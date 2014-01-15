@@ -1348,13 +1348,11 @@ public:
 
 private:
 	/// assignment
-	void Combine ( const CSphMatch & rhs, int iDynamic, int iUpBound=-1, const CSphMatch * prhs2=NULL )
+	void Combine ( const CSphMatch & rhs, int iDynamic )
 	{
 		// check that we're either initializing a new one, or NOT changing the current size
 		assert ( iDynamic>=0 );
 		assert ( !m_pDynamic || iDynamic==(int)m_pDynamic[-1] );
-		if ( iUpBound<0 )
-			iUpBound = iDynamic;
 
 		if ( this!=&rhs )
 		{
@@ -1380,13 +1378,7 @@ private:
 			{
 				assert ( rhs.m_pDynamic );
 				assert ( m_pDynamic[-1]==rhs.m_pDynamic[-1] ); // ensure we're not changing X to Y
-				memcpy ( m_pDynamic, rhs.m_pDynamic, iUpBound*sizeof(CSphRowitem) );
-			}
-			if ( prhs2 && iUpBound<iDynamic )
-			{
-				assert ( prhs2->m_pDynamic );
-				assert ( m_pDynamic[-1]==prhs2->m_pDynamic[-1] ); // ensure we're not changing X to Y
-				memcpy ( m_pDynamic+iUpBound, prhs2->m_pDynamic+iUpBound, (iDynamic-iUpBound)*sizeof(CSphRowitem) );
+				memcpy ( m_pDynamic, rhs.m_pDynamic, iDynamic*sizeof(CSphRowitem) );
 			}
 		}
 	}
@@ -1591,10 +1583,10 @@ public:
 	void							CloneWholeMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const;
 
 	/// free the linked strings and/or just initialize the pointers with NULL
-	void							FreeStringPtrs ( CSphMatch * pMatch, int iLowBound=0, int iUpBound=-1 ) const;
+	void							FreeStringPtrs ( CSphMatch * pMatch ) const;
 
 	/// ???
-	void							CopyPtrs ( CSphMatch * pDst, const CSphMatch & rhs, int iUpBound=-1 ) const;
+	void							CopyPtrs ( CSphMatch * pDst, const CSphMatch & rhs ) const;
 
 protected:
 	/// generic InsertAttr() implementation that tracks STRINGPTR, FACTORS attributes
@@ -1738,11 +1730,7 @@ public:
 
 public:
 	/// simple copy; clones either the entire dynamic part, or a part thereof
-	void CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs, int iUpBound=-1 ) const;
-
-	/// clone low part from 1-st match, high from the 2-nd
-	/// only used in N-groupby right now
-	void CombineMatch ( CSphMatch * pDst, const CSphMatch & rhs1, const CSphMatch & rhs2, int iUpBound=-1 ) const;
+	void CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const;
 
 	/// swap in a subset of current attributes, with not necessarily (!) unique names
 	/// used to create a network result set (ie. rset to be sent and then discarded)
@@ -2718,7 +2706,7 @@ public:
 	CSphString		m_sQueryTokenFilterLib;		///< token filter library name
 	CSphString		m_sQueryTokenFilterName;	///< token filter name
 	CSphString		m_sQueryTokenFilterOpts;	///< token filter options
-	
+
 public:
 					CSphQuery ();		///< ctor, fills defaults
 					~CSphQuery ();		///< dtor, frees owned stuff

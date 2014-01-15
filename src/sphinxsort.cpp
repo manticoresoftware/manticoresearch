@@ -1550,6 +1550,157 @@ struct GroupSorter_fn : public CSphMatchComparatorState, public MatchSortAccesso
 	}
 };
 
+
+struct MatchCloner_t
+{
+	CSphFixedVector<CSphRowitem>	m_dRowBuf;
+	CSphVector<CSphAttrLocator>		m_dAttrsRaw;
+	CSphVector<CSphAttrLocator>		m_dAttrsPtr;
+	const CSphRsetSchema *			m_pSchema;
+
+	MatchCloner_t ()
+		: m_dRowBuf ( 0 )
+		, m_pSchema ( NULL )
+	{ }
+
+	void SetSchema ( const CSphRsetSchema * pSchema )
+	{
+		m_pSchema = pSchema;
+		m_dRowBuf.Reset ( m_pSchema->GetDynamicSize() );
+	}
+
+	void Combine ( CSphMatch * pDst, const CSphMatch * pSrc, const CSphMatch * pGroup )
+	{
+		assert ( m_pSchema && pDst && pSrc && pGroup );
+		assert ( pDst!=pGroup );
+		m_pSchema->CloneMatch ( pDst, *pSrc );
+
+		ARRAY_FOREACH ( i, m_dAttrsRaw )
+		{
+			pDst->SetAttr ( m_dAttrsRaw[i], pGroup->GetAttr ( m_dAttrsRaw[i] ) );
+		}
+
+		ARRAY_FOREACH ( i, m_dAttrsPtr )
+		{
+			assert ( !pDst->GetAttr ( m_dAttrsPtr[i] ) );
+			const char * sSrc = (const char*)pGroup->GetAttr ( m_dAttrsPtr[i] );
+			const char * sDst = NULL;
+			if ( sSrc && *sSrc )
+				sDst = strdup(sSrc);
+
+			pDst->SetAttr ( m_dAttrsPtr[i], (SphAttr_t)sDst );
+		}
+	}
+
+	void Clone ( CSphMatch * pOld, const CSphMatch * pNew )
+	{
+		assert ( m_pSchema && pOld && pNew );
+		if ( pOld->m_pDynamic==NULL ) // no old match has no data to copy, just a fresh but old match
+		{
+			m_pSchema->CloneMatch ( pOld, *pNew );
+			return;
+		}
+
+		memcpy ( m_dRowBuf.Begin(), pOld->m_pDynamic, sizeof(m_dRowBuf[0]) * m_dRowBuf.GetLength() );
+
+		// don't let cloning operation to free old string data
+		// as it will be copied back
+		ARRAY_FOREACH ( i, m_dAttrsPtr )
+			pOld->SetAttr ( m_dAttrsPtr[i], 0 );
+
+		m_pSchema->CloneMatch ( pOld, *pNew );
+
+		ARRAY_FOREACH ( i, m_dAttrsRaw )
+			pOld->SetAttr ( m_dAttrsRaw[i], sphGetRowAttr ( m_dRowBuf.Begin(), m_dAttrsRaw[i] ) );
+		ARRAY_FOREACH ( i, m_dAttrsPtr )
+			pOld->SetAttr ( m_dAttrsPtr[i], sphGetRowAttr ( m_dRowBuf.Begin(), m_dAttrsPtr[i] ) );
+	}
+};
+
+
+static void ExtractAggregates ( const CSphRsetSchema & tSchema, const CSphAttrLocator & tLocCount, const ESphSortKeyPart * m_pGroupSorterKeyparts, const CSphAttrLocator * m_pGroupSorterLocator,
+								CSphVector<IAggrFunc *> & dAggregates, CSphVector<IAggrFunc *> & dAvgs, MatchCloner_t & tCloner )
+{
+	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
+	{
+		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
+		bool bMagicAggr = IsGroupbyMagic ( tAttr.m_sName ) || sphIsSortStringInternal ( tAttr.m_sName.cstr() ); // magic legacy aggregates
+
+		if ( tAttr.m_eAggrFunc==SPH_AGGR_NONE || bMagicAggr )
+			continue;
+
+		switch ( tAttr.m_eAggrFunc )
+		{
+		case SPH_AGGR_SUM:
+			switch ( tAttr.m_eAttrType )
+			{
+			case SPH_ATTR_INTEGER:	dAggregates.Add ( new AggrSum_t<DWORD> ( tAttr.m_tLocator ) ); break;
+			case SPH_ATTR_BIGINT:	dAggregates.Add ( new AggrSum_t<int64_t> ( tAttr.m_tLocator ) ); break;
+			case SPH_ATTR_FLOAT:	dAggregates.Add ( new AggrSum_t<float> ( tAttr.m_tLocator ) ); break;
+			default:				assert ( 0 && "internal error: unhandled aggregate type" ); break;
+			}
+			break;
+
+		case SPH_AGGR_AVG:
+			switch ( tAttr.m_eAttrType )
+			{
+			case SPH_ATTR_INTEGER:	dAggregates.Add ( new AggrAvg_t<DWORD> ( tAttr.m_tLocator, tLocCount ) ); break;
+			case SPH_ATTR_BIGINT:	dAggregates.Add ( new AggrAvg_t<int64_t> ( tAttr.m_tLocator, tLocCount ) ); break;
+			case SPH_ATTR_FLOAT:	dAggregates.Add ( new AggrAvg_t<float> ( tAttr.m_tLocator, tLocCount ) ); break;
+			default:				assert ( 0 && "internal error: unhandled aggregate type" ); break;
+			}
+			// store avg to calculate these attributes prior to groups sort
+			for ( int iState=0; iState<CSphMatchComparatorState::MAX_ATTRS; iState++ )
+			{
+				ESphSortKeyPart eKeypart = m_pGroupSorterKeyparts[iState];
+				CSphAttrLocator tLoc = m_pGroupSorterLocator[iState];
+				if ( ( eKeypart==SPH_KEYPART_INT || eKeypart==SPH_KEYPART_FLOAT )
+					&& tLoc.m_bDynamic==tAttr.m_tLocator.m_bDynamic && tLoc.m_iBitOffset==tAttr.m_tLocator.m_iBitOffset
+					&& tLoc.m_iBitCount==tAttr.m_tLocator.m_iBitCount )
+				{
+					dAvgs.Add ( dAggregates.Last() );
+					break;
+				}
+			}
+			break;
+
+		case SPH_AGGR_MIN:
+			switch ( tAttr.m_eAttrType )
+			{
+			case SPH_ATTR_INTEGER:	dAggregates.Add ( new AggrMin_t<DWORD> ( tAttr.m_tLocator ) ); break;
+			case SPH_ATTR_BIGINT:	dAggregates.Add ( new AggrMin_t<int64_t> ( tAttr.m_tLocator ) ); break;
+			case SPH_ATTR_FLOAT:	dAggregates.Add ( new AggrMin_t<float> ( tAttr.m_tLocator ) ); break;
+			default:				assert ( 0 && "internal error: unhandled aggregate type" ); break;
+			}
+			break;
+
+		case SPH_AGGR_MAX:
+			switch ( tAttr.m_eAttrType )
+			{
+			case SPH_ATTR_INTEGER:	dAggregates.Add ( new AggrMax_t<DWORD> ( tAttr.m_tLocator ) ); break;
+			case SPH_ATTR_BIGINT:	dAggregates.Add ( new AggrMax_t<int64_t> ( tAttr.m_tLocator ) ); break;
+			case SPH_ATTR_FLOAT:	dAggregates.Add ( new AggrMax_t<float> ( tAttr.m_tLocator ) ); break;
+			default:				assert ( 0 && "internal error: unhandled aggregate type" ); break;
+			}
+			break;
+
+		case SPH_AGGR_CAT:
+			dAggregates.Add ( new AggrConcat_t ( tAttr ) );
+			break;
+
+		default:
+			assert ( 0 && "internal error: unhandled aggregate function" );
+			break;
+		}
+
+		if ( tAttr.m_eAggrFunc==SPH_AGGR_CAT )
+			tCloner.m_dAttrsPtr.Add ( tAttr.m_tLocator );
+		else
+			tCloner.m_dAttrsRaw.Add ( tAttr.m_tLocator );
+	}
+}
+
+
 /// match sorter with k-buffering and group-by
 template < typename COMPGROUP, bool DISTINCT, bool NOTIFICATIONS >
 class CSphKBufferGroupSorter : public CSphMatchQueueTraits, protected CSphGroupSorterSettings
@@ -1571,8 +1722,8 @@ protected:
 
 	CSphVector<IAggrFunc *>		m_dAggregates;
 	CSphVector<IAggrFunc *>		m_dAvgs;
-	int							m_iPregroupDynamic;	///< how much dynamic attributes are computed by the index (before groupby sorter)
 	const ISphFilter *			m_pAggrFilter; ///< aggregate filter for matches on flatten
+	MatchCloner_t				m_tPregroup;
 
 	static const int			GROUPBY_FACTOR = 4;	///< allocate this times more storage when doing group-by (k, as in k-buffer)
 
@@ -1587,7 +1738,6 @@ public:
 		, m_iLimit ( pQuery->m_iMaxMatches )
 		, m_bSortByDistinct ( false )
 		, m_pComp ( pComp )
-		, m_iPregroupDynamic ( 0 )
 		, m_pAggrFilter ( tSettings.m_pAggrFilterTrait )
 	{
 		assert ( GROUPBY_FACTOR>1 );
@@ -1601,96 +1751,14 @@ public:
 	virtual void SetSchema ( CSphRsetSchema & tSchema )
 	{
 		m_tSchema = tSchema;
-
-		bool bAggrStarted = false;
-		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
+		m_tPregroup.SetSchema ( &m_tSchema );
+		m_tPregroup.m_dAttrsRaw.Add ( m_tLocGroupby );
+		m_tPregroup.m_dAttrsRaw.Add ( m_tLocCount );
+		if_const ( DISTINCT )
 		{
-			const CSphColumnInfo & tAttr = m_tSchema.GetAttr(i);
-			bool bMagicAggr = IsGroupbyMagic ( tAttr.m_sName ) || sphIsSortStringInternal ( tAttr.m_sName.cstr() ); // magic legacy aggregates
-
-			if ( tAttr.m_eAggrFunc==SPH_AGGR_NONE && !bMagicAggr )
-			{
-				if ( !bAggrStarted )
-					continue;
-
-				// !COMMIT
-				assert ( 0 && "internal error: aggregates must not be followed by non-aggregates" );
-			}
-
-			if ( !bAggrStarted )
-			{
-				assert ( ( tAttr.m_tLocator.m_iBitOffset % ROWITEM_BITS )==0 );
-				m_iPregroupDynamic = tAttr.m_tLocator.m_iBitOffset / ROWITEM_BITS;
-			}
-
-			bAggrStarted = true;
-			if ( bMagicAggr )
-				continue;
-
-			switch ( tAttr.m_eAggrFunc )
-			{
-				case SPH_AGGR_SUM:
-					switch ( tAttr.m_eAttrType )
-					{
-						case SPH_ATTR_INTEGER:	m_dAggregates.Add ( new AggrSum_t<DWORD> ( tAttr.m_tLocator ) ); break;
-						case SPH_ATTR_BIGINT:	m_dAggregates.Add ( new AggrSum_t<int64_t> ( tAttr.m_tLocator ) ); break;
-						case SPH_ATTR_FLOAT:	m_dAggregates.Add ( new AggrSum_t<float> ( tAttr.m_tLocator ) ); break;
-						default:				assert ( 0 && "internal error: unhandled aggregate type" ); break;
-					}
-					break;
-
-				case SPH_AGGR_AVG:
-					switch ( tAttr.m_eAttrType )
-					{
-						case SPH_ATTR_INTEGER:	m_dAggregates.Add ( new AggrAvg_t<DWORD> ( tAttr.m_tLocator, m_tLocCount ) ); break;
-						case SPH_ATTR_BIGINT:	m_dAggregates.Add ( new AggrAvg_t<int64_t> ( tAttr.m_tLocator, m_tLocCount ) ); break;
-						case SPH_ATTR_FLOAT:	m_dAggregates.Add ( new AggrAvg_t<float> ( tAttr.m_tLocator, m_tLocCount ) ); break;
-						default:				assert ( 0 && "internal error: unhandled aggregate type" ); break;
-					}
-					// store avg to calculate these attributes prior to groups sort
-					for ( int iState=0; iState<CSphMatchComparatorState::MAX_ATTRS; iState++ )
-					{
-						ESphSortKeyPart eKeypart = m_tGroupSorter.m_eKeypart[iState];
-						CSphAttrLocator tLoc = m_tGroupSorter.m_tLocator[iState];
-						if ( ( eKeypart==SPH_KEYPART_INT || eKeypart==SPH_KEYPART_FLOAT )
-							&& tLoc.m_bDynamic==tAttr.m_tLocator.m_bDynamic && tLoc.m_iBitOffset==tAttr.m_tLocator.m_iBitOffset
-							&& tLoc.m_iBitCount==tAttr.m_tLocator.m_iBitCount )
-						{
-								m_dAvgs.Add ( m_dAggregates.Last() );
-								break;
-						}
-					}
-					break;
-
-				case SPH_AGGR_MIN:
-					switch ( tAttr.m_eAttrType )
-					{
-						case SPH_ATTR_INTEGER:	m_dAggregates.Add ( new AggrMin_t<DWORD> ( tAttr.m_tLocator ) ); break;
-						case SPH_ATTR_BIGINT:	m_dAggregates.Add ( new AggrMin_t<int64_t> ( tAttr.m_tLocator ) ); break;
-						case SPH_ATTR_FLOAT:	m_dAggregates.Add ( new AggrMin_t<float> ( tAttr.m_tLocator ) ); break;
-						default:				assert ( 0 && "internal error: unhandled aggregate type" ); break;
-					}
-					break;
-
-				case SPH_AGGR_MAX:
-					switch ( tAttr.m_eAttrType )
-					{
-						case SPH_ATTR_INTEGER:	m_dAggregates.Add ( new AggrMax_t<DWORD> ( tAttr.m_tLocator ) ); break;
-						case SPH_ATTR_BIGINT:	m_dAggregates.Add ( new AggrMax_t<int64_t> ( tAttr.m_tLocator ) ); break;
-						case SPH_ATTR_FLOAT:	m_dAggregates.Add ( new AggrMax_t<float> ( tAttr.m_tLocator ) ); break;
-						default:				assert ( 0 && "internal error: unhandled aggregate type" ); break;
-					}
-					break;
-
-				case SPH_AGGR_CAT:
-					m_dAggregates.Add ( new AggrConcat_t ( tAttr ) );
-					break;
-
-				default:
-					assert ( 0 && "internal error: unhandled aggregate function" );
-					break;
-			}
+			m_tPregroup.m_dAttrsRaw.Add ( m_tLocDistinct );
 		}
+		ExtractAggregates ( m_tSchema, m_tLocCount, m_tGroupSorter.m_eKeypart, m_tGroupSorter.m_tLocator, m_dAggregates, m_dAvgs, m_tPregroup );
 	}
 
 	/// dtor
@@ -1786,7 +1854,7 @@ public:
 				}
 
 				// clone the low part of the match
-				m_tSchema.CloneMatch ( pMatch, tEntry, m_iPregroupDynamic );
+				m_tPregroup.Clone ( pMatch, &tEntry );
 			}
 		}
 
@@ -2008,6 +2076,7 @@ protected:
 	}
 };
 
+
 /// match sorter with k-buffering and N-best group-by
 template < typename COMPGROUP, bool DISTINCT, bool NOTIFICATIONS >
 class CSphKBufferNGroupSorter : public CSphMatchQueueTraits, protected CSphGroupSorterSettings
@@ -2038,8 +2107,8 @@ protected:
 
 	CSphVector<IAggrFunc *>		m_dAggregates;
 	CSphVector<IAggrFunc *>		m_dAvgs;
-	int							m_iPregroupDynamic;	///< how much dynamic attributes are computed by the index (before groupby sorter)
 	const ISphFilter *			m_pAggrFilter; ///< aggregate filter for matches on flatten
+	MatchCloner_t				m_tPregroup;
 
 	static const int			GROUPBY_FACTOR = 4;	///< allocate this times more storage when doing group-by (k, as in k-buffer)
 
@@ -2094,7 +2163,6 @@ public:
 		, m_uLastGroupKey ( -1 )
 		, m_bSortByDistinct ( false )
 		, m_pComp ( pComp )
-		, m_iPregroupDynamic ( 0 )
 		, m_pAggrFilter ( tSettings.m_pAggrFilterTrait )
 	{
 		assert ( GROUPBY_FACTOR>1 );
@@ -2128,95 +2196,14 @@ public:
 	{
 		m_tSchema = tSchema;
 
-		bool bAggrStarted = false;
-		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
+		m_tPregroup.SetSchema ( &m_tSchema );
+		m_tPregroup.m_dAttrsRaw.Add ( m_tLocGroupby );
+		m_tPregroup.m_dAttrsRaw.Add ( m_tLocCount );
+		if_const ( DISTINCT )
 		{
-			const CSphColumnInfo & tAttr = m_tSchema.GetAttr(i);
-			bool bMagicAggr = IsGroupbyMagic ( tAttr.m_sName ) || sphIsSortStringInternal ( tAttr.m_sName.cstr() ); // magic legacy aggregates
-
-			if ( tAttr.m_eAggrFunc==SPH_AGGR_NONE && !bMagicAggr )
-			{
-				if ( !bAggrStarted )
-					continue;
-
-				// !COMMIT
-				assert ( 0 && "internal error: aggregates must not be followed by non-aggregates" );
-			}
-
-			if ( !bAggrStarted )
-			{
-				assert ( ( tAttr.m_tLocator.m_iBitOffset % ROWITEM_BITS )==0 );
-				m_iPregroupDynamic = tAttr.m_tLocator.m_iBitOffset / ROWITEM_BITS;
-			}
-
-			bAggrStarted = true;
-			if ( bMagicAggr )
-				continue;
-
-			switch ( tAttr.m_eAggrFunc )
-			{
-			case SPH_AGGR_SUM:
-				switch ( tAttr.m_eAttrType )
-				{
-				case SPH_ATTR_INTEGER:	m_dAggregates.Add ( new AggrSum_t<DWORD> ( tAttr.m_tLocator ) ); break;
-				case SPH_ATTR_BIGINT:	m_dAggregates.Add ( new AggrSum_t<int64_t> ( tAttr.m_tLocator ) ); break;
-				case SPH_ATTR_FLOAT:	m_dAggregates.Add ( new AggrSum_t<float> ( tAttr.m_tLocator ) ); break;
-				default:				assert ( 0 && "internal error: unhandled aggregate type" ); break;
-				}
-				break;
-
-			case SPH_AGGR_AVG:
-				switch ( tAttr.m_eAttrType )
-				{
-				case SPH_ATTR_INTEGER:	m_dAggregates.Add ( new AggrAvg_t<DWORD> ( tAttr.m_tLocator, m_tLocCount ) ); break;
-				case SPH_ATTR_BIGINT:	m_dAggregates.Add ( new AggrAvg_t<int64_t> ( tAttr.m_tLocator, m_tLocCount ) ); break;
-				case SPH_ATTR_FLOAT:	m_dAggregates.Add ( new AggrAvg_t<float> ( tAttr.m_tLocator, m_tLocCount ) ); break;
-				default:				assert ( 0 && "internal error: unhandled aggregate type" ); break;
-				}
-				// store avg to calculate these attributes prior to groups sort
-				for ( int iState=0; iState<CSphMatchComparatorState::MAX_ATTRS; iState++ )
-				{
-					ESphSortKeyPart eKeypart = m_tGroupSorter.m_eKeypart[iState];
-					CSphAttrLocator tLoc = m_tGroupSorter.m_tLocator[iState];
-					if ( ( eKeypart==SPH_KEYPART_INT || eKeypart==SPH_KEYPART_FLOAT )
-						&& tLoc.m_bDynamic==tAttr.m_tLocator.m_bDynamic && tLoc.m_iBitOffset==tAttr.m_tLocator.m_iBitOffset
-						&& tLoc.m_iBitCount==tAttr.m_tLocator.m_iBitCount )
-					{
-						m_dAvgs.Add ( m_dAggregates.Last() );
-						break;
-					}
-				}
-				break;
-
-			case SPH_AGGR_MIN:
-				switch ( tAttr.m_eAttrType )
-				{
-				case SPH_ATTR_INTEGER:	m_dAggregates.Add ( new AggrMin_t<DWORD> ( tAttr.m_tLocator ) ); break;
-				case SPH_ATTR_BIGINT:	m_dAggregates.Add ( new AggrMin_t<int64_t> ( tAttr.m_tLocator ) ); break;
-				case SPH_ATTR_FLOAT:	m_dAggregates.Add ( new AggrMin_t<float> ( tAttr.m_tLocator ) ); break;
-				default:				assert ( 0 && "internal error: unhandled aggregate type" ); break;
-				}
-				break;
-
-			case SPH_AGGR_MAX:
-				switch ( tAttr.m_eAttrType )
-				{
-				case SPH_ATTR_INTEGER:	m_dAggregates.Add ( new AggrMax_t<DWORD> ( tAttr.m_tLocator ) ); break;
-				case SPH_ATTR_BIGINT:	m_dAggregates.Add ( new AggrMax_t<int64_t> ( tAttr.m_tLocator ) ); break;
-				case SPH_ATTR_FLOAT:	m_dAggregates.Add ( new AggrMax_t<float> ( tAttr.m_tLocator ) ); break;
-				default:				assert ( 0 && "internal error: unhandled aggregate type" ); break;
-				}
-				break;
-
-			case SPH_AGGR_CAT:
-				m_dAggregates.Add ( new AggrConcat_t ( tAttr ) );
-				break;
-
-			default:
-				assert ( 0 && "internal error: unhandled aggregate function" );
-				break;
-			}
+			m_tPregroup.m_dAttrsRaw.Add ( m_tLocDistinct );
 		}
+		ExtractAggregates ( m_tSchema, m_tLocCount, m_tGroupSorter.m_eKeypart, m_tGroupSorter.m_tLocator, m_dAggregates, m_dAvgs, m_tPregroup );
 	}
 
 	/// dtor
@@ -2297,7 +2284,7 @@ public:
 						iPoint = m_dGroupByList[iPoint];
 					}
 					m_dGroupByList[iPreLast]=-1;
-					if ( iPos==iPoint ) // avoid cycle link to inself
+					if ( iPos==iPoint ) // avoid cycle link to itself
 						iPos = -1;
 				}
 
@@ -2307,13 +2294,13 @@ public:
 					// trick point! The first elem MUST live in the low half of the pool.
 					// So, replacing the first is actually moving existing one to the last half,
 					// then overwriting the one in the low half with the new value and link them
-					m_tSchema.CloneMatch ( &tNew, *pMatch, m_iPregroupDynamic );
-					m_tSchema.CloneMatch ( pMatch, tEntry, m_iPregroupDynamic );
+					m_tPregroup.Clone ( &tNew, pMatch );
+					m_tPregroup.Clone ( pMatch, &tEntry );
 					m_dGroupByList[iPoint]=m_dGroupByList[iPos];
 					m_dGroupByList[iPos]=iPoint;
 				} else // this is elem somewhere in the chain, just shift it.
 				{
-					m_tSchema.CloneMatch ( &tNew, tEntry, m_iPregroupDynamic );
+					m_tPregroup.Clone ( &tNew, &tEntry );
 					m_dGroupByList[iPrev] = iPoint;
 					m_dGroupByList[iPoint] = iPos;
 				}
@@ -2332,7 +2319,7 @@ public:
 			if ( iPoint<0 )
 				return false;
 			CSphMatch & tNew = m_pData [ iPoint ];
-			m_tSchema.CloneMatch ( &tNew, tEntry, m_iPregroupDynamic );
+			m_tPregroup.Clone ( &tNew, &tEntry );
 			m_dGroupByList[iPrev] = iPoint;
 			m_dGroupByList[iPoint] = iPos;
 		}
@@ -2562,7 +2549,7 @@ public:
 				// copy rest group matches
 				if ( bTopPassed )
 				{
-					m_tSchema.CombineMatch ( pTo, m_pData[iNext], *pMatch, m_iPregroupDynamic );
+					m_tPregroup.Combine ( pTo, m_pData+iNext, pMatch );
 					if ( iTag>=0 )
 						pTo->m_iTag = iTag;
 					pTo++;
@@ -2929,15 +2916,14 @@ protected:
 	CSphVector<SphUngroupedValue_t>	m_dUniq;
 
 	CSphVector<IAggrFunc *>		m_dAggregates;
-	int				m_iPregroupDynamic;				///< how much dynamic attributes are computed by the index (before groupby sorter)
-	const ISphFilter * m_pAggrFilter;				///< aggregate filter for matches on flatten
+	const ISphFilter *			m_pAggrFilter;				///< aggregate filter for matches on flatten
+	MatchCloner_t				m_tPregroup;
 
 public:
 	/// ctor
 	CSphImplicitGroupSorter ( const ISphMatchComparator * DEBUGARG(pComp), const CSphQuery *, const CSphGroupSorterSettings & tSettings )
 		: CSphGroupSorterSettings ( tSettings )
 		, m_bDataInitialized ( false )
-		, m_iPregroupDynamic ( 0 )
 		, m_pAggrFilter ( tSettings.m_pAggrFilterTrait )
 	{
 		assert ( DISTINCT==false || tSettings.m_tDistinctLoc.m_iBitOffset>=0 );
@@ -2961,83 +2947,19 @@ public:
 	virtual void SetSchema ( CSphRsetSchema & tSchema )
 	{
 		m_tSchema = tSchema;
-
-		bool bAggrStarted = false;
-		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
+		m_tPregroup.SetSchema ( &m_tSchema );
+		m_tPregroup.m_dAttrsRaw.Add ( m_tLocGroupby );
+		m_tPregroup.m_dAttrsRaw.Add ( m_tLocCount );
+		if_const ( DISTINCT )
 		{
-			const CSphColumnInfo & tAttr = m_tSchema.GetAttr(i);
-			bool bMagicAggr = IsGroupbyMagic ( tAttr.m_sName ) || sphIsSortStringInternal ( tAttr.m_sName.cstr() ); // magic legacy aggregates
-
-			if ( tAttr.m_eAggrFunc==SPH_AGGR_NONE && !bMagicAggr )
-			{
-				if ( !bAggrStarted )
-					continue;
-
-				// !COMMIT
-				assert ( 0 && "internal error: aggregates must not be followed by non-aggregates" );
-			}
-
-			if ( !bAggrStarted )
-			{
-				assert ( ( tAttr.m_tLocator.m_iBitOffset % ROWITEM_BITS )==0 );
-				m_iPregroupDynamic = tAttr.m_tLocator.m_iBitOffset / ROWITEM_BITS;
-			}
-
-			bAggrStarted = true;
-			if ( bMagicAggr )
-				continue;
-
-			switch ( tAttr.m_eAggrFunc )
-			{
-				case SPH_AGGR_SUM:
-					switch ( tAttr.m_eAttrType )
-					{
-						case SPH_ATTR_INTEGER:	m_dAggregates.Add ( new AggrSum_t<DWORD> ( tAttr.m_tLocator ) ); break;
-						case SPH_ATTR_BIGINT:	m_dAggregates.Add ( new AggrSum_t<int64_t> ( tAttr.m_tLocator ) ); break;
-						case SPH_ATTR_FLOAT:	m_dAggregates.Add ( new AggrSum_t<float> ( tAttr.m_tLocator ) ); break;
-						default:				assert ( 0 && "internal error: unhandled aggregate type" ); break;
-					}
-					break;
-
-				case SPH_AGGR_AVG:
-					switch ( tAttr.m_eAttrType )
-					{
-						case SPH_ATTR_INTEGER:	m_dAggregates.Add ( new AggrAvg_t<DWORD> ( tAttr.m_tLocator, m_tLocCount ) ); break;
-						case SPH_ATTR_BIGINT:	m_dAggregates.Add ( new AggrAvg_t<int64_t> ( tAttr.m_tLocator, m_tLocCount ) ); break;
-						case SPH_ATTR_FLOAT:	m_dAggregates.Add ( new AggrAvg_t<float> ( tAttr.m_tLocator, m_tLocCount ) ); break;
-						default:				assert ( 0 && "internal error: unhandled aggregate type" ); break;
-					}
-					break;
-
-				case SPH_AGGR_MIN:
-					switch ( tAttr.m_eAttrType )
-					{
-						case SPH_ATTR_INTEGER:	m_dAggregates.Add ( new AggrMin_t<DWORD> ( tAttr.m_tLocator ) ); break;
-						case SPH_ATTR_BIGINT:	m_dAggregates.Add ( new AggrMin_t<int64_t> ( tAttr.m_tLocator ) ); break;
-						case SPH_ATTR_FLOAT:	m_dAggregates.Add ( new AggrMin_t<float> ( tAttr.m_tLocator ) ); break;
-						default:				assert ( 0 && "internal error: unhandled aggregate type" ); break;
-					}
-					break;
-
-				case SPH_AGGR_MAX:
-					switch ( tAttr.m_eAttrType )
-					{
-						case SPH_ATTR_INTEGER:	m_dAggregates.Add ( new AggrMax_t<DWORD> ( tAttr.m_tLocator ) ); break;
-						case SPH_ATTR_BIGINT:	m_dAggregates.Add ( new AggrMax_t<int64_t> ( tAttr.m_tLocator ) ); break;
-						case SPH_ATTR_FLOAT:	m_dAggregates.Add ( new AggrMax_t<float> ( tAttr.m_tLocator ) ); break;
-						default:				assert ( 0 && "internal error: unhandled aggregate type" ); break;
-					}
-					break;
-
-				case SPH_AGGR_CAT:
-					m_dAggregates.Add ( new AggrConcat_t ( tAttr ) );
-					break;
-
-				default:
-					assert ( 0 && "internal error: unhandled aggregate function" );
-					break;
-			}
+			m_tPregroup.m_dAttrsRaw.Add ( m_tLocDistinct );
 		}
+
+		CSphVector<IAggrFunc *> dTmp;
+		ESphSortKeyPart dTmpKeypart[CSphMatchComparatorState::MAX_ATTRS];
+		CSphAttrLocator dTmpLocator[CSphMatchComparatorState::MAX_ATTRS];
+		ExtractAggregates ( m_tSchema, m_tLocCount, dTmpKeypart, dTmpLocator, m_dAggregates, dTmp, m_tPregroup );
+		assert ( !dTmp.GetLength() );
 	}
 
 	int GetDataLength () const
@@ -3093,7 +3015,7 @@ public:
 		{
 			iCopied = 1;
 			m_tSchema.CloneMatch ( pTo, m_tData );
-		m_tSchema.FreeStringPtrs ( &m_tData );
+			m_tSchema.FreeStringPtrs ( &m_tData );
 			if ( iTag>=0 )
 				pTo->m_iTag = iTag;
 		}
@@ -3161,7 +3083,7 @@ protected:
 					m_dJustPopped.Add ( m_tData.m_uDocID );
 				}
 
-				m_tSchema.CloneMatch ( &m_tData, tEntry, m_iPregroupDynamic );
+				m_tPregroup.Clone ( &m_tData, &tEntry );
 			}
 		}
 
@@ -4848,8 +4770,6 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 	}
 
 	// expressions from select items
-	CSphVector<CSphColumnInfo> dAggregates;
-
 	bool bHasCount = false;
 
 	if ( tQueue.m_bComputeItems )
@@ -5026,18 +4946,12 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		} else // some aggregate
 		{
 			tExprCol.m_eStage = SPH_EVAL_PRESORT; // sorter expects computed expression
-			dAggregates.Add ( tExprCol );
+			tSorterSchema.AddDynamicAttr ( tExprCol );
+			if ( pExtra )
+				pExtra->AddAttr ( tExprCol, true );
 		}
 
 		dQueryAttrs.Add ( sphFNV64 ( (const BYTE *)tExprCol.m_sName.cstr() ) );
-	}
-
-	// expressions wrapped in aggregates must be at the very end of pre-groupby match
-	ARRAY_FOREACH ( i, dAggregates )
-	{
-		tSorterSchema.AddDynamicAttr ( dAggregates[i] );
-		if ( pExtra )
-			pExtra->AddAttr ( dAggregates[i], true );
 	}
 
 	////////////////////////////////////////////

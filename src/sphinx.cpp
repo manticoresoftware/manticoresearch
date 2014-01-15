@@ -6990,20 +6990,10 @@ void ISphSchema::CloneWholeMatch ( CSphMatch * pDst, const CSphMatch & rhs ) con
 }
 
 
-void ISphSchema::CopyPtrs ( CSphMatch * pDst, const CSphMatch & rhs, int iUpBound ) const
+void ISphSchema::CopyPtrs ( CSphMatch * pDst, const CSphMatch & rhs ) const
 {
-	if ( iUpBound<0 )
-	{
-		ARRAY_FOREACH ( i, m_dPtrAttrs )
-			*(const char**) (pDst->m_pDynamic+m_dPtrAttrs[i].m_iValue) = CSphString (*(const char**)(rhs.m_pDynamic+m_dPtrAttrs[i].m_iValue)).Leak();
-	} else
-	{
-		for ( int i=0; i<m_dPtrAttrs.GetLength(); ++i )
-			if ( m_dPtrAttrs[i].m_iValue < iUpBound )
-				*(const char**) (pDst->m_pDynamic+m_dPtrAttrs[i].m_iValue) = CSphString (*(const char**)(rhs.m_pDynamic+m_dPtrAttrs[i].m_iValue)).Leak();
-			else
-				break;
-	}
+	ARRAY_FOREACH ( i, m_dPtrAttrs )
+		*(const char**) (pDst->m_pDynamic+m_dPtrAttrs[i].m_iValue) = CSphString (*(const char**)(rhs.m_pDynamic+m_dPtrAttrs[i].m_iValue)).Leak();
 
 	// not immediately obvious: this is not needed while pushing matches to sorters; factors are held in an outer hash table
 	// but it is necessary to copy factors when combining results from several indexes via a sorter because at this moment matches are the owners of factor data
@@ -7024,7 +7014,7 @@ void ISphSchema::CopyPtrs ( CSphMatch * pDst, const CSphMatch & rhs, int iUpBoun
 }
 
 
-void ISphSchema::FreeStringPtrs ( CSphMatch * pMatch, int iLowBound, int iUpBound ) const
+void ISphSchema::FreeStringPtrs ( CSphMatch * pMatch ) const
 {
 	assert ( pMatch );
 	if ( !pMatch->m_pDynamic )
@@ -7033,33 +7023,15 @@ void ISphSchema::FreeStringPtrs ( CSphMatch * pMatch, int iLowBound, int iUpBoun
 	if ( m_dPtrAttrs.GetLength() )
 	{
 		CSphString sStr;
-		if ( iUpBound<0 )
+		ARRAY_FOREACH ( i, m_dPtrAttrs )
 		{
-			ARRAY_FOREACH ( i, m_dPtrAttrs )
-			{
-				if ( m_dPtrAttrs[i].m_iValue<iLowBound )
-					continue;
-				sStr.Adopt ( (char**) (pMatch->m_pDynamic+m_dPtrAttrs[i].m_iValue));
-			}
-		} else
-		{
-			ARRAY_FOREACH ( i, m_dPtrAttrs )
-			{
-				if ( m_dPtrAttrs[i].m_iValue<iLowBound )
-					continue;
-				if ( m_dPtrAttrs[i].m_iValue<iUpBound )
-					sStr.Adopt ( (char**) (pMatch->m_pDynamic+m_dPtrAttrs[i].m_iValue));
-				else
-					break;
-			}
+			sStr.Adopt ( (char**) (pMatch->m_pDynamic+m_dPtrAttrs[i].m_iValue));
 		}
 	}
 
 	ARRAY_FOREACH ( i, m_dFactorAttrs )
 	{
 		int iOffset = m_dFactorAttrs[i].m_iValue;
-		if ( iOffset<iLowBound )
-			continue;
 		BYTE * pData = *(BYTE**)(pMatch->m_pDynamic+iOffset);
 		if ( pData )
 		{
@@ -7489,47 +7461,14 @@ void CSphRsetSchema::SwapAttrs ( CSphVector<CSphColumnInfo> & dAttrs )
 }
 
 
-void CSphRsetSchema::CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs, int iUpBound ) const
+void CSphRsetSchema::CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const
 {
 	assert ( pDst );
-	FreeStringPtrs ( pDst, 0, iUpBound );
-	pDst->Combine ( rhs, GetDynamicSize(), iUpBound );
-	CopyPtrs ( pDst, rhs, iUpBound );
+	FreeStringPtrs ( pDst );
+	pDst->Combine ( rhs, GetDynamicSize() );
+	CopyPtrs ( pDst, rhs );
 }
 
-
-void CSphRsetSchema::CombineMatch ( CSphMatch * pDst, const CSphMatch & rhs1, const CSphMatch & rhs2, int iUpBound ) const
-{
-	assert ( pDst );
-	FreeStringPtrs ( pDst, (pDst==&rhs1)?iUpBound:0 );
-	pDst->Combine ( rhs1, GetDynamicSize(), iUpBound, &rhs2 );
-
-	// combine ptrs
-	ARRAY_FOREACH ( i, m_dPtrAttrs )
-	{
-		const CSphMatch & rhs = ( m_dPtrAttrs[i].m_iValue < iUpBound ) ? rhs1 : rhs2;
-		if ( pDst!=&rhs )
-			*(const char**) (pDst->m_pDynamic+m_dPtrAttrs[i].m_iValue) = CSphString (*(const char**)(rhs.m_pDynamic+m_dPtrAttrs[i].m_iValue)).Leak();
-	}
-
-	// not immediately obvious: this is not needed while pushing matches to sorters; factors are held in an outer hash table
-	// but it is necessary to copy factors when combining results from several indexes via a sorter because at this moment matches are the owners of factor data
-	if ( pDst!=&rhs1 )
-		ARRAY_FOREACH ( i, m_dFactorAttrs )
-	{
-		int iOffset = m_dFactorAttrs[i].m_iValue;
-		BYTE * pData = *(BYTE**)(rhs1.m_pDynamic+iOffset);
-		if ( pData )
-		{
-			DWORD uDataSize = *(DWORD*)pData;
-			assert ( uDataSize );
-
-			BYTE * pCopy = new BYTE[uDataSize];
-			memcpy ( pCopy, pData, uDataSize );
-			*(BYTE**)(pDst->m_pDynamic+iOffset) = pCopy;
-		}
-	}
-}
 
 ///////////////////////////////////////////////////////////////////////////////
 // BIT-ENCODED FILE OUTPUT

@@ -2787,13 +2787,18 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr 
 
 /// fixed-memory response buffer
 /// tracks usage, and flushes to network when necessary
-class NetOutputBuffer_c
+/// to remove ISphNoncopyable just add copy c-tor and operator=
+/// Splitting MySQL network packet in several sphSocketSend()s causing libmysqlclient
+/// to perform big sleep()s (40ms on some environments, to be precise).
+/// That's why we use relocation here instead of static-sized buffer.
+class NetOutputBuffer_c : public ISphNoncopyable
 {
 public:
 	CSphQueryProfile *	m_pProfile;
 
 public:
 	explicit	NetOutputBuffer_c ( int iSock );
+	~NetOutputBuffer_c() { free ( m_pBuffer ); }
 
 	bool		SendInt ( int iValue )			{ return SendT<int> ( htonl ( iValue ) ); }
 	bool		SendAsDword ( int64_t iValue ) ///< sends the 32bit MAX_UINT if the value is greater than it.
@@ -2840,8 +2845,9 @@ public:
 	void		FreezeBlock ( const char * sError, int iLen );
 
 protected:
-	BYTE		m_dBuffer[NETOUTBUF];	///< my buffer
-	BYTE *		m_pBuffer;			///< my current buffer position
+	BYTE *		m_pBuffer;			///< my dynamic buffer
+	int			m_iBufferSize;		///< my dynamic buffer size
+	BYTE *		m_pBufferPtr;			///< my current buffer position
 	int			m_iSock;			///< my socket
 	bool		m_bError;			///< if there were any write errors
 	int			m_iSent;
@@ -2852,7 +2858,7 @@ protected:
 
 protected:
 	bool		SetError ( bool bValue );	///< set error flag
-	bool		FlushIf ( int iToAdd );		///< flush if there's not enough free space to add iToAdd bytes
+	bool		ResizeIf ( int iToAdd );	///< flush if there's not enough free space to add iToAdd bytes
 
 public:
 	bool							SendBytes ( const void * pBuf, int iLen );	///< (was) protected to avoid network-vs-host order bugs
@@ -2937,13 +2943,15 @@ protected:
 
 NetOutputBuffer_c::NetOutputBuffer_c ( int iSock )
 	: m_pProfile ( NULL )
-	, m_pBuffer ( m_dBuffer )
+	, m_iBufferSize ( NETOUTBUF )
 	, m_iSock ( iSock )
 	, m_bError ( false )
 	, m_iSent ( 0 )
 	, m_bFlushEnabled ( true )
 {
 	assert ( m_iSock>0 );
+	m_pBuffer = static_cast<BYTE *> ( malloc ( m_iBufferSize ));
+	m_pBufferPtr = m_pBuffer;
 }
 
 
@@ -2952,11 +2960,11 @@ template < typename T > bool NetOutputBuffer_c::SendT ( T tValue )
 	if ( m_bError )
 		return false;
 
-	FlushIf ( sizeof(T) );
+	ResizeIf ( sizeof(T) );
 
-	sphUnalignedWrite ( m_pBuffer, tValue );
-	m_pBuffer += sizeof(T);
-	assert ( m_pBuffer<m_dBuffer+sizeof(m_dBuffer) );
+	sphUnalignedWrite ( m_pBufferPtr, tValue );
+	m_pBufferPtr += sizeof(T);
+	assert ( m_pBufferPtr<m_pBuffer+m_iBufferSize );
 	return true;
 }
 
@@ -2966,7 +2974,7 @@ bool NetOutputBuffer_c::SendString ( const char * sStr )
 	if ( m_bError )
 		return false;
 
-	FlushIf ( sizeof(DWORD) );
+	ResizeIf ( sizeof(DWORD) );
 
 	int iLen = sStr ? strlen(sStr) : 0;
 	SendInt ( iLen );
@@ -3098,20 +3106,15 @@ bool NetOutputBuffer_c::SendBytes ( const void * pBuf, int iLen )
 	BYTE * pMy = (BYTE*)pBuf;
 	while ( iLen>0 && !m_bError )
 	{
-		int iLeft = sizeof(m_dBuffer) - ( m_pBuffer - m_dBuffer );
+		int iLeft = m_iBufferSize - ( m_pBufferPtr-m_pBuffer );
 		if ( iLen<=iLeft )
 		{
-			memcpy ( m_pBuffer, pMy, iLen );
-			m_pBuffer += iLen;
+			memcpy ( m_pBufferPtr, pMy, iLen );
+			m_pBufferPtr += iLen;
 			break;
 		}
 
-		memcpy ( m_pBuffer, pMy, iLeft );
-		m_pBuffer += iLeft;
-		Flush ();
-
-		pMy += iLeft;
-		iLen -= iLeft;
+		ResizeIf ( iLen );
 	}
 	return !m_bError;
 }
@@ -3122,7 +3125,7 @@ bool NetOutputBuffer_c::Flush ( bool bUnfreeze )
 	if ( m_bError )
 		return false;
 
-	int iLen = m_pBuffer-m_dBuffer;
+	int iLen = m_pBufferPtr-m_pBuffer;
 	if ( iLen==0 )
 		return true;
 
@@ -3131,10 +3134,10 @@ bool NetOutputBuffer_c::Flush ( bool bUnfreeze )
 
 	if ( bUnfreeze )
 	{
-		BYTE * pBuf = m_pBuffer;
-		m_pBuffer = m_pSize;
+		BYTE * pBuf = m_pBufferPtr;
+		m_pBufferPtr = m_pSize;
 		SendDword ( pBuf-m_pSize-4 );
-		m_pBuffer = pBuf;
+		m_pBufferPtr = pBuf;
 		m_bFlushEnabled = true;
 	}
 
@@ -3142,16 +3145,16 @@ bool NetOutputBuffer_c::Flush ( bool bUnfreeze )
 	if ( !m_bFlushEnabled )
 	{
 		sphLogDebug ( "NetOutputBuffer with disabled flush is overloaded" );
-		m_pBuffer = m_dBuffer;
+		m_pBufferPtr = m_pBuffer;
 		SendBytes ( m_sError, m_iErrorLength );
-		iLen = m_pBuffer-m_dBuffer;
+		iLen = m_pBufferPtr-m_pBuffer;
 		if ( iLen==0 )
 			return true;
 	}
 
 	assert ( iLen>0 );
-	assert ( iLen<=(int)sizeof(m_dBuffer) );
-	char * pBuffer = (char *)&m_dBuffer[0];
+	assert ( iLen<=(int)m_iBufferSize );
+	char * pBuffer = reinterpret_cast<char *> ( m_pBuffer );
 
 	ESphQueryState eOld = SPH_QSTATE_TOTAL;
 	if ( m_pProfile )
@@ -3215,7 +3218,7 @@ bool NetOutputBuffer_c::Flush ( bool bUnfreeze )
 	if ( m_pProfile )
 		m_pProfile->Switch ( eOld );
 
-	m_pBuffer = m_dBuffer;
+	m_pBufferPtr = m_pBuffer;
 	return !m_bError;
 }
 
@@ -3225,15 +3228,22 @@ void NetOutputBuffer_c::FreezeBlock ( const char * sError, int iLen )
 	m_iErrorLength = iLen;
 	m_bFlushEnabled = false;
 	// reserve the DWORD for the size
-	m_pSize = m_pBuffer;
+	m_pSize = m_pBufferPtr;
 	SendDword ( 0 );
 }
 
 
-bool NetOutputBuffer_c::FlushIf ( int iToAdd )
+bool NetOutputBuffer_c::ResizeIf ( int iToAdd )
 {
-	if ( ( m_pBuffer+iToAdd )>=( m_dBuffer+sizeof(m_dBuffer) ) )
-		return Flush ();
+	if ( ( m_pBufferPtr+iToAdd )>=( m_pBuffer+m_iBufferSize ) )
+	{
+		m_iBufferSize *= 2;
+		int iOffset1 = ( m_pBufferPtr-m_pBuffer );
+		int iOffset2 = ( m_pSize-m_pBuffer );
+		m_pBuffer = static_cast<BYTE *> ( realloc ( m_pBuffer, m_iBufferSize ) );
+		m_pBufferPtr = ( m_pBuffer+iOffset1 );
+		m_pSize = ( m_pBuffer+iOffset2 );
+	}
 
 	return !m_bError;
 }
@@ -21429,7 +21439,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 		"\x01\x00\x00\x00" // thread id
 		"\x01\x02\x03\x04\x05\x06\x07\x08" // scramble buffer (for auth)
 		"\x00" // filler
-		"\x08\x82" // server capabilities; CLIENT_PROTOCOL_41 | CLIENT_CONNECT_WITH_DB | SECURE_CONNECTION
+		"\x08\x82" // server capabilities; CLIENT_PROTOCOL_41 | CLIENT_CONNECT_WITH_DB | CLIENT_SECURE_CONNECTION
 		"\x21" // server language; let it be ut8_general_ci to make different clients happy
 		"\x02\x00" // server status
 		"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" // filler

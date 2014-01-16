@@ -222,14 +222,7 @@ public:
 	void SetupTLS ();
 
 	// create thread with crash logging
-	static bool ThreadCreate ( SphThread_t * pThread, void ( *pCall )( void* ), void * pArg, bool bDetached=false )
-	{
-		CallArgPair_t * pWrapperArg = new CallArgPair_t ( pCall, pArg );
-		bool bSuccess = sphThreadCreate ( pThread, ThreadWrapper, pWrapperArg, bDetached );
-		if ( !bSuccess )
-			delete pWrapperArg;
-		return bSuccess;
-	}
+	static bool ThreadCreate ( SphThread_t * pThread, void ( *pCall )( void* ), void * pArg, bool bDetached=false );
 
 private:
 	struct CallArgPair_t
@@ -243,14 +236,7 @@ private:
 	};
 
 	// sets up a TLS for a given thread
-	static void ThreadWrapper ( void * pArg )
-	{
-		CallArgPair_t * pPair = static_cast<CallArgPair_t *> ( pArg );
-		SphCrashLogger_c tQueryTLS;
-		tQueryTLS.SetupTLS();
-		pPair->m_pCall ( pPair->m_pArg );
-		delete pPair;
-	}
+	static void ThreadWrapper ( void * pArg );
 
 	CrashQuery_t			m_tQuery;			// per thread copy of last query for thread mode
 	static CrashQuery_t		m_tForkQuery;		// copy of last query for fork / prefork modes
@@ -2197,7 +2183,23 @@ CrashQuery_t SphCrashLogger_c::GetQuery()
 	return pCrashLogger ? pCrashLogger->m_tQuery : m_tForkQuery;
 }
 
-bool SphCrashLogger_c::ThreadCreate ( SphThread_t * pThread, void (*pCall)(void*), void * pArg, bool bDetached=false )
+bool SphCrashLogger_c::ThreadCreate ( SphThread_t * pThread, void (*pCall)(void*), void * pArg, bool bDetached )
+{
+	CallArgPair_t * pWrapperArg = new CallArgPair_t ( pCall, pArg );
+	bool bSuccess = sphThreadCreate ( pThread, ThreadWrapper, pWrapperArg, bDetached );
+	if ( !bSuccess )
+		delete pWrapperArg;
+	return bSuccess;
+}
+
+void SphCrashLogger_c::ThreadWrapper ( void * pArg )
+{
+	CallArgPair_t * pPair = static_cast<CallArgPair_t *> ( pArg );
+	SphCrashLogger_c tQueryTLS;
+	tQueryTLS.SetupTLS();
+	pPair->m_pCall ( pPair->m_pArg );
+	delete pPair;
+}
 
 
 #if USE_WINDOWS

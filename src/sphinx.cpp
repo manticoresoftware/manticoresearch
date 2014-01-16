@@ -9365,14 +9365,14 @@ void CSphArena::CheckFreelists ()
 
 //////////////////////////////////////////////////////////////////////////
 
-static CSphArena g_MvaArena; // global mega-arena
+static CSphArena g_tMvaArena; // global mega-arena
 
 const char * sphArenaInit ( int iMaxBytes )
 {
 	if ( !g_pMvaArena )
-		g_pMvaArena = g_MvaArena.ReInit ( iMaxBytes );
+		g_pMvaArena = g_tMvaArena.ReInit ( iMaxBytes );
 
-	const char * sError = g_MvaArena.GetError();
+	const char * sError = g_tMvaArena.GetError();
 	return sError;
 }
 
@@ -9584,7 +9584,7 @@ CSphIndex_VLN::~CSphIndex_VLN ()
 #else
 	if ( m_iIndexTag>=0 && g_bHeadProcess && g_pMvaArena )
 #endif
-		g_MvaArena.TaggedFreeTag ( m_iIndexTag );
+		g_tMvaArena.TaggedFreeTag ( m_iIndexTag );
 
 #if !USE_WINDOWS
 	if ( g_bHeadProcess )
@@ -9827,7 +9827,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 				bool bDst64 = ( uDst64 & ( U64C(1) << iCol ) )!=0;
 				assert ( (iNewCount%2)==0 );
 				int iLen = ( bDst64 ? iNewCount : iNewCount/2 );
-				iAlloc = g_MvaArena.TaggedAlloc ( m_iIndexTag, (1+iLen)*sizeof(DWORD)+sizeof(SphDocID_t) );
+				iAlloc = g_tMvaArena.TaggedAlloc ( m_iIndexTag, (1+iLen)*sizeof(DWORD)+sizeof(SphDocID_t) );
 				if ( iAlloc<0 )
 					bFailed = true;
 			}
@@ -9842,7 +9842,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 	{
 		ARRAY_FOREACH ( i, dMvaPtrs )
 			if ( dMvaPtrs[i]>=0 )
-				g_MvaArena.TaggedFreeIndex ( m_iIndexTag, dMvaPtrs[i] );
+				g_tMvaArena.TaggedFreeIndex ( m_iIndexTag, dMvaPtrs[i] );
 
 		sError.SetSprintf ( "out of pool memory on MVA update" );
 		return -1;
@@ -10005,7 +10005,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 			if ( uOldIndex & MVA_ARENA_FLAG )
 			{
 				uOldIndex = ((DWORD*)((SphDocID_t*)(g_pMvaArena + (uOldIndex & MVA_OFFSET_MASK))-1))-g_pMvaArena;
-				g_MvaArena.TaggedFreeIndex ( m_iIndexTag, uOldIndex );
+				g_tMvaArena.TaggedFreeIndex ( m_iIndexTag, uOldIndex );
 			}
 
 			bUpdated = true;
@@ -10076,7 +10076,7 @@ bool CSphIndex_VLN::LoadPersistentMVA ( CSphString & sError )
 	}
 	assert ( dMvaLocators.GetLength()!=0 );
 
-	if ( g_MvaArena.GetError() ) // have to reset affected MVA in case of ( persistent MVA + no MVA arena )
+	if ( g_tMvaArena.GetError() ) // have to reset affected MVA in case of ( persistent MVA + no MVA arena )
 	{
 		ARRAY_FOREACH ( iDoc, dAffected )
 		{
@@ -10091,7 +10091,7 @@ bool CSphIndex_VLN::LoadPersistentMVA ( CSphString & sError )
 			}
 		}
 
-		sphWarning ( "index '%s' forced to reset persistent MVAs ( %s )", m_sIndexName.cstr(), g_MvaArena.GetError() );
+		sphWarning ( "index '%s' forced to reset persistent MVAs ( %s )", m_sIndexName.cstr(), g_tMvaArena.GetError() );
 		fdReader.Close();
 		return true;
 	}
@@ -10116,7 +10116,7 @@ bool CSphIndex_VLN::LoadPersistentMVA ( CSphString & sError )
 				if ( uCount )
 				{
 					assert ( j<iMva64 || ( uCount%2 )==0 );
-					int iAlloc = g_MvaArena.TaggedAlloc ( m_iIndexTag, (1+uCount)*sizeof(DWORD)+sizeof(SphDocID_t) );
+					int iAlloc = g_tMvaArena.TaggedAlloc ( m_iIndexTag, (1+uCount)*sizeof(DWORD)+sizeof(SphDocID_t) );
 					if ( iAlloc<0 )
 						bFailed = true;
 					else
@@ -10140,7 +10140,7 @@ bool CSphIndex_VLN::LoadPersistentMVA ( CSphString & sError )
 	if ( bFailed )
 	{
 		ARRAY_FOREACH ( i, dAllocs )
-			g_MvaArena.TaggedFreeIndex ( m_iIndexTag, dAllocs[i] );
+			g_tMvaArena.TaggedFreeIndex ( m_iIndexTag, dAllocs[i] );
 
 		sError.SetSprintf ( "out of pool memory on loading persistent MVA values" );
 		return false;
@@ -10275,7 +10275,7 @@ bool CSphIndex_VLN::SaveAttributes ( CSphString & sError ) const
 		CSphVector<SphDocID_t> dAffected;
 		{
 			tDocCollector dCollect ( dAffected );
-			g_MvaArena.ExamineTag ( &dCollect, m_iIndexTag );
+			g_tMvaArena.ExamineTag ( &dCollect, m_iIndexTag );
 		}
 		dAffected.Uniq();
 
@@ -15981,7 +15981,7 @@ void CSphIndex_VLN::Dealloc ()
 	SafeDelete ( m_pDict );
 
 	if ( m_iIndexTag>=0 && g_pMvaArena )
-		g_MvaArena.TaggedFreeTag ( m_iIndexTag );
+		g_tMvaArena.TaggedFreeTag ( m_iIndexTag );
 	m_iIndexTag = -1;
 
 	m_pPreread = NULL;

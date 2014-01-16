@@ -203,10 +203,18 @@ struct CrashQuery_t
 	}
 };
 
+// This class is basically a pointer to query string and some more additional info.
+// Each thread which executes query must have exactly one instance of this class on
+// its stack and m_tLastQueryTLS will contain a pointer to that instance.
+// Main thread has explicitly created SphCrashLogger_c on its stack, other query
+// threads should be created with SphCrashLogger_c::ThreadCreate()
 class SphCrashLogger_c
 {
 public:
 	SphCrashLogger_c () {}
+	// lets invalidate pointer when this instance goes out of scope to get immediate crash
+	// instead of a reference to incorrect stack frame in case of some programming error
+	~SphCrashLogger_c () { sphThreadSet ( m_tTLS, this ); }
 
 	static void Init ();
 	static void Done ();
@@ -238,9 +246,8 @@ private:
 	// sets up a TLS for a given thread
 	static void ThreadWrapper ( void * pArg );
 
-	CrashQuery_t			m_tQuery;			// per thread copy of last query for thread mode
-	static CrashQuery_t		m_tForkQuery;		// copy of last query for fork / prefork modes
-	static SphThreadKey_t	m_tLastQueryTLS;	// last query ( non threaded workers could use dist_threads too )
+	CrashQuery_t			m_tQuery;		// per thread copy of last query for thread mode
+	static SphThreadKey_t	m_tTLS;	// pointer to on-stack instance of this class
 };
 
 enum LogFormat_e
@@ -2006,17 +2013,16 @@ static int		g_iCrashInfoLen = 0;
 static char		g_sMinidump[SPH_TIME_PID_MAX_SIZE] = "";
 #endif
 
-CrashQuery_t SphCrashLogger_c::m_tForkQuery = CrashQuery_t();
-SphThreadKey_t SphCrashLogger_c::m_tLastQueryTLS = SphThreadKey_t ();
+SphThreadKey_t SphCrashLogger_c::m_tTLS = SphThreadKey_t ();
 
 void SphCrashLogger_c::Init ()
 {
-	Verify ( sphThreadKeyCreate ( &m_tLastQueryTLS ) );
+	Verify ( sphThreadKeyCreate ( &m_tTLS ) );
 }
 
 void SphCrashLogger_c::Done ()
 {
-	sphThreadKeyDelete ( m_tLastQueryTLS );
+	sphThreadKeyDelete ( m_tTLS );
 }
 
 
@@ -2154,13 +2160,9 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 
 void SphCrashLogger_c::SetLastQuery ( const CrashQuery_t & tQuery )
 {
-	if ( g_eWorkers==MPM_PREFORK || g_eWorkers==MPM_FORK )
-		m_tForkQuery = tQuery;
-	SphCrashLogger_c * pCrashLogger = (SphCrashLogger_c *)sphThreadGet ( m_tLastQueryTLS );
-	if ( pCrashLogger )
-	{
-		pCrashLogger->m_tQuery = tQuery;
-	}
+	SphCrashLogger_c * pCrashLogger = (SphCrashLogger_c *)sphThreadGet ( m_tTLS );
+	assert ( pCrashLogger );
+	pCrashLogger->m_tQuery = tQuery;
 }
 
 void SphCrashLogger_c::SetupTimePID ()
@@ -2174,13 +2176,14 @@ void SphCrashLogger_c::SetupTimePID ()
 
 void SphCrashLogger_c::SetupTLS ()
 {
-	Verify ( sphThreadSet ( m_tLastQueryTLS, this ) );
+	Verify ( sphThreadSet ( m_tTLS, this ) );
 }
 
 CrashQuery_t SphCrashLogger_c::GetQuery()
 {
-	SphCrashLogger_c * pCrashLogger = (SphCrashLogger_c *)sphThreadGet ( m_tLastQueryTLS );
-	return pCrashLogger ? pCrashLogger->m_tQuery : m_tForkQuery;
+	SphCrashLogger_c * pCrashLogger = (SphCrashLogger_c *)sphThreadGet ( m_tTLS );
+	assert ( pCrashLogger );
+	return pCrashLogger->m_tQuery;
 }
 
 bool SphCrashLogger_c::ThreadCreate ( SphThread_t * pThread, void (*pCall)(void*), void * pArg, bool bDetached )

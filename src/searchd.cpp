@@ -221,7 +221,37 @@ public:
 	static CrashQuery_t GetQuery ();
 	void SetupTLS ();
 
+	// create thread with crash logging
+	static bool ThreadCreate ( SphThread_t * pThread, void ( *pCall )( void* ), void * pArg, bool bDetached=false )
+	{
+		CallArgPair_t * pWrapperArg = new CallArgPair_t ( pCall, pArg );
+		bool bSuccess = sphThreadCreate ( pThread, ThreadWrapper, pWrapperArg, bDetached );
+		if ( !bSuccess )
+			delete pWrapperArg;
+		return bSuccess;
+	}
+
 private:
+	struct CallArgPair_t
+	{
+		CallArgPair_t ( void ( *pCall )( void * ), void * pArg )
+			: m_pCall ( pCall )
+			, m_pArg ( pArg )
+		{}
+		void ( *m_pCall )( void * );
+		void * m_pArg;
+	};
+
+	// sets up a TLS for a given thread
+	static void ThreadWrapper ( void * pArg )
+	{
+		CallArgPair_t * pPair = static_cast<CallArgPair_t *> ( pArg );
+		SphCrashLogger_c tQueryTLS;
+		tQueryTLS.SetupTLS();
+		pPair->m_pCall ( pPair->m_pArg );
+		delete pPair;
+	}
+
 	CrashQuery_t			m_tQuery;			// per thread copy of last query for thread mode
 	static CrashQuery_t		m_tForkQuery;		// copy of last query for fork / prefork modes
 	static SphThreadKey_t	m_tLastQueryTLS;	// last query ( non threaded workers could use dist_threads too )
@@ -2166,6 +2196,8 @@ CrashQuery_t SphCrashLogger_c::GetQuery()
 	SphCrashLogger_c * pCrashLogger = (SphCrashLogger_c *)sphThreadGet ( m_tLastQueryTLS );
 	return pCrashLogger ? pCrashLogger->m_tQuery : m_tForkQuery;
 }
+
+bool SphCrashLogger_c::ThreadCreate ( SphThread_t * pThread, void (*pCall)(void*), void * pArg, bool bDetached=false )
 
 
 #if USE_WINDOWS
@@ -5500,9 +5532,6 @@ public:
 	{
 		ThdWorkPool_t * pPool = (ThdWorkPool_t *)pArg;
 
-		// setup query guard for thread
-		SphCrashLogger_c tQueryTLS;
-		tQueryTLS.SetupTLS ();
 		SphCrashLogger_c::SetLastQuery ( pPool->m_tCrashQuery );
 
 		int iSpinCount = 0;
@@ -5653,7 +5682,7 @@ public:
 		}
 
 		ARRAY_FOREACH ( i, m_dThds )
-			sphThreadCreate ( m_dThds.Begin()+i, ThdWorkPool_t::PoolThreadFunc, &m_tWorkerPool );
+			SphCrashLogger_c::ThreadCreate ( m_dThds.Begin()+i, ThdWorkPool_t::PoolThreadFunc, &m_tWorkerPool );
 	}
 
 	~CSphRemoteAgentsController ()
@@ -9324,9 +9353,6 @@ void LocalSearchThreadFunc ( void * pArg )
 {
 	LocalSearchThreadContext_t * pContext = (LocalSearchThreadContext_t*) pArg;
 
-	// setup query guard for thread
-	SphCrashLogger_c tQueryTLS;
-	tQueryTLS.SetupTLS ();
 	SphCrashLogger_c::SetLastQuery ( pContext->m_tCrashQuery );
 
 	for ( ;; )
@@ -9457,7 +9483,7 @@ void SearchHandler_c::RunLocalSearchesMT ()
 		t.m_pCurSearch = &iaCursor;
 		t.m_iSearches = dWorks.GetLength();
 		t.m_pSearches = dWorks.Begin();
-		sphThreadCreate ( &dThreads[i].m_tThd, LocalSearchThreadFunc, (void*)&dThreads[i] ); // FIXME! check result
+		SphCrashLogger_c::ThreadCreate ( &dThreads[i].m_tThd, LocalSearchThreadFunc, (void*)&dThreads[i] ); // FIXME! check result
 	}
 
 	// wait for them to complete
@@ -12398,9 +12424,6 @@ void SnippetThreadFunc ( void * pArg )
 {
 	SnippetThread_t * pDesc = (SnippetThread_t*) pArg;
 
-	// setup query guard for thread
-	SphCrashLogger_c tQueryTLS;
-	tQueryTLS.SetupTLS ();
 	SphCrashLogger_c::SetLastQuery ( pDesc->m_tCrashQuery );
 
 	SnippetContext_t tCtx;
@@ -12659,7 +12682,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 			t.m_pIndex = pIndex;
 			t.m_tCrashQuery = tCrashQuery;
 			if ( i )
-				sphThreadCreate ( &dThreads[i].m_tThd, SnippetThreadFunc, &dThreads[i] );
+				SphCrashLogger_c::ThreadCreate ( &dThreads[i].m_tThd, SnippetThreadFunc, &dThreads[i] );
 		}
 
 		CSphScopedPtr<SnippetRequestBuilder_t> tReqBuilder ( NULL );
@@ -21106,10 +21129,6 @@ void TickPreforked ( CSphProcessSharedMutex * pAcceptMutex )
 
 void HandlerThread ( void * pArg )
 {
-	// setup query guard for threaded mode
-	SphCrashLogger_c tQueryTLS;
-	tQueryTLS.SetupTLS ();
-
 	// handle that client
 	ThdDesc_t * pThd = (ThdDesc_t*) pArg;
 	sphThreadSet ( g_tConnKey, &pThd->m_iConnID );
@@ -21185,9 +21204,6 @@ void TickHead ( bool bDontListen )
 	// handle the client
 	if ( g_eWorkers==MPM_NONE )
 	{
-		SphCrashLogger_c tQueryTLS;
-		tQueryTLS.SetupTLS ();
-
 		HandleClient ( pListener->m_eProto, iClientSock, sClientName, NULL );
 		sphSockClose ( iClientSock );
 		return;
@@ -21201,9 +21217,6 @@ void TickHead ( bool bDontListen )
 		SafeClose ( iChildPipe );
 		if ( !g_bHeadDaemon )
 		{
-			SphCrashLogger_c tQueryTLS;
-			tQueryTLS.SetupTLS ();
-
 			// child process, handle client
 			sphLogDebugv ( "conn %s: forked handler, socket %d", sClientName, iClientSock );
 			HandleClient ( pListener->m_eProto, iClientSock, sClientName, NULL );
@@ -21231,7 +21244,7 @@ void TickHead ( bool bDontListen )
 		g_dThd.Add ( pThd );
 		g_tThdMutex.Unlock ();
 
-		if ( !sphThreadCreate ( &pThd->m_tThd, HandlerThread, pThd, true ) )
+		if ( !SphCrashLogger_c::ThreadCreate ( &pThd->m_tThd, HandlerThread, pThd, true ) )
 		{
 			int iErr = errno;
 			g_tThdMutex.Lock ();
@@ -22407,6 +22420,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		if ( listen ( g_dListeners[j].m_iSock, iBacklog )==-1 )
 			sphFatal ( "listen() failed: %s", sphSockError() );
 
+	// crash logging for the main thread (for cases like --console and workers={fork|prefork})
 	SphCrashLogger_c tQueryTLS;
 	tQueryTLS.SetupTLS ();
 

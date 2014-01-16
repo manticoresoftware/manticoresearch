@@ -1535,7 +1535,7 @@ public:
 		memcpy ( sNew+iDst+1, sSrc, iSrc );
 		sNew [ iSrc+iDst+1 ] = '\0';
 		pDst->SetAttr ( m_tLoc, (SphAttr_t)sNew );
-		SafeDelete ( sDst );
+		SafeDeleteArray ( sDst );
 	}
 };
 

@@ -81,6 +81,7 @@ extern "C"
 	#include <sys/wait.h>
 	#include <sys/un.h>
 	#include <netdb.h>
+	#include <sys/syscall.h>
 
 	#if HAVE_POLL
 		#include <poll.h>
@@ -417,60 +418,25 @@ struct ThdDesc_t : public ListNode_t
 
 	ThdState_e		m_eThdState;
 	const char *	m_sCommand;
+	int				m_iConnID;		///< current conn-id for this thread
 
-	int				m_iConnID;						///< current conn-id for this thread
-
-	int64_t			m_tmConnect;
-	int64_t			m_tmExecStart;
-	int64_t			m_tmExecEnd;
-	CSphFixedVector<char> m_dShowThhreadBuf;
+	// stuff for SHOW THREADS
+	int				m_iTid;			///< OS thread id, or 0 if unknown
+	int64_t			m_tmConnect;	///< when did the client connect?
+	int64_t			m_tmStart;		///< when did the current request start?
+	CSphString		m_sThreadInfo;	///< current request description
 
 	ThdDesc_t ()
 		: m_iClientSock ( 0 )
 		, m_sCommand ( NULL )
 		, m_iConnID ( -1 )
+		, m_iTid ( 0 )
 		, m_tmConnect ( 0 )
-		, m_tmExecStart ( 0 )
-		, m_tmExecEnd ( 0 )
-		, m_dShowThhreadBuf ( 256 )
+		, m_tmStart ( 0 )
+	{}	
+
+	void SetSnippetThreadInfo ( const CSphVector<ExcerptQuery_t> & dSnippets )
 	{
-		m_dShowThhreadBuf[0] = '\0';
-	}
-
-	void SetQuerySphinxQL ( const char * sQuery, int iLen )
-	{
-		if ( !sQuery || !iLen )
-		{
-			m_dShowThhreadBuf[0] = '\0';
-			return;
-		}
-
-		iLen = Min ( iLen, m_dShowThhreadBuf.GetLength()-1 );
-		memcpy ( m_dShowThhreadBuf.Begin(), sQuery, iLen );
-		m_dShowThhreadBuf[iLen] = '\0';
-	}
-
-	void SetQueryApi ( const CSphQuery * pQuery )
-	{
-		if ( !pQuery )
-		{
-			snprintf ( m_dShowThhreadBuf.Begin(), m_dShowThhreadBuf.GetLength(), "api-search" );
-			return;
-		}
-
-		const char * sQuery = pQuery->m_sQuery.IsEmpty() ? "" : pQuery->m_sQuery.cstr();
-		const char * sComment = pQuery->m_sComment.IsEmpty() ? "" : pQuery->m_sComment.cstr();
-		snprintf ( m_dShowThhreadBuf.Begin(), m_dShowThhreadBuf.GetLength(), "api-search query=\"%s\" comment=\"%s\"", sQuery, sComment );
-	}
-
-	void SetSnippet ( const CSphVector<ExcerptQuery_t> & dSnippets )
-	{
-		if ( !dSnippets.GetLength() )
-		{
-			snprintf ( m_dShowThhreadBuf.Begin(), m_dShowThhreadBuf.GetLength(), "api-snippet" );
-			return;
-		}
-
 		int64_t iSize = 0;
 		ARRAY_FOREACH ( i, dSnippets )
 		{
@@ -480,9 +446,9 @@ struct ThdDesc_t : public ListNode_t
 				iSize += dSnippets[i].m_sSource.Length();
 		}
 
-		const char * sWord0 = dSnippets.Begin()->m_sWords.IsEmpty() ? "" : dSnippets.Begin()->m_sWords.cstr();
-		snprintf ( m_dShowThhreadBuf.Begin(), m_dShowThhreadBuf.GetLength(), "api-snippet datasize=%.3fK query=\"%s\"",
-			1.0f / 1024.0f * iSize, sWord0 );
+		iSize /= 100;
+		m_sThreadInfo.SetSprintf ( "api-snippet datasize=%d.%d""k query=\"%s\"",
+			int(iSize/10), int(iSize%10), dSnippets[0].m_sWords.scstr() );
 	}
 };
 
@@ -10845,8 +10811,12 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq, ThdDesc_t 
 		if ( !ParseSearchQuery ( tReq, tHandler.m_dQueries[i], iVer, iMasterVer ) )
 			return;
 
-	if ( pThd )
-		pThd->SetQueryApi ( tHandler.m_dQueries.Begin() );
+	if ( pThd && tHandler.m_dQueries.GetLength() )
+	{
+		const CSphQuery & q = tHandler.m_dQueries[0];
+		pThd->m_sThreadInfo.SetSprintf ( "api-search query=\"%s\" comment=\"%s\"",
+			q.m_sQuery.scstr(), q.m_sComment.scstr() );
+	}
 
 	// run queries, send response
 	tHandler.RunQueries();
@@ -12618,7 +12588,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 
 		// set correct data size for snippets
 		if ( pThd )
-			pThd->SetSnippet ( dQueries );
+			pThd->SetSnippetThreadInfo ( dQueries );
 
 		// tough jobs first
 		if ( !bScattered )
@@ -12759,9 +12729,6 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq, ThdDesc_t
 	if ( !CheckCommandVersion ( iVer, VER_COMMAND_EXCERPT, tReq ) )
 		return;
 
-	if ( pThd )
-		pThd->m_tmExecStart = sphMicroTimer();
-
 	/////////////////////////////
 	// parse and process request
 	/////////////////////////////
@@ -12850,13 +12817,10 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq, ThdDesc_t
 	}
 
 	if ( pThd )
-		pThd->SetSnippet ( dQueries );
+		pThd->SetSnippetThreadInfo ( dQueries );
 
 	if ( !MakeSnippets ( sIndex, dQueries, sError, pThd ) )
 	{
-		if ( pThd )
-			pThd->m_tmExecEnd = sphMicroTimer();
-
 		tReq.SendErrorReply ( "%s", sError.cstr() );
 		return;
 	}
@@ -12873,9 +12837,6 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq, ThdDesc_t
 		{
 			if ( !bScattered )
 			{
-				if ( pThd )
-					pThd->m_tmExecEnd = sphMicroTimer();
-
 				tReq.SendErrorReply ( "highlighting failed: %s", dQueries[i].m_sError.cstr() );
 				return;
 			}
@@ -12898,9 +12859,6 @@ void HandleCommandExcerpt ( int iSock, int iVer, InputBuffer_c & tReq, ThdDesc_t
 
 	tOut.Flush ();
 	assert ( tOut.GetError()==true || tOut.GetSentCount()==iRespLen+8 );
-
-	if ( pThd )
-		pThd->m_tmExecEnd = sphMicroTimer();
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -13942,7 +13900,17 @@ void HandleCommandFlush ( int iSock, int iVer, InputBuffer_c & tReq )
 // GENERAL HANDLER
 /////////////////////////////////////////////////////////////////////////////
 
-#define THD_STATE(_state) { if ( pThd ) pThd->m_eThdState = _state; }
+#define THD_STATE(_state) \
+{ \
+	if ( pThd ) \
+	{ \
+		pThd->m_eThdState = _state; \
+		pThd->m_tmStart = sphMicroTimer(); \
+		if ( _state==THD_NET_IDLE ) \
+			pThd->m_sThreadInfo = ""; \
+	} \
+}
+
 void HandleCommandSphinxql ( int iSock, int iVer, InputBuffer_c & tReq ); // definition is below
 void StatCountCommand ( int iCmd, int iCount=1 );
 
@@ -14046,9 +14014,9 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 		if ( bPersist && !bCommand && tBuf.IsIntr() )
 			continue;
 
-		THD_STATE ( THD_NET_READ );
 		// okay, signal related mess should be over, try to parse the command
 		// (but some other socket error still might had happened, so beware)
+		THD_STATE ( THD_NET_READ );
 		int iCommand = tBuf.GetWord ();
 		int iCommandVer = tBuf.GetWord ();
 		int iLength = tBuf.GetInt ();
@@ -14087,8 +14055,6 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 
 		// count commands
 		StatCountCommand ( iCommand );
-		if ( pThd )
-			pThd->m_tmExecStart = sphMicroTimer();
 
 		// get request body
 		assert ( iLength>=0 && iLength<=g_iMaxPacketSize );
@@ -14154,18 +14120,12 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 			default:						assert ( 0 && "INTERNAL ERROR: unhandled command" ); break;
 		}
 
-		if ( pThd )
-			pThd->m_tmExecEnd = sphMicroTimer();
-
 		// set off query guard
 		SphCrashLogger_c::SetLastQuery ( CrashQuery_t() );
 	} while ( bPersist );
 
 	if ( bPersist )
 		DecPersCount();
-
-	if ( pThd )
-		pThd->m_tmExecEnd = sphMicroTimer();
 
 	sphLogDebugv ( "conn %s("INT64_FMT"): exiting", sClientIP, iCID );
 }
@@ -14442,6 +14402,17 @@ public:
 			memcpy ( pStr, sMsg, iLen );
 			IncPtr ( ( pStr-pBegin )+iLen );
 		}
+	}
+
+	void PutMicrosec ( int64_t iUsec )
+	{
+		iUsec = Max ( iUsec, 0 );
+		int iSec = (int)( iUsec / 1000000 );
+		int iFrac = (int)( iUsec % 1000000 );
+		Reserve ( 18 ); // 1..10 bytes for sec, 1 for dot, 6 for frac, 1 for len
+		int iLen = snprintf ( Get()+1, 18, "%d.%06d", iSec, iFrac );
+		*Get() = BYTE(iLen);
+		IncPtr ( 1+iLen );
 	}
 
 	void PutNULL ()
@@ -15371,36 +15342,28 @@ void HandleMysqlShowThreads ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	int64_t tmNow = sphMicroTimer();
 
 	g_tThdMutex.Lock();
-	tOut.HeadBegin ( 6 );
-	tOut.HeadColumn ( "Seq" );
-	tOut.HeadColumn ( "Proto" );
+	tOut.HeadBegin ( 5 );
+	tOut.HeadColumn ( "OS_tid" );
+	tOut.HeadColumn ( "Protocol" );
 	tOut.HeadColumn ( "State" );
-	tOut.HeadColumn ( "Connect_time" );
-	tOut.HeadColumn ( "Exec_time" );
-	tOut.HeadColumn ( "Query" );
+	tOut.HeadColumn ( "State_time" );
+	tOut.HeadColumn ( "Thread_info" );
 	tOut.HeadEnd();
 
-	int iThd = 0;
 	const ListNode_t * pIt = g_dThd.Begin();
 	while ( pIt!=g_dThd.End() )
 	{
 		const ThdDesc_t * pThd = (const ThdDesc_t *)pIt;
 
-		int64_t tmExec = tmNow - pThd->m_tmExecStart;
-		if ( pThd->m_tmExecEnd>pThd->m_tmExecStart )
-			tmExec = pThd->m_tmExecEnd - pThd->m_tmExecStart;
-
-		int iLen = strnlen ( pThd->m_dShowThhreadBuf.Begin(), pThd->m_dShowThhreadBuf.GetLength() );
-		int iColumnLen = iLen;
+		int iLen = pThd->m_sThreadInfo.Length();
 		if ( tStmt.m_iSetValue )
-			iColumnLen = Min ( iLen, tStmt.m_iSetValue );
+			iLen = Min ( iLen, tStmt.m_iSetValue );
 
-		tOut.PutNumeric ( "%d", ++iThd );
-		tOut.PutString ( g_dProtoNames[pThd->m_eProto] );
-		tOut.PutString ( g_dThdStates[pThd->m_eThdState] );
-		tOut.PutNumeric ( INT64_FMT, ( tmNow - pThd->m_tmConnect ) );
-		tOut.PutNumeric ( INT64_FMT, tmExec );
-		tOut.PutString ( pThd->m_dShowThhreadBuf.Begin(), iColumnLen );
+		tOut.PutNumeric ( "%d", pThd->m_iTid );
+		tOut.PutString ( g_dProtoNames [ pThd->m_eProto ] );
+		tOut.PutString ( g_dThdStates [ pThd->m_eThdState ] );
+		tOut.PutMicrosec ( tmNow - pThd->m_tmStart );
+		tOut.PutString ( pThd->m_sThreadInfo.cstr(), iLen );
 
 		tOut.Commit();
 		pIt = pIt->m_pNext;
@@ -17680,8 +17643,8 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 			tOut.m_pProfile = &tSession.m_tProfile;
 		}
 
-		THD_STATE ( THD_NET_READ );
 		// keep getting that packet
+		THD_STATE ( THD_NET_READ );
 		const int MAX_PACKET_LEN = 0xffffffL; // 16777215 bytes, max low level packet size
 		DWORD uPacketHeader = tIn.GetLSBDword ();
 		int iPacketLen = ( uPacketHeader & MAX_PACKET_LEN );
@@ -17767,18 +17730,14 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 			case MYSQL_COM_QUERY:
 				// handle query packet
 				assert ( uMysqlCmd==MYSQL_COM_QUERY );
-				sQuery = tIn.GetRawString ( iPacketLen-1 );
+				sQuery = tIn.GetRawString ( iPacketLen-1 ); // OPTIMIZE? could be huge; avoid copying?
 				assert ( !tIn.GetError() );
 				if ( pThd )
 				{
-					pThd->m_tmExecStart = sphMicroTimer();
-					pThd->SetQuerySphinxQL ( sQuery.cstr(), iPacketLen-1 );
+					THD_STATE ( THD_QUERY );
+					pThd->m_sThreadInfo = sQuery; // OPTIMIZE? could be huge; avoid copying?
 				}
 				bKeepProfile = tSession.Execute ( sQuery, tOut, uPacketID, pThd );
-
-				if ( pThd )
-					pThd->m_tmExecEnd = sphMicroTimer();
-
 				break;
 
 			default:
@@ -17800,9 +17759,6 @@ void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 			tSession.m_tLastProfile = tSession.m_tProfile;
 		tOut.m_pProfile = NULL;
 	} // for (;;)
-
-	if ( pThd )
-		pThd->m_tmExecEnd = sphMicroTimer();
 
 	// set off query guard
 	SphCrashLogger_c::SetLastQuery ( CrashQuery_t() );
@@ -21132,11 +21088,24 @@ void TickPreforked ( CSphProcessSharedMutex * pAcceptMutex )
 }
 
 
+int gettid()
+{
+#if USE_WINDOWS
+	return GetCurrentThreadId();
+#elif defined(SYS_gettid)
+	return syscall ( SYS_gettid );
+#else
+	return 0;
+#endif
+}
+
+
 void HandlerThread ( void * pArg )
 {
 	// handle that client
 	ThdDesc_t * pThd = (ThdDesc_t*) pArg;
 	sphThreadSet ( g_tConnKey, &pThd->m_iConnID );
+	pThd->m_iTid = gettid();
 	HandleClient ( pThd->m_eProto, pThd->m_iClientSock, pThd->m_sClientName.cstr(), pThd );
 	sphSockClose ( pThd->m_iClientSock );
 

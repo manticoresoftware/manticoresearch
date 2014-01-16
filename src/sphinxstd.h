@@ -1631,6 +1631,11 @@ public:
 		return m_sValue;
 	}
 
+	const char * scstr() const
+	{
+		return m_sValue ? m_sValue : "";
+	}
+
 	inline bool operator == ( const char * t ) const
 	{
 		if ( !t || !m_sValue )

@@ -14134,6 +14134,43 @@ rlp_max_batch_docs = 100
 
 <appendix id="changelog"><title>Sphinx revision history</title>
 
+<sect1 id="rel222"><title>Version 2.2.2-beta, ??? jan 2014</title>
+<bridgehead>New features</bridgehead>
+<itemizedlist>
+<listitem>added possibility to add user-defined rankers (via plugins)</listitem>
+<listitem>added ALTER for JSON/string/MVA attributes</listitem>
+<listitem>added flag '--enable-dl' to configure script which works with libmysqlclient, libpostgresql, libexpat, libunixobdc</listitem>
+<listitem>added new plugin system: CREATE/DROP PLUGIN, SHOW PLUGINS, plugin_dir now in common, index/query_token_filter plugins</listitem>
+<listitem>added ALTER TABLE DROP COLUMN</listitem>
+</itemizedlist>
+<bridgehead>Optimizations, behavior changes, and removals</bridgehead>
+<itemizedlist>
+<listitem>removed deprecated "address" and "port" config keys</listitem>
+<listitem>removed deprecated str2wordcount attributes</listitem>
+<listitem>removed deprecated str2ordinal attributes</listitem>
+<listitem>removed deprecated ondisk_dict and ondisk_dict_default</listitem>
+<listitem>removed deprecated charset_type and mssql_unicode</listitem>
+<listitem>removed deprecated enable_star</listitem>
+<listitem>removed deprecated CLI search and sql_query_info</listitem>
+<listitem>removed support for client versions 0.9.6 and below</listitem>
+<listitem>deprecated SetMatchMode() API call</listitem>
+<listitem>changed default thread_stack value to 1M</listitem>
+<listitem>changed #1797 per-term statistics report (expanded terms fold to their respective substrings)</listitem>
+<listitem>changed local directive in a distributed index which takes now a list (eg. local=shard1,shard2,shard3)</listitem>
+<listitem>optimized kill lists in plain and RT indexes</listitem>
+<listitem>optimized infix searches for dict=keywords</listitem>
+</itemizedlist>
+<bridgehead>Bug fixes</bridgehead>
+<itemizedlist>
+<listitem>fixed #1759 indextool false positives on persistent MVA checking</listitem>
+<listitem>fixed index corruption in UPDATE queries with non-existent attributes</listitem>
+<listitem>fixed GROUP BY id</listitem>
+<listitem>fixed #1832,#1833,#1834 some big endianess issues</listitem>
+<listitem>fixed #1762 memory leak in regexp_filter</listitem>
+<listitem>fixed #1830 loss of ondisk_attrs after rotation</listitem>
+</itemizedlist>
+</sect1>
+
 <sect1 id="rel221"><title>Version 2.2.1-beta, 13 nov 2013</title>
 <bridgehead>Major new features</bridgehead>
 <itemizedlist>

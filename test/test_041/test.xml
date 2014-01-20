@@ -59,6 +59,7 @@ index rt_fix
 	morphology = stem_en
 }
 
+
 index wf
 {
 	source			= srctest
@@ -112,6 +113,7 @@ REPLACE INTO rt (id, id1, title) VALUES ( 1, 1, 'work worked working workings wo
 <sphinxql>show meta</sphinxql>
 <sphinxql>REPLACE INTO rt_fix (id, id1, title) VALUES ( 1, 1, 'hi people how are you' )</sphinxql>
 <sphinxql>SELECT * FROM rt_fix WHERE MATCH('ho*')</sphinxql>
+<sphinxql>show meta</sphinxql>
 <sphinxql>SELECT * FROM wf WHERE MATCH('run')</sphinxql>
 <sphinxql>show meta</sphinxql>
 <sphinxql>SELECT * FROM wf WHERE MATCH('runs')</sphinxql>
@@ -119,6 +121,15 @@ REPLACE INTO rt (id, id1, title) VALUES ( 1, 1, 'work worked working workings wo
 <sphinxql>SELECT * FROM wf WHERE MATCH('=run')</sphinxql>
 <sphinxql>show meta</sphinxql>
 <sphinxql>SELECT * FROM wf WHERE MATCH('=runs')</sphinxql>
+<sphinxql>show meta</sphinxql>
+
+<!--regression substring search at RT index -->
+<sphinxql>REPLACE INTO rt_fix (id, id1, title) VALUES ( 2, 1, 'howdy all around' )</sphinxql>
+<sphinxql>SELECT * FROM rt_fix WHERE MATCH('*eop*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt_fix WHERE MATCH('*ar*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt_fix WHERE MATCH('ho*')</sphinxql>
 <sphinxql>show meta</sphinxql>
 </sphqueries>
 

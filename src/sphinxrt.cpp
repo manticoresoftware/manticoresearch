@@ -6037,7 +6037,7 @@ static bool ExtractInfixCheckpoints ( const char * sInfix, int iBytes, int iMaxC
 }
 
 
-void RtIndex_t::GetInfixedWords ( const char * sSubstring, int iSubLen, const char * , Args_t & tArgs ) const
+void RtIndex_t::GetInfixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const
 {
 	// sanity checks
 	if ( !sSubstring || iSubLen<=0 )
@@ -6072,7 +6072,7 @@ void RtIndex_t::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 			while ( ( pWord = tReader.UnzipWord() )!=NULL )
 			{
 				// check it
-				if ( !sphWildcardMatch ( (const char*)pWord->m_sWord+1, sSubstring ) )
+				if ( !sphWildcardMatch ( (const char*)pWord->m_sWord+1, sWildcard ) )
 					continue;
 
 				// matched, lets add

@@ -96,6 +96,7 @@
 %token	TOK_READ
 %token	TOK_REPEATABLE
 %token	TOK_REPLACE
+%token	TOK_REMAP
 %token	TOK_RETURNS
 %token	TOK_ROLLBACK
 %token	TOK_RTINDEX
@@ -801,6 +802,7 @@ function:
 	| TOK_MAX '(' expr ',' expr ')'	{ TRACK_BOUNDS ( $$, $1, $6 ); }
 	| TOK_WEIGHT '(' ')'			{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| TOK_IDENT '(' expr TOK_FOR ident TOK_IN json_field ')' { TRACK_BOUNDS ( $$, $1, $8 ); }
+	| TOK_REMAP '(' expr ',' expr ',' '(' arglist ')' ',' '(' arglist ')' ')' { TRACK_BOUNDS ( $$, $1, $14 ); }
 	;
 	
 arglist:

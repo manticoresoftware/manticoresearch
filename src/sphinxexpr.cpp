@@ -1602,6 +1602,7 @@ enum Func_e
 	FUNC_INTERVAL,
 	FUNC_IN,
 	FUNC_BITDOT,
+	FUNC_REMAP,
 
 	FUNC_GEODIST,
 	FUNC_EXIST,
@@ -1680,6 +1681,7 @@ static FuncDesc_t g_dFuncs[] =
 	{ "interval",		-2,	FUNC_INTERVAL,		SPH_ATTR_INTEGER },
 	{ "in",				-1, FUNC_IN,			SPH_ATTR_INTEGER },
 	{ "bitdot",			-1, FUNC_BITDOT,		SPH_ATTR_NONE },
+	{ "remap",			4,	FUNC_REMAP,			SPH_ATTR_INTEGER },
 
 	{ "geodist",		-4,	FUNC_GEODIST,		SPH_ATTR_FLOAT },
 	{ "exist",			2,	FUNC_EXIST,			SPH_ATTR_NONE },
@@ -1721,7 +1723,7 @@ static FuncDesc_t g_dFuncs[] =
 int HashGen()
 {
 	printf ( "struct func { char *name; int num; };\n%%%%\n" );
-	for ( int i=0; i<sizeof(g_dFuncs)/sizeof(g_dFuncs[0]); i++ )
+	for ( int i=0; i<int( sizeof ( g_dFuncs )/sizeof ( g_dFuncs[0] )); i++ )
 		printf ( "%s, %d\n", g_dFuncs[i].m_sName, i );
 	printf ( "%%%%\n" );
 	printf ( "void main()\n" );
@@ -1757,14 +1759,14 @@ static int FuncHashLookup ( const char * sKey )
 		94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
 		94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
 		94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
-		15, 94, 94, 94, 94, 94, 94, 94, 94, 94,
+		5, 94, 94, 94, 94, 94, 94, 94, 94, 94,
 		94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
 		94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
 		94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
-		94, 94, 94, 94, 94, 45, 94, 0, 0, 20,
-		35, 0, 23, 10, 94, 5, 94, 94, 0, 0,
-		5, 0, 20, 20, 0, 55, 30, 30, 94, 0,
-		51, 55, 5, 94, 94, 94, 94, 94, 94, 94,
+		94, 94, 94, 94, 94, 45, 94, 25, 10, 20,
+		25,  0, 16, 10, 94,  5, 94, 94,  0,  0,
+		5,  0,  0, 20,  0, 55, 30, 30, 94,  0,
+		46, 30,  5, 94, 94, 94, 94, 94, 94, 94,
 		94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
 		94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
 		94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
@@ -1791,16 +1793,16 @@ static int FuncHashLookup ( const char * sKey )
 
 	static int dIndexes[] =
 	{
-		-1, -1, -1, 51, -1, 43, -1, 6, 0, -1,
-		16, 42, 28, 20, 7, 8, 37, 30, 44, 33,
-		39, 11, 35, 22, 54, 55, 32, -1, 3, 2,
-		24, -1, -1, 34, 26, -1, -1, 14, 50, 25,
-		-1, 29, -1, 48, 45, 13, -1, 40, 27, 23,
-		-1, -1, 53, 38, 21, -1, -1, 46, 1, 17,
-		-1, 31, 49, 52, 18, -1, -1, 19, 4, 12,
-		-1, 41, -1, -1, 9, -1, -1, -1, 5, 10,
-		-1, -1, -1, -1, 36, -1, -1, -1, 47, -1,
-		-1, -1, -1, 15
+		-1, -1, -1, 22, -1, 30, 33, 6, 0, -1,
+		16, 43, 28, 20, 7, 8, -1, 31, 45, 34,
+		40, 3, 36, 24, 55, 56, -1, -1, 52, 2,
+		44, 11, -1, 35, 26, -1, -1, -1, 51, 23,
+		14, 38, 54, 49, 46, 13, -1, 41, 27, 9,
+		-1, 29, -1, -1, 25, -1, 32, 47, 39, 17,
+		-1, 42, 50, 53, 18, -1, -1, 19, 4, 12,
+		-1, -1, -1, -1, 21, -1, -1, -1, 5, 10,
+		-1, -1, -1, 15, 37, -1, -1, -1, 48, -1,
+		-1, -1, -1, 1,
 	};
 
 	if ( iHash<0 || iHash>=(int)(sizeof(dIndexes)/sizeof(dIndexes[0])) )
@@ -1977,7 +1979,7 @@ protected:
 	int						AddNodeID ();
 	int						AddNodeWeight ();
 	int						AddNodeOp ( int iOp, int iLeft, int iRight );
-	int						AddNodeFunc ( int iFunc, int iLeft, int iRight=-1 );
+	int						AddNodeFunc ( int iFunc, int iFirst, int iSecond=-1, int iThird=-1, int iFourth=-1 );
 	int						AddNodeUdf ( int iCall, int iArg );
 	int						AddNodeConstlist ( int64_t iValue );
 	int						AddNodeConstlist ( float iValue );
@@ -2227,7 +2229,11 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		{
 			assert ( !strcasecmp ( g_dFuncs[iFunc].m_sName, sTok.cstr() ) );
 			lvalp->iFunc = iFunc;
-			return g_dFuncs[iFunc].m_eFunc==FUNC_IN ? TOK_FUNC_IN : TOK_FUNC;
+			if ( g_dFuncs [ iFunc ].m_eFunc==FUNC_IN )
+				return TOK_FUNC_IN;
+			if ( g_dFuncs [ iFunc ].m_eFunc==FUNC_REMAP )
+				return TOK_FUNC_REMAP;
+			return TOK_FUNC;
 		}
 
 		// ask hook
@@ -3585,6 +3591,82 @@ ISphExpr * ExprParser_t::CreateContainsNode ( const ExprNode_t & tNode )
 	}
 }
 
+class Expr_Remap_c : public ISphExpr
+{
+	struct CondValPair_t
+	{
+		int64_t m_iCond;
+		union
+		{
+			int64_t m_iVal;
+			float m_fVal;
+		};
+
+		explicit CondValPair_t ( int64_t iCond=0 ) : m_iCond ( iCond ), m_iVal ( 0 ) {}
+		bool operator< ( const CondValPair_t & rhs ) const { return m_iCond<rhs.m_iCond; }
+		bool operator== ( const CondValPair_t & rhs ) const { return m_iCond==rhs.m_iCond; }
+	};
+
+	ISphExpr * m_pCond;
+	ISphExpr * m_pVal;
+	CSphVector<CondValPair_t> m_dPairs;
+
+public:
+	Expr_Remap_c ( ISphExpr * pCondExpr, ISphExpr * pValExpr, const CSphVector<int64_t> & dConds, const ConstList_c & tVals )
+		: m_pCond ( pCondExpr )
+		, m_pVal ( pValExpr )
+		, m_dPairs ( dConds.GetLength() )
+	{
+		assert ( pCondExpr && pValExpr );
+		assert ( dConds.GetLength() );
+		assert ( dConds.GetLength()==tVals.m_dInts.GetLength() ||
+				dConds.GetLength()==tVals.m_dFloats.GetLength() );
+
+		if ( tVals.m_dInts.GetLength() )
+			ARRAY_FOREACH ( i, m_dPairs )
+			{
+				m_dPairs[i].m_iCond = dConds[i];
+				m_dPairs[i].m_iVal = tVals.m_dInts[i];
+			}
+		else
+			ARRAY_FOREACH ( i, m_dPairs )
+			{
+				m_dPairs[i].m_iCond = dConds[i];
+				m_dPairs[i].m_fVal = tVals.m_dFloats[i];
+			}
+
+		m_dPairs.Uniq();
+	}
+
+	~Expr_Remap_c()
+	{
+		SafeRelease ( m_pCond );
+		SafeRelease ( m_pVal );
+	}
+
+	virtual float Eval ( const CSphMatch & tMatch ) const
+	{
+		const CondValPair_t * p = m_dPairs.BinarySearch ( CondValPair_t ( m_pCond->Int64Eval ( tMatch ) ) );
+		if ( p )
+			return p->m_fVal;
+		return m_pVal->Eval ( tMatch );
+	}
+
+	virtual int IntEval ( const CSphMatch & tMatch ) const
+	{
+		return Int64Eval ( tMatch );
+	}
+
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const
+	{
+		const CondValPair_t * p = m_dPairs.BinarySearch ( CondValPair_t ( m_pCond->Int64Eval ( tMatch ) ) );
+		if ( p )
+			return p->m_iVal;
+		return m_pVal->Int64Eval ( tMatch );
+	}
+
+};
+
 //////////////////////////////////////////////////////////////////////////
 
 /// fold nodes subtree into opcodes
@@ -3617,6 +3699,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case FUNC_INDEXOF:
 		case FUNC_MIN_TOP_WEIGHT:
 		case FUNC_MIN_TOP_SORTVAL:
+		case FUNC_REMAP:
 			bSkipLeft = true;
 			bSkipRight = true;
 			break;
@@ -3757,6 +3840,16 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 					case FUNC_IN:		return CreateInNode ( iNode );
 					case FUNC_LENGTH:	return CreateLengthNode ( tNode, dArgs[0] );
 					case FUNC_BITDOT:	return CreateBitdotNode ( tNode.m_iLeft, dArgs );
+					case FUNC_REMAP:
+					{
+						ISphExpr * pCond = CreateTree ( tNode.m_iLeft );
+						ISphExpr * pVal = CreateTree ( tNode.m_iRight );
+						assert ( pCond && pVal );
+						// This is a hack. I know how parser fills m_dNodes and thus know where to find constlists.
+						const CSphVector<int64_t> & dConds = m_dNodes [ iNode-2 ].m_pConsts->m_dInts;
+						const ConstList_c & tVals = *m_dNodes [ iNode-1 ].m_pConsts;
+						return new Expr_Remap_c ( pCond, pVal, dConds, tVals );
+					}
 
 					case FUNC_GEODIST:	return CreateGeodistNode ( tNode.m_iLeft );
 					case FUNC_EXIST:	return CreateExistNode ( tNode );
@@ -5252,30 +5345,32 @@ int ExprParser_t::AddNodeOp ( int iOp, int iLeft, int iRight )
 }
 
 
-int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
+int ExprParser_t::AddNodeFunc ( int iFunc, int iFirst, int iSecond, int iThird, int iFourth )
 {
-	// regular case, iLeft is entire arglist, iRight is -1
-	// special case for IN(), iLeft is arg, iRight is constlist
-	assert ( iFunc>=0 && iFunc<int(sizeof(g_dFuncs)/sizeof(g_dFuncs[0])) );
-	Func_e eFunc = g_dFuncs[iFunc].m_eFunc;
+	// regular case, iFirst is entire arglist, iSecond is -1
+	// special case for IN(), iFirst is arg, iSecond is constlist
+	// special case for REMAP(), iFirst and iSecond are expressions, iThird and iFourth are constlists
+	assert ( iFunc>=0 && iFunc< int ( sizeof ( g_dFuncs )/sizeof ( g_dFuncs[0]) ) );
+	Func_e eFunc = g_dFuncs [ iFunc ].m_eFunc;
+	const char * sFuncName = g_dFuncs [ iFunc ].m_sName;
 
 	// check args count
-	if ( iRight<0 || eFunc==FUNC_IN )
+	if ( iSecond<0 || eFunc==FUNC_IN )
 	{
-		int iExpectedArgc = g_dFuncs[iFunc].m_iArgs;
+		int iExpectedArgc = g_dFuncs [ iFunc ].m_iArgs;
 		int iArgc = 0;
-		if ( iLeft>=0 )
-			iArgc = ( m_dNodes[iLeft].m_iToken==',' ) ? m_dNodes[iLeft].m_iArgs : 1;
+		if ( iFirst>=0 )
+			iArgc = ( m_dNodes [ iFirst ].m_iToken==',' ) ? m_dNodes [ iFirst ].m_iArgs : 1;
 		if ( iExpectedArgc<0 )
 		{
 			if ( iArgc<-iExpectedArgc )
 			{
-				m_sParserError.SetSprintf ( "%s() called with %d args, at least %d args expected", g_dFuncs[iFunc].m_sName, iArgc, -iExpectedArgc );
+				m_sParserError.SetSprintf ( "%s() called with %d args, at least %d args expected", sFuncName, iArgc, -iExpectedArgc );
 				return -1;
 			}
 		} else if ( iArgc!=iExpectedArgc )
 		{
-			m_sParserError.SetSprintf ( "%s() called with %d args, %d args expected", g_dFuncs[iFunc].m_sName, iArgc, iExpectedArgc );
+			m_sParserError.SetSprintf ( "%s() called with %d args, %d args expected", sFuncName, iArgc, iExpectedArgc );
 			return -1;
 		}
 	}
@@ -5286,9 +5381,9 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 	// most builtin functions take numeric args only
 	bool bGotString = false, bGotMva = false;
 	CSphVector<ESphAttr> dRetTypes;
-	if ( iRight<0 )
+	if ( iSecond<0 )
 	{
-		GatherArgRetTypes ( iLeft, dRetTypes );
+		GatherArgRetTypes ( iFirst, dRetTypes );
 		ARRAY_FOREACH ( i, dRetTypes )
 		{
 			bGotString |= ( dRetTypes[i]==SPH_ATTR_STRING );
@@ -5297,23 +5392,23 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 	}
 	if ( bGotString && !( eFunc==FUNC_CRC32 || eFunc==FUNC_EXIST || eFunc==FUNC_POLY2D || eFunc==FUNC_GEOPOLY2D ) )
 	{
-		m_sParserError.SetSprintf ( "%s() arguments can not be string", g_dFuncs[iFunc].m_sName );
+		m_sParserError.SetSprintf ( "%s() arguments can not be string", sFuncName );
 		return -1;
 	}
-	if ( bGotMva && !(eFunc==FUNC_IN || eFunc==FUNC_TO_STRING || eFunc==FUNC_LENGTH || eFunc==FUNC_LEAST || eFunc==FUNC_GREATEST ) )
+	if ( bGotMva && !( eFunc==FUNC_IN || eFunc==FUNC_TO_STRING || eFunc==FUNC_LENGTH || eFunc==FUNC_LEAST || eFunc==FUNC_GREATEST ) )
 	{
-		m_sParserError.SetSprintf ( "%s() arguments can not be MVA", g_dFuncs[iFunc].m_sName );
+		m_sParserError.SetSprintf ( "%s() arguments can not be MVA", sFuncName );
 		return -1;
 	}
 
 	// check that first BITDOT arg is integer or bigint
 	if ( eFunc==FUNC_BITDOT )
 	{
-		int iLeftmost = iLeft;
-		while ( m_dNodes[iLeftmost].m_iToken==',' )
-			iLeftmost = m_dNodes[iLeftmost].m_iLeft;
+		int iLeftmost = iFirst;
+		while ( m_dNodes [ iLeftmost ].m_iToken==',' )
+			iLeftmost = m_dNodes [ iLeftmost ].m_iLeft;
 
-		ESphAttr eArg = m_dNodes[iLeftmost].m_eRetType;
+		ESphAttr eArg = m_dNodes [ iLeftmost ].m_eRetType;
 		if ( eArg!=SPH_ATTR_INTEGER && eArg!=SPH_ATTR_BIGINT )
 		{
 			m_sParserError.SetSprintf ( "first BITDOT() argument must be integer" );
@@ -5323,10 +5418,10 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 
 	if ( eFunc==FUNC_EXIST )
 	{
-		int iExistLeft = m_dNodes[iLeft].m_iLeft;
-		int iExistRight = m_dNodes[iLeft].m_iRight;
-		bool bIsLeftGood = ( m_dNodes[iExistLeft].m_eRetType==SPH_ATTR_STRING );
-		ESphAttr eRight = m_dNodes[iExistRight].m_eRetType;
+		int iExistLeft = m_dNodes [ iFirst ].m_iLeft;
+		int iExistRight = m_dNodes [ iFirst ].m_iRight;
+		bool bIsLeftGood = ( m_dNodes [ iExistLeft ].m_eRetType==SPH_ATTR_STRING );
+		ESphAttr eRight = m_dNodes [ iExistRight ].m_eRetType;
 		bool bIsRightGood = ( eRight==SPH_ATTR_INTEGER || eRight==SPH_ATTR_TIMESTAMP || eRight==SPH_ATTR_BOOL
 			|| eRight==SPH_ATTR_FLOAT || eRight==SPH_ATTR_BIGINT );
 
@@ -5345,10 +5440,10 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 	if ( eFunc==FUNC_SINT || eFunc==FUNC_DAY || eFunc==FUNC_MONTH || eFunc==FUNC_YEAR || eFunc==FUNC_YEARMONTH || eFunc==FUNC_YEARMONTHDAY
 		|| eFunc==FUNC_FIBONACCI )
 	{
-		assert ( iLeft>=0 );
-		if ( m_dNodes[iLeft].m_eRetType!=SPH_ATTR_INTEGER )
+		assert ( iFirst>=0 );
+		if ( m_dNodes [ iFirst ].m_eRetType!=SPH_ATTR_INTEGER )
 		{
-			m_sParserError.SetSprintf ( "%s() argument must be integer", g_dFuncs[iFunc].m_sName );
+			m_sParserError.SetSprintf ( "%s() argument must be integer", sFuncName );
 			return -1;
 		}
 	}
@@ -5377,13 +5472,13 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 			// handle 1 arg version, POLY2D(string-attr)
 			if ( dRetTypes[0]!=SPH_ATTR_STRING )
 			{
-				m_sParserError.SetSprintf ( "%s() argument must be a string attribute", g_dFuncs[iFunc].m_sName );
+				m_sParserError.SetSprintf ( "%s() argument must be a string attribute", sFuncName );
 				return -1;
 			}
 		} else if ( dRetTypes.GetLength()<6 )
 		{
 			// handle 2..5 arg versions, invalid
-			m_sParserError.SetSprintf ( "bad %s() argument count, must be either 1 (string) or 6+ (x/y pairs list)", g_dFuncs[iFunc].m_sName );
+			m_sParserError.SetSprintf ( "bad %s() argument count, must be either 1 (string) or 6+ (x/y pairs list)", sFuncName );
 			return -1;
 
 		} else
@@ -5391,13 +5486,13 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 			// handle 6+ arg version, POLY2D(xy-list)
 			if ( dRetTypes.GetLength() & 1 )
 			{
-				m_sParserError.SetSprintf ( "bad %s() argument count, must be even", g_dFuncs[iFunc].m_sName );
+				m_sParserError.SetSprintf ( "bad %s() argument count, must be even", sFuncName );
 				return -1;
 			}
 			ARRAY_FOREACH ( i, dRetTypes )
 				if ( !IsNumeric ( dRetTypes[i] ) )
 			{
-				m_sParserError.SetSprintf ( "%s() argument %d must be numeric", g_dFuncs[iFunc].m_sName, 1+i );
+				m_sParserError.SetSprintf ( "%s() argument %d must be numeric", sFuncName, 1+i );
 				return -1;
 			}
 		}
@@ -5408,19 +5503,19 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 	{
 		if ( dRetTypes.GetLength()>3 )
 		{
-			m_sParserError.SetSprintf ( "%s() called with %d args, at most 3 args expected", g_dFuncs[iFunc].m_sName, dRetTypes.GetLength() );
+			m_sParserError.SetSprintf ( "%s() called with %d args, at most 3 args expected", sFuncName, dRetTypes.GetLength() );
 			return -1;
 		}
 
 		if ( dRetTypes[0]!=SPH_ATTR_FLOAT || dRetTypes[1]!=SPH_ATTR_FLOAT )
 		{
-			m_sParserError.SetSprintf ( "%s() arguments 1,2 must be numeric", g_dFuncs[iFunc].m_sName );
+			m_sParserError.SetSprintf ( "%s() arguments 1,2 must be numeric", sFuncName );
 			return -1;
 		}
 
 		if ( dRetTypes.GetLength()==3 && dRetTypes[2]!=SPH_ATTR_MAPARG )
 		{
-			m_sParserError.SetSprintf ( "%s() argument 3 must be map", g_dFuncs[iFunc].m_sName );
+			m_sParserError.SetSprintf ( "%s() argument 3 must be map", sFuncName );
 			return -1;
 		}
 	}
@@ -5430,13 +5525,66 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 	{
 		if ( dRetTypes.GetLength()>5 )
 		{
-			m_sParserError.SetSprintf ( "%s() called with %d args, at most 5 args expected", g_dFuncs[iFunc].m_sName, dRetTypes.GetLength() );
+			m_sParserError.SetSprintf ( "%s() called with %d args, at most 5 args expected", sFuncName, dRetTypes.GetLength() );
 			return -1;
 		}
 
 		if ( dRetTypes.GetLength()==5 && dRetTypes[4]!=SPH_ATTR_MAPARG )
 		{
-			m_sParserError.SetSprintf ( "%s() argument 5 must be map", g_dFuncs[iFunc].m_sName );
+			m_sParserError.SetSprintf ( "%s() argument 5 must be map", sFuncName );
+			return -1;
+		}
+	}
+
+	// check REMAP(expr, expr, (constlist), (constlist)) args
+	if ( eFunc==FUNC_REMAP )
+	{
+		if ( m_dNodes [ iFirst ].m_iToken==TOK_IDENT )
+		{
+			m_sParserError.SetSprintf ( "%s() incorrect first argument (not integer?)", sFuncName );
+			return 1;
+		}
+		if ( m_dNodes [ iSecond ].m_iToken==TOK_IDENT )
+		{
+			m_sParserError.SetSprintf ( "%s() incorrect second argument (not integer/float?)", sFuncName );
+			return 1;
+		}
+
+		ESphAttr eFirstRet = m_dNodes [ iFirst ].m_eRetType;
+		ESphAttr eSecondRet = m_dNodes [ iSecond ].m_eRetType;
+		if ( eFirstRet!=SPH_ATTR_INTEGER && eFirstRet!=SPH_ATTR_BIGINT )
+		{
+			m_sParserError.SetSprintf ( "%s() first argument should result in integer value", sFuncName );
+			return -1;
+		}
+		if ( eSecondRet!=SPH_ATTR_INTEGER && eSecondRet!=SPH_ATTR_BIGINT && eSecondRet!=SPH_ATTR_FLOAT )
+		{
+			m_sParserError.SetSprintf ( "%s() second argument should result in integer or float value", sFuncName );
+			return -1;
+		}
+
+		ConstList_c & tThirdList = *m_dNodes [ iThird ].m_pConsts;
+		ConstList_c & tFourthList = *m_dNodes [ iFourth ].m_pConsts;
+		if ( tThirdList.m_dInts.GetLength()==0 )
+		{
+			m_sParserError.SetSprintf ( "%s() first constlist should consist of integer values", sFuncName );
+			return -1;
+		}
+		if ( tThirdList.m_dInts.GetLength()!=tFourthList.m_dInts.GetLength() &&
+			tThirdList.m_dInts.GetLength()!=tFourthList.m_dFloats.GetLength() )
+		{
+			m_sParserError.SetSprintf ( "%s() both constlists should have the same length", sFuncName );
+			return -1;
+		}
+
+		if ( eSecondRet==SPH_ATTR_FLOAT && tFourthList.m_dFloats.GetLength()==0 )
+		{
+			m_sParserError.SetSprintf ( "%s() second argument results in float value and thus fourth argument should be a list of floats", sFuncName );
+			return -1;
+		}
+		if ( eSecondRet!=SPH_ATTR_FLOAT && tFourthList.m_dInts.GetLength()==0 )
+		{
+			m_sParserError.SetSprintf ( "%s() second argument results in integer value and thus fourth argument should be a list of integers", sFuncName );
 			return -1;
 		}
 	}
@@ -5445,10 +5593,10 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 	ExprNode_t & tNode = m_dNodes.Add ();
 	tNode.m_iToken = TOK_FUNC;
 	tNode.m_iFunc = iFunc;
-	tNode.m_iLeft = iLeft;
-	tNode.m_iRight = iRight;
-	tNode.m_eArgType = ( iLeft>=0 ) ? m_dNodes[iLeft].m_eRetType : SPH_ATTR_INTEGER;
-	tNode.m_eRetType = g_dFuncs[iFunc].m_eRet;
+	tNode.m_iLeft = iFirst;
+	tNode.m_iRight = iSecond;
+	tNode.m_eArgType = ( iFirst>=0 ) ? m_dNodes [ iFirst ].m_eRetType : SPH_ATTR_INTEGER;
+	tNode.m_eRetType = g_dFuncs [ iFunc ].m_eRet;
 
 	// fixup return type in a few special cases
 	if ( eFunc==FUNC_MIN || eFunc==FUNC_MAX || eFunc==FUNC_MADD || eFunc==FUNC_MUL3 || eFunc==FUNC_ABS || eFunc==FUNC_IDIV )
@@ -5456,8 +5604,8 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 
 	if ( eFunc==FUNC_EXIST )
 	{
-		int iExistRight = m_dNodes[iLeft].m_iRight;
-		ESphAttr eType = m_dNodes[iExistRight].m_eRetType;
+		int iExistRight = m_dNodes [ iFirst ].m_iRight;
+		ESphAttr eType = m_dNodes [ iExistRight ].m_eRetType;
 		tNode.m_eArgType = eType;
 		tNode.m_eRetType = eType;
 	}
@@ -5466,19 +5614,25 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iLeft, int iRight )
 		tNode.m_eRetType = SPH_ATTR_FLOAT; // enforce if we can; FIXME! silently ignores BIGINT() on floats; should warn or raise an error
 
 	if ( eFunc==FUNC_IF || eFunc==FUNC_BITDOT )
-		tNode.m_eRetType = GetWidestRet ( iLeft, iRight );
+		tNode.m_eRetType = GetWidestRet ( iFirst, iSecond );
 
 	// fixup MVA return type according to the leftmost argument
 	if ( eFunc==FUNC_GREATEST || eFunc==FUNC_LEAST )
 	{
-		int iLeftmost = iLeft;
-		while ( m_dNodes[iLeftmost].m_iToken==',' )
-			iLeftmost = m_dNodes[iLeftmost].m_iLeft;
-		ESphAttr eArg = m_dNodes[iLeftmost].m_eRetType;
+		int iLeftmost = iFirst;
+		while ( m_dNodes [ iLeftmost ].m_iToken==',' )
+			iLeftmost = m_dNodes [ iLeftmost ].m_iLeft;
+		ESphAttr eArg = m_dNodes [ iLeftmost ].m_eRetType;
 		if ( eArg==SPH_ATTR_INT64SET )
 			tNode.m_eRetType = SPH_ATTR_BIGINT;
 		if ( eArg==SPH_ATTR_UINT32SET )
 			tNode.m_eRetType = SPH_ATTR_INTEGER;
+	}
+
+	if ( eFunc==FUNC_REMAP )
+	{
+		// function return type depends on second expression
+		tNode.m_eRetType = m_dNodes [ iSecond ].m_eRetType;
 	}
 
 	// all ok

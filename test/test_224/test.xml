@@ -92,6 +92,17 @@ index rtd5
 	agent_query_timeout		= 3000
 }
 
+index remap_test
+{
+	type = rt
+	path = <data_path/>/remap_test
+	rt_field = text
+	rt_attr_uint = attr_uint
+	rt_attr_bigint = attr_bigint
+	rt_attr_float = attr_float
+	rt_attr_string = attr_str
+}
+
 
 </config>
 
@@ -143,6 +154,24 @@ index rtd5
 <sphinxql>select * from rt</sphinxql>
 <sphinxql>delete from rtd4 where id=12</sphinxql>
 <sphinxql>select * from META:all</sphinxql>
+
+<sphinxql>insert into remap_test values (1, 'text1', 1, 1, 1.0, 'one')</sphinxql>
+<sphinxql>insert into remap_test values (2, 'text2', 2, 2, 2.0, 'two')</sphinxql>
+<sphinxql>insert into remap_test values (3, 'text3', 3, 3, 3.0, 'three')</sphinxql>
+<sphinxql>select * from remap_test</sphinxql>
+<sphinxql>select remap(id, attr_uint, (1, 3), (11, 33)) from remap_test</sphinxql>
+<sphinxql>select remap(id, attr_bigint, (1, 3), (11, 33)) from remap_test</sphinxql>
+<sphinxql>select remap(id, attr_float, (1, 3), (11., 33.)) from remap_test</sphinxql>
+<sphinxql>select remap(id, attr_uint, (1, 3), (11., 33)) from remap_test</sphinxql>
+<sphinxql>select remap(id, attr_float, (1, 3), (11, 33)) from remap_test</sphinxql>
+<sphinxql>select remap(id, attr_uint, (1., 3), (11, 33)) from remap_test</sphinxql>
+<sphinxql>select remap(id, attr_uint, (1, 3), (11, 33, 44)) from remap_test</sphinxql>
+<sphinxql>select remap(id, attr_uint, (5, 3, 1), (55, 33, 11)) from remap_test</sphinxql>
+<sphinxql>select remap(id*2+3, attr_uint*2, (7), (777)) from remap_test</sphinxql>
+<sphinxql>select remap(1.0, attr_uint, (5, 3, 1), (55, 33, 11)) from remap_test</sphinxql>
+<sphinxql>select remap(id, attr_string, (5, 3, 1), (55, 33, 11)) from remap_test</sphinxql>
+<sphinxql>select id e1, attr_str e2, remap(e1, e2, (5, 3, 1), (55, 33, 11)) from remap_test</sphinxql>
+<sphinxql>select id e1, attr_str e2, remap(e2, e1, (5, 3, 1), (55, 33, 11)) from remap_test</sphinxql>
 </sphqueries>
 
 </test>

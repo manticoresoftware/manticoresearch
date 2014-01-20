@@ -2655,6 +2655,7 @@ Here's the complete reference list for quick access.
 <listitem><para><link linkend="expr-func-now">NOW()</link></para></listitem>
 <listitem><para><link linkend="expr-func-poly2d">POLY2D()</link></para></listitem>
 <listitem><para><link linkend="expr-func-pow">POW()</link></para></listitem>
+<listitem><para><link linkend="expr-func-remap">REMAP()</link></para></listitem>
 <listitem><para><link linkend="expr-func-sin">SIN()</link></para></listitem>
 <listitem><para><link linkend="expr-func-sint">SINT()</link></para></listitem>
 <listitem><para><link linkend="expr-func-sqrt">SQRT()</link></para></listitem>
@@ -3192,6 +3193,22 @@ If used with SphinxQL but not called from any UDFs, the result of PACKEDFACTORS(
 is simply formatted as plain text, which can be used to manually assess the ranking
 factors. Note that this feature is not currently supported by the Sphinx API.
 </para>	
+</listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-remap">REMAP()</term>
+<listitem>
+<para>
+REMAP(condition, expression, (cond1, cond2, ...), (expr1, expr2, ...)) function
+was added in 2.2.2-beta. It allows you to make some exceptions of an expression
+values depending on condition values. Condition expression should always result
+integer, expression can result in integer or float.
+<programlisting>
+SELECT REMAP(userid, karmapoints, (1, 67), (999, 0)) FROM users;
+SELECT REMAP(id%10, salary, (0), (0.0)) FROM employes;
+</programlisting>
+</para>
 </listitem>
 </varlistentry>
 

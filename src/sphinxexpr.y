@@ -26,6 +26,7 @@
 %token <iAttrLocator>	TOK_ATTR_FACTORS
 %token <iFunc>			TOK_FUNC
 %token <iFunc>			TOK_FUNC_IN
+%token <iFunc>			TOK_FUNC_REMAP
 %token <iNode>			TOK_USERVAR
 %token <iNode>			TOK_UDF
 %token <iNode>			TOK_HOOK_IDENT
@@ -198,6 +199,7 @@ function:
 	| TOK_FUNC_IN '(' arg ',' constlist_or_uservar ')'{ $$ = pParser->AddNodeFunc ( $1, $3, $5 ); }
 	| TOK_HOOK_FUNC '(' arglist ')' { $$ = pParser->AddNodeHookFunc ( $1, $3 ); if ( $$<0 ) YYERROR; }
 	| TOK_FUNC '(' expr for_loop ')' { $$ = pParser->AddNodeFunc ( $1, $3, $4 ); }
+	| TOK_FUNC_REMAP '(' expr ',' expr ',' '(' constlist ')' ',' '(' constlist ')' ')' { $$ = pParser->AddNodeFunc ( $1, $3, $5, $8, $12 ); }
 	;
 
 json_field:

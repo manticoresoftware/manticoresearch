@@ -490,6 +490,7 @@ class SphinxClient:
 
 
 	def SetOverride (self, name, type, values):
+		print >> sys.stderr, 'DEPRECATED: Do not call this method. Use SphinxQL REMAP() function instead.'
 		assert(isinstance(name, str))
 		assert(type in SPH_ATTR_TYPES)
 		assert(isinstance(values, dict))

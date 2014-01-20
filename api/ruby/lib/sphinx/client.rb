@@ -487,11 +487,12 @@ module Sphinx
       @retrydelay = delay
     end
     
-    # Set attribute values override
+    # DEPRECATED: Set attribute values override
     #
 	  # There can be only one override per attribute.
 	  # +values+ must be a hash that maps document IDs to attribute values.
 	  def SetOverride(attrname, attrtype, values)
+      $stderr.puts "DEPRECATED: Do not call this method. Use SphinxQL REMAP() function instead.\n"
       assert { attrname.instance_of? String }
       assert { [SPH_ATTR_INTEGER, SPH_ATTR_TIMESTAMP, SPH_ATTR_BOOL, SPH_ATTR_FLOAT, SPH_ATTR_BIGINT].include?(attrtype) }
       assert { values.instance_of? Hash }

@@ -732,11 +732,12 @@ public class SphinxClient
 	}
 
 	/**
-	 * Set attribute values override (one override list per attribute).
+	 * DEPRECATED: Set attribute values override (one override list per attribute).
 	 * @param values maps Long document IDs to Int/Long/Float values (as specified in attrtype).
 	 */
 	public void SetOverride ( String attrname, int attrtype, Map values ) throws SphinxException
 	{
+		System.out.println ( "DEPRECATED: Do not call this method. Use SphinxQL REMAP() function instead.\n" );
 		myAssert ( attrname!=null && attrname.length()>0, "attrname must not be empty" );
 		myAssert ( attrtype==SPH_ATTR_INTEGER || attrtype==SPH_ATTR_TIMESTAMP || attrtype==SPH_ATTR_BOOL || attrtype==SPH_ATTR_FLOAT || attrtype==SPH_ATTR_BIGINT,
 			"unsupported attrtype (must be one of INTEGER, TIMESTAMP, BOOL, FLOAT, or BIGINT)" );

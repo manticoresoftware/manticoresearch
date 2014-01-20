@@ -536,6 +536,7 @@ helping them and sql_query_info.</para></listitem>
 <listitem><para>Deprecated SetMatchMode() API call.</para></listitem>
 <listitem><para>Changed default <link linkend="conf-thread-stack">thread_stack
 </link> value to 1M.</para></listitem>
+<listitem><para>Deprecated SetOverride() API call.</para></listitem>
 </itemizedlist>
 </para>
 </sect1>
@@ -7300,6 +7301,7 @@ separately.
 </sect2>
 
 <sect2 id="api-func-setoverride"><title>SetOverride</title>
+<para><b>DEPRECATED</b></para>
 <para><b>Prototype:</b> function SetOverride ( $attrname, $attrtype, $values )</para>
 <para>
 Sets temporary (per-query) per-document attribute value overrides.

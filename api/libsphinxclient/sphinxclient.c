@@ -865,10 +865,12 @@ sphinx_bool sphinx_set_retries ( sphinx_client * client, int count, int delay )
 	return SPH_TRUE;
 }
 
-
+// DEPRECATED
 sphinx_bool sphinx_add_override ( sphinx_client * client, const char * attr, const sphinx_uint64_t * docids, int num_values, const unsigned int * values )
 {
 	struct st_override * p;
+
+	fprintf ( stderr, "DEPRECATED: Do not call this method. Use SphinxQL REMAP() function instead.\n" );
 
 	if ( !client )
 		return SPH_FALSE;

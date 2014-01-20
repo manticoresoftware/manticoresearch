@@ -948,6 +948,7 @@ class SphinxClient
 	/// $values must be a hash that maps document IDs to attribute values
 	function SetOverride ( $attrname, $attrtype, $values )
 	{
+		trigger_error('DEPRECATED: Do not call this method. Use SphinxQL REMAP() function instead.', E_USER_DEPRECATED);
 		assert ( is_string ( $attrname ) );
 		assert ( in_array ( $attrtype, array ( SPH_ATTR_INTEGER, SPH_ATTR_TIMESTAMP, SPH_ATTR_BOOL, SPH_ATTR_FLOAT, SPH_ATTR_BIGINT ) ) );
 		assert ( is_array ( $values ) );

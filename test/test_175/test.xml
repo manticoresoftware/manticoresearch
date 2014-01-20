@@ -182,6 +182,26 @@ index idx_qt_2
 	path			= <data_path/>/idx_quorum_tail_2
 	docinfo = extern
 }
+
+index rt_auto_expand
+{
+	type = rt
+	charset_type = utf-8
+	rt_mem_limit = 128k
+	path = <data_path/>/rt_auto_expand
+
+	dict = keywords
+	rt_attr_uint = idd1
+	rt_attr_uint = idd2
+	rt_attr_uint = idd3
+	rt_attr_uint = idd4
+	rt_attr_uint = idd5
+	rt_field = content
+	min_infix_len = 3
+	enable_star = 1
+	expand_keywords = 1
+}
+
 </config>
 
 <db_create>
@@ -436,6 +456,23 @@ $results = array_merge ( $results, $query ( "select * from idx_qt where match ('
 $results = array_merge ( $results, $query ( "select * from idx_qt where match (' \" me me me notfound \"/2 NEAR/7 like ' )", $sock ) );
 
 $results = array_merge ( $results, $query ( "select *, weight() from idx_qt_2 where match (' \" match match that pal \"/2 ' ) order by id desc limit 5 option ranker=wordcount", $sock ) );
+
+// regression - expand_keywords got lost for disk chunks of RT ndex
+$text = 'dummy text is going here dummy text is going here dummy text is going here dummy text is going here dummy text is going here dummy text is going here';
+$insert = "REPLACE INTO rt_auto_expand VALUES ( 1, 'uniq got placed here', 1, 2, 3, 4, 5 ) ";
+$query ( $insert, $sock );
+
+for ( $id=2; $id<1700; $id++ )
+{
+	$insert = "REPLACE INTO rt_auto_expand VALUES ( $id, '$text', 1, 2, 3, 4, 5 ) ";
+	$query ( $insert, $sock );
+}
+$insert = "REPLACE INTO rt_auto_expand VALUES ( 2000, 'uniq got placed here', 1, 2, 3, 4, 5 ) ";
+$query ( $insert, $sock );
+$results = array_merge ( $results, $query ( "select * from rt_auto_expand where match ( 'uniq' ) ", $sock ) );
+$results = array_merge ( $results, $query ( "show meta", $sock ) );
+$results = array_merge ( $results, $query ( "select * from rt_auto_expand where match ( 'ace' ) ", $sock ) );
+$results = array_merge ( $results, $query ( "show meta", $sock ) );
 
 @mysql_close ( $sock );
 

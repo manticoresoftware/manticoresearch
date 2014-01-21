@@ -14287,6 +14287,9 @@ rlp_max_batch_docs = 100
   <listitem><para>fixed #1799 crash in queries to distributed indexes with GROUP BY on multiple values</para></listitem>
   <listitem><para>fixed #1823 indextool fails to handle indexes with lemmatizer morphology</para></listitem>
   <listitem><para>fixed network protocol issue which results in timeouts of libmysqlclient for big Sphinx responses</para></listitem>
+  <listitem><para>fixed documentation on rt_flush_period</para></listitem>
+  <listitem><para>fixed #1718 expand_keywords option lost in disk chunks of RT indexes</para></listitem>
+  <listitem><para>fixed #1848 infixes and morphology clash</para></listitem>
 </itemizedlist>
 </sect1>
 

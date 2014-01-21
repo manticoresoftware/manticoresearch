@@ -2594,6 +2594,13 @@ RtSegment_t * RtIndex_t::MergeSegments ( const RtSegment_t * pSeg1, const RtSegm
 	CheckSegmentRows ( pSeg, m_iStride );
 #endif
 
+	// merged segment might be completely killed by committed data
+	if ( !pSeg->m_iRows )
+	{
+		SafeDelete ( pSeg );
+		return NULL;
+	}
+
 	//////////////////
 	// merge keywords
 	//////////////////
@@ -2841,14 +2848,17 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 		// do it
 		RtSegment_t * pA = dSegments.Pop();
 		RtSegment_t * pB = dSegments.Pop();
-		dSegments.Add ( MergeSegments ( pA, pB, &dAccKlist ) );
+		RtSegment_t * pMerged = MergeSegments ( pA, pB, &dAccKlist );
+		if ( pMerged )
+		{
+			int64_t iMerged = pMerged->GetUsedRam();
+			iRamLeft -= Min ( iRamLeft, iMerged );
+			dSegments.Add ( pMerged );
+		}
 		dToKill.Add ( pA );
 		dToKill.Add ( pB );
 
 		iRamFreed += pA->GetUsedRam() + pB->GetUsedRam();
-
-		int64_t iMerged = dSegments.Last()->GetUsedRam();
-		iRamLeft -= Min ( iRamLeft, iMerged );
 	}
 
 	// phase 2, obtain exclusive writer lock

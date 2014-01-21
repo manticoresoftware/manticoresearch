@@ -84,6 +84,8 @@ extern void sphSortDocinfos ( DWORD * pBuf, int iCount, int iStride );
 
 //////////////////////////////////////////////////////////////////////////
 
+// Variable Length Byte (VLB) encoding
+// store int variable in as much bytes as actually needed to represent it
 template < typename T, typename P >
 static inline void ZipT ( CSphVector < BYTE, P > * pOut, T uValue )
 {
@@ -101,6 +103,7 @@ static inline void ZipT ( CSphVector < BYTE, P > * pOut, T uValue )
 STATIC_ASSERT ( SPH_MAX_KEYWORD_LEN<255, MAX_KEYWORD_LEN_SHOULD_FITS_BYTE );
 
 
+// Variable Length Byte (VLB) decoding
 template < typename T >
 static inline const BYTE * UnzipT ( T * pValue, const BYTE * pIn )
 {
@@ -528,7 +531,7 @@ struct RtDocReader_T
 typedef RtDocReader_T<> RtDocReader_t;
 
 template < typename VECTOR >
-int sphPutBytes ( VECTOR * pOut, const void * pData, int iLen )
+static int sphPutBytes ( VECTOR * pOut, const void * pData, int iLen )
 {
 	int iOff = pOut->GetLength();
 	pOut->Resize ( iOff + iLen );
@@ -774,12 +777,6 @@ struct RtHitReader2_t : public RtHitReader_t
 
 /// forward ref
 struct RtIndex_t;
-
-struct AccDocDup_t
-{
-	SphDocID_t m_uDocid;
-	int m_iDupCount;
-};
 
 struct JSONAttr_t
 {

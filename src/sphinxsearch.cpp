@@ -1265,12 +1265,12 @@ private:
 	{
 		switch ( eType )
 		{
-		case EXTRA_GET_DATA_ZONESPANS:
-			assert ( ppResult );
-			*ppResult = &m_dZonespans;
-			return true;
-		default:
-			return m_tState.ExtraData ( eType, ppResult );
+			case EXTRA_GET_DATA_ZONESPANS:
+				assert ( ppResult );
+				*ppResult = &m_dZonespans;
+				return true;
+			default:
+				return m_tState.ExtraData ( eType, ppResult );
 		}
 	}
 };
@@ -2369,14 +2369,14 @@ inline bool TermAcceptor_c<TERM_POS_ZONES>::IsAcceptableHit ( const ExtHit_t * p
 		SphZoneHit_e eState = m_pZoneChecker->IsInZone ( m_dZones[i], pHit );
 		switch ( eState )
 		{
-		case SPH_ZONE_FOUND:
-			return true;
-		case SPH_ZONE_NO_DOCUMENT:
-			Swap ( m_dZones[i], m_dZones[m_iCheckFrom] );
-			m_iCheckFrom++;
-			break;
-		default:
-			break;
+			case SPH_ZONE_FOUND:
+				return true;
+			case SPH_ZONE_NO_DOCUMENT:
+				Swap ( m_dZones[i], m_dZones[m_iCheckFrom] );
+				m_iCheckFrom++;
+				break;
+			default:
+				break;
 		}
 	}
 	return false;

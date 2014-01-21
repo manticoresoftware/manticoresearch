@@ -14004,9 +14004,9 @@ overwrite this instance-wide default value, allowing for fine-grain control.
 
 <sect2 id="conf-query-log-min-msec"><title>query_log_min_msec</title>
 <para>
-Limit in (in milliseconds) that prevents query being written to query log.
-Optional, default is 0 (all queries being written to query log). This directive
-lets log only queries these execution time overflow specified limit.
+Limit (in milliseconds) that prevents the query from being written to the query log.
+Optional, default is 0 (all queries are written to the query log). This directive
+specifies that only queries with execution times that exceed the specified limit will be logged.
 </para>
 </sect2>
 

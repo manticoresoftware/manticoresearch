@@ -59,7 +59,6 @@ index rt_fix
 	morphology = stem_en
 }
 
-
 index wf
 {
 	source			= srctest
@@ -68,6 +67,60 @@ index wf
 	index_exact_words = 1
 	morphology = none
 	wordforms		= <this_test/>/wordforms.txt
+}
+
+source src_stem : srctest
+{
+	sql_query		= SELECT 1 id, 11 idd, 'busy' title UNION SELECT 2 id, 11 idd, 'busi' title UNION SELECT 3 id, 11 idd, 'feet' title UNION SELECT 4 id, 11 idd, 'foot' title UNION SELECT 5 id, 11 idd, 'fbusy' title UNION SELECT 6 id, 11 idd, 'fbusi' title
+	sql_attr_uint		= idd
+}
+
+index kw_p
+{
+	source			= src_stem
+	path			= <data_path/>/kw_p
+	charset_table = 0..9, a..z, A..Z->a..z
+	dict = keywords
+	min_prefix_len = 3
+	morphology		= stem_en
+	index_exact_words = 1
+}
+
+index kw_i
+{
+	source			= src_stem
+	path			= <data_path/>/kw_i
+	charset_table = 0..9, a..z, A..Z->a..z
+	dict = keywords
+	min_infix_len = 3
+	morphology		= stem_en
+	index_exact_words = 1
+}
+
+index rt_p
+{
+	type = rt
+	path			= <data_path/>/rt_p
+	rt_mem_limit = 128k
+	rt_field                = title
+	rt_attr_uint        = idd
+	dict = keywords
+	min_prefix_len = 3
+	morphology		= stem_en
+	index_exact_words = 1
+}
+
+index rt_i
+{
+	type = rt
+	path			= <data_path/>/rt_i
+	rt_mem_limit = 128k
+	rt_field                = title
+	rt_attr_uint        = idd
+	dict = keywords
+	min_infix_len = 3
+	morphology		= stem_en
+	index_exact_words = 1
 }
 </config>
 
@@ -131,6 +184,59 @@ REPLACE INTO rt (id, id1, title) VALUES ( 1, 1, 'work worked working workings wo
 <sphinxql>show meta</sphinxql>
 <sphinxql>SELECT * FROM rt_fix WHERE MATCH('ho*')</sphinxql>
 <sphinxql>show meta</sphinxql>
+
+<!--regression substring search vs stemmed terms -->
+<sphinxql>REPLACE INTO rt_p (id, idd, title) VALUES (1,11,'busy'), (2,11,'busi'), (3,11,'feet'), (4,11,'foot'), (5,11,'fbusy'), (6,11,'fbusi')</sphinxql>
+<sphinxql>REPLACE INTO rt_i (id, idd, title) VALUES (1,11,'busy'), (2,11,'busi'), (3,11,'feet'), (4,11,'foot'), (5,11,'fbusy'), (6,11,'fbusi')</sphinxql>
+<sphinxql>SELECT * FROM kw_p WHERE MATCH('busy*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM kw_i WHERE MATCH('busy*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt_p WHERE MATCH('busy*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt_i WHERE MATCH('busy*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM kw_p WHERE MATCH('busi*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM kw_i WHERE MATCH('busi*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt_p WHERE MATCH('busi*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt_i WHERE MATCH('busi*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM kw_i WHERE MATCH('*busy*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt_i WHERE MATCH('*busy*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM kw_i WHERE MATCH('*busi*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt_i WHERE MATCH('*busi*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM kw_p WHERE MATCH('foot*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM kw_i WHERE MATCH('foot*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt_p WHERE MATCH('foot*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt_i WHERE MATCH('foot*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM kw_p WHERE MATCH('feet*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM kw_i WHERE MATCH('feet*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt_p WHERE MATCH('feet*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt_i WHERE MATCH('feet*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM kw_i WHERE MATCH('*foot*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt_i WHERE MATCH('*foot*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM kw_i WHERE MATCH('*feet*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt_i WHERE MATCH('*feet*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+
 </sphqueries>
 
 <db_create>

@@ -1704,12 +1704,13 @@ public:
 		CSphVector<SphExpanded_t>	m_dExpanded;
 		const bool					m_bPayload;
 		int							m_iExpansionLimit;
+		const bool					m_bHasMorphology;
 
 		ISphSubstringPayload *		m_pPayload;
 		int							m_iTotalDocs;
 		int							m_iTotalHits;
 
-		Args_t ( bool bPayload, int iExpansionLimit );
+		Args_t ( bool bPayload, int iExpansionLimit, bool bHasMorphology );
 		~Args_t ();
 		void AddExpanded ( const BYTE * sWord, int iLen, int iDocs, int iHits );
 		const char * GetWordExpanded ( int iIndex ) const;

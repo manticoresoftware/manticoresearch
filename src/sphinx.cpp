@@ -18018,7 +18018,7 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 	if ( !iWilds || iWilds==iLen )
 		return pNode;
 
-	ISphWordlist::Args_t tWordlist ( tCtx.m_bMergeSingles, tCtx.m_iExpansionLimit );
+	ISphWordlist::Args_t tWordlist ( tCtx.m_bMergeSingles, tCtx.m_iExpansionLimit, tCtx.m_bHasMorphology );
 
 	if ( !sphIsWild(*sFull) || tCtx.m_iMinInfixLen==0 )
 	{
@@ -30846,9 +30846,10 @@ const BYTE * CWordlist::AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint
 }
 
 
-ISphWordlist::Args_t::Args_t ( bool bPayload, int iExpansionLimit )
+ISphWordlist::Args_t::Args_t ( bool bPayload, int iExpansionLimit, bool bHasMorphology )
 	: m_bPayload ( bPayload )
 	, m_iExpansionLimit ( iExpansionLimit )
+	, m_bHasMorphology ( bHasMorphology )
 {
 	m_sBuf.Reserve ( 2048 * SPH_MAX_WORD_LEN * 3 );
 	m_dExpanded.Reserve ( 2048 );
@@ -31163,6 +31164,7 @@ void CWordlist::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 		return;
 
 	DictEntryDiskPayload_t tDict2Payload ( tArgs.m_bPayload );
+	const int iSkipMagic = ( tArgs.m_bHasMorphology ? 1 : 0 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
 
 	// walk those checkpoints, check all their words
 	ARRAY_FOREACH ( i, dPoints )
@@ -31170,8 +31172,14 @@ void CWordlist::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 		// OPTIMIZE? add a quicker path than a generic wildcard for "*infix*" case?
 		KeywordsBlockReader_c tDictReader ( m_pBuf.GetWritePtr() + m_dCheckpoints[dPoints[i]-1].m_iWordlistOffset, m_bHaveSkips );
 		while ( tDictReader.UnpackWord() )
-			if ( sphWildcardMatch ( (const char *)tDictReader.m_sKeyword, sWildcard ) )
+		{
+			// stemmed terms should not match suffixes
+			if ( tArgs.m_bHasMorphology && *tDictReader.m_sKeyword!=MAGIC_WORD_HEAD_NONSTEMMED )
+				continue;
+
+			if ( sphWildcardMatch ( (const char *)tDictReader.m_sKeyword+iSkipMagic, sWildcard ) )
 				tDict2Payload.Add ( tDictReader, tDictReader.GetWordLen() );
+		}
 	}
 
 	tDict2Payload.Convert ( tArgs );

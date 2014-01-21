@@ -6046,6 +6046,7 @@ void RtIndex_t::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 
 	// find those prefixes
 	CSphVector<int> dPoints;
+	const int iSkipMagic = ( tArgs.m_bHasMorphology ? 1 : 0 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
 
 	DictEntryRtPayload_t tDict2Payload ( tArgs.m_bPayload, m_dSegments.GetLength() );
 	ARRAY_FOREACH ( iSeg, m_dSegments )
@@ -6072,8 +6073,11 @@ void RtIndex_t::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 			const RtWord_t * pWord = NULL;
 			while ( ( pWord = tReader.UnzipWord() )!=NULL )
 			{
+				if ( tArgs.m_bHasMorphology && pWord->m_sWord[1]!=MAGIC_WORD_HEAD_NONSTEMMED )
+					continue;
+
 				// check it
-				if ( !sphWildcardMatch ( (const char*)pWord->m_sWord+1, sWildcard ) )
+				if ( !sphWildcardMatch ( (const char*)pWord->m_sWord+1+iSkipMagic, sWildcard ) )
 					continue;
 
 				// matched, lets add

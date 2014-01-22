@@ -204,6 +204,12 @@ INSERT INTO test_table VALUES
 <sphinxql>select *, weight() as w, packedfactors() from fields where match(' test ') option ranker=expr('sum(lcs)')</sphinxql>
 
 <sphinxql>update test set nonexistent=1.1, gid=1 where id=100 option ignore_nonexistent_columns=1</sphinxql>
+
+<!-- regression term related factors vs packedfactors flag -->
+<sphinxql>select id, weight() as w, packedfactors() from test where match(' "by seven" ') ORDER by id ASC option ranker=expr('sum(min_idf)*1000'), idf='plain,tfidf_unnormalized'</sphinxql>
+<sphinxql>select id, weight() as w, rankfactors() from test where match(' "by seven" ') ORDER by id ASC option ranker=export('sum(min_idf)*1000'), idf='plain,tfidf_unnormalized'</sphinxql>
+<sphinxql>select id, weight() as w from test where match(' "by seven" ') ORDER by id ASC option ranker=expr('sum(min_idf)*1000'), idf='plain,tfidf_unnormalized'</sphinxql>
+
 </sphqueries>
 
 </test>

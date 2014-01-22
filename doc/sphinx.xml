@@ -8772,160 +8772,85 @@ SELECT title, sphinx_snippets(text, 'index', 'mysql php') AS text
 
 
 <para>
-Unfortunately, Sphinx is not yet 100% bug free (even though I'm working hard
+Unfortunately, Sphinx is not yet 100% bug free (even though we're working hard
 towards that), so you might occasionally run into some issues.
 </para>
 <para>
 Reporting as much as possible about each bug is very important -
-because to fix it, I need to be able either to reproduce and debug the bug,
+because to fix it, we need to be able either to reproduce and fix the bug,
 or to deduce what's causing it from the information that you provide.
 So here are some instructions on how to do that.
 </para>
 
 
-<bridgehead>Build-time issues</bridgehead>
-<para>If Sphinx fails to build for some reason, please do the following:</para>
-<orderedlist>
-<listitem><para>check that headers and libraries for your DBMS are properly installed
-(for instance, check that <filename>mysql-devel</filename> package is present);
-</para></listitem>
-<listitem><para>report Sphinx version and config file (be sure to remove the passwords!),
-MySQL (or PostgreSQL) configuration info, gcc version, OS version and CPU type
-(ie. x86, x86-64, PowerPC, etc):
-<programlisting>
-mysql_config
-gcc --version
-uname -a
-</programlisting>
-</para></listitem>
-<listitem><para>
-report the error message which is produced by <filename>configure</filename>
-or <filename>gcc</filename> (it should be to include error message itself only,
-not the whole build log).
-</para></listitem>
-</orderedlist>
+<bridgehead>Bug-tracker</bridgehead>
+<para>Nothing special to say here. Here is the
+&lt;a href="http://sphinxsearch.com/bugs"&gt;link&lt;/a&gt;. Create a new
+ticket and describe your bug in details so both you and developers can
+save their time.</para>
 
 
-<bridgehead>Run-time issues</bridgehead>
-<para>
-If Sphinx builds and runs, but there are any problems running it,
-please do the following:
-</para>
-<orderedlist>
-<listitem><para>describe the bug (ie. both the expected behavior and actual behavior)
-and all the steps necessary to reproduce it;</para></listitem>
-<listitem><para>include Sphinx version and config file (be sure to remove the passwords!),
-MySQL (or PostgreSQL) version, gcc version, OS version and CPU type (ie. x86, x86-64,
-PowerPC, etc):
+<bridgehead>Crashes</bridgehead>
+<para>In case of crashes we sometimes can get enough info to fix from
+backtrace.</para>
+<para>Sphinx tries to write crash backtrace to its log file. It may look like
+this:
 <programlisting>
-mysql --version
-gcc --version
-uname -a
+./indexer(_Z12sphBacktraceib+0x2d6)[0x5d337e]
+./indexer(_Z7sigsegvi+0xbc)[0x4ce26a]
+/lib64/libpthread.so.0[0x3f75a0dd40]
+/lib64/libc.so.6(fwrite+0x34)[0x3f74e5f564]
+./indexer(_ZN27CSphCharsetDefinitionParser5ParseEPKcR10CSphVectorI14CSphRemapRange16CSphVe
+ctorPolicyIS3_EE+0x5b)[0x51701b]
+./indexer(_ZN13ISphTokenizer14SetCaseFoldingEPKcR10CSphString+0x62)[0x517e4c]
+./indexer(_ZN17CSphTokenizerBase14SetCaseFoldingEPKcR10CSphString+0xbd)[0x518283]
+./indexer(_ZN18CSphTokenizer_SBCSILb0EEC1Ev+0x3f)[0x5b312b]
+./indexer(_Z22sphCreateSBCSTokenizerv+0x20)[0x51835c]
+./indexer(_ZN13ISphTokenizer6CreateERK21CSphTokenizerSettingsPK17CSphEmbeddedFilesR10CSphS
+tring+0x47)[0x5183d7]
+./indexer(_Z7DoIndexRK17CSphConfigSectionPKcRK17SmallStringHash_TIS_EbP8_IO_FILE+0x494)[0x
+4d31c8]
+./indexer(main+0x1a17)[0x4d6719]
+/lib64/libc.so.6(__libc_start_main+0xf4)[0x3f74e1d8a4]
+./indexer(__gxx_personality_v0+0x231)[0x4cd779]
 </programlisting>
-</para></listitem>
-<listitem><para>build, install and run debug versions of all Sphinx programs (this is
-to enable a lot of additional internal checks, so-called assertions):
+This is an example of a good backtrace - we can see mangled function names
+here.</para>
+<para>But sometimes backtrace may look like this:
 <programlisting>
-make distclean
-./configure --with-debug
-make install
-killall -TERM searchd
+/opt/piler/bin/indexer[0x4c4919]
+/opt/piler/bin/indexer[0x405cf0]
+/lib/x86_64-linux-gnu/libpthread.so.0(+0xfcb0)[0x7fc659cb6cb0]
+/opt/piler/bin/indexer[0x4237fd]
+/opt/piler/bin/indexer[0x491de6]
+/opt/piler/bin/indexer[0x451704]
+/opt/piler/bin/indexer[0x40861a]
+/opt/piler/bin/indexer[0x40442c]
+/lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0xed)[0x7fc6588aa76d]
+/opt/piler/bin/indexer[0x405b89]
 </programlisting>
-</para></listitem>
-<listitem><para>reindex to check if any assertions are triggered (in this case,
-it's likely that the index is corrupted and causing problems);
-</para></listitem>
-<listitem><para>if the bug does not reproduce with debug versions,
-revert to non-debug and mention it in your report;
-</para></listitem>
-<listitem><para>if the bug could be easily reproduced with a small (1-100 record)
-part of your database, please provide a gzipped dump of that part;
-</para></listitem>
-<listitem><para>if the problem is related to <filename>searchd</filename>, include
-relevant entries from <filename>searchd.log</filename> and
-<filename>query.log</filename> in your bug report;
-</para></listitem>
-<listitem><para>if the problem is related to <filename>searchd</filename>, try
-running it in console mode and check if it dies with an assertion:
+Developers can get nothing useful from those cryptic numbers. They're
+ordinary humans and want to see function names. To help them you need to
+provide symbols (function and variable names). If you've installed sphinx by
+building from the sources, run the following command over your binary:
 <programlisting>
-./searchd --console
+nm -n indexer > indexer.sym
 </programlisting>
-</para></listitem>
-<listitem><para>if any program dies with an assertion, provide the assertion message.</para></listitem>
-</orderedlist>
+Attach this file to bug report along with backtrace. Be sure, however, that
+the binary is not stripped; otherwise the numbers still be 'magics' without
+a sense. If you've installed the sphinx from official package
+(.deb or .rpm) - just provide the full package name.</para>
 
 
-<bridgehead>Debugging assertions, crashes and hangups</bridgehead>
-<para>
-If any program dies with an assertion, crashes without an assertion or hangs up,
-you would additionally need to generate a core dump and examine it.
-</para>
-<orderedlist>
-<listitem><para>
-enable core dumps. On most Linux systems, this is done
-using <filename>ulimit</filename>:
-<programlisting>
-ulimit -c 32768
-</programlisting>
-</para></listitem>
-<listitem><para>
-run the program and try to reproduce the bug;
-</para></listitem>
-<listitem><para>
-if the program crashes (either with or without an assertion),
-find the core file in current directory (it should typically print
-out "Segmentation fault (core dumped)" message);
-</para></listitem>
-<listitem><para>
-if the program hangs, use <filename>kill -SEGV</filename>
-from another console to force it to exit and dump core:
-<programlisting>
-kill -SEGV HANGED-PROCESS-ID
-</programlisting>
-</para></listitem>
-<listitem><para>
-use <filename>gdb</filename> to examine the core file
-and obtain a backtrace:
-<programlisting>
-gdb ./CRASHED-PROGRAM-FILE-NAME CORE-DUMP-FILE-NAME
-(gdb) bt
-(gdb) quit
-</programlisting>
-</para></listitem>
-</orderedlist>
-<para>
-Note that HANGED-PROCESS-ID, CRASHED-PROGRAM-FILE-NAME and
-CORE-DUMP-FILE-NAME must all be replaced with specific numbers
-and file names. For example, hanged searchd debugging session
-would look like:
-<programlisting>
-# kill -SEGV 12345
-# ls *core*
-core.12345
-# gdb ./searchd core.12345
-(gdb) bt
-...
-(gdb) quit
-</programlisting>
+<bridgehead>Uploading your data</bridgehead>
+<para>To fix your bug developers often need to reproduce it on their machines.
+To do this they need your sphinx.conf, index files, binlog (if present),
+sometimes data to index (like SQL tables or XMLpipe2 data files) and queries.
 </para>
 <para>
-Note that <filename>ulimit</filename> is not server-wide
-and only affects current shell session. This means that you will not
-have to restore any server-wide limits - but if you relogin,
-you will have to set <filename>ulimit</filename> again.
-</para>
-<para>
-Core dumps should be placed in current working directory
-(and Sphinx programs do not change it), so this is where you
-would look for them.
-</para>
-<para>
-Please do not immediately remove the core file because there could
-be additional helpful information which could be retrieved from it.
-You do not need to send me this file (as the debug info there is
-closely tied to your system) but I might need to ask
-you a few additional questions about it.
-</para>
+Here is our write-only FTP where you can load your data in case it's too big
+to attach to bug ticket: ftp://sphinxsearch.com (user:sphinxbugs pass:stillhappen).
+You can upload data only in folders named bug-XXXX or issue-XXXX.</para>
 
 
 </chapter>

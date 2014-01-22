@@ -2059,11 +2059,10 @@ void sphBacktrace ( int iFD, bool bSafe )
 	sphSafeInfo ( iFD, "-------------- backtrace ends here ---------------" );
 
 	if ( bOk )
-		sphSafeInfo ( iFD, "Backtrace looks OK. Now you have to do following steps:\n"
-							"  1. Run the command over the crashed binary (for example, 'searchd'):\n"
-							"     nm -n searchd > searchd.sym\n"
-							"  2. Attach the binary, generated .sym and the text of backtrace (see above) to the bug report.\n"
-							"Also you can read the section about resolving backtraces in the documentation.");
+		sphSafeInfo ( iFD, "Please, create a bug report in our bug tracker (http://sphinxsearch.com/bugs) and attach there:\n"
+							"a) searchd log, b) searchd binary, c) searchd symbols.\n"
+							"Look into the chapter 'Reporting bugs' in the documentation\n"
+							"(/usr/share/doc/sphinx/sphinx.txt or http://sphinxsearch.com/docs/current.html#reporting-bugs)" );
 
 	// convert all BT addresses to source code lines
 	int iCount = Min ( iDepth, (int)( sizeof(g_pArgv)/sizeof(g_pArgv[0]) - SPH_BT_ADDRS - 1 ) );

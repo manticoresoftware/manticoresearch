@@ -4473,7 +4473,7 @@ public:
 			dFields.Add ( s.m_dFields[i].m_sName.cstr() );
 
 		char sErrBuf[SPH_UDF_ERROR_LEN+1];
-		if ( m_pFilter->m_fnInit ( dFields.GetLength(), dFields.Begin(), m_sOptions.cstr(), &m_pUserdata, sErrBuf )==0 )
+		if ( m_pFilter->m_fnInit ( &m_pUserdata, dFields.GetLength(), dFields.Begin(), m_sOptions.cstr(), sErrBuf )==0 )
 			return true;
 		sError = sErrBuf;
 		return false;

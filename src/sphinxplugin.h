@@ -32,12 +32,12 @@ typedef void			(*PluginReinit_fn)	();
 typedef int				(*UdfInit_fn)		( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * error );
 typedef void			(*UdfDeinit_fn)		( SPH_UDF_INIT * init );
 
-typedef int				(*RankerInit_fn)		( int nfieldweights, int * fieldweights, const char * options, SPH_PLUGIN_RANKERINFO * ranker, void ** data, char * error );
-typedef void			(*RankerUpdate_fn)		( SPH_PLUGIN_HIT * hit, void ** data );
-typedef unsigned int	(*RankerFinalize_fn)	( SPH_PLUGIN_MATCH * match, void ** data );
-typedef int				(*RankerDeinit_fn)		( void * data );
+typedef int				(*RankerInit_fn)		( void ** userdata, SPH_RANKER_INIT * ranker, char * error );
+typedef void			(*RankerUpdate_fn)		( void * userdata, SPH_RANKER_HIT * hit );
+typedef unsigned int	(*RankerFinalize_fn)	( void * userdata, int match_weight );
+typedef int				(*RankerDeinit_fn)		( void * userdata );
 
-typedef int				(*TokenFilterInit_fn)			( int num_fields, const char ** field_names, const char * options, void ** userdata, char * error_message );
+typedef int				(*TokenFilterInit_fn)			( void ** userdata, int num_fields, const char ** field_names, const char * options, char * error_message );
 typedef int				(*TokenFilterBeginDocument_fn)	( void * userdata, const char * options, char * error_message );
 typedef void			(*TokenFilterBeginField_fn)		( void * userdata, int field_index );
 typedef char *			(*TokenFilterPushToken_fn)		( void * userdata, const char * token, int * extra, int * delta );
@@ -45,7 +45,7 @@ typedef char *			(*TokenFilterGetExtraToken_fn)	( void * userdata, int * delta )
 typedef int				(*TokenFilterEndField_fn)		( void * userdata );
 typedef void			(*TokenFilterDeinit_fn)			( void * userdata );
 
-typedef int				(*QueryTokenFilterInit_fn)		( int max_len, const char * options, void ** userdata, char * error );
+typedef int				(*QueryTokenFilterInit_fn)		( void ** userdata, int max_len, const char * options, char * error );
 typedef void			(*QueryTokenFilterPreMorph_fn)	( void * userdata, char * token, int * stopword );
 typedef int				(*QueryTokenFilterPostMorph_fn)	( void * userdata, char * token, int * stopword );
 typedef void			(*QueryTokenFilterDeinit_fn)	( void * userdata );

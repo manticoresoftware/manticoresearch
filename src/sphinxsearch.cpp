@@ -6482,47 +6482,45 @@ struct RankerState_Plugin_fn : public ISphExtra
 		if ( !m_pPlugin->m_fnInit )
 			return true;
 
-		SPH_PLUGIN_RANKERINFO tRankerInfo;
-		tRankerInfo.payload_mask = pRanker->m_uPayloadMask;
-		tRankerInfo.qwords = pRanker->m_iQwords;
-		tRankerInfo.max_qpos = pRanker->m_iMaxQpos;
+		SPH_RANKER_INIT r;
+		r.num_field_weights = iFields;
+		r.field_weights = const_cast<int*>(pWeights);
+		r.options = m_sOptions.cstr();
+		r.payload_mask = pRanker->m_uPayloadMask;
+		r.num_query_words = pRanker->m_iQwords;
+		r.max_qpos = pRanker->m_iMaxQpos;
 
-		char szError [ SPH_UDF_ERROR_LEN ];
-		if ( !m_pPlugin->m_fnInit ( iFields, const_cast<int*>(pWeights), m_sOptions.cstr(), &tRankerInfo, &m_pData, szError ) )
-		{
-			sError = szError;
-			return false;
-		}
-
-		return true;
+		char sErrorBuf [ SPH_UDF_ERROR_LEN ];
+		if ( m_pPlugin->m_fnInit ( &m_pData, &r, sErrorBuf )==0 )
+			return true;
+		sError = sErrorBuf;
+		return false;
 	}
 
-	void Update ( const ExtHit_t * pHlist )
+	void Update ( const ExtHit_t * p )
 	{
 		if ( !m_pPlugin->m_fnUpdate )
 			return;
 
-		SPH_PLUGIN_HIT tHit;
-		tHit.docid = pHlist->m_uDocid;
-		tHit.hitpos = pHlist->m_uHitpos;
-		tHit.querypos = pHlist->m_uQuerypos;
-		tHit.nodepos = pHlist->m_uNodepos;
-		tHit.spanlen = pHlist->m_uSpanlen;
-		tHit.matchlen = pHlist->m_uMatchlen;
-		tHit.weight = pHlist->m_uWeight;
-		tHit.qposmask = pHlist->m_uQposMask;
-
-		m_pPlugin->m_fnUpdate ( &tHit, &m_pData );
+		SPH_RANKER_HIT h;
+		h.doc_id = p->m_uDocid;
+		h.hit_pos = p->m_uHitpos;
+		h.query_pos = p->m_uQuerypos;
+		h.node_pos = p->m_uNodepos;
+		h.span_length = p->m_uSpanlen;
+		h.match_length = p->m_uMatchlen;
+		h.weight = p->m_uWeight;
+		h.query_pos_mask = p->m_uQposMask;
+		m_pPlugin->m_fnUpdate ( m_pData, &h );
 	}
 
 	DWORD Finalize ( const CSphMatch & tMatch )
 	{
-		assert ( m_pPlugin->m_fnFinalize );
-		SPH_PLUGIN_MATCH tIntMatch;
-		tIntMatch.docid = tMatch.m_uDocID;
-		tIntMatch.weight = tMatch.m_iWeight;
-
-		return m_pPlugin->m_fnFinalize ( &tIntMatch, &m_pData );
+		// at some point in the future, we might start passing the entire match,
+		// with blackjack, hookers, attributes, and their schema; but at this point,
+		// the only sort-of useful part of a match that we are able to push down to
+		// the ranker plugin is the match weight
+		return m_pPlugin->m_fnFinalize ( m_pData, tMatch.m_iWeight );
 	}
 
 private:

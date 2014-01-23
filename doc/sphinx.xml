@@ -3869,122 +3869,30 @@ can be returned depending on the collation chosen.
 </sect1>
 
 
-<sect1 id="udf"><title>User-defined functions (UDF)</title>
-<para>
-Starting with 2.0.1-beta, Sphinx supports User-Defined Functions,
-or UDF for short. They can be loaded and unloaded dynamically into
-<filename>searchd</filename> without having to restart the daemon,
-and used in expressions when searching. UDF features at a glance
-are as follows.
-<itemizedlist>
-<listitem><para>Functions can take integer (both 32-bit and 64-bit), float, string, or MVA arguments.</para></listitem>
-<listitem><para>Functions can return integer or float values.</para></listitem>
-<listitem><para>Functions can check the argument number, types, and names and raise errors.</para></listitem>
-<listitem><para>Only simple functions (that is, non-aggregate ones) are currently supported.</para></listitem>
-</itemizedlist>
-</para>
-<para>
-User-defined functions need your OS to support dynamically loadable
-libraries (aka shared objects). Most of the modern OSes are eligible,
-including Linux, Windows, MacOS, Solaris, BSD and others. (The internal
-testing has been done on Linux and Windows.) The UDF libraries must
-reside in a directory specified by
-<link linkend="conf-plugin-dir">plugin_dir</link> directive, and the
-server must be configured to use <option>workers = threads</option> mode.
-Relative paths to the library files are not allowed. Once the library
-is successfully built and copied to the trusted location, you can then
-dynamically install and deinstall the functions using
-<link linkend="sphinxql-create-function">CREATE FUNCTION</link> and
-<link linkend="sphinxql-drop-function">DROP FUNCTION</link> statements
-respectively. A single library can contain multiple functions. A library
-gets loaded when you first install a function from it, and unloaded
-when you deinstall all the functions from that library.
-</para>
-<para>
-The library functions that will implement a UDF visible to SQL statements
-need to follow C calling convention, and a simple naming convention. Sphinx
-source distribution provides a sample file,
-<ulink url="http://code.google.com/p/sphinxsearch/source/browse/trunk/src/udfexample.c">src/udfexample.c</ulink>,
-that defines a few simple functions showing how to work with integer,
-string, and MVA arguments; you can use that one as a foundation for
-your new functions. It includes the UDF interface header file,
-<ulink url="http://code.google.com/p/sphinxsearch/source/browse/trunk/src/sphinxudf.h">src/sphinxudf.h</ulink>,
-that defines the required types and structures. <filename>sphinxudf.h</filename>
-header is standalone, that is, does not require any other parts of Sphinx
-source to compile.
-</para>
-<para>
-Every function that you intend to use in your SELECT statements
-requires at least two corresponding C/C++ functions: the initialization
-call, and the function call itself. You can also optionally define
-the deinitialization call if your function requires any post-query
-cleanup. (For instance, if you were allocating any memory in either
-the initialization call or the function calls.) Function names
-in SQL are case insensitive, C function names are not. They need
-to be all lower-case. Mistakes in function name prevent UDFs
-from loading. You also have to pay special attention to the calling
-convention used when compiling, the list and the types of arguments,
-and the return type of the main function call. Mistakes in either
-are likely to crash the server, or result in unexpected results
-in the best case. Last but not least, all functions need to be
-thread-safe.
-</para>
-<para>
-Let's assume for the sake of example that your UDF name in SphinxQL
-will be <code>MYFUNC</code>. The initialization, main, and deinitialization
-functions would then need to be named as follows and take the following
-arguments:
-<programlisting>
-/// initialization function
-/// called once during query initialization
-/// returns 0 on success
-/// returns non-zero and fills error_message buffer on failure
-int myfunc_init ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args,
-                  char * error_message );
-
-/// main call function
-/// returns the computed value
-/// writes non-zero value into error_flag to indicate errors
-RETURN_TYPE myfunc ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args,
-                     char * error_flag );
-
-/// optional deinitialization function
-/// called once to cleanup once query processing is done
-void myfunc_deinit ( SPH_UDF_INIT * init );
-</programlisting>
-The two mentioned structures, <code>SPH_UDF_INIT</code> and
-<code>SPH_UDF_ARGS</code>, are defined in the <filename>src/sphinxudf.h</filename>
-interface header and documented there. <code>RETURN_TYPE</code> of the
-main function must be one of the following:
-<itemizedlist>
-<listitem><para><code>int</code> for the functions that return INT.</para></listitem>
-<listitem><para><code>sphinx_int64_t</code> for the functions that return BIGINT.</para></listitem>
-<listitem><para><code>float</code> for the functions that return FLOAT.</para></listitem>
-</itemizedlist>
-</para>
-<para>
-The calling sequence is as follows. <code>myfunc_init()</code> is called
-once when initializing the query. It can return a non-zero code to indicate
-a failure; in that case query is not executed, and the error message from
-the <code>error_message</code> buffer is returned. Otherwise, <code>myfunc()</code>
-is be called for every row, and a <code>myfunc_deinit()</code> is then called
-when the query ends. <code>myfunc()</code> can indicate an error by writing
-a non-zero byte value to <code>error_flag</code>, in that case, it will
-no more be called for subsequent rows, and a default value of 0 will be
-substituted. Sphinx might or might not choose to terminate such queries
-early, neither behavior is currently guaranteed.
-</para>
-</sect1>
-
-
 </chapter>
 <chapter id="extending-sphinx"><title>Extending Sphinx</title>
 
 
 <sect1 id="sphinx-udfs"><title>Sphinx UDFs (User Defined Functions)</title>
 <para>
-Our expression engine can be extended with user defined functions,
-or UDFs for short. Those have a wide variety of uses, for instance:
+Starting with 2.0.1-beta, our expression engine can be extended with
+user defined functions, or UDFs for short, like this:
+<programlisting>
+SELECT id, attr1, myudf(attr2, attr3+attr4) ...
+</programlisting>
+You can load and unload UDFs dynamically into <filename>searchd</filename>
+without having to restart the daemon, and used them in expressions when
+searching, ranking, etc. Quick summary of the UDF features is as follows.
+<itemizedlist>
+<listitem><para>UDFs can take integer (both 32-bit and 64-bit), float,
+string, MVA, or PACKEDFACTORS() arguments.</para></listitem>
+<listitem><para>UDFs can return integer, float, or string values.</para></listitem>
+<listitem><para>UDFs can check the argument number, types, and names
+during the query setup phase, and raise errors.</para></listitem>
+<listitem><para>Aggregation UDFs are not yet supported (but might be
+in the future).</para></listitem>
+</itemizedlist>
+UDFs have a wide variety of uses, for instance:
 <itemizedlist>
 <listitem><para>adding custom mathematical or string functions;</para></listitem>
 <listitem><para>accessing the database or files from within Sphinx;</para></listitem>
@@ -3993,11 +3901,15 @@ or UDFs for short. Those have a wide variety of uses, for instance:
 </para>
 <para>
 UDFs reside in the external dynamic libraries (.so files on UNIX and .dll
-on Windows systems). You can load and unload them dynamically into searchd
+on Windows systems). Library files need to reside in a trusted folder
+specified by <link linkend="conf-plugin-dir">plugin_dir</link> directive,
+for obvious security reasons: securing a single folder is easy; letting
+anyone install arbitrary code into <filename>searchd</filename> is a risk.
+You can load and unload them dynamically into searchd
 with <link linkend="sphinxql-create-function">CREATE FUNCTION</link> and
 <link linkend="sphinxql-drop-function">DROP FUNCTION</link> SphinxQL statements
 respectively. Sphinx keeps track of the currently loaded functions, that is,
-every time you create or drop a functions, <filename>searchd</filename> writes
+every time you create or drop an UDF, <filename>searchd</filename> writes
 its state to the <link linkend="conf-sphinxql-state">sphinxql_state</link> file
 as a plain good old SQL script.
 </para>
@@ -4010,9 +3922,10 @@ SELECT id, MYCUSTOMFUNC(groupid, authorname), ... FROM myindex
 </para>
 <para>
 UDFs are completely supported in <link linkend="conf-workers">workers=threads</link>
-mode only. They are partially supported in workers=prefork mode too: namely, CREATEs
-from the sphinxql_state startup script will work and those UDFs will be accessible.
-However, DROPs will not be available. UDFs are not supported in workers=fork mode.
+mode only. They are partially supported in <code>workers=prefork</code> mode too:
+namely, CREATEs from the <code>sphinxql_state</code> startup script will work and
+those UDFs will be accessible. However, DROPs will not be available. UDFs are not
+supported in <code>workers=fork</code> mode.
 </para>
 <para>
 Multiple UDFs (and other plugins) may reside in a single library. That library
@@ -4025,16 +3938,23 @@ is able to import standard C header, and emit standard dynamic libraries with
 properly exported functions. Of course, the path of least resistance is to write
 in either C++ or plain C. We provide an example UDF library written in plain C
 and implementing several functions (demonstrating a few different techniques)
-along with our source code, see <filename>src/udfexample.c</filename>. That
-example includes <filename>src/sphinxudf.h</filename> header file for the
-definitions of a few UDF related structures and types. And for most real-world
-UDFs and plugins, just including <filename>src/sphinxudf.h</filename> should be
-completely sufficient, too. However, if you're writing a ranking function and
+along with our source code, see 
+<ulink url="http://code.google.com/p/sphinxsearch/source/browse/trunk/src/udfexample.c">src/udfexample.c</ulink>.
+That example includes
+<ulink url="http://code.google.com/p/sphinxsearch/source/browse/trunk/src/sphinxudf.h">src/sphinxudf.h</ulink>
+header file definitions of a few UDF related structures and types. For most
+UDFs and plugins, a mere <code>#include "sphinxudf.h"</code>, like in the example,
+should be completely sufficient, too. However, if you're writing a ranking function and
 need to access the ranking signals (factors) data from within the UDF, you will
 also need to compile and link with <filename>src/sphinxudf.c</filename> (also
 available in our source code), because the <emphasis>implementations</emphasis>
 of the fuctions that let you access the signal data from within the UDF reside
 in that file.
+</para>
+<para>
+Both <filename>sphinxudf.h</filename> header and <filename>sphinxudf.c</filename>
+are standalone. So you can copy around those files only; they do not depend
+on any other bits of Sphinx source code.
 </para>
 <para>
 Within your UDF, you <b>must</b> implement and export only a couple functions,
@@ -4062,6 +3982,19 @@ sphinx_int64_t testfunc ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args,
     return 123;
 }
 </code>
+</para>
+<para>
+UDF function names in SphinxQL are case insensitive. However, the
+respective C function names are not, they need to be all <b>lower-case</b>,
+or the UDF will not load. More importantly, it is vital that a) the calling
+convention is C (aka __cdecl), b) arguments list matches the plugin system
+expectations exactly, and c) the return type matches the one you specify in
+<code>CREATE FUNCTION</code>. Unfortunately, there is no (easy) way for us
+to check for those mistakes when loading the function, and they could crash
+the server and/or result in unexpected results. Last but not least,
+all the C functions you implement need to be thread-safe.
+</para>
+<para>
 The first argument, a pointer to SPH_UDF_INIT structure, is essentially
 a pointer to our function state. It is option. In the example just above
 the function is stateless, it simply returns 123 every time it gets called.
@@ -4155,8 +4088,9 @@ the returned strings values are managed by Sphinx and we have our own
 allocator, so for the return values specifically, you need to use it too.
 </para>
 <para>
-Depending on how your UDFs are used in the query, they might be evaluated
-in a different volume and order. Specifically,
+Depending on how your UDFs are used in the query, the main function
+call (<code>testfunc()</code> in our example) might be called in a rather
+different volume and order. Specifically,
 <itemizedlist>
 <listitem><para>UDFs referenced in WHERE, ORDER BY, or GROUP BY clauses
 must and will be evaluated for every matched document. They will be called
@@ -4169,6 +4103,25 @@ applying the LIMIT clause. They will be called in the result set order.
 <listitem><para>with subselects, such UDFs will also be evaluated after
 applying the inner LIMIT clause.
 </para></listitem>
+</itemizedlist>
+</para>
+<para>
+The calling sequence of the other functions is fixed, though. Namely,
+<itemizedlist>
+<listitem><para><code>testfunc_init()</code> is called once when initializing
+the query. It can return a non-zero code to indicate a failure; in that case
+query will be terminated, and the error message from the <code>error_message</code>
+buffer will be returned.</para></listitem>
+<listitem><para><code>testfunc()</code> is called for every eligible row
+(see above), whenever Sphinx needs to compute the UDF value. It can also
+indicate an (internal) failure error by writing a non-zero byte value to
+<code>error_flag</code>. In that case, it is guaranteed that will no more be
+called for subsequent rows, and a default return value of 0 will be substituted.
+Sphinx might or might not choose to terminate such queries early, neither
+behavior is currently guaranteed.
+</para></listitem>
+<listitem><para><code>testfunc_deinit()</code> is called once when the query
+processing (in a given index shard) ends.</para></listitem>
 </itemizedlist>
 </para>
 <para>
@@ -4259,14 +4212,15 @@ we define the call prototoypes in the very beginning of that file.
 </para>
 <para>
 Despite having the public interface defined in ye good olde good pure C,
-our plugins essentially follow the object-oriented model. All the functions
-that you can define will have a "userdata" parameter, that is supposed to be
-filled out by the _init() function and gets passed to all the other ones.
+our plugins essentially follow the <emphasis>object-oriented model</emphasis>.
+Indeed, every <code>_init()</code> function receives a <code>void ** userdata</code>
+out-parameter. And the pointer value that you store at <code>(*userdata)</code>
+location is then be passed as a 1st argument to all the other plugin functions.
 So you can think of a plugin as <emphasis>class</emphasis> that gets instantiated
-every time an object of that class is needed to handle a request: the userdata
-parameter would be its state, the functions would be its methods, and the
-<code>_init()</code> and <code>_deinit()</code> functions would be the constructor and destructor
-respectively.
+every time an object of that class is needed to handle a request: the <code>userdata</code>
+pointer would be its <code>this</code> pointer; the functions would be its methods,
+and the <code>_init()</code> and <code>_deinit()</code> functions would be
+the constructor and destructor respectively.
 </para>
 <para>
 Why this (minor) OOP-in-C complication? Well, plugins run in a multi-threaded
@@ -4284,7 +4238,7 @@ To summarize, here goes the simplest complete ranker plugin, in just
 // gcc -fPIC -shared -o myrank.so myrank.c
 #include "sphinxudf.h"
 int myrank_ver() { return SPH_UDF_VERSION; }
-int myrank_finalize(SPH_PLUGIN_MATCH* m, void** u) { return 123; }
+int myrank_finalize(void *u, int w) { return 123; }
 </programlisting>
 And this is how you use it:
 <programlisting>
@@ -4301,6 +4255,39 @@ mysql&gt; SELECT id, weight() FROM test1 WHERE MATCH('test')
 +------+----------+
 2 rows in set (0.01 sec)
 </programlisting>
+</para>
+</sect1>
+
+
+<sect1 id="ranker-plugins"><title>Ranker plugins</title>
+<para>
+Ranker plugins let you implement a custom ranker that receives
+all the occurrences of the keywords matched in the document, and
+computes a WEIGHT() value. They can be called as follows:
+<programlisting>
+SELECT id, attr1 FROM test WHERE match('hello')
+OPTION ranker=myranker('option1=1');
+</programlisting>
+</para>
+<para>
+The call workflow is as follows:
+<orderedlist>
+<listitem><code>XXX_init()</code> gets called once per query
+per index, in the very beginning. A few query-wide options are
+passed to it through a <code>SPH_RANKER_INIT</code> structure,
+including the user options strings (in the example just above,
+"option1=1" is that string).</listitem>
+<listitem><code>XXX_update()</code> gets called multiple times per
+matched document, with every matched keyword occurrence passed as its
+parameter, a <code>SPH_RANKER_HIT</code> structure. The occurrences
+within each document are guaranteed to be passed in the order of
+ascending <code>hit-&gt;hit_pos</code> values.</listitem>
+<listitem><code>XXX_finalize()</code> gets called once per matched
+document, once there are no more keyword occurrences. It must return
+the WEIGHT() value. This is the only mandatory function.</listitem>
+<listitem><code>XXX_deinit()</code> gets called once per query,
+in the very end.</listitem>
+</orderedlist>
 </para>
 </sect1>
 <!-- discuss ranker, index_token_filter, query_token_filter plugins in more details? -->
@@ -5978,7 +5965,7 @@ CREATE FUNCTION udf_name
 </programlisting>
 <para>
 CREATE FUNCTION statement, introduced in version 2.0.1-beta,
-installs a <link linkend="udf">user-defined function (UDF)</link>
+installs a <link linkend="sphinx-udfs">user-defined function (UDF)</link>
 with the given name and type from the given library file.
 The library file must reside in a trusted
 <link linkend="conf-plugin-dir">plugin_dir</link> directory.
@@ -6008,7 +5995,7 @@ DROP FUNCTION udf_name
 </programlisting>
 <para>
 DROP FUNCTION statement, introduced in version 2.0.1-beta,
-deinstalls a <link linkend="udf">user-defined function (UDF)</link>
+deinstalls a <link linkend="sphinx-udfs">user-defined function (UDF)</link>
 with the given name. On success, the function is no longer available
 for use in subsequent queries. Pending concurrent queries will not be
 affected and the library unload, if necessary, will be postponed
@@ -13545,7 +13532,7 @@ Introduced in version 2.0.1-beta.
 </para>
 <para>
 Specifies the trusted directory from which the
-<link linkend="udf">UDF libraries</link> can be loaded. Requires
+<link linkend="sphinx-udfs">UDF libraries</link> can be loaded. Requires
 <link linkend="conf-workers">workers = thread</link> to take effect.
 </para>
 <bridgehead>Example:</bridgehead>
@@ -14145,7 +14132,7 @@ rlp_max_batch_docs = 100
 <bridgehead>Ranking related features</bridgehead>
 <itemizedlist>
 <listitem>added OPTION <link linkend="sphinxql-select">local_df=1</link>, an option to aggregate IDFs over local indexes (shards)</listitem>
-<listitem>added <link linkend="udf">UDF</link> XXX_reinit() method to reload UDFs with <option>workers=prefork</option></listitem>
+<listitem>added <link linkend="sphinx-udfs">UDF</link> XXX_reinit() method to reload UDFs with <option>workers=prefork</option></listitem>
 <listitem>added comma-separated syntax to <link linkend="sphinxql-select">OPTION</link> <option> idf</option>, <option>tfidf_unnormalized</option> and <option>tfidf_normalized</option> flags</listitem>
 <listitem>added <option>lccs</option>, <option>wlccs</option>, <option>exact_order</option>, <option>min_gaps</option>, and <option>atc </option> <link linkend="field-factors">ranking factors</link></listitem>
 <listitem>added <code>sphinx_get_XXX_factors()</code>, a faster interface to access <link linkend="misc-functions">PACKEDFACTORS()</link> in UDFs</listitem>
@@ -14638,7 +14625,7 @@ rlp_max_batch_docs = 100
 <listitem><para>fixed #1046, head SPZ overflow, snippet generation at non fast with SPZ</para></listitem>
 <listitem><para>fixed #1048, distributed index can't sort \ filter because of missed attributes</para></listitem>
 <listitem><para>fixed #1050, expression ranker vs agents</para></listitem>
-<listitem><para>fixed #1051, added <link linkend="mva">MVA64</link> support to <link linkend="udf">UDFs</link></para></listitem>
+<listitem><para>fixed #1051, added <link linkend="mva">MVA64</link> support to <link linkend="sphinx-udfs">UDFs</link></para></listitem>
 <listitem><para>fixed #1054, <link linkend="sphinxql-select">max_query_time</link> not handled properly on searching at <link linkend="rt-indexes">RT index</link></para></listitem>
 <listitem><para>fixed #1055, <link linkend="conf-expansion-limit">expansion_limit</link> on searching at RT disk chunks</para></listitem>
 <listitem><para>fixed #1057, daemon crashes on generating snippet with 0 documents provided</para></listitem>

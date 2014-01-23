@@ -1381,7 +1381,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 			return false;
 
 		char szError [ SPH_UDF_ERROR_LEN ];
-		if ( m_pPlugin->m_fnInit && m_pPlugin->m_fnInit ( MAX_TOKEN_BYTES, pQuery->m_sQueryTokenFilterOpts.cstr(), &m_pPluginData, szError )!=0 )
+		if ( m_pPlugin->m_fnInit && m_pPlugin->m_fnInit ( &m_pPluginData, MAX_TOKEN_BYTES, pQuery->m_sQueryTokenFilterOpts.cstr(), szError )!=0 )
 		{
 			tParsed.m_sParseError = sError;
 			m_pPlugin->Release();

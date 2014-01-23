@@ -8836,10 +8836,11 @@ building from the sources, run the following command over your binary:
 <programlisting>
 nm -n indexer > indexer.sym
 </programlisting>
-Attach this file to bug report along with backtrace. Be sure, however, that
-the binary is not stripped; otherwise the numbers still be 'magics' without
-a sense. If you've installed the sphinx from official package
-(.deb or .rpm) - just provide the full package name.</para>
+Attach this file to bug report along with backtrace. You should however ensure
+that the binary is not stripped. Our official binary packages should be fine.
+(That, or we have the symbols stored.) However, if you manually build Sphinx
+from the source tarball, do not run <filename>strip</filename> utility on that
+binary, and/or do not let your build/packaging system do that!</para>
 
 
 <bridgehead>Uploading your data</bridgehead>
@@ -8848,9 +8849,9 @@ To do this they need your sphinx.conf, index files, binlog (if present),
 sometimes data to index (like SQL tables or XMLpipe2 data files) and queries.
 </para>
 <para>
-Here is our write-only FTP where you can load your data in case it's too big
-to attach to bug ticket: ftp://sphinxsearch.com (user:sphinxbugs pass:stillhappen).
-You can upload data only in folders named bug-XXXX or issue-XXXX.</para>
+Attach your data to ticket. In case it's too big to attach ask developers and
+they give you an address to write-only FTP created exactly for such puproses.
+</para>
 
 
 </chapter>

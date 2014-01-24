@@ -791,6 +791,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 				if ( sToken )
 				{
 					m_dIntTokens.Add ( sToken );
+					m_pDict->SetApplyMorph ( m_pTokenizer->GetMorphFlag() );
 					if ( m_pDict->GetWordID ( (BYTE*)sToken ) )
 						m_tPendingToken.tInt.iStrIndex = m_dIntTokens.GetLength()-1;
 					else
@@ -968,6 +969,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		if ( m_pPlugin && m_pPlugin->m_fnPreMorph )
 			m_pPlugin->m_fnPreMorph ( m_pPluginData, (char*)sTmp, &iStopWord );
 
+		m_pDict->SetApplyMorph ( m_pTokenizer->GetMorphFlag() );
 		SphWordID_t uWordId = iStopWord ? 0 : m_pDict->GetWordID ( sTmp );	
 
 		if ( uWordId && m_pPlugin && m_pPlugin->m_fnPostMorph )
@@ -1390,14 +1392,13 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 			return false;
 		}
 	}
-	
+
 	// setup parser
 	m_pParsed = &tParsed;
 	m_sQuery = (BYTE*) sQuery;
 	m_iQueryLen = sQuery ? strlen(sQuery) : 0;
 	m_pTokenizer = pMyTokenizer.Ptr();
 	m_pSchema = pSchema;
-	m_pDict = pDict;
 	m_pCur = sQuery;
 	m_iAtomPos = 0;
 	m_iPendingNulls = 0;
@@ -1406,6 +1407,11 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 	m_bEmpty = true;
 	m_bEmptyStopword = ( tSettings.m_iStopwordStep==0 );
 	m_iOvershortStep = tSettings.m_iOvershortStep;
+
+	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
+	m_pDict = pDict;
+	if ( pDict->HasState() )
+		tDictCloned = m_pDict = pDict->Clone();
 
 	m_pTokenizer->SetBuffer ( m_sQuery, m_iQueryLen );
 	int iRes = yyparse ( this );
@@ -1449,8 +1455,6 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 		m_pParsed->m_sParseError.SetSprintf ( "query is non-computable (single NOT operator)" );
 		return false;
 	}
-
-	pDict->SetApplyMorph ( m_pTokenizer->GetMorphFlag() );
 
 	// all ok; might want to create a dummy node to indicate that
 	m_dSpawned.Reset();

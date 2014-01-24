@@ -56,6 +56,7 @@ index test : base
 {
 	source			= test
 	path			= <data_path/>/test
+	wordforms		= <this_test/>/wordforms.txt
 }
 
 index test2 : base
@@ -77,6 +78,7 @@ index test_xml : base
 {
 	source			= test_xml
 	path			= <data_path/>/test_xml
+	wordforms		= <this_test/>/wordforms.txt
 }
 
 common
@@ -104,7 +106,8 @@ INSERT INTO test_table VALUES
 ( 104, '成員年齡均超過六十歲，tested' ),
 ( 105, '這群白髮蒼蒼，test2' ),
 ( 106, '這群白髮蒼蒼 RUINED 這群白髮蒼蒼' ),
-( 107, '&lt;div class="msgCnt"&gt;说说&lt;a href="http://k.t.qq.com/k/%E4%BB%8A%E5%A4%A9%E7%9A%84%E5%BF%83%E6%83%85"&gt;#今天的心情#&lt;/a&gt;：&lt;/div&gt;' )
+( 107, '&lt;div class="msgCnt"&gt;说说&lt;a href="http://k.t.qq.com/k/%E4%BB%8A%E5%A4%A9%E7%9A%84%E5%BF%83%E6%83%85"&gt;#今天的心情#&lt;/a&gt;：&lt;/div&gt;' ),
+( 108, '這群白inbetween1這群白' )
 </db_insert>
 
 <sphqueries>
@@ -123,6 +126,7 @@ INSERT INTO test_table VALUES
 <sphinxql>select * from test where match('msgCnt')</sphinxql>
 <sphinxql>select * from test where match('今天的心情')</sphinxql>
 <sphinxql>select * from test where match('@content 則')</sphinxql>
+<sphinxql>select * from test where match('querymapped')</sphinxql>
 
 <sphinxql>select * from test_xml where match('mix')</sphinxql>
 <sphinxql>select * from test_xml where match('русский')</sphinxql>

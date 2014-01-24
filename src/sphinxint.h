@@ -2074,6 +2074,7 @@ struct StoredToken_t
 	const char *	m_szTokenStart;
 	const char *	m_szTokenEnd;
 	const char *	m_pBufferPtr;
+	const char *	m_pBufferEnd;
 	int				m_iTokenLen;
 	int				m_iOvershortCount;
 	bool			m_bBoundary;

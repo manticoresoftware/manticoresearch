@@ -672,6 +672,12 @@ Two'</sphinxql>
 <sphinxql>select j.b from json_order order by bigint(j.b) asc</sphinxql>
 <!-- is null expression -->
 <sphinxql>select j[0] is null, if(j[0] is null,0,1), j[0] is not null, if(j[0] is not null,0,1) from objects</sphinxql>
+<!-- distributed order by, distributed conversion functions -->
+<sphinxql>select id, j.uid from loc1 order by j.uid asc</sphinxql>
+<sphinxql>select id, j.uid from loc1 order by j.uid desc</sphinxql>
+<sphinxql>select id, j.uid from loc1 order by integer(j.uid) asc</sphinxql>
+<sphinxql>select id, j.uid from loc1 order by double(j.uid) asc</sphinxql>
+<sphinxql>select id, j.uid from loc1 order by bigint(j.uid) asc</sphinxql>
 </sphqueries>
 </test>
 

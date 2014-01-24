@@ -7234,11 +7234,14 @@ void LogSphinxqlError ( const char * sStmt, const char * sError )
 //////////////////////////////////////////////////////////////////////////
 
 // internals attributes are last no need to send them
-static int SendGetAttrCount ( const ISphSchema & tSchema )
+static int SendGetAttrCount ( const ISphSchema & tSchema, bool bAgentMode=false )
 {
 	int iCount = tSchema.GetAttrsCount();
-	if ( iCount
-		&& sphIsSortStringInternal ( tSchema.GetAttr ( iCount-1 ).m_sName.cstr() ) )
+
+	if ( bAgentMode )
+		return iCount;
+
+	if ( iCount && sphIsSortStringInternal ( tSchema.GetAttr ( iCount-1 ).m_sName.cstr() ) )
 	{
 		for ( int i=iCount-1; i>=0 && sphIsSortStringInternal ( tSchema.GetAttr(i).m_sName.cstr() ); i-- )
 		{
@@ -7298,7 +7301,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphTaggedV
 	// query stats
 	iRespLen += 20;
 
-	int iAttrsCount = SendGetAttrCount ( pRes->m_tSchema );
+	int iAttrsCount = SendGetAttrCount ( pRes->m_tSchema, bAgentMode );
 
 	// schema
 	if ( iVer>=0x102 )
@@ -7566,7 +7569,7 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 			tOut.SendString ( pRes->m_sWarning.cstr() );
 	}
 
-	int iAttrsCount = SendGetAttrCount ( pRes->m_tSchema );
+	int iAttrsCount = SendGetAttrCount ( pRes->m_tSchema, bAgentMode );
 
 	bool bSendJson = ( bAgentMode && iMasterVer>=3 );
 	bool bSendJsonField = ( bAgentMode && iMasterVer>=4 );

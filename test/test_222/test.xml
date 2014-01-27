@@ -105,6 +105,41 @@ index testple
 	min_infix_len	= 2
 }
 
+source src_plain_ckw
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query_pre	= set names utf8
+	sql_query		= select 1 as id, 11 as idd, 'фичин баг, но не фичина бага' as title
+	sql_attr_uint	= idd
+}
+
+index plain_ckw
+{
+	source			= src_plain_ckw
+	dict			= keywords
+	path			= <data_path/>/plain_ckw
+	morphology		= lemmatize_en_all, lemmatize_ru_all
+}
+
+index rt_ckw
+{
+    type            = rt
+    dict            = keywords
+    path            = <data_path/>/rt_ckw
+    rt_attr_uint    = idd
+    rt_field        = title
+	morphology		= lemmatize_en_all, lemmatize_ru_all
+}
+
+
+index tmpl_ckw
+{
+	type			= template
+	dict			= keywords
+	morphology		= lemmatize_en_all, lemmatize_ru_all
+}
+
 </config>
 
 <db_create>
@@ -153,6 +188,24 @@ CREATE TABLE test_table
 <sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('"english text"') option ranker=sph04;show meta</sphinxql>
 <sphinxql>SELECT id,gid,weight() as my_weight FROM META:plain WHERE MATCH('"Фичин баг"') option ranker=sph04;show meta</sphinxql>
 <sphinxql>SELECT GROUPBY() FROM testw</sphinxql>
+
+<!--regression lemmas at call keywords output -->
+<sphinxql>INSERT INTO rt_ckw VALUES ( 1, 'фичин баг, но не фичина бага', 11 )</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'фичин баг', 'plain_ckw', 1 )</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'фичин баг', 'rt_ckw', 1 )</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'фичин баг', 'tmpl_ckw', 1 )</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'фичина бага', 'plain_ckw', 1 )</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'фичина бага', 'rt_ckw', 1 )</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'фичина бага', 'tmpl_ckw', 1 )</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'сталин жил', 'plain_ckw', 1 )</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'сталин жил', 'rt_ckw', 1 )</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'сталин жил', 'tmpl_ckw', 1 )</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'DovE', 'plain_ckw', 1 )</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'DovE', 'rt_ckw', 1 )</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'DovE', 'tmpl_ckw', 1 )</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'records recorded recording men man mans mens', 'plain_ckw', 1 )</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'records recorded recording men man mans mens', 'rt_ckw', 1 )</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'records recorded recording men man mans mens', 'tmpl_ckw', 1 )</sphinxql>
 
 </sphqueries>
 

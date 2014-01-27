@@ -1427,8 +1427,29 @@ public:
 	virtual	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn ) {}
 };
 
-bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
-								const char * szQuery, bool, CSphString * ) const
+
+struct CSphTemplateQueryFilter : public ISphQueryFilter
+{
+	virtual void AddKeywordStats ( BYTE * sWord, const BYTE * sTokenized, int iQpos, CSphVector <CSphKeywordInfo> & dKeywords )
+	{
+		SphWordID_t iWord = m_pDict->GetWordID ( sWord );
+		if ( !iWord )
+			return;
+
+		CSphKeywordInfo & tInfo = dKeywords.Add();
+		tInfo.m_sTokenized = (const char *)sTokenized;
+		tInfo.m_sNormalized = (const char*)sWord;
+		tInfo.m_iDocs = 0;
+		tInfo.m_iHits = 0;
+		tInfo.m_iQpos = iQpos;
+
+		if ( tInfo.m_sNormalized.cstr()[0]==MAGIC_WORD_HEAD_NONSTEMMED )
+			*(char *)tInfo.m_sNormalized.cstr() = '=';
+	}
+};
+
+
+bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool, CSphString * ) const
 {
 	// short-cut if no query or keywords to fill
 	if ( !szQuery || !szQuery[0] )
@@ -1444,7 +1465,6 @@ bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	if ( m_tSettings.m_bIndexExactWords )
 		pTokenizer->AddPlainChar ( '=' );
 
-
 	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
 	CSphDict * pDictBase = m_pDict;
 	if ( pDictBase->HasState() )
@@ -1458,32 +1478,16 @@ bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 		pDict = new CSphDictExact ( pDict );
 
 	dKeywords.Resize ( 0 );
-	CSphString sTokenized;
-	BYTE * sWord;
 
-	CSphString sQbuf ( szQuery );
-	pTokenizer->SetBuffer ( (BYTE*)sQbuf.cstr(), strlen(szQuery) );
+	pTokenizer->SetBuffer ( (const BYTE*)szQuery, strlen(szQuery) );
 
-	while ( ( sWord = pTokenizer->GetToken() )!=NULL )
-	{
-		BYTE * sMultiform = pTokenizer->GetTokenizedMultiform();
-		if ( sMultiform )
-			sTokenized = (const char*)sMultiform;
-		else
-			sTokenized = (const char*)sWord;
+	CSphTemplateQueryFilter tAotFilter;
+	tAotFilter.m_pTokenizer = pTokenizer.Ptr();
+	tAotFilter.m_pDict = pDict;
+	tAotFilter.m_pSettings = &m_tSettings;
 
-		// result unused, however the stemmers applied
-		pDict->GetWordID ( sWord );
+	tAotFilter.GetKeywords ( dKeywords );
 
-		CSphKeywordInfo & tInfo = dKeywords.Add();
-		Swap ( tInfo.m_sTokenized, sTokenized );
-		tInfo.m_sNormalized = (const char*)sWord;
-		tInfo.m_iDocs = 0;
-		tInfo.m_iHits = 0;
-
-		if ( tInfo.m_sNormalized.cstr()[0]==MAGIC_WORD_HEAD_NONSTEMMED )
-			*(char *)tInfo.m_sNormalized.cstr() = '=';
-	}
 	return true;
 }
 
@@ -16308,21 +16312,7 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 		SetupQueryTokenizer();
 
 		// initialize AOT if needed
-		CSphVector<CSphString> dMorphs;
-		sphSplit ( dMorphs, tDictSettings.m_sMorphology.cstr() );
-		m_tSettings.m_uAotFilterMask = 0;
-		for ( int j=0; j<AOT_LENGTH; ++j )
-		{
-			char buf_all[20];
-			sprintf ( buf_all, "lemmatize_%s_all", AOT_LANGUAGES[j] ); // NOLINT
-			ARRAY_FOREACH ( i, dMorphs )
-				if ( dMorphs[i]==buf_all )
-				{
-					m_tSettings.m_uAotFilterMask |= (1UL) << j;
-					break;
-				}
-		}
-
+		m_tSettings.m_uAotFilterMask = sphParseMorphAot ( tDictSettings.m_sMorphology.cstr() );
 	} else
 	{
 		if ( m_bId32to64 )
@@ -17556,6 +17546,158 @@ bool CSphIndex_VLN::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 }
 
 
+DWORD sphParseMorphAot ( const char * sMorphology )
+{
+	if ( !sMorphology || !*sMorphology )
+		return 0;
+
+	CSphVector<CSphString> dMorphs;
+	sphSplit ( dMorphs, sMorphology );
+
+	DWORD uAotFilterMask = 0;
+	for ( int j=0; j<AOT_LENGTH; ++j )
+	{
+		char buf_all[20];
+		sprintf ( buf_all, "lemmatize_%s_all", AOT_LANGUAGES[j] ); // NOLINT
+		ARRAY_FOREACH ( i, dMorphs )
+		{
+			if ( dMorphs[i]==buf_all )
+			{
+				uAotFilterMask |= (1UL) << j;
+				break;
+			}
+		}
+	}
+
+	return uAotFilterMask;
+}
+
+
+ISphQueryFilter::ISphQueryFilter ()
+{
+	m_pTokenizer = NULL;
+	m_pDict = NULL;
+	m_pSettings = NULL;
+}
+
+
+ISphQueryFilter::~ISphQueryFilter ()
+{
+}
+
+
+void ISphQueryFilter::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords )
+{
+	assert ( m_pTokenizer && m_pDict && m_pSettings );
+
+	BYTE sTokenized[3*SPH_MAX_WORD_LEN+4];
+	BYTE * sWord;
+	int iQpos = 1;
+
+	// FIXME!!! got rid of duplicated term stat and qword setup
+	while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
+	{
+		const BYTE * sMultiform = m_pTokenizer->GetTokenizedMultiform();
+		strncpy ( (char *)sTokenized, sMultiform ? (const char*)sMultiform : (const char*)sWord, sizeof(sTokenized) );
+
+		AddKeywordStats ( sWord, sTokenized, iQpos, dKeywords );
+
+		// FIXME!!! handle consecutive blended wo blended parts
+		if ( !m_pTokenizer->TokenIsBlended() )
+			iQpos++;
+	}
+
+
+	if ( !m_pSettings->m_uAotFilterMask )
+		return;
+
+	XQLimitSpec_t tSpec;
+	BYTE sTmp[3*SPH_MAX_WORD_LEN+4];
+	CSphVector<XQNode_t *> dChildren ( 64 );
+
+	int iTokenizedTotal = dKeywords.GetLength();
+	for ( int iTokenized=0; iTokenized<iTokenizedTotal; iTokenized++ )
+	{
+		int iQpos = dKeywords[iTokenized].m_iQpos;
+		// MUST copy as Dict::GetWordID changes word and might add symbols
+		strncpy ( (char *)sTokenized, dKeywords[iTokenized].m_sTokenized.scstr(), sizeof(sTokenized) );
+		int iPreAotCount = dKeywords.GetLength();
+
+		XQNode_t tAotNode ( tSpec );
+		tAotNode.m_dWords.Resize ( 1 );
+		tAotNode.m_dWords.Begin()->m_sWord = (char *)sTokenized;
+		TransformAotFilter ( &tAotNode, m_pDict->GetWordforms(), *m_pSettings );
+
+		dChildren.Resize ( 0 );
+		dChildren.Add ( &tAotNode );
+
+		// recursion unfolded
+		ARRAY_FOREACH ( iChild, dChildren )
+		{
+			// process all words at node
+			ARRAY_FOREACH ( iAotKeyword, dChildren[iChild]->m_dWords )
+			{
+				// MUST copy as Dict::GetWordID changes word and might add symbols
+				strncpy ( (char *)sTmp, dChildren[iChild]->m_dWords[iAotKeyword].m_sWord.scstr(), sizeof(sTmp) );
+				AddKeywordStats ( sTmp, sTokenized, iQpos, dKeywords );
+			}
+
+			// push all child nodes at node to process list
+			const XQNode_t * pChild = dChildren[iChild];
+			ARRAY_FOREACH ( iRec, pChild->m_dChildren )
+				dChildren.Add ( pChild->m_dChildren[iRec] );
+		}
+
+		// remove (replace) original word in case of AOT taken place
+		if ( iPreAotCount!=dKeywords.GetLength() )
+		{
+			::Swap ( dKeywords[iTokenized], dKeywords.Last() );
+			dKeywords.Resize ( dKeywords.GetLength()-1 );
+		}
+	}
+
+	// sort by qpos
+	if ( dKeywords.GetLength()!=iTokenizedTotal )
+		sphSort ( dKeywords.Begin(), dKeywords.GetLength(), bind ( &CSphKeywordInfo::m_iQpos ) );
+}
+
+
+struct CSphPlainQueryFilter : public ISphQueryFilter
+{
+	const ISphQwordSetup *	m_pTermSetup;
+	ISphQword *				m_pQueryWord;
+	bool					m_bGetStats;
+
+	virtual void AddKeywordStats ( BYTE * sWord, const BYTE * sTokenized, int iQpos, CSphVector <CSphKeywordInfo> & dKeywords )
+	{
+		assert ( !m_bGetStats || ( m_pTermSetup && m_pQueryWord ) );
+
+		SphWordID_t iWord = m_pDict->GetWordID ( sWord );
+		if ( !iWord )
+			return;
+
+		if ( m_bGetStats )
+		{
+			m_pQueryWord->Reset ();
+			m_pQueryWord->m_sWord = (const char*)sWord;
+			m_pQueryWord->m_sDictWord = (const char*)sWord;
+			m_pQueryWord->m_uWordID = iWord;
+			m_pTermSetup->QwordSetup ( m_pQueryWord );
+		}
+
+		CSphKeywordInfo & tInfo = dKeywords.Add();
+		tInfo.m_sTokenized = (const char *)sTokenized;
+		tInfo.m_sNormalized = (const char*)sWord;
+		tInfo.m_iDocs = m_bGetStats ? m_pQueryWord->m_iDocs : 0;
+		tInfo.m_iHits = m_bGetStats ? m_pQueryWord->m_iHits : 0;
+		tInfo.m_iQpos = iQpos;
+
+		if ( tInfo.m_sNormalized.cstr()[0]==MAGIC_WORD_HEAD_NONSTEMMED )
+			*(char *)tInfo.m_sNormalized.cstr() = '=';
+	}
+};
+
+
 template < class Qword >
 bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	const char * szQuery, bool bGetStats, bool bFillOnly, CSphString * pError ) const
@@ -17573,9 +17715,6 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	// short-cut if no query or keywords to fill
 	if ( ( bFillOnly && !dKeywords.GetLength() ) || ( !bFillOnly && ( !szQuery || !szQuery[0] ) ) )
 		return true;
-
-	CSphScopedPtr <CSphAutofile> pDoclist ( NULL );
-	CSphScopedPtr <CSphAutofile> pHitlist ( NULL );
 
 	// TODO: in case of bFillOnly skip tokenizer cloning and setup
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( SPH_CLONE_INDEX ) ); // avoid race
@@ -17599,55 +17738,31 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	CSphScopedPtr<CSphDict> tDict2 ( NULL );
 	pDict = SetupExactDict ( tDict2, pDict );
 
-	// FIXME!!! missed bigram, aot transform, FieldFilter
+	// FIXME!!! missed bigram, FieldFilter, add flags to fold blended parts, show expanded terms
 
 	// prepare for setup
 	CSphAutofile tDummy1, tDummy2;
 
-	DiskIndexQwordSetup_c tTermSetup ( tDummy1, tDummy2, m_pSkiplists.GetWritePtr(), NULL );
+	DiskIndexQwordSetup_c tTermSetup ( tDummy1, tDummy2, NULL, NULL );
 	tTermSetup.m_pDict = pDict;
 	tTermSetup.m_pIndex = this;
 	tTermSetup.m_eDocinfo = m_tSettings.m_eDocinfo;
 
-	Qword QueryWord ( false, false );
+	Qword tQueryWord ( false, false );
+
+	CSphPlainQueryFilter tAotFilter;
+	tAotFilter.m_pTokenizer = pTokenizer.Ptr();
+	tAotFilter.m_pDict = pDict;
+	tAotFilter.m_pSettings = &m_tSettings;
+	tAotFilter.m_bGetStats = bGetStats;
+	tAotFilter.m_pTermSetup = &tTermSetup;
+	tAotFilter.m_pQueryWord = &tQueryWord;
 
 	if ( !bFillOnly )
 	{
-		CSphString sTokenized;
-		BYTE * sWord;
 		pTokenizer->SetBuffer ( (const BYTE *)szQuery, strlen(szQuery) );
 
-		// FIXME!!! got rid of duplicated term stat and qword setup
-		while ( ( sWord = pTokenizer->GetToken() )!=NULL )
-		{
-			BYTE * sMultiform = pTokenizer->GetTokenizedMultiform();
-			if ( sMultiform )
-				sTokenized = (const char*)sMultiform;
-			else
-				sTokenized = (const char*)sWord;
-
-			SphWordID_t iWord = pDict->GetWordID ( sWord );
-			if ( iWord )
-			{
-				if ( bGetStats )
-				{
-					QueryWord.Reset ();
-					QueryWord.m_sWord = (const char*)sWord;
-					QueryWord.m_sDictWord = (const char*)sWord;
-					QueryWord.m_uWordID = iWord;
-					tTermSetup.QwordSetup ( &QueryWord );
-				}
-
-				CSphKeywordInfo & tInfo = dKeywords.Add();
-				Swap ( tInfo.m_sTokenized, sTokenized );
-				tInfo.m_sNormalized = (const char*)sWord;
-				tInfo.m_iDocs = bGetStats ? QueryWord.m_iDocs : 0;
-				tInfo.m_iHits = bGetStats ? QueryWord.m_iHits : 0;
-
-				if ( tInfo.m_sNormalized.cstr()[0]==MAGIC_WORD_HEAD_NONSTEMMED )
-					*(char *)tInfo.m_sNormalized.cstr() = '=';
-			}
-		}
+		tAotFilter.GetKeywords ( dKeywords );
 	} else
 	{
 		BYTE sWord[MAX_KEYWORD_BYTES];
@@ -17662,14 +17777,14 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 			SphWordID_t iWord = pDict->GetWordID ( sWord );
 			if ( iWord )
 			{
-				QueryWord.Reset ();
-				QueryWord.m_sWord = tInfo.m_sTokenized;
-				QueryWord.m_sDictWord = (const char*)sWord;
-				QueryWord.m_uWordID = iWord;
-				tTermSetup.QwordSetup ( &QueryWord );
+				tQueryWord.Reset ();
+				tQueryWord.m_sWord = tInfo.m_sTokenized;
+				tQueryWord.m_sDictWord = (const char*)sWord;
+				tQueryWord.m_uWordID = iWord;
+				tTermSetup.QwordSetup ( &tQueryWord );
 
-				tInfo.m_iDocs += QueryWord.m_iDocs;
-				tInfo.m_iHits += QueryWord.m_iHits;
+				tInfo.m_iDocs += tQueryWord.m_iDocs;
+				tInfo.m_iHits += tQueryWord.m_iHits;
 			}
 		}
 	}

@@ -1145,6 +1145,7 @@ public:
 	bool						DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, bool bFillOnly, CSphString * pError ) const;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString * pError ) const;
 	virtual bool				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const;
+	void						AddKeywordStats ( BYTE * sWord, const BYTE * sTokenized, CSphDict * pDict, bool bGetStats, int iQpos, RtQword_t * pQueryWord, CSphVector <CSphKeywordInfo> & dKeywords ) const;
 
 	void						CopyDocinfo ( CSphMatch & tMatch, const DWORD * pFound ) const;
 	const CSphRowitem *			FindDocinfo ( const RtSegment_t * pSeg, SphDocID_t uDocID ) const;
@@ -6995,6 +6996,50 @@ bool RtIndex_t::MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQu
 }
 
 
+void RtIndex_t::AddKeywordStats ( BYTE * sWord, const BYTE * sTokenized, CSphDict * pDict, bool bGetStats, int iQpos, RtQword_t * pQueryWord, CSphVector <CSphKeywordInfo> & dKeywords ) const
+{
+	assert ( !bGetStats || pQueryWord );
+
+	SphWordID_t iWord = pDict->GetWordID ( sWord );
+	if ( !iWord )
+		return;
+
+	if ( bGetStats )
+	{
+		pQueryWord->Reset();
+		pQueryWord->m_uWordID = iWord;
+		pQueryWord->m_sWord = (const char *)sTokenized;
+		pQueryWord->m_sDictWord = (const char *)sWord;
+		ARRAY_FOREACH ( iSeg, m_dSegments )
+			RtQwordSetupSegment ( pQueryWord, m_dSegments[iSeg], false, m_bKeywordDict, m_iWordsCheckpoint );
+	}
+
+	CSphKeywordInfo & tInfo = dKeywords.Add();
+	tInfo.m_sTokenized = (const char *)sTokenized;
+	tInfo.m_sNormalized = (const char*)sWord;
+	tInfo.m_iDocs = bGetStats ? pQueryWord->m_iDocs : 0;
+	tInfo.m_iHits = bGetStats ? pQueryWord->m_iHits : 0;
+	tInfo.m_iQpos = iQpos;
+
+	if ( tInfo.m_sNormalized.cstr()[0]==MAGIC_WORD_HEAD_NONSTEMMED )
+		*(char *)tInfo.m_sNormalized.cstr() = '=';
+}
+
+
+struct CSphRtQueryFilter : public ISphQueryFilter
+{
+	const RtIndex_t *	m_pIndex;
+	RtQword_t *			m_pQword;
+	bool				m_bGetStats;
+
+	virtual void AddKeywordStats ( BYTE * sWord, const BYTE * sTokenized, int iQpos, CSphVector <CSphKeywordInfo> & dKeywords )
+	{
+		assert ( m_pIndex && m_pQword );
+		m_pIndex->AddKeywordStats ( sWord, sTokenized, m_pDict, m_bGetStats, iQpos, m_pQword, dKeywords );
+	}
+};
+
+
 bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const char * sQuery, bool bGetStats, bool bFillOnly, CSphString * pError ) const
 {
 	if ( !bFillOnly )
@@ -7006,6 +7051,14 @@ bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 	RtQword_t tQword;
 
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( SPH_CLONE_INDEX ) ); // avoid race
+	pTokenizer->EnableTokenizedMultiformTracking ();
+
+	// need to support '*' and '=' but not the other specials
+	// so m_pQueryTokenizer does not work for us, gotta clone and setup one manually
+	if ( IsStarDict() )
+		pTokenizer->AddPlainChar ( '*' );
+	if ( m_tSettings.m_bIndexExactWords )
+		pTokenizer->AddPlainChar ( '=' );
 
 	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
 	CSphDict * pDictBase = m_pDict;
@@ -7020,40 +7073,20 @@ bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 	CSphScopedPtr<CSphDict> tDict2 ( NULL );
 	pDict = SetupExactDict ( tDict2, pDict, pTokenizer.Ptr() );
 
+	// FIXME!!! missed bigram, FieldFilter
+	CSphRtQueryFilter tAotFilter;
+	tAotFilter.m_pTokenizer = pTokenizer.Ptr();
+	tAotFilter.m_pDict = pDict;
+	tAotFilter.m_pSettings = &m_tSettings;
+	tAotFilter.m_bGetStats = bGetStats;
+	tAotFilter.m_pIndex = this;
+	tAotFilter.m_pQword = &tQword;
+
 	if ( !bFillOnly )
 	{
 		pTokenizer->SetBuffer ( (BYTE *)sQuery, strlen ( sQuery ) );
 
-		while ( BYTE * pToken = pTokenizer->GetToken() )
-		{
-			// keep tokenized form
-			CSphString sTokenized = ( const char *)pToken;
-			SphWordID_t iWord = pDict->GetWordID ( pToken );
-			if ( iWord )
-			{
-				CSphKeywordInfo & tInfo = dKeywords.Add();
-				Swap ( tInfo.m_sTokenized, sTokenized );
-				tInfo.m_sNormalized = (const char *)pToken;
-				tInfo.m_iDocs = 0;
-				tInfo.m_iHits = 0;
-
-				if ( tInfo.m_sNormalized.cstr()[0]==MAGIC_WORD_HEAD_NONSTEMMED )
-					*(char *)tInfo.m_sNormalized.cstr() = '=';
-
-				if ( !bGetStats )
-					continue;
-
-				tQword.Reset();
-				tQword.m_uWordID = iWord;
-				tQword.m_sWord = tInfo.m_sTokenized;
-				tQword.m_sDictWord = tInfo.m_sNormalized;
-				ARRAY_FOREACH ( iSeg, m_dSegments )
-					RtQwordSetupSegment ( &tQword, m_dSegments[iSeg], false, m_bKeywordDict, m_iWordsCheckpoint );
-
-				tInfo.m_iDocs = tQword.m_iDocs;
-				tInfo.m_iHits = tQword.m_iHits;
-			}
-		}
+		tAotFilter.GetKeywords ( dKeywords );
 	} else
 	{
 		BYTE sWord[SPH_MAX_KEYWORD_LEN];

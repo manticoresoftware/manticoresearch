@@ -15108,7 +15108,8 @@ void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 	}
 
 	// result set header packet
-	tOut.HeadBegin ( bStats ? 4 : 2 );
+	tOut.HeadBegin ( bStats ? 5 : 3 );
+	tOut.HeadColumn("qpos");
 	tOut.HeadColumn("tokenized");
 	tOut.HeadColumn("normalized");
 	if ( bStats )
@@ -15122,10 +15123,8 @@ void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 	char sBuf[16];
 	ARRAY_FOREACH ( i, dKeywords )
 	{
-		char sDocs[16], sHits[16];
-		snprintf ( sDocs, sizeof(sDocs), "%d", dKeywords[i].m_iDocs );
-		snprintf ( sHits, sizeof(sHits), "%d", dKeywords[i].m_iHits );
-
+		snprintf ( sBuf, sizeof(sBuf), "%d", dKeywords[i].m_iQpos );
+		tOut.PutString ( sBuf );
 		tOut.PutString ( dKeywords[i].m_sTokenized.cstr() );
 		tOut.PutString ( dKeywords[i].m_sNormalized.cstr() );
 		if ( bStats )

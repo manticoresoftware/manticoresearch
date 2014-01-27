@@ -1490,6 +1490,24 @@ public:
 	virtual ISphTokenizer *			GetEmbeddedTokenizer () const					{ return m_pTokenizer; }
 };
 
+
+struct ISphQueryFilter
+{
+	ISphTokenizer *		m_pTokenizer;
+	CSphDict *					m_pDict;
+	const CSphIndexSettings *	m_pSettings;
+
+	ISphQueryFilter ();
+	virtual ~ISphQueryFilter ();
+
+	void GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords );
+	virtual void AddKeywordStats ( BYTE * sWord, const BYTE * sTokenized, int iQpos, CSphVector <CSphKeywordInfo> & dKeywords ) = 0;
+};
+
+
+DWORD sphParseMorphAot ( const char * );
+
+
 //////////////////////////////////////////////////////////////////////////
 // USER VARIABLES
 //////////////////////////////////////////////////////////////////////////

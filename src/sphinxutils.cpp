@@ -1480,6 +1480,9 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		{
 			sphConfDictionary ( hIndex, tSettings );
 			pDict = sphCreateDictionaryTemplate ( tSettings, NULL, pIndex->GetTokenizer (), pIndex->GetName(), sError );
+			CSphIndexSettings tIndexSettings = pIndex->GetSettings();
+			tIndexSettings.m_uAotFilterMask = sphParseMorphAot ( tSettings.m_sMorphology.cstr() );
+			pIndex->Setup ( tIndexSettings );
 		} else
 		{
 			if ( pIndex->m_bId32to64 )

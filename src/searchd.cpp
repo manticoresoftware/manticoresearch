@@ -14305,14 +14305,6 @@ void SendMysqlOkPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, int iAffected
 }
 
 
-struct CmpColumns_fn
-{
-	inline bool IsLess ( const CSphString & a, const CSphString & b ) const
-	{
-		return CmpString ( a, b )<0;
-	}
-};
-
 //////////////////////////////////////////////////////////////////////////
 // Mysql row buffer and command handler
 #define SPH_MAX_NUMERIC_STR 64
@@ -14642,25 +14634,24 @@ void HandleMysqlInsert ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt,
 		// got a list of columns, check for 1) existance, 2) dupes
 		CSphVector<CSphString> dCheck = tStmt.m_dInsertSchema;
 		ARRAY_FOREACH ( i, dCheck )
-		// OPTIMIZE! GetAttrIndex and GetFieldIndex use the linear searching. M.b. hash instead?
-		if ( dCheck[i]!="id" && tSchema.GetAttrIndex ( dCheck[i].cstr() )==-1 && tSchema.GetFieldIndex ( dCheck[i].cstr() )==-1 )
-		{
-			pServed->Unlock();
-			sError.SetSprintf ( "unknown column: '%s'", dCheck[i].cstr() );
-			tOut.Error ( tStmt.m_sStmt, sError.cstr(), MYSQL_ERR_PARSE_ERROR );
-			return;
-		}
+			// OPTIMIZE! GetAttrIndex and GetFieldIndex use the linear searching. M.b. hash instead?
+			if ( dCheck[i]!="id" && tSchema.GetAttrIndex ( dCheck[i].cstr() )==-1 && tSchema.GetFieldIndex ( dCheck[i].cstr() )==-1 )
+			{
+				pServed->Unlock();
+				sError.SetSprintf ( "unknown column: '%s'", dCheck[i].cstr() );
+				tOut.Error ( tStmt.m_sStmt, sError.cstr(), MYSQL_ERR_PARSE_ERROR );
+				return;
+			}
 
-		dCheck.Sort ( CmpColumns_fn() );
-
-		ARRAY_FOREACH ( i, dCheck )
-		if ( i>0 && dCheck[i-1]==dCheck[i] )
-		{
-			pServed->Unlock();
-			sError.SetSprintf ( "column '%s' specified twice", dCheck[i].cstr() );
-			tOut.Error ( tStmt.m_sStmt, sError.cstr(), MYSQL_ERR_FIELD_SPECIFIED_TWICE );
-			return;
-		}
+		dCheck.Sort();
+		for ( int i=1; i<dCheck.GetLength(); i++ )
+			if ( dCheck[i-1]==dCheck[i] )
+			{
+				pServed->Unlock();
+				sError.SetSprintf ( "column '%s' specified twice", dCheck[i].cstr() );
+				tOut.Error ( tStmt.m_sStmt, sError.cstr(), MYSQL_ERR_FIELD_SPECIFIED_TWICE );
+				return;
+			}
 
 		// hash column list
 		// OPTIMIZE! hash index columns once (!) instead
@@ -17001,7 +16992,7 @@ void HandleMysqlShowProfile ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p 
 
 bool TryRename ( const char * sIndex, const char * sPrefix, const char * sFromPostfix, const char * sToPostfix, const char * sAction, bool bFatal, bool bCheckExist=true );
 
-bool RenameWithRollback ( const ServedIndex_t * pLocal )
+static bool RenameWithRollback ( const ServedIndex_t * pLocal )
 {
 	const char * szIndexName = pLocal->m_pIndex->GetName();
 	const char * szIndexPath = pLocal->m_sIndexPath.cstr();
@@ -17058,7 +17049,7 @@ bool RenameWithRollback ( const ServedIndex_t * pLocal )
 }
 
 
-void ModifyIndexAttrs ( const ServedIndex_t * pLocal, bool bAdd, CSphString & sAttrName, ESphAttr eAttrType, int iPos, CSphString & sError )
+static void ModifyIndexAttrs ( const ServedIndex_t * pLocal, bool bAdd, CSphString & sAttrName, ESphAttr eAttrType, int iPos, CSphString & sError )
 {
 	if ( !pLocal->m_pIndex->CreateModifiedFiles ( bAdd, sAttrName, eAttrType, iPos, sError ) )
 		return;
@@ -17073,7 +17064,7 @@ void ModifyIndexAttrs ( const ServedIndex_t * pLocal, bool bAdd, CSphString & sA
 }
 
 
-void AddAttrToIndex ( const SqlStmt_t & tStmt, const ServedIndex_t * pLocal, CSphString & sError )
+static void AddAttrToIndex ( const SqlStmt_t & tStmt, const ServedIndex_t * pLocal, CSphString & sError )
 {
 	CSphString sAttrToAdd = tStmt.m_sAlterAttr;
 	sAttrToAdd.ToLower();
@@ -17092,7 +17083,7 @@ void AddAttrToIndex ( const SqlStmt_t & tStmt, const ServedIndex_t * pLocal, CSp
 }
 
 
-void RemoveAttrFromIndex ( const SqlStmt_t & tStmt, const ServedIndex_t * pLocal, CSphString & sError )
+static void RemoveAttrFromIndex ( const SqlStmt_t & tStmt, const ServedIndex_t * pLocal, CSphString & sError )
 {
 	CSphString sAttrToRemove = tStmt.m_sAlterAttr;
 	sAttrToRemove.ToLower();
@@ -17113,7 +17104,7 @@ void RemoveAttrFromIndex ( const SqlStmt_t & tStmt, const ServedIndex_t * pLocal
 }
 
 
-void HandleMysqlAlter ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, bool bAdd )
+static void HandleMysqlAlter ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, bool bAdd )
 {
 	MEMORY ( SPH_MEM_ALTER_SQL );
 
@@ -17211,7 +17202,7 @@ void HandleMysqlAlter ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, bool bAd
 }
 
 
-void HandleMysqlShowPlan ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p )
+static void HandleMysqlShowPlan ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p )
 {
 	tOut.HeadBegin ( 2 );
 	tOut.HeadColumn ( "Variable" );
@@ -17596,7 +17587,7 @@ void StatCountCommand ( int iCmd, int iCount )
 }
 
 
-void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
+static void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 {
 	MEMORY ( SPH_MEM_HANDLE_SQL );
 	THD_STATE ( THD_HANDSHAKE );

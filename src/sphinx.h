@@ -830,8 +830,10 @@ public:
 	/// virtualizing dtor
 	virtual				~CSphDict () {}
 
-	/// get word ID by word, "text" version
+	/// Get word ID by word, "text" version
 	/// may apply stemming and modify word inplace
+	/// modified word may become bigger than the  original one, so make sure you have enough space in buffer which is pointer by pWord
+	/// a general practice is to use char[3*SPH_MAX_WORD_LEN+4] as a buffer
 	/// returns 0 for stopwords
 	virtual SphWordID_t	GetWordID ( BYTE * pWord ) = 0;
 

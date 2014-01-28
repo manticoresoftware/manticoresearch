@@ -14461,7 +14461,7 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, const CSphVector<CSphFilterSett
 		tKillListFilter.m_bExclude = true;
 		tKillListFilter.m_eType = SPH_FILTER_VALUES;
 		tKillListFilter.m_iMinValue = pKillList[0];
-		tKillListFilter.m_iMaxValue = pKillList[nKillListSize -1];
+		tKillListFilter.m_iMaxValue = pKillList [ nKillListSize-1 ];
 		tKillListFilter.m_sAttrName = "@id";
 		tKillListFilter.SetExternalValues ( pKillList, nKillListSize );
 
@@ -14621,7 +14621,6 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 				{
 					wrRows.PutBytes ( pDstRow, sizeof(DWORD)*iStride );
 				}
-
 
 				tBuildHeader.m_uMinMaxIndex += iStride;
 				pDstRow += iStride;
@@ -14802,8 +14801,8 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	tHitBuilder.cidxHit ( &tFlush, NULL );
 
 	if ( !tHitBuilder.cidxDone ( iHitBufferSize, pDstIndex->m_tSettings.m_iMinInfixLen,
-		pDstIndex->m_pTokenizer->GetMaxCodepointLength(), &tBuildHeader ) )
-			return false;
+								pDstIndex->m_pTokenizer->GetMaxCodepointLength(), &tBuildHeader ) )
+		return false;
 
 	tBuildHeader.m_sHeaderExtension = "tmp.sph";
 	tBuildHeader.m_pThrottle = pThrottle;

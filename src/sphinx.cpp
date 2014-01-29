@@ -2792,7 +2792,7 @@ public:
 		{
 			m_eTokenType = TOK_CHINESE;
 			bool bStopword;
-			BYTE * pToken = GetNextTokenRLP ( bStopword ) ;
+			BYTE * pToken = GetNextTokenRLP ( bStopword );
 			if ( pToken )
 			{
 				if ( m_bStandalone )
@@ -3052,9 +3052,9 @@ public:
 private:
 	enum TokType_e
 	{
-		 TOK_CHINESE
-		,TOK_NONCHINESE_STORED
-		,TOK_NONCHINESE_RLP
+		TOK_CHINESE,
+		TOK_NONCHINESE_STORED,
+		TOK_NONCHINESE_RLP
 	};
 
 	BT_RLP_ContextC *		m_pContext;
@@ -30080,23 +30080,26 @@ bool CSphSource_BaseSV::Setup ( const CSphConfigSection & hSource, FILE * pPipe,
 	}
 
 	// restore order for declared columns
-	CSphString sTmp;
+	CSphString sColumn;
 	hSource.IterateStart();
 	while ( hSource.IterateNext() )
 	{
 		const CSphVariant * pVal = &hSource.IterateGet();
 		while ( pVal )
 		{
-			const char * sOptionValue = pVal->cstr();
+			sColumn = *pVal;
 			// uint attribute might have bit count that should by cut off from name
-			char * pColon = strchr ( const_cast<char*> ( sOptionValue ), ':' );
+			const char * pColon = strchr ( sColumn.cstr(), ':' );
 			if ( pColon )
 			{
-				sTmp.SetBinary ( sOptionValue, pColon-sOptionValue );
-				sOptionValue = sTmp.cstr();
+				int iColon = pColon-sColumn.cstr();
+				sColumn.SetBinary ( sColumn.cstr(), iColon );
 			}
 
-			SortedRemapXSV_t * pColumn = hSchema ( sOptionValue );
+			// let's handle different char cases
+			sColumn.ToLower();
+
+			SortedRemapXSV_t * pColumn = hSchema ( sColumn );
 			assert ( !pColumn || pColumn->m_iAttr>=0 || pColumn->m_iField>=0 );
 			assert ( !pColumn || pColumn->m_iTag==-1 );
 			if ( pColumn )

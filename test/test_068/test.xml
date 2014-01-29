@@ -87,9 +87,9 @@ source src_csv1
 	type = csvpipe
 	csvpipe_command = cat <this_test/>/data1.csv
 	csvpipe_field = title
-	csvpipe_field = content
-	csvpipe_attr_multi = tags
-	csvpipe_attr_uint = gid
+	csvpipe_field = Content
+	csvpipe_attr_multi = Tags
+	csvpipe_attr_uint = Gid
 }
 
 index csv1
@@ -104,8 +104,8 @@ source src_csv2
 	csvpipe_command = cat <this_test/>/data2.csv
 	csvpipe_delimiter =  +  
 	csvpipe_field = title
-	csvpipe_field = content
-	csvpipe_attr_multi = tags
+	csvpipe_field = Content
+	csvpipe_attr_multi = Tags
 	csvpipe_attr_uint = gid
 }
 

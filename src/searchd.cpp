@@ -231,12 +231,12 @@ public:
 	void SetupTLS ();
 
 	// create thread with crash logging
-	static bool ThreadCreate ( SphThread_t * pThread, void ( *pCall )( void* ), void * pArg, bool bDetached=false );
+	static bool ThreadCreate ( SphThread_t * pThread, void ( *pCall )(void*), void * pArg, bool bDetached=false );
 
 private:
 	struct CallArgPair_t
 	{
-		CallArgPair_t ( void ( *pCall )( void * ), void * pArg )
+		CallArgPair_t ( void ( *pCall )(void *), void * pArg )
 			: m_pCall ( pCall )
 			, m_pArg ( pArg )
 		{}
@@ -433,7 +433,7 @@ struct ThdDesc_t : public ListNode_t
 		, m_iTid ( 0 )
 		, m_tmConnect ( 0 )
 		, m_tmStart ( 0 )
-	{}	
+	{}
 
 	void SetSnippetThreadInfo ( const CSphVector<ExcerptQuery_t> & dSnippets )
 	{
@@ -448,7 +448,7 @@ struct ThdDesc_t : public ListNode_t
 
 		iSize /= 100;
 		m_sThreadInfo.SetSprintf ( "api-snippet datasize=%d.%d""k query=\"%s\"",
-			int(iSize/10), int(iSize%10), dSnippets[0].m_sWords.scstr() );
+			int ( iSize/10 ), int ( iSize%10 ), dSnippets[0].m_sWords.scstr() );
 	}
 };
 
@@ -2953,7 +2953,7 @@ NetOutputBuffer_c::NetOutputBuffer_c ( int iSock )
 	, m_bFlushEnabled ( true )
 {
 	assert ( m_iSock>0 );
-	m_pBuffer = static_cast<BYTE *> ( malloc ( m_iBufferSize ));
+	m_pBuffer = static_cast<BYTE *> ( malloc ( m_iBufferSize ) );
 	m_pBufferPtr = m_pBuffer;
 }
 
@@ -14405,7 +14405,7 @@ public:
 		int iSec = (int)( iUsec / 1000000 );
 		int iFrac = (int)( iUsec % 1000000 );
 		Reserve ( 18 ); // 1..10 bytes for sec, 1 for dot, 6 for frac, 1 for len
-		int iLen = snprintf ( Get()+1, 18, "%d.%06d", iSec, iFrac );
+		int iLen = snprintf ( Get()+1, 18, "%d.%06d", iSec, iFrac ); //NOLINT
 		*Get() = BYTE(iLen);
 		IncPtr ( 1+iLen );
 	}
@@ -15046,7 +15046,7 @@ void HandleMysqlCallSnippets ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 	// data
 	ARRAY_FOREACH ( i, dResults )
 	{
-		tOut.PutString ( dResults[i] );
+		tOut.PutString ( dResults[i] ? dResults[i] : "" );
 		tOut.Commit();
 	}
 	tOut.Eof();

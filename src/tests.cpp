@@ -2610,7 +2610,7 @@ void TestRankerFactors ()
 	CSphMultiQueryArgs tArgs ( CSphVector<SphDocID_t>(), 1 );
 	SphQueueSettings_t tQueueSettings ( tQuery, pIndex->GetMatchSchema(), tResult.m_sError, NULL );
 	tQueueSettings.m_bComputeItems = true;
-	tArgs.m_bFactors = true;
+	tArgs.m_uPackedFactorFlags = SPH_FACTOR_ENABLE | SPH_FACTOR_CALC_ATC;
 
 	ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings );
 	assert ( pSorter );

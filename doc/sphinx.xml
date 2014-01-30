@@ -10,11 +10,11 @@
 
 <bookinfo>
 <copyright>
-<year>2001-2013</year>
+<year>2001-2014</year>
 <holder>Andrew Aksyonoff</holder>
 </copyright>
 <copyright>
-<year>2008-2013</year>
+<year>2008-2014</year>
 <holder>Sphinx Technologies Inc, <ulink
 url="http://sphinxsearch.com">http://sphinxsearch.com</ulink></holder>
 </copyright>
@@ -13610,8 +13610,8 @@ by using the <code>thread_stack</code> directive (or switch to a different
 </para>
 <para>
 A query with N levels of nesting is estimated to require approximately
-30+0.12*N KB of stack, meaning that the 64K is enough for queries
-with upto 300 levels, 150K for upto 1000 levels, etc. If the stack size limit
+30+0.16*N KB of stack, meaning that the default 64K is enough for queries
+with upto 250 levels, 150K for upto 700 levels, etc. If the stack size limit
 is not met, <filename>searchd</filename> fails the query and reports
 the required stack size in the error message.
 </para>
@@ -14194,15 +14194,15 @@ rlp_max_batch_docs = 100
 </itemizedlist>
 </sect1>
 
-<sect1 id="rel215"><title>Version 2.1.5-release, ??? jan 2014</title>
+<sect1 id="rel215"><title>Version 2.1.5-release, 22 jan 2014</title>
 <bridgehead>Bug fixes</bridgehead>
 <itemizedlist>
-  <listitem><para>fixed #1799 crash in queries to distributed indexes with GROUP BY on multiple values</para></listitem>
-  <listitem><para>fixed #1823 indextool fails to handle indexes with lemmatizer morphology</para></listitem>
-  <listitem><para>fixed network protocol issue which results in timeouts of libmysqlclient for big Sphinx responses</para></listitem>
-  <listitem><para>fixed documentation on rt_flush_period</para></listitem>
-  <listitem><para>fixed #1718 expand_keywords option lost in disk chunks of RT indexes</para></listitem>
-  <listitem><para>fixed #1848 infixes and morphology clash</para></listitem>
+  <listitem><para>fixed #1848, infixes and morphology clash</para></listitem>
+  <listitem><para>fixed #1823, <filename>indextool</filename> fails to handle indexes with lemmatizer morphology</para></listitem>
+  <listitem><para>fixed #1799, crash in queries to distributed indexes with <link linkend="sphinxql-select">GROUP BY</link> on multiple values</para></listitem>
+  <listitem><para>fixed #1718, <option>expand_keywords</option> option lost in disk chunks of RT indexes</para></listitem>
+  <listitem><para>fixed documentation on <link linkend="conf-rt-flush-period">rt_flush_period</link></para></listitem>
+  <listitem><para>fixed network protocol issue which results in timeouts of <filename>libmysqlclient</filename> for big Sphinx responses</para></listitem>  
 </itemizedlist>
 </sect1>
 

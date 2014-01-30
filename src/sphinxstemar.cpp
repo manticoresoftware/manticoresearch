@@ -387,7 +387,7 @@ static int ar_match_form ( BYTE * word, struct ar_form_t * forms )
 		{
 			if ( forms[fi].entry[pi].cp>=MATCH_M && forms[fi].entry[pi].cp<=MATCH_4 )
 			{
-				int index = forms[fi].entry[pi].cp - MATCH_M;
+				int index = ( forms[fi].entry[pi].cp - MATCH_M ) >> 8;
 				if ( AR_CHAR_AT(index)!=AR_CHAR_AT(forms[fi].entry[pi].at) )
 					break;
 			} else

@@ -3187,7 +3187,7 @@ struct CSphMultiQueryArgs : public ISphNoncopyable
 	const CSphVector<SphDocID_t> &			m_dKillList;
 	const int								m_iIndexWeight;
 	int										m_iTag;
-	bool									m_bFactors;
+	DWORD									m_uPackedFactorFlags;
 	bool									m_bLocalDF;
 	const SmallStringHash_T<int64_t> *		m_pLocalDocs;
 	int64_t									m_iTotalDocs;
@@ -3416,7 +3416,7 @@ struct SphQueueSettings_t : public ISphNoncopyable
 	CSphAttrUpdateEx *			m_pUpdate;
 	CSphVector<SphDocID_t> *	m_pDeletes;
 	bool						m_bZonespanlist;
-	bool						m_bPackedFactors;
+	DWORD						m_uPackedFactorFlags;
 	ISphExprHook *				m_pHook;
 	const CSphFilterSettings *	m_pAggrFilter;
 
@@ -3430,7 +3430,7 @@ struct SphQueueSettings_t : public ISphNoncopyable
 		, m_pUpdate ( NULL )
 		, m_pDeletes ( NULL )
 		, m_bZonespanlist ( false )
-		, m_bPackedFactors ( false )
+		, m_uPackedFactorFlags ( SPH_FACTOR_DISABLE )
 		, m_pHook ( NULL )
 		, m_pAggrFilter ( NULL )
 	{ }

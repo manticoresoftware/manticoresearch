@@ -8984,7 +8984,7 @@ public:
 
 protected:
 	void							RunSubset ( int iStart, int iEnd );	///< run queries against index(es) from first query in the subset
-	void							RunLocalSearches ( ISphMatchSorter * pLocalSorter, const char * sDistName, bool bFactors );
+	void							RunLocalSearches ( ISphMatchSorter * pLocalSorter, const char * sDistName, DWORD uFactorFlags );
 	void							RunLocalSearchesMT ();
 	bool							RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters, CSphQueryResult ** pResults, bool * pMulti ) const;
 	bool							AllowsMulti ( int iStart, int iEnd ) const;
@@ -9126,7 +9126,7 @@ void SearchHandler_c::RunUpdates ( const CSphQuery & tQuery, const CSphString & 
 
 	int64_t tmLocal = -sphMicroTimer();
 
-	RunLocalSearches ( NULL, NULL, false );
+	RunLocalSearches ( NULL, NULL, SPH_FACTOR_DISABLE );
 	tmLocal += sphMicroTimer();
 
 	OnRunFinished();
@@ -9187,7 +9187,7 @@ void SearchHandler_c::RunDeletes ( const CSphQuery & tQuery, const CSphString & 
 
 	int64_t tmLocal = -sphMicroTimer();
 
-	RunLocalSearches ( NULL, NULL, false );
+	RunLocalSearches ( NULL, NULL, SPH_FACTOR_DISABLE );
 	tmLocal += sphMicroTimer();
 
 	OnRunFinished();
@@ -9582,7 +9582,7 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 
 	// create sorters
 	int iValidSorters = 0;
-	bool bNeedFactors = false;
+	DWORD uFactorFlags = SPH_FACTOR_DISABLE;
 	for ( int i=0; i<iQueries; i++ )
 	{
 		CSphString & sError = ppResults[i]->m_sError;
@@ -9600,7 +9600,7 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 
 		ppSorters[i] = sphCreateQueue ( tQueueSettings );
 
-		bNeedFactors |= tQueueSettings.m_bPackedFactors;
+		uFactorFlags |= tQueueSettings.m_uPackedFactorFlags;
 
 		if ( ppSorters[i] )
 			iValidSorters++;
@@ -9654,7 +9654,7 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 
 	// do the query
 	CSphMultiQueryArgs tMultiArgs ( dCumulativeKillList, iIndexWeight );
-	tMultiArgs.m_bFactors = bNeedFactors;
+	tMultiArgs.m_uPackedFactorFlags = uFactorFlags;
 	if ( m_bGotLocalDF )
 	{
 		tMultiArgs.m_bLocalDF = true;
@@ -9680,7 +9680,7 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 }
 
 
-void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const char * sDistName, bool bFactors )
+void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const char * sDistName, DWORD uFactorFlags )
 {
 	if ( g_iDistThreads>1 && m_dLocal.GetLength()>1 )
 	{
@@ -9712,7 +9712,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 		ARRAY_FOREACH ( i, dSorters )
 			dSorters[i] = NULL;
 
-		bool bNeedFactors = bFactors;
+		DWORD uTotalFactorFlags = uFactorFlags;
 		int iValidSorters = 0;
 		for ( int iQuery=m_iStart; iQuery<=m_iEnd; iQuery++ )
 		{
@@ -9736,7 +9736,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 
 				pSorter = sphCreateQueue ( tQueueSettings );
 
-				bNeedFactors |= tQueueSettings.m_bPackedFactors;
+				uTotalFactorFlags |= tQueueSettings.m_uPackedFactorFlags;
 				tQuery.m_bZSlist = tQueueSettings.m_bZonespanlist;
 				if ( !pSorter )
 				{
@@ -9803,7 +9803,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 
 		// do the query
 		CSphMultiQueryArgs tMultiArgs ( dCumulativeKillList, iIndexWeight );
-		tMultiArgs.m_bFactors = bNeedFactors;
+		tMultiArgs.m_uPackedFactorFlags = uTotalFactorFlags;
 		if ( m_bGotLocalDF )
 		{
 			tMultiArgs.m_bLocalDF = true;
@@ -10329,7 +10329,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// optimize single-query, same-schema local searches
 	/////////////////////////////////////////////////////
 
-	bool bLocalFactors = false;
+	DWORD uLocalPFFlags = SPH_FACTOR_DISABLE;
 	ISphMatchSorter * pLocalSorter = NULL;
 	while ( iStart==iEnd && m_dLocal.GetLength()>1 )
 	{
@@ -10372,7 +10372,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 			pLocalSorter = sphCreateQueue ( tQueueSettings );
 
-			bLocalFactors = tQueueSettings.m_bPackedFactors;
+			uLocalPFFlags = tQueueSettings.m_uPackedFactorFlags;
 		}
 
 		ReleaseIndex ( 0 );
@@ -10419,7 +10419,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			m_pProfile->Switch ( SPH_QSTATE_LOCAL_SEARCH );
 
 		tmLocal = -sphMicroTimer();
-		RunLocalSearches ( pLocalSorter, dAgents.GetLength() ? tFirst.m_sIndexes.cstr() : NULL, bLocalFactors );
+		RunLocalSearches ( pLocalSorter, dAgents.GetLength() ? tFirst.m_sIndexes.cstr() : NULL, uLocalPFFlags );
 		tmLocal += sphMicroTimer();
 	}
 

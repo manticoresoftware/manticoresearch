@@ -1952,7 +1952,7 @@ public:
 		: m_pHook ( pHook )
 		, m_pProfiler ( pProfiler )
 		, m_bHasZonespanlist ( false )
-		, m_bHasPackedFactors ( false )
+		, m_uPackedFactorFlags ( SPH_FACTOR_DISABLE )
 		, m_eEvalStage ( SPH_EVAL_FINAL ) // be default compute as late as possible
 	{
 		m_dGatherStack.Reserve ( 64 );
@@ -1981,6 +1981,7 @@ protected:
 	int						AddNodeOp ( int iOp, int iLeft, int iRight );
 	int						AddNodeFunc ( int iFunc, int iFirst, int iSecond=-1, int iThird=-1, int iFourth=-1 );
 	int						AddNodeUdf ( int iCall, int iArg );
+	int						AddNodePF ( int iFunc, int iArg );
 	int						AddNodeConstlist ( int64_t iValue );
 	int						AddNodeConstlist ( float iValue );
 	void					AppendToConstlist ( int iNode, int64_t iValue );
@@ -2010,7 +2011,7 @@ private:
 
 public:
 	bool					m_bHasZonespanlist;
-	bool					m_bHasPackedFactors;
+	DWORD					m_uPackedFactorFlags;
 	ESphEvalStage			m_eEvalStage;
 
 private:
@@ -2039,6 +2040,7 @@ private:
 	ISphExpr *				CreateInNode ( int iNode );
 	ISphExpr *				CreateLengthNode ( const ExprNode_t & tNode, ISphExpr * pLeft );
 	ISphExpr *				CreateGeodistNode ( int iArgs );
+	ISphExpr *				CreatePFNode ( int iArg );
 	ISphExpr *				CreateBitdotNode ( int iArgsNode, CSphVector<ISphExpr *> & dArgs );
 	ISphExpr *				CreateUdfNode ( int iCall, ISphExpr * pLeft );
 	ISphExpr *				CreateExistNode ( const ExprNode_t & tNode );
@@ -2233,6 +2235,8 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 				return TOK_FUNC_IN;
 			if ( g_dFuncs [ iFunc ].m_eFunc==FUNC_REMAP )
 				return TOK_FUNC_REMAP;
+			if ( g_dFuncs [ iFunc ].m_eFunc==FUNC_PACKEDFACTORS )
+				return TOK_FUNC_PF;	
 			return TOK_FUNC;
 		}
 
@@ -3867,13 +3871,10 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 					case FUNC_RANKFACTORS:
 						m_eEvalStage = SPH_EVAL_PRESORT;
 						return new Expr_GetRankFactors_c();
-					case FUNC_PACKEDFACTORS:
-						m_bHasPackedFactors = true;
-						m_eEvalStage = SPH_EVAL_FINAL;
-						return new Expr_GetPackedFactors_c();
+					case FUNC_PACKEDFACTORS: return CreatePFNode ( tNode.m_iLeft );
 					case FUNC_BM25F:
 					{
-						m_bHasPackedFactors = true;
+						m_uPackedFactorFlags |= SPH_FACTOR_ENABLE;
 
 						CSphVector<int> dBM25FArgs;
 						GatherArgNodes ( tNode.m_iLeft, dBM25FArgs );
@@ -5077,6 +5078,38 @@ ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 }
 
 
+ISphExpr * ExprParser_t::CreatePFNode ( int iArg )
+{
+	m_eEvalStage = SPH_EVAL_FINAL;
+
+	DWORD uNodeFactorFlags = SPH_FACTOR_ENABLE | SPH_FACTOR_CALC_ATC;
+
+	CSphVector<int> dArgs;
+	GatherArgNodes ( iArg, dArgs );
+	assert ( dArgs.GetLength()==0 || dArgs.GetLength()==1 );
+
+	bool bNoATC = false;
+
+	if ( dArgs.GetLength()==1 )
+	{
+		assert ( m_dNodes[dArgs[0]].m_eRetType==SPH_ATTR_MAPARG );
+		CSphVector<CSphNamedVariant> & dOpts = m_dNodes[dArgs[0]].m_pMapArg->m_dPairs;
+	
+		ARRAY_FOREACH ( i, dOpts )
+			if ( dOpts[i].m_sKey=="no_atc" && dOpts[i].m_iValue>0)
+				bNoATC = true;
+	}
+
+	if ( bNoATC )
+		uNodeFactorFlags &= ~SPH_FACTOR_CALC_ATC;
+
+	m_uPackedFactorFlags |= uNodeFactorFlags;
+
+	return new Expr_GetPackedFactors_c();
+}
+
+
+
 ISphExpr * ExprParser_t::CreateBitdotNode ( int iArgsNode, CSphVector<ISphExpr *> & dArgs )
 {
 	assert ( dArgs.GetLength()>=1 );
@@ -5749,6 +5782,33 @@ int ExprParser_t::AddNodeUdf ( int iCall, int iArg )
 	return m_dNodes.GetLength()-1;
 }
 
+int	ExprParser_t::AddNodePF ( int iFunc, int iArg )
+{
+	assert ( iFunc>=0 && iFunc< int ( sizeof ( g_dFuncs )/sizeof ( g_dFuncs[0]) ) );
+	const char * sFuncName = g_dFuncs [ iFunc ].m_sName;
+
+	CSphVector<ESphAttr> dRetTypes;
+	GatherArgRetTypes ( iArg, dRetTypes );
+
+	assert ( dRetTypes.GetLength()==0 || dRetTypes.GetLength()==1 );
+
+	if ( dRetTypes.GetLength()==1 && dRetTypes[0]!=SPH_ATTR_MAPARG )
+	{
+		m_sParserError.SetSprintf ( "%s() argument must be a map", sFuncName );
+		return -1;
+	}
+
+	ExprNode_t & tNode = m_dNodes.Add ();
+	tNode.m_iToken = TOK_FUNC;
+	tNode.m_iFunc = iFunc;
+	tNode.m_iLeft = iArg;
+	tNode.m_iRight = -1;
+	tNode.m_eArgType = SPH_ATTR_MAPARG;
+	tNode.m_eRetType = g_dFuncs[iFunc].m_eRet;
+
+	return m_dNodes.GetLength()-1;
+}
+
 int ExprParser_t::AddNodeConstlist ( int64_t iValue )
 {
 	ExprNode_t & tNode = m_dNodes.Add();
@@ -6080,7 +6140,7 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 
 /// parser entry point
 ISphExpr * sphExprParse ( const char * sExpr, const ISphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight,
-	CSphString & sError, CSphQueryProfile * pProfiler, ISphExprHook * pHook, bool * pZonespanlist, bool * pPackedFactors, ESphEvalStage * pEvalStage )
+	CSphString & sError, CSphQueryProfile * pProfiler, ISphExprHook * pHook, bool * pZonespanlist, DWORD * pPackedFactorsFlags, ESphEvalStage * pEvalStage )
 {
 	// parse into opcodes
 	ExprParser_t tParser ( pHook, pProfiler );
@@ -6089,8 +6149,8 @@ ISphExpr * sphExprParse ( const char * sExpr, const ISphSchema & tSchema, ESphAt
 		*pZonespanlist = tParser.m_bHasZonespanlist;
 	if ( pEvalStage )
 		*pEvalStage = tParser.m_eEvalStage;
-	if ( pPackedFactors )
-		*pPackedFactors = tParser.m_bHasPackedFactors;
+	if ( pPackedFactorsFlags )
+		*pPackedFactorsFlags = tParser.m_uPackedFactorFlags;
 	return bRes;
 }
 

@@ -1258,7 +1258,7 @@ public:
 
 	virtual bool InitState ( const CSphQueryContext & tCtx, CSphString & sError )
 	{
-		return m_tState.Init ( tCtx.m_iWeights, &tCtx.m_dWeights[0], this, sError, tCtx.m_bPackedFactors );
+		return m_tState.Init ( tCtx.m_iWeights, &tCtx.m_dWeights[0], this, sError, tCtx.m_uPackedFactorFlags );
 	}
 private:
 	virtual bool ExtraDataImpl ( ExtraData_e eType, void ** ppResult )
@@ -6126,7 +6126,7 @@ struct RankerState_Proximity_fn : public ISphExtra
 	DWORD m_uCurQposMask;
 	DWORD m_uCurPos;
 
-	bool Init ( int iFields, const int * pWeights, ExtRanker_c *, CSphString &, bool )
+	bool Init ( int iFields, const int * pWeights, ExtRanker_c *, CSphString &, DWORD )
 	{
 		memset ( m_uLCS, 0, sizeof(m_uLCS) );
 		m_uCurLCS = 0;
@@ -6244,7 +6244,7 @@ struct RankerState_ProximityBM25Exact_fn : public ISphExtra
 	DWORD m_uExactHit;
 	int m_iMaxQuerypos;
 
-	bool Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString &, bool )
+	bool Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString &, DWORD )
 	{
 		memset ( m_uLCS, 0, sizeof(m_uLCS) );
 		m_uCurLCS = 0;
@@ -6327,7 +6327,7 @@ struct RankerState_ProximityPayload_fn : public RankerState_Proximity_fn<USE_BM2
 	DWORD m_uPayloadRank;
 	DWORD m_uPayloadMask;
 
-	bool Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError, bool )
+	bool Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError, DWORD )
 	{
 		RankerState_Proximity_fn<USE_BM25,false>::Init ( iFields, pWeights, pRanker, sError, false );
 		m_uPayloadRank = 0;
@@ -6371,7 +6371,7 @@ struct RankerState_MatchAny_fn : public RankerState_Proximity_fn<false,false>
 	int m_iPhraseK;
 	BYTE m_uMatchMask[SPH_MAX_FIELDS];
 
-	bool Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError, bool )
+	bool Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError, DWORD )
 	{
 		RankerState_Proximity_fn<false,false>::Init ( iFields, pWeights, pRanker, sError, false );
 		m_iPhraseK = 0;
@@ -6414,7 +6414,7 @@ struct RankerState_Wordcount_fn : public ISphExtra
 	int m_iFields;
 	const int * m_pWeights;
 
-	bool Init ( int iFields, const int * pWeights, ExtRanker_c *, CSphString &, bool )
+	bool Init ( int iFields, const int * pWeights, ExtRanker_c *, CSphString &, DWORD )
 	{
 		m_uRank = 0;
 		m_iFields = iFields;
@@ -6441,7 +6441,7 @@ struct RankerState_Fieldmask_fn : public ISphExtra
 {
 	DWORD m_uRank;
 
-	bool Init ( int, const int *, ExtRanker_c *, CSphString &, bool )
+	bool Init ( int, const int *, ExtRanker_c *, CSphString &, DWORD )
 	{
 		m_uRank = 0;
 		return true;
@@ -6477,7 +6477,7 @@ struct RankerState_Plugin_fn : public ISphExtra
 		m_pPlugin->Release();
 	}
 
-	bool Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError, bool )
+	bool Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError, DWORD )
 	{
 		if ( !m_pPlugin->m_fnInit )
 			return true;
@@ -6875,7 +6875,6 @@ public:
 	float				m_dAtc[SPH_MAX_FIELDS];				///< ATC per-field values
 	bool				m_bAtcHeadProcessed;				///< flag for hits from buffer start to window start
 	bool				m_bHaveAtc;							///< calculate ATC?
-	bool				m_bWantGaps;
 	bool				m_bWantAtc;
 
 	void				UpdateATC ( bool bFlushField );
@@ -6885,7 +6884,7 @@ public:
 						RankerState_Expr_fn ();
 						~RankerState_Expr_fn ();
 
-	bool				Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError, bool bComputeHeavyFactors );
+	bool				Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError, DWORD uFactorFlags );
 	void				Update ( const ExtHit_t * pHlist );
 	DWORD				Finalize ( const CSphMatch & tMatch );
 	bool				IsTermSkipped ( int iTerm );
@@ -7565,13 +7564,9 @@ public:
 					SafeRelease ( pLeft );
 					return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMaxWindowHits );
 				}
-			case XRANK_MIN_GAPS:
-				m_pState->m_bWantGaps = true;
-				return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMinGaps );
-			case XRANK_LCCS:
-				return new Expr_FieldFactor_c<BYTE> ( pCF, m_pState->m_dLCCS );
-			case XRANK_WLCCS:
-				return new Expr_FieldFactor_c<float> ( pCF, m_pState->m_dWLCCS );
+			case XRANK_MIN_GAPS:			return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMinGaps );
+			case XRANK_LCCS:				return new Expr_FieldFactor_c<BYTE> ( pCF, m_pState->m_dLCCS );
+			case XRANK_WLCCS:				return new Expr_FieldFactor_c<float> ( pCF, m_pState->m_dWLCCS );
 			case XRANK_ATC:
 				m_pState->m_bWantAtc = true;
 				return new Expr_FieldFactor_c<float> ( pCF, m_pState->m_dAtc );
@@ -7813,7 +7808,6 @@ RankerState_Expr_fn <NEED_PACKEDFACTORS, HANDLE_DUPES>::RankerState_Expr_fn ()
 	, m_uAtcField ( 0 )
 	, m_bAtcHeadProcessed ( false )
 	, m_bHaveAtc ( false )
-	, m_bWantGaps ( false )
 	, m_bWantAtc ( false )
 {}
 
@@ -7828,8 +7822,8 @@ RankerState_Expr_fn <NEED_PACKEDFACTORS, HANDLE_DUPES>::~RankerState_Expr_fn ()
 
 /// initialize ranker state
 template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >
-bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError
-													, bool bComputeHeavyFactors )
+bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError,
+																  DWORD uFactorFlags )
 {
 	m_iFields = iFields;
 	m_pWeights = pWeights;
@@ -7907,22 +7901,19 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Init ( int iFields, 
 		return false;
 	}
 
-	// packedfactors() forces calculation of 'heavy' factors
-	if ( bComputeHeavyFactors || m_bWantGaps || m_bWantAtc )
+	int iUniq = m_iMaxQpos;
+	if_const ( HANDLE_DUPES )
 	{
-		int iUniq = m_iMaxQpos;
-		if_const ( HANDLE_DUPES )
-		{
-			iUniq = 0;
-			ARRAY_FOREACH ( i, m_dTermDupes )
-				iUniq += ( IsTermSkipped(i) ? 0 : 1 );
-		}
-
-		if ( bComputeHeavyFactors || m_bWantGaps )
-			m_iHaveMinWindow = iUniq;
-		if ( bComputeHeavyFactors || m_bWantAtc )
-			m_bHaveAtc = ( iUniq>1 );
+		iUniq = 0;
+		ARRAY_FOREACH ( i, m_dTermDupes )
+			iUniq += ( IsTermSkipped(i) ? 0 : 1 );
 	}
+
+	m_iHaveMinWindow = iUniq;
+
+	// we either have an ATC factor in the expression or packedfactors() without no_atc=1
+	if ( m_bWantAtc || ( uFactorFlags & SPH_FACTOR_CALC_ATC ) )
+		m_bHaveAtc = ( iUniq>1 );
 
 	// all seems ok
 	return true;
@@ -8800,19 +8791,22 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 		case SPH_RANK_FIELDMASK:		pRanker = new ExtRanker_T < RankerState_Fieldmask_fn > ( tXQ, tTermSetup ); break;
 		case SPH_RANK_SPH04:			pRanker = new ExtRanker_T < RankerState_ProximityBM25Exact_fn > ( tXQ, tTermSetup ); break;
 		case SPH_RANK_EXPR:
-			// we need that mask in case these factors usage:
-			// min_idf,max_idf,sum_idf,hit_count,word_count,doc_word_count,tf_idf,tf,field_tf
-			// however ranker expression got parsed later at Init stage
-			// FIXME!!! move QposMask initialization past Init
-			tTermSetup.m_bSetQposMask = true;
-			if ( tCtx.m_bPackedFactors && bGotDupes )
-				pRanker = new ExtRanker_Expr_T <true, true> ( tXQ, tTermSetup, pQuery->m_sRankerExpr.cstr(), pIndex->GetMatchSchema() );
-			else if ( tCtx.m_bPackedFactors && !bGotDupes )
-				pRanker = new ExtRanker_Expr_T <true, false> ( tXQ, tTermSetup, pQuery->m_sRankerExpr.cstr(), pIndex->GetMatchSchema() );
-			else if ( !tCtx.m_bPackedFactors && bGotDupes )
-				pRanker = new ExtRanker_Expr_T <false, true> ( tXQ, tTermSetup, pQuery->m_sRankerExpr.cstr(), pIndex->GetMatchSchema() );
-			else if ( !tCtx.m_bPackedFactors && !bGotDupes )
-				pRanker = new ExtRanker_Expr_T <false, false> ( tXQ, tTermSetup, pQuery->m_sRankerExpr.cstr(), pIndex->GetMatchSchema() );
+			{
+				// we need that mask in case these factors usage:
+				// min_idf,max_idf,sum_idf,hit_count,word_count,doc_word_count,tf_idf,tf,field_tf
+				// however ranker expression got parsed later at Init stage
+				// FIXME!!! move QposMask initialization past Init
+				tTermSetup.m_bSetQposMask = true;
+				bool bNeedFactors = !!(tCtx.m_uPackedFactorFlags & SPH_FACTOR_ENABLE);
+				if ( bNeedFactors && bGotDupes )
+					pRanker = new ExtRanker_Expr_T <true, true> ( tXQ, tTermSetup, pQuery->m_sRankerExpr.cstr(), pIndex->GetMatchSchema() );
+				else if ( bNeedFactors && !bGotDupes )
+					pRanker = new ExtRanker_Expr_T <true, false> ( tXQ, tTermSetup, pQuery->m_sRankerExpr.cstr(), pIndex->GetMatchSchema() );
+				else if ( !bNeedFactors && bGotDupes )
+					pRanker = new ExtRanker_Expr_T <false, true> ( tXQ, tTermSetup, pQuery->m_sRankerExpr.cstr(), pIndex->GetMatchSchema() );
+				else if ( !bNeedFactors && !bGotDupes )
+					pRanker = new ExtRanker_Expr_T <false, false> ( tXQ, tTermSetup, pQuery->m_sRankerExpr.cstr(), pIndex->GetMatchSchema() );
+			}
 			break;
 
 		case SPH_RANK_EXPORT:

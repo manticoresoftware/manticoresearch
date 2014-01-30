@@ -413,10 +413,10 @@ public:
 	int							m_iWeights;						///< search query field weights count
 	int							m_dWeights [ SPH_MAX_FIELDS ];	///< search query field weights
 
-	bool						m_bLookupFilter;		///< row data lookup required at filtering stage
-	bool						m_bLookupSort;			///< row data lookup required at sorting stage
+	bool						m_bLookupFilter;				///< row data lookup required at filtering stage
+	bool						m_bLookupSort;					///< row data lookup required at sorting stage
 
-	bool						m_bPackedFactors;		///< whether we need to store packed factors for our query
+	DWORD						m_uPackedFactorFlags;			///< whether we need to calculate packed factors (and some extra options)
 
 	ISphFilter *				m_pFilter;
 	ISphFilter *				m_pWeightFilter;

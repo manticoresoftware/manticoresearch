@@ -4709,7 +4709,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 	sError = "";
 	bool bHasZonespanlist = false;
 	bool bNeedZonespanlist = false;
-	bool bNeedPackedFactors = false;
+	DWORD uPackedFactorFlags = SPH_FACTOR_DISABLE;
 
 	///////////////////////////////////////
 	// build incoming and outgoing schemas
@@ -4850,7 +4850,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 
 		// a new and shiny expression, lets parse
 		CSphColumnInfo tExprCol ( tItem.m_sAlias.cstr(), SPH_ATTR_NONE );
-		bool bHasPackedFactors = false;
+		DWORD uQueryPackedFactorFlags = SPH_FACTOR_DISABLE;
 
 		// tricky bit
 		// GROUP_CONCAT() adds an implicit TO_STRING() conversion on top of its argument
@@ -4863,14 +4863,14 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 			CSphString sExpr2;
 			sExpr2.SetSprintf ( "TO_STRING(%s)", sExpr.cstr() );
 			tExprCol.m_pExpr = sphExprParse ( sExpr2.cstr(), tSorterSchema, &tExprCol.m_eAttrType,
-				&tExprCol.m_bWeight, sError, pProfiler, tQueue.m_pHook, &bHasZonespanlist, &bHasPackedFactors, &tExprCol.m_eStage );
+				&tExprCol.m_bWeight, sError, pProfiler, tQueue.m_pHook, &bHasZonespanlist, &uQueryPackedFactorFlags, &tExprCol.m_eStage );
 		} else
 		{
 			tExprCol.m_pExpr = sphExprParse ( sExpr.cstr(), tSorterSchema, &tExprCol.m_eAttrType,
-				&tExprCol.m_bWeight, sError, pProfiler, tQueue.m_pHook, &bHasZonespanlist, &bHasPackedFactors, &tExprCol.m_eStage );
+				&tExprCol.m_bWeight, sError, pProfiler, tQueue.m_pHook, &bHasZonespanlist, &uQueryPackedFactorFlags, &tExprCol.m_eStage );
 		}
 
-		bNeedPackedFactors |= bHasPackedFactors;
+		uPackedFactorFlags |= uQueryPackedFactorFlags;
 		bNeedZonespanlist |= bHasZonespanlist;
 		tExprCol.m_eAggrFunc = tItem.m_eAggrFunc;
 		if ( !tExprCol.m_pExpr )
@@ -5222,10 +5222,10 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		else if ( tQueue.m_pDeletes )
 			pTop = new CSphDeleteQueue ( pQuery->m_iMaxMatches, tQueue.m_pDeletes );
 		else
-			pTop = CreatePlainSorter ( eMatchFunc, pQuery->m_bSortKbuffer, pQuery->m_iMaxMatches, bUsesAttrs, bNeedPackedFactors );
+			pTop = CreatePlainSorter ( eMatchFunc, pQuery->m_bSortKbuffer, pQuery->m_iMaxMatches, bUsesAttrs, uPackedFactorFlags & SPH_FACTOR_ENABLE );
 	} else
 	{
-		pTop = sphCreateSorter1st ( eMatchFunc, eGroupFunc, pQuery, tSettings, bNeedPackedFactors );
+		pTop = sphCreateSorter1st ( eMatchFunc, eGroupFunc, pQuery, tSettings, uPackedFactorFlags & SPH_FACTOR_ENABLE );
 	}
 
 	if ( !pTop )
@@ -5265,7 +5265,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		sphAutoSrand ();
 
 	tQueue.m_bZonespanlist = bNeedZonespanlist;
-	tQueue.m_bPackedFactors = bNeedPackedFactors;
+	tQueue.m_uPackedFactorFlags = uPackedFactorFlags;
 
 	return pTop;
 }

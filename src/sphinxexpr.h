@@ -194,6 +194,14 @@ struct Expr_MapArg_c : public ISphExpr
 	}
 };
 
+
+enum
+{
+	SPH_FACTOR_DISABLE		= 0,
+	SPH_FACTOR_ENABLE		= 1,
+	SPH_FACTOR_CALC_ATC		= 1 << 1
+};
+
 /// parses given expression, builds evaluator
 /// returns NULL and fills sError on failure
 /// returns pointer to evaluator on success
@@ -203,7 +211,7 @@ struct Expr_MapArg_c : public ISphExpr
 class CSphQueryProfile;
 ISphExpr * sphExprParse ( const char * sExpr, const ISphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight,
 	CSphString & sError, CSphQueryProfile * pProfiler, ISphExprHook * pHook=NULL,
-	bool * pZonespanlist=NULL, bool * pPackedFactors=NULL, ESphEvalStage * pEvalStage=NULL );
+	bool * pZonespanlist=NULL, DWORD * pPackedFactorsFlags=NULL, ESphEvalStage * pEvalStage=NULL );
 
 //////////////////////////////////////////////////////////////////////////
 

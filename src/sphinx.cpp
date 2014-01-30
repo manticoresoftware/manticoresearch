@@ -9449,7 +9449,7 @@ CSphMultiQueryArgs::CSphMultiQueryArgs ( const CSphVector<SphDocID_t> & dKillLis
 	: m_dKillList ( dKillList )
 	, m_iIndexWeight ( iIndexWeight )
 	, m_iTag ( 0 )
-	, m_bFactors ( false )
+	, m_uPackedFactorFlags ( SPH_FACTOR_DISABLE )
 	, m_bLocalDF ( false )
 	, m_pLocalDocs ( NULL )
 	, m_iTotalDocs ( 0 )
@@ -15455,7 +15455,7 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 				}
 				bNewMatch |= ppSorters[iSorter]->Push ( pMatch[i] );
 
-				if ( pCtx->m_bPackedFactors )
+				if ( pCtx->m_uPackedFactorFlags & SPH_FACTOR_ENABLE )
 				{
 					pRanker->ExtraData ( EXTRA_SET_MATCHPUSHED, (void**)&(ppSorters[iSorter]->m_iJustPushed) );
 					pRanker->ExtraData ( EXTRA_SET_MATCHPOPPED, (void**)&(ppSorters[iSorter]->m_dJustPopped) );
@@ -15529,7 +15529,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	if ( pQuery->m_iMaxPredictedMsec )
 		pResult->m_bHasPrediction = true;
 
-	if ( tArgs.m_bFactors )
+	if ( tArgs.m_uPackedFactorFlags & SPH_FACTOR_ENABLE )
 		pResult->m_sWarning.SetSprintf ( "packedfactors() will not work with a fullscan; you need to specify a query" );
 
 	// check if index has data
@@ -17352,7 +17352,7 @@ CSphQueryContext::CSphQueryContext ()
 	m_iWeights = 0;
 	m_bLookupFilter = false;
 	m_bLookupSort = false;
-	m_bPackedFactors = false;
+	m_uPackedFactorFlags = SPH_FACTOR_DISABLE;
 	m_pFilter = NULL;
 	m_pWeightFilter = NULL;
 	m_pIndexData = NULL;
@@ -18938,7 +18938,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	// set string pool for string on_sort expression fix up
 	tCtx.SetStringPool ( m_tString.GetWritePtr() );
 
-	tCtx.m_bPackedFactors = tArgs.m_bFactors;
+	tCtx.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
 
 	// open files
 	CSphAutofile tDoclist, tHitlist;
@@ -18999,7 +18999,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	tStatDiff.DumpDiffer ( pResult->m_hWordStats, m_sIndexName.cstr(), pResult->m_sWarning );
 
-	if ( tArgs.m_bFactors && pQuery->m_eRanker!=SPH_RANK_EXPR )
+	if ( ( tArgs.m_uPackedFactorFlags & SPH_FACTOR_ENABLE ) && pQuery->m_eRanker!=SPH_RANK_EXPR )
 		pResult->m_sWarning.SetSprintf ( "packedfactors() and bm25f() requires using an expression ranker" );
 
 	tCtx.SetupExtraData ( pRanker.Ptr(), iSorters==1 ? ppSorters[0] : NULL );

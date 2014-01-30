@@ -6504,7 +6504,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		CSphMultiQueryArgs tMultiArgs ( dCumulativeKList, tArgs.m_iIndexWeight );
 		// storing index in matches tag for finding strings attrs offset later, biased against default zero and segments
 		tMultiArgs.m_iTag = m_dSegments.GetLength()+iChunk+1;;
-		tMultiArgs.m_bFactors = tArgs.m_bFactors;
+		tMultiArgs.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
 		tMultiArgs.m_bLocalDF = bGotLocalDF;
 		tMultiArgs.m_pLocalDocs = pLocalDocs;
 		tMultiArgs.m_iTotalDocs = iTotalDocs;
@@ -6574,7 +6574,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		return false;
 	}
 
-	tCtx.m_bPackedFactors = tArgs.m_bFactors;
+	tCtx.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
 	tCtx.m_pLocalDocs = pLocalDocs;
 	tCtx.m_iTotalDocs = iTotalDocs;
 

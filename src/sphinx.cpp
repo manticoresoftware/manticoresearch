@@ -6507,7 +6507,6 @@ BYTE * CSphMultiformTokenizer::GetToken ()
 
 			strncpy ( (char *)tEnd.m_sToken, pCurForm->m_sNormalForm.cstr(), sizeof(tEnd.m_sToken) );
 			tEnd.m_szTokenStart = tStart.m_szTokenStart;
-			tEnd.m_pBufferPtr = tStart.m_pBufferPtr;
 			tEnd.m_iTokenLen = pCurForm->m_iNormalTokenLen;
 
 			tEnd.m_bBoundary = false;

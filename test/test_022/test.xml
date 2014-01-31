@@ -28,13 +28,31 @@ index test
 	path			= <data_path/>/test
 	wordforms		= wordforms.txt
 }
+
+source src_num
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT 1 id, 11 idd, 's01e01 stuff' text UNION SELECT 2 id, 11 idd, 'season 1 episode 1 stuff' text
+	sql_attr_uint = idd
+}
+
+index test_num
+{
+	source			= src_num
+	path			= <data_path/>/test_num
+	wordforms		= <this_test/>/wf_num.txt
+}
 </config>
 
 <queries>
-<query>FOLDED</query>
-<query>folded</query>
-<query>shortform</query>
-<query>sOMEwHATmORElONGfORMtHATwOULDoVERFLOWsHORTfORMbUFFER</query>
+<query index="test">FOLDED</query>
+<query index="test">folded</query>
+<query index="test">shortform</query>
+<query index="test">sOMEwHATmORElONGfORMtHATwOULDoVERFLOWsHORTfORMbUFFER</query>
+<query index="test_num">s01e01</query>
+<query index="test_num">season 1 episode 1</query>
 </queries>
 
 <db_create>

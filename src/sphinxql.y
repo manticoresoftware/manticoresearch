@@ -167,10 +167,10 @@ static void AddInsval ( SqlParser_c * pParser, CSphVector<SqlInsert_t> & dVec, c
 %%
 
 request:
-   statement							{ pParser->PushQuery(); }
-   | multi_stmt_list
-   | multi_stmt_list ';'
-   ;
+	statement							{ pParser->PushQuery(); }
+	| multi_stmt_list
+	| multi_stmt_list ';'
+	;
 
 statement:
 	insert_into
@@ -217,7 +217,7 @@ ident_set:
 	| TOK_PLAN | TOK_PLUGIN | TOK_PLUGINS | TOK_PROFILE | TOK_RAMCHUNK | TOK_RAND | TOK_READ
 	| TOK_REPEATABLE | TOK_RETURNS | TOK_ROLLBACK | TOK_RTINDEX
 	| TOK_SERIALIZABLE | TOK_SESSION | TOK_START | TOK_STATUS | TOK_STRING
-	| TOK_SUM | TOK_TABLES  | TOK_TRUNCATE | TOK_TYPE | TOK_UNCOMMITTED
+	| TOK_SUM | TOK_TABLES | TOK_THREADS | TOK_TRUNCATE | TOK_TYPE | TOK_UNCOMMITTED
 	| TOK_VARIABLES | TOK_WARNINGS | TOK_WEIGHT | TOK_WITHIN
 	| TOK_JSON
 	;
@@ -849,6 +849,7 @@ show_what:
 	| TOK_PROFILE						{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PROFILE; }
 	| TOK_PLAN							{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PLAN; }
 	| TOK_PLUGINS						{ pParser->m_pStmt->m_eStmt = STMT_SHOW_PLUGINS; }
+	| TOK_THREADS opt_option_clause		{ pParser->m_pStmt->m_eStmt = STMT_SHOW_THREADS; }
 	| TOK_AGENT TOK_QUOTED_STRING TOK_STATUS like_filter
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENT_STATUS;
@@ -864,12 +865,6 @@ show_what:
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_INDEX_STATUS;
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $2 );
 		}
-	| TOK_THREADS						{ pParser->m_pStmt->m_eStmt = STMT_SHOW_THREADS; }
-	| TOK_THREADS const_int
-	{
-		pParser->m_pStmt->m_iSetValue = $2.m_iValue;
-		pParser->m_pStmt->m_eStmt = STMT_SHOW_THREADS;
-	}
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -1173,11 +1168,11 @@ update_item:
 			pParser->m_pStmt->m_tUpdate.m_dPool.Add ( sphF2DW ( $3.m_fValue ) );
 			pParser->AddUpdatedAttr ( $1, SPH_ATTR_FLOAT );
 		}
-	| ident '='  '(' const_list ')'
+	| ident '=' '(' const_list ')'
 		{
 			pParser->UpdateMVAAttr ( $1, $4 );
 		}
-	| ident '='  '(' ')' // special case () means delete mva
+	| ident '=' '(' ')' // special case () means delete mva
 		{
 			SqlNode_t tNoValues;
 			pParser->UpdateMVAAttr ( $1, tNoValues );

@@ -84,11 +84,16 @@ extern "C"
 	#include <sys/syscall.h>
 
 	#if HAVE_POLL
-		#include <poll.h>
+	#include <poll.h>
 	#endif
 
 	#if HAVE_EPOLL
-		#include <sys/epoll.h>
+	#include <sys/epoll.h>
+	#endif
+
+	// for thr_self()
+	#ifdef __FreeBSD__
+	#include <sys/thr.h>
 	#endif
 
 	// there's no MSG_NOSIGNAL on OS X
@@ -11134,6 +11139,9 @@ struct SqlStmt_t
 	CSphString				m_sAlterAttr;
 	ESphAttr				m_eAlterColType;
 
+	// SHOW THREADS specific
+	int						m_iThreadsCols;
+
 	// generic parameter, different meanings in different statements
 	// filter pattern in DESCRIBE, SHOW TABLES / META / VARIABLES
 	// target index name in ATTACH
@@ -11152,6 +11160,7 @@ struct SqlStmt_t
 		, m_iListStart ( -1 )
 		, m_iListEnd ( -1 )
 		, m_eUdfType ( SPH_ATTR_NONE )
+		, m_iThreadsCols ( 0 )
 	{
 		m_tQuery.m_eMode = SPH_MATCH_EXTENDED2; // only new and shiny matching and sorting
 		m_tQuery.m_eSort = SPH_SORT_EXTENDED;
@@ -11475,6 +11484,7 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 	ToString ( sOpt, tIdent ).ToLower();
 	ToString ( sVal, tValue ).ToLower().Unquote();
 
+	// OPTIMIZE? hash possible sOpt choices?
 	if ( sOpt=="ranker" )
 	{
 		m_pQuery->m_eRanker = SPH_RANK_TOTAL;
@@ -11605,6 +11615,10 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 	} else if ( sOpt=="strict" )
 	{
 		m_pQuery->m_bStrict = ( tValue.m_iValue!=0 );
+
+	} else if ( sOpt=="columns" ) // for SHOW THREADS
+	{
+		m_pStmt->m_iThreadsCols = Max ( (int)tValue.m_iValue, 0 );
 
 	} else
 	{
@@ -13910,7 +13924,7 @@ void HandleCommandFlush ( int iSock, int iVer, InputBuffer_c & tReq )
 	{ \
 		pThd->m_eThdState = _state; \
 		pThd->m_tmStart = sphMicroTimer(); \
-		if ( _state==THD_NET_IDLE ) \
+		if_const ( _state==THD_NET_IDLE ) \
 			pThd->m_sThreadInfo = ""; \
 	} \
 	ENABLE_CONST_COND_CHECK \
@@ -15338,11 +15352,11 @@ void HandleMysqlShowThreads ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 
 	g_tThdMutex.Lock();
 	tOut.HeadBegin ( 5 );
-	tOut.HeadColumn ( "OS_tid" );
-	tOut.HeadColumn ( "Protocol" );
+	tOut.HeadColumn ( "Tid" );
+	tOut.HeadColumn ( "Proto" );
 	tOut.HeadColumn ( "State" );
-	tOut.HeadColumn ( "State_time" );
-	tOut.HeadColumn ( "Thread_info" );
+	tOut.HeadColumn ( "Time" );
+	tOut.HeadColumn ( "Info" );
 	tOut.HeadEnd();
 
 	const ListNode_t * pIt = g_dThd.Begin();
@@ -15351,8 +15365,8 @@ void HandleMysqlShowThreads ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 		const ThdDesc_t * pThd = (const ThdDesc_t *)pIt;
 
 		int iLen = pThd->m_sThreadInfo.Length();
-		if ( tStmt.m_iSetValue )
-			iLen = Min ( iLen, tStmt.m_iSetValue );
+		if ( tStmt.m_iThreadsCols>0 )
+			iLen = Min ( iLen, tStmt.m_iThreadsCols );
 
 		tOut.PutNumeric ( "%d", pThd->m_iTid );
 		tOut.PutString ( g_dProtoNames [ pThd->m_eProto ] );
@@ -21083,12 +21097,16 @@ void TickPreforked ( CSphProcessSharedMutex * pAcceptMutex )
 }
 
 
-int gettid()
+static int GetOsThreadId()
 {
 #if USE_WINDOWS
 	return GetCurrentThreadId();
 #elif defined(SYS_gettid)
 	return syscall ( SYS_gettid );
+#elif defined(__FreeBSD__)
+	long tid;
+	thr_self(&tid);
+	return (int)tid;
 #else
 	return 0;
 #endif
@@ -21100,7 +21118,7 @@ void HandlerThread ( void * pArg )
 	// handle that client
 	ThdDesc_t * pThd = (ThdDesc_t*) pArg;
 	sphThreadSet ( g_tConnKey, &pThd->m_iConnID );
-	pThd->m_iTid = gettid();
+	pThd->m_iTid = GetOsThreadId();
 	HandleClient ( pThd->m_eProto, pThd->m_iClientSock, pThd->m_sClientName.cstr(), pThd );
 	sphSockClose ( pThd->m_iClientSock );
 

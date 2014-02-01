@@ -2424,7 +2424,6 @@ void ExprParser_t::CanonizePass ( int iNode )
 	ExprNode_t * pRight = ( pRoot->m_iRight>=0 ) ? &m_dNodes [ pRoot->m_iRight ] : NULL;
 
 	// canonize (expr op const), move const to the left
-	assert ( IsAri ( pRoot ) && pLeft && pRight || true );
 	if ( IsAri ( pRoot ) && !IsConst ( pLeft ) && IsConst ( pRight ) )
 	{
 		Swap ( pRoot->m_iLeft, pRoot->m_iRight );
@@ -2515,7 +2514,6 @@ void ExprParser_t::ConstantFoldPass ( int iNode )
 	ExprNode_t * pRight = ( pRoot->m_iRight>=0 ) ? &m_dNodes [ pRoot->m_iRight ] : NULL;
 
 	// unary arithmetic expression with constant
-	assert ( IsUnary ( pRoot ) && pLeft && !pRight || true );
 	if ( IsUnary ( pRoot ) && IsConst ( pLeft ) )
 	{
 		if ( pLeft->m_iToken==TOK_CONST_INT )
@@ -2631,7 +2629,6 @@ void ExprParser_t::ConstantFoldPass ( int iNode )
 	}
 
 	// unary function from a constant
-	assert ( pRoot->m_iToken==TOK_FUNC && g_dFuncs [ pRoot->m_iFunc ].m_iArgs==1 && pLeft || true );
 	if ( pRoot->m_iToken==TOK_FUNC && g_dFuncs [ pRoot->m_iFunc ].m_iArgs==1 && IsConst ( pLeft ) )
 	{
 		float fArg = pLeft->m_iToken==TOK_CONST_FLOAT ? pLeft->m_fConst : float ( pLeft->m_iConst );
@@ -3658,7 +3655,7 @@ public:
 
 	virtual int IntEval ( const CSphMatch & tMatch ) const
 	{
-		return Int64Eval ( tMatch );
+		return (int)Int64Eval ( tMatch );
 	}
 
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const

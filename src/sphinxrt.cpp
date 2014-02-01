@@ -6772,6 +6772,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			// query matching
 			ARRAY_FOREACH ( iSeg, m_dSegments )
 			{
+				if ( pProfiler )
+					pProfiler->Switch ( SPH_QSTATE_INIT_SEGMENT );
+
 				tTermSetup.SetSegment ( m_dSegments[iSeg], iSeg );
 				pRanker->Reset ( tTermSetup );
 
@@ -6788,6 +6791,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 				}
 				pRanker->ExtraData ( EXTRA_SET_MVAPOOL, (void**)m_dSegments[iSeg]->m_dMvas.Begin() );
 				pRanker->ExtraData ( EXTRA_SET_STRINGPOOL, (void**)m_dSegments[iSeg]->m_dStrings.Begin() );
+
+				if ( pProfiler )
+					pProfiler->Switch ( eRtProfiler );
 
 				CSphMatch * pMatch = pRanker->GetMatchesBuffer();
 				for ( ;; )

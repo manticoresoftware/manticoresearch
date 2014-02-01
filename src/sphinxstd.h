@@ -2966,15 +2966,20 @@ public:
 //////////////////////////////////////////////////////////////////////////
 
 #if USE_WINDOWS
-#define if_const(_arg) \
+#define DISABLE_CONST_COND_CHECK \
 	__pragma ( warning ( push ) ) \
-	__pragma ( warning ( disable:4127 ) ) \
-	if ( _arg ) \
+	__pragma ( warning ( disable:4127 ) )
+#define ENABLE_CONST_COND_CHECK \
 	__pragma ( warning ( pop ) )
 #else
-#define if_const(_arg) \
-	if ( _arg )
+#define DISABLE_CONST_COND_CHECK
+#define ENABLE_CONST_COND_CHECK
 #endif
+
+#define if_const(_arg) \
+	DISABLE_CONST_COND_CHECK \
+	if ( _arg ) \
+	ENABLE_CONST_COND_CHECK
 
 //////////////////////////////////////////////////////////////////////////
 // interlocked (atomic) operation

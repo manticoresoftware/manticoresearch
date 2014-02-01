@@ -13905,6 +13905,7 @@ void HandleCommandFlush ( int iSock, int iVer, InputBuffer_c & tReq )
 
 #define THD_STATE(_state) \
 { \
+	DISABLE_CONST_COND_CHECK \
 	if ( pThd ) \
 	{ \
 		pThd->m_eThdState = _state; \
@@ -13912,6 +13913,7 @@ void HandleCommandFlush ( int iSock, int iVer, InputBuffer_c & tReq )
 		if ( _state==THD_NET_IDLE ) \
 			pThd->m_sThreadInfo = ""; \
 	} \
+	ENABLE_CONST_COND_CHECK \
 }
 
 void HandleCommandSphinxql ( int iSock, int iVer, InputBuffer_c & tReq ); // definition is below

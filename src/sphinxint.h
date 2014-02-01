@@ -96,6 +96,7 @@ extern bool g_bJsonKeynamesToLowercase;
 	SPH_QUERY_STATE ( PARSE,		"parse" ) \
 	SPH_QUERY_STATE ( TRANSFORMS,	"transforms" ) \
 	SPH_QUERY_STATE ( INIT,			"init" ) \
+	SPH_QUERY_STATE ( INIT_SEGMENT,	"init_segment" ) \
 	SPH_QUERY_STATE ( OPEN,			"open" ) \
 	SPH_QUERY_STATE ( READ_DOCS,	"read_docs" ) \
 	SPH_QUERY_STATE ( READ_HITS,	"read_hits" ) \

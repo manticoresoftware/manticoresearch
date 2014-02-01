@@ -1189,7 +1189,7 @@ RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int6
 	, m_iWordsCheckpoint ( RTDICT_CHECKPOINT_V5 )
 	, m_pTokenizerIndexing ( NULL )
 {
-	MEMORY ( SPH_MEM_IDX_RT );
+	MEMORY ( MEM_INDEX_RT );
 
 	m_tSchema = tSchema;
 	m_iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
@@ -1380,7 +1380,7 @@ bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMat
 	if ( !tDoc.m_uDocID )
 		return true;
 
-	MEMORY ( SPH_MEM_IDX_RT );
+	MEMORY ( MEM_INDEX_RT );
 
 	if ( !bReplace )
 	{
@@ -1627,7 +1627,7 @@ void RtAccum_t::Sort ()
 
 void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, int iRowSize, const char ** ppStr, const CSphVector<DWORD> & dMvas, const CSphVector<JSONAttr_t> & dJson )
 {
-	MEMORY ( SPH_MEM_IDX_RT_ACCUM );
+	MEMORY ( MEM_RT_ACCUM );
 
 	// schedule existing copies for deletion
 	m_dAccumKlist.Add ( tDoc.m_uDocID );
@@ -1775,7 +1775,7 @@ RtSegment_t * RtAccum_t::CreateSegment ( int iRowSize, int iWordsCheckpoint )
 	if ( !m_iAccumDocs )
 		return NULL;
 
-	MEMORY ( SPH_MEM_IDX_RT_ACCUM );
+	MEMORY ( MEM_RT_ACCUM );
 
 	RtSegment_t * pSeg = new RtSegment_t ();
 
@@ -2681,7 +2681,7 @@ struct CmpSegments_fn
 void RtIndex_t::Commit ( int * pDeleted )
 {
 	assert ( g_bRTChangesAllowed );
-	MEMORY ( SPH_MEM_IDX_RT );
+	MEMORY ( MEM_INDEX_RT );
 
 	RtAccum_t * pAcc = AcquireAccum();
 	if ( !pAcc )
@@ -3082,7 +3082,7 @@ void RtIndex_t::RollBack ()
 bool RtIndex_t::DeleteDocument ( const SphDocID_t * pDocs, int iDocs, CSphString & sError )
 {
 	assert ( g_bRTChangesAllowed );
-	MEMORY ( SPH_MEM_IDX_RT_ACCUM );
+	MEMORY ( MEM_RT_ACCUM );
 
 	RtAccum_t * pAcc = AcquireAccum ( &sError );
 	if ( !pAcc )
@@ -3113,7 +3113,7 @@ struct Checkpoint_t
 
 void RtIndex_t::ForceDiskChunk ()
 {
-	MEMORY ( SPH_MEM_IDX_RT );
+	MEMORY ( MEM_INDEX_RT );
 
 	if ( !m_dSegments.GetLength() )
 		return;
@@ -3784,7 +3784,7 @@ void RtIndex_t::SaveDiskChunk ( int64_t iTID, const CSphVector<RtSegment_t *> & 
 	if ( !dSegments.GetLength() )
 		return;
 
-	MEMORY ( SPH_MEM_IDX_RT );
+	MEMORY ( MEM_INDEX_RT );
 
 	// dump it
 	CSphString sNewChunk;
@@ -3842,7 +3842,7 @@ void RtIndex_t::SaveDiskChunk ( int64_t iTID, const CSphVector<RtSegment_t *> & 
 
 CSphIndex * RtIndex_t::LoadDiskChunk ( const char * sChunk, CSphString & sError ) const
 {
-	MEMORY ( SPH_MEM_IDX_DISK );
+	MEMORY ( MEM_INDEX_DISK );
 
 	// !COMMIT handle errors gracefully instead of dying
 	CSphIndex * pDiskChunk = sphCreateIndexPhrase ( sChunk, sChunk );
@@ -3877,7 +3877,7 @@ CSphIndex * RtIndex_t::LoadDiskChunk ( const char * sChunk, CSphString & sError 
 
 bool RtIndex_t::Prealloc ( bool, bool bStripPath, CSphString & )
 {
-	MEMORY ( SPH_MEM_IDX_RT );
+	MEMORY ( MEM_INDEX_RT );
 
 	// locking uber alles
 	// in RT backend case, we just must be multi-threaded
@@ -4106,7 +4106,7 @@ static bool LoadVector ( BinlogReader_c & tReader, CSphVector < T, P > & tVector
 
 bool RtIndex_t::SaveRamChunk ()
 {
-	MEMORY ( SPH_MEM_IDX_RT );
+	MEMORY ( MEM_INDEX_RT );
 
 	CSphString sChunk, sNewChunk;
 	sChunk.SetSprintf ( "%s.ram", m_sPath.cstr() );
@@ -4175,7 +4175,7 @@ bool RtIndex_t::SaveRamChunk ()
 
 bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 {
-	MEMORY ( SPH_MEM_IDX_RT );
+	MEMORY ( MEM_INDEX_RT );
 
 	CSphString sChunk;
 	sChunk.SetSprintf ( "%s.ram", m_sPath.cstr() );
@@ -6366,7 +6366,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	assert ( pQuery );
 	assert ( tArgs.m_iTag==0 );
 
-	MEMORY ( SPH_MEM_IDX_RT_MULTY_QUERY );
+	MEMORY ( MEM_RT_QUERY );
 
 	// start counting
 	pResult->m_iQueryTime = 0;
@@ -6901,7 +6901,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	bool bSegmentMatchesFixup = ( m_tSchema.GetStaticSize()>0 && iSegmentsTotal>0 );
 	if ( bSegmentMatchesFixup || bHasArenaAttrs || bOptimizing )
 	{
-		MEMORY ( SPH_MEM_IDX_RT_RES_MATCHES );
+		MEMORY ( MEM_RT_RES_MATCHES );
 
 		// we need to count matches for allocating arena
 		// as we are going to fix match's m_pStatic pointers later
@@ -6951,7 +6951,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	// fixing string offset and data in resulting matches
 	//////////////////////
 
-	MEMORY ( SPH_MEM_IDX_RT_RES_STRINGS );
+	MEMORY ( MEM_RT_RES_STRINGS );
 
 	if ( bHasArenaAttrs || bOptimizing )
 	{
@@ -8428,7 +8428,7 @@ RtBinlog_c::RtBinlog_c ()
 	, m_bDisabled ( true )
 	, m_iRestartSize ( 0 )
 {
-	MEMORY ( SPH_MEM_BINLOG );
+	MEMORY ( MEM_BINLOG );
 
 	Verify ( m_tWriteLock.Init() );
 
@@ -8458,7 +8458,7 @@ void RtBinlog_c::BinlogCommit ( int64_t * pTID, const char * sIndexName, const R
 	if ( m_bReplayMode || m_bDisabled )
 		return;
 
-	MEMORY ( SPH_MEM_BINLOG );
+	MEMORY ( MEM_BINLOG );
 	Verify ( m_tWriteLock.Lock() );
 
 	int64_t iTID = ++(*pTID);
@@ -8522,7 +8522,7 @@ void RtBinlog_c::BinlogUpdateAttributes ( int64_t * pTID, const char * sIndexNam
 	if ( m_bReplayMode || m_bDisabled )
 		return;
 
-	MEMORY ( SPH_MEM_BINLOG );
+	MEMORY ( MEM_BINLOG );
 	Verify ( m_tWriteLock.Lock() );
 
 	int64_t iTID = ++(*pTID);
@@ -8581,7 +8581,7 @@ void RtBinlog_c::NotifyIndexFlush ( const char * sIndexName, int64_t iTID, bool 
 	if ( m_bReplayMode || m_bDisabled )
 		return;
 
-	MEMORY ( SPH_MEM_BINLOG );
+	MEMORY ( MEM_BINLOG );
 	assert ( bShutdown || m_dLogFiles.GetLength() );
 
 	Verify ( m_tWriteLock.Lock() );
@@ -8651,7 +8651,7 @@ void RtBinlog_c::NotifyIndexFlush ( const char * sIndexName, int64_t iTID, bool 
 
 void RtBinlog_c::Configure ( const CSphConfigSection & hSearchd, bool bTestMode )
 {
-	MEMORY ( SPH_MEM_BINLOG );
+	MEMORY ( MEM_BINLOG );
 
 	const int iMode = hSearchd.GetInt ( "binlog_flush", 2 );
 	switch ( iMode )
@@ -8736,7 +8736,7 @@ void RtBinlog_c::DoAutoFlush ( void * pBinlog )
 	{
 		if ( pLog->m_iFlushTimeLeft < sphMicroTimer() )
 		{
-			MEMORY ( SPH_MEM_BINLOG );
+			MEMORY ( MEM_BINLOG );
 
 			pLog->m_iFlushTimeLeft = sphMicroTimer() + pLog->m_iFlushPeriod;
 
@@ -8758,7 +8758,7 @@ void RtBinlog_c::DoAutoFlush ( void * pBinlog )
 
 int RtBinlog_c::GetWriteIndexID ( const char * sName, int64_t iTID, int64_t tmNow )
 {
-	MEMORY ( SPH_MEM_BINLOG );
+	MEMORY ( MEM_BINLOG );
 	assert ( m_dLogFiles.GetLength() );
 
 	// OPTIMIZE? maybe hash them?
@@ -8801,7 +8801,7 @@ int RtBinlog_c::GetWriteIndexID ( const char * sName, int64_t iTID, int64_t tmNo
 
 void RtBinlog_c::LoadMeta ()
 {
-	MEMORY ( SPH_MEM_BINLOG );
+	MEMORY ( MEM_BINLOG );
 
 	CSphString sMeta;
 	sMeta.SetSprintf ( "%s/binlog.meta", m_sLogPath.cstr() );
@@ -8849,7 +8849,7 @@ void RtBinlog_c::LoadMeta ()
 
 void RtBinlog_c::SaveMeta ()
 {
-	MEMORY ( SPH_MEM_BINLOG );
+	MEMORY ( MEM_BINLOG );
 
 	CSphString sMeta, sMetaOld;
 	sMeta.SetSprintf ( "%s/binlog.meta.new", m_sLogPath.cstr() );
@@ -8907,7 +8907,7 @@ void RtBinlog_c::LockFile ( bool bLock )
 
 void RtBinlog_c::OpenNewLog ( int iLastState )
 {
-	MEMORY ( SPH_MEM_BINLOG );
+	MEMORY ( MEM_BINLOG );
 
 	// calc new ext
 	int iExt = 1;
@@ -8969,7 +8969,7 @@ void RtBinlog_c::CheckDoRestart ()
 	// restart on exceed file size limit
 	if ( m_iRestartSize>0 && m_tWriter.GetPos()>m_iRestartSize )
 	{
-		MEMORY ( SPH_MEM_BINLOG );
+		MEMORY ( MEM_BINLOG );
 
 		assert ( m_dLogFiles.GetLength() );
 
@@ -9436,14 +9436,14 @@ ISphRtIndex * sphGetCurrentIndexRT()
 ISphRtIndex * sphCreateIndexRT ( const CSphSchema & tSchema, const char * sIndexName,
 	int64_t iRamSize, const char * sPath, bool bKeywordDict )
 {
-	MEMORY ( SPH_MEM_IDX_RT );
+	MEMORY ( MEM_INDEX_RT );
 	return new RtIndex_t ( tSchema, sIndexName, iRamSize, sPath, bKeywordDict );
 }
 
 
 void sphRTInit ( const CSphConfigSection & hSearchd, bool bTestMode )
 {
-	MEMORY ( SPH_MEM_BINLOG );
+	MEMORY ( MEM_BINLOG );
 
 	g_bRTChangesAllowed = false;
 	Verify ( sphThreadKeyCreate ( &g_tTlsAccumKey ) );
@@ -9477,7 +9477,7 @@ void sphRTDone ()
 
 void sphReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, DWORD uReplayFlags, ProgressCallbackSimple_t * pfnProgressCallback )
 {
-	MEMORY ( SPH_MEM_BINLOG );
+	MEMORY ( MEM_BINLOG );
 	g_pRtBinlog->Replay ( hIndexes, uReplayFlags, pfnProgressCallback );
 	g_pRtBinlog->CreateTimerThread();
 	g_bRTChangesAllowed = true;

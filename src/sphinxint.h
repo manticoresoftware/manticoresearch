@@ -1,3 +1,4 @@
+//
 // $Id$
 //
 
@@ -469,56 +470,50 @@ public:
 // MEMORY TRACKER
 //////////////////////////////////////////////////////////////////////////
 
-namespace Memory
+#define MEM_CATEGORIES \
+	MEM_CATEGORY(MEM_CORE), \
+	MEM_CATEGORY(MEM_INDEX_DISK), \
+	MEM_CATEGORY(MEM_INDEX_RT), \
+	MEM_CATEGORY(MEM_API_HANDLE ), \
+	MEM_CATEGORY(MEM_API_SEARCH ), \
+	MEM_CATEGORY(MEM_API_QUERY ), \
+	MEM_CATEGORY(MEM_RT_ACCUM), \
+	MEM_CATEGORY(MEM_MMAPED), \
+	MEM_CATEGORY(MEM_BINLOG), \
+	MEM_CATEGORY(MEM_SQL_HANDLE), \
+	MEM_CATEGORY(MEM_SQL_INSERT), \
+	MEM_CATEGORY(MEM_SQL_SELECT), \
+	MEM_CATEGORY(MEM_SQL_DELETE), \
+	MEM_CATEGORY(MEM_SQL_SET), \
+	MEM_CATEGORY(MEM_SQL_BEGIN), \
+	MEM_CATEGORY(MEM_SQL_COMMIT), \
+	MEM_CATEGORY(MEM_SQL_ALTER), \
+	MEM_CATEGORY(MEM_DISK_QUERY), \
+	MEM_CATEGORY(MEM_DISK_QUERYEX), \
+	MEM_CATEGORY(MEM_RT_QUERY), \
+	MEM_CATEGORY(MEM_RT_RES_MATCHES), \
+	MEM_CATEGORY(MEM_RT_RES_STRINGS)
+
+#define MEM_CATEGORY(_arg) _arg
+enum MemCategory_e
 {
-	enum Category_e
-	{
-		SPH_MEM_CORE,
-
-		SPH_MEM_IDX_DISK,
-		SPH_MEM_IDX_RT,
-		SPH_MEM_IDX_RT_ACCUM,
-
-		SPH_MEM_MMAPED,
-
-		SPH_MEM_BINLOG,
-
-		SPH_MEM_HANDLE_NONSQL,
-		SPH_MEM_HANDLE_SQL,
-
-		SPH_MEM_SEARCH_NONSQL,
-		SPH_MEM_QUERY_NONSQL,
-		SPH_MEM_INSERT_SQL,
-		SPH_MEM_SELECT_SQL,
-		SPH_MEM_DELETE_SQL,
-		SPH_MEM_COMMIT_SET_SQL,
-		SPH_MEM_COMMIT_BEGIN_SQL,
-		SPH_MEM_COMMIT_SQL,
-		SPH_MEM_ALTER_SQL,
-
-		SPH_MEM_IDX_DISK_MULTY_QUERY,
-		SPH_MEM_IDX_DISK_MULTY_QUERY_EX,
-		SPH_MEM_IDX_RT_MULTY_QUERY,
-
-		SPH_MEM_IDX_RT_RES_MATCHES,
-		SPH_MEM_IDX_RT_RES_STRINGS,
-
-		SPH_MEM_TOTAL
-	};
-}
+	MEM_CATEGORIES,
+	MEM_TOTAL
+};
+#undef MEM_CATEGORY
 
 #if SPH_ALLOCS_PROFILER
 
-void sphMemStatPush ( Memory::Category_e eCategory );
-void sphMemStatPop ( Memory::Category_e eCategory );
+void sphMemStatPush ( MemCategory_e eCategory );
+void sphMemStatPop ( MemCategory_e eCategory );
 
 // memory tracker
 struct MemTracker_c : ISphNoncopyable
 {
-	const Memory::Category_e m_eCategory; ///< category
+	const MemCategory_e m_eCategory; ///< category
 
 	/// ctor
-	explicit MemTracker_c ( Memory::Category_e eCategory )
+	explicit MemTracker_c ( MemCategory_e eCategory )
 		: m_eCategory ( eCategory )
 	{
 		sphMemStatPush ( m_eCategory );
@@ -531,7 +526,7 @@ struct MemTracker_c : ISphNoncopyable
 	}
 };
 
-#define MEMORY(name) MemTracker_c tracker_##__LINE__##name(Memory::name);
+#define MEMORY(name) MemTracker_c tracker_##__LINE__##name(name);
 
 #else // SPH_ALLOCS_PROFILER 0
 

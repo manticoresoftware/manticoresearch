@@ -10789,7 +10789,7 @@ void SendSearchResponse ( SearchHandler_c & tHandler, InputBuffer_c & tReq, int 
 
 void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq, ThdDesc_t * pThd )
 {
-	MEMORY ( SPH_MEM_SEARCH_NONSQL );
+	MEMORY ( MEM_API_SEARCH );
 
 	if ( !CheckCommandVersion ( iVer, VER_COMMAND_SEARCH, tReq ) )
 		return;
@@ -13962,7 +13962,7 @@ inline void DecPersCount()
 
 void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 {
-	MEMORY ( SPH_MEM_HANDLE_NONSQL );
+	MEMORY ( MEM_API_HANDLE );
 	THD_STATE ( THD_HANDSHAKE );
 
 	bool bPersist = false;
@@ -14588,7 +14588,7 @@ public:
 void HandleMysqlInsert ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt,
 	bool bReplace, bool bCommit, CSphString & sWarning )
 {
-	MEMORY ( SPH_MEM_INSERT_SQL );
+	MEMORY ( MEM_SQL_INSERT );
 
 	CSphString sError;
 
@@ -16183,7 +16183,7 @@ static int LocalIndexDoDeleteDocuments ( const char * sName, const SqlStmt_t & t
 
 void HandleMysqlDelete ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit )
 {
-	MEMORY ( SPH_MEM_DELETE_SQL );
+	MEMORY ( MEM_SQL_DELETE );
 
 	CSphString sError;
 
@@ -16446,7 +16446,7 @@ static void UservarAdd ( const CSphString & sName, CSphVector<SphAttr_t> & dVal 
 
 void HandleMysqlSet ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, SessionVars_t & tVars )
 {
-	MEMORY ( SPH_MEM_COMMIT_SET_SQL );
+	MEMORY ( MEM_SQL_SET );
 	CSphString sError;
 
 	tStmt.m_sSetName.ToLower();
@@ -17122,7 +17122,7 @@ static void RemoveAttrFromIndex ( const SqlStmt_t & tStmt, const ServedIndex_t *
 
 static void HandleMysqlAlter ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, bool bAdd )
 {
-	MEMORY ( SPH_MEM_ALTER_SQL );
+	MEMORY ( MEM_SQL_ALTER );
 
 	SearchFailuresLog_c dErrors;
 	CSphString sError;
@@ -17314,7 +17314,7 @@ public:
 
 		case STMT_SELECT:
 			{
-				MEMORY ( SPH_MEM_SELECT_SQL );
+				MEMORY ( MEM_SQL_SELECT );
 
 				StatCountCommand ( SEARCHD_COMMAND_SEARCH );
 				SearchHandler_c tHandler ( 1, true, true );
@@ -17371,7 +17371,7 @@ public:
 
 		case STMT_BEGIN:
 			{
-				MEMORY ( SPH_MEM_COMMIT_BEGIN_SQL );
+				MEMORY ( MEM_SQL_BEGIN );
 
 				m_tVars.m_bInTransaction = true;
 				ISphRtIndex * pIndex = sphGetCurrentIndexRT();
@@ -17383,7 +17383,7 @@ public:
 		case STMT_COMMIT:
 		case STMT_ROLLBACK:
 			{
-				MEMORY ( SPH_MEM_COMMIT_SQL );
+				MEMORY ( MEM_SQL_COMMIT );
 
 				m_tVars.m_bInTransaction = false;
 				ISphRtIndex * pIndex = sphGetCurrentIndexRT();
@@ -17605,7 +17605,7 @@ void StatCountCommand ( int iCmd, int iCount )
 
 static void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 {
-	MEMORY ( SPH_MEM_HANDLE_SQL );
+	MEMORY ( MEM_SQL_HANDLE );
 	THD_STATE ( THD_HANDSHAKE );
 
 	const int INTERACTIVE_TIMEOUT = 900;

@@ -358,10 +358,10 @@ struct MemCategorized_t
 	}
 };
 
-static Memory::Category_e sphMemStatGet ();
+static MemCategory_e sphMemStatGet ();
 
 // memory categories storage
-static MemCategorized_t g_dMemCategoryStat[Memory::SPH_MEM_TOTAL];
+static MemCategorized_t g_dMemCategoryStat [ MEM_TOTAL ];
 
 //////////////////////////////////////////////////////////////////////////
 // ALLOCATIONS COUNT/SIZE PROFILER
@@ -374,7 +374,7 @@ void * sphDebugNew ( size_t iSize )
 		sphDie ( "out of memory (unable to allocate %"PRIu64" bytes)", (uint64_t)iSize ); // FIXME! this may fail with malloc error too
 
 	const int iMemType = sphMemStatGet();
-	assert ( iMemType>=0 && iMemType<Memory::SPH_MEM_TOTAL );
+	assert ( iMemType>=0 && iMemType<MEM_TOTAL );
 
 	g_tAllocsMutex.Lock ();
 
@@ -407,7 +407,7 @@ void sphDebugDelete ( void * pPtr )
 
 	const int iSize = pBlock[0];
 	const int iMemType = pBlock[1];
-	assert ( iMemType>=0 && iMemType<Memory::SPH_MEM_TOTAL );
+	assert ( iMemType>=0 && iMemType<MEM_TOTAL );
 
 	g_tAllocsMutex.Lock ();
 
@@ -449,13 +449,13 @@ void operator delete [] ( void * pPtr )						{ sphDebugDelete ( pPtr ); }
 /// TLS key of memory category stack
 SphThreadKey_t g_tTLSMemCategory;
 
-STATIC_ASSERT ( Memory::SPH_MEM_TOTAL<255, MEMORY_CATEGORY_EXCEED_LIMIT );
+STATIC_ASSERT ( MEM_TOTAL<255, TOO_MANY_MEMORY_CATEGORIES );
 
 // stack of memory categories as we move deeper and deeper
 class MemCategoryStack_t // NOLINT
 {
-#define MEM_STACK_MAX_DEPHT 1024
-	BYTE m_dStack[MEM_STACK_MAX_DEPHT];
+#define MEM_STACK_MAX 1024
+	BYTE m_dStack[MEM_STACK_MAX];
 	int m_iDepth;
 
 public:
@@ -464,22 +464,22 @@ public:
 	void Reset ()
 	{
 		m_iDepth = 0;
-		m_dStack[0] = Memory::SPH_MEM_CORE;
+		m_dStack[0] = MEM_CORE;
 	}
 
-	void Push ( Memory::Category_e eCategory )
+	void Push ( MemCategory_e eCategory )
 	{
-		assert ( eCategory>=0 && eCategory<Memory::SPH_MEM_TOTAL );
-		assert ( m_iDepth+1<MEM_STACK_MAX_DEPHT );
+		assert ( eCategory>=0 && eCategory<MEM_TOTAL );
+		assert ( m_iDepth+1<MEM_STACK_MAX );
 		m_dStack[++m_iDepth] = (BYTE)eCategory;
 	}
 
 #ifndef NDEBUG
-	void Pop ( Memory::Category_e eCategory )
+	void Pop ( MemCategory_e eCategory )
 	{
-		assert ( eCategory>=0 && eCategory<Memory::SPH_MEM_TOTAL );
+		assert ( eCategory>=0 && eCategory<MEM_TOTAL );
 #else
-	void Pop ( Memory::Category_e )
+	void Pop ( MemCategory_e )
 	{
 #endif
 
@@ -488,11 +488,11 @@ public:
 		m_iDepth--;
 	}
 
-	Memory::Category_e Top () const
+	MemCategory_e Top () const
 	{
-		assert ( m_iDepth>= 0 && m_iDepth<MEM_STACK_MAX_DEPHT );
-		assert ( m_dStack[m_iDepth]>=0 && m_dStack[m_iDepth]<Memory::SPH_MEM_TOTAL );
-		return Memory::Category_e ( m_dStack[m_iDepth] );
+		assert ( m_iDepth>= 0 && m_iDepth<MEM_STACK_MAX );
+		assert ( m_dStack[m_iDepth]>=0 && m_dStack[m_iDepth]<MEM_TOTAL );
+		return MemCategory_e ( m_dStack[m_iDepth] );
 	}
 };
 
@@ -545,8 +545,8 @@ void sphMemStatMMapAdd ( int64_t iSize )
 	g_iPeakAllocs = Max ( g_iCurAllocs, g_iPeakAllocs );
 	g_iPeakBytes = Max ( g_iCurBytes, g_iPeakBytes );
 
-	g_dMemCategoryStat[Memory::SPH_MEM_MMAPED].m_iSize += iSize;
-	g_dMemCategoryStat[Memory::SPH_MEM_MMAPED].m_iCount++;
+	g_dMemCategoryStat[MEM_MMAPED].m_iSize += iSize;
+	g_dMemCategoryStat[MEM_MMAPED].m_iCount++;
 
 	g_tAllocsMutex.Unlock ();
 }
@@ -558,14 +558,14 @@ void sphMemStatMMapDel ( int64_t iSize )
 	g_iCurAllocs--;
 	g_iCurBytes -= iSize;
 
-	g_dMemCategoryStat[Memory::SPH_MEM_MMAPED].m_iSize -= iSize;
-	g_dMemCategoryStat[Memory::SPH_MEM_MMAPED].m_iCount--;
+	g_dMemCategoryStat[MEM_MMAPED].m_iSize -= iSize;
+	g_dMemCategoryStat[MEM_MMAPED].m_iCount--;
 
 	g_tAllocsMutex.Unlock ();
 }
 
 // push new category on arrival
-void sphMemStatPush ( Memory::Category_e eCategory )
+void sphMemStatPush ( MemCategory_e eCategory )
 {
 	MemCategoryStack_t * pTLS = (MemCategoryStack_t*) sphThreadGet ( g_tTLSMemCategory );
 	if ( pTLS )
@@ -573,7 +573,7 @@ void sphMemStatPush ( Memory::Category_e eCategory )
 };
 
 // restore last category
-void sphMemStatPop ( Memory::Category_e eCategory )
+void sphMemStatPop ( MemCategory_e eCategory )
 {
 	MemCategoryStack_t * pTLS = (MemCategoryStack_t*) sphThreadGet ( g_tTLSMemCategory );
 	if ( pTLS )
@@ -581,30 +581,24 @@ void sphMemStatPop ( Memory::Category_e eCategory )
 };
 
 // get current category
-static Memory::Category_e sphMemStatGet ()
+static MemCategory_e sphMemStatGet ()
 {
 	MemCategoryStack_t * pTLS = (MemCategoryStack_t*) sphThreadGet ( g_tTLSMemCategory );
-	return pTLS ? pTLS->Top() : Memory::SPH_MEM_CORE;
+	return pTLS ? pTLS->Top() : MEM_CORE;
 }
 
-// human readable category names
-static const char* g_dMemCategoryName[] = {
-	"core"
-	, "index_disk", "index_rt", "index_rt_accum"
-	, "mmaped", "binlog"
-	, "hnd_disk", "hnd_sql"
-	, "search_disk", "query_disk", "insert_sql", "select_sql", "delete_sql", "commit_set_sql", "commit_start_t_sql", "commit_sql"
-	, "mquery_disk", "mqueryex_disk", "mquery_rt"
-	, "rt_res_matches", "rt_res_strings"
-	};
-STATIC_ASSERT ( sizeof(g_dMemCategoryName)/sizeof(g_dMemCategoryName[0])==Memory::SPH_MEM_TOTAL, MEM_STAT_NAME_MISMATCH );
 
-// output of memory statistic's
+// human readable category names
+#define MEM_CATEGORY(_arg) #_arg
+static const char* g_dMemCategoryName[] = { MEM_CATEGORIES };
+#undef MEM_CATEGORY
+
+
 void sphMemStatDump ( int iFD )
 {
 	int64_t iSize = 0;
 	int iCount = 0;
-	for ( int i=0; i<Memory::SPH_MEM_TOTAL; i++ )
+	for ( int i=0; i<MEM_TOTAL; i++ )
 	{
 		iSize += (int64_t) g_dMemCategoryStat[i].m_iSize;
 		iCount += g_dMemCategoryStat[i].m_iCount;
@@ -613,7 +607,7 @@ void sphMemStatDump ( int iFD )
 	sphSafeInfo ( iFD, "%-24s allocs-count=%d, mem-total=%d.%d Mb", "(total)", iCount,
 		(int)(iSize/1048576), (int)( (iSize*10/1048576)%10 ) );
 
-	for ( int i=0; i<Memory::SPH_MEM_TOTAL; i++ )
+	for ( int i=0; i<MEM_TOTAL; i++ )
 		if ( g_dMemCategoryStat[i].m_iCount>0 )
 	{
 		iSize = (int64_t) g_dMemCategoryStat[i].m_iSize;

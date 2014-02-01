@@ -1030,14 +1030,16 @@ class SphinxConfig
 	}
 
 
-	function FixupAddresses ( $s )
+	function FixupErrorMessage ( $s )
 	{
 		global $agents;
 		$tr = array(
 			$agents[0]["address"].":".$agents[0]["port"] => "<AGENT0_ADDRESS/>",
 			$agents[1]["address"].":".$agents[1]["port"] => "<AGENT1_ADDRESS/>",
 			$agents[2]["address"].":".$agents[2]["port"] => "<AGENT2_ADDRESS/>" );
-		return strtr ( $s, $tr );
+		$s = strtr ( $s, $tr );
+		$s = preg_replace ( "/or \d+ other tokens/", "or N other tokens", $s );
+		return $s;
 	}
 
 
@@ -1085,7 +1087,7 @@ class SphinxConfig
 					$query_result["total_affected"] = mysqli_affected_rows($connection);
 				else if ($result===false)
 				{
-					$query_result["error"] = $this->FixupAddresses ( mysqli_error( $connection ) );
+					$query_result["error"] = $this->FixupErrorMessage ( mysqli_error( $connection ) );
 					$query_result["errno"] = mysqli_errno( $connection );
 				} else
 				{

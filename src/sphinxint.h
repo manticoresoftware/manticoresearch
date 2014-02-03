@@ -404,6 +404,7 @@ private:
 
 class ISphRanker;
 class ISphMatchSorter;
+class UservarIntSet_c;
 
 
 /// per-query search context
@@ -437,8 +438,8 @@ public:
 	CSphVector<CSphAttrLocator>				m_dOverrideIn;
 	CSphVector<CSphAttrLocator>				m_dOverrideOut;
 
-	void *						m_pIndexData;			///< backend specific data
-	CSphQueryProfile *			m_pProfile;
+	void *									m_pIndexData;			///< backend specific data
+	CSphQueryProfile *						m_pProfile;
 	const SmallStringHash_T<int64_t> *		m_pLocalDocs;
 	int64_t									m_iTotalDocs;
 
@@ -464,6 +465,9 @@ public:
 	void						SetStringPool ( const BYTE * pStrings );
 	void						SetMVAPool ( const DWORD * pMva );
 	void						SetupExtraData ( ISphRanker * pRanker, ISphMatchSorter * pSorter );
+
+private:
+	CSphVector<const UservarIntSet_c*>		m_dUserVals;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1513,6 +1517,8 @@ class UservarIntSet_c : public CSphVector<SphAttr_t>, public ISphRefcountedMT
 {
 };
 
+extern UservarIntSet_c * ( *g_pUservarsHook )( const CSphString & sUservar );
+
 //////////////////////////////////////////////////////////////////////////
 // BINLOG INTERNALS
 //////////////////////////////////////////////////////////////////////////
@@ -2147,11 +2153,11 @@ const int PROXY_MARKER_LEN = 3;
 
 enum
 {
-	PROXY_BOUNDARY_FLAG		= 1<<7,
-	PROXY_SPECIAL_FLAG		= 1<<8,
-	PROXY_BLENDED_FLAG		= 1<<9,
-	PROXY_BLENDED_PART_FLAG	= 1<<10,
-	PROXY_HAVE_OVERSHORT	= 1<<11
+	PROXY_BOUNDARY_FLAG		= 1<<7, //NOLINT
+	PROXY_SPECIAL_FLAG		= 1<<8, //NOLINT
+	PROXY_BLENDED_FLAG		= 1<<9, //NOLINT
+	PROXY_BLENDED_PART_FLAG	= 1<<10, //NOLINT
+	PROXY_HAVE_OVERSHORT	= 1<<11 //NOLINT
 };
 
 

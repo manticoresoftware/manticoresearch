@@ -6614,6 +6614,9 @@ bool CSphFilterSettings::operator == ( const CSphFilterSettings & rhs ) const
 
 			return true;
 
+		case  SPH_FILTER_USERVAR:
+			return ( m_sRefString==rhs.m_sRefString );
+
 		default:
 			assert ( 0 && "internal error: unhandled filter type in comparison" );
 			return false;
@@ -17364,6 +17367,9 @@ CSphQueryContext::~CSphQueryContext ()
 {
 	SafeDelete ( m_pFilter );
 	SafeDelete ( m_pWeightFilter );
+
+	ARRAY_FOREACH ( i, m_dUserVals )
+		m_dUserVals[i]->Release();
 }
 
 void CSphQueryContext::BindWeights ( const CSphQuery * pQuery, const CSphSchema & tSchema )
@@ -17822,16 +17828,40 @@ bool CSphQueryContext::CreateFilters ( bool bFullscan,
 		return true;
 	ARRAY_FOREACH ( i, (*pdFilters) )
 	{
-		const CSphFilterSettings & tFilter = (*pdFilters)[i];
-		if ( tFilter.m_sAttrName.IsEmpty() )
+		const CSphFilterSettings * pFilterSettings = pdFilters->Begin() + i;
+		if ( pFilterSettings->m_sAttrName.IsEmpty() )
 			continue;
 
-		bool bWeight = IsWeightColumn ( tFilter.m_sAttrName, tSchema );
+		bool bWeight = IsWeightColumn ( pFilterSettings->m_sAttrName, tSchema );
 
 		if ( bFullscan && bWeight )
-			continue; // @weight is not avaiable in fullscan mode
+			continue; // @weight is not available in fullscan mode
 
-		ISphFilter * pFilter = sphCreateFilter ( tFilter, tSchema, pMvaPool, pStrings, sError );
+		// bind user variable local to that daemon
+		CSphFilterSettings tUservar;
+		if ( pFilterSettings->m_eType==SPH_FILTER_USERVAR )
+		{
+			if ( !g_pUservarsHook )
+			{
+				sError = "no global variables found";
+				return false;
+			}
+
+			const UservarIntSet_c * pUservar = g_pUservarsHook ( pFilterSettings->m_sRefString );
+			if ( !pUservar )
+			{
+				sError.SetSprintf ( "undefined global variable '%s'", pFilterSettings->m_sRefString.cstr() );
+				return false;
+			}
+
+			m_dUserVals.Add ( pUservar );
+			tUservar = *pFilterSettings;
+			tUservar.m_eType = SPH_FILTER_VALUES;
+			tUservar.SetExternalValues ( pUservar->Begin(), pUservar->GetLength() );
+			pFilterSettings = &tUservar;
+		}
+
+		ISphFilter * pFilter = sphCreateFilter ( *pFilterSettings, tSchema, pMvaPool, pStrings, sError );
 		if ( !pFilter )
 			return false;
 

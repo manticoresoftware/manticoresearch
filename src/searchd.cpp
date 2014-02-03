@@ -675,7 +675,7 @@ enum SearchdStatus_e
 /// master-agent API protocol extensions version
 enum
 {
-	VER_MASTER = 8
+	VER_MASTER = 9
 };
 
 
@@ -5769,6 +5769,7 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 			case SPH_FILTER_VALUES:		iReqSize += 4 + 8*tFilter.GetNumValues (); break; // int values-count; uint64[] values
 			case SPH_FILTER_RANGE:		iReqSize += 16; break; // uint64 min-val, max-val
 			case SPH_FILTER_FLOATRANGE:	iReqSize += 8; break; // int/float min-val,max-val
+			case SPH_FILTER_USERVAR:
 			case SPH_FILTER_STRING:		iReqSize += 4 + tFilter.m_sRefString.Length(); break;
 			case SPH_FILTER_NULL:		iReqSize += 1; break; // boolean value
 		}
@@ -5880,12 +5881,14 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 				tOut.SendFloat ( tFilter.m_fMaxValue );
 				break;
 
+			case SPH_FILTER_USERVAR:
 			case SPH_FILTER_STRING:
 				tOut.SendString ( tFilter.m_sRefString.cstr() );
 				break;
 
 			case SPH_FILTER_NULL:
 				tOut.SendByte ( tFilter.m_bHasEqual );
+				break;
 		}
 		tOut.SendInt ( tFilter.m_bExclude );
 		tOut.SendInt ( tFilter.m_bHasEqual );
@@ -6536,6 +6539,10 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 						tFilter.m_bHasEqual = tReq.GetByte()!=0;
 						break;
 
+					case SPH_FILTER_USERVAR:
+						tFilter.m_sRefString = tReq.GetString();
+						break;
+
 					default:
 						tReq.SendErrorReply ( "unknown filter type (type-id=%d)", tFilter.m_eType );
 						return false;
@@ -7074,6 +7081,7 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 					}
 					break;
 
+				case SPH_FILTER_USERVAR:
 				case SPH_FILTER_STRING:
 					tBuf.Appendf ( " %s%s'%s'", f.m_sAttrName.cstr(), ( f.m_bHasEqual ? "=" : "!=" ), f.m_sRefString.cstr() );
 					break;
@@ -11098,7 +11106,6 @@ struct SqlStmt_t
 
 	// SELECT specific
 	CSphQuery				m_tQuery;
-	CSphVector < CSphRefcountedPtr<UservarIntSet_c> > m_dRefs;
 
 	CSphString				m_sTableFunc;
 	CSphVector<CSphString>	m_dTableFuncArgs;
@@ -11938,32 +11945,11 @@ bool SqlParser_c::AddIntFilterLesser ( const SqlNode_t & tAttr, int64_t iVal, bo
 
 bool SqlParser_c::AddUservarFilter ( const SqlNode_t & tCol, const SqlNode_t & tVar, bool bExclude )
 {
-	CSphScopedLock<StaticThreadsOnlyMutex_t> tLock ( g_tUservarsMutex );
-	CSphString sVar;
-	ToString ( sVar, tVar );
-	Uservar_t * pVar = g_hUservars ( sVar );
-	if ( !pVar )
-	{
-		yyerror ( this, "undefined global variable in IN clause" );
-		return false;
-	}
-
-	assert ( pVar->m_eType==USERVAR_INT_SET );
-	CSphFilterSettings * pFilter = AddFilter ( tCol, SPH_FILTER_VALUES );
+	CSphFilterSettings * pFilter = AddFilter ( tCol, SPH_FILTER_USERVAR );
 	if ( !pFilter )
 		return false;
+	ToString ( pFilter->m_sRefString, tVar ).ToLower();
 	pFilter->m_bExclude = bExclude;
-
-	// tricky black magic
-	// we want to avoid copying the data, hence external values in the filter
-	// we need to guarantee the data (uservar value) lifetime, then
-	// suddenly, enter mutex-protected refcounted value objects
-	// suddenly, we need to track those values in the statement object, too
-	assert ( pVar->m_pVal );
-	CSphRefcountedPtr<UservarIntSet_c> & tRef = m_pStmt->m_dRefs.Add();
-	tRef = pVar->m_pVal; // take over semantics, and thus NO (!) automatic addref
-	pVar->m_pVal->AddRef(); // so do that addref manually
-	pFilter->SetExternalValues ( pVar->m_pVal->Begin(), pVar->m_pVal->GetLength() );
 	return true;
 }
 
@@ -22430,8 +22416,6 @@ bool DieCallback ( const char * sMessage )
 	return false; // caller should not log
 }
 
-
-extern UservarIntSet_c * ( *g_pUservarsHook )( const CSphString & sUservar );
 
 UservarIntSet_c * UservarsHook ( const CSphString & sUservar )
 {

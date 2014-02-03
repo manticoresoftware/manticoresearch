@@ -175,13 +175,24 @@ if ( !$res )
 unset ( $res["time"] );
 $results[] = $res;
 
-$make_sock = create_function ( '&$results', '
+$make_sock = create_function ( '&$results, $agent=-1', '
 
-	global $sd_address, $sd_sphinxql_port, $error;
+	global $sd_address, $sd_sphinxql_port, $error, $agents;
 
 	$sockStr = "$sd_address:$sd_sphinxql_port";
 	if ($sd_address == "localhost")
 		$sockStr = "127.0.0.1:$sd_sphinxql_port";
+		
+	if ( $agent>=0 )
+	{
+		$addr = $agents[$agent]["address"];
+		$port = $agents[$agent]["sqlport"];
+		if ($addr == "localhost")
+			$sockStr = "127.0.0.1:$port";
+		else
+			$sockStr = "$addr:$port";
+	}
+		
 	$sock = @mysql_connect ( $sockStr,"","", true );
 	
 	if ( $sock === false )
@@ -191,7 +202,10 @@ $make_sock = create_function ( '&$results', '
 	return $sock;
 ');
 
-$query = create_function ( '&$results, $q, $sock,$vars', '
+$query = create_function ( '&$results, $q, $sock,$vars,$log_query=false', '
+	
+	if ( $log_query )
+		$results[] = $q;
 	
 	$res = @mysql_query ( $q, $sock );
 	if ($res===true)
@@ -200,7 +214,7 @@ $query = create_function ( '&$results, $q, $sock,$vars', '
 	}
 	else if ($res===false)
 	{
-		$results[] = "failed";
+		$results[] = "failed, " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
 	}
 	else
 	{
@@ -271,6 +285,27 @@ for ( $i=2000; $i<2010; $i++ )
 $query ( $results, "UPDATE rt SET gid=444 WHERE id IN ( 3, 1003, 1333, 2003 )", $sock, array() );
 $query ( $results, "SELECT * FROM i1, i2, rt WHERE id IN ( 1,2,3,4, 101,102,103,104, 1001,1002,1003,1004, 1331,1332,1333,1334, 2001, 2002, 2003, 2004 )", $sock, array() );
 
+// regression @uservars at agents only
+$query ( $results, "SET GLOBAL @var1 = (3,4,12,13)", $sock, array(), true );
+$query ( $results, "SELECT * FROM dist", $sock, array(), true );
+$query ( $results, "SELECT * FROM dist WHERE id in @var1", $sock, array(), true );
+
+@mysql_close($sock);
+$sock = $make_sock( $results, 1 );
+$query ( $results, "SET GLOBAL @var1 = (3,4,12,13)", $sock, array(), true );
+
+@mysql_close($sock);
+$sock = $make_sock( $results, 0 );
+$query ( $results, "SELECT * FROM dist WHERE id in @var1", $sock, array(), true );
+
+$query ( $results, "SET GLOBAL @var1 = (1,4)", $sock, array(), true );
+@mysql_close($sock);
+$sock = $make_sock( $results, 1 );
+$query ( $results, "SET GLOBAL @var1 = (11,12)", $sock, array(), true );
+
+@mysql_close($sock);
+$sock = $make_sock( $results, 0 );
+$query ( $results, "SELECT * FROM dist WHERE id in @var1", $sock, array(), true );
 
 ]]>
 </custom_test>

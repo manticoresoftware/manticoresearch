@@ -1116,7 +1116,7 @@ static ISphFilter * CreateFilterJson ( const CSphColumnInfo * DEBUGARG(pAttr), I
 
 static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const CSphString & sAttrName, const ISphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError, bool bHaving )
 {
-	ISphFilter * pFilter = 0;
+	ISphFilter * pFilter = NULL;
 	const CSphColumnInfo * pAttr = NULL;
 
 	// try to create a filter on a special attribute
@@ -1133,7 +1133,7 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 
 	// try to create a filter on a JSON attribute
 	CSphString sJsonCol, sJsonKey;
-	if ( sphJsonNameSplit ( sAttrName.cstr(), &sJsonCol, &sJsonKey ) )
+	if ( !pFilter && sphJsonNameSplit ( sAttrName.cstr(), &sJsonCol, &sJsonKey ) )
 	{
 		pAttr = tSchema.GetAttr ( sJsonCol.cstr() );
 		if ( !pAttr )

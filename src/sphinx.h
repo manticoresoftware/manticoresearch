@@ -2495,7 +2495,8 @@ enum ESphFilter
 	SPH_FILTER_RANGE		= 1,	///< filter by integer range
 	SPH_FILTER_FLOATRANGE	= 2,	///< filter by float range
 	SPH_FILTER_STRING		= 3,	///< filter by string value
-	SPH_FILTER_NULL			= 4		///< filter by NULL
+	SPH_FILTER_NULL			= 4,	///< filter by NULL
+	SPH_FILTER_USERVAR		= 5		///< filter by @uservar
 };
 
 

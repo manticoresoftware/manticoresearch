@@ -214,7 +214,10 @@ $query = create_function ( '&$results, $q, $sock,$vars,$log_query=false', '
 	}
 	else if ($res===false)
 	{
-		$results[] = "failed, " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+		$fail = "failed";
+		if ( $log_query )
+			$fail .= ", " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+		$results[] = $fail;
 	}
 	else
 	{

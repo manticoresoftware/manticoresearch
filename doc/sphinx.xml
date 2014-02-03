@@ -486,7 +486,8 @@ possible that someone may use it. And now we're urging you: don't use it.
 The default value is 'inline' and it's a new standard. 'plain' hit_format
 is obsolete and will be removed in the near future.</para></listitem>
 <listitem><para>docinfo=inline is deprecated. You can now use
-ondisk_attrs(link here) or ondisk_attrs_default(link here) instead.</para>
+<link linkend="conf-ondisk-attrs">ondisk_attrs</link> or 
+<link linkend="conf-ondisk-attrs-default">ondisk_attrs_default</link> instead.</para>
 </listitem>
 <listitem><para>workers=threads is a new default for all OS now.
 We're gonna get rid of other modes in future.</para></listitem>
@@ -12539,7 +12540,7 @@ rlp_context = /home/myuser/RLP/rlp-context.xml
 <sect2 id="conf-ondisk-attrs"><title>ondisk_attrs</title>
 <para>
 Allows for fine-grain control over how attributes are loaded into memory
-when using plain indexes with external storage. It is now possible (since
+when using indexes with external storage. It is now possible (since
 version 2.2.1-beta) to keep attributes on disk. Although, the daemon does
 map them to memory and the OS loads small chunks of data on demand. This
 allows use of docinfo = extern instead of docinfo = inline, but still
@@ -12548,6 +12549,11 @@ of pooled attributes (string/JSON/MVA) or when you're using many indexes
 per daemon that don't consume memory. It is not possible to update
 attributes left on disk when this option is enabled and the constraint
 of 4Gb of entries per pool is still in effect.
+</para>
+<para>
+Note that this option also affects RT indexes. When it is enabled, all atribute updates
+will be disabled, and also all disk chunks of RT indexes will behave described above. However
+inserting and deleting of docs from RT indexes is still possible with enabled ondisk_attrs.
 </para>
 <bridgehead>Possible values:</bridgehead>
 <itemizedlist>

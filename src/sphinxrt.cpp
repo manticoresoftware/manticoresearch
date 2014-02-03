@@ -1053,6 +1053,7 @@ private:
 	int							m_iWordsCheckpoint;
 	int							m_iMaxCodepointLength;
 	ISphTokenizer *				m_pTokenizerIndexing;
+	int							m_iOndiskAttrs;						///< int because we need 3-state, not just bool
 
 public:
 	explicit					RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict );
@@ -1117,6 +1118,7 @@ public:
 	virtual bool				Lock () { return true; }
 	virtual void				Unlock () {}
 	virtual bool				Mlock () { return true; }
+	virtual void				SetEnableOndiskAttributes ( bool );
 	virtual void				PostSetup();
 	virtual bool				IsRT() const { return true; }
 
@@ -1188,6 +1190,7 @@ RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int6
 	, m_bKeywordDict ( bKeywordDict )
 	, m_iWordsCheckpoint ( RTDICT_CHECKPOINT_V5 )
 	, m_pTokenizerIndexing ( NULL )
+	, m_iOndiskAttrs ( 0 )
 {
 	MEMORY ( MEM_INDEX_RT );
 
@@ -1249,7 +1252,15 @@ RtIndex_t::~RtIndex_t ()
 	}
 }
 
+
 static int64_t g_iRtFlushPeriod = 10*60*60; // default period is 10 hours
+
+
+
+void RtIndex_t::SetEnableOndiskAttributes ( bool bPool )
+{
+	m_iOndiskAttrs = bPool?2:1;
+}
 
 
 void RtIndex_t::CheckRamFlush ()
@@ -3855,6 +3866,8 @@ CSphIndex * RtIndex_t::LoadDiskChunk ( const char * sChunk, CSphString & sError 
 	pDiskChunk->m_iExpansionLimit = m_iExpansionLimit;
 	pDiskChunk->m_bExpandKeywords = m_bExpandKeywords;
 	pDiskChunk->SetBinlog ( false );
+	if ( m_iOndiskAttrs )
+		pDiskChunk->SetEnableOndiskAttributes ( m_iOndiskAttrs==2 );
 
 	CSphString sWarning;
 	if ( !pDiskChunk->Prealloc ( false, m_bPathStripped, sWarning ) )
@@ -7230,6 +7243,12 @@ static RtSegment_t * UpdateFindSegment ( const CSphVector<RtSegment_t *> & dSegm
 int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError, CSphString & sWarning )
 {
 	// check if we have to
+
+	if ( m_iOndiskAttrs )
+	{
+		sError.SetSprintf ( "can not update ondisk_attrs enabled index" );
+		return -1;
+	}
 
 	assert ( tUpd.m_dDocids.GetLength()==tUpd.m_dRows.GetLength() );
 	assert ( tUpd.m_dDocids.GetLength()==tUpd.m_dRowOffset.GetLength() );

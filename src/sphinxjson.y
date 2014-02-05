@@ -58,6 +58,11 @@ key_value_list:
 		}
 	| key_value_list ',' key ':' value
 		{ 
+			if ( $1.m_iHandle<0 )
+			{
+				yyerror ( pParser, "unexpected ','" );
+				YYERROR;
+			}
 			$$ = $1;
 			$5.m_iKeyStart = $3.m_iStart;
 			$5.m_iKeyEnd = $3.m_iEnd;
@@ -79,6 +84,11 @@ value_list:
 		}
 	| value_list ',' value
 		{
+			if ( $1.m_iHandle<0 )
+			{
+				yyerror ( pParser, "unexpected ','" );
+				YYERROR;
+			}
 			$$ = $1;
 			pParser->m_dNodes[$$.m_iHandle].Add($3);
 		}

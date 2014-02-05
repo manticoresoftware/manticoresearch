@@ -282,8 +282,8 @@ static const yysigned_char yyrhs[] =
 static const unsigned char yyrline[] =
 {
        0,    23,    23,    25,    26,    30,    31,    35,    36,    37,
-      38,    39,    40,    41,    42,    47,    51,    59,    70,    74,
-      80
+      38,    39,    40,    41,    42,    47,    51,    59,    75,    79,
+      85
 };
 #endif
 
@@ -1036,6 +1036,11 @@ yyreduce:
   case 17:
 
     { 
+			if ( yyvsp[-4].m_iHandle<0 )
+			{
+				yyerror ( pParser, "unexpected ','" );
+				YYERROR;
+			}
 			yyval = yyvsp[-4];
 			yyvsp[0].m_iKeyStart = yyvsp[-2].m_iStart;
 			yyvsp[0].m_iKeyEnd = yyvsp[-2].m_iEnd;
@@ -1063,6 +1068,11 @@ yyreduce:
   case 20:
 
     {
+			if ( yyvsp[-2].m_iHandle<0 )
+			{
+				yyerror ( pParser, "unexpected ','" );
+				YYERROR;
+			}
 			yyval = yyvsp[-2];
 			pParser->m_dNodes[yyval.m_iHandle].Add(yyvsp[0]);
 		;}

@@ -63,6 +63,9 @@ extern "C"
 	#include <winsock2.h>
 	#include <tlhelp32.h>
 
+	#pragma comment(linker, "/defaultlib:wsock32.lib")
+	#pragma message("Automatically linking with wsock32.lib")
+
 	#define sphSockRecv(_sock,_buf,_len)	::recv(_sock,_buf,_len,0)
 	#define sphSockSend(_sock,_buf,_len)	::send(_sock,_buf,_len,0)
 	#define sphSockClose(_sock)				::closesocket(_sock)

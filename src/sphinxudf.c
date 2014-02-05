@@ -86,7 +86,7 @@ int sphinx_factors_unpack ( const unsigned int * in, SPH_UDF_FACTORS * out )
 	if ( out->num_fields > 0 )
 	{
 		i = out->num_fields*sizeof(SPH_UDF_FIELD_FACTORS);
-		out->field = malloc ( i );
+		out->field = (SPH_UDF_FIELD_FACTORS*) malloc ( i );
 		memset ( out->field, 0, i );
 	}
 
@@ -126,7 +126,7 @@ int sphinx_factors_unpack ( const unsigned int * in, SPH_UDF_FACTORS * out )
 		return 1;
 
 	if ( out->max_uniq_qpos > 0 )
-		out->term = malloc ( out->max_uniq_qpos*sizeof(SPH_UDF_TERM_FACTORS) );
+		out->term = (SPH_UDF_TERM_FACTORS*) malloc ( out->max_uniq_qpos*sizeof(SPH_UDF_TERM_FACTORS) );
 
 	for ( i=0; i<out->max_uniq_qpos; i++ )
 	{
@@ -142,7 +142,7 @@ int sphinx_factors_unpack ( const unsigned int * in, SPH_UDF_FACTORS * out )
 
 	// extract field_tf factors
 	fields = *in++;
-	out->field_tf = malloc ( fields*sizeof(int) );
+	out->field_tf = (int*) malloc ( fields*sizeof(int) );
 	memcpy ( out->field_tf, in, fields*sizeof(int) );
 	in += fields;
 

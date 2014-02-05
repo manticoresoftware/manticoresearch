@@ -776,7 +776,7 @@ struct CSphDictSettings
 struct CSphDictEntry
 {
 	SphWordID_t		m_uWordID;			///< keyword id (for dict=crc)
-	BYTE *			m_sKeyword;			///< keyword text (for dict=keywords)
+	const BYTE *	m_sKeyword;			///< keyword text (for dict=keywords)
 	int				m_iDocs;			///< number of matching documents
 	int				m_iHits;			///< number of occurrences
 	SphOffset_t		m_iDoclistOffset;	///< absolute document list offset (into .spd)
@@ -3233,7 +3233,7 @@ public:
 	void						Setup ( const CSphIndexSettings & tSettings );
 	const CSphIndexSettings &	GetSettings () const { return m_tSettings; }
 	bool						IsStripperInited () const { return m_bStripperInited; }
-	virtual SphAttr_t *			GetKillList () const = 0;
+	virtual SphDocID_t *		GetKillList () const = 0;
 	virtual int					GetKillListSize () const = 0;
 	virtual bool				HasDocid ( SphDocID_t uDocid ) const = 0;
 	virtual bool				IsRT() const { return false; }
@@ -3340,7 +3340,7 @@ public:
 	virtual bool BuildDocList ( SphAttr_t ** ppDocList, int64_t * pCount, CSphString * pError ) const;
 
 	/// internal replace kill-list and rewrite spk file, DO NOT USE
-	virtual bool				ReplaceKillist ( const SphAttr_t *, int ) { return true; }
+	virtual bool				ReplaceKillList ( const SphDocID_t *, int ) { return true; }
 
 public:
 	int64_t						m_iTID;

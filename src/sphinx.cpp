@@ -673,7 +673,7 @@ struct CSphAggregateHit
 {
 	SphDocID_t		m_uDocID;		///< document ID
 	SphWordID_t		m_uWordID;		///< word ID in current dictionary
-	BYTE *			m_sKeyword;		///< word itself (in keywords dictionary case only)
+	const BYTE *	m_sKeyword;		///< word itself (in keywords dictionary case only)
 	Hitpos_t		m_iWordPos;		///< word position in current document, or hit count in case of aggregate hit
 	FieldMask_t	m_dFieldMask;	///< mask of fields containing this word, 0 for regular hits, non-0 for aggregate hits
 
@@ -1259,8 +1259,8 @@ struct BuildHeader_t : public CSphSourceStats, public DictHeader_t
 		, m_pThrottle ( NULL )
 		, m_pMinRow ( NULL )
 		, m_uMinDocid ( 0 )
-		, m_iKillListSize ( 0 )
-		, m_uMinMaxIndex ( 0 )
+		, m_uKillListSize ( 0 )
+		, m_iMinMaxIndex ( 0 )
 		, m_iTotalDups ( 0 )
 	{
 		m_iTotalDocuments = tStat.m_iTotalDocuments;
@@ -1271,8 +1271,8 @@ struct BuildHeader_t : public CSphSourceStats, public DictHeader_t
 	ThrottleState_t *	m_pThrottle;
 	const CSphRowitem *	m_pMinRow;
 	SphDocID_t			m_uMinDocid;
-	DWORD				m_iKillListSize;
-	int64_t				m_uMinMaxIndex;
+	DWORD				m_uKillListSize;
+	int64_t				m_iMinMaxIndex;
 	int					m_iTotalDups;
 };
 
@@ -1393,7 +1393,7 @@ class CSphTokenizerIndex : public CSphIndex
 {
 public:
 	CSphTokenizerIndex () : CSphIndex ( NULL, NULL ) {}
-	virtual SphAttr_t *			GetKillList () const { return NULL; }
+	virtual SphDocID_t *		GetKillList () const { return NULL; }
 	virtual int					GetKillListSize () const { return 0 ; }
 	virtual bool				HasDocid ( SphDocID_t ) const { return false; }
 	virtual int					Build ( const CSphVector<CSphSource*> & , int , int ) { return 0; }
@@ -1547,8 +1547,8 @@ public:
 	virtual bool				Merge ( CSphIndex * pSource, const CSphVector<CSphFilterSettings> & dFilters, bool bMergeKillLists );
 
 	template <class QWORDDST, class QWORDSRC>
-	static bool					MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, SphDocID_t uMinID, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle, volatile bool * pForceTerminate );
-	static bool					DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, bool bMergeKillLists, ISphFilter * pFilter, CSphString & sError, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle, volatile bool * pForceTerminate );
+	static bool					MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, const CSphVector<SphDocID_t> & dKillList, SphDocID_t uMinID, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle, volatile bool * pForceTerminate );
+	static bool					DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, bool bMergeKillLists, ISphFilter * pFilter, const CSphVector<SphDocID_t> & dKillList, CSphString & sError, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle, volatile bool * pForceTerminate );
 
 	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError, CSphString & sWarning );
 	virtual bool				SaveAttributes ( CSphString & sError ) const;
@@ -1561,15 +1561,15 @@ public:
 
 	virtual void				SetKeepAttrs ( bool bKeepAttrs ) { m_bKeepAttrs = bKeepAttrs; }
 
-	virtual SphAttr_t *			GetKillList () const;
-	virtual int					GetKillListSize () const { return m_iKillListSize; }
+	virtual SphDocID_t *		GetKillList () const;
+	virtual int					GetKillListSize () const { return m_uKillListSize; }
 	virtual bool				HasDocid ( SphDocID_t uDocid ) const;
 
 	virtual const CSphSourceStats &		GetStats () const { return m_tStats; }
 	virtual int64_t *					GetFieldLens() const { return m_tSettings.m_bIndexFieldLens ? m_dFieldLens.Begin() : NULL; }
 	virtual void				GetStatus ( CSphIndexStatus* ) const;
 	virtual bool 				BuildDocList ( SphAttr_t ** ppDocList, int64_t * pCount, CSphString * pError ) const;
-	virtual bool				ReplaceKillist ( const SphAttr_t * pKillist, int iCount );
+	virtual bool				ReplaceKillList ( const SphDocID_t * pKillist, int iCount );
 
 private:
 
@@ -1619,12 +1619,12 @@ private:
 
 	bool						m_bKeepAttrs;			///< retain attributes on reindexing
 
-	CSphSharedBuffer<SphAttr_t>	m_pKillList;			///< killlist
-	DWORD						m_iKillListSize;		///< killlist size (in elements)
+	CSphSharedBuffer<SphDocID_t>	m_pKillList;		///< killlist
+	DWORD						m_uKillListSize;		///< killlist size (in elements)
 
 	CSphSharedBuffer<BYTE>		m_pSkiplists;			///< (compressed) skiplists data
 
-	int64_t						m_uMinMaxIndex;			///< stored min/max cache offset (counted in DWORDs)
+	int64_t						m_iMinMaxIndex;			///< stored min/max cache offset (counted in DWORDs)
 
 	CSphAutofile				m_tDoclistFile;			///< doclist file
 	CSphAutofile				m_tHitlistFile;			///< hitlist file
@@ -9626,8 +9626,8 @@ CSphIndex_VLN::CSphIndex_VLN ( const char* sIndexName, const char * sFilename )
 	m_bPreallocated = false;
 	m_uVersion = INDEX_FORMAT_VERSION;
 
-	m_iKillListSize = 0;
-	m_uMinMaxIndex = 0;
+	m_uKillListSize = 0;
+	m_iMinMaxIndex = 0;
 
 	m_iIndexTag = -1;
 	m_bIsEmpty = true;
@@ -10242,7 +10242,7 @@ bool CSphIndex_VLN::PrecomputeMinMax()
 	int iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 	m_tProgress.m_ePhase = CSphIndexProgress::PHASE_PRECOMPUTE;
 	m_tProgress.m_iDone = 0;
-	m_uMinMaxIndex = 0;
+	m_iMinMaxIndex = 0;
 
 	for ( int64_t iIndexEntry=0; iIndexEntry<m_iDocinfo; iIndexEntry++ )
 	{
@@ -10250,7 +10250,7 @@ bool CSphIndex_VLN::PrecomputeMinMax()
 				m_tMva.GetNumEntries(), m_sLastError, true ) )
 				return false;
 
-		m_uMinMaxIndex += iStride;
+		m_iMinMaxIndex += iStride;
 
 		// show progress
 		int64_t iDone = (iIndexEntry+1)*1000/m_iDocinfoIndex;
@@ -10504,15 +10504,15 @@ bool CSphIndex_VLN::CreateModifiedFiles ( bool bAddAttr, const CSphString & sAtt
 	int iOldStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 	int iNewStride = DOCINFO_IDSIZE + tNewSchema.GetRowSize();
 
-	int64_t uNewMinMaxIndex = m_iDocinfo*iNewStride;
+	int64_t iNewMinMaxIndex = m_iDocinfo*iNewStride;
 
 	BuildHeader_t tBuildHeader ( m_tStats );
 	tBuildHeader.m_sHeaderExtension = "new.sph";
 	tBuildHeader.m_pThrottle = &g_tThrottle;
 	tBuildHeader.m_pMinRow = dMinRow.Begin();
 	tBuildHeader.m_uMinDocid = m_uMinDocid;
-	tBuildHeader.m_iKillListSize = m_iKillListSize;
-	tBuildHeader.m_uMinMaxIndex = uNewMinMaxIndex;
+	tBuildHeader.m_uKillListSize = m_uKillListSize;
+	tBuildHeader.m_iMinMaxIndex = iNewMinMaxIndex;
 
 	*(DictHeader_t*)&tBuildHeader = *(DictHeader_t*)&m_tWordlist;
 
@@ -10599,7 +10599,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName
 		m_tSchema.RemoveAttr ( sAttrName.cstr(), false );
 
 	int iNewStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
-	m_uMinMaxIndex = m_iDocinfo*iNewStride;
+	m_iMinMaxIndex = m_iDocinfo*iNewStride;
 
 	CSphString sWarning;
 	const CSphRowitem * pDocinfo = m_dAttrShared.GetWritePtr();
@@ -11253,8 +11253,8 @@ bool CSphIndex_VLN::WriteHeader ( const BuildHeader_t & tBuildHeader, CSphWriter
 	assert ( m_pDict );
 	SaveDictionarySettings ( fdInfo, m_pDict, false, m_tSettings.m_iEmbeddedLimit );
 
-	fdInfo.PutDword ( tBuildHeader.m_iKillListSize );
-	fdInfo.PutOffset ( tBuildHeader.m_uMinMaxIndex );
+	fdInfo.PutDword ( tBuildHeader.m_uKillListSize );
+	fdInfo.PutOffset ( tBuildHeader.m_iMinMaxIndex );
 
 	// field filter info
 	SaveFieldFilterSettings ( fdInfo, m_pFieldFilter );
@@ -12374,7 +12374,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	////////////////////////////////////////////////
 
 	// killlist storage
-	CSphVector <SphAttr_t> dKillList;
+	CSphVector <SphDocID_t> dKillList;
 
 	// adjust memory requirements
 	int iOldLimit = iMemoryLimit;
@@ -13187,7 +13187,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		// while the queue has data for us
 		pDocinfo = dDocinfos.Begin();
 		SphDocID_t uLastId = 0;
-		m_uMinMaxIndex = 0;
+		m_iMinMaxIndex = 0;
 
 		// prepare the collector for min/max of attributes
 		AttrIndexBuilder_c tMinMax ( m_tSchema );
@@ -13238,7 +13238,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			} else
 			{
 				// new unique document, handle it
-				m_uMinMaxIndex += iDocinfoStride;
+				m_iMinMaxIndex += iDocinfoStride;
 
 				CSphRowitem * pCollectibleRow = pEntry;
 				// update MVA
@@ -13531,22 +13531,22 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	}
 
 	// dump killlist
-	CSphAutofile fdKillList ( GetIndexFileName("spk"), SPH_O_NEW, m_sLastError );
-	if ( fdKillList.GetFD()<0 )
+	CSphAutofile tKillList ( GetIndexFileName("spk"), SPH_O_NEW, m_sLastError );
+	if ( tKillList.GetFD()<0 )
 		return 0;
 
 	if ( dKillList.GetLength () )
 	{
 		dKillList.Uniq ();
 
-		m_iKillListSize = dKillList.GetLength ();
+		m_uKillListSize = dKillList.GetLength ();
 
-		if ( !sphWriteThrottled ( fdKillList.GetFD(), &dKillList[0],
-			m_iKillListSize*sizeof(SphAttr_t), "kill list", m_sLastError, &g_tThrottle ) )
+		if ( !sphWriteThrottled ( tKillList.GetFD(), &dKillList[0],
+			m_uKillListSize*sizeof(SphDocID_t), "kill list", m_sLastError, &g_tThrottle ) )
 				return 0;
 	}
 
-	fdKillList.Close ();
+	tKillList.Close ();
 
 	///////////////////////////////////
 	// sort and write compressed index
@@ -13738,8 +13738,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	tBuildHeader.m_pMinRow = m_dMinRow.Begin();
 	tBuildHeader.m_uMinDocid = m_uMinDocid;
 	tBuildHeader.m_pThrottle = &g_tThrottle;
-	tBuildHeader.m_iKillListSize = m_iKillListSize;
-	tBuildHeader.m_uMinMaxIndex = m_uMinMaxIndex;
+	tBuildHeader.m_uKillListSize = m_uKillListSize;
+	tBuildHeader.m_iMinMaxIndex = m_iMinMaxIndex;
 	tBuildHeader.m_iTotalDups = iDupes;
 
 	// we're done
@@ -14095,8 +14095,8 @@ public:
 	{
 	}
 
-	template < typename QWORD > static inline
-	void PrepareQword ( QWORD & tQword, const CSphDictReader & tReader, SphDocID_t iMinID, bool bWordDict ) //NOLINT
+	template < typename QWORD >
+	static inline void PrepareQword ( QWORD & tQword, const CSphDictReader & tReader, SphDocID_t iMinID, bool bWordDict ) //NOLINT
 	{
 		tQword.m_iMinID = iMinID;
 		tQword.m_tDoc.m_uDocID = iMinID;
@@ -14113,7 +14113,7 @@ public:
 	}
 
 	template < typename QWORD >
-	inline bool NextDocument ( QWORD & tQword, const CSphIndex_VLN * pSourceIndex, const ISphFilter * pFilter )
+	inline bool NextDocument ( QWORD & tQword, const CSphIndex_VLN * pSourceIndex, const ISphFilter * pFilter, const CSphVector<SphDocID_t> & dKillList )
 	{
 		for ( ;; )
 		{
@@ -14121,6 +14121,12 @@ public:
 			if ( tQword.m_tDoc.m_uDocID )
 			{
 				tQword.SeekHitlist ( tQword.m_iHitlistPos );
+
+				if ( dKillList.BinarySearch ( tQword.m_tDoc.m_uDocID ) ) // optimize this somehow?
+				{
+					while ( tQword.m_bHasHitlist && tQword.GetNextHit()!=EMPTY_HIT );
+					continue;
+				}
 				if ( pFilter )
 				{
 					CSphMatch tMatch;
@@ -14150,15 +14156,16 @@ public:
 	}
 
 	template < typename QWORD >
-	inline void TransferData ( QWORD & tQword, SphWordID_t iWordID, BYTE * sWord,
-		const CSphIndex_VLN * pSourceIndex, const ISphFilter * pFilter, volatile bool * pForceTerminate )
+	inline void TransferData ( QWORD & tQword, SphWordID_t iWordID, const BYTE * sWord,
+							const CSphIndex_VLN * pSourceIndex, const ISphFilter * pFilter,
+							const CSphVector<SphDocID_t> & dKillList, volatile bool * pForceTerminate )
 	{
 		CSphAggregateHit tHit;
 		tHit.m_uWordID = iWordID;
 		tHit.m_sKeyword = sWord;
 		tHit.m_dFieldMask.UnsetAll();
 
-		while ( CSphMerger::NextDocument ( tQword, pSourceIndex, pFilter ) && !*pForceTerminate )
+		while ( CSphMerger::NextDocument ( tQword, pSourceIndex, pFilter, dKillList ) && !*pForceTerminate )
 		{
 			if ( tQword.m_bHasHitlist )
 				TransferHits ( tQword, tHit );
@@ -14186,7 +14193,7 @@ public:
 	}
 
 	template < typename QWORD >
-	static inline void ConfigureQword ( QWORD & tQword, CSphAutofile & tHits, CSphAutofile & tDocs,
+	static inline void ConfigureQword ( QWORD & tQword, const CSphAutofile & tHits, const CSphAutofile & tDocs,
 		int iDynamic, int iInline, const CSphRowitem * pMin, ThrottleState_t * pThrottle )
 	{
 		tQword.m_iInlineAttrs = iInline;
@@ -14203,7 +14210,6 @@ public:
 		tQword.m_tDoc.Reset ( iDynamic );
 	}
 
-
 	const CSphRowitem * GetInline () const { return m_dInlineRow.Begin(); }
 	CSphRowitem * AcquireInline () const { return m_dInlineRow.Begin(); }
 };
@@ -14211,8 +14217,9 @@ public:
 
 template < typename QWORDDST, typename QWORDSRC >
 bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex,
-	const ISphFilter * pFilter, SphDocID_t uMinID, CSphHitBuilder * pHitBuilder, CSphString & sError,
-	CSphSourceStats & tStat, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle, volatile bool * pForceTerminate )
+								const ISphFilter * pFilter, const CSphVector<SphDocID_t> & dKillList, SphDocID_t uMinID,
+								CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat,
+								CSphIndexProgress & tProgress, ThrottleState_t * pThrottle, volatile bool * pForceTerminate )
 {
 	CSphAutofile tDummy;
 	pHitBuilder->CreateIndexFiles ( pDstIndex->GetIndexFileName("tmp.spd").cstr(),
@@ -14245,13 +14252,13 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 	QWORDDST tDstQword ( false, false );
 	QWORDSRC tSrcQword ( false, false );
 
-	CSphAutofile fSrcDocs, fSrcHits;
-	fSrcDocs.Open ( pSrcIndex->GetIndexFileName("spd"), SPH_O_READ, sError );
-	fSrcHits.Open ( pSrcIndex->GetIndexFileName("spp"), SPH_O_READ, sError );
+	CSphAutofile tSrcDocs, tSrcHits;
+	tSrcDocs.Open ( pSrcIndex->GetIndexFileName("spd"), SPH_O_READ, sError );
+	tSrcHits.Open ( pSrcIndex->GetIndexFileName("spp"), SPH_O_READ, sError );
 
-	CSphAutofile fDstDocs, fDstHits;
-	fDstDocs.Open ( pDstIndex->GetIndexFileName("spd"), SPH_O_READ, sError );
-	fDstHits.Open ( pDstIndex->GetIndexFileName("spp"), SPH_O_READ, sError );
+	CSphAutofile tDstDocs, tDstHits;
+	tDstDocs.Open ( pDstIndex->GetIndexFileName("spd"), SPH_O_READ, sError );
+	tDstHits.Open ( pDstIndex->GetIndexFileName("spp"), SPH_O_READ, sError );
 
 	if ( !sError.IsEmpty() || *pForceTerminate )
 		return false;
@@ -14261,10 +14268,10 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 
 	CSphMerger tMerger ( pHitBuilder, Max ( iDstInlineSize, iSrcInlineSize ), uMinID );
 
-	CSphMerger::ConfigureQword<QWORDDST> ( tDstQword, fDstHits, fDstDocs,
+	CSphMerger::ConfigureQword<QWORDDST> ( tDstQword, tDstHits, tDstDocs,
 		pDstIndex->m_tSchema.GetDynamicSize(), iDstInlineSize,
 		pDstIndex->m_dMinRow.Begin(), pThrottle );
-	CSphMerger::ConfigureQword<QWORDSRC> ( tSrcQword, fSrcHits, fSrcDocs,
+	CSphMerger::ConfigureQword<QWORDSRC> ( tSrcQword, tSrcHits, tSrcDocs,
 		pSrcIndex->m_tSchema.GetDynamicSize(), iSrcInlineSize,
 		pSrcIndex->m_dMinRow.Begin(), pThrottle );
 
@@ -14296,14 +14303,14 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 		{
 			// transfer documents and hits from destination
 			CSphMerger::PrepareQword<QWORDDST> ( tDstQword, tDstReader, uDstMinID, bWordDict );
-			tMerger.TransferData<QWORDDST> ( tDstQword, tDstReader.m_uWordID, tDstReader.GetWord(), pDstIndex, pFilter, pForceTerminate );
+			tMerger.TransferData<QWORDDST> ( tDstQword, tDstReader.m_uWordID, tDstReader.GetWord(), pDstIndex, pFilter, dKillList, pForceTerminate );
 			bDstWord = tDstReader.Read();
 
 		} else if ( !bDstWord || ( bSrcWord && iCmp>0 ) )
 		{
 			// transfer documents and hits from source
 			CSphMerger::PrepareQword<QWORDSRC> ( tSrcQword, tSrcReader, uSrcMinID, bWordDict );
-			tMerger.TransferData<QWORDSRC> ( tSrcQword, tSrcReader.m_uWordID, tSrcReader.GetWord(), pSrcIndex, NULL, pForceTerminate );
+			tMerger.TransferData<QWORDSRC> ( tSrcQword, tSrcReader.m_uWordID, tSrcReader.GetWord(), pSrcIndex, NULL, CSphVector<SphDocID_t>(), pForceTerminate );
 			bSrcWord = tSrcReader.Read();
 
 		} else // merge documents and hits inside the word
@@ -14325,7 +14332,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 			tHit.m_sKeyword = tDstReader.GetWord();
 			tHit.m_dFieldMask.UnsetAll();
 
-			bool bDstDocs = tMerger.NextDocument ( tDstQword, pDstIndex, pFilter );
+			bool bDstDocs = tMerger.NextDocument ( tDstQword, pDstIndex, pFilter, dKillList );
 			bool bSrcDocs = true;
 
 			tSrcQword.GetNextDoc ( tMerger.AcquireInline() );
@@ -14349,7 +14356,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 						pHitBuilder->cidxHit ( &tHit, tMerger.GetInline() );
 					} else
 						tMerger.TransferHits ( tDstQword, tHit );
-					bDstDocs = tMerger.NextDocument ( tDstQword, pDstIndex, pFilter );
+					bDstDocs = tMerger.NextDocument ( tDstQword, pDstIndex, pFilter, dKillList );
 
 				} else if ( !bDstDocs || ( bSrcDocs && tDstQword.m_tDoc.m_uDocID > tSrcQword.m_tDoc.m_uDocID ) )
 				{
@@ -14364,7 +14371,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 						pHitBuilder->cidxHit ( &tHit, tMerger.GetInline() );
 					} else
 						tMerger.TransferHits ( tSrcQword, tHit );
-					bSrcDocs = tMerger.NextDocument ( tSrcQword, pSrcIndex, NULL );
+					bSrcDocs = tMerger.NextDocument ( tSrcQword, pSrcIndex, NULL, CSphVector<SphDocID_t>() );
 
 				} else
 				{
@@ -14418,8 +14425,8 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 					}
 
 					// next document
-					bDstDocs = tMerger.NextDocument ( tDstQword, pDstIndex, pFilter );
-					bSrcDocs = tMerger.NextDocument ( tSrcQword, pSrcIndex, NULL );
+					bDstDocs = tMerger.NextDocument ( tDstQword, pDstIndex, pFilter, dKillList );
+					bSrcDocs = tMerger.NextDocument ( tSrcQword, pSrcIndex, NULL, CSphVector<SphDocID_t>() );
 				}
 			}
 			// next word
@@ -14454,31 +14461,21 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, const CSphVector<CSphFilterSett
 
 	// create filters
 	CSphScopedPtr<ISphFilter> pFilter ( CreateMergeFilters ( dFilters, m_tSchema, m_tMva.GetWritePtr(), m_tString.GetWritePtr() ) );
-	DWORD nKillListSize = pSource->GetKillListSize ();
-	if ( nKillListSize )
-	{
-		CSphFilterSettings tKillListFilter;
-		const SphAttr_t * pKillList = pSource->GetKillList ();
-
-		tKillListFilter.m_bExclude = true;
-		tKillListFilter.m_eType = SPH_FILTER_VALUES;
-		tKillListFilter.m_iMinValue = pKillList[0];
-		tKillListFilter.m_iMaxValue = pKillList [ nKillListSize-1 ];
-		tKillListFilter.m_sAttrName = "@id";
-		tKillListFilter.SetExternalValues ( pKillList, nKillListSize );
-
-		ISphFilter * pKillListFilter = sphCreateFilter ( tKillListFilter, m_tSchema, m_tMva.GetWritePtr(), m_tString.GetWritePtr(), m_sLastError );
-		pFilter = sphJoinFilters ( pFilter.LeakPtr(), pKillListFilter );
-	}
+	CSphVector<SphDocID_t> dKillList ( pSource->GetKillListSize()+2 );
+	for ( int i=0; i<dKillList.GetLength()-2; ++i )
+		dKillList [ i+1 ] = pSource->GetKillList()[i];
+	dKillList[0] = 0;
+	dKillList.Last() = DOCID_MAX;
 
 	bool bForceTerminate = false;
-	return CSphIndex_VLN::DoMerge ( this, (const CSphIndex_VLN *)pSource,
-		bMergeKillLists, pFilter.Ptr(), m_sLastError, m_tProgress, &g_tThrottle, &bForceTerminate );
+	return CSphIndex_VLN::DoMerge ( this, (const CSphIndex_VLN *)pSource, bMergeKillLists, pFilter.Ptr(),
+									dKillList, m_sLastError, m_tProgress, &g_tThrottle, &bForceTerminate );
 }
 
 bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex,
-	bool bMergeKillLists, ISphFilter * pFilter, CSphString & sError,
-	CSphIndexProgress & tProgress, ThrottleState_t * pThrottle, volatile bool * pForceTerminate )
+							bool bMergeKillLists, ISphFilter * pFilter, const CSphVector<SphDocID_t> & dKillList
+							, CSphString & sError, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle,
+							volatile bool * pForceTerminate )
 {
 	assert ( pDstIndex && pSrcIndex );
 
@@ -14543,7 +14540,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 			dMvaLocators.Add ( tInfo.m_tLocator );
 	}
 
-	CSphVector<SphAttr_t> dPhantomKiller;
+	CSphVector<SphDocID_t> dPhantomKiller;
 
 	int64_t iTotalDocuments = 0;
 	bool bNeedInfinum = true;
@@ -14578,6 +14575,8 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		int64_t iSrcCount = 0;
 		int64_t iDstCount = 0;
 
+		int iKillListIdx = 0;
+
 		CSphMatch tMatch;
 		while ( iSrcCount < pSrcIndex->m_iDocinfo || iDstCount < pDstIndex->m_iDocinfo )
 		{
@@ -14589,6 +14588,17 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 			if ( iDstCount < pDstIndex->m_iDocinfo )
 			{
 				iDstDocID = DOCINFO2ID ( pDstRow );
+
+				// kill list filter goes first
+				while ( dKillList [ iKillListIdx ]<iDstDocID )
+					iKillListIdx++;
+				if ( dKillList [ iKillListIdx ]==iDstDocID )
+				{
+					pDstRow += iStride;
+					iDstCount++;
+					continue;
+				}
+
 				if ( pFilter )
 				{
 					tMatch.m_uDocID = iDstDocID;
@@ -14624,7 +14634,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 					wrRows.PutBytes ( pDstRow, sizeof(DWORD)*iStride );
 				}
 
-				tBuildHeader.m_uMinMaxIndex += iStride;
+				tBuildHeader.m_iMinMaxIndex += iStride;
 				pDstRow += iStride;
 				iDstCount++;
 				iTotalDocuments++;
@@ -14649,7 +14659,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 					wrRows.PutBytes ( pSrcRow, sizeof(DWORD)*iStride );
 				}
 
-				tBuildHeader.m_uMinMaxIndex += iStride;
+				tBuildHeader.m_iMinMaxIndex += iStride;
 				pSrcRow += iStride;
 				iSrcCount++;
 				iTotalDocuments++;
@@ -14697,24 +14707,16 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	if ( !CheckDocsCount ( iTotalDocuments, sError ) )
 		return false;
 
-	// create phantom killlist filter
-	if ( dPhantomKiller.GetLength() )
-	{
-		CSphFilterSettings tKLF;
-		tKLF.m_bExclude = true;
-		tKLF.m_eType = SPH_FILTER_VALUES;
-		tKLF.m_iMinValue = dPhantomKiller[0];
-		tKLF.m_iMaxValue = dPhantomKiller.Last();
-		tKLF.m_sAttrName = "@id";
-		tKLF.SetExternalValues ( &dPhantomKiller[0], dPhantomKiller.GetLength() );
-		ISphFilter * pSpaFilter = sphCreateFilter ( tKLF, pDstIndex->m_tSchema, pDstIndex->m_tMva.GetWritePtr(), pDstIndex->m_tString.GetWritePtr(), sError );
-		pFilter = sphJoinFilters ( pFilter, pSpaFilter );
-	}
+	int iOldLen = dPhantomKiller.GetLength();
+	int iKillLen = dKillList.GetLength();
+	dPhantomKiller.Resize ( iOldLen+iKillLen );
+	memcpy ( dPhantomKiller.Begin()+iOldLen, dKillList.Begin(), sizeof(SphDocID_t)*iKillLen );
+	dPhantomKiller.Uniq();
 
-	CSphAutofile fdTmpDict ( pDstIndex->GetIndexFileName("tmp8.spi"), SPH_O_NEW, sError, true );
-	CSphAutofile fdDict ( pDstIndex->GetIndexFileName("tmp.spi"), SPH_O_NEW, sError );
+	CSphAutofile tTmpDict ( pDstIndex->GetIndexFileName("tmp8.spi"), SPH_O_NEW, sError, true );
+	CSphAutofile tDict ( pDstIndex->GetIndexFileName("tmp.spi"), SPH_O_NEW, sError );
 
-	if ( !sError.IsEmpty() || fdTmpDict.GetFD()<0 || fdDict.GetFD()<0 || *pForceTerminate )
+	if ( !sError.IsEmpty() || tTmpDict.GetFD()<0 || tDict.GetFD()<0 || *pForceTerminate )
 		return false;
 
 	CSphScopedPtr<CSphDict> pDict ( pDstIndex->m_pDict->Clone() );
@@ -14732,7 +14734,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	tBuildHeader.m_pMinRow = dMinRow.Begin();
 
 	// FIXME? is this magic dict block constant any good?..
-	pDict->DictBegin ( fdTmpDict, fdDict, iHitBufferSize, pThrottle );
+	pDict->DictBegin ( tTmpDict, tDict, iHitBufferSize, pThrottle );
 
 	// merge dictionaries, doclists and hitlists
 	if ( pDict->GetSettings().m_bWordDict )
@@ -14740,8 +14742,9 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		WITH_QWORD ( pDstIndex, false, QwordDst,
 			WITH_QWORD ( pSrcIndex, false, QwordSrc,
 		{
-			if ( !CSphIndex_VLN::MergeWords < QwordDst, QwordSrc > ( pDstIndex, pSrcIndex, pFilter, uMinDocid,
-					&tHitBuilder, sError, tBuildHeader, tProgress, pThrottle, pForceTerminate ) )
+			if ( !CSphIndex_VLN::MergeWords < QwordDst, QwordSrc > ( pDstIndex, pSrcIndex, pFilter, dPhantomKiller,
+																	uMinDocid, &tHitBuilder, sError, tBuildHeader,
+																	tProgress, pThrottle, pForceTerminate ) )
 				return false;
 		} ) );
 	} else
@@ -14749,8 +14752,9 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		WITH_QWORD ( pDstIndex, true, QwordDst,
 			WITH_QWORD ( pSrcIndex, true, QwordSrc,
 		{
-			if ( !CSphIndex_VLN::MergeWords < QwordDst, QwordSrc > ( pDstIndex, pSrcIndex, pFilter, uMinDocid,
-					&tHitBuilder, sError, tBuildHeader, tProgress, pThrottle, pForceTerminate ) )
+			if ( !CSphIndex_VLN::MergeWords < QwordDst, QwordSrc > ( pDstIndex, pSrcIndex, pFilter, dPhantomKiller
+																	, uMinDocid, &tHitBuilder, sError, tBuildHeader,
+																	tProgress,	pThrottle, pForceTerminate ) )
 				return false;
 		} ) );
 	}
@@ -14759,36 +14763,32 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		tBuildHeader.m_iTotalDocuments = iTotalDocuments;
 
 	// merge kill-lists
-	CSphAutofile fdKillList ( pDstIndex->GetIndexFileName("tmp.spk"), SPH_O_NEW, sError );
-	if ( fdKillList.GetFD () < 0 )
+	CSphAutofile tKillList ( pDstIndex->GetIndexFileName("tmp.spk"), SPH_O_NEW, sError );
+	if ( tKillList.GetFD () < 0 )
 		return false;
 
 	if ( bMergeKillLists )
 	{
 		// merge spk
-		CSphVector<SphAttr_t> dKillList;
-		dKillList.Reserve ( pDstIndex->GetKillListSize() + pSrcIndex->GetKillListSize() );
-		for ( int i = 0; i < pSrcIndex->GetKillListSize (); i++ )
-			dKillList.Add ( pSrcIndex->GetKillList () [i] );
-
-		for ( int i = 0; i < pDstIndex->GetKillListSize (); i++ )
-			dKillList.Add ( pDstIndex->GetKillList () [i] );
-
+		CSphVector<SphDocID_t> dKillList;
+		dKillList.Reserve ( pDstIndex->GetKillListSize()+pSrcIndex->GetKillListSize() );
+		for ( int i=0; i<pSrcIndex->GetKillListSize(); i++ ) dKillList.Add ( pSrcIndex->GetKillList()[i] );
+		for ( int i=0; i<pDstIndex->GetKillListSize(); i++ ) dKillList.Add ( pDstIndex->GetKillList()[i] );
 		dKillList.Uniq ();
 
-		tBuildHeader.m_iKillListSize = dKillList.GetLength ();
+		tBuildHeader.m_uKillListSize = dKillList.GetLength ();
 
 		if ( *pForceTerminate )
 			return false;
 
 		if ( dKillList.GetLength() )
 		{
-			if ( !sphWriteThrottled ( fdKillList.GetFD(), &dKillList[0], dKillList.GetLength()*sizeof(SphAttr_t), "kill_list", sError, pThrottle ) )
+			if ( !sphWriteThrottled ( tKillList.GetFD(), &dKillList[0], dKillList.GetLength()*sizeof(SphDocID_t), "kill_list", sError, pThrottle ) )
 				return false;
 		}
 	}
 
-	fdKillList.Close ();
+	tKillList.Close ();
 
 	if ( *pForceTerminate )
 		return false;
@@ -14818,13 +14818,14 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 }
 
 
-bool sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, ISphFilter * pFilter,
-				CSphString & sError, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle, volatile bool * pForceTerminate )
+bool sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, const CSphVector<SphDocID_t> & dKillList,
+				CSphString & sError, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle,
+				volatile bool * pForceTerminate )
 {
 	const CSphIndex_VLN * pDstIndex = (const CSphIndex_VLN *)pDst;
 	const CSphIndex_VLN * pSrcIndex = (const CSphIndex_VLN *)pSrc;
 
-	return CSphIndex_VLN::DoMerge ( pDstIndex, pSrcIndex, false, pFilter, sError, tProgress, pThrottle, pForceTerminate );
+	return CSphIndex_VLN::DoMerge ( pDstIndex, pSrcIndex, false, NULL, dKillList, sError, tProgress, pThrottle, pForceTerminate );
 }
 
 
@@ -15049,7 +15050,7 @@ bool CSphIndex_VLN::EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) 
 }
 
 
-SphAttr_t * CSphIndex_VLN::GetKillList () const
+SphDocID_t * CSphIndex_VLN::GetKillList () const
 {
 	return m_pKillList.GetWritePtr ();
 }
@@ -15087,38 +15088,38 @@ bool CSphIndex_VLN::BuildDocList ( SphAttr_t ** ppDocList, int64_t * pCount, CSp
 	return true;
 }
 
-bool CSphIndex_VLN::ReplaceKillist ( const SphAttr_t * pKillist, int iCount )
+bool CSphIndex_VLN::ReplaceKillList ( const SphDocID_t * pKillist, int iCount )
 {
 	// dump killlist
-	CSphAutofile fdKillList ( GetIndexFileName("spk"), SPH_O_NEW, m_sLastError );
-	if ( fdKillList.GetFD()<0 )
+	CSphAutofile tKillList ( GetIndexFileName("spk"), SPH_O_NEW, m_sLastError );
+	if ( tKillList.GetFD()<0 )
 		return false;
 
-	if ( !sphWriteThrottled ( fdKillList.GetFD(), pKillist, iCount*sizeof(SphAttr_t), "kill list", m_sLastError, &g_tThrottle ) )
+	if ( !sphWriteThrottled ( tKillList.GetFD(), pKillist, iCount*sizeof(SphDocID_t), "kill list", m_sLastError, &g_tThrottle ) )
 		return false;
 
-	fdKillList.Close ();
+	tKillList.Close ();
 
 	BuildHeader_t tBuildHeader ( m_tStats );
 	(DictHeader_t &)tBuildHeader = (DictHeader_t)m_tWordlist;
 	tBuildHeader.m_sHeaderExtension = "sph";
 	tBuildHeader.m_pThrottle = &g_tThrottle;
 	tBuildHeader.m_uMinDocid = m_uMinDocid;
-	tBuildHeader.m_iKillListSize = iCount;
-	tBuildHeader.m_uMinMaxIndex = m_uMinMaxIndex;
+	tBuildHeader.m_uKillListSize = iCount;
+	tBuildHeader.m_iMinMaxIndex = m_iMinMaxIndex;
 
 	if ( !BuildDone ( tBuildHeader, m_sLastError ) )
 		return false;
 
 	m_pKillList.Reset ();
-	m_iKillListSize = 0;
+	m_uKillListSize = 0;
 	if ( iCount )
 	{
 		if ( !m_pKillList.Alloc ( iCount, m_sLastError, m_sLastWarning ) )
 			return false;
 
-		memcpy ( m_pKillList.GetWritePtr(), pKillist, sizeof(SphAttr_t)*iCount );
-		m_iKillListSize = iCount;
+		memcpy ( m_pKillList.GetWritePtr(), pKillist, sizeof(SphDocID_t)*iCount );
+		m_uKillListSize = iCount;
 	}
 
 	return true;
@@ -15410,7 +15411,6 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 	// do searching
 	CSphMatch * pMatch = pRanker->GetMatchesBuffer();
 	int iKillIdx = 0;
-	SphDocID_t uKillDocID = dKillList [ iKillIdx ];
 	for ( ;; )
 	{
 		// ranker does profile switches internally
@@ -15422,9 +15422,9 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 			pProfile->Switch ( SPH_QSTATE_SORT );
 		for ( int i=0; i<iMatches; i++ )
 		{
-			while ( uKillDocID<pMatch[i].m_uDocID )
-				uKillDocID = dKillList [ ++iKillIdx ];
-			if ( uKillDocID==pMatch[i].m_uDocID )
+			while ( dKillList [ iKillIdx ]<pMatch[i].m_uDocID )
+				++iKillIdx;
+			if ( dKillList [ iKillIdx ]==pMatch[i].m_uDocID )
 				continue;
 
 			if ( pCtx->m_bLookupSort )
@@ -15609,7 +15609,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 		&& pQuery->m_dFilters[0].m_eType==SPH_FILTER_VALUES
 		&& pQuery->m_dFilters[0].m_bExclude==false
 		&& pQuery->m_dFilters[0].m_sAttrName=="@id"
-		&& tArgs.m_dKillList.GetLength()==2 )
+		&& tArgs.m_dKillList.GetLength()==2 ) // [ 0, DOCID_MAX ]
 	{
 		// run id lookups
 		for ( int i=0; i<pQuery->m_dFilters[0].GetNumValues(); i++ )
@@ -15643,7 +15643,6 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 		int iCutoff = ( pQuery->m_iCutoff<=0 ) ? -1 : pQuery->m_iCutoff;
 
 		int iKillIdx = bReverse ? tArgs.m_dKillList.GetLength()-1 : 0;
-		SphDocID_t uKillDocID = tArgs.m_dKillList [ iKillIdx ];
 
 		DWORD uStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 		int64_t iStart = bReverse ? m_iDocinfoIndex-1 : 0;
@@ -15681,14 +15680,14 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 					// than creating an ISphFilter.
 					if ( !pQuery->m_bReverseScan )
 					{
-						while ( uKillDocID<tMatch.m_uDocID )
-							uKillDocID = tArgs.m_dKillList [ ++iKillIdx ];
+						while ( tArgs.m_dKillList [ iKillIdx ]<tMatch.m_uDocID )
+							++iKillIdx;
 					} else
 					{
-						while ( uKillDocID>tMatch.m_uDocID )
-							uKillDocID = tArgs.m_dKillList [ --iKillIdx ];
+						while ( tArgs.m_dKillList [ iKillIdx ]>tMatch.m_uDocID )
+							--iKillIdx;
 					}
-					if ( uKillDocID==tMatch.m_uDocID )
+					if ( tArgs.m_dKillList [ iKillIdx ]==tMatch.m_uDocID )
 						continue;
 
 					tMatch.m_pStatic = DOCINFO2ATTRS ( pDocinfo );
@@ -15713,14 +15712,14 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 
 					if ( !pQuery->m_bReverseScan )
 					{
-						while ( uKillDocID<tMatch.m_uDocID )
-							uKillDocID = tArgs.m_dKillList [ ++iKillIdx ];
+						while ( tArgs.m_dKillList [ iKillIdx ]<tMatch.m_uDocID )
+							++iKillIdx;
 					} else
 					{
-						while ( uKillDocID>tMatch.m_uDocID )
-							uKillDocID = tArgs.m_dKillList [ --iKillIdx ];
+						while ( tArgs.m_dKillList [ iKillIdx ]>tMatch.m_uDocID )
+							--iKillIdx;
 					}
-					if ( uKillDocID==tMatch.m_uDocID )
+					if ( tArgs.m_dKillList [ iKillIdx ]==tMatch.m_uDocID )
 						continue;
 
 					CopyDocinfo ( &tCtx, tMatch, pDocinfo );
@@ -16040,7 +16039,7 @@ void CSphIndex_VLN::Dealloc ()
 	m_dStringMapped.Close();
 
 	m_iDocinfo = 0;
-	m_uMinMaxIndex = 0;
+	m_iMinMaxIndex = 0;
 	m_tSettings.m_eDocinfo = SPH_DOCINFO_NONE;
 
 	m_bPreallocated = false;
@@ -16324,12 +16323,12 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 	}
 
 	if ( m_uVersion>=10 )
-		m_iKillListSize = rdInfo.GetDword ();
+		m_uKillListSize = rdInfo.GetDword ();
 
 	if ( m_uVersion>=33 )
-		m_uMinMaxIndex = rdInfo.GetOffset ();
+		m_iMinMaxIndex = rdInfo.GetOffset ();
 	else if ( m_uVersion>=20 )
-		m_uMinMaxIndex = rdInfo.GetDword ();
+		m_iMinMaxIndex = rdInfo.GetDword ();
 
 	if ( m_uVersion>=28 )
 	{
@@ -16574,8 +16573,8 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 		fprintf ( fp, "min-stemming-len: %d\n", tSettings.m_iMinStemmingLen );
 	}
 
-	fprintf ( fp, "killlist-size: %d\n", m_iKillListSize );
-	fprintf ( fp, "min-max-index: "UINT64_FMT"\n", m_uMinMaxIndex );
+	fprintf ( fp, "killlist-size: %u\n", m_uKillListSize );
+	fprintf ( fp, "min-max-index: "INT64_FMT"\n", m_iMinMaxIndex );
 
 	if ( m_pFieldFilter )
 	{
@@ -16840,7 +16839,7 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 			if ( iDocinfoSize<0 )
 				return false;
 			iDocinfoSize = iDocinfoSize / sizeof(DWORD);
-			int64_t iRealDocinfoSize = m_uMinMaxIndex ? m_uMinMaxIndex : iDocinfoSize;
+			int64_t iRealDocinfoSize = m_iMinMaxIndex ? m_iMinMaxIndex : iDocinfoSize;
 			m_iDocinfo = iRealDocinfoSize / iStride;
 
 			if ( !CheckDocsCount ( m_iDocinfo, m_sLastError ) )
@@ -16850,13 +16849,13 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 			{
 				m_sLastError.SetSprintf ( "precomputed chunk size check mismatch" );
 				sphLogDebug ( "precomputed chunk size check mismatch (size="INT64_FMT", real="INT64_FMT", min-max="INT64_FMT", count="INT64_FMT")",
-					iDocinfoSize, iRealDocinfoSize, m_uMinMaxIndex, m_iDocinfo );
+					iDocinfoSize, iRealDocinfoSize, m_iMinMaxIndex, m_iDocinfo );
 				return false;
 			}
 
 			// FIXME!!! preload min-max index
 			m_iDocinfoIndex = ( ( iDocinfoSize - iRealDocinfoSize ) / iStride / 2 ) - 1;
-			m_pDocinfoIndex = m_dAttrMapped.GetWritePtr() + m_uMinMaxIndex;
+			m_pDocinfoIndex = m_dAttrMapped.GetWritePtr() + m_iMinMaxIndex;
 
 			m_tAttr.Set ( m_dAttrMapped.GetWritePtr(), m_dAttrMapped.GetNumEntries() );
 		} else
@@ -16872,7 +16871,7 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 			if ( iDocinfoSize<0 )
 				return false;
 			iDocinfoSize = iDocinfoSize / sizeof(DWORD);
-			int64_t iRealDocinfoSize = m_uMinMaxIndex ? m_uMinMaxIndex : iDocinfoSize;
+			int64_t iRealDocinfoSize = m_iMinMaxIndex ? m_iMinMaxIndex : iDocinfoSize;
 			m_iDocinfo = iRealDocinfoSize / iStride;
 
 
@@ -16880,7 +16879,7 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 			{
 				// check also the case of id32 here, and correct m_iDocinfo for it
 				m_iDocinfo = iRealDocinfoSize / iStride2;
-				m_uMinMaxIndex = m_uMinMaxIndex / iStride2 * iStride;
+				m_iMinMaxIndex = m_iMinMaxIndex / iStride2 * iStride;
 			}
 
 			if ( !CheckDocsCount ( m_iDocinfo, m_sLastError ) )
@@ -16903,7 +16902,7 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 				{
 					m_sLastError.SetSprintf ( "precomputed chunk size check mismatch" );
 					sphLogDebug ( "precomputed chunk size check mismatch (size="INT64_FMT", real="INT64_FMT", min-max="INT64_FMT", count="INT64_FMT")",
-						iDocinfoSize, iRealDocinfoSize, m_uMinMaxIndex, m_iDocinfo );
+						iDocinfoSize, iRealDocinfoSize, m_iMinMaxIndex, m_iDocinfo );
 					return false;
 				}
 
@@ -16913,7 +16912,7 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 				if ( !m_dAttrShared.Alloc ( iDocinfoSize + ( m_bId32to64 ? ( m_iDocinfo + m_iDocinfoIndex*2 + 2 ) : 0 ), m_sLastError, sWarning ) )
 					return false;
 
-				m_pDocinfoIndex = m_dAttrShared.GetWritePtr() + m_uMinMaxIndex;
+				m_pDocinfoIndex = m_dAttrShared.GetWritePtr() + m_iMinMaxIndex;
 			}
 
 			m_tAttr.Set ( m_dAttrShared.GetWritePtr(), m_dAttrShared.GetNumEntries() );
@@ -16993,24 +16992,27 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 	// prealloc killlist
 	if ( m_uVersion>=10 )
 	{
-		CSphAutofile fdKillList ( GetIndexFileName("spk"), SPH_O_READ, m_sLastError );
-		if ( fdKillList.GetFD()<0 )
+		CSphAutofile tKillList ( GetIndexFileName("spk"), SPH_O_READ, m_sLastError );
+		if ( tKillList.GetFD()<0 )
 			return false;
 
-		SphOffset_t iSize = fdKillList.GetSize ( 0, true, m_sLastError );
+		SphOffset_t iSize = tKillList.GetSize ( 0, true, m_sLastError );
 		if ( iSize<0 )
 			return false;
 
-		if ( iSize!=(SphOffset_t)( m_iKillListSize*sizeof(SphAttr_t) ) )
+		if ( m_bId32to64 )
+			iSize *= 2;
+
+		if ( iSize!=(SphOffset_t)( m_uKillListSize*sizeof(SphDocID_t) ) )
 		{
 			m_sLastError.SetSprintf ( "header k-list size does not match .spk size (klist=" INT64_FMT ", spk=" INT64_FMT ")",
-				(int64_t)( m_iKillListSize*sizeof(SphAttr_t) ),
+				(int64_t)( m_uKillListSize*sizeof(SphDocID_t) ),
 				(int64_t) iSize );
 			return false;
 		}
 
 		// prealloc
-		if ( iSize>0 && !m_pKillList.Alloc ( m_iKillListSize, m_sLastError, sWarning ) )
+		if ( iSize>0 && !m_pKillList.Alloc ( m_uKillListSize, m_sLastError, sWarning ) )
 			return false;
 	}
 
@@ -17096,8 +17098,16 @@ bool CSphIndex_VLN::Preread ()
 
 	m_tProgress.m_iBytesTotal += m_tWordlist.m_pBuf.GetLengthBytes();
 
-	int64_t iExpected = ( m_uVersion<20 ? m_iDocinfo * ( ( m_bId32to64 ? 1 : DOCINFO_IDSIZE ) + m_tSchema.GetRowSize() ) * sizeof(DWORD) : 0 );
-	int64_t iOffset = ( m_bId32to64 ? ( m_iDocinfo + 2 + m_iDocinfoIndex * 2 ) : 0 );
+	int64_t iExpected = 0;
+	if ( m_uVersion<20 )
+	{
+		int iDwordsInID = m_bId32to64 ? 1 : 2;
+		iExpected = m_iDocinfo * ( iDwordsInID + m_tSchema.GetRowSize() ) * sizeof(DWORD);
+	}
+
+	int64_t iOffset = 0;
+	if ( m_bId32to64 )
+		iOffset = m_iDocinfo + 2 + m_iDocinfoIndex*2;
 
 	if ( !m_bOndiskAllAttr )
 	{
@@ -17112,14 +17122,15 @@ bool CSphIndex_VLN::Preread ()
 			return false;
 	}
 
-	if ( !PrereadSharedBuffer ( m_pKillList, "spk" ) )
+	int iKillListOffset = m_bId32to64 ? m_pKillList.GetLengthBytes()/2/sizeof(SphDocID_t) : 0;
+	if ( !PrereadSharedBuffer ( m_pKillList, "spk", 0, iKillListOffset ) )
 		return false;
 	if ( !PrereadSharedBuffer ( m_pSkiplists, "spe" ) )
 		return false;
 
 #if PARANOID
-	for ( int i = 1; i < (int)m_iKillListSize; i++ )
-		assert ( m_pKillList[i-1] < m_pKillList[i] );
+	for ( int i=1; i<(int)m_uKillListSize; i++ )
+		assert ( m_pKillList [ i-1 ]<m_pKillList[i] );
 #endif
 
 	// preload wordlist
@@ -17133,6 +17144,14 @@ bool CSphIndex_VLN::Preread ()
 	//////////////////////
 	// precalc everything
 	//////////////////////
+
+	if ( m_pKillList.GetLengthBytes() && m_bId32to64 )
+	{
+		SphDocID_t * pDst = m_pKillList.GetWritePtr();
+		const DWORD * pSrc = reinterpret_cast<const DWORD*> ( pDst ) + m_uKillListSize;
+		for ( DWORD i=0; i<m_uKillListSize; ++i )
+			*pDst++ = *pSrc++;
+	}
 
 	// convert id32 to id64
 	if ( m_dAttrShared.GetLengthBytes() && m_bId32to64 ) // FIXME!!! can't 32->64 convert ondisk_attrs
@@ -20313,9 +20332,9 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 	fprintf ( fp, "checking kill-list...\n" );
 
 	// check size
-	if ( m_pKillList.GetNumEntries()!=m_iKillListSize )
+	if ( m_pKillList.GetNumEntries()!=m_uKillListSize )
 		LOC_FAIL(( fp, "kill-list size differs (expected=%d, got="INT64_FMT")",
-			m_iKillListSize, (int64_t)m_pKillList.GetNumEntries() ));
+			m_uKillListSize, (int64_t)m_pKillList.GetNumEntries() ));
 
 	// check that ids are ascending
 	for ( DWORD uID=1; uID<m_pKillList.GetNumEntries(); uID++ )
@@ -31642,11 +31661,11 @@ void sphDictBuildInfixes ( const char * sPath )
 
 	// ready to party
 	// open all the cans!
-	CSphAutofile fdDict;
-	fdDict.Open ( sFilename, SPH_O_READ, sError );
+	CSphAutofile tDict;
+	tDict.Open ( sFilename, SPH_O_READ, sError );
 
 	CSphReader rdDict;
-	rdDict.SetFile ( fdDict );
+	rdDict.SetFile ( tDict );
 	rdDict.SeekTo ( 0, READ_NO_SIZE_HINT );
 
 	CSphWriter wrDict;
@@ -31661,7 +31680,7 @@ void sphDictBuildInfixes ( const char * sPath )
 	pInfixer->SaveEntries ( wrDict );
 
 	// copy checkpoints
-	int iCheckpointsSize = (int)( fdDict.GetSize() - tDictHeader.m_iDictCheckpointsOffset );
+	int iCheckpointsSize = (int)( tDict.GetSize() - tDictHeader.m_iDictCheckpointsOffset );
 	tDictHeader.m_iDictCheckpointsOffset = wrDict.GetPos();
 	CopyBytes ( wrDict, rdDict, iCheckpointsSize );
 
@@ -31684,7 +31703,7 @@ void sphDictBuildInfixes ( const char * sPath )
 
 	if ( rdDict.GetErrorFlag() )
 		sphDie ( "infix upgrade: dictionary read error" );
-	fdDict.Close();
+	tDict.Close();
 
 	////////////////////
 	// write new header

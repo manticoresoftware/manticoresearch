@@ -209,7 +209,7 @@ class CSphKilllist : public ISphNoncopyable
 {
 private:
 	static const int				MAX_SMALL_SIZE = 512;
-	CSphVector < SphAttr_t >		m_dLargeKlist;
+	CSphVector<SphDocID_t>			m_dLargeKlist;
 	CSphOrderedHash < bool, SphDocID_t, IdentityHash_fn, MAX_SMALL_SIZE >	m_hSmallKlist;
 	CSphMutex						m_tLock;
 
@@ -241,11 +241,7 @@ public:
 			// so Reserve() inside NakedFlush will do no unnecessary allocations in m_dLargeKlist
 			m_dLargeKlist.Reserve ( iOff + iCount + m_hSmallKlist.GetLength() );
 			m_dLargeKlist.Resize ( iOff + iCount );
-
-			// can not just use memcpy as SphAttr_t(always 64bits) != SphDocID_t(might be 32 or 64 bits)
-			SphAttr_t * pDst = m_dLargeKlist.Begin() + iOff;
-			while ( iCount-- )
-				*pDst++ = *pDocs++;
+			memcpy ( m_dLargeKlist.Begin()+iOff, pDocs, sizeof(SphDocID_t)*iCount );
 
 			NakedFlush();
 		} else
@@ -254,11 +250,11 @@ public:
 				m_hSmallKlist.Add ( true, *pDocs++ );
 		}
 	}
-	inline const SphAttr_t * GetKillList() const { return m_dLargeKlist.Begin(); }
+	inline const SphDocID_t * GetKillList() const { return m_dLargeKlist.Begin(); }
 	inline int	GetKillListSize() const { return m_dLargeKlist.GetLength(); }
 	bool Exists ( SphDocID_t uDoc )
 	{
-		return ( m_hSmallKlist.Exists ( uDoc ) || m_dLargeKlist.BinarySearch ( SphAttr_t(uDoc))!=NULL );
+		return ( m_hSmallKlist.Exists ( uDoc ) || m_dLargeKlist.BinarySearch ( uDoc )!=NULL );
 	}
 };
 
@@ -294,17 +290,17 @@ void CSphKilllist::LoadFromFile ( const char * sFilename )
 	if ( !sphIsReadable ( sName.cstr(), &sError ) )
 		return;
 
-	CSphAutoreader rdKlist;
-	if ( !rdKlist.Open ( sName, sError ) )
+	CSphAutoreader tKlistReader;
+	if ( !tKlistReader.Open ( sName, sError ) )
 		return;
 
 	// FIXME!!! got rid of locks here
 	m_tLock.Lock();
-	m_dLargeKlist.Resize ( rdKlist.GetDword() );
+	m_dLargeKlist.Resize ( tKlistReader.GetDword() );
 	SphDocID_t uLastDocID = 0;
 	ARRAY_FOREACH ( i, m_dLargeKlist )
 	{
-		uLastDocID += ( SphDocID_t ) rdKlist.UnzipOffset();
+		uLastDocID += ( SphDocID_t ) tKlistReader.UnzipOffset();
 		m_dLargeKlist[i] = uLastDocID;
 	};
 	m_tLock.Unlock();
@@ -316,20 +312,20 @@ void CSphKilllist::SaveToFile ( const char * sFilename )
 	m_tLock.Lock();
 	NakedFlush();
 
-	CSphWriter wrKlist;
+	CSphWriter tKlistWriter;
 	CSphString sName, sError;
 	sName.SetSprintf ( "%s.kill", sFilename );
-	wrKlist.OpenFile ( sName.cstr(), sError );
+	tKlistWriter.OpenFile ( sName.cstr(), sError );
 
-	wrKlist.PutDword ( m_dLargeKlist.GetLength() );
+	tKlistWriter.PutDword ( m_dLargeKlist.GetLength() );
 	SphDocID_t uLastDocID = 0;
 	ARRAY_FOREACH ( i, m_dLargeKlist )
 	{
-		wrKlist.ZipOffset ( m_dLargeKlist[i] - uLastDocID );
+		tKlistWriter.ZipOffset ( m_dLargeKlist[i] - uLastDocID );
 		uLastDocID = ( SphDocID_t ) m_dLargeKlist[i];
 	};
 	m_tLock.Unlock();
-	wrKlist.CloseFile();
+	tKlistWriter.CloseFile();
 }
 
 // this is what actually stores index data
@@ -1032,7 +1028,7 @@ private:
 	CSphMutex					m_tSaveOuterMutex;
 	int							m_iDoubleBuffer;
 	CSphVector<SphDocID_t>		m_dNewSegmentKlist;					///< raw docid container
-	CSphFixedVector<SphAttr_t>	m_dDiskChunkKlist;					///< ordered SphAttr_t kill list
+	CSphFixedVector<SphDocID_t>	m_dDiskChunkKlist;					///< ordered SphDocID_t kill list
 
 	int64_t						m_iSoftRamLimit;
 	int64_t						m_iDoubleBufferLimit;
@@ -1103,7 +1099,7 @@ public:
 #pragma warning(push,1)
 #pragma warning(disable:4100)
 #endif
-	virtual SphAttr_t *			GetKillList () const				{ return NULL; }
+	virtual SphDocID_t *		GetKillList () const				{ return NULL; }
 	virtual int					GetKillListSize () const			{ return 0; }
 	virtual bool				HasDocid ( SphDocID_t ) const		{ assert ( 0 ); return false; }
 
@@ -2887,7 +2883,6 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 		for ( int i=0; i<iDiskLiveKLen; i++ )
 		{
 			SphDocID_t uDocid = dAccKlist[i];
-			SphAttr_t uRef = uDocid; // for sphBinarySearch()
 
 			// the most recent part of RT index is its RAM chunk, so first search it
 			// then search chunk which is saving right now
@@ -2914,7 +2909,7 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 					break;
 
 				// killed in one of disk chunks?
-				if ( sphBinarySearch ( m_dDiskChunkKlist.Begin(), m_dDiskChunkKlist.Begin()+m_dDiskChunkKlist.GetLength()-1, uRef ) )
+				if ( sphBinarySearch ( m_dDiskChunkKlist.Begin(), m_dDiskChunkKlist.Begin()+m_dDiskChunkKlist.GetLength()-1, uDocid ) )
 					break;
 
 				for ( int j=m_dDiskChunks.GetLength()-1; j>=0; --j )
@@ -2923,7 +2918,7 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 					if ( bSavedOrDiskAlive )
 						break;
 					// killed in previous disk chunks?
-					if ( sphBinarySearch ( m_dDiskChunks[j]->GetKillList(), m_dDiskChunks[j]->GetKillList()+m_dDiskChunks[j]->GetKillListSize()-1, uRef ) )
+					if ( sphBinarySearch ( m_dDiskChunks[j]->GetKillList(), m_dDiskChunks[j]->GetKillList()+m_dDiskChunks[j]->GetKillListSize()-1, uDocid ) )
 						break;
 				}
 
@@ -3063,7 +3058,7 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 	m_tKlist.Flush();
 	m_dDiskChunkKlist.Reset ( m_tKlist.GetKillListSize() );
 	if ( m_tKlist.GetKillListSize() )
-		memcpy ( m_dDiskChunkKlist.Begin(), m_tKlist.GetKillList(), sizeof(SphAttr_t)*m_tKlist.GetKillListSize() );
+		memcpy ( m_dDiskChunkKlist.Begin(), m_tKlist.GetKillList(), sizeof(SphDocID_t)*m_tKlist.GetKillListSize() );
 
 	SaveDiskChunk ( iTID, dSegments2Dump, tStat2Dump );
 	g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), iTID, false );
@@ -3135,7 +3130,7 @@ void RtIndex_t::ForceDiskChunk ()
 
 	m_tKlist.Flush();
 	m_dDiskChunkKlist.Reset ( m_tKlist.GetKillListSize() );
-	memcpy ( m_dDiskChunkKlist.Begin(), m_tKlist.GetKillList(), sizeof(SphAttr_t)*m_tKlist.GetKillListSize() );
+	memcpy ( m_dDiskChunkKlist.Begin(), m_tKlist.GetKillList(), sizeof(SphDocID_t)*m_tKlist.GetKillListSize() );
 	Verify ( m_tRwlock.Unlock() );
 
 	SaveDiskChunk ( m_iTID, m_dSegments, m_tStats );
@@ -3615,7 +3610,7 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const CSphVector<RtSe
 	sName.SetSprintf ( "%s.spk", sFilename );
 	wrDummy.OpenFile ( sName.cstr(), sError );
 	if ( m_dDiskChunkKlist.GetLength() )
-		wrDummy.PutBytes ( m_dDiskChunkKlist.Begin(), m_dDiskChunkKlist.GetLength()*sizeof ( SphAttr_t ) );
+		wrDummy.PutBytes ( m_dDiskChunkKlist.Begin(), m_dDiskChunkKlist.GetLength()*sizeof ( SphDocID_t ) );
 	wrDummy.CloseFile ();
 
 	uint64_t uMinMax = (uint64_t)iTotalDocs * iStride;
@@ -4305,7 +4300,7 @@ void RtIndex_t::PostSetup()
 		m_dDiskChunkKlist.Reset ( m_tKlist.GetKillListSize() );
 		if ( m_tKlist.GetKillListSize() )
 		{
-			memcpy ( m_dDiskChunkKlist.Begin(), m_tKlist.GetKillList(), sizeof(SphAttr_t)*m_tKlist.GetKillListSize() );
+			memcpy ( m_dDiskChunkKlist.Begin(), m_tKlist.GetKillList(), sizeof(SphDocID_t)*m_tKlist.GetKillListSize() );
 		}
 		SaveDiskChunk ( m_iTID, m_dSegments, m_tStats );
 		// since the RAM chunk is just stored as id32, we are no more in compat mode
@@ -6466,7 +6461,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	for ( int iChunk = m_dDiskChunks.GetLength()-1; iChunk>=0; iChunk-- )
 	{
 		// collect & sort cumulative killlist for this chunk
-		const SphAttr_t * pKlist = NULL;
+		const SphDocID_t * pKlist = NULL;
 		int iKlistEntries = 0;
 		if ( iChunk==m_dDiskChunks.GetLength()-1 )
 		{
@@ -6483,24 +6478,24 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		{
 			// merging two kill lists, assuming they have sorted data
 			const SphDocID_t * pSrc1 = dCumulativeKList.Begin();
-			const SphAttr_t * pSrc2 = pKlist;
+			const SphDocID_t * pSrc2 = pKlist;
 			const SphDocID_t * pEnd1 = pSrc1 + dCumulativeKList.GetLength();
-			const SphAttr_t * pEnd2 = pSrc2 + iKlistEntries;
+			const SphDocID_t * pEnd2 = pSrc2 + iKlistEntries;
 			CSphVector<SphDocID_t> dNewCumulative ( ( pEnd1-pSrc1 )+( pEnd2-pSrc2 ) );
 			SphDocID_t * pDst = dNewCumulative.Begin();
 
 			while ( pSrc1!=pEnd1 && pSrc2!=pEnd2 )
 			{
-				if ( *pSrc1<(SphDocID_t)*pSrc2 )
+				if ( *pSrc1<*pSrc2 )
 					*pDst = *pSrc1++;
-				else if ( (SphDocID_t)*pSrc2<*pSrc1 )
+				else if ( *pSrc2<*pSrc1 )
 					*pDst = *pSrc2++;
 				else
 				{
 					*pDst = *pSrc1++;
 					// handle duplicates
 					while ( *pDst==*pSrc1 ) pSrc1++;
-					while ( *pDst==(SphDocID_t)*pSrc2 ) pSrc2++;
+					while ( *pDst==*pSrc2 ) pSrc2++;
 				}
 				pDst++;
 			}
@@ -7522,7 +7517,7 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 		{
 			m_tKlist.Flush(); // no need to lock here as it got protected here by writer locks
 		}
-		const SphAttr_t uRef = ( tUpd.m_dRows[iUpd] ? DOCINFO2ID ( tUpd.m_dRows[iUpd] ) : tUpd.m_dDocids[iUpd] );
+		const SphDocID_t uRef = ( tUpd.m_dRows[iUpd] ? DOCINFO2ID ( tUpd.m_dRows[iUpd] ) : tUpd.m_dDocids[iUpd] );
 		bUpdated = ( sphBinarySearch ( m_tKlist.GetKillList(), m_tKlist.GetKillList() + m_tKlist.GetKillListSize() - 1, uRef )!=NULL );
 		if ( bUpdated )
 			continue;
@@ -7866,16 +7861,16 @@ bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 			return false;
 		}
 
-		SphAttr_t * pCombined = new SphAttr_t[(size_t)( iCount + pIndex->GetKillListSize() )];
-		memcpy ( pCombined, pIndexDocList, (size_t)( sizeof(SphAttr_t) * iCount ) );
-		memcpy ( pCombined+iCount, pIndex->GetKillList(), sizeof(SphAttr_t) * pIndex->GetKillListSize() );
+		SphDocID_t * pCombined = new SphDocID_t[(size_t)( iCount + pIndex->GetKillListSize() )];
+		memcpy ( pCombined, pIndexDocList, (size_t)( sizeof(SphDocID_t) * iCount ) );
+		memcpy ( pCombined+iCount, pIndex->GetKillList(), sizeof(SphDocID_t) * pIndex->GetKillListSize() );
 		iCount += pIndex->GetKillListSize();
 		SafeDeleteArray ( pIndexDocList );
 
 		// lock-less ForceDiskChunk
 		m_tKlist.Flush();
 		m_dDiskChunkKlist.Reset ( m_tKlist.GetKillListSize() );
-		memcpy ( m_dDiskChunkKlist.Begin(), m_tKlist.GetKillList(), sizeof(SphAttr_t)*m_tKlist.GetKillListSize() );
+		memcpy ( m_dDiskChunkKlist.Begin(), m_tKlist.GetKillList(), sizeof(SphDocID_t)*m_tKlist.GetKillListSize() );
 
 		SaveDiskChunk ( m_iTID, m_dSegments, m_tStats );
 
@@ -7885,7 +7880,7 @@ bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 			const CSphIndex * pDiskIndex = m_dDiskChunks[iIndex];
 			for ( int i=0; i<iCount; i++ )
 			{
-				SphAttr_t uDocid = pCombined[i];
+				SphDocID_t uDocid = pCombined[i];
 				if ( !pDiskIndex->HasDocid ( (SphDocID_t)uDocid ) )
 					continue;
 
@@ -7919,10 +7914,10 @@ bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 			return false;
 		}
 
-		bool bKillistDone = pIndex->ReplaceKillist ( pCombined, (int)iCount );
+		bool bKillListDone = pIndex->ReplaceKillList ( pCombined, (int)iCount );
 		SafeDeleteArray ( pCombined );
 
-		if ( !bKillistDone )
+		if ( !bKillListDone )
 		{
 			sError.SetSprintf ( "ATTACH failed, kill-list replacement error (error='%s', warning='%s'", pIndex->GetLastError().cstr(), pIndex->GetLastWarning().cstr() );
 			return false;
@@ -8043,14 +8038,14 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 	while ( m_dDiskChunks.GetLength()>1 && !*pForceTerminate )
 	{
 		m_bOptimizing = true;
-		CSphTightVector<SphAttr_t> dKlist;
+		CSphVector<SphDocID_t> dKlist;
 		Verify ( m_tRwlock.ReadLock () );
 
 		// make kill-list
 		// initially add RAM kill-list
 		m_tKlist.Flush();
 		dKlist.Resize ( m_tKlist.GetKillListSize() );
-		memcpy ( dKlist.Begin(), m_tKlist.GetKillList(), sizeof(SphAttr_t)*m_tKlist.GetKillListSize() );
+		memcpy ( dKlist.Begin(), m_tKlist.GetKillList(), sizeof(SphDocID_t)*m_tKlist.GetKillListSize() );
 
 		// add disk chunks kill-lists
 		for ( int iChunk=1; iChunk<m_dDiskChunks.GetLength(); iChunk++ )
@@ -8064,11 +8059,11 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 
 			int iOff = dKlist.GetLength();
 			dKlist.Resize ( iOff+pIndex->GetKillListSize() );
-			memcpy ( dKlist.Begin()+iOff, pIndex->GetKillList(), sizeof(SphAttr_t)*pIndex->GetKillListSize() );
-
-			// get rid of duplicates on each iteration to keep memory consumption low
-			dKlist.Uniq();
+			memcpy ( dKlist.Begin()+iOff, pIndex->GetKillList(), sizeof(SphDocID_t)*pIndex->GetKillListSize() );
 		}
+		dKlist.Add(0);
+		dKlist.Add ( DOCID_MAX );
+		dKlist.Uniq();
 
 		// merge 'older'(pSrc) to 'oldest'(pDst) and get 'merged' that names like 'oldest'+.tmp
 		// to got rid of keeping actual kill-list
@@ -8089,23 +8084,9 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 		if ( *pForceTerminate )
 			break;
 
-		// create filter from kill-list
-		CSphScopedPtr<ISphFilter> pFilter ( NULL );
-		if ( dKlist.GetLength() )
-		{
-			CSphFilterSettings tFilterSettings;
-			tFilterSettings.m_bExclude = true;
-			tFilterSettings.m_eType = SPH_FILTER_VALUES;
-			tFilterSettings.m_iMinValue = dKlist[0];
-			tFilterSettings.m_iMaxValue = dKlist.Last();
-			tFilterSettings.m_sAttrName = "@id";
-			tFilterSettings.SetExternalValues ( dKlist.Begin(), dKlist.GetLength() );
-			pFilter = sphCreateFilter ( tFilterSettings, tSchema, NULL, NULL, sError );
-		}
-
 		// merge data to disk ( data is constant during that phase )
 		CSphIndexProgress tProgress;
-		bool bMerged = sphMerge ( pOldest, pOlder, pFilter.Ptr(), sError, tProgress, pThrottle, pForceTerminate );
+		bool bMerged = sphMerge ( pOldest, pOlder, dKlist, sError, tProgress, pThrottle, pForceTerminate );
 		if ( !bMerged )
 		{
 			sphWarning ( "rt optimize: index %s: failed to merge %s to %s (error %s)",

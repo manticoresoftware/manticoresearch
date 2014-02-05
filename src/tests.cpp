@@ -962,7 +962,7 @@ class CSphDummyIndex : public CSphIndex
 {
 public:
 	CSphDummyIndex () : CSphIndex ( NULL, NULL ) {}
-	virtual SphAttr_t *			GetKillList () const { return NULL; }
+	virtual SphDocID_t *		GetKillList () const { return NULL; }
 	virtual int					GetKillListSize () const { return 0 ; }
 	virtual bool				HasDocid ( SphDocID_t ) const { return false; }
 	virtual int					Build ( const CSphVector<CSphSource*> & , int , int ) { return 0; }

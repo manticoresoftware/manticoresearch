@@ -1830,7 +1830,7 @@ char * strlwr ( char * s )
 #endif
 
 
-char * sphStrMacro ( const char * sTemplate, const char * sMacro, SphDocID_t uValue )
+static char * sphStrMacro ( const char * sTemplate, const char * sMacro, SphDocID_t uValue )
 {
 	// expand macro
 	char sExp[32];
@@ -1872,28 +1872,28 @@ char * sphStrMacro ( const char * sTemplate, const char * sMacro, SphDocID_t uVa
 }
 
 
-float sphToFloat ( const char * s )
+static float sphToFloat ( const char * s )
 {
 	if ( !s ) return 0.0f;
 	return (float)strtod ( s, NULL );
 }
 
 
-DWORD sphToDword ( const char * s )
+static DWORD sphToDword ( const char * s )
 {
 	if ( !s ) return 0;
 	return strtoul ( s, NULL, 10 );
 }
 
 
-uint64_t sphToUint64 ( const char * s )
+static uint64_t sphToUint64 ( const char * s )
 {
 	if ( !s ) return 0;
 	return strtoull ( s, NULL, 10 );
 }
 
 
-int64_t sphToInt64 ( const char * s )
+static int64_t sphToInt64 ( const char * s )
 {
 	if ( !s ) return 0;
 	return strtoll ( s, NULL, 10 );
@@ -4191,7 +4191,7 @@ void SaveDictionarySettings ( CSphWriter & tWriter, CSphDict * pDict, bool bForc
 }
 
 
-void LoadFieldFilterSettings ( CSphReader & tReader, CSphFieldFilterSettings & tFieldFilterSettings )
+static void LoadFieldFilterSettings ( CSphReader & tReader, CSphFieldFilterSettings & tFieldFilterSettings )
 {
 	int nRegexps = tReader.GetDword();
 	if ( !nRegexps )
@@ -12201,7 +12201,7 @@ class DeleteOnFail : public ISphNoncopyable
 public:
 	DeleteOnFail() : m_bShitHappened ( true )
 	{}
-	inline ~DeleteOnFail()
+	~DeleteOnFail()
 	{
 		if ( m_bShitHappened )
 		{
@@ -12212,17 +12212,17 @@ public:
 				m_dAutofiles[i]->SetTemporary();
 		}
 	}
-	inline void AddWriter ( CSphWriter* pWr )
+	void AddWriter ( CSphWriter * pWr )
 	{
 		if ( pWr )
 			m_dWriters.Add ( pWr );
 	}
-	inline void AddAutofile ( CSphAutofile* pAf )
+	void AddAutofile ( CSphAutofile * pAf )
 	{
 		if ( pAf )
 			m_dAutofiles.Add ( pAf );
 	}
-	inline void AllIsDone()
+	void AllIsDone()
 	{
 		m_bShitHappened = false;
 	}
@@ -13163,11 +13163,11 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 		SphOffset_t iDocinfoFileSize = 0;
 		if ( iDocinfoBlocks )
-			iDocinfoFileSize = dBins [iDocinfoBlocks-1]->m_iFilePos + dBins [iDocinfoBlocks-1]->m_iFileLeft;
+			iDocinfoFileSize = dBins [ iDocinfoBlocks-1 ]->m_iFilePos + dBins [ iDocinfoBlocks-1 ]->m_iFileLeft;
 
 		// docinfo queue
 		CSphFixedVector<DWORD> dDocinfoQueue ( iDocinfoBlocks*iDocinfoStride );
-		CSphQueue < int, CmpQueuedDocinfo_fn > qDocinfo ( iDocinfoBlocks );
+		CSphQueue < int, CmpQueuedDocinfo_fn > tDocinfo ( iDocinfoBlocks );
 
 		CmpQueuedDocinfo_fn::m_pStorage = dDocinfoQueue.Begin();
 		CmpQueuedDocinfo_fn::m_iStride = iDocinfoStride;
@@ -13181,7 +13181,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				return 0;
 			}
 			pDocinfo += iDocinfoStride;
-			qDocinfo.Push ( i );
+			tDocinfo.Push ( i );
 		}
 
 		// while the queue has data for us
@@ -13206,24 +13206,20 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		tMinMax.Prepare ( dMinMaxBuffer.Begin(), dMinMaxBuffer.Begin() + dMinMaxBuffer.GetLength() ); // FIXME!!! for over INT_MAX blocks
 
 		// the last (or, lucky, the only, string chunk)
-		dStringChunks.Add ( DWORD(tStrWriter.GetPos()-uStringChunk) );
+		dStringChunks.Add ( DWORD ( tStrWriter.GetPos()-uStringChunk ) );
 
 		tStrWriter.CloseFile();
 		if ( !dStringAttrs.GetLength() )
 			::unlink ( GetIndexFileName("tmps").cstr() );
 
 		SphDocID_t uLastDupe = 0;
-		while ( qDocinfo.GetLength() )
+		while ( tDocinfo.GetLength() )
 		{
 			// obtain bin index and next entry
-			int iBin = qDocinfo.Root();
+			int iBin = tDocinfo.Root();
 			DWORD * pEntry = dDocinfoQueue.Begin() + iBin*iDocinfoStride;
 
-			if ( DOCINFO2ID ( pEntry )<uLastId )
-			{
-				m_sLastError.SetSprintf ( "descending document prev id="DOCID_FMT", curr="DOCID_FMT" bin=%d", uLastId, DOCINFO2ID ( pEntry ), iBin );
-				return 0;
-			}
+			assert ( DOCINFO2ID ( pEntry )>=uLastId && "descending documents" );
 
 			// skip duplicates
 			if ( DOCINFO2ID ( pEntry )==uLastId )
@@ -13308,7 +13304,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 						{
 							iMinBlock = -1;
 							ARRAY_FOREACH ( i, dBins )
-								if ( !dBins[i]->IsEOF () && ( iMinBlock==-1 || dBins [i]->m_iFilePos<dBins [iMinBlock]->m_iFilePos ) )
+								if ( !dBins[i]->IsEOF () && ( iMinBlock==-1 || dBins [i]->m_iFilePos<dBins[iMinBlock]->m_iFilePos ) )
 									iMinBlock = i;
 						}
 
@@ -13333,7 +13329,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			}
 
 			// pop its index, update it, push its index again
-			qDocinfo.Pop ();
+			tDocinfo.Pop ();
 			ESphBinRead eRes = dBins[iBin]->ReadBytes ( pEntry, iDocinfoStride*sizeof(DWORD) );
 			if ( eRes==BIN_READ_ERROR )
 			{
@@ -13341,7 +13337,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				return 0;
 			}
 			if ( eRes==BIN_READ_OK )
-				qDocinfo.Push ( iBin );
+				tDocinfo.Push ( iBin );
 		}
 
 		if ( pDocinfo>dDocinfos.Begin() )
@@ -13418,9 +13414,9 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		// if we have more than 1 string chunks, we need several passes and bitmask to distinquish them
 		if ( dStringChunks.GetLength()>1 )
 		{
-			dStrOffsets.Resize ( iNumStrings+(iNumStrings>>5)+1 );
-			DWORD* pDocinfoBitmap = &dStrOffsets[iNumStrings];
-			for ( DWORD i=0; i<1+(iNumStrings>>5); ++i )
+			dStrOffsets.Resize ( iNumStrings+( iNumStrings>>5 )+1 );
+			DWORD* pDocinfoBitmap = &dStrOffsets [ iNumStrings ];
+			for ( DWORD i=0; i<1+( iNumStrings>>5 ); ++i )
 				pDocinfoBitmap[i] = 0;
 			SphOffset_t iMinStrings = 0;
 

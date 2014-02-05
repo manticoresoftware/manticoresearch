@@ -237,9 +237,6 @@ uint64_t		sphFNV64cont ( const void * pString, uint64_t uPrev );
 /// calculate file crc32
 bool			sphCalcFileCRC32 ( const char * szFilename, DWORD & uCRC32 );
 
-/// replaces all occurrences of sMacro in sTemplate with textual representation of uValue
-char *			sphStrMacro ( const char * sTemplate, const char * sMacro, SphDocID_t uValue );
-
 /// try to obtain an exclusive lock on specified file
 /// bWait specifies whether to wait
 bool			sphLockEx ( int iFile, bool bWait );

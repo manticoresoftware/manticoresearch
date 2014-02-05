@@ -17101,7 +17101,7 @@ bool CSphIndex_VLN::Preread ()
 	int64_t iExpected = 0;
 	if ( m_uVersion<20 )
 	{
-		int iDwordsInID = m_bId32to64 ? 1 : 2;
+		int iDwordsInID = m_bId32to64 ? 1 : DOCINFO_IDSIZE;
 		iExpected = m_iDocinfo * ( iDwordsInID + m_tSchema.GetRowSize() ) * sizeof(DWORD);
 	}
 

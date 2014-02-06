@@ -83,8 +83,11 @@ target_link_libraries (searchd libsphinx ${EXTRA_LIBRARIES})
 target_link_libraries (spelldump libsphinx ${EXTRA_LIBRARIES})
 target_link_libraries (tests libsphinx ${EXTRA_LIBRARIES})
 
+INSTALL(TARGETS indexer indextool searchd spelldump RUNTIME DESTINATION usr/bin)
+
 # testrt is win-only project
 if (WIN32)
 	add_executable (testrt testrt.cpp )
 	target_link_libraries (testrt libsphinx ${EXTRA_LIBRARIES})
 endif (WIN32)
+

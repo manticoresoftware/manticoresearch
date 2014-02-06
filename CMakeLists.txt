@@ -30,3 +30,19 @@ include (helpers)
 
 check_veryold_gcc()
 add_subdirectory (src)
+
+install(FILES sphinx-min.conf.dist DESTINATION etc/sphinx COMPONENT config)
+install(FILES doc/sphinx.html doc/sphinx.txt DESTINATION share/doc COMPONENT doc)
+
+set(CPACK_GENERATOR "DEB")
+set(CPACK_PACKAGE_NAME "SphinxSearch")
+set(CPACK_PACKAGE_VERSION_MAJOR "0")
+set(CPACK_PACKAGE_VERSION_MINOR "2")
+set(CPACK_PACKAGE_VERSION_PATCH "0")
+#set(CPACK_DEBIAN_PACKAGE_DEPENDS "cssrobopec,libqt4-xml,libqt4-network,libqtgui4,treeupdatablereeti")
+set(CPACK_PACKAGE_DESCRIPTION "Configure UExhibitor and launch missions")
+set(CPACK_PACKAGE_CONTACT "Sphinx package builds <builds@sphinxsearch.com>")
+#set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${CMAKE_CURRENT_SOURCE_DIR}/Debian/postinst")
+
+
+include (CPack)

@@ -275,7 +275,7 @@
 #cmakedefine USE_LIBSTEMMER
 
 /* little-endian */
-#cmakedefine USE_LITTLE_ENDIAN
+#cmakedefine USE_LITTLE_ENDIAN ${USE_LITTLE_ENDIAN}
 
 /* Define to 1 if you want to compile with MySQL support */
 #cmakedefine USE_MYSQL

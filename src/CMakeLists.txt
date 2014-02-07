@@ -1,32 +1,27 @@
 cmake_minimum_required (VERSION 2.8)
 
-cmake_policy(SET CMP0003 NEW)
-
-#include(TestBigEndian)
 include(CheckFunctionExists)
 
 if (NOT WIN32)
-#TEST_BIG_ENDIAN (BIG_ENDIAN)
-#if(BIG_ENDIAN)
-#	add_definitions(-DUSE_LITTLE_ENDIAN=no)
-#else(BIG_ENDIAN)
-	add_definitions(-DUSE_LITTLE_ENDIAN=yes)
-#endif(BIG_ENDIAN)
-else()
-	add_definitions(-D_WIN32)
+include (check_veryold_gcc)
+include (SphEndianess)
 endif()
 
 # Fill system details for future
-execute_process(COMMAND "${CMAKE_CXX_COMPILER}" "-dumpversion" OUTPUT_VARIABLE gcc_ver)
-string(REGEX REPLACE "\n" "" COMPILER "${CMAKE_CXX_COMPILER} ${gcc_ver}")
-execute_process(COMMAND "uname" "-a" OUTPUT_VARIABLE OS_UNAME)
-string(REGEX REPLACE "\n" "" OS_UNAME "${OS_UNAME}")
-set(CONFIGURE_FLAGS "none, used cmake")
+if (CMAKE_COMPILER_IS_GNUCXX)
+	execute_process(COMMAND "${CMAKE_CXX_COMPILER}" "-dumpversion" OUTPUT_VARIABLE gcc_ver)
+	remove_crlf(COMPILER ${gcc_ver})
+endif (CMAKE_COMPILER_IS_GNUCXX)
+if (UNIX AND NOT CYGWIN)
+	execute_process(COMMAND "uname" "-a" OUTPUT_VARIABLE OS_UNAME)
+	remove_crlf(OS_UNAME ${OS_UNAME})
+	set(CONFIGURE_FLAGS "none, used cmake")
+endif (UNIX AND NOT CYGWIN)
 
 if (NOT WIN32)
 message(STATUS "Checking for header files")
 
-ac_header_stdc()
+include(ac_header_stdc)
 ac_check_headers ("fcntl.h;limits.h;netdb.h;netinet/in.h;stdlib.h;string.h;sys/file.h;sys/socket.h;sys/time.h;unistd.h;pthread.h;execinfo.h;sys/epoll.h")
 include(FindEXPAT)
 check_include_file("iconv.h" have_iconv_h) #fixme! Move to module?
@@ -57,10 +52,13 @@ if ( CMAKE_COMPILER_IS_GNUCXX )
 	set(CMAKE_CXX_FLAGS "${SPHINX_INJECT_CXX_FLAGS}")
 	set(CMAKE_C_FLAGS "${SPHINX_INJECT_C_FLAGS}")
 endif ( CMAKE_COMPILER_IS_GNUCXX )
+
+# make our configure file
 configure_file("${SPHINXSEARCH_SOURCE_DIR}/config/config_cmake.h.in"
 	"${SPHINXSEARCH_BINARY_DIR}/config/config.h")
 add_definitions (-DHAVE_CONFIG_H)
 include_directories("${SPHINXSEARCH_BINARY_DIR}/config")
+
 endif (NOT WIN32)
 
 # our mega-lib
@@ -69,7 +67,7 @@ sphinxquery.cpp sphinxsoundex.cpp sphinxmetaphone.cpp sphinxstemen.cpp
 sphinxstemru.cpp sphinxstemcz.cpp sphinxstemar.cpp sphinxutils.cpp
 sphinxstd.cpp sphinxsort.cpp sphinxexpr.cpp sphinxfilter.cpp
 sphinxsearch.cpp sphinxrt.cpp sphinxjson.cpp sphinxudf.c sphinxaot.cpp
-sphinxplugin.cpp )
+sphinxplugin.cpp sphinx.h )
 
 # our executables
 add_executable (indexer indexer.cpp )

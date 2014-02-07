@@ -137,50 +137,6 @@ MACRO(CHECK_DIRSYMBOL_EXISTS FILES VARIABLE)
   ENDIF(NOT DEFINED ${VARIABLE})
 ENDMACRO(CHECK_DIRSYMBOL_EXISTS)
 
-# analogue of AC_HEADER_STDC automake macro.
-# refactored a bit from https://github.com/LuaDist/libgd/blob/master/cmake/modules/AC_HEADER_STDC.cmake
-include(CheckIncludeFiles)
-
-macro(AC_HEADER_STDC)
-check_include_files("dlfcn.h;stdint.h;stddef.h;inttypes.h;stdlib.h;strings.h;string.h;float.h" StandardHeadersExist)
-if(StandardHeadersExist)
-#        check_prototype_exists(memchr string.h memchrExists)
-#        if(memchrExists)
-
-                check_prototype_exists(free stdlib.h freeExists)
-                if(freeExists)
-                        message(STATUS "ANSI C header files - found")
-                        set(STDC_HEADERS 1 CACHE INTERNAL "System has ANSI C header files")
-                        set(HAVE_STRINGS_H 1)
-                        set(HAVE_STRING_H 1)
-                        set(HAVE_FLOAT_H 1)
-                        set(HAVE_STDLIB_H 1)
-                        set(HAVE_STDDEF_H 1)
-                        set(HAVE_STDINT_H 1)
-                        set(HAVE_INTTYPES_H 1)
-                        set(HAVE_DLFCN_H 1)
-                endif(freeExists)
-#        endif(memchrExists)
-endif(StandardHeadersExist)
-
-if(NOT STDC_HEADERS)
-        message(STATUS "ANSI C header files - not found")
-        set(STDC_HEADERS 0 CACHE INTERNAL "System has ANSI C header files")
-endif(NOT STDC_HEADERS)
-
-
-check_include_files(unistd.h HAVE_UNISTD_H)
-
-#include(CheckDIRSymbolExists)
-check_dirsymbol_exists("sys/stat.h;sys/types.h;dirent.h" HAVE_DIRENT_H)
-if (HAVE_DIRENT_H)
-        set(HAVE_SYS_STAT_H 1)
-        set(HAVE_SYS_TYPES_H 1)
-endif (HAVE_DIRENT_H)
-
-check_include_files("dlfcn.h;stdint.h;stddef.h;inttypes.h;stdlib.h;strings.h;string.h;float.h" StandardHeadersExist)
-set(HAVE_LIBM 1)
-endmacro(AC_HEADER_STDC)
 
 include(CheckLibraryExists)
 macro( AC_SEARCH_LIBS LIB_REQUIRED FUNCTION_NAME TARGET_VAR )
@@ -197,26 +153,10 @@ endforeach( LIB )
 #endif(${LIB_REQUIRED})
 endmacro()
 
-#cast away too old compiler
-macro(check_veryold_gcc)
-if ( ${CMAKE_COMPILER_IS_GNUCXX} )
-	set (_CHECK_OLDCOMPILER_SOURCE_CODE "
-	#ifdef __GNUC__
-	#if __GNUC__ > 3 || (__GNUC__ == 3 && __GNUC_MINOR__ > 3)
-	int main() {}
-	#else
-	syntax error
-	#endif
-	#endif
-	")
 
-	CHECK_CXX_SOURCE_COMPILES("${_CHECK_OLDCOMPILER_SOURCE_CODE}" _RESULT)
-else()
-	set (_RESULT true)
-endif()
-	if (NOT _RESULT)
-	message(FATAL_ERROR "Gcc version error. Minspec is 3.4")
-	endif (NOT _RESULT)
-endmacro(check_veryold_gcc)
-
-
+macro(REMOVE_CRLF RETVAL INSTR)
+	if (NOT INSTR EQUAL "")
+		string(REGEX REPLACE "\n" "" ${RETVAL} ${INSTR})
+	endif()
+#	set(${RETVAL} "${RETVAL}" PARENT_SCOPE)
+endmacro()

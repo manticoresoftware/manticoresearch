@@ -3126,7 +3126,13 @@ PACKEDFACTORS(), introduced in version 2.1.1-beta, can be used in queries,
 either to just see all the weighting factors calculated when doing the matching, or to
 provide a binary attribute that can be used to write a custom ranking UDF.
 This function works only if expression ranker is specified and the query 
-is not a full scan, otherwise it will return an error.
+is not a full scan, otherwise it will return an error. Starting with 2.2.2-beta
+PACKEDFACTORS() can take an optional argument that disables ATC ranking factor calculation:
+<programlisting>
+PACKEDFACTORS({no_atc=1})
+</programlisting>
+Calculating ATC slows down query processing considerably, so this option can be useful
+if you need to see the ranking factors, but do not need ATC.
 </para>
 <para>
 It can be used to implement custom ranking functions in UDFs, as in

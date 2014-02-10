@@ -61,6 +61,7 @@ public:
 	bool			FixupNots ( XQNode_t * pNode );
 	void			FixupNulls ( XQNode_t * pNode );
 	void			DeleteNodesWOFields ( XQNode_t * pNode );
+	void			PhraseShiftQpos ( XQNode_t * pNode );
 
 	inline void SetFieldSpec ( const FieldMask_t& uMask, int iMaxPos )
 	{
@@ -98,6 +99,7 @@ public:
 	BYTE *					m_sQuery;
 	int						m_iQueryLen;
 	const char *			m_pLastTokenStart;
+	const char *			m_pLastTokenEnd;
 
 	const CSphSchema *		m_pSchema;
 	ISphTokenizer *			m_pTokenizer;
@@ -132,6 +134,7 @@ public:
 	CSphVector < CSphVector<int> >	m_dZoneVecs;
 	CSphVector<XQLimitSpec_t *>		m_dStateSpec;
 	CSphVector<XQLimitSpec_t *>		m_dSpecPool;
+	CSphVector<int>			m_dPhraseStar;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -388,6 +391,7 @@ static int GetNodeChildIndex ( const XQNode_t * pParent, const XQNode_t * pNode 
 XQParser_t::XQParser_t ()
 	: m_pParsed ( NULL )
 	, m_pLastTokenStart ( NULL )
+	, m_pLastTokenEnd ( NULL )
 	, m_pRoot ( NULL )
 	, m_bStopOnInvalid ( true )
 	, m_bWasBlended ( false )
@@ -736,6 +740,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		// required because if 0-9 are not in charset_table, or min_word_len is too high,
 		// the tokenizer will *not* return the number as a token!
 		m_pLastTokenStart = m_pTokenizer->GetBufferPtr ();
+		m_pLastTokenEnd = m_pTokenizer->GetTokenEnd();
 		const char * sEnd = m_pTokenizer->GetBufferEnd ();
 
 		const char * p = m_pLastTokenStart;
@@ -892,6 +897,36 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			break;
 		}
 
+		// count [ * ] at phrase node for qpos shift
+		if ( m_pTokenizer->m_bPhrase && m_pLastTokenEnd )
+		{
+			if ( strncmp ( sToken, "*", 1 )==0 )
+			{
+				m_dPhraseStar.Add ( m_iAtomPos );
+			} else
+			{
+				int iSpace = 0;
+				int iStar = 0;
+				const char * sCur = m_pLastTokenEnd;
+				const char * sEnd = m_pTokenizer->GetTokenStart();
+				for ( ; sCur<sEnd; sCur++ )
+				{
+					int iCur = sCur - m_pLastTokenEnd;
+					switch ( *sCur )
+					{
+					case '*':
+						iStar = sCur - m_pLastTokenEnd;
+						break;
+					case ' ':
+						if ( iSpace+2==iCur && iStar+1==iCur ) // match only [ * ] (separate single star) as valid shift operator
+							m_dPhraseStar.Add ( m_iAtomPos );
+						iSpace = iCur;
+						break;
+					}
+				}
+			}
+		}
+
 		// handle specials
 		if ( m_pTokenizer->WasTokenSpecial() )
 		{
@@ -936,7 +971,11 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 				bool bWasQuoted = m_bQuoted;
 				// all the other specials are passed to parser verbatim
 				if ( sToken[0]=='"' )
+				{
 					m_bQuoted = !m_bQuoted;
+					if ( m_bQuoted )
+						m_dPhraseStar.Resize ( 0 );
+				}
 				m_iPendingType = sToken[0]=='!' ? '-' : sToken[0];
 				m_pTokenizer->m_bPhrase = m_bQuoted;
 
@@ -971,7 +1010,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			m_pPlugin->m_fnPreMorph ( m_pPluginData, (char*)sTmp, &iStopWord );
 
 		m_pDict->SetApplyMorph ( m_pTokenizer->GetMorphFlag() );
-		SphWordID_t uWordId = iStopWord ? 0 : m_pDict->GetWordID ( sTmp );	
+		SphWordID_t uWordId = iStopWord ? 0 : m_pDict->GetWordID ( sTmp );
 
 		if ( uWordId && m_pPlugin && m_pPlugin->m_fnPostMorph )
 		{
@@ -1116,7 +1155,9 @@ void XQParser_t::SetPhrase ( XQNode_t * pNode, bool bSetExact )
 				pNode->m_dWords[iWord].m_sWord.SetSprintf ( "=%s", pNode->m_dWords[iWord].m_sWord.cstr() );
 		}
 	}
-	pNode->SetOp ( SPH_QUERY_PHRASE);
+	pNode->SetOp ( SPH_QUERY_PHRASE );
+
+	PhraseShiftQpos ( pNode );
 }
 
 
@@ -1321,6 +1362,43 @@ void XQParser_t::DeleteNodesWOFields ( XQNode_t * pNode )
 			DeleteNodesWOFields ( pNode->m_dChildren[i] );
 			i++;
 		}
+	}
+}
+
+
+void XQParser_t::PhraseShiftQpos ( XQNode_t * pNode )
+{
+	if ( !m_dPhraseStar.GetLength() )
+		return;
+
+	const int * pLast = m_dPhraseStar.Begin();
+	const int * pEnd = m_dPhraseStar.Begin() + m_dPhraseStar.GetLength();
+	int iQposShiftStart = *pLast;
+	int iQposShift = 1;
+
+	ARRAY_FOREACH ( iWord, pNode->m_dWords )
+	{
+		XQKeyword_t & tWord = pNode->m_dWords[iWord];
+
+		// star dictionary passes raw star however regular dictionary suppress it
+		// raw star also might be suppressed by min_word_len option
+		// so remove qpos shift from duplicated raw star term
+		if ( tWord.m_sWord.IsEmpty() || tWord.m_sWord=="*" )
+		{
+			pNode->m_dWords.Remove ( iWord-- );
+			iQposShift--;
+			continue;
+		}
+
+		// fold stars in phrase till current term position
+		while ( pLast+1<pEnd && *(pLast+1)<=tWord.m_iAtomPos )
+		{
+			pLast++;
+			iQposShift++;
+		}
+
+		if ( iQposShiftStart<=tWord.m_iAtomPos )
+			tWord.m_iAtomPos += iQposShift;
 	}
 }
 

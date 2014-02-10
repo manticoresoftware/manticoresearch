@@ -136,8 +136,41 @@ index phrase_idx
 	charset_table = 0..9, a..z, A..Z->a..z
 	dict = keywords
 	morphology		= stem_en
-	index_exact_words = 1
+	index_exact_words = 1	
 }
+
+source src_phrase_shift : srctest
+{
+	sql_query		= SELECT 1 id, 11 idd, 'that orange box might be and not yellow' title UNION SELECT 2 id, 11 idd, 'however that is a green box always apears here as usual' title UNION SELECT 3 id, 11 idd, 'that orange box might be not yellow' title
+	sql_attr_uint		= idd
+}
+
+index phrase_shift
+{
+	source			= src_phrase_shift
+	path			= <data_path/>/phrase_shift
+	charset_table = 0..9, a..z, A..Z->a..z
+	dict = keywords
+}
+
+index phrase_shift_star
+{
+	source			= src_phrase_shift
+	path			= <data_path/>/phrase_shift_star
+	charset_table = 0..9, a..z, A..Z->a..z
+	dict = keywords
+	min_prefix_len = 1
+}
+
+index phrase_shift_min_wlen
+{
+	source			= src_phrase_shift
+	path			= <data_path/>/phrase_shift_min_wlen
+	charset_table = 0..9, a..z, A..Z->a..z
+	dict = keywords
+	min_word_len = 2
+}
+
 </config>
 
 <queries>
@@ -262,6 +295,20 @@ REPLACE INTO rt (id, id1, title) VALUES ( 1, 1, 'work worked working workings wo
 <sphinxql>show meta</sphinxql>
 <sphinxql>SELECT * FROM phrase_idx WHERE MATCH(' ="it run" ')</sphinxql>
 <sphinxql>show meta</sphinxql>
+
+<!-- phrase shift -->
+<sphinxql>SELECT * FROM phrase_shift WHERE MATCH(' "that box" ')</sphinxql>
+<sphinxql>SELECT * FROM phrase_shift WHERE MATCH(' "that * box" ')</sphinxql>
+<sphinxql>SELECT * FROM phrase_shift WHERE MATCH(' "that * * * box" ')</sphinxql>
+<sphinxql>SELECT * FROM phrase_shift WHERE MATCH(' "that * box might * * not yellow" ')</sphinxql>
+<sphinxql>SELECT * FROM phrase_shift_star WHERE MATCH(' "that box" ')</sphinxql>
+<sphinxql>SELECT * FROM phrase_shift_star WHERE MATCH(' "that * box" ')</sphinxql>
+<sphinxql>SELECT * FROM phrase_shift_star WHERE MATCH(' "that * * * box" ')</sphinxql>
+<sphinxql>SELECT * FROM phrase_shift_star WHERE MATCH(' "that * box might * * not yellow" ')</sphinxql>
+<sphinxql>SELECT * FROM phrase_shift_min_wlen WHERE MATCH(' "that box" ')</sphinxql>
+<sphinxql>SELECT * FROM phrase_shift_min_wlen WHERE MATCH(' "that * box" ')</sphinxql>
+<sphinxql>SELECT * FROM phrase_shift_min_wlen WHERE MATCH(' "that * * * box" ')</sphinxql>
+<sphinxql>SELECT * FROM phrase_shift_min_wlen WHERE MATCH(' "that * box might * * not yellow" ')</sphinxql>
 
 </sphqueries>
 

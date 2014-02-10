@@ -54,6 +54,7 @@ public:
 	XQNode_t *		AddKeyword ( const char * sKeyword );
 	XQNode_t *		AddKeyword ( XQNode_t * pLeft, XQNode_t * pRight );
 	XQNode_t *		AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pRight, int iOpArg=0 );
+	void			SetPhrase ( XQNode_t * pNode, bool bSetExact );
 
 	void			Cleanup ();
 	XQNode_t *		SweepNulls ( XQNode_t * pNode );
@@ -1098,6 +1099,24 @@ XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pR
 		pResult = pNode;
 	}
 	return pResult;
+}
+
+
+void XQParser_t::SetPhrase ( XQNode_t * pNode, bool bSetExact )
+{
+	if ( !pNode )
+		return;
+
+	assert ( pNode->m_dWords.GetLength() );
+	if ( bSetExact )
+	{
+		ARRAY_FOREACH ( iWord, pNode->m_dWords )
+		{
+			if ( !pNode->m_dWords[iWord].m_sWord.IsEmpty() )
+				pNode->m_dWords[iWord].m_sWord.SetSprintf ( "=%s", pNode->m_dWords[iWord].m_sWord.cstr() );
+		}
+	}
+	pNode->SetOp ( SPH_QUERY_PHRASE);
 }
 
 

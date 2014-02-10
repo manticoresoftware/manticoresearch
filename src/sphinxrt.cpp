@@ -1151,7 +1151,7 @@ public:
 	bool						RtQwordSetup ( RtQword_t * pQword, const RtSegment_t * pSeg ) const;
 	static bool					RtQwordSetupSegment ( RtQword_t * pQword, const RtSegment_t * pSeg, bool bSetup, bool bWordDict, int iWordsCheckpoint );
 
-	CSphDict *					SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict, ISphTokenizer * pTokenizer ) const;
+	CSphDict *					SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict, ISphTokenizer * pTokenizer, bool bAddSpecial ) const;
 	CSphDict *					SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict, ISphTokenizer * pTokenizer ) const;
 
 	virtual const CSphSchema &	GetMatchSchema () const { return m_tSchema; }
@@ -6132,7 +6132,7 @@ bool RtIndex_t::RtQwordSetup ( RtQword_t * pQword, const RtSegment_t * pSeg ) co
 }
 
 
-CSphDict * RtIndex_t::SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict, ISphTokenizer * pTokenizer ) const
+CSphDict * RtIndex_t::SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict, ISphTokenizer * pTokenizer, bool bAddSpecial ) const
 {
 	assert ( pTokenizer );
 
@@ -6141,6 +6141,8 @@ CSphDict * RtIndex_t::SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSp
 
 	tContainer = new CSphDictExact ( pPrevDict );
 	pTokenizer->AddPlainChar ( '=' );
+	if ( bAddSpecial )
+		pTokenizer->AddSpecials ( "=" );
 	return tContainer.Ptr();
 }
 
@@ -6405,7 +6407,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	pDict = SetupStarDict ( tDictStar, pDict, pTokenizer.Ptr() );
 
 	CSphScopedPtr<CSphDict> tDictExact ( NULL );
-	pDict = SetupExactDict ( tDictExact, pDict, pTokenizer.Ptr() );
+	pDict = SetupExactDict ( tDictExact, pDict, pTokenizer.Ptr(), true );
 
 	// calculate local idf for RT with disk chunks
 	// in case of local_idf set but no external hash no full-scan query and RT has disk chunks
@@ -7071,8 +7073,6 @@ bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 	// so m_pQueryTokenizer does not work for us, gotta clone and setup one manually
 	if ( IsStarDict() )
 		pTokenizer->AddPlainChar ( '*' );
-	if ( m_tSettings.m_bIndexExactWords )
-		pTokenizer->AddPlainChar ( '=' );
 
 	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
 	CSphDict * pDictBase = m_pDict;
@@ -7085,7 +7085,7 @@ bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 	CSphDict * pDict = SetupStarDict ( tDict, pDictBase, pTokenizer.Ptr() );
 
 	CSphScopedPtr<CSphDict> tDict2 ( NULL );
-	pDict = SetupExactDict ( tDict2, pDict, pTokenizer.Ptr() );
+	pDict = SetupExactDict ( tDict2, pDict, pTokenizer.Ptr(), false );
 
 	// FIXME!!! missed bigram, FieldFilter
 	CSphRtQueryFilter tAotFilter;

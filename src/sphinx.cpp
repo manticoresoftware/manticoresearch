@@ -9538,8 +9538,13 @@ void CSphIndex::SetupQueryTokenizer()
 		m_pQueryTokenizer->AddPlainChar ( '%' );
 	}
 	if ( m_tSettings.m_bIndexExactWords )
-		m_pQueryTokenizer->AddPlainChar ( '=' );
-	m_pQueryTokenizer->AddSpecials ( "()|-!@~\"/^$<" );
+	{
+		m_pQueryTokenizer->AddPlainChar('=');
+		m_pQueryTokenizer->AddSpecials ( "()|-!@~\"/^$<=" );
+	} else
+	{
+		m_pQueryTokenizer->AddSpecials ( "()|-!@~\"/^$<" );
+	}
 }
 
 

@@ -122,6 +122,22 @@ index rt_i
 	morphology		= stem_en
 	index_exact_words = 1
 }
+
+source src_phrase : srctest
+{
+	sql_query		= SELECT 1 id, 11 idd, 'it running fast as you but can not' title UNION SELECT 2 id, 11 idd, 'as it runs me' title UNION SELECT 3 id, 11 idd, 'it run and has fun' title
+	sql_attr_uint		= idd
+}
+
+index phrase_idx
+{
+	source			= src_phrase
+	path			= <data_path/>/phrase_idx
+	charset_table = 0..9, a..z, A..Z->a..z
+	dict = keywords
+	morphology		= stem_en
+	index_exact_words = 1
+}
 </config>
 
 <queries>
@@ -235,6 +251,16 @@ REPLACE INTO rt (id, id1, title) VALUES ( 1, 1, 'work worked working workings wo
 <sphinxql>SELECT * FROM kw_i WHERE MATCH('*feet*')</sphinxql>
 <sphinxql>show meta</sphinxql>
 <sphinxql>SELECT * FROM rt_i WHERE MATCH('*feet*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+
+<!-- new feature exact phrase - just shortcut for all words in phrase have exact modifier -->
+<sphinxql>SELECT * FROM phrase_idx WHERE MATCH(' "it run" ')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM phrase_idx WHERE MATCH(' ="it running" ')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM phrase_idx WHERE MATCH(' ="it runs" ')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM phrase_idx WHERE MATCH(' ="it run" ')</sphinxql>
 <sphinxql>show meta</sphinxql>
 
 </sphqueries>

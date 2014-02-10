@@ -91,13 +91,13 @@ atom:
 	| '"' '"'							{ $$ = NULL; }
 	| '"' '"' '~' TOK_INT				{ $$ = NULL; }
 	| '"' '"' '/' TOK_INT				{ $$ = NULL; }
-	| '"' '"' '/' TOK_FLOAT			{ $$ = NULL; }
-	| '"' phrase '"'					{ $$ = $2; if ( $$ ) { assert ( $$->m_dWords.GetLength() ); $$->SetOp ( SPH_QUERY_PHRASE); } }
+	| '"' '"' '/' TOK_FLOAT				{ $$ = NULL; }
+	| '"' phrase '"'					{ $$ = $2; pParser->SetPhrase ( $$, false ); }
 	| '"' phrase '"' '~' TOK_INT		{ $$ = $2; if ( $$ ) { assert ( $$->m_dWords.GetLength() ); $$->SetOp ( SPH_QUERY_PROXIMITY ); $$->m_iOpArg = $5.iValue; } }
 	| '"' phrase '"' '/' TOK_INT		{ $$ = $2; if ( $$ ) { assert ( $$->m_dWords.GetLength() ); $$->SetOp ( SPH_QUERY_QUORUM ); $$->m_iOpArg = $5.iValue; } }
-	| '"' phrase '"' '/' TOK_FLOAT	{ $$ = $2; if ( $$ ) { assert ( $$->m_dWords.GetLength() ); $$->SetOp ( SPH_QUERY_QUORUM ); $$->m_iOpArg = $5.fValue * 100; $$->m_bPercentOp = true; } }
+	| '"' phrase '"' '/' TOK_FLOAT		{ $$ = $2; if ( $$ ) { assert ( $$->m_dWords.GetLength() ); $$->SetOp ( SPH_QUERY_QUORUM ); $$->m_iOpArg = $5.fValue * 100; $$->m_bPercentOp = true; } }
 	| '(' expr ')'						{ $$ = $2; }
-
+	| '=' '"' phrase '"'				{ $$ = $3; pParser->SetPhrase ( $$, true ); }
 	;
 
 keyword:
@@ -110,7 +110,8 @@ keyword:
 rawkeyword:
 	TOK_KEYWORD							{ $$ = $1; }
 	| TOK_INT							{ $$ = pParser->AddKeyword ( ( $1.iStrIndex>=0 ) ? pParser->m_dIntTokens[$1.iStrIndex].cstr() : NULL ); }
-	| TOK_FLOAT						{ $$ = pParser->AddKeyword ( ( $1.iStrIndex>=0 ) ? pParser->m_dIntTokens[$1.iStrIndex].cstr() : NULL ); }
+	| TOK_FLOAT							{ $$ = pParser->AddKeyword ( ( $1.iStrIndex>=0 ) ? pParser->m_dIntTokens[$1.iStrIndex].cstr() : NULL ); }
+	| '=' rawkeyword					{ $$ = $2; assert ( $$->m_dWords.GetLength()==1 ); $$->m_dWords[0].m_sWord.SetSprintf ( "=%s", $$->m_dWords[0].m_sWord.cstr() ); }
 	;
 
 sentence:

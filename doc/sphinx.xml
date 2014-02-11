@@ -14138,6 +14138,8 @@ rlp_max_batch_docs = 100
 <listitem><para>added #1604 CALL KEYWORDS can show now multiple lemmas for a keyword</para></listitem>
 <listitem><para>added an argument to PACKEDFACTORS() to disable ATC calculation (syntax: PACKEDFACTORS({no_atc=1}))</para></listitem>
 <listitem><para>added ondisk_attrs support for RT indexes</para></listitem>
+<listitem><para>added exact phrase query syntax</para></listitem>
+<listitem><para>added position shift operator to phrase operator</para></listitem>
 </itemizedlist>
 <bridgehead>Optimizations, behavior changes, and removals</bridgehead>
 <itemizedlist>

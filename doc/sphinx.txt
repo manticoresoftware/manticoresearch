@@ -1,12 +1,12 @@
-Sphinx 2.2.2-dev reference manual
-=================================
+Sphinx 2.2.2-beta reference manual
+==================================
 
 Free open-source SQL full-text search engine
 ============================================
 
-Copyright (c) 2001-2013 Andrew Aksyonoff
+Copyright (c) 2001-2014 Andrew Aksyonoff
 
-Copyright (c) 2008-2013 Sphinx Technologies Inc, http://sphinxsearch.com
+Copyright (c) 2008-2014 Sphinx Technologies Inc, http://sphinxsearch.com
 
 ----------------------------------------------------------------------------
 
@@ -86,11 +86,11 @@ Table of Contents
    5.10. MySQL protocol support and SphinxQL
    5.11. Multi-queries
    5.12. Collations
-   5.13. User-defined functions (UDF)
 
 6. Extending Sphinx
    6.1. Sphinx UDFs (User Defined Functions)
    6.2. Sphinx plugins
+   6.3. Ranker plugins
 
 7. Command line tools reference
    7.1. indexer command reference
@@ -137,10 +137,11 @@ Table of Contents
    8.35. CREATE PLUGIN syntax
    8.36. DROP PLUGIN syntax
    8.37. SHOW PLUGINS syntax
-   8.38. Multi-statement queries
-   8.39. Comment syntax
-   8.40. List of SphinxQL reserved keywords
-   8.41. SphinxQL upgrade notes, version 2.0.1-beta
+   8.38. SHOW THREADS syntax
+   8.39. Multi-statement queries
+   8.40. Comment syntax
+   8.41. List of SphinxQL reserved keywords
+   8.42. SphinxQL upgrade notes, version 2.0.1-beta
 
 9. API reference
    9.1. General API functions
@@ -398,33 +399,35 @@ Table of Contents
       12.5.8. rlp_max_batch_docs
 
 A. Sphinx revision history
-   A.1. Version 2.2.2-beta, ??? jan 2014
+   A.1. Version 2.2.2-beta, 11 feb 2014
    A.2. Version 2.2.1-beta, 13 nov 2013
-   A.3. Version 2.1.5-release, ??? jan 2014
+   A.3. Version 2.1.5-release, 22 jan 2014
    A.4. Version 2.1.4-release, 18 dec 2013
    A.5. Version 2.1.3-release, 12 nov 2013
    A.6. Version 2.1.2-release, 10 oct 2013
    A.7. Version 2.1.1-beta, 20 feb 2013
-   A.8. Version 2.0.9-release, 26 aug 2013
-   A.9. Version 2.0.8-release, 26 apr 2013
-   A.10. Version 2.0.7-release, 26 mar 2013
-   A.11. Version 2.0.6-release, 22 oct 2012
-   A.12. Version 2.0.5-release, 28 jul 2012
-   A.13. Version 2.0.4-release, 02 mar 2012
-   A.14. Version 2.0.3-release, 23 dec 2011
-   A.15. Version 2.0.2-beta, 15 nov 2011
-   A.16. Version 2.0.1-beta, 22 apr 2011
-   A.17. Version 1.10-beta, 19 jul 2010
-   A.18. Version 0.9.9-release, 02 dec 2009
-   A.19. Version 0.9.9-rc2, 08 apr 2009
-   A.20. Version 0.9.9-rc1, 17 nov 2008
-   A.21. Version 0.9.8.1, 30 oct 2008
-   A.22. Version 0.9.8, 14 jul 2008
-   A.23. Version 0.9.7, 02 apr 2007
-   A.24. Version 0.9.7-rc2, 15 dec 2006
-   A.25. Version 0.9.7-rc1, 26 oct 2006
-   A.26. Version 0.9.6, 24 jul 2006
-   A.27. Version 0.9.6-rc1, 26 jun 2006
+   A.8. Version 2.0.11-dev, xx xxx xxxx
+   A.9. Version 2.0.10-release, 22 jan 2014
+   A.10. Version 2.0.9-release, 26 aug 2013
+   A.11. Version 2.0.8-release, 26 apr 2013
+   A.12. Version 2.0.7-release, 26 mar 2013
+   A.13. Version 2.0.6-release, 22 oct 2012
+   A.14. Version 2.0.5-release, 28 jul 2012
+   A.15. Version 2.0.4-release, 02 mar 2012
+   A.16. Version 2.0.3-release, 23 dec 2011
+   A.17. Version 2.0.2-beta, 15 nov 2011
+   A.18. Version 2.0.1-beta, 22 apr 2011
+   A.19. Version 1.10-beta, 19 jul 2010
+   A.20. Version 0.9.9-release, 02 dec 2009
+   A.21. Version 0.9.9-rc2, 08 apr 2009
+   A.22. Version 0.9.9-rc1, 17 nov 2008
+   A.23. Version 0.9.8.1, 30 oct 2008
+   A.24. Version 0.9.8, 14 jul 2008
+   A.25. Version 0.9.7, 02 apr 2007
+   A.26. Version 0.9.7-rc2, 15 dec 2006
+   A.27. Version 0.9.7-rc1, 26 oct 2006
+   A.28. Version 0.9.6, 24 jul 2006
+   A.29. Version 0.9.6-rc1, 26 jun 2006
 
 List of Tables
 
@@ -994,8 +997,8 @@ Changes are as follows:
      default value is 'inline' and it's a new standard. 'plain' hit_format
      is obsolete and will be removed in the near future.
 
-   * docinfo=inline is deprecated. You can now use ondisk_attrs(link here)
-     or ondisk_attrs_default(link here) instead.
+   * docinfo=inline is deprecated. You can now use ondisk_attrs or
+     ondisk_attrs_default instead.
 
    * workers=threads is a new default for all OS now. We're gonna get rid
      of other modes in future.
@@ -2115,7 +2118,6 @@ Table of Contents
 5.10. MySQL protocol support and SphinxQL
 5.11. Multi-queries
 5.12. Collations
-5.13. User-defined functions (UDF)
 
 5.1. Matching modes
 ===================
@@ -3366,7 +3368,14 @@ PACKEDFACTORS()
    doing the matching, or to provide a binary attribute that can be used to
    write a custom ranking UDF. This function works only if expression
    ranker is specified and the query is not a full scan, otherwise it will
-   return an error.
+   return an error. Starting with 2.2.2-beta PACKEDFACTORS() can take an
+   optional argument that disables ATC ranking factor calculation:
+
+      | PACKEDFACTORS({no_atc=1})
+
+   Calculating ATC slows down query processing considerably, so this option
+   can be useful if you need to see the ranking factors, but do not need
+   ATC.
 
    It can be used to implement custom ranking functions in UDFs, as in
 
@@ -3856,7 +3865,7 @@ one go (more formally, one network request).
 
 Two API methods that implement multi-query mechanism are AddQuery() and
 RunQueries(). You can also run multiple queries with SphinxQL, see
-Section 8.38, <<Multi-statement queries>>. (In fact, regular Query() call
+Section 8.39, <<Multi-statement queries>>. (In fact, regular Query() call
 is internally implemented as a single AddQuery() call immediately followed
 by RunQueries() call.) AddQuery() captures the current state of all the
 query settings set by previous API calls, and memorizes the query.
@@ -4054,102 +4063,6 @@ Collations should affect all string attribute comparisons, including those
 within ORDER BY and GROUP BY, so differently ordered or grouped results can
 be returned depending on the collation chosen.
 
-5.13. User-defined functions (UDF)
-==================================
-
-Starting with 2.0.1-beta, Sphinx supports User-Defined Functions, or UDF
-for short. They can be loaded and unloaded dynamically into searchd without
-having to restart the daemon, and used in expressions when searching. UDF
-features at a glance are as follows.
-
-   * Functions can take integer (both 32-bit and 64-bit), float, string, or
-     MVA arguments.
-
-   * Functions can return integer or float values.
-
-   * Functions can check the argument number, types, and names and raise
-     errors.
-
-   * Only simple functions (that is, non-aggregate ones) are currently
-     supported.
-
-User-defined functions need your OS to support dynamically loadable
-libraries (aka shared objects). Most of the modern OSes are eligible,
-including Linux, Windows, MacOS, Solaris, BSD and others. (The internal
-testing has been done on Linux and Windows.) The UDF libraries must reside
-in a directory specified by plugin_dir directive, and the server must be
-configured to use workers = threads mode. Relative paths to the library
-files are not allowed. Once the library is successfully built and copied to
-the trusted location, you can then dynamically install and deinstall the
-functions using CREATE FUNCTION and DROP FUNCTION statements respectively.
-A single library can contain multiple functions. A library gets loaded when
-you first install a function from it, and unloaded when you deinstall all
-the functions from that library.
-
-The library functions that will implement a UDF visible to SQL statements
-need to follow C calling convention, and a simple naming convention. Sphinx
-source distribution provides a sample file, src/udfexample.c, that defines
-a few simple functions showing how to work with integer, string, and MVA
-arguments; you can use that one as a foundation for your new functions. It
-includes the UDF interface header file, src/sphinxudf.h, that defines the
-required types and structures. sphinxudf.h header is standalone, that is,
-does not require any other parts of Sphinx source to compile.
-
-Every function that you intend to use in your SELECT statements requires at
-least two corresponding C/C++ functions: the initialization call, and the
-function call itself. You can also optionally define the deinitialization
-call if your function requires any post-query cleanup. (For instance, if
-you were allocating any memory in either the initialization call or the
-function calls.) Function names in SQL are case insensitive, C function
-names are not. They need to be all lower-case. Mistakes in function name
-prevent UDFs from loading. You also have to pay special attention to the
-calling convention used when compiling, the list and the types of
-arguments, and the return type of the main function call. Mistakes in
-either are likely to crash the server, or result in unexpected results in
-the best case. Last but not least, all functions need to be thread-safe.
-
-Let's assume for the sake of example that your UDF name in SphinxQL will be
-MYFUNC. The initialization, main, and deinitialization functions would then
-need to be named as follows and take the following arguments:
-
-   | /// initialization function
-   | /// called once during query initialization
-   | /// returns 0 on success
-   | /// returns non-zero and fills error_message buffer on failure
-   | int myfunc_init ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args,
-   |                   char * error_message );
-   | 
-   | /// main call function
-   | /// returns the computed value
-   | /// writes non-zero value into error_flag to indicate errors
-   | RETURN_TYPE myfunc ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args,
-   |                      char * error_flag );
-   | 
-   | /// optional deinitialization function
-   | /// called once to cleanup once query processing is done
-   | void myfunc_deinit ( SPH_UDF_INIT * init );
-
-The two mentioned structures, SPH_UDF_INIT and SPH_UDF_ARGS, are defined in
-the src/sphinxudf.h interface header and documented there. RETURN_TYPE of
-the main function must be one of the following:
-
-   * int for the functions that return INT.
-
-   * sphinx_int64_t for the functions that return BIGINT.
-
-   * float for the functions that return FLOAT.
-
-The calling sequence is as follows. myfunc_init() is called once when
-initializing the query. It can return a non-zero code to indicate
-a failure; in that case query is not executed, and the error message from
-the error_message buffer is returned. Otherwise, myfunc() is be called for
-every row, and a myfunc_deinit() is then called when the query ends.
-myfunc() can indicate an error by writing a non-zero byte value to
-error_flag, in that case, it will no more be called for subsequent rows,
-and a default value of 0 will be substituted. Sphinx might or might not
-choose to terminate such queries early, neither behavior is currently
-guaranteed.
-
 Chapter 6. Extending Sphinx
 ===========================
 
@@ -4157,12 +4070,31 @@ Table of Contents
 
 6.1. Sphinx UDFs (User Defined Functions)
 6.2. Sphinx plugins
+6.3. Ranker plugins
 
 6.1. Sphinx UDFs (User Defined Functions)
 =========================================
 
-Our expression engine can be extended with user defined functions, or UDFs
-for short. Those have a wide variety of uses, for instance:
+Starting with 2.0.1-beta, our expression engine can be extended with user
+defined functions, or UDFs for short, like this:
+
+   | SELECT id, attr1, myudf(attr2, attr3+attr4) ...
+
+You can load and unload UDFs dynamically into searchd without having to
+restart the daemon, and used them in expressions when searching, ranking,
+etc. Quick summary of the UDF features is as follows.
+
+   * UDFs can take integer (both 32-bit and 64-bit), float, string, MVA, or
+     PACKEDFACTORS() arguments.
+
+   * UDFs can return integer, float, or string values.
+
+   * UDFs can check the argument number, types, and names during the query
+     setup phase, and raise errors.
+
+   * Aggregation UDFs are not yet supported (but might be in the future).
+
+UDFs have a wide variety of uses, for instance:
 
    * adding custom mathematical or string functions;
 
@@ -4171,11 +4103,14 @@ for short. Those have a wide variety of uses, for instance:
    * implementing complex ranking functions.
 
 UDFs reside in the external dynamic libraries (.so files on UNIX and .dll
-on Windows systems). You can load and unload them dynamically into searchd
-with CREATE FUNCTION and DROP FUNCTION SphinxQL statements respectively.
-Sphinx keeps track of the currently loaded functions, that is, every time
-you create or drop a functions, searchd writes its state to the
-sphinxql_state file as a plain good old SQL script.
+on Windows systems). Library files need to reside in a trusted folder
+specified by plugin_dir directive, for obvious security reasons: securing
+a single folder is easy; letting anyone install arbitrary code into searchd
+is a risk. You can load and unload them dynamically into searchd with
+CREATE FUNCTION and DROP FUNCTION SphinxQL statements respectively. Sphinx
+keeps track of the currently loaded functions, that is, every time you
+create or drop an UDF, searchd writes its state to the sphinxql_state file
+as a plain good old SQL script.
 
 Once you successfully load an UDF, you can use it in your SELECT or other
 statements just as well as any of the builtin functions:
@@ -4198,14 +4133,18 @@ properly exported functions. Of course, the path of least resistance is to
 write in either C++ or plain C. We provide an example UDF library written
 in plain C and implementing several functions (demonstrating a few
 different techniques) along with our source code, see src/udfexample.c.
-That example includes src/sphinxudf.h header file for the definitions of
-a few UDF related structures and types. And for most real-world UDFs and
-plugins, just including src/sphinxudf.h should be completely sufficient,
-too. However, if you're writing a ranking function and need to access the
+That example includes src/sphinxudf.h header file definitions of a few UDF
+related structures and types. For most UDFs and plugins, a mere #include
+"sphinxudf.h", like in the example, should be completely sufficient, too.
+However, if you're writing a ranking function and need to access the
 ranking signals (factors) data from within the UDF, you will also need to
 compile and link with src/sphinxudf.c (also available in our source code),
 because the implementations of the fuctions that let you access the signal
 data from within the UDF reside in that file.
+
+Both sphinxudf.h header and sphinxudf.c are standalone. So you can copy
+around those files only; they do not depend on any other bits of Sphinx
+source code.
 
 Within your UDF, you must implement and export only a couple functions,
 literally. First, for UDF interface version control, you must define
@@ -4225,12 +4164,23 @@ sphinxudf.h) from it. Here's an example.
 That protects you from accidentally loading a library with a mismatching
 UDF interface version into a newer or older searchd. Second, yout must
 implement the actual function, too. sphinx_int64_t testfunc ( SPH_UDF_INIT
-* init, SPH_UDF_ARGS * args, char * error_flag ) { return 123; } The first
-argument, a pointer to SPH_UDF_INIT structure, is essentially a pointer to
-our function state. It is option. In the example just above the function is
-stateless, it simply returns 123 every time it gets called. So we do not
-have to define an initialization function, and we can simply ignore that
-argument.
+* init, SPH_UDF_ARGS * args, char * error_flag ) { return 123; }
+
+UDF function names in SphinxQL are case insensitive. However, the
+respective C function names are not, they need to be all lower-case, or the
+UDF will not load. More importantly, it is vital that a) the calling
+convention is C (aka __cdecl), b) arguments list matches the plugin system
+expectations exactly, and c) the return type matches the one you specify in
+CREATE FUNCTION. Unfortunately, there is no (easy) way for us to check for
+those mistakes when loading the function, and they could crash the server
+and/or result in unexpected results. Last but not least, all the
+C functions you implement need to be thread-safe.
+
+The first argument, a pointer to SPH_UDF_INIT structure, is essentially
+a pointer to our function state. It is option. In the example just above
+the function is stateless, it simply returns 123 every time it gets called.
+So we do not have to define an initialization function, and we can simply
+ignore that argument.
 
 The second argument, a pointer to SPH_UDF_ARGS, is the most important one.
 All the actual call arguments are passed to your UDF via this structure; it
@@ -4308,8 +4258,9 @@ a matching free() call, and all is well. However, the returned strings
 values are managed by Sphinx and we have our own allocator, so for the
 return values specifically, you need to use it too.
 
-Depending on how your UDFs are used in the query, they might be evaluated
-in a different volume and order. Specifically,
+Depending on how your UDFs are used in the query, the main function call
+(testfunc() in our example) might be called in a rather different volume
+and order. Specifically,
 
    * UDFs referenced in WHERE, ORDER BY, or GROUP BY clauses must and will
      be evaluated for every matched document. They will be called in the
@@ -4322,6 +4273,24 @@ in a different volume and order. Specifically,
 
    * with subselects, such UDFs will also be evaluated after applying the
      inner LIMIT clause.
+
+The calling sequence of the other functions is fixed, though. Namely,
+
+   * testfunc_init() is called once when initializing the query. It can
+     return a non-zero code to indicate a failure; in that case query will
+     be terminated, and the error message from the error_message buffer
+     will be returned.
+
+   * testfunc() is called for every eligible row (see above), whenever
+     Sphinx needs to compute the UDF value. It can also indicate an
+     (internal) failure error by writing a non-zero byte value to
+     error_flag. In that case, it is guaranteed that will no more be called
+     for subsequent rows, and a default return value of 0 will be
+     substituted. Sphinx might or might not choose to terminate such
+     queries early, neither behavior is currently guaranteed.
+
+   * testfunc_deinit() is called once when the query processing (in a given
+     index shard) ends.
 
 As of 2.2.2-beta, we do not yet support aggregation functions. In other
 words, your UDFs will be called for just a single document at a time and
@@ -4401,14 +4370,14 @@ sphinxplugin.h, we define the call prototoypes in the very beginning of
 that file.
 
 Despite having the public interface defined in ye good olde good pure C,
-our plugins essentially follow the object-oriented model. All the functions
-that you can define will have a "userdata" parameter, that is supposed to
-be filled out by the _init() function and gets passed to all the other
-ones. So you can think of a plugin as class that gets instantiated every
-time an object of that class is needed to handle a request: the userdata
-parameter would be its state, the functions would be its methods, and the
-_init() and _deinit() functions would be the constructor and destructor
-respectively.
+our plugins essentially follow the object-oriented model. Indeed, every
+_init() function receives a void ** userdata out-parameter. And the pointer
+value that you store at (*userdata) location is then be passed as a 1st
+argument to all the other plugin functions. So you can think of a plugin as
+class that gets instantiated every time an object of that class is needed
+to handle a request: the userdata pointer would be its this pointer; the
+functions would be its methods, and the _init() and _deinit() functions
+would be the constructor and destructor respectively.
 
 Why this (minor) OOP-in-C complication? Well, plugins run in
 a multi-threaded environment, and some of them have to be stateful. You
@@ -4424,7 +4393,7 @@ To summarize, here goes the simplest complete ranker plugin, in just
    | // gcc -fPIC -shared -o myrank.so myrank.c
    | #include "sphinxudf.h"
    | int myrank_ver() { return SPH_UDF_VERSION; }
-   | int myrank_finalize(SPH_PLUGIN_MATCH* m, void** u) { return 123; }
+   | int myrank_finalize(void *u, int w) { return 123; }
 
 And this is how you use it:
 
@@ -4440,6 +4409,32 @@ And this is how you use it:
    | |    2 |      123 |
    | +------+----------+
    | 2 rows in set (0.01 sec)
+
+6.3. Ranker plugins
+===================
+
+Ranker plugins let you implement a custom ranker that receives all the
+occurrences of the keywords matched in the document, and computes
+a WEIGHT() value. They can be called as follows:
+
+   | SELECT id, attr1 FROM test WHERE match('hello')
+   | OPTION ranker=myranker('option1=1');
+
+The call workflow is as follows:
+
+   1. XXX_init() gets called once per query per index, in the very
+      beginning. A few query-wide options are passed to it through
+      a SPH_RANKER_INIT structure, including the user options strings (in
+      the example just above, "option1=1" is that string).
+   2. XXX_update() gets called multiple times per matched document, with
+      every matched keyword occurrence passed as its parameter,
+      a SPH_RANKER_HIT structure. The occurrences within each document are
+      guaranteed to be passed in the order of ascending hit->hit_pos
+      values.
+   3. XXX_finalize() gets called once per matched document, once there are
+      no more keyword occurrences. It must return the WEIGHT() value. This
+      is the only mandatory function.
+   4. XXX_deinit() gets called once per query, in the very end.
 
 Chapter 7. Command line tools reference
 =======================================
@@ -5103,10 +5098,11 @@ Table of Contents
 8.35. CREATE PLUGIN syntax
 8.36. DROP PLUGIN syntax
 8.37. SHOW PLUGINS syntax
-8.38. Multi-statement queries
-8.39. Comment syntax
-8.40. List of SphinxQL reserved keywords
-8.41. SphinxQL upgrade notes, version 2.0.1-beta
+8.38. SHOW THREADS syntax
+8.39. Multi-statement queries
+8.40. Comment syntax
+8.41. List of SphinxQL reserved keywords
+8.42. SphinxQL upgrade notes, version 2.0.1-beta
 
 SphinxQL is our SQL dialect that exposes all of the search daemon
 functionality using a standard SQL syntax with a few Sphinx-specific
@@ -5855,11 +5851,13 @@ documented in Section 9.7.1, <<BuildExcerpts>>. Usage example:
 8.15. CALL KEYWORDS syntax
 ==========================
 
-   | CALL KEYWORDS(text, index, [hits])
+   | CALL KEYWORDS(text, index [, 1])
 
 CALL KEYWORDS statement, introduced in version 1.10-beta, splits text into
 particular keywords. It returns tokenized and normalized forms of the
-keywords, and, optionally, keyword statistics.
+keywords, and, optionally, keyword statistics. Since version 2.2.2-beta it
+also returns the position of each keyword in the query and all forms of
+tokenized keywords in the case that lemmatizers were used.
 
 text is the text to break down to keywords. index is the name of the index
 from which to take the text processing settings. hits is an optional
@@ -6692,7 +6690,40 @@ the return type for the UDFs and is empty for all the other plugin types.
    | +------+----------+----------------+-------+-------+
    | 1 row in set (0.00 sec)
 
-8.38. Multi-statement queries
+8.38. SHOW THREADS syntax
+=========================
+
+   | SHOW THREADS [ OPTION columns=width ]
+
+SHOW THREADS statement, introduced in version 2.2.2-beta, lists all
+currently active client threads, not counting system threads. It returns
+a table with columns that describe:
+
+   * thread id
+   * connection protocol, possible values are sphinxapi and sphinxql
+   * thread state, possible values are handshake, net_read, net_write,
+     query, net_idle
+   * time since the current state was changed (in seconds, with microsecond
+     precision)
+   * information about queries
+
+The 'Info' column will be cut at the width you've specified in the
+'columns=width' option (notice the third row in the example table below).
+This column will contain raw SphinxQL queries and, if there are API
+queries, full text syntax and comments will be displayed. With an
+API-snippet, the data size will be displayed along with the query.
+
+   | mysql> SHOW THREADS OPTION columns=50;
+   | +------+----------+-------+----------+----------------------------------------------------+
+   | | Tid  | Proto    | State | Time     | Info                                               |
+   | +------+----------+-------+----------+----------------------------------------------------+
+   | | 5168 | sphinxql | query | 0.000002 | show threads option columns=50                     |
+   | | 5175 | sphinxql | query | 0.000002 | select * from rt where match ( 'the box' )         |
+   | | 1168 | sphinxql | query | 0.000002 | select * from rt where match ( 'the box and faximi |
+   | +------+----------+-------+----------+----------------------------------------------------+
+   | 3 row in set (0.00 sec)
+
+8.39. Multi-statement queries
 =============================
 
 Starting version 2.0.1-beta, SphinxQL supports multi-statement queries, or
@@ -6750,7 +6781,7 @@ WARNINGS, SHOW STATUS, and SHOW META. Arbitrary sequence of these
 statements are allowed. The results sets returned should match those that
 would be returned if the batched queries were sent one by one.
 
-8.39. Comment syntax
+8.40. Comment syntax
 ====================
 
 Since version 2.0.1-beta, SphinxQL supports C-style comment syntax.
@@ -6763,7 +6794,7 @@ between Sphinx and MySQL.)
 
    | SELECT /*! SQL_CALC_FOUND_ROWS */ col1 FROM table1 WHERE ...
 
-8.40. List of SphinxQL reserved keywords
+8.41. List of SphinxQL reserved keywords
 ========================================
 
 A complete alphabetical list of keywords that are currently reserved in
@@ -6822,7 +6853,7 @@ SphinxQL syntax (and therefore can not be used as identifiers).
    | WHERE
    | WITHIN
 
-8.41. SphinxQL upgrade notes, version 2.0.1-beta
+8.42. SphinxQL upgrade notes, version 2.0.1-beta
 ================================================
 
 This section only applies to existing applications that use SphinxQL
@@ -8422,129 +8453,88 @@ Usage examples:
 Chapter 11. Reporting bugs
 ==========================
 
-Unfortunately, Sphinx is not yet 100% bug free (even though I'm working
+Unfortunately, Sphinx is not yet 100% bug free (even though we're working
 hard towards that), so you might occasionally run into some issues.
 
 Reporting as much as possible about each bug is very important - because to
-fix it, I need to be able either to reproduce and debug the bug, or to
+fix it, we need to be able either to reproduce and fix the bug, or to
 deduce what's causing it from the information that you provide. So here are
 some instructions on how to do that.
 
-Build-time issues
-=================
+Bug-tracker
+===========
 
-If Sphinx fails to build for some reason, please do the following:
+Nothing special to say here. Here is the <a
+href="http://sphinxsearch.com/bugs">link</a>. Create a new ticket and
+describe your bug in details so both you and developers can save their
+time.
 
-   1. check that headers and libraries for your DBMS are properly installed
-      (for instance, check that mysql-devel package is present);
+Crashes
+=======
 
-   2. report Sphinx version and config file (be sure to remove the
-      passwords!), MySQL (or PostgreSQL) configuration info, gcc version,
-      OS version and CPU type (ie. x86, x86-64, PowerPC, etc):
+In case of crashes we sometimes can get enough info to fix from backtrace.
 
-      | mysql_config
-      | gcc --version
-      | uname -a
+Sphinx tries to write crash backtrace to its log file. It may look like
+this:
 
-   3. report the error message which is produced by configure or gcc (it
-      should be to include error message itself only, not the whole build
-      log).
+   | ./indexer(_Z12sphBacktraceib+0x2d6)[0x5d337e]
+   | ./indexer(_Z7sigsegvi+0xbc)[0x4ce26a]
+   | /lib64/libpthread.so.0[0x3f75a0dd40]
+   | /lib64/libc.so.6(fwrite+0x34)[0x3f74e5f564]
+   | ./indexer(_ZN27CSphCharsetDefinitionParser5ParseEPKcR10CSphVectorI14CSphRemapRange16CSphVe
+   | ctorPolicyIS3_EE+0x5b)[0x51701b]
+   | ./indexer(_ZN13ISphTokenizer14SetCaseFoldingEPKcR10CSphString+0x62)[0x517e4c]
+   | ./indexer(_ZN17CSphTokenizerBase14SetCaseFoldingEPKcR10CSphString+0xbd)[0x518283]
+   | ./indexer(_ZN18CSphTokenizer_SBCSILb0EEC1Ev+0x3f)[0x5b312b]
+   | ./indexer(_Z22sphCreateSBCSTokenizerv+0x20)[0x51835c]
+   | ./indexer(_ZN13ISphTokenizer6CreateERK21CSphTokenizerSettingsPK17CSphEmbeddedFilesR10CSphS
+   | tring+0x47)[0x5183d7]
+   | ./indexer(_Z7DoIndexRK17CSphConfigSectionPKcRK17SmallStringHash_TIS_EbP8_IO_FILE+0x494)[0x
+   | 4d31c8]
+   | ./indexer(main+0x1a17)[0x4d6719]
+   | /lib64/libc.so.6(__libc_start_main+0xf4)[0x3f74e1d8a4]
+   | ./indexer(__gxx_personality_v0+0x231)[0x4cd779]
 
-Run-time issues
-===============
+This is an example of a good backtrace - we can see mangled function names
+here.
 
-If Sphinx builds and runs, but there are any problems running it, please do
-the following:
+But sometimes backtrace may look like this:
 
-   1. describe the bug (ie. both the expected behavior and actual behavior)
-      and all the steps necessary to reproduce it;
+   | /opt/piler/bin/indexer[0x4c4919]
+   | /opt/piler/bin/indexer[0x405cf0]
+   | /lib/x86_64-linux-gnu/libpthread.so.0(+0xfcb0)[0x7fc659cb6cb0]
+   | /opt/piler/bin/indexer[0x4237fd]
+   | /opt/piler/bin/indexer[0x491de6]
+   | /opt/piler/bin/indexer[0x451704]
+   | /opt/piler/bin/indexer[0x40861a]
+   | /opt/piler/bin/indexer[0x40442c]
+   | /lib/x86_64-linux-gnu/libc.so.6(__libc_start_main+0xed)[0x7fc6588aa76d]
+   | /opt/piler/bin/indexer[0x405b89]
 
-   2. include Sphinx version and config file (be sure to remove the
-      passwords!), MySQL (or PostgreSQL) version, gcc version, OS version
-      and CPU type (ie. x86, x86-64, PowerPC, etc):
+Developers can get nothing useful from those cryptic numbers. They're
+ordinary humans and want to see function names. To help them you need to
+provide symbols (function and variable names). If you've installed sphinx
+by building from the sources, run the following command over your binary:
 
-      | mysql --version
-      | gcc --version
-      | uname -a
+   | nm -n indexer > indexer.sym
 
-   3. build, install and run debug versions of all Sphinx programs (this is
-      to enable a lot of additional internal checks, so-called assertions):
+Attach this file to bug report along with backtrace. You should however
+ensure that the binary is not stripped. Our official binary packages should
+be fine. (That, or we have the symbols stored.) However, if you manually
+build Sphinx from the source tarball, do not run strip utility on that
+binary, and/or do not let your build/packaging system do that!
 
-      | make distclean
-      | ./configure --with-debug
-      | make install
-      | killall -TERM searchd
+Uploading your data
+===================
 
-   4. reindex to check if any assertions are triggered (in this case, it's
-      likely that the index is corrupted and causing problems);
+To fix your bug developers often need to reproduce it on their machines. To
+do this they need your sphinx.conf, index files, binlog (if present),
+sometimes data to index (like SQL tables or XMLpipe2 data files) and
+queries.
 
-   5. if the bug does not reproduce with debug versions, revert to
-      non-debug and mention it in your report;
-
-   6. if the bug could be easily reproduced with a small (1-100 record)
-      part of your database, please provide a gzipped dump of that part;
-
-   7. if the problem is related to searchd, include relevant entries from
-      searchd.log and query.log in your bug report;
-
-   8. if the problem is related to searchd, try running it in console mode
-      and check if it dies with an assertion:
-
-      | ./searchd --console
-
-   9. if any program dies with an assertion, provide the assertion message.
-
-Debugging assertions, crashes and hangups
-=========================================
-
-If any program dies with an assertion, crashes without an assertion or
-hangs up, you would additionally need to generate a core dump and examine
-it.
-
-   1. enable core dumps. On most Linux systems, this is done using ulimit:
-
-      | ulimit -c 32768
-
-   2. run the program and try to reproduce the bug;
-
-   3. if the program crashes (either with or without an assertion), find
-      the core file in current directory (it should typically print out
-      "Segmentation fault (core dumped)" message);
-
-   4. if the program hangs, use kill -SEGV from another console to force it
-      to exit and dump core:
-
-      | kill -SEGV HANGED-PROCESS-ID
-
-   5. use gdb to examine the core file and obtain a backtrace:
-
-      | gdb ./CRASHED-PROGRAM-FILE-NAME CORE-DUMP-FILE-NAME
-      | (gdb) bt
-      | (gdb) quit
-
-Note that HANGED-PROCESS-ID, CRASHED-PROGRAM-FILE-NAME and
-CORE-DUMP-FILE-NAME must all be replaced with specific numbers and file
-names. For example, hanged searchd debugging session would look like:
-
-   | # kill -SEGV 12345
-   | # ls *core*
-   | core.12345
-   | # gdb ./searchd core.12345
-   | (gdb) bt
-   | ...
-   | (gdb) quit
-
-Note that ulimit is not server-wide and only affects current shell session.
-This means that you will not have to restore any server-wide limits - but
-if you relogin, you will have to set ulimit again.
-
-Core dumps should be placed in current working directory (and Sphinx
-programs do not change it), so this is where you would look for them.
-
-Please do not immediately remove the core file because there could be
-additional helpful information which could be retrieved from it. You do not
-need to send me this file (as the debug info there is closely tied to your
-system) but I might need to ask you a few additional questions about it.
+Attach your data to ticket. In case it's too big to attach ask developers
+and they give you an address to write-only FTP created exactly for such
+puproses.
 
 Chapter 12. sphinx.conf options reference
 =========================================
@@ -11749,15 +11739,20 @@ Example:
 ---------------------
 
 Allows for fine-grain control over how attributes are loaded into memory
-when using plain indexes with external storage. It is now possible (since
-version 2.2.1-beta) to keep attributes on disk. Although, the daemon does
-map them to memory and the OS loads small chunks of data on demand. This
-allows use of docinfo = extern instead of docinfo = inline, but still
-leaves plenty of free memory for cases when you have large collections of
-pooled attributes (string/JSON/MVA) or when you're using many indexes per
-daemon that don't consume memory. It is not possible to update attributes
-left on disk when this option is enabled and the constraint of 4Gb of
-entries per pool is still in effect.
+when using indexes with external storage. It is now possible (since version
+2.2.1-beta) to keep attributes on disk. Although, the daemon does map them
+to memory and the OS loads small chunks of data on demand. This allows use
+of docinfo = extern instead of docinfo = inline, but still leaves plenty of
+free memory for cases when you have large collections of pooled attributes
+(string/JSON/MVA) or when you're using many indexes per daemon that don't
+consume memory. It is not possible to update attributes left on disk when
+this option is enabled and the constraint of 4Gb of entries per pool is
+still in effect.
+
+Note that this option also affects RT indexes. When it is enabled, all
+atribute updates will be disabled, and also all disk chunks of RT indexes
+will behave described above. However inserting and deleting of docs from RT
+indexes is still possible with enabled ondisk_attrs.
 
 Possible values:
 
@@ -12689,10 +12684,10 @@ thread_stack directive (or switch to a different workers setting if that is
 possible).
 
 A query with N levels of nesting is estimated to require approximately
-30+0.12*N KB of stack, meaning that the 64K is enough for queries with upto
-300 levels, 150K for upto 1000 levels, etc. If the stack size limit is not
-met, searchd fails the query and reports the required stack size in the
-error message.
+30+0.16*N KB of stack, meaning that the default 64K is enough for queries
+with upto 250 levels, 150K for upto 700 levels, etc. If the stack size
+limit is not met, searchd fails the query and reports the required stack
+size in the error message.
 
 Example:
 
@@ -13071,77 +13066,129 @@ Appendix A. Sphinx revision history
 
 Table of Contents
 
-A.1. Version 2.2.2-beta, ??? jan 2014
+A.1. Version 2.2.2-beta, 11 feb 2014
 A.2. Version 2.2.1-beta, 13 nov 2013
-A.3. Version 2.1.5-release, ??? jan 2014
+A.3. Version 2.1.5-release, 22 jan 2014
 A.4. Version 2.1.4-release, 18 dec 2013
 A.5. Version 2.1.3-release, 12 nov 2013
 A.6. Version 2.1.2-release, 10 oct 2013
 A.7. Version 2.1.1-beta, 20 feb 2013
-A.8. Version 2.0.9-release, 26 aug 2013
-A.9. Version 2.0.8-release, 26 apr 2013
-A.10. Version 2.0.7-release, 26 mar 2013
-A.11. Version 2.0.6-release, 22 oct 2012
-A.12. Version 2.0.5-release, 28 jul 2012
-A.13. Version 2.0.4-release, 02 mar 2012
-A.14. Version 2.0.3-release, 23 dec 2011
-A.15. Version 2.0.2-beta, 15 nov 2011
-A.16. Version 2.0.1-beta, 22 apr 2011
-A.17. Version 1.10-beta, 19 jul 2010
-A.18. Version 0.9.9-release, 02 dec 2009
-A.19. Version 0.9.9-rc2, 08 apr 2009
-A.20. Version 0.9.9-rc1, 17 nov 2008
-A.21. Version 0.9.8.1, 30 oct 2008
-A.22. Version 0.9.8, 14 jul 2008
-A.23. Version 0.9.7, 02 apr 2007
-A.24. Version 0.9.7-rc2, 15 dec 2006
-A.25. Version 0.9.7-rc1, 26 oct 2006
-A.26. Version 0.9.6, 24 jul 2006
-A.27. Version 0.9.6-rc1, 26 jun 2006
+A.8. Version 2.0.11-dev, xx xxx xxxx
+A.9. Version 2.0.10-release, 22 jan 2014
+A.10. Version 2.0.9-release, 26 aug 2013
+A.11. Version 2.0.8-release, 26 apr 2013
+A.12. Version 2.0.7-release, 26 mar 2013
+A.13. Version 2.0.6-release, 22 oct 2012
+A.14. Version 2.0.5-release, 28 jul 2012
+A.15. Version 2.0.4-release, 02 mar 2012
+A.16. Version 2.0.3-release, 23 dec 2011
+A.17. Version 2.0.2-beta, 15 nov 2011
+A.18. Version 2.0.1-beta, 22 apr 2011
+A.19. Version 1.10-beta, 19 jul 2010
+A.20. Version 0.9.9-release, 02 dec 2009
+A.21. Version 0.9.9-rc2, 08 apr 2009
+A.22. Version 0.9.9-rc1, 17 nov 2008
+A.23. Version 0.9.8.1, 30 oct 2008
+A.24. Version 0.9.8, 14 jul 2008
+A.25. Version 0.9.7, 02 apr 2007
+A.26. Version 0.9.7-rc2, 15 dec 2006
+A.27. Version 0.9.7-rc1, 26 oct 2006
+A.28. Version 0.9.6, 24 jul 2006
+A.29. Version 0.9.6-rc1, 26 jun 2006
 
-A.1. Version 2.2.2-beta, ??? jan 2014
-=====================================
+A.1. Version 2.2.2-beta, 11 feb 2014
+====================================
 
 New features
 ------------
 
-   * added possibility to add user-defined rankers (via plugins)
+   * added #1604, CALL KEYWORDS can show now multiple lemmas for a keyword
+
+   * added ALTER TABLE DROP COLUMN
+
    * added ALTER for JSON/string/MVA attributes
+
+   * added REMAP() function which surpasses SetOverride() API
+
+   * added an argument to PACKEDFACTORS() to disable ATC calculation
+     (syntax: PACKEDFACTORS({no_atc=1}))
+
+   * added exact phrase query syntax
+
    * added flag '--enable-dl' to configure script which works with
      libmysqlclient, libpostgresql, libexpat, libunixobdc
+
    * added new plugin system: CREATE/DROP PLUGIN, SHOW PLUGINS, plugin_dir
      now in common, index/query_token_filter plugins
-   * added ALTER TABLE DROP COLUMN
+
+   * added ondisk_attrs support for RT indexes
+
+   * added position shift operator to phrase operator
+
+   * added possibility to add user-defined rankers (via plugins)
 
 Optimizations, behavior changes, and removals
 ---------------------------------------------
 
-   * removed deprecated "address" and "port" config keys
-   * removed deprecated str2wordcount attributes
-   * removed deprecated str2ordinal attributes
-   * removed deprecated ondisk_dict and ondisk_dict_default
-   * removed deprecated charset_type and mssql_unicode
-   * removed deprecated enable_star
-   * removed deprecated CLI search and sql_query_info
-   * removed support for client versions 0.9.6 and below
-   * deprecated SetMatchMode() API call
+   * changed #1797, per-term statistics report (expanded terms fold to
+     their respective substrings)
+
    * changed default thread_stack value to 1M
-   * changed #1797 per-term statistics report (expanded terms fold to their
-     respective substrings)
+
    * changed local directive in a distributed index which takes now a list
      (eg. local=shard1,shard2,shard3)
-   * optimized kill lists in plain and RT indexes
+
+   * deprecated SetMatchMode() API call
+
+   * deprecated SetOverride() API call
+
    * optimized infix searches for dict=keywords
+
+   * optimized kill lists in plain and RT indexes
+
+   * removed deprecated "address" and "port" config keys
+
+   * removed deprecated CLI search and sql_query_info
+
+   * removed deprecated charset_type and mssql_unicode
+
+   * removed deprecated enable_star
+
+   * removed deprecated ondisk_dict and ondisk_dict_default
+
+   * removed deprecated str2ordinal attributes
+
+   * removed deprecated str2wordcount attributes
+
+   * removed support for client versions 0.9.6 and below
 
 Bug fixes
 ---------
 
-   * fixed #1759 indextool false positives on persistent MVA checking
-   * fixed index corruption in UPDATE queries with non-existent attributes
+   * fixed #1864, indexer crash on badly formed JSON, e.g. '[,1,2,3,4,]'
+
+   * fixed #1853, incomplete ORDER BY JSON attribute in distributed indexes
+
+   * fixed #1847, broken infix searches in RT indexes
+
+   * fixed #1844, clash of mix cased attribute and field names at CSV
+     source
+
+   * fixed #1840, filter by @uservar in distributes indexes
+
+   * fixed #1832,#1833,#1834, some big endianess issues
+
+   * fixed #1830, loss of ondisk_attrs after rotation
+
+   * fixed #1762, memory leak in regexp_filter
+
+   * fixed #1759, indextool false positives on persistent MVA checking
+
    * fixed GROUP BY id
-   * fixed #1832,#1833,#1834 some big endianess issues
-   * fixed #1762 memory leak in regexp_filter
-   * fixed #1830 loss of ondisk_attrs after rotation
+
+   * fixed crash on sending empty snippet result
+
+   * fixed index corruption in UPDATE queries with non-existent attributes
 
 A.2. Version 2.2.1-beta, 13 nov 2013
 ====================================
@@ -13271,26 +13318,26 @@ Bug fixes
      expansion (expand_keywords or lemmatize) occurred
    * fixed a crash while creating indexes with sql_joined_field
 
-A.3. Version 2.1.5-release, ??? jan 2014
-========================================
+A.3. Version 2.1.5-release, 22 jan 2014
+=======================================
 
 Bug fixes
 ---------
 
-   * fixed #1799 crash in queries to distributed indexes with GROUP BY on
-     multiple values
+   * fixed #1848, infixes and morphology clash
 
-   * fixed #1823 indextool fails to handle indexes with lemmatizer
+   * fixed #1823, indextool fails to handle indexes with lemmatizer
      morphology
 
-   * fixed network protocol issue which results in timeouts of
-     libmysqlclient for big Sphinx responses
+   * fixed #1799, crash in queries to distributed indexes with GROUP BY on
+     multiple values
+
+   * fixed #1718, expand_keywords option lost in disk chunks of RT indexes
 
    * fixed documentation on rt_flush_period
 
-   * fixed #1718 expand_keywords option lost in disk chunks of RT indexes
-
-   * fixed #1848 infixes and morphology clash
+   * fixed network protocol issue which results in timeouts of
+     libmysqlclient for big Sphinx responses
 
 A.4. Version 2.1.4-release, 18 dec 2013
 =======================================
@@ -13659,8 +13706,51 @@ Major behavior changes and optimizations
    * optimized filtering and scan in several frequent cases (single-value,
      2-arg, 3-arg WHERE clauses)
 
-A.8. Version 2.0.9-release, 26 aug 2013
-=======================================
+A.8. Version 2.0.11-dev, xx xxx xxxx
+====================================
+
+Bug fixes
+---------
+
+A.9. Version 2.0.10-release, 22 jan 2014
+========================================
+
+Bug fixes
+---------
+
+   * fixed #1778, SENTENCE and PARAGRAPH operators and infix stars clash
+
+   * fixed #1774, stack overflow on parsing large expressions
+
+   * fixed #1744, daemon failed to write to log file bigger than 4G
+
+   * fixed #1705, expression ranker handling of indexes with more than 32
+     fields
+
+   * fixed #1700, crash and cutoff in fullscan reverse_scan=1 queries
+
+   * fixed #1698, proper handling of stopword with blended chars
+
+   * fixed #1682, field end modifier and index_exact_words clash
+
+   * fixed #1678, memory leak in SUM() function of an expression ranker
+
+   * fixed #1670, updating of MVA attributes in distributed indexes via API
+
+   * fixed #1662, EscapeString() API escapes '<' too now
+
+   * fixed #1520, SetLimits() API documentation
+
+   * fixed #1491, documentation: space character is prohibited in
+     charset_table
+
+   * fixed memory leak in expressions with max_window_hits
+
+   * fixed rt_flush_period - less stricter internal check and more often
+     flushes overall
+
+A.10. Version 2.0.9-release, 26 aug 2013
+========================================
 
 Bug fixes
 ---------
@@ -13719,8 +13809,8 @@ Bug fixes
    * added a warning for missed stopwords, exception, wordforms files on
      index load and in indextool --check
 
-A.9. Version 2.0.8-release, 26 apr 2013
-=======================================
+A.11. Version 2.0.8-release, 26 apr 2013
+========================================
 
 Bug fixes
 ---------
@@ -13769,7 +13859,7 @@ Bug fixes
 
    * fixed #1405, between with mixed int float values
 
-A.10. Version 2.0.7-release, 26 mar 2013
+A.12. Version 2.0.7-release, 26 mar 2013
 ========================================
 
 Bug fixes
@@ -13902,7 +13992,7 @@ Bug fixes
 
    * added more debug info about failed index loading
 
-A.11. Version 2.0.6-release, 22 oct 2012
+A.13. Version 2.0.6-release, 22 oct 2012
 ========================================
 
 Bug fixes
@@ -14024,7 +14114,7 @@ Bug fixes
 
    * fixed x64 configurations for libstemmer
 
-A.12. Version 2.0.5-release, 28 jul 2012
+A.14. Version 2.0.5-release, 28 jul 2012
 ========================================
 
 Bug fixes
@@ -14184,7 +14274,7 @@ Bug fixes
 
    * fixed missing command-line switches documentation
 
-A.13. Version 2.0.4-release, 02 mar 2012
+A.15. Version 2.0.4-release, 02 mar 2012
 ========================================
 
 Bug fixes
@@ -14272,7 +14362,7 @@ Bug fixes
    * fixed #1120, negative total_found, docs and hits counter on huge
      indexes
 
-A.14. Version 2.0.3-release, 23 dec 2011
+A.16. Version 2.0.3-release, 23 dec 2011
 ========================================
 
 Bug fixes
@@ -14319,7 +14409,7 @@ Bug fixes
 
    * fixed crash log for 'fork' and 'prefork' workers
 
-A.15. Version 2.0.2-beta, 15 nov 2011
+A.17. Version 2.0.2-beta, 15 nov 2011
 =====================================
 
 Major new features
@@ -14586,7 +14676,7 @@ Bug fixes
    * fixed that field/zone conditions were not propagated to expanded
      keywords with dict=keywords
 
-A.16. Version 2.0.1-beta, 22 apr 2011
+A.18. Version 2.0.1-beta, 22 apr 2011
 =====================================
 
 New general features
@@ -14884,7 +14974,7 @@ Bug fixes
 
    * fixed libsphinxclient vs VS2003 compiler bug
 
-A.17. Version 1.10-beta, 19 jul 2010
+A.19. Version 1.10-beta, 19 jul 2010
 ====================================
 
    * added RT indexes support (Chapter 4, Real-time indexes)
@@ -15034,7 +15124,7 @@ A.17. Version 1.10-beta, 19 jul 2010
 
    * fixed #509, indexing ranged results from stored procedures
 
-A.18. Version 0.9.9-release, 02 dec 2009
+A.20. Version 0.9.9-release, 02 dec 2009
 ========================================
 
    * added Open, Close, Status calls to libsphinxclient (C API)
@@ -15149,7 +15239,7 @@ A.18. Version 0.9.9-release, 02 dec 2009
 
    * fixed #326 (missing CLOCK_xxx on FreeBSD)
 
-A.19. Version 0.9.9-rc2, 08 apr 2009
+A.21. Version 0.9.9-rc2, 08 apr 2009
 ====================================
 
    * added IsConnectError(), Open(), Close() calls to Java API (bug #240)
@@ -15319,7 +15409,7 @@ A.19. Version 0.9.9-rc2, 08 apr 2009
 
    * fixed parser vs @field -keyword, foo|@field bar, "" queries (bug #310)
 
-A.20. Version 0.9.9-rc1, 17 nov 2008
+A.22. Version 0.9.9-rc1, 17 nov 2008
 ====================================
 
    * added min_stemming_len directive
@@ -15422,7 +15512,7 @@ A.20. Version 0.9.9-rc1, 17 nov 2008
 
    * fixed handling of over-2GB dictionary files (.spi)
 
-A.21. Version 0.9.8.1, 30 oct 2008
+A.23. Version 0.9.8.1, 30 oct 2008
 ==================================
 
    * added configure script to libsphinxclient
@@ -15477,7 +15567,7 @@ A.21. Version 0.9.8.1, 30 oct 2008
    * fixed default ID range (that filtered out all 64-bit values) in Java
      and Python APIs
 
-A.22. Version 0.9.8, 14 jul 2008
+A.24. Version 0.9.8, 14 jul 2008
 ================================
 
 Indexing
@@ -15761,7 +15851,7 @@ Changes and fixes since 0.9.8-rc2
 
    * fixed sorting of negative floats in SPH_SORT_EXTENDED mode
 
-A.23. Version 0.9.7, 02 apr 2007
+A.25. Version 0.9.7, 02 apr 2007
 ================================
 
    * added support for sql_str2ordinal_column
@@ -15846,7 +15936,7 @@ A.23. Version 0.9.7, 02 apr 2007
 
    * fixed crashes with no-attribute indexes after rotate
 
-A.24. Version 0.9.7-rc2, 15 dec 2006
+A.26. Version 0.9.7-rc2, 15 dec 2006
 ====================================
 
    * added support for extended matching mode (query language)
@@ -15882,7 +15972,7 @@ A.24. Version 0.9.7-rc2, 15 dec 2006
 
    * fixes for 64-bit platforms
 
-A.25. Version 0.9.7-rc1, 26 oct 2006
+A.27. Version 0.9.7-rc1, 26 oct 2006
 ====================================
 
    * added alpha index merging code
@@ -15932,7 +16022,7 @@ A.25. Version 0.9.7-rc1, 26 oct 2006
 
    * fixed some issues with index rotation
 
-A.26. Version 0.9.6, 24 jul 2006
+A.28. Version 0.9.6, 24 jul 2006
 ================================
 
    * added support for empty indexes
@@ -15945,7 +16035,7 @@ A.26. Version 0.9.6, 24 jul 2006
 
    * fixed building on Solaris 9
 
-A.27. Version 0.9.6-rc1, 26 jun 2006
+A.29. Version 0.9.6-rc1, 26 jun 2006
 ====================================
 
    * added boolean queries support (experimental, beta version)

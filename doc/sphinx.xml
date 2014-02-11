@@ -5,7 +5,7 @@
 ]>
 <book lang="en">
 
-<title>Sphinx 2.2.2-dev reference manual</title>
+<title>Sphinx 2.2.2-beta reference manual</title>
 <subtitle>Free open-source SQL full-text search engine</subtitle>
 
 <bookinfo>
@@ -14126,53 +14126,53 @@ rlp_max_batch_docs = 100
 
 <appendix id="changelog"><title>Sphinx revision history</title>
 
-<sect1 id="rel222"><title>Version 2.2.2-beta, ??? feb 2014</title>
+<sect1 id="rel222"><title>Version 2.2.2-beta, 11 feb 2014</title>
 <bridgehead>New features</bridgehead>
 <itemizedlist>
-<listitem><para>added possibility to add user-defined rankers (via plugins)</para></listitem>
+<listitem><para>added #1604, <link linkend="sphinxql-call-keywords">CALL KEYWORDS</link> can show now multiple lemmas for a keyword</para></listitem>
+<listitem><para>added <link linkend="sphinxql-attach">ALTER TABLE DROP COLUMN</link></para></listitem>
 <listitem><para>added ALTER for JSON/string/MVA attributes</para></listitem>
-<listitem><para>added flag '--enable-dl' to configure script which works with libmysqlclient, libpostgresql, libexpat, libunixobdc</para></listitem>
-<listitem><para>added new plugin system: CREATE/DROP PLUGIN, SHOW PLUGINS, plugin_dir now in common, index/query_token_filter plugins</para></listitem>
-<listitem><para>added ALTER TABLE DROP COLUMN</para></listitem>
-<listitem><para>added REMAP() function which surpasses SetOverride() API</para></listitem>
-<listitem><para>added #1604 CALL KEYWORDS can show now multiple lemmas for a keyword</para></listitem>
-<listitem><para>added an argument to PACKEDFACTORS() to disable ATC calculation (syntax: PACKEDFACTORS({no_atc=1}))</para></listitem>
-<listitem><para>added ondisk_attrs support for RT indexes</para></listitem>
+<listitem><para>added <link linkend="expr-func-remap">REMAP()</link> function which surpasses SetOverride() API</para></listitem>
+<listitem><para>added an argument to <link linkend="misc-functions">PACKEDFACTORS()</link> to disable ATC calculation (syntax: PACKEDFACTORS({no_atc=1}))</para></listitem>
 <listitem><para>added exact phrase query syntax</para></listitem>
+<listitem><para>added flag <option>'--enable-dl'</option> to configure script which works with <filename>libmysqlclient</filename>, <filename>libpostgresql</filename>, <filename>libexpat</filename>, <filename>libunixobdc</filename></para></listitem>
+<listitem><para>added new plugin system: <link linkend="sphinxql-create-plugin">CREATE</link>/<link linkend="sphinxql-drop-plugin">DROP PLUGIN</link>, <link linkend="sphinxql-show-plugins">SHOW PLUGINS</link>, <link linkend="conf-plugin-dir">plugin_dir</link> now in common, <link linkend="sphinxql-create-plugin">index/query_token_filter</link> plugins</para></listitem>
+<listitem><para>added <link linkend="conf-ondisk-attrs">ondisk_attrs</link> support for RT indexes</para></listitem>
 <listitem><para>added position shift operator to phrase operator</para></listitem>
+<listitem><para>added possibility to add user-defined rankers (via <link linkend="extending-sphinx">plugins</link>)</para></listitem>
 </itemizedlist>
 <bridgehead>Optimizations, behavior changes, and removals</bridgehead>
 <itemizedlist>
-<listitem><para>removed deprecated "address" and "port" config keys</para></listitem>
-<listitem><para>removed deprecated str2wordcount attributes</para></listitem>
-<listitem><para>removed deprecated str2ordinal attributes</para></listitem>
-<listitem><para>removed deprecated ondisk_dict and ondisk_dict_default</para></listitem>
-<listitem><para>removed deprecated charset_type and mssql_unicode</para></listitem>
-<listitem><para>removed deprecated enable_star</para></listitem>
-<listitem><para>removed deprecated CLI search and sql_query_info</para></listitem>
-<listitem><para>removed support for client versions 0.9.6 and below</para></listitem>
-<listitem><para>deprecated SetMatchMode() API call</para></listitem>
-<listitem><para>changed default thread_stack value to 1M</para></listitem>
-<listitem><para>changed #1797 per-term statistics report (expanded terms fold to their respective substrings)</para></listitem>
-<listitem><para>changed local directive in a distributed index which takes now a list (eg. local=shard1,shard2,shard3)</para></listitem>
-<listitem><para>optimized kill lists in plain and RT indexes</para></listitem>
+<listitem><para>changed #1797, per-term statistics report (expanded terms fold to their respective substrings)</para></listitem>
+<listitem><para>changed default <link linkend="conf-thread-stack">thread_stack</link> value to 1M</para></listitem>
+<listitem><para>changed local directive in a distributed index which takes now a list (eg. <option>local=shard1,shard2,shard3</option>)</para></listitem>
+<listitem><para>deprecated <link linkend="api-func-setmatchmode">SetMatchMode()</link> API call</para></listitem>
+<listitem><para>deprecated <link linkend="api-func-setoverride">SetOverride()</link> API call</para></listitem>
 <listitem><para>optimized infix searches for dict=keywords</para></listitem>
-<listitem><para>deprecated SetOverride() API call</para></listitem>
+<listitem><para>optimized kill lists in plain and RT indexes</para></listitem>
+<listitem><para>removed deprecated <option>"address"</option> and <option>"port"</option> config keys</para></listitem>
+<listitem><para>removed deprecated CLI <filename>search</filename> and <option>sql_query_info</option></para></listitem>
+<listitem><para>removed deprecated <option>charset_type</option> and <option>mssql_unicode</option></para></listitem>
+<listitem><para>removed deprecated <option>enable_star</option></para></listitem>
+<listitem><para>removed deprecated <option>ondisk_dict</option> and <option>ondisk_dict_default</option></para></listitem>
+<listitem><para>removed deprecated <option>str2ordinal</option> attributes</para></listitem>
+<listitem><para>removed deprecated <option>str2wordcount</option> attributes</para></listitem>
+<listitem><para>removed support for client versions 0.9.6 and below</para></listitem>
 </itemizedlist>
 <bridgehead>Bug fixes</bridgehead>
 <itemizedlist>
-<listitem><para>fixed #1759, indextool false positives on persistent MVA checking</para></listitem>
-<listitem><para>fixed index corruption in UPDATE queries with non-existent attributes</para></listitem>
-<listitem><para>fixed GROUP BY id</para></listitem>
-<listitem><para>fixed #1832,#1833,#1834, some big endianess issues</para></listitem>
-<listitem><para>fixed #1762, memory leak in regexp_filter</para></listitem>
-<listitem><para>fixed #1830, loss of ondisk_attrs after rotation</para></listitem>
+<listitem><para>fixed #1864, <filename>indexer</filename> crash on badly formed JSON, e.g. '[,1,2,3,4,]'</para></listitem>
+<listitem><para>fixed #1853, incomplete <link linkend="sphinxql-select">ORDER BY JSON</link> attribute in distributed indexes</para></listitem>
 <listitem><para>fixed #1847, broken infix searches in RT indexes</para></listitem>
-<listitem><para>fixed #1853, incomplete ORDER BY JSON attribute in distributed indexes</para></listitem>
 <listitem><para>fixed #1844, clash of mix cased attribute and field names at CSV source</para></listitem>
+<listitem><para>fixed #1840, filter by <link linkend="sphinxql-set">@uservar</link> in distributes indexes</para></listitem>
+<listitem><para>fixed #1832,#1833,#1834, some big endianess issues</para></listitem>
+<listitem><para>fixed #1830, loss of <link linkend="conf-ondisk-attrs">ondisk_attrs</link> after rotation</para></listitem>
+<listitem><para>fixed #1762, memory leak in <link linkend="conf-regexp-filter">regexp_filter</link></para></listitem>
+<listitem><para>fixed #1759, <filename>indextool</filename> false positives on persistent MVA checking</para></listitem>
+<listitem><para>fixed <link linkend="sphinxql-select">GROUP BY</link> id</para></listitem>
 <listitem><para>fixed crash on sending empty snippet result</para></listitem>
-<listitem><para>fixed #1840, filter by @uservar in distributes indexes</para></listitem>
-<listitem><para>fixed #1864, indexer crash on badly formed JSON, e.g. '[,1,2,3,4,]'</para></listitem>
+<listitem><para>fixed index corruption in <link linkend="sphinxql-update">UPDATE</link> queries with non-existent attributes</para></listitem>
 </itemizedlist>
 </sect1>
 
@@ -14309,7 +14309,7 @@ rlp_max_batch_docs = 100
   <listitem><para>added <link linkend="expr-func-length">LENGTH()</link> function for MVA</para></listitem>
   <listitem><para>added missing <link linkend="conf-rt-attr-bool">rt_attr_bool</link> directive</para></listitem> 
   <listitem><para>added support for selecting over 250 columns via SphinxQL</para></listitem>
-  <listitem><para>deprecated custom sort mode, and <link linkend="conf-sql-attr-str2ordinal">str2ordinal</link> and <link linkend="conf-sql-attr-str2wordcount">str2wordcount</link> attribute types</para></listitem>
+  <listitem><para>deprecated custom sort mode, and <option>str2ordinal</option> and <option>str2wordcount</option> attribute types</para></listitem>
   <listitem><para>optimized <code>SELECT</code>, <code>UPDATE</code> for indexes with many attributes (up to 3.5x speedup in extreme cases)</para></listitem>
   <listitem><para><code>JSON</code> attributes (up to 5-20% faster <code>SELECTs</code> using JSON objects)</para></listitem>
   <listitem><para>optimized <link linkend="xmlpipe2">xmlpipe2</link> indexing (up to 9 times faster on some schemas)</para></listitem>
@@ -14511,7 +14511,7 @@ rlp_max_batch_docs = 100
 <listitem><para>fixed #1511, crash on indexing PostgreSQL data source with <link linkend="mva">MVA</link> attributes</para></listitem>
 <listitem><para>fixed #1509, <link linkend="conf-blend-chars">blend_chars</link> vs incomplete multi-form and overshort</para></listitem>
 <listitem><para>fixed #1504, RT binlog replay vs descending tid on update</para></listitem>
-<listitem><para>fixed #1499, <link linkend="conf-sql-field-str2wordcount">sql_field_str2wordcount</link> actually is int, not string</para></listitem>
+<listitem><para>fixed #1499, <option>sql_field_str2wordcount</option> actually is int, not string</para></listitem>
 <listitem><para>fixed #1498, now working with exceptions starting with number too</para></listitem>
 <listitem><para>fixed #1496, multiple destination keywords in wordform</para></listitem>
 <listitem><para>fixed #1494, lost 'mod', '%' operations in select list. Also corrected few typers in the doc.</para></listitem>
@@ -15036,8 +15036,8 @@ rlp_max_batch_docs = 100
     <link linkend="conf-sql-field-string">sql_field_string</link>,
     <link linkend="conf-xmlpipe-attr-string">xml_attr_string</link>,
     <link linkend="conf-xmlpipe-field-string">xml_field_string</link> directives)</para></listitem>
-<listitem><para>added indexing-time word counter (<link linkend="conf-sql-attr-str2wordcount">sql_attr_str2wordcount</link>,
-    <link linkend="conf-sql-field-str2wordcount">sql_field_str2wordcount</link> directives)</para></listitem>
+<listitem><para>added indexing-time word counter (<option>sql_attr_str2wordcount</option>,
+    <option>sql_field_str2wordcount</option> directives)</para></listitem>
 <listitem><para>added <link linkend="sphinxql-call-snippets">CALL SNIPPETS()</link>,
     <link linkend="sphinxql-call-keywords">CALL KEYWORDS()</link> SphinxQL statements</para></listitem>
 <listitem><para>added <option>field_weights</option>, <option>index_weights</option> options to
@@ -15247,7 +15247,7 @@ rlp_max_batch_docs = 100
 <listitem><para>added blackhole agents support for debugging/testing (<link linkend="conf-agent-blackhole">agent_blackhole</link> directive)</para></listitem>
 <listitem><para>added <link linkend="conf-max-filters">max_filters</link>, <link linkend="conf-max-filter-values">max_filter_values</link> directives (were hardcoded before)</para></listitem>
 <listitem><para>added int64 expression evaluation path, automatic inference, and BIGINT() enforcer function</para></listitem>
-<listitem><para>added crash handler for debugging (<link linkend="conf-crash-log-path">crash_log_path</link> directive)</para></listitem>
+<listitem><para>added crash handler for debugging (<option>crash_log_path</option> directive)</para></listitem>
 <listitem><para>added MS SQL (aka SQL Server) source support (Windows only, <link linkend="conf-mssql-winauth">mssql_winauth</link> and mssql_unicode directives)</para></listitem>
 <listitem><para>added indexer-side column unpacking feature (<link linkend="conf-unpack-zlib">unpack_zlib</link>, <link linkend="conf-unpack-mysqlcompress">unpack_mysqlcompress</link> directives)</para></listitem>
 <listitem><para>added nested brackers and NOTs support to <link linkend="extended-syntax">query language</link>, rewritten query parser</para></listitem>

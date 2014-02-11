@@ -7,7 +7,7 @@
 %define sphinx_group	sphinx
 
 Name:           sphinx
-Version:        2.2.1
+Version:        2.2.2
 Release:        1%{?dist}
 Summary:        Sphinx full-text search server
 
@@ -255,6 +255,9 @@ fi
 
 
 %changelog
+* Tue Feb 11 2014 Anton Tsitlionok <deogar@sphinxsearch.com> 2.2.2-beta-1
+- New version 2.2.2-beta
+
 * Mon Nov 13 2013 Anton Tsitlionok <deogar@sphinxsearch.com> 2.2.1-beta-1
 - New version 2.2.1-beta
 

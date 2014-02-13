@@ -1878,6 +1878,12 @@ query will only match the first document. Exact form operator requires
 <link linkend="conf-index-exact-words">index_exact_words</link> option to be enabled.
 This is a modifier that affects the keyword and thus can be used within
 operators such as phrase, proximity, and quorum operators.
+Starting with 2.2.2-beta, it is possible to apply an exact form modifier
+to the phrase operator. It's really just syntax sugar - it adds an exact form
+modifier to all terms contained within the phrase.
+<programlisting>
+="exact phrase"
+</programlisting>
 </para>
 <para>
 Field-start and field-end keyword modifiers, introduced in version 0.9.9-rc2,
@@ -1898,6 +1904,16 @@ aaa -(bbb -(ccc ddd))
 // queries that are non-computable
 -aaa
 aaa | -bbb
+</programlisting>
+</para>
+<para>
+Starting with 2.2.2-beta, the phrase search operator may include a 'match any term'
+modifier. Terms within the phrase operator are position significant. When
+the 'match any term' modifier is implemented, the position of the subsequent terms
+from that phrase query will be shifted. Therefore, 'match any' has no impact
+on search performance.
+<programlisting>
+"exact * phrase * * for terms"
 </programlisting>
 </para>
 <para>

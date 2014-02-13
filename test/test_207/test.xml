@@ -378,6 +378,18 @@ CREATE TABLE test_table
 <!--regression quorum vs AOT -->
 <sphinxql>SELECT id  FROM test_quorum WHERE MATCH(' "меняет песенка Иван"/2 (@docid 1)');show meta</sphinxql>
 
+<sphinxql>SET profiling=1</sphinxql>
+<sphinxql>SELECT id, WEIGHT() FROM test1 WHERE MATCH('^ попил $');</sphinxql>
+<sphinxql>SHOW PLAN;</sphinxql>
+<sphinxql>SELECT id, WEIGHT() FROM test1 WHERE MATCH('попил');</sphinxql>
+<sphinxql>SHOW PLAN;</sphinxql>
+<sphinxql>SELECT id, WEIGHT() FROM test1 WHERE MATCH('попил^1.234');</sphinxql>
+<sphinxql>SHOW PLAN;</sphinxql>
+<sphinxql>SELECT id, WEIGHT() FROM test1 WHERE MATCH('попил$^1.234');</sphinxql>
+<sphinxql>SHOW PLAN;</sphinxql>
+<sphinxql>SELECT id, WEIGHT() FROM test1 WHERE MATCH('попил^1.234$');</sphinxql>
+<sphinxql>SHOW PLAN;</sphinxql>
+
 </sphqueries>
 
 </test>

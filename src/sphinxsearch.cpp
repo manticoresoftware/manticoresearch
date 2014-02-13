@@ -80,6 +80,7 @@ struct ExtQword_t
 	int			m_iDocs;		///< matching documents
 	int			m_iHits;		///< matching hits
 	float		m_fIDF;			///< IDF value
+	float		m_fBoost;		///< IDF multiplier
 	int			m_iQueryPos;	///< position in the query
 	bool		m_bExpanded;	///< added by prefix expansion
 	bool		m_bExcluded;	///< excluded by the query (eg. bb in (aa AND NOT bb))
@@ -1327,6 +1328,7 @@ static ISphQword * CreateQueryWord ( const XQKeyword_t & tWord, const ISphQwordS
 	else if ( tWord.m_bFieldEnd )					pWord->m_iTermPos = TERM_POS_FIELD_END;
 	else											pWord->m_iTermPos = 0;
 
+	pWord->m_fBoost = tWord.m_fBoost;
 	pWord->m_iAtomPos = tWord.m_iAtomPos;
 	return pWord;
 }
@@ -1735,6 +1737,7 @@ int ExtPayload_c::GetQwords ( ExtQwordsHash_t & hQwords )
 	tQword.m_iDocs = m_tWord.m_iDocs;
 	tQword.m_iHits = m_tWord.m_iHits;
 	tQword.m_fIDF = -1.0f;
+	tQword.m_fBoost = m_tWord.m_fBoost;
 	tQword.m_iQueryPos = m_tWord.m_iAtomPos;
 	tQword.m_bExpanded = true;
 	tQword.m_bExcluded = m_tWord.m_bExcluded;
@@ -2200,6 +2203,7 @@ int ExtTerm_c::GetQwords ( ExtQwordsHash_t & hQwords )
 	tInfo.m_iHits = m_pQword->m_iHits;
 	tInfo.m_iQueryPos = m_pQword->m_iAtomPos;
 	tInfo.m_fIDF = -1.0f; // suppress gcc 4.2.3 warning
+	tInfo.m_fBoost = m_pQword->m_fBoost;
 	tInfo.m_bExpanded = m_pQword->m_bExpanded;
 	tInfo.m_bExcluded = m_pQword->m_bExcluded;
 	hQwords.Add ( tInfo, m_pQword->m_sWord );
@@ -5431,6 +5435,8 @@ static void Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const 
 				tRes.Appendf ( ", field_end" );
 			if ( w.m_bMorphed )
 				tRes.Appendf ( ", morphed" );
+			if ( w.m_fBoost!=1.0f ) // really comparing floats?
+				tRes.Appendf ( ", boost=%f", w.m_fBoost );
 			tRes.Appendf ( ")" );
 		}
 	}
@@ -8904,7 +8910,7 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 		if ( pQuery->m_bNormalizedTFIDF )
 			fIDF /= iQwords;
 
-		tWord.m_fIDF = fIDF;
+		tWord.m_fIDF = fIDF * tWord.m_fBoost;
 		dWords.Add ( &tWord );
 	}
 

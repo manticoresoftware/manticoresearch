@@ -27,6 +27,7 @@ struct XQKeyword_t
 	int					m_iAtomPos;
 	bool				m_bFieldStart;	///< must occur at very start
 	bool				m_bFieldEnd;	///< must occur at very end
+	float				m_fBoost;		///< keyword IDF will be multiplied by this
 	bool				m_bExpanded;	///< added by prefix expansion
 	bool				m_bExcluded;	///< excluded by query (rval to operator NOT)
 	bool				m_bMorphed;		///< morphology processing (wordforms, stemming etc) already done
@@ -36,6 +37,7 @@ struct XQKeyword_t
 		: m_iAtomPos ( -1 )
 		, m_bFieldStart ( false )
 		, m_bFieldEnd ( false )
+		, m_fBoost ( 1.0f )
 		, m_bExpanded ( false )
 		, m_bExcluded ( false )
 		, m_bMorphed ( false )
@@ -47,6 +49,7 @@ struct XQKeyword_t
 		, m_iAtomPos ( iPos )
 		, m_bFieldStart ( false )
 		, m_bFieldEnd ( false )
+		, m_fBoost ( 1.0f )
 		, m_bExpanded ( false )
 		, m_bExcluded ( false )
 		, m_bMorphed ( false )

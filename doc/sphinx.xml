@@ -1787,6 +1787,7 @@ hello !world
 <listitem><para>strict order operator (aka operator "before"): <programlisting>aaa &lt;&lt; bbb &lt;&lt; ccc</programlisting></para></listitem>
 <listitem><para>exact form modifier (introduced in version 0.9.9-rc1): <programlisting>raining =cats and =dogs</programlisting></para></listitem>
 <listitem><para>field-start and field-end modifier (introduced in version 0.9.9-rc2): <programlisting>^hello world$</programlisting></para></listitem>
+<listitem><para>keyword IDF boost modifier (introduced in version 2.2.3-beta): <programlisting>boosted^1.234 boostedfieldend$^1.234</programlisting></para></listitem>
 <listitem><para>NEAR, generalized proximity operator (introduced in version 2.0.1-beta): <programlisting>hello NEAR/3 world NEAR/4 "my test"</programlisting></para></listitem>
 <listitem><para>SENTENCE operator (introduced in version 2.0.1-beta): <programlisting>all SENTENCE words SENTENCE "in one sentence"</programlisting></para></listitem>
 <listitem><para>PARAGRAPH operator (introduced in version 2.0.1-beta): <programlisting>"Bill Gates" PARAGRAPH "Steve Jobs"</programlisting></para></listitem>

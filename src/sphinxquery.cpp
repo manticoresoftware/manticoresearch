@@ -50,6 +50,8 @@ public:
 	bool			IsSpecial ( char c );
 	int				GetToken ( YYSTYPE * lvalp );
 
+	void			HandleModifiers ( XQKeyword_t & tKeyword );
+
 	void			AddQuery ( XQNode_t * pNode );
 	XQNode_t *		AddKeyword ( const char * sKeyword );
 	XQNode_t *		AddKeyword ( XQNode_t * pLeft, XQNode_t * pRight );
@@ -104,8 +106,6 @@ public:
 	const CSphSchema *		m_pSchema;
 	ISphTokenizer *			m_pTokenizer;
 	CSphDict *				m_pDict;
-
-	const char *			m_pCur;
 
 	CSphVector<XQNode_t*>	m_dSpawned;
 	XQNode_t *				m_pRoot;
@@ -480,7 +480,7 @@ bool XQParser_t::AddField ( FieldMask_t & dFields, const char * szField, int iLe
 	sField.SetBinary ( szField, iLen );
 
 	int iField = m_pSchema->GetFieldIndex ( sField.cstr () );
-	if ( iField < 0 )
+	if ( iField<0 )
 	{
 		if ( m_bStopOnInvalid )
 			return Error ( "no field '%s' found in schema", sField.cstr () );
@@ -491,7 +491,7 @@ bool XQParser_t::AddField ( FieldMask_t & dFields, const char * szField, int iLe
 		if ( iField>=SPH_MAX_FIELDS )
 			return Error ( " max %d fields allowed", SPH_MAX_FIELDS );
 
-		dFields.Set(iField);
+		dFields.Set ( iField );
 	}
 
 	return true;
@@ -966,6 +966,10 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 					}
 					continue;
 				}
+			} else if ( sToken[0]=='^' || sToken[0]=='$' )
+			{
+				// these specials are handled in HandleModifiers()
+				continue;
 			} else
 			{
 				bool bWasQuoted = m_bQuoted;
@@ -1063,13 +1067,50 @@ void XQParser_t::AddQuery ( XQNode_t * pNode )
 	m_pRoot = pNode;
 }
 
+// Handle modifiers:
+// 1) ^ - field start
+// 2) $ - field end
+// 3) ^1.234 - keyword boost
+// keyword$^1.234 - field end with boost are on
+// keywords^1.234$ - only boost here, '$' it NOT modifier
+void XQParser_t::HandleModifiers ( XQKeyword_t & tKeyword )
+{
+	const char * sTokStart = m_pTokenizer->GetTokenStart();
+	const char * sTokEnd = m_pTokenizer->GetTokenEnd();
+	if ( !sTokStart || !sTokEnd )
+		return;
+
+	const char * sQuery = reinterpret_cast<char *> ( m_sQuery );
+	tKeyword.m_bFieldStart = ( sTokStart-sQuery )>0 && sTokStart [ -1 ]=='^';
+
+	if ( sTokEnd[0]=='$' )
+	{
+		tKeyword.m_bFieldEnd = true;
+		++sTokEnd; // Skipping.
+	}
+
+	if ( sTokEnd[0]=='^' && ( sTokEnd[1]=='.' || isdigit ( sTokEnd[1] ) ) )
+	{
+		// Probably we have a boost, lets check.
+		char * pEnd;
+		float fBoost = strtod ( sTokEnd+1, &pEnd );
+		if ( ( sTokEnd+1 )!=pEnd )
+		{
+			// We do have a boost.
+			// FIXME Handle ERANGE errno here.
+			tKeyword.m_fBoost = fBoost;
+			m_pTokenizer->SetBufferPtr ( pEnd );
+		}
+	}
+}
+
 
 XQNode_t * XQParser_t::AddKeyword ( const char * sKeyword )
 {
 	XQKeyword_t tAW ( sKeyword, m_iAtomPos );
+	HandleModifiers ( tAW );
 	XQNode_t * pNode = new XQNode_t ( *m_dStateSpec.Last() );
 	pNode->m_dWords.Add ( tAW );
-
 	m_dSpawned.Add ( pNode );
 	return pNode;
 }
@@ -1496,7 +1537,6 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 	m_iQueryLen = sQuery ? strlen(sQuery) : 0;
 	m_pTokenizer = pMyTokenizer.Ptr();
 	m_pSchema = pSchema;
-	m_pCur = sQuery;
 	m_iAtomPos = 0;
 	m_iPendingNulls = 0;
 	m_iPendingType = 0;

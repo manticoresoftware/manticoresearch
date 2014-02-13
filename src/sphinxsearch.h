@@ -54,6 +54,7 @@ public:
 	SphWordID_t		m_uWordID;		///< word ID, from dictionary
 	int				m_iTermPos;
 	int				m_iAtomPos;		///< word position, from query
+	float			m_fBoost;		///< IDF keyword boost (multiplier)
 	bool			m_bExpanded;	///< added by prefix expansion
 	bool			m_bExcluded;	///< excluded by the query (rval to operator NOT)
 
@@ -76,6 +77,7 @@ public:
 		: m_uWordID ( 0 )
 		, m_iTermPos ( 0 )
 		, m_iAtomPos ( 0 )
+		, m_fBoost ( 1.0f )
 		, m_bExpanded ( false )
 		, m_bExcluded ( false )
 		, m_iDocs ( 0 )

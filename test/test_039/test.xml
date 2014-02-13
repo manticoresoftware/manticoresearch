@@ -313,6 +313,10 @@ $query ( $results, "SELECT * FROM dist WHERE id in @var1", $sock, array(), true 
 // regression @uservars got sent by master to agents
 $query ( $results, "SET INDEX dist2 GLOBAL @var2 = (1,4,11,12)", $sock, array(), true );
 $query ( $results, "SELECT * FROM dist2 WHERE id in @var2", $sock, array(), true );
+$query ( $results, "SELECT * FROM block1 WHERE id in @var3", $sock, array(), true );
+$query ( $results, "SET INDEX dist GLOBAL @var3 = (1,4,11,12)", $sock, array(), true );
+$query ( $results, "SELECT * FROM dist WHERE id in @var3", $sock, array(), true );
+$query ( $results, "SELECT * FROM block1 WHERE id in @var3", $sock, array(), true );
 
 ]]>
 </custom_test>

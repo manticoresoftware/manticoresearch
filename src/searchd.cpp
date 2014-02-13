@@ -15508,63 +15508,6 @@ struct UVarReplyParser_t : public IReplyParser_t
 };
 
 
-static bool SendUserVar ( const char * sIndex, const char * sUserVarName, CSphVector<SphAttr_t> & dSetValues, CSphString & sError )
-{
-	CSphVector<AgentConn_t> dAgents;
-	g_tDistLock.Lock();
-	const DistributedIndex_t * pIndex = g_hDistIndexes ( sIndex );
-	if ( pIndex )
-		pIndex->GetAllAgents ( &dAgents );
-	g_tDistLock.Unlock();
-
-	if ( !pIndex )
-	{
-		sError.SetSprintf ( "unknown index '%s' in Set statement", sIndex );
-		return false;
-	}
-
-	// FIXME!!! warn on empty agents
-	if ( !dAgents.GetLength() )
-		return true;
-
-	dSetValues.Uniq();
-	int iUserVarsCount = dSetValues.GetLength();
-	CSphFixedVector<BYTE> dBuf ( iUserVarsCount * sizeof(dSetValues[0]) );
-	int iLength = 0;
-	if ( iUserVarsCount )
-	{
-		SphAttr_t iLast = 0;
-		BYTE * pCur = dBuf.Begin();
-		ARRAY_FOREACH ( i, dSetValues )
-		{
-			SphAttr_t iDelta = dSetValues[i] - iLast;
-			assert ( iDelta>0 );
-			iLast = dSetValues[i];
-			pCur += sphEncodeVLB8 ( pCur, iDelta );
-		}
-
-		iLength = pCur - dBuf.Begin();
-	}
-
-	// connect to remote agents and query them
-	if ( dAgents.GetLength() )
-	{
-		// connect to remote agents and query them
-		UVarRequestBuilder_t tReqBuilder ( sUserVarName, iUserVarsCount, dBuf.Begin(), iLength );
-		CSphRemoteAgentsController tDistCtrl ( g_iDistThreads, dAgents, tReqBuilder, g_iPingInterval );
-
-		int iAgentsDone = tDistCtrl.Finish();
-		if ( iAgentsDone )
-		{
-			UVarReplyParser_t tParser;
-			RemoteWaitForAgents ( dAgents, g_iPingInterval, tParser );
-		}
-	}
-
-	return true;
-}
-
-
 static void UservarAdd ( const CSphString & sName, CSphVector<SphAttr_t> & dVal );
 
 // create or update the variable
@@ -15574,6 +15517,76 @@ static void SetLocalUserVar ( const CSphString & sName, CSphVector<SphAttr_t> & 
 	UservarAdd ( sName, dSetValues );
 	g_tmSphinxqlState = sphMicroTimer();
 	g_tUservarsMutex.Unlock();
+}
+
+
+static bool SendUserVar ( const char * sIndex, const char * sUserVarName, CSphVector<SphAttr_t> & dSetValues, CSphString & sError )
+{
+	CSphVector<AgentConn_t> dAgents;
+	bool bGotLocal = false;
+	g_tDistLock.Lock();
+	const DistributedIndex_t * pIndex = g_hDistIndexes ( sIndex );
+	if ( pIndex )
+	{
+		pIndex->GetAllAgents ( &dAgents );
+		bGotLocal = ( pIndex->m_dLocal.GetLength()>0 );
+	}
+	g_tDistLock.Unlock();
+
+	if ( !pIndex )
+	{
+		sError.SetSprintf ( "unknown index '%s' in Set statement", sIndex );
+		return false;
+	}
+
+	// FIXME!!! warn on missed agents
+	if ( !dAgents.GetLength() && !bGotLocal )
+		return true;
+
+	dSetValues.Uniq();
+
+	// FIXME!!! warn on empty agents
+	if ( dAgents.GetLength() )
+	{
+		int iUserVarsCount = dSetValues.GetLength();
+		CSphFixedVector<BYTE> dBuf ( iUserVarsCount * sizeof(dSetValues[0]) );
+		int iLength = 0;
+		if ( iUserVarsCount )
+		{
+			SphAttr_t iLast = 0;
+			BYTE * pCur = dBuf.Begin();
+			ARRAY_FOREACH ( i, dSetValues )
+			{
+				SphAttr_t iDelta = dSetValues[i] - iLast;
+				assert ( iDelta>0 );
+				iLast = dSetValues[i];
+				pCur += sphEncodeVLB8 ( pCur, iDelta );
+			}
+
+			iLength = pCur - dBuf.Begin();
+		}
+
+		// connect to remote agents and query them
+		if ( dAgents.GetLength() )
+		{
+			// connect to remote agents and query them
+			UVarRequestBuilder_t tReqBuilder ( sUserVarName, iUserVarsCount, dBuf.Begin(), iLength );
+			CSphRemoteAgentsController tDistCtrl ( g_iDistThreads, dAgents, tReqBuilder, g_iPingInterval );
+
+			int iAgentsDone = tDistCtrl.Finish();
+			if ( iAgentsDone )
+			{
+				UVarReplyParser_t tParser;
+				RemoteWaitForAgents ( dAgents, g_iPingInterval, tParser );
+			}
+		}
+	}
+
+	// should be at the end due to swap of dSetValues values
+	if ( bGotLocal )
+		SetLocalUserVar ( sUserVarName, dSetValues );
+
+	return true;
 }
 
 

@@ -646,6 +646,7 @@ enum SearchdCommand_e
 	SEARCHD_COMMAND_SPHINXQL	= 8,
 	SEARCHD_COMMAND_PING		= 9,
 	SEARCHD_COMMAND_DELETE		= 10,
+	SEARCHD_COMMAND_UVAR		= 11,
 
 	SEARCHD_COMMAND_TOTAL
 };
@@ -661,7 +662,8 @@ enum
 	VER_COMMAND_STATUS		= 0x101,
 	VER_COMMAND_FLUSHATTRS	= 0x100,
 	VER_COMMAND_SPHINXQL	= 0x100,
-	VER_COMMAND_PING		= 0x100
+	VER_COMMAND_PING		= 0x100,
+	VER_COMMAND_UVAR		= 0x100,
 };
 
 
@@ -678,7 +680,7 @@ enum SearchdStatus_e
 /// master-agent API protocol extensions version
 enum
 {
-	VER_MASTER = 9
+	VER_MASTER = 11
 };
 
 
@@ -11096,7 +11098,8 @@ enum SqlSet_e
 {
 	SET_LOCAL,
 	SET_GLOBAL_UVAR,
-	SET_GLOBAL_SVAR
+	SET_GLOBAL_SVAR,
+	SET_INDEX_UVAR
 };
 
 /// parsing result
@@ -13921,6 +13924,7 @@ void HandleCommandFlush ( int iSock, int iVer, InputBuffer_c & tReq )
 
 void HandleCommandSphinxql ( int iSock, int iVer, InputBuffer_c & tReq ); // definition is below
 void StatCountCommand ( int iCmd, int iCount=1 );
+void HandleCommandUserVar ( int iSock, int iVer, NetInputBuffer_c & tReq );
 
 /// ping/pong exchange over API
 void HandleCommandPing ( int iSock, int iVer, InputBuffer_c & tReq )
@@ -14125,6 +14129,7 @@ void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 			case SEARCHD_COMMAND_FLUSHATTRS:HandleCommandFlush ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_SPHINXQL:	HandleCommandSphinxql ( iSock, iCommandVer, tBuf ); break;
 			case SEARCHD_COMMAND_PING:		HandleCommandPing ( iSock, iCommandVer, tBuf ); break;
+			case SEARCHD_COMMAND_UVAR:		HandleCommandUserVar ( iSock, iCommandVer, tBuf ); break;
 			default:						assert ( 0 && "INTERNAL ERROR: unhandled command" ); break;
 		}
 
@@ -15458,6 +15463,163 @@ void CheckPing()
 
 
 /////////////////////////////////////////////////////////////////////////////
+// user variables these send from master to agents
+/////////////////////////////////////////////////////////////////////////////
+
+struct UVarRequestBuilder_t : public IRequestBuilder_t
+{
+	explicit UVarRequestBuilder_t ( const char * sName, int iUserVars, const BYTE * pBuf, int iLength )
+		: m_sName ( sName )
+		, m_iUserVars ( iUserVars )
+		, m_pBuf ( pBuf )
+		, m_iLength ( iLength )
+	{}
+
+	virtual void BuildRequest ( AgentConn_t &, NetOutputBuffer_c & tOut ) const
+	{
+		// header
+		tOut.SendWord ( SEARCHD_COMMAND_UVAR );
+		tOut.SendWord ( VER_COMMAND_UVAR );
+		tOut.SendInt ( strlen ( m_sName ) + 12 + m_iLength );
+
+		tOut.SendString ( m_sName );
+		tOut.SendInt ( m_iUserVars );
+		tOut.SendInt ( m_iLength );
+		tOut.SendBytes ( m_pBuf, m_iLength );
+	}
+
+	const char * m_sName;
+	int m_iUserVars;
+	const BYTE * m_pBuf;
+	int m_iLength;
+};
+
+struct UVarReplyParser_t : public IReplyParser_t
+{
+	explicit UVarReplyParser_t ()
+	{}
+
+	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const
+	{
+		// error got handled at call site
+		bool bOk = ( tReq.GetByte()==1 );
+		return bOk;
+	}
+};
+
+
+static bool SendUserVar ( const char * sIndex, const char * sUserVarName, CSphVector<SphAttr_t> & dSetValues, CSphString & sError )
+{
+	CSphVector<AgentConn_t> dAgents;
+	g_tDistLock.Lock();
+	const DistributedIndex_t * pIndex = g_hDistIndexes ( sIndex );
+	if ( pIndex )
+		pIndex->GetAllAgents ( &dAgents );
+	g_tDistLock.Unlock();
+
+	if ( !pIndex )
+	{
+		sError.SetSprintf ( "unknown index '%s' in Set statement", sIndex );
+		return false;
+	}
+
+	// FIXME!!! warn on empty agents
+	if ( !dAgents.GetLength() )
+		return true;
+
+	dSetValues.Uniq();
+	int iUserVarsCount = dSetValues.GetLength();
+	CSphFixedVector<BYTE> dBuf ( iUserVarsCount * sizeof(dSetValues[0]) );
+	int iLength = 0;
+	if ( iUserVarsCount )
+	{
+		SphAttr_t iLast = 0;
+		BYTE * pCur = dBuf.Begin();
+		ARRAY_FOREACH ( i, dSetValues )
+		{
+			SphAttr_t iDelta = dSetValues[i] - iLast;
+			assert ( iDelta>0 );
+			iLast = dSetValues[i];
+			pCur += sphEncodeVLB8 ( pCur, iDelta );
+		}
+
+		iLength = pCur - dBuf.Begin();
+	}
+
+	// connect to remote agents and query them
+	if ( dAgents.GetLength() )
+	{
+		// connect to remote agents and query them
+		UVarRequestBuilder_t tReqBuilder ( sUserVarName, iUserVarsCount, dBuf.Begin(), iLength );
+		CSphRemoteAgentsController tDistCtrl ( g_iDistThreads, dAgents, tReqBuilder, g_iPingInterval );
+
+		int iAgentsDone = tDistCtrl.Finish();
+		if ( iAgentsDone )
+		{
+			UVarReplyParser_t tParser;
+			RemoteWaitForAgents ( dAgents, g_iPingInterval, tParser );
+		}
+	}
+
+	return true;
+}
+
+
+static void UservarAdd ( const CSphString & sName, CSphVector<SphAttr_t> & dVal );
+
+// create or update the variable
+static void SetLocalUserVar ( const CSphString & sName, CSphVector<SphAttr_t> & dSetValues )
+{
+	g_tUservarsMutex.Lock();
+	UservarAdd ( sName, dSetValues );
+	g_tmSphinxqlState = sphMicroTimer();
+	g_tUservarsMutex.Unlock();
+}
+
+
+void HandleCommandUserVar ( int iSock, int iVer, NetInputBuffer_c & tReq )
+{
+	if ( !CheckCommandVersion ( iVer, VER_COMMAND_UVAR, tReq ) )
+		return;
+
+	CSphString sUserVar = tReq.GetString();
+	int iCount = tReq.GetInt();
+	CSphVector<SphAttr_t> dUserVar ( iCount );
+	int iLength = tReq.GetInt();
+	CSphFixedVector<BYTE> dBuf ( iLength );
+	tReq.GetBytes ( dBuf.Begin(), iLength );
+
+	if ( tReq.GetError() )
+	{
+		tReq.SendErrorReply ( "invalid or truncated request" );
+		return;
+	}
+
+	SphAttr_t iLast = 0;
+	const BYTE * pCur = dBuf.Begin();
+	ARRAY_FOREACH ( i, dUserVar )
+	{
+		uint64_t iDelta = 0;
+		pCur = spnDecodeVLB8 ( pCur, iDelta );
+		assert ( iDelta>0 );
+		iLast += iDelta;
+		dUserVar[i] = iLast;
+	}
+
+	SetLocalUserVar ( sUserVar, dUserVar );
+
+	NetOutputBuffer_c tOut ( iSock );
+	tOut.SendWord ( SEARCHD_OK );
+	tOut.SendWord ( VER_COMMAND_UVAR );
+	tOut.SendInt ( 4 ); // resplen, 1 dword
+	tOut.SendInt ( 1 );
+	tOut.Flush ();
+	assert ( tOut.GetError() || tOut.GetSentCount()==12 );
+}
+
+
+
+/////////////////////////////////////////////////////////////////////////////
 // SMART UPDATES HANDLER
 /////////////////////////////////////////////////////////////////////////////
 
@@ -16499,12 +16661,7 @@ void HandleMysqlSet ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, SessionVars_t & 
 
 		// INT_SET type must be sorted
 		tStmt.m_dSetValues.Sort();
-
-		// create or update the variable
-		g_tUservarsMutex.Lock();
-		UservarAdd ( tStmt.m_sSetName, tStmt.m_dSetValues );
-		g_tmSphinxqlState = sphMicroTimer();
-		g_tUservarsMutex.Unlock();
+		SetLocalUserVar ( tStmt.m_sSetName, tStmt.m_dSetValues );
 		break;
 	}
 
@@ -16548,6 +16705,14 @@ void HandleMysqlSet ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, SessionVars_t & 
 		} else
 		{
 			sError.SetSprintf ( "Unknown system variable '%s'", tStmt.m_sSetName.cstr() );
+			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+			return;
+		}
+		break;
+
+	case SET_INDEX_UVAR:
+		if ( !SendUserVar ( tStmt.m_sIndex.cstr(), tStmt.m_sSetName.cstr(), tStmt.m_dSetValues, sError ) )
+		{
 			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 			return;
 		}

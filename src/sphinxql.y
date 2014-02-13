@@ -906,6 +906,12 @@ set_global_stmt:
 			pParser->SetStatement ( $3, SET_GLOBAL_SVAR );
 			pParser->m_pStmt->m_iSetValue = $5.m_iValue;
 		}
+	| TOK_SET TOK_INDEX ident TOK_GLOBAL TOK_USERVAR '=' '(' const_list ')'
+		{
+			pParser->SetStatement ( $5, SET_INDEX_UVAR );
+			pParser->m_pStmt->m_dSetValues = *$8.m_pValues.Ptr();
+			pParser->ToString ( pParser->m_pStmt->m_sIndex, $3 );
+		}
 	;
 
 set_string_value:

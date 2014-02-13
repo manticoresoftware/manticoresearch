@@ -6614,7 +6614,7 @@ bool CSphFilterSettings::operator == ( const CSphFilterSettings & rhs ) const
 
 			return true;
 
-		case  SPH_FILTER_USERVAR:
+		case SPH_FILTER_USERVAR:
 			return ( m_sRefString==rhs.m_sRefString );
 
 		default:
@@ -9539,7 +9539,7 @@ void CSphIndex::SetupQueryTokenizer()
 	}
 	if ( m_tSettings.m_bIndexExactWords )
 	{
-		m_pQueryTokenizer->AddPlainChar('=');
+		m_pQueryTokenizer->AddPlainChar ( '=' );
 		m_pQueryTokenizer->AddSpecials ( "()|-!@~\"/^$<=" );
 	} else
 	{
@@ -11329,23 +11329,6 @@ inline int encodeVLB ( BYTE * buf, DWORD v )
 }
 
 
-inline int encodeVLB8 ( BYTE * buf, uint64_t v )
-{
-	register BYTE b;
-	register int n = 0;
-
-	do {
-		b = (BYTE)(v & 0x7f);
-		v >>= 7;
-		if ( v )
-			b |= 0x80;
-		*buf++ = b;
-		n++;
-	} while ( v );
-	return n;
-}
-
-
 inline int encodeKeyword ( BYTE * pBuf, const char * pKeyword )
 {
 	int iLen = strlen ( pKeyword ); // OPTIMIZE! remove this and memcpy and check if thats faster
@@ -11547,7 +11530,7 @@ int CSphHitBuilder::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWO
 
 		// encode deltas
 #if USE_64BIT
-#define LOC_ENCODE encodeVLB8
+#define LOC_ENCODE sphEncodeVLB8
 #else
 #define LOC_ENCODE encodeVLB
 #endif

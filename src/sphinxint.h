@@ -1006,6 +1006,40 @@ inline int FindBit ( DWORD uValue )
 	return iIdx;
 }
 
+
+inline int sphEncodeVLB8 ( BYTE * buf, uint64_t v )
+{
+	register BYTE b;
+	register int n = 0;
+
+	do
+	{
+		b = (BYTE)(v & 0x7f);
+		v >>= 7;
+		if ( v )
+			b |= 0x80;
+		*buf++ = b;
+		n++;
+	} while ( v );
+	return n;
+}
+
+
+inline const BYTE * spnDecodeVLB8 ( const BYTE * pIn, uint64_t & uValue )
+{
+	BYTE bIn;
+	int iOff = 0;
+
+	do
+	{
+		bIn = *pIn++;
+		uValue += ( uint64_t ( bIn & 0x7f ) ) << iOff;
+		iOff += 7;
+	} while ( bIn & 0x80 );
+
+	return pIn;
+}
+
 //////////////////////////////////////////////////////////////////////////
 // INLINES, UTF-8 TOOLS
 //////////////////////////////////////////////////////////////////////////

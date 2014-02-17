@@ -687,7 +687,7 @@ static bool IsCount ( const CSphString & s )
 
 static bool IsGroupby ( const CSphString & s )
 {
-	return s=="@groupby" || s=="@distinct" || s=="groupby()";
+	return s=="@groupby" || s=="@distinct" || s=="groupby()" || s=="@groupbystr";
 }
 
 static bool IsGroupbyMagic ( const CSphString & s )
@@ -836,68 +836,49 @@ inline static char * FormatInt ( char sBuf[32], T v )
 }
 
 
-/// lookup JSON key, group by looked up value
-class CSphGrouperJson : public CSphGrouperString<BinaryHash_fn>
+/// lookup JSON key, group by looked up value (used in CSphKBufferJsonGroupSorter)
+class CSphGrouperJsonField : public CSphGrouper
 {
 protected:
-	ISphExpr * m_pExpr;
+	CSphAttrLocator m_tLocator;
 
 public:
-	explicit CSphGrouperJson ( const CSphAttrLocator & tLoc, ISphExpr * pExpr )
-		: CSphGrouperString<BinaryHash_fn> ( tLoc )
+	ISphExpr * m_pExpr;
+	const BYTE * m_pStrings;
+
+	explicit CSphGrouperJsonField ( const CSphAttrLocator & tLoc, ISphExpr * pExpr )
+		: m_tLocator ( tLoc )
 		, m_pExpr ( pExpr )
+		, m_pStrings ( NULL )
 	{}
 
-	virtual ~CSphGrouperJson ()
+	virtual ~CSphGrouperJsonField ()
 	{
-		SafeDelete ( m_pExpr );
+		SafeRelease ( m_pExpr );
+	}
+
+	virtual void SetStringPool ( const BYTE * pStrings )
+	{
+		m_pStrings = pStrings;
+		if ( m_pExpr )
+			m_pExpr->Command ( SPH_EXPR_SET_STRING_POOL, (void*)pStrings );
+	}
+
+	virtual void GetLocator ( CSphAttrLocator & tOut ) const
+	{
+		tOut = m_tLocator;
+	}
+
+	virtual ESphAttr GetResultType () const
+	{
+		return SPH_ATTR_BIGINT;
 	}
 
 	virtual SphGroupKey_t KeyFromMatch ( const CSphMatch & tMatch ) const
 	{
 		if ( !m_pExpr )
 			return SphGroupKey_t();
-
-		// inlining Eval() for simple cases like json.key1 does not pay off
-		// only yields marginal improvements (eg 42.8 ms vs 44.3 ms on ~457K rows)
-		uint64_t uValue = m_pExpr->Int64Eval ( tMatch );
-		const BYTE * pValue = m_pStringBase + ( uValue & 0xffffffff );
-		ESphJsonType eRes = (ESphJsonType)( uValue >> 32 );
-		int iLen;
-
-		char sBuf[32];
-		switch ( eRes )
-		{
-			case JSON_STRING:
-			case JSON_STRING_VECTOR:
-			case JSON_OBJECT:
-			case JSON_MIXED_VECTOR:
-				iLen = sphJsonUnpackInt ( &pValue );
-				return sphFNV64 ( pValue, iLen );
-			case JSON_INT32:
-				return sphFNV64 ( FormatInt ( sBuf, (int)sphGetDword(pValue) ) );
-			case JSON_INT64:
-				return sphFNV64 ( FormatInt ( sBuf, (int)sphJsonLoadBigint ( &pValue ) ) );
-			case JSON_DOUBLE:
-				snprintf ( sBuf, sizeof(sBuf), "%f", sphQW2D ( sphJsonLoadBigint ( &pValue ) ) );
-				return sphFNV64 ( sBuf );
-			case JSON_INT32_VECTOR:
-				iLen = sphJsonUnpackInt ( &pValue ) * 4;
-				return sphFNV64 ( pValue, iLen );
-			case JSON_INT64_VECTOR:
-			case JSON_DOUBLE_VECTOR:
-				iLen = sphJsonUnpackInt ( &pValue ) * 8;
-				return sphFNV64 ( pValue, iLen );
-			default:
-				return 0;
-		}
-	}
-
-	virtual void SetStringPool ( const BYTE * pStrings )
-	{
-		m_pStringBase = pStrings;
-		if ( m_pExpr )
-			m_pExpr->Command ( SPH_EXPR_SET_STRING_POOL, (void*)pStrings );
+		return m_pExpr->Int64Eval ( tMatch );
 	}
 
 	virtual SphGroupKey_t KeyFromValue ( SphAttr_t ) const { assert(0); return SphGroupKey_t(); }
@@ -1342,6 +1323,8 @@ struct CSphGroupSorterSettings
 	CSphGrouper *		m_pGrouper;			///< group key calculator
 	bool				m_bImplicit;		///< for queries with aggregate functions but without group by clause
 	const ISphFilter *	m_pAggrFilterTrait; ///< aggregate filter that got owned by grouper
+	bool				m_bJson;			///< whether we're grouping by Json attribute
+	CSphAttrLocator		m_tLocGroupbyStr;	///< locator for @groupbystr
 
 	CSphGroupSorterSettings ()
 		: m_bDistinct ( false )
@@ -1350,6 +1333,7 @@ struct CSphGroupSorterSettings
 		, m_pGrouper ( NULL )
 		, m_bImplicit ( false )
 		, m_pAggrFilterTrait ( NULL )
+		, m_bJson ( false )
 	{}
 };
 
@@ -1811,7 +1795,7 @@ public:
 	}
 
 	/// add entry to the queue
-	virtual bool PushEx ( const CSphMatch & tEntry, const SphGroupKey_t uGroupKey, bool bGrouped, bool )
+	virtual bool PushEx ( const CSphMatch & tEntry, const SphGroupKey_t uGroupKey, bool bGrouped, bool, SphAttr_t * pAttr=NULL )
 	{
 		if_const ( NOTIFICATIONS )
 		{
@@ -1889,6 +1873,10 @@ public:
 			tNew.SetAttr ( m_tLocCount, 1 );
 			if_const ( DISTINCT )
 				tNew.SetAttr ( m_tLocDistinct, 0 );
+
+			// set @groupbystr value if available
+			if ( pAttr && m_tLocGroupbyStr.m_bDynamic )
+				tNew.SetAttr ( m_tLocGroupbyStr, *pAttr );
 		} else
 		{
 			ARRAY_FOREACH ( i, m_dAggregates )
@@ -2905,6 +2893,121 @@ public:
 };
 
 
+/// match sorter with k-buffering and group-by for JSON arrays
+template < typename COMPGROUP, bool DISTINCT, bool NOTIFICATIONS >
+class CSphKBufferJsonGroupSorter : public CSphKBufferGroupSorter < COMPGROUP, DISTINCT, NOTIFICATIONS >
+{
+public:
+	/// ctor
+	CSphKBufferJsonGroupSorter ( const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings )
+		: CSphKBufferGroupSorter < COMPGROUP, DISTINCT, NOTIFICATIONS > ( pComp, pQuery, tSettings )
+	{}
+
+	/// check if this sorter does groupby
+	virtual bool IsGroupby () const
+	{
+		return true;
+	}
+
+	/// add entry to the queue
+	virtual bool Push ( const CSphMatch & tMatch )
+	{
+		bool bRes = false;
+
+		int iLen;
+		char sBuf[32];
+
+		SphGroupKey_t uGroupkey = this->m_pGrouper->KeyFromMatch ( tMatch );
+
+		int64_t iValue = (int64_t)uGroupkey;
+		const BYTE * pStrings = ((CSphGrouperJsonField*)this->m_pGrouper)->m_pStrings;
+		const BYTE * pValue = pStrings + ( iValue & 0xffffffff );
+		ESphJsonType eRes = (ESphJsonType)( iValue >> 32 );
+
+		switch ( eRes )
+		{
+		case JSON_STRING:
+		case JSON_OBJECT:
+		case JSON_MIXED_VECTOR:
+			iLen = sphJsonUnpackInt ( &pValue );
+			uGroupkey = sphFNV64 ( pValue, iLen );
+			break;
+		case JSON_STRING_VECTOR:
+			{
+				sphJsonUnpackInt ( &pValue );
+				iLen = sphJsonUnpackInt ( &pValue );
+				for ( int i=0;i<iLen;i++ )
+				{
+					DWORD uOff = pValue-pStrings;
+					int64_t iValue = ( ( (int64_t)uOff ) | ( ( (int64_t)JSON_STRING )<<32 ) );
+					int iStrLen = sphJsonUnpackInt( &pValue );
+					uGroupkey = sphFNV64 ( pValue, iStrLen );
+					bRes |= this->PushEx ( tMatch, uGroupkey, false, false, &iValue );
+					pValue += iStrLen;
+				}
+				return bRes;
+			}
+		case JSON_INT32:
+			uGroupkey = sphFNV64 ( (BYTE*)FormatInt ( sBuf, (int)sphGetDword(pValue) ) );
+			break;
+		case JSON_INT64:
+			uGroupkey = sphFNV64 ( (BYTE*)FormatInt ( sBuf, (int)sphJsonLoadBigint ( &pValue ) ) );
+			break;
+		case JSON_DOUBLE:
+			snprintf ( sBuf, sizeof(sBuf), "%f", sphQW2D ( sphJsonLoadBigint ( &pValue ) ) );
+			uGroupkey = sphFNV64 ( (const BYTE*)sBuf );
+			break;
+		case JSON_INT32_VECTOR:
+			{
+				iLen = sphJsonUnpackInt ( &pValue );
+				int * p = (int*)pValue;
+				DWORD uOff = pValue-pStrings;
+				for ( int i=0;i<iLen;i++ )
+				{
+					int64_t iPacked = ( ( (int64_t)uOff ) | ( ( (int64_t)JSON_INT32 )<<32 ) );
+					uGroupkey = *p++;
+					bRes |= this->PushEx ( tMatch, uGroupkey, false, false, &iPacked );
+					uOff+=4;
+				}
+				return bRes;
+			}
+			break;
+		case JSON_INT64_VECTOR:
+		case JSON_DOUBLE_VECTOR:
+			{
+				iLen = sphJsonUnpackInt ( &pValue );
+				int64_t * p = (int64_t*)pValue;
+				DWORD uOff = pValue-pStrings;
+				ESphJsonType eType = eRes==JSON_INT64_VECTOR ? JSON_INT64 : JSON_DOUBLE;
+				for ( int i=0;i<iLen;i++ )
+				{
+					int64_t iPacked = ( ( (int64_t)uOff ) | ( ( (int64_t)eType )<<32 ) );
+					uGroupkey = *p++;
+					bRes |= this->PushEx ( tMatch, uGroupkey, false, false, &iPacked );
+					uOff+=8;
+				}
+				return bRes;
+			}
+			break;
+		default:
+			uGroupkey = 0;
+			break;
+		}
+
+		bRes |= this->PushEx ( tMatch, uGroupkey, false, false, &iValue );
+		return bRes;
+	}
+
+	/// add pre-grouped entry to the queue
+	virtual bool PushGrouped ( const CSphMatch & tEntry, bool bNewSet )
+	{
+		// re-group it based on the group key
+		// (first 'this' is for icc; second 'this' is for gcc)
+		return this->PushEx ( tEntry, tEntry.GetAttr ( this->m_tLocGroupby ), true, bNewSet );
+	}
+};
+
+
 /// implicit group-by sorter
 template < typename COMPGROUP, bool DISTINCT, bool NOTIFICATIONS >
 class CSphImplicitGroupSorter : public ISphMatchSorter, ISphNoncopyable, protected CSphGroupSorterSettings
@@ -3532,11 +3635,36 @@ ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, const char
 
 		} else
 		{
+			ESphAttr eAttrType = SPH_ATTR_NONE;
+
 			if ( !strcasecmp ( pTok, "@group" ) )
 				pTok = "@groupby";
 
 			// try to lookup plain attr in sorter schema
 			int iAttr = tSchema.GetAttrIndex ( pTok );
+
+			// try to lookup aliased count(*) and aliased groupby() in select items
+			if ( iAttr<0 )
+			{
+				ARRAY_FOREACH ( i, pQuery->m_dItems )
+				{
+					const CSphQueryItem & tItem = pQuery->m_dItems[i];
+					if ( !tItem.m_sAlias.cstr() || strcasecmp ( tItem.m_sAlias.cstr(), pTok ) )
+						continue;
+					if ( tItem.m_sExpr.Begins("@") )
+						iAttr = tSchema.GetAttrIndex ( tItem.m_sExpr.cstr() );
+					else if ( tItem.m_sExpr=="count(*)" )
+						iAttr = tSchema.GetAttrIndex ( "@count" );
+					else if ( tItem.m_sExpr=="groupby()" )
+					{
+						iAttr = tSchema.GetAttrIndex ( "@groupbystr" );
+						// try numeric group by
+						if ( iAttr<0 )
+							iAttr = tSchema.GetAttrIndex ( "@groupby" );
+					}
+					break; // break in any case; because we did match the alias
+				}
+			}
 
 			// try JSON attribute and use JSON attribute instead of JSON field
 			if ( iAttr<0 || ( iAttr>=0 && ( tSchema.GetAttr ( iAttr ).m_eAttrType==SPH_ATTR_JSON_FIELD
@@ -3566,25 +3694,7 @@ ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, const char
 				}
 			}
 
-			// try to lookup aliased count(*) in select items
-			if ( iAttr<0 )
-			{
-				ARRAY_FOREACH ( i, pQuery->m_dItems )
-				{
-					const CSphQueryItem & tItem = pQuery->m_dItems[i];
-					if ( !tItem.m_sAlias.cstr() || strcasecmp ( tItem.m_sAlias.cstr(), pTok ) )
-						continue;
-					if ( tItem.m_sExpr.Begins("@") )
-						iAttr = tSchema.GetAttrIndex ( tItem.m_sExpr.cstr() );
-					else if ( tItem.m_sExpr=="count(*)" )
-						iAttr = tSchema.GetAttrIndex ( "@count" );
-					break; // break in any case; because we did match the alias
-				}
-			}
-
-			// try json conversion functions
-			bool bIsFunc = false;
-			ESphAttr eAttrType = SPH_ATTR_JSON_FIELD;
+			// try json conversion functions (integer()/double()/bigint() in the order by clause)
 			if ( iAttr<0 )
 			{
 				ISphExpr * pExpr = sphExprParse ( pTok, tSchema, &eAttrType, NULL, sError, NULL );
@@ -3595,11 +3705,10 @@ ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, const char
 					tState.m_tSubKeys[iField].m_uMask = 0;
 					tState.m_tSubType[iField] = eAttrType;
 					iAttr = 0; // will be remapped in SetupSortRemap
-					bIsFunc = true;
 				}
 			}
 
-			// try internal attributes received from agents
+			// try precalculated json fields received from agents (prefixed with @int_*)
 			if ( iAttr<0 )
 			{
 				CSphString sName;
@@ -3615,7 +3724,7 @@ ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, const char
 			}
 
 			const CSphColumnInfo & tCol = tSchema.GetAttr(iAttr);
-			tState.m_eKeypart[iField] = Attr2Keypart ( bIsFunc ? eAttrType : tCol.m_eAttrType );
+			tState.m_eKeypart[iField] = Attr2Keypart ( eAttrType!=SPH_ATTR_NONE ? eAttrType : tCol.m_eAttrType );
 			tState.m_tLocator[iField] = tCol.m_tLocator;
 			tState.m_dAttrs[iField] = iAttr;
 		}
@@ -3653,7 +3762,8 @@ static ISphMatchSorter * sphCreateSorter3rd ( const ISphMatchComparator * pComp,
 		+(tSettings.m_bDistinct?2:0)
 		+(tSettings.m_bMVA?4:0)
 		+(tSettings.m_bImplicit?8:0)
-		+((pQuery->m_iGroupbyLimit>1)?16:0);
+		+((pQuery->m_iGroupbyLimit>1)?16:0)
+		+(tSettings.m_bJson?32:0);
 	switch ( uSelector )
 	{
 	case 0:
@@ -3688,6 +3798,14 @@ static ISphMatchSorter * sphCreateSorter3rd ( const ISphMatchComparator * pComp,
 		return new CSphKBufferNGroupSorter < COMPGROUP, true, false > ( pComp, pQuery, tSettings );
 	case 19:
 		return new CSphKBufferNGroupSorter < COMPGROUP, true, true > ( pComp, pQuery, tSettings );
+	case 32:
+		return new CSphKBufferJsonGroupSorter < COMPGROUP, false, false > ( pComp, pQuery, tSettings );
+	case 33:
+		return new CSphKBufferJsonGroupSorter < COMPGROUP, false, true > ( pComp, pQuery, tSettings );
+	case 34:
+		return new CSphKBufferJsonGroupSorter < COMPGROUP, true, false > ( pComp, pQuery, tSettings);
+	case 35:
+		return new CSphKBufferJsonGroupSorter < COMPGROUP, true, true > ( pComp, pQuery, tSettings);
 	}
 	assert(0);
 	return NULL;
@@ -3922,7 +4040,8 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const ISphSchema & 
 
 		// FIXME! handle collations here?
 		ISphExpr * pExpr = sphExprParse ( pQuery->m_sGroupBy.cstr(), tSchema, NULL, NULL, sError, NULL );
-		tSettings.m_pGrouper = new CSphGrouperJson ( tSchema.GetAttr(iAttr).m_tLocator, pExpr );
+		tSettings.m_pGrouper = new CSphGrouperJsonField ( tSchema.GetAttr(iAttr).m_tLocator, pExpr );
+		tSettings.m_bJson = true;
 
 	} else if ( bImplicit )
 	{
@@ -4226,7 +4345,6 @@ bool sphSortGetStringRemap ( const ISphSchema & tSorterSchema, const ISphSchema 
 		tRemap.m_tSrc = pSrcCol->m_tLocator;
 		tRemap.m_tDst = tDst.m_tLocator;
 	}
-
 	return ( dAttrs.GetLength()>0 );
 }
 
@@ -5007,6 +5125,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		ESphAttr eGroupByResult = ( !tSettings.m_bImplicit ) ? tSettings.m_pGrouper->GetResultType() : SPH_ATTR_INTEGER; // implicit do not have grouper
 		if ( tSettings.m_bMva64 )
 			eGroupByResult = SPH_ATTR_BIGINT;
+
 		CSphColumnInfo tGroupby ( "@groupby", eGroupByResult );
 		CSphColumnInfo tCount ( "@count", SPH_ATTR_INTEGER );
 		CSphColumnInfo tDistinct ( "@distinct", SPH_ATTR_INTEGER );
@@ -5027,6 +5146,14 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 			tSorterSchema.AddDynamicAttr ( tDistinct );
 			if ( pExtra )
 				pExtra->AddAttr ( tDistinct, true );
+		}
+
+		// add @groupbystr last in case we need to skip it on sending (like @int_str2ptr_*)
+		if ( tSettings.m_bJson )
+		{
+			CSphColumnInfo tGroupbyStr ( "@groupbystr", SPH_ATTR_JSON_FIELD );
+			tGroupbyStr.m_eStage = SPH_EVAL_SORTER;
+			tSorterSchema.AddDynamicAttr ( tGroupbyStr );
 		}
 	}
 
@@ -5055,6 +5182,10 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		{
 			LOC_CHECK ( iDistinct<=0, "unexpected @distinct" );
 		}
+
+		int iGroupbyStr = tSorterSchema.GetAttrIndex ( "@groupbystr" );
+		if ( iGroupbyStr>=0 )
+			tSettings.m_tLocGroupbyStr = tSorterSchema.GetAttr ( iGroupbyStr ).m_tLocator;
 	}
 
 	if ( bHasCount )

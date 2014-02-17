@@ -7989,6 +7989,7 @@ void RemapResult ( const ISphSchema * pTarget, AggrResult_t * pRes, bool bMultiS
 			assert ( dMapFrom[i]>=0
 				|| pTarget->GetAttr(i).m_tLocator.IsID()
 				|| sphIsSortStringInternal ( pTarget->GetAttr(i).m_sName.cstr() )
+				|| pTarget->GetAttr(i).m_sName=="@groupbystr"
 				);
 		}
 		int iLimit = bMultiSchema
@@ -8131,7 +8132,6 @@ static int KillAllDupes ( ISphMatchSorter * pSorter, AggrResult_t & tRes )
 		ARRAY_FOREACH ( i, tRes.m_dMatches )
 		{
 			CSphMatch & tMatch = tRes.m_dMatches[i];
-
 			if ( !pSorter->PushGrouped ( tMatch, i==iBound ) )
 				iDupes++;
 
@@ -8253,7 +8253,7 @@ struct AggregateColumnSort_fn
 {
 	bool IsAggr ( const CSphColumnInfo & c ) const
 	{
-		return c.m_eAggrFunc!=SPH_AGGR_NONE || c.m_sName=="@groupby" || c.m_sName=="@count" || c.m_sName=="@distinct";
+		return c.m_eAggrFunc!=SPH_AGGR_NONE || c.m_sName=="@groupby" || c.m_sName=="@count" || c.m_sName=="@distinct" || c.m_sName=="@groupbystr";
 	}
 
 	bool IsLess ( const CSphColumnInfo & a, const CSphColumnInfo & b ) const
@@ -8423,7 +8423,8 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 			// column was not found in the select list directly
 			// however we might need it anyway because of a non-NULL extra-schema
 			// ??? explain extra-schemas here
-			if ( !bAdded && pExtraSchema && ( pExtraSchema->GetAttrIndex ( tCol.m_sName.cstr() )>=0 || iLocals==0 ) )
+			// bMagic condition added for @groupbystr in the agent mode
+			if ( !bAdded && pExtraSchema && ( pExtraSchema->GetAttrIndex ( tCol.m_sName.cstr() )>=0 || iLocals==0 || bMagic ) )
 			{
 				CSphColumnInfo & t = dFrontend.Add();
 				t.m_iIndex = iCol;
@@ -8652,6 +8653,41 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 
 		if ( pProfiler )
 			pProfiler->Switch ( eOld );
+	}
+
+	// replace groupby() and aliased groupby() with @groupbystr in the final result
+	const CSphColumnInfo * p = tRes.m_tSchema.GetAttr ( "@groupbystr" );
+	if ( p )
+	{
+		ARRAY_FOREACH ( i, dFrontend )
+		{
+			CSphColumnInfo & d = dFrontend[i];
+			if ( d.m_sName=="groupby()" )
+			{
+				d.m_tLocator = p->m_tLocator;
+				d.m_eAttrType = p->m_eAttrType;
+				d.m_eAggrFunc = p->m_eAggrFunc;
+			}
+		}
+
+		// check aliases too
+		ARRAY_FOREACH ( i, tQuery.m_dItems )
+		{
+			const CSphQueryItem & tItem = tQuery.m_dItems[i];
+			if ( tItem.m_sExpr=="groupby()" )
+			{
+				ARRAY_FOREACH ( i, dFrontend )
+				{
+					CSphColumnInfo & d = dFrontend[i];
+					if ( d.m_sName==tItem.m_sAlias )
+					{
+						d.m_tLocator = p->m_tLocator;
+						d.m_eAttrType = p->m_eAttrType;
+						d.m_eAggrFunc = p->m_eAggrFunc;
+					}
+				}
+			}
+		}
 	}
 
 	// all the merging and sorting is now done

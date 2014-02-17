@@ -678,6 +678,13 @@ Two'</sphinxql>
 <sphinxql>select id, j.uid from loc1 order by integer(j.uid) asc</sphinxql>
 <sphinxql>select id, j.uid from loc1 order by double(j.uid) asc</sphinxql>
 <sphinxql>select id, j.uid from loc1 order by bigint(j.uid) asc</sphinxql>
+<!-- distributed order by for aliases -->
+<sphinxql>select id, j.uid as p from loc1 order by p asc</sphinxql>
+<sphinxql>select id, j.uid as p from loc1 order by p desc</sphinxql>
+<!-- group by JSON array elements like for MVA -->
+<sphinxql>select count(*), groupby() from arrays group by j.a</sphinxql>
+<sphinxql>select count(*), groupby() from arrays group by j.t</sphinxql>
+<sphinxql>select count(*) as p, groupby() as q from arrays group by j.t order by q asc, p desc</sphinxql>
+<sphinxql>select count(*) as p, groupby() as q from loc1 group by j.uid order by q asc, p desc</sphinxql>
 </sphqueries>
 </test>
-

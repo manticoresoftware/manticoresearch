@@ -4068,8 +4068,11 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const ISphSchema & 
 			case SPH_GROUPBY_ATTR:
 				if ( eType==SPH_ATTR_JSON )
 				{
-					sError.SetSprintf ( "invalid group-by value - JSON blob" );
-					return false;
+					// allow group by top-level json array
+					ISphExpr * pExpr = sphExprParse ( pQuery->m_sGroupBy.cstr(), tSchema, NULL, NULL, sError, NULL );
+					tSettings.m_pGrouper = new CSphGrouperJsonField ( tLoc, pExpr );
+					tSettings.m_bJson = true;
+
 				} else if ( eType==SPH_ATTR_STRING )
 					tSettings.m_pGrouper = sphCreateGrouperString ( tLoc, pQuery->m_eCollation );
 				else

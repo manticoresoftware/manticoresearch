@@ -253,6 +253,14 @@ index json_order
 	rt_field = text
 }
 
+index json_toplevel
+{
+	type = rt
+	path = <data_path/>/json_toplevel
+	rt_attr_json = j
+	rt_field = text
+}
+
 </config>
 
 <db_create>
@@ -686,5 +694,17 @@ Two'</sphinxql>
 <sphinxql>select count(*), groupby() from arrays group by j.t</sphinxql>
 <sphinxql>select count(*) as p, groupby() as q from arrays group by j.t order by q asc, p desc</sphinxql>
 <sphinxql>select count(*) as p, groupby() as q from loc1 group by j.uid order by q asc, p desc</sphinxql>
+<!-- group by top-level array -->
+<sphinxql>insert into json_toplevel (id, j) values
+	(1, '[1,2,3,4]'),
+	(2, '[1,2,3]'),
+	(3, '[1,2]'),
+	(4, '["a","b","c"]'),
+	(5, '["a","b"]'),
+	(6, '["a"]'),
+	(7, '[]'),
+	(8, '')
+</sphinxql>
+<sphinxql>select count(*) p, groupby() q from json_toplevel group by j order by p desc</sphinxql>
 </sphqueries>
 </test>

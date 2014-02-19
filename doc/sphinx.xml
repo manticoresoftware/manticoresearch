@@ -5043,10 +5043,10 @@ SELECT
     select_expr [, select_expr ...]
     FROM index [, index2 ...]
     [WHERE where_condition]
-    [GROUP BY {col_name | expr_alias} [, {sol_name | expr_alias}]]
+    [GROUP [N] BY {col_name | expr_alias} [, {sol_name | expr_alias}]]
     [WITHIN GROUP ORDER BY {col_name | expr_alias} {ASC | DESC}]
 	[HAVING having_condition]
-    [ORDER [N] BY {col_name | expr_alias} {ASC | DESC} [, ...]]
+    [ORDER BY {col_name | expr_alias} {ASC | DESC} [, ...]]
     [LIMIT [offset,] row_count]
     [OPTION opt_name = opt_value [, ...]]
 </programlisting>

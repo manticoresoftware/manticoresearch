@@ -18086,10 +18086,21 @@ XQNode_t * sphQueryExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & 
 static void TransformQuorum ( XQNode_t ** ppNode )
 {
 	XQNode_t *& pNode = *ppNode;
-	if ( pNode->GetOp()!=SPH_QUERY_QUORUM || pNode->m_iOpArg!=1 )
+
+	// recurse non-quorum nodes
+	if ( pNode->GetOp()!=SPH_QUERY_QUORUM )
+	{
+		ARRAY_FOREACH ( i, pNode->m_dChildren )
+			TransformQuorum ( &pNode->m_dChildren[i] );
+		return;
+	}
+
+	// skip quorums with thresholds other than 1
+	if ( pNode->m_iOpArg!=1 )
 		return;
 
-	assert ( pNode->m_dChildren.GetLength()==0 );
+	// transform quorums with a threshold of 1 only
+	assert ( pNode->GetOp()==SPH_QUERY_QUORUM && pNode->m_dChildren.GetLength()==0 );
 	CSphVector<XQNode_t*> dArgs;
 	ARRAY_FOREACH ( i, pNode->m_dWords )
 	{

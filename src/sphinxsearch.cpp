@@ -23,6 +23,17 @@
 
 //////////////////////////////////////////////////////////////////////////
 
+/// query debugging printouts
+#define QDEBUG 0
+
+#if QDEBUG
+#define QDEBUGARG(_arg) _arg
+#else
+#define QDEBUGARG(_arg)
+#endif
+
+//////////////////////////////////////////////////////////////////////////
+
 /// costs for max_predicted_time estimations, in nanoseconds
 /// YMMV, defaults were estimated in a very specific environment, and then rounded off
 int g_iPredictorCostDoc		= 64;
@@ -208,7 +219,7 @@ protected:
 	}
 
 protected:
-	inline const ExtDoc_t *		ReturnDocsChunk ( int iCount, SphDocID_t * pMaxID )
+	inline const ExtDoc_t * ReturnDocsChunk ( int iCount, SphDocID_t * pMaxID, const char * QDEBUGARG(sNode) )
 	{
 		assert ( iCount>=0 && iCount<MAX_DOCS );
 		m_dDocs[iCount].m_uDocid = DOCID_MAX;
@@ -216,8 +227,32 @@ protected:
 		m_uMaxID = iCount ? m_dDocs[iCount-1].m_uDocid : 0;
 		if ( pMaxID ) *pMaxID = m_uMaxID;
 
+		#if QDEBUG
+		printf ( "qdebug: node %s %d:%08x getdocs = [", sNode ? sNode : "???", m_iAtomPos, int(this) );
+		for ( int i=0; i<iCount; i++ )
+			printf ( i ? ", %d" : "%d", int(m_dDocs[i].m_uDocid) );
+		printf ( "]\n" );
+		#endif
+
 		return iCount ? m_dDocs : NULL;
 	}
+
+	inline const ExtHit_t * ReturnHitsChunk ( int iCount, const char * QDEBUGARG(sNode) )
+	{
+		assert ( iCount>=0 && iCount<MAX_HITS );
+		m_dHits[iCount].m_uDocid = DOCID_MAX;
+
+		#if QDEBUG
+		printf ( "qdebug: node %s %d:%08x gethits = [", sNode ? sNode : "???", m_iAtomPos, int(this) );
+		for ( int i=0; i<iCount; i++ )
+			printf ( i ? ", %d:%d.%d" : "%d:%d.%d", int(m_dHits[i].m_uDocid),
+			HITMAN::GetField(m_dHits[i].m_uHitpos), HITMAN::GetPos(m_dHits[i].m_uHitpos) );
+		printf ( "]\n" );
+		#endif
+
+		return iCount ? m_dHits : NULL;
+	}
+
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1034,15 +1069,14 @@ private:
 			iSum += m_dChildren[i].m_iCount;
 			bHasDupes |= ( m_dChildren[i].m_iCount>1 );
 		}
+
+		#if QDEBUG
+		if ( bFixDupes && bHasDupes!=m_bHasDupes )
+			printf ( "qdebug: quorum dupes %d -> %d\n", m_bHasDupes, bHasDupes );
+		#endif
+
 		m_bHasDupes = bFixDupes ? bHasDupes : m_bHasDupes;
 		return iSum;
-	}
-
-	inline const ExtHit_t *		ReturnHitsChunk ( int iCount )
-	{
-		assert ( iCount>=0 && iCount<MAX_HITS );
-		m_dHits[iCount].m_uDocid = DOCID_MAX;
-		return iCount ? m_dHits : NULL;
 	}
 };
 
@@ -1127,7 +1161,7 @@ protected:
 		assert ( iMyHit<MAX_HITS );
 		m_dMyHits[iMyHit].m_uDocid = DOCID_MAX;
 		m_uHitsOverFor = 0;
-		return ExtNode_i::ReturnDocsChunk ( iDocs, pMaxID );
+		return ExtNode_i::ReturnDocsChunk ( iDocs, pMaxID, "unit" );
 	}
 
 protected:
@@ -1680,7 +1714,7 @@ const ExtDoc_t * ExtPayload_c::GetDocsChunk ( SphDocID_t * pMaxID )
 	}
 	m_iCurDocsEnd = iEnd;
 
-	return ReturnDocsChunk ( iDoc, pMaxID );
+	return ReturnDocsChunk ( iDoc, pMaxID, "payload" );
 }
 
 
@@ -2085,7 +2119,7 @@ const ExtDoc_t * ExtTerm_c::GetDocsChunk ( SphDocID_t * pMaxID )
 	if ( m_pNanoBudget )
 		*m_pNanoBudget -= g_iPredictorCostDoc*iDoc;
 
-	return ReturnDocsChunk ( iDoc, pMaxID );
+	return ReturnDocsChunk ( iDoc, pMaxID, "term" );
 }
 
 const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched, SphDocID_t uMaxID )
@@ -2179,9 +2213,7 @@ const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched, SphDocID_t
 	if ( m_pNanoBudget )
 		*m_pNanoBudget -= g_iPredictorCostHit*iHit;
 
-	assert ( iHit>=0 && iHit<MAX_HITS );
-	m_dHits[iHit].m_uDocid = DOCID_MAX;
-	return ( iHit!=0 ) ? m_dHits : NULL;
+	return ReturnHitsChunk ( iHit, "term" );
 }
 
 int ExtTerm_c::GetQwords ( ExtQwordsHash_t & hQwords )
@@ -2735,7 +2767,7 @@ const ExtDoc_t * ExtAnd_c::GetDocsChunk ( SphDocID_t * pMaxID )
 	m_pCurDoc[0] = pCur0;
 	m_pCurDoc[1] = pCur1;
 
-	return ReturnDocsChunk ( iDoc, pMaxID );
+	return ReturnDocsChunk ( iDoc, pMaxID, "and" );
 }
 
 const ExtHit_t * ExtAnd_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID )
@@ -2871,6 +2903,7 @@ bool ExtAndZonespanned::IsSameZonespan ( int iLeft, int iRight ) const
 }
 
 //////////////////////////////////////////////////////////////////////////
+
 const ExtHit_t * ExtAndZonespanned::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID )
 {
 	const ExtHit_t * pCur0 = m_pCurHit[0];
@@ -3079,7 +3112,7 @@ const ExtDoc_t * ExtOr_c::GetDocsChunk ( SphDocID_t * pMaxID )
 	m_pCurDoc[0] = pCur0;
 	m_pCurDoc[1] = pCur1;
 
-	return ReturnDocsChunk ( iDoc, pMaxID );
+	return ReturnDocsChunk ( iDoc, pMaxID, "or" );
 }
 
 const ExtHit_t * ExtOr_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID )
@@ -3250,7 +3283,7 @@ const ExtDoc_t * ExtAndNot_c::GetDocsChunk ( SphDocID_t * pMaxID )
 	m_pCurDoc[0] = pCur0;
 	m_pCurDoc[1] = pCur1;
 
-	return ReturnDocsChunk ( iDoc, pMaxID );
+	return ReturnDocsChunk ( iDoc, pMaxID, "andnot" );
 }
 
 const ExtHit_t * ExtAndNot_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID )
@@ -3433,7 +3466,7 @@ const ExtDoc_t * ExtNWay_c<FSM>::GetDocsChunk ( SphDocID_t * pMaxID )
 	m_dMyHits[iHit].m_uDocid = DOCID_MAX; // end marker
 	m_uMatchedDocid = 0;
 
-	return ReturnDocsChunk ( iDoc, pMaxID );
+	return ReturnDocsChunk ( iDoc, pMaxID, "nway" );
 }
 
 template < class FSM >
@@ -3613,7 +3646,7 @@ FSMphrase::FSMphrase ( const CSphVector<ExtNode_i *> & dQwords, const XQNode_t &
 
 inline bool FSMphrase::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 {
-int iHitpos = HITMAN::GetLCS ( pHit->m_uHitpos );
+	int iHitpos = HITMAN::GetLCS ( pHit->m_uHitpos );
 
 	// adding start state for start hit
 	if ( pHit->m_uQuerypos==m_dAtomPos[0] )
@@ -4199,7 +4232,7 @@ const ExtDoc_t * ExtQuorum_c::GetDocsChunk ( SphDocID_t * pMaxID )
 			iQuorumLeft = CountQuorum ( false );
 	}
 
-	return ReturnDocsChunk ( iDoc, pMaxID );
+	return ReturnDocsChunk ( iDoc, pMaxID, "quorum" );
 }
 
 const ExtHit_t * ExtQuorum_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID )
@@ -4248,7 +4281,7 @@ const ExtHit_t * ExtQuorum_c::GetHitsChunkDupesTail ()
 			m_dChildren[iMinChild].m_pCurHit = m_dChildren[iMinChild].m_pTerm->GetHitsChunk ( dTailDocs, m_uMatchedDocid );
 	}
 
-	return ReturnHitsChunk ( iHit );
+	return ReturnHitsChunk ( iHit, "quorum-dupes-tail" );
 }
 
 struct QuorumCmpHitPos_fn
@@ -4327,7 +4360,7 @@ const ExtHit_t * ExtQuorum_c::GetHitsChunkDupes ( const ExtDoc_t * pDocs, SphDoc
 			m_uMatchedDocid = uDocid;
 	}
 
-	return ReturnHitsChunk ( iHit );
+	return ReturnHitsChunk ( iHit, "quorum-dupes" );
 }
 
 const ExtHit_t * ExtQuorum_c::GetHitsChunkSimple ( const ExtDoc_t * pDocs, SphDocID_t uMaxID )
@@ -4424,7 +4457,7 @@ const ExtHit_t * ExtQuorum_c::GetHitsChunkSimple ( const ExtDoc_t * pDocs, SphDo
 			m_dChildren[iMinChild].m_pCurHit = m_dChildren[iMinChild].m_pTerm->GetHitsChunk ( pDocs, uMaxID );
 	}
 
-	return ReturnHitsChunk ( iHit );
+	return ReturnHitsChunk ( iHit, "quorum-simple" );
 }
 
 int ExtQuorum_c::GetThreshold ( const XQNode_t & tNode, int iQwords )
@@ -4746,7 +4779,7 @@ const ExtDoc_t * ExtOrder_c::GetDocsChunk ( SphDocID_t * pMaxID )
 				if ( !m_pDocs[i] )
 				{
 					m_bDone = true;
-					return ReturnDocsChunk ( iDoc, pMaxID );
+					return ReturnDocsChunk ( iDoc, pMaxID, "order" );
 				}
 				continue;
 			}
@@ -4805,7 +4838,7 @@ const ExtDoc_t * ExtOrder_c::GetDocsChunk ( SphDocID_t * pMaxID )
 		}
 	}
 
-	return ReturnDocsChunk ( iDoc, pMaxID );
+	return ReturnDocsChunk ( iDoc, pMaxID, "order" );
 }
 
 
@@ -5549,6 +5582,10 @@ void ExtRanker_c::Reset ( const ISphQwordSetup & tSetup )
 
 const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 {
+	#if QDEBUG
+	printf ( "\nqdebug: ranker getfiltereddocs\n" );
+	#endif
+
 	ESphQueryState eState = SPH_QSTATE_TOTAL;
 	CSphQueryProfile * pProfile = m_pCtx->m_pProfile;
 
@@ -9365,7 +9402,7 @@ const ExtDoc_t * ExtNodeCached_t::GetDocsChunk ( SphDocID_t * pMaxID )
 	for ( int i=0; i<iDoc; i++ )
 		m_dDocs[i].m_fTFIDF /= m_iQwords;
 
-	return ReturnDocsChunk ( iDoc, pMaxID );
+	return ReturnDocsChunk ( iDoc, pMaxID, "cached" );
 }
 
 const ExtHit_t * ExtNodeCached_t::GetHitsChunk ( const ExtDoc_t * pMatched, SphDocID_t uMaxID )

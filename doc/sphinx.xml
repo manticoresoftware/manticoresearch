@@ -14276,6 +14276,21 @@ rlp_max_batch_docs = 100
 </itemizedlist>
 </sect1>
 
+<sect1 id="rel216"><title>Version 2.1.6-release, ??? feb 2014</title>
+<bridgehead>Bug fixes</bridgehead>
+<itemizedlist>
+  <listitem><para>fixed #1857, crash in arabic stemmer</para></listitem>
+  <listitem><para>fixed #1875, fixed crash on adding documents with long words in dict=keyword index with morphology and infixes enabled</para></listitem>
+  <listitem><para>fixed #1876, crash on words with large codepoints and infix searches</para></listitem>
+  <listitem><para>fixed #1880, crash on multiquery with one incorrect query</para></listitem>
+  <listitem><para>fixed #1882, race of periodic and forced FLUSHing on an RT index</para></listitem>
+  <listitem><para>fixed #1881, quorum syntax with '.' as blended char</para></listitem>
+  <listitem><para>fixed evaluating of LCS by an expression ranker</para></listitem>
+  <listitem><para></para></listitem>
+  <listitem><para></para></listitem>
+</itemizedlist>
+</sect1>
+
 <sect1 id="rel215"><title>Version 2.1.5-release, 22 jan 2014</title>
 <bridgehead>Bug fixes</bridgehead>
 <itemizedlist>

@@ -1915,7 +1915,7 @@ class ISphInfixBuilder
 public:
 	explicit		ISphInfixBuilder() {}
 	virtual			~ISphInfixBuilder() {}
-	virtual void	AddWord ( const BYTE * pWord, int iWordLength, int iCheckpoint ) = 0;
+	virtual void	AddWord ( const BYTE * pWord, int iWordLength, int iCheckpoint, bool bHasMorphology ) = 0;
 	virtual void	SaveEntries ( CSphWriter & wrDict ) = 0;
 	virtual int		SaveEntryBlocks ( CSphWriter & wrDict ) = 0;
 	virtual int		GetBlocksWordsSize () const = 0;

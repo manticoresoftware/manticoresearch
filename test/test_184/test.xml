@@ -210,6 +210,10 @@ INSERT INTO test_table VALUES
 <sphinxql>select id, weight() as w, rankfactors() from test where match(' "by seven" ') ORDER by id ASC option ranker=export('sum(min_idf)*1000'), idf='plain,tfidf_unnormalized'</sphinxql>
 <sphinxql>select id, weight() as w from test where match(' "by seven" ') ORDER by id ASC option ranker=expr('sum(min_idf)*1000'), idf='plain,tfidf_unnormalized'</sphinxql>
 
+<!-- both ranker shoud return the same weights -->
+<sphinxql>select id, weight() from dup where match('the the') option ranker=proximity_bm25</sphinxql>
+<sphinxql>select id, weight() from dup where match('the the') option ranker=expr('sum(lcs*user_weight)*1000+bm25')</sphinxql>
+
 </sphqueries>
 
 </test>

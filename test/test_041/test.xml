@@ -171,6 +171,25 @@ index phrase_shift_min_wlen
 	min_word_len = 2
 }
 
+source src_4codepoint : srctest
+{
+       sql_query               = SELECT 1 id, 5 idd, CONCAT ( 'the boxed state ', REPEAT( CHAR(0xf3be80bb), 7  ) ) as title
+       sql_attr_uint           = idd
+}
+
+index codepoint
+{
+       source                  = src_4codepoint
+       path                    = <data_path/>/codepoint
+       dict = keywords
+       min_infix_len = 3
+       morphology              = stem_en
+       index_exact_words = 1
+       enable_star = 1
+       charset_type    = utf-8
+}
+
+
 </config>
 
 <queries>
@@ -309,6 +328,13 @@ REPLACE INTO rt (id, id1, title) VALUES ( 1, 1, 'work worked working workings wo
 <sphinxql>SELECT * FROM phrase_shift_min_wlen WHERE MATCH(' "that * box" ')</sphinxql>
 <sphinxql>SELECT * FROM phrase_shift_min_wlen WHERE MATCH(' "that * * * box" ')</sphinxql>
 <sphinxql>SELECT * FROM phrase_shift_min_wlen WHERE MATCH(' "that * box might * * not yellow" ')</sphinxql>
+
+<!-- regression word with exact modifier that breaks infix builder -->
+<sphinxql>REPLACE INTO rt_i (id, idd, title) VALUES (20,11,'long word ___________________________________________ that crashed')</sphinxql>
+<sphinxql>FLUSH RAMCHUNK rt_i</sphinxql>
+
+<!-- regression large codepoints vs infix builder -->
+<sphinxql>SELECT * FROM codepoint WHERE MATCH('*box*')</sphinxql>
 
 </sphqueries>
 

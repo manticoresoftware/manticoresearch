@@ -112,6 +112,19 @@ index rt
 	rt_attr_uint	 = idd
 }
 
+source test4
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT 1 as document_id, ' the dog of my friend ' as text UNION SELECT 2 as document_id, ' dog is my friend ' as text
+}
+
+index test4
+{
+	source	= test4
+	path	= <data_path/>/test4
+	blend_chars = U+2E
+}
 
 </config>
 
@@ -246,6 +259,8 @@ INSERT INTO test_table VALUES
 	<sphinxql>CALL KEYWORDS ( 'thatsgoingverylongwordthathasblendedpartattheand', 'rt', 1 )</sphinxql>
 	<sphinxql>INSERT INTO rt VALUES ( 2, 'thatsgoingverylongwordthathasblendedpartattheand@blendedpart', 11 )</sphinxql>
 	<sphinxql>CALL KEYWORDS ( 'thatsgoingverylongwordthathasblendedpartattheand', 'rt', 1 )</sphinxql>
+	<!-- regression blended vs quorum argument -->
+	<sphinxql>select * from test4 where match ( ' "dog of friend"/0.5 ' )</sphinxql>
 </sphqueries>
 
 </test>

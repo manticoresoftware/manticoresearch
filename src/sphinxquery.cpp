@@ -766,12 +766,15 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			&& !( *p=='-' && !( p-sToken==1 && sphIsModifier ( p[-1] ) ) ) // !bDashInside copied over from arbitration
 			&& ( *p=='\0' || sphIsSpace(*p) || IsSpecial(*p) ) )
 		{
+			// float as quorum argument has higher precedence than blended
+			bool bQuorumPercent = ( m_iQuorumQuote==m_iQuorumFSlash && m_iQuorumFSlash==m_iAtomPos && iDots==1 );
+
 			bool bTok = ( m_pTokenizer->GetToken()!=NULL );
-			if ( bTok && m_pTokenizer->TokenIsBlended() ) // number with blended should be tokenized as usual
+			if ( bTok && m_pTokenizer->TokenIsBlended() && !bQuorumPercent ) // number with blended should be tokenized as usual
 			{
 				m_pTokenizer->SkipBlended();
 				m_pTokenizer->SetBufferPtr ( m_pLastTokenStart );
-			} else if ( bTok && m_pTokenizer->WasTokenSynonym() )
+			} else if ( bTok && m_pTokenizer->WasTokenSynonym() && !bQuorumPercent )
 			{
 				m_pTokenizer->SetBufferPtr ( m_pLastTokenStart );
 			} else

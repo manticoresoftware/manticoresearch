@@ -1026,6 +1026,7 @@ private:
 	/// segments with indexes >= m_iDoubleBuffer are RAM chunk
 	CSphMutex					m_tSaveInnerMutex;
 	CSphMutex					m_tSaveOuterMutex;
+	CSphMutex					m_tFlushLock;
 	int							m_iDoubleBuffer;
 	CSphVector<SphDocID_t>		m_dNewSegmentKlist;					///< raw docid container
 	CSphFixedVector<SphDocID_t>	m_dDiskChunkKlist;					///< ordered SphDocID_t kill list
@@ -1073,7 +1074,7 @@ private:
 	/// returns NULL if another index already uses it in an open txn
 	RtAccum_t *					AcquireAccum ( CSphString * sError=NULL );
 
-	RtSegment_t *				MergeSegments ( const RtSegment_t * pSeg1, const RtSegment_t * pSeg2, const CSphVector<SphDocID_t> * pAccKlist );
+	RtSegment_t *				MergeSegments ( const RtSegment_t * pSeg1, const RtSegment_t * pSeg2, const CSphVector<SphDocID_t> * pAccKlist, bool bHasMorphology );
 	const RtWord_t *			CopyWord ( RtSegment_t * pDst, RtWordWriter_t & tOutWord, const RtSegment_t * pSrc, const RtWord_t * pWord, RtWordReader_t & tInWord, const CSphVector<SphDocID_t> * pAccKlist );
 	void						MergeWord ( RtSegment_t * pDst, const RtSegment_t * pSrc1, const RtWord_t * pWord1, const RtSegment_t * pSrc2, const RtWord_t * pWord2, RtWordWriter_t & tOut, const CSphVector<SphDocID_t> * pAccKlist );
 	void						CopyDoc ( RtSegment_t * pSeg, RtDocWriter_t & tOutDoc, RtWord_t * pWord, const RtSegment_t * pSrc, const RtDoc_t * pDoc );
@@ -1159,7 +1160,7 @@ public:
 	int64_t						GetUsedRam () const;
 
 	bool						IsWordDict () const { return m_bKeywordDict; }
-	void						BuildSegmentInfixes ( RtSegment_t * pSeg ) const;
+	void						BuildSegmentInfixes ( RtSegment_t * pSeg, bool bHasMorphology ) const;
 
 	// TODO: implement me
 	virtual	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn ) {}
@@ -1206,6 +1207,7 @@ RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int6
 	Verify ( m_tRwlock.Init() );
 	Verify ( m_tSaveOuterMutex.Init() );
 	Verify ( m_tSaveInnerMutex.Init() );
+	Verify ( m_tFlushLock.Init() );
 }
 
 
@@ -1220,6 +1222,7 @@ RtIndex_t::~RtIndex_t ()
 		SaveMeta ( m_dDiskChunks.GetLength(), m_iTID );
 	}
 
+	Verify ( m_tFlushLock.Done() );
 	Verify ( m_tSaveInnerMutex.Done() );
 	Verify ( m_tSaveOuterMutex.Done() );
 	Verify ( m_tRwlock.Done() );
@@ -1273,6 +1276,12 @@ void RtIndex_t::CheckRamFlush ()
 void RtIndex_t::ForceRamFlush ( bool bPeriodic )
 {
 	int64_t tmSave = sphMicroTimer();
+
+	// need this lock as could get here at same time either ways:
+	// via RtFlushThreadFunc->RtIndex_t::CheckRamFlush
+	// and via HandleMysqlFlushRtindex
+	CSphScopedLock<CSphMutex> tLock ( m_tFlushLock );
+
 	if ( g_pRtBinlog->IsActive() && m_iTID<=m_iSavedTID )
 		return;
 
@@ -2472,6 +2481,7 @@ static bool BuildBloom ( const BYTE * sWord, int iLen, int iInfixCodepointCount,
 	// byte offset for each codepoints
 	BYTE dOffsets [ SPH_MAX_WORD_LEN+1 ] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
 		20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42 };
+	assert ( iLen<=SPH_MAX_WORD_LEN || ( bUtf8 && iLen<=SPH_MAX_WORD_LEN*3 ) );
 	int iCodes = iLen;
 	if ( bUtf8 )
 	{
@@ -2509,7 +2519,7 @@ static bool BuildBloom ( const BYTE * sWord, int iLen, int iInfixCodepointCount,
 }
 
 
-void RtIndex_t::BuildSegmentInfixes ( RtSegment_t * pSeg ) const
+void RtIndex_t::BuildSegmentInfixes ( RtSegment_t * pSeg, bool bHasMorphology ) const
 {
 	if ( !pSeg || !m_bKeywordDict || !m_tSettings.m_iMinInfixLen )
 		return;
@@ -2524,14 +2534,25 @@ void RtIndex_t::BuildSegmentInfixes ( RtSegment_t * pSeg ) const
 	RtWordReader_t rdDictRough ( pSeg, true, m_iWordsCheckpoint );
 	while ( ( pWord = rdDictRough.UnzipWord () )!=NULL )
 	{
+		const BYTE * pDictWord = pWord->m_sWord+1;
+		if ( bHasMorphology && *pDictWord!=MAGIC_WORD_HEAD_NONSTEMMED )
+			continue;
+
+		int iLen = pWord->m_sWord[0];
+		if ( *pDictWord<0x20 ) // anyway skip heading magic chars in the prefix, like NONSTEMMED maker
+		{
+			pDictWord++;
+			iLen--;
+		}
+
 		uint64_t * pVal = pRough + rdDictRough.m_iCheckpoint * BLOOM_PER_ENTRY_VALS_COUNT * BLOOM_HASHES_COUNT;
-		BuildBloom ( pWord->m_sWord+1, pWord->m_sWord[0], 2, ( m_iMaxCodepointLength>1 ), pVal+BLOOM_PER_ENTRY_VALS_COUNT*0, BLOOM_PER_ENTRY_VALS_COUNT );
-		BuildBloom ( pWord->m_sWord+1, pWord->m_sWord[0], 4, ( m_iMaxCodepointLength>1 ), pVal+BLOOM_PER_ENTRY_VALS_COUNT*1, BLOOM_PER_ENTRY_VALS_COUNT );
+		BuildBloom ( pDictWord, iLen, 2, ( m_iMaxCodepointLength>1 ), pVal+BLOOM_PER_ENTRY_VALS_COUNT*0, BLOOM_PER_ENTRY_VALS_COUNT );
+		BuildBloom ( pDictWord, iLen, 4, ( m_iMaxCodepointLength>1 ), pVal+BLOOM_PER_ENTRY_VALS_COUNT*1, BLOOM_PER_ENTRY_VALS_COUNT );
 	}
 }
 
 
-RtSegment_t * RtIndex_t::MergeSegments ( const RtSegment_t * pSeg1, const RtSegment_t * pSeg2, const CSphVector<SphDocID_t> * pAccKlist )
+RtSegment_t * RtIndex_t::MergeSegments ( const RtSegment_t * pSeg1, const RtSegment_t * pSeg2, const CSphVector<SphDocID_t> * pAccKlist, bool bHasMorphology )
 {
 	if ( pSeg1->m_iTag > pSeg2->m_iTag )
 		Swap ( pSeg1, pSeg2 );
@@ -2667,7 +2688,7 @@ RtSegment_t * RtIndex_t::MergeSegments ( const RtSegment_t * pSeg1, const RtSegm
 	if ( m_bKeywordDict )
 		FixupSegmentCheckpoints ( pSeg );
 
-	BuildSegmentInfixes ( pSeg );
+	BuildSegmentInfixes ( pSeg, bHasMorphology );
 
 	assert ( pSeg->m_dRows.GetLength() );
 	assert ( pSeg->m_iRows );
@@ -2716,7 +2737,7 @@ void RtIndex_t::Commit ( int * pDeleted )
 	assert ( !pNewSeg || pNewSeg->m_iAliveRows>0 );
 	assert ( !pNewSeg || pNewSeg->m_bTlsKlist==false );
 
-	BuildSegmentInfixes ( pNewSeg );
+	BuildSegmentInfixes ( pNewSeg, m_pDict->HasMorphology() );
 
 #if PARANOID
 	if ( pNewSeg )
@@ -2784,6 +2805,7 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 		dSegments.Add ( pNewSeg );
 
 	int64_t iRamFreed = 0;
+	bool bHasMorphology = m_pDict->HasMorphology();
 
 	// enforce RAM usage limit
 	int64_t iRamLeft = m_iDoubleBuffer ? m_iDoubleBufferLimit : m_iSoftRamLimit;
@@ -2856,7 +2878,7 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 		// do it
 		RtSegment_t * pA = dSegments.Pop();
 		RtSegment_t * pB = dSegments.Pop();
-		RtSegment_t * pMerged = MergeSegments ( pA, pB, &dAccKlist );
+		RtSegment_t * pMerged = MergeSegments ( pA, pB, &dAccKlist, bHasMorphology );
 		if ( pMerged )
 		{
 			int64_t iMerged = pMerged->GetUsedRam();
@@ -3325,6 +3347,8 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const CSphVector<RtSe
 	SphOffset_t uLastDocpos = 0;
 	CSphVector<SkiplistEntry_t> dSkiplist;
 
+	bool bHasMorphology = m_pDict->HasMorphology();
+
 	CSphScopedPtr<ISphInfixBuilder> pInfixer ( NULL );
 	if ( m_tSettings.m_iMinInfixLen && m_pDict->GetSettings().m_bWordDict )
 		pInfixer = sphCreateInfixBuilder ( m_pTokenizer->GetMaxCodepointLength(), &sError );
@@ -3512,7 +3536,7 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const CSphVector<RtSe
 
 				// build infixes
 				if ( pInfixer.Ptr() )
-					pInfixer->AddWord ( pWord->m_sWord+1, pWord->m_sWord[0], dCheckpoints.GetLength() );
+					pInfixer->AddWord ( pWord->m_sWord+1, pWord->m_sWord[0], dCheckpoints.GetLength(), bHasMorphology );
 			}
 
 			// emit skiplist pointer
@@ -4212,6 +4236,7 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 #endif
 	}
 
+	bool bHasMorphology = ( m_pDict && m_pDict->HasMorphology() ); // fresh and old-format index still has no dictionary at this point
 	int iSegmentSeq = rdChunk.GetDword();
 	m_dSegments.Resize ( rdChunk.GetDword() ); // FIXME? sanitize
 
@@ -4280,7 +4305,7 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 		{
 			LoadVector ( rdChunk, pSeg->m_dInfixFilterCP );
 			if ( bRebuildInfixes )
-				BuildSegmentInfixes ( pSeg );
+				BuildSegmentInfixes ( pSeg, bHasMorphology );
 		}
 	}
 
@@ -9220,7 +9245,7 @@ bool RtBinlog_c::ReplayCommit ( int iBinlog, DWORD uReplayFlags, BinlogReader_c 
 		if ( tIndex.m_pRT->IsWordDict() && pSeg.Ptr() )
 		{
 			FixupSegmentCheckpoints ( pSeg.Ptr() );
-			tIndex.m_pRT->BuildSegmentInfixes ( pSeg.Ptr() );
+			tIndex.m_pRT->BuildSegmentInfixes ( pSeg.Ptr(), tIndex.m_pRT->GetDictionary()->HasMorphology() );
 		}
 
 		// actually replay

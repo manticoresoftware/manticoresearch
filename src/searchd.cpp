@@ -9816,8 +9816,21 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 		}
 
 		// if sorter schemes have dynamic part, its lengths should be the same for queries to be optimized
-		for ( int i=m_iStart+1; i<=m_iEnd && m_bMultiQueue; i++ )
-			m_bMultiQueue = dSorters [ m_iStart ]->GetSchema().GetDynamicSize()==dSorters[i]->GetSchema().GetDynamicSize();
+		const ISphMatchSorter * pLastMulti = dSorters[0];
+		for ( int i=1; i<dSorters.GetLength() && m_bMultiQueue; i++ )
+		{
+			if ( !dSorters[i] )
+				continue;
+
+			if ( !pLastMulti )
+			{
+				pLastMulti = dSorters[i];
+				continue;
+			}
+
+			assert ( pLastMulti && dSorters[i] );
+			m_bMultiQueue = pLastMulti->GetSchema().GetDynamicSize()==dSorters[i]->GetSchema().GetDynamicSize();
+		}
 
 		// me shortcuts
 		AggrResult_t tStats;

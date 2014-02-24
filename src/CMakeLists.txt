@@ -3,8 +3,8 @@ cmake_minimum_required (VERSION 2.8)
 include(CheckFunctionExists)
 
 if (NOT WIN32)
-include (check_veryold_gcc)
-include (SphEndianess)
+	include (check_veryold_gcc)
+	include (SphEndianess)
 endif()
 
 # Fill system details for future
@@ -19,10 +19,12 @@ if (UNIX AND NOT CYGWIN)
 endif (UNIX AND NOT CYGWIN)
 
 if (NOT WIN32)
-message(STATUS "Checking for header files")
+	find_package(Threads REQUIRED)
+	SET (EXTRA_LIBRARIES ${EXTRA_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
+	message(STATUS "Checking for header files")
 
 include(ac_header_stdc)
-ac_check_headers ("fcntl.h;limits.h;netdb.h;netinet/in.h;stdlib.h;string.h;sys/file.h;sys/socket.h;sys/time.h;unistd.h;pthread.h;execinfo.h;sys/epoll.h")
+ac_check_headers ("execinfo.h")
 include(FindEXPAT)
 check_include_file("iconv.h" have_iconv_h) #fixme! Move to module?
 include(FindZLIB)
@@ -31,16 +33,13 @@ check_include_file("syslog.h" have_syslog_h) #fixme! Move to module?
 
 message(STATUS "Checking for types")
 message(STATUS "Checking for library functions")
-ac_check_funcs("dup2;gethostbyname;gettimeofday;memmove;memset;select;socket;strcasecmp;strchr;strerror;strncasecmp;strnlen;strstr;strtol;logf;pread;poll;backtrace;backtrace_symbols")
+ac_check_funcs("strnlen;pread;poll;backtrace;backtrace_symbols")
 
-ac_search_libs("m" "logf" HAVE_LOGF)
-ac_search_libs("z" "inflate" HAVE_GETHOSTBYNAME)
+ac_search_libs("socket" "setsockopt" _DUMMY EXTRA_LIBRARIES)
+ac_search_libs("nsl;socket;resolv" "gethostbyname" _DUMMY EXTRA_LIBRARIES)
+ac_search_libs("m" "logf" HAVE_LOGF EXTRA_LIBRARIES)
+ac_search_libs("z" "inflate" _DUMMY EXTRA_LIBRARIES)
 #check_function_exists(
-
-set (EXTRA_LIBRARIES
-	stdc++
-	pthread
-	)
 
 
 if ( CMAKE_COMPILER_IS_GNUCXX )
@@ -61,13 +60,33 @@ include_directories("${SPHINXSEARCH_BINARY_DIR}/config")
 
 endif (NOT WIN32)
 
-# our mega-lib
-add_library ( libsphinx STATIC sphinx.cpp sphinxexcerpt.cpp
+# main bunch of sources
+set (SRCS sphinx.cpp sphinxexcerpt.cpp
 sphinxquery.cpp sphinxsoundex.cpp sphinxmetaphone.cpp sphinxstemen.cpp
 sphinxstemru.cpp sphinxstemcz.cpp sphinxstemar.cpp sphinxutils.cpp
 sphinxstd.cpp sphinxsort.cpp sphinxexpr.cpp sphinxfilter.cpp
 sphinxsearch.cpp sphinxrt.cpp sphinxjson.cpp sphinxudf.c sphinxaot.cpp
-sphinxplugin.cpp sphinx.h )
+sphinxplugin.cpp)
+
+# all the (non-generated) headers
+file(GLOB HEADERS "sphinx*.h")
+
+file(GLOB GHEADERS "yysphinx*.h")
+source_group ("Generated Header Files" FILES ${GHEADERS})
+
+if (WIN32)
+	add_custom_command(OUTPUT "sphinxversion.h" COMMAND ${SPHINXSEARCH_SOURCE_DIR}/src/svnxrev.cmd ${SPHINXSEARCH_SOURCE_DIR})
+else (WIN32)
+	add_custom_command(OUTPUT "sphinxversion.h" COMMAND /bin/sh ${SPHINXSEARCH_SOURCE_DIR}/src/svnxrev.sh ${SPHINXSEARCH_SOURCE_DIR})
+endif(WIN32)
+
+set (HEADERS ${HEADERS} sphinxversion.h)
+
+# our mega-lib
+add_library ( libsphinx STATIC ${SRCS} ${HEADERS} ${GHEADERS})
+
+message (STATUS "Extra libraries:${EXTRA_LIBRARIES}")
+
 
 # our executables
 add_executable (indexer indexer.cpp )

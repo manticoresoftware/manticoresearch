@@ -13,10 +13,26 @@ set(CMAKE_USER_MAKE_RULES_OVERRIDE_CXX ${CMAKE_CURRENT_SOURCE_DIR}/cmake/cxx_fla
 
 PROJECT(SPHINXSEARCH)
 SET(SPHINXSEARCH_CMAKE_DIR "${SPHINXSEARCH_SOURCE_DIR}/cmake")
-SET(CMAKE_MODULE_PATH ${SPHINXSEARCH_SOURCE_DIR}/cmake)
+SET(CMAKE_MODULE_PATH "${SPHINXSEARCH_SOURCE_DIR}/cmake")
+SET(EXTRA_LIBRARIES "")
 
 if (WIN32)
 	include (select_library_dir)
+else(WIN32)
+	OPTION(WITH_STEMMER "compile with stemmer support" ON)
+	IF (WITH_STEMMER)
+		# check whether we have in-source libstemmer
+		if (EXISTS "${SPHINXSEARCH_SOURCE_DIR}/libstemmer_c/include/libstemmer.h")
+			add_subdirectory(libstemmer_c)
+		ELSE (EXISTS "${SPHINXSEARCH_SOURCE_DIR}/libstemmer_c/include/libstemmer.h")
+			find_package(stemmer)
+		ENDIF (EXISTS "${SPHINXSEARCH_SOURCE_DIR}/libstemmer_c/include/libstemmer.h")
+		IF (STEMMER_FOUND)
+			SET (EXTRA_LIBRARIES ${EXTRA_LIBRARIES} ${STEMMER_LIBRARIES})
+			include_directories (${STEMMER_INCLUDE_DIR})
+			SET (USE_LIBSTEMMER 1)
+		ENDIF (STEMMER_FOUND)
+	ENDIF (WITH_STEMMER)
 endif (WIN32)
 
 #if(CMAKE_CONFIGURATION_TYPES)

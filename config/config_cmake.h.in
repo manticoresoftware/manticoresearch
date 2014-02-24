@@ -272,7 +272,7 @@
 #cmakedefine USE_LIBICONV
 
 /* libstemmer support */
-#cmakedefine USE_LIBSTEMMER
+#cmakedefine USE_LIBSTEMMER ${USE_LIBSTEMMER}
 
 /* little-endian */
 #cmakedefine USE_LITTLE_ENDIAN ${USE_LITTLE_ENDIAN}

@@ -20,9 +20,9 @@ macro (ac_check_funcs _FUNCTIONS)
 endmacro(ac_check_funcs)
 
 # remove cr lf from input string
-macro (remove_crlf _SOURCE _DESTINATION)
-	string(REGEX REPLACE "\n" "" _DESTINATION "${_SOURCE}")
-endmacro(remove_crlf)
+#macro (remove_crlf _SOURCE _DESTINATION)
+#	string(REGEX REPLACE "\n" "" _DESTINATION "${_SOURCE}")
+#endmacro(remove_crlf)
 
 # AWI, downloaded from KDE repository since has not yet been transferred
 # to cmake repository as of 2006-07-31.
@@ -139,17 +139,29 @@ ENDMACRO(CHECK_DIRSYMBOL_EXISTS)
 
 
 include(CheckLibraryExists)
-macro( AC_SEARCH_LIBS LIB_REQUIRED FUNCTION_NAME TARGET_VAR )
+macro( AC_SEARCH_LIBS LIB_REQUIRED FUNCTION_NAME TARGET_VAR LIB_DIR)
+# check if we can use FUNCTION_NAME first.
+# if possible without extra libs - ok. If no - try to use LIB_REQUIRED list.
+# finally define TARGET_VAR as 1 if found, and also append found (if necessary) library path to LIB_DIR
 #if(${LIB_REQUIRED})
-foreach( LIB ${LIB_REQUIRED} )
-  find_library(_LIB_PATH ${LIB})
-  check_library_exists(${LIB} ${FUNCTION_NAME} ${_LIB_PATH} _LIB_FUNCTION_FOUND )
-  if( ${_LIB_FUNCTION_FOUND} )
-#    set(${TARGET_VAR} ${_LIB_PATH})
-	set(${TARGET_VAR} 1)
-    break()
-  endif()
-endforeach( LIB )
+	string(TOUPPER "${FUNCTION_NAME}" _upcase_name)
+	check_function_exists ("${FUNCTION_NAME}" "HAVE_${_upcase_name}")
+	if (HAVE_${_upcase_name} )
+		set (${TARGET_VAR} 1 )
+	else (HAVE_${_upcase_name})
+		foreach( LIB ${LIB_REQUIRED} )
+			UNSET(_LIB_PATH CACHE)
+			find_library(_LIB_PATH ${LIB})
+			UNSET (_LIB_FUNCTION_FOUND CACHE)
+			check_library_exists(${LIB} ${FUNCTION_NAME} ${_LIB_PATH} _LIB_FUNCTION_FOUND )
+			if( ${_LIB_FUNCTION_FOUND} )
+				#set(${TARGET_VAR} ${_LIB_PATH})
+				set(${TARGET_VAR} 1)
+				set (${LIB_DIR} "${${LIB_DIR}};${_LIB_PATH}")
+				break()
+			endif()
+		endforeach( LIB )
+	endif()
 #endif(${LIB_REQUIRED})
 endmacro()
 

@@ -142,8 +142,6 @@
 
 /////////////////////////////////////////////////////////////////////////////
 
-typedef Hitman_c<8> HITMAN;
-
 // logf() is not there sometimes (eg. Solaris 9)
 #if !USE_WINDOWS && !HAVE_LOGF
 static inline float logf ( float v )

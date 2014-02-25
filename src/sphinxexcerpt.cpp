@@ -33,10 +33,6 @@ static const int MAX_HIGHLIGHT_WORDS = 256;
 typedef uint64_t ZonePacked_t;
 
 
-/// hitman used here in snippets
-typedef Hitman_c<8> HITMAN;
-
-
 static int FindTagEnd ( const char * sData )
 {
 	assert ( *sData=='<' );

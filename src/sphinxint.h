@@ -1196,6 +1196,21 @@ static const int FIELD_BITS = 8;
 typedef Hitman_c<FIELD_BITS> HITMAN;
 
 /// hit in the stream
+/// combines posting info (docid and hitpos) with a few more matching/ranking bits
+///
+/// note that while in simple cases every hit would just represent a single keyword,
+/// this is NOT always the case; phrase, proximity, and NEAR operators (that already
+/// analyze keywords positions while matching the document) can emit a single folded
+/// hit representing the entire multi-keyword match, so that the ranker could avoid
+/// double work processing individual hits again. in such cases, m_uWeight, m_uSpanlen,
+/// and m_uMatchlen will differ from the "usual" value of 1.
+///
+/// thus, in folded hits:
+/// - m_uWeight is the match LCS value in all cases (phrase, proximity, near).
+/// - m_uSpanlen is the match span length, ie. a distance from the first to the last
+/// matching keyword. for phrase operators it natually equals m_uWeight, for other
+/// operators it might be very different.
+/// - m_uMatchlen is a piece of voodoo magic that only the near operator seems to use.
 struct ExtHit_t
 {
 	SphDocID_t	m_uDocid;
@@ -1204,7 +1219,7 @@ struct ExtHit_t
 	WORD		m_uNodepos;
 	WORD		m_uSpanlen;
 	WORD		m_uMatchlen;
-	DWORD		m_uWeight;
+	DWORD		m_uWeight;		///< 1 for individual keywords, LCS value for folded phrase/proximity/near hits
 	DWORD		m_uQposMask;
 };
 

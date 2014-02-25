@@ -8005,7 +8005,12 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 		if ( m_uCurLCS>m_uLCS[uField] )
 		{
 			m_uLCS[uField] = m_uCurLCS;
-			m_iMinBestSpanPos[uField] = iPos - m_uCurLCS + 1;
+			// for the first hit in current field just use current position as min_best_span_pos
+			// else adjust for current lcs
+			if ( !m_iMinBestSpanPos [ uField ] )
+				m_iMinBestSpanPos [ uField ] = iPos;
+			else
+				m_iMinBestSpanPos [ uField ] = iPos - m_uCurLCS + 1;
 		}
 		m_iExpDelta = iDelta + pHlist->m_uSpanlen - 1;
 	} else
@@ -8014,8 +8019,7 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 		if ( (DWORD)HITMAN::GetField ( m_uCurPos )!=uField )
 			m_uCurQposMask = 0;
 
-		DWORD uPos = HITMAN::GetLCS ( pHlist->m_uHitpos );
-		if ( (DWORD)uPos!=m_uCurPos )
+		if ( (DWORD)iLcs!=m_uCurPos )
 		{
 			// next new and shiny hitpos in line
 			// FIXME!? what do we do with longer spans? keep looking? reset?
@@ -8026,11 +8030,11 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
                 m_uCurLCS = 1;
 			}
 			m_uCurQposMask = 0;
-			m_uCurPos = uPos;
+			m_uCurPos = iLcs;
 			if ( m_uLCS [ uField ]<pHlist->m_uWeight )
 			{
                 m_uLCS [ uField ] = BYTE ( pHlist->m_uWeight );
-                m_iMinBestSpanPos [ uField ] = iPos - pHlist->m_uWeight + 1;
+                m_iMinBestSpanPos [ uField ] = iPos;
 			}
 		}
 
@@ -8527,16 +8531,15 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::ExtraDataImpl ( Extr
 template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >
 DWORD RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Finalize ( const CSphMatch & tMatch )
 {
-// TODO uncomment this and fix bugs
-/*#ifndef NDEBUG
+#ifndef NDEBUG
 	// sanity check
-	for ( int i=0; i<SPH_MAX_FIELDS; ++i )
+	for ( int i=0; i<m_iFields; ++i )
 	{
 		assert ( m_iMinHitPos[i]<=m_iMinBestSpanPos[i] );
 		if ( m_uLCS[i]==1 )
 			assert ( m_iMinHitPos[i]==m_iMinBestSpanPos[i] );
 	}
-	#endif // NDEBUG*/
+#endif // NDEBUG
 
 	// finishing touches
 	FinalizeDocFactors ( tMatch );

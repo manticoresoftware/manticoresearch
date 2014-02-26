@@ -984,7 +984,10 @@ typedef DWORD Hitpos_t;
 #define EMPTY_HIT 0
 
 /// hit processing tools
-/// (because we now allow multiple actual formats within a single storage type!)
+/// Hitpos_t consists of three things:
+/// 1) high bits store field number
+/// 2) middle bit - field end marker
+/// 3) lower bits store hit position in field
 template < int FIELD_BITS >
 class Hitman_c
 {

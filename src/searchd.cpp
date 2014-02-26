@@ -7974,7 +7974,7 @@ struct TaggedMatchSorter_fn : public SphAccessor_T<CSphMatch>
 };
 
 
-void RemapResult ( const ISphSchema * pTarget, AggrResult_t * pRes, bool bMultiSchema=true )
+void RemapResult ( const ISphSchema * pTarget, AggrResult_t * pRes )
 {
 	int iCur = 0;
 	CSphVector<int> dMapFrom ( pTarget->GetAttrsCount() );
@@ -7982,7 +7982,7 @@ void RemapResult ( const ISphSchema * pTarget, AggrResult_t * pRes, bool bMultiS
 	ARRAY_FOREACH ( iSchema, pRes->m_dSchemas )
 	{
 		dMapFrom.Resize ( 0 );
-		CSphRsetSchema & dSchema = ( bMultiSchema ? pRes->m_dSchemas[iSchema] : pRes->m_tSchema );
+		CSphRsetSchema & dSchema = pRes->m_dSchemas[iSchema];
 		for ( int i=0; i<pTarget->GetAttrsCount(); i++ )
 		{
 			dMapFrom.Add ( dSchema.GetAttrIndex ( pTarget->GetAttr(i).m_sName.cstr() ) );
@@ -7992,9 +7992,7 @@ void RemapResult ( const ISphSchema * pTarget, AggrResult_t * pRes, bool bMultiS
 				|| pTarget->GetAttr(i).m_sName=="@groupbystr"
 				);
 		}
-		int iLimit = bMultiSchema
-			? (int)Min ( iCur + pRes->m_dMatchCounts[iSchema], pRes->m_dMatches.GetLength() )
-			: (int)Min ( pRes->m_iTotalMatches, pRes->m_dMatches.GetLength() );
+		int iLimit = Min ( iCur + pRes->m_dMatchCounts[iSchema], pRes->m_dMatches.GetLength() );
 		for ( int i=iCur; i<iLimit; i++ )
 		{
 			CSphMatch & tMatch = pRes->m_dMatches[i];
@@ -8032,12 +8030,9 @@ void RemapResult ( const ISphSchema * pTarget, AggrResult_t * pRes, bool bMultiS
 			Swap ( tMatch, tRow );
 		}
 
-		if ( !bMultiSchema )
-			break;
-
 		iCur = iLimit;
 	}
-	assert ( !bMultiSchema || iCur==pRes->m_dMatches.GetLength() );
+	assert ( iCur==pRes->m_dMatches.GetLength() );
 }
 
 // rebuild the results itemlist expanding stars
@@ -8265,6 +8260,93 @@ struct AggregateColumnSort_fn
 		return a.m_iIndex < b.m_iIndex;
 	}
 };
+
+
+static void ExtractPostlimit ( const CSphRsetSchema & tSchema, CSphVector<const CSphColumnInfo *> & dPostlimit )
+{
+	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
+	{
+		const CSphColumnInfo & tCol = tSchema.GetAttr ( i );
+		if ( tCol.m_eStage==SPH_EVAL_POSTLIMIT )
+			dPostlimit.Add ( &tCol );
+	}
+}
+
+
+static void ProcessPostlimit ( const CSphVector<const CSphColumnInfo *> & dPostlimit, int iFrom, int iTo, AggrResult_t & tRes )
+{
+	if ( !dPostlimit.GetLength() )
+		return;
+
+	for ( int i=iFrom; i<iTo; i++ )
+	{
+		CSphMatch & tMatch = tRes.m_dMatches[i];
+		// remote match (tag highest bit 1) == everything is already computed
+		if ( tMatch.m_iTag & 0x80000000 )
+			continue;
+
+		ARRAY_FOREACH ( j, dPostlimit )
+		{
+			const CSphColumnInfo * pCol = dPostlimit[j];
+			assert ( pCol->m_pExpr.Ptr() );
+
+			// OPTIMIZE? only if the tag did not change?
+			pCol->m_pExpr->Command ( SPH_EXPR_SET_MVA_POOL, (void*)tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pMva );
+			pCol->m_pExpr->Command ( SPH_EXPR_SET_STRING_POOL, (void*)tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pStrings );
+
+			if ( pCol->m_eAttrType==SPH_ATTR_INTEGER )
+				tMatch.SetAttr ( pCol->m_tLocator, pCol->m_pExpr->IntEval(tMatch) );
+			else if ( pCol->m_eAttrType==SPH_ATTR_BIGINT )
+				tMatch.SetAttr ( pCol->m_tLocator, pCol->m_pExpr->Int64Eval(tMatch) );
+			else if ( pCol->m_eAttrType==SPH_ATTR_STRINGPTR )
+			{
+				const BYTE * pStr = NULL;
+				pCol->m_pExpr->StringEval ( tMatch, &pStr );
+				tMatch.SetAttr ( pCol->m_tLocator, (SphAttr_t) pStr ); // FIXME! a potential leak of *previous* value?
+			} else
+			{
+				tMatch.SetAttrFloat ( pCol->m_tLocator, pCol->m_pExpr->Eval(tMatch) );
+			}
+		}
+	}
+}
+
+
+static void ProcessLocalPostlimit ( const CSphQuery & tQuery, AggrResult_t & tRes )
+{
+	bool bGotPostlimit = false;
+	for ( int i=0; i<tRes.m_tSchema.GetAttrsCount() && !bGotPostlimit; i++ )
+		bGotPostlimit = ( tRes.m_tSchema.GetAttr(i).m_eStage==SPH_EVAL_POSTLIMIT );
+
+	if ( !bGotPostlimit )
+		return;
+
+	int iSetNext = 0;
+	CSphVector<const CSphColumnInfo *> dPostlimit;
+	ARRAY_FOREACH ( iSchema, tRes.m_dSchemas )
+	{
+		int iSetStart = iSetNext;
+		int iSetCount = tRes.m_dMatchCounts[iSchema];
+		iSetNext += iSetCount;
+		assert ( iSetNext<=tRes.m_dMatches.GetLength() );
+
+		dPostlimit.Resize ( 0 );
+		ExtractPostlimit ( tRes.m_dSchemas[iSchema], dPostlimit );
+		if ( !dPostlimit.GetLength() )
+			continue;
+
+		int iTo = iSetCount;
+		int iOff = Max ( tQuery.m_iOffset, tQuery.m_iOuterOffset );
+		int iCount = ( tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit );
+		iTo = Max ( Min ( iOff + iCount, iTo ), 0 );
+		int iFrom = Min ( iOff, iTo );
+
+		iFrom += iSetStart;
+		iTo += iSetStart;
+
+		ProcessPostlimit ( dPostlimit, iFrom, iTo, tRes );
+	}
+}
 
 
 /// merges multiple result sets, remaps columns, does reorder for outer selects
@@ -8557,7 +8639,20 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 
 		// convert all matches to sorter schema - at least to manage all static to dynamic
 		if ( !bAllEqual )
+		{
+			// post-limit stuff first
+			if ( iLocals )
+			{
+				ESphQueryState eOld = SPH_QSTATE_TOTAL;
+				if ( pProfiler )
+					eOld = pProfiler->Switch ( SPH_QSTATE_EVAL_POST );
+				ProcessLocalPostlimit ( tQuery, tRes );
+				if ( pProfiler )
+					pProfiler->Switch ( eOld );
+			}
+
 			RemapResult ( &tRes.m_tSchema, &tRes );
+		}
 		RemapStrings ( pSorter, tRes );
 
 		// do the sort work!
@@ -8587,12 +8682,6 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 		sphSort ( tRes.m_dMatches.Begin(), tRes.m_dMatches.GetLength(), tReorder, MatchSortAccessor_t() );
 	}
 
-	// compute post-limit stuff
-	CSphVector<int> dPostlimit;
-	for ( int i=0; i<tRes.m_tSchema.GetAttrsCount(); i++ )
-		if ( tRes.m_tSchema.GetAttr(i).m_eStage==SPH_EVAL_POSTLIMIT )
-			dPostlimit.Add ( i );
-
 	// lets catch a (potential) minor application mistake
 	// if this check causes any grief, just erase it already
 	if ( iAgents )
@@ -8606,8 +8695,16 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 		}
 	}
 
-	if ( dPostlimit.GetLength() )
+	// compute post-limit stuff
+	if ( bAllEqual && iLocals )
 	{
+		ESphQueryState eOld = SPH_QSTATE_TOTAL;
+		if ( pProfiler )
+			eOld = pProfiler->Switch ( SPH_QSTATE_EVAL_POST );
+
+		CSphVector<const CSphColumnInfo *> dPostlimit;
+		ExtractPostlimit ( tRes.m_tSchema, dPostlimit );
+
 		// post compute matches only between offset - limit
 		// however at agent we can't estimate limit.offset at master merged result set
 		// but master don't provide offset to agents only offset+limit as limit
@@ -8618,38 +8715,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 		iTo = Max ( Min ( iOff + iCount, iTo ), 0 );
 		int iFrom = Min ( iOff, iTo );
 
-		ESphQueryState eOld = SPH_QSTATE_TOTAL;
-		if ( pProfiler )
-			eOld = pProfiler->Switch ( SPH_QSTATE_EVAL_POST );
-
-		for ( int i=iFrom; i<iTo; i++ )
-		{
-			CSphMatch & tMatch = tRes.m_dMatches[i];
-			// remote match (tag highest bit 1) == everything is already computed
-			if ( tMatch.m_iTag & 0x80000000 )
-				continue;
-
-			ARRAY_FOREACH ( j, dPostlimit )
-			{
-				const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr ( dPostlimit[j] );
-
-				// OPTIMIZE? only if the tag did not change?
-				tCol.m_pExpr->Command ( SPH_EXPR_SET_MVA_POOL, (void*)tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pMva );
-				tCol.m_pExpr->Command ( SPH_EXPR_SET_STRING_POOL, (void*)tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pStrings );
-
-				if ( tCol.m_eAttrType==SPH_ATTR_INTEGER )
-					tMatch.SetAttr ( tCol.m_tLocator, tCol.m_pExpr->IntEval(tMatch) );
-				else if ( tCol.m_eAttrType==SPH_ATTR_BIGINT )
-					tMatch.SetAttr ( tCol.m_tLocator, tCol.m_pExpr->Int64Eval(tMatch) );
-				else if ( tCol.m_eAttrType==SPH_ATTR_STRINGPTR )
-				{
-					const BYTE * pStr = NULL;
-					tCol.m_pExpr->StringEval ( tMatch, &pStr );
-					tMatch.SetAttr ( tCol.m_tLocator, (SphAttr_t) pStr ); // FIXME! a potential leak of *previous* value?
-				} else
-					tMatch.SetAttrFloat ( tCol.m_tLocator, tCol.m_pExpr->Eval(tMatch) );
-			}
-		}
+		ProcessPostlimit ( dPostlimit, iFrom, iTo, tRes );
 
 		if ( pProfiler )
 			pProfiler->Switch ( eOld );

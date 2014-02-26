@@ -7,6 +7,7 @@
 searchd
 {
 	<searchd_settings/>
+	workers = threads
 }
 
 source test
@@ -30,8 +31,9 @@ source src_snip
 	type			= mysql
 	<sql_settings/>
 
-	sql_query		= SELECT 1 as id , 1 as idd, 'viva las mundos' as body
+	sql_query		= SELECT 1 as id , 1 as idd, 2 as idd2, 'viva las mundos' as body
 	sql_attr_uint = idd
+	sql_attr_uint = idd2
 	sql_field_string = body
 }
 
@@ -39,6 +41,82 @@ index snip2
 {
 	source			= src_snip
 	path			= <data_path/>/snip2
+}
+
+source src_snip22
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT 100 as id , 1 as idd, 20 as idd2, 'viva las mundos' as body
+	sql_attr_uint = idd
+	sql_attr_uint = idd2
+	sql_field_string = body
+}
+
+index snip22
+{
+	source			= src_snip22
+	path			= <data_path/>/snip22
+}
+
+source src_snip3
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT 10 as id , 1 as idd, 20 as pup, 'viva las mundos' as body
+	sql_attr_uint = pup
+	sql_attr_uint = idd
+	sql_field_string = body
+}
+
+index snip3
+{
+	source			= src_snip3
+	path			= <data_path/>/snip3
+}
+
+index dist1
+{
+	type = distributed
+	local = snip2
+	local = snip3
+}
+
+index dist2
+{
+	type = distributed
+	local = snip2
+	agent = <my_address/>:snip3
+}
+
+index dist3
+{
+	type = distributed
+	agent = <my_address/>:snip2
+	agent = <my_address/>:snip3
+}
+
+index dist11
+{
+	type = distributed
+	local = snip2
+	local = snip22
+}
+
+index dist12
+{
+	type = distributed
+	local = snip2
+	agent = <my_address/>:snip22
+}
+
+index dist13
+{
+	type = distributed
+	agent = <my_address/>:snip2
+	agent = <my_address/>:snip22
 }
 </config>
 
@@ -56,6 +134,19 @@ index snip2
 <sphinxql>select id, SNIPPET('body as las void', 'las') as s from snip2 where match ('las')</sphinxql>
 <sphinxql>select id, SNIPPET(body, 'las') as s from snip2 where match ('las')</sphinxql>
 <sphinxql>select id, SNIPPET('something', snip2) from snip2</sphinxql>
+
+<!-- regression SNIPPET expression from distributed index -->
+<sphinxql>select *, SNIPPET('body as las void', 'las') from dist3</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist3</sphinxql>
+<sphinxql>select *, SNIPPET('body as las void', 'las') from dist2</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist2</sphinxql>
+<sphinxql>select *, SNIPPET('body as las void', 'las') from dist1</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist1</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'cas') from dist2</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'cas') from dist1</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist11</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist12</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist13</sphinxql>
 
 </sphqueries>
 

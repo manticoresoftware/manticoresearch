@@ -1342,18 +1342,21 @@ struct Expr_MinTopSortval : public ISphExpr
 #define INT64SECOND	m_pSecond->Int64Eval(tMatch)
 #define INT64THIRD	m_pThird->Int64Eval(tMatch)
 
-#define DECLARE_UNARY_TRAITS(_classname,_expr) \
+#define DECLARE_UNARY_TRAITS(_classname) \
 	struct _classname : public Expr_Unary_c \
 	{ \
-		explicit _classname ( ISphExpr * pFirst ) : Expr_Unary_c ( pFirst ) {} \
-		virtual float Eval ( const CSphMatch & tMatch ) const { return _expr; } \
+		explicit _classname ( ISphExpr * pFirst ) : Expr_Unary_c ( pFirst ) {}
+
+#define DECLARE_END() };
 
 #define DECLARE_UNARY_FLT(_classname,_expr) \
-		DECLARE_UNARY_TRAITS ( _classname, _expr ) \
+		DECLARE_UNARY_TRAITS ( _classname ) \
+		virtual float Eval ( const CSphMatch & tMatch ) const { return _expr; } \
 	};
 
 #define DECLARE_UNARY_INT(_classname,_expr,_expr2,_expr3) \
-		DECLARE_UNARY_TRAITS ( _classname, _expr ) \
+		DECLARE_UNARY_TRAITS ( _classname ) \
+		virtual float Eval ( const CSphMatch & tMatch ) const { return _expr; } \
 		virtual int IntEval ( const CSphMatch & tMatch ) const { return _expr2; } \
 		virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return _expr3; } \
 	};
@@ -1367,15 +1370,48 @@ DECLARE_UNARY_INT ( Expr_Floor_c,	float(floor(FIRST)),	int(floor(FIRST)),	int64_
 
 DECLARE_UNARY_FLT ( Expr_Sin_c,		float(sin(FIRST)) )
 DECLARE_UNARY_FLT ( Expr_Cos_c,		float(cos(FIRST)) )
-DECLARE_UNARY_FLT ( Expr_Ln_c,		float(log(FIRST)) )
-DECLARE_UNARY_FLT ( Expr_Log2_c,	float(log(FIRST)*M_LOG2E) )
-DECLARE_UNARY_FLT ( Expr_Log10_c,	float(log(FIRST)*M_LOG10E) )
 DECLARE_UNARY_FLT ( Expr_Exp_c,		float(exp(FIRST)) )
-DECLARE_UNARY_FLT ( Expr_Sqrt_c,	float(sqrt(FIRST)) )
 
 DECLARE_UNARY_INT ( Expr_NotInt_c,		(float)(INTFIRST?0:1),		INTFIRST?0:1,	INTFIRST?0:1 )
 DECLARE_UNARY_INT ( Expr_NotInt64_c,	(float)(INT64FIRST?0:1),	INT64FIRST?0:1,	INT64FIRST?0:1 )
 DECLARE_UNARY_INT ( Expr_Sint_c,		(float)(INTFIRST),			INTFIRST,		INTFIRST )
+
+DECLARE_UNARY_TRAITS ( Expr_Ln_c )
+       virtual float Eval ( const CSphMatch & tMatch ) const
+       {
+               float fFirst = m_pFirst->Eval ( tMatch );
+               // ideally this would be SQLNULL instead of plain 0
+               return fFirst>0 ? log ( fFirst ) : 0;
+       }
+DECLARE_END()
+
+DECLARE_UNARY_TRAITS ( Expr_Log2_c )
+       virtual float Eval ( const CSphMatch & tMatch ) const
+       {
+               float fFirst = m_pFirst->Eval ( tMatch );
+               // ideally this would be SQLNULL instead of plain 0
+               return fFirst>0 ? log ( fFirst )*M_LOG2E : 0;
+       }
+DECLARE_END()
+
+DECLARE_UNARY_TRAITS ( Expr_Log10_c )
+       virtual float Eval ( const CSphMatch & tMatch ) const
+       {
+               float fFirst = m_pFirst->Eval ( tMatch );
+               // ideally this would be SQLNULL instead of plain 0
+               return fFirst>0 ? log ( fFirst )*M_LOG10E : 0;
+       }
+DECLARE_END()
+
+DECLARE_UNARY_TRAITS ( Expr_Sqrt_c )
+       virtual float Eval ( const CSphMatch & tMatch ) const
+       {
+               float fFirst = m_pFirst->Eval ( tMatch );
+               // ideally this would be SQLNULL instead of plain 0 in case of negative argument
+               // MEGA optimization: do not call sqrt for 0
+               return fFirst>0 ? sqrt ( fFirst ) : 0;
+       }
+DECLARE_END()
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -1387,8 +1423,6 @@ DECLARE_UNARY_INT ( Expr_Sint_c,		(float)(INTFIRST),			INTFIRST,		INTFIRST )
 		_classname ( ISphExpr * pFirst, ISphExpr * pSecond ) : m_pFirst ( pFirst ), m_pSecond ( pSecond ) {} \
 		~_classname () { SafeRelease ( m_pFirst ); SafeRelease ( m_pSecond ); } \
 		virtual void Command ( ESphExprCommand eCmd, void * pArg ) { m_pFirst->Command ( eCmd, pArg ); m_pSecond->Command ( eCmd, pArg ); }
-
-#define DECLARE_END() };
 
 #define DECLARE_BINARY_FLT(_classname,_expr) \
 		DECLARE_BINARY_TRAITS ( _classname ) \
@@ -1413,27 +1447,38 @@ DECLARE_UNARY_INT ( Expr_Sint_c,		(float)(INTFIRST),			INTFIRST,		INTFIRST )
 DECLARE_BINARY_INT ( Expr_Add_c,	FIRST + SECOND,						(DWORD)INTFIRST + (DWORD)INTSECOND,				(uint64_t)INT64FIRST + (uint64_t)INT64SECOND )
 DECLARE_BINARY_INT ( Expr_Sub_c,	FIRST - SECOND,						(DWORD)INTFIRST - (DWORD)INTSECOND,				(uint64_t)INT64FIRST - (uint64_t)INT64SECOND )
 DECLARE_BINARY_INT ( Expr_Mul_c,	FIRST * SECOND,						(DWORD)INTFIRST * (DWORD)INTSECOND,				(uint64_t)INT64FIRST * (uint64_t)INT64SECOND )
-DECLARE_BINARY_FLT ( Expr_Div_c,	FIRST / SECOND )
 DECLARE_BINARY_INT ( Expr_BitAnd_c,	(float)(int(FIRST)&int(SECOND)),	INTFIRST & INTSECOND,				INT64FIRST & INT64SECOND )
 DECLARE_BINARY_INT ( Expr_BitOr_c,	(float)(int(FIRST)|int(SECOND)),	INTFIRST | INTSECOND,				INT64FIRST | INT64SECOND )
 DECLARE_BINARY_INT ( Expr_Mod_c,	(float)(int(FIRST)%int(SECOND)),	INTFIRST % INTSECOND,				INT64FIRST % INT64SECOND )
+
+DECLARE_BINARY_TRAITS ( Expr_Div_c )
+       virtual float Eval ( const CSphMatch & tMatch ) const
+       {
+               float fSecond = m_pSecond->Eval ( tMatch );
+               // ideally this would be SQLNULL instead of plain 0
+               return fSecond ? m_pFirst->Eval ( tMatch )/fSecond : 0;
+       }
+DECLARE_END()
 
 DECLARE_BINARY_TRAITS ( Expr_Idiv_c )
 	virtual float Eval ( const CSphMatch & tMatch ) const
 	{
 		int iSecond = int(SECOND);
+		// ideally this would be SQLNULL instead of plain 0
 		return iSecond ? float(int(FIRST)/iSecond) : 0.0f;
 	}
 
 	virtual int IntEval ( const CSphMatch & tMatch ) const
 	{
 		int iSecond = INTSECOND;
+		// ideally this would be SQLNULL instead of plain 0
 		return iSecond ? ( INTFIRST / iSecond ) : 0;
 	}
 
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const
 	{
 		int64_t iSecond = INT64SECOND;
+		// ideally this would be SQLNULL instead of plain 0
 		return iSecond ? ( INT64FIRST / iSecond ) : 0;
 	}
 DECLARE_END()
@@ -1500,7 +1545,8 @@ DECLARE_TERNARY ( Expr_Mul3_c,	FIRST*SECOND*THIRD,					INTFIRST*INTSECOND*INTTHI
 //////////////////////////////////////////////////////////////////////////
 
 #define DECLARE_TIMESTAMP(_classname,_expr) \
-	DECLARE_UNARY_TRAITS ( _classname, (float)IntEval(tMatch) ) \
+	DECLARE_UNARY_TRAITS ( _classname ) \
+		virtual float Eval ( const CSphMatch & tMatch ) const { return IntEval(tMatch); } \
 		virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return IntEval(tMatch); } \
 		virtual int IntEval ( const CSphMatch & tMatch ) const \
 		{ \
@@ -2568,7 +2614,7 @@ void ExprParser_t::ConstantFoldPass ( int iNode )
 					case '+':	pRoot->m_fConst = fLeft + fRight; break;
 					case '-':	pRoot->m_fConst = fLeft - fRight; break;
 					case '*':	pRoot->m_fConst = fLeft * fRight; break;
-					case '/':	pRoot->m_fConst = fLeft / fRight; break;
+					case '/':	pRoot->m_fConst = fRight ? fLeft / fRight : 0; break;
 					default:	assert ( 0 && "internal error: unhandled arithmetic token during const-float optimization" );
 				}
 				pRoot->m_iToken = TOK_CONST_FLOAT;
@@ -2646,11 +2692,11 @@ void ExprParser_t::ConstantFoldPass ( int iNode )
 			case FUNC_FLOOR:	pRoot->m_iToken = TOK_CONST_INT; pRoot->m_iLeft = -1; pRoot->m_iConst = (int)floor ( fArg ); break;
 			case FUNC_SIN:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float ( sin ( fArg) ); break;
 			case FUNC_COS:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float ( cos ( fArg ) ); break;
-			case FUNC_LN:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float ( log ( fArg ) ); break;
-			case FUNC_LOG2:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float ( log ( fArg )*M_LOG2E ); break;
-			case FUNC_LOG10:	pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float ( log ( fArg )*M_LOG10E ); break;
+			case FUNC_LN:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = fArg>0 ? log(fArg) : 0; break;
+			case FUNC_LOG2:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = fArg>0 ? log(fArg)*M_LOG2E : 0; break;
+			case FUNC_LOG10:	pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = fArg>0 ? log(fArg)*M_LOG10E : 0; break;
 			case FUNC_EXP:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float ( exp ( fArg ) ); break;
-			case FUNC_SQRT:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float ( sqrt ( fArg ) ); break;
+			case FUNC_SQRT:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = fArg>0 ? sqrt(fArg) : 0; break;
 			default:			break;
 		}
 		return;

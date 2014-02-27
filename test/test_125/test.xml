@@ -232,6 +232,12 @@ INSERT INTO cmp_table VALUES
 <sphinxql>SHOW DATABASES</sphinxql>
 
 <sphinxql>SELECT CONTAINS(POLY2D(poly2d_attr),2,3) FROM test LIMIT 1</sphinxql>
+
+<sphinxql>SELECT 0 zero, 1/0, 1/zero FROM cmp LIMIT 1</sphinxql>
+<sphinxql>SELECT 0 zero, SINT(-1) negative, ln(0), ln(zero), ln(-1), ln(negative) FROM cmp LIMIT 1</sphinxql>
+<sphinxql>SELECT 0 zero, SINT(-1) negative, log2(0), log2(zero), log2(-1), log2(negative) FROM cmp LIMIT 1</sphinxql>
+<sphinxql>SELECT 0 zero, SINT(-1) negative, log10(0), log10(zero), log10(-1), ln(negative) FROM cmp LIMIT 1</sphinxql>
+<sphinxql>SELECT 0 zero, SINT(-1) negative, sqrt(0), sqrt(zero), sqrt(-1), sqrt(negative) FROM cmp LIMIT 1</sphinxql>
 </sphqueries>
 
 </test>

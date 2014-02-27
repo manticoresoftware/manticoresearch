@@ -4355,7 +4355,7 @@ bool sphSortGetStringRemap ( const ISphSchema & tSorterSchema, const ISphSchema 
 // BINARY COLLATION
 ////////////////////
 
-int CollateBinary ( const BYTE * pStr1, const BYTE * pStr2, bool bPacked )
+int sphCollateBinary ( const BYTE * pStr1, const BYTE * pStr2, bool bPacked )
 {
 	if ( bPacked )
 	{
@@ -4374,7 +4374,7 @@ int CollateBinary ( const BYTE * pStr1, const BYTE * pStr2, bool bPacked )
 ///////////////////////////////
 
 /// libc_ci, wrapper for strcasecmp
-int CollateLibcCI ( const BYTE * pStr1, const BYTE * pStr2, bool bPacked )
+int sphCollateLibcCI ( const BYTE * pStr1, const BYTE * pStr2, bool bPacked )
 {
 	if ( bPacked )
 	{
@@ -4390,7 +4390,7 @@ int CollateLibcCI ( const BYTE * pStr1, const BYTE * pStr2, bool bPacked )
 
 
 /// libc_cs, wrapper for strcoll
-int CollateLibcCS ( const BYTE * pStr1, const BYTE * pStr2, bool bPacked )
+int sphCollateLibcCS ( const BYTE * pStr1, const BYTE * pStr2, bool bPacked )
 {
 	#define COLLATE_STACK_BUFFER 1024
 
@@ -4613,7 +4613,7 @@ static inline int CollateUTF8CI ( int iCode )
 
 
 /// utf8_general_ci
-int CollateUtf8GeneralCI ( const BYTE * pArg1, const BYTE * pArg2, bool bPacked )
+int sphCollateUtf8GeneralCI ( const BYTE * pArg1, const BYTE * pArg2, bool bPacked )
 {
 	const BYTE * pStr1 = pArg1;
 	const BYTE * pStr2 = pArg2;
@@ -5373,20 +5373,20 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 	switch ( pQuery->m_eCollation )
 	{
 		case SPH_COLLATION_LIBC_CI:
-			tStateMatch.m_fnStrCmp = CollateLibcCI;
-			tStateGroup.m_fnStrCmp = CollateLibcCI;
+			tStateMatch.m_fnStrCmp = sphCollateLibcCI;
+			tStateGroup.m_fnStrCmp = sphCollateLibcCI;
 			break;
 		case SPH_COLLATION_LIBC_CS:
-			tStateMatch.m_fnStrCmp = CollateLibcCS;
-			tStateGroup.m_fnStrCmp = CollateLibcCS;
+			tStateMatch.m_fnStrCmp = sphCollateLibcCS;
+			tStateGroup.m_fnStrCmp = sphCollateLibcCS;
 			break;
 		case SPH_COLLATION_UTF8_GENERAL_CI:
-			tStateMatch.m_fnStrCmp = CollateUtf8GeneralCI;
-			tStateGroup.m_fnStrCmp = CollateUtf8GeneralCI;
+			tStateMatch.m_fnStrCmp = sphCollateUtf8GeneralCI;
+			tStateGroup.m_fnStrCmp = sphCollateUtf8GeneralCI;
 			break;
 		case SPH_COLLATION_BINARY:
-			tStateMatch.m_fnStrCmp = CollateBinary;
-			tStateGroup.m_fnStrCmp = CollateBinary;
+			tStateMatch.m_fnStrCmp = sphCollateBinary;
+			tStateGroup.m_fnStrCmp = sphCollateBinary;
 			break;
 	}
 

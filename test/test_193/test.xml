@@ -13,6 +13,8 @@ searchd
 {
 	<searchd_settings/>
 	workers = threads
+	collation_libc_locale = C
+	collation_server = binary
 }
 
 source test
@@ -35,13 +37,28 @@ source test2
        type                            = mysql
        <sql_settings/>
        sql_query                       = select 1, 'text', 'asdf' title union select 2, 'text', 'asdfg' title
-       sql_attr_string         = title
+       sql_attr_string         			= title
 }
 
 index test2
 {
        source                          = test2
        path                            = <data_path/>/test2
+}
+
+source src_filter
+{
+       type					= mysql
+       <sql_settings/>
+       sql_query			= SELECT 1 id, 11 idd, 'Be' title, '{"title":"BE"}' j, 'BE alive' text UNION SELECT 2 id, 22 idd, 'BE alive' title, '{"title":"Be alive"}' j,'Be undead' text  UNION SELECT 3 id, 33 idd, '' title, '{"mantle":"be alone", "title":""}' j,'Be alone' text
+       sql_field_string		= title
+	   sql_attr_json		= j
+}
+
+index i_filter
+{
+       source                          = src_filter
+       path                            = <data_path/>/i_filter
 }
 </config>
 
@@ -83,6 +100,26 @@ INSERT INTO test_table VALUES
 <sphinxql>select title from test2 order by title desc</sphinxql>
 <sphinxql>set collation_connection=binary</sphinxql>
 <sphinxql>select title from test2 order by title asc</sphinxql>
-<sphinxql>select title from test2 order by title desc</sphinxql></sphqueries>
+<sphinxql>select title from test2 order by title desc</sphinxql>
+
+<!-- regression string filter with collation -->
+<sphinxql>set collation_connection=binary</sphinxql>
+<sphinxql>SELECT * FROM i_filter WHERE title='Be'</sphinxql>
+<sphinxql>SELECT * FROM i_filter WHERE j.title='BE'</sphinxql>
+<sphinxql>SELECT * FROM i_filter WHERE title='be'</sphinxql>
+<sphinxql>SELECT * FROM i_filter WHERE j.title='be'</sphinxql>
+<sphinxql>SELECT * FROM i_filter WHERE MATCH ('be') AND title='BE alive'</sphinxql>
+<sphinxql>SELECT * FROM i_filter WHERE MATCH ('be') AND j.title='Be alive'</sphinxql>
+<sphinxql>SELECT * FROM i_filter WHERE MATCH ('be') AND title='be alive'</sphinxql>
+<sphinxql>SELECT * FROM i_filter WHERE MATCH ('be') AND j.title='be alive'</sphinxql>
+<sphinxql>set collation_connection=utf8_general_ci</sphinxql>
+<sphinxql>SELECT * FROM i_filter WHERE title='be'</sphinxql>
+<sphinxql>SELECT * FROM i_filter WHERE j.title='be'</sphinxql>
+<sphinxql>SELECT * FROM i_filter WHERE MATCH ('be') AND title='BE ALIVE'</sphinxql>
+<sphinxql>SELECT * FROM i_filter WHERE MATCH ('be') AND j.title='BE ALIVE'</sphinxql>
+<sphinxql>SELECT * FROM i_filter WHERE title!='be'</sphinxql>
+<sphinxql>SELECT * FROM i_filter WHERE MATCH ('be') AND j.title!='BE'</sphinxql>
+
+</sphqueries>
 
 </test>

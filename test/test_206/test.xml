@@ -23,6 +23,8 @@ searchd
 {
 	<searchd_settings/>
 	workers = threads
+	collation_libc_locale = C
+	collation_server = binary	
 }
 
 source test

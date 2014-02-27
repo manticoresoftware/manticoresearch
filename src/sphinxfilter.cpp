@@ -508,6 +508,87 @@ struct Filter_MVARange: public IFilter_MVA, IFilter_Range
 	}
 };
 
+
+class FilterString_c : public IFilter_Attr
+{
+private:
+	CSphFixedVector<BYTE>	m_dVal;
+	SphStringCmp_fn			m_fnStrCmp;
+	const BYTE *			m_pStringBase;
+	bool					m_bPacked;
+	bool					m_bEq;
+
+public:
+	FilterString_c ( ESphCollation eCollation, ESphAttr eType, bool bEq )
+		: m_dVal ( 0 )
+		, m_pStringBase ( NULL )
+		, m_bEq ( bEq )
+	{
+		assert ( eType==SPH_ATTR_STRING || eType==SPH_ATTR_STRINGPTR );
+		m_bPacked = ( eType==SPH_ATTR_STRING );
+
+		switch ( eCollation )
+		{
+		case SPH_COLLATION_LIBC_CI:
+			m_fnStrCmp = sphCollateLibcCI;
+			break;
+		case SPH_COLLATION_LIBC_CS:
+			m_fnStrCmp = sphCollateLibcCS;
+			break;
+		case SPH_COLLATION_UTF8_GENERAL_CI:
+			m_fnStrCmp = sphCollateUtf8GeneralCI;
+			break;
+		case SPH_COLLATION_BINARY:
+			m_fnStrCmp = sphCollateBinary;
+			break;
+		}
+	}
+
+	virtual void SetRefString ( const CSphString & sRef )
+	{
+		int iLen = sRef.Length();
+		if ( m_bPacked )
+		{
+			m_dVal.Reset ( iLen+4 );
+			int iPacked = sphPackStrlen ( m_dVal.Begin(), iLen );
+			memcpy ( m_dVal.Begin()+iPacked, sRef.cstr(), iLen );
+		} else
+		{
+			m_dVal.Reset ( iLen+1 );
+			memcpy ( m_dVal.Begin(), sRef.cstr(), iLen );
+			m_dVal[iLen] = '\0';
+		}
+	}
+
+	virtual void SetStringStorage ( const BYTE * pStrings )
+	{
+		m_pStringBase = pStrings;
+	}
+
+	virtual bool Eval ( const CSphMatch & tMatch ) const
+	{
+		if ( m_bPacked && !m_pStringBase )
+			return !m_bEq;
+
+		SphAttr_t uVal = tMatch.GetAttr ( m_tLocator );
+		if ( !uVal )
+			return !m_bEq;
+
+		const BYTE * pStr = NULL;
+		if ( m_bPacked )
+		{
+			pStr = m_pStringBase + uVal;
+		} else
+		{
+			pStr = (const BYTE *)uVal;
+		}
+
+		bool bEq = ( m_fnStrCmp ( pStr, m_dVal.Begin(), m_bPacked )==0 );
+		return ( m_bEq==bEq );
+	}
+};
+
+
 struct Filter_And2 : public ISphFilter
 {
 	ISphFilter * m_pArg1;
@@ -797,7 +878,7 @@ static inline ISphFilter * ReportError ( CSphString & sError, const char * sMess
 
 
 static ISphFilter * CreateFilter ( ESphAttr eAttrType, ESphFilter eFilterType, int iNumValues,
-	const CSphAttrLocator & tLoc, CSphString & sError, bool bHasEqual )
+	const CSphAttrLocator & tLoc, CSphString & sError, bool bHasEqual, ESphCollation eCollation )
 {
 	// MVA
 	if ( eAttrType==SPH_ATTR_UINT32SET || eAttrType==SPH_ATTR_INT64SET )
@@ -843,7 +924,7 @@ static ISphFilter * CreateFilter ( ESphAttr eAttrType, ESphFilter eFilterType, i
 	}
 
 	if ( eAttrType==SPH_ATTR_STRING || eAttrType==SPH_ATTR_STRINGPTR )
-		return ReportError ( sError, "unsupported filter type '%s' on string column", eFilterType );
+		return new FilterString_c ( eCollation, eAttrType, bHasEqual );
 
 	// non-float, non-MVA
 	switch ( eFilterType )
@@ -1012,34 +1093,50 @@ public:
 class JsonFilterString_c : public JsonFilter_c<ISphFilter>
 {
 protected:
-	CSphString	m_sRef;
-	int			m_iRef;
+	CSphFixedVector<BYTE>	m_dVal;
+	SphStringCmp_fn			m_fnStrCmp;
+	bool					m_bEq;
 
 public:
-	explicit JsonFilterString_c ( ISphExpr * pExpr )
+	explicit JsonFilterString_c ( ISphExpr * pExpr, ESphCollation eCollation, bool bEq )
 		: JsonFilter_c<ISphFilter> ( pExpr )
-	{}
+		, m_dVal ( 0 )
+		, m_bEq ( bEq )
+	{
+		switch ( eCollation )
+		{
+		case SPH_COLLATION_LIBC_CI:
+			m_fnStrCmp = sphCollateLibcCI;
+			break;
+		case SPH_COLLATION_LIBC_CS:
+			m_fnStrCmp = sphCollateLibcCS;
+			break;
+		case SPH_COLLATION_UTF8_GENERAL_CI:
+			m_fnStrCmp = sphCollateUtf8GeneralCI;
+			break;
+		case SPH_COLLATION_BINARY:
+			m_fnStrCmp = sphCollateBinary;
+			break;
+		}
+	}
 
 	virtual void SetRefString ( const CSphString & sRef )
 	{
-		m_sRef = sRef;
-		m_iRef = sRef.Length();
+		int iLen = sRef.Length();
+		m_dVal.Reset ( iLen+4 );
+		int iPacked = sphPackStrlen ( m_dVal.Begin(), iLen );
+		memcpy ( m_dVal.Begin()+iPacked, sRef.cstr(), iLen );
 	}
 
 	virtual bool Eval ( const CSphMatch & tMatch ) const
 	{
 		const BYTE * pValue;
 		ESphJsonType eRes = GetKey ( &pValue, tMatch );
-		switch ( eRes )
-		{
-			case JSON_STRING:
-			{
-				int iLen = sphJsonUnpackInt ( &pValue );
-				return iLen==m_iRef && iLen && memcmp ( pValue, m_sRef.cstr(), iLen )==0;
-			}
-			default:
-				return false;
-		}
+		if ( eRes!=JSON_STRING )
+			return !m_bEq;
+
+		bool bEq = ( m_fnStrCmp ( pValue, m_dVal.Begin(), true )==0 );
+		return ( m_bEq==bEq );
 	}
 };
 
@@ -1082,7 +1179,7 @@ public:
 
 
 static ISphFilter * CreateFilterJson ( const CSphColumnInfo * DEBUGARG(pAttr), ISphExpr * pExpr,
-	ESphFilter eType, bool bRangeEq, CSphString & sError )
+	ESphFilter eType, bool bRangeEq, CSphString & sError, ESphCollation eCollation )
 {
 	assert ( pAttr );
 
@@ -1101,7 +1198,7 @@ static ISphFilter * CreateFilterJson ( const CSphColumnInfo * DEBUGARG(pAttr), I
 			else
 				return new JsonFilterRange_c<false> ( pExpr );
 		case SPH_FILTER_STRING:
-			return new JsonFilterString_c ( pExpr );
+			return new JsonFilterString_c ( pExpr, eCollation, bRangeEq );
 		case SPH_FILTER_NULL:
 			return new JsonFilterNull_c ( pExpr, bRangeEq );
 		default:
@@ -1114,7 +1211,8 @@ static ISphFilter * CreateFilterJson ( const CSphColumnInfo * DEBUGARG(pAttr), I
 // PUBLIC FACING INTERFACE
 //////////////////////////////////////////////////////////////////////////
 
-static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const CSphString & sAttrName, const ISphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError, bool bHaving )
+static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const CSphString & sAttrName, const ISphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings,
+									CSphString & sError, bool bHaving, ESphCollation eCollation )
 {
 	ISphFilter * pFilter = NULL;
 	const CSphColumnInfo * pAttr = NULL;
@@ -1151,7 +1249,7 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 		// fastpath for simple cases like j.key1 is handled in the expression
 		// combined access/filter nodes are only marginally faster (eg 17.4 msec vs 18.5 msec on 457K rows)
 		ISphExpr * pExpr = sphExprParse ( sAttrName.cstr(), tSchema, NULL, NULL, sError, NULL );
-		pFilter = CreateFilterJson ( pAttr, pExpr, tSettings.m_eType, tSettings.m_bHasEqual, sError );
+		pFilter = CreateFilterJson ( pAttr, pExpr, tSettings.m_eType, tSettings.m_bHasEqual, sError, eCollation );
 
 		if ( !pFilter )
 			return NULL;
@@ -1178,9 +1276,9 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 			{
 				if ( pAttr->m_pExpr.Ptr() )
 					pAttr->m_pExpr->AddRef(); // CreateFilterJson() uses a refcounted pointer, but does not AddRef() itself, so help it
-				pFilter = CreateFilterJson ( pAttr, pAttr->m_pExpr.Ptr(), tSettings.m_eType, tSettings.m_bHasEqual, sError );
+				pFilter = CreateFilterJson ( pAttr, pAttr->m_pExpr.Ptr(), tSettings.m_eType, tSettings.m_bHasEqual, sError, eCollation );
 			} else
-				pFilter = CreateFilter ( pAttr->m_eAttrType, tSettings.m_eType, tSettings.GetNumValues(), pAttr->m_tLocator, sError, tSettings.m_bHasEqual );
+				pFilter = CreateFilter ( pAttr->m_eAttrType, tSettings.m_eType, tSettings.GetNumValues(), pAttr->m_tLocator, sError, tSettings.m_bHasEqual, eCollation );
 		}
 	}
 
@@ -1220,16 +1318,16 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 }
 
 
-ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const ISphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError )
+ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const ISphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError, ESphCollation eCollation )
 {
-	return CreateFilter ( tSettings, tSettings.m_sAttrName, tSchema, pMvaPool, pStrings, sError, false );
+	return CreateFilter ( tSettings, tSettings.m_sAttrName, tSchema, pMvaPool, pStrings, sError, false, eCollation );
 }
 
 
 ISphFilter * sphCreateAggrFilter ( const CSphFilterSettings * pSettings, const CSphString & sAttrName, const ISphSchema & tSchema, CSphString & sError )
 {
 	assert ( pSettings );
-	return CreateFilter ( *pSettings, sAttrName, tSchema, NULL, NULL, sError, true );
+	return CreateFilter ( *pSettings, sAttrName, tSchema, NULL, NULL, sError, true, SPH_COLLATION_DEFAULT );
 }
 
 

@@ -11091,7 +11091,7 @@ public:
 		}
 
 		// adjust the result set limits
-		dMatches.Resize ( iOutPos );
+		pResult->ClampMatches ( iOutPos, true );
 		pResult->m_iOffset = 0;
 		pResult->m_iCount = dMatches.GetLength();
 		return true;

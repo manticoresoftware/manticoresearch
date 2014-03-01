@@ -6302,8 +6302,7 @@ bool MinimizeSchema ( CSphRsetSchema & tDst, const ISphSchema & tSrc )
 	return bEqual;
 }
 
-
-void ParseIndexList ( const CSphString & sIndexes, CSphVector<CSphString> & dOut )
+static void ParseIndexList ( const CSphString & sIndexes, CSphVector<CSphString> & dOut )
 {
 	CSphString sSplit = sIndexes;
 	char * p = (char*)sSplit.cstr();
@@ -6733,6 +6732,22 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 		if ( !tQuery.ParseSelectList ( sError ) )
 		{
 			tReq.SendErrorReply ( "select: %s", sError.cstr() );
+
+			// we want to see a parse error in query_log_format=sphinxql mode too
+			if ( g_eLogFormat==LOG_FORMAT_SPHINXQL && g_iQueryLogFile>=0 )
+			{
+				CSphStringBuilder tBuf;
+				char sTimeBuf [ SPH_TIME_PID_MAX_SIZE ];
+				sphFormatCurrentTime ( sTimeBuf, sizeof(sTimeBuf) );
+
+				tBuf += "/""* ";
+				tBuf += sTimeBuf;
+				tBuf.Appendf ( "*""/ %s # error=%s\n", tQuery.m_sSelect.cstr(), sError.cstr() );
+
+				sphSeek ( g_iQueryLogFile, 0, SEEK_END );
+				sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.Length() );
+			}
+
 			return false;
 		}
 	}
@@ -6913,7 +6928,7 @@ void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 #endif
 }
 
-void FormatOrderBy ( CSphStringBuilder * pBuf, const char * sPrefix, ESphSortOrder eSort, const CSphString & sSort )
+static void FormatOrderBy ( CSphStringBuilder * pBuf, const char * sPrefix, ESphSortOrder eSort, const CSphString & sSort )
 {
 	assert ( pBuf );
 	if ( eSort==SPH_SORT_EXTENDED && sSort=="@weight desc" )
@@ -6934,7 +6949,7 @@ void FormatOrderBy ( CSphStringBuilder * pBuf, const char * sPrefix, ESphSortOrd
 	}
 }
 
-void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const CSphVector<int64_t> & dAgentTimes )
+static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const CSphVector<int64_t> & dAgentTimes )
 {
 	assert ( g_eLogFormat==LOG_FORMAT_SPHINXQL );
 	if ( g_iQueryLogFile<0 )
@@ -7215,7 +7230,7 @@ void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const
 }
 
 
-void LogQuery ( const CSphQuery & q, const CSphQueryResult & tRes, const CSphVector<int64_t> & dAgentTimes )
+static void LogQuery ( const CSphQuery & q, const CSphQueryResult & tRes, const CSphVector<int64_t> & dAgentTimes )
 {
 	if ( g_iQueryLogMinMs && tRes.m_iQueryTime<g_iQueryLogMinMs )
 		return;
@@ -7228,7 +7243,7 @@ void LogQuery ( const CSphQuery & q, const CSphQueryResult & tRes, const CSphVec
 }
 
 
-void LogSphinxqlError ( const char * sStmt, const char * sError )
+static void LogSphinxqlError ( const char * sStmt, const char * sError )
 {
 	if ( g_eLogFormat!=LOG_FORMAT_SPHINXQL || g_iQueryLogFile<0 || !sStmt || !sError )
 		return;

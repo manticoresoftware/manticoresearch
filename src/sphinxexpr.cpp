@@ -6187,14 +6187,14 @@ ISphExpr * sphExprParse ( const char * sExpr, const ISphSchema & tSchema, ESphAt
 {
 	// parse into opcodes
 	ExprParser_t tParser ( pHook, pProfiler );
-	ISphExpr * bRes = tParser.Parse ( sExpr, tSchema, pAttrType, pUsesWeight, sError );
+	ISphExpr * pRes = tParser.Parse ( sExpr, tSchema, pAttrType, pUsesWeight, sError );
 	if ( pZonespanlist )
 		*pZonespanlist = tParser.m_bHasZonespanlist;
 	if ( pEvalStage )
 		*pEvalStage = tParser.m_eEvalStage;
 	if ( pPackedFactorsFlags )
 		*pPackedFactorsFlags = tParser.m_uPackedFactorFlags;
-	return bRes;
+	return pRes;
 }
 
 //

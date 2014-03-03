@@ -1267,7 +1267,7 @@ XQNode_t * XQParser_t::SweepNulls ( XQNode_t * pNode )
 
 		m_dSpawned.RemoveValue ( pNode ); // OPTIMIZE!
 		SafeDelete ( pNode );
-		return pRet;
+		return SweepNulls ( pRet );
 	}
 
 	// done

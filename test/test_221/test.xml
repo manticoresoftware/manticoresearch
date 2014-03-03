@@ -70,5 +70,7 @@ CREATE TABLE test_table
 <sphinxql>select * from META:all where match ('hallo  | (war ( a -world))')</sphinxql>
 <sphinxql>select * from META:all where match ('war ( a -world)')</sphinxql>
 <sphinxql>select * from META:all where match ('war | ( a -world)')</sphinxql>
+<!-- check for crash on expressions like 'a<<(*!b)'-->
+<sphinxql><![CDATA[select * from META:all where match ( 'war << ( * -world )' ) ]]></sphinxql>
 </sphqueries>
 </test>

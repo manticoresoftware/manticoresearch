@@ -559,6 +559,7 @@ static KeyDesc_t g_dKeysCommon[] =
 	{ "rlp_max_batch_size",		0, NULL },
 	{ "rlp_max_batch_docs",		0, NULL },
 	{ "plugin_dir",				0, NULL }
+	{ NULL,						0, NULL }
 };
 
 //////////////////////////////////////////////////////////////////////////

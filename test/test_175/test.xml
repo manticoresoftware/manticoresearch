@@ -458,8 +458,8 @@ $results = array_merge ( $results, $query ( "select * from idx_qt where match ('
 $results = array_merge ( $results, $query ( "select *, weight() from idx_qt_2 where match (' \" match match that pal \"/2 ' ) order by id desc limit 5 option ranker=wordcount", $sock ) );
 
 // regression - expand_keywords got lost for disk chunks of RT ndex
-$text = 'dummy text is going here dummy text is going here dummy text is going here dummy text is going here dummy text is going here dummy text is going here';
-$insert = "REPLACE INTO rt_auto_expand VALUES ( 1, 'uniq got placed here', 1, 2, 3, 4, 5 ) ";
+$text = 'dummy text is going here dummy text is going here dummy text is going here dummy text is going here dummy text is going here dummy text is going here aborted';
+$insert = "REPLACE INTO rt_auto_expand VALUES ( 1, 'uniq got placed here avi', 1, 2, 3, 4, 5 ) ";
 $query ( $insert, $sock );
 
 for ( $id=2; $id<1700; $id++ )
@@ -473,6 +473,9 @@ $results = array_merge ( $results, $query ( "select * from rt_auto_expand where 
 $results = array_merge ( $results, $query ( "show meta", $sock ) );
 $results = array_merge ( $results, $query ( "select * from rt_auto_expand where match ( 'ace' ) ", $sock ) );
 $results = array_merge ( $results, $query ( "show meta", $sock ) );
+
+// regression call keywords fails at disk chunk term with skiplist
+$results = array_merge ( $results, $query ( " CALL KEYWORDS ('got aborted avi', 'rt_auto_expand', 1) ", $sock ) );
 
 @mysql_close ( $sock );
 

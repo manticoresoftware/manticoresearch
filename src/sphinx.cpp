@@ -17748,7 +17748,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	// prepare for setup
 	CSphAutofile tDummy1, tDummy2;
 
-	DiskIndexQwordSetup_c tTermSetup ( tDummy1, tDummy2, NULL, NULL );
+	DiskIndexQwordSetup_c tTermSetup ( tDummy1, tDummy2, m_pSkiplists.GetWritePtr(), NULL );
 	tTermSetup.m_pDict = pDict;
 	tTermSetup.m_pIndex = this;
 	tTermSetup.m_eDocinfo = m_tSettings.m_eDocinfo;

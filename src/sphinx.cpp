@@ -1029,6 +1029,10 @@ public:
 /////////////////////////////////////////////////////////////////////////////
 
 
+#define HITLESS_DOC_MASK 0x7FFFFFFF
+#define HITLESS_DOC_FLAG 0x80000000
+
+
 struct Slice64_t
 {
 	uint64_t	m_uOff;
@@ -1198,7 +1202,7 @@ struct DictHeader_t
 	SphOffset_t		m_iDictCheckpointsOffset;	///< dict checkpoints file position
 
 	int				m_iInfixCodepointBytes;		///< max bytes per infix codepoint (0 means no infixes)
-	int				m_iInfixBlocksOffset;		///< infix blocks file position (32bit as keywords dictionary is pretty small)
+	int64_t			m_iInfixBlocksOffset;		///< infix blocks file position (stored as unsigned 32bit int as keywords dictionary is pretty small)
 	int				m_iInfixBlocksWordsSize;	///< infix checkpoints size
 
 	DictHeader_t()
@@ -10914,7 +10918,7 @@ void CSphHitBuilder::DoclistEndEntry ( Hitpos_t uLastPos )
 	{
 		bool bIgnoreHits =
 			( m_eHitless==SPH_HITLESS_ALL ) ||
-			( m_eHitless==SPH_HITLESS_SOME && ( m_tWord.m_iDocs & 0x80000000 ) );
+			( m_eHitless==SPH_HITLESS_SOME && ( m_tWord.m_iDocs & HITLESS_DOC_FLAG ) );
 
 		// inline the only hit into doclist (unless it is completely discarded)
 		// and finish doclist entry
@@ -11091,7 +11095,7 @@ void CSphHitBuilder::cidxHit ( CSphAggregateHit * pHit, const CSphRowitem * pAtt
 		m_tWord.m_iHits += iHitCount;
 
 		if ( m_eHitless==SPH_HITLESS_SOME )
-			m_tWord.m_iDocs |= 0x80000000;
+			m_tWord.m_iDocs |= HITLESS_DOC_FLAG;
 
 	} else // handle normal hits
 	{
@@ -11237,7 +11241,7 @@ bool CSphIndex_VLN::WriteHeader ( const BuildHeader_t & tBuildHeader, CSphWriter
 	fdInfo.PutOffset ( tBuildHeader.m_iDictCheckpointsOffset );
 	fdInfo.PutDword ( tBuildHeader.m_iDictCheckpoints );
 	fdInfo.PutByte ( tBuildHeader.m_iInfixCodepointBytes );
-	fdInfo.PutDword ( tBuildHeader.m_iInfixBlocksOffset );
+	fdInfo.PutDword ( (DWORD)tBuildHeader.m_iInfixBlocksOffset );
 	fdInfo.PutDword ( tBuildHeader.m_iInfixBlocksWordsSize );
 
 	// index stats
@@ -13862,10 +13866,10 @@ static const int DOCLIST_HINT_THRESH = 256;
 // let uDocs be DWORD here to prevent int overflow in case of hitless word (highest bit is 1)
 static int DoclistHintUnpack ( DWORD uDocs, BYTE uHint )
 {
-	if ( uDocs<(DWORD)DOCLIST_HINT_THRESH )
-		return 8*uDocs;
+	if ( uDocs<DOCLIST_HINT_THRESH )
+		return (int)Min ( 8*(int64_t)uDocs, INT_MAX );
 	else
-		return 4*uDocs + (DWORD)( uint64_t(uDocs)*uHint/64 );
+		return (int)Min ( 4*(int64_t)uDocs+( int64_t(uDocs)*uHint/64 ), INT_MAX );
 }
 
 BYTE sphDoclistHintPack ( SphOffset_t iDocs, SphOffset_t iLen )
@@ -14016,8 +14020,8 @@ public:
 
 		m_bHasHitlist =
 			( m_eHitless==SPH_HITLESS_NONE ) ||
-			( m_eHitless==SPH_HITLESS_SOME && !( m_iDocs & 0x80000000 ) );
-		m_iDocs = m_eHitless==SPH_HITLESS_SOME ? ( m_iDocs & 0x7FFFFFFF ) : m_iDocs;
+			( m_eHitless==SPH_HITLESS_SOME && !( m_iDocs & HITLESS_DOC_FLAG ) );
+		m_iDocs = m_eHitless==SPH_HITLESS_SOME ? ( m_iDocs & HITLESS_DOC_MASK ) : m_iDocs;
 
 		return true; // FIXME? errorflag?
 	}
@@ -15892,11 +15896,11 @@ bool DiskIndexQwordSetup_c::Setup ( ISphQword * pWord ) const
 	}
 
 	const ESphHitless eMode = pIndex->m_tSettings.m_eHitless;
-	tWord.m_iDocs = eMode==SPH_HITLESS_SOME ? ( tRes.m_iDocs & 0x7FFFFFFF ) : tRes.m_iDocs;
+	tWord.m_iDocs = eMode==SPH_HITLESS_SOME ? ( tRes.m_iDocs & HITLESS_DOC_MASK ) : tRes.m_iDocs;
 	tWord.m_iHits = tRes.m_iHits;
 	tWord.m_bHasHitlist =
 		( eMode==SPH_HITLESS_NONE ) ||
-		( eMode==SPH_HITLESS_SOME && !( tRes.m_iDocs & 0x80000000 ) );
+		( eMode==SPH_HITLESS_SOME && !( tRes.m_iDocs & HITLESS_DOC_FLAG ) );
 
 	if ( m_bSetupReaders )
 	{
@@ -19347,6 +19351,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		SphOffset_t iNewDoclistOffset = 0;
 		int iDocs = 0;
 		int iHits = 0;
+		bool bHitless = false;
 
 		if ( bWordDict )
 		{
@@ -19381,6 +19386,12 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			int iHint = ( iDocs>=DOCLIST_HINT_THRESH ) ? rdDict.GetByte() : 0;
 			iHint = DoclistHintUnpack ( iDocs, (BYTE)iHint );
 
+			if ( m_tSettings.m_eHitless==SPH_HITLESS_SOME && ( iDocs & HITLESS_DOC_FLAG )!=0 )
+			{
+				iDocs = ( iDocs & HITLESS_DOC_MASK );
+				bHitless = true;
+			}
+
 			const int iNewWordLen = strlen(sWord);
 
 			if ( iNewWordLen==0 )
@@ -19408,9 +19419,9 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			iNewDoclistOffset = iDoclistOffset + rdDict.UnzipOffset();
 			iDocs = rdDict.UnzipInt();
 			iHits = rdDict.UnzipInt();
-			bool bHitless = ( dHitlessWords.BinarySearch ( uNewWordid )!=NULL );
+			bHitless = ( dHitlessWords.BinarySearch ( uNewWordid )!=NULL );
 			if ( bHitless )
-				iDocs &= 0x7fffffff;
+				iDocs = ( iDocs & HITLESS_DOC_MASK );
 
 			if ( uNewWordid<=uWordid )
 				LOC_FAIL(( fp, "wordid decreased (pos="INT64_FMT", wordid="UINT64_FMT", previd="UINT64_FMT")",
@@ -19426,7 +19437,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		}
 
 		// skiplist
-		if ( m_bHaveSkips && iDocs>SPH_SKIPLIST_BLOCK )
+		if ( m_bHaveSkips && iDocs>SPH_SKIPLIST_BLOCK && !bHitless )
 		{
 			int iSkipsOffset = rdDict.UnzipInt();
 			if ( !bWordDict && iSkipsOffset<iLastSkipsOffset )
@@ -19541,6 +19552,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 	int iWordsChecked = 0;
 	while ( rdDict.GetPos()<iWordsEnd )
 	{
+		bHitless = false;
 		const SphWordID_t iDeltaWord = bWordDict ? rdDict.GetByte() : rdDict.UnzipWordid();
 		if ( !iDeltaWord )
 		{
@@ -19581,6 +19593,12 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			iDictHits = rdDict.UnzipInt();
 			if ( iDictDocs>=DOCLIST_HINT_THRESH )
 				rdDict.GetByte();
+
+			if ( m_tSettings.m_eHitless==SPH_HITLESS_SOME && ( iDictDocs & HITLESS_DOC_FLAG ) )
+			{
+				iDictDocs = ( iDictDocs & HITLESS_DOC_MASK );
+				bHitless = true;
+			}
 		} else
 		{
 			// finish reading the entire entry
@@ -19589,13 +19607,13 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			iDoclistOffset = iDoclistOffset + rdDict.UnzipOffset();
 			iDictDocs = rdDict.UnzipInt();
 			if ( bHitless )
-				iDictDocs &= 0x7fffffff;
+				iDictDocs = ( iDictDocs & HITLESS_DOC_MASK );
 			iDictHits = rdDict.UnzipInt();
 		}
 
 		// FIXME? verify skiplist content too
 		int iSkipsOffset = 0;
-		if ( m_bHaveSkips && iDictDocs>SPH_SKIPLIST_BLOCK )
+		if ( m_bHaveSkips && iDictDocs>SPH_SKIPLIST_BLOCK && !bHitless )
 			iSkipsOffset = rdDict.UnzipInt();
 
 		// check whether the offset is as expected
@@ -19658,8 +19676,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		int iDoclistHits = 0;
 		int iHitlistHits = 0;
 
-		// FIXME!!! dict=keywords + hitless_words=some
-		bHitless = ( m_tSettings.m_eHitless==SPH_HITLESS_ALL ||
+		bHitless |= ( m_tSettings.m_eHitless==SPH_HITLESS_ALL ||
 			( m_tSettings.m_eHitless==SPH_HITLESS_SOME && dHitlessWords.BinarySearch ( uWordid ) ) );
 		pQword->m_bHasHitlist = !bHitless;
 
@@ -19789,7 +19806,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			LOC_FAIL(( fp, "hit count mismatch (wordid="UINT64_FMT"(%s), dict=%d, doclist=%d, hitlist=%d)",
 				uint64_t(uWordid), sWord, iDictHits, iDoclistHits, iHitlistHits ));
 
-		while ( m_bHaveSkips && iDoclistDocs>SPH_SKIPLIST_BLOCK )
+		while ( m_bHaveSkips && iDoclistDocs>SPH_SKIPLIST_BLOCK && !bHitless )
 		{
 			if ( iSkipsOffset<=0 || iSkipsOffset>(int)m_pSkiplists.GetLengthBytes() )
 			{
@@ -22197,7 +22214,7 @@ public:
 					InfixBuilder_c();
 	virtual void	AddWord ( const BYTE * pWord, int iWordLength, int iCheckpoint, bool bHasMorphology );
 	virtual void	SaveEntries ( CSphWriter & wrDict );
-	virtual int		SaveEntryBlocks ( CSphWriter & wrDict );
+	virtual int64_t	SaveEntryBlocks ( CSphWriter & wrDict );
 	virtual int		GetBlocksWordsSize () const { return m_dBlocksWords.GetLength(); }
 
 protected:
@@ -22442,7 +22459,7 @@ void InfixBuilder_c<SIZE>::SaveEntries ( CSphWriter & wrDict )
 
 			InfixBlock_t & tBlock = m_dBlocks.Add();
 			tBlock.m_iInfixOffset = iOff;
-			tBlock.m_iOffset = (int)wrDict.GetPos();
+			tBlock.m_iOffset = (DWORD)wrDict.GetPos();
 
 			memcpy ( m_dBlocksWords.Begin()+iOff, sKey, iAppendBytes );
 			m_dBlocksWords[iOff+iAppendBytes] = '\0';
@@ -22539,13 +22556,16 @@ void InfixBuilder_c<SIZE>::SaveEntries ( CSphWriter & wrDict )
 	const char * pBlockWords = (const char *)m_dBlocksWords.Begin();
 	ARRAY_FOREACH ( i, m_dBlocks )
 		m_dBlocks[i].m_sInfix = pBlockWords+m_dBlocks[i].m_iInfixOffset;
+
+	if ( wrDict.GetPos()>UINT_MAX ) // FIXME!!! change to int64
+		sphDie ( "INTERNAL ERROR: dictionary size "INT64_FMT" overflow at infix save", wrDict.GetPos() );
 }
 
 
 static const char * g_sTagInfixBlocks = "infix-blocks";
 
 template < int SIZE >
-int InfixBuilder_c<SIZE>::SaveEntryBlocks ( CSphWriter & wrDict )
+int64_t InfixBuilder_c<SIZE>::SaveEntryBlocks ( CSphWriter & wrDict )
 {
 	// save the blocks
 	wrDict.PutBytes ( g_sTagInfixBlocks, strlen ( g_sTagInfixBlocks ) );
@@ -22562,7 +22582,7 @@ int InfixBuilder_c<SIZE>::SaveEntryBlocks ( CSphWriter & wrDict )
 		wrDict.ZipInt ( m_dBlocks[i].m_iOffset ); // maybe delta these on top?
 	}
 
-	return (int)iInfixBlocksOffset;
+	return iInfixBlocksOffset;
 }
 
 
@@ -23162,6 +23182,8 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphStri
 	{
 		pHeader->m_iInfixBlocksOffset = pInfixer->SaveEntryBlocks ( m_wrDict );
 		pHeader->m_iInfixBlocksWordsSize = pInfixer->GetBlocksWordsSize();
+		if ( pHeader->m_iInfixBlocksOffset>UINT_MAX ) // FIXME!!! change to int64
+			sphDie ( "INTERNAL ERROR: dictionary size "INT64_FMT" overflow at dictend save", pHeader->m_iInfixBlocksOffset );
 	}
 
 	// flush header
@@ -23171,7 +23193,7 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphStri
 	m_wrDict.ZipInt ( pHeader->m_iDictCheckpoints );
 	m_wrDict.ZipOffset ( pHeader->m_iDictCheckpointsOffset );
 	m_wrDict.ZipInt ( pHeader->m_iInfixCodepointBytes );
-	m_wrDict.ZipInt ( pHeader->m_iInfixBlocksOffset );
+	m_wrDict.ZipInt ( (DWORD)pHeader->m_iInfixBlocksOffset );
 
 	// about it
 	LOC_CLEANUP();
@@ -30929,6 +30951,7 @@ bool CWordlist::ReadCP ( CSphAutofile & tFile, DWORD uVersion, bool bWordDict, C
 			m_dInfixBlocks[i].m_sInfix = (const char *)m_pInfixBlocksWords + m_dInfixBlocks[i].m_iInfixOffset;
 	}
 
+	// FIXME!!! store and load that explicitly
 	// set wordlist end
 	m_iWordsEnd = m_iDictCheckpointsOffset;
 	if ( m_iInfixCodepointBytes && m_iInfixBlocksOffset )
@@ -31704,6 +31727,9 @@ void sphDictBuildInfixes ( const char * sPath )
 	// write newly generated infix hash blocks
 	tDictHeader.m_iInfixBlocksOffset = pInfixer->SaveEntryBlocks ( wrDict );
 	tDictHeader.m_iInfixBlocksWordsSize = pInfixer->GetBlocksWordsSize();
+	if ( tDictHeader.m_iInfixBlocksOffset>UINT_MAX ) // FIXME!!! change to int64
+		sphDie ( "INTERNAL ERROR: dictionary size "INT64_FMT" overflow at build infixes save", tDictHeader.m_iInfixBlocksOffset );
+
 
 	// flush header
 	// mostly for debugging convenience
@@ -31712,7 +31738,7 @@ void sphDictBuildInfixes ( const char * sPath )
 	wrDict.ZipInt ( tDictHeader.m_iDictCheckpoints );
 	wrDict.ZipOffset ( tDictHeader.m_iDictCheckpointsOffset );
 	wrDict.ZipInt ( tDictHeader.m_iInfixCodepointBytes );
-	wrDict.ZipInt ( tDictHeader.m_iInfixBlocksOffset );
+	wrDict.ZipInt ( (DWORD)tDictHeader.m_iInfixBlocksOffset );
 
 	wrDict.CloseFile ();
 	if ( wrDict.IsError() )
@@ -31745,7 +31771,7 @@ void sphDictBuildInfixes ( const char * sPath )
 	wrHeader.PutOffset ( tDictHeader.m_iDictCheckpointsOffset );
 	wrHeader.PutDword ( tDictHeader.m_iDictCheckpoints );
 	wrHeader.PutByte ( tDictHeader.m_iInfixCodepointBytes );
-	wrHeader.PutDword ( tDictHeader.m_iInfixBlocksOffset );
+	wrHeader.PutDword ( (DWORD)tDictHeader.m_iInfixBlocksOffset );
 	wrHeader.PutDword ( tDictHeader.m_iInfixBlocksWordsSize );
 	wrHeader.PutDword ( (DWORD)tStats.m_iTotalDocuments ); // FIXME? we don't expect over 4G docs per just 1 local index
 	wrHeader.PutOffset ( tStats.m_iTotalBytes );
@@ -32184,7 +32210,9 @@ void sphDictBuildSkiplists ( const char * sPath )
 		int iBlocks = rdDict.UnzipInt();
 
 		wrDict.PutBytes ( g_sTagInfixBlocks, strlen ( g_sTagInfixBlocks ) );
-		tDictHeader.m_iInfixBlocksOffset = (int)wrDict.GetPos();
+		tDictHeader.m_iInfixBlocksOffset = wrDict.GetPos();
+		if ( tDictHeader.m_iInfixBlocksOffset>UINT_MAX ) // FIXME!!! change to int64
+			sphDie ( "INTERNAL ERROR: dictionary size "INT64_FMT" overflow at infix blocks save", wrDict.GetPos() );
 
 		wrDict.ZipInt ( iBlocks );
 		for ( int i=0; i<iBlocks; i++ )
@@ -32205,7 +32233,7 @@ void sphDictBuildSkiplists ( const char * sPath )
 		wrDict.ZipInt ( tDictHeader.m_iDictCheckpoints );
 		wrDict.ZipOffset ( tDictHeader.m_iDictCheckpointsOffset );
 		wrDict.ZipInt ( tDictHeader.m_iInfixCodepointBytes );
-		wrDict.ZipInt ( tDictHeader.m_iInfixBlocksOffset );
+		wrDict.ZipInt ( (DWORD)tDictHeader.m_iInfixBlocksOffset );
 	}
 
 	wrDict.CloseFile();
@@ -32316,7 +32344,7 @@ void sphDictBuildSkiplists ( const char * sPath )
 	wrHeader.PutOffset ( tDictHeader.m_iDictCheckpointsOffset );
 	wrHeader.PutDword ( tDictHeader.m_iDictCheckpoints );
 	wrHeader.PutByte ( tDictHeader.m_iInfixCodepointBytes );
-	wrHeader.PutDword ( tDictHeader.m_iInfixBlocksOffset );
+	wrHeader.PutDword ( (DWORD)tDictHeader.m_iInfixBlocksOffset );
 	wrHeader.PutDword ( tDictHeader.m_iInfixBlocksWordsSize );
 	wrHeader.PutDword ( (DWORD)tStats.m_iTotalDocuments ); // FIXME? we don't expect over 4G docs per just 1 local index
 	wrHeader.PutOffset ( tStats.m_iTotalBytes );

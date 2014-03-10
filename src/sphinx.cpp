@@ -1028,7 +1028,6 @@ public:
 
 /////////////////////////////////////////////////////////////////////////////
 
-
 #define HITLESS_DOC_MASK 0x7FFFFFFF
 #define HITLESS_DOC_FLAG 0x80000000
 
@@ -13866,7 +13865,7 @@ static const int DOCLIST_HINT_THRESH = 256;
 // let uDocs be DWORD here to prevent int overflow in case of hitless word (highest bit is 1)
 static int DoclistHintUnpack ( DWORD uDocs, BYTE uHint )
 {
-	if ( uDocs<DOCLIST_HINT_THRESH )
+	if ( uDocs<(DWORD)DOCLIST_HINT_THRESH )
 		return (int)Min ( 8*(int64_t)uDocs, INT_MAX );
 	else
 		return (int)Min ( 4*(int64_t)uDocs+( int64_t(uDocs)*uHint/64 ), INT_MAX );
@@ -18239,7 +18238,7 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 	if ( !iWilds || iWilds==iLen )
 		return pNode;
 
-	ISphWordlist::Args_t tWordlist ( tCtx.m_bMergeSingles, tCtx.m_iExpansionLimit, tCtx.m_bHasMorphology );
+	ISphWordlist::Args_t tWordlist ( tCtx.m_bMergeSingles, tCtx.m_iExpansionLimit, tCtx.m_bHasMorphology, tCtx.m_eHitless );
 
 	if ( !sphIsWild(*sFull) || tCtx.m_iMinInfixLen==0 )
 	{
@@ -18363,6 +18362,21 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 	return pNode;
 }
 
+
+ExpansionContext_t::ExpansionContext_t()
+	: m_pWordlist ( NULL )
+	, m_pBuf ( NULL )
+	, m_pResult ( NULL )
+	, m_iMinPrefixLen ( 0 )
+	, m_iMinInfixLen ( 0 )
+	, m_iExpansionLimit ( 0 )
+	, m_bHasMorphology ( false )
+	, m_bMergeSingles ( false )
+	, m_pPayloads ( NULL )
+	, m_eHitless ( SPH_HITLESS_NONE )
+{}
+
+
 XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta * pResult, CSphScopedPayload * pPayloads ) const
 {
 	if ( !pNode || !m_pDict->GetSettings().m_bWordDict || ( m_tSettings.m_iMinPrefixLen<=0 && m_tSettings.m_iMinInfixLen<=0 ) )
@@ -18380,6 +18394,7 @@ XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta *
 	tCtx.m_bHasMorphology = m_pDict->HasMorphology();
 	tCtx.m_bMergeSingles = ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_INLINE );
 	tCtx.m_pPayloads = pPayloads;
+	tCtx.m_eHitless = m_tSettings.m_eHitless;
 
 	pNode = sphExpandXQNode ( pNode, tCtx );
 	pNode->Check ( true );
@@ -31118,10 +31133,11 @@ const BYTE * CWordlist::AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint
 }
 
 
-ISphWordlist::Args_t::Args_t ( bool bPayload, int iExpansionLimit, bool bHasMorphology )
+ISphWordlist::Args_t::Args_t ( bool bPayload, int iExpansionLimit, bool bHasMorphology, ESphHitless eHitless )
 	: m_bPayload ( bPayload )
 	, m_iExpansionLimit ( iExpansionLimit )
 	, m_bHasMorphology ( bHasMorphology )
+	, m_eHitless ( eHitless )
 {
 	m_sBuf.Reserve ( 2048 * SPH_MAX_WORD_LEN * 3 );
 	m_dExpanded.Reserve ( 2048 );
@@ -31176,9 +31192,10 @@ struct DiskExpandedPayload_t
 
 struct DictEntryDiskPayload_t
 {
-	explicit DictEntryDiskPayload_t ( bool bPayload )
+	explicit DictEntryDiskPayload_t ( bool bPayload, ESphHitless eHitless )
 	{
 		m_bPayload = bPayload;
+		m_eHitless = eHitless;
 		if ( bPayload )
 			m_dWordPayload.Reserve ( 1000 );
 
@@ -31188,7 +31205,8 @@ struct DictEntryDiskPayload_t
 
 	void Add ( const CSphDictEntry & tWord, int iWordLen )
 	{
-		if ( !m_bPayload || !sphIsExpandedPayload ( tWord.m_iDocs, tWord.m_iHits ) )
+		if ( !m_bPayload || !sphIsExpandedPayload ( tWord.m_iDocs, tWord.m_iHits ) ||
+			m_eHitless==SPH_HITLESS_ALL || ( m_eHitless==SPH_HITLESS_SOME && ( tWord.m_iDocs & HITLESS_DOC_FLAG )!=0 ) ) // FIXME!!! do we need hitless=some as payloads?
 		{
 			DiskExpandedEntry_t & tExpand = m_dWordExpand.Add();
 
@@ -31225,9 +31243,14 @@ struct DictEntryDiskPayload_t
 			ARRAY_FOREACH ( i, m_dWordExpand )
 			{
 				const DiskExpandedEntry_t & tCur = m_dWordExpand[i];
-				tArgs.AddExpanded ( sBase + tCur.m_iNameOff + 1, sBase[tCur.m_iNameOff], tCur.m_iDocs, tCur.m_iHits );
+				int iDocs = tCur.m_iDocs;
 
-				iTotalDocs += tCur.m_iDocs;
+				if ( m_eHitless==SPH_HITLESS_SOME )
+					iDocs = ( tCur.m_iDocs & HITLESS_DOC_MASK );
+
+				tArgs.AddExpanded ( sBase + tCur.m_iNameOff + 1, sBase[tCur.m_iNameOff], iDocs, tCur.m_iHits );
+
+				iTotalDocs += iDocs;
 				iTotalHits += tCur.m_iHits;
 			}
 		}
@@ -31242,10 +31265,13 @@ struct DictEntryDiskPayload_t
 
 			ARRAY_FOREACH ( i, m_dWordPayload )
 			{
-				iTotalDocs += m_dWordPayload[i].m_iDocs;
-				iTotalHits += m_dWordPayload[i].m_iHits;
-				pPayload->m_dDoclist[i].m_uOff = m_dWordPayload[i].m_uDoclistOff;
-				pPayload->m_dDoclist[i].m_iLen = m_dWordPayload[i].m_iDoclistHint;
+				const DiskExpandedPayload_t & tCur = m_dWordPayload[i];
+				assert ( m_eHitless==SPH_HITLESS_NONE || ( m_eHitless==SPH_HITLESS_SOME && ( tCur.m_iDocs & HITLESS_DOC_FLAG )==0 ) );
+
+				iTotalDocs += tCur.m_iDocs;
+				iTotalHits += tCur.m_iHits;
+				pPayload->m_dDoclist[i].m_uOff = tCur.m_uDoclistOff;
+				pPayload->m_dDoclist[i].m_iLen = tCur.m_iDoclistHint;
 			}
 
 			pPayload->m_iTotalDocs = iTotalDocs;
@@ -31269,6 +31295,7 @@ struct DictEntryDiskPayload_t
 	}
 
 	bool								m_bPayload;
+	ESphHitless							m_eHitless;
 	CSphVector<DiskExpandedEntry_t>		m_dWordExpand;
 	CSphVector<DiskExpandedPayload_t>	m_dWordPayload;
 	CSphVector<BYTE>					m_dWordBuf;
@@ -31283,7 +31310,7 @@ void CWordlist::GetPrefixedWords ( const char * sSubstring, int iSubLen, const c
 	if ( !m_dCheckpoints.GetLength() )
 		return;
 
-	DictEntryDiskPayload_t tDict2Payload ( tArgs.m_bPayload );
+	DictEntryDiskPayload_t tDict2Payload ( tArgs.m_bPayload, tArgs.m_eHitless );
 
 	const CSphWordlistCheckpoint * pCheckpoint = FindCheckpoint ( sSubstring, iSubLen, 0, true );
 	const int iSkipMagic = ( BYTE(*sSubstring)<0x20 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
@@ -31435,7 +31462,7 @@ void CWordlist::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 	if ( !sphLookupInfixCheckpoints ( sSubstring, iBytes1, m_pBuf.GetWritePtr(), m_dInfixBlocks, m_iInfixCodepointBytes, dPoints ) )
 		return;
 
-	DictEntryDiskPayload_t tDict2Payload ( tArgs.m_bPayload );
+	DictEntryDiskPayload_t tDict2Payload ( tArgs.m_bPayload, tArgs.m_eHitless );
 	const int iSkipMagic = ( tArgs.m_bHasMorphology ? 1 : 0 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
 
 	// walk those checkpoints, check all their words

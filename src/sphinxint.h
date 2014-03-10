@@ -1781,12 +1781,13 @@ public:
 		const bool					m_bPayload;
 		int							m_iExpansionLimit;
 		const bool					m_bHasMorphology;
+		const ESphHitless			m_eHitless;
 
 		ISphSubstringPayload *		m_pPayload;
 		int							m_iTotalDocs;
 		int							m_iTotalHits;
 
-		Args_t ( bool bPayload, int iExpansionLimit, bool bHasMorphology );
+		Args_t ( bool bPayload, int iExpansionLimit, bool bHasMorphology, ESphHitless eHitless );
 		~Args_t ();
 		void AddExpanded ( const BYTE * sWord, int iLen, int iDocs, int iHits );
 		const char * GetWordExpanded ( int iIndex ) const;
@@ -1828,6 +1829,9 @@ struct ExpansionContext_t
 	bool m_bHasMorphology;
 	bool m_bMergeSingles;
 	CSphScopedPayload * m_pPayloads;
+	ESphHitless m_eHitless;
+
+	ExpansionContext_t ();
 };
 
 

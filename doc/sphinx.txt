@@ -1,5 +1,5 @@
-Sphinx 2.2.2-beta reference manual
-==================================
+Sphinx 2.2.3-dev reference manual
+=================================
 
 Free open-source SQL full-text search engine
 ============================================
@@ -173,6 +173,7 @@ Table of Contents
       9.4.3. SetFilterRange
       9.4.4. SetFilterFloatRange
       9.4.5. SetGeoAnchor
+      9.4.6. SetFilterString
 
    9.5. GROUP BY settings
       9.5.1. SetGroupBy
@@ -401,33 +402,34 @@ Table of Contents
 A. Sphinx revision history
    A.1. Version 2.2.2-beta, 11 feb 2014
    A.2. Version 2.2.1-beta, 13 nov 2013
-   A.3. Version 2.1.5-release, 22 jan 2014
-   A.4. Version 2.1.4-release, 18 dec 2013
-   A.5. Version 2.1.3-release, 12 nov 2013
-   A.6. Version 2.1.2-release, 10 oct 2013
-   A.7. Version 2.1.1-beta, 20 feb 2013
-   A.8. Version 2.0.11-dev, xx xxx xxxx
-   A.9. Version 2.0.10-release, 22 jan 2014
-   A.10. Version 2.0.9-release, 26 aug 2013
-   A.11. Version 2.0.8-release, 26 apr 2013
-   A.12. Version 2.0.7-release, 26 mar 2013
-   A.13. Version 2.0.6-release, 22 oct 2012
-   A.14. Version 2.0.5-release, 28 jul 2012
-   A.15. Version 2.0.4-release, 02 mar 2012
-   A.16. Version 2.0.3-release, 23 dec 2011
-   A.17. Version 2.0.2-beta, 15 nov 2011
-   A.18. Version 2.0.1-beta, 22 apr 2011
-   A.19. Version 1.10-beta, 19 jul 2010
-   A.20. Version 0.9.9-release, 02 dec 2009
-   A.21. Version 0.9.9-rc2, 08 apr 2009
-   A.22. Version 0.9.9-rc1, 17 nov 2008
-   A.23. Version 0.9.8.1, 30 oct 2008
-   A.24. Version 0.9.8, 14 jul 2008
-   A.25. Version 0.9.7, 02 apr 2007
-   A.26. Version 0.9.7-rc2, 15 dec 2006
-   A.27. Version 0.9.7-rc1, 26 oct 2006
-   A.28. Version 0.9.6, 24 jul 2006
-   A.29. Version 0.9.6-rc1, 26 jun 2006
+   A.3. Version 2.1.6-release, ??? feb 2014
+   A.4. Version 2.1.5-release, 22 jan 2014
+   A.5. Version 2.1.4-release, 18 dec 2013
+   A.6. Version 2.1.3-release, 12 nov 2013
+   A.7. Version 2.1.2-release, 10 oct 2013
+   A.8. Version 2.1.1-beta, 20 feb 2013
+   A.9. Version 2.0.11-dev, xx xxx xxxx
+   A.10. Version 2.0.10-release, 22 jan 2014
+   A.11. Version 2.0.9-release, 26 aug 2013
+   A.12. Version 2.0.8-release, 26 apr 2013
+   A.13. Version 2.0.7-release, 26 mar 2013
+   A.14. Version 2.0.6-release, 22 oct 2012
+   A.15. Version 2.0.5-release, 28 jul 2012
+   A.16. Version 2.0.4-release, 02 mar 2012
+   A.17. Version 2.0.3-release, 23 dec 2011
+   A.18. Version 2.0.2-beta, 15 nov 2011
+   A.19. Version 2.0.1-beta, 22 apr 2011
+   A.20. Version 1.10-beta, 19 jul 2010
+   A.21. Version 0.9.9-release, 02 dec 2009
+   A.22. Version 0.9.9-rc2, 08 apr 2009
+   A.23. Version 0.9.9-rc1, 17 nov 2008
+   A.24. Version 0.9.8.1, 30 oct 2008
+   A.25. Version 0.9.8, 14 jul 2008
+   A.26. Version 0.9.7, 02 apr 2007
+   A.27. Version 0.9.7-rc2, 15 dec 2006
+   A.28. Version 0.9.7-rc1, 26 oct 2006
+   A.29. Version 0.9.6, 24 jul 2006
+   A.30. Version 0.9.6-rc1, 26 jun 2006
 
 List of Tables
 
@@ -2317,6 +2319,10 @@ extended matching mode:
 
       | ^hello world$
 
+   * keyword IDF boost modifier (introduced in version 2.2.3-beta):
+
+      | boosted^1.234 boostedfieldend$^1.234
+
    * NEAR, generalized proximity operator (introduced in version
      2.0.1-beta):
 
@@ -2422,7 +2428,12 @@ contains "runs" and the document that contains "running", because both
 forms stem to just "run" - while "=runs" query will only match the first
 document. Exact form operator requires index_exact_words option to be
 enabled. This is a modifier that affects the keyword and thus can be used
-within operators such as phrase, proximity, and quorum operators.
+within operators such as phrase, proximity, and quorum operators. Starting
+with 2.2.2-beta, it is possible to apply an exact form modifier to the
+phrase operator. It's really just syntax sugar - it adds an exact form
+modifier to all terms contained within the phrase.
+
+   | ="exact phrase"
 
 Field-start and field-end keyword modifiers, introduced in version
 0.9.9-rc2, will make the keyword match only if it occurred at the very
@@ -2441,6 +2452,14 @@ an implicit list of all documents:
    | // queries that are non-computable
    | -aaa
    | aaa | -bbb
+
+Starting with 2.2.2-beta, the phrase search operator may include a 'match
+any term' modifier. Terms within the phrase operator are position
+significant. When the 'match any term' modifier is implemented, the
+position of the subsequent terms from that phrase query will be shifted.
+Therefore, 'match any' has no impact on search performance.
+
+   | "exact * phrase * * for terms"
 
 NEAR operator, added in 2.0.1-beta, is a generalized version of a proximity
 operator. The syntax is NEAR/N, it is case-sensitive, and no spaces are
@@ -5118,10 +5137,10 @@ statements syntax.
    |     select_expr [, select_expr ...]
    |     FROM index [, index2 ...]
    |     [WHERE where_condition]
-   |     [GROUP BY {col_name | expr_alias} [, {sol_name | expr_alias}]]
+   |     [GROUP [N] BY {col_name | expr_alias} [, {sol_name | expr_alias}]]
    |     [WITHIN GROUP ORDER BY {col_name | expr_alias} {ASC | DESC}]
    | 	[HAVING having_condition]
-   |     [ORDER [N] BY {col_name | expr_alias} {ASC | DESC} [, ...]]
+   |     [ORDER BY {col_name | expr_alias} {ASC | DESC} [, ...]]
    |     [LIMIT [offset,] row_count]
    |     [OPTION opt_name = opt_value [, ...]]
 
@@ -6955,6 +6974,7 @@ Table of Contents
    9.4.3. SetFilterRange
    9.4.4. SetFilterFloatRange
    9.4.5. SetGeoAnchor
+   9.4.6. SetFilterString
 
 9.5. GROUP BY settings
    9.5.1. SetGroupBy
@@ -7424,6 +7444,23 @@ to the resulting match. The latitude and longitude values both in
 SetGeoAnchor and the index attribute data are expected to be in radians.
 The result will be returned in meters, so geodistance value of 1000.0 means
 1 km. 1 mile is approximately 1609.344 meters.
+
+9.4.6. SetFilterString
+----------------------
+
+Prototype: function SetFilterString ( $attribute, $value, $exclude=false )
+
+Adds new string value filter.
+
+On this call, additional new filter is added to the existing list of
+filters. $attribute must be a string with attribute name. $value must be
+a string. $exclude must be a boolean value; it controls whether to accept
+the matching documents (default mode, when $exclude is false) or reject
+them.
+
+Only those documents where $attribute column value stored in the index
+matches string value from $value will be matched (or rejected, if $exclude
+is true).
 
 9.5. GROUP BY settings
 ======================
@@ -13068,33 +13105,34 @@ Table of Contents
 
 A.1. Version 2.2.2-beta, 11 feb 2014
 A.2. Version 2.2.1-beta, 13 nov 2013
-A.3. Version 2.1.5-release, 22 jan 2014
-A.4. Version 2.1.4-release, 18 dec 2013
-A.5. Version 2.1.3-release, 12 nov 2013
-A.6. Version 2.1.2-release, 10 oct 2013
-A.7. Version 2.1.1-beta, 20 feb 2013
-A.8. Version 2.0.11-dev, xx xxx xxxx
-A.9. Version 2.0.10-release, 22 jan 2014
-A.10. Version 2.0.9-release, 26 aug 2013
-A.11. Version 2.0.8-release, 26 apr 2013
-A.12. Version 2.0.7-release, 26 mar 2013
-A.13. Version 2.0.6-release, 22 oct 2012
-A.14. Version 2.0.5-release, 28 jul 2012
-A.15. Version 2.0.4-release, 02 mar 2012
-A.16. Version 2.0.3-release, 23 dec 2011
-A.17. Version 2.0.2-beta, 15 nov 2011
-A.18. Version 2.0.1-beta, 22 apr 2011
-A.19. Version 1.10-beta, 19 jul 2010
-A.20. Version 0.9.9-release, 02 dec 2009
-A.21. Version 0.9.9-rc2, 08 apr 2009
-A.22. Version 0.9.9-rc1, 17 nov 2008
-A.23. Version 0.9.8.1, 30 oct 2008
-A.24. Version 0.9.8, 14 jul 2008
-A.25. Version 0.9.7, 02 apr 2007
-A.26. Version 0.9.7-rc2, 15 dec 2006
-A.27. Version 0.9.7-rc1, 26 oct 2006
-A.28. Version 0.9.6, 24 jul 2006
-A.29. Version 0.9.6-rc1, 26 jun 2006
+A.3. Version 2.1.6-release, ??? feb 2014
+A.4. Version 2.1.5-release, 22 jan 2014
+A.5. Version 2.1.4-release, 18 dec 2013
+A.6. Version 2.1.3-release, 12 nov 2013
+A.7. Version 2.1.2-release, 10 oct 2013
+A.8. Version 2.1.1-beta, 20 feb 2013
+A.9. Version 2.0.11-dev, xx xxx xxxx
+A.10. Version 2.0.10-release, 22 jan 2014
+A.11. Version 2.0.9-release, 26 aug 2013
+A.12. Version 2.0.8-release, 26 apr 2013
+A.13. Version 2.0.7-release, 26 mar 2013
+A.14. Version 2.0.6-release, 22 oct 2012
+A.15. Version 2.0.5-release, 28 jul 2012
+A.16. Version 2.0.4-release, 02 mar 2012
+A.17. Version 2.0.3-release, 23 dec 2011
+A.18. Version 2.0.2-beta, 15 nov 2011
+A.19. Version 2.0.1-beta, 22 apr 2011
+A.20. Version 1.10-beta, 19 jul 2010
+A.21. Version 0.9.9-release, 02 dec 2009
+A.22. Version 0.9.9-rc2, 08 apr 2009
+A.23. Version 0.9.9-rc1, 17 nov 2008
+A.24. Version 0.9.8.1, 30 oct 2008
+A.25. Version 0.9.8, 14 jul 2008
+A.26. Version 0.9.7, 02 apr 2007
+A.27. Version 0.9.7-rc2, 15 dec 2006
+A.28. Version 0.9.7-rc1, 26 oct 2006
+A.29. Version 0.9.6, 24 jul 2006
+A.30. Version 0.9.6-rc1, 26 jun 2006
 
 A.1. Version 2.2.2-beta, 11 feb 2014
 ====================================
@@ -13318,7 +13356,28 @@ Bug fixes
      expansion (expand_keywords or lemmatize) occurred
    * fixed a crash while creating indexes with sql_joined_field
 
-A.3. Version 2.1.5-release, 22 jan 2014
+A.3. Version 2.1.6-release, ??? feb 2014
+========================================
+
+Bug fixes
+---------
+
+   * fixed #1857, crash in arabic stemmer
+
+   * fixed #1875, fixed crash on adding documents with long words in
+     dict=keyword index with morphology and infixes enabled
+
+   * fixed #1876, crash on words with large codepoints and infix searches
+
+   * fixed #1880, crash on multiquery with one incorrect query
+
+   * fixed #1882, race of periodic and forced FLUSHing on an RT index
+
+   * fixed #1881, quorum syntax with '.' as blended char
+
+   * fixed evaluating of LCS by an expression ranker
+
+A.4. Version 2.1.5-release, 22 jan 2014
 =======================================
 
 Bug fixes
@@ -13339,7 +13398,7 @@ Bug fixes
    * fixed network protocol issue which results in timeouts of
      libmysqlclient for big Sphinx responses
 
-A.4. Version 2.1.4-release, 18 dec 2013
+A.5. Version 2.1.4-release, 18 dec 2013
 =======================================
 
 Bug fixes
@@ -13359,7 +13418,7 @@ Bug fixes
 
    * fixed, --with-re2 check
 
-A.5. Version 2.1.3-release, 12 nov 2013
+A.6. Version 2.1.3-release, 12 nov 2013
 =======================================
 
 Bug fixes
@@ -13380,7 +13439,7 @@ Bug fixes
 
    * fixed crash while querying index with lemmatizer and wordforms
 
-A.6. Version 2.1.2-release, 10 oct 2013
+A.7. Version 2.1.2-release, 10 oct 2013
 =======================================
 
 New features
@@ -13554,7 +13613,7 @@ Bug fixes
 
    * fixed TOP_COUNT usage in misc/suggest and updated to PHP 5.3 and UTF-8
 
-A.7. Version 2.1.1-beta, 20 feb 2013
+A.8. Version 2.1.1-beta, 20 feb 2013
 ====================================
 
 Major new features
@@ -13706,14 +13765,14 @@ Major behavior changes and optimizations
    * optimized filtering and scan in several frequent cases (single-value,
      2-arg, 3-arg WHERE clauses)
 
-A.8. Version 2.0.11-dev, xx xxx xxxx
+A.9. Version 2.0.11-dev, xx xxx xxxx
 ====================================
 
 Bug fixes
 ---------
 
-A.9. Version 2.0.10-release, 22 jan 2014
-========================================
+A.10. Version 2.0.10-release, 22 jan 2014
+=========================================
 
 Bug fixes
 ---------
@@ -13749,7 +13808,7 @@ Bug fixes
    * fixed rt_flush_period - less stricter internal check and more often
      flushes overall
 
-A.10. Version 2.0.9-release, 26 aug 2013
+A.11. Version 2.0.9-release, 26 aug 2013
 ========================================
 
 Bug fixes
@@ -13809,7 +13868,7 @@ Bug fixes
    * added a warning for missed stopwords, exception, wordforms files on
      index load and in indextool --check
 
-A.11. Version 2.0.8-release, 26 apr 2013
+A.12. Version 2.0.8-release, 26 apr 2013
 ========================================
 
 Bug fixes
@@ -13859,7 +13918,7 @@ Bug fixes
 
    * fixed #1405, between with mixed int float values
 
-A.12. Version 2.0.7-release, 26 mar 2013
+A.13. Version 2.0.7-release, 26 mar 2013
 ========================================
 
 Bug fixes
@@ -13992,7 +14051,7 @@ Bug fixes
 
    * added more debug info about failed index loading
 
-A.13. Version 2.0.6-release, 22 oct 2012
+A.14. Version 2.0.6-release, 22 oct 2012
 ========================================
 
 Bug fixes
@@ -14114,7 +14173,7 @@ Bug fixes
 
    * fixed x64 configurations for libstemmer
 
-A.14. Version 2.0.5-release, 28 jul 2012
+A.15. Version 2.0.5-release, 28 jul 2012
 ========================================
 
 Bug fixes
@@ -14274,7 +14333,7 @@ Bug fixes
 
    * fixed missing command-line switches documentation
 
-A.15. Version 2.0.4-release, 02 mar 2012
+A.16. Version 2.0.4-release, 02 mar 2012
 ========================================
 
 Bug fixes
@@ -14362,7 +14421,7 @@ Bug fixes
    * fixed #1120, negative total_found, docs and hits counter on huge
      indexes
 
-A.16. Version 2.0.3-release, 23 dec 2011
+A.17. Version 2.0.3-release, 23 dec 2011
 ========================================
 
 Bug fixes
@@ -14409,7 +14468,7 @@ Bug fixes
 
    * fixed crash log for 'fork' and 'prefork' workers
 
-A.17. Version 2.0.2-beta, 15 nov 2011
+A.18. Version 2.0.2-beta, 15 nov 2011
 =====================================
 
 Major new features
@@ -14676,7 +14735,7 @@ Bug fixes
    * fixed that field/zone conditions were not propagated to expanded
      keywords with dict=keywords
 
-A.18. Version 2.0.1-beta, 22 apr 2011
+A.19. Version 2.0.1-beta, 22 apr 2011
 =====================================
 
 New general features
@@ -14974,7 +15033,7 @@ Bug fixes
 
    * fixed libsphinxclient vs VS2003 compiler bug
 
-A.19. Version 1.10-beta, 19 jul 2010
+A.20. Version 1.10-beta, 19 jul 2010
 ====================================
 
    * added RT indexes support (Chapter 4, Real-time indexes)
@@ -15124,7 +15183,7 @@ A.19. Version 1.10-beta, 19 jul 2010
 
    * fixed #509, indexing ranged results from stored procedures
 
-A.20. Version 0.9.9-release, 02 dec 2009
+A.21. Version 0.9.9-release, 02 dec 2009
 ========================================
 
    * added Open, Close, Status calls to libsphinxclient (C API)
@@ -15239,7 +15298,7 @@ A.20. Version 0.9.9-release, 02 dec 2009
 
    * fixed #326 (missing CLOCK_xxx on FreeBSD)
 
-A.21. Version 0.9.9-rc2, 08 apr 2009
+A.22. Version 0.9.9-rc2, 08 apr 2009
 ====================================
 
    * added IsConnectError(), Open(), Close() calls to Java API (bug #240)
@@ -15409,7 +15468,7 @@ A.21. Version 0.9.9-rc2, 08 apr 2009
 
    * fixed parser vs @field -keyword, foo|@field bar, "" queries (bug #310)
 
-A.22. Version 0.9.9-rc1, 17 nov 2008
+A.23. Version 0.9.9-rc1, 17 nov 2008
 ====================================
 
    * added min_stemming_len directive
@@ -15512,7 +15571,7 @@ A.22. Version 0.9.9-rc1, 17 nov 2008
 
    * fixed handling of over-2GB dictionary files (.spi)
 
-A.23. Version 0.9.8.1, 30 oct 2008
+A.24. Version 0.9.8.1, 30 oct 2008
 ==================================
 
    * added configure script to libsphinxclient
@@ -15567,7 +15626,7 @@ A.23. Version 0.9.8.1, 30 oct 2008
    * fixed default ID range (that filtered out all 64-bit values) in Java
      and Python APIs
 
-A.24. Version 0.9.8, 14 jul 2008
+A.25. Version 0.9.8, 14 jul 2008
 ================================
 
 Indexing
@@ -15851,7 +15910,7 @@ Changes and fixes since 0.9.8-rc2
 
    * fixed sorting of negative floats in SPH_SORT_EXTENDED mode
 
-A.25. Version 0.9.7, 02 apr 2007
+A.26. Version 0.9.7, 02 apr 2007
 ================================
 
    * added support for sql_str2ordinal_column
@@ -15936,7 +15995,7 @@ A.25. Version 0.9.7, 02 apr 2007
 
    * fixed crashes with no-attribute indexes after rotate
 
-A.26. Version 0.9.7-rc2, 15 dec 2006
+A.27. Version 0.9.7-rc2, 15 dec 2006
 ====================================
 
    * added support for extended matching mode (query language)
@@ -15972,7 +16031,7 @@ A.26. Version 0.9.7-rc2, 15 dec 2006
 
    * fixes for 64-bit platforms
 
-A.27. Version 0.9.7-rc1, 26 oct 2006
+A.28. Version 0.9.7-rc1, 26 oct 2006
 ====================================
 
    * added alpha index merging code
@@ -16022,7 +16081,7 @@ A.27. Version 0.9.7-rc1, 26 oct 2006
 
    * fixed some issues with index rotation
 
-A.28. Version 0.9.6, 24 jul 2006
+A.29. Version 0.9.6, 24 jul 2006
 ================================
 
    * added support for empty indexes
@@ -16035,7 +16094,7 @@ A.28. Version 0.9.6, 24 jul 2006
 
    * fixed building on Solaris 9
 
-A.29. Version 0.9.6-rc1, 26 jun 2006
+A.30. Version 0.9.6-rc1, 26 jun 2006
 ====================================
 
    * added boolean queries support (experimental, beta version)

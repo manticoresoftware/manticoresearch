@@ -7653,6 +7653,24 @@ so geodistance value of 1000.0 means 1 km. 1 mile is approximately 1609.344 mete
 </para>
 </sect2>
 
+<sect2 id="api-func-setfilterstring"><title>SetFilterString</title>
+<para><b>Prototype:</b> function SetFilterString ( $attribute, $value, $exclude=false )</para>
+<para>
+Adds new string value filter.
+</para>
+<para>
+On this call, additional new filter is added to the existing
+list of filters. <code>$attribute</code> must be a string with
+attribute name. <code>$value</code> must be a string. <code>$exclude</code> must be a boolean
+value; it controls whether to accept the matching documents
+(default mode, when <code>$exclude</code> is false) or reject them.
+</para>
+<para>
+Only those documents where <code>$attribute</code> column value
+stored in the index matches string value from <code>$value</code>
+will be matched (or rejected, if <code>$exclude</code> is true).
+</para>
+</sect2>
 
 </sect1>
 <sect1 id="api-funcgroup-groupby"><title>GROUP BY settings</title>

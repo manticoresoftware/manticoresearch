@@ -158,6 +158,62 @@ index test_quorum
 	dict                = keywords
 	index_exact_words = 1
 }
+
+source test_lemmas
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query_pre	= set names utf8
+	sql_query		= select 1 id, 11 gid,'1' docid,  'так Иван Иванович меняет вот' title, 'Иван Иванович меняет вот' body
+	sql_attr_uint	= gid
+}
+
+index test_lemmas
+{
+	source			= test_lemmas
+	path			= <data_path/>/test_lemmas
+	charset_type	= utf-8
+	morphology		= lemmatize_ru_all
+	dict            = keywords
+}
+
+source test_lemmas1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query_pre	= set names utf8
+	sql_query		= select 1 id, 11 gid,'1' docid,  'так Иван Иванович меняет вот.да' title, 'Иван Иванович меняет вот.да' body
+	sql_attr_uint	= gid
+}
+
+index test_lemmas1
+{
+	source			= test_lemmas1
+	path			= <data_path/>/test_lemmas1
+	charset_type	= utf-8
+	morphology		= lemmatize_ru_all
+	dict            = keywords
+	blend_chars		= .
+}
+
+source test_lemmas2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query_pre	= set names utf8
+	sql_query		= select 1 id, 11 gid,'1' docid,  'так Иван Иванович меняет да.вот' title, 'Иван Иванович меняет да.вот' body
+	sql_attr_uint	= gid
+}
+
+index test_lemmas2
+{
+	source			= test_lemmas2
+	path			= <data_path/>/test_lemmas2
+	charset_type	= utf-8
+	morphology		= lemmatize_ru_all
+	dict            = keywords
+	blend_chars		= .
+}
 </config>
 
 <db_create>
@@ -389,6 +445,23 @@ CREATE TABLE test_table
 <sphinxql>SHOW PLAN;</sphinxql>
 <sphinxql>SELECT id, WEIGHT() FROM test1 WHERE MATCH('попил^1.234$');</sphinxql>
 <sphinxql>SHOW PLAN;</sphinxql>
+
+<!--regression lemmas vs tail hit -->
+<sphinxql>SELECT *, weight() w FROM test_lemmas WHERE MATCH('вот'); show meta</sphinxql>
+<sphinxql>SELECT *, weight() w FROM test_lemmas WHERE MATCH('@title вот'); show meta</sphinxql>
+<sphinxql>SELECT *, weight() w FROM test_lemmas WHERE MATCH('@body вот'); show meta</sphinxql>
+<sphinxql>SELECT *, weight() w FROM test_lemmas1 WHERE MATCH('вот'); show meta</sphinxql>
+<sphinxql>SELECT *, weight() w FROM test_lemmas1 WHERE MATCH('@title вот'); show meta</sphinxql>
+<sphinxql>SELECT *, weight() w FROM test_lemmas1 WHERE MATCH('@body вот'); show meta</sphinxql>
+<sphinxql>SELECT *, weight() w FROM test_lemmas1 WHERE MATCH('вот.да'); show meta</sphinxql>
+<sphinxql>SELECT *, weight() w FROM test_lemmas1 WHERE MATCH('(@title вот.да)'); show meta</sphinxql>
+<sphinxql>SELECT *, weight() w FROM test_lemmas1 WHERE MATCH('(@body вот.да)'); show meta</sphinxql>
+<sphinxql>SELECT *, weight() w FROM test_lemmas2 WHERE MATCH('вот'); show meta</sphinxql>
+<sphinxql>SELECT *, weight() w FROM test_lemmas2 WHERE MATCH('@title вот'); show meta</sphinxql>
+<sphinxql>SELECT *, weight() w FROM test_lemmas2 WHERE MATCH('@body вот'); show meta</sphinxql>
+<sphinxql>SELECT *, weight() w FROM test_lemmas2 WHERE MATCH('да.вот'); show meta</sphinxql>
+<sphinxql>SELECT *, weight() w FROM test_lemmas2 WHERE MATCH('(@title да.вот)'); show meta</sphinxql>
+<sphinxql>SELECT *, weight() w FROM test_lemmas2 WHERE MATCH('(@body да.вот)'); show meta</sphinxql>
 
 </sphqueries>
 

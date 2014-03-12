@@ -952,9 +952,6 @@ int main ( int argc, char ** argv )
 	CSphConfig & hConf = cp.m_tConf;
 	for ( ;; )
 	{
-		if ( ( eCommand==CMD_DUMPHEADER || eCommand==CMD_DUMPCONFIG ) && sDumpHeader.Ends ( ".sph" ) )
-			break;
-
 		if ( eCommand==CMD_BUILDIDF || eCommand==CMD_MERGEIDF )
 			break;
 

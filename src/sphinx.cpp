@@ -1521,6 +1521,7 @@ public:
 	virtual void				DebugDumpDocids ( FILE * fp );
 	virtual void				DebugDumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
 	virtual void				DebugDumpDict ( FILE * fp );
+	virtual void				SetDebugCheck ();
 	virtual int					DebugCheck ( FILE * fp );
 	template <class Qword> void	DumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
 
@@ -1645,6 +1646,7 @@ private:
 	static volatile int			m_iIndexTagSeq;			///< static ids sequence
 
 	bool						m_bIsEmpty;				///< do we have actually indexed documents (m_iTotalDocuments is just fetched documents, not indexed!)
+	bool						m_bDebugCheck;
 
 private:
 	CSphString					GetIndexFileName ( const char * sExt ) const;
@@ -9645,6 +9647,7 @@ CSphIndex_VLN::CSphIndex_VLN ( const char* sIndexName, const char * sFilename )
 
 	m_bOndiskAllAttr = false;
 	m_bOndiskPoolAttr = false;
+	m_bDebugCheck = false;
 
 	ARRAY_FOREACH ( i, m_dFieldLens )
 		m_dFieldLens[i] = 0;
@@ -16789,8 +16792,11 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 
 	// prealloc wordlist upto checkpoints
 	// (keyword blocks aka checkpoints, infix blocks etc will be loaded separately)
-	if ( !m_tWordlist.m_pBuf.Alloc ( m_tWordlist.m_iDictCheckpointsOffset, m_sLastError, sWarning ) )
-		return false;
+	if ( !m_bDebugCheck )
+	{
+		if ( !m_tWordlist.m_pBuf.Alloc ( m_tWordlist.m_iDictCheckpointsOffset, m_sLastError, sWarning ) )
+			return false;
+	}
 
 	// preopen
 	if ( m_bKeepFilesOpen )
@@ -19229,6 +19235,12 @@ void CSphIndex_VLN::GetStatus ( CSphIndexStatus* pRes ) const
 // INDEX CHECKING
 //////////////////////////////////////////////////////////////////////////
 
+void CSphIndex_VLN::SetDebugCheck ()
+{
+	SetEnableOndiskAttributes ( false );
+	m_bDebugCheck = true;
+}
+
 // no strnlen on some OSes (Mac OS)
 #if !HAVE_STRNLEN
 size_t strnlen ( const char * s, size_t iMaxLen )
@@ -19274,9 +19286,10 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 	//////////////
 
 	CSphString sError;
-	CSphAutoreader rdDict, rdDocs, rdHits;
+	CSphAutoreader rdDocs, rdHits;
+	CSphMappedBuffer<BYTE> rdDict;
 
-	if ( !rdDict.Open ( GetIndexFileName("spi"), sError ) )
+	if ( !rdDict.Setup ( GetIndexFileName("spi").cstr(), sError ) )
 		LOC_FAIL(( fp, "unable to open dictionary: %s", sError.cstr() ));
 
 	if ( !rdDocs.Open ( GetIndexFileName("spd"), sError ) )
@@ -19330,30 +19343,37 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			, m_uVersion ));
 
 	int iLastSkipsOffset = 0;
-	rdDict.SeekTo ( 1, READ_NO_SIZE_HINT );
+	const BYTE * pDictCur = rdDict.GetWritePtr() + 1;
 	SphOffset_t iWordsEnd = m_tWordlist.m_iWordsEnd;
 	bool bCheckInfixes = bWordDict && m_tWordlist.m_iInfixCodepointBytes && m_tWordlist.m_dInfixBlocks.GetLength();
 	CSphVector<int> dInfix2CP;
 
-	while ( rdDict.GetPos()!=iWordsEnd && !m_bIsEmpty )
+	while ( pDictCur-rdDict.GetWritePtr()!=iWordsEnd && !m_bIsEmpty )
 	{
 		// sanity checks
-		if ( rdDict.GetPos()>=iWordsEnd )
+		if ( pDictCur-rdDict.GetWritePtr()>=iWordsEnd )
 		{
 			LOC_FAIL(( fp, "reading past checkpoints" ));
 			break;
 		}
 
 		// store current entry pos (for checkpointing later), read next delta
-		const int64_t iDictPos = rdDict.GetPos();
-		const SphWordID_t iDeltaWord = bWordDict ? rdDict.GetByte() : rdDict.UnzipWordid();
+		const int64_t iDictPos = pDictCur - rdDict.GetWritePtr();
+		SphWordID_t iDeltaWord = 0;
+		if ( bWordDict )
+		{
+			iDeltaWord = *pDictCur++;
+		} else
+		{
+			iDeltaWord = sphUnzipWordid ( pDictCur );
+		}
 
 		// checkpoint encountered, handle it
 		if ( !iDeltaWord )
 		{
-			rdDict.UnzipOffset();
+			sphUnzipOffset ( pDictCur );
 
-			if ( ( iWordsTotal%iWordPerCP )!=0 && rdDict.GetPos()!=iWordsEnd )
+			if ( ( iWordsTotal%iWordPerCP )!=0 && pDictCur-rdDict.GetWritePtr()!=iWordsEnd )
 				LOC_FAIL(( fp, "unexpected checkpoint (pos="INT64_FMT", word=%d, words=%d, expected=%d)",
 					iDictPos, iWordsTotal, ( iWordsTotal%iWordPerCP ), iWordPerCP ));
 
@@ -19381,24 +19401,29 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			} else
 			{
 				iDelta = uPack & 127;
-				iMatch = rdDict.GetByte();
+				iMatch = *pDictCur++;
 			}
 			const int iLastWordLen = strlen(sLastWord);
 			if ( iMatch+iDelta>=(int)sizeof(sLastWord)-1 || iMatch>iLastWordLen )
 			{
 				LOC_FAIL(( fp, "wrong word-delta (pos="INT64_FMT", word=%s, len=%d, begin=%d, delta=%d)",
 					iDictPos, sLastWord, iLastWordLen, iMatch, iDelta ));
-				rdDict.SkipBytes ( iDelta );
+				pDictCur += iDelta;
 			} else
 			{
-				rdDict.GetBytes ( sWord + iMatch, iDelta );
+				memcpy ( sWord+iMatch, pDictCur, iDelta );
+				pDictCur += iDelta;
 				sWord [ iMatch+iDelta ] = '\0';
 			}
 
-			iNewDoclistOffset = rdDict.UnzipOffset();
-			iDocs = rdDict.UnzipInt();
-			iHits = rdDict.UnzipInt();
-			int iHint = ( iDocs>=DOCLIST_HINT_THRESH ) ? rdDict.GetByte() : 0;
+			iNewDoclistOffset = sphUnzipOffset ( pDictCur );
+			iDocs = sphUnzipInt ( pDictCur );
+			iHits = sphUnzipInt ( pDictCur );
+			int iHint = 0;
+			if ( iDocs>=DOCLIST_HINT_THRESH )
+			{
+				iHint = *pDictCur++;
+			}
 			iHint = DoclistHintUnpack ( iDocs, (BYTE)iHint );
 
 			if ( m_tSettings.m_eHitless==SPH_HITLESS_SOME && ( iDocs & HITLESS_DOC_FLAG )!=0 )
@@ -19431,9 +19456,9 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		{
 			// finish reading the entire entry
 			uNewWordid = uWordid + iDeltaWord;
-			iNewDoclistOffset = iDoclistOffset + rdDict.UnzipOffset();
-			iDocs = rdDict.UnzipInt();
-			iHits = rdDict.UnzipInt();
+			iNewDoclistOffset = iDoclistOffset + sphUnzipOffset ( pDictCur );
+			iDocs = sphUnzipInt ( pDictCur );
+			iHits = sphUnzipInt ( pDictCur );
 			bHitless = ( dHitlessWords.BinarySearch ( uNewWordid )!=NULL );
 			if ( bHitless )
 				iDocs = ( iDocs & HITLESS_DOC_MASK );
@@ -19454,7 +19479,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		// skiplist
 		if ( m_bHaveSkips && iDocs>SPH_SKIPLIST_BLOCK && !bHitless )
 		{
-			int iSkipsOffset = rdDict.UnzipInt();
+			int iSkipsOffset = sphUnzipInt ( pDictCur );
 			if ( !bWordDict && iSkipsOffset<iLastSkipsOffset )
 				LOC_FAIL(( fp, "descending skiplist pos (last=%d, cur=%d, wordid=%llu)",
 					iLastSkipsOffset, iSkipsOffset, UINT64 ( uNewWordid ) ));
@@ -19487,7 +19512,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				dInfix2CP.Resize ( 0 );
 
 				int iInfixBytes = sphGetInfixLength ( sWord, iWordBytes, m_tWordlist.m_iInfixCodepointBytes );
-				sphLookupInfixCheckpoints ( sWord, iInfixBytes, m_tWordlist.m_pBuf.GetWritePtr(), m_tWordlist.m_dInfixBlocks,
+				sphLookupInfixCheckpoints ( sWord, iInfixBytes, rdDict.GetWritePtr(), m_tWordlist.m_dInfixBlocks,
 					m_tWordlist.m_iInfixCodepointBytes, dInfix2CP );
 
 				if ( !dInfix2CP.BinarySearch ( dCheckpoints.GetLength() ) )
@@ -19555,7 +19580,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 	int64_t iDocsSize = rdDocs.GetFilesize();
 
-	rdDict.SeekTo ( 1, READ_NO_SIZE_HINT );
+	pDictCur = rdDict.GetWritePtr() + 1;
 	rdDocs.SeekTo ( 1, READ_NO_SIZE_HINT );
 	rdHits.SeekTo ( 1, READ_NO_SIZE_HINT );
 
@@ -19565,13 +19590,20 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 	bool bHitless = false;
 
 	int iWordsChecked = 0;
-	while ( rdDict.GetPos()<iWordsEnd )
+	while ( pDictCur-rdDict.GetWritePtr()<iWordsEnd )
 	{
 		bHitless = false;
-		const SphWordID_t iDeltaWord = bWordDict ? rdDict.GetByte() : rdDict.UnzipWordid();
+		SphWordID_t iDeltaWord = 0;
+		if ( bWordDict )
+		{
+			iDeltaWord = *pDictCur++;
+		} else
+		{
+			sphUnzipWordid ( pDictCur );
+		}
 		if ( !iDeltaWord )
 		{
-			rdDict.UnzipOffset();
+			sphUnzipOffset ( pDictCur );
 
 			uWordid = 0;
 			iDoclistOffset = 0;
@@ -19592,22 +19624,24 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			} else
 			{
 				iDelta = uPack & 127;
-				iMatch = rdDict.GetByte();
+				iMatch = *pDictCur++;
 			}
 			const int iLastWordLen = strlen(sWord);
 			if ( iMatch+iDelta>=(int)sizeof(sWord)-1 || iMatch>iLastWordLen )
-				rdDict.SkipBytes ( iDelta );
-			else
 			{
-				rdDict.GetBytes ( sWord + iMatch, iDelta );
+				pDictCur += iDelta;
+			} else
+			{
+				memcpy ( sWord+iMatch, pDictCur, iDelta );
+				pDictCur += iDelta;
 				sWord [ iMatch+iDelta ] = '\0';
 			}
 
-			iDoclistOffset = rdDict.UnzipOffset();
-			iDictDocs = rdDict.UnzipInt();
-			iDictHits = rdDict.UnzipInt();
+			iDoclistOffset = sphUnzipOffset ( pDictCur );
+			iDictDocs = sphUnzipInt ( pDictCur );
+			iDictHits = sphUnzipInt ( pDictCur );
 			if ( iDictDocs>=DOCLIST_HINT_THRESH )
-				rdDict.GetByte();
+				pDictCur++;
 
 			if ( m_tSettings.m_eHitless==SPH_HITLESS_SOME && ( iDictDocs & HITLESS_DOC_FLAG ) )
 			{
@@ -19619,17 +19653,17 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			// finish reading the entire entry
 			uWordid = uWordid + iDeltaWord;
 			bHitless = ( dHitlessWords.BinarySearch ( uWordid )!=NULL );
-			iDoclistOffset = iDoclistOffset + rdDict.UnzipOffset();
-			iDictDocs = rdDict.UnzipInt();
+			iDoclistOffset = iDoclistOffset + sphUnzipOffset ( pDictCur );
+			iDictDocs = sphUnzipInt ( pDictCur );
 			if ( bHitless )
 				iDictDocs = ( iDictDocs & HITLESS_DOC_MASK );
-			iDictHits = rdDict.UnzipInt();
+			iDictHits = sphUnzipInt ( pDictCur );
 		}
 
 		// FIXME? verify skiplist content too
 		int iSkipsOffset = 0;
 		if ( m_bHaveSkips && iDictDocs>SPH_SKIPLIST_BLOCK && !bHitless )
-			iSkipsOffset = rdDict.UnzipInt();
+			iSkipsOffset = sphUnzipInt ( pDictCur );
 
 		// check whether the offset is as expected
 		if ( iDoclistOffset!=rdDocs.GetPos() )

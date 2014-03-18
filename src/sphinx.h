@@ -3327,6 +3327,7 @@ public:
 
 	/// internal debugging hook, DO NOT USE
 	virtual int					DebugCheck ( FILE * fp ) = 0;
+	virtual void				SetDebugCheck () {}
 
 	/// getter for name
 	const char *				GetName () { return m_sIndexName.cstr(); }

@@ -1070,6 +1070,9 @@ int main ( int argc, char ** argv )
 		if ( !pIndex )
 			sphDie ( "index '%s': failed to create (%s)", sIndex.cstr(), sError.cstr() );
 
+		if ( eCommand==CMD_CHECK )
+			pIndex->SetDebugCheck();
+
 		CSphString sWarn;
 		if ( !pIndex->Prealloc ( false, bStripPath, sWarn ) )
 			sphDie ( "index '%s': prealloc failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
@@ -1175,6 +1178,7 @@ int main ( int argc, char ** argv )
 				return iCheckErrno;
 			if ( bRotate )
 			{
+				pIndex->Dealloc();
 				sNewIndex.SetSprintf ( "%s.new", hConf["index"][sIndex]["path"].cstr() );
 				if ( !pIndex->Rename ( sNewIndex.cstr() ) )
 					sphDie ( "index '%s': rotate failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );

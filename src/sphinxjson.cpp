@@ -621,6 +621,10 @@ bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool
 	yy2lex_destroy ( tParser.m_pScanner );
 
 	tParser.Finalize();
+
+	if ( iRes!=0 )
+		dData.Reset();
+
 	return iRes==0;
 }
 
@@ -845,7 +849,7 @@ static const BYTE * JsonFormatStr ( CSphVector<BYTE> & dOut, const BYTE * p, boo
 		dOut.Add ( '"' );
 	while ( iLen-- )
 	{
-		if ( *p=='"' )
+		if ( *p=='"' && bQuote )
 			dOut.Add ( '\\' );
 		dOut.Add ( *p );
 		p++;

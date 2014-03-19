@@ -708,5 +708,10 @@ Two'</sphinxql>
 	(8, '')
 </sphinxql>
 <sphinxql>select count(*) p, groupby() q from json_toplevel group by j order by p desc</sphinxql>
+<!-- inserting/replacing in a JSONs index with an invalid HTML (quoting) -->
+<sphinxql>replace into rt (id, data) values (1,'{"html":"p class="document""}')</sphinxql>
+<sphinxql>select data, data.html from rt where id=1</sphinxql>
+<sphinxql>replace into rt (id, data) values (1,'{"html":"p class=\"document\""}')</sphinxql>
+<sphinxql>select data, data.html from rt where id=1</sphinxql>
 </sphqueries>
 </test>

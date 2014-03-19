@@ -1467,7 +1467,13 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 
 	// format the message
 	if ( sFmt )
-		vsnprintf ( sBuf+iLen, sizeof(sBuf)-iLen-1, sFmt, ap );
+	{
+		// need more space for tail zero and "\n" that added at sphLogEntry
+		int iSafeGap = 4;
+		int iBufSize = sizeof(sBuf)-iLen-iSafeGap;
+		vsnprintf ( sBuf+iLen, iBufSize, sFmt, ap );
+		sBuf[ sizeof(sBuf)-iSafeGap ] = '\0';
+	}
 
 	// catch dupes
 	DWORD uEntry = sFmt ? sphCRC32 ( sBuf+iLen ) : 0;

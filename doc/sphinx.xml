@@ -584,8 +584,8 @@ $ /usr/local/sphinx/bin/indexer --all</userinput></literallayout></para></listit
 <para>Connect to server:</para>
 <para><literallayout><userinput>$ mysql -h0 -P9306</userinput></literallayout></para>
 <para><literallayout><userinput>SELECT * FROM test1 WHERE MATCH('my document');</userinput></literallayout></para>
-<para><literallayout><userinput>INSERT INTO rt VALUES (1, 'this is a sample text', 11);</userinput></literallayout></para>
-<para><literallayout><userinput>INSERT INTO rt VALUES (2, 'some more text here', 22);</userinput></literallayout></para>
+<para><literallayout><userinput>INSERT INTO rt VALUES (1, 'this is', 'a sample text', 11);</userinput></literallayout></para>
+<para><literallayout><userinput>INSERT INTO rt VALUES (2, 'some more', 'text here', 22);</userinput></literallayout></para>
 <para><literallayout><userinput>SELECT gid/11 FROM rt WHERE MATCH('text') GROUP BY gid;</userinput></literallayout></para>
 <para><literallayout><userinput>SELECT * FROM rt ORDER BY gid DESC;</userinput></literallayout></para>
 <para><literallayout><userinput>SHOW TABLES;</userinput></literallayout></para>

@@ -142,7 +142,7 @@
     <ClCompile Include="..\src\search.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="libsphinx10.vcxproj">
+    <ProjectReference Include="libsphinx12.vcxproj">
       <Project>{6a1685de-0265-4243-965f-96cb53ebbca6}</Project>
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
     </ProjectReference>

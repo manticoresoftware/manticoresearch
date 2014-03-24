@@ -5449,7 +5449,6 @@ static void Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const 
 		}
 	} else
 	{
-		assert ( pNode->m_dWords.GetLength() );
 		ARRAY_FOREACH ( i, pNode->m_dWords )
 		{
 			const XQKeyword_t & w = pNode->m_dWords[i];

@@ -1,13 +1,13 @@
 using System;
-using MySql.Data.MySqlClient; 
+using MySql.Data.MySqlClient;
 
 public class Example
 {
-	static void Main() 
+	static void Main()
 	{
 		string cs = @"server=localhost;port=9306;userid=root;password=;database=testdb";
 		MySqlConnection conn = null;
-		try 
+		try
 		{
 			conn = new MySqlConnection(cs);
 			conn.Open();
@@ -26,12 +26,12 @@ public class Example
 			}
 			r.Close();
 			conn.Close();
-		} catch (MySqlException ex) 
+		} catch (MySqlException ex)
 		{
 			Console.WriteLine("Error: {0}", ex.ToString());
-		} finally 
+		} finally
 		{
-			if (conn != null) 
+			if (conn != null)
 				conn.Close();
 		}
 	}

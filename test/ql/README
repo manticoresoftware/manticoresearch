@@ -1,0 +1,10 @@
+Java test notes
+----------------
+
+wget http://dev.mysql.com/get/Downloads/Connector-J/mysql-connector-java-5.1.29.zip
+7z x mysql-connector-java-5.1.29.zip
+
+Q: Why this one?
+A: First hit in Google.
+
+--eof--

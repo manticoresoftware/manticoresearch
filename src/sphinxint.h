@@ -438,7 +438,7 @@ public:
 	CSphVector<CSphAttrLocator>				m_dOverrideIn;
 	CSphVector<CSphAttrLocator>				m_dOverrideOut;
 
-	void *									m_pIndexData;			///< backend specific data
+	const void *							m_pIndexData;			///< backend specific data
 	CSphQueryProfile *						m_pProfile;
 	const SmallStringHash_T<int64_t> *		m_pLocalDocs;
 	int64_t									m_iTotalDocs;
@@ -1618,7 +1618,7 @@ void			sphColumnToLowercase ( char * sVal );
 bool			sphCheckQueryHeight ( const struct XQNode_t * pRoot, CSphString & sError );
 void			sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, bool bHasBooleanOptimization, const ISphKeywordsStat * pKeywords );
 void			TransformAotFilter ( XQNode_t * pNode, const CSphWordforms * pWordforms, const CSphIndexSettings& tSettings );
-bool			sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, const CSphVector<SphDocID_t> & dKillList, CSphString & sError, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle, volatile bool * pForceTerminate );
+bool			sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, const CSphVector<SphDocID_t> & dKillList, CSphString & sError, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle, volatile bool * pGlobalStop, volatile bool * pLocalStop );
 CSphString		sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema );
 
 void			sphSetUnlinkOld ( bool bUnlink );
@@ -1786,8 +1786,9 @@ public:
 		ISphSubstringPayload *		m_pPayload;
 		int							m_iTotalDocs;
 		int							m_iTotalHits;
+		const void *				m_pIndexData;
 
-		Args_t ( bool bPayload, int iExpansionLimit, bool bHasMorphology, ESphHitless eHitless );
+		Args_t ( bool bPayload, int iExpansionLimit, bool bHasMorphology, ESphHitless eHitless, const void * pIndexData );
 		~Args_t ();
 		void AddExpanded ( const BYTE * sWord, int iLen, int iDocs, int iHits );
 		const char * GetWordExpanded ( int iIndex ) const;
@@ -1830,6 +1831,7 @@ struct ExpansionContext_t
 	bool m_bMergeSingles;
 	CSphScopedPayload * m_pPayloads;
 	ESphHitless m_eHitless;
+	const void * m_pIndexData;
 
 	ExpansionContext_t ();
 };

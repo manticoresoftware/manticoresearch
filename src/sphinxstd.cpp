@@ -1818,6 +1818,10 @@ long CSphAtomic<long>::Inc()
 {
 	return InterlockedIncrement ( &m_uValue )-1;
 }
+long CSphAtomic<long>::Dec()
+{
+	return InterlockedDecrement  ( &m_uValue )+1;
+}
 #endif
 
 // fast check if we are built with right endianess settings

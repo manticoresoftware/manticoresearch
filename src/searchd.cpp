@@ -16914,8 +16914,8 @@ void HandleMysqlAttach ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	}
 
 	ISphRtIndex * pRtTo = (ISphRtIndex*)pTo->m_pIndex;
-
-	if ( !pRtTo->AttachDiskIndex ( pFrom->m_pIndex, sError ) )
+	bool bOk = pRtTo->AttachDiskIndex ( pFrom->m_pIndex, sError );
+	if ( !bOk )
 	{
 		pFrom->Unlock();
 		pTo->Unlock();
@@ -17374,8 +17374,9 @@ static void ModifyIndexAttrs ( const ServedIndex_t * pLocal, bool bAdd, CSphStri
 		return;
 
 	if ( pLocal->m_pIndex->IsRT() )
+	{
 		pLocal->m_pIndex->AddRemoveAttribute ( bAdd, sAttrName, eAttrType, iPos, sError );
-	else
+	} else
 	{
 		if ( RenameWithRollback ( pLocal ) )
 			pLocal->m_pIndex->AddRemoveAttribute ( bAdd, sAttrName, eAttrType, iPos, sError );

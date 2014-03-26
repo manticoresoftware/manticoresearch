@@ -1227,6 +1227,13 @@ public:
 		Reset ( 0 );
 		return pData;
 	}
+
+	/// swap
+	void SwapData ( CSphFixedVector<T> & rhs )
+	{
+		Swap ( m_pData, rhs.m_pData );
+		Swap ( m_iSize, rhs.m_iSize );
+	}
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2708,6 +2715,7 @@ protected:
 	T &	m_tMutexRef;
 };
 
+
 /// scoped locked shared variable
 template < typename LOCK >
 class CSphScopedLockedShare : public CSphScopedLock<LOCK>
@@ -2792,6 +2800,31 @@ private:
 #else
 	pthread_rwlock_t	m_tLock;
 #endif
+};
+
+
+/// scoped RW lock
+class CSphScopedRWLock : ISphNoncopyable
+{
+public:
+	/// lock on creation
+	CSphScopedRWLock ( CSphRwlock & tLock, bool bRead )
+		: m_tLock ( tLock )
+	{
+		if ( bRead )
+			m_tLock.ReadLock();
+		else
+			m_tLock.WriteLock();
+	}
+
+	/// unlock on going out of scope
+	~CSphScopedRWLock ()
+	{
+		m_tLock.Unlock ();
+	}
+
+protected:
+	CSphRwlock & m_tLock;
 };
 
 
@@ -2948,9 +2981,19 @@ public:
 		return m_pData;
 	}
 
+	DWORD * Begin ()
+	{
+		return m_pData;
+	}
+
 	int GetSize() const
 	{
 		return (m_iElements+31)/32;
+	}
+
+	int GetBits() const
+	{
+		return m_iElements;
 	}
 
 	int BitCount () const
@@ -2984,7 +3027,7 @@ public:
 //////////////////////////////////////////////////////////////////////////
 // interlocked (atomic) operation
 
-#if (USE_WINDOWS) || (HAVE_SYNC_FETCH_AND_ADD)
+#if (USE_WINDOWS) || (HAVE_SYNC_FETCH)
 #define NO_ATOMIC 0
 #else
 #define NO_ATOMIC 1
@@ -3009,13 +3052,18 @@ public:
 	{
 		return m_uValue;
 	}
-#ifdef HAVE_SYNC_FETCH_AND_ADD
+#ifdef HAVE_SYNC_FETCH
 	inline UINT Inc()
 	{
 		return __sync_fetch_and_add ( &m_uValue, 1 );
 	}
+	inline UINT Dec()
+	{
+		return __sync_fetch_and_sub ( &m_uValue, 1 );
+	}
 #elif USE_WINDOWS
 	UINT Inc();
+	UINT Dec();
 #endif
 
 #if NO_ATOMIC
@@ -3024,6 +3072,14 @@ public:
 		UINT uTmp;
 		m_tLock.Lock();
 		uTmp = m_uValue++;
+		m_tLock.Unlock();
+		return uTmp;
+	}
+	inline UINT Dec()
+	{
+		UINT uTmp;
+		m_tLock.Lock();
+		uTmp = m_uValue--;
 		m_tLock.Unlock();
 		return uTmp;
 	}

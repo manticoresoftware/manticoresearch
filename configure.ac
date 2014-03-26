@@ -150,7 +150,7 @@ AC_SEARCH_LIBS([dlopen],[dl dld],[],[])
 AC_CHECK_FUNCS(dlopen dlerror)
 
 
-# check for interlocked increment in linux
+# check for interlocked increment and decrement in linux
 
 dnl helper that runs a test program and checks for success
 interlocked_prog="
@@ -159,6 +159,7 @@ int interlocked_routine ( )
 {
 	volatile int ia=0;
     __sync_fetch_and_add( &ia, 1 ); // atomic increment
+	__sync_fetch_and_sub( &ia, 1 ); // atomic decrement
 }
 
 int main ()
@@ -178,7 +179,7 @@ AC_CACHE_CHECK([for interlocked builtins], [sphinx_cv_interlocked],
 
 # final check
 if test x$sphinx_cv_interlocked = xyes; then
-    AC_DEFINE(HAVE_SYNC_FETCH_AND_ADD,1,[Whether we have internal atomic functions])
+    AC_DEFINE(HAVE_SYNC_FETCH,1,[Whether we have internal atomic functions])
 fi
 
 dnl --------------------------------------------------------------------------

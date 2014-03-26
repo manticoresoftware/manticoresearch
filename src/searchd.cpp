@@ -14603,9 +14603,8 @@ public:
 	// Header of the table with defined num of columns
 	inline void HeadBegin ( int iColumns )
 	{
-		m_tOut.SendLSBDword ( ((m_uPacketID++)<<24) + MysqlPackedLen ( iColumns ) + 1 );
+		m_tOut.SendLSBDword ( ((m_uPacketID++)<<24) + MysqlPackedLen ( iColumns ) );
 		m_tOut.SendMysqlInt ( iColumns );
-		m_tOut.SendByte ( 0 ); // extra
 		m_iSize = iColumns;
 	}
 
@@ -17041,6 +17040,19 @@ void HandleMysqlSelectSysvar ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 
 		// data packet, var value
 		tOut.PutString("1");
+		tOut.Commit();
+
+		// done
+		tOut.Eof();
+	} else if ( sVar=="@@max_allowed_packet" )
+	{
+		// MySQL Go connector really expects an answer here
+		tOut.HeadBegin(1);
+		tOut.HeadColumn ( sVar.cstr(), MYSQL_COL_LONG );
+		tOut.HeadEnd();
+
+		// data packet, var value
+		tOut.PutNumeric ( "%d", g_iMaxPacketSize );
 		tOut.Commit();
 
 		// done

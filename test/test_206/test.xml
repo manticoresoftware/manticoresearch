@@ -713,5 +713,7 @@ Two'</sphinxql>
 <sphinxql>select data, data.html from rt where id=1</sphinxql>
 <sphinxql>replace into rt (id, data) values (1,'{"html":"p class=\"document\""}')</sphinxql>
 <sphinxql>select data, data.html from rt where id=1</sphinxql>
+<sphinxql>replace into rt (id, data) values (1,'{"html":"p class=\\"document\\""}')</sphinxql>
+<sphinxql>select data, data.html from rt where id=1</sphinxql>
 </sphqueries>
 </test>

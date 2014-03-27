@@ -7936,6 +7936,7 @@ struct AggrResult_t : CSphQueryResult
 	CSphVector<int>					m_dMatchCounts;		///< aggregated resultsets lengths (for schema minimization)
 	CSphVector<const CSphIndex*>	m_dLockedAttrs;		///< indexes which are hold in the memory untill sending result
 	CSphTaggedVector				m_dTag2Pools;		///< tag to MVA and strings storage pools mapping
+	CSphString						m_sZeroCountName;
 
 	AggrResult_t()
 	{}
@@ -8387,18 +8388,22 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 		return false;
 	}
 
-	// 0 matches via SphinxAPI? no fiddling with schemas is necessary
+	bool bReturnZeroCount = !tRes.m_sZeroCountName.IsEmpty();
+
+	// 0 matches via SphinxAPI? no fiddling with schemes is necessary
 	// (and via SphinxQL, we still need to return the right schema)
 	if ( !bFromSphinxql && !tRes.m_dMatches.GetLength() )
 		return true;
 
-	// 0 result set schemas via SphinxQL? just bail
-	if ( bFromSphinxql && !tRes.m_dSchemas.GetLength() )
+	// 0 result set schemes via SphinxQL? just bail
+	if ( bFromSphinxql && !tRes.m_dSchemas.GetLength() && !bReturnZeroCount )
 		return true;
 
-	// build a minimal schema over all the (potentially different) schemas
+	// build a minimal schema over all the (potentially different) schemes
 	// that we have in our aggregated result set
-	tRes.m_tSchema = tRes.m_dSchemas[0];
+	assert ( tRes.m_dSchemas.GetLength() || bReturnZeroCount );
+	if ( tRes.m_dSchemas.GetLength() )
+		tRes.m_tSchema = tRes.m_dSchemas[0];
 	bool bAgent = tQuery.m_bAgent;
 	bool bUsualApi = !bAgent && !bFromSphinxql;
 	bool bAllEqual = true;
@@ -10752,6 +10757,18 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			if ( pExtraSchema )
 				pExtraSchema->RLock();
 			UnlockOnDestroy SchemaLocker ( pExtraSchema );
+
+			if ( m_bMaster && tRes.m_iSuccesses && tQuery.m_dItems.GetLength() && tQuery.m_sGroupBy.IsEmpty() && tRes.m_dMatches.GetLength()==0 )
+			{
+				ARRAY_FOREACH ( i, tQuery.m_dItems )
+				{
+					if ( tQuery.m_dItems[i].m_sExpr=="count(*)" )
+					{
+						tRes.m_sZeroCountName = tQuery.m_dItems[i].m_sAlias;
+						break;
+					}
+				}
+			}
 
 			if ( !MinimizeAggrResult ( tRes, tQuery, m_dLocal.GetLength(), dAgents.GetLength(), pExtraSchema, m_pProfile, m_bSphinxql, pAggrFilter ) )
 			{
@@ -16088,6 +16105,19 @@ static void FormatFactors ( CSphVector<BYTE> & dOut, const SPH_UDF_FACTORS & tFa
 }
 
 
+static void ReturnZeroCount ( const CSphRsetSchema & tSchema, int iAttrsCount, const CSphString & sName, SqlRowBuffer_c & dRows )
+{
+	for ( int i=0; i<iAttrsCount; i++ )
+	{
+		if ( tSchema.GetAttr(i).m_sName==sName )
+			dRows.PutNumeric<DWORD> ( "%u", 0 );
+		else
+			dRows.PutNULL();
+	}
+	dRows.Commit();
+}
+
+
 void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, bool bMoreResultsFollow )
 {
 	if ( !tRes.m_iSuccesses )
@@ -16101,7 +16131,8 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 	// bummer! lets protect ourselves against that
 	int iSchemaAttrsCount = 0;
 	int iAttrsCount = 1;
-	if ( tRes.m_dMatches.GetLength() )
+	bool bReturnZeroCount = !tRes.m_sZeroCountName.IsEmpty();
+	if ( tRes.m_dMatches.GetLength() || bReturnZeroCount )
 	{
 		iSchemaAttrsCount = SendGetAttrCount ( tRes.m_tSchema );
 		iAttrsCount = iSchemaAttrsCount;
@@ -16111,7 +16142,7 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 	dRows.HeadBegin ( iAttrsCount );
 
 	// field packets
-	if ( !tRes.m_dMatches.GetLength() )
+	if ( !tRes.m_dMatches.GetLength() && !bReturnZeroCount )
 	{
 		// in case there are no matches, send a dummy schema
 		dRows.HeadColumn ( "id", USE_64BIT ? MYSQL_COL_LONGLONG : MYSQL_COL_LONG );
@@ -16362,6 +16393,9 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 		}
 		dRows.Commit();
 	}
+
+	if ( bReturnZeroCount )
+		ReturnZeroCount ( tRes.m_tSchema, iSchemaAttrsCount, tRes.m_sZeroCountName, dRows );
 
 	// eof packet
 	dRows.Eof ( bMoreResultsFollow, iWarns );

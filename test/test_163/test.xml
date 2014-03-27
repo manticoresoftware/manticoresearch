@@ -2,8 +2,8 @@
 <test>
 
 <name>string attribute vs different indexes, attributes UNION</name>
-
 <num_agents>3</num_agents>
+<requires><sphinxql_keep_null/></requires>
 
 <config>
 
@@ -257,6 +257,50 @@ index idx_mva
 	path			= <data_path/>/idx_mva
 }
 
+source src_count1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT 1, 11 as idd, 'of the box' text UNION SELECT 2, 11 as idd, 'we are the boxes'
+	sql_attr_uint	= idd
+}
+
+source src_count2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT 10, 22 as idd, 'of the fox' text UNION SELECT 11, 22 as idd, 'we are the foxes'
+	sql_attr_uint	= idd
+}
+
+index count1
+{
+	source			= src_count1
+	docinfo			= extern
+	path			= <data_path/>/count1
+}
+
+index count2
+{
+	source			= src_count2
+	docinfo			= extern
+	path			= <data_path/>/count2
+}
+
+index dist_count1
+{
+	type					= distributed
+	local					= count1
+	local					= count2
+}
+
+index dist_count2
+{
+	type					= distributed
+	local					= count1
+	agent					= <my_address/>:count2
+}
+
 </agent0>
 
 <agent1>
@@ -367,6 +411,26 @@ INSERT INTO `test_table` VALUES
 <!-- regression bigint function vs udf return type -->
 <sphinxql>select *, bigint(idd1) b, min( bigint(idd1)) c from main</sphinxql>
 <sphinxql>select *, bigint(idd1) b, min( bigint(idd1)) c, 1 as gr from main GROUP BY gr</sphinxql>
+
+<!-- empty result set with count(*) -->
+<sphinxql>select count(*) from count2 where id in (1,2); show meta</sphinxql>
+<sphinxql>select *, count(*) from count2 where id in (1,2); show meta</sphinxql>
+<sphinxql>select count(*) from count1, count2 where id in (1,2); show meta</sphinxql>
+<sphinxql>select count(*) from count2, count1 where id in (1,2); show meta</sphinxql>
+<sphinxql>select *, count(*) from count1, count2 where id in (1,2); show meta</sphinxql>
+<sphinxql>select *, count(*) from count2, count1 where id in (1,2); show meta</sphinxql>
+<sphinxql>select idd, count(*) from count1, count2 where id in (1,2); show meta</sphinxql>
+<sphinxql>select idd, count(*) from count2, count1 where id in (1,2); show meta</sphinxql>
+<sphinxql>select *, count(*) from count1, count2 where id in (100); show meta</sphinxql>
+<sphinxql>select idd, count(*) from count2, count1 where id in (100); show meta</sphinxql>
+<sphinxql>select count(*) from dist_count1 where id in (1,2); show meta</sphinxql>
+<sphinxql>select count(*) from dist_count2 where id in (1,2); show meta</sphinxql>
+<sphinxql>select *, count(*) from dist_count1 where id in (1,2); show meta</sphinxql>
+<sphinxql>select *, count(*) from dist_count2 where id in (1,2); show meta</sphinxql>
+<sphinxql>select idd, count(*) from dist_count1 where id in (1,2); show meta</sphinxql>
+<sphinxql>select idd, count(*) from dist_count2 where id in (10,11); show meta</sphinxql>
+<sphinxql>select *, count(*) from dist_count1 where id in (100); show meta</sphinxql>
+<sphinxql>select idd, count(*) from dist_count2 where id in (100); show meta</sphinxql>
 </sphqueries>
 
 <queries>

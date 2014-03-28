@@ -988,9 +988,8 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 
 				if ( sToken[0]=='(' )
 				{
-					// safe way of performing m_dStateSpec.Add ( m_dStateSpec.Last() )
-					m_dStateSpec.Add ();
-					m_dStateSpec[m_dStateSpec.GetLength()-1] = m_dStateSpec[m_dStateSpec.GetLength()-2];
+					XQLimitSpec_t * pLastField = m_dStateSpec.Last();
+					m_dStateSpec.Add ( pLastField );
 				} else if ( sToken[0]==')' && m_dStateSpec.GetLength()>1 )
 				{
 					m_dStateSpec.Pop();
@@ -1155,10 +1154,6 @@ XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pR
 	if ( !pLeft || !pRight )
 		return pLeft ? pLeft : pRight;
 
-	// left spec always tries to infect the nodes to the right, only brackets can stop it
-	// eg. '@title hello' vs 'world'
-	pRight->CopySpecs ( pLeft );
-
 	// build a new node
 	XQNode_t * pResult = NULL;
 	if ( pLeft->m_dChildren.GetLength() && pLeft->GetOp()==eOp && pLeft->m_iOpArg==iOpArg )
@@ -1166,11 +1161,6 @@ XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pR
 		pLeft->m_dChildren.Add ( pRight );
 		pRight->m_pParent = pLeft;
 		pResult = pLeft;
-		if ( pRight->m_dSpec.m_bFieldSpec )
-			pResult->m_dSpec.SetFieldSpec ( pRight->m_dSpec.m_dFieldMask, pRight->m_dSpec.m_iFieldMaxPos );
-
-		if ( pRight->m_dSpec.m_dZones.GetLength() )
-			pResult->m_dSpec.SetZoneSpec ( pRight->m_dSpec.m_dZones, pRight->m_dSpec.m_bZoneSpan );
 	} else
 	{
 		// however, it's right (!) spec which is chosen for the resulting node,

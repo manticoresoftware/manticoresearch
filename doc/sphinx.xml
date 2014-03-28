@@ -14194,6 +14194,24 @@ rlp_max_batch_docs = 100
 <listitem><para>removed deprecated <option>str2wordcount</option> attributes</para></listitem>
 <listitem><para>removed support for client versions 0.9.6 and below</para></listitem>
 </itemizedlist>
+<sect1 id="rel217"><title>Version 2.1.7-release, xx mar 2014</title>
+<bridgehead>Bug fixes</bridgehead>
+<itemizedlist>
+  <listitem><para>fixed unnecessary escaping in JSON result set</para></listitem>
+  <listitem><para>fixed Quick Tour documentation chapter</para></listitem>
+  <listitem><para>fixed crash of daemon on logging extra large message</para></listitem>
+  <listitem><para>fixed #1905, multiple lemmas at the end of a field</para></listitem>
+  <listitem><para>fixed #1786, indextool fails to handle indexes with AOT morphology</para></listitem>
+  <listitem><para>fixed #1902, crash on JSON field in the IN() function</para></listitem>
+  <listitem><para>fixed #1903, indextool check mode for hitless indexes and indexes with large amount of documents</para></listitem>
+  <listitem><para>fixed #1802, loading large keywords dictionary</para></listitem>
+  <listitem><para>fixed expression engine: division by zero, log and sqrt() functions of non-positive arguments</para></listitem>
+  <listitem><para>fixed #1884, crash at SNIPPET() with local indexes at distributed index</para></listitem>
+  <listitem><para>fixed LCS and min_best_span_pos computation</para></listitem>
+</itemizedlist>
+</sect1>
+
+<sect1 id="rel216"><title>Version 2.1.6-release, 24 feb 2014</title>
 <bridgehead>Bug fixes</bridgehead>
 <itemizedlist>
 <listitem><para>fixed #1864, <filename>indexer</filename> crash on badly formed JSON, e.g. '[,1,2,3,4,]'</para></listitem>

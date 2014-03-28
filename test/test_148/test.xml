@@ -66,6 +66,22 @@ index i1
 	morphology = stem_en
 	index_exact_words = 1
 }
+
+source src_fl
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1 as id, 'we are from here' as title, 'but live there all the time' as body UNION SELECT 2 as id, 'but live there all the time' as title, 'we are from here' as body
+	sql_field_string	= title
+	sql_field_string	= body
+}
+
+index fl
+{
+	source			= src_fl
+	path			= <data_path/>/fl
+	docinfo			= extern
+}
 </config>
 
 <db_create>
@@ -106,6 +122,12 @@ CREATE TABLE start_end_table
 	<sphinxql>select * from i1 where match (' "^=Republic =of =Ireland$" ')</sphinxql>
 	<sphinxql>select * from i1 where match (' =Footpath$ ')</sphinxql>
 	<sphinxql>select * from i1 where match (' ^=Footpath$ ')</sphinxql>
+	
+	<!-- regression of field limit propagation -->
+	<sphinxql>select * from fl where match (' (@title we) live ')</sphinxql>
+	<sphinxql>select * from fl where match (' (@title we are) (@body live there) from time ')</sphinxql>
+	<sphinxql>select * from fl where match (' are (@body we) from time ')</sphinxql>
+	<sphinxql>select * from fl where match (' are (@body we) from (@title time the) here ')</sphinxql>
 </sphqueries>
 
 <custom_insert><![CDATA[

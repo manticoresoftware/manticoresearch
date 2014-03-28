@@ -352,21 +352,21 @@ static CSphIOStats * GetIOStats ()
 		return pIOStats;
 }
 
-
-static size_t sphRead ( int iFD, void * pBuf, size_t iCount )
+// a tiny wrapper over ::read() which additionally performs IO stats update
+static int64_t sphRead ( int iFD, void * pBuf, size_t iCount )
 {
 	CSphIOStats * pIOStats = GetIOStats();
 	int64_t tmStart = 0;
 	if ( pIOStats )
 		tmStart = sphMicroTimer();
 
-	size_t uRead = (size_t) ::read ( iFD, pBuf, iCount );
+	int64_t uRead = (size_t) ::read ( iFD, pBuf, iCount );
 
 	if ( pIOStats )
 	{
 		pIOStats->m_iReadTime += sphMicroTimer() - tmStart;
 		pIOStats->m_iReadOps++;
-		pIOStats->m_iReadBytes += iCount;
+		pIOStats->m_iReadBytes += (-1 == uRead) ? 0 : iCount;
 	}
 
 	return uRead;
@@ -505,7 +505,7 @@ bool CSphAutofile::Read ( void * pBuf, int64_t iCount, CSphString & sError )
 		int64_t iToReadOnce = ( m_pStat )
 			? Min ( iToRead, SPH_READ_PROGRESS_CHUNK )
 			: Min ( iToRead, SPH_READ_NOPROGRESS_CHUNK );
-		int64_t iGot = (int64_t) sphRead ( GetFD(), pCur, (size_t)iToReadOnce );
+		int64_t iGot = sphRead ( GetFD(), pCur, (size_t)iToReadOnce );
 		if ( iGot<=0 )
 			break;
 
@@ -521,8 +521,8 @@ bool CSphAutofile::Read ( void * pBuf, int64_t iCount, CSphString & sError )
 
 	if ( iToRead!=0 )
 	{
-		sError.SetSprintf ( "read error in %s; "INT64_FMT" of "INT64_FMT" bytes read",
-			GetFilename(), iCount-iToRead, iCount );
+		sError.SetSprintf ( "read error in %s (%s); "INT64_FMT" of "INT64_FMT" bytes read",
+							GetFilename(), strerror(errno), iCount-iToRead, iCount );
 		return false;
 	}
 	return true;
@@ -1777,7 +1777,7 @@ bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char 
 }
 
 
-size_t sphReadThrottled ( int iFD, void * pBuf, size_t iCount, ThrottleState_t * pThrottle )
+static size_t sphReadThrottled ( int iFD, void * pBuf, size_t iCount, ThrottleState_t * pThrottle )
 {
 	assert ( pThrottle );
 	if ( pThrottle->m_iMaxIOSize && int(iCount) > pThrottle->m_iMaxIOSize )

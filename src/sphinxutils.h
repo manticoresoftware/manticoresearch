@@ -172,6 +172,8 @@ bool			sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSet
 /// try to set dictionary, tokenizer and misc settings for an index (if not already set)
 bool			sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, CSphString & sError, bool bTemplateDict=false );
 
+bool			sphInitCharsetAliasTable ( CSphString & sError );
+
 enum ESphLogLevel
 {
 	SPH_LOG_FATAL	= 0,
@@ -253,7 +255,7 @@ public:
 	CSphDynamicLibrary()
 		: m_bReady ( false )
 		, m_pLibrary ( NULL )
-		, m_sError ("")
+		, m_sError ( "" )
 		{}
 	virtual ~CSphDynamicLibrary()
 	{}

@@ -366,7 +366,7 @@ static int64_t sphRead ( int iFD, void * pBuf, size_t iCount )
 	{
 		pIOStats->m_iReadTime += sphMicroTimer() - tmStart;
 		pIOStats->m_iReadOps++;
-		pIOStats->m_iReadBytes += (-1 == uRead) ? 0 : iCount;
+		pIOStats->m_iReadBytes += (-1==uRead) ? 0 : iCount;
 	}
 
 	return uRead;
@@ -3780,6 +3780,40 @@ bool CSphCharsetDefinitionParser::AddRange ( const CSphRemapRange & tRange, CSph
 }
 
 
+struct CharsetAlias_t
+{
+	CSphString					m_sName;
+	int							m_iNameLen;
+	CSphVector<CSphRemapRange>	m_dRemaps;
+};
+
+static CSphVector<CharsetAlias_t> g_dCharsetAliases;
+static char * g_sDefaultCharsetAliases[] = { "english", "A..Z->a..z, a..z", "russian", "U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451", NULL };
+
+bool sphInitCharsetAliasTable ( CSphString & sError ) // FIXME!!! move alias generation to config common section
+{
+	g_dCharsetAliases.Reset();
+	CSphCharsetDefinitionParser tParser;
+	CSphVector<CharsetAlias_t> dAliases;
+
+	for ( int i=0; g_sDefaultCharsetAliases[i]; i+=2 )
+	{
+		CharsetAlias_t & tCur = dAliases.Add();
+		tCur.m_sName = g_sDefaultCharsetAliases[i];
+		tCur.m_iNameLen = tCur.m_sName.Length();
+
+		if ( !tParser.Parse ( g_sDefaultCharsetAliases[i+1], tCur.m_dRemaps ) )
+		{
+			sError = tParser.GetLastError();
+			return false;
+		}
+	}
+
+	g_dCharsetAliases.SwapData ( dAliases );
+	return true;
+}
+
+
 bool CSphCharsetDefinitionParser::Parse ( const char * sConfig, CSphVector<CSphRemapRange> & dRanges )
 {
 	m_pCurrent = sConfig;
@@ -3795,6 +3829,29 @@ bool CSphCharsetDefinitionParser::Parse ( const char * sConfig, CSphVector<CSphR
 		// check for stray comma
 		if ( *m_pCurrent==',' )
 			return Error ( "stray ',' not allowed, use 'U+002C' instead" );
+
+		// alias
+		bool bGotAlias = false;
+		ARRAY_FOREACH_COND ( i, g_dCharsetAliases, !bGotAlias )
+		{
+			const CharsetAlias_t & tCur = g_dCharsetAliases[i];
+			bGotAlias = ( strncmp ( tCur.m_sName.cstr(), m_pCurrent, tCur.m_iNameLen )==0 && ( !m_pCurrent[tCur.m_iNameLen] || m_pCurrent[tCur.m_iNameLen]==',' ) );
+			if ( !bGotAlias )
+				continue;
+
+			// skip to next definition
+			m_pCurrent += tCur.m_iNameLen;
+			if ( *m_pCurrent && *m_pCurrent==',' )
+				m_pCurrent++;
+
+			ARRAY_FOREACH ( iDef, tCur.m_dRemaps )
+			{
+				if ( !AddRange ( tCur.m_dRemaps[iDef], dRanges ) )
+					return false;
+			}
+		}
+		if ( bGotAlias )
+			continue;
 
 		// parse char code
 		const char * pStart = m_pCurrent;

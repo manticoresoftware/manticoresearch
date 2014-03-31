@@ -22134,6 +22134,10 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	const CSphConfigSection & hSearchdpre = hConf["searchd"]["searchd"];
 
+	CSphString sError;
+	if ( !sphInitCharsetAliasTable ( sError ) )
+		sphFatal ( "failed to init charset alias table: %s", sError.cstr() );
+
 	////////////////////////
 	// stop running searchd
 	////////////////////////

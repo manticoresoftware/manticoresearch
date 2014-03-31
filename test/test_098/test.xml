@@ -92,6 +92,19 @@ index exact_wf
 	index_exact_words = 1
 }
 
+source src_cht
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT 1, 'Й Ц У К Е Н Г Ш Щ З Х139Ъ' UNION SELECT 2, 'Ф Ы В А П Р О Л Д Ж Э' UNION SELECT 3, 'Я Ч С М И Т Ь Б Ю Ё' UNION SELECT 11, 'й ц у к е н г ш щ з х ъ' UNION SELECT 12, 'ф ы в а п р о л д ж э' UNION SELECT 13, 'я086ч с м и т ь б ю ё' UNION SELECT 101, 'Q W E R T Y U I O P' UNION SELECT 102, 'A S D F G H J K L' UNION SELECT 103, 'Z X C V B N_M' UNION  SELECT 111, 'q w e r t y u i o p' UNION SELECT 112, 'a_s d f g h j k l' UNION SELECT 113, 'z x c v b n m'
+}
+
+index cht
+{
+	source			= src_cht
+	path			= <data_path/>/cht
+	charset_table 	= english, _, 0..9, russian
+}
 
 </config>
 
@@ -114,6 +127,17 @@ index exact_wf
 <query index='wf2' mode="extended2">run\-time</query>
 <query index='wf1' mode="extended2">run time</query>
 <query index='wf2' mode="extended2">run time</query>
+<!-- charset alias -->
+<query index='cht' mode="extended2">Й Ц У К Е Н Г Ш Щ З Х139Ъ</query>
+<query index='cht' mode="extended2">й ц у к е н г ш щ з х ъ</query>
+<query index='cht' mode="extended2">Ф Ы В А П Р О Л Д Ж Э</query>
+<query index='cht' mode="extended2">Я Ч С М И Т Ь Б Ю Ё</query>
+<query index='cht' mode="extended2">я086ч с м и т ь б ю ё</query>
+<query index='cht' mode="extended2">Q W E R T Y U I O P</query>
+<query index='cht' mode="extended2">A S D F G H J K L</query>
+<query index='cht' mode="extended2">a_s d f g h j k l</query>
+<query index='cht' mode="extended2">Z X C V B N_M</query>
+<query index='cht' mode="extended2">z x c v b n m</query>
 </queries>
 <sphqueries>
 <sphinxql>CALL KEYWORDS ('run-time (run time) issue', 'wf1')</sphinxql>

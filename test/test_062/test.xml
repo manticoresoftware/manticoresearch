@@ -41,6 +41,18 @@ index hi1
 	dict = keywords
 }
 
+index hi2
+{
+	source = test
+	path = <data_path/>/hi2
+	docinfo			= extern
+	dict = keywords
+	morphology		= stem_enru
+	min_prefix_len	= 1
+	index_exact_words	= 1
+	html_strip		= 1
+}
+
 </config>
 
 <db_insert>select 1;</db_insert>
@@ -155,7 +167,7 @@ $results[] = $client->BuildExcerpts ( array ( $doc ), 'test', $query, array('lim
 
 // regression passage generation vs new path of snippet generation
 
-$doc = "Our company's core technology platform is based on Microsoft applications, including the Windows NT operating system and a SQL server relational database, all residing on scaleable hardware. The software is constructed using an advanced proprietary XML framework and resides on an N-tier architecture. The support of open systems allows integration with a large variety of existing commercial, proprietary and legacy applications.&#160;&#160;Other applications, which are also operational in a Microsoft NT environment, have been developed using Power Builder and are dependent on an Oracle relational database.";
+$doc = "Our company's core technology platform is based on Microsoft applications, including the Windows NT operating system and a SQL server relational database, all residing on scaleable hardware. The software is constructed using an advanced proprietary XML framework and resides on an N-tier architecture. The support of open systems allows integration with a large variety of existing commercial, proprietary and legacy applications.&#160;&#160;Other applications, which are also operational in a Microsoft NT environment, have been developed using Power Builder and are dependent on an Oracle relational database. running fast and runs out";
 $query = 'the the right right text text';
 $results[] = $client->BuildExcerpts(
     array($doc),
@@ -173,6 +185,13 @@ $results[] = $client->BuildExcerpts(
         'force_all_words' => false,
     )
 );
+
+// regression duplicates removal from query
+$query = 'on | on | the | software | an* | ap* | an* | al* | on | al* | running | runs | run';
+$results[] = $client->BuildExcerpts ( array ( $doc ), 'hi2', $query, array('query_mode'=>true, 'limit'=>200) );
+$results[] = $client->BuildExcerpts ( array ( $doc ), 'hi2', $query, array('query_mode'=>true, 'limit'=>0) );
+$results[] = $client->BuildExcerpts ( array ( $doc ), 'hi2', $query, array('query_mode'=>false, 'limit'=>200) );
+$results[] = $client->BuildExcerpts ( array ( $doc ), 'hi2', $query, array('query_mode'=>false, 'limit'=>0) );
 
 ]]></custom_test>
 

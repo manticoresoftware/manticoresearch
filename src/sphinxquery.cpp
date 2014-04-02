@@ -983,7 +983,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 					if ( m_bQuoted )
 						m_dPhraseStar.Resize ( 0 );
 				}
-				m_iPendingType = sToken[0]=='!' ? '-' : sToken[0];
+				m_iPendingType = sToken[0];
 				m_pTokenizer->m_bPhrase = m_bQuoted;
 
 				if ( sToken[0]=='(' )

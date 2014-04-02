@@ -76,6 +76,7 @@ beforelist:
 orlistf:
 	orlist								{ $$ = $1; }
 	| tok_limiter '-' orlist					{ $$ = pParser->AddOp ( SPH_QUERY_NOT, $3, NULL ); }
+	| tok_limiter '!' orlist					{ $$ = pParser->AddOp ( SPH_QUERY_NOT, $3, NULL ); }
 	;
 
 orlist:

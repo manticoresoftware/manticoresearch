@@ -3788,7 +3788,7 @@ struct CharsetAlias_t
 };
 
 static CSphVector<CharsetAlias_t> g_dCharsetAliases;
-static char * g_sDefaultCharsetAliases[] = { "english", "A..Z->a..z, a..z", "russian", "U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451", NULL };
+static const char * g_sDefaultCharsetAliases[] = { "english", "A..Z->a..z, a..z", "russian", "U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451", NULL };
 
 bool sphInitCharsetAliasTable ( CSphString & sError ) // FIXME!!! move alias generation to config common section
 {

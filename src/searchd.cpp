@@ -16589,7 +16589,7 @@ void HandleMysqlDelete ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 	ARRAY_FOREACH ( iIdx, dNames )
 	{
 		const char * sName = dNames[iIdx].cstr();
-		const ServedIndex_t * pLocal = g_pLocalIndexes->GetWlockedEntry ( sName );
+		const ServedIndex_t * pLocal = g_pLocalIndexes->GetRlockedEntry ( sName );
 		if ( pLocal )
 		{
 			iAffected += LocalIndexDoDeleteDocuments ( sName, tStmt, pDocs, iDocsCount, pLocal, dErrors, bCommit );

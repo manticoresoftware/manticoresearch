@@ -854,7 +854,7 @@ public:
 	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops ) = 0;
 
 	/// apply stemmers to the given word
-	virtual void		ApplyStemmers ( BYTE * ) {}
+	virtual void		ApplyStemmers ( BYTE * ) const {}
 
 	/// load stopwords from given files
 	virtual void		LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer ) = 0;

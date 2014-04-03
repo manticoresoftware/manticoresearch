@@ -20530,7 +20530,7 @@ struct CSphTemplateDictTraits : CSphDict
 	virtual void		DisableWordforms() { m_bDisableWordforms = true; }
 	virtual int			SetMorphology ( const char * szMorph, CSphString & sMessage );
 	virtual bool		HasMorphology() const;
-	virtual void		ApplyStemmers ( BYTE * pWord );
+	virtual void		ApplyStemmers ( BYTE * pWord ) const;
 
 	virtual void		Setup ( const CSphDictSettings & tSettings ) { m_tSettings = tSettings; }
 	virtual const CSphDictSettings & GetSettings () const { return m_tSettings; }
@@ -20574,7 +20574,7 @@ private:
 
 	int					InitMorph ( const char * szMorph, int iLength, CSphString & sError );
 	int					AddMorph ( int iMorph ); ///< helper that always returns ST_OK
-	bool				StemById ( BYTE * pWord, int iStemmer );
+	bool				StemById ( BYTE * pWord, int iStemmer ) const;
 	void				AddWordform ( CSphWordforms * pContainer, char * sBuffer, int iLen, ISphTokenizer * pTokenizer, const char * szFile, const CSphVector<char> & dBlended );
 };
 
@@ -21101,7 +21101,7 @@ int CSphTemplateDictTraits::AddMorph ( int iMorph )
 
 
 
-void CSphTemplateDictTraits::ApplyStemmers ( BYTE * pWord )
+void CSphTemplateDictTraits::ApplyStemmers ( BYTE * pWord ) const
 {
 	if ( !m_bApplyMorph )
 		return;
@@ -21930,7 +21930,7 @@ bool CSphTemplateDictTraits::HasMorphology() const
 
 
 /// common id-based stemmer
-bool CSphTemplateDictTraits::StemById ( BYTE * pWord, int iStemmer )
+bool CSphTemplateDictTraits::StemById ( BYTE * pWord, int iStemmer ) const
 {
 	char szBuf [ MAX_KEYWORD_BYTES ];
 
@@ -25976,7 +25976,13 @@ void CSphSource_Document::BuildRegularHits ( SphDocID_t uDocid, bool bPayload, b
 
 		if ( m_bIndexExactWords && eMorph==SPH_TOKEN_MORPH_ORIGINAL )
 		{
-			if ( m_pDict->GetWordID ( sWord ) )
+			// can not use GetWordID here due to exception vs missed hit, ie
+			// stemmed sWord hasn't got added to hit stream but might be added as exception to dictionary
+			// that causes error at hit sorting phase \ dictionary HitblockPatch
+			if ( !m_pDict->GetSettings().m_bStopwordsUnstemmed )
+				m_pDict->ApplyStemmers ( sWord );
+
+			if ( !m_pDict->IsStopWord ( sWord ) )
 				m_tHits.AddHit ( uDocid, m_pDict->GetWordIDNonStemmed ( sBuf ), m_tState.m_iHitPos );
 
 			m_tState.m_iBuildLastStep = m_pTokenizer->TokenIsBlended() ? 0 : 1;

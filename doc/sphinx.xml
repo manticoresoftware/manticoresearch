@@ -14194,39 +14194,6 @@ rlp_max_batch_docs = 100
 <listitem><para>removed deprecated <option>str2wordcount</option> attributes</para></listitem>
 <listitem><para>removed support for client versions 0.9.6 and below</para></listitem>
 </itemizedlist>
-<sect1 id="rel217"><title>Version 2.1.7-release, xx mar 2014</title>
-<bridgehead>Bug fixes</bridgehead>
-<itemizedlist>
-  <listitem><para>fixed unnecessary escaping in JSON result set</para></listitem>
-  <listitem><para>fixed Quick Tour documentation chapter</para></listitem>
-  <listitem><para>fixed crash of daemon on logging extra large message</para></listitem>
-  <listitem><para>fixed #1905, multiple lemmas at the end of a field</para></listitem>
-  <listitem><para>fixed #1786, indextool fails to handle indexes with AOT morphology</para></listitem>
-  <listitem><para>fixed #1902, crash on JSON field in the IN() function</para></listitem>
-  <listitem><para>fixed #1903, indextool check mode for hitless indexes and indexes with large amount of documents</para></listitem>
-  <listitem><para>fixed #1802, loading large keywords dictionary</para></listitem>
-  <listitem><para>fixed expression engine: division by zero, log and sqrt() functions of non-positive arguments</para></listitem>
-  <listitem><para>fixed #1884, crash at SNIPPET() with local indexes at distributed index</para></listitem>
-  <listitem><para>fixed LCS and min_best_span_pos computation</para></listitem>
-</itemizedlist>
-</sect1>
-
-<sect1 id="rel216"><title>Version 2.1.6-release, 24 feb 2014</title>
-<bridgehead>Bug fixes</bridgehead>
-<itemizedlist>
-<listitem><para>fixed #1864, <filename>indexer</filename> crash on badly formed JSON, e.g. '[,1,2,3,4,]'</para></listitem>
-<listitem><para>fixed #1853, incomplete <link linkend="sphinxql-select">ORDER BY JSON</link> attribute in distributed indexes</para></listitem>
-<listitem><para>fixed #1847, broken infix searches in RT indexes</para></listitem>
-<listitem><para>fixed #1844, clash of mix cased attribute and field names at CSV source</para></listitem>
-<listitem><para>fixed #1840, filter by <link linkend="sphinxql-set">@uservar</link> in distributes indexes</para></listitem>
-<listitem><para>fixed #1832,#1833,#1834, some big endianess issues</para></listitem>
-<listitem><para>fixed #1830, loss of <link linkend="conf-ondisk-attrs">ondisk_attrs</link> after rotation</para></listitem>
-<listitem><para>fixed #1762, memory leak in <link linkend="conf-regexp-filter">regexp_filter</link></para></listitem>
-<listitem><para>fixed #1759, <filename>indextool</filename> false positives on persistent MVA checking</para></listitem>
-<listitem><para>fixed <link linkend="sphinxql-select">GROUP BY</link> id</para></listitem>
-<listitem><para>fixed crash on sending empty snippet result</para></listitem>
-<listitem><para>fixed index corruption in <link linkend="sphinxql-update">UPDATE</link> queries with non-existent attributes</para></listitem>
-</itemizedlist>
 </sect1>
 
 <sect1 id="rel221"><title>Version 2.2.1-beta, 13 nov 2013</title>
@@ -14312,7 +14279,26 @@ rlp_max_batch_docs = 100
 </itemizedlist>
 </sect1>
 
-<sect1 id="rel216"><title>Version 2.1.6-release, ??? feb 2014</title>
+<sect1 id="rel217"><title>Version 2.1.7-release, 30 mar 2014</title>
+<bridgehead>Bug fixes</bridgehead>
+<itemizedlist>
+  <listitem><para>fixed #1917, field limit propagation outside of group</para></listitem>
+  <listitem><para>fixed #1915, exact form passes to index skipping stopwords filter</para></listitem>
+  <listitem><para>fixed #1905, multiple lemmas at the end of a field</para></listitem>
+  <listitem><para>fixed #1903, <filename>indextool</filename> check mode for hitless indexes and indexes with large amount of documents</para></listitem>
+  <listitem><para>fixed #1902, crash on JSON field in the <link linkend="expr-func-in">IN()</link> function</para></listitem>
+  <listitem><para>fixed #1884, crash at <link linkend="sphinxql-select">SNIPPET()</link> with local indexes at distributed index</para></listitem>
+  <listitem><para>fixed #1802, loading large keywords dictionary</para></listitem>
+  <listitem><para>fixed #1786, <filename>indextool</filename> fails to handle indexes with AOT morphology</para></listitem>
+  <listitem><para>fixed crash of daemon on logging extra large message</para></listitem>
+  <listitem><para>fixed expression engine: division by zero, log and sqrt() functions of non-positive arguments</para></listitem>
+  <listitem><para>fixed LCS and min_best_span_pos computation</para></listitem>
+  <listitem><para>fixed unnecessary escaping in JSON result set</para></listitem>
+  <listitem><para>fixed Quick Tour documentation chapter</para></listitem>
+</itemizedlist>
+</sect1>
+
+<sect1 id="rel216"><title>Version 2.1.6-release, 24 feb 2014</title>
 <bridgehead>Bug fixes</bridgehead>
 <itemizedlist>
   <listitem><para>fixed #1857, crash in arabic stemmer</para></listitem>
@@ -14322,8 +14308,18 @@ rlp_max_batch_docs = 100
   <listitem><para>fixed #1882, race of periodic and forced FLUSHing on an RT index</para></listitem>
   <listitem><para>fixed #1881, quorum syntax with '.' as blended char</para></listitem>
   <listitem><para>fixed evaluating of LCS by an expression ranker</para></listitem>
-  <listitem><para></para></listitem>
-  <listitem><para></para></listitem>
+  <listitem><para>fixed #1864, <filename>indexer</filename> crash on badly formed JSON, e.g. '[,1,2,3,4,]'</para></listitem>
+  <listitem><para>fixed #1853, incomplete <link linkend="sphinxql-select">ORDER BY JSON</link> attribute in distributed indexes</para></listitem>
+  <listitem><para>fixed #1847, broken infix searches in RT indexes</para></listitem>
+  <listitem><para>fixed #1844, clash of mix cased attribute and field names at CSV source</para></listitem>
+  <listitem><para>fixed #1840, filter by <link linkend="sphinxql-set">@uservar</link> in distributes indexes</para></listitem>
+  <listitem><para>fixed #1832,#1833,#1834, some big endianess issues</para></listitem>
+  <listitem><para>fixed #1830, loss of <link linkend="conf-ondisk-attrs">ondisk_attrs</link> after rotation</para></listitem>
+  <listitem><para>fixed #1762, memory leak in <link linkend="conf-regexp-filter">regexp_filter</link></para></listitem>
+  <listitem><para>fixed #1759, <filename>indextool</filename> false positives on persistent MVA checking</para></listitem>
+  <listitem><para>fixed <link linkend="sphinxql-select">GROUP BY</link> id</para></listitem>
+  <listitem><para>fixed crash on sending empty snippet result</para></listitem>
+  <listitem><para>fixed index corruption in <link linkend="sphinxql-update">UPDATE</link> queries with non-existent attributes</para></listitem>
 </itemizedlist>
 </sect1>
 

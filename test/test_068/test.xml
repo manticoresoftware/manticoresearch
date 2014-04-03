@@ -73,7 +73,7 @@ source src_tsv1
 	tsvpipe_field = title
 	tsvpipe_field = content
 	tsvpipe_attr_multi = tags
-	tsvpipe_attr_uint = gid
+	tsvpipe_attr_uint = gid:3
 }
 
 index tsv1

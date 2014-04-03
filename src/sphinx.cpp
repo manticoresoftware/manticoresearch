@@ -30308,7 +30308,9 @@ bool CSphSource_BaseSV::Setup ( const CSphConfigSection & hSource, FILE * pPipe,
 			if ( pColon )
 			{
 				int iColon = pColon-sColumn.cstr();
-				sColumn.SetBinary ( sColumn.cstr(), iColon );
+				CSphString sTmp;
+				sTmp.SetBinary ( sColumn.cstr(), iColon );
+				sColumn.Swap ( sTmp );
 			}
 
 			// let's handle different char cases

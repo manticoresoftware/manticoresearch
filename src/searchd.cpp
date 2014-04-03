@@ -20146,7 +20146,7 @@ void InitPersistentPool()
 	}
 }
 
-void ReloadIndexSettings ( CSphConfigParser & tCP )
+static void ReloadIndexSettings ( CSphConfigParser & tCP )
 {
 	if ( !tCP.ReParse ( g_sConfigFile.cstr () ) )
 	{
@@ -20163,7 +20163,10 @@ void ReloadIndexSettings ( CSphConfigParser & tCP )
 	while ( g_hDistIndexes.IterateNext () )
 		g_hDistIndexes.IterateGet().m_bToDelete = true;
 
-	int nTotalIndexes = g_pLocalIndexes->GetLength () + g_hDistIndexes.GetLength ();
+	for ( IndexHashIterator_c it ( g_pTemplateIndexes ); it.Next(); )
+		it.Get().m_bToDelete = true;
+
+	int nTotalIndexes = g_pLocalIndexes->GetLength () + g_hDistIndexes.GetLength () + g_pTemplateIndexes->GetLength ();
 	int nChecked = 0;
 
 	const CSphConfig & hConf = tCP.m_tConf;
@@ -20173,8 +20176,7 @@ void ReloadIndexSettings ( CSphConfigParser & tCP )
 		const CSphConfigSection & hIndex = hConf["index"].IterateGet();
 		const char * sIndexName = hConf["index"].IterateGetKey().cstr();
 
-		ServedIndex_t * pServedIndex = g_pLocalIndexes->GetWlockedEntry ( sIndexName );
-		if ( pServedIndex )
+		if ( ServedIndex_t * pServedIndex = g_pLocalIndexes->GetWlockedEntry ( sIndexName ) )
 		{
 			ConfigureLocalIndex ( *pServedIndex, hIndex );
 			pServedIndex->m_bToDelete = false;
@@ -20202,35 +20204,30 @@ void ReloadIndexSettings ( CSphConfigParser & tCP )
 
 			nChecked++;
 
-		} else
+		} else if ( ServedIndex_t * pTemplateIndex = g_pTemplateIndexes->GetWlockedEntry ( sIndexName ) )
 		{
-			ServedIndex_t * pTemplateIndex = g_pLocalIndexes->GetWlockedEntry ( sIndexName );
-			if ( pTemplateIndex )
-			{
-				ConfigureTemplateIndex ( *pTemplateIndex, hIndex );
-				pTemplateIndex->m_bToDelete = false;
-				nChecked++;
-				pTemplateIndex->Unlock();
-			} else
-			{
-				ESphAddIndex eType = AddIndex ( sIndexName, hIndex );
-				if ( eType==ADD_LOCAL )
-				{
-					ServedIndex_t * pIndex = g_pLocalIndexes->GetWlockedEntry ( sIndexName );
+			ConfigureTemplateIndex ( *pTemplateIndex, hIndex );
+			pTemplateIndex->m_bToDelete = false;
+			nChecked++;
+			pTemplateIndex->Unlock();
 
-					if ( pIndex )
-					{
-						pIndex->m_bOnlyNew = true;
-						pIndex->Unlock();
-					}
-				} else if ( eType==ADD_RT )
+		} else // add new index
+		{
+			ESphAddIndex eType = AddIndex ( sIndexName, hIndex );
+			if ( eType==ADD_LOCAL )
+			{
+				if ( ServedIndex_t * pIndex = g_pLocalIndexes->GetWlockedEntry ( sIndexName ) )
 				{
-					ServedIndex_t & tIndex = g_pLocalIndexes->GetUnlockedEntry ( sIndexName );
-
-					tIndex.m_bOnlyNew = false;
-					if ( PrereadNewIndex ( tIndex, hIndex, sIndexName ) )
-						tIndex.m_bEnabled = true;
+					pIndex->m_bOnlyNew = true;
+					pIndex->Unlock();
 				}
+			} else if ( eType==ADD_RT )
+			{
+				ServedIndex_t & tIndex = g_pLocalIndexes->GetUnlockedEntry ( sIndexName );
+
+				tIndex.m_bOnlyNew = false;
+				if ( PrereadNewIndex ( tIndex, hIndex, sIndexName ) )
+					tIndex.m_bEnabled = true;
 			}
 		}
 	}
@@ -20284,7 +20281,7 @@ void CheckDelete ()
 		g_pLocalIndexes->Delete ( *dToDelete[i] ); // should result in automatic CSphIndex::Unlock() via dtor call
 
 	ARRAY_FOREACH ( i, dTmplToDelete )
-		g_pTemplateIndexes->Delete ( *dToDelete[i] ); // should result in automatic CSphIndex::Unlock() via dtor call
+		g_pTemplateIndexes->Delete ( *dTmplToDelete[i] ); // should result in automatic CSphIndex::Unlock() via dtor call
 
 	g_tDistLock.Lock();
 

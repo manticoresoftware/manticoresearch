@@ -38,7 +38,8 @@
      TOK_ZONESPAN = 264,
      TOK_BEFORE = 265,
      TOK_SENTENCE = 266,
-     TOK_PARAGRAPH = 267
+     TOK_PARAGRAPH = 267,
+     TOK_MAYBE = 268
    };
 #endif
 #define TOK_KEYWORD 258
@@ -51,6 +52,7 @@
 #define TOK_BEFORE 265
 #define TOK_SENTENCE 266
 #define TOK_PARAGRAPH 267
+#define TOK_MAYBE 268
 
 
 

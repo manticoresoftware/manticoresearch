@@ -35,6 +35,7 @@
 %token					TOK_BEFORE
 %token					TOK_SENTENCE
 %token					TOK_PARAGRAPH
+%token					TOK_MAYBE
 %type <pNode>			keyword
 %type <pNode>			phrasetoken
 %type <pNode>			phrase
@@ -82,6 +83,7 @@ orlistf:
 orlist:
 	tok_limiter atom								{ $$ = $2; }
 	| orlist '|' tok_limiter atom					{ $$ = pParser->AddOp ( SPH_QUERY_OR, $1, $4 ); }
+	| orlist TOK_MAYBE tok_limiter atom				{ $$ = pParser->AddOp ( SPH_QUERY_MAYBE, $1, $4 ); }
 	;
 
 atom:

@@ -1769,6 +1769,7 @@ evaluating such queries could take very long.
 The following special operators and modifiers can be used when using the extended matching mode:
 <itemizedlist>
 <listitem><para>operator OR: <programlisting>hello | world</programlisting></para></listitem>
+<listitem><para>operator MAYBE (introduced in verion 2.2.3-beta): <programlisting>hello MAYBE world</programlisting></para></listitem>
 <listitem><para>operator NOT:
 <programlisting>
 hello -world
@@ -1984,6 +1985,10 @@ otherwise.
 but requires the match to occur in a single contiguous span. In the example
 above, <code>(ZONESPAN:th hello world)></code> would not match the document,
 since "hello" and "world" do not occur within the same span.
+</para>
+<para>
+&lt;b&gt;MAYBE&lt;b&gt; operator was added in 2.2.3-beta. It works much like |
+operator but doesn't return documents which match only right subtree expression.
 </para>
 </sect1>
 

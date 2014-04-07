@@ -757,6 +757,17 @@ public:
 };
 
 
+/// A-maybe-B streamer
+class ExtMaybe_c : public ExtOr_c
+{
+public:
+								ExtMaybe_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const ISphQwordSetup & tSetup ) : ExtOr_c ( pFirst, pSecond, tSetup ) {}
+	virtual const ExtDoc_t *	GetDocsChunk ( SphDocID_t * pMaxID );
+
+	void DebugDump ( int iLevel ) { DebugDumpT ( "ExtMaybe", iLevel ); }
+};
+
+
 /// A-and-not-B streamer
 class ExtAndNot_c : public ExtTwofer_c
 {
@@ -1974,6 +1985,7 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 			switch ( pNode->GetOp() )
 			{
 				case SPH_QUERY_OR:			pCur = new ExtOr_c ( pCur, pNext, tSetup ); break;
+				case SPH_QUERY_MAYBE:		pCur = new ExtMaybe_c ( pCur, pNext, tSetup ); break;
 				case SPH_QUERY_AND:			pCur = new ExtAnd_c ( pCur, pNext, tSetup ); break;
 				case SPH_QUERY_ANDNOT:		pCur = new ExtAndNot_c ( pCur, pNext, tSetup ); break;
 				case SPH_QUERY_SENTENCE:	pCur = new ExtUnit_c ( pCur, pNext, pNode->m_dSpec.m_dFieldMask, tSetup, MAGIC_WORD_SENTENCE ); break;
@@ -3195,6 +3207,55 @@ const ExtHit_t * ExtOr_c::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMax
 	assert ( iHit>=0 && iHit<MAX_HITS );
 	m_dHits[iHit].m_uDocid = DOCID_MAX;
 	return ( iHit!=0 ) ? m_dHits : NULL;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+// returns documents from left subtree only
+//
+// each call returns only one document and rewinds docs in rhs to look for the
+// same docID as in lhs
+//
+// we do this to return hits from rhs too which we need to affect match rank
+const ExtDoc_t * ExtMaybe_c::GetDocsChunk ( SphDocID_t * pMaxID )
+{
+	m_uMaxID = 0;
+	const ExtDoc_t * pCur0 = m_pCurDoc[0];
+	const ExtDoc_t * pCur1 = m_pCurDoc[1];
+	int iDoc = 0;
+
+	// try to get next doc from lhs
+	if ( !pCur0 || pCur0->m_uDocid==DOCID_MAX )
+		pCur0 = m_pChildren[0]->GetDocsChunk ( pMaxID );
+
+	// we have nothing to do if there is no doc from lhs
+	if ( pCur0 )
+	{
+		// look for same docID in rhs
+		do
+		{
+			if ( !pCur1 || pCur1->m_uDocid==DOCID_MAX )
+				pCur1 = m_pChildren[1]->GetDocsChunk ( pMaxID );
+			else if ( pCur1->m_uDocid<pCur0->m_uDocid )
+				++pCur1;
+
+		} while ( pCur1 && pCur1->m_uDocid<pCur0->m_uDocid );
+
+		m_dDocs [ iDoc ] = *pCur0;
+		// alter doc like with | fulltext operator if we have it both in lhs and rhs
+		if ( pCur1 && pCur0->m_uDocid==pCur1->m_uDocid )
+		{
+			m_dDocs [ iDoc ].m_uDocFields |= pCur1->m_uDocFields;
+			m_dDocs [ iDoc ].m_fTFIDF += pCur1->m_fTFIDF;
+		}
+		++pCur0;
+		++iDoc;
+	}
+
+	m_pCurDoc[0] = pCur0;
+	m_pCurDoc[1] = pCur1;
+
+	return ReturnDocsChunk ( iDoc, pMaxID, "maybe" );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -5386,6 +5447,7 @@ static void Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const 
 	{
 		case SPH_QUERY_AND:			tRes.Appendf ( "AND(" ); break;
 		case SPH_QUERY_OR:			tRes.Appendf ( "OR(" ); break;
+		case SPH_QUERY_MAYBE:		tRes.Appendf ( "MAYBE(" ); break;
 		case SPH_QUERY_NOT:			tRes.Appendf ( "NOT(" ); break;
 		case SPH_QUERY_ANDNOT:		tRes.Appendf ( "ANDNOT(" ); break;
 		case SPH_QUERY_BEFORE:		tRes.Appendf ( "BEFORE(" ); break;

@@ -557,13 +557,13 @@ public:
 	}
 
 	/// dtor
-	virtual ~CSphQueue ()
+	~CSphQueue ()
 	{
 		SafeDeleteArray ( m_pData );
 	}
 
 	/// add entry to the queue
-	virtual bool Push ( const T & tEntry )
+	bool Push ( const T & tEntry )
 	{
 		if ( m_iUsed==m_iSize )
 		{
@@ -594,7 +594,7 @@ public:
 	}
 
 	/// remove root (ie. top priority) entry
-	virtual void Pop ()
+	void Pop ()
 	{
 		assert ( m_iUsed );
 		if ( !(--m_iUsed) ) // empty queue? just return

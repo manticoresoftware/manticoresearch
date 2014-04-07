@@ -868,6 +868,15 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			break;
 		}
 
+		// handle MAYBE
+		if ( sToken && p && !m_pTokenizer->m_bPhrase && !strcasecmp ( sToken, "maybe" ) && !strncmp ( p, "MAYBE", 5 ) )
+		{
+			// we just lexed our next token
+			m_iPendingType = TOK_MAYBE;
+			m_iAtomPos -= 1;
+			break;
+		}
+
 		// handle ZONE
 		if ( sToken && p && !m_pTokenizer->m_bPhrase && !strncmp ( p, "ZONE:", 5 )
 			&& ( sphIsAlpha(p[5]) || p[5]=='(' ) )
@@ -1337,10 +1346,11 @@ bool XQParser_t::FixupNots ( XQNode_t * pNode )
 		return false;
 	}
 
-	// NOT within OR? we can't compute that
-	if ( pNode->GetOp()==SPH_QUERY_OR )
+	// NOT within OR or MAYBE? we can't compute that
+	if ( pNode->GetOp()==SPH_QUERY_OR || pNode->GetOp()==SPH_QUERY_MAYBE )
 	{
-		m_pParsed->m_sParseError.SetSprintf ( "query is non-computable (NOT is not allowed within OR)" );
+		const char *op = pNode->GetOp()==SPH_QUERY_OR ? "OR" : "MAYBE";
+		m_pParsed->m_sParseError.SetSprintf ( "query is non-computable (NOT is not allowed within %s)", op );
 		return false;
 	}
 
@@ -1622,6 +1632,7 @@ static void xqDump ( const XQNode_t * pNode, int iIndent )
 		{
 			case SPH_QUERY_AND: printf ( "AND:" ); break;
 			case SPH_QUERY_OR: printf ( "OR:" ); break;
+			case SPH_QUERY_MAYBE: printf ( "MAYBE:" ); break;
 			case SPH_QUERY_NOT: printf ( "NOT:" ); break;
 			case SPH_QUERY_ANDNOT: printf ( "ANDNOT:" ); break;
 			case SPH_QUERY_BEFORE: printf ( "BEFORE:" ); break;
@@ -1720,6 +1731,7 @@ CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSche
 				{
 				case SPH_QUERY_AND:		sOp = " "; break;
 				case SPH_QUERY_OR:		sOp = "|"; break;
+				case SPH_QUERY_MAYBE:	sOp = "MAYBE"; break;
 				case SPH_QUERY_NOT:		sOp = "NOT"; break;
 				case SPH_QUERY_ANDNOT:	sOp = "AND NOT"; break;
 				case SPH_QUERY_BEFORE:	sOp = "BEFORE"; break;

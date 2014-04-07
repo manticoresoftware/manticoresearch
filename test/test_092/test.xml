@@ -70,6 +70,7 @@ index test105
 	<SPHinxQL>replace into test105 (id,content) values (1,'contend')</SPHinxQL>
 	<SPHinxQL>select * from test105 where match('contend|newcontent')</SPHinxQL>
 	<SPHinxQL>select * from test105 where match('content')</SPHinxQL>
+	<SPHinxQL>select * from test105 where match('contend MAYBE newcontent')</SPHinxQL>
 </SPHQueries>
 
 </Test>

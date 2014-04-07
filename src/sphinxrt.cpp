@@ -1078,7 +1078,6 @@ enum Blop_e
 // forward declaration
 class BufferReader_t;
 class RtBinlog_c;
-struct RtIndex_t;
 
 
 class BinlogWriter_c : protected CSphWriter

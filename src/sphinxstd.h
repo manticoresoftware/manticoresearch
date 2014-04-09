@@ -1234,6 +1234,11 @@ public:
 		Swap ( m_pData, rhs.m_pData );
 		Swap ( m_iSize, rhs.m_iSize );
 	}
+
+	const T * BinarySearch ( T tRef ) const
+	{
+		return sphBinarySearch ( m_pData, m_pData+m_iSize-1, tRef );
+	}
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -2734,46 +2739,6 @@ public:
 };
 
 
-/// MT-aware refcounted base
-/// mutex protected, might be slow
-struct ISphRefcountedMT : public ISphNoncopyable
-{
-protected:
-	ISphRefcountedMT ()
-		: m_iRefCount ( 1 )
-	{
-		m_tLock.Init();
-	}
-
-	virtual ~ISphRefcountedMT ()
-	{
-		m_tLock.Done();
-	}
-
-public:
-	void AddRef () const
-	{
-		m_tLock.Lock();
-		m_iRefCount++;
-		m_tLock.Unlock();
-	}
-
-	void Release () const
-	{
-		m_tLock.Lock();
-		int iRefs = --m_iRefCount;
-		assert ( iRefs>=0 );
-		m_tLock.Unlock();
-		if ( iRefs==0 )
-			delete this;
-	}
-
-protected:
-	mutable int			m_iRefCount;
-	mutable CSphMutex	m_tLock;
-};
-
-
 /// rwlock implementation
 class CSphRwlock : public ISphNoncopyable
 {
@@ -3040,6 +3005,7 @@ class CSphAtomic : public ISphNoncopyable
 #if NO_ATOMIC
 	CSphMutex		m_tLock;
 #endif
+
 public:
 	CSphAtomic ( UINT uValue=0 )
 		: m_uValue ( uValue )
@@ -3048,10 +3014,20 @@ public:
 		m_tLock.Init();
 #endif
 	}
+
+	~CSphAtomic ()
+	{
+#if NO_ATOMIC
+		m_tLock.Done();
+#endif
+	}
+
 	inline UINT operator()() const
 	{
 		return m_uValue;
 	}
+
+	// return value here is original value, prior to operation took place
 #ifdef HAVE_SYNC_FETCH
 	inline UINT Inc()
 	{
@@ -3085,6 +3061,38 @@ public:
 	}
 #endif
 };
+
+
+
+/// MT-aware refcounted base (might be a mutex protected and slow)
+struct ISphRefcountedMT : public ISphNoncopyable
+{
+protected:
+	ISphRefcountedMT ()
+		: m_iRefCount ( 1 )
+	{}
+
+	virtual ~ISphRefcountedMT ()
+	{}
+
+public:
+	void AddRef () const
+	{
+		m_iRefCount.Inc();
+	}
+
+	void Release () const
+	{
+		long uRefs = m_iRefCount.Dec();
+		assert ( uRefs>=1 );
+		if ( uRefs==1 )
+			delete this;
+	}
+
+protected:
+	mutable CSphAtomic<long>	m_iRefCount;
+};
+
 
 
 #endif // _sphinxstd_

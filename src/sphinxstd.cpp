@@ -1818,9 +1818,10 @@ long CSphAtomic<long>::Inc()
 {
 	return InterlockedIncrement ( &m_uValue )-1;
 }
+template<>
 long CSphAtomic<long>::Dec()
 {
-	return InterlockedDecrement  ( &m_uValue )+1;
+	return InterlockedDecrement ( &m_uValue )+1;
 }
 #endif
 

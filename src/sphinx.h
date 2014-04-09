@@ -829,7 +829,7 @@ public:
 
 	/// Get word ID by word, "text" version
 	/// may apply stemming and modify word inplace
-	/// modified word may become bigger than the  original one, so make sure you have enough space in buffer which is pointer by pWord
+	/// modified word may become bigger than the original one, so make sure you have enough space in buffer which is pointer by pWord
 	/// a general practice is to use char[3*SPH_MAX_WORD_LEN+4] as a buffer
 	/// returns 0 for stopwords
 	virtual SphWordID_t	GetWordID ( BYTE * pWord ) = 0;
@@ -2550,7 +2550,6 @@ struct CSphKeywordInfo
 	int				m_iDocs;
 	int				m_iHits;
 	int				m_iQpos;
-
 };
 
 inline void Swap ( CSphKeywordInfo & v1, CSphKeywordInfo & v2 )
@@ -3173,12 +3172,14 @@ struct CSphIndexStatus
 	int64_t			m_iDiskUse;
 	int64_t			m_iRamChunkSize; // not used for plain
 	int				m_iNumChunks; // not used for plain
+	int64_t			m_iMemLimit; // not used for plain
 
 	CSphIndexStatus()
-		: m_iRamUse(0)
-		, m_iDiskUse(0)
-		, m_iRamChunkSize(0)
-		, m_iNumChunks(0)
+		: m_iRamUse ( 0 )
+		, m_iDiskUse ( 0 )
+		, m_iRamChunkSize ( 0 )
+		, m_iNumChunks ( 0 )
+		, m_iMemLimit ( 0 )
 	{}
 };
 

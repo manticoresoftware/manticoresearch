@@ -8563,7 +8563,7 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 // STATUS
 //////////////////////////////////////////////////////////////////////////
 
-void RtIndex_t::GetStatus ( CSphIndexStatus* pRes ) const
+void RtIndex_t::GetStatus ( CSphIndexStatus * pRes ) const
 {
 	assert ( pRes );
 	if ( !pRes )
@@ -8581,7 +8581,9 @@ void RtIndex_t::GetStatus ( CSphIndexStatus* pRes ) const
 		+ m_dDiskChunks.GetSizeBytes()
 		+ pRes->m_iRamChunkSize;
 
+	pRes->m_iMemLimit = m_iSoftRamLimit;
 	pRes->m_iDiskUse = 0;
+
 	CSphString sError;
 	char sFile [ SPH_MAX_FILENAME_LEN ];
 	const char * sFiles[] = { ".meta", ".kill", ".ram" };

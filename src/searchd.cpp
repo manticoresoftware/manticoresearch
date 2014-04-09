@@ -17303,6 +17303,7 @@ void HandleMysqlShowIndexStatus ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt
 	{
 		tOut.DataTuplet ( "ram_chunk", tStatus.m_iRamChunkSize );
 		tOut.DataTuplet ( "disk_chunks", tStatus.m_iNumChunks );
+		tOut.DataTuplet ( "mem_limit", tStatus.m_iMemLimit );
 	}
 
 	pServed->Unlock();

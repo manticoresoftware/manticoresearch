@@ -404,7 +404,7 @@ private:
 
 enum ThdState_e
 {
-	THD_HANDSHAKE,
+	THD_HANDSHAKE = 0,
 	THD_NET_READ,
 	THD_NET_WRITE,
 	THD_QUERY,
@@ -687,7 +687,7 @@ enum
 /// command names
 static const char * g_dApiCommands[SEARCHD_COMMAND_TOTAL] =
 {
-	"search", "excerpt", "update", "keywords", "persist", "status", "query", "flushattrs"
+	"search", "excerpt", "update", "keywords", "persist", "status", "query", "flushattrs", "query", "ping", "delete", "uvar"
 };
 
 const int	MAX_RETRY_COUNT		= 8;
@@ -11200,7 +11200,7 @@ static const char * g_dSqlStmts[STMT_TOTAL] =
 	"flush_rtindex", "flush_ramchunk", "show_variables", "truncate_rtindex", "select_sysvar",
 	"show_collation", "show_character_set", "optimize_index", "show_agent_status",
 	"show_index_status", "show_profile", "alter_add", "alter_drop", "show_plan",
-	"select_dual", "show_databases", "create_plugin", "drop_plugin", "show_plugins"
+	"select_dual", "show_databases", "create_plugin", "drop_plugin", "show_plugins", "show_threads"
 };
 
 

@@ -18302,7 +18302,8 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 	if ( !iWilds || iWilds==iLen )
 		return pNode;
 
-	ISphWordlist::Args_t tWordlist ( tCtx.m_bMergeSingles, tCtx.m_iExpansionLimit, tCtx.m_bHasMorphology, tCtx.m_eHitless, tCtx.m_pIndexData );
+	bool bUseTermMerge = ( tCtx.m_bMergeSingles && pNode->m_dSpec.m_dZones.GetLength()==0 );
+	ISphWordlist::Args_t tWordlist ( bUseTermMerge, tCtx.m_iExpansionLimit, tCtx.m_bHasMorphology, tCtx.m_eHitless, tCtx.m_pIndexData );
 
 	if ( !sphIsWild(*sFull) || tCtx.m_iMinInfixLen==0 )
 	{

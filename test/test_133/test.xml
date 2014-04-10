@@ -83,6 +83,25 @@ index sp11
 	dict = keywords
 	min_prefix_len = 1
 }
+
+source z1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select 600 id, 6 gid, '&lt;zone601&gt; back off &lt;/zone601&gt; from the &lt;zone602&gt; be the &lt;/zone602&gt; ' title
+	sql_attr_uint	= gid
+}
+
+index z1
+{
+	source			= z1
+	path			= <data_path/>/z1
+	html_strip		= 1
+	index_sp		= 1
+	index_zones		= zone*
+	dict = keywords
+	min_prefix_len	= 1
+}
 </config>
 
 <db_create>
@@ -154,6 +173,17 @@ You have gone away'));]]></db_insert>
 <query mode="extended2" index="test">"of this"</query>
 <query mode="extended2" index="test">ZONE:zoneA "like this"</query>
 <query mode="extended2" index="test">strikes</query>
+
+<!--regression SP vs no morphology index -->
+<query mode="extended2" index="sp10">one SENTENCE two</query>
+<query mode="extended2" index="sp11">one SENTENCE two</query>
+<query mode="extended2" index="sp10">one SENTENCE three</query>
+<query mode="extended2" index="sp11">one SENTENCE three</query>
+
+<!-- regression zones vs expanded optimized terms -->
+<query mode="extended2" index="z1">ZONE:zone601 back</query>
+<query mode="extended2" index="z1">ZONE:zone602 back</query>
+<query mode="extended2" index="z1">ZONE:zone602 ba*</query>
 </queries>
 
 <sphqueries>

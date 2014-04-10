@@ -228,7 +228,7 @@ protected:
 		#if QDEBUG
 		printf ( "qdebug: node %s %d:%08x getdocs = [", sNode ? sNode : "???", m_iAtomPos, int(this) );
 		for ( int i=0; i<iCount; i++ )
-			printf ( i ? ", %d" : "%d", int(m_dDocs[i].m_uDocid) );
+			printf ( i ? ", %d" : "%d", int ( m_dDocs[i].m_uDocid ) );
 		printf ( "]\n" );
 		#endif
 
@@ -243,14 +243,13 @@ protected:
 		#if QDEBUG
 		printf ( "qdebug: node %s %d:%08x gethits = [", sNode ? sNode : "???", m_iAtomPos, int(this) );
 		for ( int i=0; i<iCount; i++ )
-			printf ( i ? ", %d:%d.%d" : "%d:%d.%d", int(m_dHits[i].m_uDocid),
-			HITMAN::GetField(m_dHits[i].m_uHitpos), HITMAN::GetPos(m_dHits[i].m_uHitpos) );
+			printf ( i ? ", %d:%d.%d" : "%d:%d.%d", int ( m_dHits[i].m_uDocid ),
+			HITMAN::GetField ( m_dHits[i].m_uHitpos ), HITMAN::GetPos ( m_dHits[i].m_uHitpos ) );
 		printf ( "]\n" );
 		#endif
 
 		return iCount ? m_dHits : NULL;
 	}
-
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1369,7 +1368,7 @@ static ISphQword * CreateQueryWord ( const XQKeyword_t & tWord, const ISphQwordS
 	if ( tWord.m_bFieldStart && tWord.m_bFieldEnd )	pWord->m_iTermPos = TERM_POS_FIELD_STARTEND;
 	else if ( tWord.m_bFieldStart )					pWord->m_iTermPos = TERM_POS_FIELD_START;
 	else if ( tWord.m_bFieldEnd )					pWord->m_iTermPos = TERM_POS_FIELD_END;
-	else											pWord->m_iTermPos = 0;
+	else											pWord->m_iTermPos = TERM_POS_NONE;
 
 	pWord->m_fBoost = tWord.m_fBoost;
 	pWord->m_iAtomPos = tWord.m_iAtomPos;
@@ -1512,7 +1511,7 @@ ExtNode_i * ExtNode_i::Create ( ISphQword * pQword, const XQNode_t * pNode, cons
 
 	if ( !pQword->m_bHasHitlist )
 	{
-		if ( tSetup.m_pWarning && pQword->m_iTermPos )
+		if ( tSetup.m_pWarning && pQword->m_iTermPos!=TERM_POS_NONE )
 			tSetup.m_pWarning->SetSprintf ( "hitlist unavailable, position limit ignored" );
 		return new ExtTermHitless_c ( pQword, pNode->m_dSpec.m_dFieldMask, tSetup, pNode->m_bNotWeighted );
 	}
@@ -1590,6 +1589,7 @@ ExtPayload_c::ExtPayload_c ( const XQNode_t * pNode, const ISphQwordSetup & tSet
 	assert ( pNode->m_dWords.GetLength()==1 );
 	assert ( tSetup.m_eDocinfo!=SPH_DOCINFO_INLINE );
 	assert ( pNode->m_dWords.Begin()->m_pPayload );
+	assert ( pNode->m_dSpec.m_dZones.GetLength()==0 && !pNode->m_dSpec.m_bZoneSpan );
 
 	(XQKeyword_t &)m_tWord = *pNode->m_dWords.Begin();
 	m_dFieldMask = pNode->m_dSpec.m_dFieldMask;
@@ -3238,7 +3238,6 @@ const ExtDoc_t * ExtMaybe_c::GetDocsChunk ( SphDocID_t * pMaxID )
 				pCur1 = m_pChildren[1]->GetDocsChunk ( pMaxID );
 			else if ( pCur1->m_uDocid<pCur0->m_uDocid )
 				++pCur1;
-
 		} while ( pCur1 && pCur1->m_uDocid<pCur0->m_uDocid );
 
 		m_dDocs [ iDoc ] = *pCur0;
@@ -6889,10 +6888,10 @@ public:
 	// per-field and per-document stuff
 	BYTE				m_uLCS[SPH_MAX_FIELDS];
 	BYTE				m_uCurLCS;
-	DWORD               m_uCurPos;
-	DWORD               m_uLcsTailPos;
-	DWORD               m_uLcsTailQposMask;
-	DWORD               m_uCurQposMask;
+	DWORD				m_uCurPos;
+	DWORD				m_uLcsTailPos;
+	DWORD				m_uLcsTailQposMask;
+	DWORD				m_uCurQposMask;
 	int					m_iExpDelta;
 	int					m_iLastHitPos;
 	int					m_iFields;
@@ -7940,7 +7939,7 @@ RankerState_Expr_fn <NEED_PACKEDFACTORS, HANDLE_DUPES>::~RankerState_Expr_fn ()
 /// initialize ranker state
 template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >
 bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError,
-																  DWORD uFactorFlags )
+																	DWORD uFactorFlags )
 {
 	m_iFields = iFields;
 	m_pWeights = pWeights;
@@ -8086,16 +8085,16 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 			// FIXME!? what do we do with longer spans? keep looking? reset?
 			if ( m_uCurLCS<2 )
 			{
-                m_uLcsTailPos = m_uCurPos;
-                m_uLcsTailQposMask = m_uCurQposMask;
-                m_uCurLCS = 1;
+				m_uLcsTailPos = m_uCurPos;
+				m_uLcsTailQposMask = m_uCurQposMask;
+				m_uCurLCS = 1;
 			}
 			m_uCurQposMask = 0;
 			m_uCurPos = iLcs;
 			if ( m_uLCS [ uField ]<pHlist->m_uWeight )
 			{
-                m_uLCS [ uField ] = BYTE ( pHlist->m_uWeight );
-                m_iMinBestSpanPos [ uField ] = iPos;
+				m_uLCS [ uField ] = BYTE ( pHlist->m_uWeight );
+				m_iMinBestSpanPos [ uField ] = iPos;
 			}
 		}
 
@@ -8115,19 +8114,19 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 			// update per-field vector
 			if ( m_uCurLCS>m_uLCS [ uField ] )
 			{
-                m_uLCS [ uField ] = m_uCurLCS;
-                m_iMinBestSpanPos [ uField ] = iPos - m_uCurLCS + 1;
+				m_uLCS [ uField ] = m_uCurLCS;
+				m_iMinBestSpanPos [ uField ] = iPos - m_uCurLCS + 1;
 			}
 		}
 
 		if ( iDelta==m_iExpDelta )
 		{
 			if ( HITMAN::IsEnd ( pHlist->m_uHitpos ) && (int)pHlist->m_uQuerypos==m_iMaxQpos && iPos==m_iMaxQpos )
-                m_tExactHit.BitSet ( uField );
+				m_tExactHit.BitSet ( uField );
 		} else
 		{
 			if ( iPos==1 && HITMAN::IsEnd ( pHlist->m_uHitpos ) && m_iMaxQpos==1 )
-                m_tExactHit.BitSet ( uField );
+				m_tExactHit.BitSet ( uField );
 		}
 		m_iExpDelta = iDelta + pHlist->m_uSpanlen - 1;
 	}

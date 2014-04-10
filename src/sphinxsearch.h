@@ -25,13 +25,13 @@
 /// term modifiers
 enum TermPosFilter_e
 {
+	TERM_POS_NONE = 0,
 	TERM_POS_FIELD_LIMIT = 1,
-	TERM_POS_FIELD_START,
-	TERM_POS_FIELD_END,
-	TERM_POS_FIELD_STARTEND,
-	TERM_POS_ZONES,
-	TERM_POS_ZONESPAN,
-	TERM_POS_NONE
+	TERM_POS_FIELD_START = 2,
+	TERM_POS_FIELD_END = 3,
+	TERM_POS_FIELD_STARTEND = 4,
+	TERM_POS_ZONES = 5,
+	TERM_POS_ZONESPAN = 6
 };
 
 
@@ -52,7 +52,7 @@ public:
 	CSphString		m_sWord;		///< my copy of word
 	CSphString		m_sDictWord;	///< word after being processed by dict (eg. stemmed)
 	SphWordID_t		m_uWordID;		///< word ID, from dictionary
-	int				m_iTermPos;
+	TermPosFilter_e	m_iTermPos;
 	int				m_iAtomPos;		///< word position, from query
 	float			m_fBoost;		///< IDF keyword boost (multiplier)
 	bool			m_bExpanded;	///< added by prefix expansion
@@ -75,7 +75,7 @@ protected:
 public:
 	ISphQword ()
 		: m_uWordID ( 0 )
-		, m_iTermPos ( 0 )
+		, m_iTermPos ( TERM_POS_NONE )
 		, m_iAtomPos ( 0 )
 		, m_fBoost ( 1.0f )
 		, m_bExpanded ( false )

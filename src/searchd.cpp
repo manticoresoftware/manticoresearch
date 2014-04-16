@@ -432,16 +432,22 @@ struct ThdDesc_t : public ListNode_t
 	int				m_iTid;			///< OS thread id, or 0 if unknown
 	int64_t			m_tmConnect;	///< when did the client connect?
 	int64_t			m_tmStart;		///< when did the current request start?
-	CSphString		m_sThreadInfo;	///< current request description
+	CSphFixedVector<char> m_dBuf;	///< current request description
 
 	ThdDesc_t ()
-		: m_iClientSock ( 0 )
+		: m_eProto ( PROTO_MYSQL41 )
+		, m_iClientSock ( 0 )
+		, m_eThdState ( THD_HANDSHAKE )
 		, m_sCommand ( NULL )
 		, m_iConnID ( -1 )
 		, m_iTid ( 0 )
 		, m_tmConnect ( 0 )
 		, m_tmStart ( 0 )
-	{}
+		, m_dBuf ( 512 )
+	{
+		m_dBuf[0] = '\0';
+		m_dBuf.Last() = '\0';
+	}
 
 	void SetSnippetThreadInfo ( const CSphVector<ExcerptQuery_t> & dSnippets )
 	{
@@ -455,8 +461,19 @@ struct ThdDesc_t : public ListNode_t
 		}
 
 		iSize /= 100;
-		m_sThreadInfo.SetSprintf ( "api-snippet datasize=%d.%d""k query=\"%s\"",
-			int ( iSize/10 ), int ( iSize%10 ), dSnippets[0].m_sWords.scstr() );
+		SetThreadInfo ( "api-snippet datasize=%d.%d""k query=\"%s\"", int ( iSize/10 ), int ( iSize%10 ), dSnippets[0].m_sWords.scstr() );
+	}
+
+	void SetThreadInfo ( const char * sTemplate, ... )
+	{
+		va_list ap;
+
+		va_start ( ap, sTemplate );
+		int iPrinted = vsnprintf ( m_dBuf.Begin(), m_dBuf.GetLength()-1, sTemplate, ap );
+		va_end ( ap );
+
+		if ( iPrinted>0 )
+			m_dBuf[iPrinted] = '\0';
 	}
 };
 
@@ -10988,8 +11005,7 @@ void HandleCommandSearch ( int iSock, int iVer, InputBuffer_c & tReq, ThdDesc_t 
 	if ( pThd && tHandler.m_dQueries.GetLength() )
 	{
 		const CSphQuery & q = tHandler.m_dQueries[0];
-		pThd->m_sThreadInfo.SetSprintf ( "api-search query=\"%s\" comment=\"%s\"",
-			q.m_sQuery.scstr(), q.m_sComment.scstr() );
+		pThd->SetThreadInfo ( "api-search query=\"%s\" comment=\"%s\"", q.m_sQuery.scstr(), q.m_sComment.scstr() );
 	}
 
 	// run queries, send response
@@ -14070,7 +14086,7 @@ void HandleCommandFlush ( int iSock, int iVer, InputBuffer_c & tReq )
 		pThd->m_eThdState = _state; \
 		pThd->m_tmStart = sphMicroTimer(); \
 		if_const ( _state==THD_NET_IDLE ) \
-			pThd->m_sThreadInfo = ""; \
+			pThd->m_dBuf[0] = '\0'; \
 	} \
 	ENABLE_CONST_COND_CHECK \
 }
@@ -14542,14 +14558,8 @@ public:
 
 	void PutString ( const char * sMsg )
 	{
-		PutString ( sMsg, 0 );
-	}
-
-	void PutString ( const char * sMsg, int iLen )
-	{
-		assert ( sMsg && iLen>=0 );
-
-		if ( !iLen )
+		int iLen = 0;
+		if ( sMsg && *sMsg )
 			iLen = strlen ( sMsg );
 
 		Reserve ( 9+iLen ); // 9 is taken from MysqlPack() implementation (max possible offset)
@@ -15510,15 +15520,17 @@ void HandleMysqlShowThreads ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	{
 		const ThdDesc_t * pThd = (const ThdDesc_t *)pIt;
 
-		int iLen = pThd->m_sThreadInfo.Length();
-		if ( tStmt.m_iThreadsCols>0 )
-			iLen = Min ( iLen, tStmt.m_iThreadsCols );
+		int iLen = strnlen ( pThd->m_dBuf.Begin(), pThd->m_dBuf.GetLength() );
+		if ( tStmt.m_iThreadsCols>0 && iLen>tStmt.m_iThreadsCols )
+		{
+			const_cast<ThdDesc_t *>(pThd)->m_dBuf[tStmt.m_iThreadsCols] = '\0';
+		}
 
 		tOut.PutNumeric ( "%d", pThd->m_iTid );
 		tOut.PutString ( g_dProtoNames [ pThd->m_eProto ] );
 		tOut.PutString ( g_dThdStates [ pThd->m_eThdState ] );
 		tOut.PutMicrosec ( tmNow - pThd->m_tmStart );
-		tOut.PutString ( pThd->m_sThreadInfo.cstr(), iLen );
+		tOut.PutString ( pThd->m_dBuf.Begin() );
 
 		tOut.Commit();
 		pIt = pIt->m_pNext;
@@ -18095,7 +18107,7 @@ static void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * p
 				if ( pThd )
 				{
 					THD_STATE ( THD_QUERY );
-					pThd->m_sThreadInfo = sQuery; // OPTIMIZE? could be huge; avoid copying?
+					pThd->SetThreadInfo ( "%s", sQuery.cstr() ); // OPTIMIZE? could be huge; avoid copying?
 				}
 				bKeepProfile = tSession.Execute ( sQuery, tOut, uPacketID, pThd );
 				break;

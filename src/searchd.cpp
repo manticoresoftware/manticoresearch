@@ -473,7 +473,7 @@ struct ThdDesc_t : public ListNode_t
 		va_end ( ap );
 
 		if ( iPrinted>0 )
-			m_dBuf[iPrinted] = '\0';
+			m_dBuf[Min ( iPrinted, m_dBuf.GetLength()-1 )] = '\0';
 	}
 };
 

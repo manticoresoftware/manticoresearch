@@ -10699,7 +10699,7 @@ header, see <xref linkend="conf-embedded-limit"/> for details.
 <para>
 Dictionaries are used to normalize incoming words both during indexing
 and searching. Therefore, to pick up changes in wordforms file
-it's required to reindex and restart <filename>searchd</filename>.
+it's required to rotate index.
 </para>
 <para>
 Word forms support in Sphinx is designed to support big dictionaries well.

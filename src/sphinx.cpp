@@ -348,8 +348,7 @@ static CSphIOStats * GetIOStats ()
 
 	if ( !pIOStats || !pIOStats->IsEnabled() )
 		return NULL;
-	else
-		return pIOStats;
+	return pIOStats;
 }
 
 // a tiny wrapper over ::read() which additionally performs IO stats update
@@ -360,16 +359,16 @@ static int64_t sphRead ( int iFD, void * pBuf, size_t iCount )
 	if ( pIOStats )
 		tmStart = sphMicroTimer();
 
-	int64_t uRead = (size_t) ::read ( iFD, pBuf, iCount );
+	int64_t iRead = ::read ( iFD, pBuf, iCount );
 
 	if ( pIOStats )
 	{
 		pIOStats->m_iReadTime += sphMicroTimer() - tmStart;
 		pIOStats->m_iReadOps++;
-		pIOStats->m_iReadBytes += (-1==uRead) ? 0 : iCount;
+		pIOStats->m_iReadBytes += (-1==iRead) ? 0 : iCount;
 	}
 
-	return uRead;
+	return iRead;
 }
 
 
@@ -477,8 +476,8 @@ SphOffset_t CSphAutofile::GetSize ( SphOffset_t iMinSize, bool bCheckSizeT, CSph
 	}
 	if ( bCheckSizeT )
 	{
-		size_t sCheck = (size_t)st.st_size;
-		if ( st.st_size!=SphOffset_t(sCheck) )
+		size_t uCheck = (size_t)st.st_size;
+		if ( st.st_size!=SphOffset_t(uCheck) )
 		{
 			sError.SetSprintf ( "failed to load %s: bad size "INT64_FMT" (out of size_t; 4 GB limit on 32-bit machine hit?)",
 				GetFilename(), (int64_t)st.st_size );
@@ -506,8 +505,25 @@ bool CSphAutofile::Read ( void * pBuf, int64_t iCount, CSphString & sError )
 			? Min ( iToRead, SPH_READ_PROGRESS_CHUNK )
 			: Min ( iToRead, SPH_READ_NOPROGRESS_CHUNK );
 		int64_t iGot = sphRead ( GetFD(), pCur, (size_t)iToReadOnce );
-		if ( iGot<=0 )
-			break;
+
+		if ( iGot==-1 )
+		{
+			// interrupted by a signal - try again
+			if ( errno==EINTR )
+				continue;
+
+			sError.SetSprintf ( "read error in %s (%s); "INT64_FMT" of "INT64_FMT" bytes read",
+							GetFilename(), strerror(errno), iCount-iToRead, iCount );
+			return false;
+		}
+
+		// EOF
+		if ( iGot==0 )
+		{
+			sError.SetSprintf ( "unexpected EOF in %s (%s); "INT64_FMT" of "INT64_FMT" bytes read",
+							GetFilename(), strerror(errno), iCount-iToRead, iCount );
+			return false;
+		}
 
 		iToRead -= iGot;
 		pCur += iGot;

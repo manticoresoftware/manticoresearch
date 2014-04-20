@@ -540,6 +540,13 @@ helping them and sql_query_info.</para></listitem>
 <listitem><para>Deprecated SetOverride() API call.</para></listitem>
 </itemizedlist>
 </para>
+<para>
+Changes for 2.2.3-beta:
+<itemizedlist>
+<listitem><para>Removed unneeded max_matches key from config file.</para>
+</listitem>
+</itemizedlist>
+</para>
 </sect1>
 
 <sect1 id="quick-tour"><title>Quick Sphinx usage tour</title>
@@ -5339,7 +5346,35 @@ local parts of a distributed index, so that the IDF is consistent (and precise) 
 a locally sharded index.
 </para></listitem>
 <listitem><para>'index_weights' - a named integer list (per-index user weights for ranking)</para></listitem>
-<listitem><para>'max_matches' - integer (per-query max matches value)</para></listitem>
+<listitem><para>'max_matches' - integer (per-query max matches value)</para>
+<para>
+Maximum amount of matches that the daemon keeps in RAM for each index and can return to the client.
+Default is 1000.
+</para>
+<para>
+Introduced in order to control and limit RAM usage, <code>max_matches</code>
+setting defines how much matches will be kept in RAM while searching each index.
+Every match found will still be <emphasis>processed</emphasis>; but only
+best N of them will be kept in memory and return to the client in the end.
+Assume that the index contains 2,000,000 matches for the query. You rarely
+(if ever) need to retrieve <emphasis>all</emphasis> of them. Rather, you need
+to scan all of them, but only choose "best" at most, say, 500 by some criteria
+(ie. sorted by relevance, or price, or anything else), and display those
+500 matches to the end user in pages of 20 to 100 matches. And tracking
+only the best 500 matches is much more RAM and CPU efficient than keeping
+all 2,000,000 matches, sorting them, and then discarding everything but
+the first 20 needed to display the search results page. <code>max_matches</code>
+controls N in that "best N" amount.
+</para>
+<para>
+This parameter noticeably affects per-query RAM and CPU usage.
+Values of 1,000 to 10,000 are generally fine, but higher limits must be
+used with care. Recklessly raising <code>max_matches</code> to 1,000,000
+means that <filename>searchd</filename> will have to allocate and
+initialize 1-million-entry matches buffer for <emphasis>every</emphasis>
+query. That will obviously increase per-query RAM usage, and in some cases
+can also noticeably impact performance.
+</para></listitem>
 <listitem><para>'max_query_time' - integer (max search time threshold, msec)</para></listitem>
 <listitem><para>'max_predicted_time' - integer (max predicted search time, see <xref linkend="conf-predicted-time-costs"/>)</para></listitem>
 <listitem><para>'ranker' - any of 'proximity_bm25', 'bm25', 'none', 'wordcount', 'proximity',
@@ -13000,54 +13035,6 @@ pid_file = /var/run/searchd.pid
 </sect2>
 
 
-<sect2 id="conf-max-matches"><title>max_matches</title>
-<para>
-Maximum amount of matches that the daemon keeps in RAM for each index and can return to the client.
-Optional, default is 1000.
-</para>
-<para>
-Introduced in order to control and limit RAM usage, <code>max_matches</code>
-setting defines how much matches will be kept in RAM while searching each index.
-Every match found will still be <emphasis>processed</emphasis>; but only
-best N of them will be kept in memory and return to the client in the end.
-Assume that the index contains 2,000,000 matches for the query. You rarely
-(if ever) need to retrieve <emphasis>all</emphasis> of them. Rather, you need
-to scan all of them, but only choose "best" at most, say, 500 by some criteria
-(ie. sorted by relevance, or price, or anything else), and display those
-500 matches to the end user in pages of 20 to 100 matches. And tracking
-only the best 500 matches is much more RAM and CPU efficient than keeping
-all 2,000,000 matches, sorting them, and then discarding everything but
-the first 20 needed to display the search results page. <code>max_matches</code>
-controls N in that "best N" amount.
-</para>
-<para>
-This parameter noticeably affects per-query RAM and CPU usage.
-Values of 1,000 to 10,000 are generally fine, but higher limits must be
-used with care. Recklessly raising <code>max_matches</code> to 1,000,000
-means that <filename>searchd</filename> will have to allocate and
-initialize 1-million-entry matches buffer for <emphasis>every</emphasis>
-query. That will obviously increase per-query RAM usage, and in some cases
-can also noticeably impact performance.
-</para>
-<para>
-<b>CAVEAT EMPTOR!</b> Note that there also is <b>another</b> place where this limit
-is enforced. <code>max_matches</code> can be decreased on the fly
-through the <link linkend="api-func-setlimits">corresponding API call</link>,
-and the default value in the API is <b>also</b> set to 1,000. So in order
-to retrieve more than 1,000 matches to your application, you will have
-to change the configuration file, restart searchd, and set proper limit
-in <link linkend="api-func-setlimits">SetLimits()</link> call.
-Also note that you can not set the value in the API higher than the value
-in the .conf file. This is prohibited in order to have some protection
-against malicious and/or malformed requests.
-</para>
-<bridgehead>Example:</bridgehead>
-<programlisting>
-max_matches = 10000
-</programlisting>
-</sect2>
-
-
 <sect2 id="conf-seamless-rotate"><title>seamless_rotate</title>
 <para>
 Prevents <filename>searchd</filename> stalls while rotating indexes with huge amounts of data to precache.
@@ -13869,7 +13856,7 @@ However we can't hold unlimited # of such persistent connections, since each one
 when all of them are busy). This very directive limits the number. It affects the num of connections to each agent's host, across all distributed indexes.
 </para>
 <para>
-It is reasonable to set the value equal or less than <link linkend="conf-max-matches">max_matches</link> option of the agents.
+It is reasonable to set the value equal or less than <link linkend="conf-max-children">max_children</link> option of the agents.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>

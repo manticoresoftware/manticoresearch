@@ -501,7 +501,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "client_timeout",			0, NULL },
 	{ "max_children",			0, NULL },
 	{ "pid_file",				0, NULL },
-	{ "max_matches",			0, NULL },
+	{ "max_matches",			KEY_REMOVED, NULL },
 	{ "seamless_rotate",		0, NULL },
 	{ "preopen_indexes",		0, NULL },
 	{ "unlink_old",				0, NULL },

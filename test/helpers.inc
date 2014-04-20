@@ -2212,7 +2212,7 @@ class SphinxConfig
 
 	function WriteSearchdSettings ( $fp )
 	{
-		global $sd_log, $sd_query_log, $sd_read_timeout, $sd_max_children, $sd_pid_file, $sd_max_matches;
+		global $sd_log, $sd_query_log, $sd_read_timeout, $sd_max_children, $sd_pid_file;
 
 		if ( $this->_compat098 )
 		{
@@ -2229,7 +2229,6 @@ class SphinxConfig
 		fwrite ( $fp, "\tread_timeout	= $sd_read_timeout\n" );
 		fwrite ( $fp, "\tmax_children	= $sd_max_children\n" );
 		fwrite ( $fp, "\tpid_file		= ".$this->_sd_pid_file."\n" );
-		fwrite ( $fp, "\tmax_matches	= $sd_max_matches\n" );
 		if ( $this->IsRt() )
 			fwrite ( $fp, "\tworkers		= threads\n" );
 			

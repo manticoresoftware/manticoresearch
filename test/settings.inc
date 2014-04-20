@@ -8,7 +8,6 @@ $sd_query_log		= "query.log";
 $sd_read_timeout	= 5;
 $sd_max_children	= 30;
 $sd_pid_file		= "searchd.pid";
-$sd_max_matches		= 100000;
 
 $agent_address		= "127.0.0.1";
 $agent_port			= 6713;

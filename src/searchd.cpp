@@ -48,7 +48,7 @@ extern "C"
 #define NETOUTBUF				8192
 #define PING_INTERVAL			1000
 #define QLSTATE_FLUSH_MSEC		50
-
+#define DEFAULT_MAX_MATCHES		1000
 
 // don't shutdown on SIGKILL (debug purposes)
 // 1 - SIGKILL will shut down the whole daemon; 0 - watchdog will reincarnate the daemon
@@ -304,7 +304,6 @@ static int				g_iQueryLogFile	= -1;
 static CSphString		g_sQueryLogFile;
 static const char *		g_sPidFile		= NULL;
 static int				g_iPidFD		= -1;
-static int				g_iMaxMatches	= 1000;
 
 static int				g_iMaxCachedDocs	= 0;	// in bytes
 static int				g_iMaxCachedHits	= 0;	// in bytes
@@ -6067,7 +6066,7 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 
 		// get matches
 		int iMatches = tReq.GetInt ();
-		if ( iMatches<0 || iMatches>g_iMaxMatches )
+		if ( iMatches<0 )
 		{
 			tAgent.m_sFailure.SetSprintf ( "invalid match count received (count=%d)", iMatches );
 			return false;
@@ -6352,8 +6351,9 @@ static void ParseIndexList ( const CSphString & sIndexes, CSphVector<CSphString>
 }
 
 
-void CheckQuery ( const CSphQuery & tQuery, CSphString & sError )
+static void CheckQuery ( const CSphQuery & tQuery, CSphString & sError )
 {
+	#define LOC_ERROR(_msg) { sError.SetSprintf ( _msg ); return; }
 	#define LOC_ERROR1(_msg,_arg1) { sError.SetSprintf ( _msg, _arg1 ); return; }
 	#define LOC_ERROR2(_msg,_arg1,_arg2) { sError.SetSprintf ( _msg, _arg1, _arg2 ); return; }
 
@@ -6365,9 +6365,8 @@ void CheckQuery ( const CSphQuery & tQuery, CSphString & sError )
 	if ( tQuery.m_eRanker<0 || tQuery.m_eRanker>SPH_RANK_TOTAL )
 		LOC_ERROR1 ( "invalid ranking mode %d", tQuery.m_eRanker );
 
-	if ( tQuery.m_iMaxMatches<1 || tQuery.m_iMaxMatches>g_iMaxMatches )
-		LOC_ERROR2 ( "per-query max_matches=%d out of bounds (per-server max_matches=%d)",
-			tQuery.m_iMaxMatches, g_iMaxMatches );
+	if ( tQuery.m_iMaxMatches<1 )
+		LOC_ERROR ( "max_matches can not be less than one" );
 
 	if ( tQuery.m_iOffset<0 || tQuery.m_iOffset>=tQuery.m_iMaxMatches )
 		LOC_ERROR2 ( "offset out of bounds (offset=%d, max_matches=%d)",
@@ -6388,6 +6387,7 @@ void CheckQuery ( const CSphQuery & tQuery, CSphString & sError )
 	if ( tQuery.m_iOffset>0 && tQuery.m_bHasOuter )
 		LOC_ERROR1 ( "inner offset must be 0 when using outer order by (offset=%d)", tQuery.m_iOffset );
 
+	#undef LOC_ERROR
 	#undef LOC_ERROR1
 	#undef LOC_ERROR2
 }
@@ -6618,7 +6618,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 	}
 
 	// v.1.4
-	tQuery.m_iMaxMatches = g_iMaxMatches;
+	tQuery.m_iMaxMatches = DEFAULT_MAX_MATCHES;
 	if ( iVer>=0x104 )
 		tQuery.m_iMaxMatches = tReq.GetInt ();
 
@@ -21705,18 +21705,6 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_iExpansionLimit = hSearchd.GetInt ( "expansion_limit", 0 );
 	g_bOnDiskAttrs = ( hSearchd.GetInt ( "ondisk_attrs_default", 0 )==1 );
 	g_bOnDiskPools = ( strcmp ( hSearchd.GetStr ( "ondisk_attrs_default", "" ), "pool" )==0 );
-
-	if ( hSearchd("max_matches") )
-	{
-		int iMax = hSearchd["max_matches"].intval();
-		if ( iMax<0 || iMax>10000000 )
-		{
-			sphWarning ( "max_matches=%d out of bounds; using default 1000", iMax );
-		} else
-		{
-			g_iMaxMatches = iMax;
-		}
-	}
 
 	if ( hSearchd("subtree_docs_cache") )
 		g_iMaxCachedDocs = hSearchd.GetSize ( "subtree_docs_cache", g_iMaxCachedDocs );

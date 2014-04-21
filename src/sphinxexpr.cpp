@@ -4574,6 +4574,68 @@ protected:
 	}
 };
 
+class Expr_StrIn_c : public Expr_ArgVsConstSet_c<int64_t>
+{
+protected:
+	CSphAttrLocator			m_tLocator;
+	int						m_iLocator;
+	const BYTE *			m_pStrings;
+	UservarIntSet_c *		m_pUservar;
+	CSphVector<uint64_t>	m_dHashes;
+
+public:
+	Expr_StrIn_c ( const CSphAttrLocator & tLoc, int iLocator, ConstList_c * pConsts, UservarIntSet_c * pUservar )
+		: Expr_ArgVsConstSet_c<int64_t> ( NULL, pConsts )
+		, m_tLocator ( tLoc )
+		, m_iLocator ( iLocator )
+		, m_pStrings ( NULL )
+		, m_pUservar ( pUservar )
+	{
+		assert ( tLoc.m_iBitOffset>=0 && tLoc.m_iBitCount>0 );
+		assert ( !pConsts || !pUservar );
+
+		const char * sExpr = pConsts->m_sExpr.cstr();
+		int iExprLen = pConsts->m_sExpr.Length();
+
+		const int64_t * pFilter = m_pUservar ? m_pUservar->Begin() : m_dValues.Begin();
+		const int64_t * pFilterMax = pFilter + ( m_pUservar ? m_pUservar->GetLength() : m_dValues.GetLength() );
+
+		for ( const int64_t * pCur=pFilter; pCur<pFilterMax; pCur++ )
+		{
+			int64_t iVal = *pCur;
+			int iOfs = (int)( iVal>>32 ) + 1;
+			int iLen = (int)( iVal & 0xffffffffUL ) - 2;
+			if ( iOfs>=0 && iOfs+iLen<=iExprLen )
+				m_dHashes.Add ( sphFNV64 ( sExpr + iOfs, iLen ) );
+		}
+
+		m_dHashes.Sort();
+	}
+
+	~Expr_StrIn_c()
+	{
+		SafeRelease ( m_pUservar );
+	}
+
+	virtual int IntEval ( const CSphMatch & tMatch ) const
+	{
+		const BYTE * pVal;
+		SphAttr_t iOfs = tMatch.GetAttr ( m_tLocator );
+		if ( iOfs<=0 )
+			return 0;
+		int iLen = sphUnpackStr ( m_pStrings + iOfs, &pVal );
+		return this->m_dHashes.BinarySearch ( sphFNV64 ( pVal, iLen ) )!=NULL;
+	}
+
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
+	{
+		if ( eCmd==SPH_EXPR_SET_STRING_POOL )
+			m_pStrings = (const BYTE*)pArg;
+		if ( eCmd==SPH_EXPR_GET_DEPENDENT_COLS )
+			static_cast < CSphVector<int>* > ( pArg )->Add ( m_iLocator );
+	}
+};
+
 //////////////////////////////////////////////////////////////////////////
 
 /// generic BITDOT() evaluator
@@ -4960,6 +5022,8 @@ ISphExpr * ExprParser_t::CreateInNode ( int iNode )
 					return new Expr_MVAIn_c<false> ( tLeft.m_tLocator, tLeft.m_iLocator, tRight.m_pConsts, NULL );
 				case TOK_ATTR_MVA64:
 					return new Expr_MVAIn_c<true> ( tLeft.m_tLocator, tLeft.m_iLocator, tRight.m_pConsts, NULL );
+				case TOK_ATTR_STRING:
+					return new Expr_StrIn_c ( tLeft.m_tLocator, tLeft.m_iLocator, tRight.m_pConsts, NULL );
 				case TOK_ATTR_JSON:
 					return new Expr_JsonFieldIn_c ( tRight.m_pConsts, NULL, CreateTree ( m_dNodes [ iNode ].m_iLeft ) );
 				default:
@@ -4997,6 +5061,8 @@ ISphExpr * ExprParser_t::CreateInNode ( int iNode )
 					return new Expr_MVAIn_c<false> ( tLeft.m_tLocator, tLeft.m_iLocator, NULL, pUservar );
 				case TOK_ATTR_MVA64:
 					return new Expr_MVAIn_c<true> ( tLeft.m_tLocator, tLeft.m_iLocator, NULL, pUservar );
+				case TOK_ATTR_STRING:
+					return new Expr_StrIn_c ( tLeft.m_tLocator, tLeft.m_iLocator, tRight.m_pConsts, NULL );
 				case TOK_ATTR_JSON:
 					return new Expr_JsonFieldIn_c ( NULL, pUservar, CreateTree ( m_dNodes[iNode].m_iLeft ) );
 				default:

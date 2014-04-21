@@ -238,6 +238,10 @@ INSERT INTO cmp_table VALUES
 <sphinxql>SELECT 0 zero, SINT(-1) negative, log2(0), log2(zero), log2(-1), log2(negative) FROM cmp LIMIT 1</sphinxql>
 <sphinxql>SELECT 0 zero, SINT(-1) negative, log10(0), log10(zero), log10(-1), ln(negative) FROM cmp LIMIT 1</sphinxql>
 <sphinxql>SELECT 0 zero, SINT(-1) negative, sqrt(0), sqrt(zero), sqrt(-1), sqrt(negative) FROM cmp LIMIT 1</sphinxql>
+
+<!-- IN() function for string attributes -->
+<sphinxql>SELECT IN(kk,'one','ten','eleventy') FROM test</sphinxql>
+<sphinxql>SELECT IN(kk,'is','not','there') FROM test</sphinxql>
 </sphqueries>
 
 </test>

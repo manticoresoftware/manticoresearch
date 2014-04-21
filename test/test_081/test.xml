@@ -42,6 +42,17 @@ index all
 
 	hitless_words = all
 }
+
+index some1
+{
+	source = test
+	path = <data_path/>/some1
+
+	hitless_words = <this_test/>/words1.txt <this_test/>/words2.txt
+	html_strip		= 1
+	index_sp		= 1
+	index_zones		= zone*
+}
 </config>
 
 <db_create>
@@ -121,6 +132,12 @@ insert into sph_test values
 	<query mode="extended2" index="none">basket$</query>
 	<query mode="extended2" index="some">basket$</query>
 	<query mode="extended2" index="all ">basket$</query>
+	
+	<!-- regressions hitless vs extended query operators -->
+	<query mode="extended2" index="some1">"and the tree" &lt;&lt; Woodman </query>
+	<query mode="extended2" index="some1">Tin Woodman "and the tree"</query>
+	<query mode="extended2" index="some1">ZONESPAN:(zoneC,zoneB) Tin Woodman "and the tree"</query>
+	<query mode="extended2" index="some1">Woodman NEAR/10 "and the tree"</query>
 </queries>
 
 </test>

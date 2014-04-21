@@ -3,11 +3,6 @@
 
 <name>blend characters</name>
 
-<requires>
-	<variant_match />
-</requires>
-
-
 <config>
 indexer
 {

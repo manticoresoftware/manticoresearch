@@ -82,6 +82,45 @@ index fl
 	path			= <data_path/>/fl
 	docinfo			= extern
 }
+
+source src_blend
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1 as id, 'dummy1 dummy1 dummy1 dummy1 X-COM' as title, 'dummy1 dummy1, dummy1, dummy1 dummy1 dummy1 valid dummy1 dummy1 dummy1 X-COM, dummy1' as body
+	sql_field_string	= title
+	sql_field_string	= body
+}
+
+index idx_blend_crc
+{
+	source			= src_blend
+	path			= <data_path/>/idx_blend_crc
+	docinfo			= extern
+	
+	morphology		= stem_enru
+	min_prefix_len	= 3
+	enable_star		= 1
+	index_exact_words	= 1
+	blend_mode		= trim_head, trim_tail, trim_both
+	blend_chars 	= +, %, -
+	dict = crc	
+}
+
+index idx_blend_kw
+{
+	source			= src_blend
+	path			= <data_path/>/idx_blend_kw
+	docinfo			= extern
+	
+	morphology		= stem_enru
+	min_prefix_len	= 3
+	enable_star		= 1
+	index_exact_words	= 1
+	blend_mode		= trim_head, trim_tail, trim_both
+	blend_chars 	= +, %, -
+	dict			= keywords
+}
 </config>
 
 <db_create>
@@ -128,6 +167,11 @@ CREATE TABLE start_end_table
 	<sphinxql>select * from fl where match (' (@title we are) (@body live there) from time ')</sphinxql>
 	<sphinxql>select * from fl where match (' are (@body we) from time ')</sphinxql>
 	<sphinxql>select * from fl where match (' are (@body we) from (@title time the) here ')</sphinxql>
+	
+	<!-- regression of field end marker vs blended -->
+	<sphinxql>select * from idx_blend_crc where match (' x-com NEAR/10 valid')</sphinxql>
+	<sphinxql>select * from idx_blend_kw where match (' x-com NEAR/10 valid ')</sphinxql>
+	<sphinxql>CALL SNIPPETS ( 'dummy1 dummy1 valid dummy1 dummy1 dummy1 X-COM, dummy1', 'idx_blend_kw', 'x-com NEAR/10 valid', 1 as query_mode )</sphinxql>
 </sphqueries>
 
 <custom_insert><![CDATA[

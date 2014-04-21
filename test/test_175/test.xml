@@ -202,6 +202,22 @@ index rt_auto_expand
 	expand_keywords = 1
 }
 
+source some1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table1
+	sql_attr_uint	= gid
+	sql_field_string = title
+}
+
+
+index some1
+{
+	source = some1
+	path = <data_path/>/some1
+	hitless_words = all
+}
 </config>
 
 <db_create>
@@ -371,6 +387,25 @@ foreach ( $res as $r )
 {
 	unset ( $r["time"] );
 	$results[] = $r;
+}
+
+// regression hitless vs subtree cache
+$results[] = 'hitless vs subtree cache';
+$client->SetSortMode ( SPH_SORT_ATTR_ASC, 'title' );
+$client->AddQuery ( "(\"aaa bbb\") (\"aaa cc\")", "some1" );
+$client->AddQuery ( "(\"aaa bbb\") (\"aaa cc\")", "some1" );
+$client->AddQuery ( "(\"aaa bbb\") (\"aaa cc\")", "some1" );
+$res = $client->RunQueries();
+if ( !$res )
+{
+	$results[] = $client->GetLastError();
+} else
+{
+	foreach ( $res as $r )
+	{
+		unset ( $r["time"] );
+		$results[] = $r;
+	}
 }
 
 // regression RT dictionary lost words on merge with ID64

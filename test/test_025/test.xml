@@ -40,42 +40,51 @@ index test
       <Variant>	min_prefix_len = 5 </Variant>
     </Dynamic>
 }
+
+index quo
+{
+	source			= srctest
+	path			= <data_path/>/quo
+    charset_type 	= utf-8
+	exceptions		= <this_test/>/s25.txt
+}
 </config>
 
 <queries>
-<query>a</query>
-<query>bb</query>
-<query>ccc</query>
-<query>dddd</query>
-<query>eeeee</query>
-<query>ffffff</query>
-<query>ggggggg</query>
-<query>b*</query>
-<query>cc*</query>
-<query>ddd*</query>
-<query>eeee*</query>
-<query>fffff*</query>
-<query>gggggg*</query>
-<query mode="extended2">a</query>
-<query mode="extended2">bb</query>
-<query mode="extended2">ccc</query>
-<query mode="extended2">dddd</query>
-<query mode="extended2">eeeee</query>
-<query mode="extended2">ffffff</query>
-<query mode="extended2">ggggggg</query>
-<query mode="extended2">b*</query>
-<query mode="extended2">cc*</query>
-<query mode="extended2">ddd*</query>
-<query mode="extended2">eeee*</query>
-<query mode="extended2">fffff*</query>
-<query mode="extended2">gggggg*</query>
-<query mode="phrase">hello me world</query>
-<query mode="phrase">hello two world</query>
-<query mode="phrase">hello four world</query>
-<query mode="phrase">hello me* world</query>
-<query mode="phrase">hello two* world</query>
-<query mode="phrase">hello four* world</query>
-<query mode="phrase">4 you</query>
+<query index="test">a</query>
+<query index="test">bb</query>
+<query index="test">ccc</query>
+<query index="test">dddd</query>
+<query index="test">eeeee</query>
+<query index="test">ffffff</query>
+<query index="test">ggggggg</query>
+<query index="test">b*</query>
+<query index="test">cc*</query>
+<query index="test">ddd*</query>
+<query index="test">eeee*</query>
+<query index="test">fffff*</query>
+<query index="test">gggggg*</query>
+<query mode="extended2" index="test">a</query>
+<query mode="extended2" index="test">bb</query>
+<query mode="extended2" index="test">ccc</query>
+<query mode="extended2" index="test">dddd</query>
+<query mode="extended2" index="test">eeeee</query>
+<query mode="extended2" index="test">ffffff</query>
+<query mode="extended2" index="test">ggggggg</query>
+<query mode="extended2" index="test">b*</query>
+<query mode="extended2" index="test">cc*</query>
+<query mode="extended2" index="test">ddd*</query>
+<query mode="extended2" index="test">eeee*</query>
+<query mode="extended2" index="test">fffff*</query>
+<query mode="extended2" index="test">gggggg*</query>
+<query mode="phrase" index="test">hello me world</query>
+<query mode="phrase" index="test">hello two world</query>
+<query mode="phrase" index="test">hello four world</query>
+<query mode="phrase" index="test">hello me* world</query>
+<query mode="phrase" index="test">hello two* world</query>
+<query mode="phrase" index="test">hello four* world</query>
+<query mode="phrase" index="test">4 you</query>
+<query mode="extended2" index="quo"> "hello two world"/1 </query>
 </queries>
 
 <db_create>

@@ -32,6 +32,14 @@ index test1
 	rt_field		= content
 }
 
+index test2
+{
+	type			= rt
+	path			= data/test2
+	rt_attr_uint	= idd
+	rt_field		= content
+}
+
 </Config>
 
 <SPHQueries>
@@ -61,6 +69,11 @@ index test1
 	<SPHinxQL>set autocommit=1</SPHinxQL>
 	<SPHinxQL>select * from test</SPHinxQL>
 	<SPHinxQL>select * from test1</SPHinxQL>
-</SPHQueries>
-
+	
+	<!-- regression failed insert got passed next time -->
+	<SPHinxQL>insert into test2 values (1, 'test', 11)</SPHinxQL>
+	<SPHinxQL>insert into test2 values (2, 'test of my things going well', 22), (1, 'test', 12)</SPHinxQL>
+	<SPHinxQL>insert into test2 values (3, 'test', 22), (3, 'test', 12), (3, 'test', 23)</SPHinxQL>
+	<SPHinxQL>select id from test2</SPHinxQL>
+</SPHQueries>	
 </Test>

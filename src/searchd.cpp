@@ -15019,6 +15019,7 @@ void HandleMysqlInsert ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt,
 	// fire exit
 	if ( !sError.IsEmpty() )
 	{
+		pIndex->RollBack(); // clean up collected data
 		pServed->Unlock();
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
@@ -18237,6 +18238,7 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 	}
 	sphLogDebug ( "RotateIndexGreedy: new index is readable" );
 
+	bool bNoMVP = true;
 	if ( !tIndex.m_bOnlyNew )
 	{
 		// rename current to old
@@ -18262,7 +18264,7 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 
 			CSphString sFakeError;
 			CSphAutofile fdTest ( sBuf, SPH_O_READ, sFakeError );
-			bool bNoMVP = ( fdTest.GetFD()<0 );
+			bNoMVP = ( fdTest.GetFD()<0 );
 			fdTest.Close();
 			if ( bNoMVP )
 				break; ///< no file, nothing to hold
@@ -18291,8 +18293,13 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 
 		// rollback old ones
 		if ( !tIndex.m_bOnlyNew )
-			for ( int j=0; j<=sphGetExtCount ( uVersion ); j++ ) ///< <=, not <, since we have the .mvp at the end of these lists
+		{
+			for ( int j=0; j<sphGetExtCount ( uVersion ); j++ )
 				TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_TYPE_OLD, uVersion )[j], sphGetExts ( SPH_EXT_TYPE_CUR, uVersion )[j], sAction, true );
+
+			if ( !bNoMVP )
+				TryRename ( sIndex, sPath, sphGetExt ( SPH_EXT_TYPE_OLD, SPH_EXT_MVP ), sphGetExt ( SPH_EXT_TYPE_CUR, SPH_EXT_MVP ), sAction, true );
+		}
 
 		return false;
 	}

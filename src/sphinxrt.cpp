@@ -2824,6 +2824,7 @@ void RtIndex_t::Commit ( int * pDeleted )
 		pAcc->m_pIndex = NULL;
 		pAcc->m_dAccumRows.Resize ( 0 );
 		pAcc->m_dStrings.Resize ( 1 );
+		pAcc->m_dMvas.Resize ( 1 );
 		pAcc->m_dPerDocHitsCount.Resize ( 0 );
 		pAcc->ResetDict();
 		return;
@@ -2851,6 +2852,7 @@ void RtIndex_t::Commit ( int * pDeleted )
 	pAcc->m_dAccum.Resize ( 0 );
 	pAcc->m_dAccumRows.Resize ( 0 );
 	pAcc->m_dStrings.Resize ( 1 ); // handle dummy zero offset
+	pAcc->m_dMvas.Resize ( 1 );
 	pAcc->m_dPerDocHitsCount.Resize ( 0 );
 	pAcc->ResetDict();
 
@@ -3225,6 +3227,10 @@ void RtIndex_t::RollBack ()
 	// clean up parts we no longer need
 	pAcc->m_dAccum.Resize ( 0 );
 	pAcc->m_dAccumRows.Resize ( 0 );
+	pAcc->m_dStrings.Resize ( 1 ); // handle dummy zero offset
+	pAcc->m_dMvas.Resize ( 1 );
+	pAcc->m_dPerDocHitsCount.Resize ( 0 );
+	pAcc->ResetDict();
 
 	// finish cleaning up and release accumulator
 	pAcc->m_pIndex = NULL;

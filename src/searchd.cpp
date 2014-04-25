@@ -19604,20 +19604,27 @@ bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgent, cons
 				if ( isdigit(*p) )
 					break;
 
-				if ( p==pAnchor )
+#if !USE_WINDOWS
+				if ( pCurrent->m_iFamily!=AF_UNIX )
 				{
-					sphWarning ( "index '%s': agent '%s': port number expected near '%s' - SKIPPING AGENT",
-						szIndexName, pAgent->cstr(), p );
-					return false;
-				}
-				pCurrent->m_iPort = atoi ( pAnchor );
+#endif
+					if ( p==pAnchor )
+					{
+						sphWarning ( "index '%s': agent '%s': port number expected near '%s' - SKIPPING AGENT",
+							szIndexName, pAgent->cstr(), p );
+						return false;
+					}
+					pCurrent->m_iPort = atoi ( pAnchor );
 
-				if ( !IsPortInRange ( pCurrent->m_iPort ) )
-				{
-					sphWarning ( "index '%s': agent '%s': invalid port number near '%s' - SKIPPING AGENT",
-						szIndexName, pAgent->cstr(), p );
-					return false;
+					if ( !IsPortInRange ( pCurrent->m_iPort ) )
+					{
+						sphWarning ( "index '%s': agent '%s': invalid port number near '%s' - SKIPPING AGENT",
+							szIndexName, pAgent->cstr(), p );
+						return false;
+					}
+#if !USE_WINDOWS
 				}
+#endif
 
 				if ( *p=='|' )
 				{

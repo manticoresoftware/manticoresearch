@@ -2833,7 +2833,7 @@ public:
 
 public:
 	explicit	NetOutputBuffer_c ( int iSock );
-	~NetOutputBuffer_c() { free ( m_pBuffer ); }
+	~NetOutputBuffer_c() { SafeDeleteArray ( m_pBuffer ); }
 
 	bool		SendInt ( int iValue )			{ return SendT<int> ( htonl ( iValue ) ); }
 	bool		SendAsDword ( int64_t iValue ) ///< sends the 32bit MAX_UINT if the value is greater than it.
@@ -2985,7 +2985,7 @@ NetOutputBuffer_c::NetOutputBuffer_c ( int iSock )
 	, m_bFlushEnabled ( true )
 {
 	assert ( m_iSock>0 );
-	m_pBuffer = static_cast<BYTE *> ( malloc ( m_iBufferSize ) );
+	m_pBuffer = new BYTE [ m_iBufferSize ];
 	m_pBufferPtr = m_pBuffer;
 }
 
@@ -3272,10 +3272,14 @@ bool NetOutputBuffer_c::ResizeIf ( int iToAdd )
 {
 	if ( ( m_pBufferPtr+iToAdd )>=( m_pBuffer+m_iBufferSize ) )
 	{
+		int iOldBufferSize = m_iBufferSize;
 		m_iBufferSize *= 2;
 		int iOffset1 = ( m_pBufferPtr-m_pBuffer );
 		int iOffset2 = ( m_pSize-m_pBuffer );
-		m_pBuffer = static_cast<BYTE *> ( realloc ( m_pBuffer, m_iBufferSize ) );
+		BYTE * pNew = new BYTE [ m_iBufferSize ];
+		memcpy ( pNew, m_pBuffer, iOldBufferSize );
+		SafeDeleteArray ( m_pBuffer );
+		m_pBuffer = pNew;
 		m_pBufferPtr = ( m_pBuffer+iOffset1 );
 		m_pSize = ( m_pBuffer+iOffset2 );
 	}

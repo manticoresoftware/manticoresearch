@@ -1027,7 +1027,7 @@ public:
 		return ( uHitpos & FIELDEND_MASK )!=0;
 	}
 
-	static inline DWORD GetLCS ( Hitpos_t uHitpos )
+	static inline DWORD GetPosWithField ( Hitpos_t uHitpos )
 	{
 		return uHitpos & ~FIELDEND_MASK;
 	}

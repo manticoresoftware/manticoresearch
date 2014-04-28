@@ -11548,7 +11548,7 @@ int CSphHitBuilder::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWO
 		}
 
 		// replacement of hit itself by field-end form
-		if ( d1==0 && d2==0 && HITMAN::GetLCS ( pHit->m_uWordPos )==HITMAN::GetLCS ( l3 ) )
+		if ( d1==0 && d2==0 && HITMAN::GetPosWithField ( pHit->m_uWordPos )==HITMAN::GetPosWithField ( l3 ) )
 		{
 			l3 = pHit->m_uWordPos;
 			pHit++;

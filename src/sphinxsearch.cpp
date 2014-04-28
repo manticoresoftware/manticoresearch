@@ -899,7 +899,7 @@ protected:
 	struct State_t
 	{
 		int m_iTagQword;
-		int m_iExpHitpos;
+		DWORD m_uExpHitposWithField;
 	};
 
 protected:
@@ -3719,30 +3719,30 @@ FSMphrase::FSMphrase ( const CSphVector<ExtNode_i *> & dQwords, const XQNode_t &
 
 inline bool FSMphrase::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 {
-	int iHitpos = HITMAN::GetLCS ( pHit->m_uHitpos );
+	DWORD uHitposWithField = HITMAN::GetPosWithField ( pHit->m_uHitpos );
 
 	// adding start state for start hit
 	if ( pHit->m_uQuerypos==m_dAtomPos[0] )
 	{
 		State_t & tState = m_dStates.Add();
 		tState.m_iTagQword = 0;
-		tState.m_iExpHitpos = iHitpos + m_dQposDelta[0];
+		tState.m_uExpHitposWithField = uHitposWithField + m_dQposDelta[0];
 	}
 
 	// updating states
 	for ( int i=m_dStates.GetLength()-1; i>=0; i-- )
 	{
-		if ( m_dStates[i].m_iExpHitpos<iHitpos )
+		if ( m_dStates[i].m_uExpHitposWithField<uHitposWithField )
 		{
 			m_dStates.RemoveFast(i); // failed to match
 			continue;
 		}
 
 		// get next state
-		if ( m_dStates[i].m_iExpHitpos==iHitpos && m_dAtomPos [ m_dStates[i].m_iTagQword+1 ]==pHit->m_uQuerypos )
+		if ( m_dStates[i].m_uExpHitposWithField==uHitposWithField && m_dAtomPos [ m_dStates[i].m_iTagQword+1 ]==pHit->m_uQuerypos )
 		{
 			m_dStates[i].m_iTagQword++; // check for next elm in query
-			m_dStates[i].m_iExpHitpos = iHitpos + m_dQposDelta [ pHit->m_uQuerypos - m_dAtomPos[0] ];
+			m_dStates[i].m_uExpHitposWithField = uHitposWithField + m_dQposDelta [ pHit->m_uQuerypos - m_dAtomPos[0] ];
 		}
 
 		// checking if state successfully matched
@@ -3752,7 +3752,7 @@ inline bool FSMphrase::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 
 			// emit directly into m_dHits, this is no need to disturb m_dMyHits here.
 			dTarget->m_uDocid = pHit->m_uDocid;
-			dTarget->m_uHitpos = iHitpos - uSpanlen;
+			dTarget->m_uHitpos = uHitposWithField - uSpanlen;
 			dTarget->m_uQuerypos = (WORD) m_dAtomPos[0];
 			dTarget->m_uMatchlen = dTarget->m_uSpanlen = (WORD)( uSpanlen + 1 );
 			dTarget->m_uWeight = m_dAtomPos.GetLength();
@@ -3788,21 +3788,21 @@ inline bool FSMproximity::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 {
 	// walk through the hitlist and update context
 	int iQindex = pHit->m_uQuerypos - m_uMinQpos;
-	DWORD uHitpos = HITMAN::GetLCS ( pHit->m_uHitpos );
+	DWORD uHitposWithField = HITMAN::GetPosWithField ( pHit->m_uHitpos );
 
 	// check if the word is new
 	if ( m_dProx[iQindex]==UINT_MAX )
 		m_uWords++;
 
 	// update the context
-	m_dProx[iQindex] = uHitpos;
+	m_dProx[iQindex] = uHitposWithField;
 
 	// check if the incoming hit is out of bounds, or affects min pos
-	if ( uHitpos>=m_uExpPos // out of expected bounds
+	if ( uHitposWithField>=m_uExpPos // out of expected bounds
 		|| iQindex==m_iMinQindex ) // or simply affects min pos
 	{
 		m_iMinQindex = iQindex;
-		int iMinPos = uHitpos - m_uQLen - m_iMaxDistance;
+		int iMinPos = uHitposWithField - m_uQLen - m_iMaxDistance;
 
 		ARRAY_FOREACH ( i, m_dProx )
 			if ( m_dProx[i]!=UINT_MAX )
@@ -3813,10 +3813,10 @@ inline bool FSMproximity::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 					m_uWords--;
 					continue;
 				}
-				if ( m_dProx[i]<uHitpos )
+				if ( m_dProx[i]<uHitposWithField )
 				{
 					m_iMinQindex = i;
-					uHitpos = m_dProx[i];
+					uHitposWithField = m_dProx[i];
 				}
 			}
 
@@ -3888,12 +3888,12 @@ FSMmultinear::FSMmultinear ( const CSphVector<ExtNode_i *> & dNodes, const XQNod
 inline bool FSMmultinear::HitFSM ( const ExtHit_t* pHit, ExtHit_t* pTarget )
 {
 	// walk through the hitlist and update context
-	DWORD uHitpos = HITMAN::GetLCS ( pHit->m_uHitpos );
+	DWORD uHitposWithField = HITMAN::GetPosWithField ( pHit->m_uHitpos );
 	WORD uNpos = pHit->m_uNodepos;
 	WORD uQpos = pHit->m_uQuerypos;
 
 	// skip dupe hit (may be emitted by OR node, for example)
-	if ( m_uLastP==uHitpos )
+	if ( m_uLastP==uHitposWithField )
 	{
 		// lets choose leftmost (in query) from all dupes. 'a NEAR/2 a' case
 		if ( m_bTwofer && uNpos<m_uFirstNpos )
@@ -3925,9 +3925,9 @@ inline bool FSMmultinear::HitFSM ( const ExtHit_t* pHit, ExtHit_t* pTarget )
 	}
 
 	// probably new chain
-	if ( m_uLastP==0 || ( m_uLastP + m_uLastML + m_iNear )<=uHitpos )
+	if ( m_uLastP==0 || ( m_uLastP + m_uLastML + m_iNear )<=uHitposWithField )
 	{
-		m_uFirstHit = m_uLastP = uHitpos;
+		m_uFirstHit = m_uLastP = uHitposWithField;
 		m_uLastML = pHit->m_uMatchlen;
 		m_uLastSL = pHit->m_uSpanlen;
 		m_uWeight = m_uLastW = pHit->m_uWeight;
@@ -3948,11 +3948,11 @@ inline bool FSMmultinear::HitFSM ( const ExtHit_t* pHit, ExtHit_t* pTarget )
 	if ( m_bTwofer )
 	{
 		// special case for twofer: hold the overlapping
-		if ( ( m_uFirstHit + m_uLastML )>uHitpos
-			&& ( m_uFirstHit + m_uLastML )<( uHitpos + pHit->m_uMatchlen )
+		if ( ( m_uFirstHit + m_uLastML )>uHitposWithField
+			&& ( m_uFirstHit + m_uLastML )<( uHitposWithField + pHit->m_uMatchlen )
 			&& m_uLastML!=pHit->m_uMatchlen )
 		{
-			m_uFirstHit = m_uLastP = uHitpos;
+			m_uFirstHit = m_uLastP = uHitposWithField;
 			m_uLastML = pHit->m_uMatchlen;
 			m_uLastSL = pHit->m_uSpanlen;
 			m_uWeight = m_uLastW = pHit->m_uWeight;
@@ -3962,14 +3962,14 @@ inline bool FSMmultinear::HitFSM ( const ExtHit_t* pHit, ExtHit_t* pTarget )
 		}
 		if ( uNpos==m_uFirstNpos )
 		{
-			if ( m_uLastP < uHitpos )
+			if ( m_uLastP < uHitposWithField )
 			{
 				m_uPrelastML = m_uLastML;
 				m_uPrelastSL = m_uLastSL;
 				m_uPrelastP = m_uLastP;
 				m_uPrelastW = pHit->m_uWeight;
 
-				m_uFirstHit = m_uLastP = uHitpos;
+				m_uFirstHit = m_uLastP = uHitposWithField;
 				m_uLastML = pHit->m_uMatchlen;
 				m_uLastSL = pHit->m_uSpanlen;
 				m_uWeight = m_uLastW = m_uPrelastW;
@@ -4003,7 +4003,7 @@ inline bool FSMmultinear::HitFSM ( const ExtHit_t* pHit, ExtHit_t* pTarget )
 					if ( uNpos==dHit.m_uNodepos )
 					{
 						m_uWeight -= dHit.m_uWeight;
-						m_uFirstHit = HITMAN::GetLCS ( dHit.m_uHitpos );
+						m_uFirstHit = HITMAN::GetPosWithField ( dHit.m_uHitpos );
 						ShiftRing();
 					// last addition same as the first. So, we can shift
 					} else if ( uNpos==m_dRing [ RingTail() ].m_uNodepos )
@@ -4023,7 +4023,7 @@ inline bool FSMmultinear::HitFSM ( const ExtHit_t* pHit, ExtHit_t* pTarget )
 		} else if ( uNpos==m_dRing[m_iRing].m_uNodepos )
 		{
 			m_uWeight -= m_dRing[m_iRing].m_uWeight;
-			m_uFirstHit = HITMAN::GetLCS ( m_dRing[m_iRing].m_uHitpos );
+			m_uFirstHit = HITMAN::GetPosWithField ( m_dRing[m_iRing].m_uHitpos );
 			ShiftRing();
 		// last addition same as the tail. So, we can move the tail onto it.
 		} else if ( uNpos==m_dRing [ RingTail() ].m_uNodepos )
@@ -4043,7 +4043,7 @@ inline bool FSMmultinear::HitFSM ( const ExtHit_t* pHit, ExtHit_t* pTarget )
 	{
 		pTarget->m_uDocid = pHit->m_uDocid;
 		pTarget->m_uHitpos = Hitpos_t ( m_uFirstHit ); // !COMMIT strictly speaking this is creation from LCS not value
-		pTarget->m_uMatchlen = (WORD)( uHitpos - m_uFirstHit + m_uLastML );
+		pTarget->m_uMatchlen = (WORD)( uHitposWithField - m_uFirstHit + m_uLastML );
 		pTarget->m_uWeight = m_uWeight;
 		m_uPrelastP = 0;
 
@@ -4052,7 +4052,7 @@ inline bool FSMmultinear::HitFSM ( const ExtHit_t* pHit, ExtHit_t* pTarget )
 			pTarget->m_uQuerypos = Min ( m_uFirstQpos, pHit->m_uQuerypos );
 			pTarget->m_uSpanlen = 2;
 			pTarget->m_uQposMask = ( 1 << ( Max ( m_uFirstQpos, pHit->m_uQuerypos ) - pTarget->m_uQuerypos ) );
-			m_uFirstHit = m_uLastP = uHitpos;
+			m_uFirstHit = m_uLastP = uHitposWithField;
 			m_uWeight = pHit->m_uWeight;
 			m_uFirstQpos = pHit->m_uQuerypos;
 		} else
@@ -4074,7 +4074,7 @@ inline bool FSMmultinear::HitFSM ( const ExtHit_t* pHit, ExtHit_t* pTarget )
 		return true;
 	}
 
-	m_uLastP = uHitpos;
+	m_uLastP = uHitposWithField;
 	return false;
 }
 
@@ -4330,13 +4330,13 @@ const ExtHit_t * ExtQuorum_c::GetHitsChunkDupesTail ()
 	while ( iHit<MAX_HITS-1 )
 	{
 		int iMinChild = -1;
-		DWORD uMinPos = UINT_MAX;
+		DWORD uMinPosWithField = UINT_MAX;
 		ARRAY_FOREACH ( i, m_dChildren )
 		{
 			const ExtHit_t * pCurHit = m_dChildren[i].m_pCurHit;
-			if ( pCurHit && pCurHit->m_uDocid==m_uMatchedDocid && HITMAN::GetLCS ( pCurHit->m_uHitpos ) < uMinPos )
+			if ( pCurHit && pCurHit->m_uDocid==m_uMatchedDocid && HITMAN::GetPosWithField ( pCurHit->m_uHitpos ) < uMinPosWithField )
 			{
-				uMinPos = HITMAN::GetLCS ( pCurHit->m_uHitpos );
+				uMinPosWithField = HITMAN::GetPosWithField ( pCurHit->m_uHitpos );
 				iMinChild = i;
 			}
 		}
@@ -4361,7 +4361,7 @@ struct QuorumCmpHitPos_fn
 {
 	inline bool IsLess ( const ExtHit_t & a, const ExtHit_t & b ) const
 	{
-		return HITMAN::GetLCS ( a.m_uHitpos )<HITMAN::GetLCS ( b.m_uHitpos );
+		return HITMAN::GetPosWithField ( a.m_uHitpos )<HITMAN::GetPosWithField ( b.m_uHitpos );
 	}
 };
 
@@ -4395,15 +4395,15 @@ const ExtHit_t * ExtQuorum_c::GetHitsChunkDupes ( const ExtDoc_t * pDocs, SphDoc
 		while ( iHit<MAX_HITS-1 )
 		{
 			int iMinChild = -1;
-			DWORD uMinPos = ( m_iMyLast<iMyEnd ? HITMAN::GetLCS ( m_dQuorumHits[m_iMyLast].m_uHitpos ) : UINT_MAX );
+			DWORD uMinPosWithField = ( m_iMyLast<iMyEnd ? HITMAN::GetPosWithField ( m_dQuorumHits[m_iMyLast].m_uHitpos ) : UINT_MAX );
 			if ( bCheckChildren )
 			{
 				ARRAY_FOREACH ( i, m_dChildren )
 				{
 					const ExtHit_t * pCurHit = m_dChildren[i].m_pCurHit;
-					if ( pCurHit && pCurHit->m_uDocid==uDocid && HITMAN::GetLCS ( pCurHit->m_uHitpos ) < uMinPos )
+					if ( pCurHit && pCurHit->m_uDocid==uDocid && HITMAN::GetPosWithField ( pCurHit->m_uHitpos ) < uMinPosWithField )
 					{
-						uMinPos = HITMAN::GetLCS ( pCurHit->m_uHitpos );
+						uMinPosWithField = HITMAN::GetPosWithField ( pCurHit->m_uHitpos );
 						iMinChild = i;
 					}
 				}
@@ -4451,7 +4451,7 @@ const ExtHit_t * ExtQuorum_c::GetHitsChunkSimple ( const ExtDoc_t * pDocs, SphDo
 	while ( iHit<MAX_HITS-1 )
 	{
 		int iMinChild = -1;
-		DWORD uMinPos = UINT_MAX;
+		DWORD uMinPosWithField = UINT_MAX;
 
 		if ( m_uMatchedDocid )
 		{
@@ -4460,9 +4460,9 @@ const ExtHit_t * ExtQuorum_c::GetHitsChunkSimple ( const ExtDoc_t * pDocs, SphDo
 			ARRAY_FOREACH ( i, m_dChildren )
 			{
 				const ExtHit_t * pCurHit = m_dChildren[i].m_pCurHit;
-				if ( pCurHit && pCurHit->m_uDocid==m_uMatchedDocid && HITMAN::GetLCS ( pCurHit->m_uHitpos ) < uMinPos )
+				if ( pCurHit && pCurHit->m_uDocid==m_uMatchedDocid && HITMAN::GetPosWithField ( pCurHit->m_uHitpos ) < uMinPosWithField )
 				{
-					uMinPos = HITMAN::GetLCS ( pCurHit->m_uHitpos ); // !COMMIT bench/fix, is LCS right here?
+					uMinPosWithField = HITMAN::GetPosWithField ( pCurHit->m_uHitpos ); // !COMMIT bench/fix, is LCS right here?
 					iMinChild = i;
 				}
 			}
@@ -4483,7 +4483,7 @@ const ExtHit_t * ExtQuorum_c::GetHitsChunkSimple ( const ExtDoc_t * pDocs, SphDo
 			while ( !bDocMatched && pDocs->m_uDocid!=DOCID_MAX )
 			{
 				iMinChild = -1;
-				uMinPos = UINT_MAX;
+				uMinPosWithField = UINT_MAX;
 				ARRAY_FOREACH ( i, m_dChildren )
 				{
 					TermTuple_t & tElem = m_dChildren[i];
@@ -4497,9 +4497,9 @@ const ExtHit_t * ExtQuorum_c::GetHitsChunkSimple ( const ExtDoc_t * pDocs, SphDo
 					if ( tElem.m_pCurHit->m_uDocid==pDocs->m_uDocid )
 					{
 						bDocMatched = true;
-						if ( HITMAN::GetLCS ( tElem.m_pCurHit->m_uHitpos ) < uMinPos )
+						if ( HITMAN::GetPosWithField ( tElem.m_pCurHit->m_uHitpos ) < uMinPosWithField )
 						{
-							uMinPos = HITMAN::GetLCS ( tElem.m_pCurHit->m_uHitpos );
+							uMinPosWithField = HITMAN::GetPosWithField ( tElem.m_pCurHit->m_uHitpos );
 							iMinChild = i;
 						}
 					}
@@ -4673,7 +4673,7 @@ ExtOrder_c::~ExtOrder_c ()
 int ExtOrder_c::GetNextHit ( SphDocID_t uDocid )
 {
 	// OPTIMIZE! implement PQ instead of full-scan
-	DWORD uMinPos = UINT_MAX;
+	DWORD uMinPosWithField = UINT_MAX;
 	int iChild = -1;
 	ARRAY_FOREACH ( i, m_dChildren )
 	{
@@ -4701,9 +4701,9 @@ int ExtOrder_c::GetNextHit ( SphDocID_t uDocid )
 		if ( m_pHits[i]->m_uDocid==uDocid )
 		{
 			// is he the best we can get?
-			if ( HITMAN::GetLCS ( m_pHits[i]->m_uHitpos ) < uMinPos )
+			if ( HITMAN::GetPosWithField ( m_pHits[i]->m_uHitpos ) < uMinPosWithField )
 			{
-				uMinPos = HITMAN::GetLCS ( m_pHits[i]->m_uHitpos );
+				uMinPosWithField = HITMAN::GetPosWithField ( m_pHits[i]->m_uHitpos );
 				iChild = i;
 			}
 		}
@@ -5755,9 +5755,9 @@ SphZoneHit_e ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit, int * pLa
 	if ( pZone )
 	{
 		// remove end markers that might mess up ordering
-		Hitpos_t uPos = HITMAN::GetLCS ( pHit->m_uHitpos );
-		int iSpan = FindSpan ( pZone->m_dStarts, uPos );
-		if ( iSpan<0 || uPos>pZone->m_dEnds[iSpan] )
+		DWORD uPosWithField = HITMAN::GetPosWithField ( pHit->m_uHitpos );
+		int iSpan = FindSpan ( pZone->m_dStarts, uPosWithField );
+		if ( iSpan<0 || uPosWithField>pZone->m_dEnds[iSpan] )
 			return SPH_ZONE_NO_SPAN;
 		if ( pLastSpan )
 			*pLastSpan = iSpan;
@@ -5997,9 +5997,9 @@ SphZoneHit_e ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit, int * pLa
 	if ( pZone )
 	{
 		// remove end markers that might mess up ordering
-		Hitpos_t uPos = HITMAN::GetLCS ( pHit->m_uHitpos );
-		int iSpan = FindSpan ( pZone->m_dStarts, uPos );
-		if ( iSpan<0 || uPos>pZone->m_dEnds[iSpan] )
+		DWORD uPosWithField = HITMAN::GetPosWithField ( pHit->m_uHitpos );
+		int iSpan = FindSpan ( pZone->m_dStarts, uPosWithField );
+		if ( iSpan<0 || uPosWithField>pZone->m_dEnds[iSpan] )
 			return SPH_ZONE_NO_SPAN;
 		if ( pLastSpan )
 			*pLastSpan = iSpan;
@@ -6233,7 +6233,7 @@ struct RankerState_Proximity_fn : public ISphExtra
 	BYTE m_uLCS[SPH_MAX_FIELDS];
 	BYTE m_uCurLCS;
 	int m_iExpDelta;
-	int m_iLastHitPos;
+	int m_iLastHitPosWithField;
 	int m_iFields;
 	const int * m_pWeights;
 
@@ -6247,7 +6247,7 @@ struct RankerState_Proximity_fn : public ISphExtra
 		memset ( m_uLCS, 0, sizeof(m_uLCS) );
 		m_uCurLCS = 0;
 		m_iExpDelta = -INT_MAX;
-		m_iLastHitPos = -INT_MAX;
+		m_iLastHitPosWithField = -INT_MAX;
 		m_iFields = iFields;
 		m_pWeights = pWeights;
 
@@ -6265,22 +6265,22 @@ struct RankerState_Proximity_fn : public ISphExtra
 		{
 			// all query keywords are unique
 			// simpler path (just do the delta)
-			const int iLcs = HITMAN::GetLCS ( pHlist->m_uHitpos );
-			int iDelta = iLcs - pHlist->m_uQuerypos;
-			if ( iLcs>m_iLastHitPos )
+			const int iPosWithField = HITMAN::GetPosWithField ( pHlist->m_uHitpos );
+			int iDelta = iPosWithField - pHlist->m_uQuerypos;
+			if ( iPosWithField>m_iLastHitPosWithField )
 				m_uCurLCS = ( ( iDelta==m_iExpDelta ) ? m_uCurLCS : 0 ) + BYTE(pHlist->m_uWeight);
 
 			DWORD uField = HITMAN::GetField ( pHlist->m_uHitpos );
 			if ( m_uCurLCS>m_uLCS[uField] )
 				m_uLCS[uField] = m_uCurLCS;
 
-			m_iLastHitPos = iLcs;
+			m_iLastHitPosWithField = iPosWithField;
 			m_iExpDelta = iDelta + pHlist->m_uSpanlen - 1; // !COMMIT why spanlen??
 		} else
 		{
 			// keywords are duplicated in the query
 			// so there might be multiple qpos entries sharing the same hitpos
-			DWORD uPos = HITMAN::GetLCS ( pHlist->m_uHitpos );
+			DWORD uPos = HITMAN::GetPosWithField ( pHlist->m_uHitpos );
 			DWORD uField = HITMAN::GetField ( pHlist->m_uHitpos );
 
 			// reset accumulated data from previous field
@@ -6327,7 +6327,7 @@ struct RankerState_Proximity_fn : public ISphExtra
 	{
 		m_uCurLCS = 0;
 		m_iExpDelta = -1;
-		m_iLastHitPos = -1;
+		m_iLastHitPosWithField = -1;
 
 		if_const ( HANDLE_DUPES )
 		{
@@ -6388,12 +6388,12 @@ struct RankerState_ProximityBM25Exact_fn : public ISphExtra
 	{
 		// upd LCS
 		DWORD uField = HITMAN::GetField ( pHlist->m_uHitpos );
-		int iLcs = HITMAN::GetLCS ( pHlist->m_uHitpos );
-		int iDelta = iLcs - pHlist->m_uQuerypos;
+		int iPosWithField = HITMAN::GetPosWithField ( pHlist->m_uHitpos );
+		int iDelta = iPosWithField - pHlist->m_uQuerypos;
 
-		if ( iDelta==m_iExpDelta && HITMAN::GetLCS ( pHlist->m_uHitpos )>=m_uMinExpPos )
+		if ( iDelta==m_iExpDelta && HITMAN::GetPosWithField ( pHlist->m_uHitpos )>=m_uMinExpPos )
 		{
-			if ( iLcs>m_iLastHitPos )
+			if ( iPosWithField>m_iLastHitPos )
 				m_uCurLCS = (BYTE)( m_uCurLCS + pHlist->m_uWeight );
 			if ( HITMAN::IsEnd ( pHlist->m_uHitpos )
 				&& (int)pHlist->m_uQuerypos==m_iMaxQuerypos
@@ -6403,7 +6403,7 @@ struct RankerState_ProximityBM25Exact_fn : public ISphExtra
 			}
 		} else
 		{
-			if ( iLcs>m_iLastHitPos )
+			if ( iPosWithField>m_iLastHitPos )
 				m_uCurLCS = BYTE(pHlist->m_uWeight);
 			if ( HITMAN::GetPos ( pHlist->m_uHitpos )==1 )
 			{
@@ -6417,8 +6417,8 @@ struct RankerState_ProximityBM25Exact_fn : public ISphExtra
 			m_uLCS[uField] = m_uCurLCS;
 
 		m_iExpDelta = iDelta + pHlist->m_uSpanlen - 1;
-		m_iLastHitPos = iLcs;
-		m_uMinExpPos = HITMAN::GetLCS ( pHlist->m_uHitpos ) + 1;
+		m_iLastHitPos = iPosWithField;
+		m_uMinExpPos = HITMAN::GetPosWithField ( pHlist->m_uHitpos ) + 1;
 	}
 
 	DWORD Finalize ( const CSphMatch & tMatch )
@@ -6469,7 +6469,7 @@ struct RankerState_ProximityPayload_fn : public RankerState_Proximity_fn<USE_BM2
 		// as usual, redundant 'this' is just because gcc is stupid
 		this->m_uCurLCS = 0;
 		this->m_iExpDelta = -1;
-		this->m_iLastHitPos = -1;
+		this->m_iLastHitPosWithField = -1;
 
 		DWORD uRank = m_uPayloadRank;
 		for ( int i=0; i<this->m_iFields; i++ )
@@ -6511,7 +6511,7 @@ struct RankerState_MatchAny_fn : public RankerState_Proximity_fn<false,false>
 	{
 		m_uCurLCS = 0;
 		m_iExpDelta = -1;
-		m_iLastHitPos = -1;
+		m_iLastHitPosWithField = -1;
 
 		DWORD uRank = 0;
 		for ( int i=0; i<m_iFields; i++ )
@@ -8057,21 +8057,21 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 {
 	const DWORD uField = HITMAN::GetField ( pHlist->m_uHitpos );
 	const int iPos = HITMAN::GetPos ( pHlist->m_uHitpos );
-	const int iLcs = HITMAN::GetLCS ( pHlist->m_uHitpos );
+	const DWORD uPosWithField = HITMAN::GetPosWithField ( pHlist->m_uHitpos );
 
 	if ( !HANDLE_DUPES )
 	{
 		// update LCS
-		int iDelta = iLcs - pHlist->m_uQuerypos;
+		int iDelta = uPosWithField - pHlist->m_uQuerypos;
 		if ( iDelta==m_iExpDelta )
 		{
-			if ( iLcs>m_iLastHitPos )
+			if ( (int)uPosWithField>m_iLastHitPos )
 				m_uCurLCS = (BYTE)( m_uCurLCS + pHlist->m_uWeight );
 			if ( HITMAN::IsEnd ( pHlist->m_uHitpos ) && (int)pHlist->m_uQuerypos==m_iMaxQpos && iPos==m_iMaxQpos )
 				m_tExactHit.BitSet ( uField );
 		} else
 		{
-			if ( iLcs>m_iLastHitPos )
+			if ( (int)uPosWithField>m_iLastHitPos )
 				m_uCurLCS = BYTE(pHlist->m_uWeight);
 			if ( iPos==1 && HITMAN::IsEnd ( pHlist->m_uHitpos ) && m_iMaxQpos==1 )
 				m_tExactHit.BitSet ( uField );
@@ -8094,7 +8094,7 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 		if ( (DWORD)HITMAN::GetField ( m_uCurPos )!=uField )
 			m_uCurQposMask = 0;
 
-		if ( (DWORD)iLcs!=m_uCurPos )
+		if ( (DWORD)uPosWithField!=m_uCurPos )
 		{
 			// next new and shiny hitpos in line
 			// FIXME!? what do we do with longer spans? keep looking? reset?
@@ -8105,7 +8105,7 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 				m_uCurLCS = 1;
 			}
 			m_uCurQposMask = 0;
-			m_uCurPos = iLcs;
+			m_uCurPos = uPosWithField;
 			if ( m_uLCS [ uField ]<pHlist->m_uWeight )
 			{
 				m_uLCS [ uField ] = BYTE ( pHlist->m_uWeight );
@@ -8145,7 +8145,7 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 		}
 		m_iExpDelta = iDelta + pHlist->m_uSpanlen - 1;
 	}
-	m_iLastHitPos = iLcs;
+	m_iLastHitPos = uPosWithField;
 
 	// update LCCS
 	if ( m_iQueryPosLCCS==pHlist->m_uQuerypos && m_iHitPosLCCS==iPos )

@@ -6797,12 +6797,13 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		pProfiler->Switch ( SPH_QSTATE_INIT );
 
 	// select the sorter with max schema
+	// uses GetAttrsCount to get working facets (was GetRowSize)
 	int iMaxSchemaSize = -1;
 	int iMaxSchemaIndex = -1;
 	ARRAY_FOREACH ( i, dSorters )
-		if ( dSorters[i]->GetSchema().GetRowSize() > iMaxSchemaSize )
+		if ( dSorters[i]->GetSchema().GetAttrsCount()>iMaxSchemaSize )
 		{
-			iMaxSchemaSize = dSorters[i]->GetSchema().GetRowSize();
+			iMaxSchemaSize = dSorters[i]->GetSchema().GetAttrsCount();
 			iMaxSchemaIndex = i;
 		}
 

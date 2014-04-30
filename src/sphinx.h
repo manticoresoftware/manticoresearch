@@ -2656,6 +2656,7 @@ public:
 	CSphVector<CSphFilterSettings>	m_dFilters;	///< filters
 
 	CSphString		m_sGroupBy;			///< group-by attribute name(s)
+	CSphString		m_sFacetBy;			///< facet-by attribute name(s)
 	ESphGroupBy		m_eGroupFunc;		///< function to pre-process group-by attribute value with
 	CSphString		m_sGroupSortBy;		///< sorting clause for groups in group-by mode
 	CSphString		m_sGroupDistinct;	///< count distinct values for this attribute
@@ -2718,6 +2719,7 @@ public:
 
 	/// parse select list string into items
 	bool			ParseSelectList ( CSphString & sError );
+	bool			m_bFacet;			///< whether this a facet query
 };
 
 

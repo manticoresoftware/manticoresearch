@@ -5055,12 +5055,13 @@ SELECT
     select_expr [, select_expr ...]
     FROM index [, index2 ...]
     [WHERE where_condition]
-    [GROUP [N] BY {col_name | expr_alias} [, {sol_name | expr_alias}]]
+    [GROUP [N] BY {col_name | expr_alias} [, {col_name | expr_alias}]]
     [WITHIN GROUP ORDER BY {col_name | expr_alias} {ASC | DESC}]
-	[HAVING having_condition]
+    [HAVING having_condition]
     [ORDER BY {col_name | expr_alias} {ASC | DESC} [, ...]]
     [LIMIT [offset,] row_count]
     [OPTION opt_name = opt_value [, ...]]
+    [FACET facet_options[ FACET facet_options][ ...]]
 </programlisting>
 <para>
 <b>SELECT</b> statement was introduced in version 0.9.9-rc2.
@@ -5394,6 +5395,79 @@ OPTION ranker=bm25, max_matches=3000,
     field_weights=(title=10, body=3), agent_query_timeout=10000
 </programlisting>
 </para></listitem>
+<listitem><para>FACET clause. This is a Sphinx specific extension that allows to perform faceted search with subtree optimization
+and return multiple result sets with a single SQL statement, without the need for complicated <link linkend="sphinxql-multi-queries">multi-queries</link>.
+FACET clauses should be written in the very end of the SELECT statement with spaces between them.
+<programlisting>
+FACET {expr}[, expr ...] [BY {expr}[, expr ...]] [ORDER BY {expr | FACET()} {ASC | DESC}[, ...]]
+SELECT * FROM test FACET brand_id FACET categories;
+SELECT * FROM test FACET brand_name BY brand_id ORDER BY brand_name ASC FACET property;
+</programlisting>
+Working example:
+<programlisting>
+mysql> SELECT *, IN(brand_id,1,2,3,4) AS b FROM facetdemo WHERE MATCH('Product') AND b=1 LIMIT 0,10
+FACET brand_name, brand_id BY brand_id ORDER BY brand_id ASC
+FACET property ORDER BY COUNT(*) DESC
+FACET INTERVAL(price,200,400,600,800) ORDER BY FACET() ASC
+FACET categories
++------+-------+----------+-------------------+-------------+----------+------------+------+
+| id   | price | brand_id | title             | brand_name  | property | categories | b    |
++------+-------+----------+-------------------+-------------+----------+------------+------+
+|    1 |   668 |        3 | Product Four Six  | Brand Three | Three    | 11,12,13   |    1 |
+|    2 |   101 |        4 | Product Two Eight | Brand Four  | One      | 12,13,14   |    1 |
+|    8 |   750 |        3 | Product Ten Eight | Brand Three | Five     | 13         |    1 |
+|    9 |    49 |        1 | Product Ten Two   | Brand One   | Three    | 13,14,15   |    1 |
+|   13 |   613 |        1 | Product Six Two   | Brand One   | Eight    | 13         |    1 |
+|   20 |   985 |        2 | Product Two Six   | Brand Two   | Nine     | 10         |    1 |
+|   22 |   501 |        3 | Product Five Two  | Brand Three | Four     | 12,13,14   |    1 |
+|   23 |   765 |        1 | Product Six Seven | Brand One   | Nine     | 11,12      |    1 |
+|   28 |   992 |        1 | Product Six Eight | Brand One   | Two      | 12,13      |    1 |
+|   29 |   259 |        1 | Product Nine Ten  | Brand One   | Five     | 12,13,14   |    1 |
++------+-------+----------+-------------------+-------------+----------+------------+------+
++-------------+----------+----------+
+| brand_name  | brand_id | count(*) |
++-------------+----------+----------+
+| Brand One   |        1 |     1012 |
+| Brand Two   |        2 |     1025 |
+| Brand Three |        3 |      994 |
+| Brand Four  |        4 |      973 |
++-------------+----------+----------+
++----------+----------+
+| property | count(*) |
++----------+----------+
+| One      |      427 |
+| Five     |      420 |
+| Seven    |      420 |
+| Two      |      418 |
+| Three    |      407 |
+| Six      |      401 |
+| Nine     |      396 |
+| Eight    |      387 |
+| Four     |      371 |
+| Ten      |      357 |
++----------+----------+
++---------------------------------+----------+
+| interval(price,200,400,600,800) | count(*) |
++---------------------------------+----------+
+|                               0 |      799 |
+|                               1 |      795 |
+|                               2 |      757 |
+|                               3 |      833 |
+|                               4 |      820 |
++---------------------------------+----------+
++------------+----------+
+| categories | count(*) |
++------------+----------+
+|         12 |     1998 |
+|         11 |     1653 |
+|         13 |     2090 |
+|         14 |     1058 |
+|         15 |      347 |
+|         10 |      961 |
++------------+----------+
+</programlisting>
+</para>
+</listitem>
 </itemizedlist>
 </para>
 </sect1>

@@ -1,7 +1,7 @@
 <?php
 
 //
-// $Id: helpers.inc 3914 2013-06-02 13:17:07Z shodan $
+// $Id$
 //
 
 ini_set ( "display_errors", 1 );
@@ -1133,7 +1133,7 @@ class SphinxConfig
 						if ($resultset_num==0)
 							$query_result["sphinxql"]="$query";
 						else
-							$query_result["sphinxql"]="$parts[$resultset_num] /* result ".($resultset_num+1)." of previous multistatement */";
+							$query_result["sphinxql"]=($resultset_num<count($parts)?"$parts[$resultset_num] ":"")."/* result ".($resultset_num+1)." of previous multistatement */";
 						++$resultset_num;
 						$this->_results[] = $query_result;
 						if (!mysqli_more_results($connection))
@@ -2716,5 +2716,5 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 }
 
 //
-// $Id: helpers.inc 3914 2013-06-02 13:17:07Z shodan $
+// $Id$
 //

@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>multi-queries and facet keyword</name>
+<config>
+searchd
+{
+	<searchd_settings/>
+	workers					= threads
+}
+
+index facetdemo
+{
+	type              = rt
+	path              = <data_path/>/facetdemo
+	rt_field          = title
+	rt_field          = property
+	rt_attr_string    = title
+	rt_attr_string    = brand_name
+	rt_attr_string    = property
+	rt_attr_multi     = categories
+	rt_attr_uint      = price
+	rt_attr_uint      = brand_id
+	rt_attr_json      = j
+}
+
+index facetdemo2
+{
+	source            = src
+	path              = <data_path/>/facets
+}
+
+source src
+{
+	type              = mysql
+	<sql_settings/>
+	sql_query         = SELECT * FROM test_table
+	sql_attr_uint     = price
+	sql_attr_uint     = brand_id
+	sql_field_string  = title
+	sql_attr_string   = brand_name
+	sql_field_string  = property
+	sql_attr_multi    = uint categories from field
+	sql_attr_json     = j
+}
+
+index facetdemo3
+{
+	type              = distributed
+	local             = facetdemo
+}
+
+index facetdemo4
+{
+	type              = distributed
+	agent             = <my_address/>:facetdemo
+}
+
+</config>
+
+<db_create>
+CREATE TABLE `test_table` (
+  `id` int(11),
+  `price` int(11),
+  `brand_id` int(11),
+  `title` varchar(255),
+  `brand_name` varchar(255),
+  `property` varchar(255),
+  `categories` varchar(255),
+  `j` varchar(255)
+);
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS `test_table`;</db_drop>
+
+<db_insert>
+insert into test_table (id,price,brand_id,title,brand_name,property,categories,j) values
+(1,529,9,'Product Five Two','Brand Nine','Four','(13,14)','{x:[13,14],a:["a13","a14"]}'),
+(2,173,10,'Product Five Seven','Brand Ten','Four','(10)','{x:[10],a:["a10"]}'),
+(3,121,1,'Product Seven Nine','Brand One','Five','(13,14,15)','{x:[13,14,15],a:["a13","a14","a15"]}'),
+(4,474,7,'Product Ten Three','Brand Seven','Nine','(10,11,12)','{x:[10,11,12],a:["a10","a11","a12"]}'),
+(5,20,7,'Product Ten Four','Brand Seven','Seven','(13)','{x:[13],a:["a13"]}'),
+(6,100,3,'Product One Three','Brand Three','Seven','(10)','{x:[10],a:["a10"]}'),
+(7,724,9,'Product Four Eight','Brand Nine','Five','(11,12,13)','{x:[11,12,13],a:["a11","a12","a13"]}'),
+(8,13,3,'Product Seven One','Brand Three','Eight','(12,13,14)','{x:[12,13,14],a:["a12","a13","a14"]}'),
+(9,54,2,'Product Ten Seven','Brand Two','Eight','(11)','{x:[11],a:["a11"]}'),
+(10,986,6,'Product Six Ten','Brand Six','Eight','(12,13,14)','{x:[12,13,14],a:["a12","a13","a14"]}'),
+(11,100,10,'Product One Ten','Brand Ten','Four','(11)','{x:[11],a:["a11"]}'),
+(12,69,10,'Product Five Seven','Brand Ten','Two','(12,13,14)','{x:[12,13,14],a:["a12","a13","a14"]}'),
+(13,365,4,'Product Two Nine','Brand Four','Ten','(10,11,12)','{x:[10,11,12],a:["a10","a11","a12"]}'),
+(14,455,1,'Product Two Eight','Brand One','Nine','(13,14,15)','{x:[13,14,15],a:["a13","a14","a15"]}'),
+(15,718,4,'Product Nine Two','Brand Four','Eight','(10)','{x:[10],a:["a10"]}'),
+(16,758,9,'Product Eight Ten','Brand Nine','Seven','(13)','{x:[13],a:["a13"]}'),
+(17,493,4,'Product Nine Six','Brand Four','Five','(11,12)','{x:[11,12],a:["a11","a12"]}'),
+(18,413,3,'Product Eight Five','Brand Three','Four','(11,12,13)','{x:[11,12,13],a:["a11","a12","a13"]}'),
+(19,78,4,'Product Six Five','Brand Four','Two','(12)','{x:[12],a:["a12"]}'),
+(20,169,4,'Product Seven Six','Brand Four','Eight','(10,11)','{x:[10,11],a:["a10","a11"]}')
+</db_insert>
+
+<sphqueries>
+
+<sphinxql>
+insert into facetdemo (id,price,brand_id,title,brand_name,property,categories,j) values
+(1,529,9,'Product Five Two','Brand Nine','Four',(13,14),'{x:[13,14],a:["a13","a14"]}'),
+(2,173,10,'Product Five Seven','Brand Ten','Four',(10),'{x:[10],a:["a10"]}'),
+(3,121,1,'Product Seven Nine','Brand One','Five',(13,14,15),'{x:[13,14,15],a:["a13","a14","a15"]}'),
+(4,474,7,'Product Ten Three','Brand Seven','Nine',(10,11,12),'{x:[10,11,12],a:["a10","a11","a12"]}'),
+(5,20,7,'Product Ten Four','Brand Seven','Seven',(13),'{x:[13],a:["a13"]}'),
+(6,100,3,'Product One Three','Brand Three','Seven',(10),'{x:[10],a:["a10"]}'),
+(7,724,9,'Product Four Eight','Brand Nine','Five',(11,12,13),'{x:[11,12,13],a:["a11","a12","a13"]}'),
+(8,13,3,'Product Seven One','Brand Three','Eight',(12,13,14),'{x:[12,13,14],a:["a12","a13","a14"]}'),
+(9,54,2,'Product Ten Seven','Brand Two','Eight',(11),'{x:[11],a:["a11"]}'),
+(10,986,6,'Product Six Ten','Brand Six','Eight',(12,13,14),'{x:[12,13,14],a:["a12","a13","a14"]}'),
+(11,100,10,'Product One Ten','Brand Ten','Four',(11),'{x:[11],a:["a11"]}'),
+(12,69,10,'Product Five Seven','Brand Ten','Two',(12,13,14),'{x:[12,13,14],a:["a12","a13","a14"]}'),
+(13,365,4,'Product Two Nine','Brand Four','Ten',(10,11,12),'{x:[10,11,12],a:["a10","a11","a12"]}'),
+(14,455,1,'Product Two Eight','Brand One','Nine',(13,14,15),'{x:[13,14,15],a:["a13","a14","a15"]}'),
+(15,718,4,'Product Nine Two','Brand Four','Eight',(10),'{x:[10],a:["a10"]}'),
+(16,758,9,'Product Eight Ten','Brand Nine','Seven',(13),'{x:[13],a:["a13"]}'),
+(17,493,4,'Product Nine Six','Brand Four','Five',(11,12),'{x:[11,12],a:["a11","a12"]}'),
+(18,413,3,'Product Eight Five','Brand Three','Four',(11,12,13),'{x:[11,12,13],a:["a11","a12","a13"]}'),
+(19,78,4,'Product Six Five','Brand Four','Two',(12),'{x:[12],a:["a12"]}'),
+(20,169,4,'Product Seven Six','Brand Four','Eight',(10,11),'{x:[10,11],a:["a10","a11"]}')
+</sphinxql>
+
+<!-- multi-queries require at least one ';' (see helpers.inc) -->
+
+<!-- standard multi-queries: rt, plain, local, agent (the latter two aren't optimized, see query log) -->
+<sphinxql>select groupby() as selected,count(*) as cnt from facetdemo group by categories order by cnt desc limit 0,10; select groupby() as selected,count(*) as cnt from facetdemo group by brand_id order by cnt desc limit 0,10</sphinxql>
+<sphinxql>select groupby() as selected,count(*) as cnt from facetdemo2 group by categories order by cnt desc limit 0,10; select groupby() as selected,count(*) as cnt from facetdemo2 group by brand_id order by cnt desc limit 0,10</sphinxql>
+<sphinxql>select groupby() as selected,count(*) as cnt from facetdemo3 group by categories order by cnt desc limit 0,10; select groupby() as selected,count(*) as cnt from facetdemo3 group by brand_id order by cnt desc limit 0,10</sphinxql>
+<sphinxql>select groupby() as selected,count(*) as cnt from facetdemo4 group by categories order by cnt desc limit 0,10; select groupby() as selected,count(*) as cnt from facetdemo4 group by brand_id order by cnt desc limit 0,10</sphinxql>
+
+<!-- facet keyword for rt and plain indexes -->
+<sphinxql>select id from facetdemo limit 0,1 facet brand_id as x order by x asc;</sphinxql>
+<sphinxql>select id from facetdemo limit 0,1 facet interval(price,500) as x order by x asc;</sphinxql>
+<sphinxql>select id from facetdemo limit 0,1 facet brand_name by brand_id;</sphinxql>
+<sphinxql>select id from facetdemo limit 0,1 facet brand_name,property by brand_id,property;</sphinxql>
+<sphinxql>select id from facetdemo limit 0,1 facet brand_id+1 by brand_id+2 order by count(*) asc;</sphinxql>
+<sphinxql>select id from facetdemo limit 0,1 facet brand_id order by facet() asc;</sphinxql>
+<sphinxql>select id from facetdemo limit 0,1 facet brand_id+1-1 order by facet() desc;</sphinxql>
+<sphinxql>select id from facetdemo limit 0,1 facet categories facet j.x facet j.a;</sphinxql>
+<sphinxql>select * from facetdemo where match ('one') limit 0,15 facet brand_name, brand_id by brand_id order by brand_id asc facet property order by count(*) desc facet interval(price,200,400,600,800) order by facet() asc; show meta</sphinxql>
+
+<sphinxql>select id from facetdemo2 limit 0,1 facet brand_id as x order by x asc;</sphinxql>
+<sphinxql>select id from facetdemo2 limit 0,1 facet interval(price,500) as x order by x asc;</sphinxql>
+<sphinxql>select id from facetdemo2 limit 0,1 facet brand_name by brand_id;</sphinxql>
+<sphinxql>select id from facetdemo2 limit 0,1 facet brand_name,property by brand_id,property;</sphinxql>
+<sphinxql>select id from facetdemo2 limit 0,1 facet brand_id+1 by brand_id+2 order by count(*) asc;</sphinxql>
+<sphinxql>select id from facetdemo2 limit 0,1 facet brand_id order by facet() asc;</sphinxql>
+<sphinxql>select id from facetdemo2 limit 0,1 facet brand_id+1-1 order by facet() desc;</sphinxql>
+<sphinxql>select id from facetdemo2 limit 0,1 facet categories facet j.x facet j.a;</sphinxql>
+<sphinxql>select * from facetdemo2 where match ('one') limit 0,15 facet brand_name, brand_id by brand_id order by brand_id asc facet property order by count(*) desc facet interval(price,200,400,600,800) order by facet() asc; show meta</sphinxql>
+
+</sphqueries>
+
+</test>

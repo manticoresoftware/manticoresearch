@@ -6675,6 +6675,7 @@ bool CSphFilterSettings::operator == ( const CSphFilterSettings & rhs ) const
 	switch ( m_eType )
 	{
 		case SPH_FILTER_RANGE:
+		case SPH_FILTER_STRING:
 			return m_iMinValue==rhs.m_iMinValue && m_iMaxValue==rhs.m_iMaxValue;
 
 		case SPH_FILTER_FLOATRANGE:
@@ -6751,6 +6752,7 @@ CSphQuery::CSphQuery ()
 
 	, m_eCollation		( SPH_COLLATION_DEFAULT )
 	, m_bAgent			( false )
+	, m_bFacet			( false )
 {}
 
 
@@ -7040,8 +7042,8 @@ void sphColumnToLowercase ( char * sVal )
 	if ( !sVal || !*sVal )
 		return;
 
-	// make all chars lowercase but only prior to '.' and '[' delimiters
-	for ( ; *sVal && *sVal!='.' && *sVal!='['; sVal++ )
+	// make all chars lowercase but only prior to '.', ',', and '[' delimiters
+	for ( ; *sVal && *sVal!='.' && *sVal!=',' && *sVal!='['; sVal++ )
 		*sVal = (char) tolower ( *sVal );
 }
 
@@ -15604,12 +15606,13 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	int64_t tmQueryStart = sphMicroTimer();
 
 	// select the sorter with max schema
+	// uses GetAttrsCount to get working facets (was GetRowSize)
 	int iMaxSchemaSize = -1;
 	int iMaxSchemaIndex = -1;
 	for ( int i=0; i<iSorters; i++ )
-		if ( ppSorters[i]->GetSchema().GetRowSize() > iMaxSchemaSize )
+		if ( ppSorters[i]->GetSchema().GetAttrsCount() > iMaxSchemaSize )
 		{
-			iMaxSchemaSize = ppSorters[i]->GetSchema().GetRowSize();
+			iMaxSchemaSize = ppSorters[i]->GetSchema().GetAttrsCount();
 			iMaxSchemaIndex = i;
 		}
 
@@ -17509,6 +17512,7 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema &
 	for ( int iIn=0; iIn<tInSchema.GetAttrsCount(); iIn++ )
 	{
 		const CSphColumnInfo & tIn = tInSchema.GetAttr(iIn);
+
 		switch ( tIn.m_eStage )
 		{
 			case SPH_EVAL_STATIC:

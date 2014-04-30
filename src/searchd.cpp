@@ -8803,6 +8803,39 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 		}
 	}
 
+	// facets
+	if ( tQuery.m_bFacet )
+	{
+		// remap MVA/JSON column to @groupby/@groupbystr in facet queries
+		const CSphColumnInfo * p = tRes.m_tSchema.GetAttr ( "@groupbystr" );
+		if ( !p )
+			p = tRes.m_tSchema.GetAttr ( "@groupby" );
+		if ( p )
+		{
+			ARRAY_FOREACH ( i, dFrontend )
+			{
+				CSphColumnInfo & d = dFrontend[i];
+				if ( tQuery.m_sGroupBy==d.m_sName &&
+					( d.m_eAttrType==SPH_ATTR_INT64SET
+					|| d.m_eAttrType==SPH_ATTR_UINT32SET
+					|| d.m_eAttrType==SPH_ATTR_JSON_FIELD ) )
+				{
+					d.m_tLocator = p->m_tLocator;
+					d.m_eAttrType = p->m_eAttrType;
+					d.m_eAggrFunc = p->m_eAggrFunc;
+				}
+			}
+		}
+
+		// skip all fields after count(*)
+		ARRAY_FOREACH ( i, dFrontend )
+			if ( dFrontend[i].m_sName == "count(*)" )
+			{
+				dFrontend.Resize ( i+1 );
+				break;
+			}
+	}
+
 	// all the merging and sorting is now done
 	// replace the minimized matches schema with its subset, the result set schema
 	tRes.m_tSchema.SwapAttrs ( dFrontend );
@@ -9160,6 +9193,7 @@ protected:
 	int								m_iStart;		///< subset start
 	int								m_iEnd;			///< subset end
 	bool							m_bMultiQueue;	///< whether current subset is subject to multi-queue optimization
+	bool							m_bFacetQueue;	///< whether current subset is subject to facet-queue optimization
 	CSphVector<LocalIndex_t>		m_dLocal;		///< local indexes for the current subset
 	mutable CSphVector<CSphSchemaMT>		m_dExtraSchemas; ///< the extra fields for agents
 	bool							m_bSphinxql;	///< if the query get from sphinxql - to avoid applying sphinxql magick for others
@@ -9914,6 +9948,10 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 				{
 					// can't use multi-query for sorter with string attribute at group by or sort
 					m_bMultiQueue = pSorter->CanMulti();
+
+					if ( !m_bMultiQueue )
+						m_bFacetQueue = false;
+
 				}
 				if ( !sError.IsEmpty() )
 					m_dFailuresSet[iQuery].Submit ( sLocal, sError.cstr() );
@@ -9944,6 +9982,22 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 			assert ( pLastMulti && dSorters[i] );
 			m_bMultiQueue = pLastMulti->GetSchema().GetDynamicSize()==dSorters[i]->GetSchema().GetDynamicSize();
 		}
+
+		// facets, sanity check for json fields (can't be multi-queried yet)
+		for ( int i=1; i<dSorters.GetLength() && m_bFacetQueue; i++ )
+		{
+			if ( !dSorters[i] )
+				continue;
+			for ( int j=0; j<dSorters[i]->GetSchema().GetAttrsCount(); j++ )
+				if ( dSorters[i]->GetSchema().GetAttr(j).m_eAttrType==SPH_ATTR_JSON_FIELD )
+				{
+					m_bMultiQueue = m_bFacetQueue = false;
+					break;
+				}
+		}
+
+		if ( m_bFacetQueue )
+			m_bMultiQueue = true;
 
 		// me shortcuts
 		AggrResult_t tStats;
@@ -10011,10 +10065,11 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 		// handle results
 		if ( !bResult )
 		{
-			// failed
+			// failed, submit local (if not empty) or global error string
 			for ( int iQuery=m_iStart; iQuery<=m_iEnd; iQuery++ )
-				m_dFailuresSet[iQuery].Submit ( sLocal,
-					m_dResults [ m_bMultiQueue ? m_iStart : iQuery ].m_sError.cstr() );
+				m_dFailuresSet[iQuery].Submit ( sLocal, tStats.m_sError.IsEmpty()
+					? m_dResults [ m_bMultiQueue ? m_iStart : iQuery ].m_sError.cstr()
+					: tStats.m_sError.cstr() );
 		} else
 		{
 			// multi-query succeeded
@@ -10362,6 +10417,15 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			}
 	}
 
+	// check for facets
+	m_bFacetQueue = iEnd>iStart;
+	for ( int iCheck=iStart+1; iCheck<=iEnd && m_bFacetQueue; iCheck++ )
+		if ( !m_dQueries[iCheck].m_bFacet )
+			m_bFacetQueue = false;
+
+	if ( m_bFacetQueue )
+		m_bMultiQueue = true;
+
 	////////////////////////////
 	// build local indexes list
 	////////////////////////////
@@ -10562,6 +10626,9 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// select lists must have no expressions
 	if ( m_bMultiQueue )
 		m_bMultiQueue = AllowsMulti ( iStart, iEnd );
+
+	if ( !m_bMultiQueue )
+		m_bFacetQueue = false;
 
 	// these are mutual exclusive
 	assert ( !( m_bMultiQueue && pLocalSorter ) );
@@ -11206,6 +11273,7 @@ enum SqlStmt_e
 	STMT_DROP_PLUGIN,
 	STMT_SHOW_PLUGINS,
 	STMT_SHOW_THREADS,
+	STMT_FACET,
 
 	STMT_TOTAL
 };
@@ -11412,6 +11480,7 @@ public:
 	bool			AddInsertOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue );
 	void			AddItem ( SqlNode_t * pExpr, ESphAggrFunc eFunc=SPH_AGGR_NONE, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
 	bool			AddItem ( const char * pToken, SqlNode_t * pStart=NULL, SqlNode_t * pEnd=NULL );
+	bool			AddCount ();
 	void			AliasLastItem ( SqlNode_t * pAlias );
 
 	/// called on transition from an outer select to inner select
@@ -11466,7 +11535,7 @@ public:
 	bool			AddIntFilterGreater ( const SqlNode_t & tAttr, int64_t iVal, bool bHasEqual );
 	bool			AddIntFilterLesser ( const SqlNode_t & tAttr, int64_t iVal, bool bHasEqual );
 	bool			AddUservarFilter ( const SqlNode_t & tCol, const SqlNode_t & tVar, bool bExclude );
-	void			AddGroupBy ( const SqlNode_t & sGroupBy );
+	void			AddGroupBy ( const SqlNode_t & tGroupBy );
 	bool			AddDistinct ( SqlNode_t * pNewExpr, SqlNode_t * pStart, SqlNode_t * pEnd );
 	CSphFilterSettings *	AddFilter ( const SqlNode_t & tCol, ESphFilter eType );
 	bool					AddStringFilter ( const SqlNode_t & tCol, const SqlNode_t & tVal, bool bExclude );
@@ -11931,6 +12000,14 @@ bool SqlParser_c::AddItem ( const char * pToken, SqlNode_t * pStart, SqlNode_t *
 	return SetNewSyntax();
 }
 
+bool SqlParser_c::AddCount ()
+{
+	CSphQueryItem & tItem = m_pQuery->m_dItems.Add();
+	tItem.m_sExpr = tItem.m_sAlias = "count(*)";
+	tItem.m_eAggrFunc = SPH_AGGR_NONE;
+	return SetNewSyntax();
+}
+
 void SqlParser_c::AddGroupBy ( const SqlNode_t & tGroupBy )
 {
 	if ( m_pQuery->m_sGroupBy.IsEmpty() )
@@ -12285,6 +12362,39 @@ bool ParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStm
 	{
 		sError = "Using the old-fashion @variables (@count, @weight, etc.) is deprecated";
 		return false;
+	}
+
+	// facets
+	ARRAY_FOREACH ( i, dStmt )
+	{
+		CSphQuery & tQuery = dStmt[i].m_tQuery;
+		if ( dStmt[i].m_eStmt==STMT_SELECT )
+		{
+			while ( i+1<dStmt.GetLength() )
+			{
+				SqlStmt_t & tStmt = dStmt[i+1];
+				if ( tStmt.m_eStmt!=STMT_FACET )
+					break;
+
+				tStmt.m_tQuery.m_bFacet = true;
+
+				tStmt.m_eStmt = STMT_SELECT;
+				tStmt.m_tQuery.m_sIndexes = tQuery.m_sIndexes;
+				tStmt.m_tQuery.m_sSelect = tStmt.m_tQuery.m_sFacetBy;
+				tStmt.m_tQuery.m_sQuery = tQuery.m_sQuery;
+
+				// append top-level expressions to a facet schema (for filtering)
+				ARRAY_FOREACH ( k, tQuery.m_dItems )
+					if ( tQuery.m_dItems[k].m_sAlias!=tQuery.m_dItems[k].m_sExpr )
+						tStmt.m_tQuery.m_dItems.Add( tQuery.m_dItems[k] );
+
+				// append filters
+				ARRAY_FOREACH ( k, tQuery.m_dFilters )
+					tStmt.m_tQuery.m_dFilters.Add( tQuery.m_dFilters[k] );
+
+				i++;
+			}
+		}
 	}
 
 	return true;
@@ -16683,6 +16793,9 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 			tHandler.m_dQueries[iSelect++] = dStmt[i].m_tQuery;
 	}
 
+	// use first meta for faceted search
+	bool bUseFirstMeta = tHandler.m_dQueries.GetLength()>1 && !tHandler.m_dQueries[0].m_bFacet && tHandler.m_dQueries[1].m_bFacet;
+
 	// do search
 	bool bSearchOK = true;
 	if ( iSelect )
@@ -16690,7 +16803,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 		bSearchOK = HandleMysqlSelect ( dRows, tHandler );
 
 		// save meta for SHOW *
-		tLastMeta = tHandler.m_dResults.Last();
+		tLastMeta = bUseFirstMeta ? tHandler.m_dResults[0] : tHandler.m_dResults.Last();
 	}
 
 	if ( !bSearchOK )
@@ -16706,7 +16819,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 		if ( pThd )
 			pThd->m_sCommand = g_dSqlStmts[eStmt];
 
-		const CSphQueryResultMeta & tMeta = iSelect-1>=0 ? tHandler.m_dResults[iSelect-1] : tPrevMeta;
+		const CSphQueryResultMeta & tMeta = bUseFirstMeta ? tHandler.m_dResults[0] : ( iSelect-1>=0 ? tHandler.m_dResults[iSelect-1] : tPrevMeta );
 		bool bMoreResultsFollow = (i+1)<dStmt.GetLength();
 
 		if ( eStmt==STMT_SELECT )
@@ -16719,6 +16832,8 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 			HandleMysqlWarning ( tMeta, dRows, bMoreResultsFollow );
 		else if ( eStmt==STMT_SHOW_STATUS || eStmt==STMT_SHOW_META || eStmt==STMT_SHOW_AGENT_STATUS )
 			HandleMysqlMeta ( dRows, dStmt[i], tMeta, bMoreResultsFollow ); // FIXME!!! add profiler and prediction counters
+		else if ( eStmt==STMT_FACET )
+			dRows.Ok();
 
 		if ( g_bGotSigterm )
 		{

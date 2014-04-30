@@ -51,6 +51,7 @@
 %token	TOK_DIV
 %token	TOK_DOUBLE
 %token	TOK_DROP
+%token	TOK_FACET
 %token	TOK_FALSE
 %token	TOK_FLOAT
 %token	TOK_FLUSH
@@ -231,6 +232,7 @@ ident:
 multi_stmt_list:
 	multi_stmt							{ pParser->PushQuery(); }
 	| multi_stmt_list ';' multi_stmt	{ pParser->PushQuery(); }
+	| multi_stmt_list facet_stmt		{ pParser->PushQuery(); }
 	;
 
 multi_stmt:
@@ -561,6 +563,7 @@ expr_ident:
 	| TOK_INTEGER '(' json_field ')'
 	| TOK_DOUBLE '(' json_field ')'
 	| TOK_BIGINT '(' json_field ')'
+	| TOK_FACET '(' ')'
 	;
 
 const_int:
@@ -1453,6 +1456,51 @@ streq:
 
 strval:
 	TOK_QUOTED_STRING
+	;
+
+//////////////////////////////////////////////////////////////////////////
+
+opt_facet_by_items_list:
+	// empty
+	| facet_by facet_items_list
+	;
+
+facet_by:
+	TOK_BY
+		{
+			pParser->m_pQuery->m_sFacetBy = pParser->m_pQuery->m_sGroupBy;
+			pParser->m_pQuery->m_sGroupBy = "";
+			pParser->AddCount ();
+		}
+	;
+
+facet_item:
+	facet_expr opt_alias
+	;
+
+facet_expr:
+	expr
+		{
+			pParser->AddItem ( &$1 );
+			pParser->AddGroupBy ( $1 );
+		}
+	;
+
+facet_items_list:
+	facet_item
+	| facet_items_list ',' facet_item
+	;
+
+facet_stmt:
+	TOK_FACET facet_items_list opt_facet_by_items_list opt_order_clause
+		{
+			pParser->m_pStmt->m_eStmt = STMT_FACET;
+			if ( pParser->m_pQuery->m_sFacetBy.IsEmpty() )
+			{
+				pParser->m_pQuery->m_sFacetBy = pParser->m_pQuery->m_sGroupBy;
+				pParser->AddCount ();
+			}
+		}
 	;
 
 %%

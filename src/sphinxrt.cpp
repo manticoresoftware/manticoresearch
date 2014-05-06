@@ -1110,8 +1110,6 @@ private:
 	/// m_dSegments consists of two parts
 	/// segments with indexes < m_iDoubleBuffer are being saved now as a disk chunk
 	/// segments with indexes >= m_iDoubleBuffer are RAM chunk
-	CSphMutex					m_tSaveInnerMutex;
-	CSphMutex					m_tSaveOuterMutex;
 	CSphMutex					m_tFlushLock;
 	CSphMutex					m_tOptimizingLock;
 	int							m_iDoubleBuffer;
@@ -1298,8 +1296,6 @@ RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int6
 	Verify ( m_tWriting.Init() );
 	Verify ( m_tChunkLock.Init() );
 	Verify ( m_tReading.Init() );
-	Verify ( m_tSaveOuterMutex.Init() );
-	Verify ( m_tSaveInnerMutex.Init() );
 	Verify ( m_tFlushLock.Init() );
 	Verify ( m_tOptimizingLock.Init() );
 }
@@ -1318,8 +1314,6 @@ RtIndex_t::~RtIndex_t ()
 
 	Verify ( m_tOptimizingLock.Done() );
 	Verify ( m_tFlushLock.Done() );
-	Verify ( m_tSaveInnerMutex.Done() );
-	Verify ( m_tSaveOuterMutex.Done() );
 	Verify ( m_tReading.Done() );
 	Verify ( m_tChunkLock.Done() );
 	Verify ( m_tWriting.Done() );
@@ -1385,15 +1379,11 @@ void RtIndex_t::ForceRamFlush ( bool bPeriodic )
 		return;
 
 	Verify ( m_tWriting.Lock() );
-	Verify ( m_tSaveInnerMutex.Lock() );
-	Verify ( m_tSaveOuterMutex.Lock() );
 
 	int64_t iUsedRam = GetUsedRam();
 	if ( !SaveRamChunk () )
 	{
 		sphWarning ( "rt: index %s: ramchunk save FAILED! (error=%s)", m_sIndexName.cstr(), m_sLastError.cstr() );
-		Verify ( m_tSaveOuterMutex.Unlock() );
-		Verify ( m_tSaveInnerMutex.Unlock() );
 		Verify ( m_tWriting.Unlock() );
 		return;
 	}
@@ -1405,8 +1395,6 @@ void RtIndex_t::ForceRamFlush ( bool bPeriodic )
 	m_iSavedTID = m_iTID;
 	m_tmSaved = sphMicroTimer();
 
-	Verify ( m_tSaveOuterMutex.Unlock() );
-	Verify ( m_tSaveInnerMutex.Unlock() );
 	Verify ( m_tWriting.Unlock() );
 
 	tmSave = sphMicroTimer() - tmSave;
@@ -2879,7 +2867,6 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 	// concurrent readers are ok during merges, as existing segments won't be modified yet
 	// however, concurrent writers are not
 	Verify ( m_tWriting.Lock() );
-	Verify ( m_tSaveInnerMutex.Lock() );
 
 	// first of all, binlog txn data for recovery
 	g_pRtBinlog->BinlogCommit ( &m_iTID, m_sIndexName.cstr(), pNewSeg, dAccKlist, m_bKeywordDict );
@@ -3168,8 +3155,6 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 	// we can kill retired segments now
 	FreeRetired();
 
-	Verify ( m_tSaveInnerMutex.Unlock() );
-
 	// double buffer writer stands still till save done
 	// all writers waiting double buffer done
 	// no need to dump or waiting for some writer
@@ -3182,7 +3167,6 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 
 	// scope for guard then retired clean up
 	{
-		Verify ( m_tSaveOuterMutex.Lock() );
 		// copy stats for disk chunk
 		SphChunkGuard_t tGuard;
 		GetReaderChunks ( tGuard );
@@ -3196,8 +3180,6 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 
 		SaveDiskChunk ( iTID, tGuard, tStat2Dump );
 		g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), iTID, false );
-
-		Verify ( m_tSaveOuterMutex.Unlock() );
 	}
 }
 
@@ -3278,17 +3260,15 @@ void RtIndex_t::ForceDiskChunk ()
 		return;
 
 	Verify ( m_tWriting.Lock() );
-	Verify ( m_tSaveOuterMutex.Lock() );
 
 	SphChunkGuard_t tGuard;
 	GetReaderChunks ( tGuard );
 
 	m_dDiskChunkKlist.Resize ( 0 );
 	m_tKlist.Flush ( m_dDiskChunkKlist );
-	SaveDiskChunk ( m_iTID, tGuard, m_tStats );
-
-	Verify ( m_tSaveOuterMutex.Unlock() );
 	Verify ( m_tWriting.Unlock() );
+
+	SaveDiskChunk ( m_iTID, tGuard, m_tStats );
 }
 
 
@@ -3973,7 +3953,7 @@ void RtIndex_t::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, co
 	// FIXME! add binlog cleanup here once we have binlogs
 
 	// get exclusive lock again, gotta reset RAM chunk now
-	Verify ( m_tSaveInnerMutex.Lock() );
+	Verify ( m_tWriting.Lock() );
 	Verify ( m_tChunkLock.WriteLock() );
 
 	// save updated meta
@@ -4010,7 +3990,7 @@ void RtIndex_t::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, co
 	m_iSavedTID = iTID;
 	m_tmSaved = sphMicroTimer();
 
-	Verify ( m_tSaveInnerMutex.Unlock() );
+	Verify ( m_tWriting.Unlock() );
 }
 
 
@@ -8373,9 +8353,6 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 			break;
 
 		Verify ( m_tWriting.Lock() );
-		Verify ( m_tSaveInnerMutex.Lock() );
-		Verify ( m_tSaveOuterMutex.Lock() );
-
 		Verify ( m_tChunkLock.WriteLock() );
 
 		m_dDiskChunks[1] = pMerged.LeakPtr();
@@ -8384,10 +8361,7 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 		int iDiskChunksCount = m_dDiskChunks.GetLength();
 
 		Verify ( m_tChunkLock.Unlock() );
-
 		SaveMeta ( iDiskChunksCount, m_iTID );
-		Verify ( m_tSaveOuterMutex.Unlock() );
-		Verify ( m_tSaveInnerMutex.Unlock() );
 		Verify ( m_tWriting.Unlock() );
 
 		if ( *pForceTerminate || m_bOptimizeStop )

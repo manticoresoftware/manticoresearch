@@ -1122,7 +1122,7 @@ protected:
 	SphDocID_t					m_uHitsOverFor;
 
 protected:
-	int							GetNextHit ( SphDocID_t uDocid );										///< get next hit within given document, and return its child-id
+	int							GetChildIdWithNextHit ( SphDocID_t uDocid );							///< get next hit within given document, and return its child-id
 	int							GetMatchingHits ( SphDocID_t uDocid, ExtHit_t * pHitbuf, int iLimit );	///< process candidate hits and stores actual matches while we can
 };
 
@@ -4670,7 +4670,7 @@ ExtOrder_c::~ExtOrder_c ()
 }
 
 
-int ExtOrder_c::GetNextHit ( SphDocID_t uDocid )
+int ExtOrder_c::GetChildIdWithNextHit ( SphDocID_t uDocid )
 {
 	// OPTIMIZE! implement PQ instead of full-scan
 	DWORD uMinPosWithField = UINT_MAX;
@@ -4729,7 +4729,7 @@ int ExtOrder_c::GetMatchingHits ( SphDocID_t uDocid, ExtHit_t * pHitbuf, int iLi
 	while ( iMyHit+m_dChildren.GetLength()<iLimit )
 	{
 		// get next hit (in hitpos ascending order)
-		int iChild = GetNextHit ( uDocid );
+		int iChild = GetChildIdWithNextHit ( uDocid );
 		if ( iChild<0 )
 			break; // OPTIMIZE? no trailing hits on this route
 

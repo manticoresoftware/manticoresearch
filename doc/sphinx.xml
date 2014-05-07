@@ -5767,7 +5767,7 @@ mysql> select * from rt;
 <sect1 id="sphinxql-set"><title>SET syntax</title>
 <programlisting>
 SET [GLOBAL] server_variable_name = value
-SET GLOBAL @user_variable_name = (int_val1 [, int_val2, ...])
+SET [INDEX index_name] GLOBAL @user_variable_name = (int_val1 [, int_val2, ...])
 SET NAMES value
 SET @@dummy_variable = ignored_value
 </programlisting>
@@ -5788,6 +5788,7 @@ There are the following classes of the variables:
 <listitem><para>per-session server variable (1.10-beta and above)</para></listitem>
 <listitem><para>global server variable (2.0.1-beta and above)</para></listitem>
 <listitem><para>global user variable (2.0.1-beta and above)</para></listitem>
+<listitem><para>global distributed variable (2.2.3-beta and above)</para></listitem>
 </orderedlist>
 </para>
 <para>
@@ -5796,7 +5797,9 @@ the only supported value type is the list of BIGINTs, and these variables
 can only be used along with IN() for filtering purpose. The intended usage
 scenario is uploading huge lists of values to <filename>searchd</filename>
 (once) and reusing them (many times) later, saving on network overheads.
-Example:
+Starting with 2.2.3-beta, global user variables might be either transferred to
+all agents of distributed index or set locally in case of local index
+defined at distibuted index. Example:
 <programlisting>
 // in session 1
 mysql> SET GLOBAL @myfilter=(2,3,5,7,11,13);
@@ -6807,6 +6810,7 @@ mysql&gt; SHOW INDEX lj STATUS;
 | total_tokens       | 1508824195  |
 | ram_bytes          | 305963599   |
 | disk_bytes         | 5455804365  |
+| mem_limit          | 536870912   |
 +--------------------+-------------+
 8 rows in set (0.00 sec)
 </programlisting>
@@ -11101,11 +11105,18 @@ where 'xxx' is hexadecimal codepoint number. This form can also be used
 for 7-bit ASCII characters to encode special ones: eg. use U+20 to
 encode space, U+2E to encode dot, U+2C to encode comma.
 </para>
+<para>
+Starting with 2.2.3-beta, aliases "english" and "russian" are allowed at
+control character mapping.
+</para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
 # default are English and Russian letters
 charset_table = 0..9, A..Z-&gt;a..z, _, a..z, \
     U+410..U+42F-&gt;U+430..U+44F, U+430..U+44F, U+401->U+451, U+451
+	
+# english charset defined with alias
+charset_table = 0..9, english, _
 </programlisting>
 </sect2>
 

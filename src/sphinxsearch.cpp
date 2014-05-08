@@ -490,7 +490,6 @@ protected:
 };
 
 
-
 template<>
 class TermAcceptor_c<TERM_POS_ZONESPAN> : public TermAcceptor_c<TERM_POS_ZONES>
 {
@@ -863,6 +862,7 @@ private:
 	}
 };
 
+/// FSM is Finite State Machine
 template < class FSM >
 class ExtNWay_c : public ExtNWayT, private FSM
 {
@@ -1540,7 +1540,6 @@ ExtNode_i * ExtNode_i::Create ( ISphQword * pQword, const XQNode_t * pNode, cons
 
 //////////////////////////////////////////////////////////////////////////
 
-
 struct ExtPayloadEntry_t
 {
 	SphDocID_t	m_uDocid;
@@ -1822,8 +1821,6 @@ void ExtPayload_c::GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WO
 	ExtQword_t & tQword = hQwords[ m_tWord.m_sWord ];
 	dTermDupes[m_tWord.m_iAtomPos] = (WORD)tQword.m_iQueryPos;
 }
-
-
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -2376,6 +2373,7 @@ const ExtHit_t * ExtTermHitless_c::GetHitsChunk ( const ExtDoc_t * pMatched, Sph
 }
 
 //////////////////////////////////////////////////////////////////////////
+
 template < TermPosFilter_e T, class ExtBase >
 ExtConditional<T,ExtBase>::ExtConditional ( ISphQword * pQword, const XQNode_t * pNode, const ISphQwordSetup & tSetup )
 	: BufferedNode_c ()
@@ -2663,6 +2661,7 @@ const ExtHit_t * ExtConditional<T,ExtBase>::GetHitsChunk ( const ExtDoc_t * pDoc
 }
 
 //////////////////////////////////////////////////////////////////////////
+
 ExtTwofer_c::ExtTwofer_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const ISphQwordSetup & tSetup )
 {
 	Init ( pFirst, pSecond, tSetup );
@@ -2926,8 +2925,6 @@ bool ExtAndZonespanned::IsSameZonespan ( int iLeft, int iRight ) const
 			return true;
 	return false;
 }
-
-//////////////////////////////////////////////////////////////////////////
 
 const ExtHit_t * ExtAndZonespanned::GetHitsChunk ( const ExtDoc_t * pDocs, SphDocID_t uMaxID )
 {
@@ -3764,7 +3761,6 @@ inline bool FSMphrase::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 
 	return false;
 }
-
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -5011,7 +5007,6 @@ uint64_t ExtOrder_c::GetWordID () const
 
 	return uHash;
 }
-
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -9243,7 +9238,7 @@ private:
 
 
 /// cached node wrapper to be injected into actual search trees
-/// (special container actually carries all the data and does the work, see blow)
+/// (special container actually carries all the data and does the work, see below)
 class ExtNodeCached_t : public ExtNode_i
 {
 	friend class NodeCacheContainer_t;
@@ -9342,7 +9337,6 @@ public:
 	}
 };
 
-//////////////////////////////////////////////////////////////////////////
 
 ExtNode_i * NodeCacheContainer_t::CreateCachedWrapper ( ExtNode_i * pChild, const XQNode_t * pRawChild, const ISphQwordSetup & tSetup )
 {
@@ -9439,7 +9433,6 @@ void NodeCacheContainer_t::Invalidate()
 	m_StateOk = false;
 }
 
-//////////////////////////////////////////////////////////////////////////
 
 void ExtNodeCached_t::StepForwardToHitsFor ( SphDocID_t uDocId )
 {
@@ -9594,7 +9587,6 @@ const ExtHit_t * ExtNodeCached_t::GetHitsChunk ( const ExtDoc_t * pMatched, SphD
 	return ( iHit!=0 ) ? m_dHits : NULL;
 }
 
-//////////////////////////////////////////////////////////////////////////
 
 CSphQueryNodeCache::CSphQueryNodeCache ( int iCells, int iMaxCachedDocs, int iMaxCachedHits )
 {

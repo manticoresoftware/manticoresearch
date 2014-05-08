@@ -2998,17 +2998,17 @@ public:
 #define NO_ATOMIC 1
 #endif
 
-template < typename UINT >
+template < typename INT >
 class CSphAtomic : public ISphNoncopyable
 {
-	volatile UINT	m_uValue;
+	volatile INT	m_iValue;
 #if NO_ATOMIC
 	CSphMutex		m_tLock;
 #endif
 
 public:
-	CSphAtomic ( UINT uValue=0 )
-		: m_uValue ( uValue )
+	CSphAtomic ( INT iValue=0 )
+		: m_iValue ( iValue )
 	{
 #if NO_ATOMIC
 		m_tLock.Init();
@@ -3022,42 +3022,42 @@ public:
 #endif
 	}
 
-	inline UINT operator()() const
+	inline INT operator()() const
 	{
-		return m_uValue;
+		return __sync_fetch_and_add ( & m_iValue, 0 );
 	}
 
 	// return value here is original value, prior to operation took place
 #ifdef HAVE_SYNC_FETCH
-	inline UINT Inc()
+	inline INT Inc()
 	{
-		return __sync_fetch_and_add ( &m_uValue, 1 );
+		return __sync_fetch_and_add ( &m_iValue, 1 );
 	}
-	inline UINT Dec()
+	inline INT Dec()
 	{
-		return __sync_fetch_and_sub ( &m_uValue, 1 );
+		return __sync_fetch_and_sub ( &m_iValue, 1 );
 	}
 #elif USE_WINDOWS
-	UINT Inc();
-	UINT Dec();
+	INT Inc();
+	INT Dec();
 #endif
 
 #if NO_ATOMIC
-	inline UINT Inc()
+	inline INT Inc()
 	{
-		UINT uTmp;
+		INT iTmp;
 		m_tLock.Lock();
-		uTmp = m_uValue++;
+		iTmp = m_iValue++;
 		m_tLock.Unlock();
-		return uTmp;
+		return iTmp;
 	}
-	inline UINT Dec()
+	inline INT Dec()
 	{
-		UINT uTmp;
+		INT iTmp;
 		m_tLock.Lock();
-		uTmp = m_uValue--;
+		iTmp = m_iValue--;
 		m_tLock.Unlock();
-		return uTmp;
+		return iTmp;
 	}
 #endif
 };

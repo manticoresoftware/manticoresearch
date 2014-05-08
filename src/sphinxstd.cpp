@@ -1816,7 +1816,7 @@ DWORD sphCRC32 ( const void * s, int iLen, DWORD uPrevCRC )
 template<>
 long CSphAtomic<long>::operator()()
 {
-	return InterlockedAdd ( &m_iValue, 0 );
+	return InterlockedExchangeAdd ( &m_iValue, 0 );
 }
 template<>
 long CSphAtomic<long>::Inc()

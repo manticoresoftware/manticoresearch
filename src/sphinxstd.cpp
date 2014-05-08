@@ -1814,14 +1814,19 @@ DWORD sphCRC32 ( const void * s, int iLen, DWORD uPrevCRC )
 
 #if USE_WINDOWS
 template<>
+long CSphAtomic<long>::operator()()
+{
+	return InterlockedAdd ( &m_iValue, 0 );
+}
+template<>
 long CSphAtomic<long>::Inc()
 {
-	return InterlockedIncrement ( &m_uValue )-1;
+	return InterlockedIncrement ( &m_iValue )-1;
 }
 template<>
 long CSphAtomic<long>::Dec()
 {
-	return InterlockedDecrement ( &m_uValue )+1;
+	return InterlockedDecrement ( &m_iValue )+1;
 }
 #endif
 

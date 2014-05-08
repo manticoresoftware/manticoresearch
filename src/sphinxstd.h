@@ -3022,13 +3022,13 @@ public:
 #endif
 	}
 
-	inline INT operator()() const
+#ifdef HAVE_SYNC_FETCH
+	inline INT operator()()
 	{
-		return __sync_fetch_and_add ( & m_iValue, 0 );
+		return __sync_fetch_and_add ( &m_iValue, 0 );
 	}
 
 	// return value here is original value, prior to operation took place
-#ifdef HAVE_SYNC_FETCH
 	inline INT Inc()
 	{
 		return __sync_fetch_and_add ( &m_iValue, 1 );
@@ -3038,26 +3038,26 @@ public:
 		return __sync_fetch_and_sub ( &m_iValue, 1 );
 	}
 #elif USE_WINDOWS
+	INT operator()();
 	INT Inc();
 	INT Dec();
 #endif
 
 #if NO_ATOMIC
+	INT operator()()
+	{
+		CSphScopedLock<CSphMutex> tLock ( m_tLock );
+		return m_iValue;
+	}
 	inline INT Inc()
 	{
-		INT iTmp;
-		m_tLock.Lock();
-		iTmp = m_iValue++;
-		m_tLock.Unlock();
-		return iTmp;
+		CSphScopedLock<CSphMutex> tLock ( m_tLock );
+		return m_iValue++;
 	}
 	inline INT Dec()
 	{
-		INT iTmp;
-		m_tLock.Lock();
-		iTmp = m_iValue--;
-		m_tLock.Unlock();
-		return iTmp;
+		CSphScopedLock<CSphMutex> tLock ( m_tLock );
+		return m_iValue--;
 	}
 #endif
 };

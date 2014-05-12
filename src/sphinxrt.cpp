@@ -3188,7 +3188,7 @@ void RtIndex_t::FreeRetired()
 {
 	ARRAY_FOREACH ( i, m_dRetired )
 	{
-		if ( m_dRetired[i]->m_tRefCount()==0 )
+		if ( m_dRetired[i]->m_tRefCount==0 )
 		{
 			SafeDelete ( m_dRetired[i] );
 			m_dRetired.RemoveFast ( i );
@@ -6536,7 +6536,7 @@ void RtIndex_t::GetReaderChunks ( SphChunkGuard_t & tGuard ) const
 		pKlist->m_tRefCount.Inc();
 		tGuard.m_dKill[i] = pKlist;
 
-		assert ( tGuard.m_dRamChunks[i]->m_tRefCount()>=0 );
+		assert ( tGuard.m_dRamChunks[i]->m_tRefCount>=0 );
 		tGuard.m_dRamChunks[i]->m_tRefCount.Inc();
 	}
 
@@ -6554,7 +6554,7 @@ SphChunkGuard_t::~SphChunkGuard_t()
 
 	ARRAY_FOREACH ( i, m_dRamChunks )
 	{
-		assert ( m_dRamChunks[i]->m_tRefCount()>=1 );
+		assert ( m_dRamChunks[i]->m_tRefCount>=1 );
 
 		KlistRefcounted_t * pKlist = const_cast<KlistRefcounted_t *> ( m_dKill[i] );
 		uint64_t uRefs = pKlist->m_tRefCount.Dec();

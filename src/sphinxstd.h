@@ -3023,7 +3023,7 @@ public:
 	}
 
 #ifdef HAVE_SYNC_FETCH
-	inline INT operator()()
+	operator INT()
 	{
 		return __sync_fetch_and_add ( &m_iValue, 0 );
 	}
@@ -3038,13 +3038,13 @@ public:
 		return __sync_fetch_and_sub ( &m_iValue, 1 );
 	}
 #elif USE_WINDOWS
-	INT operator()();
+	operator INT();
 	INT Inc();
 	INT Dec();
 #endif
 
 #if NO_ATOMIC
-	INT operator()()
+	operator INT()
 	{
 		CSphScopedLock<CSphMutex> tLock ( m_tLock );
 		return m_iValue;

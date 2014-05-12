@@ -521,7 +521,7 @@ static bool				g_bSafeTrace	= false;
 static bool				g_bStripPath	= false;
 
 static volatile bool	g_bDoDelete			= false;	// do we need to delete any indexes?
-static volatile int		g_iRotateCount		= 0;		// flag that we are rotating now; set from SIGHUP; cleared on rotation success
+static CSphAtomic<long> g_iRotateCount			( 0 );  // how many times do we need to rotate
 static volatile sig_atomic_t g_bGotSighup		= 0;	// we just received SIGHUP; need to log
 static volatile sig_atomic_t g_bGotSigterm		= 0;	// we just received SIGTERM; need to shutdown
 static volatile sig_atomic_t g_bGotSigchld		= 0;	// we just received SIGCHLD; need to count dead children
@@ -9532,7 +9532,7 @@ void LocalSearchThreadFunc ( void * pArg )
 
 	for ( ;; )
 	{
-		if ( (*pContext->m_pCurSearch)()>=pContext->m_iSearches)
+		if ( *pContext->m_pCurSearch>=pContext->m_iSearches)
 			return;
 
 		long iCurSearch = pContext->m_pCurSearch->Inc();
@@ -18897,7 +18897,7 @@ void RotationThreadFunc ( void * )
 		g_tRotateQueueMutex.Lock();
 		if ( !g_dRotateQueue.GetLength() )
 		{
-			g_iRotateCount = Max ( 0, g_iRotateCount-1 );
+			g_iRotateCount.Dec();
 			sphInfo ( "rotating index: all indexes done" );
 		}
 		g_sPrereading = NULL;
@@ -18922,7 +18922,7 @@ void IndexRotationDone ()
 	}
 #endif
 
-	g_iRotateCount = Max ( 0, g_iRotateCount-1 );
+	g_iRotateCount.Dec();
 	g_bInvokeRotationService = true;
 	sphInfo ( "rotating finished" );
 }
@@ -20584,8 +20584,9 @@ void CheckRotate ()
 
 	if ( !iRotIndexes )
 	{
-		g_iRotateCount = Max ( 0, g_iRotateCount-1 );
-		sphWarning ( "nothing to rotate after SIGHUP ( in queue=%d )", g_iRotateCount );
+		int iRotateCount = ( g_iRotateCount.Dec()-1 );
+		iRotateCount = Max ( 0, iRotateCount );
+		sphWarning ( "nothing to rotate after SIGHUP ( in queue=%d )", iRotateCount );
 	} else
 	{
 		g_bInvokeRotationService = true;
@@ -21215,10 +21216,8 @@ void CheckSignals ()
 
 	if ( g_bGotSighup )
 	{
-		g_tRotateQueueMutex.Lock();
-		g_iRotateCount++;
-		g_tRotateQueueMutex.Unlock();
-		sphInfo ( "caught SIGHUP (seamless=%d, in queue=%d)", (int)g_bSeamlessRotate, g_iRotateCount );
+		int iRotateCount = ( g_iRotateCount.Inc()+1 );
+		sphInfo ( "caught SIGHUP (seamless=%d, in queue=%d)", (int)g_bSeamlessRotate, iRotateCount );
 		g_bGotSighup = 0;
 	}
 

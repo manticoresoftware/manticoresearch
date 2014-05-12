@@ -1814,7 +1814,7 @@ DWORD sphCRC32 ( const void * s, int iLen, DWORD uPrevCRC )
 
 #if USE_WINDOWS
 template<>
-long CSphAtomic<long>::operator()()
+CSphAtomic<long>::operator long()
 {
 	return InterlockedExchangeAdd ( &m_iValue, 0 );
 }

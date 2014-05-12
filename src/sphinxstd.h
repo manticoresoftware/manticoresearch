@@ -2409,16 +2409,14 @@ public:
 #if USE_WINDOWS
 		delete [] this->GetWritePtr();
 #else
-		if ( g_bHeadProcess )
-		{
-			int iRes = munmap ( this->GetWritePtr(), this->GetLengthBytes() );
-			if ( iRes )
-				sphWarn ( "munmap() failed: %s", strerror(errno) );
+		int iRes = munmap ( this->GetWritePtr(), this->GetLengthBytes() );
+		if ( iRes )
+			sphWarn ( "munmap() failed: %s", strerror(errno) );
 
 #if SPH_ALLOCS_PROFILER
-			sphMemStatMMapDel ( this->GetLengthBytes() );
+		sphMemStatMMapDel ( this->GetLengthBytes() );
 #endif
-		}
+
 #endif // USE_WINDOWS
 
 		this->Set ( NULL, 0 );

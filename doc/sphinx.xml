@@ -5395,9 +5395,9 @@ OPTION ranker=bm25, max_matches=3000,
     field_weights=(title=10, body=3), agent_query_timeout=10000
 </programlisting>
 </para></listitem>
-<listitem><para>FACET clause. This is a Sphinx specific extension that allows to perform faceted search with subtree optimization
-and return multiple result sets with a single SQL statement, without the need for complicated <link linkend="sphinxql-multi-queries">multi-queries</link>.
-FACET clauses should be written in the very end of the SELECT statement with spaces between them.
+<listitem><para>FACET clause. This Sphinx specific extension enables faceted search with subtree optimization.
+It is capable of returning multiple result sets with a single SQL statement, without the need for complicated <link linkend="sphinxql-multi-queries">multi-queries</link>.
+FACET clauses should be written at the very end of SELECT statements with spaces between them.
 <programlisting>
 FACET {expr}[, expr ...] [BY {expr}[, expr ...]] [ORDER BY {expr | FACET()} {ASC | DESC}[, ...]]
 SELECT * FROM test FACET brand_id FACET categories;
@@ -5409,7 +5409,7 @@ mysql> SELECT *, IN(brand_id,1,2,3,4) AS b FROM facetdemo WHERE MATCH('Product')
 FACET brand_name, brand_id BY brand_id ORDER BY brand_id ASC
 FACET property ORDER BY COUNT(*) DESC
 FACET INTERVAL(price,200,400,600,800) ORDER BY FACET() ASC
-FACET categories
+FACET categories ORDER BY FACET() ASC;
 +------+-------+----------+-------------------+-------------+----------+------------+------+
 | id   | price | brand_id | title             | brand_name  | property | categories | b    |
 +------+-------+----------+-------------------+-------------+----------+------------+------+
@@ -5458,12 +5458,12 @@ FACET categories
 +------------+----------+
 | categories | count(*) |
 +------------+----------+
-|         12 |     1998 |
+|         10 |      961 |
 |         11 |     1653 |
+|         12 |     1998 |
 |         13 |     2090 |
 |         14 |     1058 |
 |         15 |      347 |
-|         10 |      961 |
 +------------+----------+
 </programlisting>
 </para>
@@ -14269,6 +14269,7 @@ rlp_max_batch_docs = 100
 <listitem><para>fixed #1919, TSV bitcount attributes indexation issue</para></listitem>
 <listitem><para>fixed #1906, ZONE constraints for expanded terms</para></listitem>
 <listitem><para>fixed #1942, crash in SHOW THREADS command</para></listitem>
+<listitem><para>fixed #1946, IN() function support for string attributes</para></listitem>
 <listitem><para>fixed template index removing on rotation</para></listitem>
 <listitem><para>fixed #1949, impossible to use unixsockets in agents</para></listitem>
 </itemizedlist>

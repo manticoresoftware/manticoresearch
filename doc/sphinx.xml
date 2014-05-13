@@ -5,7 +5,7 @@
 ]>
 <book lang="en">
 
-<title>Sphinx 2.2.3-dev reference manual</title>
+<title>Sphinx 2.2.3-beta reference manual</title>
 <subtitle>Free open-source SQL full-text search engine</subtitle>
 
 <bookinfo>
@@ -1994,7 +1994,7 @@ above, <code>(ZONESPAN:th hello world)></code> would not match the document,
 since "hello" and "world" do not occur within the same span.
 </para>
 <para>
-&lt;b&gt;MAYBE&lt;b&gt; operator was added in 2.2.3-beta. It works much like |
+<b>MAYBE</b> operator was added in 2.2.3-beta. It works much like |
 operator but doesn't return documents which match only right subtree expression.
 </para>
 </sect1>
@@ -14238,40 +14238,39 @@ rlp_max_batch_docs = 100
 
 <appendix id="changelog"><title>Sphinx revision history</title>
 
-<sect1 id="rel223"><title>Version 2.2.3-beta, ?? apr 2014</title>
+<sect1 id="rel223"><title>Version 2.2.3-beta, 13 may 2014</title>
 <bridgehead>New features</bridgehead>
 <itemizedlist>
-<listitem><para>added #1860, USERVARs for distributed indexes</para></listitem>
-<listitem><para>added #1689, GROUP BY JSON attributes</para></listitem>
-<listitem><para>added #1887, filtering over string attributes</para></listitem>
-<listitem><para>added #1920, charset table aliases</para></listitem>
-<listitem><para>added IDF boost keyword modifier</para></listitem>
+<listitem><para>added <ulink url="http://sphinxsearch.com/bugs/view.php?id=1920">#1920</ulink>, <link linkend="conf-charset-table">charset_table</link> aliases</para></listitem>
+<listitem><para>added <ulink url="http://sphinxsearch.com/bugs/view.php?id=1887">#1887</ulink>, filtering over string attributes</para></listitem>
+<listitem><para>added <ulink url="http://sphinxsearch.com/bugs/view.php?id=1860">#1860</ulink>, <link linkend="sphinxql-set">USERVARs</link> for distributed indexes</para></listitem>
+<listitem><para>added <ulink url="http://sphinxsearch.com/bugs/view.php?id=1689">#1689</ulink>, <link linkend="sphinxql-select">GROUP BY JSON</link> attributes</para></listitem>
+<listitem><para>added <link linkend="sphinxql-select">FACET</link> keyword</para></listitem>
 <listitem><para>added Go MySQL connector support</para></listitem>
-<listitem><para>added MAYBE fulltext operator</para></listitem>
-<listitem><para>added FACET keyword</para></listitem>
+<listitem><para>added <link linkend="extended-syntax">IDF boost</link> keyword modifier</para></listitem>
+<listitem><para>added <link linkend="extended-syntax">MAYBE</link> fulltext operator</para></listitem>
 </itemizedlist>
 <bridgehead>Optimizations and removals</bridgehead>
 <itemizedlist>
 <listitem><para>improved speed of concurrent insertion in RT indexes</para></listitem>
-<listitem><para>removed max_matches config key</para></listitem>
+<listitem><para>removed <link linkend="sphinx-deprecations-defaults">max_matches</link> config key</para></listitem>
 </itemizedlist>
 <bridgehead>Bug fixes</bridgehead>
 <itemizedlist>
-<listitem><para>fixed #1870, crash on ORDER BY JSON attributes</para></listitem>
-<listitem><para>fixed #1884, crash with SNIPPET() function over distributed index</para></listitem>
-<listitem><para>fixed #1893, searchd crashes on expressions like 'a&lt;&lt;(*!b)'</para></listitem>
-<listitem><para>fixed #1899, crash on CALL KEYWORDS</para></listitem>
-<listitem><para>fixed #1883, crash at expanded keyword with hitless index</para></listitem>
-<listitem><para>fixed #1904, race condition in RT indexes on saving disk chunk</para></listitem>
-<listitem><para>fixed #1910, JSON parsing issue</para></listitem>
-<listitem><para>fixed #1916, COUNT(*) with empty result set</para></listitem>
+<listitem><para>fixed #1946, <link linkend="expr-func-in">IN()</link> function support for string attributes</para></listitem>
+<listitem><para>fixed #1942, crash in <link linkend="sphinxql-threads">SHOW THREADS</link> command</para></listitem>
 <listitem><para>fixed #1922, crash on snippet generation for queries with duplicated words</para></listitem>
-<listitem><para>fixed #1919, TSV bitcount attributes indexation issue</para></listitem>
-<listitem><para>fixed #1906, ZONE constraints for expanded terms</para></listitem>
-<listitem><para>fixed #1942, crash in SHOW THREADS command</para></listitem>
-<listitem><para>fixed #1946, IN() function support for string attributes</para></listitem>
+<listitem><para>fixed #1919, <link linkend="tsvpipe">TSV</link> bitcount attributes indexation issue</para></listitem>
+<listitem><para>fixed #1916, <link linkend="sphinxql-select">COUNT(*)</link> with empty result set</para></listitem>
+<listitem><para>fixed #1910, JSON parsing issue</para></listitem>
+<listitem><para>fixed #1906, <link linkend="extended-syntax">ZONE</link> constraints for expanded terms</para></listitem>
+<listitem><para>fixed #1904, race condition in RT indexes on saving disk chunk</para></listitem>
+<listitem><para>fixed #1899, crash on <link linkend="sphinxql-call-keywords">CALL KEYWORDS</link></para></listitem>
+<listitem><para>fixed #1893, <filename>searchd</filename> crashes on expressions like 'a&lt;&lt;(*!b)'</para></listitem>
+<listitem><para>fixed #1884, crash with <link linkend="sphinxql-select">SNIPPET()</link> function over distributed index</para></listitem>
+<listitem><para>fixed #1883, crash at expanded keyword with hitless index</para></listitem>
+<listitem><para>fixed #1870, crash on <link linkend="sphinxql-select">ORDER BY JSON</link> attributes</para></listitem>
 <listitem><para>fixed template index removing on rotation</para></listitem>
-<listitem><para>fixed #1949, impossible to use unixsockets in agents</para></listitem>
 </itemizedlist>
 </sect1>
 

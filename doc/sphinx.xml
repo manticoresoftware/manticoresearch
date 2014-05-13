@@ -14248,6 +14248,7 @@ rlp_max_batch_docs = 100
 <listitem><para>added IDF boost keyword modifier</para></listitem>
 <listitem><para>added Go MySQL connector support</para></listitem>
 <listitem><para>added MAYBE fulltext operator</para></listitem>
+<listitem><para>added FACET keyword</para></listitem>
 </itemizedlist>
 <bridgehead>Optimizations and removals</bridgehead>
 <itemizedlist>
@@ -14269,6 +14270,7 @@ rlp_max_batch_docs = 100
 <listitem><para>fixed #1906, ZONE constraints for expanded terms</para></listitem>
 <listitem><para>fixed #1942, crash in SHOW THREADS command</para></listitem>
 <listitem><para>fixed template index removing on rotation</para></listitem>
+<listitem><para>fixed #1949, impossible to use unixsockets in agents</para></listitem>
 </itemizedlist>
 </sect1>
 

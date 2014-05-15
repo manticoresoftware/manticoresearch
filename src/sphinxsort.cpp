@@ -2900,8 +2900,8 @@ public:
 		case JSON_OBJECT:
 		case JSON_MIXED_VECTOR:
 			iLen = sphJsonUnpackInt ( &pValue );
-			uGroupkey = sphFNV64 ( pValue, iLen );
-			break;
+			uGroupkey = iLen==1 ? 0 : sphFNV64 ( pValue, iLen );
+			return this->PushEx ( tMatch, uGroupkey, false, false, iLen==1 ? 0: &iValue );
 		case JSON_STRING_VECTOR:
 			{
 				sphJsonUnpackInt ( &pValue );

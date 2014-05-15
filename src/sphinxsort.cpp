@@ -1805,6 +1805,10 @@ public:
 
 				// clone the low part of the match
 				m_tPregroup.Clone ( pMatch, &tEntry );
+
+				// update @groupbystr value, if available
+				if ( pAttr && m_tLocGroupbyStr.m_bDynamic )
+					pMatch->SetAttr ( m_tLocGroupbyStr, *pAttr );
 			}
 		}
 

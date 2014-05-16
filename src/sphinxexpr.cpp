@@ -1191,6 +1191,18 @@ struct Expr_ForIn_c : public Expr_JsonFieldConv_c
 						break;
 				break;
 			}
+		case JSON_STRING_VECTOR:
+			{
+				sphJsonUnpackInt ( &p );
+				int iLen = sphJsonUnpackInt ( &p );
+				for ( int i=0;i<iLen;i++ )
+				{
+					if ( !ExprEval ( &iResult, tMatch, i, JSON_STRING, p ) )
+						break;
+					sphJsonSkipNode ( JSON_STRING, &p );
+				}
+				break;
+			}
 		case JSON_MIXED_VECTOR:
 			{
 				sphJsonUnpackInt ( &p );

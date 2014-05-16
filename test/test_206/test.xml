@@ -648,9 +648,9 @@ Two'</sphinxql>
 <sphinxql>select * from json_inplace_rt group by title, j</sphinxql>
 <!-- search in arrays -->
 <sphinxql>insert into json_search (id, title, j) values
-	(1, 'a1', '{"array":[{gid:1,name:"a1"},{gid:2,name:"a2"},{gid:3,name:"a3"}], "intarray":[1,2,3]}'),
-	(2, 'a5', '{"array":[{gid:4,name:"a4"},{gid:5,name:"a5"},{gid:6,name:"a6"}], "intarray":[4,5,6]}'),
-	(3, 'a9', '{"array":[{gid:7,name:"a7"},{gid:8,name:"a8"},{gid:9,name:"a9"}], "intarray":[7,8,9]}')
+	(1, 'a1', '{"array":[{gid:1,name:"a1"},{gid:2,name:"a2"},{gid:3,name:"a3"}], "intarray":[1,2,3], "tags":["a1","a2","a3"]}'),
+	(2, 'a5', '{"array":[{gid:4,name:"a4"},{gid:5,name:"a5"},{gid:6,name:"a6"}], "intarray":[4,5,6], "tags":["a4","a5","a6"]}'),
+	(3, 'a9', '{"array":[{gid:7,name:"a7"},{gid:8,name:"a8"},{gid:9,name:"a9"}], "intarray":[7,8,9], "tags":["a7","a8","a9"]}')
 </sphinxql>
 <sphinxql>select all(x&gt;3 and x&lt;7 for x in j.intarray) from json_search</sphinxql>
 <sphinxql>select any(x&gt;1 and x&lt;3 for x in j.intarray) from json_search</sphinxql>
@@ -668,6 +668,9 @@ Two'</sphinxql>
 <sphinxql>select indexof('a2'=x.name for x in j.array) from json_search</sphinxql>
 <sphinxql>select indexof(title=x.name for x in j.array) from json_search</sphinxql>
 <sphinxql>select indexof(to_string(1)=to_string(1) for x in j.array) from json_search</sphinxql>
+<sphinxql>select all(x='a1' for x in j.tags) from json_search</sphinxql>
+<sphinxql>select any(x='a3' for x in j.tags) from json_search</sphinxql>
+<sphinxql>select indexof(x='a5' for x in j.tags) from json_search</sphinxql>
 <!-- type conversion in the order by clause -->
 <sphinxql>insert into json_order (id, j) values
 	(1, '{i:123,d:123.0,b:12300000000}'),

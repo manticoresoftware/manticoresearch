@@ -3345,7 +3345,7 @@ void TestGeodist()
 			{
 				for ( int b=0; b<360; b+=3, n++ )
 				{
-					double t[4] = { lat, lon, 0, 0 };
+					double t[4] = { double(lat), double(lon), 0, 0 };
 					DestVincenty ( t[0], t[1], b, dist, t+2, t+3 );
 					for ( int j=0; j<4; j++ )
 						dBench.Add ( t[j] );

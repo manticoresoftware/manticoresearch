@@ -79,7 +79,13 @@ typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag
 // COMPILE-TIME CHECKS
 /////////////////////////////////////////////////////////////////////////////
 
-#define STATIC_ASSERT(_cond,_name)		typedef char STATIC_ASSERT_FAILED_ ## _name [ (_cond) ? 1 : -1 ]
+#if defined (__GNUC__)
+#define SPH_ATTR_UNUSED __attribute__((unused))
+#else
+#define  SPH_ATTR_UNUSED
+#endif
+
+#define STATIC_ASSERT(_cond,_name)		typedef char STATIC_ASSERT_FAILED_ ## _name [ (_cond) ? 1 : -1 ] SPH_ATTR_UNUSED
 #define STATIC_SIZE_ASSERT(_type,_size)	STATIC_ASSERT ( sizeof(_type)==_size, _type ## _MUST_BE_ ## _size ## _BYTES )
 
 

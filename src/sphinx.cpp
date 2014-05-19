@@ -1825,7 +1825,7 @@ static size_t sphReadThrottled ( int iFD, void * pBuf, size_t iCount, ThrottleSt
 	}
 
 	sphThrottleSleep ( pThrottle );
-	return sphRead ( iFD, pBuf, iCount );
+	return (size_t)sphRead ( iFD, pBuf, iCount ); // FIXME? we sure this is under 2gb?
 }
 
 void SafeClose ( int & iFD )

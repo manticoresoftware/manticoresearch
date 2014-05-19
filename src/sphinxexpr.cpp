@@ -1402,7 +1402,7 @@ DECLARE_UNARY_TRAITS ( Expr_Log2_c )
        {
                float fFirst = m_pFirst->Eval ( tMatch );
                // ideally this would be SQLNULL instead of plain 0.0f
-               return fFirst>0.0f ? log ( fFirst )*M_LOG2E : 0.0f;
+               return fFirst>0.0f ? (float)( log ( fFirst )*M_LOG2E ) : 0.0f;
        }
 DECLARE_END()
 
@@ -1411,7 +1411,7 @@ DECLARE_UNARY_TRAITS ( Expr_Log10_c )
        {
                float fFirst = m_pFirst->Eval ( tMatch );
                // ideally this would be SQLNULL instead of plain 0.0f
-               return fFirst>0.0f ? log ( fFirst )*M_LOG10E : 0.0f;
+               return fFirst>0.0f ? (float)( log ( fFirst )*M_LOG10E ) : 0.0f;
        }
 DECLARE_END()
 
@@ -2705,8 +2705,8 @@ void ExprParser_t::ConstantFoldPass ( int iNode )
 			case FUNC_SIN:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float ( sin ( fArg) ); break;
 			case FUNC_COS:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float ( cos ( fArg ) ); break;
 			case FUNC_LN:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = fArg>0.0f ? log(fArg) : 0.0f; break;
-			case FUNC_LOG2:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = fArg>0.0f ? log(fArg)*M_LOG2E : 0.0f; break;
-			case FUNC_LOG10:	pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = fArg>0.0f ? log(fArg)*M_LOG10E : 0.0f; break;
+			case FUNC_LOG2:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = fArg>0.0f ? (float)( log(fArg)*M_LOG2E ) : 0.0f; break;
+			case FUNC_LOG10:	pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = fArg>0.0f ? (float)( log(fArg)*M_LOG10E ) : 0.0f; break;
 			case FUNC_EXP:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float ( exp ( fArg ) ); break;
 			case FUNC_SQRT:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = fArg>0.0f ? sqrt(fArg) : 0.0f; break;
 			default:			break;

@@ -7141,7 +7141,7 @@ public:
 	{
 		// OPTIMIZE? quick full wipe? (using dwords/sse/whatever)
 		m_uCurLCS = 0;
-		if ( HANDLE_DUPES )
+		if_const ( HANDLE_DUPES )
 		{
 			m_uCurPos = 0;
 			m_uLcsTailPos = 0;
@@ -8054,7 +8054,7 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 	const int iPos = HITMAN::GetPos ( pHlist->m_uHitpos );
 	const DWORD uPosWithField = HITMAN::GetPosWithField ( pHlist->m_uHitpos );
 
-	if ( !HANDLE_DUPES )
+	if_const ( !HANDLE_DUPES )
 	{
 		// update LCS
 		int iDelta = uPosWithField - pHlist->m_uQuerypos;
@@ -8633,7 +8633,7 @@ DWORD RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Finalize ( const CS
 		? m_pExpr->IntEval ( tMatch )
 		: (DWORD)m_pExpr->Eval ( tMatch );
 
-	if ( HANDLE_DUPES )
+	if_const ( HANDLE_DUPES )
 	{
 		m_uCurPos = 0;
 		m_uLcsTailPos = 0;

@@ -1105,7 +1105,7 @@ void XQParser_t::HandleModifiers ( XQKeyword_t & tKeyword )
 	{
 		// Probably we have a boost, lets check.
 		char * pEnd;
-		float fBoost = strtod ( sTokEnd+1, &pEnd );
+		float fBoost = (float)strtod ( sTokEnd+1, &pEnd );
 		if ( ( sTokEnd+1 )!=pEnd )
 		{
 			// We do have a boost.

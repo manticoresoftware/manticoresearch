@@ -718,5 +718,8 @@ Two'</sphinxql>
 <sphinxql>select data, data.html from rt where id=1</sphinxql>
 <sphinxql>replace into rt (id, data) values (1,'{"html":"p class=\\"document\\""}')</sphinxql>
 <sphinxql>select data, data.html from rt where id=1</sphinxql>
+<!-- interval function and implicit conversion -->
+<sphinxql>select j.a, interval(uint(j.a[0]),1,2,3) from arrays</sphinxql>
+<sphinxql>select j.a, interval(j.a[0],1,2,3) from arrays</sphinxql>
 </sphqueries>
 </test>

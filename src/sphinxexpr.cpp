@@ -4997,6 +4997,13 @@ ISphExpr * ExprParser_t::CreateIntervalNode ( int iArgsNode, CSphVector<ISphExpr
 {
 	assert ( dArgs.GetLength()>=2 );
 
+	CSphVector<ESphAttr> dTypes;
+	GatherArgRetTypes ( iArgsNode, dTypes );
+
+	// force type conversion, where possible
+	if ( dTypes[0]==SPH_ATTR_JSON_FIELD )
+		dArgs[0] = new Expr_JsonFieldConv_c ( dArgs[0] );
+
 	bool bConst = CheckForConstSet ( iArgsNode, 1 );
 	ESphAttr eAttrType = m_dNodes[iArgsNode].m_eArgType;
 	if ( bConst )

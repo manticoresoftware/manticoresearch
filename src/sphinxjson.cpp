@@ -1015,7 +1015,12 @@ bool sphJsonNameSplit ( const char * sName, CSphString * sColumn, CSphString * s
 	// find either '[' or '.', what comes first
 	const char * pSep = sName;
 	while ( *pSep && *pSep!='.' && *pSep!='[' )
+	{
+		// check for invalid characters
+		if ( !sphIsAttr( *pSep ) && *pSep!=' ' )
+			return false;
 		pSep++;
+	}
 
 	if ( !*pSep )
 		return false;

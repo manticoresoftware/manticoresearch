@@ -20,6 +20,9 @@
 #include "sphinxutils.h"
 #include "sphinxstem.h"
 
+struct CSphReconfigureSettings;
+struct CSphReconfigureSetup;
+
 /// RAM based updateable backend interface
 class ISphRtIndex : public CSphIndex
 {
@@ -63,6 +66,13 @@ public:
 	virtual bool Truncate ( CSphString & sError ) = 0;
 
 	virtual void Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pThrottle ) = 0;
+
+	/// check settings vs current and return back tokenizer and dictionary in case of difference
+	virtual bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError ) const = 0;
+
+	/// reconfigure index by using new tokenizer, dictionary and index settings
+	/// current data got saved with current settings
+	virtual void Reconfigure ( CSphReconfigureSetup & tSetup ) = 0;
 };
 
 /// initialize subsystem

@@ -95,6 +95,7 @@
 %token	TOK_RAND
 %token	TOK_RAMCHUNK
 %token	TOK_READ
+%token	TOK_RECONFIGURE
 %token	TOK_REPEATABLE
 %token	TOK_REPLACE
 %token	TOK_REMAP
@@ -1236,6 +1237,12 @@ alter:
 			tStmt.m_eStmt = STMT_ALTER_DROP;
 			pParser->ToString ( tStmt.m_sIndex, $3 );
 			pParser->ToString ( tStmt.m_sAlterAttr, $6 );
+		}
+	| TOK_ALTER TOK_RTINDEX ident TOK_RECONFIGURE
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_ALTER_RECONFIGURE;
+			pParser->ToString ( tStmt.m_sIndex, $3 );
 		}
 	;
 

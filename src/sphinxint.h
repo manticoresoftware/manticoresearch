@@ -210,7 +210,7 @@ public:
 #endif
 
 	void			ZipInt ( DWORD uValue );
-	void			ZipOffset ( SphOffset_t uValue );
+	void			ZipOffset ( uint64_t uValue );
 	void			ZipOffsets ( CSphVector<SphOffset_t> * pData );
 
 	bool			IsError () const	{ return m_bError; }
@@ -300,7 +300,7 @@ public:
 	bool		Tag ( const char * sTag );
 
 	DWORD		UnzipInt ();
-	SphOffset_t	UnzipOffset ();
+	uint64_t	UnzipOffset ();
 
 	SphOffset_t				Tell () const				{ return m_iPos + m_iBuffPos; }
 	bool					GetErrorFlag () const		{ return m_bError; }
@@ -339,8 +339,8 @@ protected:
 	CSphString	m_sFilename;
 	ThrottleState_t * m_pThrottle;
 
-private:
-	void		UpdateCache ();
+protected:
+	virtual void		UpdateCache ();
 };
 
 
@@ -1559,6 +1559,24 @@ struct ISphQueryFilter
 
 DWORD sphParseMorphAot ( const char * );
 
+struct CSphReconfigureSettings
+{
+	CSphTokenizerSettings	m_tTokenizer;
+	CSphDictSettings		m_tDict;
+	CSphIndexSettings		m_tIndex;
+};
+
+struct CSphReconfigureSetup
+{
+	ISphTokenizer *		m_pTokenizer;
+	CSphDict *			m_pDict;
+	CSphIndexSettings	m_tIndex;
+
+	CSphReconfigureSetup ();
+	~CSphReconfigureSetup ();
+};
+
+uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings );
 
 //////////////////////////////////////////////////////////////////////////
 // USER VARIABLES
@@ -1627,7 +1645,7 @@ void			sphSetDebugCheck ();
 
 void			WriteSchema ( CSphWriter & fdInfo, const CSphSchema & tSchema );
 void			ReadSchema ( CSphReader & rdInfo, CSphSchema & m_tSchema, DWORD uVersion, bool bDynamic );
-void			SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & m_tSettings );
+void			SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & tSettings );
 void			LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DWORD uVersion );
 void			SaveTokenizerSettings ( CSphWriter & tWriter, ISphTokenizer * pTokenizer, int iEmbeddedLimit );
 bool			LoadTokenizerSettings ( CSphReader & tReader, CSphTokenizerSettings & tSettings, CSphEmbeddedFiles & tEmbeddedFiles, DWORD uVersion, CSphString & sWarning );

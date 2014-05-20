@@ -7783,7 +7783,7 @@ void CSphWriter::ZipInt ( DWORD uValue )
 }
 
 
-void CSphWriter::ZipOffset ( SphOffset_t uValue )
+void CSphWriter::ZipOffset ( uint64_t uValue )
 {
 	int iBytes = 1;
 
@@ -8299,7 +8299,7 @@ DWORD sphUnzipInt ( const BYTE * & pBuf )			{ SPH_VARINT_DECODE ( DWORD, *pBuf++
 SphOffset_t sphUnzipOffset ( const BYTE * & pBuf )	{ SPH_VARINT_DECODE ( SphOffset_t, *pBuf++ ); }
 
 DWORD CSphReader::UnzipInt ()			{ SPH_VARINT_DECODE ( DWORD, GetByte() ); }
-SphOffset_t CSphReader::UnzipOffset ()	{ SPH_VARINT_DECODE ( uint64_t, GetByte() ); }
+uint64_t CSphReader::UnzipOffset ()	{ SPH_VARINT_DECODE ( uint64_t, GetByte() ); }
 
 
 #if USE_64BIT

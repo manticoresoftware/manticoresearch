@@ -521,7 +521,7 @@ static bool				g_bSafeTrace	= false;
 static bool				g_bStripPath	= false;
 
 static volatile bool	g_bDoDelete			= false;	// do we need to delete any indexes?
-static CSphAtomic<long> g_iRotateCount			( 0 );  // how many times do we need to rotate
+static CSphAtomic<long> g_iRotateCount			( 0 );	// how many times do we need to rotate
 static volatile sig_atomic_t g_bGotSighup		= 0;	// we just received SIGHUP; need to log
 static volatile sig_atomic_t g_bGotSigterm		= 0;	// we just received SIGTERM; need to shutdown
 static volatile sig_atomic_t g_bGotSigchld		= 0;	// we just received SIGCHLD; need to count dead children
@@ -8829,7 +8829,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 
 		// skip all fields after count(*)
 		ARRAY_FOREACH ( i, dFrontend )
-			if ( dFrontend[i].m_sName == "count(*)" )
+			if ( dFrontend[i].m_sName=="count(*)" )
 			{
 				dFrontend.Resize ( i+1 );
 				break;
@@ -9532,7 +9532,7 @@ void LocalSearchThreadFunc ( void * pArg )
 
 	for ( ;; )
 	{
-		if ( *pContext->m_pCurSearch>=pContext->m_iSearches)
+		if ( *pContext->m_pCurSearch>=pContext->m_iSearches )
 			return;
 
 		long iCurSearch = pContext->m_pCurSearch->Inc();
@@ -9951,7 +9951,6 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 
 					if ( !m_bMultiQueue )
 						m_bFacetQueue = false;
-
 				}
 				if ( !sError.IsEmpty() )
 					m_dFailuresSet[iQuery].Submit ( sLocal, sError.cstr() );
@@ -11274,13 +11273,14 @@ enum SqlStmt_e
 	STMT_SHOW_PLUGINS,
 	STMT_SHOW_THREADS,
 	STMT_FACET,
+	STMT_ALTER_RECONFIGURE,
 
 	STMT_TOTAL
 };
 
 
 // FIXME? verify or generate these automatically somehow?
-static const char * g_dSqlStmts[STMT_TOTAL] =
+static const char * g_dSqlStmts[] =
 {
 	"parse_error", "dummy", "select", "insert", "replace", "delete", "show_warnings",
 	"show_status", "show_meta", "set", "begin", "commit", "rollback", "call",
@@ -11288,8 +11288,11 @@ static const char * g_dSqlStmts[STMT_TOTAL] =
 	"flush_rtindex", "flush_ramchunk", "show_variables", "truncate_rtindex", "select_sysvar",
 	"show_collation", "show_character_set", "optimize_index", "show_agent_status",
 	"show_index_status", "show_profile", "alter_add", "alter_drop", "show_plan",
-	"select_dual", "show_databases", "create_plugin", "drop_plugin", "show_plugins", "show_threads"
+	"select_dual", "show_databases", "create_plugin", "drop_plugin", "show_plugins", "show_threads",
+	"facet", "alter_reconfigure"
 };
+
+STATIC_ASSERT ( sizeof(g_dSqlStmts)/sizeof(g_dSqlStmts[0])==STMT_TOTAL, STMT_DESC_SHOULD_BE_SAME_AS_STMT_TOTAL );
 
 
 /// refcounted vector
@@ -12386,11 +12389,11 @@ bool ParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStm
 				// append top-level expressions to a facet schema (for filtering)
 				ARRAY_FOREACH ( k, tQuery.m_dItems )
 					if ( tQuery.m_dItems[k].m_sAlias!=tQuery.m_dItems[k].m_sExpr )
-						tStmt.m_tQuery.m_dItems.Add( tQuery.m_dItems[k] );
+						tStmt.m_tQuery.m_dItems.Add ( tQuery.m_dItems[k] );
 
 				// append filters
 				ARRAY_FOREACH ( k, tQuery.m_dFilters )
-					tStmt.m_tQuery.m_dFilters.Add( tQuery.m_dFilters[k] );
+					tStmt.m_tQuery.m_dFilters.Add ( tQuery.m_dFilters[k] );
 
 				i++;
 			}
@@ -17701,6 +17704,78 @@ static void HandleMysqlAlter ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, b
 }
 
 
+static void HandleMysqlReconfigure ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+{
+	MEMORY ( MEM_SQL_ALTER );
+
+	const char * sName = tStmt.m_sIndex.cstr();
+	CSphString sError;
+	CSphReconfigureSettings tSettings;
+	CSphReconfigureSetup tSetup;
+
+	CSphConfigParser tCfg;
+	if ( !tCfg.ReParse ( g_sConfigFile.cstr () ) )
+	{
+		sError.SetSprintf ( "failed to parse config file '%s'; using previous settings", g_sConfigFile.cstr () );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	const CSphConfig & hConf = tCfg.m_tConf;
+	if ( !hConf["index"].Exists ( sName ) )
+	{
+		sError.SetSprintf ( "failed to find index '%s' at config file '%s'; using previous settings", sName, g_sConfigFile.cstr () );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	const CSphConfigSection & hIndex = hConf["index"][sName];
+	sphConfTokenizer ( hIndex, tSettings.m_tTokenizer );
+
+	sphConfDictionary ( hIndex, tSettings.m_tDict );
+
+	if ( !sphConfIndex ( hIndex, tSettings.m_tIndex, sError ) )
+	{
+		sError.SetSprintf ( "'%s' failed to parse index settings, error '%s'", sName, sError.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	const ServedIndex_t * pServed = g_pLocalIndexes->GetRlockedEntry ( tStmt.m_sIndex.cstr() );
+	if ( !pServed || !pServed->m_bEnabled || !pServed->m_pIndex->IsRT() )
+	{
+		if ( pServed )
+			sError.SetSprintf ( "'%s' does not support ALTER (enabled=%d, RT=%d)", sName, pServed->m_bEnabled, pServed->m_pIndex->IsRT() );
+		else
+			sError.SetSprintf ( "ALTER is only supported on local (not distributed) indexes" );
+
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+
+		if ( pServed )
+			pServed->Unlock();
+
+		return;
+	}
+
+	bool bSame = ( (const ISphRtIndex *)pServed->m_pIndex )->IsSameSettings ( tSettings, tSetup, sError );
+
+	pServed->Unlock();
+
+	// replace going with exclusive lock
+	if ( !bSame && sError.IsEmpty() )
+	{
+		const ServedIndex_t * pServed = g_pLocalIndexes->GetWlockedEntry ( tStmt.m_sIndex.cstr() );
+		( (ISphRtIndex *)pServed->m_pIndex )->Reconfigure ( tSetup );
+		pServed->Unlock();
+	}
+
+	if ( sError.IsEmpty() )
+		tOut.Ok();
+	else
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+}
+
+
 static void HandleMysqlShowPlan ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p )
 {
 	tOut.HeadBegin ( 2 );
@@ -18034,6 +18109,10 @@ public:
 
 		case STMT_SHOW_THREADS:
 			HandleMysqlShowThreads ( tOut, *pStmt );
+			return true;
+
+		case STMT_ALTER_RECONFIGURE:
+			HandleMysqlReconfigure ( tOut, *pStmt );
 			return true;
 
 		default:

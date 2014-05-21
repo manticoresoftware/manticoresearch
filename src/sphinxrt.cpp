@@ -6394,16 +6394,18 @@ struct SphFinalArenaCopy_t : ISphMatchProcessor
 
 	CSphTightVector<BYTE> m_dStorageString;
 	CSphTightVector<DWORD> m_dStorageMva;
+	const CSphBitvec & m_dMvaArenaFlag;
 
 	SphFinalArenaCopy_t ( const CSphFixedVector<const RtSegment_t *> & dSegments, const CSphVector<const BYTE *> & dDiskStrings,
 		const CSphVector<const DWORD *> & dDiskMva, const CSphVector<CSphAttrTypedLocator> & dGetLoc, const CSphVector<CSphAttrLocator> & dSetLoc,
-		int iJsonFields )
+		int iJsonFields, CSphBitvec & dMvaArenaFlag )
 		: m_dSegments ( dSegments )
 		, m_dDiskStrings ( dDiskStrings )
 		, m_dDiskMva ( dDiskMva )
 		, m_dGetLoc ( dGetLoc )
 		, m_dSetLoc ( dSetLoc )
 		, m_dJsonAssoc ( iJsonFields )
+		, m_dMvaArenaFlag ( dMvaArenaFlag )
 	{
 		m_dStorageString.Add ( 0 );
 		m_dStorageMva.Add ( 0 );
@@ -6420,6 +6422,7 @@ struct SphFinalArenaCopy_t : ISphMatchProcessor
 		bool bSegmentMatch = ( iStorageSrc<iSegCount );
 		const BYTE * pBaseString = bSegmentMatch ? m_dSegments[iStorageSrc]->m_dStrings.Begin() : m_dDiskStrings[ iStorageSrc-iSegCount ];
 		const DWORD * pBaseMva = bSegmentMatch ? m_dSegments[iStorageSrc]->m_dMvas.Begin() : m_dDiskMva[ iStorageSrc-iSegCount ];
+		bool bArenaProhibit = bSegmentMatch ? true : m_dMvaArenaFlag.BitGet ( iStorageSrc-iSegCount );
 
 		int iJson = 0;
 		m_dOriginalJson.Resize ( 0 );
@@ -6454,7 +6457,7 @@ struct SphFinalArenaCopy_t : ISphMatchProcessor
 			case SPH_ATTR_UINT32SET:
 			case SPH_ATTR_INT64SET:
 			{
-				const DWORD * pMva = pMatch->GetAttrMVA ( tLoc, pBaseMva );
+				const DWORD * pMva = pMatch->GetAttrMVA ( tLoc, pBaseMva, bArenaProhibit );
 				// have to fix up only existed attribute
 				if ( pMva )
 				{
@@ -6664,6 +6667,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	CSphVector<SphDocID_t> dCumulativeKList;
 	CSphVector<const BYTE *> dDiskStrings ( tGuard.m_dDiskChunks.GetLength() );
 	CSphVector<const DWORD *> dDiskMva ( tGuard.m_dDiskChunks.GetLength() );
+	CSphBitvec tMvaArenaFlag ( tGuard.m_dDiskChunks.GetLength() );
 	if ( tGuard.m_dDiskChunks.GetLength() )
 	{
 		dCumulativeKList.Add ( 0 );
@@ -6752,6 +6756,8 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 		dDiskStrings[iChunk] = tChunkResult.m_pStrings;
 		dDiskMva[iChunk] = tChunkResult.m_pMva;
+		if ( tChunkResult.m_bArenaProhibit )
+			tMvaArenaFlag.BitSet ( iChunk );
 
 		if ( iChunk && tmMaxTimer>0 && sphMicroTimer()>=tmMaxTimer )
 		{
@@ -6781,7 +6787,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	// setup calculations and result schema
 	CSphQueryContext tCtx;
 	tCtx.m_pProfile = pProfiler;
-	if ( !tCtx.SetupCalc ( pResult, dSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, NULL ) )
+	if ( !tCtx.SetupCalc ( pResult, dSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, NULL, false ) )
 		return false;
 
 	tCtx.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
@@ -6889,7 +6895,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		// setup filters
 		// FIXME! setup filters MVA pool
 		bool bFullscan = ( pQuery->m_eMode==SPH_MATCH_FULLSCAN || pQuery->m_sQuery.IsEmpty() );
-		if ( !tCtx.CreateFilters ( bFullscan, &pQuery->m_dFilters, dSorters[iMaxSchemaIndex]->GetSchema(), NULL, NULL, pResult->m_sError, pQuery->m_eCollation ) )
+		if ( !tCtx.CreateFilters ( bFullscan, &pQuery->m_dFilters, dSorters[iMaxSchemaIndex]->GetSchema(), NULL, NULL, pResult->m_sError, pQuery->m_eCollation, false ) )
 			return false;
 
 		// FIXME! OPTIMIZE! check if we can early reject the whole index
@@ -6923,11 +6929,11 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			{
 				// set string pool for string on_sort expression fix up
 				tCtx.SetStringPool ( tGuard.m_dRamChunks[iSeg]->m_dStrings.Begin() );
-				tCtx.SetMVAPool ( tGuard.m_dRamChunks[iSeg]->m_dMvas.Begin() );
+				tCtx.SetMVAPool ( tGuard.m_dRamChunks[iSeg]->m_dMvas.Begin(), false );
 				ARRAY_FOREACH ( i, dSorters )
 				{
 					dSorters[i]->SetStringPool ( tGuard.m_dRamChunks[iSeg]->m_dStrings.Begin() );
-					dSorters[i]->SetMVAPool ( tGuard.m_dRamChunks[iSeg]->m_dMvas.Begin() );
+					dSorters[i]->SetMVAPool ( tGuard.m_dRamChunks[iSeg]->m_dMvas.Begin(), false );
 				}
 
 				RtRowIterator_t tIt ( tGuard.m_dRamChunks[iSeg], m_iStride, false, NULL, tGuard.m_dKill[iSeg]->m_dKilled );
@@ -6991,13 +6997,16 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 				// set string pool for string on_sort expression fix up
 				tCtx.SetStringPool ( tGuard.m_dRamChunks[iSeg]->m_dStrings.Begin() );
-				tCtx.SetMVAPool ( tGuard.m_dRamChunks[iSeg]->m_dMvas.Begin() );
+				tCtx.SetMVAPool ( tGuard.m_dRamChunks[iSeg]->m_dMvas.Begin(), false );
 				ARRAY_FOREACH ( i, dSorters )
 				{
 					dSorters[i]->SetStringPool ( tGuard.m_dRamChunks[iSeg]->m_dStrings.Begin() );
-					dSorters[i]->SetMVAPool ( tGuard.m_dRamChunks[iSeg]->m_dMvas.Begin() );
+					dSorters[i]->SetMVAPool ( tGuard.m_dRamChunks[iSeg]->m_dMvas.Begin(), false );
 				}
-				pRanker->ExtraData ( EXTRA_SET_MVAPOOL, (void**)tGuard.m_dRamChunks[iSeg]->m_dMvas.Begin() );
+				PoolPtrs_t tMva;
+				tMva.m_pMva = tGuard.m_dRamChunks[iSeg]->m_dMvas.Begin();
+				tMva.m_bArenaProhibit = false;
+				pRanker->ExtraData ( EXTRA_SET_MVAPOOL, (void**)&tMva );
 				pRanker->ExtraData ( EXTRA_SET_STRINGPOOL, (void**)tGuard.m_dRamChunks[iSeg]->m_dStrings.Begin() );
 
 				if ( pProfiler )
@@ -7164,7 +7173,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	if ( bHasArenaAttrs || bOptimizing )
 	{
 		assert ( !pResult->m_pStrings && !pResult->m_pMva );
-		SphFinalArenaCopy_t fnArena ( tGuard.m_dRamChunks, dDiskStrings, dDiskMva, dGetLoc, dSetLoc, iJsonFields );
+		SphFinalArenaCopy_t fnArena ( tGuard.m_dRamChunks, dDiskStrings, dDiskMva, dGetLoc, dSetLoc, iJsonFields, tMvaArenaFlag );
 
 		ARRAY_FOREACH ( iSorter, dSorters )
 		{

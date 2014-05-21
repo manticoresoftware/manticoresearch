@@ -448,8 +448,8 @@ public:
 	~CSphQueryContext ();
 
 	void						BindWeights ( const CSphQuery * pQuery, const CSphSchema & tSchema );
-	bool						SetupCalc ( CSphQueryResult * pResult, const ISphSchema & tInSchema, const CSphSchema & tSchema, const DWORD * pMvaPool );
-	bool						CreateFilters ( bool bFullscan, const CSphVector<CSphFilterSettings> * pdFilters, const ISphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError, ESphCollation eCollation );
+	bool						SetupCalc ( CSphQueryResult * pResult, const ISphSchema & tInSchema, const CSphSchema & tSchema, const DWORD * pMvaPool, bool bArenaProhibit );
+	bool						CreateFilters ( bool bFullscan, const CSphVector<CSphFilterSettings> * pdFilters, const ISphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError, ESphCollation eCollation, bool bArenaProhibit );
 	bool						SetupOverrides ( const CSphQuery * pQuery, CSphQueryResult * pResult, const CSphSchema & tIndexSchema, const ISphSchema & tOutgoingSchema );
 
 	void						CalcFilter ( CSphMatch & tMatch ) const;
@@ -463,7 +463,7 @@ public:
 	// note that RT index bind pools at segment searching, not at time it setups context
 	void						ExprCommand ( ESphExprCommand eCmd, void * pArg );
 	void						SetStringPool ( const BYTE * pStrings );
-	void						SetMVAPool ( const DWORD * pMva );
+	void						SetMVAPool ( const DWORD * pMva, bool bArenaProhibit );
 	void						SetupExtraData ( ISphRanker * pRanker, ISphMatchSorter * pSorter );
 
 private:
@@ -550,6 +550,7 @@ inline int64_t MVA_UPSIZE ( const DWORD * pMva )
 	int64_t iMva = (int64_t)( (uint64_t)pMva[0] | ( ( (uint64_t)pMva[1] )<<32 ) );
 	return iMva;
 }
+
 
 // FIXME!!! for over INT_MAX attributes
 /// attr min-max builder
@@ -925,6 +926,19 @@ void AttrIndexBuilder_t<DOCID>::FinishCollect ()
 	}
 	m_uElements++;
 }
+
+struct PoolPtrs_t
+{
+	const DWORD *	m_pMva;
+	const BYTE *	m_pStrings;
+	bool			m_bArenaProhibit;
+
+	PoolPtrs_t ()
+		: m_pMva ( NULL )
+		, m_pStrings ( NULL )
+		, m_bArenaProhibit ( false )
+	{}
+};
 
 //////////////////////////////////////////////////////////////////////////
 // INLINES, FIND_XXX() GENERIC FUNCTIONS

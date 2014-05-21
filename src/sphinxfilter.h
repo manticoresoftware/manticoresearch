@@ -24,7 +24,7 @@ struct ISphFilter
 	virtual void SetRange ( SphAttr_t, SphAttr_t ) {}
 	virtual void SetRangeFloat ( float, float ) {}
 	virtual void SetValues ( const SphAttr_t *, int ) {}
-	virtual void SetMVAStorage ( const DWORD * ) {}
+	virtual void SetMVAStorage ( const DWORD *, bool ) {}
 	virtual void SetStringStorage ( const BYTE * ) {}
 	virtual void SetRefString ( const CSphString & ) {}
 
@@ -55,7 +55,7 @@ protected:
 	bool m_bUsesAttrs;
 };
 
-ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const ISphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError, ESphCollation eCollation );
+ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const ISphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError, ESphCollation eCollation, bool bArenaProhibit );
 ISphFilter * sphCreateAggrFilter ( const CSphFilterSettings * pSettings, const CSphString & sAttrName, const ISphSchema & tSchema, CSphString & sError );
 ISphFilter * sphJoinFilters ( ISphFilter *, ISphFilter * );
 

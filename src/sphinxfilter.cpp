@@ -130,21 +130,24 @@ struct IFilter_Range: virtual ISphFilter
 struct IFilter_MVA: virtual IFilter_Attr
 {
 	const DWORD *	m_pMvaStorage;
+	bool			m_bArenaProhibit;
 
 	IFilter_MVA ()
 		: m_pMvaStorage ( NULL )
+		, m_bArenaProhibit ( false )
 	{}
 
-	virtual void SetMVAStorage ( const DWORD * pMva )
+	virtual void SetMVAStorage ( const DWORD * pMva, bool bArenaProhibit )
 	{
 		m_pMvaStorage = pMva;
+		m_bArenaProhibit = bArenaProhibit;
 	}
 
 	inline bool LoadMVA ( const CSphMatch & tMatch, const DWORD ** pMva, const DWORD ** pMvaMax ) const
 	{
 		assert ( m_pMvaStorage );
 
-		*pMva = tMatch.GetAttrMVA ( m_tLocator, m_pMvaStorage );
+		*pMva = tMatch.GetAttrMVA ( m_tLocator, m_pMvaStorage, m_bArenaProhibit );
 		if ( !*pMva )
 			return false;
 
@@ -624,10 +627,10 @@ struct Filter_And2 : public ISphFilter
 		return this;
 	}
 
-	virtual void SetMVAStorage ( const DWORD * pMva )
+	virtual void SetMVAStorage ( const DWORD * pMva, bool bArenaProhibit )
 	{
-		m_pArg1->SetMVAStorage ( pMva );
-		m_pArg2->SetMVAStorage ( pMva );
+		m_pArg1->SetMVAStorage ( pMva, bArenaProhibit );
+		m_pArg2->SetMVAStorage ( pMva, bArenaProhibit );
 	}
 
 	virtual void SetStringStorage ( const BYTE * pStrings )
@@ -676,11 +679,11 @@ struct Filter_And3 : public ISphFilter
 		return this;
 	}
 
-	virtual void SetMVAStorage ( const DWORD * pMva )
+	virtual void SetMVAStorage ( const DWORD * pMva, bool bArenaProhibit )
 	{
-		m_pArg1->SetMVAStorage ( pMva );
-		m_pArg2->SetMVAStorage ( pMva );
-		m_pArg3->SetMVAStorage ( pMva );
+		m_pArg1->SetMVAStorage ( pMva, bArenaProhibit );
+		m_pArg2->SetMVAStorage ( pMva, bArenaProhibit );
+		m_pArg3->SetMVAStorage ( pMva, bArenaProhibit );
 	}
 
 	virtual void SetStringStorage ( const BYTE * pStrings )
@@ -736,10 +739,10 @@ struct Filter_And: public ISphFilter
 	}
 
 
-	virtual void SetMVAStorage ( const DWORD * pMva )
+	virtual void SetMVAStorage ( const DWORD * pMva, bool bArenaProhibit )
 	{
 		ARRAY_FOREACH ( i, m_dFilters )
-			m_dFilters[i]->SetMVAStorage ( pMva );
+			m_dFilters[i]->SetMVAStorage ( pMva, bArenaProhibit );
 	}
 
 	virtual void SetStringStorage ( const BYTE * pStrings )
@@ -798,9 +801,9 @@ struct Filter_Not: public ISphFilter
 		return true;
 	}
 
-	virtual void SetMVAStorage ( const DWORD * pMva )
+	virtual void SetMVAStorage ( const DWORD * pMva, bool bArenaProhibit )
 	{
-		m_pFilter->SetMVAStorage ( pMva );
+		m_pFilter->SetMVAStorage ( pMva, bArenaProhibit );
 	}
 
 	virtual void SetStringStorage ( const BYTE * pStrings )
@@ -1212,7 +1215,7 @@ static ISphFilter * CreateFilterJson ( const CSphColumnInfo * DEBUGARG(pAttr), I
 //////////////////////////////////////////////////////////////////////////
 
 static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const CSphString & sAttrName, const ISphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings,
-									CSphString & sError, bool bHaving, ESphCollation eCollation )
+								  CSphString & sError, bool bHaving, ESphCollation eCollation, bool bArenaProhibit )
 {
 	ISphFilter * pFilter = NULL;
 	const CSphColumnInfo * pAttr = NULL;
@@ -1288,7 +1291,7 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 		if ( pAttr )
 			pFilter->SetLocator ( pAttr->m_tLocator );
 
-		pFilter->SetMVAStorage ( pMvaPool );
+		pFilter->SetMVAStorage ( pMvaPool, bArenaProhibit );
 		pFilter->SetStringStorage ( pStrings );
 
 		pFilter->SetRange ( tSettings.m_iMinValue, tSettings.m_iMaxValue );
@@ -1318,16 +1321,16 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 }
 
 
-ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const ISphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError, ESphCollation eCollation )
+ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const ISphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError, ESphCollation eCollation, bool bArenaProhibit )
 {
-	return CreateFilter ( tSettings, tSettings.m_sAttrName, tSchema, pMvaPool, pStrings, sError, false, eCollation );
+	return CreateFilter ( tSettings, tSettings.m_sAttrName, tSchema, pMvaPool, pStrings, sError, false, eCollation, bArenaProhibit );
 }
 
 
 ISphFilter * sphCreateAggrFilter ( const CSphFilterSettings * pSettings, const CSphString & sAttrName, const ISphSchema & tSchema, CSphString & sError )
 {
 	assert ( pSettings );
-	return CreateFilter ( *pSettings, sAttrName, tSchema, NULL, NULL, sError, true, SPH_COLLATION_DEFAULT );
+	return CreateFilter ( *pSettings, sAttrName, tSchema, NULL, NULL, sError, true, SPH_COLLATION_DEFAULT, false );
 }
 
 

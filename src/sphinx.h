@@ -1424,7 +1424,7 @@ public:
 	}
 
 	/// MVA getter
-	const DWORD * GetAttrMVA ( const CSphAttrLocator & tLoc, const DWORD * pPool ) const;
+	const DWORD * GetAttrMVA ( const CSphAttrLocator & tLoc, const DWORD * pPool, bool bArenaProhibit ) const;
 
 private:
 	/// "manually" prevent copying
@@ -2793,6 +2793,7 @@ public:
 	CSphRsetSchema			m_tSchema;			///< result schema
 	const DWORD *			m_pMva;				///< pointer to MVA storage
 	const BYTE *			m_pStrings;			///< pointer to strings storage
+	bool					m_bArenaProhibit;
 
 	CSphVector<BYTE *>		m_dStorage2Free;	/// < aggregated external storage from rt indexes
 
@@ -3053,7 +3054,7 @@ public:
 	virtual void		SetGroupState ( const CSphMatchComparatorState & ) {}
 
 	/// set MVA pool pointer (for MVA+groupby sorters)
-	virtual void		SetMVAPool ( const DWORD * ) {}
+	virtual void SetMVAPool ( const DWORD *, bool ) {}
 
 	/// set string pool pointer (for string+groupby sorters)
 	virtual void		SetStringPool ( const BYTE * ) {}

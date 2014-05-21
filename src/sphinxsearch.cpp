@@ -8557,10 +8557,10 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::ExtraDataImpl ( Extr
 		switch ( eType )
 		{
 			case EXTRA_SET_MVAPOOL:
-				m_pExpr->Command ( SPH_EXPR_SET_MVA_POOL, (DWORD*)ppResult );
+				m_pExpr->Command ( SPH_EXPR_SET_MVA_POOL, ppResult );
 				return true;
 			case EXTRA_SET_STRINGPOOL:
-				m_pExpr->Command ( SPH_EXPR_SET_STRING_POOL, (BYTE*)ppResult );
+				m_pExpr->Command ( SPH_EXPR_SET_STRING_POOL, ppResult );
 				return true;
 			case EXTRA_SET_MAXMATCHES:
 				m_iMaxMatches = *(int*)ppResult;

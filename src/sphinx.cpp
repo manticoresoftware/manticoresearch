@@ -1633,6 +1633,7 @@ private:
 
 	bool						m_bOndiskAllAttr;
 	bool						m_bOndiskPoolAttr;
+	bool						m_bArenaProhibit;
 
 	CWordlist					m_tWordlist;			///< my wordlist
 
@@ -2068,13 +2069,13 @@ static DWORD *				g_pMvaArena = NULL;		///< initialized by sphArenaInit()
 
 
 // OPTIMIZE! try to inline or otherwise simplify maybe
-const DWORD * CSphMatch::GetAttrMVA ( const CSphAttrLocator & tLoc, const DWORD * pPool ) const
+const DWORD * CSphMatch::GetAttrMVA ( const CSphAttrLocator & tLoc, const DWORD * pPool, bool bArenaProhibit ) const
 {
 	DWORD uIndex = MVA_DOWNSIZE ( GetAttr ( tLoc ) );
 	if ( !uIndex )
 		return NULL;
 
-	if ( uIndex & MVA_ARENA_FLAG )
+	if ( !bArenaProhibit && ( uIndex & MVA_ARENA_FLAG ) )
 		return g_pMvaArena + ( uIndex & MVA_OFFSET_MASK );
 
 	assert ( pPool );
@@ -8429,6 +8430,7 @@ CSphQueryResult::CSphQueryResult ()
 	m_iCount = 0;
 	m_iSuccesses = 0;
 	m_pProfile = NULL;
+	m_bArenaProhibit = false;
 }
 
 
@@ -9724,6 +9726,7 @@ CSphIndex_VLN::CSphIndex_VLN ( const char* sIndexName, const char * sFilename )
 	m_bOndiskAllAttr = false;
 	m_bOndiskPoolAttr = false;
 	m_bDebugCheck = false;
+	m_bArenaProhibit = false;
 
 	ARRAY_FOREACH ( i, m_dFieldLens )
 		m_dFieldLens[i] = 0;
@@ -9820,6 +9823,12 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 			if ( ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET ) && !g_pMvaArena )
 			{
 				sError.SetSprintf ( "MVA attribute '%s' can not be updated (MVA arena not initialized)", tCol.m_sName.cstr() );
+				return -1;
+			}
+			if ( ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET ) && m_bArenaProhibit )
+			{
+				sError.SetSprintf ( "MVA attribute '%s' can not be updated (already so many MVA "INT64_FMT", should be less %d)",
+					tCol.m_sName.cstr(), m_tMva.GetNumEntries(), INT_MAX );
 				return -1;
 			}
 
@@ -10198,6 +10207,11 @@ bool CSphIndex_VLN::LoadPersistentMVA ( CSphString & sError )
 	if ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN )
 	{
 		sError.SetSprintf ( "docinfo=extern required for updates" );
+		return false;
+	}
+	if ( m_bArenaProhibit )
+	{
+		sError.SetSprintf ( "MVA update disabled (already so many MVA "INT64_FMT", should be less %d)", m_tMva.GetNumEntries(), INT_MAX );
 		return false;
 	}
 
@@ -13272,6 +13286,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		// { fixed row + dummy value ( zero offset elimination ) + mva data for that row } fixed row - for MinMaxBuilder
 		CSphVector < DWORD > dMvaPool;
 		tMinMax.Prepare ( dMinMaxBuffer.Begin(), dMinMaxBuffer.Begin() + dMinMaxBuffer.GetLength() ); // FIXME!!! for over INT_MAX blocks
+		uint64_t uLastMvaOff = 0;
 
 		// the last (or, lucky, the only, string chunk)
 		dStringChunks.Add ( DWORD ( tStrWriter.GetPos()-uStringChunk ) );
@@ -13332,11 +13347,12 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 						CSphRowitem * pAttr = DOCINFO2ATTRS ( pEntry );
 						ARRAY_FOREACH ( i, dMvaIndexes )
 						{
-							SphOffset_t iMvaOff = rdMva.GetPos()/sizeof(DWORD);
-							assert ( iMvaOff<UINT_MAX );
+							uLastMvaOff = rdMva.GetPos()/sizeof(DWORD);
 							int iPoolOff = dMvaPool.GetLength();
+							if ( uLastMvaOff>UINT_MAX )
+								sphDie ( "MVA counter overflows "UINT64_FMT" at document "DOCID_FMT", total MVA entries "UINT64_FMT" ( try to index less documents )", uLastMvaOff, uMvaID, rdMva.GetFilesize() );
 
-							sphSetRowAttr ( pAttr, dMvaLocators[i], iMvaOff );
+							sphSetRowAttr ( pAttr, dMvaLocators[i], uLastMvaOff );
 							// there is the cloned row at the beginning of MVA pool, lets skip it
 							sphSetRowAttr ( dMvaPool.Begin()+DOCINFO_IDSIZE, dMvaLocators[i], iPoolOff - iDocinfoStride );
 
@@ -13435,6 +13451,9 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			SafeDelete ( dBins[i] );
 
 		dBins.Reset ();
+
+		if ( uLastMvaOff>INT_MAX )
+			sphWarning ( "MVA update disabled (collected MVA "INT64_FMT", should be less %d)", uLastMvaOff, INT_MAX );
 	}
 
 	dDocinfos.Reset ( 0 );
@@ -14121,13 +14140,13 @@ public:
 };
 
 static ISphFilter * CreateMergeFilters ( const CSphVector<CSphFilterSettings> & dSettings,
-	const CSphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings )
+										const CSphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, bool bArenaProhibit )
 {
 	CSphString sError;
 	ISphFilter * pResult = NULL;
 	ARRAY_FOREACH ( i, dSettings )
 	{
-		ISphFilter * pFilter = sphCreateFilter ( dSettings[i], tSchema, pMvaPool, pStrings, sError, SPH_COLLATION_DEFAULT );
+		ISphFilter * pFilter = sphCreateFilter ( dSettings[i], tSchema, pMvaPool, pStrings, sError, SPH_COLLATION_DEFAULT, bArenaProhibit );
 		if ( pFilter )
 			pResult = sphJoinFilters ( pResult, pFilter );
 	}
@@ -14524,7 +14543,7 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, const CSphVector<CSphFilterSett
 	}
 
 	// create filters
-	CSphScopedPtr<ISphFilter> pFilter ( CreateMergeFilters ( dFilters, m_tSchema, m_tMva.GetWritePtr(), m_tString.GetWritePtr() ) );
+	CSphScopedPtr<ISphFilter> pFilter ( CreateMergeFilters ( dFilters, m_tSchema, m_tMva.GetWritePtr(), m_tString.GetWritePtr(), m_bArenaProhibit ) );
 	CSphVector<SphDocID_t> dKillList ( pSource->GetKillListSize()+2 );
 	for ( int i=0; i<dKillList.GetLength()-2; ++i )
 		dKillList [ i+1 ] = pSource->GetKillList()[i];
@@ -15387,13 +15406,16 @@ void CSphQueryContext::SetStringPool ( const BYTE * pStrings )
 }
 
 
-void CSphQueryContext::SetMVAPool ( const DWORD * pMva )
+void CSphQueryContext::SetMVAPool ( const DWORD * pMva, bool bArenaProhibit )
 {
-	ExprCommand ( SPH_EXPR_SET_MVA_POOL, (void*)pMva );
+	PoolPtrs_t tMva;
+	tMva.m_pMva = pMva;
+	tMva.m_bArenaProhibit = bArenaProhibit;
+	ExprCommand ( SPH_EXPR_SET_MVA_POOL, &tMva );
 	if ( m_pFilter )
-		m_pFilter->SetMVAStorage ( pMva );
+		m_pFilter->SetMVAStorage ( pMva, bArenaProhibit );
 	if ( m_pWeightFilter )
-		m_pWeightFilter->SetMVAStorage ( pMva );
+		m_pWeightFilter->SetMVAStorage ( pMva, bArenaProhibit );
 }
 
 
@@ -15619,14 +15641,15 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 
 	// setup calculations and result schema
 	CSphQueryContext tCtx;
-	if ( !tCtx.SetupCalc ( pResult, ppSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, m_tMva.GetWritePtr() ) )
+	if ( !tCtx.SetupCalc ( pResult, ppSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, m_tMva.GetWritePtr(), m_bArenaProhibit ) )
 		return false;
 
 	// set string pool for string on_sort expression fix up
 	tCtx.SetStringPool ( m_tString.GetWritePtr() );
 
 	// setup filters
-	if ( !tCtx.CreateFilters ( true, &pQuery->m_dFilters, ppSorters[iMaxSchemaIndex]->GetSchema(), m_tMva.GetWritePtr(), m_tString.GetWritePtr(), pResult->m_sError, pQuery->m_eCollation ) )
+	if ( !tCtx.CreateFilters ( true, &pQuery->m_dFilters, ppSorters[iMaxSchemaIndex]->GetSchema(),
+								m_tMva.GetWritePtr(), m_tString.GetWritePtr(), pResult->m_sError, pQuery->m_eCollation, m_bArenaProhibit ) )
 		return false;
 
 	// check if we can early reject the whole index
@@ -15650,7 +15673,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	// setup sorters vs. MVA
 	for ( int i=0; i<iSorters; i++ )
 	{
-		(ppSorters[i])->SetMVAPool ( m_tMva.GetWritePtr() );
+		(ppSorters[i])->SetMVAPool ( m_tMva.GetWritePtr(), m_bArenaProhibit );
 		(ppSorters[i])->SetStringPool ( m_tString.GetWritePtr() );
 	}
 
@@ -15840,6 +15863,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	// done
 	pResult->m_pMva = m_tMva.GetWritePtr();
 	pResult->m_pStrings = m_tString.GetWritePtr();
+	pResult->m_bArenaProhibit = m_bArenaProhibit;
 	pResult->m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
 	return true;
 }
@@ -17025,6 +17049,12 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 
 				m_tMva.Set ( m_dMvaShared.GetWritePtr(), m_dMvaShared.GetNumEntries() );
 			}
+
+			if ( m_tMva.GetNumEntries()>INT_MAX )
+			{
+				m_bArenaProhibit = true;
+				sphWarning ( "MVA update disabled (loaded MVA "INT64_FMT", should be less %d)", m_tMva.GetNumEntries(), INT_MAX );
+			}
 		}
 
 		///////////////
@@ -17495,7 +17525,7 @@ void CSphQueryContext::BindWeights ( const CSphQuery * pQuery, const CSphSchema 
 
 
 bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema & tInSchema,
-	const CSphSchema & tSchema, const DWORD * pMvaPool )
+									const CSphSchema & tSchema, const DWORD * pMvaPool, bool bArenaProhibit )
 {
 	m_dCalcFilter.Resize ( 0 );
 	m_dCalcSort.Resize ( 0 );
@@ -17571,7 +17601,10 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema &
 				tCalc.m_eType = tIn.m_eAttrType;
 				tCalc.m_tLoc = tIn.m_tLocator;
 				tCalc.m_pExpr = pExpr;
-				tCalc.m_pExpr->Command ( SPH_EXPR_SET_MVA_POOL, (void*)pMvaPool );
+				PoolPtrs_t tMva;
+				tMva.m_pMva = pMvaPool;
+				tMva.m_bArenaProhibit = bArenaProhibit;
+				tCalc.m_pExpr->Command ( SPH_EXPR_SET_MVA_POOL, &tMva );
 
 				switch ( tIn.m_eStage )
 				{
@@ -17913,7 +17946,7 @@ static bool IsWeightColumn ( const CSphString & sAttr, const ISphSchema & tSchem
 
 bool CSphQueryContext::CreateFilters ( bool bFullscan,
 	const CSphVector<CSphFilterSettings> * pdFilters, const ISphSchema & tSchema,
-	const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError, ESphCollation eCollation )
+	const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError, ESphCollation eCollation, bool bArenaProhibit )
 {
 	if ( !pdFilters )
 		return true;
@@ -17952,7 +17985,7 @@ bool CSphQueryContext::CreateFilters ( bool bFullscan,
 			pFilterSettings = &tUservar;
 		}
 
-		ISphFilter * pFilter = sphCreateFilter ( *pFilterSettings, tSchema, pMvaPool, pStrings, sError, eCollation );
+		ISphFilter * pFilter = sphCreateFilter ( *pFilterSettings, tSchema, pMvaPool, pStrings, sError, eCollation, bArenaProhibit );
 		if ( !pFilter )
 			return false;
 
@@ -19081,7 +19114,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	tCtx.m_pProfile = pProfile;
 	tCtx.m_pLocalDocs = tArgs.m_pLocalDocs;
 	tCtx.m_iTotalDocs = tArgs.m_iTotalDocs;
-	if ( !tCtx.SetupCalc ( pResult, ppSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, m_tMva.GetWritePtr() ) )
+	if ( !tCtx.SetupCalc ( pResult, ppSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, m_tMva.GetWritePtr(), m_bArenaProhibit ) )
 		return false;
 
 	// set string pool for string on_sort expression fix up
@@ -19153,7 +19186,10 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	tCtx.SetupExtraData ( pRanker.Ptr(), iSorters==1 ? ppSorters[0] : NULL );
 
-	pRanker->ExtraData ( EXTRA_SET_MVAPOOL, (void**)m_tMva.GetWritePtr() );
+	PoolPtrs_t tMva;
+	tMva.m_pMva = m_tMva.GetWritePtr();
+	tMva.m_bArenaProhibit = m_bArenaProhibit;
+	pRanker->ExtraData ( EXTRA_SET_MVAPOOL, (void**)&tMva );
 	pRanker->ExtraData ( EXTRA_SET_STRINGPOOL, (void**)m_tString.GetWritePtr() );
 
 	int iMatchPoolSize = 0;
@@ -19168,7 +19204,8 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	assert ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN || !m_tAttr.IsEmpty() ); // check that docinfo is preloaded
 
 	// setup filters
-	if ( !tCtx.CreateFilters ( pQuery->m_sQuery.IsEmpty(), &pQuery->m_dFilters, ppSorters[iMaxSchemaIndex]->GetSchema(), m_tMva.GetWritePtr(), m_tString.GetWritePtr(), pResult->m_sError, pQuery->m_eCollation ) )
+	if ( !tCtx.CreateFilters ( pQuery->m_sQuery.IsEmpty(), &pQuery->m_dFilters, ppSorters[iMaxSchemaIndex]->GetSchema(),
+								m_tMva.GetWritePtr(), m_tString.GetWritePtr(), pResult->m_sError, pQuery->m_eCollation, m_bArenaProhibit ) )
 		return false;
 
 	// check if we can early reject the whole index
@@ -19198,7 +19235,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	// setup sorters vs. MVA
 	for ( int i=0; i<iSorters; i++ )
 	{
-		(ppSorters[i])->SetMVAPool ( m_tMva.GetWritePtr() );
+		(ppSorters[i])->SetMVAPool ( m_tMva.GetWritePtr(), m_bArenaProhibit );
 		(ppSorters[i])->SetStringPool ( m_tString.GetWritePtr() );
 	}
 
@@ -19257,6 +19294,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	// mva and string pools ptrs
 	pResult->m_pMva = m_tMva.GetWritePtr();
 	pResult->m_pStrings = m_tString.GetWritePtr();
+	pResult->m_bArenaProhibit = m_bArenaProhibit;
 
 	// query timer
 	int64_t tmWall = sphMicroTimer() - tmQueryStart;
@@ -20111,7 +20149,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				{
 					const DWORD uOffset = pAttrs[dMvaItems[iItem]];
 					bHasValues |= ( uOffset!=0 );
-					bool bArena = ( ( uOffset & MVA_ARENA_FLAG )!=0 );
+					bool bArena = ( ( uOffset & MVA_ARENA_FLAG )!=0 ) && !m_bArenaProhibit;
 					bHasArena |= bArena;
 
 					if ( uOffset && !bArena && pMvaBase+uOffset>=pMvaMax )
@@ -20153,7 +20191,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 					ARRAY_FOREACH_COND ( iItem, dMvaItems, bIsMvaCorrect )
 					{
 						const DWORD uSpaOffset = pAttrs[dMvaItems[iItem]];
-						bool bArena = ( ( uSpaOffset & MVA_ARENA_FLAG )!=0 );
+						bool bArena = ( ( uSpaOffset & MVA_ARENA_FLAG )!=0 ) && !m_bArenaProhibit;
 						bWasArena |= bArena;
 
 						// zero offset means empty MVA in rt index

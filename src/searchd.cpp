@@ -636,16 +636,6 @@ struct PipeInfo_t
 
 static CSphVector<PipeInfo_t>	g_dPipes;		///< currently open read-pipes to children processes
 
-struct PoolPtrs_t
-{
-	const DWORD *	m_pMva;
-	const BYTE *	m_pStrings;
-
-	PoolPtrs_t ()
-		: m_pMva ( NULL )
-		, m_pStrings ( NULL )
-	{}
-};
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -7444,10 +7434,11 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphTaggedV
 		{
 			const CSphMatch & tMatch = pRes->m_dMatches [ pRes->m_iOffset+i ];
 			const DWORD * pMvaPool = dTag2Pools [ tMatch.m_iTag ].m_pMva;
+			bool bArenaProhibit = dTag2Pools[tMatch.m_iTag].m_bArenaProhibit;
 			ARRAY_FOREACH ( j, dMvaItems )
 			{
 				assert ( tMatch.GetAttr ( dMvaItems[j] )==0 || pMvaPool );
-				const DWORD * pMva = tMatch.GetAttrMVA ( dMvaItems[j], pMvaPool );
+				const DWORD * pMva = tMatch.GetAttrMVA ( dMvaItems[j], pMvaPool, bArenaProhibit );
 				if ( pMva )
 					iRespLen += pMva[0]*4; // FIXME? maybe add some sanity check here
 			}
@@ -7697,6 +7688,7 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 
 			const DWORD * pMvaPool = dTag2Pools [ tMatch.m_iTag ].m_pMva;
 			const BYTE * pStrings = dTag2Pools [ tMatch.m_iTag ].m_pStrings;
+			bool bArenaProhibit = dTag2Pools[tMatch.m_iTag].m_bArenaProhibit;
 
 			assert ( tMatch.m_pStatic || !pRes->m_tSchema.GetStaticSize() );
 #if 0
@@ -7714,7 +7706,7 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 				case SPH_ATTR_INT64SET:
 					{
 						assert ( tMatch.GetAttr ( tAttr.m_tLocator )==0 || pMvaPool );
-						const DWORD * pValues = tMatch.GetAttrMVA ( tAttr.m_tLocator, pMvaPool );
+						const DWORD * pValues = tMatch.GetAttrMVA ( tAttr.m_tLocator, pMvaPool, bArenaProhibit );
 						if ( iVer<0x10C || !pValues )
 						{
 							// for older clients, fixups column value to 0
@@ -8162,7 +8154,7 @@ static int KillAllDupes ( ISphMatchSorter * pSorter, AggrResult_t & tRes )
 	if ( pSorter->IsGroupby () )
 	{
 		// groupby sorter does that automagically
-		pSorter->SetMVAPool ( NULL ); // because we must be able to group on @groupby anyway
+		pSorter->SetMVAPool ( NULL, false ); // because we must be able to group on @groupby anyway
 		pSorter->SetStringPool ( NULL );
 		int iMC = 0;
 		int iBound = 0;
@@ -8334,7 +8326,7 @@ static void ProcessPostlimit ( const CSphVector<const CSphColumnInfo *> & dPostl
 			assert ( pCol->m_pExpr.Ptr() );
 
 			// OPTIMIZE? only if the tag did not change?
-			pCol->m_pExpr->Command ( SPH_EXPR_SET_MVA_POOL, (void*)tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pMva );
+			pCol->m_pExpr->Command ( SPH_EXPR_SET_MVA_POOL, &tRes.m_dTag2Pools [ tMatch.m_iTag ] );
 			pCol->m_pExpr->Command ( SPH_EXPR_SET_STRING_POOL, (void*)tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pStrings );
 
 			if ( pCol->m_eAttrType==SPH_ATTR_INTEGER )
@@ -9598,12 +9590,14 @@ static void FlattenToRes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, int i
 		assert ( !tPoolPtrs.m_pMva && !tPoolPtrs.m_pStrings );
 		tPoolPtrs.m_pMva = tRes.m_pMva;
 		tPoolPtrs.m_pStrings = tRes.m_pStrings;
+		tPoolPtrs.m_bArenaProhibit = tRes.m_bArenaProhibit;
 		int iCopied = sphFlattenQueue ( pSorter, &tRes, iTag );
 		tRes.m_dMatchCounts.Add ( iCopied );
 
 		// clean up for next index search
 		tRes.m_pMva = NULL;
 		tRes.m_pStrings = NULL;
+		tRes.m_bArenaProhibit = false;
 	}
 }
 
@@ -9730,6 +9724,7 @@ void SearchHandler_c::RunLocalSearchesMT ()
 
 			tRes.m_pMva = tRaw.m_pMva;
 			tRes.m_pStrings = tRaw.m_pStrings;
+			tRes.m_bArenaProhibit = tRes.m_bArenaProhibit;
 			MergeWordStats ( tRes, tRaw.m_hWordStats, &m_dFailuresSet[iQuery], sLocal );
 
 			// move external attributes storage from tRaw to actual result
@@ -10090,6 +10085,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 					tRes.m_tIOStats.Add ( tStats.m_tIOStats );
 					tRes.m_pMva = tStats.m_pMva;
 					tRes.m_pStrings = tStats.m_pStrings;
+					tRes.m_bArenaProhibit = tStats.m_bArenaProhibit;
 					MergeWordStats ( tRes, tStats.m_hWordStats, &m_dFailuresSet[iQuery], sLocal );
 					tRes.m_iMultiplier = m_iEnd-m_iStart+1;
 				} else if ( tRes.m_iMultiplier==-1 )
@@ -16344,7 +16340,8 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 					dRows.IncPtr ( 4 );
 
 					assert ( tMatch.GetAttr ( tLoc )==0 || tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pMva || ( MVA_DOWNSIZE ( tMatch.GetAttr ( tLoc ) ) & MVA_ARENA_FLAG ) );
-					const DWORD * pValues = tMatch.GetAttrMVA ( tLoc, tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pMva );
+					const PoolPtrs_t & tPools = tRes.m_dTag2Pools [ tMatch.m_iTag ];
+					const DWORD * pValues = tMatch.GetAttrMVA ( tLoc, tPools.m_pMva, tPools.m_bArenaProhibit );
 					if ( pValues )
 					{
 						DWORD nValues = *pValues++;

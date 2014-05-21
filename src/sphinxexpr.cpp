@@ -110,11 +110,21 @@ struct Expr_GetString_c : public ExprLocatorTraits_t
 struct Expr_GetMva_c : public ExprLocatorTraits_t
 {
 	const DWORD * m_pMva;
+	bool m_bArenaProhibit;
 
-	Expr_GetMva_c ( const CSphAttrLocator & tLocator, int iLocator ) : ExprLocatorTraits_t ( tLocator, iLocator ) {}
+	Expr_GetMva_c ( const CSphAttrLocator & tLocator, int iLocator ) : ExprLocatorTraits_t ( tLocator, iLocator ), m_pMva ( NULL ), m_bArenaProhibit ( false ) {}
 	virtual float Eval ( const CSphMatch & ) const { assert ( 0 ); return 0; }
-	virtual void Command ( ESphExprCommand eCmd, void * pArg ) { if ( eCmd==SPH_EXPR_SET_MVA_POOL ) m_pMva = (const DWORD*)pArg; }
-	virtual const DWORD * MvaEval ( const CSphMatch & tMatch ) const { return tMatch.GetAttrMVA ( m_tLocator, m_pMva ); }
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
+	{
+		if ( eCmd==SPH_EXPR_SET_MVA_POOL )
+		{
+			const PoolPtrs_t * pPool = (const PoolPtrs_t *)pArg;
+			assert ( pPool );
+			m_pMva = pPool->m_pMva;
+			m_bArenaProhibit = pPool->m_bArenaProhibit;
+		}
+	}
+	virtual const DWORD * MvaEval ( const CSphMatch & tMatch ) const { return tMatch.GetAttrMVA ( m_tLocator, m_pMva, m_bArenaProhibit ); }
 };
 
 
@@ -4248,6 +4258,7 @@ public:
 		, m_iLocator ( iLocator )
 		, m_pMvaPool ( NULL )
 		, m_pUservar ( pUservar )
+		, m_bArenaProhibit ( false )
 	{
 		assert ( tLoc.m_iBitOffset>=0 && tLoc.m_iBitCount>0 );
 		assert ( !pConsts || !pUservar ); // either constlist or uservar, not both
@@ -4266,7 +4277,7 @@ public:
 	/// evaluate arg, check if any values are within set
 	virtual int IntEval ( const CSphMatch & tMatch ) const
 	{
-		const DWORD * pMva = tMatch.GetAttrMVA ( m_tLocator, m_pMvaPool );
+		const DWORD * pMva = tMatch.GetAttrMVA ( m_tLocator, m_pMvaPool, m_bArenaProhibit );
 		if ( !pMva )
 			return 0;
 
@@ -4276,7 +4287,12 @@ public:
 	virtual void Command ( ESphExprCommand eCmd, void * pArg )
 	{
 		if ( eCmd==SPH_EXPR_SET_MVA_POOL )
-			m_pMvaPool = (const DWORD*)pArg;
+		{
+			const PoolPtrs_t * pPool = (const PoolPtrs_t *)pArg;
+			assert ( pArg );
+			m_pMvaPool = pPool->m_pMva;
+			m_bArenaProhibit = pPool->m_bArenaProhibit;
+		}
 		if ( eCmd==SPH_EXPR_GET_DEPENDENT_COLS )
 			static_cast < CSphVector<int>* > ( pArg )->Add ( m_iLocator );
 	}
@@ -4286,6 +4302,7 @@ protected:
 	int					m_iLocator; // used by SPH_EXPR_GET_DEPENDENT_COLS
 	const DWORD *		m_pMvaPool;
 	UservarIntSet_c *	m_pUservar;
+	bool				m_bArenaProhibit;
 };
 
 
@@ -4359,19 +4376,21 @@ protected:
 	CSphAttrLocator		m_tLocator;
 	int					m_iLocator; // used by SPH_EXPR_GET_DEPENDENT_COLS
 	const DWORD *		m_pMvaPool;
+	bool				m_bArenaProhibit;
 
 public:
 	Expr_MVALength_c ( const CSphAttrLocator & tLoc, int iLocator )
 		: m_tLocator ( tLoc )
 		, m_iLocator ( iLocator )
 		, m_pMvaPool ( NULL )
+		, m_bArenaProhibit ( false )
 	{
 		assert ( tLoc.m_iBitOffset>=0 && tLoc.m_iBitCount>0 );
 	}
 
 	virtual int IntEval ( const CSphMatch & tMatch ) const
 	{
-		const DWORD * pMva = tMatch.GetAttrMVA ( m_tLocator, m_pMvaPool );
+		const DWORD * pMva = tMatch.GetAttrMVA ( m_tLocator, m_pMvaPool, m_bArenaProhibit );
 		if ( !pMva )
 			return 0;
 		return (int)*pMva;
@@ -4380,7 +4399,12 @@ public:
 	virtual void Command ( ESphExprCommand eCmd, void * pArg )
 	{
 		if ( eCmd==SPH_EXPR_SET_MVA_POOL )
-			m_pMvaPool = (const DWORD*)pArg;
+		{
+			const PoolPtrs_t * pPool = (const PoolPtrs_t *)pArg;
+			assert ( pArg );
+			m_pMvaPool = pPool->m_pMva;
+			m_bArenaProhibit = pPool->m_bArenaProhibit;
+		}
 		if ( eCmd==SPH_EXPR_GET_DEPENDENT_COLS )
 			static_cast < CSphVector<int>* > ( pArg )->Add ( m_iLocator );
 	}
@@ -4398,6 +4422,7 @@ public:
 		: m_tLocator ( tLoc )
 		, m_iLocator ( iLocator )
 		, m_pMvaPool ( NULL )
+		, m_bArenaProhibit ( false )
 		, m_eFunc ( eFunc )
 	{
 		assert ( tLoc.m_iBitOffset>=0 && tLoc.m_iBitCount>0 );
@@ -4407,7 +4432,7 @@ public:
 
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const
 	{
-		const DWORD * pMva = tMatch.GetAttrMVA ( m_tLocator, m_pMvaPool );
+		const DWORD * pMva = tMatch.GetAttrMVA ( m_tLocator, m_pMvaPool, m_bArenaProhibit );
 		if ( !pMva )
 			return 0;
 		return MvaAggr ( pMva, m_eFunc );
@@ -4416,7 +4441,12 @@ public:
 	virtual void Command ( ESphExprCommand eCmd, void * pArg )
 	{
 		if ( eCmd==SPH_EXPR_SET_MVA_POOL )
-			m_pMvaPool = (const DWORD*)pArg;
+		{
+			const PoolPtrs_t * pPool = (const PoolPtrs_t *)pArg;
+			assert ( pArg );
+			m_pMvaPool = pPool->m_pMva;
+			m_bArenaProhibit = pPool->m_bArenaProhibit;
+		}
 		if ( eCmd==SPH_EXPR_GET_DEPENDENT_COLS )
 			static_cast < CSphVector<int>* > ( pArg )->Add ( m_iLocator );
 	}
@@ -4428,6 +4458,7 @@ protected:
 	CSphAttrLocator		m_tLocator;
 	int					m_iLocator; // used by SPH_EXPR_GET_DEPENDENT_COLS
 	const DWORD *		m_pMvaPool;
+	bool				m_bArenaProhibit;
 	ESphAggrFunc		m_eFunc;
 };
 

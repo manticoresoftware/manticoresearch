@@ -2790,6 +2790,7 @@ class CSphKBufferMVAGroupSorter : public CSphKBufferGroupSorter < COMPGROUP, DIS
 {
 protected:
 	const DWORD *		m_pMva;		///< pointer to MVA pool for incoming matches
+	bool				m_bArenaProhibit;
 	CSphAttrLocator		m_tMvaLocator;
 	bool				m_bMva64;
 
@@ -2798,6 +2799,7 @@ public:
 	CSphKBufferMVAGroupSorter ( const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings )
 		: CSphKBufferGroupSorter < COMPGROUP, DISTINCT, NOTIFICATIONS > ( pComp, pQuery, tSettings )
 		, m_pMva ( NULL )
+		, m_bArenaProhibit ( false )
 		, m_bMva64 ( tSettings.m_bMva64 )
 	{
 		this->m_pGrouper->GetLocator ( m_tMvaLocator );
@@ -2810,9 +2812,10 @@ public:
 	}
 
 	/// set MVA pool for subsequent matches
-	void SetMVAPool ( const DWORD * pMva )
+	void SetMVAPool ( const DWORD * pMva, bool bArenaProhibit )
 	{
 		m_pMva = pMva;
+		m_bArenaProhibit = bArenaProhibit;
 	}
 
 	/// add entry to the queue
@@ -2825,7 +2828,7 @@ public:
 		// get that list
 		// FIXME! OPTIMIZE! use simpler locator than full bits/count here
 		// FIXME! hardcoded MVA type, so here's MVA_DOWNSIZE marker for searching
-		const DWORD * pValues = tEntry.GetAttrMVA ( this->m_tMvaLocator, m_pMva ); // (this pointer is for gcc; it doesn't work otherwise)
+		const DWORD * pValues = tEntry.GetAttrMVA ( this->m_tMvaLocator, m_pMva, m_bArenaProhibit ); // (this pointer is for gcc; it doesn't work otherwise)
 		if ( !pValues )
 			return false;
 

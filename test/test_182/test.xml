@@ -53,7 +53,9 @@ $results = array ();
 $restartD = create_function('$client','
 	$results = array ();
 	$results[] = StopWaitSearchd ( "config.conf", "searchd.pid" );
-
+	
+	usleep(250000); // delay 250ms to make sure searchd.pid has been deleted
+	
 	$error = "";
 	$startSta = StartSearchd ( "config.conf", "error.txt", "searchd.pid", $error );
 	if ( $startSta == 0 || $startSta == 2 )

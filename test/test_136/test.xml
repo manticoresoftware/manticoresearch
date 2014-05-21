@@ -73,6 +73,8 @@ for ( $i = 0; $i < 4; $i++)
 	$stop = StopWaitSearchd ('config.conf', 'searchd.pid');
 	$results[] = 'stoped='.($stop==0 ? 'ok' : 'err' ) . '(code=' . $stop . ')';
 
+	usleep ( 250000 ); // delay 250ms to make sure searchd.pid has been deleted
+
 	$startSta = StartSearchd ( 'config.conf', 'error.txt', 'searchd.pid', $error, true );
 	if ( $startSta == 0 || $startSta == 2 )
 	{

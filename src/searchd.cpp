@@ -9762,9 +9762,13 @@ void SearchHandler_c::RunLocalSearchesMT ()
 	}
 }
 
+int64_t sphCpuTimer();
+
 // invoked from MT searches. So, must be MT-aware!
 bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters, CSphQueryResult ** ppResults, bool * pMulti ) const
 {
+	int64_t iCpuTime = -sphCpuTimer();
+
 	const int iQueries = m_iEnd-m_iStart+1;
 	const ServedIndex_t * pServed = UseIndex ( iLocal );
 	if ( !pServed )
@@ -9868,6 +9872,10 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 		bResult = pServed->m_pIndex->MultiQueryEx ( iQueries, &m_dQueries[m_iStart], ppResults, ppSorters, tMultiArgs );
 	}
 	ppResults[0]->m_tIOStats.Stop();
+
+	iCpuTime += sphCpuTimer();
+	for ( int i=0; i<iQueries; ++i )
+		ppResults[i]->m_iCpuTime = iCpuTime;
 
 	ARRAY_FOREACH ( i, dLocked )
 		ReleaseIndex ( dLocked[i] );
@@ -10922,18 +10930,28 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		for ( int iRes=iStart; iRes<=iEnd; iRes++ )
 		{
 			tmAccountedWall += m_dResults[iRes].m_iQueryTime*1000;
+			assert ( m_dResults[iRes].m_iCpuTime==0 && m_dResults[iRes].m_iAgentCpuTime==0 || // all work was done in this thread
+					m_dResults[iRes].m_iCpuTime>0 && m_dResults[iRes].m_iAgentCpuTime==0 ||   // children threads work
+					m_dResults[iRes].m_iAgentCpuTime>0 && m_dResults[iRes].m_iCpuTime==0 );   // agents work
 			tmAccountedCpu += m_dResults[iRes].m_iCpuTime;
+			tmAccountedCpu += m_dResults[iRes].m_iAgentCpuTime;
 		}
+		// whether we had work done in children threads (dist_threads>1) or in agents
+		bool bExternalWork = tmAccountedCpu!=0;
 
 		int64_t tmDeltaWall = ( tmSubset - tmAccountedWall ) / iQueries;
-		int64_t tmDeltaCpu = ( tmCpu - tmAccountedCpu ) / iQueries;
 
 		for ( int iRes=iStart; iRes<=iEnd; iRes++ )
 		{
 			m_dResults[iRes].m_iQueryTime += (int)(tmDeltaWall/1000);
 			m_dResults[iRes].m_iRealQueryTime = (int)( tmSubset/1000/iQueries );
-			m_dResults[iRes].m_iCpuTime += tmDeltaCpu;
+			m_dResults[iRes].m_iCpuTime = tmCpu/iQueries;
+			if ( bExternalWork )
+				m_dResults[iRes].m_iCpuTime += tmAccountedCpu;
 		}
+		// don't forget to add this to stats
+		if ( bExternalWork )
+			tmCpu += tmAccountedCpu;
 	}
 
 	if ( g_pStats )

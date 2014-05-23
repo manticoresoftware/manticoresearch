@@ -3518,14 +3518,18 @@ even though at the cost of brevity and readability.
 By default, <filename>searchd</filename> logs all successfully executed search queries
 into a query log file. Here's an example:
 <programlisting>
-[Fri Jun 29 21:17:58 2007] 0.004 sec [all/0/rel 35254 (0,20)] [lj] test
-[Fri Jun 29 21:20:34 2007] 0.024 sec [all/0/rel 19886 (0,20) @channel_id] [lj] test
+[Fri Jun 29 21:17:58 2007] 0.004 sec 0.004 sec [all/0/rel 35254 (0,20)] [lj] test
+[Fri Jun 29 21:20:34 2007] 0.024 sec 0.024 sec [all/0/rel 19886 (0,20) @channel_id] [lj] test
 </programlisting>
 This log format is as follows:
 <programlisting>
-[query-date] query-time [match-mode/filters-count/sort-mode
+[query-date] real-time wall-time [match-mode/filters-count/sort-mode
     total-matches (offset,limit) @groupby-attr] [index-name] query
 </programlisting>
+<itemizedlist>
+<listitem><para>real-time is a time measured just from start to finish of the query</para></listitem>
+<listitem><para>wall-time like real-time but not including waiting for agents and merging result sets time</para></listitem>
+</itemizedlist>
 Match mode can take one of the following values:
 <itemizedlist>
 <listitem><para>"all" for SPH_MATCH_ALL mode;</para></listitem>
@@ -3572,10 +3576,10 @@ statement via SphinxQL. In the new format, the example from the previous
 section would look as follows. (Wrapped below for readability, but with
 just one query per line in the actual log.)
 <programlisting>
-/* Fri Jun 29 21:17:58.609 2007 2011 conn 2 wall 0.004 found 35254 */
+/* Fri Jun 29 21:17:58.609 2007 2011 conn 2 real 0.004 wall 0.004 found 35254 */
 SELECT * FROM lj WHERE MATCH('test') OPTION ranker=proximity;
 
-/* Fri Jun 29 21:20:34 2007.555 conn 3 wall 0.024 found 19886 */
+/* Fri Jun 29 21:20:34 2007.555 conn 3 real 0.024 wall 0.024 found 19886 */
 SELECT * FROM lj WHERE MATCH('test') GROUP BY channel_id
 OPTION ranker=proximity;
 </programlisting>

@@ -9601,15 +9601,6 @@ static void FlattenToRes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, int i
 	}
 }
 
-struct MassLocalSorter_fn
-{
-	bool IsLess ( const LocalSearch_t & a, const LocalSearch_t & b ) const
-	{
-		return ( a.m_iMass < b.m_iMass );
-	}
-};
-
-
 void SearchHandler_c::RunLocalSearchesMT ()
 {
 	int64_t tmLocal = sphMicroTimer();
@@ -9618,20 +9609,20 @@ void SearchHandler_c::RunLocalSearchesMT ()
 	const int iQueries = m_iEnd-m_iStart+1;
 	CSphVector<LocalSearch_t> dWorks ( m_dLocal.GetLength() );
 	CSphVector<CSphQueryResult> dResults ( m_dLocal.GetLength()*iQueries );
-	CSphVector<ISphMatchSorter*> pSorters ( m_dLocal.GetLength()*iQueries );
-	CSphVector<CSphQueryResult*> pResults ( m_dLocal.GetLength()*iQueries );
+	CSphVector<ISphMatchSorter*> dSorters ( m_dLocal.GetLength()*iQueries );
+	CSphVector<CSphQueryResult*> dResultPtrs ( m_dLocal.GetLength()*iQueries );
 
-	ARRAY_FOREACH ( i, pResults )
-		pResults[i] = &dResults[i];
+	ARRAY_FOREACH ( i, dResultPtrs )
+		dResultPtrs[i] = &dResults[i];
 
 	ARRAY_FOREACH ( i, m_dLocal )
 	{
 		dWorks[i].m_iLocal = i;
 		dWorks[i].m_iMass = -m_dLocal[i].m_iMass; // minus for reverse order
-		dWorks[i].m_ppSorters = &pSorters [ i*iQueries ];
-		dWorks[i].m_ppResults = &pResults [ i*iQueries ];
+		dWorks[i].m_ppSorters = &dSorters [ i*iQueries ];
+		dWorks[i].m_ppResults = &dResultPtrs [ i*iQueries ];
 	}
-	dWorks.Sort ( MassLocalSorter_fn() );
+	dWorks.Sort ( bind ( &LocalSearch_t::m_iMass ) );
 
 	// setup threads
 	CSphVector<LocalSearchThreadContext_t> dThreads ( Min ( g_iDistThreads, dWorks.GetLength() ) );
@@ -9711,7 +9702,7 @@ void SearchHandler_c::RunLocalSearchesMT ()
 			}
 
 			// no sorter, no fun
-			ISphMatchSorter * pSorter = pSorters[iSorterIndex];
+			ISphMatchSorter * pSorter = dSorters [ iSorterIndex ];
 			if ( !pSorter )
 				continue;
 
@@ -9751,8 +9742,8 @@ void SearchHandler_c::RunLocalSearchesMT ()
 		}
 	}
 
-	ARRAY_FOREACH ( i, pSorters )
-		SafeDelete ( pSorters[i] );
+	ARRAY_FOREACH ( i, dSorters )
+		SafeDelete ( dSorters[i] );
 
 	// update our wall time for every result set
 	tmLocal = sphMicroTimer() - tmLocal;

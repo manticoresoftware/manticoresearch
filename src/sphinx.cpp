@@ -12149,14 +12149,6 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphFix
 }
 
 
-struct CmpMvaEntries_fn
-{
-	inline bool IsLess ( const MvaEntry_t & a, const MvaEntry_t & b ) const
-	{
-		return a<b;
-	}
-};
-
 struct FieldMVARedirect_t
 {
 	CSphAttrLocator		m_tLocator;
@@ -12723,7 +12715,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 						int iLength = dFieldMVAs.GetLength ();
 						if ( iLength==iMaxPoolFieldMVAs )
 						{
-							dFieldMVAs.Sort ( CmpMvaEntries_fn () );
+							dFieldMVAs.Sort();
 							if ( !sphWriteThrottled ( fdTmpFieldMVAs.GetFD (), &dFieldMVAs[0],
 								iLength*sizeof(MvaEntry_t), "temp_field_mva", m_sLastError, &g_tThrottle ) )
 								return 0;
@@ -12766,7 +12758,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 						int iLength = dFieldMVAs.GetLength ();
 						if ( iLength==iMaxPoolFieldMVAs )
 						{
-							dFieldMVAs.Sort ( CmpMvaEntries_fn () );
+							dFieldMVAs.Sort();
 							if ( !sphWriteThrottled ( fdTmpFieldMVAs.GetFD (), &dFieldMVAs[0],
 								iLength*sizeof(MvaEntry_t), "temp_field_mva", m_sLastError, &g_tThrottle ) )
 									return 0;
@@ -13158,7 +13150,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		int iLength = dFieldMVAs.GetLength ();
 		nFieldMVAs += iLength;
 
-		dFieldMVAs.Sort ( CmpMvaEntries_fn () );
+		dFieldMVAs.Sort();
 		if ( !sphWriteThrottled ( fdTmpFieldMVAs.GetFD (), &dFieldMVAs[0],
 			iLength*sizeof(MvaEntry_t), "temp_field_mva", m_sLastError, &g_tThrottle ) )
 				return 0;

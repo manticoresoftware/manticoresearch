@@ -290,11 +290,13 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 function StopSearchd ( $config, $pidfile )
 {
 	global $g_locals, $action_retries, $action_wait_timeout;
+	$ret = 0;
 
 	if ( file_exists($pidfile) && count(file($pidfile)) )
 	{
 		$path = $g_locals['searchd'];
-		exec ( "$path --config $config --stopwait" );
+		$dummy = array();
+		exec ( "$path --config $config --stopwait", $dummy, $ret );
 
 		$i = 0;
 		while ( file_exists ( $pidfile ) && $i < $action_retries )
@@ -302,7 +304,11 @@ function StopSearchd ( $config, $pidfile )
 			usleep ( $action_wait_timeout );
 			$i++;
 		}
+
+		if ( !file_exists ( $pidfile ) )
+			$ret = 0;
 	}
+	return $ret;
 }
 
 function StopWaitSearchd ( $config, $pidfile )

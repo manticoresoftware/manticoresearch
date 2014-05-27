@@ -1,5 +1,5 @@
 //
-// $Id$
+// $Id: sphinxutils.cpp 4522 2014-01-30 11:00:18Z tomat $
 //
 
 //
@@ -562,6 +562,23 @@ static KeyDesc_t g_dKeysCommon[] =
 	{ NULL,						0, NULL }
 };
 
+struct KeySection_t
+{
+	const char *		m_sKey;		///< key name
+	KeyDesc_t *			m_pSection; ///< section to refer
+	bool				m_bNamed; ///< true if section is named. false if plain
+};
+
+static KeySection_t g_dConfigSections[] =
+{
+	{ "source",		g_dKeysSource,	true },
+	{ "index",		g_dKeysIndex,	true },
+	{ "indexer",	g_dKeysIndexer,	false },
+	{ "searchd",	g_dKeysSearchd,	false },
+	{ "common",		g_dKeysCommon,	false },
+	{ NULL,			NULL,			false }
+};
+
 //////////////////////////////////////////////////////////////////////////
 
 CSphConfigParser::CSphConfigParser ()
@@ -570,24 +587,23 @@ CSphConfigParser::CSphConfigParser ()
 {
 }
 
-
 bool CSphConfigParser::IsPlainSection ( const char * sKey )
 {
-	if ( !strcasecmp ( sKey, "indexer" ) )		return true;
-	if ( !strcasecmp ( sKey, "searchd" ) )		return true;
-	if ( !strcasecmp ( sKey, "search" ) )		return true;
-	if ( !strcasecmp ( sKey, "common" ) )		return true;
-	return false;
+	assert ( sKey );
+	const KeySection_t * pSection = g_dConfigSections;
+	while ( pSection->m_sKey && strcasecmp ( sKey, pSection->m_sKey ) )
+		++pSection;
+	return pSection->m_sKey && !pSection->m_bNamed;
 }
-
 
 bool CSphConfigParser::IsNamedSection ( const char * sKey )
 {
-	if ( !strcasecmp ( sKey, "source" ) )		return true;
-	if ( !strcasecmp ( sKey, "index" ) )		return true;
-	return false;
+	assert ( sKey );
+	const KeySection_t * pSection = g_dConfigSections;
+	while ( pSection->m_sKey && strcasecmp ( sKey, pSection->m_sKey ) )
+		++pSection;
+	return pSection->m_sKey && pSection->m_bNamed;
 }
-
 
 bool CSphConfigParser::AddSection ( const char * sType, const char * sName )
 {
@@ -647,12 +663,13 @@ bool CSphConfigParser::ValidateKey ( const char * sKey )
 {
 	// get proper descriptor table
 	// OPTIMIZE! move lookup to AddSection
+	const KeySection_t * pSection = g_dConfigSections;
 	const KeyDesc_t * pDesc = NULL;
-	if ( m_sSectionType=="source" )			pDesc = g_dKeysSource;
-	else if ( m_sSectionType=="index" )		pDesc = g_dKeysIndex;
-	else if ( m_sSectionType=="indexer" )	pDesc = g_dKeysIndexer;
-	else if ( m_sSectionType=="searchd" )	pDesc = g_dKeysSearchd;
-	else if ( m_sSectionType=="common" )	pDesc = g_dKeysCommon;
+	while ( pSection->m_sKey && m_sSectionType!=pSection->m_sKey )
+		++pSection;
+	if ( pSection->m_sKey )
+		pDesc = pSection->m_pSection;
+
 	if ( !pDesc )
 	{
 		snprintf ( m_sError, sizeof(m_sError), "unknown section type '%s'", m_sSectionType.cstr() );
@@ -2423,5 +2440,5 @@ bool CSphDynamicLibrary::LoadSymbols ( const char **, void ***, int ) { return f
 #endif
 
 //
-// $Id$
+// $Id: sphinxutils.cpp 4522 2014-01-30 11:00:18Z tomat $
 //

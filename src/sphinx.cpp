@@ -10436,7 +10436,6 @@ bool CSphIndex_VLN::SaveAttributes ( CSphString & sError ) const
 			if ( tAttr.m_eAttrType==SPH_ATTR_INT64SET )
 				dMvaLocators.Add ( tAttr.m_tLocator );
 		}
-		assert ( dMvaLocators.GetLength()!=0 );
 
 		// collect the list of all docids with changed MVA attributes
 		CSphVector<SphDocID_t> dAffected;

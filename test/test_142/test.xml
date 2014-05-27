@@ -131,7 +131,9 @@ $client->FlushAttributes();
 
 $results[]= "killing";
 KillSearchd ('config.conf', 'searchd.pid','KILL',false);
+usleep ( 150000 );
 StartSearchd ( "config.conf", "error.txt", 'searchd.pid', $error, true );
+usleep ( 150000 );
 
 $results[] = "connecting again";
 $sock = $make_sock( $results );

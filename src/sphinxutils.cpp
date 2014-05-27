@@ -544,6 +544,10 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "ondisk_attrs_default",	0, NULL },
 	{ "shutdown_timeout",		0, NULL },
 	{ "query_log_min_msec",		0, NULL },
+	{ "agent_connect_timeout",	0, NULL },
+	{ "agent_query_timeout",	0, NULL },
+	{ "agent_retry_delay",		0, NULL },
+	{ "agent_retry_count",		0, NULL },
 	{ NULL,						0, NULL }
 };
 

@@ -336,6 +336,15 @@ static int				g_iDistThreads		= 0;
 static int				g_iPingInterval		= 0;		// by default ping HA agents every 1 second
 static DWORD			g_uHAPeriodKarma	= 60;		// by default use the last 1 minute statistic to determine the best HA agent
 
+static int				g_iAgentConnectTimeout = 1000;
+static int				g_iAgentQueryTimeout = 3000;	// global (default). May be override by index-scope values, if one specified
+
+const int	MAX_RETRY_COUNT		= 8;
+const int	MAX_RETRY_DELAY		= 1000;
+
+static int				g_iAgentRetryCount = 0;
+static int				g_iAgentRetryDelay = MAX_RETRY_DELAY/2;	// global (default) values. May be override by the query options 'retry_count' and 'retry_timeout'
+
 
 struct ListNode_t
 {
@@ -696,8 +705,7 @@ static const char * g_dApiCommands[SEARCHD_COMMAND_TOTAL] =
 	"search", "excerpt", "update", "keywords", "persist", "status", "query", "flushattrs", "query", "ping", "delete", "uvar"
 };
 
-const int	MAX_RETRY_COUNT		= 8;
-const int	MAX_RETRY_DELAY		= 1000;
+
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -4222,8 +4230,8 @@ struct DistributedIndex_t
 
 public:
 	DistributedIndex_t ()
-		: m_iAgentConnectTimeout ( 1000 )
-		, m_iAgentQueryTimeout ( 3000 )
+		: m_iAgentConnectTimeout ( g_iAgentConnectTimeout )
+		, m_iAgentQueryTimeout ( g_iAgentQueryTimeout )
 		, m_bToDelete ( false )
 		, m_bDivideRemoteRanges ( false )
 		, m_eHaStrategy ( HA_RANDOM )
@@ -6372,11 +6380,13 @@ static void CheckQuery ( const CSphQuery & tQuery, CSphString & sError )
 	if ( tQuery.m_iCutoff<0 )
 		LOC_ERROR1 ( "cutoff out of bounds (cutoff=%d)", tQuery.m_iCutoff );
 
-	if ( tQuery.m_iRetryCount<0 || tQuery.m_iRetryCount>MAX_RETRY_COUNT )
-		LOC_ERROR1 ( "retry count out of bounds (count=%d)", tQuery.m_iRetryCount );
+	if ( ( tQuery.m_iRetryCount!=g_iAgentRetryCount )
+		&& ( tQuery.m_iRetryCount<0 || tQuery.m_iRetryCount>MAX_RETRY_COUNT ) )
+			LOC_ERROR1 ( "retry count out of bounds (count=%d)", tQuery.m_iRetryCount );
 
-	if ( tQuery.m_iRetryDelay<0 || tQuery.m_iRetryDelay>MAX_RETRY_DELAY )
-		LOC_ERROR1 ( "retry delay out of bounds (delay=%d)", tQuery.m_iRetryDelay );
+	if ( ( tQuery.m_iRetryCount!=g_iAgentRetryDelay )
+		&& ( tQuery.m_iRetryDelay<0 || tQuery.m_iRetryDelay>MAX_RETRY_DELAY ) )
+			LOC_ERROR1 ( "retry delay out of bounds (delay=%d)", tQuery.m_iRetryDelay );
 
 	if ( tQuery.m_iOffset>0 && tQuery.m_bHasOuter )
 		LOC_ERROR1 ( "inner offset must be 0 when using outer order by (offset=%d)", tQuery.m_iOffset );
@@ -6456,6 +6466,11 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 
 bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int iMasterVer )
 {
+	// daemon-level defaults
+	tQuery.m_iRetryCount = g_iAgentRetryCount;
+	tQuery.m_iRetryDelay = g_iAgentRetryDelay;
+	tQuery.m_iAgentQueryTimeout = g_iAgentQueryTimeout;
+
 	// v.1.27+ flags come first
 	DWORD uFlags = 0;
 	if ( iVer>=0x11B )
@@ -10922,8 +10937,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		{
 			tmAccountedWall += m_dResults[iRes].m_iQueryTime*1000;
 			assert ( m_dResults[iRes].m_iCpuTime==0 && m_dResults[iRes].m_iAgentCpuTime==0 || // all work was done in this thread
-					m_dResults[iRes].m_iCpuTime>0 && m_dResults[iRes].m_iAgentCpuTime==0 ||   // children threads work
-					m_dResults[iRes].m_iAgentCpuTime>0 && m_dResults[iRes].m_iCpuTime==0 );   // agents work
+					m_dResults[iRes].m_iCpuTime>0 && m_dResults[iRes].m_iAgentCpuTime==0 ||	// children threads work
+					m_dResults[iRes].m_iAgentCpuTime>0 && m_dResults[iRes].m_iCpuTime==0 );	// agents work
 			tmAccountedCpu += m_dResults[iRes].m_iCpuTime;
 			tmAccountedCpu += m_dResults[iRes].m_iAgentCpuTime;
 		}
@@ -11428,6 +11443,9 @@ struct SqlStmt_t
 		m_tQuery.m_eSort = SPH_SORT_EXTENDED;
 		m_tQuery.m_sSortBy = "@weight desc"; // default order
 		m_tQuery.m_sOrderBy = "@weight desc";
+		m_tQuery.m_iAgentQueryTimeout = g_iAgentQueryTimeout;
+		m_tQuery.m_iRetryCount = g_iAgentRetryCount;
+		m_tQuery.m_iRetryDelay = g_iAgentRetryDelay;
 	}
 
 	bool AddSchemaItem ( const char * psName )
@@ -21951,6 +21969,14 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_iPingInterval = hSearchd.GetInt ( "ha_ping_interval", 1000 );
 	g_uHAPeriodKarma = hSearchd.GetInt ( "ha_period_karma", 60 );
 	g_iQueryLogMinMs = hSearchd.GetInt ( "query_log_min_msec", g_iQueryLogMinMs );
+	g_iAgentConnectTimeout = hSearchd.GetInt ( "agent_connect_timeout", g_iAgentConnectTimeout );
+	g_iAgentQueryTimeout = hSearchd.GetInt ( "agent_query_timeout", g_iAgentQueryTimeout );
+	g_iAgentRetryDelay = hSearchd.GetInt ( "agent_retry_delay", g_iAgentRetryDelay );
+	if ( g_iAgentRetryDelay > MAX_RETRY_DELAY )
+		sphWarning ( "agent_retry_delay %d exceeded max recommended %d", g_iAgentRetryDelay, MAX_RETRY_DELAY );
+	g_iAgentRetryCount = hSearchd.GetInt ( "agent_retry_count", g_iAgentRetryCount );
+	if ( g_iAgentRetryCount > MAX_RETRY_COUNT )
+		sphWarning ( "agent_retry_count %d exceeded max recommended %d", g_iAgentRetryCount, MAX_RETRY_COUNT );
 
 	if ( hSearchd ( "collation_libc_locale" ) )
 	{

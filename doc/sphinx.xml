@@ -5294,7 +5294,8 @@ OPTION &lt;optionname&gt;=&lt;value&gt; [ , ... ]
 </programlisting>
 Supported options and respectively allowed values are:
 <itemizedlist>
-<listitem><para>'agent_query_timeout' - integer (max time in milliseconds to wait for remote queries to complete, see <link linkend="conf-agent-query-timeout">agent-query-timeout</link> under Index configuration options for details)</para></listitem>
+<listitem><para>'agent_query_timeout' - integer (max time in milliseconds to wait for remote queries to complete, 
+see <link linkend="conf-agent-query-timeout">agent_query_timeout</link> under Index configuration options for details)</para></listitem>
 <listitem><para>'boolean_simplify' - 0 or 1, enables simplifying the query to speed it up</para></listitem>
 <listitem><para>'comment' - string, user comment that gets copied to a query log file</para></listitem>
 <listitem><para>'cutoff' - integer (max found matches threshold)</para></listitem>
@@ -14090,6 +14091,38 @@ Optional, default is 0 (all queries are written to the query log). This directiv
 specifies that only queries with execution times that exceed the specified limit will be logged.
 </para>
 </sect2>
+
+<sect2 id="conf-agent-connect-timeout-default"><title>agent_connect_timeout</title>
+<para>
+Instance-wide defaults for <link linkend="conf-agent-connect-timeout">agent_connect_timeout</link> parameter.
+The last defined in distributed (network) indexes.
+</para>
+</sect2>
+
+<sect2 id="conf-agent-query-timeout-default"><title>agent_query_timeout</title>
+<para>
+Instance-wide defaults for <link linkend="conf-agent-query-timeout">agent_query_timeout</link> parameter.
+The last defined in distributed (network) indexes, or also may be overrided per-query using OPTION clause.
+</para>
+</sect2>
+
+<sect2 id="conf-agent-retry-count"><title>agent_retry_count</title>
+<para>
+Integer, specifies how many times sphinx will try to connect and query remote agents in distributed index before reporting 
+fatal query error. Default is 0 (i.e. no retries). This value may be also specified on per-query basis using 
+'OPTION retry_count=XXX' clause. If per-query option exists, it will override the one specified in config.
+</para>
+</sect2>
+
+<sect2 id="conf-agent-retry-delay"><title>agent_retry_delay</title>
+<para>
+Integer, in milliseconds. Specifies the delay sphinx rest before retrying to query a remote agent in case it fails.
+The value has sense only if non-zero <link linkend="conf-agent-retry-count">agent_retry_count</link> 
+or non-zero per-query OPTION retry_count specified. Default is 500. This value may be also specified 
+on per-query basis using 'OPTION retry_delay=XXX' clause. If per-query option exists, it will override the one specified in config.
+</para>
+</sect2>
+
 
 </sect1>
 

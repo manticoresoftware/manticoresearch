@@ -34,7 +34,7 @@ source src_num
 	type			= mysql
 	<sql_settings/>
 
-	sql_query		= SELECT 1 id, 11 idd, 's01e01 stuff' text UNION SELECT 2 id, 11 idd, 'season 1 episode 1 stuff' text
+	sql_query		= SELECT 1 id, 11 idd, 's01e01 stuff' text UNION SELECT 2 id, 11 idd, 'season 1 episode 1 stuff' text UNION SELECT 3 id, 11 idd, 's02e02' text UNION SELECT 4 id, 11 idd, 's3 e3' text
 	sql_attr_uint = idd
 }
 
@@ -53,6 +53,9 @@ index test_num
 <query index="test">sOMEwHATmORElONGfORMtHATwOULDoVERFLOWsHORTfORMbUFFER</query>
 <query index="test_num">s01e01</query>
 <query index="test_num">season 1 episode 1</query>
+<query index="test_num">s02e02</query>
+<query index="test_num">season 2 episode 2</query>
+<query index="test_num">season 3 episode 3</query>
 </queries>
 
 <db_create>

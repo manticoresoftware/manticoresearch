@@ -763,6 +763,9 @@ enum eAgentStats
 	eNetworkNonCritical = eNoErrors,
 	eTotalMsecs,		///< number of microseconds in queries, total
 	eMaxCounters = eTotalMsecs,
+	eConnTries,		///< total number of connec tries
+	eAverageMsecs,		///< average connect time
+	eMaxMsecs,			///< maximal connect time
 	eMaxStat
 };
 struct AgentStats_t
@@ -785,7 +788,8 @@ struct AgentStats_t
 const char * AgentStats_t::m_sNames[eMaxStat]=
 	{ "query_timeouts", "connect_timeouts", "connect_failures",
 		"network_errors", "wrong_replies", "unexpected_closings",
-		"warnings", "succeeded_queries", "total_query_time" };
+		"warnings", "succeeded_queries", "total_query_time", "connect_count",
+		"connect_avg", "connect_max" };
 
 struct AgentDash_t : AgentStats_t
 {
@@ -4319,18 +4323,32 @@ inline void agent_stats_inc ( AgentConn_t & tAgent, eAgentStats iCounter )
 	if ( g_pStats && tAgent.m_iStatsIndex>=0 && tAgent.m_iStatsIndex<STATS_MAX_AGENTS )
 	{
 		g_tStatsMutex.Lock ();
-		g_pStats->m_dAgentStats.m_dItemStats [ tAgent.m_iStatsIndex ].m_iStats[iCounter]++;
-		if ( tAgent.m_iDashIndex>=0 && tAgent.m_iDashIndex<STATS_MAX_DASH )
+		uint64_t* pCurStat = g_pStats->m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].GetCurrentStat()->m_iStats;
+		if ( iCounter==eMaxMsecs || iCounter==eAverageMsecs )
 		{
-			g_pStats->m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].GetCurrentStat()->m_iStats[iCounter]++;
-			if ( iCounter>=eNoErrors )
-				g_pStats->m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].m_iErrorsARow = 0;
+			++pCurStat[eConnTries];
+			int64_t iConnTime = sphMicroTimer() - tAgent.m_iStartQuery;
+			if ( uint64_t(iConnTime)>pCurStat[eMaxMsecs] )
+				pCurStat[eMaxMsecs] = iConnTime;
+			if ( pCurStat[eConnTries]>1 )
+				pCurStat[eAverageMsecs] = (pCurStat[eAverageMsecs]*(pCurStat[eConnTries]-1)+iConnTime)/pCurStat[eConnTries];
 			else
-				g_pStats->m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].m_iErrorsARow += 1;
-			tAgent.m_iEndQuery = sphMicroTimer();
-			g_pStats->m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].m_iLastQueryTime = tAgent.m_iStartQuery;
-			g_pStats->m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].m_iLastAnswerTime = tAgent.m_iEndQuery;
-			g_pStats->m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].GetCurrentStat()->m_iStats[eTotalMsecs]+=tAgent.m_iEndQuery-tAgent.m_iStartQuery;
+				pCurStat[eAverageMsecs] = iConnTime;
+		} else
+		{
+			g_pStats->m_dAgentStats.m_dItemStats [ tAgent.m_iStatsIndex ].m_iStats[iCounter]++;
+			if ( tAgent.m_iDashIndex>=0 && tAgent.m_iDashIndex<STATS_MAX_DASH )
+			{
+				++pCurStat[iCounter];
+				if ( iCounter>=eNoErrors && iCounter<eMaxCounters )
+					g_pStats->m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].m_iErrorsARow = 0;
+				else
+					g_pStats->m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].m_iErrorsARow += 1;
+				tAgent.m_iEndQuery = sphMicroTimer();
+				g_pStats->m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].m_iLastQueryTime = tAgent.m_iStartQuery;
+				g_pStats->m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].m_iLastAnswerTime = tAgent.m_iEndQuery;
+				pCurStat[eTotalMsecs]+=tAgent.m_iEndQuery-tAgent.m_iStartQuery;
+			}
 		}
 		g_tStatsMutex.Unlock ();
 	}
@@ -4429,7 +4447,6 @@ void RemoteConnectToAgent ( AgentConn_t & tAgent )
 
 	tAgent.m_iStartQuery = sphMicroTimer();
 	tAgent.m_iWall -= tAgent.m_iStartQuery;
-
 	if ( connect ( tAgent.m_iSock, (struct sockaddr*)&ss, len )<0 )
 	{
 		int iErr = sphSockGetErrno();
@@ -4447,6 +4464,7 @@ void RemoteConnectToAgent ( AgentConn_t & tAgent )
 	} else
 	{
 		// connect() success
+		agent_stats_inc ( tAgent, eMaxMsecs );
 		// send the client's proto version right now to avoid w-w-r pattern.
 		NetOutputBuffer_c tOut ( tAgent.m_iSock );
 		tOut.SendDword ( SPHINX_CLIENT_VERSION );
@@ -4560,7 +4578,9 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 					tAgent.Fail ( eConnectFailures, "connect() failed: %s", sphSockError(iErr) );
 					continue;
 				}
+
 				// connect() success
+				agent_stats_inc ( tAgent, eMaxMsecs );
 				tAgent.m_eState = AGENT_HANDSHAKE;
 				// send the client's proto version right now to avoid w-w-r pattern.
 				NetOutputBuffer_c tOut ( tAgent.m_iSock );
@@ -5049,6 +5069,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 				}
 #endif
 				// connect() success
+				agent_stats_inc ( tAgent, eMaxMsecs );
 				tAgent.m_eState = AGENT_HANDSHAKE;
 				// send the client's proto version right now to avoid w-w-r pattern.
 				NetOutputBuffer_c tOut ( tAgent.m_iSock );

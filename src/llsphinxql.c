@@ -906,7 +906,7 @@ static yyconst flex_int16_t yy_chk[1235] =
 	}
 
 
-#line 906 "llsphinxql.c"
+#line 910 "llsphinxql.c"
 
 #define INITIAL 0
 #define ccomment 1
@@ -1136,7 +1136,7 @@ YY_DECL
 #line 31 "sphinxql.l"
 
 
-#line 1134 "llsphinxql.c"
+#line 1138 "llsphinxql.c"
 
 	if ( !yyg->yy_init )
 		{
@@ -1902,7 +1902,7 @@ YY_RULE_SETUP
 #line 175 "sphinxql.l"
 ECHO;
 	YY_BREAK
-#line 1890 "llsphinxql.c"
+#line 1904 "llsphinxql.c"
 case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(ccomment):
 	yyterminate();
@@ -3020,7 +3020,7 @@ void yyfree (void * ptr , yyscan_t yyscanner)
 
 #define YYTABLES_NAME "yytables"
 
-#line 174 "sphinxql.l"
+#line 175 "sphinxql.l"
 
 
 

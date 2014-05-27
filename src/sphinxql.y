@@ -1499,7 +1499,7 @@ facet_items_list:
 	;
 
 facet_stmt:
-	TOK_FACET facet_items_list opt_facet_by_items_list opt_order_clause
+	TOK_FACET facet_items_list opt_facet_by_items_list opt_order_clause opt_limit_clause
 		{
 			pParser->m_pStmt->m_eStmt = STMT_FACET;
 			if ( pParser->m_pQuery->m_sFacetBy.IsEmpty() )

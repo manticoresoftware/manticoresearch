@@ -5403,7 +5403,7 @@ OPTION ranker=bm25, max_matches=3000,
 It is capable of returning multiple result sets with a single SQL statement, without the need for complicated <link linkend="sphinxql-multi-queries">multi-queries</link>.
 FACET clauses should be written at the very end of SELECT statements with spaces between them.
 <programlisting>
-FACET {expr}[, expr ...] [BY {expr}[, expr ...]] [ORDER BY {expr | FACET()} {ASC | DESC}[, ...]]
+FACET {expr_list} [BY {expr_list}] [ORDER BY {expr | FACET()} {ASC | DESC}] [LIMIT [offset,] count]
 SELECT * FROM test FACET brand_id FACET categories;
 SELECT * FROM test FACET brand_name BY brand_id ORDER BY brand_name ASC FACET property;
 </programlisting>

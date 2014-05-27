@@ -21689,7 +21689,6 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 	}
 
 	BYTE * pTo = pTokenizer->GetToken ();
-	int iToTokenLenCP = pTokenizer->GetLastTokenLen();
 	if ( !pTo )
 	{
 		sphWarning ( "index '%s': no destination token found (wordform='%s', file='%s'). IGNORED.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );

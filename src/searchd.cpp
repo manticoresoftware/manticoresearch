@@ -1845,19 +1845,6 @@ void Shutdown ()
 		}
 	}
 
-#if USE_WINDOWS
-	CloseHandle ( g_hPipe );
-#else
-	if ( g_bHeadDaemon && fdStopwait>=0 )
-	{
-			DWORD uStatus = bAttrsSaveOk;
-			int iDummy; // to avoid gcc unused result warning
-		iDummy = ::write ( fdStopwait, &uStatus, sizeof(DWORD) );
-		iDummy++; // to avoid gcc set but not used variable warning
-		::close ( fdStopwait );
-		}
-#endif
-
 	// remove pid
 	if ( g_bHeadDaemon && g_sPidFile )
 	{
@@ -1873,6 +1860,19 @@ void Shutdown ()
 		SphCrashLogger_c::Done();
 		sphThreadDone ( g_iLogFile );
 	}
+
+#if USE_WINDOWS
+	CloseHandle ( g_hPipe );
+#else
+	if ( g_bHeadDaemon && fdStopwait>=0 )
+	{
+		DWORD uStatus = bAttrsSaveOk;
+		int iDummy; // to avoid gcc unused result warning
+		iDummy = ::write ( fdStopwait, &uStatus, sizeof(DWORD) );
+		iDummy++; // to avoid gcc set but not used variable warning
+		::close ( fdStopwait );
+	}
+#endif
 }
 
 #if !USE_WINDOWS

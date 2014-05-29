@@ -70,7 +70,7 @@ for ( $i = 0; $i < 4; $i++)
 	else
 		$results[] = sprintf("up.err=%s", $client->GetLastError());
 
-	$stop = StopSearchd ('config.conf', 'searchd.pid');
+	$stop = StopWaitSearchd ('config.conf', 'searchd.pid');
 	$results[] = 'stoped='.($stop==0 ? 'ok' : 'err' ) . '(code=' . $stop . ')';
 
 	$startSta = StartSearchd ( 'config.conf', 'error.txt', 'searchd.pid', $error, true );

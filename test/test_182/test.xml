@@ -52,7 +52,7 @@ $results = array ();
 
 $restartD = create_function('$client','
 	$results = array ();
-	$results[] = StopSearchd ( "config.conf", "searchd.pid" );
+	$results[] = StopWaitSearchd ( "config.conf", "searchd.pid" );
 
 	$error = "";
 	$startSta = StartSearchd ( "config.conf", "error.txt", "searchd.pid", $error );

@@ -37,6 +37,7 @@
 %token	TOK_BY
 %token	TOK_CALL
 %token	TOK_CHARACTER
+%token	TOK_CHUNK
 %token	TOK_COLLATION
 %token	TOK_COLUMN
 %token	TOK_COMMIT
@@ -105,6 +106,7 @@
 %token	TOK_SELECT
 %token	TOK_SERIALIZABLE
 %token	TOK_SET
+%token	TOK_SETTINGS
 %token	TOK_SESSION
 %token	TOK_SHOW
 %token	TOK_SONAME
@@ -864,12 +866,35 @@ show_what:
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_AGENT_STATUS;
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $2 );
 		}
-	| TOK_INDEX ident TOK_STATUS
+	| index_or_table ident TOK_STATUS
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_INDEX_STATUS;
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $2 );
 		}
+	| index_or_table ident opt_chunk TOK_SETTINGS
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_INDEX_SETTINGS;
+			pParser->ToString ( pParser->m_pStmt->m_sIndex, $2 );
+		}
+	| index_or_table ident TOK_DOT_NUMBER TOK_SETTINGS
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_INDEX_SETTINGS;
+			pParser->ToString ( pParser->m_pStmt->m_sIndex, $2 );
+			pParser->m_pStmt->m_iIntParam = int($3.m_fValue*10);
+		}
 	;
+
+index_or_table:
+	TOK_INDEX
+	| TOK_TABLE
+	;
+
+opt_chunk:
+	// empty
+	| TOK_CHUNK TOK_CONST_INT
+		{
+			pParser->m_pStmt->m_iIntParam = $2.m_iValue;
+		};
 
 //////////////////////////////////////////////////////////////////////////
 

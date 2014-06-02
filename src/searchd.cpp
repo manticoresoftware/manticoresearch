@@ -11315,6 +11315,7 @@ enum SqlStmt_e
 	STMT_SHOW_THREADS,
 	STMT_FACET,
 	STMT_ALTER_RECONFIGURE,
+	STMT_SHOW_INDEX_SETTINGS,
 
 	STMT_TOTAL
 };
@@ -11330,7 +11331,7 @@ static const char * g_dSqlStmts[] =
 	"show_collation", "show_character_set", "optimize_index", "show_agent_status",
 	"show_index_status", "show_profile", "alter_add", "alter_drop", "show_plan",
 	"select_dual", "show_databases", "create_plugin", "drop_plugin", "show_plugins", "show_threads",
-	"facet", "alter_reconfigure"
+	"facet", "alter_reconfigure", "show_index_settings"
 };
 
 STATIC_ASSERT ( sizeof(g_dSqlStmts)/sizeof(g_dSqlStmts[0])==STMT_TOTAL, STMT_DESC_SHOULD_BE_SAME_AS_STMT_TOTAL );
@@ -11447,6 +11448,9 @@ struct SqlStmt_t
 	// plugin type in INSTALL PLUGIN
 	CSphString				m_sStringParam;
 
+	// generic integer parameter, used in SHOW SETTINGS, default value -1
+	int						m_iIntParam;
+
 	SqlStmt_t ()
 		: m_eStmt ( STMT_PARSE_ERROR )
 		, m_iRowsAffected ( 0 )
@@ -11459,6 +11463,7 @@ struct SqlStmt_t
 		, m_iListEnd ( -1 )
 		, m_eUdfType ( SPH_ATTR_NONE )
 		, m_iThreadsCols ( 0 )
+		, m_iIntParam ( -1 )
 	{
 		m_tQuery.m_eMode = SPH_MATCH_EXTENDED2; // only new and shiny matching and sorting
 		m_tQuery.m_eSort = SPH_SORT_EXTENDED;
@@ -17491,6 +17496,95 @@ void HandleMysqlShowIndexStatus ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt
 }
 
 
+void DumpKey ( CSphStringBuilder & tBuf, const char * sKey, const char * sVal, bool bCond )
+{
+	if ( bCond )
+		tBuf.Appendf ( "%s: %s\n", sKey, sVal );
+}
+
+
+void DumpKey ( CSphStringBuilder & tBuf, const char * sKey, int iVal, bool bCond )
+{
+	if ( bCond )
+		tBuf.Appendf ( "%s: %d\n", sKey, iVal );
+}
+
+
+void DumpIndexSettings ( CSphStringBuilder & tBuf, CSphIndex * pIndex )
+{
+	const CSphIndexSettings & tSettings = pIndex->GetSettings();
+	DumpKey ( tBuf, "docinfo",				"inline",								tSettings.m_eDocinfo==SPH_DOCINFO_INLINE );
+	DumpKey ( tBuf, "min_prefix_len",		tSettings.m_iMinPrefixLen,				tSettings.m_iMinPrefixLen!=0 );
+	DumpKey ( tBuf, "max_substring_len",	tSettings.m_iMaxSubstringLen,			tSettings.m_iMaxSubstringLen!=0 );
+	DumpKey ( tBuf, "index_exact_words",	1,										tSettings.m_bIndexExactWords );
+	DumpKey ( tBuf, "html_strip",			1,										tSettings.m_bHtmlStrip );
+	DumpKey ( tBuf, "html_index_attrs",		tSettings.m_sHtmlIndexAttrs.cstr(),		!tSettings.m_sHtmlIndexAttrs.IsEmpty() );
+	DumpKey ( tBuf, "html_remove_elements", tSettings.m_sHtmlRemoveElements.cstr(), !tSettings.m_sHtmlRemoveElements.IsEmpty() );
+	DumpKey ( tBuf, "index_zones",			tSettings.m_sZones.cstr(),				!tSettings.m_sZones.IsEmpty() );
+	DumpKey ( tBuf, "index_field_lengths",	1,										tSettings.m_bIndexFieldLens );
+
+	if ( pIndex->GetTokenizer() )
+	{
+		const CSphTokenizerSettings & tTokSettings = pIndex->GetTokenizer()->GetSettings();
+		DumpKey ( tBuf, "charset_type",		( tTokSettings.m_iType==TOKENIZER_UTF8 || tTokSettings.m_iType==TOKENIZER_NGRAM )
+											? "utf-8"
+											: "unknown tokenizer (deprecated sbcs?)", true );
+		DumpKey ( tBuf, "charset_table",	tTokSettings.m_sCaseFolding.cstr(),		!tTokSettings.m_sCaseFolding.IsEmpty() );
+		DumpKey ( tBuf, "min_word_len",		tTokSettings.m_iMinWordLen,				tTokSettings.m_iMinWordLen>1 );
+		DumpKey ( tBuf, "ngram_len",		tTokSettings.m_iNgramLen,				tTokSettings.m_iNgramLen && !tTokSettings.m_sNgramChars.IsEmpty() );
+		DumpKey ( tBuf, "ngram_chars",		tTokSettings.m_sNgramChars.cstr(),		tTokSettings.m_iNgramLen && !tTokSettings.m_sNgramChars.IsEmpty() );
+		DumpKey ( tBuf, "exceptions",		tTokSettings.m_sSynonymsFile.cstr(),	!tTokSettings.m_sSynonymsFile.IsEmpty() );
+		DumpKey ( tBuf, "phrase_boundary",	tTokSettings.m_sBoundary.cstr(),		!tTokSettings.m_sBoundary.IsEmpty() );
+		DumpKey ( tBuf, "ignore_chars",		tTokSettings.m_sIgnoreChars.cstr(),		!tTokSettings.m_sIgnoreChars.IsEmpty() );
+		DumpKey ( tBuf, "blend_chars",		tTokSettings.m_sBlendChars.cstr(),		!tTokSettings.m_sBlendChars.IsEmpty() );
+		DumpKey ( tBuf, "blend_mode",		tTokSettings.m_sBlendMode.cstr(),		!tTokSettings.m_sBlendMode.IsEmpty() );
+	}
+
+	if ( pIndex->GetDictionary() )
+	{
+		const CSphDictSettings & tDictSettings = pIndex->GetDictionary()->GetSettings();
+		CSphStringBuilder tWordforms;
+		ARRAY_FOREACH ( i, tDictSettings.m_dWordforms )
+			tWordforms.Appendf ( " %s", tDictSettings.m_dWordforms[i].cstr () );
+		DumpKey ( tBuf, "dict",				"keywords",								tDictSettings.m_bWordDict );
+		DumpKey ( tBuf, "morphology",		tDictSettings.m_sMorphology.cstr(),		!tDictSettings.m_sMorphology.IsEmpty() );
+		DumpKey ( tBuf, "stopwords",		tDictSettings.m_sStopwords.cstr (),		!tDictSettings.m_sStopwords.IsEmpty() );
+		DumpKey ( tBuf, "wordforms",		tWordforms.cstr()+1,					tDictSettings.m_dWordforms.GetLength()>0 );
+		DumpKey ( tBuf, "min_stemming_len",	tDictSettings.m_iMinStemmingLen,		tDictSettings.m_iMinStemmingLen>1 );
+	}
+}
+
+
+void HandleMysqlShowIndexSettings ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+{
+	CSphString sError;
+	const ServedIndex_t * pServed = g_pLocalIndexes->GetRlockedEntry ( tStmt.m_sIndex );
+
+	int iChunk = tStmt.m_iIntParam;
+	CSphIndex * pIndex = pServed->m_pIndex;
+
+	if ( pIndex->IsRT() && iChunk>=0 )
+		pIndex = static_cast<ISphRtIndex *>( pIndex )->GetDiskChunk ( iChunk );
+
+	if ( !pServed || !pServed->m_bEnabled || !pIndex )
+	{
+		if ( pServed )
+			pServed->Unlock();
+		tOut.Error ( tStmt.m_sStmt, "SHOW INDEX SETTINGS requires an existing index" );
+		return;
+	}
+
+	tOut.HeadTuplet ( "Variable_name", "Value" );
+
+	CSphStringBuilder sBuf;
+	DumpIndexSettings ( sBuf, pIndex );
+	tOut.DataTuplet ( "settings", sBuf.cstr() );
+
+	pServed->Unlock();
+	tOut.Eof();
+}
+
+
 void HandleMysqlShowProfile ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p )
 {
 	#define SPH_QUERY_STATE(_name,_desc) _desc,
@@ -18122,6 +18216,10 @@ public:
 
 		case STMT_SHOW_INDEX_STATUS:
 			HandleMysqlShowIndexStatus ( tOut, *pStmt );
+			return true;
+
+		case STMT_SHOW_INDEX_SETTINGS:
+			HandleMysqlShowIndexSettings ( tOut, *pStmt );
 			return true;
 
 		case STMT_SHOW_PROFILE:

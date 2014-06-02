@@ -6822,6 +6822,21 @@ mysql&gt; SHOW INDEX lj STATUS;
 </sect1>
 
 
+<sect1 id="sphinxql-show-index-settings"><title>SHOW INDEX SETTINGS syntax</title>
+<programlisting>
+SHOW INDEX index_name[.N | CHUNK N] SETTINGS
+</programlisting>
+<para>
+Displays per-index settings in a <filename>sphinx.conf</filename> compliant
+file format, similar to the <link linkend="ref-indextool">--dumpconfig</link>
+option of the indextool. The report provides a breakdown of all the index
+settings, including tokenizer and dictionary options. You may also specify
+a particular <link linkend="conf-rt-mem-limit">chunk number</link>
+for the RT indexes.
+</para>
+</sect1>
+
+
 <sect1 id="sphinxql-optimize-index"><title>OPTIMIZE INDEX syntax</title>
 <programlisting>
 OPTIMIZE INDEX index_name

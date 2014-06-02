@@ -73,6 +73,9 @@ public:
 	/// reconfigure index by using new tokenizer, dictionary and index settings
 	/// current data got saved with current settings
 	virtual void Reconfigure ( CSphReconfigureSetup & tSetup ) = 0;
+
+	/// get disk chunk
+	virtual CSphIndex * GetDiskChunk ( int iChunk ) = 0;
 };
 
 /// initialize subsystem

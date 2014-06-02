@@ -1,9 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 <name>aggregate, aliases, different sorting, grouping and schemas vs different type of distributed</name>
-<requires>
-<id32/>
-</requires>
+
 <config>
 indexer
 {

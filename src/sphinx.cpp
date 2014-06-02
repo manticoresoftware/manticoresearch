@@ -5601,6 +5601,8 @@ BYTE * CSphTokenizerBase2::GetTokenSyn ( bool bQueryMode )
 	{
 		// initialize accumulators and range
 		const BYTE * pFirstSeparator = NULL;
+		bool bWasEscaped = false;
+		const BYTE * pLastEscape = NULL;
 
 		m_iAccum = 0;
 		m_pAccum = m_sAccum;
@@ -5657,6 +5659,7 @@ BYTE * CSphTokenizerBase2::GetTokenSyn ( bool bQueryMode )
 			{
 				if ( iCode=='\\' && iLastCodepoint!='\\' )
 				{
+					pLastEscape = pCur;
 					iLastCodepoint = iCode;
 					continue;
 				} else if ( iLastCodepoint=='\\' && ( iFolded & FLAG_CODEPOINT_SYNONYM ) && ( iFolded & FLAG_CODEPOINT_SPECIAL ) )
@@ -5669,6 +5672,7 @@ BYTE * CSphTokenizerBase2::GetTokenSyn ( bool bQueryMode )
 					continue;
 				}
 
+				bWasEscaped = ( iLastCodepoint=='\\' );
 				iLastCodepoint = iCode;
 			}
 
@@ -5949,8 +5953,9 @@ BYTE * CSphTokenizerBase2::GetTokenSyn ( bool bQueryMode )
 			}
 		} else
 		{
+			assert ( !bWasEscaped || pLastEscape );
 			// if there was, token is ready but we should restart from that separator
-			m_pCur = pFirstSeparator;
+			m_pCur = ( bWasEscaped ? pLastEscape : pFirstSeparator );
 			pCur = m_pCur;
 		}
 
@@ -24795,11 +24800,31 @@ void CSphHTMLStripper::Strip ( BYTE * sData ) const
 		{
 			if ( s[1]=='#' )
 			{
-				// handle "&#number;" form
+				// handle "&#number;" and "&#xnumber;" forms
 				DWORD uCode = 0;
 				s += 2;
-				while ( isdigit(*s) )
-					uCode = uCode*10 + (*s++) - '0';
+
+				bool bHex = ( *s && ( *s=='x' || *s=='X') );
+				if ( !bHex )
+				{
+					while ( isdigit(*s) )
+						uCode = uCode*10 + (*s++) - '0';
+				} else
+				{
+					s++;
+					while ( *s )
+					{
+						if ( isdigit(*s) )
+							uCode = uCode*16 + (*s++) - '0';
+						else if ( *s>=0x41 && *s<=0x46 )
+							uCode = uCode*16 + (*s++) - 'A';
+						else if ( *s>=0x61 && *s<=0x66 )
+							uCode = uCode*16 + (*s++) - 'a';
+						else
+							break;
+					}
+				}
+
 				uCode = uCode % 0x110000; // there is no uniode codepoints bigger than this value
 
 				if ( uCode<=0x1f || *s!=';' ) // 0-31 are reserved codes

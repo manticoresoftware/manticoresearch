@@ -14444,6 +14444,20 @@ rlp_max_batch_docs = 100
 </itemizedlist>
 </sect1>
 
+<sect1 id="rel218"><title>Version 2.1.8-release, 28 apr 2014</title>
+<bridgehead>Bug fixes</bridgehead>
+<itemizedlist>
+  <listitem><para>fixed #1937, crash at <link linkend="extended-syntax">SENTENCE</link> operator</para></listitem>
+  <listitem><para>fixed #1933, quorum operator works incorrectly if it's number is exception</para></listitem>
+  <listitem><para>fixed #1932, fixed daemon index recovery after failed rotation</para></listitem>
+  <listitem><para>fixed #1923, crash at <filename>indexer</filename> with <option>dict=keywords</option></para></listitem>
+  <listitem><para>fixed #1918, fixed crash while hitless words are used within fulltext operators which require hits</para></listitem>
+  <listitem><para>fixed #1878, daemon doesn't reset <link linkend="conf-regexp-filter">regexp_filter</link> after rotation with <link linkend="conf-seamless-rotate">seamless_rotate=0</link></para></listitem>
+  <listitem><para>fixed #1769, crash after unsuccessful <link linkend="sphinxql-insert">INSERT</link> at RT index</para></listitem>
+  <listitem><para>fixed #1682, field end modifier doesn't work with words containing blended chars</para></listitem>
+</itemizedlist>
+</sect1>
+
 <sect1 id="rel217"><title>Version 2.1.7-release, 30 mar 2014</title>
 <bridgehead>Bug fixes</bridgehead>
 <itemizedlist>

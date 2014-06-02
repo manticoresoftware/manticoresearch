@@ -70,7 +70,7 @@ opt_alias:
 	;
 
 select_expr:
-	expr				{ pParser->AddItem ( &$1 ); }
+	expr						{ pParser->AddItem ( &$1 ); }
 	| SEL_AVG '(' expr ')' 		{ pParser->AddItem ( &$3, SPH_AGGR_AVG, &$1, &$4 ); }
 	| SEL_MAX '(' expr ')' 		{ pParser->AddItem ( &$3, SPH_AGGR_MAX, &$1, &$4 ); }
 	| SEL_MIN '(' expr ')' 		{ pParser->AddItem ( &$3, SPH_AGGR_MIN, &$1, &$4 ); }
@@ -78,7 +78,6 @@ select_expr:
 	| SEL_GROUP_CONCAT '(' expr ')'		{ pParser->AddItem ( &$3, SPH_AGGR_CAT, &$1, &$4 ); }
 	| SEL_GROUPBY '(' ')'		{ pParser->AddItem ( "groupby()", &$1, &$3 ); }
 	| SEL_COUNT '(' '*' ')' 	{ pParser->AddItem ( "count(*)", &$1, &$4 ); }
-	| SEL_WEIGHT '(' ')' 		{ pParser->AddItem ( "weight()", &$1, &$3 ); }
 	| SEL_COUNT '(' SEL_DISTINCT SEL_TOKEN ')' 
 		// FIXME: may be check if $4 == this->m_sGroupDistinct and warn/error, if not?
 					{ pParser->AddItem ( "@distinct", &$1, &$5 ); }
@@ -86,7 +85,7 @@ select_expr:
 
 expr:
 	select_atom
-	| '-' expr %prec TOK_NEG		{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
+	| '-' expr %prec TOK_NEG	{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
 	| TOK_NOT expr				{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
 	| expr '+' expr				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| expr '-' expr				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
@@ -116,10 +115,11 @@ select_atom:
 	;
 
 function:
-	SEL_TOKEN '(' arglist ')'		{ $$ = $1; $$.m_iEnd = $4.m_iEnd; }
-	| SEL_TOKEN '(' ')'			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
+	SEL_TOKEN '(' arglist ')'			{ $$ = $1; $$.m_iEnd = $4.m_iEnd; }
+	| SEL_TOKEN '(' ')'					{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| SEL_MIN '(' expr ',' expr ')'		{ $$ = $1; $$.m_iEnd = $6.m_iEnd; }	// handle clash with aggregate functions
 	| SEL_MAX '(' expr ',' expr ')'		{ $$ = $1; $$.m_iEnd = $6.m_iEnd; }
+	| SEL_WEIGHT '(' ')'				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	;
 
 arglist:

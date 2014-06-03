@@ -17499,14 +17499,14 @@ void HandleMysqlShowIndexStatus ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt
 void DumpKey ( CSphStringBuilder & tBuf, const char * sKey, const char * sVal, bool bCond )
 {
 	if ( bCond )
-		tBuf.Appendf ( "%s: %s\n", sKey, sVal );
+		tBuf.Appendf ( "%s = %s\n", sKey, sVal );
 }
 
 
 void DumpKey ( CSphStringBuilder & tBuf, const char * sKey, int iVal, bool bCond )
 {
 	if ( bCond )
-		tBuf.Appendf ( "%s: %d\n", sKey, iVal );
+		tBuf.Appendf ( "%s = %d\n", sKey, iVal );
 }
 
 
@@ -17561,9 +17561,9 @@ void HandleMysqlShowIndexSettings ( SqlRowBuffer_c & tOut, const SqlStmt_t & tSt
 	const ServedIndex_t * pServed = g_pLocalIndexes->GetRlockedEntry ( tStmt.m_sIndex );
 
 	int iChunk = tStmt.m_iIntParam;
-	CSphIndex * pIndex = pServed->m_pIndex;
+	CSphIndex * pIndex = pServed ? pServed->m_pIndex : NULL;
 
-	if ( pIndex->IsRT() && iChunk>=0 )
+	if ( iChunk>=0 && pServed && pIndex && pIndex->IsRT() )
 		pIndex = static_cast<ISphRtIndex *>( pIndex )->GetDiskChunk ( iChunk );
 
 	if ( !pServed || !pServed->m_bEnabled || !pIndex )

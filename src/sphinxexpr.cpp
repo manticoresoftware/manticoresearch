@@ -4505,7 +4505,7 @@ protected:
 	UservarIntSet_c *	m_pUservar;
 	const BYTE *		m_pStrings;
 	ISphExpr *			m_pArg;
-	CSphString			m_sExpr;
+	CSphVector<int64_t>	m_dHashes;
 
 public:
 	Expr_JsonFieldIn_c ( ConstList_c * pConsts, UservarIntSet_c * pUservar, ISphExpr * pArg )
@@ -4515,8 +4515,27 @@ public:
 		, m_pArg ( pArg )
 	{
 		assert ( !pConsts || !pUservar );
-		if ( pConsts )
-			m_sExpr = pConsts->m_sExpr;
+
+		const char * sExpr = pConsts->m_sExpr.cstr();
+		int iExprLen = pConsts->m_sExpr.Length();
+
+		const int64_t * pFilter = m_pUservar ? m_pUservar->Begin() : m_dValues.Begin();
+		const int64_t * pFilterMax = pFilter + ( m_pUservar ? m_pUservar->GetLength() : m_dValues.GetLength() );
+
+		for ( const int64_t * pCur=pFilter; pCur<pFilterMax; pCur++ )
+		{
+			int64_t iVal = *pCur;
+			int iOfs = (int)( iVal>>32 );
+			int iLen = (int)( iVal & 0xffffffffUL );
+			if ( iOfs>0 && iOfs+iLen<=iExprLen )
+			{
+				CSphString sRes;
+				SqlUnescape ( sRes, sExpr + iOfs, iLen );
+				m_dHashes.Add ( sphFNV64 ( sRes.cstr(), sRes.Length() ) );
+			}
+		}
+
+		m_dHashes.Sort();
 	}
 
 	~Expr_JsonFieldIn_c()
@@ -4592,9 +4611,6 @@ protected:
 
 	int StringArrayEval ( const BYTE * pVal, bool bValueEval ) const
 	{
-		const int64_t * pFilter = m_pUservar ? m_pUservar->Begin() : m_dValues.Begin();
-		const int64_t * pFilterMax = pFilter + ( m_pUservar ? m_pUservar->GetLength() : m_dValues.GetLength() );
-
 		if ( !bValueEval )
 			sphJsonUnpackInt ( &pVal );
 		int iCount = bValueEval ? 1 : sphJsonUnpackInt ( &pVal );
@@ -4602,15 +4618,8 @@ protected:
 		while ( iCount-- )
 		{
 			int iLen = sphJsonUnpackInt ( &pVal );
-			for ( const int64_t * pCur=pFilter; pCur<pFilterMax; pCur++ )
-			{
-				int64_t iVal = *pCur;
-				// compare with a quoted const string
-				const char * p = m_sExpr.cstr() + (int)( iVal>>32 ) + 1;
-				int iMatchLen = (int)( iVal & 0xffffffffUL ) - 2;
-				if ( iLen==iMatchLen && memcmp ( p, (const char*) pVal, iLen )==0 )
-					return 1;
-			}
+			if ( m_dHashes.BinarySearch ( sphFNV64 ( pVal, iLen ) ) )
+				return 1;
 			pVal += iLen;
 		}
 		return 0;
@@ -4646,10 +4655,14 @@ public:
 		for ( const int64_t * pCur=pFilter; pCur<pFilterMax; pCur++ )
 		{
 			int64_t iVal = *pCur;
-			int iOfs = (int)( iVal>>32 ) + 1;
-			int iLen = (int)( iVal & 0xffffffffUL ) - 2;
-			if ( iOfs>=0 && iOfs+iLen<=iExprLen )
-				m_dHashes.Add ( sphFNV64 ( sExpr + iOfs, iLen ) );
+			int iOfs = (int)( iVal>>32 );
+			int iLen = (int)( iVal & 0xffffffffUL );
+			if ( iOfs>0 && iOfs+iLen<=iExprLen )
+			{
+				CSphString sRes;
+				SqlUnescape ( sRes, sExpr + iOfs, iLen );
+				m_dHashes.Add ( sphFNV64 ( sRes.cstr(), sRes.Length() ) );
+			}
 		}
 
 		m_dHashes.Sort();

@@ -58,6 +58,13 @@ index test_num
 <query index="test_num">season 3 episode 3</query>
 </queries>
 
+<sphqueries>
+<sphinxql>SELECT * FROM test_num WHERE MATCH('metallica')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+<sphinxql>SELECT * FROM test_num WHERE MATCH('metallica 2014')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+</sphqueries>
+
 <db_create>
 CREATE TABLE `test_table`
 (

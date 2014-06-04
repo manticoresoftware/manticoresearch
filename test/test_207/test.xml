@@ -234,6 +234,27 @@ index test_stop10
 	morphology 		= lemmatize_ru_all, stem_enru
 	index_exact_words = 1
 }
+
+source src_all11
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT 1, 11 as idd, 'секс' as text UNION SELECT 2, 22 as idd, 'себульба' as text
+	sql_query_pre = SET NAMES utf8
+	sql_attr_uint = idd
+}
+
+index test_all11
+{
+	source			= src_all11
+	path			= <data_path/>/test_all11
+	dict			= keywords
+	charset_type 	= utf-8
+	charset_table 	= 0..9, A..Z->a..z, _, ., -, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+0401->U+0435, U+0451->U+0435 
+	morphology 		= lemmatize_ru_all, stem_enru
+	min_prefix_len	= 2
+	enable_star		= 1
+}
 </config>
 
 <db_create>
@@ -486,6 +507,10 @@ CREATE TABLE test_table
 <!-- regression exceptions vs no hits -->
 <sphinxql>SELECT *, weight() w FROM test_stop10 WHERE MATCH('поглазова')</sphinxql>
 <sphinxql>SELECT *, weight() w FROM test_stop10 WHERE MATCH('kPMHkQCFrL')</sphinxql>
+
+<!-- regression missed index_exact_words vs morphology and substring -->
+<sphinxql>SELECT *, weight() w FROM test_all11 WHERE MATCH('се*'); show meta</sphinxql>
+<sphinxql>SELECT *, weight() w FROM test_all11 WHERE MATCH('^се*'); show meta</sphinxql>
 </sphqueries>
 
 </test>

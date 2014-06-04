@@ -2064,9 +2064,7 @@ void sphSetReadBuffers ( int iReadBuffer, int iReadUnhinted )
 // DOCINFO
 //////////////////////////////////////////////////////////////////////////
 
-
 static DWORD *				g_pMvaArena = NULL;		///< initialized by sphArenaInit()
-
 
 // OPTIMIZE! try to inline or otherwise simplify maybe
 const DWORD * CSphMatch::GetAttrMVA ( const CSphAttrLocator & tLoc, const DWORD * pPool, bool bArenaProhibit ) const
@@ -2083,6 +2081,342 @@ const DWORD * CSphMatch::GetAttrMVA ( const CSphAttrLocator & tLoc, const DWORD 
 }
 
 /////////////////////////////////////////////////////////////////////////////
+// TOKENIZING EXCEPTIONS
+/////////////////////////////////////////////////////////////////////////////
+
+/// exceptions trie, stored in a tidy simple blob
+/// we serialize each trie node as follows:
+///
+/// int result_offset, 0 if no output mapping
+/// BYTE num_bytes, 0 if no further valid bytes can be accepted
+/// BYTE values[num_bytes], known accepted byte values
+/// BYTE offsets[num_bytes], and the respective next node offsets
+///
+/// output mappings themselves are serialized just after the nodes,
+/// as plain old ASCIIZ strings
+class ExceptionsTrie_c
+{
+	friend class		ExceptionsTrieGen_c;
+
+protected:
+	int					m_dFirst[256];	///< table to speedup 1st byte lookup
+	CSphVector<BYTE>	m_dData;		///< data blob
+	int					m_iCount;		///< number of exceptions
+	int					m_iMappings;	///< offset where the nodes end, and output mappings start
+
+public:
+	const BYTE * GetMapping ( int i ) const
+	{
+		assert ( i>=0 && i<m_iMappings );
+		int p = *(int*)&m_dData[i];
+		if ( !p )
+			return NULL;
+		assert ( p>=m_iMappings && p<m_dData.GetLength() );
+		return &m_dData[p];
+	}
+
+	int GetFirst ( BYTE v ) const
+	{
+		return m_dFirst[v];
+	}
+
+	int GetNext ( int i, BYTE v ) const
+	{
+		assert ( i>=0 && i<m_iMappings );
+		if ( i==0 )
+			return m_dFirst[v];
+		const BYTE * p = &m_dData[i];
+		int n = p[4];
+		p += 5;
+		for ( i=0; i<n; i++ )
+			if ( p[i]==v )
+				return *(int*)&p [ n + 4*i ]; // FIXME? unaligned
+		return -1;
+	}
+
+public:
+	void Export ( CSphWriter & w ) const
+	{
+		CSphVector<BYTE> dPrefix;
+		int iCount = 0;
+
+		w.PutDword ( m_iCount );
+		Export ( w, dPrefix, 0, &iCount );
+		assert ( iCount==m_iCount );
+	}
+
+protected:
+	void Export ( CSphWriter & w, CSphVector<BYTE> & dPrefix, int iNode, int * pCount ) const
+	{
+		assert ( iNode>=0 && iNode<m_iMappings );
+		const BYTE * p = &m_dData[iNode];
+
+		int iTo = *(int*)p;
+		if ( iTo>0 )
+		{
+			CSphString s;
+			const char * sTo = (char*)&m_dData[iTo];
+			s.SetBinary ( (char*)dPrefix.Begin(), dPrefix.GetLength() );
+			s.SetSprintf ( "%s => %s\n", s.cstr(), sTo );
+			w.PutString ( s.cstr() );
+			(*pCount)++;
+		}
+
+		int n = p[4];
+		if ( n==0 )
+			return;
+
+		p += 5;
+		for ( int i=0; i<n; i++ )
+		{
+			dPrefix.Add ( p[i] );
+			Export ( w, dPrefix, *(int*)&p[n+4*i], pCount );
+			dPrefix.Pop();
+		}
+	}
+};
+
+
+/// intermediate exceptions trie node
+/// only used by ExceptionsTrieGen_c, while building a blob
+class ExceptionsTrieNode_c
+{
+	friend class						ExceptionsTrieGen_c;
+
+protected:
+	struct Entry_t
+	{
+		BYTE					m_uValue;
+		ExceptionsTrieNode_c *	m_pKid;
+	};
+
+	CSphString					m_sTo;		///< output mapping for current prefix, if any
+	CSphVector<Entry_t>			m_dKids;	///< known and accepted incoming byte values
+
+public:
+	~ExceptionsTrieNode_c()
+	{
+		ARRAY_FOREACH ( i, m_dKids )
+			SafeDelete ( m_dKids[i].m_pKid );
+	}
+
+	/// returns false on a duplicate "from" part, or true on success
+	bool AddMapping ( const BYTE * sFrom, const BYTE * sTo )
+	{
+		// no more bytes to consume? this is our output mapping then
+		if ( !*sFrom )
+		{
+			if ( !m_sTo.IsEmpty() )
+				return false;
+			m_sTo = (const char*)sTo;
+			return true;
+		}
+
+		int i;
+		for ( i=0; i<m_dKids.GetLength(); i++ )
+			if ( m_dKids[i].m_uValue==*sFrom )
+				break;
+		if ( i==m_dKids.GetLength() )
+		{
+			Entry_t & t = m_dKids.Add();
+			t.m_uValue = *sFrom;
+			t.m_pKid = new ExceptionsTrieNode_c();
+		}
+		return m_dKids[i].m_pKid->AddMapping ( sFrom+1, sTo );
+	}
+};
+
+
+/// exceptions trie builder
+/// plain old text mappings in, nice useful trie out
+class ExceptionsTrieGen_c
+{
+protected:
+	ExceptionsTrieNode_c *	m_pRoot;
+	int						m_iCount;
+
+public:
+	ExceptionsTrieGen_c()
+	{
+		m_pRoot = new ExceptionsTrieNode_c();
+		m_iCount = 0;
+	}
+
+	~ExceptionsTrieGen_c()
+	{
+		SafeDelete ( m_pRoot );
+	}
+
+	/// trims left/right whitespace, folds inner whitespace
+	void FoldSpace ( char * s ) const
+	{
+		// skip leading spaces
+		char * d = s;
+		while ( *s && sphIsSpace(*s) )
+			s++;
+
+		// handle degenerate (empty string) case
+		if ( !*s )
+		{
+			*d = '\0';
+			return;
+		}
+
+		while ( *s )
+		{
+			// copy another token, add exactly 1 space after it, and skip whitespace
+			while ( *s && !sphIsSpace(*s) )
+				*d++ = *s++;
+			*d++ = ' ';
+			while ( sphIsSpace(*s) )
+				s++;
+		}
+
+		// replace that last space that we added
+		d[-1] = '\0';
+	}
+
+	bool ParseLine ( char * sBuffer, CSphString & sError )
+	{
+		#define LOC_ERR(_arg) { sError = _arg; return false; }
+		assert ( m_pRoot );
+
+		// extract map-from and map-to parts
+		char * sSplit = strstr ( sBuffer, "=>" );
+		if ( !sSplit )
+			LOC_ERR ( "mapping token (=>) not found" );
+
+		char * sFrom = sBuffer;
+		char * sTo = sSplit + 2; // skip "=>"
+		*sSplit = '\0';
+
+		// trim map-from, map-to
+		FoldSpace ( sFrom );
+		FoldSpace ( sTo );
+		if ( !*sFrom )
+			LOC_ERR ( "empty map-from part" );
+		if ( !*sTo )
+			LOC_ERR ( "empty map-to part" );
+		if ( (int)strlen(sFrom) > MAX_KEYWORD_BYTES )
+			LOC_ERR ( "map-from part too long" );
+		if ( (int)strlen(sTo)>MAX_KEYWORD_BYTES )
+			LOC_ERR ( "map-from part too long" );
+
+		// all parsed ok; add it!
+		if ( m_pRoot->AddMapping ( (BYTE*)sFrom, (BYTE*)sTo ) )
+			m_iCount++;
+		else
+			LOC_ERR ( "duplicate map-from part" );
+
+		return true;
+		#undef LOC_ERR
+	}
+
+	ExceptionsTrie_c * Build()
+	{
+		if ( !m_pRoot || !m_pRoot->m_sTo.IsEmpty() || m_pRoot->m_dKids.GetLength()==0 )
+			return NULL;
+
+		ExceptionsTrie_c * pRes = new ExceptionsTrie_c();
+		pRes->m_iCount = m_iCount;
+
+		// save the nodes themselves
+		CSphVector<BYTE> dMappings;
+		SaveNode ( pRes, m_pRoot, dMappings );
+
+		// append and fixup output mappings
+		CSphVector<BYTE> & d = pRes->m_dData;
+		pRes->m_iMappings = d.GetLength();
+		memcpy ( d.AddN ( dMappings.GetLength() ), dMappings.Begin(), dMappings.GetLength() );
+
+		BYTE * p = d.Begin();
+		BYTE * pMax = p + pRes->m_iMappings;
+		while ( p<pMax )
+		{
+			// fixup offset in the current node, if needed
+			int * pOff = (int*)p; // FIXME? unaligned
+			if ( (*pOff)<0 )
+				*pOff = 0; // convert -1 to 0 for non-outputs
+			else
+				(*pOff) += pRes->m_iMappings; // fixup offsets for outputs
+
+			// proceed to the next node
+			int n = p[4];
+			p += 5 + 5*n;
+		}
+		assert ( p==pMax );
+
+		// build the speedup table for the very 1st byte
+		for ( int i=0; i<256; i++ )
+			pRes->m_dFirst[i] = -1;
+		int n = d[4];
+		for ( int i=0; i<n; i++ )
+			pRes->m_dFirst [ d[5+i] ] = *(int*)&pRes->m_dData [ 5+n+4*i ];
+
+		SafeDelete ( m_pRoot );
+		m_pRoot = new ExceptionsTrieNode_c();
+		m_iCount = 0;
+		return pRes;
+	}
+
+protected:
+	void SaveInt ( CSphVector<BYTE> & v, int p, int x )
+	{
+#if USE_LITTLE_ENDIAN
+		v[p] = x & 0xff;
+		v[p+1] = (x>>8) & 0xff;
+		v[p+2] = (x>>16) & 0xff;
+		v[p+3] = (x>>24) & 0xff;
+#else
+		v[p] = (x>>24) & 0xff;
+		v[p+1] = (x>>16) & 0xff;
+		v[p+2] = (x>>8) & 0xff;
+		v[p+3] = x & 0xff;
+#endif
+	}
+
+	int SaveNode ( ExceptionsTrie_c * pRes, ExceptionsTrieNode_c * pNode, CSphVector<BYTE> & dMappings )
+	{
+		CSphVector<BYTE> & d = pRes->m_dData; // shortcut
+
+		// remember the start node offset
+		int iRes = d.GetLength();
+		int n = pNode->m_dKids.GetLength();
+		assert (!( pNode->m_sTo.IsEmpty() && n==0 ));
+
+		// save offset into dMappings, or temporary (!) save -1 if there is no output mapping
+		// note that we will fixup those -1's to 0's afterwards
+		int iOff = -1;
+		if ( !pNode->m_sTo.IsEmpty() )
+		{
+			iOff = dMappings.GetLength();
+			int iLen = pNode->m_sTo.Length();
+			memcpy ( dMappings.AddN(iLen+1), pNode->m_sTo.cstr(), iLen+1 );
+		}
+		d.AddN(4);
+		SaveInt ( d, d.GetLength()-4, iOff );
+
+		// sort children nodes by value
+		pNode->m_dKids.Sort ( bind(&ExceptionsTrieNode_c::Entry_t::m_uValue) );
+
+		// save num_values, and values[]
+		d.Add ( (BYTE)n );
+		ARRAY_FOREACH ( i, pNode->m_dKids )
+			d.Add ( pNode->m_dKids[i].m_uValue );
+
+		// save offsets[], and the respective child nodes
+		int p = d.GetLength();
+		d.AddN ( 4*n );
+		for ( int i=0; i<n; i++, p+=4 )
+			SaveInt ( d, p, SaveNode ( pRes, pNode->m_dKids[i].m_pKid, dMappings ) );
+		assert ( p==iRes+5+5*n );
+
+		// done!
+		return iRes;
+	}
+};
+
+/////////////////////////////////////////////////////////////////////////////
 // TOKENIZERS
 /////////////////////////////////////////////////////////////////////////////
 
@@ -2090,25 +2424,11 @@ inline int sphUTF8Decode ( const BYTE * & pBuf ); // forward ref for GCC
 inline int sphUTF8Encode ( BYTE * pBuf, int iCode ); // forward ref for GCC
 
 
-/// synonym list entry
-struct CSphSynonym
-{
-	CSphString	m_sFrom;	///< specially packed list of map-from tokens
-	CSphString	m_sTo;		///< map-to string
-	int			m_iFromLen;	///< cached m_sFrom length
-	int			m_iToLen;	///< cached m_sTo length
-
-	inline bool operator < ( const CSphSynonym & rhs ) const
-	{
-		return strcmp ( m_sFrom.cstr(), rhs.m_sFrom.cstr() ) < 0;
-	}
-};
-
-
 class CSphTokenizerBase : public ISphTokenizer
 {
 public:
-	CSphTokenizerBase ();
+	CSphTokenizerBase();
+	~CSphTokenizerBase();
 
 	virtual bool			SetCaseFolding ( const char * sConfig, CSphString & sError );
 	virtual bool			LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, CSphString & sError );
@@ -2157,10 +2477,6 @@ protected:
 	int		CodepointArbitrationI ( int iCodepoint );
 	int		CodepointArbitrationQ ( int iCodepoint, bool bWasEscaped, BYTE uNextByte );
 
-	typedef CSphOrderedHash <int, int, IdentityHash_fn, 4096> CSphSynonymHash;
-	bool	LoadSynonym ( char * sBuffer, const char * szFilename, int iLine, CSphSynonymHash & tHash, CSphString & sError );
-
-
 protected:
 	const BYTE *		m_pBuffer;							///< my buffer
 	const BYTE *		m_pBufferMax;						///< max buffer ptr, exclusive (ie. this ptr is invalid, but every ptr below is ok)
@@ -2176,13 +2492,11 @@ protected:
 	int					m_iBlendNormalStart;					///< points to first normal char in the accumulators (might be NULL)
 	int					m_iBlendNormalEnd;						///< points just past (!) last normal char in the accumulators (might be NULL)
 
-	CSphVector<CSphSynonym>			m_dSynonyms;				///< active synonyms
-	CSphVector<int>					m_dSynStart;				///< map 1st byte to candidate range start
-	CSphVector<int>					m_dSynEnd;					///< map 1st byte to candidate range end
+	ExceptionsTrie_c *	m_pExc;								///< exceptions trie, if any
 
-	bool			m_bHasBlend;
-	const BYTE *	m_pBlendStart;
-	const BYTE *	m_pBlendEnd;
+	bool				m_bHasBlend;
+	const BYTE *		m_pBlendStart;
+	const BYTE *		m_pBlendEnd;
 
 	ESphTokenizerClone	m_eMode;
 };
@@ -2224,8 +2538,8 @@ protected:
 	}
 
 protected:
-	BYTE *			GetTokenSyn ( bool bQueryMode );
 	BYTE *			GetBlendedVariant ();
+	bool			CheckException ( const BYTE * pStart, const BYTE * pCur, bool bQueryMode );
 
 	template < bool IS_QUERY, bool IS_BLEND >
 	BYTE *						DoGetToken();
@@ -3494,7 +3808,6 @@ enum
 	FLAG_CODEPOINT_SPECIAL	= 0x01000000UL,	// this codepoint is special
 	FLAG_CODEPOINT_DUAL		= 0x02000000UL,	// this codepoint is special but also a valid word part
 	FLAG_CODEPOINT_NGRAM	= 0x04000000UL,	// this codepoint is n-gram indexed
-	FLAG_CODEPOINT_SYNONYM	= 0x08000000UL,	// this codepoint is used in synonym tokens only
 	FLAG_CODEPOINT_BOUNDARY	= 0x10000000UL,	// this codepoint is phrase boundary
 	FLAG_CODEPOINT_IGNORE	= 0x20000000UL,	// this codepoint is ignored
 	FLAG_CODEPOINT_BLEND	= 0x40000000UL	// this codepoint is "blended" (indexed both as a character, and as a separator)
@@ -3616,15 +3929,11 @@ void CSphLowercaser::AddRemaps ( const CSphVector<CSphRemapRange> & dRemaps, DWO
 		{
 			assert ( m_pChunk [ j >> CHUNK_BITS ] );
 			int & iCodepoint = m_pChunk [ j >> CHUNK_BITS ] [ j & CHUNK_MASK ];
-			bool bWordPart = ( iCodepoint & MASK_CODEPOINT ) && !( iCodepoint & FLAG_CODEPOINT_SYNONYM );
+			bool bWordPart = ( iCodepoint & MASK_CODEPOINT )!=0;
 			int iNew = iRemapped | uFlags | ( iCodepoint & MASK_FLAGS );
 			if ( bWordPart && ( uFlags & FLAG_CODEPOINT_SPECIAL ) )
 				iNew |= FLAG_CODEPOINT_DUAL;
 			iCodepoint = iNew;
-
-			// new code-point flag removes SYNONYM
-			if ( ( iCodepoint & FLAG_CODEPOINT_SYNONYM ) && uFlags==0 && iRemapped!=0 )
-				iCodepoint &= ~FLAG_CODEPOINT_SYNONYM;
 		}
 	}
 }
@@ -4405,77 +4714,6 @@ void ISphTokenizer::AddSpecials ( const char * sSpecials )
 }
 
 
-static int TokenizeOnWhitespace ( CSphVector<CSphString> & dTokens, const BYTE * sFrom )
-{
-	BYTE sAccum [ 3*SPH_MAX_WORD_LEN+16 ];
-	BYTE * pAccum = sAccum;
-	int iAccum = 0;
-
-	for ( ;; )
-	{
-		int iCode = sphUTF8Decode(sFrom);
-
-		// eof or whitespace?
-		if ( !iCode || sphIsSpace(iCode) )
-		{
-			// flush accum
-			if ( iAccum )
-			{
-				*pAccum = '\0';
-				dTokens.Add ( (char*)sAccum );
-
-				pAccum = sAccum;
-				iAccum = 0;
-			}
-
-			// break on eof
-			if ( !iCode )
-				break;
-		} else
-		{
-			// accumulate everything else
-			if ( iAccum<SPH_MAX_WORD_LEN )
-			{
-				if ( ( pAccum-sAccum+SPH_MAX_UTF8_BYTES )<=(int)sizeof(sAccum) )
-				{
-					pAccum += sphUTF8Encode ( pAccum, iCode );
-					iAccum++;
-				} else
-				{
-					*pAccum++ = BYTE(iCode);
-					iAccum++;
-				}
-			}
-		}
-	}
-
-	return dTokens.GetLength();
-}
-
-
-static BYTE * sphTrim ( BYTE * s )
-{
-	// skip to first non-whitespace from start
-	while ( *s && sphIsSpace(*s) )
-		s++;
-	if ( !*s )
-		return s;
-
-	// find the end
-	BYTE * sEnd = s;
-	while ( *sEnd )
-		sEnd++;
-	sEnd--;
-
-	// skip to first non-whitespace from end
-	while ( sEnd>s && sphIsSpace(*sEnd) )
-		sEnd--;
-
-	*++sEnd = '\0';
-	return s;
-}
-
-
 void ISphTokenizer::Setup ( const CSphTokenizerSettings & tSettings )
 {
 	m_tSettings = tSettings;
@@ -4827,6 +5065,7 @@ CSphTokenizerBase::CSphTokenizerBase ()
 	, m_pTokenStart ( NULL )
 	, m_pTokenEnd	( NULL )
 	, m_iAccum		( 0 )
+	, m_pExc		( NULL )
 	, m_bHasBlend	( false )
 	, m_pBlendStart		( NULL )
 	, m_pBlendEnd		( NULL )
@@ -4836,10 +5075,16 @@ CSphTokenizerBase::CSphTokenizerBase ()
 }
 
 
+CSphTokenizerBase::~CSphTokenizerBase()
+{
+	SafeDelete ( m_pExc );
+}
+
+
 bool CSphTokenizerBase::SetCaseFolding ( const char * sConfig, CSphString & sError )
 {
 	assert ( m_eMode!=SPH_CLONE_QUERY_LIGHTWEIGHT );
-	if ( m_dSynonyms.GetLength() )
+	if ( m_pExc )
 	{
 		sError = "SetCaseFolding() must not be called after LoadSynonyms()";
 		return false;
@@ -4857,114 +5102,18 @@ bool CSphTokenizerBase::SetBlendChars ( const char * sConfig, CSphString & sErro
 }
 
 
-bool CSphTokenizerBase::LoadSynonym ( char * sBuffer, const char * sFilename,
-	int iLine, CSphSynonymHash & tHash, CSphString & sError )
-{
-	assert ( m_eMode!=SPH_CLONE_QUERY_LIGHTWEIGHT );
-	CSphVector<CSphString> dFrom;
-
-	// extract map-from and map-to parts
-	char * sSplit = strstr ( sBuffer, "=>" );
-	if ( !sSplit )
-	{
-		sError.SetSprintf ( "%s line %d: mapping token (=>) not found", sFilename, iLine );
-		return false;
-	}
-
-	const BYTE * sFrom = (BYTE *) sBuffer;
-	BYTE * sTo = (BYTE *)( sSplit + strlen ( "=>" ) );
-	*sSplit = '\0';
-
-	// tokenize map-from
-	if ( !TokenizeOnWhitespace ( dFrom, sFrom ) )
-	{
-		sError.SetSprintf ( "%s line %d: empty map-from part", sFilename, iLine );
-		return false;
-	}
-
-	// trim map-to
-	sTo = sphTrim ( sTo );
-	if ( !*sTo )
-	{
-		sError.SetSprintf ( "%s line %d: empty map-to part", sFilename, iLine );
-		return false;
-	}
-
-	// check lengths
-	ARRAY_FOREACH ( i, dFrom )
-	{
-		int iFromLen = sphUTF8Len ( dFrom[i].cstr() );
-		if ( iFromLen>SPH_MAX_WORD_LEN )
-		{
-			sError.SetSprintf ( "%s line %d: map-from token too long (over %d bytes)", sFilename, iLine, SPH_MAX_WORD_LEN );
-			return false;
-		}
-	}
-
-	int iToLen = sphUTF8Len ( (const char*)sTo );
-	if ( iToLen>SPH_MAX_WORD_LEN )
-	{
-		sError.SetSprintf ( "%s line %d: map-to token too long (over %d bytes)", sFilename, iLine, SPH_MAX_WORD_LEN );
-		return false;
-	}
-
-	// pack and store it
-	int iFromLen = 1;
-	ARRAY_FOREACH ( i, dFrom )
-		iFromLen += strlen ( dFrom[i].cstr() ) + 1;
-
-	if ( iFromLen>MAX_SYNONYM_LEN )
-	{
-		sError.SetSprintf ( "%s line %d: map-from part too long (over %d bytes)", sFilename, iLine, MAX_SYNONYM_LEN );
-		return false;
-	}
-
-	CSphSynonym & tSyn = m_dSynonyms.Add ();
-	tSyn.m_sFrom.Reserve ( iFromLen );
-	tSyn.m_iFromLen = iFromLen;
-	tSyn.m_sTo = (char*)sTo;
-	tSyn.m_iToLen = iToLen;
-
-	char * sCur = const_cast<char*> ( tSyn.m_sFrom.cstr() );
-	ARRAY_FOREACH ( i, dFrom )
-	{
-		int iLen = strlen ( dFrom[i].cstr() );
-		memcpy ( sCur, dFrom[i].cstr(), iLen );
-
-		sCur[iLen] = MAGIC_SYNONYM_WHITESPACE;
-		sCur += iLen+1;
-	}
-	*sCur++ = '\0';
-	assert ( sCur-tSyn.m_sFrom.cstr()==iFromLen );
-
-	// track synonym-only codepoints in map-from
-	for ( ;; )
-	{
-		int iCode = sphUTF8Decode ( sFrom );
-		if ( !iCode )
-			break;
-		if ( iCode>0 && !sphIsSpace(iCode) && !m_tLC.ToLower(iCode) )
-			tHash.Add ( 1, iCode );
-	}
-
-	return true;
-}
-
-
 bool CSphTokenizerBase::LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, CSphString & sError )
 {
 	assert ( m_eMode!=SPH_CLONE_QUERY_LIGHTWEIGHT );
-	m_dSynonyms.Reset ();
 
-	CSphSynonymHash hSynonymOnly;
-
+	ExceptionsTrieGen_c g;
 	if ( pFiles )
 	{
 		m_tSynFileInfo = pFiles->m_tSynonymFile;
 		ARRAY_FOREACH ( i, pFiles->m_dSynonyms )
 		{
-			if ( !LoadSynonym ( (char*)pFiles->m_dSynonyms[i].cstr(), pFiles->m_tSynonymFile.m_sFilename.cstr(), i, hSynonymOnly, sError ) )
-				sphWarning ( "%s", sError.cstr() );
+			if ( !g.ParseLine ( (char*)pFiles->m_dSynonyms[i].cstr(), sError ) )
+				sphWarning ( "%s line %d: %s", pFiles->m_tSynonymFile.m_sFilename.cstr(), i, sError.cstr() );
 		}
 	} else
 	{
@@ -4982,73 +5131,34 @@ bool CSphTokenizerBase::LoadSynonyms ( const char * sFilename, const CSphEmbedde
 		while ( tReader.GetLine ( sBuffer, sizeof(sBuffer) )>=0 )
 		{
 			iLine++;
-			if ( !LoadSynonym ( sBuffer, sFilename, iLine, hSynonymOnly, sError ) )
-				sphWarning ( "%s", sError.cstr() );
+			if ( !g.ParseLine ( sBuffer, sError ) )
+				sphWarning ( "%s line %d: %s", sFilename, iLine, sError.cstr() );
 		}
-
-		// sort the list
-		m_dSynonyms.Sort ();
 	}
 
-	// build simple lookup table
-	m_dSynStart.Resize ( 256 );
-	m_dSynEnd.Resize ( 256 );
-	for ( int i=0; i<256; i++ )
-	{
-		m_dSynStart[i] = INT_MAX;
-		m_dSynEnd[i] = -INT_MAX;
-	}
-	ARRAY_FOREACH ( i, m_dSynonyms )
-	{
-		int iCh = *(BYTE*)( m_dSynonyms[i].m_sFrom.cstr() );
-		m_dSynStart[iCh] = Min ( m_dSynStart[iCh], i );
-		m_dSynEnd[iCh] = Max ( m_dSynEnd[iCh], i );
-	}
-
-	// add synonym-only remaps
-	CSphVector<CSphRemapRange> dRemaps;
-	dRemaps.Reserve ( hSynonymOnly.GetLength() );
-
-	hSynonymOnly.IterateStart ();
-	while ( hSynonymOnly.IterateNext() )
-	{
-		CSphRemapRange & tRange = dRemaps.Add ();
-		tRange.m_iStart = tRange.m_iEnd = tRange.m_iRemapStart = hSynonymOnly.IterateGetKey();
-	}
-
-	m_tLC.AddRemaps ( dRemaps, FLAG_CODEPOINT_SYNONYM );
+	m_pExc = g.Build();
 	return true;
 }
 
 
 void CSphTokenizerBase::WriteSynonyms ( CSphWriter & tWriter )
 {
-	tWriter.PutDword ( m_dSynonyms.GetLength() );
-	ARRAY_FOREACH ( i, m_dSynonyms )
-	{
-		CSphString sFrom, sLine;
-		sFrom = m_dSynonyms[i].m_sFrom;
-		char * pFrom = (char*)sFrom.cstr();
-		while ( pFrom && *pFrom )
-		{
-			if ( *pFrom==MAGIC_SYNONYM_WHITESPACE )
-				*pFrom = ' ';
-			pFrom++;
-		}
-
-		sFrom.Trim();
-		sLine.SetSprintf ( "%s => %s", sFrom.cstr(), m_dSynonyms[i].m_sTo.cstr() );
-		tWriter.PutString ( sLine );
-	}
+	if ( m_pExc )
+		m_pExc->Export ( tWriter );
+	else
+		tWriter.PutDword ( 0 );
 }
 
 
 void CSphTokenizerBase::CloneBase ( const CSphTokenizerBase * pFrom, ESphTokenizerClone eMode )
 {
 	m_eMode = eMode;
-	m_dSynonyms = pFrom->m_dSynonyms;
-	m_dSynStart = pFrom->m_dSynStart;
-	m_dSynEnd = pFrom->m_dSynEnd;
+	m_pExc = NULL;
+	if ( pFrom->m_pExc )
+	{
+		m_pExc = new ExceptionsTrie_c();
+		*m_pExc = *pFrom->m_pExc;
+	}
 	m_tSettings = pFrom->m_tSettings;
 	m_bHasBlend = pFrom->m_bHasBlend;
 	m_uBlendVariants = pFrom->m_uBlendVariants;
@@ -5485,9 +5595,6 @@ int CSphTokenizerBase::CodepointArbitrationQ ( int iCode, bool bWasEscaped, BYTE
 	{
 		if ( iCode & FLAG_CODEPOINT_DUAL )
 			iCode &= ~( FLAG_CODEPOINT_SPECIAL | FLAG_CODEPOINT_DUAL );
-		else if ( bDashInside && ( iCode & FLAG_CODEPOINT_SYNONYM ) )
-			// if we return zero here, we will break the tokens like 'Ms-Dos'
-			iCode &= ~( FLAG_CODEPOINT_SPECIAL );
 		else
 			iCode = 0;
 	}
@@ -5501,52 +5608,9 @@ int CSphTokenizerBase::CodepointArbitrationQ ( int iCode, bool bWasEscaped, BYTE
 
 	// ideally, all conflicts must be resolved here
 	// well, at least most
-	assert ( sphBitCount ( iCode & MASK_FLAGS )<=1
-		|| ( iCode & FLAG_CODEPOINT_SYNONYM ) );
+	assert ( sphBitCount ( iCode & MASK_FLAGS )<=1 );
 	return iCode;
 }
-
-
-enum SynCheck_e
-{
-	SYNCHECK_LESS,
-	SYNCHECK_PARTIAL,
-	SYNCHECK_EXACT,
-	SYNCHECK_GREATER
-};
-
-
-static inline SynCheck_e SynCheckPrefix ( const CSphSynonym & tCandidate, int iOff, const BYTE * sCur, int iBytes, bool bMaybeSeparator )
-{
-	const BYTE * sCand = ( (const BYTE*)tCandidate.m_sFrom.cstr() ) + iOff;
-
-	while ( iBytes-->0 )
-	{
-		if ( *sCand!=*sCur )
-		{
-			// incoming synonym-only char vs. ending sequence (eg. 2nd slash in "OS/2/3"); we actually have a match
-			if ( bMaybeSeparator && sCand[0]==MAGIC_SYNONYM_WHITESPACE && sCand[1]=='\0' )
-				return SYNCHECK_EXACT;
-
-			// otherwise, it is a mismatch
-			return ( *sCand<*sCur ) ? SYNCHECK_LESS : SYNCHECK_GREATER;
-		}
-		sCand++;
-		sCur++;
-	}
-
-	// full match after a full separator
-	if ( sCand[0]=='\0' )
-		return SYNCHECK_EXACT;
-
-	// full match after my last synonym-only char
-	if ( bMaybeSeparator && sCand[0]==MAGIC_SYNONYM_WHITESPACE && sCand[1]=='\0' )
-		return SYNCHECK_EXACT;
-
-	// otherwise, partial match so far
-	return SYNCHECK_PARTIAL;
-}
-
 
 #if !USE_WINDOWS
 #define __forceinline inline
@@ -5587,407 +5651,6 @@ static inline bool Special2Simple ( int & iCodepoint )
 	}
 
 	return false;
-}
-
-
-BYTE * CSphTokenizerBase2::GetTokenSyn ( bool bQueryMode )
-{
-	assert ( m_dSynonyms.GetLength() );
-
-	m_bWasSynonym = false;
-	const BYTE * pCur;
-
-	m_bTokenBoundary = false;
-	for ( ;; )
-	{
-		// initialize accumulators and range
-		const BYTE * pFirstSeparator = NULL;
-		bool bWasEscaped = false;
-		const BYTE * pLastEscape = NULL;
-
-		m_iAccum = 0;
-		m_pAccum = m_sAccum;
-
-		int iSynStart = 0;
-		int iSynEnd = m_dSynonyms.GetLength()-1;
-		int iSynOff = 0;
-
-		int iLastCodepoint = 0;
-		int iLastFolded = 0;
-		const BYTE * pRescan = NULL;
-
-		int iExact = -1;
-		const BYTE * pExact = NULL;
-
-		// main refinement loop
-		for ( ;; )
-		{
-			// store current position (to be able to restart from it on folded boundary)
-			pCur = m_pCur;
-
-			// get next codepoint, fold it, lookup flags
-			int iCode;
-			int iFolded;
-			if ( pCur<m_pBufferMax && *pCur<128 )
-			{
-				// fastpath (ascii7)
-				iCode = *m_pCur++;
-				iFolded = m_tLC.m_pChunk[0][iCode];
-			} else
-			{
-				iCode = GetCodepoint(); // advances m_pCur
-				iFolded = m_tLC.ToLower ( iCode );
-			}
-
-			// handle early-out
-			if ( iCode<0 )
-			{
-				// eof at token start? we're done
-				if ( iSynOff==0 )
-					return NULL;
-
-				// eof after whitespace? we already checked the candidate last time, so break
-				if ( iLastFolded==0 )
-					break;
-			}
-
-			// handle boundaries
-			if ( m_bBoundary && ( iFolded==0 ) ) m_bTokenBoundary = true;
-			m_bBoundary = ( iFolded & FLAG_CODEPOINT_BOUNDARY )!=0;
-
-			// handle escapes
-			if ( bQueryMode )
-			{
-				if ( iCode=='\\' && iLastCodepoint!='\\' )
-				{
-					pLastEscape = pCur;
-					iLastCodepoint = iCode;
-					continue;
-				} else if ( iLastCodepoint=='\\' && ( iFolded & FLAG_CODEPOINT_SYNONYM ) && ( iFolded & FLAG_CODEPOINT_SPECIAL ) )
-				{
-					iFolded &= ~FLAG_CODEPOINT_SPECIAL;
-
-				} else if ( iLastCodepoint=='\\' && !Special2Simple ( iFolded ) )
-				{
-					iLastCodepoint = 0;
-					continue;
-				}
-
-				bWasEscaped = ( iLastCodepoint=='\\' );
-				iLastCodepoint = iCode;
-			}
-
-			// skip continuous whitespace
-			// (must be here, because boundaries and escapes might fold to whitespace)
-			if ( iLastFolded==0 && iFolded==0 )
-				continue;
-
-			if ( bQueryMode )
-				iFolded = CodepointArbitrationQ ( iFolded, false, *m_pCur );
-			else if ( m_bDetectSentences )
-				iFolded = CodepointArbitrationI ( iFolded );
-
-			iLastFolded = iFolded;
-
-			if ( m_iAccum==0 )
-				m_pTokenStart = pCur;
-
-			// handle specials at the very word start
-			if ( ( iFolded & FLAG_CODEPOINT_SPECIAL ) && m_iAccum==0 )
-			{
-				m_bWasSpecial = !( iFolded & FLAG_CODEPOINT_NGRAM );
-
-				AccumCodepoint ( iFolded & MASK_CODEPOINT );
-				*m_pAccum = '\0';
-
-				m_iLastTokenLen = 1;
-				m_pTokenStart = pCur;
-				m_pTokenEnd = m_pCur;
-				return m_sAccum;
-			}
-
-			// handle specials
-			bool bJustSpecial = ( iFolded & FLAG_CODEPOINT_SPECIAL )
-				&& !( iFolded & FLAG_CODEPOINT_DUAL ) // OPTIMIZE?
-				&& !( iFolded & FLAG_CODEPOINT_SYNONYM ); // OPTIMIZE?
-
-			// if candidate starts with something special, and turns out to be not a synonym,
-			// we will need to rescan from current position later
-			if ( iSynOff==0 )
-				pRescan = IsSeparator ( iFolded, true ) ? m_pCur : NULL;
-
-			// accumulate folded token
-			if ( !pFirstSeparator )
-			{
-				if ( IsSeparator ( iFolded, m_iAccum==0 ) )
-				{
-					if ( m_iAccum )
-						pFirstSeparator = pCur;
-				} else
-				{
-					if ( m_iAccum==0 )
-						m_pTokenStart = pCur;
-
-					AccumCodepoint ( iFolded & MASK_CODEPOINT );
-				}
-			}
-
-			// accumulate next raw synonym symbol to refine
-			// note that we need a special check for whitespace here, to avoid "MS*DOS" being treated as "MS DOS" synonym
-			BYTE sTest[4];
-			int iTest;
-
-			int iMasked = ( iCode & MASK_CODEPOINT );
-			if ( iFolded<=0 || bJustSpecial )
-			{
-				sTest[0] = MAGIC_SYNONYM_WHITESPACE;
-				iTest = 1;
-
-				if (!( iMasked==' ' || iMasked=='\t' ))
-				{
-					sTest[1] = '\0';
-					iTest = 2;
-				}
-			} else
-				iTest = sphUTF8Encode ( sTest, iMasked );
-
-			// refine synonyms range
-			#define LOC_RETURN_SYNONYM(_idx) \
-			{ \
-				m_pTokenEnd = m_iAccum ? pCur : m_pCur; \
-				if ( bJustSpecial || ( iFolded & FLAG_CODEPOINT_SPECIAL )!=0 ) m_pCur = pCur; \
-				strncpy ( (char*)m_sAccum, m_dSynonyms[_idx].m_sTo.cstr(), sizeof(m_sAccum) ); \
-				m_iLastTokenLen = m_dSynonyms[_idx].m_iToLen; \
-				m_bWasSynonym = true; \
-				return m_sAccum; \
-			}
-
-			#define LOC_REFINE_BREAK() \
-			{ \
-				if ( iExact>=0 ) { m_pCur = pCur = pExact; LOC_RETURN_SYNONYM ( iExact ); } \
-				break; \
-			}
-
-			// if this is the first symbol, use prebuilt lookup table to speedup initial range search
-			if ( iSynOff==0 )
-			{
-				iSynStart = m_dSynStart[sTest[0]];
-				iSynEnd = m_dSynEnd[sTest[0]];
-				if ( iSynStart>iSynEnd )
-					break;
-			}
-
-			// this is to catch intermediate separators (eg. "OS/2/3")
-			bool bMaybeSeparator = ( iFolded & FLAG_CODEPOINT_SYNONYM )!=0 || ( iFolded<0 );
-
-			SynCheck_e eStart = SynCheckPrefix ( m_dSynonyms[iSynStart], iSynOff, sTest, iTest, bMaybeSeparator );
-			if ( eStart==SYNCHECK_EXACT )
-			{
-				if ( iSynStart==iSynEnd ) LOC_RETURN_SYNONYM ( iSynStart );
-				iExact = iSynStart;
-				pExact = pCur;
-			}
-			if ( eStart==SYNCHECK_GREATER || ( iSynStart==iSynEnd && eStart!=SYNCHECK_PARTIAL ) )
-				LOC_REFINE_BREAK();
-
-			SynCheck_e eEnd = SynCheckPrefix ( m_dSynonyms[iSynEnd], iSynOff, sTest, iTest, bMaybeSeparator );
-			if ( eEnd==SYNCHECK_LESS )
-				LOC_REFINE_BREAK();
-			if ( eEnd==SYNCHECK_EXACT )
-			{
-				iExact = iSynEnd;
-				pExact = pCur;
-			}
-
-
-			// refine left boundary
-			if ( eStart!=SYNCHECK_PARTIAL && eStart!=SYNCHECK_EXACT )
-			{
-				assert ( eStart==SYNCHECK_LESS );
-
-				int iL = iSynStart;
-				int iR = iSynEnd;
-				SynCheck_e eL = eStart;
-				SynCheck_e eR = eEnd;
-
-				while ( iR-iL>1 )
-				{
-					int iM = iL + (iR-iL)/2;
-					SynCheck_e eMid = SynCheckPrefix ( m_dSynonyms[iM], iSynOff, sTest, iTest, bMaybeSeparator );
-
-					if ( eMid==SYNCHECK_LESS )
-					{
-						iL = iM;
-						eL = eMid;
-					} else
-					{
-						iR = iM;
-						eR = eMid;
-					}
-				}
-
-				assert ( eL==SYNCHECK_LESS );
-				assert ( eR!=SYNCHECK_LESS );
-				assert ( iR-iL==1 );
-
-				if ( eR==SYNCHECK_GREATER )					LOC_REFINE_BREAK();
-				if ( eR==SYNCHECK_EXACT && iR==iSynEnd )	LOC_RETURN_SYNONYM ( iR );
-
-				assert ( eR==SYNCHECK_PARTIAL || eR==SYNCHECK_EXACT );
-				iSynStart = iR;
-				eStart = eR;
-			}
-
-			// refine right boundary
-			if ( eEnd!=SYNCHECK_PARTIAL && eEnd!=SYNCHECK_EXACT )
-			{
-				assert ( eEnd==SYNCHECK_GREATER );
-
-				int iL = iSynStart;
-				int iR = iSynEnd;
-				SynCheck_e eL = eStart;
-				SynCheck_e eR = eEnd;
-
-				while ( iR-iL>1 )
-				{
-					int iM = iL + (iR-iL)/2;
-					SynCheck_e eMid = SynCheckPrefix ( m_dSynonyms[iM], iSynOff, sTest, iTest, bMaybeSeparator );
-
-					if ( eMid==SYNCHECK_GREATER )
-					{
-						iR = iM;
-						eR = eMid;
-					} else
-					{
-						iL = iM;
-						eL = eMid;
-					}
-				}
-
-				assert ( eR==SYNCHECK_GREATER );
-				assert ( eL!=SYNCHECK_GREATER );
-				assert ( iR-iL==1 );
-
-				if ( eL==SYNCHECK_LESS )					LOC_REFINE_BREAK();
-				if ( eL==SYNCHECK_EXACT && iL==iSynStart )	LOC_RETURN_SYNONYM ( iL );
-
-				assert ( eL==SYNCHECK_PARTIAL || eL==SYNCHECK_EXACT );
-				iSynEnd = iL;
-				eEnd = eL;
-			}
-
-			// handle eof
-			if ( iCode<0 )
-				break;
-
-			// we still have a partial synonym match, continue;
-			iSynOff += iTest;
-		}
-
-		// at this point, that was not a synonym
-		if ( pRescan )
-		{
-			m_pCur = pRescan;
-			continue;
-		}
-
-		// at this point, it also started with a valid char
-		assert ( m_iAccum>0 );
-
-		// find the proper separator
-		if ( !pFirstSeparator )
-		{
-			// if there was none, scan until found
-			for ( ;; )
-			{
-				pCur = m_pCur;
-
-				int iCode;
-				int iFolded;
-				if ( pCur<m_pBufferMax && *pCur<128 )
-				{
-					// fastpath (ascii7)
-					iCode = *m_pCur++;
-					iFolded = m_tLC.m_pChunk[0][iCode];
-				} else
-				{
-					iCode = GetCodepoint(); // advances m_pCur
-					iFolded = m_tLC.ToLower ( iCode );
-				}
-
-				if ( iFolded<0 )
-					break; // eof
-
-				if ( bQueryMode && iCode=='\\' )
-				{
-					iCode = GetCodepoint(); // advances m_pCur
-					iFolded = m_tLC.ToLower ( iCode );
-					if ( iFolded<0 )
-						break;
-					if ( !Special2Simple ( iFolded ) )
-						break;
-				}
-
-				if ( bQueryMode )
-					iFolded = CodepointArbitrationQ ( iFolded, false, *m_pCur );
-				else if ( m_bDetectSentences )
-					iFolded = CodepointArbitrationI ( iFolded );
-
-				if ( IsSeparator ( iFolded, false ) )
-				{
-					if ( iFolded!=0 )
-						m_pCur = pCur; // force rescan
-					break;
-				}
-
-				// the hottest accumulation point
-				// so do this manually, no function calls, that is quickest
-				bool bFit = ( m_iAccum<SPH_MAX_WORD_LEN );
-				bFit &= ( m_pAccum-m_sAccum+SPH_MAX_UTF8_BYTES<=(int)sizeof(m_sAccum) );
-
-				if ( bFit )
-				{
-					m_iAccum++;
-					iFolded &= MASK_CODEPOINT;
-					SPH_UTF8_ENCODE ( m_pAccum, iFolded );
-				}
-			}
-		} else
-		{
-			assert ( !bWasEscaped || pLastEscape );
-			// if there was, token is ready but we should restart from that separator
-			m_pCur = ( bWasEscaped ? pLastEscape : pFirstSeparator );
-			pCur = m_pCur;
-		}
-
-		// return accumulated token
-		if ( m_iAccum<m_tSettings.m_iMinWordLen )
-		{
-			if ( m_bShortTokenFilter )
-			{
-				*m_pAccum = '\0';
-
-				if ( ShortTokenFilter ( m_sAccum, m_iAccum ) )
-				{
-					m_iLastTokenLen = m_iAccum;
-					m_pTokenEnd = pCur;
-					m_iAccum = 0;
-					return m_sAccum;
-				}
-			}
-
-			if ( m_iAccum )
-				m_iOvershortCount++;
-
-			m_iAccum = 0;
-			continue;
-		}
-
-		*m_pAccum = '\0';
-		m_iLastTokenLen = m_iAccum;
-		m_pTokenEnd = pCur;
-		return m_sAccum;
-	}
 }
 
 
@@ -6141,15 +5804,117 @@ BYTE * CSphTokenizer_UTF8<IS_QUERY>::GetToken ()
 	m_bBlended = false;
 	m_iOvershortCount = 0;
 	m_bTokenBoundary = false;
-
-	if ( m_dSynonyms.GetLength() )
-		return GetTokenSyn ( IS_QUERY );
+	m_bWasSynonym = false;
 
 	return m_bHasBlend
 		? DoGetToken<IS_QUERY,true>()
 		: DoGetToken<IS_QUERY,false>();
 }
 
+
+bool CSphTokenizerBase2::CheckException ( const BYTE * pStart, const BYTE * pCur, bool bQueryMode )
+{
+	assert ( m_pExc );
+	assert ( pStart );
+
+	// at this point [pStart,pCur) is our regular tokenization candidate,
+	// and pCur is pointing at what normally is considered separtor
+	//
+	// however, it might be either a full exception (if we're really lucky)
+	// or (more likely) an exception prefix, so lets check for that
+	//
+	// interestingly enough, note that our token might contain a full exception
+	// as a prefix, for instance [USAF] token vs [USA] exception; but in that case
+	// we still need to tokenize regularly, because even exceptions need to honor
+	// word boundaries
+
+	// lets begin with a special (hopefully fast) check for the 1st byte
+	const BYTE * p = pStart;
+	if ( m_pExc->GetFirst ( *p )<0 )
+		return false;
+
+	// consume all the (character data) bytes until the first separator
+	int iNode = 0;
+	while ( p<pCur )
+	{
+		if ( bQueryMode && *p=='\\' )
+		{
+			p++;
+			continue;;
+		}
+		iNode = m_pExc->GetNext ( iNode, *p++ );
+		if ( iNode<0 )
+			return false;
+	}
+
+	const BYTE * pMapEnd = NULL; // the longest exception found so far is [pStart,pMapEnd)
+	const BYTE * pMapTo = NULL; // the destination mapping
+
+	// now, we got ourselves a valid exception prefix, so lets keep consuming more bytes,
+	// ie. until further separators, and keep looking for a full exception match
+	while ( iNode>=0 )
+	{
+		// in query mode, ignore quoting slashes
+		if ( bQueryMode && *p=='\\' )
+		{
+			p++;
+			continue;
+		}
+
+		// decode one more codepoint, check if it is a separator
+		bool bSep = true;
+		bool bSpace = sphIsSpace(*p); // okay despite utf-8, cause hard whitespace is all ascii-7
+
+		const BYTE * q = p;
+		if ( p<m_pBufferMax )
+			bSep = IsSeparator ( m_tLC.ToLower ( sphUTF8Decode(q) ), false ); // FIXME? sometimes they ARE first
+
+		// there is a separator ahead, so check if we have a full match
+		if ( bSep && m_pExc->GetMapping(iNode) )
+		{
+			pMapEnd = p;
+			pMapTo = m_pExc->GetMapping(iNode);
+		}
+
+		// eof? bail
+		if ( p>=m_pBufferMax )
+			break;
+
+		// not eof? consume those bytes
+		if ( bSpace )
+		{
+			// and fold (hard) whitespace while we're at it!
+			while ( sphIsSpace(*p) )
+				p++;
+			iNode = m_pExc->GetNext ( iNode, ' ' );
+		} else
+		{
+			// just consume the codepoint, byte-by-byte
+			while ( p<q && iNode>=0 )
+				iNode = m_pExc->GetNext ( iNode, *p++ );
+		}
+
+		// we just consumed a separator, so check for a full match again
+		if ( iNode>=0 && bSep && m_pExc->GetMapping(iNode) )
+		{
+			pMapEnd = p;
+			pMapTo = m_pExc->GetMapping(iNode);
+		}
+	}
+
+	// found anything?
+	if ( !pMapTo )
+		return false;
+
+	strncpy ( (char*)m_sAccum, (char*)pMapTo, sizeof(m_sAccum) );
+	m_pCur = pMapEnd;
+	m_pTokenStart = pStart;
+	m_pTokenEnd = pMapEnd;
+	m_iLastTokenLen = strlen ( (char*)m_sAccum );
+
+	m_bWasSynonym = true;
+	return true;
+}
 
 template < bool IS_QUERY, bool IS_BLEND >
 BYTE * CSphTokenizerBase2::DoGetToken ()
@@ -6168,10 +5933,11 @@ BYTE * CSphTokenizerBase2::DoGetToken ()
 	bool bGotNonToken = ( !IS_QUERY || m_bPhrase ); // only do this in query mode, never in indexing mode, never within phrases
 	bool bGotSoft = false; // hey Beavis he said soft huh huhhuh
 
+	m_pTokenStart = NULL;
 	for ( ;; )
 	{
 		// get next codepoint
-		const BYTE * pCur = m_pCur; // to redo special char, if there's a token already
+		const BYTE * const pCur = m_pCur; // to redo special char, if there's a token already
 
 		int iCodePoint;
 		int iCode;
@@ -6198,8 +5964,13 @@ BYTE * CSphTokenizerBase2::DoGetToken ()
 		// handle eof
 		if ( iCode<0 )
 		{
-			// skip trailing short word
 			FlushAccum ();
+
+			// suddenly, exceptions
+			if ( m_pExc && m_pTokenStart && CheckException ( m_pTokenStart, pCur, IS_QUERY ) )
+				return m_sAccum;
+
+			// skip trailing short word
 			if ( m_iLastTokenLen<m_tSettings.m_iMinWordLen )
 			{
 				if ( !m_bShortTokenFilter || !ShortTokenFilter ( m_sAccum, m_iLastTokenLen ) )
@@ -6277,9 +6048,15 @@ BYTE * CSphTokenizerBase2::DoGetToken ()
 		}
 		m_bBoundary = ( iCode & FLAG_CODEPOINT_BOUNDARY )!=0;
 
+		// handle separator (aka, most likely a token!)
 		if ( iCode==0 || m_bBoundary )
 		{
 			FlushAccum ();
+
+			// suddenly, exceptions
+			if ( m_pExc && CheckException ( m_pTokenStart ? m_pTokenStart : pCur, pCur, IS_QUERY ) )
+				return m_sAccum;
+
 			if_const ( IS_BLEND && !BlendAdjust ( pCur ) )
 				continue;
 

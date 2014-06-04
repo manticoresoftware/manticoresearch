@@ -815,6 +815,15 @@ public:
 		m_pData [ m_iLength++ ] = tValue;
 	}
 
+	/// add N more entries, and return a pointer to that buffer
+	T * AddN ( int iCount )
+	{
+		if ( m_iLength + iCount > m_iLimit )
+			Reserve ( m_iLength + iCount );
+		m_iLength += iCount;
+		return m_pData + m_iLength - iCount;
+	}
+
 	/// add unique entry (ie. do not add if equal to last one)
 	void AddUnique ( const T & tValue )
 	{

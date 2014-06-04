@@ -53,7 +53,7 @@ bool CreateSynonymsFile ( const char * sMagic )
 		"AT&T      => AT&T\n"
 		"   AT & T => AT & T  \n"
 		"standarten fuehrer => Standartenfuehrer\n"
-		"standarten fuhrer  => Standartenfuehrer\n"
+		"standarten   fuhrer  => Standartenfuehrer\n"
 		"OS/2 => OS/2\n"
 		"Ms-Dos => MS-DOS\n"
 		"MS DOS => MS-DOS\n"
@@ -64,6 +64,8 @@ bool CreateSynonymsFile ( const char * sMagic )
 		"U.S.D. => USD\n"
 		"U.S.P. => USP\n"
 		"U.S.A.F. => USAF\n"
+		"life:) => life:)\n"
+		"; => ;\n"
 		);
 	if ( sMagic )
 		fprintf ( fp, "%s => test\n", sMagic );
@@ -74,12 +76,14 @@ bool CreateSynonymsFile ( const char * sMagic )
 
 const DWORD TOK_EXCEPTIONS		= 1;
 const DWORD TOK_NO_DASH			= 2;
+const DWORD TOK_NO_SHORT		= 4;
 
 ISphTokenizer * CreateTestTokenizer ( DWORD uMode )
 {
 	CSphString sError;
 	CSphTokenizerSettings tSettings;
-	tSettings.m_iMinWordLen = 2;
+	if (!( uMode & TOK_NO_SHORT ))
+		tSettings.m_iMinWordLen = 2;
 
 	ISphTokenizer * pTokenizer = ISphTokenizer::Create ( tSettings, NULL, sError );
 	if (!( uMode & TOK_NO_DASH ))
@@ -110,14 +114,82 @@ void TestTokenizer()
 {
 	const char * sPrefix = "testing tokenizer";
 
+	// test exceptions more
+	{
+		const char * sMagic = "\xD1\x82\xD0\xB5\xD1\x81\xD1\x82\xD1\x82\xD1\x82";
+		assert ( CreateSynonymsFile ( sMagic ) );
+		ISphTokenizer * pTokenizer = CreateTestTokenizer ( TOK_EXCEPTIONS | TOK_NO_SHORT );
+
+		CSphString sError;
+		assert ( pTokenizer->SetBlendChars ( "+, U+23", sError ) );
+
+		const char * dTests[] =
+		{
+			// for completeness...
+			"AT&T!!!",									"AT&T", "!", "!", "!", NULL,		// exceptions vs specials
+			"U.S.AB U.S.A. U.S.B.U.S.D.U.S.U.S.A.F.",	"US", "ab", "USA", "USB", "USD", "US", "USAF", NULL,
+			"Y.M.C.A.",									"y", "m", "c", "a", NULL,
+			"B&E's",									"b", "e", "s", NULL,
+
+			// exceptions vs spaces
+			"AT & T",									"AT & T", NULL,
+			"AT  &  T",									"AT & T", NULL,
+			"AT      &      T",							"AT & T", NULL,
+			"AT$&$T",									"at", "t", NULL,
+
+			// prefix fun
+			"U.S.A.X.",									"USA", "x", NULL,
+			"U.X.U.S.A.",								"u", "x", "USA", NULL,
+
+			// exceptions vs blended
+			"#test this",								"#test", "test", "this", NULL,
+			"#test       this",							"#test", "test", "this", NULL,
+			"test#that",								"test#that", "test", "that", NULL,
+			"1+2",										"1+2", "1", "2", NULL,
+			"te.st#this",								"te", "st#this", "st", "this", NULL,
+			"U.boat",									"u", "boat", NULL,
+
+			// regressions
+			";foo bar",									";", "foo", "bar", NULL,
+
+			NULL
+		};
+
+		for ( int iCur=0; dTests[iCur]; )
+		{
+			printf ( "%s, exceptions, line=%s\n", sPrefix, dTests[iCur] );
+			pTokenizer->SetBuffer ( (BYTE*)dTests[iCur], strlen ( dTests[iCur] ) );
+			iCur++;
+
+			for ( BYTE * pToken=pTokenizer->GetToken(); pToken; pToken=pTokenizer->GetToken() )
+			{
+				assert ( dTests[iCur] && strcmp ( (const char*)pToken, dTests[iCur] )==0 );
+				iCur++;
+			}
+
+			assert ( dTests[iCur]==NULL );
+			iCur++;
+		}
+
+		// query mode tokenizer tests
+		ISphTokenizer * pQtok = pTokenizer->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT );
+
+		pQtok->SetBuffer ( (BYTE*)"life:)", 7 );
+		assert ( strcmp ( (char*)pQtok->GetToken(), "life:)" )==0 );
+		assert ( pQtok->GetToken()==NULL );
+
+		pQtok->SetBuffer ( (BYTE*)"life:\\)", 8 );
+		assert ( strcmp ( (char*)pQtok->GetToken(), "life:)" )==0 );
+		assert ( pQtok->GetToken()==NULL );
+	}
+
 	for ( int iRun=1; iRun<=3; iRun++ )
 	{
 		// simple "one-line" tests
 		const char * sMagic = "\xD1\x82\xD0\xB5\xD1\x81\xD1\x82\xD1\x82\xD1\x82";
 
 		assert ( CreateSynonymsFile ( sMagic ) );
-		bool bExceptions = ( iRun>=2 );
-		ISphTokenizer * pTokenizer = CreateTestTokenizer ( bExceptions*TOK_EXCEPTIONS );
+		ISphTokenizer * pTokenizer = CreateTestTokenizer ( ( iRun>=2 ) ? TOK_EXCEPTIONS : 0 );
 
 		const char * dTests[] =
 		{
@@ -141,6 +213,8 @@ void TestTokenizer()
 			"2", "standarten fuhrer",			"Standartenfuehrer", NULL,
 			"2", "standarten fuehrerr",			"standarten", "fuehrerr", NULL,
 			"2", "standarten fuehrer Stirlitz",	"Standartenfuehrer", "stirlitz", NULL,
+			"2", "standarten  fuehrer  Zog",	"Standartenfuehrer", "zog", NULL,
+			"2", "stand\\arten  fue\\hrer Zog",	"Standartenfuehrer", "zog", NULL,
 			"2", "OS/2 vs OS/360 vs Ms-Dos",	"OS/2", "vs", "os", "360", "vs", "MS-DOS", NULL,
 			"2", "AT ",							"at", NULL,							// test that prefix-whitespace-eof combo does not hang
 			"2", "AT&T&TT",						"AT&T", "tt", NULL,
@@ -3548,7 +3622,6 @@ int main ()
 	char cTopOfMainStack;
 	sphThreadInit();
 	MemorizeStack ( &cTopOfMainStack );
-
 	setvbuf ( stdout, NULL, _IONBF, 0 );
 
 	printf ( "RUNNING INTERNAL LIBSPHINX TESTS\n\n" );

@@ -8,6 +8,7 @@ searchd
 {
 	<searchd_settings/>
 	workers = threads
+	dist_threads = 2
 }
 
 source test
@@ -147,6 +148,8 @@ index dist13
 <sphinxql>select *, SNIPPET(body, 'las') from dist11</sphinxql>
 <sphinxql>select *, SNIPPET(body, 'las') from dist12</sphinxql>
 <sphinxql>select *, SNIPPET(body, 'las') from dist13</sphinxql>
+<sphinxql>select id, body, SNIPPET(body, '','allow_empty=1', 'query_mode=1') from snip2</sphinxql>
+<sphinxql>select id, body, SNIPPET(body, '','allow_empty=0', 'query_mode=1') from snip2</sphinxql>
 
 </sphqueries>
 

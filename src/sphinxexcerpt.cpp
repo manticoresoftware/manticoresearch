@@ -3394,6 +3394,14 @@ static void DoHighlighting ( const ExcerptQuery_t & tQuerySettings,
 		CSphScopedPtr<CSphHitMarker> pMarker ( CSphHitMarker::Create ( tContainer.m_tQuery.m_pRoot, tQwordSetup ) );
 		if ( !pMarker.Ptr() )
 		{
+			// no hits - just highlight document start
+			if ( !tFixedSettings.m_bAllowEmpty )
+			{
+				DocStartHighlighter_c tHighlighter ( tContainer, pTokenizer, pDict, tFixedSettings, tIndexSettings, sDoc, iDocLen );
+				tStreamer.Tokenize ( tHighlighter );
+
+				dRes.SwapData ( tHighlighter.m_dStartResult );
+			}
 			dRes.Add(0);
 			return;
 		}

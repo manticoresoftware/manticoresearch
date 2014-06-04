@@ -27352,24 +27352,6 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 #define MYSQL_LIB "libmysqlclient.so"
 #define MYSQL_NUM_FUNCS (15)
 
-/* Just a list of names - for c/p
-mysql_free_result
-mysql_next_result
-mysql_use_result
-mysql_num_rows
-mysql_query
-mysql_errno
-mysql_error
-mysql_init
-mysql_ssl_set
-mysql_real_connect
-mysql_close
-mysql_num_fields
-mysql_fetch_row
-mysql_fetch_fields
-mysql_fetch_lengths
-*/
-
 #if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC) || defined(__ECC) || defined(__GNUC__)
 
 // use non-standard compiler extension __typeof__
@@ -27723,22 +27705,6 @@ bool CSphSource_MySQL::Setup ( const CSphSourceParams_MySQL & tParams )
 #define POSGRESQL_LIB "libpq.so"
 #define POSTRESQL_NUM_FUNCS (12)
 
-/* Just a list of names - for c/p
-
-PQgetvalue
-PQclear
-PQsetdbLogin
-PQstatus
-PQsetClientEncoding
-PQexec
-PQresultStatus
-PQntuples
-PQfname
-PQnfields
-PQfinish
-PQerrorMessage
-*/
-
 #if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC) || defined(__ECC) || defined(__GNUC__)
 
 // use non-standard compiler extension __typeof__
@@ -27836,20 +27802,6 @@ void** CPosgresql::pFuncs[] = {(void**)&m_pPQgetvalue, (void**)&m_pPQclear,
 	(void**)&m_pPQexec, (void**)&m_pPQresultStatus, (void**)&m_pPQntuples,
 	(void**)&m_pPQfname, (void**)&m_pPQnfields, (void**)&m_pPQfinish,
 	(void**)&m_pPQerrorMessage};
-/*
-xPQgetvalue PQgetvalue
-xPQclear PQclear
-xPQsetdbLogin PQsetdbLogin
-xPQstatus PQstatus
-xPQsetClientEncoding PQsetClientEncoding
-xPQexec PQexec
-xPQresultStatus PQresultStatus
-xPQntuples PQntuples
-xPQfname PQfname
-xPQnfields PQnfields
-xPQfinish PQfinish
-xPQerrorMessage PQerrorMessage
-*/
 
 xPQgetvalue CPosgresql::m_pPQgetvalue = (xPQgetvalue)CPosgresql::Stub;
 xPQclear CPosgresql::m_pPQclear = (xPQclear)CPosgresql::Stub;
@@ -28166,20 +28118,6 @@ struct CSphSchemaConfigurator
 #if DL_EXPAT
 #define EXPAT_LIB "libexpat.so"
 #define EXPAT_NUM_FUNCS (11)
-
-/* Just a list of names - for c/p
-XML_ParserFree
-XML_Parse
-XML_GetCurrentColumnNumber
-XML_GetCurrentLineNumber
-XML_GetErrorCode
-XML_ErrorString
-XML_ParserCreate
-XML_SetUserData
-XML_SetElementHandler
-XML_SetCharacterDataHandler
-XML_SetUnknownEncodingHandler
-*/
 
 #if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC) || defined(__ECC) || defined(__GNUC__)
 
@@ -29409,22 +29347,6 @@ CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE *
 #if DL_UNIXODBC
 // ODBC lib might be libodbc.so or libiodbc.so
 #define ODBC_NUM_FUNCS (13)
-
-/* Just a list of names - for c/p
-SQLFreeHandle
-SQLDisconnect
-SQLCloseCursor
-SQLGetDiagRec
-SQLSetEnvAttr
-SQLAllocHandle
-SQLFetch
-SQLExecDirect
-SQLNumResultCols
-SQLDescribeCol
-SQLBindCol
-SQLDrivers
-SQLDriverConnect
-*/
 
 #if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC) || defined(__ECC) || defined(__GNUC__)
 

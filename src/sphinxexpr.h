@@ -119,9 +119,9 @@ public:
 	/// get the number of args in an arglist
 	virtual int GetNumArgs() const { return 0; }
 
-	/// run a tree wide action
+	/// run a tree wide action (1st arg is an action, 2nd is its parameter)
 	/// usually sets something into ISphExpr like string pool or gets something from it like dependent columns
-	virtual void Command ( ESphExprCommand /* eCmd */, void * /* pArg */ ) {}
+	virtual void Command ( ESphExprCommand, void * ) {}
 };
 
 /// string expression traits

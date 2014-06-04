@@ -2243,32 +2243,18 @@ static void DeleteIndexFiles ( const char * sIndex )
 	if ( !sIndex )
 		return;
 
-	CSphString sName;
-	sName.SetSprintf ( "%s.kill", sIndex );
-	unlink ( sName.cstr() );
-	sName.SetSprintf ( "%s.lock", sIndex );
-	unlink ( sName.cstr() );
-	sName.SetSprintf ( "%s.meta", sIndex );
-	unlink ( sName.cstr() );
-	sName.SetSprintf ( "%s.ram", sIndex );
-	unlink ( sName.cstr() );
+	const char * sExts[] = {
+		"kill", "lock", "meta", "ram",
+		"0.spa", "0.spd", "0.spe", "0.sph",
+		"0.spi", "0.spk", "0.spm", "0.spp",
+		"0.sps" };
 
-	sName.SetSprintf ( "%s.0.spa", sIndex );
-	unlink ( sName.cstr() );
-	sName.SetSprintf ( "%s.0.spd", sIndex );
-	unlink ( sName.cstr() );
-	sName.SetSprintf ( "%s.0.sph", sIndex );
-	unlink ( sName.cstr() );
-	sName.SetSprintf ( "%s.0.spi", sIndex );
-	unlink ( sName.cstr() );
-	sName.SetSprintf ( "%s.0.spk", sIndex );
-	unlink ( sName.cstr() );
-	sName.SetSprintf ( "%s.0.spm", sIndex );
-	unlink ( sName.cstr() );
-	sName.SetSprintf ( "%s.0.spp", sIndex );
-	unlink ( sName.cstr() );
-	sName.SetSprintf ( "%s.0.sps", sIndex );
-	unlink ( sName.cstr() );
+	CSphString sName;
+	for ( int i=0; i<sizeof(sExts)/sizeof(sExts[0]); i++ )
+	{
+		sName.SetSprintf ( "%s.%s", sIndex, sExts[i] );
+		unlink ( sName.cstr() );
+	}
 }
 
 
@@ -3610,6 +3596,7 @@ void TestSource ()
 
 	// clean up
 	SafeDelete ( pCSV );
+	fclose ( fp );
 
 	printf ( "ok\n" );
 }

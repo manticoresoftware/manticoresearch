@@ -3594,9 +3594,8 @@ void TestSource ()
 		iTest += iWriteStride;
 	}
 
-	// clean up
+	// clean up, fp will be closed automatically in CSphSource_BaseSV::Disconnect()
 	SafeDelete ( pCSV );
-	fclose ( fp );
 
 	printf ( "ok\n" );
 }

@@ -13786,7 +13786,7 @@ void BuildStatus ( VectorLike & dStatus )
 
 			AgentStats_t & tStats = g_pStats->m_dAgentStats.m_dItemStats[iIndex];
 			for ( int k=0; k<eMaxStat; ++k )
-				if ( dStatus.MatchAddVa ( "ag_%s_%d_%s", sIdx, i, tStats.m_sNames[k] ) )
+				if ( dStatus.MatchAddVa ( "ag_%s_%d_%d_%s", sIdx, i+1, j+1, tStats.m_sNames[k] ) )
 					dStatus.Add().SetSprintf ( FMT64, tStats.m_iStats[k] );
 		}
 	}

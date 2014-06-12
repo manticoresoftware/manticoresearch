@@ -647,6 +647,7 @@ void BenchTokenizer ()
 			pTokenizer->LoadSynonyms ( g_sTmpfile, NULL, sError );
 		pTokenizer->AddSpecials ( "!-" );
 
+		printf ( "run %d: ", iRun );
 		BenchTokenizer ( pTokenizer, (BYTE*)sData, iBytes );
 		SafeDeleteArray ( sData );
 		SafeDelete ( pTokenizer );
@@ -656,6 +657,7 @@ void BenchTokenizer ()
 	if ( sData )
 	{
 		ISphTokenizer * pTokenizer = sphCreateUTF8Tokenizer ();
+		printf ( "run 3: " );
 		BenchTokenizer ( pTokenizer, (BYTE*)sData, iBytes );
 		SafeDelete ( pTokenizer );
 	}

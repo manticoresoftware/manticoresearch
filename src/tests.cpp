@@ -116,7 +116,9 @@ void TestTokenizer()
 
 	// test exceptions more
 	{
+#ifndef NDEBUG
 		const char * sMagic = "\xD1\x82\xD0\xB5\xD1\x81\xD1\x82\xD1\x82\xD1\x82";
+#endif
 		assert ( CreateSynonymsFile ( sMagic ) );
 		ISphTokenizer * pTokenizer = CreateTestTokenizer ( TOK_EXCEPTIONS | TOK_NO_SHORT );
 
@@ -590,6 +592,39 @@ char * LoadFile ( const char * sName, int * pLen, bool bReportErrors )
 }
 
 
+void BenchTokenizer ( ISphTokenizer * pTokenizer, BYTE * sData, int iBytes )
+{
+	const int iPasses = 1000;
+	int iTokens = 0;
+	CSphVector<int> dTimes;
+
+	// do several benchmark passes
+	for ( int iPass=0; iPass<iPasses; iPass++ )
+	{
+		int64_t tmTime = -sphMicroTimer();
+		pTokenizer->SetBuffer ( sData, iBytes );
+		while ( pTokenizer->GetToken() )
+			iTokens++;
+		tmTime += sphMicroTimer();
+		dTimes.Add ( (int)tmTime ); // 2 bil usec == 2000 sec, should be enough for one pass
+	}
+	iTokens /= iPasses;
+
+	// analyse results
+	int64_t iMin = INT_MAX, iAvg = 0;
+	ARRAY_FOREACH ( i, dTimes )
+	{
+		if ( dTimes[i]<iMin )
+			iMin = dTimes[i];
+		iAvg += dTimes[i];
+	}
+
+	// report
+	printf ( "%d bytes, %d tokens, max %.1f MB/sec, avg %.1f MB/sec\n",
+		iBytes, iTokens, double(iBytes)/iMin, double(iBytes*iPasses)/iAvg );
+}
+
+
 void BenchTokenizer ()
 {
 	printf ( "benchmarking tokenizer\n" );
@@ -599,60 +634,30 @@ void BenchTokenizer ()
 		return;
 	}
 
+	int iBytes = 0;
 	CSphString sError;
+	CSphVector<int> g_Runs[2];
 	for ( int iRun=1; iRun<=2; iRun++ )
 	{
-		int iData = 0;
-		char * sData = LoadFile ( "./configure", &iData, true );
+		char * sData = LoadFile ( "./configure", &iBytes, true );
 
 		ISphTokenizer * pTokenizer = sphCreateUTF8Tokenizer ();
-		pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z", sError );
+		// pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z", sError );
 		if ( iRun==2 )
 			pTokenizer->LoadSynonyms ( g_sTmpfile, NULL, sError );
 		pTokenizer->AddSpecials ( "!-" );
 
-		const int iPasses = 200;
-		int iTokens = 0;
-
-		int64_t tmTime = -sphMicroTimer();
-		for ( int iPass=0; iPass<iPasses; iPass++ )
-		{
-			pTokenizer->SetBuffer ( (BYTE*)sData, iData );
-			while ( pTokenizer->GetToken() ) iTokens++;
-		}
-		tmTime += sphMicroTimer();
-
-		iTokens /= iPasses;
-		tmTime /= iPasses;
-
-		printf ( "run %d: %d bytes, %d tokens, %d.%03d ms, %.3f MB/sec\n", iRun, iData, iTokens,
-			(int)(tmTime/1000), (int)(tmTime%1000), float(iData)/tmTime );
+		BenchTokenizer ( pTokenizer, (BYTE*)sData, iBytes );
 		SafeDeleteArray ( sData );
+		SafeDelete ( pTokenizer );
 	}
 
-	int iData;
-	char * sData = LoadFile ( "./utf8.txt", &iData, false );
+	char * sData = LoadFile ( "./utf8.txt", &iBytes, false );
 	if ( sData )
 	{
 		ISphTokenizer * pTokenizer = sphCreateUTF8Tokenizer ();
-
-		const int iPasses = 200;
-		int iTokens = 0;
-
-		int64_t tmTime = -sphMicroTimer();
-		for ( int iPass=0; iPass<iPasses; iPass++ )
-		{
-			pTokenizer->SetBuffer ( (BYTE*)sData, iData );
-			while ( pTokenizer->GetToken() )
-				iTokens++;
-		}
-		tmTime += sphMicroTimer();
-
-		iTokens /= iPasses;
-		tmTime /= iPasses;
-
-		printf ( "run 3: %d bytes, %d tokens, %d.%03d ms, %.3f MB/sec\n", iData, iTokens,
-			(int)(tmTime/1000), (int)(tmTime%1000), float(iData)/tmTime );
+		BenchTokenizer ( pTokenizer, (BYTE*)sData, iBytes );
+		SafeDelete ( pTokenizer );
 	}
 	SafeDeleteArray ( sData );
 }
@@ -3609,6 +3614,10 @@ int main ()
 	sphThreadInit();
 	MemorizeStack ( &cTopOfMainStack );
 	setvbuf ( stdout, NULL, _IONBF, 0 );
+
+#if USE_WINDOWS
+	SetProcessAffinityMask ( GetCurrentProcess(), 1 );
+#endif
 
 	printf ( "RUNNING INTERNAL LIBSPHINX TESTS\n\n" );
 

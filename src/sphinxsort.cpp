@@ -5386,7 +5386,12 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 	pTop->m_bRandomize = bRandomize;
 
 	if ( bRandomize )
-		sphAutoSrand ();
+	{
+		if ( pQuery->m_iRandSeed>=0 )
+			sphSrand ( (DWORD)pQuery->m_iRandSeed );
+		else
+			sphAutoSrand ();
+	}
 
 	tQueue.m_bZonespanlist = bNeedZonespanlist;
 	tQueue.m_uPackedFactorFlags = uPackedFactorFlags;

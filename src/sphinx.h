@@ -2644,7 +2644,9 @@ public:
 	CSphString		m_sUDRankerOpts;	///< user-defined ranker options
 	ESphSortOrder	m_eSort;		///< sort mode
 	CSphString		m_sSortBy;		///< attribute to sort by
+	int64_t			m_iRandSeed;	///< random seed for ORDER BY RAND(), -1 means do not set
 	int				m_iMaxMatches;	///< max matches to retrieve, default is 1000. more matches use more memory and CPU time to hold and sort them
+
 	bool			m_bSortKbuffer;	///< whether to use PQ or K-buffer sorting algorithm
 	bool			m_bZSlist;		///< whether the ranker has to fetch the zonespanlist with this query
 	bool			m_bSimplify;	///< whether to apply boolean simplification

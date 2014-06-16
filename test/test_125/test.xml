@@ -242,6 +242,13 @@ INSERT INTO cmp_table VALUES
 <!-- IN() function for string attributes -->
 <sphinxql>SELECT IN(kk,'one','ten','eleventy') FROM test</sphinxql>
 <sphinxql>SELECT IN(kk,'is','not','there') FROM test</sphinxql>
+
+<!-- ATAN2() function -->
+<sphinxql>SELECT ATAN2(0,1) FROM test WHERE id=10</sphinxql>
+<sphinxql>SELECT ATAN2(1,0) FROM test WHERE id=10</sphinxql>
+<sphinxql>SELECT ATAN2(0.75,0.25) FROM test WHERE id=10</sphinxql>
+<sphinxql>SELECT ATAN2(0.25,0.75) FROM test WHERE id=10</sphinxql>
+
 </sphqueries>
 
 </test>

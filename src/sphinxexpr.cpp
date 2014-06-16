@@ -1519,6 +1519,8 @@ DECLARE_BINARY_FLT ( Expr_Pow_c,	float ( pow ( FIRST, SECOND ) ) )
 DECLARE_BINARY_POLY ( Expr_And,		FIRST!=0.0f && SECOND!=0.0f,		IFINT ( INTFIRST && INTSECOND ),	IFINT ( INT64FIRST && INT64SECOND ) )
 DECLARE_BINARY_POLY ( Expr_Or,		FIRST!=0.0f || SECOND!=0.0f,		IFINT ( INTFIRST || INTSECOND ),	IFINT ( INT64FIRST || INT64SECOND ) )
 
+DECLARE_BINARY_FLT ( Expr_Atan2_c,	float ( atan2 ( FIRST, SECOND ) ) )
+
 //////////////////////////////////////////////////////////////////////////
 
 /// boring base stuff
@@ -1699,7 +1701,9 @@ enum Func_e
 	FUNC_INDEXOF,
 
 	FUNC_MIN_TOP_WEIGHT,
-	FUNC_MIN_TOP_SORTVAL
+	FUNC_MIN_TOP_SORTVAL,
+
+	FUNC_ATAN2
 };
 
 
@@ -1779,6 +1783,8 @@ static FuncDesc_t g_dFuncs[] =
 
 	{ "min_top_weight",		0,	FUNC_MIN_TOP_WEIGHT,	SPH_ATTR_INTEGER },
 	{ "min_top_sortval",	0,	FUNC_MIN_TOP_SORTVAL,	SPH_ATTR_FLOAT },
+
+	{ "atan2",			2,	FUNC_ATAN2,			SPH_ATTR_FLOAT }
 };
 
 
@@ -1869,7 +1875,7 @@ static int FuncHashLookup ( const char * sKey )
 		-1, 29, -1, -1, 25, -1, 32, 47, 39, 17,
 		-1, 42, 50, 53, 18, -1, -1, 19, 4, 12,
 		-1, -1, -1, -1, 21, -1, -1, -1, 5, 10,
-		-1, -1, -1, 15, 37, -1, -1, -1, 48, -1,
+		-1, -1, -1, 15, 37, 57, -1, -1, 48, -1,
 		-1, -1, -1, 1,
 	};
 
@@ -3904,6 +3910,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 					case FUNC_IF:		return new Expr_If_c ( dArgs[0], dArgs[1], dArgs[2] );
 					case FUNC_MADD:		return new Expr_Madd_c ( dArgs[0], dArgs[1], dArgs[2] );
 					case FUNC_MUL3:		return new Expr_Mul3_c ( dArgs[0], dArgs[1], dArgs[2] );
+					case FUNC_ATAN2:	return new Expr_Atan2_c ( dArgs[0], dArgs[1] );
 
 					case FUNC_INTERVAL:	return CreateIntervalNode ( tNode.m_iLeft, dArgs );
 					case FUNC_IN:		return CreateInNode ( iNode );

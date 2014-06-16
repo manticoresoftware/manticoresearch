@@ -2653,6 +2653,7 @@ Here's the complete reference list for quick access.
 <listitem><para><link linkend="expr-func-abs">ABS()</link></para></listitem>
 <listitem><para><link linkend="expr-func-all">ALL()</link></para></listitem>
 <listitem><para><link linkend="expr-func-any">ANY()</link></para></listitem>
+<listitem><para><link linkend="expr-func-atan2">ATAN2()</link></para></listitem>
 <listitem><para><link linkend="expr-func-bigint">BIGINT()</link></para></listitem>
 <listitem><para><link linkend="expr-func-bitdot">BITDOT()</link></para></listitem>
 <listitem><para><link linkend="expr-func-ceil">CEIL()</link></para></listitem>
@@ -3052,6 +3053,13 @@ SELECT ALL(x&gt;3 AND x&lt;7 FOR x IN j.intarray) FROM test;
 It works similar to <link linkend="expr-func-all">ALL()</link> except for it
 returns 1 if condition is true for any element in array.</para>
 </listitem>
+</varlistentry>
+
+<varlistentry>
+<term id="expr-func-atan2">ATAN2()</term>
+<listitem><para>
+Returns the arctangent function of two arguments, expressed in <b>radians</b>.
+</para></listitem>
 </varlistentry>
 
 <varlistentry>

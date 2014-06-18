@@ -10594,8 +10594,6 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			m_dResults[iRes].m_sError.SetSprintf ( "no enabled %s indexes to search", sIndexType );
 		return;
 	}
-	if ( tFirst.m_iAgentQueryTimeout>0 )
-		iAgentQueryTimeout = tFirst.m_iAgentQueryTimeout;
 	ARRAY_FOREACH ( i, m_dResults )
 		m_dResults[i].m_dTag2Pools.Resize ( iTagsCount );
 

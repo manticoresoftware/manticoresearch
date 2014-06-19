@@ -4564,9 +4564,11 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 			AgentConn_t & tAgent = *(AgentConn_t*)dEvents[i].data.ptr;
 			bool bReadable = ( dEvents[i].events & EPOLLIN )!=0;
 			bool bWriteable = ( dEvents[i].events & EPOLLOUT )!=0;
-			if ( tAgent.m_eState==AGENT_CONNECTING )
+			bool bErr = ( ( dEvents[i].events & ( EPOLLERR | EPOLLHUP ) )!=0 );
+
+			if ( tAgent.m_eState==AGENT_CONNECTING && ( bWriteable || bErr ) )
 			{
-				if ( ( dEvents[i].events & ( EPOLLERR | EPOLLHUP ) )!=0 )
+				if ( bErr )
 				{
 					epoll_ctl ( eid, EPOLL_CTL_DEL, tAgent.m_iSock, &dEvent );
 					--iEvents;
@@ -4581,7 +4583,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 
 				// connect() success
 				agent_stats_inc ( tAgent, eMaxMsecs );
-				tAgent.m_eState = AGENT_HANDSHAKE;
+
 				// send the client's proto version right now to avoid w-w-r pattern.
 				NetOutputBuffer_c tOut ( tAgent.m_iSock );
 				tOut.SendDword ( SPHINX_CLIENT_VERSION );
@@ -4589,6 +4591,8 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 				dEvent.events = EPOLLIN;
 				dEvent.data.ptr = &tAgent;
 				epoll_ctl ( eid, EPOLL_CTL_MOD, tAgent.m_iSock, &dEvent );
+
+				tAgent.m_eState = AGENT_HANDSHAKE;
 
 // fix #1071
 #ifdef	TCP_NODELAY
@@ -5032,49 +5036,46 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 		ARRAY_FOREACH ( i, dWorkingSet )
 		{
 			AgentConn_t & tAgent = pCtx->m_pAgents[dWorkingSet[i]];
+
 #if HAVE_POLL
 			bool bReadable = ( fds[i].revents & POLLIN )!=0;
 			bool bWriteable = ( fds[i].revents & POLLOUT )!=0;
+			bool bErr = ( ( fds[i].revents & ( POLLERR | POLLHUP ) )!=0 );
 #else
 			bool bReadable = FD_ISSET ( tAgent.m_iSock, &fdsRead )!=0;
 			bool bWriteable = FD_ISSET ( tAgent.m_iSock, &fdsWrite )!=0;
+			bool bErr = !bWriteable; // just poll and check for error
 #endif
-			if ( tAgent.m_eState==AGENT_CONNECTING )
+
+			if ( tAgent.m_eState==AGENT_CONNECTING && ( bWriteable || bErr ) )
 			{
-#if HAVE_POLL
-				if ( ( fds[i].revents & ( POLLERR | POLLHUP ) )!=0 )
+				if ( bErr )
 				{
-					int iErr = 0;
-					socklen_t iErrLen = sizeof(iErr);
-					getsockopt ( tAgent.m_iSock, SOL_SOCKET, SO_ERROR, (char*)&iErr, &iErrLen );
-					// connect() failure
-					tAgent.Fail ( eConnectFailures, "connect() failed: %s", sphSockError(iErr) );
-					continue;
-				}
-#else
-				// check if connection completed
-				// tricky part, with select, we MUST use write-set ONLY here at this check
-				// even though we can't tell connect() success from just OS send buffer availability
-				// but any check involving read-set just never ever completes, so...
-				if ( bWriteable )
-				{
+					// check if connection completed
+					// tricky part, with select, we MUST use write-set ONLY here at this check
+					// even though we can't tell connect() success from just OS send buffer availability
+					// but any check involving read-set just never ever completes, so...
 					int iErr = 0;
 					socklen_t iErrLen = sizeof(iErr);
 					getsockopt ( tAgent.m_iSock, SOL_SOCKET, SO_ERROR, (char*)&iErr, &iErrLen );
 					if ( iErr )
 					{
+						// connect() failure
 						tAgent.Fail ( eConnectFailures, "connect() failed: %s", sphSockError(iErr) );
-						continue;
 					}
+					continue;
 				}
-#endif
+
+				assert ( bWriteable ); // should never get empty or readable state
 				// connect() success
 				agent_stats_inc ( tAgent, eMaxMsecs );
-				tAgent.m_eState = AGENT_HANDSHAKE;
+
 				// send the client's proto version right now to avoid w-w-r pattern.
 				NetOutputBuffer_c tOut ( tAgent.m_iSock );
 				tOut.SendDword ( SPHINX_CLIENT_VERSION );
 				bool bFlushed = tOut.Flush (); // FIXME! handle flush failure?
+
+				tAgent.m_eState = AGENT_HANDSHAKE;
 				// fix #1071
 #ifdef	TCP_NODELAY
 				int bNoDelay = 1;

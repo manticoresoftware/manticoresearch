@@ -354,7 +354,9 @@ void SnippetsDocIndex_c::AddHits ( SphWordID_t iWordID, const BYTE * sWord, int 
 	const Term_t * pQueryTerm = iWordID ? m_dTerms.BinarySearch ( bind ( &Term_t::m_iWordId ), iWordID ) : NULL;
 	if ( pQueryTerm )
 	{
-		m_dDocHits [ pQueryTerm->m_iQueryPos ].Add ( uPosition );
+		int iQPos = pQueryTerm->m_iQueryPos;
+		if ( !m_dDocHits[iQPos].GetLength() || DWORD(m_dDocHits[iQPos].Last())!=uPosition )
+			m_dDocHits [iQPos].Add ( uPosition );
 
 		// might add hit to star hit-list too
 		if ( !m_dStarred.BinarySearch ( iWordID ) )
@@ -364,7 +366,11 @@ void SnippetsDocIndex_c::AddHits ( SphWordID_t iWordID, const BYTE * sWord, int 
 	if ( sWord && iWordLen )
 		ARRAY_FOREACH ( i, m_dStars )
 			if ( MatchStar ( m_dStars[i], sWord ) )
-				m_dDocHits [ m_dStars[i].m_iQueryPos ].Add ( uPosition );
+			{
+				int iQPos = m_dStars[i].m_iQueryPos;
+				if ( !m_dDocHits[iQPos].GetLength() || DWORD(m_dDocHits[iQPos].Last())!=uPosition )
+					m_dDocHits [iQPos].Add ( uPosition );
+			}
 }
 
 static bool HasStars ( const XQKeyword_t & w )
@@ -2892,20 +2898,17 @@ static void TokenizeDocument ( T & tFunctor, const CSphHTMLStripper * pStripper,
 		// handle only blended parts
 		if ( pTokenizer->TokenIsBlended() )
 		{
-			if ( pBlendedEnd<pTokenizer->GetTokenEnd() )
+			if ( tFunctor.m_bIndexExactWords && pTokenizer->GetTokenMorph()!=SPH_TOKEN_MORPH_GUESS )
 			{
-				if ( tFunctor.m_bIndexExactWords && pTokenizer->GetTokenMorph()!=SPH_TOKEN_MORPH_GUESS )
-				{
-					BYTE sTmpBuf [ 3*SPH_MAX_WORD_LEN+4];
-					sTmpBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
-					CopyString ( sTmpBuf+1, sWord, pTokenizer->GetTokenEnd() - pTokenStart );
-					dMultiToken.Add ( tFunctor.m_pDict->GetWordIDNonStemmed ( sTmpBuf ) );
-				}
-				// must be last because it can change (stem) sWord
-				dMultiToken.Add ( tFunctor.m_pDict->GetWordID ( sWord ) );
-				pBlendedEnd = Max ( pBlendedEnd, pTokenizer->GetTokenEnd() );
+				BYTE sTmpBuf [ 3*SPH_MAX_WORD_LEN+4];
+				sTmpBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
+				CopyString ( sTmpBuf+1, sWord, pTokenizer->GetTokenEnd() - pTokenStart );
+				dMultiToken.Add ( tFunctor.m_pDict->GetWordIDNonStemmed ( sTmpBuf ) );
 			}
 
+			// must be last because it can change (stem) sWord
+			dMultiToken.Add ( tFunctor.m_pDict->GetWordID ( sWord ) );
+			pBlendedEnd = Max ( pBlendedEnd, pTokenizer->GetTokenEnd() );
 			continue;
 		}
 

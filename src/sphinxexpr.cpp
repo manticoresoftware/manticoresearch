@@ -891,8 +891,17 @@ protected:
 		case JSON_INT32:	return (T)sphJsonLoadInt ( &pVal );
 		case JSON_INT64:	return (T)sphJsonLoadBigint ( &pVal );
 		case JSON_DOUBLE:	return (T)sphQW2D ( sphJsonLoadBigint ( &pVal ) );
-		case JSON_TRUE:		return (T)1;
-		default:			return (T)0;
+		case JSON_TRUE:		return 1;
+		case JSON_STRING:
+			{
+				int iLen = sphJsonUnpackInt ( &pVal );
+				int64_t iVal;
+				double fVal;
+				ESphJsonType eType;
+				if ( sphJsonStringToNumber ( (const char*)pVal, iLen, eType, iVal, fVal ) )
+					return eType==JSON_DOUBLE ? (T)fVal : (T)iVal;
+			}
+		default:			return 0;
 		}
 	}
 

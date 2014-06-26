@@ -133,6 +133,9 @@ int sphJsonFieldLength ( ESphJsonType eType, const BYTE * pData );
 /// inplace JSON update, both for realtime and non-realtime indexes, returns true if update is possible
 bool sphJsonInplaceUpdate ( ESphJsonType eValueType, int64_t iValue, ISphExpr * pExpr, BYTE * pStrings, const CSphRowitem * pRow, bool bUpdate );
 
+/// converts string to number
+bool sphJsonStringToNumber ( const char * s, int iLen, ESphJsonType & eType, int64_t & iVal, double & fVal );
+
 #endif // _sphinxjson_
 
 //

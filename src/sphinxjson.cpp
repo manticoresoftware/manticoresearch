@@ -20,8 +20,6 @@
 #include <io.h> // for isatty() in llsphinxjson.c
 #endif
 
-#include <math.h>
-
 //////////////////////////////////////////////////////////////////////////
 
 /// parser view on a generic node

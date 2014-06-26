@@ -8758,19 +8758,6 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 		sphSort ( tRes.m_dMatches.Begin(), tRes.m_dMatches.GetLength(), tReorder, MatchSortAccessor_t() );
 	}
 
-	// lets catch a (potential) minor application mistake
-	// if this check causes any grief, just erase it already
-	if ( iAgents )
-	{
-		int iIndexes = iLocals + iAgents;
-		int iOuter = tQuery.m_iOuterOffset+tQuery.m_iOuterLimit;
-		if ( tQuery.m_iLimit*iIndexes < iOuter )
-		{
-			tRes.m_sWarning.SetSprintf ( "inner limit too small (inner=%d by indexes=%d less than outer=%d)",
-				tQuery.m_iLimit, iIndexes, iOuter );
-		}
-	}
-
 	// compute post-limit stuff
 	if ( bAllEqual && iLocals )
 	{

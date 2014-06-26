@@ -1066,6 +1066,9 @@ bool sphJsonStringToNumber ( const char * s, int iLen, ESphJsonType & eType, int
 	while ( iLen>0 && ( *s==' ' || *s=='\n' || *s=='\r' || *s=='\t' || *s=='\f' ) )
 		s++, iLen--;
 
+	if ( iLen<=0 )
+		return false;
+
 	// check whether the string looks like a numeric
 	const char * p = s;
 	const char * pEnd = p+iLen-1;

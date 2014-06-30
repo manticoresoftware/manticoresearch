@@ -141,6 +141,9 @@ INSERT INTO `test_table` VALUES
 <!-- regression bad complex expression -->
 <sphinxql>select 50+ival*10 as ii1, 50+bad*10 from test</sphinxql>
 
+<!-- regression: aggregate dependencies -->
+<sphinxql>select ival*ival as p, sum(p), avg(p), min(p), max(p) from test</sphinxql>
+
 </sphqueries>
 
 </test>

@@ -5072,8 +5072,26 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 			tSorterSchema.AddDynamicAttr ( tExprCol );
 			if ( pExtra )
 				pExtra->AddAttr ( tExprCol, true );
-		}
 
+			/// update aggregate dependencies (e.g. SELECT 1+attr f1, min(f1), ...)
+			CSphVector<int> dCur;
+			tExprCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
+
+			ARRAY_FOREACH ( j, dCur )
+			{
+				const CSphColumnInfo & tCol = tSorterSchema.GetAttr ( dCur[j] );
+				if ( tCol.m_pExpr.Ptr() )
+					tCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
+			}
+			dCur.Uniq();
+
+			ARRAY_FOREACH ( j, dCur )
+			{
+				CSphColumnInfo & tDep = const_cast < CSphColumnInfo & > ( tSorterSchema.GetAttr ( dCur[j] ) );
+				if ( tDep.m_eStage>tExprCol.m_eStage )
+					tDep.m_eStage = tExprCol.m_eStage;
+			}
+		}
 		dQueryAttrs.Add ( sphFNV64 ( (const BYTE *)tExprCol.m_sName.cstr() ) );
 	}
 

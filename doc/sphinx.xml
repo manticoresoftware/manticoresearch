@@ -14298,6 +14298,42 @@ rlp_max_batch_docs = 100
 
 <appendix id="changelog"><title>Sphinx revision history</title>
 
+<sect1 id="rel224"><title>Version 2.2.4-beta, ??? july 2014</title>
+<bridgehead>New major features</bridgehead>
+<itemizedlist>
+<listitem><para>added ALTER RTINDEX rt1 RECONFIGURE which allows to change RT index settings on the fly</para></listitem>
+<listitem><para>added ability to specify several destination forms for the same source wordform (as a result, N:M mapping is now available)</para></listitem>
+<listitem><para>added SHOW INDEX idx1 SETTINGS statement</para></listitem>
+<listitem><para>added blended chars support to exceptions</para></listitem>
+</itemizedlist>
+
+<bridgehead>New minor features</bridgehead>
+<itemizedlist>
+<listitem><para>added ANY()/ALL()/INDEXOF() support for JSON string arrays</para></listitem>
+<listitem><para>added LIMIT clause for the FACET keyword</para></listitem>
+<listitem><para>added searchd configuration keys agent_connect_timeout, agent_query_timeout, agent_retry_count and agent_retry_delay</para></listitem>
+<listitem><para>added connections counter and also avg and max timers to agent status</para></listitem>
+<listitem><para>added #1999 ATAN2() function</para></listitem>
+</itemizedlist>
+
+<bridgehead>Optimizations and removals</bridgehead>
+<itemizedlist>
+<listitem><para>optimized tokenizing with expections on</para></listitem>
+<listitem><para>optimized json_autoconv_numbers option speed</para></listitem>
+</itemizedlist>
+
+<bridgehead>Bug fixes</bridgehead>
+<itemizedlist>
+<listitem><para>fixed #1963, GROUPBY() on JSON attributes sometimes yields NULL</para></listitem>
+<listitem><para>fixed GROUPBY() on empty JSON arrays to return NULL instead of []</para></listitem>
+<listitem><para>fixed #1966, INTERVAL() function does not work with JSON fields</para></listitem>
+<listitem><para>fixed #1972, daemon crashes trying to read a big (>8G) .spm file</para></listitem>
+<listitem><para>fixed cpu time logging for cases where work is done in child threads or agents</para></listitem>
+<listitem><para>fixed #2005, aggregate functions improperly calculate aliased expressions</para></listitem>
+</itemizedlist>
+</sect1>
+
+
 <sect1 id="rel223"><title>Version 2.2.3-beta, 13 may 2014</title>
 <bridgehead>New features</bridgehead>
 <itemizedlist>

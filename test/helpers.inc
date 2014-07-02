@@ -1143,7 +1143,7 @@ class SphinxConfig
 			if ( $query=="RECONNECT" )
 			{
 				mysqli_close($connection);
-				if (!($connection = $this->ConnectQL()))
+				if (!($connection = ConnectQL()))
 					return false;
 
 				$r = array("sphinxql"=>$query, "error"=>"reconnected ok!", "errno"=>0);

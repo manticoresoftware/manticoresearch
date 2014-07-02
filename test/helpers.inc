@@ -520,11 +520,6 @@ class QLClient
 {
 	private $_conn = false;
 
-	function QLClient()
-	{
-		$this->Reconnect();
-	}
-
 	function Reconnect()
 	{
 		if ($this->_conn!==false)

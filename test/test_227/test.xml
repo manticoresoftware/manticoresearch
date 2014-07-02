@@ -142,6 +142,7 @@ $results[] = $client->XQuery ( "", "dist2" );
 
 
 // regression crash on SphinxQL packet overflow max_packet_size
+$ql->Reconnect();
 $results[] = $ql->Query ( "SHOW STATUS LIKE 'connections'" );
 $results[] = $ql->Query ( "SHOW STATUS LIKE 'command_status'" );
 $results[] = $ql->Query ( "SHOW STATUS LIKE 'queries'" );

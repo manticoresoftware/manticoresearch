@@ -256,7 +256,7 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 		if ( !$port )
 			$port = $sd_port;
 
-		$cl = new SphinxClient ();
+		$cl = new APIClient;
 		$cl->SetServer ( $addr, $port );	
 		$cl->SetConnectTimeout ( 10 );
 		
@@ -507,6 +507,72 @@ function GetFirstChildValue ( $node, $name, $default="" )
 	return is_null($child) ? $default : $child->nodeValue;
 }
 
+
+function ConnectQL()
+{
+	global $sd_address, $sd_sphinxql_port;
+	if ($sd_address == "localhost")
+		$sd_address = "127.0.0.1";
+	return @mysqli_connect ( $sd_address, '', '', '', $sd_sphinxql_port );
+}
+
+class QLClient
+{
+	private $_conn = false;
+
+	function QLClient()
+	{
+		$this->Reconnect();
+	}
+
+	function Reconnect()
+	{
+		if ($this->_conn!==false)
+			@mysqli_close($this->_conn);
+		$this->_conn = ConnectQL();
+		return $this->_conn!==false;
+	}
+
+	function Query($q)
+	{
+		if ($this->_conn===false)
+			return "NOT CONNECTED";
+
+		$r = @mysqli_query($this->_conn, $q);
+		if (!$r)
+			return "ERROR: ".mysqli_error($this->_conn);
+
+		$n = 0;
+		$res = "";
+		while ($row = mysqli_fetch_row($r))
+		{
+			$res .= join(" | ", $row) . "\n";
+			$n++;
+		}
+		$res .= "$n rows";
+		return $res;
+	}
+}
+
+class APIClient extends SphinxClient
+{
+	function XQuery ( $query, $index="*", $comment="" )
+	{
+		$res = $this->Query($query, $index, $comment);
+		if ($res===false)
+			return $this->GetLastError();
+		unset($res["time"]);
+		return $res;
+	}
+
+	function XUpdateAttributes ( $index, $attrs, $values, $mva=false, $ignorenonexistent=false )
+	{
+		$res = $this->UpdateAttributes ( $index, $attrs, $values, $mva, $ignorenonexistent );
+		if ($res===false)
+			return $this->GetLastError();
+		return $res;
+	}
+}
 
 class SphinxConfig
 {
@@ -1043,20 +1109,16 @@ class SphinxConfig
 		return $s;
 	}
 
-
 	function RunQuerySphinxQL ( &$error, $bench=false )
 	{
-		global $sd_address, $sd_sphinxql_port, $action_retries, $action_wait_timeout, $g_pick_query;
+		global $g_pick_query;
 
 		$total = $done = 0;
-		if ($sd_address == "localhost")
-			$sd_address = "127.0.0.1";
-		$connection = @mysqli_connect ( $sd_address, '', '', '', $sd_sphinxql_port );
-		if ( $connection === false )
-			return false;
 		$qcount = count($this->_sphqueries);
 		if ( $bench === true )
 			$qcount *= 2;
+		if (!($connection = $this->ConnectQL()))
+			return false;
 
 		$qmin = 0;
 		$qmax = $qcount - 1;
@@ -1067,12 +1129,30 @@ class SphinxConfig
 		}
 		for ( $n=$qmin; $n<=$qmax; $n++ )
 		{
-			$query = 'show meta';
 			if ( $bench === false )
+			{
 				$query = $this->_sphqueries[$n];
-			else if ( ($n%2)==0 )
-				$query = $this->_sphqueries[$n/2];
-		
+			} else
+			{
+				if ( ($n%2)==0 )
+					$query = $this->_sphqueries[$n/2];
+				else
+					$query = 'show meta';
+			}
+
+			if ( $query=="RECONNECT" )
+			{
+				mysqli_close($connection);
+				if (!($connection = $this->ConnectQL()))
+					return false;
+
+				$r = array("sphinxql"=>$query, "error"=>"reconnected ok!", "errno"=>0);
+				$this->_results[] = $r;
+				if ( IsModelGenMode () )
+					$this->_results_model[$this->SubtestNo ()][] = $r;
+				continue;
+			}
+
 			$query_result = array ();
 			
 			$no_time = false;
@@ -1180,11 +1260,11 @@ class SphinxConfig
 		else
 			$compact = false;
 
-		$cl = new SphinxClient;
+		$cl = new APIClient;
 		$pconn = $benchmark && method_exists ( $cl, 'Open' );
 		if ( $pconn )
 		{
-			$cl = new SphinxClient ();
+			$cl = new APIClient;
 			$cl->SetServer ( $sd_address, $sd_port );
 			$cl->Open ();
 		}
@@ -1230,7 +1310,7 @@ class SphinxConfig
 				{
 					if ( !$pconn )
 					{
-						$cl = new SphinxClient ();
+						$cl = new APIClient();
 						$cl->SetServer ( $sd_address, $sd_port );
 					} else
 					{
@@ -1352,7 +1432,6 @@ class SphinxConfig
 		return TRUE;
 	}
 
-	
 	function RunCustomTest ( & $error )
 	{
 		global $sd_address, $sd_port, $action_retries, $action_wait_timeout, $g_locals;
@@ -1362,11 +1441,11 @@ class SphinxConfig
 
 		for ( $i = 0; $i < $action_retries && !$bOk; $i++ )
 		{
-			$cl = new SphinxClient ();
+			$cl = new APIClient;
 			$cl->SetServer ( $sd_address, $sd_port );
 
 			$results = false;
-			$run_func = create_function( '$client, &$results', $this->_custom_test );
+			$run_func = create_function( '$client, $ql, &$results', $this->_custom_test );
 
 			if ( !@mysql_connect ( $g_locals['db-host'].":".$g_locals['db-port'], $g_locals['db-user'], $g_locals['db-password'] ) )
 				return FALSE;
@@ -1374,7 +1453,8 @@ class SphinxConfig
 				return FALSE;
 
 			$GLOBALS["this_test"] = $this->_testdir;
-			$run_func ( $cl, $results );
+			$ql = new QLClient();
+			$run_func ( $cl, $ql, $results );
 
 			@mysql_close();
 

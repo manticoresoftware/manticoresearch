@@ -1117,7 +1117,7 @@ class SphinxConfig
 		$qcount = count($this->_sphqueries);
 		if ( $bench === true )
 			$qcount *= 2;
-		if (!($connection = $this->ConnectQL()))
+		if (!($connection = ConnectQL()))
 			return false;
 
 		$qmin = 0;

@@ -256,7 +256,7 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 		if ( !$port )
 			$port = $sd_port;
 
-		$cl = new APIClient;
+		$cl = new SphinxClient;
 		$cl->SetServer ( $addr, $port );	
 		$cl->SetConnectTimeout ( 10 );
 		

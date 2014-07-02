@@ -8784,8 +8784,18 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 			pProfiler->Switch ( eOld );
 	}
 
-	// replace groupby() and aliased groupby() with @groupbystr in the final result
+	// remap groupby() and aliased groupby() to @groupbystr or string attribute
 	const CSphColumnInfo * p = tRes.m_tSchema.GetAttr ( "@groupbystr" );
+	if ( !p )
+	{
+		// try string attribute (multiple group-by still displays hashes)
+		if ( !tQuery.m_sGroupBy.IsEmpty() )
+		{
+			p = tRes.m_tSchema.GetAttr ( tQuery.m_sGroupBy.cstr() );
+			if ( p && ( p->m_eAttrType!=SPH_ATTR_STRING && p->m_eAttrType!=SPH_ATTR_STRINGPTR ) )
+				p = NULL;
+		}
+	}
 	if ( p )
 	{
 		ARRAY_FOREACH ( i, dFrontend )
@@ -8800,9 +8810,9 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 		}
 
 		// check aliases too
-		ARRAY_FOREACH ( i, tQuery.m_dItems )
+		ARRAY_FOREACH ( j, tQuery.m_dItems )
 		{
-			const CSphQueryItem & tItem = tQuery.m_dItems[i];
+			const CSphQueryItem & tItem = tQuery.m_dItems[j];
 			if ( tItem.m_sExpr=="groupby()" )
 			{
 				ARRAY_FOREACH ( i, dFrontend )

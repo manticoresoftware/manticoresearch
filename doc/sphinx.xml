@@ -10888,12 +10888,11 @@ core 2duo =&gt; c2d # Some people write '2duo' together...
 </programlisting>
 </para>
 <para>
-Notice however that the <emphasis>destination</emphasis> wordforms
-are still always interpreted as a <emphasis>single</emphasis> keyword!
-Having a mapping like "St John > Saint John" will result in <b>not</b>
-matching "St John" when searching for "Saint" or "John", because the
-destination keyword will be "Saint John" with a space character in it
-(and it's barely possible to input a destination keyword with a space).
+Stating with version 2.2.4, you can specify multiple destination tokens:
+<programlisting>
+s02e02 &gt; season 2 episode 2
+s3 e3 &gt; season 3 episode 3
+</programlisting>
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>

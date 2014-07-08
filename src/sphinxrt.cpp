@@ -1313,6 +1313,7 @@ RtIndex_t::~RtIndex_t ()
 	ARRAY_FOREACH ( i, m_dRamChunks )
 		SafeDelete ( m_dRamChunks[i] );
 
+	m_dRetired.Uniq();
 	ARRAY_FOREACH ( i, m_dRetired )
 		SafeDelete ( m_dRetired[i] );
 
@@ -3178,6 +3179,7 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 
 void RtIndex_t::FreeRetired()
 {
+	m_dRetired.Uniq();
 	ARRAY_FOREACH ( i, m_dRetired )
 	{
 		if ( m_dRetired[i]->m_tRefCount==0 )

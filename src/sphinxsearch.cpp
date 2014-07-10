@@ -222,7 +222,7 @@ protected:
 		m_dDocs[iCount].m_uDocid = DOCID_MAX;
 
 		#if QDEBUG
-		printf ( "qdebug: node %s %d:%08x getdocs = [", sNode ? sNode : "???", m_iAtomPos, int(this) );
+		printf ( "qdebug: node %s %d:%p getdocs = [", sNode ? sNode : "???", m_iAtomPos, this );
 		for ( int i=0; i<iCount; i++ )
 			printf ( i ? ", %d" : "%d", int ( m_dDocs[i].m_uDocid ) );
 		printf ( "]\n" );
@@ -237,7 +237,7 @@ protected:
 		m_dHits[iCount].m_uDocid = DOCID_MAX;
 
 		#if QDEBUG
-		printf ( "qdebug: node %s %d:%08x gethits = [", sNode ? sNode : "???", m_iAtomPos, int(this) );
+		printf ( "qdebug: node %s %d:%p gethits = [", sNode ? sNode : "???", m_iAtomPos, this );
 		for ( int i=0; i<iCount; i++ )
 			printf ( i ? ", %d:%d.%d" : "%d:%d.%d", int ( m_dHits[i].m_uDocid ),
 			HITMAN::GetField ( m_dHits[i].m_uHitpos ), HITMAN::GetPos ( m_dHits[i].m_uHitpos ) );
@@ -653,7 +653,6 @@ public:
 	{
 		m_dNodePos[0] = uPosLeft;
 		m_dNodePos[1] = uPosRight;
-		m_bPosAware = true;
 	}
 
 	virtual void HintDocid ( SphDocID_t uMinID )
@@ -672,7 +671,6 @@ protected:
 	const ExtDoc_t *			m_pCurDoc[2];
 	const ExtHit_t *			m_pCurHit[2];
 	WORD						m_dNodePos[2];
-	bool						m_bPosAware;
 	SphDocID_t					m_uMatchedDocid;
 };
 
@@ -2641,7 +2639,6 @@ inline void	ExtTwofer_c::Init ( ExtNode_i * pFirst, ExtNode_i * pSecond, const I
 	m_pCurDoc[1] = NULL;
 	m_dNodePos[0] = 0;
 	m_dNodePos[1] = 0;
-	m_bPosAware = false;
 	m_uMatchedDocid = 0;
 	m_iAtomPos = ( pFirst && pFirst->m_iAtomPos ) ? pFirst->m_iAtomPos : 0;
 	if ( pSecond && pSecond->m_iAtomPos && pSecond->m_iAtomPos<m_iAtomPos && m_iAtomPos!=0 )

@@ -863,12 +863,10 @@ public:
 		: ExtNWayT ( dNodes, tSetup )
 		, FSM ( dNodes, tNode, tSetup )
 	{
-		bool bTerms = FSM::bTermsTree; // workaround MSVC const condition warning
 		CSphVector<WORD> dPositions ( dNodes.GetLength() );
 		ARRAY_FOREACH ( i, dPositions )
 			dPositions[i] = (WORD) i;
-		if ( bTerms )
-			dPositions.Sort ( ExtNodeTFExt_fn ( dNodes ) );
+		dPositions.Sort ( ExtNodeTFExt_fn ( dNodes ) );
 		ConstructNode ( dNodes, dPositions, tSetup );
 	}
 
@@ -895,8 +893,6 @@ protected:
 	};
 
 protected:
-	static const bool			bTermsTree = true;		///< we work with ExtTerm nodes
-
 								FSMphrase ( const CSphVector<ExtNode_i *> & dQwords, const XQNode_t & tNode, const ISphQwordSetup & tSetup );
 	bool						HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget );
 
@@ -919,8 +915,6 @@ typedef ExtNWay_c < FSMphrase > ExtPhrase_c;
 class FSMproximity
 {
 protected:
-	static const bool			bTermsTree = true;		///< we work with ExtTerm nodes
-
 								FSMproximity ( const CSphVector<ExtNode_i *> & dQwords, const XQNode_t & tNode, const ISphQwordSetup & tSetup );
 	bool						HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget );
 
@@ -953,8 +947,6 @@ typedef ExtNWay_c<FSMproximity> ExtProximity_c;
 class FSMmultinear
 {
 protected:
-	static const bool			bTermsTree = true;	///< we work with generic (not just ExtTerm) nodes
-
 								FSMmultinear ( const CSphVector<ExtNode_i *> & dNodes, const XQNode_t & tNode, const ISphQwordSetup & tSetup );
 	bool						HitFSM ( const ExtHit_t * pHit, ExtHit_t * dTarget );
 
@@ -3678,7 +3670,7 @@ FSMphrase::FSMphrase ( const CSphVector<ExtNode_i *> & dQwords, const XQNode_t &
 		m_uQposMask = GetQposMask ( dQwords );
 }
 
-inline bool FSMphrase::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
+inline bool FSMphrase::HitFSM ( const ExtHit_t * pHit, ExtHit_t * pTarget )
 {
 	DWORD uHitposWithField = HITMAN::GetPosWithField ( pHit->m_uHitpos );
 
@@ -3712,12 +3704,12 @@ inline bool FSMphrase::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 			DWORD uSpanlen = m_dAtomPos.Last() - m_dAtomPos[0];
 
 			// emit directly into m_dHits, this is no need to disturb m_dMyHits here.
-			dTarget->m_uDocid = pHit->m_uDocid;
-			dTarget->m_uHitpos = uHitposWithField - uSpanlen;
-			dTarget->m_uQuerypos = (WORD) m_dAtomPos[0];
-			dTarget->m_uMatchlen = dTarget->m_uSpanlen = (WORD)( uSpanlen + 1 );
-			dTarget->m_uWeight = m_dAtomPos.GetLength();
-			dTarget->m_uQposMask = m_uQposMask;
+			pTarget->m_uDocid = pHit->m_uDocid;
+			pTarget->m_uHitpos = uHitposWithField - uSpanlen;
+			pTarget->m_uQuerypos = (WORD) m_dAtomPos[0];
+			pTarget->m_uMatchlen = pTarget->m_uSpanlen = (WORD)( uSpanlen + 1 );
+			pTarget->m_uWeight = m_dAtomPos.GetLength();
+			pTarget->m_uQposMask = m_uQposMask;
 			ResetFSM ();
 			return true;
 		}
@@ -3744,7 +3736,7 @@ FSMproximity::FSMproximity ( const CSphVector<ExtNode_i *> & dQwords, const XQNo
 		m_uQposMask = GetQposMask ( dQwords );
 }
 
-inline bool FSMproximity::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
+inline bool FSMproximity::HitFSM ( const ExtHit_t* pHit, ExtHit_t* pTarget )
 {
 	// walk through the hitlist and update context
 	int iQindex = pHit->m_uQuerypos - m_uMinQpos;
@@ -3811,12 +3803,12 @@ inline bool FSMproximity::HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget )
 	}
 
 	// emit hit
-	dTarget->m_uDocid = pHit->m_uDocid;
-	dTarget->m_uHitpos = Hitpos_t ( m_dProx[m_iMinQindex] ); // !COMMIT strictly speaking this is creation from LCS not value
-	dTarget->m_uQuerypos = (WORD) m_uMinQpos;
-	dTarget->m_uSpanlen = dTarget->m_uMatchlen = (WORD)( uMax-m_dProx[m_iMinQindex]+1 );
-	dTarget->m_uWeight = uWeight;
-	dTarget->m_uQposMask = m_uQposMask;
+	pTarget->m_uDocid = pHit->m_uDocid;
+	pTarget->m_uHitpos = Hitpos_t ( m_dProx[m_iMinQindex] ); // !COMMIT strictly speaking this is creation from LCS not value
+	pTarget->m_uQuerypos = (WORD) m_uMinQpos;
+	pTarget->m_uSpanlen = pTarget->m_uMatchlen = (WORD)( uMax-m_dProx[m_iMinQindex]+1 );
+	pTarget->m_uWeight = uWeight;
+	pTarget->m_uQposMask = m_uQposMask;
 
 	// remove current min, and force recompue
 	m_dProx[m_iMinQindex] = UINT_MAX;

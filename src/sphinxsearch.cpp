@@ -7156,7 +7156,8 @@ protected:
 
 private:
 	virtual bool	ExtraDataImpl ( ExtraData_e eType, void ** ppResult );
-	BYTE *			PackFactors ( int * pSize = NULL );
+	int				GetMaxPackedLength();
+	BYTE *			PackFactors();
 };
 
 /// extra expression ranker node types
@@ -8400,22 +8401,19 @@ void RankerState_Expr_fn<PF, HANDLE_DUPES>::UpdateMinGaps ( const ExtHit_t * pHl
 }
 
 
-template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >
-BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::PackFactors ( int * pSize )
+template<bool A1,bool A2>
+int RankerState_Expr_fn<A1,A2>::GetMaxPackedLength()
 {
-	DWORD * pPackStart = NULL;
+	return sizeof(DWORD)*( 8 + m_tExactHit.GetSize() + m_tExactOrder.GetSize() + m_iFields*15 + m_iMaxQpos*4 + m_dFieldTF.GetLength() );
+}
 
-	if ( pSize )
-	{
-		const DWORD MAX_PACKED_SIZE = 2048;
-		pPackStart = new DWORD [ MAX_PACKED_SIZE ];
-	} else
-	{
-		pPackStart = (DWORD *)m_tFactorPool.Alloc();
-		assert ( pPackStart );
-	}
 
+template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >
+BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::PackFactors()
+{
+	DWORD * pPackStart = (DWORD *)m_tFactorPool.Alloc();
 	DWORD * pPack = pPackStart;
+	assert ( pPackStart );
 
 	// leave space for size
 	pPack++;
@@ -8439,8 +8437,7 @@ BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::PackFactors ( int 
 	{
 		DWORD uHit = m_uHitCount[i];
 		*pPack++ = uHit;
-
-		if ( uHit || pSize )
+		if ( uHit )
 		{
 			*pPack++ = (DWORD)i;
 			*pPack++ = m_uLCS[i];
@@ -8466,7 +8463,7 @@ BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::PackFactors ( int 
 	{
 		DWORD uKeywordMask = !IsTermSkipped(i); // !COMMIT !m_tExcluded.BitGet(i);
 		*pPack++ = uKeywordMask;
-		if ( uKeywordMask || pSize )
+		if ( uKeywordMask )
 		{
 			*pPack++ = (DWORD)i;
 			*pPack++ = (DWORD)m_dTF[i];
@@ -8477,21 +8474,11 @@ BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::PackFactors ( int 
 	// m_dFieldTF = iWord + iField * ( 1 + iWordsCount )
 	// FIXME! pack these sparse factors ( however these should fit into fixed-size FactorPool block )
 	*pPack++ = m_dFieldTF.GetLength();
-	if ( !pSize )
-		memcpy ( pPack, m_dFieldTF.Begin(), m_dFieldTF.GetLength()*sizeof(m_dFieldTF[0]) );
+	memcpy ( pPack, m_dFieldTF.Begin(), m_dFieldTF.GetLength()*sizeof(m_dFieldTF[0]) );
 	pPack += m_dFieldTF.GetLength();
 
 	*pPackStart = (pPack-pPackStart)*sizeof(DWORD);
-
-	if ( pSize )
-	{
-		*pSize = (pPack-pPackStart)*sizeof(DWORD);
-		delete [] pPackStart;
-		return NULL;
-	}
-
 	assert ( (pPack-pPackStart)*sizeof(DWORD)<=(DWORD)m_tFactorPool.GetElementSize() );
-
 	return (BYTE*)pPackStart;
 }
 
@@ -8566,12 +8553,7 @@ DWORD RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Finalize ( const CS
 	{
 		// pack factors
 		if ( !m_tFactorPool.IsInitialized() )
-		{
-			int iPoolElementSize = 0;
-			PackFactors ( &iPoolElementSize );
-			m_tFactorPool.Prealloc ( iPoolElementSize, m_iMaxMatches+ExtNode_i::MAX_DOCS );
-		}
-
+			m_tFactorPool.Prealloc ( GetMaxPackedLength(), m_iMaxMatches+ExtNode_i::MAX_DOCS );
 		m_tFactorPool.AddToHash ( tMatch.m_uDocID, PackFactors() );
 	}
 

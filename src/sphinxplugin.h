@@ -40,7 +40,7 @@ typedef int				(*RankerDeinit_fn)		( void * userdata );
 typedef int				(*TokenFilterInit_fn)			( void ** userdata, int num_fields, const char ** field_names, const char * options, char * error_message );
 typedef int				(*TokenFilterBeginDocument_fn)	( void * userdata, const char * options, char * error_message );
 typedef void			(*TokenFilterBeginField_fn)		( void * userdata, int field_index );
-typedef char *			(*TokenFilterPushToken_fn)		( void * userdata, const char * token, int * extra, int * delta );
+typedef char *			(*TokenFilterPushToken_fn)		( void * userdata, char * token, int * extra, int * delta );
 typedef char *			(*TokenFilterGetExtraToken_fn)	( void * userdata, int * delta );
 typedef int				(*TokenFilterEndField_fn)		( void * userdata );
 typedef void			(*TokenFilterDeinit_fn)			( void * userdata );

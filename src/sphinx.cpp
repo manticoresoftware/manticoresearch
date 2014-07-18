@@ -4937,7 +4937,7 @@ public:
 
 			// push raw token to plugin, return a processed one, if any
 			int iExtra = 0;
-			BYTE * pTok = (BYTE*)m_pFilter->m_fnPushToken ( m_pUserdata, (const char*)pRaw, &iExtra, &m_iPosDelta );
+			BYTE * pTok = (BYTE*)m_pFilter->m_fnPushToken ( m_pUserdata, (char*)pRaw, &iExtra, &m_iPosDelta );
 			m_bGotExtra = ( iExtra!=0 );
 			if ( pTok )
 				return pTok;

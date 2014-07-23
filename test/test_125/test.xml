@@ -249,6 +249,8 @@ INSERT INTO cmp_table VALUES
 <sphinxql>SELECT ATAN2(0.75,0.25) FROM test WHERE id=10</sphinxql>
 <sphinxql>SELECT ATAN2(0.25,0.75) FROM test WHERE id=10</sphinxql>
 
+<sphinxql>SELECT GEODIST(0,0,1,1,{in=radians,out=kilometers}) FROM test WHERE id=10</sphinxql>
+
 </sphqueries>
 
 </test>

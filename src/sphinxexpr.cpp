@@ -5205,13 +5205,13 @@ ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 
 			} else if ( t.m_sKey=="out" )
 			{
-				if ( t.m_sValue=="km" || t.m_sKey=="kilometers" )
+				if ( t.m_sValue=="km" || t.m_sValue=="kilometers" )
 					fOut = 1.0f / 1000.0f;
-				else if ( t.m_sValue=="mi" || t.m_sKey=="miles" )
+				else if ( t.m_sValue=="mi" || t.m_sValue=="miles" )
 					fOut = 1.0f / 1609.34f;
-				else if ( t.m_sValue=="ft" || t.m_sKey=="feet" )
+				else if ( t.m_sValue=="ft" || t.m_sValue=="feet" )
 					fOut = 1.0f / 0.3048f;
-				else if ( t.m_sValue=="m" || t.m_sKey=="meters" )
+				else if ( t.m_sValue=="m" || t.m_sValue=="meters" )
 					fOut = 1.0f;
 			} else if ( t.m_sKey=="method" )
 			{

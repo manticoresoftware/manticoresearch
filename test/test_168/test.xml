@@ -58,6 +58,20 @@ index idx2
 <sphinxql>CALL SNIPPETS ('What are you need here+ (exactly)?', 'idx2', '\(exactly\)', 1 as query_mode, 3 as limit_passages, 2 as around)</sphinxql>
 <sphinxql>CALL SNIPPETS ('What are you need here+ (exactly)?', 'idx2', '\(exactly\)', 1 as query_mode, 0 as around, 0 as limit)</sphinxql>
 
+<!-- regression hightlight of blend-char along with term -->
+<sphinxql>CALL SNIPPETS ('abc +hashtag abc', 'idx2', '+hashtag', 0 as query_mode, 0 as around, 0 as limit)</sphinxql>
+<sphinxql>CALL SNIPPETS ('abc +hashtag abc', 'idx2', '+hashtag', 1 as query_mode, 0 as around, 0 as limit)</sphinxql>
+<sphinxql>CALL SNIPPETS ('abc +hashtag +hashtag abc', 'idx2', '+hashtag', 0 as query_mode, 0 as around, 0 as limit)</sphinxql>
+<sphinxql>CALL SNIPPETS ('abc +hashtag +hashtag abc', 'idx2', '+hashtag', 1 as query_mode, 0 as around, 0 as limit)</sphinxql>
+<sphinxql>CALL SNIPPETS ('abc +hashtag +hashtag', 'idx2', '+hashtag', 0 as query_mode, 0 as around, 0 as limit)</sphinxql>
+<sphinxql>CALL SNIPPETS ('abc +hashtag +hashtag', 'idx2', '+hashtag', 1 as query_mode, 0 as around, 0 as limit)</sphinxql>
+<sphinxql>CALL SNIPPETS ('abc +hashtag+bag abc', 'idx2', '+hashtag', 0 as query_mode, 0 as around, 0 as limit)</sphinxql>
+<sphinxql>CALL SNIPPETS ('abc +hashtag+bag abc', 'idx2', '+hashtag', 1 as query_mode, 0 as around, 0 as limit)</sphinxql>
+<sphinxql>CALL SNIPPETS ('abc +hashtag+bag abc', 'idx2', '+hashtag+bag', 0 as query_mode, 0 as around, 0 as limit)</sphinxql>
+<sphinxql>CALL SNIPPETS ('abc +hashtag+bag abc', 'idx2', '+hashtag+bag', 1 as query_mode, 0 as around, 0 as limit)</sphinxql>
+<sphinxql>CALL SNIPPETS ('abc +hashtag+bag abc', 'idx2', '+hashtag +bag', 0 as query_mode, 0 as around, 0 as limit)</sphinxql>
+<sphinxql>CALL SNIPPETS ('abc +hashtag+bag abc', 'idx2', '+hashtag +bag', 1 as query_mode, 0 as around, 0 as limit)</sphinxql>
+
 </sphqueries>
 
 <db_create>

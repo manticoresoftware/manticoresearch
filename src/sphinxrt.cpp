@@ -6857,7 +6857,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		tExpCtx.m_bHasMorphology = m_pDict->HasMorphology();
 		tExpCtx.m_bMergeSingles = true;
 		tExpCtx.m_pPayloads = &tPayloads;
-		tExpCtx.m_pIndexData = &tGuard;
+		tExpCtx.m_pIndexData = &tGuard.m_dRamChunks;
 
 		tParsed.m_pRoot = sphExpandXQNode ( tParsed.m_pRoot, tExpCtx );
 	}

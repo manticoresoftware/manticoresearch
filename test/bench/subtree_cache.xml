@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>subtree caches</name>
+
+<config>
+indexer
+{
+	mem_limit = 512M
+}
+
+searchd
+{
+	<searchd_settings/>
+	<dynamic>
+	  <variant>
+		subtree_docs_cache = 256M
+		subtree_hits_cache = 256M
+	  </variant>
+	  <variant>
+	  </variant>
+	</dynamic>
+}
+
+source lj
+{
+	type = mysql
+	<sql_settings sql_db="lj" />
+
+	sql_query = select id, \
+		uncompress(content) content, \
+		channel_id \
+		from posting
+
+	sql_attr_uint = channel_id
+}
+
+index lj
+{
+	source	= lj
+	path	= <local>data</local>/lj
+}
+</config>
+
+<custom_test><![CDATA[
+
+// in this query cache is harmful and brins slow-down up to 1.5 times
+$client->AddQuery('one two 1');
+$client->AddQuery('one two 2');
+$client->AddQuery('one two 3');
+$results = $client->RunQueries();
+for ($i = 0; $i < 3; ++$i)
+	if (is_array($results) && is_array($results[$i]))
+		unset($results[$i]["time"]);
+
+// in this query we can see a major speed-up due to using caches
+$client->AddQuery("is s" me);
+$client->AddQuery("is s" you);
+$client->AddQuery("is s" him);
+$client->AddQuery("is s" she);
+$client->AddQuery("is s" her);
+$client->AddQuery("is s" he);
+$client->AddQuery("is s" we);
+$client->AddQuery("is s" they);
+$client->AddQuery("is s" the);
+$client->AddQuery("is s" br);
+$results = $client->RunQueries();
+for ($i = 0; $i < 10; ++$i)
+	if (is_array($results) && is_array($results[$i]))
+		unset($results[$i]["time"]);
+
+]]></custom_test>
+</test>

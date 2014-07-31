@@ -773,7 +773,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			const char * sWordform = (const char *)m_pTokenizer->GetToken();
 			bool bTok = ( sWordform!=NULL );
 			int iTokLength = m_pTokenizer->GetLastTokenLen();
-			iTokLength = Min ( iTokLength, p-sToken );
+			iTokLength = Min ( p-sToken, iTokLength );
 			if ( bTok && m_pTokenizer->TokenIsBlended() && !( bQuorum || bQuorumPercent ) ) // number with blended should be tokenized as usual
 			{
 				m_pTokenizer->SkipBlended();

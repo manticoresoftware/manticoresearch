@@ -14487,6 +14487,18 @@ rlp_max_batch_docs = 100
 </itemizedlist>
 </sect1>
 
+<sect1 id="rel219"><title>Version 2.1.9-release, 03 jul 2014</title>
+<bridgehead>Bug fixes</bridgehead>
+<itemizedlist>
+  <listitem><para>fixed #1994, parsing of empty JSON arrays</para></listitem>
+  <listitem><para>fixed #1987, handling of <link linkend="conf-index-exact-words">index_exact_words</link> with AOT morphology and infixes on</para></listitem>
+  <listitem><para>fixed #1984, teaching HTML parser to handle hex numbers</para></listitem>
+  <listitem><para>fixed #1983, master and agents networking issue</para></listitem>
+  <listitem><para>fixed #1977, escaping of characters doens't work with exceptions</para></listitem>
+  <listitem><para>fixed #1968, parsing of <link linkend="sphinxql-select">WEIGHT()</link> function (queries to distributed indexes affected)</para></listitem>
+ </itemizedlist>
+</sect1>
+
 <sect1 id="rel218"><title>Version 2.1.8-release, 28 apr 2014</title>
 <bridgehead>Bug fixes</bridgehead>
 <itemizedlist>

@@ -770,13 +770,21 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			bool bQuorum = ( m_iQuorumQuote==m_iQuorumFSlash && m_iQuorumFSlash==m_iAtomPos );
 			bool bQuorumPercent = ( bQuorum && iDots==1 );
 
-			bool bTok = ( m_pTokenizer->GetToken()!=NULL );
+			const char * sWordform = (const char *)m_pTokenizer->GetToken();
+			bool bTok = ( sWordform!=NULL );
+			int iTokLength = m_pTokenizer->GetLastTokenLen();
+			iTokLength = Min ( iTokLength, p-sToken );
 			if ( bTok && m_pTokenizer->TokenIsBlended() && !( bQuorum || bQuorumPercent ) ) // number with blended should be tokenized as usual
 			{
 				m_pTokenizer->SkipBlended();
 				m_pTokenizer->SetBufferPtr ( m_pLastTokenStart );
 			} else if ( bTok && m_pTokenizer->WasTokenSynonym() && !( bQuorum || bQuorumPercent ) )
 			{
+				m_pTokenizer->SetBufferPtr ( m_pLastTokenStart );
+			} else if ( bTok && m_pTokenizer->GetTokenStart()==sToken && strncmp ( sToken, sWordform, iTokLength )!=0 )
+			{
+				// that is regular keyword not just a number
+				// multi-word word-form started with a number
 				m_pTokenizer->SetBufferPtr ( m_pLastTokenStart );
 			} else
 			{

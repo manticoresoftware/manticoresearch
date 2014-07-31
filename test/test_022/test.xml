@@ -56,6 +56,12 @@ index test_num
 <query index="test_num">s02e02</query>
 <query index="test_num">season 2 episode 2</query>
 <query index="test_num">season 3 episode 3</query>
+
+<!-- regression wordform with leading number -->
+<!-- meta should match for all queries below-->
+<query index="test_num">test 1</query>
+<query index="test_num">1 test</query>
+<query index="test_num">test one</query>
 </queries>
 
 <sphqueries>

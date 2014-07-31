@@ -10798,9 +10798,6 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 					m_dString2Free.Add ( dStringStorage.LeakData() );
 				}
 			}
-
-			if ( tFirst.m_iRetryDelay && !bDistDone )
-				sphSleepMsec ( tFirst.m_iRetryDelay );
 		} // while ( !bDistDone )
 	} // if ( bDist && dAgents.GetLength() )
 

@@ -33,7 +33,7 @@ struct IFilter_Attr: virtual ISphFilter
 };
 
 /// values
-struct IFilter_Values: virtual ISphFilter
+struct IFilter_Values : virtual ISphFilter
 {
 	const SphAttr_t *	m_pValues;
 	int					m_iValueCount;
@@ -1211,11 +1211,72 @@ static ISphFilter * CreateFilterJson ( const CSphColumnInfo * DEBUGARG(pAttr), I
 }
 
 //////////////////////////////////////////////////////////////////////////
+// KillList STUFF
+//////////////////////////////////////////////////////////////////////////
+
+static int g_iKillMerge = 128;
+
+struct Filter_KillList : public ISphFilter
+{
+	KillListVector			m_dExt;
+	CSphVector<SphDocID_t>	m_dMerged;
+
+	explicit Filter_KillList ( const KillListVector & dKillList )
+	{
+		m_bUsesAttrs = false;
+		m_dExt = dKillList;
+
+		int iMerged = 0;
+		if ( m_dExt.GetLength()>1 )
+		{
+			ARRAY_FOREACH ( i, m_dExt )
+			{
+				iMerged += ( m_dExt[i].m_iLen<=g_iKillMerge ? m_dExt[i].m_iLen : 0 );
+			}
+			if ( iMerged>0 )
+			{
+				m_dMerged.Reserve ( iMerged );
+				ARRAY_FOREACH ( i, m_dExt )
+				{
+					if ( m_dExt[i].m_iLen>g_iKillMerge )
+						continue;
+
+					int iOff = m_dMerged.GetLength();
+					m_dMerged.Resize ( iOff + m_dExt[i].m_iLen );
+					memcpy ( m_dMerged.Begin()+iOff, m_dExt[i].m_pBegin, sizeof ( m_dMerged[0] ) * m_dExt[i].m_iLen );
+					m_dExt.RemoveFast ( i );
+					i--;
+				}
+			}
+			m_dMerged.Uniq();
+		}
+	}
+
+	virtual bool Eval ( const CSphMatch & tMatch ) const
+	{
+		if ( !m_dMerged.GetLength() && !m_dExt.GetLength() )
+			return true;
+
+		if ( m_dMerged.BinarySearch ( tMatch.m_uDocID )!=NULL )
+			return false;
+
+		ARRAY_FOREACH ( i, m_dExt )
+		{
+			if ( sphBinarySearch ( m_dExt[i].m_pBegin, m_dExt[i].m_pBegin + m_dExt[i].m_iLen - 1, tMatch.m_uDocID )!=NULL )
+				return false;
+		}
+
+		return true;
+	}
+};
+
+
+//////////////////////////////////////////////////////////////////////////
 // PUBLIC FACING INTERFACE
 //////////////////////////////////////////////////////////////////////////
 
 static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const CSphString & sAttrName, const ISphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings,
-								  CSphString & sError, bool bHaving, ESphCollation eCollation, bool bArenaProhibit )
+									CSphString & sError, bool bHaving, ESphCollation eCollation, bool bArenaProhibit )
 {
 	ISphFilter * pFilter = NULL;
 	const CSphColumnInfo * pAttr = NULL;
@@ -1333,6 +1394,10 @@ ISphFilter * sphCreateAggrFilter ( const CSphFilterSettings * pSettings, const C
 	return CreateFilter ( *pSettings, sAttrName, tSchema, NULL, NULL, sError, true, SPH_COLLATION_DEFAULT, false );
 }
 
+ISphFilter * sphCreateFilter ( const KillListVector & dKillList )
+{
+	return new Filter_KillList ( dKillList );
+}
 
 ISphFilter * sphJoinFilters ( ISphFilter * pA, ISphFilter * pB )
 {

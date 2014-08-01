@@ -44,7 +44,7 @@ void DoSearch ( CSphIndex * pIndex )
 
 	CSphQuery tQuery;
 	CSphQueryResult tResult;
-	CSphVector<SphDocID_t> dDummyKlist;
+	KillListVector dDummyKlist;
 	CSphMultiQueryArgs tArgs ( dDummyKlist, 1 );
 	tQuery.m_sQuery = "@title cat";
 

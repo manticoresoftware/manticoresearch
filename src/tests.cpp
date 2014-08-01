@@ -2365,7 +2365,7 @@ void TestRTWeightBoundary ()
 
 		CSphQuery tQuery;
 		CSphQueryResult tResult;
-		CSphMultiQueryArgs tArgs ( CSphVector<SphDocID_t>(), 1 );
+		CSphMultiQueryArgs tArgs ( KillListVector(), 1 );
 		tQuery.m_sQuery = "@title cat";
 
 		SphQueueSettings_t tQueueSettings ( tQuery, pIndex->GetMatchSchema(), tResult.m_sError, NULL );
@@ -2525,7 +2525,7 @@ void TestRTSendVsMerge ()
 
 	CSphQuery tQuery;
 	CSphQueryResult tResult;
-	CSphMultiQueryArgs tArgs ( CSphVector<SphDocID_t>(), 1 );
+	CSphMultiQueryArgs tArgs ( KillListVector(), 1 );
 	tQuery.m_sQuery = "@title cat";
 
 	SphQueueSettings_t tQueueSettings ( tQuery, pIndex->GetMatchSchema(), tResult.m_sError, NULL );
@@ -2674,7 +2674,7 @@ void TestRankerFactors ()
 	tQuery.m_sSortBy = "@weight desc";
 	tQuery.m_sOrderBy = "@weight desc";
 	CSphQueryResult tResult;
-	CSphMultiQueryArgs tArgs ( CSphVector<SphDocID_t>(), 1 );
+	CSphMultiQueryArgs tArgs ( KillListVector(), 1 );
 	SphQueueSettings_t tQueueSettings ( tQuery, pIndex->GetMatchSchema(), tResult.m_sError, NULL );
 	tQueueSettings.m_bComputeItems = true;
 	tArgs.m_uPackedFactorFlags = SPH_FACTOR_ENABLE | SPH_FACTOR_CALC_ATC;

@@ -3188,10 +3188,17 @@ struct CSphIndexStatus
 	{}
 };
 
+struct KillListTrait_t
+{
+	const SphDocID_t *	m_pBegin;
+	int					m_iLen;
+};
+
+typedef CSphVector<KillListTrait_t> KillListVector;
 
 struct CSphMultiQueryArgs : public ISphNoncopyable
 {
-	const CSphVector<SphDocID_t> &			m_dKillList;
+	const KillListVector &					m_dKillList;
 	const int								m_iIndexWeight;
 	int										m_iTag;
 	DWORD									m_uPackedFactorFlags;
@@ -3199,7 +3206,7 @@ struct CSphMultiQueryArgs : public ISphNoncopyable
 	const SmallStringHash_T<int64_t> *		m_pLocalDocs;
 	int64_t									m_iTotalDocs;
 
-	CSphMultiQueryArgs ( const CSphVector<SphDocID_t> & dKillList, int iIndexWeight );
+	CSphMultiQueryArgs ( const KillListVector & dKillList, int iIndexWeight );
 };
 
 

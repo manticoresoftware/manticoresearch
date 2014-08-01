@@ -6668,14 +6668,13 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		tmMaxTimer = sphMicroTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
 
 	CSphVector<SphDocID_t> dCumulativeKList;
+	KillListVector dMergedKillist;
 	CSphVector<const BYTE *> dDiskStrings ( tGuard.m_dDiskChunks.GetLength() );
 	CSphVector<const DWORD *> dDiskMva ( tGuard.m_dDiskChunks.GetLength() );
 	CSphBitvec tMvaArenaFlag ( tGuard.m_dDiskChunks.GetLength() );
 	if ( tGuard.m_dDiskChunks.GetLength() )
 	{
-		dCumulativeKList.Add ( 0 );
 		m_tKlist.Flush ( dCumulativeKList );
-		dCumulativeKList.Add ( DOCID_MAX );
 	}
 
 	for ( int iChunk = tGuard.m_dDiskChunks.GetLength()-1; iChunk>=0; iChunk-- )
@@ -6719,9 +6718,17 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			}
 		}
 
+		dMergedKillist.Resize ( 0 );
+		if ( dCumulativeKList.GetLength() )
+		{
+			dMergedKillist.Resize ( 1 );
+			dMergedKillist.Last().m_pBegin = dCumulativeKList.Begin();
+			dMergedKillist.Last().m_iLen = dCumulativeKList.GetLength();
+		}
+
 		CSphQueryResult tChunkResult;
 		tChunkResult.m_pProfile = pResult->m_pProfile;
-		CSphMultiQueryArgs tMultiArgs ( dCumulativeKList, tArgs.m_iIndexWeight );
+		CSphMultiQueryArgs tMultiArgs ( dMergedKillist, tArgs.m_iIndexWeight );
 		// storing index in matches tag for finding strings attrs offset later, biased against default zero and segments
 		tMultiArgs.m_iTag = tGuard.m_dRamChunks.GetLength()+iChunk+1;
 		tMultiArgs.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
@@ -6898,7 +6905,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		// setup filters
 		// FIXME! setup filters MVA pool
 		bool bFullscan = ( pQuery->m_eMode==SPH_MATCH_FULLSCAN || pQuery->m_sQuery.IsEmpty() );
-		if ( !tCtx.CreateFilters ( bFullscan, &pQuery->m_dFilters, dSorters[iMaxSchemaIndex]->GetSchema(), NULL, NULL, pResult->m_sError, pQuery->m_eCollation, false ) )
+		if ( !tCtx.CreateFilters ( bFullscan, &pQuery->m_dFilters, dSorters[iMaxSchemaIndex]->GetSchema(), NULL, NULL, pResult->m_sError, pQuery->m_eCollation, false, KillListVector() ) )
 			return false;
 
 		// FIXME! OPTIMIZE! check if we can early reject the whole index

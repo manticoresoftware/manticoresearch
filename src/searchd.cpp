@@ -8423,7 +8423,7 @@ static void ProcessLocalPostlimit ( const CSphQuery & tQuery, AggrResult_t & tRe
 
 /// merges multiple result sets, remaps columns, does reorder for outer selects
 /// query is only (!) non-const to tweak order vs reorder clauses
-bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, int iAgents,
+bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, int ,
 	CSphSchema * pExtraSchema, CSphQueryProfile * pProfiler, bool bFromSphinxql, const CSphFilterSettings * pAggrFilter )
 {
 	// sanity check
@@ -9843,9 +9843,7 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 	CSphVector<int> dLocked;
 
 	// setup kill-lists
-	CSphVector<SphDocID_t> dCumulativeKillList;
-	int iKillListSize = 2; // 2 elements are reserved for 0 and DOCID_MAX
-	CSphVector<int> dKillListIndexes;
+	KillListVector dKillist;
 	for ( int i=iLocal+1; i<m_dLocal.GetLength(); i++ )
 	{
 		const ServedIndex_t * pKillListIndex = UseIndex(i);
@@ -9854,31 +9852,20 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 
 		if ( pKillListIndex->m_pIndex->GetKillListSize() )
 		{
-			iKillListSize += pKillListIndex->m_pIndex->GetKillListSize();
+			KillListTrait_t & tElem = dKillist.Add ();
+			tElem.m_pBegin = pKillListIndex->m_pIndex->GetKillList();
+			tElem.m_iLen = pKillListIndex->m_pIndex->GetKillListSize();
 			dLocked.Add(i);
-			dKillListIndexes.Add(i);
 		} else
+		{
 			ReleaseIndex(i);
+		}
 	}
-	dCumulativeKillList.Resize ( iKillListSize );
-	int iKillListIdx = 1;
-	for ( int i=0; i<dKillListIndexes.GetLength(); i++ )
-	{
-		const ServedIndex_t * pKillListIndex = UseIndex ( dKillListIndexes[i] );
-		if ( !pKillListIndex )
-			continue;
-
-		for ( int i=0, iEnd=pKillListIndex->m_pIndex->GetKillListSize(); i<iEnd; i++ )
-			dCumulativeKillList [ iKillListIdx++ ] = pKillListIndex->m_pIndex->GetKillList()[i];
-	}
-	dCumulativeKillList[0] = 0;
-	dCumulativeKillList.Last() = DOCID_MAX;
-	dCumulativeKillList.Uniq();
 
 	int iIndexWeight = m_dLocal[iLocal].m_iWeight;
 
 	// do the query
-	CSphMultiQueryArgs tMultiArgs ( dCumulativeKillList, iIndexWeight );
+	CSphMultiQueryArgs tMultiArgs ( dKillist, iIndexWeight );
 	tMultiArgs.m_uPackedFactorFlags = uFactorFlags;
 	if ( m_bGotLocalDF )
 	{
@@ -10030,9 +10017,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 		AggrResult_t tStats;
 
 		// set kill-list
-		CSphVector<SphDocID_t> dCumulativeKillList;
-		int iKillListSize = 2; // 2 element are reserved for 0 and DOCID_MAX
-		CSphVector<int> dKillListIndexes;
+		KillListVector dKillist;
 		for ( int i=iLocal+1; i<m_dLocal.GetLength(); i++ )
 		{
 			const ServedIndex_t * pKillListIndex = UseIndex(i);
@@ -10041,29 +10026,18 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 
 			if ( pKillListIndex->m_pIndex->GetKillListSize() )
 			{
-				iKillListSize += pKillListIndex->m_pIndex->GetKillListSize();
+				KillListTrait_t & tElem = dKillist.Add ();
+				tElem.m_pBegin = pKillListIndex->m_pIndex->GetKillList();
+				tElem.m_iLen = pKillListIndex->m_pIndex->GetKillListSize();
 				dLocked.Add(i);
-				dKillListIndexes.Add(i);
 			} else
+			{
 				ReleaseIndex(i);
+			}
 		}
-		dCumulativeKillList.Resize ( iKillListSize );
-		int iKillListIdx = 1;
-		for ( int i=0; i<dKillListIndexes.GetLength(); i++ )
-		{
-			const ServedIndex_t * pKillListIndex = UseIndex ( dKillListIndexes[i] );
-			if ( !pKillListIndex )
-				continue;
-
-			for ( int i=0, iEnd=pKillListIndex->m_pIndex->GetKillListSize(); i<iEnd; i++ )
-				dCumulativeKillList [ iKillListIdx++ ] = pKillListIndex->m_pIndex->GetKillList()[i];
-		}
-		dCumulativeKillList[0] = 0;
-		dCumulativeKillList.Last() = DOCID_MAX;
-		dCumulativeKillList.Uniq();
 
 		// do the query
-		CSphMultiQueryArgs tMultiArgs ( dCumulativeKillList, iIndexWeight );
+		CSphMultiQueryArgs tMultiArgs ( dKillist, iIndexWeight );
 		tMultiArgs.m_uPackedFactorFlags = uTotalFactorFlags;
 		if ( m_bGotLocalDF )
 		{

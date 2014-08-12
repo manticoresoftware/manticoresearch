@@ -3154,7 +3154,7 @@ public:
 						// we don't want to mess up the states in our base tokenizer, so we use a cloned tokenizer
 						if ( !m_pTokenizerClone )
 						{
-							m_pTokenizerClone = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
+							m_pTokenizerClone = m_pTokenizer->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT );
 							assert ( m_pTokenizerClone );
 						}
 
@@ -5168,11 +5168,13 @@ void CSphTokenizerBase::CloneBase ( const CSphTokenizerBase * pFrom, ESphTokeniz
 	switch ( eMode )
 	{
 		case SPH_CLONE_INDEX:
+			assert ( pFrom->m_eMode==SPH_CLONE_INDEX );
 			m_tLC = pFrom->m_tLC;
 			break;
 
 		case SPH_CLONE_QUERY:
 		{
+			assert ( pFrom->m_eMode==SPH_CLONE_INDEX || pFrom->m_eMode==SPH_CLONE_QUERY );
 			m_tLC = pFrom->m_tLC;
 
 			CSphVector<CSphRemapRange> dRemaps;

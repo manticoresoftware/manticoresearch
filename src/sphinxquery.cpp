@@ -919,7 +919,8 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		}
 
 		// count [ * ] at phrase node for qpos shift
-		if ( m_pTokenizer->m_bPhrase && m_pLastTokenEnd )
+		// FIXME! RLP can return tokens from several buffers, all this pointer arithmetic will lead to crashes
+		if ( m_pTokenizer->m_bPhrase && m_pLastTokenEnd && !m_pTokenizer->GetRLPContext() )
 		{
 			if ( strncmp ( sToken, "*", 1 )==0 )
 			{

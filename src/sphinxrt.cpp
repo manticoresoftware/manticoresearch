@@ -6312,6 +6312,10 @@ CSphDict * RtIndex_t::SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer, CSph
 	assert ( pTokenizer );
 	if ( !m_bKeywordDict )
 		return pPrevDict;
+	// should match CSphIndex_VLN::IsStarDict overwise got warning on query word mismatch
+	// at distributed index with plain and RT indexes
+	if ( m_tSettings.m_iMinPrefixLen==0 && m_tSettings.m_iMinInfixLen==0 )
+		return pPrevDict;
 
 	tContainer = new CSphDictStarV8 ( pPrevDict, false, true );
 	pTokenizer->AddPlainChar ( '*' );
@@ -7295,7 +7299,7 @@ bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 
 	// need to support '*' and '=' but not the other specials
 	// so m_pQueryTokenizer does not work for us, gotta clone and setup one manually
-	if ( IsStarDict() )
+	if ( IsStarDict() && ( m_tSettings.m_iMinPrefixLen>0 || m_tSettings.m_iMinInfixLen>0 ) )
 		pTokenizer->AddPlainChar ( '*' );
 
 	CSphScopedPtr<CSphDict> tDictCloned ( NULL );

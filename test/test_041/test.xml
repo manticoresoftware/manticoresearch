@@ -189,6 +189,43 @@ index codepoint
        charset_type    = utf-8
 }
 
+source src_nostar1 : srctest
+{
+	sql_query		= SELECT 1 id, 11 idd, 'cool test' title
+	sql_attr_uint		= idd
+}
+
+index plain_nostar1
+{
+	source			= src_nostar1
+	path			= <data_path/>/plain_nostar1
+	docinfo			= extern
+	charset_table = 0..9, a..z, A..Z->a..z
+	dict = keywords
+	min_prefix_len = 0
+	min_infix_len = 0
+}
+
+index rt_nostar1
+{
+	type = rt
+	path			= <data_path/>/rt_nostar1
+	docinfo = extern
+	rt_mem_limit = 32M
+	rt_attr_uint	= idd
+	rt_field		= title
+	charset_table = 0..9, a..z, A..Z->a..z
+	dict = keywords
+	min_prefix_len = 0
+	min_infix_len = 0
+}
+
+index dist
+{
+	type = distributed
+	local = plain_nostar1
+	local = rt_nostar1
+}
 
 </config>
 
@@ -335,6 +372,12 @@ REPLACE INTO rt (id, id1, title) VALUES ( 1, 1, 'work worked working workings wo
 
 <!-- regression large codepoints vs infix builder -->
 <sphinxql>SELECT * FROM codepoint WHERE MATCH('*box*')</sphinxql>
+
+<!-- regression plain vs RT wildcard setup -->
+<sphinxql>SELECT * FROM dist WHERE MATCH('test*')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'test*', 'plain_nostar1')</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'test*', 'rt_nostar1')</sphinxql>
 
 </sphqueries>
 

@@ -71,6 +71,11 @@ index idx2
 <sphinxql>CALL SNIPPETS ('abc +hashtag+bag abc', 'idx2', '+hashtag+bag', 1 as query_mode, 0 as around, 0 as limit)</sphinxql>
 <sphinxql>CALL SNIPPETS ('abc +hashtag+bag abc', 'idx2', '+hashtag +bag', 0 as query_mode, 0 as around, 0 as limit)</sphinxql>
 <sphinxql>CALL SNIPPETS ('abc +hashtag+bag abc', 'idx2', '+hashtag +bag', 1 as query_mode, 0 as around, 0 as limit)</sphinxql>
+<!-- regression hightlight of blend-char along with term with passages -->
+<sphinxql>CALL SNIPPETS ('hashtag+bag abc for me is not so long but who knows', 'idx2', 'hashtag+bag', 1 as query_mode, 40 as limit)</sphinxql>
+<sphinxql>CALL SNIPPETS ('for me is not so long but who knows abc hashtag+bag', 'idx2', 'hashtag+bag', 1 as query_mode, 40 as limit)</sphinxql>
+<sphinxql>CALL SNIPPETS ('for me is not so long abc hashtag+bag but who knows everyone is not same abc hashtag+bag as me or someone', 'idx2', 'hashtag+bag', 1 as query_mode, 40 as limit)</sphinxql>
+<sphinxql>CALL SNIPPETS ('for me is not so long abc hashtag+bag but who knows everyone is not same abc hashtag+bag as me or someone', 'idx2', 'hashtag+bag', 1 as query_mode, 80 as limit)</sphinxql>
 
 </sphqueries>
 

@@ -2628,6 +2628,8 @@ public:
 		, m_iSeparatorLen ( m_sChunkSeparator.Length() )
 		, m_bLastWasSeparator ( false )
 		, m_pZoneInfo ( pZoneInfo )
+		, m_iOpenTill ( 0 )
+		, m_iLastPos ( 0 )
 	{
 		if ( m_bWeightOrder )
 			m_dPassageHeads.Reserve(1024);
@@ -2638,6 +2640,7 @@ public:
 		assert ( m_pDoc );
 		assert ( tTok.m_iStart>=0 && m_pDoc+tTok.m_iStart+tTok.m_iLen<=m_pDocMax );
 
+		CheckClose ( tTok.m_uPosition );
 		UpdatePassage ( tTok.m_iStart );
 
 		if ( m_iCurPassage!=-1 )
@@ -2662,30 +2665,40 @@ public:
 			} else
 			{
 				bool bHit = m_pHit<m_pHitEnd && tTok.m_uPosition>=m_pHit->m_uPosition && tTok.m_uPosition<=m_pHit->m_uPosition+m_pHit->m_uSpan-1;
-				if ( bHit )
+				if ( bHit && !m_iOpenTill )
+				{
 					ResultEmit ( m_sBeforeMatch.cstr(), m_iBeforeLen, m_bHasBeforePassageMacro, m_iPassageId, m_sBeforeMatchPassage.cstr(), m_iBeforePostLen );
+					m_iOpenTill = m_pHit->m_uPosition+m_pHit->m_uSpan;
+				}
 
 				// emit token itself
 				ResultEmit ( m_pDoc+tTok.m_iStart, tTok.m_iLen );
-
-				if ( bHit )
-					ResultEmit ( m_sAfterMatch.cstr(), m_iAfterLen, m_bHasAfterPassageMacro, m_iPassageId++, m_sAfterMatchPassage.cstr(), m_iAfterPostLen );
 			}
 		}
 
+		m_iLastPos = tTok.m_uPosition;
 		m_iCurToken++;
 		return true;
 	}
 
 	bool OnOverlap ( int iStart, int iLen, int iBoundary )
 	{
+		CheckClose ( m_iLastPos+1 );
 		EmitSpaces ( iStart, iLen, iBoundary );
 		return true;
 	}
 
 	void OnTail ( int iStart, int iLen, int iBoundary )
 	{
+		CheckClose ( m_iLastPos+1 );
 		EmitSpaces ( iStart, iLen, iBoundary );
+	}
+
+	void OnFinish()
+	{
+		if ( !m_iOpenTill )
+			return;
+		ResultEmit ( m_sAfterMatch.cstr(), m_iAfterLen, m_bHasAfterPassageMacro, m_iPassageId++, m_sAfterMatchPassage.cstr(), m_iAfterPostLen );
 	}
 
 private:
@@ -2699,7 +2712,8 @@ private:
 	TokenSpan_t						m_tTmpSpan;
 	CSphVector<Space_t>				m_dSpaces;
 	const FunctorZoneInfo_t *		m_pZoneInfo;
-
+	int								m_iOpenTill;
+	int								m_iLastPos;
 
 	void EmitZoneName ( int iStart ) const
 	{
@@ -2783,6 +2797,16 @@ private:
 
 			EmitZoneName ( iStart );
 		}
+	}
+
+	void CheckClose ( int iPos )
+	{
+		// marker folding, emit "after" marker at span end only
+		if ( !m_iOpenTill || iPos<m_iOpenTill )
+			return;
+
+		ResultEmit ( m_sAfterMatch.cstr(), m_iAfterLen, m_bHasAfterPassageMacro, m_iPassageId++, m_sAfterMatchPassage.cstr(), m_iAfterPostLen );
+		m_iOpenTill = 0;
 	}
 };
 

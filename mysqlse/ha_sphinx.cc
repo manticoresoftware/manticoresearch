@@ -1273,7 +1273,7 @@ CSphSEQuery::CSphSEQuery ( const char * sQuery, int iLength, const char * sIndex
 	, m_fGeoLatitude ( 0.0f )
 	, m_fGeoLongitude ( 0.0f )
 	, m_sComment ( "" )
-	, m_sSelect ( "" )
+	, m_sSelect ( "*" )
 
 	, m_pBuf ( NULL )
 	, m_pCur ( NULL )

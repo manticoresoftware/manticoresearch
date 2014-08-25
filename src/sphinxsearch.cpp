@@ -99,47 +99,34 @@ struct ExtQword_t
 /// query words set
 typedef CSphOrderedHash < ExtQword_t, CSphString, QwordsHash_fn, 256 > ExtQwordsHash_t;
 
+struct ZoneHits_t
+{
+	CSphVector<Hitpos_t>	m_dStarts;
+	CSphVector<Hitpos_t>	m_dEnds;
+};
+
 /// per-document zone information (span start/end positions)
 struct ZoneInfo_t
 {
-	CSphVector<Hitpos_t> m_dStarts;
-	CSphVector<Hitpos_t> m_dEnds;
-};
-
-
-/// zone hash key, zoneid+docid
-struct ZoneKey_t
-{
-	int				m_iZone;
 	SphDocID_t		m_uDocid;
-
-	explicit ZoneKey_t ( int iZone=0, SphDocID_t uDocid=0 )
-		: m_iZone ( iZone )
-		, m_uDocid ( uDocid )
-	{}
-
-	bool operator == ( const ZoneKey_t & rhs ) const
-	{
-		return m_iZone==rhs.m_iZone && m_uDocid==rhs.m_uDocid;
-	}
+	ZoneHits_t *	m_pHits;
 };
 
-
-/// zone hashing function
-struct ZoneHash_fn
+// FindSpan vector operators
+static bool operator < ( const ZoneInfo_t & tZone, SphDocID_t uDocid )
 {
-	static inline int Hash ( const ZoneKey_t & tKey )
-	{
-		return (DWORD)tKey.m_uDocid ^ ( tKey.m_iZone<<16 );
-	}
-};
+	return tZone.m_uDocid<uDocid;
+}
 
+static bool operator == ( const ZoneInfo_t & tZone, SphDocID_t uDocid )
+{
+	return tZone.m_uDocid==uDocid;
+}
 
-/// zone hash
-typedef CSphOrderedHash < ZoneInfo_t, ZoneKey_t, ZoneHash_fn, 4096 > ZoneHash_c;
-
-/// zonespan prototype
-typedef CSphOrderedHash < int, ZoneKey_t, ZoneHash_fn, 8192*1024 > ZoneSpans_c;
+static bool operator < ( SphDocID_t uDocid, const ZoneInfo_t & tZone )
+{
+	return uDocid<tZone.m_uDocid;
+}
 
 
 /// generic match streamer
@@ -163,6 +150,7 @@ public:
 	virtual void				GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) const = 0;
 	virtual bool				GotHitless () = 0;
 	virtual int					GetDocsCount () { return INT_MAX; }
+	virtual int					GetHitsCount () { return 0; }
 	virtual uint64_t			GetWordID () const = 0;			///< for now, only used for duplicate keyword checks in quorum operator
 
 	void DebugIndent ( int iLevel )
@@ -333,6 +321,7 @@ public:
 	virtual void				GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) const;
 	virtual bool				GotHitless () { return false; }
 	virtual int					GetDocsCount () { return m_pQword->m_iDocs; }
+	virtual int					GetHitsCount () { return m_pQword->m_iHits; }
 	virtual uint64_t			GetWordID () const
 	{
 		if ( m_pQword->m_uWordID )
@@ -1179,7 +1168,7 @@ private:
 };
 
 
-
+typedef CSphFixedVector < CSphVector < ZoneInfo_t > > ZoneVVector_t;
 
 /// ranker interface
 /// ranker folds incoming hitstream into simple match chunks, and computes relevance rank
@@ -1229,7 +1218,7 @@ protected:
 	CSphVector<const ExtDoc_t*>	m_dZoneEnd;
 	CSphVector<SphDocID_t>		m_dZoneMax;				///< last docid we (tried) to cache
 	CSphVector<SphDocID_t>		m_dZoneMin;				///< first docid we (tried) to cache
-	ZoneHash_c					m_hZoneInfo;
+	ZoneVVector_t				m_dZoneInfo;
 	bool						m_bZSlist;
 };
 
@@ -5139,7 +5128,7 @@ int ExtUnit_c::FilterHits ( int iMyHit, DWORD uSentenceEnd, SphDocID_t uDocid, i
 			{
 				m_dMyHits[iMyHit++] = *m_pHit2++;
 				if ( m_pHit2->m_uDocid==DOCID_MAX )
-					m_pHit2 = m_pArg2->GetHitsChunk( m_pDocs2 );
+					m_pHit2 = m_pArg2->GetHitsChunk ( m_pDocs2 );
 			}
 
 		} else
@@ -5498,6 +5487,7 @@ static void Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const 
 
 
 ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup )
+	: m_dZoneInfo ( 0 )
 {
 	assert ( tSetup.m_pCtx );
 
@@ -5547,6 +5537,7 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup 
 	m_dZoneMax.Fill ( 0 );
 	m_dZoneMin.Fill	( DOCID_MAX );
 	m_bZSlist = tXQ.m_bNeedSZlist;
+	m_dZoneInfo.Reset ( m_dZones.GetLength() );
 
 	CSphDict * pZonesDict = NULL;
 	// workaround for a particular case with following conditions
@@ -5595,7 +5586,12 @@ void ExtRanker_c::Reset ( const ISphQwordSetup & tSetup )
 
 	m_dZoneMax.Fill ( 0 );
 	m_dZoneMin.Fill ( DOCID_MAX );
-	m_hZoneInfo.Reset();
+	ARRAY_FOREACH ( i, m_dZoneInfo )
+	{
+		ARRAY_FOREACH ( iDoc, m_dZoneInfo[i] )
+			SafeDelete ( m_dZoneInfo[i][iDoc].m_pHits );
+		m_dZoneInfo[i].Reset();
+	}
 }
 
 
@@ -5625,6 +5621,7 @@ const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 		if ( pProfile )
 			pProfile->Switch ( SPH_QSTATE_FILTER );
 		int iDocs = 0;
+		SphDocID_t uMaxID = 0;
 		while ( pCand->m_uDocid!=DOCID_MAX )
 		{
 			m_tTestMatch.m_uDocID = pCand->m_uDocid;
@@ -5637,6 +5634,7 @@ const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 				continue;
 			}
 
+			uMaxID = pCand->m_uDocid;
 			m_dMyDocs[iDocs] = *pCand;
 			m_tTestMatch.m_iWeight = (int)( (pCand->m_fTFIDF+0.5f)*SPH_BM25_SCALE ); // FIXME! bench bNeedBM25
 			Swap ( m_tTestMatch, m_dMyMatches[iDocs] );
@@ -5651,21 +5649,27 @@ const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 			if ( uMinDocid==DOCID_MAX )
 				continue;
 
-			Verify ( m_hZoneInfo.IterateStart ( ZoneKey_t ( i, uMinDocid ) ) );
-			uMinDocid = DOCID_MAX;
-			do
-			{
-				ZoneKey_t tKey = m_hZoneInfo.IterateGetKey();
-				if ( tKey.m_iZone!=i )
+				CSphVector<ZoneInfo_t> & dZone = m_dZoneInfo[i];
+				int iSpan = FindSpan ( dZone, uMaxID );
+				if ( iSpan==-1 )
+					continue;
+
+				if ( iSpan==dZone.GetLength()-1 )
 				{
-					uMinDocid = ( tKey.m_iZone==i ) ? tKey.m_uDocid : DOCID_MAX;
-					break;
+					ARRAY_FOREACH ( iDoc, dZone )
+						SafeDelete ( dZone[iDoc].m_pHits );
+					dZone.Resize ( 0 );
+					m_dZoneMin[i] = uMaxID;
+					continue;
 				}
 
-				m_hZoneInfo.Delete ( tKey );
-			} while ( m_hZoneInfo.IterateNext() );
+				for ( int iDoc=0; iDoc<=iSpan; iDoc++ )
+					SafeDelete ( dZone[iDoc].m_pHits );
 
-			m_dZoneMin[i] = uMinDocid;
+				int iLen = dZone.GetLength() - iSpan;
+				memmove ( dZone.Begin(), dZone.Begin()+iSpan, sizeof(dZone[0]) * iLen );
+				dZone.Resize ( iLen );
+				m_dZoneMin[i] = dZone.Begin()->m_uDocid;
 		}
 
 		if ( iDocs )
@@ -5689,22 +5693,37 @@ void ExtRanker_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 }
 
 
-SphZoneHit_e ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit, int * pLastSpan )
+static SphZoneHit_e ZoneCacheFind ( const ZoneVVector_t & dZones, int iZone, const ExtHit_t * pHit, int * pLastSpan )
 {
-	// quick route, we have current docid cached
-	ZoneKey_t tKey ( iZone, pHit->m_uDocid ); // OPTIMIZE? allow 2-component hash keys maybe?
-	ZoneInfo_t * pZone = m_hZoneInfo ( tKey );
+	if ( !dZones[iZone].GetLength() )
+		return SPH_ZONE_NO_DOCUMENT;
+
+	ZoneInfo_t * pZone = sphBinarySearch ( dZones[iZone].Begin(), &dZones[iZone].Last(), bind ( &ZoneInfo_t::m_uDocid ), pHit->m_uDocid );
+	if ( !pZone )
+		return SPH_ZONE_NO_DOCUMENT;
+
 	if ( pZone )
 	{
 		// remove end markers that might mess up ordering
-		DWORD uPosWithField = HITMAN::GetPosWithField ( pHit->m_uHitpos );
-		int iSpan = FindSpan ( pZone->m_dStarts, uPosWithField );
-		if ( iSpan<0 || uPosWithField>pZone->m_dEnds[iSpan] )
+		Hitpos_t uPosWithField = HITMAN::GetPosWithField ( pHit->m_uHitpos );
+		int iSpan = FindSpan ( pZone->m_pHits->m_dStarts, uPosWithField );
+		if ( iSpan<0 || uPosWithField>pZone->m_pHits->m_dEnds[iSpan] )
 			return SPH_ZONE_NO_SPAN;
 		if ( pLastSpan )
 			*pLastSpan = iSpan;
 		return SPH_ZONE_FOUND;
 	}
+
+	return SPH_ZONE_NO_DOCUMENT;
+}
+
+
+SphZoneHit_e ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit, int * pLastSpan )
+{
+	// quick route, we have current docid cached
+	SphZoneHit_e eRes = ZoneCacheFind ( m_dZoneInfo, iZone, pHit, pLastSpan );
+	if ( eRes!=SPH_ZONE_NO_DOCUMENT )
+		return eRes;
 
 	// is there any zone info for this document at all?
 	if ( pHit->m_uDocid<=m_dZoneMax[iZone] )
@@ -5826,6 +5845,9 @@ SphZoneHit_e ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit, int * pLa
 		// do caching
 		const ExtHit_t * pStartHits = m_dZoneStartTerm[iZone]->GetHitsChunk ( dCache );
 		const ExtHit_t * pEndHits = m_dZoneEndTerm[iZone]->GetHitsChunk ( dCache );
+		int iReserveStart = m_dZoneStartTerm[iZone]->GetHitsCount() / Max ( m_dZoneStartTerm[iZone]->GetDocsCount(), 1 );
+		int iReserveEnd = m_dZoneEndTerm[iZone]->GetHitsCount() / Max ( m_dZoneEndTerm[iZone]->GetDocsCount(), 1 );
+		int iReserve = Max ( iReserveStart, iReserveEnd );
 
 		// loop documents one by one
 		while ( pStartHits && pEndHits )
@@ -5833,8 +5855,33 @@ SphZoneHit_e ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit, int * pLa
 			// load all hits for current document
 			SphDocID_t uCur = pStartHits->m_uDocid;
 
-			tKey.m_uDocid = uCur;
-			pZone = &m_hZoneInfo.AddUnique ( tKey );
+			// FIXME!!! replace by iterate then add elements to vector instead of searching each time
+			ZoneHits_t * pZone = NULL;
+			CSphVector<ZoneInfo_t> & dZones = m_dZoneInfo[iZone];
+			if ( dZones.GetLength() )
+			{
+				ZoneInfo_t * pInfo = sphBinarySearch ( dZones.Begin(), &dZones.Last(), bind ( &ZoneInfo_t::m_uDocid ), uCur );
+				if ( pInfo )
+					pZone = pInfo->m_pHits;
+			}
+			if ( !pZone )
+			{
+				if ( dZones.GetLength() && dZones.Last().m_uDocid>uCur )
+				{
+					int iInsertPos = FindSpan ( dZones, uCur );
+					assert ( iInsertPos>=0 );
+					dZones.Insert ( iInsertPos, ZoneInfo_t() );
+					dZones[iInsertPos].m_uDocid = uCur;
+					pZone = dZones[iInsertPos].m_pHits = new ZoneHits_t();
+				} else
+				{
+					ZoneInfo_t & tElem = dZones.Add ();
+					tElem.m_uDocid = uCur;
+					pZone = tElem.m_pHits = new ZoneHits_t();
+				}
+				pZone->m_dStarts.Reserve ( iReserve );
+				pZone->m_dEnds.Reserve ( iReserve );
+			}
 
 			assert ( pEndHits->m_uDocid==uCur );
 
@@ -5934,21 +5981,7 @@ SphZoneHit_e ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit, int * pLa
 	m_dZoneEnd[iZone] = pEnd;
 
 	// cached a bunch of spans, try our check again
-	tKey.m_uDocid = pHit->m_uDocid;
-	pZone = m_hZoneInfo ( tKey );
-	if ( pZone )
-	{
-		// remove end markers that might mess up ordering
-		DWORD uPosWithField = HITMAN::GetPosWithField ( pHit->m_uHitpos );
-		int iSpan = FindSpan ( pZone->m_dStarts, uPosWithField );
-		if ( iSpan<0 || uPosWithField>pZone->m_dEnds[iSpan] )
-			return SPH_ZONE_NO_SPAN;
-		if ( pLastSpan )
-			*pLastSpan = iSpan;
-		return SPH_ZONE_FOUND;
-	}
-
-	return SPH_ZONE_NO_DOCUMENT;
+	return ZoneCacheFind ( m_dZoneInfo, iZone, pHit, pLastSpan );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -8401,7 +8434,7 @@ void RankerState_Expr_fn<PF, HANDLE_DUPES>::UpdateMinGaps ( const ExtHit_t * pHl
 }
 
 
-template<bool A1,bool A2>
+template<bool A1, bool A2>
 int RankerState_Expr_fn<A1,A2>::GetMaxPackedLength()
 {
 	return sizeof(DWORD)*( 8 + m_tExactHit.GetSize() + m_tExactOrder.GetSize() + m_iFields*15 + m_iMaxQpos*4 + m_dFieldTF.GetLength() );

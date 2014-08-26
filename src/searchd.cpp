@@ -9248,6 +9248,7 @@ SearchHandler_c::SearchHandler_c ( int iQueries, bool bSphinxql, bool bMaster )
 	m_iStart = 0;
 	m_iEnd = 0;
 	m_bMultiQueue = false;
+	m_bFacetQueue = false;
 
 	m_dQueries.Resize ( iQueries );
 	m_dResults.Resize ( iQueries );

@@ -1694,6 +1694,7 @@ enum Func_e
 	FUNC_TO_STRING,
 	FUNC_RANKFACTORS,
 	FUNC_PACKEDFACTORS,
+	FUNC_FACTORS,
 	FUNC_BM25F,
 	FUNC_INTEGER,
 	FUNC_DOUBLE,
@@ -1775,7 +1776,7 @@ static FuncDesc_t g_dFuncs[] =
 	{ "to_string",		1,	FUNC_TO_STRING,		SPH_ATTR_STRINGPTR },
 	{ "rankfactors",	0,	FUNC_RANKFACTORS,	SPH_ATTR_STRINGPTR },
 	{ "packedfactors",	0,	FUNC_PACKEDFACTORS, SPH_ATTR_FACTORS },
-	{ "factors",		0,	FUNC_PACKEDFACTORS, SPH_ATTR_FACTORS },
+	{ "factors",		0,	FUNC_FACTORS,		SPH_ATTR_FACTORS }, // just an alias for PACKEDFACTORS()
 	{ "bm25f",			-2,	FUNC_BM25F,			SPH_ATTR_FLOAT },
 	{ "integer",		1,	FUNC_INTEGER,		SPH_ATTR_BIGINT },
 	{ "double",			1,	FUNC_DOUBLE,		SPH_ATTR_FLOAT },
@@ -1914,6 +1915,9 @@ static int FuncHashCheck()
 		sKey.ToUpper();
 		if ( FuncHashLookup ( sKey.cstr() )!=i )
 			sphDie ( "INTERNAL ERROR: lookup for %s() failed, rebuild function hash", sKey.cstr() );
+		if ( g_dFuncs[i].m_eFunc!=i )
+			sphDie ( "INTERNAL ERROR: function hash entry %s() at index %d maps to Func_e entry %d, sync Func_e and g_dFuncs",
+				sKey.cstr(), i, g_dFuncs[i].m_eFunc );
 	}
 	if ( FuncHashLookup("A")!=-1 )
 		sphDie ( "INTERNAL ERROR: lookup for A() succeeded, rebuild function hash" );
@@ -2336,11 +2340,11 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		{
 			assert ( !strcasecmp ( g_dFuncs[iFunc].m_sName, sTok.cstr() ) );
 			lvalp->iFunc = iFunc;
-			if ( g_dFuncs [ iFunc ].m_eFunc==FUNC_IN )
+			if ( iFunc==FUNC_IN )
 				return TOK_FUNC_IN;
-			if ( g_dFuncs [ iFunc ].m_eFunc==FUNC_REMAP )
+			if ( iFunc==FUNC_REMAP )
 				return TOK_FUNC_REMAP;
-			if ( g_dFuncs [ iFunc ].m_eFunc==FUNC_PACKEDFACTORS )
+			if ( iFunc==FUNC_PACKEDFACTORS || iFunc==FUNC_FACTORS )
 				return TOK_FUNC_PF;
 			return TOK_FUNC;
 		}
@@ -2737,7 +2741,7 @@ void ExprParser_t::ConstantFoldPass ( int iNode )
 	if ( pRoot->m_iToken==TOK_FUNC && g_dFuncs [ pRoot->m_iFunc ].m_iArgs==1 && IsConst ( pLeft ) )
 	{
 		float fArg = pLeft->m_iToken==TOK_CONST_FLOAT ? pLeft->m_fConst : float ( pLeft->m_iConst );
-		switch ( g_dFuncs [ pRoot->m_iFunc ].m_eFunc )
+		switch ( pRoot->m_iFunc )
 		{
 			case FUNC_ABS:
 				pRoot->m_iToken = pLeft->m_iToken;
@@ -2800,7 +2804,6 @@ void ExprParser_t::VariousOptimizationsPass ( int iNode )
 		pRoot->m_iToken = TOK_FUNC;
 		pRoot->m_iLeft = m_dNodes.GetLength();
 		pRoot->m_iRight = -1;
-		assert ( g_dFuncs[pRoot->m_iFunc].m_eFunc==pRoot->m_iFunc );
 
 		ExprNode_t & tArgs = m_dNodes.Add(); // invalidates all pointers!
 		tArgs.m_iToken = ',';
@@ -3782,7 +3785,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 	bool bSkipRight = false;
 	if ( tNode.m_iToken==TOK_FUNC )
 	{
-		switch ( g_dFuncs[tNode.m_iFunc].m_eFunc )
+		switch ( tNode.m_iFunc )
 		{
 		case FUNC_IN:
 		case FUNC_EXIST:
@@ -3791,6 +3794,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case FUNC_ZONESPANLIST:
 		case FUNC_RANKFACTORS:
 		case FUNC_PACKEDFACTORS:
+		case FUNC_FACTORS:
 		case FUNC_BM25F:
 		case FUNC_CURTIME:
 		case FUNC_UTC_TIME:
@@ -3890,7 +3894,8 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case TOK_FUNC:
 			{
 				// fold arglist to array
-				Func_e eFunc = g_dFuncs[tNode.m_iFunc].m_eFunc;
+				Func_e eFunc = (Func_e)tNode.m_iFunc;
+				assert ( g_dFuncs[tNode.m_iFunc].m_eFunc==eFunc );
 
 				CSphVector<ISphExpr *> dArgs;
 				if ( !bSkipLeft )
@@ -3968,7 +3973,9 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 					case FUNC_RANKFACTORS:
 						m_eEvalStage = SPH_EVAL_PRESORT;
 						return new Expr_GetRankFactors_c();
-					case FUNC_PACKEDFACTORS: return CreatePFNode ( tNode.m_iLeft );
+					case FUNC_PACKEDFACTORS:
+					case FUNC_FACTORS:
+						return CreatePFNode ( tNode.m_iLeft );
 					case FUNC_BM25F:
 					{
 						m_uPackedFactorFlags |= SPH_FACTOR_ENABLE;
@@ -5595,7 +5602,8 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iFirst, int iSecond, int iThird, 
 	// special case for IN(), iFirst is arg, iSecond is constlist
 	// special case for REMAP(), iFirst and iSecond are expressions, iThird and iFourth are constlists
 	assert ( iFunc>=0 && iFunc< int ( sizeof ( g_dFuncs )/sizeof ( g_dFuncs[0]) ) );
-	Func_e eFunc = g_dFuncs [ iFunc ].m_eFunc;
+	Func_e eFunc = (Func_e)iFunc;
+	assert ( g_dFuncs [ iFunc ].m_eFunc==eFunc );
 	const char * sFuncName = g_dFuncs [ iFunc ].m_sName;
 
 	// check args count
@@ -5903,8 +5911,7 @@ int ExprParser_t::AddNodeUdf ( int iCall, int iArg )
 			if ( m_dNodes[iCur].m_iToken!=',' )
 			{
 				const ExprNode_t & tNode = m_dNodes[iCur];
-				if ( tNode.m_iToken==TOK_FUNC &&
-					( g_dFuncs[tNode.m_iFunc].m_eFunc==FUNC_PACKEDFACTORS || g_dFuncs[tNode.m_iFunc].m_eFunc==FUNC_RANKFACTORS ) )
+				if ( tNode.m_iToken==TOK_FUNC && ( tNode.m_iFunc==FUNC_PACKEDFACTORS || tNode.m_iFunc==FUNC_RANKFACTORS || tNode.m_iFunc==FUNC_FACTORS ) )
 					pCall->m_dArgs2Free.Add ( dArgTypes.GetLength() );
 				dArgTypes.Add ( tNode.m_eRetType );
 				break;
@@ -5915,8 +5922,7 @@ int ExprParser_t::AddNodeUdf ( int iCall, int iArg )
 			{
 				const ExprNode_t & tNode = m_dNodes[iRight];
 				assert ( tNode.m_iToken!=',' );
-				if ( tNode.m_iToken==TOK_FUNC &&
-					( g_dFuncs[tNode.m_iFunc].m_eFunc==FUNC_PACKEDFACTORS || g_dFuncs[tNode.m_iFunc].m_eFunc==FUNC_RANKFACTORS ) )
+				if ( tNode.m_iToken==TOK_FUNC && ( tNode.m_iFunc==FUNC_PACKEDFACTORS || tNode.m_iFunc==FUNC_RANKFACTORS || tNode.m_iFunc==FUNC_FACTORS) )
 					pCall->m_dArgs2Free.Add ( dArgTypes.GetLength() );
 				dArgTypes.Add ( tNode.m_eRetType );
 			}

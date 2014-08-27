@@ -636,7 +636,6 @@ void BenchTokenizer ()
 
 	int iBytes = 0;
 	CSphString sError;
-	CSphVector<int> g_Runs[2];
 	for ( int iRun=1; iRun<=2; iRun++ )
 	{
 		char * sData = LoadFile ( "./configure", &iBytes, true );
@@ -2257,7 +2256,7 @@ static void DeleteIndexFiles ( const char * sIndex )
 		"0.sps" };
 
 	CSphString sName;
-	for ( int i=0; i<sizeof(sExts)/sizeof(sExts[0]); i++ )
+	for ( int i=0; i<(int)(sizeof(sExts)/sizeof(sExts[0])); i++ )
 	{
 		sName.SetSprintf ( "%s.%s", sIndex, sExts[i] );
 		unlink ( sName.cstr() );

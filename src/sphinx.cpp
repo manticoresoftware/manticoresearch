@@ -30525,7 +30525,9 @@ CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & s
 			assert ( !*pDst || *pDst==m_iDelimiter || *pDst=='"' || *pDst=='\\' || *pDst=='\r' || *pDst=='\n' );
 			bool bNull = !*pDst;
 			bool bEOL = ( *pDst=='\r' || *pDst=='\n' );
+#ifndef NDEBUG
 			bool bDelimiter = ( *pDst==m_iDelimiter );
+#endif
 			bool bQuot = ( *pDst=='"' );
 			bool bEscape = ( *pDst=='\\' );
 			int iOff = pDst-m_dBuf.Begin();

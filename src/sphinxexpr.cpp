@@ -5106,6 +5106,9 @@ ISphExpr * ExprParser_t::CreateIntervalNode ( int iArgsNode, CSphVector<ISphExpr
 			default:				return new Expr_Interval_c<float> ( dArgs ); break;
 		}
 	}
+#if !USE_WINDOWS
+	return NULL;
+#endif
 }
 
 

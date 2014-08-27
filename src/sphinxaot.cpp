@@ -1418,7 +1418,7 @@ protected:
 	const CSphWordforms *	m_pWordforms;
 
 public:
-	CSphAotTokenizerTmpl ( ISphTokenizer * pTok, CSphDict * pDict, bool bIndexExact, int iLang )
+	CSphAotTokenizerTmpl ( ISphTokenizer * pTok, CSphDict * pDict, bool bIndexExact, int DEBUGARG(iLang) )
 		: CSphTokenFilter ( pTok )
 	{
 		assert ( pTok );

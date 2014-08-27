@@ -1925,10 +1925,27 @@ static int G_FUNC_HASH_CHECK = FuncHashCheck();
 
 //////////////////////////////////////////////////////////////////////////
 
+/// check whether the type is numeric
+static inline bool IsNumeric ( ESphAttr eType )
+{
+	return eType==SPH_ATTR_INTEGER || eType==SPH_ATTR_BIGINT || eType==SPH_ATTR_FLOAT;
+}
+
 /// check for type based on int value
 static inline ESphAttr GetIntType ( int64_t iValue )
 {
 	return ( iValue>=(int64_t)INT_MIN && iValue<=(int64_t)INT_MAX ) ? SPH_ATTR_INTEGER : SPH_ATTR_BIGINT;
+}
+
+/// get the widest numeric type of the two
+static inline ESphAttr WidestType ( ESphAttr a, ESphAttr b )
+{
+	assert ( IsNumeric(a) && IsNumeric(b) );
+	if ( a==SPH_ATTR_FLOAT || b==SPH_ATTR_FLOAT )
+		return SPH_ATTR_FLOAT;
+	if ( a==SPH_ATTR_BIGINT || b==SPH_ATTR_BIGINT )
+		return SPH_ATTR_BIGINT;
+	return SPH_ATTR_INTEGER;
 }
 
 /// list of constants
@@ -1947,13 +1964,13 @@ public:
 
 	void Add ( int64_t iValue )
 	{
-		if ( m_eRetType!=SPH_ATTR_FLOAT )
-		{
-			m_eRetType = GetIntType ( iValue );
-			m_dInts.Add ( iValue );
-		} else
+		if ( m_eRetType==SPH_ATTR_FLOAT )
 		{
 			m_dFloats.Add ( (float)iValue );
+		} else
+		{
+			m_eRetType = WidestType ( m_eRetType, GetIntType ( iValue ) );
+			m_dInts.Add ( iValue );
 		}
 	}
 
@@ -3175,12 +3192,6 @@ ISphExpr * ExprParser_t::CreateExistNode ( const ExprNode_t & tNode )
 }
 
 //////////////////////////////////////////////////////////////////////////
-
-static inline bool IsNumeric ( ESphAttr eType )
-{
-	return eType==SPH_ATTR_INTEGER || eType==SPH_ATTR_BIGINT || eType==SPH_ATTR_FLOAT;
-}
-
 
 class Expr_Contains_c : public ISphExpr
 {
@@ -5113,7 +5124,7 @@ ISphExpr * ExprParser_t::CreateInNode ( int iNode )
 				default:
 				{
 					ISphExpr * pArg = CreateTree ( m_dNodes[iNode].m_iLeft );
-					switch ( tRight.m_pConsts->m_eRetType )
+					switch ( WidestType ( tLeft.m_eRetType, tRight.m_pConsts->m_eRetType ) )
 					{
 						case SPH_ATTR_INTEGER:	return new Expr_In_c<int> ( pArg, tRight.m_pConsts ); break;
 						case SPH_ATTR_BIGINT:	return new Expr_In_c<int64_t> ( pArg, tRight.m_pConsts ); break;

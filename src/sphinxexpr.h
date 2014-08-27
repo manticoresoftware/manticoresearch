@@ -52,7 +52,8 @@ enum ESphAttr
 	// used as intermediate types in the expression engine
 	SPH_ATTR_MAPARG		= 1000,
 	SPH_ATTR_FACTORS	= 1001,			///< packed search factors (binary, in-memory, pooled)
-	SPH_ATTR_JSON_FIELD	= 1002			///< points to particular field in JSON column subset
+	SPH_ATTR_JSON_FIELD	= 1002,			///< points to particular field in JSON column subset
+	SPH_ATTR_FACTORS_JSON	= 1003		///< packed search factors (binary, in-memory, pooled, provided to client json encoded)
 };
 
 /// column evaluation stage
@@ -199,7 +200,8 @@ enum
 {
 	SPH_FACTOR_DISABLE		= 0,
 	SPH_FACTOR_ENABLE		= 1,
-	SPH_FACTOR_CALC_ATC		= 1 << 1
+	SPH_FACTOR_CALC_ATC		= 1 << 1,
+	SPH_FACTOR_JSON_OUT		= 1 << 2
 };
 
 /// parses given expression, builds evaluator

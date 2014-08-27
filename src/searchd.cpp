@@ -6166,7 +6166,7 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 					{
 						CSphString sValue = tReq.GetString();
 						tMatch.SetAttr ( tAttr.m_tLocator, (SphAttr_t) sValue.Leak() );
-					} else if ( tAttr.m_eAttrType==SPH_ATTR_FACTORS )
+					} else if ( tAttr.m_eAttrType==SPH_ATTR_FACTORS || tAttr.m_eAttrType==SPH_ATTR_FACTORS_JSON )
 					{
 						DWORD uLength = tReq.GetDword();
 						BYTE * pData = new BYTE[uLength];
@@ -7458,6 +7458,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphTaggedV
 			dJsonFieldsItems.Add ( tCol.m_tLocator );
 			break;
 		case SPH_ATTR_FACTORS:
+		case SPH_ATTR_FACTORS_JSON:
 			dFactorItems.Add ( tCol.m_tLocator );
 			break;
 		default:
@@ -7885,6 +7886,7 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 						break;
 					}
 				case SPH_ATTR_FACTORS:
+				case SPH_ATTR_FACTORS_JSON:
 					{
 						if ( iVer<0x11C )
 						{
@@ -16211,46 +16213,121 @@ bool HandleMysqlSelect ( SqlRowBuffer_c & dRows, SearchHandler_c & tHandler )
 }
 
 
-static void FormatFactors ( CSphVector<BYTE> & dOut, const SPH_UDF_FACTORS & tFactors )
+static void FormatFactors ( CSphVector<BYTE> & dOut, const unsigned int * pFactors, bool bJson )
 {
 	const int MAX_STR_LEN = 512;
 	int iLen;
 	int iOff = dOut.GetLength();
 	dOut.Resize ( iOff+MAX_STR_LEN );
-	iLen = snprintf ( (char *)dOut.Begin()+iOff, MAX_STR_LEN, "bm25=%d, bm25a=%f, field_mask=%u, doc_word_count=%d",
-		tFactors.doc_bm25, tFactors.doc_bm25a, tFactors.matched_fields, tFactors.doc_word_count );
+	if ( !bJson )
+	{
+		iLen = snprintf ( (char *)dOut.Begin()+iOff, MAX_STR_LEN, "bm25=%d, bm25a=%f, field_mask=%u, doc_word_count=%d",
+			sphinx_get_doc_factor_int ( pFactors, SPH_DOCF_BM25 ), sphinx_get_doc_factor_float ( pFactors, SPH_DOCF_BM25A ),
+			sphinx_get_doc_factor_int ( pFactors, SPH_DOCF_MATCHED_FIELDS ), sphinx_get_doc_factor_int ( pFactors, SPH_DOCF_DOC_WORD_COUNT ) );
+	} else
+	{
+		iLen = snprintf ( (char *)dOut.Begin()+iOff, MAX_STR_LEN, "{\"bm25\":%d, \"bm25a\":%f, \"field_mask\":%u, \"doc_word_count\":%d",
+			sphinx_get_doc_factor_int ( pFactors, SPH_DOCF_BM25 ), sphinx_get_doc_factor_float ( pFactors, SPH_DOCF_BM25A ),
+			sphinx_get_doc_factor_int ( pFactors, SPH_DOCF_MATCHED_FIELDS ), sphinx_get_doc_factor_int ( pFactors, SPH_DOCF_DOC_WORD_COUNT ) );
+	}
 	dOut.Resize ( iOff+iLen );
 
-	for ( int i = 0; i < tFactors.num_fields; i++ )
+	if ( bJson )
 	{
-		const SPH_UDF_FIELD_FACTORS & f = tFactors.field[i];
-		if ( !f.hit_count )
+		iOff = dOut.GetLength();
+		dOut.Resize ( iOff+MAX_STR_LEN );
+		iLen = snprintf ( (char *)dOut.Begin()+iOff, MAX_STR_LEN, ", \"fields\":[" );
+		dOut.Resize ( iOff+iLen );
+	}
+
+	const unsigned int * pExactHit = sphinx_get_doc_factor_ptr ( pFactors, SPH_DOCF_EXACT_HIT_MASK );
+	const unsigned int * pExactOrder = sphinx_get_doc_factor_ptr ( pFactors, SPH_DOCF_EXACT_ORDER_MASK );
+
+	int iFields = sphinx_get_doc_factor_int ( pFactors, SPH_DOCF_NUM_FIELDS );
+	for ( int i = 0; i<iFields; i++ )
+	{
+		const unsigned int * pField = sphinx_get_field_factors ( pFactors, i );
+		int iHits = sphinx_get_field_factor_int ( pField, SPH_FIELDF_HIT_COUNT );
+		if ( !iHits )
 			continue;
 
 		iOff = dOut.GetLength();
 		dOut.Resize ( iOff+MAX_STR_LEN );
-		iLen = snprintf ( (char *)dOut.Begin()+iOff, MAX_STR_LEN, ", field%d="
+
+		int iFieldPos = i/32;
+		int iFieldBit = 1<<( i % 32 );
+		int iGotExactHit = ( ( pExactHit [ iFieldPos ] & iFieldBit )==0 ? 0 : 1 );
+		int iGotExactOrder = ( ( pExactOrder [ iFieldPos ] & iFieldBit )==0 ? 0 : 1 );
+
+		if ( !bJson )
+		{
+			iLen = snprintf ( (char *)dOut.Begin()+iOff, MAX_STR_LEN, ", field%d="
 				"(lcs=%u, hit_count=%u, word_count=%u, "
 				"tf_idf=%f, min_idf=%f, max_idf=%f, sum_idf=%f, "
 				"min_hit_pos=%d, min_best_span_pos=%d, exact_hit=%u, max_window_hits=%d, "
 				"min_gaps=%d, exact_order=%d, lccs=%d, wlccs=%f, atc=%f)",
 				i,
-				f.lcs, f.hit_count, f.word_count,
-				f.tf_idf, f.min_idf, f.max_idf, f.sum_idf,
-				f.min_hit_pos, f.min_best_span_pos, f.exact_hit, f.max_window_hits,
-				f.min_gaps, f.exact_order, f.lccs, f.wlccs, f.atc );
+				sphinx_get_field_factor_int ( pField, SPH_FIELDF_LCS ), sphinx_get_field_factor_int ( pField, SPH_FIELDF_HIT_COUNT ), sphinx_get_field_factor_int ( pField, SPH_FIELDF_WORD_COUNT ),
+				sphinx_get_field_factor_float ( pField, SPH_FIELDF_TF_IDF ), sphinx_get_field_factor_float ( pField, SPH_FIELDF_MIN_IDF ),
+				sphinx_get_field_factor_float ( pField, SPH_FIELDF_MAX_IDF ), sphinx_get_field_factor_float ( pField, SPH_FIELDF_SUM_IDF ),
+				sphinx_get_field_factor_int ( pField, SPH_FIELDF_MIN_HIT_POS ), sphinx_get_field_factor_int ( pField, SPH_FIELDF_MIN_BEST_SPAN_POS ),
+				iGotExactHit, sphinx_get_field_factor_int ( pField, SPH_FIELDF_MAX_WINDOW_HITS ),
+				sphinx_get_field_factor_int ( pField, SPH_FIELDF_MIN_GAPS ), iGotExactOrder,
+				sphinx_get_field_factor_int ( pField, SPH_FIELDF_LCCS ), sphinx_get_field_factor_float ( pField, SPH_FIELDF_WLCCS ), sphinx_get_field_factor_float ( pField, SPH_FIELDF_ATC ) );
+		} else
+		{
+			iLen = snprintf ( (char *)dOut.Begin()+iOff, MAX_STR_LEN,
+				"%s{\"lcs\":%u, \"hit_count\":%u, \"word_count\":%u, "
+				"\"tf_idf\":%f, \"min_idf\":%f, \"max_idf\":%f, \"sum_idf\":%f, "
+				"\"min_hit_pos\":%d, \"min_best_span_pos\":%d, \"exact_hit\":%u, \"max_window_hits\":%d, "
+				"\"min_gaps\":%d, \"exact_order\":%d, \"lccs\":%d, \"wlccs\":%f, \"atc\":%f}",
+				( i==0 ? "" : ", " ), i,
+				sphinx_get_field_factor_int ( pField, SPH_FIELDF_LCS ), sphinx_get_field_factor_int ( pField, SPH_FIELDF_HIT_COUNT ), sphinx_get_field_factor_int ( pField, SPH_FIELDF_WORD_COUNT ),
+				sphinx_get_field_factor_float ( pField, SPH_FIELDF_TF_IDF ), sphinx_get_field_factor_float ( pField, SPH_FIELDF_MIN_IDF ),
+				sphinx_get_field_factor_float ( pField, SPH_FIELDF_MAX_IDF ), sphinx_get_field_factor_float ( pField, SPH_FIELDF_SUM_IDF ),
+				sphinx_get_field_factor_int ( pField, SPH_FIELDF_MIN_HIT_POS ), sphinx_get_field_factor_int ( pField, SPH_FIELDF_MIN_BEST_SPAN_POS ),
+				iGotExactHit, sphinx_get_field_factor_int ( pField, SPH_FIELDF_MAX_WINDOW_HITS ),
+				sphinx_get_field_factor_int ( pField, SPH_FIELDF_MIN_GAPS ), iGotExactOrder,
+				sphinx_get_field_factor_int ( pField, SPH_FIELDF_LCCS ), sphinx_get_field_factor_float ( pField, SPH_FIELDF_WLCCS ), sphinx_get_field_factor_float ( pField, SPH_FIELDF_ATC ) );
+		}
+
 		dOut.Resize ( iOff+iLen );
 	}
 
-	for ( int i = 0; i < tFactors.max_uniq_qpos; i++ )
+	int iUniqQpos = sphinx_get_doc_factor_int ( pFactors, SPH_DOCF_MAX_UNIQ_QPOS );
+	if ( bJson )
 	{
-		const SPH_UDF_TERM_FACTORS & tTerm = tFactors.term[i];
-		if ( !tTerm.keyword_mask )
+		iOff = dOut.GetLength();
+		dOut.Resize ( iOff+MAX_STR_LEN );
+		iLen = snprintf ( (char *)dOut.Begin()+iOff, MAX_STR_LEN, "], \"words\":[" );
+		dOut.Resize ( iOff+iLen );
+	}
+	for ( int i = 0; i<iUniqQpos; i++ )
+	{
+		const unsigned int * pTerm = sphinx_get_term_factors ( pFactors, i+1 );
+		int iKeywordMask = sphinx_get_term_factor_int ( pTerm, SPH_TERMF_KEYWORD_MASK );
+		if ( !iKeywordMask )
 			continue;
 
 		iOff = dOut.GetLength();
 		dOut.Resize ( iOff+MAX_STR_LEN );
-		iLen = snprintf ( (char *)dOut.Begin()+iOff, MAX_STR_LEN, ", word%d=(tf=%d, idf=%f)", i, tTerm.tf, tTerm.idf );
+		if ( !bJson )
+		{
+			iLen = snprintf ( (char *)dOut.Begin()+iOff, MAX_STR_LEN, ", word%d=(tf=%d, idf=%f)", i,
+				sphinx_get_term_factor_int ( pTerm, SPH_TERMF_TF ), sphinx_get_term_factor_float ( pTerm, SPH_TERMF_IDF ) );
+		} else
+		{
+			iLen = snprintf ( (char *)dOut.Begin()+iOff, MAX_STR_LEN, "%s{\"tf\":%d, \"idf\":%f}", ( i==0 ? "" : ", " ), i,
+				sphinx_get_term_factor_int ( pTerm, SPH_TERMF_TF ), sphinx_get_term_factor_float ( pTerm, SPH_TERMF_IDF ) );
+		}
+		dOut.Resize ( iOff+iLen );
+	}
+
+	if ( bJson )
+	{
+		iOff = dOut.GetLength();
+		dOut.Resize ( iOff+MAX_STR_LEN );
+		iLen = snprintf ( (char *)dOut.Begin()+iOff, MAX_STR_LEN, "]}" );
 		dOut.Resize ( iOff+iLen );
 	}
 }
@@ -16309,7 +16386,7 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 				eType = MYSQL_COL_FLOAT;
 			if ( tCol.m_eAttrType==SPH_ATTR_BIGINT )
 				eType = MYSQL_COL_LONGLONG;
-			if ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_STRINGPTR || tCol.m_eAttrType==SPH_ATTR_FACTORS )
+			if ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_STRINGPTR || tCol.m_eAttrType==SPH_ATTR_FACTORS || tCol.m_eAttrType==SPH_ATTR_FACTORS_JSON )
 				eType = MYSQL_COL_STRING;
 			dRows.HeadColumn ( tCol.m_sName.cstr(), eType );
 		}
@@ -16476,18 +16553,15 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 				}
 
 			case SPH_ATTR_FACTORS:
+			case SPH_ATTR_FACTORS_JSON:
 				{
 					int iLen = 0;
 					const BYTE * pStr = NULL;
 					const unsigned int * pFactors = (unsigned int*) tMatch.GetAttr ( tLoc );
 					if ( pFactors )
 					{
-						SPH_UDF_FACTORS tUnpacked;
-						sphinx_factors_init ( &tUnpacked );
-						sphinx_factors_unpack ( pFactors, &tUnpacked );
 						dTmp.Resize ( 0 );
-						FormatFactors ( dTmp, tUnpacked );
-						sphinx_factors_deinit ( &tUnpacked );
+						FormatFactors ( dTmp, pFactors, eAttrType==SPH_ATTR_FACTORS_JSON );
 						iLen = dTmp.GetLength();
 						pStr = dTmp.Begin();
 					}

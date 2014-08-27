@@ -235,6 +235,21 @@ int sphinx_get_doc_factor_int ( const unsigned int * in, enum sphinx_doc_factor 
 	return 0;
 }
 
+const unsigned int * sphinx_get_doc_factor_ptr ( const unsigned int * in, enum sphinx_doc_factor f )
+{
+	int fields_size;
+
+	if ( f==SPH_DOCF_EXACT_HIT_MASK )
+		return in + 6;
+
+	fields_size = ( (int)in[5] + 31 ) / 32;
+	if ( f==SPH_DOCF_EXACT_ORDER_MASK )
+		return in + 6 + fields_size;
+
+	return 0;
+};
+
+
 float sphinx_get_doc_factor_float ( const unsigned int * in, enum sphinx_doc_factor f )
 {
 	if ( f==SPH_DOCF_BM25A )

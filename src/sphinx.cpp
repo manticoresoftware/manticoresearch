@@ -6927,7 +6927,7 @@ void ISphSchema::InsertAttr ( CSphVector<CSphColumnInfo> & dAttrs, CSphVector<in
 	if ( tCol.m_eAttrType==SPH_ATTR_BIGINT || tCol.m_eAttrType==SPH_ATTR_JSON_FIELD )
 		iBits = 64;
 
-	if ( tCol.m_eAttrType==SPH_ATTR_STRINGPTR || tCol.m_eAttrType==SPH_ATTR_FACTORS )
+	if ( tCol.m_eAttrType==SPH_ATTR_STRINGPTR || tCol.m_eAttrType==SPH_ATTR_FACTORS || tCol.m_eAttrType==SPH_ATTR_FACTORS_JSON )
 	{
 		assert ( bDynamic );
 		iBits = ROWITEMPTR_BITS;
@@ -15135,7 +15135,7 @@ static inline void CalcContextItems ( CSphMatch & tMatch, const CSphVector<CSphQ
 			const BYTE * pStr = NULL;
 			tCalc.m_pExpr->StringEval ( tMatch, &pStr );
 			tMatch.SetAttr ( tCalc.m_tLoc, (SphAttr_t) pStr ); // FIXME! a potential leak of *previous* value?
-		} else if ( tCalc.m_eType==SPH_ATTR_FACTORS )
+		} else if ( tCalc.m_eType==SPH_ATTR_FACTORS || tCalc.m_eType==SPH_ATTR_FACTORS_JSON )
 			tMatch.SetAttr ( tCalc.m_tLoc, (SphAttr_t)tCalc.m_pExpr->FactorEval(tMatch) );
 		else
 			tMatch.SetAttrFloat ( tCalc.m_tLoc, tCalc.m_pExpr->Eval(tMatch) );
@@ -15177,6 +15177,7 @@ static inline void FreeStrItems ( CSphMatch & tMatch, const CSphVector<CSphQuery
 			break;
 
 		case SPH_ATTR_FACTORS:
+		case SPH_ATTR_FACTORS_JSON:
 			{
 				BYTE * pData = (BYTE *)tMatch.GetAttr ( tCalc.m_tLoc );
 				delete [] pData;

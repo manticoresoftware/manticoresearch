@@ -226,6 +226,9 @@ int sphinx_get_term_factor_int ( const unsigned int * in, enum sphinx_term_facto
 /// returns a term factor value, interpreted as float
 float sphinx_get_term_factor_float ( const unsigned int * in, enum sphinx_term_factor f );
 
+/// returns a pointer to document factor value, interpreted as vector of integers
+const unsigned int * sphinx_get_doc_factor_ptr ( const unsigned int * in, enum sphinx_doc_factor f );
+
 //////////////////////////////////////////////////////////////////////////
 // RANKER PLUGINS
 //////////////////////////////////////////////////////////////////////////

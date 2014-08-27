@@ -66,6 +66,13 @@ CREATE TABLE test_table
 <sphinxql>select *, weight(), packedfactors() from test where match('and idftest1 the') option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
 <sphinxql>select *, weight(), packedfactors() from test where match('the idftest1') option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
 <sphinxql>select *, weight(), packedfactors() from test where match('the and idftest1') option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
+
+<!-- packedfactors with json output -->
+<sphinxql>select *, weight(), factors({json=1}) from test where match('idftest1 the') option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
+<sphinxql>select *, weight(), packedfactors({json=1}) from test where match('and idftest1 the')  option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
+<sphinxql>select *, weight(), factors({json=1}) from test where match('the idftest1')  option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
+<sphinxql>select *, weight(), packedfactors({json=1}) from test where match('the and idftest1')  option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
+
 </sphqueries>
 
 </test>

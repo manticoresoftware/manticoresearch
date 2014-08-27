@@ -5004,6 +5004,9 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 			return NULL;
 		}
 
+		if ( uQueryPackedFactorFlags & SPH_FACTOR_JSON_OUT )
+			tExprCol.m_eAttrType = SPH_ATTR_FACTORS_JSON;
+
 		// force GROUP_CONCAT() to be computed as strings
 		if ( tExprCol.m_eAggrFunc==SPH_AGGR_CAT )
 		{

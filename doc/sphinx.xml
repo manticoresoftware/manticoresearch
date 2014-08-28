@@ -14313,12 +14313,16 @@ rlp_max_batch_docs = 100
 <listitem><para>added searchd configuration keys agent_connect_timeout, agent_query_timeout, agent_retry_count and agent_retry_delay</para></listitem>
 <listitem><para>added connections counter and also avg and max timers to agent status</para></listitem>
 <listitem><para>added #1999 ATAN2() function</para></listitem>
+<listitem><para>GROUPBY() function now returns strings for string attributes</para></listitem>
+<listitem><para>added FACTORS() alias for PACKEDFACTORS() function</para></listitem>
+<listitem><para>added JSON-formatted output to PACKEDFACTORS() function</para></listitem>
 </itemizedlist>
 
 <bridgehead>Optimizations and removals</bridgehead>
 <itemizedlist>
 <listitem><para>optimized tokenizing with expections on</para></listitem>
 <listitem><para>optimized json_autoconv_numbers option speed</para></listitem>
+<listitem><para>fixed #1970, speeding up ZONE and ZONESPAN operators</para></listitem>
 </itemizedlist>
 
 <bridgehead>Bug fixes</bridgehead>
@@ -14329,6 +14333,11 @@ rlp_max_batch_docs = 100
 <listitem><para>fixed #1972, daemon crashes trying to read a big (>8G) .spm file</para></listitem>
 <listitem><para>fixed cpu time logging for cases where work is done in child threads or agents</para></listitem>
 <listitem><para>fixed #2005, aggregate functions improperly calculate aliased expressions</para></listitem>
+<listitem><para>fixed buffer overrun when sizing packed factors (with way too many fields) in expression ranker</para></listitem>
+<listitem><para>fixed #2022, blend characters of matched word must not be outside of snippet passage</para></listitem>
+<listitem><para>fixed #2021, output units in GEODIST() function</para></listitem>
+<listitem><para>fixed #2027, slow queries to multiple indexes with large kill-lists</para></listitem>
+<listitem><para>fixed #2018, different wildcard behavior in RT and plain indexes</para></listitem>
 </itemizedlist>
 </sect1>
 

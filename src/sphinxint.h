@@ -383,6 +383,8 @@ enum ExtraData_e
 
 	EXTRA_SET_RANKER_PLUGIN,
 	EXTRA_SET_RANKER_PLUGIN_OPTS,
+
+	EXTRA_GET_POOL_SIZE
 };
 
 /// generic COM-like interface

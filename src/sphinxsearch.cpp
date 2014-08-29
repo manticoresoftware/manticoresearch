@@ -8556,6 +8556,12 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::ExtraDataImpl ( Extr
 					pState->m_iMaxQpos = m_iMaxQpos;
 				}
 				return true;
+			case EXTRA_GET_POOL_SIZE:
+				if_const ( NEED_PACKEDFACTORS )
+				{
+					*(int64_t*)ppResult = (int64_t)GetMaxPackedLength()*( m_iMaxMatches+ExtNode_i::MAX_DOCS );
+					return true;
+				}
 			default:
 				return false;
 		}

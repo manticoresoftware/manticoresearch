@@ -18999,6 +18999,14 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	pRanker->ExtraData ( EXTRA_SET_MAXMATCHES, (void**)&iMatchPoolSize );
 
+	// check for the possible integer overflow in m_dPool.Resize
+	int64_t iPoolSize = 0;
+	if ( pRanker->ExtraData ( EXTRA_GET_POOL_SIZE, (void**)&iPoolSize ) && iPoolSize>INT_MAX )
+	{
+		pResult->m_sError.SetSprintf ( "ranking factors pool too big (%d Mb), reduce max_matches", iPoolSize/1024/1024 );
+		return false;
+	}
+
 	// empty index, empty response!
 	if ( m_bIsEmpty )
 		return true;

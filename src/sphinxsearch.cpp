@@ -8561,7 +8561,8 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::ExtraDataImpl ( Extr
 				{
 					*(int64_t*)ppResult = (int64_t)GetMaxPackedLength()*( m_iMaxMatches+ExtNode_i::MAX_DOCS );
 					return true;
-				}
+				} else
+					return false;
 			default:
 				return false;
 		}

@@ -1390,7 +1390,7 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 	// hit-less indices
 	if ( hIndex("hitless_words") )
 	{
-		const CSphString & sValue = hIndex["hitless_words"];
+		const CSphString & sValue = hIndex["hitless_words"].strval();
 		if ( sValue=="all" )
 		{
 			tSettings.m_eHitless = SPH_HITLESS_ALL;
@@ -1409,7 +1409,7 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 	tSettings.m_eBigramIndex = SPH_BIGRAM_NONE;
 	if ( hIndex("bigram_index") )
 	{
-		CSphString & s = hIndex["bigram_index"];
+		CSphString s = hIndex["bigram_index"].strval();
 		s.ToLower();
 		if ( s=="all" )
 			tSettings.m_eBigramIndex = SPH_BIGRAM_ALL;
@@ -2256,9 +2256,9 @@ void sphCheckDuplicatePaths ( const CSphConfig & hConf )
 		if ( hIndex ( "path" ) )
 		{
 			const CSphString & sIndex = hConf["index"].IterateGetKey ();
-			if ( hPaths ( hIndex["path"] ) )
-				sphDie ( "duplicate paths: index '%s' has the same path as '%s'.\n", sIndex.cstr(), hPaths[hIndex["path"]].cstr() );
-			hPaths.Add ( sIndex, hIndex["path"] );
+			if ( hPaths ( hIndex["path"].strval() ) )
+				sphDie ( "duplicate paths: index '%s' has the same path as '%s'.\n", sIndex.cstr(), hPaths[hIndex["path"].strval()].cstr() );
+			hPaths.Add ( sIndex, hIndex["path"].strval() );
 		}
 	}
 }
@@ -2283,7 +2283,7 @@ void sphConfigureCommon ( const CSphConfig & hConf )
 
 	if ( hCommon("on_json_attr_error") )
 	{
-		const CSphString & sVal = hCommon["on_json_attr_error"];
+		const CSphString & sVal = hCommon["on_json_attr_error"].strval();
 		if ( sVal=="ignore_attr" )
 			bJsonStrict = false;
 		else if ( sVal=="fail_index" )
@@ -2294,7 +2294,7 @@ void sphConfigureCommon ( const CSphConfig & hConf )
 
 	if ( hCommon("json_autoconv_keynames") )
 	{
-		const CSphString & sVal = hCommon["json_autoconv_keynames"];
+		const CSphString & sVal = hCommon["json_autoconv_keynames"].strval();
 		if ( sVal=="lowercase" )
 			bJsonKeynamesToLowercase = true;
 		else

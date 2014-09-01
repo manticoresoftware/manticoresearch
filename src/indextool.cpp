@@ -992,11 +992,11 @@ int main ( int argc, char ** argv )
 		while ( hIndexes.IterateNext() )
 		{
 			const CSphConfigSection & tIndex = hIndexes.IterateGet();
-			const CSphString * pPath = tIndex ( "path" );
+			const CSphVariant * pPath = tIndex ( "path" );
 			if ( !pPath )
 				continue;
 
-			const CSphString * pType = tIndex ( "type" );
+			const CSphVariant * pType = tIndex ( "type" );
 			if ( pType && ( *pType=="rt" || *pType=="distributed" ) )
 				continue;
 
@@ -1091,7 +1091,7 @@ int main ( int argc, char ** argv )
 		{
 			CSphIndexSettings tSettings = pIndex->GetSettings();
 
-			const CSphString & sValue = hConf["index"][sIndex]["hitless_words"];
+			const CSphString & sValue = hConf["index"][sIndex]["hitless_words"].strval();
 			if ( sValue=="all" )
 			{
 				tSettings.m_eHitless = SPH_HITLESS_ALL;

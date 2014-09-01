@@ -19953,7 +19953,7 @@ bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgent, cons
 						szIndexName, pAgent->cstr(), p );
 					return false;
 				}
-				CSphString sSub = pAgent->SubString ( pAnchor-pAgent->cstr(), p-pAnchor );
+				CSphString sSub = pAgent->strval().SubString ( pAnchor-pAgent->cstr(), p-pAnchor );
 				if ( sSub.cstr()[0]=='/' )
 				{
 #if USE_WINDOWS
@@ -20041,7 +20041,7 @@ bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgent, cons
 				if ( sphIsAlpha(*p) || isspace(*p) || *p==',' )
 					break;
 
-				CSphString sIndexes = pAgent->SubString ( pAnchor-pAgent->cstr(), p-pAnchor );
+				CSphString sIndexes = pAgent->strval().SubString ( pAnchor-pAgent->cstr(), p-pAnchor );
 
 				if ( *p && *p!='|' )
 				{
@@ -20342,7 +20342,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 			sphWarning ( "WARNING: index '%s': prefix_fields and infix_fields has no effect with dict=keywords, ignoring\n", szIndexName );
 		tIdx.m_pIndex = sphCreateIndexRT ( tSchema, szIndexName, iRamSize, hIndex["path"].cstr(), bWordDict );
 		tIdx.m_bEnabled = false;
-		tIdx.m_sIndexPath = hIndex["path"];
+		tIdx.m_sIndexPath = hIndex["path"].strval();
 		tIdx.m_bRT = true;
 
 		ConfigureLocalIndex ( tIdx, hIndex );
@@ -20397,7 +20397,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		ConfigureLocalIndex ( tIdx, hIndex );
 
 		// try to create index
-		tIdx.m_sIndexPath = hIndex["path"];
+		tIdx.m_sIndexPath = hIndex["path"].strval();
 		PreCreatePlainIndex ( tIdx, szIndexName );
 		tIdx.m_pIndex->SetCacheSize ( g_iMaxCachedDocs, g_iMaxCachedHits );
 		CSphIndexStatus tStatus;
@@ -22838,7 +22838,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	{
 		// listen directives in configuration file
 		for ( CSphVariant * v = hSearchd("listen"); v; v = v->m_pNext )
-			AddListener ( *v );
+			AddListener ( v->strval() );
 
 		// default is to listen on our two ports
 		if ( !g_dListeners.GetLength() )

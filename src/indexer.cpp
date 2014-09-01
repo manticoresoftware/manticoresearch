@@ -384,7 +384,7 @@ bool ParseMultiAttr ( const char * sBuf, CSphColumnInfo & tAttr, const char * sS
 // get string
 #define LOC_GETS(_arg,_key) \
 	if ( hSource.Exists(_key) ) \
-		_arg = hSource[_key];
+		_arg = hSource[_key].strval();
 
 // get int
 #define LOC_GETI(_arg,_key) \
@@ -917,7 +917,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 	bool bPlain = true;
 	if ( hIndex("type") )
 	{
-		const CSphString & sType = hIndex["type"];
+		const CSphString & sType = hIndex["type"].strval();
 		bPlain = ( sType=="plain" );
 
 		if ( sType!="plain" && sType!="distributed" && sType!="rt" && sType!="template" )
@@ -1840,7 +1840,7 @@ int main ( int argc, char ** argv )
 
 		if ( hIndexer("on_file_field_error") )
 		{
-			const CSphString & sVal = hIndexer["on_file_field_error"];
+			const CSphString & sVal = hIndexer["on_file_field_error"].strval();
 			if ( sVal=="ignore_field" )
 				g_eOnFileFieldError = FFE_IGNORE_FIELD;
 			else if ( sVal=="skip_document" )
@@ -1856,7 +1856,7 @@ int main ( int argc, char ** argv )
 		bool bJsonKeynamesToLowercase = false;
 		if ( hIndexer("on_json_attr_error") )
 		{
-			const CSphString & sVal = hIndexer["on_json_attr_error"];
+			const CSphString & sVal = hIndexer["on_json_attr_error"].strval();
 			if ( sVal=="ignore_attr" )
 				bJsonStrict = false;
 			else if ( sVal=="fail_index" )
@@ -1867,7 +1867,7 @@ int main ( int argc, char ** argv )
 
 		if ( hIndexer("json_autoconv_keynames") )
 		{
-			const CSphString & sVal = hIndexer["json_autoconv_keynames"];
+			const CSphString & sVal = hIndexer["json_autoconv_keynames"].strval();
 			if ( sVal=="lowercase" )
 				bJsonKeynamesToLowercase = true;
 			else

@@ -89,7 +89,7 @@ public:
 	const char * GetStr ( const char * sKey, const char * sDefault="" ) const
 	{
 		CSphVariant * pEntry = (*this)( sKey );
-		return pEntry ? pEntry->cstr() : sDefault;
+		return pEntry ? pEntry->strval().cstr() : sDefault;
 	}
 
 	/// get size option (plain int, or with K/M prefix) value by key and default value

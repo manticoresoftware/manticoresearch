@@ -28036,7 +28036,7 @@ struct CSphSchemaConfigurator
 	{
 		for ( const CSphVariant * pCur = pHead; pCur; pCur= pCur->m_pNext )
 		{
-			CSphColumnInfo tCol ( pCur->cstr(), eAttrType );
+			CSphColumnInfo tCol ( pCur->strval().cstr(), eAttrType );
 			char * pColon = strchr ( const_cast<char*> ( tCol.m_sName.cstr() ), ':' );
 			if ( pColon )
 			{
@@ -28082,7 +28082,7 @@ struct CSphSchemaConfigurator
 	{
 		for ( const CSphVariant * pCur = pHead; pCur; pCur= pCur->m_pNext )
 		{
-			const char * sFieldName = pCur->cstr();
+			const char * sFieldName = pCur->strval().cstr();
 
 			bool bFound = false;
 			for ( int i = 0; i < tSchema.m_dFields.GetLength () && !bFound; i++ )
@@ -30148,7 +30148,7 @@ bool CSphSource_BaseSV::Setup ( const CSphConfigSection & hSource, FILE * pPipe,
 		const CSphVariant * pVal = &hSource.IterateGet();
 		while ( pVal )
 		{
-			sColumn = *pVal;
+			sColumn = pVal->strval();
 			// uint attribute might have bit count that should by cut off from name
 			const char * pColon = strchr ( sColumn.cstr(), ':' );
 			if ( pColon )

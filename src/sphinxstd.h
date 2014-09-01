@@ -1648,7 +1648,7 @@ public:
 		*this = rhs;
 	}
 
-	virtual ~CSphString ()
+	~CSphString ()
 	{
 		SafeDeleteArray ( m_sValue );
 	}
@@ -2046,9 +2046,10 @@ private:
 
 /// immutable string/int/float variant list proxy
 /// used in config parsing
-struct CSphVariant : public CSphString
+struct CSphVariant
 {
 protected:
+	CSphString		m_sValue;
 	int				m_iValue;
 	int64_t			m_i64Value;
 	float			m_fValue;
@@ -2062,8 +2063,7 @@ public:
 public:
 	/// default ctor
 	CSphVariant ()
-		: CSphString ()
-		, m_iValue ( 0 )
+		: m_iValue ( 0 )
 		, m_i64Value ( 0 )
 		, m_fValue ( 0.0f )
 		, m_pNext ( NULL )
@@ -2074,10 +2074,10 @@ public:
 
 	/// ctor from C string
 	CSphVariant ( const char * sString, int iTag )
-		: CSphString ( sString )
-		, m_iValue ( m_sValue ? atoi ( m_sValue ) : 0 )
-		, m_i64Value ( m_sValue ? (int64_t)strtoull ( m_sValue, NULL, 10 ) : 0 )
-		, m_fValue ( m_sValue ? (float)atof ( m_sValue ) : 0.0f )
+		: m_sValue ( sString )
+		, m_iValue ( sString ? atoi ( sString ) : 0 )
+		, m_i64Value ( sString ? (int64_t)strtoull ( sString, NULL, 10 ) : 0 )
+		, m_fValue ( sString ? (float)atof ( sString ) : 0.0f )
 		, m_pNext ( NULL )
 		, m_bTag ( false )
 		, m_iTag ( iTag )
@@ -2086,39 +2086,23 @@ public:
 
 	/// copy ctor
 	CSphVariant ( const CSphVariant & rhs )
-		: CSphString ()
-		, m_iValue ( 0 )
-		, m_i64Value ( 0 )
-		, m_fValue ( 0.0f )
-		, m_pNext ( NULL )
 	{
 		*this = rhs;
 	}
 
 	/// default dtor
 	/// WARNING: automatically frees linked items!
-	virtual ~CSphVariant ()
+	~CSphVariant ()
 	{
 		SafeDelete ( m_pNext );
 	}
 
-	/// int value getter
-	int intval () const
-	{
-		return m_iValue;
-	}
+	const char * cstr() const { return m_sValue.cstr(); }
 
-	/// int64_t value getter
-	int64_t int64val () const
-	{
-		return m_i64Value;
-	}
-
-	/// float value getter
-	float floatval () const
-	{
-		return m_fValue;
-	}
+	const CSphString & strval () const { return m_sValue; }
+	int intval () const	{ return m_iValue; }
+	int64_t int64val () const { return m_i64Value; }
+	float floatval () const	{ return m_fValue; }
 
 	/// default copy operator
 	const CSphVariant & operator = ( const CSphVariant & rhs )
@@ -2127,7 +2111,7 @@ public:
 		if ( rhs.m_pNext )
 			m_pNext = new CSphVariant ( *rhs.m_pNext );
 
-		CSphString::operator = ( rhs );
+		m_sValue = rhs.m_sValue;
 		m_iValue = rhs.m_iValue;
 		m_i64Value = rhs.m_i64Value;
 		m_fValue = rhs.m_fValue;
@@ -2136,6 +2120,9 @@ public:
 
 		return *this;
 	}
+
+	bool operator== ( const char * s ) const { return m_sValue==s; }
+	bool operator!= ( const char * s ) const { return m_sValue!=s; }
 };
 
 //////////////////////////////////////////////////////////////////////////

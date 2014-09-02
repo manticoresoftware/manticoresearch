@@ -5,7 +5,7 @@
 ]>
 <book lang="en">
 
-<title>Sphinx 2.2.4-dev reference manual</title>
+<title>Sphinx 2.2.4-beta reference manual</title>
 <subtitle>Free open-source SQL full-text search engine</subtitle>
 
 <bookinfo>
@@ -14297,47 +14297,47 @@ rlp_max_batch_docs = 100
 
 <appendix id="changelog"><title>Sphinx revision history</title>
 
-<sect1 id="rel224"><title>Version 2.2.4-beta, ??? july 2014</title>
+<sect1 id="rel224"><title>Version 2.2.4-beta, 02 sep 2014</title>
 <bridgehead>New major features</bridgehead>
 <itemizedlist>
-<listitem><para>added ALTER RTINDEX rt1 RECONFIGURE which allows to change RT index settings on the fly</para></listitem>
+<listitem><para>added <link linkend="sphinxql-attach">ALTER</link> RTINDEX rt1 RECONFIGURE which allows to change RT index settings on the fly</para></listitem>
+<listitem><para>added <link linkend="sphinxql-show-index-settings">SHOW INDEX idx1 SETTINGS</link> statement</para></listitem>
 <listitem><para>added ability to specify several destination forms for the same source wordform (as a result, N:M mapping is now available)</para></listitem>
-<listitem><para>added SHOW INDEX idx1 SETTINGS statement</para></listitem>
 <listitem><para>added blended chars support to exceptions</para></listitem>
 </itemizedlist>
 
 <bridgehead>New minor features</bridgehead>
 <itemizedlist>
-<listitem><para>added ANY()/ALL()/INDEXOF() support for JSON string arrays</para></listitem>
-<listitem><para>added LIMIT clause for the FACET keyword</para></listitem>
-<listitem><para>added searchd configuration keys agent_connect_timeout, agent_query_timeout, agent_retry_count and agent_retry_delay</para></listitem>
+<listitem><para>added <link linkend="expr-func-any">ANY()</link>/<link linkend="expr-func-all">ALL()</link>/<link linkend="expr-func-indexof">INDEXOF()</link> support for JSON string arrays</para></listitem>
+<listitem><para>added FACTORS() alias for <link linkend="expr-func-packedfactors">PACKEDFACTORS()</link> function</para></listitem>
+<listitem><para>added <code>LIMIT</code> clause for the <link linkend="sphinxql-select">FACET</link> keyword</para></listitem>
+<listitem><para>added JSON-formatted output to <code>PACKEDFACTORS()</code> function</para></listitem>
+<listitem><para>added #1999 <link linkend="expr-func-atan2">ATAN2()</link> function</para></listitem>
 <listitem><para>added connections counter and also avg and max timers to agent status</para></listitem>
-<listitem><para>added #1999 ATAN2() function</para></listitem>
-<listitem><para>GROUPBY() function now returns strings for string attributes</para></listitem>
-<listitem><para>added FACTORS() alias for PACKEDFACTORS() function</para></listitem>
-<listitem><para>added JSON-formatted output to PACKEDFACTORS() function</para></listitem>
+<listitem><para>added <filename>searchd</filename> configuration keys <link linkend="conf-agent-connect-timeout">agent_connect_timeout</link>, <link linkend="conf-agent-query-timeout">agent_query_timeout</link>, <link linkend="conf-agent-retry-count">agent_retry_count</link> and <link linkend="conf-agent-retry-delay">agent_retry_delay</link></para></listitem>
+<listitem><para><link linkend="sphinxql-select">GROUPBY()</link> function now returns strings for string attributes</para></listitem>
 </itemizedlist>
 
 <bridgehead>Optimizations and removals</bridgehead>
 <itemizedlist>
+<listitem><para>optimized <link linkend="conf-json-autoconv-numbers">json_autoconv_numbers</link> option speed</para></listitem>
 <listitem><para>optimized tokenizing with expections on</para></listitem>
-<listitem><para>optimized json_autoconv_numbers option speed</para></listitem>
-<listitem><para>fixed #1970, speeding up ZONE and ZONESPAN operators</para></listitem>
+<listitem><para>fixed #1970, speeding up <link linkend="extended-syntax">ZONE and ZONESPAN</link> operators</para></listitem>
 </itemizedlist>
 
 <bridgehead>Bug fixes</bridgehead>
 <itemizedlist>
-<listitem><para>fixed #1963, GROUPBY() on JSON attributes sometimes yields NULL</para></listitem>
-<listitem><para>fixed GROUPBY() on empty JSON arrays to return NULL instead of []</para></listitem>
-<listitem><para>fixed #1966, INTERVAL() function does not work with JSON fields</para></listitem>
-<listitem><para>fixed #1972, daemon crashes trying to read a big (>8G) .spm file</para></listitem>
-<listitem><para>fixed cpu time logging for cases where work is done in child threads or agents</para></listitem>
-<listitem><para>fixed #2005, aggregate functions improperly calculate aliased expressions</para></listitem>
-<listitem><para>fixed buffer overrun when sizing packed factors (with way too many fields) in expression ranker</para></listitem>
-<listitem><para>fixed #2022, blend characters of matched word must not be outside of snippet passage</para></listitem>
-<listitem><para>fixed #2021, output units in GEODIST() function</para></listitem>
 <listitem><para>fixed #2027, slow queries to multiple indexes with large kill-lists</para></listitem>
-<listitem><para>fixed #2018, different wildcard behavior in RT and plain indexes</para></listitem>
+<listitem><para>fixed #2022, blend characters of matched word must not be outside of snippet passage</para></listitem>
+<listitem><para>fixed #2021, output units in <link linkend="expr-func-geodist">GEODIST()</link> function</para></listitem>
+<listitem><para>fixed #2018, different wildcard behaviour in RT and plain indexes</para></listitem>
+<listitem><para>fixed #2005, aggregate functions improperly calculate aliased expressions</para></listitem>
+<listitem><para>fixed #1972, daemon crashes trying to read a big (>8G) .spm file</para></listitem>
+<listitem><para>fixed #1966, <link linkend="expr-func-interval">INTERVAL()</link> function does not work with JSON fields</para></listitem>
+<listitem><para>fixed #1963, <code>GROUPBY()</code> on JSON attributes sometimes yields NULL</para></listitem>
+<listitem><para>fixed <code>GROUPBY()</code> on empty JSON arrays to return NULL instead of []</para></listitem>
+<listitem><para>fixed buffer overrun when sizing packed factors (with way too many fields) in expression ranker</para></listitem>
+<listitem><para>fixed cpu time logging for cases where work is done in child threads or agents</para></listitem>
 </itemizedlist>
 </sect1>
 

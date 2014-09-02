@@ -18697,6 +18697,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 		pResult->m_sError = tParsed.m_sParseError;
 		return false;
 	}
+	pResult->m_sWarning = tParsed.m_sParseWarning;
 
 	// transform query if needed (quorum transform, etc.)
 	if ( pProfile )
@@ -18834,6 +18835,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 			ppResults[i]->m_sError = dXQ[i].m_sParseError;
 			ppResults[i]->m_iMultiplier = -1;
 		}
+		ppResults[i]->m_sWarning = dXQ[i].m_sParseWarning;
 
 		ppResults[i]->m_tIOStats.Stop();
 	}

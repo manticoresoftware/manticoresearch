@@ -3438,6 +3438,7 @@ static void DoHighlighting ( const ExcerptQuery_t & tQuerySettings,
 			sError = tExactPhraseQuery.m_sParseError;
 			return;
 		}
+		sWarning = tExactPhraseQuery.m_sParseWarning;
 		if ( tExactPhraseQuery.m_pRoot )
 			tExactPhraseQuery.m_pRoot->ClearFieldMask();
 	}

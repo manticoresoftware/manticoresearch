@@ -1,5 +1,5 @@
-Sphinx 2.2.4-beta reference manual
-==================================
+Sphinx 2.2.5-dev reference manual
+=================================
 
 Free open-source SQL full-text search engine
 ============================================

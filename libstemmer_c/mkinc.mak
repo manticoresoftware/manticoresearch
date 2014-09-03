@@ -20,7 +20,7 @@ snowball_sources= \
   src_c/stem_UTF_8_french.c \
   src_c/stem_ISO_8859_1_german.c \
   src_c/stem_UTF_8_german.c \
-  src_c/stem_ISO_8859_1_hungarian.c \
+  src_c/stem_ISO_8859_2_hungarian.c \
   src_c/stem_UTF_8_hungarian.c \
   src_c/stem_ISO_8859_1_italian.c \
   src_c/stem_UTF_8_italian.c \
@@ -56,7 +56,7 @@ snowball_headers= \
   src_c/stem_UTF_8_french.h \
   src_c/stem_ISO_8859_1_german.h \
   src_c/stem_UTF_8_german.h \
-  src_c/stem_ISO_8859_1_hungarian.h \
+  src_c/stem_ISO_8859_2_hungarian.h \
   src_c/stem_UTF_8_hungarian.h \
   src_c/stem_ISO_8859_1_italian.h \
   src_c/stem_UTF_8_italian.h \

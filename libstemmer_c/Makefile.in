@@ -65,7 +65,7 @@ am__libstemmer_a_SOURCES_DIST = src_c/stem_ISO_8859_1_danish.c \
 	src_c/stem_UTF_8_english.c src_c/stem_ISO_8859_1_finnish.c \
 	src_c/stem_UTF_8_finnish.c src_c/stem_ISO_8859_1_french.c \
 	src_c/stem_UTF_8_french.c src_c/stem_ISO_8859_1_german.c \
-	src_c/stem_UTF_8_german.c src_c/stem_ISO_8859_1_hungarian.c \
+	src_c/stem_UTF_8_german.c src_c/stem_ISO_8859_2_hungarian.c \
 	src_c/stem_UTF_8_hungarian.c src_c/stem_ISO_8859_1_italian.c \
 	src_c/stem_UTF_8_italian.c src_c/stem_ISO_8859_1_norwegian.c \
 	src_c/stem_UTF_8_norwegian.c src_c/stem_ISO_8859_1_porter.c \
@@ -88,7 +88,7 @@ am__libstemmer_a_SOURCES_DIST = src_c/stem_ISO_8859_1_danish.c \
 @USE_LIBSTEMMER_TRUE@	stem_UTF_8_french.$(OBJEXT) \
 @USE_LIBSTEMMER_TRUE@	stem_ISO_8859_1_german.$(OBJEXT) \
 @USE_LIBSTEMMER_TRUE@	stem_UTF_8_german.$(OBJEXT) \
-@USE_LIBSTEMMER_TRUE@	stem_ISO_8859_1_hungarian.$(OBJEXT) \
+@USE_LIBSTEMMER_TRUE@	stem_ISO_8859_2_hungarian.$(OBJEXT) \
 @USE_LIBSTEMMER_TRUE@	stem_UTF_8_hungarian.$(OBJEXT) \
 @USE_LIBSTEMMER_TRUE@	stem_ISO_8859_1_italian.$(OBJEXT) \
 @USE_LIBSTEMMER_TRUE@	stem_UTF_8_italian.$(OBJEXT) \
@@ -127,7 +127,7 @@ am__noinst_HEADERS_DIST = src_c/stem_ISO_8859_1_danish.h \
 	src_c/stem_UTF_8_english.h src_c/stem_ISO_8859_1_finnish.h \
 	src_c/stem_UTF_8_finnish.h src_c/stem_ISO_8859_1_french.h \
 	src_c/stem_UTF_8_french.h src_c/stem_ISO_8859_1_german.h \
-	src_c/stem_UTF_8_german.h src_c/stem_ISO_8859_1_hungarian.h \
+	src_c/stem_UTF_8_german.h src_c/stem_ISO_8859_2_hungarian.h \
 	src_c/stem_UTF_8_hungarian.h src_c/stem_ISO_8859_1_italian.h \
 	src_c/stem_UTF_8_italian.h src_c/stem_ISO_8859_1_norwegian.h \
 	src_c/stem_UTF_8_norwegian.h src_c/stem_ISO_8859_1_porter.h \
@@ -261,7 +261,7 @@ top_srcdir = @top_srcdir@
 @USE_LIBSTEMMER_TRUE@  src_c/stem_UTF_8_french.c \
 @USE_LIBSTEMMER_TRUE@  src_c/stem_ISO_8859_1_german.c \
 @USE_LIBSTEMMER_TRUE@  src_c/stem_UTF_8_german.c \
-@USE_LIBSTEMMER_TRUE@  src_c/stem_ISO_8859_1_hungarian.c \
+@USE_LIBSTEMMER_TRUE@  src_c/stem_ISO_8859_2_hungarian.c \
 @USE_LIBSTEMMER_TRUE@  src_c/stem_UTF_8_hungarian.c \
 @USE_LIBSTEMMER_TRUE@  src_c/stem_ISO_8859_1_italian.c \
 @USE_LIBSTEMMER_TRUE@  src_c/stem_UTF_8_italian.c \
@@ -297,7 +297,7 @@ top_srcdir = @top_srcdir@
 @USE_LIBSTEMMER_TRUE@  src_c/stem_UTF_8_french.h \
 @USE_LIBSTEMMER_TRUE@  src_c/stem_ISO_8859_1_german.h \
 @USE_LIBSTEMMER_TRUE@  src_c/stem_UTF_8_german.h \
-@USE_LIBSTEMMER_TRUE@  src_c/stem_ISO_8859_1_hungarian.h \
+@USE_LIBSTEMMER_TRUE@  src_c/stem_ISO_8859_2_hungarian.h \
 @USE_LIBSTEMMER_TRUE@  src_c/stem_UTF_8_hungarian.h \
 @USE_LIBSTEMMER_TRUE@  src_c/stem_ISO_8859_1_italian.h \
 @USE_LIBSTEMMER_TRUE@  src_c/stem_UTF_8_italian.h \
@@ -380,7 +380,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/stem_ISO_8859_1_finnish.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/stem_ISO_8859_1_french.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/stem_ISO_8859_1_german.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/stem_ISO_8859_1_hungarian.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/stem_ISO_8859_2_hungarian.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/stem_ISO_8859_1_italian.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/stem_ISO_8859_1_norwegian.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/stem_ISO_8859_1_porter.Po@am__quote@
@@ -589,19 +589,19 @@ stem_UTF_8_german.obj: src_c/stem_UTF_8_german.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_german.obj `if test -f 'src_c/stem_UTF_8_german.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_german.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_german.c'; fi`
 
-stem_ISO_8859_1_hungarian.o: src_c/stem_ISO_8859_1_hungarian.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_hungarian.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_hungarian.Tpo -c -o stem_ISO_8859_1_hungarian.o `test -f 'src_c/stem_ISO_8859_1_hungarian.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_hungarian.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_1_hungarian.Tpo $(DEPDIR)/stem_ISO_8859_1_hungarian.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_1_hungarian.c' object='stem_ISO_8859_1_hungarian.o' libtool=no @AMDEPBACKSLASH@
+stem_ISO_8859_2_hungarian.o: src_c/stem_ISO_8859_2_hungarian.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_2_hungarian.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_2_hungarian.Tpo -c -o stem_ISO_8859_2_hungarian.o `test -f 'src_c/stem_ISO_8859_2_hungarian.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_2_hungarian.c
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_2_hungarian.Tpo $(DEPDIR)/stem_ISO_8859_2_hungarian.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_2_hungarian.c' object='stem_ISO_8859_2_hungarian.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_hungarian.o `test -f 'src_c/stem_ISO_8859_1_hungarian.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_hungarian.c
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_2_hungarian.o `test -f 'src_c/stem_ISO_8859_2_hungarian.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_2_hungarian.c
 
-stem_ISO_8859_1_hungarian.obj: src_c/stem_ISO_8859_1_hungarian.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_hungarian.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_hungarian.Tpo -c -o stem_ISO_8859_1_hungarian.obj `if test -f 'src_c/stem_ISO_8859_1_hungarian.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_hungarian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_hungarian.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_1_hungarian.Tpo $(DEPDIR)/stem_ISO_8859_1_hungarian.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_1_hungarian.c' object='stem_ISO_8859_1_hungarian.obj' libtool=no @AMDEPBACKSLASH@
+stem_ISO_8859_2_hungarian.obj: src_c/stem_ISO_8859_2_hungarian.c
+@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_2_hungarian.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_2_hungarian.Tpo -c -o stem_ISO_8859_2_hungarian.obj `if test -f 'src_c/stem_ISO_8859_2_hungarian.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_2_hungarian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_2_hungarian.c'; fi`
+@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_2_hungarian.Tpo $(DEPDIR)/stem_ISO_8859_2_hungarian.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_2_hungarian.c' object='stem_ISO_8859_2_hungarian.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_hungarian.obj `if test -f 'src_c/stem_ISO_8859_1_hungarian.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_hungarian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_hungarian.c'; fi`
+@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_2_hungarian.obj `if test -f 'src_c/stem_ISO_8859_2_hungarian.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_2_hungarian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_2_hungarian.c'; fi`
 
 stem_UTF_8_hungarian.o: src_c/stem_UTF_8_hungarian.c
 @am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_hungarian.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_hungarian.Tpo -c -o stem_UTF_8_hungarian.o `test -f 'src_c/stem_UTF_8_hungarian.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_hungarian.c

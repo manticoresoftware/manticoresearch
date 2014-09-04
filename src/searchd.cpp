@@ -11831,7 +11831,7 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 
 	} else if ( sOpt=="comment" )
 	{
-		ToString ( m_pQuery->m_sComment, tValue );
+		ToStringUnescape ( m_pQuery->m_sComment, tValue );
 
 	} else if ( sOpt=="sort_method" )
 	{

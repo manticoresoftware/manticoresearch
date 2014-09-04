@@ -1,5 +1,5 @@
 //
-// $Id: sphinxutils.cpp 4522 2014-01-30 11:00:18Z tomat $
+// $Id$
 //
 
 //
@@ -1183,7 +1183,7 @@ void sphConfDictionary ( const CSphConfigSection & hIndex, CSphDictSettings & tS
 
 		CSphString sPath;
 		if ( sLastSlash )
-			sPath = pWordforms->SubString ( 0, sLastSlash - pWordforms->cstr() + 1 );
+			sPath = pWordforms->strval().SubString ( 0, sLastSlash - pWordforms->cstr() + 1 );
 
 		HANDLE hFind = FindFirstFile ( pWordforms->cstr(), &tFFData );
 		if ( hFind!=INVALID_HANDLE_VALUE )
@@ -2444,5 +2444,5 @@ bool CSphDynamicLibrary::LoadSymbols ( const char **, void ***, int ) { return f
 #endif
 
 //
-// $Id: sphinxutils.cpp 4522 2014-01-30 11:00:18Z tomat $
+// $Id$
 //

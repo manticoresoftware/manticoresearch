@@ -212,10 +212,10 @@ function sphBenchmark ( $name, $locals, $force_reindex )
 
 	global $g_locals;	
 	$g_locals['rt_mode']= $config->Requires('force-rt');
+	$reindex_rt = $config->Requires('reindex-rt');
 		
 	// temporary limitations
 	assert ( $config->SubtestCount()==1 );
-	assert ( $config->IsQueryTest() );
 
 	// find unused output prefix
 	$i = 0;
@@ -228,20 +228,26 @@ function sphBenchmark ( $name, $locals, $force_reindex )
 	$msg = '';
 	$config->WriteConfig ( 'config.conf', 'all', $msg );
 	$indexes = array();
+	$indexes_rt = array();
 	$text = file_get_contents('config.conf');
 	preg_match_all ( '/index\s+(\S+)\s+{[^}]+path\s*=\s*(.*)[^}]+}/m', $text, $matches );
 	for ( $i=0; $i<count($matches[1]); $i++ )
 		$indexes[$matches[1][$i]] = $matches[2][$i];
-	
+
+	for ( $i=0; $i<count($matches[0]); $i++ )
+		if ( preg_match ( '/type\s*=\s*rt/', $matches[0][$i] ) )
+			$indexes_rt[$matches[1][$i]] = 1;
+			
 	// checksum/reindex as needed
 	$hash = null;
 	foreach ( $indexes as $indexName => $path )
 	{
+		$skip_rt = ( $reindex_rt && array_key_exists ( $indexName, $indexes_rt ) );
 		printf ( "index: %s - ", $indexName );
-		if ( $config->IsRt() && $force_reindex )
+		if ( ( $config->IsRt() && $force_reindex ) || $skip_rt )
 			EraseRtIndex ( $locals['data'], $path );
 
-		if ( !$config->IsRt() && ( !is_readable ( "$path.spa" ) || !is_readable ( "$path.spi" ) || $force_reindex ) )
+		if ( !$config->IsRt() && ( !is_readable ( "$path.spa" ) || !is_readable ( "$path.spi" ) || $force_reindex ) && !$skip_rt )
 		{
 			printf ( "indexing... " );
 			$tm = MyMicrotime();
@@ -257,7 +263,7 @@ function sphBenchmark ( $name, $locals, $force_reindex )
 			else
 				printf ( "done in %s - ", sphFormatTime($tm) );
 		}
-		if ( !$config->IsRt() )
+		if ( !$config->IsRt() && !$skip_rt )
 		{
 			$hash = array ( 'spi' => md5_file ( "$path.spi" ),
 							'spa' => md5_file ( "$path.spa" ) );
@@ -283,68 +289,94 @@ function sphBenchmark ( $name, $locals, $force_reindex )
 			printf ( "searchd warning: %s\n", $error );
 	}
 
-	// run the benchmark
-	$isOK = false;
-	if ( $config->IsSphinxqlTest () )
-		$isOK = $config->RunQuerySphinxQL ( $error, true );
-	else
-		$isOK = $config->RunQuery ( '*', $error, 'warming-up:' ) &&
-			$config->RunQuery ( '*', $error, 'profiling:' );
+	$report = array (
+		'results' => array(),
+		'time' => time(),
+		'hash' => $hash,
+		'version' => GetVersion()
+	);
 	
-	if ( $isOK )
+	// run the benchmark
+	foreach ( array('custom', 'ql', 'api') as $mode )
 	{
-		$report = array (
-			'results' => array(),
-			'time' => time(),
-			'hash' => $hash,
-			'version' => GetVersion()
-		);
-		$i = 0; $q = null;
-		$lastQuery = '';
-		$lastTag = '';
-		foreach ( $config->Results() as $result )
+		$config->ResetResults();
+		$isOK = false;
+		if ( $mode=='ql' && $config->IsSphinxqlTest () )
 		{
-			if ( $config->IsSphinxqlTest () )
+			$isOK = $config->RunQuerySphinxQL ( $error, true );
+		} else if ( $mode=='api' && $config->IsQueryTest () )
+		{
+			$isOK = $config->RunQuery ( '*', $error, 'warming-up:' ) && $config->RunQuery ( '*', $error, 'profiling:' );
+		} else if ( $mode=='custom' )
+		{
+			$isOK = $config->RunCustomTest ( $error );
+		} else
+		{
+			continue;
+		}
+		
+		if ( $isOK )
+		{
+			$i = 0; $q = null;
+			$lastQuery = '';
+			$lastTag = '';
+			foreach ( $config->Results() as $result )
 			{
-				if ( $result['sphinxql']=='show meta' )
+				if ( $mode=='ql' )
 				{
-					$report['results'][] =
-						array ( 'total'			=> $result['rows'][0]['Value'],
-								'total_found'	=> $result['rows'][1]['Value'],
-								'time'			=> $result['rows'][2]['Value'],
-								'query'			=> $lastQuery,
-								'tag'			=> $lastTag );
-				} else
-				{
-					$lastQuery = $result['sphinxql'];
-					$lastTag = $lastQuery;
-					$matches = array();
-					if ( preg_match_all ( "/comment.*=.*\'(.*)\'/", $lastQuery, $matches ) )
+					if ( $result['sphinxql']=='show meta' )
 					{
-						$lastTag = $matches[1][0];
+						$report['results'][] =
+							array ( 'total'			=> $result['rows'][0]['Value'],
+									'total_found'	=> $result['rows'][1]['Value'],
+									'time'			=> $result['rows'][2]['Value'],
+									'query'			=> $lastQuery,
+									'tag'			=> $lastTag );
+					} else
+					{
+						$lastQuery = $result['sphinxql'];
+						$lastTag = $lastQuery;
+						$matches = array();
+						if ( preg_match_all ( "/comment.*=.*\'(.*)\'/", $lastQuery, $matches ) )
+						{
+							$lastTag = $matches[1][0];
+						}
+					}
+				} else if ( $mode=='api' )
+				{
+					if ( $result[0] !== $q )
+					{
+						$i = 0;
+						$q = $result[0];
+					}
+					$query = $config->GetQuery ( $q );
+					$report['results'][] =
+						array ( 'total'			=> $result[1],
+								'total_found'	=> $result[2],
+								'time'			=> $result[3],
+								'query'			=> $query['query'][$i++],
+								'tag'			=> $query['tag'] );
+				} else if ( $mode=='custom' )
+				{
+					foreach ( $result as $r )
+					{
+						$report['results'][] =
+							array ( 'total'			=> $r['total'],
+									'total_found'	=> $r['total_found'],
+									'time'			=> $r['time'],
+									'query'			=> $r['query'],
+									'tag'			=> $r['tag'] );
 					}
 				}
-			} else
-			{
-				if ( $result[0] !== $q )
-				{
-					$i = 0;
-					$q = $result[0];
-				}
-				$query = $config->GetQuery ( $q );
-				$report['results'][] =
-					array ( 'total'			=> $result[1],
-							'total_found'	=> $result[2],
-							'time'			=> $result[3],
-							'query'			=> $query['query'][$i++],
-							'tag'			=> $query['tag'] );
 			}
+		} else
+		{
+			printf ( "\nfailed to run queries at %s:\n%s\n", $mode, $error );
 		}
-		file_put_contents ( "$output.bin", serialize ( $report ) );
-		printf ( "results saved to: $output.bin\n" );
 	}
-	else
-		printf ( "\nfailed to run queries:\n%s\n", $error );
+	
+	file_put_contents ( "$output.bin", serialize ( $report ) );
+	printf ( "results saved to: $output.bin\n" );
 
 	// shutdown
 	StopSearchd ( 'config.conf', 'searchd.pid' );
@@ -541,6 +573,7 @@ function Main ( $argv )
 	global $g_locals;
 	PublishLocals ( $locals, true );
 	require_once ( "helpers.inc" );
+	require_once ( "helpers_rt.inc" );
 
 	// run the command
 	if ( $mode=='benchmark' )

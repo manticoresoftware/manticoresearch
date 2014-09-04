@@ -537,6 +537,9 @@ class QLClient
 		if (!$r)
 			return "ERROR: ".mysqli_error($this->_conn);
 
+		if ( $r===true )
+			return "OK";
+			
 		$n = 0;
 		$res = "";
 		while ($row = mysqli_fetch_row($r))
@@ -668,6 +671,7 @@ class SphinxConfig
 	function Results ()				{ return $this->_results; }
 	function GetQuery ( $i )		{ return $this->_queries[$i]; }
 	function IsSkipIndexer ()		{ return $this->_skip_indexer; }
+	function ResetResults ()				{ $this->_results = array (); }
 
 	function SetTestDir ( $dir )	{ $this->_testdir = $dir; }
 

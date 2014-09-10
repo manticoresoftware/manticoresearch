@@ -3170,7 +3170,13 @@ PACKEDFACTORS({no_atc=1})
 </programlisting>
 Calculating ATC slows down query processing considerably, so this option can be useful
 if you need to see the ranking factors, but do not need ATC.
+Starting with 2.2.3-beta PACKEDFACTORS() can take an optional argument that provides
+output as json encoded object. That makes it easier to parse such column and use
+particular factor.
 </para>
+<programlisting>
+PACKEDFACTORS({json=1})
+</programlisting>
 <para>
 It can be used to implement custom ranking functions in UDFs, as in
 <programlisting>
@@ -6325,6 +6331,14 @@ impossible (because of a write lock) while adding a column. This may change
 in the future. The newly created attribute values are set to 0. ALTER will
 not work for distributed indexes and indexes without any attributes. 
 DROP COLUMN will fail if an index has only one attribute.
+</para>
+<programlisting>
+ALTER RTINDEX index RECONFIGURE
+</programlisting>
+<para>
+As of 2.2.3-beta, ALTER can reconfigure existed RT index. That saves ram chunks of RT index
+as disk chunk then changes index settings with new settings from config.
+Changing tokenizer settings might produce a warning on words mismatch after applying new settings.
 </para>
 <programlisting>
 mysql> desc plain;

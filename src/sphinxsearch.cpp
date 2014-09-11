@@ -8454,7 +8454,7 @@ BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::PackFactors()
 
 	// document level factors
 	*pPack++ = m_uDocBM25;
-	*pPack++ = *(DWORD*)&m_fDocBM25A;
+	*pPack++ = sphF2DW ( m_fDocBM25A );
 	*pPack++ = *m_tMatchedFields.Begin();
 	*pPack++ = m_uDocWordCount;
 
@@ -8475,18 +8475,18 @@ BYTE * RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::PackFactors()
 			*pPack++ = (DWORD)i;
 			*pPack++ = m_uLCS[i];
 			*pPack++ = m_uWordCount[i];
-			*pPack++ = *(DWORD*)&m_dTFIDF[i];
-			*pPack++ = *(DWORD*)&m_dMinIDF[i];
-			*pPack++ = *(DWORD*)&m_dMaxIDF[i];
-			*pPack++ = *(DWORD*)&m_dSumIDF[i];
+			*pPack++ = sphF2DW ( m_dTFIDF[i] );
+			*pPack++ = sphF2DW ( m_dMinIDF[i] );
+			*pPack++ = sphF2DW ( m_dMaxIDF[i] );
+			*pPack++ = sphF2DW ( m_dSumIDF[i] );
 			*pPack++ = (DWORD)m_iMinHitPos[i];
 			*pPack++ = (DWORD)m_iMinBestSpanPos[i];
 			// had exact_hit here before v.4
 			*pPack++ = (DWORD)m_iMaxWindowHits[i];
 			*pPack++ = (DWORD)m_iMinGaps[i]; // added in v.3
-			*pPack++ = *(DWORD*)&m_dAtc[i];			// added in v.4
+			*pPack++ = sphF2DW ( m_dAtc[i] );			// added in v.4
 			*pPack++ = m_dLCCS[i];					// added in v.5
-			*pPack++ = *(DWORD*)&m_dWLCCS[i];	// added in v.5
+			*pPack++ = sphF2DW ( m_dWLCCS[i] );	// added in v.5
 		}
 	}
 

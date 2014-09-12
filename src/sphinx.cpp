@@ -29524,6 +29524,7 @@ CSphSourceParams_ODBC::CSphSourceParams_ODBC ()
 CSphSource_ODBC::CSphSource_ODBC ( const char * sName )
 	: CSphSource_SQL	( sName )
 	, m_bWinAuth		( false )
+	, m_bUnicode		( false )
 	, m_hEnv			( NULL )
 	, m_hDBC			( NULL )
 	, m_hStmt			( NULL )
@@ -29606,13 +29607,13 @@ bool CSphSource_ODBC::SqlQuery ( const char * sQuery )
 		tCol.m_dRaw.Resize ( iBuffLen + MS_SQL_BUFFER_GAP );
 		tCol.m_iInd = 0;
 		tCol.m_iBufferSize = iBuffLen;
-		tCol.m_bUnicode = iDataType==SQL_WCHAR || iDataType==SQL_WVARCHAR || iDataType==SQL_WLONGVARCHAR;
+		tCol.m_bUCS2 = m_bUnicode && ( iDataType==SQL_WCHAR || iDataType==SQL_WVARCHAR || iDataType==SQL_WLONGVARCHAR );
 		tCol.m_bTruncated = false;
 		iTotalBuffer += iBuffLen;
 
 		if ( sph_SQLBindCol ( m_hStmt, (SQLUSMALLINT)(i+1),
-			tCol.m_bUnicode ? SQL_UNICODE : SQL_C_CHAR,
-			tCol.m_bUnicode ? tCol.m_dRaw.Begin() : tCol.m_dContents.Begin(),
+			tCol.m_bUCS2 ? SQL_UNICODE : SQL_C_CHAR,
+			tCol.m_bUCS2 ? tCol.m_dRaw.Begin() : tCol.m_dContents.Begin(),
 			iBuffLen, &(tCol.m_iInd) )==SQL_ERROR )
 				return false;
 	}
@@ -29731,7 +29732,7 @@ bool CSphSource_ODBC::SqlFetchRow ()
 
 			default:
 #if USE_WINDOWS // FIXME! support UCS-2 columns on Unix too
-				if ( tCol.m_bUnicode )
+				if ( tCol.m_bUCS2 )
 				{
 					// WideCharToMultiByte should get NULL terminated string
 					memset ( tCol.m_dRaw.Begin()+tCol.m_iBufferSize, 0, MS_SQL_BUFFER_GAP );

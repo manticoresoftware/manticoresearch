@@ -2377,6 +2377,7 @@ protected:
 protected:
 	CSphString				m_sOdbcDSN;
 	bool					m_bWinAuth;
+	bool					m_bUnicode;
 
 	SQLHENV					m_hEnv;
 	SQLHDBC					m_hDBC;
@@ -2391,7 +2392,7 @@ protected:
 		CSphString			m_sName;
 		SQLLEN				m_iInd;
 		int					m_iBufferSize;	///< size of m_dContents and m_dRaw buffers, in bytes
-		bool				m_bUnicode;		///< whether this column needs UCS-2 to UTF-8 translation
+		bool				m_bUCS2;		///< whether this column needs UCS-2 to UTF-8 translation
 		bool				m_bTruncated;	///< whether data was truncated when fetching rows
 	};
 
@@ -2407,10 +2408,10 @@ protected:
 };
 
 
-/// MS SQL source implemenation
+/// MS SQL source implementation
 struct CSphSource_MSSQL : public CSphSource_ODBC
 {
-	explicit				CSphSource_MSSQL ( const char * sName ) : CSphSource_ODBC ( sName ) {}
+	explicit				CSphSource_MSSQL ( const char * sName ) : CSphSource_ODBC ( sName ) { m_bUnicode=true; }
 	virtual void			OdbcPostConnect ();
 };
 #endif // USE_ODBC

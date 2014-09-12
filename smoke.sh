@@ -37,7 +37,7 @@ cmd "mysql -utest test < example.sql" "Documents setup failed. Log in into mysql
 
 export CC='gcc -ftrapv'
 export CXX='g++ -ftrapv'
-for CONFARGS in "--with-debug" "--with-debug --disable-id64";
+for CONFARGS in "--with-debug" "--with-debug --disable-id64" "--with-debug --with-unixodbc";
 do
 	BANNER="testing $CONFARGS build"
 	cmd "$SHELL ./configure $CONFARGS" "$BANNER: configure failed"

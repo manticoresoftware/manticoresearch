@@ -121,6 +121,7 @@ PublishLocals ( $locals, false );
 GuessIdSize();
 GuessRE2();
 GuessRLP();
+GuessODBC();
 
 if ( $g_locals["malloc-scribble"] )
 {

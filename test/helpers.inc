@@ -2327,6 +2327,27 @@ class SphinxConfig
 		fprintf ( $fp, "\tsql_db		= %s\n", $node ? $node->nodeValue : $g_locals['db-name'] );
 	}
 
+    function WriteOdbcSettings ( $fp, $attributes )
+    {
+        global $g_locals;
+
+        $dsn=array();
+        $dsn[] = "Driver=" . $g_locals['odbc_driver'];
+        $dsn[] = "Servername=" . $g_locals['db-host'];
+        $dsn[] = "Port=" . $g_locals['db-port'];
+        $dsn[] = "UID=" . $g_locals['db-user'];
+        $dsn[] = "PWD=" . $g_locals['db-password'];
+
+        $node = $attributes->getNamedItem('sql_db');
+        if ($node)
+            $dsn[] = "Database=" . $node->nodeValue;
+        else
+            $dsn[] = "Database=" . $g_locals['db-name'];
+
+        $dsn = join ( ";", $dsn );
+        fwrite ( $fp, "odbc_dsn		= $dsn" );
+    }
+
 	function Dump ( $node, $fp, $dynamic_only, $agentid )
 	{
 		global $index_data_path, $agents;
@@ -2340,6 +2361,7 @@ class SphinxConfig
 			case "static":				fwrite ( $fp, $node->nodeValue ); return;
 			case "searchd_settings":	$this->WriteSearchdSettings ( $fp ); return;
 			case "sql_settings":		$this->WriteSqlSettings ( $fp, $node->attributes ); return;
+            case "odbc_settings":       $this->WriteOdbcSettings ( $fp, $node->attributes); return;
 			case "my_address":
 			case "agent0_address":		fwrite ( $fp, $agents[0]["address"].":".$agents[0]["port"] ); return;
 			case "agent_address":
@@ -2429,7 +2451,7 @@ function CopyDirContents ( $from, $to )
 
 function CheckConfig ( $config, $path )
 {
-	global $g_id64, $g_re2, $g_rlp, $windows, $g_locals;
+	global $g_id64, $g_re2, $g_rlp, $g_odbc, $windows, $g_locals;
 	
 	if ( $config->Requires("id64") && !$g_id64 )
 	{
@@ -2466,6 +2488,20 @@ function CheckConfig ( $config, $path )
 		printf ( "SKIPPING %s, %s - compile with RLP support to run this test\n", $path, $config->Name () );
 		return false;
 	}
+
+    if ( $config->Requires("odbc") )
+    {
+        if (!$g_odbc)
+        {
+            printf ( "SKIPPING %s, %s - compile with ODBC support to run this test\n", $path, $config->Name () );
+            return false;
+        }
+        if ( !isset($g_locals["odbc_driver"]) )
+        {
+            printf ( "SKIPPING %s, %s - odbc_driver required, add it to your ~/.sphinx\n", $path, $config->Name () );
+            return false;
+        }
+    }
 
 	if ( $config->NeedIndexerEx() && $config->IsRt() )
 	{

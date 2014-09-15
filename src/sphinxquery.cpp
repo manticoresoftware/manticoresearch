@@ -117,6 +117,7 @@ public:
 	int						m_iPendingType;
 	YYSTYPE					m_tPendingToken;
 	bool					m_bWasBlended;
+	bool					m_bWasKeyword;
 
 	bool					m_bEmpty;
 	bool					m_bQuoted;
@@ -395,6 +396,7 @@ XQParser_t::XQParser_t ()
 	, m_pRoot ( NULL )
 	, m_bStopOnInvalid ( true )
 	, m_bWasBlended ( false )
+	, m_bWasKeyword ( false )
 	, m_bQuoted ( false )
 	, m_bEmptyStopword ( false )
 	, m_iQuorumQuote ( -1 )
@@ -726,11 +728,16 @@ int XQParser_t::ParseZone ( const char * pZone )
 /// a lexer of my own
 int XQParser_t::GetToken ( YYSTYPE * lvalp )
 {
+	bool bWasFrontModifier = false; // used to print warning
+
 	// what, noone's pending for a bending?!
 	if ( !m_iPendingType )
 		for ( ;; )
 	{
 		assert ( m_iPendingNulls==0 );
+
+		bool bWasKeyword = m_bWasKeyword;
+		m_bWasKeyword = false;
 
 		if ( m_bWasBlended )
 			m_iAtomPos += m_pTokenizer->SkipBlended();
@@ -832,6 +839,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 				return 0;
 			m_iPendingNulls = 0;
 			lvalp->pNode = AddKeyword ( NULL );
+			m_bWasKeyword = true;
 			return TOK_KEYWORD;
 		}
 
@@ -984,13 +992,29 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 					{
 						m_iPendingNulls = 0;
 						lvalp->pNode = AddKeyword ( NULL );
+						m_bWasKeyword = true;
 						return TOK_KEYWORD;
 					}
 					continue;
 				}
-			} else if ( sToken[0]=='^' || sToken[0]=='$' )
+			} else if ( sToken[0]=='^' )
 			{
-				// these specials are handled in HandleModifiers()
+				const char * pTokEnd = m_pTokenizer->GetTokenEnd();
+				if ( pTokEnd<m_pTokenizer->GetBufferEnd() && !isspace ( pTokEnd[0] ) )
+					bWasFrontModifier = true;
+
+				// this special is handled in HandleModifiers()
+				continue;
+			} else if ( sToken[0]=='$' )
+			{
+				if ( bWasKeyword )
+					continue;
+				if ( isspace ( m_pTokenizer->GetTokenStart() [ -1 ] ) )
+					 continue;
+
+				Warning ( "modifiers must be applied to keywords, not operators" );
+
+				// this special is handled in HandleModifiers()
 				continue;
 			} else
 			{
@@ -1062,6 +1086,9 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		break;
 	}
 
+	if ( bWasFrontModifier && m_iPendingType!=TOK_KEYWORD )
+		Warning ( "modifiers must be applied to keywords, not operators" );
+
 	// someone must be pending now!
 	assert ( m_iPendingType );
 	m_bEmpty = false;
@@ -1071,6 +1098,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 	{
 		m_iPendingNulls--;
 		lvalp->pNode = AddKeyword ( NULL );
+		m_bWasKeyword = true;
 		return TOK_KEYWORD;
 	}
 
@@ -1078,6 +1106,8 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 	int iRes = m_iPendingType;
 	m_iPendingType = 0;
 
+	if ( iRes==TOK_KEYWORD )
+		m_bWasKeyword = true;
 	*lvalp = m_tPendingToken;
 	return iRes;
 }

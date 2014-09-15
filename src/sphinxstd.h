@@ -2087,6 +2087,7 @@ public:
 	/// copy ctor
 	CSphVariant ( const CSphVariant & rhs )
 	{
+		m_pNext = NULL;
 		*this = rhs;
 	}
 

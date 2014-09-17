@@ -15641,7 +15641,7 @@ void HandleMysqlShowThreads ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 {
 	if ( g_eWorkers!=MPM_THREADS )
 	{
-		tOut.Eof();
+		tOut.Ok();
 		return;
 	}
 

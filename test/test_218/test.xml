@@ -81,6 +81,30 @@ index test_xml : base
 	wordforms		= <this_test/>/wordforms.txt
 }
 
+source test_spec
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query_pre		= set names utf8
+	sql_query			= select 100 id, 'the 凤1 a' title, 11 as idd UNION select 200 id, '凤1' title, 11 as idd UNION select 300 id, '凤1 轉注转注' title, 11 as idd UNION select 400 id, '凤 注 轉凤'  title, 11 as idd  
+	
+	sql_field_string = title
+    sql_attr_uint = idd
+}
+
+index test_spec
+{
+	source			= test_spec
+	path			= <data_path/>/test_spec
+
+	charset_table	= 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, \
+			U+2E80..U+2EF3, U+2F00..U+2FD5, U+3105..U+312D, U+31C0..U+31E3, U+3400..U+4DB5, U+4E00..U+9FCC, \
+			U+F900..U+FAD9, U+20000..U+2FA1D
+			
+	morphology 		= rlp_chinese_batched
+	rlp_context		= ../rlp/samples/etc/rlp-chinese-context.xml
+}
+
 common
 {
 	rlp_root = ..
@@ -170,6 +194,15 @@ INSERT INTO test_table VALUES
 
 <sphinxql>select * from test_stripped where match('msgCnt')</sphinxql>
 <sphinxql>select * from test_stripped where match('今天的心情')</sphinxql>
+
+<!-- regression number after RLP token and spicial chars around RLP token -->
+<sphinxql>select * from test_spec where match('凤1 凤凤凤 轉注转注')</sphinxql>
+<sphinxql>select * from test_spec where match('凤1  凤凤凤   轉注转注')</sphinxql>
+<sphinxql>select * from test_spec where match('"凤1"')</sphinxql>
+<sphinxql>select * from test_spec where match('凤1')</sphinxql>
+<sphinxql>select * from test_spec where match('^凤 轉注$')</sphinxql>
+<sphinxql>select * from test_spec where match('注 ^凤 轉凤$ 注')</sphinxql>
+<sphinxql>select * from test_spec where match('凤 !注')</sphinxql>
 
 </sphqueries>
 

@@ -593,8 +593,8 @@ public:
 	/// create a filter to split an RLP-processed token stream into tokens
 	static ISphTokenizer *			CreateRLPResultSplitter ( ISphTokenizer * pTokenizer, const char * szRLPCtx );
 
-	/// create a filter that first splits data to tokens and performs RLP processing later
-	static ISphTokenizer *			CreateRLPQueryFilter ( ISphTokenizer * pTokenizer, bool bChineseRLP, const char * szRLPRoot, const char * szRLPEnv, const char * szRLPCtx, CSphString & sError );
+	/// split query string with an RLP token filter
+	static bool						ProcessQueryRLP ( const char * sRLPContext, const char * sQuery, const char ** sProcessed, CSphTightVector<char> & dBuf, CSphString & sError );
 #endif
 
 	/// save tokenizer settings to a stream

@@ -240,6 +240,9 @@ void sphCheckDuplicatePaths ( const CSphConfig & hConf );
 /// set globals from the common config section
 void sphConfigureCommon ( const CSphConfig & hConf );
 
+/// my own is chinese
+bool sphIsChineseCode ( int iCode );
+
 /// detect chinese chars in a buffer
 bool sphDetectChinese ( const BYTE * szBuffer, int iLength );
 

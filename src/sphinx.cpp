@@ -2980,6 +2980,13 @@ static void sphRLPFree ()
 }
 
 
+static bool sphIsJunkPOS ( const char * szPOS )
+{
+	// drop EOS and PUNCT
+	return !szPOS || !*szPOS || ( *szPOS=='E' && *(szPOS+1)=='O' ) || ( *szPOS=='P' && *(szPOS+1)=='U' );
+}
+
+
 class CSphRLPTokenizer : public CSphTokenFilter
 {
 public:
@@ -3154,7 +3161,7 @@ public:
 						// we don't want to mess up the states in our base tokenizer, so we use a cloned tokenizer
 						if ( !m_pTokenizerClone )
 						{
-							m_pTokenizerClone = m_pTokenizer->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT );
+							m_pTokenizerClone = m_pTokenizer->Clone ( SPH_CLONE_QUERY );
 							assert ( m_pTokenizerClone );
 						}
 
@@ -3434,12 +3441,6 @@ private:
 		return ( iCode>=0x3000 && iCode<=0x303F ) || IsSpecialCode ( iCode ) || !m_pTokenizer->GetLowercaser().ToLower ( iCode );
 	}
 
-	inline bool IsJunkPOS ( const char * szPOS ) const
-	{
-		// drop EOS and PUNCT
-		return !szPOS || !*szPOS || ( *szPOS=='E' && *(szPOS+1)=='O' ) || ( *szPOS=='P' && *(szPOS+1)=='U' );
-	}
-
 	void ProcessBufferRLP ( const BYTE * pBuffer, int iLength )
 	{
 		assert ( !m_pTokenIterator );
@@ -3487,7 +3488,7 @@ private:
 		{
 			const char * szPartOfSpeech = BT_RLP_TokenIterator_GetPartOfSpeech ( m_pTokenIterator );
 
-			if ( IsJunkPOS ( szPartOfSpeech ) )
+			if ( sphIsJunkPOS ( szPartOfSpeech ) )
 				continue;
 
 			const BT_Char16 * pToken;
@@ -4997,6 +4998,189 @@ ISphTokenizer * ISphTokenizer::CreateRLPResultSplitter ( ISphTokenizer * pTokeni
 {
 	assert ( pTokenizer );
 	return new CSphRLPResultSplitter ( pTokenizer, szRLPCtx );
+}
+
+struct QueryRLP_t
+{
+	BT_RLP_ContextC *				m_pContext;
+	BT_RLP_TokenIteratorFactoryC *	m_pFactory;
+
+	QueryRLP_t ()
+		: m_pContext ( NULL )
+		, m_pFactory ( NULL )
+	{ }
+
+	~QueryRLP_t()
+	{
+		if ( m_pFactory )
+			BT_RLP_TokenIteratorFactory_Destroy ( m_pFactory );
+
+		if ( m_pContext )
+			BT_RLP_Environment_DestroyContext ( g_pRLPEnv, m_pContext );
+
+		sphRLPFree();
+	}
+};
+
+static void AddTokenRLP ( const BT_Char16 * pToken, CSphTightVector<char> & dBuf, bool bAddSpace )
+{
+	assert ( pToken );
+	int iOff = dBuf.GetLength();
+	dBuf.Resize ( iOff + SPH_MAX_WORD_LEN*3+1 );
+
+	if ( bAddSpace )
+	{
+		dBuf[iOff] = ' ';
+		iOff++;
+	}
+
+	bt_xutf16toutf8 ( dBuf.Begin() + iOff, pToken, SPH_MAX_WORD_LEN*3 );
+
+	int iTokLen = strnlen ( dBuf.Begin() + iOff, SPH_MAX_WORD_LEN*3 );
+	dBuf.Resize ( iOff+iTokLen );
+}
+
+static void TokenenizeRLP ( const BYTE * sToken, int iLen, bool bAddSpace, QueryRLP_t & tRLP, CSphTightVector<char> & dBuf, CSphString & sError )
+{
+	assert ( sToken && iLen );
+
+	// iteration should still work ok in this case
+	if ( BT_RLP_Context_ProcessBuffer ( tRLP.m_pContext, sToken, iLen, BT_LANGUAGE_SIMPLIFIED_CHINESE, "UTF-8", NULL )!=BT_OK )
+		sphWarning ( "BT_RLP_Context_ProcessBuffer error" );
+
+	BT_RLP_TokenIteratorC * pIt = BT_RLP_TokenIteratorFactory_CreateIterator ( tRLP.m_pFactory, tRLP.m_pContext );
+	if ( !pIt )
+	{
+		sError = "BT_RLP_TokenIteratorFactory_CreateIterator error";
+		return;
+	}
+
+	while ( BT_RLP_TokenIterator_Next ( pIt ) )
+	{
+		int iComponents = BT_RLP_TokenIterator_GetNumberOfCompoundComponents ( pIt );
+		if ( !iComponents )
+		{
+			if ( !BT_RLP_TokenIterator_IsStopword ( pIt ) ) // FIXME!!! manage Chinese stopwords properly or disable them at indexing too
+			{
+				AddTokenRLP ( BT_RLP_TokenIterator_GetToken ( pIt ), dBuf, bAddSpace );
+				bAddSpace = true;
+			}
+		} else
+		{
+			for ( int i=0; i<iComponents; i++ )
+			{
+				if ( !BT_RLP_TokenIterator_IsStopword ( pIt ) ) // FIXME!!! manage Chinese stopwords properly or disable them at indexing too
+				{
+					AddTokenRLP ( BT_RLP_TokenIterator_GetCompoundComponent ( pIt, i ), dBuf, bAddSpace );
+					bAddSpace = true;
+				}
+			}
+		}
+	}
+
+	BT_RLP_TokenIterator_Destroy ( pIt );
+}
+
+static bool IsPullCode ( int iChar )
+{
+	return ( iChar=='!' || iChar=='^' || iChar=='$' || iChar=='*' || iChar=='=' );
+}
+
+
+bool ISphTokenizer::ProcessQueryRLP ( const char * sRLPContext, const char * sQuery, const char ** sProcessed, CSphTightVector<char> & dBuf, CSphString & sError )
+{
+	assert ( g_pRLPEnv && sRLPContext && *sRLPContext );
+	assert ( sProcessed );
+
+	int iQueryLen = sQuery ? strlen ( sQuery ) : 0;
+	if ( !iQueryLen || !sphDetectChinese ( (const BYTE *)sQuery, iQueryLen ) )
+	{
+		*sProcessed = sQuery;
+		return true;
+	}
+
+	QueryRLP_t tRLP;
+
+	if ( !sphRLPInit ( g_sRLPRoot.cstr(), g_sRLPEnv.cstr(), sError ) )
+		return false;
+
+	if ( BT_RLP_Environment_GetContextFromFile ( g_pRLPEnv, sRLPContext, &tRLP.m_pContext )!=BT_OK )
+	{
+		sError = "Unable to create RLP context";
+		return false;
+	}
+
+	tRLP.m_pFactory = BT_RLP_TokenIteratorFactory_Create();
+	if ( !tRLP.m_pFactory )
+	{
+		sError = "Unable to create RLP token iterator factory";
+		return false;
+	}
+
+	// TODO: check that query really doesn't need components
+	BT_RLP_TokenIteratorFactory_SetReturnCompoundComponents ( tRLP.m_pFactory, true );
+
+	dBuf.Reserve ( iQueryLen );
+
+	const BYTE * sBegin = (const BYTE * )sQuery;
+	const BYTE * sEnd = (const BYTE * )( sQuery + iQueryLen );
+	const BYTE * sCur = (const BYTE * )sQuery;
+	const BYTE * sSrc = (const BYTE * )sQuery;
+	bool bWasChinese = sphIsChineseCode ( sphUTF8Decode ( sCur ) ); // is initial token RLP?
+
+	while ( sCur<sEnd )
+	{
+		const BYTE * sTokenStart = sCur;
+		int iCode = sphUTF8Decode ( sCur );
+		bool bGotChinese = sphIsChineseCode ( iCode );
+
+		if ( bGotChinese==bWasChinese )
+			continue;
+
+		int iLen = sTokenStart - sSrc;
+		if ( bWasChinese )
+		{
+			// check char right before Chinese token and make sure to keep specials together
+			bool bAddSpace = ( sSrc-1>=sBegin && !IsPullCode ( sSrc[-1] ) );
+			TokenenizeRLP ( sSrc, iLen, bAddSpace, tRLP, dBuf, sError );
+
+			// check char right after Chinese token and make sure to keep specials together
+			if ( !IsPullCode ( iCode ) )
+				dBuf.Add ( ' ' );
+		} else
+		{
+			char * sDst = dBuf.AddN ( iLen );
+			memcpy ( sDst, sSrc, iLen );
+		}
+
+		bWasChinese = bGotChinese;
+		sSrc = sTokenStart;
+	}
+
+	// copy query tail
+	int iLen = sCur - sSrc;
+	if ( bWasChinese )
+	{
+		// check char right before Chinese token and make sure to keep specials together
+		bool bAddSpace = ( sSrc-1>=sBegin && !IsPullCode ( sSrc[-1] ) );
+		TokenenizeRLP ( sSrc, iLen, bAddSpace, tRLP, dBuf, sError );
+	} else
+	{
+		char * sDst = dBuf.AddN ( iLen );
+		memcpy ( sDst, sSrc, iLen );
+	}
+	dBuf.Add ( '\0' );
+
+	if ( sError.IsEmpty() )
+	{
+		dBuf.Add ( '\0' );
+		*sProcessed = dBuf.Begin();
+		return true;
+	} else
+	{
+		dBuf.Reset();
+		return false;
+	}
 }
 
 #endif

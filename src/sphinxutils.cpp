@@ -2308,7 +2308,7 @@ void sphConfigureCommon ( const CSphConfig & hConf )
 		sphPluginInit ( hCommon["plugin_dir"].cstr() );
 }
 
-static bool IsChineseCode ( int iCode )
+bool sphIsChineseCode ( int iCode )
 {
 	return ( ( iCode>=0x2E80 && iCode<=0x2EF3 ) ||	// CJK radicals
 		( iCode>=0x2F00 && iCode<=0x2FD5 ) ||	// Kangxi radicals
@@ -2329,7 +2329,7 @@ bool sphDetectChinese ( const BYTE * szBuffer, int iLength )
 	while ( pBuffer<szBuffer+iLength )
 	{
 		int iCode = sphUTF8Decode ( pBuffer );
-		if ( IsChineseCode ( iCode ) )
+		if ( sphIsChineseCode ( iCode ) )
 			return true;
 	}
 

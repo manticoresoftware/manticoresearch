@@ -1188,7 +1188,7 @@ source tsv_test
 {
 	type = tsvpipe
 	tsvpipe_command = cat /tmp/rock_bands.tsv
-	tsvpipe_attr_field = name
+	tsvpipe_field = name
 	tsvpipe_attr_multi = genre_tags
 }
 </programlisting>

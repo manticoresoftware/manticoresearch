@@ -27,7 +27,7 @@ struct CSphReqQuery;
 struct CSphSEShare;
 struct CSphSEAttr;
 struct CSphSEStats;
-struct CSphSEThreadData;
+struct CSphSEThreadTable;
 
 /// Sphinx SE handler class
 class ha_sphinx : public handler
@@ -155,7 +155,7 @@ private:
 	bool			UnpackStats ( CSphSEStats * pStats );
 	bool			CheckResponcePtr ( int iLen );
 
-	CSphSEThreadData *	GetTls ();
+	CSphSEThreadTable *	GetTls ();
 };
 
 

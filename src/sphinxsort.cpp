@@ -4295,6 +4295,13 @@ static void SetupSortRemap ( CSphRsetSchema & tSorterSchema, CSphMatchComparator
 			: tSorterSchema.GetAttr ( tState.m_dAttrs[i] ).m_sName.cstr() );
 
 		int iRemap = tSorterSchema.GetAttrIndex ( sRemapCol.cstr() );
+		if ( iRemap==-1 && bIsJson )
+		{
+			CSphString sRemapLowercase = sRemapCol;
+			sRemapLowercase.ToLower();
+			iRemap = tSorterSchema.GetAttrIndex ( sRemapLowercase.cstr() );
+		}
+
 		if ( iRemap==-1 )
 		{
 			CSphColumnInfo tRemapCol ( sRemapCol.cstr(), bIsJson ? SPH_ATTR_STRINGPTR : SPH_ATTR_BIGINT );

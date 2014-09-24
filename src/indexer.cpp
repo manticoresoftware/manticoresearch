@@ -997,8 +997,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 		}
 
 		// multiforms filter
-		sphConfDictionary ( hIndex, tDictSettings );
-
 		pDict = tDictSettings.m_bWordDict
 			? sphCreateDictionaryKeywords ( tDictSettings, NULL, pTokenizer, sIndexName, sError )
 			: sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer, sIndexName, sError );

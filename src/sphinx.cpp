@@ -6292,6 +6292,11 @@ BYTE * CSphTokenizerBase2::DoGetToken ()
 			}
 
 			FlushAccum ();
+
+			// suddenly, exceptions
+			if ( m_pExc && CheckException ( m_pTokenStart, pCur, IS_QUERY ) )
+				return m_sAccum;
+
 			if_const ( IS_BLEND )
 			{
 				if ( !BlendAdjust ( pCur ) )

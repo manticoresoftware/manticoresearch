@@ -11056,7 +11056,7 @@ map-from-tokens => map-to-token
 </programlisting>
 Example file:
 <programlisting>
-AT &amp; T => AT&amp;T
+at &amp; t => at&amp;t
 AT&amp;T => AT&amp;T
 Standarten   Fuehrer => standartenfuhrer
 Standarten Fuhrer => standartenfuhrer
@@ -11068,7 +11068,7 @@ C plus plus => cplusplus
 </programlisting>
 All tokens here are case sensitive: they will <b>not</b> be processed by
 <link linkend="conf-charset-table">charset_table</link> rules. Thus, with
-the example exceptions file above, "At&amp;t" text will be tokenized as two
+the example exceptions file above, "at&amp;t" text will be tokenized as two
 keywords "at" and "t", because of lowercase letters. On the other hand,
 "AT&amp;T" will match exactly and produce single "AT&amp;T" keyword.
 </para>

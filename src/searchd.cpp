@@ -21408,7 +21408,7 @@ bool SetWatchDog ( int iDevNull )
 			bStreamsActive = false;
 		}
 
-		sphInfo ( "Child process %d has been forked", iRes );
+		sphInfo ( "watchdog: main process %d forked ok", iRes );
 
 		SetSignalHandlers();
 
@@ -21418,7 +21418,7 @@ bool SetWatchDog ( int iDevNull )
 		while ( ( iPid = wait ( &iStatus ) )>0 )
 		{
 			bDaemonAtShutdown = ( g_bDaemonAtShutdown[0]!=0 );
-			const char * sWillRestart = ( bDaemonAtShutdown ? "will not be restarted ( daemon is shutting down )" : "will be restarted" );
+			const char * sWillRestart = ( bDaemonAtShutdown ? "will not be restarted (daemon is shutting down)" : "will be restarted" );
 
 			assert ( iPid==iRes );
 			if ( WIFEXITED ( iStatus ) )
@@ -21426,39 +21426,42 @@ bool SetWatchDog ( int iDevNull )
 				int iExit = WEXITSTATUS ( iStatus );
 				if ( iExit==2 || iExit==6 ) // really crash
 				{
-					sphInfo ( "Child process %d has been finished by CRASH_EXIT (exit code %d), %s", iPid, iExit, sWillRestart );
+					sphInfo ( "watchdog: main process %d crashed via CRASH_EXIT (exit code %d), %s", iPid, iExit, sWillRestart );
 					iReincarnate = -1;
 				} else
 				{
-					sphInfo ( "Child process %d has been finished, exit code %d. Watchdog finishes also. Good bye!", iPid, iExit );
+					sphInfo ( "watchdog: main process %d exited cleanly (exit code %d), shutting down", iPid, iExit );
 					bShutdown = true;
 				}
 			} else if ( WIFSIGNALED ( iStatus ) )
 			{
-				if ( WTERMSIG ( iStatus )==SIGINT || WTERMSIG ( iStatus )==SIGTERM
-#if WATCHDOG_SIGKILL
-					|| WTERMSIG ( iStatus )==SIGKILL
-#endif
-					)
+				int iSig = WTERMSIG ( iStatus );
+				const char * sSig =NULL;
+				if ( iSig==SIGINT )
+					sSig = "SIGINIT";
+				else if ( iSig==SIGTERM )
+					sSig = "SIGTERM";
+				else if ( WATCHDOG_SIGKILL && iSig==SIGKILL )
+					sSig = "SIGKILL";
+				if ( sSig )
 				{
-					sphInfo ( "Child process %d has been killed with kill or sigterm (%i). Watchdog finishes also. Good bye!",
-						iPid, WTERMSIG ( iStatus ) );
+					sphInfo ( "watchdog: main process %d killed cleanly with %s, shutting down", iPid, sSig );
 					bShutdown = true;
 				} else
 				{
 					if ( WCOREDUMP ( iStatus ) )
-						sphInfo ( "Child process %i has been killed with signal %i, core dumped, %s",
-							iPid, WTERMSIG ( iStatus ), sWillRestart );
+						sphInfo ( "watchdog: main process %d killed dirtily with signal %d, core dumped, %s",
+							iPid, iSig, sWillRestart );
 					else
-						sphInfo ( "Child process %i has been killed with signal %i, %s",
-							iPid, WTERMSIG ( iStatus ), sWillRestart );
+						sphInfo ( "watchdog: main process %d killed dirtily with signal %d, %s",
+							iPid, iSig, sWillRestart );
 					iReincarnate = -1;
 				}
 			} else if ( WIFSTOPPED ( iStatus ) )
-				sphInfo ( "Child %i stopped with signal %i", iPid, WSTOPSIG ( iStatus ) );
+				sphInfo ( "watchdog: main process %d stopped with signal %d", iPid, WSTOPSIG ( iStatus ) );
 #ifdef WIFCONTINUED
 			else if ( WIFCONTINUED ( iStatus ) )
-				sphInfo ( "Child %i resumed", iPid );
+				sphInfo ( "watchdog: main process %d resumed", iPid );
 #endif
 		}
 

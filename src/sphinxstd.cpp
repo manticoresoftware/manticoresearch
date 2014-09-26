@@ -628,7 +628,7 @@ void * operator new ( size_t iSize )
 {
 	void * pResult = ::malloc ( iSize );
 	if ( !pResult )
-		sphDie ( "out of memory (unable to allocate "UINT64_FMT" bytes)", (uint64_t)iSize ); // FIXME! this may fail with malloc error too
+		sphDieRestart ( "out of memory (unable to allocate "UINT64_FMT" bytes)", (uint64_t)iSize ); // FIXME! this may fail with malloc error too
 	return pResult;
 }
 
@@ -637,7 +637,7 @@ void * operator new [] ( size_t iSize )
 {
 	void * pResult = ::malloc ( iSize );
 	if ( !pResult )
-		sphDie ( "out of memory (unable to allocate "UINT64_FMT" bytes)", (uint64_t)iSize ); // FIXME! this may fail with malloc error too
+		sphDieRestart ( "out of memory (unable to allocate "UINT64_FMT" bytes)", (uint64_t)iSize ); // FIXME! this may fail with malloc error too
 	return pResult;
 }
 
@@ -689,7 +689,7 @@ void sphSetDieCallback ( SphDieCallback_t pfDieCallback )
 
 void sphDie ( const char * sTemplate, ... )
 {
-	char sBuf[256];
+	char sBuf[1024];
 
 	va_list ap;
 	va_start ( ap, sTemplate );
@@ -703,6 +703,25 @@ void sphDie ( const char * sTemplate, ... )
 		fprintf ( stdout, "FATAL: %s\n", sBuf );
 
 	exit ( 1 );
+}
+
+
+void sphDieRestart ( const char * sTemplate, ... )
+{
+	char sBuf[1024];
+
+	va_list ap;
+	va_start ( ap, sTemplate );
+	vsnprintf ( sBuf, sizeof(sBuf), sTemplate, ap );
+	va_end ( ap );
+
+	// if there's no callback,
+	// or if callback returns true,
+	// log to stdout
+	if ( !g_pfDieCallback || g_pfDieCallback ( sBuf ) )
+		fprintf ( stdout, "FATAL: %s\n", sBuf );
+
+	exit ( 2 ); // almost CRASH_EXIT
 }
 
 //////////////////////////////////////////////////////////////////////////

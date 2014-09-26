@@ -21703,6 +21703,14 @@ void FailClient ( int iSock, SearchdStatus_e eStatus, const char * sMessage )
 }
 
 
+void MysqlMaxedOut ( int iSock )
+{
+	static const char * dMaxedOutPacket = "\x17\x00\x00\x00\xff\x10\x04Too many connections";
+	sphSockSend ( iSock, dMaxedOutPacket, 27 );
+	sphSockClose ( iSock );
+}
+
+
 Listener_t * DoAccept ( int * pClientSock, char * sClientName )
 {
 	assert ( pClientSock );
@@ -21944,7 +21952,10 @@ void TickHead ( bool bDontListen )
 	if ( ( g_iMaxChildren && ( g_dChildren.GetLength()>=g_iMaxChildren || g_dThd.GetLength()>=g_iMaxChildren ) )
 		|| ( g_iRotateCount && !g_bSeamlessRotate ) )
 	{
-		FailClient ( iClientSock, SEARCHD_RETRY, "server maxed out, retry in a second" );
+		if ( pListener->m_eProto==PROTO_SPHINX )
+			FailClient ( iClientSock, SEARCHD_RETRY, "server maxed out, retry in a second" );
+		else
+			MysqlMaxedOut ( iClientSock );
 		sphWarning ( "maxed out, dismissing client" );
 
 		if ( g_pStats )

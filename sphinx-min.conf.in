@@ -56,7 +56,6 @@ searchd
 	read_timeout		= 5
 	max_children		= 30
 	pid_file		= @CONFDIR@/log/searchd.pid
-	max_matches		= 1000
 	seamless_rotate		= 1
 	preopen_indexes		= 1
 	unlink_old		= 1

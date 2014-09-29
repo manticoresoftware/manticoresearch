@@ -31,6 +31,14 @@ index exact
 	blend_chars = (, ), -
 	blend_mode = trim_none, trim_head, trim_tail, trim_both, skip_pure
 }
+
+index idx_ru
+{
+	source			= src
+	path			= <data_path/>/idx_ru
+	min_word_len = 1
+    morphology = stem_enru
+}
 </config>
 
 <db_insert>select 1;</db_insert>
@@ -151,6 +159,12 @@ $results [] = $reply;
 $results [] = $client->BuildExcerpts ( array('=welcome home'), 'exact', '=welcome', array('query_mode'=>1) );
 $results [] = $client->BuildExcerpts ( array('=welcome home'), 'exact', '\=welcome', array('query_mode'=>1) );
 $results [] = $client->BuildExcerpts ( array('=welcome home'), 'exact', '\=welcome', array('query_mode'=>0) );
+
+// regression weight ordered passage generation
+$query = 'масляков';
+$docs = array ( 'ждународного сeоюза КВН Александр Масляков и веедущий программы  Премьл Лига КВН  Александр Масляков младший   ши Масляков никогда не принимал' ); 
+$opts = array( 'around'=> 4, 'weight_order'=>true );
+$results [] = $client->BuildExcerpts ( $docs, 'idx_ru', $query, $opts );
 
 ]]></custom_test>
 

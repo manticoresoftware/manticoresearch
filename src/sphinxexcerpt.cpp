@@ -2769,6 +2769,7 @@ private:
 			m_bLastWasSeparator = true;
 		}
 
+		int iPassage = m_iCurPassage;
 		if ( m_iCurPassage==-1 || m_iCurToken<pPassage->m_iStart || m_iCurToken>( pPassage->m_iStart + pPassage->m_iTokens - 1 ) )
 		{
 			int iNextPassage = 0;
@@ -2784,7 +2785,7 @@ private:
 				}
 		}
 
-		if ( m_iCurPassage!=-1 && m_iCurToken==m_dPassages[m_iCurPassage].m_iStart )
+		if ( m_iCurPassage!=-1 && iPassage!=m_iCurPassage )
 		{
 			if ( !m_bLastWasSeparator && m_iCurToken && !m_bWeightOrder )
 			{

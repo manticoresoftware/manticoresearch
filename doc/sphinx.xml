@@ -14380,6 +14380,27 @@ rlp_max_batch_docs = 100
 
 <appendix id="changelog"><title>Sphinx revision history</title>
 
+<sect1 id="rel225"><title>Version 2.2.5-release, ?? oct 2014</title>
+<bridgehead>New minor features</bridgehead>
+<itemizedlist>
+<listitem><para>added OPTION rand_seed which affects ORDER BY RAND()</para></listitem>
+</itemizedlist>
+
+<bridgehead>Bug fixes</bridgehead>
+<itemizedlist>
+<listitem><para>fixed #2042, indextool fails with field mask on 32+ fields</para></listitem>
+<listitem><para>fixed #2031, wrong encoding with UnixODBC/Oracle source</para></listitem>
+<listitem><para>fixed #2056, several bugs in RLP tokenizer</para></listitem>
+<listitem><para>fixed #2054, SHOW THREADS hangs if queries in prefork mode</para></listitem>
+<listitem><para>fixed #2057, WARNING at indexer on duplicated wordforms</para></listitem>
+<listitem><para>fixed #2066, snippet generation with weight_order enabled</para></listitem>
+<listitem><para>fixed exception parsing in queries</para></listitem>
+<listitem><para>fixed crash in config parser</para></listitem>
+<listitem><para>fixed MySQL protocol response when daemon maxed out</para></listitem>
+</itemizedlist>
+</sect1>
+
+
 <sect1 id="rel224"><title>Version 2.2.4-release, 11 sep 2014</title>
 <bridgehead>New major features</bridgehead>
 <itemizedlist>

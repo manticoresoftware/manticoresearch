@@ -10772,7 +10772,7 @@ struct CmpHit_fn
 	{
 		return ( a.m_uWordID<b.m_uWordID ) ||
 				( a.m_uWordID==b.m_uWordID && a.m_uDocID<b.m_uDocID ) ||
-				( a.m_uWordID==b.m_uWordID && a.m_uDocID==b.m_uDocID && a.m_uWordPos<b.m_uWordPos );
+				( a.m_uWordID==b.m_uWordID && a.m_uDocID==b.m_uDocID && HITMAN::GetPosWithField ( a.m_uWordPos )<HITMAN::GetPosWithField ( b.m_uWordPos ) );
 	}
 };
 
@@ -10844,9 +10844,6 @@ public:
 
 	bool	CreateIndexFiles ( const char * sDocName, const char * sHitName, const char * sSkipName, bool bInplace, int iWriteBuffer, CSphAutofile & tHit, SphOffset_t * pSharedOffset );
 	void	HitReset ();
-	void	DoclistBeginEntry ( SphDocID_t uDocid, const DWORD * pAttrs );
-	void	DoclistEndEntry ( Hitpos_t uLastPos );
-	void	DoclistEndList ();
 	void	cidxHit ( CSphAggregateHit * pHit, const CSphRowitem * pAttrs );
 	bool	cidxDone ( int iMemLimit, int iMinInfixLen, int iMaxCodepointLen, DictHeader_t * pDictHeader );
 	int		cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWORD * pDocinfo, int iDocinfos, int iStride );
@@ -10860,6 +10857,9 @@ public:
 	void			SetThrottle ( ThrottleState_t * pState ) { m_pThrottle = pState; }
 
 private:
+	void	DoclistBeginEntry ( SphDocID_t uDocid, const DWORD * pAttrs );
+	void	DoclistEndEntry ( Hitpos_t uLastPos );
+	void	DoclistEndList ();
 
 	CSphWriter					m_wrDoclist;			///< wordlist writer
 	CSphWriter					m_wrHitlist;			///< hitlist writer
@@ -10870,6 +10870,8 @@ private:
 	CSphFixedVector<CSphRowitem>	m_dMinRow;
 
 	CSphAggregateHit			m_tLastHit;				///< hitlist entry
+	Hitpos_t					m_tPrevHitPos;			///< previous hit position
+	bool						m_bGotHit;
 	BYTE						m_sLastKeyword [ MAX_KEYWORD_BYTES ];
 
 	const CSphVector<SphWordID_t> &	m_dHitlessWords;
@@ -10878,7 +10880,7 @@ private:
 
 	SphOffset_t					m_iLastHitlistPos;		///< doclist entry
 	SphOffset_t					m_iLastHitlistDelta;	///< doclist entry
-	FieldMask_t				m_dLastDocFields;		///< doclist entry
+	FieldMask_t					m_dLastDocFields;		///< doclist entry
 	DWORD						m_uLastDocHits;			///< doclist entry
 
 	CSphDictEntry				m_tWord;				///< dictionary entry
@@ -10896,6 +10898,8 @@ CSphHitBuilder::CSphHitBuilder ( const CSphIndexSettings & tSettings,
 	CSphDict * pDict, CSphString * sError )
 	: m_dWriteBuffer ( iBufSize )
 	, m_dMinRow ( 0 )
+	, m_tPrevHitPos ( 0 )
+	, m_bGotHit ( false )
 	, m_dHitlessWords ( dHitless )
 	, m_pDict ( pDict )
 	, m_pLastError ( sError )
@@ -10979,6 +10983,8 @@ void CSphHitBuilder::HitReset()
 	m_tLastHit.m_uWordID = 0;
 	m_tLastHit.m_iWordPos = EMPTY_HIT;
 	m_tLastHit.m_sKeyword = m_sLastKeyword;
+	m_tPrevHitPos = 0;
+	m_bGotHit = false;
 }
 
 
@@ -11119,6 +11125,17 @@ void CSphHitBuilder::cidxHit ( CSphAggregateHit * pHit, const CSphRowitem * pAtt
 		( m_pDict->GetSettings().m_bWordDict && strcmp ( (char*)m_tLastHit.m_sKeyword, (char*)pHit->m_sKeyword ) ) ); // OPTIMIZE?
 	bool bNextDoc = bNextWord || ( m_tLastHit.m_uDocID!=pHit->m_uDocID );
 
+	if ( m_bGotHit )
+	{
+		if ( !bNextDoc && !bNextWord && HITMAN::GetField ( m_tLastHit.m_iWordPos )==HITMAN::GetField ( pHit->m_iWordPos ) &&
+			( HITMAN::IsEnd ( m_tLastHit.m_iWordPos ) || HITMAN::IsEnd ( pHit->m_iWordPos ) ) )
+			m_tLastHit.m_iWordPos = HITMAN::GetPosWithField ( m_tLastHit.m_iWordPos );
+
+		m_wrHitlist.ZipInt ( m_tLastHit.m_iWordPos - m_tPrevHitPos );
+	}
+	m_bGotHit = false;
+
+
 	if ( bNextDoc )
 	{
 		// finish hitlist, if any
@@ -11127,6 +11144,7 @@ void CSphHitBuilder::cidxHit ( CSphAggregateHit * pHit, const CSphRowitem * pAtt
 		{
 			m_wrHitlist.ZipInt ( 0 );
 			m_tLastHit.m_iWordPos = EMPTY_HIT;
+			m_tPrevHitPos = EMPTY_HIT;
 		}
 
 		// finish doclist entry, if any
@@ -11215,7 +11233,8 @@ void CSphHitBuilder::cidxHit ( CSphAggregateHit * pHit, const CSphRowitem * pAtt
 			return;
 
 		assert ( m_tLastHit.m_iWordPos < pHit->m_iWordPos );
-		m_wrHitlist.ZipInt ( pHit->m_iWordPos - m_tLastHit.m_iWordPos );
+		m_bGotHit = true;
+		m_tPrevHitPos = m_tLastHit.m_iWordPos;
 		m_tLastHit.m_iWordPos = pHit->m_iWordPos;
 		m_tWord.m_iHits++;
 
@@ -11406,6 +11425,10 @@ bool CSphIndex_VLN::BuildDone ( const BuildHeader_t & tBuildHeader, CSphString &
 bool CSphHitBuilder::cidxDone ( int iMemLimit, int iMinInfixLen, int iMaxCodepointLen, DictHeader_t * pDictHeader )
 {
 	assert ( pDictHeader );
+
+	if ( m_bGotHit )
+		m_wrHitlist.ZipInt ( m_tLastHit.m_iWordPos - m_tPrevHitPos );
+	m_bGotHit = false;
 
 	// finalize dictionary
 	// in dict=crc mode, just flushes wordlist checkpoints
@@ -11750,7 +11773,7 @@ inline bool SPH_CMPAGGRHIT_LESS ( const CSphAggregateHit & a, const CSphAggregat
 
 	return
 		( a.m_uDocID < b.m_uDocID ) ||
-		( a.m_uDocID==b.m_uDocID && a.m_iWordPos<b.m_iWordPos );
+		( a.m_uDocID==b.m_uDocID && HITMAN::GetPosWithField ( a.m_iWordPos )<HITMAN::GetPosWithField ( b.m_iWordPos ) );
 }
 
 

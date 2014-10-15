@@ -20663,7 +20663,7 @@ private:
 	int					InitMorph ( const char * szMorph, int iLength, CSphString & sError );
 	int					AddMorph ( int iMorph ); ///< helper that always returns ST_OK
 	bool				StemById ( BYTE * pWord, int iStemmer ) const;
-	void				AddWordform ( CSphWordforms * pContainer, char * sBuffer, int iLen, ISphTokenizer * pTokenizer, const char * szFile, const CSphVector<char> & dBlended );
+	void				AddWordform ( CSphWordforms * pContainer, char * sBuffer, int iLen, ISphTokenizer * pTokenizer, const char * szFile, const CSphVector<int> & dBlended );
 };
 
 CSphVector<CSphWordforms*> CSphTemplateDictTraits::m_dWordformContainers;
@@ -21627,7 +21627,7 @@ CSphWordforms * CSphTemplateDictTraits::GetWordformContainer ( const CSphVector<
 
 
 void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sBuffer, int iLen,
-	ISphTokenizer * pTokenizer, const char * szFile, const CSphVector<char> & dBlended )
+	ISphTokenizer * pTokenizer, const char * szFile, const CSphVector<int> & dBlended )
 {
 	CSphVector<CSphString> dTokens;
 
@@ -21736,10 +21736,14 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 
 	// we disabled all blended, so we need to filter them manually
 	bool bBlendedPresent = false;
-	ARRAY_FOREACH ( i, dDestTokens )
-		for ( int j = 0; j < dDestTokens[i].m_sForm.Length() && !bBlendedPresent; j++ )
-			ARRAY_FOREACH_COND ( k, dBlended, !bBlendedPresent )
-				bBlendedPresent = dDestTokens[i].m_sForm.cstr()[j]==dBlended[k];
+	if ( dBlended.GetLength() )
+		ARRAY_FOREACH ( i, dDestTokens )
+		{
+			int iCode;
+			const BYTE * pBuf = (const BYTE *) dDestTokens[i].m_sForm.cstr();
+			while ( ( iCode = sphUTF8Decode ( pBuf ) )>0 && !bBlendedPresent )
+				bBlendedPresent = ( dBlended.BinarySearch ( iCode )!=NULL );
+		}
 
 	if ( bBlendedPresent )
 		sphWarning ( "invalid mapping (destination contains blended characters) (wordform='%s'). Fix your wordforms file '%s'.", sBuffer, szFile );
@@ -21865,7 +21869,7 @@ CSphWordforms * CSphTemplateDictTraits::LoadWordformContainer ( const CSphVector
 
 	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone ( SPH_CLONE_INDEX ) );
 	const CSphTokenizerSettings & tSettings = pMyTokenizer->GetSettings();
-	CSphVector<char> dBlended;
+	CSphVector<int> dBlended;
 
 	// get a list of blend chars and set add them to the tokenizer as simple chars
 	if ( tSettings.m_sBlendChars.Length() )
@@ -21883,10 +21887,13 @@ CSphWordforms * CSphTemplateDictTraits::LoadWordformContainer ( const CSphVector
 					dNewCharset.Add ( ',' );
 					dNewCharset.Add ( ' ' );
 					dNewCharset.Add ( char(j) );
-					dBlended.Add ( char(j) );
+					dBlended.Add ( j );
 				}
 
 		dNewCharset.Add(0);
+
+		// sort dBlended for binary search
+		dBlended.Sort ();
 
 		CSphString sError;
 		pMyTokenizer->SetCaseFolding ( dNewCharset.Begin(), sError );

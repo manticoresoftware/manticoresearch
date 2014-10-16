@@ -10870,8 +10870,8 @@ private:
 	CSphFixedVector<CSphRowitem>	m_dMinRow;
 
 	CSphAggregateHit			m_tLastHit;				///< hitlist entry
-	Hitpos_t					m_tPrevHitPos;			///< previous hit position
-	bool						m_bGotHit;
+	Hitpos_t					m_iPrevHitPos;			///< previous hit position
+	bool						m_bGotFieldEnd;
 	BYTE						m_sLastKeyword [ MAX_KEYWORD_BYTES ];
 
 	const CSphVector<SphWordID_t> &	m_dHitlessWords;
@@ -10898,8 +10898,8 @@ CSphHitBuilder::CSphHitBuilder ( const CSphIndexSettings & tSettings,
 	CSphDict * pDict, CSphString * sError )
 	: m_dWriteBuffer ( iBufSize )
 	, m_dMinRow ( 0 )
-	, m_tPrevHitPos ( 0 )
-	, m_bGotHit ( false )
+	, m_iPrevHitPos ( 0 )
+	, m_bGotFieldEnd ( false )
 	, m_dHitlessWords ( dHitless )
 	, m_pDict ( pDict )
 	, m_pLastError ( sError )
@@ -10983,8 +10983,8 @@ void CSphHitBuilder::HitReset()
 	m_tLastHit.m_uWordID = 0;
 	m_tLastHit.m_iWordPos = EMPTY_HIT;
 	m_tLastHit.m_sKeyword = m_sLastKeyword;
-	m_tPrevHitPos = 0;
-	m_bGotHit = false;
+	m_iPrevHitPos = 0;
+	m_bGotFieldEnd = false;
 }
 
 
@@ -11125,15 +11125,14 @@ void CSphHitBuilder::cidxHit ( CSphAggregateHit * pHit, const CSphRowitem * pAtt
 		( m_pDict->GetSettings().m_bWordDict && strcmp ( (char*)m_tLastHit.m_sKeyword, (char*)pHit->m_sKeyword ) ) ); // OPTIMIZE?
 	bool bNextDoc = bNextWord || ( m_tLastHit.m_uDocID!=pHit->m_uDocID );
 
-	if ( m_bGotHit )
+	if ( m_bGotFieldEnd && ( bNextWord || bNextDoc ) )
 	{
-		if ( !bNextDoc && !bNextWord && HITMAN::GetField ( m_tLastHit.m_iWordPos )==HITMAN::GetField ( pHit->m_iWordPos ) &&
-			( HITMAN::IsEnd ( m_tLastHit.m_iWordPos ) || HITMAN::IsEnd ( pHit->m_iWordPos ) ) )
-			m_tLastHit.m_iWordPos = HITMAN::GetPosWithField ( m_tLastHit.m_iWordPos );
-
-		m_wrHitlist.ZipInt ( m_tLastHit.m_iWordPos - m_tPrevHitPos );
+		// writing hits only without duplicates
+		assert ( HITMAN::GetPosWithField ( m_iPrevHitPos )!=HITMAN::GetPosWithField ( m_tLastHit.m_iWordPos ) );
+		HITMAN::SetEndMarker ( &m_tLastHit.m_iWordPos );
+		m_wrHitlist.ZipInt ( m_tLastHit.m_iWordPos - m_iPrevHitPos );
+		m_bGotFieldEnd = false;
 	}
-	m_bGotHit = false;
 
 
 	if ( bNextDoc )
@@ -11144,7 +11143,7 @@ void CSphHitBuilder::cidxHit ( CSphAggregateHit * pHit, const CSphRowitem * pAtt
 		{
 			m_wrHitlist.ZipInt ( 0 );
 			m_tLastHit.m_iWordPos = EMPTY_HIT;
-			m_tPrevHitPos = EMPTY_HIT;
+			m_iPrevHitPos = EMPTY_HIT;
 		}
 
 		// finish doclist entry, if any
@@ -11228,19 +11227,54 @@ void CSphHitBuilder::cidxHit ( CSphAggregateHit * pHit, const CSphRowitem * pAtt
 
 	} else // handle normal hits
 	{
-		// add hit delta
-		if ( pHit->m_iWordPos==m_tLastHit.m_iWordPos )
+		Hitpos_t iHitPosPure = HITMAN::GetPosWithField ( pHit->m_iWordPos );
+
+		// skip any duplicates and keep only 1st position in place
+		// duplicates are hit with same position: [N, N] [N, N | FIELDEND_MASK] [N | FIELDEND_MASK, N] [N | FIELDEND_MASK, N | FIELDEND_MASK]
+		if ( iHitPosPure==m_tLastHit.m_iWordPos )
 			return;
 
+		// storing previous hit that might have a field end flag
+		if ( m_bGotFieldEnd )
+		{
+			if ( HITMAN::GetField ( pHit->m_iWordPos)!=HITMAN::GetField ( m_tLastHit.m_iWordPos ) ) // is field end flag real?
+				HITMAN::SetEndMarker ( &m_tLastHit.m_iWordPos );
+
+			m_wrHitlist.ZipInt ( m_tLastHit.m_iWordPos - m_iPrevHitPos );
+			m_bGotFieldEnd = false;
+		}
+
+		/* duplicate hits from duplicated documents
+		... 0x03, 0x03 ... 
+		... 0x8003, 0x8003 ... 
+		... 1, 0x8003, 0x03 ... 
+		... 1, 0x03, 0x8003 ... 
+		... 1, 0x8003, 0x04 ... 
+		... 1, 0x03, 0x8003, 0x8003 ... 
+		... 1, 0x03, 0x8003, 0x03 ... 
+		*/
+
 		assert ( m_tLastHit.m_iWordPos < pHit->m_iWordPos );
-		m_bGotHit = true;
-		m_tPrevHitPos = m_tLastHit.m_iWordPos;
-		m_tLastHit.m_iWordPos = pHit->m_iWordPos;
-		m_tWord.m_iHits++;
+
+		// add hit delta without field end marker
+		// or postpone adding to hitlist till got another uniq hit
+		if ( iHitPosPure==pHit->m_iWordPos )
+		{
+			m_wrHitlist.ZipInt ( pHit->m_iWordPos - m_tLastHit.m_iWordPos );
+			m_tLastHit.m_iWordPos = pHit->m_iWordPos;
+		} else
+		{
+			assert ( HITMAN::IsEnd ( pHit->m_iWordPos ) );
+			m_bGotFieldEnd = true;
+			m_iPrevHitPos = m_tLastHit.m_iWordPos;
+			m_tLastHit.m_iWordPos = HITMAN::GetPosWithField ( pHit->m_iWordPos );
+		}
 
 		// update matched fields mask
 		m_dLastDocFields.Set ( HITMAN::GetField ( pHit->m_iWordPos ) );
+
 		m_uLastDocHits++;
+		m_tWord.m_iHits++;
 	}
 }
 
@@ -11426,9 +11460,12 @@ bool CSphHitBuilder::cidxDone ( int iMemLimit, int iMinInfixLen, int iMaxCodepoi
 {
 	assert ( pDictHeader );
 
-	if ( m_bGotHit )
-		m_wrHitlist.ZipInt ( m_tLastHit.m_iWordPos - m_tPrevHitPos );
-	m_bGotHit = false;
+	if ( m_bGotFieldEnd )
+	{
+		HITMAN::SetEndMarker ( &m_tLastHit.m_iWordPos );
+		m_wrHitlist.ZipInt ( m_tLastHit.m_iWordPos - m_iPrevHitPos );
+		m_bGotFieldEnd = false;
+	}
 
 	// finalize dictionary
 	// in dict=crc mode, just flushes wordlist checkpoints
@@ -11614,6 +11651,18 @@ int CSphHitBuilder::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWO
 			continue;
 		}
 
+		// reset field-end inside token stream due of document duplicates
+		if ( d1==0 && d2==0 && HITMAN::IsEnd ( l3 ) && HITMAN::GetField ( pHit->m_uWordPos )==HITMAN::GetField ( l3 ) )
+		{
+			l3 = HITMAN::GetPosWithField ( l3 );
+			d3 = pHit->m_uWordPos - l3;
+
+			if ( d3==0 )
+			{
+				pHit++;
+				continue;
+			}
+		}
 
 		// non-zero delta restarts all the fields after it
 		// because their deltas might now be negative

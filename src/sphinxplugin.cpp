@@ -261,17 +261,20 @@ static bool PluginCreate ( const char * szLib, const char * szName,
 {
 #if !HAVE_DLOPEN
 	sError = "no dlopen(), no plugins";
+	delete pPlugin;
 	return false;
 #else
 	if ( !g_bPluginsEnabled )
 	{
 		sError = "plugin support disabled (requires a valid plugin_dir)";
+		delete pPlugin;
 		return false;
 	}
 
 	if ( g_bPluginsLocked )
 	{
 		sError = "CREATE is disabled (fully dynamic plugins require workers=threads)";
+		delete pPlugin;
 		return false;
 	}
 
@@ -280,6 +283,7 @@ static bool PluginCreate ( const char * szLib, const char * szName,
 		if ( *p=='/' || *p=='\\' )
 		{
 			sError = "restricted character (path delimiter) in a library file name";
+			delete pPlugin;
 			return false;
 		}
 
@@ -294,6 +298,7 @@ static bool PluginCreate ( const char * szLib, const char * szName,
 	if ( g_hPlugins(k) )
 	{
 		sError.SetSprintf ( "plugin '%s' already exists", k.m_sName.cstr() );
+		delete pPlugin;
 		return false;
 	}
 
@@ -312,6 +317,7 @@ static bool PluginCreate ( const char * szLib, const char * szName,
 		{
 			const char * sDlerror = dlerror();
 			sError.SetSprintf ( "dlopen() failed: %s", sDlerror ? sDlerror : "(null)" );
+			delete pPlugin;
 			return false;
 		}
 		sphLogDebug ( "dlopen(%s)=%p", sLibfile.cstr(), pHandle );
@@ -327,6 +333,7 @@ static bool PluginCreate ( const char * szLib, const char * szName,
 			dlclose ( pHandle );
 
 		sError.SetSprintf ( "%s in %s", sError.cstr(), sLib.cstr() );
+		delete pPlugin;
 		return false;
 	}
 
@@ -344,6 +351,7 @@ static bool PluginCreate ( const char * szLib, const char * szName,
 		{
 			sError.SetSprintf ( "symbol '%s_ver' not found in '%s': update your UDF implementation", sBasename.cstr(), sLib.cstr() );
 			dlclose ( pHandle );
+			delete pPlugin;
 			return false;
 		}
 
@@ -351,6 +359,7 @@ static bool PluginCreate ( const char * szLib, const char * szName,
 		{
 			sError.SetSprintf ( "library '%s' was compiled using an older version of sphinxudf.h; it needs to be recompiled", sLib.cstr() );
 			dlclose ( pHandle );
+			delete pPlugin;
 			return false;
 		}
 

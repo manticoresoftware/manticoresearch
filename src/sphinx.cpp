@@ -11643,6 +11643,15 @@ int CSphHitBuilder::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWO
 			continue;
 		}
 
+		// checks below are intended handle several "fun" cases
+		//
+		// case 1, duplicate documents (same docid), different field contents, but ending with
+		// the same keyword, ending up in multiple field end markers within the same keyword
+		// eg. [foo] in positions {1, 0x800005} in 1st dupe, {3, 0x800007} in 2nd dupe
+		//
+		// case 2, blended token in the field end, duplicate parts, different positions (as expected)
+		// for those parts but still multiple field end markers, eg. [U.S.S.R.] in the end of field
+
 		// replacement of hit itself by field-end form
 		if ( d1==0 && d2==0 && HITMAN::GetPosWithField ( pHit->m_uWordPos )==HITMAN::GetPosWithField ( l3 ) )
 		{
@@ -11655,7 +11664,7 @@ int CSphHitBuilder::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWO
 		if ( d1==0 && d2==0 && HITMAN::IsEnd ( l3 ) && HITMAN::GetField ( pHit->m_uWordPos )==HITMAN::GetField ( l3 ) )
 		{
 			l3 = HITMAN::GetPosWithField ( l3 );
-			d3 = pHit->m_uWordPos - l3;
+			d3 = HITMAN::GetPosWithField ( pHit->m_uWordPos ) - l3;
 
 			if ( d3==0 )
 			{

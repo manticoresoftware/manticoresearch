@@ -91,6 +91,9 @@ const CSphNamedInt &	sphAotDictinfo ( int iLang );
 class CSphTokenFilter;
 CSphTokenFilter *		sphAotCreateFilter ( ISphTokenizer * pTokenizer, CSphDict * pDict, bool bIndexExact, DWORD uLangMask );
 
+/// free lemmatizers on shutdown
+void	sphAotShutdown ();
+
 #endif // _sphinxstem_
 
 //

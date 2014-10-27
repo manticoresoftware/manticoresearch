@@ -1747,6 +1747,13 @@ CSphTokenFilter * sphAotCreateFilter ( ISphTokenizer * pTokenizer, CSphDict * pD
 	return pDerivedTokenizer;
 }
 
+
+void sphAotShutdown ()
+{
+	for ( int i=0; i<AOT_LENGTH; i++ )
+		SafeDelete ( g_pLemmatizers[i] );
+}
+
 //
 // $Id$
 //

@@ -1829,6 +1829,7 @@ void Shutdown ()
 
 		sphShutdownWordforms ();
 		sphShutdownGlobalIDFs ();
+		sphAotShutdown ();
 	}
 
 	ARRAY_FOREACH ( i, g_dListeners )

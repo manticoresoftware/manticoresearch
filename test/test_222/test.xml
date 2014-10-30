@@ -207,6 +207,11 @@ CREATE TABLE test_table
 <sphinxql>CALL KEYWORDS ( 'records recorded recording men man mans mens', 'rt_ckw', 1 )</sphinxql>
 <sphinxql>CALL KEYWORDS ( 'records recorded recording men man mans mens', 'tmpl_ckw', 1 )</sphinxql>
 
+<!-- field-start, field-end escaping test -->
+<sphinxql>SET profiling=1</sphinxql>
+<sphinxql>SELECT id FROM testw WHERE MATCH('\\^one\\$') limit 1</sphinxql>
+<sphinxql>SHOW PLAN</sphinxql>
+
 </sphqueries>
 
 </test>

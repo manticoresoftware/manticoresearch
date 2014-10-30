@@ -1132,7 +1132,8 @@ void XQParser_t::HandleModifiers ( XQKeyword_t & tKeyword )
 		return;
 
 	const char * sQuery = reinterpret_cast<char *> ( m_sQuery );
-	tKeyword.m_bFieldStart = ( sTokStart-sQuery )>0 && sTokStart [ -1 ]=='^';
+	tKeyword.m_bFieldStart = ( sTokStart-sQuery )>0 && sTokStart [ -1 ]=='^' &&
+		!( ( sTokStart-sQuery )>1 && sTokStart [ -2 ]=='\\' );
 
 	if ( sTokEnd[0]=='$' )
 	{

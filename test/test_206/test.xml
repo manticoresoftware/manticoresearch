@@ -754,7 +754,6 @@ Two'</sphinxql>
 <!-- interval function and implicit conversion -->
 <sphinxql>select j.a, interval(uint(j.a[0]),1,2,3) from arrays</sphinxql>
 <sphinxql>select j.a, interval(j.a[0],1,2,3) from arrays</sphinxql>
-
 <!-- crash on query multiple indexes with order by UPPERCASE json.field -->
 <sphinxql>select * from json_up1, json_up2 order by j.R158S asc</sphinxql>
 <sphinxql>select * from json_up1, json_up2 order by j.R158S desc</sphinxql>
@@ -764,6 +763,9 @@ Two'</sphinxql>
 <sphinxql>select * from dist_up order by j.R158S desc</sphinxql>
 <sphinxql>select * from dist_up order by j.rom asc</sphinxql>
 <sphinxql>select * from dist_up order by j.rom desc</sphinxql>
-
+<!-- reserved keyword for distributed indexes -->
+<sphinxql>select id, j.id, j.uid from dist</sphinxql>
+<!-- is null expression for distributed indexes -->
+<sphinxql>select id, j.uid, j.uid is null, j.uid is not null from dist</sphinxql>
 </sphqueries>
 </test>

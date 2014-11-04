@@ -46,6 +46,9 @@
 %nonassoc TOK_NEG
 %nonassoc TOK_NOT
 
+%token	TOK_IS
+%token	TOK_NULL
+
 %%
 
 select:
@@ -107,6 +110,8 @@ expr:
 	| '(' expr ')'				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| function
 	| json_field
+	| json_field TOK_IS TOK_NULL			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
+	| json_field TOK_IS TOK_NOT TOK_NULL	{ $$ = $1; $$.m_iEnd = $4.m_iEnd; }
 	;
 
 select_atom:
@@ -147,14 +152,23 @@ comment:
 
 json_field:
 	SEL_TOKEN subscript			{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
+	;
 
 subscript:
 	subkey
 	| subscript subkey			{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
 	;
 
+ident:
+	SEL_TOKEN
+	| SEL_ID | SEL_AS | SEL_AVG | SEL_MAX | SEL_MIN | SEL_SUM | SEL_GROUP_CONCAT
+	| SEL_GROUPBY | SEL_COUNT | SEL_WEIGHT | SEL_DISTINCT | SEL_OPTION | TOK_DIV
+	| TOK_MOD | TOK_NEG | TOK_LTE | TOK_GTE | TOK_EQ | TOK_NE | TOK_OR | TOK_AND
+	| TOK_NOT | TOK_IS | TOK_NULL
+	;
+
 subkey:
-	'.' SEL_TOKEN				{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
+	'.' ident					{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
 	| '[' expr ']'				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| '[' TOK_CONST_STRING ']'	{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	;

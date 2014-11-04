@@ -6883,6 +6883,8 @@ int SelectParser_t::GetToken ( YYSTYPE * lvalp )
 		LOC_CHECK ( "DISTINCT", 8, SEL_DISTINCT );
 		LOC_CHECK ( "WEIGHT", 6, SEL_WEIGHT );
 		LOC_CHECK ( "OPTION", 6, SEL_OPTION );
+		LOC_CHECK ( "IS", 2, TOK_IS );
+		LOC_CHECK ( "NULL", 4, TOK_NULL );
 
 		#undef LOC_CHECK
 

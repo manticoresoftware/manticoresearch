@@ -4842,6 +4842,10 @@ public:
 	{
 		assert ( m_pTokenizer );
 		assert ( m_pFilter );
+		m_pFilter->Use();
+		// FIXME!!! handle error in constructor \ move to setup?
+		CSphString sError;
+		SetFilterSchema ( CSphSchema(), sError );
 	}
 
 	~PluginFilterTokenizer_c()
@@ -4859,6 +4863,9 @@ public:
 
 	virtual bool SetFilterSchema ( const CSphSchema & s, CSphString & sError )
 	{
+		if ( m_pUserdata && m_pFilter->m_fnDeinit )
+			m_pFilter->m_fnDeinit ( m_pUserdata );
+
 		CSphVector<const char*> dFields;
 		ARRAY_FOREACH ( i, s.m_dFields )
 			dFields.Add ( s.m_dFields[i].m_sName.cstr() );
@@ -4974,7 +4981,9 @@ ISphTokenizer * ISphTokenizer::CreatePluginFilter ( ISphTokenizer * pTokenizer, 
 		sError.SetSprintf ( "INTERNAL ERROR: plugin %s:%s loaded ok but lookup fails", dPlugin[0].cstr(), dPlugin[1].cstr() );
 		return NULL;
 	}
-	return new PluginFilterTokenizer_c ( pTokenizer, (const PluginTokenFilter_c *)p, dPlugin[2].cstr() );
+	ISphTokenizer * pPluginTokenizer = new PluginFilterTokenizer_c ( pTokenizer, (const PluginTokenFilter_c *)p, dPlugin[2].cstr() );
+	p->Release(); // plugin got owned by filter no need to leak counter
+	return pPluginTokenizer;
 }
 
 
@@ -11239,7 +11248,7 @@ void CSphHitBuilder::cidxHit ( CSphAggregateHit * pHit, const CSphRowitem * pAtt
 		// storing previous hit that might have a field end flag
 		if ( m_bGotFieldEnd )
 		{
-			if ( HITMAN::GetField ( pHit->m_iWordPos)!=HITMAN::GetField ( m_tLastHit.m_iWordPos ) ) // is field end flag real?
+			if ( HITMAN::GetField ( pHit->m_iWordPos )!=HITMAN::GetField ( m_tLastHit.m_iWordPos ) ) // is field end flag real?
 				HITMAN::SetEndMarker ( &m_tLastHit.m_iWordPos );
 
 			m_wrHitlist.ZipInt ( m_tLastHit.m_iWordPos - m_iPrevHitPos );

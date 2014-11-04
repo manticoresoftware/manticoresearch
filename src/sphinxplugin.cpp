@@ -89,6 +89,14 @@ static CSphOrderedHash<PluginDesc_c*, PluginKey_t, PluginKey_t, 256>	g_hPlugins;
 
 //////////////////////////////////////////////////////////////////////////
 
+void PluginDesc_c::Use() const
+{
+	g_tPluginMutex.Lock ();
+	m_iUserCount++;
+	g_tPluginMutex.Unlock ();
+}
+
+
 void PluginDesc_c::Release() const
 {
 	g_tPluginMutex.Lock ();
@@ -193,7 +201,7 @@ static bool PluginLoadSymbols ( void * pDesc, const SymbolDesc_t * pSymbol, void
 	return false;
 #else
 	CSphString s;
-	while ( pSymbol->m_iOffsetOf >= 0 )
+	while ( pSymbol->m_iOffsetOf>=0 )
 	{
 		s.SetSprintf ( pSymbol->m_sPostfix[0] ? "%s_%s" : "%s%s", sName, pSymbol->m_sPostfix );
 		void ** ppFunc = (void**)((BYTE*)pDesc + pSymbol->m_iOffsetOf);
@@ -289,7 +297,7 @@ static bool PluginCreate ( const char * szLib, const char * szName,
 
 	CSphString sLib = szLib;
 	sLib.ToLower();
-	
+
 	// from here, we need a lock (we intend to update the plugin hash)
 	CSphScopedLock<CSphStaticMutex> tLock ( g_tPluginMutex );
 
@@ -509,7 +517,7 @@ PluginDesc_c * sphPluginAcquire ( const char * szLib, PluginType_e eType, const 
 
 	CSphString sLib ( szLib );
 	sLib.ToLower();
-	if ( *(pDesc->m_pLibName) == sLib )
+	if ( *(pDesc->m_pLibName)==sLib )
 		return pDesc;
 
 	sError.SetSprintf ( "unable to load plugin '%s' from '%s': it has already been loaded from library '%s'",

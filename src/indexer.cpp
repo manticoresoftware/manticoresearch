@@ -992,6 +992,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 		if ( !tSettings.m_sIndexTokenFilter.IsEmpty() )
 		{
 			pTokenizer = ISphTokenizer::CreatePluginFilter ( pTokenizer, tSettings.m_sIndexTokenFilter, sError );
+			// need token_filter that just passes init phase in case stopwords or wordforms will be loaded
 			if ( !pTokenizer )
 				sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 		}

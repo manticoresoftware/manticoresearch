@@ -84,6 +84,7 @@ public:
 		, m_bToDrop ( false )
 	{}
 	virtual				~PluginDesc_c() {}
+	virtual void		Use() const;
 	virtual void		Release() const;
 };
 

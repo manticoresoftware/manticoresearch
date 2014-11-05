@@ -4918,7 +4918,11 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 				tAgent.Close ();
 				tAgent.m_dResults.Reset ();
 			} else if ( tAgent.m_bSuccess )
+			{
+				ARRAY_FOREACH_COND ( i, tAgent.m_dResults, !bWarnings )
+					bWarnings = !tAgent.m_dResults[i].m_sWarning.IsEmpty();
 				agent_stats_inc ( tAgent, bWarnings ? eWarnings : eNoErrors );
+			}
 		}
 	}
 
@@ -5402,7 +5406,11 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 				tAgent.Close ();
 				tAgent.m_dResults.Reset ();
 			} else if ( tAgent.m_bSuccess )
+			{
+				ARRAY_FOREACH_COND ( i, tAgent.m_dResults, !bWarnings )
+					bWarnings = !tAgent.m_dResults[i].m_sWarning.IsEmpty();
 				agent_stats_inc ( tAgent, bWarnings ? eWarnings : eNoErrors );
+			}
 		}
 	}
 
@@ -21437,7 +21445,7 @@ bool SetWatchDog ( int iDevNull )
 			} else if ( WIFSIGNALED ( iStatus ) )
 			{
 				int iSig = WTERMSIG ( iStatus );
-				const char * sSig =NULL;
+				const char * sSig = NULL;
 				if ( iSig==SIGINT )
 					sSig = "SIGINIT";
 				else if ( iSig==SIGTERM )

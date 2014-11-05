@@ -48,6 +48,8 @@
 
 %token	TOK_IS
 %token	TOK_NULL
+%token	TOK_FOR
+%token	TOK_FUNC_IN
 
 %%
 
@@ -112,6 +114,7 @@ expr:
 	| json_field
 	| json_field TOK_IS TOK_NULL			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| json_field TOK_IS TOK_NOT TOK_NULL	{ $$ = $1; $$.m_iEnd = $4.m_iEnd; }
+	| expr TOK_EQ TOK_CONST_STRING			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	;
 
 select_atom:
@@ -125,6 +128,8 @@ function:
 	| SEL_MIN '(' expr ',' expr ')'		{ $$ = $1; $$.m_iEnd = $6.m_iEnd; }	// handle clash with aggregate functions
 	| SEL_MAX '(' expr ',' expr ')'		{ $$ = $1; $$.m_iEnd = $6.m_iEnd; }
 	| SEL_WEIGHT '(' ')'				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
+	| SEL_TOKEN '(' expr for_loop ')'	{ $$ = $1; $$.m_iEnd = $5.m_iEnd; }
+	| TOK_FUNC_IN '(' arglist ')'		{ $$ = $1; $$.m_iEnd = $4.m_iEnd; }
 	;
 
 arglist:
@@ -171,6 +176,10 @@ subkey:
 	'.' ident					{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
 	| '[' expr ']'				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| '[' TOK_CONST_STRING ']'	{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
+	;
+
+for_loop:
+	TOK_FOR ident TOK_FUNC_IN json_field	{ $$ = $1; $$.m_iEnd = $4.m_iEnd; }
 	;
 
 %%

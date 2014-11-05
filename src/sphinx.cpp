@@ -6894,6 +6894,8 @@ int SelectParser_t::GetToken ( YYSTYPE * lvalp )
 		LOC_CHECK ( "OPTION", 6, SEL_OPTION );
 		LOC_CHECK ( "IS", 2, TOK_IS );
 		LOC_CHECK ( "NULL", 4, TOK_NULL );
+		LOC_CHECK ( "FOR", 3, TOK_FOR );
+		LOC_CHECK ( "IN", 2, TOK_FUNC_IN );
 
 		#undef LOC_CHECK
 

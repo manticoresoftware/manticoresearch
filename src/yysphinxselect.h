@@ -56,7 +56,9 @@
      TOK_AND = 282,
      TOK_NOT = 283,
      TOK_IS = 284,
-     TOK_NULL = 285
+     TOK_NULL = 285,
+     TOK_FOR = 286,
+     TOK_FUNC_IN = 287
    };
 #endif
 #define SEL_TOKEN 258
@@ -87,6 +89,8 @@
 #define TOK_NOT 283
 #define TOK_IS 284
 #define TOK_NULL 285
+#define TOK_FOR 286
+#define TOK_FUNC_IN 287
 
 
 

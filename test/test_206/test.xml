@@ -767,5 +767,7 @@ Two'</sphinxql>
 <sphinxql>select id, j.id, j.uid from dist</sphinxql>
 <!-- is null expression for distributed indexes -->
 <sphinxql>select id, j.uid, j.uid is null, j.uid is not null from dist</sphinxql>
+<!-- all/any/indexof syntax for distributed indexes -->
+<sphinxql>select all(x=1 for x in j.uid), any(x='1' for x in j.uid), indexof(x.uid='1' for x in j.uid) from dist</sphinxql>
 </sphqueries>
 </test>

@@ -14380,6 +14380,20 @@ rlp_max_batch_docs = 100
 
 <appendix id="changelog"><title>Sphinx revision history</title>
 
+<sect1 id="rel226"><title>Version 2.2.6-release, ?? nov 2014</title>
+<bridgehead>Bug fixes</bridgehead>
+<itemizedlist>
+<listitem><para>fixed #2097, escaping of field-start modifier</para></listitem>
+<listitem><para>fixed #2098, arbitrary JSON subkeys and IS NULL for distributed indexes</para></listitem>
+<listitem><para>fixed #2100, crash of indexer while loading stopwords with tokenizer plugin</para></listitem>
+<listitem><para>fixed #2102, show agent status misses warnings from agents</para></listitem>
+<listitem><para>fixed #2104, ALL()/ANY()/INDEXOF() support for distributed indexes</para></listitem>
+<listitem><para>indexation of duplicate documents</para></listitem>
+<listitem><para>fixed possibly memory leak in plugin creation function</para></listitem>
+</itemizedlist>
+</sect1>
+
+
 <sect1 id="rel225"><title>Version 2.2.5-release, 06 oct 2014</title>
 <bridgehead>New minor features</bridgehead>
 <itemizedlist>

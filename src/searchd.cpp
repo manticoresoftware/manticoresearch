@@ -2433,6 +2433,10 @@ int sphCreateInetSocket ( DWORD uAddr, int iPort )
 	int iOn = 1;
 	if ( setsockopt ( iSock, SOL_SOCKET, SO_REUSEADDR, (char*)&iOn, sizeof(iOn) ) )
 		sphFatal ( "setsockopt() failed: %s", sphSockError() );
+#ifdef TCP_NODELAY
+	if ( setsockopt ( iSock, IPPROTO_TCP, TCP_NODELAY, (char*)&iOn, sizeof(iOn) ) )
+		sphFatal ( "setsockopt() failed: %s", sphSockError() );
+#endif
 
 	int iTries = 12;
 	int iRes;
@@ -2823,12 +2827,12 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr 
 // NETWORK BUFFERS
 /////////////////////////////////////////////////////////////////////////////
 
-/// fixed-memory response buffer
-/// tracks usage, and flushes to network when necessary
+/// dynamic response buffer
 /// to remove ISphNoncopyable just add copy c-tor and operator=
-/// Splitting MySQL network packet in several sphSocketSend()s causing libmysqlclient
-/// to perform big sleep()s (40ms on some environments, to be precise).
+/// splitting application network packets in several sphSocketSend()s causes
+/// Nagle's algorithm to wait delayead ACKs (google for it if you want)
 /// That's why we use relocation here instead of static-sized buffer.
+/// To be twice sure we're switching off Nagle's algorithm in all sockets.
 class NetOutputBuffer_c : public ISphNoncopyable
 {
 public:
@@ -4437,6 +4441,15 @@ void RemoteConnectToAgent ( AgentConn_t & tAgent )
 		return;
 	}
 
+#ifdef TCP_NODELAY
+	int iOn = 1;
+	if ( setsockopt ( tAgent.m_iSock, IPPROTO_TCP, TCP_NODELAY, (char*)&iOn, sizeof(iOn) ) )
+	{
+		tAgent.m_sFailure.SetSprintf ( "setsockopt() failed: %s", sphSockError() );
+		return;
+	}
+#endif
+
 	// count connects
 	if ( g_pStats )
 	{
@@ -4469,14 +4482,7 @@ void RemoteConnectToAgent ( AgentConn_t & tAgent )
 		// send the client's proto version right now to avoid w-w-r pattern.
 		NetOutputBuffer_c tOut ( tAgent.m_iSock );
 		tOut.SendDword ( SPHINX_CLIENT_VERSION );
-		bool bFlushed = tOut.Flush (); // FIXME! handle flush failure?
-		// fix #1071
-#ifdef	TCP_NODELAY
-		int bNoDelay = 1;
-		if ( bFlushed && tAgent.m_iFamily==AF_INET )
-			setsockopt ( tAgent.m_iSock, IPPROTO_TCP, TCP_NODELAY, (char*)&bNoDelay, sizeof(bNoDelay) );
-#endif
-
+		tOut.Flush (); // FIXME! handle flush failure?
 		// socket connected, ready to read hello message
 		tAgent.m_eState = AGENT_HANDSHAKE;
 	}
@@ -4588,19 +4594,13 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 				// send the client's proto version right now to avoid w-w-r pattern.
 				NetOutputBuffer_c tOut ( tAgent.m_iSock );
 				tOut.SendDword ( SPHINX_CLIENT_VERSION );
-				bool bFlushed = tOut.Flush (); // FIXME! handle flush failure?
+				tOut.Flush (); // FIXME! handle flush failure?
 				dEvent.events = EPOLLIN;
 				dEvent.data.ptr = &tAgent;
 				epoll_ctl ( eid, EPOLL_CTL_MOD, tAgent.m_iSock, &dEvent );
 
 				tAgent.m_eState = AGENT_HANDSHAKE;
 
-// fix #1071
-#ifdef	TCP_NODELAY
-				int bNoDelay = 1;
-				if ( bFlushed && tAgent.m_iFamily==AF_INET )
-					setsockopt ( tAgent.m_iSock, IPPROTO_TCP, TCP_NODELAY, (char*)&bNoDelay, sizeof(bNoDelay) );
-#endif
 				continue;
 			}
 
@@ -5081,12 +5081,6 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 				bool bFlushed = tOut.Flush (); // FIXME! handle flush failure?
 
 				tAgent.m_eState = AGENT_HANDSHAKE;
-				// fix #1071
-#ifdef	TCP_NODELAY
-				int bNoDelay = 1;
-				if ( bFlushed && tAgent.m_iFamily==AF_INET )
-					setsockopt ( tAgent.m_iSock, IPPROTO_TCP, TCP_NODELAY, (char*)&bNoDelay, sizeof(bNoDelay) );
-#endif
 				continue;
 			}
 
@@ -21623,6 +21617,12 @@ void QueryStatus ( CSphVariant * v )
 			if ( iSock<0 )
 				sphFatal ( "failed to create TCP socket: %s", sphSockError() );
 
+#ifdef TCP_NODELAY
+			int iOn = 1;
+			if ( setsockopt ( iSock, IPPROTO_TCP, TCP_NODELAY, (char*)&iOn, sizeof(iOn) ) )
+				sphFatal ( "setsockopt() failed: %s", sphSockError() );
+#endif
+
 			if ( connect ( iSock, (struct sockaddr*)&sin, sizeof(sin) )<0 )
 			{
 				sphWarning ( "failed to connect to %s:%d: %s\n", sphFormatIP ( sBuf, sizeof(sBuf), tDesc.m_uIP ), tDesc.m_iPort, sphSockError() );
@@ -21777,6 +21777,12 @@ Listener_t * DoAccept ( int * pClientSock, char * sClientName )
 
 			sphFatal ( "accept() failed: %s", sphSockError(iErrno) );
 		}
+
+#ifdef TCP_NODELAY
+		int iOn = 1;
+		if ( setsockopt ( iClientSock, IPPROTO_TCP, TCP_NODELAY, (char*)&iOn, sizeof(iOn) ) )
+			sphFatal ( "setsockopt() failed: %s", sphSockError() );
+#endif
 
 		if ( g_pStats )
 		{

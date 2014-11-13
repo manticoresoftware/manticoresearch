@@ -10,6 +10,7 @@ indexer
 searchd
 {
 	<searchd_settings/>
+	workers = threads
 }
 
 source test
@@ -121,6 +122,18 @@ index idx_blend_kw
 	blend_chars 	= +, %, -
 	dict			= keywords
 }
+
+index rt
+{
+	type = rt
+	path			= <data_path/>/rt
+	docinfo = extern
+	rt_mem_limit = 128k
+	rt_attr_uint	= idd
+	rt_field = title
+	rt_field = description
+	dict = keywords
+}
 </config>
 
 <db_create>
@@ -172,6 +185,12 @@ CREATE TABLE start_end_table
 	<sphinxql>select * from idx_blend_crc where match (' x-com NEAR/10 valid')</sphinxql>
 	<sphinxql>select * from idx_blend_kw where match (' x-com NEAR/10 valid ')</sphinxql>
 	<sphinxql>CALL SNIPPETS ( 'dummy1 dummy1 valid dummy1 dummy1 dummy1 X-COM, dummy1', 'idx_blend_kw', 'x-com NEAR/10 valid', 1 as query_mode )</sphinxql>
+	
+	<!-- regression of field position limit vs RT index -->
+	<sphinxql>REPLACE INTO rt (id, title, description) VALUES (1, 'This is a simple test', 'This is a longer description of a simple test')</sphinxql>
+	<sphinxql>SELECT id FROM rt WHERE MATCH('@description test')</sphinxql>
+	<sphinxql>SELECT id FROM rt WHERE MATCH('@description[10] test')</sphinxql>
+	
 </sphqueries>
 
 <custom_insert><![CDATA[

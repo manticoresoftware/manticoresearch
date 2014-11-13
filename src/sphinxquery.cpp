@@ -1000,7 +1000,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			} else if ( sToken[0]=='^' )
 			{
 				const char * pTokEnd = m_pTokenizer->GetTokenEnd();
-				if ( pTokEnd<m_pTokenizer->GetBufferEnd() && !isspace ( pTokEnd[0] ) )
+				if ( pTokEnd<m_pTokenizer->GetBufferEnd() && !sphIsSpace ( pTokEnd[0] ) )
 					bWasFrontModifier = true;
 
 				// this special is handled in HandleModifiers()
@@ -1009,8 +1009,8 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			{
 				if ( bWasKeyword )
 					continue;
-				if ( isspace ( m_pTokenizer->GetTokenStart() [ -1 ] ) )
-					 continue;
+				if ( sphIsSpace ( m_pTokenizer->GetTokenStart() [ -1 ] ) )
+					continue;
 
 				Warning ( "modifiers must be applied to keywords, not operators" );
 

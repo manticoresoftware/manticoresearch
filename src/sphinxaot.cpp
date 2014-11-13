@@ -986,6 +986,10 @@ void sphAotLemmatize ( BYTE * pWord, int iLang )
 		sForm[iFormLen++] = *p++;
 	sForm[iFormLen] = '\0';
 
+	// do nothing with one-char words
+	if ( iFormLen<=1 )
+		return;
+
 	DWORD FindResults[12]; // max results is like 6
 	bool bFound = g_pLemmatizers[iLang]->LemmatizeWord ( (BYTE*)sForm, FindResults );
 	if ( FindResults[0]==AOT_NOFORM )
@@ -1527,7 +1531,7 @@ public:
 			return pToken;
 
 		// pass-through 1-char "words"
-		if ( pToken[2]=='\0' )
+		if ( pToken[1]=='\0' )
 			return pToken;
 
 		// pass-through non-Russian words
@@ -1654,7 +1658,7 @@ public:
 			return pToken;
 
 		// pass-through 1-char "words"
-		if ( pToken[2]=='\0' )
+		if ( pToken[1]=='\0' )
 			return pToken;
 
 		// pass-through non-Russian words

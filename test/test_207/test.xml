@@ -255,6 +255,34 @@ index test_all11
 	min_prefix_len	= 2
 	enable_star		= 1
 }
+
+source test_en_all
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query_pre	= set names utf8
+	sql_query		= select 1 id, 11 idd, 'told me stops' body
+	sql_attr_uint	= idd
+}
+
+
+index test_en_all
+{
+	source			= test_en_all
+	dict			= keywords
+	path			= <data_path/>/test_en_all
+	morphology		= lemmatize_en_all
+}
+
+index test_en_all1
+{
+	source			= test_en_all
+	dict			= keywords
+	path			= <data_path/>/test_en_all1
+	morphology		= lemmatize_en_all
+	index_exact_words = 1
+}
+
 </config>
 
 <db_create>
@@ -511,6 +539,18 @@ CREATE TABLE test_table
 <!-- regression missed index_exact_words vs morphology and substring -->
 <sphinxql>SELECT *, weight() w FROM test_all11 WHERE MATCH('се*'); show meta</sphinxql>
 <sphinxql>SELECT *, weight() w FROM test_all11 WHERE MATCH('^се*'); show meta</sphinxql>
+
+<!-- regression missed index_exact_words vs lemmatizer_all -->
+<sphinxql>SELECT id FROM test_en_all WHERE MATCH('told me'); show meta</sphinxql>
+<sphinxql>SELECT id FROM test_en_all WHERE MATCH('=stops'); show meta</sphinxql>
+<sphinxql>SELECT id FROM test_en_all WHERE MATCH('=stop'); show meta</sphinxql>
+<sphinxql>SELECT id FROM test_en_all WHERE MATCH('stops'); show meta</sphinxql>
+<sphinxql>SELECT id FROM test_en_all WHERE MATCH('stop'); show meta</sphinxql>
+<sphinxql>SELECT id FROM test_en_all1 WHERE MATCH('=stops'); show meta</sphinxql>
+<sphinxql>SELECT id FROM test_en_all1 WHERE MATCH('=stop'); show meta</sphinxql>
+<sphinxql>SELECT id FROM test_en_all1 WHERE MATCH('stops'); show meta</sphinxql>
+<sphinxql>SELECT id FROM test_en_all1 WHERE MATCH('stop'); show meta</sphinxql>
+
 </sphqueries>
 
 </test>

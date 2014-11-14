@@ -296,6 +296,7 @@ static int				g_iShutdownTimeout	= 3000000; // default timeout on daemon shutdow
 struct Listener_t
 {
 	int					m_iSock;
+	bool				m_bTcp;
 	ProtocolType_e		m_eProto;
 };
 static CSphVector<Listener_t>	g_dListeners;
@@ -2608,10 +2609,14 @@ void AddListener ( const CSphString & sListen )
 
 	Listener_t tListener;
 	tListener.m_eProto = tDesc.m_eProto;
+	tListener.m_bTcp = true;
 
 #if !USE_WINDOWS
 	if ( !tDesc.m_sUnix.IsEmpty() )
+	{
 		tListener.m_iSock = sphCreateUnixSocket ( tDesc.m_sUnix.cstr() );
+		tListener.m_bTcp = false;
+	}
 	else
 #endif
 		tListener.m_iSock = sphCreateInetSocket ( tDesc.m_uIP, tDesc.m_iPort );
@@ -21780,7 +21785,7 @@ Listener_t * DoAccept ( int * pClientSock, char * sClientName )
 
 #ifdef TCP_NODELAY
 		int iOn = 1;
-		if ( setsockopt ( iClientSock, IPPROTO_TCP, TCP_NODELAY, (char*)&iOn, sizeof(iOn) ) )
+		if ( g_dListeners[i].m_bTcp && setsockopt ( iClientSock, IPPROTO_TCP, TCP_NODELAY, (char*)&iOn, sizeof(iOn) ) )
 			sphFatal ( "setsockopt() failed: %s", sphSockError() );
 #endif
 

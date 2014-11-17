@@ -233,6 +233,7 @@ iterator:
 streq:
 	expr TOK_EQ strval				{ $$ = pParser->AddNodeOp ( TOK_EQ, $1, $3 ); }
 	| strval TOK_EQ expr			{ $$ = pParser->AddNodeOp ( TOK_EQ, $3, $1 ); }
+	| strval TOK_EQ strval			{ $$ = pParser->AddNodeOp ( TOK_EQ, $1, $3 ); }
 	;
 
 strval:

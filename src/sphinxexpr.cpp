@@ -3874,6 +3874,10 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 									( m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRING ||
 									m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRINGPTR ) )
 									return new Expr_StrEq_c ( pLeft, pRight );
+								else if ( ( m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_JSON_FIELD ) &&
+									( m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRING ||
+									m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRINGPTR ) )
+									return new Expr_StrEq_c ( new Expr_JsonFieldConv_c ( pLeft ), pRight );
 								LOC_SPAWN_POLY ( Expr_Eq ); break;
 		case TOK_NE:			LOC_SPAWN_POLY ( Expr_Ne ); break;
 		case TOK_AND:			LOC_SPAWN_POLY ( Expr_And ); break;

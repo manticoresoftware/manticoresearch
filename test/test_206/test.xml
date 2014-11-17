@@ -769,5 +769,7 @@ Two'</sphinxql>
 <sphinxql>select id, j.uid, j.uid is null, j.uid is not null from dist</sphinxql>
 <!-- all/any/indexof syntax for distributed indexes -->
 <sphinxql>select all(x=1 for x in j.uid), any(x='1' for x in j.uid), indexof(x.uid='1' for x in j.uid) from dist</sphinxql>
+<!-- simple string comparison -->
+<sphinxql>select title, j.array[0].name, title='a1', j.array[0].name='a4', if(j.array[1].name='a5',0,1) from json_search</sphinxql>
 </sphqueries>
 </test>

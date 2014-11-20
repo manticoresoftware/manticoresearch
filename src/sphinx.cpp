@@ -6627,6 +6627,7 @@ BYTE * CSphMultiformTokenizer::GetToken ()
 			strncpy ( (char *)tDst.m_sToken, pCurForm->m_dNormalForm[0].m_sForm.cstr(), sizeof(tDst.m_sToken) );
 			tDst.m_iTokenLen = pCurForm->m_dNormalForm[0].m_iLengthCP;
 		}
+		break;
 	}
 
 	return m_dStoredTokens[m_iStart].m_sToken;

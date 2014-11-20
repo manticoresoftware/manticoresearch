@@ -50,7 +50,8 @@ INSERT INTO test_table VALUES
 ( 105, 'me walked' ),
 ( 106, 'us walk' ),
 ( 107, 'me run' ),
-( 108, 'us running' )
+( 108, 'us running' ),
+( 111, 'tell me test fest but not test pest' )
 </db_insert>
 
 <sphqueries>
@@ -63,6 +64,9 @@ INSERT INTO test_table VALUES
 <sphinxql>select * from test where match('shouldnotbe')</sphinxql>
 <sphinxql>select * from test where match('ran')</sphinxql>
 <sphinxql>select * from test where match('halt')</sphinxql>
+<!-- regression crash on wordform with multiple destination tokens -->
+<sphinxql>select * from test where match('test test')</sphinxql>
+<sphinxql>select * from test where match('test pest')</sphinxql>
 </sphqueries>
 
 </test>

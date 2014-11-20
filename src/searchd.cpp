@@ -20762,7 +20762,7 @@ void CheckRotate ()
 	// RAM-greedy rotate
 	/////////////////////
 
-	if ( !g_bSeamlessRotate || g_eWorkers==MPM_PREFORK )
+	if ( !g_bSeamlessRotate )
 	{
 		// wait until there's no running queries
 		if ( g_dChildren.GetLength() && g_eWorkers!=MPM_PREFORK )

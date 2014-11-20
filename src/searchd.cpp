@@ -22859,6 +22859,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	Listener_t tListener;
 	tListener.m_eProto = PROTO_SPHINX;
+	tListener.m_bTcp = true;
 
 	// command line arguments override config (but only in --console)
 	if ( bOptListen )

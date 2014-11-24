@@ -76,6 +76,8 @@ index idx2
 <sphinxql>CALL SNIPPETS ('for me is not so long but who knows abc hashtag+bag', 'idx2', 'hashtag+bag', 1 as query_mode, 40 as limit)</sphinxql>
 <sphinxql>CALL SNIPPETS ('for me is not so long abc hashtag+bag but who knows everyone is not same abc hashtag+bag as me or someone', 'idx2', 'hashtag+bag', 1 as query_mode, 40 as limit)</sphinxql>
 <sphinxql>CALL SNIPPETS ('for me is not so long abc hashtag+bag but who knows everyone is not same abc hashtag+bag as me or someone', 'idx2', 'hashtag+bag', 1 as query_mode, 80 as limit)</sphinxql>
+<!-- assert in the beginning of the string -->
+<sphinxql>CALL SNIPPETS ('+hashtag for me is not so long but who knows', 'idx2', '+hashtag', 1 as query_mode, 40 as limit)</sphinxql>
 
 </sphqueries>
 

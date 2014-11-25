@@ -136,7 +136,7 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
     </ClCompile>
 	<Lib>
-      <OutputFile>$(OutDir)libsstemmer_c.lib</OutputFile>
+      <OutputFile>$(OutDir)libstemmer_c.lib</OutputFile>
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>

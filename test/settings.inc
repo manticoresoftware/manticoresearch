@@ -50,7 +50,7 @@ $g_site_defaults = array
 	'force-reindex'		=> false,
 	'malloc-scribble'	=> false,
 
-	'db-host'			=> 'localhost',
+	'db-host'			=> '127.0.0.1',
 	'db-user'			=> 'root',
 	'db-password'		=> '',
 	'db-name'			=> 'test',

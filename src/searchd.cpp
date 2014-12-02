@@ -12215,9 +12215,16 @@ bool SqlParser_c::AddIntFilterGreater ( const SqlNode_t & tAttr, int64_t iVal, b
 	if ( !pFilter )
 		return false;
 	bool bId = ( pFilter->m_sAttrName=="@id" ) || ( pFilter->m_sAttrName=="id" );
-	pFilter->m_iMinValue = iVal;
 	pFilter->m_iMaxValue = bId ? (SphAttr_t)ULLONG_MAX : LLONG_MAX;
-	pFilter->m_bHasEqual = bHasEqual;
+	if ( iVal==LLONG_MAX )
+	{
+		pFilter->m_iMinValue = iVal;
+		pFilter->m_bHasEqual = bHasEqual;
+	} else
+	{
+		pFilter->m_iMinValue = bHasEqual ? iVal : iVal+1;
+		pFilter->m_bHasEqual = true;
+	}
 	return true;
 }
 
@@ -12228,8 +12235,15 @@ bool SqlParser_c::AddIntFilterLesser ( const SqlNode_t & tAttr, int64_t iVal, bo
 		return false;
 	bool bId = ( pFilter->m_sAttrName=="@id" ) || ( pFilter->m_sAttrName=="id" );
 	pFilter->m_iMinValue = bId ? 0 : LLONG_MIN;
-	pFilter->m_iMaxValue = iVal;
-	pFilter->m_bHasEqual = bHasEqual;
+	if ( iVal==LLONG_MIN )
+	{
+		pFilter->m_iMaxValue = iVal;
+		pFilter->m_bHasEqual = bHasEqual;
+	} else
+	{
+		pFilter->m_iMaxValue = bHasEqual ? iVal : iVal-1;
+		pFilter->m_bHasEqual = true;
+	}
 	return true;
 }
 

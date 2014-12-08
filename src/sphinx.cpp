@@ -186,9 +186,6 @@ static const int	MIN_READ_BUFFER			= 8192;
 static const int	MIN_READ_UNHINTED		= 1024;
 #define READ_NO_SIZE_HINT 0
 
-static bool			g_bSphQuiet					= false;
-static bool			g_bDebugCheck				= false;
-
 static int			g_iReadBuffer			= DEFAULT_READ_BUFFER;
 static int			g_iReadUnhinted			= DEFAULT_READ_UNHINTED;
 
@@ -1245,11 +1242,11 @@ public:
 	SphOffset_t							m_iWordsEnd;			///< end of wordlist
 	bool								m_bHaveSkips;			///< whether there are skiplists
 
-	BYTE *								m_pWords;				///< arena for checkpoint's words
+	CSphFixedVector<BYTE>				m_pWords;				///< arena for checkpoint's words
 	BYTE *								m_pInfixBlocksWords;	///< arena for infix checkpoint's words
 
 public:
-	explicit							CWordlist ();
+										CWordlist ();
 										~CWordlist ();
 	void								Reset ();
 
@@ -17083,7 +17080,7 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 		}
 
 		// prealloc docinfo hash but only if docinfo is big enough (in other words if hash is 8x+ less in size)
-		if ( m_pDocinfoHash.IsEmpty() && m_dAttrShared.GetLengthBytes() > ( 32 << DOCINFO_HASH_BITS ) && !g_bDebugCheck )
+		if ( m_pDocinfoHash.IsEmpty() && m_dAttrShared.GetLengthBytes() > ( 32 << DOCINFO_HASH_BITS ) && !m_bDebugCheck )
 			if ( !m_pDocinfoHash.Alloc ( ( 1 << DOCINFO_HASH_BITS )+4, m_sLastError, sWarning ) )
 				return false;
 
@@ -17343,7 +17340,7 @@ bool CSphIndex_VLN::Preread ()
 	}
 
 	// build attributes hash
-	if ( m_tAttr.GetLengthBytes() && m_pDocinfoHash.GetLengthBytes() && !g_bDebugCheck )
+	if ( m_tAttr.GetLengthBytes() && m_pDocinfoHash.GetLengthBytes() && !m_bDebugCheck )
 	{
 		sphLogDebug ( "Hashing docinfo" );
 		assert ( CheckDocsCount ( m_iDocinfo, m_sLastError ) );
@@ -19457,6 +19454,25 @@ void CSphIndex_VLN::SetDebugCheck ()
 	m_bDebugCheck = true;
 }
 
+static int sphUnpackStrLength ( CSphReader & tReader )
+{
+	int v = tReader.GetByte();
+	if ( v & 0x80 )
+	{
+		if ( v & 0x40 )
+		{
+			v = ( int ( v & 0x3f )<<16 ) + ( int ( tReader.GetByte() )<<8 );
+			v += ( tReader.GetByte() ); // MUST be separate statement; cf. sequence point
+		} else
+		{
+			v = ( int ( v & 0x3f )<<8 ) + ( tReader.GetByte() );
+		}
+	}
+
+	return v;
+}
+
+
 // no strnlen on some OSes (Mac OS)
 #if !HAVE_STRNLEN
 size_t strnlen ( const char * s, size_t iMaxLen )
@@ -19484,6 +19500,7 @@ size_t strnlen ( const char * s, size_t iMaxLen )
 			fprintf ( fp, "(threshold reached; suppressing further output)\n" ); \
 	}
 
+
 int CSphIndex_VLN::DebugCheck ( FILE * fp )
 {
 	int64_t tmCheck = sphMicroTimer();
@@ -19503,9 +19520,9 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 	CSphString sError;
 	CSphAutoreader rdDocs, rdHits;
-	CSphMappedBuffer<BYTE> rdDict;
+	CSphAutoreader rdDict;
 
-	if ( !rdDict.Setup ( GetIndexFileName("spi").cstr(), sError ) )
+	if ( !rdDict.Open ( GetIndexFileName("spi").cstr(), sError ) )
 		LOC_FAIL(( fp, "unable to open dictionary: %s", sError.cstr() ));
 
 	if ( !rdDocs.Open ( GetIndexFileName("spd"), sError ) )
@@ -19513,6 +19530,26 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 	if ( !rdHits.Open ( GetIndexFileName("spp"), sError ) )
 		LOC_FAIL(( fp, "unable to open hitlist: %s", sError.cstr() ));
+
+	CSphAutoreader rdAttr;
+	CSphAutoreader rdString;
+	CSphAutoreader rdMva;
+	int64_t iStrEnd = 0;
+	int64_t iMvaEnd = 0;
+
+	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && !m_tAttr.IsEmpty() )
+	{
+		fprintf ( fp, "checking rows...\n" );
+
+		if ( !rdAttr.Open ( GetIndexFileName("spa").cstr(), sError ) )
+			LOC_FAIL(( fp, "unable to open attributes: %s", sError.cstr() ));
+
+		if ( !rdString.Open ( GetIndexFileName("sps").cstr(), sError ) )
+			LOC_FAIL(( fp, "unable to open strings: %s", sError.cstr() ));
+
+		if ( !rdMva.Open ( GetIndexFileName("spm").cstr(), sError ) )
+			LOC_FAIL(( fp, "unable to open MVA: %s", sError.cstr() ));
+	}
 
 	CSphVector<SphWordID_t> dHitlessWords;
 	if ( !LoadHitlessWords ( dHitlessWords ) )
@@ -19553,43 +19590,44 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 	const bool bWordDict = m_pDict->GetSettings().m_bWordDict;
 
 	CSphVector<CSphWordlistCheckpoint> dCheckpoints;
+	dCheckpoints.Reserve ( m_tWordlist.m_dCheckpoints.GetLength() );
+	CSphVector<char> dCheckpointWords;
+	dCheckpointWords.Reserve ( m_tWordlist.m_pWords.GetLength() );
 
 	if ( bWordDict && m_uVersion<21 )
 		LOC_FAIL(( fp, "dictionary needed index version not less then 21 (readed=%d)"
 			, m_uVersion ));
 
+	rdDict.GetByte();
 	int iLastSkipsOffset = 0;
-	const BYTE * pDictCur = rdDict.GetWritePtr() + 1;
 	SphOffset_t iWordsEnd = m_tWordlist.m_iWordsEnd;
-	bool bCheckInfixes = bWordDict && m_tWordlist.m_iInfixCodepointBytes && m_tWordlist.m_dInfixBlocks.GetLength();
-	CSphVector<int> dInfix2CP;
 
-	while ( pDictCur-rdDict.GetWritePtr()!=iWordsEnd && !m_bIsEmpty )
+	while ( rdDict.GetPos()!=iWordsEnd && !m_bIsEmpty )
 	{
 		// sanity checks
-		if ( pDictCur-rdDict.GetWritePtr()>=iWordsEnd )
+		if ( rdDict.GetPos()>=iWordsEnd )
 		{
 			LOC_FAIL(( fp, "reading past checkpoints" ));
 			break;
 		}
 
 		// store current entry pos (for checkpointing later), read next delta
-		const int64_t iDictPos = pDictCur - rdDict.GetWritePtr();
+		const int64_t iDictPos = rdDict.GetPos();
 		SphWordID_t iDeltaWord = 0;
 		if ( bWordDict )
 		{
-			iDeltaWord = *pDictCur++;
+			iDeltaWord = rdDict.GetByte();
 		} else
 		{
-			iDeltaWord = sphUnzipWordid ( pDictCur );
+			iDeltaWord = rdDict.UnzipWordid();
 		}
 
 		// checkpoint encountered, handle it
 		if ( !iDeltaWord )
 		{
-			sphUnzipOffset ( pDictCur );
+			rdDict.UnzipOffset();
 
-			if ( ( iWordsTotal%iWordPerCP )!=0 && pDictCur-rdDict.GetWritePtr()!=iWordsEnd )
+			if ( ( iWordsTotal%iWordPerCP )!=0 && rdDict.GetPos()!=iWordsEnd )
 				LOC_FAIL(( fp, "unexpected checkpoint (pos="INT64_FMT", word=%d, words=%d, expected=%d)",
 					iDictPos, iWordsTotal, ( iWordsTotal%iWordPerCP ), iWordPerCP ));
 
@@ -19617,28 +19655,27 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			} else
 			{
 				iDelta = uPack & 127;
-				iMatch = *pDictCur++;
+				iMatch = rdDict.GetByte();
 			}
 			const int iLastWordLen = strlen(sLastWord);
 			if ( iMatch+iDelta>=(int)sizeof(sLastWord)-1 || iMatch>iLastWordLen )
 			{
 				LOC_FAIL(( fp, "wrong word-delta (pos="INT64_FMT", word=%s, len=%d, begin=%d, delta=%d)",
 					iDictPos, sLastWord, iLastWordLen, iMatch, iDelta ));
-				pDictCur += iDelta;
+				rdDict.SkipBytes ( iDelta );
 			} else
 			{
-				memcpy ( sWord+iMatch, pDictCur, iDelta );
-				pDictCur += iDelta;
+				rdDict.GetBytes ( sWord+iMatch, iDelta );
 				sWord [ iMatch+iDelta ] = '\0';
 			}
 
-			iNewDoclistOffset = sphUnzipOffset ( pDictCur );
-			iDocs = sphUnzipInt ( pDictCur );
-			iHits = sphUnzipInt ( pDictCur );
+			iNewDoclistOffset = rdDict.UnzipOffset();
+			iDocs = rdDict.UnzipInt();
+			iHits = rdDict.UnzipInt();
 			int iHint = 0;
 			if ( iDocs>=DOCLIST_HINT_THRESH )
 			{
-				iHint = *pDictCur++;
+				iHint = rdDict.GetByte();
 			}
 			iHint = DoclistHintUnpack ( iDocs, (BYTE)iHint );
 
@@ -19672,9 +19709,9 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		{
 			// finish reading the entire entry
 			uNewWordid = uWordid + iDeltaWord;
-			iNewDoclistOffset = iDoclistOffset + sphUnzipOffset ( pDictCur );
-			iDocs = sphUnzipInt ( pDictCur );
-			iHits = sphUnzipInt ( pDictCur );
+			iNewDoclistOffset = iDoclistOffset + rdDict.UnzipOffset();
+			iDocs = rdDict.UnzipInt();
+			iHits = rdDict.UnzipInt();
 			bHitless = ( dHitlessWords.BinarySearch ( uNewWordid )!=NULL );
 			if ( bHitless )
 				iDocs = ( iDocs & HITLESS_DOC_MASK );
@@ -19695,7 +19732,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		// skiplist
 		if ( m_bHaveSkips && iDocs>SPH_SKIPLIST_BLOCK && !bHitless )
 		{
-			int iSkipsOffset = sphUnzipInt ( pDictCur );
+			int iSkipsOffset = rdDict.UnzipInt();
 			if ( !bWordDict && iSkipsOffset<iLastSkipsOffset )
 				LOC_FAIL(( fp, "descending skiplist pos (last=%d, cur=%d, wordid=%llu)",
 					iLastSkipsOffset, iSkipsOffset, UINT64 ( uNewWordid ) ));
@@ -19707,37 +19744,19 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		{
 			CSphWordlistCheckpoint & tCP = dCheckpoints.Add();
 			tCP.m_iWordlistOffset = iDictPos;
+
 			if ( bWordDict )
 			{
 				const int iLen = strlen ( sWord );
-				char * sWordChecked = new char [iLen+1];
-				strncpy ( sWordChecked, sWord, iLen+1 );
-				tCP.m_sWord = sWordChecked;
+				char * sArenaWord = dCheckpointWords.AddN ( iLen + 1 );
+				memcpy ( sArenaWord, sWord, iLen );
+				sArenaWord[iLen] = '\0';
+				tCP.m_uWordID = sArenaWord - dCheckpointWords.Begin();
 			} else
 				tCP.m_uWordID = uNewWordid;
 		}
 
-		// check infixes
-		if ( bCheckInfixes )
-		{
-			int iWordBytes = strnlen ( sWord, sizeof(sWord) );
-			int iWordCodepoints = sphUTF8Len ( sWord );
-
-			if ( iWordCodepoints>=m_tSettings.m_iMinInfixLen )
-			{
-				dInfix2CP.Resize ( 0 );
-
-				int iInfixBytes = sphGetInfixLength ( sWord, iWordBytes, m_tWordlist.m_iInfixCodepointBytes );
-				sphLookupInfixCheckpoints ( sWord, iInfixBytes, rdDict.GetWritePtr(), m_tWordlist.m_dInfixBlocks,
-					m_tWordlist.m_iInfixCodepointBytes, dInfix2CP );
-
-				if ( !dInfix2CP.BinarySearch ( dCheckpoints.GetLength() ) )
-				{
-					LOC_FAIL(( fp, "infix not found for word '%s' (%d), checkpoint %d, readpos="INT64_FMT,
-						sWord, iWordsTotal, dCheckpoints.GetLength(), (int64_t)iDictPos ));
-				}
-			}
-		}
+		// TODO add back infix checking
 
 		uWordid = uNewWordid;
 		iDoclistOffset = iNewDoclistOffset;
@@ -19751,9 +19770,11 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 	for ( int i=0; i < Min ( dCheckpoints.GetLength(), m_tWordlist.m_dCheckpoints.GetLength() ); i++ )
 	{
-		const CSphWordlistCheckpoint & tRefCP = dCheckpoints[i];
+		CSphWordlistCheckpoint tRefCP = dCheckpoints[i];
 		const CSphWordlistCheckpoint & tCP = m_tWordlist.m_dCheckpoints[i];
 		const int iLen = bWordDict ? strlen ( tCP.m_sWord ) : 0;
+		if ( bWordDict )
+			tRefCP.m_sWord = dCheckpointWords.Begin() + tRefCP.m_uWordID;
 		if ( bWordDict && ( tRefCP.m_sWord[0]=='\0' || tCP.m_sWord[0]=='\0' ) )
 		{
 			LOC_FAIL(( fp, "empty checkpoint %d (read_word=%s, read_len=%u, readpos="INT64_FMT", calc_word=%s, calc_len=%u, calcpos="INT64_FMT")",
@@ -19782,11 +19803,9 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			}
 		}
 	}
-	if ( bWordDict )
-		ARRAY_FOREACH ( i, dCheckpoints )
-			SafeDeleteArray ( dCheckpoints[i].m_sWord );
 
-	dCheckpoints.Reset ();
+	dCheckpoints.Reset();
+	dCheckpointWords.Reset();
 
 	///////////////////////
 	// check docs and hits
@@ -19796,7 +19815,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 	int64_t iDocsSize = rdDocs.GetFilesize();
 
-	pDictCur = rdDict.GetWritePtr() + 1;
+	rdDict.SeekTo ( 1, READ_NO_SIZE_HINT );
 	rdDocs.SeekTo ( 1, READ_NO_SIZE_HINT );
 	rdHits.SeekTo ( 1, READ_NO_SIZE_HINT );
 
@@ -19804,22 +19823,41 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 	iDoclistOffset = 0;
 	int iDictDocs, iDictHits;
 	bool bHitless = false;
+	CSphSharedBuffer<SphDocID_t> dID;
+	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN )
+	{
+		int64_t iRowsTotal = m_iDocinfo;
+		int iSkip = sizeof(CSphRowitem) * m_tSchema.GetRowSize();
+		CSphString sWarning;
+		if ( !dID.Alloc ( iRowsTotal, sError, sWarning ) )
+			LOC_FAIL(( fp, "unable to allocate doc-id storage: %s", sError.cstr() ));
+
+		rdAttr.SeekTo ( 0, sizeof(CSphRowitem) * ( DOCINFO_IDSIZE + m_tSchema.GetRowSize() ) );
+		for ( int64_t iRow=0; iRow<iRowsTotal && !rdAttr.GetErrorFlag(); iRow++ )
+		{
+			*( dID.GetWritePtr() + iRow ) = rdAttr.GetDocid();
+			rdAttr.SkipBytes ( iSkip );
+		}
+
+		if ( rdAttr.GetErrorFlag() )
+			LOC_FAIL(( fp, "unable to read attributes: %s", sError.cstr() ));
+	}
 
 	int iWordsChecked = 0;
-	while ( pDictCur-rdDict.GetWritePtr()<iWordsEnd )
+	while ( rdDict.GetPos()<iWordsEnd )
 	{
 		bHitless = false;
 		SphWordID_t iDeltaWord = 0;
 		if ( bWordDict )
 		{
-			iDeltaWord = *pDictCur++;
+			iDeltaWord = rdDict.GetByte();
 		} else
 		{
-			sphUnzipWordid ( pDictCur );
+			rdDict.UnzipWordid();
 		}
 		if ( !iDeltaWord )
 		{
-			sphUnzipOffset ( pDictCur );
+			rdDict.UnzipOffset();
 
 			uWordid = 0;
 			iDoclistOffset = 0;
@@ -19840,24 +19878,23 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			} else
 			{
 				iDelta = uPack & 127;
-				iMatch = *pDictCur++;
+				iMatch = rdDict.GetByte();
 			}
 			const int iLastWordLen = strlen(sWord);
 			if ( iMatch+iDelta>=(int)sizeof(sWord)-1 || iMatch>iLastWordLen )
 			{
-				pDictCur += iDelta;
+				rdDict.SkipBytes ( iDelta );
 			} else
 			{
-				memcpy ( sWord+iMatch, pDictCur, iDelta );
-				pDictCur += iDelta;
+				rdDict.GetBytes ( sWord+iMatch, iDelta );
 				sWord [ iMatch+iDelta ] = '\0';
 			}
 
-			iDoclistOffset = sphUnzipOffset ( pDictCur );
-			iDictDocs = sphUnzipInt ( pDictCur );
-			iDictHits = sphUnzipInt ( pDictCur );
+			iDoclistOffset = rdDict.UnzipOffset();
+			iDictDocs = rdDict.UnzipInt();
+			iDictHits = rdDict.UnzipInt();
 			if ( iDictDocs>=DOCLIST_HINT_THRESH )
-				pDictCur++;
+				rdDict.GetByte();
 
 			if ( m_tSettings.m_eHitless==SPH_HITLESS_SOME && ( iDictDocs & HITLESS_DOC_FLAG ) )
 			{
@@ -19869,17 +19906,17 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			// finish reading the entire entry
 			uWordid = uWordid + iDeltaWord;
 			bHitless = ( dHitlessWords.BinarySearch ( uWordid )!=NULL );
-			iDoclistOffset = iDoclistOffset + sphUnzipOffset ( pDictCur );
-			iDictDocs = sphUnzipInt ( pDictCur );
+			iDoclistOffset = iDoclistOffset + rdDict.UnzipOffset();
+			iDictDocs = rdDict.UnzipInt();
 			if ( bHitless )
 				iDictDocs = ( iDictDocs & HITLESS_DOC_MASK );
-			iDictHits = sphUnzipInt ( pDictCur );
+			iDictHits = rdDict.UnzipInt();
 		}
 
 		// FIXME? verify skiplist content too
 		int iSkipsOffset = 0;
 		if ( m_bHaveSkips && iDictDocs>SPH_SKIPLIST_BLOCK && !bHitless )
-			iSkipsOffset = sphUnzipInt ( pDictCur );
+			iSkipsOffset = rdDict.UnzipInt();
 
 		// check whether the offset is as expected
 		if ( iDoclistOffset!=rdDocs.GetPos() )
@@ -19965,15 +20002,17 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			// checks!
 			if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN )
 			{
-				const CSphRowitem * pFound = FindDocinfo ( tDoc.m_uDocID );
-				if ( !pFound )
+				SphDocID_t uDocID = tDoc.m_uDocID;
+				const SphDocID_t * pID = sphBinarySearch ( dID.GetWritePtr(), dID.GetWritePtr() + dID.GetNumEntries() - 1, uDocID );
+				if ( !pID )
+				{
 					LOC_FAIL(( fp, "row not found (wordid="UINT64_FMT"(%s), docid="DOCID_FMT")",
 						uint64_t(uWordid), sWord, tDoc.m_uDocID ));
-
-				if ( pFound )
-					if ( tDoc.m_uDocID!=DOCINFO2ID(pFound) )
+				} else if ( tDoc.m_uDocID!=*pID )
+				{
 						LOC_FAIL(( fp, "row found but id mismatches (wordid="UINT64_FMT"(%s), docid="DOCID_FMT", found="DOCID_FMT")",
-							uint64_t(uWordid), sWord, tDoc.m_uDocID, DOCINFO2ID(pFound) ));
+							uint64_t(uWordid), sWord, tDoc.m_uDocID, *pID ));
+				}
 			}
 
 			if ( tDoc.m_uDocID<=uLastDocid )
@@ -20133,6 +20172,8 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		}
 	}
 
+	dID.Reset();
+
 	///////////////////////////
 	// check rows (attributes)
 	///////////////////////////
@@ -20151,6 +20192,12 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		if ( iAllRowsTotal*uStride!=(int64_t)m_tAttr.GetNumEntries() )
 			LOC_FAIL(( fp, "rowitems count mismatch (expected="INT64_FMT", loaded="INT64_FMT")",
 				iAllRowsTotal*uStride, (int64_t)m_tAttr.GetNumEntries() ));
+
+		iStrEnd = rdString.GetFilesize();
+		iMvaEnd = rdMva.GetFilesize();
+		CSphFixedVector<DWORD> dRow ( uStride );
+		CSphVector<DWORD> dMva;
+		rdAttr.SeekTo ( 0, sizeof ( dRow[0] ) * dRow.GetLength() );
 
 		// extract rowitem indexes for MVAs etc
 		// (ie. attr types that we can and will run additional checks on)
@@ -20194,44 +20241,41 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		CSphVector<DWORD> dStringOffsets;
 		if ( m_tString.GetNumEntries()>1 )
 		{
-			const BYTE * pBase = m_tString.GetWritePtr();
-			const BYTE * pCur = pBase + 1;
-			const BYTE * pMax = pBase + m_tString.GetNumEntries();
-			while ( pCur<pMax )
+			rdString.SeekTo ( 1, READ_NO_SIZE_HINT );
+			while ( rdString.GetPos()<iStrEnd )
 			{
-				const BYTE * pStr = NULL;
-				const int iLen = sphUnpackStr ( pCur, &pStr );
+				int64_t iLastPos = rdString.GetPos();
+				const int iLen = sphUnpackStrLength ( rdString );
 
 				// 4 bytes must be enough to encode string length, hence pCur+4
-				if ( pStr+iLen>pMax || pStr<pCur || pStr>pCur+4 )
+				if ( rdString.GetPos()+iLen>iStrEnd || rdString.GetPos()>iLastPos+4 )
 				{
-					LOC_FAIL(( fp, "string length out of bounds (offset=%u, len=%d)", (DWORD)(pCur-pBase), iLen ));
+					LOC_FAIL(( fp, "string length out of bounds (offset="INT64_FMT", len=%d)", iLastPos, iLen ));
 					break;
 				}
 
-				dStringOffsets.Add ( (DWORD)(pCur-pBase) );
-				pCur = pStr + iLen;
+				dStringOffsets.Add ( (DWORD)iLastPos );
+				rdString.SkipBytes ( iLen );
 			}
 		}
 
 		// loop the rows
-		const CSphRowitem * pRow = m_tAttr.GetWritePtr();
-		const DWORD * pMvaBase = m_tMva.GetWritePtr();
-		const DWORD * pMvaMax = pMvaBase + m_tMva.GetNumEntries();
-		const DWORD * pMva = pMvaBase;
-
 		int iOrphan = 0;
 		SphDocID_t uLastID = 0;
 
-		for ( int64_t iRow=0; iRow<iRowsTotal; iRow++, pRow+=uStride )
+		for ( int64_t iRow=0; iRow<iRowsTotal; iRow++ )
 		{
+			// fetch the row
+			rdAttr.GetBytes ( dRow.Begin(), sizeof(dRow[0])*dRow.GetLength() );
+			SphDocID_t uCurID = DOCINFO2ID ( dRow.Begin() );
+
 			// check that ids are ascending
-			bool bIsSpaValid = uLastID < DOCINFO2ID(pRow);
+			bool bIsSpaValid = ( uLastID<uCurID );
 			if ( !bIsSpaValid )
 				LOC_FAIL(( fp, "docid decreased (row="INT64_FMT", id="DOCID_FMT", lastid="DOCID_FMT")",
-					iRow, DOCINFO2ID(pRow), uLastID ));
+					iRow, uCurID, uLastID ));
 
-			uLastID = DOCINFO2ID(pRow);
+			uLastID = uCurID;
 
 			///////////////////////////
 			// check MVAs
@@ -20239,8 +20283,8 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 			if ( dMvaItems.GetLength() )
 			{
-				const DWORD * pMvaSpaFixed = NULL;
-				const CSphRowitem * pAttrs = DOCINFO2ATTRS(pRow);
+				DWORD uMvaSpaFixed = 0;
+				const CSphRowitem * pAttrs = DOCINFO2ATTRS ( dRow.Begin() );
 				bool bHasValues = false;
 				bool bHasArena = false;
 				ARRAY_FOREACH ( iItem, dMvaItems )
@@ -20250,36 +20294,37 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 					bool bArena = ( ( uOffset & MVA_ARENA_FLAG )!=0 ) && !m_bArenaProhibit;
 					bHasArena |= bArena;
 
-					if ( uOffset && !bArena && pMvaBase+uOffset>=pMvaMax )
+					if ( uOffset && !bArena && uOffset>=iMvaEnd )
 					{
 						bIsSpaValid = false;
 						LOC_FAIL(( fp, "MVA index out of bounds (row="INT64_FMT", mvaattr=%d, docid="DOCID_FMT", index=%u)",
 							iRow, iItem, uLastID, uOffset ));
 					}
 
-					if ( uOffset && !bArena && pMvaBase+uOffset<pMvaMax && !pMvaSpaFixed )
-						pMvaSpaFixed = pMvaBase + uOffset - sizeof(SphDocID_t) / sizeof(DWORD);
+					if ( uOffset && !bArena && uOffset<iMvaEnd && !uMvaSpaFixed )
+						uMvaSpaFixed = uOffset - sizeof(SphDocID_t) / sizeof(DWORD);
 				}
 
 				// MVAs ptr recovery from previous errors only if current spa record is valid
-				if ( pMva!=pMvaSpaFixed && bIsSpaValid && pMvaSpaFixed )
-					pMva = pMvaSpaFixed;
+				if ( rdMva.GetPos()!=sizeof(DWORD)*uMvaSpaFixed && bIsSpaValid && uMvaSpaFixed )
+					rdMva.SeekTo ( sizeof(DWORD)*uMvaSpaFixed, READ_NO_SIZE_HINT );
 
 				bool bLastIDChecked = false;
-
 				SphDocID_t uLastMvaID = 0;
-				while ( pMva<pMvaMax && DOCINFO2ID(pMva)<=uLastID )
+				while ( rdMva.GetPos()<iMvaEnd )
 				{
-					const SphDocID_t uMvaID = DOCINFO2ID(pMva);
-					pMva = DOCINFO2ATTRS(pMva);
+					int64_t iLastPos = rdMva.GetPos();
+					const SphDocID_t uMvaID = rdMva.GetDocid();
+					if ( uMvaID>uLastID )
+						break;
 
 					if ( bLastIDChecked && uLastID==uMvaID )
-						LOC_FAIL(( fp, "duplicate docid found (row="INT64_FMT", docid expected="DOCID_FMT", got="DOCID_FMT", index=%u)",
-							iRow, uLastID, uMvaID, (DWORD)(pMva-pMvaBase) ));
+						LOC_FAIL(( fp, "duplicate docid found (row="INT64_FMT", docid expected="DOCID_FMT", got="DOCID_FMT", index="INT64_FMT")",
+							iRow, uLastID, uMvaID, iLastPos ));
 
 					if ( uMvaID<uLastMvaID )
-						LOC_FAIL(( fp, "MVA docid decreased (row="INT64_FMT", spa docid="DOCID_FMT", last MVA docid="DOCID_FMT", MVA docid="DOCID_FMT", index=%u)",
-							iRow, uLastID, uLastMvaID, uMvaID, (DWORD)(pMva-pMvaBase) ));
+						LOC_FAIL(( fp, "MVA docid decreased (row="INT64_FMT", spa docid="DOCID_FMT", last MVA docid="DOCID_FMT", MVA docid="DOCID_FMT", index="INT64_FMT")",
+							iRow, uLastID, uLastMvaID, uMvaID, iLastPos ));
 
 					bool bIsMvaCorrect = ( uLastMvaID<=uMvaID && uMvaID<=uLastID );
 					uLastMvaID = uMvaID;
@@ -20297,52 +20342,56 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 							continue;
 
 						if ( bWasArena )
-							pMva = pMvaBase+uSpaOffset;
+							rdMva.SeekTo ( sizeof(DWORD)*uSpaOffset, READ_NO_SIZE_HINT );
 						bWasArena = false;
 
 						// check offset (index)
-						if ( uMvaID==uLastID && bIsSpaValid && pMva!=pMvaBase+uSpaOffset )
+						if ( uMvaID==uLastID && bIsSpaValid && rdMva.GetPos()!=sizeof(DWORD)*uSpaOffset )
 						{
-							LOC_FAIL(( fp, "unexpected MVA docid (row="INT64_FMT", mvaattr=%d, docid expected="DOCID_FMT", got="DOCID_FMT", expected=%u, got=%u)",
-								iRow, iItem, uLastID, uMvaID, (DWORD)(pMva-pMvaBase), uSpaOffset ));
+							LOC_FAIL(( fp, "unexpected MVA docid (row="INT64_FMT", mvaattr=%d, docid expected="DOCID_FMT", got="DOCID_FMT", expected="INT64_FMT", got=%u)",
+								iRow, iItem, uLastID, uMvaID, rdMva.GetPos()/sizeof(DWORD), uSpaOffset ));
 							// it's unexpected but it's our best guess
 							// but do fix up only once, to prevent infinite loop
 							if ( !bLastIDChecked )
-								pMva = pMvaBase+uSpaOffset;
+								rdMva.SeekTo ( sizeof(DWORD)*uSpaOffset, READ_NO_SIZE_HINT );
 						}
 
-						if ( pMva>=pMvaMax )
+						if ( rdMva.GetPos()>=iMvaEnd )
 						{
-							LOC_FAIL(( fp, "MVA index out of bounds (row="INT64_FMT", mvaattr=%d, docid expected="DOCID_FMT", got="DOCID_FMT", index=%u)",
-								iRow, iItem, uLastID, uMvaID, (DWORD)(pMva-pMvaBase) ));
+							LOC_FAIL(( fp, "MVA index out of bounds (row="INT64_FMT", mvaattr=%d, docid expected="DOCID_FMT", got="DOCID_FMT", index="INT64_FMT")",
+								iRow, iItem, uLastID, uMvaID, rdMva.GetPos()/sizeof(DWORD) ));
 							bIsMvaCorrect = false;
 							continue;
 						}
 
 						// check values
-						DWORD uValues = *pMva++;
+						DWORD uValues = rdMva.GetDword();
 
-						if ( pMva+uValues-1>=pMvaMax )
+						if ( rdMva.GetPos()+sizeof(DWORD)*uValues-1>=iMvaEnd )
 						{
 							LOC_FAIL(( fp, "MVA count out of bounds (row="INT64_FMT", mvaattr=%d, docid expected="DOCID_FMT", got="DOCID_FMT", count=%u)",
 								iRow, iItem, uLastID, uMvaID, uValues ));
-							pMva += uValues;
+							rdMva.SeekTo ( rdMva.GetPos() + sizeof(DWORD)*uValues, READ_NO_SIZE_HINT );
 							bIsMvaCorrect = false;
 							continue;
 						}
+
+						dMva.Resize ( uValues );
+						rdMva.GetBytes ( dMva.Begin(), sizeof(DWORD)*uValues );
+
 						// check that values are ascending
 						for ( DWORD uVal=(iItem>=iMva64 ? 2 : 1); uVal<uValues && bIsMvaCorrect; )
 						{
 							int64_t iPrev, iCur;
 							if ( iItem>=iMva64 )
 							{
-								iPrev = MVA_UPSIZE ( pMva+uVal-2 );
-								iCur = MVA_UPSIZE ( pMva+uVal );
+								iPrev = MVA_UPSIZE ( dMva.Begin() + uVal - 2 );
+								iCur = MVA_UPSIZE ( dMva.Begin() + uVal );
 								uVal += 2;
 							} else
 							{
-								iPrev = pMva[uVal-1];
-								iCur = pMva[uVal];
+								iPrev = dMva[uVal-1];
+								iCur = dMva[uVal];
 								uVal++;
 							}
 
@@ -20355,7 +20404,6 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 							uVal += ( iItem>=iMva64 ? 2 : 1 );
 						}
-						pMva += uValues;
 					}
 
 					if ( !bIsMvaCorrect )
@@ -20365,7 +20413,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 					if ( bIsMvaCorrect && ( uMvaID!=uLastID || ( uMvaID==uLastID && bLastIDChecked ) ) )
 						iOrphan++;
 
-					bLastIDChecked |= uLastID==uMvaID;
+					bLastIDChecked |= ( uLastID==uMvaID );
 				}
 
 				if ( !bLastIDChecked && bHasValues && !bHasArena )
@@ -20379,7 +20427,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 			ARRAY_FOREACH ( iItem, dFloatItems )
 			{
-				const CSphRowitem * pAttrs = DOCINFO2ATTRS(pRow);
+				const CSphRowitem * pAttrs = DOCINFO2ATTRS ( dRow.Begin() );
 				const DWORD uValue = (DWORD)sphGetRowAttr ( pAttrs, dFloatItems[ iItem ] );
 				const DWORD uExp = ( uValue >> 23 ) & 0xff;
 				const DWORD uMantissa = uValue & 0x003fffff;
@@ -20401,10 +20449,10 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 			ARRAY_FOREACH ( iItem, dStrItems )
 			{
-				const CSphRowitem * pAttrs = DOCINFO2ATTRS(pRow);
+				const CSphRowitem * pAttrs = DOCINFO2ATTRS ( dRow.Begin() );
 
 				const DWORD uOffset = (DWORD)sphGetRowAttr ( pAttrs, dStrItems[ iItem ] );
-				if ( uOffset>=m_tString.GetNumEntries() )
+				if ( uOffset>=iStrEnd )
 				{
 					LOC_FAIL(( fp, "string offset out of bounds (row="INT64_FMT", stringattr=%d, docid="DOCID_FMT", index=%u)",
 						iRow, iItem, uLastID, uOffset ));
@@ -20414,14 +20462,14 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				if ( !uOffset )
 					continue;
 
-				const BYTE * pStr = NULL;
-				const int iLen = sphUnpackStr ( m_tString.GetWritePtr() + uOffset, &pStr );
+				rdString.SeekTo ( uOffset, READ_NO_SIZE_HINT );
+				const int iLen = sphUnpackStrLength ( rdString );
 
 				// check that length is sane
-				if ( pStr+iLen-1>=m_tString.GetWritePtr()+m_tString.GetLengthBytes() )
+				if ( rdString.GetPos()+iLen-1>=iStrEnd )
 				{
 					LOC_FAIL(( fp, "string length out of bounds (row="INT64_FMT", stringattr=%d, docid="DOCID_FMT", index=%u)",
-						iRow, iItem, uLastID, (unsigned int)( pStr-m_tString.GetWritePtr()+iLen-1 ) ));
+						iRow, iItem, uLastID, uOffset ));
 					continue;
 				}
 
@@ -20460,6 +20508,8 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		const DWORD uMinMaxStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 		const DWORD * pDocinfoIndexMax = m_pDocinfoIndex + ( m_iDocinfoIndex+1 )*uMinMaxStride*2;
 
+		rdAttr.SeekTo ( 0, sizeof ( dRow[0] ) * dRow.GetLength() );
+
 		for ( int64_t iIndexEntry=0; iIndexEntry<m_iDocinfo; iIndexEntry++ )
 		{
 			const int64_t iBlock = iIndexEntry / DOCINFO_INDEX_FREQ;
@@ -20468,8 +20518,8 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			const int64_t iPrevEntryBlock = ( iIndexEntry-1 )/DOCINFO_INDEX_FREQ;
 			const bool bIsBordersCheckTime = ( iPrevEntryBlock!=iBlock );
 
-			const DWORD * pAttr = m_tAttr.GetWritePtr() + iIndexEntry * uMinMaxStride;
-			const SphDocID_t uDocID = DOCINFO2ID(pAttr);
+			rdAttr.GetBytes ( dRow.Begin(), sizeof(dRow[0]) * dRow.GetLength() );
+			const SphDocID_t uDocID = DOCINFO2ID ( dRow.Begin() );
 
 			const DWORD * pMinEntry = m_pDocinfoIndex + iBlock * uMinMaxStride * 2;
 			const DWORD * pMaxEntry = pMinEntry + uMinMaxStride;
@@ -20502,7 +20552,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			bool bIsFirstMva = true;
 
 			// check values vs blocks range
-			const DWORD * pSpaRow = DOCINFO2ATTRS(pAttr);
+			const DWORD * pSpaRow = DOCINFO2ATTRS ( dRow.Begin() );
 			for ( int iItem=0; iItem<m_tSchema.GetAttrsCount(); iItem++ )
 			{
 				const CSphColumnInfo & tCol = m_tSchema.GetAttr(iItem);
@@ -20557,31 +20607,41 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 							iIndexEntry, iBlock, uMin, uMax ));
 
 						SphAttr_t uOff = sphGetRowAttr ( pSpaRow, tCol.m_tLocator );
-						if ( !uOff )
+						if ( !uOff || ( uOff & MVA_ARENA_FLAG )!=0 )
 							break;
 
-						pMva = m_tMva.GetWritePtr() + uOff;
-						const DWORD * pMvaDocID = bIsFirstMva ? ( pMva - sizeof(SphDocID_t) / sizeof(DWORD) ) : NULL;
-						bIsFirstMva = false;
+						SphDocID_t uMvaDocID = 0;
+						if ( bIsFirstMva )
+						{
+							bIsFirstMva = false;
+							rdMva.SeekTo ( sizeof(DWORD) * uOff - sizeof(SphDocID_t), READ_NO_SIZE_HINT );
+							uMvaDocID = rdMva.GetDocid();
+						} else
+						{
+							rdMva.SeekTo ( sizeof(DWORD) * uOff, READ_NO_SIZE_HINT );
+						}
 
-						if ( uOff>=(SphAttr_t)m_tMva.GetNumEntries() )
+						if ( uOff>=iMvaEnd )
 							break;
 
-						if ( pMvaDocID && DOCINFO2ID ( pMvaDocID )!=uDocID )
+						if ( uMvaDocID && uMvaDocID!=uDocID )
 						{
 							LOC_FAIL(( fp, "unexpected MVA docid (row="INT64_FMT", mvaattr=%d, expected="DOCID_FMT", got="DOCID_FMT", block="INT64_FMT", index=%u)",
-								iIndexEntry, iItem, uDocID, DOCINFO2ID ( pMvaDocID ), iBlock, (DWORD)uOff ));
+								iIndexEntry, iItem, uDocID, uMvaDocID, iBlock, (DWORD)uOff ));
 							break;
 						}
 
 						// check values
-						const DWORD uValues = *pMva++;
-						if ( uOff+uValues>(SphAttr_t)m_tMva.GetNumEntries() )
+						const DWORD uValues = rdMva.GetDword();
+						if ( uOff+uValues>iMvaEnd )
 							break;
+
+						dMva.Resize ( uValues );
+						rdMva.GetBytes ( dMva.Begin(), sizeof ( dMva[0] ) * uValues );
 
 						for ( DWORD iVal=0; iVal<uValues; iVal++ )
 						{
-							const DWORD uVal = *pMva++;
+							const DWORD uVal = dMva[iVal];
 							if ( uVal < uMin || uVal > uMax )
 								LOC_FAIL(( fp, "unexpected MVA value (row="INT64_FMT", attr=%u, docid="DOCID_FMT", block="INT64_FMT", index=%u, value=0x%x, min=0x%x, max=0x%x)",
 									iIndexEntry, iItem, uDocID, iBlock, iVal, (DWORD)uVal, (DWORD)uMin, (DWORD)uMax ));
@@ -30981,17 +31041,6 @@ void CSphSource_CSV::SetDelimiter ( const char * sDelimiter )
 
 /////////////////////////////////////////////////////////////////////////////
 
-void sphSetQuiet ( bool bQuiet )
-{
-	g_bSphQuiet = bQuiet;
-}
-
-
-void sphSetDebugCheck ()
-{
-	g_bDebugCheck = true;
-}
-
 
 void sphSetJsonOptions ( bool bStrict, bool bAutoconvNumbers, bool bKeynamesToLowercase )
 {
@@ -31090,12 +31139,12 @@ int sphDictCmpStrictly ( const char * pStr1, int iLen1, const char * pStr2, int 
 CWordlist::CWordlist ()
 	: m_dCheckpoints ( 0 )
 	, m_dInfixBlocks ( 0 )
+	, m_pWords ( 0 )
 {
 	m_iDictCheckpointsOffset = 0;
 	m_iSize = 0;
 	m_iMaxChunk = 0;
 	m_bWordDict = false;
-	m_pWords = NULL;
 	m_pInfixBlocksWords = NULL;
 }
 
@@ -31110,7 +31159,7 @@ void CWordlist::Reset ()
 	m_pBuf.Reset ();
 
 	m_dCheckpoints.Reset ( 0 );
-	SafeDeleteArray ( m_pWords );
+	m_pWords.Reset ( 0 );
 	SafeDeleteArray ( m_pInfixBlocksWords );
 }
 
@@ -31142,17 +31191,16 @@ bool CWordlist::ReadCP ( CSphAutofile & tFile, DWORD uVersion, bool bWordDict, C
 			- (sizeof(DWORD)+sizeof(SphOffset_t))*m_dCheckpoints.GetLength()
 			+ sizeof(BYTE)*m_dCheckpoints.GetLength();
 		assert ( iArenaSize>=0 );
-		m_pWords = new BYTE[iArenaSize];
-		assert ( m_pWords );
+		m_pWords.Reset ( iArenaSize );
 
-		BYTE * pWord = m_pWords;
+		BYTE * pWord = m_pWords.Begin();
 		ARRAY_FOREACH ( i, m_dCheckpoints )
 		{
 			m_dCheckpoints[i].m_sWord = (char *)pWord;
 
 			const int iLen = tReader.GetDword();
 			assert ( iLen>0 );
-			assert ( iLen+1+(pWord-m_pWords)<=iArenaSize );
+			assert ( iLen + 1 + ( pWord - m_pWords.Begin() )<=iArenaSize );
 			tReader.GetBytes ( pWord, iLen );
 			pWord[iLen] = '\0';
 			pWord += iLen+1;

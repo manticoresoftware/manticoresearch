@@ -832,10 +832,6 @@ bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dRe
 	return true;
 }
 
-bool CSphConfigParser::TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dResult )
-{
-	return ::TryToExec ( pBuffer, szFilename, dResult, m_sError, sizeof(m_sError) );
-}
 #endif
 
 
@@ -948,7 +944,7 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 				if ( !pBuffer && m_iLine==1 && p==sBuf && p[1]=='!' )
 				{
 					CSphVector<char> dResult;
-					if ( TryToExec ( p+2, sFileName, dResult ) )
+					if ( TryToExec ( p+2, sFileName, dResult, m_sError, sizeof(m_sError) ) )
 						Parse ( sFileName, &dResult[0] );
 					break;
 				} else

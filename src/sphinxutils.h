@@ -134,16 +134,10 @@ protected:
 	bool			AddSection ( const char * sType, const char * sSection );
 	void			AddKey ( const char * sKey, char * sValue );
 	bool			ValidateKey ( const char * sKey );
-
-#if !USE_WINDOWS
-	bool			TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dResult );
-#endif
 	char *			GetBufferString ( char * szDest, int iMax, const char * & szSource );
 };
 
-#if !USE_WINDOWS
 bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dResult, char * sError, int iErrorLen );
-#endif
 
 /////////////////////////////////////////////////////////////////////////////
 

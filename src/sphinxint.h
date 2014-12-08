@@ -302,7 +302,6 @@ public:
 	DWORD		UnzipInt ();
 	uint64_t	UnzipOffset ();
 
-	SphOffset_t				Tell () const				{ return m_iPos + m_iBuffPos; }
 	bool					GetErrorFlag () const		{ return m_bError; }
 	const CSphString &		GetErrorMessage () const	{ return m_sError; }
 	const CSphString &		GetFilename() const			{ return m_sFilename; }
@@ -1657,7 +1656,6 @@ CSphString		sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSch
 
 void			sphSetUnlinkOld ( bool bUnlink );
 void			sphUnlinkIndex ( const char * sName, bool bForce );
-void			sphSetDebugCheck ();
 
 void			WriteSchema ( CSphWriter & fdInfo, const CSphSchema & tSchema );
 void			ReadSchema ( CSphReader & rdInfo, CSphSchema & m_tSchema, DWORD uVersion, bool bDynamic );

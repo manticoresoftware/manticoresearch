@@ -1681,7 +1681,6 @@ int main ( int argc, char ** argv )
 		} else if ( strcasecmp ( argv[i], "--quiet" )==0 )
 		{
 			g_bQuiet = true;
-			sphSetQuiet ( true );
 
 		} else if ( strcasecmp ( argv[i], "--noprogress" )==0 )
 		{

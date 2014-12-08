@@ -3460,9 +3460,6 @@ CSphIndex *			sphCreateIndexPhrase ( const char* szIndexName, const char * sFile
 /// create template (tokenizer) index implementation
 CSphIndex *			sphCreateIndexTemplate ( );
 
-/// tell libsphinx to be quiet or not (logs and loglevels to come later)
-void				sphSetQuiet ( bool bQuiet );
-
 /// set JSON attribute indexing options
 /// bStrict is whether to stop indexing on error, or just ignore the attribute value
 /// bAutoconvNumbers is whether to auto-convert eligible (!) strings to integers and floats, or keep them as strings

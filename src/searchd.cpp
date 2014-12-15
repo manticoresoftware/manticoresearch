@@ -54,6 +54,7 @@ extern "C"
 // 1 - SIGKILL will shut down the whole daemon; 0 - watchdog will reincarnate the daemon
 #define WATCHDOG_SIGKILL		1
 
+#define SPH_MYSQL_FLAG_MORE_RESULTS 8 // mysql.h: SERVER_MORE_RESULTS_EXISTS
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -14609,11 +14610,7 @@ void SendMysqlEofPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, int iWarns, 
 	if ( iWarns<0 ) iWarns = 0;
 	if ( iWarns>65535 ) iWarns = 65535;
 	if ( bMoreResults )
-#if USE_MYSQL
-		iWarns |= ( SERVER_MORE_RESULTS_EXISTS<<16 );
-#else
-		iWarns = iWarns;
-#endif
+		iWarns |= ( SPH_MYSQL_FLAG_MORE_RESULTS<<16 );
 
 	tOut.SendLSBDword ( (uPacketID<<24) + 5 );
 	tOut.SendByte ( 0xfe );

@@ -801,9 +801,22 @@ static const BYTE * JsonFormatStr ( CSphVector<BYTE> & dOut, const BYTE * p, boo
 		dOut.Add ( '"' );
 	while ( iLen-- )
 	{
-		if ( *p=='"' && bQuote )
-			dOut.Add ( '\\' );
-		dOut.Add ( *p );
+		if ( bQuote )
+		{
+			switch ( *p )
+			{
+				case '\b': dOut.Add('\\'); dOut.Add('b'); break;
+				case '\n': dOut.Add('\\'); dOut.Add('n'); break;
+				case '\r': dOut.Add('\\'); dOut.Add('r'); break;
+				case '\t': dOut.Add('\\'); dOut.Add('t'); break;
+				case '\f': dOut.Add('\\'); dOut.Add('f'); break; // formfeed (rfc 4627)
+				default:
+					if ( *p == '"' || *p=='\\' || *p=='/' )
+						dOut.Add ( '\\' );
+					dOut.Add ( *p );
+			}
+		} else
+			dOut.Add ( *p );
 		p++;
 	}
 	if ( bQuote )

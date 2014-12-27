@@ -9761,7 +9761,7 @@ void SearchHandler_c::RunLocalSearchesMT ()
 
 			tRes.m_pMva = tRaw.m_pMva;
 			tRes.m_pStrings = tRaw.m_pStrings;
-			tRes.m_bArenaProhibit = tRes.m_bArenaProhibit;
+			tRes.m_bArenaProhibit = tRaw.m_bArenaProhibit;
 			MergeWordStats ( tRes, tRaw.m_hWordStats, &m_dFailuresSet[iQuery], sLocal );
 
 			// move external attributes storage from tRaw to actual result

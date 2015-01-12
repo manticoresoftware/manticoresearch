@@ -711,9 +711,9 @@ static const char * g_dApiCommands[SEARCHD_COMMAND_TOTAL] =
 
 //////////////////////////////////////////////////////////////////////////
 
-const int	STATS_MAX_AGENTS	= 1024;	///< we'll track stats for this much remote agents
-const int	STATS_MAX_DASH	= 256;	///< we'll track stats for RR of this much remote agents
-const int	STATS_DASH_TIME = 15;	///< store the history for last periods
+const int	STATS_MAX_AGENTS	= 4096;				///< we'll track stats for this much remote agents
+const int	STATS_MAX_DASH	= STATS_MAX_AGENTS / 4;	///< we'll track stats for RR of this much remote agents
+const int	STATS_DASH_TIME = 15;					///< store the history for last periods
 
 template <class DATA, int SIZE> class StaticStorage_t : public ISphNoncopyable
 {
@@ -1000,6 +1000,8 @@ struct SearchdStats_t
 	int64_t		m_iPredictedTime;	///< total agent predicted query time
 	int64_t		m_iAgentPredictedTime;	///< total agent predicted query time
 
+	// FIXME!!! all these are still not thread safe (read at CheckPing vs modify at ValidateAgentDesc)
+	// and not concurent friendly due to g_tStatsMutex ( read at BuildOneAgentStatus might block often write at agent_stats_inc )
 	StaticStorage_t<AgentStats_t,STATS_MAX_AGENTS> m_dAgentStats;
 	StaticStorage_t<HostDashboard_t,STATS_MAX_DASH> m_dDashboard;
 	SmallStringHash_T<int>							m_hDashBoard; ///< find hosts for agents and sort them all
@@ -2617,8 +2619,7 @@ void AddListener ( const CSphString & sListen )
 	{
 		tListener.m_iSock = sphCreateUnixSocket ( tDesc.m_sUnix.cstr() );
 		tListener.m_bTcp = false;
-	}
-	else
+	} else
 #endif
 		tListener.m_iSock = sphCreateInetSocket ( tDesc.m_uIP, tDesc.m_iPort );
 
@@ -19917,6 +19918,10 @@ bool ValidateAgentDesc ( MetaAgentDesc_t & tAgent, const CSphVariant * pLine, co
 	{
 		g_tStatsMutex.Lock();
 		pAgent->m_iStatsIndex = g_pStats->m_dAgentStats.AllocItem();
+		if ( pAgent->m_iStatsIndex<0 )
+			sphWarning ( "index '%s': agent '%s': failed to allocate slot for stats",
+				szIndexName, pLine->cstr(), ( tAgent.IsHA() ? ", HA might be wrong" : "" ) );
+
 		if ( g_pStats->m_hDashBoard.Exists ( sHashKey ) )
 		{
 			pAgent->m_iDashIndex = g_pStats->m_hDashBoard[sHashKey];
@@ -19924,8 +19929,15 @@ bool ValidateAgentDesc ( MetaAgentDesc_t & tAgent, const CSphVariant * pLine, co
 		} else
 		{
 			pAgent->m_iDashIndex = g_pStats->m_dDashboard.AllocItem();
-			g_pStats->m_dDashboard.m_dItemStats[pAgent->m_iDashIndex].Init ( pAgent );
-			g_pStats->m_hDashBoard.Add ( pAgent->m_iDashIndex, sHashKey );
+			if ( pAgent->m_iDashIndex<0 )
+			{
+				sphWarning ( "index '%s': agent '%s': failed to allocate slot for stat-dashboard",
+				szIndexName, pLine->cstr(), ( tAgent.IsHA() ? ", HA might be wrong" : "" ) );
+			} else
+			{
+				g_pStats->m_dDashboard.m_dItemStats[pAgent->m_iDashIndex].Init ( pAgent );
+				g_pStats->m_hDashBoard.Add ( pAgent->m_iDashIndex, sHashKey );
+			}
 		}
 
 		g_tStatsMutex.Unlock();

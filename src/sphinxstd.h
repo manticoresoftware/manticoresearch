@@ -2476,7 +2476,7 @@ public:
 		int64_t iCount = 0;
 
 #if USE_WINDOWS
-		HANDLE iFD = CreateFile ( sFile, GENERIC_READ, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0 );
+		HANDLE iFD = CreateFile ( sFile, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_READONLY, 0 );
 		if ( iFD==INVALID_HANDLE_VALUE )
 		{
 			sError.SetSprintf ( "failed to open file '%s' (errno %d)", sFile, ::GetLastError() );

@@ -19561,8 +19561,25 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		LOC_FAIL(( fp, "unable to open exceptions '%s': %s", tTokenizerSettings.m_sSynonymsFile.cstr(), sError.cstr() ));
 
 	const CSphDictSettings & tDictSettings = m_pDict->GetSettings ();
-	if ( !tDictSettings.m_sStopwords.IsEmpty() && !GetFileStats ( tDictSettings.m_sStopwords.cstr(), tStat, &sError ) )
-		LOC_FAIL(( fp, "unable to open stopwords '%s': %s", tDictSettings.m_sStopwords.cstr(), sError.cstr() ));
+	const char * pStop = tDictSettings.m_sStopwords.cstr();
+	for ( ;; )
+	{
+		// find next name start
+		while ( pStop && *pStop && isspace(*pStop) ) pStop++;
+		if ( !pStop || !*pStop ) break;
+
+		const char * sNameStart = pStop;
+
+		// find next name end
+		while ( *pStop && !isspace(*pStop) ) pStop++;
+
+		CSphString sStopFile;
+		sStopFile.SetBinary ( sNameStart, pStop-sNameStart );
+
+		if ( !GetFileStats ( sStopFile.cstr(), tStat, &sError ) )
+			LOC_FAIL(( fp, "unable to open stopwords '%s': %s", sStopFile.cstr(), sError.cstr() ));
+	}
+
 	if ( !tDictSettings.m_dWordforms.GetLength() )
 	{
 		ARRAY_FOREACH ( i, tDictSettings.m_dWordforms )

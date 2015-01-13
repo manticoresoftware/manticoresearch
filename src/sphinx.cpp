@@ -19824,7 +19824,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 	int iDictDocs, iDictHits;
 	bool bHitless = false;
 	CSphSharedBuffer<SphDocID_t> dID;
-	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN )
+	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && m_iDocinfo )
 	{
 		int64_t iRowsTotal = m_iDocinfo;
 		int iSkip = sizeof(CSphRowitem) * m_tSchema.GetRowSize();

@@ -66,6 +66,7 @@
 %type <sIdent>			ident
 %type <iNode>			stringlist
 %type <iNode>			json_field
+%type <iNode>			json_expr
 %type <iNode>			subkey
 %type <iNode>			subscript
 %type <iNode>			for_loop
@@ -130,7 +131,7 @@ expr:
 	| expr TOK_AND expr				{ $$ = pParser->AddNodeOp ( TOK_AND, $1, $3 ); if ( $$<0 ) YYERROR; }
 	| expr TOK_OR expr				{ $$ = pParser->AddNodeOp ( TOK_OR, $1, $3 ); if ( $$<0 ) YYERROR; }
 	| '(' expr ')'					{ $$ = $2; }
-	| json_field
+	| json_expr
 	| iterator
 	| streq
 	| json_field TOK_IS TOK_NULL			{ $$ = pParser->AddNodeOp ( TOK_IS_NULL, $1, -1); }
@@ -206,7 +207,12 @@ function:
 	;
 
 json_field:
-	TOK_ATTR_JSON subscript			{ $$ = pParser->AddNodeJsonField ( $1, $2 ); }
+	json_expr
+	| attr
+	;
+
+json_expr:
+	TOK_ATTR_JSON subscript { $$ = pParser->AddNodeJsonField ( $1, $2 ); }
 
 subscript:
 	subkey

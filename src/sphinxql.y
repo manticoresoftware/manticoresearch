@@ -562,10 +562,10 @@ expr_ident:
 			if ( !pParser->SetNewSyntax() )
 				YYERROR;
 		}
-	| json_field
-	| TOK_INTEGER '(' json_field ')'
-	| TOK_DOUBLE '(' json_field ')'
-	| TOK_BIGINT '(' json_field ')'
+	| json_expr
+	| TOK_INTEGER '(' json_expr ')'
+	| TOK_DOUBLE '(' json_expr ')'
+	| TOK_BIGINT '(' json_expr ')'
 	| TOK_FACET '(' ')'
 	;
 
@@ -790,7 +790,7 @@ expr:
 	| '(' expr ')'				{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| '{' consthash '}'			{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| function
-	| json_field
+	| json_expr
 	| streq
 	| json_field TOK_IS TOK_NULL			{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| json_field TOK_IS TOK_NOT TOK_NULL	{ TRACK_BOUNDS ( $$, $1, $4 ); }
@@ -1212,7 +1212,7 @@ update_item:
 			SqlNode_t tNoValues;
 			pParser->UpdateMVAAttr ( $1, tNoValues );
 		}
-	| json_field '=' const_int // duplicate ident code (avoiding s/r conflict)
+	| json_expr '=' const_int // duplicate ident code (avoiding s/r conflict)
 		{
 			// it is performance-critical to forcibly inline this
 			pParser->m_pStmt->m_tUpdate.m_dPool.Add ( (DWORD)$3.m_iValue );
@@ -1226,7 +1226,7 @@ update_item:
 				pParser->AddUpdatedAttr ( $1, SPH_ATTR_INTEGER );
 			}
 		}
-	| json_field '=' const_float
+	| json_expr '=' const_float
 		{
 			// it is performance-critical to forcibly inline this
 			pParser->m_pStmt->m_tUpdate.m_dPool.Add ( sphF2DW ( $3.m_fValue ) );
@@ -1467,6 +1467,11 @@ drop_plugin:
 //////////////////////////////////////////////////////////////////////////
 
 json_field:
+	json_expr
+	| ident
+	;
+
+json_expr:
 	ident subscript				{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
 
 subscript:

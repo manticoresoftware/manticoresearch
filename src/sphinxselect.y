@@ -111,7 +111,7 @@ expr:
 	| expr TOK_OR expr			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| '(' expr ')'				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| function
-	| json_field
+	| json_expr
 	| json_field TOK_IS TOK_NULL			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| json_field TOK_IS TOK_NOT TOK_NULL	{ $$ = $1; $$.m_iEnd = $4.m_iEnd; }
 	| expr TOK_EQ TOK_CONST_STRING			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
@@ -156,6 +156,11 @@ comment:
 	;
 
 json_field:
+	json_expr
+	| ident
+	;
+
+json_expr:
 	SEL_TOKEN subscript			{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
 	;
 
@@ -169,7 +174,7 @@ ident:
 	| SEL_ID | SEL_AS | SEL_AVG | SEL_MAX | SEL_MIN | SEL_SUM | SEL_GROUP_CONCAT
 	| SEL_GROUPBY | SEL_COUNT | SEL_WEIGHT | SEL_DISTINCT | SEL_OPTION | TOK_DIV
 	| TOK_MOD | TOK_NEG | TOK_LTE | TOK_GTE | TOK_EQ | TOK_NE | TOK_OR | TOK_AND
-	| TOK_NOT | TOK_IS | TOK_NULL
+	| TOK_NOT | TOK_NULL
 	;
 
 subkey:

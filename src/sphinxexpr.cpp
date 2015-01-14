@@ -4607,6 +4607,28 @@ public:
 			case JSON_STRING:			return StringArrayEval ( pVal, true );
 			case JSON_INT32:			return ValueEval ( (int64_t) sphJsonLoadInt ( &pVal ) );
 			case JSON_INT64:			return ValueEval ( sphJsonLoadBigint ( &pVal ) );
+			case JSON_MIXED_VECTOR:
+				{
+					const BYTE * p = pVal;
+					sphJsonUnpackInt ( &p ); // skip node length
+					int iLen = sphJsonUnpackInt ( &p );
+					for ( int i=0; i<iLen; i++ )
+					{
+						ESphJsonType eType = (ESphJsonType)*p++;
+						pVal = p;
+						int iRes = 0;
+						switch (eType)
+						{
+						case JSON_STRING: iRes =  StringArrayEval ( pVal, true ); break;
+						case JSON_INT32: iRes = ValueEval ( (int64_t) sphJsonLoadInt ( &pVal ) ); break;
+						case JSON_INT64: iRes = ValueEval ( sphJsonLoadBigint ( &pVal ) ); break;
+						}
+						if ( iRes )
+							return 1;
+						sphJsonSkipNode ( eType, &p );
+					}
+					return 0;
+				}
 			default:					return 0;
 		}
 	}

@@ -4113,6 +4113,12 @@ bool RtIndex_t::Prealloc ( bool, bool bStripPath, CSphString & )
 		if ( m_bId32to64 )
 			tDictSettings.m_bCrc32 = true;
 
+		// initialize AOT if needed
+		DWORD uPrevAot = m_tSettings.m_uAotFilterMask;
+		m_tSettings.m_uAotFilterMask = sphParseMorphAot ( tDictSettings.m_sMorphology.cstr() );
+		if ( m_tSettings.m_uAotFilterMask!=uPrevAot )
+			sphWarning ( "index '%s': morphology option changed from config has no effect, ignoring", m_sIndexName.cstr() );
+
 		if ( bStripPath )
 		{
 			StripPath ( tTokenizerSettings.m_sSynonymsFile );

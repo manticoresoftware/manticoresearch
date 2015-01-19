@@ -3852,7 +3852,7 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, DOCID iMinDocID, int iC
 	SaveTokenizerSettings ( tWriter, m_pTokenizer, m_tSettings.m_iEmbeddedLimit );
 
 	// dictionary
-	SaveDictionarySettings ( tWriter, m_pDict, m_bKeywordDict, m_tSettings.m_iEmbeddedLimit );
+	SaveDictionarySettings ( tWriter, m_pDict, m_bKeywordDict, 0 );
 
 	// kill-list size
 	tWriter.PutDword ( uKillListSize );

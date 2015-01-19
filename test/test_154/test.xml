@@ -96,6 +96,10 @@ INSERT INTO `test_table` VALUES
 <sphinxql>select * from both where idd1!=11</sphinxql>
 <sphinxql>select * from both where match ('bird') and idd1!=11</sphinxql>
 <sphinxql>select * from both where idd1!=10</sphinxql>
+
+<!-- regression stopwords missed on disk chunk save (either regular or forced) -->
+<sphinxql>flush ramchunk rt</sphinxql>
+<sphinxql>select * from rt where match ('a bird')</sphinxql>
 </sphqueries>
 
 </test>

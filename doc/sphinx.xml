@@ -292,10 +292,10 @@ specific project files) manually.
     <para>
     Extract everything from the distribution tarball (haven't you already?)
     and go to the <filename>sphinx</filename> subdirectory. (We are using
-    version 2.2.1-beta here for the sake of example only; be sure to change this
+    version 2.2.8-dev here for the sake of example only; be sure to change this
     to a specific version you're using.)
     </para>
-<para><literallayout><userinput>$ tar xzvf sphinx-2.2.1-beta.tar.gz
+<para><literallayout><userinput>$ tar xzvf sphinx-2.2.8-dev.tar.gz
 $ cd sphinx
 </userinput></literallayout></para></listitem>
 <listitem>
@@ -367,14 +367,14 @@ do not seem to help you, please don't hesitate to contact me.
     <userinput>$ sudo apt-get install mysql-client unixodbc libpq5</userinput></listitem>
 <listitem>
     <para>Now you can install Sphinx:</para>
-    <userinput>$ sudo dpkg -i sphinxsearch_2.2.1-beta-0ubuntu11~precise_amd64.deb</userinput></listitem>
+    <userinput>$ sudo dpkg -i sphinxsearch_2.2.8-dev-0ubuntu11~trusty_amd64.deb</userinput></listitem>
 </orderedlist>
 <para>PPA repository (Ubuntu only).</para>
 <para>Installing Sphinx is much easier from Sphinxsearch PPA repository, because you will get all dependencies and can also update Sphinx to the latest version with the same command.</para>
 <orderedlist>
 <listitem>    
     <para>First, add Sphinxsearch repository and update the list of packages:</para>
-    <para><userinput>$ sudo add-apt-repository ppa:builds/sphinxsearch-daily</userinput></para>
+    <para><userinput>$ sudo add-apt-repository ppa:builds/sphinxsearch-rel22</userinput></para>
     <para><userinput>$ sudo apt-get update</userinput></para></listitem>
 <listitem>
     <para>Install/update sphinxsearch package:</para>
@@ -407,9 +407,9 @@ area on the website.</para>
 <orderedlist>
 <listitem>
     <para>Extract everything from the .zip file you have downloaded -
-    <filename>sphinx-2.2.1-beta-win32.zip</filename>,
-    or <filename>sphinx-2.2.1-beta-win32-pgsql.zip</filename> if you need PostgresSQL support as well.
-    (We are using version 2.2.1-beta here for the sake of example only;
+    <filename>sphinx-2.2.8-dev-win32.zip</filename>,
+    or <filename>sphinx-2.2.8-dev-win32-pgsql.zip</filename> if you need PostgresSQL support as well.
+    (We are using version 2.2.8-dev here for the sake of example only;
     be sure to change this to a specific version you're using.)
     You can use Windows Explorer in Windows XP and up to extract the files,
     or a freeware package like 7Zip to open the archive.</para>

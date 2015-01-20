@@ -1,5 +1,5 @@
-Sphinx 2.2.7-dev reference manual
-=================================
+Sphinx 2.2.7-release reference manual
+=====================================
 
 Free open-source SQL full-text search engine
 ============================================
@@ -13405,7 +13405,7 @@ Bug fixes
 
    * fixed #2050, multi result set doesn't work without libmysqlclient
 
-   * fixed #2003, lemmatizer_all handling of short and exact words
+   * fixed #2003, lemmatize_XX_all handling of short and exact words
 
    * fixed #1912, reduce indextool memory usage during a check of a huge
      index
@@ -13414,7 +13414,7 @@ Bug fixes
 
    * fixed seamless rotation in prefork mode
 
-   * fixed snippets crash with blendchars at the beginning of a string
+   * fixed snippets crash with blend chars at the beginning of a string
 
 A.2. Version 2.2.6-release, 13 nov 2014
 =======================================

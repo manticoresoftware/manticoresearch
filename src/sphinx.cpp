@@ -4970,9 +4970,7 @@ ISphTokenizer * ISphTokenizer::CreatePluginFilter ( ISphTokenizer * pTokenizer, 
 	if ( !dPlugin.GetLength() )
 		return pTokenizer;
 
-	if ( !sphPluginCreate ( dPlugin[0].cstr(), PLUGIN_INDEX_TOKEN_FILTER, dPlugin[1].cstr(), SPH_ATTR_NONE, sError ) )
-		return NULL;
-	const PluginDesc_c * p = sphPluginGet ( PLUGIN_INDEX_TOKEN_FILTER, dPlugin[1].cstr() );
+	const PluginDesc_c * p = sphPluginAcquire ( dPlugin[0].cstr(), PLUGIN_INDEX_TOKEN_FILTER, dPlugin[1].cstr(), sError );
 	if ( !p )
 	{
 		sError.SetSprintf ( "INTERNAL ERROR: plugin %s:%s loaded ok but lookup fails", dPlugin[0].cstr(), dPlugin[1].cstr() );

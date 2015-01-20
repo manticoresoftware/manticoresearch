@@ -14383,23 +14383,23 @@ rlp_max_batch_docs = 100
 <sect1 id="rel227"><title>Version 2.2.7-release, 20 jan 2015</title>
 <bridgehead>Minor features</bridgehead>
 <itemizedlist>
-<listitem><para>added #2112, string equal comparison support for IF() function (for JSON and string attributes)</para></listitem>
-<listitem><para>added #2153, IN() support for mixed and top-level JSON arrays</para></listitem>
+<listitem><para>added #2112, string equal comparison support for <link linkend="expr-func-if">IF()</link> function (for JSON and string attributes)</para></listitem>
+<listitem><para>added #2153, <link linkend="expr-func-in">IN()</link> support for mixed and top-level JSON arrays</para></listitem>
 </itemizedlist>
 <bridgehead>Bug fixes</bridgehead>
 <itemizedlist>
 <listitem><para>fixed #2158, crash at RT index after morphology changed to AOT after index was created</para></listitem>
-<listitem><para>fixed #2155, stopwords got missed on disk chunk save at RT index</para></listitem>
+<listitem><para>fixed #2155, <link linkend="conf-stopwords">stopwords</link> got missed on disk chunk save at RT index</para></listitem>
 <listitem><para>fixed #2151, agents statistics missed in case of huge amount of agents</para></listitem>
 <listitem><para>fixed #2139, escape all special characters in JSON result set, according to RFC 4627</para></listitem>
 <listitem><para>fixed #2123, no pid file created in x64 release built with vs2012</para></listitem>
-<listitem><para>fixed #2115, indexer crash on wordforms with multiple destination keywords</para></listitem>
-<listitem><para>fixed #2050, multi result set doesn't work without libmysqlclient</para></listitem>
-<listitem><para>fixed #2003, lemmatizer_all handling of short and exact words</para></listitem>
-<listitem><para>fixed #1912, reduce indextool memory usage during a check of a huge index</para></listitem>
-<listitem><para>fixed off by one errors in filtering of BIGINT attributes</para></listitem>
-<listitem><para>fixed seamless rotation in prefork mode</para></listitem>
-<listitem><para>fixed snippets crash with blendchars at the beginning of a string</para></listitem>
+<listitem><para>fixed #2115, <filename>indexer</filename> crash on wordforms with multiple destination keywords</para></listitem>
+<listitem><para>fixed #2050, multi result set doesn't work without <filename>libmysqlclient</filename></para></listitem>
+<listitem><para>fixed #2003, <link linkend="conf-morphology">lemmatize_XX_all</link> handling of short and exact words</para></listitem>
+<listitem><para>fixed #1912, reduce <filename>indextool</filename> memory usage during a check of a huge index</para></listitem>
+<listitem><para>fixed off by one errors in filtering of <code>BIGINT</code> attributes</para></listitem>
+<listitem><para>fixed seamless rotation in <link linkend="conf-workers">prefork</link> mode</para></listitem>
+<listitem><para>fixed snippets crash with <link linkend="conf-blend-chars">blend chars</link> at the beginning of a string</para></listitem>
 </itemizedlist>
 </sect1>
 

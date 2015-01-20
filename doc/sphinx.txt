@@ -4,9 +4,9 @@ Sphinx 2.2.8-dev reference manual
 Free open-source SQL full-text search engine
 ============================================
 
-Copyright (c) 2001-2014 Andrew Aksyonoff
+Copyright (c) 2001-2015 Andrew Aksyonoff
 
-Copyright (c) 2008-2014 Sphinx Technologies Inc, http://sphinxsearch.com
+Copyright (c) 2008-2015 Sphinx Technologies Inc, http://sphinxsearch.com
 
 ----------------------------------------------------------------------------
 

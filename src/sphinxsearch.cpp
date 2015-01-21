@@ -5663,8 +5663,8 @@ const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 				for ( int iDoc=0; iDoc<=iSpan; iDoc++ )
 					SafeDelete ( dZone[iDoc].m_pHits );
 
-				int iLen = dZone.GetLength() - iSpan;
-				memmove ( dZone.Begin(), dZone.Begin()+iSpan, sizeof(dZone[0]) * iLen );
+				int iLen = dZone.GetLength() - iSpan - 1;
+				memmove ( dZone.Begin(), dZone.Begin()+iSpan+1, sizeof(dZone[0]) * iLen );
 				dZone.Resize ( iLen );
 				m_dZoneMin[i] = dZone.Begin()->m_uDocid;
 		}

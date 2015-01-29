@@ -92,6 +92,21 @@ index expand
 	dict = keywords
 	min_prefix_len = 1
 }
+
+source src_attrs
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = select id, text, mode from test_table where mode=1;
+	sql_attr_uint = mode
+}
+
+index i_attrs
+{
+	source = src_attrs
+	path = <data_path/>/attrs
+}
 </config>
 
 <db_drop>drop table if exists test_table</db_drop>
@@ -172,6 +187,14 @@ $results[] = $query ( $client, 'first' );
 $results[] = $query ( $client, 'one' );
 $results[] = $mquery ( $client );
 $results[] = $q1 ( $client, 'a*', 'expand' );
+
+// regression keep-attrs vs rotate
+$results[] = $client->UpdateAttributes ( 'i_attrs', array('mode'), array(1=>array(10),3=>array(11)) );
+$results[] = $q1 ( $client, '', 'i_attrs' );
+$results[] = 'updated flush tag - ' . $client->FlushAttributes();
+RunIndexer ( $errors, 'i_attrs --rotate --keep-attrs' );
+sleep(2);
+$results[] = $q1 ( $client, '', 'i_attrs' );
 
 ]]></custom_test>
 

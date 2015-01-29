@@ -1575,7 +1575,7 @@ public:
 
 	bool						EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const;
 
-	virtual void				SetKeepAttrs ( bool bKeepAttrs ) { m_bKeepAttrs = bKeepAttrs; }
+	virtual void				SetKeepAttrs ( const CSphString & sKeepAttrs ) { m_sKeepAttrs = sKeepAttrs; }
 
 	virtual SphDocID_t *		GetKillList () const;
 	virtual int					GetKillListSize () const { return m_uKillListSize; }
@@ -1634,7 +1634,7 @@ private:
 
 	CWordlist					m_tWordlist;			///< my wordlist
 
-	bool						m_bKeepAttrs;			///< retain attributes on reindexing
+	CSphString					m_sKeepAttrs;			///< retain attributes of that index reindexing
 
 	CSphSharedBuffer<SphDocID_t>	m_pKillList;		///< killlist
 	DWORD						m_uKillListSize;		///< killlist size (in elements)
@@ -9730,7 +9730,6 @@ CSphIndex_VLN::CSphIndex_VLN ( const char* sIndexName, const char * sFilename )
 	, m_iTotalDups ( 0 )
 	, m_dMinRow ( 0 )
 	, m_dFieldLens ( SPH_MAX_FIELDS )
-	, m_bKeepAttrs ( false )
 {
 	m_sFilename = sFilename;
 
@@ -12625,13 +12624,21 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	int nFieldMVAs = 0;
 
 	CSphScopedPtr<CSphIndex_VLN> pPrevIndex(NULL);
-	if ( m_bKeepAttrs )
+	if ( !m_sKeepAttrs.IsEmpty() )
 	{
 		CSphString sWarning;
-		pPrevIndex = (CSphIndex_VLN *)sphCreateIndexPhrase ( NULL, m_sFilename.cstr() );
+		pPrevIndex = (CSphIndex_VLN *)sphCreateIndexPhrase ( "keep-attrs", m_sKeepAttrs.cstr() );
 		if ( !pPrevIndex->Prealloc ( false, false, sWarning ) || !pPrevIndex->Preread() )
+		{
+			CSphString sError;
+			if ( !sWarning.IsEmpty() )
+				sError.SetSprintf ( "warning: '%s',", sWarning.cstr() );
+			if ( !pPrevIndex->GetLastError().IsEmpty() )
+				sError.SetSprintf ( "%serror: '%s'", sError.scstr(), pPrevIndex->GetLastError().cstr() );
+			sphWarn ( "unable to load 'keep-attrs' index (%s); ignoring --keep-attrs", sError.cstr() );
+
 			pPrevIndex.Reset();
-		else
+		} else
 		{
 			// check schemas
 			CSphString sError;

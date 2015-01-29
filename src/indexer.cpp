@@ -1254,7 +1254,8 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 		pIndex->SetFieldFilter ( pFieldFilter );
 		pIndex->SetTokenizer ( pTokenizer );
 		pIndex->SetDictionary ( pDict );
-		pIndex->SetKeepAttrs ( g_bKeepAttrs );
+		if ( g_bKeepAttrs )
+			pIndex->SetKeepAttrs ( hIndex["path"].strval() );
 		pIndex->Setup ( tSettings );
 
 		bOK = pIndex->Build ( dSources, g_iMemLimit, g_iWriteBuffer )!=0;

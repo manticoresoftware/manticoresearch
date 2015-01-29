@@ -11296,6 +11296,7 @@ enum SqlStmt_e
 	STMT_FACET,
 	STMT_ALTER_RECONFIGURE,
 	STMT_SHOW_INDEX_SETTINGS,
+	STMT_FLUSH_INDEX,
 
 	STMT_TOTAL
 };
@@ -11311,7 +11312,7 @@ static const char * g_dSqlStmts[] =
 	"show_collation", "show_character_set", "optimize_index", "show_agent_status",
 	"show_index_status", "show_profile", "alter_add", "alter_drop", "show_plan",
 	"select_dual", "show_databases", "create_plugin", "drop_plugin", "show_plugins", "show_threads",
-	"facet", "alter_reconfigure", "show_index_settings"
+	"facet", "alter_reconfigure", "show_index_settings", "flush_attributes"
 };
 
 STATIC_ASSERT ( sizeof(g_dSqlStmts)/sizeof(g_dSqlStmts[0])==STMT_TOTAL, STMT_DESC_SHOULD_BE_SAME_AS_STMT_TOTAL );
@@ -14203,16 +14204,11 @@ void HandleCommandStatus ( int iSock, int iVer, InputBuffer_c & tReq )
 // FLUSH HANDLER
 //////////////////////////////////////////////////////////////////////////
 
-void HandleCommandFlush ( int iSock, int iVer, InputBuffer_c & tReq )
+static int CommandFlush ( CSphString & sError )
 {
-	if ( !CheckCommandVersion ( iVer, VER_COMMAND_FLUSHATTRS, tReq ) )
-		return;
-
 	if ( g_eWorkers==MPM_NONE )
 	{
-		// --console mode, no async thread/process to handle the check
-		sphLogDebug ( "attrflush: --console mode, command ignored" );
-
+		sError = ( "console mode, command ignored" );
 	} else
 	{
 		// force a check in head process, and wait it until completes
@@ -14228,15 +14224,29 @@ void HandleCommandFlush ( int iSock, int iVer, InputBuffer_c & tReq )
 		sphLogDebug ( "attrflush: check finished, tag=%d", g_pFlush->m_iFlushTag );
 	}
 
+	return g_pFlush->m_iFlushTag;
+}
+
+void HandleCommandFlush ( int iSock, int iVer, InputBuffer_c & tReq )
+{
+	if ( !CheckCommandVersion ( iVer, VER_COMMAND_FLUSHATTRS, tReq ) )
+		return;
+
+	CSphString sError;
+	int iTag = CommandFlush ( sError );
+	if ( !sError.IsEmpty() )
+		sphLogDebug ( "attrflush: %s", sError.cstr() );
+
 	// return last flush tag, just for the fun of it
 	NetOutputBuffer_c tOut ( iSock );
 	tOut.SendWord ( SEARCHD_OK );
 	tOut.SendWord ( VER_COMMAND_FLUSHATTRS );
 	tOut.SendInt ( 4 ); // resplen, 1 dword
-	tOut.SendInt ( g_pFlush->m_iFlushTag );
+	tOut.SendInt ( iTag );
 	tOut.Flush ();
 	assert ( tOut.GetError()==true || tOut.GetSentCount()==12 ); // 8+resplen
 }
+
 
 /////////////////////////////////////////////////////////////////////////////
 // GENERAL HANDLER
@@ -17265,6 +17275,29 @@ void HandleMysqlFlushRamchunk ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 }
 
 
+void HandleMysqlFlush ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+{
+	CSphString sError;
+	int iTag = CommandFlush ( sError );
+	if ( !sError.IsEmpty() )
+	{
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+	} else
+	{
+		tOut.HeadBegin(1);
+		tOut.HeadColumn ( "tag", MYSQL_COL_LONG );
+		tOut.HeadEnd();
+
+		// data packet, var value
+		tOut.PutNumeric ( "%d", iTag );
+		tOut.Commit();
+
+		// done
+		tOut.Eof();
+	}
+}
+
+
 void HandleMysqlTruncate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 {
 	// get an exclusive lock
@@ -18323,6 +18356,10 @@ public:
 
 		case STMT_ALTER_RECONFIGURE:
 			HandleMysqlReconfigure ( tOut, *pStmt );
+			return true;
+
+		case STMT_FLUSH_INDEX:
+			HandleMysqlFlush ( tOut, *pStmt );
 			return true;
 
 		default:

@@ -29,6 +29,7 @@
 %token	TOK_AS
 %token	TOK_ASC
 %token	TOK_ATTACH
+%token	TOK_ATTRIBUTES
 %token	TOK_AVG
 %token	TOK_BEGIN
 %token	TOK_BETWEEN
@@ -195,6 +196,7 @@ statement:
 	| attach_index
 	| flush_rtindex
 	| flush_ramchunk
+	| flush_index
 	| set_transaction
 	| select_sysvar
 	| select_dual
@@ -214,7 +216,7 @@ statement:
 
 ident_set:
 	TOK_IDENT
-	| TOK_AGENT | TOK_ATTACH | TOK_AVG | TOK_BEGIN | TOK_BOOL
+	| TOK_AGENT | TOK_ATTACH | TOK_ATTRIBUTES | TOK_AVG | TOK_BEGIN | TOK_BOOL
 	| TOK_COLLATION | TOK_COUNT | TOK_FLUSH | TOK_FUNCTION
 	| TOK_GLOBAL | TOK_GROUP | TOK_GROUPBY | TOK_GROUP_CONCAT | TOK_ISOLATION
 	| TOK_LEVEL | TOK_LIKE | TOK_MATCH | TOK_MAX | TOK_META
@@ -1397,6 +1399,14 @@ flush_ramchunk:
 		}
 	;
 
+flush_index:
+	TOK_FLUSH TOK_ATTRIBUTES
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_FLUSH_INDEX;
+		}
+	;
+	
 //////////////////////////////////////////////////////////////////////////
 
 select_sysvar:

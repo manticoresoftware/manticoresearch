@@ -29,6 +29,8 @@ int g_iThreadStackSize = 1024*1024;
 
 //////////////////////////////////////////////////////////////////////////
 
+char CSphString::EMPTY[] = "";
+
 #if USE_WINDOWS
 #ifndef NDEBUG
 

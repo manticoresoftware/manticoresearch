@@ -1625,6 +1625,8 @@ struct CSphString
 {
 protected:
 	char *				m_sValue;
+	// Empty ("") string optimization.
+	static char EMPTY[];
 
 private:
 	/// safety gap after the string end; for instance, UTF-8 Russian stemmer
@@ -1653,7 +1655,8 @@ public:
 
 	~CSphString ()
 	{
-		SafeDeleteArray ( m_sValue );
+		if ( m_sValue!=EMPTY )
+			SafeDeleteArray ( m_sValue );
 	}
 
 	const char * cstr () const
@@ -1663,7 +1666,7 @@ public:
 
 	const char * scstr() const
 	{
-		return m_sValue ? m_sValue : "";
+		return m_sValue ? m_sValue : EMPTY;
 	}
 
 	inline bool operator == ( const char * t ) const
@@ -1692,11 +1695,17 @@ public:
 	{
 		if ( sString )
 		{
-			int iLen = 1+strlen(sString);
-			m_sValue = new char [ iLen+SAFETY_GAP ];
+			if ( sString[0]=='\0' )
+			{
+				m_sValue = EMPTY;
+			} else
+			{
+				int iLen = 1+strlen(sString);
+				m_sValue = new char [ iLen+SAFETY_GAP ];
 
-			strcpy ( m_sValue, sString ); // NOLINT
-			memset ( m_sValue+iLen, 0, SAFETY_GAP );
+				strcpy ( m_sValue, sString ); // NOLINT
+				memset ( m_sValue+iLen, 0, SAFETY_GAP );
+			}
 		} else
 		{
 			m_sValue = NULL;
@@ -1713,14 +1722,21 @@ public:
 	{
 		if ( m_sValue==rhs.m_sValue )
 			return *this;
-		SafeDeleteArray ( m_sValue );
+		if ( m_sValue!=EMPTY )
+			SafeDeleteArray ( m_sValue );
 		if ( rhs.m_sValue )
 		{
-			int iLen = 1+strlen(rhs.m_sValue);
-			m_sValue = new char [ iLen+SAFETY_GAP ];
+			if ( rhs.m_sValue[0]=='\0' )
+			{
+				m_sValue = EMPTY;
+			} else
+			{
+				int iLen = 1+strlen(rhs.m_sValue);
+				m_sValue = new char [ iLen+SAFETY_GAP ];
 
-			strcpy ( m_sValue, rhs.m_sValue ); // NOLINT
-			memset ( m_sValue+iLen, 0, SAFETY_GAP );
+				strcpy ( m_sValue, rhs.m_sValue ); // NOLINT
+				memset ( m_sValue+iLen, 0, SAFETY_GAP );
+			}
 		}
 		return *this;
 	}
@@ -1743,18 +1759,26 @@ public:
 
 	void SetBinary ( const char * sValue, int iLen )
 	{
-		SafeDeleteArray ( m_sValue );
+		if ( m_sValue!=EMPTY )
+			SafeDeleteArray ( m_sValue );
 		if ( sValue )
 		{
-			m_sValue = new char [ 1+SAFETY_GAP+iLen ];
-			memcpy ( m_sValue, sValue, iLen );
-			memset ( m_sValue+iLen, 0, 1+SAFETY_GAP );
+			if ( sValue[0]=='\0' )
+			{
+				m_sValue = EMPTY;
+			} else
+			{
+				m_sValue = new char [ 1+SAFETY_GAP+iLen ];
+				memcpy ( m_sValue, sValue, iLen );
+				memset ( m_sValue+iLen, 0, 1+SAFETY_GAP );
+			}
 		}
 	}
 
 	void Reserve ( int iLen )
 	{
-		SafeDeleteArray ( m_sValue );
+		if ( m_sValue!=EMPTY )
+			SafeDeleteArray ( m_sValue );
 		m_sValue = new char [ 1+SAFETY_GAP+iLen ];
 		memset ( m_sValue, 0, 1+SAFETY_GAP+iLen );
 	}
@@ -1848,6 +1872,13 @@ public:
 
 	char * Leak ()
 	{
+		if ( m_sValue==EMPTY )
+		{
+			m_sValue = NULL;
+			char * pBuf = new char[1];
+			pBuf[0] = '\0';
+			return pBuf;
+		}
 		char * pBuf = m_sValue;
 		m_sValue = NULL;
 		return pBuf;
@@ -1856,7 +1887,8 @@ public:
 	// opposite to Leak()
 	void Adopt ( char ** sValue )
 	{
-		SafeDeleteArray ( m_sValue );
+		if ( m_sValue!=EMPTY )
+			SafeDeleteArray ( m_sValue );
 		m_sValue = *sValue;
 		*sValue = NULL;
 	}

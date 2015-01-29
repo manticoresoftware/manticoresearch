@@ -1437,7 +1437,6 @@ public:
 
 protected:
 	CSphVector<BYTE *>			m_dFields;
-	CSphVector<CSphWordHit>		m_dHits;
 };
 
 

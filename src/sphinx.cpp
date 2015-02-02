@@ -25594,7 +25594,8 @@ const CSphSourceStats & CSphSource::GetStats ()
 bool CSphSource::SetStripHTML ( const char * sExtractAttrs, const char * sRemoveElements,
 	bool bDetectParagraphs, const char * sZones, CSphString & sError )
 {
-	m_pStripper = new CSphHTMLStripper ( true );
+	if ( !m_pStripper )
+		m_pStripper = new CSphHTMLStripper ( true );
 
 	if ( !m_pStripper->SetIndexedAttrs ( sExtractAttrs, sError ) )
 		return false;

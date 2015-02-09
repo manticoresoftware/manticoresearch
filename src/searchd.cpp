@@ -20279,9 +20279,6 @@ void PreCreateTemplateIndex ( ServedDesc_t & tServed, const CSphConfigSection & 
 	tServed.m_pIndex->m_bExpandKeywords = tServed.m_bExpand;
 	tServed.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 	tServed.m_bEnabled = false;
-
-	CSphString sError;
-	sphFixupIndexSettings ( tServed.m_pIndex, hIndex, sError, true );
 }
 
 void PreCreatePlainIndex ( ServedDesc_t & tServed, const char * sName )
@@ -20507,6 +20504,22 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		// try to create index
 		PreCreateTemplateIndex ( tIdx, hIndex );
 		tIdx.m_bEnabled = true;
+
+		CSphIndexSettings s;
+		CSphString sError;
+		if ( !sphConfIndex ( hIndex, s, sError ) )
+		{
+			sphWarning ( "failed to configure index %s: %s", szIndexName, sError.cstr() );
+			return ADD_ERROR;
+		}
+		tIdx.m_pIndex->Setup(s);
+
+		if ( !sphFixupIndexSettings ( tIdx.m_pIndex, hIndex, sError ) )
+		{
+			sphWarning ( "index '%s': %s - NOT SERVING", szIndexName, sError.cstr() );
+			return ADD_ERROR;
+		}
+
 		CSphIndexStatus tStatus;
 		tIdx.m_pIndex->GetStatus ( &tStatus );
 		tIdx.m_iMass = CalculateMass ( tStatus );

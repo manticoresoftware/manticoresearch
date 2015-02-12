@@ -2635,8 +2635,7 @@ public:
 
 	int				m_iOffset;		///< offset into result set (as X in MySQL LIMIT X,Y clause)
 	int				m_iLimit;		///< limit into result set (as Y in MySQL LIMIT X,Y clause)
-	DWORD *			m_pWeights;		///< user-supplied per-field weights. may be NULL. default is NULL. NOT OWNED, WILL NOT BE FREED in dtor.
-	int				m_iWeights;		///< number of user-supplied weights. missing fields will be assigned weight 1. default is 0
+	CSphVector<DWORD>	m_dWeights;		///< user-supplied per-field weights. may be NULL. default is NULL
 	ESphMatchMode	m_eMode;		///< match mode. default is "match all"
 	ESphRankMode	m_eRanker;		///< ranking mode, default is proximity+BM25
 	CSphString		m_sRankerExpr;	///< ranking expression for SPH_RANK_EXPR

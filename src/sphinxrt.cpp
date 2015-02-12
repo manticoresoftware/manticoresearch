@@ -377,7 +377,7 @@ struct KlistRefcounted_t
 		, m_tRefCount ( 1 )
 	{}
 	CSphFixedVector<SphDocID_t>		m_dKilled;
-	CSphAtomic<long>				m_tRefCount;
+	CSphAtomic						m_tRefCount;
 };
 
 
@@ -407,7 +407,7 @@ public:
 	CSphTightVector<BYTE>		m_dStrings;		///< strings storage
 	CSphTightVector<DWORD>		m_dMvas;		///< MVAs storage
 	CSphVector<BYTE>			m_dKeywordCheckpoints;
-	mutable CSphAtomic<long>	m_tRefCount;
+	mutable CSphAtomic			m_tRefCount;
 
 	RtSegment_t ()
 	{
@@ -849,10 +849,9 @@ struct JSONAttr_t
 };
 
 /// indexing accumulator
-class RtAccum_t
+class RtAccum_t : public ISphRtAccum
 {
 public:
-	RtIndex_t *					m_pIndex;		///< my current owner in this thread
 	int							m_iAccumDocs;
 	CSphTightVector<CSphWordHit>	m_dAccum;
 	CSphTightVector<CSphRowitem>	m_dAccumRows;
@@ -866,7 +865,6 @@ public:
 
 private:
 	CSphDict *					m_pRefDict;
-	RtIndex_t *					m_pRefIndex;
 	CSphDict *					m_pDictCloned;
 	ISphRtDictWraper *			m_pDictRt;
 
@@ -874,7 +872,7 @@ public:
 					explicit RtAccum_t ( bool bKeywordDict );
 					~RtAccum_t();
 
-	void			SetupDict ( RtIndex_t * pIndex, CSphDict * pDict, bool bKeywordDict );
+	void			SetupDict ( const RtIndex_t * pIndex, CSphDict * pDict, bool bKeywordDict );
 	void			ResetDict ();
 	void			Sort ();
 
@@ -882,6 +880,7 @@ public:
 	RtSegment_t *	CreateSegment ( int iRowSize, int iWordsCheckpoint );
 	void			CleanupDuplicates ( int iRowSize );
 	void			GrabLastWarning ( CSphString & sWarning );
+	void			SetIndex ( ISphRtIndex * pIndex ) { m_pIndex = pIndex; }
 };
 
 /// TLS indexing accumulator (we disallow two uncommitted adds within one thread; and so need at most one)
@@ -1129,12 +1128,12 @@ public:
 	explicit					RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict );
 	virtual						~RtIndex_t ();
 
-	virtual bool				AddDocument ( int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning );
-	virtual bool				AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning );
-	virtual bool				DeleteDocument ( const SphDocID_t * pDocs, int iDocs, CSphString & sError );
-	virtual void				Commit ( int * pDeleted=NULL );
-	virtual void				RollBack ();
-	void						CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t> & dAccKlist, int * pTotalKilled=NULL ); // FIXME? protect?
+	virtual bool				AddDocument ( int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt );
+	virtual bool				AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt );
+	virtual bool				DeleteDocument ( const SphDocID_t * pDocs, int iDocs, CSphString & sError, ISphRtAccum * pAccExt );
+	virtual void				Commit ( int * pDeleted, ISphRtAccum * pAccExt );
+	virtual void				RollBack ( ISphRtAccum * pAccExt );
+	void						CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t> & dAccKlist, int * pTotalKilled ); // FIXME? protect?
 	virtual void				CheckRamFlush ();
 	virtual void				ForceRamFlush ( bool bPeriodic=false );
 	virtual void				ForceDiskChunk ();
@@ -1146,7 +1145,8 @@ public:
 private:
 	/// acquire thread-local indexing accumulator
 	/// returns NULL if another index already uses it in an open txn
-	RtAccum_t *					AcquireAccum ( CSphString * sError=NULL );
+	RtAccum_t *					AcquireAccum ( CSphString * sError, ISphRtAccum * pAccExt, bool bSetTLS );
+	virtual ISphRtAccum *		CreateAccum ( CSphString & sError );
 
 	RtSegment_t *				MergeSegments ( const RtSegment_t * pSeg1, const RtSegment_t * pSeg2, const CSphVector<SphDocID_t> * pAccKlist, bool bHasMorphology );
 	const RtWord_t *			CopyWord ( RtSegment_t * pDst, RtWordWriter_t & tOutWord, const RtSegment_t * pSrc, const RtWord_t * pWord, RtWordReader_t & tInWord, const CSphVector<SphDocID_t> * pAccKlist );
@@ -1471,7 +1471,7 @@ void CSphSource_StringVector::Disconnect ()
 bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMatch & tDoc,
 	bool bReplace, const CSphString & sTokenFilterOptions,
 	const char ** ppStr, const CSphVector<DWORD> & dMvas,
-	CSphString & sError, CSphString & sWarning )
+	CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt )
 {
 	assert ( g_bRTChangesAllowed );
 
@@ -1493,7 +1493,7 @@ bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMat
 		}
 	}
 
-	RtAccum_t * pAcc = AcquireAccum ( &sError );
+	RtAccum_t * pAcc = AcquireAccum ( &sError, pAccExt, true );
 	if ( !pAcc )
 		return false;
 
@@ -1547,7 +1547,7 @@ bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMat
 	ISphHits * pHits = tSrc.IterateHits ( sError );
 	pAcc->GrabLastWarning ( sWarning );
 
-	if ( !AddDocument ( pHits, tDoc, ppStr, dMvas, sError, sWarning ) )
+	if ( !AddDocument ( pHits, tDoc, ppStr, dMvas, sError, sWarning, pAcc ) )
 		return false;
 
 	m_tStats.m_iTotalBytes += tSrc.GetStats().m_iTotalBytes;
@@ -1563,38 +1563,52 @@ void AccumCleanup ( void * pArg )
 }
 
 
-RtAccum_t * RtIndex_t::AcquireAccum ( CSphString * sError )
+RtAccum_t * RtIndex_t::AcquireAccum ( CSphString * sError, ISphRtAccum * pAccExt, bool bSetTLS )
 {
 	RtAccum_t * pAcc = NULL;
+	//assert ( pAccExt && !bSetTLS );
 
 	// check that no other index is holding the acc
-	pAcc = (RtAccum_t*) sphThreadGet ( g_tTlsAccumKey );
-	if ( pAcc && pAcc->m_pIndex!=NULL && pAcc->m_pIndex!=this )
+	if ( !pAccExt )
+		pAcc = (RtAccum_t*) sphThreadGet ( g_tTlsAccumKey );
+	else
+		pAcc = (RtAccum_t *)pAccExt;
+
+	if ( pAcc && pAcc->GetIndex()!=NULL && pAcc->GetIndex()!=this )
 	{
 		if ( sError )
-			sError->SetSprintf ( "current txn is working with another index ('%s')", pAcc->m_pIndex->m_tSchema.m_sName.cstr() );
+			sError->SetSprintf ( "current txn is working with another index ('%s')", pAcc->GetIndex()->GetName() );
 		return NULL;
 	}
 
 	if ( !pAcc )
 	{
 		pAcc = new RtAccum_t ( m_bKeywordDict );
-		sphThreadSet ( g_tTlsAccumKey, pAcc );
-		sphThreadOnExit ( AccumCleanup, pAcc );
+		if ( bSetTLS )
+		{
+			sphThreadSet ( g_tTlsAccumKey, pAcc );
+			sphThreadOnExit ( AccumCleanup, pAcc );
+		}
 	}
 
-	assert ( pAcc->m_pIndex==NULL || pAcc->m_pIndex==this );
-	pAcc->m_pIndex = this;
+	assert ( pAcc->GetIndex()==NULL || pAcc->GetIndex()==this );
+	pAcc->SetIndex ( this );
 	pAcc->SetupDict ( this, m_pDict, m_bKeywordDict );
 	return pAcc;
 }
 
+ISphRtAccum * RtIndex_t::CreateAccum ( CSphString & sError )
+{
+	return AcquireAccum ( &sError, NULL, false );
+}
+
+
 bool RtIndex_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, const char ** ppStr, const CSphVector<DWORD> & dMvas,
-	CSphString & sError, CSphString & sWarning )
+	CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt )
 {
 	assert ( g_bRTChangesAllowed );
 
-	RtAccum_t * pAcc = AcquireAccum ( &sError );
+	RtAccum_t * pAcc = (RtAccum_t *)pAccExt;
 
 	if ( pAcc )
 	{
@@ -1655,15 +1669,14 @@ bool RtIndex_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, const ch
 
 
 RtAccum_t::RtAccum_t ( bool bKeywordDict )
-	: m_pIndex ( NULL )
-	, m_iAccumDocs ( 0 )
+	: m_iAccumDocs ( 0 )
 	, m_bKeywordDict ( bKeywordDict )
 	, m_pDict ( NULL )
 	, m_pRefDict ( NULL )
-	, m_pRefIndex ( NULL )
 	, m_pDictCloned ( NULL )
 	, m_pDictRt ( NULL )
 {
+	m_pIndex = NULL;
 	m_dStrings.Add ( 0 );
 	m_dMvas.Add ( 0 );
 }
@@ -1674,14 +1687,13 @@ RtAccum_t::~RtAccum_t()
 	SafeDelete ( m_pDictRt );
 }
 
-void RtAccum_t::SetupDict ( RtIndex_t * pIndex, CSphDict * pDict, bool bKeywordDict )
+void RtAccum_t::SetupDict ( const RtIndex_t * pIndex, CSphDict * pDict, bool bKeywordDict )
 {
-	if ( pIndex!=m_pRefIndex || pDict!=m_pRefDict || bKeywordDict!=m_bKeywordDict )
+	if ( pIndex!=m_pIndex || pDict!=m_pRefDict || bKeywordDict!=m_bKeywordDict )
 	{
 		SafeDelete ( m_pDictCloned );
 		SafeDelete ( m_pDictRt );
 		m_pDict = NULL;
-		m_pRefIndex = pIndex;
 		m_pRefDict = pDict;
 		m_bKeywordDict = bKeywordDict;
 	}
@@ -2789,19 +2801,19 @@ struct CmpSegments_fn
 };
 
 
-void RtIndex_t::Commit ( int * pDeleted )
+void RtIndex_t::Commit ( int * pDeleted, ISphRtAccum * pAccExt )
 {
 	assert ( g_bRTChangesAllowed );
 	MEMORY ( MEM_INDEX_RT );
 
-	RtAccum_t * pAcc = AcquireAccum();
+	RtAccum_t * pAcc = AcquireAccum ( NULL, pAccExt, true );
 	if ( !pAcc )
 		return;
 
 	// empty txn, just ignore
 	if ( !pAcc->m_iAccumDocs && !pAcc->m_dAccumKlist.GetLength() )
 	{
-		pAcc->m_pIndex = NULL;
+		pAcc->SetIndex ( NULL );
 		pAcc->m_dAccumRows.Resize ( 0 );
 		pAcc->m_dStrings.Resize ( 1 );
 		pAcc->m_dMvas.Resize ( 1 );
@@ -2843,7 +2855,7 @@ void RtIndex_t::Commit ( int * pDeleted )
 	CommitReplayable ( pNewSeg, pAcc->m_dAccumKlist, pDeleted );
 
 	// done; cleanup accum
-	pAcc->m_pIndex = NULL;
+	pAcc->SetIndex ( NULL );
 	pAcc->m_iAccumDocs = 0;
 	pAcc->m_dAccumKlist.Reset();
 	// reset accumulated warnings
@@ -3181,7 +3193,7 @@ void RtIndex_t::FreeRetired()
 	m_dRetired.Uniq();
 	ARRAY_FOREACH ( i, m_dRetired )
 	{
-		if ( m_dRetired[i]->m_tRefCount==0 )
+		if ( m_dRetired[i]->m_tRefCount.GetValue()==0 )
 		{
 			SafeDelete ( m_dRetired[i] );
 			m_dRetired.RemoveFast ( i );
@@ -3191,11 +3203,11 @@ void RtIndex_t::FreeRetired()
 }
 
 
-void RtIndex_t::RollBack ()
+void RtIndex_t::RollBack ( ISphRtAccum * pAccExt )
 {
 	assert ( g_bRTChangesAllowed );
 
-	RtAccum_t * pAcc = AcquireAccum();
+	RtAccum_t * pAcc = AcquireAccum ( NULL, pAccExt, true );
 	if ( !pAcc )
 		return;
 
@@ -3208,17 +3220,17 @@ void RtIndex_t::RollBack ()
 	pAcc->ResetDict();
 
 	// finish cleaning up and release accumulator
-	pAcc->m_pIndex = NULL;
+	pAcc->SetIndex ( NULL );
 	pAcc->m_iAccumDocs = 0;
 	pAcc->m_dAccumKlist.Reset();
 }
 
-bool RtIndex_t::DeleteDocument ( const SphDocID_t * pDocs, int iDocs, CSphString & sError )
+bool RtIndex_t::DeleteDocument ( const SphDocID_t * pDocs, int iDocs, CSphString & sError, ISphRtAccum * pAccExt )
 {
 	assert ( g_bRTChangesAllowed );
 	MEMORY ( MEM_RT_ACCUM );
 
-	RtAccum_t * pAcc = AcquireAccum ( &sError );
+	RtAccum_t * pAcc = AcquireAccum ( &sError, pAccExt, true );
 	if ( !pAcc )
 		return false;
 
@@ -6542,7 +6554,7 @@ void RtIndex_t::GetReaderChunks ( SphChunkGuard_t & tGuard ) const
 		pKlist->m_tRefCount.Inc();
 		tGuard.m_dKill[i] = pKlist;
 
-		assert ( tGuard.m_dRamChunks[i]->m_tRefCount>=0 );
+		assert ( tGuard.m_dRamChunks[i]->m_tRefCount.GetValue()>=0 );
 		tGuard.m_dRamChunks[i]->m_tRefCount.Inc();
 	}
 
@@ -6560,7 +6572,7 @@ SphChunkGuard_t::~SphChunkGuard_t()
 
 	ARRAY_FOREACH ( i, m_dRamChunks )
 	{
-		assert ( m_dRamChunks[i]->m_tRefCount>=1 );
+		assert ( m_dRamChunks[i]->m_tRefCount.GetValue()>=1 );
 
 		KlistRefcounted_t * pKlist = const_cast<KlistRefcounted_t *> ( m_dKill[i] );
 		uint64_t uRefs = pKlist->m_tRefCount.Dec();
@@ -9621,7 +9633,7 @@ bool RtBinlog_c::ReplayCommit ( int iBinlog, DWORD uReplayFlags, BinlogReader_c 
 		}
 
 		// actually replay
-		tIndex.m_pRT->CommitReplayable ( pSeg.LeakPtr(), dKlist );
+		tIndex.m_pRT->CommitReplayable ( pSeg.LeakPtr(), dKlist, NULL );
 
 		// update committed tid on replay in case of unexpected / mismatched tid
 		tIndex.m_pRT->m_iTID = iTID;
@@ -9901,9 +9913,9 @@ void RtBinlog_c::CheckPath ( const CSphConfigSection & hSearchd, bool bTestMode 
 
 ISphRtIndex * sphGetCurrentIndexRT()
 {
-	RtAccum_t * pAcc = (RtAccum_t*) sphThreadGet ( g_tTlsAccumKey );
+	ISphRtAccum * pAcc = (ISphRtAccum*) sphThreadGet ( g_tTlsAccumKey );
 	if ( pAcc )
-		return pAcc->m_pIndex;
+		return pAcc->GetIndex();
 	return NULL;
 }
 

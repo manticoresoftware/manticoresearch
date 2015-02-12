@@ -70,9 +70,7 @@ typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag
 #include <sys/mman.h>
 #include <errno.h>
 #include <pthread.h>
-#ifdef __FreeBSD__
 #include <semaphore.h>
-#endif
 #endif
 
 /////////////////////////////////////////////////////////////////////////////
@@ -2707,6 +2705,27 @@ protected:
 #endif
 };
 
+// semaphore implementation
+class CSphSemaphore
+{
+public:
+	CSphSemaphore ();
+	~CSphSemaphore();
+
+	bool Init ();
+	bool Done();
+	void Post();
+	bool Wait();
+
+protected:
+	bool m_bInitialized;
+#if USE_WINDOWS
+	HANDLE	m_hSem;
+#else
+	sem_t *	m_pSem;
+#endif
+};
+
 
 /// static mutex (for globals)
 class CSphStaticMutex : private CSphMutex
@@ -2767,8 +2786,8 @@ public:
 		: CSphScopedLock<LOCK> ( tMutex )
 	{}
 
-	template <typename T>
-	inline T& SharedValue()
+	template < typename T >
+	inline T & SharedValue()
 	{
 		return *(T*)( this->m_tMutexRef.GetSharedData() );
 	}
@@ -3034,63 +3053,50 @@ public:
 #define NO_ATOMIC 1
 #endif
 
-template < typename INT >
 class CSphAtomic : public ISphNoncopyable
 {
-	volatile INT	m_iValue;
+	volatile mutable long	m_iValue;
 #if NO_ATOMIC
-	CSphMutex		m_tLock;
+	mutable CSphMutex		m_tLock;
 #endif
 
 public:
-	CSphAtomic ( INT iValue=0 )
-		: m_iValue ( iValue )
-	{
-#if NO_ATOMIC
-		m_tLock.Init();
-#endif
-	}
-
-	~CSphAtomic ()
-	{
-#if NO_ATOMIC
-		m_tLock.Done();
-#endif
-	}
+	explicit CSphAtomic ( long iValue=0 );
+	~CSphAtomic ();
 
 #ifdef HAVE_SYNC_FETCH
-	operator INT()
+	long GetValue() const
 	{
 		return __sync_fetch_and_add ( &m_iValue, 0 );
 	}
 
 	// return value here is original value, prior to operation took place
-	inline INT Inc()
+	inline long Inc()
 	{
 		return __sync_fetch_and_add ( &m_iValue, 1 );
 	}
-	inline INT Dec()
+	inline long Dec()
 	{
 		return __sync_fetch_and_sub ( &m_iValue, 1 );
 	}
 #elif USE_WINDOWS
-	operator INT();
-	INT Inc();
-	INT Dec();
+	long GetValue() const;
+	long Inc();
+	long Dec();
 #endif
 
 #if NO_ATOMIC
-	operator INT()
+	long GetValue() const
 	{
 		CSphScopedLock<CSphMutex> tLock ( m_tLock );
 		return m_iValue;
 	}
-	inline INT Inc()
+	inline long Inc()
 	{
 		CSphScopedLock<CSphMutex> tLock ( m_tLock );
 		return m_iValue++;
 	}
-	inline INT Dec()
+	inline long Dec()
 	{
 		CSphScopedLock<CSphMutex> tLock ( m_tLock );
 		return m_iValue--;
@@ -3126,9 +3132,33 @@ public:
 	}
 
 protected:
-	mutable CSphAtomic<long>	m_iRefCount;
+	mutable CSphAtomic	m_iRefCount;
 };
 
+
+struct ISphJob
+{
+	ISphJob () {}
+	virtual ~ISphJob () {}
+	virtual void Call () = 0;
+};
+
+struct ISphThdPool
+{
+	ISphThdPool () {}
+	virtual ~ISphThdPool () {}
+	virtual void Shutdown () = 0;
+	virtual void AddJob ( ISphJob * pItem ) = 0;
+	virtual void StartJob ( ISphJob * pItem ) = 0;
+
+	virtual int GetActiveWorkerCount () const = 0;
+	virtual int GetTotalWorkerCount () const = 0;
+	virtual int GetQueueLength () const = 0;
+};
+
+ISphThdPool * sphThreadPoolCreate ( int iThreads );
+
+int sphCpuThreadsCount ();
 
 
 #endif // _sphinxstd_

@@ -1374,6 +1374,46 @@ bool CSphAutoEvent::WaitEvent()
 	return !( uWait==WAIT_FAILED || uWait==WAIT_TIMEOUT );
 }
 
+CSphSemaphore::CSphSemaphore ()
+	: m_bInitialized ( false )
+{
+}
+
+CSphSemaphore::~CSphSemaphore ()
+{
+	assert ( !m_bInitialized );
+}
+
+bool CSphSemaphore::Init()
+{
+	assert ( !m_bInitialized );
+	m_hSem = CreateSemaphore ( NULL, 0, INT_MAX, NULL );
+	m_bInitialized = ( m_hSem!=NULL );
+	return m_bInitialized;
+}
+
+bool CSphSemaphore::Done()
+{
+	if ( !m_bInitialized )
+		return true;
+
+	m_bInitialized = false;
+	return ( CloseHandle ( m_hSem )==TRUE );
+}
+
+void CSphSemaphore::Post()
+{
+	assert ( m_bInitialized );
+	ReleaseSemaphore ( m_hSem, 1, NULL );
+}
+
+bool CSphSemaphore::Wait()
+{
+	assert ( m_bInitialized );
+	DWORD uWait = WaitForSingleObject ( m_hSem, INFINITE );
+	return !( uWait==WAIT_FAILED || uWait==WAIT_TIMEOUT );
+}
+
 #else
 
 // UNIX mutex implementation
@@ -1445,6 +1485,54 @@ bool CSphAutoEvent::WaitEvent ()
 	m_bSent = false;
 	pthread_mutex_unlock ( m_pMutex );
 	return true;
+}
+
+
+CSphSemaphore::CSphSemaphore ()
+	: m_bInitialized ( false )
+	, m_pSem ( NULL )
+{
+}
+
+
+CSphSemaphore::~CSphSemaphore ()
+{
+	assert ( !m_bInitialized );
+	SafeDelete ( m_pSem );
+}
+
+
+bool CSphSemaphore::Init ()
+{
+	assert ( !m_bInitialized );
+	m_pSem = new sem_t;
+	int iRes = sem_init ( m_pSem, 0, 0 );
+	m_bInitialized = ( iRes==0 );
+	return m_bInitialized;
+}
+
+bool CSphSemaphore::Done ()
+{
+	if ( !m_bInitialized )
+		return true;
+
+	m_bInitialized = false;
+	int iRes = sem_destroy ( m_pSem );
+	SafeDelete ( m_pSem );
+	return ( iRes==0 );
+}
+
+void CSphSemaphore::Post()
+{
+	assert ( m_bInitialized );
+	sem_post ( m_pSem );
+}
+
+bool CSphSemaphore::Wait ()
+{
+	assert ( m_bInitialized );
+	int iRes = sem_wait ( m_pSem );
+	return ( iRes==0 );
 }
 
 #endif
@@ -1833,19 +1921,33 @@ DWORD sphCRC32 ( const void * s, int iLen, DWORD uPrevCRC )
 	return ~crc;
 }
 
+
+CSphAtomic::CSphAtomic ( long iValue )
+	: m_iValue ( iValue )
+{
+#if NO_ATOMIC
+	m_tLock.Init();
+#endif
+}
+
+CSphAtomic::~CSphAtomic ()
+{
+#if NO_ATOMIC
+	m_tLock.Done();
+#endif
+}
+
+
 #if USE_WINDOWS
-template<>
-CSphAtomic<long>::operator long()
+long CSphAtomic::GetValue () const
 {
 	return InterlockedExchangeAdd ( &m_iValue, 0 );
 }
-template<>
-long CSphAtomic<long>::Inc()
+long CSphAtomic::Inc()
 {
 	return InterlockedIncrement ( &m_iValue )-1;
 }
-template<>
-long CSphAtomic<long>::Dec()
+long CSphAtomic::Dec()
 {
 	return InterlockedDecrement ( &m_iValue )+1;
 }
@@ -1876,6 +1978,223 @@ const char*		sphCheckEndian()
 		return sErrorMsg;
 	return NULL;
 }
+
+struct ThdJob_t
+{
+	ISphJob *	m_pItem;
+	ThdJob_t *	m_pNext;
+	ThdJob_t *	m_pPrev;
+
+	ThdJob_t ()
+		: m_pItem ( NULL )
+		, m_pNext ( NULL )
+		, m_pPrev ( NULL )
+	{}
+
+	~ThdJob_t ()
+	{
+		SafeDelete ( m_pItem );
+	}
+};
+
+#ifdef USE_VTUNE
+#include "ittnotify.h"
+static void SetThdName ( const char * )
+{
+	__itt_thread_set_name ( "job" );
+}
+#else
+static void SetThdName ( const char * ) {}
+#endif
+
+class CSphThdPool : public ISphThdPool
+{
+	CSphSemaphore					m_tWorkSem;
+	CSphMutex						m_tJobLock;
+
+	CSphFixedVector<SphThread_t>	m_dWorkers;
+	ThdJob_t *						m_pHead;
+	ThdJob_t *						m_pTail;
+
+	volatile bool					m_bShutdown;
+
+	CSphAtomic						m_tStatActiveWorkers;
+	int								m_iStatQueuedJobs;
+
+public:
+	explicit CSphThdPool ( int iThreads )
+		: m_dWorkers ( 0 )
+		, m_pHead ( NULL )
+		, m_pTail ( NULL )
+		, m_bShutdown ( false )
+		, m_iStatQueuedJobs ( 0 )
+	{
+		Verify ( m_tWorkSem.Init () );
+		Verify ( m_tJobLock.Init() );
+
+		iThreads = Max ( iThreads, 1 );
+		m_dWorkers.Reset ( iThreads );
+		ARRAY_FOREACH ( i, m_dWorkers )
+		{
+			sphThreadCreate ( m_dWorkers.Begin() + i, Tick, this );
+		}
+	}
+
+	virtual ~CSphThdPool ()
+	{
+		Shutdown();
+
+		Verify ( m_tJobLock.Done() );
+		Verify ( m_tWorkSem.Done() );
+	}
+
+	virtual void Shutdown ()
+	{
+		if ( m_bShutdown )
+			return;
+
+		m_bShutdown = true;
+
+		ARRAY_FOREACH ( i, m_dWorkers )
+			m_tWorkSem.Post();
+
+		ARRAY_FOREACH ( i, m_dWorkers )
+			sphThreadJoin ( m_dWorkers.Begin()+i );
+
+		while ( m_pHead && m_pHead!=m_pTail )
+		{
+			ThdJob_t * pNext = m_pHead->m_pNext;
+			SafeDelete ( m_pHead );
+			m_pHead = pNext;
+		}
+	}
+
+	virtual void AddJob ( ISphJob * pItem )
+	{
+		assert ( pItem );
+		assert ( !m_bShutdown );
+
+		ThdJob_t * pJob = new ThdJob_t;
+		pJob->m_pItem = pItem;
+
+		m_tJobLock.Lock();
+
+		if ( !m_pHead )
+		{
+			m_pHead = pJob;
+			m_pTail = pJob;
+		} else
+		{
+			pJob->m_pNext = m_pHead;
+			m_pHead->m_pPrev = pJob;
+			m_pHead = pJob;
+		}
+
+		m_iStatQueuedJobs++;
+
+		m_tWorkSem.Post();
+		m_tJobLock.Unlock();
+	}
+
+	virtual void StartJob ( ISphJob * pItem )
+	{
+		// FIXME!!! start thread only in case of no workers available to offload call site
+		SphThread_t tThd;
+		sphThreadCreate ( &tThd, Start, pItem, true );
+	}
+
+private:
+	static void Tick ( void * pArg )
+	{
+		SetThdName ( "job" );
+
+		CSphThdPool * pPool = (CSphThdPool *)pArg;
+
+		while ( !pPool->m_bShutdown )
+		{
+			pPool->m_tWorkSem.Wait();
+
+			if ( pPool->m_bShutdown )
+				break;
+
+			pPool->m_tJobLock.Lock();
+
+			ThdJob_t * pJob = pPool->m_pTail;
+			if ( pPool->m_pHead==pPool->m_pTail ) // either 0 or 1 job case
+			{
+				pPool->m_pHead = pPool->m_pTail = NULL;
+			} else
+			{
+				pJob->m_pPrev->m_pNext = NULL;
+				pPool->m_pTail = pJob->m_pPrev;
+			}
+
+			if ( pJob )
+				pPool->m_iStatQueuedJobs--;
+
+			pPool->m_tJobLock.Unlock();
+
+			if ( !pJob )
+				continue;
+
+			pPool->m_tStatActiveWorkers.Inc();
+
+			pJob->m_pItem->Call();
+			SafeDelete ( pJob );
+
+			pPool->m_tStatActiveWorkers.Dec();
+
+			// FIXME!!! work stealing case (check another job prior going to sem)
+		}
+	}
+
+	static void Start ( void * pArg )
+	{
+		ISphJob * pJob = (ISphJob *)pArg;
+		if ( pJob )
+			pJob->Call();
+		SafeDelete ( pJob );
+	}
+
+	virtual int GetActiveWorkerCount () const
+	{
+		return m_tStatActiveWorkers.GetValue();
+	}
+
+	virtual int GetTotalWorkerCount () const
+	{
+		return m_dWorkers.GetLength();
+	}
+
+	virtual int GetQueueLength () const
+	{
+		return m_iStatQueuedJobs;
+	}
+};
+
+
+ISphThdPool * sphThreadPoolCreate ( int iThreads )
+{
+	return new CSphThdPool ( iThreads );
+}
+
+int sphCpuThreadsCount ()
+{
+	int iThd = 0;
+
+#if USE_WINDOWS
+	SYSTEM_INFO tInfo;
+	GetSystemInfo ( &tInfo );
+	iThd = tInfo.dwNumberOfProcessors;
+#else
+	iThd = sysconf ( _SC_NPROCESSORS_ONLN );
+#endif
+
+	// clamp our worst guess
+	iThd = Max ( iThd, 2 );
+	return iThd;
+}
+
 
 //
 // $Id$

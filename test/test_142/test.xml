@@ -3,7 +3,6 @@
 <name>RT on *nix: watchdog and replaying binlog</name>
 
 <requires>
-<non-windows/>
 <watchdog/>
 </requires>
 

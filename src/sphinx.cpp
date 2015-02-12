@@ -6737,8 +6737,6 @@ CSphQuery::CSphQuery ()
 	, m_sRawQuery	( "" )
 	, m_iOffset		( 0 )
 	, m_iLimit		( 20 )
-	, m_pWeights	( NULL )
-	, m_iWeights	( 0 )
 	, m_eMode		( SPH_MATCH_EXTENDED )
 	, m_eRanker		( SPH_RANK_DEFAULT )
 	, m_eSort		( SPH_SORT_RELEVANCE )
@@ -17587,10 +17585,10 @@ void CSphQueryContext::BindWeights ( const CSphQuery * pQuery, const CSphSchema 
 	}
 
 	// order-bound weights
-	if ( pQuery->m_pWeights )
+	if ( pQuery->m_dWeights.GetLength() )
 	{
-		for ( int i=0; i<Min ( m_iWeights, pQuery->m_iWeights ); i++ )
-			m_dWeights[i] = Max ( MIN_WEIGHT, (int)pQuery->m_pWeights[i] );
+		for ( int i=0; i<Min ( m_iWeights, pQuery->m_dWeights.GetLength() ); i++ )
+			m_dWeights[i] = Max ( MIN_WEIGHT, (int)pQuery->m_dWeights[i] );
 	}
 }
 

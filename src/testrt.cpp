@@ -71,10 +71,11 @@ void DoSearch ( CSphIndex * pIndex )
 	printf ( "---\n" );
 }
 
+static int g_iFieldsCount = 0;
 
-void DoIndexing ( CSphSource * pSrc, ISphRtIndex * pIndex )
+void DoIndexing ( CSphSource_MySQL * pSrc, ISphRtIndex * pIndex )
 {
-	CSphString sError, sWarning;
+	CSphString sError, sWarning, sFilter;
 	CSphVector<DWORD> dMvas;
 
 	int64_t tmStart = sphMicroTimer ();
@@ -83,21 +84,17 @@ void DoIndexing ( CSphSource * pSrc, ISphRtIndex * pIndex )
 	int iCommits = 0;
 	for ( ;; )
 	{
-		if ( !pSrc->IterateDocument ( sError ) )
-			sphDie ( "iterate-document failed: %s", sError.cstr() );
+		const char ** pFields = (const char **)pSrc->NextDocument ( sError );
+		if ( !pFields )
+			break;
 
 		if ( pSrc->m_tDocInfo.m_uDocID )
-		{
-			ISphHits * pHitsNext = pSrc->IterateHits ( sError );
-			if ( !sError.IsEmpty() )
-				sphDie ( "iterate-hits failed: %s", sError.cstr() );
-			pIndex->AddDocument ( pHitsNext, pSrc->m_tDocInfo, NULL, dMvas, sError, sWarning );
-		}
+			pIndex->AddDocument ( g_iFieldsCount, pFields, pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
 
 		if ( ( pSrc->GetStats().m_iTotalDocuments % COMMIT_STEP )==0 || !pSrc->m_tDocInfo.m_uDocID )
 		{
 			int64_t tmCommit = sphMicroTimer();
-			pIndex->Commit ();
+			pIndex->Commit ( NULL, NULL );
 			tmCommit = sphMicroTimer()-tmCommit;
 
 			iCommits++;
@@ -140,7 +137,7 @@ void DoIndexing ( CSphSource * pSrc, ISphRtIndex * pIndex )
 }
 
 
-CSphSource * SpawnSource ( const char * sQuery, ISphTokenizer * pTok, CSphDict * pDict )
+CSphSource_MySQL * SpawnSource ( const char * sQuery, ISphTokenizer * pTok, CSphDict * pDict )
 {
 	CSphSource_MySQL * pSrc = new CSphSource_MySQL ( "test" );
 	pSrc->SetTokenizer ( pTok );
@@ -171,7 +168,7 @@ static ISphRtIndex * g_pIndex = NULL;
 
 void IndexingThread ( void * pArg )
 {
-	CSphSource * pSrc = (CSphSource *) pArg;
+	CSphSource_MySQL * pSrc = (CSphSource_MySQL *) pArg;
 	DoIndexing ( pSrc, g_pIndex );
 }
 
@@ -192,12 +189,12 @@ int main ( int argc, char ** argv )
 
 	ISphTokenizer * pTok = sphCreateUTF8Tokenizer();
 	CSphDict * pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt1", sError );
-	CSphSource * pSrc = SpawnSource ( "SELECT id, channel_id, UNIX_TIMESTAMP(published) published, "
+	CSphSource_MySQL * pSrc = SpawnSource ( "SELECT id, channel_id, UNIX_TIMESTAMP(published) published, "
 		"title, UNCOMPRESS(content) content FROM posting WHERE id<=10000 AND id%2=0", pTok, pDict );
 
 	ISphTokenizer * pTok2 = sphCreateUTF8Tokenizer();
 	CSphDict * pDict2 = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt2", sError );
-	CSphSource * pSrc2 = SpawnSource ( "SELECT id, channel_id, UNIX_TIMESTAMP(published) published, "
+	CSphSource_MySQL * pSrc2 = SpawnSource ( "SELECT id, channel_id, UNIX_TIMESTAMP(published) published, "
 		"title, UNCOMPRESS(content) content FROM posting WHERE id<=10000 AND id%2=1", pTok2, pDict2 );
 
 	CSphSchema tSrcSchema;
@@ -208,6 +205,7 @@ int main ( int argc, char ** argv )
 	tSchema.m_dFields = tSrcSchema.m_dFields;
 	for ( int i=0; i<tSrcSchema.GetAttrsCount(); i++ )
 		tSchema.AddAttr ( tSrcSchema.GetAttr(i), false );
+	g_iFieldsCount = tSrcSchema.m_dFields.GetLength();
 
 	CSphConfigSection tRTConfig;
 	sphRTInit ( tRTConfig, true );

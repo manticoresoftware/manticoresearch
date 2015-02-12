@@ -2224,6 +2224,8 @@ public:
 	bool IterateFieldMVANext () { return false; }
 	bool IterateKillListStart ( CSphString & ) { return false; }
 	bool IterateKillListNext ( SphDocID_t & ) { return false; }
+	int  GetFieldCount () const { return m_iFields; }
+	const char ** GetFields () { return (const char **)( m_ppDocs + ( m_tDocInfo.m_uDocID-1 ) * m_iFields ); }
 
 private:
 	int m_iDocCount;
@@ -2342,20 +2344,16 @@ void TestRTWeightBoundary ()
 		pIndex->PostSetup();
 		Verify ( pIndex->Prealloc ( false, false, sError ) );
 
-		ISphHits * pHits;
 		CSphVector<DWORD> dMvas;
+		CSphString sFilter;
 		for ( ;; )
 		{
 			Verify ( pSrc->IterateDocument ( sError ) );
 			if ( !pSrc->m_tDocInfo.m_uDocID )
 				break;
 
-			pHits = pSrc->IterateHits ( sError );
-			if ( !pHits )
-				break;
-
-			pIndex->AddDocument ( pHits, pSrc->m_tDocInfo, NULL, dMvas, sError, sWarning );
-			pIndex->Commit ();
+			pIndex->AddDocument ( pSrc->GetFieldCount(), pSrc->GetFields(), pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
+			pIndex->Commit ( NULL, NULL );
 		}
 
 		pSrc->Disconnect();
@@ -2463,6 +2461,8 @@ public:
 	bool IterateFieldMVANext () { return false; }
 	bool IterateKillListStart ( CSphString & ) { return false; }
 	bool IterateKillListNext ( SphDocID_t & ) { return false; }
+	int  GetFieldCount () const { return m_iMaxFields; }
+	const char ** GetFields () { return (const char **)( m_ppFields ); }
 };
 
 void TestRTSendVsMerge ()
@@ -2532,6 +2532,7 @@ void TestRTSendVsMerge ()
 	ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings );
 	assert ( pSorter );
 
+	CSphString sFilter;
 	CSphVector<DWORD> dMvas;
 	for ( ;; )
 	{
@@ -2539,19 +2540,15 @@ void TestRTSendVsMerge ()
 		if ( !pSrc->m_tDocInfo.m_uDocID )
 			break;
 
-		ISphHits * pHits = pSrc->IterateHits ( sError );
-		if ( !pHits )
-			break;
-
-		pIndex->AddDocument ( pHits, pSrc->m_tDocInfo, NULL, dMvas, sError, sWarning );
+		pIndex->AddDocument ( pSrc->GetFieldCount(), pSrc->GetFields(), pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
 		if ( pSrc->m_tDocInfo.m_uDocID==350 )
 		{
-			pIndex->Commit ();
+			pIndex->Commit ( NULL, NULL );
 			Verify ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, tArgs ) );
 			sphFlattenQueue ( pSorter, &tResult, 0 );
 		}
 	}
-	pIndex->Commit ();
+	pIndex->Commit ( NULL, NULL );
 
 	pSrc->Disconnect();
 
@@ -2623,7 +2620,7 @@ void TestRankerFactors ()
 	tCol.m_eAttrType = SPH_ATTR_INTEGER;
 	tSrcSchema.AddAttr ( tCol, true );
 
-	CSphSource * pSrc = new SphTestDoc_c ( tSrcSchema, (BYTE **)dFields, sizeof(dFields)/sizeof(dFields[0])/2, 2 );
+	SphTestDoc_c * pSrc = new SphTestDoc_c ( tSrcSchema, (BYTE **)dFields, sizeof(dFields)/sizeof(dFields[0])/2, 2 );
 
 	pSrc->SetTokenizer ( pTok );
 	pSrc->SetDict ( pDict );
@@ -2646,6 +2643,7 @@ void TestRankerFactors ()
 	pIndex->PostSetup();
 	Verify ( pIndex->Prealloc ( false, false, sError ) );
 
+	CSphString sFilter;
 	CSphVector<DWORD> dMvas;
 	for ( ;; )
 	{
@@ -2653,13 +2651,9 @@ void TestRankerFactors ()
 		if ( !pSrc->m_tDocInfo.m_uDocID )
 			break;
 
-		ISphHits * pHits = pSrc->IterateHits ( sError );
-		if ( !pHits )
-			break;
-
-		pIndex->AddDocument ( pHits, pSrc->m_tDocInfo, NULL, dMvas, sError, sWarning );
+		pIndex->AddDocument ( pSrc->GetFieldCount(), pSrc->GetFields(), pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
 	}
-	pIndex->Commit ();
+	pIndex->Commit ( NULL, NULL );
 	pSrc->Disconnect();
 
 	CSphQuery tQuery;

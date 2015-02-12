@@ -3,10 +3,6 @@
 <test>
 <name>persistent MVA updates surviving after hard killing part 1 - *nix only</name>
 
-<requires>
-<non-windows/>
-</requires>
-
 <config>
 indexer
 {

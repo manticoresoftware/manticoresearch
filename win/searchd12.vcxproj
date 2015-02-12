@@ -109,7 +109,7 @@
     <Link>
       <AdditionalDependencies>wsock32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <OutputFile>$(OutDir)searchd.exe</OutputFile>
-      <AdditionalLibraryDirectories>$(SolutionDir)/libstemmer_c/lib/$(Configuration); $(SolutionDir)/libexpat/lib/$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(SolutionDir)/libstemmer_c/lib/$(Configuration);$(SolutionDir)/libexpat/lib/$(Configuration);E:\VTune Amplifier XE 2013\lib32;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <ProgramDatabaseFile>$(OutDir)searchd.pdb</ProgramDatabaseFile>
       <SubSystem>Console</SubSystem>
@@ -134,7 +134,7 @@
     <Link>
       <AdditionalDependencies>wsock32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <OutputFile>$(OutDir)searchd.exe</OutputFile>
-      <AdditionalLibraryDirectories>$(SolutionDir)/libstemmer_c/lib/$(Configuration); $(SolutionDir)/libexpat/lib/$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(SolutionDir)/libstemmer_c/lib/$(Configuration);$(SolutionDir)/libexpat/lib/$(Configuration);E:\VTune Amplifier XE 2013\lib32;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
       <OptimizeReferences>true</OptimizeReferences>

@@ -81,6 +81,7 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="-i" || $arg=="--indexer" )		$locals['indexer'] = $args[++$i];
 	else if ( $arg=="-s" || $arg=="--searchd" )		$locals['searchd'] = $args[++$i];
 	else if ( $arg=="--rt" )						$locals['rt_mode'] = true;
+	else if ( $arg=="--test-thd-pool" )				$locals['use_pool'] = true;
 	else if ( $arg=="--strict" )					$g_strict = true;
 	else if ( $arg=="--strict-verbose" )			{ $g_strict = true; $g_strictverbose = true; }
 	else if ( $arg=="--ignore-weights" )			$g_ignore_weights = true;

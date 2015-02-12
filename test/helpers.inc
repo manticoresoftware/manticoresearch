@@ -199,6 +199,9 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 	$test_mode = '--test';
 	if ( $use_watchdog )
 		$test_mode = '';
+
+	if ( isset ( $g_locals['use_pool'] ) && $g_locals['use_pool'] )
+		$test_mode .= ' --test-thd-pool';
 		
 	$retval = 0;
 	if ( $windows )
@@ -326,20 +329,19 @@ function KillSearchd ( $config, $pidfile, $signal, $unlinkpid=True )
 	
 	if ( file_exists($pidfile) && count(file($pidfile)) )
 	{
-		if ( !$windows )
-		{
-			$fp = fopen($pidfile,"r");
-			$pid = fread ( $fp, filesize ( $pidfile ) );
-			fclose ($fp);
+		$fp = fopen($pidfile,"r");
+		$pid = fread ( $fp, filesize ( $pidfile ) );
+		fclose ($fp);
 
+		if ( $windows )
+			exec ("kill -f -s $signal $pid");
+		else
 			exec ("kill -s $signal $pid");
-			if ( $unlinkpid && file_exists ( $pidfile ) )
-			{
-				usleep ( $action_wait_timeout );
-				unlink ( $pidfile );
-			}
-		} else
-			StopSearchd ($config, $pidfile);
+		if ( $unlinkpid && file_exists ( $pidfile ) )
+		{
+			usleep ( $action_wait_timeout );
+			unlink ( $pidfile );
+		}
 	}
 }
 

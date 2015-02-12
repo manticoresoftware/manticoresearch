@@ -22,6 +22,8 @@
 
 struct CSphReconfigureSettings;
 struct CSphReconfigureSetup;
+class ISphRtAccum;
+
 
 /// RAM based updateable backend interface
 class ISphRtIndex : public CSphIndex
@@ -34,21 +36,17 @@ public:
 
 	/// insert/update document in current txn
 	/// fails in case of two open txns to different indexes
-	virtual bool AddDocument ( int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning ) = 0;
-
-	/// insert/update document in current txn
-	/// fails in case of two open txns to different indexes
-	virtual bool AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning ) = 0;
+	virtual bool AddDocument ( int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt ) = 0;
 
 	/// delete document in current txn
 	/// fails in case of two open txns to different indexes
-	virtual bool DeleteDocument ( const SphDocID_t * pDocs, int iDocs, CSphString & sError ) = 0;
+	virtual bool DeleteDocument ( const SphDocID_t * pDocs, int iDocs, CSphString & sError, ISphRtAccum * pAccExt ) = 0;
 
 	/// commit pending changes
-	virtual void Commit ( int * pDeleted=NULL ) = 0;
+	virtual void Commit ( int * pDeleted, ISphRtAccum * pAccExt ) = 0;
 
 	/// undo pending changes
-	virtual void RollBack () = 0;
+	virtual void RollBack ( ISphRtAccum * pAccExt ) = 0;
 
 	/// check and periodically flush RAM chunk to disk
 	virtual void CheckRamFlush () = 0;
@@ -76,6 +74,8 @@ public:
 
 	/// get disk chunk
 	virtual CSphIndex * GetDiskChunk ( int iChunk ) = 0;
+	
+	virtual ISphRtAccum * CreateAccum ( CSphString & sError ) = 0;
 };
 
 /// initialize subsystem
@@ -90,10 +90,18 @@ void sphRTDone ();
 /// RT index factory
 ISphRtIndex * sphCreateIndexRT ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict );
 
-/// Get current txn index
-ISphRtIndex * sphGetCurrentIndexRT();
-
 typedef void ProgressCallbackSimple_t ();
+
+class ISphRtAccum
+{
+protected:
+	ISphRtIndex * m_pIndex;		///< my current owner in this thread
+	ISphRtAccum () {} // can not create such thing outside of RT index
+public:
+	virtual ~ISphRtAccum () {}
+	ISphRtIndex * GetIndex() const { return m_pIndex; }
+};
+
 
 //////////////////////////////////////////////////////////////////////////
 

@@ -1670,6 +1670,9 @@ void			SaveFieldFilterSettings ( CSphWriter & tWriter, ISphFieldFilter * pFieldF
 DWORD			ReadVersion ( const char * sPath, CSphString & sError );
 bool			AddFieldLens ( CSphSchema & tSchema, bool bDynamic, CSphString & sError );
 
+/// Get current thread local index - internal do not use
+ISphRtIndex * sphGetCurrentIndexRT();
+
 // all indexes should produce same terms for same query
 struct SphWordStatChecker_t
 {

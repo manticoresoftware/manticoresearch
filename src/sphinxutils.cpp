@@ -548,6 +548,12 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "agent_query_timeout",	0, NULL },
 	{ "agent_retry_delay",		0, NULL },
 	{ "agent_retry_count",		0, NULL },
+	{ "net_wait_tm",			0, NULL },
+	{ "net_throttle_action",	0, NULL },
+	{ "net_throttle_accept",	0, NULL },
+	{ "net_send_job",			0, NULL },
+	{ "net_workers",			0, NULL },
+	{ "queue_max_length",		0, NULL },
 	{ NULL,						0, NULL }
 };
 

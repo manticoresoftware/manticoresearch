@@ -3602,6 +3602,116 @@ void TestSource ()
 
 //////////////////////////////////////////////////////////////////////////
 
+void TestHash()
+{
+	printf ( "testing CSphHash...\n" );
+
+	// a few basic tests
+	{
+		// add and verify a couple keys manually
+		CSphHash<int> h;
+		int & a = h.Acquire(123);
+		assert ( a==0 );
+		a = 1;
+		int & b = h.Acquire(234);
+		assert ( b==0 );
+		b = 2;
+		assert ( h.Find(123) );
+		assert ( *h.Find(123)==1 );
+		assert ( h.Find(234) );
+		assert ( *h.Find(234)==2 );
+		assert ( h.Find(345)==NULL );
+
+		// add several pairs of colliding keys
+		const int DUPES = 8;
+		int64_t dupes[DUPES*2] = {
+			54309970105, 55904555634,
+			54386834629, 61870972983,
+			54789062086, 8033211121,
+			41888995393, 69125167042,
+			18878807922, 3782313558,
+			31939787707, 58687170065,
+			36013093500, 57976719271,
+			35732429300, 67391785901
+		};
+		for ( int i=0; i<2*DUPES; i++ )
+		{
+			assert ( h.GetHash ( dupes[i] )==h.GetHash ( dupes [ ( i>>1 )<<1 ] ) );
+			int & x = h.Acquire(dupes[i]);
+			assert ( x==0 );
+			x = 100+i;
+		}
+
+		// verify that colliding keys hashed differently
+		for ( int i=0; i<2*DUPES; i++ )
+			assert ( *h.Find(dupes[i])==100+i );
+
+		// verify that Add() attempts fail
+		for ( int i=0; i<2*DUPES; i++ )
+			assert ( h.Add ( dupes[i], 567 )==false );
+
+		// delete every 1st colliding key
+		for ( int i=0; i<2*DUPES; i+=2 )
+			h.Delete ( dupes[i] );
+
+		// verify that 1st colliding key got deleted
+		for ( int i=0; i<2*DUPES; i+=2 )
+			assert ( h.Find ( dupes[i] )==NULL );
+
+		// verify that 2nd colliding key still works ok
+		for ( int i=1; i<2*DUPES; i+=2 )
+			assert ( *h.Find ( dupes[i] )==100+i );
+	}
+
+	// big randomized test
+	{
+		CSphHash<int> h;
+		const int NVALS = 996146; // 0.95f out of 1M
+
+		// add N numbers
+		sphSrand(0);
+		for ( int i=0; i<NVALS; i++ )
+		{
+			uint64_t k = sphRand();
+			k = ( k<<32 ) + sphRand();
+			h.Acquire(k) = i;
+		}
+
+		// verify that everything looks up as expected
+		sphSrand(0);
+		for ( int i=0; i<NVALS; i++ )
+		{
+			uint64_t k = sphRand();
+			k = ( k<<32 ) + sphRand();
+			assert ( h.Acquire(k)==i );
+		}
+
+		// delete every 3rd number
+		sphSrand(0);
+		for ( int i=0; i<NVALS; i++ )
+		{
+			uint64_t k = sphRand();
+			k = ( k<<32 ) + sphRand();
+			if (!( i%3 ))
+				h.Delete(k);
+		}
+
+		// verify that everything looks up as expected
+		sphSrand(0);
+		for ( int i=0; i<NVALS; i++ )
+		{
+			uint64_t k = sphRand();
+			k = ( k<<32 ) + sphRand();
+			if ( i%3 )
+				assert ( *h.Find(k)==i );
+			else
+				assert ( h.Find(k)==NULL );
+		}
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 int main ()
 {
 	// threads should be initialized before memory allocations
@@ -3631,6 +3741,7 @@ int main ()
 	BenchLocators ();
 	BenchThreads ();
 #else
+	TestHash();
 	TestAppendf();
 	TestQueryParser ();
 	TestQueryTransforms ();

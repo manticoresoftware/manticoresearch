@@ -3160,6 +3160,159 @@ ISphThdPool * sphThreadPoolCreate ( int iThreads );
 
 int sphCpuThreadsCount ();
 
+//////////////////////////////////////////////////////////////////////////
+
+/// simple open-addressing hash
+/// for now, with int64_t keys (for docids), maybe i will templatize this later
+template < typename VALUE >
+class CSphHash
+{
+protected:
+	typedef int64_t		KEY;
+	static const KEY	NO_ENTRY = LLONG_MAX;		///< final entry in a chain, we can now safely stop searching
+	static const KEY	DEAD_ENTRY = LLONG_MAX-1;	///< dead entry in a chain, more alive entries may follow
+
+	struct Entry
+	{
+		KEY		m_Key;
+		VALUE	m_Value;
+
+		Entry() : m_Key ( NO_ENTRY ) {}
+	};
+
+	Entry *		m_pHash;	///< hash entries
+	int			m_iSize;	///< total hash size
+	int			m_iUsed;	///< how many entries are actually used
+	int			m_iMaxUsed;	///< resize threshold
+
+public:
+	/// initialize hash of a given initial size
+	explicit CSphHash ( int iSize=256 )
+	{
+		iSize = ( 1<<sphLog2 ( iSize-1 ) );
+		m_pHash = new Entry[iSize];
+		m_iSize = iSize;
+		m_iUsed = 0;
+		m_iMaxUsed = GetMaxLoad ( iSize );
+	}
+
+	~CSphHash()
+	{
+		SafeDeleteArray ( m_pHash );
+	}
+
+	/// hash me the key, quick!
+	static inline DWORD GetHash ( KEY k )
+	{
+		return ( DWORD(k) * 0x607cbb77UL ) ^ ( k>>32 );
+	}
+
+	/// acquire value by key (ie. get existing hashed value, or add a new default value)
+	VALUE & Acquire ( KEY k )
+	{
+		assert ( k!=NO_ENTRY && k!=DEAD_ENTRY );
+		DWORD uHash = GetHash(k);
+		int iIndex = uHash & ( m_iSize-1 );
+		for ( ;; )
+		{
+			Entry * p = m_pHash + iIndex;
+			if ( p->m_Key==k )
+				return p->m_Value;
+			if ( p->m_Key==NO_ENTRY )
+			{
+				if ( m_iUsed>=m_iMaxUsed )
+				{
+					Grow();
+					iIndex = uHash & ( m_iSize-1 );
+					continue;
+				}
+				p->m_Key = k;
+				m_iUsed++;
+				return p->m_Value;
+			}
+			iIndex = ( iIndex+1 ) & ( m_iSize-1 );
+		}
+	}
+
+	/// find an existing value by key
+	VALUE * Find ( KEY k ) const
+	{
+		Entry * e = FindEntry(k);
+		return e ? &e->m_Value : NULL;
+	}
+
+	/// add or fail (if key already exists)
+	bool Add ( KEY k, const VALUE & v )
+	{
+		int u = m_iUsed;
+		VALUE & x = Acquire(k);
+		if ( u==m_iUsed )
+			return false;
+		x = v;
+		return true;
+	}
+
+	/// delete by key
+	bool Delete ( KEY k )
+	{
+		Entry * e = FindEntry(k);
+		if ( e )
+			e->m_Key = DEAD_ENTRY;
+		return e!=NULL;
+	}
+
+protected:
+	/// get max load, ie. max number of actually used entries at given size
+	int GetMaxLoad ( int iSize ) const
+	{
+		return (int)( iSize*0.95f );
+	}
+
+	/// we are overloaded, lets grow 2x and rehash
+	void Grow()
+	{
+		Entry * pNew = new Entry [ 2*m_iSize ];
+
+		for ( int i=0; i<m_iSize; i++ )
+			if ( m_pHash[i].m_Key!=NO_ENTRY && m_pHash[i].m_Key!=DEAD_ENTRY )
+			{
+				int j = GetHash ( m_pHash[i].m_Key ) & ( 2*m_iSize-1 );
+				while ( pNew[j].m_Key!=NO_ENTRY )
+					j = ( j+1 ) & ( 2*m_iSize-1 );
+				pNew[j] = m_pHash[i];
+			}
+
+			SafeDeleteArray ( m_pHash );
+			m_pHash = pNew;
+			m_iSize *= 2;
+			m_iMaxUsed = GetMaxLoad ( m_iSize );
+	}
+
+	/// find (and do not touch!) entry by key
+	inline Entry * FindEntry ( KEY k ) const
+	{
+		assert ( k!=NO_ENTRY && k!=DEAD_ENTRY );
+		DWORD uHash = GetHash(k);
+		int iIndex = uHash & ( m_iSize-1 );
+		for ( ;; )
+		{
+			Entry * p = m_pHash + iIndex;
+			if ( p->m_Key==k )
+				return p;
+			if ( p->m_Key==NO_ENTRY )
+				return NULL;
+			iIndex = ( iIndex+1 ) & ( m_iSize-1 );
+		}
+	}
+};
+
+
+template<> CSphHash<int>::Entry::Entry() : m_Key ( NO_ENTRY ), m_Value ( 0 ) {}
+template<> CSphHash<DWORD>::Entry::Entry() : m_Key ( NO_ENTRY ), m_Value ( 0 ) {}
+template<> CSphHash<float>::Entry::Entry() : m_Key ( NO_ENTRY ), m_Value ( 0.0f ) {}
+template<> CSphHash<int64_t>::Entry::Entry() : m_Key ( NO_ENTRY ), m_Value ( 0 ) {}
+template<> CSphHash<uint64_t>::Entry::Entry() : m_Key ( NO_ENTRY ), m_Value ( 0 ) {}
+
 
 #endif // _sphinxstd_
 

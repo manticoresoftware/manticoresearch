@@ -23617,9 +23617,13 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( iStartupErr )
 		sphFatal ( "failed to initialize WinSock2: %s", sphSockError ( iStartupErr ) );
 
+	// i want my windows sessions to log onto stdout
+	// both in Debug and Release builds
+	if ( !g_bService )
+		g_bOptNoDetach = true;
+
 #ifndef NDEBUG
-	// i want my windows debugging sessions to log onto stdout
-	g_bOptNoDetach = true;
+	// i also want my windows debug builds to skip locking by default
 	g_bOptNoLock = true;
 #endif
 #endif

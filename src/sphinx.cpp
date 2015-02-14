@@ -20326,7 +20326,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				}
 
 				// MVAs ptr recovery from previous errors only if current spa record is valid
-				if ( rdMva.GetPos()!=sizeof(DWORD)*uMvaSpaFixed && bIsSpaValid && uMvaSpaFixed )
+				if ( rdMva.GetPos()!=int(sizeof(DWORD))*uMvaSpaFixed && bIsSpaValid && uMvaSpaFixed )
 					rdMva.SeekTo ( sizeof(DWORD)*uMvaSpaFixed, READ_NO_SIZE_HINT );
 
 				bool bLastIDChecked = false;
@@ -20366,7 +20366,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 						bWasArena = false;
 
 						// check offset (index)
-						if ( uMvaID==uLastID && bIsSpaValid && rdMva.GetPos()!=sizeof(DWORD)*uSpaOffset )
+						if ( uMvaID==uLastID && bIsSpaValid && rdMva.GetPos()!=int(sizeof(DWORD))*uSpaOffset )
 						{
 							LOC_FAIL(( fp, "unexpected MVA docid (row="INT64_FMT", mvaattr=%d, docid expected="DOCID_FMT", got="DOCID_FMT", expected="INT64_FMT", got=%u)",
 								iRow, iItem, uLastID, uMvaID, rdMva.GetPos()/sizeof(DWORD), uSpaOffset ));
@@ -20387,7 +20387,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 						// check values
 						DWORD uValues = rdMva.GetDword();
 
-						if ( rdMva.GetPos()+sizeof(DWORD)*uValues-1>=iMvaEnd )
+						if ( rdMva.GetPos()+int(sizeof(DWORD))*uValues-1>=iMvaEnd )
 						{
 							LOC_FAIL(( fp, "MVA count out of bounds (row="INT64_FMT", mvaattr=%d, docid expected="DOCID_FMT", got="DOCID_FMT", count=%u)",
 								iRow, iItem, uLastID, uMvaID, uValues ));

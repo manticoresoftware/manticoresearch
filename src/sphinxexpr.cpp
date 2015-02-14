@@ -4619,9 +4619,10 @@ public:
 						int iRes = 0;
 						switch (eType)
 						{
-						case JSON_STRING: iRes =  StringArrayEval ( pVal, true ); break;
-						case JSON_INT32: iRes = ValueEval ( (int64_t) sphJsonLoadInt ( &pVal ) ); break;
-						case JSON_INT64: iRes = ValueEval ( sphJsonLoadBigint ( &pVal ) ); break;
+							case JSON_STRING: iRes =  StringArrayEval ( pVal, true ); break;
+							case JSON_INT32: iRes = ValueEval ( (int64_t) sphJsonLoadInt ( &pVal ) ); break;
+							case JSON_INT64: iRes = ValueEval ( sphJsonLoadBigint ( &pVal ) ); break;
+							default: break;
 						}
 						if ( iRes )
 							return 1;

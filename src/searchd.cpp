@@ -19299,7 +19299,7 @@ bool ValidateAgentDesc ( MetaAgentDesc_t & tAgent, const CSphVariant * pLine, co
 		pAgent->m_iStatsIndex = g_tStats.m_dAgentStats.AllocItem();
 		if ( pAgent->m_iStatsIndex<0 )
 			sphWarning ( "index '%s': agent '%s': failed to allocate slot for stats",
-				szIndexName, pLine->cstr(), ( tAgent.IsHA() ? ", HA might be wrong" : "" ) );
+				szIndexName, pLine->cstr() );
 
 		if ( g_tStats.m_hDashBoard.Exists ( sHashKey ) )
 		{
@@ -19311,7 +19311,7 @@ bool ValidateAgentDesc ( MetaAgentDesc_t & tAgent, const CSphVariant * pLine, co
 			if ( pAgent->m_iDashIndex<0 )
 			{
 				sphWarning ( "index '%s': agent '%s': failed to allocate slot for stat-dashboard",
-				szIndexName, pLine->cstr(), ( tAgent.IsHA() ? ", HA might be wrong" : "" ) );
+				szIndexName, pLine->cstr() );
 			} else
 			{
 				g_tStats.m_dDashboard.m_dItemStats[pAgent->m_iDashIndex].Init ( pAgent );

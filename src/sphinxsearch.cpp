@@ -8609,6 +8609,12 @@ DWORD RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Finalize ( const CS
 
 	// cleanup
 	ResetDocFactors();
+	memset ( m_dLCCS, 0 , sizeof(m_dLCCS) );
+	memset ( m_dWLCCS, 0, sizeof(m_dWLCCS) );
+	m_iQueryPosLCCS = 0;
+	m_iHitPosLCCS = 0;
+	m_iLenLCCS = 0;
+	m_fWeightLCCS = 0.0f;
 
 	// done
 	return uRes;

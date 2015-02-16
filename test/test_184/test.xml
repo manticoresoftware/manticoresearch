@@ -214,6 +214,9 @@ INSERT INTO test_table VALUES
 <sphinxql>select id, weight() from dup where match('the the') option ranker=proximity_bm25</sphinxql>
 <sphinxql>select id, weight() from dup where match('the the') option ranker=expr('sum(lcs*user_weight)*1000+bm25')</sphinxql>
 
+<!-- regression wlccs did not get reset between documents -->
+<sphinxql>select id, weight() from test where match('seven|lies') option ranker=expr('sum(1000*wlccs)')</sphinxql>
+
 </sphqueries>
 
 </test>

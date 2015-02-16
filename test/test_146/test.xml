@@ -74,6 +74,27 @@ index ignore_absent_joined_ids
 	path = <data_path/>/ignore_absent_joined_ids
 }
 
+source multi_joined
+{
+	type = mysql
+	<sql_settings/>
+	sql_attr_uint = idd
+
+	sql_query = SELECT 490495 id, 11 idd, 'Beast Obsessed 3 - Scene 12 - Future Works' t1, '' t2 UNION SELECT 490496 id, 11 idd, 'Hot Fonde Aaliyah Love Foo Her Stud Longer' t1, 'When Ryan comes into the picture' t2 UNION SELECT 490497 id, 11 idd, 'Daia Gloomer Big Noob In Prague' t1, 'Daia Gloomer Big Noob' t2
+
+	sql_joined_field = t1 from query; SELECT 0 id, 'aspirine brunette fooneling powder solo latina group salsa webcam gum idling shovel european killing too tan lines' t1 UNION SELECT 490495 id, 'job babe cow busty mugshot wire all full trip' t1 UNION SELECT 490496 id, 'hd fonde style glamour love madison ryan aaliyah' t1  UNION SELECT 490497 id, 'job salsa redhead famous shot tilt daia gloomer' t1
+	sql_joined_field = t1 from query; SELECT 490496 id, 'Aaliyah Love' t1
+}
+
+index multi_joined
+{
+	source = multi_joined
+	path = <data_path/>/multi_joined
+	
+	docinfo			= extern
+ 	charset_table		= 0..9, a..z, A..Z->a..z, _
+}
+
 </config>
 
 <db_create>
@@ -129,6 +150,8 @@ insert into test_joined (id, text) values
 	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">"do not as dog sleepy"</query>
 	<!-- regression crash on pure joined fields index indexing -->
 	<query mode="extended2" index="pure" sortmode="extended" sortby="@id asc">( dog sleepy ) | my</query>
+	<!-- regression crash on joined fields index indexing with docid==0 and dupes -->
+	<query mode="extended2" index="multi_joined" sortmode="extended" sortby="@id asc"></query>
 </queries>
 
 </test>

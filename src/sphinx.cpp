@@ -25816,10 +25816,12 @@ bool CSphSource_Document::IterateDocument ( CSphString & sError )
 	for ( ;; )
 	{
 		m_tState.m_dFields = NextDocument ( sError );
-		if ( HasJoinedFields() )
-			m_dAllIds.Add ( m_tDocInfo.m_uDocID );
 		if ( m_tDocInfo.m_uDocID==0 )
 			return true;
+		// moved that here as docid==0 means eof for regular query
+		// but joined might produce doc with docid==0 and breaks delta packing
+		if ( HasJoinedFields() )
+			m_dAllIds.Add ( m_tDocInfo.m_uDocID );
 
 		if ( !m_tState.m_dFields )
 			return false;

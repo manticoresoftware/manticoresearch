@@ -3393,7 +3393,9 @@ enum HAStrategies_e {
 	HA_AVOIDDEAD,
 	HA_AVOIDERRORS,
 	HA_AVOIDDEADTM,			///< the same as HA_AVOIDDEAD, but uses just min timeout instead of weighted random
-	HA_AVOIDERRORSTM		///< the same as HA_AVOIDERRORS, but uses just min timeout instead of weighted random
+	HA_AVOIDERRORSTM,		///< the same as HA_AVOIDERRORS, but uses just min timeout instead of weighted random
+
+	HA_DEFAULT = HA_RANDOM
 };
 
 class InterWorkerStorage : public ISphNoncopyable
@@ -3444,6 +3446,7 @@ private:
 	int *					m_pRRCounter; /// pointer not owned, pointee IPC-shared
 	InterWorkerStorage *	m_pLock; /// pointer not owned, lock for threads/IPC
 	DWORD					m_uTimestamp;
+	HAStrategies_e			m_eStrategy;
 
 public:
 	MetaAgentDesc_t ()
@@ -3451,6 +3454,7 @@ public:
 		, m_pRRCounter ( NULL )
 		, m_pLock ( NULL )
 		, m_uTimestamp ( HostDashboard_t::GetCurSeconds() )
+		, m_eStrategy ( HA_DEFAULT )
 	{}
 
 	MetaAgentDesc_t ( const MetaAgentDesc_t & rhs )
@@ -3462,6 +3466,17 @@ public:
 	{
 		ARRAY_FOREACH ( i, m_dAgents )
 			m_dAgents[i].m_bPersistent = true;
+	}
+
+	void SetBlackhole ()
+	{
+		ARRAY_FOREACH ( i, m_dAgents )
+			m_dAgents[i].m_bBlackhole = true;
+	}
+
+	void SetStrategy ( HAStrategies_e eStrategy )
+	{
+		m_eStrategy = eStrategy;
 	}
 
 	inline void SetHAData ( int * pRRCounter, WORD * pWeights, InterWorkerStorage * pLock )
@@ -3816,9 +3831,9 @@ public:
 	}
 
 
-	AgentDesc_t * GetRRAgent ( HAStrategies_e eStrategy )
+	AgentDesc_t * GetRRAgent ()
 	{
-		switch ( eStrategy )
+		switch ( m_eStrategy )
 		{
 		case HA_AVOIDDEAD:
 			return StDiscardDead();
@@ -4008,7 +4023,7 @@ public:
 		, m_iAgentQueryTimeout ( g_iAgentQueryTimeout )
 		, m_bToDelete ( false )
 		, m_bDivideRemoteRanges ( false )
-		, m_eHaStrategy ( HA_RANDOM )
+		, m_eHaStrategy ( HA_DEFAULT )
 		, m_pHAStorage ( NULL )
 	{}
 	~DistributedIndex_t()
@@ -10251,7 +10266,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				dAgents.Reserve ( dAgents.GetLength() + pDist->m_dAgents.GetLength() );
 				ARRAY_FOREACH ( j, pDist->m_dAgents )
 				{
-					dAgents.Add().TakeTraits ( *pDist->m_dAgents[j].GetRRAgent ( pDist->m_eHaStrategy ) );
+					dAgents.Add().TakeTraits ( *pDist->m_dAgents[j].GetRRAgent() );
 					dAgents.Last().m_iStoreTag = iTagsCount;
 					dAgents.Last().m_iWeight = iWeight;
 					iTagsCount += iTagStep;
@@ -12573,7 +12588,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 		dDistLocal = pDist->m_dLocal;
 		dRemoteSnippets.m_dAgents.Resize ( pDist->m_dAgents.GetLength() );
 		ARRAY_FOREACH ( i, pDist->m_dAgents )
-			dRemoteSnippets.m_dAgents[i].TakeTraits ( *pDist->m_dAgents[i].GetRRAgent ( pDist->m_eHaStrategy ) );
+			dRemoteSnippets.m_dAgents[i].TakeTraits ( *pDist->m_dAgents[i].GetRRAgent() );
 	}
 	g_tDistLock.Unlock();
 
@@ -19267,7 +19282,7 @@ bool PrereadNewIndex ( ServedIndex_t & tIdx, const CSphConfigSection & hIndex, c
 	return true;
 }
 
-bool ValidateAgentDesc ( MetaAgentDesc_t & tAgent, const CSphVariant * pLine, const char * szIndexName, bool bBlackhole )
+bool ValidateAgentDesc ( MetaAgentDesc_t & tAgent, const CSphVariant * pLine, const char * szIndexName )
 {
 	AgentDesc_t * pAgent = tAgent.LastAgent();
 	assert ( pAgent );
@@ -19286,8 +19301,6 @@ bool ValidateAgentDesc ( MetaAgentDesc_t & tAgent, const CSphVariant * pLine, co
 
 	// hash for dashboard
 	CSphString sHashKey = pAgent->GetName();
-
-	pAgent->m_bBlackhole = bBlackhole;
 
 	// allocate stats slot
 	// let us cheat and also allocate the dashboard slot under the same lock
@@ -19338,13 +19351,59 @@ bool ValidateAgentDesc ( MetaAgentDesc_t & tAgent, const CSphVariant * pLine, co
 	}
 	return true;
 }
-enum eAgentParse { apInHost, apInPort, apStartIndexList, apIndexList, apDone };
-bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgent, const char * szIndexName, bool bBlackhole, bool bPersistent=false )
+
+#define sphStrMatchStatic(_str, _cstr) ( strncmp ( _str, _cstr, sizeof(_str)-1 )==0 )
+
+
+static bool ParseStrategyHA ( const char * sName, HAStrategies_e & eStrategy )
 {
-	eAgentParse eState = apInHost;
+	if ( sphStrMatchStatic ( "random", sName ) )
+		eStrategy = HA_RANDOM;
+	else if ( sphStrMatchStatic ( "roundrobin", sName ) )
+		eStrategy = HA_ROUNDROBIN;
+	else if ( sphStrMatchStatic ( "nodeads", sName ) )
+		eStrategy = HA_AVOIDDEAD;
+	else if ( sphStrMatchStatic ( "noerrors", sName ) )
+		eStrategy = HA_AVOIDERRORS;
+	else
+		return false;
+
+	return true;
+}
+
+static bool IsAgentDelimiter ( char c )
+{
+	return c=='|' || c=='[' || c==']';
+}
+
+struct AgentOptions_t
+{
+	bool m_bBlackhole;
+	bool m_bPersistent;
+	HAStrategies_e m_eStrategy;
+};
+
+enum AgentParse_e { apInHost, apInPort, apStartIndexList, apIndexList, apOptions, apDone };
+
+bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgent, const char * szIndexName, AgentOptions_t tDesc )
+{
 	AgentDesc_t * pCurrent = tAgent.NewAgent();
+
 	// extract host name or path
 	const char * p = pAgent->cstr();
+	while ( *p && isspace ( *p ) )
+		p++;
+	AgentParse_e eState = apDone;
+	// might be agent options at head
+	if ( *p )
+	{
+		if ( *p=='[' )
+		{
+			eState = apOptions;
+			p += 1;
+		} else
+			eState = apInHost;
+	}
 	const char * pAnchor = p;
 
 	while ( eState!=apDone )
@@ -19353,8 +19412,15 @@ bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgent, cons
 		{
 		case apInHost:
 			{
+				if ( !*p )
+				{
+					eState = apDone;
+					break;
+				}
+
 				if ( sphIsAlpha(*p) || *p=='.' || *p=='-' || *p=='/' )
 					break;
+
 				if ( p==pAnchor )
 				{
 					sphWarning ( "index '%s': agent '%s': host name or path expected - SKIPPING AGENT",
@@ -19422,11 +19488,11 @@ bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgent, cons
 				}
 #endif
 
-				if ( *p=='|' )
+				if ( IsAgentDelimiter ( *p ) )
 				{
+					eState = ( *p=='|' ? apInHost : apOptions );
 					pAnchor = p+1;
-					eState = apInHost;
-					if ( !ValidateAgentDesc ( tAgent, pAgent, szIndexName, bBlackhole ) )
+					if ( !ValidateAgentDesc ( tAgent, pAgent, szIndexName ) )
 						return false;
 					pCurrent = tAgent.NewAgent();
 					break;
@@ -19457,7 +19523,7 @@ bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgent, cons
 
 				CSphString sIndexes = pAgent->strval().SubString ( pAnchor-pAgent->cstr(), p-pAnchor );
 
-				if ( *p && *p!='|' )
+				if ( *p && !IsAgentDelimiter ( *p ) )
 				{
 					sphWarning ( "index '%s': agent '%s': index list expected near '%s' - SKIPPING AGENT",
 						szIndexName, pAgent->cstr(), p );
@@ -19465,36 +19531,132 @@ bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgent, cons
 				}
 				pCurrent->m_sIndexes = sIndexes;
 
-				if ( *p=='|' )
+				if ( IsAgentDelimiter ( *p ) )
 				{
+					if ( *p=='|' )
+					{
+						eState = apInHost;
+						if ( !ValidateAgentDesc ( tAgent, pAgent, szIndexName ) )
+							return false;
+						pCurrent = tAgent.NewAgent();
+					} else
+						eState = apOptions;
+
 					pAnchor = p+1;
-					eState = apInHost;
-					if ( !ValidateAgentDesc ( tAgent, pAgent, szIndexName, bBlackhole ) )
-						return false;
-					pCurrent = tAgent.NewAgent();
 					break;
-				}
-				eState = apDone;
+				} else
+					eState = apDone;
 			}
+			break;
+
+		case apOptions:
+			{
+				const char * sOptName = NULL;
+				const char * sOptValue = NULL;
+				bool bGotEq = false;
+				while ( *p )
+				{
+					bool bNextOpt = ( *p==',' );
+					bool bNextAgent = IsAgentDelimiter ( *p );
+					bGotEq |= ( *p=='=' );
+
+					if ( bNextOpt || bNextAgent )
+					{
+						if ( sOptName && sOptValue )
+						{
+							bool bParsed = false;
+							if ( sphStrMatchStatic ( "conn", sOptName ) )
+							{
+								if ( sphStrMatchStatic ( "pconn", sOptValue ) || sphStrMatchStatic ( "persistent", sOptValue ) )
+								{
+									tDesc.m_bPersistent = true;
+									bParsed = true;
+								}
+							} else if ( sphStrMatchStatic ( "ha_strategy", sOptName ) )
+							{
+								bParsed = ParseStrategyHA ( sOptValue, tDesc.m_eStrategy );
+							} else if ( sphStrMatchStatic ( "blackhole", sOptName ) )
+							{
+								tDesc.m_bBlackhole = ( atoi ( sOptValue )!=0 );
+								bParsed = true;
+							}
+
+							if ( !bParsed )
+							{
+								CSphString sInvalid;
+								sInvalid.SetBinary ( sOptName, p-sOptName );
+								sphWarning ( "index '%s': agent '%s': unknown agent option '%s' ", szIndexName, pAgent->cstr(), sInvalid.cstr() );
+							}
+						}
+
+						sOptName = sOptValue = NULL;
+						bGotEq = false;
+						if ( bNextAgent )
+							break;
+					}
+
+					if ( sphIsAlpha ( *p ) )
+					{
+						if ( !sOptName )
+							sOptName = p;
+						else if ( bGotEq && !sOptValue )
+							sOptValue = p;
+					}
+
+					p++;
+				}
+
+				if ( IsAgentDelimiter ( *p ) )
+				{
+					eState = apInHost;
+					pAnchor = p+1;
+				} else
+					eState = apDone;
+			}
+			break;
+
 		case apDone:
 		default:
 			break;
 		} // switch (eState)
 		p++;
 	} // while (eState!=apDone)
-	bool bRes = ValidateAgentDesc ( tAgent, pAgent, szIndexName, bBlackhole );
+
+	bool bRes = ValidateAgentDesc ( tAgent, pAgent, szIndexName );
 	tAgent.QueuePings();
-	if ( bPersistent )
+	if ( tDesc.m_bPersistent )
 		tAgent.SetPersistent();
+	if ( tDesc.m_bBlackhole )
+		tAgent.SetBlackhole();
+	tAgent.SetStrategy ( tDesc.m_eStrategy );
+
 	return bRes;
 }
+
+#undef sphStrMatchStatic
 
 static void ConfigureDistributedIndex ( DistributedIndex_t * pIdx, const char * szIndexName, const CSphConfigSection & hIndex )
 {
 	assert ( hIndex("type") && hIndex["type"]=="distributed" );
 	assert ( pIdx!=NULL );
 
-	DistributedIndex_t& tIdx = *pIdx;
+	DistributedIndex_t & tIdx = *pIdx;
+
+	bool bSetHA = false;
+	// configure ha_strategy
+	if ( hIndex("ha_strategy") )
+	{
+		bSetHA = ParseStrategyHA ( hIndex["ha_strategy"].cstr(), tIdx.m_eHaStrategy );
+		if ( !bSetHA )
+			sphWarning ( "index '%s': ha_strategy (%s) is unknown for me, will use random", szIndexName, hIndex["ha_strategy"].cstr() );
+	}
+
+	bool bEnablePersistentConns = ( g_iPersistentPoolSize>0 );
+	if ( hIndex ( "agent_persistent" ) && !bEnablePersistentConns )
+	{
+			sphWarning ( "index '%s': agent_persistent used, but no persistent_connections_limit defined. Fall back to non-persistent agent", szIndexName );
+			bEnablePersistentConns = false;
+	}
 
 	// add local agents
 	CSphVector<CSphString> dLocs;
@@ -19513,37 +19675,35 @@ static void ConfigureDistributedIndex ( DistributedIndex_t * pIdx, const char * 
 		}
 	}
 
-	bool bHaveHA = false;
+	AgentOptions_t tAgentOptions;
+	tAgentOptions.m_bBlackhole = false;
+	tAgentOptions.m_bPersistent = false;
+	tAgentOptions.m_eStrategy = tIdx.m_eHaStrategy;
 	// add remote agents
 	for ( CSphVariant * pAgent = hIndex("agent"); pAgent; pAgent = pAgent->m_pNext )
 	{
 		MetaAgentDesc_t& tAgent = tIdx.m_dAgents.Add();
-		if ( ConfigureAgent ( tAgent, pAgent, szIndexName, false ) )
-			bHaveHA |= tAgent.IsHA();
-		else
+		if ( !ConfigureAgent ( tAgent, pAgent, szIndexName, tAgentOptions ) )
 			tIdx.m_dAgents.Pop();
 	}
 
-	// for now work with client persistent connections
+	// for now work with client persistent connections only on per-thread basis,
+	// to avoid locks, etc.
+	tAgentOptions.m_bBlackhole = false;
+	tAgentOptions.m_bPersistent = bEnablePersistentConns;
 	for ( CSphVariant * pAgent = hIndex("agent_persistent"); pAgent; pAgent = pAgent->m_pNext )
 	{
 		MetaAgentDesc_t& tAgent = tIdx.m_dAgents.Add ();
-		if ( !g_iPersistentPoolSize )
-		{
-			sphWarning ( "index '%s': agent_persistent used, but no persistent_connections_limit defined. Fall back to non-persistent agent", szIndexName );
-		}
-		if ( ConfigureAgent ( tAgent, pAgent, szIndexName, false, ( g_iPersistentPoolSize>0 ) ) )
-			bHaveHA |= tAgent.IsHA();
-		else
+		if ( !ConfigureAgent ( tAgent, pAgent, szIndexName, tAgentOptions ) )
 			tIdx.m_dAgents.Pop();
 	}
 
+	tAgentOptions.m_bBlackhole = true;
+	tAgentOptions.m_bPersistent = false;
 	for ( CSphVariant * pAgent = hIndex("agent_blackhole"); pAgent; pAgent = pAgent->m_pNext )
 	{
 		MetaAgentDesc_t& tAgent = tIdx.m_dAgents.Add ();
-		if ( ConfigureAgent ( tAgent, pAgent, szIndexName, true ) )
-			bHaveHA |= tAgent.IsHA();
-		else
+		if ( !ConfigureAgent ( tAgent, pAgent, szIndexName, tAgentOptions ) )
 			tIdx.m_dAgents.Pop();
 	}
 
@@ -19566,24 +19726,12 @@ static void ConfigureDistributedIndex ( DistributedIndex_t * pIdx, const char * 
 			tIdx.m_iAgentQueryTimeout = hIndex["agent_query_timeout"].intval();
 	}
 
-	// configure ha_strategy
-	if ( hIndex("ha_strategy") )
-	{
-		if ( !bHaveHA )
-			sphWarning ( "index '%s': ha_strategy defined, but no ha agents in the index", szIndexName );
+	bool bHaveHA = ARRAY_ANY ( bHaveHA, tIdx.m_dAgents, tIdx.m_dAgents[_any].IsHA() );
 
-		tIdx.m_eHaStrategy = HA_RANDOM;
-		if ( hIndex["ha_strategy"]=="random" )
-			tIdx.m_eHaStrategy = HA_RANDOM;
-		else if ( hIndex["ha_strategy"]=="roundrobin" )
-			tIdx.m_eHaStrategy = HA_ROUNDROBIN;
-		else if ( hIndex["ha_strategy"]=="nodeads" )
-			tIdx.m_eHaStrategy = HA_AVOIDDEAD;
-		else if ( hIndex["ha_strategy"]=="noerrors" )
-			tIdx.m_eHaStrategy = HA_AVOIDERRORS;
-		else
-			sphWarning ( "index '%s': ha_strategy (%s) is unknown for me, will use random", szIndexName, hIndex["ha_strategy"].cstr() );
-	}
+	// configure ha_strategy
+	if ( bSetHA && !bHaveHA )
+		sphWarning ( "index '%s': ha_strategy defined, but no ha agents in the index", szIndexName );
+
 	tIdx.ShareHACounters();
 }
 
@@ -19611,7 +19759,7 @@ void FreeAgentStats ( DistributedIndex_t & tIndex )
 	g_tStatsMutex.Unlock();
 }
 
-void PreCreateTemplateIndex ( ServedDesc_t & tServed, const CSphConfigSection & hIndex )
+void PreCreateTemplateIndex ( ServedDesc_t & tServed, const CSphConfigSection & )
 {
 	tServed.m_pIndex = sphCreateIndexTemplate ( );
 	tServed.m_pIndex->m_bExpandKeywords = tServed.m_bExpand;

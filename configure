@@ -726,6 +726,7 @@ ac_user_opts='
 enable_option_checking
 enable_maintainer_mode
 with_debug
+with_assert
 enable_dependency_tracking
 enable_dl
 with_mysql
@@ -1388,6 +1389,8 @@ Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
   --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
   --with-debug            compile slower debug version (default is disabled)
+  --with-assert           compile optimized build but with debugging
+                          assertions (default is disabled)
   --with-mysql            compile with MySQL support (default is enabled)
   --with-static-mysql     link statically with MySQL library (default is no)
   --with-mysql-includes   path to MySQL header files
@@ -2918,6 +2921,16 @@ else
 fi
 
 
+
+# Check whether --with-assert was given.
+if test "${with_assert+set}" = set; then :
+  withval=$with_assert; ac_cv_use_assert=$withval
+else
+  ac_cv_use_assert=no
+
+fi
+
+
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to compile debug version" >&5
 $as_echo_n "checking whether to compile debug version... " >&6; }
 if test x$ac_cv_use_debug != xno; then
@@ -2926,10 +2939,17 @@ if test x$ac_cv_use_debug != xno; then
 	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 $as_echo "yes" >&6; }
 else
-	SPHINX_CFLAGS="-fno-rtti -Wall -g -D_FILE_OFFSET_BITS=64 -O3 -DNDEBUG"
-	SPHINX_INJECT_FLAGS="-D_FILE_OFFSET_BITS=64 -DNDEBUG"
-	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+	if test x$ac_cv_use_assert != xno; then
+		SPHINX_CFLAGS="-fno-rtti -Wall -g -D_FILE_OFFSET_BITS=64 -O2"
+		SPHINX_INJECT_FLAGS="-D_FILE_OFFSET_BITS=64"
+		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: asserts only" >&5
+$as_echo "asserts only" >&6; }
+	else
+		SPHINX_CFLAGS="-fno-rtti -Wall -g -D_FILE_OFFSET_BITS=64 -O3 -DNDEBUG"
+		SPHINX_INJECT_FLAGS="-D_FILE_OFFSET_BITS=64 -DNDEBUG"
+		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
 $as_echo "no" >&6; }
+	fi
 fi
 
 if test x$ac_env_CFLAGS_set != xset; then

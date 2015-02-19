@@ -26,15 +26,26 @@ AC_ARG_WITH([debug],
 	[ac_cv_use_debug=$withval], [ac_cv_use_debug=no]
 )
 
+AC_ARG_WITH([assert],
+	AC_HELP_STRING([--with-assert], [compile optimized build but with debugging assertions (default is disabled)]),
+	[ac_cv_use_assert=$withval], [ac_cv_use_assert=no]
+)
+
 AC_MSG_CHECKING([whether to compile debug version])
 if test x$ac_cv_use_debug != xno; then
 	SPHINX_CFLAGS="-fno-rtti -Wall -g -D_FILE_OFFSET_BITS=64"
 	SPHINX_INJECT_FLAGS="-D_FILE_OFFSET_BITS=64"
 	AC_MSG_RESULT([yes])
 else
-	SPHINX_CFLAGS="-fno-rtti -Wall -g -D_FILE_OFFSET_BITS=64 -O3 -DNDEBUG"
-	SPHINX_INJECT_FLAGS="-D_FILE_OFFSET_BITS=64 -DNDEBUG"
-	AC_MSG_RESULT([no])
+	if test x$ac_cv_use_assert != xno; then
+		SPHINX_CFLAGS="-fno-rtti -Wall -g -D_FILE_OFFSET_BITS=64 -O2"
+		SPHINX_INJECT_FLAGS="-D_FILE_OFFSET_BITS=64"
+		AC_MSG_RESULT([asserts only])
+	else
+		SPHINX_CFLAGS="-fno-rtti -Wall -g -D_FILE_OFFSET_BITS=64 -O3 -DNDEBUG"
+		SPHINX_INJECT_FLAGS="-D_FILE_OFFSET_BITS=64 -DNDEBUG"
+		AC_MSG_RESULT([no])
+	fi
 fi
 
 dnl set flags for C compiler if there are no user overrides

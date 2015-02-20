@@ -1904,6 +1904,11 @@ class SphinxConfig
 		}
 	}
 
+	function RemoveBits ( $value )
+	{
+		return preg_replace('/:\d+$/', '', $value);
+	}
+
 	function WriteConfig ( $filename, $agentid, &$msg, $collectdata = true )
 	{
 		global $g_locals;
@@ -1978,8 +1983,8 @@ class SphinxConfig
 							}
 							break;
 
-						case "sql_attr_uint":		$insert_types[$value] = "rt_attr_uint"; break;
-						case "sql_attr_bigint":		$insert_types[$value] = "rt_attr_bigint"; break;
+						case "sql_attr_uint":		$insert_types[$this->RemoveBits($value)] = "rt_attr_uint"; break;
+						case "sql_attr_bigint":		$insert_types[$this->RemoveBits($value)] = "rt_attr_bigint"; break;
 						case "sql_attr_float":		$insert_types[$value] = "rt_attr_float"; break;
 						case "sql_attr_timestamp":	$insert_types[$value] = "rt_attr_timestamp"; break;
 						//case "sql_attr_multi":	$insert_types[$value] = "rt_attr_multi"; break;

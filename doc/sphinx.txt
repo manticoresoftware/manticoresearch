@@ -13365,7 +13365,7 @@ A.1. Version 2.3.1-beta, 24 feb 2015
 Major features
 --------------
 
-   * added workers=thread_pool directive
+   * added workers = thread_pool directive
 
    * added max_children directive
 

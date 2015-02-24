@@ -14362,30 +14362,29 @@ rlp_max_batch_docs = 100
 <sect1 id="rel231"><title>Version 2.3.1-beta, 24 feb 2015</title>
 <bridgehead>Major features</bridgehead>
 <itemizedlist>
-<listitem><para>added workers=thread_pool directive</para></listitem>
-<listitem><para>added max_children directive</para></listitem>
-<listitem><para>added net_workers directive</para></listitem>
-<listitem><para>added queue_max_length directive</para></listitem>
-<listitem><para>added vip suffixes to listener interface declaration,
-like sphinx_vip or mysql41_vip</para></listitem>
+<listitem><para>added <link linkend="conf-workers">workers = thread_pool</link> directive</para></listitem>
+<listitem><para>added <link linkend="conf-max-children">max_children</link> directive</para></listitem>
+<listitem><para>added <link linkend="conf-net-workers">net_workers</link> directive</para></listitem>
+<listitem><para>added <link linkend="conf-queue-max_length">queue_max_length</link> directive</para></listitem>
+<listitem><para>added vip suffixes to <link linkend="conf-listen">listener</link> interface declaration, like sphinx_vip or mysql41_vip</para></listitem>
 </itemizedlist>
 
 <bridgehead>Removals</bridgehead>
 <itemizedlist>
 <listitem><para>removed fork and prefork modes</para></listitem>
-<listitem><para>removed prefork_rotation_throttle configure key</para></listitem>
+<listitem><para>removed <option>prefork_rotation_throttle</option> configure key</para></listitem>
 </itemizedlist>
 
 <bridgehead>Minor features</bridgehead>
 <itemizedlist>
-<listitem><para>added FLUSH ATTRIBUTES to SphinxQL</para></listitem>
+<listitem><para>added <code>FLUSH ATTRIBUTES</code> to SphinxQL</para></listitem>
 </itemizedlist>
 
 <bridgehead>Bug fixes</bridgehead>
 <itemizedlist>
-<listitem><para>fixed #2167, --keep_attrs doesn't work with --rotate</para></listitem>
-<listitem><para>fixed #2161, indexation or RT index fail due to multiple loads of an index_token_filter</para></listitem>
-<listitem><para>fixed #2154, crash of ZONE operator</para></listitem>
+<listitem><para>fixed #2167, <option>--keep_attrs</option> doesn't work with <option>--rotate</option></para></listitem>
+<listitem><para>fixed #2161, indexation or RT index fail due to multiple loads of an <option>index_token_filter</option></para></listitem>
+<listitem><para>fixed #2154, crash of <code>ZONE</code> operator</para></listitem>
 </itemizedlist>
 </sect1>
 

@@ -2511,6 +2511,7 @@ const ExtDoc_t * ExtConditional<T,ExtBase>::GetDocsChunk()
 template < TermPosFilter_e T, class ExtBase >
 const ExtHit_t * ExtConditional<T,ExtBase>::GetHitsChunk ( const ExtDoc_t * pDocs )
 {
+	const ExtDoc_t * pStart = pDocs;
 	if ( m_eState==COPY_DONE )
 	{
 		// this request completed in full
@@ -2520,6 +2521,11 @@ const ExtHit_t * ExtConditional<T,ExtBase>::GetHitsChunk ( const ExtDoc_t * pDoc
 		// old request completed in full, but we have a new hits subchunk request now
 		// even though there were no new docs requests in the meantime!
 		m_eState = COPY_FILTERED;
+		if ( m_uDoneFor && m_uDoneFor!=DOCID_MAX )
+		{
+			while ( pDocs->m_uDocid!=DOCID_MAX && pDocs->m_uDocid<=m_uDoneFor )
+				pDocs++;
+		}
 	}
 	m_uDoneFor = pDocs->m_uDocid;
 
@@ -2603,6 +2609,10 @@ const ExtHit_t * ExtConditional<T,ExtBase>::GetHitsChunk ( const ExtDoc_t * pDoc
 		// in any case, this chunk is over
 		break;
 	}
+
+	m_uDoneFor = pDocs->m_uDocid;
+	if ( m_uDoneFor==DOCID_MAX && pDocs-1>=pStart )
+		m_uDoneFor = ( pDocs-1 )->m_uDocid;
 
 	m_dFilteredHits[iFilteredHits].m_uDocid = DOCID_MAX;
 	return iFilteredHits ? m_dFilteredHits : NULL;

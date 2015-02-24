@@ -1,5 +1,5 @@
-Sphinx 2.2.8-dev reference manual
-=================================
+Sphinx 2.3.1-beta reference manual
+==================================
 
 Free open-source SQL full-text search engine
 ============================================
@@ -348,50 +348,51 @@ Table of Contents
       12.4.5. read_timeout
       12.4.6. client_timeout
       12.4.7. max_children
-      12.4.8. pid_file
-      12.4.9. seamless_rotate
-      12.4.10. preopen_indexes
-      12.4.11. unlink_old
-      12.4.12. attr_flush_period
-      12.4.13. max_packet_size
-      12.4.14. mva_updates_pool
-      12.4.15. max_filters
-      12.4.16. max_filter_values
-      12.4.17. listen_backlog
-      12.4.18. read_buffer
-      12.4.19. read_unhinted
-      12.4.20. max_batch_queries
-      12.4.21. subtree_docs_cache
-      12.4.22. subtree_hits_cache
-      12.4.23. workers
-      12.4.24. dist_threads
-      12.4.25. binlog_path
-      12.4.26. binlog_flush
-      12.4.27. binlog_max_log_size
-      12.4.28. snippets_file_prefix
-      12.4.29. collation_server
-      12.4.30. collation_libc_locale
-      12.4.31. plugin_dir
-      12.4.32. mysql_version_string
-      12.4.33. rt_flush_period
-      12.4.34. thread_stack
-      12.4.35. expansion_limit
-      12.4.36. watchdog
-      12.4.37. prefork_rotation_throttle
-      12.4.38. sphinxql_state
-      12.4.39. ha_ping_interval
-      12.4.40. ha_period_karma
-      12.4.41. persistent_connections_limit
-      12.4.42. rt_merge_iops
-      12.4.43. rt_merge_maxiosize
-      12.4.44. predicted_time_costs
-      12.4.45. shutdown_timeout
-      12.4.46. ondisk_attrs_default
-      12.4.47. query_log_min_msec
-      12.4.48. agent_connect_timeout
-      12.4.49. agent_query_timeout
-      12.4.50. agent_retry_count
-      12.4.51. agent_retry_delay
+      12.4.8. net_workers
+      12.4.9. queue_max_length
+      12.4.10. pid_file
+      12.4.11. seamless_rotate
+      12.4.12. preopen_indexes
+      12.4.13. unlink_old
+      12.4.14. attr_flush_period
+      12.4.15. max_packet_size
+      12.4.16. mva_updates_pool
+      12.4.17. max_filters
+      12.4.18. max_filter_values
+      12.4.19. listen_backlog
+      12.4.20. read_buffer
+      12.4.21. read_unhinted
+      12.4.22. max_batch_queries
+      12.4.23. subtree_docs_cache
+      12.4.24. subtree_hits_cache
+      12.4.25. workers
+      12.4.26. dist_threads
+      12.4.27. binlog_path
+      12.4.28. binlog_flush
+      12.4.29. binlog_max_log_size
+      12.4.30. snippets_file_prefix
+      12.4.31. collation_server
+      12.4.32. collation_libc_locale
+      12.4.33. plugin_dir
+      12.4.34. mysql_version_string
+      12.4.35. rt_flush_period
+      12.4.36. thread_stack
+      12.4.37. expansion_limit
+      12.4.38. watchdog
+      12.4.39. sphinxql_state
+      12.4.40. ha_ping_interval
+      12.4.41. ha_period_karma
+      12.4.42. persistent_connections_limit
+      12.4.43. rt_merge_iops
+      12.4.44. rt_merge_maxiosize
+      12.4.45. predicted_time_costs
+      12.4.46. shutdown_timeout
+      12.4.47. ondisk_attrs_default
+      12.4.48. query_log_min_msec
+      12.4.49. agent_connect_timeout
+      12.4.50. agent_query_timeout
+      12.4.51. agent_retry_count
+      12.4.52. agent_retry_delay
 
    12.5. Common section configuration options
       12.5.1. lemmatizer_base
@@ -404,44 +405,45 @@ Table of Contents
       12.5.8. rlp_max_batch_docs
 
 A. Sphinx revision history
-   A.1. Version 2.2.7-release, 20 jan 2015
-   A.2. Version 2.2.6-release, 13 nov 2014
-   A.3. Version 2.2.5-release, 06 oct 2014
-   A.4. Version 2.2.4-release, 11 sep 2014
-   A.5. Version 2.2.3-beta, 13 may 2014
-   A.6. Version 2.2.2-beta, 11 feb 2014
-   A.7. Version 2.2.1-beta, 13 nov 2013
-   A.8. Version 2.1.9-release, 03 jul 2014
-   A.9. Version 2.1.8-release, 28 apr 2014
-   A.10. Version 2.1.7-release, 30 mar 2014
-   A.11. Version 2.1.6-release, 24 feb 2014
-   A.12. Version 2.1.5-release, 22 jan 2014
-   A.13. Version 2.1.4-release, 18 dec 2013
-   A.14. Version 2.1.3-release, 12 nov 2013
-   A.15. Version 2.1.2-release, 10 oct 2013
-   A.16. Version 2.1.1-beta, 20 feb 2013
-   A.17. Version 2.0.11-dev, xx xxx xxxx
-   A.18. Version 2.0.10-release, 22 jan 2014
-   A.19. Version 2.0.9-release, 26 aug 2013
-   A.20. Version 2.0.8-release, 26 apr 2013
-   A.21. Version 2.0.7-release, 26 mar 2013
-   A.22. Version 2.0.6-release, 22 oct 2012
-   A.23. Version 2.0.5-release, 28 jul 2012
-   A.24. Version 2.0.4-release, 02 mar 2012
-   A.25. Version 2.0.3-release, 23 dec 2011
-   A.26. Version 2.0.2-beta, 15 nov 2011
-   A.27. Version 2.0.1-beta, 22 apr 2011
-   A.28. Version 1.10-beta, 19 jul 2010
-   A.29. Version 0.9.9-release, 02 dec 2009
-   A.30. Version 0.9.9-rc2, 08 apr 2009
-   A.31. Version 0.9.9-rc1, 17 nov 2008
-   A.32. Version 0.9.8.1, 30 oct 2008
-   A.33. Version 0.9.8, 14 jul 2008
-   A.34. Version 0.9.7, 02 apr 2007
-   A.35. Version 0.9.7-rc2, 15 dec 2006
-   A.36. Version 0.9.7-rc1, 26 oct 2006
-   A.37. Version 0.9.6, 24 jul 2006
-   A.38. Version 0.9.6-rc1, 26 jun 2006
+   A.1. Version 2.3.1-beta, 24 feb 2015
+   A.2. Version 2.2.7-release, 20 jan 2015
+   A.3. Version 2.2.6-release, 13 nov 2014
+   A.4. Version 2.2.5-release, 06 oct 2014
+   A.5. Version 2.2.4-release, 11 sep 2014
+   A.6. Version 2.2.3-beta, 13 may 2014
+   A.7. Version 2.2.2-beta, 11 feb 2014
+   A.8. Version 2.2.1-beta, 13 nov 2013
+   A.9. Version 2.1.9-release, 03 jul 2014
+   A.10. Version 2.1.8-release, 28 apr 2014
+   A.11. Version 2.1.7-release, 30 mar 2014
+   A.12. Version 2.1.6-release, 24 feb 2014
+   A.13. Version 2.1.5-release, 22 jan 2014
+   A.14. Version 2.1.4-release, 18 dec 2013
+   A.15. Version 2.1.3-release, 12 nov 2013
+   A.16. Version 2.1.2-release, 10 oct 2013
+   A.17. Version 2.1.1-beta, 20 feb 2013
+   A.18. Version 2.0.11-dev, xx xxx xxxx
+   A.19. Version 2.0.10-release, 22 jan 2014
+   A.20. Version 2.0.9-release, 26 aug 2013
+   A.21. Version 2.0.8-release, 26 apr 2013
+   A.22. Version 2.0.7-release, 26 mar 2013
+   A.23. Version 2.0.6-release, 22 oct 2012
+   A.24. Version 2.0.5-release, 28 jul 2012
+   A.25. Version 2.0.4-release, 02 mar 2012
+   A.26. Version 2.0.3-release, 23 dec 2011
+   A.27. Version 2.0.2-beta, 15 nov 2011
+   A.28. Version 2.0.1-beta, 22 apr 2011
+   A.29. Version 1.10-beta, 19 jul 2010
+   A.30. Version 0.9.9-release, 02 dec 2009
+   A.31. Version 0.9.9-rc2, 08 apr 2009
+   A.32. Version 0.9.9-rc1, 17 nov 2008
+   A.33. Version 0.9.8.1, 30 oct 2008
+   A.34. Version 0.9.8, 14 jul 2008
+   A.35. Version 0.9.7, 02 apr 2007
+   A.36. Version 0.9.7-rc2, 15 dec 2006
+   A.37. Version 0.9.7-rc1, 26 oct 2006
+   A.38. Version 0.9.6, 24 jul 2006
+   A.39. Version 0.9.6-rc1, 26 jun 2006
 
 List of Tables
 
@@ -790,10 +792,10 @@ project files) manually.
 
    1. Extract everything from the distribution tarball (haven't you
       already?) and go to the sphinx subdirectory. (We are using version
-      2.2.8-dev here for the sake of example only; be sure to change this
+      2.3.1-beta here for the sake of example only; be sure to change this
       to a specific version you're using.)
 
-      | $ tar xzvf sphinx-2.2.8-dev.tar.gz
+      | $ tar xzvf sphinx-2.3.1-beta.tar.gz
       | $ cd sphinx
 
    2. Run the configuration program:
@@ -872,7 +874,7 @@ Deb packages:
       $ sudo apt-get install mysql-client unixodbc libpq5
    2. Now you can install Sphinx:
 
-      $ sudo dpkg -i sphinxsearch_2.2.8-dev-0ubuntu11~trusty_amd64.deb
+      $ sudo dpkg -i sphinxsearch_2.3.1-beta-0ubuntu11~trusty_amd64.deb
 
 PPA repository (Ubuntu only).
 
@@ -882,7 +884,7 @@ version with the same command.
 
    1. First, add Sphinxsearch repository and update the list of packages:
 
-      $ sudo add-apt-repository ppa:builds/sphinxsearch-rel22
+      $ sudo add-apt-repository ppa:builds/sphinxsearch-rel23
 
       $ sudo apt-get update
 
@@ -922,10 +924,10 @@ a Linux environment; unless you are preparing code patches, you can use the
 pre-compiled binary files from the Downloads area on the website.
 
    1. Extract everything from the .zip file you have downloaded -
-      sphinx-2.2.8-dev-win32.zip, or sphinx-2.2.8-dev-win32-pgsql.zip if
-      you need PostgresSQL support as well. (We are using version 2.2.8-dev
-      here for the sake of example only; be sure to change this to
-      a specific version you're using.) You can use Windows Explorer in
+      sphinx-2.3.1-beta-win32.zip, or sphinx-2.3.1-beta-win32-pgsql.zip if
+      you need PostgresSQL support as well. (We are using version
+      2.3.1-beta here for the sake of example only; be sure to change this
+      to a specific version you're using.) You can use Windows Explorer in
       Windows XP and up to extract the files, or a freeware package like
       7Zip to open the archive.
 
@@ -3990,7 +3992,7 @@ query settings set by previous API calls, and memorizes the query.
 RunQueries() actually sends all the memorized queries, and returns multiple
 result sets. There are no restrictions on the queries at all, except just
 a sanity check on a number of queries in a single batch (see
-Section 12.4.20, <<max_batch_queries>>).
+Section 12.4.22, <<max_batch_queries>>).
 
 Why use multi-queries? Generally, it all boils down to performance. First,
 by sending requests to searchd in a batch instead of one by one, you always
@@ -4234,12 +4236,6 @@ Once you successfully load an UDF, you can use it in your SELECT or other
 statements just as well as any of the builtin functions:
 
    | SELECT id, MYCUSTOMFUNC(groupid, authorname), ... FROM myindex
-
-UDFs are completely supported in workers=threads mode only. They are
-partially supported in workers=prefork mode too: namely, CREATEs from the
-sphinxql_state startup script will work and those UDFs will be accessible.
-However, DROPs will not be available. UDFs are not supported in
-workers=fork mode.
 
 Multiple UDFs (and other plugins) may reside in a single library. That
 library will only be loaded once. It gets automatically unloaded once all
@@ -5532,7 +5528,7 @@ omissions (such as (currently) missing support for JOINs). Specifically,
       * 'max_query_time' - integer (max search time threshold, msec)
 
       * 'max_predicted_time' - integer (max predicted search time, see
-        Section 12.4.44, <<predicted_time_costs>>)
+        Section 12.4.45, <<predicted_time_costs>>)
 
       * 'ranker' - any of 'proximity_bm25', 'bm25', 'none', 'wordcount',
         'proximity', 'matchany', 'fieldmask', 'sph04', 'expr', or 'export'
@@ -8947,50 +8943,51 @@ Table of Contents
    12.4.5. read_timeout
    12.4.6. client_timeout
    12.4.7. max_children
-   12.4.8. pid_file
-   12.4.9. seamless_rotate
-   12.4.10. preopen_indexes
-   12.4.11. unlink_old
-   12.4.12. attr_flush_period
-   12.4.13. max_packet_size
-   12.4.14. mva_updates_pool
-   12.4.15. max_filters
-   12.4.16. max_filter_values
-   12.4.17. listen_backlog
-   12.4.18. read_buffer
-   12.4.19. read_unhinted
-   12.4.20. max_batch_queries
-   12.4.21. subtree_docs_cache
-   12.4.22. subtree_hits_cache
-   12.4.23. workers
-   12.4.24. dist_threads
-   12.4.25. binlog_path
-   12.4.26. binlog_flush
-   12.4.27. binlog_max_log_size
-   12.4.28. snippets_file_prefix
-   12.4.29. collation_server
-   12.4.30. collation_libc_locale
-   12.4.31. plugin_dir
-   12.4.32. mysql_version_string
-   12.4.33. rt_flush_period
-   12.4.34. thread_stack
-   12.4.35. expansion_limit
-   12.4.36. watchdog
-   12.4.37. prefork_rotation_throttle
-   12.4.38. sphinxql_state
-   12.4.39. ha_ping_interval
-   12.4.40. ha_period_karma
-   12.4.41. persistent_connections_limit
-   12.4.42. rt_merge_iops
-   12.4.43. rt_merge_maxiosize
-   12.4.44. predicted_time_costs
-   12.4.45. shutdown_timeout
-   12.4.46. ondisk_attrs_default
-   12.4.47. query_log_min_msec
-   12.4.48. agent_connect_timeout
-   12.4.49. agent_query_timeout
-   12.4.50. agent_retry_count
-   12.4.51. agent_retry_delay
+   12.4.8. net_workers
+   12.4.9. queue_max_length
+   12.4.10. pid_file
+   12.4.11. seamless_rotate
+   12.4.12. preopen_indexes
+   12.4.13. unlink_old
+   12.4.14. attr_flush_period
+   12.4.15. max_packet_size
+   12.4.16. mva_updates_pool
+   12.4.17. max_filters
+   12.4.18. max_filter_values
+   12.4.19. listen_backlog
+   12.4.20. read_buffer
+   12.4.21. read_unhinted
+   12.4.22. max_batch_queries
+   12.4.23. subtree_docs_cache
+   12.4.24. subtree_hits_cache
+   12.4.25. workers
+   12.4.26. dist_threads
+   12.4.27. binlog_path
+   12.4.28. binlog_flush
+   12.4.29. binlog_max_log_size
+   12.4.30. snippets_file_prefix
+   12.4.31. collation_server
+   12.4.32. collation_libc_locale
+   12.4.33. plugin_dir
+   12.4.34. mysql_version_string
+   12.4.35. rt_flush_period
+   12.4.36. thread_stack
+   12.4.37. expansion_limit
+   12.4.38. watchdog
+   12.4.39. sphinxql_state
+   12.4.40. ha_ping_interval
+   12.4.41. ha_period_karma
+   12.4.42. persistent_connections_limit
+   12.4.43. rt_merge_iops
+   12.4.44. rt_merge_maxiosize
+   12.4.45. predicted_time_costs
+   12.4.46. shutdown_timeout
+   12.4.47. ondisk_attrs_default
+   12.4.48. query_log_min_msec
+   12.4.49. agent_connect_timeout
+   12.4.50. agent_query_timeout
+   12.4.51. agent_retry_count
+   12.4.52. agent_retry_delay
 
 12.5. Common section configuration options
    12.5.1. lemmatizer_base
@@ -11061,7 +11058,7 @@ in different distributed indexes.
 Note that by default all local indexes will be searched sequentially,
 utilizing only 1 CPU or core. To parallelize processing of the local parts
 in the distributed index, you should use dist_threads directive, see
-Section 12.4.24, <<dist_threads>>.
+Section 12.4.26, <<dist_threads>>.
 
 Before dist_threads, there also was a legacy solution to configure searchd
 to query itself instead of using local indexes (refer to Section 12.2.31,
@@ -12249,19 +12246,23 @@ path, that searchd will listen on. Introduced in version 0.9.9-rc1.
 
 The informal grammar for listen setting is:
 
-   | listen = ( address ":" port | port | path ) [ ":" protocol ]
+   | listen = ( address ":" port | port | path ) [ ":" protocol ] [ "_vip" ]
 
 I.e. you can specify either an IP address (or hostname) and port number, or
 just a port number, or Unix socket path. If you specify port number but not
 the address, searchd will listen on all network interfaces. Unix path is
 identified by a leading slash.
 
-Starting with version 0.9.9-rc2, you can also specify a protocol handler
-(listener) to be used for connections on this socket. Supported protocol
-values are 'sphinx' (Sphinx 0.9.x API protocol) and 'mysql41' (MySQL
-protocol used since 4.1 upto at least 5.1). More details on MySQL protocol
-support can be found in Section 5.10, <<MySQL protocol support and
-SphinxQL>> section.
+You can also specify a protocol handler (listener) to be used for
+connections on this socket. Supported protocol values are 'sphinx' (Sphinx
+0.9.x API protocol) and 'mysql41' (MySQL protocol used since 4.1 upto at
+least 5.1). More details on MySQL protocol support can be found in
+Section 5.10, <<MySQL protocol support and SphinxQL>> section.
+
+Adding a "_vip" suffix to listener interface declaration, like sphinx_vip
+or mysql41_vip, makes all connections to this port passing-by thread pool
+and got handled at dedicated threads. That might help to administrate
+loaded daemon without stuck or delays.
 
 Examples:
 
@@ -12354,21 +12355,42 @@ Example:
 12.4.7. max_children
 --------------------
 
-Maximum amount of children to fork (or in other words, concurrent searches
-to run in parallel). Optional, default is 0 (unlimited).
+Maximum amount of worker threads (or in other words, concurrent queries to
+run in parallel). Optional, default is 0 (unlimited) for threads and number
+of CPU cores for thread_pool mode.
 
-Useful to control server load. There will be no more than this much
-concurrent searches running, at all times. When the limit is reached,
-additional incoming clients are dismissed with temporarily failure
-(SEARCHD_RETRY) status code and a message stating that the server is maxed
-out.
+Useful to control server load.
+
+In threads mode there will be no more than this much concurrent searches
+running, at all times. When the limit is reached, additional incoming
+clients are dismissed with temporarily failure (SEARCHD_RETRY) status code
+and a message stating that the server is maxed out.
+
+In thread_pool mode max_children is a thread pool size, i.e. amount of
+worker threads which actually execute queries.
 
 Example:
 
    | max_children = 10
 
-12.4.8. pid_file
-----------------
+12.4.8. net_workers
+-------------------
+
+Amount of dedicated net loop threads. Default is 1.
+
+Might be useful in case of SMP box.
+
+12.4.9. queue_max_length
+------------------------
+
+Set thread pool max queue length. Default is 0 (unlimited).
+
+In case of high CPU load thread pool queue may grow all the time. This
+directive constrains queue length by rejecting incoming requests with
+"maxed out" message till queue got low again.
+
+12.4.10. pid_file
+-----------------
 
 searchd process ID file name. Mandatory.
 
@@ -12383,8 +12405,8 @@ Example:
 
    | pid_file = /var/run/searchd.pid
 
-12.4.9. seamless_rotate
------------------------
+12.4.11. seamless_rotate
+------------------------
 
 Prevents searchd stalls while rotating indexes with huge amounts of data to
 precache. Optional, default is 1 (enable seamless rotation).
@@ -12434,7 +12456,7 @@ Example:
 
    | seamless_rotate = 1
 
-12.4.10. preopen_indexes
+12.4.12. preopen_indexes
 ------------------------
 
 Whether to forcibly preopen all indexes on startup. Optional, default is
@@ -12458,7 +12480,7 @@ Example:
 
    | preopen_indexes = 1
 
-12.4.11. unlink_old
+12.4.13. unlink_old
 -------------------
 
 Whether to unlink .old index copies on successful rotation. Optional,
@@ -12468,7 +12490,7 @@ Example:
 
    | unlink_old = 0
 
-12.4.12. attr_flush_period
+12.4.14. attr_flush_period
 --------------------------
 
 When calling UpdateAttributes() to update document attributes in real-time,
@@ -12488,7 +12510,7 @@ Example:
 
    | attr_flush_period = 900 # persist updates to disk every 15 minutes
 
-12.4.13. max_packet_size
+12.4.15. max_packet_size
 ------------------------
 
 Maximum allowed network packet size. Limits both query packets from
@@ -12501,7 +12523,7 @@ Example:
 
    | max_packet_size = 32M
 
-12.4.14. mva_updates_pool
+12.4.16. mva_updates_pool
 -------------------------
 
 Shared pool size for in-memory MVA updates storage. Optional, default size
@@ -12521,7 +12543,7 @@ Example:
 
    | mva_updates_pool = 16M
 
-12.4.15. max_filters
+12.4.17. max_filters
 --------------------
 
 Maximum allowed per-query filter count. Only used for internal sanity
@@ -12532,7 +12554,7 @@ Example:
 
    | max_filters = 1024
 
-12.4.16. max_filter_values
+12.4.18. max_filter_values
 --------------------------
 
 Maximum allowed per-filter values count. Only used for internal sanity
@@ -12543,7 +12565,7 @@ Example:
 
    | max_filter_values = 16384
 
-12.4.17. listen_backlog
+12.4.19. listen_backlog
 -----------------------
 
 TCP listen backlog. Optional, default is 5.
@@ -12559,7 +12581,7 @@ Example:
 
    | listen_backlog = 20
 
-12.4.18. read_buffer
+12.4.20. read_buffer
 --------------------
 
 Per-keyword read buffer size. Optional, default is 256K.
@@ -12573,7 +12595,7 @@ Example:
 
    | read_buffer = 1M
 
-12.4.19. read_unhinted
+12.4.21. read_unhinted
 ----------------------
 
 Unhinted read size. Optional, default is 32K.
@@ -12590,7 +12612,7 @@ Example:
 
    | read_unhinted = 32K
 
-12.4.20. max_batch_queries
+12.4.22. max_batch_queries
 --------------------------
 
 Limits the amount of queries per batch. Optional, default is 32.
@@ -12602,7 +12624,7 @@ Example:
 
    | max_batch_queries = 256
 
-12.4.21. subtree_docs_cache
+12.4.23. subtree_docs_cache
 ---------------------------
 
 Max common subtree document cache size, per-query. Optional, default is
@@ -12616,7 +12638,7 @@ Example:
 
    | subtree_docs_cache = 8M
 
-12.4.22. subtree_hits_cache
+12.4.24. subtree_hits_cache
 ---------------------------
 
 Max common subtree hit cache size, per-query. Optional, default is
@@ -12631,46 +12653,35 @@ Example:
 
    | subtree_hits_cache = 16M
 
-12.4.23. workers
+12.4.25. workers
 ----------------
 
-Multi-processing mode (MPM). Optional; allowed values are none, fork,
-prefork, and threads. Default is threads. Introduced in version 1.10-beta.
+Multi-processing mode (MPM). Optional; allowed values are thread_pool, and
+threads. Default is thread_pool. Introduced in version 1.10-beta.
 
 Lets you choose how searchd processes multiple concurrent requests. The
 possible values are:
 
-none
-   All requests will be handled serially, one-by-one. Prior to 1.x, this
-   was the only mode available on Windows.
-
-fork
-   A new child process will be forked to handle every incoming request.
-
-prefork
-   On startup, searchd will pre-fork a number of worker processes, and pass
-   the incoming requests to one of those children.
-
 threads
-   A new thread will be created to handle every incoming request. This is
-   the only mode compatible with RT indexing backend. This is a default
-   value.
+   A new thread will be created to handle every incoming request.
 
-Historically, searchd used fork-based model, which generally performs OK
-but spends a noticeable amount of CPU in fork() system call when there's
-a high amount of (tiny) requests per second. Prefork mode was implemented
-to alleviate that; with prefork, worker processes are basically only
-created on startup and re-created on index rotation, somewhat reducing
-fork() call pressure.
+thread_pool
+   A thread pool will be created on daemon start. Query tasks are putted in
+   a queue and processed in order. Uses poll() and epoll() on Linux and
+   WSAPoll on Windows (vista and later). This is the default mode.
 
 Threads mode was implemented along with RT backend and is required to use
 RT indexes. (Regular disk-based indexes work in all the available modes.)
 
+Thread pool is similar to threads mode but it doesn't suffer from overhead
+of creating a new thread on new connection and managing a lot of parallel
+threads.
+
 Example:
 
-   | workers = threads
+   | workers = thread_pool
 
-12.4.24. dist_threads
+12.4.26. dist_threads
 ---------------------
 
 Max local worker threads to use for parallelizable requests (searching
@@ -12696,9 +12707,6 @@ time). In case of mixed CPU/disk bound workload it might sometimes make
 sense to use more (so that all cores could be utilizes even when there are
 threads that wait for I/O completion).
 
-Note that dist_threads does not require threads MPM. You can perfectly use
-it with fork or prefork MPMs too.
-
 Starting with version 2.0.1-beta, building a batch of snippets with
 load_files flag enabled can also be parallelized. Up to dist_threads
 threads are be created to process those files. That speeds up snippet
@@ -12720,7 +12728,7 @@ Example:
    | 
    | dist_threads = 4
 
-12.4.25. binlog_path
+12.4.27. binlog_path
 --------------------
 
 Binary log (aka transaction log) files path. Optional, default is
@@ -12752,7 +12760,7 @@ Example:
    | binlog_path = # disable logging
    | binlog_path = /var/data # /var/data/binlog.001 etc will be created
 
-12.4.26. binlog_flush
+12.4.28. binlog_flush
 ---------------------
 
 Binary log transaction flush/sync mode. Optional, default is 2 (flush every
@@ -12783,7 +12791,7 @@ Example:
 
    | binlog_flush = 1 # ultimate safety, low speed
 
-12.4.27. binlog_max_log_size
+12.4.29. binlog_max_log_size
 ----------------------------
 
 Maximum binary log file size. Optional, default is 0 (do not reopen binlog
@@ -12797,7 +12805,7 @@ Example:
 
    | binlog_max_log_size = 16M
 
-12.4.28. snippets_file_prefix
+12.4.30. snippets_file_prefix
 -----------------------------
 
 A prefix to prepend to the local file names when generating snippets.
@@ -12824,7 +12832,7 @@ Example:
 
    | snippets_file_prefix = /mnt/common/server1/
 
-12.4.29. collation_server
+12.4.31. collation_server
 -------------------------
 
 Default server collation. Optional, default is libc_ci. Introduced in
@@ -12839,7 +12847,7 @@ Example:
 
    | collation_server = utf8_ci
 
-12.4.30. collation_libc_locale
+12.4.32. collation_libc_locale
 ------------------------------
 
 Server libc locale. Optional, default is C. Introduced in version
@@ -12852,7 +12860,7 @@ Example:
 
    | collation_libc_locale = fr_FR
 
-12.4.31. plugin_dir
+12.4.33. plugin_dir
 -------------------
 
 Trusted location for the dynamic libraries (UDFs). Optional, default is
@@ -12866,7 +12874,7 @@ Example:
    | workers = threads
    | plugin_dir = /usr/local/sphinx/lib
 
-12.4.32. mysql_version_string
+12.4.34. mysql_version_string
 -----------------------------
 
 A server version string to return via MySQL protocol. Optional, default is
@@ -12886,7 +12894,7 @@ Example:
 
    | mysql_version_string = 5.0.37
 
-12.4.33. rt_flush_period
+12.4.35. rt_flush_period
 ------------------------
 
 RT indexes RAM chunk flush check period, in seconds. Optional, default is
@@ -12902,7 +12910,7 @@ Example:
 
    | rt_flush_period = 3600 # 1 hour
 
-12.4.34. thread_stack
+12.4.36. thread_stack
 ---------------------
 
 Per-thread stack size. Optional, default is 1M. Introduced in version
@@ -12930,7 +12938,7 @@ Example:
 
    | thread_stack = 256K
 
-12.4.35. expansion_limit
+12.4.37. expansion_limit
 ------------------------
 
 The maximum number of expanded keywords for a single wildcard. Optional,
@@ -12948,7 +12956,7 @@ Example:
 
    | expansion_limit = 16
 
-12.4.36. watchdog
+12.4.38. watchdog
 -----------------
 
 Threaded server watchdog. Optional, default is 1 (watchdog enabled).
@@ -12964,31 +12972,7 @@ Example:
 
    | watchdog = 0 # disable watchdog
 
-12.4.37. prefork_rotation_throttle
-----------------------------------
-
-Delay between restarting preforked children on index rotation, in
-milliseconds. Optional, default is 0 (no delay). Introduced in version
-2.0.2-beta.
-
-When running in workers = prefork mode, every index rotation needs to
-restart all children to propagate the newly loaded index data changes.
-Restarting all of them at once might put excessive strain on CPU and/or
-network connections. (For instance, when the application keeps a bunch of
-open persistent connections to different children, and all those children
-restart.) Those bursts can be throttled down with prefork_rotation_throttle
-directive. Note that the children will be restarted sequentially, and thus
-"old" results might persist for a few more seconds. For instance, if
-prefork_rotation_throttle is set to 50 (milliseconds), and there are 30
-children, then the last one would only be actually restarted 1.5 seconds
-(50*30=1500 milliseconds) after the "rotation finished" message in the
-searchd event log.
-
-Example:
-
-   | prefork_rotation_throttle = 50 # throttle children restarts by 50 msec each
-
-12.4.38. sphinxql_state
+12.4.39. sphinxql_state
 -----------------------
 
 Path to a file where current SphinxQL state will be serialized. Available
@@ -13005,7 +12989,7 @@ Example:
 
    | sphinxql_state = uservars.sql
 
-12.4.39. ha_ping_interval
+12.4.40. ha_ping_interval
 -------------------------
 
 Interval between agent mirror pings, in milliseconds. Optional, default is
@@ -13022,7 +13006,7 @@ Example:
 
    | ha_ping_interval = 0
 
-12.4.40. ha_period_karma
+12.4.41. ha_period_karma
 ------------------------
 
 Agent mirror statistics window size, in seconds. Optional, default is 60.
@@ -13047,7 +13031,7 @@ Example:
 
    | ha_period_karma = 120
 
-12.4.41. persistent_connections_limit
+12.4.42. persistent_connections_limit
 -------------------------------------
 
 The maximum # of simultaneous persistent connections to remote persistent
@@ -13066,7 +13050,7 @@ Example:
 
    | persistent_connections_limit = 29 # assume that each host of agents has max_children = 30 (or 29).
 
-12.4.42. rt_merge_iops
+12.4.43. rt_merge_iops
 ----------------------
 
 A maximum number of I/O operations (per second) that the RT chunks merge
@@ -13084,7 +13068,7 @@ Example:
 
    | rt_merge_iops = 40
 
-12.4.43. rt_merge_maxiosize
+12.4.44. rt_merge_maxiosize
 ---------------------------
 
 A maximum size of an I/O operation that the RT chunks merge thread is
@@ -13101,7 +13085,7 @@ Example:
 
    | rt_merge_maxiosize = 1M
 
-12.4.44. predicted_time_costs
+12.4.45. predicted_time_costs
 -----------------------------
 
 Costs for the query time prediction model, in nanoseconds. Optional,
@@ -13154,7 +13138,7 @@ Example:
 
    | predicted_time_costs = doc=128, hit=96, skip=4096, match=128
 
-12.4.45. shutdown_timeout
+12.4.46. shutdown_timeout
 -------------------------
 
 searchd --stopwait wait time, in seconds. Optional, default is 3 seconds.
@@ -13170,7 +13154,7 @@ Example:
 
    | shutdown_timeout = 5 # wait for up to 5 seconds
 
-12.4.46. ondisk_attrs_default
+12.4.47. ondisk_attrs_default
 -----------------------------
 
 Instance-wide defaults for ondisk_attrs directive. Optional, default is
@@ -13179,7 +13163,7 @@ the default value of ondisk_attrs for all indexes served by this copy of
 searchd. Per-index directives take precedence, and will overwrite this
 instance-wide default value, allowing for fine-grain control.
 
-12.4.47. query_log_min_msec
+12.4.48. query_log_min_msec
 ---------------------------
 
 Limit (in milliseconds) that prevents the query from being written to the
@@ -13187,20 +13171,20 @@ query log. Optional, default is 0 (all queries are written to the query
 log). This directive specifies that only queries with execution times that
 exceed the specified limit will be logged.
 
-12.4.48. agent_connect_timeout
+12.4.49. agent_connect_timeout
 ------------------------------
 
 Instance-wide defaults for agent_connect_timeout parameter. The last
 defined in distributed (network) indexes.
 
-12.4.49. agent_query_timeout
+12.4.50. agent_query_timeout
 ----------------------------
 
 Instance-wide defaults for agent_query_timeout parameter. The last defined
 in distributed (network) indexes, or also may be overrided per-query using
 OPTION clause.
 
-12.4.50. agent_retry_count
+12.4.51. agent_retry_count
 --------------------------
 
 Integer, specifies how many times sphinx will try to connect and query
@@ -13209,7 +13193,7 @@ Default is 0 (i.e. no retries). This value may be also specified on
 per-query basis using 'OPTION retry_count=XXX' clause. If per-query option
 exists, it will override the one specified in config.
 
-12.4.51. agent_retry_delay
+12.4.52. agent_retry_delay
 --------------------------
 
 Integer, in milliseconds. Specifies the delay sphinx rest before retrying
@@ -13335,46 +13319,86 @@ Appendix A. Sphinx revision history
 
 Table of Contents
 
-A.1. Version 2.2.7-release, 20 jan 2015
-A.2. Version 2.2.6-release, 13 nov 2014
-A.3. Version 2.2.5-release, 06 oct 2014
-A.4. Version 2.2.4-release, 11 sep 2014
-A.5. Version 2.2.3-beta, 13 may 2014
-A.6. Version 2.2.2-beta, 11 feb 2014
-A.7. Version 2.2.1-beta, 13 nov 2013
-A.8. Version 2.1.9-release, 03 jul 2014
-A.9. Version 2.1.8-release, 28 apr 2014
-A.10. Version 2.1.7-release, 30 mar 2014
-A.11. Version 2.1.6-release, 24 feb 2014
-A.12. Version 2.1.5-release, 22 jan 2014
-A.13. Version 2.1.4-release, 18 dec 2013
-A.14. Version 2.1.3-release, 12 nov 2013
-A.15. Version 2.1.2-release, 10 oct 2013
-A.16. Version 2.1.1-beta, 20 feb 2013
-A.17. Version 2.0.11-dev, xx xxx xxxx
-A.18. Version 2.0.10-release, 22 jan 2014
-A.19. Version 2.0.9-release, 26 aug 2013
-A.20. Version 2.0.8-release, 26 apr 2013
-A.21. Version 2.0.7-release, 26 mar 2013
-A.22. Version 2.0.6-release, 22 oct 2012
-A.23. Version 2.0.5-release, 28 jul 2012
-A.24. Version 2.0.4-release, 02 mar 2012
-A.25. Version 2.0.3-release, 23 dec 2011
-A.26. Version 2.0.2-beta, 15 nov 2011
-A.27. Version 2.0.1-beta, 22 apr 2011
-A.28. Version 1.10-beta, 19 jul 2010
-A.29. Version 0.9.9-release, 02 dec 2009
-A.30. Version 0.9.9-rc2, 08 apr 2009
-A.31. Version 0.9.9-rc1, 17 nov 2008
-A.32. Version 0.9.8.1, 30 oct 2008
-A.33. Version 0.9.8, 14 jul 2008
-A.34. Version 0.9.7, 02 apr 2007
-A.35. Version 0.9.7-rc2, 15 dec 2006
-A.36. Version 0.9.7-rc1, 26 oct 2006
-A.37. Version 0.9.6, 24 jul 2006
-A.38. Version 0.9.6-rc1, 26 jun 2006
+A.1. Version 2.3.1-beta, 24 feb 2015
+A.2. Version 2.2.7-release, 20 jan 2015
+A.3. Version 2.2.6-release, 13 nov 2014
+A.4. Version 2.2.5-release, 06 oct 2014
+A.5. Version 2.2.4-release, 11 sep 2014
+A.6. Version 2.2.3-beta, 13 may 2014
+A.7. Version 2.2.2-beta, 11 feb 2014
+A.8. Version 2.2.1-beta, 13 nov 2013
+A.9. Version 2.1.9-release, 03 jul 2014
+A.10. Version 2.1.8-release, 28 apr 2014
+A.11. Version 2.1.7-release, 30 mar 2014
+A.12. Version 2.1.6-release, 24 feb 2014
+A.13. Version 2.1.5-release, 22 jan 2014
+A.14. Version 2.1.4-release, 18 dec 2013
+A.15. Version 2.1.3-release, 12 nov 2013
+A.16. Version 2.1.2-release, 10 oct 2013
+A.17. Version 2.1.1-beta, 20 feb 2013
+A.18. Version 2.0.11-dev, xx xxx xxxx
+A.19. Version 2.0.10-release, 22 jan 2014
+A.20. Version 2.0.9-release, 26 aug 2013
+A.21. Version 2.0.8-release, 26 apr 2013
+A.22. Version 2.0.7-release, 26 mar 2013
+A.23. Version 2.0.6-release, 22 oct 2012
+A.24. Version 2.0.5-release, 28 jul 2012
+A.25. Version 2.0.4-release, 02 mar 2012
+A.26. Version 2.0.3-release, 23 dec 2011
+A.27. Version 2.0.2-beta, 15 nov 2011
+A.28. Version 2.0.1-beta, 22 apr 2011
+A.29. Version 1.10-beta, 19 jul 2010
+A.30. Version 0.9.9-release, 02 dec 2009
+A.31. Version 0.9.9-rc2, 08 apr 2009
+A.32. Version 0.9.9-rc1, 17 nov 2008
+A.33. Version 0.9.8.1, 30 oct 2008
+A.34. Version 0.9.8, 14 jul 2008
+A.35. Version 0.9.7, 02 apr 2007
+A.36. Version 0.9.7-rc2, 15 dec 2006
+A.37. Version 0.9.7-rc1, 26 oct 2006
+A.38. Version 0.9.6, 24 jul 2006
+A.39. Version 0.9.6-rc1, 26 jun 2006
 
-A.1. Version 2.2.7-release, 20 jan 2015
+A.1. Version 2.3.1-beta, 24 feb 2015
+====================================
+
+Major features
+--------------
+
+   * added workers=thread_pool directive
+
+   * added max_children directive
+
+   * added net_workers directive
+
+   * added queue_max_length directive
+
+   * added vip suffixes to listener interface declaration, like sphinx_vip
+     or mysql41_vip
+
+Removals
+--------
+
+   * removed fork and prefork modes
+
+   * removed prefork_rotation_throttle configure key
+
+Minor features
+--------------
+
+   * added FLUSH ATTRIBUTES to SphinxQL
+
+Bug fixes
+---------
+
+   * fixed #2167, --keep_attrs doesn't work with --rotate
+
+   * fixed #2161, indexation or RT index fail due to multiple loads of an
+     index_token_filter
+
+   * fixed #2154, crash of ZONE operator
+
+A.2. Version 2.2.7-release, 20 jan 2015
 =======================================
 
 Minor features
@@ -13416,7 +13440,7 @@ Bug fixes
 
    * fixed snippets crash with blend chars at the beginning of a string
 
-A.2. Version 2.2.6-release, 13 nov 2014
+A.3. Version 2.2.6-release, 13 nov 2014
 =======================================
 
 Bug fixes
@@ -13438,7 +13462,7 @@ Bug fixes
 
    * indexation of duplicate documents
 
-A.3. Version 2.2.5-release, 06 oct 2014
+A.4. Version 2.2.5-release, 06 oct 2014
 =======================================
 
 New minor features
@@ -13467,7 +13491,7 @@ Bug fixes
 
    * fixed MySQL protocol response when daemon maxed out
 
-A.4. Version 2.2.4-release, 11 sep 2014
+A.5. Version 2.2.4-release, 11 sep 2014
 =======================================
 
 New major features
@@ -13541,7 +13565,7 @@ Bug fixes
    * fixed cpu time logging for cases where work is done in child threads
      or agents
 
-A.5. Version 2.2.3-beta, 13 may 2014
+A.6. Version 2.2.3-beta, 13 may 2014
 ====================================
 
 New features
@@ -13602,7 +13626,7 @@ Bug fixes
 
    * fixed template index removing on rotation
 
-A.6. Version 2.2.2-beta, 11 feb 2014
+A.7. Version 2.2.2-beta, 11 feb 2014
 ====================================
 
 New features
@@ -13668,7 +13692,7 @@ Optimizations, behavior changes, and removals
 
    * removed support for client versions 0.9.6 and below
 
-A.7. Version 2.2.1-beta, 13 nov 2013
+A.8. Version 2.2.1-beta, 13 nov 2013
 ====================================
 
 Major new features
@@ -13796,7 +13820,7 @@ Bug fixes
      expansion (expand_keywords or lemmatize) occurred
    * fixed a crash while creating indexes with sql_joined_field
 
-A.8. Version 2.1.9-release, 03 jul 2014
+A.9. Version 2.1.9-release, 03 jul 2014
 =======================================
 
 Bug fixes
@@ -13816,8 +13840,8 @@ Bug fixes
    * fixed #1968, parsing of WEIGHT() function (queries to distributed
      indexes affected)
 
-A.9. Version 2.1.8-release, 28 apr 2014
-=======================================
+A.10. Version 2.1.8-release, 28 apr 2014
+========================================
 
 Bug fixes
 ---------
@@ -13842,7 +13866,7 @@ Bug fixes
    * fixed #1682, field end modifier doesn't work with words containing
      blended chars
 
-A.10. Version 2.1.7-release, 30 mar 2014
+A.11. Version 2.1.7-release, 30 mar 2014
 ========================================
 
 Bug fixes
@@ -13877,7 +13901,7 @@ Bug fixes
 
    * fixed Quick Tour documentation chapter
 
-A.11. Version 2.1.6-release, 24 feb 2014
+A.12. Version 2.1.6-release, 24 feb 2014
 ========================================
 
 Bug fixes
@@ -13923,7 +13947,7 @@ Bug fixes
 
    * fixed index corruption in UPDATE queries with non-existent attributes
 
-A.12. Version 2.1.5-release, 22 jan 2014
+A.13. Version 2.1.5-release, 22 jan 2014
 ========================================
 
 Bug fixes
@@ -13944,7 +13968,7 @@ Bug fixes
    * fixed network protocol issue which results in timeouts of
      libmysqlclient for big Sphinx responses
 
-A.13. Version 2.1.4-release, 18 dec 2013
+A.14. Version 2.1.4-release, 18 dec 2013
 ========================================
 
 Bug fixes
@@ -13964,7 +13988,7 @@ Bug fixes
 
    * fixed, --with-re2 check
 
-A.14. Version 2.1.3-release, 12 nov 2013
+A.15. Version 2.1.3-release, 12 nov 2013
 ========================================
 
 Bug fixes
@@ -13985,7 +14009,7 @@ Bug fixes
 
    * fixed crash while querying index with lemmatizer and wordforms
 
-A.15. Version 2.1.2-release, 10 oct 2013
+A.16. Version 2.1.2-release, 10 oct 2013
 ========================================
 
 New features
@@ -14159,7 +14183,7 @@ Bug fixes
 
    * fixed TOP_COUNT usage in misc/suggest and updated to PHP 5.3 and UTF-8
 
-A.16. Version 2.1.1-beta, 20 feb 2013
+A.17. Version 2.1.1-beta, 20 feb 2013
 =====================================
 
 Major new features
@@ -14311,13 +14335,13 @@ Major behavior changes and optimizations
    * optimized filtering and scan in several frequent cases (single-value,
      2-arg, 3-arg WHERE clauses)
 
-A.17. Version 2.0.11-dev, xx xxx xxxx
+A.18. Version 2.0.11-dev, xx xxx xxxx
 =====================================
 
 Bug fixes
 ---------
 
-A.18. Version 2.0.10-release, 22 jan 2014
+A.19. Version 2.0.10-release, 22 jan 2014
 =========================================
 
 Bug fixes
@@ -14354,7 +14378,7 @@ Bug fixes
    * fixed rt_flush_period - less stricter internal check and more often
      flushes overall
 
-A.19. Version 2.0.9-release, 26 aug 2013
+A.20. Version 2.0.9-release, 26 aug 2013
 ========================================
 
 Bug fixes
@@ -14414,7 +14438,7 @@ Bug fixes
    * added a warning for missed stopwords, exception, wordforms files on
      index load and in indextool --check
 
-A.20. Version 2.0.8-release, 26 apr 2013
+A.21. Version 2.0.8-release, 26 apr 2013
 ========================================
 
 Bug fixes
@@ -14464,7 +14488,7 @@ Bug fixes
 
    * fixed #1405, between with mixed int float values
 
-A.21. Version 2.0.7-release, 26 mar 2013
+A.22. Version 2.0.7-release, 26 mar 2013
 ========================================
 
 Bug fixes
@@ -14597,7 +14621,7 @@ Bug fixes
 
    * added more debug info about failed index loading
 
-A.22. Version 2.0.6-release, 22 oct 2012
+A.23. Version 2.0.6-release, 22 oct 2012
 ========================================
 
 Bug fixes
@@ -14719,7 +14743,7 @@ Bug fixes
 
    * fixed x64 configurations for libstemmer
 
-A.23. Version 2.0.5-release, 28 jul 2012
+A.24. Version 2.0.5-release, 28 jul 2012
 ========================================
 
 Bug fixes
@@ -14879,7 +14903,7 @@ Bug fixes
 
    * fixed missing command-line switches documentation
 
-A.24. Version 2.0.4-release, 02 mar 2012
+A.25. Version 2.0.4-release, 02 mar 2012
 ========================================
 
 Bug fixes
@@ -14967,7 +14991,7 @@ Bug fixes
    * fixed #1120, negative total_found, docs and hits counter on huge
      indexes
 
-A.25. Version 2.0.3-release, 23 dec 2011
+A.26. Version 2.0.3-release, 23 dec 2011
 ========================================
 
 Bug fixes
@@ -15014,7 +15038,7 @@ Bug fixes
 
    * fixed crash log for 'fork' and 'prefork' workers
 
-A.26. Version 2.0.2-beta, 15 nov 2011
+A.27. Version 2.0.2-beta, 15 nov 2011
 =====================================
 
 Major new features
@@ -15281,7 +15305,7 @@ Bug fixes
    * fixed that field/zone conditions were not propagated to expanded
      keywords with dict=keywords
 
-A.27. Version 2.0.1-beta, 22 apr 2011
+A.28. Version 2.0.1-beta, 22 apr 2011
 =====================================
 
 New general features
@@ -15579,7 +15603,7 @@ Bug fixes
 
    * fixed libsphinxclient vs VS2003 compiler bug
 
-A.28. Version 1.10-beta, 19 jul 2010
+A.29. Version 1.10-beta, 19 jul 2010
 ====================================
 
    * added RT indexes support (Chapter 4, Real-time indexes)
@@ -15729,7 +15753,7 @@ A.28. Version 1.10-beta, 19 jul 2010
 
    * fixed #509, indexing ranged results from stored procedures
 
-A.29. Version 0.9.9-release, 02 dec 2009
+A.30. Version 0.9.9-release, 02 dec 2009
 ========================================
 
    * added Open, Close, Status calls to libsphinxclient (C API)
@@ -15844,7 +15868,7 @@ A.29. Version 0.9.9-release, 02 dec 2009
 
    * fixed #326 (missing CLOCK_xxx on FreeBSD)
 
-A.30. Version 0.9.9-rc2, 08 apr 2009
+A.31. Version 0.9.9-rc2, 08 apr 2009
 ====================================
 
    * added IsConnectError(), Open(), Close() calls to Java API (bug #240)
@@ -16014,7 +16038,7 @@ A.30. Version 0.9.9-rc2, 08 apr 2009
 
    * fixed parser vs @field -keyword, foo|@field bar, "" queries (bug #310)
 
-A.31. Version 0.9.9-rc1, 17 nov 2008
+A.32. Version 0.9.9-rc1, 17 nov 2008
 ====================================
 
    * added min_stemming_len directive
@@ -16117,7 +16141,7 @@ A.31. Version 0.9.9-rc1, 17 nov 2008
 
    * fixed handling of over-2GB dictionary files (.spi)
 
-A.32. Version 0.9.8.1, 30 oct 2008
+A.33. Version 0.9.8.1, 30 oct 2008
 ==================================
 
    * added configure script to libsphinxclient
@@ -16172,7 +16196,7 @@ A.32. Version 0.9.8.1, 30 oct 2008
    * fixed default ID range (that filtered out all 64-bit values) in Java
      and Python APIs
 
-A.33. Version 0.9.8, 14 jul 2008
+A.34. Version 0.9.8, 14 jul 2008
 ================================
 
 Indexing
@@ -16456,7 +16480,7 @@ Changes and fixes since 0.9.8-rc2
 
    * fixed sorting of negative floats in SPH_SORT_EXTENDED mode
 
-A.34. Version 0.9.7, 02 apr 2007
+A.35. Version 0.9.7, 02 apr 2007
 ================================
 
    * added support for sql_str2ordinal_column
@@ -16541,7 +16565,7 @@ A.34. Version 0.9.7, 02 apr 2007
 
    * fixed crashes with no-attribute indexes after rotate
 
-A.35. Version 0.9.7-rc2, 15 dec 2006
+A.36. Version 0.9.7-rc2, 15 dec 2006
 ====================================
 
    * added support for extended matching mode (query language)
@@ -16577,7 +16601,7 @@ A.35. Version 0.9.7-rc2, 15 dec 2006
 
    * fixes for 64-bit platforms
 
-A.36. Version 0.9.7-rc1, 26 oct 2006
+A.37. Version 0.9.7-rc1, 26 oct 2006
 ====================================
 
    * added alpha index merging code
@@ -16627,7 +16651,7 @@ A.36. Version 0.9.7-rc1, 26 oct 2006
 
    * fixed some issues with index rotation
 
-A.37. Version 0.9.6, 24 jul 2006
+A.38. Version 0.9.6, 24 jul 2006
 ================================
 
    * added support for empty indexes
@@ -16640,7 +16664,7 @@ A.37. Version 0.9.6, 24 jul 2006
 
    * fixed building on Solaris 9
 
-A.38. Version 0.9.6-rc1, 26 jun 2006
+A.39. Version 0.9.6-rc1, 26 jun 2006
 ====================================
 
    * added boolean queries support (experimental, beta version)

@@ -20452,10 +20452,6 @@ static void ThdSaveIndexes ( void * )
 	g_tFlush.m_bFlushing = false;
 }
 
-#if !USE_WINDOWS
-int PreforkChild ();
-#endif
-
 void CheckFlush ()
 {
 	if ( g_tFlush.m_bFlushing )
@@ -20813,25 +20809,6 @@ BOOL WINAPI CtrlHandler ( DWORD )
 
 
 #if !USE_WINDOWS
-int PreforkChild ()
-{
-	// next one
-	int iRes = fork();
-	if ( iRes==-1 )
-		sphFatal ( "fork() failed during prefork (error=%s)", strerror(errno) );
-
-	// child process
-	if ( iRes==0 )
-	{
-		sphSetProcessInfo ( false );
-		return iRes;
-	}
-
-	// parent process
-	return iRes;
-}
-
-
 // returns 'true' only once - at the very start, to show it beatiful way.
 bool SetWatchDog ( int iDevNull )
 {
@@ -24442,7 +24419,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		}
 	}
 
-	// crash logging for the main thread (for cases like --console and workers={fork|prefork})
+	// crash logging for the main thread (for --console case)
 	SphCrashLogger_c tQueryTLS;
 	tQueryTLS.SetupTLS ();
 

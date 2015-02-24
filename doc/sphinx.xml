@@ -4035,13 +4035,6 @@ SELECT id, MYCUSTOMFUNC(groupid, authorname), ... FROM myindex
 </programlisting>
 </para>
 <para>
-UDFs are completely supported in <link linkend="conf-workers">workers=threads</link>
-mode only. They are partially supported in <code>workers=prefork</code> mode too:
-namely, CREATEs from the <code>sphinxql_state</code> startup script will work and
-those UDFs will be accessible. However, DROPs will not be available. UDFs are not
-supported in <code>workers=fork</code> mode.
-</para>
-<para>
 Multiple UDFs (and other plugins) may reside in a single library. That library
 will only be loaded once. It gets automatically unloaded once all the UDFs and
 plugins from it are dropped.
@@ -13068,7 +13061,7 @@ Introduced in version 0.9.9-rc1.
 <para>
 The informal grammar for <code>listen</code> setting is:
 <programlisting>
-listen = ( address ":" port | port | path ) [ ":" protocol ]
+listen = ( address ":" port | port | path ) [ ":" protocol ] [ "_vip" ]
 </programlisting>
 I.e. you can specify either an IP address (or hostname) and port
 number, or just a port number, or Unix socket path. If you specify
@@ -13076,12 +13069,18 @@ port number but not the address, <code>searchd</code> will listen on
 all network interfaces. Unix path is identified by a leading slash.
 </para>
 <para>
-Starting with version 0.9.9-rc2, you can also specify a protocol
+You can also specify a protocol
 handler (listener) to be used for connections on this socket.
 Supported protocol values are 'sphinx' (Sphinx 0.9.x API protocol)
 and 'mysql41' (MySQL protocol used since 4.1 upto at least 5.1).
 More details on MySQL protocol support can be found in
 <xref linkend="sphinxql"/> section.
+</para>
+<para>
+Adding a "_vip" suffix to listener interface declaration, like sphinx_vip
+or mysql41_vip, makes all connections to this port passing-by thread pool and
+got handled at dedicated threads. That might help to administrate loaded daemon
+without stuck or delays.
 </para>
 <bridgehead>Examples:</bridgehead>
 <programlisting>
@@ -13193,19 +13192,48 @@ client_timeout = 3600
 
 <sect2 id="conf-max-children"><title>max_children</title>
 <para>
-Maximum amount of children to fork (or in other words, concurrent searches to run in parallel).
-Optional, default is 0 (unlimited).
+Maximum amount of worker threads (or in other words, concurrent queries to run in parallel).
+Optional, default is 0 (unlimited) for threads and number of CPU cores for thread_pool mode.
 </para>
 <para>
-Useful to control server load. There will be no more than this much concurrent
+Useful to control server load.
+</para>
+<para>
+In threads mode there will be no more than this much concurrent
 searches running, at all times. When the limit is reached, additional incoming
 clients are dismissed with temporarily failure (SEARCHD_RETRY) status code
 and a message stating that the server is maxed out.
+</para>
+<para>
+In thread_pool mode max_children is a thread pool size, i.e. amount of worker
+threads which actually execute queries.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
 max_children = 10
 </programlisting>
+</sect2>
+
+
+<sect2 id="conf-net-workers"><title>net_workers</title>
+<para>
+Amount of dedicated net loop threads. Default is 1.
+</para>
+<para>
+Might be useful in case of SMP box.
+</para>
+</sect2>
+
+
+<sect2 id="conf-queue-max_length"><title>queue_max_length</title>
+<para>
+Set thread pool max queue length. Default is 0 (unlimited).
+</para>
+<para>
+In case of high CPU load thread pool queue may grow all the time.
+This directive constrains queue length by rejecting incoming requests
+with "maxed out" message till queue got low again.
+</para>
 </sect2>
 
 
@@ -13524,8 +13552,8 @@ subtree_hits_cache = 16M
 <sect2 id="conf-workers"><title>workers</title>
 <para>
 Multi-processing mode (MPM).
-Optional; allowed values are none, fork, prefork, and threads.
-Default is threads.
+Optional; allowed values are thread_pool, and threads.
+Default is thread_pool.
 Introduced in version 1.10-beta.
 </para>
 <para>
@@ -13533,50 +13561,33 @@ Lets you choose how <filename>searchd</filename> processes multiple
 concurrent requests. The possible values are:
 <variablelist>
 <varlistentry>
-    <term>none</term>
-    <listitem><para>All requests will be handled serially, one-by-one.
-        Prior to 1.x, this was the only mode available on Windows.
-    </para></listitem>
-</varlistentry>
-<varlistentry>
-    <term>fork</term>
-    <listitem><para>A new child process will be forked to handle every
+    <term>threads</term>
+    <listitem><para>A new thread will be created to handle every
         incoming request.
     </para></listitem>
 </varlistentry>
 <varlistentry>
-    <term>prefork</term>
-    <listitem><para>On startup, <filename>searchd</filename> will pre-fork
-        a number of worker processes, and pass the incoming requests
-        to one of those children.
-    </para></listitem>
-</varlistentry>
-<varlistentry>
-    <term>threads</term>
-    <listitem><para>A new thread will be created to handle every
-        incoming request. This is the only mode compatible with
-        RT indexing backend. This is a default value.
-    </para></listitem>
+	<term>thread_pool</term>
+	<listitem><para>A thread pool will be created on daemon start. Query tasks
+		are putted in a queue and processed in order. Uses poll() and epoll()
+		on Linux and WSAPoll on Windows (vista and later).
+		This is the default mode.
+	</para></listitem>
 </varlistentry>
 </variablelist>
-</para>
-<para>
-Historically, <filename>searchd</filename> used fork-based model,
-which generally performs OK but spends a noticeable amount of CPU
-in fork() system call when there's a high amount of (tiny) requests
-per second. Prefork mode was implemented to alleviate that; with
-prefork, worker processes are basically only created on startup
-and re-created on index rotation, somewhat reducing fork() call
-pressure.
 </para>
 <para>
 Threads mode was implemented along with RT backend and is required
 to use RT indexes. (Regular disk-based indexes work in all the
 available modes.)
 </para>
+<para>
+Thread pool is similar to threads mode but it doesn't suffer from overhead of
+creating a new thread on new connection and managing a lot of parallel threads.
+</para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
-workers = threads
+workers = thread_pool
 </programlisting>
 </sect2>
 
@@ -13606,10 +13617,6 @@ to 1x the number of cores is advised (creating more threads than cores
 will not improve query time). In case of mixed CPU/disk bound workload
 it might sometimes make sense to use more (so that all cores could be
 utilizes even when there are threads that wait for I/O completion).
-</para>
-<para>
-Note that <option>dist_threads</option> does <b>not</b> require
-threads MPM. You can perfectly use it with fork or prefork MPMs too.
 </para>
 <para>
 Starting with version 2.0.1-beta, building a batch of snippets
@@ -13937,34 +13944,6 @@ is enabled by default.
 <bridgehead>Example:</bridgehead>
 <programlisting>
 watchdog = 0 # disable watchdog
-</programlisting>
-</sect2>
-
-
-<sect2 id="conf-prefork-rotation-throttle"><title>prefork_rotation_throttle</title>
-<para>
-Delay between restarting preforked children on index rotation, in milliseconds.
-Optional, default is 0 (no delay).
-Introduced in version 2.0.2-beta.
-</para>
-<para>
-When running in <code><link linkend="conf-workers">workers</link> = prefork</code>
-mode, every index rotation needs to restart all children to propagate the newly
-loaded index data changes. Restarting all of them at once might put excessive
-strain on CPU and/or network connections. (For instance, when the application
-keeps a bunch of open persistent connections to different children, and all those
-children restart.) Those bursts can be throttled down with
-<option>prefork_rotation_throttle</option> directive. Note that
-the children will be restarted sequentially, and thus "old" results might
-persist for a few more seconds. For instance, if
-<option>prefork_rotation_throttle</option> is set to 50 (milliseconds), and
-there are 30 children, then the last one would only be <emphasis>actually</emphasis>
-restarted 1.5 seconds (50*30=1500 milliseconds) <emphasis>after</emphasis>
-the "rotation finished" message in the <filename>searchd</filename> event log.
-</para>
-<bridgehead>Example:</bridgehead>
-<programlisting>
-prefork_rotation_throttle = 50 # throttle children restarts by 50 msec each
 </programlisting>
 </sect2>
 
@@ -14379,6 +14358,37 @@ rlp_max_batch_docs = 100
 -->
 
 <appendix id="changelog"><title>Sphinx revision history</title>
+
+<sect1 id="rel231"><title>Version 2.3.1-beta, ?? feb 2015</title>
+<bridgehead>Major features</bridgehead>
+<itemizedlist>
+<listitem><para>added workers=thread_pool directive</para></listitem>
+<listitem><para>added max_children directive</para></listitem>
+<listitem><para>added net_workers directive</para></listitem>
+<listitem><para>added queue_max_length directive</para></listitem>
+<listitem><para>added vip suffixes to listener interface declaration,
+like sphinx_vip or mysql41_vip</para></listitem>
+</itemizedlist>
+
+<bridgehead>Removals</bridgehead>
+<itemizedlist>
+<listitem><para>removed fork and prefork modes</para></listitem>
+<listitem><para>removed prefork_rotation_throttle configure key</para></listitem>
+</itemizedlist>
+
+<bridgehead>Minor features</bridgehead>
+<itemizedlist>
+<listitem><para>added FLUSH ATTRIBUTES to SphinxQL</para></listitem>
+</itemizedlist>
+
+<bridgehead>Bug fixes</bridgehead>
+<itemizedlist>
+<listitem><para>fixed #2161: indexation or RT index fail due to multiple loads of an index_token_filter</para></listitem>
+<listitem><para>fixed #2154: crash of ZONE operator</para></listitem>
+<listitem><para>fixed #2167: --keep_attrs doesn't work with --rotate</para></listitem>
+</itemizedlist>
+</sect1>
+
 
 <sect1 id="rel227"><title>Version 2.2.7-release, 20 jan 2015</title>
 <bridgehead>Minor features</bridgehead>

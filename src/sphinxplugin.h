@@ -161,9 +161,6 @@ void sphPluginLock ( bool bLocked );
 /// save SphinxQL state (ie. all active functions)
 void sphPluginSaveState ( CSphWriter & tWriter );
 
-/// call reinit function in every plugin library
-void sphPluginReinit();
-
 /// convert plugin type string to enum
 PluginType_e sphPluginGetType ( const CSphString & s );
 

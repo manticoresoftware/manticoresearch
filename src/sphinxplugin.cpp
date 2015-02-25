@@ -40,7 +40,6 @@ struct PluginLib_t
 {
 	void *				m_pHandle;				///< handle from dlopen()
 	int					m_dCount[PLUGIN_TOTAL]; ///< per-type plugin counts from this library
-	PluginReinit_fn		m_fnReinit;				///< per-library reinitialization func (for prefork), optional
 };
 
 /// plugin key
@@ -375,7 +374,6 @@ static bool PluginCreate ( const char * szLib, const char * szName,
 		memset ( tLib.m_dCount, 0, sizeof(tLib.m_dCount) );
 		tLib.m_dCount[eType] = 1;
 		tLib.m_pHandle = pHandle;
-		tLib.m_fnReinit = (PluginReinit_fn) dlsym ( pHandle, sTmp.SetSprintf ( "%s_reinit", sBasename.cstr() ).cstr() );
 		Verify ( g_hPluginLibs.Add ( tLib, sLib.cstr() ) );
 		pPlugin->m_pLib = g_hPluginLibs ( sLib.cstr() );
 	} else
@@ -559,19 +557,6 @@ void sphPluginSaveState ( CSphWriter & tWriter )
 				k.m_sName.cstr(), g_dPluginTypes[k.m_eType], v->m_pLibName->cstr() );
 
 		tWriter.PutBytes ( sBuf.cstr(), sBuf.Length() );
-	}
-}
-
-
-void sphPluginReinit()
-{
-	CSphScopedLock<CSphStaticMutex> tLock ( g_tPluginMutex );
-	g_hPluginLibs.IterateStart();
-	while ( g_hPluginLibs.IterateNext() )
-	{
-		const PluginLib_t & tLib = g_hPluginLibs.IterateGet();
-		if ( tLib.m_fnReinit )
-			tLib.m_fnReinit();
 	}
 }
 

@@ -4022,7 +4022,9 @@ anyone install arbitrary code into <filename>searchd</filename> is a risk.
 You can load and unload them dynamically into searchd
 with <link linkend="sphinxql-create-function">CREATE FUNCTION</link> and
 <link linkend="sphinxql-drop-function">DROP FUNCTION</link> SphinxQL statements
-respectively. Sphinx keeps track of the currently loaded functions, that is,
+respectively. Also, you can seamlessly reload UDFs (and other plugins) with
+<link linkend="sphinxql-reload-plugins">RELOAD PLUGINS</link> statement.
+Sphinx keeps track of the currently loaded functions, that is,
 every time you create or drop an UDF, <filename>searchd</filename> writes
 its state to the <link linkend="conf-sphinxql-state">sphinxql_state</link> file
 as a plain good old SQL script.
@@ -4264,7 +4266,7 @@ things specific to writing this or that type of a plugin are then
 discussed in their respective subsections.
 </para>
 <para>
-So, how do you write and use a plugin? Three-line crash course
+So, how do you write and use a plugin? Four-line crash course
 goes as follows:
 <itemizedlist>
 <listitem><para>create a dynamic library (either .so or.dll),
@@ -4275,6 +4277,10 @@ most likely in C or C++;</para></listitem>
 <listitem><para>invoke it using the plugin specific calls
 (typically using this or that OPTION).
 </para></listitem>
+<listitem><para>to unload or reload a plugin use
+<link linkend="sphinxql-drop-plugin">DROP PLUGIN</link> and
+<link linkend="sphinxql-reload-plugins">RELOAD PLUGINS</link>
+respectively.</para></listitem>
 </itemizedlist>
 Note that while UDFs are first-class plugins they are nevertheless
 installed using a separate
@@ -6601,6 +6607,31 @@ Query OK, 0 rows affected (0.05 sec)
 </sect1>
 
 
+<sect1 id="sphinxql-flush-attributes"><title>FLUSH ATTRIBUTES syntax</title>
+<programlisting>
+FLUSH ATTRIBUTES
+</programlisting>
+<para>
+Added in 2.3.1-beta. Flushes all in-memory attribute updates in all
+the active disk indexes to disk. Returns a tag that identifies the result
+on-disk state (basically, a number of actual disk attribute saves performed
+since the daemon startup).
+</para>
+<programlisting>
+mysql> UPDATE testindex SET channel_id=1107025 WHERE id=1;
+Query OK, 1 row affected (0.04 sec)
+
+mysql> FLUSH ATTRIBUTES;
++------+
+| tag  |
++------+
+|    1 |
++------+
+1 row in set (0.19 sec)
+</programlisting>
+</sect1>
+
+
 <sect1 id="sphinxql-truncate-rtindex"><title>TRUNCATE RTINDEX syntax</title>
 <programlisting>
 TRUNCATE RTINDEX rtindex
@@ -7092,6 +7123,45 @@ mysql> SHOW PLUGINS;
 1 row in set (0.00 sec)
 </programlisting>
 </sect1>
+
+
+<sect1 id="sphinxql-reload-plugins"><title>RELOAD PLUGINS syntax</title>
+<programlisting>
+RELOAD PLUGINS FROM SONAME 'plugin_library'
+</programlisting>
+<para>
+Added in 2.3.1-beta. Reloads all plugins (UDFs, rankers, etc) from a given
+library. Reload is, in a sense, transactional: a succesful reload guarantees
+that a) all the plugins were succesfully updated with their new versions;
+b) the update was atomic, all the plugins were replaced at once. Atomicity
+means that queries using multiple functions from a reloaded library will
+never mix the old and new versions. The set of plugins is guaranteed to always
+be consistent during the RELOAD, it will be either all old, or all new.
+</para>
+<para>
+Reload also is seamless, meaning that some version of a reloaded plugin
+will be available to concurrent queries at all times, and there will be no
+temporary disruptions. Note how this improves on using a pair of DROP and
+CREATE statements for reloading: with those, there is a tiny window between
+the DROP and the subsequent CREATE, during which the queries technically refer
+to an unknown plugin and will thus fail.
+</para>
+<para>
+In case of any failure RELOAD PLUGINS does absolutely nothing, keeps
+the old plugins, and reports an error.
+</para>
+<para>
+On Windows, either overwriting or deleting a DLL library currently in use
+seems to be an issue. However, you can still rename it, then put a new version
+under the old name, and RELOAD will then work. After a succesful reload you
+will also be able to delete the renamed old library, too.
+</para>
+<programlisting>
+mysql> RELOAD PLUGINS FROM SONAME 'udfexample.dll';
+Query OK, 0 rows affected (0.00 sec)
+</programlisting>
+</sect1>
+
 
 <sect1 id="sphinxql-threads"><title>SHOW THREADS syntax</title>
 <programlisting>
@@ -13077,10 +13147,10 @@ More details on MySQL protocol support can be found in
 <xref linkend="sphinxql"/> section.
 </para>
 <para>
-Adding a "_vip" suffix to listener interface declaration, like sphinx_vip
-or mysql41_vip, makes all connections to this port passing-by thread pool and
-got handled at dedicated threads. That might help to administrate loaded daemon
-without stuck or delays.
+Adding a "_vip" suffix to a protocol (for instance "sphinx_vip" or "mysql41_vip")
+makes all connections to that port bypass the thread pool and always forcibly
+create a new dedicated thread. That's useful for managing in case of a severe overload
+when the daemon would either stall or not let you connect via a regular port.
 </para>
 <bridgehead>Examples:</bridgehead>
 <programlisting>
@@ -13193,20 +13263,38 @@ client_timeout = 3600
 <sect2 id="conf-max-children"><title>max_children</title>
 <para>
 Maximum amount of worker threads (or in other words, concurrent queries to run in parallel).
-Optional, default is 0 (unlimited) for threads and number of CPU cores for thread_pool mode.
+Optional, default is 0 (unlimited) in workers=threads, or 1.5 times the CPU cores count
+in workers=thread_pool mode.
 </para>
 <para>
-Useful to control server load.
+max_children imposes a hard limit on the number of threads working on user queries.
+There might still be additional internal threads doing maintenance tasks, but when it
+comes to user queries, it is no more than max_children concurrent threads (and queries)
+at all times.
 </para>
 <para>
-In threads mode there will be no more than this much concurrent
-searches running, at all times. When the limit is reached, additional incoming
-clients are dismissed with temporarily failure (SEARCHD_RETRY) status code
-and a message stating that the server is maxed out.
+Note that in workers=threads mode a thread is allocated for every connection rather
+than an active query. So when there are 100 idle connections but only 2 active connections
+with currently running queries, that still accounts for 102 threads, all of them subject
+to max_children limit. So with a max_children set way too low, and pooled connections not
+reused well enough on the application side, you can effectively DOS your own server.
+When the limit is reached, any additional incoming connections will be dismissed with
+a temporary "maxed out" error immediately as they attempt to connect. Thus, in threads mode
+you should choose the max_children limit rather carefully, with not just the concurrent
+queries but also with potentially idle <emphasis>network connections</emphasis> in mind.
 </para>
 <para>
-In thread_pool mode max_children is a thread pool size, i.e. amount of worker
-threads which actually execute queries.
+Now, in workers=thread_pool mode the network connections are separated from query
+processing, so in the example above, 100 idle connections will all be handled by
+an internal network thread, and only the 2 actually active queries will be subject
+to max_children limit. When the limit is reached, any additional incoming
+<emphasis>connections</emphasis> will still be accepted, and any additional
+<emphasis>queries</emphasis> will <link linkend="conf-queue-max-length">get enqueued</link>
+until there are free worker threads.
+The queries will only start failing with a temporary
+Thus, in thread_pool mode it makes little sense to raise max_children much higher
+than the amount of CPU cores. Usually that will only hurt CPU contention and
+<emphasis>decrease</emphasis> the general throughput.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
@@ -13217,22 +13305,23 @@ max_children = 10
 
 <sect2 id="conf-net-workers"><title>net_workers</title>
 <para>
-Amount of dedicated net loop threads. Default is 1.
+Number of network threads for workers=thread_pool mode, default is 1.
 </para>
 <para>
-Might be useful in case of SMP box.
+Useful for extremely high query rates, when just 1 thread is not enough to
+manage all the incoming queries.
 </para>
 </sect2>
 
 
-<sect2 id="conf-queue-max_length"><title>queue_max_length</title>
+<sect2 id="conf-queue-max-length"><title>queue_max_length</title>
 <para>
-Set thread pool max queue length. Default is 0 (unlimited).
+Maximum pending queries queue length for workers=thread_pool mode, default is 0 (unlimited).
 </para>
 <para>
-In case of high CPU load thread pool queue may grow all the time.
-This directive constrains queue length by rejecting incoming requests
-with "maxed out" message till queue got low again.
+In case of high CPU load thread pool queries queue may grow all the time.
+This directive lets you constrain queue length and start rejecting incoming queries
+at some point with a "maxed out" message.
 </para>
 </sect2>
 
@@ -13561,29 +13650,32 @@ Lets you choose how <filename>searchd</filename> processes multiple
 concurrent requests. The possible values are:
 <variablelist>
 <varlistentry>
-    <term>threads</term>
-    <listitem><para>A new thread will be created to handle every
-        incoming request.
-    </para></listitem>
+<term>threads</term>
+<listitem><para>A new dedicated thread is created on every
+	incoming network connection. Subsequent queries on that
+	connection are handled by that thread. When a client
+	disconnected, the thread gets killed.
+</para></listitem>
 </varlistentry>
 <varlistentry>
-	<term>thread_pool</term>
-	<listitem><para>A thread pool will be created on daemon start. Query tasks
-		are putted in a queue and processed in order. Uses poll() and epoll()
-		on Linux and WSAPoll on Windows (vista and later).
-		This is the default mode.
-	</para></listitem>
+<term>thread_pool</term>
+<listitem><para>A worker threads pool is created on daemon startup.
+	An internal network thread handles all the incoming network
+	connections. Subsequent queries on any connection are then
+	put into a queue, and processed in order by the first avaialble
+	worker thread from the pool. No threads are normally created or killed,
+	neither for new connections, nor for new queries. Network thread
+	uses poll() and epoll() on Linux and WSAPoll on Windows (Vista and later).
+	This is the default mode.
+</para></listitem>
 </varlistentry>
 </variablelist>
 </para>
 <para>
-Threads mode was implemented along with RT backend and is required
-to use RT indexes. (Regular disk-based indexes work in all the
-available modes.)
-</para>
-<para>
-Thread pool is similar to threads mode but it doesn't suffer from overhead of
-creating a new thread on new connection and managing a lot of parallel threads.
+Thread pool is a newer, better, faster implementation of threads mode which
+does not suffer from overheads of creating a new thread per every new connection
+and managing a lot of parallel threads. As of 2.3.1, we still retain workers=threads
+for the transition period, but thread pool is scheduled to become the only MPM mode.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
@@ -14362,29 +14454,30 @@ rlp_max_batch_docs = 100
 <sect1 id="rel231"><title>Version 2.3.1-beta, 24 feb 2015</title>
 <bridgehead>Major features</bridgehead>
 <itemizedlist>
-<listitem><para>added <link linkend="conf-workers">workers = thread_pool</link> directive</para></listitem>
-<listitem><para>added <link linkend="conf-max-children">max_children</link> directive</para></listitem>
-<listitem><para>added <link linkend="conf-net-workers">net_workers</link> directive</para></listitem>
-<listitem><para>added <link linkend="conf-queue-max_length">queue_max_length</link> directive</para></listitem>
-<listitem><para>added vip suffixes to <link linkend="conf-listen">listener</link> interface declaration, like sphinx_vip or mysql41_vip</para></listitem>
+<listitem><para>added thread pool mode, and the respective <link linkend="conf-workers">workers = thread_pool</link>,
+	<link linkend="conf-max-children">max_children</link>, <link linkend="conf-net-workers">net_workers</link>,
+	<link linkend="conf-queue-max-length">queue_max_length</link> directives
+</para></listitem>
+<listitem><para>added vip suffixes to <link linkend="conf-listen">listener</link> protocols (sphinx_vip, mysql41_vip)</para></listitem>
 </itemizedlist>
 
 <bridgehead>Removals</bridgehead>
 <itemizedlist>
 <listitem><para>removed fork and prefork modes</para></listitem>
-<listitem><para>removed <option>prefork_rotation_throttle</option> configure key</para></listitem>
+<listitem><para>removed <option>prefork_rotation_throttle</option> directive</para></listitem>
 </itemizedlist>
 
 <bridgehead>Minor features</bridgehead>
 <itemizedlist>
-<listitem><para>added <code>FLUSH ATTRIBUTES</code> to SphinxQL</para></listitem>
+<listitem><para>added <link linkend="sphinxql-reload-plugins">RELOAD PLUGINS</link> SphinxQL statement</para></listitem>
+<listitem><para>added <link linkend="sphinxql-flush-attributes">FLUSH ATTRIBUTES</link> SphinxQL statement</para></listitem>
 </itemizedlist>
 
 <bridgehead>Bug fixes</bridgehead>
 <itemizedlist>
-<listitem><para>fixed #2167, <option>--keep_attrs</option> doesn't work with <option>--rotate</option></para></listitem>
-<listitem><para>fixed #2161, indexation or RT index fail due to multiple loads of an <option>index_token_filter</option></para></listitem>
-<listitem><para>fixed #2154, crash of <code>ZONE</code> operator</para></listitem>
+<listitem><para>fixed #2167, <option>--keep_attrs</option> did not work with <option>--rotate</option></para></listitem>
+<listitem><para>fixed #2161, RT indexing could fail with <option>index_token_filter</option> because of multiple errorneous filter loads</para></listitem>
+<listitem><para>fixed #2154, crash in <code>ZONE</code> operator</para></listitem>
 </itemizedlist>
 </sect1>
 

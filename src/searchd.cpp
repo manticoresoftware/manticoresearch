@@ -24328,7 +24328,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( bThdPool )
 	{
 		g_iThdQueueMax = hSearchd.GetInt ( "queue_max_length", g_iThdQueueMax );
-		g_iThdPoolCount = sphCpuThreadsCount();
+		g_iThdPoolCount = Max ( 3*sphCpuThreadsCount()/2, 2 ); // default to 1.5*detected_cores but not less than 2 worker threads
 		if ( hSearchd.Exists ( "max_children" ) && hSearchd["max_children"].intval()>=0 )
 			g_iThdPoolCount = hSearchd["max_children"].intval();
 

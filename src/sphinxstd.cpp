@@ -2180,19 +2180,13 @@ ISphThdPool * sphThreadPoolCreate ( int iThreads )
 
 int sphCpuThreadsCount ()
 {
-	int iThd = 0;
-
 #if USE_WINDOWS
 	SYSTEM_INFO tInfo;
 	GetSystemInfo ( &tInfo );
-	iThd = tInfo.dwNumberOfProcessors;
+	return tInfo.dwNumberOfProcessors;
 #else
-	iThd = sysconf ( _SC_NPROCESSORS_ONLN );
+	return sysconf ( _SC_NPROCESSORS_ONLN );
 #endif
-
-	// clamp our worst guess
-	iThd = Max ( iThd, 2 );
-	return iThd;
 }
 
 

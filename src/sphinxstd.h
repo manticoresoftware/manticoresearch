@@ -3132,6 +3132,11 @@ public:
 			delete this;
 	}
 
+	int GetRefcount() const
+	{
+		return m_iRefCount.GetValue();
+	}
+
 protected:
 	mutable CSphAtomic	m_iRefCount;
 };

@@ -11059,6 +11059,7 @@ enum SqlStmt_e
 	STMT_ALTER_RECONFIGURE,
 	STMT_SHOW_INDEX_SETTINGS,
 	STMT_FLUSH_INDEX,
+	STMT_RELOAD_PLUGINS,
 
 	STMT_TOTAL
 };
@@ -11074,8 +11075,9 @@ static const char * g_dSqlStmts[] =
 	"show_collation", "show_character_set", "optimize_index", "show_agent_status",
 	"show_index_status", "show_profile", "alter_add", "alter_drop", "show_plan",
 	"select_dual", "show_databases", "create_plugin", "drop_plugin", "show_plugins", "show_threads",
-	"facet", "alter_reconfigure", "show_index_settings", "flush_attributes"
+	"facet", "alter_reconfigure", "show_index_settings", "flush_index", "reload_plugins"
 };
+
 
 STATIC_ASSERT ( sizeof(g_dSqlStmts)/sizeof(g_dSqlStmts[0])==STMT_TOTAL, STMT_DESC_SHOULD_BE_SAME_AS_STMT_TOTAL );
 
@@ -18062,6 +18064,12 @@ public:
 				return true;
 			}
 
+		case STMT_RELOAD_PLUGINS:
+			if ( sphPluginReload ( pStmt->m_sUdfLib.cstr(), m_sError ) )
+				tOut.Ok();
+			else
+				tOut.Error ( sQuery.cstr(), m_sError.cstr() );
+			return true;
 
 		case STMT_ATTACH_INDEX:
 			HandleMysqlAttach ( tOut, *pStmt );

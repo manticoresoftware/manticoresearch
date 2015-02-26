@@ -116,46 +116,47 @@
      TOK_RAMCHUNK = 342,
      TOK_READ = 343,
      TOK_RECONFIGURE = 344,
-     TOK_REPEATABLE = 345,
-     TOK_REPLACE = 346,
-     TOK_REMAP = 347,
-     TOK_RETURNS = 348,
-     TOK_ROLLBACK = 349,
-     TOK_RTINDEX = 350,
-     TOK_SELECT = 351,
-     TOK_SERIALIZABLE = 352,
-     TOK_SET = 353,
-     TOK_SETTINGS = 354,
-     TOK_SESSION = 355,
-     TOK_SHOW = 356,
-     TOK_SONAME = 357,
-     TOK_START = 358,
-     TOK_STATUS = 359,
-     TOK_STRING = 360,
-     TOK_SUM = 361,
-     TOK_TABLE = 362,
-     TOK_TABLES = 363,
-     TOK_THREADS = 364,
-     TOK_TO = 365,
-     TOK_TRANSACTION = 366,
-     TOK_TRUE = 367,
-     TOK_TRUNCATE = 368,
-     TOK_TYPE = 369,
-     TOK_UNCOMMITTED = 370,
-     TOK_UPDATE = 371,
-     TOK_VALUES = 372,
-     TOK_VARIABLES = 373,
-     TOK_WARNINGS = 374,
-     TOK_WEIGHT = 375,
-     TOK_WHERE = 376,
-     TOK_WITHIN = 377,
-     TOK_OR = 378,
-     TOK_AND = 379,
-     TOK_NE = 380,
-     TOK_GTE = 381,
-     TOK_LTE = 382,
-     TOK_NOT = 383,
-     TOK_NEG = 384
+     TOK_RELOAD = 345,
+     TOK_REPEATABLE = 346,
+     TOK_REPLACE = 347,
+     TOK_REMAP = 348,
+     TOK_RETURNS = 349,
+     TOK_ROLLBACK = 350,
+     TOK_RTINDEX = 351,
+     TOK_SELECT = 352,
+     TOK_SERIALIZABLE = 353,
+     TOK_SET = 354,
+     TOK_SETTINGS = 355,
+     TOK_SESSION = 356,
+     TOK_SHOW = 357,
+     TOK_SONAME = 358,
+     TOK_START = 359,
+     TOK_STATUS = 360,
+     TOK_STRING = 361,
+     TOK_SUM = 362,
+     TOK_TABLE = 363,
+     TOK_TABLES = 364,
+     TOK_THREADS = 365,
+     TOK_TO = 366,
+     TOK_TRANSACTION = 367,
+     TOK_TRUE = 368,
+     TOK_TRUNCATE = 369,
+     TOK_TYPE = 370,
+     TOK_UNCOMMITTED = 371,
+     TOK_UPDATE = 372,
+     TOK_VALUES = 373,
+     TOK_VARIABLES = 374,
+     TOK_WARNINGS = 375,
+     TOK_WEIGHT = 376,
+     TOK_WHERE = 377,
+     TOK_WITHIN = 378,
+     TOK_OR = 379,
+     TOK_AND = 380,
+     TOK_NE = 381,
+     TOK_GTE = 382,
+     TOK_LTE = 383,
+     TOK_NOT = 384,
+     TOK_NEG = 385
    };
 #endif
 #define TOK_IDENT 258
@@ -245,46 +246,47 @@
 #define TOK_RAMCHUNK 342
 #define TOK_READ 343
 #define TOK_RECONFIGURE 344
-#define TOK_REPEATABLE 345
-#define TOK_REPLACE 346
-#define TOK_REMAP 347
-#define TOK_RETURNS 348
-#define TOK_ROLLBACK 349
-#define TOK_RTINDEX 350
-#define TOK_SELECT 351
-#define TOK_SERIALIZABLE 352
-#define TOK_SET 353
-#define TOK_SETTINGS 354
-#define TOK_SESSION 355
-#define TOK_SHOW 356
-#define TOK_SONAME 357
-#define TOK_START 358
-#define TOK_STATUS 359
-#define TOK_STRING 360
-#define TOK_SUM 361
-#define TOK_TABLE 362
-#define TOK_TABLES 363
-#define TOK_THREADS 364
-#define TOK_TO 365
-#define TOK_TRANSACTION 366
-#define TOK_TRUE 367
-#define TOK_TRUNCATE 368
-#define TOK_TYPE 369
-#define TOK_UNCOMMITTED 370
-#define TOK_UPDATE 371
-#define TOK_VALUES 372
-#define TOK_VARIABLES 373
-#define TOK_WARNINGS 374
-#define TOK_WEIGHT 375
-#define TOK_WHERE 376
-#define TOK_WITHIN 377
-#define TOK_OR 378
-#define TOK_AND 379
-#define TOK_NE 380
-#define TOK_GTE 381
-#define TOK_LTE 382
-#define TOK_NOT 383
-#define TOK_NEG 384
+#define TOK_RELOAD 345
+#define TOK_REPEATABLE 346
+#define TOK_REPLACE 347
+#define TOK_REMAP 348
+#define TOK_RETURNS 349
+#define TOK_ROLLBACK 350
+#define TOK_RTINDEX 351
+#define TOK_SELECT 352
+#define TOK_SERIALIZABLE 353
+#define TOK_SET 354
+#define TOK_SETTINGS 355
+#define TOK_SESSION 356
+#define TOK_SHOW 357
+#define TOK_SONAME 358
+#define TOK_START 359
+#define TOK_STATUS 360
+#define TOK_STRING 361
+#define TOK_SUM 362
+#define TOK_TABLE 363
+#define TOK_TABLES 364
+#define TOK_THREADS 365
+#define TOK_TO 366
+#define TOK_TRANSACTION 367
+#define TOK_TRUE 368
+#define TOK_TRUNCATE 369
+#define TOK_TYPE 370
+#define TOK_UNCOMMITTED 371
+#define TOK_UPDATE 372
+#define TOK_VALUES 373
+#define TOK_VARIABLES 374
+#define TOK_WARNINGS 375
+#define TOK_WEIGHT 376
+#define TOK_WHERE 377
+#define TOK_WITHIN 378
+#define TOK_OR 379
+#define TOK_AND 380
+#define TOK_NE 381
+#define TOK_GTE 382
+#define TOK_LTE 383
+#define TOK_NOT 384
+#define TOK_NEG 385
 
 
 

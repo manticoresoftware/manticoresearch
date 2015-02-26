@@ -4839,7 +4839,7 @@ public:
 	{
 		assert ( m_pTokenizer );
 		assert ( m_pFilter );
-		m_pFilter->Use();
+		m_pFilter->AddRef();
 		// FIXME!!! handle error in constructor \ move to setup?
 		CSphString sError;
 		SetFilterSchema ( CSphSchema(), sError );

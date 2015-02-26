@@ -98,6 +98,7 @@
 %token	TOK_RAMCHUNK
 %token	TOK_READ
 %token	TOK_RECONFIGURE
+%token	TOK_RELOAD
 %token	TOK_REPEATABLE
 %token	TOK_REPLACE
 %token	TOK_REMAP
@@ -205,6 +206,7 @@ statement:
 	| alter
 	| create_plugin
 	| drop_plugin
+	| reload_plugins
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -221,7 +223,7 @@ ident_set:
 	| TOK_GLOBAL | TOK_GROUP | TOK_GROUPBY | TOK_GROUP_CONCAT | TOK_ISOLATION
 	| TOK_LEVEL | TOK_LIKE | TOK_MATCH | TOK_MAX | TOK_META
 	| TOK_PLAN | TOK_PLUGIN | TOK_PLUGINS | TOK_PROFILE | TOK_RAMCHUNK | TOK_RAND | TOK_READ
-	| TOK_REPEATABLE | TOK_RETURNS | TOK_ROLLBACK | TOK_RTINDEX
+	| TOK_RELOAD | TOK_REPEATABLE | TOK_RETURNS | TOK_ROLLBACK | TOK_RTINDEX
 	| TOK_SERIALIZABLE | TOK_SESSION | TOK_START | TOK_STATUS | TOK_STRING
 	| TOK_SUM | TOK_TABLES | TOK_THREADS | TOK_TRUNCATE | TOK_TYPE | TOK_UNCOMMITTED
 	| TOK_VARIABLES | TOK_WARNINGS | TOK_WEIGHT | TOK_WITHIN
@@ -1474,6 +1476,16 @@ drop_plugin:
 			pParser->ToStringUnescape ( s.m_sStringParam, $5 );
 		}
 	;
+
+reload_plugins:
+	TOK_RELOAD TOK_PLUGINS TOK_FROM TOK_SONAME TOK_QUOTED_STRING
+		{
+			SqlStmt_t & s = *pParser->m_pStmt;
+			s.m_eStmt = STMT_RELOAD_PLUGINS;
+			pParser->ToStringUnescape ( s.m_sUdfLib, $5 );
+		}
+	;
+
 //////////////////////////////////////////////////////////////////////////
 
 json_field:

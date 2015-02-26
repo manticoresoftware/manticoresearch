@@ -36,10 +36,21 @@
 //////////////////////////////////////////////////////////////////////////
 
 /// loaded plugin library
-struct PluginLib_t
+class PluginLib_c : public ISphRefcountedMT
 {
+protected:
+	CSphString			m_sName;
 	void *				m_pHandle;				///< handle from dlopen()
-	int					m_dCount[PLUGIN_TOTAL]; ///< per-type plugin counts from this library
+
+public:
+	int					m_iHashedPlugins;		///< how many active g_hPlugins entries reference this handle
+
+	explicit			PluginLib_c ( void * pHandle, const char * sName );
+	const CSphString &	GetName() const { return m_sName; }
+	void *				GetHandle() const { return m_pHandle; }
+
+protected:
+						~PluginLib_c();
 };
 
 /// plugin key
@@ -78,31 +89,13 @@ const char * g_dPluginTypes[PLUGIN_TOTAL] = { "udf", "ranker", "index_token_filt
 
 //////////////////////////////////////////////////////////////////////////
 
-static bool								g_bPluginsEnabled = false;	///< is there any plugin support all?
-static bool								g_bPluginsLocked = false;	///< do we allow CREATE/DROP at this point?
+static bool								g_bPluginsEnabled = false;	///< is there any plugin support at all?
 static CSphString						g_sPluginDir;
 static CSphStaticMutex					g_tPluginMutex;				///< common plugin mutex (access to lib, func and ranker hashes)
-static SmallStringHash_T<PluginLib_t>	g_hPluginLibs;				///< key is the filename (no path)
+static SmallStringHash_T<PluginLib_c*>	g_hPluginLibs;				///< key is the filename (no path)
 
 static CSphOrderedHash<PluginDesc_c*, PluginKey_t, PluginKey_t, 256>	g_hPlugins;
 
-//////////////////////////////////////////////////////////////////////////
-
-void PluginDesc_c::Use() const
-{
-	g_tPluginMutex.Lock ();
-	m_iUserCount++;
-	g_tPluginMutex.Unlock ();
-}
-
-
-void PluginDesc_c::Release() const
-{
-	g_tPluginMutex.Lock ();
-	m_iUserCount--;
-	assert ( m_iUserCount>=0 );
-	g_tPluginMutex.Unlock ();
-}
 
 //////////////////////////////////////////////////////////////////////////
 // PLUGIN MANAGER
@@ -142,6 +135,41 @@ const char * dlerror()
 
 //////////////////////////////////////////////////////////////////////////
 
+PluginLib_c::PluginLib_c ( void * pHandle, const char * sName )
+{
+	assert ( pHandle );
+	m_pHandle = pHandle;
+	m_iHashedPlugins = 0;
+	m_sName = sName;
+	m_sName.ToLower();
+}
+
+PluginLib_c::~PluginLib_c()
+{
+	int iRes = dlclose ( m_pHandle );
+	sphLogDebug ( "dlclose(%s)=%d", m_sName.cstr(), iRes );
+}
+
+PluginDesc_c::PluginDesc_c ( PluginLib_c * pLib )
+{
+	assert ( pLib );
+	m_pLib = pLib;
+	m_pLib->AddRef();
+}
+
+PluginDesc_c::~PluginDesc_c()
+{
+	m_pLib->Release();
+}
+
+const CSphString & PluginDesc_c::GetLibName() const
+{
+	assert ( m_pLib );
+	return m_pLib->GetName();
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 void sphPluginInit ( const char * sDir )
 {
 	if ( !sDir || !*sDir )
@@ -149,13 +177,6 @@ void sphPluginInit ( const char * sDir )
 
 	g_sPluginDir = sDir;
 	g_bPluginsEnabled = true;
-	g_bPluginsLocked = false;
-}
-
-
-void sphPluginLock ( bool bLocked )
-{
-	g_bPluginsLocked = bLocked;
 }
 
 
@@ -263,134 +284,68 @@ static SymbolDesc_t g_dSymbolsQueryTokenFilter[] =
 };
 
 
-static bool PluginCreate ( const char * szLib, const char * szName,
-	PluginType_e eType, PluginDesc_c * pPlugin, const SymbolDesc_t * pSymbols, CSphString & sError )
+static PluginLib_c * LoadPluginLibrary ( const char * sLibName, CSphString & sError )
+{
+	CSphString sLibfile;
+	sLibfile.SetSprintf ( "%s/%s", g_sPluginDir.cstr(), sLibName );
+
+	void * pHandle = dlopen ( sLibfile.cstr(), RTLD_LAZY | RTLD_LOCAL );
+	if ( !pHandle )
+	{
+		const char * sDlerror = dlerror();
+		sError.SetSprintf ( "dlopen() failed: %s", sDlerror ? sDlerror : "(null)" );
+		return NULL;
+	}
+	sphLogDebug ( "dlopen(%s)=%p", sLibfile.cstr(), pHandle );
+
+	CSphString sBasename = sLibName;
+	const char * pDot = strchr ( sBasename.cstr(), '.' );
+	if ( pDot )
+		sBasename = sBasename.SubString ( 0, pDot-sBasename.cstr() );
+
+	CSphString sTmp;
+	PluginVer_fn fnVer = (PluginVer_fn) dlsym ( pHandle, sTmp.SetSprintf ( "%s_ver", sBasename.cstr() ).cstr() );
+	if ( !fnVer )
+	{
+		sError.SetSprintf ( "symbol '%s_ver' not found in '%s': update your UDF implementation", sBasename.cstr(), sLibName );
+		dlclose ( pHandle );
+		return NULL;
+	}
+
+	if ( fnVer() < SPH_UDF_VERSION )
+	{
+		sError.SetSprintf ( "library '%s' was compiled using an older version of sphinxudf.h; it needs to be recompiled", sLibName );
+		dlclose ( pHandle );
+		return NULL;
+	}
+
+	return new PluginLib_c ( pHandle, sLibName );
+}
+
+
+bool sphPluginCreate ( const char * szLib, PluginType_e eType, const char * sName, ESphAttr eUDFRetType, CSphString & sError )
 {
 #if !HAVE_DLOPEN
 	sError = "no dlopen(), no plugins";
-	delete pPlugin;
 	return false;
 #else
 	if ( !g_bPluginsEnabled )
 	{
 		sError = "plugin support disabled (requires a valid plugin_dir)";
-		delete pPlugin;
-		return false;
-	}
-
-	if ( g_bPluginsLocked )
-	{
-		sError = "CREATE is disabled (fully dynamic plugins require workers=threads)";
-		delete pPlugin;
 		return false;
 	}
 
 	// validate library name
 	for ( const char * p = szLib; *p; p++ )
 		if ( *p=='/' || *p=='\\' )
-		{
-			sError = "restricted character (path delimiter) in a library file name";
-			delete pPlugin;
-			return false;
-		}
+	{
+		sError = "restricted character (path delimiter) in a library file name";
+		return false;
+	}
 
 	CSphString sLib = szLib;
 	sLib.ToLower();
 
-	// from here, we need a lock (we intend to update the plugin hash)
-	CSphScopedLock<CSphStaticMutex> tLock ( g_tPluginMutex );
-
-	// validate function name
-	PluginKey_t k ( eType, szName );
-	if ( g_hPlugins(k) )
-	{
-		sError.SetSprintf ( "plugin '%s' already exists", k.m_sName.cstr() );
-		delete pPlugin;
-		return false;
-	}
-
-	// lookup or load library
-	CSphString sLibfile;
-	sLibfile.SetSprintf ( "%s/%s", g_sPluginDir.cstr(), sLib.cstr() );
-
-	bool bJustLoaded = false;
-	void * pHandle = NULL;
-	pPlugin->m_pLib = g_hPluginLibs ( sLib.cstr() );
-	if ( !pPlugin->m_pLib )
-	{
-		bJustLoaded = true;
-		pHandle = dlopen ( sLibfile.cstr(), RTLD_LAZY | RTLD_LOCAL );
-		if ( !pHandle )
-		{
-			const char * sDlerror = dlerror();
-			sError.SetSprintf ( "dlopen() failed: %s", sDlerror ? sDlerror : "(null)" );
-			delete pPlugin;
-			return false;
-		}
-		sphLogDebug ( "dlopen(%s)=%p", sLibfile.cstr(), pHandle );
-
-	} else
-		pHandle = pPlugin->m_pLib->m_pHandle;
-
-	assert ( pHandle );
-
-	if ( !PluginLoadSymbols ( pPlugin, pSymbols, pHandle, k.m_sName.cstr(), sError ) )
-	{
-		if ( bJustLoaded )
-			dlclose ( pHandle );
-
-		sError.SetSprintf ( "%s in %s", sError.cstr(), sLib.cstr() );
-		delete pPlugin;
-		return false;
-	}
-
-	// add library
-	if ( bJustLoaded )
-	{
-		CSphString sBasename = sLib.cstr();
-		const char * pDot = strchr ( sBasename.cstr(), '.' );
-		if ( pDot )
-			sBasename = sBasename.SubString ( 0, pDot-sBasename.cstr() );
-
-		CSphString sTmp;
-		PluginVer_fn fnVer = (PluginVer_fn) dlsym ( pHandle, sTmp.SetSprintf ( "%s_ver", sBasename.cstr() ).cstr() );
-		if ( !fnVer )
-		{
-			sError.SetSprintf ( "symbol '%s_ver' not found in '%s': update your UDF implementation", sBasename.cstr(), sLib.cstr() );
-			dlclose ( pHandle );
-			delete pPlugin;
-			return false;
-		}
-
-		if ( fnVer() < SPH_UDF_VERSION )
-		{
-			sError.SetSprintf ( "library '%s' was compiled using an older version of sphinxudf.h; it needs to be recompiled", sLib.cstr() );
-			dlclose ( pHandle );
-			delete pPlugin;
-			return false;
-		}
-
-		PluginLib_t tLib;
-		memset ( tLib.m_dCount, 0, sizeof(tLib.m_dCount) );
-		tLib.m_dCount[eType] = 1;
-		tLib.m_pHandle = pHandle;
-		Verify ( g_hPluginLibs.Add ( tLib, sLib.cstr() ) );
-		pPlugin->m_pLib = g_hPluginLibs ( sLib.cstr() );
-	} else
-		pPlugin->m_pLib->m_dCount[eType]++;
-
-	pPlugin->m_pLibName = g_hPluginLibs.GetKeyPtr ( sLib );
-	assert ( pPlugin->m_pLib );
-
-	// add function
-	Verify ( g_hPlugins.Add ( pPlugin, k ) );
-	return true;
-#endif // HAVE_DLOPEN
-}
-
-
-bool sphPluginCreate ( const char * sLib, PluginType_e eType, const char * sName, ESphAttr eUDFRetType, CSphString & sError )
-{
 	// FIXME? preregister known rankers instead?
 	if ( eType==PLUGIN_RANKER )
 	{
@@ -405,19 +360,68 @@ bool sphPluginCreate ( const char * sLib, PluginType_e eType, const char * sName
 		}
 	}
 
-	PluginDesc_c * pDesc = NULL;
+	// from here, we need a lock (we intend to update the plugin hash)
+	CSphScopedLock<CSphStaticMutex> tLock ( g_tPluginMutex );
+
+	// validate function name
+	PluginKey_t k ( eType, sName );
+	if ( g_hPlugins(k) )
+	{
+		sError.SetSprintf ( "plugin '%s' already exists", k.m_sName.cstr() );
+		return false;
+	}
+
+	// lookup or load library
+	PluginLib_c * pLib = NULL;
+	if ( g_hPluginLibs ( sLib ) )
+	{
+		pLib = g_hPluginLibs [ sLib ];
+		pLib->AddRef();
+	} else
+	{
+		pLib = LoadPluginLibrary ( sLib.cstr(), sError );
+		if ( !pLib )
+			return false;
+	}
+	assert ( pLib->GetHandle() );
+
+	PluginDesc_c * pPlugin = NULL;
 	const SymbolDesc_t * pSym = NULL;
 	switch ( eType )
 	{
-		case PLUGIN_RANKER:					pDesc = new PluginRanker_c(); pSym = g_dSymbolsRanker; break;
-		case PLUGIN_INDEX_TOKEN_FILTER:		pDesc = new PluginTokenFilter_c(); pSym = g_dSymbolsTokenFilter; break;
-		case PLUGIN_QUERY_TOKEN_FILTER:		pDesc = new PluginQueryTokenFilter_c(); pSym = g_dSymbolsQueryTokenFilter; break;
-		case PLUGIN_FUNCTION:				pDesc = new PluginUDF_c ( eUDFRetType ); pSym = g_dSymbolsUDF; break;
+		case PLUGIN_RANKER:					pPlugin = new PluginRanker_c ( pLib ); pSym = g_dSymbolsRanker; break;
+		case PLUGIN_INDEX_TOKEN_FILTER:		pPlugin = new PluginTokenFilter_c ( pLib ); pSym = g_dSymbolsTokenFilter; break;
+		case PLUGIN_QUERY_TOKEN_FILTER:		pPlugin = new PluginQueryTokenFilter_c ( pLib ); pSym = g_dSymbolsQueryTokenFilter; break;
+		case PLUGIN_FUNCTION:				pPlugin = new PluginUDF_c ( pLib, eUDFRetType ); pSym = g_dSymbolsUDF; break;
 		default:
 			sError.SetSprintf ( "INTERNAL ERROR: unknown plugin type %d in CreatePlugin()", (int)eType );
+			pLib->Release();
 			return false;
 	}
-	return PluginCreate ( sLib, sName, eType, pDesc, pSym, sError );
+
+	// release the refcount that this very function is holding
+	// or in other words, transfer the refcount to newly created plugin instance (it does its own addref)
+	pLib->Release();
+
+	if ( !PluginLoadSymbols ( pPlugin, pSym, pLib->GetHandle(), k.m_sName.cstr(), sError ) )
+	{
+		sError.SetSprintf ( "%s in %s", sError.cstr(), sLib.cstr() );
+		pPlugin->Release();
+		return false;
+	}
+
+	// add library if needed
+	if ( !g_hPluginLibs ( sLib ) )
+	{
+		Verify ( g_hPluginLibs.Add ( pLib, pLib->GetName() ) );
+		pLib->AddRef(); // the hash reference
+	}
+
+	// add function
+	Verify ( g_hPlugins.Add ( pPlugin, k ) );
+	pPlugin->GetLib()->m_iHashedPlugins++;
+	return true;
+#endif // HAVE_DLOPEN
 }
 
 
@@ -427,77 +431,129 @@ bool sphPluginDrop ( PluginType_e eType, const char * sName, CSphString & sError
 	sError = "no dlopen(), no plugins";
 	return false;
 #else
-	if ( g_bPluginsLocked )
-	{
-		sError = "DROP is disabled (fully dynamic plugins require workers=threads)";
-		return false;
-	}
-
-	g_tPluginMutex.Lock();
+	CSphScopedLock<CSphStaticMutex> tLock ( g_tPluginMutex );
 
 	PluginKey_t tKey ( eType, sName );
 	PluginDesc_c ** ppPlugin = g_hPlugins(tKey);
-	if ( !ppPlugin || !*ppPlugin || (**ppPlugin).m_bToDrop ) // handle concurrent drop in progress as "not exists"
+	if ( !ppPlugin || !*ppPlugin )
 	{
 		sError.SetSprintf ( "plugin '%s' does not exist", sName );
-		g_tPluginMutex.Unlock();
 		return false;
 	}
 
-	static const int UDF_DROP_TIMEOUT_SEC = 30; // in seconds
-	int64_t tmEnd = sphMicroTimer() + UDF_DROP_TIMEOUT_SEC*1000000;
-
-	// mark for deletion, to prevent new users
 	PluginDesc_c * pPlugin = *ppPlugin;
-	pPlugin->m_bToDrop = true;
-	if ( pPlugin->m_iUserCount )
-		for ( ;; )
-		{
-			// release lock and wait
-			// so that concurrent users could complete and release the plugin
-			g_tPluginMutex.Unlock();
-			sphSleepMsec ( 50 );
-
-			// re-acquire lock
-			g_tPluginMutex.Lock();
-
-			// everyone out? proceed with dropping
-			assert ( pPlugin->m_iUserCount>=0 );
-			if ( pPlugin->m_iUserCount<=0 )
-				break;
-
-			// timed out? clear deletion flag, and bail
-			if ( sphMicroTimer() > tmEnd )
-			{
-				pPlugin->m_bToDrop = false;
-				g_tPluginMutex.Unlock();
-
-				sError.SetSprintf ( "DROP timed out in (still got %d users after waiting for %d seconds); please retry",
-					pPlugin->m_iUserCount, UDF_DROP_TIMEOUT_SEC );
-				return false;
-			}
-		}
-
-	PluginLib_t * pLib = pPlugin->m_pLib;
-	const CSphString * pLibName = pPlugin->m_pLibName;
+	PluginLib_c * pLib = pPlugin->GetLib();
 
 	Verify ( g_hPlugins.Delete(tKey) );
-	pLib->m_dCount[eType]--;
+	pPlugin->Release();
 
-	bool bCanDrop = true;
-	for ( int i=0; i<PLUGIN_TOTAL && bCanDrop; i++ )
-		if ( pLib->m_dCount[i]>0 )
-			bCanDrop = false;
-
-	if ( bCanDrop )
+	if ( --pLib->m_iHashedPlugins==0 )
 	{
-		// FIXME! running queries might be using this function/ranker
-		int iRes = dlclose ( pLib->m_pHandle );
-		sphLogDebug ( "dlclose(%s)=%d", pLibName->cstr(), iRes );
-		Verify ( g_hPluginLibs.Delete ( *pLibName ) );
+		g_hPluginLibs.Delete ( pLib->GetName() );
+		pLib->Release();
 	}
 
-	g_tPluginMutex.Unlock();
+	return true;
+#endif // HAVE_DLOPEN
+}
+
+
+bool sphPluginReload ( const char * sName, CSphString & sError )
+{
+#if !HAVE_DLOPEN
+	sError = "no dlopen(), no plugins";
+	return false;
+#else
+	// find all plugins from the given library
+	CSphScopedLock<CSphStaticMutex> tLock ( g_tPluginMutex );
+
+	CSphVector<PluginKey_t> dKeys;
+	CSphVector<PluginDesc_c*> dPlugins;
+
+	g_hPlugins.IterateStart();
+	while ( g_hPlugins.IterateNext() )
+	{
+		PluginDesc_c * v = g_hPlugins.IterateGet();
+		if ( v->GetLibName()==sName )
+		{
+			dKeys.Add ( g_hPlugins.IterateGetKey() );
+			dPlugins.Add ( g_hPlugins.IterateGet() );
+		}
+	}
+
+	// no plugins loaded? oops
+	if ( dPlugins.GetLength()==0 )
+	{
+		sError.SetSprintf ( "no active plugins loaded from %s", sName );
+		return false;
+	}
+
+	// load new library and check every plugin
+	PluginLib_c * pNewLib = LoadPluginLibrary ( sName, sError );
+	if ( !pNewLib )
+		return false;
+
+	// load all plugins
+	CSphVector<PluginDesc_c*> dNewPlugins;
+	ARRAY_FOREACH ( i, dPlugins )
+	{
+		PluginDesc_c * pDesc = NULL;
+		const SymbolDesc_t * pSym = NULL;
+		switch ( dKeys[i].m_eType )
+		{
+			case PLUGIN_RANKER:					pDesc = new PluginRanker_c ( pNewLib ); pSym = g_dSymbolsRanker; break;
+			case PLUGIN_INDEX_TOKEN_FILTER:		pDesc = new PluginTokenFilter_c ( pNewLib ); pSym = g_dSymbolsTokenFilter; break;
+			case PLUGIN_QUERY_TOKEN_FILTER:		pDesc = new PluginQueryTokenFilter_c ( pNewLib ); pSym = g_dSymbolsQueryTokenFilter; break;
+			case PLUGIN_FUNCTION:				pDesc = new PluginUDF_c ( pNewLib, dPlugins[i]->GetUdfRetType() ); pSym = g_dSymbolsUDF; break;
+			default:
+				sphDie ( "INTERNAL ERROR: unknown plugin type %d in sphPluginReload()", (int)dKeys[i].m_eType );
+				return false;
+		}
+
+		if ( !PluginLoadSymbols ( pDesc, pSym, pNewLib->GetHandle(), dKeys[i].m_sName.cstr(), sError ) )
+		{
+			pDesc->Release();
+			break;
+		}
+
+		dNewPlugins.Add ( pDesc );
+	}
+
+	// we can now release the reference that this function was holding
+	pNewLib->Release();
+
+	// if there was a problem loading any of the plugins, time to fail
+	if ( dPlugins.GetLength()!=dNewPlugins.GetLength() )
+	{
+		ARRAY_FOREACH ( i, dNewPlugins )
+			dNewPlugins[i]->Release();
+
+		sError.SetSprintf ( "failed to import plugin %s: %s", dKeys [ dNewPlugins.GetLength() ].m_sName.cstr(), sError.cstr() );
+		return false;
+	}
+
+	// unregister and release the old references
+	PluginLib_c * pOldLib = dPlugins[0]->GetLib();
+	ARRAY_FOREACH ( i, dPlugins )
+	{
+		assert ( dPlugins[i]->GetLib()==pOldLib );
+		Verify ( g_hPlugins.Delete ( dKeys[i] ) );
+		SafeRelease ( dPlugins[i] );
+	}
+	assert ( pOldLib->m_iHashedPlugins==dPlugins.GetLength() );
+	pOldLib->m_iHashedPlugins = 0;
+	Verify ( g_hPluginLibs.Delete ( pOldLib->GetName() ) );
+	SafeRelease ( pOldLib );
+
+	// register new references
+	g_hPluginLibs.Add ( pNewLib, pNewLib->GetName() );
+	pNewLib->AddRef(); // the hash reference
+
+	ARRAY_FOREACH ( i, dNewPlugins )
+		Verify ( g_hPlugins.Add ( dNewPlugins[i], dKeys[i] ) );
+	assert ( pNewLib->m_iHashedPlugins==0 );
+	pNewLib->m_iHashedPlugins = dNewPlugins.GetLength();
+
 	return true;
 #endif // HAVE_DLOPEN
 }
@@ -515,11 +571,11 @@ PluginDesc_c * sphPluginAcquire ( const char * szLib, PluginType_e eType, const 
 
 	CSphString sLib ( szLib );
 	sLib.ToLower();
-	if ( *(pDesc->m_pLibName)==sLib )
+	if ( pDesc->GetLibName()==sLib )
 		return pDesc;
 
 	sError.SetSprintf ( "unable to load plugin '%s' from '%s': it has already been loaded from library '%s'",
-		szName, sLib.cstr(), pDesc->m_pLibName->cstr() );
+		szName, sLib.cstr(), pDesc->GetLibName().cstr() );
 	pDesc->Release();
 	return NULL;
 }
@@ -545,16 +601,14 @@ void sphPluginSaveState ( CSphWriter & tWriter )
 	{
 		const PluginKey_t & k = g_hPlugins.IterateGetKey();
 		const PluginDesc_c * v = g_hPlugins.IterateGet();
-		if ( v->m_bToDrop )
-			continue;
 
 		CSphString sBuf;
 		if ( k.m_eType==PLUGIN_FUNCTION )
 			sBuf.SetSprintf ( "CREATE FUNCTION %s RETURNS %s SONAME '%s';\n", k.m_sName.cstr(),
-				UdfReturnType ( ((PluginUDF_c*)v)->m_eRetType ), v->m_pLibName->cstr() );
+				UdfReturnType ( ((PluginUDF_c*)v)->m_eRetType ), v->GetLibName().cstr() );
 		else
 			sBuf.SetSprintf ( "CREATE PLUGIN %s TYPE '%s' SONAME '%s';\n",
-				k.m_sName.cstr(), g_dPluginTypes[k.m_eType], v->m_pLibName->cstr() );
+				k.m_sName.cstr(), g_dPluginTypes[k.m_eType], v->GetLibName().cstr() );
 
 		tWriter.PutBytes ( sBuf.cstr(), sBuf.Length() );
 	}
@@ -577,7 +631,7 @@ bool sphPluginExists ( PluginType_e eType, const char * sName )
 	CSphScopedLock<CSphStaticMutex> tLock ( g_tPluginMutex );
 	PluginKey_t k ( eType, sName );
 	PluginDesc_c ** pp = g_hPlugins(k);
-	return pp && *pp && !(**pp).m_bToDrop;
+	return pp && *pp;
 }
 
 
@@ -589,9 +643,9 @@ PluginDesc_c * sphPluginGet ( PluginType_e eType, const char * sName )
 	CSphScopedLock<CSphStaticMutex> tLock ( g_tPluginMutex );
 	PluginKey_t k ( eType, sName );
 	PluginDesc_c ** pp = g_hPlugins(k);
-	if ( !pp || !*pp || (**pp).m_bToDrop )
-		return NULL; // either not found, or DROP in progress, can not use
-	(**pp).m_iUserCount++; // protection against concurrent DROP, gets decremented in PluginDesc_c::Release()
+	if ( !pp || !*pp )
+		return NULL;
+	(**pp).AddRef();
 	return *pp;
 }
 
@@ -610,8 +664,8 @@ void sphPluginList ( CSphVector<PluginInfo_t> & dResult )
 		PluginInfo_t & p = dResult.Add();
 		p.m_eType = k.m_eType;
 		p.m_sName = k.m_sName;
-		p.m_sLib = v->m_pLibName->cstr();
-		p.m_iUsers = v->m_iUserCount;
+		p.m_sLib = v->GetLibName().cstr();
+		p.m_iUsers = v->GetRefcount() - 1; // except the one reference from the hash itself
 		if ( p.m_eType==PLUGIN_FUNCTION )
 			p.m_sExtra = UdfReturnType ( ((PluginUDF_c*)v)->m_eRetType );
 	}

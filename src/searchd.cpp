@@ -517,7 +517,7 @@ static bool				g_bSafeTrace	= false;
 static bool				g_bStripPath	= false;
 
 static volatile bool	g_bDoDelete			= false;	// do we need to delete any indexes?
-static CSphAtomic		g_iRotateCount			( 0 );	// how many times do we need to rotate
+
 static volatile sig_atomic_t g_bGotSighup		= 0;	// we just received SIGHUP; need to log
 static volatile sig_atomic_t g_bGotSigterm		= 0;	// we just received SIGTERM; need to shutdown
 static volatile sig_atomic_t g_bGotSigusr1		= 0;	// we just received SIGUSR1; need to reopen logs
@@ -585,14 +585,16 @@ private:
 
 static IndexHash_c *						g_pLocalIndexes = NULL;	// served (local) indexes hash
 static IndexHash_c *						g_pTemplateIndexes = NULL; // template (tokenizer) indexes hash
-static CSphVector<const char *>				g_dRotating;			// names of indexes to be rotated this time
 
 static CSphMutex							g_tRotateQueueMutex;
-static CSphVector<CSphString>				g_dRotateQueue;		// FIXME? maybe replace it with lockless ring buffer
+static CSphVector<CSphString>				g_dRotateQueue;
 static CSphMutex							g_tRotateConfigMutex;
 static SphThread_t							g_tRotateThread;
 static SphThread_t							g_tRotationServiceThread;
 static volatile bool						g_bInvokeRotationService = false;
+static volatile bool						g_bNeedRotate = false;		// true if there were pending HUPs to handle (they could fly in during previous rotate)
+static volatile bool						g_bInRotate = false;		// true while we are rotating
+
 static CSphVector<SphThread_t>				g_dTickPoolThread;
 
 /// flush parameters of rt indexes
@@ -18655,7 +18657,7 @@ void CheckLeaks ()
 	static int iHeadAllocs = sphAllocsCount ();
 	static int iHeadCheckpoint = sphAllocsLastID ();
 
-	if ( g_dThd.GetLength()==0 && !g_iRotateCount.GetValue() && iHeadAllocs!=sphAllocsCount() )
+	if ( g_dThd.GetLength()==0 && !g_bInRotate && iHeadAllocs!=sphAllocsCount() )
 	{
 		sphSeek ( g_iLogFile, 0, SEEK_END );
 		sphAllocsDump ( g_iLogFile, iHeadCheckpoint );
@@ -18916,11 +18918,6 @@ void RotationThreadFunc ( void * )
 	while ( !g_bShutdown )
 	{
 		// check if we have work to do
-		if ( !g_iRotateCount.GetValue() )
-		{
-			sphSleepMsec ( 50 );
-			continue;
-		}
 		g_tRotateQueueMutex.Lock();
 		if ( !g_dRotateQueue.GetLength() )
 		{
@@ -18939,19 +18936,12 @@ void RotationThreadFunc ( void * )
 		g_tRotateQueueMutex.Lock();
 		if ( !g_dRotateQueue.GetLength() )
 		{
-			g_iRotateCount.Dec();
+			g_bInRotate = false;
+			g_bInvokeRotationService = true;
 			sphInfo ( "rotating index: all indexes done" );
 		}
 		g_tRotateQueueMutex.Unlock();
 	}
-}
-
-
-void IndexRotationDone ()
-{
-	g_iRotateCount.Dec();
-	g_bInvokeRotationService = true;
-	sphInfo ( "rotating finished" );
 }
 
 
@@ -20307,8 +20297,11 @@ void RotationServiceThreadFunc ( void * )
 void CheckRotate ()
 {
 	// do we need to rotate now?
-	if ( !g_iRotateCount.GetValue() )
+	if ( !g_bNeedRotate || g_bInRotate )
 		return;
+
+	g_bInRotate = true; // ok, another rotation cycle just started
+	g_bNeedRotate = false; // which therefore clears any previous HUP signals
 
 	sphLogDebug ( "CheckRotate invoked" );
 
@@ -20354,7 +20347,9 @@ void CheckRotate ()
 			tIndex.Unlock();
 		}
 
-		IndexRotationDone ();
+		g_bInRotate = false;
+		g_bInvokeRotationService = true;
+		sphInfo ( "rotating finished" );
 		return;
 	}
 
@@ -20362,8 +20357,7 @@ void CheckRotate ()
 	// seamless rotate
 	///////////////////
 
-	if ( g_dRotating.GetLength() || g_dRotateQueue.GetLength() )
-		return; // rotate in progress already
+	assert ( g_dRotateQueue.GetLength()==0 );
 
 	g_tRotateConfigMutex.Lock();
 	if ( CheckConfigChanges() )
@@ -20372,8 +20366,8 @@ void CheckRotate ()
 	}
 	g_tRotateConfigMutex.Unlock();
 
-	int iRotIndexes = 0;
 	// check what indexes need to be rotated
+	CSphVector<CSphString> dQueue;
 	for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
 	{
 		const ServedIndex_t & tIndex = it.Get();
@@ -20393,21 +20387,26 @@ void CheckRotate ()
 			continue;
 		}
 
-		g_tRotateQueueMutex.Lock();
-		g_dRotateQueue.Add ( sIndex );
-		g_tRotateQueueMutex.Unlock();
-
-		iRotIndexes++;
+		dQueue.Add ( sIndex );
 	}
 
-	if ( !iRotIndexes )
+	if ( !dQueue.GetLength() )
 	{
-		int iRotateCount = ( g_iRotateCount.Dec()-1 );
-		iRotateCount = Max ( 0, iRotateCount );
-		sphWarning ( "nothing to rotate after SIGHUP ( in queue=%d )", iRotateCount );
-	} else
+		sphWarning ( "nothing to rotate after SIGHUP" );
+		g_bInvokeRotationService = false;
+		g_bInRotate = false;
+		return;
+	}
+
+	g_tRotateQueueMutex.Lock();
+	g_dRotateQueue.SwapData ( dQueue );
+	g_tRotateQueueMutex.Unlock();
+
+	if ( dQueue.GetLength() )
 	{
-		g_bInvokeRotationService = true;
+		sphWarning ( "INTERNAL ERROR: non-empty queue on a rotation cycle start, got %d elements", dQueue.GetLength() );
+		ARRAY_FOREACH ( i, g_dRotateQueue )
+			sphWarning ( "queue[%d] = %s", i, dQueue[i].cstr() );
 	}
 }
 
@@ -20982,8 +20981,8 @@ void CheckSignals ()
 
 	if ( g_bGotSighup )
 	{
-		int iRotateCount = ( g_iRotateCount.Inc()+1 );
-		sphInfo ( "caught SIGHUP (seamless=%d, in queue=%d)", (int)g_bSeamlessRotate, iRotateCount );
+		sphInfo ( "caught SIGHUP (seamless=%d, in_rotate=%d, need_rotate=%d)", (int)g_bSeamlessRotate, (int)g_bInRotate, (int)g_bNeedRotate );
+		g_bNeedRotate = true;
 		g_bGotSighup = 0;
 	}
 
@@ -21360,7 +21359,7 @@ void TickHead ()
 		return;
 
 	if ( ( g_iMaxChildren && !g_pThdPool && g_dThd.GetLength()>=g_iMaxChildren )
-		|| ( g_iRotateCount.GetValue() && !g_bSeamlessRotate ) )
+		|| ( g_bInRotate && !g_bSeamlessRotate ) )
 	{
 		if ( pListener->m_eProto==PROTO_SPHINX )
 			FailClient ( iClientSock, SEARCHD_RETRY, "server maxed out, retry in a second" );

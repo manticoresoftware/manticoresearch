@@ -657,6 +657,10 @@ public:
 	/// get original tokenized multiform (if any); NULL means there was none
 	virtual BYTE *					GetTokenizedMultiform () { return NULL; }
 
+	/// was last token a part of multi-wordforms destination
+	/// head parameter might be useful to distinguish between sequence of different multi-wordforms
+	virtual bool					WasTokenMultiformDestination ( bool & bHead ) const = 0;
+
 	/// check whether this token is a generated morphological guess
 	ESphTokenMorph					GetTokenMorph() const { return m_eTokenMorph; }
 

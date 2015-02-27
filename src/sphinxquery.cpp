@@ -31,6 +31,13 @@
 
 //////////////////////////////////////////////////////////////////////////
 
+struct MultiformNode_t
+{
+	XQNode_t *	m_pNode;
+	int			m_iDestStart;
+	int			m_iDestCount;
+};
+
 class XQParser_t
 {
 public:
@@ -64,6 +71,7 @@ public:
 	void			FixupNulls ( XQNode_t * pNode );
 	void			DeleteNodesWOFields ( XQNode_t * pNode );
 	void			PhraseShiftQpos ( XQNode_t * pNode );
+	void			FixupDestForms ();
 
 	inline void SetFieldSpec ( const FieldMask_t& uMask, int iMaxPos )
 	{
@@ -135,7 +143,10 @@ public:
 	CSphVector < CSphVector<int> >	m_dZoneVecs;
 	CSphVector<XQLimitSpec_t *>		m_dStateSpec;
 	CSphVector<XQLimitSpec_t *>		m_dSpecPool;
-	CSphVector<int>			m_dPhraseStar;
+	CSphVector<int>					m_dPhraseStar;
+
+	CSphVector<CSphString>			m_dDestForms;
+	CSphVector<MultiformNode_t>		m_dMultiforms;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1078,12 +1089,37 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 				m_iAtomPos--;
 		}
 
-		m_tPendingToken.pNode = AddKeyword ( sToken );
-		m_iPendingType = TOK_KEYWORD;
+		bool bMultiDestHead = false;
+		bool bMultiDest = false;
+		// do nothing inside phrase
+		if ( !m_pTokenizer->m_bPhrase )
+			bMultiDest = m_pTokenizer->WasTokenMultiformDestination ( bMultiDestHead );
+
+		if ( bMultiDest && !bMultiDestHead )
+		{
+			assert ( m_dMultiforms.GetLength() );
+			m_dMultiforms.Last().m_iDestCount++;
+			m_dDestForms.Add ( sToken );
+			m_bWasKeyword = true;
+		} else
+		{
+			m_tPendingToken.pNode = AddKeyword ( sToken );
+			m_iPendingType = TOK_KEYWORD;
+		}
+
+		if ( bMultiDestHead )
+		{
+			MultiformNode_t & tMulti = m_dMultiforms.Add();
+			tMulti.m_pNode = m_tPendingToken.pNode;
+			tMulti.m_iDestStart = m_dDestForms.GetLength();
+			tMulti.m_iDestCount = 0;
+		}
 
 		if ( m_pTokenizer->TokenIsBlended() )
 			m_iAtomPos--;
-		break;
+
+		if ( !bMultiDest || bMultiDestHead )
+			break;
 	}
 
 	if ( bWasFrontModifier && m_iPendingType!=TOK_KEYWORD )
@@ -1532,6 +1568,56 @@ static void FixupDegenerates ( XQNode_t * pNode )
 		FixupDegenerates ( pNode->m_dChildren[i] );
 }
 
+void XQParser_t::FixupDestForms ()
+{
+	if ( !m_dMultiforms.GetLength() )
+		return;
+
+	CSphVector<XQNode_t *> dForms;
+
+	ARRAY_FOREACH ( iNode, m_dMultiforms )
+	{
+		const MultiformNode_t & tDesc = m_dMultiforms[iNode];
+		XQNode_t * pMultiParent = tDesc.m_pNode;
+		assert ( pMultiParent->m_dWords.GetLength()==1 && pMultiParent->m_dChildren.GetLength()==0 );
+
+		XQKeyword_t tKeyword;
+		Swap ( pMultiParent->m_dWords[0], tKeyword );
+		pMultiParent->m_dWords.Reset();
+
+		// FIXME: what about whildcard?
+		bool bExact = ( tKeyword.m_sWord.Length()>1 && tKeyword.m_sWord.cstr()[0]=='=' );
+		bool bFieldEnd = tKeyword.m_bFieldEnd;
+		tKeyword.m_bFieldEnd = false;
+
+		XQNode_t * pMultiHead = new XQNode_t ( pMultiParent->m_dSpec );
+		pMultiHead->m_dWords.Add ( tKeyword );
+		m_dSpawned.Add ( pMultiHead );
+		dForms.Add ( pMultiHead );
+
+		for ( int iForm=0; iForm<tDesc.m_iDestCount; iForm++ )
+		{
+			tKeyword.m_iAtomPos++;
+			tKeyword.m_sWord = m_dDestForms [ tDesc.m_iDestStart + iForm ];
+
+			// propagate exact word flag to all destination forms
+			if ( bExact )
+				tKeyword.m_sWord.SetSprintf ( "=%s", tKeyword.m_sWord.cstr() );
+
+			XQNode_t * pMulti = new XQNode_t ( pMultiParent->m_dSpec );
+			pMulti->m_dWords.Add ( tKeyword );
+			m_dSpawned.Add ( pMulti );
+			dForms.Add ( pMulti );
+		}
+
+		// move field end modifier to last word
+		dForms.Last()->m_dWords[0].m_bFieldEnd = bFieldEnd;
+
+		pMultiParent->SetOp ( SPH_QUERY_AND, dForms );
+		dForms.Resize ( 0 );
+	}
+}
+
 
 bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const ISphTokenizer * pTokenizer,
 	const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings )
@@ -1631,6 +1717,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 		return false;
 	}
 
+	FixupDestForms ();
 	DeleteNodesWOFields ( m_pRoot );
 	m_pRoot = SweepNulls ( m_pRoot );
 	FixupDegenerates ( m_pRoot );

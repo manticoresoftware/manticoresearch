@@ -44,6 +44,31 @@ index test_num
 	path			= <data_path/>/test_num
 	wordforms		= <this_test/>/wf_num.txt
 }
+
+source src_multi
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT 1 id, 11 idd, 'test me rd' text UNION SELECT 2 id, 11 idd, 'test me red dogs' text UNION SELECT 3 id, 11 idd, 'test me red dog' text
+	sql_attr_uint = idd
+}
+
+index multi1
+{
+	source			= src_multi
+	path			= <data_path/>/multi1
+	wordforms		= <this_test/>/wf_multi.txt
+}
+
+index multi2
+{
+	source			= src_multi
+	path			= <data_path/>/multi2
+	wordforms		= <this_test/>/wf_multi.txt
+	morphology		= stem_en
+	index_exact_words = 1
+}
 </config>
 
 <queries>
@@ -69,6 +94,57 @@ index test_num
 <sphinxql>SHOW META</sphinxql>
 <sphinxql>SELECT * FROM test_num WHERE MATCH('metallica 2014')</sphinxql>
 <sphinxql>SHOW META</sphinxql>
+
+<!-- regression multi destination wordform vs operators -->
+<sphinxql>set profiling=1</sphinxql>
+<sphinxql>SELECT * FROM multi1 WHERE MATCH('me | rdogs')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi2 WHERE MATCH('me | rdogs')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi1 WHERE MATCH('me | dogs')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi2 WHERE MATCH('me | dogs')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi1 WHERE MATCH('me | (red dogs)')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi2 WHERE MATCH('me | (red dogs)')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi1 WHERE MATCH('meo | (red dog)')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi2 WHERE MATCH('meo | (red dog)')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi1 WHERE MATCH('me | =rdogs')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi2 WHERE MATCH('me | =rdogs')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi1 WHERE MATCH('me | rdogs$')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi2 WHERE MATCH('me | rdogs$')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi1 WHERE MATCH('me | =rdogs$')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi2 WHERE MATCH('me | =rdogs$')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi1 WHERE MATCH('test | "me rdogs" ')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi2 WHERE MATCH('test | "me rdogs" ')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
 </sphqueries>
 
 <db_create>

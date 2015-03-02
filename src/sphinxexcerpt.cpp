@@ -3019,7 +3019,9 @@ static void TokenizeDocument ( T & tFunctor, const CSphHTMLStripper * pStripper,
 			if ( pBlendedStart<pTokenStart && bBlendedHead )
 			{
 				// FIXME!!! implement proper handling of blend-chars
-				bDone = pBlendedStart!=pLastTokenEnd && !tFunctor.OnOverlap ( pLastTokenEnd-pStartPtr, pBlendedStart - pLastTokenEnd, pTokenizer->GetBoundary() ? pTokenizer->GetBoundaryOffset() : -1 );
+				if ( ( pBlendedStart - pLastTokenEnd )>0 )
+					bDone = !tFunctor.OnOverlap ( pLastTokenEnd-pStartPtr, pBlendedStart - pLastTokenEnd, pTokenizer->GetBoundary() ? pTokenizer->GetBoundaryOffset() : -1 );
+
 				tTok.m_uWordId = 0;
 				tTok.m_bStopWord = false;
 				tTok.m_uPosition = uPosition; // let's stick to 1st blended part

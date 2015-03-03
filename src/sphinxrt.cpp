@@ -20,6 +20,7 @@
 #include "sphinxutils.h"
 #include "sphinxjson.h"
 #include "sphinxplugin.h"
+#include "sphinxqcache.h"
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -6816,7 +6817,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		}
 
 	// setup calculations and result schema
-	CSphQueryContext tCtx;
+	CSphQueryContext tCtx ( *pQuery );
 	tCtx.m_pProfile = pProfiler;
 	if ( !tCtx.SetupCalc ( pResult, dSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, NULL, false ) )
 		return false;
@@ -7053,10 +7054,21 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 					for ( int i=0; i<iMatches; i++ )
 					{
-						assert ( !tCtx.m_bLookupSort || FindDocinfo ( tGuard.m_dRamChunks[iSeg], pMatch[i].m_uDocID ) );
-
 						if ( tCtx.m_bLookupSort )
-							CopyDocinfo ( pMatch[i], FindDocinfo ( tGuard.m_dRamChunks[iSeg], pMatch[i].m_uDocID ) );
+						{
+							// tricky bit
+							// that kills two birds with one stone, sort of
+							// first, broken indexes MIGHT yield nonexistent docids at this point
+							// second, query cache ranker WILL return nonexistent docids (from other segments)
+							// because the cached query only stores docids, not segment ids (which change all the time anyway)
+							// to catch broken indexes or other bugs in debug, we have that assert 
+							// but release builds will simply ignore nonexistent docids, whatever the reason they do not exist
+							const CSphRowitem * pRow = FindDocinfo ( tGuard.m_dRamChunks[iSeg], pMatch[i].m_uDocID );
+							assert ( pRanker->IsCache() || pRow );
+							if ( !pRow )
+								continue;
+							CopyDocinfo ( pMatch[i], pRow );
+						}
 
 						pMatch[i].m_iWeight *= tArgs.m_iIndexWeight;
 						if ( bRandomize )
@@ -8220,7 +8232,8 @@ bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 	// FIXME? do something about binlog too?
 	// g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, false );
 
-	// all done
+	// all done, reset cache
+	QcacheDeleteIndex ( GetIndexId() );
 	return true;
 }
 
@@ -8269,6 +8282,8 @@ bool RtIndex_t::Truncate ( CSphString & )
 	// we don't want kill list to work if we perform ATTACH right after this TRUNCATE
 	m_tKlist.Reset ( NULL, 0 );
 
+	// reset cache
+	QcacheDeleteIndex ( GetIndexId() );
 	return true;
 }
 

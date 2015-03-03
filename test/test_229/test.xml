@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>query cache</name>
+
+<skip_indexer/>
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+index rt
+{
+	type			= rt
+	path			= <data_path/>/rt
+	rt_field		= title
+	rt_attr_uint	= gid
+}
+</config>
+
+<sphqueries>
+<sphinxql>SET GLOBAL qcache_thresh_msec=0</sphinxql>
+<sphinxql>TRUNCATE RTINDEX rt</sphinxql>
+<sphinxql>INSERT INTO rt (id,gid,title) VALUES (1,111,'test one')</sphinxql>
+<sphinxql>INSERT INTO rt (id,gid,title) VALUES (2,111,'test two')</sphinxql>
+<sphinxql>INSERT INTO rt (id,gid,title) VALUES (3,111,'test three')</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('test')</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('test')</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('test')</sphinxql>
+<sphinxql>SHOW STATUS LIKE 'qcache%'</sphinxql>
+<sphinxql>TRUNCATE RTINDEX rt</sphinxql>
+<sphinxql>SET GLOBAL qcache_thresh_msec=1000</sphinxql>
+<sphinxql>INSERT INTO rt (id,gid,title) VALUES (1,222,'another generation')</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('test')</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('test')</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('another')</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('another')</sphinxql>
+<sphinxql>SHOW STATUS LIKE 'qcache%'</sphinxql>
+</sphqueries>
+
+</test>

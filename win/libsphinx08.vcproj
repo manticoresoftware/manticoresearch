@@ -447,7 +447,15 @@
 				>
 			</File>
 			<File
+				RelativePath="..\src\sphinxqcache.cpp"
+				>
+			</File>
+			<File
 				RelativePath="..\src\sphinxplugin.h"
+				>
+			</File>
+			<File
+				RelativePath="..\src\sphinxqcache.h"
 				>
 			</File>
 			<File

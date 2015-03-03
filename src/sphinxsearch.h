@@ -161,6 +161,7 @@ public:
 	virtual CSphMatch *			GetMatchesBuffer() = 0;
 	virtual int					GetMatches () = 0;
 	virtual void				Reset ( const ISphQwordSetup & tSetup ) = 0;
+	virtual bool				IsCache() const { return false; }
 };
 
 /// factory

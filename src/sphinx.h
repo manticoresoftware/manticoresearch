@@ -2534,7 +2534,7 @@ public:
 	bool				operator == ( const CSphFilterSettings & rhs ) const;
 	bool				operator != ( const CSphFilterSettings & rhs ) const { return !( (*this)==rhs ); }
 
-
+	uint64_t			GetHash() const;
 
 protected:
 	const SphAttr_t *	m_pValues;		///< external value array
@@ -3251,8 +3251,8 @@ public:
 	virtual bool				IsRT() const { return false; }
 	void						SetBinlog ( bool bBinlog ) { m_bBinlog = bBinlog; }
 	virtual int64_t *			GetFieldLens() const { return NULL; }
-
 	virtual bool				IsStarDict() const { return true; }
+	int64_t						GetIndexId() const { return m_iIndexId; }
 
 public:
 	/// build index by indexing given sources
@@ -3356,12 +3356,15 @@ public:
 	virtual bool				ReplaceKillList ( const SphDocID_t *, int ) { return true; }
 
 public:
-	int64_t						m_iTID;
+	int64_t						m_iTID;					///< last committed transaction id
 
 	bool						m_bExpandKeywords;		///< enable automatic query-time keyword expansion (to "( word | =word | *word* )")
 	int							m_iExpansionLimit;
 
 protected:
+	static CSphAtomic			m_tIdGenerator;
+
+	int64_t						m_iIndexId;				///< internal (per daemon) unique index id, introduced for caching
 
 	CSphSchema					m_tSchema;
 	CSphString					m_sLastError;

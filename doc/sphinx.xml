@@ -3983,6 +3983,98 @@ can be returned depending on the collation chosen.
 </sect1>
 
 
+<sect1 id="qcache"><title>Query cache</title>
+<para>
+Query cache, added in 2.3.1-beta, stores a compressed result set in memory,
+and then reuses it for subsequent queries where possible. You can configure
+it using the following directives:
+<itemizedlist>
+<listitem><para><link linkend="conf-qcache-max-bytes">qcache_max_bytes</link>,
+a limit on the RAM use for cached queries storage. Defaults to 16 MB. Setting
+qcache_max_bytes to 0 completely disables the query cache.
+</para></listitem>
+<listitem><para><link linkend="conf-qcache-thresh-msec">qcache_thresh_msec</link>,
+the minimum wall query time to cache. Queries that completed faster than this will
+<emphasis>not</emphasis> be cached. Defaults to 3000 msec, or 3 seconds.
+</para></listitem>
+<listitem><para><link linkend="conf-qcache-ttl-sec">qcache_ttl_sec</link>,
+cached entry TTL, or time to live. Queries will stay cached for this much.
+Defaults to 60 seconds, or 1 minute.
+</para></listitem>
+</itemizedlist>
+These settings can be changed on the fly using the
+<link linkend="sphinxql-set">SET GLOBAL</link> statement:
+<programlisting>
+mysql&gt; SET GLOBAL qcache_max_bytes=128000000;
+</programlisting>
+These changes are applied immediately, and the cached result sets that no longer
+satisfy the constraints are immediately discarded. When reducing the cache size
+on the fly, MRU (most recently used) result sets win.
+</para>
+<para>
+Query cache works as follows. When it's enabled, <emphasis>every</emphasis>
+full-text search result gets <emphasis>completely</emphasis> stored in memory.
+That happens after full-text matching, filtering, and ranking, so basically
+we store <code>total_found</code> {docid,weight} pairs. Compressed matches
+can consume anywhere from 2 bytes to 12 bytes per match on average, mostly
+depending on the deltas between the subsequent docids. Once the query completes,
+we check the wall time and size thresholds, and either save that compressed
+result set for reuse, or discard it.
+</para>
+<para>
+Note how the query cache impact on RAM is thus <emphasis>not</emphasis>
+limited by <code>qcache_max_bytes</code>! If you run, say, 10 concurrent
+queries, each of them matching upto 1M matches (after filters), then the
+peak temporary RAM use will be in the 40 MB to 240 MB range, even if
+in the end the queries are quick enough and do not get cached.
+</para>
+<para>
+Queries can then use cache when the index, the full-text query (ie. MATCH()
+contents), and the ranker are all a match, and filters are compatible.
+Meaning:
+<itemizedlist>
+<listitem><para>The full-text part within MATCH() must be a bytewise match.
+Add a single extra space, and that is now a different query where the query
+cache is concerned.
+</para></listitem>
+<listitem><para>The ranker (and its parameters if any, for user-defined rankers)
+must be a bytewise match.
+</para></listitem>
+<listitem><para>The filters must be a superset of the original filters. That is,
+you can add extra filters and still hit the cache. (In this case, the extra filters
+will be applied to the cached result.) But if you remove one, that will be a new
+query again.
+</para></listitem>
+</itemizedlist>
+</para>
+<para>
+Cache entries expire with TTL, and also get invalidated on index rotation,
+or on TRUNCATE, or on ATTACH. Note that at the moment entries are <b>not</b>
+invalidated on arbitrary RT index writes! So a cached query might be returning
+older results for the duration of its TTL.
+</para>
+<para>
+Current cache status can be inspected with
+in <link linkend="sphinxql-show-status">SHOW STATUS</link>
+through the <code>qcache_XXX</code> variables:
+<programlisting>
+mysql&gt; SHOW STATUS LIKE 'qcache%';
++-----------------------+----------+
+| Counter               | Value    |
++-----------------------+----------+
+| qcache_max_bytes      | 16777216 |
+| qcache_thresh_msec    | 3000     |
+| qcache_ttl_sec        | 60       |
+| qcache_cached_queries | 0        |
+| qcache_used_bytes     | 0        |
+| qcache_hits           | 0        |
++-----------------------+----------+
+6 rows in set (0.00 sec)
+</programlisting>
+</para>
+</sect1>
+
+
 </chapter>
 <chapter id="extending-sphinx"><title>Extending Sphinx</title>
 
@@ -5971,6 +6063,27 @@ Introduced in version 2.0.1-beta.
 <listitem><para>
 Changes the current log verboseness level.
 Introduced in version 2.0.1-beta.
+</para></listitem>
+</varlistentry>
+<varlistentry>
+<term><code>QCACHE_MAX_BYTES = &lt;value&gt;</code></term>
+<listitem><para>
+Changes the <link linkend="qcache">query cache</link> RAM use limit to a given value.
+Added in 2.3.1-beta.
+</para></listitem>
+</varlistentry>
+<varlistentry>
+<term><code>QCACHE_THRESH_MSEC = &lt;value&gt;</code></term>
+<listitem><para>
+Changes the <link linkend="qcache">query cache</link> minimum wall time threshold to a given value.
+Added in 2.3.1-beta.
+</para></listitem>
+</varlistentry>
+<varlistentry>
+<term><code>QCACHE_TTL_SEC = &lt;value&gt;</code></term>
+<listitem><para>
+Changes the <link linkend="qcache">query cache</link> TTL for a cached result to a given value.
+Added in 2.3.1-beta.
 </para></listitem>
 </varlistentry>
 </variablelist>
@@ -14299,6 +14412,27 @@ on per-query basis using 'OPTION retry_delay=XXX' clause. If per-query option ex
 </para>
 </sect2>
 
+<sect2 id="conf-qcache-max-bytes"><title>qcache_max_bytes</title>
+<para>
+Integer, in bytes. The maximum RAM allocated for cached result sets. Defaults to 16777216,
+or 16 MB. 0 means disable query cache. Added in 2.3.1-beta. Refer to <link linkend="qcache"/> for details.
+</para>
+</sect2>
+
+<sect2 id="conf-qcache-thresh-msec"><title>qcache_thresh_msec</title>
+<para>
+Integer, in milliseconds. The minimum wall time threshold for a query result to be cached.
+Defaults to 3000, or 3 seconds. 0 means cache everything. Added in 2.3.1-beta.
+Refer to <link linkend="qcache"/> for details.
+</para>
+</sect2>
+
+<sect2 id="conf-qcache-ttl-sec"><title>qcache_ttl_sec</title>
+<para>
+Integer, in seconds. The expiration period for a cached result set. Defaults to 60, or 1 minute.
+The minimum possible value is 1 second. Added in 2.3.1-beta. Refer to <link linkend="qcache"/> for details.
+</para>
+</sect2>
 
 </sect1>
 

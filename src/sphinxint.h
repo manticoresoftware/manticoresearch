@@ -410,10 +410,12 @@ class UservarIntSet_c;
 
 /// per-query search context
 /// everything that index needs to compute/create to process the query
-class CSphQueryContext
+class CSphQueryContext : public ISphNoncopyable
 {
 public:
 	// searching-only, per-query
+	const CSphQuery &			m_tQuery;
+
 	int							m_iWeights;						///< search query field weights count
 	int							m_dWeights [ SPH_MAX_FIELDS ];	///< search query field weights
 
@@ -445,7 +447,7 @@ public:
 	int64_t									m_iTotalDocs;
 
 public:
-	CSphQueryContext ();
+	CSphQueryContext ( const CSphQuery & q );
 	~CSphQueryContext ();
 
 	void						BindWeights ( const CSphQuery * pQuery, const CSphSchema & tSchema );

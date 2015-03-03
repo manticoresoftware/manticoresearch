@@ -18,6 +18,7 @@
 #include "sphinxquery.h"
 #include "sphinxint.h"
 #include "sphinxplugin.h"
+#include "sphinxqcache.h"
 
 #include <math.h>
 
@@ -1164,6 +1165,9 @@ private:
 	const ExtHit_t *	m_pDotHit;		///< current in-chunk ptr
 };
 
+//////////////////////////////////////////////////////////////////////////
+// RANKER
+//////////////////////////////////////////////////////////////////////////
 
 typedef CSphFixedVector < CSphVector < ZoneInfo_t > > ZoneVVector_t;
 
@@ -1206,6 +1210,7 @@ protected:
 	const CSphIndex *			m_pIndex;							///< this is he who'll do my filtering!
 	CSphQueryContext *			m_pCtx;
 	int64_t *					m_pNanoBudget;
+	QcacheEntry_c *				m_pQcacheEntry;						///< data to cache if we decide that the current query is worth caching
 
 protected:
 	CSphVector<CSphString>		m_dZones;
@@ -1217,6 +1222,9 @@ protected:
 	CSphVector<SphDocID_t>		m_dZoneMin;				///< first docid we (tried) to cache
 	ZoneVVector_t				m_dZoneInfo;
 	bool						m_bZSlist;
+
+protected:
+	void						UpdateQcache ( int iMatches );
 };
 
 
@@ -5555,11 +5563,22 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup 
 	}
 
 	SafeDelete ( pZonesDict );
+
+	m_pQcacheEntry = NULL;
+	if ( QcacheGetStatus().m_iMaxBytes>0 )
+	{
+		m_pQcacheEntry = new QcacheEntry_c();
+		m_pQcacheEntry->m_iIndexId = m_pIndex->GetIndexId();
+	}
 }
 
 
 ExtRanker_c::~ExtRanker_c ()
 {
+	if ( m_pQcacheEntry )
+		QcacheAdd ( m_pCtx->m_tQuery, m_pQcacheEntry );
+	SafeRelease ( m_pQcacheEntry );
+
 	SafeDelete ( m_pRoot );
 	ARRAY_FOREACH ( i, m_dZones )
 	{
@@ -5589,6 +5608,19 @@ void ExtRanker_c::Reset ( const ISphQwordSetup & tSetup )
 			SafeDelete ( m_dZoneInfo[i][iDoc].m_pHits );
 		m_dZoneInfo[i].Reset();
 	}
+
+	// Ranker::Reset() happens on a switch to next RT segment
+	// next segment => new and shiny docids => gotta restart encoding
+	if ( m_pQcacheEntry )
+		m_pQcacheEntry->RankerReset();
+}
+
+
+void ExtRanker_c::UpdateQcache ( int iMatches )
+{
+	if ( m_pQcacheEntry )
+		for ( int i=0; i<iMatches; i++ )
+			m_pQcacheEntry->Append ( m_dMatches[i].m_uDocID, m_dMatches[i].m_iWeight );
 }
 
 
@@ -5995,7 +6027,7 @@ int ExtRanker_WeightSum_c<USE_BM25>::GetMatches ()
 	while ( iMatches<ExtNode_i::MAX_DOCS )
 	{
 		if ( !pDoc || pDoc->m_uDocid==DOCID_MAX ) pDoc = GetFilteredDocs ();
-		if ( !pDoc ) { m_pDoclist = NULL; return iMatches; }
+		if ( !pDoc ) break;
 
 		DWORD uRank = 0;
 		DWORD uMask = pDoc->m_uDocFields;
@@ -6022,6 +6054,8 @@ int ExtRanker_WeightSum_c<USE_BM25>::GetMatches ()
 		pDoc++;
 	}
 
+	UpdateQcache ( iMatches );
+
 	m_pDoclist = pDoc;
 	return iMatches;
 }
@@ -6039,13 +6073,15 @@ int ExtRanker_None_c::GetMatches ()
 	while ( iMatches<ExtNode_i::MAX_DOCS )
 	{
 		if ( !pDoc || pDoc->m_uDocid==DOCID_MAX ) pDoc = GetFilteredDocs ();
-		if ( !pDoc ) { m_pDoclist = NULL; return iMatches; }
+		if ( !pDoc ) break;
 
 		Swap ( m_dMatches[iMatches], m_dMyMatches[pDoc-m_dMyDocs] ); // OPTIMIZE? can avoid this swap and simply return m_dMyMatches (though in lesser chunks)
 		m_dMatches[iMatches].m_iWeight = 1;
 		iMatches++;
 		pDoc++;
 	}
+
+	UpdateQcache ( iMatches );
 
 	m_pDoclist = pDoc;
 	return iMatches;
@@ -6107,11 +6143,16 @@ int ExtRanker_T<STATE>::GetMatches ()
 		if ( !pDocs )
 			pDocs = GetFilteredDocs ();
 		if ( !pDocs )
-			return iMatches;
-
+		{
+			UpdateQcache(0);
+			return 0;
+		}
 		pHlist = RankerGetHits ( pProfile, m_pRoot, pDocs );
 		if ( !pHlist )
-			return iMatches;
+		{
+			UpdateQcache(0);
+			return 0;
+		}
 	}
 
 	if ( !pHitBase )
@@ -6194,6 +6235,9 @@ int ExtRanker_T<STATE>::GetMatches ()
 	m_pHitlist = pHlist;
 	if ( !m_pHitBase )
 		m_pHitBase = pHitBase;
+
+	UpdateQcache ( iMatches );
+
 	return iMatches;
 }
 
@@ -8941,6 +8985,12 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 		uPayloadMask |= pIndex->GetMatchSchema().m_dFields[i].m_bPayload << i;
 
 	bool bGotDupes = HasQwordDupes ( tXQ.m_pRoot );
+
+	// can we serve this from cache?
+	QcacheEntry_c * pCached = QcacheFind ( pIndex->GetIndexId(), *pQuery );
+	if ( pCached )
+		return QcacheRanker ( pCached, tTermSetup );
+	SafeRelease ( pCached );
 
 	// setup eval-tree
 	ExtRanker_c * pRanker = NULL;

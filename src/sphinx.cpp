@@ -23,6 +23,7 @@
 #include "sphinxsearch.h"
 #include "sphinxjson.h"
 #include "sphinxplugin.h"
+#include "sphinxqcache.h"
 
 #include <errno.h>
 #include <ctype.h>
@@ -6678,7 +6679,7 @@ int CSphMultiformTokenizer::SkipBlended ()
 CSphFilterSettings::CSphFilterSettings ()
 	: m_sAttrName	( "" )
 	, m_bExclude	( false )
-	, m_bHasEqual		( true )
+	, m_bHasEqual	( true )
 	, m_iMinValue	( LLONG_MIN )
 	, m_iMaxValue	( LLONG_MAX )
 	, m_pValues		( NULL )
@@ -6725,6 +6726,40 @@ bool CSphFilterSettings::operator == ( const CSphFilterSettings & rhs ) const
 			assert ( 0 && "internal error: unhandled filter type in comparison" );
 			return false;
 	}
+}
+
+
+uint64_t CSphFilterSettings::GetHash() const
+{
+	uint64_t h = sphFNV64 ( &m_eType, sizeof(m_eType) );
+	h = sphFNV64 ( &m_bExclude, sizeof(m_bExclude), h );
+	switch ( m_eType )
+	{
+		case SPH_FILTER_VALUES:
+			{
+				int t = m_dValues.GetLength();
+				h = sphFNV64 ( &t, sizeof(t), h );
+				h = sphFNV64 ( m_dValues.Begin(), t*sizeof(SphAttr_t), h );
+				break;
+			}
+		case SPH_FILTER_RANGE:
+			h = sphFNV64 ( &m_iMaxValue, sizeof(m_iMaxValue), sphFNV64 ( &m_iMinValue, sizeof(m_iMinValue), h ) );
+			break;
+		case SPH_FILTER_FLOATRANGE:
+			h = sphFNV64 ( &m_fMaxValue, sizeof(m_fMaxValue), sphFNV64 ( &m_fMinValue, sizeof(m_fMinValue), h ) );
+			break;
+		case SPH_FILTER_STRING:
+			h = sphFNV64cont ( m_sRefString.cstr(), h );
+			break;
+		case SPH_FILTER_USERVAR:
+			h = sphFNV64cont ( m_sRefString.cstr(), h );
+			break;
+		case SPH_FILTER_NULL:
+			break;
+		default:
+			assert ( 0 && "internal error: unhandled filter type in GetHash()" );
+	}
+	return h;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -9573,6 +9608,8 @@ CSphMultiQueryArgs::CSphMultiQueryArgs ( const KillListVector & dKillList, int i
 // INDEX
 /////////////////////////////////////////////////////////////////////////////
 
+CSphAtomic CSphIndex::m_tIdGenerator;
+
 CSphIndex::CSphIndex ( const char * sIndexName, const char * sFilename )
 	: m_iTID ( 0 )
 	, m_bExpandKeywords ( false )
@@ -9596,11 +9633,13 @@ CSphIndex::CSphIndex ( const char * sIndexName, const char * sFilename )
 	, m_sIndexName ( sIndexName )
 	, m_sFilename ( sFilename )
 {
+	m_iIndexId = m_tIdGenerator.Inc();
 }
 
 
 CSphIndex::~CSphIndex ()
 {
+	QcacheDeleteIndex ( m_iIndexId );
 	SafeDelete ( m_pFieldFilter );
 	SafeDelete ( m_pQueryTokenizer );
 	SafeDelete ( m_pTokenizer );
@@ -15741,7 +15780,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 		}
 
 	// setup calculations and result schema
-	CSphQueryContext tCtx;
+	CSphQueryContext tCtx ( *pQuery );
 	if ( !tCtx.SetupCalc ( pResult, ppSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, m_tMva.GetWritePtr(), m_bArenaProhibit ) )
 		return false;
 
@@ -16217,6 +16256,9 @@ void CSphIndex_VLN::Dealloc ()
 #ifndef NDEBUG
 	m_dShared.Reset ();
 #endif
+
+	QcacheDeleteIndex ( m_iIndexId );
+	m_iIndexId = m_tIdGenerator.Inc();
 }
 
 
@@ -17538,7 +17580,8 @@ bool CSphIndex_VLN::Rename ( const char * sNewBase )
 
 //////////////////////////////////////////////////////////////////////////
 
-CSphQueryContext::CSphQueryContext ()
+CSphQueryContext::CSphQueryContext ( const CSphQuery & q )
+	: m_tQuery ( q )
 {
 	m_iWeights = 0;
 	m_bLookupFilter = false;
@@ -19197,7 +19240,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 		}
 
 	// setup calculations and result schema
-	CSphQueryContext tCtx;
+	CSphQueryContext tCtx ( *pQuery );
 	tCtx.m_pProfile = pProfile;
 	tCtx.m_pLocalDocs = tArgs.m_pLocalDocs;
 	tCtx.m_iTotalDocs = tArgs.m_iTotalDocs;

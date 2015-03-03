@@ -21,6 +21,7 @@
 #include "sphinxquery.h"
 #include "sphinxjson.h"
 #include "sphinxplugin.h"
+#include "sphinxqcache.h"
 
 extern "C"
 {
@@ -11160,7 +11161,7 @@ struct SqlStmt_t
 	// SET specific
 	CSphString				m_sSetName;		// reused by ATTACH
 	SqlSet_e				m_eSet;
-	int						m_iSetValue;
+	int64_t					m_iSetValue;
 	CSphString				m_sSetValue;
 	CSphVector<SphAttr_t>	m_dSetValues;
 	bool					m_bSetNull;
@@ -13639,6 +13640,21 @@ void BuildStatus ( VectorLike & dStatus )
 		if ( dStatus.MatchAdd ( "avg_query_readtime" ) )
 			dStatus.Add() = OFF;
 	}
+
+	const QcacheStatus_t & s = QcacheGetStatus();
+	if ( dStatus.MatchAdd ( "qcache_max_bytes" ) )
+		dStatus.Add().SetSprintf ( "%lld", s.m_iMaxBytes );
+	if ( dStatus.MatchAdd ( "qcache_thresh_msec" ) )
+		dStatus.Add().SetSprintf ( "%d", s.m_iThreshMsec );
+	if ( dStatus.MatchAdd ( "qcache_ttl_sec" ) )
+		dStatus.Add().SetSprintf ( "%d", s.m_iTtlSec );
+
+	if ( dStatus.MatchAdd ( "qcache_cached_queries" ) )
+		dStatus.Add().SetSprintf ( "%d", s.m_iCachedQueries );
+	if ( dStatus.MatchAdd ( "qcache_used_bytes" ) )
+		dStatus.Add().SetSprintf ( "%lld", s.m_iUsedBytes );
+	if ( dStatus.MatchAdd ( "qcache_hits" ) )
+		dStatus.Add().SetSprintf ( "%lld", s.m_iHits );
 }
 
 void BuildOneAgentStatus ( VectorLike & dStatus, const CSphString& sAgent, const char * sPrefix="agent" )
@@ -16896,7 +16912,19 @@ void HandleMysqlSet ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, SessionVars_t & 
 			}
 		} else if ( tStmt.m_sSetName=="query_log_min_msec" )
 		{
-			g_iQueryLogMinMs = tStmt.m_iSetValue;
+			g_iQueryLogMinMs = (int)tStmt.m_iSetValue;
+		} else if ( tStmt.m_sSetName=="qcache_max_bytes" )
+		{
+			const QcacheStatus_t & s = QcacheGetStatus();
+			QcacheSetup ( tStmt.m_iSetValue, s.m_iThreshMsec, s.m_iTtlSec );
+		} else if ( tStmt.m_sSetName=="qcache_thresh_msec" )
+		{
+			const QcacheStatus_t & s = QcacheGetStatus();
+			QcacheSetup ( s.m_iMaxBytes, (int)tStmt.m_iSetValue, s.m_iTtlSec );
+		} else if ( tStmt.m_sSetName=="qcache_ttl_sec" )
+		{
+			const QcacheStatus_t & s = QcacheGetStatus();
+			QcacheSetup ( s.m_iMaxBytes, s.m_iThreshMsec, (int)tStmt.m_iSetValue );
 		} else
 		{
 			sError.SetSprintf ( "Unknown system variable '%s'", tStmt.m_sSetName.cstr() );
@@ -23461,6 +23489,12 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 		if ( iTimeout )
 			g_iShutdownTimeout = iTimeout * 1000000;
 	}
+
+	QcacheStatus_t s = QcacheGetStatus();
+	s.m_iMaxBytes = hSearchd.GetSize64 ( "qcache_max_bytes", s.m_iMaxBytes );
+	s.m_iThreshMsec = hSearchd.GetInt ( "qcache_thresh_msec", s.m_iThreshMsec );
+	s.m_iTtlSec = hSearchd.GetInt ( "qcache_ttl_sec", s.m_iTtlSec );
+	QcacheSetup ( s.m_iMaxBytes, s.m_iThreshMsec, s.m_iTtlSec );
 
 	//////////////////////////////////////////////////
 	// prebuild MySQL wire protocol handshake packets

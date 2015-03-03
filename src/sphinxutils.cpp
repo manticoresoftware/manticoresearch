@@ -554,6 +554,9 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "net_send_job",			0, NULL },
 	{ "net_workers",			0, NULL },
 	{ "queue_max_length",		0, NULL },
+	{ "qcache_ttl_sec",			0, NULL },
+	{ "qcache_max_bytes",		0, NULL },
+	{ "qcache_thresh_msec",		0, NULL },
 	{ NULL,						0, NULL }
 };
 

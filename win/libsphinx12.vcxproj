@@ -145,6 +145,7 @@
     <ClCompile Include="..\src\sphinxjson.cpp" />
     <ClCompile Include="..\src\sphinxmetaphone.cpp" />
     <ClCompile Include="..\src\sphinxplugin.cpp" />
+    <ClCompile Include="..\src\sphinxqcache.cpp" />
     <ClCompile Include="..\src\sphinxquery.cpp" />
     <ClCompile Include="..\src\sphinxrt.cpp" />
     <ClCompile Include="..\src\sphinxsearch.cpp" />
@@ -173,6 +174,7 @@
     <ClInclude Include="..\src\sphinxint.h" />
     <ClInclude Include="..\src\sphinxjson.h" />
     <ClInclude Include="..\src\sphinxplugin.h" />
+    <ClInclude Include="..\src\sphinxqcache.h" />
     <ClInclude Include="..\src\sphinxquery.h" />
     <ClInclude Include="..\src\sphinxrt.h" />
     <ClInclude Include="..\src\sphinxsearch.h" />

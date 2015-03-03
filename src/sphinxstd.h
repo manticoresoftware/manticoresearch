@@ -3195,6 +3195,19 @@ public:
 	/// initialize hash of a given initial size
 	explicit CSphHash ( int iSize=256 )
 	{
+		m_pHash = NULL;
+		Reset ( iSize );
+	}
+
+	/// reset to a given size
+	void Reset ( int iSize )
+	{
+		SafeDeleteArray ( m_pHash );
+		if ( iSize<=0 )
+		{
+			m_iSize = m_iUsed = m_iMaxUsed = 0;
+			return;
+		}
 		iSize = ( 1<<sphLog2 ( iSize-1 ) );
 		m_pHash = new Entry[iSize];
 		m_iSize = iSize;
@@ -3219,23 +3232,41 @@ public:
 		assert ( k!=NO_ENTRY && k!=DEAD_ENTRY );
 		DWORD uHash = GetHash(k);
 		int iIndex = uHash & ( m_iSize-1 );
+		int iDead = -1;
 		for ( ;; )
 		{
+			// found matching key? great, return the value
 			Entry * p = m_pHash + iIndex;
 			if ( p->m_Key==k )
 				return p->m_Value;
+
+			// no matching keys? add it
 			if ( p->m_Key==NO_ENTRY )
 			{
+				// not enough space? grow the hash and force rescan
 				if ( m_iUsed>=m_iMaxUsed )
 				{
 					Grow();
 					iIndex = uHash & ( m_iSize-1 );
+					iDead = -1;
 					continue;
 				}
+
+				// did we walk past a dead entry while probing? if so, lets reuse it
+				if ( iDead>=0 )
+					p = m_pHash + iDead;
+
+				// store the newly added key
 				p->m_Key = k;
 				m_iUsed++;
 				return p->m_Value;
 			}
+
+			// is this a dead entry? store its index for (possible) reuse
+			if ( p->m_Key==DEAD_ENTRY )
+				iDead = iIndex;
+
+			// no match so far, keep probing
 			iIndex = ( iIndex+1 ) & ( m_iSize-1 );
 		}
 	}
@@ -3253,9 +3284,19 @@ public:
 		int u = m_iUsed;
 		VALUE & x = Acquire(k);
 		if ( u==m_iUsed )
-			return false;
+			return false; // found an existing value by k, can not add v
 		x = v;
 		return true;
+	}
+
+	/// find existing value, or add a new value
+	VALUE & FindOrAdd ( KEY k, const VALUE & v )
+	{
+		int u = m_iUsed;
+		VALUE & x = Acquire(k);
+		if ( u!=m_iUsed )
+			x = v; // did not find an existing value by k, so add v
+		return x;
 	}
 
 	/// delete by key
@@ -3265,6 +3306,33 @@ public:
 		if ( e )
 			e->m_Key = DEAD_ENTRY;
 		return e!=NULL;
+	}
+
+	/// get number of inserted key-value pairs
+	int GetLength() const
+	{
+		return m_iUsed;
+	}
+
+	/// iterate the hash by entry index, starting from 0
+	/// finds the next alive key-value pair starting from the given index
+	/// returns that pair and updates the index on success
+	/// returns NULL when the hash is over
+	VALUE * Iterate ( int * pIndex, KEY * pKey ) const
+	{
+		if ( !pIndex || *pIndex<0 )
+			return NULL;
+		for ( int i = *pIndex; i < m_iSize; i++ )
+		{
+			if ( m_pHash[i].m_Key!=NO_ENTRY && m_pHash[i].m_Key!=DEAD_ENTRY )
+			{
+				*pIndex = i+1;
+				if ( pKey )
+					*pKey = m_pHash[i].m_Key;
+				return &m_pHash[i].m_Value;
+			}
+		}
+		return NULL;
 	}
 
 protected:
@@ -3277,7 +3345,7 @@ protected:
 	/// we are overloaded, lets grow 2x and rehash
 	void Grow()
 	{
-		Entry * pNew = new Entry [ 2*m_iSize ];
+		Entry * pNew = new Entry [ 2*Max(m_iSize,8) ];
 
 		for ( int i=0; i<m_iSize; i++ )
 			if ( m_pHash[i].m_Key!=NO_ENTRY && m_pHash[i].m_Key!=DEAD_ENTRY )

@@ -66,7 +66,7 @@ sphinxquery.cpp sphinxsoundex.cpp sphinxmetaphone.cpp sphinxstemen.cpp
 sphinxstemru.cpp sphinxstemcz.cpp sphinxstemar.cpp sphinxutils.cpp
 sphinxstd.cpp sphinxsort.cpp sphinxexpr.cpp sphinxfilter.cpp
 sphinxsearch.cpp sphinxrt.cpp sphinxjson.cpp sphinxudf.c sphinxaot.cpp
-sphinxplugin.cpp)
+sphinxplugin.cpp sphinxqcache.cpp)
 
 # all the (non-generated) headers
 file(GLOB HEADERS "sphinx*.h")

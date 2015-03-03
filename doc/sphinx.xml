@@ -5,7 +5,7 @@
 ]>
 <book lang="en">
 
-<title>Sphinx 2.3.2-dev reference manual</title>
+<title>Sphinx 2.3.1-beta reference manual</title>
 <subtitle>Free open-source SQL full-text search engine</subtitle>
 
 <bookinfo>
@@ -14585,9 +14585,10 @@ rlp_max_batch_docs = 100
 
 <appendix id="changelog"><title>Sphinx revision history</title>
 
-<sect1 id="rel231"><title>Version 2.3.1-beta, 24 feb 2015</title>
+<sect1 id="rel231"><title>Version 2.3.1-beta, 03 mar 2015</title>
 <bridgehead>Major features</bridgehead>
 <itemizedlist>
+<listitem><para>added <link linkend="qcache">query cache</link></para></listitem>
 <listitem><para>added thread pool mode, and the respective <link linkend="conf-workers">workers = thread_pool</link>,
 	<link linkend="conf-max-children">max_children</link>, <link linkend="conf-net-workers">net_workers</link>,
 	<link linkend="conf-queue-max-length">queue_max_length</link> directives

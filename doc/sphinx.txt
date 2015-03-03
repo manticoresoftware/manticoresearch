@@ -1,5 +1,5 @@
-Sphinx 2.3.2-dev reference manual
-=================================
+Sphinx 2.3.1-beta reference manual
+==================================
 
 Free open-source SQL full-text search engine
 ============================================
@@ -86,6 +86,7 @@ Table of Contents
    5.10. MySQL protocol support and SphinxQL
    5.11. Multi-queries
    5.12. Collations
+   5.13. Query cache
 
 6. Extending Sphinx
    6.1. Sphinx UDFs (User Defined Functions)
@@ -127,22 +128,24 @@ Table of Contents
    8.25. ATTACH INDEX syntax
    8.26. FLUSH RTINDEX syntax
    8.27. FLUSH RAMCHUNK syntax
-   8.28. TRUNCATE RTINDEX syntax
-   8.29. SHOW AGENT STATUS
-   8.30. SHOW PROFILE syntax
-   8.31. SHOW INDEX STATUS syntax
-   8.32. SHOW INDEX SETTINGS syntax
-   8.33. OPTIMIZE INDEX syntax
-   8.34. SHOW PLAN syntax
-   8.35. SHOW DATABASES syntax
-   8.36. CREATE PLUGIN syntax
-   8.37. DROP PLUGIN syntax
-   8.38. SHOW PLUGINS syntax
-   8.39. SHOW THREADS syntax
-   8.40. Multi-statement queries
-   8.41. Comment syntax
-   8.42. List of SphinxQL reserved keywords
-   8.43. SphinxQL upgrade notes, version 2.0.1-beta
+   8.28. FLUSH ATTRIBUTES syntax
+   8.29. TRUNCATE RTINDEX syntax
+   8.30. SHOW AGENT STATUS
+   8.31. SHOW PROFILE syntax
+   8.32. SHOW INDEX STATUS syntax
+   8.33. SHOW INDEX SETTINGS syntax
+   8.34. OPTIMIZE INDEX syntax
+   8.35. SHOW PLAN syntax
+   8.36. SHOW DATABASES syntax
+   8.37. CREATE PLUGIN syntax
+   8.38. DROP PLUGIN syntax
+   8.39. SHOW PLUGINS syntax
+   8.40. RELOAD PLUGINS syntax
+   8.41. SHOW THREADS syntax
+   8.42. Multi-statement queries
+   8.43. Comment syntax
+   8.44. List of SphinxQL reserved keywords
+   8.45. SphinxQL upgrade notes, version 2.0.1-beta
 
 9. API reference
    9.1. General API functions
@@ -393,6 +396,9 @@ Table of Contents
       12.4.50. agent_query_timeout
       12.4.51. agent_retry_count
       12.4.52. agent_retry_delay
+      12.4.53. qcache_max_bytes
+      12.4.54. qcache_thresh_msec
+      12.4.55. qcache_ttl_sec
 
    12.5. Common section configuration options
       12.5.1. lemmatizer_base
@@ -405,7 +411,7 @@ Table of Contents
       12.5.8. rlp_max_batch_docs
 
 A. Sphinx revision history
-   A.1. Version 2.3.1-beta, 24 feb 2015
+   A.1. Version 2.3.1-beta, 03 mar 2015
    A.2. Version 2.2.7-release, 20 jan 2015
    A.3. Version 2.2.6-release, 13 nov 2014
    A.4. Version 2.2.5-release, 06 oct 2014
@@ -2138,6 +2144,7 @@ Table of Contents
 5.10. MySQL protocol support and SphinxQL
 5.11. Multi-queries
 5.12. Collations
+5.13. Query cache
 
 5.1. Matching modes
 ===================
@@ -3985,7 +3992,7 @@ one go (more formally, one network request).
 
 Two API methods that implement multi-query mechanism are AddQuery() and
 RunQueries(). You can also run multiple queries with SphinxQL, see
-Section 8.40, <<Multi-statement queries>>. (In fact, regular Query() call
+Section 8.42, <<Multi-statement queries>>. (In fact, regular Query() call
 is internally implemented as a single AddQuery() call immediately followed
 by RunQueries() call.) AddQuery() captures the current state of all the
 query settings set by previous API calls, and memorizes the query.
@@ -4183,6 +4190,84 @@ Collations should affect all string attribute comparisons, including those
 within ORDER BY and GROUP BY, so differently ordered or grouped results can
 be returned depending on the collation chosen.
 
+5.13. Query cache
+=================
+
+Query cache, added in 2.3.1-beta, stores a compressed result set in memory,
+and then reuses it for subsequent queries where possible. You can configure
+it using the following directives:
+
+   * qcache_max_bytes, a limit on the RAM use for cached queries storage.
+     Defaults to 16 MB. Setting qcache_max_bytes to 0 completely disables
+     the query cache.
+
+   * qcache_thresh_msec, the minimum wall query time to cache. Queries that
+     completed faster than this will not be cached. Defaults to 3000 msec,
+     or 3 seconds.
+
+   * qcache_ttl_sec, cached entry TTL, or time to live. Queries will stay
+     cached for this much. Defaults to 60 seconds, or 1 minute.
+
+These settings can be changed on the fly using the SET GLOBAL statement:
+
+   | mysql> SET GLOBAL qcache_max_bytes=128000000;
+
+These changes are applied immediately, and the cached result sets that no
+longer satisfy the constraints are immediately discarded. When reducing the
+cache size on the fly, MRU (most recently used) result sets win.
+
+Query cache works as follows. When it's enabled, every full-text search
+result gets completely stored in memory. That happens after full-text
+matching, filtering, and ranking, so basically we store total_found
+{docid,weight} pairs. Compressed matches can consume anywhere from 2 bytes
+to 12 bytes per match on average, mostly depending on the deltas between
+the subsequent docids. Once the query completes, we check the wall time and
+size thresholds, and either save that compressed result set for reuse, or
+discard it.
+
+Note how the query cache impact on RAM is thus not limited by
+qcache_max_bytes! If you run, say, 10 concurrent queries, each of them
+matching upto 1M matches (after filters), then the peak temporary RAM use
+will be in the 40 MB to 240 MB range, even if in the end the queries are
+quick enough and do not get cached.
+
+Queries can then use cache when the index, the full-text query (ie. MATCH()
+contents), and the ranker are all a match, and filters are compatible.
+Meaning:
+
+   * The full-text part within MATCH() must be a bytewise match. Add
+     a single extra space, and that is now a different query where the
+     query cache is concerned.
+
+   * The ranker (and its parameters if any, for user-defined rankers) must
+     be a bytewise match.
+
+   * The filters must be a superset of the original filters. That is, you
+     can add extra filters and still hit the cache. (In this case, the
+     extra filters will be applied to the cached result.) But if you remove
+     one, that will be a new query again.
+
+Cache entries expire with TTL, and also get invalidated on index rotation,
+or on TRUNCATE, or on ATTACH. Note that at the moment entries are not
+invalidated on arbitrary RT index writes! So a cached query might be
+returning older results for the duration of its TTL.
+
+Current cache status can be inspected with in SHOW STATUS through the
+qcache_XXX variables:
+
+   | mysql> SHOW STATUS LIKE 'qcache%';
+   | +-----------------------+----------+
+   | | Counter               | Value    |
+   | +-----------------------+----------+
+   | | qcache_max_bytes      | 16777216 |
+   | | qcache_thresh_msec    | 3000     |
+   | | qcache_ttl_sec        | 60       |
+   | | qcache_cached_queries | 0        |
+   | | qcache_used_bytes     | 0        |
+   | | qcache_hits           | 0        |
+   | +-----------------------+----------+
+   | 6 rows in set (0.00 sec)
+
 Chapter 6. Extending Sphinx
 ===========================
 
@@ -4227,10 +4312,11 @@ on Windows systems). Library files need to reside in a trusted folder
 specified by plugin_dir directive, for obvious security reasons: securing
 a single folder is easy; letting anyone install arbitrary code into searchd
 is a risk. You can load and unload them dynamically into searchd with
-CREATE FUNCTION and DROP FUNCTION SphinxQL statements respectively. Sphinx
-keeps track of the currently loaded functions, that is, every time you
-create or drop an UDF, searchd writes its state to the sphinxql_state file
-as a plain good old SQL script.
+CREATE FUNCTION and DROP FUNCTION SphinxQL statements respectively. Also,
+you can seamlessly reload UDFs (and other plugins) with RELOAD PLUGINS
+statement. Sphinx keeps track of the currently loaded functions, that is,
+every time you create or drop an UDF, searchd writes its state to the
+sphinxql_state file as a plain good old SQL script.
 
 Once you successfully load an UDF, you can use it in your SELECT or other
 statements just as well as any of the builtin functions:
@@ -4438,7 +4524,7 @@ This section discusses writing and managing plugins in general; things
 specific to writing this or that type of a plugin are then discussed in
 their respective subsections.
 
-So, how do you write and use a plugin? Three-line crash course goes as
+So, how do you write and use a plugin? Four-line crash course goes as
 follows:
 
    * create a dynamic library (either .so or.dll), most likely in C or C++;
@@ -4447,6 +4533,9 @@ follows:
 
    * invoke it using the plugin specific calls (typically using this or
      that OPTION).
+
+   * to unload or reload a plugin use DROP PLUGIN and RELOAD PLUGINS
+     respectively.
 
 Note that while UDFs are first-class plugins they are nevertheless
 installed using a separate CREATE FUNCTION statement. It lets you specify
@@ -5202,22 +5291,24 @@ Table of Contents
 8.25. ATTACH INDEX syntax
 8.26. FLUSH RTINDEX syntax
 8.27. FLUSH RAMCHUNK syntax
-8.28. TRUNCATE RTINDEX syntax
-8.29. SHOW AGENT STATUS
-8.30. SHOW PROFILE syntax
-8.31. SHOW INDEX STATUS syntax
-8.32. SHOW INDEX SETTINGS syntax
-8.33. OPTIMIZE INDEX syntax
-8.34. SHOW PLAN syntax
-8.35. SHOW DATABASES syntax
-8.36. CREATE PLUGIN syntax
-8.37. DROP PLUGIN syntax
-8.38. SHOW PLUGINS syntax
-8.39. SHOW THREADS syntax
-8.40. Multi-statement queries
-8.41. Comment syntax
-8.42. List of SphinxQL reserved keywords
-8.43. SphinxQL upgrade notes, version 2.0.1-beta
+8.28. FLUSH ATTRIBUTES syntax
+8.29. TRUNCATE RTINDEX syntax
+8.30. SHOW AGENT STATUS
+8.31. SHOW PROFILE syntax
+8.32. SHOW INDEX STATUS syntax
+8.33. SHOW INDEX SETTINGS syntax
+8.34. OPTIMIZE INDEX syntax
+8.35. SHOW PLAN syntax
+8.36. SHOW DATABASES syntax
+8.37. CREATE PLUGIN syntax
+8.38. DROP PLUGIN syntax
+8.39. SHOW PLUGINS syntax
+8.40. RELOAD PLUGINS syntax
+8.41. SHOW THREADS syntax
+8.42. Multi-statement queries
+8.43. Comment syntax
+8.44. List of SphinxQL reserved keywords
+8.45. SphinxQL upgrade notes, version 2.0.1-beta
 
 SphinxQL is our SQL dialect that exposes all of the search daemon
 functionality using a standard SQL syntax with a few Sphinx-specific
@@ -5975,7 +6066,7 @@ SQL_MODE = value
 
 PROFILING = {0 | 1}
    Enables query profiling in the current session. Defaults to 0. See also
-   Section 8.30, <<SHOW PROFILE syntax>>. Introduced in version 2.1.1-beta.
+   Section 8.31, <<SHOW PROFILE syntax>>. Introduced in version 2.1.1-beta.
 
 Known global server variables are:
 
@@ -5985,6 +6076,18 @@ QUERY_LOG_FORMAT = {plain | sphinxql}
 LOG_LEVEL = {info | debug | debugv | debugvv}
    Changes the current log verboseness level. Introduced in version
    2.0.1-beta.
+
+QCACHE_MAX_BYTES = <value>
+   Changes the query cache RAM use limit to a given value. Added in
+   2.3.1-beta.
+
+QCACHE_THRESH_MSEC = <value>
+   Changes the query cache minimum wall time threshold to a given value.
+   Added in 2.3.1-beta.
+
+QCACHE_TTL_SEC = <value>
+   Changes the query cache TTL for a cached result to a given value. Added
+   in 2.3.1-beta.
 
 Examples:
 
@@ -6403,7 +6506,7 @@ ATTACH INDEX a one-time conversion operation only. Those restrictions may
 be lifted in future releases, as we add the needed functionality to the RT
 indexes. The complete list is as follows.
 
-   * Target RT index needs to be empty. (See Section 8.28, <<TRUNCATE
+   * Target RT index needs to be empty. (See Section 8.29, <<TRUNCATE
      RTINDEX syntax>>)
 
    * Source disk index needs to have index_sp=0, boundary_step=0,
@@ -6510,7 +6613,28 @@ from using this statement unless you're absolutely sure what you're doing.
    | mysql> FLUSH RAMCHUNK rt;
    | Query OK, 0 rows affected (0.05 sec)
 
-8.28. TRUNCATE RTINDEX syntax
+8.28. FLUSH ATTRIBUTES syntax
+=============================
+
+   | FLUSH ATTRIBUTES
+
+Added in 2.3.1-beta. Flushes all in-memory attribute updates in all the
+active disk indexes to disk. Returns a tag that identifies the result
+on-disk state (basically, a number of actual disk attribute saves performed
+since the daemon startup).
+
+   | mysql> UPDATE testindex SET channel_id=1107025 WHERE id=1;
+   | Query OK, 1 row affected (0.04 sec)
+   | 
+   | mysql> FLUSH ATTRIBUTES;
+   | +------+
+   | | tag  |
+   | +------+
+   | |    1 |
+   | +------+
+   | 1 row in set (0.19 sec)
+
+8.29. TRUNCATE RTINDEX syntax
 =============================
 
    | TRUNCATE RTINDEX rtindex
@@ -6527,7 +6651,7 @@ files; when you build the main index, you need to wipe the delta index, and
 thus TRUNCATE RTINDEX. You also need to use this command before attaching
 an index; see Section 8.25, <<ATTACH INDEX syntax>>.
 
-8.29. SHOW AGENT STATUS
+8.30. SHOW AGENT STATUS
 =======================
 
    | SHOW AGENT ['agent'|'index'|index] STATUS [ LIKE pattern ]
@@ -6655,7 +6779,7 @@ when one of the weighted-probability strategies is in effect).
    | +--------------------------------------+--------------------------------+
    | 13 rows in set (0.00 sec)
 
-8.30. SHOW PROFILE syntax
+8.31. SHOW PROFILE syntax
 =========================
 
    | SHOW PROFILE
@@ -6753,7 +6877,7 @@ Here's a brief description of the currently profiled states.
    * aggregate, aggregating multiple result sets.
    * net_write, writing the result set to the network.
 
-8.31. SHOW INDEX STATUS syntax
+8.32. SHOW INDEX STATUS syntax
 ==============================
 
    | SHOW INDEX index_name STATUS
@@ -6785,7 +6909,7 @@ Currently, those include:
    | +--------------------+-------------+
    | 8 rows in set (0.00 sec)
 
-8.32. SHOW INDEX SETTINGS syntax
+8.33. SHOW INDEX SETTINGS syntax
 ================================
 
    | SHOW INDEX index_name[.N | CHUNK N] SETTINGS
@@ -6795,7 +6919,7 @@ to the --dumpconfig option of the indextool. The report provides
 a breakdown of all the index settings, including tokenizer and dictionary
 options. You may also specify a particular chunk number for the RT indexes.
 
-8.33. OPTIMIZE INDEX syntax
+8.34. OPTIMIZE INDEX syntax
 ===========================
 
    | OPTIMIZE INDEX index_name
@@ -6831,7 +6955,7 @@ be optimized automatically. That might change in the future releases.
    | mysql> OPTIMIZE INDEX rt;
    | Query OK, 0 rows affected (0.00 sec)
 
-8.34. SHOW PLAN syntax
+8.35. SHOW PLAN syntax
 ======================
 
    | SHOW PLAN
@@ -6873,7 +6997,7 @@ expansions and other transformations:
    |   AND(fields=(body), KEYWORD(hey, querypos=2)))
    | 1 row in set (0.00 sec)
 
-8.35. SHOW DATABASES syntax
+8.36. SHOW DATABASES syntax
 ===========================
 
    | SHOW DATABASES
@@ -6881,7 +7005,7 @@ expansions and other transformations:
 Added in 2.2.1-beta. This is a dummy statement to support MySQL Workbench
 and other clients that require it. Currently, it does absolutely nothing.
 
-8.36. CREATE PLUGIN syntax
+8.37. CREATE PLUGIN syntax
 ==========================
 
    | CREATE PLUGIN plugin_name TYPE 'plugin_type' SONAME 'plugin_library'
@@ -6902,7 +7026,7 @@ writing the plugins.
    | mysql> CREATE PLUGIN myranker TYPE 'ranker' SONAME 'myplugins.so';
    | Query OK, 0 rows affected (0.00 sec)
 
-8.37. DROP PLUGIN syntax
+8.38. DROP PLUGIN syntax
 ========================
 
    | DROP PLUGIN plugin_name TYPE 'plugin_type'
@@ -6917,7 +7041,7 @@ the library is also automatically unloaded.
    | mysql> DROP PLUGIN myranker TYPE 'ranker';
    | Query OK, 0 rows affected (0.00 sec)
 
-8.38. SHOW PLUGINS syntax
+8.39. SHOW PLUGINS syntax
 =========================
 
    | SHOW PLUGINS
@@ -6937,7 +7061,39 @@ the return type for the UDFs and is empty for all the other plugin types.
    | +------+----------+----------------+-------+-------+
    | 1 row in set (0.00 sec)
 
-8.39. SHOW THREADS syntax
+8.40. RELOAD PLUGINS syntax
+===========================
+
+   | RELOAD PLUGINS FROM SONAME 'plugin_library'
+
+Added in 2.3.1-beta. Reloads all plugins (UDFs, rankers, etc) from a given
+library. Reload is, in a sense, transactional: a succesful reload
+guarantees that a) all the plugins were succesfully updated with their new
+versions; b) the update was atomic, all the plugins were replaced at once.
+Atomicity means that queries using multiple functions from a reloaded
+library will never mix the old and new versions. The set of plugins is
+guaranteed to always be consistent during the RELOAD, it will be either all
+old, or all new.
+
+Reload also is seamless, meaning that some version of a reloaded plugin
+will be available to concurrent queries at all times, and there will be no
+temporary disruptions. Note how this improves on using a pair of DROP and
+CREATE statements for reloading: with those, there is a tiny window between
+the DROP and the subsequent CREATE, during which the queries technically
+refer to an unknown plugin and will thus fail.
+
+In case of any failure RELOAD PLUGINS does absolutely nothing, keeps the
+old plugins, and reports an error.
+
+On Windows, either overwriting or deleting a DLL library currently in use
+seems to be an issue. However, you can still rename it, then put a new
+version under the old name, and RELOAD will then work. After a succesful
+reload you will also be able to delete the renamed old library, too.
+
+   | mysql> RELOAD PLUGINS FROM SONAME 'udfexample.dll';
+   | Query OK, 0 rows affected (0.00 sec)
+
+8.41. SHOW THREADS syntax
 =========================
 
    | SHOW THREADS [ OPTION columns=width ]
@@ -6970,7 +7126,7 @@ API-snippet, the data size will be displayed along with the query.
    | +------+----------+-------+----------+----------------------------------------------------+
    | 3 row in set (0.00 sec)
 
-8.40. Multi-statement queries
+8.42. Multi-statement queries
 =============================
 
 Starting version 2.0.1-beta, SphinxQL supports multi-statement queries, or
@@ -7028,7 +7184,7 @@ WARNINGS, SHOW STATUS, and SHOW META. Arbitrary sequence of these
 statements are allowed. The results sets returned should match those that
 would be returned if the batched queries were sent one by one.
 
-8.41. Comment syntax
+8.43. Comment syntax
 ====================
 
 Since version 2.0.1-beta, SphinxQL supports C-style comment syntax.
@@ -7041,7 +7197,7 @@ between Sphinx and MySQL.)
 
    | SELECT /*! SQL_CALC_FOUND_ROWS */ col1 FROM table1 WHERE ...
 
-8.42. List of SphinxQL reserved keywords
+8.44. List of SphinxQL reserved keywords
 ========================================
 
 A complete alphabetical list of keywords that are currently reserved in
@@ -7100,7 +7256,7 @@ SphinxQL syntax (and therefore can not be used as identifiers).
    | WHERE
    | WITHIN
 
-8.43. SphinxQL upgrade notes, version 2.0.1-beta
+8.45. SphinxQL upgrade notes, version 2.0.1-beta
 ================================================
 
 This section only applies to existing applications that use SphinxQL
@@ -8988,6 +9144,9 @@ Table of Contents
    12.4.50. agent_query_timeout
    12.4.51. agent_retry_count
    12.4.52. agent_retry_delay
+   12.4.53. qcache_max_bytes
+   12.4.54. qcache_thresh_msec
+   12.4.55. qcache_ttl_sec
 
 12.5. Common section configuration options
    12.5.1. lemmatizer_base
@@ -12259,10 +12418,11 @@ connections on this socket. Supported protocol values are 'sphinx' (Sphinx
 least 5.1). More details on MySQL protocol support can be found in
 Section 5.10, <<MySQL protocol support and SphinxQL>> section.
 
-Adding a "_vip" suffix to listener interface declaration, like sphinx_vip
-or mysql41_vip, makes all connections to this port passing-by thread pool
-and got handled at dedicated threads. That might help to administrate
-loaded daemon without stuck or delays.
+Adding a "_vip" suffix to a protocol (for instance "sphinx_vip" or
+"mysql41_vip") makes all connections to that port bypass the thread pool
+and always forcibly create a new dedicated thread. That's useful for
+managing in case of a severe overload when the daemon would either stall or
+not let you connect via a regular port.
 
 Examples:
 
@@ -12356,18 +12516,36 @@ Example:
 --------------------
 
 Maximum amount of worker threads (or in other words, concurrent queries to
-run in parallel). Optional, default is 0 (unlimited) for threads and number
-of CPU cores for thread_pool mode.
+run in parallel). Optional, default is 0 (unlimited) in workers=threads, or
+1.5 times the CPU cores count in workers=thread_pool mode.
 
-Useful to control server load.
+max_children imposes a hard limit on the number of threads working on user
+queries. There might still be additional internal threads doing maintenance
+tasks, but when it comes to user queries, it is no more than max_children
+concurrent threads (and queries) at all times.
 
-In threads mode there will be no more than this much concurrent searches
-running, at all times. When the limit is reached, additional incoming
-clients are dismissed with temporarily failure (SEARCHD_RETRY) status code
-and a message stating that the server is maxed out.
+Note that in workers=threads mode a thread is allocated for every
+connection rather than an active query. So when there are 100 idle
+connections but only 2 active connections with currently running queries,
+that still accounts for 102 threads, all of them subject to max_children
+limit. So with a max_children set way too low, and pooled connections not
+reused well enough on the application side, you can effectively DOS your
+own server. When the limit is reached, any additional incoming connections
+will be dismissed with a temporary "maxed out" error immediately as they
+attempt to connect. Thus, in threads mode you should choose the
+max_children limit rather carefully, with not just the concurrent queries
+but also with potentially idle network connections in mind.
 
-In thread_pool mode max_children is a thread pool size, i.e. amount of
-worker threads which actually execute queries.
+Now, in workers=thread_pool mode the network connections are separated from
+query processing, so in the example above, 100 idle connections will all be
+handled by an internal network thread, and only the 2 actually active
+queries will be subject to max_children limit. When the limit is reached,
+any additional incoming connections will still be accepted, and any
+additional queries will get enqueued until there are free worker threads.
+The queries will only start failing with a temporary Thus, in thread_pool
+mode it makes little sense to raise max_children much higher than the
+amount of CPU cores. Usually that will only hurt CPU contention and
+decrease the general throughput.
 
 Example:
 
@@ -12376,18 +12554,20 @@ Example:
 12.4.8. net_workers
 -------------------
 
-Amount of dedicated net loop threads. Default is 1.
+Number of network threads for workers=thread_pool mode, default is 1.
 
-Might be useful in case of SMP box.
+Useful for extremely high query rates, when just 1 thread is not enough to
+manage all the incoming queries.
 
 12.4.9. queue_max_length
 ------------------------
 
-Set thread pool max queue length. Default is 0 (unlimited).
+Maximum pending queries queue length for workers=thread_pool mode, default
+is 0 (unlimited).
 
-In case of high CPU load thread pool queue may grow all the time. This
-directive constrains queue length by rejecting incoming requests with
-"maxed out" message till queue got low again.
+In case of high CPU load thread pool queries queue may grow all the time.
+This directive lets you constrain queue length and start rejecting incoming
+queries at some point with a "maxed out" message.
 
 12.4.10. pid_file
 -----------------
@@ -12663,19 +12843,24 @@ Lets you choose how searchd processes multiple concurrent requests. The
 possible values are:
 
 threads
-   A new thread will be created to handle every incoming request.
+   A new dedicated thread is created on every incoming network connection.
+   Subsequent queries on that connection are handled by that thread. When
+   a client disconnected, the thread gets killed.
 
 thread_pool
-   A thread pool will be created on daemon start. Query tasks are putted in
-   a queue and processed in order. Uses poll() and epoll() on Linux and
-   WSAPoll on Windows (vista and later). This is the default mode.
+   A worker threads pool is created on daemon startup. An internal network
+   thread handles all the incoming network connections. Subsequent queries
+   on any connection are then put into a queue, and processed in order by
+   the first avaialble worker thread from the pool. No threads are normally
+   created or killed, neither for new connections, nor for new queries.
+   Network thread uses poll() and epoll() on Linux and WSAPoll on Windows
+   (Vista and later). This is the default mode.
 
-Threads mode was implemented along with RT backend and is required to use
-RT indexes. (Regular disk-based indexes work in all the available modes.)
-
-Thread pool is similar to threads mode but it doesn't suffer from overhead
-of creating a new thread on new connection and managing a lot of parallel
-threads.
+Thread pool is a newer, better, faster implementation of threads mode which
+does not suffer from overheads of creating a new thread per every new
+connection and managing a lot of parallel threads. As of 2.3.1, we still
+retain workers=threads for the transition period, but thread pool is
+scheduled to become the only MPM mode.
 
 Example:
 
@@ -13203,6 +13388,27 @@ specified. Default is 500. This value may be also specified on per-query
 basis using 'OPTION retry_delay=XXX' clause. If per-query option exists, it
 will override the one specified in config.
 
+12.4.53. qcache_max_bytes
+-------------------------
+
+Integer, in bytes. The maximum RAM allocated for cached result sets.
+Defaults to 16777216, or 16 MB. 0 means disable query cache. Added in
+2.3.1-beta. Refer to ??? for details.
+
+12.4.54. qcache_thresh_msec
+---------------------------
+
+Integer, in milliseconds. The minimum wall time threshold for a query
+result to be cached. Defaults to 3000, or 3 seconds. 0 means cache
+everything. Added in 2.3.1-beta. Refer to ??? for details.
+
+12.4.55. qcache_ttl_sec
+-----------------------
+
+Integer, in seconds. The expiration period for a cached result set.
+Defaults to 60, or 1 minute. The minimum possible value is 1 second. Added
+in 2.3.1-beta. Refer to ??? for details.
+
 12.5. Common section configuration options
 ==========================================
 
@@ -13319,7 +13525,7 @@ Appendix A. Sphinx revision history
 
 Table of Contents
 
-A.1. Version 2.3.1-beta, 24 feb 2015
+A.1. Version 2.3.1-beta, 03 mar 2015
 A.2. Version 2.2.7-release, 20 jan 2015
 A.3. Version 2.2.6-release, 13 nov 2014
 A.4. Version 2.2.5-release, 06 oct 2014
@@ -13359,44 +13565,42 @@ A.37. Version 0.9.7-rc1, 26 oct 2006
 A.38. Version 0.9.6, 24 jul 2006
 A.39. Version 0.9.6-rc1, 26 jun 2006
 
-A.1. Version 2.3.1-beta, 24 feb 2015
+A.1. Version 2.3.1-beta, 03 mar 2015
 ====================================
 
 Major features
 --------------
 
-   * added workers = thread_pool directive
+   * added query cache
 
-   * added max_children directive
+   * added thread pool mode, and the respective workers = thread_pool,
+     max_children, net_workers, queue_max_length directives
 
-   * added net_workers directive
-
-   * added queue_max_length directive
-
-   * added vip suffixes to listener interface declaration, like sphinx_vip
-     or mysql41_vip
+   * added vip suffixes to listener protocols (sphinx_vip, mysql41_vip)
 
 Removals
 --------
 
    * removed fork and prefork modes
 
-   * removed prefork_rotation_throttle configure key
+   * removed prefork_rotation_throttle directive
 
 Minor features
 --------------
 
-   * added FLUSH ATTRIBUTES to SphinxQL
+   * added RELOAD PLUGINS SphinxQL statement
+
+   * added FLUSH ATTRIBUTES SphinxQL statement
 
 Bug fixes
 ---------
 
-   * fixed #2167, --keep_attrs doesn't work with --rotate
+   * fixed #2167, --keep_attrs did not work with --rotate
 
-   * fixed #2161, indexation or RT index fail due to multiple loads of an
-     index_token_filter
+   * fixed #2161, RT indexing could fail with index_token_filter because of
+     multiple errorneous filter loads
 
-   * fixed #2154, crash of ZONE operator
+   * fixed #2154, crash in ZONE operator
 
 A.2. Version 2.2.7-release, 20 jan 2015
 =======================================

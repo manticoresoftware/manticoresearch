@@ -1489,12 +1489,6 @@ RT indexes are currently quality feature, but there are still a few known
 usage quirks. Those quirks are listed in this section.
 </para>
 <itemizedlist>
-<listitem><para>Prefix indexing is supported with dict = keywords starting 2.0.2-beta. Infix indexing is experimental in trunk.</para></listitem>
-<listitem><para>Disk chunks optimization routine is not implemented yet.</para></listitem>
-<listitem><para>On initial index creation, attributes are reordered by type,
-in the following order: uint, bigint, float, timestamp, string. So when
-using INSERT without an explicit column names list, specify all uint
-column values first, then bigint, etc.</para></listitem>
 <listitem><para>Default conservative RAM chunk limit (<option>rt_mem_limit</option>)
 of 32M can lead to poor performance on bigger indexes, you should raise it to
 256..1024M if you're planning to index gigabytes.</para></listitem>
@@ -3978,7 +3972,8 @@ directive. Sphinx currently defaults to <option>libc_ci</option> collation.
 <para>
 Collations should affect all string attribute comparisons, including
 those within ORDER BY and GROUP BY, so differently ordered or grouped results
-can be returned depending on the collation chosen.
+can be returned depending on the collation chosen. Note that collations don't
+affect full-text searching, for that use <link linkend="conf-charset-table">charset_table</link>.
 </para>
 </sect1>
 
@@ -9509,8 +9504,8 @@ sql_joined_field = \
     SELECT docid, CONCAT('tag',tagid) FROM tags ORDER BY docid ASC
 
 sql_joined_field = bigint tag from ranged-query; \
-    SELECT id, tag FROM tags WHERE id&gt;=$start AND id&lt;=$end; \
-    SELECT MIN(id), MAX(id) FROM tags ORDER BY docid ASC
+    SELECT id, tag FROM tags WHERE id&gt;=$start AND id&lt;=$end ORDER BY id ASC; \
+    SELECT MIN(id), MAX(id) FROM tags
 </programlisting>
 </sect2>
 
@@ -10434,6 +10429,7 @@ For reference, different index files store the following data:
 <listitem><para><filename>.spm</filename> stores MVA data;</para></listitem>
 <listitem><para><filename>.spp</filename> stores hit (aka posting, aka word occurrence) lists for each word ID;</para></listitem>
 <listitem><para><filename>.sps</filename> stores string attribute data.</para></listitem>
+<listitem><para><filename>.spe</filename> stores skip-lists to speed up doc-list filtering</para></listitem>
 </itemizedlist>
 </para>
 <bridgehead>Example:</bridgehead>
@@ -10614,8 +10610,8 @@ option are as follows:
 <listitem><para>lemmatize_en - apply English lemmatizer and pick a single root form (added in 2.2.1-beta);</para></listitem>
 <listitem><para>lemmatize_de - apply German lemmatizer and pick a single root form (added in 2.2.1-beta);</para></listitem>
 <listitem><para>lemmatize_ru_all - apply Russian lemmatizer and index all possible root forms (added in 2.1.1-beta);</para></listitem>
-<listitem><para>lemmatize_en_all - apply Russian lemmatizer and index all possible root forms (added in 2.2.1-beta);</para></listitem>
-<listitem><para>lemmatize_de_all - apply Russian lemmatizer and index all possible root forms (added in 2.2.1-beta);</para></listitem>
+<listitem><para>lemmatize_en_all - apply English lemmatizer and index all possible root forms (added in 2.2.1-beta);</para></listitem>
+<listitem><para>lemmatize_de_all - apply German lemmatizer and index all possible root forms (added in 2.2.1-beta);</para></listitem>
 <listitem><para>stem_en - apply Porter's English stemmer;</para></listitem>
 <listitem><para>stem_ru - apply Porter's Russian stemmer;</para></listitem>
 <listitem><para>stem_enru - apply Porter's English and Russian stemmers;</para></listitem>
@@ -12618,7 +12614,7 @@ Added in 2.1.1-beta.
 <para>
 When <code>index_field_lengths</code> is set to 1, <filename>indexer</filename>
 will 1) create a respective length attribute for every full-text field,
-sharing the same name; 2) compute a field length (counted in keywords) for
+sharing the same name but with <emphasis>_len</emphasis> suffix; 2) compute a field length (counted in keywords) for
 every document and store in to a respective attribute; 3) compute the per-index
 averages. The lengths attributes will have a special TOKENCOUNT type, but their
 values are in fact regular 32-bit integers, and their values are generally
@@ -13798,25 +13794,6 @@ collation_libc_locale = fr_FR
 </sect2>
 
 
-<sect2 id="conf-plugin-dir"><title>plugin_dir</title>
-<para>
-Trusted location for the dynamic libraries (UDFs).
-Optional, default is empty (no location).
-Introduced in version 2.0.1-beta.
-</para>
-<para>
-Specifies the trusted directory from which the
-<link linkend="sphinx-udfs">UDF libraries</link> can be loaded. Requires
-<link linkend="conf-workers">workers = thread</link> to take effect.
-</para>
-<bridgehead>Example:</bridgehead>
-<programlisting>
-workers = threads
-plugin_dir = /usr/local/sphinx/lib
-</programlisting>
-</sect2>
-
-
 <sect2 id="conf-mysql-version-string"><title>mysql_version_string</title>
 <para>
 A server version string to return via MySQL protocol.
@@ -14356,6 +14333,25 @@ Added in 2.2.1-beta.
 rlp_max_batch_docs = 100
 </programlisting>
 </sect2>
+
+
+<sect2 id="conf-plugin-dir"><title>plugin_dir</title>
+<para>
+Trusted location for the dynamic libraries (UDFs).
+Optional, default is empty (no location).
+Introduced in version 2.0.1-beta.
+</para>
+<para>
+Specifies the trusted directory from which the
+<link linkend="sphinx-udfs">UDF libraries</link> can be loaded. Requires
+<link linkend="conf-workers">workers = thread</link> to take effect.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+plugin_dir = /usr/local/sphinx/lib
+</programlisting>
+</sect2>
+
 
 </sect1>
 </chapter>

@@ -5576,6 +5576,15 @@ ExtRanker_c::~ExtRanker_c ()
 		SafeDelete ( m_dZoneStartTerm[i] );
 		SafeDelete ( m_dZoneEndTerm[i] );
 	}
+
+	ARRAY_FOREACH ( i, m_dZoneInfo )
+	{
+		ARRAY_FOREACH ( iDoc, m_dZoneInfo[i] )
+		{
+			SafeDelete ( m_dZoneInfo[i][iDoc].m_pHits );
+		}
+		m_dZoneInfo[i].Reset();
+	}
 }
 
 void ExtRanker_c::Reset ( const ISphQwordSetup & tSetup )

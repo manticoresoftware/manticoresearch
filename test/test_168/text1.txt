@@ -1,0 +1,29 @@
+or ask around on <a href=\"/forum\">community forum</a> for advice.</p> 
+ ','<div class=\"titlepage\"><div><div><h2 class=\"title\" style=\"clear: both\"><a 
+name=\"sql\"></a>3.8. SQL data sources (MySQL, PostgreSQL)</h2></div></div></div> 
+<p> With all the SQL drivers, indexing generally works as follows. </p><div class=\"itemizedlist\"><ul 
+class=\"itemizedlist\" type=\"disc\"><li class=\"listitem\"><p>connection to the database 
+is established;</p></li> <li class=\"listitem\"><p>pre-query (see <a class=\"xref\" 
+href=\"#conf-sql-query-pre\" title=\"12.1.11. sql_query_pre\">Section 12.1.11, &#8220;sql_query_pre&#8221;</a>) 
+is executed     to perform any necessary initial setup, such as setting per-connection 
+encoding with MySQL;</p></li> <li class=\"listitem\"><p>main query (see <a class=\"xref\" 
+href=\"#conf-sql-query\" title=\"12.1.12. sql_query\">Section 12.1.12, &#8220;sql_query&#8221;</a>) 
+is executed and the rows it returns are indexed;</p></li> <li class=\"listitem\"><p>post-query 
+(see <a class=\"xref\" href=\"#conf-sql-query-post\" title=\"12.1.28. sql_query_post\">Section 
+12.1.28, &#8220;sql_query_post&#8221;</a>) is executed     to perform any necessary 
+cleanup;</p></li> <li class=\"listitem\"><p>connection to the database is closed;</p></li> 
+<li class=\"listitem\"><p>indexer does the sorting phase (to be pedantic, index-type 
+specific post-processing);</p></li> <li class=\"listitem\"><p>connection to the database 
+is established again;</p></li> <li class=\"listitem\"><p>post-index query (see <a 
+class=\"xref\" href=\"#conf-sql-query-post-index\" title=\"12.1.29. sql_query_post_index\">Section 
+12.1.29, &#8220;sql_query_post_index&#8221;</a>) is executed     to perform any necessary 
+final cleanup;</p></li> <li class=\"listitem\"><p>connection to the database is closed 
+again.</p></li> </ul></div> <p> Most options, such as database user/host/password,
+ are straightforward. However, there are a few subtle things, which are discussed 
+in more detail here. </p><h3><a name=\"ranged-queries\"></a>Ranged queries</h3><p> 
+Main query, which needs to fetch all the documents, can impose a read lock on the 
+whole table and stall the concurrent queries (eg. INSERTs to MyISAM table), waste 
+a lot of memory for result set, etc. To avoid this, Sphinx supports so-called <em 
+class=\"glossterm\">ranged queries</em>. With ranged queries, Sphinx first fetches 
+min and max document IDs from the table, and then substitutes different ID intervals 
+into main query text and runs the modified query to fetch another chunk of documents.

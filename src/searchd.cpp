@@ -19327,7 +19327,6 @@ bool ValidateAgentDesc ( MetaAgentDesc_t & tAgent, const CSphVariant * pLine, co
 
 	// hash for dashboard
 	CSphString sHashKey = pAgent->GetName();
-
 	// allocate stats slot
 	// let us cheat and also allocate the dashboard slot under the same lock
 	g_tStatsMutex.Lock();

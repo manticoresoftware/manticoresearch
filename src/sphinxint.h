@@ -1251,7 +1251,7 @@ class ISphZoneCheck
 {
 public:
 	virtual ~ISphZoneCheck () {}
-	virtual SphZoneHit_e IsInZone ( int iZone, const ExtHit_t * pHit, int * pLastSpan=0 ) = 0;
+	virtual SphZoneHit_e IsInZone ( int iZone, const ExtHit_t * pHit, int * pLastSpan ) = 0;
 };
 
 
@@ -1557,6 +1557,7 @@ public:
 	virtual BYTE *					GetToken ()										{ return m_pTokenizer->GetToken(); }
 
 	virtual ISphTokenizer *			GetEmbeddedTokenizer () const					{ return m_pTokenizer; }
+	virtual bool					WasTokenMultiformDestination ( bool & bHead ) const { return m_pTokenizer->WasTokenMultiformDestination ( bHead ); }
 };
 
 

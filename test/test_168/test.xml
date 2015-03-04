@@ -12,6 +12,7 @@ indexer
 searchd
 {
 	<searchd_settings/>
+	snippets_file_prefix	= <this_test/>/
 }
 
 source src
@@ -39,6 +40,33 @@ index idx2
 	charset_table = 0..9, a..z, A..Z->a..z
 	blend_chars		= U+0028, U+0029, U+002f, U+002b
 	blend_mode = trim_none, trim_head, trim_tail, trim_both, skip_pure
+}
+
+index idx_blend1
+{
+	type =template
+	html_strip      = 1
+	min_word_len    = 2
+	min_infix_len   = 3
+	index_sp        = 1
+	dict            = keywords
+	morphology = stem_en,stem_ru
+	blend_chars = .
+	blend_mode = trim_both
+}
+
+index idx_blend2
+{
+	type = template
+	min_word_len = 2
+	charset_type = utf-8
+	charset_table = 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+0401->U+0435, U+0451->U+0435, U+A8->U+E5, U+B8->U+E5
+	ignore_chars = U+AD
+	min_prefix_len = 2
+	blend_chars = +, U+23
+	html_strip = 1
+	index_exact_words = 1
+	morphology = stem_ru
 }
 
 </config>
@@ -78,7 +106,8 @@ index idx2
 <sphinxql>CALL SNIPPETS ('for me is not so long abc hashtag+bag but who knows everyone is not same abc hashtag+bag as me or someone', 'idx2', 'hashtag+bag', 1 as query_mode, 80 as limit)</sphinxql>
 <!-- assert in the beginning of the string -->
 <sphinxql>CALL SNIPPETS ('+hashtag for me is not so long but who knows', 'idx2', '+hashtag', 1 as query_mode, 40 as limit)</sphinxql>
-
+<sphinxql>CALL SNIPPETS (('text1.txt'),'idx_blend1','mysql query',1 AS load_files)</sphinxql>
+<sphinxql>CALL SNIPPETS (('text2.txt'),'idx_blend2','*алгоритм*',1 AS load_files)</sphinxql>
 </sphqueries>
 
 <db_create>

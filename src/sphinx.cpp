@@ -2441,6 +2441,7 @@ public:
 	virtual uint64_t		GetSettingsFNV () const;
 
 	virtual bool			SetBlendChars ( const char * sConfig, CSphString & sError );
+	virtual bool			WasTokenMultiformDestination ( bool & ) const { return false; }
 
 public:
 	// lightweight clones must impose a lockdown on some methods
@@ -2653,6 +2654,7 @@ public:
 	virtual const char *			GetBufferPtr () const		{ return m_iStart<m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_pBufferPtr : m_pTokenizer->GetBufferPtr(); }
 	virtual void					SetBufferPtr ( const char * sNewPtr );
 	virtual uint64_t				GetSettingsFNV () const;
+	virtual bool					WasTokenMultiformDestination ( bool & bHead ) const;
 
 private:
 	const CSphMultiformContainer *	m_pMultiWordforms;
@@ -6451,7 +6453,6 @@ BYTE * CSphMultiformTokenizer::GetToken ()
 
 			StoredToken_t & tStart = m_dStoredTokens[m_iStart];
 			strncpy ( (char *)tStart.m_sToken, m_pCurrentForm->m_dNormalForm[m_iOutputPending].m_sForm.cstr(), sizeof(tStart.m_sToken) );
-			tStart.m_szTokenStart = tStart.m_szTokenStart;
 			if ( bLastForm )
 				tStart.m_pBufferPtr = m_szPendingBufferPtr;
 
@@ -6670,6 +6671,18 @@ int CSphMultiformTokenizer::SkipBlended ()
 		m_iStart = iTok;
 
 	return m_iStart-iWasStart;
+}
+
+bool CSphMultiformTokenizer::WasTokenMultiformDestination ( bool & bHead ) const
+{
+	if ( m_iOutputPending>-1 && m_pCurrentForm && m_pCurrentForm->m_dNormalForm.GetLength()>1 && m_iOutputPending<m_pCurrentForm->m_dNormalForm.GetLength() )
+	{
+		bHead = ( m_iOutputPending==0 );
+		return true;
+	} else
+	{
+		return false;
+	}
 }
 
 /////////////////////////////////////////////////////////////////////////////

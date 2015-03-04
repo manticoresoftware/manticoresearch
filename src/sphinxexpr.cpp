@@ -197,17 +197,14 @@ struct Expr_GetStrConst_c : public ISphStringExpr
 
 struct Expr_GetZonespanlist_c : public ISphStringExpr
 {
-	CSphString m_sVal;
-	int m_iLen;
-	CSphVector<int> * m_pData;
+	const int * m_pData;
 	mutable CSphStringBuilder m_sBuilder;
 
 	explicit Expr_GetZonespanlist_c ()
-		: m_iLen ( 0 )
-		, m_pData ( NULL )
+		: m_pData ( NULL )
 	{}
 
-	virtual int StringEval ( const CSphMatch &tMatch, const BYTE ** ppStr ) const
+	virtual int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
 	{
 		assert ( ppStr );
 		if ( !m_pData )
@@ -216,7 +213,7 @@ struct Expr_GetZonespanlist_c : public ISphStringExpr
 			return 0;
 		}
 		m_sBuilder.Clear();
-		const int* pValues = &(*m_pData)[tMatch.m_iTag];
+		const int * pValues = m_pData + tMatch.m_iTag;
 		int iSize = *pValues++;
 		for ( int i=0; i<(iSize/2); ++i )
 		{

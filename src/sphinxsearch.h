@@ -31,7 +31,6 @@ enum TermPosFilter_e
 	TERM_POS_FIELD_END = 3,
 	TERM_POS_FIELD_STARTEND = 4,
 	TERM_POS_ZONES = 5,
-	TERM_POS_ZONESPAN = 6
 };
 
 

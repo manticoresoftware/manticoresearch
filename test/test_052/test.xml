@@ -65,6 +65,57 @@ index test3
 	path	= <data_path/>/test3
 }
 
+source test4
+{
+	type = mysql
+	<sql_settings/>
+	sql_query 		= /*term 0x1 getdocs (4)*/ \
+SELECT CAST(0x1281 AS UNSIGNED) id, 'as1 my1 m1 fe1' title, 11 idd UNION SELECT CAST(0x389c AS UNSIGNED) id, 'as1 my1 m1 fe1' title, 11 idd UNION \
+SELECT CAST(0x1b153 AS UNSIGNED) id, 'as1 my1 m1 fe1' title, 11 idd UNION SELECT CAST(0x1e8fc AS UNSIGNED) id, 'as1 my1 m1 fe1' title, 11 idd UNION \
+/*term 0x2 getdocs (511)*/ \
+SELECT CAST(0x1a6 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x1b3 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x1bf AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x219 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION \
+SELECT CAST(0x28c AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x309 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x31b AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x337 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION \
+SELECT CAST(0x498 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x4c0 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x4e8 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x568 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION \
+SELECT CAST(0x58d AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x60b AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x77e AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x7df AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION \
+SELECT CAST(0x7e0 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x7e1 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x851 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x889 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION \
+SELECT CAST(0x88a AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x8e4 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x8f0 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x954 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION \
+SELECT CAST(0xa21 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0xa22 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0xa4c AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0xad5 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION \
+SELECT CAST(0xad6 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0xbbc AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0xc07 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0xc4c AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION \
+SELECT CAST(0xc4d AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0xc9d AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0xcb8 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0xcea AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION \
+SELECT CAST(0xcf3 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0xd1d AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0xd21 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0xd5f AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION \
+SELECT CAST(0xded AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0xe28 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0xe74 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0xe78 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION \
+SELECT CAST(0xe79 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0xe92 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0xee2 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0xefa AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION \
+SELECT CAST(0xf0c AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0xfbc AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0xfda AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x1038 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION \
+SELECT CAST(0x105d AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x10f0 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x110b AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x1121 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION \
+SELECT CAST(0x116c AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x116d AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x11e2 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x11e4 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION \
+SELECT CAST(0x11fa AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x11fc AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x1209 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x120f AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION \
+SELECT CAST(0x1219 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x122f AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x1235 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x125c AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION \
+SELECT CAST(0x1270 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x1289 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x12ae AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x12db AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION \
+SELECT CAST(0x12fd AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x1314 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x1376 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x1377 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION \
+SELECT CAST(0x13d9 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x13de AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x13e9 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x141d AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION \
+SELECT CAST(0x1424 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x143d AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x144f AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x14c2 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION \
+SELECT CAST(0x14c4 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x14c7 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x14e6 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION \
+SELECT CAST(0x1517 AS UNSIGNED) id, 't2 e2 m2 m3' title, 11 idd UNION \
+SELECT CAST(0x1520 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x155f AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x1571 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x15c9 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION \
+SELECT CAST(0x15fe AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x161b AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x163d AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x1663 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION \
+SELECT CAST(0x1694 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x16cb AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x16ed AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x1747 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION \
+SELECT CAST(0x177d AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION \
+SELECT CAST(0x1794 AS UNSIGNED) id, 't2 e2 m2 m3' title, 11 idd UNION \
+SELECT CAST(0x1799 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x1818 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x1835 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x183a AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION \
+SELECT CAST(0x1857 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x1867 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x18ac AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x18bb AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION \
+SELECT CAST(0x18dd AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION SELECT CAST(0x1925 AS UNSIGNED) id, 'z2 m2 x2' title, 11 idd UNION  \
+/*term 0x3 getdocs (37)*/ \
+SELECT CAST(0xe9f AS UNSIGNED) id, 'fe3 he3 ze3 m3' title, 11 idd UNION SELECT CAST(0xeec AS UNSIGNED) id, 'he3 ze3 m3' title, 11 idd UNION \
+SELECT CAST(0x182f AS UNSIGNED) id, 'he3 ze3 m3' title, 11 idd UNION SELECT CAST(0x205f AS UNSIGNED) id, 'm3' title, 11 idd 
+}
+
+index test4
+{
+	source	= test4
+	path	= <data_path/>/test4
+	charset_table	= 0..9, a..z, A..Z->a..z
+	dict 			= keywords	
+}
 </config>
 
 <db_create>
@@ -134,6 +185,8 @@ INSERT INTO test_table ( document_id, title, text ) VALUES
 <sphqueries>
 <sphinxql><![CDATA[ select * from test2 where match ( ' hi | ( vi << mi )' ) and id in ( 10, 11, 12, 15 ) ]]></sphinxql>
 <sphinxql><![CDATA[ select * from test3 where match ( '"New York, New York 10451"' ) ]]></sphinxql>
+<!-- regression ExtConditional vs tail hits from other nodes -->
+<sphinxql><![CDATA[ select * from test4 where match ( ' "m1 m2 m3$"/2 ' ) ]]></sphinxql>
 </sphqueries>
 
 </test>

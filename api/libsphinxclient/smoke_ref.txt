@@ -228,6 +228,12 @@ avg_query_cpu: OFF
 avg_dist_local: 0.000
 avg_query_reads: OFF
 avg_query_readkb: OFF
+qcache_max_bytes: 16777216
+qcache_thresh_msec: 3000
+qcache_ttl_sec: 60
+qcache_cached_queries: 0
+qcache_used_bytes: 0
+qcache_hits: 0
 
 n=0,	query failed: response length out of bounds (len=8388666)
 n=1,	res=<b>that is</b> no need to worry about   ... 

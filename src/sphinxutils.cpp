@@ -557,6 +557,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "qcache_ttl_sec",			0, NULL },
 	{ "qcache_max_bytes",		0, NULL },
 	{ "qcache_thresh_msec",		0, NULL },
+	{ "sphinxql_timeout",		0, NULL },
 	{ NULL,						0, NULL }
 };
 

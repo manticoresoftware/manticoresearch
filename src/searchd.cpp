@@ -286,6 +286,7 @@ static int				g_iQueryLogMinMs	= 0;				// log 'slow' threshold for query
 static int				g_iReadTimeout		= 5;	// sec
 static int				g_iWriteTimeout		= 5;
 static int				g_iClientTimeout	= 300;
+static int				g_iClientQlTimeout	= 900;	// sec
 static int				g_iPersistentPoolSize	= 0;
 static CSphVector<int>	g_dPersistentConnections; // protect by CSphScopedLock<ThreadsOnlyMutex_t> tLock ( g_tPersLock );
 static int				g_iMaxChildren		= 0;
@@ -18259,14 +18260,13 @@ static void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * p
 
 	for ( ;; )
 	{
-		const int INTERACTIVE_TIMEOUT = 900;
 		NetOutputBuffer_c tOut ( iSock ); // OPTIMIZE? looks like buffer size matters a lot..
 		NetInputBuffer_c tIn ( iSock );
 
 		// get next packet
 		// we want interruptible calls here, so that shutdowns could be honored
 		THD_STATE ( THD_NET_IDLE );
-		if ( !tIn.ReadFrom ( 4, INTERACTIVE_TIMEOUT, true ) )
+		if ( !tIn.ReadFrom ( 4, g_iClientQlTimeout, true ) )
 		{
 			sphLogDebugv ( "conn %s(%d): bailing on failed MySQL header (sockerr=%s)", sClientIP, iCID, sphSockError() );
 			break;
@@ -18285,7 +18285,7 @@ static void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * p
 		const int MAX_PACKET_LEN = 0xffffffL; // 16777215 bytes, max low level packet size
 		DWORD uPacketHeader = tIn.GetLSBDword ();
 		int iPacketLen = ( uPacketHeader & MAX_PACKET_LEN );
-		if ( !tIn.ReadFrom ( iPacketLen, INTERACTIVE_TIMEOUT, true ) )
+		if ( !tIn.ReadFrom ( iPacketLen, g_iClientQlTimeout, true ) )
 		{
 			sphWarning ( "failed to receive MySQL request body (client=%s(%d), exp=%d, error='%s')", sClientIP, iCID, iPacketLen, sphSockError() );
 			break;
@@ -18304,7 +18304,7 @@ static void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * p
 			int iAddonLen = -1;
 			do
 			{
-				if ( !tIn2.ReadFrom ( 4, INTERACTIVE_TIMEOUT, true ) )
+				if ( !tIn2.ReadFrom ( 4, g_iClientQlTimeout, true ) )
 				{
 					sphLogDebugv ( "conn %s(%d): bailing on failed MySQL header2 (sockerr=%s)", sClientIP, iCID, sphSockError() );
 					break;
@@ -18313,7 +18313,7 @@ static void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * p
 				DWORD uAddon = tIn2.GetLSBDword();
 				uPacketID = 1 + (BYTE)( uAddon>>24 );
 				iAddonLen = ( uAddon & MAX_PACKET_LEN );
-				if ( !tIn.ReadFrom ( iAddonLen, INTERACTIVE_TIMEOUT, true, true ) )
+				if ( !tIn.ReadFrom ( iAddonLen, g_iClientQlTimeout, true, true ) )
 				{
 					sphWarning ( "failed to receive MySQL request body2 (client=%s(%d), exp=%d, error='%s')", sClientIP, iCID, iAddonLen, sphSockError() );
 					iAddonLen = -1;
@@ -22788,8 +22788,7 @@ NetEvent_e NetReceiveDataQL_t::Setup ( int64_t tmNow )
 	assert ( m_tState.Ptr() );
 	sphLogDebugv ( "%p receive QL setup, phase=%d, client=%s, conn=%d, sock=%d", this, m_ePhase, m_tState->m_sClientName, m_tState->m_iConnID, m_tState->m_iClientSock ); // !COMMIT
 
-	const int INTERACTIVE_TIMEOUT = 900;
-	m_tmTimeout = tmNow + MS2SEC * INTERACTIVE_TIMEOUT;
+	m_tmTimeout = tmNow + MS2SEC * g_iClientQlTimeout;
 
 	NetEvent_e eEvent;
 	if ( m_ePhase==AQL_HANDSHAKE )
@@ -23394,6 +23393,9 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 
 	if ( hSearchd.Exists ( "read_timeout" ) && hSearchd["read_timeout"].intval()>=0 )
 		g_iReadTimeout = hSearchd["read_timeout"].intval();
+
+	if ( hSearchd.Exists ( "sphinxql_timeout" ) && hSearchd["sphinxql_timeout"].intval()>=0 )
+		g_iClientQlTimeout = hSearchd["sphinxql_timeout"].intval();
 
 	if ( hSearchd.Exists ( "client_timeout" ) && hSearchd["client_timeout"].intval()>=0 )
 		g_iClientTimeout = hSearchd["client_timeout"].intval();

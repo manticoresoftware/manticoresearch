@@ -826,42 +826,6 @@ ISphFilter * ISphFilter::Join ( ISphFilter * pFilter )
 
 /// helper functions
 
-static ISphFilter * CreateSpecialFilter ( const CSphString & sName, ESphFilter eFilterType, bool bHasEqual )
-{
-	if ( sName=="@id" )
-	{
-		switch ( eFilterType )
-		{
-			case SPH_FILTER_VALUES:	return new Filter_IdValues;
-			case SPH_FILTER_RANGE:
-				if ( bHasEqual )
-					return new Filter_IdRange<true>;
-				else
-					return new Filter_IdRange<false>;
-			default:
-				assert ( 0 && "invalid filter on @id" );
-				return NULL;
-		}
-	} else if ( sName=="@weight" )
-	{
-		switch ( eFilterType )
-		{
-			case SPH_FILTER_VALUES:	return new Filter_WeightValues;
-			case SPH_FILTER_RANGE:
-				if ( bHasEqual )
-					return new Filter_WeightRange<true>;
-				else
-					return new Filter_WeightRange<false>;
-			default:
-				assert ( 0 && "invalid filter on @weight" );
-				return NULL;
-		}
-	}
-
-	return NULL;
-}
-
-
 static inline ISphFilter * ReportError ( CSphString & sError, const char * sMessage, ESphFilter eFilterType )
 {
 	CSphString sFilterName;
@@ -876,6 +840,40 @@ static inline ISphFilter * ReportError ( CSphString & sError, const char * sMess
 	}
 
 	sError.SetSprintf ( sMessage, sFilterName.cstr() );
+	return NULL;
+}
+
+
+static ISphFilter * CreateSpecialFilter ( const CSphString & sName, ESphFilter eFilterType, bool bHasEqual, CSphString & sError )
+{
+	if ( sName=="@id" )
+	{
+		switch ( eFilterType )
+		{
+		case SPH_FILTER_VALUES:	return new Filter_IdValues;
+		case SPH_FILTER_RANGE:
+			if ( bHasEqual )
+				return new Filter_IdRange<true>;
+			else
+				return new Filter_IdRange<false>;
+		default:
+			return ReportError ( sError, "unsupported filter type '%s' on @id", eFilterType );
+		}
+	} else if ( sName=="@weight" )
+	{
+		switch ( eFilterType )
+		{
+		case SPH_FILTER_VALUES:	return new Filter_WeightValues;
+		case SPH_FILTER_RANGE:
+			if ( bHasEqual )
+				return new Filter_WeightRange<true>;
+			else
+				return new Filter_WeightRange<false>;
+		default:
+			return ReportError ( sError, "unsupported filter type '%s' on @weight", eFilterType );
+		}
+	}
+
 	return NULL;
 }
 
@@ -1290,7 +1288,9 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 
 	if ( sAttrName.Begins("@") )
 	{
-		pFilter = CreateSpecialFilter ( sAttrName, tSettings.m_eType, tSettings.m_bHasEqual );
+		pFilter = CreateSpecialFilter ( sAttrName, tSettings.m_eType, tSettings.m_bHasEqual, sError );
+		if ( !pFilter && !sError.IsEmpty() )
+			return NULL;
 	}
 
 	// try to create a filter on a JSON attribute

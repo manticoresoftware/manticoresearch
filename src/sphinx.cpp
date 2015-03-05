@@ -24980,6 +24980,29 @@ static inline int HtmlEntityLookup ( const BYTE * str, int len )
 }
 
 
+static const BYTE * SkipPI ( const BYTE * s )
+{
+	assert ( s[0]=='<' && s[1]=='?' );
+	s += 2;
+
+	const BYTE * pStart = s;
+	const BYTE * pMax = s + 256;
+	for ( ; s<pMax; s++ )
+	{
+		// for now, let's just bail whenever we see ">", like Firefox does!!!
+		// that covers the valid case, ie. the closing "?>", just as well
+		if ( s[0]=='>' )
+			return s+1;
+	}
+
+	// no closing end marker ever found; just skip non-whitespace after "<?" then
+	s = pStart;
+	while ( s<pMax && !sphIsSpace(*s) )
+		s++;
+	return s;
+}
+
+
 void CSphHTMLStripper::Strip ( BYTE * sData ) const
 {
 	const BYTE * s = sData;
@@ -25136,16 +25159,7 @@ void CSphHTMLStripper::Strip ( BYTE * sData ) const
 			} else if ( s[1]=='?' )
 			{
 				// scan until PI end
-				s += 2; // skip opening '<?'
-				while ( *s )
-				{
-					if ( s[0]=='?' && s[1]=='>' )
-						break;
-					s++;
-				}
-				if ( !*s )
-					break;
-				s += 2; // skip closing '?>'
+				s = SkipPI ( s );
 				continue;
 
 			} else

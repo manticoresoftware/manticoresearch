@@ -670,6 +670,8 @@ void TestStripper ()
 	const char * sTests[][4] =
 	{
 		// source-data, index-attrs, remove-elements, expected-results
+		{ "<?xml broken piece of shit/>should be indexed", "", "", "should be indexed" },
+		{ "<?xml crazily=\"broken>shit\">still should be indexed", "", "", "shit\">still should be indexed" },
 		{ "<html>trivial test</html>", "", "", " trivial test " },
 		{ "<html>lets <img src=\"g/smth.jpg\" alt=\"nice picture\">index attrs</html>", "img=alt", "", " lets nice picture index attrs " },
 		{ "<html>   lets  also<script> whatever here; a<b</script>remove scripts", "", "script, style", " lets also remove scripts" },

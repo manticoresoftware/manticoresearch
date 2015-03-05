@@ -2987,24 +2987,14 @@ public:
 
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const
 	{
-		ESphQueryState eOld = SPH_QSTATE_TOTAL;
-		if ( m_pProfiler )
-			eOld = m_pProfiler->Switch ( SPH_QSTATE_EVAL_UDF );
-
 		if ( m_bError )
-		{
-			if ( m_pProfiler )
-				m_pProfiler->Switch ( eOld );
 			return 0;
-		}
 
+		CSphScopedProfile tProf ( m_pProfiler, SPH_QSTATE_EVAL_UDF );
 		FillArgs ( tMatch );
 		UdfInt_fn pFn = (UdfInt_fn) m_pCall->m_pUdf->m_fnFunc;
 		int64_t iRes = pFn ( &m_pCall->m_tInit, &m_pCall->m_tArgs, &m_bError );
 		FreeArgs();
-
-		if ( m_pProfiler )
-			m_pProfiler->Switch ( eOld );
 		return iRes;
 	}
 
@@ -3024,24 +3014,14 @@ public:
 
 	virtual float Eval ( const CSphMatch & tMatch ) const
 	{
-		ESphQueryState eOld = SPH_QSTATE_TOTAL;
-		if ( m_pProfiler )
-			eOld = m_pProfiler->Switch ( SPH_QSTATE_EVAL_UDF );
-
 		if ( m_bError )
-		{
-			if ( m_pProfiler )
-				m_pProfiler->Switch ( eOld );
 			return 0;
-		}
 
+		CSphScopedProfile tProf ( m_pProfiler, SPH_QSTATE_EVAL_UDF );
 		FillArgs ( tMatch );
 		UdfDouble_fn pFn = (UdfDouble_fn) m_pCall->m_pUdf->m_fnFunc;
 		float fRes = (float) pFn ( &m_pCall->m_tInit, &m_pCall->m_tArgs, &m_bError );
 		FreeArgs();
-
-		if ( m_pProfiler )
-			m_pProfiler->Switch ( eOld );
 		return fRes;
 	}
 
@@ -3079,20 +3059,19 @@ public:
 
 	virtual int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
 	{
-		ESphQueryState eOld = SPH_QSTATE_TOTAL;
-		if ( m_pProfiler )
-			eOld = m_pProfiler->Switch ( SPH_QSTATE_EVAL_UDF );
+		if ( m_bError )
+		{
+			*ppStr = NULL;
+			return 0;
+		}
 
+		CSphScopedProfile tProf ( m_pProfiler, SPH_QSTATE_EVAL_UDF );
 		FillArgs ( tMatch );
 		UdfCharptr_fn pFn = (UdfCharptr_fn) m_pCall->m_pUdf->m_fnFunc;
 		char * pRes = pFn ( &m_pCall->m_tInit, &m_pCall->m_tArgs, &m_bError ); // owned now!
 		*ppStr = (const BYTE*) pRes;
 		int iLen = ( pRes ? strlen(pRes) : 0 );
 		FreeArgs();
-
-		if ( m_pProfiler )
-			m_pProfiler->Switch ( eOld );
-
 		return iLen;
 	}
 

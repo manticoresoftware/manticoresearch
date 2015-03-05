@@ -3100,9 +3100,7 @@ void NetOutputBuffer_c::Flush ()
 
 	const char * pBuffer = (const char *)m_dBuf.Begin();
 
-	ESphQueryState eOld = SPH_QSTATE_TOTAL;
-	if ( m_pProfile )
-		eOld = m_pProfile->Switch ( SPH_QSTATE_NET_WRITE );
+	CSphScopedProfile tProf ( m_pProfile, SPH_QSTATE_NET_WRITE );
 
 	const int64_t tmMaxTimer = sphMicroTimer() + g_iWriteTimeout*1000000; // in microseconds
 	while ( !m_bError )
@@ -3158,9 +3156,6 @@ void NetOutputBuffer_c::Flush ()
 			}
 		}
 	}
-
-	if ( m_pProfile )
-		m_pProfile->Switch ( eOld );
 
 	m_dBuf.Resize ( 0 );
 }
@@ -8508,12 +8503,8 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 			// post-limit stuff first
 			if ( iLocals )
 			{
-				ESphQueryState eOld = SPH_QSTATE_TOTAL;
-				if ( pProfiler )
-					eOld = pProfiler->Switch ( SPH_QSTATE_EVAL_POST );
+				CSphScopedProfile tProf ( pProfiler, SPH_QSTATE_EVAL_POST );
 				ProcessLocalPostlimit ( tQuery, tRes );
-				if ( pProfiler )
-					pProfiler->Switch ( eOld );
 			}
 
 			RemapResult ( &tRes.m_tSchema, &tRes );
@@ -8550,9 +8541,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 	// compute post-limit stuff
 	if ( bAllEqual && iLocals )
 	{
-		ESphQueryState eOld = SPH_QSTATE_TOTAL;
-		if ( pProfiler )
-			eOld = pProfiler->Switch ( SPH_QSTATE_EVAL_POST );
+		CSphScopedProfile ( pProfiler, SPH_QSTATE_EVAL_POST );
 
 		CSphVector<const CSphColumnInfo *> dPostlimit;
 		ExtractPostlimit ( tRes.m_tSchema, dPostlimit );
@@ -8568,9 +8557,6 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 		int iFrom = Min ( iOff, iTo );
 
 		ProcessPostlimit ( dPostlimit, iFrom, iTo, tRes );
-
-		if ( pProfiler )
-			pProfiler->Switch ( eOld );
 	}
 
 	// remap groupby() and aliased groupby() to @groupbystr or string attribute
@@ -8838,9 +8824,7 @@ struct Expr_Snippet_c : public ISphStringExpr
 
 	virtual int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
 	{
-		ESphQueryState eOld = SPH_QSTATE_TOTAL;
-		if ( m_pProfiler )
-			eOld = m_pProfiler->Switch ( SPH_QSTATE_SNIPPET );
+		CSphScopedProfile ( m_pProfiler, SPH_QSTATE_SNIPPET );
 
 		*ppStr = NULL;
 
@@ -8851,8 +8835,6 @@ struct Expr_Snippet_c : public ISphStringExpr
 		{
 			if ( m_pText->IsStringPtr() )
 				SafeDeleteArray ( sSource );
-			if ( m_pProfiler )
-				m_pProfiler->Switch ( eOld );
 			return 0;
 		}
 
@@ -8871,8 +8853,6 @@ struct Expr_Snippet_c : public ISphStringExpr
 
 		int iRes = m_tHighlight.m_dRes.GetLength();
 		*ppStr = m_tHighlight.m_dRes.LeakData();
-		if ( m_pProfiler )
-			m_pProfiler->Switch ( eOld );
 		return iRes;
 	}
 

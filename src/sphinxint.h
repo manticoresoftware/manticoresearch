@@ -179,6 +179,28 @@ public:
 };
 
 
+class CSphScopedProfile
+{
+private:
+	CSphQueryProfile *	m_pProfile;
+	ESphQueryState		m_eOldState;
+
+public:
+	explicit CSphScopedProfile ( CSphQueryProfile * pProfile, ESphQueryState eNewState )
+	{
+		m_pProfile = pProfile;
+		if ( m_pProfile )
+			m_eOldState = m_pProfile->Switch ( eNewState );
+	}
+
+	~CSphScopedProfile()
+	{
+		if ( m_pProfile )
+			m_pProfile->Switch ( m_eOldState );
+	}
+};
+
+
 /// file writer with write buffering and int encoder
 class CSphWriter : ISphNoncopyable
 {

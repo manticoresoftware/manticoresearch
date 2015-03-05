@@ -6618,9 +6618,8 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	int64_t tmQueryStart = sphMicroTimer();
 	CSphQueryProfile * pProfiler = pResult->m_pProfile;
 
-	ESphQueryState eRtProfiler = SPH_QSTATE_TOTAL;
 	if ( pProfiler )
-		eRtProfiler = pProfiler->Switch ( SPH_QSTATE_DICT_SETUP );
+		pProfiler->Switch ( SPH_QSTATE_DICT_SETUP );
 
 	// force ext2 mode for them
 	// FIXME! eliminate this const breakage
@@ -6673,7 +6672,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	}
 
 	if ( pProfiler )
-		pProfiler->Switch ( eRtProfiler );
+		pProfiler->Switch ( SPH_QSTATE_INIT );
 
 	// FIXME! each result will point to its own MVA and string pools
 
@@ -6701,6 +6700,10 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	for ( int iChunk = tGuard.m_dDiskChunks.GetLength()-1; iChunk>=0; iChunk-- )
 	{
+		// because disk chunk search within the loop will switch the profiler state
+		if ( pProfiler )
+			pProfiler->Switch ( SPH_QSTATE_INIT );
+
 		// collect & sort cumulative killlist for current chunk
 		if ( iChunk<tGuard.m_dDiskChunks.GetLength()-1 )
 		{
@@ -6757,6 +6760,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		tMultiArgs.m_bLocalDF = bGotLocalDF;
 		tMultiArgs.m_pLocalDocs = pLocalDocs;
 		tMultiArgs.m_iTotalDocs = iTotalDocs;
+
 		if ( !tGuard.m_dDiskChunks[iChunk]->MultiQuery ( pQuery, &tChunkResult, iSorters, ppSorters, tMultiArgs ) )
 		{
 			// FIXME? maybe handle this more gracefully (convert to a warning)?
@@ -6918,8 +6922,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		return true;
 	}
 
+	// probably redundant, but just in case
 	if ( pProfiler )
-		pProfiler->Switch ( eRtProfiler );
+		pProfiler->Switch ( SPH_QSTATE_INIT );
 
 	// search segments no looking to max_query_time
 	// FIXME!!! move searching at segments before disk chunks as result set is safe with kill-lists
@@ -6952,6 +6957,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 		if ( bFullscan )
 		{
+			if ( pProfiler )
+				pProfiler->Switch ( SPH_QSTATE_FULLSCAN );
+
 			// full scan
 			// FIXME? OPTIMIZE? add shortcuts here too?
 			CSphMatch tMatch;
@@ -7042,16 +7050,16 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 				pRanker->ExtraData ( EXTRA_SET_MVAPOOL, (void**)&tMva );
 				pRanker->ExtraData ( EXTRA_SET_STRINGPOOL, (void**)tGuard.m_dRamChunks[iSeg]->m_dStrings.Begin() );
 
-				if ( pProfiler )
-					pProfiler->Switch ( eRtProfiler );
-
 				CSphMatch * pMatch = pRanker->GetMatchesBuffer();
 				for ( ;; )
 				{
+					// ranker does profile switches internally in GetMatches()
 					int iMatches = pRanker->GetMatches();
 					if ( iMatches<=0 )
 						break;
 
+					if ( pProfiler )
+						pProfiler->Switch ( SPH_QSTATE_SORT );
 					for ( int i=0; i<iMatches; i++ )
 					{
 						if ( tCtx.m_bLookupSort )

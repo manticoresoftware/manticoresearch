@@ -8168,9 +8168,7 @@ int sphPread ( int iFD, void * pBuf, int iBytes, SphOffset_t iOffset )
 
 void CSphReader::UpdateCache ()
 {
-	ESphQueryState eOld = SPH_QSTATE_TOTAL;
-	if ( m_pProfile )
-		eOld = m_pProfile->Switch ( m_eProfileState );
+	CSphScopedProfile tProf ( m_pProfile, m_eProfileState );
 
 	assert ( m_iFD>=0 );
 
@@ -8201,16 +8199,12 @@ void CSphReader::UpdateCache ()
 		m_bError = true;
 		m_sError.SetSprintf ( "pread error in %s: pos="INT64_FMT", len=%d, code=%d, msg=%s",
 			m_sFilename.cstr(), (int64_t)iNewPos, iReadLen, errno, strerror(errno) );
-		if ( m_pProfile )
-			m_pProfile->Switch ( eOld );
 		return;
 	}
 
 	// all fine, adjust offset and hint
 	m_iSizeHint -= m_iBuffUsed;
 	m_iPos = iNewPos;
-	if ( m_pProfile )
-		m_pProfile->Switch ( eOld );
 }
 
 
@@ -15658,7 +15652,7 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 	CSphMatch * pMatch = pRanker->GetMatchesBuffer();
 	for ( ;; )
 	{
-		// ranker does profile switches internally
+		// ranker does profile switches internally in GetMatches()
 		int iMatches = pRanker->GetMatches();
 		if ( iMatches<=0 )
 			break;

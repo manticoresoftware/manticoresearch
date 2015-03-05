@@ -5492,25 +5492,19 @@ const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 	printf ( "ranker getfiltereddocs" );
 	#endif
 
-	ESphQueryState eState = SPH_QSTATE_TOTAL;
-	CSphQueryProfile * pProfile = m_pCtx->m_pProfile;
-
+	CSphScopedProfile ( m_pCtx->m_pProfile, SPH_QSTATE_GET_DOCS );
 	for ( ;; )
 	{
 		// get another chunk
-		if ( pProfile )
-			eState = pProfile->Switch ( SPH_QSTATE_GET_DOCS );
+		if ( m_pCtx->m_pProfile )
+			m_pCtx->m_pProfile->Switch ( SPH_QSTATE_GET_DOCS );
 		const ExtDoc_t * pCand = m_pRoot->GetDocsChunk();
 		if ( !pCand )
-		{
-			if ( pProfile )
-				pProfile->Switch ( eState );
 			return NULL;
-		}
 
 		// create matches, and filter them
-		if ( pProfile )
-			pProfile->Switch ( SPH_QSTATE_FILTER );
+		if ( m_pCtx->m_pProfile )
+			m_pCtx->m_pProfile->Switch ( SPH_QSTATE_FILTER );
 		int iDocs = 0;
 		SphDocID_t uMaxID = 0;
 		while ( pCand->m_uDocid!=DOCID_MAX )
@@ -5542,8 +5536,6 @@ const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 			if ( m_pNanoBudget )
 				*m_pNanoBudget -= g_iPredictorCostMatch*iDocs;
 			m_dMyDocs[iDocs].m_uDocid = DOCID_MAX;
-			if ( pProfile )
-				pProfile->Switch ( eState );
 
 			#if QDEBUG
 			CSphStringBuilder tRes;
@@ -5902,6 +5894,9 @@ int ExtRanker_WeightSum_c<USE_BM25>::GetMatches ()
 	if ( !m_pRoot )
 		return 0;
 
+	if ( m_pCtx->m_pProfile )
+		m_pCtx->m_pProfile->Switch ( SPH_QSTATE_RANK );
+
 	const ExtDoc_t * pDoc = m_pDoclist;
 	int iMatches = 0;
 
@@ -5947,6 +5942,9 @@ int ExtRanker_None_c::GetMatches ()
 {
 	if ( !m_pRoot )
 		return 0;
+
+	if ( m_pCtx->m_pProfile )
+		m_pCtx->m_pProfile->Switch ( SPH_QSTATE_RANK );
 
 	const ExtDoc_t * pDoc = m_pDoclist;
 	int iMatches = 0;
@@ -6000,6 +5998,9 @@ int ExtRanker_T<STATE>::GetMatches ()
 {
 	if ( !m_pRoot )
 		return 0;
+
+	if ( m_pCtx->m_pProfile )
+		m_pCtx->m_pProfile->Switch ( SPH_QSTATE_RANK );
 
 	CSphQueryProfile * pProfile = m_pCtx->m_pProfile;
 	int iMatches = 0;

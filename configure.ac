@@ -19,6 +19,9 @@ LIBS="$LIBS -L/usr/local/lib"
 
 dnl --------------------------------------------------------------------------
 
+# enable silent (without compiler/linker commands) build by default
+AM_SILENT_RULES([yes])
+
 SPHINX_CONFIGURE_PART([checking for compiler programs])
 
 AC_ARG_WITH([debug],

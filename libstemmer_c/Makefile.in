@@ -57,6 +57,12 @@ CONFIG_CLEAN_VPATH_FILES =
 LIBRARIES = $(noinst_LIBRARIES)
 AR = ar
 ARFLAGS = cru
+AM_V_AR = $(am__v_AR_@AM_V@)
+am__v_AR_ = $(am__v_AR_@AM_DEFAULT_V@)
+am__v_AR_0 = @echo "  AR    " $@;
+AM_V_at = $(am__v_at_@AM_V@)
+am__v_at_ = $(am__v_at_@AM_DEFAULT_V@)
+am__v_at_0 = @
 libstemmer_a_AR = $(AR) $(ARFLAGS)
 libstemmer_a_LIBADD =
 am__libstemmer_a_SOURCES_DIST = src_c/stem_ISO_8859_1_danish.c \
@@ -115,10 +121,22 @@ DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/config
 depcomp = $(SHELL) $(top_srcdir)/config/depcomp
 am__depfiles_maybe = depfiles
 am__mv = mv -f
+AM_V_lt = $(am__v_lt_@AM_V@)
+am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
+am__v_lt_0 = --silent
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
+AM_V_CC = $(am__v_CC_@AM_V@)
+am__v_CC_ = $(am__v_CC_@AM_DEFAULT_V@)
+am__v_CC_0 = @echo "  CC    " $@;
 CCLD = $(CC)
 LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
+AM_V_CCLD = $(am__v_CCLD_@AM_V@)
+am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
+am__v_CCLD_0 = @echo "  CCLD  " $@;
+AM_V_GEN = $(am__v_GEN_@AM_V@)
+am__v_GEN_ = $(am__v_GEN_@AM_DEFAULT_V@)
+am__v_GEN_0 = @echo "  GEN   " $@;
 SOURCES = $(libstemmer_a_SOURCES)
 DIST_SOURCES = $(am__libstemmer_a_SOURCES_DIST)
 am__noinst_HEADERS_DIST = src_c/stem_ISO_8859_1_danish.h \
@@ -145,6 +163,7 @@ CTAGS = ctags
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 ACLOCAL = @ACLOCAL@
 AMTAR = @AMTAR@
+AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
 AUTOCONF = @AUTOCONF@
 AUTOHEADER = @AUTOHEADER@
 AUTOMAKE = @AUTOMAKE@
@@ -362,9 +381,9 @@ $(am__aclocal_m4_deps):
 clean-noinstLIBRARIES:
 	-test -z "$(noinst_LIBRARIES)" || rm -f $(noinst_LIBRARIES)
 libstemmer.a: $(libstemmer_a_OBJECTS) $(libstemmer_a_DEPENDENCIES) $(EXTRA_libstemmer_a_DEPENDENCIES) 
-	-rm -f libstemmer.a
-	$(libstemmer_a_AR) libstemmer.a $(libstemmer_a_OBJECTS) $(libstemmer_a_LIBADD)
-	$(RANLIB) libstemmer.a
+	$(AM_V_at)-rm -f libstemmer.a
+	$(AM_V_AR)$(libstemmer_a_AR) libstemmer.a $(libstemmer_a_OBJECTS) $(libstemmer_a_LIBADD)
+	$(AM_V_at)$(RANLIB) libstemmer.a
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -408,494 +427,494 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/utilities.Po@am__quote@
 
 .c.o:
-@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(COMPILE) -c $<
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(COMPILE) -c $<
 
 .c.obj:
-@am__fastdepCC_TRUE@	$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ `$(CYGPATH_W) '$<'`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ `$(CYGPATH_W) '$<'`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/$*.Tpo $(DEPDIR)/$*.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(COMPILE) -c `$(CYGPATH_W) '$<'`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(COMPILE) -c `$(CYGPATH_W) '$<'`
 
 stem_ISO_8859_1_danish.o: src_c/stem_ISO_8859_1_danish.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_danish.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_danish.Tpo -c -o stem_ISO_8859_1_danish.o `test -f 'src_c/stem_ISO_8859_1_danish.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_danish.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_1_danish.Tpo $(DEPDIR)/stem_ISO_8859_1_danish.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_1_danish.c' object='stem_ISO_8859_1_danish.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_danish.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_danish.Tpo -c -o stem_ISO_8859_1_danish.o `test -f 'src_c/stem_ISO_8859_1_danish.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_danish.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_ISO_8859_1_danish.Tpo $(DEPDIR)/stem_ISO_8859_1_danish.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_ISO_8859_1_danish.c' object='stem_ISO_8859_1_danish.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_danish.o `test -f 'src_c/stem_ISO_8859_1_danish.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_danish.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_danish.o `test -f 'src_c/stem_ISO_8859_1_danish.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_danish.c
 
 stem_ISO_8859_1_danish.obj: src_c/stem_ISO_8859_1_danish.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_danish.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_danish.Tpo -c -o stem_ISO_8859_1_danish.obj `if test -f 'src_c/stem_ISO_8859_1_danish.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_danish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_danish.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_1_danish.Tpo $(DEPDIR)/stem_ISO_8859_1_danish.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_1_danish.c' object='stem_ISO_8859_1_danish.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_danish.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_danish.Tpo -c -o stem_ISO_8859_1_danish.obj `if test -f 'src_c/stem_ISO_8859_1_danish.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_danish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_danish.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_ISO_8859_1_danish.Tpo $(DEPDIR)/stem_ISO_8859_1_danish.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_ISO_8859_1_danish.c' object='stem_ISO_8859_1_danish.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_danish.obj `if test -f 'src_c/stem_ISO_8859_1_danish.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_danish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_danish.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_danish.obj `if test -f 'src_c/stem_ISO_8859_1_danish.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_danish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_danish.c'; fi`
 
 stem_UTF_8_danish.o: src_c/stem_UTF_8_danish.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_danish.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_danish.Tpo -c -o stem_UTF_8_danish.o `test -f 'src_c/stem_UTF_8_danish.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_danish.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_danish.Tpo $(DEPDIR)/stem_UTF_8_danish.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_danish.c' object='stem_UTF_8_danish.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_danish.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_danish.Tpo -c -o stem_UTF_8_danish.o `test -f 'src_c/stem_UTF_8_danish.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_danish.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_danish.Tpo $(DEPDIR)/stem_UTF_8_danish.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_danish.c' object='stem_UTF_8_danish.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_danish.o `test -f 'src_c/stem_UTF_8_danish.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_danish.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_danish.o `test -f 'src_c/stem_UTF_8_danish.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_danish.c
 
 stem_UTF_8_danish.obj: src_c/stem_UTF_8_danish.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_danish.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_danish.Tpo -c -o stem_UTF_8_danish.obj `if test -f 'src_c/stem_UTF_8_danish.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_danish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_danish.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_danish.Tpo $(DEPDIR)/stem_UTF_8_danish.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_danish.c' object='stem_UTF_8_danish.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_danish.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_danish.Tpo -c -o stem_UTF_8_danish.obj `if test -f 'src_c/stem_UTF_8_danish.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_danish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_danish.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_danish.Tpo $(DEPDIR)/stem_UTF_8_danish.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_danish.c' object='stem_UTF_8_danish.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_danish.obj `if test -f 'src_c/stem_UTF_8_danish.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_danish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_danish.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_danish.obj `if test -f 'src_c/stem_UTF_8_danish.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_danish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_danish.c'; fi`
 
 stem_ISO_8859_1_dutch.o: src_c/stem_ISO_8859_1_dutch.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_dutch.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_dutch.Tpo -c -o stem_ISO_8859_1_dutch.o `test -f 'src_c/stem_ISO_8859_1_dutch.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_dutch.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_1_dutch.Tpo $(DEPDIR)/stem_ISO_8859_1_dutch.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_1_dutch.c' object='stem_ISO_8859_1_dutch.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_dutch.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_dutch.Tpo -c -o stem_ISO_8859_1_dutch.o `test -f 'src_c/stem_ISO_8859_1_dutch.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_dutch.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_ISO_8859_1_dutch.Tpo $(DEPDIR)/stem_ISO_8859_1_dutch.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_ISO_8859_1_dutch.c' object='stem_ISO_8859_1_dutch.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_dutch.o `test -f 'src_c/stem_ISO_8859_1_dutch.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_dutch.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_dutch.o `test -f 'src_c/stem_ISO_8859_1_dutch.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_dutch.c
 
 stem_ISO_8859_1_dutch.obj: src_c/stem_ISO_8859_1_dutch.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_dutch.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_dutch.Tpo -c -o stem_ISO_8859_1_dutch.obj `if test -f 'src_c/stem_ISO_8859_1_dutch.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_dutch.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_dutch.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_1_dutch.Tpo $(DEPDIR)/stem_ISO_8859_1_dutch.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_1_dutch.c' object='stem_ISO_8859_1_dutch.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_dutch.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_dutch.Tpo -c -o stem_ISO_8859_1_dutch.obj `if test -f 'src_c/stem_ISO_8859_1_dutch.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_dutch.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_dutch.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_ISO_8859_1_dutch.Tpo $(DEPDIR)/stem_ISO_8859_1_dutch.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_ISO_8859_1_dutch.c' object='stem_ISO_8859_1_dutch.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_dutch.obj `if test -f 'src_c/stem_ISO_8859_1_dutch.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_dutch.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_dutch.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_dutch.obj `if test -f 'src_c/stem_ISO_8859_1_dutch.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_dutch.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_dutch.c'; fi`
 
 stem_UTF_8_dutch.o: src_c/stem_UTF_8_dutch.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_dutch.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_dutch.Tpo -c -o stem_UTF_8_dutch.o `test -f 'src_c/stem_UTF_8_dutch.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_dutch.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_dutch.Tpo $(DEPDIR)/stem_UTF_8_dutch.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_dutch.c' object='stem_UTF_8_dutch.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_dutch.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_dutch.Tpo -c -o stem_UTF_8_dutch.o `test -f 'src_c/stem_UTF_8_dutch.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_dutch.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_dutch.Tpo $(DEPDIR)/stem_UTF_8_dutch.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_dutch.c' object='stem_UTF_8_dutch.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_dutch.o `test -f 'src_c/stem_UTF_8_dutch.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_dutch.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_dutch.o `test -f 'src_c/stem_UTF_8_dutch.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_dutch.c
 
 stem_UTF_8_dutch.obj: src_c/stem_UTF_8_dutch.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_dutch.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_dutch.Tpo -c -o stem_UTF_8_dutch.obj `if test -f 'src_c/stem_UTF_8_dutch.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_dutch.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_dutch.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_dutch.Tpo $(DEPDIR)/stem_UTF_8_dutch.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_dutch.c' object='stem_UTF_8_dutch.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_dutch.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_dutch.Tpo -c -o stem_UTF_8_dutch.obj `if test -f 'src_c/stem_UTF_8_dutch.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_dutch.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_dutch.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_dutch.Tpo $(DEPDIR)/stem_UTF_8_dutch.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_dutch.c' object='stem_UTF_8_dutch.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_dutch.obj `if test -f 'src_c/stem_UTF_8_dutch.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_dutch.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_dutch.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_dutch.obj `if test -f 'src_c/stem_UTF_8_dutch.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_dutch.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_dutch.c'; fi`
 
 stem_ISO_8859_1_english.o: src_c/stem_ISO_8859_1_english.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_english.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_english.Tpo -c -o stem_ISO_8859_1_english.o `test -f 'src_c/stem_ISO_8859_1_english.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_english.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_1_english.Tpo $(DEPDIR)/stem_ISO_8859_1_english.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_1_english.c' object='stem_ISO_8859_1_english.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_english.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_english.Tpo -c -o stem_ISO_8859_1_english.o `test -f 'src_c/stem_ISO_8859_1_english.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_english.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_ISO_8859_1_english.Tpo $(DEPDIR)/stem_ISO_8859_1_english.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_ISO_8859_1_english.c' object='stem_ISO_8859_1_english.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_english.o `test -f 'src_c/stem_ISO_8859_1_english.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_english.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_english.o `test -f 'src_c/stem_ISO_8859_1_english.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_english.c
 
 stem_ISO_8859_1_english.obj: src_c/stem_ISO_8859_1_english.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_english.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_english.Tpo -c -o stem_ISO_8859_1_english.obj `if test -f 'src_c/stem_ISO_8859_1_english.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_english.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_english.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_1_english.Tpo $(DEPDIR)/stem_ISO_8859_1_english.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_1_english.c' object='stem_ISO_8859_1_english.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_english.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_english.Tpo -c -o stem_ISO_8859_1_english.obj `if test -f 'src_c/stem_ISO_8859_1_english.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_english.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_english.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_ISO_8859_1_english.Tpo $(DEPDIR)/stem_ISO_8859_1_english.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_ISO_8859_1_english.c' object='stem_ISO_8859_1_english.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_english.obj `if test -f 'src_c/stem_ISO_8859_1_english.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_english.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_english.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_english.obj `if test -f 'src_c/stem_ISO_8859_1_english.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_english.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_english.c'; fi`
 
 stem_UTF_8_english.o: src_c/stem_UTF_8_english.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_english.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_english.Tpo -c -o stem_UTF_8_english.o `test -f 'src_c/stem_UTF_8_english.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_english.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_english.Tpo $(DEPDIR)/stem_UTF_8_english.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_english.c' object='stem_UTF_8_english.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_english.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_english.Tpo -c -o stem_UTF_8_english.o `test -f 'src_c/stem_UTF_8_english.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_english.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_english.Tpo $(DEPDIR)/stem_UTF_8_english.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_english.c' object='stem_UTF_8_english.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_english.o `test -f 'src_c/stem_UTF_8_english.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_english.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_english.o `test -f 'src_c/stem_UTF_8_english.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_english.c
 
 stem_UTF_8_english.obj: src_c/stem_UTF_8_english.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_english.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_english.Tpo -c -o stem_UTF_8_english.obj `if test -f 'src_c/stem_UTF_8_english.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_english.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_english.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_english.Tpo $(DEPDIR)/stem_UTF_8_english.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_english.c' object='stem_UTF_8_english.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_english.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_english.Tpo -c -o stem_UTF_8_english.obj `if test -f 'src_c/stem_UTF_8_english.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_english.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_english.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_english.Tpo $(DEPDIR)/stem_UTF_8_english.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_english.c' object='stem_UTF_8_english.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_english.obj `if test -f 'src_c/stem_UTF_8_english.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_english.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_english.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_english.obj `if test -f 'src_c/stem_UTF_8_english.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_english.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_english.c'; fi`
 
 stem_ISO_8859_1_finnish.o: src_c/stem_ISO_8859_1_finnish.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_finnish.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_finnish.Tpo -c -o stem_ISO_8859_1_finnish.o `test -f 'src_c/stem_ISO_8859_1_finnish.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_finnish.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_1_finnish.Tpo $(DEPDIR)/stem_ISO_8859_1_finnish.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_1_finnish.c' object='stem_ISO_8859_1_finnish.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_finnish.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_finnish.Tpo -c -o stem_ISO_8859_1_finnish.o `test -f 'src_c/stem_ISO_8859_1_finnish.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_finnish.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_ISO_8859_1_finnish.Tpo $(DEPDIR)/stem_ISO_8859_1_finnish.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_ISO_8859_1_finnish.c' object='stem_ISO_8859_1_finnish.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_finnish.o `test -f 'src_c/stem_ISO_8859_1_finnish.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_finnish.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_finnish.o `test -f 'src_c/stem_ISO_8859_1_finnish.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_finnish.c
 
 stem_ISO_8859_1_finnish.obj: src_c/stem_ISO_8859_1_finnish.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_finnish.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_finnish.Tpo -c -o stem_ISO_8859_1_finnish.obj `if test -f 'src_c/stem_ISO_8859_1_finnish.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_finnish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_finnish.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_1_finnish.Tpo $(DEPDIR)/stem_ISO_8859_1_finnish.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_1_finnish.c' object='stem_ISO_8859_1_finnish.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_finnish.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_finnish.Tpo -c -o stem_ISO_8859_1_finnish.obj `if test -f 'src_c/stem_ISO_8859_1_finnish.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_finnish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_finnish.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_ISO_8859_1_finnish.Tpo $(DEPDIR)/stem_ISO_8859_1_finnish.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_ISO_8859_1_finnish.c' object='stem_ISO_8859_1_finnish.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_finnish.obj `if test -f 'src_c/stem_ISO_8859_1_finnish.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_finnish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_finnish.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_finnish.obj `if test -f 'src_c/stem_ISO_8859_1_finnish.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_finnish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_finnish.c'; fi`
 
 stem_UTF_8_finnish.o: src_c/stem_UTF_8_finnish.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_finnish.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_finnish.Tpo -c -o stem_UTF_8_finnish.o `test -f 'src_c/stem_UTF_8_finnish.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_finnish.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_finnish.Tpo $(DEPDIR)/stem_UTF_8_finnish.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_finnish.c' object='stem_UTF_8_finnish.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_finnish.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_finnish.Tpo -c -o stem_UTF_8_finnish.o `test -f 'src_c/stem_UTF_8_finnish.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_finnish.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_finnish.Tpo $(DEPDIR)/stem_UTF_8_finnish.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_finnish.c' object='stem_UTF_8_finnish.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_finnish.o `test -f 'src_c/stem_UTF_8_finnish.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_finnish.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_finnish.o `test -f 'src_c/stem_UTF_8_finnish.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_finnish.c
 
 stem_UTF_8_finnish.obj: src_c/stem_UTF_8_finnish.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_finnish.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_finnish.Tpo -c -o stem_UTF_8_finnish.obj `if test -f 'src_c/stem_UTF_8_finnish.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_finnish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_finnish.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_finnish.Tpo $(DEPDIR)/stem_UTF_8_finnish.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_finnish.c' object='stem_UTF_8_finnish.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_finnish.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_finnish.Tpo -c -o stem_UTF_8_finnish.obj `if test -f 'src_c/stem_UTF_8_finnish.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_finnish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_finnish.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_finnish.Tpo $(DEPDIR)/stem_UTF_8_finnish.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_finnish.c' object='stem_UTF_8_finnish.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_finnish.obj `if test -f 'src_c/stem_UTF_8_finnish.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_finnish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_finnish.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_finnish.obj `if test -f 'src_c/stem_UTF_8_finnish.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_finnish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_finnish.c'; fi`
 
 stem_ISO_8859_1_french.o: src_c/stem_ISO_8859_1_french.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_french.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_french.Tpo -c -o stem_ISO_8859_1_french.o `test -f 'src_c/stem_ISO_8859_1_french.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_french.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_1_french.Tpo $(DEPDIR)/stem_ISO_8859_1_french.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_1_french.c' object='stem_ISO_8859_1_french.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_french.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_french.Tpo -c -o stem_ISO_8859_1_french.o `test -f 'src_c/stem_ISO_8859_1_french.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_french.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_ISO_8859_1_french.Tpo $(DEPDIR)/stem_ISO_8859_1_french.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_ISO_8859_1_french.c' object='stem_ISO_8859_1_french.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_french.o `test -f 'src_c/stem_ISO_8859_1_french.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_french.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_french.o `test -f 'src_c/stem_ISO_8859_1_french.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_french.c
 
 stem_ISO_8859_1_french.obj: src_c/stem_ISO_8859_1_french.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_french.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_french.Tpo -c -o stem_ISO_8859_1_french.obj `if test -f 'src_c/stem_ISO_8859_1_french.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_french.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_french.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_1_french.Tpo $(DEPDIR)/stem_ISO_8859_1_french.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_1_french.c' object='stem_ISO_8859_1_french.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_french.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_french.Tpo -c -o stem_ISO_8859_1_french.obj `if test -f 'src_c/stem_ISO_8859_1_french.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_french.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_french.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_ISO_8859_1_french.Tpo $(DEPDIR)/stem_ISO_8859_1_french.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_ISO_8859_1_french.c' object='stem_ISO_8859_1_french.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_french.obj `if test -f 'src_c/stem_ISO_8859_1_french.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_french.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_french.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_french.obj `if test -f 'src_c/stem_ISO_8859_1_french.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_french.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_french.c'; fi`
 
 stem_UTF_8_french.o: src_c/stem_UTF_8_french.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_french.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_french.Tpo -c -o stem_UTF_8_french.o `test -f 'src_c/stem_UTF_8_french.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_french.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_french.Tpo $(DEPDIR)/stem_UTF_8_french.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_french.c' object='stem_UTF_8_french.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_french.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_french.Tpo -c -o stem_UTF_8_french.o `test -f 'src_c/stem_UTF_8_french.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_french.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_french.Tpo $(DEPDIR)/stem_UTF_8_french.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_french.c' object='stem_UTF_8_french.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_french.o `test -f 'src_c/stem_UTF_8_french.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_french.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_french.o `test -f 'src_c/stem_UTF_8_french.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_french.c
 
 stem_UTF_8_french.obj: src_c/stem_UTF_8_french.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_french.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_french.Tpo -c -o stem_UTF_8_french.obj `if test -f 'src_c/stem_UTF_8_french.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_french.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_french.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_french.Tpo $(DEPDIR)/stem_UTF_8_french.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_french.c' object='stem_UTF_8_french.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_french.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_french.Tpo -c -o stem_UTF_8_french.obj `if test -f 'src_c/stem_UTF_8_french.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_french.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_french.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_french.Tpo $(DEPDIR)/stem_UTF_8_french.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_french.c' object='stem_UTF_8_french.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_french.obj `if test -f 'src_c/stem_UTF_8_french.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_french.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_french.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_french.obj `if test -f 'src_c/stem_UTF_8_french.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_french.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_french.c'; fi`
 
 stem_ISO_8859_1_german.o: src_c/stem_ISO_8859_1_german.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_german.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_german.Tpo -c -o stem_ISO_8859_1_german.o `test -f 'src_c/stem_ISO_8859_1_german.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_german.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_1_german.Tpo $(DEPDIR)/stem_ISO_8859_1_german.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_1_german.c' object='stem_ISO_8859_1_german.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_german.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_german.Tpo -c -o stem_ISO_8859_1_german.o `test -f 'src_c/stem_ISO_8859_1_german.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_german.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_ISO_8859_1_german.Tpo $(DEPDIR)/stem_ISO_8859_1_german.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_ISO_8859_1_german.c' object='stem_ISO_8859_1_german.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_german.o `test -f 'src_c/stem_ISO_8859_1_german.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_german.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_german.o `test -f 'src_c/stem_ISO_8859_1_german.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_german.c
 
 stem_ISO_8859_1_german.obj: src_c/stem_ISO_8859_1_german.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_german.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_german.Tpo -c -o stem_ISO_8859_1_german.obj `if test -f 'src_c/stem_ISO_8859_1_german.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_german.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_german.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_1_german.Tpo $(DEPDIR)/stem_ISO_8859_1_german.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_1_german.c' object='stem_ISO_8859_1_german.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_german.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_german.Tpo -c -o stem_ISO_8859_1_german.obj `if test -f 'src_c/stem_ISO_8859_1_german.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_german.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_german.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_ISO_8859_1_german.Tpo $(DEPDIR)/stem_ISO_8859_1_german.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_ISO_8859_1_german.c' object='stem_ISO_8859_1_german.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_german.obj `if test -f 'src_c/stem_ISO_8859_1_german.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_german.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_german.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_german.obj `if test -f 'src_c/stem_ISO_8859_1_german.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_german.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_german.c'; fi`
 
 stem_UTF_8_german.o: src_c/stem_UTF_8_german.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_german.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_german.Tpo -c -o stem_UTF_8_german.o `test -f 'src_c/stem_UTF_8_german.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_german.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_german.Tpo $(DEPDIR)/stem_UTF_8_german.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_german.c' object='stem_UTF_8_german.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_german.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_german.Tpo -c -o stem_UTF_8_german.o `test -f 'src_c/stem_UTF_8_german.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_german.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_german.Tpo $(DEPDIR)/stem_UTF_8_german.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_german.c' object='stem_UTF_8_german.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_german.o `test -f 'src_c/stem_UTF_8_german.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_german.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_german.o `test -f 'src_c/stem_UTF_8_german.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_german.c
 
 stem_UTF_8_german.obj: src_c/stem_UTF_8_german.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_german.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_german.Tpo -c -o stem_UTF_8_german.obj `if test -f 'src_c/stem_UTF_8_german.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_german.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_german.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_german.Tpo $(DEPDIR)/stem_UTF_8_german.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_german.c' object='stem_UTF_8_german.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_german.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_german.Tpo -c -o stem_UTF_8_german.obj `if test -f 'src_c/stem_UTF_8_german.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_german.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_german.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_german.Tpo $(DEPDIR)/stem_UTF_8_german.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_german.c' object='stem_UTF_8_german.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_german.obj `if test -f 'src_c/stem_UTF_8_german.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_german.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_german.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_german.obj `if test -f 'src_c/stem_UTF_8_german.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_german.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_german.c'; fi`
 
 stem_ISO_8859_2_hungarian.o: src_c/stem_ISO_8859_2_hungarian.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_2_hungarian.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_2_hungarian.Tpo -c -o stem_ISO_8859_2_hungarian.o `test -f 'src_c/stem_ISO_8859_2_hungarian.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_2_hungarian.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_2_hungarian.Tpo $(DEPDIR)/stem_ISO_8859_2_hungarian.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_2_hungarian.c' object='stem_ISO_8859_2_hungarian.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_2_hungarian.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_2_hungarian.Tpo -c -o stem_ISO_8859_2_hungarian.o `test -f 'src_c/stem_ISO_8859_2_hungarian.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_2_hungarian.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_ISO_8859_2_hungarian.Tpo $(DEPDIR)/stem_ISO_8859_2_hungarian.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_ISO_8859_2_hungarian.c' object='stem_ISO_8859_2_hungarian.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_2_hungarian.o `test -f 'src_c/stem_ISO_8859_2_hungarian.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_2_hungarian.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_2_hungarian.o `test -f 'src_c/stem_ISO_8859_2_hungarian.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_2_hungarian.c
 
 stem_ISO_8859_2_hungarian.obj: src_c/stem_ISO_8859_2_hungarian.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_2_hungarian.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_2_hungarian.Tpo -c -o stem_ISO_8859_2_hungarian.obj `if test -f 'src_c/stem_ISO_8859_2_hungarian.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_2_hungarian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_2_hungarian.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_2_hungarian.Tpo $(DEPDIR)/stem_ISO_8859_2_hungarian.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_2_hungarian.c' object='stem_ISO_8859_2_hungarian.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_2_hungarian.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_2_hungarian.Tpo -c -o stem_ISO_8859_2_hungarian.obj `if test -f 'src_c/stem_ISO_8859_2_hungarian.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_2_hungarian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_2_hungarian.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_ISO_8859_2_hungarian.Tpo $(DEPDIR)/stem_ISO_8859_2_hungarian.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_ISO_8859_2_hungarian.c' object='stem_ISO_8859_2_hungarian.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_2_hungarian.obj `if test -f 'src_c/stem_ISO_8859_2_hungarian.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_2_hungarian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_2_hungarian.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_2_hungarian.obj `if test -f 'src_c/stem_ISO_8859_2_hungarian.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_2_hungarian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_2_hungarian.c'; fi`
 
 stem_UTF_8_hungarian.o: src_c/stem_UTF_8_hungarian.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_hungarian.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_hungarian.Tpo -c -o stem_UTF_8_hungarian.o `test -f 'src_c/stem_UTF_8_hungarian.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_hungarian.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_hungarian.Tpo $(DEPDIR)/stem_UTF_8_hungarian.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_hungarian.c' object='stem_UTF_8_hungarian.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_hungarian.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_hungarian.Tpo -c -o stem_UTF_8_hungarian.o `test -f 'src_c/stem_UTF_8_hungarian.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_hungarian.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_hungarian.Tpo $(DEPDIR)/stem_UTF_8_hungarian.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_hungarian.c' object='stem_UTF_8_hungarian.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_hungarian.o `test -f 'src_c/stem_UTF_8_hungarian.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_hungarian.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_hungarian.o `test -f 'src_c/stem_UTF_8_hungarian.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_hungarian.c
 
 stem_UTF_8_hungarian.obj: src_c/stem_UTF_8_hungarian.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_hungarian.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_hungarian.Tpo -c -o stem_UTF_8_hungarian.obj `if test -f 'src_c/stem_UTF_8_hungarian.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_hungarian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_hungarian.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_hungarian.Tpo $(DEPDIR)/stem_UTF_8_hungarian.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_hungarian.c' object='stem_UTF_8_hungarian.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_hungarian.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_hungarian.Tpo -c -o stem_UTF_8_hungarian.obj `if test -f 'src_c/stem_UTF_8_hungarian.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_hungarian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_hungarian.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_hungarian.Tpo $(DEPDIR)/stem_UTF_8_hungarian.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_hungarian.c' object='stem_UTF_8_hungarian.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_hungarian.obj `if test -f 'src_c/stem_UTF_8_hungarian.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_hungarian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_hungarian.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_hungarian.obj `if test -f 'src_c/stem_UTF_8_hungarian.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_hungarian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_hungarian.c'; fi`
 
 stem_ISO_8859_1_italian.o: src_c/stem_ISO_8859_1_italian.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_italian.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_italian.Tpo -c -o stem_ISO_8859_1_italian.o `test -f 'src_c/stem_ISO_8859_1_italian.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_italian.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_1_italian.Tpo $(DEPDIR)/stem_ISO_8859_1_italian.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_1_italian.c' object='stem_ISO_8859_1_italian.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_italian.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_italian.Tpo -c -o stem_ISO_8859_1_italian.o `test -f 'src_c/stem_ISO_8859_1_italian.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_italian.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_ISO_8859_1_italian.Tpo $(DEPDIR)/stem_ISO_8859_1_italian.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_ISO_8859_1_italian.c' object='stem_ISO_8859_1_italian.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_italian.o `test -f 'src_c/stem_ISO_8859_1_italian.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_italian.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_italian.o `test -f 'src_c/stem_ISO_8859_1_italian.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_italian.c
 
 stem_ISO_8859_1_italian.obj: src_c/stem_ISO_8859_1_italian.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_italian.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_italian.Tpo -c -o stem_ISO_8859_1_italian.obj `if test -f 'src_c/stem_ISO_8859_1_italian.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_italian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_italian.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_1_italian.Tpo $(DEPDIR)/stem_ISO_8859_1_italian.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_1_italian.c' object='stem_ISO_8859_1_italian.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_italian.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_italian.Tpo -c -o stem_ISO_8859_1_italian.obj `if test -f 'src_c/stem_ISO_8859_1_italian.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_italian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_italian.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_ISO_8859_1_italian.Tpo $(DEPDIR)/stem_ISO_8859_1_italian.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_ISO_8859_1_italian.c' object='stem_ISO_8859_1_italian.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_italian.obj `if test -f 'src_c/stem_ISO_8859_1_italian.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_italian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_italian.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_italian.obj `if test -f 'src_c/stem_ISO_8859_1_italian.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_italian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_italian.c'; fi`
 
 stem_UTF_8_italian.o: src_c/stem_UTF_8_italian.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_italian.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_italian.Tpo -c -o stem_UTF_8_italian.o `test -f 'src_c/stem_UTF_8_italian.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_italian.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_italian.Tpo $(DEPDIR)/stem_UTF_8_italian.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_italian.c' object='stem_UTF_8_italian.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_italian.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_italian.Tpo -c -o stem_UTF_8_italian.o `test -f 'src_c/stem_UTF_8_italian.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_italian.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_italian.Tpo $(DEPDIR)/stem_UTF_8_italian.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_italian.c' object='stem_UTF_8_italian.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_italian.o `test -f 'src_c/stem_UTF_8_italian.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_italian.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_italian.o `test -f 'src_c/stem_UTF_8_italian.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_italian.c
 
 stem_UTF_8_italian.obj: src_c/stem_UTF_8_italian.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_italian.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_italian.Tpo -c -o stem_UTF_8_italian.obj `if test -f 'src_c/stem_UTF_8_italian.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_italian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_italian.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_italian.Tpo $(DEPDIR)/stem_UTF_8_italian.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_italian.c' object='stem_UTF_8_italian.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_italian.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_italian.Tpo -c -o stem_UTF_8_italian.obj `if test -f 'src_c/stem_UTF_8_italian.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_italian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_italian.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_italian.Tpo $(DEPDIR)/stem_UTF_8_italian.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_italian.c' object='stem_UTF_8_italian.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_italian.obj `if test -f 'src_c/stem_UTF_8_italian.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_italian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_italian.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_italian.obj `if test -f 'src_c/stem_UTF_8_italian.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_italian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_italian.c'; fi`
 
 stem_ISO_8859_1_norwegian.o: src_c/stem_ISO_8859_1_norwegian.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_norwegian.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_norwegian.Tpo -c -o stem_ISO_8859_1_norwegian.o `test -f 'src_c/stem_ISO_8859_1_norwegian.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_norwegian.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_1_norwegian.Tpo $(DEPDIR)/stem_ISO_8859_1_norwegian.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_1_norwegian.c' object='stem_ISO_8859_1_norwegian.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_norwegian.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_norwegian.Tpo -c -o stem_ISO_8859_1_norwegian.o `test -f 'src_c/stem_ISO_8859_1_norwegian.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_norwegian.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_ISO_8859_1_norwegian.Tpo $(DEPDIR)/stem_ISO_8859_1_norwegian.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_ISO_8859_1_norwegian.c' object='stem_ISO_8859_1_norwegian.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_norwegian.o `test -f 'src_c/stem_ISO_8859_1_norwegian.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_norwegian.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_norwegian.o `test -f 'src_c/stem_ISO_8859_1_norwegian.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_norwegian.c
 
 stem_ISO_8859_1_norwegian.obj: src_c/stem_ISO_8859_1_norwegian.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_norwegian.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_norwegian.Tpo -c -o stem_ISO_8859_1_norwegian.obj `if test -f 'src_c/stem_ISO_8859_1_norwegian.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_norwegian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_norwegian.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_1_norwegian.Tpo $(DEPDIR)/stem_ISO_8859_1_norwegian.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_1_norwegian.c' object='stem_ISO_8859_1_norwegian.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_norwegian.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_norwegian.Tpo -c -o stem_ISO_8859_1_norwegian.obj `if test -f 'src_c/stem_ISO_8859_1_norwegian.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_norwegian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_norwegian.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_ISO_8859_1_norwegian.Tpo $(DEPDIR)/stem_ISO_8859_1_norwegian.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_ISO_8859_1_norwegian.c' object='stem_ISO_8859_1_norwegian.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_norwegian.obj `if test -f 'src_c/stem_ISO_8859_1_norwegian.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_norwegian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_norwegian.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_norwegian.obj `if test -f 'src_c/stem_ISO_8859_1_norwegian.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_norwegian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_norwegian.c'; fi`
 
 stem_UTF_8_norwegian.o: src_c/stem_UTF_8_norwegian.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_norwegian.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_norwegian.Tpo -c -o stem_UTF_8_norwegian.o `test -f 'src_c/stem_UTF_8_norwegian.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_norwegian.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_norwegian.Tpo $(DEPDIR)/stem_UTF_8_norwegian.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_norwegian.c' object='stem_UTF_8_norwegian.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_norwegian.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_norwegian.Tpo -c -o stem_UTF_8_norwegian.o `test -f 'src_c/stem_UTF_8_norwegian.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_norwegian.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_norwegian.Tpo $(DEPDIR)/stem_UTF_8_norwegian.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_norwegian.c' object='stem_UTF_8_norwegian.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_norwegian.o `test -f 'src_c/stem_UTF_8_norwegian.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_norwegian.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_norwegian.o `test -f 'src_c/stem_UTF_8_norwegian.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_norwegian.c
 
 stem_UTF_8_norwegian.obj: src_c/stem_UTF_8_norwegian.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_norwegian.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_norwegian.Tpo -c -o stem_UTF_8_norwegian.obj `if test -f 'src_c/stem_UTF_8_norwegian.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_norwegian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_norwegian.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_norwegian.Tpo $(DEPDIR)/stem_UTF_8_norwegian.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_norwegian.c' object='stem_UTF_8_norwegian.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_norwegian.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_norwegian.Tpo -c -o stem_UTF_8_norwegian.obj `if test -f 'src_c/stem_UTF_8_norwegian.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_norwegian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_norwegian.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_norwegian.Tpo $(DEPDIR)/stem_UTF_8_norwegian.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_norwegian.c' object='stem_UTF_8_norwegian.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_norwegian.obj `if test -f 'src_c/stem_UTF_8_norwegian.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_norwegian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_norwegian.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_norwegian.obj `if test -f 'src_c/stem_UTF_8_norwegian.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_norwegian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_norwegian.c'; fi`
 
 stem_ISO_8859_1_porter.o: src_c/stem_ISO_8859_1_porter.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_porter.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_porter.Tpo -c -o stem_ISO_8859_1_porter.o `test -f 'src_c/stem_ISO_8859_1_porter.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_porter.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_1_porter.Tpo $(DEPDIR)/stem_ISO_8859_1_porter.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_1_porter.c' object='stem_ISO_8859_1_porter.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_porter.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_porter.Tpo -c -o stem_ISO_8859_1_porter.o `test -f 'src_c/stem_ISO_8859_1_porter.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_porter.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_ISO_8859_1_porter.Tpo $(DEPDIR)/stem_ISO_8859_1_porter.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_ISO_8859_1_porter.c' object='stem_ISO_8859_1_porter.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_porter.o `test -f 'src_c/stem_ISO_8859_1_porter.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_porter.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_porter.o `test -f 'src_c/stem_ISO_8859_1_porter.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_porter.c
 
 stem_ISO_8859_1_porter.obj: src_c/stem_ISO_8859_1_porter.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_porter.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_porter.Tpo -c -o stem_ISO_8859_1_porter.obj `if test -f 'src_c/stem_ISO_8859_1_porter.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_porter.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_porter.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_1_porter.Tpo $(DEPDIR)/stem_ISO_8859_1_porter.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_1_porter.c' object='stem_ISO_8859_1_porter.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_porter.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_porter.Tpo -c -o stem_ISO_8859_1_porter.obj `if test -f 'src_c/stem_ISO_8859_1_porter.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_porter.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_porter.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_ISO_8859_1_porter.Tpo $(DEPDIR)/stem_ISO_8859_1_porter.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_ISO_8859_1_porter.c' object='stem_ISO_8859_1_porter.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_porter.obj `if test -f 'src_c/stem_ISO_8859_1_porter.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_porter.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_porter.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_porter.obj `if test -f 'src_c/stem_ISO_8859_1_porter.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_porter.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_porter.c'; fi`
 
 stem_UTF_8_porter.o: src_c/stem_UTF_8_porter.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_porter.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_porter.Tpo -c -o stem_UTF_8_porter.o `test -f 'src_c/stem_UTF_8_porter.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_porter.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_porter.Tpo $(DEPDIR)/stem_UTF_8_porter.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_porter.c' object='stem_UTF_8_porter.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_porter.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_porter.Tpo -c -o stem_UTF_8_porter.o `test -f 'src_c/stem_UTF_8_porter.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_porter.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_porter.Tpo $(DEPDIR)/stem_UTF_8_porter.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_porter.c' object='stem_UTF_8_porter.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_porter.o `test -f 'src_c/stem_UTF_8_porter.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_porter.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_porter.o `test -f 'src_c/stem_UTF_8_porter.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_porter.c
 
 stem_UTF_8_porter.obj: src_c/stem_UTF_8_porter.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_porter.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_porter.Tpo -c -o stem_UTF_8_porter.obj `if test -f 'src_c/stem_UTF_8_porter.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_porter.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_porter.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_porter.Tpo $(DEPDIR)/stem_UTF_8_porter.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_porter.c' object='stem_UTF_8_porter.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_porter.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_porter.Tpo -c -o stem_UTF_8_porter.obj `if test -f 'src_c/stem_UTF_8_porter.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_porter.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_porter.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_porter.Tpo $(DEPDIR)/stem_UTF_8_porter.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_porter.c' object='stem_UTF_8_porter.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_porter.obj `if test -f 'src_c/stem_UTF_8_porter.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_porter.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_porter.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_porter.obj `if test -f 'src_c/stem_UTF_8_porter.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_porter.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_porter.c'; fi`
 
 stem_ISO_8859_1_portuguese.o: src_c/stem_ISO_8859_1_portuguese.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_portuguese.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_portuguese.Tpo -c -o stem_ISO_8859_1_portuguese.o `test -f 'src_c/stem_ISO_8859_1_portuguese.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_portuguese.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_1_portuguese.Tpo $(DEPDIR)/stem_ISO_8859_1_portuguese.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_1_portuguese.c' object='stem_ISO_8859_1_portuguese.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_portuguese.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_portuguese.Tpo -c -o stem_ISO_8859_1_portuguese.o `test -f 'src_c/stem_ISO_8859_1_portuguese.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_portuguese.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_ISO_8859_1_portuguese.Tpo $(DEPDIR)/stem_ISO_8859_1_portuguese.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_ISO_8859_1_portuguese.c' object='stem_ISO_8859_1_portuguese.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_portuguese.o `test -f 'src_c/stem_ISO_8859_1_portuguese.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_portuguese.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_portuguese.o `test -f 'src_c/stem_ISO_8859_1_portuguese.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_portuguese.c
 
 stem_ISO_8859_1_portuguese.obj: src_c/stem_ISO_8859_1_portuguese.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_portuguese.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_portuguese.Tpo -c -o stem_ISO_8859_1_portuguese.obj `if test -f 'src_c/stem_ISO_8859_1_portuguese.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_portuguese.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_portuguese.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_1_portuguese.Tpo $(DEPDIR)/stem_ISO_8859_1_portuguese.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_1_portuguese.c' object='stem_ISO_8859_1_portuguese.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_portuguese.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_portuguese.Tpo -c -o stem_ISO_8859_1_portuguese.obj `if test -f 'src_c/stem_ISO_8859_1_portuguese.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_portuguese.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_portuguese.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_ISO_8859_1_portuguese.Tpo $(DEPDIR)/stem_ISO_8859_1_portuguese.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_ISO_8859_1_portuguese.c' object='stem_ISO_8859_1_portuguese.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_portuguese.obj `if test -f 'src_c/stem_ISO_8859_1_portuguese.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_portuguese.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_portuguese.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_portuguese.obj `if test -f 'src_c/stem_ISO_8859_1_portuguese.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_portuguese.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_portuguese.c'; fi`
 
 stem_UTF_8_portuguese.o: src_c/stem_UTF_8_portuguese.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_portuguese.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_portuguese.Tpo -c -o stem_UTF_8_portuguese.o `test -f 'src_c/stem_UTF_8_portuguese.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_portuguese.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_portuguese.Tpo $(DEPDIR)/stem_UTF_8_portuguese.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_portuguese.c' object='stem_UTF_8_portuguese.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_portuguese.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_portuguese.Tpo -c -o stem_UTF_8_portuguese.o `test -f 'src_c/stem_UTF_8_portuguese.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_portuguese.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_portuguese.Tpo $(DEPDIR)/stem_UTF_8_portuguese.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_portuguese.c' object='stem_UTF_8_portuguese.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_portuguese.o `test -f 'src_c/stem_UTF_8_portuguese.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_portuguese.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_portuguese.o `test -f 'src_c/stem_UTF_8_portuguese.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_portuguese.c
 
 stem_UTF_8_portuguese.obj: src_c/stem_UTF_8_portuguese.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_portuguese.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_portuguese.Tpo -c -o stem_UTF_8_portuguese.obj `if test -f 'src_c/stem_UTF_8_portuguese.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_portuguese.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_portuguese.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_portuguese.Tpo $(DEPDIR)/stem_UTF_8_portuguese.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_portuguese.c' object='stem_UTF_8_portuguese.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_portuguese.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_portuguese.Tpo -c -o stem_UTF_8_portuguese.obj `if test -f 'src_c/stem_UTF_8_portuguese.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_portuguese.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_portuguese.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_portuguese.Tpo $(DEPDIR)/stem_UTF_8_portuguese.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_portuguese.c' object='stem_UTF_8_portuguese.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_portuguese.obj `if test -f 'src_c/stem_UTF_8_portuguese.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_portuguese.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_portuguese.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_portuguese.obj `if test -f 'src_c/stem_UTF_8_portuguese.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_portuguese.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_portuguese.c'; fi`
 
 stem_ISO_8859_2_romanian.o: src_c/stem_ISO_8859_2_romanian.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_2_romanian.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_2_romanian.Tpo -c -o stem_ISO_8859_2_romanian.o `test -f 'src_c/stem_ISO_8859_2_romanian.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_2_romanian.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_2_romanian.Tpo $(DEPDIR)/stem_ISO_8859_2_romanian.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_2_romanian.c' object='stem_ISO_8859_2_romanian.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_2_romanian.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_2_romanian.Tpo -c -o stem_ISO_8859_2_romanian.o `test -f 'src_c/stem_ISO_8859_2_romanian.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_2_romanian.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_ISO_8859_2_romanian.Tpo $(DEPDIR)/stem_ISO_8859_2_romanian.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_ISO_8859_2_romanian.c' object='stem_ISO_8859_2_romanian.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_2_romanian.o `test -f 'src_c/stem_ISO_8859_2_romanian.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_2_romanian.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_2_romanian.o `test -f 'src_c/stem_ISO_8859_2_romanian.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_2_romanian.c
 
 stem_ISO_8859_2_romanian.obj: src_c/stem_ISO_8859_2_romanian.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_2_romanian.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_2_romanian.Tpo -c -o stem_ISO_8859_2_romanian.obj `if test -f 'src_c/stem_ISO_8859_2_romanian.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_2_romanian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_2_romanian.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_2_romanian.Tpo $(DEPDIR)/stem_ISO_8859_2_romanian.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_2_romanian.c' object='stem_ISO_8859_2_romanian.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_2_romanian.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_2_romanian.Tpo -c -o stem_ISO_8859_2_romanian.obj `if test -f 'src_c/stem_ISO_8859_2_romanian.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_2_romanian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_2_romanian.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_ISO_8859_2_romanian.Tpo $(DEPDIR)/stem_ISO_8859_2_romanian.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_ISO_8859_2_romanian.c' object='stem_ISO_8859_2_romanian.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_2_romanian.obj `if test -f 'src_c/stem_ISO_8859_2_romanian.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_2_romanian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_2_romanian.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_2_romanian.obj `if test -f 'src_c/stem_ISO_8859_2_romanian.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_2_romanian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_2_romanian.c'; fi`
 
 stem_UTF_8_romanian.o: src_c/stem_UTF_8_romanian.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_romanian.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_romanian.Tpo -c -o stem_UTF_8_romanian.o `test -f 'src_c/stem_UTF_8_romanian.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_romanian.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_romanian.Tpo $(DEPDIR)/stem_UTF_8_romanian.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_romanian.c' object='stem_UTF_8_romanian.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_romanian.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_romanian.Tpo -c -o stem_UTF_8_romanian.o `test -f 'src_c/stem_UTF_8_romanian.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_romanian.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_romanian.Tpo $(DEPDIR)/stem_UTF_8_romanian.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_romanian.c' object='stem_UTF_8_romanian.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_romanian.o `test -f 'src_c/stem_UTF_8_romanian.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_romanian.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_romanian.o `test -f 'src_c/stem_UTF_8_romanian.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_romanian.c
 
 stem_UTF_8_romanian.obj: src_c/stem_UTF_8_romanian.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_romanian.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_romanian.Tpo -c -o stem_UTF_8_romanian.obj `if test -f 'src_c/stem_UTF_8_romanian.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_romanian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_romanian.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_romanian.Tpo $(DEPDIR)/stem_UTF_8_romanian.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_romanian.c' object='stem_UTF_8_romanian.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_romanian.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_romanian.Tpo -c -o stem_UTF_8_romanian.obj `if test -f 'src_c/stem_UTF_8_romanian.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_romanian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_romanian.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_romanian.Tpo $(DEPDIR)/stem_UTF_8_romanian.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_romanian.c' object='stem_UTF_8_romanian.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_romanian.obj `if test -f 'src_c/stem_UTF_8_romanian.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_romanian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_romanian.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_romanian.obj `if test -f 'src_c/stem_UTF_8_romanian.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_romanian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_romanian.c'; fi`
 
 stem_KOI8_R_russian.o: src_c/stem_KOI8_R_russian.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_KOI8_R_russian.o -MD -MP -MF $(DEPDIR)/stem_KOI8_R_russian.Tpo -c -o stem_KOI8_R_russian.o `test -f 'src_c/stem_KOI8_R_russian.c' || echo '$(srcdir)/'`src_c/stem_KOI8_R_russian.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_KOI8_R_russian.Tpo $(DEPDIR)/stem_KOI8_R_russian.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_KOI8_R_russian.c' object='stem_KOI8_R_russian.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_KOI8_R_russian.o -MD -MP -MF $(DEPDIR)/stem_KOI8_R_russian.Tpo -c -o stem_KOI8_R_russian.o `test -f 'src_c/stem_KOI8_R_russian.c' || echo '$(srcdir)/'`src_c/stem_KOI8_R_russian.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_KOI8_R_russian.Tpo $(DEPDIR)/stem_KOI8_R_russian.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_KOI8_R_russian.c' object='stem_KOI8_R_russian.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_KOI8_R_russian.o `test -f 'src_c/stem_KOI8_R_russian.c' || echo '$(srcdir)/'`src_c/stem_KOI8_R_russian.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_KOI8_R_russian.o `test -f 'src_c/stem_KOI8_R_russian.c' || echo '$(srcdir)/'`src_c/stem_KOI8_R_russian.c
 
 stem_KOI8_R_russian.obj: src_c/stem_KOI8_R_russian.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_KOI8_R_russian.obj -MD -MP -MF $(DEPDIR)/stem_KOI8_R_russian.Tpo -c -o stem_KOI8_R_russian.obj `if test -f 'src_c/stem_KOI8_R_russian.c'; then $(CYGPATH_W) 'src_c/stem_KOI8_R_russian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_KOI8_R_russian.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_KOI8_R_russian.Tpo $(DEPDIR)/stem_KOI8_R_russian.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_KOI8_R_russian.c' object='stem_KOI8_R_russian.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_KOI8_R_russian.obj -MD -MP -MF $(DEPDIR)/stem_KOI8_R_russian.Tpo -c -o stem_KOI8_R_russian.obj `if test -f 'src_c/stem_KOI8_R_russian.c'; then $(CYGPATH_W) 'src_c/stem_KOI8_R_russian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_KOI8_R_russian.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_KOI8_R_russian.Tpo $(DEPDIR)/stem_KOI8_R_russian.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_KOI8_R_russian.c' object='stem_KOI8_R_russian.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_KOI8_R_russian.obj `if test -f 'src_c/stem_KOI8_R_russian.c'; then $(CYGPATH_W) 'src_c/stem_KOI8_R_russian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_KOI8_R_russian.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_KOI8_R_russian.obj `if test -f 'src_c/stem_KOI8_R_russian.c'; then $(CYGPATH_W) 'src_c/stem_KOI8_R_russian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_KOI8_R_russian.c'; fi`
 
 stem_UTF_8_russian.o: src_c/stem_UTF_8_russian.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_russian.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_russian.Tpo -c -o stem_UTF_8_russian.o `test -f 'src_c/stem_UTF_8_russian.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_russian.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_russian.Tpo $(DEPDIR)/stem_UTF_8_russian.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_russian.c' object='stem_UTF_8_russian.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_russian.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_russian.Tpo -c -o stem_UTF_8_russian.o `test -f 'src_c/stem_UTF_8_russian.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_russian.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_russian.Tpo $(DEPDIR)/stem_UTF_8_russian.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_russian.c' object='stem_UTF_8_russian.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_russian.o `test -f 'src_c/stem_UTF_8_russian.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_russian.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_russian.o `test -f 'src_c/stem_UTF_8_russian.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_russian.c
 
 stem_UTF_8_russian.obj: src_c/stem_UTF_8_russian.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_russian.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_russian.Tpo -c -o stem_UTF_8_russian.obj `if test -f 'src_c/stem_UTF_8_russian.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_russian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_russian.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_russian.Tpo $(DEPDIR)/stem_UTF_8_russian.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_russian.c' object='stem_UTF_8_russian.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_russian.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_russian.Tpo -c -o stem_UTF_8_russian.obj `if test -f 'src_c/stem_UTF_8_russian.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_russian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_russian.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_russian.Tpo $(DEPDIR)/stem_UTF_8_russian.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_russian.c' object='stem_UTF_8_russian.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_russian.obj `if test -f 'src_c/stem_UTF_8_russian.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_russian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_russian.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_russian.obj `if test -f 'src_c/stem_UTF_8_russian.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_russian.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_russian.c'; fi`
 
 stem_ISO_8859_1_spanish.o: src_c/stem_ISO_8859_1_spanish.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_spanish.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_spanish.Tpo -c -o stem_ISO_8859_1_spanish.o `test -f 'src_c/stem_ISO_8859_1_spanish.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_spanish.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_1_spanish.Tpo $(DEPDIR)/stem_ISO_8859_1_spanish.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_1_spanish.c' object='stem_ISO_8859_1_spanish.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_spanish.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_spanish.Tpo -c -o stem_ISO_8859_1_spanish.o `test -f 'src_c/stem_ISO_8859_1_spanish.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_spanish.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_ISO_8859_1_spanish.Tpo $(DEPDIR)/stem_ISO_8859_1_spanish.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_ISO_8859_1_spanish.c' object='stem_ISO_8859_1_spanish.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_spanish.o `test -f 'src_c/stem_ISO_8859_1_spanish.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_spanish.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_spanish.o `test -f 'src_c/stem_ISO_8859_1_spanish.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_spanish.c
 
 stem_ISO_8859_1_spanish.obj: src_c/stem_ISO_8859_1_spanish.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_spanish.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_spanish.Tpo -c -o stem_ISO_8859_1_spanish.obj `if test -f 'src_c/stem_ISO_8859_1_spanish.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_spanish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_spanish.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_1_spanish.Tpo $(DEPDIR)/stem_ISO_8859_1_spanish.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_1_spanish.c' object='stem_ISO_8859_1_spanish.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_spanish.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_spanish.Tpo -c -o stem_ISO_8859_1_spanish.obj `if test -f 'src_c/stem_ISO_8859_1_spanish.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_spanish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_spanish.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_ISO_8859_1_spanish.Tpo $(DEPDIR)/stem_ISO_8859_1_spanish.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_ISO_8859_1_spanish.c' object='stem_ISO_8859_1_spanish.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_spanish.obj `if test -f 'src_c/stem_ISO_8859_1_spanish.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_spanish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_spanish.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_spanish.obj `if test -f 'src_c/stem_ISO_8859_1_spanish.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_spanish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_spanish.c'; fi`
 
 stem_UTF_8_spanish.o: src_c/stem_UTF_8_spanish.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_spanish.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_spanish.Tpo -c -o stem_UTF_8_spanish.o `test -f 'src_c/stem_UTF_8_spanish.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_spanish.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_spanish.Tpo $(DEPDIR)/stem_UTF_8_spanish.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_spanish.c' object='stem_UTF_8_spanish.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_spanish.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_spanish.Tpo -c -o stem_UTF_8_spanish.o `test -f 'src_c/stem_UTF_8_spanish.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_spanish.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_spanish.Tpo $(DEPDIR)/stem_UTF_8_spanish.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_spanish.c' object='stem_UTF_8_spanish.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_spanish.o `test -f 'src_c/stem_UTF_8_spanish.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_spanish.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_spanish.o `test -f 'src_c/stem_UTF_8_spanish.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_spanish.c
 
 stem_UTF_8_spanish.obj: src_c/stem_UTF_8_spanish.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_spanish.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_spanish.Tpo -c -o stem_UTF_8_spanish.obj `if test -f 'src_c/stem_UTF_8_spanish.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_spanish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_spanish.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_spanish.Tpo $(DEPDIR)/stem_UTF_8_spanish.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_spanish.c' object='stem_UTF_8_spanish.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_spanish.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_spanish.Tpo -c -o stem_UTF_8_spanish.obj `if test -f 'src_c/stem_UTF_8_spanish.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_spanish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_spanish.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_spanish.Tpo $(DEPDIR)/stem_UTF_8_spanish.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_spanish.c' object='stem_UTF_8_spanish.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_spanish.obj `if test -f 'src_c/stem_UTF_8_spanish.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_spanish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_spanish.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_spanish.obj `if test -f 'src_c/stem_UTF_8_spanish.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_spanish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_spanish.c'; fi`
 
 stem_ISO_8859_1_swedish.o: src_c/stem_ISO_8859_1_swedish.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_swedish.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_swedish.Tpo -c -o stem_ISO_8859_1_swedish.o `test -f 'src_c/stem_ISO_8859_1_swedish.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_swedish.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_1_swedish.Tpo $(DEPDIR)/stem_ISO_8859_1_swedish.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_1_swedish.c' object='stem_ISO_8859_1_swedish.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_swedish.o -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_swedish.Tpo -c -o stem_ISO_8859_1_swedish.o `test -f 'src_c/stem_ISO_8859_1_swedish.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_swedish.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_ISO_8859_1_swedish.Tpo $(DEPDIR)/stem_ISO_8859_1_swedish.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_ISO_8859_1_swedish.c' object='stem_ISO_8859_1_swedish.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_swedish.o `test -f 'src_c/stem_ISO_8859_1_swedish.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_swedish.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_swedish.o `test -f 'src_c/stem_ISO_8859_1_swedish.c' || echo '$(srcdir)/'`src_c/stem_ISO_8859_1_swedish.c
 
 stem_ISO_8859_1_swedish.obj: src_c/stem_ISO_8859_1_swedish.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_swedish.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_swedish.Tpo -c -o stem_ISO_8859_1_swedish.obj `if test -f 'src_c/stem_ISO_8859_1_swedish.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_swedish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_swedish.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_ISO_8859_1_swedish.Tpo $(DEPDIR)/stem_ISO_8859_1_swedish.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_ISO_8859_1_swedish.c' object='stem_ISO_8859_1_swedish.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_ISO_8859_1_swedish.obj -MD -MP -MF $(DEPDIR)/stem_ISO_8859_1_swedish.Tpo -c -o stem_ISO_8859_1_swedish.obj `if test -f 'src_c/stem_ISO_8859_1_swedish.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_swedish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_swedish.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_ISO_8859_1_swedish.Tpo $(DEPDIR)/stem_ISO_8859_1_swedish.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_ISO_8859_1_swedish.c' object='stem_ISO_8859_1_swedish.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_swedish.obj `if test -f 'src_c/stem_ISO_8859_1_swedish.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_swedish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_swedish.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_ISO_8859_1_swedish.obj `if test -f 'src_c/stem_ISO_8859_1_swedish.c'; then $(CYGPATH_W) 'src_c/stem_ISO_8859_1_swedish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_ISO_8859_1_swedish.c'; fi`
 
 stem_UTF_8_swedish.o: src_c/stem_UTF_8_swedish.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_swedish.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_swedish.Tpo -c -o stem_UTF_8_swedish.o `test -f 'src_c/stem_UTF_8_swedish.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_swedish.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_swedish.Tpo $(DEPDIR)/stem_UTF_8_swedish.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_swedish.c' object='stem_UTF_8_swedish.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_swedish.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_swedish.Tpo -c -o stem_UTF_8_swedish.o `test -f 'src_c/stem_UTF_8_swedish.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_swedish.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_swedish.Tpo $(DEPDIR)/stem_UTF_8_swedish.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_swedish.c' object='stem_UTF_8_swedish.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_swedish.o `test -f 'src_c/stem_UTF_8_swedish.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_swedish.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_swedish.o `test -f 'src_c/stem_UTF_8_swedish.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_swedish.c
 
 stem_UTF_8_swedish.obj: src_c/stem_UTF_8_swedish.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_swedish.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_swedish.Tpo -c -o stem_UTF_8_swedish.obj `if test -f 'src_c/stem_UTF_8_swedish.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_swedish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_swedish.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_swedish.Tpo $(DEPDIR)/stem_UTF_8_swedish.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_swedish.c' object='stem_UTF_8_swedish.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_swedish.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_swedish.Tpo -c -o stem_UTF_8_swedish.obj `if test -f 'src_c/stem_UTF_8_swedish.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_swedish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_swedish.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_swedish.Tpo $(DEPDIR)/stem_UTF_8_swedish.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_swedish.c' object='stem_UTF_8_swedish.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_swedish.obj `if test -f 'src_c/stem_UTF_8_swedish.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_swedish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_swedish.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_swedish.obj `if test -f 'src_c/stem_UTF_8_swedish.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_swedish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_swedish.c'; fi`
 
 stem_UTF_8_turkish.o: src_c/stem_UTF_8_turkish.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_turkish.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_turkish.Tpo -c -o stem_UTF_8_turkish.o `test -f 'src_c/stem_UTF_8_turkish.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_turkish.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_turkish.Tpo $(DEPDIR)/stem_UTF_8_turkish.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_turkish.c' object='stem_UTF_8_turkish.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_turkish.o -MD -MP -MF $(DEPDIR)/stem_UTF_8_turkish.Tpo -c -o stem_UTF_8_turkish.o `test -f 'src_c/stem_UTF_8_turkish.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_turkish.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_turkish.Tpo $(DEPDIR)/stem_UTF_8_turkish.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_turkish.c' object='stem_UTF_8_turkish.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_turkish.o `test -f 'src_c/stem_UTF_8_turkish.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_turkish.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_turkish.o `test -f 'src_c/stem_UTF_8_turkish.c' || echo '$(srcdir)/'`src_c/stem_UTF_8_turkish.c
 
 stem_UTF_8_turkish.obj: src_c/stem_UTF_8_turkish.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_turkish.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_turkish.Tpo -c -o stem_UTF_8_turkish.obj `if test -f 'src_c/stem_UTF_8_turkish.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_turkish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_turkish.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/stem_UTF_8_turkish.Tpo $(DEPDIR)/stem_UTF_8_turkish.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='src_c/stem_UTF_8_turkish.c' object='stem_UTF_8_turkish.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT stem_UTF_8_turkish.obj -MD -MP -MF $(DEPDIR)/stem_UTF_8_turkish.Tpo -c -o stem_UTF_8_turkish.obj `if test -f 'src_c/stem_UTF_8_turkish.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_turkish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_turkish.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/stem_UTF_8_turkish.Tpo $(DEPDIR)/stem_UTF_8_turkish.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='src_c/stem_UTF_8_turkish.c' object='stem_UTF_8_turkish.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_turkish.obj `if test -f 'src_c/stem_UTF_8_turkish.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_turkish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_turkish.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o stem_UTF_8_turkish.obj `if test -f 'src_c/stem_UTF_8_turkish.c'; then $(CYGPATH_W) 'src_c/stem_UTF_8_turkish.c'; else $(CYGPATH_W) '$(srcdir)/src_c/stem_UTF_8_turkish.c'; fi`
 
 api.o: runtime/api.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT api.o -MD -MP -MF $(DEPDIR)/api.Tpo -c -o api.o `test -f 'runtime/api.c' || echo '$(srcdir)/'`runtime/api.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/api.Tpo $(DEPDIR)/api.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='runtime/api.c' object='api.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT api.o -MD -MP -MF $(DEPDIR)/api.Tpo -c -o api.o `test -f 'runtime/api.c' || echo '$(srcdir)/'`runtime/api.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/api.Tpo $(DEPDIR)/api.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='runtime/api.c' object='api.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o api.o `test -f 'runtime/api.c' || echo '$(srcdir)/'`runtime/api.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o api.o `test -f 'runtime/api.c' || echo '$(srcdir)/'`runtime/api.c
 
 api.obj: runtime/api.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT api.obj -MD -MP -MF $(DEPDIR)/api.Tpo -c -o api.obj `if test -f 'runtime/api.c'; then $(CYGPATH_W) 'runtime/api.c'; else $(CYGPATH_W) '$(srcdir)/runtime/api.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/api.Tpo $(DEPDIR)/api.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='runtime/api.c' object='api.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT api.obj -MD -MP -MF $(DEPDIR)/api.Tpo -c -o api.obj `if test -f 'runtime/api.c'; then $(CYGPATH_W) 'runtime/api.c'; else $(CYGPATH_W) '$(srcdir)/runtime/api.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/api.Tpo $(DEPDIR)/api.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='runtime/api.c' object='api.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o api.obj `if test -f 'runtime/api.c'; then $(CYGPATH_W) 'runtime/api.c'; else $(CYGPATH_W) '$(srcdir)/runtime/api.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o api.obj `if test -f 'runtime/api.c'; then $(CYGPATH_W) 'runtime/api.c'; else $(CYGPATH_W) '$(srcdir)/runtime/api.c'; fi`
 
 utilities.o: runtime/utilities.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT utilities.o -MD -MP -MF $(DEPDIR)/utilities.Tpo -c -o utilities.o `test -f 'runtime/utilities.c' || echo '$(srcdir)/'`runtime/utilities.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/utilities.Tpo $(DEPDIR)/utilities.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='runtime/utilities.c' object='utilities.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT utilities.o -MD -MP -MF $(DEPDIR)/utilities.Tpo -c -o utilities.o `test -f 'runtime/utilities.c' || echo '$(srcdir)/'`runtime/utilities.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/utilities.Tpo $(DEPDIR)/utilities.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='runtime/utilities.c' object='utilities.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o utilities.o `test -f 'runtime/utilities.c' || echo '$(srcdir)/'`runtime/utilities.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o utilities.o `test -f 'runtime/utilities.c' || echo '$(srcdir)/'`runtime/utilities.c
 
 utilities.obj: runtime/utilities.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT utilities.obj -MD -MP -MF $(DEPDIR)/utilities.Tpo -c -o utilities.obj `if test -f 'runtime/utilities.c'; then $(CYGPATH_W) 'runtime/utilities.c'; else $(CYGPATH_W) '$(srcdir)/runtime/utilities.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/utilities.Tpo $(DEPDIR)/utilities.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='runtime/utilities.c' object='utilities.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT utilities.obj -MD -MP -MF $(DEPDIR)/utilities.Tpo -c -o utilities.obj `if test -f 'runtime/utilities.c'; then $(CYGPATH_W) 'runtime/utilities.c'; else $(CYGPATH_W) '$(srcdir)/runtime/utilities.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/utilities.Tpo $(DEPDIR)/utilities.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='runtime/utilities.c' object='utilities.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o utilities.obj `if test -f 'runtime/utilities.c'; then $(CYGPATH_W) 'runtime/utilities.c'; else $(CYGPATH_W) '$(srcdir)/runtime/utilities.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o utilities.obj `if test -f 'runtime/utilities.c'; then $(CYGPATH_W) 'runtime/utilities.c'; else $(CYGPATH_W) '$(srcdir)/runtime/utilities.c'; fi`
 
 libstemmer.o: libstemmer/libstemmer.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT libstemmer.o -MD -MP -MF $(DEPDIR)/libstemmer.Tpo -c -o libstemmer.o `test -f 'libstemmer/libstemmer.c' || echo '$(srcdir)/'`libstemmer/libstemmer.c
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/libstemmer.Tpo $(DEPDIR)/libstemmer.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='libstemmer/libstemmer.c' object='libstemmer.o' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT libstemmer.o -MD -MP -MF $(DEPDIR)/libstemmer.Tpo -c -o libstemmer.o `test -f 'libstemmer/libstemmer.c' || echo '$(srcdir)/'`libstemmer/libstemmer.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libstemmer.Tpo $(DEPDIR)/libstemmer.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='libstemmer/libstemmer.c' object='libstemmer.o' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o libstemmer.o `test -f 'libstemmer/libstemmer.c' || echo '$(srcdir)/'`libstemmer/libstemmer.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o libstemmer.o `test -f 'libstemmer/libstemmer.c' || echo '$(srcdir)/'`libstemmer/libstemmer.c
 
 libstemmer.obj: libstemmer/libstemmer.c
-@am__fastdepCC_TRUE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT libstemmer.obj -MD -MP -MF $(DEPDIR)/libstemmer.Tpo -c -o libstemmer.obj `if test -f 'libstemmer/libstemmer.c'; then $(CYGPATH_W) 'libstemmer/libstemmer.c'; else $(CYGPATH_W) '$(srcdir)/libstemmer/libstemmer.c'; fi`
-@am__fastdepCC_TRUE@	$(am__mv) $(DEPDIR)/libstemmer.Tpo $(DEPDIR)/libstemmer.Po
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	source='libstemmer/libstemmer.c' object='libstemmer.obj' libtool=no @AMDEPBACKSLASH@
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT libstemmer.obj -MD -MP -MF $(DEPDIR)/libstemmer.Tpo -c -o libstemmer.obj `if test -f 'libstemmer/libstemmer.c'; then $(CYGPATH_W) 'libstemmer/libstemmer.c'; else $(CYGPATH_W) '$(srcdir)/libstemmer/libstemmer.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libstemmer.Tpo $(DEPDIR)/libstemmer.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='libstemmer/libstemmer.c' object='libstemmer.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o libstemmer.obj `if test -f 'libstemmer/libstemmer.c'; then $(CYGPATH_W) 'libstemmer/libstemmer.c'; else $(CYGPATH_W) '$(srcdir)/libstemmer/libstemmer.c'; fi`
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o libstemmer.obj `if test -f 'libstemmer/libstemmer.c'; then $(CYGPATH_W) 'libstemmer/libstemmer.c'; else $(CYGPATH_W) '$(srcdir)/libstemmer/libstemmer.c'; fi`
 
 ID: $(HEADERS) $(SOURCES) $(LISP) $(TAGS_FILES)
 	list='$(SOURCES) $(HEADERS) $(LISP) $(TAGS_FILES)'; \

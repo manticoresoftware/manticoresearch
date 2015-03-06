@@ -14376,6 +14376,26 @@ plugin_dir = /usr/local/sphinx/lib
 
 <appendix id="changelog"><title>Sphinx revision history</title>
 
+<sect1 id="rel228"><title>Version 2.2.8-release, ?? mar 2015</title>
+<bridgehead>Minor features</bridgehead>
+<itemizedlist>
+<listitem><para>added #2166, per agent HA strategy for distributed indexes</para></listitem>
+</itemizedlist>
+<bridgehead>Bug fixes</bridgehead>
+<itemizedlist>
+<listitem><para>fixed #2171, some index options do not work for template indexes</para></listitem>
+<listitem><para>fixed #2170, joined fields indexation with document id equals to 0</para></listitem>
+<listitem><para>fixed #2172, incorrect results with field position fulltext operators</para></listitem>
+<listitem><para>fixed #2182, incorrect query results with multiple same destination wordforms</para></listitem>
+<listitem><para>fixed #2110, crash on snippet generation</para></listitem>
+<listitem><para>fixed #2178, ZONESPAN operator for queries with more than two words</para></listitem>
+<listitem><para>fixed #2181, improved error message on incorrect filters</para></listitem>
+<listitem><para>fixed WLCCS ranking factor computation</para></listitem>
+<listitem><para>fixed memory leak on queries with ZONEs</para></listitem>
+</itemizedlist>
+</sect1>
+
+
 <sect1 id="rel227"><title>Version 2.2.7-release, 20 jan 2015</title>
 <bridgehead>Minor features</bridgehead>
 <itemizedlist>

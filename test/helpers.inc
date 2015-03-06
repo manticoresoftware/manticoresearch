@@ -395,13 +395,17 @@ function CompareResultSetFixup ( &$set, $roundoff, $variants_match )
 	//foreach ( preg_split ( "/\\W+/", "time warning status fields resarray roundoff words" ) as $key )
 	foreach ( preg_split ( "/\\W+/", "time warning status fields resarray roundoff" ) as $key )
 		unset ( $set[$key] );
-		
+
+	// variants are be used to check mva32/mva64, int/bigint, etc
+	// thus in variants check we fixup the compatible attribute types and only check the data
 	if ( $variants_match && isset ( $set["attrs"] ) )
-	{			
+	{
 		foreach ( $set["attrs"] as $k=>$v )
 		{
 			if ( $v==SPH_ATTR_MULTI64 )
 				$set["attrs"][$k] = SPH_ATTR_MULTI; 
+			if ( $v==SPH_ATTR_BIGINT && $k[0]=="@" )
+				$set["attrs"][$k] = SPH_ATTR_INTEGER;
 		}
 	}
 }
@@ -1594,8 +1598,8 @@ class SphinxConfig
 			for ( $k=0; $k<$nqueries; $k++ )
 			if ( !$this->CompareResultSets ( $this->_results_model[0][$k], $this->_results_model[$i][$k] ) )
 			{
-				$first = $this->FormatResultSet ( $k+1, $this->_results_model[0][$k] );
-				$current = $this->FormatResultSet ( $k+1, $this->_results_model[$i][$k] );
+				$first = $this->FormatResultSet ( $k+1, $this->_results_model[0][$k], array("format_attrs"=>1) );
+				$current = $this->FormatResultSet ( $k+1, $this->_results_model[$i][$k], array("format_attrs"=>1) );
 
 				file_put_contents ( "first", $first );
 				file_put_contents ( "current", $current );

@@ -196,7 +196,7 @@ inline const	DWORD *	STATIC2DOCINFO ( const DWORD * pAttrs )	{ return STATIC2DOC
 #include "sphinxversion.h"
 
 #ifndef SPHINX_TAG
-#define SPHINX_TAG "-dev"
+#define SPHINX_TAG "-release"
 #endif
 
 #define SPHINX_VERSION			"2.2.8" SPHINX_BITS_TAG SPHINX_TAG " (" SPH_SVN_TAGREV ")"

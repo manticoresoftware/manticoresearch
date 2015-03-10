@@ -2899,6 +2899,13 @@ public:
 
 		switch ( eRes )
 		{
+		case JSON_ROOT:
+			{
+				iLen = sphJsonNodeSize ( JSON_ROOT, pValue-4 );
+				bool bEmpty = iLen==5; // mask and JSON_EOF
+				uGroupkey = bEmpty ? 0 : sphFNV64 ( pValue, iLen );
+				return this->PushEx ( tMatch, uGroupkey, false, false, bEmpty ? NULL : &iValue );
+			}
 		case JSON_STRING:
 		case JSON_OBJECT:
 		case JSON_MIXED_VECTOR:

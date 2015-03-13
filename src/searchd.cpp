@@ -18576,7 +18576,7 @@ static void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * p
 			default:
 				// default case, unknown command
 				sError.SetSprintf ( "unknown command (code=%d)", uMysqlCmd );
-				SendMysqlErrorPacket ( tOut, uPacketID, sQuery.cstr(), sError.cstr(), MYSQL_ERR_UNKNOWN_COM_ERROR );
+				SendMysqlErrorPacket ( tOut, uPacketID, NULL, sError.cstr(), MYSQL_ERR_UNKNOWN_COM_ERROR );
 				break;
 		}
 

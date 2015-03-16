@@ -198,7 +198,6 @@ HANDLE					g_hPipe			= INVALID_HANDLE_VALUE;
 
 static CSphVector<CSphString>	g_dArgs;
 
-static bool				g_bLogStdout	= true;
 static bool				g_bWatchdogPassed	= false;
 
 struct CrashQuery_t
@@ -272,16 +271,18 @@ enum LogFormat_e
 	LOG_FORMAT_SPHINXQL
 };
 
-static ESphLogLevel		g_eLogLevel		= SPH_LOG_INFO;
-static int				g_iLogFile		= STDOUT_FILENO;	// log file descriptor
-static bool				g_bLogSyslog	= false;
-static bool				g_bQuerySyslog	= false;
-static CSphString		g_sLogFile;							// log file name
-static bool				g_bLogTty		= false;			// cached isatty(g_iLogFile)
-static LogFormat_e		g_eLogFormat	= LOG_FORMAT_PLAIN;
-static bool				g_bShortenIn	= false;			// whether to cut list in IN() clauses.
-static const int		SHORTEN_IN_LIMIT = 128;				// how many values will be pushed into log uncutted
-static int				g_iQueryLogMinMs	= 0;				// log 'slow' threshold for query
+#define					LOG_COMPACT_IN	128						// upto this many IN(..) values allowed in query_log 
+
+static ESphLogLevel		g_eLogLevel			= SPH_LOG_INFO;		// current log level, can be changed on the fly
+static int				g_iLogFile			= STDOUT_FILENO;	// log file descriptor
+static bool				g_bLogSyslog		= false;
+static bool				g_bQuerySyslog		= false;
+static CSphString		g_sLogFile;								// log file name
+static bool				g_bLogTty			= false;			// cached isatty(g_iLogFile)
+static bool				g_bLogStdout		= true;				// extra copy of startup log messages to stdout; true until around "accepting connections", then MUST be false
+static LogFormat_e		g_eLogFormat		= LOG_FORMAT_PLAIN;
+static bool				g_bLogCompactIn		= false;			// whether to cut list in IN() clauses.
+static int				g_iQueryLogMinMsec	= 0;				// log 'slow' threshold for query
 
 static int				g_iReadTimeout		= 5;	// sec
 static int				g_iWriteTimeout		= 5;
@@ -6863,10 +6864,10 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes
 						else
 							tBuf.Appendf ( " %s IN (", f.m_sAttrName.cstr() );
 
-						if ( g_bShortenIn && ( SHORTEN_IN_LIMIT+1<f.m_dValues.GetLength() ) )
+						if ( g_bLogCompactIn && ( LOG_COMPACT_IN+1<f.m_dValues.GetLength() ) )
 						{
 							// for really long IN-lists optionally format them as N,N,N,N,...N,N,N, with ellipsis inside.
-							int iLimit = SHORTEN_IN_LIMIT-3;
+							int iLimit = LOG_COMPACT_IN-3;
 							for ( int j=0; j<iLimit; ++j )
 							{
 								if ( j )
@@ -7070,7 +7071,7 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes
 
 static void LogQuery ( const CSphQuery & q, const CSphQueryResult & tRes, const CSphVector<int64_t> & dAgentTimes, int iCid )
 {
-	if ( g_iQueryLogMinMs && tRes.m_iQueryTime<g_iQueryLogMinMs )
+	if ( g_iQueryLogMinMsec>0 && tRes.m_iQueryTime<g_iQueryLogMinMsec )
 		return;
 
 	switch ( g_eLogFormat )
@@ -16893,7 +16894,7 @@ void HandleMysqlSet ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, SessionVars_t & 
 			}
 		} else if ( tStmt.m_sSetName=="query_log_min_msec" )
 		{
-			g_iQueryLogMinMs = (int)tStmt.m_iSetValue;
+			g_iQueryLogMinMsec = (int)tStmt.m_iSetValue;
 		} else if ( tStmt.m_sSetName=="qcache_max_bytes" )
 		{
 			const QcacheStatus_t & s = QcacheGetStatus();
@@ -23416,7 +23417,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_tRtThrottle.m_iMaxIOSize = hSearchd.GetSize ( "rt_merge_maxiosize", 0 );
 	g_iPingInterval = hSearchd.GetInt ( "ha_ping_interval", 1000 );
 	g_uHAPeriodKarma = hSearchd.GetInt ( "ha_period_karma", 60 );
-	g_iQueryLogMinMs = hSearchd.GetInt ( "query_log_min_msec", g_iQueryLogMinMs );
+	g_iQueryLogMinMsec = hSearchd.GetInt ( "query_log_min_msec", g_iQueryLogMinMsec );
 	g_iAgentConnectTimeout = hSearchd.GetInt ( "agent_connect_timeout", g_iAgentConnectTimeout );
 	g_iAgentQueryTimeout = hSearchd.GetInt ( "agent_query_timeout", g_iAgentQueryTimeout );
 	g_iAgentRetryDelay = hSearchd.GetInt ( "agent_retry_delay", g_iAgentRetryDelay );
@@ -23709,6 +23710,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	bool			bOptListen = false;
 	bool			bTestMode = false;
 	bool			bTestThdPoolMode = false;
+	bool			bOptDebugQlog = true;
 
 	DWORD			uReplayFlags = 0;
 
@@ -23748,6 +23750,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		OPT1 ( "--test-thd-pool" )	{ g_bWatchdog = false; bTestMode = true; bTestThdPoolMode = true; } // internal option, do NOT document
 		OPT1 ( "--strip-path" )		g_bStripPath = true;
 		OPT1 ( "--vtune" )			g_bVtune = true;
+		OPT1 ( "--noqlog" )			bOptDebugQlog = false;
 
 		// FIXME! add opt=(csv)val handling here
 		OPT1 ( "--replay-flags=accept-desc-timestamp" )		uReplayFlags |= SPH_REPLAY_ACCEPT_DESC_TIMESTAMP;
@@ -23784,6 +23787,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 #ifndef NDEBUG
 	// i also want my windows debug builds to skip locking by default
+	// NOTE, this also skips log files!
 	g_bOptNoLock = true;
 #endif
 #endif
@@ -24193,11 +24197,11 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			else if ( !strcmp ( sLogFormat, "plain" ) )
 				g_eLogFormat = LOG_FORMAT_PLAIN;
 			else if ( !strcmp ( sLogFormat, "compact_in" ) )
-				g_bShortenIn = true;
+				g_bLogCompactIn = true;
 		}
-		if ( g_bShortenIn && g_eLogFormat==LOG_FORMAT_PLAIN )
-			sphWarning ( "combination of query_log_format=plain and option compact_in is not supported." );
 	}
+	if ( g_bLogCompactIn && g_eLogFormat==LOG_FORMAT_PLAIN )
+		sphWarning ( "compact_in option only supported with query_log_format=sphinxql" );
 
 	// prepare to detach
 	if ( !g_bOptNoDetach )
@@ -24318,8 +24322,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		}
 	}
 
-	// if we're running in console mode, dump queries to tty as well
-	if ( g_bOptNoLock && hSearchd ( "query_log" ) )
+	// if we're running in test console mode, dump queries to tty as well
+	// unless we're explicitly asked not to!
+	if ( hSearchd ( "query_log" ) && g_bOptNoLock && g_bOptNoDetach && bOptDebugQlog )
 	{
 		g_bQuerySyslog = false;
 		g_bLogSyslog = false;
@@ -24374,9 +24379,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	sphReplayBinlog ( hIndexes, uReplayFlags, DumpMemStat );
 	hIndexes.Reset();
-
-	if ( !g_bOptNoDetach )
-		g_bLogStdout = false;
 
 	if ( g_bIOStats && !sphInitIOStats () )
 		sphWarning ( "unable to init IO statistics" );
@@ -24445,13 +24447,19 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	SphCrashLogger_c tQueryTLS;
 	tQueryTLS.SetupTLS ();
 
+	// ready, steady, go
 	sphInfo ( "accepting connections" );
+
+	// disable startup logging to stdout
+	if ( !g_bOptNoDetach )
+		g_bLogStdout = false;
+
 	for ( ;; )
 	{
 		SphCrashLogger_c::SetupTimePID();
 		TickHead();
 	}
-} // NOLINT function length
+} // NOLINT ServiceMain() function length
 
 
 bool DieCallback ( const char * sMessage )

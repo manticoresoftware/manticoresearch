@@ -1049,14 +1049,14 @@ public:
 	virtual bool				HasDocid ( SphDocID_t ) const { return false; }
 	virtual int					Build ( const CSphVector<CSphSource*> & , int , int ) { return 0; }
 	virtual bool				Merge ( CSphIndex * , const CSphVector<CSphFilterSettings> & , bool ) {return false; }
-	virtual bool				Prealloc ( bool , bool , CSphString & ) { return false; }
+	virtual bool				Prealloc ( bool ) { return false; }
 	virtual void				Dealloc () {}
-	virtual bool				Preread () { return false; }
+	virtual void				Preread () {}
+	virtual void				SetMemorySettings ( bool , bool , bool ) {}
 	virtual void				SetBase ( const char * ) {}
 	virtual bool				Rename ( const char * ) { return false; }
 	virtual bool				Lock () { return false; }
 	virtual void				Unlock () {}
-	virtual bool				Mlock () { return false; }
 	virtual void				PostSetup() {}
 	virtual bool				EarlyReject ( CSphQueryContext * , CSphMatch & ) const { return false; }
 	virtual const CSphSourceStats &	GetStats () const { return g_tTmpDummyStat; }
@@ -2344,7 +2344,7 @@ void TestRTWeightBoundary ()
 		pIndex->SetTokenizer ( pTok->Clone ( SPH_CLONE_INDEX ) );
 		pIndex->SetDictionary ( pDict->Clone() );
 		pIndex->PostSetup();
-		Verify ( pIndex->Prealloc ( false, false, sError ) );
+		Verify ( pIndex->Prealloc ( false ) );
 
 		CSphVector<DWORD> dMvas;
 		CSphString sFilter;
@@ -2522,7 +2522,7 @@ void TestRTSendVsMerge ()
 	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
 	pIndex->SetDictionary ( pDict );
 	pIndex->PostSetup();
-	Verify ( pIndex->Prealloc ( false, false, sError ) );
+	Verify ( pIndex->Prealloc ( false ) );
 
 	CSphQuery tQuery;
 	CSphQueryResult tResult;
@@ -2643,7 +2643,7 @@ void TestRankerFactors ()
 	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
 	pIndex->SetDictionary ( pDict );
 	pIndex->PostSetup();
-	Verify ( pIndex->Prealloc ( false, false, sError ) );
+	Verify ( pIndex->Prealloc ( false ) );
 
 	CSphString sFilter;
 	CSphVector<DWORD> dMvas;

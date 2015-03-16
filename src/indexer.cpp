@@ -1351,16 +1351,19 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 		return false;
 	}
 
-	if ( !pSrc->Lock() && !bRotate )
+	if ( !bRotate )
 	{
-		fprintf ( stdout, "ERROR: index '%s' is already locked; lock: %s\n", sSrc, pSrc->GetLastError().cstr() );
-		return false;
-	}
+		if ( !pSrc->Lock() )
+		{
+			fprintf ( stdout, "ERROR: index '%s' is already locked; lock: %s\n", sSrc, pSrc->GetLastError().cstr() );
+			return false;
+		}
 
-	if ( !pDst->Lock() && !bRotate )
-	{
-		fprintf ( stdout, "ERROR: index '%s' is already locked; lock: %s\n", sDst, pDst->GetLastError().cstr() );
-		return false;
+		if ( !pDst->Lock() )
+		{
+			fprintf ( stdout, "ERROR: index '%s' is already locked; lock: %s\n", sDst, pDst->GetLastError().cstr() );
+			return false;
+		}
 	}
 
 	pDst->SetProgressCallback ( ShowProgress );
@@ -1374,54 +1377,34 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	if ( !g_bQuiet )
 		printf ( "merged in %d.%03d sec\n", (int)(tmMergeTime/1000000), (int)(tmMergeTime%1000000)/1000 );
 
+	// need to close attribute files that was mapped with RW access to unlink and rename them on windows
+	pSrc->Dealloc();
+	pDst->Dealloc();
+
 	// pick up merge result
 	const char * sPath = hDst["path"].cstr();
 	char sFrom [ SPH_MAX_FILENAME_LEN ];
 	char sTo [ SPH_MAX_FILENAME_LEN ];
-	struct stat tFileInfo;
 
-	int iExt;
-	for ( iExt=0; iExt<EXT_COUNT; iExt++ )
-	{
-		snprintf ( sFrom, sizeof(sFrom), "%s.tmp.%s", sPath, g_dExt[iExt] );
-		sFrom [ sizeof(sFrom)-1 ] = '\0';
+	snprintf ( sFrom, sizeof(sFrom), "%s.tmp", sPath );
+	sFrom [ sizeof(sFrom)-1 ] = '\0';
+	if ( bRotate )
+		snprintf ( sTo, sizeof(sTo), "%s.new", sPath );
+	else
+		snprintf ( sTo, sizeof(sTo), "%s", sPath );
+	sTo [ sizeof(sTo)-1 ] = '\0';
 
-		if ( bRotate )
-			snprintf ( sTo, sizeof(sTo), "%s.new.%s", sPath, g_dExt[iExt] );
-		else
-			snprintf ( sTo, sizeof(sTo), "%s.%s", sPath, g_dExt[iExt] );
+	pDst->SetBase ( sFrom );
+	bool bRenamed = pDst->Rename ( sTo );
 
-		sTo [ sizeof(sTo)-1 ] = '\0';
-
-		if ( !stat ( sTo, &tFileInfo ) )
-		{
-			if ( remove ( sTo ) )
-			{
-				fprintf ( stdout, "ERROR: index '%s': failed to delete '%s': %s",
-					sDst, sTo, strerror(errno) );
-				break;
-			}
-		}
-
-		if ( rename ( sFrom, sTo ) )
-		{
-			fprintf ( stdout, "ERROR: index '%s': failed to rename '%s' to '%s': %s",
-				sDst, sFrom, sTo, strerror(errno) );
-			break;
-		}
-	}
-
-	if ( !bRotate )
-	{
-		pSrc->Unlock();
-		pDst->Unlock();
-	}
+	if ( !bRenamed )
+		fprintf ( stdout, "ERROR: index '%s': failed to rename '%s' to '%s': %s", sDst, sFrom, sTo, pDst->GetLastError().cstr() );
 
 	SafeDelete ( pSrc );
 	SafeDelete ( pDst );
 
 	// all good?
-	return ( iExt==EXT_COUNT );
+	return bRenamed;
 }
 
 //////////////////////////////////////////////////////////////////////////

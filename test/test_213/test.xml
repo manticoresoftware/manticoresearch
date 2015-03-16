@@ -3,10 +3,6 @@
 
 <name>ALTER</name>
 
-<requires>
-<non-windows/>
-</requires>
-
 <config>
 indexer
 {

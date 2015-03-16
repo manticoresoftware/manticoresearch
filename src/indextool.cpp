@@ -1078,14 +1078,13 @@ int main ( int argc, char ** argv )
 			pIndex->SetDebugCheck();
 
 		CSphString sWarn;
-		if ( !pIndex->Prealloc ( false, bStripPath, sWarn ) )
+		if ( !pIndex->Prealloc ( bStripPath ) )
 			sphDie ( "index '%s': prealloc failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
 
 		if ( eCommand==CMD_MORPH )
 			break;
 
-		if ( !pIndex->Preread() )
-			sphDie ( "index '%s': preread failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
+		pIndex->Preread();
 
 		if ( hConf["index"][sIndex]("hitless_words") )
 		{
@@ -1161,11 +1160,10 @@ int main ( int argc, char ** argv )
 					sphDie ( "index '%s': failed to create (%s)", sIndex.cstr(), sError.cstr() );
 
 				CSphString sWarn;
-				if ( !pIndex->Prealloc ( false, bStripPath, sWarn ) )
+				if ( !pIndex->Prealloc ( bStripPath ) )
 					sphDie ( "index '%s': prealloc failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
 
-				if ( !pIndex->Preread() )
-					sphDie ( "index '%s': preread failed: %s\n", sIndex.cstr(), pIndex->GetLastError().cstr() );
+				pIndex->Preread();
 			} else
 				fprintf ( stdout, "dumping dictionary for index '%s'...\n", sIndex.cstr() );
 

@@ -1513,8 +1513,6 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 			pIndex->Setup ( tIndexSettings );
 		} else
 		{
-			if ( pIndex->m_bId32to64 )
-				tSettings.m_bCrc32 = true;
 			sphConfDictionary ( hIndex, tSettings );
 			pDict = sphCreateDictionaryCRC ( tSettings, NULL, pIndex->GetTokenizer (), pIndex->GetName(), sError );
 		}

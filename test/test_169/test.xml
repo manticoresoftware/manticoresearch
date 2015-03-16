@@ -5,10 +5,7 @@
 
 <requires>
 <non-rt/>
-<non-windows/>
-<!--
-<variant_match/>
--->
+<id32/>
 </requires>
 
 <config>
@@ -38,6 +35,22 @@ index small
 	path = <data_path/>/small
 	docinfo = extern
 }
+
+source rot_dummy
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = select * from test_table
+	sql_attr_uint = group_id
+	sql_field_string = title
+}
+
+index rot_dummy
+{
+	source = rot_dummy
+	path = <data_path/>/rot_dummy
+	docinfo = extern
+}
 </config>
 
 <db_drop>drop table if exists test_table</db_drop>
@@ -62,7 +75,7 @@ insert into test_table values
 global $index_data_path, $sd_pid_file;
 global $this_test;
 
-$query = create_function('$client,$words','$result = $client->Query ( $words );	if ( $result ) { unset ( $result["time"] ); return $result; } else return $client->GetLastError(); ');
+$query = create_function('$client,$words','$result = $client->Query ( $words, "small" );	if ( $result ) { unset ( $result["time"] ); return $result; } else return $client->GetLastError(); ');
 
 $results = array();
 $errors = '';
@@ -72,7 +85,8 @@ $results[] = $query ( $client, 'test' );
 
 foreach (explode(" ", "a d h i k m p s") as $c)
 	exec ( "cp $this_test/refdata/small1.sp$c $index_data_path/small.new.sp$c" );
-exec ( "kill -HUP `cat $sd_pid_file`" );
+	
+RunIndexer ( $errors, 'rot_dummy --rotate' );
 sleep ( 1 );
 
 $results[] = $query ( $client, '' );
@@ -80,7 +94,7 @@ $results[] = $query ( $client, 'test' );
 
 foreach (explode(" ", "a d h i k m p s") as $c)
 	exec ( "cp $this_test/refdata/small2.sp$c $index_data_path/small.new.sp$c" );
-exec ( "kill -HUP `cat $sd_pid_file`" );
+RunIndexer ( $errors, 'rot_dummy --rotate' );
 sleep ( 1 );
 
 $results[] = $query ( $client, '' );

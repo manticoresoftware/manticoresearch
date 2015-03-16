@@ -1252,6 +1252,13 @@ public:
 		Swap ( m_iSize, rhs.m_iSize );
 	}
 
+	void Set ( T * pData, int iSize )
+	{
+		SafeDeleteArray ( m_pData );
+		m_pData = pData;
+		m_iSize = iSize;
+	}
+
 	const T * BinarySearch ( T tRef ) const
 	{
 		return sphBinarySearch ( m_pData, m_pData+m_iSize-1, tRef );
@@ -2275,7 +2282,7 @@ void sphWarn ( const char *, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) )
 void SafeClose ( int & iFD );
 
 /// open file for reading
-int				sphOpenFile ( const char * sFile, CSphString & sError );
+int				sphOpenFile ( const char * sFile, CSphString & sError, bool bWrite );
 
 /// return size of file descriptor
 int64_t			sphGetFileSize ( int iFD, CSphString & sError );
@@ -2290,10 +2297,16 @@ public:
 	CSphBufferTrait ()
 		: m_pData ( NULL )
 		, m_iCount ( 0 )
+		, m_bMemLocked ( false )
 	{ }
 
 	/// dtor
-	virtual ~CSphBufferTrait () {}
+	virtual ~CSphBufferTrait ()
+	{
+		assert ( !m_bMemLocked && !m_pData );
+	}
+
+	virtual void Reset () = 0;
 
 	/// accessor
 	inline const T & operator [] ( int64_t iIndex ) const
@@ -2332,43 +2345,70 @@ public:
 		m_iCount = iCount;
 	}
 
+	bool MemLock ( CSphString & sWarning )
+	{
+#if USE_WINDOWS
+		m_bMemLocked = ( VirtualLock ( m_pData, GetLengthBytes() )==0 );
+		if ( !m_bMemLocked )
+			sWarning.SetSprintf ( "mlock() failed: errno %d", GetLastError() );
+
+#else
+		m_bMemLocked = ( mlock ( m_pData, GetLengthBytes() )==0 );
+		if ( !m_bMemLocked )
+			sWarning.SetSprintf ( "mlock() failed: %s", strerror(errno) );
+#endif
+
+		return m_bMemLocked;
+	}
+
 protected:
+
 	T *			m_pData;
 	int64_t		m_iCount;
+	bool		m_bMemLocked;
+
+	void MemUnlock ()
+	{
+		if ( !m_bMemLocked )
+			return;
+
+		m_bMemLocked = false;
+#if USE_WINDOWS
+		bool bOk = ( VirtualUnlock ( m_pData, GetLengthBytes() )==0 );
+		if ( !bOk )
+			sphWarn ( "munlock() failed: errno %d", GetLastError() );
+
+#else
+		bool bOk = ( munlock ( m_pData, GetLengthBytes() )==0 );
+		if ( !bOk )
+			sphWarn ( "munlock() failed: %s", strerror(errno) );
+#endif
+	}
 };
 
 
 //////////////////////////////////////////////////////////////////////////
 
 /// in-memory buffer shared between processes
-template < typename T >
-class CSphSharedBuffer : public CSphBufferTrait < T >
+template < typename T, bool SHARED=false >
+class CSphLargeBuffer : public CSphBufferTrait < T >
 {
 public:
 	/// ctor
-	CSphSharedBuffer ()
-	{
-		m_bMlock = false;
-	}
+	CSphLargeBuffer () {}
 
 	/// dtor
-	virtual ~CSphSharedBuffer ()
+	virtual ~CSphLargeBuffer ()
 	{
-		Reset ();
-	}
-
-	/// set locking mode for subsequent Alloc()s
-	void SetMlock ( bool bMlock )
-	{
-		m_bMlock = bMlock;
+		this->Reset();
 	}
 
 public:
 	/// allocate storage
 #if USE_WINDOWS
-	bool Alloc ( int64_t iEntries, CSphString & sError, CSphString & )
+	bool Alloc ( int64_t iEntries, CSphString & sError )
 #else
-	bool Alloc ( int64_t iEntries, CSphString & sError, CSphString & sWarning )
+	bool Alloc ( int64_t iEntries, CSphString & sError )
 #endif
 	{
 		assert ( !this->GetWritePtr() );
@@ -2386,7 +2426,11 @@ public:
 #if USE_WINDOWS
 		T * pData = new T [ (size_t)iEntries ];
 #else
-		T * pData = (T *) mmap ( NULL, iLength, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0 );
+		int iFlags = MAP_ANON | MAP_PRIVATE;
+		if ( SHARED )
+			iFlags = MAP_ANON | MAP_SHARED;
+
+		T * pData = (T *) mmap ( NULL, iLength, PROT_READ | PROT_WRITE, iFlags, -1, 0 );
 		if ( pData==MAP_FAILED )
 		{
 			if ( iLength>(int64_t)0x7fffffffUL )
@@ -2396,10 +2440,6 @@ public:
 				sError.SetSprintf ( "mmap() failed: %s (length="INT64_FMT")", strerror(errno), iLength );
 			return false;
 		}
-
-		if ( m_bMlock )
-			if ( -1==mlock ( pData, iLength ) )
-				sWarning.SetSprintf ( "mlock() failed: %s", strerror(errno) );
 
 #if SPH_ALLOCS_PROFILER
 		sphMemStatMMapAdd ( iLength );
@@ -2413,33 +2453,11 @@ public:
 	}
 
 
-	/// relock again (for daemonization only)
-#if USE_WINDOWS
-	bool Mlock ( const char *, CSphString & )
-	{
-		return true;
-	}
-#else
-	bool Mlock ( const char * sPrefix, CSphString & sError )
-	{
-		if ( !m_bMlock )
-			return true;
-
-		if ( mlock ( this->GetWritePtr(), this->GetLengthBytes() )!=-1 )
-			return true;
-
-		if ( sError.IsEmpty() )
-			sError.SetSprintf ( "%s mlock() failed: bytes="INT64_FMT", error=%s", sPrefix, (int64_t)this->GetLengthBytes(), strerror(errno) );
-		else
-			sError.SetSprintf ( "%s; %s mlock() failed: bytes="INT64_FMT", error=%s", sError.cstr(), sPrefix, (int64_t)this->GetLengthBytes(), strerror(errno) );
-		return false;
-	}
-#endif
-
-
 	/// deallocate storage
-	void Reset ()
+	virtual void Reset ()
 	{
+		this->MemUnlock();
+
 		if ( !this->GetWritePtr() )
 			return;
 
@@ -2458,17 +2476,6 @@ public:
 
 		this->Set ( NULL, 0 );
 	}
-
-public:
-	void Swap ( CSphSharedBuffer & tBuf )
-	{
-		::Swap ( this->m_pData, tBuf.m_pData );
-		::Swap ( this->m_iCount, tBuf.m_iCount );
-		::Swap ( m_bMlock, tBuf.m_bMlock );
-	}
-
-protected:
-	bool				m_bMlock;	///< whether to lock data in RAM
 };
 
 
@@ -2483,6 +2490,7 @@ public:
 	{
 #if USE_WINDOWS
 		m_iFD = INVALID_HANDLE_VALUE;
+		m_iMap = INVALID_HANDLE_VALUE;
 #else
 		m_iFD = -1;
 #endif
@@ -2491,10 +2499,10 @@ public:
 	/// dtor
 	virtual ~CSphMappedBuffer ()
 	{
-		Close();
+		this->Reset();
 	}
 
-	bool Setup ( const char * sFile, CSphString & sError )
+	bool Setup ( const char * sFile, CSphString & sError, bool bWrite )
 	{
 #if USE_WINDOWS
 		assert ( m_iFD==INVALID_HANDLE_VALUE );
@@ -2507,7 +2515,15 @@ public:
 		int64_t iCount = 0;
 
 #if USE_WINDOWS
-		HANDLE iFD = CreateFile ( sFile, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_READONLY, 0 );
+		int iAccessMode = GENERIC_READ;
+		if ( bWrite )
+			iAccessMode |= GENERIC_WRITE;
+
+		DWORD uShare = FILE_SHARE_READ | FILE_SHARE_DELETE;
+		if ( bWrite )
+			uShare |= FILE_SHARE_WRITE; // wo this flag indexer and indextool unable to open attribute file that was opened by daemon
+
+		HANDLE iFD = CreateFile ( sFile, iAccessMode, uShare, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0 );
 		if ( iFD==INVALID_HANDLE_VALUE )
 		{
 			sError.SetSprintf ( "failed to open file '%s' (errno %d)", sFile, ::GetLastError() );
@@ -2519,7 +2535,7 @@ public:
 		if ( GetFileSizeEx ( iFD, &tLen )==0 )
 		{
 			sError.SetSprintf ( "failed to fstat file '%s' (errno %d)", sFile, ::GetLastError() );
-			Close();
+			Reset();
 			return false;
 		}
 
@@ -2529,18 +2545,24 @@ public:
 		// mmap fails to map zero-size file
 		if ( tLen.QuadPart>0 )
 		{
-			HANDLE hFile = ::CreateFileMapping ( iFD, NULL, PAGE_READONLY, 0, 0, NULL );
-			pData = (T *)::MapViewOfFile ( hFile, FILE_MAP_READ, 0, 0, 0 );
+			int iProtectMode = PAGE_READONLY;
+			if ( bWrite )
+				iProtectMode = PAGE_READWRITE;
+			m_iMap = ::CreateFileMapping ( iFD, NULL, iProtectMode, 0, 0, NULL );
+			int iAccessMode = FILE_MAP_READ;
+			if ( bWrite )
+				iAccessMode |= FILE_MAP_WRITE;
+			pData = (T *)::MapViewOfFile ( m_iMap, iAccessMode, 0, 0, 0 );
 			if ( !pData )
 			{
 				sError.SetSprintf ( "failed to map file '%s': (errno %d, length="INT64_FMT")", sFile, ::GetLastError(), (int64_t)tLen.QuadPart );
-				Close();
+				Reset();
 				return false;
 			}
 		}
 #else
 
-		int iFD = sphOpenFile ( sFile, sError );
+		int iFD = sphOpenFile ( sFile, sError, bWrite );
 		if ( iFD<0 )
 			return false;
 		m_iFD = iFD;
@@ -2555,11 +2577,17 @@ public:
 		// mmap fails to map zero-size file
 		if ( iFileSize>0 )
 		{
-			pData = (T *)mmap ( NULL, iFileSize, PROT_READ, MAP_PRIVATE, iFD, 0 );
+			int iProt = PROT_READ;
+			int iFlags = MAP_PRIVATE;
+
+			if ( bWrite )
+				iProt |= PROT_WRITE;
+
+			pData = (T *)mmap ( NULL, iFileSize, iProt, iFlags, iFD, 0 );
 			if ( pData==MAP_FAILED )
 			{
 				sError.SetSprintf ( "failed to mmap file '%s': %s (length="INT64_FMT")", sFile, strerror(errno), iFileSize );
-				Close();
+				Reset();
 				return false;
 			}
 		}
@@ -2569,15 +2597,20 @@ public:
 		return true;
 	}
 
-	void		Close ()
+	virtual void Reset ()
 	{
+		this->MemUnlock();
+
 #if USE_WINDOWS
 		if ( this->GetWritePtr() )
 			::UnmapViewOfFile ( this->GetWritePtr() );
 
+		if ( m_iMap!=INVALID_HANDLE_VALUE )
+			::CloseHandle ( m_iMap );
+		m_iMap = INVALID_HANDLE_VALUE;
+
 		if ( m_iFD!=INVALID_HANDLE_VALUE )
 			::CloseHandle ( m_iFD );
-
 		m_iFD = INVALID_HANDLE_VALUE;
 #else
 		if ( this->GetWritePtr() )
@@ -2592,6 +2625,7 @@ public:
 private:
 #if USE_WINDOWS
 	HANDLE		m_iFD;
+	HANDLE		m_iMap;
 #else
 	int			m_iFD;
 #endif
@@ -2777,24 +2811,6 @@ protected:
 };
 
 
-/// scoped locked shared variable
-template < typename LOCK >
-class CSphScopedLockedShare : public CSphScopedLock<LOCK>
-{
-public:
-	/// lock on creation
-	explicit CSphScopedLockedShare ( LOCK & tMutex )
-		: CSphScopedLock<LOCK> ( tMutex )
-	{}
-
-	template < typename T >
-	inline T & SharedValue()
-	{
-		return *(T*)( this->m_tMutexRef.GetSharedData() );
-	}
-};
-
-
 /// rwlock implementation
 class CSphRwlock : public ISphNoncopyable
 {
@@ -2847,73 +2863,6 @@ public:
 protected:
 	CSphRwlock & m_tLock;
 };
-
-
-/// process-shared mutex that survives fork
-class CSphProcessSharedMutex
-{
-public:
-	explicit CSphProcessSharedMutex ( int iExtraSize=0 );
-	~CSphProcessSharedMutex(); // not virtual for now.
-	void	Lock ();
-	void	Unlock ();
-	bool	TimedLock ( int tmSpin ) const; // wait at least tmSpin microseconds the lock will available
-	const char * GetError () const;
-	BYTE *	GetSharedData() const;
-
-protected:
-#if !USE_WINDOWS
-	CSphSharedBuffer<BYTE>		m_pStorage;
-#ifdef __FreeBSD__
-	sem_t *						m_pMutex;
-#else
-	pthread_mutex_t *			m_pMutex;
-#endif
-	CSphString					m_sError;
-#else
-	CSphMutex					m_tLock;
-#endif
-};
-
-#if !USE_WINDOWS
-/// process-shared mutex variable that survives fork
-template < typename T > class CSphProcessSharedVariable : protected CSphProcessSharedMutex, public ISphNoncopyable
-{
-public:
-
-	explicit CSphProcessSharedVariable ( const T& tInitValue )
-		: CSphProcessSharedMutex ( sizeof(T) )
-		, m_pValue ( NULL )
-	{
-		if ( m_pMutex )
-		{
-			m_pValue = reinterpret_cast<T*> ( GetSharedData() );
-			*m_pValue = tInitValue;
-		}
-	}
-	T ReadValue()
-	{
-		if ( !m_pValue )
-			return 0;
-		Lock();
-		T val = *m_pValue;
-		Unlock();
-		return val;
-	}
-	void WriteValue ( const T& tNewValue )
-	{
-		if ( !m_pValue )
-			return;
-		Lock();
-		*m_pValue = tNewValue;
-		Unlock();
-	}
-
-protected:
-	T *		m_pValue;
-};
-#endif // #if !USE_WINDOWS
-
 
 #if USE_WINDOWS
 #pragma warning(push,1)

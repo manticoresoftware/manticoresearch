@@ -759,14 +759,12 @@ struct CSphDictSettings
 	CSphVector<CSphString> m_dWordforms;
 	int				m_iMinStemmingLen;
 	bool			m_bWordDict;
-	bool			m_bCrc32;
 	bool			m_bStopwordsUnstemmed;
 	CSphString		m_sMorphFingerprint;		///< not used for creation; only for a check when loading
 
 	CSphDictSettings ()
 		: m_iMinStemmingLen ( 1 )
 		, m_bWordDict ( true )
-		, m_bCrc32 ( !USE_64BIT )
 		, m_bStopwordsUnstemmed ( false )
 	{}
 };
@@ -3266,15 +3264,14 @@ public:
 	virtual bool				Merge ( CSphIndex * pSource, const CSphVector<CSphFilterSettings> & dFilters, bool bMergeKillLists ) = 0;
 
 public:
-	/// check all data files, preload schema, and preallocate enough shared RAM to load memory-cached data
-	virtual bool				Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarning ) = 0;
+	/// check all data files, preload schema, and preallocate enough RAM to load memory-cached data
+	virtual bool				Prealloc ( bool bStripPath ) = 0;
 
 	/// deallocate all previously preallocated shared data
 	virtual void				Dealloc () = 0;
 
 	/// precache everything which needs to be precached
-	// WARNING, WILL BE CALLED FROM DIFFERENT PROCESS, MUST ONLY MODIFY SHARED MEMORY
-	virtual bool				Preread () = 0;
+	virtual void				Preread () = 0;
 
 	/// set new index base path
 	virtual void				SetBase ( const char * sNewBase ) = 0;
@@ -3287,12 +3284,6 @@ public:
 
 	/// dismiss exclusive lock and unlink lock file
 	virtual void				Unlock () = 0;
-
-	/// relock shared RAM (only on daemonization)
-	virtual bool				Mlock () = 0;
-
-	/// keep attributes on disk and map them via file memory mapping
-	virtual void				SetEnableOndiskAttributes ( bool ) {}
 
 	/// called when index is loaded and prepared to work
 	virtual void				PostSetup() = 0;
@@ -3324,9 +3315,7 @@ public:
 
 	virtual DWORD				GetAttributeStatus () const = 0;
 
-	virtual bool				CreateModifiedFiles ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, int iPos, CSphString & sError ) = 0;
-
-	virtual bool				AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, int iPos, CSphString & sError ) = 0;
+	virtual bool				AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, int iPos, CSphString & sError ) = 0;
 
 public:
 	/// internal debugging hook, DO NOT USE
@@ -3359,6 +3348,8 @@ public:
 	/// internal replace kill-list and rewrite spk file, DO NOT USE
 	virtual bool				ReplaceKillList ( const SphDocID_t *, int ) { return true; }
 
+	virtual void				SetMemorySettings ( bool bMlock, bool bOndiskAttrs, bool bOndiskPool ) = 0;
+
 public:
 	int64_t						m_iTID;					///< last committed transaction id
 
@@ -3384,9 +3375,6 @@ protected:
 	bool						m_bBinlog;
 
 	bool						m_bStripperInited;		///< was stripper initialized (old index version (<9) handling)
-
-public:
-	bool						m_bId32to64;			///< did we convert id32 to id64 on startup
 
 protected:
 	CSphIndexSettings			m_tSettings;

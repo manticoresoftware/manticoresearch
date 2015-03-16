@@ -3,10 +3,6 @@
 
 <name>ATTACH INDEX</name>
 
-<requires>
-<id32/> <!-- otherwise, 'DESC rt' mismatches between builds -->
-</requires>
-
 <config>
 indexer
 {
@@ -127,7 +123,7 @@ INSERT INTO test_table VALUES
 <sphinxql>SELECT * FROM rt</sphinxql>
 <sphinxql>SELECT * FROM disk</sphinxql>
 <sphinxql>SELECT * FROM rt WHERE MATCH('thee')</sphinxql>
-<sphinxql>DESC rt</sphinxql>
+<sphinxql>DESC rt like '_i%'</sphinxql>
 <sphinxql>INSERT INTO rt ( id, gid, title ) VALUES ( 10, 22, 'I dub thee unforgiven' )</sphinxql>
 <sphinxql>SELECT * FROM rt WHERE MATCH('thee')</sphinxql>
 <sphinxql><![CDATA[INSERT INTO rt ( id, gid, title ) VALUES ( 11, 22, 'under_score_again <stuff>but got here</stuff>' )]]></sphinxql>

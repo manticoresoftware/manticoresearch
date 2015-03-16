@@ -602,7 +602,7 @@ private:
 	DWORD						m_uElements;	// counts total number of collected min/max pairs
 	int							m_iLoop;		// loop inside one set
 	DWORD *						m_pOutBuffer;	// storage for collected min/max
-	DWORD *						m_pOutMax;		// storage max for bound checking
+	DWORD const *				m_pOutMax;		// storage max for bound checking
 	DOCID						m_uStart;		// first and last docids of current chunk
 	DOCID						m_uLast;
 	DOCID						m_uIndexStart;	// first and last docids of whole index
@@ -619,7 +619,7 @@ private:
 public:
 	explicit AttrIndexBuilder_t ( const CSphSchema & tSchema );
 
-	void Prepare ( DWORD * pOutBuffer, DWORD * pOutMax );
+	void Prepare ( DWORD * pOutBuffer, const DWORD * pOutMax );
 
 	bool Collect ( const DWORD * pCur, const DWORD * pMvas, int64_t iMvasCount, CSphString & sError, bool bHasMvaID );
 
@@ -795,7 +795,7 @@ AttrIndexBuilder_t<DOCID>::AttrIndexBuilder_t ( const CSphSchema & tSchema )
 }
 
 template < typename DOCID >
-void AttrIndexBuilder_t<DOCID>::Prepare ( DWORD * pOutBuffer, DWORD * pOutMax )
+void AttrIndexBuilder_t<DOCID>::Prepare ( DWORD * pOutBuffer, const DWORD * pOutMax )
 {
 	m_pOutBuffer = pOutBuffer;
 	m_pOutMax = pOutMax;
@@ -1755,30 +1755,35 @@ int sphCheckpointCmpStrictly ( const char * sWord, int iLen, SphWordID_t iWordID
 	return iRes;
 }
 
-
 template < typename CP >
+struct SphCheckpointAccess_fn
+{
+	const CP & operator () ( const CP * pCheckpoint ) const { return *pCheckpoint; }
+};
+
+template < typename CP, typename PRED >
 const CP * sphSearchCheckpoint ( const char * sWord, int iWordLen, SphWordID_t iWordID
 							, bool bStarMode, bool bWordDict
-							, const CP * pFirstCP, const CP * pLastCP )
+							, const CP * pFirstCP, const CP * pLastCP, const PRED & tPred )
 {
 	assert ( !bWordDict || iWordLen>0 );
 
 	const CP * pStart = pFirstCP;
 	const CP * pEnd = pLastCP;
 
-	if ( bStarMode && sphCheckpointCmp ( sWord, iWordLen, iWordID, bWordDict, *pStart )<0 )
+	if ( bStarMode && sphCheckpointCmp ( sWord, iWordLen, iWordID, bWordDict, tPred ( pStart ) )<0 )
 		return NULL;
-	if ( !bStarMode && sphCheckpointCmpStrictly ( sWord, iWordLen, iWordID, bWordDict, *pStart )<0 )
+	if ( !bStarMode && sphCheckpointCmpStrictly ( sWord, iWordLen, iWordID, bWordDict, tPred ( pStart ) )<0 )
 		return NULL;
 
-	if ( sphCheckpointCmpStrictly ( sWord, iWordLen, iWordID, bWordDict, *pEnd )>=0 )
+	if ( sphCheckpointCmpStrictly ( sWord, iWordLen, iWordID, bWordDict, tPred ( pEnd ) )>=0 )
 		pStart = pEnd;
 	else
 	{
 		while ( pEnd-pStart>1 )
 		{
 			const CP * pMid = pStart + (pEnd-pStart)/2;
-			const int iCmpRes = sphCheckpointCmpStrictly ( sWord, iWordLen, iWordID, bWordDict, *pMid );
+			const int iCmpRes = sphCheckpointCmpStrictly ( sWord, iWordLen, iWordID, bWordDict, tPred ( pMid ) );
 
 			if ( iCmpRes==0 )
 			{
@@ -1792,12 +1797,19 @@ const CP * sphSearchCheckpoint ( const char * sWord, int iWordLen, SphWordID_t i
 
 		assert ( pStart>=pFirstCP );
 		assert ( pStart<=pLastCP );
-		assert ( sphCheckpointCmp ( sWord, iWordLen, iWordID, bWordDict, *pStart )>=0
-			&& sphCheckpointCmpStrictly ( sWord, iWordLen, iWordID, bWordDict, *pEnd )<0 );
+		assert ( sphCheckpointCmp ( sWord, iWordLen, iWordID, bWordDict, tPred ( pStart ) )>=0
+			&& sphCheckpointCmpStrictly ( sWord, iWordLen, iWordID, bWordDict, tPred ( pEnd ) )<0 );
 	}
 
 	return pStart;
 }
+
+template < typename CP >
+const CP * sphSearchCheckpoint ( const char * sWord, int iWordLen, SphWordID_t iWordID, bool bStarMode, bool bWordDict , const CP * pFirstCP, const CP * pLastCP )
+{
+	return sphSearchCheckpoint ( sWord, iWordLen, iWordID, bStarMode, bWordDict, pFirstCP, pLastCP, SphCheckpointAccess_fn<CP>() );
+}
+
 
 int sphCollateLibcCI ( const BYTE * pStr1, const BYTE * pStr2, bool bPacked );
 int sphCollateLibcCS ( const BYTE * pStr1, const BYTE * pStr2, bool bPacked );

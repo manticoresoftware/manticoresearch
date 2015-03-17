@@ -274,7 +274,6 @@ Qcache_c::Qcache_c()
 	m_iHits = 0;
 	m_iMruHead = -1;
 
-	m_tLock.Init();
 	m_hData.Resize ( 256 );
 	m_hData.Fill ( QCACHE_NO_ENTRY );
 	m_iMaxQueries = (int)( m_hData.GetLength()*0.7f );
@@ -287,7 +286,6 @@ Qcache_c::~Qcache_c()
 		if ( IsValidEntry(i) )
 			SafeRelease ( m_hData[i] );
 	m_tLock.Unlock();
-	m_tLock.Done();
 }
 
 void Qcache_c::Setup ( int64_t iMaxBytes, int iThreshMsec, int iTtlSec )

@@ -390,7 +390,7 @@ protected:
 	static const int			KLIST_ACCUM_THRESH	= 32;
 
 public:
-	static CSphStaticMutex		m_tSegmentSeq;
+	static CSphMutex			m_tSegmentSeq;
 	static int					m_iSegments;	///< age tag sequence generator (guarded by m_tSegmentSeq)
 	int							m_iTag;			///< segment age tag
 
@@ -460,7 +460,7 @@ public:
 };
 
 int RtSegment_t::m_iSegments = 0;
-CSphStaticMutex RtSegment_t::m_tSegmentSeq;
+CSphMutex RtSegment_t::m_tSegmentSeq;
 
 
 const CSphRowitem * RtSegment_t::FindRow ( SphDocID_t uDocid ) const
@@ -1284,11 +1284,8 @@ RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int6
 		assert ( !m_tSchema.GetAttr(i).m_tLocator.m_bDynamic );
 #endif
 
-	Verify ( m_tWriting.Init() );
 	Verify ( m_tChunkLock.Init() );
 	Verify ( m_tReading.Init() );
-	Verify ( m_tFlushLock.Init() );
-	Verify ( m_tOptimizingLock.Init() );
 }
 
 
@@ -1303,11 +1300,8 @@ RtIndex_t::~RtIndex_t ()
 		SaveMeta ( m_dDiskChunks.GetLength(), m_iTID );
 	}
 
-	Verify ( m_tOptimizingLock.Done() );
-	Verify ( m_tFlushLock.Done() );
 	Verify ( m_tReading.Done() );
 	Verify ( m_tChunkLock.Done() );
-	Verify ( m_tWriting.Done() );
 
 	ARRAY_FOREACH ( i, m_dRamChunks )
 		SafeDelete ( m_dRamChunks[i] );
@@ -8643,8 +8637,6 @@ RtBinlog_c::RtBinlog_c ()
 {
 	MEMORY ( MEM_BINLOG );
 
-	Verify ( m_tWriteLock.Init() );
-
 	m_tWriter.SetBufferSize ( BINLOG_WRITE_BUFFER );
 }
 
@@ -8660,8 +8652,6 @@ RtBinlog_c::~RtBinlog_c ()
 		m_tWriter.CloseFile();
 		LockFile ( false );
 	}
-
-	Verify ( m_tWriteLock.Done() );
 }
 
 

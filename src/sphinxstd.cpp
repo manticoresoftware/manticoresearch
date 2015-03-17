@@ -1104,33 +1104,27 @@ bool sphIsLtLib()
 
 // Windows mutex implementation
 
-bool CSphMutex::Init ()
+CSphMutex::CSphMutex ()
 {
-	assert ( !m_bInitialized );
 	m_hMutex = CreateMutex ( NULL, FALSE, NULL );
-	m_bInitialized = ( m_hMutex!=NULL );
-	return m_bInitialized;
+	if ( !m_hMutex )
+		sphDie ( "CreateMutex() failed" );
 }
 
-bool CSphMutex::Done ()
+CSphMutex::~CSphMutex ()
 {
-	if ( !m_bInitialized )
-		return true;
-
-	m_bInitialized = false;
-	return CloseHandle ( m_hMutex )==TRUE;
+	if ( CloseHandle ( m_hMutex )==FALSE )
+		sphDie ( "CloseHandle() failed" );
 }
 
 bool CSphMutex::Lock ()
 {
-	assert ( m_bInitialized );
 	DWORD uWait = WaitForSingleObject ( m_hMutex, INFINITE );
 	return ( uWait!=WAIT_FAILED && uWait!=WAIT_TIMEOUT );
 }
 
 bool CSphMutex::Unlock ()
 {
-	assert ( m_bInitialized );
 	return ReleaseMutex ( m_hMutex )==TRUE;
 }
 
@@ -1212,31 +1206,23 @@ bool CSphSemaphore::Wait()
 
 // UNIX mutex implementation
 
-bool CSphMutex::Init ()
-{
-	assert ( !m_bInitialized );
-	m_bInitialized = ( pthread_mutex_init ( &m_tMutex, NULL )==0 );
-	return m_bInitialized;
+CSphMutex::CSphMutex() {
+	if ( pthread_mutex_init ( &m_tMutex, NULL ) )
+		sphDie ( "pthread_mutex_init() failed %s", strerror ( errno ) );
 }
 
-bool CSphMutex::Done ()
-{
-	if ( !m_bInitialized )
-		return true;
-
-	m_bInitialized = false;
-	return pthread_mutex_destroy ( &m_tMutex )==0;
+CSphMutex::~CSphMutex() {
+	if ( pthread_mutex_destroy ( &m_tMutex ) )
+		sphDie ( "pthread_mutex_destroy() failed %s", strerror ( errno ) );
 }
 
 bool CSphMutex::Lock ()
 {
-	assert ( m_bInitialized );
 	return ( pthread_mutex_lock ( &m_tMutex )==0 );
 }
 
 bool CSphMutex::Unlock ()
 {
-	assert ( m_bInitialized );
 	return ( pthread_mutex_unlock ( &m_tMutex )==0 );
 }
 
@@ -1762,7 +1748,6 @@ public:
 		, m_iStatQueuedJobs ( 0 )
 	{
 		Verify ( m_tWorkSem.Init () );
-		Verify ( m_tJobLock.Init() );
 
 		iThreads = Max ( iThreads, 1 );
 		m_dWorkers.Reset ( iThreads );
@@ -1776,7 +1761,6 @@ public:
 	{
 		Shutdown();
 
-		Verify ( m_tJobLock.Done() );
 		Verify ( m_tWorkSem.Done() );
 	}
 

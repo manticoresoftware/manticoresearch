@@ -248,7 +248,7 @@ protected:
 
 /// global idf definitions hash
 static SmallStringHash_T <CSphGlobalIDF * >	g_hGlobalIDFs;
-static CSphStaticMutex						g_tGlobalIDFLock;
+static CSphMutex							g_tGlobalIDFLock;
 
 /////////////////////////////////////////////////////////////////////////////
 // COMPILE-TIME CHECKS
@@ -9014,7 +9014,6 @@ public:
 CSphArena::CSphArena ()
 	: m_iPages ( 0 )
 {
-	m_tThdMutex.Init();
 }
 
 
@@ -9022,7 +9021,6 @@ CSphArena::~CSphArena ()
 {
 	// notify callers that arena no longer exists
 	g_pMvaArena = NULL;
-	m_tThdMutex.Done();
 }
 
 DWORD * CSphArena::ReInit ( int uMaxBytes )

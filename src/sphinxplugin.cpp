@@ -91,7 +91,7 @@ const char * g_dPluginTypes[PLUGIN_TOTAL] = { "udf", "ranker", "index_token_filt
 
 static bool								g_bPluginsEnabled = false;	///< is there any plugin support at all?
 static CSphString						g_sPluginDir;
-static CSphStaticMutex					g_tPluginMutex;				///< common plugin mutex (access to lib, func and ranker hashes)
+static CSphMutex						g_tPluginMutex;				///< common plugin mutex (access to lib, func and ranker hashes)
 static SmallStringHash_T<PluginLib_c*>	g_hPluginLibs;				///< key is the filename (no path)
 
 static CSphOrderedHash<PluginDesc_c*, PluginKey_t, PluginKey_t, 256>	g_hPlugins;
@@ -361,7 +361,7 @@ bool sphPluginCreate ( const char * szLib, PluginType_e eType, const char * sNam
 	}
 
 	// from here, we need a lock (we intend to update the plugin hash)
-	CSphScopedLock<CSphStaticMutex> tLock ( g_tPluginMutex );
+	CSphScopedLock<CSphMutex> tLock ( g_tPluginMutex );
 
 	// validate function name
 	PluginKey_t k ( eType, sName );
@@ -431,7 +431,7 @@ bool sphPluginDrop ( PluginType_e eType, const char * sName, CSphString & sError
 	sError = "no dlopen(), no plugins";
 	return false;
 #else
-	CSphScopedLock<CSphStaticMutex> tLock ( g_tPluginMutex );
+	CSphScopedLock<CSphMutex> tLock ( g_tPluginMutex );
 
 	PluginKey_t tKey ( eType, sName );
 	PluginDesc_c ** ppPlugin = g_hPlugins(tKey);
@@ -465,7 +465,7 @@ bool sphPluginReload ( const char * sName, CSphString & sError )
 	return false;
 #else
 	// find all plugins from the given library
-	CSphScopedLock<CSphStaticMutex> tLock ( g_tPluginMutex );
+	CSphScopedLock<CSphMutex> tLock ( g_tPluginMutex );
 
 	CSphVector<PluginKey_t> dKeys;
 	CSphVector<PluginDesc_c*> dPlugins;
@@ -595,7 +595,7 @@ static const char * UdfReturnType ( ESphAttr eType )
 
 void sphPluginSaveState ( CSphWriter & tWriter )
 {
-	CSphScopedLock<CSphStaticMutex> tLock ( g_tPluginMutex );
+	CSphScopedLock<CSphMutex> tLock ( g_tPluginMutex );
 	g_hPlugins.IterateStart();
 	while ( g_hPlugins.IterateNext() )
 	{
@@ -628,7 +628,7 @@ bool sphPluginExists ( PluginType_e eType, const char * sName )
 {
 	if ( !g_bPluginsEnabled )
 		return false;
-	CSphScopedLock<CSphStaticMutex> tLock ( g_tPluginMutex );
+	CSphScopedLock<CSphMutex> tLock ( g_tPluginMutex );
 	PluginKey_t k ( eType, sName );
 	PluginDesc_c ** pp = g_hPlugins(k);
 	return pp && *pp;
@@ -640,7 +640,7 @@ PluginDesc_c * sphPluginGet ( PluginType_e eType, const char * sName )
 	if ( !g_bPluginsEnabled )
 		return NULL;
 
-	CSphScopedLock<CSphStaticMutex> tLock ( g_tPluginMutex );
+	CSphScopedLock<CSphMutex> tLock ( g_tPluginMutex );
 	PluginKey_t k ( eType, sName );
 	PluginDesc_c ** pp = g_hPlugins(k);
 	if ( !pp || !*pp )
@@ -654,7 +654,7 @@ void sphPluginList ( CSphVector<PluginInfo_t> & dResult )
 {
 	if ( !g_bPluginsEnabled )
 		return;
-	CSphScopedLock<CSphStaticMutex> tLock ( g_tPluginMutex );
+	CSphScopedLock<CSphMutex> tLock ( g_tPluginMutex );
 	g_hPlugins.IterateStart();
 	while ( g_hPlugins.IterateNext() )
 	{

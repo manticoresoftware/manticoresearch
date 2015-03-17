@@ -1667,8 +1667,6 @@ void BenchThreads ()
 	SphThread_t * pThd = new SphThread_t [ BATCH_THREADS ];
 
 	CSphMutex tMutex;
-	if ( !tMutex.Init() )
-		sphDie ( "failed to init mutex" );
 
 	for ( int iRun=1; iRun<=2; iRun++ )
 	{
@@ -1697,7 +1695,6 @@ void BenchThreads ()
 			iThdSec10/10, iThdSec10%10 );
 	}
 
-	tMutex.Done ();
 	SafeDeleteArray ( pThd );
 }
 

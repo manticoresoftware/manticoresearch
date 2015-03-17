@@ -1653,33 +1653,10 @@ static bool SaveIndexes ()
 
 static void InitLocks ()
 {
-	g_tThdMutex.Init();
-	g_tRotateQueueMutex.Init();
-	g_tRotateConfigMutex.Init();
-	g_tOptimizeQueueMutex.Init();
-	g_tDistLock.Init();
-	g_tPersLock.Init();
-	g_tStatsMutex.Init();
-	g_tLastMetaMutex.Init();
-	g_tUservarsMutex.Init();
-
 	// DO NOT clean up these !!! at DoneLocks
 	// as these explicitly got deleted at Shutdown to save RT indexes
 	g_pLocalIndexes = new IndexHash_c();
 	g_pTemplateIndexes = new IndexHash_c();
-}
-
-static void DoneLocks ()
-{
-	g_tUservarsMutex.Done();
-	g_tLastMetaMutex.Done();
-	g_tStatsMutex.Done();
-	g_tPersLock.Done();
-	g_tDistLock.Done();
-	g_tOptimizeQueueMutex.Done();
-	g_tRotateConfigMutex.Done();
-	g_tRotateQueueMutex.Done();
-	g_tThdMutex.Done();
 }
 
 
@@ -1764,7 +1741,6 @@ void Shutdown ()
 	sphShutdownWordforms ();
 	sphShutdownGlobalIDFs ();
 	sphAotShutdown ();
-	DoneLocks();
 
 	ARRAY_FOREACH ( i, g_dListeners )
 		if ( g_dListeners[i].m_iSock>=0 )
@@ -3391,16 +3367,10 @@ public:
 		: m_dBuffer ( 0 )
 	{}
 
-	~InterWorkerStorage()
-	{
-		m_tThdMutex.Done();
-	}
-
 	void Init ( int iBufSize )
 	{
 		assert ( !m_dBuffer.GetLength() );
 		m_dBuffer.Reset ( iBufSize );
-		m_tThdMutex.Init();
 	}
 
 	inline BYTE * GetSharedData()
@@ -5241,16 +5211,12 @@ public:
 			m_dData[i] = AgentWorkContext_t();
 #endif
 
-		m_tDataLock.Init();
-		m_tStatLock.Init();
 		m_tChanged.Init ( &m_tStatLock );
 	}
 
 	~ThdWorkPool_t ()
 	{
 		m_tChanged.Done();
-		m_tStatLock.Done();
-		m_tDataLock.Done();
 		SafeDeleteArray ( m_dData );
 	}
 
@@ -9018,7 +8984,6 @@ SearchHandler_c::SearchHandler_c ( int iQueries, bool bSphinxql, bool bMaster, i
 	m_bGotLocalDF = false;
 	m_bMaster = bMaster;
 	m_iCid = iCid;
-	m_tLock.Init();
 }
 
 
@@ -9035,8 +9000,6 @@ SearchHandler_c::~SearchHandler_c ()
 		SafeDeleteArray ( m_dMva2Free[i] );
 	ARRAY_FOREACH ( i, m_dString2Free )
 		SafeDeleteArray ( m_dString2Free[i] );
-
-	m_tLock.Done();
 }
 
 
@@ -12312,11 +12275,6 @@ struct SnippetRequestBuilder_t : public IRequestBuilder_t
 		, m_bScattered ( false )
 		, m_iWorker ( 0 )
 	{
-		m_tWorkerMutex.Init();
-	}
-	~SnippetRequestBuilder_t()
-	{
-		m_tWorkerMutex.Done();
 	}
 	virtual void BuildRequest ( AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const;
 
@@ -12715,7 +12673,6 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 
 		// do MT searching
 		CSphMutex tLock;
-		tLock.Init();
 
 		CrashQuery_t tCrashQuery = SphCrashLogger_c::GetQuery(); // transfer query info for crash logger to new thread
 		int iCurQuery = 0;
@@ -12781,7 +12738,6 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 				SnippetThreadFunc ( &dThreads[0] );
 			}
 		}
-		tLock.Done();
 
 		// back in query order
 		dQueries.Sort ( bind ( &ExcerptQuery_t::m_iSeq ) );
@@ -13607,7 +13563,7 @@ void BuildStatus ( VectorLike & dStatus )
 
 	const QcacheStatus_t & s = QcacheGetStatus();
 	if ( dStatus.MatchAdd ( "qcache_max_bytes" ) )
-		dStatus.Add().SetSprintf ( "%lld", s.m_iMaxBytes );
+		dStatus.Add().SetSprintf ( INT64_FMT, s.m_iMaxBytes );
 	if ( dStatus.MatchAdd ( "qcache_thresh_msec" ) )
 		dStatus.Add().SetSprintf ( "%d", s.m_iThreshMsec );
 	if ( dStatus.MatchAdd ( "qcache_ttl_sec" ) )
@@ -13616,9 +13572,9 @@ void BuildStatus ( VectorLike & dStatus )
 	if ( dStatus.MatchAdd ( "qcache_cached_queries" ) )
 		dStatus.Add().SetSprintf ( "%d", s.m_iCachedQueries );
 	if ( dStatus.MatchAdd ( "qcache_used_bytes" ) )
-		dStatus.Add().SetSprintf ( "%lld", s.m_iUsedBytes );
+		dStatus.Add().SetSprintf ( INT64_FMT, s.m_iUsedBytes );
 	if ( dStatus.MatchAdd ( "qcache_hits" ) )
-		dStatus.Add().SetSprintf ( "%lld", s.m_iHits );
+		dStatus.Add().SetSprintf ( INT64_FMT, s.m_iHits );
 }
 
 void BuildOneAgentStatus ( VectorLike & dStatus, const CSphString& sAgent, const char * sPrefix="agent" )
@@ -22023,15 +21979,12 @@ private:
 
 		m_bGotExternal = false;
 		m_dWorkExternal.Reserve ( 1000 );
-		m_tExtLock.Init();
 	}
 
 	~CSphNetLoop()
 	{
 		ARRAY_FOREACH ( i, m_dWorkExternal )
 			SafeDelete ( m_dWorkExternal[i] );
-
-		m_tExtLock.Done();
 	}
 
 	void Tick ()
@@ -24176,7 +24129,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 				break;
 
 			default:
-				DoneLocks();
 				// tty-controlled parent
 				sphSetProcessInfo ( false );
 				exit ( 0 );

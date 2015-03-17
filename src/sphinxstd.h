@@ -2695,16 +2695,13 @@ bool sphIsLtLib();
 class CSphMutex
 {
 public:
-	CSphMutex () : m_bInitialized ( false ) {}
-	~CSphMutex () { assert ( !m_bInitialized ); }
+	CSphMutex ();
+	~CSphMutex ();
 
-	bool Init ();
-	bool Done ();
 	bool Lock ();
 	bool Unlock ();
 
 protected:
-	bool m_bInitialized;
 #if USE_WINDOWS
 	HANDLE m_hMutex;
 #else
@@ -2759,32 +2756,6 @@ protected:
 #else
 	sem_t *	m_pSem;
 #endif
-};
-
-
-/// static mutex (for globals)
-class CSphStaticMutex : private CSphMutex
-{
-public:
-	CSphStaticMutex()
-	{
-		Verify ( Init() );
-	}
-
-	~CSphStaticMutex()
-	{
-		Done();
-	}
-
-	bool Lock ()
-	{
-		return CSphMutex::Lock();
-	}
-
-	bool Unlock ()
-	{
-		return CSphMutex::Unlock();
-	}
 };
 
 

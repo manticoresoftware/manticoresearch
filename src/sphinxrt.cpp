@@ -8089,7 +8089,11 @@ bool RtIndex_t::Truncate ( CSphString & )
 	// kill all disk chunks files
 	ARRAY_FOREACH ( i, m_dDiskChunks )
 	{
-		sFile.SetSprintf ( "%s.%d", m_sPath.cstr(), i );
+		CSphVector<CSphString> v;
+		const char * sChunkFilename = m_dDiskChunks[i]->GetFilename();
+		sphSplit ( v, sChunkFilename, "." ); // split something like "rt.1"
+		const char * sChunkNumber = v.Last().cstr();
+		sFile.SetSprintf ( "%s.%s", m_sPath.cstr(), sChunkNumber );
 		sphUnlinkIndex ( sFile.cstr(), false );
 	}
 

@@ -18209,7 +18209,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString
 		default:
 			// default case, unknown command
 			sError.SetSprintf ( "unknown command (code=%d)", uMysqlCmd );
-				SendMysqlErrorPacket ( tOut, uPacketID, sQuery.cstr(), sError.cstr(), pThd->m_iConnID, MYSQL_ERR_UNKNOWN_COM_ERROR );
+				SendMysqlErrorPacket ( tOut, uPacketID, NULL, sError.cstr(), pThd->m_iConnID, MYSQL_ERR_UNKNOWN_COM_ERROR );
 			break;
 	}
 

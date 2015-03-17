@@ -59,7 +59,7 @@ public:
 
 	void						Append ( SphDocID_t uDocid, int iWeight );
 	void						Finish();
-	int							GetSize() const { return m_dData.GetSizeBytes() + m_dWeights.GetSizeBytes(); }
+	int							GetSize() const { return sizeof(*this) + m_dFilters.GetSizeBytes() + m_dData.GetSizeBytes() + m_dWeights.GetSizeBytes(); }
 	void						RankerReset();
 
 private:

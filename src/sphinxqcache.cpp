@@ -347,6 +347,9 @@ void Qcache_c::Add ( const CSphQuery & q, QcacheEntry_c * pResult )
 		CSphVector<QcacheEntry_c*> hNew ( 2*m_hData.GetLength() );
 		hNew.Fill ( NULL );
 
+		CSphVector<int> dRemap ( m_hData.GetLength() );
+		dRemap.Fill ( -1 );
+
 		int iLenMask = hNew.GetLength() - 1;
 		ARRAY_FOREACH ( i, m_hData )
 			if ( IsValidEntry(i) )
@@ -355,9 +358,23 @@ void Qcache_c::Add ( const CSphQuery & q, QcacheEntry_c * pResult )
 			while ( hNew[j]!=NULL )
 				j = ( j+1 ) & iLenMask;
 			hNew[j] = m_hData[i];
+			dRemap[i] = j;
+		}
+
+		ARRAY_FOREACH ( i, m_hData )
+			if ( IsValidEntry(i) )
+		{
+			QcacheEntry_c * p = hNew [ dRemap[i] ];
+			if ( p->m_iMruNext>=0 )
+				p->m_iMruNext = dRemap [ p->m_iMruNext ];
+			if ( p->m_iMruPrev>=0 )
+				p->m_iMruPrev = dRemap [ p->m_iMruPrev ];
 		}
 
 		m_hData.SwapData ( hNew );
+		m_iMruHead = dRemap [ m_iMruHead ];
+
+		m_iMaxQueries *= 2;
 	}
 
 	// add entry
@@ -470,7 +487,7 @@ void Qcache_c::DeleteEntry ( int i )
 	if ( p->m_iMruPrev>=0 )
 		m_hData[p->m_iMruPrev]->m_iMruNext = p->m_iMruNext;
 	else
-		m_iMruHead = -1;
+		m_iMruHead = p->m_iMruNext;
 
 	// adjust stats
 	m_iCachedQueries--;

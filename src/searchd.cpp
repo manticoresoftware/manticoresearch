@@ -136,7 +136,6 @@ struct ServedDesc_t
 	bool				m_bToDelete;
 	bool				m_bOnlyNew;
 	bool				m_bRT;
-	bool				m_bAlterEnabled;
 	CSphString			m_sGlobalIDFPath;
 	bool				m_bOnDiskAttrs;
 	bool				m_bOnDiskPools;
@@ -156,7 +155,7 @@ public:
 	void				WriteLock () const;
 	void				Unlock () const;
 
-	bool				InitLock ( bool bProcessShared, CSphString & sError ) const;
+	bool				InitLock () const;
 
 private:
 	mutable CSphRwlock	m_tLock;
@@ -1088,7 +1087,6 @@ ServedDesc_t::ServedDesc_t ()
 	, m_bToDelete ( false )
 	, m_bOnlyNew ( false )
 	, m_bRT ( false )
-	, m_bAlterEnabled ( true )
 	, m_bOnDiskAttrs ( false )
 	, m_bOnDiskPools ( false )
 	, m_iMass ( 0 )
@@ -1126,13 +1124,9 @@ void ServedIndex_t::WriteLock () const
 	}
 }
 
-bool ServedIndex_t::InitLock ( bool bProcessShared, CSphString & sError ) const
+bool ServedIndex_t::InitLock() const
 {
-	bool bRes = m_tLock.Init ( bProcessShared );
-	if ( !bRes )
-		sError = m_tLock.GetError();
-
-	return bRes;
+	return m_tLock.Init();
 }
 
 void ServedIndex_t::Unlock () const
@@ -1223,13 +1217,7 @@ bool IndexHash_c::Add ( const ServedDesc_t & tDesc, const CSphString & tKey )
 	if ( bAdded )
 	{
 		*( (ServedDesc_t *)&tVal ) = tDesc;
-		CSphString sError;
-		if ( !tVal.InitLock ( true, sError ) )
-		{
-			tVal.m_bAlterEnabled = false;
-			sphWarning ( "failed to init process shared rwlock: %s; ALTER disabled", sError.cstr() );
-			Verify ( tVal.InitLock ( false, sError ) );
-		}
+		Verify ( tVal.InitLock() );
 	}
 	Unlock();
 	return bAdded;
@@ -17556,13 +17544,6 @@ static void HandleMysqlAlter ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, b
 			if ( !pLocal->m_bEnabled )
 			{
 				dErrors.Submit ( sName, "does not support ALTER (enabled=false)" );
-				pLocal->Unlock();
-				continue;
-			}
-
-			if ( !pLocal->m_bAlterEnabled )
-			{
-				dErrors.Submit ( sName, "ALTER disabled for this index" );
 				pLocal->Unlock();
 				continue;
 			}

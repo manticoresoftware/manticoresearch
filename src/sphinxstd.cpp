@@ -1347,7 +1347,7 @@ CSphRwlock::CSphRwlock ()
 {}
 
 
-bool CSphRwlock::Init ( bool )
+bool CSphRwlock::Init ()
 {
 	assert ( !m_bInitialized );
 	assert ( !m_hWriteMutex && !m_hReadEvent && !m_iReaders );
@@ -1384,12 +1384,6 @@ bool CSphRwlock::Done ()
 	m_iReaders = 0;
 	m_bInitialized = false;
 	return true;
-}
-
-
-const char * CSphRwlock::GetError () const
-{
-	return m_sError.cstr();
 }
 
 
@@ -1471,63 +1465,12 @@ CSphRwlock::CSphRwlock ()
 	: m_bInitialized ( false )
 {}
 
-bool CSphRwlock::Init ( bool bProcessShared )
+bool CSphRwlock::Init ()
 {
 	assert ( !m_bInitialized );
 
-#ifdef __FreeBSD__
-	if ( bProcessShared )
-	{
-		m_sError = "process shared rwlock is not supported by FreeBSD";
-		return false;
-	}
-#endif
-
-	pthread_rwlockattr_t tAttr;
-	pthread_rwlockattr_t * pAttrUsed = NULL;
-	int iRes;
-
-	if ( bProcessShared )
-	{
-		iRes = pthread_rwlockattr_init ( &tAttr );
-		if ( iRes )
-		{
-			m_sError.SetSprintf ( "pthread_rwlockattr_init, errno=%d", iRes );
-			return false;
-		}
-		iRes = pthread_rwlockattr_setpshared ( &tAttr, PTHREAD_PROCESS_SHARED );
-		if ( iRes )
-		{
-			m_sError.SetSprintf ( "pthread_rwlockattr_setpshared, errno = %d", iRes );
-			pthread_rwlockattr_destroy ( &tAttr );
-			return false;
-		}
-
-		pAttrUsed = &tAttr;
-	}
-
-	iRes = pthread_rwlock_init ( &m_tLock, pAttrUsed );
-	if ( iRes )
-	{
-		m_sError.SetSprintf ( "pthread_rwlock_init, errno = %d", iRes );
-		if ( pAttrUsed )
-			pthread_rwlockattr_destroy ( pAttrUsed );
-		return false;
-	}
-
-	if ( pAttrUsed )
-	{
-		iRes = pthread_rwlockattr_destroy ( pAttrUsed );
-		if ( iRes )
-		{
-			m_sError.SetSprintf ( "pthread_rwlockattr_destroy, errno = %d", iRes );
-			return false;
-		}
-	}
-
-	m_bInitialized = true;
-
-	return true;
+	m_bInitialized = ( pthread_rwlock_init ( &m_tLock, NULL )==0 );
+	return m_bInitialized;
 }
 
 bool CSphRwlock::Done ()
@@ -1537,11 +1480,6 @@ bool CSphRwlock::Done ()
 
 	m_bInitialized = !( pthread_rwlock_destroy ( &m_tLock )==0 );
 	return !m_bInitialized;
-}
-
-const char * CSphRwlock::GetError () const
-{
-	return m_sError.cstr();
 }
 
 bool CSphRwlock::ReadLock ()

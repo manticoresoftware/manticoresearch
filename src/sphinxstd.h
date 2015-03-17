@@ -2818,10 +2818,8 @@ public:
 	CSphRwlock ();
 	~CSphRwlock () {}
 
-	bool Init ( bool bProcessShared = false );
+	bool Init ();
 	bool Done ();
-
-	const char * GetError () const;
 
 	bool ReadLock ();
 	bool WriteLock ();
@@ -2829,7 +2827,6 @@ public:
 
 private:
 	bool				m_bInitialized;
-	CSphString			m_sError;
 #if USE_WINDOWS
 	HANDLE				m_hWriteMutex;
 	HANDLE				m_hReadEvent;

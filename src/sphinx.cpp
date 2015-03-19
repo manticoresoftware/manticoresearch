@@ -25587,7 +25587,7 @@ CSphSource::CSphSource ( const char * sName )
 
 CSphSource::~CSphSource()
 {
-	delete m_pStripper;
+	SafeDelete ( m_pStripper );
 }
 
 

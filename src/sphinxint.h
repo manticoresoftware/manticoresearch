@@ -2316,7 +2316,7 @@ public:
 		, m_iDocStart ( 0 )
 		, m_iDocCount ( 0 )
 		, m_pExtraTokenizer ( NULL )
-		, m_bProxyStripHTML ( false )
+		, m_pProxyStripper ( NULL )
 	{
 		assert ( sphUTF8Encode ( m_pMarkerDocStart, PROXY_DOCUMENT_START )==PROXY_MARKER_LEN );
 
@@ -2335,6 +2335,7 @@ public:
 	virtual ~CSphSource_Proxy()
 	{
 		SafeDelete ( m_pExtraTokenizer );
+		SafeDelete ( m_pProxyStripper );
 	}
 
 	void AppendToField ( StoredDoc_t * pCurDoc, int iField, BYTE * pToken, int iTokenLen, BYTE * pMarker )
@@ -2376,10 +2377,10 @@ public:
 		assert ( pEmbeddedTokenizer );
 
 		// do not run the stripper twice
-		if ( CSphSource_Proxy<T>::m_bStripHTML )
+		if ( CSphSource_Proxy<T>::m_pStripper )
 		{
-			m_bProxyStripHTML = true;
-			CSphSource_Proxy<T>::m_bStripHTML = false;
+			m_pProxyStripper = CSphSource_Proxy<T>::m_pStripper;
+			CSphSource_Proxy<T>::m_pStripper = NULL;
 		}
 
 		if ( !m_pExtraTokenizer )
@@ -2450,9 +2451,9 @@ public:
 			{
 				pDoc->m_dChinese[i] = sphDetectChinese ( pFields[i], m_dFieldLengths[i] );
 
-				if ( m_bProxyStripHTML )
+				if ( m_pProxyStripper )
 				{
-					CSphSource_Proxy<T>::m_pStripper->Strip ( pFields[i] );
+					m_pProxyStripper->Strip ( pFields[i] );
 					m_dFieldLengths[i] = strlen ( (const char *)pFields[i] );
 				}
 
@@ -2608,7 +2609,7 @@ private:
 	int						m_iDocStart;
 	int						m_iDocCount;
 	ISphTokenizer *			m_pExtraTokenizer;
-	bool					m_bProxyStripHTML;
+	CSphHTMLStripper *		m_pProxyStripper;
 
 	BYTE					m_pMarkerDocStart[PROXY_MARKER_LEN];
 	BYTE					m_pMarkerChineseField[PROXY_MARKER_LEN];

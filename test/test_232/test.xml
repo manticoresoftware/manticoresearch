@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>snippets and weights vs matching positions</name>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query			= select * from test_table
+	sql_attr_uint		= gid
+	sql_field_string	= title
+}
+
+index test
+{
+	source				= test
+	path				= <data_path/>/test
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	gid INTEGER NOT NULL,
+	title VARCHAR(255) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_insert>INSERT INTO test_table VALUES ( 1, 123, 'hello world' )</db_insert>
+<db_insert>INSERT INTO test_table VALUES ( 2, 123, 'aaa' )</db_insert>
+<db_insert>INSERT INTO test_table VALUES ( 3, 123, 'aaa bbb' )</db_insert>
+<db_insert>INSERT INTO test_table VALUES ( 4, 123, 'aaa bbb ccc' )</db_insert>
+<db_insert>INSERT INTO test_table VALUES ( 5, 123, 'aaa bbb ddd' )</db_insert>
+
+<sphqueries>
+<sphinxql>SELECT id,WEIGHT(),title FROM test WHERE MATCH('aaa|(bbb ccc)')</sphinxql>
+<sphinxql>CALL SNIPPETS('aaa bbb ddd', 'test', 'aaa|(bbb ccc)', 1 AS query_mode)</sphinxql>
+</sphqueries>
+
+</test>

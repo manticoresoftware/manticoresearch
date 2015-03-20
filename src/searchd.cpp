@@ -16348,6 +16348,7 @@ static void FormatFactors ( CSphVector<BYTE> & dOut, const unsigned int * pFacto
 		iLen = snprintf ( (char *)dOut.Begin()+iOff, MAX_STR_LEN, "], \"words\":[" );
 		dOut.Resize ( iOff+iLen );
 	}
+	bool bWord = false;
 	for ( int i = 0; i<iUniqQpos; i++ )
 	{
 		const unsigned int * pTerm = sphinx_get_term_factors ( pFactors, i+1 );
@@ -16363,8 +16364,9 @@ static void FormatFactors ( CSphVector<BYTE> & dOut, const unsigned int * pFacto
 				sphinx_get_term_factor_int ( pTerm, SPH_TERMF_TF ), sphinx_get_term_factor_float ( pTerm, SPH_TERMF_IDF ) );
 		} else
 		{
-			iLen = snprintf ( (char *)dOut.Begin()+iOff, MAX_STR_LEN, "%s{\"tf\":%d, \"idf\":%f}", ( i==0 ? "" : ", " ),
+			iLen = snprintf ( (char *)dOut.Begin()+iOff, MAX_STR_LEN, "%s{\"tf\":%d, \"idf\":%f}", ( bWord ? ", " : "" ),
 				sphinx_get_term_factor_int ( pTerm, SPH_TERMF_TF ), sphinx_get_term_factor_float ( pTerm, SPH_TERMF_IDF ) );
+			bWord = true;
 		}
 		dOut.Resize ( iOff+iLen );
 	}

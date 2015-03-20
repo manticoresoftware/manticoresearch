@@ -1121,8 +1121,8 @@ class ExtRanker_T : public ExtRanker_c
 {
 protected:
 	STATE			m_tState;
-	const ExtHit_t *			m_pHitBase;
-	CSphFixedVector<int>		m_dZonespans; // zonespanlists for my matches
+	const ExtHit_t *	m_pHitBase;
+	CSphVector<int>		m_dZonespans; // zonespanlists for my matches
 
 public:
 					ExtRanker_T ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup );
@@ -1139,7 +1139,7 @@ private:
 		{
 			case EXTRA_GET_DATA_ZONESPANS:
 				assert ( ppResult );
-				*ppResult = m_dZonespans.Begin();
+				*ppResult = &m_dZonespans;
 				return true;
 			default:
 				return m_tState.ExtraData ( eType, ppResult );
@@ -5937,11 +5937,10 @@ int ExtRanker_None_c::GetMatches ()
 template < typename STATE >
 ExtRanker_T<STATE>::ExtRanker_T ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup )
 	: ExtRanker_c ( tXQ, tSetup )
-	, m_dZonespans ( 0 )
 {
 	// FIXME!!! move out the disable of m_bZSlist in case no zonespan nodes
 	if ( m_bZSlist )
-		m_dZonespans.Reset ( ExtNode_i::MAX_DOCS * m_dZones.GetLength() );
+		m_dZonespans.Reserve ( ExtNode_i::MAX_DOCS * m_dZones.GetLength() );
 
 	m_pHitBase = NULL;
 }
@@ -5970,8 +5969,8 @@ int ExtRanker_T<STATE>::GetMatches ()
 	const ExtHit_t * pHlist = m_pHitlist;
 	const ExtHit_t * pHitBase = m_pHitBase;
 	const ExtDoc_t * pDocs = m_pDoclist;
+	m_dZonespans.Resize(1);
 	int	iLastZoneData = 0;
-	int iCurZoneData = 1;
 
 	CSphVector<int> dSpans;
 	if ( m_bZSlist )
@@ -6012,11 +6011,10 @@ int ExtRanker_T<STATE>::GetMatches ()
 					if ( IsInZone ( i, pHlist, &iSpan )!=SPH_ZONE_FOUND )
 						continue;
 
-					if ( iSpan!=dSpans[i] && iCurZoneData+1<m_dZonespans.GetLength() )
+					if ( iSpan!=dSpans[i] )
 					{
-						m_dZonespans[iCurZoneData] = i;
-						m_dZonespans[iCurZoneData+1] = iSpan;
-						iCurZoneData += 2;
+						m_dZonespans.Add ( i );
+						m_dZonespans.Add ( iSpan );
 						dSpans[i] = iSpan;
 					}
 				}
@@ -6041,10 +6039,12 @@ int ExtRanker_T<STATE>::GetMatches ()
 			m_dMatches[iMatches].m_iWeight = m_tState.Finalize ( m_dMatches[iMatches] );
 			if ( m_bZSlist )
 			{
-				m_dZonespans[iLastZoneData] = iCurZoneData-iLastZoneData-1;
+				m_dZonespans[iLastZoneData] = m_dZonespans.GetLength() - iLastZoneData - 1;
 				m_dMatches[iMatches].m_iTag = iLastZoneData;
-				iLastZoneData = iCurZoneData;
-				iCurZoneData++;
+
+				iLastZoneData = m_dZonespans.GetLength();
+				m_dZonespans.Add(0);
+
 				dSpans.Fill ( -1 );
 			}
 			iMatches++;

@@ -197,7 +197,7 @@ struct Expr_GetStrConst_c : public ISphStringExpr
 
 struct Expr_GetZonespanlist_c : public ISphStringExpr
 {
-	const int * m_pData;
+	const CSphVector<int> * m_pData;
 	mutable CSphStringBuilder m_sBuilder;
 
 	explicit Expr_GetZonespanlist_c ()
@@ -207,19 +207,17 @@ struct Expr_GetZonespanlist_c : public ISphStringExpr
 	virtual int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
 	{
 		assert ( ppStr );
-		if ( !m_pData )
+		if ( !m_pData || !m_pData->GetLength() )
 		{
 			*ppStr = NULL;
 			return 0;
 		}
 		m_sBuilder.Clear();
-		const int * pValues = m_pData + tMatch.m_iTag;
-		int iSize = *pValues++;
-		for ( int i=0; i<(iSize/2); ++i )
-		{
-			m_sBuilder.Appendf ( " %d:%d", pValues[0]+1, pValues[1]+1 );
-			pValues+=2;
-		}
+		const CSphVector<int> & dSpans = *m_pData;
+		int iStart = tMatch.m_iTag + 1; // spans[tag] contains the length, so the 1st data index is tag+1
+		int iEnd = iStart + dSpans [ tMatch.m_iTag ]; // [start,end) now covers all data indexes
+		for ( int i=iStart; i<iEnd; i+=2 )
+			m_sBuilder.Appendf ( " %d:%d", 1+dSpans[i], 1+dSpans[i+1] ); // convert our 0-based span numbers to human 1-based ones
 		*ppStr = (const BYTE *) CSphString ( m_sBuilder.cstr() ).Leak();
 		return m_sBuilder.Length();
 	}

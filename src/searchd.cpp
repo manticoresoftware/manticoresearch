@@ -3521,21 +3521,14 @@ public:
 
 			// renormalize the weights
 			fNormale = 65535/fNormale;
-#ifndef NDEBUG
 			DWORD uCheck = 0;
-			sphInfo ( "Rebalancing the mirrors" );
-#endif
 			ARRAY_FOREACH ( i, m_dAgents )
 			{
 				m_pWeights[i] = WORD ( m_pWeights[i]*dCoefs[i]*fNormale );
-#ifndef NDEBUG
 				uCheck += m_pWeights[i];
-				sphInfo ( "Mirror %d, new weight (%d)", i, m_pWeights[i] );
-#endif
+				sphLogDebug ( "Mirror %d, new weight (%d)", i, m_pWeights[i] );
 			}
-#ifndef NDEBUG
-		sphInfo ( "Rebalancing finished. The whole sum is %d", uCheck );
-#endif
+			sphLogDebug ( "Rebalancing finished. The whole sum is %d", uCheck );
 		}
 	}
 
@@ -3838,6 +3831,7 @@ public:
 		m_pWeights = rhs.m_pWeights;
 		m_pRRCounter = rhs.m_pRRCounter;
 		m_pLock = rhs.m_pLock;
+		m_eStrategy = rhs.m_eStrategy;
 		return *this;
 	}
 };
@@ -16007,6 +16001,7 @@ static void FormatFactors ( CSphVector<BYTE> & dOut, const unsigned int * pFacto
 		iLen = snprintf ( (char *)dOut.Begin()+iOff, MAX_STR_LEN, "], \"words\":[" );
 		dOut.Resize ( iOff+iLen );
 	}
+	bool bWord = false;
 	for ( int i = 0; i<iUniqQpos; i++ )
 	{
 		const unsigned int * pTerm = sphinx_get_term_factors ( pFactors, i+1 );
@@ -16022,8 +16017,9 @@ static void FormatFactors ( CSphVector<BYTE> & dOut, const unsigned int * pFacto
 				sphinx_get_term_factor_int ( pTerm, SPH_TERMF_TF ), sphinx_get_term_factor_float ( pTerm, SPH_TERMF_IDF ) );
 		} else
 		{
-			iLen = snprintf ( (char *)dOut.Begin()+iOff, MAX_STR_LEN, "%s{\"tf\":%d, \"idf\":%f}", ( i==0 ? "" : ", " ),
+			iLen = snprintf ( (char *)dOut.Begin()+iOff, MAX_STR_LEN, "%s{\"tf\":%d, \"idf\":%f}", ( bWord ? ", " : "" ),
 				sphinx_get_term_factor_int ( pTerm, SPH_TERMF_TF ), sphinx_get_term_factor_float ( pTerm, SPH_TERMF_IDF ) );
+			bWord = true;
 		}
 		dOut.Resize ( iOff+iLen );
 	}

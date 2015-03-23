@@ -302,6 +302,9 @@ index dist_w2
 <query index="dist_no" select="gr" groupattr="gr"/>
 <query index="dist_no" select="gr, @groupby, @count" groupattr="gr"/>
 
+<!-- regression legacy API select list crashes daemon -->
+<query select="*,*" index="dist_no"/>
+
 </queries>
 
 

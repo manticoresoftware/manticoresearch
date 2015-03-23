@@ -6798,7 +6798,8 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 		if ( tQuery.m_sSelect.Begins ( "*,*" ) ) // this is the legacy mark of agent for debug purpose
 		{
 			tQuery.m_bAgent = true;
-			tQuery.m_sSelect = tQuery.m_sSelect.SubString ( 4, tQuery.m_sSelect.Length()-4 );
+			int iSelectLen = tQuery.m_sSelect.Length();
+			tQuery.m_sSelect = ( iSelectLen>4 ? tQuery.m_sSelect.SubString ( 4, iSelectLen-4 ) : "*" );
 		}
 
 		CSphString sError;

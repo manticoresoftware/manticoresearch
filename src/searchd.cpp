@@ -3802,21 +3802,14 @@ public:
 
 			// renormalize the weights
 			fNormale = 65535/fNormale;
-#ifndef NDEBUG
 			DWORD uCheck = 0;
-			sphInfo ( "Rebalancing the mirrors" );
-#endif
 			ARRAY_FOREACH ( i, m_dAgents )
 			{
 				m_pWeights[i] = WORD ( m_pWeights[i]*dCoefs[i]*fNormale );
-#ifndef NDEBUG
 				uCheck += m_pWeights[i];
-				sphInfo ( "Mirror %d, new weight (%d)", i, m_pWeights[i] );
-#endif
+				sphLogDebug ( "Mirror %d, new weight (%d)", i, m_pWeights[i] );
 			}
-#ifndef NDEBUG
-		sphInfo ( "Rebalancing finished. The whole sum is %d", uCheck );
-#endif
+			sphLogDebug ( "Rebalancing finished. The whole sum is %d", uCheck );
 		}
 	}
 
@@ -4128,6 +4121,7 @@ public:
 		m_pWeights = rhs.m_pWeights;
 		m_pRRCounter = rhs.m_pRRCounter;
 		m_pLock = rhs.m_pLock;
+		m_eStrategy = rhs.m_eStrategy;
 		return *this;
 	}
 };

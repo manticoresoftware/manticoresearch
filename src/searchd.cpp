@@ -19178,34 +19178,28 @@ bool ValidateAgentDesc ( MetaAgentDesc_t & tAgent, const CSphVariant * pLine, co
 	// allocate stats slot
 	// let us cheat and also allocate the dashboard slot under the same lock
 	g_tStatsMutex.Lock();
+
 	pAgent->m_iStatsIndex = g_tStats.m_dAgentStats.AllocItem();
+	if ( pAgent->m_iStatsIndex<0 )
+		sphWarning ( "index '%s': agent '%s': failed to allocate slot for stats",
+			szIndexName, pLine->cstr() );
+
 	if ( g_tStats.m_hDashBoard.Exists ( sHashKey ) )
 	{
-		g_tStatsMutex.Lock();
-		pAgent->m_iStatsIndex = g_tStats.m_dAgentStats.AllocItem();
-		if ( pAgent->m_iStatsIndex<0 )
-			sphWarning ( "index '%s': agent '%s': failed to allocate slot for stats",
-				szIndexName, pLine->cstr() );
-
-		if ( g_tStats.m_hDashBoard.Exists ( sHashKey ) )
+		pAgent->m_iDashIndex = g_tStats.m_hDashBoard[sHashKey];
+		g_tStats.m_dDashboard.m_dItemStats[pAgent->m_iDashIndex].m_iRefCount++;
+	} else
+	{
+		pAgent->m_iDashIndex = g_tStats.m_dDashboard.AllocItem();
+		if ( pAgent->m_iDashIndex<0 )
 		{
-			pAgent->m_iDashIndex = g_tStats.m_hDashBoard[sHashKey];
-			g_tStats.m_dDashboard.m_dItemStats[pAgent->m_iDashIndex].m_iRefCount++;
+			sphWarning ( "index '%s': agent '%s': failed to allocate slot for stat-dashboard",
+			szIndexName, pLine->cstr() );
 		} else
 		{
-			pAgent->m_iDashIndex = g_tStats.m_dDashboard.AllocItem();
-			if ( pAgent->m_iDashIndex<0 )
-			{
-				sphWarning ( "index '%s': agent '%s': failed to allocate slot for stat-dashboard",
-				szIndexName, pLine->cstr() );
-			} else
-			{
-				g_tStats.m_dDashboard.m_dItemStats[pAgent->m_iDashIndex].Init ( pAgent );
-				g_tStats.m_hDashBoard.Add ( pAgent->m_iDashIndex, sHashKey );
-			}
+			g_tStats.m_dDashboard.m_dItemStats[pAgent->m_iDashIndex].Init ( pAgent );
+			g_tStats.m_hDashBoard.Add ( pAgent->m_iDashIndex, sHashKey );
 		}
-
-		g_tStatsMutex.Unlock();
 	}
 
 	g_tStatsMutex.Unlock();

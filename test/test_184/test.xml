@@ -102,6 +102,23 @@ index fields
 	path				= <data_path/>/fields
 	docinfo				= extern
 }
+
+source src_str2
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query			= SELECT 1 id, 11 gid, 'who' title, 'Well who is that shouting?' content UNION SELECT 2 id, 12 gid, 'is' title, 'All he ever gives us is pain' content UNION SELECT 3 id, 13 gid, 'who' title, 'Well who is shoping there?' content 
+	sql_field_string 	= title
+	sql_attr_uint 		= gid
+}
+
+index str2
+{
+	source				= src_str2
+	path				= <data_path/>/str2
+	docinfo				= extern
+}
+
 </config>
 
 <db_create>
@@ -216,6 +233,14 @@ INSERT INTO test_table VALUES
 
 <!-- regression wlccs did not get reset between documents -->
 <sphinxql>select id, weight() from test where match('seven|lies') option ranker=expr('sum(1000*wlccs)')</sphinxql>
+
+<!-- regression string condition at expression and expression ranker -->
+<sphinxql>select id, weight() w, title=1 as c, title from str2 where match('who | is') option ranker=expr('sum(1000)')</sphinxql>
+<sphinxql>select id, weight() w, title='who' as c, title from str2 where match('who | is') option ranker=expr('sum(1000)')</sphinxql>
+<sphinxql>select id, weight() w, title from str2 where match('who | is') option ranker=expr('sum(1000) * (gid*10+(title=1))')</sphinxql>
+<sphinxql>select id, weight() w, title from str2 where match('who | is') option ranker=expr('sum(1000) * (gid*10+(title="who"))')</sphinxql>
+<sphinxql>select id, weight() w, title from str2 where match('who | is') option ranker=expr('sum(gid*10+(title="who"))')</sphinxql>
+<sphinxql>select id, weight() w, title from str2 where match('who | is') option ranker=expr('top(gid*10+(title="who"))')</sphinxql>
 
 </sphqueries>
 

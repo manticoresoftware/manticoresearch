@@ -6190,16 +6190,13 @@ int ExprParser_t::AddNodeIdent ( const char * sKey, int iLeft )
 // checks operand types for some arithmetic operators
 struct TypeCheck_fn
 {
-	bool * m_pRes;
-
-	explicit TypeCheck_fn ( bool * pRes )
-		: m_pRes ( pRes )
-	{
-		*m_pRes = false;
-	}
+	CSphString m_sError;
 
 	void Enter ( const ExprNode_t & tNode, const CSphVector<ExprNode_t> & dNodes )
 	{
+		if ( !m_sError.IsEmpty() )
+			return;
+
 		bool bNumberOp = tNode.m_iToken=='+' || tNode.m_iToken=='-' || tNode.m_iToken=='*' || tNode.m_iToken=='/';
 		if ( bNumberOp )
 		{
@@ -6207,7 +6204,24 @@ struct TypeCheck_fn
 			bool bRightNumeric = tNode.m_iRight==-1 ? false : IsNumericNode ( dNodes[tNode.m_iRight] );
 
 			if ( !bLeftNumeric || !bRightNumeric )
-				*m_pRes = true;
+			{
+				m_sError = "numeric operation applied to non-numeric operands";
+				return;
+			}
+		}
+
+		if ( tNode.m_iToken==TOK_EQ )
+		{
+			// string equal must work with string columns only
+			ESphAttr eLeftRet = tNode.m_iLeft==-1 ? SPH_ATTR_NONE : dNodes[tNode.m_iLeft].m_eRetType;
+			ESphAttr eRightRet = tNode.m_iRight==-1 ? SPH_ATTR_NONE : dNodes[tNode.m_iRight].m_eRetType;
+			bool bLeftStr = ( eLeftRet==SPH_ATTR_STRING || eLeftRet==SPH_ATTR_STRINGPTR || eLeftRet==SPH_ATTR_JSON_FIELD );
+			bool bRightStr = ( eRightRet==SPH_ATTR_STRING || eRightRet==SPH_ATTR_STRINGPTR || eRightRet==SPH_ATTR_JSON_FIELD );
+			if ( bLeftStr!=bRightStr )
+			{
+				m_sError = "equal operation applied to part string operands";
+				return;
+			}
 		}
 	}
 
@@ -6337,12 +6351,11 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 #endif
 
 	// simple semantic analysis
-	bool bTypeMismatch;
-	TypeCheck_fn tFunctor ( &bTypeMismatch );
-	WalkTree ( m_iParsed, tFunctor );
-	if ( bTypeMismatch )
+	TypeCheck_fn tTypeChecker;
+	WalkTree ( m_iParsed, tTypeChecker );
+	if ( !tTypeChecker.m_sError.IsEmpty() )
 	{
-		sError.SetSprintf ( "numeric operation applied to non-numeric operands" );
+		sError.Swap ( tTypeChecker.m_sError );
 		return NULL;
 	}
 

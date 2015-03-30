@@ -59,6 +59,10 @@
 		<Unit filename="../src/sphinxjson.cpp" />
 		<Unit filename="../src/sphinxjson.h" />
 		<Unit filename="../src/sphinxmetaphone.cpp" />
+		<Unit filename="../src/sphinxplugin.cpp" />
+		<Unit filename="../src/sphinxplugin.h" />
+		<Unit filename="../src/sphinxqcache.cpp" />
+		<Unit filename="../src/sphinxqcache.h" />
 		<Unit filename="../src/sphinxquery.cpp" />
 		<Unit filename="../src/sphinxquery.h" />
 		<Unit filename="../src/sphinxrt.cpp" />

@@ -79,6 +79,9 @@
 			<Add library="pthread" />
 		</Linker>
 		<Unit filename="../src/searchd.cpp" />
+		<Unit filename="../src/searchdaemon.h" />
+		<Unit filename="../src/searchdha.cpp" />
+		<Unit filename="../src/searchdha.h" />
 		<Extensions>
 			<AutoVersioning>
 				<Scheme minor_max="10" build_max="0" rev_max="0" rev_rand_max="10" build_times_to_increment_minor="100" />

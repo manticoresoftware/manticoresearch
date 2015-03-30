@@ -361,7 +361,7 @@
 				>
 			</File>
 			<File
-				RelativePath="..\src\searchha.cpp"
+				RelativePath="..\src\searchdha.cpp"
 				>
 			</File>
 		</Filter>

@@ -251,6 +251,9 @@ INSERT INTO cmp_table VALUES
 
 <sphinxql>SELECT GEODIST(0,0,1,1,{in=radians,out=kilometers}) FROM test WHERE id=10</sphinxql>
 
+<!-- .NET connector 6.9.6 uses select timediff(now(), utc_timestamp()) -->
+<sphinxql>SELECT bigint(timediff(now(),utc_timestamp())) % 15</sphinxql>
+
 </sphqueries>
 
 </test>

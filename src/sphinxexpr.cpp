@@ -1044,9 +1044,11 @@ public:
 struct Expr_Time_c : public ISphExpr
 {
 	bool m_bUTC;
+	bool m_bDate;
 
-	explicit Expr_Time_c ( bool bUTC )
+	explicit Expr_Time_c ( bool bUTC, bool bDate )
 		: m_bUTC ( bUTC )
+		, m_bDate ( bDate )
 	{}
 
 	virtual int IntEval ( const CSphMatch & ) const
@@ -1069,7 +1071,10 @@ struct Expr_Time_c : public ISphExpr
 			gmtime_r ( &t, &s );
 		else
 			localtime_r ( &t, &s );
-		sVal.SetSprintf ( "%02d:%02d:%02d", s.tm_hour, s.tm_min, s.tm_sec );
+		if ( m_bDate )
+			sVal.SetSprintf ( "%04d-%02d-%02d %02d:%02d:%02d", s.tm_year+1900, s.tm_mon+1, s.tm_mday, s.tm_hour, s.tm_min, s.tm_sec );
+		else
+			sVal.SetSprintf ( "%02d:%02d:%02d", s.tm_hour, s.tm_min, s.tm_sec );
 		*ppStr = (const BYTE*) sVal.Leak();
 		return sVal.Length();
 	}
@@ -1700,6 +1705,7 @@ enum Func_e
 
 	FUNC_CURTIME,
 	FUNC_UTC_TIME,
+	FUNC_UTC_TIMESTAMP,
 	FUNC_TIMEDIFF,
 	FUNC_CURRENT_USER,
 	FUNC_CONNECTION_ID,
@@ -1782,6 +1788,7 @@ static FuncDesc_t g_dFuncs[] =
 
 	{ "curtime",		0,	FUNC_CURTIME,		SPH_ATTR_STRINGPTR },
 	{ "utc_time",		0,	FUNC_UTC_TIME,		SPH_ATTR_STRINGPTR },
+	{ "utc_timestamp",	0,	FUNC_UTC_TIMESTAMP,	SPH_ATTR_STRINGPTR },
 	{ "timediff",		2,	FUNC_TIMEDIFF,		SPH_ATTR_STRINGPTR },
 	{ "current_user",	0,	FUNC_CURRENT_USER,	SPH_ATTR_INTEGER },
 	{ "connection_id",	0,	FUNC_CONNECTION_ID,	SPH_ATTR_INTEGER },
@@ -1836,32 +1843,32 @@ static int FuncHashLookup ( const char * sKey )
 
 	static BYTE dAsso[] =
 	{
-		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
-		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
-		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
-		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
-		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
-		5, 114, 114, 114, 114, 114, 114, 114, 114, 114,
-		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
-		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
-		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
-		114, 114, 114, 114, 114,  10, 114,  25,  30,  20,
-		25,   0,  30,  10, 114,   5, 114, 114,   0,   0,
-		5,   0,   0,  20,   0,  55,  30,  30, 114,   0,
-		62,  30,   5, 114, 114, 114, 114, 114, 114, 114,
-		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
-		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
-		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
-		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
-		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
-		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
-		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
-		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
-		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
-		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
-		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
-		114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
-		114, 114, 114, 114, 114, 114
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		10, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 5, 109, 35, 0, 0,
+		50, 5, 20, 30, 109, 10, 109, 109, 5, 0,
+		10, 15, 5, 25, 0, 55, 0, 0, 109, 21,
+		45, 20, 0, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109
 	};
 
 	const BYTE * s = (const BYTE*) sKey;
@@ -1875,18 +1882,17 @@ static int FuncHashLookup ( const char * sKey )
 
 	static int dIndexes[] =
 	{
-		-1, -1, -1, 22, -1, 30, 33, 6, 0, -1,
-		16, 44, 28, 20, 7, 8, -1, 31, 46, 34,
-		-1, -1, 36, -1, 56, 57, -1, -1, 53, 2,
-		45, -1, -1, 35, 26, 3, -1, 24, 52, 23,
-		41, 38, 55, 50, 47, 13, -1, 42, 27, 37,
-		-1, 11, -1, -1, 25, -1, -1, 48, 39, 17,
-		-1, 43, 51, 54, 18, 9, -1, 19, 4, 12,
-		-1, 29, 32, -1, 14, -1, -1, -1, 5, 10,
-		-1, -1, 40, 15, -1, 58, -1, -1, 49, -1,
-		21, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-		-1, -1, -1, 1
+		-1, -1, -1, -1, -1, 13, -1, 48, 49, 26,
+		30, -1, 52, 50, -1, 41, 29, 6, 51, 2,
+		-1, -1, 28, 20, 47, -1, 44, 42, 27, 37,
+		16, 33, 24, 35, 57, 58, -1, 36, 53, 14,
+		-1, -1, -1, 46, 22, 3, 11, -1, 54, 0,
+		45, -1, -1, 39, 7, 8, 38, 31, 9, 34,
+		-1, -1, 40, -1, 17, 32, -1, -1, 55, 18,
+		-1, 43, 19, 5, 23, 59, -1, 56, 4, 12,
+		-1, -1, -1, 21, 10, -1, -1, -1, -1, 25,
+		-1, -1, -1, 1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, 15
 	};
 
 	if ( iHash<0 || iHash>=(int)(sizeof(dIndexes)/sizeof(dIndexes[0])) )
@@ -3793,6 +3799,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case FUNC_BM25F:
 		case FUNC_CURTIME:
 		case FUNC_UTC_TIME:
+		case FUNC_UTC_TIMESTAMP:
 		case FUNC_ALL:
 		case FUNC_ANY:
 		case FUNC_INDEXOF:
@@ -4007,8 +4014,9 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 					case FUNC_LEAST:	return CreateAggregateNode ( tNode, SPH_AGGR_MIN, dArgs[0] );
 					case FUNC_GREATEST:	return CreateAggregateNode ( tNode, SPH_AGGR_MAX, dArgs[0] );
 
-					case FUNC_CURTIME:	return new Expr_Time_c ( false ); break;
-					case FUNC_UTC_TIME: return new Expr_Time_c ( true ); break;
+					case FUNC_CURTIME:	return new Expr_Time_c ( false, false ); break;
+					case FUNC_UTC_TIME: return new Expr_Time_c ( true, false ); break;
+					case FUNC_UTC_TIMESTAMP: return new Expr_Time_c ( true, true ); break;
 					case FUNC_TIMEDIFF: return new Expr_TimeDiff_c ( dArgs[0], dArgs[1] ); break;
 
 					case FUNC_ALL:

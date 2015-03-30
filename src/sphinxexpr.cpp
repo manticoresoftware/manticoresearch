@@ -4617,6 +4617,8 @@ public:
 						case JSON_STRING: iRes =  StringArrayEval ( pVal, true ); break;
 						case JSON_INT32: iRes = ValueEval ( (int64_t) sphJsonLoadInt ( &pVal ) ); break;
 						case JSON_INT64: iRes = ValueEval ( sphJsonLoadBigint ( &pVal ) ); break;
+						case JSON_DOUBLE: iRes = ValueEval ( sphQW2D ( sphJsonLoadBigint ( &pVal ) ) ); break;
+						default: break; // for weird subobjects, just let IN() return false
 						}
 						if ( iRes )
 							return 1;

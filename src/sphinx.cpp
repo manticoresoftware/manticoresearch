@@ -27285,6 +27285,7 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 			if ( m_iJoinedHitField>=m_tSchema.m_dFields.GetLength() )
 			{
 				m_tDocInfo.m_uDocID = ( m_tHits.Length() ? 1 : 0 ); // to eof or not to eof
+				SqlDismissResult ();
 				return &m_tHits;
 			}
 

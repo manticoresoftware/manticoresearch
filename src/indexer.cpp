@@ -1141,6 +1141,8 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 	if ( bSpawnFailed )
 	{
 		fprintf ( stdout, "ERROR: index '%s': failed to configure some of the sources, will not index.\n", sIndexName );
+		SafeDelete ( pDict );
+		SafeDelete ( pTokenizer );
 		return false;
 	}
 

@@ -30,18 +30,19 @@ index rt
 <sphinxql>INSERT INTO rt (id,gid,title) VALUES (1,111,'test one')</sphinxql>
 <sphinxql>INSERT INTO rt (id,gid,title) VALUES (2,111,'test two')</sphinxql>
 <sphinxql>INSERT INTO rt (id,gid,title) VALUES (3,111,'test three')</sphinxql>
-<sphinxql>SELECT * FROM rt WHERE MATCH('test')</sphinxql>
-<sphinxql>SELECT * FROM rt WHERE MATCH('test')</sphinxql>
-<sphinxql>SELECT * FROM rt WHERE MATCH('test')</sphinxql>
+<sphinxql>SELECT *,WEIGHT() FROM rt WHERE MATCH('test')</sphinxql>
+<sphinxql>SELECT *,WEIGHT() FROM rt WHERE MATCH('test')</sphinxql>
+<sphinxql>SELECT *,WEIGHT() FROM rt WHERE MATCH('test')</sphinxql>
 <sphinxql>SHOW STATUS LIKE 'qcache%'</sphinxql>
 <sphinxql>TRUNCATE RTINDEX rt</sphinxql>
 <sphinxql>SET GLOBAL qcache_thresh_msec=1000</sphinxql>
 <sphinxql>INSERT INTO rt (id,gid,title) VALUES (1,222,'another generation')</sphinxql>
-<sphinxql>SELECT * FROM rt WHERE MATCH('test')</sphinxql>
-<sphinxql>SELECT * FROM rt WHERE MATCH('test')</sphinxql>
-<sphinxql>SELECT * FROM rt WHERE MATCH('another')</sphinxql>
-<sphinxql>SELECT * FROM rt WHERE MATCH('another')</sphinxql>
+<sphinxql>SELECT *,WEIGHT() FROM rt WHERE MATCH('test')</sphinxql>
+<sphinxql>SELECT *,WEIGHT() FROM rt WHERE MATCH('test')</sphinxql>
+<sphinxql>SELECT *,WEIGHT() FROM rt WHERE MATCH('another')</sphinxql>
+<sphinxql>SELECT *,WEIGHT() FROM rt WHERE MATCH('another')</sphinxql>
 <sphinxql>SHOW STATUS LIKE 'qcache%'</sphinxql>
+<sphinxql>SELECT *,WEIGHT() FROM rt WHERE MATCH('another') OPTION ranker=expr('-1')</sphinxql>
 </sphqueries>
 
 </test>

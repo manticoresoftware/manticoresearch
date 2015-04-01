@@ -23,7 +23,7 @@
 struct QcacheMatch_t
 {
 	SphDocID_t		m_uDocid;
-	int				m_iWeight;
+	DWORD			m_uWeight;
 };
 
 /// query cache entry
@@ -57,7 +57,7 @@ private:
 public:
 	QcacheEntry_c();
 
-	void						Append ( SphDocID_t uDocid, int iWeight );
+	void						Append ( SphDocID_t uDocid, DWORD uWeight );
 	void						Finish();
 	int							GetSize() const { return sizeof(*this) + m_dFilters.GetSizeBytes() + m_dData.GetSizeBytes() + m_dWeights.GetSizeBytes(); }
 	void						RankerReset();

@@ -94,13 +94,13 @@ QcacheEntry_c::QcacheEntry_c()
 }
 
 
-void QcacheEntry_c::Append ( SphDocID_t uDocid, int iWeight )
+void QcacheEntry_c::Append ( SphDocID_t uDocid, DWORD uWeight )
 {
 	m_iTotalMatches++;
 
 	QcacheMatch_t & m = m_dFrame.Add();
 	m.m_uDocid = uDocid;
-	m.m_iWeight = iWeight;
+	m.m_uWeight = uWeight;
 
 	if ( m_dFrame.GetLength()==MAX_FRAME_SIZE )
 		FlushFrame();
@@ -153,7 +153,7 @@ void QcacheEntry_c::FlushFrame()
 			SphDocID_t uDelta = m_dFrame[i].m_uDocid - uLastId - 1;
 			uLastId = m_dFrame[i].m_uDocid;
 			iDeltaBytes = Max ( iDeltaBytes, NumBytes ( uDelta ) );
-			iWeightBytes = Max ( iWeightBytes, NumBytes ( m_dFrame[i].m_iWeight ) );
+			iWeightBytes = Max ( iWeightBytes, NumBytes ( m_dFrame[i].m_uWeight ) );
 		}
 
 		assert ( iDeltaBytes>=1 && iDeltaBytes<=8 );
@@ -169,7 +169,7 @@ void QcacheEntry_c::FlushFrame()
 			uLastId = m_dFrame[i].m_uDocid;
 			memcpy ( p, &uDelta, iDeltaBytes );
 			p += iDeltaBytes;
-			memcpy ( p, &m_dFrame[i].m_iWeight, iWeightBytes );
+			memcpy ( p, &m_dFrame[i].m_uWeight, iWeightBytes );
 			p += iWeightBytes;
 		}
 
@@ -204,8 +204,8 @@ void QcacheEntry_c::FlushFrame()
 		uLastId = m_dFrame[i].m_uDocid;
 
 		if ( bIndexWeights )
-			m_dFrame[i].m_iWeight = m_hWeights.FindOrAdd ( m_dFrame[i].m_iWeight, m_hWeights.GetLength() );
-		iWeightBytes = Max ( iWeightBytes, NumBytes ( m_dFrame[i].m_iWeight ) );
+			m_dFrame[i].m_uWeight = m_hWeights.FindOrAdd ( m_dFrame[i].m_uWeight, m_hWeights.GetLength() );
+		iWeightBytes = Max ( iWeightBytes, NumBytes ( m_dFrame[i].m_uWeight ) );
 	}
 
 	// add marker byte
@@ -223,7 +223,7 @@ void QcacheEntry_c::FlushFrame()
 		p += iDeltaBytes;
 		uLastId = m_dFrame[i].m_uDocid;
 
-		memcpy ( p, &m_dFrame[i].m_iWeight, iWeightBytes );
+		memcpy ( p, &m_dFrame[i].m_uWeight, iWeightBytes );
 		p += iWeightBytes;
 	}
 	assert ( p==( m_dData.Begin() + m_dData.GetLength() ) );

@@ -26,6 +26,7 @@ index rt
 
 <sphqueries>
 <sphinxql>SET GLOBAL qcache_thresh_msec=0</sphinxql>
+<sphinxql>SET GLOBAL qcache_max_bytes=16777216</sphinxql>
 <sphinxql>TRUNCATE RTINDEX rt</sphinxql>
 <sphinxql>INSERT INTO rt (id,gid,title) VALUES (1,111,'test one')</sphinxql>
 <sphinxql>INSERT INTO rt (id,gid,title) VALUES (2,111,'test two')</sphinxql>

@@ -228,7 +228,7 @@ avg_query_cpu: OFF
 avg_dist_local: 0.000
 avg_query_reads: OFF
 avg_query_readkb: OFF
-qcache_max_bytes: 16777216
+qcache_max_bytes: 0
 qcache_thresh_msec: 3000
 qcache_ttl_sec: 60
 qcache_cached_queries: 0

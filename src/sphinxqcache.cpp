@@ -266,6 +266,10 @@ Qcache_c::Qcache_c()
 {
 	// defaults are here
 	m_iMaxBytes = 16777216;
+#ifndef NDEBUG
+	m_iMaxBytes = 0; // disable qcache in debug builds
+#endif
+
 	m_iThreshMsec = 3000;
 	m_iTtlSec = 60;
 

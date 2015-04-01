@@ -11468,25 +11468,33 @@ min_prefix_len = 3
 
 <sect2 id="conf-min-infix-len"><title>min_infix_len</title>
 <para>
-Minimum infix prefix length to index.
-Optional, default is 0 (do not index infixes).
+Minimum infix prefix length to index and search.
+Optional, default is 0 (do not index infixes), and minimum allowed non-zero value is 2.
 </para>
 <para>
-Infix indexing allows to implement wildcard searching by 'start*', '*end', and '*middle*' wildcards.
-When minimum infix length is set to a positive number, indexer will index all the possible keyword infixes
-(ie. substrings) in addition to the keywords themselves. Too short infixes
-(below the minimum allowed length) will not be indexed. For instance,
-indexing a keyword "test" with min_infix_len=2 will result in indexing
-"te", "es", "st", "tes", "est" infixes along with the word itself.
-Searches against such index for "es" will match documents that contain
-"test" word, even if they do not contain "es" on itself. However,
-indexing infixes will make the index grow significantly (because of
-many more indexed keywords), and will degrade both indexing and
-searching times.</para>
+Infix length setting enables wildcard searches with term patterns like
+'start*', '*end', '*middle*', and so on. It also lets you disable too short
+wildcards if those are too expensive to search for.
+</para>
 <para>
-There's no automatic way to rank perfect word matches higher
-in an infix index, but the same tricks as with <link linkend="conf-min-prefix-len">prefix indexes</link>
-can be applied.
+With dict=keywords (which now is the only non-deprecated mode), infixes only affect
+the dictionary size, and wildcards are expanded in search time. So enabling infixes
+should only slightly affects the index size and indexing time.
+</para>
+<para>
+However, query time might vary greatly, depending on how many keywords the substring
+will actually expand to. Short and frequent syllables like '*in*' or '*ti*' just might
+expand to way too many keywords, all of which would need to be matched and processed.
+Therefore, to generally enable substring searches you would set min_infix_len to 2;
+and to limit the impact from wildcard searches with too short wildcards,
+you might set it higher.
+</para>
+<para>
+Infixes must be at least 2 characters long, wildcards like '*a*' are not allowed
+for performance reasons. (While in theory it is possible to scan the entire dictionary,
+identify keywords matching on just a single character, expand '*a*' to an OR operator
+over 100,000+ keywords, and evaluate that expanded query, in practice this will very
+definitely kill your server.)
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>

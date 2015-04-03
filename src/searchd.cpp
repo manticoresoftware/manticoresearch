@@ -2138,13 +2138,6 @@ ISphOutputBuffer::ISphOutputBuffer ( CSphVector<BYTE> & dBuf )
 	m_dBuf.SwapData ( dBuf );
 }
 
-template < typename T > void ISphOutputBuffer::SendT ( T tValue )
-{
-	int iOff = m_dBuf.GetLength();
-	m_dBuf.Resize ( iOff + sizeof(T) );
-	sphUnalignedWrite ( m_dBuf.Begin() + iOff, tValue );
-}
-
 
 void ISphOutputBuffer::SendString ( const char * sStr )
 {

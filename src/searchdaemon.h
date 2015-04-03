@@ -239,7 +239,12 @@ protected:
 	CSphVector<BYTE>	m_dBuf;
 
 private:
-	template < typename T > void	SendT ( T tValue );							///< (was) protected to avoid network-vs-host order bugs
+	template < typename T > void	SendT ( T tValue )							///< (was) protected to avoid network-vs-host order bugs
+	{
+		int iOff = m_dBuf.GetLength();
+		m_dBuf.Resize ( iOff + sizeof(T) );
+		sphUnalignedWrite ( m_dBuf.Begin() + iOff, tValue );
+	}
 };
 
 class NetOutputBuffer_c : public ISphOutputBuffer

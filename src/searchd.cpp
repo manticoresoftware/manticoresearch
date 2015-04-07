@@ -14876,6 +14876,7 @@ static void HandleMysqlReloadIndex ( SqlRowBuffer_c & tOut, const SqlStmt_t & tS
 	{
 		if ( !RotateIndexMT ( tStmt.m_sIndex, sError ) )
 		{
+			sphWarning ( "%s", sError.cstr() );
 			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 			return;
 		}
@@ -14885,6 +14886,7 @@ static void HandleMysqlReloadIndex ( SqlRowBuffer_c & tOut, const SqlStmt_t & tS
 		if ( !RotateIndexGreedy ( *pIndex, tStmt.m_sIndex.cstr(), sError ) )
 		{
 			pIndex->Unlock();
+			sphWarning ( "%s", sError.cstr() );
 			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 			return;
 		}
@@ -15598,7 +15600,6 @@ bool RotateIndexGreedy ( ServedIndex_c & tIndex, const char * sIndex, CSphString
 				else
 					sError.SetSprintf ( "rotating index '%s': '%s' unreadable: %s; using old index", sIndex, sFile, strerror(errno) );
 			}
-			sphWarning ( "%s", sError.cstr() );
 			return false;
 		}
 	}
@@ -15619,7 +15620,6 @@ bool RotateIndexGreedy ( ServedIndex_c & tIndex, const char * sIndex, CSphString
 				TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_TYPE_OLD, uVersion )[j], sphGetExts ( SPH_EXT_TYPE_CUR, uVersion )[j], sAction, true, true );
 
 			sError.SetSprintf ( "rotating index '%s': rename to .old failed; using old index", sIndex );
-			sphWarning ( "%s", sError.cstr() );
 			return false;
 		}
 
@@ -15684,7 +15684,6 @@ bool RotateIndexGreedy ( ServedIndex_c & tIndex, const char * sIndex, CSphString
 		if ( tIndex.m_bOnlyNew )
 		{
 			sError.SetSprintf ( "rotating index '%s': .new preload failed: %s; NOT SERVING", sIndex, tIndex.m_pIndex->GetLastError().cstr() );
-			sphWarning ( "%s", sError.cstr() );
 			return false;
 
 		} else
@@ -15703,14 +15702,12 @@ bool RotateIndexGreedy ( ServedIndex_c & tIndex, const char * sIndex, CSphString
 			if ( !tIndex.m_pIndex->Prealloc ( g_bStripPath ) )
 			{
 				sError.SetSprintf ( "rotating index '%s': .new preload failed; ROLLBACK FAILED; INDEX UNUSABLE", sIndex );
-				sphWarning ( "%s", sError.cstr() );
 				tIndex.m_bEnabled = false;
 
 			} else
 			{
 				tIndex.m_bEnabled = true;
 				bPreread = true;
-				sphWarning ( "rotating index '%s': .new preload failed; using old index", sIndex );
 			}
 
 			if ( !tIndex.m_pIndex->GetLastWarning().IsEmpty() )
@@ -15889,7 +15886,7 @@ static bool RotateIndexMT ( const CSphString & sIndex, CSphString & sError )
 	{
 		if ( pRotating )
 			pRotating->Unlock();
-		sphWarning ( "%s", sError.cstr() );
+
 		return false;
 	}
 
@@ -15923,14 +15920,12 @@ static bool RotateIndexMT ( const CSphString & sIndex, CSphString & sError )
 	if ( !tNewIndex.m_pIndex->Prealloc ( g_bStripPath ) )
 	{
 		sError.SetSprintf ( "rotating index '%s': prealloc: %s; using old index", sIndex.cstr(), tNewIndex.m_pIndex->GetLastError().cstr() );
-		sphWarning ( "%s", sError.cstr() );
 		return false;
 	}
 
 	if ( !tNewIndex.m_pIndex->Lock() )
 	{
 		sError.SetSprintf ( "rotating index '%s': lock: %s; using old index", sIndex.cstr (), tNewIndex.m_pIndex->GetLastError().cstr() );
-		sphWarning ( "%s", sError.cstr() );
 		return false;
 	}
 
@@ -15944,7 +15939,6 @@ static bool RotateIndexMT ( const CSphString & sIndex, CSphString & sError )
 		{
 			sError.SetSprintf ( "rotating index '%s': fixup: %s; using old index", sIndex.cstr(), sError2.cstr() );
 			g_tRotateConfigMutex.Unlock ();
-			sphWarning ( "%s", sError.cstr() );
 			return false;
 		}
 	}
@@ -15967,7 +15961,6 @@ static bool RotateIndexMT ( const CSphString & sIndex, CSphString & sError )
 	{
 		if ( pServed )
 			pServed->Unlock();
-		sphWarning ( "%s", sError.cstr() );
 		return false;
 	}
 
@@ -15985,7 +15978,6 @@ static bool RotateIndexMT ( const CSphString & sIndex, CSphString & sError )
 	{
 		// FIXME! rollback inside Rename() call potentially fail
 		sError.SetSprintf ( "rotating index '%s': cur to old rename failed: %s", sIndex.cstr(), pOld->GetLastError().cstr() );
-		sphWarning ( "%s", sError.cstr() );
 		pServed->Unlock();
 		return false;
 	} else
@@ -16001,7 +15993,6 @@ static bool RotateIndexMT ( const CSphString & sIndex, CSphString & sError )
 				pServed->m_bEnabled = false;
 			}
 			pServed->Unlock();
-			sphWarning ( "%s", sError.cstr() );
 			return false;
 		} else
 		{
@@ -16055,13 +16046,6 @@ void RotationThreadFunc ( void * )
 
 		CSphString sIndex = g_dRotateQueue.Pop();
 		g_tRotateQueueMutex.Unlock();
-
-		const char * sPath = "";
-		if ( const ServedIndex_c * pServed = g_pLocalIndexes->GetRlockedEntry ( sIndex ) )
-		{
-			sPath = pServed->m_sIndexPath.cstr();
-			pServed->Unlock();
-		}
 
 		CSphString sError;
 		if ( !RotateIndexMT ( sIndex, sError ) )
@@ -17134,8 +17118,9 @@ void CheckRotate ()
 			}
 
 			bool bWasAdded = tIndex.m_bOnlyNew;
-			CSphString sDummyError;
-			RotateIndexGreedy ( tIndex, sIndex, sDummyError );
+			CSphString sError;
+			if ( !RotateIndexGreedy ( tIndex, sIndex, sError ) )
+				sphWarning ( "%s", sError.cstr() );
 			if ( bWasAdded && tIndex.m_bEnabled )
 			{
 				const CSphConfigType & hConf = g_pCfg.m_tConf ["index"];
@@ -20348,10 +20333,9 @@ void ConfigureAndPreload ( const CSphConfig & hConf, const CSphVector<const char
 			if ( HasFiles ( tIndex, sphGetExts ( SPH_EXT_TYPE_NEW ) ) )
 			{
 				tIndex.m_bOnlyNew = !HasFiles ( tIndex, sphGetExts ( SPH_EXT_TYPE_CUR ) );
-				CSphString sDummyError;
-				if ( RotateIndexGreedy ( tIndex, sIndexName, sDummyError ) )
+				CSphString sError;
+				if ( RotateIndexGreedy ( tIndex, sIndexName, sError ) )
 				{
-					CSphString sError;
 					if ( !sphFixupIndexSettings ( tIndex.m_pIndex, hIndex, sError ) )
 					{
 						sphWarning ( "index '%s': %s - NOT SERVING", sIndexName, sError.cstr() );
@@ -20359,6 +20343,7 @@ void ConfigureAndPreload ( const CSphConfig & hConf, const CSphVector<const char
 					}
 				} else
 				{
+					sphWarning ( "%s", sError.cstr() );
 					if ( PrereadNewIndex ( tIndex, hIndex, sIndexName ) )
 						tIndex.m_bEnabled = true;
 				}

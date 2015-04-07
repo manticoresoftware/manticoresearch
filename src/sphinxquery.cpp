@@ -55,6 +55,7 @@ public:
 	int				ParseZone ( const char * pZone );
 
 	bool			IsSpecial ( char c );
+	bool			GetNumber ( const char * p );
 	int				GetToken ( YYSTYPE * lvalp );
 
 	void			HandleModifiers ( XQKeyword_t & tKeyword );
@@ -134,6 +135,7 @@ public:
 
 	int						m_iQuorumQuote;
 	int						m_iQuorumFSlash;
+	bool					m_bCheckNumber;
 
 	const PluginQueryTokenFilter_c * m_pPlugin;
 	void *					m_pPluginData;
@@ -412,6 +414,7 @@ XQParser_t::XQParser_t ()
 	, m_bEmptyStopword ( false )
 	, m_iQuorumQuote ( -1 )
 	, m_iQuorumFSlash ( -1 )
+	, m_bCheckNumber ( false )
 	, m_pPlugin ( NULL )
 	, m_pPluginData ( NULL )
 {
@@ -736,6 +739,82 @@ int XQParser_t::ParseZone ( const char * pZone )
 }
 
 
+bool XQParser_t::GetNumber ( const char * p )
+{
+	int iDots = 0;
+	const char * sToken = p;
+	const char * sEnd = m_pTokenizer->GetBufferEnd ();
+	while ( p<sEnd && ( isdigit ( *(BYTE*)p ) || *p=='.' ) )
+	{
+		iDots += ( *p=='.' );
+		p++;
+	}
+
+	// must be float number but got many dots or only dot
+	if ( iDots && ( iDots>1 || p-sToken==iDots ) )
+		p = sToken;
+
+	// float as number allowed only as quorum argument and regular keywords stream otherwise
+	if ( iDots==1 && ( m_iQuorumQuote!=m_iQuorumFSlash || m_iQuorumQuote!=m_iAtomPos ) )
+		p = sToken;
+
+	static const int NUMBER_BUF_LEN = 10; // max strlen of int32
+	if ( p>sToken && p-sToken<NUMBER_BUF_LEN
+		&& !( *p=='-' && !( p-sToken==1 && sphIsModifier ( p[-1] ) ) ) // !bDashInside copied over from arbitration
+		&& ( *p=='\0' || sphIsSpace(*p) || IsSpecial(*p) ) )
+	{
+		// float as quorum argument has higher precedence than blended
+		bool bQuorum = ( m_iQuorumQuote==m_iQuorumFSlash && m_iQuorumFSlash==m_iAtomPos );
+		bool bQuorumPercent = ( bQuorum && iDots==1 );
+
+		bool bTok = ( m_pTokenizer->GetToken()!=NULL );
+		if ( bTok && m_pTokenizer->TokenIsBlended() && !( bQuorum || bQuorumPercent ) ) // number with blended should be tokenized as usual
+		{
+			m_pTokenizer->SkipBlended();
+			m_pTokenizer->SetBufferPtr ( m_pLastTokenStart );
+		} else if ( bTok && m_pTokenizer->WasTokenSynonym() && !( bQuorum || bQuorumPercent ) )
+		{
+			m_pTokenizer->SetBufferPtr ( m_pLastTokenStart );
+		} else
+		{
+			// got not a very long number followed by a whitespace or special, handle it
+			char sNumberBuf[NUMBER_BUF_LEN];
+
+			int iNumberLen = Min ( (int)sizeof(sNumberBuf)-1, int(p-sToken) );
+			memcpy ( sNumberBuf, sToken, iNumberLen );
+			sNumberBuf[iNumberLen] = '\0';
+			if ( iDots )
+				m_tPendingToken.tInt.fValue = (float)strtod ( sNumberBuf, NULL );
+			else
+				m_tPendingToken.tInt.iValue = atoi ( sNumberBuf );
+
+			// check if it can be used as a keyword too
+			m_pTokenizer->SetBuffer ( (BYTE*)sNumberBuf, iNumberLen );
+			sToken = (const char*) m_pTokenizer->GetToken();
+			m_pTokenizer->SetBuffer ( m_sQuery, m_iQueryLen );
+			m_pTokenizer->SetBufferPtr ( p );
+
+			m_tPendingToken.tInt.iStrIndex = -1;
+			if ( sToken )
+			{
+				m_dIntTokens.Add ( sToken );
+				m_pDict->SetApplyMorph ( m_pTokenizer->GetMorphFlag() );
+				if ( m_pDict->GetWordID ( (BYTE*)sToken ) )
+					m_tPendingToken.tInt.iStrIndex = m_dIntTokens.GetLength()-1;
+				else
+					m_dIntTokens.Pop();
+				m_iAtomPos++;
+			}
+
+			m_iPendingNulls = 0;
+			m_iPendingType = iDots ? TOK_FLOAT : TOK_INT;
+			return true;
+		}
+	}
+	return false;
+}
+
+
 /// a lexer of my own
 int XQParser_t::GetToken ( YYSTYPE * lvalp )
 {
@@ -764,85 +843,15 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		const char * p = m_pLastTokenStart;
 		while ( p<sEnd && isspace ( *(BYTE*)p ) ) p++; // to avoid CRT assertions on Windows
 
-		int iDots = 0;
-		const char * sToken = p;
-		while ( p<sEnd && ( isdigit ( *(BYTE*)p ) || *p=='.' ) )
+		if ( m_bCheckNumber )
 		{
-			iDots += ( *p=='.' );
-			p++;
-		}
-
-		// must be float number but got many dots or only dot
-		if ( iDots && ( iDots>1 || p-sToken==iDots ) )
-			p = sToken;
-		// float as number allowed only as quorum argument and regular keywords stream otherwise
-		if ( iDots==1 && ( m_iQuorumQuote!=m_iQuorumFSlash || m_iQuorumQuote!=m_iAtomPos ) )
-			p = sToken;
-
-		static const int NUMBER_BUF_LEN = 10; // max strlen of int32
-		if ( p>sToken && p-sToken<NUMBER_BUF_LEN
-			&& !( *p=='-' && !( p-sToken==1 && sphIsModifier ( p[-1] ) ) ) // !bDashInside copied over from arbitration
-			&& ( *p=='\0' || sphIsSpace(*p) || IsSpecial(*p) ) )
-		{
-			// float as quorum argument has higher precedence than blended
-			bool bQuorum = ( m_iQuorumQuote==m_iQuorumFSlash && m_iQuorumFSlash==m_iAtomPos );
-			bool bQuorumPercent = ( bQuorum && iDots==1 );
-
-			const char * sWordform = (const char *)m_pTokenizer->GetToken();
-			bool bTok = ( sWordform!=NULL );
-			int iTokLength = m_pTokenizer->GetLastTokenLen();
-			iTokLength = Min ( p-sToken, iTokLength );
-			if ( bTok && m_pTokenizer->TokenIsBlended() && !( bQuorum || bQuorumPercent ) ) // number with blended should be tokenized as usual
-			{
-				m_pTokenizer->SkipBlended();
-				m_pTokenizer->SetBufferPtr ( m_pLastTokenStart );
-			} else if ( bTok && m_pTokenizer->WasTokenSynonym() && !( bQuorum || bQuorumPercent ) )
-			{
-				m_pTokenizer->SetBufferPtr ( m_pLastTokenStart );
-			} else if ( bTok && m_pTokenizer->GetTokenStart()==sToken && strncmp ( sToken, sWordform, iTokLength )!=0 )
-			{
-				// that is regular keyword not just a number
-				// multi-word word-form started with a number
-				m_pTokenizer->SetBufferPtr ( m_pLastTokenStart );
-			} else
-			{
-				// got not a very long number followed by a whitespace or special, handle it
-				char sNumberBuf[NUMBER_BUF_LEN];
-
-				int iNumberLen = Min ( (int)sizeof(sNumberBuf)-1, int(p-sToken) );
-				memcpy ( sNumberBuf, sToken, iNumberLen );
-				sNumberBuf[iNumberLen] = '\0';
-				if ( iDots )
-					m_tPendingToken.tInt.fValue = (float)strtod ( sNumberBuf, NULL );
-				else
-					m_tPendingToken.tInt.iValue = atoi ( sNumberBuf );
-
-				// check if it can be used as a keyword too
-				m_pTokenizer->SetBuffer ( (BYTE*)sNumberBuf, iNumberLen );
-				sToken = (const char*) m_pTokenizer->GetToken();
-				m_pTokenizer->SetBuffer ( m_sQuery, m_iQueryLen );
-				m_pTokenizer->SetBufferPtr ( p );
-
-				m_tPendingToken.tInt.iStrIndex = -1;
-				if ( sToken )
-				{
-					m_dIntTokens.Add ( sToken );
-					m_pDict->SetApplyMorph ( m_pTokenizer->GetMorphFlag() );
-					if ( m_pDict->GetWordID ( (BYTE*)sToken ) )
-						m_tPendingToken.tInt.iStrIndex = m_dIntTokens.GetLength()-1;
-					else
-						m_dIntTokens.Pop();
-					m_iAtomPos++;
-				}
-
-				m_iPendingNulls = 0;
-				m_iPendingType = iDots ? TOK_FLOAT : TOK_INT;
+			m_bCheckNumber = false;
+			if ( GetNumber(p) )
 				break;
-			}
 		}
 
 		// not a number, long number, or number not followed by a whitespace, so fallback to regular tokenizing
-		sToken = (const char *) m_pTokenizer->GetToken ();
+		const char * sToken = (const char *) m_pTokenizer->GetToken ();
 		if ( !sToken )
 		{
 			m_iPendingNulls = m_pTokenizer->GetOvershortCount() * m_iOvershortStep;
@@ -1054,6 +1063,8 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 				else if ( sToken[0]=='/' )
 					m_iQuorumFSlash = m_iAtomPos;
 
+				if ( sToken[0]=='~' ||sToken[0]=='/' )
+					m_bCheckNumber = true;
 				break;
 			}
 		}

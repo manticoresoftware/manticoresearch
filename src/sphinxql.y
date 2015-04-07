@@ -207,6 +207,7 @@ statement:
 	| create_plugin
 	| drop_plugin
 	| reload_plugins
+	| reload_index
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -1559,6 +1560,22 @@ facet_stmt:
 				pParser->m_pQuery->m_sFacetBy = pParser->m_pQuery->m_sGroupBy;
 				pParser->AddCount ();
 			}
+		}
+	;
+
+opt_reload_index_from:
+	// empty
+	| TOK_FROM TOK_QUOTED_STRING
+		{
+			pParser->ToStringUnescape ( pParser->m_pStmt->m_sStringParam, $2 );
+		}
+	;
+
+reload_index:
+	TOK_RELOAD TOK_INDEX ident opt_reload_index_from
+		{
+			pParser->m_pStmt->m_eStmt = STMT_RELOAD_INDEX;
+			pParser->ToString ( pParser->m_pStmt->m_sIndex, $3);
 		}
 	;
 

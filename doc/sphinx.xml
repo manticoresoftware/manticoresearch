@@ -7309,6 +7309,29 @@ mysql> SHOW THREADS OPTION columns=50;
 </programlisting>
 </sect1>
 
+<sect1 id="sphinxql-reload-index"><title>RELOAD INDEX syntax</title>
+<programlisting>
+RELOAD INDEX idx [ FROM '/path/to/index_files' ]
+</programlisting>
+<para>
+RELOAD INDEX, added in 2.3.1-beta, allows you to rotate indexes using SphinxQL.
+</para>
+<para>
+It has two modes of operation. First one (without specifying a path) makes Sphinx
+daemon check for new index files in directory specified in
+<xref linkend="conf-path">path</xref>. New index files must have a idx.new.sp? names.
+</para>
+<para>
+And if you additionally specify a path, daemon will look for index files in specified
+directory, move them to index <xref linkend="conf-path">path</xref>, rename from
+index_files.sp? to idx.new.sp? and rotate them.
+</para>
+<programslisting>
+mysql> RELOAD INDEX plain_index;
+mysql> RELOAD INDEX plain_index FROM '/home/mighty/new_index_files';
+</programslisting>
+</sect1>
+
 <!-- add new statement sections above this, and other SphinxQL related sections below -->
 
 <sect1 id="sphinxql-multi-queries">

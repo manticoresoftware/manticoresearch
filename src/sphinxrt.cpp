@@ -5000,6 +5000,7 @@ int RtIndex_t::DebugCheck ( FILE * fp )
 		dRefCheckpoints.Reset ();
 
 		// check killlists
+		dUsedKListEntries.Uniq();
 		int nUsedKListEntries = dUsedKListEntries.GetLength();
 
 		if ( nUsedKListEntries!=tSegment.GetKlist().GetLength() )

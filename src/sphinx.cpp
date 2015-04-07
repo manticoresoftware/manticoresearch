@@ -6621,6 +6621,8 @@ ISphTokenizer * CSphMultiformTokenizer::Clone ( ESphTokenizerClone eMode ) const
 void CSphMultiformTokenizer::SetBufferPtr ( const char * sNewPtr )
 {
 	m_iStart = 0;
+	m_iOutputPending = -1;
+	m_pCurrentForm = NULL;
 	m_dStoredTokens.Resize ( 0 );
 	m_pTokenizer->SetBufferPtr ( sNewPtr );
 }

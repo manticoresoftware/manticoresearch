@@ -7424,6 +7424,12 @@ struct Expr_Sum_T : public ISphExpr
 		}
 		return iRes;
 	}
+
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
+	{
+		assert ( m_pArg );
+		m_pArg->Command ( eCmd, pArg );
+	}
 };
 
 
@@ -7478,6 +7484,12 @@ struct Expr_Top_T : public ISphExpr
 			m_pState->m_iCurrentField++;
 		}
 		return iRes;
+	}
+
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
+	{
+		assert ( m_pArg );
+		m_pArg->Command ( eCmd, pArg );
 	}
 };
 

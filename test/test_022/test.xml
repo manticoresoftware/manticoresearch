@@ -145,6 +145,13 @@ index multi2
 <sphinxql>SELECT * FROM multi2 WHERE MATCH('test | "me rdogs" ')</sphinxql>
 <sphinxql>show plan</sphinxql>
 <sphinxql>show meta</sphinxql>
+
+<!-- regression multiforms vs numbers mess -->
+<sphinxql>SELECT * FROM test_num WHERE MATCH('24 mois')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+<sphinxql>SELECT * FROM test_num WHERE MATCH('"foo bar baz"/24 mois')</sphinxql>
+<sphinxql>SHOW PLAN</sphinxql>
+<sphinxql>SELECT * FROM test_num WHERE MATCH('foo ~ 24 mois')</sphinxql>
 </sphqueries>
 
 <db_create>

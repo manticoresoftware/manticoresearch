@@ -13181,7 +13181,7 @@ indexed.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
-on_file_field_errors = skip_document
+on_file_field_error = skip_document
 </programlisting>
 </sect2>
 

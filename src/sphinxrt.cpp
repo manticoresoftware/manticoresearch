@@ -97,6 +97,19 @@ static inline void ZipT ( CSphVector < BYTE, P > * pOut, T uValue )
 	} while ( uValue );
 }
 
+template < typename T >
+static inline void ZipT ( BYTE * & pOut, T uValue )
+{
+	do
+	{
+		BYTE bOut = (BYTE)( uValue & 0x7f );
+		uValue >>= 7;
+		if ( uValue )
+			bOut |= 0x80;
+		*pOut++ = bOut;
+	} while ( uValue );
+}
+
 #define SPH_MAX_KEYWORD_LEN (3*SPH_MAX_WORD_LEN+4)
 STATIC_ASSERT ( SPH_MAX_KEYWORD_LEN<255, MAX_KEYWORD_LEN_SHOULD_FITS_BYTE );
 
@@ -519,16 +532,23 @@ struct RtDocWriter_t
 	void ZipDoc ( const RtDoc_t & tDoc )
 	{
 		CSphTightVector<BYTE> * pDocs = m_pDocs;
-		ZipDocid ( pDocs, tDoc.m_uDocID - m_uLastDocID );
+		int iLen = pDocs->GetLength();
+		pDocs->Resize ( iLen+5*sizeof(DWORD) );
+		BYTE * pBegin = pDocs->Begin();
+		BYTE * pEnd = pBegin+iLen;
+
+		ZipDocid ( pEnd, tDoc.m_uDocID - m_uLastDocID );
 		m_uLastDocID = tDoc.m_uDocID;
-		ZipDword ( pDocs, tDoc.m_uDocFields );
-		ZipDword ( pDocs, tDoc.m_uHits );
+		ZipDword ( pEnd, tDoc.m_uDocFields );
+		ZipDword ( pEnd, tDoc.m_uHits );
 		if ( tDoc.m_uHits==1 )
 		{
-			ZipDword ( pDocs, tDoc.m_uHit & 0xffffffUL );
-			ZipDword ( pDocs, tDoc.m_uHit>>24 );
+			ZipDword ( pEnd, tDoc.m_uHit & 0xffffffUL );
+			ZipDword ( pEnd, tDoc.m_uHit>>24 );
 		} else
-			ZipDword ( pDocs, tDoc.m_uHit );
+			ZipDword ( pEnd, tDoc.m_uHit );
+
+		pDocs->Resize ( pEnd-pBegin );
 	}
 
 	DWORD ZipDocPtr () const
@@ -668,9 +688,17 @@ struct RtWordWriter_t
 			m_tLastKeyword.PutDelta ( *this, tWord.m_sWord+1, tWord.m_sWord[0] );
 		}
 
-		ZipDword ( pWords, tWord.m_uDocs );
-		ZipDword ( pWords, tWord.m_uHits );
-		ZipDword ( pWords, tWord.m_uDoc - m_uLastDoc );
+		int iLen = pWords->GetLength();
+		pWords->Resize ( iLen+3*sizeof(DWORD) );
+		BYTE * pBegin = pWords->Begin();
+		BYTE * pEnd = pBegin+iLen;
+
+		ZipDword ( pEnd, tWord.m_uDocs );
+		ZipDword ( pEnd, tWord.m_uHits );
+		ZipDword ( pEnd, tWord.m_uDoc - m_uLastDoc );
+
+		pWords->Resize ( pEnd-pBegin );
+
 		m_uLastWordID = tWord.m_uWordID;
 		m_uLastDoc = tWord.m_uDoc;
 	}

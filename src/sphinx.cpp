@@ -23584,6 +23584,7 @@ private:
 
 	CSphString				m_sWarning;
 	int						m_iKeywordsOverrun;
+	CSphString				m_sWord; // For allocation reuse.
 
 public:
 	explicit CRtDictKeywords ( CSphDict * pBase )
@@ -23641,7 +23642,6 @@ public:
 
 	SphWordID_t AddKeyword ( const BYTE * pWord )
 	{
-		CSphString sWord;
 		int iLen = strlen ( (const char *)pWord );
 		// stemmer might squeeze out the word
 		if ( !iLen )
@@ -23651,22 +23651,22 @@ public:
 		if ( iLen>=( SPH_MAX_WORD_LEN*3 ) )
 		{
 			int iClippedLen = SPH_MAX_WORD_LEN*3;
-			sWord.SetBinary ( (const char *)pWord, iClippedLen );
+			m_sWord.SetBinary ( (const char *)pWord, iClippedLen );
 			if ( m_iKeywordsOverrun )
 			{
-				m_sWarning.SetSprintf ( "word overrun buffer, clipped!!! clipped='%s', length=%d(%d)", sWord.cstr(), iClippedLen, iLen );
+				m_sWarning.SetSprintf ( "word overrun buffer, clipped!!! clipped='%s', length=%d(%d)", m_sWord.cstr(), iClippedLen, iLen );
 			} else
 			{
-				m_sWarning.SetSprintf ( ", clipped='%s', length=%d(%d)", sWord.cstr(), iClippedLen, iLen );
+				m_sWarning.SetSprintf ( ", clipped='%s', length=%d(%d)", m_sWord.cstr(), iClippedLen, iLen );
 			}
 			iLen = iClippedLen;
 			m_iKeywordsOverrun++;
 		} else
 		{
-			sWord.SetBinary ( (const char *)pWord, iLen );
+			m_sWord.SetBinary ( (const char *)pWord, iLen );
 		}
 
-		int * pOff = m_hKeywords ( sWord );
+		int * pOff = m_hKeywords ( m_sWord );
 		if ( pOff )
 		{
 			return *pOff;
@@ -23677,7 +23677,7 @@ public:
 		m_dPackedKeywords[iOff] = (BYTE)( iLen & 0xFF );
 		memcpy ( m_dPackedKeywords.Begin()+iOff+1, pWord, iLen );
 
-		m_hKeywords.Add ( iOff, sWord );
+		m_hKeywords.Add ( iOff, m_sWord );
 
 		return iOff;
 	}

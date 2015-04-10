@@ -1763,21 +1763,27 @@ public:
 		return sRes;
 	}
 
+	// tries to reuse memory buffer, but calls Length() every time
+	// hope this won't kill performance on a huge strings
 	void SetBinary ( const char * sValue, int iLen )
 	{
-		if ( m_sValue!=EMPTY )
-			SafeDeleteArray ( m_sValue );
-		if ( sValue )
+		if ( Length()<iLen )
 		{
-			if ( sValue[0]=='\0' )
-			{
-				m_sValue = EMPTY;
-			} else
-			{
-				m_sValue = new char [ 1+SAFETY_GAP+iLen ];
-				memcpy ( m_sValue, sValue, iLen );
-				memset ( m_sValue+iLen, 0, 1+SAFETY_GAP );
-			}
+			if ( m_sValue!=EMPTY )
+				SafeDeleteArray ( m_sValue );
+			m_sValue = new char [ 1+SAFETY_GAP+iLen ];
+			memcpy ( m_sValue, sValue, iLen );
+			memset ( m_sValue+iLen, 0, 1+SAFETY_GAP );
+			return;
+		}
+
+		if ( sValue[0]=='\0' || iLen==0 )
+		{
+			m_sValue = EMPTY;
+		} else
+		{
+			memcpy ( m_sValue, sValue, iLen );
+			m_sValue [ iLen ] = '\0';
 		}
 	}
 

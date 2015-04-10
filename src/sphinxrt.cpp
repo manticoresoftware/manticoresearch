@@ -532,10 +532,8 @@ struct RtDocWriter_t
 	void ZipDoc ( const RtDoc_t & tDoc )
 	{
 		CSphTightVector<BYTE> * pDocs = m_pDocs;
-		int iLen = pDocs->GetLength();
-		pDocs->Resize ( iLen+5*sizeof(DWORD) );
-		BYTE * pBegin = pDocs->Begin();
-		BYTE * pEnd = pBegin+iLen;
+		BYTE * pEnd = pDocs->AddN ( 5*sizeof(DWORD) );
+		const BYTE * pBegin = pDocs->Begin();
 
 		ZipDocid ( pEnd, tDoc.m_uDocID - m_uLastDocID );
 		m_uLastDocID = tDoc.m_uDocID;
@@ -688,10 +686,8 @@ struct RtWordWriter_t
 			m_tLastKeyword.PutDelta ( *this, tWord.m_sWord+1, tWord.m_sWord[0] );
 		}
 
-		int iLen = pWords->GetLength();
-		pWords->Resize ( iLen+3*sizeof(DWORD) );
-		BYTE * pBegin = pWords->Begin();
-		BYTE * pEnd = pBegin+iLen;
+		BYTE * pEnd = pWords->AddN ( 3*sizeof(DWORD) );
+		const BYTE * pBegin = pWords->Begin();
 
 		ZipDword ( pEnd, tWord.m_uDocs );
 		ZipDword ( pEnd, tWord.m_uHits );

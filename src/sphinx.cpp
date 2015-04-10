@@ -23579,7 +23579,7 @@ class CRtDictKeywords : public ISphRtDictWraper
 {
 private:
 	CSphDict *				m_pBase;
-	SmallStringHash_T<int>	m_hKeywords;
+	CSphOrderedHash<int, CSphString, CSphStrHashFunc, 8192>	m_hKeywords;
 	CSphVector<BYTE>		m_dPackedKeywords;
 
 	CSphString				m_sWarning;

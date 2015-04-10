@@ -3,6 +3,10 @@
 <test>
 <name>RELOAD INDEX</name>
 
+<requires>
+<id64/>
+</requires>
+
 <config>
 searchd
 {

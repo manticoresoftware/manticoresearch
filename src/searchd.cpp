@@ -22,8 +22,6 @@
 #include "sphinxjson.h"
 #include "sphinxplugin.h"
 #include "sphinxqcache.h"
-#include "searchdaemon.h"
-#include "searchdha.h"
 
 extern "C"
 {
@@ -41,6 +39,9 @@ extern "C"
 #include <stdarg.h>
 #include <limits.h>
 #include <locale.h>
+
+#include "searchdaemon.h"
+#include "searchdha.h"
 
 #define SEARCHD_BACKLOG			5
 #define SPHINXAPI_PORT			9312

@@ -14,7 +14,6 @@
 //
 
 #include "sphinx.h"
-#include "sphinxstd.h"
 #include "sphinxint.h"
 #include "sphinxjson.h"
 

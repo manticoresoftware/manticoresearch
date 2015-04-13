@@ -184,7 +184,7 @@
     <ClInclude Include="..\src\sphinxstem.h" />
     <ClInclude Include="..\src\sphinxtimers.h" />
     <ClInclude Include="..\src\sphinxutils.h" />
-    <ClCompile Include="..\src\http\http_parser.h" />
+    <ClInclude Include="..\src\http\http_parser.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -99,6 +99,7 @@ enum ProtocolType_e
 {
 	PROTO_SPHINX = 0,
 	PROTO_MYSQL41,
+	PROTO_HTTP,
 
 	PROTO_TOTAL
 };
@@ -106,7 +107,7 @@ enum ProtocolType_e
 
 static const char * g_dProtoNames[PROTO_TOTAL] =
 {
-	"sphinxapi", "sphinxql"
+	"sphinxapi", "sphinxql", "http"
 };
 
 
@@ -1776,6 +1777,7 @@ void ProtoByName ( const CSphString & sProto, ListenerDesc_t & tDesc )
 {
 	if ( sProto=="sphinx" )			tDesc.m_eProto = PROTO_SPHINX;
 	else if ( sProto=="mysql41" )	tDesc.m_eProto = PROTO_MYSQL41;
+	else if ( sProto=="http" )		tDesc.m_eProto = PROTO_HTTP;
 	else if ( sProto=="sphinx_vip" )
 	{
 		tDesc.m_eProto = PROTO_SPHINX;
@@ -1899,7 +1901,7 @@ ListenerDesc_t ParseListener ( const char * sSpec )
 }
 
 
-void AddListener ( const CSphString & sListen )
+void AddListener ( const CSphString & sListen, bool bHttpAllowed )
 {
 	ListenerDesc_t tDesc = ParseListener ( sListen.cstr() );
 
@@ -1907,6 +1909,12 @@ void AddListener ( const CSphString & sListen )
 	tListener.m_eProto = tDesc.m_eProto;
 	tListener.m_bTcp = true;
 	tListener.m_bVIP = tDesc.m_bVIP;
+
+	if ( tDesc.m_eProto==PROTO_HTTP && !bHttpAllowed )
+	{
+		sphWarning ( "thread_pool disabled, can not listen for http interface, port=%d, use workers=thread_pool", tDesc.m_iPort );
+		return;
+	}
 
 #if !USE_WINDOWS
 	if ( !tDesc.m_sUnix.IsEmpty() )
@@ -4272,27 +4280,6 @@ static int SendGetAttrCount ( const ISphSchema & tSchema, bool bAgentMode=false 
 	return iCount;
 }
 
-class CSphTaggedVector
-{
-public:
-	const PoolPtrs_t & operator [] ( int iTag ) const
-	{
-		return m_dPool [ iTag & 0x7FFFFFF ];
-	}
-	PoolPtrs_t & operator [] ( int iTag )
-	{
-		return m_dPool [ iTag & 0x7FFFFFF ];
-	}
-
-	void Resize ( int iSize )
-	{
-		m_dPool.Resize ( iSize );
-	}
-
-private:
-	CSphVector<PoolPtrs_t> m_dPool;
-};
-
 static char g_sJsonNull[] = "{}";
 
 int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphTaggedVector & dTag2Pools, bool bAgentMode, const CSphQuery & tQuery, int iMasterVer )
@@ -4915,45 +4902,33 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const CSphQueryResult * pRe
 
 /////////////////////////////////////////////////////////////////////////////
 
-struct AggrResult_t : CSphQueryResult
+void AggrResult_t::ClampMatches ( int iLimit, bool bCommonSchema )
 {
-	CSphVector<CSphRsetSchema>		m_dSchemas;			///< aggregated resultsets schemas (for schema minimization)
-	CSphVector<int>					m_dMatchCounts;		///< aggregated resultsets lengths (for schema minimization)
-	CSphVector<const CSphIndex*>	m_dLockedAttrs;		///< indexes which are hold in the memory untill sending result
-	CSphTaggedVector				m_dTag2Pools;		///< tag to MVA and strings storage pools mapping
-	CSphString						m_sZeroCountName;
+	if ( m_dMatches.GetLength()<=iLimit )
+		return;
 
-	AggrResult_t()
-	{}
-
-	void ClampMatches ( int iLimit, bool bCommonSchema )
+	if ( bCommonSchema )
 	{
-		if ( m_dMatches.GetLength()<=iLimit )
-			return;
+		for ( int i = iLimit; i < m_dMatches.GetLength(); i++ )
+			m_tSchema.FreeStringPtrs ( &m_dMatches[i] );
+	} else
+	{
+		int nMatches = 0;
+		ARRAY_FOREACH ( i, m_dMatchCounts )
+		{
+			nMatches += m_dMatchCounts[i];
 
-		if ( bCommonSchema )
-		{
-			for ( int i = iLimit; i < m_dMatches.GetLength(); i++ )
-				m_tSchema.FreeStringPtrs ( &m_dMatches[i] );
-		} else
-		{
-			int nMatches = 0;
-			ARRAY_FOREACH ( i, m_dMatchCounts )
+			if ( iLimit < nMatches )
 			{
-				nMatches += m_dMatchCounts[i];
-
-				if ( iLimit < nMatches )
-				{
-					int iFrom = Max ( iLimit, nMatches-m_dMatchCounts[i] );
-					for ( int j=iFrom; j<nMatches; j++ )
-						m_dSchemas[i].FreeStringPtrs ( &m_dMatches[j] );
-				}
+				int iFrom = Max ( iLimit, nMatches-m_dMatchCounts[i] );
+				for ( int j=iFrom; j<nMatches; j++ )
+					m_dSchemas[i].FreeStringPtrs ( &m_dMatches[j] );
 			}
 		}
-
-		m_dMatches.Resize ( iLimit );
 	}
-};
+
+	m_dMatches.Resize ( iLimit );
+}
 
 
 struct TaggedMatchSorter_fn : public SphAccessor_T<CSphMatch>
@@ -6108,16 +6083,19 @@ struct LocalIndex_t
 };
 
 
-class SearchHandler_c
+class SearchHandler_c : public ISphSearchHandler
 {
 	friend void LocalSearchThreadFunc ( void * pArg );
 
 public:
-	explicit						SearchHandler_c ( int iQueries, bool bSphinxql, bool bMaster, int iCID );
-	~SearchHandler_c();
-	void							RunQueries ();					///< run all queries, get all results
+									SearchHandler_c ( int iQueries, bool bSphinxql, bool bMaster, int iCID );
+	virtual							~SearchHandler_c();
+	virtual void					RunQueries ();					///< run all queries, get all results
 	void							RunUpdates ( const CSphQuery & tQuery, const CSphString & sIndex, CSphAttrUpdateEx * pUpdates ); ///< run Update command instead of Search
 	void							RunDeletes ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors, CSphVector<SphDocID_t>* ); ///< run Delete command instead of Search
+
+	virtual CSphQuery *				GetQuery ( int iQuery ) { return m_dQueries.Begin() + iQuery; }
+	virtual AggrResult_t *			GetResult ( int iResult ) { return m_dResults.Begin() + iResult; }
 
 public:
 	CSphVector<CSphQuery>			m_dQueries;						///< queries which i need to search
@@ -6162,6 +6140,12 @@ protected:
 
 	void							OnRunFinished ();
 };
+
+
+ISphSearchHandler * sphCreateSearchHandler ( int iQueries, bool bSphinxql, bool bMaster, int iCID )
+{
+	return new SearchHandler_c ( iQueries, bSphinxql, bMaster, iCID );
+}
 
 
 SearchHandler_c::SearchHandler_c ( int iQueries, bool bSphinxql, bool bMaster, int iCid )
@@ -8143,61 +8127,6 @@ public:
 //////////////////////////////////////////////////////////////////////////
 // SQL PARSER
 //////////////////////////////////////////////////////////////////////////
-
-enum SqlStmt_e
-{
-	STMT_PARSE_ERROR = 0,
-	STMT_DUMMY,
-
-	STMT_SELECT,
-	STMT_INSERT,
-	STMT_REPLACE,
-	STMT_DELETE,
-	STMT_SHOW_WARNINGS,
-	STMT_SHOW_STATUS,
-	STMT_SHOW_META,
-	STMT_SET,
-	STMT_BEGIN,
-	STMT_COMMIT,
-	STMT_ROLLBACK,
-	STMT_CALL, // check.pl STMT_CALL_SNIPPETS STMT_CALL_KEYWORDS
-	STMT_DESCRIBE,
-	STMT_SHOW_TABLES,
-	STMT_UPDATE,
-	STMT_CREATE_FUNCTION,
-	STMT_DROP_FUNCTION,
-	STMT_ATTACH_INDEX,
-	STMT_FLUSH_RTINDEX,
-	STMT_FLUSH_RAMCHUNK,
-	STMT_SHOW_VARIABLES,
-	STMT_TRUNCATE_RTINDEX,
-	STMT_SELECT_SYSVAR,
-	STMT_SHOW_COLLATION,
-	STMT_SHOW_CHARACTER_SET,
-	STMT_OPTIMIZE_INDEX,
-	STMT_SHOW_AGENT_STATUS,
-	STMT_SHOW_INDEX_STATUS,
-	STMT_SHOW_PROFILE,
-	STMT_ALTER_ADD,
-	STMT_ALTER_DROP,
-	STMT_SHOW_PLAN,
-	STMT_SELECT_DUAL,
-	STMT_SHOW_DATABASES,
-	STMT_CREATE_PLUGIN,
-	STMT_DROP_PLUGIN,
-	STMT_SHOW_PLUGINS,
-	STMT_SHOW_THREADS,
-	STMT_FACET,
-	STMT_ALTER_RECONFIGURE,
-	STMT_SHOW_INDEX_SETTINGS,
-	STMT_FLUSH_INDEX,
-	STMT_RELOAD_PLUGINS,
-	STMT_RELOAD_INDEX,
-
-	STMT_TOTAL
-};
-
-
 // FIXME? verify or generate these automatically somehow?
 static const char * g_dSqlStmts[] =
 {
@@ -8213,29 +8142,6 @@ static const char * g_dSqlStmts[] =
 
 
 STATIC_ASSERT ( sizeof(g_dSqlStmts)/sizeof(g_dSqlStmts[0])==STMT_TOTAL, STMT_DESC_SHOULD_BE_SAME_AS_STMT_TOTAL );
-
-
-/// refcounted vector
-template < typename T >
-class RefcountedVector_c : public CSphVector<T>, public ISphRefcounted
-{
-};
-
-typedef CSphRefcountedPtr < RefcountedVector_c<SphAttr_t> > AttrValues_p;
-
-/// insert value
-struct SqlInsert_t
-{
-	int						m_iType;
-	CSphString				m_sVal;		// OPTIMIZE? use char* and point to node?
-	int64_t					m_iVal;
-	float					m_fVal;
-	AttrValues_p			m_pVals;
-
-	SqlInsert_t ()
-		: m_pVals ( NULL )
-	{}
-};
 
 
 /// parser view on a generic node
@@ -8257,122 +8163,48 @@ struct SqlNode_t
 };
 #define YYSTYPE SqlNode_t
 
-
-enum SqlSet_e
+SqlStmt_t::SqlStmt_t ()
+	: m_eStmt ( STMT_PARSE_ERROR )
+	, m_iRowsAffected ( 0 )
+	, m_sStmt ( NULL )
+	, m_iSchemaSz ( 0 )
+	, m_eSet ( SET_LOCAL )
+	, m_iSetValue ( 0 )
+	, m_bSetNull ( false )
+	, m_iListStart ( -1 )
+	, m_iListEnd ( -1 )
+	, m_eUdfType ( SPH_ATTR_NONE )
+	, m_iThreadsCols ( 0 )
+	, m_iIntParam ( -1 )
 {
-	SET_LOCAL,
-	SET_GLOBAL_UVAR,
-	SET_GLOBAL_SVAR,
-	SET_INDEX_UVAR
-};
+	m_tQuery.m_eMode = SPH_MATCH_EXTENDED2; // only new and shiny matching and sorting
+	m_tQuery.m_eSort = SPH_SORT_EXTENDED;
+	m_tQuery.m_sSortBy = "@weight desc"; // default order
+	m_tQuery.m_sOrderBy = "@weight desc";
+	m_tQuery.m_iAgentQueryTimeout = g_iAgentQueryTimeout;
+	m_tQuery.m_iRetryCount = g_iAgentRetryCount;
+	m_tQuery.m_iRetryDelay = g_iAgentRetryDelay;
+}
 
-/// parsing result
-/// one day, we will start subclassing this
-struct SqlStmt_t
+bool SqlStmt_t::AddSchemaItem ( const char * psName )
 {
-	SqlStmt_e				m_eStmt;
-	int						m_iRowsAffected;
-	const char *			m_sStmt; // for error reporting
+	m_dInsertSchema.Add ( psName );
+	m_dInsertSchema.Last().ToLower();
+	m_iSchemaSz = m_dInsertSchema.GetLength();
+	return true; // stub; check if the given field actually exists in the schema
+}
 
-	// SELECT specific
-	CSphQuery				m_tQuery;
+// check if the number of fields which would be inserted is in accordance to the given schema
+bool SqlStmt_t::CheckInsertIntegrity()
+{
+	// cheat: if no schema assigned, assume the size of schema as the size of the first row.
+	// (if it is wrong, it will be revealed later)
+	if ( !m_iSchemaSz )
+		m_iSchemaSz = m_dInsertValues.GetLength();
 
-	CSphString				m_sTableFunc;
-	CSphVector<CSphString>	m_dTableFuncArgs;
-
-	// used by INSERT, DELETE, CALL, DESC, ATTACH, ALTER, RELOAD INDEX
-	CSphString				m_sIndex;
-
-	// INSERT (and CALL) specific
-	CSphVector<SqlInsert_t>	m_dInsertValues; // reused by CALL
-	CSphVector<CSphString>	m_dInsertSchema;
-	int						m_iSchemaSz;
-
-	// SET specific
-	CSphString				m_sSetName;		// reused by ATTACH
-	SqlSet_e				m_eSet;
-	int64_t					m_iSetValue;
-	CSphString				m_sSetValue;
-	CSphVector<SphAttr_t>	m_dSetValues;
-	bool					m_bSetNull;
-
-	// CALL specific
-	CSphString				m_sCallProc;
-	CSphVector<CSphString>	m_dCallOptNames;
-	CSphVector<SqlInsert_t>	m_dCallOptValues;
-	CSphVector<CSphString>	m_dCallStrings;
-
-	// UPDATE specific
-	CSphAttrUpdate			m_tUpdate;
-	int						m_iListStart; // < the position of start and end of index's definition in original query.
-	int						m_iListEnd;
-
-	// CREATE/DROP FUNCTION, INSTALL PLUGIN specific
-	CSphString				m_sUdfName; // FIXME! move to arg1?
-	CSphString				m_sUdfLib;
-	ESphAttr				m_eUdfType;
-
-	// ALTER specific
-	CSphString				m_sAlterAttr;
-	ESphAttr				m_eAlterColType;
-
-	// SHOW THREADS specific
-	int						m_iThreadsCols;
-
-	// generic parameter, different meanings in different statements
-	// filter pattern in DESCRIBE, SHOW TABLES / META / VARIABLES
-	// target index name in ATTACH
-	// token filter options in INSERT
-	// plugin type in INSTALL PLUGIN
-	// path in RELOAD INDEX
-	CSphString				m_sStringParam;
-
-	// generic integer parameter, used in SHOW SETTINGS, default value -1
-	int						m_iIntParam;
-
-	SqlStmt_t ()
-		: m_eStmt ( STMT_PARSE_ERROR )
-		, m_iRowsAffected ( 0 )
-		, m_sStmt ( NULL )
-		, m_iSchemaSz ( 0 )
-		, m_eSet ( SET_LOCAL )
-		, m_iSetValue ( 0 )
-		, m_bSetNull ( false )
-		, m_iListStart ( -1 )
-		, m_iListEnd ( -1 )
-		, m_eUdfType ( SPH_ATTR_NONE )
-		, m_iThreadsCols ( 0 )
-		, m_iIntParam ( -1 )
-	{
-		m_tQuery.m_eMode = SPH_MATCH_EXTENDED2; // only new and shiny matching and sorting
-		m_tQuery.m_eSort = SPH_SORT_EXTENDED;
-		m_tQuery.m_sSortBy = "@weight desc"; // default order
-		m_tQuery.m_sOrderBy = "@weight desc";
-		m_tQuery.m_iAgentQueryTimeout = g_iAgentQueryTimeout;
-		m_tQuery.m_iRetryCount = g_iAgentRetryCount;
-		m_tQuery.m_iRetryDelay = g_iAgentRetryDelay;
-	}
-
-	bool AddSchemaItem ( const char * psName )
-	{
-		m_dInsertSchema.Add ( psName );
-		m_dInsertSchema.Last().ToLower();
-		m_iSchemaSz = m_dInsertSchema.GetLength();
-		return true; // stub; check if the given field actually exists in the schema
-	}
-
-	// check if the number of fields which would be inserted is in accordance to the given schema
-	bool CheckInsertIntegrity()
-	{
-		// cheat: if no schema assigned, assume the size of schema as the size of the first row.
-		// (if it is wrong, it will be revealed later)
-		if ( !m_iSchemaSz )
-			m_iSchemaSz = m_dInsertValues.GetLength();
-
-		m_iRowsAffected++;
-		return m_dInsertValues.GetLength()==m_iRowsAffected*m_iSchemaSz;
-	}
-};
+	m_iRowsAffected++;
+	return m_dInsertValues.GetLength()==m_iRowsAffected*m_iSchemaSz;
+}
 
 
 /// magic codes passed via SqlNode_t::m_iStart to handle certain special tokens
@@ -9225,7 +9057,7 @@ void SqlParser_c::FreeNamedVec ( int )
 	m_dNamedVec.Resize ( 0 );
 }
 
-bool ParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation )
+bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation )
 {
 	assert ( sQuery );
 
@@ -13121,7 +12953,7 @@ bool HandleMysqlSelect ( SqlRowBuffer_c & dRows, SearchHandler_c & tHandler )
 }
 
 
-static void FormatFactors ( CSphVector<BYTE> & dOut, const unsigned int * pFactors, bool bJson )
+void sphFormatFactors ( CSphVector<BYTE> & dOut, const unsigned int * pFactors, bool bJson )
 {
 	const int MAX_STR_LEN = 512;
 	int iLen;
@@ -13472,7 +13304,7 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 					if ( pFactors )
 					{
 						dTmp.Resize ( 0 );
-						FormatFactors ( dTmp, pFactors, eAttrType==SPH_ATTR_FACTORS_JSON );
+						sphFormatFactors ( dTmp, pFactors, eAttrType==SPH_ATTR_FACTORS_JSON );
 						iLen = dTmp.GetLength();
 						pStr = dTmp.Begin();
 					}
@@ -14966,7 +14798,7 @@ public:
 			m_tProfile.Switch ( SPH_QSTATE_SQL_PARSE );
 
 		CSphVector<SqlStmt_t> dStmt;
-		bool bParsedOK = ParseSqlQuery ( sQuery.cstr(), tCrashQuery.m_iSize, dStmt, m_sError, m_tVars.m_eCollation );
+		bool bParsedOK = sphParseSqlQuery ( sQuery.cstr(), tCrashQuery.m_iSize, dStmt, m_sError, m_tVars.m_eCollation );
 
 		if ( m_tVars.m_bProfile )
 			m_tProfile.Switch ( SPH_QSTATE_UNKNOWN );
@@ -16244,7 +16076,7 @@ static bool SphinxqlStateLine ( CSphVector<char> & dLine, CSphString * sError )
 	dLine.Add ( '\0' );
 
 	CSphVector<SqlStmt_t> dStmt;
-	bool bParsedOK = ParseSqlQuery ( dLine.Begin(), dLine.GetLength(), dStmt, *sError, SPH_COLLATION_DEFAULT );
+	bool bParsedOK = sphParseSqlQuery ( dLine.Begin(), dLine.GetLength(), dStmt, *sError, SPH_COLLATION_DEFAULT );
 	if ( !bParsedOK )
 		return false;
 
@@ -18200,23 +18032,12 @@ enum NetEvent_e
 	NE_REMOVE = 1UL<<4,
 };
 
-enum NetProfiler_e
-{
-	NET_ACCEPT = 0,
-	NET_RECV_API,
-	NET_RECV_QL,
-	NET_SEND,
-
-	NET_TOTAL
-};
-
 struct NetStateCommon_t;
 class CSphNetLoop;
 struct ISphNetAction : ISphNoncopyable, public ListNode_t
 {
 	int64_t				m_tmTimeout;
 	const int			m_iSock;
-	NetProfiler_e		m_eType;
 
 	explicit ISphNetAction ( int iSock ) : m_tmTimeout ( 0 ), m_iSock ( iSock ) {}
 	virtual ~ISphNetAction () {}
@@ -18331,20 +18152,43 @@ struct NetReceiveDataQL_t : public ISphNetAction
 
 struct NetSendData_t : public ISphNetAction
 {
-	CSphScopedPtr<NetStateAPI_t>		m_tStateAPI;
-	CSphScopedPtr<NetStateQL_t>			m_tStateQL;
+	CSphScopedPtr<NetStateCommon_t>		m_tState;
+	ProtocolType_e						m_eProto;
 
-	NetSendData_t ( NetStateAPI_t * pStateAPI, NetStateQL_t * pStateQL );
+	NetSendData_t ( NetStateCommon_t * pState, ProtocolType_e eProto );
 	virtual ~NetSendData_t () {}
 
 	virtual NetEvent_e		Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop );
 	virtual NetEvent_e		Setup ( int64_t tmNow );
 	virtual void			CloseSocket ();
-
-private:
-	NetStateCommon_t & NetState () const;
 };
 
+struct HttpHeaderStreamParser_t
+{
+	int m_iHeaderEnd;
+	int m_iFieldContentLenStart;
+	int m_iFieldContentLenVal;
+
+	int m_iCur;
+	int m_iCRLF;
+	int m_iName;
+
+	HttpHeaderStreamParser_t ();
+	bool HeaderFound ( const BYTE * pBuf, int iLen );
+};
+
+struct NetReceiveDataHttp_t : public ISphNetAction
+{
+	CSphScopedPtr<NetStateQL_t>		m_tState;
+	HttpHeaderStreamParser_t		m_tHeadParser;
+
+	explicit NetReceiveDataHttp_t ( NetStateQL_t * pState );
+	virtual ~NetReceiveDataHttp_t() {}
+
+	virtual NetEvent_e		Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop );
+	virtual NetEvent_e		Setup ( int64_t tmNow );
+	virtual void			CloseSocket ();
+};
 
 struct EventsIterator_t
 {
@@ -18556,7 +18400,7 @@ public:
 		tEv.data.ptr = pWork;
 		tEv.events = ( eSetup==NE_IN ? EPOLLIN : EPOLLOUT );
 
-		sphLogDebugv ( "%p epoll setup, ev=0x%u, sock=%d", pWork, tEv.events, pWork->m_iSock ); // !COMMIT
+		sphLogDebugv ( "%p epoll setup, ev=0x%u, sock=%d", pWork, tEv.events, pWork->m_iSock );
 
 		int iRes = epoll_ctl ( m_iEFD, EPOLL_CTL_ADD, pWork->m_iSock, &tEv );
 		if ( iRes==-1 )
@@ -18640,7 +18484,7 @@ public:
 		tEv.data.ptr = pWork;
 		tEv.events = ( ( eEv & NE_IN )!=0 ? EPOLLIN : EPOLLOUT );
 
-		sphLogDebugv ( "%p epoll change, ev=0x%u, sock=%d", pWork, tEv.events, pWork->m_iSock ); // !COMMIT
+		sphLogDebugv ( "%p epoll change, ev=0x%u, sock=%d", pWork, tEv.events, pWork->m_iSock );
 
 		int iRes = epoll_ctl ( m_iEFD, EPOLL_CTL_MOD, pWork->m_iSock, &tEv );
 		if ( iRes==-1 )
@@ -18649,7 +18493,7 @@ public:
 
 	void IterateRemove ()
 	{
-		sphLogDebugv ( "%p epoll remove, ev=0x%u, sock=%d", m_tIter.m_pWork, m_tIter.m_uEvents, m_tIter.m_pWork->m_iSock ); // !COMMIT
+		sphLogDebugv ( "%p epoll remove, ev=0x%u, sock=%d", m_tIter.m_pWork, m_tIter.m_uEvents, m_tIter.m_pWork->m_iSock );
 		assert ( m_tIter.m_pWork );
 
 		epoll_event tEv;
@@ -18856,7 +18700,6 @@ struct ThdJobCleanup_t : public ISphJob
 };
 
 static int	g_tmWait = 1;
-static int	g_iSendJob = 0;
 static int	g_iNetWorkers = 1;
 static int	g_iThrottleAction = 0;
 static int	g_iThrottleAccept = 0;
@@ -19026,7 +18869,7 @@ private:
 				continue;
 			}
 
-			sphLogDebugv ( "%p bailing on timeout no signal, sock=%d", pWork, pWork->m_iSock ); // !COMMIT
+			sphLogDebugv ( "%p bailing on timeout no signal, sock=%d", pWork, pWork->m_iSock );
 			m_tEvents.IterateRemove ();
 			// SafeDelete ( pWork );
 			// close socket immediately to prevent write by client into persist connection that just timed out
@@ -19093,6 +18936,18 @@ struct ThdJobQL_t : public ISphJob
 
 	ThdJobQL_t ( CSphNetLoop * pLoop, NetStateQL_t * pState );
 	virtual ~ThdJobQL_t () {}
+
+	virtual void		Call ();
+};
+
+
+struct ThdJobHttp_t : public ISphJob
+{
+	CSphScopedPtr<NetStateQL_t>		m_tState;
+	CSphNetLoop *		m_pLoop;
+
+	ThdJobHttp_t ( CSphNetLoop * pLoop, NetStateQL_t * pState );
+	virtual ~ThdJobHttp_t () {}
 
 	virtual void		Call ();
 };
@@ -19185,7 +19040,6 @@ NetActionAccept_t::NetActionAccept_t ( const Listener_t & tListener )
 {
 	m_tListener = tListener;
 	m_iConnections = 0;
-	m_eType = NET_ACCEPT;
 }
 
 NetEvent_e NetActionAccept_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * )
@@ -19202,7 +19056,7 @@ NetEvent_e NetActionAccept_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction 
 	{
 		if ( g_iThrottleAccept && g_iThrottleAccept<m_iConnections-iLastConn )
 		{
-			sphLogDebugv ( "%p accepted %d connections throttled", this, m_iConnections-iLastConn ); // !COMMIT
+			sphLogDebugv ( "%p accepted %d connections throttled", this, m_iConnections-iLastConn );
 			return NE_KEEP;
 		}
 
@@ -19216,7 +19070,7 @@ NetEvent_e NetActionAccept_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction 
 			if ( iErrno==EINTR || iErrno==ECONNABORTED || iErrno==EAGAIN || iErrno==EWOULDBLOCK )
 			{
 				if ( m_iConnections!=iLastConn )
-					sphLogDebugv ( "%p accepted %d connections all", this, m_iConnections-iLastConn ); // !COMMIT
+					sphLogDebugv ( "%p accepted %d connections all", this, m_iConnections-iLastConn );
 
 				return NE_KEEP;
 			}
@@ -19262,6 +19116,12 @@ NetEvent_e NetActionAccept_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction 
 			pStateAPI->m_dBuf.Reserve ( 65535 );
 			FillNetState ( pStateAPI, iClientSock, iConnID, m_tListener.m_bVIP, saStorage );
 			pAction = new NetReceiveDataAPI_t ( pStateAPI );
+		} else if ( m_tListener.m_eProto==PROTO_HTTP )
+		{
+			NetStateQL_t * pStateHttp = new NetStateQL_t ();
+			pStateHttp->m_dBuf.Reserve ( 65535 );
+			FillNetState ( pStateHttp, iClientSock, iConnID, false, saStorage );
+			pAction = new NetReceiveDataHttp_t ( pStateHttp );
 		} else
 		{
 			NetStateQL_t * pStateQL = new NetStateQL_t ();
@@ -19272,7 +19132,7 @@ NetEvent_e NetActionAccept_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction 
 			pAction = pActionQL;
 		}
 		dNextTick.Add ( pAction );
-		sphLogDebugv ( "%p accepted %s, sock=%d", this, (m_tListener.m_eProto==PROTO_SPHINX ? "API" : "QL"), pAction->m_iSock ); // !COMMIT
+		sphLogDebugv ( "%p accepted %s, sock=%d", this, g_dProtoNames[m_tListener.m_eProto], pAction->m_iSock );
 	}
 }
 
@@ -19332,13 +19192,12 @@ NetReceiveDataAPI_t::NetReceiveDataAPI_t ( NetStateAPI_t *	pState )
 	*(DWORD *)( m_tState->m_dBuf.Begin() ) = htonl ( SPHINX_SEARCHD_PROTO );
 	m_tState->m_iLeft = 4;
 	assert ( m_tState.Ptr() );
-	m_eType = NET_RECV_API;
 }
 
 NetEvent_e NetReceiveDataAPI_t::Setup ( int64_t tmNow )
 {
 	assert ( m_tState.Ptr() );
-	sphLogDebugv ( "%p receive API setup, phase=%d, keep=%d, client=%s, conn=%d, sock=%d", this, m_ePhase, m_tState->m_bKeepSocket, m_tState->m_sClientName, m_tState->m_iConnID, m_tState->m_iClientSock ); // !COMMIT
+	sphLogDebugv ( "%p receive API setup, phase=%d, keep=%d, client=%s, conn=%d, sock=%d", this, m_ePhase, m_tState->m_bKeepSocket, m_tState->m_sClientName, m_tState->m_iConnID, m_tState->m_iClientSock );
 
 	if ( !m_tState->m_bKeepSocket )
 	{
@@ -19367,7 +19226,7 @@ void NetReceiveDataAPI_t::AddJobAPI ( CSphNetLoop * pLoop )
 	ThdJobAPI_t * pJob = new ThdJobAPI_t ( pLoop, m_tState.LeakPtr() );
 	pJob->m_iCommand = m_iCommand;
 	pJob->m_iCommandVer = m_iCommandVer;
-	sphLogDebugv ( "%p receive API job created (%p), buf=%d, sock=%d", this, pJob, iLen, m_iSock ); // !COMMIT
+	sphLogDebugv ( "%p receive API job created (%p), buf=%d, sock=%d", this, pJob, iLen, m_iSock );
 	if ( bStart )
 		g_pThdPool->StartJob ( pJob );
 	else
@@ -19411,7 +19270,7 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 		if ( m_tState->m_iLeft )
 			continue;
 
-		sphLogDebugv ( "%p pre-API phase=%d, buf=%d, write=%d, sock=%d", this, m_ePhase, m_tState->m_dBuf.GetLength(), (int)bWrite, m_iSock ); // !COMMIT
+		sphLogDebugv ( "%p pre-API phase=%d, buf=%d, write=%d, sock=%d", this, m_ePhase, m_tState->m_dBuf.GetLength(), (int)bWrite, m_iSock );
 
 		// FIXME!!! handle persist socket timeout
 		m_tState->m_iPos = 0;
@@ -19466,7 +19325,7 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 				}
 
 				tOut.SwapData ( m_tState->m_dBuf );
-				NetSendData_t * pSend = new NetSendData_t ( m_tState.LeakPtr(), NULL );
+				NetSendData_t * pSend = new NetSendData_t ( m_tState.LeakPtr(), PROTO_SPHINX );
 				dNextTick.Add ( pSend );
 				return NE_REMOVE;
 			}
@@ -19491,7 +19350,7 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 		} // switch
 
 		bool bNextWrite = ( m_ePhase==AAPI_HANDSHAKE_OUT );
-		sphLogDebugv ( "%p post-API phase=%d, buf=%d, write=%d, sock=%d", this, m_ePhase, m_tState->m_dBuf.GetLength(), (int)bNextWrite, m_iSock ); // !COMMIT
+		sphLogDebugv ( "%p post-API phase=%d, buf=%d, write=%d, sock=%d", this, m_ePhase, m_tState->m_dBuf.GetLength(), (int)bNextWrite, m_iSock );
 	}
 }
 
@@ -19514,7 +19373,6 @@ NetReceiveDataQL_t::NetReceiveDataQL_t ( NetStateQL_t * pState )
 	m_bAppend = false;
 	m_bWrite = false;
 	assert ( m_tState.Ptr() );
-	m_eType = NET_RECV_QL;
 }
 
 void NetReceiveDataQL_t::SetupHandshakePhase()
@@ -19545,7 +19403,7 @@ void NetReceiveDataQL_t::SetupBodyPhase()
 NetEvent_e NetReceiveDataQL_t::Setup ( int64_t tmNow )
 {
 	assert ( m_tState.Ptr() );
-	sphLogDebugv ( "%p receive QL setup, phase=%d, client=%s, conn=%d, sock=%d", this, m_ePhase, m_tState->m_sClientName, m_tState->m_iConnID, m_tState->m_iClientSock ); // !COMMIT
+	sphLogDebugv ( "%p receive QL setup, phase=%d, client=%s, conn=%d, sock=%d", this, m_ePhase, m_tState->m_sClientName, m_tState->m_iConnID, m_tState->m_iClientSock );
 
 	m_tmTimeout = tmNow + MS2SEC * g_iClientQlTimeout;
 
@@ -19595,7 +19453,7 @@ NetEvent_e NetReceiveDataQL_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction
 		if ( m_tState->m_iLeft )
 			continue;
 
-		sphLogDebugv ( "%p pre-QL phase=%d, buf=%d, append=%d, write=%d, sock=%d", this, m_ePhase, m_tState->m_dBuf.GetLength(), (int)m_bAppend, (int)m_bWrite, m_iSock ); // !COMMIT
+		sphLogDebugv ( "%p pre-QL phase=%d, buf=%d, append=%d, write=%d, sock=%d", this, m_ePhase, m_tState->m_dBuf.GetLength(), (int)m_bAppend, (int)m_bWrite, m_iSock );
 
 		switch ( m_ePhase )
 		{
@@ -19664,7 +19522,7 @@ NetEvent_e NetReceiveDataQL_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction
 				int iBufLen = dBuf.GetLength();
 				int iCmd = ( iBufLen>0 ? dBuf[0] : 0 );
 				int iStrLen = Min ( iBufLen, 80 );
-				sphLogDebugv ( "%p receive-QL, cmd=%d, buf=%d, sock=%d, '%.*s'", this, iCmd, iBufLen, m_iSock, iStrLen, ( dBuf.GetLength() ? (const char *)dBuf.Begin() : "" ) ); // !COMMIT
+				sphLogDebugv ( "%p receive-QL, cmd=%d, buf=%d, sock=%d, '%.*s'", this, iCmd, iBufLen, m_iSock, iStrLen, ( dBuf.GetLength() ? (const char *)dBuf.Begin() : "" ) );
 
 				bool bEmptyBuf = !dBuf.GetLength();
 				bool bMaxedOut = ( iCmd==MYSQL_COM_QUERY && !m_tState->m_bVIP && g_iThdQueueMax && g_pThdPool->GetQueueLength()>=g_iThdQueueMax );
@@ -19758,7 +19616,7 @@ NetEvent_e NetReceiveDataQL_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction
 		default: return NE_REMOVE;
 		}
 
-		sphLogDebugv ( "%p post-QL phase=%d, buf=%d, append=%d, write=%d, sock=%d", this, m_ePhase, m_tState->m_dBuf.GetLength(), (int)m_bAppend, (int)m_bWrite, m_iSock ); // !COMMIT
+		sphLogDebugv ( "%p post-QL phase=%d, buf=%d, append=%d, write=%d, sock=%d", this, m_ePhase, m_tState->m_dBuf.GetLength(), (int)m_bAppend, (int)m_bWrite, m_iSock );
 	}
 }
 
@@ -19770,58 +19628,73 @@ void NetReceiveDataQL_t::CloseSocket()
 }
 
 
-NetSendData_t::NetSendData_t ( NetStateAPI_t * pStateAPI, NetStateQL_t * pStateQL )
-	: ISphNetAction ( pStateAPI ? pStateAPI->m_iClientSock : pStateQL->m_iClientSock )
-	, m_tStateAPI ( pStateAPI )
-	, m_tStateQL ( pStateQL )
+NetSendData_t::NetSendData_t ( NetStateCommon_t * pState, ProtocolType_e eProto )
+	: ISphNetAction ( pState->m_iClientSock )
+	, m_tState ( pState )
+	, m_eProto ( eProto )
 {
-	assert ( m_tStateAPI.Ptr() || m_tStateQL.Ptr() );
-	NetState().m_iPos = 0;
-	NetState().m_iLeft = 0;
-	m_eType = NET_SEND;
+	assert ( pState );
+	m_tState->m_iPos = 0;
+	m_tState->m_iLeft = 0;
 }
 
 NetEvent_e NetSendData_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * )
 {
-	if ( CheckSocketError ( uGotEvents, "failed to send data", &NetState(), false ) )
+	if ( CheckSocketError ( uGotEvents, "failed to send data", m_tState.Ptr(), false ) )
 		return NE_REMOVE;
 
-	for ( ; NetState().m_iLeft>0; )
+	for ( ; m_tState->m_iLeft>0; )
 	{
-		int iRes = NetManageSocket ( NetState().m_iClientSock, (char *)NetState().m_dBuf.Begin() + NetState().m_iPos, NetState().m_iLeft, true );
+		int iRes = NetManageSocket ( m_tState->m_iClientSock, (char *)m_tState->m_dBuf.Begin() + m_tState->m_iPos, m_tState->m_iLeft, true );
 		if ( iRes==-1 )
 		{
-			LogSocketError ( "failed to send data", &NetState(), false );
+			LogSocketError ( "failed to send data", m_tState.Ptr(), false );
 			return NE_REMOVE;
 		}
 		// for iRes==0 case might proceed after interruption
-		NetState().m_iLeft -= iRes;
-		NetState().m_iPos += iRes;
+		m_tState->m_iLeft -= iRes;
+		m_tState->m_iPos += iRes;
 
 		// socket would block - going back to polling
 		if ( iRes==0 )
 			break;
 	}
 
-	if ( NetState().m_iLeft>0 )
+	if ( m_tState->m_iLeft>0 )
 		return NE_KEEP;
 
-	assert ( NetState().m_iLeft==0 && NetState().m_iPos==NetState().m_dBuf.GetLength() );
+	assert ( m_tState->m_iLeft==0 && m_tState->m_iPos==m_tState->m_dBuf.GetLength() );
 
-	if ( m_tStateAPI.Ptr() && m_tStateAPI->m_bKeepSocket )
+	if ( m_tState->m_bKeepSocket )
 	{
-		sphLogDebugv ( "%p send-API job created, sent=%d, sock=%d", this, NetState().m_iPos, m_iSock ); // !COMMIT
-		NetReceiveDataAPI_t * pAction = new NetReceiveDataAPI_t ( m_tStateAPI.LeakPtr() );
-		pAction->SetupBodyPhase();
-		dNextTick.Add ( pAction );
-	}
+		sphLogDebugv ( "%p send %s job created, sent=%d, sock=%d", this, g_dProtoNames[m_eProto], m_tState->m_iPos, m_iSock );
+		switch ( m_eProto )
+		{
+			case PROTO_SPHINX:
+			{
+				NetReceiveDataAPI_t * pAction = new NetReceiveDataAPI_t ( (NetStateAPI_t *)m_tState.LeakPtr() );
+				pAction->SetupBodyPhase();
+				dNextTick.Add ( pAction );
+			}
+			break;
 
-	if ( m_tStateQL.Ptr() && m_tStateQL->m_bKeepSocket )
-	{
-		sphLogDebugv ( "%p send-QL job created, sent=%d, sock=%d", this, NetState().m_iPos, m_iSock ); // !COMMIT
-		NetReceiveDataQL_t * pAction = new NetReceiveDataQL_t ( m_tStateQL.LeakPtr() );
-		pAction->SetupBodyPhase();
-		dNextTick.Add ( pAction );
+			case PROTO_MYSQL41:
+			{
+				NetReceiveDataQL_t * pAction = new NetReceiveDataQL_t ( (NetStateQL_t *)m_tState.LeakPtr() );
+				pAction->SetupBodyPhase();
+				dNextTick.Add ( pAction );
+			}
+			break;
+
+			case PROTO_HTTP:
+			{
+				NetReceiveDataHttp_t * pAction = new NetReceiveDataHttp_t ( (NetStateQL_t *)m_tState.LeakPtr() );
+				dNextTick.Add ( pAction );
+			}
+			break;
+
+			default: break;
+		}
 	}
 
 	return NE_REMOVE;
@@ -19829,35 +19702,24 @@ NetEvent_e NetSendData_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> &
 
 NetEvent_e NetSendData_t::Setup ( int64_t tmNow )
 {
-	assert ( m_tStateAPI.Ptr() || m_tStateQL.Ptr() );
-	const NetStateCommon_t & tState = NetState();
-	sphLogDebugv ( "%p send setup, api=%d, keep=%d, buf=%d, client=%s, conn=%d, sock=%d", this, (int)(m_tStateAPI.Ptr() ? 1 : 0 ), (int)(tState.m_bKeepSocket),
-		tState.m_dBuf.GetLength(), tState.m_sClientName, tState.m_iConnID, tState.m_iClientSock ); // !COMMIT
+	assert ( m_tState.Ptr() );
+	sphLogDebugv ( "%p send %s setup, keep=%d, buf=%d, client=%s, conn=%d, sock=%d", this, g_dProtoNames[m_eProto], (int)(m_tState->m_bKeepSocket),
+		m_tState->m_dBuf.GetLength(), m_tState->m_sClientName, m_tState->m_iConnID, m_tState->m_iClientSock );
 
 	m_tmTimeout = tmNow + MS2SEC * g_iWriteTimeout;
 
-	assert ( NetState().m_dBuf.GetLength() );
-	NetState().m_iLeft = NetState().m_dBuf.GetLength();
-	NetState().m_iPos = 0;
+	assert ( m_tState->m_dBuf.GetLength() );
+	m_tState->m_iLeft = m_tState->m_dBuf.GetLength();
+	m_tState->m_iPos = 0;
 
 	return NE_OUT;
-}
-
-NetStateCommon_t & NetSendData_t::NetState () const
-{
-	if ( m_tStateAPI.Ptr() )
-		return *m_tStateAPI.Ptr();
-	else
-		return *m_tStateQL.Ptr();
 }
 
 
 void NetSendData_t::CloseSocket()
 {
-	if ( m_tStateAPI.Ptr() )
-		m_tStateAPI->CloseSocket();
-	if ( m_tStateQL.Ptr() )
-		m_tStateQL->CloseSocket();
+	if ( m_tState.Ptr() )
+		m_tState->CloseSocket();
 }
 
 
@@ -19881,7 +19743,7 @@ void NetStateCommon_t::CloseSocket ()
 {
 	if ( m_iClientSock>=0 )
 	{
-		sphLogDebugv ( "%p state closing socket=%d", this, m_iClientSock ); // !COMMIT
+		sphLogDebugv ( "%p state closing socket=%d", this, m_iClientSock );
 		sphSockClose ( m_iClientSock );
 		m_iClientSock = -1;
 	}
@@ -19892,6 +19754,147 @@ NetStateQL_t::NetStateQL_t ()
 	, m_bAuthed ( false )
 	, m_uPacketID ( 1 )
 {}
+
+
+NetReceiveDataHttp_t::NetReceiveDataHttp_t ( NetStateQL_t *	pState )
+	: ISphNetAction ( pState->m_iClientSock )
+	, m_tState ( pState )
+{
+	assert ( m_tState.Ptr() );
+	m_tState->m_iPos = 0;
+	m_tState->m_iLeft = 4000;
+	m_tState->m_dBuf.Resize ( Max ( m_tState->m_dBuf.GetLimit(), 4000 ) );
+}
+
+NetEvent_e NetReceiveDataHttp_t::Setup ( int64_t tmNow )
+{
+	assert ( m_tState.Ptr() );
+	sphLogDebugv ( "%p receive HTTP setup, keep=%d, client=%s, conn=%d, sock=%d", this, m_tState->m_bKeepSocket, m_tState->m_sClientName, m_tState->m_iConnID, m_tState->m_iClientSock );
+
+	if ( !m_tState->m_bKeepSocket )
+	{
+		m_tmTimeout = tmNow + MS2SEC * g_iReadTimeout;
+	} else
+	{
+		m_tmTimeout = tmNow + MS2SEC * g_iClientTimeout;
+	}
+	return NE_IN;
+}
+
+static const char g_sContentLength[] = "\r\r\n\nCcOoNnTtEeNnTt--LlEeNnGgTtHh";
+static const char g_sHeadEnd[] = "\r\n\r\n";
+
+HttpHeaderStreamParser_t::HttpHeaderStreamParser_t ()
+{
+	m_iHeaderEnd = 0;
+	m_iFieldContentLenStart = 0;
+	m_iFieldContentLenVal = 0;
+	m_iCur = 0;
+	m_iCRLF = 0;
+	m_iName = 0;
+}
+
+bool HttpHeaderStreamParser_t::HeaderFound ( const BYTE * pBuf, int iLen )
+{
+	// early exit at for already found request header
+	if ( m_iHeaderEnd || m_iCur>=iLen )
+		return true;
+
+	const int iCNwoLFSize = ( sizeof(g_sContentLength)-5 )/2; // size of just Content-Length field name
+	for ( ; m_iCur<iLen; m_iCur++ )
+	{
+		m_iCRLF = ( pBuf[m_iCur]==g_sHeadEnd[m_iCRLF] ? m_iCRLF+1 : 0 );
+		m_iName = ( !m_iFieldContentLenStart && ( pBuf[m_iCur]==g_sContentLength[m_iName] || pBuf[m_iCur]==g_sContentLength[m_iName+1] ) ? m_iName+2 : 0 );
+
+		// header end found
+		if ( m_iCRLF==sizeof(g_sHeadEnd)-1 )
+		{
+			m_iHeaderEnd = m_iCur+1;
+			break;
+		}
+		// Content-Length field found
+		if ( !m_iFieldContentLenStart && m_iName==sizeof(g_sContentLength)-1 )
+			m_iFieldContentLenStart = m_iCur - iCNwoLFSize + 1;
+	}
+
+	// parse Content-Length field value
+	while ( m_iHeaderEnd && m_iFieldContentLenStart )
+	{
+		int iNumStart = m_iFieldContentLenStart + iCNwoLFSize;
+		// skip spaces
+		while ( iNumStart<m_iHeaderEnd && pBuf[iNumStart]==' ' )
+			iNumStart++;
+		if ( iNumStart>=m_iHeaderEnd || pBuf[iNumStart]!=':' )
+			break;
+
+		iNumStart++; // skip ':' delimiter
+		m_iFieldContentLenVal = atoi ( (const char *)pBuf + iNumStart ); // atoi handles leading spaces and tail not digital chars
+		break;
+	}
+
+	return ( m_iHeaderEnd>0 );
+}
+
+NetEvent_e NetReceiveDataHttp_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & , CSphNetLoop * pLoop )
+{
+	assert ( m_tState.Ptr() );
+	const char * sHttpError = "http error";
+	if ( CheckSocketError ( uGotEvents, sHttpError, m_tState.Ptr(), false ) )
+		return NE_REMOVE;
+
+	// loop to handle similar operations at once
+	for ( ;; )
+	{
+		int iRes = NetManageSocket ( m_tState->m_iClientSock, (char *)( m_tState->m_dBuf.Begin() + m_tState->m_iPos ), m_tState->m_iLeft, false );
+		if ( iRes==-1 )
+		{
+			// FIXME!!! report back to client buffer overflow with 413 error
+			LogSocketError ( sHttpError, m_tState.Ptr(), false );
+			return NE_REMOVE;
+		}
+		m_tState->m_iLeft -= iRes;
+		m_tState->m_iPos += iRes;
+
+		// socket would block - going back to polling
+		if ( iRes==0 )
+			return NE_KEEP;
+
+		// keep fetching data till the end of a header
+		if ( !m_tHeadParser.m_iHeaderEnd )
+		{
+			if ( !m_tHeadParser.HeaderFound ( m_tState->m_dBuf.Begin(), m_tState->m_iPos ) )
+				continue;
+
+			int iReqSize = m_tHeadParser.m_iHeaderEnd + m_tHeadParser.m_iFieldContentLenVal;
+			if ( m_tHeadParser.m_iFieldContentLenVal && m_tState->m_iPos<iReqSize )
+			{
+				m_tState->m_dBuf.Resize ( iReqSize );
+				m_tState->m_iLeft = iReqSize - m_tState->m_iPos;
+				continue;
+			}
+
+			m_tState->m_iLeft = 0;
+			m_tState->m_iPos = iReqSize;
+			m_tState->m_dBuf.Resize ( iReqSize + 1 );
+			m_tState->m_dBuf[m_tState->m_iPos] = '\0';
+			m_tState->m_dBuf.Resize ( iReqSize );
+		}
+
+		sphLogDebugv ( "%p HTTP buf=%d, header=%d, content-len=%d, sock=%d", this, m_tState->m_dBuf.GetLength(), m_tHeadParser.m_iHeaderEnd, m_tHeadParser.m_iFieldContentLenVal, m_iSock );
+
+		// no VIP for http for now
+		ThdJobHttp_t * pJob = new ThdJobHttp_t ( pLoop, m_tState.LeakPtr() );
+		g_pThdPool->AddJob ( pJob );
+
+		return NE_REMOVE;
+	}
+}
+
+void NetReceiveDataHttp_t::CloseSocket()
+{
+	if ( m_tState.Ptr() )
+		m_tState->CloseSocket();
+}
 
 ThdJobAPI_t::ThdJobAPI_t ( CSphNetLoop * pLoop, NetStateAPI_t * pState )
 	: m_tState ( pState )
@@ -19905,7 +19908,7 @@ void ThdJobAPI_t::Call ()
 	SphCrashLogger_c tQueryTLS;
 	tQueryTLS.SetupTLS ();
 
-	sphLogDebugv ( "%p API job started, command=%d", this, m_iCommand ); // !COMMIT
+	sphLogDebugv ( "%p API job started, command=%d", this, m_iCommand );
 
 	int iTid = GetOsThreadId();
 
@@ -19933,13 +19936,13 @@ void ThdJobAPI_t::Call ()
 	g_dThd.Remove ( &tThdDesc );
 	g_tThdMutex.Unlock ();
 
-	sphLogDebugv ( "%p API job done, command=%d", this, m_iCommand ); // !COMMIT
+	sphLogDebugv ( "%p API job done, command=%d", this, m_iCommand );
 
 	assert ( m_pLoop );
 	if ( tOut.GetSentCount() )
 	{
 		tOut.SwapData ( m_tState->m_dBuf );
-		NetSendData_t * pSend = new NetSendData_t ( m_tState.LeakPtr(), NULL );
+		NetSendData_t * pSend = new NetSendData_t ( m_tState.LeakPtr(), PROTO_SPHINX );
 		m_pLoop->AddAction ( pSend );
 	} else if ( m_tState->m_bKeepSocket ) // no response - switching to receive
 	{
@@ -19985,59 +19988,12 @@ void ThdJobQL_t::Call ()
 	bool bProceed = LoopClientMySQL ( m_tState->m_uPacketID, m_tState->m_tSession, sQuery, m_tState->m_dBuf.GetLength(), bProfile, &tThdDesc, tIn, tOut );
 	m_tState->m_bKeepSocket = bProceed;
 
-	if ( bProceed && !g_iSendJob )
+	if ( bProceed )
 	{
 		assert ( m_pLoop );
 		tOut.SwapData ( m_tState->m_dBuf );
-		NetSendData_t * pSend = new NetSendData_t ( NULL, m_tState.LeakPtr() );
+		NetSendData_t * pSend = new NetSendData_t ( m_tState.LeakPtr(), PROTO_MYSQL41 );
 		m_pLoop->AddAction ( pSend );
-	}
-	if ( bProceed && g_iSendJob )
-	{
-		assert ( m_pLoop );
-		tOut.SwapData ( m_tState->m_dBuf );
-		NetSendData_t * pSend = new NetSendData_t ( NULL, m_tState.LeakPtr() );
-		pSend->Setup ( sphMicroTimer() );
-
-		CSphVector<ISphNetAction *> dNext;
-		struct pollfd tEv;
-		tEv.fd = pSend->m_tStateQL->m_iClientSock;
-		tEv.events = POLLOUT;
-
-		for ( ;; )
-		{
-			tEv.revents = 0;
-			int iGot = ::poll ( &tEv, 1, 1 );
-
-			if ( iGot<0 )
-			{
-				int iErrno = sphSockGetErrno();
-				if ( iErrno==EINTR || iErrno==EAGAIN || iErrno==EWOULDBLOCK )
-					continue;
-
-				sphWarning ( "poll at send job failed: %s", sphSockError(iErrno) );
-				continue;
-			}
-
-			DWORD uGotEvents = 0;
-			if ( tEv.revents & POLLIN )
-				uGotEvents |= NE_IN;
-			if ( tEv.revents & POLLOUT )
-				uGotEvents |= NE_OUT;
-			if ( tEv.revents & POLLHUP )
-				uGotEvents |= NE_HUP;
-			if ( tEv.revents & POLLERR )
-				uGotEvents |= NE_ERR;
-
-			NetEvent_e eRes = pSend->Tick ( uGotEvents, dNext, m_pLoop );
-			if ( eRes==NE_REMOVE )
-				break;
-		}
-
-		SafeDelete ( pSend );
-		assert ( dNext.GetLength()<2 );
-		if ( dNext.GetLength()>0 )
-			m_pLoop->AddAction ( dNext[0] );
 	}
 
 	g_tThdMutex.Lock ();
@@ -20068,6 +20024,48 @@ void ThdJobCleanup_t::Clear ()
 
 	m_dCleanup.Reset();
 }
+
+ThdJobHttp_t::ThdJobHttp_t ( CSphNetLoop * pLoop, NetStateQL_t * pState )
+	: m_tState ( pState )
+	, m_pLoop ( pLoop )
+{
+	assert ( m_tState.Ptr() );
+}
+
+void ThdJobHttp_t::Call ()
+{
+	SphCrashLogger_c tQueryTLS;
+	tQueryTLS.SetupTLS ();
+
+	sphLogDebugv ( "%p http job started, buffer len=%d", this, m_tState->m_dBuf.GetLength() );
+
+	int iTid = GetOsThreadId();
+
+	ThdDesc_t tThdDesc;
+	tThdDesc.m_eProto = PROTO_HTTP;
+	tThdDesc.m_iClientSock = m_tState->m_iClientSock;
+	tThdDesc.m_sClientName = m_tState->m_sClientName;
+	tThdDesc.m_iConnID = m_tState->m_iConnID;
+	tThdDesc.m_tmConnect = sphMicroTimer();
+	tThdDesc.m_iTid = iTid;
+
+	g_tThdMutex.Lock ();
+	g_dThd.Add ( &tThdDesc );
+	g_tThdMutex.Unlock ();
+
+	assert ( m_tState.Ptr() );
+
+	m_tState->m_bKeepSocket = sphLoopClientHttp ( m_tState->m_dBuf, m_tState->m_iConnID );
+
+	assert ( m_pLoop );
+	NetSendData_t * pSend = new NetSendData_t ( m_tState.LeakPtr(), PROTO_HTTP );
+	m_pLoop->AddAction ( pSend );
+
+	g_tThdMutex.Lock ();
+	g_dThd.Remove ( &tThdDesc );
+	g_tThdMutex.Unlock ();
+}
+
 
 
 /////////////////////////////////////////////////////////////////////////////
@@ -20207,7 +20205,6 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_tmWait = hSearchd.GetInt ( "net_wait_tm", g_tmWait );
 	g_iThrottleAction = hSearchd.GetInt ( "net_throttle_action", g_iThrottleAction );
 	g_iThrottleAccept = hSearchd.GetInt ( "net_throttle_accept", g_iThrottleAccept );
-	g_iSendJob = hSearchd.GetInt ( "net_send_job", g_iSendJob );
 	g_iNetWorkers = hSearchd.GetInt ( "net_workers", g_iNetWorkers );
 	g_iNetWorkers = Max ( g_iNetWorkers, 1 );
 
@@ -20909,7 +20906,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	// command line arguments override config (but only in --console)
 	if ( bOptListen )
 	{
-		AddListener ( sOptListen );
+		AddListener ( sOptListen, bThdPool );
 
 	} else if ( bOptPort )
 	{
@@ -20920,7 +20917,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	{
 		// listen directives in configuration file
 		for ( CSphVariant * v = hSearchd("listen"); v; v = v->m_pNext )
-			AddListener ( v->strval() );
+			AddListener ( v->strval(), bThdPool );
 
 		// default is to listen on our two ports
 		if ( !g_dListeners.GetLength() )

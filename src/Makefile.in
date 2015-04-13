@@ -84,7 +84,8 @@ am_indextool_OBJECTS = indextool.$(OBJEXT)
 indextool_OBJECTS = $(am_indextool_OBJECTS)
 indextool_LDADD = $(LDADD)
 indextool_DEPENDENCIES = $(am__DEPENDENCIES_2)
-am_searchd_OBJECTS = searchd.$(OBJEXT) searchdha.$(OBJEXT)
+am_searchd_OBJECTS = searchd.$(OBJEXT) searchdha.$(OBJEXT) \
+	http_parser.$(OBJEXT) searchdhttp.$(OBJEXT)
 searchd_OBJECTS = $(am_searchd_OBJECTS)
 searchd_LDADD = $(LDADD)
 searchd_DEPENDENCIES = $(am__DEPENDENCIES_2)
@@ -104,6 +105,9 @@ DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)/config
 depcomp = $(SHELL) $(top_srcdir)/config/depcomp
 am__depfiles_maybe = depfiles
 am__mv = mv -f
+AM_V_lt = $(am__v_lt_@AM_V@)
+am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
+am__v_lt_0 = --silent
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
 AM_V_CC = $(am__v_CC_@AM_V@)
@@ -250,7 +254,7 @@ SRC_SPHINX = sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp \
 noinst_LIBRARIES = libsphinx.a
 libsphinx_a_SOURCES = $(SRC_SPHINX)
 indexer_SOURCES = indexer.cpp
-searchd_SOURCES = searchd.cpp searchdha.cpp
+searchd_SOURCES = searchd.cpp searchdha.cpp http/http_parser.c searchdhttp.cpp
 spelldump_SOURCES = spelldump.cpp
 indextool_SOURCES = indextool.cpp
 tests_SOURCES = tests.cpp
@@ -370,10 +374,12 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/http_parser.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/indexer.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/indextool.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/searchd.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/searchdha.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/searchdhttp.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/spelldump.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinx.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxaot.Po@am__quote@
@@ -412,6 +418,20 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='$<' object='$@' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(COMPILE) -c `$(CYGPATH_W) '$<'`
+
+http_parser.o: http/http_parser.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT http_parser.o -MD -MP -MF $(DEPDIR)/http_parser.Tpo -c -o http_parser.o `test -f 'http/http_parser.c' || echo '$(srcdir)/'`http/http_parser.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/http_parser.Tpo $(DEPDIR)/http_parser.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='http/http_parser.c' object='http_parser.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o http_parser.o `test -f 'http/http_parser.c' || echo '$(srcdir)/'`http/http_parser.c
+
+http_parser.obj: http/http_parser.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT http_parser.obj -MD -MP -MF $(DEPDIR)/http_parser.Tpo -c -o http_parser.obj `if test -f 'http/http_parser.c'; then $(CYGPATH_W) 'http/http_parser.c'; else $(CYGPATH_W) '$(srcdir)/http/http_parser.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/http_parser.Tpo $(DEPDIR)/http_parser.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='http/http_parser.c' object='http_parser.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o http_parser.obj `if test -f 'http/http_parser.c'; then $(CYGPATH_W) 'http/http_parser.c'; else $(CYGPATH_W) '$(srcdir)/http/http_parser.c'; fi`
 
 .cpp.o:
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)$(CXXCOMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<

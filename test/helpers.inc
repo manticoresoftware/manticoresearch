@@ -578,6 +578,129 @@ class APIClient extends SphinxClient
 	}
 }
 
+function FormatJsonRow ( $j )
+{
+	if ( !is_array ( $j ) ||  !count($j) )
+	{
+		return "[]\n";
+	}
+	$str = "[\n";
+
+	$row_sep = "";
+	foreach ( $j as $row )
+	{
+		$str .= "$row_sep\t";
+		$str .= json_encode ( $row, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+		$row_sep = ",\n";
+	}
+	$str .= "]";
+	return $str;
+}
+
+function HttpFormatResultSet ( $result )
+{
+	$str = '';
+	$n = 0;
+	foreach ( $result as $res )
+	{
+		$http_endpoint = '';
+		$http_get = '';
+		$http_post = '';
+		$http_code = '';
+		$rows = array();
+		$attrs = array();
+		$matches = array();
+		$meta = array();
+
+		if ( is_array ( $res ) && array_key_exists ( 'http_endpoint', $res ) )
+			$http_endpoint = $res['http_endpoint'];
+		if ( is_array ( $res ) && array_key_exists ( 'http_get', $res ) )
+			$http_get = $res['http_get'];
+		if ( is_array ( $res ) && array_key_exists ( 'http_post', $res ) )
+			$http_post = $res['http_post'];
+		if ( is_array ( $res ) && array_key_exists ( 'http_code', $res ) )	
+			$http_code = $res['http_code'];
+		if ( is_array ( $res ) && array_key_exists ( 'rows', $res ) )	
+			$rows = json_decode ( $res['rows'], 1 );
+		
+		if ( is_array ( $rows ) && array_key_exists ( 'attrs', $rows ) )
+			$attrs = $rows['attrs'];
+		if ( is_array ( $rows ) && array_key_exists ( 'matches', $rows ) )	
+			$matches = $rows['matches'];
+		if ( is_array ( $rows ) && array_key_exists ( 'meta', $rows ) )
+			$meta = $rows['meta'];
+		
+		$str .= "http-$n> /$http_endpoint\n";
+		$str .= "\tStatus: $http_code\n";
+		if ( $http_get )
+			$str .= "\tGET $http_get\n";
+		if ( $http_post )
+			$str .= "\tPOST " . json_encode ( $http_post, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) . "\n";
+		$str .= "\n";
+		
+		$str .= "\tschema:" . json_encode ( $attrs, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+		$str .= "\n";
+		$str .= "\tmatches:" . FormatJsonRow ( $matches );
+		$str .= "\n";
+		unset ( $meta['time'] );
+		$str .= "\tmeta:" . json_encode ( $meta, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+		$str .= "\n";
+		
+		// data tail
+		unset ( $rows['attrs'] );
+		unset ( $rows['matches'] );
+		unset ( $rows['meta'] );
+		if ( count ( $rows ) )
+			$str .= json_encode ( $rows, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+			
+		$str .= "\n";
+		$n++;
+	}
+	return $str;
+}
+
+function Dict2String ( $dict )
+{
+	if ( is_null ( $dict ) )
+		return NULL;
+		
+	$str = '';
+	$delimiter = '';
+	foreach ( $dict as $name=>$val )
+	{
+		$str .= $delimiter . $name . '=' . $val;
+		$delimiter = '&';
+	}
+	return $str;
+}
+
+function HttpQuery ( $http_endpoint, $http_get, $http_post )
+{
+	global $sd_http_port;
+	$curl_desc = array ( CURLOPT_RETURNTRANSFER => 1, CURLOPT_CONNECTTIMEOUT=>1, CURLOPT_URL => "127.0.0.1:$sd_http_port/" . $http_endpoint );
+	$http_get = Dict2String ( $http_get );
+	$http_post = Dict2String ( $http_post );
+
+	if ( $http_get )
+		$curl_desc[CURLOPT_URL] = $curl_desc[CURLOPT_URL] . '?' . $http_get;
+
+	if ( $http_post )
+	{
+		$curl_desc[CURLOPT_POST] = 1;
+		$curl_desc[CURLOPT_POSTFIELDS] = $http_post;
+	}
+	
+	$con = curl_init();
+	
+	curl_setopt_array ( $con, $curl_desc );
+	$rows = curl_exec ( $con );
+	$http_code = curl_getinfo ( $con, CURLINFO_HTTP_CODE );
+	
+	curl_close($con);
+	
+	return array ( 'http_endpoint'=>$http_endpoint, 'http_get'=>$http_get, 'http_post'=>$http_post, 'rows'=>$rows, 'http_code'=>$http_code );
+}
+
 class SphinxConfig
 {
 	private $_name;
@@ -596,6 +719,7 @@ class SphinxConfig
 	private	$_sd_address;
 	private	$_sd_port;
 	private $_sd_sphinxql_port;
+	private	$_sd_http_port;
 	private	$_sd_pid_file;
 	private $_num_agents;
 	private $_subtest;
@@ -616,7 +740,7 @@ class SphinxConfig
 
 	function SphinxConfig ()
 	{
-		global $sd_address, $sd_port, $sd_sphinxql_port, $sd_pid_file;
+		global $sd_address, $sd_port, $sd_sphinxql_port, $sd_pid_file, $sd_http_port;
 
 		$this->_counters 		= array ();
 		$this->_dynamic_entries = array ();
@@ -636,6 +760,7 @@ class SphinxConfig
 		$this->_sd_address		= $sd_address;
 		$this->_sd_port			= $sd_port;
 		$this->_sd_sphinxql_port	= $sd_sphinxql_port;
+		$this->_sd_http_port	= $sd_http_port;
 		$this->_sd_pid_file		= $sd_pid_file;
 		$this->_custom_test		= "";
 		$this->_compat098		= false;
@@ -1641,6 +1766,9 @@ class SphinxConfig
 	function FormatResultSet ( $nquery, $result, $opts=array() )
 	{
 		global $sd_skip_indexer;
+		if ( $this->Requires('http') )
+			return HttpFormatResultSet ( $result );
+
 		if ( !$this->IsQueryTest () || !is_array($result) )
 			return var_export ( $result, true )."\n";
 
@@ -1829,7 +1957,7 @@ class SphinxConfig
 	/// write all the result sets
 	function WriteResults ( $fp )
 	{
-		if ( $this->IsQueryTest () )
+		if ( $this->IsQueryTest () || $this->Requires('http') )
 		{
 			$nquery = 1;
 			foreach ( $this->_results as $result )
@@ -2304,6 +2432,9 @@ class SphinxConfig
 	function WriteSearchdSettings ( $fp )
 	{
 		global $sd_log, $sd_query_log, $sd_read_timeout, $sd_max_children, $sd_pid_file;
+		$workers = "threads";
+		if ( $this->Requires("thread_pool") || $this->Requires("http") )
+			$workers = "thread_pool";
 
 		if ( $this->_compat098 )
 		{
@@ -2314,15 +2445,15 @@ class SphinxConfig
 		{
 			fwrite ( $fp, "\tlisten		= {$this->_sd_address}:{$this->_sd_port}\n" );
 			fwrite ( $fp, "\tlisten		= {$this->_sd_address}:{$this->_sd_sphinxql_port}:mysql41\n" );
+			if ( $this->Requires("http") )
+				fwrite ( $fp, "\tlisten		= {$this->_sd_address}:{$this->_sd_http_port}:http\n" );
 		}
 		fwrite ( $fp, "\tlog			= $sd_log\n" );
 		fwrite ( $fp, "\tquery_log		= $sd_query_log\n" );
 		fwrite ( $fp, "\tread_timeout	= $sd_read_timeout\n" );
 		fwrite ( $fp, "\tmax_children	= $sd_max_children\n" );
 		fwrite ( $fp, "\tpid_file		= ".$this->_sd_pid_file."\n" );
-		if ( $this->IsRt() )
-			fwrite ( $fp, "\tworkers		= threads\n" );
-			
+		fwrite ( $fp, "\tworkers		= $workers\n" );
 	}
 
 	function WriteSqlSettings ( $fp, $attributes )

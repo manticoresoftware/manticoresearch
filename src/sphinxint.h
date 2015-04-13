@@ -965,6 +965,27 @@ struct PoolPtrs_t
 	{}
 };
 
+class CSphTaggedVector
+{
+public:
+	const PoolPtrs_t & operator [] ( int iTag ) const
+	{
+		return m_dPool [ iTag & 0x7FFFFFF ];
+	}
+	PoolPtrs_t & operator [] ( int iTag )
+	{
+		return m_dPool [ iTag & 0x7FFFFFF ];
+	}
+
+	void Resize ( int iSize )
+	{
+		m_dPool.Resize ( iSize );
+	}
+
+private:
+	CSphVector<PoolPtrs_t> m_dPool;
+};
+
 //////////////////////////////////////////////////////////////////////////
 // INLINES, FIND_XXX() GENERIC FUNCTIONS
 //////////////////////////////////////////////////////////////////////////

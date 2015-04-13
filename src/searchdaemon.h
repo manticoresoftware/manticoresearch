@@ -535,7 +535,193 @@ extern IndexHash_c *						g_pLocalIndexes;	// served (local) indexes hash
 extern IndexHash_c *						g_pTemplateIndexes;	// template (tokenizer) indexes hash
 
 
+enum SqlStmt_e
+{
+	STMT_PARSE_ERROR = 0,
+	STMT_DUMMY,
+
+	STMT_SELECT,
+	STMT_INSERT,
+	STMT_REPLACE,
+	STMT_DELETE,
+	STMT_SHOW_WARNINGS,
+	STMT_SHOW_STATUS,
+	STMT_SHOW_META,
+	STMT_SET,
+	STMT_BEGIN,
+	STMT_COMMIT,
+	STMT_ROLLBACK,
+	STMT_CALL, // check.pl STMT_CALL_SNIPPETS STMT_CALL_KEYWORDS
+	STMT_DESCRIBE,
+	STMT_SHOW_TABLES,
+	STMT_UPDATE,
+	STMT_CREATE_FUNCTION,
+	STMT_DROP_FUNCTION,
+	STMT_ATTACH_INDEX,
+	STMT_FLUSH_RTINDEX,
+	STMT_FLUSH_RAMCHUNK,
+	STMT_SHOW_VARIABLES,
+	STMT_TRUNCATE_RTINDEX,
+	STMT_SELECT_SYSVAR,
+	STMT_SHOW_COLLATION,
+	STMT_SHOW_CHARACTER_SET,
+	STMT_OPTIMIZE_INDEX,
+	STMT_SHOW_AGENT_STATUS,
+	STMT_SHOW_INDEX_STATUS,
+	STMT_SHOW_PROFILE,
+	STMT_ALTER_ADD,
+	STMT_ALTER_DROP,
+	STMT_SHOW_PLAN,
+	STMT_SELECT_DUAL,
+	STMT_SHOW_DATABASES,
+	STMT_CREATE_PLUGIN,
+	STMT_DROP_PLUGIN,
+	STMT_SHOW_PLUGINS,
+	STMT_SHOW_THREADS,
+	STMT_FACET,
+	STMT_ALTER_RECONFIGURE,
+	STMT_SHOW_INDEX_SETTINGS,
+	STMT_FLUSH_INDEX,
+	STMT_RELOAD_PLUGINS,
+	STMT_RELOAD_INDEX,
+
+	STMT_TOTAL
+};
+
+
+enum SqlSet_e
+{
+	SET_LOCAL,
+	SET_GLOBAL_UVAR,
+	SET_GLOBAL_SVAR,
+	SET_INDEX_UVAR
+};
+
+/// refcounted vector
+template < typename T >
+class RefcountedVector_c : public CSphVector<T>, public ISphRefcounted
+{
+};
+
+typedef CSphRefcountedPtr < RefcountedVector_c<SphAttr_t> > AttrValues_p;
+
+/// insert value
+struct SqlInsert_t
+{
+	int						m_iType;
+	CSphString				m_sVal;		// OPTIMIZE? use char* and point to node?
+	int64_t					m_iVal;
+	float					m_fVal;
+	AttrValues_p			m_pVals;
+
+	SqlInsert_t ()
+		: m_pVals ( NULL )
+	{}
+};
+
+/// parsing result
+/// one day, we will start subclassing this
+struct SqlStmt_t
+{
+	SqlStmt_e				m_eStmt;
+	int						m_iRowsAffected;
+	const char *			m_sStmt; // for error reporting
+
+	// SELECT specific
+	CSphQuery				m_tQuery;
+
+	CSphString				m_sTableFunc;
+	CSphVector<CSphString>	m_dTableFuncArgs;
+
+	// used by INSERT, DELETE, CALL, DESC, ATTACH, ALTER, RELOAD INDEX
+	CSphString				m_sIndex;
+
+	// INSERT (and CALL) specific
+	CSphVector<SqlInsert_t>	m_dInsertValues; // reused by CALL
+	CSphVector<CSphString>	m_dInsertSchema;
+	int						m_iSchemaSz;
+
+	// SET specific
+	CSphString				m_sSetName;		// reused by ATTACH
+	SqlSet_e				m_eSet;
+	int64_t					m_iSetValue;
+	CSphString				m_sSetValue;
+	CSphVector<SphAttr_t>	m_dSetValues;
+	bool					m_bSetNull;
+
+	// CALL specific
+	CSphString				m_sCallProc;
+	CSphVector<CSphString>	m_dCallOptNames;
+	CSphVector<SqlInsert_t>	m_dCallOptValues;
+	CSphVector<CSphString>	m_dCallStrings;
+
+	// UPDATE specific
+	CSphAttrUpdate			m_tUpdate;
+	int						m_iListStart; // < the position of start and end of index's definition in original query.
+	int						m_iListEnd;
+
+	// CREATE/DROP FUNCTION, INSTALL PLUGIN specific
+	CSphString				m_sUdfName; // FIXME! move to arg1?
+	CSphString				m_sUdfLib;
+	ESphAttr				m_eUdfType;
+
+	// ALTER specific
+	CSphString				m_sAlterAttr;
+	ESphAttr				m_eAlterColType;
+
+	// SHOW THREADS specific
+	int						m_iThreadsCols;
+
+	// generic parameter, different meanings in different statements
+	// filter pattern in DESCRIBE, SHOW TABLES / META / VARIABLES
+	// target index name in ATTACH
+	// token filter options in INSERT
+	// plugin type in INSTALL PLUGIN
+	// path in RELOAD INDEX
+	CSphString				m_sStringParam;
+
+	// generic integer parameter, used in SHOW SETTINGS, default value -1
+	int						m_iIntParam;
+
+	SqlStmt_t ();
+	bool AddSchemaItem ( const char * psName );
+	// check if the number of fields which would be inserted is in accordance to the given schema
+	bool CheckInsertIntegrity();
+};
+
+/// result set aggregated across indexes
+struct AggrResult_t : CSphQueryResult
+{
+	CSphVector<CSphRsetSchema>		m_dSchemas;			///< aggregated result sets schemas (for schema minimization)
+	CSphVector<int>					m_dMatchCounts;		///< aggregated result sets lengths (for schema minimization)
+	CSphVector<const CSphIndex*>	m_dLockedAttrs;		///< indexes which are hold in the memory until sending result
+	CSphTaggedVector				m_dTag2Pools;		///< tag to MVA and strings storage pools mapping
+	CSphString						m_sZeroCountName;
+
+	AggrResult_t () {}
+	virtual ~AggrResult_t () {}
+	void ClampMatches ( int iLimit, bool bCommonSchema );
+};
+
+
+class ISphSearchHandler
+{
+public:
+									ISphSearchHandler () {}
+	virtual							~ISphSearchHandler() {}
+	virtual void					RunQueries () = 0;					///< run all queries, get all results
+
+	virtual CSphQuery *				GetQuery ( int iQuery ) = 0;
+	virtual AggrResult_t *			GetResult ( int iResult ) = 0;
+};
+
 bool CheckCommandVersion ( int iVer, int iDaemonVersion, ISphOutputBuffer & tOut );
+ISphSearchHandler * sphCreateSearchHandler ( int iQueries, bool bSphinxql, bool bMaster, int iCID );
+void sphFormatFactors ( CSphVector<BYTE> & dOut, const unsigned int * pFactors, bool bJson );
+bool sphLoopClientHttp ( CSphVector<BYTE> & dData, int iCID );
+bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation );
+
+
 
 #endif // _searchdaemon_
 

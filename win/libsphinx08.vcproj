@@ -301,6 +301,14 @@
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
 			<File
+				RelativePath="..\src\http\http_parser.c"
+				>
+			</File>
+			<File
+				RelativePath="..\src\searchdhttp.cpp"
+				>
+			</File>
+			<File
 				RelativePath="..\src\sphinx.cpp"
 				>
 			</File>
@@ -383,6 +391,10 @@
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
 			<File
+				RelativePath="..\src\http\http_parser.h"
+				>
+			</File>
+			<File
 				RelativePath="..\src\sphinx.h"
 				>
 				<FileConfiguration
@@ -447,11 +459,11 @@
 				>
 			</File>
 			<File
-				RelativePath="..\src\sphinxqcache.cpp"
+				RelativePath="..\src\sphinxplugin.h"
 				>
 			</File>
 			<File
-				RelativePath="..\src\sphinxplugin.h"
+				RelativePath="..\src\sphinxqcache.cpp"
 				>
 			</File>
 			<File

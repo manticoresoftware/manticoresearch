@@ -1935,7 +1935,8 @@ inline void Swap ( CSphString & v1, CSphString & v2 )
 /// string builder
 /// somewhat quicker than a series of SetSprintf()s
 /// lets you build strings bigger than 1024 bytes, too
-class CSphStringBuilder
+template <typename T>
+class SphStringBuilder_T
 {
 protected:
 	char *	m_sBuffer;
@@ -1943,12 +1944,12 @@ protected:
 	int		m_iUsed;
 
 public:
-	CSphStringBuilder ()
+	SphStringBuilder_T ()
 	{
 		Reset ();
 	}
 
-	~CSphStringBuilder ()
+	~SphStringBuilder_T ()
 	{
 		SafeDeleteArray ( m_sBuffer );
 	}
@@ -1966,7 +1967,7 @@ public:
 		m_iUsed = 0;
 	}
 
-	CSphStringBuilder & Appendf ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) )
+	SphStringBuilder_T<T> & Appendf ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) )
 	{
 		assert ( m_sBuffer );
 		assert ( m_iUsed<m_iSize );
@@ -2010,7 +2011,7 @@ public:
 		return m_iUsed;
 	}
 
-	const CSphStringBuilder & operator += ( const char * sText )
+	const SphStringBuilder_T<T> & operator += ( const char * sText )
 	{
 		if ( !sText || *sText=='\0' )
 			return *this;
@@ -2025,7 +2026,7 @@ public:
 		return *this;
 	}
 
-	const CSphStringBuilder & operator = ( const CSphStringBuilder & rhs )
+	const SphStringBuilder_T<T> & operator = ( const SphStringBuilder_T<T> & rhs )
 	{
 		if ( this!=&rhs )
 		{
@@ -2049,7 +2050,7 @@ public:
 		for ( ; *pBuf; )
 		{
 			char s = *pBuf++;
-			iEsc = ( bEscape && ( s=='\\' || s=='\'' ) ) ? ( iEsc+1 ) : iEsc;
+			iEsc = ( bEscape && T::IsEscapeChar ( s ) ? ( iEsc+1 ) : iEsc );
 		}
 
 		int iLen = pBuf - sText + iEsc;
@@ -2062,10 +2063,10 @@ public:
 		for ( ; *pBuf; )
 		{
 			char s = *pBuf++;
-			if ( bEscape && ( s=='\\' || s=='\'' ) )
+			if ( bEscape && T::IsEscapeChar ( s ) )
 			{
 				*pCur++ = '\\';
-				*pCur++ = s;
+				*pCur++ = T::GetEscapedChar ( s );
 			} else if ( bFixupSpace && ( s==' ' || s=='\t' || s=='\n' || s=='\r' ) )
 			{
 				*pCur++ = ' ';
@@ -2088,6 +2089,23 @@ private:
 		SafeDeleteArray ( pNew );
 	}
 };
+
+
+struct EscapeQuotation_t
+{
+	static bool IsEscapeChar ( char c )
+	{
+		return ( c=='\\' || c=='\'' );
+	}
+
+	static char GetEscapedChar ( char c )
+	{
+		return c;
+	}
+};
+
+
+typedef SphStringBuilder_T<EscapeQuotation_t> CSphStringBuilder;
 
 /////////////////////////////////////////////////////////////////////////////
 

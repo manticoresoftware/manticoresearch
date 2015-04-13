@@ -3711,6 +3711,38 @@ void TestHash()
 
 //////////////////////////////////////////////////////////////////////////
 
+CSphMutex g_Mutex1;
+
+void TimedLockTest ( void * )
+{
+	printf ( "- timedlock attempt 1\n" );
+	assert ( !g_Mutex1.TimedLock ( 1000 ) );
+	printf ( "- timedlock attempt 2\n" );
+	assert ( !g_Mutex1.TimedLock ( 1000 ) );
+	printf ( "- timedlock attempt 3\n" );
+	assert ( !g_Mutex1.TimedLock ( 1000 ) );
+	printf ( "- timedlock attempt 4\n" );
+	assert ( g_Mutex1.TimedLock ( 1000 ) );
+	assert ( g_Mutex1.Unlock() );
+}
+
+void TestMutex()
+{
+	printf ( "testing mutex...\n" );
+	SphThread_t th;
+	assert ( g_Mutex1.Lock() );
+	printf ( "- locked ok\n" );
+	assert ( sphThreadCreate ( &th, TimedLockTest, NULL ) );
+	printf ( "- timedlock thread created\n" );
+	sphSleepMsec ( 3500 );
+	assert ( g_Mutex1.Unlock() );
+	printf ( "- unlocked ok\n" );
+	assert ( sphThreadJoin ( &th ) );
+	printf ( "- timedlock thread done\n" );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 int main ()
 {
 	// threads should be initialized before memory allocations
@@ -3740,6 +3772,7 @@ int main ()
 	BenchLocators ();
 	BenchThreads ();
 #else
+	TestMutex();
 	TestHash();
 	TestAppendf();
 	TestQueryParser ();

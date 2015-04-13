@@ -2724,6 +2724,7 @@ public:
 
 	bool Lock ();
 	bool Unlock ();
+	bool TimedLock ( int iMsec );
 
 protected:
 #if USE_WINDOWS

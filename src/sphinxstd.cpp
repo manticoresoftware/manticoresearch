@@ -1123,6 +1123,12 @@ bool CSphMutex::Lock ()
 	return ( uWait!=WAIT_FAILED && uWait!=WAIT_TIMEOUT );
 }
 
+bool CSphMutex::TimedLock ( int iMsec )
+{
+	DWORD uWait = WaitForSingleObject ( m_hMutex, iMsec );
+	return ( uWait!=WAIT_FAILED && uWait!=WAIT_TIMEOUT );
+}
+
 bool CSphMutex::Unlock ()
 {
 	return ReleaseMutex ( m_hMutex )==TRUE;
@@ -1219,6 +1225,19 @@ CSphMutex::~CSphMutex() {
 bool CSphMutex::Lock ()
 {
 	return ( pthread_mutex_lock ( &m_tMutex )==0 );
+}
+
+bool CSphMutex::TimedLock ( int iMsec )
+{
+	struct timespec ts;
+	clock_gettime ( CLOCK_REALTIME, &ts );
+
+	int ns = ts.tv_nsec + ( iMsec % 1000 )*1000000;
+	ts.tv_sec += ( ns / 1000000000 ) + ( iMsec / 1000 );
+	ts.tv_nsec = ( ns % 1000000000 );
+
+	int iRes = pthread_mutex_timedlock ( &m_tMutex, &ts );
+	return iRes==0;
 }
 
 bool CSphMutex::Unlock ()

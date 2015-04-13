@@ -22,6 +22,8 @@
 #include "sphinxjson.h"
 #include "sphinxplugin.h"
 #include "sphinxqcache.h"
+#include "searchdaemon.h"
+#include "searchdha.h"
 
 extern "C"
 {
@@ -91,9 +93,6 @@ extern "C"
 	#include <syslog.h>
 #endif
 
-#include "searchdaemon.h"
-#include "searchdha.h"
-
 /////////////////////////////////////////////////////////////////////////////
 
 enum ProtocolType_e
@@ -119,8 +118,6 @@ HANDLE					g_hPipe			= INVALID_HANDLE_VALUE;
 #endif
 
 static CSphVector<CSphString>	g_dArgs;
-
-static bool				g_bWatchdogPassed	= false;
 
 
 enum LogFormat_e
@@ -380,10 +377,8 @@ static CSphLargeBuffer<DWORD, true>	g_bDaemonAtShutdown;
 volatile bool					g_bShutdown = false;
 static CSphLargeBuffer<DWORD, true>	g_bHaveTTY;
 
-
-
-IndexHash_c *						g_pLocalIndexes = NULL;	// served (local) indexes hash
-IndexHash_c *						g_pTemplateIndexes = NULL; // template (tokenizer) indexes hash
+IndexHash_c *								g_pLocalIndexes = new IndexHash_c();	// served (local) indexes hash
+IndexHash_c *								g_pTemplateIndexes = new IndexHash_c(); // template (tokenizer) indexes hash
 
 static CSphMutex							g_tRotateQueueMutex;
 static CSphVector<CSphString>				g_dRotateQueue;
@@ -887,6 +882,7 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	sphLogEntry ( eLevel, sBuf, sTtyBuf );
 }
 
+
 void sphFatal ( const char * sFmt, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) );
 void sphFatal ( const char * sFmt, ... )
 {
@@ -894,10 +890,20 @@ void sphFatal ( const char * sFmt, ... )
 	va_start ( ap, sFmt );
 	sphLog ( SPH_LOG_FATAL, sFmt, ap );
 	va_end ( ap );
-	if ( g_bWatchdogPassed )
-		Shutdown ();
+	Shutdown ();
 	exit ( 1 );
 }
+
+
+void sphFatalLog ( const char * sFmt, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) );
+void sphFatalLog ( const char * sFmt, ... )
+{
+	va_list ap;
+	va_start ( ap, sFmt );
+	sphLog ( SPH_LOG_FATAL, sFmt, ap );
+	va_end ( ap );
+}
+
 
 #if !USE_WINDOWS
 static CSphString GetNamedPipeName ( int iPid )
@@ -1053,14 +1059,6 @@ static bool SaveIndexes ()
 		tServed.Unlock();
 	}
 	return bAllSaved;
-}
-
-static void InitLocks ()
-{
-	// DO NOT clean up these !!! at DoneLocks
-	// as these explicitly got deleted at Shutdown to save RT indexes
-	g_pLocalIndexes = new IndexHash_c();
-	g_pTemplateIndexes = new IndexHash_c();
 }
 
 
@@ -17618,7 +17616,7 @@ bool SetWatchDog ( int iDevNull )
 	{
 		case -1:
 			// error
-			sphFatal ( "fork() failed (reason: %s)", strerror ( errno ) );
+			sphFatalLog ( "fork() failed (reason: %s)", strerror ( errno ) );
 			exit ( 1 );
 		case 0:
 			// daemonized child - or new and free watchdog :)
@@ -17636,7 +17634,7 @@ bool SetWatchDog ( int iDevNull )
 	// became the session leader
 	if ( setsid()==-1 )
 	{
-		sphFatal ( "setsid() failed (reason: %s)", strerror ( errno ) );
+		sphFatalLog ( "setsid() failed (reason: %s)", strerror ( errno ) );
 		exit ( 1 );
 	}
 
@@ -17645,7 +17643,7 @@ bool SetWatchDog ( int iDevNull )
 	{
 		case -1:
 			// error
-			sphFatal ( "fork() failed (reason: %s)", strerror ( errno ) );
+			sphFatalLog ( "fork() failed (reason: %s)", strerror ( errno ) );
 			exit ( 1 );
 		case 0:
 			// daemonized child - or new and free watchdog :)
@@ -17669,7 +17667,8 @@ bool SetWatchDog ( int iDevNull )
 
 		if ( iRes==-1 )
 		{
-			sphFatal ( "fork() failed during watchdog setup (error=%s)", strerror(errno) );
+			sphFatalLog ( "fork() failed during watchdog setup (error=%s)", strerror(errno) );
+			exit ( 1 );
 		}
 
 		// child process; return true to show that we have to reload everything
@@ -17751,8 +17750,6 @@ bool SetWatchDog ( int iDevNull )
 
 		if ( bShutdown || g_bGotSigterm || bDaemonAtShutdown )
 		{
-			InitLocks();
-			Shutdown();
 			exit ( 0 );
 		}
 	}
@@ -20849,9 +20846,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	}
 #endif
 
-	InitLocks();
-	g_bWatchdogPassed = true;
-
 	// here we either since plain startup, either being resurrected (forked) by watchdog.
 	// create the pid
 	if ( bOptPIDFile )
@@ -21033,7 +21027,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		{
 			case -1:
 				// error
-				sphFatal ( "fork() failed (reason: %s)", strerror ( errno ) );
+				sphFatalLog ( "fork() failed (reason: %s)", strerror ( errno ) );
 				exit ( 1 );
 
 			case 0:

@@ -763,6 +763,14 @@ public:
 		if ( !uOffset )
 			return 0;
 
+		if ( m_tLocator.m_bDynamic )
+		{
+			// extends precalculated (aliased) field
+			const BYTE * pVal = m_pStrings + ( uOffset & 0xffffffff );
+			ESphJsonType eJson = (ESphJsonType)( uOffset >> 32 );
+			return DoEval ( eJson, pVal, tMatch );
+		}
+
 		const BYTE * pVal = NULL;
 		sphUnpackStr ( m_pStrings + uOffset, &pVal );
 		if ( !pVal )
@@ -1134,7 +1142,7 @@ struct Expr_Iterator_c : Expr_JsonField_c
 
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const
 	{
-		uint64_t uValue = *m_pData;
+		uint64_t uValue = m_pData ? *m_pData : 0;
 		const BYTE * p = m_pStrings + ( uValue & 0xffffffff );
 		ESphJsonType eType = (ESphJsonType)( uValue >> 32 );
 		return DoEval ( eType, p, tMatch );
@@ -3827,6 +3835,8 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 #define LOC_SPAWN_POLY(_classname) \
 	if ( m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_JSON_FIELD && m_dNodes[tNode.m_iLeft].m_iToken==TOK_ATTR_JSON ) \
 		pLeft = new Expr_JsonFieldConv_c ( pLeft ); \
+		if ( m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_JSON_FIELD && m_dNodes[tNode.m_iRight].m_iToken==TOK_ATTR_JSON ) \
+		pRight = new Expr_JsonFieldConv_c ( pRight ); \
 	if ( tNode.m_eArgType==SPH_ATTR_INTEGER )		return new _classname##Int_c ( pLeft, pRight ); \
 	else if ( tNode.m_eArgType==SPH_ATTR_BIGINT )	return new _classname##Int64_c ( pLeft, pRight ); \
 	else											return new _classname##Float_c ( pLeft, pRight );
@@ -4048,7 +4058,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 			return new Expr_MapArg_c ( tNode.m_pMapArg->m_dPairs );
 			break;
 		case TOK_ATTR_JSON:
-			if ( pLeft && m_dNodes[tNode.m_iLeft].m_iToken==TOK_SUBKEY )
+			if ( pLeft && m_dNodes[tNode.m_iLeft].m_iToken==TOK_SUBKEY && !tNode.m_tLocator.m_bDynamic )
 			{
 				// json key is a single static subkey, switch to fastpath
 				return new Expr_JsonFastKey_c ( tNode.m_tLocator, tNode.m_iLocator, pLeft );
@@ -4625,7 +4635,7 @@ public:
 						case JSON_STRING: iRes =  StringArrayEval ( pVal, true ); break;
 						case JSON_INT32: iRes = ValueEval ( (int64_t) sphJsonLoadInt ( &pVal ) ); break;
 						case JSON_INT64: iRes = ValueEval ( sphJsonLoadBigint ( &pVal ) ); break;
-						case JSON_DOUBLE: iRes = ValueEval ( sphQW2D ( sphJsonLoadBigint ( &pVal ) ) ); break;
+						case JSON_DOUBLE: iRes = ValueEval ( (int64_t)sphQW2D ( sphJsonLoadBigint ( &pVal ) ) ); break;
 						default: break; // for weird subobjects, just let IN() return false
 						}
 						if ( iRes )

@@ -2436,10 +2436,10 @@ int sphCreateInetSocket ( DWORD uAddr, int iPort )
 
 	int iOn = 1;
 	if ( setsockopt ( iSock, SOL_SOCKET, SO_REUSEADDR, (char*)&iOn, sizeof(iOn) ) )
-		sphFatal ( "setsockopt() failed: %s", sphSockError() );
+		sphWarning ( "setsockopt() failed: %s", sphSockError() );
 #ifdef TCP_NODELAY
 	if ( setsockopt ( iSock, IPPROTO_TCP, TCP_NODELAY, (char*)&iOn, sizeof(iOn) ) )
-		sphFatal ( "setsockopt() failed: %s", sphSockError() );
+		sphWarning ( "setsockopt() failed: %s", sphSockError() );
 #endif
 
 	int iTries = 12;
@@ -5094,7 +5094,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 				// send the client's proto version right now to avoid w-w-r pattern.
 				NetOutputBuffer_c tOut ( tAgent.m_iSock );
 				tOut.SendDword ( SPHINX_CLIENT_VERSION );
-				bool bFlushed = tOut.Flush (); // FIXME! handle flush failure?
+				tOut.Flush (); // FIXME! handle flush failure?
 
 				tAgent.m_eState = AGENT_HANDSHAKE;
 				continue;
@@ -21840,7 +21840,7 @@ void QueryStatus ( CSphVariant * v )
 #ifdef TCP_NODELAY
 			int iOn = 1;
 			if ( setsockopt ( iSock, IPPROTO_TCP, TCP_NODELAY, (char*)&iOn, sizeof(iOn) ) )
-				sphFatal ( "setsockopt() failed: %s", sphSockError() );
+				sphWarning ( "setsockopt() failed: %s", sphSockError() );
 #endif
 
 			if ( connect ( iSock, (struct sockaddr*)&sin, sizeof(sin) )<0 )
@@ -22001,7 +22001,7 @@ Listener_t * DoAccept ( int * pClientSock, char * sClientName )
 #ifdef TCP_NODELAY
 		int iOn = 1;
 		if ( g_dListeners[i].m_bTcp && setsockopt ( iClientSock, IPPROTO_TCP, TCP_NODELAY, (char*)&iOn, sizeof(iOn) ) )
-			sphFatal ( "setsockopt() failed: %s", sphSockError() );
+			sphWarning ( "setsockopt() failed: %s", sphSockError() );
 #endif
 
 		if ( g_pStats )

@@ -17187,16 +17187,20 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 		if ( iSize<0 )
 			return false;
 
+		SphOffset_t uKlistBytes = m_uKillListSize*sizeof(SphDocID_t);
 		if ( m_bId32to64 )
-			iSize *= 2;
+			uKlistBytes /= 2;
 
-		if ( iSize!=(SphOffset_t)( m_uKillListSize*sizeof(SphDocID_t) ) )
+		if ( iSize!=uKlistBytes )
 		{
 			m_sLastError.SetSprintf ( "header k-list size does not match .spk size (klist=" INT64_FMT ", spk=" INT64_FMT ")",
-				(int64_t)( m_uKillListSize*sizeof(SphDocID_t) ),
+				(int64_t)( uKlistBytes ),
 				(int64_t) iSize );
 			return false;
 		}
+
+		if ( m_bId32to64 )
+			m_uKillListSize *= 2;
 
 		// prealloc
 		if ( iSize>0 && !m_pKillList.Alloc ( m_uKillListSize, m_sLastError, sWarning ) )
@@ -17310,7 +17314,7 @@ bool CSphIndex_VLN::Preread ()
 	}
 
 	int iKillListOffset = m_bId32to64 ? m_pKillList.GetLengthBytes()/2/sizeof(SphDocID_t) : 0;
-	if ( !PrereadSharedBuffer ( m_pKillList, "spk", 0, iKillListOffset ) )
+	if ( !PrereadSharedBuffer ( m_pKillList, "spk", iKillListOffset, iKillListOffset ) )
 		return false;
 	if ( !PrereadSharedBuffer ( m_pSkiplists, "spe" ) )
 		return false;

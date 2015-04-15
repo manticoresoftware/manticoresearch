@@ -31,6 +31,10 @@ index test
 <queries>
 <!-- hit chunks 2+ got lost in proximity operator -->
 <query mode="extended2">"one two"~10</query>
+<!-- regression for errors in lcs calculation for proximity queries -->
+<query mode="extended2">"aa bb cc dd ee ff"~10</query>
+<query mode="extended2">"aa bb dd cc ee ff"~10</query>
+<query mode="extended2">"aa bb ee ff"~10</query>
 </queries>
 
 <db_create>
@@ -48,7 +52,8 @@ DROP TABLE IF EXISTS `test_table`
 <db_insert>
 INSERT INTO `test_table`
 SELECT 1, REPEAT('one two ',257) UNION
-SELECT 2, 'two one'
+SELECT 2, 'two one' UNION
+SELECT 3, 'aa bb cc dd ee ff'
 </db_insert>
 
 </test>

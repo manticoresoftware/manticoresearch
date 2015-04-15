@@ -3621,22 +3621,33 @@ inline bool FSMproximity::HitFSM ( const ExtHit_t* pHit, ExtHit_t* pTarget )
 	// m_iMaxDistance - ( pHit->m_uHitpos - m_dProx[m_iMinQindex] - m_uQLen )
 	DWORD uMax = 0;
 	ARRAY_FOREACH ( i, m_dProx )
-	{
-		m_dDeltas[i] = m_dProx[i] - i;
-		uMax = Max ( uMax, m_dProx[i] );
-	}
-	m_dDeltas.Sort ();
+		if ( m_dProx[i]!=UINT_MAX )
+		{				
+			m_dDeltas[i] = m_dProx[i] - i;
+			uMax = Max ( uMax, m_dProx[i] );
+		} else
+			m_dDeltas[i] = INT_MAX;
 
-	DWORD uWeight = 0;
-	int iLast = -INT_MAX;
-	ARRAY_FOREACH ( i, m_dDeltas )
-	{
-		if ( m_dDeltas[i]==iLast )
-			uWeight++;
-		else
+		m_dDeltas.Sort ();
+
+		DWORD uCurWeight = 0;
+		DWORD uWeight = 0;
+		int iLast = -INT_MAX;
+		ARRAY_FOREACH_COND ( i, m_dDeltas, m_dDeltas[i]!=INT_MAX )
+		{
+			if ( m_dDeltas[i]==iLast )
+				uCurWeight++;
+			else
+			{
+				uWeight += uCurWeight ? ( 1+uCurWeight ) : 0;
+				uCurWeight = 0;
+			}
+			iLast = m_dDeltas[i];
+		}
+
+		uWeight += uCurWeight ? ( 1+uCurWeight ) : 0;
+		if ( !uWeight )
 			uWeight = 1;
-		iLast = m_dDeltas[i];
-	}
 
 	// emit hit
 	pTarget->m_uDocid = pHit->m_uDocid;

@@ -8217,7 +8217,7 @@ void CSphReader::GetBytes ( void * pData, int iSize )
 		m_iBuffPos += iLen;
 		pOut += iLen;
 		iSize -= iLen;
-		m_iSizeHint = iSize; // FIXME!
+		m_iSizeHint = Max ( m_iReadUnhinted, iSize );
 
 		if ( iSize>0 )
 		{
@@ -8242,7 +8242,7 @@ void CSphReader::GetBytes ( void * pData, int iSize )
 			iSize -= iLen;
 		}
 
-		m_iSizeHint = iSize - m_iBuffUsed + m_iBuffPos; // FIXME!
+		m_iSizeHint = Max ( m_iReadUnhinted, iSize );
 		UpdateCache ();
 		if ( m_iBuffPos+iSize>m_iBuffUsed )
 		{

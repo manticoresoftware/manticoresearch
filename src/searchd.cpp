@@ -1729,10 +1729,10 @@ int sphCreateInetSocket ( DWORD uAddr, int iPort )
 
 	int iOn = 1;
 	if ( setsockopt ( iSock, SOL_SOCKET, SO_REUSEADDR, (char*)&iOn, sizeof(iOn) ) )
-		sphFatal ( "setsockopt() failed: %s", sphSockError() );
+		sphWarning ( "setsockopt() failed: %s", sphSockError() );
 #ifdef TCP_NODELAY
 	if ( setsockopt ( iSock, IPPROTO_TCP, TCP_NODELAY, (char*)&iOn, sizeof(iOn) ) )
-		sphFatal ( "setsockopt() failed: %s", sphSockError() );
+		sphWarning ( "setsockopt() failed: %s", sphSockError() );
 #endif
 
 	int iTries = 12;
@@ -17708,7 +17708,7 @@ void QueryStatus ( CSphVariant * v )
 #ifdef TCP_NODELAY
 			int iOn = 1;
 			if ( setsockopt ( iSock, IPPROTO_TCP, TCP_NODELAY, (char*)&iOn, sizeof(iOn) ) )
-				sphFatal ( "setsockopt() failed: %s", sphSockError() );
+				sphWarning ( "setsockopt() failed: %s", sphSockError() );
 #endif
 
 			if ( connect ( iSock, (struct sockaddr*)&sin, sizeof(sin) )<0 )
@@ -17871,7 +17871,7 @@ Listener_t * DoAccept ( int * pClientSock, char * sClientName )
 #ifdef TCP_NODELAY
 		int iOn = 1;
 		if ( g_dListeners[i].m_bTcp && setsockopt ( iClientSock, IPPROTO_TCP, TCP_NODELAY, (char*)&iOn, sizeof(iOn) ) )
-			sphFatal ( "setsockopt() failed: %s", sphSockError() );
+			sphWarning ( "setsockopt() failed: %s", sphSockError() );
 #endif
 
 		g_tStatsMutex.Lock();

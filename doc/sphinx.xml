@@ -14644,6 +14644,48 @@ plugin_dir = /usr/local/sphinx/lib
 </sect1>
 
 
+<sect1 id="rel229"><title>Version 2.2.9-release, 16 apr 2015</title>
+<bridgehead>Bug fixes</bridgehead>
+<itemizedlist>
+<listitem><para>fixed #2228, removed <filename>searchd</filename> shutdown behavior on failed connection</para></listitem>
+<listitem><para>fixed #2208, <link linkend="extended-syntax">ZONESPANLIST()</link> support for RT indexes</para></listitem>
+<listitem><para>fixed #2203, legacy API <link linkend="api-reference">SELECT</link> list</para></listitem>
+<listitem><para>fixed #2201, <filename>indextool</filename> false positive error on RT index</para></listitem>
+<listitem><para>fixed #2201, crash with string comparison at expressions and expression ranker</para></listitem>
+<listitem><para>fixed #2199, invalid packedfactors JSON output for index with stopwords</para></listitem>
+<listitem><para>fixed #2197, <link linkend="sphinxql-truncate-rtindex">TRUNCATE</link> fails to remove disk chunk files after calling <link linkend="sphinxql-optimize-index">OPTIMIZE</link></para></listitem>
+<listitem><para>fixed #2196, .NET connector issue (UTC_TIMESTAMP() support)</para></listitem>
+<listitem><para>fixed #2190, incorrect <link linkend="api-funcgroup-groupby">GROUP BY</link> outer JSON object</para></listitem>
+<listitem><para>fixed #2176, agent used <option>ha_strategy=random</option> instead of specified in config</para></listitem>
+<listitem><para>fixed #2144, query parser crash vs multiforms with heading numbers</para></listitem>
+<listitem><para>fixed #2122, id64 daemon failed to load RT disk chunk with kill-list from id32 build</para></listitem>
+<listitem><para>fixed #2120, aliased JSON elements support</para></listitem>
+<listitem><para>fixed #1979, snippets generation and span length and lcs calculation in proximity queries</para></listitem>
+<listitem><para>fixed truncated results (and a potential crash) vs long enough ZONESPANLIST() result</para></listitem>
+</itemizedlist>
+</sect1>
+
+
+<sect1 id="rel228"><title>Version 2.2.8-release, 09 mar 2015</title>
+<bridgehead>Minor features</bridgehead>
+<itemizedlist>
+<listitem><para>added #2166, per agent HA strategy for distributed indexes</para></listitem>
+</itemizedlist>
+<bridgehead>Bug fixes</bridgehead>
+<itemizedlist>
+<listitem><para>fixed #2182, incorrect query results with multiple same destination wordforms</para></listitem>
+<listitem><para>fixed #2181, improved error message on incorrect filters</para></listitem>
+<listitem><para>fixed #2178, ZONESPAN operator for queries with more than two words</para></listitem>
+<listitem><para>fixed #2172, incorrect results with field position fulltext operators</para></listitem>
+<listitem><para>fixed #2171, some index options do not work for template indexes</para></listitem>
+<listitem><para>fixed #2170, joined fields indexation with document id equals to 0</para></listitem>
+<listitem><para>fixed #2110, crash on snippet generation</para></listitem>
+<listitem><para>fixed WLCCS ranking factor computation</para></listitem>
+<listitem><para>fixed memory leak on queries with ZONEs</para></listitem>
+</itemizedlist>
+</sect1>
+
+
 <sect1 id="rel227"><title>Version 2.2.7-release, 20 jan 2015</title>
 <bridgehead>Minor features</bridgehead>
 <itemizedlist>
@@ -14666,6 +14708,7 @@ plugin_dir = /usr/local/sphinx/lib
 <listitem><para>fixed snippets crash with <link linkend="conf-blend-chars">blend chars</link> at the beginning of a string</para></listitem>
 </itemizedlist>
 </sect1>
+
 
 <sect1 id="rel226"><title>Version 2.2.6-release, 13 nov 2014</title>
 <bridgehead>Bug fixes</bridgehead>

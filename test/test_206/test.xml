@@ -771,5 +771,8 @@ Two'</sphinxql>
 <sphinxql>select all(x=1 for x in j.uid), any(x='1' for x in j.uid), indexof(x.uid='1' for x in j.uid) from dist</sphinxql>
 <!-- simple string comparison -->
 <sphinxql>select title, j.array[0].name, title='a1', j.array[0].name='a4', if(j.array[1].name='a5',0,1) from json_search</sphinxql>
+<!-- aliases in functions -->
+<sphinxql>select j.array as some_alias, any(some_alias.name&gt;x.name for x in j.array) from json_search</sphinxql>
+<sphinxql>select j.intarray as p, p[1], indexof(x&gt;p[1] for x in j.intarray) from json_search</sphinxql>
 </sphqueries>
 </test>

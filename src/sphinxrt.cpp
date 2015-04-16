@@ -6857,6 +6857,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	if ( !sphCheckQueryHeight ( tParsed.m_pRoot, pResult->m_sError ) )
 		return false;
 
+	// set zonespanlist settings
+	tParsed.m_bNeedSZlist = pQuery->m_bZSlist;
+
 	if ( pProfiler )
 		pProfiler->Switch ( SPH_QSTATE_INIT );
 

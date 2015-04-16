@@ -9,6 +9,9 @@ $sd_skip_indexer = false;
 $g_ignore_weights = false;
 $g_pick_query = -1;
 
+if (!defined("JSON_UNESCAPED_SLASHES") || !defined("JSON_UNESCAPED_UNICODE"))
+	die("ubertest needs JSON_UNESCAPED_xxx support; upgrade your PHP to 5.4+");
+
 require_once ( "settings.inc" );
 
 //////////////////////

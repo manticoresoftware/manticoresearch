@@ -642,7 +642,6 @@ function HttpFormatResultSet ( $result )
 		$str .= "\n";
 		$str .= "\tmatches:" . FormatJsonRow ( $matches );
 		$str .= "\n";
-		unset ( $meta['time'] );
 		$str .= "\tmeta:" . json_encode ( $meta, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
 		$str .= "\n";
 		
@@ -694,6 +693,7 @@ function HttpQuery ( $http_endpoint, $http_get, $http_post )
 	
 	curl_setopt_array ( $con, $curl_desc );
 	$rows = curl_exec ( $con );
+	$rows = preg_replace('/"time":\d+(\.\d+)*,/', '"time":0.000,', $rows);
 	$http_code = curl_getinfo ( $con, CURLINFO_HTTP_CODE );
 	
 	curl_close($con);

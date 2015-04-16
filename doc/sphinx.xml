@@ -14392,6 +14392,7 @@ plugin_dir = /usr/local/sphinx/lib
 <listitem><para>fixed #2120, aliased JSON elements support</para></listitem>
 <listitem><para>fixed #2122, id64 daemon failed to load RT disk chunk with kill-list from id32 build</para></listitem>
 <listitem><para>fixed #2208, ZONESPANLIST() support for RT indexes</para></listitem>
+<listitem><para>fixed #1979, snippets generation and span length and lcs calculation in proximity queries</para></listitem>
 <listitem><para>fixed truncated results (and a potential crash) vs long enough ZONESPANLIST() result</para></listitem>
 </itemizedlist>
 </sect1>

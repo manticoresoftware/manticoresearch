@@ -2501,7 +2501,7 @@ because even though mutual dispositions of 3 keywords (one, three, five) match b
 the query and the document, no 2 matching positions are actually next to each other.
 </para><para>
 Note that LCCS still does not differentiate between the frequent and rare keywords;
-for that, see WLCS and WLLCS.
+for that, see WLCCS.
 </para></listitem>
 <listitem><para>
 <code>wlccs</code> (float), added in version 2.2.1-beta. Weighted Longest Common Contiguous

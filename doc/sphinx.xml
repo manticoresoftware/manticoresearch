@@ -5,7 +5,7 @@
 ]>
 <book lang="en">
 
-<title>Sphinx 2.2.9-dev reference manual</title>
+<title>Sphinx 2.2.9-release reference manual</title>
 <subtitle>Free open-source SQL full-text search engine</subtitle>
 
 <bookinfo>
@@ -292,10 +292,10 @@ specific project files) manually.
     <para>
     Extract everything from the distribution tarball (haven't you already?)
     and go to the <filename>sphinx</filename> subdirectory. (We are using
-    version 2.2.9-dev here for the sake of example only; be sure to change this
+    version 2.2.9-release here for the sake of example only; be sure to change this
     to a specific version you're using.)
     </para>
-<para><literallayout><userinput>$ tar xzvf sphinx-2.2.9-dev.tar.gz
+<para><literallayout><userinput>$ tar xzvf sphinx-2.2.9-release.tar.gz
 $ cd sphinx
 </userinput></literallayout></para></listitem>
 <listitem>
@@ -367,7 +367,7 @@ do not seem to help you, please don't hesitate to contact me.
     <userinput>$ sudo apt-get install mysql-client unixodbc libpq5</userinput></listitem>
 <listitem>
     <para>Now you can install Sphinx:</para>
-    <userinput>$ sudo dpkg -i sphinxsearch_2.2.9-dev-0ubuntu11~trusty_amd64.deb</userinput></listitem>
+    <userinput>$ sudo dpkg -i sphinxsearch_2.2.9-release-0ubuntu12~trusty_amd64.deb</userinput></listitem>
 </orderedlist>
 <para>PPA repository (Ubuntu only).</para>
 <para>Installing Sphinx is much easier from Sphinxsearch PPA repository, because you will get all dependencies and can also update Sphinx to the latest version with the same command.</para>
@@ -407,9 +407,9 @@ area on the website.</para>
 <orderedlist>
 <listitem>
     <para>Extract everything from the .zip file you have downloaded -
-    <filename>sphinx-2.2.9-dev-win32.zip</filename>,
-    or <filename>sphinx-2.2.9-dev-win32-pgsql.zip</filename> if you need PostgresSQL support as well.
-    (We are using version 2.2.9-dev here for the sake of example only;
+    <filename>sphinx-2.2.9-release-win32.zip</filename>,
+    or <filename>sphinx-2.2.9-release-win32-pgsql.zip</filename> if you need PostgresSQL support as well.
+    (We are using version 2.2.9-release here for the sake of example only;
     be sure to change this to a specific version you're using.)
     You can use Windows Explorer in Windows XP and up to extract the files,
     or a freeware package like 7Zip to open the archive.</para>
@@ -14376,22 +14376,22 @@ plugin_dir = /usr/local/sphinx/lib
 
 <appendix id="changelog"><title>Sphinx revision history</title>
 
-<sect1 id="rel229"><title>Version 2.2.9-release, ?? apr 2015</title>
+<sect1 id="rel229"><title>Version 2.2.9-release, 16 apr 2015</title>
 <bridgehead>Bug fixes</bridgehead>
 <itemizedlist>
-<listitem><para>fixed #2190, incorrect GROUP BY outer JSON object</para></listitem>
-<listitem><para>fixed #2197, TRUNCATE fails to remove disk chunk files after calling OPTIMIZE</para></listitem>
-<listitem><para>fixed #2199, invalid packedfactors JSON output for index with stopwords</para></listitem>
-<listitem><para>fixed #2176, agent used ha_strategy=random instead of specified in config</para></listitem>
-<listitem><para>fixed #2203, legacy API SELECT list</para></listitem>
-<listitem><para>fixed #2201, indextool false positive error on RT index</para></listitem>
+<listitem><para>fixed #2228, removed <filename>searchd</filename> shutdown behavior on failed connection</para></listitem>
+<listitem><para>fixed #2208, <link linkend="extended-syntax">ZONESPANLIST()</link> support for RT indexes</para></listitem>
+<listitem><para>fixed #2203, legacy API <link linkend="api-reference">SELECT</link> list</para></listitem>
+<listitem><para>fixed #2201, <filename>indextool</filename> false positive error on RT index</para></listitem>
 <listitem><para>fixed #2201, crash with string comparison at expressions and expression ranker</para></listitem>
+<listitem><para>fixed #2199, invalid packedfactors JSON output for index with stopwords</para></listitem>
+<listitem><para>fixed #2197, <link linkend="sphinxql-truncate-rtindex">TRUNCATE</link> fails to remove disk chunk files after calling <link linkend="sphinxql-optimize-index">OPTIMIZE</link></para></listitem>
 <listitem><para>fixed #2196, .NET connector issue (UTC_TIMESTAMP() support)</para></listitem>
+<listitem><para>fixed #2190, incorrect <link linkend="api-funcgroup-groupby">GROUP BY</link> outer JSON object</para></listitem>
+<listitem><para>fixed #2176, agent used <option>ha_strategy=random</option> instead of specified in config</para></listitem>
 <listitem><para>fixed #2144, query parser crash vs multiforms with heading numbers</para></listitem>
-<listitem><para>fixed #2228, removed searchd shutdown behavior on failed connection</para></listitem>
-<listitem><para>fixed #2120, aliased JSON elements support</para></listitem>
 <listitem><para>fixed #2122, id64 daemon failed to load RT disk chunk with kill-list from id32 build</para></listitem>
-<listitem><para>fixed #2208, ZONESPANLIST() support for RT indexes</para></listitem>
+<listitem><para>fixed #2120, aliased JSON elements support</para></listitem>
 <listitem><para>fixed #1979, snippets generation and span length and lcs calculation in proximity queries</para></listitem>
 <listitem><para>fixed truncated results (and a potential crash) vs long enough ZONESPANLIST() result</para></listitem>
 </itemizedlist>

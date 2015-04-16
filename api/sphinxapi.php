@@ -392,10 +392,10 @@ function sphSetBit ( $flag, $bit, $on )
 {
 	if ( $on )
 	{
-		$flag += ( 1<<$bit );
+		$flag |= ( 1<<$bit );
 	} else
 	{
-		$reset = 255 ^ ( 1<<$bit );
+		$reset = 16777215 ^ ( 1<<$bit );
 		$flag = $flag & $reset;
 	}
 	return $flag;
@@ -965,7 +965,7 @@ class SphinxClient
 	
 	function SetQueryFlag ( $flag_name, $flag_value )
 	{
-		$known_names = array ( "reverse_scan", "sort_method", "max_predicted_time", "boolean_simplify", "idf", "global_idf" );
+		$known_names = array ( "reverse_scan", "sort_method", "max_predicted_time", "boolean_simplify", "idf", "global_idf", "low_priority" );
 		$flags = array (
 		"reverse_scan" => array ( 0, 1 ),
 		"sort_method" => array ( "pq", "kbuffer" ),
@@ -973,6 +973,7 @@ class SphinxClient
 		"boolean_simplify" => array ( true, false ),
 		"idf" => array ("normalized", "plain", "tfidf_normalized", "tfidf_unnormalized" ),
 		"global_idf" => array ( true, false ),
+		"low_priority" => array ( true, false )
 		);
 		
 		assert ( isset ( $flag_name, $known_names ) );
@@ -989,6 +990,7 @@ class SphinxClient
 		if ( $flag_name=="idf" && ( $flag_value=="normalized" || $flag_value=="plain" ) )	$this->_query_flags = sphSetBit ( $this->_query_flags, 4, $flag_value=="plain" );
 		if ( $flag_name=="global_idf" )	$this->_query_flags = sphSetBit ( $this->_query_flags, 5, $flag_value );
 		if ( $flag_name=="idf" && ( $flag_value=="tfidf_normalized" || $flag_value=="tfidf_unnormalized" ) )	$this->_query_flags = sphSetBit ( $this->_query_flags, 6, $flag_value=="tfidf_normalized" );
+		if ( $flag_name=="low_priority" ) $this->_query_flags = sphSetBit ( $this->_query_flags, 8, $flag_value );
 	}
 	
 	/// set outer order by parameters

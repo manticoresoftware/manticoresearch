@@ -2798,7 +2798,8 @@ enum
 	QFLAG_PLAIN_IDF				= 1UL << 4,
 	QFLAG_GLOBAL_IDF			= 1UL << 5,
 	QFLAG_NORMALIZED_TF			= 1UL << 6,
-	QFLAG_LOCAL_DF				= 1UL << 7
+	QFLAG_LOCAL_DF				= 1UL << 7,
+	QFLAG_LOW_PRIORITY			= 1UL << 8
 };
 
 void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_c & tOut, const CSphQuery & q, bool bAgentWeight, int iWeight ) const
@@ -2814,6 +2815,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 	uFlags |= QFLAG_GLOBAL_IDF * q.m_bGlobalIDF;
 	uFlags |= QFLAG_NORMALIZED_TF * q.m_bNormalizedTFIDF;
 	uFlags |= QFLAG_LOCAL_DF * q.m_bLocalDF;
+	uFlags |= QFLAG_LOW_PRIORITY * q.m_bLowPriority;
 	tOut.SendDword ( uFlags );
 
 	// The Search Legacy
@@ -3763,6 +3765,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		tQuery.m_bPlainIDF = !!( uFlags & QFLAG_PLAIN_IDF );
 		tQuery.m_bGlobalIDF = !!( uFlags & QFLAG_GLOBAL_IDF );
 		tQuery.m_bLocalDF = !!( uFlags & QFLAG_LOCAL_DF );
+		tQuery.m_bLowPriority = !!( uFlags & QFLAG_LOW_PRIORITY );
 
 		if ( iMasterVer>0 || iVer==0x11E )
 			tQuery.m_bNormalizedTFIDF = !!( uFlags & QFLAG_NORMALIZED_TF );
@@ -8238,6 +8241,7 @@ public:
 
 	void			PushQuery ();
 
+	bool			AddOption ( const SqlNode_t & tIdent );
 	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue );
 	bool			AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue, const SqlNode_t & sArg );
 	bool			AddOption ( const SqlNode_t & tIdent, CSphVector<CSphNamedInt> & dNamed );
@@ -8494,6 +8498,24 @@ void SqlParser_c::PushQuery ()
 	m_pQuery->m_eCollation = m_eCollation;
 
 	m_bGotQuery = false;
+}
+
+
+bool SqlParser_c::AddOption ( const SqlNode_t & tIdent )
+{
+	CSphString sOpt, sVal;
+	ToString ( sOpt, tIdent ).ToLower();
+
+	if ( sOpt=="low_priority" )
+	{
+		m_pQuery->m_bLowPriority = true;
+	} else
+	{
+		m_pParseError->SetSprintf ( "unknown option '%s'", sOpt.cstr() );
+		return false;
+	}
+
+	return true;
 }
 
 

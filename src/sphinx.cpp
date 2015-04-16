@@ -6779,6 +6779,7 @@ CSphQuery::CSphQuery ()
 	, m_bGlobalIDF		( false )
 	, m_bNormalizedTFIDF ( true )
 	, m_bLocalDF		( false )
+	, m_bLowPriority	( false )
 	, m_eGroupFunc		( SPH_GROUPBY_ATTR )
 	, m_sGroupSortBy	( "@groupby desc" )
 	, m_sGroupDistinct	( "" )
@@ -15681,6 +15682,51 @@ struct SphFinalMatchCalc_t : ISphMatchProcessor, ISphNoncopyable
 };
 
 
+/// scoped thread scheduling helper
+/// either makes the current thread low priority while the helper lives, or does noething
+class ScopedThreadPriority_c
+{
+private:
+	bool m_bRestore;
+
+public:
+	ScopedThreadPriority_c ( bool bLowPriority )
+	{
+		m_bRestore = false;
+		if ( !bLowPriority )
+			return;
+
+#if USE_WINDOWS
+		if ( !SetThreadPriority ( GetCurrentThread(), THREAD_PRIORITY_IDLE ) )
+			return;
+#else
+		struct sched_param p;
+		p.sched_priority = 0;
+		if ( pthread_setschedparam ( pthread_self(), SCHED_IDLE, &p ) )
+			return;
+#endif
+
+		m_bRestore = true;
+	}
+
+	~ScopedThreadPriority_c()
+	{
+		if ( !m_bRestore )
+			return;
+
+#if USE_WINDOWS
+		if ( !SetThreadPriority ( GetCurrentThread(), THREAD_PRIORITY_NORMAL ) )
+			return;
+#else
+		struct sched_param p;
+		p.sched_priority = 0;
+		if ( pthread_setschedparam ( pthread_self(), SCHED_OTHER, &p ) )
+			return;
+#endif
+	}
+};
+
+
 bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult,
 	int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const
 {
@@ -15714,6 +15760,8 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 
 	// start counting
 	int64_t tmQueryStart = sphMicroTimer();
+
+	ScopedThreadPriority_c tPrio ( pQuery->m_bLowPriority );
 
 	// select the sorter with max schema
 	// uses GetAttrsCount to get working facets (was GetRowSize)
@@ -18799,6 +18847,8 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	CSphQueryProfile * pProfile = pResult->m_pProfile;
 	if ( pProfile )
 		pProfile->Switch ( SPH_QSTATE_INIT );
+
+	ScopedThreadPriority_c tPrio ( pQuery->m_bLowPriority );
 
 	///////////////////
 	// setup searching

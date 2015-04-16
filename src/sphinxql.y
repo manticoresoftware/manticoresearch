@@ -714,7 +714,12 @@ option_list:
 	;
 
 option_item:
-	ident '=' ident
+	ident
+		{
+			if ( !pParser->AddOption ( $1 ) )
+				YYERROR;
+		}
+	| ident '=' ident
 		{
 			if ( !pParser->AddOption ( $1, $3 ) )
 				YYERROR;

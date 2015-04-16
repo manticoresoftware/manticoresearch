@@ -2655,6 +2655,7 @@ public:
 	bool			m_bGlobalIDF;		///< whether to use local indexes or a global idf file
 	bool			m_bNormalizedTFIDF;	///< whether to scale IDFs by query word count, so that TF*IDF is normalized
 	bool			m_bLocalDF;			///< whether to use calculate DF among local indexes
+	bool			m_bLowPriority;		///< set low thread priority for this query
 
 	CSphVector<CSphFilterSettings>	m_dFilters;	///< filters
 

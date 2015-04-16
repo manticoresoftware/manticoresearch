@@ -1,5 +1,5 @@
-Sphinx 2.2.9-release reference manual
-=====================================
+Sphinx 2.2.10-dev reference manual
+==================================
 
 Free open-source SQL full-text search engine
 ============================================
@@ -792,10 +792,10 @@ project files) manually.
 
    1. Extract everything from the distribution tarball (haven't you
       already?) and go to the sphinx subdirectory. (We are using version
-      2.2.9-release here for the sake of example only; be sure to change
-      this to a specific version you're using.)
+      2.2.10-dev here for the sake of example only; be sure to change this
+      to a specific version you're using.)
 
-      | $ tar xzvf sphinx-2.2.9-release.tar.gz
+      | $ tar xzvf sphinx-2.2.10-dev.tar.gz
       | $ cd sphinx
 
    2. Run the configuration program:
@@ -874,7 +874,7 @@ Deb packages:
       $ sudo apt-get install mysql-client unixodbc libpq5
    2. Now you can install Sphinx:
 
-      $ sudo dpkg -i sphinxsearch_2.2.9-release-0ubuntu12~trusty_amd64.deb
+      $ sudo dpkg -i sphinxsearch_2.2.10-dev-0ubuntu12~trusty_amd64.deb
 
 PPA repository (Ubuntu only).
 
@@ -924,12 +924,12 @@ a Linux environment; unless you are preparing code patches, you can use the
 pre-compiled binary files from the Downloads area on the website.
 
    1. Extract everything from the .zip file you have downloaded -
-      sphinx-2.2.9-release-win32.zip, or
-      sphinx-2.2.9-release-win32-pgsql.zip if you need PostgresSQL support
-      as well. (We are using version 2.2.9-release here for the sake of
-      example only; be sure to change this to a specific version you're
-      using.) You can use Windows Explorer in Windows XP and up to extract
-      the files, or a freeware package like 7Zip to open the archive.
+      sphinx-2.2.10-dev-win32.zip, or sphinx-2.2.10-dev-win32-pgsql.zip if
+      you need PostgresSQL support as well. (We are using version
+      2.2.10-dev here for the sake of example only; be sure to change this
+      to a specific version you're using.) You can use Windows Explorer in
+      Windows XP and up to extract the files, or a freeware package like
+      7Zip to open the archive.
 
       For the remainder of this guide, we will assume that the folders are
       unzipped into C:\Sphinx, such that searchd.exe can be found in

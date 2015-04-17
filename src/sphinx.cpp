@@ -24599,7 +24599,7 @@ static const BYTE * SkipPI ( const BYTE * s )
 
 	const BYTE * pStart = s;
 	const BYTE * pMax = s + 256;
-	for ( ; s<pMax; s++ )
+	for ( ; s<pMax && *s; s++ )
 	{
 		// for now, let's just bail whenever we see ">", like Firefox does!!!
 		// that covers the valid case, ie. the closing "?>", just as well
@@ -24607,9 +24607,12 @@ static const BYTE * SkipPI ( const BYTE * s )
 			return s+1;
 	}
 
+	if ( !*s )
+		return s;
+
 	// no closing end marker ever found; just skip non-whitespace after "<?" then
 	s = pStart;
-	while ( s<pMax && !sphIsSpace(*s) )
+	while ( s<pMax && *s && !sphIsSpace(*s) )
 		s++;
 	return s;
 }

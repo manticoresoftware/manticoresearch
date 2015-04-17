@@ -443,6 +443,7 @@ public:
 	CSphQueryProfile *						m_pProfile;
 	const SmallStringHash_T<int64_t> *		m_pLocalDocs;
 	int64_t									m_iTotalDocs;
+	int64_t									m_iBadRows;
 
 public:
 	CSphQueryContext ();

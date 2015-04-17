@@ -2782,6 +2782,7 @@ public:
 
 	CSphString				m_sError;			///< error message
 	CSphString				m_sWarning;			///< warning message
+	int64_t					m_iBadRows;
 
 	CSphQueryResultMeta ();													///< ctor
 	virtual					~CSphQueryResultMeta () {}						///< dtor

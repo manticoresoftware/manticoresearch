@@ -5495,6 +5495,7 @@ const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 		while ( pCand->m_uDocid!=DOCID_MAX )
 		{
 			m_tTestMatch.m_uDocID = pCand->m_uDocid;
+			m_tTestMatch.m_pStatic = NULL;
 			if ( pCand->m_pDocinfo )
 				memcpy ( m_tTestMatch.m_pDynamic, pCand->m_pDocinfo, m_iInlineRowitems*sizeof(CSphRowitem) );
 

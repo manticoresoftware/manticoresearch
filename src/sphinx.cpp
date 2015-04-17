@@ -867,7 +867,7 @@ bool operator < ( SphDocID_t a, const SkiplistEntry_t & b )		{ return a<b.m_iBas
 
 
 /// query word from the searcher's point of view
-template < bool INLINE_HITS, bool INLINE_DOCINFO, bool DISABLE_HITLIST_SEEK, bool DO_DEBUG_CHECK >
+template < bool INLINE_HITS, bool INLINE_DOCINFO, bool DISABLE_HITLIST_SEEK >
 class DiskIndexQword_c : public DiskIndexQwordTraits_c
 {
 public:
@@ -941,12 +941,8 @@ public:
 					DWORD uField = m_rdDoclist.UnzipInt(); // field and end marker
 					m_iHitlistPos = uFirst | ( uField << 23 ) | ( U64C(1)<<63 );
 					m_dQwordFields.UnsetAll();
-					if_const ( DO_DEBUG_CHECK )
-					{
-						if ( ( uField>>1 )>=SPH_MAX_FIELDS )
-							uField = ( (DWORD)SPH_MAX_FIELDS-1 )<<1;
-					}
-					m_dQwordFields.Set ( uField >> 1 );
+					// want to make sure bad field data not cause crash
+					m_dQwordFields.Set ( ( uField >> 1 ) & ( (DWORD)SPH_MAX_FIELDS-1 ) );
 					m_bAllFieldsKnown = true;
 				} else
 				{
@@ -1031,10 +1027,10 @@ public:
 																									\
 	switch ( ( INDEX##uInlineHits<<1 ) | INDEX##uInlineDocinfo )													\
 	{																								\
-		case 0: { typedef DiskIndexQword_c < false, false, NO_SEEK, false > NAME; ACTION; break; }			\
-		case 1: { typedef DiskIndexQword_c < false, true, NO_SEEK, false > NAME; ACTION; break; }			\
-		case 2: { typedef DiskIndexQword_c < true, false, NO_SEEK, false > NAME; ACTION; break; }			\
-		case 3: { typedef DiskIndexQword_c < true, true, NO_SEEK, false > NAME; ACTION; break; }			\
+		case 0: { typedef DiskIndexQword_c < false, false, NO_SEEK > NAME; ACTION; break; }			\
+		case 1: { typedef DiskIndexQword_c < false, true, NO_SEEK > NAME; ACTION; break; }			\
+		case 2: { typedef DiskIndexQword_c < true, false, NO_SEEK > NAME; ACTION; break; }			\
+		case 3: { typedef DiskIndexQword_c < true, true, NO_SEEK > NAME; ACTION; break; }			\
 		default:																					\
 			sphDie ( "INTERNAL ERROR: impossible qword settings" );									\
 	}																								\
@@ -1066,9 +1062,9 @@ struct DiskSubstringPayload_t : public ISphSubstringPayload
 
 
 template < bool INLINE_HITS >
-class DiskPayloadQword_c : public DiskIndexQword_c<INLINE_HITS, false, false, false>
+class DiskPayloadQword_c : public DiskIndexQword_c<INLINE_HITS, false, false>
 {
-	typedef DiskIndexQword_c<INLINE_HITS, false, false, false> BASE;
+	typedef DiskIndexQword_c<INLINE_HITS, false, false> BASE;
 
 public:
 	explicit DiskPayloadQword_c ( const DiskSubstringPayload_t * pPayload, bool bExcluded,
@@ -15250,7 +15246,15 @@ bool CSphIndex_VLN::EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) 
 {
 	// might be needed even when we do not have a filter
 	if ( pCtx->m_bLookupFilter )
-		CopyDocinfo ( pCtx, tMatch, FindDocinfo ( tMatch.m_uDocID ) );
+	{
+		const CSphRowitem * pRow = FindDocinfo ( tMatch.m_uDocID );
+		if ( !pRow && m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN )
+		{
+			pCtx->m_iBadRows++;
+			return true;
+		}
+		CopyDocinfo ( pCtx, tMatch, pRow );
+	}
 	pCtx->CalcFilter ( tMatch ); // FIXME!!! leak of filtered STRING_PTR
 
 	return pCtx->m_pFilter ? !pCtx->m_pFilter->Eval ( tMatch ) : false;
@@ -15633,7 +15637,15 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 		for ( int i=0; i<iMatches; i++ )
 		{
 			if ( pCtx->m_bLookupSort )
-				CopyDocinfo ( pCtx, pMatch[i], FindDocinfo ( pMatch[i].m_uDocID ) );
+			{
+				const CSphRowitem * pRow = FindDocinfo ( pMatch[i].m_uDocID );
+				if ( !pRow && m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN )
+				{
+					pCtx->m_iBadRows++;
+					continue;
+				}
+				CopyDocinfo ( pCtx, pMatch[i], pRow );
+			}
 
 			pMatch[i].m_iWeight *= iIndexWeight;
 			pCtx->CalcSort ( pMatch[i] );
@@ -15690,11 +15702,13 @@ struct SphFinalMatchCalc_t : ISphMatchProcessor, ISphNoncopyable
 {
 	const CSphIndex_VLN *		m_pDocinfoSrc;
 	const CSphQueryContext &	m_tCtx;
+	int64_t						m_iBadRows;
 	int							m_iTag;
 
 	SphFinalMatchCalc_t ( int iTag, const CSphIndex_VLN * pIndex, const CSphQueryContext & tCtx )
 		: m_pDocinfoSrc ( pIndex )
 		, m_tCtx ( tCtx )
+		, m_iBadRows ( 0 )
 		, m_iTag ( iTag )
 	{ }
 
@@ -15704,7 +15718,16 @@ struct SphFinalMatchCalc_t : ISphMatchProcessor, ISphNoncopyable
 			return;
 
 		if ( m_pDocinfoSrc )
-			m_pDocinfoSrc->CopyDocinfo ( &m_tCtx, *pMatch, m_pDocinfoSrc->FindDocinfo ( pMatch->m_uDocID ) );
+		{
+			const CSphRowitem * pRow = m_pDocinfoSrc->FindDocinfo ( pMatch->m_uDocID );
+			if ( !pRow && m_pDocinfoSrc->m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN )
+			{
+				m_iBadRows++;
+				pMatch->m_iTag = m_iTag;
+				return;
+			}
+			m_pDocinfoSrc->CopyDocinfo ( &m_tCtx, *pMatch, pRow );
+		}
 
 		m_tCtx.CalcFinal ( *pMatch );
 		pMatch->m_iTag = m_iTag;
@@ -15944,6 +15967,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 			ISphMatchSorter * pTop = ppSorters[iSorter];
 			pTop->Finalize ( tFinal, false );
 		}
+		tCtx.m_iBadRows += tFinal.m_iBadRows;
 	}
 
 	// done
@@ -15951,6 +15975,8 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	pResult->m_pStrings = m_tString.GetWritePtr();
 	pResult->m_bArenaProhibit = m_bArenaProhibit;
 	pResult->m_iQueryTime += (int)( ( sphMicroTimer()-tmQueryStart )/1000 );
+	pResult->m_iBadRows += tCtx.m_iBadRows;
+
 	return true;
 }
 
@@ -17571,6 +17597,7 @@ CSphQueryContext::CSphQueryContext ()
 	m_pProfile = NULL;
 	m_pLocalDocs = NULL;
 	m_iTotalDocs = 0;
+	m_iBadRows = 0;
 }
 
 CSphQueryContext::~CSphQueryContext ()
@@ -19002,7 +19029,8 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 		pResult->m_sError = tParsed.m_sParseError;
 		return false;
 	}
-	pResult->m_sWarning = tParsed.m_sParseWarning;
+	if ( !tParsed.m_sParseWarning.IsEmpty() )
+		pResult->m_sWarning = tParsed.m_sParseWarning;
 
 	// transform query if needed (quorum transform, etc.)
 	if ( pProfile )
@@ -19140,7 +19168,8 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 			ppResults[i]->m_sError = dXQ[i].m_sParseError;
 			ppResults[i]->m_iMultiplier = -1;
 		}
-		ppResults[i]->m_sWarning = dXQ[i].m_sParseWarning;
+		if ( !dXQ[i].m_sParseWarning.IsEmpty() )
+			ppResults[i]->m_sWarning = dXQ[i].m_sParseWarning;
 
 		ppResults[i]->m_tIOStats.Stop();
 	}
@@ -19405,12 +19434,14 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 			ISphMatchSorter * pTop = ppSorters[iSorter];
 			pTop->Finalize ( tProcessor, bGotUDF );
 		}
+		pResult->m_iBadRows += tProcessor.m_iBadRows;
 	}
 
 	// mva and string pools ptrs
 	pResult->m_pMva = m_tMva.GetWritePtr();
 	pResult->m_pStrings = m_tString.GetWritePtr();
 	pResult->m_bArenaProhibit = m_bArenaProhibit;
+	pResult->m_iBadRows += tCtx.m_iBadRows;
 
 	// query timer
 	int64_t tmWall = sphMicroTimer() - tmQueryStart;
@@ -19982,10 +20013,10 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		DWORD uInlineDocinfo = ( m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE );
 		switch ( ( uInlineHits<<1 ) | uInlineDocinfo )
 		{
-		case 0: { typedef DiskIndexQword_c < false, false, false, true > T; pQword = new T ( false, false ); break; }
-		case 1: { typedef DiskIndexQword_c < false, true, false, true > T; pQword = new T ( false, false ); break; }
-		case 2: { typedef DiskIndexQword_c < true, false, false, true > T; pQword = new T ( false, false ); break; }
-		case 3: { typedef DiskIndexQword_c < true, true, false, true > T; pQword = new T ( false, false ); break; }
+		case 0: { typedef DiskIndexQword_c < false, false, false > T; pQword = new T ( false, false ); break; }
+		case 1: { typedef DiskIndexQword_c < false, true, false > T; pQword = new T ( false, false ); break; }
+		case 2: { typedef DiskIndexQword_c < true, false, false > T; pQword = new T ( false, false ); break; }
+		case 3: { typedef DiskIndexQword_c < true, true, false > T; pQword = new T ( false, false ); break; }
 		}
 		if ( !pQword )
 			sphDie ( "INTERNAL ERROR: impossible qword settings" );
@@ -31885,6 +31916,7 @@ CSphQueryResultMeta::CSphQueryResultMeta ()
 	, m_iAgentFetchedHits ( 0 )
 	, m_iAgentFetchedSkips ( 0 )
 	, m_bHasPrediction ( false )
+	, m_iBadRows ( 0 )
 {
 }
 

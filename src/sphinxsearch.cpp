@@ -502,7 +502,7 @@ bool ExtConditional<T,ExtBase>::ExtraDataImpl ( ExtraData_e, void ** )
 class ExtTwofer_c : public ExtNode_i
 {
 public:
-								ExtTwofer_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const ISphQwordSetup & tSetup );
+								ExtTwofer_c ( ExtNode_i * pLeft, ExtNode_i * pRight, const ISphQwordSetup & tSetup );
 								ExtTwofer_c () {} ///< to be used in pair with Init();
 								~ExtTwofer_c ();
 
@@ -512,38 +512,42 @@ public:
 	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
 	virtual void				GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) const;
 
-	virtual bool				GotHitless () { return m_pChildren[0]->GotHitless() || m_pChildren[1]->GotHitless(); }
+	virtual bool				GotHitless () { return m_pLeft->GotHitless() || m_pRight->GotHitless(); }
 
 	void DebugDumpT ( const char * sName, int iLevel )
 	{
 		DebugIndent ( iLevel );
 		printf ( "%s:\n", sName );
-		m_pChildren[0]->DebugDump ( iLevel+1 );
-		m_pChildren[1]->DebugDump ( iLevel+1 );
+		m_pLeft->DebugDump ( iLevel+1 );
+		m_pRight->DebugDump ( iLevel+1 );
 	}
 
 	void SetNodePos ( WORD uPosLeft, WORD uPosRight )
 	{
-		m_dNodePos[0] = uPosLeft;
-		m_dNodePos[1] = uPosRight;
+		m_uNodePosL = uPosLeft;
+		m_uNodePosR = uPosRight;
 	}
 
 	virtual void HintDocid ( SphDocID_t uMinID )
 	{
-		m_pChildren[0]->HintDocid ( uMinID );
-		m_pChildren[1]->HintDocid ( uMinID );
+		m_pLeft->HintDocid ( uMinID );
+		m_pRight->HintDocid ( uMinID );
 	}
 
 	virtual uint64_t GetWordID () const
 	{
-		return m_pChildren[0]->GetWordID() ^ m_pChildren[1]->GetWordID();
+		return m_pLeft->GetWordID() ^ m_pRight->GetWordID();
 	}
 
 protected:
-	ExtNode_i *					m_pChildren[2];
-	const ExtDoc_t *			m_pCurDoc[2];
-	const ExtHit_t *			m_pCurHit[2];
-	WORD						m_dNodePos[2];
+	ExtNode_i *					m_pLeft;
+	ExtNode_i *					m_pRight;
+	const ExtDoc_t *			m_pCurDocL;
+	const ExtDoc_t *			m_pCurDocR;
+	const ExtHit_t *			m_pCurHitL;
+	const ExtHit_t *			m_pCurHitR;
+	WORD						m_uNodePosL;
+	WORD						m_uNodePosR;
 	SphDocID_t					m_uMatchedDocid;
 };
 
@@ -551,7 +555,7 @@ protected:
 class ExtAnd_c : public ExtTwofer_c
 {
 public:
-								ExtAnd_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const ISphQwordSetup & tSetup ) : ExtTwofer_c ( pFirst, pSecond, tSetup ) {}
+								ExtAnd_c ( ExtNode_i * pLeft, ExtNode_i * pRight, const ISphQwordSetup & tSetup ) : ExtTwofer_c ( pLeft, pRight, tSetup ) {}
 								ExtAnd_c() {} ///< to be used with Init()
 	virtual const ExtDoc_t *	GetDocsChunk();
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs );
@@ -588,7 +592,7 @@ public:
 class ExtOr_c : public ExtTwofer_c
 {
 public:
-								ExtOr_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const ISphQwordSetup & tSetup ) : ExtTwofer_c ( pFirst, pSecond, tSetup ) {}
+								ExtOr_c ( ExtNode_i * pLeft, ExtNode_i * pRight, const ISphQwordSetup & tSetup ) : ExtTwofer_c ( pLeft, pRight, tSetup ) {}
 	virtual const ExtDoc_t *	GetDocsChunk();
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs );
 
@@ -600,7 +604,7 @@ public:
 class ExtMaybe_c : public ExtOr_c
 {
 public:
-								ExtMaybe_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const ISphQwordSetup & tSetup ) : ExtOr_c ( pFirst, pSecond, tSetup ) {}
+								ExtMaybe_c ( ExtNode_i * pLeft, ExtNode_i * pRight, const ISphQwordSetup & tSetup ) : ExtOr_c ( pLeft, pRight, tSetup ) {}
 	virtual const ExtDoc_t *	GetDocsChunk();
 
 	void DebugDump ( int iLevel ) { DebugDumpT ( "ExtMaybe", iLevel ); }
@@ -611,7 +615,7 @@ public:
 class ExtAndNot_c : public ExtTwofer_c
 {
 public:
-								ExtAndNot_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const ISphQwordSetup & tSetup );
+								ExtAndNot_c ( ExtNode_i * pLeft, ExtNode_i * pRight, const ISphQwordSetup & tSetup );
 	virtual const ExtDoc_t *	GetDocsChunk();
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs );
 	virtual void				Reset ( const ISphQwordSetup & tSetup );
@@ -2479,65 +2483,65 @@ ExtTwofer_c::ExtTwofer_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const ISphQw
 	Init ( pFirst, pSecond, tSetup );
 }
 
-inline void	ExtTwofer_c::Init ( ExtNode_i * pFirst, ExtNode_i * pSecond, const ISphQwordSetup & tSetup )
+inline void	ExtTwofer_c::Init ( ExtNode_i * pLeft, ExtNode_i * pRight, const ISphQwordSetup & tSetup )
 {
-	m_pChildren[0] = pFirst;
-	m_pChildren[1] = pSecond;
-	m_pCurHit[0] = NULL;
-	m_pCurHit[1] = NULL;
-	m_pCurDoc[0] = NULL;
-	m_pCurDoc[1] = NULL;
-	m_dNodePos[0] = 0;
-	m_dNodePos[1] = 0;
+	m_pLeft = pLeft;
+	m_pRight = pRight;
+	m_pCurHitL = NULL;
+	m_pCurHitR = NULL;
+	m_pCurDocL = NULL;
+	m_pCurDocR = NULL;
+	m_uNodePosL = 0;
+	m_uNodePosR = 0;
 	m_uMatchedDocid = 0;
-	m_iAtomPos = ( pFirst && pFirst->m_iAtomPos ) ? pFirst->m_iAtomPos : 0;
-	if ( pSecond && pSecond->m_iAtomPos && pSecond->m_iAtomPos<m_iAtomPos && m_iAtomPos!=0 )
-		m_iAtomPos = pSecond->m_iAtomPos;
+	m_iAtomPos = ( pLeft && pLeft->m_iAtomPos ) ? pLeft->m_iAtomPos : 0;
+	if ( pRight && pRight->m_iAtomPos && pRight->m_iAtomPos<m_iAtomPos && m_iAtomPos!=0 )
+		m_iAtomPos = pRight->m_iAtomPos;
 	AllocDocinfo ( tSetup );
 }
 
 ExtTwofer_c::~ExtTwofer_c ()
 {
-	SafeDelete ( m_pChildren[0] );
-	SafeDelete ( m_pChildren[1] );
+	SafeDelete ( m_pLeft );
+	SafeDelete ( m_pRight );
 }
 
 void ExtTwofer_c::Reset ( const ISphQwordSetup & tSetup )
 {
-	m_pChildren[0]->Reset ( tSetup );
-	m_pChildren[1]->Reset ( tSetup );
-	m_pCurHit[0] = NULL;
-	m_pCurHit[1] = NULL;
-	m_pCurDoc[0] = NULL;
-	m_pCurDoc[1] = NULL;
+	m_pLeft->Reset ( tSetup );
+	m_pRight->Reset ( tSetup );
+	m_pCurHitL = NULL;
+	m_pCurHitR = NULL;
+	m_pCurDocL = NULL;
+	m_pCurDocR = NULL;
 	m_uMatchedDocid = 0;
 }
 
 int ExtTwofer_c::GetQwords ( ExtQwordsHash_t & hQwords )
 {
-	int iMax1 = m_pChildren[0]->GetQwords ( hQwords );
-	int iMax2 = m_pChildren[1]->GetQwords ( hQwords );
+	int iMax1 = m_pLeft->GetQwords ( hQwords );
+	int iMax2 = m_pRight->GetQwords ( hQwords );
 	return Max ( iMax1, iMax2 );
 }
 
 void ExtTwofer_c::SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
 {
-	m_pChildren[0]->SetQwordsIDF ( hQwords );
-	m_pChildren[1]->SetQwordsIDF ( hQwords );
+	m_pLeft->SetQwordsIDF ( hQwords );
+	m_pRight->SetQwordsIDF ( hQwords );
 }
 
 void ExtTwofer_c::GetTermDupes ( const ExtQwordsHash_t & hQwords, CSphVector<WORD> & dTermDupes ) const
 {
-	m_pChildren[0]->GetTermDupes ( hQwords, dTermDupes );
-	m_pChildren[1]->GetTermDupes ( hQwords, dTermDupes );
+	m_pLeft->GetTermDupes ( hQwords, dTermDupes );
+	m_pRight->GetTermDupes ( hQwords, dTermDupes );
 }
 
 //////////////////////////////////////////////////////////////////////////
 
 const ExtDoc_t * ExtAnd_c::GetDocsChunk()
 {
-	const ExtDoc_t * pCur0 = m_pCurDoc[0];
-	const ExtDoc_t * pCur1 = m_pCurDoc[1];
+	const ExtDoc_t * pCurL = m_pCurDocL;
+	const ExtDoc_t * pCurR = m_pCurDocR;
 
 	int iDoc = 0;
 	CSphRowitem * pDocinfo = m_pDocinfo;
@@ -2545,126 +2549,126 @@ const ExtDoc_t * ExtAnd_c::GetDocsChunk()
 	{
 		// if any of the pointers is empty, *and* there is no data yet, process next child chunk
 		// if there is data, we can't advance, because child hitlist offsets would be lost
-		if ( !pCur0 || !pCur1 )
+		if ( !pCurL || !pCurR )
 		{
 			if ( iDoc!=0 )
 				break;
 
-			if ( !pCur0 )
+			if ( !pCurL )
 			{
-				if ( pCur1 && pCur1->m_uDocid!=DOCID_MAX )
-					m_pChildren[0]->HintDocid ( pCur1->m_uDocid );
-				pCur0 = m_pChildren[0]->GetDocsChunk();
+				if ( pCurR && pCurR->m_uDocid!=DOCID_MAX )
+					m_pLeft->HintDocid ( pCurR->m_uDocid );
+				pCurL = m_pLeft->GetDocsChunk();
 			}
-			if ( !pCur1 )
+			if ( !pCurR )
 			{
-				if ( pCur0 && pCur0->m_uDocid!=DOCID_MAX )
-					m_pChildren[1]->HintDocid ( pCur0->m_uDocid );
-				pCur1 = m_pChildren[1]->GetDocsChunk();
+				if ( pCurL && pCurL->m_uDocid!=DOCID_MAX )
+					m_pRight->HintDocid ( pCurL->m_uDocid );
+				pCurR = m_pRight->GetDocsChunk();
 			}
-			if ( !pCur0 || !pCur1 )
+			if ( !pCurL || !pCurR )
 			{
-				m_pCurDoc[0] = NULL;
-				m_pCurDoc[1] = NULL;
+				m_pCurDocL = NULL;
+				m_pCurDocR = NULL;
 				return NULL;
 			}
 		}
 
 		// find common matches
-		assert ( pCur0 && pCur1 );
+		assert ( pCurL && pCurR );
 		while ( iDoc<MAX_DOCS-1 )
 		{
 			// find next matching docid
-			while ( pCur0->m_uDocid < pCur1->m_uDocid ) pCur0++;
-			if ( pCur0->m_uDocid==DOCID_MAX ) { pCur0 = NULL; break; }
+			while ( pCurL->m_uDocid < pCurR->m_uDocid ) pCurL++;
+			if ( pCurL->m_uDocid==DOCID_MAX ) { pCurL = NULL; break; }
 
-			while ( pCur1->m_uDocid < pCur0->m_uDocid ) pCur1++;
-			if ( pCur1->m_uDocid==DOCID_MAX ) { pCur1 = NULL; break; }
+			while ( pCurR->m_uDocid < pCurL->m_uDocid ) pCurR++;
+			if ( pCurR->m_uDocid==DOCID_MAX ) { pCurR = NULL; break; }
 
-			if ( pCur0->m_uDocid!=pCur1->m_uDocid ) continue;
+			if ( pCurL->m_uDocid!=pCurR->m_uDocid ) continue;
 
 			// emit it
 			ExtDoc_t & tDoc = m_dDocs[iDoc++];
-			tDoc.m_uDocid = pCur0->m_uDocid;
-			tDoc.m_uDocFields = pCur0->m_uDocFields | pCur1->m_uDocFields; // not necessary
+			tDoc.m_uDocid = pCurL->m_uDocid;
+			tDoc.m_uDocFields = pCurL->m_uDocFields | pCurR->m_uDocFields; // not necessary
 			tDoc.m_uHitlistOffset = -1;
-			tDoc.m_fTFIDF = pCur0->m_fTFIDF + pCur1->m_fTFIDF;
-			CopyExtDocinfo ( tDoc, *pCur0, &pDocinfo, m_iStride );
+			tDoc.m_fTFIDF = pCurL->m_fTFIDF + pCurR->m_fTFIDF;
+			CopyExtDocinfo ( tDoc, *pCurL, &pDocinfo, m_iStride );
 
 			// skip it
-			pCur0++; if ( pCur0->m_uDocid==DOCID_MAX ) pCur0 = NULL;
-			pCur1++; if ( pCur1->m_uDocid==DOCID_MAX ) pCur1 = NULL;
-			if ( !pCur0 || !pCur1 ) break;
+			pCurL++; if ( pCurL->m_uDocid==DOCID_MAX ) pCurL = NULL;
+			pCurR++; if ( pCurR->m_uDocid==DOCID_MAX ) pCurR = NULL;
+			if ( !pCurL || !pCurR ) break;
 		}
 	}
 
-	m_pCurDoc[0] = pCur0;
-	m_pCurDoc[1] = pCur1;
+	m_pCurDocL = pCurL;
+	m_pCurDocR = pCurR;
 
 	return ReturnDocsChunk ( iDoc, "and" );
 }
 
 const ExtHit_t * ExtAnd_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 {
-	const ExtHit_t * pCur0 = m_pCurHit[0];
-	const ExtHit_t * pCur1 = m_pCurHit[1];
+	const ExtHit_t * pCurL = m_pCurHitL;
+	const ExtHit_t * pCurR = m_pCurHitR;
 
 	if ( m_uMatchedDocid < pDocs->m_uDocid )
 		m_uMatchedDocid = 0;
 
 	int iHit = 0;
-	WORD uNodePos0 = m_dNodePos[0];
-	WORD uNodePos1 = m_dNodePos[1];
+	WORD uNodePos0 = m_uNodePosL;
+	WORD uNodePos1 = m_uNodePosR;
 	while ( iHit<MAX_HITS-1 )
 	{
 		// emit hits, while possible
 		if ( m_uMatchedDocid!=0
 			&& m_uMatchedDocid!=DOCID_MAX
-			&& ( ( pCur0 && pCur0->m_uDocid==m_uMatchedDocid ) || ( pCur1 && pCur1->m_uDocid==m_uMatchedDocid ) ) )
+			&& ( ( pCurL && pCurL->m_uDocid==m_uMatchedDocid ) || ( pCurR && pCurR->m_uDocid==m_uMatchedDocid ) ) )
 		{
 			// merge, while possible
-			if ( pCur0 && pCur1 && pCur0->m_uDocid==m_uMatchedDocid && pCur1->m_uDocid==m_uMatchedDocid )
+			if ( pCurL && pCurR && pCurL->m_uDocid==m_uMatchedDocid && pCurR->m_uDocid==m_uMatchedDocid )
 				while ( iHit<MAX_HITS-1 )
 			{
-				if ( ( pCur0->m_uHitpos < pCur1->m_uHitpos )
-					|| ( pCur0->m_uHitpos==pCur1->m_uHitpos && pCur0->m_uQuerypos>pCur1->m_uQuerypos ) )
+				if ( ( pCurL->m_uHitpos < pCurR->m_uHitpos )
+					|| ( pCurL->m_uHitpos==pCurR->m_uHitpos && pCurL->m_uQuerypos>pCurR->m_uQuerypos ) )
 				{
-					m_dHits[iHit] = *pCur0++;
+					m_dHits[iHit] = *pCurL++;
 					if ( uNodePos0!=0 )
 						m_dHits[iHit++].m_uNodepos = uNodePos0;
 					else
 						iHit++;
-					if ( pCur0->m_uDocid!=m_uMatchedDocid )
+					if ( pCurL->m_uDocid!=m_uMatchedDocid )
 						break;
 				} else
 				{
-					m_dHits[iHit] = *pCur1++;
+					m_dHits[iHit] = *pCurR++;
 					if ( uNodePos1!=0 )
 						m_dHits[iHit++].m_uNodepos = uNodePos1;
 					else
 						iHit++;
-					if ( pCur1->m_uDocid!=m_uMatchedDocid )
+					if ( pCurR->m_uDocid!=m_uMatchedDocid )
 						break;
 				}
 			}
 
 			// copy tail, while possible, unless the other child is at the end of a hit block
-			if ( pCur0 && pCur0->m_uDocid==m_uMatchedDocid && !( pCur1 && pCur1->m_uDocid==DOCID_MAX ) )
+			if ( pCurL && pCurL->m_uDocid==m_uMatchedDocid && !( pCurR && pCurR->m_uDocid==DOCID_MAX ) )
 			{
-				while ( pCur0->m_uDocid==m_uMatchedDocid && iHit<MAX_HITS-1 )
+				while ( pCurL->m_uDocid==m_uMatchedDocid && iHit<MAX_HITS-1 )
 				{
-					m_dHits[iHit] = *pCur0++;
+					m_dHits[iHit] = *pCurL++;
 					if ( uNodePos0!=0 )
 						m_dHits[iHit++].m_uNodepos = uNodePos0;
 					else
 						iHit++;
 				}
 			}
-			if ( pCur1 && pCur1->m_uDocid==m_uMatchedDocid && !( pCur0 && pCur0->m_uDocid==DOCID_MAX ) )
+			if ( pCurR && pCurR->m_uDocid==m_uMatchedDocid && !( pCurL && pCurL->m_uDocid==DOCID_MAX ) )
 			{
-				while ( pCur1->m_uDocid==m_uMatchedDocid && iHit<MAX_HITS-1 )
+				while ( pCurR->m_uDocid==m_uMatchedDocid && iHit<MAX_HITS-1 )
 				{
-					m_dHits[iHit] = *pCur1++;
+					m_dHits[iHit] = *pCurR++;
 					if ( uNodePos1!=0 )
 						m_dHits[iHit++].m_uNodepos = uNodePos1;
 					else
@@ -2674,46 +2678,46 @@ const ExtHit_t * ExtAnd_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 		}
 
 		// move on
-		if ( ( pCur0 && pCur0->m_uDocid!=m_uMatchedDocid && pCur0->m_uDocid!=DOCID_MAX )
-			&& ( pCur1 && pCur1->m_uDocid!=m_uMatchedDocid && pCur1->m_uDocid!=DOCID_MAX ) )
+		if ( ( pCurL && pCurL->m_uDocid!=m_uMatchedDocid && pCurL->m_uDocid!=DOCID_MAX )
+			&& ( pCurR && pCurR->m_uDocid!=m_uMatchedDocid && pCurR->m_uDocid!=DOCID_MAX ) )
 				m_uMatchedDocid = 0;
 
 		// warmup if needed
-		if ( !pCur0 || pCur0->m_uDocid==DOCID_MAX ) pCur0 = m_pChildren[0]->GetHitsChunk ( pDocs );
-		if ( !pCur1 || pCur1->m_uDocid==DOCID_MAX ) pCur1 = m_pChildren[1]->GetHitsChunk ( pDocs );
+		if ( !pCurL || pCurL->m_uDocid==DOCID_MAX ) pCurL = m_pLeft->GetHitsChunk ( pDocs );
+		if ( !pCurR || pCurR->m_uDocid==DOCID_MAX ) pCurR = m_pRight->GetHitsChunk ( pDocs );
 
 		// one of the hitlists is over
-		if ( !pCur0 || !pCur1 )
+		if ( !pCurL || !pCurR )
 		{
 			// if one is over, we might still need to copy the other one. otherwise, skip it
-			if ( ( pCur0 && pCur0->m_uDocid==m_uMatchedDocid ) || ( pCur1 && pCur1->m_uDocid==m_uMatchedDocid ) )
+			if ( ( pCurL && pCurL->m_uDocid==m_uMatchedDocid ) || ( pCurR && pCurR->m_uDocid==m_uMatchedDocid ) )
 				continue;
 
-			if ( pCur0 )
-				while ( ( pCur0 = m_pChildren[0]->GetHitsChunk ( pDocs ) )!=NULL );
-			if ( pCur1 )
-				while ( ( pCur1 = m_pChildren[1]->GetHitsChunk ( pDocs ) )!=NULL );
+			if ( pCurL )
+				while ( ( pCurL = m_pLeft->GetHitsChunk ( pDocs ) )!=NULL );
+			if ( pCurR )
+				while ( ( pCurR = m_pRight->GetHitsChunk ( pDocs ) )!=NULL );
 
-			if ( !pCur0 && !pCur1 )
+			if ( !pCurL && !pCurR )
 				break; // both are over, we're done
 		}
 
 		// find matching doc
-		assert ( pCur1 && pCur0 );
+		assert ( pCurR && pCurL );
 		while ( !m_uMatchedDocid )
 		{
-			while ( pCur0->m_uDocid < pCur1->m_uDocid ) pCur0++;
-			if ( pCur0->m_uDocid==DOCID_MAX ) break;
+			while ( pCurL->m_uDocid < pCurR->m_uDocid ) pCurL++;
+			if ( pCurL->m_uDocid==DOCID_MAX ) break;
 
-			while ( pCur1->m_uDocid < pCur0->m_uDocid ) pCur1++;
-			if ( pCur1->m_uDocid==DOCID_MAX ) break;
+			while ( pCurR->m_uDocid < pCurL->m_uDocid ) pCurR++;
+			if ( pCurR->m_uDocid==DOCID_MAX ) break;
 
-			if ( pCur0->m_uDocid==pCur1->m_uDocid ) m_uMatchedDocid = pCur0->m_uDocid;
+			if ( pCurL->m_uDocid==pCurR->m_uDocid ) m_uMatchedDocid = pCurL->m_uDocid;
 		}
 	}
 
-	m_pCurHit[0] = pCur0;
-	m_pCurHit[1] = pCur1;
+	m_pCurHitL = pCurL;
+	m_pCurHitR = pCurR;
 
 	assert ( iHit>=0 && iHit<MAX_HITS );
 	m_dHits[iHit].m_uDocid = DOCID_MAX;
@@ -2739,114 +2743,114 @@ bool ExtAndZonespanned_c::IsSameZonespan ( const ExtHit_t * pHit1, const ExtHit_
 
 const ExtHit_t * ExtAndZonespanned_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 {
-	const ExtHit_t * pCur0 = m_pCurHit[0];
-	const ExtHit_t * pCur1 = m_pCurHit[1];
+	const ExtHit_t * pCurL = m_pCurHitL;
+	const ExtHit_t * pCurR = m_pCurHitR;
 
 	if ( m_uMatchedDocid < pDocs->m_uDocid )
 		m_uMatchedDocid = 0;
 
 	int iHit = 0;
-	WORD uNodePos0 = m_dNodePos[0];
-	WORD uNodePos1 = m_dNodePos[1];
+	WORD uNodePos0 = m_uNodePosL;
+	WORD uNodePos1 = m_uNodePosR;
 	while ( iHit<MAX_HITS-1 )
 	{
 		// emit hits, while possible
 		if ( m_uMatchedDocid!=0
 			&& m_uMatchedDocid!=DOCID_MAX
-			&& ( ( pCur0 && pCur0->m_uDocid==m_uMatchedDocid ) || ( pCur1 && pCur1->m_uDocid==m_uMatchedDocid ) ) )
+			&& ( ( pCurL && pCurL->m_uDocid==m_uMatchedDocid ) || ( pCurR && pCurR->m_uDocid==m_uMatchedDocid ) ) )
 		{
 			// merge, while possible
-			if ( pCur0 && pCur1 && pCur0->m_uDocid==m_uMatchedDocid && pCur1->m_uDocid==m_uMatchedDocid )
+			if ( pCurL && pCurR && pCurL->m_uDocid==m_uMatchedDocid && pCurR->m_uDocid==m_uMatchedDocid )
 				while ( iHit<MAX_HITS-1 )
 				{
-					if ( ( pCur0->m_uHitpos < pCur1->m_uHitpos )
-						|| ( pCur0->m_uHitpos==pCur1->m_uHitpos && pCur0->m_uQuerypos>pCur1->m_uQuerypos ) )
+					if ( ( pCurL->m_uHitpos < pCurR->m_uHitpos )
+						|| ( pCurL->m_uHitpos==pCurR->m_uHitpos && pCurL->m_uQuerypos>pCurR->m_uQuerypos ) )
 					{
-						if ( IsSameZonespan ( pCur0, pCur1 ) )
+						if ( IsSameZonespan ( pCurL, pCurR ) )
 						{
-							m_dHits[iHit] = *pCur0;
+							m_dHits[iHit] = *pCurL;
 							if ( uNodePos0!=0 )
 								m_dHits[iHit].m_uNodepos = uNodePos0;
 							iHit++;
 						}
-						pCur0++;
-						if ( pCur0->m_uDocid!=m_uMatchedDocid )
+						pCurL++;
+						if ( pCurL->m_uDocid!=m_uMatchedDocid )
 							break;
 					} else
 					{
-						if ( IsSameZonespan ( pCur0, pCur1 ) )
+						if ( IsSameZonespan ( pCurL, pCurR ) )
 						{
-							m_dHits[iHit] = *pCur1;
+							m_dHits[iHit] = *pCurR;
 							if ( uNodePos1!=0 )
 								m_dHits[iHit].m_uNodepos = uNodePos1;
 							iHit++;
 						}
-						pCur1++;
-						if ( pCur1->m_uDocid!=m_uMatchedDocid )
+						pCurR++;
+						if ( pCurR->m_uDocid!=m_uMatchedDocid )
 							break;
 					}
 				}
 
 				// our special GetDocsChunk made the things so simply, that we doesn't need to care about tail hits at all.
 				// copy tail, while possible, unless the other child is at the end of a hit block
-				if ( pCur0 && pCur0->m_uDocid==m_uMatchedDocid && !( pCur1 && pCur1->m_uDocid==DOCID_MAX ) )
+				if ( pCurL && pCurL->m_uDocid==m_uMatchedDocid && !( pCurR && pCurR->m_uDocid==DOCID_MAX ) )
 				{
-					while ( pCur0->m_uDocid==m_uMatchedDocid && iHit<MAX_HITS-1 )
+					while ( pCurL->m_uDocid==m_uMatchedDocid && iHit<MAX_HITS-1 )
 					{
-						pCur0++;
+						pCurL++;
 					}
 				}
-				if ( pCur1 && pCur1->m_uDocid==m_uMatchedDocid && !( pCur0 && pCur0->m_uDocid==DOCID_MAX ) )
+				if ( pCurR && pCurR->m_uDocid==m_uMatchedDocid && !( pCurL && pCurL->m_uDocid==DOCID_MAX ) )
 				{
-					while ( pCur1->m_uDocid==m_uMatchedDocid && iHit<MAX_HITS-1 )
+					while ( pCurR->m_uDocid==m_uMatchedDocid && iHit<MAX_HITS-1 )
 					{
-						pCur1++;
+						pCurR++;
 					}
 				}
 		}
 
 		// move on
-		if ( ( pCur0 && pCur0->m_uDocid!=m_uMatchedDocid && pCur0->m_uDocid!=DOCID_MAX )
-			&& ( pCur1 && pCur1->m_uDocid!=m_uMatchedDocid && pCur1->m_uDocid!=DOCID_MAX ) )
+		if ( ( pCurL && pCurL->m_uDocid!=m_uMatchedDocid && pCurL->m_uDocid!=DOCID_MAX )
+			&& ( pCurR && pCurR->m_uDocid!=m_uMatchedDocid && pCurR->m_uDocid!=DOCID_MAX ) )
 			m_uMatchedDocid = 0;
 
 		// warmup if needed
-		if ( !pCur0 || pCur0->m_uDocid==DOCID_MAX )
+		if ( !pCurL || pCurL->m_uDocid==DOCID_MAX )
 		{
-			pCur0 = m_pChildren[0]->GetHitsChunk ( pDocs );
+			pCurL = m_pLeft->GetHitsChunk ( pDocs );
 		}
-		if ( !pCur1 || pCur1->m_uDocid==DOCID_MAX )
+		if ( !pCurR || pCurR->m_uDocid==DOCID_MAX )
 		{
-			pCur1 = m_pChildren[1]->GetHitsChunk ( pDocs );
+			pCurR = m_pRight->GetHitsChunk ( pDocs );
 		}
 
 		// one of the hitlists is over
-		if ( !pCur0 || !pCur1 )
+		if ( !pCurL || !pCurR )
 		{
-			if ( !pCur0 && !pCur1 ) break; // both are over, we're done
+			if ( !pCurL && !pCurR ) break; // both are over, we're done
 
 			// one is over, but we still need to copy the other one
-			m_uMatchedDocid = pCur0 ? pCur0->m_uDocid : pCur1->m_uDocid;
+			m_uMatchedDocid = pCurL ? pCurL->m_uDocid : pCurR->m_uDocid;
 			assert ( m_uMatchedDocid!=DOCID_MAX );
 			continue;
 		}
 
 		// find matching doc
-		assert ( pCur1 && pCur0 );
+		assert ( pCurR && pCurL );
 		while ( !m_uMatchedDocid )
 		{
-			while ( pCur0->m_uDocid < pCur1->m_uDocid ) pCur0++;
-			if ( pCur0->m_uDocid==DOCID_MAX ) break;
+			while ( pCurL->m_uDocid < pCurR->m_uDocid ) pCurL++;
+			if ( pCurL->m_uDocid==DOCID_MAX ) break;
 
-			while ( pCur1->m_uDocid < pCur0->m_uDocid ) pCur1++;
-			if ( pCur1->m_uDocid==DOCID_MAX ) break;
+			while ( pCurR->m_uDocid < pCurL->m_uDocid ) pCurR++;
+			if ( pCurR->m_uDocid==DOCID_MAX ) break;
 
-			if ( pCur0->m_uDocid==pCur1->m_uDocid ) m_uMatchedDocid = pCur0->m_uDocid;
+			if ( pCurL->m_uDocid==pCurR->m_uDocid ) m_uMatchedDocid = pCurL->m_uDocid;
 		}
 	}
 
-	m_pCurHit[0] = pCur0;
-	m_pCurHit[1] = pCur1;
+	m_pCurHitL = pCurL;
+	m_pCurHitR = pCurR;
 
 	return ReturnHitsChunk ( iHit, "and-zonespan" );
 }
@@ -2855,8 +2859,8 @@ const ExtHit_t * ExtAndZonespanned_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 
 const ExtDoc_t * ExtOr_c::GetDocsChunk()
 {
-	const ExtDoc_t * pCur0 = m_pCurDoc[0];
-	const ExtDoc_t * pCur1 = m_pCurDoc[1];
+	const ExtDoc_t * pCurL = m_pCurDocL;
+	const ExtDoc_t * pCurR = m_pCurDocR;
 
 	DWORD uTouched = 0;
 	int iDoc = 0;
@@ -2864,89 +2868,89 @@ const ExtDoc_t * ExtOr_c::GetDocsChunk()
 	while ( iDoc<MAX_DOCS-1 )
 	{
 		// if any of the pointers is empty, and not touched yet, advance
-		if ( !pCur0 || pCur0->m_uDocid==DOCID_MAX )
+		if ( !pCurL || pCurL->m_uDocid==DOCID_MAX )
 		{
 			if ( uTouched & 1 ) break; // it was touched, so we can't advance, because child hitlist offsets would be lost
-			pCur0 = m_pChildren[0]->GetDocsChunk();
+			pCurL = m_pLeft->GetDocsChunk();
 		}
-		if ( !pCur1 || pCur1->m_uDocid==DOCID_MAX )
+		if ( !pCurR || pCurR->m_uDocid==DOCID_MAX )
 		{
 			if ( uTouched & 2 ) break; // it was touched, so we can't advance, because child hitlist offsets would be lost
-			pCur1 = m_pChildren[1]->GetDocsChunk();
+			pCurR = m_pRight->GetDocsChunk();
 		}
 
 		// check if we're over
-		if ( !pCur0 && !pCur1 ) break;
+		if ( !pCurL && !pCurR ) break;
 
 		// merge lists while we can, copy tail while if we can not
-		if ( pCur0 && pCur1 )
+		if ( pCurL && pCurR )
 		{
 			// merge lists if we have both of them
 			while ( iDoc<MAX_DOCS-1 )
 			{
 				// copy min docids from 1st child
-				while ( pCur0->m_uDocid < pCur1->m_uDocid && iDoc<MAX_DOCS-1 )
+				while ( pCurL->m_uDocid < pCurR->m_uDocid && iDoc<MAX_DOCS-1 )
 				{
-					CopyExtDoc ( m_dDocs[iDoc++], *pCur0++, &pDocinfo, m_iStride );
+					CopyExtDoc ( m_dDocs[iDoc++], *pCurL++, &pDocinfo, m_iStride );
 					uTouched |= 1;
 				}
-				if ( pCur0->m_uDocid==DOCID_MAX ) { pCur0 = NULL; break; }
+				if ( pCurL->m_uDocid==DOCID_MAX ) { pCurL = NULL; break; }
 
 				// copy min docids from 2nd child
-				while ( pCur1->m_uDocid < pCur0->m_uDocid && iDoc<MAX_DOCS-1 )
+				while ( pCurR->m_uDocid < pCurL->m_uDocid && iDoc<MAX_DOCS-1 )
 				{
-					CopyExtDoc ( m_dDocs[iDoc++], *pCur1++, &pDocinfo, m_iStride );
+					CopyExtDoc ( m_dDocs[iDoc++], *pCurR++, &pDocinfo, m_iStride );
 					uTouched |= 2;
 				}
-				if ( pCur1->m_uDocid==DOCID_MAX ) { pCur1 = NULL; break; }
+				if ( pCurR->m_uDocid==DOCID_MAX ) { pCurR = NULL; break; }
 
 				// copy min docids from both children
-				assert ( pCur0->m_uDocid && pCur0->m_uDocid!=DOCID_MAX );
-				assert ( pCur1->m_uDocid && pCur1->m_uDocid!=DOCID_MAX );
+				assert ( pCurL->m_uDocid && pCurL->m_uDocid!=DOCID_MAX );
+				assert ( pCurR->m_uDocid && pCurR->m_uDocid!=DOCID_MAX );
 
-				while ( pCur0->m_uDocid==pCur1->m_uDocid && pCur0->m_uDocid!=DOCID_MAX && iDoc<MAX_DOCS-1 )
+				while ( pCurL->m_uDocid==pCurR->m_uDocid && pCurL->m_uDocid!=DOCID_MAX && iDoc<MAX_DOCS-1 )
 				{
-					m_dDocs[iDoc] = *pCur0;
-					m_dDocs[iDoc].m_uDocFields = pCur0->m_uDocFields | pCur1->m_uDocFields; // not necessary
-					m_dDocs[iDoc].m_fTFIDF = pCur0->m_fTFIDF + pCur1->m_fTFIDF;
-					CopyExtDocinfo ( m_dDocs[iDoc], *pCur0, &pDocinfo, m_iStride );
+					m_dDocs[iDoc] = *pCurL;
+					m_dDocs[iDoc].m_uDocFields = pCurL->m_uDocFields | pCurR->m_uDocFields; // not necessary
+					m_dDocs[iDoc].m_fTFIDF = pCurL->m_fTFIDF + pCurR->m_fTFIDF;
+					CopyExtDocinfo ( m_dDocs[iDoc], *pCurL, &pDocinfo, m_iStride );
 					iDoc++;
-					pCur0++;
-					pCur1++;
+					pCurL++;
+					pCurR++;
 					uTouched |= 3;
 				}
-				if ( pCur0->m_uDocid==DOCID_MAX ) { pCur0 = NULL; break; }
-				if ( pCur1->m_uDocid==DOCID_MAX ) { pCur1 = NULL; break; }
+				if ( pCurL->m_uDocid==DOCID_MAX ) { pCurL = NULL; break; }
+				if ( pCurR->m_uDocid==DOCID_MAX ) { pCurR = NULL; break; }
 			}
 		} else
 		{
 			// copy tail if we don't have both lists
-			const ExtDoc_t * pList = pCur0 ? pCur0 : pCur1;
+			const ExtDoc_t * pList = pCurL ? pCurL : pCurR;
 			if ( pList->m_uDocid!=DOCID_MAX && iDoc<MAX_DOCS-1 )
 			{
 				while ( pList->m_uDocid!=DOCID_MAX && iDoc<MAX_DOCS-1 )
 					CopyExtDoc ( m_dDocs[iDoc++], *pList++, &pDocinfo, m_iStride );
-				uTouched |= pCur0 ? 1 : 2;
+				uTouched |= pCurL ? 1 : 2;
 			}
 
 			if ( pList->m_uDocid==DOCID_MAX ) pList = NULL;
-			if ( pCur0 )
-				pCur0 = pList;
+			if ( pCurL )
+				pCurL = pList;
 			else
-				pCur1 = pList;
+				pCurR = pList;
 		}
 	}
 
-	m_pCurDoc[0] = pCur0;
-	m_pCurDoc[1] = pCur1;
+	m_pCurDocL = pCurL;
+	m_pCurDocR = pCurR;
 
 	return ReturnDocsChunk ( iDoc, "or" );
 }
 
 const ExtHit_t * ExtOr_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 {
-	const ExtHit_t * pCur0 = m_pCurHit[0];
-	const ExtHit_t * pCur1 = m_pCurHit[1];
+	const ExtHit_t * pCurL = m_pCurHitL;
+	const ExtHit_t * pCurR = m_pCurHitR;
 
 	int iHit = 0;
 	while ( iHit<MAX_HITS-1 )
@@ -2954,21 +2958,21 @@ const ExtHit_t * ExtOr_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 		// emit hits, while possible
 		if ( m_uMatchedDocid!=0
 			&& m_uMatchedDocid!=DOCID_MAX
-			&& ( ( pCur0 && pCur0->m_uDocid==m_uMatchedDocid ) || ( pCur1 && pCur1->m_uDocid==m_uMatchedDocid ) ) )
+			&& ( ( pCurL && pCurL->m_uDocid==m_uMatchedDocid ) || ( pCurR && pCurR->m_uDocid==m_uMatchedDocid ) ) )
 		{
 			// merge, while possible
-			if ( pCur0 && pCur1 && pCur0->m_uDocid==m_uMatchedDocid && pCur1->m_uDocid==m_uMatchedDocid )
+			if ( pCurL && pCurR && pCurL->m_uDocid==m_uMatchedDocid && pCurR->m_uDocid==m_uMatchedDocid )
 				while ( iHit<MAX_HITS-1 )
 			{
-				if ( pCur0->m_uHitpos < pCur1->m_uHitpos )
+				if ( pCurL->m_uHitpos < pCurR->m_uHitpos )
 				{
-					m_dHits[iHit++] = *pCur0++;
-					if ( pCur0->m_uDocid!=m_uMatchedDocid )
+					m_dHits[iHit++] = *pCurL++;
+					if ( pCurL->m_uDocid!=m_uMatchedDocid )
 						break;
 				} else
 				{
-					m_dHits[iHit++] = *pCur1++;
-					if ( pCur1->m_uDocid!=m_uMatchedDocid )
+					m_dHits[iHit++] = *pCurR++;
+					if ( pCurR->m_uDocid!=m_uMatchedDocid )
 						break;
 				}
 			}
@@ -2978,49 +2982,49 @@ const ExtHit_t * ExtOr_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 			// so we need to get the next hits chunk NOW, check for that condition, and keep merging
 			// simply going to tail hits copying is incorrect, it could copy in wrong order
 			// example, word A, pos 1, 2, 3, hit chunk ends, 4, 5, 6, word B, pos 7, 8, 9
-			if ( !pCur0 || pCur0->m_uDocid==DOCID_MAX )
+			if ( !pCurL || pCurL->m_uDocid==DOCID_MAX )
 			{
-				pCur0 = m_pChildren[0]->GetHitsChunk ( pDocs );
-				if ( pCur0 && pCur0->m_uDocid==m_uMatchedDocid )
+				pCurL = m_pLeft->GetHitsChunk ( pDocs );
+				if ( pCurL && pCurL->m_uDocid==m_uMatchedDocid )
 					continue;
 			}
-			if ( !pCur1 || pCur1->m_uDocid==DOCID_MAX )
+			if ( !pCurR || pCurR->m_uDocid==DOCID_MAX )
 			{
-				pCur1 = m_pChildren[1]->GetHitsChunk ( pDocs );
-				if ( pCur1 && pCur1->m_uDocid==m_uMatchedDocid )
+				pCurR = m_pRight->GetHitsChunk ( pDocs );
+				if ( pCurR && pCurR->m_uDocid==m_uMatchedDocid )
 					continue;
 			}
 
 			// copy tail, while possible
-			if ( pCur0 && pCur0->m_uDocid==m_uMatchedDocid )
+			if ( pCurL && pCurL->m_uDocid==m_uMatchedDocid )
 			{
-				while ( pCur0->m_uDocid==m_uMatchedDocid && iHit<MAX_HITS-1 )
-					m_dHits[iHit++] = *pCur0++;
+				while ( pCurL->m_uDocid==m_uMatchedDocid && iHit<MAX_HITS-1 )
+					m_dHits[iHit++] = *pCurL++;
 			} else
 			{
-				assert ( pCur1 && pCur1->m_uDocid==m_uMatchedDocid );
-				while ( pCur1->m_uDocid==m_uMatchedDocid && iHit<MAX_HITS-1 )
-					m_dHits[iHit++] = *pCur1++;
+				assert ( pCurR && pCurR->m_uDocid==m_uMatchedDocid );
+				while ( pCurR->m_uDocid==m_uMatchedDocid && iHit<MAX_HITS-1 )
+					m_dHits[iHit++] = *pCurR++;
 			}
 		}
 
 		// move on
-		if ( ( pCur0 && pCur0->m_uDocid!=m_uMatchedDocid ) && ( pCur1 && pCur1->m_uDocid!=m_uMatchedDocid ) )
+		if ( ( pCurL && pCurL->m_uDocid!=m_uMatchedDocid ) && ( pCurR && pCurR->m_uDocid!=m_uMatchedDocid ) )
 			m_uMatchedDocid = 0;
 
 		// warmup if needed
-		if ( !pCur0 || pCur0->m_uDocid==DOCID_MAX ) pCur0 = m_pChildren[0]->GetHitsChunk ( pDocs );
-		if ( !pCur1 || pCur1->m_uDocid==DOCID_MAX ) pCur1 = m_pChildren[1]->GetHitsChunk ( pDocs );
-		if ( !pCur0 && !pCur1 )
+		if ( !pCurL || pCurL->m_uDocid==DOCID_MAX ) pCurL = m_pLeft->GetHitsChunk ( pDocs );
+		if ( !pCurR || pCurR->m_uDocid==DOCID_MAX ) pCurR = m_pRight->GetHitsChunk ( pDocs );
+		if ( !pCurL && !pCurR )
 			break;
 
-		m_uMatchedDocid = ( pCur0 && pCur1 )
-			? Min ( pCur0->m_uDocid, pCur1->m_uDocid )
-			: ( pCur0 ? pCur0->m_uDocid : pCur1->m_uDocid );
+		m_uMatchedDocid = ( pCurL && pCurR )
+			? Min ( pCurL->m_uDocid, pCurR->m_uDocid )
+			: ( pCurL ? pCurL->m_uDocid : pCurR->m_uDocid );
 	}
 
-	m_pCurHit[0] = pCur0;
-	m_pCurHit[1] = pCur1;
+	m_pCurHitL = pCurL;
+	m_pCurHitR = pCurR;
 
 	assert ( iHit>=0 && iHit<MAX_HITS );
 	m_dHits[iHit].m_uDocid = DOCID_MAX;
@@ -3037,39 +3041,39 @@ const ExtHit_t * ExtOr_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 // we do this to return hits from rhs too which we need to affect match rank
 const ExtDoc_t * ExtMaybe_c::GetDocsChunk()
 {
-	const ExtDoc_t * pCur0 = m_pCurDoc[0];
-	const ExtDoc_t * pCur1 = m_pCurDoc[1];
+	const ExtDoc_t * pCurL = m_pCurDocL;
+	const ExtDoc_t * pCurR = m_pCurDocR;
 	int iDoc = 0;
 
 	// try to get next doc from lhs
-	if ( !pCur0 || pCur0->m_uDocid==DOCID_MAX )
-		pCur0 = m_pChildren[0]->GetDocsChunk();
+	if ( !pCurL || pCurL->m_uDocid==DOCID_MAX )
+		pCurL = m_pLeft->GetDocsChunk();
 
 	// we have nothing to do if there is no doc from lhs
-	if ( pCur0 )
+	if ( pCurL )
 	{
 		// look for same docID in rhs
 		do
 		{
-			if ( !pCur1 || pCur1->m_uDocid==DOCID_MAX )
-				pCur1 = m_pChildren[1]->GetDocsChunk();
-			else if ( pCur1->m_uDocid<pCur0->m_uDocid )
-				++pCur1;
-		} while ( pCur1 && pCur1->m_uDocid<pCur0->m_uDocid );
+			if ( !pCurR || pCurR->m_uDocid==DOCID_MAX )
+				pCurR = m_pRight->GetDocsChunk();
+			else if ( pCurR->m_uDocid<pCurL->m_uDocid )
+				++pCurR;
+		} while ( pCurR && pCurR->m_uDocid<pCurL->m_uDocid );
 
-		m_dDocs [ iDoc ] = *pCur0;
+		m_dDocs [ iDoc ] = *pCurL;
 		// alter doc like with | fulltext operator if we have it both in lhs and rhs
-		if ( pCur1 && pCur0->m_uDocid==pCur1->m_uDocid )
+		if ( pCurR && pCurL->m_uDocid==pCurR->m_uDocid )
 		{
-			m_dDocs [ iDoc ].m_uDocFields |= pCur1->m_uDocFields;
-			m_dDocs [ iDoc ].m_fTFIDF += pCur1->m_fTFIDF;
+			m_dDocs [ iDoc ].m_uDocFields |= pCurR->m_uDocFields;
+			m_dDocs [ iDoc ].m_fTFIDF += pCurR->m_fTFIDF;
 		}
-		++pCur0;
+		++pCurL;
 		++iDoc;
 	}
 
-	m_pCurDoc[0] = pCur0;
-	m_pCurDoc[1] = pCur1;
+	m_pCurDocL = pCurL;
+	m_pCurDocR = pCurR;
 
 	return ReturnDocsChunk ( iDoc, "maybe" );
 }
@@ -3086,83 +3090,83 @@ const ExtDoc_t * ExtAndNot_c::GetDocsChunk()
 {
 	// if reject-list is over, simply pass through to accept-list
 	if ( m_bPassthrough )
-		return m_pChildren[0]->GetDocsChunk();
+		return m_pLeft->GetDocsChunk();
 
 	// otherwise, do some removals
-	const ExtDoc_t * pCur0 = m_pCurDoc[0];
-	const ExtDoc_t * pCur1 = m_pCurDoc[1];
+	const ExtDoc_t * pCurL = m_pCurDocL;
+	const ExtDoc_t * pCurR = m_pCurDocR;
 
 	int iDoc = 0;
 	CSphRowitem * pDocinfo = m_pDocinfo;
 	while ( iDoc<MAX_DOCS-1 )
 	{
 		// pull more docs from accept, if needed
-		if ( !pCur0 || pCur0->m_uDocid==DOCID_MAX )
+		if ( !pCurL || pCurL->m_uDocid==DOCID_MAX )
 		{
 			// there were matches; we can not pull more because that'd fuckup hitlists
 			if ( iDoc )
 				break;
 
 			// no matches so far; go pull
-			pCur0 = m_pChildren[0]->GetDocsChunk();
-			if ( !pCur0 )
+			pCurL = m_pLeft->GetDocsChunk();
+			if ( !pCurL )
 				break;
 		}
 
 		// pull more docs from reject, if nedeed
-		if ( !pCur1 || pCur1->m_uDocid==DOCID_MAX )
-			pCur1 = m_pChildren[1]->GetDocsChunk();
+		if ( !pCurR || pCurR->m_uDocid==DOCID_MAX )
+			pCurR = m_pRight->GetDocsChunk();
 
 		// if there's nothing to filter against, simply copy leftovers
-		if ( !pCur1 )
+		if ( !pCurR )
 		{
-			assert ( pCur0 );
-			while ( pCur0->m_uDocid!=DOCID_MAX && iDoc<MAX_DOCS-1 )
-				CopyExtDoc ( m_dDocs[iDoc++], *pCur0++, &pDocinfo, m_iStride );
+			assert ( pCurL );
+			while ( pCurL->m_uDocid!=DOCID_MAX && iDoc<MAX_DOCS-1 )
+				CopyExtDoc ( m_dDocs[iDoc++], *pCurL++, &pDocinfo, m_iStride );
 
-			if ( pCur0->m_uDocid==DOCID_MAX )
+			if ( pCurL->m_uDocid==DOCID_MAX )
 				m_bPassthrough = true;
 
 			break;
 		}
 
 		// perform filtering
-		assert ( pCur0 );
-		assert ( pCur1 );
+		assert ( pCurL );
+		assert ( pCurR );
 		for ( ;; )
 		{
 			assert ( iDoc<MAX_DOCS-1 );
-			assert ( pCur0->m_uDocid!=DOCID_MAX );
-			assert ( pCur1->m_uDocid!=DOCID_MAX );
+			assert ( pCurL->m_uDocid!=DOCID_MAX );
+			assert ( pCurR->m_uDocid!=DOCID_MAX );
 
 			// copy accepted until min rejected id
-			while ( pCur0->m_uDocid < pCur1->m_uDocid && iDoc<MAX_DOCS-1 )
-				CopyExtDoc ( m_dDocs[iDoc++], *pCur0++, &pDocinfo, m_iStride );
-			if ( pCur0->m_uDocid==DOCID_MAX || iDoc==MAX_DOCS-1 ) break;
+			while ( pCurL->m_uDocid < pCurR->m_uDocid && iDoc<MAX_DOCS-1 )
+				CopyExtDoc ( m_dDocs[iDoc++], *pCurL++, &pDocinfo, m_iStride );
+			if ( pCurL->m_uDocid==DOCID_MAX || iDoc==MAX_DOCS-1 ) break;
 
 			// skip rejected until min accepted id
-			while ( pCur1->m_uDocid < pCur0->m_uDocid ) pCur1++;
-			if ( pCur1->m_uDocid==DOCID_MAX ) break;
+			while ( pCurR->m_uDocid < pCurL->m_uDocid ) pCurR++;
+			if ( pCurR->m_uDocid==DOCID_MAX ) break;
 
 			// skip both while ids match
-			while ( pCur0->m_uDocid==pCur1->m_uDocid && pCur0->m_uDocid!=DOCID_MAX )
+			while ( pCurL->m_uDocid==pCurR->m_uDocid && pCurL->m_uDocid!=DOCID_MAX )
 			{
-				pCur0++;
-				pCur1++;
+				pCurL++;
+				pCurR++;
 			}
-			if ( pCur0->m_uDocid==DOCID_MAX || pCur1->m_uDocid==DOCID_MAX ) break;
+			if ( pCurL->m_uDocid==DOCID_MAX || pCurR->m_uDocid==DOCID_MAX ) break;
 		}
 	}
 
-	m_pCurDoc[0] = pCur0;
-	m_pCurDoc[1] = pCur1;
+	m_pCurDocL = pCurL;
+	m_pCurDocR = pCurR;
 
 	return ReturnDocsChunk ( iDoc, "andnot" );
 }
 
 const ExtHit_t * ExtAndNot_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 {
-	return m_pChildren[0]->GetHitsChunk ( pDocs );
+	return m_pLeft->GetHitsChunk ( pDocs );
 }
 
 void ExtAndNot_c::Reset ( const ISphQwordSetup & tSetup )

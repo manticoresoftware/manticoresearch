@@ -819,6 +819,8 @@ function:
 	| TOK_WEIGHT '(' ')'			{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| TOK_IDENT '(' expr TOK_FOR ident TOK_IN json_field ')' { TRACK_BOUNDS ( $$, $1, $8 ); }
 	| TOK_REMAP '(' expr ',' expr ',' '(' arglist ')' ',' '(' arglist ')' ')' { TRACK_BOUNDS ( $$, $1, $14 ); }
+	| TOK_RAND '(' ')'				{ TRACK_BOUNDS ( $$, $1, $3 ); }
+	| TOK_RAND '(' arglist ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	;
 	
 arglist:

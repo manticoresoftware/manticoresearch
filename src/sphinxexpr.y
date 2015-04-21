@@ -26,6 +26,7 @@
 %token <iAttrLocator>	TOK_ATTR_FACTORS
 %token <iFunc>			TOK_FUNC
 %token <iFunc>			TOK_FUNC_IN
+%token <iFunc>			TOK_FUNC_RAND
 %token <iFunc>			TOK_FUNC_REMAP
 %token <iNode>			TOK_FUNC_PF
 %token <iNode>			TOK_USERVAR
@@ -149,6 +150,7 @@ map_key:
 	ident							{ $$ = $1; }
 	| TOK_ATTR_STRING				{ $$ = pParser->Attr2Ident($1); }
 	| TOK_FUNC_IN					{ $$ = strdup("in"); }
+	| TOK_FUNC_RAND					{ $$ = strdup("rand"); }
 	;
 
 arg:
@@ -204,6 +206,8 @@ function:
 	| TOK_FUNC_REMAP '(' expr ',' expr ',' '(' constlist ')' ',' '(' constlist ')' ')' { $$ = pParser->AddNodeFunc ( $1, $3, $5, $8, $12 ); }
 	| TOK_FUNC_PF '(' ')'			{ $$ = pParser->AddNodePF ( $1, -1 ); }
 	| TOK_FUNC_PF '(' arg ')'		{ $$ = pParser->AddNodePF ( $1, $3 ); }
+	| TOK_FUNC_RAND '(' ')'			{ $$ = pParser->AddNodeFunc ( $1, -1 ); }
+	| TOK_FUNC_RAND '(' arglist ')'	{ $$ = pParser->AddNodeFunc ( $1, $3 ); }
 	;
 
 json_field:

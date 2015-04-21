@@ -1369,6 +1369,27 @@ struct Expr_MinTopSortval : public ISphExpr
 	}
 };
 
+
+struct Expr_Rand_c : public ISphExpr
+{
+	ISphExpr * m_pFirst;
+
+	explicit Expr_Rand_c ( ISphExpr * pFirst )
+		: m_pFirst ( pFirst )
+	{}
+
+	virtual float Eval ( const CSphMatch & tMatch ) const
+	{
+		if ( m_pFirst )
+			sphSrand( (DWORD)m_pFirst->Eval ( tMatch ) );
+		return sphRand() / float(UINT_MAX);
+	}
+
+	virtual int IntEval ( const CSphMatch & tMatch ) const { return (int)Eval ( tMatch ); }
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t)Eval ( tMatch ); }
+};
+
+
 //////////////////////////////////////////////////////////////////////////
 
 #define FIRST	m_pFirst->Eval(tMatch)
@@ -1724,7 +1745,8 @@ enum Func_e
 	FUNC_MIN_TOP_WEIGHT,
 	FUNC_MIN_TOP_SORTVAL,
 
-	FUNC_ATAN2
+	FUNC_ATAN2,
+	FUNC_RAND
 };
 
 
@@ -1742,8 +1764,8 @@ static FuncDesc_t g_dFuncs[] =
 	{ "now",			0,	FUNC_NOW,			SPH_ATTR_INTEGER },
 
 	{ "abs",			1,	FUNC_ABS,			SPH_ATTR_NONE },
-	{ "ceil",			1,	FUNC_CEIL,			SPH_ATTR_INTEGER },
-	{ "floor",			1,	FUNC_FLOOR,			SPH_ATTR_INTEGER },
+	{ "ceil",			1,	FUNC_CEIL,			SPH_ATTR_BIGINT },
+	{ "floor",			1,	FUNC_FLOOR,			SPH_ATTR_BIGINT },
 	{ "sin",			1,	FUNC_SIN,			SPH_ATTR_FLOAT },
 	{ "cos",			1,	FUNC_COS,			SPH_ATTR_FLOAT },
 	{ "ln",				1,	FUNC_LN,			SPH_ATTR_FLOAT },
@@ -1807,7 +1829,8 @@ static FuncDesc_t g_dFuncs[] =
 	{ "min_top_weight",		0,	FUNC_MIN_TOP_WEIGHT,	SPH_ATTR_INTEGER },
 	{ "min_top_sortval",	0,	FUNC_MIN_TOP_SORTVAL,	SPH_ATTR_FLOAT },
 
-	{ "atan2",			2,	FUNC_ATAN2,			SPH_ATTR_FLOAT }
+	{ "atan2",			2,	FUNC_ATAN2,			SPH_ATTR_FLOAT },
+	{ "rand",			-1,	FUNC_RAND,			SPH_ATTR_FLOAT }
 };
 
 
@@ -1851,32 +1874,32 @@ static int FuncHashLookup ( const char * sKey )
 
 	static BYTE dAsso[] =
 	{
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		10, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 5, 109, 35, 0, 0,
-		50, 5, 20, 30, 109, 10, 109, 109, 5, 0,
-		10, 15, 5, 25, 0, 55, 0, 0, 109, 21,
-		45, 20, 0, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109
+		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
+		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
+		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
+		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
+		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
+		0, 129, 129, 129, 129, 129, 129, 129, 129, 129,
+		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
+		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
+		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
+		129, 129, 129, 129, 129, 15, 129, 25, 45, 0,
+		20, 5, 25, 20, 129, 10, 129, 129, 5, 0,
+		10, 30, 25, 25, 0, 55, 0, 0, 129, 0,
+		47, 35, 0, 129, 129, 129, 129, 129, 129, 129,
+		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
+		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
+		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
+		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
+		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
+		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
+		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
+		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
+		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
+		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
+		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
+		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
+		129, 129, 129, 129, 129, 129
 	};
 
 	const BYTE * s = (const BYTE*) sKey;
@@ -1891,16 +1914,18 @@ static int FuncHashLookup ( const char * sKey )
 	static int dIndexes[] =
 	{
 		-1, -1, -1, -1, -1, 13, -1, 48, 49, 26,
-		30, -1, 52, 50, -1, 41, 29, 6, 51, 2,
-		-1, -1, 28, 20, 47, -1, 44, 42, 27, 37,
-		16, 33, 24, 35, 57, 58, -1, 36, 53, 14,
-		-1, -1, -1, 46, 22, 3, 11, -1, 54, 0,
-		45, -1, -1, 39, 7, 8, 38, 31, 9, 34,
-		-1, -1, 40, -1, 17, 32, -1, -1, 55, 18,
-		-1, 43, 19, 5, 23, 59, -1, 56, 4, 12,
-		-1, -1, -1, 21, 10, -1, -1, -1, -1, 25,
-		-1, -1, -1, 1, -1, -1, -1, -1, -1, -1,
-		-1, -1, -1, -1, -1, -1, -1, -1, 15
+		30, -1, 52, 50, -1, -1, -1, 6, 51, 2,
+		-1, -1, 28, 20, 47, -1, 44, 42, 27, -1,
+		-1, -1, -1, 46, 57, 58, -1, 24, 54, 60,
+		45, -1, -1, 0, 23, 16, 38, 56, 35, 25,
+		41, -1, 36, 53, 37, 59, 43, 40, 22, 7,
+		8, 29, 31, 39, 34, 3, 33, 32, -1, 17,
+		-1, -1, -1, 55, 18, 21, -1, 19, 4, 12,
+		9, 11, -1, 15, 10, -1, -1, -1, 5, 14,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, 1
 	};
 
 	if ( iHash<0 || iHash>=(int)(sizeof(dIndexes)/sizeof(dIndexes[0])) )
@@ -2351,11 +2376,13 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 			lvalp->iFunc = iFunc;
 			if ( iFunc==FUNC_IN )
 				return TOK_FUNC_IN;
-			if ( iFunc==FUNC_REMAP )
+			else if ( iFunc==FUNC_REMAP )
 				return TOK_FUNC_REMAP;
-			if ( iFunc==FUNC_PACKEDFACTORS || iFunc==FUNC_FACTORS )
+			else if ( iFunc==FUNC_PACKEDFACTORS || iFunc==FUNC_FACTORS )
 				return TOK_FUNC_PF;
-			return TOK_FUNC;
+			else if ( iFunc==FUNC_RAND )
+				return TOK_FUNC_RAND;
+			else return TOK_FUNC;
 		}
 
 		// ask hook
@@ -2760,8 +2787,8 @@ void ExprParser_t::ConstantFoldPass ( int iNode )
 				else
 					pRoot->m_fConst = fabs ( fArg );
 				break;
-			case FUNC_CEIL:		pRoot->m_iToken = TOK_CONST_INT; pRoot->m_iLeft = -1; pRoot->m_iConst = (int)ceil ( fArg ); break;
-			case FUNC_FLOOR:	pRoot->m_iToken = TOK_CONST_INT; pRoot->m_iLeft = -1; pRoot->m_iConst = (int)floor ( fArg ); break;
+			case FUNC_CEIL:		pRoot->m_iToken = TOK_CONST_INT; pRoot->m_iLeft = -1; pRoot->m_iConst = (int64_t)ceil ( fArg ); break;
+			case FUNC_FLOOR:	pRoot->m_iToken = TOK_CONST_INT; pRoot->m_iLeft = -1; pRoot->m_iConst = (int64_t)floor ( fArg ); break;
 			case FUNC_SIN:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float ( sin ( fArg) ); break;
 			case FUNC_COS:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float ( cos ( fArg ) ); break;
 			case FUNC_LN:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = fArg>0.0f ? log(fArg) : 0.0f; break;
@@ -3936,6 +3963,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 					case FUNC_MADD:		return new Expr_Madd_c ( dArgs[0], dArgs[1], dArgs[2] );
 					case FUNC_MUL3:		return new Expr_Mul3_c ( dArgs[0], dArgs[1], dArgs[2] );
 					case FUNC_ATAN2:	return new Expr_Atan2_c ( dArgs[0], dArgs[1] );
+					case FUNC_RAND:		return new Expr_Rand_c ( dArgs.GetLength()>0 ? dArgs[0] : NULL );
 
 					case FUNC_INTERVAL:	return CreateIntervalNode ( tNode.m_iLeft, dArgs );
 					case FUNC_IN:		return CreateInNode ( iNode );
@@ -5636,7 +5664,15 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iFirst, int iSecond, int iThird, 
 		int iArgc = 0;
 		if ( iFirst>=0 )
 			iArgc = ( m_dNodes [ iFirst ].m_iToken==',' ) ? m_dNodes [ iFirst ].m_iArgs : 1;
-		if ( iExpectedArgc<0 )
+
+		if ( eFunc==FUNC_RAND )
+		{
+			if ( iArgc>1 )
+			{
+				m_sParserError.SetSprintf ( "%s() called with %d args, either 0 or 1 args expected", sFuncName, iArgc );
+				return -1;
+			}
+		} else if ( iExpectedArgc<0 )
 		{
 			if ( iArgc<-iExpectedArgc )
 			{
@@ -5860,6 +5896,15 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iFirst, int iSecond, int iThird, 
 		if ( eSecondRet!=SPH_ATTR_FLOAT && tFourthList.m_dInts.GetLength()==0 )
 		{
 			m_sParserError.SetSprintf ( "%s() second argument results in integer value and thus fourth argument should be a list of integers", sFuncName );
+			return -1;
+		}
+	}
+
+	if ( eFunc==FUNC_RAND )
+	{
+		if ( iFirst>=0 && !IsNumeric ( m_dNodes [ iFirst ].m_eRetType ) )
+		{
+			m_sParserError.SetSprintf ( "%s() argument must be numeric", sFuncName );
 			return -1;
 		}
 	}

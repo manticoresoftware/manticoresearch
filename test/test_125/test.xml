@@ -254,6 +254,10 @@ INSERT INTO cmp_table VALUES
 <!-- .NET connector 6.9.6 uses select timediff(now(), utc_timestamp()) -->
 <sphinxql>SELECT bigint(timediff(now(),utc_timestamp())) % 15</sphinxql>
 
+<!-- rand function, should be strictly deterministic (if called with arguments) -->
+<sphinxql>select rand()*0, rand(0), rand(1), rand(2), rand(id), rand(id+1) from test</sphinxql>
+<sphinxql>select id, floor(1 + rand(id) * 4294967295) as rand from test order by rand asc</sphinxql>
+
 </sphqueries>
 
 </test>

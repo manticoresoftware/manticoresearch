@@ -58,7 +58,8 @@
      TOK_IS = 284,
      TOK_NULL = 285,
      TOK_FOR = 286,
-     TOK_FUNC_IN = 287
+     TOK_FUNC_IN = 287,
+     TOK_FUNC_RAND = 288
    };
 #endif
 #define SEL_TOKEN 258
@@ -91,6 +92,7 @@
 #define TOK_NULL 285
 #define TOK_FOR 286
 #define TOK_FUNC_IN 287
+#define TOK_FUNC_RAND 288
 
 
 

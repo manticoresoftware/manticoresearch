@@ -1372,17 +1372,42 @@ struct Expr_MinTopSortval : public ISphExpr
 
 struct Expr_Rand_c : public ISphExpr
 {
-	ISphExpr * m_pFirst;
+	ISphExpr *			m_pFirst;
+	bool				m_bConst;
+	mutable bool		m_bFirstEval;
+	mutable uint64_t	m_uState;
 
-	explicit Expr_Rand_c ( ISphExpr * pFirst )
+	explicit Expr_Rand_c ( ISphExpr * pFirst, bool bConst )
 		: m_pFirst ( pFirst )
-	{}
+		, m_bConst ( bConst )
+		, m_bFirstEval ( true )
+	{
+		sphAutoSrand ();
+		m_uState = ( (uint64_t)sphRand() << 32 ) + sphRand();
+	}
+
+	uint64_t XorShift64Star() const
+	{
+		m_uState ^= m_uState >> 12;
+		m_uState ^= m_uState << 25;
+		m_uState ^= m_uState >> 27;
+		return m_uState * 2685821657736338717ULL;
+	}
 
 	virtual float Eval ( const CSphMatch & tMatch ) const
 	{
 		if ( m_pFirst )
-			sphSrand( (DWORD)m_pFirst->Eval ( tMatch ) );
-		return sphRand() / float(UINT_MAX);
+		{
+			uint64_t uSeed = (uint64_t)m_pFirst->Int64Eval ( tMatch );
+			if ( !m_bConst )
+				m_uState = uSeed;
+			else if ( m_bFirstEval )
+			{
+				m_uState = uSeed;
+				m_bFirstEval = false;
+			}
+		}
+		return (float)( XorShift64Star() / (double)UINT64_MAX );
 	}
 
 	virtual int IntEval ( const CSphMatch & tMatch ) const { return (int)Eval ( tMatch ); }
@@ -3963,7 +3988,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 					case FUNC_MADD:		return new Expr_Madd_c ( dArgs[0], dArgs[1], dArgs[2] );
 					case FUNC_MUL3:		return new Expr_Mul3_c ( dArgs[0], dArgs[1], dArgs[2] );
 					case FUNC_ATAN2:	return new Expr_Atan2_c ( dArgs[0], dArgs[1] );
-					case FUNC_RAND:		return new Expr_Rand_c ( dArgs.GetLength()>0 ? dArgs[0] : NULL );
+					case FUNC_RAND:		return new Expr_Rand_c ( dArgs.GetLength() ? dArgs[0] : NULL, tNode.m_iLeft>=0 ? IsConst ( &m_dNodes[tNode.m_iLeft] ) : false );
 
 					case FUNC_INTERVAL:	return CreateIntervalNode ( tNode.m_iLeft, dArgs );
 					case FUNC_IN:		return CreateInNode ( iNode );

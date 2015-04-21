@@ -14910,6 +14910,18 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	if ( !CheckDocsCount ( iTotalDocuments, sError ) )
 		return false;
 
+	if ( tSPSWriter.GetPos()>( U64C(1)<<32 ) )
+	{
+		sError.SetSprintf ( "resulting .sps file is over 4 GB" );
+		return false;
+	}
+
+	if ( tSPMWriter.GetPos()>( U64C(4)<<32 ) )
+	{
+		sError.SetSprintf ( "resulting .spm file is over 16 GB" );
+		return false;
+	}
+
 	int iOldLen = dPhantomKiller.GetLength();
 	int iKillLen = dKillList.GetLength();
 	dPhantomKiller.Resize ( iOldLen+iKillLen );

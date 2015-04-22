@@ -68,7 +68,7 @@ protected:
 
 public:
 	explicit					QcacheRanker_c ( QcacheEntry_c * pEntry, const ISphQwordSetup & tSetup );
-								~QcacheRanker_c() { SafeRelease ( m_pEntry); }
+								~QcacheRanker_c() { SafeRelease ( m_pEntry ); }
 
 	CSphMatch *					GetMatchesBuffer() { return m_dMatches; }
 	int							GetMatches();
@@ -193,7 +193,7 @@ void QcacheEntry_c::FlushFrame()
 	SphDocID_t uLastId = m_uLastDocid;
 	int iDeltaBytes = 1;
 
-	bool bIndexWeights = ( m_hWeights.GetLength() + MAX_FRAME_SIZE ) <= 0xffff;
+	bool bIndexWeights = ( m_hWeights.GetLength() + MAX_FRAME_SIZE )<=0xffff;
 	int iWeightBytes = 1;
 
 	ARRAY_FOREACH ( i, m_dFrame )
@@ -349,7 +349,7 @@ void Qcache_c::Add ( const CSphQuery & q, QcacheEntry_c * pResult )
 	if ( m_iCachedQueries>=m_iMaxQueries )
 	{
 		CSphVector<QcacheEntry_c*> hNew ( 2*m_hData.GetLength() );
-		hNew.Fill ( NULL );
+		hNew.Fill ( QCACHE_NO_ENTRY );
 
 		CSphVector<int> dRemap ( m_hData.GetLength() );
 		dRemap.Fill ( -1 );
@@ -413,8 +413,9 @@ QcacheEntry_c * Qcache_c::Find ( int64_t iIndexId, const CSphQuery & q )
 
 	int64_t tmMin = sphMicroTimer() - int64_t(m_iTtlSec)*1000000;
 	int iLenMask = m_hData.GetLength() - 1;
+	int iLoop = m_hData.GetLength();
 	int iRes = -1;
-	for ( int i = k & iLenMask; m_hData[i]!=QCACHE_NO_ENTRY; i = ( i+1 ) & iLenMask )
+	for ( int i = k & iLenMask; m_hData[i]!=QCACHE_NO_ENTRY && iLoop--!=0; i = ( i+1 ) & iLenMask )
 	{
 		// check that entry is alive
 		QcacheEntry_c * e = m_hData[i]; // shortcut
@@ -593,7 +594,7 @@ int QcacheRanker_c::GetMatches()
 		if ( *p & 128 )
 		{
 			iMatches = p[1];
-			bIndexedWeights =  false;
+			bIndexedWeights = false;
 			p++;
 		}
 		p++;

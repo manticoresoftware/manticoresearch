@@ -6538,6 +6538,36 @@ static void FlattenToRes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, int i
 	}
 }
 
+
+static void RemoveMissedRows ( AggrResult_t & tRes )
+{
+	if ( !tRes.m_dMatchCounts.Last() )
+		return;
+
+	CSphMatch * pStart = tRes.m_dMatches.Begin() + tRes.m_dMatches.GetLength() - tRes.m_dMatchCounts.Last();
+	CSphMatch * pSrc = pStart;
+	CSphMatch * pDst = pStart;
+	const CSphMatch * pEnd = tRes.m_dMatches.Begin() + tRes.m_dMatches.GetLength();
+
+	while ( pSrc<pEnd )
+	{
+		if ( !pSrc->m_pStatic )
+		{
+			tRes.m_tSchema.FreeStringPtrs ( pSrc );
+			pSrc++;
+			continue;
+		}
+
+		Swap ( *pSrc, *pDst );
+		pSrc++;
+		pDst++;
+	}
+
+	tRes.m_dMatchCounts.Last() = pDst - pStart;
+	tRes.m_dMatches.Resize ( pDst - tRes.m_dMatches.Begin() );
+}
+
+
 void SearchHandler_c::RunLocalSearchesMT ()
 {
 	int64_t tmLocal = sphMicroTimer();
@@ -6667,9 +6697,14 @@ void SearchHandler_c::RunLocalSearchesMT ()
 				tRes.m_tStats.Add ( tRaw.m_tStats );
 				tRes.m_iPredictedTime = CalcPredictedTimeMsec ( tRes );
 			}
+			if ( tRaw.m_iBadRows )
+				tRes.m_sWarning.SetSprintf ( "query result is inaccurate because of "INT64_FMT" missed documents", tRaw.m_iBadRows );
 
 			// extract matches from sorter
 			FlattenToRes ( pSorter, tRes, iOrderTag+iQuery-m_iStart );
+
+			if ( tRaw.m_iBadRows )
+				RemoveMissedRows ( tRes );
 
 			// take over the schema from sorter, it doesn't need it anymore
 			tRes.m_tSchema = pSorter->GetSchema(); // can SwapOut
@@ -6986,6 +7021,11 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 
 				// this one seems OK
 				AggrResult_t & tRes = m_dResults[iQuery];
+
+				int64_t iBadRows = m_bMultiQueue ? tStats.m_iBadRows : tRes.m_iBadRows;
+				if ( iBadRows )
+					tRes.m_sWarning.SetSprintf ( "query result is inaccurate because of "INT64_FMT" missed documents", iBadRows );
+
 				// multi-queue only returned one result set meta, so we need to replicate it
 				if ( m_bMultiQueue )
 				{
@@ -7012,6 +7052,9 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 
 				// extract matches from sorter
 				FlattenToRes ( pSorter, tRes, iOrderTag+iQuery-m_iStart );
+
+				if ( iBadRows )
+					RemoveMissedRows ( tRes );
 
 				// move external attributes storage from tStats to actual result
 				tStats.LeakStorages ( tRes );

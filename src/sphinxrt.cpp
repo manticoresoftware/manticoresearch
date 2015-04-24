@@ -5737,7 +5737,15 @@ bool RtIndex_t::EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) cons
 {
 	// might be needed even when we do not have a filter!
 	if ( pCtx->m_bLookupFilter || pCtx->m_bLookupSort )
-		CopyDocinfo ( tMatch, FindDocinfo ( (RtSegment_t*)pCtx->m_pIndexData, tMatch.m_uDocID ) );
+	{
+		const CSphRowitem * pRow = FindDocinfo ( (RtSegment_t*)pCtx->m_pIndexData, tMatch.m_uDocID );
+		if ( !pRow )
+		{
+			pCtx->m_iBadRows++;
+			return true;
+		}
+		CopyDocinfo ( tMatch, pRow );
+	}
 
 	pCtx->CalcFilter ( tMatch ); // FIXME!!! leak of filtered STRING_PTR
 	return pCtx->m_pFilter ? !pCtx->m_pFilter->Eval ( tMatch ) : false;
@@ -6326,7 +6334,7 @@ struct SphFinalMatchCounter_t : ISphMatchProcessor
 	virtual void Process ( CSphMatch * pMatch )
 	{
 		int iMatchSegment = pMatch->m_iTag-1;
-		if ( iMatchSegment>=0 && iMatchSegment<m_iSegments )
+		if ( iMatchSegment>=0 && iMatchSegment<m_iSegments && pMatch->m_pStatic )
 			m_iCount++;
 	}
 };
@@ -6351,7 +6359,7 @@ struct SphFinalMatchCopy_t : ISphMatchProcessor
 	virtual void Process ( CSphMatch * pMatch )
 	{
 		const int iMatchSegment = pMatch->m_iTag-1;
-		if ( m_bForce || ( iMatchSegment>=0 && iMatchSegment<m_iSegments ) )
+		if ( pMatch->m_pStatic && ( m_bForce || ( iMatchSegment>=0 && iMatchSegment<m_iSegments ) ) )
 		{
 			assert ( m_pStorage+m_iStaticSize<=m_pEnd );
 
@@ -6399,6 +6407,9 @@ struct SphFinalArenaCopy_t : ISphMatchProcessor
 	virtual void Process ( CSphMatch * pMatch )
 	{
 		assert ( pMatch->m_iTag>=1 && pMatch->m_iTag<m_dSegments.GetLength()+m_dDiskStrings.GetLength()+1 );
+
+		if ( !pMatch->m_pStatic )
+			return;
 
 		const int iSegCount = m_dSegments.GetLength();
 		const int iStorageSrc = pMatch->m_iTag-1;
@@ -6752,6 +6763,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		dDiskMva[iChunk] = tChunkResult.m_pMva;
 		if ( tChunkResult.m_bArenaProhibit )
 			tMvaArenaFlag.BitSet ( iChunk );
+		pResult->m_iBadRows += tChunkResult.m_iBadRows;
 
 		if ( iChunk && tmMaxTimer>0 && sphMicroTimer()>=tmMaxTimer )
 		{
@@ -7035,7 +7047,10 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 							const CSphRowitem * pRow = FindDocinfo ( tGuard.m_dRamChunks[iSeg], pMatch[i].m_uDocID );
 							assert ( pRanker->IsCache() || pRow );
 							if ( !pRow )
+							{
+								tCtx.m_iBadRows++;
 								continue;
+							}
 							CopyDocinfo ( pMatch[i], pRow );
 						}
 

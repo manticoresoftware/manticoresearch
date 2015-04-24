@@ -16905,8 +16905,8 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath )
 	// might be no dictionary at this point for old index format
 	bool bWordDict = m_pDict && m_pDict->GetSettings().m_bWordDict;
 
-	// reading here only checkpoint and wordlist infixes
-	if ( !m_bDebugCheck && !m_tWordlist.Preread ( GetIndexFileName("spi").cstr() , m_uVersion, bWordDict, m_sLastError ) )
+	// only checkpoint and wordlist infixes are actually read here; dictionary itself is just mapped
+	if ( !m_tWordlist.Preread ( GetIndexFileName("spi").cstr() , m_uVersion, bWordDict, m_sLastError ) )
 		return false;
 
 	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN )

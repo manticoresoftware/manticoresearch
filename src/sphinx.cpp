@@ -10577,17 +10577,6 @@ BYTE PrereadMapping ( const char * sIndexName, const char * sFor, bool bMlock, b
 	if ( bOnDisk || tBuf.IsEmpty() )
 		return 0xff;
 
-	if ( bMlock )
-	{
-		CSphString sWarning;
-		if ( tBuf.MemLock ( sWarning ) )
-			return 0xff;
-
-		// fall back to regular caching path
-		sphLogDebug ( "index '%s': %s for %s", sIndexName, sWarning.cstr(), sFor );
-	}
-
-
 	volatile BYTE * pCur = (BYTE *)tBuf.GetWritePtr();
 	const BYTE * pEnd = (BYTE *)tBuf.GetWritePtr() + tBuf.GetLengthBytes();
 	const int iHalfPage = 2048;
@@ -10597,6 +10586,11 @@ BYTE PrereadMapping ( const char * sIndexName, const char * sFor, bool bMlock, b
 		uHash ^= *pCur;
 
 	uHash ^= *(pEnd-1);
+
+	CSphString sWarning;
+	if ( bMlock && !tBuf.MemLock ( sWarning ) )
+		sphWarning ( "index '%s': %s for %s", sIndexName, sWarning.cstr(), sFor );
+
 	return uHash;
 }
 

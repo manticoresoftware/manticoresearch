@@ -2376,7 +2376,7 @@ public:
 	bool MemLock ( CSphString & sWarning )
 	{
 #if USE_WINDOWS
-		m_bMemLocked = ( VirtualLock ( m_pData, GetLengthBytes() )==0 );
+		m_bMemLocked = ( VirtualLock ( m_pData, GetLengthBytes() )!=0 );
 		if ( !m_bMemLocked )
 			sWarning.SetSprintf ( "mlock() failed: errno %d", GetLastError() );
 
@@ -2402,7 +2402,7 @@ protected:
 
 		m_bMemLocked = false;
 #if USE_WINDOWS
-		bool bOk = ( VirtualUnlock ( m_pData, GetLengthBytes() )==0 );
+		bool bOk = ( VirtualUnlock ( m_pData, GetLengthBytes() )!=0 );
 		if ( !bOk )
 			sphWarn ( "munlock() failed: errno %d", GetLastError() );
 

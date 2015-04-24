@@ -30827,7 +30827,7 @@ int sphDictCmp ( const char * pStr1, int iLen1, const char * pStr2, int iLen2 )
 	assert ( pStr1 && pStr2 );
 	assert ( iLen1 && iLen2 );
 	const int iCmpLen = Min ( iLen1, iLen2 );
-	return strncmp ( pStr1, pStr2, iCmpLen );
+	return memcmp ( pStr1, pStr2, iCmpLen );
 }
 
 int sphDictCmpStrictly ( const char * pStr1, int iLen1, const char * pStr2, int iLen2 )
@@ -30835,7 +30835,7 @@ int sphDictCmpStrictly ( const char * pStr1, int iLen1, const char * pStr2, int 
 	assert ( pStr1 && pStr2 );
 	assert ( iLen1 && iLen2 );
 	const int iCmpLen = Min ( iLen1, iLen2 );
-	const int iCmpRes = strncmp ( pStr1, pStr2, iCmpLen );
+	const int iCmpRes = memcmp ( pStr1, pStr2, iCmpLen );
 	return iCmpRes==0 ? iLen1-iLen2 : iCmpRes;
 }
 

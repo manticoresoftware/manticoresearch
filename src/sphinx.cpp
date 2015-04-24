@@ -20397,6 +20397,14 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				SphDocID_t uLastMvaID = 0;
 				while ( rdMva.GetPos()<iMvaEnd )
 				{
+					// current row does not reference any MVA values
+					// lets mark it as checked and bail
+					if ( !bHasValues )
+					{
+						bLastIDChecked = true;
+						break;
+					}
+
 					int64_t iLastPos = rdMva.GetPos();
 					const SphDocID_t uMvaID = rdMva.GetDocid();
 					if ( uMvaID>uLastID )

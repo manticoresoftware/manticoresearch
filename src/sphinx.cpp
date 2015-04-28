@@ -9959,7 +9959,7 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 						? JSON_DOUBLE
 						: ( dBigints.BitGet ( iCol ) ? JSON_INT64 : JSON_INT32 );
 
-					if ( !sphJsonInplaceUpdate ( eType, dValues[iCol], dExpr[iCol].Ptr(), m_tString.GetWritePtr(), pEntry, true ) )
+					if ( !sphJsonInplaceUpdate ( eType, dValues[iCol], dExpr[iCol].Ptr(), m_tString.GetWritePtr(), pEntry, false ) )
 					{
 						sError.SetSprintf ( "attribute '%s' can not be updated (not found or incompatible types) ", tUpd.m_dAttrs[iCol] );
 						return -1;

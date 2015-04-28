@@ -100,6 +100,7 @@ INSERT INTO `test_table` VALUES
 <!-- regression stopwords missed on disk chunk save (either regular or forced) -->
 <sphinxql>flush ramchunk rt</sphinxql>
 <sphinxql>select * from rt where match ('a bird')</sphinxql>
+<sphinxql>call keywords ('a bird', 'rt', 1)</sphinxql>
 </sphqueries>
 
 </test>

@@ -7298,7 +7298,7 @@ struct CSphRtQueryFilter : public ISphQueryFilter, public ISphNoncopyable
 };
 
 
-bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const char * sQuery, bool bGetStats, bool bFillOnly, CSphString * pError, const SphChunkGuard_t & tGuard ) const
+bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const char * sQuery, bool bGetStats, bool bFillOnly, CSphString * , const SphChunkGuard_t & tGuard ) const
 {
 	if ( !bFillOnly )
 		dKeywords.Resize ( 0 );
@@ -7370,48 +7370,6 @@ bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 	// get stats from disk chunks too
 	if ( !bGetStats )
 		return true;
-
-	bool bSame = !bFillOnly; // check only for GetKeywords path
-	ARRAY_FOREACH_COND ( iChunk, tGuard.m_dDiskChunks, bSame )
-	{
-		const CSphIndex * pIndex = tGuard.m_dDiskChunks[iChunk];
-		if ( m_pTokenizer->GetSettingsFNV()==pIndex->GetTokenizer()->GetSettingsFNV() &&
-			m_pDict->GetSettingsFNV()==pIndex->GetDictionary()->GetSettingsFNV() )
-			continue;
-
-		// handle settings difference
-		bSame = false;
-		CSphVector<CSphKeywordInfo> dKeywordsDisk;
-		if ( pError && pIndex->GetKeywords ( dKeywordsDisk, sQuery, false, pError ) )
-		{
-			if ( dKeywords.GetLength()!=dKeywordsDisk.GetLength() )
-				pError->SetSprintf ( "INTERNAL ERROR: keyword count mismatch (ram=%d, disk[%d]=%d)",
-					dKeywords.GetLength(), iChunk, dKeywordsDisk.GetLength() );
-
-			ARRAY_FOREACH ( i, dKeywords )
-			{
-				if ( dKeywords[i].m_sTokenized!=dKeywordsDisk[i].m_sTokenized )
-				{
-					pError->SetSprintf ( "INTERNAL ERROR: tokenized keyword mismatch (n=%d, ram=%s, disk[%d]=%s)",
-						i, dKeywords[i].m_sTokenized.cstr(), iChunk, dKeywordsDisk[i].m_sTokenized.cstr() );
-					return false;
-				}
-
-				if ( dKeywords[i].m_sNormalized!=dKeywordsDisk[i].m_sNormalized )
-				{
-					pError->SetSprintf ( "INTERNAL ERROR: normalized keyword mismatch (n=%d, ram=%s, disk[%d]=%s)",
-						i, dKeywords[i].m_sNormalized.cstr(), iChunk, dKeywordsDisk[i].m_sNormalized.cstr() );
-					return false;
-				}
-			}
-		}
-	}
-
-	if ( !bSame && !bFillOnly )
-	{
-		pError->SetSprintf ( "INTERNAL ERROR: different settings of disk and RAM parts of RT index" );
-		return false;
-	}
 
 	ARRAY_FOREACH ( iChunk, tGuard.m_dDiskChunks )
 		tGuard.m_dDiskChunks[iChunk]->FillKeywords ( dKeywords );

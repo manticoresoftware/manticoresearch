@@ -20367,6 +20367,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 			if ( dMvaItems.GetLength() )
 			{
+				bool bMvaFix = false;
 				DWORD uMvaSpaFixed = 0;
 				const CSphRowitem * pAttrs = DOCINFO2ATTRS ( dRow.Begin() );
 				bool bHasValues = false;
@@ -20385,12 +20386,15 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 							iRow, iItem, uLastID, uOffset ));
 					}
 
-					if ( uOffset && !bArena && uOffset<iMvaEnd && !uMvaSpaFixed )
+					if ( uOffset && !bArena && uOffset<iMvaEnd && !bMvaFix )
+					{
 						uMvaSpaFixed = uOffset - sizeof(SphDocID_t) / sizeof(DWORD);
+						bMvaFix = true;
+					}
 				}
 
 				// MVAs ptr recovery from previous errors only if current spa record is valid
-				if ( rdMva.GetPos()!=sizeof(DWORD)*uMvaSpaFixed && bIsSpaValid && uMvaSpaFixed )
+				if ( rdMva.GetPos()!=sizeof(DWORD)*uMvaSpaFixed && bIsSpaValid && bMvaFix )
 					rdMva.SeekTo ( sizeof(DWORD)*uMvaSpaFixed, READ_NO_SIZE_HINT );
 
 				bool bLastIDChecked = false;

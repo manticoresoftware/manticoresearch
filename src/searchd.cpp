@@ -9854,9 +9854,11 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 
 	const int iQueries = m_iEnd-m_iStart+1;
 	const ServedIndex_t * pServed = UseIndex ( iLocal );
-	if ( !pServed )
+	if ( !pServed || !pServed->m_bEnabled )
 	{
 		// FIXME! submit a failure?
+		if ( pServed )
+			ReleaseIndex ( iLocal );
 		return false;
 	}
 	assert ( pServed->m_pIndex );
@@ -9908,7 +9910,7 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 		if ( !pKillListIndex )
 			continue;
 
-		if ( pKillListIndex->m_pIndex->GetKillListSize() )
+		if ( pKillListIndex->m_bEnabled && pKillListIndex->m_pIndex->GetKillListSize() )
 		{
 			KillListTrait_t & tElem = dKillist.Add ();
 			tElem.m_pBegin = pKillListIndex->m_pIndex->GetKillList();
@@ -9970,11 +9972,14 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 		int iIndexWeight = m_dLocal[iLocal].m_iWeight;
 
 		const ServedIndex_t * pServed = UseIndex ( iLocal );
-		if ( !pServed )
+		if ( !pServed || !pServed->m_bEnabled )
 		{
 			if ( sDistName )
 				for ( int i=m_iStart; i<=m_iEnd; i++ )
 					m_dFailuresSet[i].SubmitEx ( sDistName, "local index %s missing", sLocal );
+
+			if ( pServed )
+				ReleaseIndex ( iLocal );
 			continue;
 		}
 
@@ -10082,7 +10087,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 			if ( !pKillListIndex )
 				continue;
 
-			if ( pKillListIndex->m_pIndex->GetKillListSize() )
+			if ( pKillListIndex->m_bEnabled && pKillListIndex->m_pIndex->GetKillListSize() )
 			{
 				KillListTrait_t & tElem = dKillist.Add ();
 				tElem.m_pBegin = pKillListIndex->m_pIndex->GetKillList();
@@ -10265,11 +10270,11 @@ void SearchHandler_c::SetupLocalDF ( int iStart, int iEnd )
 	ARRAY_FOREACH_COND ( i, m_dLocal, bGlobalIDF )
 	{
 		const ServedIndex_t * pIndex = UseIndex ( i );
-		if ( pIndex )
-		{
+		if ( pIndex && pIndex->m_bEnabled )
 			bGlobalIDF = !pIndex->m_sGlobalIDFPath.IsEmpty();
+
+		if ( pIndex )
 			ReleaseIndex ( i );
-		}
 	}
 	// bail out on all indexes with global idf set
 	if ( bGlobalIDF )
@@ -10317,8 +10322,12 @@ void SearchHandler_c::SetupLocalDF ( int iStart, int iEnd )
 	ARRAY_FOREACH ( i, m_dLocal )
 	{
 		const ServedIndex_t * pIndex = UseIndex ( i );
-		if ( !pIndex )
+		if ( !pIndex || !pIndex->m_bEnabled )
+		{
+			if ( pIndex )
+				ReleaseIndex ( i );
 			continue;
+		}
 
 		dLocal.Add();
 		dLocal.Last().m_iLocal = i;
@@ -10334,9 +10343,14 @@ void SearchHandler_c::SetupLocalDF ( int iStart, int iEnd )
 	CSphVector < CSphKeywordInfo > dKeywords;
 	ARRAY_FOREACH ( i, dLocal )
 	{
-		const ServedIndex_t * pIndex = UseIndex ( dLocal[i].m_iLocal );
-		if ( !pIndex )
+		int iLocalIndex = dLocal[i].m_iLocal;
+		const ServedIndex_t * pIndex = UseIndex ( iLocalIndex );
+		if ( !pIndex || !pIndex->m_bEnabled )
+		{
+			if ( pIndex )
+				ReleaseIndex ( iLocalIndex );
 			continue;
+		}
 
 		m_iTotalDocs += pIndex->m_pIndex->GetStats().m_iTotalDocuments;
 
@@ -10602,6 +10616,9 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		ARRAY_FOREACH ( i, m_dLocal )
 		{
 			const ServedIndex_t * pServedIndex = UseIndex ( i );
+			bool bEnabled = pServedIndex && pServedIndex->m_bEnabled;
+			if ( pServedIndex )
+				ReleaseIndex ( i );
 
 			// check that it exists
 			if ( !pServedIndex )
@@ -10616,8 +10633,6 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				return;
 			}
 
-			bool bEnabled = pServedIndex->m_bEnabled;
-			ReleaseIndex ( i );
 			// if it exists but is not enabled, remove it from the list and force recheck
 			if ( !bEnabled )
 				m_dLocal.Remove ( i-- );
@@ -10649,16 +10664,22 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		bool bAllEqual = true;
 
 		const ServedIndex_t * pFirstIndex = UseIndex ( 0 );
-		if ( !pFirstIndex )
+		if ( !pFirstIndex || !pFirstIndex->m_bEnabled )
+		{
+			if ( pFirstIndex )
+				ReleaseIndex ( 0 );
 			break;
+		}
 
 		const CSphSchema & tFirstSchema = pFirstIndex->m_pIndex->GetMatchSchema();
 		for ( int i=1; i<m_dLocal.GetLength() && bAllEqual; i++ )
 		{
 			const ServedIndex_t * pNextIndex = UseIndex ( i );
-			if ( !pNextIndex )
+			if ( !pNextIndex || !pNextIndex->m_bEnabled )
 			{
 				bAllEqual = false;
+				if ( pNextIndex )
+					ReleaseIndex ( i );
 				break;
 			}
 

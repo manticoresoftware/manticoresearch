@@ -1147,6 +1147,7 @@ private:
 	int							m_iWordsCheckpoint;
 	int							m_iMaxCodepointLength;
 	ISphTokenizer *				m_pTokenizerIndexing;
+	bool						m_bLoadRamPassedOk;
 
 	bool						m_bMlock;
 	bool						m_bOndiskAllAttr;
@@ -1301,6 +1302,7 @@ RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int6
 	m_bMlock = false;
 	m_bOndiskAllAttr = false;
 	m_bOndiskPoolAttr = false;
+	m_bLoadRamPassedOk = true;
 
 #ifndef NDEBUG
 	// check that index cols are static
@@ -1316,7 +1318,7 @@ RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int6
 RtIndex_t::~RtIndex_t ()
 {
 	int64_t tmSave = sphMicroTimer();
-	bool bValid = m_pTokenizer && m_pDict;
+	bool bValid = m_pTokenizer && m_pDict && m_bLoadRamPassedOk;
 
 	if ( bValid )
 	{
@@ -4195,6 +4197,16 @@ void RtIndex_t::SetMemorySettings ( bool bMlock, bool bOndiskAttrs, bool bOndisk
 }
 
 
+static bool CheckVectorLength ( int iLen, int64_t iSaneLen, const char * sAt, CSphString & sError )
+{
+	if ( iLen>=0 && iLen<iSaneLen )
+		return true;
+
+	sError.SetSprintf ( "broken index, %s length overflow (len=%d, max="INT64_FMT")", sAt, iLen, iSaneLen );
+	return false;
+}
+
+
 template < typename T > struct IsPodType { enum { Value = false }; };
 template<> struct IsPodType<char> { enum { Value = true }; };
 template<> struct IsPodType<BYTE> { enum { Value = true }; };
@@ -4215,12 +4227,18 @@ static void SaveVector ( CSphWriter & tWriter, const CSphVector < T, P > & tVect
 
 
 template < typename T, typename P >
-static void LoadVector ( CSphReader & tReader, CSphVector < T, P > & tVector )
+static bool LoadVector ( CSphReader & tReader, CSphVector < T, P > & tVector, int64_t iSaneLen, const char * sAt, CSphString & sError )
 {
 	STATIC_ASSERT ( IsPodType<T>::Value, NON_POD_VECTORS_ARE_UNSERIALIZABLE );
-	tVector.Resize ( tReader.GetDword() ); // FIXME? sanitize?
+	int iSize = tReader.GetDword();
+	if ( !CheckVectorLength ( iSize, iSaneLen, sAt, sError ) )
+		return false;
+
+	tVector.Resize ( iSize );
 	if ( tVector.GetLength() )
 		tReader.GetBytes ( tVector.Begin(), tVector.GetLength()*sizeof(T) );
+
+	return true;
 }
 
 
@@ -4328,6 +4346,7 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 	if ( !sphIsReadable ( sChunk.cstr(), &m_sLastError ) )
 		return true;
 
+	m_bLoadRamPassedOk = false;
 	m_tKlist.LoadFromFile ( m_sPath.cstr() );
 
 	CSphAutoreader rdChunk;
@@ -4343,9 +4362,18 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 		return false;
 	}
 
+	int64_t iFileSize = rdChunk.GetFilesize();
+	int64_t iSaneVecSize = Min ( iFileSize, INT_MAX / 2 );
+	int64_t iSaneTightVecSize = Min ( iFileSize, INT_MAX - (int)( INT_MAX / 1.2f ) );
+
 	bool bHasMorphology = ( m_pDict && m_pDict->HasMorphology() ); // fresh and old-format index still has no dictionary at this point
 	int iSegmentSeq = rdChunk.GetDword();
-	m_dRamChunks.Resize ( rdChunk.GetDword() ); // FIXME? sanitize
+
+	int iSegmentCount = rdChunk.GetDword();
+	if ( !CheckVectorLength ( iSegmentCount, iSaneVecSize, "ram-chunks", m_sLastError ) )
+		return false;
+	m_dRamChunks.Resize ( iSegmentCount );
+	m_dRamChunks.Fill ( NULL );
 
 	ARRAY_FOREACH ( iSeg, m_dRamChunks )
 	{
@@ -4353,14 +4381,19 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 		m_dRamChunks[iSeg] = pSeg;
 
 		pSeg->m_iTag = rdChunk.GetDword ();
-		LoadVector ( rdChunk, pSeg->m_dWords );
-		if ( uVersion>=5 && m_bKeywordDict )
-		{
-			LoadVector ( rdChunk, pSeg->m_dKeywordCheckpoints );
-		}
+		if ( !LoadVector ( rdChunk, pSeg->m_dWords, iSaneTightVecSize, "ram-words", m_sLastError ) )
+			return false;
+
+		if ( uVersion>=5 && m_bKeywordDict && !LoadVector ( rdChunk, pSeg->m_dKeywordCheckpoints, iSaneVecSize, "ram-checkpoints", m_sLastError ) )
+				return false;
 
 		const char * pCheckpoints = (const char *)pSeg->m_dKeywordCheckpoints.Begin();
-		pSeg->m_dWordCheckpoints.Resize ( rdChunk.GetDword() );
+
+		int iCheckpointCount = rdChunk.GetDword();
+		if ( !CheckVectorLength ( iCheckpointCount, iSaneVecSize, "ram-checkpoints", m_sLastError ) )
+			return false;
+
+		pSeg->m_dWordCheckpoints.Resize ( iCheckpointCount );
 		ARRAY_FOREACH ( i, pSeg->m_dWordCheckpoints )
 		{
 			pSeg->m_dWordCheckpoints[i].m_iOffset = (int)rdChunk.GetOffset();
@@ -4373,18 +4406,26 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 				pSeg->m_dWordCheckpoints[i].m_uWordID = (SphWordID_t)uOff;
 			}
 		}
-		LoadVector ( rdChunk, pSeg->m_dDocs );
-		LoadVector ( rdChunk, pSeg->m_dHits );
+		if ( !LoadVector ( rdChunk, pSeg->m_dDocs, iSaneTightVecSize, "ram-doclist", m_sLastError ) )
+			return false;
+
+		if ( !LoadVector ( rdChunk, pSeg->m_dHits, iSaneTightVecSize, "ram-hitlist", m_sLastError ) )
+			return false;
+
 		pSeg->m_iRows = rdChunk.GetDword();
 		pSeg->m_iAliveRows = rdChunk.GetDword();
 		// warning! m_dRows saved in id32 is NOT consistent for id64!
 		// (the Stride for id32 is 1 DWORD shorter than for id64)
 		// the only usage of this BLOB is to save id32 disk-chunk.
-		LoadVector ( rdChunk, pSeg->m_dRows );
+		if ( !LoadVector ( rdChunk, pSeg->m_dRows, iSaneTightVecSize, "ram-attributes", m_sLastError ) )
+			return false;
 
 		if ( uVersion>=9 )
 		{
 			int iLen = rdChunk.GetDword();
+			if ( !CheckVectorLength ( iLen, Min ( iFileSize, INT_MAX ), "ram-killlist", m_sLastError ) )
+				return false;
+
 			if ( iLen )
 			{
 				pSeg->m_pKlist->m_dKilled.Reset ( iLen );
@@ -4397,6 +4438,9 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 				rdChunk.GetDword(); // Hash.used
 
 			int iLen = rdChunk.GetDword();
+			if ( !CheckVectorLength ( iLen, iSaneVecSize, "ram-killlist", m_sLastError ) )
+				return false;
+
 			CSphVector<SphDocID_t> dLegacy;
 			for ( int i=0; i<iLen; i++ )
 			{
@@ -4413,14 +4457,16 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 			}
 		}
 
-		LoadVector ( rdChunk, pSeg->m_dStrings );
-		if ( uVersion>=3 )
-			LoadVector ( rdChunk, pSeg->m_dMvas );
+		if ( !LoadVector ( rdChunk, pSeg->m_dStrings, iSaneTightVecSize, "ram-strings", m_sLastError ) )
+			return false;
+		if ( uVersion>=3 && !LoadVector ( rdChunk, pSeg->m_dMvas, iSaneTightVecSize, "ram-mva", m_sLastError ) )
+			return false;
 
 		// infixes
 		if ( uVersion>=7 )
 		{
-			LoadVector ( rdChunk, pSeg->m_dInfixFilterCP );
+			if ( !LoadVector ( rdChunk, pSeg->m_dInfixFilterCP, iSaneTightVecSize, "ram-infixes", m_sLastError ) )
+				return false;
 			if ( bRebuildInfixes )
 				BuildSegmentInfixes ( pSeg, bHasMorphology );
 		}
@@ -4431,6 +4477,7 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 	RtSegment_t::m_tSegmentSeq.Unlock();
 	if ( rdChunk.GetErrorFlag() )
 		return false;
+	m_bLoadRamPassedOk = true;
 	return true;
 }
 

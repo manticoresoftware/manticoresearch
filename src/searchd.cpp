@@ -7224,7 +7224,7 @@ void SearchHandler_c::SetupLocalDF ( int iStart, int iEnd )
 	ARRAY_FOREACH ( i, dLocal )
 	{
 		int iLocalIndex = dLocal[i].m_iLocal;
-		const ServedIndex_t * pIndex = UseIndex ( iLocalIndex );
+		const ServedIndex_c * pIndex = UseIndex ( iLocalIndex );
 		if ( !pIndex || !pIndex->m_bEnabled )
 		{
 			if ( pIndex )

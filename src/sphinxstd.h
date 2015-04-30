@@ -759,7 +759,10 @@ public:
 		if ( !iLimit )
 			iLimit = MAGIC_INITIAL_LIMIT;
 		while ( iLimit<iNewLimit )
+		{
 			iLimit *= 2;
+			assert ( iLimit>0 );
+		}
 		return iLimit;
 	}
 };
@@ -1162,9 +1165,15 @@ public:
 		if ( !iLimit )
 			iLimit = CSphVectorPolicy<T>::MAGIC_INITIAL_LIMIT;
 		while ( iLimit<iNewLimit && iLimit<SLOW_GROW_TRESHOLD )
+		{
 			iLimit *= 2;
+			assert ( iLimit>0 );
+		}
 		while ( iLimit<iNewLimit )
+		{
 			iLimit = (int)( iLimit*1.2f );
+			assert ( iLimit>0 );
+		}
 		return iLimit;
 	}
 };

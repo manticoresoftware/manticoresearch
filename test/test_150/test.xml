@@ -136,6 +136,32 @@ index kw_infix_morph
 	morphology = stem_en
 }
 
+source plain_prefix_limit
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query_pre = SET NAMES utf8
+	sql_query		= select 1000 as id, 1 as gid, 'hello two world' as text
+	sql_attr_uint	= gid
+}
+index plain_prefix_limit
+{
+	source			= plain_prefix_limit
+	path			= <data_path/>/plain_prefix_limit
+	dict			= keywords
+	min_prefix_len	= 4
+}
+index rt_prefix_limit
+{
+	type			= rt
+	path			= <data_path/>/rt_prefix_limit
+	docinfo			= extern
+	rt_field		= data
+	rt_attr_uint	= idd
+	dict			= keywords
+	min_prefix_len	= 4
+}
+
 </config>
 
 <db_create>
@@ -186,6 +212,13 @@ create table test_table
 <sphinxql>select * from kw_infix where match('1')</sphinxql>
 <!--regression exact form vs infix -->
 <sphinxql>select * from kw_infix_morph where match('r*')</sphinxql>
+
+<!--regression min_prefix_len at plain vs rt -->
+<sphinxql>insert into rt_prefix_limit values ( 1000, 'hello two world', 23 )</sphinxql>
+<sphinxql>select * from plain_prefix_limit where match('hello two* world')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from rt_prefix_limit where match('hello two* world')</sphinxql>
+<sphinxql>show meta</sphinxql>
 
 </sphqueries>
 

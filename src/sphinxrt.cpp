@@ -1246,7 +1246,7 @@ public:
 	const CSphRowitem *			FindDocinfo ( const RtSegment_t * pSeg, SphDocID_t uDocID ) const;
 
 	bool						RtQwordSetup ( RtQword_t * pQword, int iSeg, const SphChunkGuard_t & tGuard ) const;
-	static bool					RtQwordSetupSegment ( RtQword_t * pQword, const RtSegment_t * pSeg, bool bSetup, bool bWordDict, int iWordsCheckpoint, const CSphFixedVector<SphDocID_t> & dKill );
+	static bool					RtQwordSetupSegment ( RtQword_t * pQword, const RtSegment_t * pSeg, bool bSetup, bool bWordDict, int iWordsCheckpoint, const CSphFixedVector<SphDocID_t> & dKill, const CSphIndexSettings & tSettings );
 
 	CSphDict *					SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict, ISphTokenizer * pTokenizer, bool bAddSpecial ) const;
 	CSphDict *					SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict, ISphTokenizer * pTokenizer ) const;
@@ -5866,7 +5866,7 @@ const CSphRowitem * RtIndex_t::FindDocinfo ( const RtSegment_t * pSeg, SphDocID_
 // for RT queries, we setup qwords several times
 // first pass (with NULL segment arg) should sum all stats over all segments
 // others passes (with non-NULL segments) should setup specific segment (including local stats)
-bool RtIndex_t::RtQwordSetupSegment ( RtQword_t * pQword, const RtSegment_t * pCurSeg, bool bSetup, bool bWordDict, int iWordsCheckpoint, const CSphFixedVector<SphDocID_t> & dKill )
+bool RtIndex_t::RtQwordSetupSegment ( RtQword_t * pQword, const RtSegment_t * pCurSeg, bool bSetup, bool bWordDict, int iWordsCheckpoint, const CSphFixedVector<SphDocID_t> & dKill, const CSphIndexSettings & tSettings )
 {
 	if ( !pCurSeg )
 		return false;
@@ -5874,12 +5874,14 @@ bool RtIndex_t::RtQwordSetupSegment ( RtQword_t * pQword, const RtSegment_t * pC
 	SphWordID_t uWordID = pQword->m_uWordID;
 	const char * sWord = pQword->m_sDictWord.cstr();
 	int iWordLen = pQword->m_sDictWord.Length();
+	bool bPrefix = false;
 	if ( bWordDict && iWordLen && sWord[iWordLen-1]=='*' ) // crc star search emulation
 	{
 		iWordLen = iWordLen-1;
+		bPrefix = true;
 	}
 
-	if ( !iWordLen )
+	if ( !iWordLen || ( bPrefix && tSettings.m_iMinPrefixLen && iWordLen<=tSettings.m_iMinPrefixLen ) )
 		return false;
 
 	// no checkpoints - check all words
@@ -6302,7 +6304,7 @@ bool RtIndex_t::RtQwordSetup ( RtQword_t * pQword, int iSeg, const SphChunkGuard
 {
 	// segment-specific setup pass
 	if ( iSeg>=0 )
-		return RtQwordSetupSegment ( pQword, tGuard.m_dRamChunks[iSeg], true, m_bKeywordDict, m_iWordsCheckpoint, tGuard.m_dKill[iSeg]->m_dKilled );
+		return RtQwordSetupSegment ( pQword, tGuard.m_dRamChunks[iSeg], true, m_bKeywordDict, m_iWordsCheckpoint, tGuard.m_dKill[iSeg]->m_dKilled, m_tSettings );
 
 	// stat-only pass
 	// loop all segments, gather stats, do not setup anything
@@ -6315,7 +6317,7 @@ bool RtIndex_t::RtQwordSetup ( RtQword_t * pQword, int iSeg, const SphChunkGuard
 	// because if all (!) segments miss this word, we must notify the caller, right?
 	bool bFound = false;
 	ARRAY_FOREACH ( i, tGuard.m_dRamChunks )
-		bFound |= RtQwordSetupSegment ( pQword, tGuard.m_dRamChunks[i], false, m_bKeywordDict, m_iWordsCheckpoint, tGuard.m_dKill[i]->m_dKilled );
+		bFound |= RtQwordSetupSegment ( pQword, tGuard.m_dRamChunks[i], false, m_bKeywordDict, m_iWordsCheckpoint, tGuard.m_dKill[i]->m_dKilled, m_tSettings );
 
 	// sanity check
 	assert (!( bFound==true && pQword->m_iDocs==0 ) );
@@ -7308,7 +7310,7 @@ void RtIndex_t::AddKeywordStats ( BYTE * sWord, const BYTE * sTokenized, CSphDic
 		pQueryWord->m_sWord = (const char *)sTokenized;
 		pQueryWord->m_sDictWord = (const char *)sWord;
 		ARRAY_FOREACH ( iSeg, tGuard.m_dRamChunks )
-			RtQwordSetupSegment ( pQueryWord, tGuard.m_dRamChunks[iSeg], false, m_bKeywordDict, m_iWordsCheckpoint, tGuard.m_dKill[iSeg]->m_dKilled );
+			RtQwordSetupSegment ( pQueryWord, tGuard.m_dRamChunks[iSeg], false, m_bKeywordDict, m_iWordsCheckpoint, tGuard.m_dKill[iSeg]->m_dKilled, m_tSettings );
 	}
 
 	CSphKeywordInfo & tInfo = dKeywords.Add();
@@ -7406,7 +7408,7 @@ bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 				tQword.m_sWord = tInfo.m_sTokenized;
 				tQword.m_sDictWord = (const char *)sWord;
 				ARRAY_FOREACH ( iSeg, tGuard.m_dRamChunks )
-					RtQwordSetupSegment ( &tQword, tGuard.m_dRamChunks[iSeg], false, m_bKeywordDict, m_iWordsCheckpoint, tGuard.m_dKill[iSeg]->m_dKilled );
+					RtQwordSetupSegment ( &tQword, tGuard.m_dRamChunks[iSeg], false, m_bKeywordDict, m_iWordsCheckpoint, tGuard.m_dKill[iSeg]->m_dKilled, m_tSettings );
 
 				tInfo.m_iDocs += tQword.m_iDocs;
 				tInfo.m_iHits += tQword.m_iHits;

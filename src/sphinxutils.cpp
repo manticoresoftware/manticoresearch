@@ -54,7 +54,7 @@
 
 static char * ltrim ( char * sLine )
 {
-	while ( *sLine && isspace(*sLine) )
+	while ( *sLine && sphIsSpace(*sLine) )
 		sLine++;
 	return sLine;
 }
@@ -63,7 +63,7 @@ static char * ltrim ( char * sLine )
 static char * rtrim ( char * sLine )
 {
 	char * p = sLine + strlen(sLine) - 1;
-	while ( p>=sLine && isspace(*p) )
+	while ( p>=sLine && sphIsSpace(*p) )
 		p--;
 	p[1] = '\0';
 	return sLine;

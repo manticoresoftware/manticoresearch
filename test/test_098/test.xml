@@ -96,7 +96,7 @@ source src_cht
 {
 	type			= mysql
 	<sql_settings/>
-	sql_query		= SELECT 1, 'Й Ц У К Е Н Г Ш Щ З Х139Ъ' UNION SELECT 2, 'Ф Ы В А П Р О Л Д Ж Э' UNION SELECT 3, 'Я Ч С М И Т Ь Б Ю Ё' UNION SELECT 11, 'й ц у к е н г ш щ з х ъ' UNION SELECT 12, 'ф ы в а п р о л д ж э' UNION SELECT 13, 'я086ч с м и т ь б ю ё' UNION SELECT 101, 'Q W E R T Y U I O P' UNION SELECT 102, 'A S D F G H J K L' UNION SELECT 103, 'Z X C V B N_M' UNION  SELECT 111, 'q w e r t y u i o p' UNION SELECT 112, 'a_s d f g h j k l' UNION SELECT 113, 'z x c v b n m'
+	sql_query		= SELECT 1, 'Й Ц У К Е Н Г Ш Щ З Х139Ъ' f UNION SELECT 2, 'Ф Ы В А П Р О Л Д Ж Э' UNION SELECT 3, 'Я Ч С М И Т Ь Б Ю Ё' UNION SELECT 11, 'й ц у к е н г ш щ з х ъ' UNION SELECT 12, 'ф ы в а п р о л д ж э' UNION SELECT 13, 'я086ч с м и т ь б ю ё' UNION SELECT 101, 'Q W E R T Y U I O P' UNION SELECT 102, 'A S D F G H J K L' UNION SELECT 103, 'Z X C V B N_M' UNION  SELECT 111, 'q w e r t y u i o p' UNION SELECT 112, 'a_s d f g h j k l' UNION SELECT 113, 'z x c v b n m'
 }
 
 index cht

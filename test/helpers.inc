@@ -375,7 +375,7 @@ function CompareResultSetFixup ( &$set, $roundoff, $variants_match )
 			if ( @$set["resarray"] )
 			{
 				for ( $i=0; $i<count($set); $i++ )
-					unset ( $set["matches"][$id]["weight"] );
+					unset ( $set["matches"][$i]["weight"] );
 			} else
 			{
 				foreach ( $set["matches"] as $id=>$match )
@@ -2073,7 +2073,7 @@ class SphinxConfig
 			$parent = 4;
 			$content = 5;
 			$epilog = 6;
-			$pattern = "/.*?(source\s+(\S*?)(\s*\:\s*(\S*?))?\s*\{(.*?)\})(.*?)/s";
+			$pattern = "/.*?(source\s+(\S*?)(\s*\:\s*(\S*?))?\s*\{(.*?)\n\s*\})(.*?)/s";
 			preg_match_all ( $pattern, $config, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE );
 			$schemas = array();
 			$shift = 0;
@@ -2082,14 +2082,27 @@ class SphinxConfig
 			// parse sources
 			foreach ( $matches as $match )
 			{
-				$lines = explode("\n", $match[$content][0]);
+				// split to lines, taking into account multiline variables
+				$lines = explode("\n", str_replace("\\\n", "", $match[$content][0]));
+
 				$insert_schema = array();
 				$insert_types = array();
-				if ( $match[$parent][0] != "" )
-					$insert_types = $schemas[$match[$parent][0]]['types'];
-
+				$insert_values = array();
+				$sql_attr_multi = array();
 				$sql_query_pre = array();
 				$sql_query = "";
+				$sql_query_range = "";
+				$sql_query_range_step = 1024;
+
+				if ( $match[$parent][0] != "" )
+				{
+					$insert_types = $schemas[$match[$parent][0]]['types'];
+					$insert_schema = $schemas[$match[$parent][0]]['orders'];
+					$sql_attr_multi = $schemas[$match[$parent][0]]['multi'];
+					$sql_query_pre = $schemas[$match[$parent][0]]['pre'];
+					$sql_query = $schemas[$match[$parent][0]]['query'];
+					$sql_query_range = $schemas[$match[$parent][0]]['range'];
+				}
 
 				foreach ( $lines as $line )
 				{
@@ -2115,78 +2128,168 @@ class SphinxConfig
 							}
 							break;
 
-						case "sql_attr_uint":		$insert_types[$this->RemoveBits($value)] = "rt_attr_uint"; break;
-						case "sql_attr_bigint":		$insert_types[$this->RemoveBits($value)] = "rt_attr_bigint"; break;
-						case "sql_attr_float":		$insert_types[$value] = "rt_attr_float"; break;
-						case "sql_attr_timestamp":	$insert_types[$value] = "rt_attr_timestamp"; break;
-						//case "sql_attr_multi":	$insert_types[$value] = "rt_attr_multi"; break;
-						case "sql_attr_bool":		$insert_types[$value] = "rt_attr_bool"; break;
-						case "sql_attr_json":		$insert_types[$value] = "rt_attr_json"; break;
-						case "sql_attr_string":		$insert_types[$value] = "rt_attr_string"; break;
-						case "sql_field_string":	$insert_types[$value] = "FIELD"; break;
-
+						case "sql_attr_uint":		$insert_types[strtolower($this->RemoveBits($value))] = "rt_attr_uint"; break;
+						case "sql_attr_bigint":		$insert_types[strtolower($this->RemoveBits($value))] = "rt_attr_bigint"; break;
+						case "sql_attr_float":		$insert_types[strtolower($value)] = "rt_attr_float"; break;
+						case "sql_attr_timestamp":	$insert_types[strtolower($value)] = "rt_attr_timestamp"; break;
+						case "sql_attr_bool":		$insert_types[strtolower($value)] = "rt_attr_bool"; break;
+						case "sql_attr_json":		$insert_types[strtolower($value)] = "rt_attr_json"; break;
+						case "sql_attr_string":		$insert_types[strtolower($value)] = "rt_attr_string"; break;
+						case "sql_field_string":	$insert_types[strtolower($value)] = "FIELD"; break;
+						case "sql_attr_multi":		$sql_attr_multi[] = $value; break;
 						case "sql_query_pre":		$sql_query_pre[] = $value; break;
-						case "sql_query":			$sql_query = $value; break;
+						case "sql_query":				$sql_query = $value; break;
+						case "sql_query_range":		$sql_query_range = $value; break;
+						case "sql_query_range_step": $sql_query_range_step = $value; break;
 					}
 				}
 
-				// query is kinda mandatory
-				if ( !$sql_query )
+				// sql query is not mandatory (e.g. in parent sections)
+				if ( $sql_query )
 				{
-					$msg = "missing sql_query";
-					return false;
-				}
 
-				// now let's connect to MySQL, run the query, and fetch the values
-				$conn = ConnectDB();
-				if ( !$conn )
-				{
-					$msg = "can't connect or select the database";
-					return false;
-				}
+					// now let's connect to MySQL, run the query, and fetch the values
+					$conn = ConnectDB();
+					if ( !$conn )
+					{
+						$msg = "can't connect or select the database";
+						return false;
+					}
 
-				// gotta run pre-queries first!
-				foreach ( $sql_query_pre as $q )
-				{
-					if ( mysql_wr ( $q, $conn ) )
-						continue;
+					// gotta run pre-queries first!
+					foreach ( $sql_query_pre as $q )
+					{
+						if ( mysql_wr ( $q, $conn ) )
+							continue;
 
-					$msg = sprintf ( "sql_query_pre failed (query=%s, error=%s)", $q, mysql_error ( $conn ) );
+						$msg = sprintf ( "sql_query_pre failed (query=%s, error=%s)", $q, mysql_error ( $conn ) );
+						mysql_close ( $conn );
+						return false;
+					}
+
+					// copy original query
+					$sql = $sql_query;
+
+					// apply query range
+					if ( $sql_query_range )
+					{
+						$res = mysql_wr ( $sql_query_range, $conn );
+						if ( !$res )
+						{
+							$msg = sprintf ( "sql_query failed (query=%s, error=%s)", $sql_query, mysql_error ( $conn ) );
+							mysql_close ( $conn );
+							return false;
+						}
+
+						$range_values = array();
+						while ( $row = mysql_fetch_row($res) )
+							$range_values[] = array_values ( $row );
+
+						if ( count($range_values)>=1 )
+						{
+							$sql = str_replace ( '$start', $range_values[0][0], $sql );
+							$sql = str_replace ( '$end', $range_values[0][1], $sql );
+						}
+					}
+
+					// run main query
+					$res = mysql_wr ( $sql, $conn );
+					if ( !$res )
+					{
+						$msg = sprintf ( "sql_query failed (query=%s, error=%s)", $sql_query, mysql_error ( $conn ) );
+						$msg = "sql_query can't fetch test data: " . mysql_error ( $conn );
+						mysql_close ( $conn );
+						return false;
+					}
+
+					// fetch fields
+					$insert_schema = array ( "id" => 0 );
+					for ( $i=1; $i < mysql_num_fields($res); $i++ )
+						$insert_schema [ mysql_fetch_field ( $res, $i )->name ] = $i;
+
+					// fetch data
+					while ( $row = mysql_fetch_row($res) )
+						$insert_values[] = array_values ( $row );
+
+					// cleanup
+					mysql_free_result ( $res );
+
+					// parse mva statements
+					foreach ( $sql_attr_multi as $q )
+					{
+						$stmt = preg_split ( "/\s*;\s*/", $q, 2 );
+						$sql_query = count($stmt)>1 ? $stmt[1] : "";
+
+						if ( !preg_match ( "/^\s*([^\s]+)\s+([^\s]+)\s+from\s+([^\s]+)/", $stmt[0], $regs) )
+						{
+							$msg = sprintf ( "invalid mva statement %s\n", $value );
+							return false;
+						}
+
+						list ( $dummy, $attr_type, $attr_name, $source_type ) = $regs;
+						$attr_name = strtolower ( $attr_name );
+						$multi_type = ( $attr_type=="uint" ? "rt_attr_multi" : ( $attr_type=="bigint" ? "rt_attr_multi_64" : "rt_attr_timestamp" ) );
+						$insert_types[$attr_name] = $multi_type;
+
+						if ( $source_type=="query" )
+						{
+							// query mva_pairs
+							$res = mysql_wr ( $sql_query, $conn );
+							if ( !$res )
+							{
+								$msg = sprintf ( "sql_query failed (query=%s, error=%s)", $sql_query, mysql_error ( $conn ) );
+								$msg = "sql_query can't fetch test data: " . mysql_error ( $conn );
+								mysql_close ( $conn );
+								return false;
+							}
+
+							// fetch mva pairs (id, value), group by id
+							$mva =  array();
+							while ( $row = mysql_fetch_row($res) )
+							{
+								list ( $id, $value ) = array_values ( $row );
+								$mva[$id][] = $value;
+							}
+
+							// cleanup mysql
+							mysql_free_result ( $res );
+
+							// add mva attribute to the schema
+							$attr_index = count ( $insert_schema );
+							$insert_schema[$attr_name] = $attr_index;
+
+							// insert mva values separated with commas
+							for ( $i=0; $i<count($insert_values); $i++ )
+							{
+								$id = $insert_values[$i][0];
+								$insert_values[$i][] = array_key_exists ( $id, $mva ) ? implode ( ',', $mva[$id] ) : "";
+							}
+						}
+						else if ( $source_type=="field" )
+						{
+							// get field offset
+							$attr_index = $insert_schema[$attr_name];
+
+							// insert mva values
+							for ( $i=0; $i<count($insert_values); $i++ )
+							{
+								$mva = preg_split ( "/[ ,]+/", $insert_values[$i][$attr_index] );
+								$insert_values[$i][$attr_index] = implode ( ',', $mva );
+							}
+						}
+					}
+					// cleanup
 					mysql_close ( $conn );
-					return false;
 				}
-
-				// run main query
-				$res = mysql_wr ( $sql_query, $conn );
-				if ( !$res )
-				{
-					$msg = sprintf ( "sql_query failed (query=%s, error=%s)", $sql_query, mysql_error ( $conn ) );
-					$msg = "sql_query can't fetch test data: " . mysql_error ( $conn );
-					mysql_close ( $conn );
-					return false;
-				}
-
-				// fetch fields
-				$insert_schema = array ( "id" => 0 );
-				for ( $i=1; $i < mysql_num_fields($res); $i++ )
-					$insert_schema [ mysql_fetch_field ( $res, $i )->name ] = $i;
-
-				// fetch data
-				$insert_values = array();
-				while ( $row = mysql_fetch_row($res) )
-					$insert_values[] = array_values ( $row );
-
-				// cleanup
-				mysql_free_result ( $res );
-				mysql_close ( $conn );
 
 				// store
 				$schema = array();
 				$schema['types'] = $insert_types;
-				if ( $match[$parent][0] != "" )
-					$schema['orders'] = $schemas[$match[$parent][0]]['orders'];
-				else
-					$schema['orders'] = $insert_schema;
+				$schema['orders'] = $insert_schema;
+				$schema['multi'] = $sql_attr_multi;
+				$schema['pre'] = $sql_query_pre;
+				$schema['query'] = $sql_query;
+				$schema['range'] = $sql_query_range;
 				$schema['values'] = $insert_values;
 				$schema['sqlport'] = $this->_sd_sphinxql_port;
 
@@ -2201,11 +2304,12 @@ class SphinxConfig
 			$parent = 4;
 			$content = 5;
 			$epilog = 6;
-			$pattern = "/.*?(index\s+(\S*?)(\s*\:\s*(\S*?))?\s*\{(.*?)\})(.*?)/s";
+			$pattern = "/.*?(index\s+(\S*?)(\s*\:\s*(\S*?))?\s*\{(.*?)\n\s*\})(.*?)/s";
 			preg_match_all ( $pattern, $config, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE );
 			$shift = 0;
 			// parse indexes
 			$indexes = array();
+			$sources = array();
 			foreach ( $matches as $match )
 			{
 				$idx = "index ".$match[$idxname][0];
@@ -2213,7 +2317,12 @@ class SphinxConfig
 					$idx .= " : ".$match[$parent][0];
 				$idx .= "\n{\n\tdict = keywords\n";
 
-				$lines = explode("\n", $match[$content][0]);
+				//source could be inherited
+				if ( !strpos ( $match[$content][0],"source" ) )
+					if ( array_key_exists ( $match[$parent][0], $sources ) )
+						$match[$content][0] .= "\nsource = ".$sources[$match[$parent][0]];
+
+				$lines = explode("\n", str_replace("\\\n", "", $match[$content][0]));
 				$justcopy = false;
 				$rtcopy = false;
 				$idxbody = "";
@@ -2227,6 +2336,7 @@ class SphinxConfig
 						continue;
 					$key = strtolower ( trim ( substr($line,0,$eq), " \t" ) );
 					$value = trim ( substr($line,$eq+1), " \t" );
+
 					switch ( $key )
 					{
 						case "type":
@@ -2254,6 +2364,7 @@ class SphinxConfig
 										} else
 											$idxbody .= "\trt_field\t= $key\n";
 									}
+								$sources[$match[$idxname][0]] = $value;
 								break;
 							}
 						case "path": $this->EraseIndexFiles($value);
@@ -2356,14 +2467,23 @@ class SphinxConfig
 			$prefix = "INSERT INTO $name ($cols) VALUES ";
 
 			$accum = "";
+
+			// mva shouldn't be quoted, e.g. "insert into rt (id,gid,mva) values ('1','2',(1,2))"
+			$is_mva = array();
+			foreach ( array_keys($data["orders"]) as $key )
+				$is_mva[] = array_key_exists ( $key, $data["types"] ) && ( $data["types"][$key]=="rt_attr_multi" || $data["types"][$key]=="rt_attr_multi_64" );
+
 			foreach ($data['values'] as $row)
 			{
 				$query = "";
+				$i = 0;
 				foreach ( $row as $column )
 				{
 					if ( $query!="" )
 						$query .=",";
-					$query .="'".mysql_escape_string($column)."'";
+					$s = mysql_real_escape_string($column, $cn);
+					$query .= ( array_key_exists ( $i, $is_mva ) && $is_mva[$i] ) ? '('.$s.')' : "'".$s."'";
+					$i++;
 				}
 				
 				if ( ( strlen ($accum) + strlen ($query) ) > 1024000 ) ///<checkit!

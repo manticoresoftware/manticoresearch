@@ -119,7 +119,7 @@ source test_wf
 	type			= mysql
 	<sql_settings/>
 	sql_query_pre	= set names utf8
-	sql_query		= select 1 id, 11 gid, 'камеди full source' UNION select 2 id, 11 gid, 'comedi central' UNION select 3 id, 11 gid, 'pop idol'
+	sql_query		= select 1 id, 11 gid, 'камеди full source' AS text UNION select 2 id, 11 gid, 'comedi central' UNION select 3 id, 11 gid, 'pop idol'
 	sql_attr_uint	= gid
 }
 

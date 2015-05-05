@@ -21232,7 +21232,10 @@ SphWordID_t CSphDictCRC<CRC32DICT>::GetWordIDWithMarkers ( BYTE * pWord )
 template < bool CRC32DICT >
 SphWordID_t CSphDictCRC<CRC32DICT>::GetWordIDNonStemmed ( BYTE * pWord )
 {
-	SphWordID_t uWordId = tHASH::DoCrc ( pWord + 1 );
+	// this method can generally receive both '=stopword' with a marker and 'stopword' without it
+	// so for filtering stopwords, let's handle both
+	int iOff = ( pWord[0]<' ' );
+	SphWordID_t uWordId = tHASH::DoCrc ( pWord+iOff );
 	if ( !FilterStopword ( uWordId ) )
 		return 0;
 
@@ -26034,7 +26037,9 @@ void CSphSource_Document::BuildRegularHits ( SphDocID_t uDocid, bool bPayload, b
 			continue;
 		}
 
-		SphWordID_t iWord = m_pDict->GetWordID ( sWord );
+		SphWordID_t iWord = ( eMorph==SPH_TOKEN_MORPH_GUESS )
+			? m_pDict->GetWordIDNonStemmed ( sWord ) // tokenizer did morphology => dict must not stem
+			: m_pDict->GetWordID ( sWord ); // tokenizer did not => stemmers can be applied
 		if ( iWord )
 		{
 #if 0

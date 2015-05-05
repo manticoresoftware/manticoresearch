@@ -2036,11 +2036,6 @@ class SphinxConfig
 		}
 	}
 
-	function RemoveBits ( $value )
-	{
-		return preg_replace('/:\d+$/', '', $value);
-	}
-
 	function WriteConfig ( $filename, $agentid, &$msg, $collectdata = true )
 	{
 		global $g_locals;
@@ -2088,6 +2083,7 @@ class SphinxConfig
 				$insert_schema = array();
 				$insert_types = array();
 				$insert_values = array();
+				$schema_bits = array();
 				$sql_attr_multi = array();
 				$sql_query_pre = array();
 				$sql_query = "";
@@ -2116,6 +2112,7 @@ class SphinxConfig
 						continue;
 					$key = strtolower ( trim ( substr($line,0,$eq), " \t" ) );
 					$value = trim ( substr($line,$eq+1), " \t" );
+					$lcvalue = strtolower($value);
 
 					// handle known keys
 					switch ( $key )
@@ -2128,19 +2125,31 @@ class SphinxConfig
 							}
 							break;
 
-						case "sql_attr_uint":		$insert_types[strtolower($this->RemoveBits($value))] = "rt_attr_uint"; break;
-						case "sql_attr_bigint":		$insert_types[strtolower($this->RemoveBits($value))] = "rt_attr_bigint"; break;
-						case "sql_attr_float":		$insert_types[strtolower($value)] = "rt_attr_float"; break;
-						case "sql_attr_timestamp":	$insert_types[strtolower($value)] = "rt_attr_timestamp"; break;
-						case "sql_attr_bool":		$insert_types[strtolower($value)] = "rt_attr_bool"; break;
-						case "sql_attr_json":		$insert_types[strtolower($value)] = "rt_attr_json"; break;
-						case "sql_attr_string":		$insert_types[strtolower($value)] = "rt_attr_string"; break;
-						case "sql_field_string":	$insert_types[strtolower($value)] = "FIELD"; break;
+						case "sql_attr_uint":
+						case "sql_attr_bigint":
+							if (strstr($lcvalue, ":")===false)
+							{
+								$attr = $lcvalue;
+								$bits = "";
+							} else
+							{
+								$attr = strstr($lcvalue, ":", true); // true == extract the part before needle, ie. attr name
+								$bits = strstr($lcvalue, ":");
+							}
+							$insert_types[$attr] = "rt_" . substr($key, 4);
+							$schema_bits[$attr] = $bits;
+							break;
+						case "sql_attr_float":		$insert_types[$lcvalue] = "rt_attr_float"; break;
+						case "sql_attr_timestamp":	$insert_types[$lcvalue] = "rt_attr_timestamp"; break;
+						case "sql_attr_bool":		$insert_types[$lcvalue] = "rt_attr_bool"; break;
+						case "sql_attr_json":		$insert_types[$lcvalue] = "rt_attr_json"; break;
+						case "sql_attr_string":		$insert_types[$lcvalue] = "rt_attr_string"; break;
+						case "sql_field_string":	$insert_types[$lcvalue] = "FIELD"; break;
 						case "sql_attr_multi":		$sql_attr_multi[] = $value; break;
 						case "sql_query_pre":		$sql_query_pre[] = $value; break;
-						case "sql_query":				$sql_query = $value; break;
+						case "sql_query":			$sql_query = $value; break;
 						case "sql_query_range":		$sql_query_range = $value; break;
-						case "sql_query_range_step": $sql_query_range_step = $value; break;
+						case "sql_query_range_step":$sql_query_range_step = $value; break;
 					}
 				}
 
@@ -2285,6 +2294,7 @@ class SphinxConfig
 				// store
 				$schema = array();
 				$schema['types'] = $insert_types;
+				$schema['bits'] = $schema_bits;
 				$schema['orders'] = $insert_schema;
 				$schema['multi'] = $sql_attr_multi;
 				$schema['pre'] = $sql_query_pre;
@@ -2360,7 +2370,12 @@ class SphinxConfig
 												$idxbody .= "\trt_field\t= $key\n";
 												$idxbody .= "\trt_attr_string\t= $key\n";
 											} else
-												$idxbody .= "\t".$schemas[$value]['types'][$key]."\t= $key\n";
+											{
+												$idxbody .= "\t".$schemas[$value]['types'][$key]."\t= $key";
+												if (isset($schemas[$value]['bits'][$key]))
+													$idxbody .= $schemas[$value]['bits'][$key];
+												$idxbody .= "\n";
+											}
 										} else
 											$idxbody .= "\trt_field\t= $key\n";
 									}

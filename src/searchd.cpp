@@ -3932,6 +3932,39 @@ void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 #endif
 }
 
+class UnBackquote_fn : public ISphNoncopyable
+{
+	CSphString m_sBuf;
+	const char * m_pDst;
+
+public:
+	explicit UnBackquote_fn ( const char * pSrc )
+	{
+		m_pDst = pSrc;
+		int iLen = 0;
+		if ( pSrc && *pSrc )
+			iLen = strlen ( pSrc );
+
+		if ( iLen && memchr ( pSrc, '`', iLen ) )
+		{
+			m_sBuf = pSrc;
+			char * pDst = const_cast<char *>( m_sBuf.cstr() );
+			const char * pEnd = pSrc + iLen;
+
+			while ( pSrc<pEnd )
+			{
+				*pDst = *pSrc++;
+				if ( *pDst!='`' )
+					pDst++;
+			}
+			*pDst = '\0';
+			m_pDst = m_sBuf.cstr();
+		}
+	}
+
+	const char * cstr() { return m_pDst; }
+};
+
 static void FormatOrderBy ( CSphStringBuilder * pBuf, const char * sPrefix, ESphSortOrder eSort, const CSphString & sSort )
 {
 	assert ( pBuf );
@@ -3942,6 +3975,9 @@ static void FormatOrderBy ( CSphStringBuilder * pBuf, const char * sPrefix, ESph
 	if ( sSort!="@relevance" )
 			sSubst = sSort.cstr();
 
+	UnBackquote_fn tUnquoted ( sSubst );
+	sSubst = tUnquoted.cstr();
+
 	switch ( eSort )
 	{
 	case SPH_SORT_ATTR_DESC:		pBuf->Appendf ( " %s %s DESC", sPrefix, sSubst ); break;
@@ -3949,6 +3985,7 @@ static void FormatOrderBy ( CSphStringBuilder * pBuf, const char * sPrefix, ESph
 	case SPH_SORT_TIME_SEGMENTS:	pBuf->Appendf ( " %s TIME_SEGMENT(%s)", sPrefix, sSubst ); break;
 	case SPH_SORT_EXTENDED:			pBuf->Appendf ( " %s %s", sPrefix, sSubst ); break;
 	case SPH_SORT_EXPR:				pBuf->Appendf ( " %s BUILTIN_EXPR()", sPrefix ); break;
+	case SPH_SORT_RELEVANCE:		pBuf->Appendf ( " %s weight() desc%s%s", sPrefix, ( sSubst && *sSubst ? ", " : "" ), ( sSubst && *sSubst ? sSubst : "" ) ); break;
 	default:						pBuf->Appendf ( " %s mode-%d", sPrefix, (int)eSort ); break;
 	}
 }
@@ -3985,7 +4022,8 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes
 	if ( q.m_bHasOuter )
 		tBuf += "SELECT * FROM (";
 
-	tBuf.Appendf ( "SELECT %s FROM %s", q.m_sSelect.cstr(), q.m_sIndexes.cstr() );
+	UnBackquote_fn tUnquoted ( q.m_sSelect.cstr() );
+	tBuf.Appendf ( "SELECT %s FROM %s", tUnquoted.cstr(), q.m_sIndexes.cstr() );
 
 	// WHERE clause
 	// (m_sRawQuery is empty when using MySQL handler)
@@ -4158,6 +4196,9 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes
 
 		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
 		tBuf.Appendf ( "ranker=%s", sRanker );
+
+		if ( !q.m_sRankerExpr.IsEmpty() )
+			tBuf.Appendf ( "(\'%s\')", q.m_sRankerExpr.scstr() );
 	}
 
 	// outer order by, limit

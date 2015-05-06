@@ -1709,7 +1709,6 @@ followed by Sphinx document ID in ascending order (earliest first).
 <para>
 Boolean queries allow the following special operators to be used:
 <itemizedlist>
-<listitem><para>explicit operator AND: <programlisting>hello &amp; world</programlisting></para></listitem>
 <listitem><para>operator OR: <programlisting>hello | world</programlisting></para></listitem>
 <listitem><para>operator NOT:
 <programlisting>

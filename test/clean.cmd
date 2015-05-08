@@ -10,7 +10,7 @@ if exist "ubertest.php" (
 
 	del /q "data\*.sp*" 2>nul
 	del /q "data\*.mvp" 2>nul
-	del /q "data\*.meta" "data\*.lock" "data\*.kill" "data\*.ram" "data\binlog.*" 2>nul
+	del /q "data\*.meta" "data\*.lock" "data\*.kill" "data\*.ram" "data\binlog.*" "binlog.*" 2>nul
 	del /q "*.log" 2>nul
 
 	del /q "error*.txt" 2>nul

@@ -63,6 +63,20 @@ index cmp2
 	source	= cmp2
 	path	= <data_path/>/cmp2
 }
+
+source strings
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT *, 'dummy' FROM string_table
+	sql_attr_string = string_value
+}
+
+index strings
+{
+	source	= strings
+	path	= <data_path/>/strings
+}
 </config>
 
 <db_create>
@@ -90,8 +104,17 @@ CREATE TABLE cmp_table
 );
 </db_create>
 
+<db_create>
+CREATE TABLE string_table
+(
+	id INT NOT NULL,
+	string_value VARCHAR(255) NOT NULL
+);
+</db_create>
+
 <db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
 <db_drop>DROP TABLE IF EXISTS cmp_table;</db_drop>
+<db_drop>DROP TABLE IF EXISTS string_table;</db_drop>
 
 
 <db_insert>
@@ -107,6 +130,14 @@ INSERT INTO cmp_table VALUES
 ( 2, 'dummy', '201, 220, 210', '-200, -350 ', 21.2, 20 ),
 ( 3, 'dummy', '310, 330, 301', '-300, -350, 320', 31.3, 33 ),
 ( 4, 'dummy', '900, 400, 601', '1000, 500, 401', 101.2, 110 )
+</db_insert>
+
+<db_insert>
+INSERT INTO string_table VALUES
+(1, 'asdf'),
+(2, 'ASDF'),
+(3, 'qwer'),
+(4, '')
 </db_insert>
 
 <query_attributes>
@@ -253,6 +284,10 @@ INSERT INTO cmp_table VALUES
 
 <!-- .NET connector 6.9.6 uses select timediff(now(), utc_timestamp()) -->
 <sphinxql>SELECT bigint(timediff(now(),utc_timestamp())) % 15</sphinxql>
+
+<!-- filter by empty string -->
+<sphinxql>select * from strings where string_value!=''</sphinxql>
+<sphinxql>select * from strings where string_value=''</sphinxql>
 
 </sphqueries>
 

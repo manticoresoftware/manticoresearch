@@ -3198,6 +3198,7 @@ ISphExpr * ExprParser_t::CreateExistNode ( const ExprNode_t & tNode )
 	assert ( iNameStart>=0 && iNameLen>0 && iNameStart+iNameLen<=(int)strlen ( m_sExpr ) );
 
 	CSphString sAttr ( m_sExpr+iNameStart, iNameLen );
+	sphColumnToLowercase ( const_cast<char *>( sAttr.cstr() ) );
 	int iLoc = m_pSchema->GetAttrIndex ( sAttr.cstr() );
 
 	if ( iLoc>=0 )

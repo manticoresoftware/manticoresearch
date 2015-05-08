@@ -574,17 +574,14 @@ public:
 			return !m_bEq;
 
 		SphAttr_t uVal = tMatch.GetAttr ( m_tLocator );
-		if ( !uVal )
-			return !m_bEq;
 
-		const BYTE * pStr = NULL;
-		if ( m_bPacked )
-		{
+		const BYTE * pStr;
+		if ( !uVal )
+			pStr = (const BYTE*)"\0"; // 2 bytes, for packed strings
+		else if ( m_bPacked )
 			pStr = m_pStringBase + uVal;
-		} else
-		{
+		else
 			pStr = (const BYTE *)uVal;
-		}
 
 		bool bEq = ( m_fnStrCmp ( pStr, m_dVal.Begin(), m_bPacked )==0 );
 		return ( m_bEq==bEq );
@@ -1312,7 +1309,7 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 
 		// fastpath for simple cases like j.key1 is handled in the expression
 		// combined access/filter nodes are only marginally faster (eg 17.4 msec vs 18.5 msec on 457K rows)
-		ISphExpr * pExpr = sphExprParse ( sAttrName.cstr(), tSchema, NULL, NULL, sError, NULL );
+		ISphExpr * pExpr = sphExprParse ( sAttrName.cstr(), tSchema, NULL, NULL, sError, NULL, eCollation );
 		pFilter = CreateFilterJson ( pAttr, pExpr, tSettings.m_eType, tSettings.m_bHasEqual, sError, eCollation );
 
 		if ( !pFilter )

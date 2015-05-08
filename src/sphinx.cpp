@@ -7101,8 +7101,14 @@ void sphColumnToLowercase ( char * sVal )
 		return;
 
 	// make all chars lowercase but only prior to '.', ',', and '[' delimiters
-	for ( ; *sVal && *sVal!='.' && *sVal!=',' && *sVal!='['; sVal++ )
-		*sVal = (char) tolower ( *sVal );
+	// leave quoted values unchanged
+	for ( bool bQuoted=false; *sVal && *sVal!='.' && *sVal!=',' && *sVal!='['; sVal++ )
+	{
+		if ( !bQuoted )
+			*sVal = (char) tolower ( *sVal );
+		if ( *sVal=='\'' )
+			bQuoted = !bQuoted;
+	}
 }
 
 

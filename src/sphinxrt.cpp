@@ -1248,6 +1248,7 @@ public:
 	bool						RtQwordSetup ( RtQword_t * pQword, int iSeg, const SphChunkGuard_t & tGuard ) const;
 	static bool					RtQwordSetupSegment ( RtQword_t * pQword, const RtSegment_t * pSeg, bool bSetup, bool bWordDict, int iWordsCheckpoint, const CSphFixedVector<SphDocID_t> & dKill, const CSphIndexSettings & tSettings );
 
+	virtual bool				IsStarDict() const;
 	CSphDict *					SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict, ISphTokenizer * pTokenizer, bool bAddSpecial ) const;
 	CSphDict *					SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict, ISphTokenizer * pTokenizer ) const;
 
@@ -6325,6 +6326,12 @@ bool RtIndex_t::RtQwordSetup ( RtQword_t * pQword, int iSeg, const SphChunkGuard
 }
 
 
+bool RtIndex_t::IsStarDict() const
+{
+	return m_tSettings.m_iMinPrefixLen>0 || m_tSettings.m_iMinInfixLen>0;
+}
+
+
 CSphDict * RtIndex_t::SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict, ISphTokenizer * pTokenizer, bool bAddSpecial ) const
 {
 	assert ( pTokenizer );
@@ -6345,9 +6352,8 @@ CSphDict * RtIndex_t::SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer, CSph
 	assert ( pTokenizer );
 	if ( !m_bKeywordDict )
 		return pPrevDict;
-	// should match CSphIndex_VLN::IsStarDict overwise got warning on query word mismatch
-	// at distributed index with plain and RT indexes
-	if ( m_tSettings.m_iMinPrefixLen==0 && m_tSettings.m_iMinInfixLen==0 )
+
+	if ( !IsStarDict() )
 		return pPrevDict;
 
 	tContainer = new CSphDictStarV8 ( pPrevDict, false, true );
@@ -6898,7 +6904,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	// expanding prefix in word dictionary case
 	CSphScopedPayload tPayloads;
-	if ( m_bKeywordDict && ( m_tSettings.m_iMinPrefixLen>0 || m_tSettings.m_iMinInfixLen>0 ) )
+	if ( m_bKeywordDict && IsStarDict() )
 	{
 		ExpansionContext_t tExpCtx;
 		tExpCtx.m_pWordlist = this;
@@ -7362,7 +7368,7 @@ bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 
 	// need to support '*' and '=' but not the other specials
 	// so m_pQueryTokenizer does not work for us, gotta clone and setup one manually
-	if ( IsStarDict() && ( m_tSettings.m_iMinPrefixLen>0 || m_tSettings.m_iMinInfixLen>0 ) )
+	if ( IsStarDict() )
 		pTokenizer->AddPlainChar ( '*' );
 
 	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
@@ -8421,8 +8427,7 @@ bool RtIndex_t::IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconf
 	if ( tSettings.m_tIndex.m_bIndexExactWords && !bNeedExact )
 		tSettings.m_tIndex.m_bIndexExactWords = false;
 
-	if ( tDict->GetSettings().m_bWordDict && tDict->HasMorphology() &&
-		( tSettings.m_tIndex.m_iMinPrefixLen || tSettings.m_tIndex.m_iMinInfixLen ) && !tSettings.m_tIndex.m_bIndexExactWords )
+	if ( tDict->GetSettings().m_bWordDict && tDict->HasMorphology() && IsStarDict() && !tSettings.m_tIndex.m_bIndexExactWords )
 		tSettings.m_tIndex.m_bIndexExactWords = true;
 
 	// compare options

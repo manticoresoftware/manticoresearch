@@ -2604,18 +2604,6 @@ struct CSphQueryItem
 };
 
 
-/// known collations
-enum ESphCollation
-{
-	SPH_COLLATION_LIBC_CI,
-	SPH_COLLATION_LIBC_CS,
-	SPH_COLLATION_UTF8_GENERAL_CI,
-	SPH_COLLATION_BINARY,
-
-	SPH_COLLATION_DEFAULT = SPH_COLLATION_LIBC_CI
-};
-
-
 /// table function interface
 class CSphQuery;
 struct AggrResult_t;

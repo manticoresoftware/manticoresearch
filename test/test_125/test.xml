@@ -289,6 +289,12 @@ INSERT INTO string_table VALUES
 <sphinxql>select * from strings where string_value!=''</sphinxql>
 <sphinxql>select * from strings where string_value=''</sphinxql>
 
+<!-- collation support in expressions -->
+<sphinxql>select id, string_value, in(string_value,'asdf','qwer') as in_string, string_value='asdf' AS is_string from strings</sphinxql>
+<sphinxql>select id, string_value from strings where string_value='asdf'</sphinxql>
+<sphinxql>select id, string_value, (string_value='asdf' or string_value='ASDF') as in_string from strings</sphinxql>
+<sphinxql>select id, string_value, (string_value='asdf' or string_value='qwer') as in_string from strings</sphinxql>
+
 </sphqueries>
 
 </test>

@@ -204,6 +204,18 @@ enum
 	SPH_FACTOR_JSON_OUT		= 1 << 2
 };
 
+
+/// known collations
+enum ESphCollation
+{
+	SPH_COLLATION_LIBC_CI,
+	SPH_COLLATION_LIBC_CS,
+	SPH_COLLATION_UTF8_GENERAL_CI,
+	SPH_COLLATION_BINARY,
+
+	SPH_COLLATION_DEFAULT = SPH_COLLATION_LIBC_CI
+};
+
 /// parses given expression, builds evaluator
 /// returns NULL and fills sError on failure
 /// returns pointer to evaluator on success
@@ -212,7 +224,7 @@ enum
 /// fills pEvalStage with a required (!) evaluation stage
 class CSphQueryProfile;
 ISphExpr * sphExprParse ( const char * sExpr, const ISphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight,
-	CSphString & sError, CSphQueryProfile * pProfiler, ISphExprHook * pHook=NULL,
+	CSphString & sError, CSphQueryProfile * pProfiler, ESphCollation eCollation=SPH_COLLATION_DEFAULT, ISphExprHook * pHook=NULL,
 	bool * pZonespanlist=NULL, DWORD * pPackedFactorsFlags=NULL, ESphEvalStage * pEvalStage=NULL );
 
 //////////////////////////////////////////////////////////////////////////

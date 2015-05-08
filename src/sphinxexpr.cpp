@@ -1257,15 +1257,30 @@ struct Expr_ForIn_c : public Expr_JsonFieldConv_c
 };
 
 
+SphStringCmp_fn GetCollationFn ( ESphCollation eCollation )
+{
+	switch ( eCollation )
+	{
+		case SPH_COLLATION_LIBC_CS:			return sphCollateLibcCS;
+		case SPH_COLLATION_UTF8_GENERAL_CI:	return sphCollateUtf8GeneralCI;
+		case SPH_COLLATION_BINARY:			return sphCollateBinary;
+		default:							return sphCollateLibcCI;
+	}
+}
+
+
 struct Expr_StrEq_c : public ISphExpr
 {
 	ISphExpr * m_pLeft;
 	ISphExpr * m_pRight;
+	SphStringCmp_fn m_fnStrCmp;
 
-	Expr_StrEq_c ( ISphExpr * pLeft, ISphExpr * pRight )
+	Expr_StrEq_c ( ISphExpr * pLeft, ISphExpr * pRight, ESphCollation eCollation )
 		: m_pLeft ( pLeft )
 		, m_pRight ( pRight )
-	{}
+	{
+		m_fnStrCmp = GetCollationFn ( eCollation );
+	}
 
 	~Expr_StrEq_c ()
 	{
@@ -1286,10 +1301,15 @@ struct Expr_StrEq_c : public ISphExpr
 		const BYTE * pRight;
 		int iLeft = m_pLeft->StringEval ( tMatch, &pLeft );
 		int iRight = m_pRight->StringEval ( tMatch, &pRight );
-		bool eq = ( iLeft==iRight ) && memcmp ( pLeft, pRight, iLeft )==0;
+
+		CSphString sStr1 ( pLeft ? (const char*)pLeft : "", iLeft );
+		CSphString sStr2 ( pRight ? (const char*)pRight : "", iRight );
+
+		bool bEq = m_fnStrCmp ( (const BYTE*)sStr1.cstr(), (const BYTE*)sStr2.cstr(), false )==0;
+
 		if ( m_pLeft->IsStringPtr() )	SafeDeleteArray ( pLeft );
 		if ( m_pRight->IsStringPtr() )	SafeDeleteArray ( pRight );
-		return (int)eq;
+		return (int)bEq;
 	}
 
 	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }
@@ -2066,12 +2086,13 @@ class ExprParser_t
 	friend void				yyerror ( ExprParser_t * pParser, const char * sMessage );
 
 public:
-	ExprParser_t ( ISphExprHook * pHook, CSphQueryProfile * pProfiler )
+	ExprParser_t ( ISphExprHook * pHook, CSphQueryProfile * pProfiler, ESphCollation eCollation )
 		: m_pHook ( pHook )
 		, m_pProfiler ( pProfiler )
 		, m_bHasZonespanlist ( false )
 		, m_uPackedFactorFlags ( SPH_FACTOR_DISABLE )
 		, m_eEvalStage ( SPH_EVAL_FINAL ) // be default compute as late as possible
+		, m_eCollation ( eCollation )
 	{
 		m_dGatherStack.Reserve ( 64 );
 	}
@@ -2131,6 +2152,7 @@ public:
 	bool					m_bHasZonespanlist;
 	DWORD					m_uPackedFactorFlags;
 	ESphEvalStage			m_eEvalStage;
+	ESphCollation			m_eCollation;
 
 private:
 	int						GetToken ( YYSTYPE * lvalp );
@@ -3885,11 +3907,11 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 									m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_STRINGPTR ) &&
 									( m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRING ||
 									m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRINGPTR ) )
-									return new Expr_StrEq_c ( pLeft, pRight );
+									return new Expr_StrEq_c ( pLeft, pRight, m_eCollation );
 								else if ( ( m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_JSON_FIELD ) &&
 									( m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRING ||
 									m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRINGPTR ) )
-									return new Expr_StrEq_c ( new Expr_JsonFieldConv_c ( pLeft ), pRight );
+									return new Expr_StrEq_c ( new Expr_JsonFieldConv_c ( pLeft ), pRight, m_eCollation );
 								LOC_SPAWN_POLY ( Expr_Eq ); break;
 		case TOK_NE:			LOC_SPAWN_POLY ( Expr_Ne ); break;
 		case TOK_AND:			LOC_SPAWN_POLY ( Expr_And ); break;
@@ -4706,6 +4728,7 @@ protected:
 	}
 };
 
+
 class Expr_StrIn_c : public Expr_ArgVsConstSet_c<int64_t>
 {
 protected:
@@ -4713,10 +4736,11 @@ protected:
 	int						m_iLocator;
 	const BYTE *			m_pStrings;
 	UservarIntSet_c *		m_pUservar;
-	CSphVector<uint64_t>	m_dHashes;
+	CSphVector<CSphString>  m_dStringValues;
+	SphStringCmp_fn			m_fnStrCmp;
 
 public:
-	Expr_StrIn_c ( const CSphAttrLocator & tLoc, int iLocator, ConstList_c * pConsts, UservarIntSet_c * pUservar )
+	Expr_StrIn_c ( const CSphAttrLocator & tLoc, int iLocator, ConstList_c * pConsts, UservarIntSet_c * pUservar, ESphCollation eCollation )
 		: Expr_ArgVsConstSet_c<int64_t> ( NULL, pConsts )
 		, m_tLocator ( tLoc )
 		, m_iLocator ( iLocator )
@@ -4725,6 +4749,8 @@ public:
 	{
 		assert ( tLoc.m_iBitOffset>=0 && tLoc.m_iBitCount>0 );
 		assert ( !pConsts || !pUservar );
+
+		m_fnStrCmp = GetCollationFn ( eCollation );
 
 		const char * sExpr = pConsts->m_sExpr.cstr();
 		int iExprLen = pConsts->m_sExpr.Length();
@@ -4741,11 +4767,9 @@ public:
 			{
 				CSphString sRes;
 				SqlUnescape ( sRes, sExpr + iOfs, iLen );
-				m_dHashes.Add ( sphFNV64 ( sRes.cstr(), sRes.Length() ) );
+				m_dStringValues.Add ( sRes );
 			}
 		}
-
-		m_dHashes.Sort();
 	}
 
 	~Expr_StrIn_c()
@@ -4760,7 +4784,15 @@ public:
 		if ( iOfs<=0 )
 			return 0;
 		int iLen = sphUnpackStr ( m_pStrings + iOfs, &pVal );
-		return this->m_dHashes.BinarySearch ( sphFNV64 ( pVal, iLen ) )!=NULL;
+
+		CSphString sValue ( (const char*)pVal, iLen );
+		const BYTE * pStr = (const BYTE*)sValue.cstr();
+
+		ARRAY_FOREACH ( i, m_dStringValues )
+			if ( m_fnStrCmp ( pStr, (const BYTE*)m_dStringValues[i].cstr(), false )==0 )
+				return 1;
+
+		return 0;
 	}
 
 	virtual void Command ( ESphExprCommand eCmd, void * pArg )
@@ -5169,7 +5201,7 @@ ISphExpr * ExprParser_t::CreateInNode ( int iNode )
 				case TOK_ATTR_MVA64:
 					return new Expr_MVAIn_c<true> ( tLeft.m_tLocator, tLeft.m_iLocator, tRight.m_pConsts, NULL );
 				case TOK_ATTR_STRING:
-					return new Expr_StrIn_c ( tLeft.m_tLocator, tLeft.m_iLocator, tRight.m_pConsts, NULL );
+					return new Expr_StrIn_c ( tLeft.m_tLocator, tLeft.m_iLocator, tRight.m_pConsts, NULL, m_eCollation );
 				case TOK_ATTR_JSON:
 					return new Expr_JsonFieldIn_c ( tRight.m_pConsts, NULL, CreateTree ( m_dNodes [ iNode ].m_iLeft ) );
 				default:
@@ -5208,7 +5240,7 @@ ISphExpr * ExprParser_t::CreateInNode ( int iNode )
 				case TOK_ATTR_MVA64:
 					return new Expr_MVAIn_c<true> ( tLeft.m_tLocator, tLeft.m_iLocator, NULL, pUservar );
 				case TOK_ATTR_STRING:
-					return new Expr_StrIn_c ( tLeft.m_tLocator, tLeft.m_iLocator, NULL, pUservar );
+					return new Expr_StrIn_c ( tLeft.m_tLocator, tLeft.m_iLocator, NULL, pUservar, m_eCollation );
 				case TOK_ATTR_JSON:
 					return new Expr_JsonFieldIn_c ( NULL, pUservar, CreateTree ( m_dNodes[iNode].m_iLeft ) );
 				default:
@@ -6414,10 +6446,10 @@ ISphExpr * ExprParser_t::Parse ( const char * sExpr, const ISphSchema & tSchema,
 
 /// parser entry point
 ISphExpr * sphExprParse ( const char * sExpr, const ISphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight,
-	CSphString & sError, CSphQueryProfile * pProfiler, ISphExprHook * pHook, bool * pZonespanlist, DWORD * pPackedFactorsFlags, ESphEvalStage * pEvalStage )
+	CSphString & sError, CSphQueryProfile * pProfiler, ESphCollation eCollation, ISphExprHook * pHook, bool * pZonespanlist, DWORD * pPackedFactorsFlags, ESphEvalStage * pEvalStage )
 {
 	// parse into opcodes
-	ExprParser_t tParser ( pHook, pProfiler );
+	ExprParser_t tParser ( pHook, pProfiler, eCollation );
 	ISphExpr * pRes = tParser.Parse ( sExpr, tSchema, pAttrType, pUsesWeight, sError );
 	if ( pZonespanlist )
 		*pZonespanlist = tParser.m_bHasZonespanlist;

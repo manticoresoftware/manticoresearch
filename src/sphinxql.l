@@ -153,7 +153,7 @@ ALPHA				[a-zA-Z_]+
 ">="				{ YYSTOREBOUNDS; return TOK_GTE; }
 ":="				{ YYSTOREBOUNDS; return '='; }
 
-'([^'\\]|\\.|\\\\)*'			{ YYSTOREBOUNDS; pParser->m_pLastTokenStart = yytext; return TOK_QUOTED_STRING; }
+'([^'\\]|\\.|\\\\)*'			{ YYSTOREBOUNDS; pParser->m_pLastTokenStart = yytext; lvalp->m_iValue = ( (SphAttr_t)lvalp->m_iStart<<32 ) | ( lvalp->m_iEnd-lvalp->m_iStart ); return TOK_QUOTED_STRING; }
 
 {DIGIT}+\.{DIGIT}*{EXPONENT}?	{ YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
 \.{DIGIT}+{EXPONENT}?			{ YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_DOT_NUMBER; }

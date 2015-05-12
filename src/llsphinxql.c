@@ -1837,7 +1837,7 @@ case 121:
 /* rule 121 can match eol */
 YY_RULE_SETUP
 #line 156 "sphinxql.l"
-{ YYSTOREBOUNDS; pParser->m_pLastTokenStart = yytext; return TOK_QUOTED_STRING; }
+{ YYSTOREBOUNDS; pParser->m_pLastTokenStart = yytext; lvalp->m_iValue = ( (SphAttr_t)lvalp->m_iStart<<32 ) | ( lvalp->m_iEnd-lvalp->m_iStart ); return TOK_QUOTED_STRING; }
 	YY_BREAK
 case 122:
 YY_RULE_SETUP

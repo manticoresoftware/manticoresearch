@@ -299,6 +299,12 @@ INSERT INTO string_table VALUES
 <sphinxql>select id, string_value, (string_value='asdf' or string_value='ASDF') as in_string from strings</sphinxql>
 <sphinxql>select id, string_value, (string_value='asdf' or string_value='qwer') as in_string from strings</sphinxql>
 
+<!-- IN() filter for multiple strings, including empty ones, also test string pointers -->
+<sphinxql>select id, string_value from strings where string_value in ('asdf','qwer','')</sphinxql>
+<sphinxql>select id, string_value from strings where string_value in ('asdf','qwer')</sphinxql>
+<sphinxql>select id, string_value from strings where string_value not in ('')</sphinxql>
+<sphinxql>select id, to_string(id) as p from strings where p in('1','3')</sphinxql>
+
 </sphqueries>
 
 </test>

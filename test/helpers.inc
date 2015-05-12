@@ -2089,6 +2089,7 @@ class SphinxConfig
 				$sql_query = "";
 				$sql_query_range = "";
 				$sql_query_range_step = 1024;
+				$sql_file_fields = array();
 
 				if ( $match[$parent][0] != "" )
 				{
@@ -2150,6 +2151,7 @@ class SphinxConfig
 						case "sql_query":			$sql_query = $value; break;
 						case "sql_query_range":		$sql_query_range = $value; break;
 						case "sql_query_range_step":$sql_query_range_step = $value; break;
+						case "sql_file_field":		$sql_file_fields[] = $value; break;
 					}
 				}
 
@@ -2287,6 +2289,15 @@ class SphinxConfig
 							}
 						}
 					}
+
+					// load files
+					foreach ($sql_file_fields as $ff)
+					{
+						$index = $insert_schema[$ff]; // FIXME? what if it does not exist?
+						for ($i=0; $i<count($insert_values); $i++)
+							$insert_values[$i][$index] = @file_get_contents($insert_values[$i][$index]); // FIXME? handle errors
+					}
+
 					// cleanup
 					mysql_close ( $conn );
 				}

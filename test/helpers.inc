@@ -163,13 +163,13 @@ function CheckSearchdLog ( $error_file, &$retval )
 
 	foreach ( $rawlog as $line )
 	{
-		foreach ( array ( "WARNING", "ERROR", "FATAL" ) as $tag )
+		foreach ( array ( "WARNING:", "ERROR:", "FATAL:" ) as $tag )
 		{
-			$t = stristr ( $line, $tag );
+			$t = strstr ( $line, $tag );
 			if ( $t )
 			{
 				$error .= $t;
-				if ( $tag!="WARNING" )
+				if ( $tag!="WARNING:" )
 					$retval = 1;
 			}
 		}

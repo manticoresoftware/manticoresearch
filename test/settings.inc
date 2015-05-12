@@ -116,7 +116,7 @@ function GuessRE2 ()
 function GuessRLP ()
 {
 	global $g_rlp;
-    $g_rpl = GuessFeature ( 'test_rlp.conf','no RLP support compiled');
+    $g_rlp = GuessFeature ( 'test_rlp.conf','no RLP support compiled');
 }
 
 function GuessODBC ()

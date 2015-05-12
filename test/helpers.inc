@@ -2284,7 +2284,7 @@ class SphinxConfig
 							// insert mva values
 							for ( $i=0; $i<count($insert_values); $i++ )
 							{
-								$mva = preg_split ( "/[\s,]+/", $insert_values[$i][$attr_index] );
+								$mva = preg_split ( "/[\s,]+/", $insert_values[$i][$attr_index], -1, PREG_SPLIT_NO_EMPTY );
 								$insert_values[$i][$attr_index] = implode ( ',', $mva );
 							}
 						}

@@ -67,7 +67,7 @@ index star
 	path	= <data_path/>/star
 
 	blend_chars = @, ., !, (, ), [, ], {, }
-	min_infix_len = 1
+	min_infix_len = 2
 	dict = crc
 }
 
@@ -230,9 +230,9 @@ INSERT INTO test_table VALUES
 	
 	<query mode="extended2" index="star">^gg*</query>
 	<query mode="extended2" index="star">*hh$</query>
-	<query mode="extended2" index="star">^*g*</query>
-	<query mode="extended2" index="star">^*h*</query>
-	<query mode="extended2" index="star">*c*$</query>
+	<query mode="extended2" index="star">^*gg*</query>
+	<query mode="extended2" index="star">^*hh*</query>
+	<query mode="extended2" index="star">*cc*$</query>
 	<!--regression for missed field modifier vs tiny expanded -->
 	<query mode="extended2" index="star_kw">*hh*</query>
 	<query mode="extended2" index="star_kw">*hh*$</query>

@@ -1768,52 +1768,36 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 			bZonespanChecked = true;
 		}
 		bZonespan &= bZonespanChecked;
+
 		if ( bAndTerms )
 		{
-			if ( bZonespan )
+			// create eval-tree terms from query-tree nodes
+			CSphVector<ExtNode_i*> dTerms;
+			for ( int i=0; i<iChildren; i++ )
 			{
-				CSphVector<ExtNode_i*> dTerms;
-				for ( int i=0; i<iChildren; i++ )
-				{
-					const XQNode_t * pChild = pNode->m_dChildren[i];
-					ExtNode_i * pTerm = ExtNode_i::Create ( pChild, tSetup );
-					if ( pTerm )
-						dTerms.Add ( pTerm );
-				}
+				const XQNode_t * pChild = pNode->m_dChildren[i];
+				ExtNode_i * pTerm = ExtNode_i::Create ( pChild, tSetup );
+				if ( pTerm )
+					dTerms.Add ( pTerm );
+			}
 
-				dTerms.Sort ( ExtNodeTF_fn() );
+			// sort them by frequency, to speed up AND matching
+			dTerms.Sort ( ExtNodeTF_fn() );
 
-				ExtNode_i * pCur = dTerms[0];
-				for ( int i=1; i<dTerms.GetLength(); i++ )
+			// create the right eval-tree node
+			ExtNode_i * pCur = dTerms[0];
+			for ( int i=1; i<dTerms.GetLength(); i++ )
+				if ( bZonespan )
 					pCur = new ExtAndZonespan_c ( pCur, dTerms[i], tSetup, pNode->m_dChildren[0] );
-
-// For zonespan we have also Extra data which is not (yet?) covered by common-node optimization.
-// if ( pNode->GetCount() )
-// return tSetup.m_pNodeCache->CreateProxy ( pCur, pNode, tSetup );
-
-				return pCur;
-			} else
-			{
-				CSphVector<ExtNode_i*> dTerms;
-				for ( int i=0; i<iChildren; i++ )
-				{
-					const XQNode_t * pChild = pNode->m_dChildren[i];
-					ExtNode_i * pTerm = ExtNode_i::Create ( pChild, tSetup );
-					if ( pTerm )
-						dTerms.Add ( pTerm );
-				}
-
-				dTerms.Sort ( ExtNodeTF_fn() );
-
-				ExtNode_i * pCur = dTerms[0];
-				for ( int i=1; i<dTerms.GetLength(); i++ )
+				else
 					pCur = new ExtAnd_c ( pCur, dTerms[i], tSetup );
 
-				if ( pNode->GetCount() )
-					return tSetup.m_pNodeCache->CreateProxy ( pCur, pNode, tSetup );
+			// zonespan has Extra data which is not (yet?) covered by common-node optimizations,
+			// so we need to avoid those for zonespan
+			if ( !bZonespan && pNode->GetCount() )
+				return tSetup.m_pNodeCache->CreateProxy ( pCur, pNode, tSetup );
 
-				return pCur;
-			}
+			return pCur;
 		}
 
 		// Multinear and phrase could be also non-plain, so here is the second entry for it.

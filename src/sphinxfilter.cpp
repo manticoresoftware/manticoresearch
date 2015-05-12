@@ -526,8 +526,8 @@ protected:
 public:
 	FilterString_c ( ESphCollation eCollation, ESphAttr eType, bool bEq )
 		: m_dVal ( 0 )
-		, m_pStringBase ( NULL )
 		, m_bEq ( bEq )
+		, m_pStringBase ( NULL )
 	{
 		assert ( eType==SPH_ATTR_STRING || eType==SPH_ATTR_STRINGPTR );
 		m_bPacked = ( eType==SPH_ATTR_STRING );
@@ -991,11 +991,12 @@ static ISphFilter * CreateFilter ( ESphAttr eAttrType, ESphFilter eFilterType, i
 	}
 
 	if ( eAttrType==SPH_ATTR_STRING || eAttrType==SPH_ATTR_STRINGPTR )
+	{
 		if ( eFilterType==SPH_FILTER_VALUES )
 			return new Filter_StringValues_c ( eCollation, eAttrType );
 		else
 			return new FilterString_c ( eCollation, eAttrType, bHasEqual );
-
+        }
 
 	// non-float, non-MVA
 	switch ( eFilterType )

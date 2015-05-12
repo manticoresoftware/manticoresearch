@@ -15,7 +15,7 @@ searchd
 	binlog_path = #
 	workers = threads
 	
-	sphinxql_state = <data_path/>/idx.meta
+	sphinxql_state = <data_path/>/startup.sql
 }
 
 source src

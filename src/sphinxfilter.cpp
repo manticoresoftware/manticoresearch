@@ -516,10 +516,12 @@ class FilterString_c : public IFilter_Attr
 {
 private:
 	CSphFixedVector<BYTE>	m_dVal;
+	bool					m_bEq;
+
+protected:
 	SphStringCmp_fn			m_fnStrCmp;
 	const BYTE *			m_pStringBase;
 	bool					m_bPacked;
-	bool					m_bEq;
 
 public:
 	FilterString_c ( ESphCollation eCollation, ESphAttr eType, bool bEq )
@@ -585,6 +587,73 @@ public:
 
 		bool bEq = ( m_fnStrCmp ( pStr, m_dVal.Begin(), m_bPacked )==0 );
 		return ( m_bEq==bEq );
+	}
+};
+
+
+struct Filter_StringValues_c: FilterString_c
+{
+	CSphString				m_sRefString;
+	CSphVector<BYTE>		m_dVal;
+	CSphVector<int>			m_dOfs;
+
+	Filter_StringValues_c ( ESphCollation eCollation, ESphAttr eType )
+		: FilterString_c ( eCollation, eType, false )
+	{}
+
+	virtual void SetValues ( const SphAttr_t * pStorage, int iCount )
+	{
+		assert ( pStorage );
+		assert ( iCount > 0 );
+
+		int iOfs = 0;
+		for ( int i=0; i<iCount; i++ )
+		{
+			SphAttr_t uVal = pStorage[i];
+
+			CSphString sRef;
+			SqlUnescape ( sRef, m_sRefString.cstr() + ( uVal>>32 ), uVal & 0xffffffff );
+			int iLen = sRef.Length();
+
+			if ( m_bPacked )
+			{
+				m_dVal.Resize ( iOfs+iLen+4 );
+				int iPacked = sphPackStrlen ( m_dVal.Begin() + iOfs, iLen );
+				memcpy ( m_dVal.Begin() + iOfs + iPacked, sRef.cstr(), iLen );
+			} else
+			{
+				m_dVal.Resize ( iOfs+iLen+1 );
+				memcpy ( m_dVal.Begin() + iOfs, sRef.cstr(), iLen );
+				m_dVal[iOfs+iLen] = '\0';
+			}
+
+			m_dOfs.Add ( iOfs );
+			iOfs = m_dVal.GetLength();
+		}
+	}
+
+	virtual void SetRefString ( const CSphString & sRef )
+	{
+		m_sRefString = sRef;
+	}
+
+	virtual bool Eval ( const CSphMatch & tMatch ) const
+	{
+		SphAttr_t uVal = tMatch.GetAttr ( m_tLocator );
+
+		const BYTE * pStr;
+		if ( !uVal )
+			pStr = (const BYTE*)"\0";
+		else if ( m_bPacked )
+			pStr = m_pStringBase + uVal;
+		else
+			pStr = (const BYTE *)uVal;
+
+		ARRAY_FOREACH ( i, m_dOfs )
+			if ( m_fnStrCmp ( pStr, m_dVal.Begin() + m_dOfs[i], m_bPacked )==0 )
+				return true;
+
+		return false;
 	}
 };
 
@@ -922,7 +991,11 @@ static ISphFilter * CreateFilter ( ESphAttr eAttrType, ESphFilter eFilterType, i
 	}
 
 	if ( eAttrType==SPH_ATTR_STRING || eAttrType==SPH_ATTR_STRINGPTR )
-		return new FilterString_c ( eCollation, eAttrType, bHasEqual );
+		if ( eFilterType==SPH_FILTER_VALUES )
+			return new Filter_StringValues_c ( eCollation, eAttrType );
+		else
+			return new FilterString_c ( eCollation, eAttrType, bHasEqual );
+
 
 	// non-float, non-MVA
 	switch ( eFilterType )

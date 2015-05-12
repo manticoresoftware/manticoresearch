@@ -410,15 +410,16 @@ filter_item:
 			pFilter->m_dValues.Add ( $3.m_iValue );
 			pFilter->m_bExclude = true;
 		}
-	| expr_ident TOK_IN '(' const_list ')'
+	| expr_ident TOK_IN '(' const_list_or_string_list ')'
 		{
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )
 				YYERROR;
 			pFilter->m_dValues = *$4.m_pValues.Ptr();
 			pFilter->m_dValues.Uniq();
+			pFilter->m_sRefString = pParser->m_pBuf;
 		}
-	| expr_ident TOK_NOT TOK_IN '(' const_list ')'
+	| expr_ident TOK_NOT TOK_IN '(' const_list_or_string_list ')'
 		{
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )
@@ -426,6 +427,7 @@ filter_item:
 			pFilter->m_dValues = *$5.m_pValues.Ptr();
 			pFilter->m_bExclude = true;
 			pFilter->m_dValues.Uniq();
+			pFilter->m_sRefString = pParser->m_pBuf;
 		}
 	| expr_ident TOK_IN TOK_USERVAR
 		{
@@ -600,6 +602,24 @@ const_list:
 		{
 			$$.m_pValues->Add ( $3.m_iValue );
 		}
+	;
+
+string_list:
+	TOK_QUOTED_STRING
+		{
+			assert ( !$$.m_pValues.Ptr() );
+			$$.m_pValues = new RefcountedVector_c<SphAttr_t> ();
+			$$.m_pValues->Add ( $1.m_iValue );
+		}
+	| string_list ',' TOK_QUOTED_STRING
+		{
+			$$.m_pValues->Add ( $3.m_iValue );
+		}
+	;
+
+const_list_or_string_list:
+	const_list
+	| string_list
 	;
 
 opt_group_clause:

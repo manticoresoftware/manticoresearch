@@ -85,7 +85,7 @@ source src10
 {
 	type			= mysql
 	<sql_settings/>
-	sql_query = SELECT 1 id, 11 idd, 'ab cd'
+	sql_query = SELECT 1 id, 11 idd, 'aab cd' as text
 	sql_attr_uint	= idd
 }
 
@@ -140,29 +140,29 @@ index testr
 
 <queries>
 <query index="test" select="avg(price) as avgprice,gid*10 as xgid" groupattr="gid"/>
-<query index="test" select="*,avg(price) as avgprice" groupattr="gid"/>
-<query index="test" select="*,sum(views) as sumviews, avg(price) as avgprice" groupattr="gid"/>
-<query index="dist" select="*,avg(price) as avgprice" groupattr="gid"/>
-<query index="dist" select="*,sum(views) as sumviews, avg(price) as avgprice" groupattr="gid"/>
-<query index="dist2" select="*,avg(price) as avgprice" groupattr="gid"/>
-<query index="dist2" select="*,sum(views) as sumviews, avg(price) as avgprice" groupattr="gid"/>
-<query index="dist3" select="*,avg(price) as avgprice" groupattr="gid"/>
-<query index="dist3" select="*,sum(views) as sumviews, avg(price) as avgprice" groupattr="gid"/>
+<query index="test" select="gid,price,views,avg(price) as avgprice" groupattr="gid"/>
+<query index="test" select="gid,price,views,sum(views) as sumviews, avg(price) as avgprice" groupattr="gid"/>
+<query index="dist" select="gid,price,views,avg(price) as avgprice" groupattr="gid"/>
+<query index="dist" select="gid,price,views,sum(views) as sumviews, avg(price) as avgprice" groupattr="gid"/>
+<query index="dist2" select="gid,price,views,avg(price) as avgprice" groupattr="gid"/>
+<query index="dist2" select="gid,price,views,sum(views) as sumviews, avg(price) as avgprice" groupattr="gid"/>
+<query index="dist3" select="gid,price,views,avg(price) as avgprice" groupattr="gid"/>
+<query index="dist3" select="gid,price,views,sum(views) as sumviews, avg(price) as avgprice" groupattr="gid"/>
 <query index="test" select="gid, sum(views) as sumviews, avg(price) as avgprice" groupattr="gid"/>
 <query index="test3" select="gid, sum(views) as sumviews, avg(price) as avgprice" groupattr="gid"/>
 <query index="test,test3" select="gid, sum(views) as sumviews, avg(price) as avgprice" groupattr="gid"/>
 </queries>
 
 <sphqueries>
-<sphinxql>select * from i10 where match('a* abc')</sphinxql>
+<sphinxql>select * from i10 where match('aa* abc')</sphinxql>
 <sphinxql>show meta</sphinxql>
-<sphinxql>select * from i10, i11 where match('a* abc')</sphinxql>
+<sphinxql>select * from i10, i11 where match('aa* abc')</sphinxql>
 <sphinxql>show meta</sphinxql>
-<sphinxql>select * from i11, i10 where match('a* abc')</sphinxql>
+<sphinxql>select * from i11, i10 where match('aa* abc')</sphinxql>
 <sphinxql>show meta</sphinxql>
-<sphinxql>select * from i10, i12 where match('a* abc')</sphinxql>
+<sphinxql>select * from i10, i12 where match('aa* abc')</sphinxql>
 <sphinxql>show meta</sphinxql>
-<sphinxql>select * from i12, i10 where match('a* abc')</sphinxql>
+<sphinxql>select * from i12, i10 where match('aa* abc')</sphinxql>
 <sphinxql>show meta</sphinxql>
 </sphqueries>
 

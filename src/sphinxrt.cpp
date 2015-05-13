@@ -5911,7 +5911,11 @@ bool RtIndex_t::RtQwordSetupSegment ( RtQword_t * pQword, const RtSegment_t * pC
 		bPrefix = true;
 	}
 
-	if ( !iWordLen || ( bPrefix && tSettings.m_iMinPrefixLen && iWordLen<=tSettings.m_iMinPrefixLen ) )
+	if ( !iWordLen )
+		return false;
+
+	// prevent prefix matching for explicitly setting prohibited by config, to be on pair with plain index (or CRC kind of index)
+	if ( bPrefix && ( ( tSettings.m_iMinPrefixLen && iWordLen<tSettings.m_iMinPrefixLen ) || ( tSettings.m_iMinInfixLen && iWordLen<tSettings.m_iMinInfixLen ) ) )
 		return false;
 
 	// no checkpoints - check all words

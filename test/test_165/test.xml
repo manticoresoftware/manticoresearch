@@ -74,7 +74,7 @@ source src_e
 	type			= mysql
 	<sql_settings/>
 
-	sql_query		= SELECT 1, 'life:) on mars'
+	sql_query		= SELECT 1, 'life:) on mars' text
 }
 
 index e

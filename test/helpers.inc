@@ -2350,9 +2350,6 @@ class SphinxConfig
 				$idxbody = "";
 				foreach ($lines as $line)
 				{
-					// skip comment lines (if any)
-					if ( preg_match ( "/\s*#/" , $line ) > 0 )
-						continue;
 					$eq = strpos ( $line,"=" );
 					if ($eq == 0)
 						continue;

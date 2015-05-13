@@ -975,7 +975,7 @@ void TestQueryParser ()
 	assert ( pBase->LoadSynonyms ( g_sTmpfile, NULL, sError ) );
 
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( pBase->Clone ( SPH_CLONE_QUERY ) );
-	sphSetupQueryTokenizer ( pTokenizer.Ptr() );
+	sphSetupQueryTokenizer ( pTokenizer.Ptr(), true, false );
 
 	CSphDictSettings tDictSettings;
 	tDictSettings.m_bWordDict = false;
@@ -1119,7 +1119,7 @@ void TestQueryTransforms ()
 	assert ( pBase->LoadSynonyms ( g_sTmpfile, NULL, sError ) );
 
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( pBase->Clone ( SPH_CLONE_QUERY ) );
-	sphSetupQueryTokenizer ( pTokenizer.Ptr() );
+	sphSetupQueryTokenizer ( pTokenizer.Ptr(), true, false );
 
 	struct CKeywordHits {
 		const char * 	m_sKeyword;

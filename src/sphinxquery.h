@@ -296,7 +296,7 @@ struct XQQuery_t : public ISphNoncopyable
 //////////////////////////////////////////////////////////////////////////////
 
 /// setup tokenizer for query parsing (ie. add all specials and whatnot)
-void	sphSetupQueryTokenizer ( ISphTokenizer * pTokenizer );
+void	sphSetupQueryTokenizer ( ISphTokenizer * pTokenizer, bool bWildcards, bool bExact );
 
 /// parses the query and returns the resulting tree
 /// return false and fills tQuery.m_sParseError on error

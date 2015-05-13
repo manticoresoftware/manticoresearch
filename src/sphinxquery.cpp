@@ -4286,11 +4286,22 @@ void sphOptimizeBoolean ( XQNode_t ** ppRoot, const ISphKeywordsStat * pKeywords
 }
 
 
-void sphSetupQueryTokenizer ( ISphTokenizer * pTokenizer )
+void sphSetupQueryTokenizer ( ISphTokenizer * pTokenizer, bool bWildcards, bool bExact )
 {
-	pTokenizer->AddSpecials ( "()|-!@~\"/^$<" );
-	pTokenizer->AddPlainChar ( '?' );
-	pTokenizer->AddPlainChar ( '%' );
+	if ( bWildcards )
+	{
+		pTokenizer->AddPlainChar ( '*' );
+		pTokenizer->AddPlainChar ( '?' );
+		pTokenizer->AddPlainChar ( '%' );
+	}
+	if ( bExact )
+	{
+		pTokenizer->AddPlainChar ( '=' );
+		pTokenizer->AddSpecials ( "()|-!@~\"/^$<=" );
+	} else
+	{
+		pTokenizer->AddSpecials ( "()|-!@~\"/^$<" );
+	}
 }
 
 

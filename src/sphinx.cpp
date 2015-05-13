@@ -9661,20 +9661,7 @@ void CSphIndex::SetupQueryTokenizer()
 	// that we can then use to create lightweight clones
 	SafeDelete ( m_pQueryTokenizer );
 	m_pQueryTokenizer = m_pTokenizer->Clone ( SPH_CLONE_QUERY );
-	if ( IsStarDict() )
-	{
-		m_pQueryTokenizer->AddPlainChar ( '*' );
-		m_pQueryTokenizer->AddPlainChar ( '?' );
-		m_pQueryTokenizer->AddPlainChar ( '%' );
-	}
-	if ( m_tSettings.m_bIndexExactWords )
-	{
-		m_pQueryTokenizer->AddPlainChar ( '=' );
-		m_pQueryTokenizer->AddSpecials ( "()|-!@~\"/^$<=" );
-	} else
-	{
-		m_pQueryTokenizer->AddSpecials ( "()|-!@~\"/^$<" );
-	}
+	sphSetupQueryTokenizer ( m_pQueryTokenizer, IsStarDict(), m_tSettings.m_bIndexExactWords );
 }
 
 

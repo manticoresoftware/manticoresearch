@@ -37,7 +37,7 @@ source src_prefix
 	type			= mysql
 	<sql_settings/>
 
-	sql_query		= SELECT 1, 'force all' UNION SELECT 2, 'forcing me' UNION SELECT 3, 'foam stuff'
+	sql_query		= SELECT 1, 'force all' as content UNION SELECT 2, 'forcing me' as content UNION SELECT 3, 'foam stuff' as content
 }
 index prefix
 {
@@ -76,9 +76,9 @@ source src_empty
         sql_query               = SELECT * FROM empty_table
         sql_attr_uint           = uid
 }
+
 index empty
 {
-        type                    = plain
         path                    = <data_path/>/empty_kw
         source                  = src_empty
         min_infix_len           = 3

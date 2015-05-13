@@ -3,6 +3,10 @@
 
 <name>indexing ranged stored procedures</name>
 
+<requires>
+<non-rt/>
+</requires>
+
 <config>
 indexer
 {

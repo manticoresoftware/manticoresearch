@@ -2,6 +2,11 @@
 <Test>
 <Name>indexing vs sql_file_field failed processing</Name>
 
+<requires>
+<!-- this test checks on_file_field_error behavior which is basically indexer-only -->
+<non-rt/>
+</requires>
+
 <Config>
 indexer
 {

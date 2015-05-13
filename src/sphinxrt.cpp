@@ -6708,6 +6708,8 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	// search disk chunks
 	//////////////////////
 
+	pResult->m_bHasPrediction = pQuery->m_iMaxPredictedMsec>0;
+
 	SphWordStatChecker_t tDiskStat;
 	SphWordStatChecker_t tStat;
 	tStat.Set ( pResult->m_hWordStats );
@@ -6824,6 +6826,13 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			tMvaArenaFlag.BitSet ( iChunk );
 		pResult->m_iBadRows += tChunkResult.m_iBadRows;
 
+		if ( pResult->m_bHasPrediction )
+		{
+			pResult->m_tStats.m_iFetchedDocs += tChunkResult.m_tStats.m_iFetchedDocs;
+			pResult->m_tStats.m_iFetchedHits += tChunkResult.m_tStats.m_iFetchedHits;
+			pResult->m_tStats.m_iSkips += tChunkResult.m_tStats.m_iSkips;
+		}
+
 		if ( iChunk && tmMaxTimer>0 && sphMicroTimer()>=tmMaxTimer )
 		{
 			pResult->m_sWarning = "query time exceeded max_query_time";
@@ -6870,6 +6879,13 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	tTermSetup.m_pWarning = &pResult->m_sWarning;
 	tTermSetup.SetSegment ( -1 );
 	tTermSetup.m_pCtx = &tCtx;
+
+	// setup prediction constrain
+	CSphQueryStats tQueryStats;
+	int64_t iNanoBudget = (int64_t)(pQuery->m_iMaxPredictedMsec) * 1000000; // from milliseconds to nanoseconds
+	tQueryStats.m_pNanoBudget = &iNanoBudget;
+	if ( pResult->m_bHasPrediction )
+		tTermSetup.m_pStats = &tQueryStats;
 
 	// bind weights
 	tCtx.BindWeights ( pQuery, m_tSchema );
@@ -7284,6 +7300,13 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	if ( pProfiler )
 		pProfiler->Switch ( SPH_QSTATE_UNKNOWN );
+
+	if ( pResult->m_bHasPrediction )
+	{
+		pResult->m_tStats.m_iFetchedDocs += tQueryStats.m_iFetchedDocs;
+		pResult->m_tStats.m_iFetchedHits += tQueryStats.m_iFetchedHits;
+		pResult->m_tStats.m_iSkips += tQueryStats.m_iSkips;
+	}
 
 	// query timer
 	pResult->m_iQueryTime = int ( ( sphMicroTimer()-tmQueryStart )/1000 );

@@ -159,7 +159,6 @@ index dist2
 <sphinxql>SHOW STATUS LIKE '%n_\_up%'</sphinxql>
 <sphinxql>SHOW META LIKE '%al%found'</sphinxql>
 <sphinxql>DESCRIBE test LIKE 'g_oup%'</sphinxql>
-<sphinxql>SHOW TABLES LIKE '__s_'</sphinxql>
 <sphinxql>SHOW AGENT STATUS LIKE '%seconds%'</sphinxql>
 
 <sphinxql>SELECT *, GROUPBY(), COUNT(*) FROM test GROUP BY group_id, group_id2</sphinxql>

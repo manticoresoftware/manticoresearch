@@ -285,8 +285,8 @@ INSERT INTO string_table VALUES
 <!-- .NET connector 6.9.6 uses select timediff(now(), utc_timestamp()) -->
 <sphinxql>SELECT bigint(timediff(now(),utc_timestamp())) % 15</sphinxql>
 
-<!-- rand function, should be strictly deterministic (if called with arguments) -->
-<sphinxql>select rand()*0, rand(0), rand(1), rand(2), rand(id), rand(id+1) from test</sphinxql>
+<!-- RAND() function, should be strictly deterministic (if called with arguments) -->
+<sphinxql>select id, rand()*0, rand(0), rand(1) as p, rand(2) as q, rand(id), rand(id+1) from test order by p asc, q asc</sphinxql>
 <sphinxql>select id, floor(1 + rand(id) * 4294967295) as rand from test order by rand asc</sphinxql>
 
 <!-- filter by empty string -->

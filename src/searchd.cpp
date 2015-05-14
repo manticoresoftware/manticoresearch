@@ -8513,6 +8513,7 @@ public:
 		}
 		return 0;
 	}
+
 	inline static SphAttr_t ToBigInt ( const SqlInsert_t & tVal )
 	{
 		switch ( tVal.m_iType )
@@ -8523,11 +8524,21 @@ public:
 		}
 		return 0;
 	}
-#if USE_64BIT
-#define ToDocid ToBigInt
-#else
-#define ToDocid ToInt
-#endif // USE_64BIT
+
+	inline static SphDocID_t ToDocid ( const SqlInsert_t & tVal )
+	{
+		// FIXME? report conversion errors?
+		SphDocID_t uRes;
+		switch ( tVal.m_iType )
+		{
+			case TOK_QUOTED_STRING :	uRes = (SphDocID_t) strtoull ( tVal.m_sVal.cstr(), NULL, 10 ); break;
+			case TOK_CONST_INT:			uRes = (SphDocID_t) tVal.m_iVal; break;
+			case TOK_CONST_FLOAT:		uRes = (SphDocID_t) tVal.m_fVal; break;
+		}
+		if ( uRes==DOCID_MAX )
+			uRes = 0;
+		return uRes;
+	}
 
 	bool SetAttr ( const CSphAttrLocator & tLoc, const SqlInsert_t & tVal, ESphAttr eTargetType )
 	{
@@ -11918,7 +11929,7 @@ void HandleMysqlInsert ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt,
 
 		CSphMatchVariant tDoc;
 		tDoc.Reset ( tSchema.GetRowSize() );
-		tDoc.m_uDocID = (SphDocID_t)CSphMatchVariant::ToDocid ( tStmt.m_dInsertValues[iIdIndex + c * iExp] );
+		tDoc.m_uDocID = CSphMatchVariant::ToDocid ( tStmt.m_dInsertValues[iIdIndex + c * iExp] );
 		dStrings.Resize ( 0 );
 		dMvas.Resize ( 0 );
 

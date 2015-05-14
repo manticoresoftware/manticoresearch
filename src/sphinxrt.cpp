@@ -892,6 +892,7 @@ private:
 	CSphDict *					m_pRefDict;
 	CSphDict *					m_pDictCloned;
 	ISphRtDictWraper *			m_pDictRt;
+	bool						m_bReplace;		///< insert or replace mode (affects CleanupDuplicates() behavior)
 
 public:
 					explicit RtAccum_t ( bool bKeywordDict );
@@ -901,7 +902,7 @@ public:
 	void			ResetDict ();
 	void			Sort ();
 
-	void			AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, int iRowSize, const char ** ppStr, const CSphVector<DWORD> & dMvas, const CSphVector<JSONAttr_t> & dJson );
+	void			AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bReplace, int iRowSize, const char ** ppStr, const CSphVector<DWORD> & dMvas, const CSphVector<JSONAttr_t> & dJson );
 	RtSegment_t *	CreateSegment ( int iRowSize, int iWordsCheckpoint );
 	void			CleanupDuplicates ( int iRowSize );
 	void			GrabLastWarning ( CSphString & sWarning );
@@ -1158,7 +1159,7 @@ public:
 	virtual						~RtIndex_t ();
 
 	virtual bool				AddDocument ( int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt );
-	virtual bool				AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt );
+	virtual bool				AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bReplace, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt );
 	virtual bool				DeleteDocument ( const SphDocID_t * pDocs, int iDocs, CSphString & sError, ISphRtAccum * pAccExt );
 	virtual void				Commit ( int * pDeleted, ISphRtAccum * pAccExt );
 	virtual void				RollBack ( ISphRtAccum * pAccExt );
@@ -1559,7 +1560,7 @@ bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMat
 	ISphHits * pHits = tSrc.IterateHits ( sError );
 	pAcc->GrabLastWarning ( sWarning );
 
-	if ( !AddDocument ( pHits, tDoc, ppStr, dMvas, sError, sWarning, pAcc ) )
+	if ( !AddDocument ( pHits, tDoc, bReplace, ppStr, dMvas, sError, sWarning, pAcc ) )
 		return false;
 
 	m_tStats.m_iTotalBytes += tSrc.GetStats().m_iTotalBytes;
@@ -1615,7 +1616,7 @@ ISphRtAccum * RtIndex_t::CreateAccum ( CSphString & sError )
 }
 
 
-bool RtIndex_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, const char ** ppStr, const CSphVector<DWORD> & dMvas,
+bool RtIndex_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bReplace, const char ** ppStr, const CSphVector<DWORD> & dMvas,
 	CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt )
 {
 	assert ( g_bRTChangesAllowed );
@@ -1673,7 +1674,7 @@ bool RtIndex_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, const ch
 			iAttr += ( tColumn.m_eAttrType==SPH_ATTR_STRING || tColumn.m_eAttrType==SPH_ATTR_JSON ) ? 1 : 0;
 		}
 
-		pAcc->AddDocument ( pHits, tDoc, m_tSchema.GetRowSize(), ppStr, dMvas, dJsonData );
+		pAcc->AddDocument ( pHits, tDoc, bReplace, m_tSchema.GetRowSize(), ppStr, dMvas, dJsonData );
 	}
 
 	return ( pAcc!=NULL );
@@ -1687,6 +1688,7 @@ RtAccum_t::RtAccum_t ( bool bKeywordDict )
 	, m_pRefDict ( NULL )
 	, m_pDictCloned ( NULL )
 	, m_pDictRt ( NULL )
+	, m_bReplace ( false )
 {
 	m_pIndex = NULL;
 	m_dStrings.Add ( 0 );
@@ -1747,9 +1749,12 @@ void RtAccum_t::Sort ()
 	}
 }
 
-void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, int iRowSize, const char ** ppStr, const CSphVector<DWORD> & dMvas, const CSphVector<JSONAttr_t> & dJson )
+void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bReplace, int iRowSize, const char ** ppStr, const CSphVector<DWORD> & dMvas, const CSphVector<JSONAttr_t> & dJson )
 {
 	MEMORY ( MEM_RT_ACCUM );
+
+	// FIXME? what happens on mixed insert/replace?
+	m_bReplace = bReplace;
 
 	// schedule existing copies for deletion
 	m_dAccumKlist.Add ( tDoc.m_uDocID );
@@ -2062,14 +2067,20 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 	if ( !bHasDups )
 		return;
 
-	// filter out unique - keep duplicates, but not last one
+	// identify duplicates to kill, and store them in dDocHits
 	int iDst = 0;
-	int iSrc = 1;
-	while ( iSrc<dDocHits.GetLength() )
+	if ( m_bReplace )
 	{
-		bool bDup = ( dDocHits[iDst].m_uDocid==dDocHits[iSrc].m_uDocid );
-		iDst += bDup;
-		dDocHits[iDst] = dDocHits[iSrc++];
+		// replace mode, last value wins, precending values are duplicate
+		for ( int iSrc=0; iSrc<dDocHits.GetLength()-1; iSrc++ )
+			if ( dDocHits[iSrc].m_uDocid==dDocHits[iSrc+1].m_uDocid ) // if my next value has the same docid, i am dupe
+				dDocHits[iDst++] = dDocHits[iSrc];
+	} else
+	{
+		// insert mode, first value wins, subsequent values are duplicates
+		for ( int iSrc=1; iSrc<dDocHits.GetLength(); iSrc++ )
+			if ( dDocHits[iSrc].m_uDocid==dDocHits[iSrc-1].m_uDocid ) // if my prev value has the same docid, i am a dupe
+				dDocHits[iDst++] = dDocHits[iSrc];
 	}
 	dDocHits.Resize ( iDst );
 	assert ( dDocHits.GetLength() );
@@ -2078,6 +2089,7 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 	dDocHits.Sort ( bind ( &AccumDocHits_t::m_iHitIndex ) );
 
 	// clean up hits of duplicates
+	int iSrc;
 	for ( int iHit = dDocHits.GetLength()-1; iHit>=0; iHit-- )
 	{
 		if ( !dDocHits[iHit].m_iHitCount )

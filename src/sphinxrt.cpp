@@ -1102,13 +1102,28 @@ struct SphChunkGuard_t
 };
 
 
+struct ChunkStats_t
+{
+	CSphSourceStats				m_Stats;
+	CSphFixedVector<int64_t>	m_dFieldLens;
+
+	explicit ChunkStats_t ( const CSphSourceStats & s, const CSphFixedVector<int64_t> & dLens )
+		: m_dFieldLens ( dLens.GetLength() )
+	{
+		m_Stats = s;
+		ARRAY_FOREACH ( i, dLens )
+			m_dFieldLens[i] = dLens[i];
+	}
+};
+
+
 /// RAM based index
 struct RtQword_t;
 struct RtIndex_t : public ISphRtIndex, public ISphNoncopyable, public ISphWordlist
 {
 private:
 	static const DWORD			META_HEADER_MAGIC	= 0x54525053;	///< my magic 'SPRT' header
-	static const DWORD			META_VERSION		= 9;			///< current version
+	static const DWORD			META_VERSION		= 10;			///< current version
 
 private:
 	int							m_iStride;
@@ -1154,6 +1169,11 @@ private:
 	bool						m_bOndiskAllAttr;
 	bool						m_bOndiskPoolAttr;
 
+	CSphFixedVector<int64_t>	m_dFieldLens;						///< total field lengths over entire index
+	CSphFixedVector<int64_t>	m_dFieldLensRam;					///< field lengths summed over current RAM chunk
+	CSphFixedVector<int64_t>	m_dFieldLensDisk;					///< field lengths summed over all disk chunks
+	int							m_iFieldLensBegin;					///< index of a first xxx_len attribute in the schema (-1 if field lengths are disabled)
+
 public:
 	explicit					RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict );
 	virtual						~RtIndex_t ();
@@ -1184,9 +1204,9 @@ private:
 	void						CopyDoc ( RtSegment_t * pSeg, RtDocWriter_t & tOutDoc, RtWord_t * pWord, const RtSegment_t * pSrc, const RtDoc_t * pDoc );
 
 	void						SaveMeta ( int iDiskChunks, int64_t iTID );
-	void						SaveDiskHeader ( const char * sFilename, SphDocID_t iMinDocID, int iCheckpoints, SphOffset_t iCheckpointsPosition, DWORD iInfixBlocksOffset, int iInfixCheckpointWordsSize, DWORD uKillListSize, uint64_t uMinMaxSize, const CSphSourceStats & tStats ) const;
-	void						SaveDiskDataImpl ( const char * sFilename, const SphChunkGuard_t & tGuard, const CSphSourceStats & tStats ) const;
-	void						SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, const CSphSourceStats & tStats );
+	void						SaveDiskHeader ( const char * sFilename, SphDocID_t iMinDocID, int iCheckpoints, SphOffset_t iCheckpointsPosition, DWORD iInfixBlocksOffset, int iInfixCheckpointWordsSize, DWORD uKillListSize, uint64_t uMinMaxSize, const ChunkStats_t & tStats ) const;
+	void						SaveDiskDataImpl ( const char * sFilename, const SphChunkGuard_t & tGuard, const ChunkStats_t & tStats ) const;
+	void						SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, const ChunkStats_t & tStats );
 	CSphIndex *					LoadDiskChunk ( const char * sChunk, CSphString & sError ) const;
 	bool						LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes );
 	bool						SaveRamChunk ();
@@ -1217,6 +1237,8 @@ public:
 	virtual void				PostSetup();
 	virtual bool				IsRT() const { return true; }
 
+	virtual void				Setup ( const CSphIndexSettings & tSettings );
+
 	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError, CSphString & sWarning );
 	virtual bool				SaveAttributes ( CSphString & sError ) const;
 	virtual DWORD				GetAttributeStatus () const { return m_uDiskAttrStatus; }
@@ -1234,6 +1256,7 @@ public:
 public:
 	virtual bool						EarlyReject ( CSphQueryContext * pCtx, CSphMatch & ) const;
 	virtual const CSphSourceStats &		GetStats () const { return m_tStats; }
+	virtual int64_t *					GetFieldLens() const { return m_tSettings.m_bIndexFieldLens ? m_dFieldLens.Begin() : NULL; }
 	virtual void				GetStatus ( CSphIndexStatus* ) const;
 
 	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const;
@@ -1293,6 +1316,10 @@ RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int6
 	, m_bKeywordDict ( bKeywordDict )
 	, m_iWordsCheckpoint ( RTDICT_CHECKPOINT_V5 )
 	, m_pTokenizerIndexing ( NULL )
+	, m_dFieldLens ( SPH_MAX_FIELDS )
+	, m_dFieldLensRam ( SPH_MAX_FIELDS )
+	, m_dFieldLensDisk ( SPH_MAX_FIELDS )
+	, m_iFieldLensBegin ( -1 )
 {
 	MEMORY ( MEM_INDEX_RT );
 
@@ -1314,6 +1341,13 @@ RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int6
 
 	Verify ( m_tChunkLock.Init() );
 	Verify ( m_tReading.Init() );
+
+	ARRAY_FOREACH ( i, m_dFieldLens )
+	{
+		m_dFieldLens[i] = 0;
+		m_dFieldLensRam[i] = 0;
+		m_dFieldLensDisk[i] = 0;
+	}
 }
 
 
@@ -2888,7 +2922,21 @@ void RtIndex_t::Commit ( int * pDeleted, ISphRtAccum * pAccExt )
 
 void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t> & dAccKlist, int * pTotalKilled )
 {
+	// store statistics, because pNewSeg just might get merged
 	int iNewDocs = pNewSeg ? pNewSeg->m_iRows : 0;
+
+	CSphVector<int64_t> dLens;
+	if ( pNewSeg && m_iFieldLensBegin>=0 )
+	{
+		assert ( pNewSeg->GetStride()==m_iStride );
+		int iFields = m_tSchema.m_dFields.GetLength(); // shortcut
+		dLens.Resize ( iFields );
+		dLens.Fill ( 0 );
+		for ( int i=0; i<pNewSeg->m_iRows; i++ )
+			for ( int j=0; j<iFields; j++ )
+				dLens[j] += sphGetRowAttr ( &pNewSeg->m_dRows [ i*m_iStride+DOCINFO_IDSIZE ], m_tSchema.GetAttr ( j+m_iFieldLensBegin ).m_tLocator );
+
+	}
 
 	// phase 1, lock out other writers (but not readers yet)
 	// concurrent readers are ok during merges, as existing segments won't be modified yet
@@ -3172,6 +3220,15 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 	// update stats
 	m_tStats.m_iTotalDocuments += iNewDocs - iTotalKilled;
 
+	if ( m_iFieldLensBegin>=0 )
+	{
+		ARRAY_FOREACH ( i, m_tSchema.m_dFields )
+		{
+			m_dFieldLensRam[i] += dLens[i];
+			m_dFieldLens[i] = m_dFieldLensRam[i] + m_dFieldLensDisk[i];
+		}
+	}
+
 	// get flag of double-buffer prior mutex unlock
 	bool bDoubleBufferActive = ( m_iDoubleBuffer>0 );
 
@@ -3197,7 +3254,8 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 		// copy stats for disk chunk
 		SphChunkGuard_t tGuard;
 		GetReaderChunks ( tGuard );
-		CSphSourceStats tStat2Dump = m_tStats;
+
+		ChunkStats_t tStat2Dump ( m_tStats, m_dFieldLensRam );
 		m_iDoubleBuffer = m_dRamChunks.GetLength();
 
 		m_dDiskChunkKlist.Resize ( 0 );
@@ -3296,7 +3354,8 @@ void RtIndex_t::ForceDiskChunk ()
 	m_tKlist.Flush ( m_dDiskChunkKlist );
 	Verify ( m_tWriting.Unlock() );
 
-	SaveDiskChunk ( m_iTID, tGuard, m_tStats );
+	ChunkStats_t s ( m_tStats, m_dFieldLensRam );
+	SaveDiskChunk ( m_iTID, tGuard, s );
 }
 
 
@@ -3307,7 +3366,7 @@ struct SaveSegment_t
 };
 
 
-void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const SphChunkGuard_t & tGuard, const CSphSourceStats & tStats ) const
+void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const SphChunkGuard_t & tGuard, const ChunkStats_t & tStats ) const
 {
 	typedef RtDoc_T<SphDocID_t> RTDOC;
 	typedef RtWord_T<SphWordID_t> RTWORD;
@@ -3796,7 +3855,7 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const SphChunkGuard_t
 
 void RtIndex_t::SaveDiskHeader ( const char * sFilename, SphDocID_t iMinDocID, int iCheckpoints,
 	SphOffset_t iCheckpointsPosition, DWORD iInfixBlocksOffset, int iInfixCheckpointWordsSize, DWORD uKillListSize, uint64_t uMinMaxSize,
-	const CSphSourceStats & tStats ) const
+	const ChunkStats_t & tStats ) const
 {
 	static const DWORD INDEX_FORMAT_VERSION	= 39;			///< my format version
 
@@ -3828,8 +3887,8 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, SphDocID_t iMinDocID, i
 	tWriter.PutDword ( iInfixCheckpointWordsSize ); // m_iInfixCheckpointWordsSize, v.34+
 
 	// stats
-	tWriter.PutDword ( (DWORD)tStats.m_iTotalDocuments ); // FIXME? we don't expect over 4G docs per just 1 local index
-	tWriter.PutOffset ( tStats.m_iTotalBytes );
+	tWriter.PutDword ( (DWORD)tStats.m_Stats.m_iTotalDocuments ); // FIXME? we don't expect over 4G docs per just 1 local index
+	tWriter.PutOffset ( tStats.m_Stats.m_iTotalBytes );
 
 	// index settings
 	tWriter.PutDword ( m_tSettings.m_iMinPrefixLen );
@@ -3867,6 +3926,11 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, SphDocID_t iMinDocID, i
 
 	// field filter
 	SaveFieldFilterSettings ( tWriter, m_pFieldFilter );
+
+	// field lengths
+	if ( m_tSettings.m_bIndexFieldLens )
+		ARRAY_FOREACH ( i, m_tSchema.m_dFields )
+			tWriter.PutOffset ( tStats.m_dFieldLens[i] );
 
 	// done
 	tWriter.CloseFile ();
@@ -3932,7 +3996,7 @@ void RtIndex_t::SaveMeta ( int iDiskChunks, int64_t iTID )
 }
 
 
-void RtIndex_t::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, const CSphSourceStats & tStats )
+void RtIndex_t::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, const ChunkStats_t & tStats )
 {
 	if ( !tGuard.m_dRamChunks.GetLength() )
 		return;
@@ -3966,6 +4030,15 @@ void RtIndex_t::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, co
 	m_dRamChunks.Resize ( iNewSegmentsCount );
 
 	m_dDiskChunks.Add ( pDiskChunk );
+
+	// update field lengths
+	if ( m_iFieldLensBegin>=0 )
+	{
+		ARRAY_FOREACH ( i, m_dFieldLensRam )
+			m_dFieldLensRam[i] -= tStats.m_dFieldLens[i];
+		ARRAY_FOREACH ( i, m_dFieldLensDisk )
+			m_dFieldLensDisk[i] += tStats.m_dFieldLens[i];
+	}
 
 	// move up kill-list
 	m_tKlist.Reset ( m_dNewSegmentKlist.Begin(), m_dNewSegmentKlist.GetLength() );
@@ -4139,6 +4212,14 @@ bool RtIndex_t::Prealloc ( bool bStripPath )
 
 		// update schema
 		m_iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
+
+		// settings/schema were loaded, need to recompute field lengths base
+		if ( m_tSettings.m_bIndexFieldLens )
+		{
+			m_iFieldLensBegin = m_tSchema.GetAttrsCount() - m_tSchema.m_dFields.GetLength();
+			assert ( m_tSchema.GetAttr ( m_iFieldLensBegin ).m_eAttrType==SPH_ATTR_TOKENCOUNT );
+			assert ( m_tSchema.GetAttr ( m_iFieldLensBegin + m_tSchema.m_dFields.GetLength() - 1 ).m_eAttrType==SPH_ATTR_TOKENCOUNT );
+		}
 	}
 
 	// meta v.5 checkpoint freq
@@ -4183,10 +4264,23 @@ bool RtIndex_t::Prealloc ( bool bStripPath )
 		// outgoing match schema on disk chunk should be identical to our internal (!) schema
 		if ( !m_tSchema.CompareTo ( pIndex->GetMatchSchema(), m_sLastError ) )
 			return false;
+
+		// update field lengths
+		if ( m_iFieldLensBegin>=0 )
+		{
+			int64_t * pLens = pIndex->GetFieldLens();
+			if ( pLens )
+				ARRAY_FOREACH ( i, pIndex->GetMatchSchema().m_dFields )
+					m_dFieldLensDisk[i] += pLens[i];
+		}
 	}
 
 	// load ram chunk
 	bool bRamLoaded = LoadRamChunk ( uVersion, bRebuildInfixes );
+
+	// field lengths
+	ARRAY_FOREACH ( i, m_dFieldLens )
+		m_dFieldLens[i] = m_dFieldLensDisk[i] + m_dFieldLensRam[i];
 
 	// set up values for on timer save
 	m_iSavedTID = m_iTID;
@@ -4335,6 +4429,11 @@ bool RtIndex_t::SaveRamChunk ()
 		// infixes
 		SaveVector ( wrChunk, pSeg->m_dInfixFilterCP );
 	}
+
+	// field lengths
+	wrChunk.PutDword ( m_tSchema.m_dFields.GetLength() );
+	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
+		wrChunk.PutOffset ( m_dFieldLensRam[i] );
 
 	wrChunk.CloseFile();
 	if ( wrChunk.IsError() )
@@ -4485,6 +4584,17 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 		}
 	}
 
+	// field lengths
+	if ( uVersion>=10 )
+	{
+		int iFields = rdChunk.GetDword();
+		assert ( iFields==m_tSchema.m_dFields.GetLength() );
+
+		for ( int i=0; i<iFields; i++ )
+			m_dFieldLensRam[i] = rdChunk.GetOffset();
+	}
+
+	// all done
 	RtSegment_t::m_tSegmentSeq.Lock();
 	RtSegment_t::m_iSegments = iSegmentSeq;
 	RtSegment_t::m_tSegmentSeq.Unlock();
@@ -4493,6 +4603,21 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 	m_bLoadRamPassedOk = true;
 	return true;
 }
+
+
+void RtIndex_t::Setup ( const CSphIndexSettings & tSettings )
+{
+	m_bStripperInited = true;
+	m_tSettings = tSettings;
+
+	if ( m_tSettings.m_bIndexFieldLens )
+	{
+		m_iFieldLensBegin = m_tSchema.GetAttrsCount() - m_tSchema.m_dFields.GetLength();
+		assert ( m_tSchema.GetAttr ( m_iFieldLensBegin ).m_eAttrType==SPH_ATTR_TOKENCOUNT );
+		assert ( m_tSchema.GetAttr ( m_iFieldLensBegin + m_tSchema.m_dFields.GetLength() - 1 ).m_eAttrType==SPH_ATTR_TOKENCOUNT );
+	}
+}
+
 
 void RtIndex_t::PostSetup()
 {
@@ -8058,7 +8183,9 @@ bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 		m_tKlist.Flush ( m_dDiskChunkKlist );
 		SphChunkGuard_t tGuard;
 		GetReaderChunks ( tGuard );
-		SaveDiskChunk ( m_iTID, tGuard, m_tStats );
+
+		ChunkStats_t s ( m_tStats, m_dFieldLensRam );
+		SaveDiskChunk ( m_iTID, tGuard, s );
 
 		// kill-list drying up
 		for ( int iIndex=m_dDiskChunks.GetLength()-1; iIndex>=0 && iCount; iIndex-- )

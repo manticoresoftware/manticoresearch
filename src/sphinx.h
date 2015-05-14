@@ -3234,7 +3234,7 @@ public:
 	CSphDict *					GetDictionary () const { return m_pDict; }
 	CSphDict *					LeakDictionary ();
 	virtual void				SetKeepAttrs ( const CSphString & ) {}
-	void						Setup ( const CSphIndexSettings & tSettings );
+	virtual void				Setup ( const CSphIndexSettings & tSettings );
 	const CSphIndexSettings &	GetSettings () const { return m_tSettings; }
 	bool						IsStripperInited () const { return m_bStripperInited; }
 	virtual SphDocID_t *		GetKillList () const = 0;

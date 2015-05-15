@@ -127,6 +127,13 @@ $query ( $results, "SELECT * FROM test", $sock );
 $query ( $results, "UPDATE test SET idd=111 WHERE id=1", $sock );
 $query ( $results, "SELECT * FROM test", $sock );
 $client->FlushAttributes();
+// in RT mode lets emulate FlushAttributes for this particular index via FLUSH RAMCHUNK
+global $g_locals;
+if ( array_key_exists ('rt_mode', $g_locals) && $g_locals['rt_mode'] )
+{
+	$dummy_res = array();
+	$query ( $dummy_res, "FLUSH RAMCHUNK test", $sock );
+}
 
 $results[]= "killing";
 KillSearchd ('config.conf', 'searchd.pid','KILL',false);

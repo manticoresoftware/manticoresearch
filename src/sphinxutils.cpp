@@ -410,7 +410,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "ignore_chars",			0, NULL },
 	{ "min_prefix_len",			0, NULL },
 	{ "min_infix_len",			0, NULL },
-	{ "max_substring_len",		0, NULL },
+	{ "max_substring_len",		KEY_DEPRECATED, "dict=keywords" },
 	{ "prefix_fields",			0, NULL },
 	{ "infix_fields",			0, NULL },
 	{ "enable_star",			KEY_REMOVED, NULL },

@@ -82,23 +82,19 @@ source plain_substring
        sql_query               = select 1 id, 1 gid, '12345' as text
        sql_attr_uint   = gid
 }
+
 index plain_sub_prefix
 {
        source                  = plain_substring
        path                    = <data_path/>/plain_sub_prefix
-
        min_prefix_len  = 2
-       max_substring_len       = 3
-	   dict = crc
 }
+
 index plain_sub_infix
 {
        source                  = plain_substring
        path                    = <data_path/>/plain_sub_infix
-
        min_infix_len   = 2
-       max_substring_len       = 3
-	   dict = crc
 }
 
 source kw_infix

@@ -140,6 +140,12 @@ for ( $i=0; $i<50000; $i++ )
 $client->SetFilter ( 'group_id', $gid );
 $results[] = $client->XQuery ( "", "dist2" );
 
+// just add one dummy connection for non RT mode to be on pair with RT mode
+global $g_locals;
+if ( !array_key_exists ('rt_mode', $g_locals) || !$g_locals['rt_mode'] )
+{
+	$ql->Reconnect();
+}
 
 // regression crash on SphinxQL packet overflow max_packet_size
 $ql->Reconnect();

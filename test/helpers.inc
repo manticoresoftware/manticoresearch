@@ -2510,7 +2510,7 @@ class SphinxConfig
 					$i++;
 				}
 				
-				if ( ( strlen ($accum) + strlen ($query) ) > 1024000 ) ///<checkit!
+				if ( ( strlen ($accum) + strlen ($query) ) > 8192000 ) ///<checkit!
 				{
 					$result = mysql_wr ( $prefix.$accum, $cn );
 					if ( $result === false )

@@ -5,6 +5,7 @@
 
 <requires>
 <non-windows/>
+<non-rt/>
 </requires>
 
 <config>#!/usr/bin/python

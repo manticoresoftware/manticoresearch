@@ -3,6 +3,10 @@
 
 <name>hitless indexes</name>
 
+<requires>
+<non-rt/>
+</requires>
+
 <config>
 indexer
 {

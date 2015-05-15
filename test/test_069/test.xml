@@ -2,6 +2,10 @@
 <test>
 <name>overrides</name>
 
+<requires>
+<non-rt/>
+</requires>
+
 <config>
 indexer
 {

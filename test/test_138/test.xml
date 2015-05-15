@@ -1,6 +1,10 @@
 <test>
 <name>quorum vs decreased matched word</name>
 
+<requires>
+<non-rt/>
+</requires>
+
 <config>
 indexer
 {
@@ -116,7 +120,7 @@ create table test_kw_joined
 		$text = sprintf ( "insert into test_table2 values ( %d, '%s' )", $i, $sql_data[1] );
 		mysql_query ( $text );
 	}
-	foreach ( $sql_data as $key => $value )
+		foreach ( $sql_data as $key => $value )
 	{
 		$text = sprintf ( "insert into test_table2 values ( %d, '%s' )", 600+$key, $value );
 		mysql_query ( $text );

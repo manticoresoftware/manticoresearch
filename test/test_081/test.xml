@@ -57,6 +57,22 @@ index some1
 	index_sp		= 1
 	index_zones		= zone*
 }
+
+source all2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table1
+	sql_attr_uint	= gid
+	sql_field_string = title
+}
+
+index all2
+{
+	source = all2
+	path = <data_path/>/all2
+	hitless_words = all
+}
 </config>
 
 <db_create>
@@ -66,16 +82,26 @@ create table sph_test
 	text varchar(255) not null
 );
 </db_create>
+<db_create>
+create table test_table1
+(
+	id int not null,
+	gid int not null,
+	title varchar(16384) not null
+);
+</db_create>
 
-<db_drop>
-drop table if exists sph_test;
-</db_drop>
+<db_drop>drop table if exists sph_test;</db_drop>
+<db_drop>drop table if exists test_table1;</db_drop>
 
 <db_insert>
 insert into sph_test values
 ( 1, 'The Tin Woodman gave a sigh of satisfaction and lowered his axe, which he leaned against the tree.' ),
 ( 2, 'The Tin Woodman appeared to think deeply for a moment.' ),
 ( 3, 'The Tin Woodman had asked Dorothy to put the oil-can in her basket.' );
+</db_insert>
+<db_insert>
+INSERT INTO test_table1 VALUES (10,1,'bbb bbb bbb bbb aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa '),(11,1,'aaa aaa aaa aaa bbb bbb aaa aaa');
 </db_insert>
 
 <queries>
@@ -142,6 +168,18 @@ insert into sph_test values
 	<query mode="extended2" index="some1">Tin Woodman "and the tree"</query>
 	<query mode="extended2" index="some1">ZONESPAN:(zoneC,zoneB) Tin Woodman "and the tree"</query>
 	<query mode="extended2" index="some1">Woodman NEAR/10 "and the tree"</query>
+
 </queries>
+
+<sphqueries>
+	<!-- regression hitless vs subtree cache -->
+	<sphinxql>select * from all2</sphinxql>
+	<sphinxql>
+	select * from all2 where match('("aaa bbb") ("aaa cc")');
+	select * from all2 where match('("aaa bbb") ("aaa cc")');
+	select * from all2 where match('("aaa bbb") ("aaa cc")');
+	show meta;
+	</sphinxql>
+</sphqueries>
 
 </test>

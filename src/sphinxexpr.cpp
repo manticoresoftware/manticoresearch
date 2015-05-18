@@ -4486,13 +4486,15 @@ class Expr_MVALength_c : public ISphExpr
 protected:
 	CSphAttrLocator		m_tLocator;
 	int					m_iLocator; // used by SPH_EXPR_GET_DEPENDENT_COLS
+	bool				m_b64;
 	const DWORD *		m_pMvaPool;
 	bool				m_bArenaProhibit;
 
 public:
-	Expr_MVALength_c ( const CSphAttrLocator & tLoc, int iLocator )
+	Expr_MVALength_c ( const CSphAttrLocator & tLoc, int iLocator, bool b64 )
 		: m_tLocator ( tLoc )
 		, m_iLocator ( iLocator )
+		, m_b64 ( b64 )
 		, m_pMvaPool ( NULL )
 		, m_bArenaProhibit ( false )
 	{
@@ -4504,7 +4506,7 @@ public:
 		const DWORD * pMva = tMatch.GetAttrMVA ( m_tLocator, m_pMvaPool, m_bArenaProhibit );
 		if ( !pMva )
 			return 0;
-		return (int)*pMva;
+		return (int)( m_b64 ? *pMva/2 : *pMva );
 	}
 
 	virtual void Command ( ESphExprCommand eCmd, void * pArg )
@@ -5297,7 +5299,7 @@ ISphExpr * ExprParser_t::CreateLengthNode ( const ExprNode_t & tNode, ISphExpr *
 	{
 		case TOK_ATTR_MVA32:
 		case TOK_ATTR_MVA64:
-			return new Expr_MVALength_c ( tLeft.m_tLocator, tLeft.m_iLocator );
+			return new Expr_MVALength_c ( tLeft.m_tLocator, tLeft.m_iLocator, tLeft.m_iToken==TOK_ATTR_MVA64 );
 		case TOK_ATTR_JSON:
 			return new Expr_JsonFieldLength_c ( pLeft );
 		default:

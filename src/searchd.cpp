@@ -14600,11 +14600,7 @@ static void AddAttrToIndex ( const SqlStmt_t & tStmt, const ServedIndex_c * pSer
 		return;
 	}
 
-	int iPos = pServed->m_pIndex->GetMatchSchema().GetAttrsCount();
-	if ( pServed->m_pIndex->GetSettings().m_bIndexFieldLens )
-		iPos -= pServed->m_pIndex->GetMatchSchema().m_dFields.GetLength();
-
-	pServed->m_pIndex->AddRemoveAttribute ( true, sAttrToAdd, tStmt.m_eAlterColType, iPos, sError );
+	pServed->m_pIndex->AddRemoveAttribute ( true, sAttrToAdd, tStmt.m_eAlterColType, sError );
 }
 
 
@@ -14625,7 +14621,7 @@ static void RemoveAttrFromIndex ( const SqlStmt_t & tStmt, const ServedIndex_c *
 		return;
 	}
 
-	pServed->m_pIndex->AddRemoveAttribute ( false, sAttrToRemove, SPH_ATTR_NONE, -1, sError );
+	pServed->m_pIndex->AddRemoveAttribute ( false, sAttrToRemove, SPH_ATTR_NONE, sError );
 }
 
 

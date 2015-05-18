@@ -1172,7 +1172,6 @@ private:
 	CSphFixedVector<int64_t>	m_dFieldLens;						///< total field lengths over entire index
 	CSphFixedVector<int64_t>	m_dFieldLensRam;					///< field lengths summed over current RAM chunk
 	CSphFixedVector<int64_t>	m_dFieldLensDisk;					///< field lengths summed over all disk chunks
-	int							m_iFieldLensBegin;					///< index of a first xxx_len attribute in the schema (-1 if field lengths are disabled)
 
 public:
 	explicit					RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict );
@@ -1242,7 +1241,7 @@ public:
 	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError, CSphString & sWarning );
 	virtual bool				SaveAttributes ( CSphString & sError ) const;
 	virtual DWORD				GetAttributeStatus () const { return m_uDiskAttrStatus; }
-	virtual bool				AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, int iPos, CSphString & sError );
+	virtual bool				AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError );
 
 	virtual void				DebugDumpHeader ( FILE * , const char * , bool ) {}
 	virtual void				DebugDumpDocids ( FILE * ) {}
@@ -1319,7 +1318,6 @@ RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int6
 	, m_dFieldLens ( SPH_MAX_FIELDS )
 	, m_dFieldLensRam ( SPH_MAX_FIELDS )
 	, m_dFieldLensDisk ( SPH_MAX_FIELDS )
-	, m_iFieldLensBegin ( -1 )
 {
 	MEMORY ( MEM_INDEX_RT );
 
@@ -1872,7 +1870,7 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bRe
 	DWORD * pFieldLens = NULL;
 	if ( m_pIndex->GetSettings().m_bIndexFieldLens )
 	{
-		int iFirst = tSchema.GetAttrsCount() - tSchema.m_dFields.GetLength();
+		int iFirst = tSchema.GetAttrId_FirstFieldLen();
 		assert ( tSchema.GetAttr ( iFirst ).m_eAttrType==SPH_ATTR_TOKENCOUNT );
 		assert ( tSchema.GetAttr ( iFirst+tSchema.m_dFields.GetLength()-1 ).m_eAttrType==SPH_ATTR_TOKENCOUNT );
 		pFieldLens = pAttrs + ( tSchema.GetAttr ( iFirst ).m_tLocator.m_iBitOffset / 32 );
@@ -2926,7 +2924,8 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 	int iNewDocs = pNewSeg ? pNewSeg->m_iRows : 0;
 
 	CSphVector<int64_t> dLens;
-	if ( pNewSeg && m_iFieldLensBegin>=0 )
+	int iFirstFieldLenAttr = m_tSchema.GetAttrId_FirstFieldLen();
+	if ( pNewSeg && iFirstFieldLenAttr>=0 )
 	{
 		assert ( pNewSeg->GetStride()==m_iStride );
 		int iFields = m_tSchema.m_dFields.GetLength(); // shortcut
@@ -2934,8 +2933,7 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 		dLens.Fill ( 0 );
 		for ( int i=0; i<pNewSeg->m_iRows; i++ )
 			for ( int j=0; j<iFields; j++ )
-				dLens[j] += sphGetRowAttr ( &pNewSeg->m_dRows [ i*m_iStride+DOCINFO_IDSIZE ], m_tSchema.GetAttr ( j+m_iFieldLensBegin ).m_tLocator );
-
+				dLens[j] += sphGetRowAttr ( &pNewSeg->m_dRows [ i*m_iStride+DOCINFO_IDSIZE ], m_tSchema.GetAttr ( j+iFirstFieldLenAttr ).m_tLocator );
 	}
 
 	// phase 1, lock out other writers (but not readers yet)
@@ -3220,14 +3218,12 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 	// update stats
 	m_tStats.m_iTotalDocuments += iNewDocs - iTotalKilled;
 
-	if ( m_iFieldLensBegin>=0 )
-	{
+	if ( m_tSchema.GetAttrId_FirstFieldLen()>=0 )
 		ARRAY_FOREACH ( i, m_tSchema.m_dFields )
 		{
 			m_dFieldLensRam[i] += dLens[i];
 			m_dFieldLens[i] = m_dFieldLensRam[i] + m_dFieldLensDisk[i];
 		}
-	}
 
 	// get flag of double-buffer prior mutex unlock
 	bool bDoubleBufferActive = ( m_iDoubleBuffer>0 );
@@ -4032,7 +4028,7 @@ void RtIndex_t::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, co
 	m_dDiskChunks.Add ( pDiskChunk );
 
 	// update field lengths
-	if ( m_iFieldLensBegin>=0 )
+	if ( m_tSchema.GetAttrId_FirstFieldLen()>=0 )
 	{
 		ARRAY_FOREACH ( i, m_dFieldLensRam )
 			m_dFieldLensRam[i] -= tStats.m_dFieldLens[i];
@@ -4212,14 +4208,6 @@ bool RtIndex_t::Prealloc ( bool bStripPath )
 
 		// update schema
 		m_iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
-
-		// settings/schema were loaded, need to recompute field lengths base
-		if ( m_tSettings.m_bIndexFieldLens )
-		{
-			m_iFieldLensBegin = m_tSchema.GetAttrsCount() - m_tSchema.m_dFields.GetLength();
-			assert ( m_tSchema.GetAttr ( m_iFieldLensBegin ).m_eAttrType==SPH_ATTR_TOKENCOUNT );
-			assert ( m_tSchema.GetAttr ( m_iFieldLensBegin + m_tSchema.m_dFields.GetLength() - 1 ).m_eAttrType==SPH_ATTR_TOKENCOUNT );
-		}
 	}
 
 	// meta v.5 checkpoint freq
@@ -4266,7 +4254,7 @@ bool RtIndex_t::Prealloc ( bool bStripPath )
 			return false;
 
 		// update field lengths
-		if ( m_iFieldLensBegin>=0 )
+		if ( m_tSchema.GetAttrId_FirstFieldLen()>=0 )
 		{
 			int64_t * pLens = pIndex->GetFieldLens();
 			if ( pLens )
@@ -4609,13 +4597,6 @@ void RtIndex_t::Setup ( const CSphIndexSettings & tSettings )
 {
 	m_bStripperInited = true;
 	m_tSettings = tSettings;
-
-	if ( m_tSettings.m_bIndexFieldLens )
-	{
-		m_iFieldLensBegin = m_tSchema.GetAttrsCount() - m_tSchema.m_dFields.GetLength();
-		assert ( m_tSchema.GetAttr ( m_iFieldLensBegin ).m_eAttrType==SPH_ATTR_TOKENCOUNT );
-		assert ( m_tSchema.GetAttr ( m_iFieldLensBegin + m_tSchema.m_dFields.GetLength() - 1 ).m_eAttrType==SPH_ATTR_TOKENCOUNT );
-	}
 }
 
 
@@ -8021,7 +8002,7 @@ struct SphOptimizeGuard_t : ISphNoncopyable
 };
 
 
-bool RtIndex_t::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, int iPos, CSphString & sError )
+bool RtIndex_t::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError )
 {
 	if ( m_dDiskChunks.GetLength() && !m_tSchema.GetAttrsCount() )
 	{
@@ -8038,7 +8019,7 @@ bool RtIndex_t::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ES
 	if ( bAdd )
 	{
 		CSphColumnInfo tInfo ( sAttrName.cstr(), eAttrType );
-		m_tSchema.InsertAttr ( iPos, tInfo, false );
+		m_tSchema.AddAttr ( tInfo, false );
 		pNewAttr = m_tSchema.GetAttr ( sAttrName.cstr() );
 	} else
 		m_tSchema.RemoveAttr ( sAttrName.cstr(), false );
@@ -8048,7 +8029,7 @@ bool RtIndex_t::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ES
 	// modify the in-memory data of disk chunks
 	// fixme: we can't rollback in-memory changes, so we just show errors here for now
 	ARRAY_FOREACH ( iDiskChunk, m_dDiskChunks )
-		if ( !m_dDiskChunks[iDiskChunk]->AddRemoveAttribute ( bAdd, sAttrName, eAttrType, iPos, sError ) )
+		if ( !m_dDiskChunks[iDiskChunk]->AddRemoveAttribute ( bAdd, sAttrName, eAttrType, sError ) )
 			sphWarning ( "%s attribute to %s.%d: %s", bAdd ? "adding" : "removing", m_sPath.cstr(), iDiskChunk+m_iDiskBase, sError.cstr() );
 
 	// now modify the ramchunk

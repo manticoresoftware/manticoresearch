@@ -1582,6 +1582,12 @@ public:
 	/// assign current schema to rset schema (kind of a visitor operator)
 	virtual void					AssignTo ( class CSphRsetSchema & lhs ) const = 0;
 
+	/// get the first one of field length attributes. return -1 if none exist
+	virtual int						GetAttrId_FirstFieldLen() const = 0;
+
+	/// get the last one of field length attributes. return -1 if none exist
+	virtual int						GetAttrId_LastFieldLen() const = 0;
+
 public:
 	/// full copy, for purely dynamic matches
 	void							CloneWholeMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const;
@@ -1631,6 +1637,9 @@ public:
 protected:
 	WORD						m_dBuckets [ BUCKET_COUNT ];	///< uses indexes in m_dAttrs as ptrs; 0xffff is like NULL in this hash
 
+	int							m_iFirstFieldLenAttr;///< position of the first field length attribute (cached on insert/delete)
+	int							m_iLastFieldLenAttr; ///< position of the last field length attribute (cached on insert/delete)
+
 public:
 
 	/// ctor
@@ -1677,6 +1686,13 @@ public:
 
 	/// remove attr
 	void					RemoveAttr ( const char * szAttr, bool bDynamic );
+
+	/// get the first one of field length attributes. return -1 if none exist
+	virtual int				GetAttrId_FirstFieldLen() const;
+
+	/// get the last one of field length attributes. return -1 if none exist
+	virtual int				GetAttrId_LastFieldLen() const;
+
 
 	static bool				IsReserved ( const char * szToken );
 
@@ -1726,6 +1742,9 @@ public:
 	int							GetAttrIndex ( const char * sName ) const;
 	const CSphColumnInfo &		GetAttr ( int iIndex ) const;
 	const CSphColumnInfo *		GetAttr ( const char * sName ) const;
+
+	virtual int					GetAttrId_FirstFieldLen() const;
+	virtual int					GetAttrId_LastFieldLen() const;
 
 public:
 	void						AddDynamicAttr ( const CSphColumnInfo & tCol );
@@ -3305,7 +3324,7 @@ public:
 
 	virtual DWORD				GetAttributeStatus () const = 0;
 
-	virtual bool				AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, int iPos, CSphString & sError ) = 0;
+	virtual bool				AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError ) = 0;
 
 public:
 	/// internal debugging hook, DO NOT USE

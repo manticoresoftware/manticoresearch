@@ -1431,7 +1431,7 @@ public:
 	virtual bool				SaveAttributes ( CSphString & ) const { return false; }
 	virtual DWORD				GetAttributeStatus () const { return 0; }
 	virtual bool				CreateModifiedFiles ( bool , const CSphString & , ESphAttr , int , CSphString & ) { return true; }
-	virtual bool				AddRemoveAttribute ( bool, const CSphString &, ESphAttr, int, CSphString & ) { return true; }
+	virtual bool				AddRemoveAttribute ( bool, const CSphString &, ESphAttr, CSphString & ) { return true; }
 	virtual void				DebugDumpHeader ( FILE *, const char *, bool ) {}
 	virtual void				DebugDumpDocids ( FILE * ) {}
 	virtual void				DebugDumpHitlist ( FILE * , const char * , bool ) {}
@@ -1565,7 +1565,7 @@ public:
 	virtual bool				SaveAttributes ( CSphString & sError ) const;
 	virtual DWORD				GetAttributeStatus () const;
 
-	virtual bool				AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, int iPos, CSphString & sError );
+	virtual bool				AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError );
 
 	bool						EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const;
 
@@ -7256,6 +7256,8 @@ void ISphSchema::FreeStringPtrs ( CSphMatch * pMatch ) const
 CSphSchema::CSphSchema ( const char * sName )
 	: m_sName ( sName )
 	, m_iStaticSize ( 0 )
+	, m_iFirstFieldLenAttr ( -1 )
+	, m_iLastFieldLenAttr ( -1 )
 {
 	for ( int i=0; i<BUCKET_COUNT; i++ )
 		m_dBuckets[i] = 0xffff;
@@ -7390,6 +7392,13 @@ void CSphSchema::InsertAttr ( int iPos, const CSphColumnInfo & tCol, bool bDynam
 	// update static size
 	m_iStaticSize = m_dStaticUsed.GetLength();
 
+	// update field length locators
+	if ( tCol.m_eAttrType==SPH_ATTR_TOKENCOUNT )
+	{
+		m_iFirstFieldLenAttr = m_iFirstFieldLenAttr==-1 ? iPos : Min ( m_iFirstFieldLenAttr, iPos );
+		m_iLastFieldLenAttr = Max ( m_iLastFieldLenAttr, iPos );
+	}
+
 	// do hash add
 	if ( m_dAttrs.GetLength()==HASH_THRESH )
 		RebuildHash();
@@ -7420,6 +7429,8 @@ void CSphSchema::RemoveAttr ( const char * szAttr, bool bDynamic )
 
 	ISphSchema::Reset();
 	m_dAttrs.Reset();
+	m_iFirstFieldLenAttr = -1;
+	m_iLastFieldLenAttr = -1;
 
 	ARRAY_FOREACH ( i, dBackup )
 		if ( i!=iIndex )
@@ -7430,6 +7441,18 @@ void CSphSchema::RemoveAttr ( const char * szAttr, bool bDynamic )
 void CSphSchema::AddAttr ( const CSphColumnInfo & tCol, bool bDynamic )
 {
 	InsertAttr ( m_dAttrs.GetLength(), tCol, bDynamic );
+}
+
+
+int CSphSchema::GetAttrId_FirstFieldLen() const
+{
+	return m_iFirstFieldLenAttr;
+}
+
+
+int CSphSchema::GetAttrId_LastFieldLen() const
+{
+	return m_iLastFieldLenAttr;
 }
 
 
@@ -7605,6 +7628,20 @@ const CSphColumnInfo * CSphRsetSchema::GetAttr ( const char * sName ) const
 	if ( m_pIndexSchema )
 		return m_pIndexSchema->GetAttr ( sName );
 	return NULL;
+}
+
+
+int CSphRsetSchema::GetAttrId_FirstFieldLen() const
+{
+	// we assume that field_lens are in the base schema
+	return m_pIndexSchema->GetAttrId_FirstFieldLen();
+}
+
+
+int CSphRsetSchema::GetAttrId_LastFieldLen() const
+{
+	// we assume that field_lens are in the base schema
+	return m_pIndexSchema->GetAttrId_LastFieldLen();
 }
 
 
@@ -10623,14 +10660,14 @@ static void CreateAttrMap ( CSphVector<int> & dAttrMap, const CSphSchema & tOldS
 }
 
 
-bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, int iPos, CSphString & sError )
+bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError )
 {
 	CSphSchema tNewSchema = m_tSchema;
 
 	if ( bAddAttr )
 	{
 		CSphColumnInfo tInfo ( sAttrName.cstr(), eAttrType );
-		tNewSchema.InsertAttr ( iPos, tInfo, false );
+		tNewSchema.AddAttr ( tInfo, false );
 	} else
 		tNewSchema.RemoveAttr ( sAttrName.cstr(), false );
 
@@ -12437,7 +12474,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	}
 
 	bool bHaveFieldMVAs = false;
-	int iFieldLens = -1;
+	int iFieldLens = m_tSchema.GetAttrId_FirstFieldLen();
 	CSphVector<int> dMvaIndexes;
 	CSphVector<CSphAttrLocator> dMvaLocators;
 
@@ -12466,10 +12503,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			case SPH_ATTR_STRING:
 			case SPH_ATTR_JSON:
 				dStringAttrs.Add ( i );
-				break;
-			case SPH_ATTR_TOKENCOUNT:
-				if ( iFieldLens<0 )
-					iFieldLens = i;
 				break;
 			default:
 				break;
@@ -25752,7 +25785,7 @@ void CSphSource_Document::AllocDocinfo()
 
 	if ( m_bIndexFieldLens && m_tSchema.GetAttrsCount() && m_tSchema.m_dFields.GetLength() )
 	{
-		int iFirst = m_tSchema.GetAttrsCount() - m_tSchema.m_dFields.GetLength();
+		int iFirst = m_tSchema.GetAttrId_FirstFieldLen();
 		assert ( m_tSchema.GetAttr ( iFirst ).m_eAttrType==SPH_ATTR_TOKENCOUNT );
 		assert ( m_tSchema.GetAttr ( iFirst+m_tSchema.m_dFields.GetLength()-1 ).m_eAttrType==SPH_ATTR_TOKENCOUNT );
 
@@ -28896,9 +28929,8 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
 			continue;
 		}
 
-		int iFieldLenAttr = nAttrs;
-		if ( m_bIndexFieldLens )
-			iFieldLenAttr = nAttrs - m_tSchema.m_dFields.GetLength();
+		int iFirstFieldLenAttr = m_tSchema.GetAttrId_FirstFieldLen();
+		int iLastFieldLenAttr = m_tSchema.GetAttrId_LastFieldLen();
 
 		// attributes
 		for ( int i = 0; i < nAttrs; i++ )
@@ -28906,7 +28938,7 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
 			const CSphColumnInfo & tAttr = m_tSchema.GetAttr ( i );
 
 			// reset, and the value will be filled by IterateHits()
-			if ( i>=iFieldLenAttr )
+			if ( i>=iFirstFieldLenAttr && i<=iLastFieldLenAttr )
 			{
 				assert ( tAttr.m_eAttrType==SPH_ATTR_TOKENCOUNT );
 				m_tDocInfo.SetAttr ( tAttr.m_tLocator, 0 );

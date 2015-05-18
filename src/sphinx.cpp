@@ -30152,8 +30152,9 @@ protected:
 	CSphFixedVector<BYTE *>		m_dFields;
 
 	FILE *						m_pFP;
-	int							m_iDataStart;
-	int							m_iDataLeft;
+	int							m_iDataStart;		///< where the next line to parse starts in m_dBuf
+	int							m_iDocStart;		///< where the last parsed document stats in m_dBuf
+	int							m_iBufUsed;			///< bytes [0,m_iBufUsed) are actually currently used; the rest of m_dBuf is free
 	int							m_iLine;
 	int							m_iAutoCount;
 };
@@ -30236,7 +30237,7 @@ CSphSource_BaseSV::CSphSource_BaseSV ( const char * sName )
 	, m_iAutoCount ( 0 )
 {
 	m_iDataStart = 0;
-	m_iDataLeft = 0;
+	m_iBufUsed = 0;
 }
 
 
@@ -30403,18 +30404,16 @@ bool CSphSource_BaseSV::IterateStart ( CSphString & sError )
 
 	m_iLine = 0;
 	m_iDataStart = 0;
-	m_iDataLeft = 0;
 
 	// initial buffer update
-	int iRead = fread ( m_dBuf.Begin(), 1, m_dBuf.GetLength(), m_pFP );
-	if ( !iRead )
+	m_iBufUsed = fread ( m_dBuf.Begin(), 1, m_dBuf.GetLength(), m_pFP );
+	if ( !m_iBufUsed )
 	{
 		sError.SetSprintf ( "source '%s': read error '%s'", m_tSchema.m_sName.cstr(), strerror(errno) );
 		return false;
 	}
-	m_iDataLeft = iRead;
-	m_iPlainFieldsLength = m_tSchema.m_dFields.GetLength();
 
+	m_iPlainFieldsLength = m_tSchema.m_dFields.GetLength();
 	return true;
 }
 
@@ -30422,7 +30421,7 @@ BYTE ** CSphSource_BaseSV::ReportDocumentError ()
 {
 	m_tDocInfo.m_uDocID = 1; // 0 means legal eof
 	m_iDataStart = 0;
-	m_iDataLeft = 0;
+	m_iBufUsed = 0;
 	return NULL;
 }
 
@@ -30440,24 +30439,22 @@ BYTE **	CSphSource_BaseSV::NextDocument ( CSphString & sError )
 	// check doc_id
 	if ( !m_dColumnsLen[0] )
 	{
-		sError.SetSprintf ( "source '%s': not doc_id found (line=%d, pos=%d, docid=" DOCID_FMT ")",
-			m_tSchema.m_sName.cstr(), m_iLine, m_iDataStart, m_tDocInfo.m_uDocID );
+		sError.SetSprintf ( "source '%s': no doc_id found (line=%d)", m_tSchema.m_sName.cstr(), m_iLine );
 		return ReportDocumentError();
 	}
 
 	// parse doc_id
-	m_tDocInfo.m_uDocID = sphToDocid ( (const char *)m_dBuf.Begin() );
+	m_tDocInfo.m_uDocID = sphToDocid ( (const char *)&m_dBuf[m_iDocStart] );
 
 	// check doc_id
 	if ( m_tDocInfo.m_uDocID==0 )
 	{
-		sError.SetSprintf ( "source '%s': invalid doc_id found (line=%d, pos=%d, docid=" DOCID_FMT ")",
-			m_tSchema.m_sName.cstr(), m_iLine, m_iDataStart, m_tDocInfo.m_uDocID );
+		sError.SetSprintf ( "source '%s': invalid doc_id found (line=%d)", m_tSchema.m_sName.cstr(), m_iLine );
 		return ReportDocumentError();
 	}
 
 	// parse column data
-	int iOff = m_dColumnsLen[0] + 1;
+	int iOff = m_iDocStart + m_dColumnsLen[0] + 1; // skip docid and its trailing zero
 	int iColumns = m_dRemap.GetLength();
 	for ( int iCol=1; iCol<iColumns; iCol++ )
 	{
@@ -30515,25 +30512,19 @@ BYTE **	CSphSource_BaseSV::NextDocument ( CSphString & sError )
 
 CSphSource_BaseSV::ESphParseResult CSphSource_TSV::SplitColumns ( CSphString & sError )
 {
-	// move up tail to buffer head
-	if ( m_iDataLeft && m_iDataStart )
-	{
-		memmove ( m_dBuf.Begin(), m_dBuf.Begin() + m_iDataStart, m_iDataLeft );
-		m_iDataStart = 0;
-	}
-
 	int iColumns = m_dRemap.GetLength();
 	int iCol = 0;
-	int iColumnStart = 0;
-	BYTE * pData = m_dBuf.Begin();
-	const BYTE * pEnd = m_dBuf.Begin() + m_iDataLeft;
+	int iColumnStart = m_iDataStart;
+	BYTE * pData = m_dBuf.Begin() + m_iDataStart;
+	const BYTE * pEnd = m_dBuf.Begin() + m_iBufUsed;
+	m_iDocStart = m_iDataStart;
 
 	for ( ;; )
 	{
 		if ( iCol>=iColumns )
 		{
-			sError.SetSprintf ( "source '%s': too many columns found (found=%d, declared=%d, line=%d, pos=%d, docid=" DOCID_FMT ")",
-				m_tSchema.m_sName.cstr(), iCol, iColumns+m_iAutoCount, m_iLine, (int)( pData - m_dBuf.Begin() ), m_tDocInfo.m_uDocID );
+			sError.SetSprintf ( "source '%s': too many columns found (found=%d, declared=%d, line=%d, docid=" DOCID_FMT ")",
+				m_tSchema.m_sName.cstr(), iCol, iColumns+m_iAutoCount, m_iLine, m_tDocInfo.m_uDocID );
 			return CSphSource_BaseSV::PARSING_FAILED;
 		}
 
@@ -30556,7 +30547,7 @@ CSphSource_BaseSV::ESphParseResult CSphSource_TSV::SplitColumns ( CSphString & s
 			if ( bNull )
 			{
 				// null terminated string found
-				m_iDataStart = m_iDataLeft = 0;
+				m_iDataStart = m_iBufUsed = 0;
 				break;
 			} else if ( bEOL )
 			{
@@ -30574,44 +30565,56 @@ CSphSource_BaseSV::ESphParseResult CSphSource_TSV::SplitColumns ( CSphString & s
 
 		int iOff = pData - m_dBuf.Begin();
 
-		// full buffer got resized to collect whole document
-		if ( iOff==m_dBuf.GetLength() )
+		// if there is space at the start, move data around
+		// if not, resize the buffer
+		if ( m_iDataStart>0 )
+		{
+			memmove ( m_dBuf.Begin(), m_dBuf.Begin() + m_iDataStart, m_iBufUsed - m_iDataStart );
+			m_iBufUsed -= m_iDataStart;
+			iOff -= m_iDataStart;
+			iColumnStart -= m_iDataStart;
+			m_iDataStart = 0;
+			m_iDocStart = 0;
+		} else if ( m_iBufUsed==m_dBuf.GetLength() )
+		{
 			m_dBuf.Resize ( m_dBuf.GetLength()*2 );
+		}
 
-		int iGot = fread ( m_dBuf.Begin() + iOff, 1, m_dBuf.GetLength() - iOff, m_pFP );
+		// do read
+		int iGot = fread ( m_dBuf.Begin() + m_iBufUsed, 1, m_dBuf.GetLength() - m_iBufUsed, m_pFP );
 		if ( !iGot )
 		{
 			if ( !iCol )
 			{
 				// normal file termination - no pending columns and documents
-				m_iDataStart = m_iDataLeft = 0;
+				m_iDataStart = m_iBufUsed = 0;
 				m_tDocInfo.m_uDocID = 0;
 				return CSphSource_BaseSV::DATA_OVER;
 			}
 
 			// error in case no data left in middle of data stream
-			sError.SetSprintf ( "source '%s': read error '%s' (line=%d, pos=%d, docid=" DOCID_FMT ")",
-				m_tSchema.m_sName.cstr(), strerror(errno), m_iLine, iOff, m_tDocInfo.m_uDocID );
+			sError.SetSprintf ( "source '%s': read error '%s' (line=%d, docid=" DOCID_FMT ")",
+				m_tSchema.m_sName.cstr(), strerror(errno), m_iLine, m_tDocInfo.m_uDocID );
 			return CSphSource_BaseSV::PARSING_FAILED;
 		}
+		m_iBufUsed += iGot;
 
-		// fix-up pointers due of buffer resize
+		// restored pointers after buffer resize
 		pData = m_dBuf.Begin() + iOff;
-		pEnd = m_dBuf.Begin() + iOff + iGot;
+		pEnd = m_dBuf.Begin() + m_iBufUsed;
 	}
 
 	// all columns presence check
 	if ( iCol!=iColumns )
 	{
-		sError.SetSprintf ( "source '%s': not all columns found (found=%d, total=%d, line=%d, pos=%d, docid=" DOCID_FMT ")",
-			m_tSchema.m_sName.cstr(), iCol, iColumns, m_iLine, (int)( pData - m_dBuf.Begin() ), m_tDocInfo.m_uDocID );
+		sError.SetSprintf ( "source '%s': not all columns found (found=%d, total=%d, line=%d, docid=" DOCID_FMT ")",
+			m_tSchema.m_sName.cstr(), iCol, iColumns, m_iLine, m_tDocInfo.m_uDocID );
 		return CSphSource_BaseSV::PARSING_FAILED;
 	}
 
 	// tail data
 	assert ( pData<=pEnd );
 	m_iDataStart = pData - m_dBuf.Begin();
-	m_iDataLeft = pEnd - pData;
 	return CSphSource_BaseSV::GOT_DOCUMENT;
 }
 
@@ -30650,41 +30653,36 @@ CSphSource_CSV::CSphSource_CSV ( const char * sName, const char * sDelimiter )
 
 CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & sError )
 {
-	// move up tail to buffer head
-	if ( m_iDataLeft && m_iDataStart )
-	{
-		memmove ( m_dBuf.Begin(), m_dBuf.Begin() + m_iDataStart, m_iDataLeft );
-		m_iDataStart = 0;
-	}
-
 	int iColumns = m_dRemap.GetLength();
 	int iCol = 0;
-	int iColumnStart = 0;
+	int iColumnStart = m_iDataStart;
 	int iQuoteCount = 0;
 	int iQuoteStart = -1;
 	int	iEscapeStart = -1;
-	const BYTE * pDst = m_dBuf.Begin();
-	BYTE * pSrc = m_dBuf.Begin();
-	const BYTE * pEnd = m_dBuf.Begin() + m_iDataLeft;
+	const BYTE * s = m_dBuf.Begin() + m_iDataStart; // parse this line
+	BYTE * d = m_dBuf.Begin() + m_iDataStart; // do parsing in place
+	const BYTE * pEnd = m_dBuf.Begin() + m_iBufUsed; // until we reach the end of current buffer
+	m_iDocStart = m_iDataStart;
 
 	for ( ;; )
 	{
-		assert ( pSrc<=pDst );
-		// move to next control symbol
-		while ( pDst<pEnd && *pDst && *pDst!=m_iDelimiter && *pDst!='"' && *pDst!='\\' && *pDst!='\r' && *pDst!='\n' )
-			*pSrc++ = *pDst++;
+		assert ( d<=s );
 
-		if ( pDst<pEnd )
+		// move to next control symbol
+		while ( s<pEnd && *s && *s!=m_iDelimiter && *s!='"' && *s!='\\' && *s!='\r' && *s!='\n' )
+			*d++ = *s++;
+
+		if ( s<pEnd )
 		{
-			assert ( !*pDst || *pDst==m_iDelimiter || *pDst=='"' || *pDst=='\\' || *pDst=='\r' || *pDst=='\n' );
-			bool bNull = !*pDst;
-			bool bEOL = ( *pDst=='\r' || *pDst=='\n' );
+			assert ( !*s || *s==m_iDelimiter || *s=='"' || *s=='\\' || *s=='\r' || *s=='\n' );
+			bool bNull = !*s;
+			bool bEOL = ( *s=='\r' || *s=='\n' );
 #ifndef NDEBUG
-			bool bDelimiter = ( *pDst==m_iDelimiter );
+			bool bDelimiter = ( *s==m_iDelimiter );
 #endif
-			bool bQuot = ( *pDst=='"' );
-			bool bEscape = ( *pDst=='\\' );
-			int iOff = pDst-m_dBuf.Begin();
+			bool bQuot = ( *s=='"' );
+			bool bEscape = ( *s=='\\' );
+			int iOff = s - m_dBuf.Begin();
 
 			// [ " ... " ]
 			// [ " ... "" ... " ]
@@ -30701,14 +30699,11 @@ CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & s
 				// but quoted quotation proceed as regular symbol
 				bool bOdd = ( ( iQuoteCount%2 )==1 );
 				if ( bOdd && ( !bQuot || ( iQuoteStart!=-1 && iQuoteStart+1==iOff ) ) ) // regular symbol inside quotation or quoted quotation
-				{
-						*pSrc++ = *pDst;
-				}
-				pDst++;
+					*d++ = *s;
+				s++;
 
 				if ( bQuot )
 					iQuoteStart = iOff;
-
 				continue;
 			}
 
@@ -30716,82 +30711,101 @@ CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & s
 			{
 				if ( iEscapeStart>=0 && iEscapeStart+1==iOff ) // next to escape symbol proceed as regular
 				{
-					*pSrc++ = *pDst;
+					*d++ = *s;
 				} else // escape just started
 				{
 					iEscapeStart = iOff;
-					pDst++;
+					s++;
 				}
 				continue;
 			}
 
-			int iLen = pSrc - m_dBuf.Begin() - iColumnStart;
+			int iLen = d - m_dBuf.Begin() - iColumnStart;
 			assert ( iLen>=0 );
 			m_dColumnsLen[iCol] = iLen;
-			*pSrc++ = '\0';
-			pDst++;
+			*d++ = '\0';
+			s++;
 			iCol++;
 
 			if ( bNull ) // null terminated string found
 			{
-				m_iDataStart = m_iDataLeft = 0;
+				m_iDataStart = m_iBufUsed = 0;
 				break;
 			} else if ( bEOL ) // end of document found
 			{
 				// skip all EOL characters
-				while ( pDst<pEnd && *pDst && ( *pDst=='\r' || *pDst=='\n' ) )
-					pDst++;
+				while ( s<pEnd && *s && ( *s=='\r' || *s=='\n' ) )
+					s++;
 				break;
 			}
 
 			assert ( bDelimiter );
 			// column separator found
-			iColumnStart = pSrc - m_dBuf.Begin();
+			iColumnStart = d - m_dBuf.Begin();
 			continue;
 		}
 
-		int iDstOff = pDst - m_dBuf.Begin();
-		int iSrcOff = pSrc - m_dBuf.Begin();
+		/////////////////////
+		// read in more data
+		/////////////////////
 
-		// full buffer got resized to collect whole document
-		if ( iDstOff==m_dBuf.GetLength() )
+		int iDstOff = s - m_dBuf.Begin();
+		int iSrcOff = d - m_dBuf.Begin();
+
+		// if there is space at the start, move data around
+		// if not, resize the buffer
+		if ( m_iDataStart>0 )
+		{
+			memmove ( m_dBuf.Begin(), m_dBuf.Begin() + m_iDataStart, m_iBufUsed - m_iDataStart );
+			m_iBufUsed -= m_iDataStart;
+			iDstOff -= m_iDataStart;
+			iSrcOff -= m_iDataStart;
+			iColumnStart -= m_iDataStart;
+			iQuoteStart -= m_iDataStart;
+			iEscapeStart -= m_iDataStart;
+			m_iDataStart = 0;
+			m_iDocStart = 0;
+		} else if ( m_iBufUsed==m_dBuf.GetLength() )
+		{
 			m_dBuf.Resize ( m_dBuf.GetLength()*2 );
+		}
 
-		int iGot = fread ( m_dBuf.Begin() + iDstOff, 1, m_dBuf.GetLength() - iDstOff, m_pFP );
+		// do read
+		int iGot = fread ( m_dBuf.Begin() + m_iBufUsed, 1, m_dBuf.GetLength() - m_iBufUsed, m_pFP );
 		if ( !iGot )
 		{
 			if ( !iCol )
 			{
 				// normal file termination - no pending columns and documents
-				m_iDataStart = m_iDataLeft = 0;
+				m_iDataStart = m_iBufUsed = 0;
 				m_tDocInfo.m_uDocID = 0;
 				return CSphSource_BaseSV::DATA_OVER;
 			}
 
 			// error in case no data left in middle of data stream
-			sError.SetSprintf ( "source '%s': read error '%s' (line=%d, pos=%d, docid=" DOCID_FMT ")",
-				m_tSchema.m_sName.cstr(), strerror(errno), m_iLine, iDstOff, m_tDocInfo.m_uDocID );
+			sError.SetSprintf ( "source '%s': read error '%s' (line=%d, docid=" DOCID_FMT ")",
+				m_tSchema.m_sName.cstr(), strerror(errno), m_iLine, m_tDocInfo.m_uDocID );
 			return CSphSource_BaseSV::PARSING_FAILED;
 		}
+		m_iBufUsed += iGot;
 
-		// fix-up pointers due of buffer resize
-		pDst = m_dBuf.Begin() + iDstOff;
-		pSrc = m_dBuf.Begin() + iSrcOff;
-		pEnd = m_dBuf.Begin() + iDstOff + iGot;
+		// restore pointers because of the resize
+		s = m_dBuf.Begin() + iDstOff;
+		d = m_dBuf.Begin() + iSrcOff;
+		pEnd = m_dBuf.Begin() + m_iBufUsed;
 	}
 
 	// all columns presence check
 	if ( iCol!=iColumns )
 	{
-		sError.SetSprintf ( "source '%s': not all columns found (found=%d, total=%d, line=%d, pos=%d, docid=" DOCID_FMT ")",
-			m_tSchema.m_sName.cstr(), iCol, iColumns, m_iLine, (int)( pDst - m_dBuf.Begin() ), m_tDocInfo.m_uDocID );
+		sError.SetSprintf ( "source '%s': not all columns found (found=%d, total=%d, line=%d, docid=" DOCID_FMT ")",
+			m_tSchema.m_sName.cstr(), iCol, iColumns, m_iLine, m_tDocInfo.m_uDocID );
 		return CSphSource_BaseSV::PARSING_FAILED;
 	}
 
 	// tail data
-	assert ( pDst<=pEnd );
-	m_iDataStart = pDst - m_dBuf.Begin();
-	m_iDataLeft = pEnd - pDst;
+	assert ( s<=pEnd );
+	m_iDataStart = s - m_dBuf.Begin();
 	return CSphSource_BaseSV::GOT_DOCUMENT;
 }
 

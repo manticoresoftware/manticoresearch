@@ -2663,6 +2663,7 @@ public:
 	bool			m_bNormalizedTFIDF;	///< whether to scale IDFs by query word count, so that TF*IDF is normalized
 	bool			m_bLocalDF;			///< whether to use calculate DF among local indexes
 	bool			m_bLowPriority;		///< set low thread priority for this query
+	DWORD			m_uDebugFlags;
 
 	CSphVector<CSphFilterSettings>	m_dFilters;	///< filters
 

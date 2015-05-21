@@ -1965,6 +1965,7 @@ RtSegment_t * RtAccum_t::CreateSegment ( int iRowSize, int iWordsCheckpoint )
 		pPacketBase = m_pDictRt->GetPackedKeywords();
 
 	Hitpos_t uEmbeddedHit = EMPTY_HIT;
+	Hitpos_t uPrevHit = EMPTY_HIT;
 	ARRAY_FOREACH ( i, m_dAccum )
 	{
 		const CSphWordHit & tHit = m_dAccum[i];
@@ -1991,7 +1992,8 @@ RtSegment_t * RtAccum_t::CreateSegment ( int iRowSize, int iWordsCheckpoint )
 
 			tDoc.m_uDocID = tHit.m_uDocID;
 			tOutHit.ZipRestart ();
-			uEmbeddedHit = 0;
+			uEmbeddedHit = EMPTY_HIT;
+			uPrevHit = EMPTY_HIT;
 		}
 
 		// new keyword; flush current keyword
@@ -2013,7 +2015,12 @@ RtSegment_t * RtAccum_t::CreateSegment ( int iRowSize, int iWordsCheckpoint )
 			tWord.m_uDocs = 0;
 			tWord.m_uHits = 0;
 			tWord.m_uDoc = tOutDoc.ZipDocPtr();
+			uPrevHit = EMPTY_HIT;
 		}
+
+		// might be a duplicate
+		if ( uPrevHit==tHit.m_uWordPos )
+			continue;
 
 		// just a new hit
 		if ( !tDoc.m_uHits )
@@ -2029,6 +2036,7 @@ RtSegment_t * RtAccum_t::CreateSegment ( int iRowSize, int iWordsCheckpoint )
 
 			tOutHit.ZipHit ( tHit.m_uWordPos );
 		}
+		uPrevHit = tHit.m_uWordPos;
 
 		const int iField = HITMAN::GetField ( tHit.m_uWordPos );
 		if ( iField<32 )
@@ -6678,6 +6686,25 @@ struct SphFinalArenaCopy_t : ISphMatchProcessor
 };
 
 
+struct SphRtFinalMatchCalc_t : ISphMatchProcessor, ISphNoncopyable
+{
+	const CSphQueryContext &	m_tCtx;
+	int							m_iSegments;
+
+	SphRtFinalMatchCalc_t ( int iSegments, const CSphQueryContext & tCtx )
+		: m_tCtx ( tCtx )
+		, m_iSegments ( iSegments )
+	{}
+
+	virtual void Process ( CSphMatch * pMatch )
+	{
+		int iMatchSegment = pMatch->m_iTag-1;
+		if ( iMatchSegment>=0 && iMatchSegment<m_iSegments && pMatch->m_pStatic )
+			m_tCtx.CalcPostAggregate ( *pMatch );
+	}
+};
+
+
 void RtIndex_t::GetReaderChunks ( SphChunkGuard_t & tGuard ) const
 {
 	if ( !m_dRamChunks.GetLength() && !m_dDiskChunks.GetLength() )
@@ -6969,17 +6996,21 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	// uses GetAttrsCount to get working facets (was GetRowSize)
 	int iMaxSchemaSize = -1;
 	int iMaxSchemaIndex = -1;
+	int iMatchPoolSize = 0;
 	ARRAY_FOREACH ( i, dSorters )
-		if ( dSorters[i]->GetSchema().GetAttrsCount()>iMaxSchemaSize )
+	{
+		iMatchPoolSize += dSorters[i]->GetDataLength ();
+		if ( dSorters[i]->GetSchema ().GetAttrsCount ()>iMaxSchemaSize )
 		{
-			iMaxSchemaSize = dSorters[i]->GetSchema().GetAttrsCount();
+			iMaxSchemaSize = dSorters[i]->GetSchema ().GetAttrsCount ();
 			iMaxSchemaIndex = i;
 		}
+	}
 
 	// setup calculations and result schema
 	CSphQueryContext tCtx ( *pQuery );
 	tCtx.m_pProfile = pProfiler;
-	if ( !tCtx.SetupCalc ( pResult, dSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, NULL, false ) )
+	if ( !tCtx.SetupCalc ( pResult, dSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, NULL, false, true ) )
 		return false;
 
 	tCtx.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
@@ -7052,7 +7083,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		tExpCtx.m_iMinInfixLen = m_tSettings.m_iMinInfixLen;
 		tExpCtx.m_iExpansionLimit = m_iExpansionLimit;
 		tExpCtx.m_bHasMorphology = m_pDict->HasMorphology();
-		tExpCtx.m_bMergeSingles = ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_INLINE );
+		tExpCtx.m_bMergeSingles = ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_INLINE && ( pQuery->m_uDebugFlags & QUERY_DEBUG_NO_PAYLOAD )==0 );
 		tExpCtx.m_pPayloads = &tPayloads;
 		tExpCtx.m_pIndexData = &tGuard.m_dRamChunks;
 
@@ -7086,6 +7117,16 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	{
 		pResult->m_iQueryTime = 0;
 		return true;
+	}
+
+	pRanker->ExtraData ( EXTRA_SET_MAXMATCHES, (void**)&iMatchPoolSize );
+
+	// check for the possible integer overflow in m_dPool.Resize
+	int64_t iPoolSize = 0;
+	if ( pRanker->ExtraData ( EXTRA_GET_POOL_SIZE, (void**)&iPoolSize ) && iPoolSize>INT_MAX )
+	{
+		pResult->m_sError.SetSprintf ( "ranking factors pool too big (%d Mb), reduce max_matches", (int)( iPoolSize/1024/1024 ) );
+		return false;
 	}
 
 	// probably redundant, but just in case
@@ -7286,6 +7327,19 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			}
 		}
 	}
+
+	// do final expression calculations
+	if ( tCtx.m_dCalcPostAggregate.GetLength () )
+	{
+		const int iSegmentsTotal = tGuard.m_dRamChunks.GetLength ();
+		SphRtFinalMatchCalc_t tFinal ( iSegmentsTotal, tCtx );
+		for ( int iSorter = 0; iSorter<iSorters; iSorter++ )
+		{
+			ISphMatchSorter * pTop = ppSorters[iSorter];
+			pTop->Finalize ( tFinal, false );
+		}
+	}
+
 
 	//////////////////////
 	// coping match's attributes to external storage in result set

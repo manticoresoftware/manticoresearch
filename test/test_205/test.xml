@@ -153,10 +153,10 @@ INSERT INTO test_table VALUES
 <sphinxql>select *, packedfactors() as f, weight() from dd where match('da blow') option idf=plain,idf=tfidf_normalized, ranker=expr('sum(lcs*user_weight)*1000+bm25')</sphinxql>
 
 <!-- regression expression ranker crash on expanded terms -->
-<sphinxql>select *, weight() as w, packedfactors() as p from kw where match('t* here') option ranker=expr('sum(lcs)*1000+bm25')</sphinxql>
-<sphinxql>select *, weight() as w, packedfactors() as p from kw where match('t* starts h*') option ranker=expr('sum(lcs)*1000+bm25')</sphinxql>
-<sphinxql>select *, weight() as w, packedfactors() as p from kw where match('t* from h*') option ranker=expr('sum(lcs)*1000+bm25')</sphinxql>
-<sphinxql>select *, weight() as w, packedfactors() as p from kw where match('t* ( starts | from ) h*') option ranker=expr('sum(lcs)*1000+bm25')</sphinxql>
+<sphinxql>select *, weight() as w, packedfactors() as p from kw where match('t* here') option ranker=expr('sum(lcs)*1000+bm25'), debug_no_payload, idf=tfidf_unnormalized</sphinxql>
+<sphinxql>select *, weight() as w, packedfactors() as p from kw where match('t* starts h*') option ranker=expr('sum(lcs)*1000+bm25'), debug_no_payload, idf=tfidf_unnormalized</sphinxql>
+<sphinxql>select *, weight() as w, packedfactors() as p from kw where match('t* from h*') option ranker=expr('sum(lcs)*1000+bm25'), debug_no_payload, idf=tfidf_unnormalized</sphinxql>
+<sphinxql>select *, weight() as w, packedfactors() as p from kw where match('t* ( starts | from ) h*') option ranker=expr('sum(lcs)*1000+bm25'), debug_no_payload, idf=tfidf_unnormalized</sphinxql>
 
 <!-- regression local idf -->
 <sphinxql>select *, weight() from l1,l2 where match('da win') option local_df=1</sphinxql>

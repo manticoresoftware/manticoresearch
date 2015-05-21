@@ -8625,6 +8625,9 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent )
 	if ( sOpt=="low_priority" )
 	{
 		m_pQuery->m_bLowPriority = true;
+	} else if ( sOpt=="debug_no_payload" )
+	{
+		m_pStmt->m_tQuery.m_uDebugFlags |= QUERY_DEBUG_NO_PAYLOAD;
 	} else
 	{
 		m_pParseError->SetSprintf ( "unknown option '%s'", sOpt.cstr() );

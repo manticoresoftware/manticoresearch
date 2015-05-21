@@ -1664,7 +1664,7 @@ private:
 	bool						LoadPersistentMVA ( CSphString & sError );
 
 	bool						JuggleFile ( const char* szExt, CSphString & sError, bool bNeedOrigin=true ) const;
-	XQNode_t *					ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta * pResult, CSphScopedPayload * pPayloads ) const;
+	XQNode_t *					ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta * pResult, CSphScopedPayload * pPayloads, DWORD uQueryDebugFlags ) const;
 
 	bool						BuildDone ( const BuildHeader_t & tBuildHeader, CSphString & sError ) const;
 };
@@ -6776,6 +6776,7 @@ CSphQuery::CSphQuery ()
 	, m_bNormalizedTFIDF ( true )
 	, m_bLocalDF		( false )
 	, m_bLowPriority	( false )
+	, m_uDebugFlags		( 0 )
 	, m_eGroupFunc		( SPH_GROUPBY_ATTR )
 	, m_sGroupSortBy	( "@groupby desc" )
 	, m_sGroupDistinct	( "" )
@@ -15467,6 +15468,11 @@ void CSphQueryContext::CalcFinal ( CSphMatch & tMatch ) const
 	CalcContextItems ( tMatch, m_dCalcFinal );
 }
 
+void CSphQueryContext::CalcPostAggregate ( CSphMatch & tMatch ) const
+{
+	CalcContextItems ( tMatch, m_dCalcPostAggregate );
+}
+
 static inline void FreeStrItems ( CSphMatch & tMatch, const CSphVector<CSphQueryContext::CalcItem_t> & dItems )
 {
 	if ( !tMatch.m_pDynamic )
@@ -15832,7 +15838,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 
 	// setup calculations and result schema
 	CSphQueryContext tCtx ( *pQuery );
-	if ( !tCtx.SetupCalc ( pResult, ppSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, m_tMva.GetWritePtr(), m_bArenaProhibit ) )
+	if ( !tCtx.SetupCalc ( pResult, ppSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, m_tMva.GetWritePtr(), m_bArenaProhibit, false ) )
 		return false;
 
 	// set string pool for string on_sort expression fix up
@@ -17325,9 +17331,29 @@ void CSphQueryContext::BindWeights ( const CSphQuery * pQuery, const CSphSchema 
 	}
 }
 
+static bool SortedVectorsContain ( const CSphVector<int> & dVec1, const CSphVector<int> & dVec2 )
+{
+	const int * pSrc1 = dVec1.Begin ();
+	const int * pEnd1 = pSrc1 + dVec1.GetLength ();
+	const int * pSrc2 = dVec2.Begin ();
+	const int * pEnd2 = pSrc2 + dVec2.GetLength ();
+
+	while ( pSrc1!=pEnd1 && pSrc2!=pEnd2 )
+	{
+		if ( *pSrc1==*pSrc2 )
+			return true;
+
+		if ( *pSrc1<*pSrc2 )
+			pSrc1++;
+		else
+			pSrc2++;
+	}
+
+	return false;
+}
 
 bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema & tInSchema,
-									const CSphSchema & tSchema, const DWORD * pMvaPool, bool bArenaProhibit )
+								   const CSphSchema & tSchema, const DWORD * pMvaPool, bool bArenaProhibit, bool bExtractPostAggr )
 {
 	m_dCalcFilter.Resize ( 0 );
 	m_dCalcSort.Resize ( 0 );
@@ -17341,10 +17367,13 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema &
 		return false;
 	}
 
+	bool bGotAggregate = false;
+
 	// now match everyone
 	for ( int iIn=0; iIn<tInSchema.GetAttrsCount(); iIn++ )
 	{
 		const CSphColumnInfo & tIn = tInSchema.GetAttr(iIn);
+		bGotAggregate |= ( tIn.m_eAggrFunc!=SPH_AGGR_NONE );
 
 		switch ( tIn.m_eStage )
 		{
@@ -17413,6 +17442,7 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema &
 					case SPH_EVAL_PREFILTER:	m_dCalcFilter.Add ( tCalc ); break;
 					case SPH_EVAL_PRESORT:		m_dCalcSort.Add ( tCalc ); break;
 					case SPH_EVAL_FINAL:		m_dCalcFinal.Add ( tCalc ); break;
+
 					default:					break;
 				}
 				break;
@@ -17426,6 +17456,44 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema &
 			default:
 				pResult->m_sError.SetSprintf ( "INTERNAL ERROR: unhandled eval stage=%d", (int)tIn.m_eStage );
 				return false;
+		}
+	}
+
+	// move some items from final calc to post-aggrerate for RT index
+	if ( bExtractPostAggr && bGotAggregate && m_dCalcFinal.GetLength () )
+	{
+		CSphVector<int> dAggrs;
+		for ( int i=0; i<tInSchema.GetAttrsCount (); i++ )
+		{
+			if ( tInSchema.GetAttr ( i ).m_eAggrFunc!=SPH_AGGR_NONE )
+				dAggrs.Add ( i );
+		}
+
+		CSphVector<int> dCur;
+		ARRAY_FOREACH ( i, m_dCalcFinal )
+		{
+			const CalcItem_t & tFinal = m_dCalcFinal[i];
+			if ( !tFinal.m_pExpr )
+				continue;
+
+			dCur.Resize ( 0 );
+			tFinal.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
+
+			// handle chains of dependencies (e.g. SELECT 1+attr f1, f1-1 f2 ... )
+			ARRAY_FOREACH ( j, dCur )
+			{
+				const CSphColumnInfo & tCol = tInSchema.GetAttr ( dCur[j] );
+				if ( tCol.m_pExpr.Ptr () )
+					tCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
+			}
+			dCur.Sort ();
+
+			if ( SortedVectorsContain ( dAggrs, dCur ) )
+			{
+				m_dCalcPostAggregate.Add ( tFinal );
+				m_dCalcFinal.Remove ( i );
+				i--;
+			}
 		}
 	}
 
@@ -18317,7 +18385,7 @@ ExpansionContext_t::ExpansionContext_t()
 {}
 
 
-XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta * pResult, CSphScopedPayload * pPayloads ) const
+XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta * pResult, CSphScopedPayload * pPayloads, DWORD uQueryDebugFlags ) const
 {
 	if ( !pNode || !m_pDict->GetSettings().m_bWordDict || ( m_tSettings.m_iMinPrefixLen<=0 && m_tSettings.m_iMinInfixLen<=0 ) )
 		return pNode;
@@ -18332,7 +18400,7 @@ XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta *
 	tCtx.m_iMinInfixLen = m_tSettings.m_iMinInfixLen;
 	tCtx.m_iExpansionLimit = m_iExpansionLimit;
 	tCtx.m_bHasMorphology = m_pDict->HasMorphology();
-	tCtx.m_bMergeSingles = ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_INLINE );
+	tCtx.m_bMergeSingles = ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_INLINE && ( uQueryDebugFlags & QUERY_DEBUG_NO_PAYLOAD )==0 );
 	tCtx.m_pPayloads = pPayloads;
 	tCtx.m_eHitless = m_tSettings.m_eHitless;
 
@@ -18737,7 +18805,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 
 	// expanding prefix in word dictionary case
 	CSphScopedPayload tPayloads;
-	XQNode_t * pPrefixed = ExpandPrefix ( tParsed.m_pRoot, pResult, &tPayloads );
+	XQNode_t * pPrefixed = ExpandPrefix ( tParsed.m_pRoot, pResult, &tPayloads, pQuery->m_uDebugFlags );
 	if ( !pPrefixed )
 		return false;
 	tParsed.m_pRoot = pPrefixed;
@@ -18830,7 +18898,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 			dStatChecker[i].Set ( ppResults[i]->m_hWordStats );
 
 			// expanding prefix in word dictionary case
-			XQNode_t * pPrefixed = ExpandPrefix ( dXQ[i].m_pRoot, ppResults[i], &tPayloads );
+			XQNode_t * pPrefixed = ExpandPrefix ( dXQ[i].m_pRoot, ppResults[i], &tPayloads, pQueries[i].m_uDebugFlags );
 			if ( pPrefixed )
 			{
 				dXQ[i].m_pRoot = pPrefixed;
@@ -18938,7 +19006,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	tCtx.m_pProfile = pProfile;
 	tCtx.m_pLocalDocs = tArgs.m_pLocalDocs;
 	tCtx.m_iTotalDocs = tArgs.m_iTotalDocs;
-	if ( !tCtx.SetupCalc ( pResult, ppSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, m_tMva.GetWritePtr(), m_bArenaProhibit ) )
+	if ( !tCtx.SetupCalc ( pResult, ppSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, m_tMva.GetWritePtr(), m_bArenaProhibit, false ) )
 		return false;
 
 	// set string pool for string on_sort expression fix up

@@ -429,6 +429,11 @@ class ISphRanker;
 class ISphMatchSorter;
 class UservarIntSet_c;
 
+enum QueryDebug_e
+{
+	QUERY_DEBUG_NO_PAYLOAD = 1<<0
+};
+
 
 /// per-query search context
 /// everything that index needs to compute/create to process the query
@@ -458,6 +463,7 @@ public:
 	CSphVector<CalcItem_t>		m_dCalcFilter;			///< items to compute for filtering
 	CSphVector<CalcItem_t>		m_dCalcSort;			///< items to compute for sorting/grouping
 	CSphVector<CalcItem_t>		m_dCalcFinal;			///< items to compute when finalizing result set
+	CSphVector<CalcItem_t>		m_dCalcPostAggregate;	///< items to compute aggregate depended with finalized result set
 
 	const CSphVector<CSphAttrOverride> *	m_pOverrides;		///< overridden attribute values
 	CSphVector<CSphAttrLocator>				m_dOverrideIn;
@@ -474,13 +480,14 @@ public:
 	~CSphQueryContext ();
 
 	void						BindWeights ( const CSphQuery * pQuery, const CSphSchema & tSchema );
-	bool						SetupCalc ( CSphQueryResult * pResult, const ISphSchema & tInSchema, const CSphSchema & tSchema, const DWORD * pMvaPool, bool bArenaProhibit );
+	bool						SetupCalc ( CSphQueryResult * pResult, const ISphSchema & tInSchema, const CSphSchema & tSchema, const DWORD * pMvaPool, bool bArenaProhibit, bool bExtractPostAggr );
 	bool						CreateFilters ( bool bFullscan, const CSphVector<CSphFilterSettings> * pdFilters, const ISphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError, ESphCollation eCollation, bool bArenaProhibit, const KillListVector & dKillList );
 	bool						SetupOverrides ( const CSphQuery * pQuery, CSphQueryResult * pResult, const CSphSchema & tIndexSchema, const ISphSchema & tOutgoingSchema );
 
 	void						CalcFilter ( CSphMatch & tMatch ) const;
 	void						CalcSort ( CSphMatch & tMatch ) const;
 	void						CalcFinal ( CSphMatch & tMatch ) const;
+	void						CalcPostAggregate ( CSphMatch & tMatch ) const;
 
 	void						FreeStrFilter ( CSphMatch & tMatch ) const;
 	void						FreeStrSort ( CSphMatch & tMatch ) const;

@@ -7,6 +7,7 @@
 searchd
 {
 	<searchd_settings/>
+	workers = threads
 }
 
 source test
@@ -107,6 +108,22 @@ index test12
 	blend_chars 	= +, %, -, $
 }
 
+index test12_rt
+{
+	type		= rt
+	path		= <data_path/>/test12_rt
+	rt_field	= content
+	dict 		= keywords
+	
+	wordforms	= <this_test/>/wordforms-12.txt
+	morphology	= stem_enru
+	min_prefix_len	= 3
+	html_strip	= 1
+	index_exact_words	= 1
+	blend_mode	= trim_head, trim_tail, trim_both
+	blend_chars	= +, %, -, $
+}
+
 
 </config>
 
@@ -164,8 +181,11 @@ index test12
 <sphinxql>SELECT * FROM wb WHERE MATCH('box-of-my goes-here')</sphinxql>
 
 <sphinxql>SELECT * FROM test12 WHERE MATCH('путин')</sphinxql>
-<sphinxql>SELECT * FROM test12 WHERE MATCH('путин-то')</sphinxql>
+<sphinxql>SELECT id, weight() FROM test12 WHERE MATCH('путин-то')</sphinxql>
 <sphinxql>SELECT * FROM test12 WHERE MATCH('"Военно-промышленная комиссия"')</sphinxql>
+
+<sphinxql>INSERT INTO test12_rt (id, content) VALUES (1, 'путин-то'), (2, 'путиными'), (3, 'путена'), (4, 'Военно-промышленная комиссия превратилась в авторитетную площадку диалога')</sphinxql>
+<sphinxql>SELECT id, weight() FROM test12_rt WHERE MATCH('путин-то')</sphinxql>
 </sphqueries>
 
 </test>

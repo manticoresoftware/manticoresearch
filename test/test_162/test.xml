@@ -31,6 +31,17 @@ index plain
     docinfo			= extern
 	path			= <data_path/>/plain
 }
+
+index rt
+{
+	dict = keywords
+	type	= rt
+	rt_attr_uint	= idd1
+	rt_attr_string	= str1
+	rt_field	= body
+	docinfo	= extern
+	path			= <data_path/>/rt
+}
 </config>
 
 <db_create>
@@ -77,6 +88,22 @@ INSERT INTO `test_table` VALUES
 <sphinxql>select * from ( select *, sum(id) as s1, sum(idd1) as s2, s1+s2 as s3, group_concat(id) from plain where match('the | eats | bird') group by idd1 within group order by str1 asc ) order by s1 desc</sphinxql>
 <sphinxql>select * from ( select *, sum(id) as s1, sum(idd1) as s2, s1+s2 as s3, group_concat(id) from plain where match('the | eats | bird') group by idd1 within group order by str1 asc ) order by s2 desc</sphinxql>
 <sphinxql>select * from ( select *, sum(id) as s1, sum(idd1) as s2, s1+s2 as s3, group_concat(id) from plain where match('the | eats | bird') group by idd1 within group order by str1 asc ) order by s3 desc</sphinxql>
+
+<!-- regression aggregate dependend attributes at RT index -->
+<sphinxql>
+INSERT INTO rt (id, idd1, str1, body) VALUES
+( 1, 1,		'a aa',		'the dog' ),
+( 2, 11,	'c cc',		'the cat' ),
+( 3, 11,	'a a',		'the bird' ), 
+( 4, 11,	'cc c',		'cat eats bird' ),
+( 5, 3, 	'a a',		'dog eats cat' ), 
+( 6, 1,		'c cc',		'bird' ), 
+( 7, 1,		'a a',		'the cat' ),
+( 8, 1,		'a a',		'eats' ),
+( 9, 3, 	'c cc',		'the' )
+</sphinxql>
+<sphinxql>select *, sum(id) as s1, sum(idd1) as s2, s1+s2 as s3, group_concat(id) from plain where match('the | eats | bird') group by idd1 within group order by str1 asc</sphinxql>
+<sphinxql>select *, sum(id) as s1, sum(idd1) as s2, s1+s2 as s3, group_concat(id) from rt    where match('the | eats | bird') group by idd1 within group order by str1 asc</sphinxql>
 </sphqueries>
 
 </test>

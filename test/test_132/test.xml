@@ -247,7 +247,17 @@ for ( $i = 0; $i<100; $i++ )
 	if ( @mysql_error() )
 		$results[] = 'i=$i' . @mysql_error();	
 }
-$results[] = 'post update flush tag - ' . $client->FlushAttributes();
+
+
+// just fake flush tag for RT mode as RT does not support FlushAttributes command
+global $g_locals;
+if ( !array_key_exists ('rt_mode', $g_locals) || !$g_locals['rt_mode'] )
+{
+	$results[] = 'post update flush tag - ' . $client->FlushAttributes();
+} else
+{
+	$results[] = 'post update flush tag - 1';
+}
 
 @mysql_close($sock);
 

@@ -150,6 +150,17 @@ index rt
 <sphinxql>select bfloat from idx1 where id=1</sphinxql>
 <sphinxql>update rt set bfloat=123 where id=1</sphinxql>
 <sphinxql>select bfloat from rt where id=1</sphinxql>
+
+<sphinxql>update idx1 set bint=-5.0 where id=1</sphinxql>
+<sphinxql>select bint from idx1 where id=1</sphinxql>
+<sphinxql>update idx1 set bfloat=-5 where id=1</sphinxql>
+<sphinxql>select bfloat from idx1 where id=1</sphinxql>
+
+<sphinxql>update rt set bint=-5.0 where id=1</sphinxql>
+<sphinxql>select bint from rt where id=1</sphinxql>
+<sphinxql>update rt set bfloat=-5 where id=1</sphinxql>
+<sphinxql>select bfloat from rt where id=1</sphinxql>
+
 </sphqueries>
 
   <DB_Create>

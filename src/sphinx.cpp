@@ -9848,6 +9848,8 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 	CSphBitvec dBigints ( iUpdLen );
 	CSphBitvec dDoubles ( iUpdLen );
 	CSphBitvec dJsonFields ( iUpdLen );
+	CSphBitvec dBigint2Float ( iUpdLen );
+	CSphBitvec dFloat2Bigint ( iUpdLen );
 	CSphVector<int64_t> dValues ( iUpdLen );
 	CSphVector < CSphRefcountedPtr<ISphExpr> > dExpr ( iUpdLen );
 	memset ( dLocators.Begin(), 0, dLocators.GetSizeBytes() );
@@ -9915,9 +9917,19 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 				uDst64 |= ( U64C(1)<<i );
 
 			if ( tCol.m_eAttrType==SPH_ATTR_FLOAT )
+			{
+				if ( tUpd.m_dTypes[i]==SPH_ATTR_BIGINT )
+					dBigint2Float.BitSet(i);
+
 				dFloats.BitSet(i);
-			else if ( tCol.m_eAttrType==SPH_ATTR_JSON )
+			} else if ( tCol.m_eAttrType==SPH_ATTR_JSON )
 				dJsonFields.BitSet(i);
+			else if ( tCol.m_eAttrType==SPH_ATTR_BIGINT )
+			{
+				if ( tUpd.m_dTypes[i]==SPH_ATTR_FLOAT )
+					dFloat2Bigint.BitSet(i);
+			}
+
 			dLocators[i] = ( tCol.m_tLocator );
 		} else if ( tUpd.m_bIgnoreNonexistent )
 		{
@@ -10106,6 +10118,12 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 			{
 				// plain update
 				SphAttr_t uValue = dBigints.BitGet ( iCol ) ? MVA_UPSIZE ( &tUpd.m_dPool[iPos] ) : tUpd.m_dPool[iPos];
+
+				if ( dBigint2Float.BitGet(iCol) ) // handle bigint(-1) -> float attr updates
+					uValue = sphF2DW ( float((int64_t)uValue) );
+				else if ( dFloat2Bigint.BitGet(iCol) ) // handle float(1.0) -> bigint attr updates
+					uValue = (int64_t)sphDW2F((DWORD)uValue);
+
 				sphSetRowAttr ( pEntry, dLocators[iCol], uValue );
 
 				// update block and index ranges

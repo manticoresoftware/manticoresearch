@@ -2352,7 +2352,8 @@ void TestRTWeightBoundary ()
 			if ( !pSrc->m_tDocInfo.m_uDocID )
 				break;
 
-			pIndex->AddDocument ( pSrc->GetFieldCount(), pSrc->GetFields(), pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
+			CSphScopedPtr<ISphTokenizer> pTokenizer ( pIndex->CloneIndexingTokenizer() );
+			pIndex->AddDocument ( pTokenizer.Ptr(), pSrc->GetFieldCount(), pSrc->GetFields(), pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
 			pIndex->Commit ( NULL, NULL );
 		}
 
@@ -2540,7 +2541,8 @@ void TestRTSendVsMerge ()
 		if ( !pSrc->m_tDocInfo.m_uDocID )
 			break;
 
-		pIndex->AddDocument ( pSrc->GetFieldCount(), pSrc->GetFields(), pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
+		CSphScopedPtr<ISphTokenizer> pTokenizer ( pIndex->CloneIndexingTokenizer() );
+		pIndex->AddDocument ( pTokenizer.Ptr(), pSrc->GetFieldCount(), pSrc->GetFields(), pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
 		if ( pSrc->m_tDocInfo.m_uDocID==350 )
 		{
 			pIndex->Commit ( NULL, NULL );
@@ -2651,7 +2653,8 @@ void TestRankerFactors ()
 		if ( !pSrc->m_tDocInfo.m_uDocID )
 			break;
 
-		pIndex->AddDocument ( pSrc->GetFieldCount(), pSrc->GetFields(), pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
+		CSphScopedPtr<ISphTokenizer> pTokenizer ( pIndex->CloneIndexingTokenizer() );
+		pIndex->AddDocument ( pTokenizer.Ptr(), pSrc->GetFieldCount(), pSrc->GetFields(), pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
 	}
 	pIndex->Commit ( NULL, NULL );
 	pSrc->Disconnect();

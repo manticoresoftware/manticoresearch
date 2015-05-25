@@ -1177,7 +1177,7 @@ public:
 	explicit					RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict );
 	virtual						~RtIndex_t ();
 
-	virtual bool				AddDocument ( int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt );
+	virtual bool				AddDocument ( ISphTokenizer * pTokenizer, int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt );
 	virtual bool				AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bReplace, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt );
 	virtual bool				DeleteDocument ( const SphDocID_t * pDocs, int iDocs, CSphString & sError, ISphRtAccum * pAccExt );
 	virtual void				Commit ( int * pDeleted, ISphRtAccum * pAccExt );
@@ -1190,6 +1190,7 @@ public:
 	virtual bool				Truncate ( CSphString & sError );
 	virtual void				Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pThrottle );
 	CSphIndex *					GetDiskChunk ( int iChunk ) { return m_dDiskChunks.GetLength()>iChunk ? m_dDiskChunks[iChunk] : NULL; }
+	virtual ISphTokenizer *		CloneIndexingTokenizer() const { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
 
 private:
 	/// acquire thread-local indexing accumulator
@@ -1513,7 +1514,7 @@ void CSphSource_StringVector::Disconnect ()
 	m_tHits.m_dData.Reset();
 }
 
-bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMatch & tDoc,
+bool RtIndex_t::AddDocument ( ISphTokenizer * pTokenizer, int iFields, const char ** ppFields, const CSphMatch & tDoc,
 	bool bReplace, const CSphString & sTokenFilterOptions,
 	const char ** ppStr, const CSphVector<DWORD> & dMvas,
 	CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt )
@@ -1542,18 +1543,12 @@ bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMat
 	if ( !pAcc )
 		return false;
 
-	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ) ); // avoid race
-
 	// OPTIMIZE? do not create filter on each(!) INSERT
 	if ( !m_tSettings.m_sIndexTokenFilter.IsEmpty() )
 	{
-		ISphTokenizer * p = pTokenizer.LeakPtr();
-		pTokenizer = ISphTokenizer::CreatePluginFilter ( p, m_tSettings.m_sIndexTokenFilter, sError );
-		if ( !pTokenizer.Ptr() )
-		{
-			SafeDelete(p);
+		pTokenizer = ISphTokenizer::CreatePluginFilter ( pTokenizer->Clone ( SPH_CLONE_INDEX ), m_tSettings.m_sIndexTokenFilter, sError );
+		if ( !pTokenizer )
 			return false;
-		}
 		if ( !pTokenizer->SetFilterSchema ( m_tSchema, sError ) )
 			return false;
 		if ( !sTokenFilterOptions.IsEmpty() )
@@ -1563,7 +1558,7 @@ bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMat
 
 	// OPTIMIZE? do not create filter on each(!) INSERT
 	if ( m_tSettings.m_uAotFilterMask )
-		pTokenizer = sphAotCreateFilter ( pTokenizer.LeakPtr(), m_pDict, m_tSettings.m_bIndexExactWords, m_tSettings.m_uAotFilterMask );
+		pTokenizer = sphAotCreateFilter ( pTokenizer->Clone ( SPH_CLONE_INDEX ), m_pDict, m_tSettings.m_bIndexExactWords, m_tSettings.m_uAotFilterMask );
 
 	CSphSource_StringVector tSrc ( iFields, ppFields, m_tSchema );
 
@@ -1579,7 +1574,7 @@ bool RtIndex_t::AddDocument ( int iFields, const char ** ppFields, const CSphMat
 		return false;
 
 	tSrc.Setup ( m_tSettings );
-	tSrc.SetTokenizer ( pTokenizer.Ptr() );
+	tSrc.SetTokenizer ( pTokenizer );
 	tSrc.SetDict ( pAcc->m_pDict );
 	if ( !tSrc.Connect ( m_sLastError ) )
 		return false;

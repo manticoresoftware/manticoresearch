@@ -36,7 +36,7 @@ public:
 
 	/// insert/update document in current txn
 	/// fails in case of two open txns to different indexes
-	virtual bool AddDocument ( int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt ) = 0;
+	virtual bool AddDocument ( ISphTokenizer * pTokenizer, int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt ) = 0;
 
 	/// delete document in current txn
 	/// fails in case of two open txns to different indexes
@@ -76,6 +76,9 @@ public:
 	virtual CSphIndex * GetDiskChunk ( int iChunk ) = 0;
 	
 	virtual ISphRtAccum * CreateAccum ( CSphString & sError ) = 0;
+
+	// instead of cloning for each AddDocument() call we could just call this method and improve batch inserts speed
+	virtual ISphTokenizer * CloneIndexingTokenizer() const = 0;
 };
 
 /// initialize subsystem

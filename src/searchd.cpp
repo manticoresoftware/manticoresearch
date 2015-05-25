@@ -11924,6 +11924,7 @@ void HandleMysqlInsert ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt,
 
 	CSphVector<const char *> dStrings;
 	CSphVector<DWORD> dMvas;
+	CSphScopedPtr<ISphTokenizer> pTokenizer ( pIndex->CloneIndexingTokenizer() );
 
 	// convert attrs
 	for ( int c=0; c<tStmt.m_iRowsAffected; c++ )
@@ -12043,7 +12044,7 @@ void HandleMysqlInsert ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt,
 			break;
 
 		// do add
-		pIndex->AddDocument ( dFields.GetLength(), dFields.Begin(), tDoc,
+		pIndex->AddDocument ( pTokenizer.Ptr(), dFields.GetLength(), dFields.Begin(), tDoc,
 			bReplace, tStmt.m_sStringParam,
 			dStrings.Begin(), dMvas, sError, sWarning, pAccum );
 

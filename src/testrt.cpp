@@ -82,6 +82,7 @@ void DoIndexing ( CSphSource_MySQL * pSrc, ISphRtIndex * pIndex )
 	int64_t tmAvgCommit = 0;
 	int64_t tmMaxCommit = 0;
 	int iCommits = 0;
+	ISphTokenizer * pTok = pIndex->CloneIndexingTokenizer();
 	for ( ;; )
 	{
 		const char ** pFields = (const char **)pSrc->NextDocument ( sError );
@@ -89,7 +90,7 @@ void DoIndexing ( CSphSource_MySQL * pSrc, ISphRtIndex * pIndex )
 			break;
 
 		if ( pSrc->m_tDocInfo.m_uDocID )
-			pIndex->AddDocument ( g_iFieldsCount, pFields, pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
+			pIndex->AddDocument ( pTok, g_iFieldsCount, pFields, pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
 
 		if ( ( pSrc->GetStats().m_iTotalDocuments % COMMIT_STEP )==0 || !pSrc->m_tDocInfo.m_uDocID )
 		{

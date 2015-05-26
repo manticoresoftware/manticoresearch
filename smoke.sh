@@ -45,6 +45,10 @@ do
 	cmd "make $jobs" "$BANNER: make failed" 
 
 	cmd1 "/dev/null" "cd ./test; php ubertest.php t -u test --strict-verbose --no-demo" "$BANNER: regression suite failed" "cat report.txt; rm report.txt"
+	if test "$CONFARGS" = "--with-debug"; then
+		cmd1 "/dev/null" "./clean.sh; php ubertest.php t -u test --strict-verbose --no-demo --rt --ignore-weights" "$BANNER: regression RT suite failed" "cat report.txt; rm report.txt"
+	fi
+	
 	cd ..
 
 	cmd "cd ./src; ./tests" "$BANNER: unit tests failed" 

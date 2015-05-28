@@ -41,6 +41,7 @@ struct JsonNode_t
 #define YYSTYPE JsonNode_t
 
 // must be included after YYSTYPE declaration
+class JsonParser_c;
 #include "yysphinxjson.h"
 
 /// actually, JSON-to-SphinxBSON converter helper, but who cares
@@ -534,8 +535,7 @@ public:
 
 // unused parameter, simply to avoid type clash between all my yylex() functions
 #define YY_NO_UNISTD_H 1
-#define YYLEX_PARAM pParser->m_pScanner, pParser
-#define YY_DECL int yylex ( YYSTYPE * lvalp, void * yyscanner, JsonParser_c * pParser )
+#define YY_DECL static int my_lex ( YYSTYPE * lvalp, void * yyscanner, JsonParser_c * pParser )
 
 #include "llsphinxjson.c"
 
@@ -543,6 +543,11 @@ void yyerror ( JsonParser_c * pParser, const char * sMessage )
 {
 	yy2lex_unhold ( pParser->m_pScanner );
 	pParser->m_sError.SetSprintf ( "%s near '%s'", sMessage, pParser->m_pLastToken );
+}
+
+static int yylex ( YYSTYPE * lvalp, JsonParser_c * pParser )
+{
+	return my_lex ( lvalp, pParser->m_pScanner, pParser );
 }
 
 #include "yysphinxjson.c"

@@ -6823,6 +6823,7 @@ struct SelectBounds_t
 	int		m_iEnd;
 };
 #define YYSTYPE SelectBounds_t
+class SelectParser_t;
 #include "yysphinxselect.h"
 
 

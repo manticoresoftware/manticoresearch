@@ -133,9 +133,6 @@
 %token	TOK_WHERE
 %token	TOK_WITHIN
 
-%type	<m_iValue>		named_const_list
-%type	<m_iValue>		udf_type
-
 %left TOK_OR
 %left TOK_AND
 %left '|'
@@ -751,9 +748,9 @@ option_item:
 		}
 	| ident '=' '(' named_const_list ')'
 		{
-			if ( !pParser->AddOption ( $1, pParser->GetNamedVec ( $4 ) ) )
+			if ( !pParser->AddOption ( $1, pParser->GetNamedVec ( $4.m_iValue ) ) )
 				YYERROR;
-			pParser->FreeNamedVec ( $4 );
+			pParser->FreeNamedVec ( $4.m_iValue );
 		}
 	| ident '=' ident '(' TOK_QUOTED_STRING ')'
 		{
@@ -770,12 +767,12 @@ option_item:
 named_const_list:
 	named_const
 		{
-			$$ = pParser->AllocNamedVec ();
-			pParser->AddConst ( $$, $1 );
+			$$.m_iValue = pParser->AllocNamedVec ();
+			pParser->AddConst ( $$.m_iValue, $1 );
 		}
 	| named_const_list ',' named_const
 		{
-			pParser->AddConst( $$, $3 );
+			pParser->AddConst( $$.m_iValue, $3 );
 		}
 	;
 
@@ -1376,15 +1373,15 @@ create_function:
 			tStmt.m_eStmt = STMT_CREATE_FUNCTION;
 			pParser->ToString ( tStmt.m_sUdfName, $3 );
 			pParser->ToStringUnescape ( tStmt.m_sUdfLib, $7 );
-			tStmt.m_eUdfType = (ESphAttr) $5;
+			tStmt.m_eUdfType = (ESphAttr) $5.m_iValue;
 		}
 	;
 
 udf_type:
-	TOK_INT			{ $$ = SPH_ATTR_INTEGER; }
-	| TOK_BIGINT	{ $$ = SPH_ATTR_BIGINT; }
-	| TOK_FLOAT		{ $$ = SPH_ATTR_FLOAT; }
-	| TOK_STRING	{ $$ = SPH_ATTR_STRINGPTR; }
+	TOK_INT			{ $$.m_iValue = SPH_ATTR_INTEGER; }
+	| TOK_BIGINT	{ $$.m_iValue = SPH_ATTR_BIGINT; }
+	| TOK_FLOAT		{ $$.m_iValue = SPH_ATTR_FLOAT; }
+	| TOK_STRING	{ $$.m_iValue = SPH_ATTR_STRINGPTR; }
 	;
 
 

@@ -164,7 +164,16 @@ void yyerror ( XQParser_t * pParser, const char * sMessage )
 		pParser->m_pParsed->m_sParseError.SetSprintf ( "%s near '%s'", sMessage, pParser->m_pLastTokenStart );
 }
 
+#if USE_WINDOWS
+#pragma warning(push,1)
+#pragma warning(disable:4702) // unreachable code
+#endif
+
 #include "yysphinxquery.c"
+
+#if USE_WINDOWS
+#pragma warning(pop)
+#endif
 
 //////////////////////////////////////////////////////////////////////////
 

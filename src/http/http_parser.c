@@ -624,8 +624,10 @@ parse_url_char(enum state s, const char ch)
   return s_dead;
 }
 
+#ifdef _WIN32
 #pragma warning(push) // store current warning values
 #pragma warning(disable:4127) // conditional expr is const
+#endif
 
 size_t http_parser_execute (http_parser *parser,
                             const http_parser_settings *settings,
@@ -2077,7 +2079,9 @@ error:
   RETURN(p - data);
 }
 
+#ifdef _WIN32
 #pragma warning(pop) // restore warnings
+#endif
 
 /* Does the parser need to see an EOF to find the end of the message? */
 int
@@ -2395,8 +2399,10 @@ http_parser_parse_url(const char *buf, size_t buflen, int is_connect,
   return 0;
 }
 
+#ifdef _WIN32
 #pragma warning(push) // store current warning values
 #pragma warning(disable:4127) // conditional expr is const
+#endif
 
 void
 http_parser_pause(http_parser *parser, int paused) {
@@ -2412,7 +2418,9 @@ http_parser_pause(http_parser *parser, int paused) {
   }
 }
 
+#ifdef _WIN32
 #pragma warning(pop) // restore warnings
+#endif
 
 int
 http_body_is_final(const struct http_parser *parser) {

@@ -8017,7 +8017,12 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 	{
 		// reset accumulated data from previous field
 		if ( (DWORD)HITMAN::GetField ( m_uCurPos )!=uField )
+		{
+			m_uCurPos = 0;
+			m_uLcsTailPos = 0;
 			m_uCurQposMask = 0;
+			m_uCurLCS = 0;
+		}
 
 		if ( (DWORD)uPosWithField!=m_uCurPos )
 		{

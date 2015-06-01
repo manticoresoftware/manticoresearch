@@ -9015,6 +9015,21 @@ private:
 };
 
 
+static int StringBinary2Number ( const char * sStr, int iLen )
+{
+	if ( !sStr || !iLen )
+		return 0;
+
+	char sBuf[64];
+	if ( sizeof ( sBuf-1 )<iLen )
+		iLen = sizeof ( sBuf-1 );
+	memcpy ( sBuf, sStr, iLen );
+	sBuf[iLen] = '\0';
+
+	return atoi ( sBuf );
+}
+
+
 /// suddenly, searchd-level expression function!
 struct Expr_Snippet_c : public ISphStringExpr
 {
@@ -9045,15 +9060,16 @@ struct Expr_Snippet_c : public ISphStringExpr
 		for ( int i = 2; i < pArglist->GetNumArgs(); i++ )
 		{
 			assert ( !pArglist->GetArg(i)->IsStringPtr() ); // aware of memleaks potentially caused by StringEval()
-			pArglist->GetArg(i)->StringEval ( tDummy, (const BYTE**)&pWords );
-			if ( !pWords )
+			int iLen = pArglist->GetArg(i)->StringEval ( tDummy, (const BYTE**)&pWords );
+			if ( !pWords || !iLen )
 				continue;
 
-			while ( *pWords && sphIsSpace ( *pWords ) )	pWords++;
+			const char * sEnd = pWords + iLen;
+			while ( pWords<sEnd && *pWords && sphIsSpace ( *pWords ) )	pWords++;
 			char * szOption = pWords;
-			while ( *pWords && sphIsAlpha ( *pWords ) )	pWords++;
+			while ( pWords<sEnd && *pWords && sphIsAlpha ( *pWords ) )	pWords++;
 			char * szOptEnd = pWords;
-			while ( *pWords && sphIsSpace ( *pWords ) )	pWords++;
+			while ( pWords<sEnd && *pWords && sphIsSpace ( *pWords ) )	pWords++;
 
 			if ( *pWords++!='=' )
 			{
@@ -9062,42 +9078,42 @@ struct Expr_Snippet_c : public ISphStringExpr
 			}
 
 			*szOptEnd = '\0';
-			while ( *pWords && sphIsSpace ( *pWords ) )	pWords++;
-			char * szValue = pWords;
+			while ( pWords<sEnd && *pWords && sphIsSpace ( *pWords ) )	pWords++;
+			char * sValue = pWords;
 
-			if ( !*szValue )
+			if ( !*sValue )
 			{
 				sError.SetSprintf ( "Error parsing SNIPPET options" );
 				return;
 			}
 
-			while ( *pWords && !sphIsSpace ( *pWords ) ) pWords++;
-			*pWords = '\0';
+			while ( pWords<sEnd && *pWords ) pWords++;
+			int iStrValLen = pWords - sValue;
 
-			int iValue = atoi ( szValue );
-			bool bValue = !!iValue;
-			if ( !strcasecmp ( szOption, "before_match" ) )			{ m_tHighlight.m_sBeforeMatch = szValue; }
-			else if ( !strcasecmp ( szOption, "after_match" ) )		{ m_tHighlight.m_sAfterMatch = szValue; }
-			else if ( !strcasecmp ( szOption, "chunk_separator" ) )	{ m_tHighlight.m_sChunkSeparator = szValue; }
-			else if ( !strcasecmp ( szOption, "limit" ) )			{ m_tHighlight.m_iLimit = iValue; }
-			else if ( !strcasecmp ( szOption, "around" ) )			{ m_tHighlight.m_iAround = iValue; }
-			else if ( !strcasecmp ( szOption, "exact_phrase" ) )		{ m_tHighlight.m_bExactPhrase = bValue; }
-			else if ( !strcasecmp ( szOption, "use_boundaries" ) )	{ m_tHighlight.m_bUseBoundaries = bValue; }
-			else if ( !strcasecmp ( szOption, "weight_order" ) )		{ m_tHighlight.m_bWeightOrder = bValue; }
-			else if ( !strcasecmp ( szOption, "query_mode" ) )		{ m_tHighlight.m_bHighlightQuery = bValue; }
-			else if ( !strcasecmp ( szOption, "force_all_words" ) )	{ m_tHighlight.m_bForceAllWords = bValue; }
-			else if ( !strcasecmp ( szOption, "limit_passages" ) )	{ m_tHighlight.m_iLimitPassages = iValue; }
-			else if ( !strcasecmp ( szOption, "limit_words" ) )		{ m_tHighlight.m_iLimitWords = iValue; }
-			else if ( !strcasecmp ( szOption, "start_passage_id" ) )	{ m_tHighlight.m_iPassageId = iValue; }
-			else if ( !strcasecmp ( szOption, "load_files" ) )		{ m_tHighlight.m_iLoadFiles |= bValue ? 1 : 0; }
-			else if ( !strcasecmp ( szOption, "load_files_scattered" ) ) { m_tHighlight.m_iLoadFiles |= bValue ? 2 : 0; }
-			else if ( !strcasecmp ( szOption, "html_strip_mode" ) )	{ m_tHighlight.m_sStripMode = szValue; }
-			else if ( !strcasecmp ( szOption, "allow_empty" ) )		{ m_tHighlight.m_bAllowEmpty= bValue; }
-			else if ( !strcasecmp ( szOption, "passage_boundary" ) )	{ m_tHighlight.m_sRawPassageBoundary = szValue; }
-			else if ( !strcasecmp ( szOption, "emit_zones" ) )		{ m_tHighlight.m_bEmitZones = bValue; }
+			if ( !strcasecmp ( szOption, "before_match" ) )					{ m_tHighlight.m_sBeforeMatch.SetBinary ( sValue, iStrValLen ); }
+			else if ( !strcasecmp ( szOption, "after_match" ) )				{ m_tHighlight.m_sAfterMatch.SetBinary ( sValue, iStrValLen ); }
+			else if ( !strcasecmp ( szOption, "chunk_separator" ) )			{ m_tHighlight.m_sChunkSeparator.SetBinary ( sValue, iStrValLen ); }
+			else if ( !strcasecmp ( szOption, "limit" ) )					{ m_tHighlight.m_iLimit = StringBinary2Number ( sValue, iStrValLen ); }
+			else if ( !strcasecmp ( szOption, "around" ) )					{ m_tHighlight.m_iAround = StringBinary2Number ( sValue, iStrValLen ); }
+			else if ( !strcasecmp ( szOption, "exact_phrase" ) )			{ m_tHighlight.m_bExactPhrase = ( StringBinary2Number ( sValue, iStrValLen )!=0 ); }
+			else if ( !strcasecmp ( szOption, "use_boundaries" ) )			{ m_tHighlight.m_bUseBoundaries = ( StringBinary2Number ( sValue, iStrValLen )!=0 ); }
+			else if ( !strcasecmp ( szOption, "weight_order" ) )			{ m_tHighlight.m_bWeightOrder = ( StringBinary2Number ( sValue, iStrValLen )!=0 ); }
+			else if ( !strcasecmp ( szOption, "query_mode" ) )				{ m_tHighlight.m_bHighlightQuery = ( StringBinary2Number ( sValue, iStrValLen )!=0 ); }
+			else if ( !strcasecmp ( szOption, "force_all_words" ) )			{ m_tHighlight.m_bForceAllWords = ( StringBinary2Number ( sValue, iStrValLen )!=0 ); }
+			else if ( !strcasecmp ( szOption, "limit_passages" ) )			{ m_tHighlight.m_iLimitPassages = StringBinary2Number ( sValue, iStrValLen ); }
+			else if ( !strcasecmp ( szOption, "limit_words" ) )				{ m_tHighlight.m_iLimitWords = StringBinary2Number ( sValue, iStrValLen ); }
+			else if ( !strcasecmp ( szOption, "start_passage_id" ) )		{ m_tHighlight.m_iPassageId = StringBinary2Number ( sValue, iStrValLen ); }
+			else if ( !strcasecmp ( szOption, "load_files" ) )				{ m_tHighlight.m_iLoadFiles |= ( StringBinary2Number ( sValue, iStrValLen )!=0 ? 1 : 0 ); }
+			else if ( !strcasecmp ( szOption, "load_files_scattered" ) )	{ m_tHighlight.m_iLoadFiles |= ( StringBinary2Number ( sValue, iStrValLen )!=0 ? 2 : 0 ); }
+			else if ( !strcasecmp ( szOption, "html_strip_mode" ) )			{ m_tHighlight.m_sStripMode.SetBinary ( sValue, iStrValLen ); }
+			else if ( !strcasecmp ( szOption, "allow_empty" ) )				{ m_tHighlight.m_bAllowEmpty= ( StringBinary2Number ( sValue, iStrValLen )!=0 ); }
+			else if ( !strcasecmp ( szOption, "passage_boundary" ) )		{ m_tHighlight.m_sRawPassageBoundary.SetBinary ( sValue, iStrValLen ); }
+			else if ( !strcasecmp ( szOption, "emit_zones" ) )				{ m_tHighlight.m_bEmitZones = ( StringBinary2Number ( sValue, iStrValLen )!=0 ); }
 			else
 			{
-				sError.SetSprintf ( "Unknown SNIPPET option: %s=%s", szOption, szValue );
+				CSphString sBuf;
+				sBuf.SetBinary ( sValue, iStrValLen );
+				sError.SetSprintf ( "Unknown SNIPPET option: %s=%s", szOption, sBuf.cstr() );
 				return;
 			}
 		}

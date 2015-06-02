@@ -253,6 +253,14 @@ index dist_w2
 	agent					= <my_address/>:dist_proxy1
 }
 
+<!-- regression empty agent string might cause crash on daemon start -->
+index dist_invalid
+{
+	type					= distributed
+	local					= proxy_loc2
+	agent					=
+}
+
 </config>
 
 

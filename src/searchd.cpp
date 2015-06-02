@@ -9021,7 +9021,7 @@ static int StringBinary2Number ( const char * sStr, int iLen )
 		return 0;
 
 	char sBuf[64];
-	if ( sizeof ( sBuf-1 )<iLen )
+	if ( (int)sizeof ( sBuf-1 )<iLen )
 		iLen = sizeof ( sBuf-1 );
 	memcpy ( sBuf, sStr, iLen );
 	sBuf[iLen] = '\0';
@@ -20073,6 +20073,13 @@ bool ValidateAgentDesc ( MetaAgentDesc_t & tAgent, const CSphVariant * pLine, co
 	// lookup address (if needed)
 	if ( pAgent->m_iFamily==AF_INET )
 	{
+		if ( pAgent->m_sHost.IsEmpty() )
+		{
+			sphWarning ( "index '%s': agent '%s': invalid host name 'empty' - SKIPPING AGENT",
+						 szIndexName, pLine->cstr() );
+			return false;
+		}
+
 		pAgent->m_uAddr = sphGetAddress ( pAgent->m_sHost.cstr() );
 		if ( pAgent->m_uAddr==0 )
 		{
@@ -20092,7 +20099,7 @@ bool ValidateAgentDesc ( MetaAgentDesc_t & tAgent, const CSphVariant * pLine, co
 		g_tStatsMutex.Lock();
 		pAgent->m_iStatsIndex = g_pStats->m_dAgentStats.AllocItem();
 		if ( pAgent->m_iStatsIndex<0 )
-			sphWarning ( "index '%s': agent '%s': failed to allocate slot for stats",
+			sphWarning ( "index '%s': agent '%s': failed to allocate slot for stats%s",
 				szIndexName, pLine->cstr(), ( tAgent.IsHA() ? ", HA might be wrong" : "" ) );
 
 		if ( g_pStats->m_hDashBoard.Exists ( sHashKey ) )
@@ -20104,7 +20111,7 @@ bool ValidateAgentDesc ( MetaAgentDesc_t & tAgent, const CSphVariant * pLine, co
 			pAgent->m_iDashIndex = g_pStats->m_dDashboard.AllocItem();
 			if ( pAgent->m_iDashIndex<0 )
 			{
-				sphWarning ( "index '%s': agent '%s': failed to allocate slot for stat-dashboard",
+				sphWarning ( "index '%s': agent '%s': failed to allocate slot for stat-dashboard%s",
 				szIndexName, pLine->cstr(), ( tAgent.IsHA() ? ", HA might be wrong" : "" ) );
 			} else
 			{

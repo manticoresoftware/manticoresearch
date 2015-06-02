@@ -27,6 +27,21 @@ index idx
 	path			= <data_path/>/main
 }
 
+source src1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT 1, 'M&amp;M text in'
+	sql_attr_uint	= idd
+}
+
+index idx1
+{
+	source			= src1
+	path			= <data_path/>/idx1
+	blend_chars		= &amp;
+}
+
 </config>
 
 <queries>
@@ -36,6 +51,12 @@ index idx
 	<query index="idx" mode="extended2" ranker="wordcount" >"e f"~2</query>
 	<!-- expect 1 match, the first with the weithg=532 -->
 	<query index="idx" mode="extended2" ranker="wordcount" >"i j"~2</query>
+
+	<!-- regression for blended chars vs proximity -->
+	<query index="idx1">"M&amp;M in"~2</query>
+	<query index="idx1">"in M&amp;M"~2</query>
+	<query index="idx1">"M&amp;M in"~3</query>
+	<query index="idx1">"in M&amp;M"~3</query>
 </queries>
 
 <db_create>

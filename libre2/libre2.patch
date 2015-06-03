@@ -1,6 +1,6 @@
 diff -rupN re2_orig/re2/compile.cc re2_new/re2/compile.cc
---- re2_orig/re2/compile.cc	2014-11-23 16:30:31.791329900 +0200
-+++ re2_new/re2/compile.cc	2014-11-23 16:32:33.494444000 +0200
+--- re2_orig/re2/compile.cc	2015-06-03 21:01:39.859724500 +0300
++++ re2_new/re2/compile.cc	2015-06-03 21:04:00.834589300 +0300
 @@ -7,7 +7,10 @@
  // Prog and Inst are defined in prog.h.
  // This file's external interface is just Regexp::CompileToProg.
@@ -23,8 +23,8 @@ diff -rupN re2_orig/re2/compile.cc re2_new/re2/compile.cc
    if (it != rune_cache_.end())
      return it->second;
 diff -rupN re2_orig/re2/prefilter_tree.cc re2_new/re2/prefilter_tree.cc
---- re2_orig/re2/prefilter_tree.cc	2014-11-23 16:30:31.931969800 +0200
-+++ re2_new/re2/prefilter_tree.cc	2014-11-23 16:33:19.306972200 +0200
+--- re2_orig/re2/prefilter_tree.cc	2015-06-03 21:01:39.941447500 +0300
++++ re2_new/re2/prefilter_tree.cc	2015-06-03 21:04:34.520203500 +0300
 @@ -7,6 +7,10 @@
  #include "re2/prefilter.h"
  #include "re2/prefilter_tree.h"
@@ -37,8 +37,8 @@ diff -rupN re2_orig/re2/prefilter_tree.cc re2_new/re2/prefilter_tree.cc
  DEFINE_int32(filtered_re2_min_atom_len,
               3,
 diff -rupN re2_orig/re2/re2.cc re2_new/re2/re2.cc
---- re2_orig/re2/re2.cc	2014-11-23 16:30:31.931969800 +0200
-+++ re2_new/re2/re2.cc	2014-11-23 16:40:08.197610400 +0200
+--- re2_orig/re2/re2.cc	2015-06-03 21:01:39.959349200 +0300
++++ re2_new/re2/re2.cc	2015-06-03 21:05:47.173725000 +0300
 @@ -11,7 +11,13 @@
  
  #include <stdio.h>
@@ -54,7 +54,7 @@ diff -rupN re2_orig/re2/re2.cc re2_new/re2/re2.cc
  #include <errno.h>
  #include "util/atomicops.h"
  #include "util/util.h"
-@@ -34,7 +40,7 @@ const VariadicFunction2<bool, StringPiec
+@@ -35,7 +41,7 @@ const VariadicFunction2<bool, StringPiec
  
  // This will trigger LNK2005 error in MSVC.
  #ifndef COMPILER_MSVC
@@ -64,8 +64,8 @@ diff -rupN re2_orig/re2/re2.cc re2_new/re2/re2.cc
  
  RE2::Options::Options(RE2::CannedOptions opt)
 diff -rupN re2_orig/re2/re2.h re2_new/re2/re2.h
---- re2_orig/re2/re2.h	2014-11-23 16:30:31.963219700 +0200
-+++ re2_new/re2/re2.h	2014-11-23 16:41:58.400689600 +0200
+--- re2_orig/re2/re2.h	2015-06-03 21:01:39.963230400 +0300
++++ re2_new/re2/re2.h	2015-06-03 21:06:35.371015500 +0300
 @@ -5,6 +5,7 @@
  #ifndef RE2_RE2_H
  #define RE2_RE2_H
@@ -74,7 +74,7 @@ diff -rupN re2_orig/re2/re2.h re2_new/re2/re2.h
  // C++ interface to the re2 regular-expression library.
  // RE2 supports Perl-style regular expressions (with extensions like
  // \d, \w, \s, ...).
-@@ -556,7 +557,6 @@ class RE2 {
+@@ -563,7 +564,6 @@ class RE2 {
      // If this happens too often, RE2 falls back on the NFA implementation.
  
      // For now, make the default budget something close to Code Search.
@@ -83,8 +83,8 @@ diff -rupN re2_orig/re2/re2.h re2_new/re2/re2.h
      enum Encoding {
        EncodingUTF8 = 1,
 diff -rupN re2_orig/re2/stringpiece.h re2_new/re2/stringpiece.h
---- re2_orig/re2/stringpiece.h	2014-11-23 16:30:32.103836100 +0200
-+++ re2_new/re2/stringpiece.h	2014-11-23 16:42:42.760097000 +0200
+--- re2_orig/re2/stringpiece.h	2015-06-03 21:01:39.999380800 +0300
++++ re2_new/re2/stringpiece.h	2015-06-03 21:07:02.478501800 +0300
 @@ -23,6 +23,9 @@
  #include <cstddef>
  #include <iosfwd>
@@ -96,8 +96,8 @@ diff -rupN re2_orig/re2/stringpiece.h re2_new/re2/stringpiece.h
  namespace re2 {
  
 diff -rupN re2_orig/util/logging.h re2_new/util/logging.h
---- re2_orig/util/logging.h	2014-11-23 16:30:32.338202900 +0200
-+++ re2_new/util/logging.h	2014-11-23 16:43:21.869608500 +0200
+--- re2_orig/util/logging.h	2015-06-03 21:01:40.236689900 +0300
++++ re2_new/util/logging.h	2015-06-03 21:07:48.737390800 +0300
 @@ -7,7 +7,11 @@
  #ifndef RE2_UTIL_LOGGING_H__
  #define RE2_UTIL_LOGGING_H__
@@ -112,8 +112,8 @@ diff -rupN re2_orig/util/logging.h re2_new/util/logging.h
  
  // Debug-only checking.
 diff -rupN re2_orig/util/mutex.h re2_new/util/mutex.h
---- re2_orig/util/mutex.h	2014-11-23 16:30:32.338202900 +0200
-+++ re2_new/util/mutex.h	2014-11-23 16:44:09.931924800 +0200
+--- re2_orig/util/mutex.h	2015-06-03 21:01:40.240105400 +0300
++++ re2_new/util/mutex.h	2015-06-03 21:08:41.660376900 +0300
 @@ -14,7 +14,10 @@
  
  namespace re2 {
@@ -127,8 +127,8 @@ diff -rupN re2_orig/util/mutex.h re2_new/util/mutex.h
  
  #if defined(NO_THREADS)
 diff -rupN re2_orig/util/stringprintf.cc re2_new/util/stringprintf.cc
---- re2_orig/util/stringprintf.cc	2014-11-23 16:30:32.353822900 +0200
-+++ re2_new/util/stringprintf.cc	2014-11-23 16:44:38.713225400 +0200
+--- re2_orig/util/stringprintf.cc	2015-06-03 21:01:40.271834700 +0300
++++ re2_new/util/stringprintf.cc	2015-06-03 21:09:07.784384200 +0300
 @@ -3,6 +3,9 @@
  // license that can be found in the LICENSE file.
  
@@ -139,36 +139,21 @@ diff -rupN re2_orig/util/stringprintf.cc re2_new/util/stringprintf.cc
  
  namespace re2 { 
  
-diff -rupN re2_orig/util/util.h re2_new/util/util.h
---- re2_orig/util/util.h	2014-11-23 16:30:32.369447200 +0200
-+++ re2_new/util/util.h	2014-11-23 17:01:07.186487000 +0200
-@@ -12,7 +12,9 @@
- #include <stddef.h>         // For size_t
- #include <assert.h>
- #include <stdarg.h>
-+#ifndef WIN32
- #include <sys/time.h>
-+#endif
- #include <time.h>
- #include <ctype.h>	// For isdigit, isalpha.
- 
 diff -rupN re2_orig/util/valgrind.h re2_new/util/valgrind.h
---- re2_orig/util/valgrind.h	2014-11-23 16:30:32.369447200 +0200
-+++ re2_new/util/valgrind.h	2014-11-23 16:48:08.322600200 +0200
-@@ -125,7 +125,7 @@
- #  endif
+--- re2_orig/util/valgrind.h	2015-06-03 21:01:40.315784200 +0300
++++ re2_new/util/valgrind.h	2015-06-03 21:11:07.508240700 +0300
+@@ -126,6 +126,7 @@
  #endif
  
--
+ 
 +#ifndef WIN32
  /* ------------------------------------------------------------------ */
  /* ARCHITECTURE SPECIFICS for SPECIAL INSTRUCTIONS.  There is nothing */
  /* in here of use to end-users -- skip to the next section.           */
-@@ -4170,7 +4170,7 @@ typedef
-                                VG_USERREQ__DISCARD_TRANSLATIONS,  \
+@@ -4171,6 +4172,7 @@ typedef
                                 _qzz_addr, _qzz_len, 0, 0, 0);     \
     }
--
+ 
 +#endif
  
  /* These requests are for getting Valgrind itself to print something.

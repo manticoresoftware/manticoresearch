@@ -440,6 +440,7 @@ protected:
 		, m_uLastID ( 0 )
 		, m_eState ( COPY_DONE )
 		, m_uDoneFor ( 0 )
+		, m_uHitStartDocid ( 0 )
 		{
 			m_dMyDocs[0].m_uDocid = DOCID_MAX;
 			m_dMyHits[0].m_uDocid = DOCID_MAX;
@@ -454,6 +455,7 @@ protected:
 		m_uLastID = 0;
 		m_eState = COPY_DONE;
 		m_uDoneFor = 0;
+		m_uHitStartDocid = 0;
 		m_dMyDocs[0].m_uDocid = DOCID_MAX;
 		m_dMyHits[0].m_uDocid = DOCID_MAX;
 		m_dFilteredHits[0].m_uDocid = DOCID_MAX;
@@ -474,6 +476,7 @@ protected:
 	ExtHit_t					m_dMyHits[ExtNode_i::MAX_HITS];		///< all hits within the required pos range
 	ExtHit_t					m_dFilteredHits[ExtNode_i::MAX_HITS];	///< hits from requested subset of the documents (for GetHitsChunk())
 	SphDocID_t					m_uDoneFor;
+	SphDocID_t					m_uHitStartDocid;
 };
 
 /// single keyword streamer, with term position filtering
@@ -2385,7 +2388,7 @@ const ExtHit_t * ExtConditional<T,ExtBase>::GetHitsChunk ( const ExtDoc_t * pDoc
 	if ( m_eState==COPY_DONE )
 	{
 		// this request completed in full
-		if ( m_uDoneFor==pDocs->m_uDocid || !m_uDoneFor )
+		if ( m_uDoneFor==pDocs->m_uDocid || !m_uDoneFor || m_uHitStartDocid==pDocs->m_uDocid )
 			return NULL;
 
 		// old request completed in full, but we have a new hits subchunk request now
@@ -2476,8 +2479,12 @@ const ExtHit_t * ExtConditional<T,ExtBase>::GetHitsChunk ( const ExtDoc_t * pDoc
 	}
 
 	m_uDoneFor = pDocs->m_uDocid;
+	m_uHitStartDocid = 0;
 	if ( m_uDoneFor==DOCID_MAX && pDocs-1>=pStart )
+	{
 		m_uDoneFor = ( pDocs-1 )->m_uDocid;
+		m_uHitStartDocid = pStart->m_uDocid;
+	}
 
 	PrintHitsChunk ( iFilteredHits, ExtBase::m_iAtomPos, m_dFilteredHits, "cond", this );
 

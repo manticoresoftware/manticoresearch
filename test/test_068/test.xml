@@ -115,6 +115,17 @@ index csv2
 	path = <data_path/>/csv2
 }
 
+source src51
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data51.xml
+}
+
+index idx51
+{
+	source = src51
+	path = <data_path/>/idx51
+}
 </config>
 
 <queries>
@@ -152,6 +163,8 @@ index csv2
 <query index="csv2">two</query>
 <query index="csv2">another</query>
 <query index="csv2">my</query>
+<!-- regression tail hits from ext-conditional node -->
+<query index="idx51" mode="extended2">^go | go$</query>
 </queries>
 
 </test>

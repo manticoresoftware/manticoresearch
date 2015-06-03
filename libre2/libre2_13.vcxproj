@@ -176,10 +176,8 @@
     <ClCompile Include="re2\tostring.cc" />
     <ClCompile Include="re2\unicode_casefold.cc" />
     <ClCompile Include="re2\unicode_groups.cc" />
-    <ClCompile Include="util\arena.cc" />
     <ClCompile Include="util\hash.cc" />
     <ClCompile Include="util\rune.cc" />
-    <ClCompile Include="util\stringpiece.cc" />
     <ClCompile Include="util\stringprintf.cc" />
     <ClCompile Include="util\strutil.cc" />
     <ClCompile Include="util\valgrind.cc" />
@@ -198,7 +196,6 @@
     <ClInclude Include="re2\variadic_function.h" />
     <ClInclude Include="re2\walker-inl.h" />
     <ClInclude Include="stdint.h" />
-    <ClInclude Include="util\arena.h" />
     <ClInclude Include="util\atomicops.h" />
     <ClInclude Include="util\benchmark.h" />
     <ClInclude Include="util\flags.h" />

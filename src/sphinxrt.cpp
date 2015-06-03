@@ -6923,7 +6923,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	tTermSetup.m_pCtx = &tCtx;
 
 	// bind weights
-	tCtx.BindWeights ( pQuery, m_tSchema );
+	tCtx.BindWeights ( pQuery, m_tSchema, pResult->m_sWarning );
 
 	// parse query
 	if ( pProfiler )

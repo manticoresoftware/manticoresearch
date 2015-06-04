@@ -168,7 +168,7 @@
     <ClCompile Include="re2\regexp.cc" />
     <ClCompile Include="util\rune.cc" />
     <ClCompile Include="re2\set.cc" />
-    <ClCompile Include="re2\stringpiece.h" />
+    <ClCompile Include="re2\stringpiece.cc" />
     <ClCompile Include="re2\simplify.cc" />
     <ClCompile Include="util\stringprintf.cc" />
     <ClCompile Include="util\strutil.cc" />

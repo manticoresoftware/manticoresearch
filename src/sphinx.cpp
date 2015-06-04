@@ -17637,7 +17637,7 @@ void ISphQueryFilter::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords )
 	{
 		int iQpos = dKeywords[iTokenized].m_iQpos;
 		// MUST copy as Dict::GetWordID changes word and might add symbols
-		strncpy ( (char *)sTokenized, dKeywords[iTokenized].m_sTokenized.scstr(), sizeof(sTokenized) );
+		strncpy ( (char *)sTokenized, dKeywords[iTokenized].m_sNormalized.scstr(), sizeof(sTokenized) );
 		int iPreAotCount = dKeywords.GetLength();
 
 		XQNode_t tAotNode ( tSpec );
@@ -17656,7 +17656,9 @@ void ISphQueryFilter::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords )
 			{
 				// MUST copy as Dict::GetWordID changes word and might add symbols
 				strncpy ( (char *)sTmp, dChildren[iChild]->m_dWords[iAotKeyword].m_sWord.scstr(), sizeof(sTmp) );
-				AddKeywordStats ( sTmp, sTokenized, iQpos, dKeywords );
+				// prevent use-after-free-bug due to vector grow: AddKeywordsStats() calls dKeywords.Add()
+				CSphString sTmp2 = dKeywords[iTokenized].m_sTokenized;
+				AddKeywordStats ( sTmp, (const BYTE *)sTmp2.cstr(), iQpos, dKeywords );
 			}
 
 			// push all child nodes at node to process list

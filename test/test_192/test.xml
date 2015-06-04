@@ -186,6 +186,8 @@ index test12_rt
 
 <sphinxql>INSERT INTO test12_rt (id, content) VALUES (1, 'путин-то'), (2, 'путиными'), (3, 'путена'), (4, 'Военно-промышленная комиссия превратилась в авторитетную площадку диалога')</sphinxql>
 <sphinxql>SELECT id, weight() FROM test12_rt WHERE MATCH('путин-то')</sphinxql>
+
+<sphinxql>CALL KEYWORDS('intel e8500 cpu', 'test', 1)</sphinxql>
 </sphqueries>
 
 </test>

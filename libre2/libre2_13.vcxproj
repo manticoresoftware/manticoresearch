@@ -173,6 +173,7 @@
     <ClCompile Include="re2\regexp.cc" />
     <ClCompile Include="re2\set.cc" />
     <ClCompile Include="re2\simplify.cc" />
+    <ClCompile Include="re2\stringpiece.cc" />
     <ClCompile Include="re2\tostring.cc" />
     <ClCompile Include="re2\unicode_casefold.cc" />
     <ClCompile Include="re2\unicode_groups.cc" />

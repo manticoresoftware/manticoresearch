@@ -139,6 +139,24 @@ diff -rupN re2_orig/util/stringprintf.cc re2_new/util/stringprintf.cc
  
  namespace re2 { 
  
+diff -rupN re2_orig/util/util.h re2_new/util/util.h
+--- re2_orig/util/util.h	2015-06-03 21:01:40.304059500 +0300
++++ re2_new/util/util.h	2015-06-04 14:27:55.625698100 +0300
+@@ -64,12 +64,12 @@ using std::unordered_set;
+ #ifdef WIN32
+ 
+ #define snprintf _snprintf_s
+-#define sprintf sprintf_s
++//#define sprintf sprintf_s
+ #define stricmp _stricmp
+ #define strtof strtod /* not really correct but best we can do */
+ #define strtoll _strtoi64
+ #define strtoull _strtoui64
+-#define vsnprintf vsnprintf_s
++//#define vsnprintf vsnprintf_s
+ 
+ #pragma warning(disable: 4018) // signed/unsigned mismatch
+ #pragma warning(disable: 4244) // possible data loss in int conversion
 diff -rupN re2_orig/util/valgrind.h re2_new/util/valgrind.h
 --- re2_orig/util/valgrind.h	2015-06-03 21:01:40.315784200 +0300
 +++ re2_new/util/valgrind.h	2015-06-03 21:11:07.508240700 +0300

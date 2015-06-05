@@ -2431,6 +2431,7 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 		case '}':
 		case '[':
 		case ']':
+		case '`':
 			return *m_pCur++;
 
 		case '<':

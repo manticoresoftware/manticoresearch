@@ -564,6 +564,13 @@ void TestTokenizer()
 	pTokenizer->SetBuffer ( (BYTE*)sTest21, sizeof(sTest21) );
 	assert ( !strcmp ( (const char*)pTokenizer->GetToken(), "\xF4\x80\x80\x80\x32\x34" ) );
 	delete pTokenizer;
+
+	pTokenizer = sphCreateUTF8NgramTokenizer ();
+	assert ( !pTokenizer->SetNgramChars ( "2..4", sError ) );
+
+	assert ( pTokenizer->SetCaseFolding ( "0..9, A..Z->a..z, _, a..z", sError ) );
+	assert ( pTokenizer->SetNgramChars ( "U+410..U+42F->U+430..U+44F, U+430..U+44F", sError ) );
+	delete pTokenizer;
 }
 
 

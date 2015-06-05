@@ -5822,6 +5822,45 @@ static inline bool Special2Simple ( int & iCodepoint )
 	return false;
 }
 
+static bool CheckRemap ( CSphString & sError, const CSphVector<CSphRemapRange> & dRemaps, const char * sSource, bool bCanRemap, const CSphLowercaser & tLC )
+{
+	// check
+	ARRAY_FOREACH ( i, dRemaps )
+	{
+		const CSphRemapRange & r = dRemaps[i];
+
+		if ( !bCanRemap && r.m_iStart!=r.m_iRemapStart )
+		{
+			sError.SetSprintf ( "%s characters must not be remapped (map-from=U+%x, map-to=U+%x)",
+								sSource, r.m_iStart, r.m_iRemapStart );
+			return false;
+		}
+
+		for ( int j=r.m_iStart; j<=r.m_iEnd; j++ )
+		{
+			if ( tLC.ToLower ( j ) )
+			{
+				sError.SetSprintf ( "%s characters must not be referenced anywhere else (code=U+%x)", sSource, j );
+				return false;
+			}
+		}
+
+		if ( bCanRemap )
+		{
+			for ( int j=r.m_iRemapStart; j<=r.m_iRemapStart + r.m_iEnd - r.m_iStart; j++ )
+			{
+				if ( tLC.ToLower ( j ) )
+				{
+					sError.SetSprintf ( "%s characters must not be referenced anywhere else (code=U+%x)", sSource, j );
+					return false;
+				}
+			}
+		}
+	}
+
+	return true;
+}
+
 
 bool ISphTokenizer::RemapCharacters ( const char * sConfig, DWORD uFlags, const char * sSource, bool bCanRemap, CSphString & sError )
 {
@@ -5834,33 +5873,8 @@ bool ISphTokenizer::RemapCharacters ( const char * sConfig, DWORD uFlags, const 
 		return false;
 	}
 
-	// check
-	ARRAY_FOREACH ( i, dRemaps )
-	{
-		const CSphRemapRange & r = dRemaps[i];
-
-		if ( !bCanRemap && r.m_iStart!=r.m_iRemapStart )
-		{
-			sError.SetSprintf ( "%s characters must not be remapped (map-from=U+%x, map-to=U+%x)",
-				sSource, r.m_iStart, r.m_iRemapStart );
-			return false;
-		}
-
-		for ( int j=r.m_iStart; j<=r.m_iEnd; j++ )
-			if ( m_tLC.ToLower(j) )
-		{
-			sError.SetSprintf ( "%s characters must not be referenced anywhere else (code=U+%x)", sSource, j );
-			return false;
-		}
-
-		if ( bCanRemap )
-			for ( int j=r.m_iRemapStart; j<=r.m_iRemapStart + r.m_iEnd - r.m_iStart; j++ )
-				if ( m_tLC.ToLower(j) )
-		{
-			sError.SetSprintf ( "%s characters must not be referenced anywhere else (code=U+%x)", sSource, j );
-			return false;
-		}
-	}
+	if ( !CheckRemap ( sError, dRemaps, sSource, bCanRemap, m_tLC ) )
+		return false;
 
 	// add mapping
 	m_tLC.AddRemaps ( dRemaps, uFlags );
@@ -6366,6 +6380,9 @@ bool CSphTokenizer_UTF8Ngram<IS_QUERY>::SetNgramChars ( const char * sConfig, CS
 		sError = tParser.GetLastError();
 		return false;
 	}
+
+	if ( !CheckRemap ( sError, dRemaps, "ngram", true, this->m_tLC ) )
+		return false;
 
 	// gcc braindamage requires this
 	this->m_tLC.AddRemaps ( dRemaps, FLAG_CODEPOINT_NGRAM | FLAG_CODEPOINT_SPECIAL ); // !COMMIT support other n-gram lengths than 1

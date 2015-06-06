@@ -656,7 +656,7 @@ uninstall-am: uninstall-binPROGRAMS
 
 .PHONY: extract-version
 extract-version:
-	/bin/sh svnxrev.sh ..
+	/bin/sh git_commit_id.sh
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

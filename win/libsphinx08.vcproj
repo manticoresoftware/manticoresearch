@@ -402,7 +402,7 @@
 					>
 					<Tool
 						Name="VCCustomBuildTool"
-						CommandLine="$(SolutionDir)\src\svnxrev.wsf $(SolutionDir)&#x0D;&#x0A;"
+						CommandLine="$(SolutionDir)\src\git_commit_id.cmd"
 						Outputs="$(SolutionDir)\src\nonexistent"
 					/>
 				</FileConfiguration>
@@ -411,7 +411,7 @@
 					>
 					<Tool
 						Name="VCCustomBuildTool"
-						CommandLine="$(SolutionDir)\src\svnxrev.wsf $(SolutionDir)&#x0D;&#x0A;"
+                                                CommandLine="$(SolutionDir)\src\git_commit_id.cmd"
 						Outputs="$(SolutionDir)\src\nonexistent"
 					/>
 				</FileConfiguration>
@@ -420,7 +420,7 @@
 					>
 					<Tool
 						Name="VCCustomBuildTool"
-						CommandLine="$(SolutionDir)\src\svnxrev.wsf $(SolutionDir)&#x0D;&#x0A;"
+                                                CommandLine="$(SolutionDir)\src\git_commit_id.cmd"
 						Outputs="$(SolutionDir)\src\nonexistent"
 					/>
 				</FileConfiguration>
@@ -429,7 +429,7 @@
 					>
 					<Tool
 						Name="VCCustomBuildTool"
-						CommandLine="$(SolutionDir)\src\svnxrev.wsf $(SolutionDir)&#x0D;&#x0A;"
+                                                CommandLine="$(SolutionDir)\src\git_commit_id.cmd"
 						Outputs="$(SolutionDir)\src\nonexistent"
 					/>
 				</FileConfiguration>

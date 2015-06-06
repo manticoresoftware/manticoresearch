@@ -44,7 +44,7 @@
 			<Add directory="../config/" />
 		</Compiler>
 		<ExtraCommands>
-			<Add before="../src/svnxrev.sh .." />
+			<Add before="../src/git_commit_id.sh" />
 		</ExtraCommands>
 		<Unit filename="../src/sphinx.cpp" />
 		<Unit filename="../src/sphinx.h" />

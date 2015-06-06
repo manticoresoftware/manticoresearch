@@ -163,12 +163,19 @@
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="..\src\sphinx.h">
-      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(SolutionDir)\src\svnxrev.wsf $(SolutionDir)
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(SolutionDir)\src\git_commit_id.cmd
 </Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(SolutionDir)\src\nonexistent;%(Outputs)</Outputs>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(SolutionDir)\src\svnxrev.wsf $(SolutionDir)
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(SolutionDir)\src\git_commit_id.cmd
 </Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(SolutionDir)\src\nonexistent;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(SolutionDir)\src\git_commit_id.cmd
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(SolutionDir)\src\nonexistent;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(SolutionDir)\src\git_commit_id.cmd
+</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(SolutionDir)\src\nonexistent;%(Outputs)</Outputs>
+
     </CustomBuild>
     <ClInclude Include="..\src\sphinxexcerpt.h" />
     <ClInclude Include="..\src\sphinxexpr.h" />

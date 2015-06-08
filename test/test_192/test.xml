@@ -124,6 +124,26 @@ index test12_rt
 	blend_chars	= +, %, -, $
 }
 
+source test_all
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = \
+		SELECT 1, '3+rd me text off' AS content UNION \
+		SELECT 2, '3@rd+4+5 me off' AS content UNION \
+		SELECT 3, '+3@rd@ me text off' AS content
+		
+	sql_field_string = content
+}
+
+index test_blend_all
+{
+	source			= test_all
+	path			= <data_path/>/test_blend_all
+
+	blend_chars		= +, U+2D, @
+	blend_mode	= trim_none, trim_all, trim_both
+}
 
 </config>
 
@@ -188,6 +208,14 @@ index test12_rt
 <sphinxql>SELECT id, weight() FROM test12_rt WHERE MATCH('путин-то')</sphinxql>
 
 <sphinxql>CALL KEYWORDS('intel e8500 cpu', 'test', 1)</sphinxql>
+
+<!-- trim_all blend_mode cases -->
+<sphinxql>SELECT id, content, SNIPPET(content, '3rd') s FROM test_blend_all WHERE MATCH(' 3rd ')</sphinxql>
+<sphinxql>SELECT id, content, SNIPPET(content, '3rd me') s FROM test_blend_all WHERE MATCH(' 3rd me')</sphinxql>
+<sphinxql>SELECT id, content, SNIPPET(content, '3rd45 me') s FROM test_blend_all WHERE MATCH(' 3rd45 me')</sphinxql>
+<sphinxql>SELECT id, content, SNIPPET(content, '"3rd * me"') s FROM test_blend_all WHERE MATCH(' "3rd * me"')</sphinxql>
+<sphinxql>SELECT id, content, SNIPPET(content, '"3rd45 * * * me"') s FROM test_blend_all WHERE MATCH(' "3rd45 * * * me"')</sphinxql>
+<sphinxql>SELECT id, content, SNIPPET(content, '"3rd45 * * * * off"') s FROM test_blend_all WHERE MATCH(' "3rd45 * * * * off"')</sphinxql>
 </sphqueries>
 
 </test>

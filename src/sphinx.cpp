@@ -5575,6 +5575,24 @@ BYTE * CSphTokenizerBase2::GetBlendedVariant ()
 		return m_sAccum;
 	}
 
+	// handle trim_all
+	if ( m_uBlendVariantsPending & BLEND_TRIM_ALL )
+	{
+		m_uBlendVariantsPending &= ~BLEND_TRIM_ALL;
+		m_bBlended = true;
+		const BYTE * pSrc = m_sAccumBlend;
+		BYTE * pDst = m_sAccum;
+		while ( *pSrc )
+		{
+			int iCode = sphUTF8Decode ( pSrc );
+			if ( !( m_tLC.ToLower ( iCode ) & FLAG_CODEPOINT_BLEND ) )
+				pDst += sphUTF8Encode ( pDst, ( iCode & MASK_CODEPOINT ) );
+		}
+		*pDst = '\0';
+
+		return m_sAccum;
+	}
+
 	// handle trim_both
 	if ( m_uBlendVariantsPending & BLEND_TRIM_BOTH )
 	{
@@ -5932,6 +5950,8 @@ bool ISphTokenizer::SetBlendMode ( const char * sMode, CSphString & sError )
 			m_uBlendVariants |= BLEND_TRIM_TAIL;
 		else if ( sphStrncmp ( sTok, p-sTok, "trim_both" ) )
 			m_uBlendVariants |= BLEND_TRIM_BOTH;
+		else if ( sphStrncmp ( sTok, p-sTok, "trim_all" ) )
+			m_uBlendVariants |= BLEND_TRIM_ALL;
 		else if ( sphStrncmp ( sTok, p-sTok, "skip_pure" ) )
 			m_bBlendSkipPure = true;
 		else

@@ -709,6 +709,7 @@ protected:
 	static const BYTE				BLEND_TRIM_HEAD		= 2;
 	static const BYTE				BLEND_TRIM_TAIL		= 4;
 	static const BYTE				BLEND_TRIM_BOTH		= 8;
+	static const BYTE				BLEND_TRIM_ALL		= 16;
 
 	CSphLowercaser					m_tLC;						///< my lowercaser
 	int								m_iLastTokenLen;			///< last token length, in codepoints

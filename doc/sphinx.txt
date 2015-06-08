@@ -142,10 +142,11 @@ Table of Contents
    8.39. SHOW PLUGINS syntax
    8.40. RELOAD PLUGINS syntax
    8.41. SHOW THREADS syntax
-   8.42. Multi-statement queries
-   8.43. Comment syntax
-   8.44. List of SphinxQL reserved keywords
-   8.45. SphinxQL upgrade notes, version 2.0.1-beta
+   8.42. RELOAD INDEX syntax
+   8.43. Multi-statement queries
+   8.44. Comment syntax
+   8.45. List of SphinxQL reserved keywords
+   8.46. SphinxQL upgrade notes, version 2.0.1-beta
 
 9. API reference
    9.1. General API functions
@@ -376,29 +377,28 @@ Table of Contents
       12.4.30. snippets_file_prefix
       12.4.31. collation_server
       12.4.32. collation_libc_locale
-      12.4.33. plugin_dir
-      12.4.34. mysql_version_string
-      12.4.35. rt_flush_period
-      12.4.36. thread_stack
-      12.4.37. expansion_limit
-      12.4.38. watchdog
-      12.4.39. sphinxql_state
-      12.4.40. ha_ping_interval
-      12.4.41. ha_period_karma
-      12.4.42. persistent_connections_limit
-      12.4.43. rt_merge_iops
-      12.4.44. rt_merge_maxiosize
-      12.4.45. predicted_time_costs
-      12.4.46. shutdown_timeout
-      12.4.47. ondisk_attrs_default
-      12.4.48. query_log_min_msec
-      12.4.49. agent_connect_timeout
-      12.4.50. agent_query_timeout
-      12.4.51. agent_retry_count
-      12.4.52. agent_retry_delay
-      12.4.53. qcache_max_bytes
-      12.4.54. qcache_thresh_msec
-      12.4.55. qcache_ttl_sec
+      12.4.33. mysql_version_string
+      12.4.34. rt_flush_period
+      12.4.35. thread_stack
+      12.4.36. expansion_limit
+      12.4.37. watchdog
+      12.4.38. sphinxql_state
+      12.4.39. ha_ping_interval
+      12.4.40. ha_period_karma
+      12.4.41. persistent_connections_limit
+      12.4.42. rt_merge_iops
+      12.4.43. rt_merge_maxiosize
+      12.4.44. predicted_time_costs
+      12.4.45. shutdown_timeout
+      12.4.46. ondisk_attrs_default
+      12.4.47. query_log_min_msec
+      12.4.48. agent_connect_timeout
+      12.4.49. agent_query_timeout
+      12.4.50. agent_retry_count
+      12.4.51. agent_retry_delay
+      12.4.52. qcache_max_bytes
+      12.4.53. qcache_thresh_msec
+      12.4.54. qcache_ttl_sec
 
    12.5. Common section configuration options
       12.5.1. lemmatizer_base
@@ -409,47 +409,50 @@ Table of Contents
       12.5.6. rlp_environment
       12.5.7. rlp_max_batch_size
       12.5.8. rlp_max_batch_docs
+      12.5.9. plugin_dir
 
 A. Sphinx revision history
    A.1. Version 2.3.1-beta, 03 mar 2015
-   A.2. Version 2.2.7-release, 20 jan 2015
-   A.3. Version 2.2.6-release, 13 nov 2014
-   A.4. Version 2.2.5-release, 06 oct 2014
-   A.5. Version 2.2.4-release, 11 sep 2014
-   A.6. Version 2.2.3-beta, 13 may 2014
-   A.7. Version 2.2.2-beta, 11 feb 2014
-   A.8. Version 2.2.1-beta, 13 nov 2013
-   A.9. Version 2.1.9-release, 03 jul 2014
-   A.10. Version 2.1.8-release, 28 apr 2014
-   A.11. Version 2.1.7-release, 30 mar 2014
-   A.12. Version 2.1.6-release, 24 feb 2014
-   A.13. Version 2.1.5-release, 22 jan 2014
-   A.14. Version 2.1.4-release, 18 dec 2013
-   A.15. Version 2.1.3-release, 12 nov 2013
-   A.16. Version 2.1.2-release, 10 oct 2013
-   A.17. Version 2.1.1-beta, 20 feb 2013
-   A.18. Version 2.0.11-dev, xx xxx xxxx
-   A.19. Version 2.0.10-release, 22 jan 2014
-   A.20. Version 2.0.9-release, 26 aug 2013
-   A.21. Version 2.0.8-release, 26 apr 2013
-   A.22. Version 2.0.7-release, 26 mar 2013
-   A.23. Version 2.0.6-release, 22 oct 2012
-   A.24. Version 2.0.5-release, 28 jul 2012
-   A.25. Version 2.0.4-release, 02 mar 2012
-   A.26. Version 2.0.3-release, 23 dec 2011
-   A.27. Version 2.0.2-beta, 15 nov 2011
-   A.28. Version 2.0.1-beta, 22 apr 2011
-   A.29. Version 1.10-beta, 19 jul 2010
-   A.30. Version 0.9.9-release, 02 dec 2009
-   A.31. Version 0.9.9-rc2, 08 apr 2009
-   A.32. Version 0.9.9-rc1, 17 nov 2008
-   A.33. Version 0.9.8.1, 30 oct 2008
-   A.34. Version 0.9.8, 14 jul 2008
-   A.35. Version 0.9.7, 02 apr 2007
-   A.36. Version 0.9.7-rc2, 15 dec 2006
-   A.37. Version 0.9.7-rc1, 26 oct 2006
-   A.38. Version 0.9.6, 24 jul 2006
-   A.39. Version 0.9.6-rc1, 26 jun 2006
+   A.2. Version 2.2.9-release, 16 apr 2015
+   A.3. Version 2.2.8-release, 09 mar 2015
+   A.4. Version 2.2.7-release, 20 jan 2015
+   A.5. Version 2.2.6-release, 13 nov 2014
+   A.6. Version 2.2.5-release, 06 oct 2014
+   A.7. Version 2.2.4-release, 11 sep 2014
+   A.8. Version 2.2.3-beta, 13 may 2014
+   A.9. Version 2.2.2-beta, 11 feb 2014
+   A.10. Version 2.2.1-beta, 13 nov 2013
+   A.11. Version 2.1.9-release, 03 jul 2014
+   A.12. Version 2.1.8-release, 28 apr 2014
+   A.13. Version 2.1.7-release, 30 mar 2014
+   A.14. Version 2.1.6-release, 24 feb 2014
+   A.15. Version 2.1.5-release, 22 jan 2014
+   A.16. Version 2.1.4-release, 18 dec 2013
+   A.17. Version 2.1.3-release, 12 nov 2013
+   A.18. Version 2.1.2-release, 10 oct 2013
+   A.19. Version 2.1.1-beta, 20 feb 2013
+   A.20. Version 2.0.11-dev, xx xxx xxxx
+   A.21. Version 2.0.10-release, 22 jan 2014
+   A.22. Version 2.0.9-release, 26 aug 2013
+   A.23. Version 2.0.8-release, 26 apr 2013
+   A.24. Version 2.0.7-release, 26 mar 2013
+   A.25. Version 2.0.6-release, 22 oct 2012
+   A.26. Version 2.0.5-release, 28 jul 2012
+   A.27. Version 2.0.4-release, 02 mar 2012
+   A.28. Version 2.0.3-release, 23 dec 2011
+   A.29. Version 2.0.2-beta, 15 nov 2011
+   A.30. Version 2.0.1-beta, 22 apr 2011
+   A.31. Version 1.10-beta, 19 jul 2010
+   A.32. Version 0.9.9-release, 02 dec 2009
+   A.33. Version 0.9.9-rc2, 08 apr 2009
+   A.34. Version 0.9.9-rc1, 17 nov 2008
+   A.35. Version 0.9.8.1, 30 oct 2008
+   A.36. Version 0.9.8, 14 jul 2008
+   A.37. Version 0.9.7, 02 apr 2007
+   A.38. Version 0.9.7-rc2, 15 dec 2006
+   A.39. Version 0.9.7-rc1, 26 oct 2006
+   A.40. Version 0.9.6, 24 jul 2006
+   A.41. Version 0.9.6-rc1, 26 jun 2006
 
 List of Tables
 
@@ -798,10 +801,10 @@ project files) manually.
 
    1. Extract everything from the distribution tarball (haven't you
       already?) and go to the sphinx subdirectory. (We are using version
-      2.3.1-beta here for the sake of example only; be sure to change this
+      2.3.2-dev here for the sake of example only; be sure to change this
       to a specific version you're using.)
 
-      | $ tar xzvf sphinx-2.3.1-beta.tar.gz
+      | $ tar xzvf sphinx-2.3.2-dev.tar.gz
       | $ cd sphinx
 
    2. Run the configuration program:
@@ -880,7 +883,7 @@ Deb packages:
       $ sudo apt-get install mysql-client unixodbc libpq5
    2. Now you can install Sphinx:
 
-      $ sudo dpkg -i sphinxsearch_2.3.1-beta-0ubuntu11~trusty_amd64.deb
+      $ sudo dpkg -i sphinxsearch_2.3.2-dev-0ubuntu11~trusty_amd64.deb
 
 PPA repository (Ubuntu only).
 
@@ -930,10 +933,10 @@ a Linux environment; unless you are preparing code patches, you can use the
 pre-compiled binary files from the Downloads area on the website.
 
    1. Extract everything from the .zip file you have downloaded -
-      sphinx-2.3.1-beta-win32.zip, or sphinx-2.3.1-beta-win32-pgsql.zip if
-      you need PostgresSQL support as well. (We are using version
-      2.3.1-beta here for the sake of example only; be sure to change this
-      to a specific version you're using.) You can use Windows Explorer in
+      sphinx-2.3.2-dev-win32.zip, or sphinx-2.3.2-dev-win32-pgsql.zip if
+      you need PostgresSQL support as well. (We are using version 2.3.2-dev
+      here for the sake of example only; be sure to change this to
+      a specific version you're using.) You can use Windows Explorer in
       Windows XP and up to extract the files, or a freeware package like
       7Zip to open the archive.
 
@@ -1974,16 +1977,6 @@ on subsequent startup.
 RT indexes are currently quality feature, but there are still a few known
 usage quirks. Those quirks are listed in this section.
 
-   * Prefix indexing is supported with dict = keywords starting 2.0.2-beta.
-     Infix indexing is experimental in trunk.
-
-   * Disk chunks optimization routine is not implemented yet.
-
-   * On initial index creation, attributes are reordered by type, in the
-     following order: uint, bigint, float, timestamp, string. So when using
-     INSERT without an explicit column names list, specify all uint column
-     values first, then bigint, etc.
-
    * Default conservative RAM chunk limit (rt_mem_limit) of 32M can lead to
      poor performance on bigger indexes, you should raise it to 256..1024M
      if you're planning to index gigabytes.
@@ -2208,10 +2201,6 @@ Sphinx document ID in ascending order (earliest first).
 =========================
 
 Boolean queries allow the following special operators to be used:
-
-   * explicit operator AND:
-
-      | hello & world
 
    * operator OR:
 
@@ -2884,7 +2873,7 @@ factors are:
      actually next to each other.
 
      Note that LCCS still does not differentiate between the frequent and
-     rare keywords; for that, see WLCS and WLLCS.
+     rare keywords; for that, see WLCCS.
 
    * wlccs (float), added in version 2.2.1-beta. Weighted Longest Common
      Contiguous Subsequence. A sum of IDFs of the keywords of the longest
@@ -3992,7 +3981,7 @@ one go (more formally, one network request).
 
 Two API methods that implement multi-query mechanism are AddQuery() and
 RunQueries(). You can also run multiple queries with SphinxQL, see
-Section 8.42, <<Multi-statement queries>>. (In fact, regular Query() call
+Section 8.43, <<Multi-statement queries>>. (In fact, regular Query() call
 is internally implemented as a single AddQuery() call immediately followed
 by RunQueries() call.) AddQuery() captures the current state of all the
 query settings set by previous API calls, and memorizes the query.
@@ -4188,7 +4177,8 @@ currently defaults to libc_ci collation.
 
 Collations should affect all string attribute comparisons, including those
 within ORDER BY and GROUP BY, so differently ordered or grouped results can
-be returned depending on the collation chosen.
+be returned depending on the collation chosen. Note that collations don't
+affect full-text searching, for that use charset_table.
 
 5.13. Query cache
 =================
@@ -5305,10 +5295,11 @@ Table of Contents
 8.39. SHOW PLUGINS syntax
 8.40. RELOAD PLUGINS syntax
 8.41. SHOW THREADS syntax
-8.42. Multi-statement queries
-8.43. Comment syntax
-8.44. List of SphinxQL reserved keywords
-8.45. SphinxQL upgrade notes, version 2.0.1-beta
+8.42. RELOAD INDEX syntax
+8.43. Multi-statement queries
+8.44. Comment syntax
+8.45. List of SphinxQL reserved keywords
+8.46. SphinxQL upgrade notes, version 2.0.1-beta
 
 SphinxQL is our SQL dialect that exposes all of the search daemon
 functionality using a standard SQL syntax with a few Sphinx-specific
@@ -5619,7 +5610,7 @@ omissions (such as (currently) missing support for JOINs). Specifically,
       * 'max_query_time' - integer (max search time threshold, msec)
 
       * 'max_predicted_time' - integer (max predicted search time, see
-        Section 12.4.45, <<predicted_time_costs>>)
+        Section 12.4.44, <<predicted_time_costs>>)
 
       * 'ranker' - any of 'proximity_bm25', 'bm25', 'none', 'wordcount',
         'proximity', 'matchany', 'fieldmask', 'sph04', 'expr', or 'export'
@@ -7126,7 +7117,26 @@ API-snippet, the data size will be displayed along with the query.
    | +------+----------+-------+----------+----------------------------------------------------+
    | 3 row in set (0.00 sec)
 
-8.42. Multi-statement queries
+8.42. RELOAD INDEX syntax
+=========================
+
+   | RELOAD INDEX idx [ FROM '/path/to/index_files' ]
+
+RELOAD INDEX, added in 2.3.1-beta, allows you to rotate indexes using
+SphinxQL.
+
+It has two modes of operation. First one (without specifying a path) makes
+Sphinx daemon check for new index files in directory specified in
+Section 12.2.3, <<path>>. New index files must have a idx.new.sp? names.
+
+And if you additionally specify a path, daemon will look for index files in
+specified directory, move them to index Section 12.2.3, <<path>>, rename
+from index_files.sp? to idx.new.sp? and rotate them.
+
+<programslisting> mysql> RELOAD INDEX plain_index; mysql> RELOAD INDEX
+plain_index FROM '/home/mighty/new_index_files'; </programslisting>
+
+8.43. Multi-statement queries
 =============================
 
 Starting version 2.0.1-beta, SphinxQL supports multi-statement queries, or
@@ -7184,7 +7194,7 @@ WARNINGS, SHOW STATUS, and SHOW META. Arbitrary sequence of these
 statements are allowed. The results sets returned should match those that
 would be returned if the batched queries were sent one by one.
 
-8.43. Comment syntax
+8.44. Comment syntax
 ====================
 
 Since version 2.0.1-beta, SphinxQL supports C-style comment syntax.
@@ -7197,7 +7207,7 @@ between Sphinx and MySQL.)
 
    | SELECT /*! SQL_CALC_FOUND_ROWS */ col1 FROM table1 WHERE ...
 
-8.44. List of SphinxQL reserved keywords
+8.45. List of SphinxQL reserved keywords
 ========================================
 
 A complete alphabetical list of keywords that are currently reserved in
@@ -7256,7 +7266,7 @@ SphinxQL syntax (and therefore can not be used as identifiers).
    | WHERE
    | WITHIN
 
-8.45. SphinxQL upgrade notes, version 2.0.1-beta
+8.46. SphinxQL upgrade notes, version 2.0.1-beta
 ================================================
 
 This section only applies to existing applications that use SphinxQL
@@ -9124,29 +9134,28 @@ Table of Contents
    12.4.30. snippets_file_prefix
    12.4.31. collation_server
    12.4.32. collation_libc_locale
-   12.4.33. plugin_dir
-   12.4.34. mysql_version_string
-   12.4.35. rt_flush_period
-   12.4.36. thread_stack
-   12.4.37. expansion_limit
-   12.4.38. watchdog
-   12.4.39. sphinxql_state
-   12.4.40. ha_ping_interval
-   12.4.41. ha_period_karma
-   12.4.42. persistent_connections_limit
-   12.4.43. rt_merge_iops
-   12.4.44. rt_merge_maxiosize
-   12.4.45. predicted_time_costs
-   12.4.46. shutdown_timeout
-   12.4.47. ondisk_attrs_default
-   12.4.48. query_log_min_msec
-   12.4.49. agent_connect_timeout
-   12.4.50. agent_query_timeout
-   12.4.51. agent_retry_count
-   12.4.52. agent_retry_delay
-   12.4.53. qcache_max_bytes
-   12.4.54. qcache_thresh_msec
-   12.4.55. qcache_ttl_sec
+   12.4.33. mysql_version_string
+   12.4.34. rt_flush_period
+   12.4.35. thread_stack
+   12.4.36. expansion_limit
+   12.4.37. watchdog
+   12.4.38. sphinxql_state
+   12.4.39. ha_ping_interval
+   12.4.40. ha_period_karma
+   12.4.41. persistent_connections_limit
+   12.4.42. rt_merge_iops
+   12.4.43. rt_merge_maxiosize
+   12.4.44. predicted_time_costs
+   12.4.45. shutdown_timeout
+   12.4.46. ondisk_attrs_default
+   12.4.47. query_log_min_msec
+   12.4.48. agent_connect_timeout
+   12.4.49. agent_query_timeout
+   12.4.50. agent_retry_count
+   12.4.51. agent_retry_delay
+   12.4.52. qcache_max_bytes
+   12.4.53. qcache_thresh_msec
+   12.4.54. qcache_ttl_sec
 
 12.5. Common section configuration options
    12.5.1. lemmatizer_base
@@ -9157,6 +9166,7 @@ Table of Contents
    12.5.6. rlp_environment
    12.5.7. rlp_max_batch_size
    12.5.8. rlp_max_batch_docs
+   12.5.9. plugin_dir
 
 12.1. Data source configuration options
 =======================================
@@ -9457,8 +9467,8 @@ Example:
    |     SELECT docid, CONCAT('tag',tagid) FROM tags ORDER BY docid ASC
    | 
    | sql_joined_field = bigint tag from ranged-query; \
-   |     SELECT id, tag FROM tags WHERE id>=$start AND id<=$end; \
-   |     SELECT MIN(id), MAX(id) FROM tags ORDER BY docid ASC
+   |     SELECT id, tag FROM tags WHERE id>=$start AND id<=$end ORDER BY id ASC; \
+   |     SELECT MIN(id), MAX(id) FROM tags
 
 12.1.14. sql_query_range
 ------------------------
@@ -10224,6 +10234,8 @@ For reference, different index files store the following data:
 
    * .sps stores string attribute data.
 
+   * .spe stores skip-lists to speed up doc-list filtering
+
 Example:
 
    | path = /var/data/test1
@@ -10382,11 +10394,11 @@ follows:
    * lemmatize_ru_all - apply Russian lemmatizer and index all possible
      root forms (added in 2.1.1-beta);
 
-   * lemmatize_en_all - apply Russian lemmatizer and index all possible
+   * lemmatize_en_all - apply English lemmatizer and index all possible
      root forms (added in 2.2.1-beta);
 
-   * lemmatize_de_all - apply Russian lemmatizer and index all possible
-     root forms (added in 2.2.1-beta);
+   * lemmatize_de_all - apply German lemmatizer and index all possible root
+     forms (added in 2.2.1-beta);
 
    * stem_en - apply Porter's English stemmer;
 
@@ -10953,23 +10965,31 @@ Example:
 12.2.19. min_infix_len
 ----------------------
 
-Minimum infix prefix length to index. Optional, default is 0 (do not index
-infixes).
+Minimum infix prefix length to index and search. Optional, default is 0 (do
+not index infixes), and minimum allowed non-zero value is 2.
 
-Infix indexing allows to implement wildcard searching by 'start*', '*end',
-and '*middle*' wildcards. When minimum infix length is set to a positive
-number, indexer will index all the possible keyword infixes (ie.
-substrings) in addition to the keywords themselves. Too short infixes
-(below the minimum allowed length) will not be indexed. For instance,
-indexing a keyword "test" with min_infix_len=2 will result in indexing
-"te", "es", "st", "tes", "est" infixes along with the word itself. Searches
-against such index for "es" will match documents that contain "test" word,
-even if they do not contain "es" on itself. However, indexing infixes will
-make the index grow significantly (because of many more indexed keywords),
-and will degrade both indexing and searching times.
+Infix length setting enables wildcard searches with term patterns like
+'start*', '*end', '*middle*', and so on. It also lets you disable too short
+wildcards if those are too expensive to search for.
 
-There's no automatic way to rank perfect word matches higher in an infix
-index, but the same tricks as with prefix indexes can be applied.
+With dict=keywords (which now is the only non-deprecated mode), infixes
+only affect the dictionary size, and wildcards are expanded in search time.
+So enabling infixes should only slightly affects the index size and
+indexing time.
+
+However, query time might vary greatly, depending on how many keywords the
+substring will actually expand to. Short and frequent syllables like '*in*'
+or '*ti*' just might expand to way too many keywords, all of which would
+need to be matched and processed. Therefore, to generally enable substring
+searches you would set min_infix_len to 2; and to limit the impact from
+wildcard searches with too short wildcards, you might set it higher.
+
+Infixes must be at least 2 characters long, wildcards like '*a*' are not
+allowed for performance reasons. (While in theory it is possible to scan
+the entire dictionary, identify keywords matching on just a single
+character, expand '*a*' to an OR operator over 100,000+ keywords, and
+evaluate that expanded query, in practice this will very definitely kill
+your server.)
 
 Example:
 
@@ -12042,12 +12062,12 @@ average per-index values) into the index. Optional, default is 0 (do not
 compute and store). Added in 2.1.1-beta.
 
 When index_field_lengths is set to 1, indexer will 1) create a respective
-length attribute for every full-text field, sharing the same name; 2)
-compute a field length (counted in keywords) for every document and store
-in to a respective attribute; 3) compute the per-index averages. The
-lengths attributes will have a special TOKENCOUNT type, but their values
-are in fact regular 32-bit integers, and their values are generally
-accessible.
+length attribute for every full-text field, sharing the same name but with
+_len suffix; 2) compute a field length (counted in keywords) for every
+document and store in to a respective attribute; 3) compute the per-index
+averages. The lengths attributes will have a special TOKENCOUNT type, but
+their values are in fact regular 32-bit integers, and their values are
+generally accessible.
 
 BM25A() and BM25F() functions in the expression ranker are based on these
 lengths and require index_field_lengths to be enabled. Historically, Sphinx
@@ -12350,7 +12370,7 @@ open attempts, the document will still be indexed.
 
 Example:
 
-   | on_file_field_errors = skip_document
+   | on_file_field_error = skip_document
 
 12.3.8. lemmatizer_cache
 ------------------------
@@ -13045,21 +13065,7 @@ Example:
 
    | collation_libc_locale = fr_FR
 
-12.4.33. plugin_dir
--------------------
-
-Trusted location for the dynamic libraries (UDFs). Optional, default is
-empty (no location). Introduced in version 2.0.1-beta.
-
-Specifies the trusted directory from which the UDF libraries can be loaded.
-Requires workers = thread to take effect.
-
-Example:
-
-   | workers = threads
-   | plugin_dir = /usr/local/sphinx/lib
-
-12.4.34. mysql_version_string
+12.4.33. mysql_version_string
 -----------------------------
 
 A server version string to return via MySQL protocol. Optional, default is
@@ -13079,7 +13085,7 @@ Example:
 
    | mysql_version_string = 5.0.37
 
-12.4.35. rt_flush_period
+12.4.34. rt_flush_period
 ------------------------
 
 RT indexes RAM chunk flush check period, in seconds. Optional, default is
@@ -13095,7 +13101,7 @@ Example:
 
    | rt_flush_period = 3600 # 1 hour
 
-12.4.36. thread_stack
+12.4.35. thread_stack
 ---------------------
 
 Per-thread stack size. Optional, default is 1M. Introduced in version
@@ -13123,7 +13129,7 @@ Example:
 
    | thread_stack = 256K
 
-12.4.37. expansion_limit
+12.4.36. expansion_limit
 ------------------------
 
 The maximum number of expanded keywords for a single wildcard. Optional,
@@ -13141,7 +13147,7 @@ Example:
 
    | expansion_limit = 16
 
-12.4.38. watchdog
+12.4.37. watchdog
 -----------------
 
 Threaded server watchdog. Optional, default is 1 (watchdog enabled).
@@ -13157,7 +13163,7 @@ Example:
 
    | watchdog = 0 # disable watchdog
 
-12.4.39. sphinxql_state
+12.4.38. sphinxql_state
 -----------------------
 
 Path to a file where current SphinxQL state will be serialized. Available
@@ -13174,7 +13180,7 @@ Example:
 
    | sphinxql_state = uservars.sql
 
-12.4.40. ha_ping_interval
+12.4.39. ha_ping_interval
 -------------------------
 
 Interval between agent mirror pings, in milliseconds. Optional, default is
@@ -13191,7 +13197,7 @@ Example:
 
    | ha_ping_interval = 0
 
-12.4.41. ha_period_karma
+12.4.40. ha_period_karma
 ------------------------
 
 Agent mirror statistics window size, in seconds. Optional, default is 60.
@@ -13216,7 +13222,7 @@ Example:
 
    | ha_period_karma = 120
 
-12.4.42. persistent_connections_limit
+12.4.41. persistent_connections_limit
 -------------------------------------
 
 The maximum # of simultaneous persistent connections to remote persistent
@@ -13235,7 +13241,7 @@ Example:
 
    | persistent_connections_limit = 29 # assume that each host of agents has max_children = 30 (or 29).
 
-12.4.43. rt_merge_iops
+12.4.42. rt_merge_iops
 ----------------------
 
 A maximum number of I/O operations (per second) that the RT chunks merge
@@ -13253,7 +13259,7 @@ Example:
 
    | rt_merge_iops = 40
 
-12.4.44. rt_merge_maxiosize
+12.4.43. rt_merge_maxiosize
 ---------------------------
 
 A maximum size of an I/O operation that the RT chunks merge thread is
@@ -13270,7 +13276,7 @@ Example:
 
    | rt_merge_maxiosize = 1M
 
-12.4.45. predicted_time_costs
+12.4.44. predicted_time_costs
 -----------------------------
 
 Costs for the query time prediction model, in nanoseconds. Optional,
@@ -13323,7 +13329,7 @@ Example:
 
    | predicted_time_costs = doc=128, hit=96, skip=4096, match=128
 
-12.4.46. shutdown_timeout
+12.4.45. shutdown_timeout
 -------------------------
 
 searchd --stopwait wait time, in seconds. Optional, default is 3 seconds.
@@ -13339,7 +13345,7 @@ Example:
 
    | shutdown_timeout = 5 # wait for up to 5 seconds
 
-12.4.47. ondisk_attrs_default
+12.4.46. ondisk_attrs_default
 -----------------------------
 
 Instance-wide defaults for ondisk_attrs directive. Optional, default is
@@ -13348,7 +13354,7 @@ the default value of ondisk_attrs for all indexes served by this copy of
 searchd. Per-index directives take precedence, and will overwrite this
 instance-wide default value, allowing for fine-grain control.
 
-12.4.48. query_log_min_msec
+12.4.47. query_log_min_msec
 ---------------------------
 
 Limit (in milliseconds) that prevents the query from being written to the
@@ -13356,20 +13362,20 @@ query log. Optional, default is 0 (all queries are written to the query
 log). This directive specifies that only queries with execution times that
 exceed the specified limit will be logged.
 
-12.4.49. agent_connect_timeout
+12.4.48. agent_connect_timeout
 ------------------------------
 
 Instance-wide defaults for agent_connect_timeout parameter. The last
 defined in distributed (network) indexes.
 
-12.4.50. agent_query_timeout
+12.4.49. agent_query_timeout
 ----------------------------
 
 Instance-wide defaults for agent_query_timeout parameter. The last defined
 in distributed (network) indexes, or also may be overrided per-query using
 OPTION clause.
 
-12.4.51. agent_retry_count
+12.4.50. agent_retry_count
 --------------------------
 
 Integer, specifies how many times sphinx will try to connect and query
@@ -13378,7 +13384,7 @@ Default is 0 (i.e. no retries). This value may be also specified on
 per-query basis using 'OPTION retry_count=XXX' clause. If per-query option
 exists, it will override the one specified in config.
 
-12.4.52. agent_retry_delay
+12.4.51. agent_retry_delay
 --------------------------
 
 Integer, in milliseconds. Specifies the delay sphinx rest before retrying
@@ -13388,21 +13394,21 @@ specified. Default is 500. This value may be also specified on per-query
 basis using 'OPTION retry_delay=XXX' clause. If per-query option exists, it
 will override the one specified in config.
 
-12.4.53. qcache_max_bytes
+12.4.52. qcache_max_bytes
 -------------------------
 
 Integer, in bytes. The maximum RAM allocated for cached result sets.
 Defaults to 16777216, or 16 MB. 0 means disable query cache. Added in
 2.3.1-beta. Refer to ??? for details.
 
-12.4.54. qcache_thresh_msec
+12.4.53. qcache_thresh_msec
 ---------------------------
 
 Integer, in milliseconds. The minimum wall time threshold for a query
 result to be cached. Defaults to 3000, or 3 seconds. 0 means cache
 everything. Added in 2.3.1-beta. Refer to ??? for details.
 
-12.4.55. qcache_ttl_sec
+12.4.54. qcache_ttl_sec
 -----------------------
 
 Integer, in seconds. The expiration period for a cached result set.
@@ -13520,50 +13526,65 @@ Example:
 
    | rlp_max_batch_docs = 100
 
+12.5.9. plugin_dir
+------------------
+
+Trusted location for the dynamic libraries (UDFs). Optional, default is
+empty (no location). Introduced in version 2.0.1-beta.
+
+Specifies the trusted directory from which the UDF libraries can be loaded.
+Requires workers = thread to take effect.
+
+Example:
+
+   | plugin_dir = /usr/local/sphinx/lib
+
 Appendix A. Sphinx revision history
 ===================================
 
 Table of Contents
 
 A.1. Version 2.3.1-beta, 03 mar 2015
-A.2. Version 2.2.7-release, 20 jan 2015
-A.3. Version 2.2.6-release, 13 nov 2014
-A.4. Version 2.2.5-release, 06 oct 2014
-A.5. Version 2.2.4-release, 11 sep 2014
-A.6. Version 2.2.3-beta, 13 may 2014
-A.7. Version 2.2.2-beta, 11 feb 2014
-A.8. Version 2.2.1-beta, 13 nov 2013
-A.9. Version 2.1.9-release, 03 jul 2014
-A.10. Version 2.1.8-release, 28 apr 2014
-A.11. Version 2.1.7-release, 30 mar 2014
-A.12. Version 2.1.6-release, 24 feb 2014
-A.13. Version 2.1.5-release, 22 jan 2014
-A.14. Version 2.1.4-release, 18 dec 2013
-A.15. Version 2.1.3-release, 12 nov 2013
-A.16. Version 2.1.2-release, 10 oct 2013
-A.17. Version 2.1.1-beta, 20 feb 2013
-A.18. Version 2.0.11-dev, xx xxx xxxx
-A.19. Version 2.0.10-release, 22 jan 2014
-A.20. Version 2.0.9-release, 26 aug 2013
-A.21. Version 2.0.8-release, 26 apr 2013
-A.22. Version 2.0.7-release, 26 mar 2013
-A.23. Version 2.0.6-release, 22 oct 2012
-A.24. Version 2.0.5-release, 28 jul 2012
-A.25. Version 2.0.4-release, 02 mar 2012
-A.26. Version 2.0.3-release, 23 dec 2011
-A.27. Version 2.0.2-beta, 15 nov 2011
-A.28. Version 2.0.1-beta, 22 apr 2011
-A.29. Version 1.10-beta, 19 jul 2010
-A.30. Version 0.9.9-release, 02 dec 2009
-A.31. Version 0.9.9-rc2, 08 apr 2009
-A.32. Version 0.9.9-rc1, 17 nov 2008
-A.33. Version 0.9.8.1, 30 oct 2008
-A.34. Version 0.9.8, 14 jul 2008
-A.35. Version 0.9.7, 02 apr 2007
-A.36. Version 0.9.7-rc2, 15 dec 2006
-A.37. Version 0.9.7-rc1, 26 oct 2006
-A.38. Version 0.9.6, 24 jul 2006
-A.39. Version 0.9.6-rc1, 26 jun 2006
+A.2. Version 2.2.9-release, 16 apr 2015
+A.3. Version 2.2.8-release, 09 mar 2015
+A.4. Version 2.2.7-release, 20 jan 2015
+A.5. Version 2.2.6-release, 13 nov 2014
+A.6. Version 2.2.5-release, 06 oct 2014
+A.7. Version 2.2.4-release, 11 sep 2014
+A.8. Version 2.2.3-beta, 13 may 2014
+A.9. Version 2.2.2-beta, 11 feb 2014
+A.10. Version 2.2.1-beta, 13 nov 2013
+A.11. Version 2.1.9-release, 03 jul 2014
+A.12. Version 2.1.8-release, 28 apr 2014
+A.13. Version 2.1.7-release, 30 mar 2014
+A.14. Version 2.1.6-release, 24 feb 2014
+A.15. Version 2.1.5-release, 22 jan 2014
+A.16. Version 2.1.4-release, 18 dec 2013
+A.17. Version 2.1.3-release, 12 nov 2013
+A.18. Version 2.1.2-release, 10 oct 2013
+A.19. Version 2.1.1-beta, 20 feb 2013
+A.20. Version 2.0.11-dev, xx xxx xxxx
+A.21. Version 2.0.10-release, 22 jan 2014
+A.22. Version 2.0.9-release, 26 aug 2013
+A.23. Version 2.0.8-release, 26 apr 2013
+A.24. Version 2.0.7-release, 26 mar 2013
+A.25. Version 2.0.6-release, 22 oct 2012
+A.26. Version 2.0.5-release, 28 jul 2012
+A.27. Version 2.0.4-release, 02 mar 2012
+A.28. Version 2.0.3-release, 23 dec 2011
+A.29. Version 2.0.2-beta, 15 nov 2011
+A.30. Version 2.0.1-beta, 22 apr 2011
+A.31. Version 1.10-beta, 19 jul 2010
+A.32. Version 0.9.9-release, 02 dec 2009
+A.33. Version 0.9.9-rc2, 08 apr 2009
+A.34. Version 0.9.9-rc1, 17 nov 2008
+A.35. Version 0.9.8.1, 30 oct 2008
+A.36. Version 0.9.8, 14 jul 2008
+A.37. Version 0.9.7, 02 apr 2007
+A.38. Version 0.9.7-rc2, 15 dec 2006
+A.39. Version 0.9.7-rc1, 26 oct 2006
+A.40. Version 0.9.6, 24 jul 2006
+A.41. Version 0.9.6-rc1, 26 jun 2006
 
 A.1. Version 2.3.1-beta, 03 mar 2015
 ====================================
@@ -13602,7 +13623,80 @@ Bug fixes
 
    * fixed #2154, crash in ZONE operator
 
-A.2. Version 2.2.7-release, 20 jan 2015
+A.2. Version 2.2.9-release, 16 apr 2015
+=======================================
+
+Bug fixes
+---------
+
+   * fixed #2228, removed searchd shutdown behavior on failed connection
+
+   * fixed #2208, ZONESPANLIST() support for RT indexes
+
+   * fixed #2203, legacy API SELECT list
+
+   * fixed #2201, indextool false positive error on RT index
+
+   * fixed #2201, crash with string comparison at expressions and
+     expression ranker
+
+   * fixed #2199, invalid packedfactors JSON output for index with
+     stopwords
+
+   * fixed #2197, TRUNCATE fails to remove disk chunk files after calling
+     OPTIMIZE
+
+   * fixed #2196, .NET connector issue (UTC_TIMESTAMP() support)
+
+   * fixed #2190, incorrect GROUP BY outer JSON object
+
+   * fixed #2176, agent used ha_strategy=random instead of specified in
+     config
+
+   * fixed #2144, query parser crash vs multiforms with heading numbers
+
+   * fixed #2122, id64 daemon failed to load RT disk chunk with kill-list
+     from id32 build
+
+   * fixed #2120, aliased JSON elements support
+
+   * fixed #1979, snippets generation and span length and lcs calculation
+     in proximity queries
+
+   * fixed truncated results (and a potential crash) vs long enough
+     ZONESPANLIST() result
+
+A.3. Version 2.2.8-release, 09 mar 2015
+=======================================
+
+Minor features
+--------------
+
+   * added #2166, per agent HA strategy for distributed indexes
+
+Bug fixes
+---------
+
+   * fixed #2182, incorrect query results with multiple same destination
+     wordforms
+
+   * fixed #2181, improved error message on incorrect filters
+
+   * fixed #2178, ZONESPAN operator for queries with more than two words
+
+   * fixed #2172, incorrect results with field position fulltext operators
+
+   * fixed #2171, some index options do not work for template indexes
+
+   * fixed #2170, joined fields indexation with document id equals to 0
+
+   * fixed #2110, crash on snippet generation
+
+   * fixed WLCCS ranking factor computation
+
+   * fixed memory leak on queries with ZONEs
+
+A.4. Version 2.2.7-release, 20 jan 2015
 =======================================
 
 Minor features
@@ -13644,7 +13738,7 @@ Bug fixes
 
    * fixed snippets crash with blend chars at the beginning of a string
 
-A.3. Version 2.2.6-release, 13 nov 2014
+A.5. Version 2.2.6-release, 13 nov 2014
 =======================================
 
 Bug fixes
@@ -13666,7 +13760,7 @@ Bug fixes
 
    * indexation of duplicate documents
 
-A.4. Version 2.2.5-release, 06 oct 2014
+A.6. Version 2.2.5-release, 06 oct 2014
 =======================================
 
 New minor features
@@ -13695,7 +13789,7 @@ Bug fixes
 
    * fixed MySQL protocol response when daemon maxed out
 
-A.5. Version 2.2.4-release, 11 sep 2014
+A.7. Version 2.2.4-release, 11 sep 2014
 =======================================
 
 New major features
@@ -13769,7 +13863,7 @@ Bug fixes
    * fixed cpu time logging for cases where work is done in child threads
      or agents
 
-A.6. Version 2.2.3-beta, 13 may 2014
+A.8. Version 2.2.3-beta, 13 may 2014
 ====================================
 
 New features
@@ -13830,7 +13924,7 @@ Bug fixes
 
    * fixed template index removing on rotation
 
-A.7. Version 2.2.2-beta, 11 feb 2014
+A.9. Version 2.2.2-beta, 11 feb 2014
 ====================================
 
 New features
@@ -13896,8 +13990,8 @@ Optimizations, behavior changes, and removals
 
    * removed support for client versions 0.9.6 and below
 
-A.8. Version 2.2.1-beta, 13 nov 2013
-====================================
+A.10. Version 2.2.1-beta, 13 nov 2013
+=====================================
 
 Major new features
 ------------------
@@ -14024,8 +14118,8 @@ Bug fixes
      expansion (expand_keywords or lemmatize) occurred
    * fixed a crash while creating indexes with sql_joined_field
 
-A.9. Version 2.1.9-release, 03 jul 2014
-=======================================
+A.11. Version 2.1.9-release, 03 jul 2014
+========================================
 
 Bug fixes
 ---------
@@ -14044,7 +14138,7 @@ Bug fixes
    * fixed #1968, parsing of WEIGHT() function (queries to distributed
      indexes affected)
 
-A.10. Version 2.1.8-release, 28 apr 2014
+A.12. Version 2.1.8-release, 28 apr 2014
 ========================================
 
 Bug fixes
@@ -14070,7 +14164,7 @@ Bug fixes
    * fixed #1682, field end modifier doesn't work with words containing
      blended chars
 
-A.11. Version 2.1.7-release, 30 mar 2014
+A.13. Version 2.1.7-release, 30 mar 2014
 ========================================
 
 Bug fixes
@@ -14105,7 +14199,7 @@ Bug fixes
 
    * fixed Quick Tour documentation chapter
 
-A.12. Version 2.1.6-release, 24 feb 2014
+A.14. Version 2.1.6-release, 24 feb 2014
 ========================================
 
 Bug fixes
@@ -14151,7 +14245,7 @@ Bug fixes
 
    * fixed index corruption in UPDATE queries with non-existent attributes
 
-A.13. Version 2.1.5-release, 22 jan 2014
+A.15. Version 2.1.5-release, 22 jan 2014
 ========================================
 
 Bug fixes
@@ -14172,7 +14266,7 @@ Bug fixes
    * fixed network protocol issue which results in timeouts of
      libmysqlclient for big Sphinx responses
 
-A.14. Version 2.1.4-release, 18 dec 2013
+A.16. Version 2.1.4-release, 18 dec 2013
 ========================================
 
 Bug fixes
@@ -14192,7 +14286,7 @@ Bug fixes
 
    * fixed, --with-re2 check
 
-A.15. Version 2.1.3-release, 12 nov 2013
+A.17. Version 2.1.3-release, 12 nov 2013
 ========================================
 
 Bug fixes
@@ -14213,7 +14307,7 @@ Bug fixes
 
    * fixed crash while querying index with lemmatizer and wordforms
 
-A.16. Version 2.1.2-release, 10 oct 2013
+A.18. Version 2.1.2-release, 10 oct 2013
 ========================================
 
 New features
@@ -14387,7 +14481,7 @@ Bug fixes
 
    * fixed TOP_COUNT usage in misc/suggest and updated to PHP 5.3 and UTF-8
 
-A.17. Version 2.1.1-beta, 20 feb 2013
+A.19. Version 2.1.1-beta, 20 feb 2013
 =====================================
 
 Major new features
@@ -14539,13 +14633,13 @@ Major behavior changes and optimizations
    * optimized filtering and scan in several frequent cases (single-value,
      2-arg, 3-arg WHERE clauses)
 
-A.18. Version 2.0.11-dev, xx xxx xxxx
+A.20. Version 2.0.11-dev, xx xxx xxxx
 =====================================
 
 Bug fixes
 ---------
 
-A.19. Version 2.0.10-release, 22 jan 2014
+A.21. Version 2.0.10-release, 22 jan 2014
 =========================================
 
 Bug fixes
@@ -14582,7 +14676,7 @@ Bug fixes
    * fixed rt_flush_period - less stricter internal check and more often
      flushes overall
 
-A.20. Version 2.0.9-release, 26 aug 2013
+A.22. Version 2.0.9-release, 26 aug 2013
 ========================================
 
 Bug fixes
@@ -14642,7 +14736,7 @@ Bug fixes
    * added a warning for missed stopwords, exception, wordforms files on
      index load and in indextool --check
 
-A.21. Version 2.0.8-release, 26 apr 2013
+A.23. Version 2.0.8-release, 26 apr 2013
 ========================================
 
 Bug fixes
@@ -14692,7 +14786,7 @@ Bug fixes
 
    * fixed #1405, between with mixed int float values
 
-A.22. Version 2.0.7-release, 26 mar 2013
+A.24. Version 2.0.7-release, 26 mar 2013
 ========================================
 
 Bug fixes
@@ -14825,7 +14919,7 @@ Bug fixes
 
    * added more debug info about failed index loading
 
-A.23. Version 2.0.6-release, 22 oct 2012
+A.25. Version 2.0.6-release, 22 oct 2012
 ========================================
 
 Bug fixes
@@ -14947,7 +15041,7 @@ Bug fixes
 
    * fixed x64 configurations for libstemmer
 
-A.24. Version 2.0.5-release, 28 jul 2012
+A.26. Version 2.0.5-release, 28 jul 2012
 ========================================
 
 Bug fixes
@@ -15107,7 +15201,7 @@ Bug fixes
 
    * fixed missing command-line switches documentation
 
-A.25. Version 2.0.4-release, 02 mar 2012
+A.27. Version 2.0.4-release, 02 mar 2012
 ========================================
 
 Bug fixes
@@ -15195,7 +15289,7 @@ Bug fixes
    * fixed #1120, negative total_found, docs and hits counter on huge
      indexes
 
-A.26. Version 2.0.3-release, 23 dec 2011
+A.28. Version 2.0.3-release, 23 dec 2011
 ========================================
 
 Bug fixes
@@ -15242,7 +15336,7 @@ Bug fixes
 
    * fixed crash log for 'fork' and 'prefork' workers
 
-A.27. Version 2.0.2-beta, 15 nov 2011
+A.29. Version 2.0.2-beta, 15 nov 2011
 =====================================
 
 Major new features
@@ -15509,7 +15603,7 @@ Bug fixes
    * fixed that field/zone conditions were not propagated to expanded
      keywords with dict=keywords
 
-A.28. Version 2.0.1-beta, 22 apr 2011
+A.30. Version 2.0.1-beta, 22 apr 2011
 =====================================
 
 New general features
@@ -15807,7 +15901,7 @@ Bug fixes
 
    * fixed libsphinxclient vs VS2003 compiler bug
 
-A.29. Version 1.10-beta, 19 jul 2010
+A.31. Version 1.10-beta, 19 jul 2010
 ====================================
 
    * added RT indexes support (Chapter 4, Real-time indexes)
@@ -15957,7 +16051,7 @@ A.29. Version 1.10-beta, 19 jul 2010
 
    * fixed #509, indexing ranged results from stored procedures
 
-A.30. Version 0.9.9-release, 02 dec 2009
+A.32. Version 0.9.9-release, 02 dec 2009
 ========================================
 
    * added Open, Close, Status calls to libsphinxclient (C API)
@@ -16072,7 +16166,7 @@ A.30. Version 0.9.9-release, 02 dec 2009
 
    * fixed #326 (missing CLOCK_xxx on FreeBSD)
 
-A.31. Version 0.9.9-rc2, 08 apr 2009
+A.33. Version 0.9.9-rc2, 08 apr 2009
 ====================================
 
    * added IsConnectError(), Open(), Close() calls to Java API (bug #240)
@@ -16242,7 +16336,7 @@ A.31. Version 0.9.9-rc2, 08 apr 2009
 
    * fixed parser vs @field -keyword, foo|@field bar, "" queries (bug #310)
 
-A.32. Version 0.9.9-rc1, 17 nov 2008
+A.34. Version 0.9.9-rc1, 17 nov 2008
 ====================================
 
    * added min_stemming_len directive
@@ -16345,7 +16439,7 @@ A.32. Version 0.9.9-rc1, 17 nov 2008
 
    * fixed handling of over-2GB dictionary files (.spi)
 
-A.33. Version 0.9.8.1, 30 oct 2008
+A.35. Version 0.9.8.1, 30 oct 2008
 ==================================
 
    * added configure script to libsphinxclient
@@ -16400,7 +16494,7 @@ A.33. Version 0.9.8.1, 30 oct 2008
    * fixed default ID range (that filtered out all 64-bit values) in Java
      and Python APIs
 
-A.34. Version 0.9.8, 14 jul 2008
+A.36. Version 0.9.8, 14 jul 2008
 ================================
 
 Indexing
@@ -16684,7 +16778,7 @@ Changes and fixes since 0.9.8-rc2
 
    * fixed sorting of negative floats in SPH_SORT_EXTENDED mode
 
-A.35. Version 0.9.7, 02 apr 2007
+A.37. Version 0.9.7, 02 apr 2007
 ================================
 
    * added support for sql_str2ordinal_column
@@ -16769,7 +16863,7 @@ A.35. Version 0.9.7, 02 apr 2007
 
    * fixed crashes with no-attribute indexes after rotate
 
-A.36. Version 0.9.7-rc2, 15 dec 2006
+A.38. Version 0.9.7-rc2, 15 dec 2006
 ====================================
 
    * added support for extended matching mode (query language)
@@ -16805,7 +16899,7 @@ A.36. Version 0.9.7-rc2, 15 dec 2006
 
    * fixes for 64-bit platforms
 
-A.37. Version 0.9.7-rc1, 26 oct 2006
+A.39. Version 0.9.7-rc1, 26 oct 2006
 ====================================
 
    * added alpha index merging code
@@ -16855,7 +16949,7 @@ A.37. Version 0.9.7-rc1, 26 oct 2006
 
    * fixed some issues with index rotation
 
-A.38. Version 0.9.6, 24 jul 2006
+A.40. Version 0.9.6, 24 jul 2006
 ================================
 
    * added support for empty indexes
@@ -16868,7 +16962,7 @@ A.38. Version 0.9.6, 24 jul 2006
 
    * fixed building on Solaris 9
 
-A.39. Version 0.9.6-rc1, 26 jun 2006
+A.41. Version 0.9.6-rc1, 26 jun 2006
 ====================================
 
    * added boolean queries support (experimental, beta version)

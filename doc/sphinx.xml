@@ -292,10 +292,10 @@ specific project files) manually.
     <para>
     Extract everything from the distribution tarball (haven't you already?)
     and go to the <filename>sphinx</filename> subdirectory. (We are using
-    version 2.3.1-beta here for the sake of example only; be sure to change this
+    version 2.3.2-dev here for the sake of example only; be sure to change this
     to a specific version you're using.)
     </para>
-<para><literallayout><userinput>$ tar xzvf sphinx-2.3.1-beta.tar.gz
+<para><literallayout><userinput>$ tar xzvf sphinx-2.3.2-dev.tar.gz
 $ cd sphinx
 </userinput></literallayout></para></listitem>
 <listitem>
@@ -367,7 +367,7 @@ do not seem to help you, please don't hesitate to contact me.
     <userinput>$ sudo apt-get install mysql-client unixodbc libpq5</userinput></listitem>
 <listitem>
     <para>Now you can install Sphinx:</para>
-    <userinput>$ sudo dpkg -i sphinxsearch_2.3.1-beta-0ubuntu11~trusty_amd64.deb</userinput></listitem>
+    <userinput>$ sudo dpkg -i sphinxsearch_2.3.2-dev-0ubuntu11~trusty_amd64.deb</userinput></listitem>
 </orderedlist>
 <para>PPA repository (Ubuntu only).</para>
 <para>Installing Sphinx is much easier from Sphinxsearch PPA repository, because you will get all dependencies and can also update Sphinx to the latest version with the same command.</para>
@@ -407,9 +407,9 @@ area on the website.</para>
 <orderedlist>
 <listitem>
     <para>Extract everything from the .zip file you have downloaded -
-    <filename>sphinx-2.3.1-beta-win32.zip</filename>,
-    or <filename>sphinx-2.3.1-beta-win32-pgsql.zip</filename> if you need PostgresSQL support as well.
-    (We are using version 2.3.1-beta here for the sake of example only;
+    <filename>sphinx-2.3.2-dev-win32.zip</filename>,
+    or <filename>sphinx-2.3.2-dev-win32-pgsql.zip</filename> if you need PostgresSQL support as well.
+    (We are using version 2.3.2-dev here for the sake of example only;
     be sure to change this to a specific version you're using.)
     You can use Windows Explorer in Windows XP and up to extract the files,
     or a freeware package like 7Zip to open the archive.</para>

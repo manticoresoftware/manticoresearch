@@ -782,7 +782,7 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 		return NULL;
 	}
 
-	FILE * pPipe = popen ( hSource [ "xmlpipe_command" ].cstr(), "r" );
+	FILE * pPipe = popen ( hSource [ "xmlpipe_command" ].cstr(), "rb" );
 	if ( !pPipe )
 	{
 		fprintf ( stdout, "ERROR: xmlpipe: failed to popen '%s'", hSource [ "xmlpipe_command" ].cstr() );
@@ -820,7 +820,7 @@ CSphSource * SpawnSourceTSVPipe ( const CSphConfigSection & hSource, const char 
 		return NULL;
 	}
 
-	FILE * pPipe = popen ( hSource [ "tsvpipe_command" ].cstr(), "r" );
+	FILE * pPipe = popen ( hSource [ "tsvpipe_command" ].cstr(), "rb" );
 	if ( !pPipe )
 	{
 		fprintf ( stdout, "ERROR: tsvpipe: failed to popen '%s'", hSource [ "tsvpipe_command" ].cstr() );
@@ -845,7 +845,7 @@ CSphSource * SpawnSourceCSVPipe ( const CSphConfigSection & hSource, const char 
 		return NULL;
 	}
 
-	FILE * pPipe = popen ( hSource [ "csvpipe_command" ].cstr(), "r" );
+	FILE * pPipe = popen ( hSource [ "csvpipe_command" ].cstr(), "rb" );
 	if ( !pPipe )
 	{
 		fprintf ( stdout, "ERROR: csvpipe: failed to popen '%s'", hSource [ "csvpipe_command" ].cstr() );

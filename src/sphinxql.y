@@ -164,6 +164,8 @@ static void AddInsval ( SqlParser_c * pParser, CSphVector<SqlInsert_t> & dVec, c
 
 #define TRACK_BOUNDS(_res,_left,_right) \
 	_res = _left; \
+	if ( _res.m_iStart>0 && pParser->m_pBuf[_res.m_iStart-1]=='`' ) \
+		_res.m_iStart--; \
 	_res.m_iEnd = _right.m_iEnd; \
 	_res.m_iType = 0;
 

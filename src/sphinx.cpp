@@ -30788,6 +30788,7 @@ const char * CSphSource_BaseSV::DecorateMessage ( const char * sTemplate, ... ) 
 	return m_dError.Begin();
 }
 
+static const BYTE g_dBOM[] = { 0xEF, 0xBB, 0xBF };
 
 bool CSphSource_BaseSV::IterateStart ( CSphString & sError )
 {
@@ -30810,6 +30811,10 @@ bool CSphSource_BaseSV::IterateStart ( CSphString & sError )
 	}
 	m_iDataLeft = iRead;
 	m_iPlainFieldsLength = m_tSchema.m_dFields.GetLength();
+
+	// space out BOM like xml-pipe does
+	if ( m_iDataLeft>sizeof(g_dBOM) && memcmp ( m_dBuf.Begin(), g_dBOM, sizeof ( g_dBOM ) )==0 )
+		memset ( m_dBuf.Begin(), ' ', sizeof(g_dBOM) );
 
 	return true;
 }

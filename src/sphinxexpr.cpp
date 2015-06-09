@@ -548,7 +548,7 @@ struct Expr_Crc32_c : public Expr_Unary_c
 			SafeDeleteArray ( pStr );
 		return uCrc;
 	}
-	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return IntEval ( tMatch ); }
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t)(DWORD)IntEval ( tMatch ); }
 };
 
 

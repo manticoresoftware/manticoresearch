@@ -18,11 +18,8 @@
 /api/libsphinxclient/debug
 /api/libsphinxclient/release
 
-# /codeblocks/
-/codeblocks/junk
-/codeblocks/bin
-/codeblocks/*.depend
-/codeblocks/*.layout
+# clion
+/.idea
 
 # /config/
 /config/stamp-h1

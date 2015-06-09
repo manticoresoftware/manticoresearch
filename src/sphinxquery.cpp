@@ -61,7 +61,7 @@ public:
 	void			HandleModifiers ( XQKeyword_t & tKeyword );
 
 	void			AddQuery ( XQNode_t * pNode );
-	XQNode_t *		AddKeyword ( const char * sKeyword );
+	XQNode_t *		AddKeyword ( const char * sKeyword, int iSkippedPosBeforeToken=0 );
 	XQNode_t *		AddKeyword ( XQNode_t * pLeft, XQNode_t * pRight );
 	XQNode_t *		AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pRight, int iOpArg=0 );
 	void			SetPhrase ( XQNode_t * pNode, bool bSetExact );
@@ -361,6 +361,24 @@ void XQNode_t::SetOp ( XQOperator_e eOp, XQNode_t * pArg1, XQNode_t * pArg2 )
 		m_dChildren.Add ( pArg2 );
 		pArg2->m_pParent = this;
 	}
+}
+
+
+int XQNode_t::FixupAtomPos()
+{
+	assert ( m_eOp==SPH_QUERY_PROXIMITY && m_dWords.GetLength()>0 );
+
+	ARRAY_FOREACH ( i, m_dWords )
+	{
+		int iSub = m_dWords[i].m_iSkippedBefore-1;
+		if ( iSub>0 )
+		{
+			for ( int j = i; j < m_dWords.GetLength(); j++ )
+				m_dWords[j].m_iAtomPos -= iSub;
+		}
+	}
+
+	return m_dWords.Last().m_iAtomPos+1;
 }
 
 
@@ -838,8 +856,12 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		bool bWasKeyword = m_bWasKeyword;
 		m_bWasKeyword = false;
 
+		int iSkippedPosBeforeToken = 0;
 		if ( m_bWasBlended )
-			m_iAtomPos += m_pTokenizer->SkipBlended();
+		{
+			iSkippedPosBeforeToken = m_pTokenizer->SkipBlended();
+			m_iAtomPos += iSkippedPosBeforeToken;
+		}
 
 		// tricky stuff
 		// we need to manually check for numbers in certain states (currently, just after proximity or quorum operator)
@@ -867,7 +889,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			if ( !( m_iPendingNulls || m_pTokenizer->GetBufferPtr()-p>0 ) )
 				return 0;
 			m_iPendingNulls = 0;
-			lvalp->pNode = AddKeyword ( NULL );
+			lvalp->pNode = AddKeyword ( NULL, iSkippedPosBeforeToken );
 			m_bWasKeyword = true;
 			return TOK_KEYWORD;
 		}
@@ -1020,7 +1042,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 					if ( m_iPendingNulls>0 )
 					{
 						m_iPendingNulls = 0;
-						lvalp->pNode = AddKeyword ( NULL );
+						lvalp->pNode = AddKeyword ( NULL, iSkippedPosBeforeToken );
 						m_bWasKeyword = true;
 						return TOK_KEYWORD;
 					}
@@ -1123,7 +1145,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			m_bWasKeyword = true;
 		} else
 		{
-			m_tPendingToken.pNode = AddKeyword ( sToken );
+			m_tPendingToken.pNode = AddKeyword ( sToken, iSkippedPosBeforeToken );
 			m_iPendingType = TOK_KEYWORD;
 		}
 
@@ -1213,9 +1235,10 @@ void XQParser_t::HandleModifiers ( XQKeyword_t & tKeyword )
 }
 
 
-XQNode_t * XQParser_t::AddKeyword ( const char * sKeyword )
+XQNode_t * XQParser_t::AddKeyword ( const char * sKeyword, int iSkippedPosBeforeToken )
 {
 	XQKeyword_t tAW ( sKeyword, m_iAtomPos );
+	tAW.m_iSkippedBefore = iSkippedPosBeforeToken;
 	HandleModifiers ( tAW );
 	XQNode_t * pNode = new XQNode_t ( *m_dStateSpec.Last() );
 	pNode->m_dWords.Add ( tAW );

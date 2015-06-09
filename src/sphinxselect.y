@@ -91,6 +91,7 @@ select_expr:
 
 expr:
 	select_atom
+	| '`' select_atom '`'		{ $$ = $2; $$.m_iEnd = $2.m_iEnd; }
 	| '-' expr %prec TOK_NEG	{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
 	| TOK_NOT expr				{ $$ = $1; $$.m_iEnd = $2.m_iEnd; }
 	| expr '+' expr				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }

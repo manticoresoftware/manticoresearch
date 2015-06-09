@@ -17356,7 +17356,7 @@ CSphQueryContext::~CSphQueryContext ()
 		m_dUserVals[i]->Release();
 }
 
-void CSphQueryContext::BindWeights ( const CSphQuery * pQuery, const CSphSchema & tSchema )
+void CSphQueryContext::BindWeights ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sWarning )
 {
 	const int MIN_WEIGHT = 1;
 	// const int HEAVY_FIELDS = 32;
@@ -17368,14 +17368,27 @@ void CSphQueryContext::BindWeights ( const CSphQuery * pQuery, const CSphSchema 
 		m_dWeights[i] = MIN_WEIGHT;
 
 	// name-bound weights
+	CSphString sFieldsNotFound;
 	if ( pQuery->m_dFieldWeights.GetLength() )
 	{
 		ARRAY_FOREACH ( i, pQuery->m_dFieldWeights )
 		{
 			int j = tSchema.GetFieldIndex ( pQuery->m_dFieldWeights[i].m_sName.cstr() );
+			if ( j<0 )
+			{
+				if ( sFieldsNotFound.IsEmpty() )
+					sFieldsNotFound = pQuery->m_dFieldWeights[i].m_sName;
+				else
+					sFieldsNotFound.SetSprintf ( "%s %s", sFieldsNotFound.cstr(), pQuery->m_dFieldWeights[i].m_sName.cstr() );
+			}
+
 			if ( j>=0 && j<HEAVY_FIELDS )
 				m_dWeights[j] = Max ( MIN_WEIGHT, pQuery->m_dFieldWeights[i].m_iValue );
 		}
+
+		if ( !sFieldsNotFound.IsEmpty() )
+			sWarning.SetSprintf ( "Fields specified in field_weights option not found: [%s]", sFieldsNotFound.cstr() );
+
 		return;
 	}
 
@@ -19121,7 +19134,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 		tTermSetup.m_pStats = &tQueryStats;
 
 	// bind weights
-	tCtx.BindWeights ( pQuery, m_tSchema );
+	tCtx.BindWeights ( pQuery, m_tSchema, pResult->m_sWarning );
 
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats

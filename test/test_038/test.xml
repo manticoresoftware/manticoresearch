@@ -112,11 +112,27 @@ index test_stop1
 	enable_star		= 1
 	index_exact_words = 1
 }
+
+source src_metaphone
+{
+	type			= mysql
+	<sql_settings/>
+	sql_field_string = name
+	sql_query = SELECT 1 as id, '加藤郁子アーティスト片山耕アーティストピューロキッズアーティスト金子知恵アーティスト井上かなえアーティスト他知恵アーティスト井上かなえアーティスト他' as name
+}
+
+index test_metaphone
+{
+	source 			= src_metaphone
+	path			= <data_path/>/test_metaphone
+	morphology 		= metaphone
+	charset_table 	= U+21..U+29, U+30..U+999, U+1000..U+FFFF
+}
 </config>
 
 <queries>
 <!-- long query after proximity length was not properly 0-terminated, and caused overlong token to be passed to stemmer, and crash -->
-<query mode="extended2">"one two"~3                                                                                                                                                                                                                                                                                                                                                                            three</query>
+<query mode="extended2" index="test morph0 morph1 test_ru rt test_stop test_stop1">"one two"~3                                                                                                                                                                                                                                                                                                                                                                            three</query>
 
 <!--here is going regression dict=keywords got broken by morphology-->
 <query mode="extended2" index="morph1">=running</query>

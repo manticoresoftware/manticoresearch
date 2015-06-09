@@ -39,6 +39,19 @@ index stars : test
 	morphology			= stem_en
 }
 
+source test2
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1, 'hello this is a test' text;
+}
+
+index test2
+{
+	source			= test2
+	path			= <data_path/>/test2
+}
+
 </config>
 
 <db_insert>select 1;</db_insert>
@@ -64,6 +77,9 @@ index stars : test
 <sphinxql>CALL SNIPPETS('time is dying out like everething', 'test', 'nothing', 1 AS query_mode, 40 AS limit, 1 as allow_empty  )</sphinxql>
 <sphinxql>CALL SNIPPETS('time is dying out like everething else here', 'test', 'nothing', 40 AS limit, 1 as allow_empty  )</sphinxql>
 <sphinxql>CALL SNIPPETS('time is dying out like everething', 'test', 'nothing', 40 AS limit, 1 as allow_empty  )</sphinxql>
+<!-- regression stripped option at SNIPPET expression -->
+<sphinxql><![CDATA[SELECT id, SNIPPET('hello this is a text', 'this','before_match=<strong class="match">', 'after_match=</strong>') from test2 where match ('this')]]></sphinxql>
+<sphinxql><![CDATA[CALL SNIPPETS('hello this is a text',  'test2', 'this', '<strong class="match">' as before_match, '</strong>' as after_match)]]></sphinxql>
 </sphqueries>
 
 </test>

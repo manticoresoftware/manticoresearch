@@ -5405,7 +5405,8 @@ int RtIndex_t::DebugCheck ( FILE * fp )
 				if ( !uOffset )
 					continue;
 
-				if ( uLastStrOffset>=uOffset )
+				bool bLastOff4UpdatedJson = ( iItem==0 && dJsonItems.GetLength () );
+				if ( uLastStrOffset>=uOffset && !bLastOff4UpdatedJson )
 					LOC_FAIL(( fp, "string offset decreased (segment=%d, row=%u, stringattr=%d, docid="DOCID_FMT", offset=%u, last_offset=%u)",
 						iSegment, uRow, iItem, uLastID, uOffset, uLastStrOffset ));
 
@@ -7032,7 +7033,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		tTermSetup.m_pStats = &tQueryStats;
 
 	// bind weights
-	tCtx.BindWeights ( pQuery, m_tSchema );
+	tCtx.BindWeights ( pQuery, m_tSchema, pResult->m_sWarning );
 
 	// parse query
 	if ( pProfiler )

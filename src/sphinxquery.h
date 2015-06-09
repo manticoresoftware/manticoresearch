@@ -25,6 +25,7 @@ struct XQKeyword_t
 {
 	CSphString			m_sWord;
 	int					m_iAtomPos;
+	int					m_iSkippedBefore; ///< positions skipped before this token (because of blended chars)
 	bool				m_bFieldStart;	///< must occur at very start
 	bool				m_bFieldEnd;	///< must occur at very end
 	float				m_fBoost;		///< keyword IDF will be multiplied by this
@@ -35,6 +36,7 @@ struct XQKeyword_t
 
 	XQKeyword_t ()
 		: m_iAtomPos ( -1 )
+		, m_iSkippedBefore ( 0 )
 		, m_bFieldStart ( false )
 		, m_bFieldEnd ( false )
 		, m_fBoost ( 1.0f )
@@ -46,6 +48,7 @@ struct XQKeyword_t
 
 	XQKeyword_t ( const char * sWord, int iPos )
 		: m_sWord ( sWord )
+		, m_iSkippedBefore ( 0 )
 		, m_iAtomPos ( iPos )
 		, m_bFieldStart ( false )
 		, m_bFieldEnd ( false )
@@ -238,6 +241,11 @@ public:
 	{
 		m_eOp = eOp;
 	}
+
+	/// fixup atom positions in case of proximity queries and blended chars
+	/// we need to handle tokens with blended characters as simple tokens in this case
+	/// and we need to remove possible gaps in atom positions
+	int FixupAtomPos();
 
 	/// return node like current
 	inline XQNode_t * Clone ();

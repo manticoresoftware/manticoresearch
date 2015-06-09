@@ -253,6 +253,14 @@ index dist_w2
 	agent					= <my_address/>:dist_proxy1
 }
 
+<!-- regression empty agent string might cause crash on daemon start -->
+index dist_invalid
+{
+	type					= distributed
+	local					= proxy_loc2
+	agent					=
+}
+
 </config>
 
 
@@ -434,6 +442,8 @@ index dist_w2
 <!-- regression weight as expression at distributed -->
 <sphinxql>select id, weight() * 11 as w from dist50</sphinxql>
 <sphinxql>SHOW META</sphinxql>
+<!-- regression quotation at distributed -->
+<sphinxql>select `id`, `tag` t, `gr` from dist50</sphinxql>
 
 </sphqueries>
 

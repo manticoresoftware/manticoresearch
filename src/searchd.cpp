@@ -4427,6 +4427,7 @@ void RemoteConnectToAgent ( AgentConn_t & tAgent )
 	struct sockaddr_storage ss;
 	memset ( &ss, 0, sizeof(ss) );
 	ss.ss_family = (short)tAgent.m_iFamily;
+	bool bUnixSocket = false;
 
 	if ( ss.ss_family==AF_INET )
 	{
@@ -4441,6 +4442,7 @@ void RemoteConnectToAgent ( AgentConn_t & tAgent )
 		struct sockaddr_un *un = (struct sockaddr_un *)&ss;
 		snprintf ( un->sun_path, sizeof(un->sun_path), "%s", tAgent.m_sPath.cstr() );
 		len = sizeof(*un);
+		bUnixSocket = true;
 	}
 #endif
 
@@ -4459,7 +4461,7 @@ void RemoteConnectToAgent ( AgentConn_t & tAgent )
 
 #ifdef TCP_NODELAY
 	int iOn = 1;
-	if ( setsockopt ( tAgent.m_iSock, IPPROTO_TCP, TCP_NODELAY, (char*)&iOn, sizeof(iOn) ) )
+	if ( !bUnixSocket && setsockopt ( tAgent.m_iSock, IPPROTO_TCP, TCP_NODELAY, (char*)&iOn, sizeof(iOn) ) )
 	{
 		tAgent.m_sFailure.SetSprintf ( "setsockopt() failed: %s", sphSockError() );
 		return;

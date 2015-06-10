@@ -3249,7 +3249,7 @@ protected:
 			// check point vs edge
 			float t1 = (x-ax)*(by-ay);
 			float t2 = (y-ay)*(bx-ax);
-			if ( t1==t2 )
+			if ( t1==t2 && !( ax==bx && ay==by ) )
 			{
 				// so AP and AB are colinear
 				// because (AP dot (-AB.y, AB.x)) aka (t1-t2) is 0

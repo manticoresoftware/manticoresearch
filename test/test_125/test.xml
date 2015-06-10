@@ -306,6 +306,12 @@ INSERT INTO string_table VALUES
 <sphinxql>select BIGINT(CRC32('4759')) AS test_crc FROM strings LIMIT 1</sphinxql>
 <sphinxql>select CRC32('4759') AS test_crc, CRC32('4759')=2182940993 AS is_crc FROM strings LIMIT 1</sphinxql>
 
+<!-- GEOPOLY -->
+<sphinxql>SELECT CONTAINS(GEOPOLY2D(44.0,-88.0, 44.3,-88.6, 44.6,-88.0), 44.3, -88.5 ) from strings limit 1</sphinxql>
+<sphinxql>SELECT CONTAINS(GEOPOLY2D(44.0,-88.0, 44.3,-88.6, 44.6,-88.0), 44.6, -88.5 ) from strings limit 1</sphinxql>
+<sphinxql>SELECT CONTAINS(GEOPOLY2D(44.0,-88.0, 44.0, -88.0, 44.3,-88.6, 44.6,-88.0), 44.3, -88.5 ) from strings limit 1</sphinxql>
+<sphinxql>SELECT CONTAINS(GEOPOLY2D(44.0,-88.0, 44.0, -88.0, 44.3,-88.6, 44.6,-88.0), 44.6, -88.5 ) from strings limit 1</sphinxql>
+
 </sphqueries>
 
 </test>

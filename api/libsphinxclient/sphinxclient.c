@@ -509,7 +509,7 @@ sphinx_bool sphinx_set_limits ( sphinx_client * client, int offset, int limit, i
 
 	client->offset = offset;
 	client->limit = limit;
-	if ( max_matches>=0 )
+	if ( max_matches>0 )
 		client->max_matches = max_matches;
 	if ( cutoff>=0 )
 		client->cutoff = cutoff;

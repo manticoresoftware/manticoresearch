@@ -19,7 +19,7 @@ wordbreaker_SOURCES = wordbreaker.cpp
 BUILT_SOURCES = extract-version
 .PHONY: extract-version
 extract-version:
-	/bin/sh svnxrev.sh ..
+	/bin/sh git_commit_id.sh
 
 if USE_RLP
 RLP_LIBS = -L$(top_srcdir)/rlp/lib/amd64-glibc25-gcc42 -lbtrlpc -lbtrlpcore -lbtutils

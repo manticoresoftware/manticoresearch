@@ -1363,7 +1363,7 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 			fprintf ( stdout, "WARNING: unknown docinfo=%s, defaulting to extern\n", hIndex["docinfo"].cstr() );
 
 		if ( tSettings.m_eDocinfo==SPH_DOCINFO_INLINE )
-			fprintf ( stdout, "WARNING: docinfo=inline is deprecated, use ondisc_attrs=1 instead\n" );
+			fprintf ( stdout, "WARNING: docinfo=inline is deprecated, use ondisk_attrs=1 instead\n" );
 
 		if ( tSettings.m_eDocinfo==SPH_DOCINFO_INLINE && tSettings.m_bIndexFieldLens )
 		{

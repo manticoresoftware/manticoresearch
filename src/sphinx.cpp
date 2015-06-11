@@ -2585,6 +2585,7 @@ struct CSphNormalForm
 
 struct CSphMultiform
 {
+	int								m_iFileId;
 	CSphTightVector<CSphNormalForm>	m_dNormalForm;
 	CSphTightVector<CSphString>		m_dTokens;
 };
@@ -6546,7 +6547,7 @@ BYTE * CSphMultiformTokenizer::GetToken ()
 		return m_dStoredTokens[m_iStart].m_sToken;
 
 	int iStartToken = m_iStart + ( bBlended ? 1 : 0 );
-	for ( int i = (*pWordforms)->m_pForms.GetLength()-1; i>=0; i-- )
+	ARRAY_FOREACH ( i, (*pWordforms)->m_pForms )
 	{
 		const CSphMultiform * pCurForm = (*pWordforms)->m_pForms[i];
 		int iFormTokCount = pCurForm->m_dTokens.GetLength();
@@ -20977,7 +20978,7 @@ private:
 	int					InitMorph ( const char * szMorph, int iLength, CSphString & sError );
 	int					AddMorph ( int iMorph ); ///< helper that always returns ST_OK
 	bool				StemById ( BYTE * pWord, int iStemmer ) const;
-	void				AddWordform ( CSphWordforms * pContainer, char * sBuffer, int iLen, ISphTokenizer * pTokenizer, const char * szFile, const CSphVector<int> & dBlended );
+	void				AddWordform ( CSphWordforms * pContainer, char * sBuffer, int iLen, ISphTokenizer * pTokenizer, const char * szFile, const CSphVector<int> & dBlended, int iFileId );
 };
 
 CSphVector<CSphWordforms*> CSphTemplateDictTraits::m_dWordformContainers;
@@ -21940,8 +21941,21 @@ CSphWordforms * CSphTemplateDictTraits::GetWordformContainer ( const CSphVector<
 }
 
 
+struct CmpMultiforms_fn
+{
+	inline bool IsLess ( const CSphMultiform * pA, const CSphMultiform * pB ) const
+	{
+		assert ( pA && pB );
+		if ( pA->m_iFileId==pB->m_iFileId )
+			return pA->m_dTokens.GetLength() > pB->m_dTokens.GetLength();
+
+		return pA->m_iFileId > pB->m_iFileId;
+	}
+};
+
+
 void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sBuffer, int iLen,
-	ISphTokenizer * pTokenizer, const char * szFile, const CSphVector<int> & dBlended )
+	ISphTokenizer * pTokenizer, const char * szFile, const CSphVector<int> & dBlended, int iFileId )
 {
 	CSphVector<CSphString> dTokens;
 
@@ -22071,6 +22085,7 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 	if ( dTokens.GetLength()>1 || dDestTokens.GetLength()>1 )
 	{
 		CSphMultiform * pMultiWordform = new CSphMultiform;
+		pMultiWordform->m_iFileId = iFileId;
 		pMultiWordform->m_dNormalForm.Resize ( dDestTokens.GetLength() );
 		ARRAY_FOREACH ( i, dDestTokens )
 			pMultiWordform->m_dNormalForm[i] = dDestTokens[i];
@@ -22106,6 +22121,8 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 						ARRAY_FOREACH ( iForm, pMultiWordform->m_dNormalForm )
 							pStoredMF->m_dNormalForm[iForm] = pMultiWordform->m_dNormalForm[iForm];
 
+						pStoredMF->m_iFileId = iFileId;
+
 						SafeDelete ( pMultiWordform );
 						break; // otherwise, we crash next turn
 					}
@@ -22115,6 +22132,12 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 			if ( pMultiWordform )
 			{
 				(*pWordforms)->m_pForms.Add ( pMultiWordform );
+
+				// sort forms by files and length
+				// but do not sort if we're loading embedded
+				if ( iFileId>=0 )
+					(*pWordforms)->m_pForms.Sort ( CmpMultiforms_fn() );
+
 				(*pWordforms)->m_iMinTokens = Min ( (*pWordforms)->m_iMinTokens, pMultiWordform->m_dTokens.GetLength () );
 				(*pWordforms)->m_iMaxTokens = Max ( (*pWordforms)->m_iMaxTokens, pMultiWordform->m_dTokens.GetLength () );
 				pContainer->m_pMultiWordforms->m_iMaxTokens = Max ( pContainer->m_pMultiWordforms->m_iMaxTokens, (*pWordforms)->m_iMaxTokens );
@@ -22231,7 +22254,7 @@ CSphWordforms * CSphTemplateDictTraits::LoadWordformContainer ( const CSphVector
 
 		ARRAY_FOREACH ( i, (*pEmbeddedWordforms) )
 			AddWordform ( pContainer, (char*)(*pEmbeddedWordforms)[i].cstr(),
-				(*pEmbeddedWordforms)[i].Length(), pMyTokenizer.Ptr(), sAllFiles.cstr(), dBlended );
+				(*pEmbeddedWordforms)[i].Length(), pMyTokenizer.Ptr(), sAllFiles.cstr(), dBlended, -1 );
 	} else
 	{
 		char sBuffer [ 6*SPH_MAX_WORD_LEN + 512 ]; // enough to hold 2 UTF-8 words, plus some whitespace overhead
@@ -22249,7 +22272,7 @@ CSphWordforms * CSphTemplateDictTraits::LoadWordformContainer ( const CSphVector
 
 			int iLen;
 			while ( ( iLen = rdWordforms.GetLine ( sBuffer, sizeof(sBuffer) ) )>=0 )
-				AddWordform ( pContainer, sBuffer, iLen, pMyTokenizer.Ptr(), szFile, dBlended );
+				AddWordform ( pContainer, sBuffer, iLen, pMyTokenizer.Ptr(), szFile, dBlended, i );
 		}
 	}
 

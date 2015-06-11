@@ -30,6 +30,20 @@ index test
 	wordforms			= <this_test/>/words*.txt
 	morphology			= stem_en
 }
+
+index ord1
+{
+	source				= test
+	path				= <data_path/>/ord1
+	wordforms			= <this_test/>/wf1.txt
+}
+
+index ord2
+{
+	source				= test
+	path				= <data_path/>/ord2
+	wordforms			= <this_test/>/wf2.txt
+}
 </config>
 
 <db_create>
@@ -51,7 +65,8 @@ INSERT INTO test_table VALUES
 ( 106, 'us walk' ),
 ( 107, 'me run' ),
 ( 108, 'us running' ),
-( 111, 'tell me test fest but not test pest' )
+( 111, 'tell me test fest but not test pest' ),
+( 120, 'wound care and ostomy' )
 </db_insert>
 
 <sphqueries>
@@ -67,6 +82,9 @@ INSERT INTO test_table VALUES
 <!-- regression crash on wordform with multiple destination tokens -->
 <sphinxql>select * from test where match('test test')</sphinxql>
 <sphinxql>select * from test where match('test pest')</sphinxql>
+<!-- regression for multiforms applied in the wrong order -->
+<sphinxql>select * from ord1 where match('^wound$')</sphinxql>
+<sphinxql>select * from ord2 where match('^wound$')</sphinxql>
 </sphqueries>
 
 </test>

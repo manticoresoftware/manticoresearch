@@ -14917,13 +14917,13 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	if ( !CheckDocsCount ( iTotalDocuments, sError ) )
 		return false;
 
-	if ( tSPSWriter.GetPos()>( U64C(1)<<32 ) )
+	if ( tSPSWriter.GetPos()>SphOffset_t( U64C(1)<<32 ) )
 	{
 		sError.SetSprintf ( "resulting .sps file is over 4 GB" );
 		return false;
 	}
 
-	if ( tSPMWriter.GetPos()>( U64C(4)<<32 ) )
+	if ( tSPMWriter.GetPos()>SphOffset_t( U64C(4)<<32 ) )
 	{
 		sError.SetSprintf ( "resulting .spm file is over 16 GB" );
 		return false;
@@ -20481,7 +20481,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				}
 
 				// MVAs ptr recovery from previous errors only if current spa record is valid
-				if ( rdMva.GetPos()!=sizeof(DWORD)*uMvaSpaFixed && bIsSpaValid && bMvaFix )
+				if ( rdMva.GetPos()!=SphOffset_t(sizeof(DWORD)*uMvaSpaFixed) && bIsSpaValid && bMvaFix )
 					rdMva.SeekTo ( sizeof(DWORD)*uMvaSpaFixed, READ_NO_SIZE_HINT );
 
 				bool bLastIDChecked = false;
@@ -20529,7 +20529,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 						bWasArena = false;
 
 						// check offset (index)
-						if ( uMvaID==uLastID && bIsSpaValid && rdMva.GetPos()!=sizeof(DWORD)*uSpaOffset )
+						if ( uMvaID==uLastID && bIsSpaValid && rdMva.GetPos()!=SphOffset_t(sizeof(DWORD)*uSpaOffset) )
 						{
 							LOC_FAIL(( fp, "unexpected MVA docid (row="INT64_FMT", mvaattr=%d, docid expected="DOCID_FMT", got="DOCID_FMT", expected="INT64_FMT", got=%u)",
 								iRow, iItem, uLastID, uMvaID, rdMva.GetPos()/sizeof(DWORD), uSpaOffset ));
@@ -20550,7 +20550,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 						// check values
 						DWORD uValues = rdMva.GetDword();
 
-						if ( rdMva.GetPos()+sizeof(DWORD)*uValues-1>=iMvaEnd )
+						if ( rdMva.GetPos()+SphOffset_t(sizeof(DWORD)*uValues)-1>=iMvaEnd )
 						{
 							LOC_FAIL(( fp, "MVA count out of bounds (row="INT64_FMT", mvaattr=%d, docid expected="DOCID_FMT", got="DOCID_FMT", count=%u)",
 								iRow, iItem, uLastID, uMvaID, uValues ));
@@ -30836,7 +30836,7 @@ bool CSphSource_BaseSV::IterateStart ( CSphString & sError )
 	m_iPlainFieldsLength = m_tSchema.m_dFields.GetLength();
 
 	// space out BOM like xml-pipe does
-	if ( m_iDataLeft>sizeof(g_dBOM) && memcmp ( m_dBuf.Begin(), g_dBOM, sizeof ( g_dBOM ) )==0 )
+	if ( m_iDataLeft>(int)sizeof(g_dBOM) && memcmp ( m_dBuf.Begin(), g_dBOM, sizeof ( g_dBOM ) )==0 )
 		memset ( m_dBuf.Begin(), ' ', sizeof(g_dBOM) );
 
 	return true;

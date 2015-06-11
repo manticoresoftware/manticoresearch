@@ -5776,7 +5776,9 @@ It inserts new rows (documents) into an existing index, with the provided column
 </para>
 <para>
 ID column must be present in all cases. Rows with duplicate IDs will <b>not</b>
-be overwritten by INSERT; use REPLACE to do that.
+be overwritten by INSERT; use REPLACE to do that. REPLACE works exactly like INSERT,
+except that if an old row has the same ID as a new row, the old row is deleted
+before the new row is inserted.
 </para>
 <para>
 <option>index</option> is the name of RT index into which the new row(s)

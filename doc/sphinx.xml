@@ -5776,7 +5776,9 @@ It inserts new rows (documents) into an existing index, with the provided column
 </para>
 <para>
 ID column must be present in all cases. Rows with duplicate IDs will <b>not</b>
-be overwritten by INSERT; use REPLACE to do that.
+be overwritten by INSERT; use REPLACE to do that. REPLACE works exactly like INSERT,
+except that if an old row has the same ID as a new row, the old row is deleted
+before the new row is inserted.
 </para>
 <para>
 <option>index</option> is the name of RT index into which the new row(s)
@@ -6632,8 +6634,10 @@ create a new disk chunk, and FLUSH RAMCHUNK statement does exactly that.
 <para>
 Note that using FLUSH RAMCHUNK increases RT index fragmentation.
 Most likely, you want to use FLUSH RTINDEX instead. We suggest that
-you abstain from using this statement unless you're absolutely sure
-what you're doing.
+you abstain from using just this statement unless you're absolutely sure
+what you're doing. As the right way is to issue FLUSH RAMCHUNK with
+following <link linkend="sphinxql-optimize-index">OPTIMIZE</link> command.
+Such combo allows to keep RT index fragmentation on minimum.
 </para>
 <programlisting>
 mysql> FLUSH RAMCHUNK rt;

@@ -28,11 +28,13 @@
 #if USE_WINDOWS
 	#define snprintf	_snprintf
 	#define popen		_popen
+	#define RMODE "rb"
 
 	#include <io.h>
 	#include <tlhelp32.h>
 #else
 	#include <unistd.h>
+	#define RMODE "r"
 #endif
 
 /////////////////////////////////////////////////////////////////////////////
@@ -782,7 +784,7 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 		return NULL;
 	}
 
-	FILE * pPipe = popen ( hSource [ "xmlpipe_command" ].cstr(), "rb" );
+	FILE * pPipe = popen ( hSource [ "xmlpipe_command" ].cstr(), RMODE );
 	if ( !pPipe )
 	{
 		fprintf ( stdout, "ERROR: xmlpipe: failed to popen '%s'", hSource [ "xmlpipe_command" ].cstr() );
@@ -820,7 +822,7 @@ CSphSource * SpawnSourceTSVPipe ( const CSphConfigSection & hSource, const char 
 		return NULL;
 	}
 
-	FILE * pPipe = popen ( hSource [ "tsvpipe_command" ].cstr(), "rb" );
+	FILE * pPipe = popen ( hSource [ "tsvpipe_command" ].cstr(), RMODE );
 	if ( !pPipe )
 	{
 		fprintf ( stdout, "ERROR: tsvpipe: failed to popen '%s'", hSource [ "tsvpipe_command" ].cstr() );
@@ -845,7 +847,7 @@ CSphSource * SpawnSourceCSVPipe ( const CSphConfigSection & hSource, const char 
 		return NULL;
 	}
 
-	FILE * pPipe = popen ( hSource [ "csvpipe_command" ].cstr(), "rb" );
+	FILE * pPipe = popen ( hSource [ "csvpipe_command" ].cstr(), RMODE );
 	if ( !pPipe )
 	{
 		fprintf ( stdout, "ERROR: csvpipe: failed to popen '%s'", hSource [ "csvpipe_command" ].cstr() );

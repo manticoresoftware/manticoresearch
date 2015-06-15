@@ -11747,6 +11747,21 @@ to the remote agent. How exactly that list is searched within the agent
 configuration (ie. dist_threads directive). Master has no remote
 control over that.
 </para>
+Starting with 2.2.9-release, the value can additionally enumerate per agent
+options such as:
+<itemizedlist>
+<listitem><para><link linkend="conf-ha-strategy">ha_strategy</link> - random,
+roundrobin, nodeads, noerrors (replces index <link linkend="conf-ha-strategy">ha_strategy</link>
+for particular agent)</para></listitem>
+<listitem><para><link linkend="conf-agent-persistent">conn</link> - pconn,
+persistent (same as <link linkend="conf-agent-persistent">agent_persistent</link>
+agent declaration)</para></listitem>
+<listitem><para><link linkend="conf-agent-blackhole">blackhole</link> - 0,1 (same as
+<link linkend="conf-agent-blackhole">agent_blackhole</link> agent declaration)</para></listitem>
+</itemizedlist>
+<programlisting>
+agent = address1:index-list[[ha_strategy=value] | [conn=value] | [blackhole=value]]
+</programlisting>
 <bridgehead>Example:</bridgehead>
 <programlisting>
 # config on box2
@@ -11763,6 +11778,11 @@ agent = box3:9312:chunk3
 # sharding an index over 3 servers
 agent = box1:9312:chunk2
 agent = box2:9312:chunk3
+
+# per agent options
+agent = box1:9312:chunk1[ha_strategy=nodeads]
+agent = box2:9312:chunk2[conn=pconn]
+agent = test:9312:any[blackhole=1]
 </programlisting>
 <bridgehead>Agent mirrors</bridgehead>
 <para>

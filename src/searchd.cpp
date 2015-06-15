@@ -9023,12 +9023,38 @@ static int StringBinary2Number ( const char * sStr, int iLen )
 		return 0;
 
 	char sBuf[64];
-	if ( (int)sizeof ( sBuf-1 )<iLen )
-		iLen = sizeof ( sBuf-1 );
+	if ( (int)(sizeof ( sBuf )-1 )<iLen )
+		iLen = sizeof ( sBuf )-1;
 	memcpy ( sBuf, sStr, iLen );
 	sBuf[iLen] = '\0';
 
 	return atoi ( sBuf );
+}
+
+static bool SnippetTransformPassageMacros ( CSphString & sSrc, CSphString & sPost )
+{
+	const char sPassageMacro[] = "%PASSAGE_ID%";
+
+	const char * sPass = NULL;
+	if ( !sSrc.IsEmpty() )
+		sPass = strstr ( sSrc.cstr(), sPassageMacro );
+
+	if ( !sPass )
+		return false;
+
+	int iSrcLen = sSrc.Length();
+	int iPassLen = sizeof ( sPassageMacro ) - 1;
+	int iTailLen = iSrcLen - iPassLen - ( sPass - sSrc.cstr() );
+
+	// copy tail
+	if ( iTailLen )
+		sPost.SetBinary ( sPass+iPassLen, iTailLen );
+
+	CSphString sPre;
+	sPre.SetBinary ( sSrc.cstr(), sPass - sSrc.cstr() );
+	sSrc.Swap ( sPre );
+
+	return true;
 }
 
 
@@ -9119,6 +9145,9 @@ struct Expr_Snippet_c : public ISphStringExpr
 				return;
 			}
 		}
+
+		m_tHighlight.m_bHasBeforePassageMacro = SnippetTransformPassageMacros ( m_tHighlight.m_sBeforeMatch, m_tHighlight.m_sBeforeMatchPassage );
+		m_tHighlight.m_bHasAfterPassageMacro = SnippetTransformPassageMacros ( m_tHighlight.m_sAfterMatch, m_tHighlight.m_sAfterMatchPassage );
 
 		m_tCtx.Setup ( m_pIndex, m_tHighlight, sError );
 	}
@@ -12846,33 +12875,6 @@ bool SnippetReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & t
 	}
 
 	return bOk;
-}
-
-
-static bool SnippetTransformPassageMacros ( CSphString & sSrc, CSphString & sPost )
-{
-	const char sPassageMacro[] = "%PASSAGE_ID%";
-
-	const char * sPass = NULL;
-	if ( !sSrc.IsEmpty() )
-		sPass = strstr ( sSrc.cstr(), sPassageMacro );
-
-	if ( !sPass )
-		return false;
-
-	int iSrcLen = sSrc.Length();
-	int iPassLen = sizeof ( sPassageMacro ) - 1;
-	int iTailLen = iSrcLen - iPassLen - ( sPass - sSrc.cstr() );
-
-	// copy tail
-	if ( iTailLen )
-		sPost.SetBinary ( sPass+iPassLen, iTailLen );
-
-	CSphString sPre;
-	sPre.SetBinary ( sSrc.cstr(), sPass - sSrc.cstr() );
-	sSrc.Swap ( sPre );
-
-	return true;
 }
 
 

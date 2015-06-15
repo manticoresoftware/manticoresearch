@@ -16,7 +16,7 @@ searchd
 {
 	<searchd_settings/>
 	workers					= threads
-	listen 					= /tmp/searchd-test-241.sock
+	listen 					= <test_root/>/data/searchd-test-241.sock
 }
 
 source src1
@@ -64,7 +64,7 @@ index dist
 	type					= distributed
 	local					= idx1
 	agent					= <my_address/>:idx2
-	agent 					= /tmp/searchd-test-241.sock:idx3
+	agent 					= <test_root/>/data/searchd-test-241.sock:idx3
 	agent_connect_timeout	= 1000
 	agent_query_timeout		= 3000
 }

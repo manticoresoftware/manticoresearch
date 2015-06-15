@@ -8256,10 +8256,10 @@ star-syntax available in queries.
 <varlistentry>
     <term>"before_match":</term>
     <listitem><para>A string to insert before a keyword match. Starting with version 1.10-beta,
-    a %PASSAGE_ID% macro can be used in this string. The macro is replaced with an incrementing
-    passage number within a current snippet. Numbering starts at 1 by default but can be
-    overridden with "start_passage_id" option. In a multi-document call, %PASSAGE_ID% would
-    restart at every given document. Default is "&lt;b&gt;".</para></listitem>
+    a %PASSAGE_ID% macro can be used in this string. The first match of the macro is replaced 
+    with an incrementing passage number within a current snippet. Numbering starts at 1 
+    by default but can be overridden with "start_passage_id" option. In a multi-document call,
+    %PASSAGE_ID% would restart at every given document. Default is "&lt;b&gt;".</para></listitem>
 </varlistentry>
 <varlistentry>
     <term>"after_match":</term>

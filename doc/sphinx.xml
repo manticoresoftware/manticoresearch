@@ -13305,7 +13305,7 @@ pid_file = /var/run/searchd.pid
 <sect2 id="conf-seamless-rotate"><title>seamless_rotate</title>
 <para>
 Prevents <filename>searchd</filename> stalls while rotating indexes with huge amounts of data to precache.
-Optional, default is 1 (enable seamless rotation).
+Optional, default is 1 (enable seamless rotation). On Windows systems seamless rotation is disabled by default.
 </para>
 <para>
 Indexes may contain some data that needs to be precached in RAM.

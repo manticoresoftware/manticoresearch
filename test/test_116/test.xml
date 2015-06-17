@@ -31,7 +31,7 @@ source src1
 {
 	type			= mysql
 	<sql_settings/>
-	sql_query		= SELECT 1, 'M&amp;M text in'
+	sql_query		= SELECT 1, 'M&amp;M text in' as text
 	sql_attr_uint	= idd
 }
 

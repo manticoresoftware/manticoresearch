@@ -7048,7 +7048,8 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		pResult->m_sError = tParsed.m_sParseError;
 		return false;
 	}
-	pResult->m_sWarning = tParsed.m_sParseWarning;
+	if ( !tParsed.m_sParseWarning.IsEmpty() )
+		pResult->m_sWarning = tParsed.m_sParseWarning;
 
 	// transform query if needed (quorum transform, etc.)
 	if ( pProfiler )

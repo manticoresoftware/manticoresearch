@@ -31872,8 +31872,12 @@ bool sphLookupInfixCheckpoints ( const char * sInfix, int iBytes, const BYTE * p
 	assert ( pInfixes );
 	dCheckpoints.Resize ( 0 );
 
+	char dInfixBuf[3*SPH_MAX_WORD_LEN+4];
+	memcpy ( dInfixBuf, sInfix, iBytes );
+	dInfixBuf[iBytes] = '\0';
+
 	// lookup block
-	int iBlock = FindSpan ( dInfixBlocks, sInfix );
+	int iBlock = FindSpan ( dInfixBlocks, dInfixBuf );
 	if ( iBlock<0 )
 		return false;
 	const BYTE * pBlock = pInfixes + dInfixBlocks[iBlock].m_iOffset;
@@ -31916,7 +31920,7 @@ bool sphLookupInfixCheckpoints ( const char * sInfix, int iBytes, const BYTE * p
 		*pOut = '\0'; // handy for debugging, but not used for real matching
 #endif
 
-		if ( pOut==sKey+iBytes && memcmp ( sKey, sInfix, iBytes )==0 )
+		if ( pOut==sKey+iBytes && memcmp ( sKey, dInfixBuf, iBytes )==0 )
 		{
 			// found you! decompress the data
 			int iLast = 0;

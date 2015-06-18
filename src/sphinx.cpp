@@ -25662,6 +25662,7 @@ void CSphSource_Document::CSphBuildHitsState_t::Reset ()
 	m_bProcessingHits = false;
 	m_bDocumentDone = false;
 	m_dFields = NULL;
+	m_dFieldLengths.Resize(0);
 	m_iStartPos = 0;
 	m_iHitPos = 0;
 	m_iField = 0;
@@ -25700,6 +25701,7 @@ bool CSphSource_Document::IterateDocument ( CSphString & sError )
 
 	m_tState.Reset();
 	m_tState.m_iEndField = m_iPlainFieldsLength;
+	m_tState.m_dFieldLengths.Resize ( m_tState.m_iEndField );
 
 	if ( m_pFieldFilter )
 	{
@@ -25719,6 +25721,10 @@ bool CSphSource_Document::IterateDocument ( CSphString & sError )
 	for ( ;; )
 	{
 		m_tState.m_dFields = NextDocument ( sError );
+		const int * pFieldLengths = GetFieldLengths();
+		for ( int iField=0; iField<m_tState.m_iEndField; iField++ )
+			m_tState.m_dFieldLengths[iField] = pFieldLengths[iField];
+
 		if ( m_tDocInfo.m_uDocID==0 )
 			return true;
 		// moved that here as docid==0 means eof for regular query
@@ -25765,15 +25771,15 @@ bool CSphSource_Document::IterateDocument ( CSphString & sError )
 				}
 
 				CSphVector<BYTE> dFiltered;
-				if ( m_pFieldFilter->Apply ( m_tState.m_dFields[iField], 0, dFiltered ) )
+				int iFilteredLen = m_pFieldFilter->Apply ( m_tState.m_dFields[iField], 0, dFiltered );
+				if ( iFilteredLen )
 				{
 					m_tState.m_dTmpFieldStorage[iField] = dFiltered.LeakData();
 					m_tState.m_dTmpFieldPtrs[iField] = m_tState.m_dTmpFieldStorage[iField];
+					m_tState.m_dFieldLengths[iField] = iFilteredLen;
 					bHaveModifiedFields = true;
 				} else
-				{
 					m_tState.m_dTmpFieldPtrs[iField] = m_tState.m_dFields[iField];
-				}
 			}
 
 			if ( bHaveModifiedFields )
@@ -26262,11 +26268,11 @@ void CSphSource_Document::BuildHits ( CSphString & sError, bool bSkipEndMarker )
 		{
 			// get that field
 			BYTE * sField = m_tState.m_dFields[m_tState.m_iField-m_tState.m_iStartField];
-			if ( !sField || !(*sField) )
+			int iFieldBytes = m_tState.m_dFieldLengths[m_tState.m_iField-m_tState.m_iStartField];
+			if ( !sField || !(*sField) || !iFieldBytes )
 				continue;
 
 			// load files
-			int iFieldBytes;
 			const BYTE * sTextToIndex;
 			if ( m_tSchema.m_dFields[m_tState.m_iField].m_bFilename )
 			{
@@ -26283,10 +26289,7 @@ void CSphSource_Document::BuildHits ( CSphString & sError, bool bSkipEndMarker )
 					}
 				}
 			} else
-			{
-				iFieldBytes = (int) strlen ( (char*)sField );
 				sTextToIndex = sField;
-			}
 
 			if ( iFieldBytes<=0 )
 				continue;
@@ -27084,11 +27087,14 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 		#if USE_ZLIB
 		if ( m_dUnpack[i]!=SPH_UNPACK_NONE )
 		{
-			m_dFields[i] = (BYTE*) SqlUnpackColumn ( i, m_dUnpack[i] );
+			DWORD uUnpackedLen = 0;
+			m_dFields[i] = (BYTE*) SqlUnpackColumn ( i, uUnpackedLen, m_dUnpack[i] );
+			m_dFieldLengths[i] = (int)uUnpackedLen;
 			continue;
 		}
 		#endif
 		m_dFields[i] = (BYTE*) SqlColumn ( m_tSchema.m_dFields[i].m_iIndex );
+		m_dFieldLengths[i] = SqlColumnLength ( m_tSchema.m_dFields[i].m_iIndex );
 	}
 
 	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
@@ -27152,6 +27158,12 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 	}
 
 	return m_dFields;
+}
+
+
+const int * CSphSource_SQL::GetFieldLengths() const
+{
+	return m_dFieldLengths;
 }
 
 
@@ -27344,14 +27356,16 @@ void CSphSource_SQL::ReportUnpackError ( int iIndex, int iError )
 
 #if !USE_ZLIB
 
-const char * CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, ESphUnpackFormat )
+const char * CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, DWORD & uUnpackedLen, ESphUnpackFormat )
 {
-	return SqlColumn ( m_tSchema.m_dFields[iFieldIndex].m_iIndex );
+	int iIndex = m_tSchema.m_dFields[iFieldIndex].m_iIndex;
+	uUnpackedLen = SqlColumnLength(iIndex);
+	return SqlColumn(iIndex);
 }
 
 #else
 
-const char * CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, ESphUnpackFormat eFormat )
+const char * CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, DWORD & uUnpackedLen, ESphUnpackFormat eFormat )
 {
 	int iIndex = m_tSchema.m_dFields[iFieldIndex].m_iIndex;
 	const char * pData = SqlColumn(iIndex);
@@ -27402,6 +27416,7 @@ const char * CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, ESphUnpackFormat
 			iResult = uncompress ( (Bytef *)tBuffer.Begin(), &uSize, (Bytef *)pData + 4, uLen );
 			if ( iResult==Z_OK )
 			{
+				uUnpackedLen = uSize;
 				tBuffer[uSize] = 0;
 				return &tBuffer[0];
 			} else
@@ -27435,6 +27450,7 @@ const char * CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, ESphUnpackFormat
 				if ( iResult==Z_STREAM_END )
 				{
 					tBuffer [ tStream.total_out ] = 0;
+					uUnpackedLen = tStream.total_out;
 					sResult = &tBuffer[0];
 					break;
 				} else if ( iResult==Z_OK )
@@ -27529,6 +27545,8 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 			// build those hits
 			BYTE * dText[] = { (BYTE *)SqlColumn(1) };
 			m_tState.m_dFields = dText;
+			m_tState.m_dFieldLengths.Resize(1);
+			m_tState.m_dFieldLengths[0] = SqlColumnLength(1);
 
 			BuildHits ( sError, true );
 
@@ -28540,6 +28558,7 @@ public:
 
 	virtual bool	IterateStart ( CSphString & ) { m_iPlainFieldsLength = m_tSchema.m_dFields.GetLength(); return true; }	///< Connect() starts getting documents automatically, so this one is empty
 	virtual BYTE **	NextDocument ( CSphString & sError );			///< parse incoming chunk and emit some hits
+	virtual const int *	GetFieldLengths () const { return m_dFieldLengths.Begin(); }
 
 	virtual bool	HasAttrsConfigured ()							{ return true; }	///< xmlpipe always has some attrs for now
 	virtual bool	IterateMultivaluedStart ( int, CSphString & )	{ return false; }
@@ -28577,6 +28596,7 @@ private:
 	int				m_iBufferSize;
 
 	CSphVector<BYTE*>m_dFieldPtrs;
+	CSphVector<int>	m_dFieldLengths;
 	bool			m_bRemoveParsed;
 
 	bool			m_bInDocset;
@@ -29129,8 +29149,12 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
 		}
 
 		m_dFieldPtrs.Resize ( nFields );
+		m_dFieldLengths.Resize ( nFields );
 		for ( int i = 0; i < nFields; ++i )
+		{
 			m_dFieldPtrs[i] = pDocument->m_dFields[i].Begin();
+			m_dFieldLengths[i] = pDocument->m_dFields[i].GetLength();
+		}
 
 		return (BYTE **)&( m_dFieldPtrs[0] );
 	}
@@ -30261,6 +30285,7 @@ public:
 
 	virtual bool	IterateStart ( CSphString & );					///< Connect() starts getting documents automatically, so this one is empty
 	virtual BYTE **	NextDocument ( CSphString & );					///< parse incoming chunk and emit some hits
+	virtual const int *	GetFieldLengths () const { return m_dFieldLengths.Begin(); }
 
 	virtual bool	HasAttrsConfigured ()							{ return ( m_tSchema.GetAttrsCount()>0 ); }
 	virtual bool	IterateMultivaluedStart ( int, CSphString & )	{ return false; }
@@ -30289,6 +30314,7 @@ protected:
 
 	// output
 	CSphFixedVector<BYTE *>		m_dFields;
+	CSphFixedVector<int>		m_dFieldLengths;
 
 	FILE *						m_pFP;
 	int							m_iDataStart;		///< where the next line to parse starts in m_dBuf
@@ -30373,6 +30399,7 @@ CSphSource_BaseSV::CSphSource_BaseSV ( const char * sName )
 	, m_dColumnsLen ( 0 )
 	, m_dRemap ( 0 )
 	, m_dFields ( 0 )
+	, m_dFieldLengths ( 0 )
 	, m_iAutoCount ( 0 )
 {
 	m_iDataStart = 0;
@@ -30400,7 +30427,9 @@ bool CSphSource_BaseSV::Setup ( const CSphConfigSection & hSource, FILE * pPipe,
 	if ( !SetupSchema ( hSource, bWordDict, sError ) )
 		return false;
 
-	m_dFields.Reset ( m_tSchema.m_dFields.GetLength() );
+	int nFields = m_tSchema.m_dFields.GetLength();
+	m_dFields.Reset ( nFields );
+	m_dFieldLengths.Reset ( nFields );
 
 	// build hash from schema names
 	SmallStringHash_T<SortedRemapXSV_t> hSchema;
@@ -30602,7 +30631,10 @@ BYTE **	CSphSource_BaseSV::NextDocument ( CSphString & sError )
 
 		// field column
 		if ( tRemap.m_iField!=-1 )
+		{
 			m_dFields[tRemap.m_iField] = m_dBuf.Begin() + iOff;
+			m_dFieldLengths[tRemap.m_iField] = strlen ( (char *)m_dFields[tRemap.m_iField] );
+		}
 
 		// attribute column
 		if ( tRemap.m_iAttr!=-1 )

@@ -2631,6 +2631,12 @@ public:
 		return CopyDoc ();
 	}
 
+
+	virtual const int *	GetFieldLengths () const
+	{
+		return T::m_tState.m_dFieldLengths;
+	}
+
 private:
 	CSphSource_Document *	m_pSource;
 	CSphFixedVector<StoredDoc_t> m_dBatchedDocs;
@@ -2677,6 +2683,9 @@ private:
 		StoredDoc_t * pDoc = PopDoc();
 		CopyDocInfo ( T::m_tDocInfo, pDoc->m_tDocInfo );
 		T::m_tState.m_dFields = pDoc->m_dFields.Begin();
+		ARRAY_FOREACH ( i, pDoc->m_dFields )
+			T::m_tState.m_dFieldLengths[i] = strlen ( (char*)pDoc->m_dFields[i] );
+
 		T::m_dMva.SwapData ( pDoc->m_dMva );
 		T::m_dStrAttrs.SwapData ( pDoc->m_dStrAttrs );
 

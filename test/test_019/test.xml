@@ -102,6 +102,9 @@ index fld
 <sphinxql>select * from fld where match ( '(((((((((( crashing 9 brackets')</sphinxql>
 <sphinxql>select * from fld where match ( '@title(spec1 absentword) | @body(dummy1)' ) and id=1000 option ranker='wordcount', field_weights=(title=1000, body=1)</sphinxql>
 <sphinxql>select * from fld where match ( 'one | !two' )</sphinxql>
+<!-- regression for embedded zeroes -->
+<sphinxql>select * from test where match ( 'wordbefore' )</sphinxql>
+<sphinxql>select * from test where match ( 'wordafter' )</sphinxql>
 </sphqueries>
 <db_create>
 CREATE TABLE `test_table`
@@ -131,6 +134,7 @@ INSERT INTO `test_table` VALUES
 ( 901, 'aaa', 'aaa' ),
 ( 902, 'aaa', '' ),
 ( 903, '', 'aaa' ),
+( 910, '', 'wordbefore\0\0wordafter' ),
 (1000, 'spec1', 'dummy1' ),
 (1001, 'spec1 dummy1', '' ),
 (1002, '', 'spec1 dummy1' ),

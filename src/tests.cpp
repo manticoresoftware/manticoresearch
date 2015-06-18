@@ -2206,6 +2206,7 @@ public:
 		m_ppDocs = ppDocs;
 		m_iDocCount = iDocs;
 		m_iFields = iFields;
+		m_dFieldLengths.Resize ( m_iFields );
 	}
 
 	virtual BYTE ** NextDocument ( CSphString & )
@@ -2218,9 +2219,16 @@ public:
 
 		int iDoc = (int)m_tDocInfo.m_uDocID;
 		m_tDocInfo.m_uDocID++;
+		for ( int i = 0; i < m_iFields; i++ )
+		{
+			char * szField = (char *)(m_ppDocs + iDoc*m_iFields)[i];
+			m_dFieldLengths[i] = strlen ( szField );
+		}
+
 		return m_ppDocs + iDoc * m_iFields;
 	}
 
+	virtual const int * GetFieldLengths () const { return m_dFieldLengths.Begin(); }
 	bool Connect ( CSphString & ) { return true; }
 	void Disconnect () {}
 	bool HasAttrsConfigured () { return true; }
@@ -2238,6 +2246,7 @@ private:
 	int m_iDocCount;
 	int m_iFields;
 	BYTE ** m_ppDocs;
+	CSphVector<int> m_dFieldLengths;
 };
 
 
@@ -2429,6 +2438,7 @@ class SphDocRandomizer_c : public CSphSource_Document
 	static const int m_iMaxFieldLen = 512;
 	char m_dFields[m_iMaxFields][m_iMaxFieldLen];
 	BYTE * m_ppFields[m_iMaxFields];
+	int m_dFieldLengths[m_iMaxFields];
 public:
 	explicit SphDocRandomizer_c ( const CSphSchema & tSchema ) : CSphSource_Document ( "test_doc" )
 	{
@@ -2456,9 +2466,13 @@ public:
 		snprintf ( m_dFields[1], m_iMaxFieldLen, "dog contentwashere%d contentwashere%d contentwashere%d contentwashere%d contentwashere%d"
 			, sphRand(), sphRand(), sphRand(), sphRand(), sphRand() );
 
+		for ( int i=0; i < m_iMaxFields; i++ )
+			m_dFieldLengths[i] = strlen ( (char*)m_ppFields[i] );
+
 		return &m_ppFields[0];
 	}
 
+	virtual const int * GetFieldLengths () const { return m_dFieldLengths; }
 	bool Connect ( CSphString & ) { return true; }
 	void Disconnect () {}
 	bool HasAttrsConfigured () { return true; }

@@ -2063,6 +2063,7 @@ public:
 	/// field data getter
 	/// to be implemented by descendants
 	virtual BYTE **			NextDocument ( CSphString & sError ) = 0;
+	virtual const int *		GetFieldLengths () const = 0;
 
 	virtual void			SetDumpRows ( FILE * fpDumpRows ) { m_fpDumpRows = fpDumpRows; }
 
@@ -2107,6 +2108,7 @@ protected:
 		bool m_bDocumentDone;
 
 		BYTE ** m_dFields;
+		CSphVector<int> m_dFieldLengths;
 
 		CSphVector<BYTE*> m_dTmpFieldStorage;
 		CSphVector<BYTE*> m_dTmpFieldPtrs;
@@ -2199,6 +2201,7 @@ struct CSphSource_SQL : CSphSource_Document
 
 	virtual bool		IterateStart ( CSphString & sError );
 	virtual BYTE **		NextDocument ( CSphString & sError );
+	virtual const int *	GetFieldLengths () const;
 	virtual void		PostIndex ();
 
 	virtual bool		HasAttrsConfigured () { return m_tParams.m_dAttrs.GetLength()!=0; }
@@ -2218,6 +2221,7 @@ protected:
 	CSphString			m_sSqlDSN;
 
 	BYTE *				m_dFields [ SPH_MAX_FIELDS ];
+	int					m_dFieldLengths [ SPH_MAX_FIELDS ];
 	ESphUnpackFormat	m_dUnpack [ SPH_MAX_FIELDS ];
 
 	SphDocID_t			m_uMinID;			///< grand min ID
@@ -2267,7 +2271,7 @@ protected:
 	virtual const char *	SqlColumn ( int iIndex ) = 0;
 	virtual const char *	SqlFieldName ( int iIndex ) = 0;
 
-	const char *	SqlUnpackColumn ( int iIndex, ESphUnpackFormat eFormat );
+	const char *	SqlUnpackColumn ( int iIndex, DWORD & uUnpackedLen, ESphUnpackFormat eFormat );
 	void			ReportUnpackError ( int iIndex, int iError );
 };
 

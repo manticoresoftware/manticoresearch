@@ -1480,9 +1480,11 @@ public:
 	virtual bool		IterateKillListNext ( SphDocID_t & ) { return false; }
 
 	virtual BYTE **		NextDocument ( CSphString & ) { return m_dFields.Begin(); }
+	virtual const int *	GetFieldLengths () const { return m_dFieldLengths.Begin(); }
 
 protected:
 	CSphVector<BYTE *>			m_dFields;
+	CSphVector<int>				m_dFieldLengths;
 };
 
 
@@ -1492,9 +1494,11 @@ CSphSource_StringVector::CSphSource_StringVector ( int iFields, const char ** pp
 	m_tSchema = tSchema;
 
 	m_dFields.Resize ( 1+iFields );
+	m_dFieldLengths.Resize ( iFields );
 	for ( int i=0; i<iFields; i++ )
 	{
 		m_dFields[i] = (BYTE*) ppFields[i];
+		m_dFieldLengths[i] = strlen ( ppFields[i] );
 		assert ( m_dFields[i] );
 	}
 	m_dFields [ iFields ] = NULL;

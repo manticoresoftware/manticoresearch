@@ -1453,6 +1453,7 @@ inline void SqlUnescape ( CSphString & sRes, const char * sEscaped, int iLen )
 			case 'n': *d++ = '\n'; break;
 			case 'r': *d++ = '\r'; break;
 			case 't': *d++ = '\t'; break;
+			case '0': *d++ = ' '; break;
 			default:
 				*d++ = s[1];
 			}

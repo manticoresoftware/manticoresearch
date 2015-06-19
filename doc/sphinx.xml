@@ -636,8 +636,8 @@ MySQL, PostgreSQL, MS SQL (on Windows), and ODBC. There is also
 a generic driver called xmlpipe2, which runs a specified command
 and reads the data from its <filename>stdout</filename>.
 See <xref linkend="xmlpipe2"/> section for the format description.
-In 2.2.1-beta a tsvpipe (Tab Separated Values) data source was added.
-You can get more information here <xref linkend="tsvpipe"/>.
+In 2.2.1-beta a tsvpipe (Tab Separated Values) and csvpipe (Comma Separated Values)
+data source was added. You can get more information here <xref linkend="xsvpipe"/>.
 </para>
 <para>
 There can be as many sources per index as necessary. They will be
@@ -1169,7 +1169,7 @@ XML elements (tags) recognized by xmlpipe2 (and their attributes where applicabl
 </sect1>
 
 
-<sect1 id="tsvpipe"><title>tsvpipe (Tab Separated Values) data source</title>
+<sect1 id="xsvpipe"><title>tsvpipe\csvpipe (Tab\Comma Separated Values) data source</title>
 <para>
 This is the simplest way to pass data to the indexer. It was created due to
 xmlpipe2 limitations. Namely, indexer must map each attribute and field tag
@@ -1180,9 +1180,49 @@ is a particular column in TSV file. So, in some cases tsvpipe could work
 slightly faster than xmlpipe2. Added in 2.2.1-beta.
 </para>
 <para>
-The first column in TSV file must be a document ID. The rest ones must mirror
+The first column in TSV\CSV file must be a document ID. The rest ones must mirror
 the declaration of fields and attributes in schema definition.
 </para>
+<para>
+The difference between tsvpipe and csvpipe is delimiter and quoting rules.
+tsvpipe has tab character as hardcoded delimiter and has no quoting rules.
+csvpipe has option <link linkend="conf-csvpipe-delimiter">csvpipe_delimiter</link> for
+delimiter with default value ',' and also has quoting rules, such as:
+<itemizedlist>
+<listitem><para>any field may be quoted</para></listitem>
+<listitem><para>fields containing a line-break, double-quote or commas should be quoted</para></listitem>
+<listitem><para>a double quote character in a field must be represented by two double quote characters</para></listitem>
+</itemizedlist>
+</para>
+<para>
+tsvpipe and csvpipe have same field and attrribute declaration derectives as xmlpipe.
+</para>
+<para>
+tsvpipe declarations:
+</para>
+<para>
+<link linkend="conf-xmlpipe-command">tsvpipe_command</link>,
+<link linkend="conf-xmlpipe-field">tsvpipe_field</link>, <link linkend="conf-xmlpipe-field-string">tsvpipe_field_string</link>,
+<link linkend="conf-xmlpipe-attr-uint">tsvpipe_attr_uint</link>, <link linkend="conf-xmlpipe-attr-timestamp">tsvpipe_attr_timestamp</link>,
+<link linkend="conf-xmlpipe-attr-bool">tsvpipe_attr_bool</link>, <link linkend="conf-xmlpipe-attr-float">tsvpipe_attr_float</link>,
+<link linkend="conf-xmlpipe-attr-bigint">tsvpipe_attr_bigint</link>, <link linkend="conf-xmlpipe-attr-multi">tsvpipe_attr_multi</link>,
+<link linkend="conf-xmlpipe-attr-multi-64">tsvpipe_attr_multi_64</link>, <link linkend="conf-xmlpipe-attr-string">tsvpipe_attr_string</link>,
+<link linkend="conf-xmlpipe-attr-json">tsvpipe_attr_json</link>
+</para>
+
+<para>
+csvpipe declarations:
+</para>
+<para>
+<link linkend="conf-xmlpipe-command">csvpipe_command</link>,
+<link linkend="conf-xmlpipe-field">csvpipe_field</link>, <link linkend="conf-xmlpipe-field-string">csvpipe_field_string</link>,
+<link linkend="conf-xmlpipe-attr-uint">csvpipe_attr_uint</link>, <link linkend="conf-xmlpipe-attr-timestamp">csvpipe_attr_timestamp</link>,
+<link linkend="conf-xmlpipe-attr-bool">csvpipe_attr_bool</link>, <link linkend="conf-xmlpipe-attr-float">csvpipe_attr_float</link>,
+<link linkend="conf-xmlpipe-attr-bigint">csvpipe_attr_bigint</link>, <link linkend="conf-xmlpipe-attr-multi">csvpipe_attr_multi</link>,
+<link linkend="conf-xmlpipe-attr-multi-64">csvpipe_attr_multi_64</link>, <link linkend="conf-xmlpipe-attr-string">csvpipe_attr_string</link>,
+<link linkend="conf-xmlpipe-attr-json">csvpipe_attr_json</link>
+</para>
+
 <programlisting>
 source tsv_test
 {
@@ -5827,7 +5867,9 @@ It inserts new rows (documents) into an existing index, with the provided column
 </para>
 <para>
 ID column must be present in all cases. Rows with duplicate IDs will <b>not</b>
-be overwritten by INSERT; use REPLACE to do that.
+be overwritten by INSERT; use REPLACE to do that. REPLACE works exactly like INSERT,
+except that if an old row has the same ID as a new row, the old row is deleted
+before the new row is inserted.
 </para>
 <para>
 <option>index</option> is the name of RT index into which the new row(s)
@@ -6704,8 +6746,10 @@ create a new disk chunk, and FLUSH RAMCHUNK statement does exactly that.
 <para>
 Note that using FLUSH RAMCHUNK increases RT index fragmentation.
 Most likely, you want to use FLUSH RTINDEX instead. We suggest that
-you abstain from using this statement unless you're absolutely sure
-what you're doing.
+you abstain from using just this statement unless you're absolutely sure
+what you're doing. As the right way is to issue FLUSH RAMCHUNK with
+following <link linkend="sphinxql-optimize-index">OPTIMIZE</link> command.
+Such combo allows to keep RT index fragmentation on minimum.
 </para>
 <programlisting>
 mysql> FLUSH RAMCHUNK rt;
@@ -8411,10 +8455,10 @@ star-syntax available in queries.
 <varlistentry>
     <term>"before_match":</term>
     <listitem><para>A string to insert before a keyword match. Starting with version 1.10-beta,
-    a %PASSAGE_ID% macro can be used in this string. The macro is replaced with an incrementing
-    passage number within a current snippet. Numbering starts at 1 by default but can be
-    overridden with "start_passage_id" option. In a multi-document call, %PASSAGE_ID% would
-    restart at every given document. Default is "&lt;b&gt;".</para></listitem>
+    a %PASSAGE_ID% macro can be used in this string. The first match of the macro is replaced 
+    with an incrementing passage number within a current snippet. Numbering starts at 1 
+    by default but can be overridden with "start_passage_id" option. In a multi-document call,
+    %PASSAGE_ID% would restart at every given document. Default is "&lt;b&gt;".</para></listitem>
 </varlistentry>
 <varlistentry>
     <term>"after_match":</term>
@@ -9357,12 +9401,13 @@ they give you an address to write-only FTP created exactly for such puproses.
 Data source type.
 Mandatory, no default value.
 Known types are <option>mysql</option>, <option>pgsql</option>, <option>mssql</option>,
-<option>xmlpipe2</option>, tsvpipe, and <option>odbc</option>.
+<option>xmlpipe2</option>, <option>tsvpipe</option>, <option>csvpipe</option> and <option>odbc</option>.
 </para>
 <para>
 All other per-source options depend on source type selected by this option.
 Names of the options used for SQL sources (ie. MySQL, PostgreSQL, MS SQL) start with "sql_";
-names of the ones used for xmlpipe2 or tsvpipe start with "xmlpipe_" and "tsvpipe_" correspondingly.
+names of the ones used for xmlpipe2 or tsvpipe, csvpipe start with "xmlpipe_" and "tsvpipe_",
+"csvpipe_" correspondingly.
 All source types are conditional; they might or might
 not be supported depending on your build settings, installed client libraries, etc.
 <option>mssql</option> type is currently only available on Windows.
@@ -10491,6 +10536,18 @@ of really long data fields if necessary.
 <bridgehead>Example:</bridgehead>
 <programlisting>
 unpack_mysqlcompress_maxsize = 1M
+</programlisting>
+</sect2>
+
+
+<sect2 id="conf-csvpipe-delimiter"><title>csvpipe_delimiter</title>
+<para>
+csvpipe source fields delimiter. Optional, default value is ','.
+Introduced in version 2.2.1-beta.
+</para>
+<bridgehead>Example:</bridgehead>
+<programlisting>
+csvpipe_delimiter = ;
 </programlisting>
 </sect2>
 
@@ -11897,6 +11954,21 @@ to the remote agent. How exactly that list is searched within the agent
 configuration (ie. dist_threads directive). Master has no remote
 control over that.
 </para>
+Starting with 2.2.9-release, the value can additionally enumerate per agent
+options such as:
+<itemizedlist>
+<listitem><para><link linkend="conf-ha-strategy">ha_strategy</link> - random,
+roundrobin, nodeads, noerrors (replces index <link linkend="conf-ha-strategy">ha_strategy</link>
+for particular agent)</para></listitem>
+<listitem><para><link linkend="conf-agent-persistent">conn</link> - pconn,
+persistent (same as <link linkend="conf-agent-persistent">agent_persistent</link>
+agent declaration)</para></listitem>
+<listitem><para><link linkend="conf-agent-blackhole">blackhole</link> - 0,1 (same as
+<link linkend="conf-agent-blackhole">agent_blackhole</link> agent declaration)</para></listitem>
+</itemizedlist>
+<programlisting>
+agent = address1:index-list[[ha_strategy=value] | [conn=value] | [blackhole=value]]
+</programlisting>
 <bridgehead>Example:</bridgehead>
 <programlisting>
 # config on box2
@@ -11913,6 +11985,11 @@ agent = box3:9312:chunk3
 # sharding an index over 3 servers
 agent = box1:9312:chunk2
 agent = box2:9312:chunk3
+
+# per agent options
+agent = box1:9312:chunk1[ha_strategy=nodeads]
+agent = box2:9312:chunk2[conn=pconn]
+agent = test:9312:any[blackhole=1]
 </programlisting>
 <bridgehead>Agent mirrors</bridgehead>
 <para>
@@ -13489,7 +13566,7 @@ pid_file = /var/run/searchd.pid
 <sect2 id="conf-seamless-rotate"><title>seamless_rotate</title>
 <para>
 Prevents <filename>searchd</filename> stalls while rotating indexes with huge amounts of data to precache.
-Optional, default is 1 (enable seamless rotation).
+Optional, default is 1 (enable seamless rotation). On Windows systems seamless rotation is disabled by default.
 </para>
 <para>
 Indexes may contain some data that needs to be precached in RAM.
@@ -14811,7 +14888,7 @@ plugin_dir = /usr/local/sphinx/lib
 <listitem><para>fixed #1946, <link linkend="expr-func-in">IN()</link> function support for string attributes</para></listitem>
 <listitem><para>fixed #1942, crash in <link linkend="sphinxql-threads">SHOW THREADS</link> command</para></listitem>
 <listitem><para>fixed #1922, crash on snippet generation for queries with duplicated words</para></listitem>
-<listitem><para>fixed #1919, <link linkend="tsvpipe">TSV</link> bitcount attributes indexation issue</para></listitem>
+<listitem><para>fixed #1919, <link linkend="xsvpipe">TSV</link> bitcount attributes indexation issue</para></listitem>
 <listitem><para>fixed #1916, <link linkend="sphinxql-select">COUNT(*)</link> with empty result set</para></listitem>
 <listitem><para>fixed #1910, JSON parsing issue</para></listitem>
 <listitem><para>fixed #1906, <link linkend="extended-syntax">ZONE</link> constraints for expanded terms</para></listitem>
@@ -14870,7 +14947,7 @@ plugin_dir = /usr/local/sphinx/lib
 <listitem>added <link linkend="sphinxql-select">HAVING</link> support to SELECT statement, filtering on aggregate values is now possible</listitem>
 <listitem>added <link linkend="sphinxql-select">N-best GROUP BY</link> extension to return more than 1 row per group</listitem>
 <listitem>added RT index support for <link linkend="conf-index-field-lengths">index_field_lengths=1</link>, bitfield attributes, and multiforms</listitem>
-<listitem>added CSV, <link linkend="tsvpipe">TSV</link> data sources</listitem>
+<listitem>added <link linkend="xsvpipe">CSV</link>, <link linkend="xsvpipe">TSV</link> data sources</listitem>
 <listitem>added full <link linkend="conf-sql-attr-json">JSON</link> attributes support, arbitrary JSON documents (with subobjects etc) can now be stored</listitem>
 <listitem>added in-place JSON updates for scalar values</listitem>
 <listitem>added index <link linkend="conf-index-type">type=template</link> directive (allows CALL KEYWORDS, CALL SNIPPETS)</listitem>

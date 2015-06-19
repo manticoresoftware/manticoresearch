@@ -78,8 +78,8 @@ index test2
 <sphinxql>CALL SNIPPETS('time is dying out like everething else here', 'test', 'nothing', 40 AS limit, 1 as allow_empty  )</sphinxql>
 <sphinxql>CALL SNIPPETS('time is dying out like everething', 'test', 'nothing', 40 AS limit, 1 as allow_empty  )</sphinxql>
 <!-- regression stripped option at SNIPPET expression -->
-<sphinxql><![CDATA[SELECT id, SNIPPET('hello this is a text', 'this','before_match=<strong class="match">', 'after_match=</strong>') from test2 where match ('this')]]></sphinxql>
-<sphinxql><![CDATA[CALL SNIPPETS('hello this is a text',  'test2', 'this', '<strong class="match">' as before_match, '</strong>' as after_match)]]></sphinxql>
+<sphinxql><![CDATA[SELECT id, SNIPPET('hello this is a text. And this.', 'this','before_match=<strong id= %PASSAGE_ID% >', 'after_match=</strong>', 'start_passage_id=100000000') from test2 where match ('this')]]></sphinxql>
+<sphinxql><![CDATA[CALL SNIPPETS('hello this is a text. And this.',  'test2', 'this', '<strong id=%PASSAGE_ID%>' as before_match, '</strong>' as after_match, 100000000 as start_passage_id)]]></sphinxql>
 </sphqueries>
 
 </test>

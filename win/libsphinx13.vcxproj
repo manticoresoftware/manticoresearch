@@ -183,7 +183,15 @@
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="..\src\sphinx.h">
-    </CustomBuild>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(SolutionDir)\src\git_commit_id.cmd</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(SolutionDir)\src\nonexistent;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(SolutionDir)\src\git_commit_id.cmd</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(SolutionDir)\src\nonexistent;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(SolutionDir)\src\git_commit_id.cmd</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(SolutionDir)\src\nonexistent;%(Outputs)</Outputs>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(SolutionDir)\src\git_commit_id.cmd</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(SolutionDir)\src\nonexistent;%(Outputs)</Outputs>
+    </CustomBuild>  
     <ClInclude Include="..\src\sphinxexcerpt.h" />
     <ClInclude Include="..\src\sphinxexpr.h" />
     <ClInclude Include="..\src\sphinxfilter.h" />
@@ -196,7 +204,6 @@
     <ClInclude Include="..\src\sphinxsearch.h" />
     <ClInclude Include="..\src\sphinxstd.h" />
     <ClInclude Include="..\src\sphinxstem.h" />
-    <ClInclude Include="..\src\sphinxtimers.h" />
     <ClInclude Include="..\src\sphinxutils.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

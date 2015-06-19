@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>agent of distributed index via unix socket</name>
+
+<requires>
+<non-windows/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit			= 28M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers					= threads
+	listen 					= <test_root/>/data/searchd-test-241.sock
+}
+
+source src1
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1 id, 11 idd, 'test me 1'
+
+	sql_attr_uint = idd
+}
+
+source src2 : src1
+{
+	sql_query = SELECT 2 id, 11 idd, 'test me 2'
+}
+
+source src3 : src1
+{
+	sql_query = SELECT 3 id, 11 idd, 'test me 3'
+}
+
+index idx1
+{
+	source				= src1
+	path				= <data_path/>/idx1
+	docinfo 			= extern
+}
+
+index idx2
+{
+	source				= src2
+	path				= <data_path/>/idx2
+	docinfo 			= extern
+}
+
+index idx3
+{
+	source				= src3
+	path				= <data_path/>/idx3
+	docinfo 			= extern	
+}
+
+index dist
+{
+	type					= distributed
+	local					= idx1
+	agent					= <my_address/>:idx2
+	agent 					= <test_root/>/data/searchd-test-241.sock:idx3
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+</config>
+
+<sphqueries>
+<sphinxql>select * from dist</sphinxql>
+<sphinxql>show meta</sphinxql>
+</sphqueries>
+
+</test>

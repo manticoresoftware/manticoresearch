@@ -126,6 +126,37 @@ index idx51
 	source = src51
 	path = <data_path/>/idx51
 }
+
+source src_tsv_spec
+{
+	type = tsvpipe
+	tsvpipe_command = cat <this_test/>/data_spec.tsv
+	tsvpipe_field = title
+	tsvpipe_field = content
+	tsvpipe_attr_uint = gid
+}
+
+index tsv_spec
+{
+	source = src_tsv_spec
+	path = <data_path/>/tsv_spec
+}
+
+source src_csv_spec
+{
+	type = csvpipe
+	csvpipe_command = cat <this_test/>/data_spec.csv
+	csvpipe_field = title
+	csvpipe_field = content
+	csvpipe_attr_uint = gid
+}
+
+index csv_spec
+{
+	source = src_csv_spec
+	path = <data_path/>/csv_spec
+}
+
 </config>
 
 <queries>
@@ -165,6 +196,11 @@ index idx51
 <query index="csv2">my</query>
 <!-- regression tail hits from ext-conditional node -->
 <query index="idx51" mode="extended2">^go | go$</query>
+<!-- document end (^Z) at data source  -->
+<query index="tsv_spec" mode="extended2">"test one"</query>
+<query index="csv_spec" mode="extended2">"test one"</query>
+<query index="tsv_spec" mode="extended2">"document number"</query>
+<query index="csv_spec" mode="extended2">"document number"</query>
 </queries>
 
 </test>

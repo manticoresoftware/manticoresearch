@@ -2566,6 +2566,7 @@ struct CSphNormalForm
 
 struct CSphMultiform
 {
+	int								m_iFileId;
 	CSphTightVector<CSphNormalForm>	m_dNormalForm;
 	CSphTightVector<CSphString>		m_dTokens;
 };
@@ -6564,7 +6565,7 @@ BYTE * CSphMultiformTokenizer::GetToken ()
 		return m_dStoredTokens[m_iStart].m_sToken;
 
 	int iStartToken = m_iStart + ( bBlended ? 1 : 0 );
-	for ( int i = (*pWordforms)->m_pForms.GetLength()-1; i>=0; i-- )
+	ARRAY_FOREACH ( i, (*pWordforms)->m_pForms )
 	{
 		const CSphMultiform * pCurForm = (*pWordforms)->m_pForms[i];
 		int iFormTokCount = pCurForm->m_dTokens.GetLength();
@@ -14955,13 +14956,13 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	if ( !CheckDocsCount ( iTotalDocuments, sError ) )
 		return false;
 
-	if ( tSPSWriter.GetPos()>( U64C(1)<<32 ) )
+	if ( tSPSWriter.GetPos()>SphOffset_t( U64C(1)<<32 ) )
 	{
 		sError.SetSprintf ( "resulting .sps file is over 4 GB" );
 		return false;
 	}
 
-	if ( tSPMWriter.GetPos()>( U64C(4)<<32 ) )
+	if ( tSPMWriter.GetPos()>SphOffset_t( U64C(4)<<32 ) )
 	{
 		sError.SetSprintf ( "resulting .spm file is over 16 GB" );
 		return false;
@@ -20207,7 +20208,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				}
 
 				// MVAs ptr recovery from previous errors only if current spa record is valid
-				if ( rdMva.GetPos()!=sizeof(DWORD)*uMvaSpaFixed && bIsSpaValid && bMvaFix )
+				if ( rdMva.GetPos()!=SphOffset_t(sizeof(DWORD)*uMvaSpaFixed) && bIsSpaValid && bMvaFix )
 					rdMva.SeekTo ( sizeof(DWORD)*uMvaSpaFixed, READ_NO_SIZE_HINT );
 
 				bool bLastIDChecked = false;
@@ -20699,7 +20700,7 @@ private:
 	int					InitMorph ( const char * szMorph, int iLength, CSphString & sError );
 	int					AddMorph ( int iMorph ); ///< helper that always returns ST_OK
 	bool				StemById ( BYTE * pWord, int iStemmer ) const;
-	void				AddWordform ( CSphWordforms * pContainer, char * sBuffer, int iLen, ISphTokenizer * pTokenizer, const char * szFile, const CSphVector<int> & dBlended );
+	void				AddWordform ( CSphWordforms * pContainer, char * sBuffer, int iLen, ISphTokenizer * pTokenizer, const char * szFile, const CSphVector<int> & dBlended, int iFileId );
 };
 
 CSphVector<CSphWordforms*> CSphTemplateDictTraits::m_dWordformContainers;
@@ -21663,8 +21664,21 @@ CSphWordforms * CSphTemplateDictTraits::GetWordformContainer ( const CSphVector<
 }
 
 
+struct CmpMultiforms_fn
+{
+	inline bool IsLess ( const CSphMultiform * pA, const CSphMultiform * pB ) const
+	{
+		assert ( pA && pB );
+		if ( pA->m_iFileId==pB->m_iFileId )
+			return pA->m_dTokens.GetLength() > pB->m_dTokens.GetLength();
+
+		return pA->m_iFileId > pB->m_iFileId;
+	}
+};
+
+
 void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sBuffer, int iLen,
-	ISphTokenizer * pTokenizer, const char * szFile, const CSphVector<int> & dBlended )
+	ISphTokenizer * pTokenizer, const char * szFile, const CSphVector<int> & dBlended, int iFileId )
 {
 	CSphVector<CSphString> dTokens;
 
@@ -21794,6 +21808,7 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 	if ( dTokens.GetLength()>1 || dDestTokens.GetLength()>1 )
 	{
 		CSphMultiform * pMultiWordform = new CSphMultiform;
+		pMultiWordform->m_iFileId = iFileId;
 		pMultiWordform->m_dNormalForm.Resize ( dDestTokens.GetLength() );
 		ARRAY_FOREACH ( i, dDestTokens )
 			pMultiWordform->m_dNormalForm[i] = dDestTokens[i];
@@ -21829,6 +21844,8 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 						ARRAY_FOREACH ( iForm, pMultiWordform->m_dNormalForm )
 							pStoredMF->m_dNormalForm[iForm] = pMultiWordform->m_dNormalForm[iForm];
 
+						pStoredMF->m_iFileId = iFileId;
+
 						SafeDelete ( pMultiWordform );
 						break; // otherwise, we crash next turn
 					}
@@ -21838,6 +21855,12 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 			if ( pMultiWordform )
 			{
 				(*pWordforms)->m_pForms.Add ( pMultiWordform );
+
+				// sort forms by files and length
+				// but do not sort if we're loading embedded
+				if ( iFileId>=0 )
+					(*pWordforms)->m_pForms.Sort ( CmpMultiforms_fn() );
+
 				(*pWordforms)->m_iMinTokens = Min ( (*pWordforms)->m_iMinTokens, pMultiWordform->m_dTokens.GetLength () );
 				(*pWordforms)->m_iMaxTokens = Max ( (*pWordforms)->m_iMaxTokens, pMultiWordform->m_dTokens.GetLength () );
 				pContainer->m_pMultiWordforms->m_iMaxTokens = Max ( pContainer->m_pMultiWordforms->m_iMaxTokens, (*pWordforms)->m_iMaxTokens );
@@ -21954,7 +21977,7 @@ CSphWordforms * CSphTemplateDictTraits::LoadWordformContainer ( const CSphVector
 
 		ARRAY_FOREACH ( i, (*pEmbeddedWordforms) )
 			AddWordform ( pContainer, (char*)(*pEmbeddedWordforms)[i].cstr(),
-				(*pEmbeddedWordforms)[i].Length(), pMyTokenizer.Ptr(), sAllFiles.cstr(), dBlended );
+				(*pEmbeddedWordforms)[i].Length(), pMyTokenizer.Ptr(), sAllFiles.cstr(), dBlended, -1 );
 	} else
 	{
 		char sBuffer [ 6*SPH_MAX_WORD_LEN + 512 ]; // enough to hold 2 UTF-8 words, plus some whitespace overhead
@@ -21972,7 +21995,7 @@ CSphWordforms * CSphTemplateDictTraits::LoadWordformContainer ( const CSphVector
 
 			int iLen;
 			while ( ( iLen = rdWordforms.GetLine ( sBuffer, sizeof(sBuffer) ) )>=0 )
-				AddWordform ( pContainer, sBuffer, iLen, pMyTokenizer.Ptr(), szFile, dBlended );
+				AddWordform ( pContainer, sBuffer, iLen, pMyTokenizer.Ptr(), szFile, dBlended, i );
 		}
 	}
 
@@ -30561,6 +30584,7 @@ const char * CSphSource_BaseSV::DecorateMessage ( const char * sTemplate, ... ) 
 	return m_dError.Begin();
 }
 
+static const BYTE g_dBOM[] = { 0xEF, 0xBB, 0xBF };
 
 bool CSphSource_BaseSV::IterateStart ( CSphString & sError )
 {
@@ -30580,8 +30604,12 @@ bool CSphSource_BaseSV::IterateStart ( CSphString & sError )
 		sError.SetSprintf ( "source '%s': read error '%s'", m_tSchema.m_sName.cstr(), strerror(errno) );
 		return false;
 	}
-
 	m_iPlainFieldsLength = m_tSchema.m_dFields.GetLength();
+
+	// space out BOM like xml-pipe does
+	if ( m_iBufUsed>(int)sizeof(g_dBOM) && memcmp ( m_dBuf.Begin(), g_dBOM, sizeof ( g_dBOM ) )==0 )
+		memset ( m_dBuf.Begin(), ' ', sizeof(g_dBOM) );
+
 	return true;
 }
 
@@ -31730,8 +31758,12 @@ bool sphLookupInfixCheckpoints ( const char * sInfix, int iBytes, const BYTE * p
 	assert ( pInfixes );
 	dCheckpoints.Resize ( 0 );
 
+	char dInfixBuf[3*SPH_MAX_WORD_LEN+4];
+	memcpy ( dInfixBuf, sInfix, iBytes );
+	dInfixBuf[iBytes] = '\0';
+
 	// lookup block
-	int iBlock = FindSpan ( dInfixBlocks, sInfix );
+	int iBlock = FindSpan ( dInfixBlocks, dInfixBuf );
 	if ( iBlock<0 )
 		return false;
 	const BYTE * pBlock = pInfixes + dInfixBlocks[iBlock].m_iOffset;
@@ -31774,7 +31806,7 @@ bool sphLookupInfixCheckpoints ( const char * sInfix, int iBytes, const BYTE * p
 		*pOut = '\0'; // handy for debugging, but not used for real matching
 #endif
 
-		if ( pOut==sKey+iBytes && memcmp ( sKey, sInfix, iBytes )==0 )
+		if ( pOut==sKey+iBytes && memcmp ( sKey, dInfixBuf, iBytes )==0 )
 		{
 			// found you! decompress the data
 			int iLast = 0;

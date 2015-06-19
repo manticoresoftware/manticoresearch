@@ -48,8 +48,8 @@ struct XQKeyword_t
 
 	XQKeyword_t ( const char * sWord, int iPos )
 		: m_sWord ( sWord )
-		, m_iSkippedBefore ( 0 )
 		, m_iAtomPos ( iPos )
+		, m_iSkippedBefore ( 0 )
 		, m_bFieldStart ( false )
 		, m_bFieldEnd ( false )
 		, m_fBoost ( 1.0f )

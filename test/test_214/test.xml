@@ -224,6 +224,7 @@ $query ( "alter table rt add column select integer", $sock, $results );
 $query ( "alter table rt add column `select` integer", $sock, $results );
 $query ( "select `select` from rt where id=10", $sock, $results );
 $query ( "select min(`select`,`select`+1) from rt where id=10", $sock, $results );
+$query ( "select `select`=1 from rt where id=10", $sock, $results );
 
 @mysql_close($sock);
 	

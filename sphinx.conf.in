@@ -787,28 +787,6 @@ indexer
 	# on_file_field_error = skip_document
 
 
-	# how to handle syntax errors in JSON attributes
-	# known values are 'ignore_attr' and 'fail_index'
-	# optional, default is 'ignore_attr'
-	#
-	# on_json_attr_error = fail_index
-
-
-	# whether to auto-convert numeric values from strings in JSON attributes
-	# with auto-conversion, string value with actually numeric data
-	# (as in {"key":"12345"}) gets stored as a number, rather than string
-	# optional, allowed values are 0 and 1, default is 0 (do not convert)
-	#
-	# json_autoconv_numbers = 1
-
-
-	# whether and how to auto-convert key names in JSON attributes
-	# known value is 'lowercase'
-	# optional, default is unspecified (do nothing)
-	#
-	# json_autoconv_keynames = lowercase
-
-
 	# lemmatizer cache size
 	# improves the indexing time when the lemmatization is enabled
 	# optional, default is 256K
@@ -1003,12 +981,6 @@ searchd
 	# mysql_version_string	= 5.0.37
 
 
-	# trusted plugin directory
-	# optional, default is empty (disable UDFs)
-	#
-	# plugin_dir			= /usr/local/sphinx/lib
-
-
 	# default server-wide collation
 	# optional, default is libc_ci
 	#
@@ -1087,15 +1059,58 @@ common
 	#
 	# lemmatizer_base = /usr/local/share/sphinx/dicts
 
+
+	# how to handle syntax errors in JSON attributes
+	# known values are 'ignore_attr' and 'fail_index'
+	# optional, default is 'ignore_attr'
+	#
+	# on_json_attr_error = fail_index
+
+
+	# whether to auto-convert numeric values from strings in JSON attributes
+	# with auto-conversion, string value with actually numeric data
+	# (as in {"key":"12345"}) gets stored as a number, rather than string
+	# optional, allowed values are 0 and 1, default is 0 (do not convert)
+	#
+	# json_autoconv_numbers = 1
+
+
+	# whether and how to auto-convert key names in JSON attributes
+	# known value is 'lowercase'
+	# optional, default is unspecified (do nothing)
+	#
+	# json_autoconv_keynames = lowercase
+
+
 	# path to RLP root directory
 	# optional, defaut is /usr/local/share (see ./configure --datadir)
 	#
 	# rlp_root = /usr/local/share/sphinx/rlp
 
+
 	# path to RLP environment file
 	# optional, defaut is /usr/local/share/rlp-environment.xml (see ./configure --datadir)
 	#
 	# rlp_environment = /usr/local/share/sphinx/rlp/rlp/etc/rlp-environment.xml
+
+
+	# maximum total size of documents batched before processing them by the RLP
+	# optional, default is 51200
+	#
+	# rlp_max_batch_size = 100k
+
+
+	# maximum number of documents batched before processing them by the RLP
+	# optional, default is 50
+	#
+	# rlp_max_batch_docs = 100
+
+
+	# trusted plugin directory
+	# optional, default is empty (disable UDFs)
+	#
+	# plugin_dir			= /usr/local/sphinx/lib
+
 }
 
 # --eof--

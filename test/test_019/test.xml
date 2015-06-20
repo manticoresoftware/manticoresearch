@@ -102,6 +102,10 @@ index fld
 <sphinxql>select * from fld where match ( '(((((((((( crashing 9 brackets')</sphinxql>
 <sphinxql>select * from fld where match ( '@title(spec1 absentword) | @body(dummy1)' ) and id=1000 option ranker='wordcount', field_weights=(title=1000, body=1)</sphinxql>
 <sphinxql>select * from fld where match ( 'one | !two' )</sphinxql>
+<!-- regression @@relaxed vs complex query -->
+<sphinxql>select * from test where match ( '@@relaxed ((@title sample) | (@ttitle sample) (@body program -in )) ' )</sphinxql>
+<sphinxql>select * from test where match ( '@@relaxed ((@ttitle sample) | (@title sample) (@body program -in )) ' )</sphinxql>
+<sphinxql>select * from test where match ( '@@relaxed ((@ttitle sample) | (@ttitle sample) (@body program -in )) ' )</sphinxql>
 </sphqueries>
 <db_create>
 CREATE TABLE `test_table`

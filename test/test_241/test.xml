@@ -23,19 +23,19 @@ source src1
 {
 	type = mysql
 	<sql_settings/>
-	sql_query = SELECT 1 id, 11 idd, 'test me 1'
+	sql_query = SELECT 1 id, 11 idd, 'test me 1' text
 
 	sql_attr_uint = idd
 }
 
 source src2 : src1
 {
-	sql_query = SELECT 2 id, 11 idd, 'test me 2'
+	sql_query = SELECT 2 id, 11 idd, 'test me 2' text
 }
 
 source src3 : src1
 {
-	sql_query = SELECT 3 id, 11 idd, 'test me 3'
+	sql_query = SELECT 3 id, 11 idd, 'test me 3' text
 }
 
 index idx1

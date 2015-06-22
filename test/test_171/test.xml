@@ -37,6 +37,19 @@ source src2 : src
 	sql_query = SELECT id, tag, gr, text FROM test_table WHERE id=3
 }
 
+source src_keys : auth
+{
+	sql_query = SELECT id, tag, text FROM test_keys
+	sql_field_string = text
+	sql_attr_uint	= tag
+}
+
+index idx_keys
+{
+	source			= src_keys
+	path			= <data_path/>/idx_keys
+}
+
 index dist_no
 {
 	source			= src
@@ -424,6 +437,12 @@ index dist_just1
 <sphinxql>select id, MIN(tag)  aa, COUNT(*) cc, GROUPBY() gg FROM dist2 GROUP 8  BY gr HAVING COUNT(*)=2</sphinxql>
 <sphinxql>select id, SUM(tag)  aa, COUNT(*) cc, GROUPBY() gg FROM dist2 GROUP 8  BY gr HAVING aa=4</sphinxql>
 
+<!-- distinct vs strings -->
+<sphinxql>select count(*) from idx_keys</sphinxql>
+<sphinxql>select count(distinct text) from idx_keys</sphinxql>
+<sphinxql>select count(*) from idx_keys group by tag</sphinxql>
+<sphinxql>select count(distinct text) from idx_keys group by tag</sphinxql>
+
 </sphqueries>
 
 <db_create>
@@ -478,5 +497,32 @@ INSERT INTO `sub_table` VALUES
 ( 111, 'test of'),( 112, 'my test'),( 113, 'test is'),( 114, 'goes to test'),( 115, 'test was'),
 ( 116, 'test of'),( 117, 'my test'),( 118, 'test is'),( 119, 'goes to test'),( 120, 'test was')
 </db_insert>
+
+
+<db_create>
+CREATE TABLE `test_keys` (
+  `id` int(11),
+  `tag` int(11),
+  `text` varchar(255) NOT NULL
+)
+</db_create>
+
+ <db_drop>
+DROP TABLE IF EXISTS `test_keys`
+</db_drop>
+
+<db_insert>SET NAMES utf8</db_insert>
+<db_insert>
+INSERT INTO `test_keys` VALUES
+( 1,  1, 'alpha'),
+( 2,  1, 'alpha'),
+( 3,  1, 'alpha'),
+( 4,  2, 'beta'),
+( 5,  2, 'gamma'),
+( 6,  2, 'delta'),
+( 7,  3, 'theta'),
+( 8,  3, 'theta')
+</db_insert>
+
 
 </test>

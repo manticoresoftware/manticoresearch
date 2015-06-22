@@ -3713,9 +3713,9 @@ properly exported functions. Of course, the path of least resistance is to write
 in either C++ or plain C. We provide an example UDF library written in plain C
 and implementing several functions (demonstrating a few different techniques)
 along with our source code, see 
-<a class="ulink" href="http://code.google.com/p/sphinxsearch/source/browse/trunk/src/udfexample.c" target="_top">src/udfexample.c</a>.
+<a class="ulink" href="https://github.com/sphinxsearch/sphinx/blob/master/src/udfexample.c" target="_top">src/udfexample.c</a>.
 That example includes
-<a class="ulink" href="http://code.google.com/p/sphinxsearch/source/browse/trunk/src/sphinxudf.h" target="_top">src/sphinxudf.h</a>
+<a class="ulink" href="https://github.com/sphinxsearch/sphinx/blob/master/src/sphinxudf.h" target="_top">src/sphinxudf.h</a>
 header file definitions of a few UDF related structures and types. For most
 UDFs and plugins, a mere <code class="code">#include "sphinxudf.h"</code>, like in the example,
 should be completely sufficient, too. However, if you're writing a ranking function and
@@ -11034,7 +11034,7 @@ stage possible, before any other processing, even before tokenization.
 That is, regexps are applied to the raw source fields when indeixng,
 and to the raw search query text when searching.
 </p><p>
-We use the <a class="ulink" href="http://code.google.com/p/re2/" target="_top">RE2 engine</a>
+We use the <a class="ulink" href="https://github.com/google/re2" target="_top">RE2 engine</a>
 to implement regexps. So when building from the source, the library must be
 installed in the system and Sphinx must be configured built with a
 <code class="code">--with-re2</code> switch. Binary packages should come with RE2

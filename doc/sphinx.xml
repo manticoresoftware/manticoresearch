@@ -4174,9 +4174,9 @@ properly exported functions. Of course, the path of least resistance is to write
 in either C++ or plain C. We provide an example UDF library written in plain C
 and implementing several functions (demonstrating a few different techniques)
 along with our source code, see 
-<ulink url="http://code.google.com/p/sphinxsearch/source/browse/trunk/src/udfexample.c">src/udfexample.c</ulink>.
+<ulink url="https://github.com/sphinxsearch/sphinx/blob/master/src/udfexample.c">src/udfexample.c</ulink>.
 That example includes
-<ulink url="http://code.google.com/p/sphinxsearch/source/browse/trunk/src/sphinxudf.h">src/sphinxudf.h</ulink>
+<ulink url="https://github.com/sphinxsearch/sphinx/blob/master/src/sphinxudf.h">src/sphinxudf.h</ulink>
 header file definitions of a few UDF related structures and types. For most
 UDFs and plugins, a mere <code>#include "sphinxudf.h"</code>, like in the example,
 should be completely sufficient, too. However, if you're writing a ranking function and
@@ -12954,7 +12954,7 @@ That is, regexps are applied to the raw source fields when indeixng,
 and to the raw search query text when searching.
 </para>
 <para>
-We use the <ulink url="http://code.google.com/p/re2/">RE2 engine</ulink>
+We use the <ulink url="https://github.com/google/re2">RE2 engine</ulink>
 to implement regexps. So when building from the source, the library must be
 installed in the system and Sphinx must be configured built with a
 <code>--with-re2</code> switch. Binary packages should come with RE2

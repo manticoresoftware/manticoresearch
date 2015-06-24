@@ -77,6 +77,14 @@ index strings
 	source	= strings
 	path	= <data_path/>/strings
 }
+
+index dist
+{
+	type = distributed
+	agent = <my_address/>:test
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000	
+}
 </config>
 
 <db_create>
@@ -311,6 +319,12 @@ INSERT INTO string_table VALUES
 <sphinxql>SELECT CONTAINS(GEOPOLY2D(44.0,-88.0, 44.3,-88.6, 44.6,-88.0), 44.6, -88.5 ) from strings limit 1</sphinxql>
 <sphinxql>SELECT CONTAINS(GEOPOLY2D(44.0,-88.0, 44.0, -88.0, 44.3,-88.6, 44.6,-88.0), 44.3, -88.5 ) from strings limit 1</sphinxql>
 <sphinxql>SELECT CONTAINS(GEOPOLY2D(44.0,-88.0, 44.0, -88.0, 44.3,-88.6, 44.6,-88.0), 44.6, -88.5 ) from strings limit 1</sphinxql>
+
+<!-- regression hash as geodist argument -->
+<sphinxql>select GEODIST(0,0,1,1, {in=radians, out=m} ) FROM dist</sphinxql>
+<sphinxql>select GEODIST(0,0,1,1, {out=m, in=radians} ) FROM dist</sphinxql>
+<sphinxql>select GEODIST(0,0,1,1, {out=m} ) FROM dist</sphinxql>
+<sphinxql>select GEODIST(0,0,1,1, {in=radians} ) FROM dist</sphinxql>
 
 </sphqueries>
 

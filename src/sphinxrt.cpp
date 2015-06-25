@@ -4391,7 +4391,7 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 
 	int64_t iFileSize = rdChunk.GetFilesize();
 	int64_t iSaneVecSize = Min ( iFileSize, INT_MAX / 2 );
-	int64_t iSaneTightVecSize = Min ( iFileSize, INT_MAX - (int)( INT_MAX / 1.2f ) );
+	int64_t iSaneTightVecSize = Min ( iFileSize, int( INT_MAX / 1.2f ) );
 
 	bool bHasMorphology = ( m_pDict && m_pDict->HasMorphology() ); // fresh and old-format index still has no dictionary at this point
 	int iSegmentSeq = rdChunk.GetDword();

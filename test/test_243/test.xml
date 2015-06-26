@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>thread_pool timeout</name>
+
+<config>
+indexer
+{
+	mem_limit			= 28M
+}
+
+searchd
+{
+	workers				= thread_pool
+    read_timeout        = 90000
+    client_timeout      = 90000
+	<searchd_settings/>
+}
+
+source auth
+{
+	type			= mysql
+	<sql_settings/>
+}
+
+source src : auth
+{
+	sql_query = SELECT id, tag, gr, text FROM test_table WHERE id&lt;3
+	sql_query_pre = SET NAMES UTF8
+	sql_attr_uint	= tag
+	sql_attr_uint	= gr
+}
+
+source src1 : src
+{
+	sql_query = SELECT id, tag, gr, text FROM test_table WHERE id&gt;3 AND id&lt;6
+}
+
+source src2 : src
+{
+	sql_query = SELECT id, tag, gr, text FROM test_table WHERE id&gt;6 AND id&lt;10
+}
+
+index idx
+{
+	source			= src
+	path			= <data_path/>/idx
+	docinfo			= extern
+	min_word_len	= 1
+}
+
+index idx1 : idx
+{
+	source			= src1
+	path			= <data_path/>/idx1
+}
+
+index idx2 : idx
+{
+	source			= src2
+	path			= <data_path/>/idx2
+}
+
+index dist1
+{
+	type					= distributed
+	local					= idx
+	agent					= <my_address/>:idx1
+	agent					= <my_address/>:idx2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+</config>
+
+
+<queries>
+<query index="dist1">test</query>
+</queries>
+
+<sphqueries>
+<sphinxql>select * from dist1 WHERE MATCH('test')</sphinxql>
+<sphinxql>show meta</sphinxql>
+</sphqueries>
+
+<db_create>
+CREATE TABLE `test_table` (
+  `id` int(11),
+  `tag` int(11),
+  `gr` int(11),
+  `text` varchar(255) NOT NULL
+)
+</db_create>
+
+ <db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+
+<db_insert>SET NAMES utf8</db_insert>
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 2, 3, 'test'),
+( 2, 2, 2, 'test'),
+( 3, 2, 3, 'test'),
+( 4, 2, 10, 'test'),
+( 5, 2, 9, 'test'),
+( 6, 2, 8, 'test'),
+( 7, 2, 7, 'test'),
+( 8, 2, 6, 'test'),
+( 9, 2, 5, 'test'),
+( 10, 2, 4, 'test')
+</db_insert>
+
+</test>
+

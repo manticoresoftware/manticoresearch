@@ -141,7 +141,8 @@ static LogFormat_e		g_eLogFormat		= LOG_FORMAT_PLAIN;
 static bool				g_bLogCompactIn		= false;			// whether to cut list in IN() clauses.
 static int				g_iQueryLogMinMsec	= 0;				// log 'slow' threshold for query
 
-int				g_iReadTimeout		= 5;	// sec
+static const int64_t	MS2SEC = I64C ( 1000000 );
+int						g_iReadTimeout		= 5;	// sec
 static int				g_iWriteTimeout		= 5;
 static int				g_iClientTimeout	= 300;
 static int				g_iClientQlTimeout	= 900;	// sec
@@ -2310,7 +2311,7 @@ void NetOutputBuffer_c::Flush ()
 
 	CSphScopedProfile tProf ( m_pProfile, SPH_QSTATE_NET_WRITE );
 
-	const int64_t tmMaxTimer = sphMicroTimer() + g_iWriteTimeout*1000000; // in microseconds
+	const int64_t tmMaxTimer = sphMicroTimer() + MS2SEC * g_iWriteTimeout; // in microseconds
 	while ( !m_bError )
 	{
 		int iRes = sphSockSend ( m_iSock, pBuffer, iLen );
@@ -8578,7 +8579,7 @@ public:
 	inline static SphDocID_t ToDocid ( const SqlInsert_t & tVal )
 	{
 		// FIXME? report conversion errors?
-		SphDocID_t uRes;
+		SphDocID_t uRes = DOCID_MAX;
 		switch ( tVal.m_iType )
 		{
 			case TOK_QUOTED_STRING :	uRes = (SphDocID_t) strtoull ( tVal.m_sVal.cstr(), NULL, 10 ); break;
@@ -19341,7 +19342,6 @@ void NetActionAccept_t::FillNetState ( NetStateCommon_t * pState, int iClientSoc
 	}
 }
 
-static const int MS2SEC = I64C ( 1000000 );
 
 const char * g_sErrorNetAPI[] = { "failed to send server version", "exiting on handshake error", "bailing on failed request header", "failed to receive client request body" };
 STATIC_ASSERT ( sizeof(g_sErrorNetAPI)/sizeof(g_sErrorNetAPI[0])==AAPI_TOTAL, NOT_ALL_EMUN_DESCRIBERD );

@@ -1262,6 +1262,12 @@ XQNode_t * XQParser_t::AddKeyword ( XQNode_t * pLeft, XQNode_t * pRight )
 }
 
 
+static bool HasMissedField ( const XQLimitSpec_t & tSpec )
+{
+	return ( tSpec.m_dFieldMask.TestAll ( false ) && tSpec.m_iFieldMaxPos==0 && !tSpec.m_bZoneSpan && tSpec.m_dZones.GetLength()==0 );
+}
+
+
 XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pRight, int iOpArg )
 {
 	/////////
@@ -1292,9 +1298,14 @@ XQNode_t * XQParser_t::AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pR
 		pResult = pLeft;
 	} else
 	{
+		// however-2, beside all however below, [@@relaxed ((@title hello) | (@missed world)) @body other terms]
+		// we should use valid (left) field mask for complex (OR) node
+		// as right node in this case has m_bFieldSpec==true but m_dFieldMask==0
+		const XQLimitSpec_t & tSpec = HasMissedField ( pRight->m_dSpec ) ? pLeft->m_dSpec : pRight->m_dSpec;
+
 		// however, it's right (!) spec which is chosen for the resulting node,
 		// eg. '@title hello' + 'world @body program'
-		XQNode_t * pNode = new XQNode_t ( pRight->m_dSpec );
+		XQNode_t * pNode = new XQNode_t ( tSpec );
 		pNode->SetOp ( eOp, pLeft, pRight );
 		pNode->m_iOpArg = iOpArg;
 		m_dSpawned.Add ( pNode );
@@ -1504,6 +1515,21 @@ bool XQParser_t::FixupNots ( XQNode_t * pNode )
 }
 
 
+static void CollectChildren ( XQNode_t * pNode, CSphVector<XQNode_t *> & dChildren )
+{
+	if ( !pNode->m_dChildren.GetLength() )
+		return;
+
+	dChildren.Add ( pNode );
+	ARRAY_FOREACH ( i, dChildren )
+	{
+		const XQNode_t * pNode = dChildren[i];
+		ARRAY_FOREACH ( j, pNode->m_dChildren )
+			dChildren.Add ( pNode->m_dChildren[j] );
+	}
+}
+
+
 void XQParser_t::DeleteNodesWOFields ( XQNode_t * pNode )
 {
 	if ( !pNode )
@@ -1514,8 +1540,20 @@ void XQParser_t::DeleteNodesWOFields ( XQNode_t * pNode )
 		if ( pNode->m_dChildren[i]->m_dSpec.m_dFieldMask.TestAll ( false ) )
 		{
 			XQNode_t * pChild = pNode->m_dChildren[i];
-			assert ( pChild->m_dChildren.GetLength()==0 );
+			CSphVector<XQNode_t *> dChildren;
+			CollectChildren ( pChild, dChildren );
+#ifndef NDEBUG
+			bool bAllEmpty = ARRAY_ALL ( bAllEmpty, dChildren, dChildren[_all]->m_dSpec.m_dFieldMask.TestAll ( false ) );
+			assert ( pChild->m_dChildren.GetLength()==0 || ( dChildren.GetLength() && bAllEmpty ) );
+#endif
+			if ( dChildren.GetLength() )
+			{
+				ARRAY_FOREACH ( i, dChildren )
+					m_dSpawned.RemoveValue ( dChildren[i] );
+			} else
+			{
 			m_dSpawned.RemoveValue ( pChild );
+			}
 
 			// this should be a leaf node
 			SafeDelete ( pNode->m_dChildren[i] );

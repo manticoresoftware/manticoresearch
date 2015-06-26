@@ -14811,8 +14811,10 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		int64_t iMinMaxSize = tMinMax.GetExpectedSize ( iExpectedDocs );
 		if ( iMinMaxSize>INT_MAX || iExpectedDocs>INT_MAX )
 		{
-			sError.SetSprintf ( "attribute files (.spa) over 128 GB are not supported (min-max approximate="INT64_FMT", documents count="INT64_FMT")",
-				iMinMaxSize, iExpectedDocs );
+			if ( iMinMaxSize>INT_MAX )
+				sError.SetSprintf ( "attribute files over 128 GB are not supported (projected_minmax_size="INT64_FMT")", iMinMaxSize );
+			else if ( iExpectedDocs>INT_MAX )
+				sError.SetSprintf ( "indexes over 2B docs are not supported (projected_docs="INT64_FMT")", iExpectedDocs );
 			return false;
 		}
 		CSphFixedVector<DWORD> dMinMaxBuffer ( (int)iMinMaxSize );

@@ -112,6 +112,7 @@ expr:
 	| expr TOK_AND expr			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| expr TOK_OR expr			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
 	| '(' expr ')'				{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
+	| '{' consthash '}'			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }	
 	| function
 	| json_expr
 	| json_field TOK_IS TOK_NULL			{ $$ = $1; $$.m_iEnd = $3.m_iEnd; }
@@ -142,13 +143,17 @@ arglist:
 	;
 
 consthash:
-	SEL_TOKEN TOK_EQ SEL_TOKEN
-	| consthash ',' SEL_TOKEN TOK_EQ SEL_TOKEN
+	hash_key TOK_EQ SEL_TOKEN
+	| consthash ',' hash_key TOK_EQ SEL_TOKEN
+	;	
+	
+hash_key:
+	SEL_TOKEN
+	| TOK_FUNC_IN
 	;	
 	
 arg:
 	expr
-	| '{' consthash '}'
 	| TOK_CONST_STRING
 	;
 

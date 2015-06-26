@@ -105,6 +105,10 @@ index fld
 <!-- regression for embedded zeroes -->
 <sphinxql>select * from test where match ( 'wordbefore' )</sphinxql>
 <sphinxql>select * from test where match ( 'wordafter' )</sphinxql>
+<!-- regression @@relaxed vs complex query -->
+<sphinxql>select * from test where match ( '@@relaxed ((@title sample) | (@ttitle sample) (@body program -in )) ' )</sphinxql>
+<sphinxql>select * from test where match ( '@@relaxed ((@ttitle sample) | (@title sample) (@body program -in )) ' )</sphinxql>
+<sphinxql>select * from test where match ( '@@relaxed ((@ttitle sample) | (@ttitle sample) (@body program -in )) ' )</sphinxql>
 </sphqueries>
 <db_create>
 CREATE TABLE `test_table`

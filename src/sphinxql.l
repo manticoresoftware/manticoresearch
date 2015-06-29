@@ -34,10 +34,12 @@ ALPHA				[a-zA-Z_]+
 <ccomment>.			{ }
 <ccomment>"*/"		{ BEGIN(INITIAL); }
 
-"AGENT"				{ YYSTOREBOUNDS; return TOK_AGENT; }
-"ALTER"				{ YYSTOREBOUNDS; return TOK_ALTER; }
 "ADD"				{ YYSTOREBOUNDS; return TOK_ADD; }
+"AGENT"				{ YYSTOREBOUNDS; return TOK_AGENT; }
+"ALL"				{ YYSTOREBOUNDS; return TOK_ALL; }
+"ALTER"				{ YYSTOREBOUNDS; return TOK_ALTER; }
 "AND"				{ YYSTOREBOUNDS; return TOK_AND; }
+"ANY"				{ YYSTOREBOUNDS; return TOK_ANY; }
 "AS"				{ YYSTOREBOUNDS; return TOK_AS; }
 "ASC"				{ YYSTOREBOUNDS; return TOK_ASC; }
 "ATTACH"			{ YYSTOREBOUNDS; return TOK_ATTACH; }
@@ -80,6 +82,7 @@ ALPHA				[a-zA-Z_]+
 "ID"				{ YYSTOREBOUNDS; return TOK_ID; }
 "IN"				{ YYSTOREBOUNDS; return TOK_IN; }
 "INDEX"				{ YYSTOREBOUNDS; return TOK_INDEX; }
+"INDEXOF"			{ YYSTOREBOUNDS; return TOK_INDEXOF; }
 "INSERT"			{ YYSTOREBOUNDS; return TOK_INSERT; }
 "INTEGER"			{ YYSTOREBOUNDS; return TOK_INTEGER; }
 "INT"				{ YYSTOREBOUNDS; return TOK_INT; }

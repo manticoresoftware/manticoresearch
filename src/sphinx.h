@@ -2526,6 +2526,16 @@ enum ESphFilter
 };
 
 
+/// MVA folding function
+/// (currently used in filters, eg WHERE ALL(mymva) BETWEEN 1 AND 3)
+enum  ESphMvaFunc
+{
+	SPH_MVAFUNC_NONE = 0,
+	SPH_MVAFUNC_ANY,
+	SPH_MVAFUNC_ALL
+};
+
+
 /// search query filter
 class CSphFilterSettings
 {
@@ -2535,6 +2545,7 @@ public:
 	bool				m_bHasEqual;	///< has filter "equal" component (gte\lte) or pure greater\less
 
 	ESphFilter			m_eType;		///< filter type
+	ESphMvaFunc			m_eMvaFunc;		///< MVA folding function
 	union
 	{
 		SphAttr_t		m_iMinValue;	///< range min

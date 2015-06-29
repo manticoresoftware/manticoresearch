@@ -226,7 +226,7 @@ for ( $i = 1; $i <= 16000; $i++)
 
 $results = array_merge ( $results, $query ( "select * from rt_mva order by id desc limit 3", $sock ) );
 $results = array_merge ( $results, $query ( "show meta", $sock ) );
-$results = array_merge ( $results, $query ( "select * from rt_mva where mva<17000 order by id asc limit 3", $sock ) );
+$results = array_merge ( $results, $query ( "select * from rt_mva where any(mva)<17000 order by id asc limit 3", $sock ) );
 $results = array_merge ( $results, $query ( "show meta", $sock ) );
 
 // regressions:

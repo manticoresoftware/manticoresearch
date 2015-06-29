@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>SphinxQL MVA syntax</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query			= select * from test_table
+	sql_attr_multi		= uint tags from field
+}
+
+index test
+{
+	source				= test
+	path				= <data_path/>/test
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	tags VARCHAR(255) NOT NULL,
+	title VARCHAR(255) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_insert>INSERT INTO test_table VALUES
+	( 1, '1,3,5,7', 'test one' ),
+	( 2, '6,4,2', 'test two' ),
+	( 3, '15',  'test three' ),
+	( 4, '4,40', 'test four ')
+</db_insert>
+
+<sphqueries>
+<sphinxql>select * from test where any(tags)=1</sphinxql>
+<sphinxql>select * from test where all(tags)=1</sphinxql>
+<sphinxql>select * from test where any(tags)=4</sphinxql>
+<sphinxql>select * from test where all(tags)=4</sphinxql>
+<sphinxql>select * from test where any(tags)=15</sphinxql>
+<sphinxql>select * from test where all(tags)=15</sphinxql>
+<sphinxql>select * from test where any(tags)!=3</sphinxql>
+<sphinxql>select * from test where all(tags)!=3</sphinxql>
+<sphinxql>select * from test where any(tags) in (3,4)</sphinxql>
+<sphinxql>select * from test where all(tags) in (3,4)</sphinxql>
+<sphinxql>select * from test where all(tags) in (3,4,40)</sphinxql>
+<sphinxql>select * from test where any(tags) not in (3,4)</sphinxql>
+<sphinxql>select * from test where all(tags) not in (3,4)</sphinxql>
+<sphinxql>select * from test where all(tags) not in (3,4,40)</sphinxql>
+<sphinxql>select * from test where any(tags) between 2 and 10</sphinxql>
+<sphinxql>select * from test where all(tags) between 2 and 10</sphinxql>
+<sphinxql>select * from test where any(tags) not between 2 and 10</sphinxql>
+<sphinxql>select * from test where all(tags) not between 2 and 10</sphinxql>
+<sphinxql>select * from test where tags>3</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from test where any(tags)>3</sphinxql>
+<sphinxql>select * from test where all(tags)>3</sphinxql>
+<sphinxql>select * from test where tags>6</sphinxql>
+<sphinxql>select * from test where any(tags)>6</sphinxql>
+<sphinxql>select * from test where all(tags)>6</sphinxql>
+<sphinxql>select * from test where tags>=6</sphinxql>
+<sphinxql>select * from test where any(tags)>=6</sphinxql>
+<sphinxql>select * from test where all(tags)>=6</sphinxql>
+</sphqueries>
+
+</test>

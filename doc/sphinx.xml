@@ -4224,7 +4224,7 @@ will be zero allocations. So for top-notch ranking UDF performance,
 you want to use that one.
 </para>
 <para>
-As for the return types, UDFs can currently return a signle INT, BIGINT,
+As for the return types, UDFs can currently return a signle INTEGER, BIGINT,
 FLOAT, or STRING value. The C function return type should be sphinx_int64_t,
 sphinx_int64_t, double, or char* respectively. In the last case you <b>must</b>
 use <code>args-&gt;fn_malloc</code> function to allocate the returned
@@ -5365,6 +5365,10 @@ HAVING clause. This is used to filter on GROUP BY values. It was added in
 SELECT id FROM plain GROUP BY title HAVING group_id=16;
 SELECT id FROM plain GROUP BY attribute HAVING COUNT(*)>1;
 </programlisting>
+<para>
+Because of HAVING is implemented as a whole result set post-processing, result set
+for query with HAVING could be less than <option>max_matches</option> allows.
+</para>
 </para></listitem>
 
 <listitem><para>ORDER BY clause. Unlike in regular SQL, only column names
@@ -5722,7 +5726,7 @@ switches respectively.
 <programlisting>
 mysql> SHOW STATUS;
 +--------------------+-------+
-| Variable_name      | Value |
+| Counter            | Value |
 +--------------------+-------+
 | uptime             | 216   |
 | connections        | 3     |
@@ -6222,7 +6226,7 @@ Refer to <xref linkend="sphinxql-show-meta"/> for its syntax details.
 <sect1 id="sphinxql-create-function"><title>CREATE FUNCTION syntax</title>
 <programlisting>
 CREATE FUNCTION udf_name
-    RETURNS {INT | BIGINT | FLOAT | STRING}
+    RETURNS {INT | INTEGER | BIGINT | FLOAT | STRING}
     SONAME 'udf_lib_file'
 </programlisting>
 <para>
@@ -6235,7 +6239,7 @@ On success, the function is available for use in all subsequent
 queries that the server receives. Example:
 </para>
 <programlisting>
-mysql> CREATE FUNCTION avgmva RETURNS INT SONAME 'udfexample.dll';
+mysql> CREATE FUNCTION avgmva RETURNS INTEGER SONAME 'udfexample.dll';
 Query OK, 0 rows affected (0.03 sec)
 
 mysql> SELECT *, AVGMVA(tag) AS q from test1;
@@ -6415,7 +6419,7 @@ on and warning otherwise.</para>
 
 <sect1 id="sphinxql-attach"><title>ALTER syntax</title>
 <programlisting>
-ALTER TABLE index {ADD|DROP} COLUMN column_name [{INTEGER|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON|STRING}]
+ALTER TABLE index {ADD|DROP} COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON|STRING}]
 </programlisting>
 <para>
 The ALTER statement was added in version 2.2.1-beta. As of 2.2.1-beta, it supports adding one
@@ -6683,7 +6687,7 @@ The command exists only in sphinxql.
 <programlisting>
 mysql> SHOW AGENT STATUS;
 +------------------------------------+----------------------------+
-| Key                                | Value                      |
+| Variable_name                      | Value                      |
 +------------------------------------+----------------------------+
 | status_period_seconds              | 60                         |
 | status_stored_periods              | 15                         |

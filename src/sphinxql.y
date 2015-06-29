@@ -1269,6 +1269,7 @@ alter_col_type:
 	| TOK_MULTI64	{ $$.m_iValue = SPH_ATTR_INT64SET; }
 	| TOK_JSON		{ $$.m_iValue = SPH_ATTR_JSON; }
 	| TOK_STRING	{ $$.m_iValue = SPH_ATTR_STRING; }
+	| TOK_INT		{ $$.m_iValue = SPH_ATTR_INTEGER; }
 	;
 
 alter:
@@ -1377,6 +1378,7 @@ udf_type:
 	| TOK_BIGINT	{ $$ = SPH_ATTR_BIGINT; }
 	| TOK_FLOAT		{ $$ = SPH_ATTR_FLOAT; }
 	| TOK_STRING	{ $$ = SPH_ATTR_STRINGPTR; }
+	| TOK_INTEGER	{ $$ = SPH_ATTR_INTEGER; }
 	;
 
 

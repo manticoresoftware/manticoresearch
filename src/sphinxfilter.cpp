@@ -1391,6 +1391,10 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 	}
 
 	// try to lookup a regular attribute
+	ESphFilter eType = tSettings.m_eType;
+	float fMin = tSettings.m_fMinValue;
+	float fMax = tSettings.m_fMaxValue;
+
 	if ( !pFilter )
 	{
 		const int iAttr = tSchema.GetAttrIndex ( sAttrName.cstr() );
@@ -1413,7 +1417,16 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 					pAttr->m_pExpr->AddRef(); // CreateFilterJson() uses a refcounted pointer, but does not AddRef() itself, so help it
 				pFilter = CreateFilterJson ( pAttr, pAttr->m_pExpr.Ptr(), tSettings.m_eType, tSettings.m_bHasEqual, sError, eCollation );
 			} else
-				pFilter = CreateFilter ( pAttr->m_eAttrType, tSettings.m_eType, tSettings.GetNumValues(), pAttr->m_tLocator, sError, tSettings.m_bHasEqual, eCollation );
+			{
+				// fixup "fltcol=intval" conditions
+				if ( pAttr->m_eAttrType==SPH_ATTR_FLOAT && tSettings.m_eType==SPH_FILTER_VALUES && tSettings.GetNumValues()==1 )
+				{
+					eType = SPH_FILTER_FLOATRANGE;
+					fMin = fMax = (float)tSettings.GetValue(0);
+				}
+
+				pFilter = CreateFilter ( pAttr->m_eAttrType, eType, tSettings.GetNumValues(), pAttr->m_tLocator, sError, tSettings.m_bHasEqual, eCollation );
+			}
 		}
 	}
 
@@ -1427,8 +1440,8 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 		pFilter->SetStringStorage ( pStrings );
 
 		pFilter->SetRange ( tSettings.m_iMinValue, tSettings.m_iMaxValue );
-		if ( tSettings.m_eType==SPH_FILTER_FLOATRANGE )
-			pFilter->SetRangeFloat ( tSettings.m_fMinValue, tSettings.m_fMaxValue );
+		if ( eType==SPH_FILTER_FLOATRANGE )
+			pFilter->SetRangeFloat ( fMin, fMax );
 		else
 			pFilter->SetRangeFloat ( (float)tSettings.m_iMinValue, (float)tSettings.m_iMaxValue );
 

@@ -1973,17 +1973,22 @@ int main ( int argc, char ** argv )
 	// rotating searchd indices
 	////////////////////////////
 
+	int iExitCode = bIndexedOk ? 0 : 1;
+
 	if ( bIndexedOk && g_bRotate )
 	{
 		if ( !SendRotate ( hConf, true ) )
+		{
 			fprintf ( stdout, "WARNING: indices NOT rotated.\n" );
+			iExitCode = 2;
+		}
 	}
 
 #if SPH_DEBUG_LEAKS
 	sphAllocsStats ();
 #endif
 
-	return bIndexedOk ? 0 : 1;
+	return iExitCode;
 }
 
 //

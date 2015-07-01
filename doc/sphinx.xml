@@ -4475,6 +4475,13 @@ one or more indexes for your data. You might call <filename>indexer</filename> t
 one of them, ad-hoc, or you can tell it to process all indexes - you are not limited
 to calling just one, or all at once, you can always pick some combination
 of the available indexes.</para>
+<para>The exit codes are as follows:
+<itemizedlist>
+<listitem>0, everything went ok</listitem>
+<listitem>1, there was a problem while indexing (and if --rotate was specified, it was skipped)</listitem>
+<listitem>2, indexing went ok, but --rotate attempt failed</listitem>
+</itemizedlist>
+</para>
 <para>The majority of the options for <filename>indexer</filename> are given
 in the configuration file, however there are some options you might need to specify
 on the command line as well, as they can affect how the indexing operation is performed.

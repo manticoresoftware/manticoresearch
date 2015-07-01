@@ -282,7 +282,7 @@
 /* Define to 1 if you want to compile with PostgreSQL support */
 #undef USE_PGSQL
 
-/* re2 library support */
+/* RE2 library support */
 #undef USE_RE2
 
 /* RLP library support */

@@ -200,10 +200,10 @@ dnl -----------
 dnl Whether we use runtime dlopen for loading dynamic external libs like mysql, posgres, etc.
 dnl instead of hard linking on build.
 
-AC_MSG_CHECKING([Whether to use dl lib to load mysql, posgres and other libs])
+AC_MSG_CHECKING([whether to use dynamic linking for DB drivers])
 sph_usedl=no
 AC_ARG_ENABLE([dl],
-    [  --enable-dl             dynamically load the libs like mysql, posgresql and may be others instead of linking them with binary during the build.],
+    AC_HELP_STRING([--enable-dl], [dynamically load DB drivers (like MySQL, Postgres, etc) rather than statically linking with them]),
     [ac_cv_use_dl_libs=$enableval])
 
 if test x$ac_cv_use_dl_libs == xyes ; then
@@ -492,19 +492,19 @@ AC_ARG_WITH([libexpat],
 dnl ---
 
 AC_ARG_WITH([re2],
-	AC_HELP_STRING([--with-re2], [compile with re2 library support (default is disabled)]),
+	AC_HELP_STRING([--with-re2], [compile with RE2 library support (default is disabled)]),
 	[ac_cv_use_re2=$withval], [ac_cv_use_re2=no]
 )
 
-AC_MSG_CHECKING([whether to compile with re2 library support])
+AC_MSG_CHECKING([whether to compile with RE2 library support])
 
 AC_ARG_WITH([re2-includes],
-	AC_HELP_STRING([--with-re2-includes], [path to re2 header files]),
+	AC_HELP_STRING([--with-re2-includes], [path to RE2 header files]),
 	[ac_cv_re2_includes=$withval], [ac_cv_re2_includes=no]
 )
 
 AC_ARG_WITH([re2-libs],
-        AC_HELP_STRING([--with-re2-libs], [path to re2 libraries]),
+        AC_HELP_STRING([--with-re2-libs], [path to RE2 libraries]),
         [ac_cv_re2_libs=$withval], [ac_cv_re2_libs=no]
 )
 
@@ -522,7 +522,7 @@ if test x$ac_cv_use_re2 != xno; then
        AC_SUBST([LIBRE2_PATH])
 else
 	AC_MSG_RESULT([no])
-	AC_DEFINE(USE_RE2, 0, [re2 library support])
+	AC_DEFINE(USE_RE2, 0, [RE2 library support])
 fi
 AM_CONDITIONAL(USE_RE2, test x$ac_cv_use_re2 != xno)
 
@@ -669,7 +669,7 @@ dnl ---
 AC_MSG_CHECKING([whether to enable c++ memory routines override])
 sph_enable_mem_override=yes
 AC_ARG_ENABLE([mem-override],
-    [ --enable-mem-override   enable to override std c++ mem routines in production build (default is yes). Disabling may help in some rare cases as statically linking with mysql on Mac OS X Lion.],
+    AC_HELP_STRING([--enable-mem-override], [enable to override std C++ mem routines in production build (default is yes); disabling may help in some rare cases like statically linking MySQL on Mac OS X Lion]),
     [sph_enable_mem_override=$enableval])
 if test x$sph_enable_mem_override = xyes; then
     AC_MSG_RESULT([yes])

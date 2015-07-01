@@ -7280,59 +7280,10 @@ SELECT /*! SQL_CALC_FOUND_ROWS */ col1 FROM table1 WHERE ...
 <para>A complete alphabetical list of keywords that are currently reserved
 in SphinxQL syntax (and therefore can not be used as identifiers).
 <programlisting>
-AND
-AGENT
-AS
-ASC
-AVG
-BEGIN
-BETWEEN
-BY
-CALL
-COLLATION
-COMMIT
-COUNT
-DELETE
-DESC
-DESCRIBE
-DISTINCT
-FALSE
-FROM
-GLOBAL
-GROUP
-ID
-IN
-INSERT
-INTO
-LIMIT
-MATCH
-MAX
-META
-MIN
-NOT
-NULL
-OPTION
-OR
-ORDER
-REPLACE
-ROLLBACK
-SELECT
-SET
-SHOW
-START
-STATUS
-SUM
-TABLES
-TRANSACTION
-TRUE
-UPDATE
-VALUES
-VARIABLES
-WARNINGS
-WEIGHT
-WHERE
-WITHIN
-</programlisting></para>
+AND, AS, BY, DIV, FACET, FALSE, FROM, ID, IN, IS, LIMIT,
+MOD, NOT, NULL, OR, ORDER, SELECT, TRUE
+</programlisting>
+</para>
 </sect1>
 
 

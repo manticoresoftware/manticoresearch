@@ -11725,7 +11725,7 @@ public:
 	bool			SetMatch ( const SqlNode_t & tValue );
 	void			AddConst ( int iList, const SqlNode_t& tValue );
 	void			SetStatement ( const SqlNode_t & tName, SqlSet_e eSet );
-	bool			AddFloatRangeFilter ( const SqlNode_t & tAttr, float fMin, float fMax, bool bHasEqual );
+	bool			AddFloatRangeFilter ( const SqlNode_t & tAttr, float fMin, float fMax, bool bHasEqual, bool bExclude=false );
 	bool			AddIntRangeFilter ( const SqlNode_t & tAttr, int64_t iMin, int64_t iMax );
 	bool			AddIntFilterGreater ( const SqlNode_t & tAttr, int64_t iVal, bool bHasEqual );
 	bool			AddIntFilterLesser ( const SqlNode_t & tAttr, int64_t iVal, bool bHasEqual );
@@ -12353,7 +12353,7 @@ CSphFilterSettings * SqlParser_c::AddFilter ( const SqlNode_t & tCol, ESphFilter
 	return pFilter;
 }
 
-bool SqlParser_c::AddFloatRangeFilter ( const SqlNode_t & sAttr, float fMin, float fMax, bool bHasEqual )
+bool SqlParser_c::AddFloatRangeFilter ( const SqlNode_t & sAttr, float fMin, float fMax, bool bHasEqual, bool bExclude )
 {
 	CSphFilterSettings * pFilter = AddFilter ( sAttr, SPH_FILTER_FLOATRANGE );
 	if ( !pFilter )
@@ -12361,6 +12361,7 @@ bool SqlParser_c::AddFloatRangeFilter ( const SqlNode_t & sAttr, float fMin, flo
 	pFilter->m_fMinValue = fMin;
 	pFilter->m_fMaxValue = fMax;
 	pFilter->m_bHasEqual = bHasEqual;
+	pFilter->m_bExclude = bExclude;
 	return true;
 }
 

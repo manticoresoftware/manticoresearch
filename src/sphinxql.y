@@ -482,10 +482,10 @@ filter_item:
 			if ( !pParser->AddFloatRangeFilter ( $1, $3.m_fValue, $3.m_fValue, true ) )
 				YYERROR;
 		}
-	| expr_float_unhandled
+	| expr_ident TOK_NE const_float
 		{
-			yyerror ( pParser, "NEQ filter on floats is not (yet?) supported" );
-			YYERROR;
+			if ( !pParser->AddFloatRangeFilter ( $1, $3.m_fValue, $3.m_fValue, true, true ) )
+				YYERROR;
 		}
 	| expr_ident TOK_BETWEEN const_float TOK_AND const_float
 		{
@@ -542,10 +542,6 @@ filter_item:
 			if ( !pParser->AddNullFilter ( $1, false ) )
 				YYERROR;
 		}
-	;
-
-expr_float_unhandled:
-	expr_ident TOK_NE const_float
 	;
 
 expr_ident:

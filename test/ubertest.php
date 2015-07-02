@@ -9,10 +9,16 @@ $sd_skip_indexer = false;
 $g_ignore_weights = false;
 $g_pick_query = -1;
 
+require_once ( "settings.inc" );
+
 if (!defined("JSON_UNESCAPED_SLASHES") || !defined("JSON_UNESCAPED_UNICODE"))
 	die("ubertest needs JSON_UNESCAPED_xxx support; upgrade your PHP to 5.4+");
 
-require_once ( "settings.inc" );
+if (!function_exists("curl_init"))
+	die("ERROR: missing required curl_init(); add php_curl.so (.dll on Windows) to your php.ini!");
+
+if ( !$windows && !is_executable("/usr/bin/python"))
+		die("ubertest needs python support; install python");
 
 //////////////////////
 // parse command line

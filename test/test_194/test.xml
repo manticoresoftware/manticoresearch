@@ -46,7 +46,7 @@ CREATE TABLE test_table
 	id INTEGER PRIMARY KEY NOT NULL,
 	content VARCHAR(255) NOT NULL,
 	file_field VARCHAR(255) NOT NULL
-);
+) CHARACTER SET utf8;
 </db_create>
 <db_drop>DROP TABLE IF EXISTS test_table</db_drop>
 <db_insert>SET NAMES utf8</db_insert>

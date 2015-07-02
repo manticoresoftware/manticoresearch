@@ -7501,12 +7501,8 @@ bool CSphSchema::IsReserved ( const char * szToken )
 {
 	static const char * dReserved[] =
 	{
-		"ALTER", "ADD", "AND", "AS", "ASC", "BETWEEN", "BIGINT", "BY", "CALL", "CHARACTER",
-		"COLUMN", "COMMIT", "COMMITTED", "CREATE", "DATABASES", "DELETE", "DESC", "DESCRIBE",
-		"DISTINCT", "DIV", "DOUBLE", "DROP", "FALSE", "FLOAT", "FOR", "FROM", "HAVING", "ID",
-		"IN", "INDEX", "INSERT", "INTEGER", "INT", "INTO", "IS", "LIMIT", "MIN", "MOD", "NOT",
-		"NULL", "OPTION", "OPTIMIZE", "OR", "ORDER", "RANKER", "REPLACE", "SELECT", "SET",
-		"SHOW", "SONAME", "TABLE", "TO", "TRUE", "UPDATE", "VALUES", "WHERE", NULL
+		"AND", "AS", "BY", "DIV", "FACET", "FALSE", "FROM", "ID", "IN", "IS", "LIMIT",
+		"MOD", "NOT", "NULL", "OR", "ORDER", "SELECT", "TRUE", NULL
 	};
 
 	const char ** p = dReserved;
@@ -24907,15 +24903,15 @@ void CSphHTMLStripper::Strip ( BYTE * sData ) const
 						if ( isdigit(*s) )
 							uCode = uCode*16 + (*s++) - '0';
 						else if ( *s>=0x41 && *s<=0x46 )
-							uCode = uCode*16 + (*s++) - 'A';
+							uCode = uCode*16 + (*s++) - 'A' + 0xA;
 						else if ( *s>=0x61 && *s<=0x66 )
-							uCode = uCode*16 + (*s++) - 'a';
+							uCode = uCode*16 + (*s++) - 'a' + 0xA;
 						else
 							break;
 					}
 				}
 
-				uCode = uCode % 0x110000; // there is no uniode codepoints bigger than this value
+				uCode = uCode % 0x110000; // there is no unicode code-points bigger than this value
 
 				if ( uCode<=0x1f || *s!=';' ) // 0-31 are reserved codes
 					continue;

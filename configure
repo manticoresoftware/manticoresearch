@@ -1388,9 +1388,13 @@ Optional Features:
   --disable-silent-rules         verbose build output (undo: `make V=0')
   --disable-dependency-tracking  speeds up one-time build
   --enable-dependency-tracking   do not reject slow dependency extractors
-  --enable-dl             dynamically load the libs like mysql, posgresql and may be others instead of linking them with binary during the build.
+  --enable-dl             dynamically load DB drivers (like MySQL, Postgres,
+                          etc) rather than statically linking with them
   --enable-id64           use 64-bit document and word IDs (default is yes)
- --enable-mem-override   enable to override std c++ mem routines in production build (default is yes). Disabling may help in some rare cases as statically linking with mysql on Mac OS X Lion.
+  --enable-mem-override   enable to override std C++ mem routines in
+                          production build (default is yes); disabling may
+                          help in some rare cases like statically linking
+                          MySQL on Mac OS X Lion
 
 Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
@@ -1414,10 +1418,10 @@ Optional Packages:
                           disabled)
   --with-libexpat         compile with expat XML library suppport (default is
                           autodetect)
-  --with-re2              compile with re2 library support (default is
+  --with-re2              compile with RE2 library support (default is
                           disabled)
-  --with-re2-includes     path to re2 header files
-  --with-re2-libs         path to re2 libraries
+  --with-re2-includes     path to RE2 header files
+  --with-re2-libs         path to RE2 libraries
   --with-rlp              compile with RLP library support (default is
                           disabled)
   --with-iconv            compile with iconv support (default is autodetect)
@@ -6404,8 +6408,8 @@ $as_echo "" >&6; }
 
 
 
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking Whether to use dl lib to load mysql, posgres and other libs" >&5
-$as_echo_n "checking Whether to use dl lib to load mysql, posgres and other libs... " >&6; }
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to use dynamic linking for DB drivers" >&5
+$as_echo_n "checking whether to use dynamic linking for DB drivers... " >&6; }
 sph_usedl=no
 # Check whether --enable-dl was given.
 if test "${enable_dl+set}" = set; then :
@@ -8084,8 +8088,8 @@ else
 fi
 
 
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to compile with re2 library support" >&5
-$as_echo_n "checking whether to compile with re2 library support... " >&6; }
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to compile with RE2 library support" >&5
+$as_echo_n "checking whether to compile with RE2 library support... " >&6; }
 
 
 # Check whether --with-re2-includes was given.

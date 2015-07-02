@@ -10,15 +10,23 @@
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
-// it under the terms of the GNU General Public License. You should have
-// received a copy of the GPL license along with this program; if you
+// it under the terms of the GNU Library General Public License. You should
+// have received a copy of the LGPL license along with this program; if you
 // did not, you can find it at http://www.gnu.org/
 //
-
-// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-//							WARNING
-// We strongly recommend you to use SphinxQL instead of the API
-// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+// WARNING!!!
+//
+// As of 2015, we strongly recommend to use either SphinxQL or REST APIs
+// rather than the native SphinxAPI.
+//
+// While both the native SphinxAPI protocol and the existing APIs will
+// continue to exist, and perhaps should not even break (too much), exposing
+// all the new features via multiple different native API implementations
+// is too much of a support complication for us.
+//
+// That said, you're welcome to overtake the maintenance of any given
+// official API, and remove this warning ;)
+//
 
 /////////////////////////////////////////////////////////////////////////////
 // PHP version of Sphinx searchd client (PHP API)

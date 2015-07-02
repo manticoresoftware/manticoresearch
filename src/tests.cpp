@@ -716,7 +716,8 @@ void TestStripper ()
 		{ "ahoy<font class =\"smth><b>3</b></font>there", "font=zzz", "", "ahoy3there" },
 		{ "ahoy<font nowrap class=\"a>b\">4", "font=zzz", "", "ahoy4" },
 		{ "ahoy<font now rap class=\"a>b\">5", "font=zzz", "", "ahoy5" },
-		{ "ahoy<font class = \"smth><b><i>6</i><b class=\"test\">seven</b></i></font>eight", "font=zzz", "", "ahoyseveneight" }
+		{ "ahoy<font class = \"smth><b><i>6</i><b class=\"test\">seven</b></i></font>eight", "font=zzz", "", "ahoyseveneight" },
+		{ "testing &#xC0; &#x2116; &#x0116;1 numbers utf encoding", "", "", "testing \xC3\x80 \xE2\x84\x96 \xC4\x96\x31 numbers utf encoding" }
 	};
 
 	int nTests = (int)(sizeof(sTests)/sizeof(sTests[0]));

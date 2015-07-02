@@ -58,9 +58,6 @@ static int				g_iMaxFileFieldBuffer	= 1024*1024;
 
 static ESphOnFileFieldError	g_eOnFileFieldError = FFE_IGNORE_FIELD;
 
-static const int		EXT_COUNT = 9;
-static const char *	g_dExt[EXT_COUNT] = { "sph", "spa", "spi", "spd", "spp", "spm", "spk", "sps", "spe" };
-
 #if USE_WINDOWS
 static char			g_sMinidump[256];
 #endif

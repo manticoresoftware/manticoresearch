@@ -189,6 +189,7 @@ public:
 	explicit CSphScopedProfile ( CSphQueryProfile * pProfile, ESphQueryState eNewState )
 	{
 		m_pProfile = pProfile;
+		m_eOldState = SPH_QSTATE_UNKNOWN;
 		if ( m_pProfile )
 			m_eOldState = m_pProfile->Switch ( eNewState );
 	}

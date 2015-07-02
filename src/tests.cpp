@@ -3736,6 +3736,8 @@ void TestHash()
 
 //////////////////////////////////////////////////////////////////////////
 
+#ifndef NDEBUG
+
 CSphMutex g_Mutex1;
 
 void TimedLockTest ( void * )
@@ -3765,6 +3767,8 @@ void TestMutex()
 	assert ( sphThreadJoin ( &th ) );
 	printf ( "- timedlock thread done\n" );
 }
+
+#endif
 
 //////////////////////////////////////////////////////////////////////////
 

@@ -10662,21 +10662,24 @@ BYTE PrereadMapping ( const char * sIndexName, const char * sFor, bool bMlock, b
 	if ( bOnDisk || tBuf.IsEmpty() )
 		return 0xff;
 
-	volatile BYTE * pCur = (BYTE *)tBuf.GetWritePtr();
+	const BYTE * pCur = (BYTE *)tBuf.GetWritePtr();
 	const BYTE * pEnd = (BYTE *)tBuf.GetWritePtr() + tBuf.GetLengthBytes();
 	const int iHalfPage = 2048;
 
 	BYTE uHash = 0xff;
 	for ( ; pCur<pEnd; pCur+=iHalfPage )
 		uHash ^= *pCur;
-
 	uHash ^= *(pEnd-1);
+
+	// we want to prevent PrereadMapping() from being aggressively optimized away
+	// volatile return values *should* normally achieve that
+	volatile BYTE uRes = uHash;
 
 	CSphString sWarning;
 	if ( bMlock && !tBuf.MemLock ( sWarning ) )
 		sphWarning ( "index '%s': %s for %s", sIndexName, sWarning.cstr(), sFor );
 
-	return uHash;
+	return uRes;
 }
 
 
@@ -10820,9 +10823,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttr
 	m_pDocinfoIndex = m_tAttr.GetWritePtr() + m_iMinMaxIndex;
 	m_iDocinfoIndex = ( ( m_tAttr.GetNumEntries() - m_iMinMaxIndex ) / iNewStride / 2 ) - 1;
 
-	volatile BYTE uRead = 0;
-	uRead = PrereadMapping ( m_sIndexName.cstr(), "attributes", m_bMlock, m_bOndiskAllAttr, m_tAttr );
-
+	PrereadMapping ( m_sIndexName.cstr(), "attributes", m_bMlock, m_bOndiskAllAttr, m_tAttr );
 	return true;
 }
 
@@ -15393,9 +15394,7 @@ bool CSphIndex_VLN::ReplaceKillList ( const SphDocID_t * pKillist, int iCount )
 	if ( !m_tKillList.Setup ( GetIndexFileName("spk").cstr(), m_sLastError, true ) )
 		return false;
 
-	volatile BYTE uRead = 0;
-	uRead = PrereadMapping ( m_sIndexName.cstr(), "kill-list", m_bMlock, m_bOndiskAllAttr, m_tKillList );
-
+	PrereadMapping ( m_sIndexName.cstr(), "kill-list", m_bMlock, m_bOndiskAllAttr, m_tKillList );
 	return true;
 }
 
@@ -31524,7 +31523,7 @@ const BYTE * CWordlist::AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint
 	}
 
 	assert ( !m_tBuf.IsEmpty() );
-	assert ( iOff>0 && iOff<=m_tBuf.GetLengthBytes() && iOff<(int64_t)m_tBuf.GetLengthBytes() );
+	assert ( iOff>0 && iOff<=(int64_t)m_tBuf.GetLengthBytes() && iOff<(int64_t)m_tBuf.GetLengthBytes() );
 
 	return m_tBuf.GetWritePtr()+iOff;
 }

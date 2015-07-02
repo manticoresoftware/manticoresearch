@@ -1087,7 +1087,9 @@ void RemoteConnectToAgent ( AgentConn_t & tAgent )
 	struct sockaddr_storage ss;
 	memset ( &ss, 0, sizeof(ss) );
 	ss.ss_family = (short)tAgent.m_iFamily;
+#ifdef TCP_NODELAY
 	bool bUnixSocket = false;
+#endif
 
 	if ( ss.ss_family==AF_INET )
 	{
@@ -1102,7 +1104,9 @@ void RemoteConnectToAgent ( AgentConn_t & tAgent )
 		struct sockaddr_un *un = (struct sockaddr_un *)&ss;
 		snprintf ( un->sun_path, sizeof(un->sun_path), "%s", tAgent.m_sPath.cstr() );
 		len = sizeof(*un);
+#ifdef TCP_NODELAY
 		bUnixSocket = true;
+#endif
 	}
 #endif
 

@@ -2636,7 +2636,7 @@ public:
 
 	virtual const int *	GetFieldLengths () const
 	{
-		return T::m_tState.m_dFieldLengths;
+		return T::m_tState.m_dFieldLengths.Begin();
 	}
 
 private:

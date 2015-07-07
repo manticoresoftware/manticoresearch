@@ -1548,6 +1548,27 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		pIndex->Setup ( tSettings );
 	}
 
+	if ( !pIndex->GetFieldFilter() )
+	{
+		ISphFieldFilter * pFieldFilter = NULL;
+		CSphFieldFilterSettings tFilterSettings;
+		if ( sphConfFieldFilter ( hIndex, tFilterSettings, sError ) )
+			pFieldFilter = sphCreateRegexpFilter ( tFilterSettings, sError );
+
+#if USE_RLP
+		if ( pIndex->GetSettings().m_eChineseRLP!=SPH_RLP_NONE )
+		{
+			pFieldFilter = sphCreateRLPFilter ( pFieldFilter, g_sRLPRoot.cstr(), g_sRLPEnv.cstr(), pIndex->GetSettings().m_sRLPContext.cstr(),
+				pIndex->GetTokenizer()->GetSettings().m_sBlendChars.cstr(), sError );
+		}
+#endif
+
+		if ( !sError.IsEmpty () )
+			sphWarning ( "index '%s': %s", pIndex->GetName(), sError.cstr() );
+
+		pIndex->SetFieldFilter ( pFieldFilter );
+	}
+
 	// exact words fixup, needed for RT indexes
 	// cloned from indexer, remove somehow?
 	CSphDict * pDict = pIndex->GetDictionary();
@@ -2316,11 +2337,13 @@ bool sphIsChineseCode ( int iCode )
 {
 	return ( ( iCode>=0x2E80 && iCode<=0x2EF3 ) ||	// CJK radicals
 		( iCode>=0x2F00 && iCode<=0x2FD5 ) ||	// Kangxi radicals
+		( iCode>=0x3000 && iCode<=0x303F ) ||	// CJK Symbols and Punctuation
 		( iCode>=0x3105 && iCode<=0x312D ) ||	// Bopomofo
 		( iCode>=0x31C0 && iCode<=0x31E3 ) ||	// CJK strokes
 		( iCode>=0x3400 && iCode<=0x4DB5 ) ||	// CJK Ideograph Extension A
-		( iCode>=0x4E00 && iCode<=0x9FCC ) ||	// Ideograph
+		( iCode>=0x4E00 && iCode<=0x9FFF ) ||	// Ideograph
 		( iCode>=0xF900 && iCode<=0xFAD9 ) ||	// compatibility ideographs
+		( iCode>=0xFF00 && iCode<=0xFFEF ) ||	// Halfwidth and fullwidth forms
 		( iCode>=0x20000 && iCode<=0x2FA1D ) );	// CJK Ideograph Extensions B/C/D, and compatibility ideographs
 }
 

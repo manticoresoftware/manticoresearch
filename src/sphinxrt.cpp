@@ -1123,7 +1123,7 @@ struct RtIndex_t : public ISphRtIndex, public ISphNoncopyable, public ISphWordli
 {
 private:
 	static const DWORD			META_HEADER_MAGIC	= 0x54525053;	///< my magic 'SPRT' header
-	static const DWORD			META_VERSION		= 10;			///< current version
+	static const DWORD			META_VERSION		= 11;			///< current version
 
 private:
 	int							m_iStride;
@@ -1577,9 +1577,15 @@ bool RtIndex_t::AddDocument ( ISphTokenizer * pTokenizer, int iFields, const cha
 			m_tSettings.m_bIndexSP, m_tSettings.m_sZones.cstr(), sError ) )
 		return false;
 
+	// OPTIMIZE? do not clone filters on each INSERT
+	CSphScopedPtr<ISphFieldFilter> pFieldFilter ( NULL );
+	if ( m_pFieldFilter )
+		pFieldFilter = m_pFieldFilter->Clone();
+
 	tSrc.Setup ( m_tSettings );
 	tSrc.SetTokenizer ( pTokenizer );
 	tSrc.SetDict ( pAcc->m_pDict );
+	tSrc.SetFieldFilter ( pFieldFilter.Ptr() );
 	if ( !tSrc.Connect ( m_sLastError ) )
 		return false;
 
@@ -3990,6 +3996,9 @@ void RtIndex_t::SaveMeta ( int iDiskChunks, int64_t iTID )
 	wrMeta.PutByte ( BLOOM_PER_ENTRY_VALS_COUNT );
 	wrMeta.PutByte ( BLOOM_HASHES_COUNT );
 
+	// meta v.11
+	SaveFieldFilterSettings ( wrMeta, m_pFieldFilter );
+
 	wrMeta.CloseFile(); // FIXME? handle errors?
 
 	// rename
@@ -4163,9 +4172,9 @@ bool RtIndex_t::Prealloc ( bool bStripPath )
 	// and those reuse disk format version, aka INDEX_FORMAT_VERSION
 	// anyway, starting v.4, serialized settings take precedence over config
 	// so different chunks can't have different settings any more
+	CSphTokenizerSettings tTokenizerSettings;
 	if ( uVersion>=4 )
 	{
-		CSphTokenizerSettings tTokenizerSettings;
 		CSphDictSettings tDictSettings;
 		CSphEmbeddedFiles tEmbeddedFiles;
 		CSphString sWarning;
@@ -4236,6 +4245,31 @@ bool RtIndex_t::Prealloc ( bool bStripPath )
 		if ( bRebuildInfixes )
 			sphWarning ( "infix definition changed (from len=%d, hashes=%d to len=%d, hashes=%d) - rebuilding...",
 						(int)BLOOM_PER_ENTRY_VALS_COUNT, (int)BLOOM_HASHES_COUNT, iBloomKeyLen, iBloomHashesCount );
+	}
+
+	if ( uVersion>=11 )
+	{
+		ISphFieldFilter * pFieldFilter = NULL;
+		CSphFieldFilterSettings tFieldFilterSettings;
+		LoadFieldFilterSettings ( rdMeta, tFieldFilterSettings );
+		if ( tFieldFilterSettings.m_dRegexps.GetLength() )
+			pFieldFilter = sphCreateRegexpFilter ( tFieldFilterSettings, m_sLastError );
+
+#if USE_RLP
+		if ( m_tSettings.m_eChineseRLP!=SPH_RLP_NONE )
+		{
+			ISphFieldFilter * pRLPFilter = sphCreateRLPFilter ( pFieldFilter, g_sRLPRoot.cstr(), g_sRLPEnv.cstr(), m_tSettings.m_sRLPContext.cstr(), tTokenizerSettings.m_sBlendChars.cstr(), m_sLastError );
+			if ( pRLPFilter==pFieldFilter && m_tSettings.m_eChineseRLP==SPH_RLP_BATCHED )
+			{
+				m_sLastError.SetSprintf ( "index '%s': Error initializing RLP: %s", sMeta.cstr(), m_sLastError.cstr() );
+				return false;
+			}
+
+			pFieldFilter = pRLPFilter;
+		}
+#endif
+
+		SetFieldFilter ( pFieldFilter );
 	}
 
 	///////////////
@@ -4623,21 +4657,11 @@ void RtIndex_t::PostSetup()
 		m_tSettings.m_dBigramWords.Sort();
 	}
 
-#if USE_RLP
-	m_pTokenizer = ISphTokenizer::CreateRLPFilter ( m_pTokenizer, m_tSettings.m_eChineseRLP!=SPH_RLP_NONE, g_sRLPRoot.cstr(),
-		g_sRLPEnv.cstr(), m_tSettings.m_sRLPContext.cstr(), true, m_sLastError );
-#endif
-
 	// FIXME!!! handle error
 	m_pTokenizerIndexing = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
 	ISphTokenizer * pIndexing = ISphTokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError );
 	if ( pIndexing )
 		m_pTokenizerIndexing = pIndexing;
-
-#if USE_RLP
-	m_pTokenizerIndexing = ISphTokenizer::CreateRLPFilter ( m_pTokenizerIndexing, m_tSettings.m_eChineseRLP!=SPH_RLP_NONE, g_sRLPRoot.cstr(),
-		g_sRLPEnv.cstr(), m_tSettings.m_sRLPContext.cstr(), true, m_sLastError );
-#endif
 }
 
 
@@ -7039,13 +7063,24 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	// bind weights
 	tCtx.BindWeights ( pQuery, m_tSchema, pResult->m_sWarning );
 
+	CSphVector<BYTE> dFiltered;
+	const BYTE * sModifiedQuery = (BYTE *)pQuery->m_sQuery.cstr();
+
+	CSphScopedPtr<ISphFieldFilter> pFieldFilter ( NULL );
+	if ( m_pFieldFilter )
+	{
+		pFieldFilter = m_pFieldFilter->Clone();
+		if ( pFieldFilter->Apply ( sModifiedQuery, strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
+			sModifiedQuery = dFiltered.Begin();
+	}
+
 	// parse query
 	if ( pProfiler )
 		pProfiler->Switch ( SPH_QSTATE_PARSE );
 
 	XQQuery_t tParsed;
 	// FIXME!!! provide segments list instead index to tTermSetup.m_pIndex
-	bool bParsed = sphParseExtendedQuery ( tParsed, pQuery->m_sQuery.cstr(), pQuery, pTokenizer.Ptr(), &m_tSchema, pDict, m_tSettings );
+	bool bParsed = sphParseExtendedQuery ( tParsed, (const char *)sModifiedQuery, pQuery, pTokenizer.Ptr(), &m_tSchema, pDict, m_tSettings );
 
 	if ( !bParsed )
 	{
@@ -8627,11 +8662,6 @@ bool RtIndex_t::IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconf
 		tSettings.m_tIndex.m_dBigramWords.Sort();
 	}
 
-#if USE_RLP
-	tTokenizer = ISphTokenizer::CreateRLPFilter ( tTokenizer.LeakPtr(), tSettings.m_tIndex.m_eChineseRLP!=SPH_RLP_NONE, g_sRLPRoot.cstr(),
-		g_sRLPEnv.cstr(), tSettings.m_tIndex.m_sRLPContext.cstr(), true, sError );
-#endif
-
 	// FIXME!!! check missed embedded files
 	CSphScopedPtr<CSphDict> tDict ( sphCreateDictionaryCRC ( tSettings.m_tDict, NULL, tTokenizer.Ptr(), m_sIndexName.cstr(), sError ) );
 	if ( !tDict.Ptr() )
@@ -8678,11 +8708,6 @@ void RtIndex_t::Reconfigure ( CSphReconfigureSetup & tSetup )
 	ISphTokenizer * pIndexing = ISphTokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError );
 	if ( pIndexing )
 		m_pTokenizerIndexing = pIndexing;
-
-#if USE_RLP
-	m_pTokenizerIndexing = ISphTokenizer::CreateRLPFilter ( m_pTokenizerIndexing, m_tSettings.m_eChineseRLP!=SPH_RLP_NONE, g_sRLPRoot.cstr(),
-		g_sRLPEnv.cstr(), m_tSettings.m_sRLPContext.cstr(), true, m_sLastError );
-#endif
 
 	g_pRtBinlog->BinlogReconfigure ( &m_iTID, m_sIndexName.cstr(), tSetup );
 	// clean-up

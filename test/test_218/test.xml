@@ -48,7 +48,7 @@ index base
 		<variant>morphology 		= rlp_chinese_batched, stem_enru</variant>
 	</dynamic>
 	
-	blend_chars		= -
+	blend_chars		= -, U+23
 	rlp_context		= ../rlp/samples/etc/rlp-chinese-context.xml
 }
 
@@ -131,7 +131,8 @@ INSERT INTO test_table VALUES
 ( 105, '這群白髮蒼蒼，test2' ),
 ( 106, '這群白髮蒼蒼 RUINED 這群白髮蒼蒼' ),
 ( 107, '&lt;div class="msgCnt"&gt;说说&lt;a href="http://k.t.qq.com/k/%E4%BB%8A%E5%A4%A9%E7%9A%84%E5%BF%83%E6%83%85"&gt;#今天的心情#&lt;/a&gt;：&lt;/div&gt;' ),
-( 108, '這群白inbetween1這群白' )
+( 108, '這群白inbetween1這群白' ),
+( 109, '#abc #中国地理' )
 </db_insert>
 
 <sphqueries>
@@ -203,6 +204,15 @@ INSERT INTO test_table VALUES
 <sphinxql>select * from test_spec where match('^凤 轉注$')</sphinxql>
 <sphinxql>select * from test_spec where match('注 ^凤 轉凤$ 注')</sphinxql>
 <sphinxql>select * from test_spec where match('凤 !注')</sphinxql>
+
+<!-- regression for blend chars vs rlp -->
+<sphinxql>select * from test where match('#中国地理')</sphinxql>
+<sphinxql>select * from test where match('中国地理')</sphinxql>
+<sphinxql>select * from test where match('#abc')</sphinxql>
+<sphinxql>select * from test where match('abc')</sphinxql>
+<sphinxql>CALL KEYWORDS ( '#中国地理', 'test' )</sphinxql>
+<sphinxql>CALL KEYWORDS ( '#abc', 'test' )</sphinxql>
+
 
 </sphqueries>
 

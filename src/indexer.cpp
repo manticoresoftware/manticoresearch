@@ -212,7 +212,6 @@ public:
 	virtual const CSphVector <CSphSavedFile> & GetWordformsFileInfos () { return m_dWFFileInfos; }
 	virtual const CSphMultiformContainer * GetMultiWordforms () const { return NULL; }
 	virtual uint64_t		GetSettingsFNV () const { return 0; }
-	virtual void		SetApplyMorph ( bool ) {}
 
 	virtual bool IsStopWord ( const BYTE * ) const { return false; }
 
@@ -1027,22 +1026,25 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 		if ( tSettings.m_uAotFilterMask )
 			pTokenizer = sphAotCreateFilter ( pTokenizer, pDict, tSettings.m_bIndexExactWords, tSettings.m_uAotFilterMask );
 	}
-#if USE_RLP
-	if ( tSettings.m_eChineseRLP==SPH_RLP_BATCHED )
-		pTokenizer = ISphTokenizer::CreateRLPResultSplitter ( pTokenizer, tSettings.m_sRLPContext.cstr() );
-	else
-		pTokenizer = ISphTokenizer::CreateRLPFilter ( pTokenizer, tSettings.m_eChineseRLP!=SPH_RLP_NONE, g_sRLPRoot.cstr(), g_sRLPEnv.cstr(), tSettings.m_sRLPContext.cstr(), true, sError );
-
-	if ( !pTokenizer )
-		sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
-#endif
 
 	ISphFieldFilter * pFieldFilter = NULL;
 	CSphFieldFilterSettings tFilterSettings;
 	if ( sphConfFieldFilter ( hIndex, tFilterSettings, sError ) )
+		pFieldFilter = sphCreateRegexpFilter ( tFilterSettings, sError );
+	
+#if USE_RLP
+	if ( tSettings.m_eChineseRLP!=SPH_RLP_NONE )
 	{
-		pFieldFilter = sphCreateFieldFilter ( tFilterSettings, sError );
+		ISphFieldFilter * pRLPFilter = sphCreateRLPFilter ( pFieldFilter, g_sRLPRoot.cstr(), g_sRLPEnv.cstr(), tSettings.m_sRLPContext.cstr(), tTokSettings.m_sBlendChars.cstr(), sError );
+		if ( pRLPFilter==pFieldFilter && tSettings.m_eChineseRLP==SPH_RLP_BATCHED )
+		{
+			SafeDelete ( pFieldFilter );
+			sphDie ( "index '%s': Error initializing RLP: %s", sIndexName, sError.cstr() );
+		}
+
+		pFieldFilter = pRLPFilter;
 	}
+#endif
 
 	if ( !sError.IsEmpty () )
 		fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sError.cstr() );

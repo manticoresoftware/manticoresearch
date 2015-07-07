@@ -586,17 +586,6 @@ public:
 	/// sSspec is a library, name, and options specification string, eg "myplugins.dll:myfilter1:arg1=123"
 	static ISphTokenizer *			CreatePluginFilter ( ISphTokenizer * pTokenizer, const CSphString & sSpec, CSphString & sError );
 
-#if USE_RLP
-	/// create a RLP token filter
-	static ISphTokenizer *			CreateRLPFilter ( ISphTokenizer * pTokenizer, bool bChineseRLP, const char * szRLPRoot,	const char * szRLPEnv, const char * szRLPCtx, bool bStandalone, CSphString & sError );
-
-	/// create a filter to split an RLP-processed token stream into tokens
-	static ISphTokenizer *			CreateRLPResultSplitter ( ISphTokenizer * pTokenizer, const char * szRLPCtx );
-
-	/// split query string with an RLP token filter
-	static bool						ProcessQueryRLP ( const char * sRLPContext, const char * sQuery, const char ** sProcessed, CSphTightVector<char> & dBuf, CSphString & sError );
-#endif
-
 	/// save tokenizer settings to a stream
 	virtual const CSphTokenizerSettings &	GetSettings () const { return m_tSettings; }
 
@@ -630,9 +619,6 @@ public:
 
 	/// enable zone indexing
 	virtual bool					EnableZoneIndexing ( CSphString & sError );
-
-	// shows whether morphology needs to be applied to this token or not
-	virtual bool					GetMorphFlag () const { return true; }
 
 	/// enable tokenized multiform tracking
 	virtual void					EnableTokenizedMultiformTracking () {}
@@ -668,8 +654,6 @@ public:
 	virtual bool					TokenIsBlendedPart () const { return m_bBlendedPart; }
 	virtual int						SkipBlended () { return 0; }
 
-	virtual ISphTokenizer *			GetEmbeddedTokenizer () const { return NULL; }
-
 public:
 	/// spawn a clone of my own
 	virtual ISphTokenizer *			Clone ( ESphTokenizerClone eMode ) const = 0;
@@ -694,9 +678,6 @@ public:
 
 	/// get (readonly) lowercaser
 	const CSphLowercaser &			GetLowercaser() const { return m_tLC; }
-
-	/// get an RLP context path (if any)
-	virtual const char * GetRLPContext () const { return NULL; }
 
 protected:
 	virtual bool					RemapCharacters ( const char * sConfig, DWORD uFlags, const char * sSource, bool bCanRemap, CSphString & sError );
@@ -949,9 +930,6 @@ public:
 
 	/// get settings hash
 	virtual uint64_t		GetSettingsFNV () const = 0;
-
-	/// apply morphology or not
-	virtual void			SetApplyMorph ( bool bApply ) = 0;
 
 protected:
 	CSphString				m_sMorphFingerprint;
@@ -1897,14 +1875,24 @@ struct CSphFieldFilterSettings
 class ISphFieldFilter
 {
 public:
-	virtual					~ISphFieldFilter () {}
+								ISphFieldFilter();
+	virtual						~ISphFieldFilter();
 
-	virtual	int				Apply ( const BYTE * sField, int iLength, CSphVector<BYTE> & dStorage ) = 0;
-	virtual	void			GetSettings ( CSphFieldFilterSettings & tSettings ) const = 0;
+	virtual	int					Apply ( const BYTE * sField, int iLength, CSphVector<BYTE> & dStorage, bool bQuery ) = 0;
+	virtual	void				GetSettings ( CSphFieldFilterSettings & tSettings ) const = 0;
+	virtual ISphFieldFilter *	Clone() = 0;
+
+	void						SetParent ( ISphFieldFilter * pParent );
+
+protected:
+	ISphFieldFilter *		m_pParent;
 };
 
-/// create a field filter
-ISphFieldFilter * sphCreateFieldFilter ( const CSphFieldFilterSettings & tFilterSettings, CSphString & sError );
+/// create a regexp field filter
+ISphFieldFilter * sphCreateRegexpFilter ( const CSphFieldFilterSettings & tFilterSettings, CSphString & sError );
+
+/// create a RLP field filter
+ISphFieldFilter * sphCreateRLPFilter ( ISphFieldFilter * pParent, const char * szRLPRoot, const char * szRLPEnv, const char * szRLPCtx, const char * szBlendChars, CSphString & sError );
 
 
 /// generic data source
@@ -1936,7 +1924,7 @@ public:
 	bool								SetStripHTML ( const char * sExtractAttrs, const char * sRemoveElements, bool bDetectParagraphs, const char * sZones, CSphString & sError );
 
 	/// set field filter
-	void								SetFieldFilter ( ISphFieldFilter * pFilter );
+	virtual void						SetFieldFilter ( ISphFieldFilter * pFilter );
 
 	/// set tokenizer
 	void								SetTokenizer ( ISphTokenizer * pTokenizer );
@@ -3261,6 +3249,7 @@ public:
 	virtual void				SetInplaceSettings ( int iHitGap, int iDocinfoGap, float fRelocFactor, float fWriteFactor );
 	virtual void				SetPreopen ( bool bValue ) { m_bKeepFilesOpen = bValue; }
 	void						SetFieldFilter ( ISphFieldFilter * pFilter );
+	const ISphFieldFilter *		GetFieldFilter() const { return m_pFieldFilter; }
 	void						SetTokenizer ( ISphTokenizer * pTokenizer );
 	void						SetupQueryTokenizer();
 	const ISphTokenizer *		GetTokenizer () const { return m_pTokenizer; }

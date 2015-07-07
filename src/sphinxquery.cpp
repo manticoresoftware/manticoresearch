@@ -825,7 +825,6 @@ bool XQParser_t::GetNumber ( const char * p )
 			if ( sToken )
 			{
 				m_dIntTokens.Add ( sToken );
-				m_pDict->SetApplyMorph ( m_pTokenizer->GetMorphFlag() );
 				if ( m_pDict->GetWordID ( (BYTE*)sToken ) )
 					m_tPendingToken.tInt.iStrIndex = m_dIntTokens.GetLength()-1;
 				else
@@ -1111,7 +1110,6 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		if ( m_pPlugin && m_pPlugin->m_fnPreMorph )
 			m_pPlugin->m_fnPreMorph ( m_pPluginData, (char*)sTmp, &iStopWord );
 
-		m_pDict->SetApplyMorph ( m_pTokenizer->GetMorphFlag() );
 		SphWordID_t uWordId = iStopWord ? 0 : m_pDict->GetWordID ( sTmp );
 
 		if ( uWordId && m_pPlugin && m_pPlugin->m_fnPostMorph )
@@ -1704,25 +1702,8 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 	const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings )
 {
 	// FIXME? might wanna verify somehow that pTokenizer has all the specials etc from sphSetupQueryTokenizer
-	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( NULL );
+	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT ) );
 	CSphTightVector<char> dRlpBuf;
-
-#if USE_RLP
-	if ( !pTokenizer->GetRLPContext() )
-	{
-#endif
-		pMyTokenizer = pTokenizer->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT );
-#if USE_RLP
-	} else
-	{
-		const char * sProcessed = NULL;
-		if ( !ISphTokenizer::ProcessQueryRLP ( tSettings.m_sRLPContext.cstr(), sQuery, &sProcessed, dRlpBuf, tParsed.m_sParseError ) )
-			return false;
-
-		pMyTokenizer = pTokenizer->GetEmbeddedTokenizer()->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT );
-		sQuery = sProcessed;
-	}
-#endif
 
 	// most outcomes are errors
 	SafeDelete ( tParsed.m_pRoot );

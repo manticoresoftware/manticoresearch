@@ -2439,11 +2439,15 @@ public:
 			for ( int i = 0; i < T::m_tSchema.m_dFields.GetLength(); i++ )
 				if ( !m_dFieldHasChinese[i] )
 				{
-					pDoc->m_dFieldStorage[i].Resize ( m_dFieldLengths[i] );
+					int iFieldLength = m_dFieldLengths[i];
+					pDoc->m_dFieldStorage[i].Resize ( iFieldLength+1 );
 					BYTE * pStart = pDoc->m_dFieldStorage[i].Begin();
-					memcpy ( pStart, pFields[i], m_dFieldLengths[i] );
+					memcpy ( pStart, pFields[i], iFieldLength );
 					pDoc->m_dFields[i] = pStart;
-					pDoc->m_dFieldLengths[i] = m_dFieldLengths[i];
+					pDoc->m_dFieldLengths[i] = iFieldLength;
+
+					// stripper still doesn't know about field lengths, so we need to add a zero
+					pDoc->m_dFields[i][iFieldLength] = '\0';
 				}
 
 			// document doesnt have any CJK, so no copying/segmenting/etc
@@ -2585,6 +2589,7 @@ private:
 	BYTE ** CopyDoc ()
 	{
 		StoredDoc_t * pDoc = PopDoc();
+		assert ( pDoc );
 		CopyDocInfo ( T::m_tDocInfo, pDoc->m_tDocInfo );
 		T::m_tState.m_dFields = pDoc->m_dFields.Begin();
 		T::m_tState.m_dFieldLengths.SwapData ( pDoc->m_dFieldLengths );

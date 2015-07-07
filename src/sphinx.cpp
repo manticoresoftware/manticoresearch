@@ -15666,6 +15666,7 @@ void CSphIndex_VLN::Dealloc ()
 	m_iMinMaxIndex = 0;
 	m_tSettings.m_eDocinfo = SPH_DOCINFO_NONE;
 
+	SafeDelete ( m_pFieldFilter );
 	SafeDelete ( m_pQueryTokenizer );
 	SafeDelete ( m_pTokenizer );
 	SafeDelete ( m_pDict );

@@ -6893,7 +6893,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	int iMatchPoolSize = 0;
 	ARRAY_FOREACH ( i, dSorters )
 	{
-		iMatchPoolSize += dSorters[i]->GetDataLength ();
+		iMatchPoolSize += dSorters[i]->m_iMatchCapacity;
 		if ( dSorters[i]->GetSchema ().GetAttrsCount ()>iMaxSchemaSize )
 		{
 			iMaxSchemaSize = dSorters[i]->GetSchema ().GetAttrsCount ();
@@ -7006,7 +7006,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		return true;
 	}
 
-	pRanker->ExtraData ( EXTRA_SET_MAXMATCHES, (void**)&iMatchPoolSize );
+	pRanker->ExtraData ( EXTRA_SET_POOL_CAPACITY, (void**)&iMatchPoolSize );
 
 	// check for the possible integer overflow in m_dPool.Resize
 	int64_t iPoolSize = 0;

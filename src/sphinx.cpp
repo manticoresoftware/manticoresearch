@@ -19428,9 +19428,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	int iMatchPoolSize = 0;
 	for ( int i=0; i<iSorters; i++ )
-		iMatchPoolSize += ppSorters[i]->GetDataLength();
+		iMatchPoolSize += ppSorters[i]->m_iMatchCapacity;
 
-	pRanker->ExtraData ( EXTRA_SET_MAXMATCHES, (void**)&iMatchPoolSize );
+	pRanker->ExtraData ( EXTRA_SET_POOL_CAPACITY, (void**)&iMatchPoolSize );
 
 	// check for the possible integer overflow in m_dPool.Resize
 	int64_t iPoolSize = 0;

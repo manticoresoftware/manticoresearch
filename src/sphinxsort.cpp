@@ -78,8 +78,7 @@ protected:
 	const bool					m_bUsesAttrs;
 
 private:
-	int							m_iAllocatedSize;
-	int							m_iDataLength;
+	const int					m_iDataLength;
 
 public:
 	/// ctor
@@ -87,26 +86,26 @@ public:
 		: m_iUsed ( 0 )
 		, m_iSize ( iSize )
 		, m_bUsesAttrs ( bUsesAttrs )
-		, m_iAllocatedSize ( iSize )
 		, m_iDataLength ( iSize )
 	{
 		assert ( iSize>0 );
-		m_pData = new CSphMatch [ m_iAllocatedSize ];
+		m_pData = new CSphMatch [ m_iDataLength ];
 		assert ( m_pData );
 
 		m_tState.m_iNow = (DWORD) time ( NULL );
+		m_iMatchCapacity = m_iDataLength;
 	}
 
 	/// dtor
-	~CSphMatchQueueTraits ()
+	virtual ~CSphMatchQueueTraits ()
 	{
-		for ( int i=0; i<m_iAllocatedSize; ++i )
+		for ( int i=0; i<m_iDataLength; ++i )
 			m_tSchema.FreeStringPtrs ( m_pData+i );
 		SafeDeleteArray ( m_pData );
 	}
 
 public:
-	bool			UsesAttrs () const										{ return m_bUsesAttrs; }
+	bool				UsesAttrs () const										{ return m_bUsesAttrs; }
 	virtual int			GetLength () const										{ return m_iUsed; }
 	virtual int			GetDataLength () const									{ return m_iDataLength; }
 
@@ -2109,7 +2108,7 @@ protected:
 public:
 	/// ctor
 	CSphKBufferNGroupSorter ( const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings ) // FIXME! make k configurable
-		: CSphMatchQueueTraits ( ((pQuery->m_iGroupbyLimit>1)?2:1)*pQuery->m_iMaxMatches*GROUPBY_FACTOR, true )
+		: CSphMatchQueueTraits ( ( pQuery->m_iGroupbyLimit>1 ? 2 : 1 ) * pQuery->m_iMaxMatches * GROUPBY_FACTOR, true )
 		, CSphGroupSorterSettings ( tSettings )
 		, m_eGroupBy ( pQuery->m_eGroupFunc )
 		, m_pGrouper ( tSettings.m_pGrouper )
@@ -2127,15 +2126,15 @@ public:
 		assert ( DISTINCT==false || tSettings.m_tDistinctLoc.m_iBitOffset>=0 );
 		assert ( m_iGLimit > 1 );
 
+		if_const( NOTIFICATIONS )
+			m_dJustPopped.Reserve( m_iSize );
+
 		// trick! This case we allocated 2*m_iSize mem.
 		// range 0..m_iSize used for 1-st matches of each subgroup (i.e., for heads)
 		// range m_iSize+1..2*m_iSize used for the tails.
 		m_dGroupByList.Resize ( m_iSize );
 		m_dGroupsLen.Resize ( m_iSize );
 		m_iSize >>= 1;
-
-		if_const ( NOTIFICATIONS )
-			m_dJustPopped.Reserve ( m_iSize );
 
 #ifndef NDEBUG
 		m_iruns = 0;
@@ -2165,7 +2164,7 @@ public:
 	}
 
 	/// dtor
-	~CSphKBufferNGroupSorter ()
+	virtual ~CSphKBufferNGroupSorter ()
 	{
 		SafeDelete ( m_pComp );
 		SafeDelete ( m_pGrouper );
@@ -2358,10 +2357,20 @@ public:
 			// if new entry is more relevant, update from it
 			int iAdded = InsertMatch ( pMatch-m_pData, tEntry );
 			if ( !iAdded )
+			{
+				CSphTightVector<SphDocID_t> dJustPopped;
+				dJustPopped.SwapData ( m_dJustPopped );
+
 				// was no insertion because cache cleaning. Recall myself
 				PushEx ( tEntry, uGroupKey, bGrouped, bNewSet );
-			else if ( iAdded>1 )
+
+				ARRAY_FOREACH ( i, dJustPopped )
+					m_dJustPopped.Add ( dJustPopped[i] );
+			} else if ( iAdded>1 )
 			{
+				if_const( NOTIFICATIONS )
+					m_iJustPushed = tEntry.m_uDocID;
+
 				if ( bGrouped )
 					return true;
 				++m_iTotal;
@@ -2519,8 +2528,6 @@ public:
 
 		m_iHeads = m_iUsed = 0;
 		m_iTotal = 0;
-
-		memset ( m_pData+m_iSize, 0, m_iSize*sizeof(CSphMatch) );
 		m_iTails = 0;
 
 		m_hGroup2Match.Reset ();
@@ -3017,6 +3024,7 @@ public:
 			m_dJustPopped.Reserve(1);
 
 		m_dUniq.Reserve ( 16384 );
+		m_iMatchCapacity = 1;
 	}
 
 	/// dtor

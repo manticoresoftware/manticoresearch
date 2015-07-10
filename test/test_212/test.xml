@@ -4,9 +4,7 @@
 <name>index format backwards compatibility pt.2</name>
 
 <requires>
-<id32/>
 <non-rt/>
-<non-windows/>
 </requires>
 
 <config>
@@ -18,6 +16,7 @@ indexer
 searchd
 {
 	<searchd_settings/>
+	workers = threads
 	<dynamic>
 	  <variant>seamless_rotate = 0</variant>
 	  <variant>seamless_rotate = 1</variant>
@@ -28,13 +27,26 @@ source test
 {
 	type = mysql
 	<sql_settings/>
-	sql_query = select 1, 'dummy'
+	sql_query = select 1, 'dummy' dummy
 }
 
 index plain
 {
 	source	= test
 	path	= <data_path/>/plain
+}
+
+source dummy_rot
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = select 1, 'dummy' body
+}
+
+index dummy_rot
+{
+	source	= dummy_rot
+	path	= <data_path/>/dummy_rot
 }
 
 </config>
@@ -48,9 +60,8 @@ $files = array ( 'spa', 'spd', 'sph', 'spi', 'spk', 'spm', 'spp', 'sps' );
 foreach ( $files as $ext )
 	copy ( "test_212/refdata/plain.new.$ext", "data/plain.new.$ext" );
 
-$pid = file_get_contents ( 'searchd.pid' );
-posix_kill ( (int)$pid, 1 );
-sleep(1);
+RunIndexer ( $errors, '--rotate dummy_rot' ); // just to send SIGHUP to daemon	
+sleep(2);
 
 $results[] = $client->Query ( 'dummy', 'plain' );
 $results[] = $client->Query ( 'something', 'plain' );

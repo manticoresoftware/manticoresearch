@@ -3,6 +3,8 @@
 <test>
 <name>re-enable indexes using rotation</name>
 
+<requires><non-rt/></requires>
+
 <config>
 searchd
 {

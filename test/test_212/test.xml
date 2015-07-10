@@ -5,6 +5,7 @@
 
 <requires>
 <non-rt/>
+<id32/>
 </requires>
 
 <config>

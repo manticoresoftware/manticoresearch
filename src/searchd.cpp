@@ -18831,7 +18831,7 @@ bool RotateIndexGreedy ( ServedDesc_t & tIndex, const char * sIndex )
 
 	for ( int i=0; i<sphGetExtCount ( uVersion ); i++ )
 	{
-		snprintf ( sFile, sizeof( sFile ), "%s%s", sPath, sphGetExts( SPH_EXT_TYPE_NEW, uVersion )[i] );
+		snprintf ( sFile, sizeof( sFile ), "%s%s", sPath, sphGetExts( bReEnable ? SPH_EXT_TYPE_CUR : SPH_EXT_TYPE_NEW, uVersion )[i] );
 		if ( !sphIsReadable( sFile ) )
 		{
 			if ( tIndex.m_bOnlyNew )

@@ -1309,19 +1309,15 @@ const char* CheckFmtMagic ( DWORD uHeader )
 DWORD ReadVersion ( const char * sPath, CSphString & sError )
 {
 	BYTE dBuffer[8];
-	char sHeaderName [ SPH_MAX_FILENAME_LEN ];
-
-	snprintf ( sHeaderName, sizeof(sHeaderName), "%s%s", sPath, ".new.sph" );
-
 	CSphAutoreader rdHeader ( dBuffer, sizeof(dBuffer) );
-	if ( !rdHeader.Open ( sHeaderName, sError ) )
+	if ( !rdHeader.Open ( sPath, sError ) )
 		return 0;
 
 	// check magic header
 	const char* sMsg = CheckFmtMagic ( rdHeader.GetDword() );
 	if ( sMsg )
 	{
-		sError.SetSprintf ( sMsg, sHeaderName );
+		sError.SetSprintf ( sMsg, sPath );
 		return 0;
 	}
 
@@ -1329,7 +1325,7 @@ DWORD ReadVersion ( const char * sPath, CSphString & sError )
 	DWORD uVersion = rdHeader.GetDword();
 	if ( uVersion==0 || uVersion>INDEX_FORMAT_VERSION )
 	{
-		sError.SetSprintf ( "%s is v.%d, binary is v.%d", sHeaderName, uVersion, INDEX_FORMAT_VERSION );
+		sError.SetSprintf ( "%s is v.%d, binary is v.%d", sPath, uVersion, INDEX_FORMAT_VERSION );
 		return 0;
 	}
 
@@ -18514,9 +18510,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	int iMatchPoolSize = 0;
 	for ( int i=0; i<iSorters; i++ )
-		iMatchPoolSize += ppSorters[i]->GetDataLength();
+		iMatchPoolSize += ppSorters[i]->m_iMatchCapacity;
 
-	pRanker->ExtraData ( EXTRA_SET_MAXMATCHES, (void**)&iMatchPoolSize );
+	pRanker->ExtraData ( EXTRA_SET_POOL_CAPACITY, (void**)&iMatchPoolSize );
 
 	// check for the possible integer overflow in m_dPool.Resize
 	int64_t iPoolSize = 0;

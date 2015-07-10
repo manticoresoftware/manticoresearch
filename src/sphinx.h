@@ -3038,7 +3038,9 @@ class ISphMatchSorter
 public:
 	bool				m_bRandomize;
 	int64_t				m_iTotal;
+
 	SphDocID_t			m_iJustPushed;
+	int					m_iMatchCapacity;
 	CSphTightVector<SphDocID_t> m_dJustPopped;
 
 protected:
@@ -3047,7 +3049,7 @@ protected:
 
 public:
 	/// ctor
-						ISphMatchSorter () : m_bRandomize ( false ), m_iTotal ( 0 ), m_iJustPushed ( 0 ) {}
+						ISphMatchSorter () : m_bRandomize ( false ), m_iTotal ( 0 ), m_iJustPushed ( 0 ), m_iMatchCapacity ( 0 ) {}
 
 	/// virtualizing dtor
 	virtual				~ISphMatchSorter () {}

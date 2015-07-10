@@ -473,8 +473,6 @@ private:
 	mutable CSphRwlock	m_tLock;
 };
 
-bool PrereadNewIndex ( ServedIndex_c & tIdx, const CSphConfigSection & hIndex, const char * szIndexName );
-
 /// global index hash
 /// used in both non-threaded and multi-threaded modes
 ///

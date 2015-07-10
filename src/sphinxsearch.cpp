@@ -6615,7 +6615,7 @@ private:
 	int				m_iElementSize;
 	int				m_iNextFree;
 
-	CSphTightVector<BYTE>	m_dPool;
+	CSphFixedVector<BYTE>	m_dPool;
 	CSphTightVector<int>	m_dFree;
 	SphFactorHash_t			m_dHash;
 
@@ -6628,6 +6628,8 @@ private:
 FactorPool_c::FactorPool_c ()
 	: m_iElementSize	( 0 )
 	, m_iNextFree		( 0 )
+	, m_dPool ( 0 )
+	, m_dHash ( 0 )
 {
 }
 
@@ -6636,8 +6638,8 @@ void FactorPool_c::Prealloc ( int iElementSize, int nElements )
 {
 	m_iElementSize = iElementSize;
 
-	m_dPool.Resize ( nElements*GetIntElementSize() );
-	m_dHash.Resize ( nElements );
+	m_dPool.Reset ( nElements*GetIntElementSize() );
+	m_dHash.Reset ( nElements );
 	m_dFree.Reserve ( nElements );
 
 	memset ( m_dHash.Begin(), 0, sizeof(m_dHash[0])*m_dHash.GetLength() );
@@ -6881,7 +6883,7 @@ public:
 	int					m_uLastSpanStart;
 
 	FactorPool_c 		m_tFactorPool;
-	int					m_iMaxMatches;
+	int					m_iPoolMatchCapacity;
 
 	// per-query stuff
 	int					m_iMaxLCS;
@@ -7895,7 +7897,7 @@ RankerState_Expr_fn <NEED_PACKEDFACTORS, HANDLE_DUPES>::RankerState_Expr_fn ()
 	: m_pWeights ( NULL )
 	, m_sExpr ( NULL )
 	, m_pExpr ( NULL )
-	, m_iMaxMatches ( 0 )
+	, m_iPoolMatchCapacity ( 0 )
 	, m_iMaxLCS ( 0 )
 	, m_iQueryWordCount ( 0 )
 	, m_iAtcHitStart ( 0 )
@@ -8538,8 +8540,9 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::ExtraDataImpl ( Extr
 			case EXTRA_SET_STRINGPOOL:
 				m_pExpr->Command ( SPH_EXPR_SET_STRING_POOL, ppResult );
 				return true;
-			case EXTRA_SET_MAXMATCHES:
-				m_iMaxMatches = *(int*)ppResult;
+			case EXTRA_SET_POOL_CAPACITY:
+				m_iPoolMatchCapacity = *(int*)ppResult;
+				m_iPoolMatchCapacity += ExtNode_i::MAX_DOCS;
 				return true;
 			case EXTRA_SET_MATCHPUSHED:
 				m_tFactorPool.AddRef ( *(SphDocID_t*)ppResult );
@@ -8568,7 +8571,7 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::ExtraDataImpl ( Extr
 			case EXTRA_GET_POOL_SIZE:
 				if_const ( NEED_PACKEDFACTORS )
 				{
-					*(int64_t*)ppResult = (int64_t)GetMaxPackedLength()*( m_iMaxMatches+ExtNode_i::MAX_DOCS );
+					*(int64_t*)ppResult = (int64_t)GetMaxPackedLength() * m_iPoolMatchCapacity;
 					return true;
 				} else
 					return false;
@@ -8602,7 +8605,7 @@ DWORD RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Finalize ( const CS
 	{
 		// pack factors
 		if ( !m_tFactorPool.IsInitialized() )
-			m_tFactorPool.Prealloc ( GetMaxPackedLength(), m_iMaxMatches+ExtNode_i::MAX_DOCS );
+			m_tFactorPool.Prealloc ( GetMaxPackedLength(), m_iPoolMatchCapacity );
 		m_tFactorPool.AddToHash ( tMatch.m_uDocID, PackFactors() );
 	}
 

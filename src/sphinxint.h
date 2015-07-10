@@ -399,7 +399,7 @@ enum ExtraData_e
 
 	EXTRA_SET_MVAPOOL,
 	EXTRA_SET_STRINGPOOL,
-	EXTRA_SET_MAXMATCHES,
+	EXTRA_SET_POOL_CAPACITY,
 	EXTRA_SET_MATCHPUSHED,
 	EXTRA_SET_MATCHPOPPED,
 
@@ -1316,7 +1316,7 @@ struct SphFactorHashEntry_t
 	SphFactorHashEntry_t *	m_pNext;
 };
 
-typedef CSphTightVector<SphFactorHashEntry_t *> SphFactorHash_t;
+typedef CSphFixedVector<SphFactorHashEntry_t *> SphFactorHash_t;
 
 
 struct SphExtraDataRankerState_t

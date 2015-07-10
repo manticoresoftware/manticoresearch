@@ -17318,7 +17318,7 @@ void HandleMysqlSet ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, SessionVars_t & 
 
 // fwd
 void PreCreatePlainIndex ( ServedDesc_t & tServed, const char * sName );
-bool PrereadNewIndex ( ServedIndex_t & tIdx, const CSphConfigSection & hIndex, const char * szIndexName );
+bool PrereadNewIndex ( ServedDesc_t & tIdx, const CSphConfigSection & hIndex, const char * szIndexName );
 
 
 void HandleMysqlAttach ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
@@ -18777,10 +18777,9 @@ bool TryRename ( const char * sIndex, const char * sPrefix, const char * sFromPo
 }
 
 
-bool HasFiles ( const ServedIndex_t & tIndex, const char ** dExts )
+bool HasFiles ( const char * sPath, const char ** dExts )
 {
 	char sFile [ SPH_MAX_FILENAME_LEN ];
-	const char * sPath = tIndex.m_sIndexPath.cstr();
 
 	for ( int i=0; i<sphGetExtCount(); i++ )
 	{
@@ -18793,15 +18792,36 @@ bool HasFiles ( const ServedIndex_t & tIndex, const char ** dExts )
 }
 
 /// returns true if any version of the index (old or new one) has been preread
-bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
+bool RotateIndexGreedy ( ServedDesc_t & tIndex, const char * sIndex )
 {
 	sphLogDebug ( "RotateIndexGreedy for '%s' invoked", sIndex );
 	char sFile [ SPH_MAX_FILENAME_LEN ];
 	const char * sPath = tIndex.m_sIndexPath.cstr();
 	const char * sAction = "rotating";
 
+	bool bGotNewFiles = HasFiles ( tIndex.m_sIndexPath.cstr(), sphGetExts ( SPH_EXT_TYPE_NEW ) );
+	bool bReEnable = ( tIndex.m_bOnlyNew && !bGotNewFiles && HasFiles ( tIndex.m_sIndexPath.cstr(), sphGetExts ( SPH_EXT_TYPE_CUR ) ) );
+
+	if ( !bGotNewFiles && !bReEnable )
+	{
+		for ( int i=0; i<sphGetExtCount(); i++ )
+		{
+			snprintf( sFile, sizeof( sFile ), "%s%s", sPath, sphGetExts ( SPH_EXT_TYPE_NEW )[i] );
+			if ( !sphIsReadable ( sFile ) )
+			{
+				if ( tIndex.m_bOnlyNew )
+					sphWarning ( "rotating index '%s': '%s' unreadable: %s; NOT SERVING", sIndex, sFile, strerror(errno) );
+				else
+					sphWarning ( "rotating index '%s': '%s' unreadable: %s; using old index", sIndex, sFile, strerror(errno) );
+				return false;
+			}
+		}
+	}
+
 	CSphString sError;
-	DWORD uVersion = ReadVersion ( sPath, sError );
+	CSphString sHeaderPath;
+	sHeaderPath.SetSprintf ( "%s%s", sPath, sphGetExt ( bReEnable ? SPH_EXT_TYPE_CUR : SPH_EXT_TYPE_NEW, SPH_EXT_SPH ) );
+	DWORD uVersion = ReadVersion ( sHeaderPath.cstr(), sError );
 
 	if ( !sError.IsEmpty() )
 	{
@@ -18809,22 +18829,13 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 		return false;
 	}
 
-	for ( int i=0; i<sphGetExtCount ( uVersion ); i++ )
+	if ( bReEnable )
 	{
-		snprintf ( sFile, sizeof(sFile), "%s%s", sPath, sphGetExts ( SPH_EXT_TYPE_NEW, uVersion )[i]);
-		if ( !sphIsReadable ( sFile ) )
-		{
-			if ( i>0 )
-			{
-				if ( tIndex.m_bOnlyNew )
-					sphWarning ( "rotating index '%s': '%s' unreadable: %s; NOT SERVING", sIndex, sFile, strerror(errno) );
-				else
-					sphWarning ( "rotating index '%s': '%s' unreadable: %s; using old index", sIndex, sFile, strerror(errno) );
-			}
-			return false;
-		}
+		sphLogDebug ( "RotateIndexGreedy: re-enabling index" );
+	} else
+	{
+		sphLogDebug ( "RotateIndexGreedy: new index is readable" );
 	}
-	sphLogDebug ( "RotateIndexGreedy: new index is readable" );
 
 	bool bNoMVP = true;
 	if ( !tIndex.m_bOnlyNew )
@@ -18870,28 +18881,31 @@ bool RotateIndexGreedy ( ServedIndex_t & tIndex, const char * sIndex )
 	}
 
 	// rename new to current
-	for ( int i=0; i<sphGetExtCount ( uVersion ); i++ )
+	if ( !bReEnable )
 	{
-		if ( TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_TYPE_NEW, uVersion )[i], sphGetExts ( SPH_EXT_TYPE_CUR, uVersion )[i], sAction, false ) )
-			continue;
-
-		// rollback new ones we already renamed
-		for ( int j=0; j<i; j++ )
-			TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_TYPE_CUR, uVersion )[j], sphGetExts ( SPH_EXT_TYPE_NEW, uVersion )[j], sAction, true );
-
-		// rollback old ones
-		if ( !tIndex.m_bOnlyNew )
+		for ( int i=0; i<sphGetExtCount ( uVersion ); i++ )
 		{
-			for ( int j=0; j<sphGetExtCount ( uVersion ); j++ )
-				TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_TYPE_OLD, uVersion )[j], sphGetExts ( SPH_EXT_TYPE_CUR, uVersion )[j], sAction, true );
+			if ( TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_TYPE_NEW, uVersion )[i], sphGetExts ( SPH_EXT_TYPE_CUR, uVersion )[i], sAction, false ) )
+				continue;
 
-			if ( !bNoMVP )
-				TryRename ( sIndex, sPath, sphGetExt ( SPH_EXT_TYPE_OLD, SPH_EXT_MVP ), sphGetExt ( SPH_EXT_TYPE_CUR, SPH_EXT_MVP ), sAction, true );
+			// rollback new ones we already renamed
+			for ( int j=0; j<i; j++ )
+				TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_TYPE_CUR, uVersion )[j], sphGetExts ( SPH_EXT_TYPE_NEW, uVersion )[j], sAction, true );
+
+			// rollback old ones
+			if ( !tIndex.m_bOnlyNew )
+			{
+				for ( int j=0; j<sphGetExtCount ( uVersion ); j++ )
+					TryRename ( sIndex, sPath, sphGetExts ( SPH_EXT_TYPE_OLD, uVersion )[j], sphGetExts ( SPH_EXT_TYPE_CUR, uVersion )[j], sAction, true );
+
+				if ( !bNoMVP )
+					TryRename ( sIndex, sPath, sphGetExt ( SPH_EXT_TYPE_OLD, SPH_EXT_MVP ), sphGetExt ( SPH_EXT_TYPE_CUR, SPH_EXT_MVP ), sAction, true );
+			}
+
+			return false;
 		}
-
-		return false;
+		sphLogDebug ( "RotateIndexGreedy: New renamed to current" );
 	}
-	sphLogDebug ( "RotateIndexGreedy: New renamed to current" );
 
 	bool bPreread = false;
 
@@ -19214,14 +19228,23 @@ static void RotateIndexMT ( const CSphString & sIndex )
 	tNewIndex.m_bOnDiskPools = pRotating->m_bOnDiskPools;
 	SetEnableOndiskAttributes ( tNewIndex, tNewIndex.m_pIndex );
 
-	// rebase new index
-	char sNewPath [ SPH_MAX_FILENAME_LEN ];
-	snprintf ( sNewPath, sizeof(sNewPath), "%s.new", pRotating->m_sIndexPath.cstr() );
-	tNewIndex.m_pIndex->SetBase ( sNewPath );
-
+	CSphString sIndexPath = pRotating->m_sIndexPath.cstr();
 	// don't need to hold the existing index any more now
 	pRotating->Unlock();
 	pRotating = NULL;
+
+	bool bReEnable = false;
+	if ( tNewIndex.m_bOnlyNew && !HasFiles ( sIndexPath.cstr(), sphGetExts ( SPH_EXT_TYPE_NEW ) ) && HasFiles ( sIndexPath.cstr(), sphGetExts ( SPH_EXT_TYPE_CUR ) ) )
+	{
+		tNewIndex.m_pIndex->SetBase ( sIndexPath.cstr() );
+		bReEnable = true;
+	} else
+	{
+		// rebase new index
+		char sNewPath[SPH_MAX_FILENAME_LEN];
+		snprintf ( sNewPath, sizeof( sNewPath ), "%s.new", sIndexPath.cstr() );
+		tNewIndex.m_pIndex->SetBase ( sNewPath );
+	}
 
 	// prealloc enough RAM and lock new index
 	sphLogDebug ( "prealloc enough RAM and lock new index" );
@@ -19295,7 +19318,7 @@ static void RotateIndexMT ( const CSphString & sIndex )
 	{
 		// FIXME! at this point there's no cur lock file; ie. potential race
 		sphLogDebug ( "no cur lock file; ie. potential race" );
-		if ( !pNew->Rename ( pServed->m_sIndexPath.cstr() ) )
+		if ( !bReEnable && !pNew->Rename ( pServed->m_sIndexPath.cstr() ) )
 		{
 			sphWarning ( "rotating index '%s': new to cur rename failed: %s", sIndex.cstr(), pNew->GetLastError().cstr() );
 			if ( !pServed->m_bOnlyNew && !pOld->Rename ( pServed->m_sIndexPath.cstr() ) )
@@ -19322,7 +19345,9 @@ static void RotateIndexMT ( const CSphString & sIndex )
 			pServed->m_bEnabled = true;
 
 			// rename current MVP to old one to unlink it
-			TryRename ( sIndex.cstr(), pServed->m_sIndexPath.cstr(), sphGetExt ( SPH_EXT_TYPE_CUR, SPH_EXT_MVP ), sphGetExt ( SPH_EXT_TYPE_OLD, SPH_EXT_MVP ), sAction, false, false );
+			if ( !bReEnable )
+				TryRename ( sIndex.cstr(), pServed->m_sIndexPath.cstr(), sphGetExt ( SPH_EXT_TYPE_CUR, SPH_EXT_MVP ), sphGetExt ( SPH_EXT_TYPE_OLD, SPH_EXT_MVP ), sAction, false, false );
+
 			// unlink .old
 			sphLogDebug ( "unlink .old" );
 			if ( !pServed->m_bOnlyNew )
@@ -19422,9 +19447,15 @@ void SeamlessTryToForkPrereader ()
 	g_pPrereading->SetGlobalIDFPath ( tServed.m_sGlobalIDFPath );
 	SetEnableOndiskAttributes ( tServed, tServed.m_pIndex );
 
+	bool bGotNewFiles = HasFiles ( tServed.m_sIndexPath.cstr(), sphGetExts ( SPH_EXT_TYPE_NEW ) );
+	bool bReEnable = ( tServed.m_bOnlyNew && !bGotNewFiles && HasFiles ( tServed.m_sIndexPath.cstr(), sphGetExts ( SPH_EXT_TYPE_CUR ) ) );
+
 	// rebase buffer index
 	char sNewPath [ SPH_MAX_FILENAME_LEN ];
-	snprintf ( sNewPath, sizeof(sNewPath), "%s.new", tServed.m_sIndexPath.cstr() );
+	if ( bReEnable )
+		snprintf ( sNewPath, sizeof(sNewPath), "%s", tServed.m_sIndexPath.cstr() );
+	else
+		snprintf ( sNewPath, sizeof(sNewPath), "%s.new", tServed.m_sIndexPath.cstr() );
 	g_pPrereading->SetBase ( sNewPath );
 
 	// prealloc enough RAM and lock new index
@@ -19899,6 +19930,9 @@ void HandlePipePreread ( PipeReader_t & tPipe, bool bFailure )
 		char sCurTest [ SPH_MAX_FILENAME_LEN ];
 		snprintf ( sCurTest, sizeof(sCurTest), "%s.sph", tServed.m_sIndexPath.cstr() );
 
+		bool bGotNewFiles = HasFiles ( tServed.m_sIndexPath.cstr(), sphGetExts ( SPH_EXT_TYPE_NEW ) );
+		bool bReEnable = ( tServed.m_bOnlyNew && !bGotNewFiles && HasFiles ( tServed.m_sIndexPath.cstr(), sphGetExts ( SPH_EXT_TYPE_CUR ) ) );
+
 		if ( !tServed.m_bOnlyNew && sphIsReadable ( sCurTest ) && !pOld->Rename ( sOld ) )
 		{
 			// FIXME! rollback inside Rename() call potentially fail
@@ -19907,7 +19941,7 @@ void HandlePipePreread ( PipeReader_t & tPipe, bool bFailure )
 		} else
 		{
 			// FIXME! at this point there's no cur lock file; ie. potential race
-			if ( !pNew->Rename ( tServed.m_sIndexPath.cstr() ) )
+			if ( !bReEnable && !pNew->Rename ( tServed.m_sIndexPath.cstr() ) )
 			{
 				sphWarning ( "rotating index '%s': new to cur rename failed: %s", sPrereading, pNew->GetLastError().cstr() );
 				if ( !tServed.m_bOnlyNew && !pOld->Rename ( tServed.m_sIndexPath.cstr() ) )
@@ -19932,7 +19966,9 @@ void HandlePipePreread ( PipeReader_t & tPipe, bool bFailure )
 				const char * sAction = "rotating";
 
 				// rename current MVP to old one to unlink it
-				TryRename ( sPrereading, tServed.m_sIndexPath.cstr(), sphGetExt ( SPH_EXT_TYPE_CUR, SPH_EXT_MVP ), sphGetExt ( SPH_EXT_TYPE_OLD, SPH_EXT_MVP ), sAction, false, false );
+				if ( !bReEnable )
+					TryRename ( sPrereading, tServed.m_sIndexPath.cstr(), sphGetExt ( SPH_EXT_TYPE_CUR, SPH_EXT_MVP ), sphGetExt ( SPH_EXT_TYPE_OLD, SPH_EXT_MVP ), sAction, false, false );
+
 				// unlink .old
 				if ( !tServed.m_bOnlyNew )
 				{
@@ -20030,7 +20066,7 @@ void ConfigureLocalIndex ( ServedDesc_t & tIdx, const CSphConfigSection & hIndex
 
 /// this gets called for every new physical index
 /// that is, local and RT indexes, but not distributed once
-bool PrereadNewIndex ( ServedIndex_t & tIdx, const CSphConfigSection & hIndex, const char * szIndexName )
+bool PrereadNewIndex ( ServedDesc_t & tIdx, const CSphConfigSection & hIndex, const char * szIndexName )
 {
 	CSphString sWarning;
 
@@ -21190,7 +21226,15 @@ void CheckRotate ()
 		// FIXME? move this code to index, and also check for exists-but-not-readable
 		CSphString sTmp;
 		sTmp.SetSprintf ( "%s.sph", sNewPath.cstr() );
-		if ( !sphIsReadable ( sTmp.cstr() ) )
+		bool bGotNew = sphIsReadable ( sTmp.cstr() );
+		bool bReEnable = false;
+		if ( tIndex.m_bOnlyNew && !bGotNew )
+		{
+			sTmp.SetSprintf ( "%s.sph", tIndex.m_sIndexPath.cstr() );
+			bReEnable = sphIsReadable ( sTmp.cstr() );
+		}
+
+		if ( !bGotNew && !bReEnable )
 		{
 			sphLogDebug ( "%s.sph is not readable. Skipping", sNewPath.cstr() );
 			continue;
@@ -22641,9 +22685,9 @@ void ConfigureAndPreload ( const CSphConfig & hConf, const CSphVector<const char
 			fflush ( stdout );
 			tIndex.m_pIndex->SetProgressCallback ( ShowProgress );
 
-			if ( HasFiles ( tIndex, sphGetExts ( SPH_EXT_TYPE_NEW ) ) )
+			if ( HasFiles ( tIndex.m_sIndexPath.cstr(), sphGetExts ( SPH_EXT_TYPE_NEW ) ) )
 			{
-				tIndex.m_bOnlyNew = !HasFiles ( tIndex, sphGetExts ( SPH_EXT_TYPE_CUR ) );
+				tIndex.m_bOnlyNew = !HasFiles ( tIndex.m_sIndexPath.cstr(), sphGetExts ( SPH_EXT_TYPE_CUR ) );
 				if ( RotateIndexGreedy ( tIndex, sIndexName ) )
 				{
 					CSphString sError;

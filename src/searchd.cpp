@@ -15571,6 +15571,22 @@ bool HasFiles ( const char * sPath, const char ** dExts )
 	return true;
 }
 
+void CheckIndexReenable ( const char * sIndexBase, bool bOnlyNew, bool & bGotNew, bool & bReEnable )
+{
+	bReEnable = false;
+	char sHeaderName [ SPH_MAX_FILENAME_LEN ];
+
+	snprintf ( sHeaderName, sizeof(sHeaderName), "%s%s", sIndexBase, sphGetExt( SPH_EXT_TYPE_NEW, SPH_EXT_SPH ) );
+	bGotNew = sphIsReadable( sHeaderName );
+
+	if ( bGotNew || !bOnlyNew )
+		return;
+
+	snprintf ( sHeaderName, sizeof(sHeaderName), "%s%s", sIndexBase, sphGetExt( SPH_EXT_TYPE_CUR, SPH_EXT_SPH ) );
+	bReEnable = sphIsReadable ( sHeaderName );
+}
+
+
 /// returns true if any version of the index (old or new one) has been preread
 bool RotateIndexGreedy ( ServedDesc_t & tIndex, const char * sIndex, CSphString & sError )
 {
@@ -15579,33 +15595,30 @@ bool RotateIndexGreedy ( ServedDesc_t & tIndex, const char * sIndex, CSphString 
 	const char * sPath = tIndex.m_sIndexPath.cstr();
 	const char * sAction = "rotating";
 
-	bool bGotNewFiles = HasFiles ( tIndex.m_sIndexPath.cstr(), sphGetExts ( SPH_EXT_TYPE_NEW ) );
-	bool bReEnable = ( tIndex.m_bOnlyNew && !bGotNewFiles && HasFiles ( tIndex.m_sIndexPath.cstr(), sphGetExts ( SPH_EXT_TYPE_CUR ) ) );
+	bool bGotNewFiles = false;
+	bool bReEnable = false;
+	CheckIndexReenable ( sPath, tIndex.m_bOnlyNew, bGotNewFiles, bReEnable );
 
-	if ( !bGotNewFiles && !bReEnable )
-	{
-		for ( int i=0; i<sphGetExtCount(); i++ )
-		{
-			snprintf( sFile, sizeof( sFile ), "%s%s", sPath, sphGetExts ( SPH_EXT_TYPE_NEW )[i] );
-			if ( !sphIsReadable ( sFile ) )
-			{
-				if ( tIndex.m_bOnlyNew )
-					sphWarning ( "rotating index '%s': '%s' unreadable: %s; NOT SERVING", sIndex, sFile, strerror(errno) );
-				else
-					sphWarning ( "rotating index '%s': '%s' unreadable: %s; using old index", sIndex, sFile, strerror(errno) );
-				return false;
-			}
-		}
-	}
-
-	CSphString sHeaderPath;
-	sHeaderPath.SetSprintf ( "%s%s", sPath, sphGetExt ( bReEnable ? SPH_EXT_TYPE_CUR : SPH_EXT_TYPE_NEW, SPH_EXT_SPH ) );
-	DWORD uVersion = ReadVersion ( sHeaderPath.cstr(), sError );
+	snprintf (  sFile, sizeof( sFile ), "%s%s", sPath, sphGetExt ( bReEnable ? SPH_EXT_TYPE_CUR : SPH_EXT_TYPE_NEW, SPH_EXT_SPH ) );
+	DWORD uVersion = ReadVersion ( sFile, sError );
 
 	if ( !sError.IsEmpty() )
 	{
 		// no files - no rotation
 		return false;
+	}
+
+	for ( int i=0; i<sphGetExtCount ( uVersion ); i++ )
+	{
+		snprintf ( sFile, sizeof( sFile ), "%s%s", sPath, sphGetExts( bReEnable ? SPH_EXT_TYPE_CUR : SPH_EXT_TYPE_NEW, uVersion )[i] );
+		if ( !sphIsReadable( sFile ) )
+		{
+			if ( tIndex.m_bOnlyNew )
+				sphWarning( "rotating index '%s': '%s' unreadable: %s; NOT SERVING", sIndex, sFile, strerror( errno ) );
+			else
+				sphWarning( "rotating index '%s': '%s' unreadable: %s; using old index", sIndex, sFile, strerror( errno ) );
+			return false;
+		}
 	}
 
 	if ( bReEnable )
@@ -15925,8 +15938,11 @@ static bool RotateIndexMT ( const CSphString & sIndex, CSphString & sError )
 	pRotating->Unlock();
 	pRotating = NULL;
 
+	bool bGotNew = false;
 	bool bReEnable = false;
-	if ( tNewIndex.m_bOnlyNew && !HasFiles ( sIndexPath.cstr(), sphGetExts ( SPH_EXT_TYPE_NEW ) ) && HasFiles ( sIndexPath.cstr(), sphGetExts ( SPH_EXT_TYPE_CUR ) ) )
+	CheckIndexReenable ( sIndexPath.cstr(), tNewIndex.m_bOnlyNew, bGotNew, bReEnable );
+
+	if ( bReEnable )
 	{
 		tNewIndex.m_pIndex->SetBase ( sIndexPath.cstr() );
 		bReEnable = true;

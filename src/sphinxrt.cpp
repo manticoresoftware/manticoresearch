@@ -20,6 +20,7 @@
 #include "sphinxutils.h"
 #include "sphinxjson.h"
 #include "sphinxplugin.h"
+#include "sphinxrlp.h"
 #include "sphinxqcache.h"
 
 #include <sys/stat.h>
@@ -4255,19 +4256,11 @@ bool RtIndex_t::Prealloc ( bool bStripPath )
 		if ( tFieldFilterSettings.m_dRegexps.GetLength() )
 			pFieldFilter = sphCreateRegexpFilter ( tFieldFilterSettings, m_sLastError );
 
-#if USE_RLP
-		if ( m_tSettings.m_eChineseRLP!=SPH_RLP_NONE )
+		if ( !sphSpawnRLPFilter ( pFieldFilter, m_tSettings, tTokenizerSettings, sMeta.cstr(), m_sLastError ) )
 		{
-			ISphFieldFilter * pRLPFilter = sphCreateRLPFilter ( pFieldFilter, g_sRLPRoot.cstr(), g_sRLPEnv.cstr(), m_tSettings.m_sRLPContext.cstr(), tTokenizerSettings.m_sBlendChars.cstr(), m_sLastError );
-			if ( pRLPFilter==pFieldFilter && m_tSettings.m_eChineseRLP==SPH_RLP_BATCHED )
-			{
-				m_sLastError.SetSprintf ( "index '%s': Error initializing RLP: %s", sMeta.cstr(), m_sLastError.cstr() );
-				return false;
-			}
-
-			pFieldFilter = pRLPFilter;
+			SafeDelete ( pFieldFilter );
+			return false;
 		}
-#endif
 
 		SetFieldFilter ( pFieldFilter );
 	}

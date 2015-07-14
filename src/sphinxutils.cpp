@@ -20,6 +20,7 @@
 #include "sphinxutils.h"
 #include "sphinxint.h"
 #include "sphinxplugin.h"
+#include "sphinxrlp.h"
 
 #include <ctype.h>
 #include <fcntl.h>
@@ -1470,13 +1471,8 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 	tSettings.m_eChineseRLP = bPlainRLP ? SPH_RLP_PLAIN : ( bBatchedRLP ? SPH_RLP_BATCHED : SPH_RLP_NONE );
 	tSettings.m_sRLPContext = hIndex.GetStr ( "rlp_context" );
 
-#if !USE_RLP
-	if ( tSettings.m_eChineseRLP!=SPH_RLP_NONE || !tSettings.m_sRLPContext.IsEmpty() )
-	{
-		tSettings.m_eChineseRLP = SPH_RLP_NONE;
-		fprintf ( stdout, "WARNING: RLP options specified, but no RLP support compiled; ignoring\n" );
-	}
-#endif
+	if ( !sphRLPCheckConfig ( tSettings, sError ) )
+		fprintf ( stdout, "WARNING: %s\n", sError.cstr() );
 
 	// all good
 	return true;
@@ -1555,14 +1551,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		if ( sphConfFieldFilter ( hIndex, tFilterSettings, sError ) )
 			pFieldFilter = sphCreateRegexpFilter ( tFilterSettings, sError );
 
-#if USE_RLP
-		if ( pIndex->GetSettings().m_eChineseRLP!=SPH_RLP_NONE )
-		{
-			pFieldFilter = sphCreateRLPFilter ( pFieldFilter, g_sRLPRoot.cstr(), g_sRLPEnv.cstr(), pIndex->GetSettings().m_sRLPContext.cstr(),
-				pIndex->GetTokenizer()->GetSettings().m_sBlendChars.cstr(), sError );
-		}
-#endif
-
+		sphSpawnRLPFilter ( pFieldFilter, pIndex->GetSettings(), pIndex->GetTokenizer()->GetSettings(), pIndex->GetName(), sError );
 		if ( !sError.IsEmpty () )
 			sphWarning ( "index '%s': %s", pIndex->GetName(), sError.cstr() );
 
@@ -2296,12 +2285,8 @@ void sphConfigureCommon ( const CSphConfig & hConf )
 
 	CSphConfigSection & hCommon = hConf["common"]["common"];
 	g_sLemmatizerBase = hCommon.GetStr ( "lemmatizer_base" );
-#if USE_RLP
-	g_sRLPRoot = hCommon.GetStr ( "rlp_root" );
-	g_sRLPEnv = hCommon.GetStr ( "rlp_environment" );
-	g_iRLPMaxBatchSize = hCommon.GetSize ( "rlp_max_batch_size", 51200 );
-	g_iRLPMaxBatchDocs = hCommon.GetInt ( "rlp_max_batch_docs", 50 );
-#endif
+	sphConfigureRLP ( hCommon );
+
 	bool bJsonStrict = false;
 	bool bJsonAutoconvNumbers = false;
 	bool bJsonKeynamesToLowercase = false;

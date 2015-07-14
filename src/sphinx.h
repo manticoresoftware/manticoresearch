@@ -3503,13 +3503,6 @@ void				sphCollationInit ();
 
 extern CSphString g_sLemmatizerBase;
 
-#if USE_RLP
-extern CSphString g_sRLPRoot;
-extern CSphString g_sRLPEnv;
-extern int g_iRLPMaxBatchSize;
-extern int g_iRLPMaxBatchDocs;
-#endif
-
 /////////////////////////////////////////////////////////////////////////////
 
 // workaround to suppress C4511/C4512 warnings (copy ctor and assignment operator) in VS 2003

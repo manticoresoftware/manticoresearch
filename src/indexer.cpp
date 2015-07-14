@@ -18,6 +18,7 @@
 #include "sphinxutils.h"
 #include "sphinxstem.h"
 #include "sphinxplugin.h"
+#include "sphinxrlp.h"
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -659,7 +660,7 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 
 
 #if USE_PGSQL
-CSphSource * SpawnSourcePgSQL ( const CSphConfigSection & hSource, const char * sSourceName, bool RLPARG(bProxy) )
+CSphSource * SpawnSourcePgSQL ( const CSphConfigSection & hSource, const char * sSourceName, bool bProxy )
 {
 	assert ( hSource["type"]=="pgsql" );
 
@@ -669,13 +670,7 @@ CSphSource * SpawnSourcePgSQL ( const CSphConfigSection & hSource, const char * 
 
 	LOC_GETS ( tParams.m_sClientEncoding,	"sql_client_encoding" );
 
-	CSphSource_PgSQL * pSrcPgSQL;
-#if USE_RLP
-	if ( bProxy )
-		pSrcPgSQL = new CSphSource_Proxy<CSphSource_PgSQL> ( sSourceName );
-	else
-#endif
-	pSrcPgSQL = new CSphSource_PgSQL ( sSourceName );
+	CSphSource_PgSQL * pSrcPgSQL = CreateSourceWithProxy<CSphSource_PgSQL> ( sSourceName, bProxy );
 	if ( !pSrcPgSQL->Setup ( tParams ) )
 		SafeDelete ( pSrcPgSQL );
 
@@ -685,7 +680,7 @@ CSphSource * SpawnSourcePgSQL ( const CSphConfigSection & hSource, const char * 
 
 
 #if USE_MYSQL
-CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * sSourceName, bool RLPARG(bProxy) )
+CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * sSourceName, bool bProxy )
 {
 	assert ( hSource["type"]=="mysql" );
 
@@ -699,14 +694,7 @@ CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * 
 	LOC_GETS ( tParams.m_sSslCert,			"mysql_ssl_cert" );
 	LOC_GETS ( tParams.m_sSslCA,			"mysql_ssl_ca" );
 
-	CSphSource_MySQL * pSrcMySQL;
-#if USE_RLP
-	if ( bProxy )
-		pSrcMySQL = new CSphSource_Proxy<CSphSource_MySQL> ( sSourceName );
-	else
-#endif
-		pSrcMySQL = new CSphSource_MySQL ( sSourceName );
-
+	CSphSource_MySQL * pSrcMySQL = CreateSourceWithProxy<CSphSource_MySQL> ( sSourceName, bProxy );
 	if ( !pSrcMySQL->Setup ( tParams ) )
 		SafeDelete ( pSrcMySQL );
 
@@ -716,7 +704,7 @@ CSphSource * SpawnSourceMySQL ( const CSphConfigSection & hSource, const char * 
 
 
 #if USE_ODBC
-CSphSource * SpawnSourceODBC ( const CSphConfigSection & hSource, const char * sSourceName, bool RLPARG(bProxy) )
+CSphSource * SpawnSourceODBC ( const CSphConfigSection & hSource, const char * sSourceName, bool bProxy )
 {
 	assert ( hSource["type"]=="odbc" );
 
@@ -727,21 +715,14 @@ CSphSource * SpawnSourceODBC ( const CSphConfigSection & hSource, const char * s
 	LOC_GETS ( tParams.m_sOdbcDSN, "odbc_dsn" );
 	LOC_GETS ( tParams.m_sColBuffers, "sql_column_buffers" );
 
-	CSphSource_ODBC * pSrc;
-#if USE_RLP
-	if ( bProxy )
-		pSrc = new CSphSource_Proxy<CSphSource_ODBC> ( sSourceName );
-	else
-#endif
-	pSrc = new CSphSource_ODBC ( sSourceName );
-
+	CSphSource_ODBC * pSrc = CreateSourceWithProxy<CSphSource_ODBC> ( sSourceName, bProxy );
 	if ( !pSrc->Setup ( tParams ) )
 		SafeDelete ( pSrc );
 
 	return pSrc;
 }
 
-CSphSource * SpawnSourceMSSQL ( const CSphConfigSection & hSource, const char * sSourceName, bool RLPARG(bProxy) )
+CSphSource * SpawnSourceMSSQL ( const CSphConfigSection & hSource, const char * sSourceName, bool bProxy )
 {
 	assert ( hSource["type"]=="mssql" );
 
@@ -752,15 +733,8 @@ CSphSource * SpawnSourceMSSQL ( const CSphConfigSection & hSource, const char * 
 	LOC_GETB ( tParams.m_bWinAuth, "mssql_winauth" );
 	LOC_GETS ( tParams.m_sColBuffers, "sql_column_buffers" );
 	LOC_GETS ( tParams.m_sOdbcDSN, "odbc_dsn" ); // a shortcut, may be used instead of other specific combination
-
-	CSphSource_MSSQL * pSrc;
-#if USE_RLP
-	if ( bProxy )
-		pSrc = new CSphSource_Proxy<CSphSource_MSSQL> ( sSourceName );
-	else
-#endif
-	pSrc = new CSphSource_MSSQL ( sSourceName );
-
+	
+	CSphSource_MSSQL * pSrc = CreateSourceWithProxy<CSphSource_MSSQL> ( sSourceName, bProxy );
 	if ( !pSrc->Setup ( tParams ) )
 		SafeDelete ( pSrc );
 
@@ -769,7 +743,7 @@ CSphSource * SpawnSourceMSSQL ( const CSphConfigSection & hSource, const char * 
 #endif // USE_ODBC
 
 
-CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char * sSourceName, bool RLPARG(bProxy) )
+CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char * sSourceName, bool bProxy )
 {
 	assert ( hSource["type"]=="xmlpipe2" );
 
@@ -787,15 +761,8 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 		return NULL;
 	}
 
-	CSphSource * pResult = NULL;
 	CSphString sError;
-
-#if USE_RLP
-	pResult = sphCreateSourceXmlpipe2 ( &hSource, pPipe, sSourceName, g_iMaxXmlpipe2Field, bProxy, sError );
-#else
-	pResult = sphCreateSourceXmlpipe2 ( &hSource, pPipe, sSourceName, g_iMaxXmlpipe2Field, false, sError );
-#endif // USE_RLP
-
+	CSphSource * pResult = sphCreateSourceXmlpipe2 ( &hSource, pPipe, sSourceName, g_iMaxXmlpipe2Field, bProxy, sError );
 	if ( !pResult )
 		fprintf ( stdout, "ERROR: xmlpipe: %s", sError.cstr() );
 
@@ -808,7 +775,7 @@ CSphSource * SpawnSourceXMLPipe ( const CSphConfigSection & hSource, const char 
 }
 
 
-CSphSource * SpawnSourceTSVPipe ( const CSphConfigSection & hSource, const char * sSourceName, bool RLPARG(bProxy) )
+CSphSource * SpawnSourceTSVPipe ( const CSphConfigSection & hSource, const char * sSourceName, bool bProxy )
 {
 	assert ( hSource["type"]=="tsvpipe" );
 
@@ -825,15 +792,11 @@ CSphSource * SpawnSourceTSVPipe ( const CSphConfigSection & hSource, const char 
 		return NULL;
 	}
 
-#if USE_RLP
 	return sphCreateSourceTSVpipe ( &hSource, pPipe, sSourceName, bProxy );
-#else
-	return sphCreateSourceTSVpipe ( &hSource, pPipe, sSourceName, false );
-#endif
 }
 
 
-CSphSource * SpawnSourceCSVPipe ( const CSphConfigSection & hSource, const char * sSourceName, bool RLPARG(bProxy) )
+CSphSource * SpawnSourceCSVPipe ( const CSphConfigSection & hSource, const char * sSourceName, bool bProxy )
 {
 	assert ( hSource["type"]=="csvpipe" );
 
@@ -850,11 +813,7 @@ CSphSource * SpawnSourceCSVPipe ( const CSphConfigSection & hSource, const char 
 		return NULL;
 	}
 
-#if USE_RLP
 	return sphCreateSourceCSVpipe ( &hSource, pPipe, sSourceName, bProxy );
-#else
-	return sphCreateSourceCSVpipe ( &hSource, pPipe, sSourceName, false );
-#endif
 }
 
 
@@ -1032,19 +991,11 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 	if ( sphConfFieldFilter ( hIndex, tFilterSettings, sError ) )
 		pFieldFilter = sphCreateRegexpFilter ( tFilterSettings, sError );
 	
-#if USE_RLP
-	if ( tSettings.m_eChineseRLP!=SPH_RLP_NONE )
+	if ( !sphSpawnRLPFilter ( pFieldFilter, tSettings, tTokSettings, sIndexName, sError ) )
 	{
-		ISphFieldFilter * pRLPFilter = sphCreateRLPFilter ( pFieldFilter, g_sRLPRoot.cstr(), g_sRLPEnv.cstr(), tSettings.m_sRLPContext.cstr(), tTokSettings.m_sBlendChars.cstr(), sError );
-		if ( pRLPFilter==pFieldFilter && tSettings.m_eChineseRLP==SPH_RLP_BATCHED )
-		{
-			SafeDelete ( pFieldFilter );
-			sphDie ( "index '%s': Error initializing RLP: %s", sIndexName, sError.cstr() );
-		}
-
-		pFieldFilter = pRLPFilter;
+		SafeDelete ( pFieldFilter );
+		sphDie ( "%s", sError.cstr() );
 	}
-#endif
 
 	if ( !sError.IsEmpty () )
 		fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sError.cstr() );

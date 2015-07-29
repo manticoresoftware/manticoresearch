@@ -169,6 +169,7 @@
     <ClCompile Include="..\src\sphinxplugin.cpp" />
     <ClCompile Include="..\src\sphinxqcache.cpp" />
     <ClCompile Include="..\src\sphinxquery.cpp" />
+    <ClCompile Include="..\src\sphinxrlp.cpp" />
     <ClCompile Include="..\src\sphinxrt.cpp" />
     <ClCompile Include="..\src\sphinxsearch.cpp" />
     <ClCompile Include="..\src\sphinxsort.cpp" />
@@ -191,7 +192,7 @@
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(SolutionDir)\src\nonexistent;%(Outputs)</Outputs>
       <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(SolutionDir)\src\git_commit_id.cmd</Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(SolutionDir)\src\nonexistent;%(Outputs)</Outputs>
-    </CustomBuild>  
+    </CustomBuild>
     <ClInclude Include="..\src\sphinxexcerpt.h" />
     <ClInclude Include="..\src\sphinxexpr.h" />
     <ClInclude Include="..\src\sphinxfilter.h" />
@@ -200,6 +201,7 @@
     <ClInclude Include="..\src\sphinxplugin.h" />
     <ClInclude Include="..\src\sphinxqcache.h" />
     <ClInclude Include="..\src\sphinxquery.h" />
+    <ClInclude Include="..\src\sphinxrlp.h" />
     <ClInclude Include="..\src\sphinxrt.h" />
     <ClInclude Include="..\src\sphinxsearch.h" />
     <ClInclude Include="..\src\sphinxstd.h" />

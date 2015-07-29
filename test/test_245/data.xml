@@ -2,7 +2,7 @@
 <sphinx:docset>
 
 <sphinx:schema>
-<sphinx:field name="t"/>
+<sphinx:field name="t" attr="string"/>
 <sphinx:attr name="gid" type="int"/>
 </sphinx:schema>
 

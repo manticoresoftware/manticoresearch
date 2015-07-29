@@ -995,6 +995,50 @@ private:
 	CSphVector<PoolPtrs_t> m_dPool;
 };
 
+class CSphFreeList
+{
+private:
+	CSphTightVector<int>	m_dFree;
+	int						m_iNextFree;
+#ifndef NDEBUG
+	int						m_iSize;
+#endif
+
+public:
+	CSphFreeList ()
+		: m_iNextFree ( 0 )
+#ifndef NDEBUG
+		, m_iSize ( 0 )
+#endif
+	{}
+
+	void Reset ( int iSize )
+	{
+#ifndef NDEBUG
+		m_iSize = iSize;
+#endif
+		m_iNextFree = 0;
+		m_dFree.Reserve ( iSize );
+	}
+
+	int Get ()
+	{
+		int iRes = -1;
+		if ( m_dFree.GetLength () )
+			iRes = m_dFree.Pop ();
+		else
+			iRes = m_iNextFree++;
+		assert ( iRes>=0 && iRes<m_iSize );
+		return iRes;
+	}
+
+	void Free ( int iIndex )
+	{
+		assert ( iIndex>=0 && iIndex<m_iSize );
+		m_dFree.Add ( iIndex );
+	}
+};
+
 //////////////////////////////////////////////////////////////////////////
 // INLINES, FIND_XXX() GENERIC FUNCTIONS
 //////////////////////////////////////////////////////////////////////////

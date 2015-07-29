@@ -6613,12 +6613,10 @@ public:
 
 private:
 	int				m_iElementSize;
-	int				m_iNextFree;
 
 	CSphFixedVector<BYTE>	m_dPool;
-	CSphTightVector<int>	m_dFree;
 	SphFactorHash_t			m_dHash;
-
+	CSphFreeList			m_dFree;
 	SphFactorHashEntry_t * Find ( SphDocID_t uId ) const;
 	inline DWORD	HashFunc ( SphDocID_t uId ) const;
 	bool			FlushEntry ( SphFactorHashEntry_t * pEntry );
@@ -6627,7 +6625,6 @@ private:
 
 FactorPool_c::FactorPool_c ()
 	: m_iElementSize	( 0 )
-	, m_iNextFree		( 0 )
 	, m_dPool ( 0 )
 	, m_dHash ( 0 )
 {
@@ -6640,7 +6637,7 @@ void FactorPool_c::Prealloc ( int iElementSize, int nElements )
 
 	m_dPool.Reset ( nElements*GetIntElementSize() );
 	m_dHash.Reset ( nElements );
-	m_dFree.Reserve ( nElements );
+	m_dFree.Reset ( nElements );
 
 	memset ( m_dHash.Begin(), 0, sizeof(m_dHash[0])*m_dHash.GetLength() );
 }
@@ -6648,17 +6645,9 @@ void FactorPool_c::Prealloc ( int iElementSize, int nElements )
 
 BYTE * FactorPool_c::Alloc ()
 {
-	if ( m_dFree.GetLength() )
-	{
-		int iIndex = m_dFree.Pop();
-		return m_dPool.Begin() + iIndex*GetIntElementSize();
-	}
-
-	assert ( m_iNextFree<=m_dPool.GetLength() / GetIntElementSize() );
-
-	BYTE * pAllocated = m_dPool.Begin()+m_iNextFree*GetIntElementSize();
-	m_iNextFree++;
-	return pAllocated;
+	int iIndex = m_dFree.Get();
+	assert ( iIndex>=0 && iIndex*GetIntElementSize()<m_dPool.GetLength() );
+	return m_dPool.Begin() + iIndex * GetIntElementSize();
 }
 
 
@@ -6671,7 +6660,7 @@ void FactorPool_c::Free ( BYTE * pPtr )
 	assert ( pPtr>=m_dPool.Begin() && pPtr<&( m_dPool.Last() ) );
 
 	int iIndex = ( pPtr-m_dPool.Begin() )/GetIntElementSize();
-	m_dFree.Add(iIndex);
+	m_dFree.Free ( iIndex );
 }
 
 

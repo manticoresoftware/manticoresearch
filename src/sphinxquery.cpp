@@ -1469,10 +1469,11 @@ bool XQParser_t::FixupNots ( XQNode_t * pNode )
 	}
 
 	// NOT within OR or MAYBE? we can't compute that
-	if ( pNode->GetOp()==SPH_QUERY_OR || pNode->GetOp()==SPH_QUERY_MAYBE )
+	if ( pNode->GetOp()==SPH_QUERY_OR || pNode->GetOp()==SPH_QUERY_MAYBE || pNode->GetOp()==SPH_QUERY_NEAR )
 	{
-		const char *op = pNode->GetOp()==SPH_QUERY_OR ? "OR" : "MAYBE";
-		m_pParsed->m_sParseError.SetSprintf ( "query is non-computable (NOT is not allowed within %s)", op );
+		XQOperator_e eOp = pNode->GetOp();
+		const char * sOp = ( eOp==SPH_QUERY_OR ? "OR" : ( eOp==SPH_QUERY_MAYBE ? "MAYBE" : "NEAR" ) );
+		m_pParsed->m_sParseError.SetSprintf ( "query is non-computable (NOT is not allowed within %s)", sOp );
 		return false;
 	}
 

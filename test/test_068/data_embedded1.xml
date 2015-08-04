@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<sphinx:docset>
+
+<sphinx:schema>
+<sphinx:field name="title"/>
+<sphinx:field name="content"/>
+<sphinx:attr name="gid" type="int" default="1"/>
+</sphinx:schema>
+
+<sphinx:document id="101"><title>test</title></sphinx:document>
+<sphinx:document id="102"><title>test</title></sphinx:document>
+
+</sphinx:docset>

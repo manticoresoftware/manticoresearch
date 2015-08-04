@@ -24672,12 +24672,13 @@ bool CSphSource_Document::IterateDocument ( CSphString & sError )
 	for ( ;; )
 	{
 		m_tState.m_dFields = NextDocument ( sError );
-		const int * pFieldLengths = GetFieldLengths();
+		if ( m_tDocInfo.m_uDocID==0 )
+			return true;
+
+		const int * pFieldLengths = GetFieldLengths ();
 		for ( int iField=0; iField<m_tState.m_iEndField; iField++ )
 			m_tState.m_dFieldLengths[iField] = pFieldLengths[iField];
 
-		if ( m_tDocInfo.m_uDocID==0 )
-			return true;
 		// moved that here as docid==0 means eof for regular query
 		// but joined might produce doc with docid==0 and breaks delta packing
 		if ( HasJoinedFields() )

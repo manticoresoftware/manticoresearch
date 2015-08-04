@@ -157,6 +157,26 @@ index csv_spec
 	path = <data_path/>/csv_spec
 }
 
+source src_embedded1
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data_embedded1.xml
+}
+
+source src_embedded2
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data_embedded2.xml
+}
+
+index embedded1
+{
+	source = src_embedded1
+	source = src_embedded2
+	path = <data_path/>/embedded1
+}
+
+
 </config>
 
 <queries>
@@ -201,6 +221,7 @@ index csv_spec
 <query index="csv_spec" mode="extended2">"test one"</query>
 <query index="tsv_spec" mode="extended2">"document number"</query>
 <query index="csv_spec" mode="extended2">"document number"</query>
+<query index="embedded1">test</query>
 </queries>
 
 </test>

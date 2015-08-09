@@ -1046,6 +1046,11 @@ void TestQueryParser ()
 
 		printf ( "ok\n" );
 	}
+
+	// NEAR with NOT operator argument
+	XQQuery_t tQuery;
+	bool bOK = sphParseExtendedQuery ( tQuery, "me -test NEAR/2 off", NULL, pTokenizer.Ptr (), &tSchema, pDict.Ptr (), tTmpSettings );
+	assert ( !bOK && !tQuery.m_pRoot );
 }
 
 static CSphSourceStats g_tTmpDummyStat;

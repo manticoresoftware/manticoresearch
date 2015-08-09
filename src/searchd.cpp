@@ -172,7 +172,7 @@ static CSphVector<Listener_t>	g_dListeners;
 
 static int				g_iQueryLogFile	= -1;
 static CSphString		g_sQueryLogFile;
-static const char *		g_sPidFile		= NULL;
+static CSphString		g_sPidFile;
 static int				g_iPidFD		= -1;
 
 static int				g_iMaxCachedDocs	= 0;	// in bytes
@@ -1154,10 +1154,10 @@ void Shutdown ()
 	ClosePersistentSockets();
 
 	// remove pid
-	if ( g_sPidFile )
+	if ( !g_sPidFile.IsEmpty() )
 	{
 		::close ( g_iPidFD );
-		::unlink ( g_sPidFile );
+		::unlink ( g_sPidFile.cstr() );
 	}
 
 	sphInfo ( "shutdown complete" );
@@ -1509,7 +1509,7 @@ void SphCrashLogger_c::ThreadWrapper ( void * pArg )
 void SetSignalHandlers ( bool )
 {
 	SphCrashLogger_c::Init();
-	snprintf ( g_sMinidump, SPH_TIME_PID_MAX_SIZE-1, "%s.%d", g_sPidFile ? g_sPidFile : "", (int)getpid() );
+	snprintf ( g_sMinidump, SPH_TIME_PID_MAX_SIZE-1, "%s.%d", g_sPidFile.scstr(), (int)getpid() );
 	SetUnhandledExceptionFilter ( SphCrashLogger_c::HandleCrash );
 }
 #else
@@ -10483,7 +10483,7 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 
 			// connect to remote agents and query them
 			UpdateRequestBuilder_t tReqBuilder ( tUpd );
-			CSphScopedPtr<ISphRemoteAgentsController> pDistCtrl ( GetAgentsController( g_iDistThreads, dAgents, tReqBuilder, tDist.m_iAgentConnectTimeout ) );
+			CSphScopedPtr<ISphRemoteAgentsController> pDistCtrl ( GetAgentsController ( g_iDistThreads, dAgents, tReqBuilder, tDist.m_iAgentConnectTimeout ) );
 			int iAgentsDone = pDistCtrl->Finish();
 			if ( iAgentsDone )
 			{
@@ -15576,8 +15576,8 @@ void CheckIndexReenable ( const char * sIndexBase, bool bOnlyNew, bool & bGotNew
 	bReEnable = false;
 	char sHeaderName [ SPH_MAX_FILENAME_LEN ];
 
-	snprintf ( sHeaderName, sizeof(sHeaderName), "%s%s", sIndexBase, sphGetExt( SPH_EXT_TYPE_NEW, SPH_EXT_SPH ) );
-	bGotNew = sphIsReadable( sHeaderName );
+	snprintf ( sHeaderName, sizeof(sHeaderName), "%s%s", sIndexBase, sphGetExt ( SPH_EXT_TYPE_NEW, SPH_EXT_SPH ) );
+	bGotNew = sphIsReadable ( sHeaderName );
 
 	if ( bGotNew || !bOnlyNew )
 		return;
@@ -15599,7 +15599,7 @@ bool RotateIndexGreedy ( ServedDesc_t & tIndex, const char * sIndex, CSphString 
 	bool bReEnable = false;
 	CheckIndexReenable ( sPath, tIndex.m_bOnlyNew, bGotNewFiles, bReEnable );
 
-	snprintf (  sFile, sizeof( sFile ), "%s%s", sPath, sphGetExt ( bReEnable ? SPH_EXT_TYPE_CUR : SPH_EXT_TYPE_NEW, SPH_EXT_SPH ) );
+	snprintf ( sFile, sizeof( sFile ), "%s%s", sPath, sphGetExt ( bReEnable ? SPH_EXT_TYPE_CUR : SPH_EXT_TYPE_NEW, SPH_EXT_SPH ) );
 	DWORD uVersion = ReadVersion ( sFile, sError );
 
 	if ( !sError.IsEmpty() )
@@ -15610,13 +15610,13 @@ bool RotateIndexGreedy ( ServedDesc_t & tIndex, const char * sIndex, CSphString 
 
 	for ( int i=0; i<sphGetExtCount ( uVersion ); i++ )
 	{
-		snprintf ( sFile, sizeof( sFile ), "%s%s", sPath, sphGetExts( bReEnable ? SPH_EXT_TYPE_CUR : SPH_EXT_TYPE_NEW, uVersion )[i] );
-		if ( !sphIsReadable( sFile ) )
+		snprintf ( sFile, sizeof( sFile ), "%s%s", sPath, sphGetExts ( bReEnable ? SPH_EXT_TYPE_CUR : SPH_EXT_TYPE_NEW, uVersion )[i] );
+		if ( !sphIsReadable ( sFile ) )
 		{
 			if ( tIndex.m_bOnlyNew )
-				sphWarning( "rotating index '%s': '%s' unreadable: %s; NOT SERVING", sIndex, sFile, strerror( errno ) );
+				sphWarning ( "rotating index '%s': '%s' unreadable: %s; NOT SERVING", sIndex, sFile, strerror ( errno ) );
 			else
-				sphWarning( "rotating index '%s': '%s' unreadable: %s; using old index", sIndex, sFile, strerror( errno ) );
+				sphWarning ( "rotating index '%s': '%s' unreadable: %s; using old index", sIndex, sFile, strerror ( errno ) );
 			return false;
 		}
 	}
@@ -21067,12 +21067,12 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	{
 		g_sPidFile = hSearchdpre["pid_file"].cstr();
 
-		g_iPidFD = ::open ( g_sPidFile, O_CREAT | O_WRONLY, S_IREAD | S_IWRITE );
+		g_iPidFD = ::open ( g_sPidFile.scstr(), O_CREAT | O_WRONLY, S_IREAD | S_IWRITE );
 		if ( g_iPidFD<0 )
-			sphFatal ( "failed to create pid file '%s': %s", g_sPidFile, strerror(errno) );
+			sphFatal ( "failed to create pid file '%s': %s", g_sPidFile.scstr(), strerror(errno) );
 	}
 	if ( bOptPIDFile && !sphLockEx ( g_iPidFD, false ) )
-		sphFatal ( "failed to lock pid file '%s': %s (searchd already running?)", g_sPidFile, strerror(errno) );
+		sphFatal ( "failed to lock pid file '%s': %s (searchd already running?)", g_sPidFile.scstr(), strerror(errno) );
 
 	// Actions on resurrection
 	if ( bWatched && !bVisualLoad && CheckConfigChanges() )
@@ -21265,7 +21265,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		// re-lock pid
 		// FIXME! there's a potential race here
 		if ( !sphLockEx ( g_iPidFD, true ) )
-			sphFatal ( "failed to re-lock pid file '%s': %s", g_sPidFile, strerror(errno) );
+			sphFatal ( "failed to re-lock pid file '%s': %s", g_sPidFile.scstr(), strerror(errno) );
 #endif
 
 		char sPid[16];
@@ -21274,11 +21274,11 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 		sphSeek ( g_iPidFD, 0, SEEK_SET );
 		if ( !sphWrite ( g_iPidFD, sPid, iPidLen ) )
-			sphFatal ( "failed to write to pid file '%s' (errno=%d, msg=%s)", g_sPidFile,
+			sphFatal ( "failed to write to pid file '%s' (errno=%d, msg=%s)", g_sPidFile.scstr(),
 				errno, strerror(errno) );
 
 		if ( ::ftruncate ( g_iPidFD, iPidLen ) )
-			sphFatal ( "failed to truncate pid file '%s' (errno=%d, msg=%s)", g_sPidFile,
+			sphFatal ( "failed to truncate pid file '%s' (errno=%d, msg=%s)", g_sPidFile.scstr(),
 				errno, strerror(errno) );
 	}
 

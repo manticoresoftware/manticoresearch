@@ -441,6 +441,7 @@ struct ServedDesc_t
 {
 	CSphIndex *			m_pIndex;
 	CSphString			m_sIndexPath;
+	CSphString			m_sNewPath;
 	bool				m_bEnabled;		///< to disable index in cases when rotation fails
 	bool				m_bMlock;
 	bool				m_bPreopen;

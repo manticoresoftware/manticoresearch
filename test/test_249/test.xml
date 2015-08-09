@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>distributed index stat2 - hung of daemon</name>
+
+<requires><non-rt/></requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	binlog_path =
+	workers = threads
+	seamless_rotate = 1
+}
+
+source src1
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query_pre = SET NAMES utf8
+	sql_attr_uint		= idd
+}
+
+source src11 : src1
+{
+	sql_query 		= SELECT 1 id, '50% term1 term2' body, 11 idd, 10.0 as f1, 10.0 as f2
+	sql_field_string		= body
+	sql_attr_float = f1
+	sql_attr_float = f2
+}
+
+index i110
+{
+	source			= src11
+	path			= <data_path/>/i110
+	dict = keywords
+}
+
+index i112
+{
+	source			= src11
+	path			= <data_path/>/i112
+	dict = keywords
+}
+
+source src12 : src1
+{
+	sql_query 		= SELECT 1 id, '50% term1 term2' body, '' roger, 11 idd, 12 idk UNION SELECT 2 id, '50% term1 term2' body, '' roger, 11 idd, 12 idk
+	sql_attr_string		= roger
+	sql_attr_uint		= idk
+}
+
+index i120
+{
+	source			= src12
+	path			= <data_path/>/i120
+	dict = keywords
+}
+
+
+index dist
+{
+	type = distributed
+	local = i110
+	agent = <my_address/>:i112
+}
+
+</config>
+
+<custom_test><![CDATA[
+
+$results = array();
+$ql->Reconnect();
+
+$results[] = 'all index presents';
+$results[] = "\n" . $ql->Query ( "SHOW tables" );
+$results[] = "\n" . $ql->Query ( "SELECT * FROM i112, i110" );
+
+$orig_conf = file('config.conf');
+
+$new_conf = '';
+$got_idx2 = false;
+foreach ( $orig_conf as $line )
+{
+	if ( $got_idx2 || strstr ( $line, 'index i110' ) )
+	{
+		if ( strstr ( $line, 'index i110' ) )
+			$got_idx2 = true;
+		if ( $got_idx2 && strstr ( $line, '}' ) )
+			$got_idx2 = false;
+		$line = '#' . $line;
+	}
+	$new_conf .= $line;
+}
+file_put_contents('config.conf', $new_conf);
+
+RunIndexer ( $errors, '--rotate i112' ); // just to send SIGHUP to daemon
+sleep(2);
+
+$results[] = 'i110 disabled';
+$results[] = "\n" . $ql->Query ( "SHOW tables" );
+
+
+]]></custom_test>
+
+</test>

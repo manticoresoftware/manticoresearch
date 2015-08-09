@@ -1036,9 +1036,9 @@ bool ValidateAgentDesc ( MetaAgentDesc_t & tAgent, const CSphVariant * pLine, co
 	return true;
 }
 
-void FreeDashboard ( const AgentDesc_c& dAgent, DashBoard_t& dDashBoard, SmallStringHash_T<int>& hDashBoard )
+void FreeDashboard ( const AgentDesc_c & dAgent, DashBoard_t & dDashBoard, SmallStringHash_T<int> & hDashBoard )
 {
-	HostDashboard_t& dDash = dDashBoard.m_dItemStats[dAgent.m_iDashIndex];
+	HostDashboard_t & dDash = dDashBoard.m_dItemStats[dAgent.m_iDashIndex];
 
 	--dDash.m_iRefCount;
 	assert ( dDash.m_iRefCount>=0 );
@@ -1049,13 +1049,14 @@ void FreeDashboard ( const AgentDesc_c& dAgent, DashBoard_t& dDashBoard, SmallSt
 	}
 }
 
-void FreeAgentStats ( const AgentDesc_c& dAgent )
+void FreeAgentStats ( const AgentDesc_c & dAgent )
 {
 	g_tStatsMutex.Lock();
-	g_tStats.m_dDashboard.FreeItem ( dAgent.m_iStatsIndex );
+	g_tStats.m_dAgentStats.FreeItem ( dAgent.m_iStatsIndex );
 
 	// now free the dashboard hosts also
 	FreeDashboard ( dAgent, g_tStats.m_dDashboard, g_tStats.m_hDashBoard );
+	g_tStatsMutex.Unlock ();
 }
 
 void FreeHostStats ( MetaAgentDesc_t & tHosts )

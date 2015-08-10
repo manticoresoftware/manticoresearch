@@ -364,13 +364,17 @@ void SnippetsDocIndex_c::AddHits ( SphWordID_t iWordID, const BYTE * sWord, int 
 	}
 
 	if ( sWord && iWordLen )
+	{
 		ARRAY_FOREACH ( i, m_dStars )
+		{
 			if ( MatchStar ( m_dStars[i], sWord ) )
 			{
 				int iQPos = m_dStars[i].m_iQueryPos;
 				if ( !m_dDocHits[iQPos].GetLength() || DWORD ( m_dDocHits[iQPos].Last() )!=uPosition )
 					m_dDocHits [iQPos].Add ( uPosition );
 			}
+		}
+	}
 }
 
 static bool HasStars ( const XQKeyword_t & w )
@@ -716,6 +720,7 @@ struct TokenInfo_t
 	bool			m_bWord;
 	bool			m_bStopWord;
 	int				m_iTermIndex;
+	int				m_iMultiPosLen;
 
 	SphWordID_t		m_uWordId;
 };
@@ -740,6 +745,7 @@ private:
 		TYPE_SKIPHTML,
 		TYPE_SPZ,
 		TYPE_TAIL,
+		TYPE_MULTIFORM,
 
 		TYPE_TOTAL
 	};
@@ -826,9 +832,9 @@ public:
 		m_eLastStored = TYPE_SKIPHTML;
 	}
 
-	void StoreToken ( const TokenInfo_t & tTok )
+	void StoreToken ( const TokenInfo_t & tTok, int iTermIndex )
 	{
-		assert ( tTok.m_iTermIndex<USHRT_MAX );
+		assert ( iTermIndex<USHRT_MAX );
 		assert ( tTok.m_iLen<=255 );
 
 		int iDstart = tTok.m_iStart - m_iLastStart;
@@ -837,7 +843,7 @@ public:
 		m_iLastStart = tTok.m_iStart + tTok.m_iLen;
 		m_iLastPos = tTok.m_uPosition;
 
-		if ( iDstart==0 && iDpos==1 && tTok.m_bWord && !tTok.m_bStopWord && tTok.m_iTermIndex==-1 )
+		if ( iDstart==0 && iDpos==1 && tTok.m_bWord && !tTok.m_bStopWord && iTermIndex==-1 && !tTok.m_iMultiPosLen )
 		{
 			if ( tTok.m_iLen<16 )
 			{
@@ -856,15 +862,19 @@ public:
 		}
 
 		// TOKEN, stupid generic uncompressed path (can optimize with deltas, if needed)
-		BYTE * p = StoreEntry ( 13 );
+		bool bMultiform = ( tTok.m_iMultiPosLen>0 );
+		BYTE * p = StoreEntry ( bMultiform ? 14 : 13 );
 
-		p[0] = ( TYPE_TOKEN<<4 );
+		BYTE eTok = (BYTE)( bMultiform ? TYPE_MULTIFORM : TYPE_TOKEN );
+		p[0] = ( eTok<<4 );
 		sphUnalignedWrite ( p+1, tTok.m_iStart );
 		p[5] = BYTE(tTok.m_iLen);
 		sphUnalignedWrite ( p+6, tTok.m_uPosition );
 		p[10] = ( tTok.m_bWord<<1 ) + tTok.m_bStopWord;
-		sphUnalignedWrite ( p+11, (WORD)(tTok.m_iTermIndex+1) );
-		m_eLastStored = TYPE_TOKEN;
+		sphUnalignedWrite ( p+11, (WORD)(iTermIndex+1) );
+		if ( bMultiform )
+			p[13] = (BYTE)tTok.m_iMultiPosLen;
+		m_eLastStored = eTok;
 	}
 
 	void StoreSPZ ( BYTE iSPZ, DWORD uPosition, const char *, int iZone )
@@ -904,7 +914,8 @@ public:
 
 		while ( m_iReadPtr < m_dTokenStream.GetLength() )
 		{
-			switch ( m_dTokenStream [ m_iReadPtr ]>>4 )
+			BYTE eTok = m_dTokenStream [ m_iReadPtr ]>>4;
+			switch ( eTok )
 			{
 			case TYPE_OVERLAP1:
 				{
@@ -936,6 +947,7 @@ public:
 				break;
 
 			case TYPE_TOKEN:
+			case TYPE_MULTIFORM:
 				{
 					BYTE * p = &m_dTokenStream [ m_iReadPtr ];
 					tTok.m_iStart = sphUnalignedRead ( *(DWORD*)(p+1) );
@@ -944,7 +956,15 @@ public:
 					tTok.m_bWord = ( p[10] & 2 )!=0;
 					tTok.m_bStopWord = ( p[10] & 1 )!=0;
 					tTok.m_iTermIndex = (int)sphUnalignedRead ( *(WORD*)(p+11) ) - 1;
-					m_iReadPtr += 13;
+					if ( eTok==TYPE_TOKEN )
+					{
+						tTok.m_iMultiPosLen = 0;
+						m_iReadPtr += 13;
+					} else
+					{
+						tTok.m_iMultiPosLen = (int)( p[13] );
+						m_iReadPtr += 14;
+					}
 
 					m_iLastStart = tTok.m_iStart + tTok.m_iLen;
 					m_iLastPos = tTok.m_uPosition;
@@ -964,6 +984,7 @@ public:
 					tTok.m_bWord = true;
 					tTok.m_bStopWord = false;
 					tTok.m_iTermIndex = -1;
+					tTok.m_iMultiPosLen = 0;
 
 					tTok.m_sWord = NULL;
 
@@ -981,6 +1002,7 @@ public:
 					tTok.m_bWord = true;
 					tTok.m_bStopWord = false;
 					tTok.m_iTermIndex = -1;
+					tTok.m_iMultiPosLen = 0;
 
 					tTok.m_sWord = NULL;
 
@@ -1003,6 +1025,7 @@ public:
 					tTok.m_bWord = true;
 					tTok.m_bStopWord = false;
 					tTok.m_iTermIndex = -1;
+					tTok.m_iMultiPosLen = 0;
 
 					tTok.m_sWord = NULL;
 
@@ -1027,6 +1050,7 @@ public:
 					tTok.m_bWord = true;
 					tTok.m_bStopWord = false;
 					tTok.m_iTermIndex = -1;
+					tTok.m_iMultiPosLen = 0;
 
 					tTok.m_sWord = NULL;
 
@@ -1160,33 +1184,46 @@ public:
 		m_bCollectExtraZoneInfo = true;
 	}
 
-	bool OnToken ( TokenInfo_t & tTok, const CSphVector<SphWordID_t> & dTokens )
+	bool OnToken ( const TokenInfo_t & tTok, const CSphVector<SphWordID_t> & dTokens )
 	{
 		bool bReal = false;
-		if ( tTok.m_uWordId )
+
+		assert ( tTok.m_iMultiPosLen==0 || tTok.m_iMultiPosLen==dTokens.GetLength()+1 );
+		bool bMultiform = ( tTok.m_iMultiPosLen!=0 );
+		int iPos = tTok.m_uPosition;
+
+		// different paths for leading token and tokens position generation
+		// for blended and multi word-form with multiple destination word-forms
+		if ( !bMultiform && tTok.m_uWordId )
 		{
-			m_tContainer.AddHits ( tTok.m_uWordId, tTok.m_sWord, tTok.m_iLen, tTok.m_uPosition );
+			m_tContainer.AddHits ( tTok.m_uWordId, tTok.m_sWord, tTok.m_iLen, iPos );
 			bReal = true;
 		}
 		ARRAY_FOREACH ( i, dTokens )
 		{
 			if ( dTokens[i] )
 			{
-				m_tContainer.AddHits ( dTokens[i], tTok.m_sWord, tTok.m_iLen, tTok.m_uPosition );
+				m_tContainer.AddHits ( dTokens[i], tTok.m_sWord, tTok.m_iLen, iPos );
 				bReal = true;
+				if ( bMultiform )
+					iPos++;
 			}
 		}
+		if ( bMultiform && tTok.m_uWordId )
+		{
+			m_tContainer.AddHits ( tTok.m_uWordId, tTok.m_sWord, tTok.m_iLen, iPos );
+			bReal = true;
+		}
 
-		m_tContainer.m_uLastPos = bReal ? tTok.m_uPosition : m_tContainer.m_uLastPos;
+		m_tContainer.m_uLastPos = bReal ? iPos : m_tContainer.m_uLastPos;
 
 		int iTermIndex = m_tContainer.FindWord ( tTok.m_uWordId, tTok.m_sWord, tTok.m_iLen );
 		ARRAY_FOREACH_COND ( i, dTokens, iTermIndex==-1 )
 			iTermIndex = m_tContainer.FindWord ( dTokens[i], NULL, 0 );
 
 		m_uFoundWords |= iTermIndex==-1 ? 0 : 1 << iTermIndex;
-		tTok.m_iTermIndex = iTermIndex;
 
-		m_tTokenContainer.StoreToken ( tTok );
+		m_tTokenContainer.StoreToken ( tTok, iTermIndex );
 
 		return true;
 	}
@@ -1292,7 +1329,7 @@ public:
 		ResultEmit ( m_pDoc+iStart, iLen );
 	}
 
-	bool OnToken ( TokenInfo_t & tTok, const CSphVector<SphWordID_t> & dTokens )
+	bool OnToken ( const TokenInfo_t & tTok, const CSphVector<SphWordID_t> & dTokens )
 	{
 		assert ( m_pDoc );
 		assert ( tTok.m_iStart>=0 && m_pDoc+tTok.m_iStart+tTok.m_iLen<=m_pDocMax );
@@ -1342,6 +1379,17 @@ static int EstimateResult ( const ExcerptQuery_t & q, int iDocLen )
 	return iDocLen;
 }
 
+static bool IsTokenHit ( const TokenInfo_t & tTok, int iHitPos, int iHitSpan )
+{
+	int iTokenPos = tTok.m_uPosition;
+	if ( !tTok.m_iMultiPosLen )
+		return ( iTokenPos>=iHitPos && iTokenPos<=iHitPos + iHitSpan );
+
+	// 1d segments intersection
+	// token.pos + token.len vs hit.pos + hit.spanLen
+	return ( ( Min ( iTokenPos + tTok.m_iMultiPosLen, iHitPos + iHitSpan ) - Max ( iTokenPos, iHitPos ) )>=0 );
+}
+
 
 /// functor that matches tokens against hit positions from mini-index and highlights them
 class HighlightQuery_c : public HighlightPlain_c
@@ -1363,7 +1411,7 @@ public:
 		, m_iLastPos ( 0 )
 	{}
 
-	bool OnToken ( TokenInfo_t & tTok, const CSphVector<SphWordID_t> & )
+	bool OnToken ( const TokenInfo_t & tTok, const CSphVector<SphWordID_t> & )
 	{
 		assert ( m_pDoc );
 		assert ( tTok.m_iStart>=0 && m_pDoc+tTok.m_iStart+tTok.m_iLen<=m_pDocMax );
@@ -1375,7 +1423,7 @@ public:
 		CheckClose ( tTok.m_uPosition );
 
 		// marker folding, emit "before" marker at span start only
-		if ( m_pHit<m_pHitEnd && tTok.m_uPosition==m_pHit->m_uPosition && !m_iOpenTill )
+		if ( m_pHit<m_pHitEnd && IsTokenHit ( tTok, m_pHit->m_uPosition, 0 ) && !m_iOpenTill )
 		{
 			ResultEmit ( m_sBeforeMatch.cstr(), m_iBeforeLen, m_bHasBeforePassageMacro,
 				m_iPassageId, m_sBeforeMatchPassage.cstr(), m_iBeforePostLen );
@@ -1385,7 +1433,7 @@ public:
 
 		// emit token itself
 		ResultEmit ( m_pDoc+tTok.m_iStart, tTok.m_iLen );
-		m_iLastPos = tTok.m_uPosition;
+		m_iLastPos = tTok.m_uPosition + Max ( tTok.m_iMultiPosLen-1, 0 );
 		return true;
 	}
 
@@ -2140,7 +2188,7 @@ public:
 		assert ( !m_bAllowEmpty );
 	}
 
-	bool OnToken ( TokenInfo_t & tTok, const CSphVector<SphWordID_t> & )
+	bool OnToken ( const TokenInfo_t & tTok, const CSphVector<SphWordID_t> & )
 	{
 		CollectStartTokens ( tTok.m_iStart, tTok.m_iLen );
 		return !m_bCollectionStopped;
@@ -2180,7 +2228,7 @@ public:
 	{
 	}
 
-	bool OnToken ( TokenInfo_t & tTok, const CSphVector<SphWordID_t> & dTokens )
+	bool OnToken ( const TokenInfo_t & tTok, const CSphVector<SphWordID_t> & dTokens )
 	{
 		assert ( m_pDoc );
 		assert ( tTok.m_iStart>=0 && m_pDoc+tTok.m_iStart+tTok.m_iLen<=m_pDocMax );
@@ -2193,7 +2241,7 @@ public:
 			while ( m_pHit<m_pHitEnd && m_pHit->m_uPosition+m_pHit->m_uSpan<=tTok.m_uPosition )
 				m_pHit++;
 
-			if ( m_pHit<m_pHitEnd && tTok.m_uPosition>=m_pHit->m_uPosition && tTok.m_uPosition<=m_pHit->m_uPosition+m_pHit->m_uSpan )
+			if ( m_pHit<m_pHitEnd && IsTokenHit ( tTok, m_pHit->m_uPosition, m_pHit->m_uSpan ) )
 				bQWord = true;
 
 			iTermIndex = tTok.m_iTermIndex;
@@ -2261,7 +2309,7 @@ public:
 		m_iCurToken++;
 
 		if ( m_pTokenContainer )
-			m_pTokenContainer->StoreToken ( tTok );
+			m_pTokenContainer->StoreToken ( tTok, iTermIndex );
 		return true;
 	}
 
@@ -2635,7 +2683,7 @@ public:
 			m_dPassageHeads.Reserve(1024);
 	}
 
-	bool OnToken ( TokenInfo_t & tTok, const CSphVector<SphWordID_t> & )
+	bool OnToken ( const TokenInfo_t & tTok, const CSphVector<SphWordID_t> & )
 	{
 		assert ( m_pDoc );
 		assert ( tTok.m_iStart>=0 && m_pDoc+tTok.m_iStart+tTok.m_iLen<=m_pDocMax );
@@ -2664,7 +2712,7 @@ public:
 
 			} else
 			{
-				bool bHit = m_pHit<m_pHitEnd && tTok.m_uPosition>=m_pHit->m_uPosition && tTok.m_uPosition<=m_pHit->m_uPosition+m_pHit->m_uSpan-1;
+				bool bHit = m_pHit<m_pHitEnd && IsTokenHit ( tTok, m_pHit->m_uPosition, m_pHit->m_uSpan - 1 );
 				if ( bHit && !m_iOpenTill )
 				{
 					ResultEmit ( m_sBeforeMatch.cstr(), m_iBeforeLen, m_bHasBeforePassageMacro, m_iPassageId, m_sBeforeMatchPassage.cstr(), m_iBeforePostLen );
@@ -2944,6 +2992,7 @@ static void TokenizeDocument ( T & tFunctor, const CSphHTMLStripper * pStripper,
 	tTok.m_sWord = sNonStemmed;
 	tTok.m_bStopWord = false;
 	tTok.m_iTermIndex = -1;
+	tTok.m_iMultiPosLen = 0;
 
 	bool bRetainHtml = tFunctor.m_sStripMode=="retain";
 	BYTE * sWord = NULL;
@@ -2965,6 +3014,8 @@ static void TokenizeDocument ( T & tFunctor, const CSphHTMLStripper * pStripper,
 	while ( ( sWord = pTokenizer->GetToken() )!=NULL )
 	{
 		const char * pTokenStart = pTokenizer->GetTokenStart ();
+
+		tTok.m_iMultiPosLen = 0;
 
 		if ( pBlendedEnd<pTokenStart )
 		{
@@ -2993,6 +3044,24 @@ static void TokenizeDocument ( T & tFunctor, const CSphHTMLStripper * pStripper,
 			uPosition += tFunctor.m_iBoundaryStep;
 		if ( pTokenizer->TokenIsBlended() )
 			uStep = 0;
+
+		// collect all tokens from multi destination of multi word-form
+		bool bMultiDestHead = false;
+		int iDestCount = 0;
+		pTokenizer->WasTokenMultiformDestination ( bMultiDestHead, iDestCount );
+		if ( bMultiDestHead )
+		{
+			assert ( iDestCount>1 );
+			tTok.m_iMultiPosLen = iDestCount;
+			for ( int i=0; i<iDestCount-1; i++ )
+			{
+				dMultiToken.Add ( tFunctor.m_pDict->GetWordID ( sWord ) );
+				sWord = pTokenizer->GetToken ();
+				assert ( sWord );
+			}
+			uStep = iDestCount;
+		}
+
 
 		// handle only blended parts
 		if ( pTokenizer->TokenIsBlended() )
@@ -3148,7 +3217,7 @@ static void TokenizeDocument ( T & tFunctor, const CSphHTMLStripper * pStripper,
 		// compute position
 		if ( !iWord || tTok.m_bStopWord )
 			uStep = tFunctor.m_iStopwordStep;
-		else
+		else if ( !tTok.m_iMultiPosLen ) // keep position step from multi word-forms
 			uStep = 1;
 
 		tTok.m_uPosition = ( iWord || tTok.m_bStopWord ) ? uPosition : 0;
@@ -3178,6 +3247,7 @@ static void TokenizeDocument ( T & tFunctor, const CSphHTMLStripper * pStripper,
 		tTok.m_iStart = pLastTokenEnd - pStartPtr;
 		tTok.m_iLen = pBlendedEnd - pLastTokenEnd;
 		tTok.m_bWord = false;
+		tTok.m_iMultiPosLen = 0;
 		tFunctor.OnToken ( tTok, dMultiToken );
 		pLastTokenEnd = pBlendedEnd;
 	}

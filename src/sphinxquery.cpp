@@ -1124,9 +1124,10 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 
 		bool bMultiDestHead = false;
 		bool bMultiDest = false;
+		int iDestCount = 0;
 		// do nothing inside phrase
 		if ( !m_pTokenizer->m_bPhrase )
-			bMultiDest = m_pTokenizer->WasTokenMultiformDestination ( bMultiDestHead );
+			bMultiDest = m_pTokenizer->WasTokenMultiformDestination ( bMultiDestHead, iDestCount );
 
 		if ( bMultiDest && !bMultiDestHead )
 		{

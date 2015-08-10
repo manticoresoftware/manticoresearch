@@ -1602,7 +1602,7 @@ public:
 	virtual BYTE *					GetToken ()										{ return m_pTokenizer->GetToken(); }
 
 	virtual ISphTokenizer *			GetEmbeddedTokenizer () const					{ return m_pTokenizer; }
-	virtual bool					WasTokenMultiformDestination ( bool & bHead ) const { return m_pTokenizer->WasTokenMultiformDestination ( bHead ); }
+	virtual bool					WasTokenMultiformDestination ( bool & bHead, int & iDestCount ) const { return m_pTokenizer->WasTokenMultiformDestination ( bHead, iDestCount ); }
 };
 
 

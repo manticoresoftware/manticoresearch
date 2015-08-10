@@ -2432,7 +2432,7 @@ public:
 	virtual uint64_t		GetSettingsFNV () const;
 
 	virtual bool			SetBlendChars ( const char * sConfig, CSphString & sError );
-	virtual bool			WasTokenMultiformDestination ( bool & ) const { return false; }
+	virtual bool			WasTokenMultiformDestination ( bool &, int & ) const { return false; }
 
 public:
 	// lightweight clones must impose a lockdown on some methods
@@ -2646,7 +2646,7 @@ public:
 	virtual const char *			GetBufferPtr () const		{ return m_iStart<m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_pBufferPtr : m_pTokenizer->GetBufferPtr(); }
 	virtual void					SetBufferPtr ( const char * sNewPtr );
 	virtual uint64_t				GetSettingsFNV () const;
-	virtual bool					WasTokenMultiformDestination ( bool & bHead ) const;
+	virtual bool					WasTokenMultiformDestination ( bool & bHead, int & iDestCount ) const;
 
 private:
 	const CSphMultiformContainer *	m_pMultiWordforms;
@@ -6667,11 +6667,12 @@ int CSphMultiformTokenizer::SkipBlended ()
 	return m_iStart-iWasStart;
 }
 
-bool CSphMultiformTokenizer::WasTokenMultiformDestination ( bool & bHead ) const
+bool CSphMultiformTokenizer::WasTokenMultiformDestination ( bool & bHead, int & iDestCount ) const
 {
 	if ( m_iOutputPending>-1 && m_pCurrentForm && m_pCurrentForm->m_dNormalForm.GetLength()>1 && m_iOutputPending<m_pCurrentForm->m_dNormalForm.GetLength() )
 	{
 		bHead = ( m_iOutputPending==0 );
+		iDestCount = m_pCurrentForm->m_dNormalForm.GetLength();
 		return true;
 	} else
 	{
@@ -21961,12 +21962,16 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 
 	bool bFirstToken = true;
 	bool bStopwordsPresent = false;
+	bool bCommentedWholeLine = false;
 
 	BYTE * pFrom = NULL;
 	while ( ( pFrom = pTokenizer->GetToken () )!=NULL )
 	{
 		if ( *pFrom=='#' )
+		{
+			bCommentedWholeLine = bFirstToken;
 			break;
+		}
 
 		if ( *pFrom=='~' && bFirstToken )
 		{
@@ -21998,7 +22003,8 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 
 	if ( !dTokens.GetLength() )
 	{
-		sphWarning ( "index '%s': all source tokens are stopwords (wordform='%s', file='%s'). IGNORED.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );
+		if ( !bCommentedWholeLine )
+			sphWarning ( "index '%s': all source tokens are stopwords (wordform='%s', file='%s'). IGNORED.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );
 		return;
 	}
 

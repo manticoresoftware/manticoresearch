@@ -119,6 +119,14 @@ index dist13
 	agent = <my_address/>:snip2
 	agent = <my_address/>:snip22
 }
+
+index test_milti
+{
+	type		= template
+	wordforms	= <this_test/>/wordforms_multi_dest.txt
+	charset_table = english, 0..9
+}
+
 </config>
 
 <db_insert>select 1;</db_insert>
@@ -150,6 +158,36 @@ index dist13
 <sphinxql>select *, SNIPPET(body, 'las') from dist13</sphinxql>
 <sphinxql>select id, body, SNIPPET(body, '','allow_empty=1', 'query_mode=1') from snip2</sphinxql>
 <sphinxql>select id, body, SNIPPET(body, '','allow_empty=0', 'query_mode=1') from snip2</sphinxql>
+
+<!-- start\whole doc on query\plain -->
+<sphinxql>CALL SNIPPETS('tried and true 1 12 11 11 11 11', 'test_milti', 'notfound', 1 AS query_mode, 25 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('tried and true 1 12 11 11 11 11', 'test_milti', 'notfound', 1 AS query_mode, 0 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('tried and true 1 12 11 11 11 11', 'test_milti', 'notfound', 0 AS query_mode, 25 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('tried and true 1 12 11 11 11 11', 'test_milti', 'notfound', 0 AS query_mode, 0 as limit )</sphinxql>
+<!-- higlight start\whole doc on query\plain -->
+<sphinxql>CALL SNIPPETS('tried and true 1 12 11 11 11 11', 'test_milti', 'time1', 1 AS query_mode, 25 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('tried and true 1 12 11 11 11 11', 'test_milti', 'test1', 1 AS query_mode, 0 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('tried and true 1 12 11 11 11 11', 'test_milti', 'time1', 0 AS query_mode, 25 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('tried and true 1 12 11 11 11 11', 'test_milti', 'test1', 0 AS query_mode, 0 as limit )</sphinxql>
+
+<sphinxql>CALL SNIPPETS('17 64 15 tripple and true 1 12 11 11 11 11', 'test_milti', 'time2', 1 AS query_mode, 25 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('17 64 15 tripple and true 1 12 11 11 11 11', 'test_milti', 'test2', 1 AS query_mode, 0 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('17 64 15 tripple and true 1 12 11 11 11 11', 'test_milti', 'time2', 0 AS query_mode, 25 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('17 64 15 tripple and true 1 12 11 11 11 11', 'test_milti', 'test2', 0 AS query_mode, 0 as limit )</sphinxql>
+
+<sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', 'time3', 1 AS query_mode, 25 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', 'test3', 1 AS query_mode, 0 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', 'time3', 0 AS query_mode, 25 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', 'test3', 0 AS query_mode, 0 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', 'time3 for', 1 AS query_mode, 25 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', 'for test3', 1 AS query_mode, 0 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', 'time3 for', 0 AS query_mode, 25 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', 'for test3', 0 AS query_mode, 0 as limit )</sphinxql>
+
+<sphinxql>CALL SNIPPETS('17 64 15 tripple and true 1 12 11 11 11 11', 'test_milti', '"for test2"', 1 AS query_mode, 25 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('17 64 15 tripple and true 1 12 11 11 11 11', 'test_milti', '"for test2"', 1 AS query_mode, 0 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', '"time3 for"', 1 AS query_mode, 25 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', '"time3 for"', 1 AS query_mode, 0 as limit )</sphinxql>
 
 </sphqueries>
 

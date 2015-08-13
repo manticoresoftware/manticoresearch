@@ -1221,6 +1221,46 @@ static ISphQword * CreateQueryWord ( const XQKeyword_t & tWord, const ISphQwordS
 	return pWord;
 }
 
+struct AtomPosQWord_fn
+{
+	bool operator () ( ISphQword * ) const { return true; }
+};
+
+struct AtomPosExtNode_fn
+{
+	bool operator () ( ExtNode_i * pNode ) const { return !pNode->GotHitless(); }
+};
+
+template <typename T, typename NODE_CHECK>
+int CountAtomPos ( const CSphVector<T *> & dNodes, const NODE_CHECK & fnCheck )
+{
+	if ( dNodes.GetLength()<2 )
+		return dNodes.GetLength();
+
+	int iMinPos = INT_MAX;
+	int iMaxPos = 0;
+	ARRAY_FOREACH ( i, dNodes )
+	{
+		T * pNode = dNodes[i];
+		if ( fnCheck ( pNode ) )
+		{
+			iMinPos = Min ( pNode->m_iAtomPos, iMinPos );
+			iMaxPos = Max ( pNode->m_iAtomPos, iMaxPos );
+		}
+	}
+	if ( iMinPos==INT_MAX )
+		return 0;
+
+	CSphBitvec dAtomPos ( iMaxPos - iMinPos + 1 );
+	ARRAY_FOREACH ( i, dNodes )
+	{
+		if ( fnCheck ( dNodes[i] ) )
+			dAtomPos.BitSet ( dNodes[i]->m_iAtomPos - iMinPos );
+	}
+
+	return dAtomPos.BitCount();
+}
+
 
 template < typename T >
 static ExtNode_i * CreateMultiNode ( const XQNode_t * pQueryNode, const ISphQwordSetup & tSetup, bool bNeedsHitlist )
@@ -1232,29 +1272,48 @@ static ExtNode_i * CreateMultiNode ( const XQNode_t * pQueryNode, const ISphQwor
 	if ( pQueryNode->m_dChildren.GetLength() )
 	{
 		CSphVector<ExtNode_i *> dNodes;
+		CSphVector<ExtNode_i *> dTerms;
 		ARRAY_FOREACH ( i, pQueryNode->m_dChildren )
 		{
 			ExtNode_i * pTerm = ExtNode_i::Create ( pQueryNode->m_dChildren[i], tSetup );
 			assert ( !pTerm || pTerm->m_iAtomPos>=0 );
 			if ( pTerm )
-				dNodes.Add ( pTerm );
+			{
+				if ( !pTerm->GotHitless() )
+					dNodes.Add ( pTerm );
+				else
+					dTerms.Add ( pTerm );
+			}
 		}
 
-		if ( dNodes.GetLength()<2 )
+		int iAtoms = CountAtomPos ( dNodes, AtomPosExtNode_fn() );
+		if ( iAtoms<2 )
 		{
 			ARRAY_FOREACH ( i, dNodes )
 				SafeDelete ( dNodes[i] );
+			ARRAY_FOREACH ( i, dTerms )
+				SafeDelete ( dTerms[i] );
 			if ( tSetup.m_pWarning )
-				tSetup.m_pWarning->SetSprintf ( "can't create phrase node, hitlists unavailable (hitlists=%d, nodes=%d)", dNodes.GetLength(), pQueryNode->m_dChildren.GetLength() );
+				tSetup.m_pWarning->SetSprintf ( "can't create phrase node, hitlists unavailable (hitlists=%d, nodes=%d)", iAtoms, pQueryNode->m_dChildren.GetLength() );
 			return NULL;
 		}
 
 		// FIXME! tricky combo again
 		// quorum+expand used KeywordsEqual() path to drill down until actual nodes
 		ExtNode_i * pResult = new T ( dNodes, *pQueryNode, tSetup );
+
+		// AND result with the words that had no hitlist
+		if ( dTerms.GetLength () )
+		{
+			pResult = new ExtAnd_c ( pResult, dTerms[0], tSetup );
+			for ( int i=1; i<dTerms.GetLength (); i++ )
+				pResult = new ExtAnd_c ( pResult, dTerms[i], tSetup );
+		}
+
 		if ( pQueryNode->GetCount() )
 			return tSetup.m_pNodeCache->CreateProxy ( pResult, pQueryNode, tSetup );
-		return pResult; // FIXME! sorry, no hitless vs expand vs phrase support for now!
+
+		return pResult;
 	}
 
 	//////////////////////
@@ -1277,7 +1336,8 @@ static ExtNode_i * CreateMultiNode ( const XQNode_t * pQueryNode, const ISphQwor
 	}
 
 	// see if we can create the node
-	if ( dQwordsHit.GetLength()<2 )
+	int iAtoms = CountAtomPos ( dQwordsHit, AtomPosQWord_fn() );
+	if ( iAtoms<2 )
 	{
 		ARRAY_FOREACH ( i, dQwords )
 			SafeDelete ( dQwords[i] );
@@ -1285,7 +1345,7 @@ static ExtNode_i * CreateMultiNode ( const XQNode_t * pQueryNode, const ISphQwor
 			SafeDelete ( dQwordsHit[i] );
 		if ( tSetup.m_pWarning )
 			tSetup.m_pWarning->SetSprintf ( "can't create phrase node, hitlists unavailable (hitlists=%d, nodes=%d)",
-				dQwordsHit.GetLength(), dWords.GetLength() );
+				iAtoms, dWords.GetLength() );
 		return NULL;
 
 	} else

@@ -6711,7 +6711,6 @@ bool CSphFilterSettings::operator == ( const CSphFilterSettings & rhs ) const
 	switch ( m_eType )
 	{
 		case SPH_FILTER_RANGE:
-		case SPH_FILTER_STRING:
 			return m_iMinValue==rhs.m_iMinValue && m_iMaxValue==rhs.m_iMaxValue;
 
 		case SPH_FILTER_FLOATRANGE:
@@ -6727,6 +6726,7 @@ bool CSphFilterSettings::operator == ( const CSphFilterSettings & rhs ) const
 
 			return true;
 
+		case SPH_FILTER_STRING:
 		case SPH_FILTER_USERVAR:
 			return ( m_sRefString==rhs.m_sRefString );
 

@@ -154,6 +154,9 @@ insert into facetdemo (id,price,brand_id,title,brand_name,property,categories,j)
 <!-- interval function for json fields -->
 <sphinxql>select j.x from facetdemo limit 0,1 facet interval(j.x[0],10,11,12,13);</sphinxql>
 
+<!-- multi-queries with string filters -->
+<sphinxql>select id, title, property from facetdemo2 where match ('product') and property='Four' order by id asc; select id, title, property from facetdemo2 where match ('product') and property='Seven' order by id asc</sphinxql>
+
 </sphqueries>
 
 </test>

@@ -5614,7 +5614,6 @@ bool CSphFilterSettings::operator == ( const CSphFilterSettings & rhs ) const
 	switch ( m_eType )
 	{
 		case SPH_FILTER_RANGE:
-		case SPH_FILTER_STRING:
 			return m_iMinValue==rhs.m_iMinValue && m_iMaxValue==rhs.m_iMaxValue;
 
 		case SPH_FILTER_FLOATRANGE:
@@ -5630,6 +5629,7 @@ bool CSphFilterSettings::operator == ( const CSphFilterSettings & rhs ) const
 
 			return true;
 
+		case SPH_FILTER_STRING:
 		case SPH_FILTER_USERVAR:
 			return ( m_sRefString==rhs.m_sRefString );
 
@@ -5687,7 +5687,7 @@ CSphQuery::CSphQuery ()
 	, m_eRanker		( SPH_RANK_DEFAULT )
 	, m_eSort		( SPH_SORT_RELEVANCE )
 	, m_iRandSeed	( -1 )
-	, m_iMaxMatches	( 1000 )
+	, m_iMaxMatches	( DEFAULT_MAX_MATCHES )
 	, m_bSortKbuffer	( false )
 	, m_bZSlist			( false )
 	, m_bSimplify		( false )

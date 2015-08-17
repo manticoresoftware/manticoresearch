@@ -104,4 +104,8 @@ $results[] = $client->RunQueries();
 
 <Queries><Query/></Queries>
 
+<sphqueries>
+<sphinxql>select missed from products; select * from products</sphinxql>
+</sphqueries>
+
 </test>

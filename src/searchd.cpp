@@ -52,7 +52,6 @@ extern "C"
 #define NETOUTBUF				8192
 #define PING_INTERVAL			1000
 #define QLSTATE_FLUSH_MSEC		50
-#define DEFAULT_MAX_MATCHES		1000
 
 // don't shutdown on SIGKILL (debug purposes)
 // 1 - SIGKILL will shut down the whole daemon; 0 - watchdog will reincarnate the daemon
@@ -4177,7 +4176,7 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes
 	// OPTION clause
 	int iOpts = 0;
 
-	if ( q.m_iMaxMatches!=1000 )
+	if ( q.m_iMaxMatches!=DEFAULT_MAX_MATCHES )
 	{
 		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
 		tBuf.Appendf ( "max_matches=%d", q.m_iMaxMatches );
@@ -13849,6 +13848,9 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 			if ( !sWarning.IsEmpty() )
 				tRes.m_sWarning = sWarning;
 			SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow );
+			// mysql server breaks send on error
+			if ( !tRes.m_iSuccesses )
+				break;
 		} else if ( eStmt==STMT_SHOW_WARNINGS )
 			HandleMysqlWarning ( tMeta, dRows, bMoreResultsFollow );
 		else if ( eStmt==STMT_SHOW_STATUS || eStmt==STMT_SHOW_META || eStmt==STMT_SHOW_AGENT_STATUS )

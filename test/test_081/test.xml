@@ -3,11 +3,14 @@
 
 <name>hitless indexes</name>
 
-<requires>
-<non-rt/>
-</requires>
+<requires><lemmatizer_base/><non-rt/></requires>
 
 <config>
+common
+{
+	lemmatizer_base	= <local>lemmatizer_base</local>
+}
+
 indexer
 {
 	mem_limit = 16M
@@ -73,6 +76,30 @@ index all2
 	path = <data_path/>/all2
 	hitless_words = all
 }
+
+source hit_test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query		= SELECT 1 id, "protest, to teach, to feed, and" body, 11 idd UNION SELECT 2 id, "to and windows text" body, 12 idd
+	sql_attr_uint	= idd
+}
+
+index hit_0
+{
+	source = hit_test
+	path			= <data_path/>/hit_0
+	morphology		= lemmatize_en_all
+}
+
+index hit_1
+{
+	source = hit_test
+	path			= <data_path/>/hit_1
+	morphology		= lemmatize_en_all
+	hitless_words 	= <this_test/>/words3.txt
+}
+
 </config>
 
 <db_create>
@@ -180,6 +207,24 @@ INSERT INTO test_table1 VALUES (10,1,'bbb bbb bbb bbb aaa aaa aaa aaa aaa aaa aa
 	select * from all2 where match('("aaa bbb") ("aaa cc")');
 	show meta;
 	</sphinxql>
+	
+	<!-- regressions hitless vs multiple terms from lemmatizer -->
+	<sphinxql>SELECT * FROM hit_0 WHERE MATCH(' "teach to feed" ')</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM hit_1 WHERE MATCH(' "teach to feed" ')</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM hit_0 WHERE MATCH(' "to feed and" ')</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM hit_1 WHERE MATCH(' "to feed and" ')</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM hit_0 WHERE MATCH(' "to feed" ')</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM hit_1 WHERE MATCH(' "to feed" ')</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM hit_0 WHERE MATCH(' "to windows text" ')</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM hit_1 WHERE MATCH(' "to windows text" ')</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
 </sphqueries>
 
 </test>

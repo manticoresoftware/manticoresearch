@@ -2105,9 +2105,20 @@ int ha_sphinx::open ( const char * name, int, uint )
 	thr_lock_data_init ( &m_pShare->m_tLock, &m_tLock, NULL );
 
 	#if MYSQL_VERSION_ID>50100
-	*thd_ha_data ( table->in_use, ht ) = NULL;
+	void ** tmp = thd_ha_data ( table->in_use, ht );
+	if ( *tmp )
+	{
+		CSphTLS * pTls = (CSphTLS *)( *tmp );
+		SafeDelete ( pTls );
+		*tmp = NULL;
+	}	
 	#else
-	table->in_use->ha_data [ sphinx_hton.slot ] = NULL;
+	if ( table->in_use->ha_data [ sphinx_hton.slot ] )
+	{
+		CSphTLS * pTls = (CSphTLS *)( table->in_use->ha_data [ sphinx_hton.slot ] );
+		SafeDelete ( pTls );
+		table->in_use->ha_data [ sphinx_hton.slot ] = NULL;
+	}
 	#endif
 
 	SPH_RET(0);

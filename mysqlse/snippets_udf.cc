@@ -17,8 +17,10 @@
 #include <string.h>
 #include <assert.h>
 
+#ifndef __WIN__
 #include <sys/un.h>
 #include <netdb.h>
+#endif
 
 #include <mysql_version.h>
 

@@ -2158,9 +2158,9 @@ int ha_sphinx::Connect ( const char * sHost, ushort uPort )
 			bool bError = false;
 
 #if MYSQL_VERSION_ID>=50515
-			struct addrinfo *hp = NULL;
+			struct addrinfo * hp = NULL;
 			tmp_errno = getaddrinfo ( sHost, NULL, NULL, &hp );
-			if ( !tmp_errno || !hp || !hp->ai_addr )
+			if ( tmp_errno!=0 || !hp || !hp->ai_addr )
 			{
 				bError = true;
 				if ( hp )
@@ -2187,7 +2187,7 @@ int ha_sphinx::Connect ( const char * sHost, ushort uPort )
 			}
 
 #if MYSQL_VERSION_ID>=50515
-			memcpy ( &sin.sin_addr, hp->ai_addr, Min ( sizeof(sin.sin_addr), (size_t)hp->ai_addrlen ) );
+			memcpy ( &sin.sin_addr, &( (struct sockaddr_in *)hp->ai_addr )->sin_addr, sizeof(sin.sin_addr) );
 			freeaddrinfo ( hp );
 #else
 			memcpy ( &sin.sin_addr, hp->h_addr, Min ( sizeof(sin.sin_addr), (size_t)hp->h_length ) );

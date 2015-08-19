@@ -3027,6 +3027,11 @@ int ha_sphinx::index_next_same ( byte * buf, const byte * key, uint keylen )
 	SPH_RET ( get_rec ( buf, key, keylen ) );
 }
 
+#ifndef PRIi64
+#define PRIi64 "lld"
+#endif
+
+#define INT64_FMT "%" PRIi64
 
 int ha_sphinx::get_rec ( byte * buf, const byte *, uint )
 {
@@ -3128,7 +3133,7 @@ int ha_sphinx::get_rec ( byte * buf, const byte *, uint )
 							if ( pCur < sBuf+sizeof(sBuf)-16 ) // 10 chars per 32bit value plus some safety bytes
 							{
 								snprintf ( pCur, sBuf+sizeof(sBuf)-pCur, "%u", uEntry );
-								while ( *pCur ) *pCur++;
+								while ( *pCur ) pCur++;
 								if ( uValue>1 )
 									*pCur++ = ','; // non-trailing commas
 							}
@@ -3137,12 +3142,13 @@ int ha_sphinx::get_rec ( byte * buf, const byte *, uint )
 					{
 						for ( ; uValue>0 && !m_bUnpackError; uValue-=2 )
 						{
-							uint32 uEntryLo = UnpackDword ();
-							uint32 uEntryHi = UnpackDword();
+							longlong uEntry = UnpackDword ();
+							uEntry = uEntry<<32;
+							uEntry += UnpackDword();
 							if ( pCur < sBuf+sizeof(sBuf)-24 ) // 20 chars per 64bit value plus some safety bytes
 							{
-								snprintf ( pCur, sBuf+sizeof(sBuf)-pCur, "%u%u", uEntryHi, uEntryLo );
-								while ( *pCur ) *pCur++;
+								snprintf ( pCur, sBuf+sizeof(sBuf)-pCur, INT64_FMT, uEntry );
+								while ( *pCur ) pCur++;
 								if ( uValue>2 )
 									*pCur++ = ','; // non-trailing commas
 							}

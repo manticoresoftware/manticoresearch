@@ -120,6 +120,10 @@ INSERT INTO test_table VALUES
 <sphinxql>SELECT * FROM i_filter WHERE title!='be'</sphinxql>
 <sphinxql>SELECT * FROM i_filter WHERE MATCH ('be') AND j.title!='BE'</sphinxql>
 
+<!-- regression string expresion with missed json field -->
+<sphinxql>SELECT id, (j.mantle='be alone') as c, j FROM i_filter </sphinxql>
+
+
 </sphqueries>
 
 </test>

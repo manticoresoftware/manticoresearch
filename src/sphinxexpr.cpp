@@ -1302,8 +1302,8 @@ struct Expr_StrEq_c : public ISphExpr
 		int iLeft = m_pLeft->StringEval ( tMatch, &pLeft );
 		int iRight = m_pRight->StringEval ( tMatch, &pRight );
 
-		CSphString sStr1 ( pLeft ? (const char*)pLeft : "", iLeft );
-		CSphString sStr2 ( pRight ? (const char*)pRight : "", iRight );
+		CSphString sStr1 ( iLeft ? (const char*)pLeft : "", iLeft );
+		CSphString sStr2 ( iRight ? (const char*)pRight : "", iRight );
 
 		bool bEq = m_fnStrCmp ( (const BYTE*)sStr1.cstr(), (const BYTE*)sStr2.cstr(), false )==0;
 

@@ -2105,9 +2105,20 @@ int ha_sphinx::open ( const char * name, int, uint )
 	thr_lock_data_init ( &m_pShare->m_tLock, &m_tLock, NULL );
 
 	#if MYSQL_VERSION_ID>50100
-	*thd_ha_data ( table->in_use, ht ) = NULL;
+	void ** tmp = thd_ha_data ( table->in_use, ht );
+	if ( *tmp )
+	{
+		CSphTLS * pTls = (CSphTLS *)( *tmp );
+		SafeDelete ( pTls );
+		*tmp = NULL;
+	}	
 	#else
-	table->in_use->ha_data [ sphinx_hton.slot ] = NULL;
+	if ( table->in_use->ha_data [ sphinx_hton.slot ] )
+	{
+		CSphTLS * pTls = (CSphTLS *)( table->in_use->ha_data [ sphinx_hton.slot ] );
+		SafeDelete ( pTls );
+		table->in_use->ha_data [ sphinx_hton.slot ] = NULL;
+	}
 	#endif
 
 	SPH_RET(0);
@@ -2147,9 +2158,9 @@ int ha_sphinx::Connect ( const char * sHost, ushort uPort )
 			bool bError = false;
 
 #if MYSQL_VERSION_ID>=50515
-			struct addrinfo *hp = NULL;
+			struct addrinfo * hp = NULL;
 			tmp_errno = getaddrinfo ( sHost, NULL, NULL, &hp );
-			if ( !tmp_errno || !hp || !hp->ai_addr )
+			if ( tmp_errno!=0 || !hp || !hp->ai_addr )
 			{
 				bError = true;
 				if ( hp )
@@ -2176,7 +2187,7 @@ int ha_sphinx::Connect ( const char * sHost, ushort uPort )
 			}
 
 #if MYSQL_VERSION_ID>=50515
-			memcpy ( &sin.sin_addr, hp->ai_addr, Min ( sizeof(sin.sin_addr), (size_t)hp->ai_addrlen ) );
+			memcpy ( &sin.sin_addr, &( (struct sockaddr_in *)hp->ai_addr )->sin_addr, sizeof(sin.sin_addr) );
 			freeaddrinfo ( hp );
 #else
 			memcpy ( &sin.sin_addr, hp->h_addr, Min ( sizeof(sin.sin_addr), (size_t)hp->h_length ) );
@@ -3016,6 +3027,11 @@ int ha_sphinx::index_next_same ( byte * buf, const byte * key, uint keylen )
 	SPH_RET ( get_rec ( buf, key, keylen ) );
 }
 
+#ifndef PRIi64
+#define PRIi64 "lld"
+#endif
+
+#define INT64_FMT "%" PRIi64
 
 int ha_sphinx::get_rec ( byte * buf, const byte *, uint )
 {
@@ -3117,7 +3133,7 @@ int ha_sphinx::get_rec ( byte * buf, const byte *, uint )
 							if ( pCur < sBuf+sizeof(sBuf)-16 ) // 10 chars per 32bit value plus some safety bytes
 							{
 								snprintf ( pCur, sBuf+sizeof(sBuf)-pCur, "%u", uEntry );
-								while ( *pCur ) *pCur++;
+								while ( *pCur ) pCur++;
 								if ( uValue>1 )
 									*pCur++ = ','; // non-trailing commas
 							}
@@ -3126,12 +3142,13 @@ int ha_sphinx::get_rec ( byte * buf, const byte *, uint )
 					{
 						for ( ; uValue>0 && !m_bUnpackError; uValue-=2 )
 						{
-							uint32 uEntryLo = UnpackDword ();
-							uint32 uEntryHi = UnpackDword();
+							longlong uEntry = UnpackDword ();
+							uEntry = uEntry<<32;
+							uEntry += UnpackDword();
 							if ( pCur < sBuf+sizeof(sBuf)-24 ) // 20 chars per 64bit value plus some safety bytes
 							{
-								snprintf ( pCur, sBuf+sizeof(sBuf)-pCur, "%u%u", uEntryHi, uEntryLo );
-								while ( *pCur ) *pCur++;
+								snprintf ( pCur, sBuf+sizeof(sBuf)-pCur, INT64_FMT, uEntry );
+								while ( *pCur ) pCur++;
 								if ( uValue>2 )
 									*pCur++ = ','; // non-trailing commas
 							}

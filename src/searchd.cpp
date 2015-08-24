@@ -20801,6 +20801,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 		// FIXME! add opt=(csv)val handling here
 		OPT1 ( "--replay-flags=accept-desc-timestamp" )		uReplayFlags |= SPH_REPLAY_ACCEPT_DESC_TIMESTAMP;
+		OPT1 ( "--replay-flags=ignore-open-errors" )			uReplayFlags |= SPH_REPLAY_IGNORE_OPEN_ERROR;
 
 		// handle 1-arg options
 		else if ( (i+1)>=argc )		break;

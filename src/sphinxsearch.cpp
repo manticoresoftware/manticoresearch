@@ -9339,9 +9339,14 @@ public:
 
 	virtual int GetQwords ( ExtQwordsHash_t & hQwords )
 	{
-		if ( m_pChild )
-			return m_pChild->GetQwords ( hQwords );
-		return -1;
+		if ( !m_pChild )
+			return -1;
+
+		int iChildAtom = m_pChild->GetQwords ( hQwords );
+		if ( iChildAtom<0 )
+			return -1;
+
+		return m_iAtomPos + iChildAtom;
 	}
 
 	virtual void SetQwordsIDF ( const ExtQwordsHash_t & hQwords )
@@ -9607,7 +9612,7 @@ const ExtHit_t * ExtNodeCached_t::GetHitsChunk ( const ExtDoc_t * pMatched )
 		}
 		m_iHitIndex++;
 		m_dHits[iHit] = tCachedHit;
-		m_dHits[iHit].m_uQuerypos = (WORD)( m_dHits[iHit].m_uQuerypos + m_iAtomPos - m_pNode->m_iAtomPos );
+		m_dHits[iHit].m_uQuerypos = (WORD)( tCachedHit.m_uQuerypos + m_iAtomPos - m_pNode->m_iAtomPos );
 		iHit++;
 	}
 

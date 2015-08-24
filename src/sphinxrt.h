@@ -110,7 +110,8 @@ public:
 
 enum ESphBinlogReplayFlags
 {
-	SPH_REPLAY_ACCEPT_DESC_TIMESTAMP = 1
+	SPH_REPLAY_ACCEPT_DESC_TIMESTAMP = 1,
+	SPH_REPLAY_IGNORE_OPEN_ERROR = 2
 };
 
 /// replay stored binlog

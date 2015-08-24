@@ -9542,7 +9542,14 @@ int RtBinlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, D
 
 	BinlogReader_c tReader;
 	if ( !tReader.Open ( sLog, sError ) )
+	{
+		if ( ( uReplayFlags & SPH_REPLAY_IGNORE_OPEN_ERROR )!=0 )
+		{
+			sphWarning ( "binlog: log open error: %s", sError.cstr() );
+			return 0;
+		} 
 		sphDie ( "binlog: log open error: %s", sError.cstr() );
+	}
 
 	const SphOffset_t iFileSize = tReader.GetFilesize();
 

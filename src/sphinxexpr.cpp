@@ -1671,6 +1671,10 @@ DECLARE_TIMESTAMP ( Expr_Month_c,			s.tm_mon+1 )
 DECLARE_TIMESTAMP ( Expr_Year_c,			s.tm_year+1900 )
 DECLARE_TIMESTAMP ( Expr_YearMonth_c,		(s.tm_year+1900)*100+s.tm_mon+1 )
 DECLARE_TIMESTAMP ( Expr_YearMonthDay_c,	(s.tm_year+1900)*10000+(s.tm_mon+1)*100+s.tm_mday )
+DECLARE_TIMESTAMP ( Expr_Hour_c, s.tm_hour )
+DECLARE_TIMESTAMP ( Expr_Minute_c, s.tm_min )
+DECLARE_TIMESTAMP ( Expr_Second_c, s.tm_sec )
+
 
 //////////////////////////////////////////////////////////////////////////
 // UDF CALL SITE
@@ -1744,6 +1748,9 @@ enum Func_e
 	FUNC_YEAR,
 	FUNC_YEARMONTH,
 	FUNC_YEARMONTHDAY,
+	FUNC_HOUR,
+	FUNC_MINUTE,
+	FUNC_SECOND,
 
 	FUNC_MIN,
 	FUNC_MAX,
@@ -1828,6 +1835,9 @@ static FuncDesc_t g_dFuncs[] =
 	{ "year",			1,	FUNC_YEAR,			SPH_ATTR_INTEGER },
 	{ "yearmonth",		1,	FUNC_YEARMONTH,		SPH_ATTR_INTEGER },
 	{ "yearmonthday",	1,	FUNC_YEARMONTHDAY,	SPH_ATTR_INTEGER },
+	{ "hour",			1,	FUNC_HOUR,			SPH_ATTR_INTEGER },
+	{ "minute",			1,	FUNC_MINUTE,		SPH_ATTR_INTEGER },
+	{ "second",			1,	FUNC_SECOND,		SPH_ATTR_INTEGER },
 
 	{ "min",			2,	FUNC_MIN,			SPH_ATTR_NONE },
 	{ "max",			2,	FUNC_MAX,			SPH_ATTR_NONE },
@@ -1919,32 +1929,32 @@ static int FuncHashLookup ( const char * sKey )
 
 	static BYTE dAsso[] =
 	{
-		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
-		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
-		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
-		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
-		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
-		0, 129, 129, 129, 129, 129, 129, 129, 129, 129,
-		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
-		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
-		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
-		129, 129, 129, 129, 129, 15, 129, 25, 45, 0,
-		20, 5, 25, 20, 129, 10, 129, 129, 5, 0,
-		10, 30, 25, 25, 0, 55, 0, 0, 129, 0,
-		47, 35, 0, 129, 129, 129, 129, 129, 129, 129,
-		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
-		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
-		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
-		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
-		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
-		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
-		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
-		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
-		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
-		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
-		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
-		129, 129, 129, 129, 129, 129, 129, 129, 129, 129,
-		129, 129, 129, 129, 129, 129
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		0, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 60, 109, 25, 25, 0,
+		25, 15, 30, 10, 60, 10, 109, 109, 5, 0,
+		10, 25, 25, 25, 0, 55, 0, 0, 109, 15,
+		60, 20, 0, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
+		109, 109, 109, 109, 109, 109
 	};
 
 	const BYTE * s = (const BYTE*) sKey;
@@ -1958,19 +1968,17 @@ static int FuncHashLookup ( const char * sKey )
 
 	static int dIndexes[] =
 	{
-		-1, -1, -1, -1, -1, 13, -1, 48, 49, 26,
-		30, -1, 52, 50, -1, -1, -1, 6, 51, 2,
-		-1, -1, 28, 20, 47, -1, 44, 42, 27, -1,
-		-1, -1, -1, 46, 57, 58, -1, 24, 54, 60,
-		45, -1, -1, 0, 23, 16, 38, 56, 35, 25,
-		41, -1, 36, 53, 37, 59, 43, 40, 22, 7,
-		8, 29, 31, 39, 34, 3, 33, 32, -1, 17,
-		-1, -1, -1, 55, 18, 21, -1, 19, 4, 12,
-		9, 11, -1, 15, 10, -1, -1, -1, 5, 14,
-		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-		-1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-		-1, -1, -1, -1, -1, -1, -1, -1, 1
+		-1, -1, -1, -1, -1, 13, -1, 51, 52, 29,
+		-1, -1, 55, 53, -1, -1, -1, 6, 54, -1,
+		33, -1, 31, 23, 50, -1, 21, 45, 30, 2,
+		44, -1, -1, 49, 60, 61, 47, -1, 57, 63,
+		16, 32, 27, 38, 7, 8, 41, 39, 56, 26,
+		48, 11, 59, 0, 28, 62, 46, 34, 58, 37,
+		-1, 36, 43, 42, 17, 3, -1, -1, 25, 18,
+		-1, -1, 19, 15, 14, -1, 22, -1, 4, 12,
+		-1, -1, -1, 5, 10, -1, -1, -1, 24, 20,
+		35, -1, -1, -1, 40, -1, -1, -1, -1, -1,
+		-1, -1, -1, 9, -1, -1, -1, -1, 1
 	};
 
 	if ( iHash<0 || iHash>=(int)(sizeof(dIndexes)/sizeof(dIndexes[0])) )
@@ -4002,6 +4010,9 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 					case FUNC_YEAR:			return new Expr_Year_c ( dArgs[0] );
 					case FUNC_YEARMONTH:	return new Expr_YearMonth_c ( dArgs[0] );
 					case FUNC_YEARMONTHDAY:	return new Expr_YearMonthDay_c ( dArgs[0] );
+					case FUNC_HOUR:			return new Expr_Hour_c ( dArgs[0] );
+					case FUNC_MINUTE:		return new Expr_Minute_c ( dArgs[0] );
+					case FUNC_SECOND:		return new Expr_Second_c ( dArgs[0] );
 
 					case FUNC_MIN:		return new Expr_Min_c ( dArgs[0], dArgs[1] );
 					case FUNC_MAX:		return new Expr_Max_c ( dArgs[0], dArgs[1] );
@@ -5810,7 +5821,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iFirst, int iSecond, int iThird, 
 
 	// check that first SINT or timestamp family arg is integer
 	if ( eFunc==FUNC_SINT || eFunc==FUNC_DAY || eFunc==FUNC_MONTH || eFunc==FUNC_YEAR || eFunc==FUNC_YEARMONTH || eFunc==FUNC_YEARMONTHDAY
-		|| eFunc==FUNC_FIBONACCI )
+		|| eFunc==FUNC_FIBONACCI || eFunc==FUNC_HOUR || eFunc==FUNC_MINUTE || eFunc==FUNC_SECOND )
 	{
 		assert ( iFirst>=0 );
 		if ( m_dNodes [ iFirst ].m_eRetType!=SPH_ATTR_INTEGER )

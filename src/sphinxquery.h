@@ -214,9 +214,6 @@ public:
 		m_iOrder = iOrder;
 	}
 
-	/// precise comparison
-	bool IsEqualTo ( const XQNode_t * pNode );
-
 	/// hash me
 	uint64_t GetHash () const;
 

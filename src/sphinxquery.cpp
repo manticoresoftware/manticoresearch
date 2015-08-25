@@ -268,45 +268,6 @@ void XQNode_t::ClearFieldMask ()
 }
 
 
-bool XQNode_t::IsEqualTo ( const XQNode_t * pNode )
-{
-	if ( !pNode || pNode->GetHash()!=GetHash() || pNode->GetOp()!=GetOp() )
-		return false;
-
-	if ( m_dWords.GetLength() )
-	{
-		// two plain nodes. let's compare the keywords
-		if ( pNode->m_dWords.GetLength()!=m_dWords.GetLength() )
-			return false;
-
-		if ( !m_dWords.GetLength() )
-			return true;
-
-		SmallStringHash_T<int> hSortedWords;
-		ARRAY_FOREACH ( i, pNode->m_dWords )
-			hSortedWords.Add ( 0, pNode->m_dWords[i].m_sWord );
-
-		ARRAY_FOREACH ( i, m_dWords )
-			if ( !hSortedWords.Exists ( m_dWords[i].m_sWord ) )
-				return false;
-
-		return true;
-	}
-
-	// two non-plain nodes. let's compare the children
-	if ( pNode->m_dChildren.GetLength()!=m_dChildren.GetLength() )
-		return false;
-
-	if ( !m_dChildren.GetLength() )
-		return true;
-
-	ARRAY_FOREACH ( i, m_dChildren )
-		if ( !pNode->m_dChildren[i]->IsEqualTo ( m_dChildren[i] ) )
-			return false;
-	return true;
-}
-
-
 uint64_t XQNode_t::GetHash () const
 {
 	if ( m_iMagicHash )
@@ -2435,7 +2396,7 @@ struct MarkedNode_t
 		, m_iOrder ( 0 )
 	{}
 
-	void MarkIt ( bool bMark=true )
+	void MarkIt ( bool bMark )
 	{
 		// mark
 		if ( bMark )
@@ -2455,8 +2416,17 @@ struct MarkedNode_t
 
 typedef CSphOrderedHash < MarkedNode_t, uint64_t, IdentityHash_fn, 128 > CSubtreeHash;
 
+struct XqTreeComparator_t
+{
+	CSphVector<const XQKeyword_t *>		m_dTerms1;
+	CSphVector<const XQKeyword_t *>		m_dTerms2;
+
+	bool IsEqual ( const XQNode_t * pNode1, const XQNode_t * pNode2 );
+	bool CheckCollectTerms ( const XQNode_t * pNode1, const XQNode_t * pNode2 );
+};
+
 /// check hashes, then check subtrees, then flag
-static void FlagCommonSubtrees ( XQNode_t * pTree, CSubtreeHash & hSubTrees, bool bFlag=true, bool bMarkIt=true )
+static void FlagCommonSubtrees ( XQNode_t * pTree, CSubtreeHash & hSubTrees, XqTreeComparator_t & tCmp, bool bFlag, bool bMarkIt )
 {
 	if ( !IsAppropriate ( pTree ) )
 		return;
@@ -2464,39 +2434,40 @@ static void FlagCommonSubtrees ( XQNode_t * pTree, CSubtreeHash & hSubTrees, boo
 	// we do not yet have any collisions stats,
 	// but chances are we don't actually need IsEqualTo() at all
 	uint64_t iHash = pTree->GetHash();
-	if ( bFlag && hSubTrees.Exists ( iHash ) && hSubTrees [ iHash ].m_pTree->IsEqualTo ( pTree ) )
+	if ( bFlag && hSubTrees.Exists ( iHash ) && tCmp.IsEqual ( hSubTrees [ iHash ].m_pTree, pTree ) )
 	{
-		hSubTrees[iHash].MarkIt ();
+		hSubTrees[iHash].MarkIt ( true );
 
 		// we just add all the children but do NOT mark them as common
 		// so that only the subtree root is marked.
 		// also we unmark all the cases which were eaten by bigger trees
 		ARRAY_FOREACH ( i, pTree->m_dChildren )
 			if ( !hSubTrees.Exists ( pTree->m_dChildren[i]->GetHash() ) )
-				FlagCommonSubtrees ( pTree->m_dChildren[i], hSubTrees, false, bMarkIt );
+				FlagCommonSubtrees ( pTree->m_dChildren[i], hSubTrees, tCmp, false, bMarkIt );
 			else
-				FlagCommonSubtrees ( pTree->m_dChildren[i], hSubTrees, false, false );
+				FlagCommonSubtrees ( pTree->m_dChildren[i], hSubTrees, tCmp, false, false );
 	} else
 	{
 		if ( !bMarkIt )
-			hSubTrees[iHash].MarkIt(false);
+			hSubTrees[iHash].MarkIt ( false );
 		else
 			hSubTrees.Add ( MarkedNode_t ( pTree ), iHash );
 
 		ARRAY_FOREACH ( i, pTree->m_dChildren )
-			FlagCommonSubtrees ( pTree->m_dChildren[i], hSubTrees, bFlag, bMarkIt );
+			FlagCommonSubtrees ( pTree->m_dChildren[i], hSubTrees, tCmp, bFlag, bMarkIt );
 	}
 }
 
 
-static void SignCommonSubtrees ( XQNode_t * pTree, CSubtreeHash & hSubTrees )
+static void SignCommonSubtrees ( XQNode_t * pTree, const CSubtreeHash & hSubTrees )
 {
 	if ( !pTree )
 		return;
 
 	uint64_t iHash = pTree->GetHash();
-	if ( hSubTrees.Exists(iHash) && hSubTrees[iHash].m_bMarked )
-		pTree->TagAsCommon ( hSubTrees[iHash].m_iOrder, hSubTrees[iHash].m_iCounter );
+	const MarkedNode_t * pCommon = hSubTrees ( iHash );
+	if ( pCommon && pCommon->m_bMarked )
+		pTree->TagAsCommon ( pCommon->m_iOrder, pCommon->m_iCounter );
 
 	ARRAY_FOREACH ( i, pTree->m_dChildren )
 		SignCommonSubtrees ( pTree->m_dChildren[i], hSubTrees );
@@ -2514,9 +2485,10 @@ int sphMarkCommonSubtrees ( int iXQ, const XQQuery_t * pXQ )
 	}
 
 	// flag common subtrees and refcount them
+	XqTreeComparator_t tCmp;
 	CSubtreeHash hSubtrees;
 	for ( int i=0; i<iXQ; i++ )
-		FlagCommonSubtrees ( pXQ[i].m_pRoot, hSubtrees );
+		FlagCommonSubtrees ( pXQ[i].m_pRoot, hSubtrees, tCmp, true, true );
 
 	// number marked subtrees and assign them order numbers.
 	int iOrder = 0;
@@ -2530,6 +2502,79 @@ int sphMarkCommonSubtrees ( int iXQ, const XQQuery_t * pXQ )
 		SignCommonSubtrees ( pXQ[i].m_pRoot, hSubtrees );
 
 	return iOrder;
+}
+
+struct CmpTermQPos_fn
+{
+	inline bool IsLess ( const XQKeyword_t * pA, const XQKeyword_t * pB ) const
+	{
+		assert ( pA && pB );
+		return ( pA->m_iAtomPos<pB->m_iAtomPos );
+	}
+};
+
+bool XqTreeComparator_t::IsEqual ( const XQNode_t * pNode1, const XQNode_t * pNode2 )
+{
+	// early out check to skip allocations
+	if ( !pNode1 || !pNode2 || pNode1->GetHash()!=pNode2->GetHash() || pNode1->GetOp()!=pNode2->GetOp () )
+		return false;
+
+	// need reset data from previous compare
+	m_dTerms1.Resize ( 0 );
+	m_dTerms2.Resize ( 0 );
+	// need reserve some space for first compare
+	m_dTerms1.Reserve ( 64 );
+	m_dTerms2.Reserve ( 64 );
+
+	if ( !CheckCollectTerms ( pNode1, pNode2 ) )
+		return false;
+
+	assert ( m_dTerms1.GetLength ()==m_dTerms2.GetLength () );
+
+	if ( !m_dTerms1.GetLength() )
+		return true;
+
+	m_dTerms1.Sort ( CmpTermQPos_fn() );
+	m_dTerms2.Sort ( CmpTermQPos_fn() );
+
+	if ( m_dTerms1[0]->m_sWord!=m_dTerms2[0]->m_sWord )
+		return false;
+
+	for ( int i=1; i<m_dTerms1.GetLength(); i++ )
+	{
+		int iDelta1 = m_dTerms1[i]->m_iAtomPos - m_dTerms1[i-1]->m_iAtomPos;
+		int iDelta2 = m_dTerms2[i]->m_iAtomPos - m_dTerms2[i-1]->m_iAtomPos;
+		if ( iDelta1!=iDelta2 || m_dTerms1[i]->m_sWord!=m_dTerms2[i]->m_sWord )
+			return false;
+	}
+
+	return true;
+}
+
+bool XqTreeComparator_t::CheckCollectTerms ( const XQNode_t * pNode1, const XQNode_t * pNode2 )
+{
+	// early out
+	if ( !pNode1 || !pNode2
+			|| pNode1->GetHash ()!=pNode2->GetHash () || pNode1->GetOp ()!=pNode2->GetOp ()
+			|| pNode1->m_dWords.GetLength ()!=pNode2->m_dWords.GetLength ()
+			|| pNode1->m_dChildren.GetLength ()!=pNode2->m_dChildren.GetLength () )
+		return false;
+
+	// for plain nodes compare keywords
+	ARRAY_FOREACH ( i, pNode1->m_dWords )
+		m_dTerms1.Add ( pNode1->m_dWords.Begin() + i );
+
+	ARRAY_FOREACH ( i, pNode2->m_dWords )
+		m_dTerms2.Add ( pNode2->m_dWords.Begin () + i );
+
+	// for non-plain nodes compare children
+	ARRAY_FOREACH ( i, pNode1->m_dChildren )
+	{
+		if ( !CheckCollectTerms ( pNode1->m_dChildren[i], pNode2->m_dChildren[i] ) )
+			return false;
+	}
+
+	return true;
 }
 
 

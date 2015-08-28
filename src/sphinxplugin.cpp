@@ -284,19 +284,42 @@ static SymbolDesc_t g_dSymbolsQueryTokenFilter[] =
 };
 
 
-static PluginLib_c * LoadPluginLibrary ( const char * sLibName, CSphString & sError )
+static PluginLib_c * LoadPluginLibrary ( const char * sLibName, CSphString & sError, bool bLinuxReload=false )
 {
+	CSphString sTmpfile;
 	CSphString sLibfile;
 	sLibfile.SetSprintf ( "%s/%s", g_sPluginDir.cstr(), sLibName );
 
-	void * pHandle = dlopen ( sLibfile.cstr(), RTLD_LAZY | RTLD_LOCAL );
+	// dlopen caches the old file content, even if file was updated
+	// let's reload library from the temporary file to invalidate the cache
+	if ( bLinuxReload )
+	{
+		sTmpfile.SetSprintf ( "%s/%s.%u", g_sPluginDir.cstr(), sLibName, sphRand() );
+		if ( ::rename ( sLibfile.cstr(), sTmpfile.cstr() ) )
+		{
+			sError.SetSprintf ( "failed to rename file (src=%s, dst=%s, errno=%d, error=%s)", sLibfile.cstr(), sTmpfile.cstr(), errno, strerror(errno) );
+			return NULL;
+		}
+	}
+
+	void * pHandle = dlopen ( bLinuxReload ? sTmpfile.cstr() : sLibfile.cstr(), RTLD_LAZY | RTLD_LOCAL );
 	if ( !pHandle )
 	{
 		const char * sDlerror = dlerror();
 		sError.SetSprintf ( "dlopen() failed: %s", sDlerror ? sDlerror : "(null)" );
 		return NULL;
 	}
-	sphLogDebug ( "dlopen(%s)=%p", sLibfile.cstr(), pHandle );
+	sphLogDebug ( "dlopen(%s)=%p", bLinuxReload ? sTmpfile.cstr() : sLibfile.cstr(), pHandle );
+
+	// rename file back to the original name
+	if ( bLinuxReload )
+	{
+		if ( ::rename ( sTmpfile.cstr(), sLibfile.cstr() ) )
+		{
+			sError.SetSprintf ( "failed to rename file (src=%s, dst=%s, errno=%d, error=%s)", sTmpfile.cstr(), sLibfile.cstr(), errno, strerror(errno) );
+			return NULL;
+		}
+	}
 
 	CSphString sBasename = sLibName;
 	const char * pDot = strchr ( sBasename.cstr(), '.' );
@@ -489,7 +512,11 @@ bool sphPluginReload ( const char * sName, CSphString & sError )
 	}
 
 	// load new library and check every plugin
+#if !USE_WINDOWS
+	PluginLib_c * pNewLib = LoadPluginLibrary ( sName, sError, true );
+#else
 	PluginLib_c * pNewLib = LoadPluginLibrary ( sName, sError );
+#endif
 	if ( !pNewLib )
 		return false;
 

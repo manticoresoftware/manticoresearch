@@ -2363,9 +2363,16 @@ int ha_sphinx::write_row ( byte * )
 			} else
 			{
 				(*ppField)->val_str ( &sValue );
-				sQuery.append ( "'" );
+				
+				int iLen = sValue.length();
+				bool bMva = ( iLen>1 && sValue.ptr()[0]=='(' && sValue.ptr()[iLen-1]==')' );
+				
+				if ( !bMva )
+					sQuery.append ( "'" );
 				sValue.print ( &sQuery );
-				sQuery.append ( "'" );
+				if ( !bMva )
+					sQuery.append ( "'" );
+				
 				sValue.length(0);
 			}
 		}

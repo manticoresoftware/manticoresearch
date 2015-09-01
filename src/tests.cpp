@@ -965,6 +965,47 @@ void BenchExpr ()
 //////////////////////////////////////////////////////////////////////////
 
 
+struct CmpAtomPos_fn
+{
+	bool IsLess ( const XQKeyword_t * pA, const XQKeyword_t * pB )
+	{
+		return pA->m_iAtomPos<pB->m_iAtomPos;
+	}
+};
+
+
+static void CheckQuerySoftSpace ( const XQNode_t * pNode, const int * pQPos, int iCount )
+{
+	assert ( pNode );
+
+	CSphVector< const XQKeyword_t * > dTerms;
+	CSphVector<const XQNode_t *> dChildren;
+
+	dChildren.Add ( pNode );
+
+	ARRAY_FOREACH ( i, dChildren )
+	{
+		const XQNode_t * pChild = dChildren[i];
+		ARRAY_FOREACH ( j, pChild->m_dChildren )
+			dChildren.Add ( pChild->m_dChildren[j] );
+
+		ARRAY_FOREACH ( j, pChild->m_dWords )
+			dTerms.Add ( pChild->m_dWords.Begin() + j );
+	}
+
+	dTerms.Sort ( CmpAtomPos_fn() );
+
+	assert ( iCount==dTerms.GetLength() );
+
+	ARRAY_FOREACH ( i, dTerms )
+	{
+		assert ( dTerms[i]->m_iAtomPos==pQPos[i] );
+	}
+	assert ( dTerms[0]->m_sWord=="me" );
+	assert ( dTerms.Last()->m_sWord=="off" );
+}
+
+
 void TestQueryParser ()
 {
 	CSphString sError;
@@ -1048,9 +1089,44 @@ void TestQueryParser ()
 	}
 
 	// NEAR with NOT operator argument
-	XQQuery_t tQuery;
-	bool bOK = sphParseExtendedQuery ( tQuery, "me -test NEAR/2 off", NULL, pTokenizer.Ptr (), &tSchema, pDict.Ptr (), tTmpSettings );
-	assert ( !bOK && !tQuery.m_pRoot );
+	{
+		XQQuery_t tQuery;
+		bool bOK = sphParseExtendedQuery ( tQuery, "me -test NEAR/2 off", NULL, pTokenizer.Ptr (), &tSchema, pDict.Ptr (), tTmpSettings );
+		assert ( !bOK && !tQuery.m_pRoot );
+	}
+
+	// soft whitespace
+	{
+		bool bOK = false;
+		{
+			XQQuery_t tQuery;
+			bOK = sphParseExtendedQuery ( tQuery, "me [ off", NULL, pTokenizer.Ptr (), &tSchema, pDict.Ptr (), tTmpSettings );
+			assert ( bOK );
+			int dQpos[] = { 1, 2 };
+			CheckQuerySoftSpace ( tQuery.m_pRoot, dQpos, sizeof(dQpos)/sizeof(dQpos[0]) );
+		}
+		{
+			XQQuery_t tQuery;
+			bOK = sphParseExtendedQuery ( tQuery, "me [ ,, &&,[ off", NULL, pTokenizer.Ptr (), &tSchema, pDict.Ptr (), tTmpSettings );
+			assert ( bOK );
+			int dQpos[] = { 1, 2 };
+			CheckQuerySoftSpace ( tQuery.m_pRoot, dQpos, sizeof(dQpos)/sizeof(dQpos[0]) );
+		}
+		{
+			XQQuery_t tQuery;
+			bOK = sphParseExtendedQuery ( tQuery, "me \xE7\xA7\x81\xE3\x81\xAF\xE3\x82\xAC off", NULL, pTokenizer.Ptr (), &tSchema, pDict.Ptr (), tTmpSettings );
+			assert ( bOK );
+			int dQpos[] = { 1, 3 };
+			CheckQuerySoftSpace ( tQuery.m_pRoot, dQpos, sizeof(dQpos)/sizeof(dQpos[0]) );
+		}
+		{
+			XQQuery_t tQuery;
+			bOK = sphParseExtendedQuery ( tQuery, "me \xE7\xA7\x81\xE3\x81\xAF\xE3\x82\xAC \xE7\xA7\x81\xE3\x81\xAF\xE3\x82\xAC \xE7\xA7\x81\xE3\x81\xAF\xE3\x82\xAC off", NULL, pTokenizer.Ptr (), &tSchema, pDict.Ptr (), tTmpSettings );
+			assert ( bOK );
+			int dQpos[] = { 1, 3 };
+			CheckQuerySoftSpace ( tQuery.m_pRoot, dQpos, sizeof(dQpos)/sizeof(dQpos[0]) );
+		}
+	}
 }
 
 static CSphSourceStats g_tTmpDummyStat;

@@ -4549,6 +4549,12 @@ static inline bool IsBoundary ( BYTE c, bool bPhrase )
 }
 
 
+static inline bool IsPunctuation ( int c )
+{
+	return ( c>=33 && c<=47 ) || ( c>=58 && c<=64 ) || ( c>=91 && c<=96 ) || ( c>=123 && c<=126 );
+}
+
+
 int CSphTokenizerBase::CodepointArbitrationI ( int iCode )
 {
 	if ( !m_bDetectSentences )
@@ -5107,7 +5113,7 @@ BYTE * CSphTokenizerBase2::DoGetToken ()
 			if ( !bGotSoft )
 			{
 				// detect opening soft whitespace
-				if ( ( iCode==0 && !( iCode & MASK_FLAGS ) && !IsWhitespace ( iCodePoint ) )
+				if ( ( iCode==0 && !IsWhitespace ( iCodePoint ) && !IsPunctuation ( iCodePoint ) )
 					|| ( ( iCode & FLAG_CODEPOINT_BLEND ) && !m_iAccum ) )
 				{
 					bGotSoft = true;

@@ -124,6 +124,7 @@ struct Expr_GetMva_c : public ExprLocatorTraits_t
 			m_bArenaProhibit = pPool->m_bArenaProhibit;
 		}
 	}
+	virtual int IntEval ( const CSphMatch & tMatch ) const { return (int)tMatch.GetAttr ( m_tLocator ); }
 	virtual const DWORD * MvaEval ( const CSphMatch & tMatch ) const { return tMatch.GetAttrMVA ( m_tLocator, m_pMva, m_bArenaProhibit ); }
 };
 

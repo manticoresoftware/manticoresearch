@@ -4991,7 +4991,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 					return NULL;
 				}
 
-				if ( !bPlainAttr )
+				if ( !bPlainAttr && eAttr==SPH_ATTR_STRING )
 				{
 					bPlainAttr = true;
 					for ( int i=0; i<iItem && bPlainAttr; i++ )

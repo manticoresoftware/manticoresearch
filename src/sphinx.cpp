@@ -14377,19 +14377,38 @@ static inline void CalcContextItems ( CSphMatch & tMatch, const CSphVector<CSphQ
 	ARRAY_FOREACH ( i, dItems )
 	{
 		const CSphQueryContext::CalcItem_t & tCalc = dItems[i];
-		if ( tCalc.m_eType==SPH_ATTR_INTEGER )
-			tMatch.SetAttr ( tCalc.m_tLoc, tCalc.m_pExpr->IntEval(tMatch) );
-		else if ( tCalc.m_eType==SPH_ATTR_BIGINT || tCalc.m_eType==SPH_ATTR_JSON_FIELD )
-			tMatch.SetAttr ( tCalc.m_tLoc, tCalc.m_pExpr->Int64Eval(tMatch) );
-		else if ( tCalc.m_eType==SPH_ATTR_STRINGPTR )
+		switch ( tCalc.m_eType )
 		{
-			const BYTE * pStr = NULL;
-			tCalc.m_pExpr->StringEval ( tMatch, &pStr );
-			tMatch.SetAttr ( tCalc.m_tLoc, (SphAttr_t) pStr ); // FIXME! a potential leak of *previous* value?
-		} else if ( tCalc.m_eType==SPH_ATTR_FACTORS || tCalc.m_eType==SPH_ATTR_FACTORS_JSON )
-			tMatch.SetAttr ( tCalc.m_tLoc, (SphAttr_t)tCalc.m_pExpr->FactorEval(tMatch) );
-		else
-			tMatch.SetAttrFloat ( tCalc.m_tLoc, tCalc.m_pExpr->Eval(tMatch) );
+			case SPH_ATTR_INTEGER:
+				tMatch.SetAttr ( tCalc.m_tLoc, tCalc.m_pExpr->IntEval(tMatch) );
+			break;
+
+			case SPH_ATTR_BIGINT:
+			case SPH_ATTR_JSON_FIELD:
+				tMatch.SetAttr ( tCalc.m_tLoc, tCalc.m_pExpr->Int64Eval(tMatch) );
+			break;
+
+			case SPH_ATTR_STRINGPTR:
+			{
+				const BYTE * pStr = NULL;
+				tCalc.m_pExpr->StringEval ( tMatch, &pStr );
+				tMatch.SetAttr ( tCalc.m_tLoc, (SphAttr_t) pStr ); // FIXME! a potential leak of *previous* value?
+			}
+			break;
+
+			case SPH_ATTR_FACTORS:
+			case SPH_ATTR_FACTORS_JSON:
+				tMatch.SetAttr ( tCalc.m_tLoc, (SphAttr_t)tCalc.m_pExpr->FactorEval(tMatch) );
+			break;
+
+			case SPH_ATTR_INT64SET:
+			case SPH_ATTR_UINT32SET:
+				tMatch.SetAttr ( tCalc.m_tLoc, (SphAttr_t)tCalc.m_pExpr->IntEval ( tMatch ) );
+			break;
+
+			default:
+				tMatch.SetAttrFloat ( tCalc.m_tLoc, tCalc.m_pExpr->Eval(tMatch) );
+		}
 	}
 }
 

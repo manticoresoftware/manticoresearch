@@ -196,10 +196,10 @@ inline const	DWORD *	STATIC2DOCINFO ( const DWORD * pAttrs )	{ return STATIC2DOC
 #include "sphinxversion.h"
 
 #ifndef SPHINX_TAG
-#define SPHINX_TAG "-release"
+#define SPHINX_TAG "-dev"
 #endif
 
-#define SPHINX_VERSION			"2.2.10" SPHINX_BITS_TAG SPHINX_TAG " (" SPH_GIT_COMMIT_ID ")"
+#define SPHINX_VERSION			"2.2.11" SPHINX_BITS_TAG SPHINX_TAG " (" SPH_GIT_COMMIT_ID ")"
 #define SPHINX_BANNER			"Sphinx " SPHINX_VERSION "\nCopyright (c) 2001-2015, Andrew Aksyonoff\nCopyright (c) 2008-2015, Sphinx Technologies Inc (http://sphinxsearch.com)\n\n"
 #define SPHINX_SEARCHD_PROTO	1
 #define SPHINX_CLIENT_VERSION	1

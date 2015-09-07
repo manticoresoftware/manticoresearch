@@ -123,6 +123,9 @@ public:
 	/// run a tree wide action (1st arg is an action, 2nd is its parameter)
 	/// usually sets something into ISphExpr like string pool or gets something from it like dependent columns
 	virtual void Command ( ESphExprCommand, void * ) {}
+
+	/// check for const type
+	virtual bool IsConst () const { return false; }
 };
 
 /// string expression traits

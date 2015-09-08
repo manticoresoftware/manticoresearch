@@ -5394,7 +5394,7 @@ int RtIndex_t::DebugCheck ( FILE * fp )
 				{
 					ESphJsonType eType = (ESphJsonType)*p++;
 
-					if ( dStateStack.GetLength() && dStateStack.Last()==JSON_OBJECT )
+					if ( dStateStack.GetLength() && dStateStack.Last()==JSON_OBJECT && eType!=JSON_EOF )
 					{
 						int iKeyLen = sphJsonUnpackInt ( &p );
 						p += iKeyLen;

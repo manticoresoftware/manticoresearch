@@ -38,6 +38,22 @@ index idx2
 	path				= <data_path/>/idx2
 }
 
+source src3
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 10 id, 100 as other_seller, 101 attributes_id, 'test' text UNION SELECT 11 id, 101 as other_seller, 102 attributes_id, 'test' text 
+
+	sql_attr_uint = other_seller
+	sql_attr_uint = attributes_id
+}
+
+index idx3
+{
+	source				= src3
+	path				= <data_path/>/idx3
+}
+
 </config>
 
 <db_create>
@@ -99,6 +115,13 @@ $client->AddQuery ($query, $index);
 $client->SetGroupBy ('missed', SPH_GROUPBY_ATTR, 'missed desc');
 $client->AddQuery ($query, $index);
 $results[] = $client->RunQueries(); 
+
+$client->ResetGroupBy();
+$index = 'products, idx3';
+$client->SetSelect('');
+$client->SetLimits(0, 10);
+$client->SetSortMode (SPH_SORT_EXTENDED, 'attributes_id ASC');
+$results[] = $client->Query ('', $index);
 
 ]]></Query_Settings>
 

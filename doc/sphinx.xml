@@ -14681,6 +14681,69 @@ plugin_dir = /usr/local/sphinx/lib
 </itemizedlist>
 </sect1>
 
+<sect1 id="rel2210"><title>Version 2.2.10-release, 07 sep 2015</title>
+<bridgehead>New features and changes</bridgehead>
+<itemizedlist>
+<listitem><para>added #2310, <option>--replay-flags=ignore-open-errors</option> switch to replay binlogs even if some files are missing</para></listitem>
+<listitem><para>added #2234, support for empty string values (stringattr='') in <link linkend="sphinxql-select">WHERE</link> clause</para></listitem>
+<listitem><para>added #2233, support for <code>IN()</code> filters with string values</para></listitem>
+<listitem><para>added #2232, string collation support in <link linkend="sphinxql-select">SELECT</link> expressions</para></listitem>
+<listitem><para>added #2121, "where flt&lt;&gt;val" support, "where fltcol=intval" and "where fltcol!=intval" conditions</para></listitem>
+<listitem><para>added #2119, new <filename>indexer</filename> exit code 2 on a <option>--rotate</option> failure</para></listitem>
+<listitem><para>fixed #2207, unified <option>min_prefix_len</option>, <option>min_infix_len</option> behavior between RT and plain indexes</para></listitem>
+<listitem><para>fixed #2020, unified (and greatly shortened) the list of SphinxQL <link linkend="sphinxql-reserved-keywords">reserved keywords</link> between indexer checks, SphinxQL parser checks, and the documentation</para></listitem>
+</itemizedlist>
+<bridgehead>Major bug fixes</bridgehead>
+<itemizedlist>
+<listitem><para>fixed #2251, expressions dependent on aggregation results (eg. as in SELECT MAX(id) m1, m1+10 m2) were not computed properly in RT indexes</para></listitem>
+<listitem><para>fixed #2248, <link linkend="expr-func-length">LENGTH()</link> was 2x off for 64-bit MVA attributes</para></listitem>
+<listitem><para>fixed #2146, <link linkend="sphinxql-optimize-index">OPTIMIZE</link> could occasionally break big RT indexes (by violating 4/16 GB string/MVA per chunk size limits)</para></listitem>
+<listitem><para>fixed #2118, multi-wordforms with clashing prefixes were processed in a wrong order</para></listitem>
+<listitem><para>fixed #1926, disabled and later re-enabled indexes were not picked up again by <filename>searchd</filename> on SIGHUP</para></listitem>
+</itemizedlist>
+<bridgehead>Minor bug fixes</bridgehead>
+<itemizedlist>
+<listitem><para>fixed #2312, using FACTORS() along with a subtree cache could crash (because on wrong qpos values from the cache passed to the ranker)</para></listitem>
+<listitem><para>fixed #2310, comparing a non-existent JSON field with a string constant (as in jcol.some_typo='abc') could crash</para></listitem>
+<listitem><para>fixed #2309, UDFs with BIGINT return were saved without a type into sphinxql_state file</para></listitem>
+<listitem><para>fixed #2305, punctuation chars not mentioned in <link linkend="conf-charset-table">charset_table</link> could still occasionally affect term position in the query</para></listitem>
+<listitem><para>fixed #2303, a combination of <link linkend="conf-hitless-words">hitless_words</link>, lemmatizer_all, and a phrase operator could match a wrong result set</para></listitem>
+<listitem><para>fixed #2301, <filename>searchd</filename> could sometimes crash on shutdown (at pid file unlink()) if the config was reloaded</para></listitem>
+<listitem><para>fixed #2296, wordforms with multiple destination tokens broke snippet highlighting</para></listitem>
+<listitem><para>fixed #2290, error in the middle of a multi-query batch did not abort SphinxQL packet, causing problems with some MySQL drivers like PHP mysqlnd</para></listitem>
+<listitem><para>fixed #2286, multi-quries with different string filters were incorrectly considered identical</para></listitem>
+<listitem><para>fixed #2280, HTML stripper incorrectly parsed hexadecimal NCRs (like eg. #xC0)</para></listitem>
+<listitem><para>fixed #2273, a bit better error message when OPTIMIZE fails on a too big chunk</para></listitem>
+<listitem><para>fixed #2258, some ranking FACTORS() were off when lemmatizer expansions yielded duplicate terms</para></listitem>
+<listitem><para>fixed #2257, OR operator over conditional operators could crash</para></listitem>
+<listitem><para>fixed #2242, added whitespaces support to SNIPPET() before_match/after_matches options, and fixed the handling of repeated %PASSAGE_ID% macros</para></listitem>
+<listitem><para>fixed #2238, added a few safeguards to prevent crashes/freezes on loading damaged RT RAM chunks</para></listitem>
+<listitem><para>fixed #2237, ATTACH-ing a part of a distributed index did not correctly invalidate it, could crash</para></listitem>
+<listitem><para>fixed #2235, <link linkend="sphinxql-update">UPDATE</link> ... OPTION <option>strict=1</option> did not with plain indexes</para></listitem>
+<listitem><para>fixed #2225, <filename>searchd</filename> crashed on startup if agent host string was empty</para></listitem>
+<listitem><para>fixed #2127, <filename>indextool</filename> did not handle RT indexes with updated JSON attributes in them</para></listitem>
+<listitem><para>fixed #2117, <link linkend="sort-expr">GEODIST()</link> calls with hash {in=deg,out=mi} arguments on a distributed index did not parse correctly</para></listitem>
+<listitem><para>fixed #2113, @@relaxed could occasonally crash ceratin complex queries</para></listitem>
+<listitem><para>fixed #2106, using GROUP N BY with a custom ranker and FACTORS() caused crashes and memory leaks</para></listitem>
+<listitem><para>fixed #2093, wildcard character at the end of the keyword could sometimes erroneously produce no matches</para></listitem>
+<listitem><para>fixed #2088, NEAR operator with NOT argument could crash</para></listitem>
+<listitem><para>fixed #1929, allowed `123abc` column names in SphinxQL SELECT (alas, they are still allowed in <filename>indexer</filename>)</para></listitem>
+<listitem><para>fixed #1889, #1890, #1891, a few typo-style bugs in <filename>libsphinxclient</filename> sphinx_set_field_weights(), sphinx_set_index_weights(), sphinx_add_filter_entry()</para></listitem>
+<listitem><para>fixed #1859, #2202, XML/TSV/CSV sources now works with control characters like EOF, and UTF BOM marks</para></listitem>
+<listitem><para>fixed #1815, a number of SphinxSE issues (inet adress endpoint, too big numbers at MVA, and MVA inserts/replaces via SphinxQL)</para></listitem>
+<listitem><para>fixed #1704, <link linkend="expr-func-contains">CONTAINS()</link> now correctly handles polygons with duplicated points</para></listitem>
+<listitem><para>fixed #1643, <link linkend="expr-func-crc32">CRC32()</link> is now properly evaluated as unsigned in BIGINT context</para></listitem>
+<listitem><para>fixed #1567, #1747, #2245, column name quotation could fail in UDF expressions and distributed queries</para></listitem>
+<listitem><para>fixed #1551, off-by-one blended keyword position errors in proximity queries (phrase, NEAR, etc)</para></listitem>
+<listitem><para>fixed #1528, metaphone on too long (eg. Chinese or Japanese) strings crashed with a buffer overflow</para></listitem>
+<listitem><para>fixed #1510, added an unknown field warning to SetFieldWeights() API call and SphinxQL OPTION field_weights</para></listitem>
+<listitem><para>fixed #1367, remote agents (in distributed index) could not be accessed via UNIX sockets</para></listitem>
+<listitem><para>fixed #1349, max_matches=0 was not handled correctly in <filename>libsphinxclient</filename> sphinx_set_limits()</para></listitem>
+<listitem><para>fixed Github PR-1, SphinxSE TLS leak on table reopen</para></listitem>
+<listitem><para>fixed <filename>searchd</filename> crash when trying to load a damaged index with an incorrect row count</para></listitem>
+<listitem><para>fixed <filename>indextool</filename> MVA checks (an index error could sometimes be mistakenly reported)</para></listitem>
+</itemizedlist>
+</sect1>
 
 <sect1 id="rel229"><title>Version 2.2.9-release, 16 apr 2015</title>
 <bridgehead>Bug fixes</bridgehead>

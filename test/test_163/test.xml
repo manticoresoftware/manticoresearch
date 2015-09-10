@@ -404,6 +404,10 @@ INSERT INTO `test_table` VALUES
 <sphinxql>select idd, count(*) from dist_count2 where id in (10,11); show meta</sphinxql>
 <sphinxql>select *, count(*) from dist_count1 where id in (100); show meta</sphinxql>
 <sphinxql>select idd, count(*) from dist_count2 where id in (100); show meta</sphinxql>
+
+<!-- empty result set with constant columns -->
+<sphinxql>select *, 123456, 2+2, sin(1.0), sin(idd), idd+1, count(*) from count2</sphinxql>
+<sphinxql>select *, 123456, 2+2, sin(1.0), sin(idd), idd+1, count(*) from count2 where id in (1,2)</sphinxql>
 </sphqueries>
 
 <queries>

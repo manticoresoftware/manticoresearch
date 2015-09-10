@@ -296,6 +296,14 @@ index dist_up
 	agent		= <my_address/>:json_up2
 }
 
+index json_remap
+{
+	type = rt
+	path = <data_path/>/json_remap
+	rt_attr_json = j1
+	rt_attr_json = j2
+	rt_field = text
+}
 </config>
 
 <db_create>
@@ -774,5 +782,8 @@ Two'</sphinxql>
 <!-- aliases in functions -->
 <sphinxql>select j.array as some_alias, any(some_alias.name&gt;x.name for x in j.array) from json_search</sphinxql>
 <sphinxql>select j.intarray as p, p[1], indexof(x&gt;p[1] for x in j.intarray) from json_search</sphinxql>
+<!-- crash (OOB) on groupby while remapping fields if there is a NULL attribute -->
+<sphinxql>insert into json_remap(id,j1,j2) values (1, '[1]','[1]'), (2, '','[2]')</sphinxql>
+<sphinxql>select groupby() from json_remap group by j2</sphinxql>
 </sphqueries>
 </test>

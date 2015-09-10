@@ -144,6 +144,7 @@ struct Expr_GetConst_c : public ISphExpr
 	virtual float Eval ( const CSphMatch & ) const { return m_fValue; }
 	virtual int IntEval ( const CSphMatch & ) const { return (int)m_fValue; }
 	virtual int64_t Int64Eval ( const CSphMatch & ) const { return (int64_t)m_fValue; }
+	virtual bool IsConst () const { return true; }
 };
 
 
@@ -154,6 +155,7 @@ struct Expr_GetIntConst_c : public ISphExpr
 	virtual float Eval ( const CSphMatch & ) const { return (float) m_iValue; } // no assert() here cause generic float Eval() needs to work even on int-evaluator tree
 	virtual int IntEval ( const CSphMatch & ) const { return m_iValue; }
 	virtual int64_t Int64Eval ( const CSphMatch & ) const { return m_iValue; }
+	virtual bool IsConst () const { return true; }
 };
 
 
@@ -164,6 +166,7 @@ struct Expr_GetInt64Const_c : public ISphExpr
 	virtual float Eval ( const CSphMatch & ) const { return (float) m_iValue; } // no assert() here cause generic float Eval() needs to work even on int-evaluator tree
 	virtual int IntEval ( const CSphMatch & ) const { assert ( 0 ); return (int)m_iValue; }
 	virtual int64_t Int64Eval ( const CSphMatch & ) const { return m_iValue; }
+	virtual bool IsConst () const { return true; }
 };
 
 
@@ -193,6 +196,7 @@ struct Expr_GetStrConst_c : public ISphStringExpr
 	virtual float Eval ( const CSphMatch & ) const { assert ( 0 ); return 0; }
 	virtual int IntEval ( const CSphMatch & ) const { assert ( 0 ); return 0; }
 	virtual int64_t Int64Eval ( const CSphMatch & ) const { assert ( 0 ); return 0; }
+	virtual bool IsConst () const { return true; }
 };
 
 

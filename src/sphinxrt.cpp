@@ -5499,7 +5499,7 @@ int RtIndex_t::DebugCheck ( FILE * fp )
 				{
 					ESphJsonType eType = (ESphJsonType)*p++;
 
-					if ( dStateStack.GetLength() && dStateStack.Last()==JSON_OBJECT )
+					if ( dStateStack.GetLength() && dStateStack.Last()==JSON_OBJECT && eType!=JSON_EOF )
 					{
 						int iKeyLen = sphJsonUnpackInt ( &p );
 						p += iKeyLen;
@@ -6635,18 +6635,22 @@ struct SphFinalArenaCopy_t : ISphMatchProcessor
 			case SPH_ATTR_JSON:
 			{
 				const SphAttr_t uOff = pMatch->GetAttr ( tLoc );
+				DWORD uRebased = 0;
 				if ( uOff>0 )
 				{
 					assert ( uOff<( I64C(1)<<32 ) ); // should be 32 bit offset
 					assert ( !bSegmentMatch || (int)uOff<m_dSegments[iStorageSrc]->m_dStrings.GetLength() );
-					DWORD uRebased = CopyPackedString ( pBaseString + uOff, m_dStorageString );
+					uRebased = CopyPackedString ( pBaseString + uOff, m_dStorageString );
 					iAttr = uRebased;
-					// store the map of full jsons in order to map json fields
-					if ( tLoc.m_eAttrType==SPH_ATTR_JSON )
-					{
-						m_dOriginalJson.Add ( (DWORD)uOff );
-						m_dMovedJson.Add ( uRebased );
-					}
+				}
+
+				// store the map of full jsons in order to map json fields
+				// note that m_dJsonAssoc mapping is calculated only once (see the m_dJsonAssoc[iJson]<0 condition)
+				// we have to consider empty fields too (if any) otherwise mapping will be incorrect or out of bounds
+				if ( tLoc.m_eAttrType==SPH_ATTR_JSON && m_dJsonAssoc.GetLength() )
+				{
+					m_dOriginalJson.Add ( (DWORD)uOff );
+					m_dMovedJson.Add ( uRebased );
 				}
 			}
 			break;
@@ -6682,8 +6686,8 @@ struct SphFinalArenaCopy_t : ISphMatchProcessor
 								iDistance = uOff - m_dOriginalJson[j];
 								k = j;
 							}
-							assert ( k>=0 );
-							m_dJsonAssoc[iJson] = k;
+						assert ( k>=0 );
+						m_dJsonAssoc[iJson] = k;
 					}
 					DWORD uNew = m_dMovedJson [ m_dJsonAssoc[iJson] ] - m_dOriginalJson [ m_dJsonAssoc[iJson] ] + uOff;
 					++iJson;

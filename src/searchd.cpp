@@ -3730,6 +3730,9 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 			int iSelectLen = tQuery.m_sSelect.Length();
 			tQuery.m_sSelect = ( iSelectLen>4 ? tQuery.m_sSelect.SubString ( 4, iSelectLen-4 ) : "*" );
 		}
+		// fixup select list
+		if ( tQuery.m_sSelect.IsEmpty () )
+			tQuery.m_sSelect = "*";
 
 		CSphString sError;
 		if ( !tQuery.ParseSelectList ( sError ) )
@@ -13253,10 +13256,40 @@ static void ReturnZeroCount ( const CSphRsetSchema & tSchema, int iAttrsCount, c
 {
 	for ( int i=0; i<iAttrsCount; i++ )
 	{
-		if ( tSchema.GetAttr(i).m_sName==sName )
+		const CSphColumnInfo & tCol = tSchema.GetAttr(i);
+
+		if ( tCol.m_sName==sName ) // @count or its alias
 			dRows.PutNumeric<DWORD> ( "%u", 0 );
 		else
-			dRows.PutNULL();
+		{
+			// essentially the same as SELECT_DUAL, parse and print constant expressions
+			ESphAttr eAttrType;
+			CSphString sError;
+			ISphExpr * pExpr = sphExprParse ( tCol.m_sName.cstr(), tSchema, &eAttrType, NULL, sError, NULL );
+
+			if ( !pExpr || !pExpr->IsConst() )
+				eAttrType = SPH_ATTR_NONE;
+
+			CSphMatch tMatch;
+			const BYTE * pStr = NULL;
+
+			switch ( eAttrType )
+			{
+				case SPH_ATTR_STRINGPTR:
+					pExpr->StringEval ( tMatch, &pStr );
+					dRows.PutString ( (const char*)pStr );
+					SafeDelete ( pStr );
+					break;
+				case SPH_ATTR_INTEGER:	dRows.PutNumeric<int> ( "%d", pExpr->IntEval ( tMatch ) ); break;
+				case SPH_ATTR_BIGINT:	dRows.PutNumeric<SphAttr_t> ( INT64_FMT, pExpr->Int64Eval ( tMatch ) ); break;
+				case SPH_ATTR_FLOAT:	dRows.PutNumeric<float> ( "%f", pExpr->Eval ( tMatch ) ); break;
+				default:
+					dRows.PutNULL();
+					break;
+			}
+
+			SafeDelete ( pExpr );
+		}
 	}
 	dRows.Commit();
 }

@@ -2387,14 +2387,6 @@ static DWORD CopyPackedString ( const BYTE * pSrc, CSphTightVector<BYTE> & dDst 
 	return uOff;
 }
 
-static DWORD CopyString ( const BYTE * pSrc, CSphTightVector<BYTE> & dDst, int iLen )
-{
-	const DWORD uOff = dDst.GetLength();
-	dDst.Resize ( uOff + iLen );
-	memcpy ( dDst.Begin() + uOff, pSrc, iLen );
-	return uOff;
-}
-
 static DWORD CopyMva ( const DWORD * pSrc, CSphTightVector<DWORD> & dDst )
 {
 	assert ( pSrc );
@@ -6518,6 +6510,10 @@ struct SphFinalArenaCopy_t : ISphMatchProcessor
 		const DWORD * pBaseMva = bSegmentMatch ? m_dSegments[iStorageSrc]->m_dMvas.Begin() : m_dDiskMva[ iStorageSrc-iSegCount ];
 		bool bArenaProhibit = bSegmentMatch ? true : m_dMvaArenaFlag.BitGet ( iStorageSrc-iSegCount );
 
+		int iJson = 0;
+		m_dOriginalJson.Resize ( 0 );
+		m_dMovedJson.Resize ( 0 );
+
 		ARRAY_FOREACH ( i, m_dGetLoc )
 		{
 			int64_t iAttr = 0;
@@ -6529,12 +6525,22 @@ struct SphFinalArenaCopy_t : ISphMatchProcessor
 			case SPH_ATTR_JSON:
 			{
 				const SphAttr_t uOff = pMatch->GetAttr ( tLoc );
+				DWORD uRebased = 0;
 				if ( uOff>0 )
 				{
 					assert ( uOff<( I64C(1)<<32 ) ); // should be 32 bit offset
 					assert ( !bSegmentMatch || (int)uOff<m_dSegments[iStorageSrc]->m_dStrings.GetLength() );
-					DWORD uRebased = CopyPackedString ( pBaseString + uOff, m_dStorageString );
+					uRebased = CopyPackedString ( pBaseString + uOff, m_dStorageString );
 					iAttr = uRebased;
+				}
+
+				// store the map of full jsons in order to map json fields
+				// note that m_dJsonAssoc mapping is calculated only once (see the m_dJsonAssoc[iJson]<0 condition)
+				// we have to consider empty fields too (if any) otherwise mapping will be incorrect or out of bounds
+				if ( tLoc.m_eAttrType==SPH_ATTR_JSON && m_dJsonAssoc.GetLength() )
+				{
+					m_dOriginalJson.Add ( (DWORD)uOff );
+					m_dMovedJson.Add ( uRebased );
 				}
 			}
 			break;
@@ -6558,7 +6564,23 @@ struct SphFinalArenaCopy_t : ISphMatchProcessor
 				{
 					ESphJsonType eJson = ESphJsonType ( iAttr>>32 );
 					DWORD uOff = (DWORD)iAttr;
-					DWORD uNew = CopyString ( pBaseString+uOff, m_dStorageString, sphJsonNodeSize ( eJson, pBaseString+uOff ) );
+					if ( m_dJsonAssoc[iJson]<0 )
+					{
+						// tricky part. We have packed json field, but it points somewhere into original json.
+						// since all jsons already relocated, we have to find the original (source) and recalculate the locator
+						int k = -1;
+						int iDistance = -1;
+						ARRAY_FOREACH ( j, m_dOriginalJson )
+							if ( iDistance<0 || ( uOff>=m_dOriginalJson[j] && uOff<( m_dOriginalJson[j]+iDistance ) ) )
+							{
+								iDistance = uOff - m_dOriginalJson[j];
+								k = j;
+							}
+						assert ( k>=0 );
+						m_dJsonAssoc[iJson] = k;
+					}
+					DWORD uNew = m_dMovedJson [ m_dJsonAssoc[iJson] ] - m_dOriginalJson [ m_dJsonAssoc[iJson] ] + uOff;
+					++iJson;
 					iAttr = ( ( (int64_t)uNew ) | ( ( (int64_t)eJson )<<32 ) );
 				}
 			}

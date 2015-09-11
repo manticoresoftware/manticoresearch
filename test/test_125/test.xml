@@ -243,10 +243,9 @@ INSERT INTO string_table VALUES
 <sphinxql>SELECT id, to_string(mva64) from cmp WHERE id=3</sphinxql>
 <sphinxql>SELECT id, length(mva32) from cmp WHERE id=3</sphinxql>
 <sphinxql>SELECT id, length(mva64) from cmp WHERE id=3</sphinxql>
-<!-- Not in REL21 <sphinxql>SELECT id, least(mva32) from cmp WHERE id=3</sphinxql>
 <sphinxql>SELECT id, least(mva64) from cmp WHERE id=3</sphinxql>
 <sphinxql>SELECT id, greatest(mva32) from cmp WHERE id=3</sphinxql>
-<sphinxql>SELECT id, greatest(mva64) from cmp WHERE id=3</sphinxql> -->
+<sphinxql>SELECT id, greatest(mva64) from cmp WHERE id=3</sphinxql>
 
 <sphinxql>SELECT id, min(mva32) from cmp WHERE id=3</sphinxql>
 <sphinxql>SELECT id, max(mva32) from cmp WHERE id=3</sphinxql>

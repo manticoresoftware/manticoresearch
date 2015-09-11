@@ -18673,7 +18673,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			iDeltaWord = rdDict.GetByte();
 		} else
 		{
-			rdDict.UnzipWordid();
+			iDeltaWord = rdDict.UnzipWordid();
 		}
 		if ( !iDeltaWord )
 		{

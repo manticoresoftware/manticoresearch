@@ -7380,10 +7380,10 @@ And if you additionally specify a path, daemon will look for index files in spec
 directory, move them to index <xref linkend="conf-path">path</xref>, rename from
 index_files.sp? to idx.new.sp? and rotate them.
 </para>
-<programslisting>
+<programlisting>
 mysql> RELOAD INDEX plain_index;
 mysql> RELOAD INDEX plain_index FROM '/home/mighty/new_index_files';
-</programslisting>
+</programlisting>
 </sect1>
 
 <!-- add new statement sections above this, and other SphinxQL related sections below -->
@@ -14461,7 +14461,7 @@ on per-query basis using 'OPTION retry_delay=XXX' clause. If per-query option ex
 <sect2 id="conf-qcache-max-bytes"><title>qcache_max_bytes</title>
 <para>
 Integer, in bytes. The maximum RAM allocated for cached result sets. Defaults to 16777216,
-or 16 MB. 0 means disable query cache. Added in 2.3.1-beta. Refer to <link linkend="qcache"/> for details.
+or 16 MB. 0 means disable query cache. Added in 2.3.1-beta. Refer to <link linkend="qcache">query cache</link> for details.
 </para>
 </sect2>
 
@@ -14469,14 +14469,14 @@ or 16 MB. 0 means disable query cache. Added in 2.3.1-beta. Refer to <link linke
 <para>
 Integer, in milliseconds. The minimum wall time threshold for a query result to be cached.
 Defaults to 3000, or 3 seconds. 0 means cache everything. Added in 2.3.1-beta.
-Refer to <link linkend="qcache"/> for details.
+Refer to <link linkend="qcache">query cache</link> for details.
 </para>
 </sect2>
 
 <sect2 id="conf-qcache-ttl-sec"><title>qcache_ttl_sec</title>
 <para>
 Integer, in seconds. The expiration period for a cached result set. Defaults to 60, or 1 minute.
-The minimum possible value is 1 second. Added in 2.3.1-beta. Refer to <link linkend="qcache"/> for details.
+The minimum possible value is 1 second. Added in 2.3.1-beta. Refer to <link linkend="qcache">query cache</link> for details.
 </para>
 </sect2>
 

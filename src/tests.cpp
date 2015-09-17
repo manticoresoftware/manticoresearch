@@ -3091,6 +3091,7 @@ void BenchStemmer ()
 void TestWildcards()
 {
 	printf ( "testing wildcards... " );
+
 	assert ( sphWildcardMatch ( "abc", "abc" ) );
 	assert ( sphWildcardMatch ( "abc", "?bc" ) );
 	assert ( sphWildcardMatch ( "abc", "a?c" ) );
@@ -3136,6 +3137,102 @@ void TestWildcards()
 	assert ( sphWildcardMatch ( "a*b", "a\\*b" ) );
 	assert ( !sphWildcardMatch ( "acb", "a\\*b" ) );
 	assert ( !sphWildcardMatch ( "acdeb", "a\\*b" ) );
+
+	// new cases recursive slow cases
+	assert ( !sphWildcardMatch ( "-----this-li", "-*-*-*-" ) );
+	assert ( !sphWildcardMatch ( "---------------------------------this-li", "-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-" ) );
+	assert ( sphWildcardMatch ( "---------------------------------this-li-", "-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-" ) );
+	assert ( sphWildcardMatch ( "---------------------------------this-li", "-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*i" ) );
+	assert ( sphWildcardMatch ( "---------------------------------this-li", "-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*" ) );
+	assert ( sphWildcardMatch ( "---------------------------------this-li", "-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*s-*i" ) );
+	assert ( !sphWildcardMatch ( "---------------------------------this-li", "-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-s-*i" ) );
+	assert ( !sphWildcardMatch ( "---------------------------------this-li", "-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*x-*i" ) );
+	assert ( !sphWildcardMatch ( "--------------------------this-li--p---", "-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-z-*-" ) );
+
+	// cases with repeating character sequences
+	assert ( sphWildcardMatch ( "abcccd", "*ccd" ) );
+	assert ( sphWildcardMatch ( "mississipissippi", "*issip*ss*" ) );
+	assert ( !sphWildcardMatch ( "xxxx*zzzzzzzzy*f", "xxxx*zzy*fffff" ) );
+	assert ( sphWildcardMatch ( "xxxx*zzzzzzzzy*f", "xxx*zzy*f" ) );
+	assert ( !sphWildcardMatch ( "xxxxzzzzzzzzyf", "xxxx*zzy*fffff" ) );
+	assert ( sphWildcardMatch ( "xxxxzzzzzzzzyf", "xxxx*zzy*f" ) );
+	assert ( sphWildcardMatch ( "xyxyxyzyxyz", "xy*z*xyz" ) );
+	assert ( sphWildcardMatch ( "mississippi", "*sip*" ) );
+	assert ( sphWildcardMatch ( "xyxyxyxyz", "xy*xyz" ) );
+	assert ( sphWildcardMatch ( "mississippi", "mi*sip*" ) );
+	assert ( sphWildcardMatch ( "ababac", "*abac*" ) );
+	assert ( sphWildcardMatch ( "ababac", "*abac*" ) );
+	assert ( sphWildcardMatch ( "aaazz", "a*zz*" ) );
+	assert ( !sphWildcardMatch ( "a12b12", "*12*23" ) );
+	assert ( !sphWildcardMatch ( "a12b12", "a12b" ) );
+	assert ( sphWildcardMatch ( "a12b12", "*12*12*" ) );
+
+	// wildcard in the tame string
+	assert ( sphWildcardMatch ( "*", "*" ) );
+	assert ( sphWildcardMatch ( "a*abab", "a*b" ) );
+	assert ( sphWildcardMatch ( "a*r", "a*" ) );
+	assert ( !sphWildcardMatch ( "a*ar", "a*aar" ) );
+
+	// double wildcard
+	assert ( sphWildcardMatch ( "XYXYXYZYXYz", "XY*Z*XYz" ) );
+	assert ( sphWildcardMatch ( "missisSIPpi", "*SIP*" ) );
+	assert ( sphWildcardMatch ( "mississipPI", "*issip*PI" ) );
+	assert ( sphWildcardMatch ( "xyxyxyxyz", "xy*xyz" ) );
+	assert ( sphWildcardMatch ( "miSsissippi", "mi*sip*" ) );
+	assert ( !sphWildcardMatch ( "miSsissippi", "mi*Sip*" ) );
+	assert ( sphWildcardMatch ( "abAbac", "*Abac*" ) );
+	assert ( sphWildcardMatch ( "abAbac", "*Abac*" ) );
+	assert ( sphWildcardMatch ( "aAazz", "a*zz*" ) );
+	assert ( !sphWildcardMatch ( "A12b12", "*12*23" ) );
+	assert ( sphWildcardMatch ( "a12B12", "*12*12*" ) );
+	assert ( sphWildcardMatch ( "oWn", "*oWn*" ) );
+
+	// mixed wildcard
+	assert ( sphWildcardMatch ( "a", "*?" ) );
+	assert ( sphWildcardMatch ( "ab", "*?" ) );
+	assert ( sphWildcardMatch ( "abc", "*?" ) );
+
+	// wildcard false positives
+	assert ( !sphWildcardMatch ( "a", "??" ) );
+	assert ( sphWildcardMatch ( "ab", "?*?" ) );
+	// due to loop just right after case '*'
+	// skip all the extra stars and question marks
+	// this case has opposite result
+	assert ( !sphWildcardMatch ( "ab", "*?*?*" ) );
+	assert ( sphWildcardMatch ( "abc", "?**?*?" ) );
+	assert ( !sphWildcardMatch ( "abc", "?**?*&?" ) );
+	assert ( sphWildcardMatch ( "abcd", "?b*??" ) );
+	assert ( !sphWildcardMatch ( "abcd", "?a*??" ) );
+	assert ( sphWildcardMatch ( "abcd", "?**?c?" ) );
+	assert ( !sphWildcardMatch ( "abcd", "?**?d?" ) );
+	assert ( sphWildcardMatch ( "abcde", "?*b*?*d*?" ) );
+
+	// single char match
+	assert ( sphWildcardMatch ( "bLah", "bL?h" ) );
+	assert ( !sphWildcardMatch ( "bLaaa", "bLa?" ) );
+	assert ( sphWildcardMatch ( "bLah", "bLa?" ) );
+	assert ( !sphWildcardMatch ( "bLaH", "?Lah" ) );
+	assert ( sphWildcardMatch ( "bLaH", "?LaH" ) );
+
+	// many wildcard
+	assert ( sphWildcardMatch ( "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab", "a*a*a*a*a*a*aa*aaa*a*a*b" ) );
+	assert ( sphWildcardMatch ( "abababababababababababababababababababaacacacacacacacadaeafagahaiajakalaaaaaaaaaaaaaaaaaffafagaagggagaaaaaaaab", "*a*b*ba*ca*a*aa*aaa*fa*ga*b*" ) );
+	assert ( !sphWildcardMatch ( "abababababababababababababababababababaacacacacacacacadaeafagahaiajakalaaaaaaaaaaaaaaaaaffafagaagggagaaaaaaaab", "*a*b*ba*ca*a*x*aaa*fa*ga*b*" ) );
+	assert ( !sphWildcardMatch ( "abababababababababababababababababababaacacacacacacacadaeafagahaiajakalaaaaaaaaaaaaaaaaaffafagaagggagaaaaaaaab", "*a*b*ba*ca*aaaa*fa*ga*gggg*b*" ) );
+	assert ( sphWildcardMatch ( "abababababababababababababababababababaacacacacacacacadaeafagahaiajakalaaaaaaaaaaaaaaaaaffafagaagggagaaaaaaaab", "*a*b*ba*ca*aaaa*fa*ga*ggg*b*" ) );
+	assert ( sphWildcardMatch ( "aaabbaabbaab", "*aabbaa*a*" ) );
+	assert ( sphWildcardMatch ( "a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*", "a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*" ) );
+	assert ( sphWildcardMatch ( "aaaaaaaaaaaaaaaaa", "*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*" ) );
+	assert ( !sphWildcardMatch ( "aaaaaaaaaaaaaaaa", "*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*" ) );
+	assert ( !sphWildcardMatch ( "abc*abcd*abcde*abcdef*abcdefg*abcdefgh*abcdefghi*abcdefghij*abcdefghijk*abcdefghijkl*abcdefghijklm*abcdefghijklmn", "abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*" ) );
+	assert ( sphWildcardMatch ( "abc*abcd*abcde*abcdef*abcdefg*abcdefgh*abcdefghi*abcdefghij*abcdefghijk*abcdefghijkl*abcdefghijklm*abcdefghijklmn", "abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*" ) );
+	assert ( !sphWildcardMatch ( "abc*abcd*abcd*abc*abcd", "abc*abc*abc*abc*abc" ) );
+	assert ( sphWildcardMatch ( "abc*abcd*abcd*abc*abcd*abcd*abc*abcd*abc*abc*abcd", "abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abcd" ) );
+	assert ( sphWildcardMatch ( "abc", "********a********b********c********" ) );
+	assert ( !sphWildcardMatch ( "********a********b********c********", "abc" ) );
+	assert ( !sphWildcardMatch ( "abc", "********a********b********b********" ) );
+	assert ( sphWildcardMatch ( "*abc*", "***a*b*c***" ) );
+
 	printf ( "ok\n" );
 }
 

@@ -30657,10 +30657,16 @@ void CWordlist::GetPrefixedWords ( const char * sSubstring, int iSubLen, const c
 			if ( iCmp<0 )
 				break;
 
+			if ( sphInterrupted() )
+				break;
+
 			// does it match the prefix *and* the entire wildcard?
 			if ( iCmp==0 && sphWildcardMatch ( (const char *)tDictReader.m_sKeyword + iSkipMagic, sWildcard ) )
 				tDict2Payload.Add ( tDictReader, tDictReader.GetWordLen() );
 		}
+
+		if ( sphInterrupted () )
+			break;
 
 		pCheckpoint++;
 		if ( pCheckpoint > &m_dCheckpoints.Last() )
@@ -30809,6 +30815,9 @@ void CWordlist::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 		KeywordsBlockReader_c tDictReader ( m_tBuf.GetWritePtr() + m_dCheckpoints[dPoints[i]-1].m_iWordlistOffset, m_bHaveSkips );
 		while ( tDictReader.UnpackWord() )
 		{
+			if ( sphInterrupted () )
+				break;
+
 			// stemmed terms should not match suffixes
 			if ( tArgs.m_bHasMorphology && *tDictReader.m_sKeyword!=MAGIC_WORD_HEAD_NONSTEMMED )
 				continue;
@@ -30816,6 +30825,9 @@ void CWordlist::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 			if ( sphWildcardMatch ( (const char *)tDictReader.m_sKeyword+iSkipMagic, sWildcard ) )
 				tDict2Payload.Add ( tDictReader, tDictReader.GetWordLen() );
 		}
+
+		if ( sphInterrupted () )
+			break;
 	}
 
 	tDict2Payload.Convert ( tArgs );

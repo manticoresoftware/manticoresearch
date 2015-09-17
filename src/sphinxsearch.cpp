@@ -1487,8 +1487,11 @@ private:
 	ExtPayloadKeyword_t				m_tWord;
 	FieldMask_t						m_dFieldMask;
 
-	int		m_iCurDocsEnd;		///< end of the last docs chunk returned, exclusive, ie [begin,end)
-	int		m_iCurHit;			///< end of the last hits chunk (within the last docs chunk) returned, exclusive
+	int								m_iCurDocsEnd;		///< end of the last docs chunk returned, exclusive, ie [begin,end)
+	int								m_iCurHit;			///< end of the last hits chunk (within the last docs chunk) returned, exclusive
+
+	int64_t							m_iMaxTimer;		///< work until this timestamp
+	CSphString *					m_pWarning;
 
 public:
 	explicit						ExtPayload_c ( const XQNode_t * pNode, const ISphQwordSetup & tSetup );
@@ -1533,6 +1536,9 @@ ExtPayload_c::ExtPayload_c ( const XQNode_t * pNode, const ISphQwordSetup & tSet
 	m_tWord.m_fIDF = -1.0f;
 	m_tWord.m_iDocs = 0;
 	m_tWord.m_iHits = 0;
+
+	m_pWarning = tSetup.m_pWarning;
+	m_iMaxTimer = tSetup.m_iMaxTimer;
 
 	PopulateCache ( tSetup, true );
 }
@@ -1615,6 +1621,7 @@ void ExtPayload_c::PopulateCache ( const ISphQwordSetup & tSetup, bool bFillStat
 
 void ExtPayload_c::Reset ( const ISphQwordSetup & tSetup )
 {
+	m_iMaxTimer = tSetup.m_iMaxTimer;
 	m_dCache.Resize ( 0 );
 	PopulateCache ( tSetup, false );
 }
@@ -1625,6 +1632,22 @@ const ExtDoc_t * ExtPayload_c::GetDocsChunk()
 	m_iCurHit = m_iCurDocsEnd;
 	if ( m_iCurDocsEnd>=m_dCache.GetLength() )
 		return NULL;
+
+	// max_query_time
+	if ( m_iMaxTimer>0 && sphMicroTimer()>=m_iMaxTimer )
+	{
+		if ( m_pWarning )
+			*m_pWarning = "query time exceeded max_query_time";
+		return NULL;
+	}
+
+	// interrupt by sitgerm
+	if ( ExtTerm_c::m_bInterruptNow )
+	{
+		if ( m_pWarning )
+			*m_pWarning = "Server shutdown in progress";
+		return NULL;
+	}
 
 	int iDoc = 0;
 	int iEnd = m_iCurDocsEnd; // shortcut, and vs2005 optimization

@@ -1089,6 +1089,9 @@ void Shutdown ()
 	}
 #endif
 
+	// force even long time searches to shut
+	sphInterruptNow();
+
 	// tell flush-rt thread to shutdown, and wait until it does
 	sphThreadJoin ( &g_tRtFlushThread );
 
@@ -20241,6 +20244,9 @@ void ThdJobAPI_t::Call ()
 
 	sphLogDebugv ( "%p API job done, command=%d", this, m_iCommand );
 
+	if ( g_bShutdown )
+		return;
+
 	assert ( m_pLoop );
 	if ( tOut.GetSentCount() )
 	{
@@ -20291,7 +20297,7 @@ void ThdJobQL_t::Call ()
 	bool bProceed = LoopClientMySQL ( m_tState->m_uPacketID, m_tState->m_tSession, sQuery, m_tState->m_dBuf.GetLength(), bProfile, &tThdDesc, tIn, tOut );
 	m_tState->m_bKeepSocket = bProceed;
 
-	if ( bProceed )
+	if ( bProceed && !g_bShutdown )
 	{
 		assert ( m_pLoop );
 		tOut.SwapData ( m_tState->m_dBuf );
@@ -20360,13 +20366,16 @@ void ThdJobHttp_t::Call ()
 
 	m_tState->m_bKeepSocket = sphLoopClientHttp ( m_tState->m_dBuf, m_tState->m_iConnID );
 
-	assert ( m_pLoop );
-	NetSendData_t * pSend = new NetSendData_t ( m_tState.LeakPtr(), PROTO_HTTP );
-	m_pLoop->AddAction ( pSend );
-
 	g_tThdMutex.Lock ();
 	g_dThd.Remove ( &tThdDesc );
 	g_tThdMutex.Unlock ();
+
+	if ( g_bShutdown )
+		return;
+
+	assert ( m_pLoop );
+	NetSendData_t * pSend = new NetSendData_t ( m_tState.LeakPtr(), PROTO_HTTP );
+	m_pLoop->AddAction ( pSend );
 }
 
 

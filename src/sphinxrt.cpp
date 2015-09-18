@@ -10120,11 +10120,13 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema * pSche
 	CSphColumnInfo tCol;
 
 	// fields
+	SmallStringHash_T<BYTE> hFields;
 	for ( CSphVariant * v=hIndex("rt_field"); v; v=v->m_pNext )
 	{
 		tCol.m_sName = v->cstr();
 		tCol.m_sName.ToLower();
 		pSchema->m_dFields.Add ( tCol );
+		hFields.Add ( 1, tCol.m_sName );
 	}
 	if ( !pSchema->m_dFields.GetLength() )
 	{
@@ -10178,6 +10180,12 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema * pSche
 			}
 
 			pSchema->AddAttr ( tCol, false );
+
+			if ( tCol.m_eAttrType!=SPH_ATTR_STRING && hFields.Exists ( tCol.m_sName ) )
+			{
+				pError->SetSprintf ( "can not add attribute that shadows '%s' field", tCol.m_sName.cstr () );
+				return false;
+			}
 		}
 	}
 

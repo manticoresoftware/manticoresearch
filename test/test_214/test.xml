@@ -226,6 +226,12 @@ $query ( "select `select` from rt where id=10", $sock, $results );
 $query ( "select min(`select`,`select`+1) from rt where id=10", $sock, $results );
 $query ( "select `select`=1 from rt where id=10", $sock, $results );
 
+// add and drop attr named as field
+$query ( "alter table rt add column title integer", $sock, $results );
+$query ( "alter table rt add column title string", $sock, $results );
+$query ( "insert into rt (id, title) values (101, 'test me')", $sock, $results );
+$query ( "select id, title from rt where id=101", $sock, $results );
+
 @mysql_close($sock);
 	
 ]]></custom_test>

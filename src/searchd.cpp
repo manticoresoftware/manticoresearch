@@ -14673,6 +14673,12 @@ static void AddAttrToIndex ( const SqlStmt_t & tStmt, const ServedIndex_c * pSer
 		return;
 	}
 
+	if ( tStmt.m_eAlterColType!=SPH_ATTR_STRING && pServed->m_pIndex->GetMatchSchema().GetFieldIndex ( sAttrToAdd.cstr () )!=-1 )
+	{
+		sError.SetSprintf ( "can not add attribute that shadows '%s' field", sAttrToAdd.cstr () );
+		return;
+	}
+
 	pServed->m_pIndex->AddRemoveAttribute ( true, sAttrToAdd, tStmt.m_eAlterColType, sError );
 }
 

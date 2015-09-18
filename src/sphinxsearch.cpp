@@ -1820,8 +1820,14 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 		assert ( iChildren>0 );
 
 		// special case, operator BEFORE
-		if ( pNode->GetOp()==SPH_QUERY_BEFORE )
+		if ( pNode->GetOp ()==SPH_QUERY_BEFORE )
+		{
+			// before operator can not handle ZONESPAN
+			bool bZoneSpan = ARRAY_ANY ( bZoneSpan, pNode->m_dChildren, pNode->m_dChildren[_any]->m_dSpec.m_bZoneSpan );
+			if ( bZoneSpan && tSetup.m_pWarning )
+				tSetup.m_pWarning->SetSprintf ( "BEFORE operator is incompatible with ZONESPAN, ZONESPAN ignored" );
 			return CreateOrderNode ( pNode, tSetup );
+		}
 
 		// special case, AND over terms (internally reordered for speed)
 		bool bAndTerms = ( pNode->GetOp()==SPH_QUERY_AND );

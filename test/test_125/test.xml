@@ -85,6 +85,12 @@ index dist
 	agent_connect_timeout	= 1000
 	agent_query_timeout		= 3000	
 }
+
+index strings_dist
+{
+	type = distributed
+	agent = <my_address/>:strings
+}
 </config>
 
 <db_create>
@@ -307,6 +313,8 @@ INSERT INTO string_table VALUES
 <sphinxql>select id, string_value from strings where string_value in ('asdf','qwer')</sphinxql>
 <sphinxql>select id, string_value from strings where string_value not in ('')</sphinxql>
 <sphinxql>select id, to_string(id) as p from strings where p in('1','3')</sphinxql>
+<sphinxql>select id, string_value from strings_dist where string_value in ('asdf','qwer')</sphinxql>
+<sphinxql>select id, string_value from strings_dist where string_value not in ('')</sphinxql>
 
 <!-- CRC32 as BIGINT -->
 <sphinxql>select CRC32('4759') AS test_crc FROM strings LIMIT 1</sphinxql>

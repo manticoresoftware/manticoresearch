@@ -6714,6 +6714,7 @@ bool CSphFilterSettings::operator == ( const CSphFilterSettings & rhs ) const
 	if ( m_sAttrName!=rhs.m_sAttrName || m_bExclude!=rhs.m_bExclude || m_eType!=rhs.m_eType )
 		return false;
 
+	bool bSameStrings = false;
 	switch ( m_eType )
 	{
 		case SPH_FILTER_RANGE:
@@ -6734,7 +6735,11 @@ bool CSphFilterSettings::operator == ( const CSphFilterSettings & rhs ) const
 
 		case SPH_FILTER_STRING:
 		case SPH_FILTER_USERVAR:
-			return ( m_sRefString==rhs.m_sRefString );
+		case SPH_FILTER_STRING_LIST:
+			if ( m_dStrings.GetLength()!=rhs.m_dStrings.GetLength() )
+				return false;
+			bSameStrings = ARRAY_ALL ( bSameStrings, m_dStrings, m_dStrings[_all]==rhs.m_dStrings[_all] );
+			return bSameStrings;
 
 		default:
 			assert ( 0 && "internal error: unhandled filter type in comparison" );
@@ -18189,16 +18194,17 @@ bool CSphQueryContext::CreateFilters ( bool bFullscan,
 			CSphFilterSettings tUservar;
 			if ( pFilterSettings->m_eType==SPH_FILTER_USERVAR )
 			{
-				if ( !g_pUservarsHook )
+				const CSphString * sVar = pFilterSettings->m_dStrings.GetLength()==1 ? pFilterSettings->m_dStrings.Begin() : NULL;
+				if ( !g_pUservarsHook || !sVar )
 				{
 					sError = "no global variables found";
 					return false;
 				}
 
-				const UservarIntSet_c * pUservar = g_pUservarsHook ( pFilterSettings->m_sRefString );
+				const UservarIntSet_c * pUservar = g_pUservarsHook ( *sVar );
 				if ( !pUservar )
 				{
-					sError.SetSprintf ( "undefined global variable '%s'", pFilterSettings->m_sRefString.cstr() );
+					sError.SetSprintf ( "undefined global variable '%s'", sVar->cstr() );
 					return false;
 				}
 

@@ -549,18 +549,20 @@ public:
 		}
 	}
 
-	virtual void SetRefString ( const CSphString & sRef )
+	virtual void SetRefString ( const CSphString * pRef, int iCount )
 	{
-		int iLen = sRef.Length();
+		assert ( iCount<2 );
+		const char * sVal = pRef ? pRef->cstr() : NULL;
+		int iLen = pRef ? pRef->Length() : 0;
 		if ( m_bPacked )
 		{
 			m_dVal.Reset ( iLen+4 );
 			int iPacked = sphPackStrlen ( m_dVal.Begin(), iLen );
-			memcpy ( m_dVal.Begin()+iPacked, sRef.cstr(), iLen );
+			memcpy ( m_dVal.Begin()+iPacked, sVal, iLen );
 		} else
 		{
 			m_dVal.Reset ( iLen+1 );
-			memcpy ( m_dVal.Begin(), sRef.cstr(), iLen );
+			memcpy ( m_dVal.Begin(), sVal, iLen );
 			m_dVal[iLen] = '\0';
 		}
 	}
@@ -593,7 +595,6 @@ public:
 
 struct Filter_StringValues_c: FilterString_c
 {
-	CSphString				m_sRefString;
 	CSphVector<BYTE>		m_dVal;
 	CSphVector<int>			m_dOfs;
 
@@ -601,18 +602,16 @@ struct Filter_StringValues_c: FilterString_c
 		: FilterString_c ( eCollation, eType, false )
 	{}
 
-	virtual void SetValues ( const SphAttr_t * pStorage, int iCount )
+	virtual void SetRefString ( const CSphString * pRef, int iCount )
 	{
-		assert ( pStorage );
-		assert ( iCount > 0 );
+		assert ( pRef );
+		assert ( iCount>0 );
 
 		int iOfs = 0;
 		for ( int i=0; i<iCount; i++ )
 		{
-			SphAttr_t uVal = pStorage[i];
-
 			CSphString sRef;
-			SqlUnescape ( sRef, m_sRefString.cstr() + ( uVal>>32 ), uVal & 0xffffffff );
+			SqlUnescape ( sRef, (pRef+i)->cstr(), (pRef+i)->Length() );
 			int iLen = sRef.Length();
 
 			if ( m_bPacked )
@@ -630,11 +629,6 @@ struct Filter_StringValues_c: FilterString_c
 			m_dOfs.Add ( iOfs );
 			iOfs = m_dVal.GetLength();
 		}
-	}
-
-	virtual void SetRefString ( const CSphString & sRef )
-	{
-		m_sRefString = sRef;
 	}
 
 	virtual bool Eval ( const CSphMatch & tMatch ) const
@@ -992,11 +986,11 @@ static ISphFilter * CreateFilter ( ESphAttr eAttrType, ESphFilter eFilterType, i
 
 	if ( eAttrType==SPH_ATTR_STRING || eAttrType==SPH_ATTR_STRINGPTR )
 	{
-		if ( eFilterType==SPH_FILTER_VALUES )
+		if ( eFilterType==SPH_FILTER_STRING_LIST )
 			return new Filter_StringValues_c ( eCollation, eAttrType );
 		else
 			return new FilterString_c ( eCollation, eAttrType, bHasEqual );
-        }
+	}
 
 	// non-float, non-MVA
 	switch ( eFilterType )
@@ -1192,12 +1186,13 @@ public:
 		}
 	}
 
-	virtual void SetRefString ( const CSphString & sRef )
+	virtual void SetRefString ( const CSphString * pRef, int iCount )
 	{
-		int iLen = sRef.Length();
+		assert ( pRef && iCount==1 );
+		int iLen = pRef->Length();
 		m_dVal.Reset ( iLen+4 );
 		int iPacked = sphPackStrlen ( m_dVal.Begin(), iLen );
-		memcpy ( m_dVal.Begin()+iPacked, sRef.cstr(), iLen );
+		memcpy ( m_dVal.Begin()+iPacked, pRef->cstr(), iLen );
 	}
 
 	virtual bool Eval ( const CSphMatch & tMatch ) const
@@ -1445,7 +1440,7 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 		else
 			pFilter->SetRangeFloat ( (float)tSettings.m_iMinValue, (float)tSettings.m_iMaxValue );
 
-		pFilter->SetRefString ( tSettings.m_sRefString );
+		pFilter->SetRefString ( tSettings.m_dStrings.Begin(), tSettings.m_dStrings.GetLength() );
 		if ( tSettings.GetNumValues() > 0 )
 		{
 			pFilter->SetValues ( tSettings.GetValueArray(), tSettings.GetNumValues() );

@@ -29,6 +29,22 @@ index idx
     docinfo			= extern
 }
 
+source src1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT id, id AS tag, body FROM test_table
+	sql_attr_uint	= tag
+	sql_field_string = body
+}
+
+index idx1
+{
+	source			= src1
+	path			= <data_path/>/main1
+    docinfo			= extern
+}
+
 </config>
 
 <custom_test><![CDATA[
@@ -41,13 +57,28 @@ for ( $i=10000; $i<20000; $i++ )
 $client->SetSelect ( "*, IN(@id,1," . $idlist . "3) AS q, crc32('the') as crc" );
 $client->SetFilter ( "q", array(1) );
 
-$r = $client->Query ( "" );
+$r = $client->Query ( "", "idx" );
 if ( $r )
 {
 	unset ( $r["time"] );
 	$results[] = $r;
 } else
 	$results[] = $client->GetLastError();
+	
+// regression crash on not well formed filter	
+$client->ResetFilters();
+$client->SetSelect ( "*" );
+$client->SetFilter ( "body", array(0) );
+
+$r = $client->Query ( "", "idx1" );
+if ( $r )
+{
+	unset ( $r["time"] );
+	$results[] = $r;
+} else
+{
+	$results[] = $client->GetLastError();
+}	
 ]]></custom_test>
 
 <db_create>

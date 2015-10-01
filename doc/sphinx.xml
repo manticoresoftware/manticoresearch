@@ -6536,7 +6536,7 @@ on and warning otherwise.</para>
 </para>
 </sect1>
 
-<sect1 id="sphinxql-attach"><title>ALTER syntax</title>
+<sect1 id="sphinxql-alter"><title>ALTER syntax</title>
 <programlisting>
 ALTER TABLE index {ADD|DROP} COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON|STRING}]
 </programlisting>

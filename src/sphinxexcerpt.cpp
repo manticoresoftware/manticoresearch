@@ -971,7 +971,7 @@ public:
 
 					tTok.m_sWord = NULL;
 
-					bStop = !tFunctor.OnToken ( tTok, dTmp );
+					bStop = !tFunctor.OnToken ( tTok, dTmp, NULL );
 				}
 				break;
 
@@ -988,7 +988,7 @@ public:
 
 					tTok.m_sWord = NULL;
 
-					bStop = !tFunctor.OnToken ( tTok, dTmp );
+					bStop = !tFunctor.OnToken ( tTok, dTmp, NULL );
 				}
 				break;
 
@@ -1006,7 +1006,7 @@ public:
 
 					tTok.m_sWord = NULL;
 
-					bStop = !tFunctor.OnToken ( tTok, dTmp );
+					bStop = !tFunctor.OnToken ( tTok, dTmp, NULL );
 				}
 				break;
 
@@ -1029,7 +1029,7 @@ public:
 
 					tTok.m_sWord = NULL;
 
-					bStop = !tFunctor.OnToken ( tTok, dTmp );
+					bStop = !tFunctor.OnToken ( tTok, dTmp, NULL );
 
 					if ( bStop )
 						break;
@@ -1054,7 +1054,7 @@ public:
 
 					tTok.m_sWord = NULL;
 
-					bStop = !tFunctor.OnToken ( tTok, dTmp );
+					bStop = !tFunctor.OnToken ( tTok, dTmp, NULL );
 
 					if ( bStop )
 						break;
@@ -1184,11 +1184,11 @@ public:
 		m_bCollectExtraZoneInfo = true;
 	}
 
-	bool OnToken ( const TokenInfo_t & tTok, const CSphVector<SphWordID_t> & dTokens )
+	bool OnToken ( const TokenInfo_t & tTok, const CSphVector<SphWordID_t> & dTokens, const CSphVector<int> * pMultiPosDelta )
 	{
 		bool bReal = false;
 
-		assert ( tTok.m_iMultiPosLen==0 || tTok.m_iMultiPosLen==dTokens.GetLength()+1 );
+		assert ( tTok.m_iMultiPosLen==0 || ( pMultiPosDelta && pMultiPosDelta->GetLength()==dTokens.GetLength()+1 ) );
 		bool bMultiform = ( tTok.m_iMultiPosLen!=0 );
 		int iPos = tTok.m_uPosition;
 
@@ -1203,14 +1203,17 @@ public:
 		{
 			if ( dTokens[i] )
 			{
+				if ( bMultiform )
+					iPos += ( *pMultiPosDelta )[i];
 				m_tContainer.AddHits ( dTokens[i], tTok.m_sWord, tTok.m_iLen, iPos );
 				bReal = true;
-				if ( bMultiform )
-					iPos++;
 			}
 		}
+
 		if ( bMultiform && tTok.m_uWordId )
 		{
+			if ( bMultiform )
+				iPos += pMultiPosDelta->Last();
 			m_tContainer.AddHits ( tTok.m_uWordId, tTok.m_sWord, tTok.m_iLen, iPos );
 			bReal = true;
 		}
@@ -1329,7 +1332,7 @@ public:
 		ResultEmit ( m_pDoc+iStart, iLen );
 	}
 
-	bool OnToken ( const TokenInfo_t & tTok, const CSphVector<SphWordID_t> & dTokens )
+	bool OnToken ( const TokenInfo_t & tTok, const CSphVector<SphWordID_t> & dTokens, const CSphVector<int> * )
 	{
 		assert ( m_pDoc );
 		assert ( tTok.m_iStart>=0 && m_pDoc+tTok.m_iStart+tTok.m_iLen<=m_pDocMax );
@@ -1411,7 +1414,7 @@ public:
 		, m_iLastPos ( 0 )
 	{}
 
-	bool OnToken ( const TokenInfo_t & tTok, const CSphVector<SphWordID_t> & )
+	bool OnToken ( const TokenInfo_t & tTok, const CSphVector<SphWordID_t> &, const CSphVector<int> * )
 	{
 		assert ( m_pDoc );
 		assert ( tTok.m_iStart>=0 && m_pDoc+tTok.m_iStart+tTok.m_iLen<=m_pDocMax );
@@ -2188,7 +2191,7 @@ public:
 		assert ( !m_bAllowEmpty );
 	}
 
-	bool OnToken ( const TokenInfo_t & tTok, const CSphVector<SphWordID_t> & )
+	bool OnToken ( const TokenInfo_t & tTok, const CSphVector<SphWordID_t> &, const CSphVector<int> * )
 	{
 		CollectStartTokens ( tTok.m_iStart, tTok.m_iLen );
 		return !m_bCollectionStopped;
@@ -2228,7 +2231,7 @@ public:
 	{
 	}
 
-	bool OnToken ( const TokenInfo_t & tTok, const CSphVector<SphWordID_t> & dTokens )
+	bool OnToken ( const TokenInfo_t & tTok, const CSphVector<SphWordID_t> & dTokens, const CSphVector<int> * )
 	{
 		assert ( m_pDoc );
 		assert ( tTok.m_iStart>=0 && m_pDoc+tTok.m_iStart+tTok.m_iLen<=m_pDocMax );
@@ -2683,7 +2686,7 @@ public:
 			m_dPassageHeads.Reserve(1024);
 	}
 
-	bool OnToken ( const TokenInfo_t & tTok, const CSphVector<SphWordID_t> & )
+	bool OnToken ( const TokenInfo_t & tTok, const CSphVector<SphWordID_t> &, const CSphVector<int> * )
 	{
 		assert ( m_pDoc );
 		assert ( tTok.m_iStart>=0 && m_pDoc+tTok.m_iStart+tTok.m_iLen<=m_pDocMax );
@@ -3003,6 +3006,7 @@ static void TokenizeDocument ( T & tFunctor, const CSphHTMLStripper * pStripper,
 	bool bBlendedHead = false;
 	bool bBlendedPart = false;
 	CSphVector<SphWordID_t> dMultiToken;
+	CSphVector<int>	dMultiPosDelta;
 
 	CSphVector<int> dZoneStack;
 	CSphVector<char> dZoneName ( 16+3*SPH_MAX_WORD_LEN );
@@ -3016,6 +3020,7 @@ static void TokenizeDocument ( T & tFunctor, const CSphHTMLStripper * pStripper,
 		const char * pTokenStart = pTokenizer->GetTokenStart ();
 
 		tTok.m_iMultiPosLen = 0;
+		dMultiPosDelta.Resize ( 0 );
 
 		if ( pBlendedEnd<pTokenStart )
 		{
@@ -3028,7 +3033,7 @@ static void TokenizeDocument ( T & tFunctor, const CSphHTMLStripper * pStripper,
 				tTok.m_iStart = pLastTokenEnd - pStartPtr;
 				tTok.m_iLen = pBlendedEnd - pLastTokenEnd;
 				tTok.m_bWord = false;
-				if ( !tFunctor.OnToken ( tTok, dMultiToken ) )
+				if ( !tFunctor.OnToken ( tTok, dMultiToken, NULL ) )
 				{
 					tFunctor.OnFinish();
 					return;
@@ -3053,18 +3058,42 @@ static void TokenizeDocument ( T & tFunctor, const CSphHTMLStripper * pStripper,
 		{
 			assert ( iDestCount>1 );
 			tTok.m_iMultiPosLen = iDestCount;
-			for ( int i=0; i<iDestCount-1; i++ )
+			int iLastToken = iDestCount-1;
+
+			// blended from destination wordform means multiple lemma from appropriate destination token
+			bool bWasBlended = pTokenizer->TokenIsBlended ();
+			dMultiToken.Add ( tFunctor.m_pDict->GetWordID ( sWord ) );
+			dMultiPosDelta.Add ( 0 );
+
+			int iToken = ( bWasBlended ? 0 : 1 );
+			for ( ;; )
 			{
-				dMultiToken.Add ( tFunctor.m_pDict->GetWordID ( sWord ) );
 				sWord = pTokenizer->GetToken ();
 				assert ( sWord );
+				bool bBlended = pTokenizer->TokenIsBlended();
+				if ( iToken==iLastToken && !bBlended )
+					break;
+
+				dMultiToken.Add ( tFunctor.m_pDict->GetWordID ( sWord ) );
+				dMultiPosDelta.Add ( bWasBlended ? 0 : 1 );
+
+				bWasBlended = bBlended;
+				if ( !bBlended )
+					iToken++;
 			}
+			dMultiPosDelta.Add ( bWasBlended ? 0 : 1 );
+#ifndef NDEBUG
+			int iDeltaPos = 0;
+			ARRAY_FOREACH ( i, dMultiPosDelta )
+				iDeltaPos += dMultiPosDelta[i];
+			assert ( iDeltaPos==iDestCount-1 );
+#endif
 			uStep = iDestCount;
 		}
 
 
 		// handle only blended parts
-		if ( pTokenizer->TokenIsBlended() )
+		if ( pTokenizer->TokenIsBlended() && !bMultiDestHead )
 		{
 			if ( tFunctor.m_bIndexExactWords && pTokenizer->GetTokenMorph()!=SPH_TOKEN_MORPH_GUESS )
 			{
@@ -3098,7 +3127,7 @@ static void TokenizeDocument ( T & tFunctor, const CSphHTMLStripper * pStripper,
 				tTok.m_iLen = pTokenStart - pBlendedStart;
 				tTok.m_bWord = false;
 				if ( !bDone )
-					bDone = !tFunctor.OnToken ( tTok, dMultiToken );
+					bDone = !tFunctor.OnToken ( tTok, dMultiToken, &dMultiPosDelta );
 			} else
 			{
 				bDone = !tFunctor.OnOverlap ( pLastTokenEnd-pStartPtr, pTokenStart - pLastTokenEnd, pTokenizer->GetBoundary() ? pTokenizer->GetBoundaryOffset() : -1 );
@@ -3227,7 +3256,7 @@ static void TokenizeDocument ( T & tFunctor, const CSphHTMLStripper * pStripper,
 
 		// match & emit
 		// star match needs non-stemmed word
-		if ( !tFunctor.OnToken ( tTok, dMultiToken ) )
+		if ( !tFunctor.OnToken ( tTok, dMultiToken, &dMultiPosDelta ) )
 		{
 			tFunctor.OnFinish();
 			return;
@@ -3248,7 +3277,7 @@ static void TokenizeDocument ( T & tFunctor, const CSphHTMLStripper * pStripper,
 		tTok.m_iLen = pBlendedEnd - pLastTokenEnd;
 		tTok.m_bWord = false;
 		tTok.m_iMultiPosLen = 0;
-		tFunctor.OnToken ( tTok, dMultiToken );
+		tFunctor.OnToken ( tTok, dMultiToken, &dMultiPosDelta );
 		pLastTokenEnd = pBlendedEnd;
 	}
 

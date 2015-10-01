@@ -435,24 +435,32 @@ filter_item:
 			pFilter->m_dValues.Add ( $3.m_iValue );
 			pFilter->m_bExclude = true;
 		}
-	| expr_ident TOK_IN '(' const_list_or_string_list ')'
+	| expr_ident TOK_IN '(' const_list ')'
 		{
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )
 				YYERROR;
 			pFilter->m_dValues = *$4.m_pValues.Ptr();
 			pFilter->m_dValues.Uniq();
-			pFilter->m_sRefString = pParser->m_pBuf;
 		}
-	| expr_ident TOK_NOT TOK_IN '(' const_list_or_string_list ')'
+	| expr_ident TOK_NOT TOK_IN '(' const_list ')'
 		{
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )
 				YYERROR;
 			pFilter->m_dValues = *$5.m_pValues.Ptr();
-			pFilter->m_bExclude = true;
 			pFilter->m_dValues.Uniq();
-			pFilter->m_sRefString = pParser->m_pBuf;
+			pFilter->m_bExclude = true;
+		}
+	| expr_ident TOK_IN '(' string_list ')'
+		{
+			if ( !pParser->AddStringListFilter ( $1, $4, false ) )
+				YYERROR;
+		}
+	| expr_ident TOK_NOT TOK_IN '(' string_list ')'
+		{
+			if ( !pParser->AddStringListFilter ( $1, $5, true ) )
+				YYERROR;
 		}
 	| expr_ident TOK_IN TOK_USERVAR
 		{
@@ -710,11 +718,6 @@ string_list:
 		{
 			$$.m_pValues->Add ( $3.m_iValue );
 		}
-	;
-
-const_list_or_string_list:
-	const_list
-	| string_list
 	;
 
 opt_group_clause:

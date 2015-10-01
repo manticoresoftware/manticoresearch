@@ -26,7 +26,7 @@ struct ISphFilter
 	virtual void SetValues ( const SphAttr_t *, int ) {}
 	virtual void SetMVAStorage ( const DWORD *, bool ) {}
 	virtual void SetStringStorage ( const BYTE * ) {}
-	virtual void SetRefString ( const CSphString & ) {}
+	virtual void SetRefString ( const CSphString * , int ) {}
 
 	virtual ~ISphFilter () {}
 

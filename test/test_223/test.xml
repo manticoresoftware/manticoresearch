@@ -94,6 +94,14 @@ index tmpl_expanded
 	min_infix_len	= 2
 }
 
+index wf_multi
+{
+	type		= template
+	wordforms	= <this_test/>/wordforms.txt
+	charset_table = english, 0..9
+	morphology	= lemmatize_en_all
+}
+
 </config>
 
 <metaindex name='META:tmpl'>
@@ -125,6 +133,12 @@ index tmpl_expanded
 <sphinxql>CALL SNIPPETS('time is dying out like everething', 'META:tmpl', 'nothing', 1 AS query_mode, 40 AS limit, 1 as allow_empty  )</sphinxql>
 <sphinxql>CALL SNIPPETS('time is dying out like everething else here', 'META:tmpl', 'nothing', 40 AS limit, 1 as allow_empty  )</sphinxql>
 <sphinxql>CALL SNIPPETS('time is dying out like everething', 'META:tmpl', 'nothing', 40 AS limit, 1 as allow_empty  )</sphinxql>
+
+<!-- multi wordform with many destination tokens vs lemmas-->
+<sphinxql>CALL SNIPPETS('rock music', 'wf_multi', 'rock', 1 AS query_mode, 0 AS limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('rock music', 'wf_multi', 'and', 1 AS query_mode, 0 AS limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('rock music', 'wf_multi', 'roll', 1 AS query_mode, 0 AS limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('trial period', 'wf_multi', 'test', 1 AS query_mode, 0 AS limit )</sphinxql>
 </sphqueries>
 
 </test>

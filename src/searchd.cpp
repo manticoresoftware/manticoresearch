@@ -410,7 +410,7 @@ static CSphAtomic							g_iPersistentInUse;
 /// master-agent API protocol extensions version
 enum
 {
-	VER_MASTER = 11
+	VER_MASTER = 12
 };
 
 
@@ -2762,8 +2762,13 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 			case SPH_FILTER_RANGE:		iReqSize += 16; break; // uint64 min-val, max-val
 			case SPH_FILTER_FLOATRANGE:	iReqSize += 8; break; // int/float min-val,max-val
 			case SPH_FILTER_USERVAR:
-			case SPH_FILTER_STRING:		iReqSize += 4 + tFilter.m_sRefString.Length(); break;
+			case SPH_FILTER_STRING:		iReqSize += 4 + ( tFilter.m_dStrings.GetLength()==1 ? tFilter.m_dStrings[0].Length() : 0 ); break;
 			case SPH_FILTER_NULL:		iReqSize += 1; break; // boolean value
+			case SPH_FILTER_STRING_LIST:	// int values-count; string[] values
+				iReqSize += 4;
+				ARRAY_FOREACH ( iString, tFilter.m_dStrings )
+					iReqSize += 4 + tFilter.m_dStrings[iString].Length();
+				break;
 		}
 	}
 	if ( q.m_bGeoAnchor )
@@ -2877,11 +2882,17 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 
 			case SPH_FILTER_USERVAR:
 			case SPH_FILTER_STRING:
-				tOut.SendString ( tFilter.m_sRefString.cstr() );
+				tOut.SendString ( tFilter.m_dStrings.GetLength()==1 ? tFilter.m_dStrings[0].cstr() : NULL );
 				break;
 
 			case SPH_FILTER_NULL:
 				tOut.SendByte ( tFilter.m_bHasEqual );
+				break;
+
+			case SPH_FILTER_STRING_LIST:
+				tOut.SendInt ( tFilter.m_dStrings.GetLength() );
+				ARRAY_FOREACH ( iString, tFilter.m_dStrings )
+					tOut.SendString ( tFilter.m_dStrings[iString].cstr() );
 				break;
 		}
 		tOut.SendInt ( tFilter.m_bExclude );
@@ -3537,7 +3548,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 						}
 						break;
 					case SPH_FILTER_STRING:
-						tFilter.m_sRefString = tReq.GetString();
+						tFilter.m_dStrings.Add ( tReq.GetString() );
 						break;
 
 					case SPH_FILTER_NULL:
@@ -3545,8 +3556,22 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 						break;
 
 					case SPH_FILTER_USERVAR:
-						tFilter.m_sRefString = tReq.GetString();
+						tFilter.m_dStrings.Add ( tReq.GetString() );
 						break;
+
+					case SPH_FILTER_STRING_LIST:
+					{
+						int iCount = tReq.GetDword();
+						if ( iCount<0 || iCount>g_iMaxFilterValues )
+						{
+							SendErrorReply ( tOut, "invalid attribute '%s'(%d) set length %d (should be in 0..%d range)", tFilter.m_sAttrName.cstr(), iFilter, iCount, g_iMaxFilterValues );
+							return false;
+						}
+						tFilter.m_dStrings.Resize ( iCount );
+						ARRAY_FOREACH ( iString, tFilter.m_dStrings )
+							tFilter.m_dStrings[iString] = tReq.GetString();
+					}
+					break;
 
 					default:
 						SendErrorReply ( tOut, "unknown filter type (type-id=%d)", tFilter.m_eType );
@@ -4148,11 +4173,18 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes
 
 				case SPH_FILTER_USERVAR:
 				case SPH_FILTER_STRING:
-					tBuf.Appendf ( " %s%s'%s'", f.m_sAttrName.cstr(), ( f.m_bHasEqual ? "=" : "!=" ), f.m_sRefString.cstr() );
+					tBuf.Appendf ( " %s%s'%s'", f.m_sAttrName.cstr(), ( f.m_bHasEqual ? "=" : "!=" ), ( f.m_dStrings.GetLength()==1 ? f.m_dStrings[0].cstr() : "" ) );
 					break;
 
 				case SPH_FILTER_NULL:
 					tBuf.Appendf ( " %s %s", f.m_sAttrName.cstr(), ( f.m_bHasEqual ? "IS NULL" : "IS NOT NULL" ) );
+					break;
+
+				case SPH_FILTER_STRING_LIST:
+					tBuf.Appendf ( " %s IN (", f.m_sAttrName.cstr () );
+					ARRAY_FOREACH ( iString, f.m_dStrings )
+						tBuf.Appendf ( "%s'%s'", ( iString>0 ? "," : "" ), f.m_dStrings[iString].cstr() );
+					tBuf.Appendf ( ")" );
 					break;
 
 				default:
@@ -8464,6 +8496,7 @@ public:
 	CSphFilterSettings *	AddFilter ( const SqlNode_t & tCol, ESphFilter eType );
 	bool					AddStringFilter ( const SqlNode_t & tCol, const SqlNode_t & tVal, bool bExclude );
 	CSphFilterSettings *	AddValuesFilter ( const SqlNode_t & tCol ) { return AddFilter ( tCol, SPH_FILTER_VALUES ); }
+	bool					AddStringListFilter ( const SqlNode_t & tCol, SqlNode_t & tVal, bool bExclude );
 	bool					AddNullFilter ( const SqlNode_t & tCol, bool bEqualsNull );
 	void			AddHaving ();
 
@@ -9185,7 +9218,8 @@ bool SqlParser_c::AddUservarFilter ( const SqlNode_t & tCol, const SqlNode_t & t
 	CSphFilterSettings * pFilter = AddFilter ( tCol, SPH_FILTER_USERVAR );
 	if ( !pFilter )
 		return false;
-	ToString ( pFilter->m_sRefString, tVar ).ToLower();
+	CSphString & sUserVar = pFilter->m_dStrings.Add();
+	ToString ( sUserVar, tVar ).ToLower();
 	pFilter->m_bExclude = bExclude;
 	return true;
 }
@@ -9196,7 +9230,28 @@ bool SqlParser_c::AddStringFilter ( const SqlNode_t & tCol, const SqlNode_t & tV
 	CSphFilterSettings * pFilter = AddFilter ( tCol, SPH_FILTER_STRING );
 	if ( !pFilter )
 		return false;
-	ToStringUnescape ( pFilter->m_sRefString, tVal );
+	CSphString & sFilterString = pFilter->m_dStrings.Add();
+	ToStringUnescape ( sFilterString, tVal );
+	pFilter->m_bExclude = bExclude;
+	return true;
+}
+
+
+bool SqlParser_c::AddStringListFilter ( const SqlNode_t & tCol, SqlNode_t & tVal, bool bExclude )
+{
+	CSphFilterSettings * pFilter = AddFilter ( tCol, SPH_FILTER_STRING_LIST );
+	if ( !pFilter || !tVal.m_pValues.Ptr() )
+		return false;
+
+	pFilter->m_dStrings.Resize ( tVal.m_pValues->GetLength() );
+	ARRAY_FOREACH ( i, ( *tVal.m_pValues.Ptr() ) )
+	{
+		uint64_t uVal = ( *tVal.m_pValues.Ptr() )[i];
+		int iOff = ( uVal>>32 );
+		int iLen = ( uVal & 0xffffffff );
+		pFilter->m_dStrings[i].SetBinary ( m_pBuf + iOff, iLen );
+	}
+	tVal.m_pValues = NULL;
 	pFilter->m_bExclude = bExclude;
 	return true;
 }

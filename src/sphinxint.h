@@ -307,6 +307,7 @@ public:
 	bool					GetErrorFlag () const		{ return m_bError; }
 	const CSphString &		GetErrorMessage () const	{ return m_sError; }
 	const CSphString &		GetFilename() const			{ return m_sFilename; }
+	void					ResetError();
 
 #if USE_64BIT
 	SphDocID_t	GetDocid ()		{ return GetOffset(); }

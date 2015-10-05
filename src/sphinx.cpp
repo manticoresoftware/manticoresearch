@@ -8321,6 +8321,12 @@ int CSphReader::GetLine ( char * sBuffer, int iMaxLen )
 	return iOutPos;
 }
 
+void CSphReader::ResetError()
+{
+	m_bError = false;
+	m_sError = "";
+}
+
 /////////////////////////////////////////////////////////////////////////////
 
 #if PARANOID
@@ -17264,7 +17270,7 @@ bool CSphIndex_VLN::Prealloc ( bool bMlock, bool bStripPath, CSphString & sWarni
 	}
 
 	// prealloc skiplist
-	if ( m_bHaveSkips )
+	if ( m_bHaveSkips && !m_bDebugCheck )
 	{
 		CSphAutofile fdSkips ( GetIndexFileName("spe"), SPH_O_READ, m_sLastError );
 		if ( fdSkips.GetFD()<0 )
@@ -17372,7 +17378,7 @@ bool CSphIndex_VLN::Preread ()
 	int iKillListOffset = m_bId32to64 ? m_pKillList.GetLengthBytes()/2/sizeof(SphDocID_t) : 0;
 	if ( !PrereadSharedBuffer ( m_pKillList, "spk", iKillListOffset, iKillListOffset ) )
 		return false;
-	if ( !PrereadSharedBuffer ( m_pSkiplists, "spe" ) )
+	if ( !m_bDebugCheck && !PrereadSharedBuffer ( m_pSkiplists, "spe" ) )
 		return false;
 
 #if PARANOID
@@ -19636,6 +19642,109 @@ static int sphUnpackStrLength ( CSphReader & tReader )
 	return v;
 }
 
+class CSphDocidList
+{
+public:
+	CSphDocidList ()
+	{
+		m_bRawID = true;
+		m_iDocidMin = DOCID_MAX;
+		m_iDocidMax = 0;
+	}
+
+	~CSphDocidList ()
+	{}
+
+	bool Init ( int iRowSize, int64_t iRows, CSphReader & rdAttr, CSphString & sError )
+	{
+		if ( !iRows )
+			return true;
+
+		int iSkip = sizeof ( CSphRowitem ) * iRowSize;
+		CSphString sWarning;
+
+		rdAttr.SeekTo ( 0, sizeof ( CSphRowitem ) * ( DOCINFO_IDSIZE + iRowSize ) );
+		m_iDocidMin = rdAttr.GetDocid ();
+		rdAttr.SeekTo ( ( iRows-1 ) * sizeof ( CSphRowitem ) * ( DOCINFO_IDSIZE + iRowSize ), sizeof ( CSphRowitem ) * ( DOCINFO_IDSIZE + iRowSize ) );
+		m_iDocidMax = rdAttr.GetDocid();
+		rdAttr.SeekTo ( 0, sizeof ( CSphRowitem ) * ( DOCINFO_IDSIZE + iRowSize ) );
+
+		if ( m_iDocidMax<m_iDocidMin )
+			return true;
+
+		uint64_t uRawBufLenght = sizeof(SphDocID_t) * iRows;
+		uint64_t uBitsBufLenght = ( m_iDocidMax - m_iDocidMin ) / 32;
+		if ( uRawBufLenght<uBitsBufLenght )
+		{
+			if ( !m_dDocid.Alloc ( iRows, sError, sWarning ) )
+			{
+				sError.SetSprintf ( "unable to allocate doc-id storage: %s", sError.cstr () );
+				return false;
+			}
+		} else
+		{
+			if ( !m_dBits.Alloc ( ( uBitsBufLenght * sizeof(DWORD) )+1, sError, sWarning ) )
+			{
+				sError.SetSprintf ( "unable to allocate doc-id storage: %s", sError.cstr () );
+				return false;
+			}
+			m_bRawID = false;
+			memset ( m_dBits.GetWritePtr(), 0, m_dBits.GetLengthBytes() );
+		}
+
+		for ( int64_t iRow=0; iRow<iRows && !rdAttr.GetErrorFlag (); iRow++ )
+		{
+			SphDocID_t uDocid = rdAttr.GetDocid ();
+			rdAttr.SkipBytes ( iSkip );
+
+			if ( uDocid<m_iDocidMin || uDocid>m_iDocidMax )
+				continue;
+
+			if ( m_bRawID )
+				m_dDocid.GetWritePtr()[iRow] = uDocid;
+			else
+			{
+				SphDocID_t uIndex = uDocid - m_iDocidMin;
+				DWORD uBit = 1UL<<(uIndex & 31);
+				m_dBits.GetWritePtr()[uIndex>>5] |= uBit;
+			}
+		}
+
+		if ( rdAttr.GetErrorFlag () )
+		{
+			sError.SetSprintf ( "unable to read attributes: %s", rdAttr.GetErrorMessage().cstr() );
+			rdAttr.ResetError();
+			return false;
+		}
+
+		return true;
+	}
+
+	bool HasDocid ( SphDocID_t uDocid )
+	{
+		if ( uDocid<m_iDocidMin || uDocid>m_iDocidMax )
+			return false;
+
+		if ( m_bRawID )
+		{
+			return ( sphBinarySearch ( m_dDocid.GetWritePtr(), m_dDocid.GetWritePtr () + m_dDocid.GetNumEntries() - 1, uDocid )!=NULL );
+		} else
+		{
+			SphDocID_t uIndex = uDocid - m_iDocidMin;
+			DWORD uBit = 1UL<<( uIndex & 31 );
+
+			return ( ( ( m_dBits.GetWritePtr()[uIndex>>5] & uBit ) )!=0 ); // NOLINT
+		}
+	}
+
+private:
+	CSphSharedBuffer<SphDocID_t> m_dDocid;
+	CSphSharedBuffer<DWORD> m_dBits;
+	bool m_bRawID;
+	SphDocID_t m_iDocidMin;
+	SphDocID_t m_iDocidMax;
+};
+
 
 // no strnlen on some OSes (Mac OS)
 #if !HAVE_STRNLEN
@@ -19685,6 +19794,8 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 	CSphString sError;
 	CSphAutoreader rdDocs, rdHits;
 	CSphAutoreader rdDict;
+	CSphAutoreader rdSkips;
+	int64_t iSkiplistLen = 0;
 
 	if ( !rdDict.Open ( GetIndexFileName("spi").cstr(), sError ) )
 		LOC_FAIL(( fp, "unable to open dictionary: %s", sError.cstr() ));
@@ -19694,6 +19805,13 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 	if ( !rdHits.Open ( GetIndexFileName("spp"), sError ) )
 		LOC_FAIL(( fp, "unable to open hitlist: %s", sError.cstr() ));
+
+	if ( m_bHaveSkips )
+	{
+		if ( !rdSkips.Open ( GetIndexFileName ( "spe" ), sError ) )
+			LOC_FAIL ( ( fp, "unable to open skiplist: %s", sError.cstr () ) );
+		iSkiplistLen = rdSkips.GetFilesize();
+	}
 
 	CSphAutoreader rdAttr;
 	CSphAutoreader rdString;
@@ -19994,6 +20112,10 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 	fprintf ( fp, "checking data...\n" );
 
+	CSphScopedPtr<CSphDocidList> tDoclist ( new CSphDocidList );
+	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && !tDoclist->Init ( m_tSchema.GetRowSize (), m_iDocinfo, rdAttr, sError ) )
+		LOC_FAIL ( ( fp, "%s", sError.cstr () ) );
+
 	int64_t iDocsSize = rdDocs.GetFilesize();
 
 	rdDict.SeekTo ( 1, READ_NO_SIZE_HINT );
@@ -20004,25 +20126,6 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 	iDoclistOffset = 0;
 	int iDictDocs, iDictHits;
 	bool bHitless = false;
-	CSphSharedBuffer<SphDocID_t> dID;
-	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && m_iDocinfo )
-	{
-		int64_t iRowsTotal = m_iDocinfo;
-		int iSkip = sizeof(CSphRowitem) * m_tSchema.GetRowSize();
-		CSphString sWarning;
-		if ( !dID.Alloc ( iRowsTotal, sError, sWarning ) )
-			LOC_FAIL(( fp, "unable to allocate doc-id storage: %s", sError.cstr() ));
-
-		rdAttr.SeekTo ( 0, sizeof(CSphRowitem) * ( DOCINFO_IDSIZE + m_tSchema.GetRowSize() ) );
-		for ( int64_t iRow=0; iRow<iRowsTotal && !rdAttr.GetErrorFlag(); iRow++ )
-		{
-			*( dID.GetWritePtr() + iRow ) = rdAttr.GetDocid();
-			rdAttr.SkipBytes ( iSkip );
-		}
-
-		if ( rdAttr.GetErrorFlag() )
-			LOC_FAIL(( fp, "unable to read attributes: %s", sError.cstr() ));
-	}
 
 	int iWordsChecked = 0;
 	while ( rdDict.GetPos()<iWordsEnd )
@@ -20184,15 +20287,10 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN )
 			{
 				SphDocID_t uDocID = tDoc.m_uDocID;
-				const SphDocID_t * pID = sphBinarySearch ( dID.GetWritePtr(), dID.GetWritePtr() + dID.GetNumEntries() - 1, uDocID );
-				if ( !pID )
+				if ( !tDoclist->HasDocid ( uDocID ) )
 				{
 					LOC_FAIL(( fp, "row not found (wordid="UINT64_FMT"(%s), docid="DOCID_FMT")",
 						uint64_t(uWordid), sWord, tDoc.m_uDocID ));
-				} else if ( tDoc.m_uDocID!=*pID )
-				{
-						LOC_FAIL(( fp, "row found but id mismatches (wordid="UINT64_FMT"(%s), docid="DOCID_FMT", found="DOCID_FMT")",
-							uint64_t(uWordid), sWord, tDoc.m_uDocID, *pID ));
 				}
 			}
 
@@ -20296,10 +20394,10 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 		while ( m_bHaveSkips && iDoclistDocs>SPH_SKIPLIST_BLOCK && !bHitless )
 		{
-			if ( iSkipsOffset<=0 || iSkipsOffset>(int)m_pSkiplists.GetLengthBytes() )
+			if ( iSkipsOffset<=0 || iSkipsOffset>iSkiplistLen )
 			{
-				LOC_FAIL(( fp, "invalid skiplist offset (wordid=%llu(%s), off=%d, max=%d)",
-					UINT64 ( uWordid ), sWord, iSkipsOffset, (int)m_pSkiplists.GetLengthBytes() ));
+				LOC_FAIL(( fp, "invalid skiplist offset (wordid=%llu(%s), off=%d, max="INT64_FMT")",
+					UINT64 ( uWordid ), sWord, iSkipsOffset, iSkiplistLen ));
 				break;
 			}
 
@@ -20312,15 +20410,28 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 			t.m_iOffset = iDoclistOffset;
 			t.m_iBaseHitlistPos = 0;
 
-			const BYTE * pSkip = m_pSkiplists.GetWritePtr() + iSkipsOffset;
-			const BYTE * pMax = m_pSkiplists.GetWritePtr() + m_pSkiplists.GetLengthBytes();
+			// hint is: dDoclistSkips * ZIPPED( sizeof(int64_t) * 3 ) == dDoclistSkips * 8
+			rdSkips.SeekTo ( iSkipsOffset, dDoclistSkips.GetLength()*8 );
 			int i = 0;
-			while ( pSkip<pMax && ++i<dDoclistSkips.GetLength() )
+			while ( ++i<dDoclistSkips.GetLength() )
 			{
 				const SkiplistEntry_t & r = dDoclistSkips[i];
-				t.m_iBaseDocid += SPH_SKIPLIST_BLOCK + (SphDocID_t) sphUnzipOffset ( pSkip );
-				t.m_iOffset += 4*SPH_SKIPLIST_BLOCK + sphUnzipOffset ( pSkip );
-				t.m_iBaseHitlistPos += sphUnzipOffset ( pSkip );
+
+				uint64_t uDocidDelta = rdSkips.UnzipOffset();
+				uint64_t uOff = rdSkips.UnzipOffset();
+				uint64_t uPosDelta = rdSkips.UnzipOffset();
+
+				if ( rdSkips.GetErrorFlag() )
+				{
+					LOC_FAIL ( ( fp, "skiplist reading error (wordid=%llu(%s), exp=%d, got=%d, error='%s')",
+						UINT64 ( uWordid ), sWord, i, dDoclistSkips.GetLength(), rdSkips.GetErrorMessage().cstr() ) );
+					rdSkips.ResetError();
+					break;
+				}
+
+				t.m_iBaseDocid += SPH_SKIPLIST_BLOCK + (SphDocID_t)uDocidDelta;
+				t.m_iOffset += 4*SPH_SKIPLIST_BLOCK + uOff;
+				t.m_iBaseHitlistPos += uPosDelta;
 				if ( t.m_iBaseDocid!=r.m_iBaseDocid
 					|| t.m_iOffset!=r.m_iOffset ||
 					t.m_iBaseHitlistPos!=r.m_iBaseHitlistPos )
@@ -20331,9 +20442,6 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 						UINT64 ( t.m_iBaseDocid ), UINT64 ( t.m_iOffset ), UINT64 ( t.m_iBaseHitlistPos ) ));
 					break;
 				}
-				if ( pSkip>pMax )
-					LOC_FAIL(( fp, "skiplist length mismatch (wordid=%llu(%s), exp=%d, got=%d)",
-						UINT64 ( uWordid ), sWord, i, dDoclistSkips.GetLength() ));
 			}
 			break;
 		}
@@ -20353,7 +20461,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		}
 	}
 
-	dID.Reset();
+	tDoclist = NULL;
 
 	///////////////////////////
 	// check rows (attributes)

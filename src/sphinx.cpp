@@ -23035,7 +23035,7 @@ void InfixBuilder_c<SIZE>::AddWord ( const BYTE * pWord, int iWordLength, int iC
 
 	// build an offsets table into the bytestring
 	dBytes[0] = 0;
-	for ( const BYTE * p = (const BYTE*)pWord; p<pWord+iWordLength; )
+	for ( const BYTE * p = (const BYTE*)pWord; p<pWord+iWordLength && iCodes<SPH_MAX_WORD_LEN; )
 	{
 		int iLen = 0;
 		BYTE uVal = *p;
@@ -23057,7 +23057,7 @@ void InfixBuilder_c<SIZE>::AddWord ( const BYTE * pWord, int iWordLength, int iC
 		dBytes[iCodes+1] = dBytes[iCodes] + (BYTE)iLen;
 		iCodes++;
 	}
-	assert ( pWord[dBytes[iCodes]]==0 );
+	assert ( pWord[dBytes[iCodes]]==0 || iCodes==SPH_MAX_WORD_LEN );
 
 	// generate infixes
 	Infix_t<SIZE> sKey;

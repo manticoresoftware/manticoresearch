@@ -38,6 +38,24 @@ index test
 	regexp_filter = (blue|red) => color
 }
 
+source src_large
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query_pre		= set names utf8
+	sql_query			= select 1 id, 'test_194/file3.txt' file_field, 11 as idd
+	sql_file_field 		= file_field
+	sql_attr_uint		= idd
+}
+
+index test_large
+{
+	source			= src_large
+	path			= <data_path/>/test_large
+	
+	regexp_filter = (blue|red) => color
+}
+
 </config>
 
 <db_create>
@@ -46,7 +64,7 @@ CREATE TABLE test_table
 	id INTEGER PRIMARY KEY NOT NULL,
 	content VARCHAR(255) NOT NULL,
 	file_field VARCHAR(255) NOT NULL
-);
+) CHARACTER SET utf8;
 </db_create>
 <db_drop>DROP TABLE IF EXISTS test_table</db_drop>
 <db_insert>SET NAMES utf8</db_insert>
@@ -72,6 +90,9 @@ INSERT INTO test_table VALUES
 <sphinxql>select * from test where match('fx-35')</sphinxql>
 <sphinxql>select * from test where match('fx35')</sphinxql>
 <sphinxql>select * from test where match('car')</sphinxql>
+
+<!-- regression crash of indexer on indexing large data passed regexp_filter -->
+<sphinxql>select * from test_large where match('color')</sphinxql>
 </sphqueries>
 
 </test>

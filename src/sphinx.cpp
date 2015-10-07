@@ -26077,8 +26077,9 @@ void CSphSource_Document::CSphBuildHitsState_t::Reset ()
 	ARRAY_FOREACH ( i, m_dTmpFieldStorage )
 		SafeDeleteArray ( m_dTmpFieldStorage[i] );
 
-	m_dTmpFieldStorage.Resize(0);
-	m_dTmpFieldPtrs.Resize(0);
+	m_dTmpFieldStorage.Resize ( 0 );
+	m_dTmpFieldPtrs.Resize ( 0 );
+	m_dFiltered.Resize( 0 );
 }
 
 CSphSource_Document::CSphSource_Document ( const char * sName )
@@ -26658,7 +26659,6 @@ void CSphSource_Document::BuildHits ( CSphString & sError, bool bSkipEndMarker )
 {
 	SphDocID_t uDocid = m_tDocInfo.m_uDocID;
 
-	CSphVector<BYTE> dFiltered;
 	for ( ; m_tState.m_iField<m_tState.m_iEndField; m_tState.m_iField++ )
 	{
 		if ( !m_tState.m_bProcessingHits )
@@ -26678,10 +26678,11 @@ void CSphSource_Document::BuildHits ( CSphString & sError, bool bSkipEndMarker )
 				iFieldBytes = (int) strlen ( (char*)sField );
 				if ( m_pFieldFilter && iFieldBytes )
 				{
-					int iFiltered = m_pFieldFilter->Apply ( sTextToIndex, iFieldBytes, dFiltered );
+					m_tState.m_dFiltered.Resize ( 0 );
+					int iFiltered = m_pFieldFilter->Apply ( sTextToIndex, iFieldBytes, m_tState.m_dFiltered );
 					if ( iFiltered )
 					{
-						sTextToIndex = dFiltered.Begin();
+						sTextToIndex = m_tState.m_dFiltered.Begin();
 						iFieldBytes = iFiltered;
 					}
 				}

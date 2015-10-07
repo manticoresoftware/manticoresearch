@@ -1622,7 +1622,9 @@ void XQParser_t::FixupDestForms ()
 
 		// FIXME: what about whildcard?
 		bool bExact = ( tKeyword.m_sWord.Length()>1 && tKeyword.m_sWord.cstr()[0]=='=' );
+		bool bFieldStart = tKeyword.m_bFieldStart;
 		bool bFieldEnd = tKeyword.m_bFieldEnd;
+		tKeyword.m_bFieldStart = false;
 		tKeyword.m_bFieldEnd = false;
 
 		XQNode_t * pMultiHead = new XQNode_t ( pMultiParent->m_dSpec );
@@ -1645,7 +1647,8 @@ void XQParser_t::FixupDestForms ()
 			dForms.Add ( pMulti );
 		}
 
-		// move field end modifier to last word
+		// fix-up field start\end modifier
+		dForms[0]->m_dWords[0].m_bFieldStart = bFieldStart;
 		dForms.Last()->m_dWords[0].m_bFieldEnd = bFieldEnd;
 
 		pMultiParent->SetOp ( SPH_QUERY_AND, dForms );

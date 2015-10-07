@@ -10241,7 +10241,11 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 		{
 			CSphVector<CSphQueryResult*> dResults ( m_dResults.GetLength() );
 			ARRAY_FOREACH ( i, m_dResults )
+			{
 				dResults[i] = &m_dResults[i];
+				dResults[i]->m_pMva = NULL;
+				dResults[i]->m_pStrings = NULL;
+			}
 
 			dResults[m_iStart]->m_tIOStats.Start();
 			bResult = pServed->m_pIndex->MultiQueryEx ( dSorters.GetLength(), &m_dQueries[m_iStart], &dResults[m_iStart], &dSorters[0], tMultiArgs );

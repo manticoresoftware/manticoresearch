@@ -47,6 +47,18 @@ index rt
 	rt_mem_limit	= 128K 
 }
 
+index rt1
+{
+	type			= rt
+    docinfo			= extern
+	path			= <data_path/>/rt1
+
+	rt_attr_uint	= IDD1
+	rt_attr_string	= str1
+	rt_field		= body
+	rt_mem_limit	= 128K 
+}
+
 index dist
 {
 	type = distributed
@@ -120,6 +132,13 @@ INSERT INTO `test_table` VALUES
 <sphinxql>select id, idd2, idd2+4 as i, to_string(i) as c from rt order by i asc, id desc</sphinxql>
 <sphinxql>select id, idd2, idd2+4 as i, to_string(i) as c from rt order by c desc, id desc</sphinxql>
 <sphinxql>select id, idd2, to_string(idd1) as c from rt where match ( 'the' ) order by c desc, id asc</sphinxql>
+
+<!-- regression double free of pool storage on query of multi index -->
+<sphinxql>insert into rt1 (id, idd1, str1, Body) values ( 14, 3, '', 'dog eats bone' )</sphinxql>
+<sphinxql>insert into rt1 (id, idd1, str1, Body) values ( 15, 3, '', 'cat ear' )</sphinxql>
+<sphinxql>select id, str1 from plain,rt1 where match ('^cat$') order by id asc</sphinxql>
+<sphinxql>select id, str1 from plain,rt1 where match ('cat') order by id asc</sphinxql>
+
 </sphqueries>
 
 <queries>

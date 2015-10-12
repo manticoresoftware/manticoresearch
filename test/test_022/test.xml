@@ -69,6 +69,22 @@ index multi2
 	morphology		= stem_en
 	index_exact_words = 1
 }
+
+source src_multi_fm
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT 1 id, 11 idd, 'rdogs' text UNION SELECT 2 id, 11 idd, 'red dogs' text UNION SELECT 3 id, 11 idd, 'test me rdogs' text UNION SELECT 4 id, 11 idd, 'test me red dogs' text
+	sql_attr_uint = idd
+}
+
+index multi_fm
+{
+	source			= src_multi_fm
+	path			= <data_path/>/multi_fm
+	wordforms		= <this_test/>/wf_multi.txt
+}
 </config>
 
 <queries>
@@ -152,6 +168,10 @@ index multi2
 <sphinxql>SELECT * FROM test_num WHERE MATCH('"foo bar baz"/24 mois')</sphinxql>
 <sphinxql>SHOW PLAN</sphinxql>
 <sphinxql>SELECT * FROM test_num WHERE MATCH('foo ~ 24 mois')</sphinxql>
+
+<!-- regression multiforms vs field modifiers -->
+<sphinxql>SELECT * FROM multi_fm WHERE MATCH('^rdogs$')</sphinxql>
+<sphinxql>SELECT * FROM multi_fm WHERE MATCH('^red dogs$')</sphinxql>
 </sphqueries>
 
 <db_create>

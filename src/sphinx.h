@@ -2100,6 +2100,7 @@ protected:
 
 		CSphVector<BYTE*> m_dTmpFieldStorage;
 		CSphVector<BYTE*> m_dTmpFieldPtrs;
+		CSphVector<BYTE> m_dFiltered;
 
 		int m_iStartPos;
 		Hitpos_t m_iHitPos;

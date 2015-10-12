@@ -832,14 +832,21 @@ inline void CreateLemma ( BYTE * sOut, const BYTE * sBase, int iBaseLen, bool bF
 	if ( bFound || ( iBaseLen>=iSuff && strncmp ( (const char*)sBase+iBaseLen-iSuff, F.m_Flexia, iSuff )==0 ) )
 	{
 		// ok, found and/or suffix matches, the usual route
+		int iCodePoints = 0;
 		iBaseLen -= iSuff;
-		while ( iBaseLen-- )
+		while ( iBaseLen-- && iCodePoints<SPH_MAX_WORD_LEN )
+		{
 			sOut = Emit<IS_UTF8> ( sOut, *sBase++ );
+			iCodePoints++;
+		}
 
 		int iLemmaSuff = M[0].m_FlexiaLen;
 		const char * sFlexia = M[0].m_Flexia;
-		while ( iLemmaSuff-- ) // OPTIMIZE? can remove len here
+		while ( iLemmaSuff-- && iCodePoints<SPH_MAX_WORD_LEN ) // OPTIMIZE? can remove len here
+		{
 			sOut = Emit<IS_UTF8> ( sOut, *sFlexia++ );
+			iCodePoints++;
+		}
 	} else
 	{
 		// whoops, no suffix match, just copy and lowercase the current base

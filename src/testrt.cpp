@@ -82,7 +82,6 @@ void DoIndexing ( CSphSource_MySQL * pSrc, ISphRtIndex * pIndex )
 	int64_t tmAvgCommit = 0;
 	int64_t tmMaxCommit = 0;
 	int iCommits = 0;
-	ISphTokenizer * pTok = pIndex->CloneIndexingTokenizer();
 	for ( ;; )
 	{
 		const char ** pFields = (const char **)pSrc->NextDocument ( sError );
@@ -90,7 +89,7 @@ void DoIndexing ( CSphSource_MySQL * pSrc, ISphRtIndex * pIndex )
 			break;
 
 		if ( pSrc->m_tDocInfo.m_uDocID )
-			pIndex->AddDocument ( pTok, g_iFieldsCount, pFields, pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
+			pIndex->AddDocument ( pIndex->CloneIndexingTokenizer(), g_iFieldsCount, pFields, pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
 
 		if ( ( pSrc->GetStats().m_iTotalDocuments % COMMIT_STEP )==0 || !pSrc->m_tDocInfo.m_uDocID )
 		{
@@ -218,6 +217,7 @@ int main ( int argc, char ** argv )
 	pIndex->SetDictionary ( pDict );
 	if ( !pIndex->Prealloc ( false ) )
 		sphDie ( "prealloc failed: %s", pIndex->GetLastError().cstr() );
+	pIndex->PostSetup();
 	g_pIndex = pIndex;
 
 	// initial indexing

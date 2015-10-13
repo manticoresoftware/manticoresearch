@@ -1526,6 +1526,8 @@ bool RtIndex_t::AddDocument ( ISphTokenizer * pTokenizer, int iFields, const cha
 {
 	assert ( g_bRTChangesAllowed );
 
+	CSphScopedPtr<ISphTokenizer> tTokenizer ( pTokenizer );
+
 	if ( !tDoc.m_uDocID )
 		return true;
 
@@ -1551,27 +1553,27 @@ bool RtIndex_t::AddDocument ( ISphTokenizer * pTokenizer, int iFields, const cha
 	// OPTIMIZE? do not create filter on each(!) INSERT
 	if ( !m_tSettings.m_sIndexTokenFilter.IsEmpty() )
 	{
-		pTokenizer = ISphTokenizer::CreatePluginFilter ( pTokenizer->Clone ( SPH_CLONE_INDEX ), m_tSettings.m_sIndexTokenFilter, sError );
-		if ( !pTokenizer )
+		tTokenizer.ReplacePtr ( ISphTokenizer::CreatePluginFilter ( tTokenizer.Ptr(), m_tSettings.m_sIndexTokenFilter, sError ) );
+		if ( !tTokenizer.Ptr() )
 			return false;
-		if ( !pTokenizer->SetFilterSchema ( m_tSchema, sError ) )
+		if ( !tTokenizer->SetFilterSchema ( m_tSchema, sError ) )
 			return false;
 		if ( !sTokenFilterOptions.IsEmpty() )
-			if ( !pTokenizer->SetFilterOptions ( sTokenFilterOptions.cstr(), sError ) )
+			if ( !tTokenizer->SetFilterOptions ( sTokenFilterOptions.cstr(), sError ) )
 				return false;
 	}
 
 	// OPTIMIZE? do not create filter on each(!) INSERT
 	if ( m_tSettings.m_uAotFilterMask )
-		pTokenizer = sphAotCreateFilter ( pTokenizer->Clone ( SPH_CLONE_INDEX ), m_pDict, m_tSettings.m_bIndexExactWords, m_tSettings.m_uAotFilterMask );
+		tTokenizer.ReplacePtr ( sphAotCreateFilter ( tTokenizer.Ptr(), m_pDict, m_tSettings.m_bIndexExactWords, m_tSettings.m_uAotFilterMask ) );
 
 	CSphSource_StringVector tSrc ( iFields, ppFields, m_tSchema );
 
 	// SPZ setup
-	if ( m_tSettings.m_bIndexSP && !pTokenizer->EnableSentenceIndexing ( sError ) )
+	if ( m_tSettings.m_bIndexSP && !tTokenizer->EnableSentenceIndexing ( sError ) )
 		return false;
 
-	if ( !m_tSettings.m_sZones.IsEmpty() && !pTokenizer->EnableZoneIndexing ( sError ) )
+	if ( !m_tSettings.m_sZones.IsEmpty() && !tTokenizer->EnableZoneIndexing ( sError ) )
 		return false;
 
 	if ( m_tSettings.m_bHtmlStrip && !tSrc.SetStripHTML ( m_tSettings.m_sHtmlIndexAttrs.cstr(), m_tSettings.m_sHtmlRemoveElements.cstr(),
@@ -1584,7 +1586,7 @@ bool RtIndex_t::AddDocument ( ISphTokenizer * pTokenizer, int iFields, const cha
 		pFieldFilter = m_pFieldFilter->Clone();
 
 	tSrc.Setup ( m_tSettings );
-	tSrc.SetTokenizer ( pTokenizer );
+	tSrc.SetTokenizer ( tTokenizer.Ptr() );
 	tSrc.SetDict ( pAcc->m_pDict );
 	tSrc.SetFieldFilter ( pFieldFilter.Ptr() );
 	if ( !tSrc.Connect ( m_sLastError ) )

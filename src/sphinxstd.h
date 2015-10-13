@@ -2247,6 +2247,7 @@ public:
 	T *				Ptr () const				{ return m_pPtr; }
 	CSphScopedPtr &	operator = ( T * pPtr )		{ SafeDelete ( m_pPtr ); m_pPtr = pPtr; return *this; }
 	T *				LeakPtr ()					{ T * pPtr = m_pPtr; m_pPtr = NULL; return pPtr; }
+	void			ReplacePtr ( T * pPtr )		{ m_pPtr = pPtr; }
 	void			Reset ()					{ SafeDelete ( m_pPtr ); }
 
 protected:

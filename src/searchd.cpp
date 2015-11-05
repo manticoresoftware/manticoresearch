@@ -11816,12 +11816,12 @@ protected:
 //////////////////////////////////////////////////////////////////////////
 
 // unused parameter, simply to avoid type clash between all my yylex() functions
-#define YYLEX_PARAM pParser->m_pScanner, pParser
-#ifdef NDEBUG
-#define YY_DECL int yylex ( YYSTYPE * lvalp, void * yyscanner, SqlParser_c * pParser )
-#else
-#define YY_DECL int yylexd ( YYSTYPE * lvalp, void * yyscanner, SqlParser_c * pParser )
+#define YY_DECL static int my_lex ( YYSTYPE * lvalp, void * yyscanner, SqlParser_c * pParser )
+
+#if USE_WINDOWS
+#define YY_NO_UNISTD_H 1
 #endif
+
 #include "llsphinxql.c"
 
 
@@ -11850,10 +11850,15 @@ void yyerror ( SqlParser_c * pParser, const char * sMessage )
 
 #ifndef NDEBUG
 // using a proxy to be possible to debug inside yylex
-int yylex ( YYSTYPE * lvalp, void * yyscanner, SqlParser_c * pParser )
+static int yylex ( YYSTYPE * lvalp, SqlParser_c * pParser )
 {
-	int res = yylexd ( lvalp, yyscanner, pParser );
+	int res = my_lex ( lvalp, pParser->m_pScanner, pParser );
 	return res;
+}
+#else
+static int yylex ( YYSTYPE * lvalp, SqlParser_c * pParser )
+{
+	return my_lex ( lvalp, pParser->m_pScanner, pParser );
 }
 #endif
 

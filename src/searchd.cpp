@@ -9427,6 +9427,7 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 				tStmt.m_tQuery.m_sIndexes = tQuery.m_sIndexes;
 				tStmt.m_tQuery.m_sSelect = tStmt.m_tQuery.m_sFacetBy;
 				tStmt.m_tQuery.m_sQuery = tQuery.m_sQuery;
+				tStmt.m_tQuery.m_iMaxMatches = tQuery.m_iMaxMatches;
 
 				// append top-level expressions to a facet schema (for filtering)
 				ARRAY_FOREACH ( k, tQuery.m_dItems )

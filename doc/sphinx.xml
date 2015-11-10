@@ -1253,7 +1253,7 @@ API call description for details.
 First, you can use disk-based indexes, partition them manually,
 and only rebuild the smaller partitions (so-called "deltas") frequently.
 By minimizing the rebuild size, you can reduce the average indexing lag
-to something as low as 30-60 seconds. This approach was the the only one
+to something as low as 30-60 seconds. This approach was the only one
 available in versions 0.9.x. On huge collections it actually might be
 the most efficient one. Refer to <xref linkend="delta-updates"/>
 for details.
@@ -1353,7 +1353,7 @@ to issue the encoding setup query explicitly once again.
 
 <sect1 id="index-merging"><title>Index merging</title>
 <para>
-Merging two existing indexes can be more efficient that indexing the data
+Merging two existing indexes can be more efficient than indexing the data
 from scratch, and desired in some cases (such as merging 'main' and 'delta'
 indexes instead of simply reindexing 'main' in 'main+delta' partitioning
 scheme). So <filename>indexer</filename> has an option to do that.

@@ -1721,6 +1721,8 @@ void			SaveFieldFilterSettings ( CSphWriter & tWriter, ISphFieldFilter * pFieldF
 DWORD			ReadVersion ( const char * sPath, CSphString & sError );
 bool			AddFieldLens ( CSphSchema & tSchema, bool bDynamic, CSphString & sError );
 
+void			RebalanceWeights ( const CSphFixedVector<int64_t> & dTimers, WORD * pWeights );
+
 // all indexes should produce same terms for same query
 struct SphWordStatChecker_t
 {

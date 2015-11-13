@@ -2427,6 +2427,12 @@ protected:
 
 //////////////////////////////////////////////////////////////////////////
 
+#if !USE_WINDOWS
+#ifndef MADV_DONTFORK
+#define MADV_DONTFORK MADV_NORMAL
+#endif
+#endif
+
 /// in-memory buffer shared between processes
 template < typename T, bool SHARED=false >
 class CSphLargeBuffer : public CSphBufferTrait < T >
@@ -2478,6 +2484,9 @@ public:
 				sError.SetSprintf ( "mmap() failed: %s (length="INT64_FMT")", strerror(errno), iLength );
 			return false;
 		}
+
+		if ( !SHARED )
+			madvise ( pData, iLength, MADV_DONTFORK );
 
 #if SPH_ALLOCS_PROFILER
 		sphMemStatMMapAdd ( iLength );
@@ -2628,6 +2637,8 @@ public:
 				Reset();
 				return false;
 			}
+
+			madvise ( pData, iFileSize, MADV_DONTFORK );
 		}
 #endif
 
@@ -2908,7 +2919,25 @@ public:
 			SafeDeleteArray ( m_pData );
 	}
 
-	// huh, no copy ctor and operator= ?
+	/// copy ctor
+	CSphBitvec ( const CSphBitvec & rhs )
+	{
+		m_pData = NULL;
+		m_iElements = 0;
+		*this = rhs;
+	}
+
+	/// copy
+	const CSphBitvec & operator = ( const CSphBitvec & rhs )
+	{
+		if ( m_pData!=m_uStatic )
+			SafeDeleteArray ( m_pData );
+
+		Init ( rhs.m_iElements );
+		memcpy ( m_pData, rhs.m_pData, sizeof(m_uStatic[0]) * GetSize() );
+
+		return *this;
+	}
 
 	void Init ( int iElements )
 	{

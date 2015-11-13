@@ -2604,6 +2604,7 @@ struct DistributedIndex_t
 {
 	CSphVector<MetaAgentDesc_t>		m_dAgents;					///< remote agents
 	CSphVector<CSphString>		m_dLocal;					///< local indexes
+	CSphBitvec					m_dKillBreak;
 	int							m_iAgentConnectTimeout;		///< in msec
 	int							m_iAgentQueryTimeout;		///< in msec
 	bool						m_bToDelete;				///< should be deleted
@@ -6204,9 +6205,11 @@ struct LocalIndex_t
 	int			m_iOrderTag;
 	int			m_iWeight;
 	int64_t		m_iMass;
+	bool		m_bKillBreak;
 	LocalIndex_t ()
 		: m_iOrderTag ( 0 )
 		, m_iWeight ( 1 )
+		, m_bKillBreak ( false )
 	{ }
 };
 
@@ -6910,6 +6913,9 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 	KillListVector dKillist;
 	for ( int i=iLocal+1; i<m_dLocal.GetLength(); i++ )
 	{
+		if ( m_dLocal[i].m_bKillBreak )
+			break;
+
 		const ServedIndex_c * pKillListIndex = UseIndex(i);
 		if ( !pKillListIndex )
 			continue;
@@ -7087,6 +7093,9 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 		KillListVector dKillist;
 		for ( int i=iLocal+1; i<m_dLocal.GetLength(); i++ )
 		{
+			if ( m_dLocal[i].m_bKillBreak )
+				break;
+
 			const ServedIndex_c * pKillListIndex = UseIndex(i);
 			if ( !pKillListIndex )
 				continue;
@@ -7586,6 +7595,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 						m_dLocal.Last().m_iWeight = iWeight;
 					iTagsCount += iTagStep;
 					m_dLocal.Last().m_iMass = GetIndexMass ( pDist->m_dLocal[j].cstr() );
+					if ( pDist->m_dKillBreak.GetBits() && pDist->m_dKillBreak.BitGet ( j ) )
+						m_dLocal.Last().m_bKillBreak = true;
 				}
 
 				bDevideRemote |= pDist->m_bDivideRemoteRanges;
@@ -16674,12 +16685,20 @@ static void ConfigureDistributedIndex ( DistributedIndex_t * pIdx, const char * 
 
 	// add local agents
 	CSphVector<CSphString> dLocs;
+	CSphVector<int> dKillBreak;
 	for ( CSphVariant * pLocal = hIndex("local"); pLocal; pLocal = pLocal->m_pNext )
 	{
 		dLocs.Resize(0);
 		sphSplit ( dLocs, pLocal->cstr(), " \t," );
 		ARRAY_FOREACH ( i, dLocs )
 		{
+			// got hidden feature kill-list break
+			if ( dLocs[i]=="$BREAK" )
+			{
+				dKillBreak.Add ( tIdx.m_dLocal.GetLength() );
+				continue;
+			}
+
 			if ( !g_pLocalIndexes->Exists ( dLocs[i] ) )
 			{
 				sphWarning ( "index '%s': no such local index '%s', SKIPPED", szIndexName, dLocs[i].cstr() );
@@ -16687,6 +16706,12 @@ static void ConfigureDistributedIndex ( DistributedIndex_t * pIdx, const char * 
 			}
 			tIdx.m_dLocal.Add ( dLocs[i] );
 		}
+	}
+	if ( dKillBreak.GetLength() )
+	{
+		tIdx.m_dKillBreak.Init ( tIdx.m_dLocal.GetLength()+1 );
+		ARRAY_FOREACH ( i, dKillBreak )
+			tIdx.m_dKillBreak.BitSet ( dKillBreak[i] );
 	}
 
 	AgentOptions_t tAgentOptions;
@@ -19361,7 +19386,7 @@ static bool CheckSocketError ( DWORD uGotEvents, const char * sMsg, const NetSta
 	}
 }
 
-static int NetManageSocket ( int iSock, char * pBuf, int iSize, bool bWrite )
+static int NetManageSocket ( int iSock, char * pBuf, int iSize, bool bWrite, bool bAfterWrite )
 {
 	// try next chunk
 	int iRes = 0;
@@ -19380,8 +19405,11 @@ static int NetManageSocket ( int iSock, char * pBuf, int iSize, bool bWrite )
 	}
 
 	// if there was eof, we're done
-	if ( !bWrite && iRes==0 )
+	// but need to make sure that poll loop passed at least once,
+	// ie write-read pattern should failed only this way write-poll-read
+	if ( !bWrite && iRes==0 && !bAfterWrite )
 	{
+		sphLogDebugv ( "read zero bytes, shutting down socket, sock=%d", iSock );
 		sphSockSetErrno ( ESHUTDOWN );
 		return -1;
 	}
@@ -19618,7 +19646,7 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 	for ( ;; )
 	{
 		bool bWrite = ( m_ePhase==AAPI_HANDSHAKE_OUT );
-		int iRes = NetManageSocket ( m_tState->m_iClientSock, (char *)( m_tState->m_dBuf.Begin() + m_tState->m_iPos ), m_tState->m_iLeft, bWrite );
+		int iRes = NetManageSocket ( m_tState->m_iClientSock, (char *)( m_tState->m_dBuf.Begin() + m_tState->m_iPos ), m_tState->m_iLeft, bWrite, bWasWrite );
 		if ( iRes==-1 )
 		{
 			LogSocketError ( g_sErrorNetAPI[m_ePhase], m_tState.Ptr(), false );
@@ -19680,6 +19708,7 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 				if ( bMaxedOut )
 					sphWarning ( "%s", g_sMaxedOutMessage );
 
+				m_tState->m_dBuf.Resize ( 0 );
 				ISphOutputBuffer tOut ( m_tState->m_dBuf );
 				if ( !bMaxedOut )
 				{
@@ -19712,7 +19741,42 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 
 		case AAPI_BODY:
 		{
-			AddJobAPI ( pLoop );
+			if ( m_iCommand==SEARCHD_COMMAND_PING )
+			{
+				bool bGotError = false;
+				int iCookie = 0;
+				if ( m_tState->m_dBuf.GetLength()>=4 )
+					iCookie = NetBufGetInt ( m_tState->m_dBuf.Begin () );
+				else
+					bGotError = true;
+
+				m_tState->m_dBuf.Resize ( 0 );
+				ISphOutputBuffer tOut ( m_tState->m_dBuf );
+
+				// dump invalid command here after out-buffer set
+				if ( bGotError )
+					SendErrorReply ( tOut, "invalid command (code=%d, len=%d)", m_iCommand, m_tState->m_iLeft );
+
+				// another check that command was sane
+				bGotError = !CheckCommandVersion ( m_iCommandVer, VER_COMMAND_PING, tOut );
+
+				// out-buffer might have error message at this point
+				if ( !bGotError )
+				{
+					// return last flush tag, just for the fun of it
+					tOut.SendWord ( SEARCHD_OK );
+					tOut.SendWord ( VER_COMMAND_PING );
+					tOut.SendInt ( 4 ); // resplen, 1 dword
+					tOut.SendInt ( iCookie ); // echo the cookie back
+				}
+
+				tOut.SwapData ( m_tState->m_dBuf );
+				NetSendData_t * pSend = new NetSendData_t ( m_tState.LeakPtr (), PROTO_SPHINX );
+				dNextTick.Add ( pSend );
+			} else
+			{
+				AddJobAPI ( pLoop );
+			}
 			return NE_REMOVE;
 		}
 		break;
@@ -19802,7 +19866,7 @@ NetEvent_e NetReceiveDataQL_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction
 	// loop to handle similar operations at once
 	for ( ;; )
 	{
-		int iRes = NetManageSocket ( m_tState->m_iClientSock, (char *)( m_tState->m_dBuf.Begin() + m_tState->m_iPos ), m_tState->m_iLeft, m_bWrite );
+		int iRes = NetManageSocket ( m_tState->m_iClientSock, (char *)( m_tState->m_dBuf.Begin() + m_tState->m_iPos ), m_tState->m_iLeft, m_bWrite, bWrite );
 		if ( iRes==-1 )
 		{
 			LogSocketError ( g_sErrorNetQL[m_ePhase], m_tState.Ptr(), false );
@@ -20016,7 +20080,7 @@ NetEvent_e NetSendData_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> &
 
 	for ( ; m_tState->m_iLeft>0; )
 	{
-		int iRes = NetManageSocket ( m_tState->m_iClientSock, (char *)m_tState->m_dBuf.Begin() + m_tState->m_iPos, m_tState->m_iLeft, true );
+		int iRes = NetManageSocket ( m_tState->m_iClientSock, (char *)m_tState->m_dBuf.Begin() + m_tState->m_iPos, m_tState->m_iLeft, true, false );
 		if ( iRes==-1 )
 		{
 			LogSocketError ( "failed to send data", m_tState.Ptr(), false );
@@ -20114,7 +20178,7 @@ void NetStateCommon_t::CloseSocket ()
 {
 	if ( m_iClientSock>=0 )
 	{
-		sphLogDebugv ( "%p state closing socket=%d", this, m_iClientSock );
+		sphLogDebugv ( "%p state closing sock=%d", this, m_iClientSock );
 		sphSockClose ( m_iClientSock );
 		m_iClientSock = -1;
 	}
@@ -20216,7 +20280,7 @@ NetEvent_e NetReceiveDataHttp_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActi
 	// loop to handle similar operations at once
 	for ( ;; )
 	{
-		int iRes = NetManageSocket ( m_tState->m_iClientSock, (char *)( m_tState->m_dBuf.Begin() + m_tState->m_iPos ), m_tState->m_iLeft, false );
+		int iRes = NetManageSocket ( m_tState->m_iClientSock, (char *)( m_tState->m_dBuf.Begin() + m_tState->m_iPos ), m_tState->m_iLeft, false, false );
 		if ( iRes==-1 )
 		{
 			// FIXME!!! report back to client buffer overflow with 413 error
@@ -20339,6 +20403,8 @@ void ThdJobQL_t::Call ()
 	SphCrashLogger_c tQueryTLS;
 	tQueryTLS.SetupTLS ();
 
+	sphLogDebugv ( "%p QL job started", this );
+
 	int iTid = GetOsThreadId();
 
 	ThdDesc_t tThdDesc;
@@ -20352,6 +20418,8 @@ void ThdJobQL_t::Call ()
 	g_tThdMutex.Lock ();
 	g_dThd.Add ( &tThdDesc );
 	g_tThdMutex.Unlock ();
+
+	sphLogDebugv ( "%p QL job done", this );
 
 	CSphString sQuery; // to keep data alive for SphCrashQuery_c
 	bool bProfile = m_tState->m_tSession.m_tVars.m_bProfile; // the current statement might change it

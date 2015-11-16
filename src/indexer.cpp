@@ -44,6 +44,8 @@ static bool			g_bQuiet		= false;
 static bool			g_bProgress		= true;
 static bool			g_bPrintQueries	= false;
 static bool			g_bKeepAttrs	= false;
+static CSphString	g_sKeepAttrsPath;
+static const char	g_sKeepAttrsKey[] = "--keep-attrs";
 
 static const char *	g_sBuildStops	= NULL;
 static int				g_iTopStops		= 100;
@@ -733,7 +735,7 @@ CSphSource * SpawnSourceMSSQL ( const CSphConfigSection & hSource, const char * 
 	LOC_GETB ( tParams.m_bWinAuth, "mssql_winauth" );
 	LOC_GETS ( tParams.m_sColBuffers, "sql_column_buffers" );
 	LOC_GETS ( tParams.m_sOdbcDSN, "odbc_dsn" ); // a shortcut, may be used instead of other specific combination
-	
+
 	CSphSource_MSSQL * pSrc = CreateSourceWithProxy<CSphSource_MSSQL> ( sSourceName, bProxy );
 	if ( !pSrc->Setup ( tParams ) )
 		SafeDelete ( pSrc );
@@ -990,7 +992,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 	CSphFieldFilterSettings tFilterSettings;
 	if ( sphConfFieldFilter ( hIndex, tFilterSettings, sError ) )
 		pFieldFilter = sphCreateRegexpFilter ( tFilterSettings, sError );
-	
+
 	if ( !sphSpawnRLPFilter ( pFieldFilter, tSettings, tTokSettings, sIndexName, sError ) )
 	{
 		SafeDelete ( pFieldFilter );
@@ -1209,7 +1211,12 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 		pIndex->SetTokenizer ( pTokenizer );
 		pIndex->SetDictionary ( pDict );
 		if ( g_bKeepAttrs )
-			pIndex->SetKeepAttrs ( hIndex["path"].strval() );
+		{
+			if ( g_sKeepAttrsPath.IsEmpty() )
+				pIndex->SetKeepAttrs ( hIndex["path"].strval() );
+			else
+				pIndex->SetKeepAttrs ( g_sKeepAttrsPath );
+		}
 		pIndex->Setup ( tSettings );
 
 		bOK = pIndex->Build ( dSources, g_iMemLimit, g_iWriteBuffer )!=0;
@@ -1664,9 +1671,24 @@ int main ( int argc, char ** argv )
 		{
 			g_bPrintQueries = true;
 
-		} else if ( strcasecmp ( argv[i], "--keep-attrs" )==0 )
+		} else if ( strcasecmp ( argv[i], g_sKeepAttrsKey )>=0 )
 		{
-			g_bKeepAttrs = true;
+			const char * sArg = argv[i];
+			int iArgLen = strlen ( sArg );
+			int iKeyLen = sizeof ( g_sKeepAttrsKey )-1;
+			int iKeyMatched = 0;
+			for ( iKeyMatched=0; iKeyMatched<Min ( iArgLen, iKeyLen ); iKeyMatched++ )
+			{
+				if ( sArg[iKeyMatched]!=g_sKeepAttrsKey[iKeyMatched] )
+					break;
+			}
+
+			if ( iKeyMatched>=iKeyLen )
+			{
+				g_bKeepAttrs = true;
+				if ( iKeyLen+1<iArgLen )
+					g_sKeepAttrsPath = sArg + iKeyLen + 1;
+			}
 
 		} else
 		{

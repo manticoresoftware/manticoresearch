@@ -6212,7 +6212,7 @@ bool CSphSchema::CompareTo ( const CSphSchema & rhs, CSphString & sError, bool b
 			ESphAttr eAttr2 = tAttr2.m_eAttrType;
 
 			bMismatch = tAttr1.m_sName!=tAttr2.m_sName || eAttr1!=eAttr2 || tAttr1.m_eWordpart!=tAttr2.m_eWordpart ||
-				tAttr1.m_bIndexed!=tAttr2.m_bIndexed ||	tAttr1.m_tLocator.m_iBitCount!=tAttr2.m_tLocator.m_iBitCount ||
+				tAttr1.m_tLocator.m_iBitCount!=tAttr2.m_tLocator.m_iBitCount ||
 				tAttr1.m_tLocator.m_iBitOffset!=tAttr2.m_tLocator.m_iBitOffset;
 		}
 

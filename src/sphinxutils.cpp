@@ -2549,6 +2549,52 @@ bool CSphDynamicLibrary::LoadSymbols ( const char **, void ***, int ) { return f
 
 #endif
 
+
+void RebalanceWeights ( const CSphFixedVector<int64_t> & dTimers, WORD * pWeights )
+{
+	assert ( dTimers.GetLength () );
+	int64_t iSum = 0;
+	int iCounters = 0;
+	ARRAY_FOREACH ( i, dTimers )
+	{
+		iSum += dTimers[i];
+		iCounters += ( dTimers[i]>0 );
+	}
+
+	// no statistics, all timers bad, keep previous weights
+	if ( iSum<=0 )
+		return;
+
+	// in case of mirror without response still set small probability to it
+	const float fEmptiesPercent = 0.1f;
+	int iEmpties = dTimers.GetLength() - iCounters;
+
+	// balance weights
+	int64_t iCheck = 0;
+	ARRAY_FOREACH ( i, dTimers )
+	{
+		// mirror weight is inverse of timer \ query time
+		float fWeight = 1.0f - (float)dTimers[i] / iSum;
+
+		// subtract coef-empty percent to get sum eq to 1.0
+		if ( iEmpties )
+			fWeight = fWeight - fWeight * fEmptiesPercent;
+
+		// mirror without response
+		if ( !dTimers[i] )
+			fWeight = fEmptiesPercent / iEmpties;
+		else if ( iCounters==1 ) // case when only one mirror has valid counter
+			fWeight = 1.0f - fEmptiesPercent;
+
+		int iWeight = int( fWeight * 65535.0f );
+		assert ( iWeight>=0 && iWeight<=65535 );
+		pWeights[i] = (WORD)iWeight;
+		iCheck += pWeights[i];
+	}
+	assert ( iCheck<=65535 );
+}
+
+
 //
 // $Id$
 //

@@ -221,58 +221,6 @@ AgentDesc_c * MetaAgentDesc_t::RandAgent ()
 	return GetAgent ( sphRand() % m_dHosts.GetLength() );
 }
 
-void MetaAgentDesc_t::RecalculateWeights ( const CSphVector<int64_t> &dTimers )
-{
-	// minimal probability must not fall below the original one with this coef.
-	const float fMin_coef = 0.1f;
-	DWORD uMin_value = DWORD ( 65535*fMin_coef/m_dHosts.GetLength() );
-
-	if ( m_pWeights && HostDashboard_t::IsHalfPeriodChanged ( &m_uTimestamp ) )
-	{
-		int64_t dMin = -1;
-		ARRAY_FOREACH ( i, dTimers )
-			if ( dTimers[i] > 0 )
-			{
-				if ( dMin<=0 )
-					dMin = dTimers[i];
-				else
-					dMin = Min ( dMin, dTimers[i] );
-			}
-
-			if ( dMin<=0 ) // no statistics, all timers bad.
-				return;
-
-			// apply coefficients
-			float fNormale = 0;
-			CSphVector<float> dCoefs ( dTimers.GetLength() );
-			assert ( m_pLock );
-			CSphScopedLock<InterWorkerStorage> tLock ( *m_pLock );
-			ARRAY_FOREACH ( i, dTimers )
-			{
-				if ( dTimers[i] > 0 )
-				{
-					dCoefs[i] = (float)dMin/dTimers[i];
-					if ( m_pWeights[i]*dCoefs[i] < uMin_value )
-						dCoefs[i] = (float)uMin_value/m_pWeights[i]; // restrict balancing like 1/0 into 0.9/0.1
-				} else
-					dCoefs[i] = (float)uMin_value/m_pWeights[i];
-
-				fNormale += m_pWeights[i]*dCoefs[i];
-			}
-
-			// renormalize the weights
-			fNormale = 65535/fNormale;
-			DWORD uCheck = 0;
-			ARRAY_FOREACH ( i, m_dHosts )
-			{
-				m_pWeights[i] = WORD ( m_pWeights[i]*dCoefs[i]*fNormale );
-				uCheck += m_pWeights[i];
-				sphLogDebug ( "Mirror %d, new weight (%d)", i, m_pWeights[i] );
-			}
-			sphLogDebug ( "Rebalancing finished. The whole sum is %d", uCheck );
-	}
-}
-
 void MetaAgentDesc_t::WeightedRandAgent ( int * pBestAgent, CSphVector<int> & dCandidates )
 {
 	assert ( m_pWeights );
@@ -320,6 +268,14 @@ inline int64_t MetaAgentDesc_t::GetBestDelay ( int * pBestAgent, CSphVector<int>
 	return iBestAnswerTime;
 }
 
+static void LogAgentWeights ( const WORD * pOldWeights, const WORD * pCurWeights, const int64_t * pTimers, const CSphVector<AgentDesc_c> & dAgents )
+{
+	if ( g_eLogLevel<SPH_LOG_DEBUG )
+		return;
+
+	ARRAY_FOREACH ( i, dAgents )
+		sphLogDebug ( "client=%s:%d, mirror=%d, weight=%d, %d, timer="INT64_FMT, dAgents[i].m_sHost.cstr (), dAgents[i].m_iPort, i, pCurWeights[i], pOldWeights[i], pTimers[i] );
+}
 
 AgentDesc_c * MetaAgentDesc_t::StDiscardDead ()
 {
@@ -333,9 +289,8 @@ AgentDesc_c * MetaAgentDesc_t::StDiscardDead ()
 	int64_t iErrARow = -1;
 	int64_t iThisErrARow = -1;
 	CSphVector<int> dCandidates;
-	CSphVector<int64_t> dTimers;
+	CSphFixedVector<int64_t> dTimers ( m_dHosts.GetLength() );
 	dCandidates.Reserve ( m_dHosts.GetLength() );
-	dTimers.Resize ( m_dHosts.GetLength() );
 
 	ARRAY_FOREACH ( i, m_dHosts )
 	{
@@ -350,7 +305,7 @@ AgentDesc_c * MetaAgentDesc_t::StDiscardDead ()
 		if ( uQueries > 0 )
 			dTimers[i] = dDashStat.m_iStats[eTotalMsecs]/uQueries;
 		else
-			dTimers[i] = -1;
+			dTimers[i] = 0;
 
 		iThisErrARow = ( dDash.m_iErrorsARow<=iDeadThr ) ? 0 : dDash.m_iErrorsARow;
 
@@ -372,7 +327,17 @@ AgentDesc_c * MetaAgentDesc_t::StDiscardDead ()
 	}
 
 	// check if it is a time to recalculate the agent's weights
-	RecalculateWeights ( dTimers );
+	if ( m_pWeights && dTimers.GetLength () && HostDashboard_t::IsHalfPeriodChanged ( &m_uTimestamp ) )
+	{
+		CSphFixedVector<WORD> dWeights ( m_dHosts.GetLength() );
+		memcpy ( dWeights.Begin(), m_pWeights, sizeof ( dWeights[0] ) * dWeights.GetLength() );
+		RebalanceWeights ( dTimers, dWeights.Begin() );
+
+		assert ( m_pLock );
+		CSphScopedLock<InterWorkerStorage> tLock ( *m_pLock );
+		LogAgentWeights ( m_pWeights, dWeights.Begin(), dTimers.Begin(), m_dHosts );
+		memcpy ( m_pWeights, dWeights.Begin(), sizeof ( dWeights[0] ) * dWeights.GetLength() );
+	}
 
 	// nothing to select, sorry. Just plain RR...
 	if ( iBestAgent < 0 )
@@ -384,23 +349,22 @@ AgentDesc_c * MetaAgentDesc_t::StDiscardDead ()
 	// only one node with lowest error rating. Return it.
 	if ( !dCandidates.GetLength() )
 	{
-		sphLogDebug ( "HA selected %d node with best num of errors a row ("INT64_FMT")", iBestAgent, iErrARow );
+		sphLogDebug ( "client=%s:%d, HA selected %d node with best num of errors a row ("INT64_FMT")", m_dHosts[iBestAgent].m_sHost.cstr(), m_dHosts[iBestAgent].m_iPort, iBestAgent, iErrARow );
 		return &m_dHosts[iBestAgent];
 	}
 
 	// several nodes. Let's select the one.
-	float fAge = 0.0;
-	const char * sLogStr = NULL;
-
 	WeightedRandAgent ( &iBestAgent, dCandidates );
-	if ( g_eLogLevel>=SPH_LOG_DEBUG )
+	if ( g_eLogLevel>=SPH_LOG_VERBOSE_DEBUG )
 	{
+		float fAge = 0.0;
+		const char * sLogStr = NULL;
 		const HostDashboard_t & dDash = GetCommonStat ( iBestAgent );
 		fAge = ( dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime ) / 1000.0f;
-		sLogStr = "HA selected %d node by weighted random, with best EaR ("INT64_FMT"), last answered in %f milliseconds";
+		sLogStr = "client=%s:%d, HA selected %d node by weighted random, with best EaR ("INT64_FMT"), last answered in %.3f milliseconds";
+		sphLogDebugv ( sLogStr, m_dHosts[iBestAgent].m_sHost.cstr(), m_dHosts[iBestAgent].m_iPort, iBestAgent, iErrARow, fAge );
 	}
 
-	sphLogDebug ( sLogStr, iBestAgent, iErrARow, fAge );
 	return &m_dHosts[iBestAgent];
 }
 
@@ -416,9 +380,8 @@ AgentDesc_c * MetaAgentDesc_t::StLowErrors()
 	float fBestCriticalErrors = 1.0;
 	float fBestAllErrors = 1.0;
 	CSphVector<int> dCandidates;
-	CSphVector<int64_t> dTimers;
+	CSphFixedVector<int64_t> dTimers ( m_dHosts.GetLength() );
 	dCandidates.Reserve ( m_dHosts.GetLength() );
-	dTimers.Resize ( m_dHosts.GetLength() );
 
 	ARRAY_FOREACH ( i, m_dHosts )
 	{
@@ -446,7 +409,7 @@ AgentDesc_c * MetaAgentDesc_t::StLowErrors()
 		if ( uQueries > 0 )
 			dTimers[i] = dDashStat.m_iStats[eTotalMsecs]/uQueries;
 		else
-			dTimers[i] = -1;
+			dTimers[i] = 0;
 
 		// 1. No successes queries last period (it includes the pings). Skip such node!
 		if ( !uSuccesses )
@@ -485,7 +448,18 @@ AgentDesc_c * MetaAgentDesc_t::StLowErrors()
 	}
 
 	// check if it is a time to recalculate the agent's weights
-	RecalculateWeights ( dTimers );
+	if ( m_pWeights && dTimers.GetLength () && HostDashboard_t::IsHalfPeriodChanged ( &m_uTimestamp ) )
+	{
+		CSphFixedVector<WORD> dWeights ( m_dHosts.GetLength() );
+		memcpy ( dWeights.Begin(), m_pWeights, sizeof ( dWeights[0] ) * dWeights.GetLength() );
+		RebalanceWeights ( dTimers, dWeights.Begin() );
+
+		assert ( m_pLock );
+		CSphScopedLock<InterWorkerStorage> tLock ( *m_pLock );
+		LogAgentWeights ( m_pWeights, dWeights.Begin(), dTimers.Begin(), m_dHosts );
+		memcpy ( m_pWeights, dWeights.Begin(), sizeof ( dWeights[0] ) * dWeights.GetLength() );
+
+	}
 
 	// nothing to select, sorry. Just plain RR...
 	if ( iBestAgent < 0 )
@@ -497,22 +471,22 @@ AgentDesc_c * MetaAgentDesc_t::StLowErrors()
 	// only one node with lowest error rating. Return it.
 	if ( !dCandidates.GetLength() )
 	{
-		sphLogDebug ( "HA selected %d node with best error rating (%.2f)", iBestAgent, fBestCriticalErrors );
+		sphLogDebug ( "client=%s:%d, HA selected %d node with best error rating (%.2f)", m_dHosts[iBestAgent].m_sHost.cstr(), m_dHosts[iBestAgent].m_iPort, iBestAgent, fBestCriticalErrors );
 		return &m_dHosts[iBestAgent];
 	}
 
 	// several nodes. Let's select the one.
-	float fAge = 0.0f;
-	const char * sLogStr = NULL;
 	WeightedRandAgent ( &iBestAgent, dCandidates );
-	if ( g_eLogLevel>=SPH_LOG_DEBUG )
+	if ( g_eLogLevel>=SPH_LOG_VERBOSE_DEBUG )
 	{
+		float fAge = 0.0f;
+		const char * sLogStr = NULL;
 		const HostDashboard_t & dDash = GetCommonStat ( iBestAgent );
 		fAge = ( dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime ) / 1000.0f;
-		sLogStr = "HA selected %d node by weighted random, with best error rating (%.2f), answered %f seconds ago";
+		sLogStr = "client=%s:%d, HA selected %d node by weighted random, with best error rating (%.2f), answered %f seconds ago";
+		sphLogDebugv ( sLogStr, m_dHosts[iBestAgent].m_sHost.cstr(), m_dHosts[iBestAgent].m_iPort, iBestAgent, fBestCriticalErrors, fAge );
 	}
 
-	sphLogDebug ( sLogStr, iBestAgent, fBestCriticalErrors, fAge );
 	return &m_dHosts[iBestAgent];
 }
 
@@ -583,6 +557,7 @@ AgentConn_t::AgentConn_t ()
 	, m_iWorkerTag ( -1 )
 	, m_iStoreTag ( 0 )
 	, m_iWeight ( -1 )
+	, m_bPing ( false )
 {}
 
 AgentConn_t::~AgentConn_t ()
@@ -682,7 +657,11 @@ void agent_stats_inc ( AgentConn_t & tAgent, AgentStats_e iCounter )
 				tAgent.m_iEndQuery = sphMicroTimer();
 				g_tStats.m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].m_iLastQueryTime = tAgent.m_iStartQuery;
 				g_tStats.m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].m_iLastAnswerTime = tAgent.m_iEndQuery;
-				pCurStat[eTotalMsecs]+=tAgent.m_iEndQuery-tAgent.m_iStartQuery;
+				// do not count query time for pings
+				// only count errors
+				if ( !tAgent.m_bPing )
+					pCurStat[eTotalMsecs]+=tAgent.m_iEndQuery-tAgent.m_iStartQuery;
+
 			}
 		}
 		g_tStatsMutex.Unlock ();
@@ -1146,7 +1125,7 @@ void RemoteConnectToAgent ( AgentConn_t & tAgent )
 		int iErr = sphSockGetErrno();
 		if ( iErr!=EINPROGRESS && iErr!=EINTR && iErr!=EWOULDBLOCK ) // check for EWOULDBLOCK is for winsock only
 		{
-			tAgent.Fail ( eConnectFailures, "connect() failed: %s", sphSockError(iErr) );
+			tAgent.Fail ( eConnectFailures, "connect() failed: errno=%d, %s", iErr, sphSockError(iErr) );
 			tAgent.m_eState = AGENT_RETRY; // do retry on connect() failures
 			return;
 
@@ -1265,7 +1244,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 					socklen_t iErrLen = sizeof(iErr);
 					getsockopt ( tAgent.m_iSock, SOL_SOCKET, SO_ERROR, (char*)&iErr, &iErrLen );
 					// connect() failure
-					tAgent.Fail ( eConnectFailures, "connect() failed: %s", sphSockError(iErr) );
+					tAgent.Fail ( eConnectFailures, "connect() failed: errno=%d, %s", iErr, sphSockError(iErr) );
 					continue;
 				}
 
@@ -1527,7 +1506,7 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 						tAgent.m_iReplySize-tAgent.m_iReplyRead );
 
 					// bail out if read failed
-					if ( iRes<0 )
+					if ( iRes<=0 )
 					{
 						tAgent.m_sFailure.SetSprintf ( "failed to receive reply body: %s", sphSockError() );
 						agent_stats_inc ( tAgent, eNetworkErrors );
@@ -1615,7 +1594,8 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 		AgentConn_t & tAgent = dAgents[iAgent];
 		if ( tAgent.m_bBlackhole )
 			tAgent.Close ();
-		else if ( bTimeout && ( tAgent.m_eState==AGENT_QUERYED || tAgent.m_eState==AGENT_PREREPLY ) )
+		else if ( bTimeout && ( tAgent.m_eState==AGENT_QUERYED || tAgent.m_eState==AGENT_PREREPLY ||
+			( tAgent.m_eState==AGENT_REPLY && tAgent.m_iReplyRead!=tAgent.m_iReplySize ) ) )
 		{
 			assert ( !tAgent.m_dResults.GetLength() );
 			assert ( !tAgent.m_bSuccess );
@@ -1747,7 +1727,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 					if ( iErr )
 					{
 						// connect() failure
-						tAgent.Fail ( eConnectFailures, "connect() failed: %s", sphSockError(iErr) );
+						tAgent.Fail ( eConnectFailures, "connect() failed: errno=%d, %s", iErr, sphSockError(iErr) );
 					}
 					continue;
 				}
@@ -1864,6 +1844,7 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 
 	int iAgents = 0;
 	int64_t tmMaxTimer = sphMicroTimer() + iTimeout*1000; // in microseconds
+	bool bTimeout = false;
 
 	CSphVector<int> dWorkingSet;
 	dWorkingSet.Reserve ( dAgents.GetLength() );
@@ -1914,7 +1895,10 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 		int64_t tmSelect = sphMicroTimer();
 		int64_t tmMicroLeft = tmMaxTimer - tmSelect;
 		if ( tmMicroLeft<=0 ) // FIXME? what about iTimeout==0 case?
+		{
+			bTimeout = true;
 			break;
+		}
 
 #if HAVE_POLL
 		int iSelected = ::poll ( fds.Begin(), fds.GetLength(), int( tmMicroLeft/1000 ) );
@@ -2013,7 +1997,7 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 						tAgent.m_iReplySize-tAgent.m_iReplyRead );
 
 					// bail out if read failed
-					if ( iRes<0 )
+					if ( iRes<=0 )
 					{
 						tAgent.m_sFailure.SetSprintf ( "failed to receive reply body: %s", sphSockError() );
 						agent_stats_inc ( tAgent, eNetworkErrors );
@@ -2095,7 +2079,8 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 		AgentConn_t & tAgent = dAgents[iAgent];
 		if ( tAgent.m_bBlackhole )
 			tAgent.Close ();
-		else if ( tAgent.m_eState==AGENT_QUERYED || tAgent.m_eState==AGENT_PREREPLY )
+		else if ( bTimeout && ( tAgent.m_eState==AGENT_QUERYED || tAgent.m_eState==AGENT_PREREPLY ||
+			( tAgent.m_eState==AGENT_REPLY && tAgent.m_iReplyRead!=tAgent.m_iReplySize ) ) )
 		{
 			assert ( !tAgent.m_dResults.GetLength() );
 			assert ( !tAgent.m_bSuccess );

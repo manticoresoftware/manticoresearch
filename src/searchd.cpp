@@ -139,6 +139,8 @@ static bool				g_bLogStdout		= true;				// extra copy of startup log messages to
 static LogFormat_e		g_eLogFormat		= LOG_FORMAT_PLAIN;
 static bool				g_bLogCompactIn		= false;			// whether to cut list in IN() clauses.
 static int				g_iQueryLogMinMsec	= 0;				// log 'slow' threshold for query
+static char				g_sLogFilter[SPH_MAX_FILENAME_LEN] = "\0";
+static int				g_iLogFilterLen = 0;
 
 static const int64_t	MS2SEC = I64C ( 1000000 );
 int						g_iReadTimeout		= 5;	// sec
@@ -840,6 +842,12 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 		int iBufSize = sizeof(sBuf)-iLen-iSafeGap;
 		vsnprintf ( sBuf+iLen, iBufSize, sFmt, ap );
 		sBuf[ sizeof(sBuf)-iSafeGap ] = '\0';
+	}
+
+	if ( sFmt && eLevel>SPH_LOG_INFO && g_iLogFilterLen )
+	{
+		if ( strncmp ( sBuf+iLen, g_sLogFilter, g_iLogFilterLen )!=0 )
+			return;
 	}
 
 	// catch dupes
@@ -10901,15 +10909,12 @@ void BuildOneAgentStatus ( VectorLike & dStatus, const CSphString& sAgent, const
 
 	AgentDash_t dDashStat;
 	int iPeriods = 1;
-	int iHadPeriods = 0;
-	int iHavePeriods = 0;
 
 	while ( iPeriods>0 )
 	{
-		iHavePeriods = dDash.GetDashStat ( &dDashStat, iPeriods );
+		dDash.GetDashStat ( &dDashStat, iPeriods );
 		uint64_t uQueries = 0;
 
-		if ( iHavePeriods!=iHadPeriods )
 		{
 			for ( int j=0; j<eMaxStat; ++j )
 				if ( j==eTotalMsecs ) // hack. Avoid microseconds in human-readable statistic
@@ -10929,7 +10934,6 @@ void BuildOneAgentStatus ( VectorLike & dStatus, const CSphString& sAgent, const
 						dStatus.Add().SetSprintf ( FMT64, dDashStat.m_iStats[j] );
 					uQueries += dDashStat.m_iStats[j];
 				}
-			iHadPeriods = iHavePeriods;
 		}
 
 		if ( iPeriods==1 )
@@ -12736,6 +12740,7 @@ void CheckPing()
 		{
 			AgentConn_t & dAgent = dAgents.Add ();
 			dAgent = dDash.m_tDescriptor;
+			dAgent.m_bPing = true;
 		}
 	}
 
@@ -14155,6 +14160,13 @@ void HandleMysqlSet ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, SessionVars_t & 
 		{
 			const QcacheStatus_t & s = QcacheGetStatus();
 			QcacheSetup ( s.m_iMaxBytes, s.m_iThreshMsec, (int)tStmt.m_iSetValue );
+		} else if ( tStmt.m_sSetName=="log_debug_filter" )
+		{
+			int iLen = tStmt.m_sSetValue.Length();
+			iLen = Min ( iLen, (int)( sizeof(g_sLogFilter)/sizeof(g_sLogFilter[0]) ) );
+			memcpy ( g_sLogFilter, tStmt.m_sSetValue.cstr(), iLen );
+			g_sLogFilter[iLen] = '\0';
+			g_iLogFilterLen = iLen;
 		} else
 		{
 			sError.SetSprintf ( "Unknown system variable '%s'", tStmt.m_sSetName.cstr() );

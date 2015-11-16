@@ -55,7 +55,7 @@ enum SearchdStatus_e
 /// remote agent state
 enum AgentState_e
 {
-	AGENT_UNUSED,					///< agent is unused for this request
+	AGENT_UNUSED = 0,				///< agent is unused for this request
 	AGENT_CONNECTING,				///< connecting to agent in progress, write handshake on socket ready
 	AGENT_HANDSHAKE,				///< waiting for "VER x" hello, read response on socket ready
 	AGENT_ESTABLISHED,				///< handshake completed. Ready to sent query, write query on socket ready
@@ -174,6 +174,7 @@ struct AgentConn_t : public AgentDesc_c
 	int				m_iWorkerTag;	///< worker tag
 	int				m_iStoreTag;
 	int				m_iWeight;
+	bool			m_bPing;
 
 public:
 	AgentConn_t ();
@@ -201,8 +202,16 @@ struct AgentStats_t
 	}
 	void Add ( const AgentStats_t& rhs )
 	{
-		for ( int i=0; i<eMaxStat; ++i )
+		for ( int i=0; i<=eMaxCounters; ++i )
 			m_iStats[i] += rhs.m_iStats[i];
+
+		if ( m_iStats[eConnTries] )
+			m_iStats[eAverageMsecs] = ( m_iStats[eAverageMsecs] + rhs.m_iStats[eAverageMsecs] ) / 2;
+		else
+			m_iStats[eAverageMsecs] = rhs.m_iStats[eAverageMsecs];
+		m_iStats[eMaxMsecs] = Max ( m_iStats[eMaxMsecs], rhs.m_iStats[eMaxMsecs] );
+		m_iStats[eConnTries] += rhs.m_iStats[eConnTries];
+
 	}
 };
 

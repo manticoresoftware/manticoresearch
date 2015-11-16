@@ -259,12 +259,6 @@ void			sphInterruptNow();
 /// check if we got interrupted
 bool			sphInterrupted();
 
-#if !USE_WINDOWS
-/// set process info
-void			sphSetProcessInfo ( bool bHead );
-#endif
-
-
 /// initialize IO statistics collecting
 bool			sphInitIOStats ();
 

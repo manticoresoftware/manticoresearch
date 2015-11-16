@@ -17856,7 +17856,6 @@ bool SetWatchDog ( int iDevNull )
 			while ( g_bHaveTTY[0]==0 )
 				sphSleepMsec ( 100 );
 
-			sphSetProcessInfo ( false );
 			exit ( 0 );
 	}
 
@@ -17880,7 +17879,6 @@ bool SetWatchDog ( int iDevNull )
 
 		default:
 			// tty-controlled parent
-			sphSetProcessInfo ( false );
 			exit ( 0 );
 	}
 
@@ -21341,6 +21339,27 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		}
 	}
 
+#if !USE_WINDOWS
+	if ( !g_bOptNoDetach && !bWatched )
+	{
+		switch ( fork () )
+		{
+			case -1:
+			// error
+			sphFatalLog ( "fork() failed (reason: %s)", strerror ( errno ) );
+			exit ( 1 );
+
+			case 0:
+			// daemonized child
+			break;
+
+			default:
+			// tty-controlled parent
+			exit ( 0 );
+		}
+	}
+#endif
+
 	////////////////////
 	// network startup
 	////////////////////
@@ -21426,6 +21445,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	// prepare to detach
 	if ( !g_bOptNoDetach )
 	{
+		ReleaseTTYFlag();
+
 #if !USE_WINDOWS
 		if ( !bWatched || bVisualLoad )
 		{
@@ -21437,53 +21458,10 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			dup2 ( iDevNull, STDERR_FILENO );
 		}
 #endif
-		ReleaseTTYFlag();
-
-		// explicitly unlock everything in parent immediately before fork
-		//
-		// there's a race in case another instance is started before
-		// child re-acquires all locks; but let's hope that's rare
-		if ( !bWatched )
-		{
-			for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
-			{
-				ServedIndex_c & tServed = it.Get();
-				if ( tServed.m_bEnabled )
-					tServed.m_pIndex->Unlock();
-			}
-			for ( IndexHashIterator_c it ( g_pTemplateIndexes ); it.Next(); )
-			{
-				ServedIndex_c & tServed = it.Get();
-				if ( tServed.m_bEnabled )
-					tServed.m_pIndex->Unlock();
-			}
-		}
 	}
 
 	if ( bOptPIDFile && !bWatched )
 		sphLockUn ( g_iPidFD );
-
-#if !USE_WINDOWS
-	if ( !g_bOptNoDetach && !bWatched )
-	{
-		switch ( fork() )
-		{
-			case -1:
-				// error
-				sphFatalLog ( "fork() failed (reason: %s)", strerror ( errno ) );
-				exit ( 1 );
-
-			case 0:
-				// daemonized child
-				break;
-
-			default:
-				// tty-controlled parent
-				sphSetProcessInfo ( false );
-				exit ( 0 );
-		}
-	}
-#endif
 
 	sphRTConfigure ( hSearchd, bTestMode );
 

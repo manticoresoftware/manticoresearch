@@ -241,17 +241,6 @@ STATIC_SIZE_ASSERT ( SphOffset_t, 8 );
 
 /////////////////////////////////////////////////////////////////////////////
 
-#if !USE_WINDOWS
-
-bool g_bHeadProcess = true;
-
-void sphSetProcessInfo ( bool bHead )
-{
-	g_bHeadProcess = bHead;
-}
-
-#endif // USE_WINDOWS
-
 // whatever to collect IO stats
 static bool g_bCollectIOStats = false;
 static SphThreadKey_t g_tIOStatsTls;
@@ -8738,16 +8727,9 @@ CSphIndex_VLN::CSphIndex_VLN ( const char* sIndexName, const char * sFilename )
 
 CSphIndex_VLN::~CSphIndex_VLN ()
 {
-#if USE_WINDOWS
 	if ( m_iIndexTag>=0 && g_pMvaArena )
-#else
-	if ( m_iIndexTag>=0 && g_bHeadProcess && g_pMvaArena )
-#endif
 		g_tMvaArena.TaggedFreeTag ( m_iIndexTag );
 
-#if !USE_WINDOWS
-	if ( g_bHeadProcess )
-#endif
 	Unlock();
 }
 

@@ -2314,8 +2314,6 @@ protected:
 
 //////////////////////////////////////////////////////////////////////////
 
-// parent process for forked children
-extern bool g_bHeadProcess;
 void sphWarn ( const char *, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) );
 void SafeClose ( int & iFD );
 

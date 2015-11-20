@@ -1587,7 +1587,7 @@ static bool CheckQuorumProximity ( XQNode_t * pNode, CSphString * pError )
 }
 
 
-static void FixupDegenerates ( XQNode_t * pNode )
+static void FixupDegenerates ( XQNode_t * pNode, CSphString & sWarning )
 {
 	if ( !pNode )
 		return;
@@ -1595,12 +1595,15 @@ static void FixupDegenerates ( XQNode_t * pNode )
 	if ( pNode->m_dWords.GetLength()==1 &&
 		( pNode->GetOp()==SPH_QUERY_PHRASE || pNode->GetOp()==SPH_QUERY_PROXIMITY || pNode->GetOp()==SPH_QUERY_QUORUM ) )
 	{
+		if ( pNode->GetOp()==SPH_QUERY_QUORUM && !pNode->m_bPercentOp && pNode->m_iOpArg>1 )
+			sWarning.SetSprintf ( "quorum threshold too high (words=%d, thresh=%d); replacing quorum operator with AND operator", pNode->m_dWords.GetLength(), pNode->m_iOpArg );
+
 		pNode->SetOp ( SPH_QUERY_AND );
 		return;
 	}
 
 	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		FixupDegenerates ( pNode->m_dChildren[i] );
+		FixupDegenerates ( pNode->m_dChildren[i], sWarning );
 }
 
 void XQParser_t::FixupDestForms ()
@@ -1758,7 +1761,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 	FixupDestForms ();
 	DeleteNodesWOFields ( m_pRoot );
 	m_pRoot = SweepNulls ( m_pRoot );
-	FixupDegenerates ( m_pRoot );
+	FixupDegenerates ( m_pRoot, m_pParsed->m_sParseWarning );
 	FixupNulls ( m_pRoot );
 
 	if ( !FixupNots ( m_pRoot ) )

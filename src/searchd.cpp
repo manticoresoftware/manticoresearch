@@ -14900,6 +14900,8 @@ static void HandleMysqlReconfigure ( SqlRowBuffer_c & tOut, const SqlStmt_t & tS
 
 	sphConfDictionary ( hIndex, tSettings.m_tDict );
 
+	sphConfFieldFilter ( hIndex, tSettings.m_tFieldFilter, sError );
+
 	if ( !sphConfIndex ( hIndex, tSettings.m_tIndex, sError ) )
 	{
 		sError.SetSprintf ( "'%s' failed to parse index settings, error '%s'", sName, sError.cstr() );

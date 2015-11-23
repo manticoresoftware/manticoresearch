@@ -1681,6 +1681,7 @@ struct CSphReconfigureSettings
 	CSphTokenizerSettings	m_tTokenizer;
 	CSphDictSettings		m_tDict;
 	CSphIndexSettings		m_tIndex;
+	CSphFieldFilterSettings m_tFieldFilter;
 };
 
 struct CSphReconfigureSetup
@@ -1688,6 +1689,7 @@ struct CSphReconfigureSetup
 	ISphTokenizer *		m_pTokenizer;
 	CSphDict *			m_pDict;
 	CSphIndexSettings	m_tIndex;
+	ISphFieldFilter *	m_pFieldFilter;
 
 	CSphReconfigureSetup ();
 	~CSphReconfigureSetup ();

@@ -1030,7 +1030,7 @@ public:
 	void	CheckPath ( const CSphConfigSection & hSearchd, bool bTestMode );
 
 private:
-	static const DWORD		BINLOG_VERSION = 5;
+	static const DWORD		BINLOG_VERSION = 6;
 
 	static const DWORD		BINLOG_HEADER_MAGIC = 0x4c425053;	/// magic 'SPBL' header that marks binlog file
 	static const DWORD		BLOP_MAGIC = 0x214e5854;			/// magic 'TXN!' header that marks binlog entry
@@ -8680,13 +8680,68 @@ bool RtIndex_t::IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconf
 	if ( tDict->GetSettings().m_bWordDict && tDict->HasMorphology() && IsStarDict() && !tSettings.m_tIndex.m_bIndexExactWords )
 		tSettings.m_tIndex.m_bIndexExactWords = true;
 
+	// field filter
+	CSphScopedPtr<ISphFieldFilter> tFieldFilter ( NULL );
+
+	// re filter
+	bool bReFilterSame = true;
+	CSphFieldFilterSettings tFieldFilterSettings;
+	if ( m_pFieldFilter )
+		m_pFieldFilter->GetSettings ( tFieldFilterSettings );
+	if ( tFieldFilterSettings.m_dRegexps.GetLength()!=tSettings.m_tFieldFilter.m_dRegexps.GetLength() )
+	{
+		bReFilterSame = false;
+	} else
+	{
+		CSphVector<uint64_t> dFieldFilter;
+		ARRAY_FOREACH ( i, tFieldFilterSettings.m_dRegexps )
+			dFieldFilter.Add ( sphFNV64 ( tFieldFilterSettings.m_dRegexps[i].cstr() ) );
+		dFieldFilter.Uniq();
+		uint64_t uMyFF = sphFNV64 ( dFieldFilter.Begin(), sizeof(dFieldFilter[0]) * dFieldFilter.GetLength() );
+
+		dFieldFilter.Resize ( 0 );
+		ARRAY_FOREACH ( i, tSettings.m_tFieldFilter.m_dRegexps )
+			dFieldFilter.Add ( sphFNV64 ( tSettings.m_tFieldFilter.m_dRegexps[i].cstr() ) );
+		dFieldFilter.Uniq();
+		uint64_t uNewFF = sphFNV64 ( dFieldFilter.Begin(), sizeof(dFieldFilter[0]) * dFieldFilter.GetLength() );
+
+		bReFilterSame = ( uMyFF==uNewFF );
+	}
+
+	if ( !bReFilterSame && tSettings.m_tFieldFilter.m_dRegexps.GetLength () )
+	{
+		tFieldFilter = sphCreateRegexpFilter ( tSettings.m_tFieldFilter, sError );
+		if ( !tFieldFilter.Ptr() )
+		{
+			sError.SetSprintf ( "'%s' failed to create field filter, error '%s'", m_sIndexName.cstr (), sError.cstr () );
+			return true;
+		}
+	}
+
+	// rlp filter
+	bool bRlpSame = ( m_tSettings.m_eChineseRLP==tSettings.m_tIndex.m_eChineseRLP );
+	if ( !bRlpSame )
+	{
+		ISphFieldFilter * pRlpFilter = tFieldFilter.Ptr();
+		bool bOk = sphSpawnRLPFilter ( pRlpFilter, tSettings.m_tIndex, tSettings.m_tTokenizer, m_sIndexName.cstr(), sError );
+		if ( !bOk )
+		{
+			sError.SetSprintf ( "'%s' failed to create field filter, error '%s'", m_sIndexName.cstr (), sError.cstr () );
+			return true;
+		}
+
+		tFieldFilter = pRlpFilter;
+	}
+
 	// compare options
 	if ( m_pTokenizer->GetSettingsFNV()!=tTokenizer->GetSettingsFNV() || m_pDict->GetSettingsFNV()!=tDict->GetSettingsFNV() ||
-		m_pTokenizer->GetMaxCodepointLength()!=tTokenizer->GetMaxCodepointLength() || sphGetSettingsFNV ( m_tSettings )!=sphGetSettingsFNV ( tSettings.m_tIndex ) )
+		m_pTokenizer->GetMaxCodepointLength()!=tTokenizer->GetMaxCodepointLength() || sphGetSettingsFNV ( m_tSettings )!=sphGetSettingsFNV ( tSettings.m_tIndex ) ||
+		!bReFilterSame || !bRlpSame )
 	{
 		tSetup.m_pTokenizer = tTokenizer.LeakPtr();
 		tSetup.m_pDict = tDict.LeakPtr();
 		tSetup.m_tIndex = tSettings.m_tIndex;
+		tSetup.m_pFieldFilter = tFieldFilter.LeakPtr();
 		return false;
 	} else
 	{
@@ -8701,6 +8756,7 @@ void RtIndex_t::Reconfigure ( CSphReconfigureSetup & tSetup )
 	Setup ( tSetup.m_tIndex );
 	SetTokenizer ( tSetup.m_pTokenizer );
 	SetDictionary ( tSetup.m_pDict );
+	SetFieldFilter ( tSetup.m_pFieldFilter );
 
 	m_iMaxCodepointLength = m_pTokenizer->GetMaxCodepointLength();
 	SetupQueryTokenizer();
@@ -8716,6 +8772,7 @@ void RtIndex_t::Reconfigure ( CSphReconfigureSetup & tSetup )
 	// clean-up
 	tSetup.m_pTokenizer = NULL;
 	tSetup.m_pDict = NULL;
+	tSetup.m_pFieldFilter = NULL;
 }
 
 uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings )
@@ -8758,6 +8815,7 @@ uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings )
 CSphReconfigureSetup::CSphReconfigureSetup ()
 	: m_pTokenizer ( NULL )
 	, m_pDict ( NULL )
+	, m_pFieldFilter ( NULL )
 {}
 
 
@@ -8765,6 +8823,7 @@ CSphReconfigureSetup::~CSphReconfigureSetup()
 {
 	SafeDelete ( m_pTokenizer );
 	SafeDelete ( m_pDict );
+	SafeDelete ( m_pFieldFilter );
 }
 
 
@@ -9104,6 +9163,7 @@ void RtBinlog_c::BinlogReconfigure ( int64_t * pTID, const char * sIndexName, co
 	SaveIndexSettings ( m_tWriter, tSetup.m_tIndex );
 	SaveTokenizerSettings ( m_tWriter, tSetup.m_pTokenizer, 0 );
 	SaveDictionarySettings ( m_tWriter, tSetup.m_pDict, false, 0 );
+	SaveFieldFilterSettings ( m_tWriter, tSetup.m_pFieldFilter );
 
 	// checksum
 	m_tWriter.WriteCrc ();
@@ -9557,7 +9617,7 @@ int RtBinlog_c::ReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, D
 		{
 			sphWarning ( "binlog: log open error: %s", sError.cstr() );
 			return 0;
-		} 
+		}
 		sphDie ( "binlog: log open error: %s", sError.cstr() );
 	}
 
@@ -9983,6 +10043,7 @@ bool RtBinlog_c::ReplayReconfigure ( int iBinlog, DWORD uReplayFlags, BinlogRead
 		sphDie ( "binlog: reconfigure: failed to load settings (index=%s, lasttid="INT64_FMT", logtid="INT64_FMT", pos="INT64_FMT", error=%s)",
 			tIndex.m_sName.cstr(), tIndex.m_iMaxTID, iTID, iTxnPos, sError.cstr() );
 	LoadDictionarySettings ( tReader, tSettings.m_tDict, tEmbeddedFiles, INDEX_FORMAT_VERSION, sError );
+	LoadFieldFilterSettings ( tReader, tSettings.m_tFieldFilter );
 
 	// checksum
 	if ( tReader.GetErrorFlag() || !tReader.CheckCrc ( "reconfigure", tIndex.m_sName.cstr(), iTID, iTxnPos ) )

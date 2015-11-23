@@ -7136,7 +7136,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
-	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( tParsed, pQuery, pResult, tTermSetup, tCtx ) );
+	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( tParsed, pQuery, pResult, tTermSetup, tCtx, dSorters[iMaxSchemaIndex]->GetSchema() ) );
 
 	if ( !pRanker.Ptr() )
 		return false;
@@ -7477,6 +7477,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		}
 	}
 
+	pRanker->FinalizeCache ( dSorters[iMaxSchemaIndex]->GetSchema() );
 
 	//////////////////////
 	// fixing string offset and data in resulting matches

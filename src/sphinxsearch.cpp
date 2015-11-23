@@ -1073,6 +1073,8 @@ public:
 	virtual void				SetTermDupes ( const ExtQwordsHash_t & , int ) {}
 	virtual bool				InitState ( const CSphQueryContext &, CSphString & )	{ return true; }
 
+	virtual void				FinalizeCache ( const ISphSchema & tSorterSchema );
+
 public:
 	// FIXME? hide and friend?
 	virtual SphZoneHit_e		IsInZone ( int iZone, const ExtHit_t * pHit, int * pLastSpan );
@@ -5543,8 +5545,6 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup 
 
 ExtRanker_c::~ExtRanker_c ()
 {
-	if ( m_pQcacheEntry )
-		QcacheAdd ( m_pCtx->m_tQuery, m_pQcacheEntry );
 	SafeRelease ( m_pQcacheEntry );
 
 	SafeDelete ( m_pRoot );
@@ -5598,6 +5598,15 @@ void ExtRanker_c::UpdateQcache ( int iMatches )
 	if ( m_pQcacheEntry )
 		for ( int i=0; i<iMatches; i++ )
 			m_pQcacheEntry->Append ( m_dMatches[i].m_uDocID, m_dMatches[i].m_iWeight );
+}
+
+
+void ExtRanker_c::FinalizeCache ( const ISphSchema & tSorterSchema )
+{
+	if ( m_pQcacheEntry )
+		QcacheAdd ( m_pCtx->m_tQuery, m_pQcacheEntry, tSorterSchema );
+
+	SafeRelease ( m_pQcacheEntry );
 }
 
 
@@ -9020,7 +9029,7 @@ static bool HasQwordDupes ( XQNode_t * pNode )
 
 
 ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, CSphQueryResult * pResult,
-	const ISphQwordSetup & tTermSetup, const CSphQueryContext & tCtx )
+	const ISphQwordSetup & tTermSetup, const CSphQueryContext & tCtx, const ISphSchema & tSorterSchema )
 {
 	// shortcut
 	const CSphIndex * pIndex = tTermSetup.m_pIndex;
@@ -9036,7 +9045,7 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 	bool bGotDupes = HasQwordDupes ( tXQ.m_pRoot );
 
 	// can we serve this from cache?
-	QcacheEntry_c * pCached = QcacheFind ( pIndex->GetIndexId(), *pQuery );
+	QcacheEntry_c * pCached = QcacheFind ( pIndex->GetIndexId(), *pQuery, tSorterSchema );
 	if ( pCached )
 		return QcacheRanker ( pCached, tTermSetup );
 	SafeRelease ( pCached );

@@ -5640,9 +5640,9 @@ bool CSphFilterSettings::operator == ( const CSphFilterSettings & rhs ) const
 }
 
 
-uint64_t CSphFilterSettings::GetHash() const
+uint64_t CSphFilterSettings::GetHash ( uint64_t uPrevHash ) const
 {
-	uint64_t h = sphFNV64 ( &m_eType, sizeof(m_eType) );
+	uint64_t h = sphFNV64 ( &m_eType, sizeof(m_eType), uPrevHash );
 	h = sphFNV64 ( &m_bExclude, sizeof(m_bExclude), h );
 	switch ( m_eType )
 	{
@@ -18055,7 +18055,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
-	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( tXQ, pQuery, pResult, tTermSetup, tCtx ) );
+	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( tXQ, pQuery, pResult, tTermSetup, tCtx, ppSorters[iMaxSchemaIndex]->GetSchema() ) );
 	if ( !pRanker.Ptr() )
 		return false;
 
@@ -18179,6 +18179,8 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 		}
 		pResult->m_iBadRows += tProcessor.m_iBadRows;
 	}
+
+	pRanker->FinalizeCache ( ppSorters[iMaxSchemaIndex]->GetSchema() );
 
 	// mva and string pools ptrs
 	pResult->m_pMva = m_tMva.GetWritePtr();

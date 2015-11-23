@@ -161,10 +161,11 @@ public:
 	virtual int					GetMatches () = 0;
 	virtual void				Reset ( const ISphQwordSetup & tSetup ) = 0;
 	virtual bool				IsCache() const { return false; }
+	virtual void				FinalizeCache ( const ISphSchema & ) {}
 };
 
 /// factory
-ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, CSphQueryResult * pResult, const ISphQwordSetup & tTermSetup, const CSphQueryContext & tCtx );
+ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, CSphQueryResult * pResult, const ISphQwordSetup & tTermSetup, const CSphQueryContext & tCtx, const ISphSchema & tSorterSchema );
 
 //////////////////////////////////////////////////////////////////////////
 

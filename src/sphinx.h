@@ -2555,7 +2555,7 @@ public:
 	bool				operator == ( const CSphFilterSettings & rhs ) const;
 	bool				operator != ( const CSphFilterSettings & rhs ) const { return !( (*this)==rhs ); }
 
-	uint64_t			GetHash() const;
+	uint64_t			GetHash ( uint64_t uPrevHash ) const;
 
 protected:
 	const SphAttr_t *	m_pValues;		///< external value array

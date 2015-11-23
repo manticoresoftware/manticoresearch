@@ -81,8 +81,8 @@ struct QcacheStatus_t
 };
 
 
-void					QcacheAdd ( const CSphQuery & q, QcacheEntry_c * pResult );
-QcacheEntry_c *			QcacheFind ( int64_t iIndexId, const CSphQuery & q );
+void					QcacheAdd ( const CSphQuery & q, QcacheEntry_c * pResult, const ISphSchema & tSorterSchema );
+QcacheEntry_c *			QcacheFind ( int64_t iIndexId, const CSphQuery & q, const ISphSchema & tSorterSchema );
 ISphRanker *			QcacheRanker ( QcacheEntry_c * pEntry, const ISphQwordSetup & tSetup );
 const QcacheStatus_t &	QcacheGetStatus();
 void					QcacheSetup ( int64_t iMaxBytes, int iThreshMsec, int iTtlSec );

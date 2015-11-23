@@ -42,8 +42,8 @@ public:
 								~Qcache_c();
 
 	void						Setup ( int64_t iMaxBytes, int iThreshMsec, int iTtlSec );
-	void						Add ( const CSphQuery & q, QcacheEntry_c * pResult );
-	QcacheEntry_c *				Find ( int64_t iIndexId, const CSphQuery & q );
+	void						Add ( const CSphQuery & q, QcacheEntry_c * pResult, const ISphSchema & tSorterSchema );
+	QcacheEntry_c *				Find ( int64_t iIndexId, const CSphQuery & q, const ISphSchema & tSorterSchema );
 	void						DeleteIndex ( int64_t iIndexId );
 
 private:
@@ -326,7 +326,32 @@ void Qcache_c::MruToHead ( int iRes )
 	m_iMruHead = iRes;
 }
 
-void Qcache_c::Add ( const CSphQuery & q, QcacheEntry_c * pResult )
+
+static void CalcFilterHashes ( CSphVector<uint64_t> & dFilters, const CSphQuery & q, const ISphSchema & tSorterSchema )
+{
+	dFilters.Resize(0);
+
+	ARRAY_FOREACH ( i, q.m_dFilters )
+	{
+		uint64_t uFilterHash;
+		const CSphFilterSettings & tFS = q.m_dFilters[i];
+		uFilterHash = sphFNV64 ( tFS.m_sAttrName.cstr(), tFS.m_sAttrName.Length() );
+
+		const CSphColumnInfo * pAttr = tSorterSchema.GetAttr ( tFS.m_sAttrName.cstr() );
+		if ( pAttr && pAttr->m_pExpr.Ptr() )
+		{
+			// fixme: rewrite this code to get expression hashes from the tree
+			uFilterHash = sphFNV64 ( q.m_sSelect.cstr(), q.m_sSelect.Length(), uFilterHash );
+		}
+
+		dFilters.Add ( q.m_dFilters[i].GetHash ( uFilterHash ) );
+	}
+
+	dFilters.Sort();
+}
+
+
+void Qcache_c::Add ( const CSphQuery & q, QcacheEntry_c * pResult, const ISphSchema & tSorterSchema )
 {
 	pResult->Finish();
 
@@ -339,9 +364,7 @@ void Qcache_c::Add ( const CSphQuery & q, QcacheEntry_c * pResult )
 
 	pResult->AddRef();
 	pResult->m_Key = GetKey ( pResult->m_iIndexId, q );
-	ARRAY_FOREACH ( i, q.m_dFilters )
-		pResult->m_dFilters.Add ( q.m_dFilters[i].GetHash() );
-	pResult->m_dFilters.Sort();
+	CalcFilterHashes ( pResult->m_dFilters, q, tSorterSchema );
 
 	m_tLock.Lock();
 
@@ -397,7 +420,7 @@ void Qcache_c::Add ( const CSphQuery & q, QcacheEntry_c * pResult )
 	EnforceLimits ( true );
 }
 
-QcacheEntry_c * Qcache_c::Find ( int64_t iIndexId, const CSphQuery & q )
+QcacheEntry_c * Qcache_c::Find ( int64_t iIndexId, const CSphQuery & q, const ISphSchema & tSorterSchema )
 {
 	if ( m_iMaxBytes<=0 )
 		return NULL;
@@ -405,9 +428,7 @@ QcacheEntry_c * Qcache_c::Find ( int64_t iIndexId, const CSphQuery & q )
 	uint64_t k = GetKey ( iIndexId, q );
 
 	CSphVector<uint64_t> dFilters;
-	ARRAY_FOREACH ( i, q.m_dFilters )
-		dFilters.Add ( q.m_dFilters[i].GetHash() );
-	dFilters.Sort();
+	CalcFilterHashes ( dFilters, q, tSorterSchema );
 
 	m_tLock.Lock();
 
@@ -639,14 +660,14 @@ int QcacheRanker_c::GetMatches()
 
 //////////////////////////////////////////////////////////////////////////
 
-void QcacheAdd ( const CSphQuery & q, QcacheEntry_c * pResult )
+void QcacheAdd ( const CSphQuery & q, QcacheEntry_c * pResult, const ISphSchema & tSorterSchema )
 {
-	return g_Qcache.Add ( q, pResult );
+	return g_Qcache.Add ( q, pResult, tSorterSchema );
 }
 
-QcacheEntry_c * QcacheFind ( int64_t iIndexId, const CSphQuery & q )
+QcacheEntry_c * QcacheFind ( int64_t iIndexId, const CSphQuery & q, const ISphSchema & tSorterSchema )
 {
-	return g_Qcache.Find ( iIndexId, q );
+	return g_Qcache.Find ( iIndexId, q, tSorterSchema );
 }
 
 ISphRanker * QcacheRanker ( QcacheEntry_c * pEntry, const ISphQwordSetup & tSetup )

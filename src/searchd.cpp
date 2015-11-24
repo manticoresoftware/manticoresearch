@@ -6691,7 +6691,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 	{
 		tQuery.m_eGroupFunc = (ESphGroupBy) tReq.GetDword ();
 		tQuery.m_sGroupBy = tReq.GetString ();
-		tQuery.m_sGroupBy.ToLower ();
+		sphColumnToLowercase ( const_cast<char *>( tQuery.m_sGroupBy.cstr() ) );
 	}
 
 	// v.1.4
@@ -6748,7 +6748,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CSphQuery & tQuery, int iVer, int 
 	if ( iVer>=0x10B )
 	{
 		tQuery.m_sGroupDistinct = tReq.GetString ();
-		tQuery.m_sGroupDistinct.ToLower();
+		sphColumnToLowercase ( const_cast<char *>( tQuery.m_sGroupDistinct.cstr() ) );
 	}
 
 	// v.1.14

@@ -76,4 +76,18 @@ CREATE TABLE test_table
 <sphinxql>select * from test where all(tags)>=6</sphinxql>
 </sphqueries>
 
+<queries>
+<query index="test" filter_value="1" filter="tags"></query>
+<query index="test" filter_value="4" filter="tags"></query>
+<query index="test" filter_value="15" filter="tags"></query>
+<query index="test" filter_value="3" filter="tags" filter_exclude="1"></query>
+<query index="test" filter_range="3 4" filter="tags"></query>
+<query index="test" filter_range="3 4" filter="tags" filter_exclude="1"></query>
+<query index="test" filter_range="2 10" filter="tags"></query>
+<query index="test" filter_range="2 10" filter="tags" filter_exclude="1"></query>
+<query index="test" filter_range="4 100" filter="tags"></query>
+<query index="test" filter_range="7 100" filter="tags"></query>
+<query index="test" filter_range="6 100" filter="tags"></query>
+</queries>
+
 </test>

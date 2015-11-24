@@ -3612,6 +3612,8 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 			if ( iMasterVer>=5 )
 				tFilter.m_bHasEqual = !!tReq.GetDword();
+
+			tFilter.m_eMvaFunc = SPH_MVAFUNC_ANY;
 		}
 	}
 

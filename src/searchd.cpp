@@ -412,7 +412,7 @@ static CSphAtomic							g_iPersistentInUse;
 /// master-agent API protocol extensions version
 enum
 {
-	VER_MASTER = 12
+	VER_MASTER = 13
 };
 
 
@@ -2764,7 +2764,7 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 	ARRAY_FOREACH ( j, q.m_dFilters )
 	{
 		const CSphFilterSettings & tFilter = q.m_dFilters[j];
-		iReqSize += 16 + tFilter.m_sAttrName.Length(); // string attr-name; int type; int exclude-flag; int equal-flag
+		iReqSize += 20 + tFilter.m_sAttrName.Length(); // string attr-name; int type; int exclude-flag; int equal-flag; int mva-func
 		switch ( tFilter.m_eType )
 		{
 			case SPH_FILTER_VALUES:		iReqSize += 4 + 8*tFilter.GetNumValues (); break; // int values-count; uint64[] values
@@ -2906,6 +2906,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 		}
 		tOut.SendInt ( tFilter.m_bExclude );
 		tOut.SendInt ( tFilter.m_bHasEqual );
+		tOut.SendInt ( tFilter.m_eMvaFunc );
 	}
 	tOut.SendInt ( q.m_eGroupFunc );
 	tOut.SendString ( q.m_sGroupBy.cstr() );
@@ -3614,6 +3615,8 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 				tFilter.m_bHasEqual = !!tReq.GetDword();
 
 			tFilter.m_eMvaFunc = SPH_MVAFUNC_ANY;
+			if ( iMasterVer>=13 )
+				tFilter.m_eMvaFunc = (ESphMvaFunc)tReq.GetDword();
 		}
 	}
 

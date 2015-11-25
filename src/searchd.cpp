@@ -616,6 +616,7 @@ static StaticThreadsOnlyMutex_t				g_tRotateConfigMutex;
 static SphThread_t							g_tRotateThread;
 static SphThread_t							g_tRotationServiceThread;
 static volatile bool						g_bInvokeRotationService = false;
+static SphThread_t							g_tPingThread;
 
 /// flush parameters of rt indexes
 static SphThread_t							g_tRtFlushThread;
@@ -1767,6 +1768,8 @@ void Shutdown ()
 			iDummy++; // to avoid gcc set but not used variable warning
 		}
 #endif
+		sphThreadJoin ( &g_tRotationServiceThread );
+		sphThreadJoin ( &g_tPingThread );
 
 		if ( g_eWorkers==MPM_THREADS )
 		{
@@ -1790,8 +1793,6 @@ void Shutdown ()
 			while ( g_dThd.GetLength() > 0 && ( sphMicroTimer()-tmShutStarted )<g_iShutdownTimeout )
 				sphSleepMsec ( 50 );
 		}
-
-		sphThreadJoin ( &g_tRotationServiceThread );
 
 #if !USE_WINDOWS
 		if ( g_eWorkers==MPM_FORK || g_eWorkers==MPM_PREFORK )
@@ -4018,7 +4019,6 @@ public:
 			CSphScopedLock<InterWorkerStorage> tLock ( *m_pLock );
 			LogAgentWeights ( m_pWeights, dWeights.Begin (), dTimers.Begin (), m_dAgents );
 			memcpy ( m_pWeights, dWeights.Begin (), sizeof ( dWeights[0] ) * dWeights.GetLength () );
-
 		}
 
 
@@ -5431,8 +5431,8 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 		AgentConn_t & tAgent = dAgents[iAgent];
 		if ( tAgent.m_bBlackhole )
 			tAgent.Close ();
-		else if  ( bTimeout && ( tAgent.m_eState==AGENT_QUERYED || tAgent.m_eState==AGENT_PREREPLY ||
-				  ( tAgent.m_eState==AGENT_REPLY && tAgent.m_iReplyRead!=tAgent.m_iReplySize ) ) )
+		else if ( bTimeout && ( tAgent.m_eState==AGENT_QUERYED || tAgent.m_eState==AGENT_PREREPLY ||
+				( tAgent.m_eState==AGENT_REPLY && tAgent.m_iReplyRead!=tAgent.m_iReplySize ) ) )
 		{
 			assert ( !tAgent.m_dResults.GetLength() );
 			assert ( !tAgent.m_bSuccess );
@@ -15952,32 +15952,29 @@ protected:
 	int * m_pCookie;
 };
 
-void CheckPing()
+
+static void CheckPing ( CSphVector<AgentConn_t> & dAgents, int64_t iNow )
 {
-	if ( g_iPingInterval<=0 )
+	if ( !g_pStats )
 		return;
 
-	static int64_t iLastCheck = 0;
-	CSphVector<AgentConn_t> dAgents;
-	int64_t iNow = sphMicroTimer();
-	if ( (iNow-iLastCheck)<g_iPingInterval*1000 )
-		return;
-
+	dAgents.Resize ( 0 );
 	int iCookie = (int)iNow;
-	iLastCheck = iNow;
 
+	g_tStatsMutex.Lock();
 	g_pStats->m_hDashBoard.IterateStart();
 	while ( g_pStats->m_hDashBoard.IterateNext() )
 	{
 		int iIndex = g_pStats->m_hDashBoard.IterateGet();
 		const HostDashboard_t & dDash = g_pStats->m_dDashboard.m_dItemStats[iIndex];
-		if ( dDash.m_bNeedPing && dDash.IsOlder(iNow) )
+		if ( dDash.m_bNeedPing && dDash.IsOlder ( iNow ) )
 		{
-			AgentConn_t & dAgent = dAgents.Add ();
+			AgentConn_t & dAgent = dAgents.Add();
 			dAgent = dDash.m_dDescriptor;
 			dAgent.m_bPing = true;
 		}
 	}
+	g_tStatsMutex.Unlock();
 
 	CSphScopedPtr<PingRequestBuilder_t> tReqBuilder ( NULL );
 	CSphScopedPtr<CSphRemoteAgentsController> tDistCtrl ( NULL );
@@ -15988,17 +15985,52 @@ void CheckPing()
 		tDistCtrl = new CSphRemoteAgentsController ( g_iDistThreads, dAgents, *tReqBuilder.Ptr(), g_iPingInterval );
 	}
 
+	if ( g_bShutdown )
+		return;
+
 	int iAgentsDone = 0;
 	if ( dAgents.GetLength() )
 	{
 		iAgentsDone = tDistCtrl->Finish();
 	}
 
+	if ( g_bShutdown )
+		return;
+
 	int iReplyCookie = 0;
 	if ( iAgentsDone )
 	{
 		PingReplyParser_t tParser ( &iReplyCookie );
 		RemoteWaitForAgents ( dAgents, g_iPingInterval, tParser );
+	}
+}
+
+
+static void PingThreadFunc ( void * )
+{
+	if ( g_iPingInterval<=0 )
+		return;
+
+	// crash logging for the thread
+	SphCrashLogger_c tQueryTLS;
+	tQueryTLS.SetupTLS ();
+
+	int64_t iLastCheck = 0;
+	CSphVector<AgentConn_t> dAgents;
+
+	while ( !g_bShutdown || !g_bHeadDaemon )
+	{
+		SphCrashLogger_c::SetupTimePID ();
+
+		// check if we have work to do
+		int64_t iNow = sphMicroTimer ();
+		if ( ( iNow-iLastCheck )<g_iPingInterval*1000 )
+		{
+			sphSleepMsec ( 50 );
+			continue;
+		}
+
+		CheckPing ( dAgents, iNow );
 	}
 }
 
@@ -22472,7 +22504,6 @@ void TickHead ( bool bDontListen )
 	CheckRotate ();
 	CheckFlush ();
 	CheckChildrenHup();
-	CheckPing();
 
 	sphInfo ( NULL ); // flush dupes
 
@@ -23717,6 +23748,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	if ( !sphThreadCreate ( &g_tRotationServiceThread, RotationServiceThreadFunc, 0 ) )
 		sphDie ( "failed to create rotation service thread" );
+
+	if ( !sphThreadCreate ( &g_tPingThread, PingThreadFunc, 0 ) )
+		sphDie ( "failed to create ping service thread" );
 
 	// almost ready, time to start listening
 	int iBacklog = hSearchd.GetInt ( "listen_backlog", SEARCHD_BACKLOG );

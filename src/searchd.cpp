@@ -1016,9 +1016,23 @@ struct SearchdStats_t
 	SmallStringHash_T<int>							m_hDashBoard; ///< find hosts for agents and sort them all
 };
 
+
+struct StaticThreadProcMutex_t
+{
+	StaticThreadProcMutex_t ();
+	~StaticThreadProcMutex_t ();
+	void Lock ();
+	void Unlock ();
+
+private:
+	CSphMutex m_tThdLock;
+	CSphProcessSharedMutex m_tProcLock;
+};
+
+
 static SearchdStats_t *			g_pStats		= NULL;
 static CSphSharedBuffer<SearchdStats_t>	g_tStatsBuffer;
-static CSphProcessSharedMutex	g_tStatsMutex;
+static StaticThreadProcMutex_t	g_tStatsMutex;
 
 static CSphQueryResultMeta		g_tLastMeta;
 static StaticThreadsOnlyMutex_t g_tLastMetaMutex;
@@ -1357,6 +1371,34 @@ void StaticThreadsOnlyMutex_t::Unlock()
 	if ( g_eWorkers==MPM_THREADS )
 		m_tLock.Unlock();
 }
+
+StaticThreadProcMutex_t::StaticThreadProcMutex_t ()
+{
+	if ( !m_tThdLock.Init () )
+		sphDie ( "failed to create thread mutex" );
+}
+
+StaticThreadProcMutex_t::~StaticThreadProcMutex_t ()
+{
+	m_tThdLock.Done ();
+}
+
+void StaticThreadProcMutex_t::Lock ()
+{
+	if ( g_eWorkers==MPM_THREADS )
+		m_tThdLock.Lock ();
+	else
+		m_tProcLock.Lock();
+}
+
+void StaticThreadProcMutex_t::Unlock ()
+{
+	if ( g_eWorkers==MPM_THREADS )
+		m_tThdLock.Unlock ();
+	else
+		m_tProcLock.Unlock();
+}
+
 
 /////////////////////////////////////////////////////////////////////////////
 // LOGGING
@@ -14244,15 +14286,22 @@ void BuildAgentStatus ( VectorLike & dStatus, const CSphString& sAgent )
 	if ( dStatus.MatchAdd ( "status_stored_periods" ) )
 		dStatus.Add().SetSprintf ( "%d", STATS_DASH_TIME );
 
-	g_pStats->m_hDashBoard.IterateStart();
-
-	CSphString sPrefix;
+	CSphVector<CSphNamedInt> dAgents;
+	g_tStatsMutex.Lock ();
+	g_pStats->m_hDashBoard.IterateStart ();
 	while ( g_pStats->m_hDashBoard.IterateNext() )
 	{
-		int iIndex = g_pStats->m_hDashBoard.IterateGet();
-		const CSphString sKey = g_pStats->m_hDashBoard.IterateGetKey();
-		sPrefix.SetSprintf ( "ag_%d", iIndex );
-		BuildOneAgentStatus ( dStatus, sKey, sPrefix.cstr() );
+		CSphNamedInt & tAgent = dAgents.Add();
+		tAgent.m_iValue = g_pStats->m_hDashBoard.IterateGet();
+		tAgent.m_sName = g_pStats->m_hDashBoard.IterateGetKey();
+	}
+	g_tStatsMutex.Unlock ();
+
+	CSphString sPrefix;
+	ARRAY_FOREACH ( i, dAgents )
+	{
+		sPrefix.SetSprintf ( "ag_%d", dAgents[i].m_iValue );
+		BuildOneAgentStatus ( dStatus, dAgents[i].m_sName, sPrefix.cstr() );
 	}
 }
 

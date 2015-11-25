@@ -16020,8 +16020,6 @@ static void PingThreadFunc ( void * )
 
 	while ( !g_bShutdown || !g_bHeadDaemon )
 	{
-		SphCrashLogger_c::SetupTimePID ();
-
 		// check if we have work to do
 		int64_t iNow = sphMicroTimer ();
 		if ( ( iNow-iLastCheck )<g_iPingInterval*1000 )

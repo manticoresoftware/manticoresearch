@@ -793,5 +793,9 @@ Two'</sphinxql>
 <sphinxql>select count(*), groupby() from json_up1, json_up2 group by j.T1</sphinxql>
 <sphinxql>select count(*), groupby() from dist_up group by j.t1</sphinxql>
 <sphinxql>select count(*), groupby() from dist_up group by j.T1</sphinxql>
+<!-- number to string autoconversion in expressions -->
+<sphinxql>select integer(j.rom=202) as p from json_up1</sphinxql>
+<sphinxql>select j.rom=202 as p from json_up1</sphinxql>
+<sphinxql>select j.rom='202' as p from json_up1</sphinxql>
 </sphqueries>
 </test>

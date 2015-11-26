@@ -919,7 +919,15 @@ public:
 	{
 		const BYTE * pVal = NULL;
 		ESphJsonType eJson = GetKey ( &pVal, tMatch );
-		return ( eJson==JSON_STRING ) ? sphUnpackStr ( pVal, ppStr ) : 0;
+		if ( eJson!=JSON_STRING )
+		{
+			CSphVector<BYTE> dOut;
+			sphJsonFieldFormat ( dOut, pVal, eJson );
+			int iLen = dOut.GetLength();
+			*ppStr = dOut.LeakData();
+			return iLen;
+		} else
+			return sphUnpackStr ( pVal, ppStr );
 	}
 	virtual float Eval ( const CSphMatch & tMatch ) const { return DoEval<float> ( tMatch ); }
 	virtual int IntEval ( const CSphMatch & tMatch ) const { return DoEval<int> ( tMatch ); }
@@ -6277,7 +6285,7 @@ struct TypeCheck_fn
 			ESphAttr eRightRet = tNode.m_iRight==-1 ? SPH_ATTR_NONE : dNodes[tNode.m_iRight].m_eRetType;
 			bool bLeftStr = ( eLeftRet==SPH_ATTR_STRING || eLeftRet==SPH_ATTR_STRINGPTR || eLeftRet==SPH_ATTR_JSON_FIELD );
 			bool bRightStr = ( eRightRet==SPH_ATTR_STRING || eRightRet==SPH_ATTR_STRINGPTR || eRightRet==SPH_ATTR_JSON_FIELD );
-			if ( bLeftStr!=bRightStr )
+			if ( bLeftStr!=bRightStr && eLeftRet!=SPH_ATTR_JSON_FIELD && eRightRet!=SPH_ATTR_JSON_FIELD )
 			{
 				m_sError = "equal operation applied to part string operands";
 				return;

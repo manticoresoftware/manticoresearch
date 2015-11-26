@@ -919,15 +919,7 @@ public:
 	{
 		const BYTE * pVal = NULL;
 		ESphJsonType eJson = GetKey ( &pVal, tMatch );
-		if ( eJson!=JSON_STRING )
-		{
-			CSphVector<BYTE> dOut;
-			sphJsonFieldFormat ( dOut, pVal, eJson );
-			int iLen = dOut.GetLength();
-			*ppStr = dOut.LeakData();
-			return iLen;
-		} else
-			return sphUnpackStr ( pVal, ppStr );
+		return ( eJson==JSON_STRING ) ? sphUnpackStr ( pVal, ppStr ) : 0;
 	}
 	virtual float Eval ( const CSphMatch & tMatch ) const { return DoEval<float> ( tMatch ); }
 	virtual int IntEval ( const CSphMatch & tMatch ) const { return DoEval<int> ( tMatch ); }

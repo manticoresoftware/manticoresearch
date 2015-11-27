@@ -8553,7 +8553,9 @@ static void ProcessLocalPostlimit ( const CSphQuery & tQuery, AggrResult_t & tRe
 		int iOff = Max ( tQuery.m_iOffset, tQuery.m_iOuterOffset );
 		int iCount = ( tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit );
 		iTo = Max ( Min ( iOff + iCount, iTo ), 0 );
-		int iFrom = Min ( iOff, iTo );
+		// we can't estimate limit.offset per result set
+		// as matches got merged and sort next step
+		int iFrom = 0;
 
 		iFrom += iSetStart;
 		iTo += iSetStart;

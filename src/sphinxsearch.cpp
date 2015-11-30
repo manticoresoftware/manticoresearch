@@ -1807,7 +1807,9 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 			{
 				assert ( pNode->m_dWords.GetLength()==0 || pNode->m_dChildren.GetLength()==0 );
 				int iQuorumCount = pNode->m_dWords.GetLength()+pNode->m_dChildren.GetLength();
-				if ( ExtQuorum_c::GetThreshold ( *pNode, iQuorumCount )>=iQuorumCount )
+				int iThr = ExtQuorum_c::GetThreshold ( *pNode, iQuorumCount );
+				bool bOrOperator = false;
+				if ( iThr>=iQuorumCount )
 				{
 					// threshold is too high
 					if ( tSetup.m_pWarning && !pNode->m_bPercentOp )
@@ -1819,7 +1821,9 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 					// right now quorum can only handle 256 words
 					if ( tSetup.m_pWarning )
 						tSetup.m_pWarning->SetSprintf ( "too many words (%d) for quorum; replacing with an AND", iQuorumCount );
-
+				} else if ( iThr==1 )
+				{
+					bOrOperator = true;
 				} else // everything is ok; create quorum node
 				{
 					return CreateMultiNode<ExtQuorum_c> ( pNode, tSetup, false );
@@ -1840,7 +1844,12 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 
 				ExtNode_i * pCur = dTerms[0];
 				for ( int i=1; i<dTerms.GetLength(); i++ )
-					pCur = new ExtAnd_c ( pCur, dTerms[i], tSetup );
+				{
+					if ( !bOrOperator )
+						pCur = new ExtAnd_c ( pCur, dTerms[i], tSetup );
+					else
+						pCur = new ExtOr_c ( pCur, dTerms[i], tSetup );
+				}
 
 				if ( pNode->GetCount() )
 					return tSetup.m_pNodeCache->CreateProxy ( pCur, pNode, tSetup );

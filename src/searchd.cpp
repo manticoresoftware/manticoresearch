@@ -392,6 +392,7 @@ static SphThread_t							g_tRotationServiceThread;
 static volatile bool						g_bInvokeRotationService = false;
 static volatile bool						g_bNeedRotate = false;		// true if there were pending HUPs to handle (they could fly in during previous rotate)
 static volatile bool						g_bInRotate = false;		// true while we are rotating
+static SphThread_t							g_tPingThread;
 
 static CSphVector<SphThread_t>				g_dTickPoolThread;
 
@@ -1096,6 +1097,8 @@ void Shutdown ()
 		iDummy++; // to avoid gcc set but not used variable warning
 	}
 #endif
+	sphThreadJoin ( &g_tRotationServiceThread );
+	sphThreadJoin ( &g_tPingThread );
 
 	// force even long time searches to shut
 	sphInterruptNow();
@@ -1127,8 +1130,6 @@ void Shutdown ()
 		ARRAY_FOREACH ( i, g_dTickPoolThread )
 			sphThreadJoin ( g_dTickPoolThread.Begin() + i );
 	}
-
-	sphThreadJoin ( &g_tRotationServiceThread );
 
 	CSphString sError;
 	// save attribute updates for all local indexes
@@ -3635,7 +3636,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	{
 		tQuery.m_eGroupFunc = (ESphGroupBy) tReq.GetDword ();
 		tQuery.m_sGroupBy = tReq.GetString ();
-		tQuery.m_sGroupBy.ToLower ();
+		sphColumnToLowercase ( const_cast<char *>( tQuery.m_sGroupBy.cstr() ) );
 	}
 
 	// v.1.4
@@ -3692,7 +3693,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	if ( iVer>=0x10B )
 	{
 		tQuery.m_sGroupDistinct = tReq.GetString ();
-		tQuery.m_sGroupDistinct.ToLower();
+		sphColumnToLowercase ( const_cast<char *>( tQuery.m_sGroupDistinct.cstr() ) );
 	}
 
 	// v.1.14
@@ -5418,7 +5419,9 @@ static void ProcessLocalPostlimit ( const CSphQuery & tQuery, AggrResult_t & tRe
 		int iOff = Max ( tQuery.m_iOffset, tQuery.m_iOuterOffset );
 		int iCount = ( tQuery.m_iOuterLimit ? tQuery.m_iOuterLimit : tQuery.m_iLimit );
 		iTo = Max ( Min ( iOff + iCount, iTo ), 0 );
-		int iFrom = Min ( iOff, iTo );
+		// we can't estimate limit.offset per result set
+		// as matches got merged and sort next step
+		int iFrom = 0;
 
 		iFrom += iSetStart;
 		iTo += iSetStart;
@@ -11019,15 +11022,22 @@ void BuildAgentStatus ( VectorLike & dStatus, const CSphString& sAgent )
 	if ( dStatus.MatchAdd ( "status_stored_periods" ) )
 		dStatus.Add().SetSprintf ( "%d", STATS_DASH_TIME );
 
+	CSphVector<CSphNamedInt> dAgents;
+	g_tStatsMutex.Lock ();
 	g_tStats.m_hDashBoard.IterateStart();
-
-	CSphString sPrefix;
 	while ( g_tStats.m_hDashBoard.IterateNext() )
 	{
-		int iIndex = g_tStats.m_hDashBoard.IterateGet();
-		const CSphString sKey = g_tStats.m_hDashBoard.IterateGetKey();
-		sPrefix.SetSprintf ( "ag_%d", iIndex );
-		BuildOneAgentStatus ( dStatus, sKey, sPrefix.cstr() );
+		CSphNamedInt & tAgent = dAgents.Add();
+		tAgent.m_iValue = g_tStats.m_hDashBoard.IterateGet();
+		tAgent.m_sName = g_tStats.m_hDashBoard.IterateGetKey();
+	}
+	g_tStatsMutex.Unlock ();
+
+	CSphString sPrefix;
+	ARRAY_FOREACH ( i, dAgents )
+	{
+		sPrefix.SetSprintf ( "ag_%d", dAgents[i].m_iValue );
+		BuildOneAgentStatus ( dStatus, dAgents[i].m_sName, sPrefix.cstr() );
 	}
 }
 
@@ -12722,32 +12732,26 @@ protected:
 	int * m_pCookie;
 };
 
-void CheckPing()
+
+static void CheckPing ( CSphVector<AgentConn_t> & dAgents, int64_t iNow )
 {
-	if ( g_iPingInterval<=0 )
-		return;
-
-	static int64_t iLastCheck = 0;
-	CSphVector<AgentConn_t> dAgents;
-	int64_t iNow = sphMicroTimer();
-	if ( (iNow-iLastCheck)<g_iPingInterval*1000 )
-		return;
-
+	dAgents.Resize ( 0 );
 	int iCookie = (int)iNow;
-	iLastCheck = iNow;
 
+	g_tStatsMutex.Lock();
 	g_tStats.m_hDashBoard.IterateStart();
 	while ( g_tStats.m_hDashBoard.IterateNext() )
 	{
 		int iIndex = g_tStats.m_hDashBoard.IterateGet();
 		const HostDashboard_t & dDash = g_tStats.m_dDashboard.m_dItemStats[iIndex];
-		if ( dDash.m_bNeedPing && dDash.IsOlder(iNow) )
+		if ( dDash.m_bNeedPing && dDash.IsOlder ( iNow ) )
 		{
-			AgentConn_t & dAgent = dAgents.Add ();
+			AgentConn_t & dAgent = dAgents.Add();
 			dAgent = dDash.m_tDescriptor;
 			dAgent.m_bPing = true;
 		}
 	}
+	g_tStatsMutex.Unlock();
 
 	CSphScopedPtr<PingRequestBuilder_t> tReqBuilder ( NULL );
 	CSphScopedPtr<ISphRemoteAgentsController> tDistCtrl ( NULL );
@@ -12758,17 +12762,50 @@ void CheckPing()
 		tDistCtrl = GetAgentsController ( g_iDistThreads, dAgents, *tReqBuilder.Ptr(), g_iPingInterval );
 	}
 
+	if ( g_bShutdown )
+		return;
+
 	int iAgentsDone = 0;
 	if ( dAgents.GetLength() )
 	{
 		iAgentsDone = tDistCtrl->Finish();
 	}
 
+	if ( g_bShutdown )
+		return;
+
 	int iReplyCookie = 0;
 	if ( iAgentsDone )
 	{
 		PingReplyParser_t tParser ( &iReplyCookie );
 		RemoteWaitForAgents ( dAgents, g_iPingInterval, tParser );
+	}
+}
+
+
+static void PingThreadFunc ( void * )
+{
+	if ( g_iPingInterval<=0 )
+		return;
+
+	// crash logging for the thread
+	SphCrashLogger_c tQueryTLS;
+	tQueryTLS.SetupTLS ();
+
+	int64_t iLastCheck = 0;
+	CSphVector<AgentConn_t> dAgents;
+
+	while ( !g_bShutdown )
+	{
+		// check if we have work to do
+		int64_t iNow = sphMicroTimer ();
+		if ( ( iNow-iLastCheck )<g_iPingInterval*1000 )
+		{
+			sphSleepMsec ( 50 );
+			continue;
+		}
+
+		CheckPing ( dAgents, iNow );
 	}
 }
 
@@ -18378,7 +18415,6 @@ void TickHead ()
 	CheckDelete ();
 	CheckRotate ();
 	CheckFlush ();
-	CheckPing();
 
 	if ( g_pThdPool )
 	{
@@ -21618,6 +21654,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	if ( !sphThreadCreate ( &g_tRotationServiceThread, RotationServiceThreadFunc, 0 ) )
 		sphDie ( "failed to create rotation service thread" );
+
+	if ( !sphThreadCreate ( &g_tPingThread, PingThreadFunc, 0 ) )
+		sphDie ( "failed to create ping service thread" );
 
 	if ( bForcedPreread )
 	{

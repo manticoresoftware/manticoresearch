@@ -694,6 +694,8 @@ public:
 	{
 		if ( eCmd==SPH_EXPR_SET_STRING_POOL )
 			m_pStrings = (const BYTE*)pArg;
+		else if ( eCmd==SPH_EXPR_GET_DEPENDENT_COLS )
+			static_cast < CSphVector<int>* > ( pArg )->Add ( m_iLocator );
 		ARRAY_FOREACH ( i, m_dArgs )
 			if ( m_dArgs[i] )
 				m_dArgs[i]->Command ( eCmd, pArg );
@@ -4119,7 +4121,10 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 
 		case TOK_IS_NULL:
 		case TOK_IS_NOT_NULL:
-			return new Expr_JsonFieldIsNull_c ( pLeft, tNode.m_iToken==TOK_IS_NULL );
+			if ( m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_JSON_FIELD )
+				return new Expr_JsonFieldIsNull_c ( pLeft, tNode.m_iToken==TOK_IS_NULL );
+			else
+				return new Expr_GetIntConst_c ( tNode.m_iToken!=TOK_IS_NULL );
 
 		default:				assert ( 0 && "unhandled token type" ); break;
 	}

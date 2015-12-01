@@ -144,13 +144,20 @@ source src_snip301
 	sql_attr_uint = idd
 	sql_field_string = body
 }
-source src_snip302 : src_snip301
+source src_snip302
 {
+	type			= mysql
+	<sql_settings/>
 	sql_query		= SELECT document_id+10 as id, idd+10 as idd, body FROM test_table
+	sql_attr_uint = idd
+	sql_field_string = body
 }
-source src_snip303 : src_snip301
+source src_snip303
 {
+	type			= mysql
+	<sql_settings/>
 	sql_query		= SELECT document_id+20 as id, idd+20 as idd, 1 as idd1, body FROM test_table
+	sql_field_string = body
 	sql_attr_uint = idd1
 }
 index snip301
@@ -158,12 +165,12 @@ index snip301
 	source			= src_snip301
 	path			= <data_path/>/snip301
 }
-index snip302 : snip301
+index snip302
 {
 	source			= src_snip302
 	path			= <data_path/>/snip302
 }
-index snip303 : snip301
+index snip303
 {
 	source			= src_snip303
 	path			= <data_path/>/snip303

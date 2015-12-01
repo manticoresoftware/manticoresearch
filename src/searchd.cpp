@@ -16027,23 +16027,19 @@ static void CheckPing ( CSphVector<AgentConn_t> & dAgents, int64_t iNow )
 	}
 	g_tStatsMutex.Unlock();
 
+	if ( !dAgents.GetLength() )
+		return;
+
 	CSphScopedPtr<PingRequestBuilder_t> tReqBuilder ( NULL );
 	CSphScopedPtr<CSphRemoteAgentsController> tDistCtrl ( NULL );
-	if ( dAgents.GetLength() )
-	{
-		// connect to remote agents and query them
-		tReqBuilder = new PingRequestBuilder_t ( iCookie );
-		tDistCtrl = new CSphRemoteAgentsController ( g_iDistThreads, dAgents, *tReqBuilder.Ptr(), g_iPingInterval );
-	}
+	// connect to remote agents and query them
+	tReqBuilder = new PingRequestBuilder_t ( iCookie );
+	tDistCtrl = new CSphRemoteAgentsController ( g_iDistThreads, dAgents, *tReqBuilder.Ptr(), g_iPingInterval );
 
 	if ( g_bShutdown )
 		return;
 
-	int iAgentsDone = 0;
-	if ( dAgents.GetLength() )
-	{
-		iAgentsDone = tDistCtrl->Finish();
-	}
+	int iAgentsDone = tDistCtrl->Finish();
 
 	if ( g_bShutdown )
 		return;
@@ -16072,7 +16068,7 @@ static void PingThreadFunc ( void * )
 	while ( !g_bShutdown || !g_bHeadDaemon )
 	{
 		// check if we have work to do
-		int64_t iNow = sphMicroTimer ();
+		int64_t iNow = sphMicroTimer();
 		if ( ( iNow-iLastCheck )<g_iPingInterval*1000 )
 		{
 			sphSleepMsec ( 50 );
@@ -16080,6 +16076,7 @@ static void PingThreadFunc ( void * )
 		}
 
 		CheckPing ( dAgents, iNow );
+		iLastCheck = sphMicroTimer();
 	}
 }
 

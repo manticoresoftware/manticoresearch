@@ -333,6 +333,9 @@ INSERT INTO string_table VALUES
 <sphinxql>select GEODIST(0,0,1,1, {out=m} ) FROM dist</sphinxql>
 <sphinxql>select GEODIST(0,0,1,1, {in=radians} ) FROM dist</sphinxql>
 
+<!-- JDBC, MySQL Connector/J 5.1.36+ multiple sysvars select -->
+<sphinxql>select @@session.auto_increment_increment AS v1, @@character_set_client as v2</sphinxql>
+
 </sphqueries>
 
 </test>

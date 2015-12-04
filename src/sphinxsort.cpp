@@ -3898,6 +3898,7 @@ public:
 	bool				Setup ( const CSphQuery * pQuery, const ISphSchema & tSchema, CSphString & sError );
 	virtual float		Eval ( const CSphMatch & tMatch ) const;
 	virtual void		Command ( ESphExprCommand eCmd, void * pArg );
+	virtual uint64_t	GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable );
 
 protected:
 	CSphAttrLocator		m_tGeoLatLoc;
@@ -3966,6 +3967,18 @@ void ExprGeodist_t::Command ( ESphExprCommand eCmd, void * pArg )
 		static_cast < CSphVector<int>* >(pArg)->Add ( m_iLat );
 		static_cast < CSphVector<int>* >(pArg)->Add ( m_iLon );
 	}
+}
+
+uint64_t ExprGeodist_t::GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
+{
+	uint64_t uHash = sphCalcExprDepHash ( this, tSorterSchema, uPrevHash, bDisable );
+
+	static const char * EXPR_TAG = "ExprGeodist_t";
+	uHash = sphFNV64 ( EXPR_TAG, strlen(EXPR_TAG), uHash );
+	uHash = sphFNV64 ( &m_fGeoAnchorLat, sizeof(m_fGeoAnchorLat), uHash );
+	uHash = sphFNV64 ( &m_fGeoAnchorLong, sizeof(m_fGeoAnchorLong), uHash );
+
+	return uHash;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -4220,6 +4233,12 @@ struct ExprSortStringAttrFixup_c : public ISphExpr
 		if ( eCmd==SPH_EXPR_SET_STRING_POOL )
 			m_pStrings = (const BYTE*)pArg;
 	}
+
+	virtual uint64_t GetHash ( const ISphSchema &, uint64_t, bool & )
+	{
+		assert ( 0 && "remap expressions in filters" );
+		return 0;
+	}
 };
 
 
@@ -4321,6 +4340,12 @@ struct ExprSortJson2StringPtr_c : public ISphExpr
 			if ( m_pExpr.Ptr() )
 				m_pExpr->Command ( eCmd, pArg );
 		}
+	}
+
+	virtual uint64_t GetHash ( const ISphSchema &, uint64_t, bool & )
+	{
+		assert ( 0 && "remap expression in filters" );
+		return 0;
 	}
 };
 

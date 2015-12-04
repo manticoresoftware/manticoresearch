@@ -7325,6 +7325,12 @@ struct Expr_FieldFactor_c : public ISphExpr
 	{
 		return (int) m_pData [ *m_pIndex ];
 	}
+
+	virtual uint64_t GetHash ( const ISphSchema &, uint64_t, bool & )
+	{
+		assert ( 0 && "ranker expressions in filters" );
+		return 0;
+	}
 };
 
 
@@ -7349,6 +7355,12 @@ struct Expr_FieldFactor_c<bool> : public ISphExpr
 	{
 		return (int)( (*m_pData) >> (*m_pIndex) );
 	}
+
+	virtual uint64_t GetHash ( const ISphSchema &, uint64_t, bool & )
+	{
+		assert ( 0 && "ranker expressions in filters" );
+		return 0;
+	}
 };
 
 
@@ -7370,6 +7382,12 @@ struct Expr_IntPtr_c : public ISphExpr
 	{
 		return (int)*m_pVal;
 	}
+
+	virtual uint64_t GetHash ( const ISphSchema &, uint64_t, bool & )
+	{
+		assert ( 0 && "ranker expressions in filters" );
+		return 0;
+	}
 };
 
 
@@ -7390,6 +7408,12 @@ struct Expr_FieldMask_c : public ISphExpr
 	int IntEval ( const CSphMatch & ) const
 	{
 		return (int)*m_tFieldMask.Begin();
+	}
+
+	virtual uint64_t GetHash ( const ISphSchema &, uint64_t, bool & )
+	{
+		assert ( 0 && "ranker expressions in filters" );
+		return 0;
 	}
 };
 
@@ -7415,6 +7439,12 @@ struct Expr_FieldFactor_c<CSphBitvec> : public ISphExpr
 	{
 		return (int)( m_tField.BitGet ( *m_pIndex ) );
 	}
+
+	virtual uint64_t GetHash ( const ISphSchema &, uint64_t, bool & )
+	{
+		assert ( 0 && "ranker expressions in filters" );
+		return 0;
+	}
 };
 
 
@@ -7435,6 +7465,12 @@ struct Expr_FloatPtr_c : public ISphExpr
 	int IntEval ( const CSphMatch & ) const
 	{
 		return (int)*m_pVal;
+	}
+
+	virtual uint64_t GetHash ( const ISphSchema &, uint64_t, bool & )
+	{
+		assert ( 0 && "ranker expressions in filters" );
+		return 0;
 	}
 };
 
@@ -7514,6 +7550,12 @@ struct Expr_BM25F_T : public ISphExpr
 		}
 		return fRes + 0.5f; // map to [0..1] range
 	}
+
+	virtual uint64_t GetHash ( const ISphSchema &, uint64_t, bool & )
+	{
+		assert ( 0 && "ranker expressions in filters" );
+		return 0;
+	}
 };
 
 
@@ -7574,6 +7616,12 @@ struct Expr_Sum_T : public ISphExpr
 	{
 		assert ( m_pArg );
 		m_pArg->Command ( eCmd, pArg );
+	}
+
+	virtual uint64_t GetHash ( const ISphSchema &, uint64_t, bool & )
+	{
+		assert ( 0 && "ranker expressions in filters" );
+		return 0;
 	}
 };
 
@@ -7636,17 +7684,29 @@ struct Expr_Top_T : public ISphExpr
 		assert ( m_pArg );
 		m_pArg->Command ( eCmd, pArg );
 	}
+
+	virtual uint64_t GetHash ( const ISphSchema &, uint64_t, bool & )
+	{
+		assert ( 0 && "ranker expressions in filters" );
+		return 0;
+	}
 };
 
 
 // FIXME! cut/pasted from sphinxexpr; remove dupe
-struct Expr_GetIntConst_c : public ISphExpr
+struct Expr_GetIntConst_Rank_c : public ISphExpr
 {
 	int m_iValue;
-	explicit Expr_GetIntConst_c ( int iValue ) : m_iValue ( iValue ) {}
+	explicit Expr_GetIntConst_Rank_c ( int iValue ) : m_iValue ( iValue ) {}
 	virtual float Eval ( const CSphMatch & ) const { return (float) m_iValue; } // no assert() here cause generic float Eval() needs to work even on int-evaluator tree
 	virtual int IntEval ( const CSphMatch & ) const { return m_iValue; }
 	virtual int64_t Int64Eval ( const CSphMatch & ) const { return m_iValue; }
+
+	virtual uint64_t GetHash ( const ISphSchema &, uint64_t, bool & )
+	{
+		assert ( 0 && "ranker expressions in filters" );
+		return 0;
+	}
 };
 
 
@@ -7765,9 +7825,9 @@ public:
 				return new Expr_FieldFactor_c<float> ( pCF, m_pState->m_dAtc );
 
 			case XRANK_BM25:				return new Expr_IntPtr_c ( &m_pState->m_uDocBM25 );
-			case XRANK_MAX_LCS:				return new Expr_GetIntConst_c ( m_pState->m_iMaxLCS );
+			case XRANK_MAX_LCS:				return new Expr_GetIntConst_Rank_c ( m_pState->m_iMaxLCS );
 			case XRANK_FIELD_MASK:			return new Expr_FieldMask_c ( m_pState->m_tMatchedFields );
-			case XRANK_QUERY_WORD_COUNT:	return new Expr_GetIntConst_c ( m_pState->m_iQueryWordCount );
+			case XRANK_QUERY_WORD_COUNT:	return new Expr_GetIntConst_Rank_c ( m_pState->m_iQueryWordCount );
 			case XRANK_DOC_WORD_COUNT:		return new Expr_IntPtr_c ( &m_pState->m_uDocWordCount );
 			case XRANK_BM25A:
 				{

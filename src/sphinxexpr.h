@@ -126,6 +126,9 @@ public:
 
 	/// check for const type
 	virtual bool IsConst () const { return false; }
+
+	/// get expression hash (for query cache)
+	virtual uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) = 0;
 };
 
 /// string expression traits
@@ -195,6 +198,12 @@ struct Expr_MapArg_c : public ISphExpr
 	{
 		assert ( 0 && "one just does not simply evaluate a const hash" );
 		return 0.0f;
+	}
+
+	virtual uint64_t GetHash ( const ISphSchema &, uint64_t, bool & )
+	{
+		assert ( 0 && "calling GetHash from a const hash" );
+		return 0;
 	}
 };
 

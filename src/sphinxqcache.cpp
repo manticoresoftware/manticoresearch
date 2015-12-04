@@ -327,27 +327,34 @@ void Qcache_c::MruToHead ( int iRes )
 }
 
 
-static void CalcFilterHashes ( CSphVector<uint64_t> & dFilters, const CSphQuery & q, const ISphSchema & tSorterSchema )
+static bool CalcFilterHashes ( CSphVector<uint64_t> & dFilters, const CSphQuery & q, const ISphSchema & tSorterSchema )
 {
 	dFilters.Resize(0);
 
 	ARRAY_FOREACH ( i, q.m_dFilters )
 	{
-		uint64_t uFilterHash;
 		const CSphFilterSettings & tFS = q.m_dFilters[i];
-		uFilterHash = sphFNV64 ( tFS.m_sAttrName.cstr(), tFS.m_sAttrName.Length() );
+		uint64_t uFilterHash = q.m_dFilters[i].GetHash();
 
-		const CSphColumnInfo * pAttr = tSorterSchema.GetAttr ( tFS.m_sAttrName.cstr() );
-		if ( pAttr && pAttr->m_pExpr.Ptr() )
+		// need this cast because ISphExpr::Command is not const
+		CSphColumnInfo * pAttr = const_cast<CSphColumnInfo *>(tSorterSchema.GetAttr ( tFS.m_sAttrName.cstr() ));
+		if ( pAttr )
 		{
-			// fixme: rewrite this code to get expression hashes from the tree
-			uFilterHash = sphFNV64 ( q.m_sSelect.cstr(), q.m_sSelect.Length(), uFilterHash );
+			if ( pAttr->m_pExpr.Ptr() )
+			{
+				bool bDisableCaching = false;
+				uFilterHash = pAttr->m_pExpr->GetHash ( tSorterSchema, uFilterHash, bDisableCaching );
+				if ( bDisableCaching )
+					return false;
+			} else
+				uFilterHash = sphCalcLocatorHash ( pAttr->m_tLocator, uFilterHash );
 		}
 
-		dFilters.Add ( q.m_dFilters[i].GetHash ( uFilterHash ) );
+		dFilters.Add ( uFilterHash );
 	}
 
 	dFilters.Sort();
+	return true;
 }
 
 
@@ -362,9 +369,11 @@ void Qcache_c::Add ( const CSphQuery & q, QcacheEntry_c * pResult, const ISphSch
 	if ( q.m_eMode==SPH_MATCH_FULLSCAN || q.m_sQuery.IsEmpty() )
 		return;
 
+	if ( !CalcFilterHashes ( pResult->m_dFilters, q, tSorterSchema ) )
+		return;	// this query can't be cached because of the nature of expressions in filters
+
 	pResult->AddRef();
 	pResult->m_Key = GetKey ( pResult->m_iIndexId, q );
-	CalcFilterHashes ( pResult->m_dFilters, q, tSorterSchema );
 
 	m_tLock.Lock();
 
@@ -428,7 +437,9 @@ QcacheEntry_c * Qcache_c::Find ( int64_t iIndexId, const CSphQuery & q, const IS
 	uint64_t k = GetKey ( iIndexId, q );
 
 	CSphVector<uint64_t> dFilters;
-	CalcFilterHashes ( dFilters, q, tSorterSchema );
+	
+	if ( !CalcFilterHashes ( dFilters, q, tSorterSchema ) )
+		return NULL;	// this query can't be cached because of the nature of expressions in filters
 
 	m_tLock.Lock();
 

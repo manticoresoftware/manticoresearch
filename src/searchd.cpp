@@ -6165,6 +6165,12 @@ struct Expr_Snippet_c : public ISphStringExpr
 		if ( m_pText )
 			m_pText->Command ( SPH_EXPR_SET_STRING_POOL, pArg );
 	}
+
+	virtual uint64_t GetHash ( const ISphSchema &, uint64_t, bool & )
+	{
+		assert ( 0 && "no snippets in filters" );
+		return 0;
+	}
 };
 
 

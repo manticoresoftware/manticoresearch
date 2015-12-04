@@ -5640,9 +5640,9 @@ bool CSphFilterSettings::operator == ( const CSphFilterSettings & rhs ) const
 }
 
 
-uint64_t CSphFilterSettings::GetHash ( uint64_t uPrevHash ) const
+uint64_t CSphFilterSettings::GetHash() const
 {
-	uint64_t h = sphFNV64 ( &m_eType, sizeof(m_eType), uPrevHash );
+	uint64_t h = sphFNV64 ( &m_eType, sizeof(m_eType) );
 	h = sphFNV64 ( &m_bExclude, sizeof(m_bExclude), h );
 	switch ( m_eType )
 	{
@@ -30151,6 +30151,43 @@ void CSphIndexProgress::Show ( bool bPhaseEnd ) const
 		m_fnProgress ( this, bPhaseEnd );
 }
 
+//////////////////////////////////////////////////////////////////////////
+
+uint64_t sphCalcLocatorHash ( const CSphAttrLocator & tLoc, uint64_t uPrevHash )
+{
+	uint64_t uHash = sphFNV64 ( &tLoc.m_bDynamic, sizeof(tLoc.m_bDynamic), uPrevHash );
+	uHash = sphFNV64 ( &tLoc.m_iBitCount, sizeof(tLoc.m_iBitCount), uHash );
+	return sphFNV64 ( &tLoc.m_iBitOffset, sizeof(tLoc.m_iBitOffset), uHash );
+}
+
+uint64_t sphCalcExprDepHash ( const char * szTag, ISphExpr * pExpr, const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
+{
+	uint64_t uHash = sphFNV64 ( szTag, strlen(szTag), uPrevHash );
+	return sphCalcExprDepHash ( pExpr, tSorterSchema, uHash, bDisable );
+}
+
+uint64_t sphCalcExprDepHash ( ISphExpr * pExpr, const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
+{
+	CSphVector<int> dCols;
+	pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCols );
+
+	uint64_t uHash = uPrevHash;
+	ARRAY_FOREACH ( i, dCols )
+	{
+		const CSphColumnInfo & tCol = tSorterSchema.GetAttr ( dCols[i] );
+		if ( tCol.m_pExpr.Ptr() )
+		{
+			// one more expression
+			uHash = tCol.m_pExpr->GetHash( tSorterSchema, uHash, bDisable );
+			if ( bDisable )
+				return 0;
+		}
+		else			
+			uHash = sphCalcLocatorHash ( tCol.m_tLocator, uHash ); // plain column, add locator to hash
+	}
+
+	return uHash;
+}
 
 /////////////////////////////////////////////////////////////////////////////
 

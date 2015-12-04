@@ -52,6 +52,7 @@ private:
 	void						EnforceLimits ( bool bSizeOnly );
 	void						MruToHead ( int iRes );
 	void						DeleteEntry ( int iEntry );
+	bool						CanCacheQuery ( const CSphQuery & q ) const;
 };
 
 /// ranker that servers cached results
@@ -366,7 +367,8 @@ void Qcache_c::Add ( const CSphQuery & q, QcacheEntry_c * pResult, const ISphSch
 	// do not cache full scans, because we'll get an incorrect empty result set here
 	if ( pResult->m_iElapsedMsec < m_iThreshMsec || pResult->GetSize() > m_iMaxBytes )
 		return;
-	if ( q.m_eMode==SPH_MATCH_FULLSCAN || q.m_sQuery.IsEmpty() )
+
+	if ( !CanCacheQuery(q) )
 		return;
 
 	if ( !CalcFilterHashes ( pResult->m_dFilters, q, tSorterSchema ) )
@@ -434,13 +436,14 @@ QcacheEntry_c * Qcache_c::Find ( int64_t iIndexId, const CSphQuery & q, const IS
 	if ( m_iMaxBytes<=0 )
 		return NULL;
 
+	if ( !CanCacheQuery(q) )
+		return NULL;
+
 	uint64_t k = GetKey ( iIndexId, q );
 
+	bool bFilterHashesCalculated = false;
 	CSphVector<uint64_t> dFilters;
 	
-	if ( !CalcFilterHashes ( dFilters, q, tSorterSchema ) )
-		return NULL;	// this query can't be cached because of the nature of expressions in filters
-
 	m_tLock.Lock();
 
 	int64_t tmMin = sphMicroTimer() - int64_t(m_iTtlSec)*1000000;
@@ -466,6 +469,17 @@ QcacheEntry_c * Qcache_c::Find ( int64_t iIndexId, const CSphQuery & q, const IS
 			continue;
 
 		// check that filters are compatible (ie. that entry filters are a subset of query filters)
+		if ( !bFilterHashesCalculated )
+		{
+			bFilterHashesCalculated = true;
+
+			if ( !CalcFilterHashes ( dFilters, q, tSorterSchema ) )
+			{
+				m_tLock.Unlock();
+				return NULL;	// this query can't be cached because of the nature of expressions in filters
+			}
+		}
+
 		int j = 0;
 		for ( ; j < e->m_dFilters.GetLength(); j++ )
 			if ( !dFilters.BinarySearch ( e->m_dFilters[j] ) )
@@ -533,6 +547,15 @@ void Qcache_c::DeleteEntry ( int i )
 	// release entry
 	p->Release();
 	m_hData[i] = QCACHE_DEAD_ENTRY;
+}
+
+
+bool Qcache_c::CanCacheQuery ( const CSphQuery & q ) const
+{
+	if ( q.m_eMode==SPH_MATCH_FULLSCAN || q.m_sQuery.IsEmpty() )
+		return false;
+
+	return true;
 }
 
 void Qcache_c::EnforceLimits ( bool bSizeOnly )

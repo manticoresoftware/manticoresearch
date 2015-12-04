@@ -41,12 +41,14 @@ UservarIntSet_c * ( *g_pUservarsHook )( const CSphString & sUservar );
 #if USE_WINDOWS
 	#ifndef NDEBUG
 		#define EXPR_CLASS_NAME(name) \
+			{\
 			const char * szFuncName = __FUNCTION__; \
 			const char * szClassNameEnd = strstr ( szFuncName, "::" ); \
 			assert ( szClassNameEnd ); \
 			size_t iLen = szClassNameEnd-szFuncName; \
 			assert ( strlen(name)==iLen && "Wrong expression name specified in ::GetHash" ); \
 			assert ( !strncmp(name, szFuncName, iLen) && "Wrong expression name specified in ::GetHash" ); \
+			}\
 			const char * szClassName = name; \
 			uint64_t uHash = uPrevHash;
 	#else
@@ -85,7 +87,7 @@ struct ExprLocatorTraits_t
 
 	void HandleCommand ( ESphExprCommand eCmd, void * pArg )
 	{
-		if ( eCmd==SPH_EXPR_GET_DEPENDENT_COLS )
+		if ( eCmd==SPH_EXPR_GET_DEPENDENT_COLS && m_iLocator!=-1 )
 			static_cast < CSphVector<int>* >(pArg)->Add ( m_iLocator );
 	}
 };
@@ -324,7 +326,7 @@ struct Expr_GetStrConst_c : public ISphStringExpr
 	virtual uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
 	{
 		EXPR_CLASS_NAME("Expr_GetStrConst_c");
-		CALC_STR_HASH(m_sVal, iLen);
+		CALC_STR_HASH(m_sVal, m_iLen);
 		return CALC_DEP_HASHES();
 	}
 };
@@ -704,15 +706,15 @@ struct Expr_Arglist_c : public ISphExpr
 
 struct Expr_Unary_c : public ISphExpr
 {
-	ISphExpr *	m_pFirst;
-	CSphString	m_sExprName;
+	ISphExpr *		m_pFirst;
+	const char *	m_szExprName;
 
 	explicit Expr_Unary_c ( const char * szClassName, ISphExpr * pFirst )
 		: m_pFirst ( pFirst )
-		, m_sExprName ( szClassName )
+		, m_szExprName ( szClassName )
 	{}
 
-	~Expr_Unary_c()
+	virtual ~Expr_Unary_c()
 	{
 		SafeRelease ( m_pFirst );
 	}
@@ -724,7 +726,7 @@ struct Expr_Unary_c : public ISphExpr
 
 	virtual uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
 	{
-		EXPR_CLASS_NAME_NOCHECK(m_sExprName.cstr());
+		EXPR_CLASS_NAME_NOCHECK(m_szExprName);
 		CALC_CHILD_HASH(m_pFirst);
 		return CALC_DEP_HASHES();
 	}
@@ -733,17 +735,17 @@ struct Expr_Unary_c : public ISphExpr
 
 struct Expr_Binary_c : public ISphExpr
 {
-	ISphExpr *	m_pFirst;
-	ISphExpr *	m_pSecond;
-	CSphString	m_sExprName;
+	ISphExpr *		m_pFirst;
+	ISphExpr *		m_pSecond;
+	const char *	m_szExprName;
 
 	explicit Expr_Binary_c ( const char * szClassName, ISphExpr * pFirst, ISphExpr * pSecond )
 		: m_pFirst ( pFirst )
 		, m_pSecond ( pSecond )
-		, m_sExprName ( szClassName )
+		, m_szExprName ( szClassName )
 	{}
 
-	~Expr_Binary_c()
+	virtual ~Expr_Binary_c()
 	{
 		SafeRelease ( m_pFirst );
 		SafeRelease ( m_pSecond );
@@ -757,7 +759,7 @@ struct Expr_Binary_c : public ISphExpr
 
 	virtual uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
 	{
-		EXPR_CLASS_NAME_NOCHECK(m_sExprName.cstr());
+		EXPR_CLASS_NAME_NOCHECK(m_szExprName);
 		CALC_CHILD_HASH(m_pFirst);
 		CALC_CHILD_HASH(m_pSecond);
 		return CALC_DEP_HASHES();
@@ -1866,7 +1868,7 @@ DECLARE_END()
 #define DECLARE_BINARY_TRAITS(_classname) \
 	struct _classname : public Expr_Binary_c \
 	{ \
-		explicit _classname ( ISphExpr * pFirst, ISphExpr * pSecond ) : Expr_Binary_c ( #_classname, pFirst, pSecond ) {}
+		_classname ( ISphExpr * pFirst, ISphExpr * pSecond ) : Expr_Binary_c ( #_classname, pFirst, pSecond ) {}
 
 #define DECLARE_BINARY_FLT(_classname,_expr) \
 		DECLARE_BINARY_TRAITS ( _classname ) \
@@ -1960,7 +1962,7 @@ struct ExprThreeway_c : public ISphExpr
 		, m_sExprName ( szClassName )
 	{}
 
-	~ExprThreeway_c()
+	virtual ~ExprThreeway_c()
 	{
 		SafeRelease ( m_pFirst );
 		SafeRelease ( m_pSecond );
@@ -4709,8 +4711,8 @@ public:
 
 	virtual uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
 	{
-		EXPR_CLASS_NAME("Expr_IntervalConst_c");
-		return CALC_PARENT_HASH();
+		EXPR_CLASS_NAME("Expr_IntervalConst_c");		
+		return Expr_ArgVsConstSet_c<T>::CalcHash ( szClassName, tSorterSchema, uHash, bDisable );		// can't do CALC_PARENT_HASH because of gcc and templates
 	}
 };
 
@@ -4752,7 +4754,7 @@ public:
 	{
 		EXPR_CLASS_NAME("Expr_Interval_c");
 		CALC_CHILD_HASHES(m_dTurnPoints);
-		return CALC_PARENT_HASH();
+		return Expr_ArgVsSet_c<T>::CalcHash ( szClassName, tSorterSchema, uHash, bDisable );		// can't do CALC_PARENT_HASH because of gcc and templates
 	}
 };
 
@@ -4780,7 +4782,7 @@ public:
 	virtual uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
 	{
 		EXPR_CLASS_NAME("Expr_In_c");
-		return CALC_PARENT_HASH();
+		return Expr_ArgVsConstSet_c<T>::CalcHash ( szClassName, tSorterSchema, uHash, bDisable );		// can't do CALC_PARENT_HASH because of gcc and templates
 	}
 };
 
@@ -5386,7 +5388,7 @@ public:
 	{
 		EXPR_CLASS_NAME("Expr_Bitdot_c");
 		CALC_CHILD_HASHES(m_dBitWeights);
-		return CALC_PARENT_HASH();
+		return Expr_ArgVsSet_c<T>::CalcHash ( szClassName, tSorterSchema, uHash, bDisable );		// can't do CALC_PARENT_HASH because of gcc and templates
 	}
 
 protected:

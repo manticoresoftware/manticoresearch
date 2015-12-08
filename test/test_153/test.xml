@@ -270,6 +270,25 @@ index dist_large5
 	local					= idx52
 	local					= idxfake
 }
+
+index idx55 : dist_no
+{
+	source			= src52
+	path			= <data_path/>/idx55
+	charset_table = 0..9
+}
+
+index dist_large6
+{
+	type					= distributed
+	local					= idx55
+	local					= idx1
+	local					= idx2
+	local					= idx51
+	local					= idx52
+	local					= idxfake
+}
+
 </config>
 
 
@@ -324,6 +343,7 @@ index dist_large5
 
 <!-- regression index list got folded at more than 4 items -->
 <query index="dist_large5" mode="extended2" expect_error="1">one /test me</query>
+<query index="dist_large6" mode="extended2" expect_error="1">one /test me</query>
 </queries>
 
 

@@ -946,6 +946,7 @@ static int CmpString ( const CSphString & a, const CSphString & b )
 struct SearchFailure_t
 {
 public:
+	CSphString	m_sParentIndex;
 	CSphString	m_sIndex;	///< searched index name
 	CSphString	m_sError;	///< search error message
 
@@ -955,12 +956,14 @@ public:
 public:
 	bool operator == ( const SearchFailure_t & r ) const
 	{
-		return m_sIndex==r.m_sIndex && m_sError==r.m_sError;
+		return m_sIndex==r.m_sIndex && m_sError==r.m_sError && m_sParentIndex==r.m_sParentIndex;
 	}
 
 	bool operator < ( const SearchFailure_t & r ) const
 	{
 		int iRes = CmpString ( m_sError.cstr(), r.m_sError.cstr() );
+		if ( !iRes )
+			iRes = CmpString ( m_sParentIndex.cstr (), r.m_sParentIndex.cstr () );
 		if ( !iRes )
 			iRes = CmpString ( m_sIndex.cstr(), r.m_sIndex.cstr() );
 		return iRes<0;
@@ -970,6 +973,7 @@ public:
 	{
 		if ( this!=&r )
 		{
+			m_sParentIndex = r.m_sParentIndex;
 			m_sIndex = r.m_sIndex;
 			m_sError = r.m_sError;
 		}
@@ -978,20 +982,23 @@ public:
 };
 
 
+static void ReportIndexesName ( int iSpanStart, int iSpandEnd, const CSphVector<SearchFailure_t> & dLog, CSphStringBuilder & sOut );
+
 class SearchFailuresLog_c
 {
 protected:
 	CSphVector<SearchFailure_t>		m_dLog;
 
 public:
-	void Submit ( const char * sIndex, const char * sError )
+	void Submit ( const char * sIndex, const char * sParentIndex , const char * sError )
 	{
 		SearchFailure_t & tEntry = m_dLog.Add ();
 		tEntry.m_sIndex = sIndex;
 		tEntry.m_sError = sError;
+		tEntry.m_sParentIndex = sParentIndex;
 	}
 
-	void SubmitEx ( const char * sIndex, const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 3, 4 ) ) )
+	void SubmitEx ( const char * sIndex, const char * sParentIndex, const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 3, 4 ) ) )
 	{
 		SearchFailure_t & tEntry = m_dLog.Add ();
 		va_list ap;
@@ -999,6 +1006,7 @@ public:
 		tEntry.m_sIndex = sIndex;
 		tEntry.m_sError.SetSprintfVa ( sTemplate, ap );
 		va_end ( ap );
+		tEntry.m_sParentIndex = sParentIndex;
 	}
 
 public:
@@ -1023,31 +1031,12 @@ public:
 				if ( m_dLog[i].m_sError==m_dLog[i-1].m_sError )
 					continue;
 
-			// build current span
-			CSphStringBuilder sSpan;
 			if ( iSpanStart )
-				sSpan += ";\n";
-			sSpan += "index ";
+				sReport += ";\n";
+			sReport += "index ";
 
-			// report only first up to 4 index names
-			int iEndReport = ( i-iSpanStart>4 ) ? iSpanStart+3 : i;
-
-			for ( int j=iSpanStart; j<iEndReport; j++ )
-			{
-				if ( j!=iSpanStart )
-					sSpan += ",";
-				sSpan += m_dLog[j].m_sIndex.cstr();
-			}
-
-			// add total index count
-			if ( iEndReport!=i )
-				sSpan.Appendf ( " and %d more", i - iEndReport );
-
-			sSpan += ": ";
-			sSpan += m_dLog[iSpanStart].m_sError.cstr();
-
-			// flush current span
-			sReport += sSpan.cstr();
+			ReportIndexesName ( iSpanStart, i, m_dLog, sReport );
+			sReport += m_dLog[iSpanStart].m_sError.cstr();
 
 			// done
 			iSpanStart = i;
@@ -2706,12 +2695,6 @@ void DistributedIndex_t::RemoveHACounters()
 static SmallStringHash_T < DistributedIndex_t >		g_hDistIndexes;
 
 /////////////////////////////////////////////////////////////////////////////
-
-
-
-
-
-/////////////////////////////////////////////////////////////////////////////
 // SEARCH HANDLER
 /////////////////////////////////////////////////////////////////////////////
 
@@ -4364,6 +4347,42 @@ static void LogSphinxqlError ( const char * sStmt, const char * sError, int iCid
 
 	sphSeek ( g_iQueryLogFile, 0, SEEK_END );
 	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.Length() );
+}
+
+
+void ReportIndexesName ( int iSpanStart, int iSpandEnd, const CSphVector<SearchFailure_t> & dLog, CSphStringBuilder & sOut )
+{
+	int iSpanLen = iSpandEnd - iSpanStart;
+
+	// report distributed index in case all failures are from their locals
+	if ( iSpanLen>1 && !dLog[iSpanStart].m_sParentIndex.IsEmpty () && dLog[iSpanStart].m_sParentIndex==dLog[iSpandEnd-1].m_sParentIndex )
+	{
+		g_tDistLock.Lock ();
+		const DistributedIndex_t * pDist = g_hDistIndexes ( dLog[iSpanStart].m_sParentIndex );
+		int iChildCount = pDist ? pDist->m_dLocal.GetLength () : 0;
+		g_tDistLock.Unlock ();
+
+		if ( iSpanLen==iChildCount )
+		{
+			sOut.Appendf ( "%s: ", dLog[iSpanStart].m_sParentIndex.cstr () );
+			return;
+		}
+	}
+
+	// report only first indexes up to 4
+	int iEndReport = ( iSpanLen>4 ) ? iSpanStart+3 : iSpandEnd;
+	for ( int j=iSpanStart; j<iEndReport; j++ )
+	{
+		if ( j!=iSpanStart )
+			sOut += ",";
+		sOut += dLog[j].m_sIndex.cstr ();
+	}
+
+	// add total index count
+	if ( iEndReport!=iSpandEnd )
+		sOut.Appendf ( " and %d more: ", iSpandEnd-iEndReport );
+	else
+		sOut += ": ";
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -6227,6 +6246,7 @@ struct ExprHook_t : public ISphExprHook
 struct LocalIndex_t
 {
 	CSphString	m_sName;
+	CSphString	m_sParentIndex;
 	int			m_iOrderTag;
 	int			m_iWeight;
 	int64_t		m_iMass;
@@ -6265,7 +6285,7 @@ public:
 
 protected:
 	void							RunSubset ( int iStart, int iEnd );	///< run queries against index(es) from first query in the subset
-	void							RunLocalSearches ( ISphMatchSorter * pLocalSorter, const char * sDistName, DWORD uFactorFlags );
+	void							RunLocalSearches ( ISphMatchSorter * pLocalSorter, DWORD uFactorFlags );
 	void							RunLocalSearchesMT ();
 	bool							RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters, CSphQueryResult ** pResults, bool * pMulti ) const;
 	bool							AllowsMulti ( int iStart, int iEnd ) const;
@@ -6414,7 +6434,7 @@ void SearchHandler_c::RunUpdates ( const CSphQuery & tQuery, const CSphString & 
 
 	int64_t tmLocal = -sphMicroTimer();
 
-	RunLocalSearches ( NULL, NULL, SPH_FACTOR_DISABLE );
+	RunLocalSearches ( NULL, SPH_FACTOR_DISABLE );
 	tmLocal += sphMicroTimer();
 
 	OnRunFinished();
@@ -6472,7 +6492,7 @@ void SearchHandler_c::RunDeletes ( const CSphQuery & tQuery, const CSphString & 
 
 	int64_t tmLocal = -sphMicroTimer();
 
-	RunLocalSearches ( NULL, NULL, SPH_FACTOR_DISABLE );
+	RunLocalSearches ( NULL, SPH_FACTOR_DISABLE );
 	tmLocal += sphMicroTimer();
 
 	OnRunFinished();
@@ -6628,7 +6648,7 @@ void LocalSearchThreadFunc ( void * pArg )
 
 static void MergeWordStats ( CSphQueryResultMeta & tDstResult,
 	const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hSrc,
-	SearchFailuresLog_c * pLog, const char * sIndex )
+	SearchFailuresLog_c * pLog, const char * sIndex, const char * sParentIndex )
 {
 	assert ( pLog );
 
@@ -6644,7 +6664,7 @@ static void MergeWordStats ( CSphQueryResultMeta & tDstResult,
 	tDiff.Set ( hSrc );
 	tDiff.DumpDiffer ( tDstResult.m_hWordStats, NULL, sDiff );
 	if ( !sDiff.IsEmpty() )
-		pLog->SubmitEx ( sIndex, "%s", sDiff.cstr() );
+		pLog->SubmitEx ( sIndex, sParentIndex, "%s", sDiff.cstr() );
 
 	hSrc.IterateStart();
 	while ( hSrc.IterateNext() )
@@ -6774,6 +6794,7 @@ void SearchHandler_c::RunLocalSearchesMT ()
 	{
 		bool bResult = dWorks[iLocal].m_bResult;
 		const char * sLocal = m_dLocal[iLocal].m_sName.cstr();
+		const char * sParentIndex = m_dLocal[iLocal].m_sParentIndex.cstr();
 		int iOrderTag = m_dLocal[iLocal].m_iOrderTag;
 
 		if ( !bResult )
@@ -6784,7 +6805,7 @@ void SearchHandler_c::RunLocalSearchesMT ()
 				int iResultIndex = iLocal*iQueries;
 				if ( !m_bMultiQueue )
 					iResultIndex += iQuery - m_iStart;
-				m_dFailuresSet[iQuery].Submit ( sLocal, dResults[iResultIndex].m_sError.cstr() );
+				m_dFailuresSet[iQuery].Submit ( sLocal, sParentIndex, dResults[iResultIndex].m_sError.cstr() );
 			}
 			continue;
 		}
@@ -6816,7 +6837,7 @@ void SearchHandler_c::RunLocalSearchesMT ()
 				// note that iSorterIndex just below is NOT a typo
 				// separate errors still go into separate result sets
 				// even though regular meta does not
-				m_dFailuresSet[iQuery].Submit ( sLocal, dResults[iSorterIndex].m_sError.cstr() );
+				m_dFailuresSet[iQuery].Submit ( sLocal, sParentIndex, dResults[iSorterIndex].m_sError.cstr() );
 				continue;
 			}
 
@@ -6835,7 +6856,7 @@ void SearchHandler_c::RunLocalSearchesMT ()
 			tRes.m_pMva = tRaw.m_pMva;
 			tRes.m_pStrings = tRaw.m_pStrings;
 			tRes.m_bArenaProhibit = tRaw.m_bArenaProhibit;
-			MergeWordStats ( tRes, tRaw.m_hWordStats, &m_dFailuresSet[iQuery], sLocal );
+			MergeWordStats ( tRes, tRaw.m_hWordStats, &m_dFailuresSet[iQuery], sLocal, sParentIndex );
 
 			// move external attributes storage from tRaw to actual result
 			tRaw.LeakStorages ( tRes );
@@ -6862,7 +6883,7 @@ void SearchHandler_c::RunLocalSearchesMT ()
 			tRes.m_tSchema = pSorter->GetSchema(); // can SwapOut
 
 			if ( !tRaw.m_sWarning.IsEmpty() )
-				m_dFailuresSet[iQuery].Submit ( sLocal, tRaw.m_sWarning.cstr() );
+				m_dFailuresSet[iQuery].Submit ( sLocal, sParentIndex, tRaw.m_sWarning.cstr() );
 		}
 	}
 
@@ -6991,7 +7012,7 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 }
 
 
-void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const char * sDistName, DWORD uFactorFlags )
+void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, DWORD uFactorFlags )
 {
 	if ( g_iDistThreads>1 && m_dLocal.GetLength()>1 )
 	{
@@ -7003,15 +7024,16 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 	ARRAY_FOREACH ( iLocal, m_dLocal )
 	{
 		const char * sLocal = m_dLocal[iLocal].m_sName.cstr();
+		const char * sParentIndex = m_dLocal[iLocal].m_sParentIndex.cstr();
 		int iOrderTag = m_dLocal[iLocal].m_iOrderTag;
 		int iIndexWeight = m_dLocal[iLocal].m_iWeight;
 
 		const ServedIndex_c * pServed = UseIndex ( iLocal );
 		if ( !pServed || !pServed->m_bEnabled )
 		{
-			if ( sDistName )
+			if ( sParentIndex )
 				for ( int i=m_iStart; i<=m_iEnd; i++ )
-					m_dFailuresSet[i].SubmitEx ( sDistName, "local index %s missing", sLocal );
+					m_dFailuresSet[i].SubmitEx ( sParentIndex, NULL, "local index %s missing", sLocal );
 
 			if ( pServed )
 				ReleaseIndex ( iLocal );
@@ -7054,7 +7076,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 				tQuery.m_bZSlist = tQueueSettings.m_bZonespanlist;
 				if ( !pSorter )
 				{
-					m_dFailuresSet[iQuery].Submit ( sLocal, sError.cstr() );
+					m_dFailuresSet[iQuery].Submit ( sLocal, sParentIndex, sError.cstr() );
 					continue;
 				}
 				if ( m_bMultiQueue )
@@ -7066,7 +7088,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 						m_bFacetQueue = false;
 				}
 				if ( !sError.IsEmpty() )
-					m_dFailuresSet[iQuery].Submit ( sLocal, sError.cstr() );
+					m_dFailuresSet[iQuery].Submit ( sLocal, sParentIndex, sError.cstr() );
 			}
 
 			dSorters[iQuery-m_iStart] = pSorter;
@@ -7173,7 +7195,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 		{
 			// failed, submit local (if not empty) or global error string
 			for ( int iQuery=m_iStart; iQuery<=m_iEnd; iQuery++ )
-				m_dFailuresSet[iQuery].Submit ( sLocal, tStats.m_sError.IsEmpty()
+				m_dFailuresSet[iQuery].Submit ( sLocal, sParentIndex, tStats.m_sError.IsEmpty()
 					? m_dResults [ m_bMultiQueue ? m_iStart : iQuery ].m_sError.cstr()
 					: tStats.m_sError.cstr() );
 		} else
@@ -7203,11 +7225,11 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, const c
 					tRes.m_pMva = tStats.m_pMva;
 					tRes.m_pStrings = tStats.m_pStrings;
 					tRes.m_bArenaProhibit = tStats.m_bArenaProhibit;
-					MergeWordStats ( tRes, tStats.m_hWordStats, &m_dFailuresSet[iQuery], sLocal );
+					MergeWordStats ( tRes, tStats.m_hWordStats, &m_dFailuresSet[iQuery], sLocal, sParentIndex );
 					tRes.m_iMultiplier = m_iEnd-m_iStart+1;
 				} else if ( tRes.m_iMultiplier==-1 )
 				{
-					m_dFailuresSet[iQuery].Submit ( sLocal, tRes.m_sError.cstr() );
+					m_dFailuresSet[iQuery].Submit ( sLocal, sParentIndex, tRes.m_sError.cstr() );
 					continue;
 				}
 
@@ -7615,6 +7637,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				ARRAY_FOREACH ( j, pDist->m_dLocal )
 				{
 					m_dLocal.Add().m_sName = pDist->m_dLocal[j];
+					m_dLocal.Last().m_sParentIndex = sIndex;
 					m_dLocal.Last().m_iOrderTag = iTagsCount;
 					if ( iWeight!=-1 )
 						m_dLocal.Last().m_iWeight = iWeight;
@@ -7797,7 +7820,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			m_pProfile->Switch ( SPH_QSTATE_LOCAL_SEARCH );
 
 		tmLocal = -sphMicroTimer();
-		RunLocalSearches ( pLocalSorter, dAgents.GetLength() ? tFirst.m_sIndexes.cstr() : NULL, uLocalPFFlags );
+		RunLocalSearches ( pLocalSorter, uLocalPFFlags );
 		tmLocal += sphMicroTimer();
 	}
 
@@ -7845,11 +7868,11 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 							// copy errors or warnings
 							if ( !tRemoteResult.m_sError.IsEmpty() )
-								m_dFailuresSet[iRes].SubmitEx ( tFirst.m_sIndexes.cstr(),
+								m_dFailuresSet[iRes].SubmitEx ( tFirst.m_sIndexes.cstr(), NULL,
 									"agent %s: remote query error: %s",
 									tAgent.GetMyUrl().cstr(), tRemoteResult.m_sError.cstr() );
 							if ( !tRemoteResult.m_sWarning.IsEmpty() )
-								m_dFailuresSet[iRes].SubmitEx ( tFirst.m_sIndexes.cstr(),
+								m_dFailuresSet[iRes].SubmitEx ( tFirst.m_sIndexes.cstr(), NULL,
 									"agent %s: remote query warning: %s",
 									tAgent.GetMyUrl().cstr(), tRemoteResult.m_sWarning.cstr() );
 
@@ -7890,7 +7913,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 							tRes.m_bHasPrediction |= ( m_dQueries[iRes].m_iMaxPredictedMsec>0 );
 
 							// merge this agent's words
-							MergeWordStats ( tRes, tRemoteResult.m_hWordStats, &m_dFailuresSet[iRes], tFirst.m_sIndexes.cstr() );
+							MergeWordStats ( tRes, tRemoteResult.m_hWordStats, &m_dFailuresSet[iRes], tFirst.m_sIndexes.cstr(), NULL );
 						}
 
 						// dismissed
@@ -7925,7 +7948,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 			if ( !tAgent.m_bSuccess && !tAgent.m_sFailure.IsEmpty() )
 				for ( int j=iStart; j<=iEnd; j++ )
-					m_dFailuresSet[j].SubmitEx ( tFirst.m_sIndexes.cstr(), tAgent.m_bBlackhole ? "blackhole %s: %s" : "agent %s: %s",
+					m_dFailuresSet[j].SubmitEx ( tFirst.m_sIndexes.cstr(), NULL, tAgent.m_bBlackhole ? "blackhole %s: %s" : "agent %s: %s",
 						tAgent.GetMyUrl().cstr(), tAgent.m_sFailure.cstr() );
 		}
 	}
@@ -10393,13 +10416,13 @@ void UpdateRequestBuilder_t::BuildRequest ( AgentConn_t & tAgent, NetOutputBuffe
 	}
 }
 
-static void DoCommandUpdate ( const char * sIndex, const CSphAttrUpdate & tUpd,
+static void DoCommandUpdate ( const char * sIndex, const char * sDistributed, const CSphAttrUpdate & tUpd,
 	int & iSuccesses, int & iUpdated,
 	SearchFailuresLog_c & dFails, const ServedIndex_c * pServed )
 {
 	if ( !pServed || !pServed->m_pIndex || !pServed->m_bEnabled )
 	{
-		dFails.Submit ( sIndex, "index not available" );
+		dFails.Submit ( sIndex, sDistributed, "index not available" );
 		return;
 	}
 
@@ -10408,14 +10431,14 @@ static void DoCommandUpdate ( const char * sIndex, const CSphAttrUpdate & tUpd,
 
 	if ( iUpd<0 )
 	{
-		dFails.Submit ( sIndex, sError.cstr() );
+		dFails.Submit ( sIndex, sDistributed, sError.cstr() );
 
 	} else
 	{
 		iUpdated += iUpd;
 		iSuccesses++;
 		if ( sWarning.Length() )
-			dFails.Submit ( sIndex, sWarning.cstr() );
+			dFails.Submit ( sIndex, sDistributed, sWarning.cstr() );
 	}
 }
 
@@ -10557,7 +10580,7 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 		const ServedIndex_c * pLocked = UpdateGetLockedIndex ( sReqIndex, bMvaUpdate );
 		if ( pLocked )
 		{
-			DoCommandUpdate ( sReqIndex, tUpd, iSuccesses, iUpdated, dFails, pLocked );
+			DoCommandUpdate ( sReqIndex, NULL, tUpd, iSuccesses, iUpdated, dFails, pLocked );
 			pLocked->Unlock();
 		} else
 		{
@@ -10568,7 +10591,7 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 			{
 				const char * sLocal = dLocal[i].cstr();
 				const ServedIndex_c * pServed = UpdateGetLockedIndex ( sLocal, bMvaUpdate );
-				DoCommandUpdate ( sLocal, tUpd, iSuccesses, iUpdated, dFails, pServed );
+				DoCommandUpdate ( sLocal, sReqIndex, tUpd, iSuccesses, iUpdated, dFails, pServed );
 				if ( pServed )
 					pServed->Unlock();
 			}
@@ -13061,7 +13084,8 @@ void SphinxqlRequestBuilder_t::BuildRequest ( AgentConn_t & tAgent, NetOutputBuf
 }
 
 //////////////////////////////////////////////////////////////////////////
-static void DoExtendedUpdate ( const char * sIndex, const SqlStmt_t & tStmt,
+
+static void DoExtendedUpdate ( const char * sIndex, const char * sDistributed, const SqlStmt_t & tStmt,
 							int & iSuccesses, int & iUpdated,
 							SearchFailuresLog_c & dFails, const ServedIndex_c * pServed, CSphString & sWarning, int iCID )
 {
@@ -13069,7 +13093,7 @@ static void DoExtendedUpdate ( const char * sIndex, const SqlStmt_t & tStmt,
 	{
 		if ( pServed )
 			pServed->Unlock();
-		dFails.Submit ( sIndex, "index not available" );
+		dFails.Submit ( sIndex, sDistributed, "index not available" );
 		return;
 	}
 
@@ -13086,7 +13110,7 @@ static void DoExtendedUpdate ( const char * sIndex, const SqlStmt_t & tStmt,
 
 	if ( sError.Length() )
 	{
-		dFails.Submit ( sIndex, sError.cstr() );
+		dFails.Submit ( sIndex, sDistributed, sError.cstr() );
 		return;
 	}
 
@@ -13166,7 +13190,7 @@ void HandleMysqlUpdate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 		const ServedIndex_c * pLocked = UpdateGetLockedIndex ( sReqIndex, bMvaUpdate );
 		if ( pLocked )
 		{
-			DoExtendedUpdate ( sReqIndex, tStmt, iSuccesses, iUpdated, dFails, pLocked, sWarning, iCID );
+			DoExtendedUpdate ( sReqIndex, NULL, tStmt, iSuccesses, iUpdated, dFails, pLocked, sWarning, iCID );
 		} else
 		{
 			assert ( dDistributed[iIdx].m_dLocal.GetLength() || dDistributed[iIdx].m_dAgents.GetLength() );
@@ -13176,7 +13200,7 @@ void HandleMysqlUpdate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 			{
 				const char * sLocal = dLocal[i].cstr();
 				const ServedIndex_c * pServed = UpdateGetLockedIndex ( sLocal, bMvaUpdate );
-				DoExtendedUpdate ( sLocal, tStmt, iSuccesses, iUpdated, dFails, pServed, sWarning, iCID );
+				DoExtendedUpdate ( sLocal, sReqIndex, tStmt, iSuccesses, iUpdated, dFails, pServed, sWarning, iCID );
 			}
 		}
 
@@ -13762,14 +13786,14 @@ void HandleMysqlMeta ( SqlRowBuffer_c & dRows, const SqlStmt_t & tStmt, const CS
 }
 
 
-static int LocalIndexDoDeleteDocuments ( const char * sName, const SqlStmt_t & tStmt, const SphDocID_t * pDocs, int iCount,
+static int LocalIndexDoDeleteDocuments ( const char * sName, const char * sDistributed, const SqlStmt_t & tStmt, const SphDocID_t * pDocs, int iCount,
 											const ServedIndex_c * pLocked, SearchFailuresLog_c & dErrors, bool bCommit, CSphSessionAccum & tAcc, int iCID )
 {
 	if ( !pLocked || !pLocked->m_pIndex )
 	{
 		if ( pLocked )
 			pLocked->Unlock();
-		dErrors.Submit ( sName, "index not available" );
+		dErrors.Submit ( sName, sDistributed, "index not available" );
 		return 0;
 	}
 
@@ -13778,7 +13802,7 @@ static int LocalIndexDoDeleteDocuments ( const char * sName, const SqlStmt_t & t
 	if ( !pLocked->m_bRT || !pLocked->m_bEnabled )
 	{
 		sError.SetSprintf ( "does not support DELETE (enabled=%d)", pLocked->m_bEnabled );
-		dErrors.Submit ( sName, sError.cstr() );
+		dErrors.Submit ( sName, sDistributed, sError.cstr() );
 		pLocked->Unlock();
 		return 0;
 	}
@@ -13786,7 +13810,7 @@ static int LocalIndexDoDeleteDocuments ( const char * sName, const SqlStmt_t & t
 	ISphRtAccum * pAccum = tAcc.GetAcc ( pIndex, sError );
 	if ( !sError.IsEmpty() )
 	{
-		dErrors.Submit ( sName, sError.cstr() );
+		dErrors.Submit ( sName, sDistributed, sError.cstr() );
 		pLocked->Unlock();
 		return 0;
 	}
@@ -13803,7 +13827,7 @@ static int LocalIndexDoDeleteDocuments ( const char * sName, const SqlStmt_t & t
 
 	if ( !pIndex->DeleteDocument ( pDocs, iCount, sError, pAccum ) )
 	{
-		dErrors.Submit ( sName, sError.cstr() );
+		dErrors.Submit ( sName, sDistributed, sError.cstr() );
 		if ( pHandler )
 			delete pHandler;
 		else
@@ -13901,7 +13925,7 @@ void HandleMysqlDelete ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 		const ServedIndex_c * pLocal = g_pLocalIndexes->GetRlockedEntry ( sName );
 		if ( pLocal )
 		{
-			iAffected += LocalIndexDoDeleteDocuments ( sName, tStmt, pDocs, iDocsCount, pLocal, dErrors, bCommit, tAcc, iCID );
+			iAffected += LocalIndexDoDeleteDocuments ( sName, NULL, tStmt, pDocs, iDocsCount, pLocal, dErrors, bCommit, tAcc, iCID );
 		} else
 		{
 			assert ( dDistributed[iIdx].m_dLocal.GetLength() || dDistributed[iIdx].m_dAgents.GetLength() );
@@ -13911,7 +13935,7 @@ void HandleMysqlDelete ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 			{
 				const char * sDistLocal = dDistLocal[i].cstr();
 				const ServedIndex_c * pDistLocal = g_pLocalIndexes->GetRlockedEntry ( sDistLocal );
-				iAffected += LocalIndexDoDeleteDocuments ( sDistLocal, tStmt, pDocs, iDocsCount, pDistLocal, dErrors, bCommit, tAcc, iCID );
+				iAffected += LocalIndexDoDeleteDocuments ( sDistLocal, sName, tStmt, pDocs, iDocsCount, pDistLocal, dErrors, bCommit, tAcc, iCID );
 			}
 		}
 
@@ -14881,14 +14905,14 @@ static void HandleMysqlAlter ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, b
 		{
 			if ( !pLocal->m_bEnabled )
 			{
-				dErrors.Submit ( sName, "does not support ALTER (enabled=false)" );
+				dErrors.Submit ( sName, NULL, "does not support ALTER (enabled=false)" );
 				pLocal->Unlock();
 				continue;
 			}
 
 			if ( pLocal->m_pIndex->GetSettings().m_eDocinfo==SPH_DOCINFO_INLINE )
 			{
-				dErrors.Submit ( sName, "docinfo is inline: ALTER disabled" );
+				dErrors.Submit ( sName, NULL, "docinfo is inline: ALTER disabled" );
 				pLocal->Unlock();
 				continue;
 			}
@@ -14901,7 +14925,7 @@ static void HandleMysqlAlter ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, b
 				RemoveAttrFromIndex ( tStmt, pLocal, sAddError );
 
 			if ( sAddError.Length() )
-				dErrors.Submit ( sName, sAddError.cstr() );
+				dErrors.Submit ( sName, NULL, sAddError.cstr() );
 
 			pLocal->Unlock();
 		}

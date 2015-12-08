@@ -998,7 +998,7 @@ public:
 		tEntry.m_sParentIndex = sParentIndex;
 	}
 
-	void SubmitEx ( const char * sIndex, const char * sParentIndex, const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 3, 4 ) ) )
+	void SubmitEx ( const char * sIndex, const char * sParentIndex, const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 4, 5 ) ) )
 	{
 		SearchFailure_t & tEntry = m_dLog.Add ();
 		va_list ap;

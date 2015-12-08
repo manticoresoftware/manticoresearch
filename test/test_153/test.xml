@@ -261,6 +261,15 @@ index dist_invalid
 	agent					=
 }
 
+index dist_large5
+{
+	type					= distributed
+	local					= idx1
+	local					= idx2
+	local					= idx51
+	local					= idx52
+	local					= idxfake
+}
 </config>
 
 
@@ -313,6 +322,8 @@ index dist_invalid
 <!-- regression legacy API select list crashes daemon -->
 <query select="*,*" index="dist_no"/>
 
+<!-- regression index list got folded at more than 4 items -->
+<query index="dist_large5" mode="extended2" expect_error="1">one /test me</query>
 </queries>
 
 

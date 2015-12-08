@@ -1028,12 +1028,21 @@ public:
 			if ( iSpanStart )
 				sSpan += ";\n";
 			sSpan += "index ";
-			for ( int j=iSpanStart; j<i; j++ )
+
+			// report only first up to 4 index names
+			int iEndReport = ( i-iSpanStart>4 ) ? iSpanStart+3 : i;
+
+			for ( int j=iSpanStart; j<iEndReport; j++ )
 			{
 				if ( j!=iSpanStart )
 					sSpan += ",";
 				sSpan += m_dLog[j].m_sIndex.cstr();
 			}
+
+			// add total index count
+			if ( iEndReport!=i )
+				sSpan.Appendf ( " and %d more", i - iEndReport );
+
 			sSpan += ": ";
 			sSpan += m_dLog[iSpanStart].m_sError.cstr();
 

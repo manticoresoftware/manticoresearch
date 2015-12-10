@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>expressions, hashes, query cache</name>
+
+<config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query			= select * from test_table
+	sql_attr_uint		= gid
+	sql_attr_uint 		= bits:5
+	sql_attr_bigint		= bint
+	sql_attr_float		= flt
+	sql_attr_multi		= uint tags from field
+	sql_attr_string		= str
+	sql_attr_json		= json_col
+}
+
+index test
+{
+	source				= test
+	path				= <data_path/>/test
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	gid INTEGER NOT NULL,
+	bits INTEGER NOT NULL,
+	bint INTEGER NOT NULL,
+	flt FLOAT NOT NULL,
+	tags VARCHAR(255) NOT NULL,
+	str VARCHAR(255) NOT NULL,
+	json_col VARCHAR(255) NOT NULL,
+	title VARCHAR(255) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_insert>INSERT INTO test_table VALUES
+( 1, 123, 123, 123, 1.1, '10,20,30', 'str1', '{"a":[1,2,3,4], "t":["t1", "t2", "t3"]}', 'title' ),
+( 2, 234, 234, 234, 2.2, '20,30,40', 'str2', '{"a":[2,3,4,5], "t":["t2", "t3", "t4"]}', 'title' ),
+( 3, 345, 345, 345, 3.3, '30,40,50', 'str3', '{"a":[3,4,5,1], "t":["t3", "t4", "t5"]}',	'title' ),
+( 4, 456, 456, 456, 4.4, '40,50,60', 'str4', '{"a":["4","5","6","2"], "t":["t4", "t5", "t6"]}','title' ),
+( 5, 567, 567, 567, 5.5, '50,60,70', 'str5', '["a","b"]', 'title' )
+</db_insert>
+
+<sphqueries>
+<sphinxql>set global qcache_max_bytes=10000</sphinxql>
+<sphinxql>set global qcache_thresh_msec=0</sphinxql>
+<sphinxql>set global qcache_ttl_sec=1</sphinxql>
+<sphinxql>set global @uservar=(1,2,3,4,5)</sphinxql>
+
+<sphinxql>select gid a, a+1 b from test where match('title') and b>0</sphinxql>				<!--Expr_GetInt_c-->
+<sphinxql>select flt a, a+1.0 b from test where match('title') and b>0.0</sphinxql>			<!--Expr_GetFloat_c-->
+<sphinxql>select bits a, a+1 b from test where match('title') and b>0</sphinxql>			<!--Expr_GetBits_c-->
+<sphinxql>select sint(gid) a, a+1 b from test where match('title') and b>0</sphinxql>		<!--Expr_GetSint_c-->
+
+<sphinxql>select tags a, IN(a,1,2,3) b from test where match('title') and b>0</sphinxql>	<!--Expr_MVAIn_c-->
+<sphinxql>select IN(str,'str1') as a from test where match('title') and a=1</sphinxql>		<!--Expr_StrIn_c-->
+
+<sphinxql>select json_col[str] a from test where match('title') and a=1</sphinxql>			<!--Expr_GetString_c/Expr_JsonField_c-->
+<sphinxql>select tags a from test where match('title') and any(a)>1</sphinxql>				<!--Expr_GetMva_c-->
+
+<sphinxql>select id a from test where match('title') and a>1</sphinxql>                     <!--Expr_GetId_c-->
+<sphinxql>select weight() a from test where match('title') and a>1</sphinxql>				<!--Expr_GetWeight_c-->
+
+<sphinxql>select 1.1 a from test where match('title') and a>1</sphinxql>					<!--Expr_GetConst_c-->
+<sphinxql>select 1 a from test where match('title') and a>1</sphinxql>						<!--Expr_GetIntConst_c-->
+<sphinxql>select 12345678901 a from test where match('title') and a>1</sphinxql>			<!--Expr_GetInt64Const_c-->
+<sphinxql>select json_col['test_str'] a from test where match('title') and a=1</sphinxql>	<!--Expr_GetStrConst_c-->
+
+<sphinxql>select zonespanlist() a from test where match('title') and a=''</sphinxql>		<!--Expr_GetZonespanlist_c-->
+
+<sphinxql>select rankfactors() a from test where match('title') and a='' OPTION ranker=export('100*bm25')</sphinxql>	<!--Expr_GetRankFactors_c-->
+<sphinxql>select packedfactors() a from test where match('title') and a=0 OPTION ranker=expr('100*bm25')</sphinxql>		<!--Expr_GetPackedFactors_c-->
+
+<!-- left out Expr_GetFactorsAttr_c (can't be used in filters) -->
+
+<sphinxql>select bm25f(1.1,1.2) a from test where match('title') and a>0.0</sphinxql>		<!-- Expr_BM25F_c -->
+<sphinxql>select gid a, in(a, 1,2,3,4,5,6,7,8) b from test where match('title') and b=0</sphinxql> <!-- Expr_In_c -->
+<sphinxql>select gid a, min(a,1) b from test where match('title') and b=1</sphinxql>		<!-- Expr_Arglist_c -->
+<sphinxql>select gid a, -a b, abs(b) c from test where match('title') and c>200</sphinxql>	<!-- Expr_Neg_c/Expr_Abs_c -->
+<sphinxql>select flt a, ceil(a) b, floor(b) c, sin(c) d, cos(d) e, exp(e) f from test where match('title') and f>0.0</sphinxql>	<!-- Expr_Ceil_c/Expr_Floor_c/Expr_Sin_c/Expr_Cos_cExpr_Exp_c -->
+<sphinxql>select flt a, ln(a) b, log2(b) c, log10(c) d, abs(d) e, sqrt(e) f from test where match('title') and f>0.0</sphinxql>	<!-- Expr_Ln_c/Expr_Log2_c/Expr_Log10_c/Expr_Sqrt_c -->
+<sphinxql>select gid a1, bint a2, not a1 b1, not a2 b2, sint(b1) c1, sint(b2) c2 from test where match('title') and c1>0 and c2>0</sphinxql>	<!-- Expr_NotInt_c/Expr_NotInt64_c/Expr_Sint_c -->
+<sphinxql>select gid a1, gid a2, a1+a2 c, a1-a2+11 d, c*d e, c/d f, c%d g, c&amp;d h, c|d i, a1 div a2 j, e+f+g+h+i+j k from test where match('title') and k>0</sphinxql> <!-- Expr_Add_c/Expr_Sub_c/Expr_Mul_c/Expr_BitAnd_c/Expr_BitOr_c/Expr_Mod_c/Expr_Div_c/Expr_Idiv_c -->
+<sphinxql>select gid a1, gid a2, a1&lt;a2 b1, a1&lt;=a2 b2, a1&gt;a2 b3, a1&gt;=a2 b4, a1&lt;&gt;a2 b5, min(b1,b2+b3+b4+b5) c from test where match('title') and c=0</sphinxql> <!-- Expr_LtInt_c/Expr_GtInt_c/Expr_LteInt_c/Expr_GteInt_c/Expr_EqInt_c/Expr_NeInt_c/Expr_Min_c -->
+<sphinxql>select bint a1, bint a2, a1&lt;a2 b1, a1&lt;=a2 b2, a1&gt;a2 b3, a1&gt;=a2 b4, a1&lt;&gt;a2 b5, max(b1,b2+b3+b4+b5) c from test where match('title') and c>0</sphinxql> <!-- Expr_LtInt64_c/Expr_GtInt64_c/Expr_LteInt64_c/Expr_GteInt64_c/Expr_EqInt64_c/Expr_NeInt64_c/Expr_Max_c -->
+<sphinxql>select flt a1, flt a2, a1&lt;a2 b1, a1&lt;=a2 b2, a1&gt;a2 b3, a1&gt;=a2 b4, a1&lt;&gt;a2 b5, pow(b1,b2+b3+b4+b5) c from test where match('title') and c>0</sphinxql> <!-- Expr_LtFloat_c/Expr_GtFloat_c/Expr_LteFloat_c/Expr_GteFloat_c/Expr_EqFloat_c/Expr_NeFloat_c/Expr_Pow_c -->
+<sphinxql>select gid a1, gid a2, a1 and a2 b1, a1 or a2 b2, b1+b2 c from test where match('title') and c>0</sphinxql> <!-- Expr_AndInt_c/Expr_OrInt_c -->
+<sphinxql>select bint a1, bint a2, a1 and a2 b1, a1 or a2 b2, b1+b2 c from test where match('title') and c>0</sphinxql> <!-- Expr_AndInt64_c/Expr_OrInt64_c -->
+<sphinxql>select flt a1, flt a2, atan2(a1,a2) b from test where match('title') and b=0</sphinxql> <!-- Expr_Atan2_c -->
+
+<sphinxql>select 1449690488 a, day(a) b, month(a) c, year(a) d, yearmonth(a) e, yearmonthday(a) f, b+c+d+e+f g from test where match('title') and g>0</sphinxql> <!-- Expr_Day_c/Expr_Month_c/Expr_Year_c/Expr_YearMonth_c/Expr_YearMonthDay_c -->
+<sphinxql>select 1449690488 a, hour(a) b, minute(a) c, second(a) d, b+c+d e from test where match('title') and e>0</sphinxql> <!-- Expr_Hour_c/Expr_Minute_c/Expr_Second_c -->
+
+<sphinxql>select flt a, flt-1.0 b1, flt+1.0 b2, if ( a>0, b1, b2 ) c from test where match('title') and c>0</sphinxql>					<!-- Expr_If_c -->
+<sphinxql>select flt a1, flt a2, flt a3, madd(a1,a2,a3) b, mul3(a1,a2,a3) c, b+c d from test where match('title') and d>0</sphinxql>	<!-- Expr_Madd_c/Expr_Mul3_c -->
+<sphinxql>select flt x, flt y, CONTAINS(POLY2D(1.0,1.0,2.0,2.0,3.0,3.0),x,y) a from test where match('title') and a>0</sphinxql>		<!-- Expr_ContainsConstvec_c -->
+<sphinxql>select flt x, flt y, CONTAINS(GEOPOLY2D(x+1.0,y+1.0,2.0,2.0,3.0,3.0),x,y) a from test where match('title') and a>0</sphinxql>	<!-- Expr_ContainsExprvec_c -->
+<sphinxql>select flt x, flt y, CONTAINS(POLY2D(str),x,y) a from test where match('title') and a>0</sphinxql>	<!-- Expr_ContainsStrattr_c -->
+
+<sphinxql>select flt a, flt+1.0 x, flt+2.0 y, INTERVAL(a,0.0,1.0,2.0) b, INTERVAL(a,x,y) c, b+c d from test where match('title') and d>0</sphinxql>	<!-- Expr_IntervalConst_c/Expr_Interval_c -->
+
+<sphinxql>select curtime() a, utc_time() b, utc_timestamp() c, timediff(curtime(),utc_timestamp()) d from test where match('title') and d=''</sphinxql>	<!-- Expr_Time_c/Expr_TimeDiff_c -->
+
+<sphinxql>select gid a, crc32(a) b, fibonacci(a) c, MIN_TOP_WEIGHT() d, MIN_TOP_SORTVAL() e, a+b+c+d+e f from test where match('title') and f=0</sphinxql>	<!-- Expr_Crc32_c/Expr_Fibonacci_c/Expr_MinTopWeight/Expr_MinTopSortval -->
+<sphinxql>select gid a, to_string(a) b, str='10' d from test where match('title') and d=0 and b=''</sphinxql>	<!-- Expr_ToString_c/Expr_StrEq_c -->
+
+<sphinxql>select gid a, in(a,@uservar) b, length(tags) c, bitdot(a,0.1,flt,0.3) d, b+c+d e from test where match('title') and e>0</sphinxql>	<!-- Expr_InUservar_c/Expr_MVALength_c/Expr_Bitdot_c -->
+
+<sphinxql>select to_string(rand())='' a, remap(id=1,gid, (1, 67), (999, 0)) b, a+b c from test where match('title') and c=1</sphinxql>		<!--  Expr_Rand()/Expr_Remap_c -->
+<sphinxql>select flt x, flt y, geodist(x,y,0.0,0.0) a, geodist(x,y,x+1.0,y+1.0) b, geodist(x-1.0,y-1.0,x+1.0,y+1.0) c, a+b+c d from test where match('title') and d>0</sphinxql>		<!-- Expr_Geodist_c/Expr_GeodistAttrConst_c/Expr_GeodistConst_c  -->
+<sphinxql>select tags a1, json_col a2, least(a1) a, greatest(a2.a) b from test where match('title') and a>0 and b=''</sphinxql> <!--Expr_MVAAggr_c/Expr_JsonFieldAggr_c/Expr_JsonFieldConv_c-->
+<sphinxql>select json_col j, all(x&gt;1 and x&lt;7 for x in j.a) a from test where match('title') and a=0</sphinxql> <!-- Expr_Iterator_c/Expr_ForIn_c -->
+<sphinxql>select json_col j, json_col.a jc, in(j.a,4,6) as a from test where match('title') and a=1 and jc=''</sphinxql> <!-- Expr_JsonFieldIn_c/Expr_JsonFastKey_c -->
+
+<sphinxql>select json_col j, length(j.a) a, j.a is null b, j.t is not null c, a+b+c d from test where match('title') and d>0</sphinxql> <!-- Expr_JsonFieldLength_c/Expr_JsonFieldIsNull_c -->
+<sphinxql>select now()=0 a from test where match('title') and a=0</sphinxql> <!-- Expr_Now_c -->
+
+<!-- fixme: NOT TESTED 
+Expr_Udf_c
+Expr_UdfInt_c
+Expr_UdfFloat_c
+Expr_UdfStringptr_c
+-->
+</sphqueries>
+
+</test>

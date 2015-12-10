@@ -45,6 +45,8 @@ UservarIntSet_c * ( *g_pUservarsHook )( const CSphString & sUservar );
 			const char * szFuncName = __FUNCTION__; \
 			const char * szClassNameEnd = strstr ( szFuncName, "::" ); \
 			assert ( szClassNameEnd ); \
+			const char * szTemplateNameEnd = strstr ( szFuncName, "<" ); \
+			if ( szTemplateNameEnd ) szClassNameEnd = szTemplateNameEnd; \
 			size_t iLen = szClassNameEnd-szFuncName; \
 			assert ( strlen(name)==iLen && "Wrong expression name specified in ::GetHash" ); \
 			assert ( !strncmp(name, szFuncName, iLen) && "Wrong expression name specified in ::GetHash" ); \
@@ -694,11 +696,10 @@ struct Expr_Arglist_c : public ISphExpr
 			m_dArgs[i]->Command ( eCmd, pArg );
 	}
 
-	virtual uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
+	virtual uint64_t GetHash ( const ISphSchema &, uint64_t, bool & )
 	{
-		EXPR_CLASS_NAME("Expr_Arglist_c");
-		CALC_CHILD_HASHES(m_dArgs);
-		return CALC_DEP_HASHES();
+		assert ( 0 && "internal error: GetHash() must not be explicitly called on arglist" );
+		return 0;
 	}
 };
 
@@ -1020,6 +1021,7 @@ public:
 	{
 		EXPR_CLASS_NAME("Expr_JsonField_c");
 		CALC_POD_HASHES(m_dRetTypes);
+		CALC_CHILD_HASHES(m_dArgs);
 		return CALC_DEP_HASHES();
 	}
 };
@@ -1324,6 +1326,28 @@ public:
 		EXPR_CLASS_NAME("Expr_JsonFieldLength_c");
 		return CALC_PARENT_HASH();
 	}
+};
+
+
+struct Expr_Now_c : public ISphExpr
+{
+	Expr_Now_c ( int iNow )
+		: m_iNow ( iNow )
+	{}
+
+	virtual int		IntEval ( const CSphMatch & tMatch ) const { return m_iNow; }
+	virtual float	Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t)IntEval ( tMatch ); }
+
+	virtual uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
+	{
+		EXPR_CLASS_NAME("Expr_Now_c");
+		CALC_POD_HASH(m_iNow);
+		return CALC_DEP_HASHES();
+	}
+
+private:
+	int m_iNow;
 };
 
 
@@ -3206,13 +3230,6 @@ void ExprParser_t::ConstantFoldPass ( int iNode )
 		}
 		return;
 	}
-
-	// constant function (such as NOW())
-	if ( pRoot->m_iToken==TOK_FUNC && pRoot->m_iFunc==FUNC_NOW )
-	{
-		pRoot->m_iToken = TOK_CONST_INT;
-		pRoot->m_iConst = m_iConstNow;
-	}
 }
 
 void ExprParser_t::VariousOptimizationsPass ( int iNode )
@@ -4261,6 +4278,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 	{
 		switch ( tNode.m_iFunc )
 		{
+		case FUNC_NOW:
 		case FUNC_IN:
 		case FUNC_EXIST:
 		case FUNC_GEODIST:
@@ -4391,7 +4409,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 
 				switch ( eFunc )
 				{
-					case FUNC_NOW:		assert ( 0 ); break; // prevent gcc bitching
+					case FUNC_NOW:		return new Expr_Now_c(m_iConstNow); break;
 
 					case FUNC_ABS:		return new Expr_Abs_c ( dArgs[0] );
 					case FUNC_CEIL:		return new Expr_Ceil_c ( dArgs[0] );

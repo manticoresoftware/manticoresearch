@@ -1335,7 +1335,7 @@ struct Expr_Now_c : public ISphExpr
 		: m_iNow ( iNow )
 	{}
 
-	virtual int		IntEval ( const CSphMatch & tMatch ) const { return m_iNow; }
+	virtual int		IntEval ( const CSphMatch & ) const { return m_iNow; }
 	virtual float	Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t)IntEval ( tMatch ); }
 

@@ -97,7 +97,7 @@ CREATE TABLE test_table
 <sphinxql>select flt a, ceil(a) b, floor(b) c, sin(c) d, cos(d) e, exp(e) f from test where match('title') and f>0.0</sphinxql>	<!-- Expr_Ceil_c/Expr_Floor_c/Expr_Sin_c/Expr_Cos_cExpr_Exp_c -->
 <sphinxql>select flt a, ln(a) b, log2(b) c, log10(c) d, abs(d) e, sqrt(e) f from test where match('title') and f>0.0</sphinxql>	<!-- Expr_Ln_c/Expr_Log2_c/Expr_Log10_c/Expr_Sqrt_c -->
 <sphinxql>select gid a1, bint a2, not a1 b1, not a2 b2, sint(b1) c1, sint(b2) c2 from test where match('title') and c1>0 and c2>0</sphinxql>	<!-- Expr_NotInt_c/Expr_NotInt64_c/Expr_Sint_c -->
-<sphinxql>select gid a1, gid a2, a1+a2 c, a1-a2+11 d, c*d e, c/d f, c%d g, c&amp;d h, c|d i, a1 div a2 j, e+f+g+h+i+j k from test where match('title') and k>0</sphinxql> <!-- Expr_Add_c/Expr_Sub_c/Expr_Mul_c/Expr_BitAnd_c/Expr_BitOr_c/Expr_Mod_c/Expr_Div_c/Expr_Idiv_c -->
+<sphinxql>select gid a1, gid a2, a1+a2 c, a1-a2+11 d, c*d e, c/d f, c%d g, c&amp;d h, c|d i, a1 div a2 j, ceil(e+f+g+h+i+j) k from test where match('title') and k>0</sphinxql> <!-- Expr_Add_c/Expr_Sub_c/Expr_Mul_c/Expr_BitAnd_c/Expr_BitOr_c/Expr_Mod_c/Expr_Div_c/Expr_Idiv_c -->
 <sphinxql>select gid a1, gid a2, a1&lt;a2 b1, a1&lt;=a2 b2, a1&gt;a2 b3, a1&gt;=a2 b4, a1&lt;&gt;a2 b5, min(b1,b2+b3+b4+b5) c from test where match('title') and c=0</sphinxql> <!-- Expr_LtInt_c/Expr_GtInt_c/Expr_LteInt_c/Expr_GteInt_c/Expr_EqInt_c/Expr_NeInt_c/Expr_Min_c -->
 <sphinxql>select bint a1, bint a2, a1&lt;a2 b1, a1&lt;=a2 b2, a1&gt;a2 b3, a1&gt;=a2 b4, a1&lt;&gt;a2 b5, max(b1,b2+b3+b4+b5) c from test where match('title') and c>0</sphinxql> <!-- Expr_LtInt64_c/Expr_GtInt64_c/Expr_LteInt64_c/Expr_GteInt64_c/Expr_EqInt64_c/Expr_NeInt64_c/Expr_Max_c -->
 <sphinxql>select flt a1, flt a2, a1&lt;a2 b1, a1&lt;=a2 b2, a1&gt;a2 b3, a1&gt;=a2 b4, a1&lt;&gt;a2 b5, pow(b1,b2+b3+b4+b5) c from test where match('title') and c>0</sphinxql> <!-- Expr_LtFloat_c/Expr_GtFloat_c/Expr_LteFloat_c/Expr_GteFloat_c/Expr_EqFloat_c/Expr_NeFloat_c/Expr_Pow_c -->
@@ -106,7 +106,7 @@ CREATE TABLE test_table
 <sphinxql>select flt a1, flt a2, atan2(a1,a2) b from test where match('title') and b=0</sphinxql> <!-- Expr_Atan2_c -->
 
 <sphinxql>select 1449690488 a, day(a) b, month(a) c, year(a) d, yearmonth(a) e, yearmonthday(a) f, b+c+d+e+f g from test where match('title') and g>0</sphinxql> <!-- Expr_Day_c/Expr_Month_c/Expr_Year_c/Expr_YearMonth_c/Expr_YearMonthDay_c -->
-<sphinxql>select 1449690488 a, hour(a) b, minute(a) c, second(a) d, b+c+d e from test where match('title') and e>0</sphinxql> <!-- Expr_Hour_c/Expr_Minute_c/Expr_Second_c -->
+<sphinxql>select 1449690488 a, hour(a)=0 b, minute(a) c, second(a) d, b+c+d e from test where match('title') and e>0</sphinxql> <!-- Expr_Hour_c/Expr_Minute_c/Expr_Second_c -->
 
 <sphinxql>select flt a, flt-1.0 b1, flt+1.0 b2, if ( a>0, b1, b2 ) c from test where match('title') and c>0</sphinxql>					<!-- Expr_If_c -->
 <sphinxql>select flt a1, flt a2, flt a3, madd(a1,a2,a3) b, mul3(a1,a2,a3) c, b+c d from test where match('title') and d>0</sphinxql>	<!-- Expr_Madd_c/Expr_Mul3_c -->

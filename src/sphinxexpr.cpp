@@ -74,7 +74,7 @@ UservarIntSet_c * ( *g_pUservarsHook )( const CSphString & sUservar );
 #define CALC_PARENT_HASH_EX(hash) CalcHash ( szClassName, tSorterSchema, uHash^hash, bDisable );
 
 #define CALC_POD_HASH(value) uHash = sphFNV64 ( &value, sizeof(value), uHash );
-#define CALC_POD_HASHES(values) ARRAY_FOREACH ( i, values ) uHash = sphFNV64 ( values.Begin(), values.GetLength()*sizeof(values[0]), uHash );
+#define CALC_POD_HASHES(values) uHash = sphFNV64 ( values.Begin(), values.GetLength()*sizeof(values[0]), uHash );
 #define CALC_STR_HASH(str,len) uHash = sphFNV64 ( str.cstr(), len, uHash );
 #define CALC_CHILD_HASH(child) if (child) uHash = child->GetHash ( tSorterSchema, uHash, bDisable );
 #define CALC_CHILD_HASHES(children) ARRAY_FOREACH ( i, children ) if (children[i]) uHash = children[i]->GetHash ( tSorterSchema, uHash, bDisable );

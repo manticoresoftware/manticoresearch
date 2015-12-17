@@ -1385,8 +1385,10 @@ struct Expr_Time_c : public ISphExpr
 			sVal.SetSprintf ( "%04d-%02d-%02d %02d:%02d:%02d", s.tm_year+1900, s.tm_mon+1, s.tm_mday, s.tm_hour, s.tm_min, s.tm_sec );
 		else
 			sVal.SetSprintf ( "%02d:%02d:%02d", s.tm_hour, s.tm_min, s.tm_sec );
+
+		int iLength = sVal.Length();
 		*ppStr = (const BYTE*) sVal.Leak();
-		return sVal.Length();
+		return iLength;
 	}
 
 	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }
@@ -1431,8 +1433,9 @@ struct Expr_TimeDiff_c : public ISphExpr
 		CSphString sVal;
 		int t = iVal<0 ? -iVal : iVal;
 		sVal.SetSprintf ( "%s%02d:%02d:%02d", iVal<0 ? "-" : "", t/60/60, (t/60)%60, t%60 );
+		int iLength = sVal.Length();
 		*ppStr = (const BYTE*) sVal.Leak();
-		return sVal.Length();
+		return iLength;
 	}
 
 	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }

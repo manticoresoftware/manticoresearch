@@ -116,7 +116,7 @@ CREATE TABLE test_table
 
 <sphinxql>select flt a, flt+1.0 x, flt+2.0 y, INTERVAL(a,0.0,1.0,2.0) b, INTERVAL(a,x,y) c, b+c d from test where match('title') and d>0</sphinxql>	<!-- Expr_IntervalConst_c/Expr_Interval_c -->
 
-<sphinxql>select curtime() a, utc_time() b, utc_timestamp() c, timediff(curtime(),utc_timestamp()) d from test where match('title') and d!=''</sphinxql>	<!-- Expr_Time_c/Expr_TimeDiff_c -->
+<sphinxql>select length(curtime()) a,length(utc_time()) b, length(utc_timestamp()) c, length(timediff(curtime(),utc_timestamp())) d, a+b+c+d e from test where match('title') and e>0</sphinxql>	<!-- Expr_Time_c/Expr_TimeDiff_c -->
 
 <sphinxql>select gid a, crc32(a) b, fibonacci(a) c, MIN_TOP_WEIGHT() d, MIN_TOP_SORTVAL() e, a+b+c+d+e f from test where match('title') and f=0</sphinxql>	<!-- Expr_Crc32_c/Expr_Fibonacci_c/Expr_MinTopWeight/Expr_MinTopSortval -->
 <sphinxql>select gid a, to_string(a) b, str='10' d from test where match('title') and d=0 and b=''</sphinxql>	<!-- Expr_ToString_c/Expr_StrEq_c -->

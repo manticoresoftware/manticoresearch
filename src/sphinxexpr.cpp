@@ -334,6 +334,39 @@ struct Expr_GetStrConst_c : public ISphStringExpr
 };
 
 
+class Expr_StrLength_c : public ISphExpr
+{
+public:
+	Expr_StrLength_c ( ISphExpr * pArg )
+		: m_pArg ( pArg )
+	{}
+
+	virtual int IntEval ( const CSphMatch & tMatch ) const
+	{
+		const BYTE * pStr;		
+		return m_pArg->StringEval ( tMatch, &pStr );
+	}
+
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
+	{
+		m_pArg->Command ( eCmd, pArg );
+	}
+
+	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }
+
+	virtual uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
+	{
+		EXPR_CLASS_NAME("Expr_StrLength_c");
+		CALC_CHILD_HASH(m_pArg);
+		return CALC_DEP_HASHES();
+	}
+
+protected:
+	ISphExpr * m_pArg;
+};
+
+
+
 struct Expr_GetZonespanlist_c : public ISphStringExpr
 {
 	const CSphVector<int> * m_pData;
@@ -1395,12 +1428,10 @@ struct Expr_Time_c : public ISphExpr
 	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t)IntEval ( tMatch ); }
 	virtual bool IsStringPtr () const { return true; }
 
-	virtual uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
+	virtual uint64_t GetHash ( const ISphSchema &, uint64_t, bool & bDisable )
 	{
-		EXPR_CLASS_NAME("Expr_Time_c");
-		CALC_POD_HASH(m_bUTC);
-		CALC_POD_HASH(m_bDate);
-		return CALC_DEP_HASHES();
+		bDisable = true;
+		return 0;
 	}
 };
 
@@ -5861,6 +5892,8 @@ ISphExpr * ExprParser_t::CreateLengthNode ( const ExprNode_t & tNode, ISphExpr *
 	const ExprNode_t & tLeft = m_dNodes [ tNode.m_iLeft ];
 	switch ( tLeft.m_iToken )
 	{
+		case TOK_FUNC:
+			return new Expr_StrLength_c ( pLeft );
 		case TOK_ATTR_MVA32:
 		case TOK_ATTR_MVA64:
 			return new Expr_MVALength_c ( tLeft.m_tLocator, tLeft.m_iLocator, tLeft.m_iToken==TOK_ATTR_MVA64 );

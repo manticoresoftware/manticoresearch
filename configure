@@ -4963,7 +4963,7 @@ fi
 done
 
 
-for ac_header in fcntl.h limits.h netdb.h netinet/in.h stdlib.h string.h sys/file.h sys/socket.h sys/time.h unistd.h pthread.h execinfo.h sys/epoll.h
+for ac_header in fcntl.h limits.h netdb.h netinet/in.h stdlib.h string.h sys/file.h sys/socket.h sys/time.h unistd.h pthread.h execinfo.h sys/epoll.h sys/eventfd.h
 do :
   as_ac_Header=`$as_echo "ac_cv_header_$ac_header" | $as_tr_sh`
 ac_fn_c_check_header_mongrel "$LINENO" "$ac_header" "$as_ac_Header" "$ac_includes_default"
@@ -6116,6 +6116,32 @@ $as_echo "#define HAVE_EPOLL 1" >>confdefs.h
 	case " $LIBOBJS " in
   *" epoll.$ac_objext "* ) ;;
   *) LIBOBJS="$LIBOBJS epoll.$ac_objext"
+ ;;
+esac
+
+fi
+
+if test "z$ac_cv_func_eventfd" != "zno" && test "z$ac_cv_func_eventfd" != "zyes" ; then
+	for ac_func in eventfd
+do :
+  ac_fn_c_check_func "$LINENO" "eventfd" "ac_cv_func_eventfd"
+if test "x$ac_cv_func_eventfd" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_EVENTFD 1
+_ACEOF
+ ac_cv_func_eventfd=yes
+fi
+done
+
+fi
+
+if test "x$ac_cv_func_eventfd" = "xyes" && test "x$ac_cv_header_sys_eventfd_h" = "xyes" ; then
+
+$as_echo "#define HAVE_EVENTFD 1" >>confdefs.h
+
+	case " $LIBOBJS " in
+  *" eventfd.$ac_objext "* ) ;;
+  *) LIBOBJS="$LIBOBJS eventfd.$ac_objext"
  ;;
 esac
 

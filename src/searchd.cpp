@@ -87,6 +87,11 @@ extern "C"
 	#endif
 
 	#define sphSeek		lseek
+
+#if HAVE_EVENTFD
+	#include <sys/eventfd.h>
+#endif
+
 #endif
 
 #if USE_SYSLOG
@@ -161,6 +166,7 @@ static int				g_iShutdownTimeout	= 3000000; // default timeout on daemon shutdow
 static int				g_iBacklog			= SEARCHD_BACKLOG;
 static int				g_iThdPoolCount		= 2;
 static int				g_iThdQueueMax		= 0;
+static int				g_tmWait = 1;
 
 struct Listener_t
 {
@@ -14245,6 +14251,9 @@ void HandleMysqlSet ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, SessionVars_t & 
 			memcpy ( g_sLogFilter, tStmt.m_sSetValue.cstr(), iLen );
 			g_sLogFilter[iLen] = '\0';
 			g_iLogFilterLen = iLen;
+		} else if ( tStmt.m_sSetName=="net_wait" )
+		{
+			g_tmWait = (int)tStmt.m_iSetValue;
 		} else
 		{
 			sError.SetSprintf ( "Unknown system variable '%s'", tStmt.m_sSetName.cstr() );
@@ -18455,7 +18464,14 @@ void TickHead ()
 	if ( g_pThdPool )
 	{
 		sphInfo ( NULL ); // flush dupes
-		sphSleepMsec ( 500 );
+#if USE_WINDOWS
+		// at windows there is no signals that interrupt sleep
+		// need to sleep less to make main loop more responsible
+		int tmSleep = 100;
+#else
+		int tmSleep = 500;
+#endif
+		sphSleepMsec ( tmSleep );
 		return;
 	}
 
@@ -18640,6 +18656,7 @@ struct NetSendData_t : public ISphNetAction
 {
 	CSphScopedPtr<NetStateCommon_t>		m_tState;
 	ProtocolType_e						m_eProto;
+	bool								m_bContinue;
 
 	NetSendData_t ( NetStateCommon_t * pState, ProtocolType_e eProto );
 	virtual ~NetSendData_t () {}
@@ -18647,6 +18664,8 @@ struct NetSendData_t : public ISphNetAction
 	virtual NetEvent_e		Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop );
 	virtual NetEvent_e		Setup ( int64_t tmNow );
 	virtual void			CloseSocket ();
+
+	void SetContinue () { m_bContinue = true; }
 };
 
 struct HttpHeaderStreamParser_t
@@ -19022,6 +19041,203 @@ public:
 	EventsIterator_t & IterateGet () { return m_tIter; }
 };
 
+
+// event that wakes-up poll net loop from finished thread pool job
+class CSphWakeupEvent : public ISphNetAction
+{
+public:
+	CSphWakeupEvent ( int iRead, int iWrite )
+		: ISphNetAction ( iRead )
+		, m_iReadFD ( iRead )
+		, m_iWriteFD ( iWrite )
+	{
+	}
+
+	virtual ~CSphWakeupEvent ()
+	{
+		CloseSocket();
+	}
+
+	void Wakeup ()
+	{
+		if ( m_iWriteFD==-1 )
+			return;
+
+		for ( ;; )
+		{
+			uint64_t uVal = 1;
+#if HAVE_EVENTFD
+			int iPut = ::write ( m_iWriteFD, &uVal, sizeof ( uVal ) );
+#else
+			int iPut = sphSockSend ( m_iWriteFD, (const char * )&uVal, sizeof ( uVal ) );
+#endif
+
+			if ( iPut==sizeof(uVal) )
+				break;
+
+			int iErrno = sphSockGetErrno();
+			if ( iErrno==EAGAIN || iErrno==EWOULDBLOCK )
+				continue;
+
+			sphLogDebugv ( "failed to wakeup net thread ( error %d,'%s')", iErrno, strerror(iErrno) );
+			break;
+		}
+	}
+
+	virtual NetEvent_e Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> &, CSphNetLoop * )
+	{
+		if ( ( uGotEvents & NE_IN ) )
+		{
+			assert ( m_iReadFD!=-1 );
+			uint64_t uVal = 0;
+#if HAVE_EVENTFD
+			::read ( m_iReadFD, &uVal, sizeof ( uVal ) );
+#else
+			// socket-pair case might stack up some values and these should be read
+			for ( ;; )
+			{
+				int iRead = sphSockRecv ( m_iReadFD, (char *)&uVal, sizeof ( uVal ) );
+				if ( iRead<=0 )
+					break;
+			}
+#endif
+		}
+		return NE_KEEP;
+	}
+
+	virtual NetEvent_e Setup ( int64_t )
+	{
+		return NE_IN;
+	}
+
+	virtual void CloseSocket ()
+	{
+#if HAVE_EVENTFD
+		SafeClose ( m_iReadFD );
+#else
+		sphSockClose ( m_iReadFD );
+		sphSockClose ( m_iWriteFD );
+#endif
+		m_iReadFD = -1;
+		m_iWriteFD = -1;
+		*const_cast<int *>( &m_iSock ) = -1;
+	}
+private:
+	int m_iReadFD;
+	int m_iWriteFD;
+};
+
+
+bool sphCreateSocketPair ( int & iSock1, int & iSock2, CSphString & sError )
+{
+#if USE_WINDOWS
+	union {
+		struct sockaddr_in inaddr;
+		struct sockaddr addr;
+	} tAddr;
+
+	int iListen = socket ( AF_INET, SOCK_STREAM, IPPROTO_TCP );
+	if ( iListen<0 )
+	{
+		sError.SetSprintf ( "failed to create listen socket: %s", sphSockError() );
+		return false;
+	}
+
+	memset ( &tAddr, 0, sizeof ( tAddr ) );
+	tAddr.inaddr.sin_family = AF_INET;
+	tAddr.inaddr.sin_addr.s_addr = htonl ( INADDR_LOOPBACK );
+	tAddr.inaddr.sin_port = 0;
+
+	if ( bind ( iListen, &tAddr.addr, sizeof ( tAddr.inaddr ) )<0 )
+	{
+		sError.SetSprintf ( "failed to bind listen socket: %s", sphSockError() );
+		sphSockClose ( iListen );
+		return false;
+	}
+
+	int iAddrBufLen = sizeof ( tAddr );
+	memset ( &tAddr, 0, sizeof ( tAddr ) );
+	if ( getsockname ( iListen, &tAddr.addr, &iAddrBufLen )<0 )
+	{
+		sError.SetSprintf ( "failed to get socket description: %s", sphSockError() );
+		sphSockClose ( iListen );
+		return false;
+	}
+
+	tAddr.inaddr.sin_addr.s_addr = htonl ( INADDR_LOOPBACK );
+	tAddr.inaddr.sin_family = AF_INET;
+
+	if ( listen ( iListen, g_iBacklog )<0 )
+	{
+		sError.SetSprintf ( "failed to listen socket: %s", sphSockError() );
+		sphSockClose ( iListen );
+		return false;
+	}
+
+	int iWrite = socket ( AF_INET, SOCK_STREAM, 0 );
+	if ( iWrite<0 )
+	{
+		sError.SetSprintf ( "failed to create write socket: %s", sphSockError() );
+		sphSockClose ( iListen );
+		return false;
+	}
+
+	if ( connect ( iWrite, &tAddr.addr, sizeof(tAddr.addr) )<0 )
+	{
+		sError.SetSprintf ( "failed to connect to loopback: %s\n", sphSockError() );
+		sphSockClose ( iListen );
+		sphSockClose ( iWrite );
+		return false;
+	}
+
+	int iRead = accept ( iListen, NULL, NULL );
+	if ( iRead<0 )
+	{
+		sError.SetSprintf ( "failed to accept loopback: %s\n", sphSockError() );
+		sphSockClose ( iListen );
+		sphSockClose ( iWrite );
+	}
+
+	sphSockClose ( iListen ); // no need anymore
+
+	iSock1 = iRead;
+	iSock2 = iWrite;
+
+#else
+	int dSockets[2] = {-1, -1};
+	if ( socketpair ( AF_LOCAL, SOCK_STREAM, 0, dSockets )!=0 )
+	{
+		sphWarning ( "failed to create socketpair: %s", sphSockError() );
+		return false;
+	}
+
+	iSock1 = dSockets[0];
+	iSock2 = dSockets[1];
+
+#endif
+
+	if ( sphSetSockNB ( iSock1 )<0 || sphSetSockNB ( iSock2 )<0 )
+	{
+		sError.SetSprintf ( "failed to set socket non-block: %s", sphSockError() );
+		sphSockClose ( iSock1 );
+		sphSockClose ( iSock2 );
+		iSock1 = iSock2 = -1;
+		return false;
+	}
+
+#ifdef TCP_NODELAY
+	int iOn = 1;
+	if ( setsockopt ( iSock1, IPPROTO_TCP, TCP_NODELAY, (char*)&iOn, sizeof(iOn) )<0 )
+		sphWarning ( "failed to set nodelay option: %s", sphSockError() );
+	iOn = 1;
+	if ( setsockopt ( iSock2, IPPROTO_TCP, TCP_NODELAY, (char*)&iOn, sizeof ( iOn ) )<0 )
+		sphWarning ( "failed to set nodelay option: %s", sphSockError() );
+#endif
+
+	return true;
+}
+
+
 static bool g_bVtune = false;
 static int64_t g_tmStarted = 0;
 
@@ -19185,7 +19401,6 @@ struct ThdJobCleanup_t : public ISphJob
 	void				Clear();
 };
 
-static int	g_tmWait = 1;
 static int	g_iNetWorkers = 1;
 static int	g_iThrottleAction = 0;
 static int	g_iThrottleAccept = 0;
@@ -19195,6 +19410,7 @@ class CSphNetLoop
 private:
 	CSphVector<ISphNetAction *>		m_dWorkExternal;
 	volatile bool					m_bGotExternal;
+	CSphWakeupEvent *				m_pWakeupExternal; // FIXME!!! owned\deleted by event loop
 	CSphMutex						m_tExtLock;
 	LoopProfiler_t					m_tPrf;
 #if HAVE_EPOLL
@@ -19214,6 +19430,24 @@ private:
 			m_tEvents.SetupEvent ( pCur, tmNow );
 		}
 
+		int iRead = -1;
+		int iWrite = -1;
+#if HAVE_EVENTFD
+		int iFD = eventfd ( 0, EFD_NONBLOCK );
+		iRead = iWrite = iFD;
+#else
+		CSphString sError;
+		if ( !sphCreateSocketPair ( iRead, iWrite, sError ) )
+			sphWarning ( "net-loop use timeout due to %s", sError.cstr() );
+#endif
+
+		m_pWakeupExternal = NULL;
+		if ( iRead>=0 && iWrite>=0 )
+		{
+			m_pWakeupExternal = new CSphWakeupEvent ( iRead, iWrite );
+			m_tEvents.SetupEvent ( m_pWakeupExternal, tmNow );
+		}
+
 		m_bGotExternal = false;
 		m_dWorkExternal.Reserve ( 1000 );
 	}
@@ -19231,15 +19465,25 @@ private:
 		dWorkNext.Reserve ( 1000 );
 		dCleanup.Reserve ( 1000 );
 		int64_t tmNextCheck = INT64_MAX;
-		const int tmDefaultMs = g_tmWait;
+		int64_t tmLastWait = sphMicroTimer();
 
 		while ( !g_bShutdown )
 		{
 			m_tPrf.Start();
 
+			// lets spin net-loop thread without syscall\sleep\wait up to net_wait period
+			// in case we got events recently or call job that might finish early
+			// otherwise poll ( 1 ) \ epoll_wait ( 1 ) put off this thread and introduce some latency, ie
+			// sysbench test with 1 thd and 3 empty indexes reports:
+			// 3k qps for net-loop without spin-wait
+			// 5k qps for net-loop with spin-wait
+			int iSpinWait = 0;
+			if ( g_tmWait>0 && sphMicroTimer()-tmLastWait>I64C(10000)*g_tmWait )
+				iSpinWait = 1;
+
 			m_tPrf.StartPoll();
 			// need positive timeout for communicate threads back and shutdown
-			bool bGot = m_tEvents.Wait ( tmDefaultMs );
+			bool bGot = m_tEvents.Wait ( iSpinWait );
 			m_tPrf.EndTask();
 
 			// try to remove outdated items on no signals
@@ -19327,6 +19571,7 @@ private:
 				m_tPrf.EndTask();
 			}
 
+			tmLastWait = sphMicroTimer();
 			m_tPrf.End();
 		}
 	}
@@ -19389,6 +19634,8 @@ public:
 		m_bGotExternal = true;
 		m_dWorkExternal.Add ( pElem );
 		Verify ( m_tExtLock.Unlock() );
+		if ( m_pWakeupExternal )
+			m_pWakeupExternal->Wakeup();
 	}
 
 	// main thread wrapper
@@ -19438,6 +19685,7 @@ struct ThdJobHttp_t : public ISphJob
 	virtual void		Call ();
 };
 
+static void JobDoSendNB ( NetSendData_t * pSend, CSphNetLoop * pLoop );
 
 static void LogSocketError ( const char * sMsg, const NetStateCommon_t * pConn, bool bDebug )
 {
@@ -20156,6 +20404,7 @@ NetSendData_t::NetSendData_t ( NetStateCommon_t * pState, ProtocolType_e eProto 
 	: ISphNetAction ( pState->m_iClientSock )
 	, m_tState ( pState )
 	, m_eProto ( eProto )
+	, m_bContinue ( false )
 {
 	assert ( pState );
 	m_tState->m_iPos = 0;
@@ -20230,11 +20479,15 @@ NetEvent_e NetSendData_t::Setup ( int64_t tmNow )
 	sphLogDebugv ( "%p send %s setup, keep=%d, buf=%d, client=%s, conn=%d, sock=%d", this, g_dProtoNames[m_eProto], (int)(m_tState->m_bKeepSocket),
 		m_tState->m_dBuf.GetLength(), m_tState->m_sClientName, m_tState->m_iConnID, m_tState->m_iClientSock );
 
-	m_tmTimeout = tmNow + MS2SEC * g_iWriteTimeout;
+	if ( !m_bContinue )
+	{
+		m_tmTimeout = tmNow + MS2SEC * g_iWriteTimeout;
 
-	assert ( m_tState->m_dBuf.GetLength() );
-	m_tState->m_iLeft = m_tState->m_dBuf.GetLength();
-	m_tState->m_iPos = 0;
+		assert ( m_tState->m_dBuf.GetLength() );
+		m_tState->m_iLeft = m_tState->m_dBuf.GetLength();
+		m_tState->m_iPos = 0;
+	}
+	m_bContinue = false;
 
 	return NE_OUT;
 }
@@ -20470,7 +20723,7 @@ void ThdJobAPI_t::Call ()
 	{
 		tOut.SwapData ( m_tState->m_dBuf );
 		NetSendData_t * pSend = new NetSendData_t ( m_tState.LeakPtr(), PROTO_SPHINX );
-		m_pLoop->AddAction ( pSend );
+		JobDoSendNB ( pSend, m_pLoop );
 	} else if ( m_tState->m_bKeepSocket ) // no response - switching to receive
 	{
 		NetReceiveDataAPI_t * pReceive = new NetReceiveDataAPI_t ( m_tState.LeakPtr() );
@@ -20490,7 +20743,7 @@ ThdJobQL_t::ThdJobQL_t ( CSphNetLoop * pLoop, NetStateQL_t * pState )
 void ThdJobQL_t::Call ()
 {
 	SphCrashLogger_c tQueryTLS;
-	tQueryTLS.SetupTLS ();
+	tQueryTLS.SetupTLS();
 
 	sphLogDebugv ( "%p QL job started", this );
 
@@ -20504,11 +20757,9 @@ void ThdJobQL_t::Call ()
 	tThdDesc.m_tmConnect = sphMicroTimer();
 	tThdDesc.m_iTid = iTid;
 
-	g_tThdMutex.Lock ();
+	g_tThdMutex.Lock();
 	g_dThd.Add ( &tThdDesc );
-	g_tThdMutex.Unlock ();
-
-	sphLogDebugv ( "%p QL job done", this );
+	g_tThdMutex.Unlock();
 
 	CSphString sQuery; // to keep data alive for SphCrashQuery_c
 	bool bProfile = m_tState->m_tSession.m_tVars.m_bProfile; // the current statement might change it
@@ -20519,17 +20770,19 @@ void ThdJobQL_t::Call ()
 	bool bProceed = LoopClientMySQL ( m_tState->m_uPacketID, m_tState->m_tSession, sQuery, m_tState->m_dBuf.GetLength(), bProfile, &tThdDesc, tIn, tOut );
 	m_tState->m_bKeepSocket = bProceed;
 
+	sphLogDebugv ( "%p QL job done", this );
+
 	if ( bProceed && !g_bShutdown )
 	{
 		assert ( m_pLoop );
 		tOut.SwapData ( m_tState->m_dBuf );
 		NetSendData_t * pSend = new NetSendData_t ( m_tState.LeakPtr(), PROTO_MYSQL41 );
-		m_pLoop->AddAction ( pSend );
+		JobDoSendNB ( pSend, m_pLoop );
 	}
 
-	g_tThdMutex.Lock ();
+	g_tThdMutex.Lock();
 	g_dThd.Remove ( &tThdDesc );
-	g_tThdMutex.Unlock ();
+	g_tThdMutex.Unlock();
 }
 
 ThdJobCleanup_t::ThdJobCleanup_t ( CSphVector<ISphNetAction *> & dCleanup )
@@ -20592,15 +20845,39 @@ void ThdJobHttp_t::Call ()
 	g_dThd.Remove ( &tThdDesc );
 	g_tThdMutex.Unlock ();
 
+	sphLogDebugv ( "%p http job done", this );
+
 	if ( g_bShutdown )
 		return;
 
 	assert ( m_pLoop );
 	NetSendData_t * pSend = new NetSendData_t ( m_tState.LeakPtr(), PROTO_HTTP );
-	m_pLoop->AddAction ( pSend );
+	JobDoSendNB ( pSend, m_pLoop );
 }
 
 
+void JobDoSendNB ( NetSendData_t * pSend, CSphNetLoop * pLoop )
+{
+	assert ( pLoop && pSend );
+	pSend->Setup ( sphMicroTimer() );
+
+	// try to push data to socket here then transfer send-action to net-loop in case send needs poll to continue
+	CSphVector<ISphNetAction *> dNext ( 1 );
+	dNext.Resize ( 0 );
+	DWORD uGotEvents = NE_OUT;
+	NetEvent_e eRes = pSend->Tick ( uGotEvents, dNext, pLoop );
+	if ( eRes==NE_REMOVE )
+	{
+		SafeDelete ( pSend );
+		assert ( dNext.GetLength()<2 );
+		if ( dNext.GetLength() )
+			pLoop->AddAction ( dNext[0] );
+	} else
+	{
+		pSend->SetContinue();
+		pLoop->AddAction ( pSend );
+	}
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // DAEMON OPTIONS

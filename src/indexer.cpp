@@ -1468,7 +1468,7 @@ void SetSignalHandlers ()
 
 bool SendRotate ( const CSphConfig & hConf, bool bForce )
 {
-	if ( !( g_bRotate && ( g_bRotateEach || bForce ) ) || !g_bSendHUP )
+	if ( !( g_bRotate && ( g_bRotateEach || bForce ) ) )
 		return false;
 
 	int iPID = -1;
@@ -1895,7 +1895,7 @@ int main ( int argc, char ** argv )
 		{
 			bool bLastOk = DoIndex ( hConf["index"].IterateGet (), hConf["index"].IterateGetKey().cstr(), hConf["source"], bVerbose, fpDumpRows );
 			bIndexedOk |= bLastOk;
-			if ( bLastOk && ( sphMicroTimer() - tmRotated > ROTATE_MIN_INTERVAL ) && SendRotate ( hConf, false ) )
+			if ( bLastOk && ( sphMicroTimer() - tmRotated > ROTATE_MIN_INTERVAL ) && g_bSendHUP && SendRotate ( hConf, false ) )
 				tmRotated = sphMicroTimer();
 		}
 	} else
@@ -1909,7 +1909,7 @@ int main ( int argc, char ** argv )
 			{
 				bool bLastOk = DoIndex ( hConf["index"][dIndexes[j]], dIndexes[j], hConf["source"], bVerbose, fpDumpRows );
 				bIndexedOk |= bLastOk;
-				if ( bLastOk && ( sphMicroTimer() - tmRotated > ROTATE_MIN_INTERVAL ) && SendRotate ( hConf, false ) )
+				if ( bLastOk && ( sphMicroTimer() - tmRotated > ROTATE_MIN_INTERVAL ) && g_bSendHUP && SendRotate ( hConf, false ) )
 					tmRotated = sphMicroTimer();
 			}
 		}
@@ -1932,7 +1932,7 @@ int main ( int argc, char ** argv )
 
 	int iExitCode = bIndexedOk ? 0 : 1;
 
-	if ( bIndexedOk && g_bRotate )
+	if ( bIndexedOk && g_bRotate && g_bSendHUP )
 	{
 		if ( !SendRotate ( hConf, true ) )
 		{

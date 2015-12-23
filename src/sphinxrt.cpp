@@ -4500,7 +4500,7 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 
 	int64_t iFileSize = rdChunk.GetFilesize();
 	int64_t iSaneVecSize = Min ( iFileSize, INT_MAX / 2 );
-	int64_t iSaneTightVecSize = Min ( iFileSize, int( INT_MAX / 1.2f ) );
+	int64_t iSaneTightVecSize = Min ( iFileSize, int ( INT_MAX / 1.2f ) );
 
 	bool bHasMorphology = ( m_pDict && m_pDict->HasMorphology() ); // fresh and old-format index still has no dictionary at this point
 	int iSegmentSeq = rdChunk.GetDword();
@@ -4718,6 +4718,12 @@ int RtIndex_t::DebugCheck ( FILE * fp )
 		RtSegment_t & tSegment = *m_dRamChunks[iSegment];
 		if ( tSegment.m_bTlsKlist )
 			LOC_FAIL(( fp, "TLS k-list flag on: index is being commited (segment=%d)", iSegment ));
+
+		if ( !tSegment.m_iRows )
+		{
+			LOC_FAIL(( fp, "empty RT segment (segment=%d)", iSegment ));
+			continue;
+		}
 
 		const BYTE * pCurWord = tSegment.m_dWords.Begin();
 		const BYTE * pMaxWord = pCurWord+tSegment.m_dWords.GetLength();

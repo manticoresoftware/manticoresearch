@@ -75,9 +75,9 @@ file(GLOB GHEADERS "yysphinx*.h")
 source_group ("Generated Header Files" FILES ${GHEADERS})
 
 if (WIN32)
-	add_custom_command(COMMAND ${SPHINXSEARCH_SOURCE_DIR}/src/git_commit_id.cmd)
+	add_custom_command(OUTPUT "sphinxversion.h" COMMAND ${SPHINXSEARCH_SOURCE_DIR}/src/git_commit_id.cmd ${SPHINXSEARCH_SOURCE_DIR})
 else (WIN32)
-	add_custom_command(COMMAND /bin/sh ${SPHINXSEARCH_SOURCE_DIR}/src/git_commit_id.sh)
+	add_custom_command(OUTPUT "sphinxversion.h" COMMAND /bin/sh ${SPHINXSEARCH_SOURCE_DIR}/src/git_commit_id.sh ${SPHINXSEARCH_SOURCE_DIR})
 endif(WIN32)
 
 set (HEADERS ${HEADERS} sphinxversion.h)

@@ -1543,16 +1543,24 @@ flush_index:
 //////////////////////////////////////////////////////////////////////////
 
 select_sysvar:
-	TOK_SELECT sysvar_name opt_limit_clause
+	TOK_SELECT sysvar_list opt_limit_clause
 		{
 			pParser->m_pStmt->m_eStmt = STMT_SELECT_SYSVAR;
 			pParser->ToString ( pParser->m_pStmt->m_tQuery.m_sQuery, $2 );
 		}
 	;
-	
+
+sysvar_list:
+	sysvar_item
+	| sysvar_list ',' sysvar_item
+	;
+
+sysvar_item:
+	sysvar_name opt_alias
+	;
+
 sysvar_name:
-	TOK_SYSVAR
-	| TOK_SYSVAR '.' ident
+	TOK_SYSVAR { pParser->AddItem ( &$1 ); }
 	;
 
 select_dual:

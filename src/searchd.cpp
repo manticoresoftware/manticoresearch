@@ -14448,40 +14448,30 @@ void HandleMysqlOptimize ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 
 void HandleMysqlSelectSysvar ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 {
-	CSphString sVar = tStmt.m_tQuery.m_sQuery;
-	sVar.ToLower();
+	tOut.HeadBegin( tStmt.m_tQuery.m_dItems.GetLength() );
+	ARRAY_FOREACH ( i, tStmt.m_tQuery.m_dItems )
+		tOut.HeadColumn ( tStmt.m_tQuery.m_dItems[i].m_sAlias.cstr(), MYSQL_COL_LONG );
+	tOut.HeadEnd();
 
-	if ( sVar=="@@session.auto_increment_increment" )
+	ARRAY_FOREACH ( i, tStmt.m_tQuery.m_dItems )
 	{
-		// MySQL Connector/J really expects an answer here
-		tOut.HeadBegin(1);
-		tOut.HeadColumn ( sVar.cstr(), MYSQL_COL_LONG );
-		tOut.HeadEnd();
+		const CSphString & sVar = tStmt.m_tQuery.m_dItems[i].m_sExpr;
 
-		// data packet, var value
-		tOut.PutString("1");
-		tOut.Commit();
+		// MySQL Connector/J, really expects an answer here
+		if ( sVar=="@@session.auto_increment_increment" )
+			tOut.PutString("1");
+		else if ( sVar=="@@character_set_client" || sVar=="@@character_set_connection" )
+			tOut.PutString("utf8");
 
-		// done
-		tOut.Eof();
-	} else if ( sVar=="@@max_allowed_packet" )
-	{
-		// MySQL Go connector really expects an answer here
-		tOut.HeadBegin(1);
-		tOut.HeadColumn ( sVar.cstr(), MYSQL_COL_LONG );
-		tOut.HeadEnd();
-
-		// data packet, var value
-		tOut.PutNumeric ( "%d", g_iMaxPacketSize );
-		tOut.Commit();
-
-		// done
-		tOut.Eof();
-	} else
-	{
-		// generally, just send empty response
-		tOut.Ok();
+		// MySQL Go connector, really expects an answer here
+		else if ( sVar=="@@max_allowed_packet" )
+			tOut.PutNumeric ( "%d", g_iMaxPacketSize );
+		else
+			tOut.PutString("");
 	}
+
+	tOut.Commit();
+	tOut.Eof();
 }
 
 

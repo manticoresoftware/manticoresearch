@@ -17673,7 +17673,7 @@ void HandleMysqlOptimize ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 
 void HandleMysqlSelectSysvar ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 {
-	tOut.HeadBegin( tStmt.m_tQuery.m_dItems.GetLength() );
+	tOut.HeadBegin ( tStmt.m_tQuery.m_dItems.GetLength() );
 	ARRAY_FOREACH ( i, tStmt.m_tQuery.m_dItems )
 		tOut.HeadColumn ( tStmt.m_tQuery.m_dItems[i].m_sAlias.cstr(), MYSQL_COL_LONG );
 	tOut.HeadEnd();
@@ -18273,6 +18273,13 @@ static void HandleMysqlReconfigure ( SqlRowBuffer_c & tOut, const SqlStmt_t & tS
 	{
 		sError.SetSprintf ( "failed to parse config file '%s'; using previous settings", g_sConfigFile.cstr () );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	if ( !tCfg.m_tConf.Exists ( "index" ) )
+	{
+		sError.SetSprintf ( "failed to find any index at config file '%s'; using previous settings", g_sConfigFile.cstr () );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
 		return;
 	}
 
@@ -21172,6 +21179,12 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP )
 	int nTotalIndexes = g_pLocalIndexes->GetLength () + g_hDistIndexes.GetLength () + g_pTemplateIndexes->GetLength ();
 	int nChecked = 0;
 
+	if ( !tCP.m_tConf.Exists ( "index" ) )
+	{
+		g_bDoDelete |= ( nTotalIndexes>0 );
+		return;
+	}
+
 	const CSphConfig & hConf = tCP.m_tConf;
 	hConf["index"].IterateStart ();
 	while ( hConf["index"].IterateNext() )
@@ -21368,7 +21381,7 @@ void CheckRotate ()
 
 			bool bWasAdded = tIndex.m_bOnlyNew;
 			RotateIndexGreedy ( tIndex, sIndex );
-			if ( bWasAdded && tIndex.m_bEnabled )
+			if ( bWasAdded && tIndex.m_bEnabled && g_pCfg.m_tConf.Exists ( "index" ) )
 			{
 				const CSphConfigType & hConf = g_pCfg.m_tConf ["index"];
 				if ( hConf.Exists ( sIndex ) )
@@ -22846,6 +22859,9 @@ void ConfigureAndPreload ( const CSphConfig & hConf, const CSphVector<const char
 	int iCounter = 1;
 	int iValidIndexes = 0;
 	int64_t tmLoad = -sphMicroTimer();
+
+	if ( !hConf.Exists ( "index" ) )
+		sphFatal ( "no valid indexes to serve" );
 
 	hConf["index"].IterateStart ();
 	while ( hConf["index"].IterateNext() )

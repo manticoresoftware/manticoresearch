@@ -69,6 +69,7 @@ index rt
 	path = <data_path/>/rt
 
 	rt_field = content
+	rt_attr_uint = dummy
 	morphology = none
 }
 
@@ -488,9 +489,9 @@ for ( $doc=1; $doc<121; $doc++ )
 	$query ( $insert, $sock );
 }	
 
-$results = array_merge ( $results, $query ( "select * from rt limit 0,2", $sock ) );
+$results = array_merge ( $results, $query ( "select id from rt limit 0,2", $sock ) );
 $results = array_merge ( $results, $query ( "show meta", $sock ) );	
-$results = array_merge ( $results, $query ( "select * from rt where match ( 'basketball' )", $sock ) );
+$results = array_merge ( $results, $query ( "select id from rt where match ( 'basketball' )", $sock ) );
 $results = array_merge ( $results, $query ( "show meta", $sock ) );	
 
 // regression - optimized filter broken with extra-filter

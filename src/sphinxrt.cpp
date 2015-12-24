@@ -10137,6 +10137,13 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema * pSche
 		}
 	}
 
+	if ( !pSchema->m_dAttrs.GetLength () )
+	{
+		pError->SetSprintf ( "no attribute configured (use rt_attr directive)" );
+		return false;
+	}
+
+
 	return true;
 }
 

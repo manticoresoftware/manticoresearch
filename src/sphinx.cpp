@@ -22152,15 +22152,10 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 	}
 
 	CSphVector<CSphNormalForm> dDestTokens;
-	bool bDestStop = !GetWordID ( pTo, strlen ( (const char*)pTo ), true );
-	if ( !bDestStop )
-	{
-		CSphNormalForm & tForm = dDestTokens.Add();
-		tForm.m_sForm = (const char *)pTo;
-		tForm.m_iLengthCP = pTokenizer->GetLastTokenLen();
-	}
-
-	bStopwordsPresent |= bDestStop;
+	bool bFirstDestIsStop = !GetWordID ( pTo, strlen ( (const char*)pTo ), true );
+	CSphNormalForm & tForm = dDestTokens.Add();
+	tForm.m_sForm = (const char *)pTo;
+	tForm.m_iLengthCP = pTokenizer->GetLastTokenLen();
 
 	// what if we have more than one word in the right part?
 	const BYTE * pDestToken;
@@ -22176,6 +22171,10 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 
 		bStopwordsPresent |= bStop;
 	}
+
+	// we can have wordforms with 1 destination token that is a stopword
+	if ( dDestTokens.GetLength()>1 && bFirstDestIsStop )
+		dDestTokens.Remove(0);
 
 	if ( !dDestTokens.GetLength() )
 	{

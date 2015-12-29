@@ -7439,8 +7439,10 @@ void SearchHandler_c::SetupLocalDF ( int iStart, int iEnd )
 			pIndex->m_pIndex->FillKeywords ( dKeywords );
 		} else
 		{
+			GetKeywordsSettings_t tSettings;
+			tSettings.m_bStats = true;
 			dKeywords.Resize ( 0 );
-			pIndex->m_pIndex->GetKeywords ( dKeywords, dQuery.Begin(), true, NULL );
+			pIndex->m_pIndex->GetKeywords ( dKeywords, dQuery.Begin(), tSettings, NULL );
 
 			// FIXME!!! move duplicate removal to GetKeywords to do less QWord setup and dict searching
 			// custom uniq - got rid of word duplicates
@@ -10242,9 +10244,10 @@ void HandleCommandKeywords ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & 
 	if ( !CheckCommandVersion ( iVer, VER_COMMAND_KEYWORDS, tOut ) )
 		return;
 
+	GetKeywordsSettings_t tSettings;
 	CSphString sQuery = tReq.GetString ();
 	CSphString sIndex = tReq.GetString ();
-	bool bGetStats = !!tReq.GetInt ();
+	tSettings.m_bStats = !!tReq.GetInt ();
 
 	const ServedIndex_c * pIndex = g_pLocalIndexes->GetRlockedEntry ( sIndex );
 	if ( !pIndex )
@@ -10259,7 +10262,7 @@ void HandleCommandKeywords ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & 
 
 	CSphString sError;
 	CSphVector < CSphKeywordInfo > dKeywords;
-	if ( !pIndex->m_pIndex->GetKeywords ( dKeywords, sQuery.cstr (), bGetStats, &sError ) )
+	if ( !pIndex->m_pIndex->GetKeywords ( dKeywords, sQuery.cstr (), tSettings, &sError ) )
 	{
 		SendErrorReply ( tOut, "error generating keywords: %s", sError.cstr () );
 		pIndex->Unlock();
@@ -10273,7 +10276,7 @@ void HandleCommandKeywords ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & 
 	{
 		iRespLen += 4 + strlen ( dKeywords[i].m_sTokenized.cstr () );
 		iRespLen += 4 + strlen ( dKeywords[i].m_sNormalized.cstr () );
-		if ( bGetStats )
+		if ( tSettings.m_bStats )
 			iRespLen += 8;
 	}
 
@@ -10285,7 +10288,7 @@ void HandleCommandKeywords ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & 
 	{
 		tOut.SendString ( dKeywords[i].m_sTokenized.cstr () );
 		tOut.SendString ( dKeywords[i].m_sNormalized.cstr () );
-		if ( bGetStats )
+		if ( tSettings.m_bStats )
 		{
 			tOut.SendInt ( dKeywords[i].m_iDocs );
 			tOut.SendInt ( dKeywords[i].m_iHits );
@@ -12435,7 +12438,7 @@ void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 {
 	CSphString sError;
 
-	// string query, string index, [bool hits]
+	// string query, string index, [bool hits] || [value as option_name, ...]
 	int iArgs = tStmt.m_dInsertValues.GetLength();
 	if ( iArgs<2
 		|| iArgs>3
@@ -12445,6 +12448,40 @@ void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 	{
 		tOut.Error ( tStmt.m_sStmt, "bad argument count or types in KEYWORDS() call" );
 		return;
+	}
+
+	GetKeywordsSettings_t tSettings;
+	tSettings.m_bStats = ( iArgs==3 && tStmt.m_dInsertValues[2].m_iVal!=0 );
+	ARRAY_FOREACH ( i, tStmt.m_dCallOptNames )
+	{
+		CSphString & sOpt = tStmt.m_dCallOptNames[i];
+		sOpt.ToLower ();
+		bool bEnabled = ( tStmt.m_dCallOptValues[i].m_iVal!=0 );
+
+		if ( sOpt=="stats" )
+			tSettings.m_bStats = bEnabled;
+		else if ( sOpt=="fold_lemmas" )
+			tSettings.m_bFoldLemmas = bEnabled;
+		else if ( sOpt=="fold_blended" )
+			tSettings.m_bFoldBlended = bEnabled;
+		else if ( sOpt=="fold_wildcards" )
+			tSettings.m_bFoldWildcards = bEnabled;
+		else if ( sOpt=="expansion_limit" )
+			tSettings.m_iExpansionLimit = tStmt.m_dCallOptValues[i].m_iVal;
+		else
+		{
+			sError.SetSprintf ( "unknown option %s", sOpt.cstr () );
+			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+			return;
+		}
+
+		// post-conf type check
+		if ( tStmt.m_dCallOptValues[i].m_iType!=TOK_CONST_INT )
+		{
+			sError.SetSprintf ( "unexpected option %s type", sOpt.cstr () );
+			tOut.Error ( tStmt.m_sStmt, sError.cstr () );
+			return;
+		}
 	}
 
 	const ServedIndex_c * pServed = g_pLocalIndexes->GetRlockedEntry ( tStmt.m_dInsertValues[1].m_sVal );
@@ -12465,8 +12502,7 @@ void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 	}
 
 	CSphVector<CSphKeywordInfo> dKeywords;
-	bool bStats = ( iArgs==3 && tStmt.m_dInsertValues[2].m_iVal!=0 );
-	bool bRes = pServed->m_pIndex->GetKeywords ( dKeywords, tStmt.m_dInsertValues[0].m_sVal.cstr(), bStats, &sError );
+	bool bRes = pServed->m_pIndex->GetKeywords ( dKeywords, tStmt.m_dInsertValues[0].m_sVal.cstr(), tSettings, &sError );
 	pServed->Unlock ();
 
 	if ( !bRes )
@@ -12477,11 +12513,11 @@ void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 	}
 
 	// result set header packet
-	tOut.HeadBegin ( bStats ? 5 : 3 );
+	tOut.HeadBegin ( tSettings.m_bStats ? 5 : 3 );
 	tOut.HeadColumn("qpos");
 	tOut.HeadColumn("tokenized");
 	tOut.HeadColumn("normalized");
-	if ( bStats )
+	if ( tSettings.m_bStats )
 	{
 		tOut.HeadColumn("docs");
 		tOut.HeadColumn("hits");
@@ -12496,7 +12532,7 @@ void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 		tOut.PutString ( sBuf );
 		tOut.PutString ( dKeywords[i].m_sTokenized.cstr() );
 		tOut.PutString ( dKeywords[i].m_sNormalized.cstr() );
-		if ( bStats )
+		if ( tSettings.m_bStats )
 		{
 			snprintf ( sBuf, sizeof(sBuf), "%d", dKeywords[i].m_iDocs );
 			tOut.PutString ( sBuf );

@@ -1659,21 +1659,6 @@ public:
 	virtual bool					WasTokenMultiformDestination ( bool & bHead, int & iDestCount ) const { return m_pTokenizer->WasTokenMultiformDestination ( bHead, iDestCount ); }
 };
 
-
-struct ISphQueryFilter
-{
-	ISphTokenizer *		m_pTokenizer;
-	CSphDict *					m_pDict;
-	const CSphIndexSettings *	m_pSettings;
-
-	ISphQueryFilter ();
-	virtual ~ISphQueryFilter ();
-
-	void GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords );
-	virtual void AddKeywordStats ( BYTE * sWord, const BYTE * sTokenized, int iQpos, CSphVector <CSphKeywordInfo> & dKeywords ) = 0;
-};
-
-
 DWORD sphParseMorphAot ( const char * );
 
 struct CSphReconfigureSettings
@@ -1991,6 +1976,31 @@ struct ExpansionContext_t
 };
 
 
+struct GetKeywordsSettings_t
+{
+	bool m_bStats;
+	bool m_bFoldLemmas;
+	bool m_bFoldBlended;
+	bool m_bFoldWildcards;
+	int  m_iExpansionLimit;
+
+	GetKeywordsSettings_t ();
+};
+
+struct ISphQueryFilter
+{
+	ISphTokenizer *				m_pTokenizer;
+	CSphDict *					m_pDict;
+	const CSphIndexSettings *	m_pSettings;
+	GetKeywordsSettings_t		m_tFoldSettings;
+
+	ISphQueryFilter ();
+	virtual ~ISphQueryFilter ();
+
+	void GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const ExpansionContext_t & tCtx );
+	virtual void AddKeywordStats ( BYTE * sWord, const BYTE * sTokenized, int iQpos, CSphVector <CSphKeywordInfo> & dKeywords ) = 0;
+};
+
 XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx );
 XQNode_t * sphQueryExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & tSettings );
 inline int sphGetExpansionMagic ( int iDocs, int iHits )
@@ -2001,6 +2011,8 @@ inline bool sphIsExpandedPayload ( int iDocs, int iHits )
 {
 	return ( iHits<=256 || iDocs<32 ); // magic threshold; mb make this configurable?
 }
+bool sphHasExpandableWildcards ( const char * sWord );
+bool sphExpandGetWords ( const char * sWord, const ExpansionContext_t & tCtx, ISphWordlist::Args_t & tWordlist );
 
 
 template<typename T>

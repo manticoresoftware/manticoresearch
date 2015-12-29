@@ -1393,7 +1393,7 @@ public:
 	virtual void			GetStatus ( CSphIndexStatus* pRes ) const { assert (pRes); if ( pRes ) { pRes->m_iDiskUse = 0; pRes->m_iRamUse = 0;}}
 	virtual bool				MultiQuery ( const CSphQuery * , CSphQueryResult * , int , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const { return false; }
 	virtual bool				MultiQueryEx ( int , const CSphQuery * , CSphQueryResult ** , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const { return false; }
-	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , bool , CSphString * ) const;
+	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & tSettings, CSphString * ) const;
 	virtual bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const { return true; }
 	virtual int					UpdateAttributes ( const CSphAttrUpdate & , int , CSphString & , CSphString & ) { return -1; }
 	virtual bool				SaveAttributes ( CSphString & ) const { return false; }
@@ -1430,7 +1430,7 @@ struct CSphTemplateQueryFilter : public ISphQueryFilter
 };
 
 
-bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool, CSphString * ) const
+bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, CSphString * ) const
 {
 	// short-cut if no query or keywords to fill
 	if ( !szQuery || !szQuery[0] )
@@ -1470,14 +1470,19 @@ bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 			sModifiedQuery = dFiltered.Begin();
 	}
 
-	pTokenizer->SetBuffer ( sModifiedQuery, strlen((const char*)sModifiedQuery) );
+	pTokenizer->SetBuffer ( sModifiedQuery, strlen ( (const char*)sModifiedQuery) );
 
 	CSphTemplateQueryFilter tAotFilter;
 	tAotFilter.m_pTokenizer = pTokenizer.Ptr();
 	tAotFilter.m_pDict = pDict;
 	tAotFilter.m_pSettings = &m_tSettings;
+	tAotFilter.m_tFoldSettings = tSettings;
+	tAotFilter.m_tFoldSettings.m_bStats = false;
+	tAotFilter.m_tFoldSettings.m_bFoldWildcards = true;
 
-	tAotFilter.GetKeywords ( dKeywords );
+	ExpansionContext_t tExpCtx;
+
+	tAotFilter.GetKeywords ( dKeywords, tExpCtx );
 
 	return true;
 }
@@ -1529,8 +1534,8 @@ public:
 
 	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const;
 	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const;
-	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString * pError ) const;
-	template <class Qword> bool	DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, bool bFillOnly, CSphString * pError ) const;
+	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, CSphString * pError ) const;
+	template <class Qword> bool	DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, bool bFillOnly, CSphString * pError ) const;
 	virtual bool 				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const;
 
 	virtual bool				Merge ( CSphIndex * pSource, const CSphVector<CSphFilterSettings> & dFilters, bool bMergeKillLists );
@@ -16321,7 +16326,7 @@ static bool SortedVectorsContain ( const CSphVector<int> & dVec1, const CSphVect
 }
 
 bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema & tInSchema,
-								   const CSphSchema & tSchema, const DWORD * pMvaPool, bool bArenaProhibit, bool bExtractPostAggr )
+									const CSphSchema & tSchema, const DWORD * pMvaPool, bool bArenaProhibit, bool bExtractPostAggr )
 {
 	m_dCalcFilter.Resize ( 0 );
 	m_dCalcSort.Resize ( 0 );
@@ -16505,9 +16510,9 @@ CSphDict * CSphIndex_VLN::SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer,
 
 
 bool CSphIndex_VLN::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
-	const char * szQuery, bool bGetStats, CSphString * pError ) const
+	const char * szQuery, const GetKeywordsSettings_t & tSettings, CSphString * pError ) const
 {
-	WITH_QWORD ( this, false, Qword, return DoGetKeywords<Qword> ( dKeywords, szQuery, bGetStats, false, pError ) );
+	WITH_QWORD ( this, false, Qword, return DoGetKeywords<Qword> ( dKeywords, szQuery, tSettings, false, pError ) );
 	return false;
 }
 
@@ -16539,6 +16544,16 @@ DWORD sphParseMorphAot ( const char * sMorphology )
 }
 
 
+GetKeywordsSettings_t::GetKeywordsSettings_t ()
+{
+	m_bStats = true;
+	m_bFoldLemmas = false;
+	m_bFoldBlended = false;
+	m_bFoldWildcards = false;
+	m_iExpansionLimit = 0;
+}
+
+
 ISphQueryFilter::ISphQueryFilter ()
 {
 	m_pTokenizer = NULL;
@@ -16552,13 +16567,14 @@ ISphQueryFilter::~ISphQueryFilter ()
 }
 
 
-void ISphQueryFilter::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords )
+void ISphQueryFilter::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const ExpansionContext_t & tCtx )
 {
 	assert ( m_pTokenizer && m_pDict && m_pSettings );
 
 	BYTE sTokenized[3*SPH_MAX_WORD_LEN+4];
 	BYTE * sWord;
 	int iQpos = 1;
+	CSphVector<int> dQposWildcards;
 
 	// FIXME!!! got rid of duplicated term stat and qword setup
 	while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
@@ -16566,13 +16582,64 @@ void ISphQueryFilter::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords )
 		const BYTE * sMultiform = m_pTokenizer->GetTokenizedMultiform();
 		strncpy ( (char *)sTokenized, sMultiform ? (const char*)sMultiform : (const char*)sWord, sizeof(sTokenized) );
 
-		AddKeywordStats ( sWord, sTokenized, iQpos, dKeywords );
+		if ( ( !m_tFoldSettings.m_bFoldWildcards || m_tFoldSettings.m_bStats ) && sphHasExpandableWildcards ( (const char *)sWord ) )
+		{
+			dQposWildcards.Add ( iQpos );
+
+			ISphWordlist::Args_t tWordlist ( false, tCtx.m_iExpansionLimit, tCtx.m_bHasMorphology, tCtx.m_eHitless, tCtx.m_pIndexData );
+			bool bExpanded = sphExpandGetWords ( (const char *)sWord, tCtx, tWordlist );
+
+			int iDocs = 0;
+			int iHits = 0;
+
+			// might fold wildcards but still want to sum up stats
+			if ( m_tFoldSettings.m_bFoldWildcards && m_tFoldSettings.m_bStats )
+			{
+				ARRAY_FOREACH ( i, tWordlist.m_dExpanded )
+				{
+					iDocs += tWordlist.m_dExpanded[i].m_iDocs;
+					iHits += tWordlist.m_dExpanded[i].m_iHits;
+				}
+				bExpanded = false;
+			} else
+			{
+				ARRAY_FOREACH ( i, tWordlist.m_dExpanded )
+				{
+					CSphKeywordInfo & tInfo = dKeywords.Add();
+					tInfo.m_sTokenized = (const char *)sWord;
+					tInfo.m_sNormalized = tWordlist.GetWordExpanded ( i );
+					tInfo.m_iDocs = tWordlist.m_dExpanded[i].m_iDocs;
+					tInfo.m_iHits = tWordlist.m_dExpanded[i].m_iHits;
+					tInfo.m_iQpos = iQpos;
+				}
+			}
+
+			if ( !bExpanded || !tWordlist.m_dExpanded.GetLength() )
+			{
+				CSphKeywordInfo & tInfo = dKeywords.Add ();
+				tInfo.m_sTokenized = (const char *)sWord;
+				tInfo.m_sNormalized = (const char *)sWord;
+				tInfo.m_iDocs = iDocs;
+				tInfo.m_iHits = iHits;
+				tInfo.m_iQpos = iQpos;
+			}
+		} else
+		{
+			AddKeywordStats ( sWord, sTokenized, iQpos, dKeywords );
+		}
 
 		// FIXME!!! handle consecutive blended wo blended parts
-		if ( !m_pTokenizer->TokenIsBlended() )
-			iQpos++;
-	}
+		bool bBlended = m_pTokenizer->TokenIsBlended();
 
+		if ( bBlended )
+		{
+			if ( m_tFoldSettings.m_bFoldBlended )
+				iQpos += m_pTokenizer->SkipBlended();
+		} else
+		{
+			iQpos++;
+		}
+	}
 
 	if ( !m_pSettings->m_uAotFilterMask )
 		return;
@@ -16582,10 +16649,23 @@ void ISphQueryFilter::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords )
 	BYTE sTmp2[3*SPH_MAX_WORD_LEN+4];
 	CSphVector<XQNode_t *> dChildren ( 64 );
 
+	CSphBitvec tSkipTransform;
+	if ( dQposWildcards.GetLength () )
+	{
+		tSkipTransform.Init ( iQpos+1 );
+		ARRAY_FOREACH ( i, dQposWildcards )
+			tSkipTransform.BitSet ( dQposWildcards[i] );
+	}
+
 	int iTokenizedTotal = dKeywords.GetLength();
 	for ( int iTokenized=0; iTokenized<iTokenizedTotal; iTokenized++ )
 	{
 		int iQpos = dKeywords[iTokenized].m_iQpos;
+
+		// do not transform expanded wild-cards
+		if ( tSkipTransform.GetSize() && tSkipTransform.BitGet ( iQpos ) )
+			continue;
+
 		// MUST copy as Dict::GetWordID changes word and might add symbols
 		strncpy ( (char *)sTokenized, dKeywords[iTokenized].m_sNormalized.scstr(), sizeof(sTokenized) );
 		int iPreAotCount = dKeywords.GetLength();
@@ -16617,11 +16697,32 @@ void ISphQueryFilter::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords )
 				dChildren.Add ( pChild->m_dChildren[iRec] );
 		}
 
+		bool bGotLemmas = ( iPreAotCount!=dKeywords.GetLength() );
+
 		// remove (replace) original word in case of AOT taken place
-		if ( iPreAotCount!=dKeywords.GetLength() )
+		if ( bGotLemmas )
 		{
-			::Swap ( dKeywords[iTokenized], dKeywords.Last() );
-			dKeywords.Resize ( dKeywords.GetLength()-1 );
+			if ( !m_tFoldSettings.m_bFoldLemmas )
+			{
+				::Swap ( dKeywords[iTokenized], dKeywords.Last() );
+				dKeywords.Resize ( dKeywords.GetLength()-1 );
+			} else
+			{
+				int iDocs = 0;
+				int iHits = 0;
+				if ( m_tFoldSettings.m_bStats )
+				{
+					for ( int i=iPreAotCount; i<dKeywords.GetLength(); i++ )
+					{
+						iDocs += dKeywords[i].m_iDocs;
+						iHits += dKeywords[i].m_iHits;
+					}
+				}
+				::Swap ( dKeywords[iTokenized], dKeywords[iPreAotCount] );
+				dKeywords.Resize ( iPreAotCount );
+				dKeywords[iTokenized].m_iDocs = iDocs;
+				dKeywords[iTokenized].m_iHits = iHits;
+			}
 		}
 	}
 
@@ -16635,17 +16736,16 @@ struct CSphPlainQueryFilter : public ISphQueryFilter
 {
 	const ISphQwordSetup *	m_pTermSetup;
 	ISphQword *				m_pQueryWord;
-	bool					m_bGetStats;
 
 	virtual void AddKeywordStats ( BYTE * sWord, const BYTE * sTokenized, int iQpos, CSphVector <CSphKeywordInfo> & dKeywords )
 	{
-		assert ( !m_bGetStats || ( m_pTermSetup && m_pQueryWord ) );
+		assert ( !m_tFoldSettings.m_bStats || ( m_pTermSetup && m_pQueryWord ) );
 
 		SphWordID_t iWord = m_pDict->GetWordID ( sWord );
 		if ( !iWord )
 			return;
 
-		if ( m_bGetStats )
+		if ( m_tFoldSettings.m_bStats )
 		{
 			m_pQueryWord->Reset ();
 			m_pQueryWord->m_sWord = (const char*)sWord;
@@ -16657,8 +16757,8 @@ struct CSphPlainQueryFilter : public ISphQueryFilter
 		CSphKeywordInfo & tInfo = dKeywords.Add();
 		tInfo.m_sTokenized = (const char *)sTokenized;
 		tInfo.m_sNormalized = (const char*)sWord;
-		tInfo.m_iDocs = m_bGetStats ? m_pQueryWord->m_iDocs : 0;
-		tInfo.m_iHits = m_bGetStats ? m_pQueryWord->m_iHits : 0;
+		tInfo.m_iDocs = m_tFoldSettings.m_bStats ? m_pQueryWord->m_iDocs : 0;
+		tInfo.m_iHits = m_tFoldSettings.m_bStats ? m_pQueryWord->m_iHits : 0;
 		tInfo.m_iQpos = iQpos;
 
 		if ( tInfo.m_sNormalized.cstr()[0]==MAGIC_WORD_HEAD_NONSTEMMED )
@@ -16669,7 +16769,7 @@ struct CSphPlainQueryFilter : public ISphQueryFilter
 
 template < class Qword >
 bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
-	const char * szQuery, bool bGetStats, bool bFillOnly, CSphString * pError ) const
+	const char * szQuery, const GetKeywordsSettings_t & tSettings, bool bFillOnly, CSphString * pError ) const
 {
 	if ( !bFillOnly )
 		dKeywords.Resize ( 0 );
@@ -16729,19 +16829,32 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 
 	Qword tQueryWord ( false, false );
 
-	CSphPlainQueryFilter tAotFilter;
-	tAotFilter.m_pTokenizer = pTokenizer.Ptr();
-	tAotFilter.m_pDict = pDict;
-	tAotFilter.m_pSettings = &m_tSettings;
-	tAotFilter.m_bGetStats = bGetStats;
-	tAotFilter.m_pTermSetup = &tTermSetup;
-	tAotFilter.m_pQueryWord = &tQueryWord;
-
 	if ( !bFillOnly )
 	{
-		pTokenizer->SetBuffer ( sModifiedQuery, strlen((const char *)sModifiedQuery) );
+		ExpansionContext_t tExpCtx;
+		// query defined options
+		tExpCtx.m_iExpansionLimit = ( tSettings.m_iExpansionLimit ? tSettings.m_iExpansionLimit : m_iExpansionLimit );
+		bool bExpandWildcards = ( pDict->GetSettings ().m_bWordDict && IsStarDict() && !tSettings.m_bFoldWildcards );
 
-		tAotFilter.GetKeywords ( dKeywords );
+		CSphPlainQueryFilter tAotFilter;
+		tAotFilter.m_pTokenizer = pTokenizer.Ptr();
+		tAotFilter.m_pDict = pDict;
+		tAotFilter.m_pSettings = &m_tSettings;
+		tAotFilter.m_pTermSetup = &tTermSetup;
+		tAotFilter.m_pQueryWord = &tQueryWord;
+		tAotFilter.m_tFoldSettings = tSettings;
+		tAotFilter.m_tFoldSettings.m_bFoldWildcards = !bExpandWildcards;
+
+		tExpCtx.m_pWordlist = &m_tWordlist;
+		tExpCtx.m_iMinPrefixLen = m_tSettings.m_iMinPrefixLen;
+		tExpCtx.m_iMinInfixLen = m_tSettings.m_iMinInfixLen;
+		tExpCtx.m_bHasMorphology = m_pDict->HasMorphology();
+		tExpCtx.m_bMergeSingles = false;
+		tExpCtx.m_eHitless = m_tSettings.m_eHitless;
+
+		pTokenizer->SetBuffer ( sModifiedQuery, strlen ( (const char *)sModifiedQuery) );
+
+		tAotFilter.GetKeywords ( dKeywords, tExpCtx );
 	} else
 	{
 		BYTE sWord[MAX_KEYWORD_BYTES];
@@ -16774,7 +16887,10 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 
 bool CSphIndex_VLN::FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const
 {
-	WITH_QWORD ( this, false, Qword, return DoGetKeywords<Qword> ( dKeywords, NULL, true, true, NULL ) );
+	GetKeywordsSettings_t tSettings;
+	tSettings.m_bStats = true;
+
+	WITH_QWORD ( this, false, Qword, return DoGetKeywords<Qword> ( dKeywords, NULL, tSettings, true, NULL ) );
 	return false;
 }
 
@@ -17215,89 +17331,16 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 
 	// check the wildcards
 	const char * sFull = pNode->m_dWords[0].m_sWord.cstr();
-	const int iLen = strlen ( sFull );
-
-	int iWilds = 0;
-	for ( const char * s = sFull; *s; s++ )
-		if ( sphIsWild(*s) )
-			iWilds++;
 
 	// no wildcards, or just wildcards? do not expand
-	if ( !iWilds || iWilds==iLen )
+	if ( !sphHasExpandableWildcards ( sFull ) )
 		return pNode;
 
 	bool bUseTermMerge = ( tCtx.m_bMergeSingles && pNode->m_dSpec.m_dZones.GetLength()==0 );
 	ISphWordlist::Args_t tWordlist ( bUseTermMerge, tCtx.m_iExpansionLimit, tCtx.m_bHasMorphology, tCtx.m_eHitless, tCtx.m_pIndexData );
 
-	if ( !sphIsWild(*sFull) || tCtx.m_iMinInfixLen==0 )
-	{
-		// do prefix expansion
-		// remove exact form modifier, if any
-		const char * sPrefix = sFull;
-		if ( *sPrefix=='=' )
-			sPrefix++;
-
-		// skip leading wildcards
-		// (in case we got here on non-infixed index path)
-		const char * sWildcard = sPrefix;
-		while ( sphIsWild ( *sPrefix ) )
-		{
-			sPrefix++;
-			sWildcard++;
-		}
-
-		// compute non-wildcard prefix length
-		int iPrefix = 0;
-		for ( const char * s = sPrefix; *s && !sphIsWild(*s); s++ )
-			iPrefix++;
-
-		// do not expand prefixes under min length
-		int iMinLen = Max ( tCtx.m_iMinPrefixLen, tCtx.m_iMinInfixLen );
-		if ( iPrefix<iMinLen )
-			return pNode;
-
-		// prefix expansion should work on nonstemmed words only
-		char sFixed [ MAX_KEYWORD_BYTES ];
-		if ( tCtx.m_bHasMorphology )
-		{
-			sFixed[0] = MAGIC_WORD_HEAD_NONSTEMMED;
-			memcpy ( sFixed+1, sPrefix, iPrefix );
-			sPrefix = sFixed;
-			iPrefix++;
-		}
-
-		tCtx.m_pWordlist->GetPrefixedWords ( sPrefix, iPrefix, sWildcard, tWordlist );
-
-	} else
-	{
-		// do infix expansion
-		assert ( sphIsWild(*sFull) );
-		assert ( tCtx.m_iMinInfixLen>0 );
-
-		// find the longest substring of non-wildcards
-		const char * sMaxInfix = NULL;
-		int iMaxInfix = 0;
-		int iCur = 0;
-
-		for ( const char * s = sFull; *s; s++ )
-		{
-			if ( sphIsWild(*s) )
-			{
-				iCur = 0;
-			} else if ( ++iCur > iMaxInfix )
-			{
-				sMaxInfix = s-iCur+1;
-				iMaxInfix = iCur;
-			}
-		}
-
-		// do not expand infixes under min_infix_len
-		if ( iMaxInfix < tCtx.m_iMinInfixLen )
-			return pNode;
-
-		// ignore heading star
-		tCtx.m_pWordlist->GetInfixedWords ( sMaxInfix, iMaxInfix, sFull, tWordlist );
-	}
+	if ( !sphExpandGetWords ( sFull, tCtx, tWordlist ) )
+		return pNode;
 
 	// no real expansions?
 	// mark source word as expanded to prevent warning on terms mismatch in statistics
@@ -17351,6 +17394,95 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 	return pNode;
 }
 
+
+bool sphHasExpandableWildcards ( const char * sWord )
+{
+	const char * pCur = sWord;
+	int iWilds = 0;
+
+	for ( ; *pCur; pCur++ )
+		if ( sphIsWild ( *pCur ) )
+			iWilds++;
+
+	int iLen = pCur - sWord;
+
+	return ( iWilds && iWilds<iLen );
+}
+
+bool sphExpandGetWords ( const char * sWord, const ExpansionContext_t & tCtx, ISphWordlist::Args_t & tWordlist )
+{
+	if ( !sphIsWild ( *sWord ) || tCtx.m_iMinInfixLen==0 )
+	{
+		// do prefix expansion
+		// remove exact form modifier, if any
+		const char * sPrefix = sWord;
+		if ( *sPrefix=='=' )
+			sPrefix++;
+
+		// skip leading wildcards
+		// (in case we got here on non-infixed index path)
+		const char * sWildcard = sPrefix;
+		while ( sphIsWild ( *sPrefix ) )
+		{
+			sPrefix++;
+			sWildcard++;
+		}
+
+		// compute non-wildcard prefix length
+		int iPrefix = 0;
+		for ( const char * s = sPrefix; *s && !sphIsWild ( *s ); s++ )
+			iPrefix++;
+
+		// do not expand prefixes under min length
+		int iMinLen = Max ( tCtx.m_iMinPrefixLen, tCtx.m_iMinInfixLen );
+		if ( iPrefix<iMinLen )
+			return false;
+
+		// prefix expansion should work on nonstemmed words only
+		char sFixed[MAX_KEYWORD_BYTES];
+		if ( tCtx.m_bHasMorphology )
+		{
+			sFixed[0] = MAGIC_WORD_HEAD_NONSTEMMED;
+			memcpy ( sFixed+1, sPrefix, iPrefix );
+			sPrefix = sFixed;
+			iPrefix++;
+		}
+
+		tCtx.m_pWordlist->GetPrefixedWords ( sPrefix, iPrefix, sWildcard, tWordlist );
+
+	} else
+	{
+		// do infix expansion
+		assert ( sphIsWild ( *sWord ) );
+		assert ( tCtx.m_iMinInfixLen>0 );
+
+		// find the longest substring of non-wildcards
+		const char * sMaxInfix = NULL;
+		int iMaxInfix = 0;
+		int iCur = 0;
+
+		for ( const char * s = sWord; *s; s++ )
+		{
+			if ( sphIsWild ( *s ) )
+			{
+				iCur = 0;
+			} else if ( ++iCur > iMaxInfix )
+			{
+				sMaxInfix = s-iCur+1;
+				iMaxInfix = iCur;
+			}
+		}
+
+		// do not expand infixes under min_infix_len
+		if ( iMaxInfix < tCtx.m_iMinInfixLen )
+			return false;
+
+		// ignore heading star
+		tCtx.m_pWordlist->GetInfixedWords ( sMaxInfix, iMaxInfix, sWord, tWordlist );
+	}
+
+	return true;
+}
 
 ExpansionContext_t::ExpansionContext_t()
 	: m_pWordlist ( NULL )
@@ -24755,7 +24887,7 @@ void CSphSource_Document::CSphBuildHitsState_t::Reset ()
 
 	m_dTmpFieldStorage.Resize ( 0 );
 	m_dTmpFieldPtrs.Resize ( 0 );
-	m_dFiltered.Resize( 0 );
+	m_dFiltered.Resize ( 0 );
 }
 
 CSphSource_Document::CSphSource_Document ( const char * sName )
@@ -29436,7 +29568,7 @@ CSphSource * sphCreateSourceTSVpipe ( const CSphConfigSection * pSource, FILE * 
 
 
 CSphSource * sphCreateSourceCSVpipe ( const CSphConfigSection * pSource, FILE * pPipe, const char * sSourceName, bool bProxy )
-{	
+{
 	CSphString sError;
 	const char * sDelimiter = pSource->GetStr ( "csvpipe_delimiter", "" );
 	CSphSource_CSV * pCSV = CreateSourceWithProxy<CSphSource_CSV> ( sSourceName, bProxy );
@@ -30178,12 +30310,13 @@ uint64_t sphCalcExprDepHash ( ISphExpr * pExpr, const ISphSchema & tSorterSchema
 		if ( tCol.m_pExpr.Ptr() )
 		{
 			// one more expression
-			uHash = tCol.m_pExpr->GetHash( tSorterSchema, uHash, bDisable );
+			uHash = tCol.m_pExpr->GetHash ( tSorterSchema, uHash, bDisable );
 			if ( bDisable )
 				return 0;
-		}
-		else			
+		} else
+		{
 			uHash = sphCalcLocatorHash ( tCol.m_tLocator, uHash ); // plain column, add locator to hash
+		}
 	}
 
 	return uHash;

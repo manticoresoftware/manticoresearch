@@ -1262,8 +1262,8 @@ public:
 
 	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const;
 	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const;
-	bool						DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, bool bFillOnly, CSphString * pError, const SphChunkGuard_t & tGuard ) const;
-	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, bool bGetStats, CSphString * pError ) const;
+	bool						DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, bool bFillOnly, CSphString * pError, const SphChunkGuard_t & tGuard ) const;
+	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, CSphString * pError ) const;
 	virtual bool				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const;
 	void						AddKeywordStats ( BYTE * sWord, const BYTE * sTokenized, CSphDict * pDict, bool bGetStats, int iQpos, RtQword_t * pQueryWord, CSphVector <CSphKeywordInfo> & dKeywords, const SphChunkGuard_t & tGuard ) const;
 
@@ -6859,8 +6859,10 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		if ( pProfiler )
 			pProfiler->Switch ( SPH_QSTATE_LOCAL_DF );
 
+		GetKeywordsSettings_t tSettings;
+		tSettings.m_bStats = true;
 		CSphVector < CSphKeywordInfo > dKeywords;
-		DoGetKeywords ( dKeywords, pQuery->m_sQuery.cstr(), true, false, NULL, tGuard );
+		DoGetKeywords ( dKeywords, pQuery->m_sQuery.cstr(), tSettings, false, NULL, tGuard );
 		ARRAY_FOREACH ( i, dKeywords )
 		{
 			const CSphKeywordInfo & tKw = dKeywords[i];
@@ -7583,22 +7585,21 @@ struct CSphRtQueryFilter : public ISphQueryFilter, public ISphNoncopyable
 	bool				m_bGetStats;
 	const SphChunkGuard_t & m_tGuard;
 
-	CSphRtQueryFilter ( const RtIndex_t * pIndex, RtQword_t * pQword, bool bGetStats, const SphChunkGuard_t & tGuard )
+	CSphRtQueryFilter ( const RtIndex_t * pIndex, RtQword_t * pQword, const SphChunkGuard_t & tGuard )
 		: m_pIndex ( pIndex )
 		, m_pQword ( pQword )
-		, m_bGetStats ( bGetStats )
 		, m_tGuard ( tGuard )
 	{}
 
 	virtual void AddKeywordStats ( BYTE * sWord, const BYTE * sTokenized, int iQpos, CSphVector <CSphKeywordInfo> & dKeywords )
 	{
 		assert ( m_pIndex && m_pQword );
-		m_pIndex->AddKeywordStats ( sWord, sTokenized, m_pDict, m_bGetStats, iQpos, m_pQword, dKeywords, m_tGuard );
+		m_pIndex->AddKeywordStats ( sWord, sTokenized, m_pDict, m_tFoldSettings.m_bStats, iQpos, m_pQword, dKeywords, m_tGuard );
 	}
 };
 
 
-bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const char * sQuery, bool bGetStats, bool bFillOnly, CSphString * , const SphChunkGuard_t & tGuard ) const
+bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const char * sQuery, const GetKeywordsSettings_t & tSettings, bool bFillOnly, CSphString * , const SphChunkGuard_t & tGuard ) const
 {
 	if ( !bFillOnly )
 		dKeywords.Resize ( 0 );
@@ -7630,16 +7631,31 @@ bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 	pDict = SetupExactDict ( tDict2, pDict, pTokenizer.Ptr(), false );
 
 	// FIXME!!! missed bigram, FieldFilter
-	CSphRtQueryFilter tAotFilter ( this, &tQword, bGetStats, tGuard );
-	tAotFilter.m_pTokenizer = pTokenizer.Ptr();
-	tAotFilter.m_pDict = pDict;
-	tAotFilter.m_pSettings = &m_tSettings;
 
 	if ( !bFillOnly )
 	{
-		pTokenizer->SetBuffer ( (BYTE *)sQuery, strlen ( sQuery ) );
+		ExpansionContext_t tExpCtx;
 
-		tAotFilter.GetKeywords ( dKeywords );
+		// query defined options 
+		tExpCtx.m_iExpansionLimit = tSettings.m_iExpansionLimit ? tSettings.m_iExpansionLimit : m_iExpansionLimit;
+		bool bExpandWildcards = ( m_bKeywordDict && IsStarDict() && !tSettings.m_bFoldWildcards );
+
+		CSphRtQueryFilter tAotFilter ( this, &tQword, tGuard );
+		tAotFilter.m_pTokenizer = pTokenizer.Ptr();
+		tAotFilter.m_pDict = pDict;
+		tAotFilter.m_pSettings = &m_tSettings;
+		tAotFilter.m_tFoldSettings = tSettings;
+		tAotFilter.m_tFoldSettings.m_bFoldWildcards = !bExpandWildcards;
+
+		tExpCtx.m_pWordlist = this;
+		tExpCtx.m_iMinPrefixLen = m_tSettings.m_iMinPrefixLen;
+		tExpCtx.m_iMinInfixLen = m_tSettings.m_iMinInfixLen;
+		tExpCtx.m_bHasMorphology = m_pDict->HasMorphology();
+		tExpCtx.m_bMergeSingles = false;
+		tExpCtx.m_pIndexData = &tGuard.m_dRamChunks;
+
+		pTokenizer->SetBuffer ( (BYTE *)sQuery, strlen ( sQuery ) );
+		tAotFilter.GetKeywords ( dKeywords, tExpCtx );
 	} else
 	{
 		BYTE sWord[SPH_MAX_KEYWORD_LEN];
@@ -7668,7 +7684,7 @@ bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 	}
 
 	// get stats from disk chunks too
-	if ( !bGetStats )
+	if ( !tSettings.m_bStats )
 		return true;
 
 	ARRAY_FOREACH ( iChunk, tGuard.m_dDiskChunks )
@@ -7678,20 +7694,22 @@ bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 }
 
 
-bool RtIndex_t::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const char * sQuery, bool bGetStats, CSphString * pError ) const
+bool RtIndex_t::GetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const char * sQuery, const GetKeywordsSettings_t & tSettings, CSphString * pError ) const
 {
 	SphChunkGuard_t tGuard;
 	GetReaderChunks ( tGuard );
-	bool bGot = DoGetKeywords ( dKeywords, sQuery, bGetStats, false, pError, tGuard );
+	bool bGot = DoGetKeywords ( dKeywords, sQuery, tSettings, false, pError, tGuard );
 	return bGot;
 }
 
 
 bool RtIndex_t::FillKeywords ( CSphVector<CSphKeywordInfo> & dKeywords ) const
 {
+	GetKeywordsSettings_t tSettings;
+	tSettings.m_bStats = true;
 	SphChunkGuard_t tGuard;
 	GetReaderChunks ( tGuard );
-	bool bGot = DoGetKeywords ( dKeywords, NULL, true, true, NULL, tGuard );
+	bool bGot = DoGetKeywords ( dKeywords, NULL, tSettings, true, NULL, tGuard );
 	return bGot;
 }
 

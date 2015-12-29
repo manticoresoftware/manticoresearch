@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>CALL KEYWORDS options</name>
+
+<requires><lemmatizer_base/><non-rt/></requires>
+
+<config>
+common
+{
+	lemmatizer_base	= <local>lemmatizer_base</local>
+}
+
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query 			= SELECT 1 id, 'another quorum test testers tests re-bu@s' body, 11 idd UNION SELECT 2 id, 'quorum quorum quorumm quorummm test re-bu@s-es' body, 22 idd
+	sql_field_string	= body
+	sql_attr_uint		= idd
+}
+
+index plain_blend
+{
+	source = test
+	path = <data_path/>/plain_blend
+	source			= test
+	docinfo			= extern
+	dict = keywords
+    charset_table = a..z, _, A..Z->a..z
+	min_infix_len = 2
+	blend_chars = -, @,	
+}
+
+index plain_lemm
+{
+	source = test
+	path = <data_path/>/plain_lemm
+	source			= test
+	docinfo			= extern
+	dict = keywords
+    charset_table = a..z, _, A..Z->a..z
+	min_infix_len = 2
+	morphology = lemmatize_en_all
+}
+
+index rt_blend
+{
+	type = rt
+	path			= <data_path/>/rt_blend
+	docinfo = extern
+	rt_mem_limit = 128M
+	rt_field		= body
+	rt_attr_uint	= idd
+	dict = keywords
+    charset_table = a..z, _, A..Z->a..z
+	min_infix_len = 2
+	blend_chars = -, @,	
+}
+
+index rt_lemm
+{
+	type = rt
+	path			= <data_path/>/rt_lemm
+	docinfo = extern
+	rt_mem_limit = 128M
+	rt_field		= body
+	rt_attr_uint	= idd
+	dict = keywords
+    charset_table = a..z, _, A..Z->a..z
+	min_infix_len = 2
+	morphology = lemmatize_en_all
+}
+
+index tpl_blend
+{
+	type = template
+	dict = keywords
+    charset_table = a..z, _, A..Z->a..z
+	min_infix_len = 2
+	blend_chars = -, @,	
+}
+
+index tpl_lemm
+{
+	type = template
+	dict = keywords
+    charset_table = a..z, _, A..Z->a..z	
+	min_infix_len = 2
+	morphology = lemmatize_en_all
+}
+
+</config>
+
+<sphqueries>
+	<sphinxql>INSERT INTO rt_blend (id, body, idd) VALUES (1, 'another quorum test testers tests re-bu@s', 11)</sphinxql>
+	<sphinxql>INSERT INTO rt_blend (id, body, idd) VALUES (2, 'quorum quorum quorumm quorummm test re-bu@s-es', 22)</sphinxql>
+	<sphinxql>INSERT INTO rt_lemm (id, body, idd) VALUES (1, 'another quorum test testers tests re-bu@s', 11)</sphinxql>
+	<sphinxql>INSERT INTO rt_lemm (id, body, idd) VALUES (2, 'quorum quorum quorumm quorummm test re-bu@s-es', 22)</sphinxql>
+	
+	<!-- fold wildcards options -->
+	<sphinxql>CALL KEYWORDS ( 'qu* me tests', 'plain_blend',	1 AS stats, 0 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
+	<sphinxql>CALL KEYWORDS ( 'qu* me tests', 'plain_blend',	1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
+	<sphinxql>CALL KEYWORDS ( 'qu* me tests', 'plain_blend',	0 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
+	<sphinxql>CALL KEYWORDS ( 'qu* me tests', 'rt_blend',		1 AS stats, 0 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
+	<sphinxql>CALL KEYWORDS ( 'qu* me tests', 'rt_blend',		1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
+	<sphinxql>CALL KEYWORDS ( 'qu* me tests', 'rt_blend',		0 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
+	<sphinxql>CALL KEYWORDS ( 'qu* me tests', 'tpl_blend',		1 AS stats, 0 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
+	<sphinxql>CALL KEYWORDS ( 'qu* me tests', 'tpl_blend',		1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
+	<sphinxql>CALL KEYWORDS ( 'qu* me tests', 'tpl_blend',		0 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
+	
+	<!-- fold blended options -->
+	<sphinxql>CALL KEYWORDS ( 're-bu@s fe@bus qu* me tests', 'plain_blend',	1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
+	<sphinxql>CALL KEYWORDS ( 're-bu@s fe@bus qu* me tests', 'plain_blend',	1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 1 AS fold_blended )</sphinxql>
+	<sphinxql>CALL KEYWORDS ( 're-bu@s fe@bus qu* me tests', 'rt_blend',	1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
+	<sphinxql>CALL KEYWORDS ( 're-bu@s fe@bus qu* me tests', 'rt_blend',	1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 1 AS fold_blended )</sphinxql>
+	<sphinxql>CALL KEYWORDS ( 're-bu@s fe@bus qu* me tests', 'tpl_blend',	1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
+	<sphinxql>CALL KEYWORDS ( 're-bu@s fe@bus qu* me tests', 'tpl_blend',	1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 1 AS fold_blended )</sphinxql>
+	
+	<!-- fold lemmas options -->
+	<sphinxql>CALL KEYWORDS ( 'bus qu* me tests testing gone', 'plain_lemm',	1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
+	<sphinxql>CALL KEYWORDS ( 'bus qu* me tests testing gone', 'plain_lemm',	1 AS stats, 1 AS fold_wildcards, 1 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
+	<sphinxql>CALL KEYWORDS ( 'bus qu* me tests testing gone', 'plain_lemm',	0 AS stats, 1 AS fold_wildcards, 1 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
+	<sphinxql>CALL KEYWORDS ( 'bus qu* me tests testing gone', 'rt_lemm',		1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
+	<sphinxql>CALL KEYWORDS ( 'bus qu* me tests testing gone', 'rt_lemm',		1 AS stats, 1 AS fold_wildcards, 1 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
+	<sphinxql>CALL KEYWORDS ( 'bus qu* me tests testing gone', 'rt_lemm',		0 AS stats, 1 AS fold_wildcards, 1 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
+	<sphinxql>CALL KEYWORDS ( 'bus qu* me tests testing gone', 'tpl_lemm',		1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
+	<sphinxql>CALL KEYWORDS ( 'bus qu* me tests testing gone', 'tpl_lemm',		1 AS stats, 1 AS fold_wildcards, 1 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
+	<sphinxql>CALL KEYWORDS ( 'bus qu* me tests testing gone', 'tpl_lemm',		0 AS stats, 1 AS fold_wildcards, 1 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
+</sphqueries>
+
+</test>

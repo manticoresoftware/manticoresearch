@@ -9841,10 +9841,8 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 	CSphBitvec dBigints ( iUpdLen );
 	CSphBitvec dDoubles ( iUpdLen );
 	CSphBitvec dJsonFields ( iUpdLen );
-	CSphVector<int64_t> dValues ( iUpdLen );
 	CSphVector < CSphRefcountedPtr<ISphExpr> > dExpr ( iUpdLen );
 	memset ( dLocators.Begin(), 0, dLocators.GetSizeBytes() );
-	memset ( dValues.Begin(), 0, dValues.GetSizeBytes() );
 
 	uint64_t uDst64 = 0;
 	ARRAY_FOREACH ( i, tUpd.m_dAttrs )
@@ -9937,12 +9935,6 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 			dBigints.BitSet(i);
 		else if ( tUpd.m_dTypes[i]==SPH_ATTR_FLOAT )
 			dDoubles.BitSet(i);
-		switch ( tUpd.m_dTypes[i] )
-		{
-			case SPH_ATTR_FLOAT:	dValues[i] = ( sphD2QW ( (double)sphDW2F ( tUpd.m_dPool[i] ) ) ); break;
-			case SPH_ATTR_BIGINT:	dValues[i] = ( MVA_UPSIZE ( &tUpd.m_dPool[i] ) ); break;
-			default:				dValues[i] = ( tUpd.m_dPool[i] ); break;
-		}
 	}
 
 	// FIXME! FIXME! FIXME! overwriting just-freed blocks might hurt concurrent searchers;
@@ -9977,7 +9969,11 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 						? JSON_DOUBLE
 						: ( dBigints.BitGet ( iCol ) ? JSON_INT64 : JSON_INT32 );
 
-					if ( !sphJsonInplaceUpdate ( eType, dValues[iCol], dExpr[iCol].Ptr(), m_tString.GetWritePtr(), pEntry, false ) )
+					SphAttr_t uValue = dDoubles.BitGet ( iCol )
+						? sphD2QW ( (double)sphDW2F ( tUpd.m_dPool[iPos] ) )
+						: dBigints.BitGet ( iCol ) ? MVA_UPSIZE ( &tUpd.m_dPool[iPos] ) : tUpd.m_dPool[iPos];
+
+					if ( !sphJsonInplaceUpdate ( eType, uValue, dExpr[iCol].Ptr(), m_tString.GetWritePtr(), pEntry, false ) )
 					{
 						sError.SetSprintf ( "attribute '%s' can not be updated (not found or incompatible types) ", tUpd.m_dAttrs[iCol] );
 						return -1;
@@ -10139,7 +10135,11 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 					? JSON_DOUBLE
 					: ( dBigints.BitGet ( iCol ) ? JSON_INT64 : JSON_INT32 );
 
-				if ( sphJsonInplaceUpdate ( eType, dValues[iCol], dExpr[iCol].Ptr(), m_tString.GetWritePtr(), pEntry, true ) )
+				SphAttr_t uValue = dDoubles.BitGet ( iCol )
+					? sphD2QW ( (double)sphDW2F ( tUpd.m_dPool[iPos] ) )
+					: dBigints.BitGet ( iCol ) ? MVA_UPSIZE ( &tUpd.m_dPool[iPos] ) : tUpd.m_dPool[iPos];
+
+				if ( sphJsonInplaceUpdate ( eType, uValue, dExpr[iCol].Ptr(), m_tString.GetWritePtr(), pEntry, true ) )
 				{
 					bUpdated = true;
 					uUpdateMask |= ATTRS_STRINGS_UPDATED;

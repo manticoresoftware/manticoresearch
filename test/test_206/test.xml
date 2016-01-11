@@ -801,5 +801,10 @@ Two'</sphinxql>
 <sphinxql>select id as v, double(v) as dv, v is null, v is not null from dist_up</sphinxql>
 <sphinxql>select j.rom as v, double(v) as dv, v is null, v is not null from dist_up</sphinxql>
 <sphinxql>select j.rom as v, double(v) as dv, v is null, v is not null from dist_up order by dv asc</sphinxql>
+<!-- inplace update for several 64-bit values -->
+<sphinxql>update json_inplace set j.f[0]=345345345354, j.f[1]=777 where id=1</sphinxql>
+<sphinxql>select j.f[0], j.f[1] from json_inplace where id=1</sphinxql>
+<sphinxql>update json_inplace_rt set j.f[0]=345345345354, j.f[1]=777 where id=1</sphinxql>
+<sphinxql>select j.f[0], j.f[1] from json_inplace_rt where id=1</sphinxql>
 </sphqueries>
 </test>

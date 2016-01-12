@@ -6281,7 +6281,7 @@ struct RankerState_Proximity_fn : public ISphExtra
 
 			// and check if that results in a better lcs match now
 			int iDelta = m_uCurPos - m_uLcsTailPos;
-			if ( ( m_uCurQposMask >> iDelta ) & m_uLcsTailQposMask )
+			if ( iDelta && iDelta<32 && ( m_uCurQposMask >> iDelta ) & m_uLcsTailQposMask )
 			{
 				// cool, it matched!
 				m_uLcsTailQposMask = ( 1UL << pHlist->m_uQuerypos ); // our lcs span now ends with a specific qpos
@@ -8122,7 +8122,7 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Update ( const ExtHi
 
 		// and check if that results in a better lcs match now
 		int iDelta = ( m_uCurPos-m_uLcsTailPos );
-		if ( iDelta && ( m_uCurQposMask >> iDelta ) & m_uLcsTailQposMask )
+		if ( iDelta && iDelta<32 && ( m_uCurQposMask >> iDelta ) & m_uLcsTailQposMask )
 		{
 			// cool, it matched!
 			m_uLcsTailQposMask = ( 1UL << pHlist->m_uQuerypos ); // our lcs span now ends with a specific qpos

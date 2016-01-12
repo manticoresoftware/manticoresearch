@@ -247,6 +247,20 @@ index dup_end2
 	source			= dup_end2
 	path			= <data_path/>/dup_end2
 }
+
+source src_xml1
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/hits1.xml
+}
+
+index idx_xml1
+{
+	source = src_xml1
+	path = <data_path/>/idx_xml1
+	docinfo = extern
+}
+
 </config>
 
 <db_create>
@@ -546,6 +560,10 @@ $results = array_merge ( $results, $query ( "select * from dup_end1 where match 
 $results = array_merge ( $results, $query ( "show meta", $sock ) );
 $results = array_merge ( $results, $query ( "select * from dup_end2 where match (' 100 ' )", $sock ) );
 $results = array_merge ( $results, $query ( "show meta", $sock ) );
+
+
+// regression 
+$results = array_merge ( $results, $query ( "select id, weight() w FROM idx_xml1 WHERE MATCH('\"missed go3\" | (go3 go4)') OPTION ranker=expr('top(lcs)')", $sock ) );
 
 @mysql_close ( $sock );
 

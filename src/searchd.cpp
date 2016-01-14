@@ -14885,7 +14885,7 @@ void SendMysqlEofPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, int iWarns, 
 }
 
 
-void SendMysqlOkPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, int iAffectedRows=0, int iWarns=0, const char * sMessage=NULL )
+void SendMysqlOkPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, int iAffectedRows=0, int iWarns=0, const char * sMessage=NULL, bool bMoreResults=false )
 {
 	DWORD iInsert_id = 0;
 	char sVarLen[20] = {0}; // max 18 for packed number, +1 more just for fun
@@ -14904,9 +14904,10 @@ void SendMysqlOkPacket ( NetOutputBuffer_c & tOut, BYTE uPacketID, int iAffected
 	if ( iWarns<0 ) iWarns = 0;
 	if ( iWarns>65535 ) iWarns = 65535;
 	DWORD uWarnStatus = iWarns<<16;
-	tOut.SendLSBDword ( uWarnStatus );		// N warnings, 0 status
-	if ( iMsgLen > 0 )
-		tOut.SendBytes ( sMessage, iMsgLen );
+	if ( bMoreResults ) // order of WORDs is opposite to EOF packet
+		uWarnStatus |= ( SPH_MYSQL_FLAG_MORE_RESULTS );
+	tOut.SendLSBDword ( uWarnStatus );		// 0 status, N warnings
+	tOut.SendBytes ( sMessage, iMsgLen );
 }
 
 
@@ -15048,9 +15049,11 @@ public:
 		Error ( NULL, sBuf, iErr );
 	}
 
-	inline void Ok ( int iAffectedRows=0, int iWarns=0, const char * sMessage=NULL )
+	inline void Ok ( int iAffectedRows=0, int iWarns=0, const char * sMessage=NULL, bool bMoreResults=false )
 	{
-		SendMysqlOkPacket ( m_tOut, m_uPacketID, iAffectedRows, iWarns, sMessage );
+		SendMysqlOkPacket ( m_tOut, m_uPacketID, iAffectedRows, iWarns, sMessage, bMoreResults );
+		if ( bMoreResults )
+			m_uPacketID++;
 	}
 
 	// Header of the table with defined num of columns
@@ -17214,6 +17217,25 @@ void HandleMysqlDelete ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 }
 
 
+struct SessionVars_t
+{
+	bool			m_bAutoCommit;
+	bool			m_bInTransaction;
+	ESphCollation	m_eCollation;
+	bool			m_bProfile;
+
+	SessionVars_t ()
+		: m_bAutoCommit ( true )
+		, m_bInTransaction ( false )
+		, m_eCollation ( g_eCollation )
+		, m_bProfile ( false )
+	{}
+};
+
+// fwd
+void HandleMysqlShowProfile ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p, bool bMoreResultsFollow );
+static void HandleMysqlShowPlan ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p, bool bMoreResultsFollow );
+
 void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResultMeta & tLastMeta,
 	SqlRowBuffer_c & dRows, ThdDesc_t * pThd, const CSphString& sWarning )
 {
@@ -17230,17 +17252,28 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 
 	StatCountCommand ( SEARCHD_COMMAND_SEARCH, iSelect );
 
-	// setup query for searching
+	// setup query for searching and handle set profiler statement
 	SearchHandler_c tHandler ( iSelect, true, true );
+	SessionVars_t tVars;
+	CSphQueryProfile tProfile;
+
 	iSelect = 0;
 	ARRAY_FOREACH ( i, dStmt )
 	{
 		if ( dStmt[i].m_eStmt==STMT_SELECT )
 			tHandler.m_dQueries[iSelect++] = dStmt[i].m_tQuery;
+		else if ( dStmt[i].m_eStmt==STMT_SET && dStmt[i].m_eSet==SET_LOCAL )
+		{
+			CSphString sSetName ( dStmt[i].m_sSetName );
+			sSetName.ToLower();
+			tVars.m_bProfile = ( sSetName=="profiling" && dStmt[i].m_iSetValue!=0 );
+		}
 	}
 
 	// use first meta for faceted search
-	bool bUseFirstMeta = tHandler.m_dQueries.GetLength()>1 && !tHandler.m_dQueries[0].m_bFacet && tHandler.m_dQueries[1].m_bFacet;
+	bool bUseFirstMeta = ( tHandler.m_dQueries.GetLength()>1 && !tHandler.m_dQueries[0].m_bFacet && tHandler.m_dQueries[1].m_bFacet );
+	if ( tVars.m_bProfile )
+		tHandler.m_pProfile = &tProfile;
 
 	// do search
 	bool bSearchOK = true;
@@ -17280,9 +17313,13 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 		} else if ( eStmt==STMT_SHOW_WARNINGS )
 			HandleMysqlWarning ( tMeta, dRows, bMoreResultsFollow );
 		else if ( eStmt==STMT_SHOW_STATUS || eStmt==STMT_SHOW_META || eStmt==STMT_SHOW_AGENT_STATUS )
-			HandleMysqlMeta ( dRows, dStmt[i], tMeta, bMoreResultsFollow ); // FIXME!!! add profiler and prediction counters
-		else if ( eStmt==STMT_FACET )
-			dRows.Ok();
+			HandleMysqlMeta ( dRows, dStmt[i], tMeta, bMoreResultsFollow ); // FIXME!!! add prediction counters
+		else if ( eStmt==STMT_SET ) // TODO implement all set statements and make them handle bMoreResultsFollow flag
+			dRows.Ok ( 0, 0, NULL, bMoreResultsFollow );
+		else if ( eStmt==STMT_SHOW_PROFILE )
+			HandleMysqlShowProfile ( dRows, tProfile, bMoreResultsFollow );
+		else if ( eStmt==STMT_SHOW_PLAN )
+			HandleMysqlShowPlan ( dRows, tProfile, bMoreResultsFollow );
 
 		if ( g_bGotSigterm )
 		{
@@ -17292,22 +17329,6 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 		}
 	}
 }
-
-
-struct SessionVars_t
-{
-	bool			m_bAutoCommit;
-	bool			m_bInTransaction;
-	ESphCollation	m_eCollation;
-	bool			m_bProfile;
-
-	SessionVars_t ()
-		: m_bAutoCommit ( true )
-		, m_bInTransaction ( false )
-		, m_eCollation ( g_eCollation )
-		, m_bProfile ( false )
-	{}
-};
 
 static ESphCollation sphCollationFromName ( const CSphString & sName, CSphString * pError )
 {
@@ -18001,7 +18022,7 @@ void HandleMysqlShowIndexSettings ( SqlRowBuffer_c & tOut, const SqlStmt_t & tSt
 }
 
 
-void HandleMysqlShowProfile ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p )
+void HandleMysqlShowProfile ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p, bool bMoreResultsFollow )
 {
 	#define SPH_QUERY_STATE(_name,_desc) _desc,
 	static const char * dStates [ SPH_QSTATE_TOTAL ] = { SPH_QUERY_STATES };
@@ -18012,7 +18033,7 @@ void HandleMysqlShowProfile ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p 
 	tOut.HeadColumn ( "Duration" );
 	tOut.HeadColumn ( "Switches" );
 	tOut.HeadColumn ( "Percent" );
-	tOut.HeadEnd();
+	tOut.HeadEnd ( bMoreResultsFollow );
 
 	int64_t tmTotal = 0;
 	int iCount = 0;
@@ -18042,7 +18063,7 @@ void HandleMysqlShowProfile ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p 
 	tOut.PutNumeric ( "%d", iCount );
 	tOut.PutString ( "0" );
 	tOut.Commit();
-	tOut.Eof();
+	tOut.Eof ( bMoreResultsFollow );
 }
 
 
@@ -18338,18 +18359,18 @@ static void HandleMysqlReconfigure ( SqlRowBuffer_c & tOut, const SqlStmt_t & tS
 }
 
 
-static void HandleMysqlShowPlan ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p )
+static void HandleMysqlShowPlan ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p, bool bMoreResultsFollow )
 {
 	tOut.HeadBegin ( 2 );
 	tOut.HeadColumn ( "Variable" );
 	tOut.HeadColumn ( "Value" );
-	tOut.HeadEnd();
+	tOut.HeadEnd ( bMoreResultsFollow );
 
 	tOut.PutString ( "transformed_tree" );
 	tOut.PutString ( p.m_sTransformedTree.cstr() );
 	tOut.Commit();
 
-	tOut.Eof();
+	tOut.Eof ( bMoreResultsFollow );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -18646,7 +18667,7 @@ public:
 			return true;
 
 		case STMT_SHOW_PROFILE:
-			HandleMysqlShowProfile ( tOut, m_tLastProfile );
+			HandleMysqlShowProfile ( tOut, m_tLastProfile, false );
 			return false; // do not profile this call, keep last query profile
 
 		case STMT_ALTER_ADD:
@@ -18658,7 +18679,7 @@ public:
 			return true;
 
 		case STMT_SHOW_PLAN:
-			HandleMysqlShowPlan ( tOut, m_tLastProfile );
+			HandleMysqlShowPlan ( tOut, m_tLastProfile, false );
 			return false; // do not profile this call, keep last query profile
 
 		case STMT_SELECT_DUAL:

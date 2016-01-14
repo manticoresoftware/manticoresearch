@@ -1222,6 +1222,7 @@ class SphinxConfig
 						{
 							$this->_results_model[$this->SubtestNo ()][] = $query_result;
 						}
+						$query_result = array ();
 					} while (mysqli_next_result($connection));
 				} else
 				{

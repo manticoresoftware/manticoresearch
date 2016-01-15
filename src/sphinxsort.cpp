@@ -5218,10 +5218,35 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 	}
 
 	// check for HAVING constrains
-	if ( tQueue.m_pAggrFilter && !tQueue.m_pAggrFilter->m_sAttrName.IsEmpty() && !bGotGroupby )
+	if ( tQueue.m_pAggrFilter && !tQueue.m_pAggrFilter->m_sAttrName.IsEmpty() )
 	{
-		sError.SetSprintf ( "can not use HAVING without group by" );
-		return NULL;
+		if ( !bGotGroupby )
+		{
+			sError.SetSprintf ( "can not use HAVING without GROUP BY" );
+			return NULL;
+		}
+
+		// should be column named at group by or it's alias or aggregate
+		const CSphString & sHaving = tQueue.m_pAggrFilter->m_sAttrName;
+		if ( !IsGroupbyMagic ( sHaving ) )
+		{
+			bool bValidHaving = false;
+			ARRAY_FOREACH ( i, pQuery->m_dItems )
+			{
+				const CSphQueryItem & tItem = pQuery->m_dItems[i];
+				if ( tItem.m_sAlias!=sHaving )
+					continue;
+
+				bValidHaving = ( IsGroupbyMagic ( tItem.m_sExpr ) || tItem.m_eAggrFunc!=SPH_AGGR_NONE );
+				break;
+			}
+
+			if ( !bValidHaving )
+			{
+				sError.SetSprintf ( "can not use HAVING with attribute not related to GROUP BY" );
+				return NULL;
+			}
+		}
 	}
 
 	// now lets add @groupby etc if needed

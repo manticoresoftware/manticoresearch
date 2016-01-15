@@ -192,7 +192,6 @@ request:
 statement:
 	insert_into
 	| delete_from
-	| set_stmt
 	| set_global_stmt
 	| transact_op
 	| call_proc
@@ -268,6 +267,7 @@ multi_stmt_list:
 multi_stmt:
 	select
 	| show_stmt
+	| set_stmt
 	;
 
 select:

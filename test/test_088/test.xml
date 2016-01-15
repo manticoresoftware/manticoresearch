@@ -22,12 +22,13 @@ index test
 	path	= data/test
 	rt_field	= title
 	rt_field	= content
+	rt_attr_uint = dummy
 }
 
 </Config>
 
 <SPHQueries>
-	<SPHinxQL>insert into test values (1,'title1','content1'),(2,'title2','content2'),(3,'title3','content3')</SPHinxQL>
+	<SPHinxQL>insert into test (id, title, content) values (1,'title1','content1'),(2,'title2','content2'),(3,'title3','content3')</SPHinxQL>
 	<SPHinxQL>insert into test (id,title) values (4,'title1'),(5,'title5'),(6,'title6')</SPHinxQL>
 	<SPHinxQL>insert into test (id,content) values (7,'content7'),(8,'content8'),(9,'content9')</SPHinxQL>
 	<SPHinxQL>insert into test (title,content) values ('title','failure'),('title1','failure')</SPHinxQL>

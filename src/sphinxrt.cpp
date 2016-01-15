@@ -7772,10 +7772,8 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 	CSphBitvec dJsonFields ( iUpdLen );
 	CSphBitvec dBigint2Float ( iUpdLen );
 	CSphBitvec dFloat2Bigint ( iUpdLen );
-	CSphVector<int64_t> dValues ( iUpdLen );
 	CSphVector < CSphRefcountedPtr<ISphExpr> > dExpr ( iUpdLen );
 	memset ( dLocators.Begin(), 0, dLocators.GetSizeBytes() );
-	memset ( dValues.Begin(), 0, dValues.GetSizeBytes() );
 
 	uint64_t uDst64 = 0;
 	ARRAY_FOREACH ( i, tUpd.m_dAttrs )
@@ -7864,12 +7862,6 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 			dBigints.BitSet(i);
 		else if ( tUpd.m_dTypes[i]==SPH_ATTR_FLOAT )
 			dDoubles.BitSet(i);
-		switch ( tUpd.m_dTypes[i] )
-		{
-			case SPH_ATTR_FLOAT:	dValues[i] = sphD2QW ( (double)sphDW2F ( tUpd.m_dPool[i] ) ); break;
-			case SPH_ATTR_BIGINT:	dValues[i] = MVA_UPSIZE ( &tUpd.m_dPool[i] ); break;
-			default:				dValues[i] = tUpd.m_dPool[i]; break;
-		}
 	}
 
 	// check if we are empty
@@ -7918,7 +7910,11 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 					? JSON_DOUBLE
 					: ( dBigints.BitGet ( iCol ) ? JSON_INT64 : JSON_INT32 );
 
-				if ( !sphJsonInplaceUpdate ( eType, dValues[iCol], dExpr[iCol].Ptr(), (BYTE *)pSegment->m_dStrings.Begin(), pRow, false ) )
+				SphAttr_t uValue = dDoubles.BitGet ( iCol )
+					? sphD2QW ( (double)sphDW2F ( tUpd.m_dPool[iPos] ) )
+					: dBigints.BitGet ( iCol ) ? MVA_UPSIZE ( &tUpd.m_dPool[iPos] ) : tUpd.m_dPool[iPos];
+
+				if ( !sphJsonInplaceUpdate ( eType, uValue, dExpr[iCol].Ptr(), (BYTE *)pSegment->m_dStrings.Begin(), pRow, false ) )
 				{
 					sError.SetSprintf ( "attribute '%s' can not be updated (not found or incompatible types)", tUpd.m_dAttrs[iCol] );
 					return -1;
@@ -7958,7 +7954,11 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 						? JSON_DOUBLE
 						: ( dBigints.BitGet ( iCol ) ? JSON_INT64 : JSON_INT32 );
 
-					if ( sphJsonInplaceUpdate ( eType, dValues[iCol], dExpr[iCol].Ptr(), pSegment->m_dStrings.Begin(), pRow, true ) )
+					SphAttr_t uValue = dDoubles.BitGet ( iCol )
+						? sphD2QW ( (double)sphDW2F ( tUpd.m_dPool[iPos] ) )
+						: dBigints.BitGet ( iCol ) ? MVA_UPSIZE ( &tUpd.m_dPool[iPos] ) : tUpd.m_dPool[iPos];
+
+					if ( sphJsonInplaceUpdate ( eType, uValue, dExpr[iCol].Ptr(), pSegment->m_dStrings.Begin(), pRow, true ) )
 					{
 						bUpdated = true;
 						uUpdateMask |= ATTRS_STRINGS_UPDATED;
@@ -10276,6 +10276,13 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema * pSche
 			}
 		}
 	}
+
+	if ( !pSchema->m_dAttrs.GetLength () )
+	{
+		pError->SetSprintf ( "no attribute configured (use rt_attr directive)" );
+		return false;
+	}
+
 
 	return true;
 }

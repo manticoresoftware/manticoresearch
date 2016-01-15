@@ -113,6 +113,7 @@ index test12_rt
 	type		= rt
 	path		= <data_path/>/test12_rt
 	rt_field	= content
+	rt_attr_uint = dummy	
 	dict 		= keywords
 	
 	wordforms	= <this_test/>/wordforms-12.txt

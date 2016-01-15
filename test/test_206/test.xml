@@ -685,6 +685,7 @@ Two'</sphinxql>
 <sphinxql>insert into rt (id, data) values (8, '{"f": 6.022e+3}')</sphinxql>
 <sphinxql>insert into rt (id, data) values (9, '{"f": 1.4738223E-1}')</sphinxql>
 <sphinxql>select * from rt where id&gt;=4 and id&lt;=9</sphinxql>
+<!-- group by json blob -->
 <sphinxql>select * from json_inplace_rt group by j</sphinxql>
 <sphinxql>select * from json_inplace_rt group by title, j</sphinxql>
 <!-- search in arrays -->
@@ -749,7 +750,9 @@ Two'</sphinxql>
 	(5, '["a","b"]'),
 	(6, '["a"]'),
 	(7, '[]'),
-	(8, '')
+	(8, ''),
+	(9, '{"a":"b"}'),
+	(10, '{}')
 </sphinxql>
 <sphinxql>select count(*) p, groupby() q from json_toplevel group by j order by p desc</sphinxql>
 <!-- inserting/replacing in a JSONs index with an invalid HTML (quoting) -->
@@ -798,5 +801,10 @@ Two'</sphinxql>
 <sphinxql>select id as v, double(v) as dv, v is null, v is not null from dist_up</sphinxql>
 <sphinxql>select j.rom as v, double(v) as dv, v is null, v is not null from dist_up</sphinxql>
 <sphinxql>select j.rom as v, double(v) as dv, v is null, v is not null from dist_up order by dv asc</sphinxql>
+<!-- inplace update for several 64-bit values -->
+<sphinxql>update json_inplace set j.f[0]=345345345354, j.f[1]=777 where id=1</sphinxql>
+<sphinxql>select j.f[0], j.f[1] from json_inplace where id=1</sphinxql>
+<sphinxql>update json_inplace_rt set j.f[0]=345345345354, j.f[1]=777 where id=1</sphinxql>
+<sphinxql>select j.f[0], j.f[1] from json_inplace_rt where id=1</sphinxql>
 </sphqueries>
 </test>

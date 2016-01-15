@@ -247,6 +247,36 @@ index dist_just1
 	agent_query_timeout		= 3000
 }
 
+source src_j1 : auth
+{
+	sql_query = SELECT id, body, gr, j FROM json_table1 where id in ( 1,2 )
+	sql_query_pre = SET NAMES UTF8
+	sql_attr_uint	= gr
+	sql_attr_json	= j
+}
+index dist_j1
+{
+	source			= src_j1
+	path			= <data_path/>/j1
+	docinfo			= extern
+}
+
+source src_j2 : src_j1
+{
+	sql_query = SELECT id, body, gr, j FROM json_table1 where id in ( 100 )
+}
+index dist_j2 : dist_j1
+{
+	source			= src_j2
+	path			= <data_path/>/j2
+}
+
+index dist_j
+{
+	type					= distributed
+	local					= dist_j1
+	local					= dist_j2
+}
 </config>
 
 
@@ -443,6 +473,9 @@ index dist_just1
 <sphinxql>select count(*) from idx_keys group by tag</sphinxql>
 <sphinxql>select count(distinct text) from idx_keys group by tag</sphinxql>
 
+<!-- regression prohibit HAVING on regular\pool'ed attribute -->
+<sphinxql>SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist_j GROUP BY j.j1 HAVING j.j1 IN ( 1,2 )</sphinxql>
+<sphinxql>SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist_j GROUP BY j.j1 HAVING gg IN ( 1,2 )</sphinxql>
 </sphqueries>
 
 <db_create>
@@ -524,5 +557,23 @@ INSERT INTO `test_keys` VALUES
 ( 8,  3, 'theta')
 </db_insert>
 
+<db_create>
+CREATE TABLE `json_table1` (
+  `id` int(11),
+  `body` varchar(255) NOT NULL,
+  `gr` int(11),
+  `j` varchar(255) NOT NULL
+)
+</db_create>
+ <db_drop>
+DROP TABLE IF EXISTS `json_table1`
+</db_drop>
+
+<db_insert>
+INSERT INTO `json_table1` VALUES
+( 1, 'test', 1, '{"j0":"test string","j1":[1,2,3],"j2":3}' ),
+( 2, 'test', 2, '{"j1":[10,20,30],"j2":3}' ),
+( 100, 'test', 100, '{"j1":[1,200,300],"j2":3}' )
+</db_insert>
 
 </test>

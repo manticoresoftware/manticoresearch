@@ -21839,6 +21839,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	// configure and preload
 
+	if ( bTestMode ) // pass this flag here prior to index config
+		sphRTSetTestMode();
+
 	ConfigureAndPreload ( hConf, dOptIndexes );
 
 	///////////

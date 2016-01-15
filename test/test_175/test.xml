@@ -203,51 +203,6 @@ index rt_auto_expand
 	expand_keywords = 1
 }
 
-source some1
-{
-	type			= mysql
-	<sql_settings/>
-	sql_query		= select * from test_table1
-	sql_attr_uint	= gid
-	sql_field_string = title
-}
-
-
-index some1
-{
-	source = some1
-	path = <data_path/>/some1
-	hitless_words = all
-}
-
-source dup_end1
-{
-	type			= mysql
-	<sql_settings/>
-	sql_query		= SELECT 1 id, 11 gid, '1127206,819,100' title UNION SELECT 1 id, 11 gid, '1,2,3,4,5,1127206,819,100' title
-	sql_attr_uint	= gid
-}
-
-source dup_end2
-{
-	type			= mysql
-	<sql_settings/>
-	sql_query		= SELECT 1 id, 11 gid, '1127206,819,100' title UNION SELECT 1 id, 11 gid, '1,2,3,4,5,6,7,8,1127206,819,100,113,114,115,100' title
-	sql_attr_uint	= gid
-}
-
-index dup_end1
-{
-	source			= dup_end1
-	path			= <data_path/>/dup_end1
-}
-
-index dup_end2
-{
-	source			= dup_end2
-	path			= <data_path/>/dup_end2
-}
-
 source src_xml1
 {
 	type = xmlpipe2
@@ -536,12 +491,7 @@ $results = array_merge ( $results, $query ( "show meta", $sock ) );
 // regression call keywords fails at disk chunk term with skiplist
 $results = array_merge ( $results, $query ( " CALL KEYWORDS ('got aborted avi', 'rt_auto_expand', 1) ", $sock ) );
 
-// regression field end hits vs duplicated doc
-$results = array_merge ( $results, $query ( "select * from dup_end1 where match (' 100 ' )", $sock ) );
-$results = array_merge ( $results, $query ( "show meta", $sock ) );
-$results = array_merge ( $results, $query ( "select * from dup_end2 where match (' 100 ' )", $sock ) );
-$results = array_merge ( $results, $query ( "show meta", $sock ) );
-
+// regression field end hits vs duplicated doc, MOVED to separete test 238 to pass rt mode
 
 // regression 
 $results = array_merge ( $results, $query ( "select id, weight() w FROM idx_xml1 WHERE MATCH('\"missed go3\" | (go3 go4)') OPTION ranker=expr('top(lcs)')", $sock ) );

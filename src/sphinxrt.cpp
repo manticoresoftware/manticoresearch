@@ -10157,7 +10157,6 @@ ISphRtIndex * sphCreateIndexRT ( const CSphSchema & tSchema, const char * sIndex
 	return new RtIndex_t ( tSchema, sIndexName, iRamSize, sPath, bKeywordDict );
 }
 
-
 void sphRTInit ( const CSphConfigSection & hSearchd, bool bTestMode )
 {
 	MEMORY ( MEM_BINLOG );
@@ -10200,6 +10199,12 @@ void sphReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, DWORD uRe
 	g_bRTChangesAllowed = true;
 }
 
+static bool g_bTestMode = false;
+
+void sphRTSetTestMode ()
+{
+	g_bTestMode = true;
+}
 
 bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema * pSchema, CSphString * pError )
 {
@@ -10277,7 +10282,7 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema * pSche
 		}
 	}
 
-	if ( !pSchema->m_dAttrs.GetLength () )
+	if ( !pSchema->m_dAttrs.GetLength() && !g_bTestMode )
 	{
 		pError->SetSprintf ( "no attribute configured (use rt_attr directive)" );
 		return false;

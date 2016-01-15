@@ -86,6 +86,7 @@ class CSphConfigSection;
 void sphRTInit ( const CSphConfigSection & hSearchd, bool bTestMode );
 void sphRTConfigure ( const CSphConfigSection & hSearchd, bool bTestMode );
 bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema * pSchema, CSphString * pError );
+void sphRTSetTestMode ();
 
 /// deinitialize subsystem
 void sphRTDone ();

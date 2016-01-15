@@ -131,7 +131,7 @@ $results[] = $client->Query ('', $index);
 <sphinxql>select missed from products; select * from products</sphinxql>
 
 <!-- regression SET and new SHOW statements at multi query-->
-<sphinxql>set profiling=1; select id from idx3; show plan; show meta; set profiling=1; show plan; show meta</sphinxql>
+<sphinxql>set profiling=1; select id from idx3 where match ( 'test' ); show plan; show meta; set profiling=1; show plan; show meta</sphinxql>
 </sphqueries>
 
 </test>

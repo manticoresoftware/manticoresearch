@@ -1463,7 +1463,7 @@ bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	CSphVector<BYTE> dFiltered;
 	CSphScopedPtr<ISphFieldFilter> pFieldFilter ( NULL );
 	const BYTE * sModifiedQuery = (const BYTE *)szQuery;
-	if ( m_pFieldFilter )
+	if ( m_pFieldFilter && szQuery )
 	{
 		pFieldFilter = m_pFieldFilter->Clone();
 		if ( pFieldFilter->Apply ( sModifiedQuery, strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
@@ -16810,7 +16810,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	CSphVector<BYTE> dFiltered;
 	CSphScopedPtr<ISphFieldFilter> pFieldFilter ( NULL );
 	const BYTE * sModifiedQuery = (const BYTE *)szQuery;
-	if ( m_pFieldFilter )
+	if ( m_pFieldFilter && szQuery )
 	{
 		pFieldFilter = m_pFieldFilter->Clone();
 		if ( pFieldFilter->Apply ( sModifiedQuery, strlen ( (char*)sModifiedQuery ), dFiltered, true ) )

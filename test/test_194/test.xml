@@ -56,6 +56,17 @@ index test_large
 	regexp_filter = (blue|red) => color
 }
 
+index rt1
+{
+	type 			= rt
+	path			= <data_path/>/rt1
+	docinfo = extern
+	rt_mem_limit = 8M
+	rt_attr_uint	= idd
+	rt_field		= title
+	dict = keywords
+	regexp_filter = (blue|red) => color
+}
 </config>
 
 <db_create>
@@ -93,6 +104,13 @@ INSERT INTO test_table VALUES
 
 <!-- regression crash of indexer on indexing large data passed regexp_filter -->
 <sphinxql>select * from test_large where match('color')</sphinxql>
+
+<!-- regression crash of daemon on query RT index with disk chunk -->
+<sphinxql>INSERT INTO rt1 ( id, idd, title ) VALUES ( 1, 11, 'test another test')</sphinxql>
+<sphinxql>FLUSH RAMCHUNK rt1</sphinxql>
+<sphinxql>INSERT INTO rt1 ( id, idd, title ) VALUES ( 2, 22, 'test')</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'test', 'rt1', 1 )</sphinxql>
+
 </sphqueries>
 
 </test>

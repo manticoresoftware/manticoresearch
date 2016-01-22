@@ -18266,6 +18266,9 @@ static void HandleMysqlAlter ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, b
 				dErrors.Submit ( sName, sAddError.cstr() );
 
 			pLocal->Unlock();
+		} else
+		{
+			dErrors.Submit ( sName, "unknown local index in ALTER request" );
 		}
 	}
 

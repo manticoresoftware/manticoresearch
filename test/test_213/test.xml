@@ -132,6 +132,9 @@ INSERT INTO `test_table` VALUES
 <sphinxql>alter table test add column add1 integer</sphinxql>
 <sphinxql>select * from test</sphinxql>
 
+<!-- regression ok reply from missed index and failed query -->
+<sphinxql>alter table missed_index add column add1 integer</sphinxql>
+
 </sphqueries>
 
 </test>

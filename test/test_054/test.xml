@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
 <test>
 <name>quorum</name>
 
@@ -101,6 +102,25 @@ index num1t
 	charset_table	= 0..9, A..Z->a..z, _, a..z, U+2E
 }
 
+source test_q1
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1 id, 11 idd, "есть и можешь купить набор" text
+	sql_attr_uint = idd
+}
+
+index test_q1
+{
+	source	= test_q1
+	path	= <data_path/>/test_q1
+	charset_table	= 0..9, A..Z->a..z, _, ., -, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+0401->U+0435, U+0451->U+0435 
+	morphology              = stem_enru
+	min_infix_len           = 1
+	index_exact_words       = 1
+	expand_keywords         = 1
+}
+
 </config>
 
 <db_create>
@@ -176,6 +196,9 @@ INSERT INTO test_table ( document_id, text ) VALUES
 	<sphinxql>SHOW META</sphinxql>
 	<sphinxql>SELECT * FROM num1t WHERE MATCH ( ' "set of 3 51"/0.7 ' )</sphinxql>
 	<sphinxql>SHOW META</sphinxql>
+
+	<!-- regression duplacates from multiple qpos -->
+	<sphinxql>SELECT id FROM test_q1 WHERE MATCH(' "наборы купить набор"/2 ') ORDER BY ID ASC</sphinxql>
 </sphqueries>
 
 </test>

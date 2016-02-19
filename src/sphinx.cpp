@@ -31110,6 +31110,9 @@ struct CmpHistogram_fn
 // convert utf8 to unicode string
 int DecodeUtf8 ( const BYTE * sWord, int * pBuf )
 {
+	if ( !sWord )
+		return 0;
+
 	int * pCur = pBuf;
 	while ( *sWord )
 	{

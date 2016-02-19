@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>CALL SUGGEST</name>
+
+<requires><non-rt/></requires>
+
+<config>
+
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query_pre 		= SET NAMES utf8
+	sql_query 			= SELECT id, body, idd FROM test_table
+	sql_attr_uint		= idd
+}
+
+index plain1
+{
+	source			= test
+	path = <data_path/>/plain1
+	docinfo			= extern
+	dict = keywords
+    charset_table = a..z, _, A..Z->a..z, russian
+	min_infix_len = 3
+}
+
+index rt1
+{
+	type = rt
+	path			= <data_path/>/rt1
+	docinfo = extern
+	rt_mem_limit = 128M
+	rt_field		= body
+	rt_attr_uint	= idd
+	dict = keywords
+    charset_table = a..z, _, A..Z->a..z, russian
+	min_infix_len = 3
+}
+
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	idd INTEGER NOT NULL,
+	body VARCHAR(255) NOT NULL
+) CHARACTER SET utf8;
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_insert>INSERT INTO test_table VALUES
+( 1, 11, 'The role of a software tester in an Agile environment goes beyond' ),
+( 2, 12, 'paint coating is to be tested with a wet sponge tester' ),
+( 3, 13, 'technical tester builds tools' ),
+( 4, 14, 'aquia magic rester' ),
+( 5, 15, 'pharma exec arrested for securities fraud' ),
+( 6, 16, 'was arrested for stealing a tester bottle' ),
+( 7, 17, 'star allegedly tells drug tester' ),
+
+( 101, 111, 'С благодарностью к своим' ),
+( 102, 112, 'с благодарностью за все' ),
+( 103, 113, 'его к поощрению благодарностью всех' ),
+( 104, 114, 'письма благодарности героям прошлого' ),
+( 105, 115, 'его благодарность неизвестна' ),
+( 106, 116, 'написать e-mail с благодарностью' )
+
+</db_insert>
+
+
+<sphqueries>
+	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 1, 11, 'The role of a software tester in an Agile environment goes beyond')</sphinxql>
+	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 2, 11, 'paint coating is to be tested with a wet sponge tester' )</sphinxql>
+	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 3, 11, 'technical tester builds tools' )</sphinxql>
+	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 4, 11, 'aquia magic rester' )</sphinxql>
+	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 5, 11, 'pharma exec arrested for securities fraud' )</sphinxql>
+	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 6, 11, 'was arrested for stealing a tester bottle' )</sphinxql>
+	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 7, 11, 'star allegedly tells drug tester' )</sphinxql>
+	
+	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 10, 22, 'С благодарностью к своим' )</sphinxql>
+	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 11, 22, 'с благодарностью за все' )</sphinxql>
+	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 12, 22, 'его к поощрению благодарностью всех' )</sphinxql>
+	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 13, 22, 'письма благодарности героям прошлого' )</sphinxql>
+	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 14, 22, 'его благодарность неизвестна' )</sphinxql>
+	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 15, 22, 'написать e-mail с благодарностью' )</sphinxql>
+	
+	
+	<sphinxql>CALL SUGGEST ( 'taster', 'plain1')</sphinxql>
+	<sphinxql>CALL SUGGEST ( 'taster', 'rt1')</sphinxql>
+	<sphinxql>CALL SUGGEST ( 'благодраность', 'plain1')</sphinxql>
+	<sphinxql>CALL SUGGEST ( 'благодраность', 'rt1')</sphinxql>
+	
+	<sphinxql>CALL QSUGGEST ( 'tests passed well because of taster', 'plain1')</sphinxql>
+	<sphinxql>CALL QSUGGEST ( 'tests passed well because of taster', 'rt1')</sphinxql>
+	<sphinxql>CALL QSUGGEST ( 'с превеликой благодраностью', 'plain1')</sphinxql>
+	<sphinxql>CALL QSUGGEST ( 'с превеликой благодраностью', 'rt1')</sphinxql>
+</sphqueries>
+
+</test>

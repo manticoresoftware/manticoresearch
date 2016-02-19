@@ -3176,6 +3176,8 @@ class ISphQwordSetup;
 class CSphQueryContext;
 struct ISphFilter;
 struct GetKeywordsSettings_t;
+struct SuggestArgs_t;
+struct SuggestResult_t;
 
 
 struct ISphKeywordsStat
@@ -3316,6 +3318,7 @@ public:
 	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const = 0;
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, CSphString * pError ) const = 0;
 	virtual bool				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const = 0;
+	virtual void				GetSuggest ( const SuggestArgs_t & , SuggestResult_t & ) const {}
 
 public:
 	/// updates memory-cached attributes in real time

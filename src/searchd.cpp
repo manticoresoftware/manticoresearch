@@ -12470,7 +12470,7 @@ void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 		else if ( sOpt=="fold_wildcards" )
 			tSettings.m_bFoldWildcards = bEnabled;
 		else if ( sOpt=="expansion_limit" )
-			tSettings.m_iExpansionLimit = tStmt.m_dCallOptValues[i].m_iVal;
+			tSettings.m_iExpansionLimit = int ( tStmt.m_dCallOptValues[i].m_iVal );
 		else
 		{
 			sError.SetSprintf ( "unknown option %s", sOpt.cstr () );
@@ -12544,6 +12544,184 @@ void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 		}
 		tOut.Commit();
 	}
+	tOut.Eof();
+}
+
+
+// sort by distance asc, document count desc, ABC asc
+struct CmpDistDocABC_fn
+{
+	const char * m_pBuf;
+	explicit CmpDistDocABC_fn ( const char * pBuf ) : m_pBuf ( pBuf ) {}
+
+	inline bool IsLess ( const SuggestWord_t & a, const SuggestWord_t & b ) const
+	{
+		if ( a.m_iDistance==b.m_iDistance && a.m_iDocs==b.m_iDocs )
+		{
+			return ( sphDictCmpStrictly ( m_pBuf + a.m_iNameOff, a.m_iLen, m_pBuf + b.m_iNameOff, b.m_iLen )<0 );
+		}
+
+		if ( a.m_iDistance==b.m_iDistance )
+			return a.m_iDocs>=b.m_iDocs;
+		return a.m_iDistance<b.m_iDistance;
+	}
+};
+
+void HandleMysqlCallSuggest ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, bool bQueryMode )
+{
+	CSphString sError;
+
+	// string query, string index, [value as option_name, ...]
+	int iArgs = tStmt.m_dInsertValues.GetLength ();
+	if ( iArgs<2
+			|| iArgs>3
+			|| tStmt.m_dInsertValues[0].m_iType!=TOK_QUOTED_STRING
+			|| tStmt.m_dInsertValues[1].m_iType!=TOK_QUOTED_STRING
+			|| ( iArgs==3 && tStmt.m_dInsertValues[2].m_iType!=TOK_CONST_INT ) )
+	{
+		tOut.Error ( tStmt.m_sStmt, "bad argument count or types in KEYWORDS() call" );
+		return;
+	}
+
+	SuggestArgs_t tArgs;
+	SuggestResult_t tRes;
+	const char * sWord = tStmt.m_dInsertValues[0].m_sVal.cstr();
+	tArgs.m_bQueryMode = bQueryMode;
+
+	ARRAY_FOREACH ( i, tStmt.m_dCallOptNames )
+	{
+		CSphString & sOpt = tStmt.m_dCallOptNames[i];
+		sOpt.ToLower ();
+		int iTokType = TOK_CONST_INT;
+
+		if ( sOpt=="limit" )
+		{
+			tArgs.m_iLimit = int ( tStmt.m_dCallOptValues[i].m_iVal );
+		} else if ( sOpt=="delta_len" )
+		{
+			tArgs.m_iDeltaLen = int ( tStmt.m_dCallOptValues[i].m_iVal );
+		} else if ( sOpt=="max_matches" )
+		{
+			tArgs.m_iQueueLen = int ( tStmt.m_dCallOptValues[i].m_iVal );
+		} else if ( sOpt=="reject" )
+		{
+			tArgs.m_iRejectThr = int ( tStmt.m_dCallOptValues[i].m_iVal );
+		} else if ( sOpt=="max_edits" )
+		{
+			tArgs.m_iMaxEdits = int ( tStmt.m_dCallOptValues[i].m_iVal );
+		} else if ( sOpt=="result_line" )
+		{
+			tArgs.m_bResultOneline = ( tStmt.m_dCallOptValues[i].m_iVal!=0 );
+		} else if ( sOpt=="result_stats" )
+		{
+			tArgs.m_bResultStats = ( tStmt.m_dCallOptValues[i].m_iVal!=0 );
+		} else
+		{
+			sError.SetSprintf ( "unknown option %s", sOpt.cstr () );
+			tOut.Error ( tStmt.m_sStmt, sError.cstr () );
+			return;
+		}
+
+		// post-conf type check
+		if ( tStmt.m_dCallOptValues[i].m_iType!=iTokType )
+		{
+			sError.SetSprintf ( "unexpected option %s type", sOpt.cstr () );
+			tOut.Error ( tStmt.m_sStmt, sError.cstr () );
+			return;
+		}
+	}
+
+	const ServedIndex_c * pServed = g_pLocalIndexes->GetRlockedEntry ( tStmt.m_dInsertValues[1].m_sVal );
+	if ( !pServed || !pServed->m_bEnabled || !pServed->m_pIndex )
+	{
+		if ( pServed )
+			pServed->Unlock();
+
+		sError.SetSprintf ( "no such index %s", tStmt.m_dInsertValues[1].m_sVal.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	if ( !pServed->m_pIndex->GetSettings().m_iMinInfixLen || !pServed->m_pIndex->GetDictionary()->GetSettings().m_bWordDict )
+	{
+		sError.SetSprintf ( "suggests work only for keywords dictionary with infix enabled" );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		pServed->Unlock();
+		return;
+	}
+
+	if ( tRes.SetWord ( sWord, pServed->m_pIndex->GetQueryTokenizer(), tArgs.m_bQueryMode ) )
+	{
+		pServed->m_pIndex->GetSuggest ( tArgs, tRes );
+	}
+
+	pServed->Unlock ();
+
+	// data
+	CSphStringBuilder sBuf;
+
+	if ( tArgs.m_bResultOneline )
+	{
+		// let's resort by alphabet to better compare result sets
+		CmpDistDocABC_fn tCmp ( (const char *)( tRes.m_dBuf.Begin() ) );
+		tRes.m_dMatched.Sort ( tCmp );
+
+		// result set header packet
+		tOut.HeadBegin ( 2 );
+		tOut.HeadColumn ( "name" );
+		tOut.HeadColumn ( "value" );
+		tOut.HeadEnd ();
+
+		sBuf.Clear();
+		ARRAY_FOREACH ( i, tRes.m_dMatched )
+			sBuf.Appendf ( "%s%s", ( i==0 ? "" : "," ), tRes.m_dBuf.Begin() + tRes.m_dMatched[i].m_iNameOff );
+		tOut.PutString ( "suggests" );
+		tOut.PutString ( sBuf.cstr() );
+		tOut.Commit();
+
+		if ( tArgs.m_bResultStats )
+		{
+			sBuf.Clear ();
+			ARRAY_FOREACH ( i, tRes.m_dMatched )
+				sBuf.Appendf ( "%s%d", ( i==0 ? "" : "," ), tRes.m_dMatched[i].m_iDistance );
+			tOut.PutString ( "distance" );
+			tOut.PutString ( sBuf.cstr () );
+			tOut.Commit ();
+
+			sBuf.Clear ();
+			ARRAY_FOREACH ( i, tRes.m_dMatched )
+				sBuf.Appendf ( "%s%d", ( i==0 ? "" : "," ), tRes.m_dMatched[i].m_iDocs );
+			tOut.PutString ( "docs" );
+			tOut.PutString ( sBuf.cstr () );
+			tOut.Commit ();
+		}
+	} else
+	{
+		// result set header packet
+		tOut.HeadBegin ( tArgs.m_bResultStats ? 3 : 1 );
+		tOut.HeadColumn ( "suggest" );
+		if ( tArgs.m_bResultStats )
+		{
+			tOut.HeadColumn ( "distance" );
+			tOut.HeadColumn ( "docs" );
+		}
+		tOut.HeadEnd ();
+
+		sBuf.Clear();
+		const char * sBuf = (const char *)( tRes.m_dBuf.Begin() );
+		ARRAY_FOREACH ( i, tRes.m_dMatched )
+		{
+			const SuggestWord_t & tWord = tRes.m_dMatched[i];
+			tOut.PutString ( sBuf + tWord.m_iNameOff );
+			if ( tArgs.m_bResultStats )
+			{
+				tOut.PutNumeric ( "%d", tWord.m_iDistance );
+				tOut.PutNumeric ( "%d", tWord.m_iDocs );
+			}
+			tOut.Commit();
+		}
+	}
+
 	tOut.Eof();
 }
 
@@ -15387,6 +15565,12 @@ public:
 			{
 				StatCountCommand ( SEARCHD_COMMAND_KEYWORDS );
 				HandleMysqlCallKeywords ( tOut, *pStmt );
+			} else if ( pStmt->m_sCallProc=="SUGGEST" )
+			{
+				HandleMysqlCallSuggest ( tOut, *pStmt, false );
+			} else if ( pStmt->m_sCallProc=="QSUGGEST" )
+			{
+				HandleMysqlCallSuggest ( tOut, *pStmt, true );
 			} else
 			{
 				m_sError.SetSprintf ( "no such builtin procedure %s", pStmt->m_sCallProc.cstr() );

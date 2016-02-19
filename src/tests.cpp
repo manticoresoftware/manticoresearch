@@ -4023,6 +4023,63 @@ void TestMutex()
 	printf ( "- timedlock thread done\n" );
 }
 
+static int ProxyLevenshtein ( const char * sA, const char * sB )
+{
+	int iLenA = strlen ( sA );
+	int iLenB = strlen ( sB );
+	return sphLevenshtein ( sA, iLenA, sB, iLenB );
+}
+
+void TestLevenshtein()
+{
+	printf ( "testing levenshtein... " );
+
+	assert ( ProxyLevenshtein ( "a", "b" )==1 );
+	assert ( ProxyLevenshtein ( "ab", "ac" )==1 );
+	assert ( ProxyLevenshtein ( "ac", "bc" )==1 );
+	assert ( ProxyLevenshtein ( "abc", "axc" )==1 );
+	assert ( ProxyLevenshtein ( "kitten", "sitting" )==3 );
+	assert ( ProxyLevenshtein ( "xabxcdxxefxgx", "1ab2cd34ef5g6" )==6 );
+	assert ( ProxyLevenshtein ( "cat", "cow" )==2 );
+	assert ( ProxyLevenshtein ( "xabxcdxxefxgx", "abcdefg" )==6 );
+	assert ( ProxyLevenshtein ( "javawasneat", "scalaisgreat" )==7 );
+	assert ( ProxyLevenshtein ( "example", "samples" )==3 );
+	assert ( ProxyLevenshtein ( "sturgeon", "urgently" )==6 );
+	assert ( ProxyLevenshtein ( "levenshtein", "frankenstein" )==6 );
+	assert ( ProxyLevenshtein ( "distance", "difference" )==5 );
+	assert ( ProxyLevenshtein ( "abc", "xyz" )==3 );
+	assert ( ProxyLevenshtein ( "abc", "a" )==2 );
+	assert ( ProxyLevenshtein ( "a", "abc" )==2 );
+	assert ( ProxyLevenshtein ( "abc", "c" )==2 );
+	assert ( ProxyLevenshtein ( "c", "abc" )==2 );
+	assert ( ProxyLevenshtein ( "cake", "drake" )==2 );
+	assert ( ProxyLevenshtein ( "drake", "cake" )==2 );
+	assert ( ProxyLevenshtein ( "saturday", "sunday" )==3 );
+	assert ( ProxyLevenshtein ( "sunday", "saturday" )==3 );
+	assert ( ProxyLevenshtein ( "book", "back" )==2 );
+	assert ( ProxyLevenshtein ( "dog", "fog" )==1 );
+	assert ( ProxyLevenshtein ( "foq", "fog" )==1 );
+	assert ( ProxyLevenshtein ( "fvg", "fog" )==1 );
+	assert ( ProxyLevenshtein ( "encyclopedia", "encyclopediaz" )==1 );
+	assert ( ProxyLevenshtein ( "encyclopediz", "encyclopediaz" )==1 );
+	assert ( ProxyLevenshtein ( "chukumwong", "ckwong" )==4 );
+	assert ( ProxyLevenshtein ( "ckwong", "chukumwong" )==4 );
+
+	assert ( ProxyLevenshtein ( "folden", "older" )==2 );
+	assert ( ProxyLevenshtein ( "folden", "melden" )==2 );
+	assert ( ProxyLevenshtein ( "folden", "scolded" )==3 );
+	assert ( ProxyLevenshtein ( "goldin", "holding" )==2 );
+	assert ( ProxyLevenshtein ( "goldin", "soldier" )==3 );
+	assert ( ProxyLevenshtein ( "helden", "hielden" )==1 );
+	assert ( ProxyLevenshtein ( "helden", "sheldon" )==2 );
+	assert ( ProxyLevenshtein ( "helena", "helens" )==1 );
+	assert ( ProxyLevenshtein ( "helena", "helllena" )==2 );
+	assert ( ProxyLevenshtein ( "helga", "belgrave" )==4 );
+	assert ( ProxyLevenshtein ( "helga", "anhel" )==4 );
+
+	printf ( "ok\n" );
+}
+
 #endif
 
 //////////////////////////////////////////////////////////////////////////
@@ -4079,6 +4136,7 @@ int main ()
 	TestSource ();
 	TestRankerFactors ();
 	TestRebalance();
+	TestLevenshtein();
 #endif
 
 	unlink ( g_sTmpfile );

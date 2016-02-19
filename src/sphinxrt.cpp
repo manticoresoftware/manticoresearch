@@ -215,14 +215,6 @@ struct RtWordCheckpoint_t
 	int							m_iOffset;
 };
 
-
-struct Slice_t
-{
-	DWORD				m_uOff;
-	DWORD				m_uLen;
-};
-
-
 // More than just sorted vector.
 // OrderedHash is for fast (without sorting potentially big vector) inserts.
 class CSphKilllist : public ISphNoncopyable
@@ -726,13 +718,19 @@ struct RtWordReader_T
 		, m_iWordsCheckpoint ( iWordsCheckpoint )
 		, m_iCheckpoint ( 0 )
 	{
+		m_tWord.m_uWordID = 0;
+		Reset ( pSeg );
+		if ( bWordDict )
+			m_tWord.m_sWord = m_tPackedWord;
+	}
+
+	void Reset ( const RtSegment_t * pSeg )
+	{
 		m_pCur = pSeg->m_dWords.Begin();
 		m_pMax = m_pCur + pSeg->m_dWords.GetLength();
 
-		m_tWord.m_uWordID = 0;
 		m_tWord.m_uDoc = 0;
-		if ( bWordDict )
-			m_tWord.m_sWord = m_tPackedWord;
+		m_iWords = 0;
 	}
 
 	const RTWORD * UnzipWord ()
@@ -1120,7 +1118,7 @@ struct ChunkStats_t
 
 /// RAM based index
 struct RtQword_t;
-struct RtIndex_t : public ISphRtIndex, public ISphNoncopyable, public ISphWordlist
+struct RtIndex_t : public ISphRtIndex, public ISphNoncopyable, public ISphWordlist, public ISphWordlistSuggest
 {
 private:
 	static const DWORD			META_HEADER_MAGIC	= 0x54525053;	///< my magic 'SPRT' header
@@ -1214,6 +1212,11 @@ private:
 
 	virtual void				GetPrefixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const;
 	virtual void				GetInfixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const;
+	virtual void				GetSuggest ( const SuggestArgs_t & tArgs, SuggestResult_t & tRes ) const;
+
+	virtual void				SuffixGetChekpoints ( const SuggestResult_t & tRes, const char * sSuffix, int iLen, CSphVector<DWORD> & dCheckpoints ) const;
+	virtual void				SetCheckpoint ( SuggestResult_t & tRes, DWORD iCP ) const;
+	virtual bool				ReadNextWord ( SuggestResult_t & tRes, DictWord_t & tWord ) const;
 
 public:
 #if USE_WINDOWS
@@ -6379,11 +6382,12 @@ static bool MatchBloomCheckpoint ( const uint64_t * pBloom, const uint64_t * pVa
 }
 
 
-static bool ExtractInfixCheckpoints ( const char * sInfix, int iBytes, int iMaxCodepointLength, int iCPs, const CSphTightVector<uint64_t> & dFilter, CSphVector<int> & dCheckpoints )
+static bool ExtractInfixCheckpoints ( const char * sInfix, int iBytes, int iMaxCodepointLength, int iCPs, const CSphTightVector<uint64_t> & dFilter, CSphVector<DWORD> & dCheckpoints )
 {
-	dCheckpoints.Resize ( 0 );
 	if ( !dFilter.GetLength() )
 		return false;
+
+	int iStart = dCheckpoints.GetLength();
 
 	uint64_t dVals[ BLOOM_PER_ENTRY_VALS_COUNT * BLOOM_HASHES_COUNT ];
 	memset ( dVals, 0, sizeof(dVals) );
@@ -6396,10 +6400,10 @@ static bool ExtractInfixCheckpoints ( const char * sInfix, int iBytes, int iMaxC
 	for ( int i=0; i<iCPs+1; i++ )
 	{
 		if ( MatchBloomCheckpoint ( pRough, dVals, 1, i, BLOOM_HASHES_COUNT ) )
-			dCheckpoints.Add ( i );
+			dCheckpoints.Add ( (DWORD)i );
 	}
 
-	return ( dCheckpoints.GetLength()>0 );
+	return ( dCheckpoints.GetLength()!=iStart );
 }
 
 
@@ -6410,7 +6414,7 @@ void RtIndex_t::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 		return;
 
 	// find those prefixes
-	CSphVector<int> dPoints;
+	CSphVector<DWORD> dPoints;
 	const int iSkipMagic = ( tArgs.m_bHasMorphology ? 1 : 0 ); // whether to skip heading magic chars in the prefix, like NONSTEMMED maker
 	const CSphFixedVector<RtSegment_t*> & dSegments = *((CSphFixedVector<RtSegment_t*> *)tArgs.m_pIndexData);
 
@@ -6428,7 +6432,7 @@ void RtIndex_t::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 		// walk those checkpoints, check all their words
 		ARRAY_FOREACH ( i, dPoints )
 		{
-			int iNext = dPoints[i];
+			int iNext = (int)dPoints[i];
 			int iCur = iNext-1;
 			RtWordReader_t tReader ( pSeg, true, m_iWordsCheckpoint );
 			if ( iCur>0 )
@@ -6453,6 +6457,118 @@ void RtIndex_t::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 	}
 
 	tDict2Payload.Convert ( tArgs );
+}
+
+void RtIndex_t::GetSuggest ( const SuggestArgs_t & tArgs, SuggestResult_t & tRes ) const
+{
+	SphChunkGuard_t tGuard;
+	GetReaderChunks ( tGuard );
+
+	const CSphFixedVector<const RtSegment_t*> & dSegments = tGuard.m_dRamChunks;
+
+	// segments and disk chunks dictionaries produce duplicated entries
+	tRes.m_bMergeWords = true;
+
+	if ( dSegments.GetLength() )
+	{
+		assert ( !tRes.m_pWordReader && !tRes.m_pSegments );
+		tRes.m_pWordReader = new RtWordReader_t ( dSegments[0], true, m_iWordsCheckpoint );
+		tRes.m_pSegments = &tGuard.m_dRamChunks;
+
+		// FIXME!!! cache InfixCodepointBytes as it is slow - GetMaxCodepointLength is charset_table traverse
+		sphGetSuggest ( this, m_pTokenizer->GetMaxCodepointLength(), tArgs, tRes );
+
+		RtWordReader_t * pReader = (RtWordReader_t *)tRes.m_pWordReader;
+		SafeDelete ( pReader );
+		tRes.m_pWordReader = NULL;
+		tRes.m_pSegments = NULL;
+	}
+
+	int iWorstCount = 0;
+	// check disk chunks from recent to oldest
+	for ( int i=tGuard.m_dDiskChunks.GetLength()-1; i>=0; i-- )
+	{
+		int iWorstDist = 0;
+		int iWorstDocs = 0;
+		if ( tRes.m_dMatched.GetLength() )
+		{
+			iWorstDist = tRes.m_dMatched.Last().m_iDistance;
+			iWorstDocs = tRes.m_dMatched.Last().m_iDocs;
+		}
+
+		tGuard.m_dDiskChunks[i]->GetSuggest ( tArgs, tRes );
+
+		// stop checking in case worst element is same several times during loop
+		if ( tRes.m_dMatched.GetLength() && iWorstDist==tRes.m_dMatched.Last().m_iDistance && iWorstDocs==tRes.m_dMatched.Last().m_iDocs )
+		{
+			iWorstCount++;
+			if ( iWorstCount>2 )
+				break;
+		} else
+		{
+			iWorstCount = 0;
+		}
+	}
+}
+
+void RtIndex_t::SuffixGetChekpoints ( const SuggestResult_t & tRes, const char * sSuffix, int iLen, CSphVector<DWORD> & dCheckpoints ) const
+{
+	const CSphFixedVector<const RtSegment_t*> & dSegments = *( (const CSphFixedVector<const RtSegment_t*> *)tRes.m_pSegments );
+	assert ( dSegments.GetLength()<0xFF );
+
+	ARRAY_FOREACH ( iSeg, dSegments )
+	{
+		const RtSegment_t * pSeg = dSegments[iSeg];
+		if ( !pSeg->m_dWords.GetLength () )
+			continue;
+
+		int iStart = dCheckpoints.GetLength();
+		if ( !ExtractInfixCheckpoints ( sSuffix, iLen, m_iMaxCodepointLength, pSeg->m_dWordCheckpoints.GetLength(), pSeg->m_dInfixFilterCP, dCheckpoints ) )
+			continue;
+
+		DWORD iSegPacked = (DWORD)iSeg<<24;
+		for ( int i=iStart; i<dCheckpoints.GetLength(); i++ )
+		{
+			assert ( ( dCheckpoints[i] & 0xFFFFFF )==dCheckpoints[i] );
+			dCheckpoints[i] |= iSegPacked;
+		}
+	}
+}
+
+void RtIndex_t::SetCheckpoint ( SuggestResult_t & tRes, DWORD iCP ) const
+{
+	assert ( tRes.m_pWordReader && tRes.m_pSegments );
+	const CSphFixedVector<const RtSegment_t*> & dSegments = *( (const CSphFixedVector<const RtSegment_t*> *)tRes.m_pSegments );
+	RtWordReader_t * pReader = (RtWordReader_t *)tRes.m_pWordReader;
+
+	int iSeg = iCP>>24;
+	assert ( iSeg>=0 && iSeg<dSegments.GetLength() );
+	const RtSegment_t * pSeg = dSegments[iSeg];
+	pReader->Reset ( pSeg );
+
+	int iNext = (int)( iCP & 0xFFFFFF );
+	int iCur = iNext-1;
+
+	if ( iCur>0 )
+		pReader->m_pCur = pSeg->m_dWords.Begin() + pSeg->m_dWordCheckpoints[iCur].m_iOffset;
+	if ( iNext<pSeg->m_dWordCheckpoints.GetLength() )
+		pReader->m_pMax = pSeg->m_dWords.Begin() + pSeg->m_dWordCheckpoints[iNext].m_iOffset;
+}
+
+bool RtIndex_t::ReadNextWord ( SuggestResult_t & tRes, DictWord_t & tWord ) const
+{
+	assert ( tRes.m_pWordReader );
+	RtWordReader_t * pReader = (RtWordReader_t *)tRes.m_pWordReader;
+
+	const RtWord_t * pWord = pReader->UnzipWord();
+
+	if ( !pWord )
+		return false;
+
+	tWord.m_sWord = (const char *)( pWord->m_sWord + 1 );
+	tWord.m_iLen = pWord->m_sWord[0];
+	tWord.m_iDocs = pWord->m_uDocs;
+	return true;
 }
 
 
@@ -7636,7 +7752,7 @@ bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 	{
 		ExpansionContext_t tExpCtx;
 
-		// query defined options 
+		// query defined options
 		tExpCtx.m_iExpansionLimit = tSettings.m_iExpansionLimit ? tSettings.m_iExpansionLimit : m_iExpansionLimit;
 		bool bExpandWildcards = ( m_bKeywordDict && IsStarDict() && !tSettings.m_bFoldWildcards );
 

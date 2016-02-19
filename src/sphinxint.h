@@ -480,7 +480,7 @@ public:
 	int64_t									m_iBadRows;
 
 public:
-	CSphQueryContext ( const CSphQuery & q );
+	explicit CSphQueryContext ( const CSphQuery & q );
 	~CSphQueryContext ();
 
 	void						BindWeights ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sWarning );
@@ -1911,6 +1911,103 @@ struct ISphSubstringPayload
 };
 
 
+void sphBuildNGrams ( const char * sWord, int iLen, char cDelimiter, CSphVector<char> & dNgrams );
+
+// levenstein distance for words
+int sphLevenshtein ( const char * sWord1, int iLen1, const char * sWord2, int iLen2 );
+
+// levenstein distance for unicode codepoints
+int sphLevenshtein ( const int * sWord1, int iLen1, const int * sWord2, int iLen2 );
+
+struct Slice_t
+{
+	DWORD				m_uOff;
+	DWORD				m_uLen;
+};
+
+struct SuggestWord_t
+{
+	int	m_iNameOff;
+	int m_iLen;
+	int m_iDistance;
+	int m_iDocs;
+	DWORD m_iNameHash;
+};
+
+struct SuggestArgs_t
+{
+	int				m_iLimit;			// limit into result set
+	int				m_iMaxEdits;		// levenstein distance threshold
+	int				m_iDeltaLen;		// filter out words from dictionary these shorter \ longer then reference word
+	int				m_iQueueLen;
+	int				m_iRejectThr;
+	bool			m_bQueryMode;
+
+	bool			m_bResultOneline;
+	bool			m_bResultStats;
+
+	SuggestArgs_t () : m_iLimit ( 5 ), m_iMaxEdits ( 4 ), m_iDeltaLen ( 3 ), m_iQueueLen ( 25 ), m_iRejectThr ( 4 ), m_bQueryMode ( false ), m_bResultOneline ( false ), m_bResultStats ( true )
+	{}
+};
+
+struct SuggestResult_t
+{
+	// result set
+	CSphVector<BYTE>			m_dBuf;
+	CSphVector<SuggestWord_t>	m_dMatched;
+
+	// state
+	CSphVector<char>			m_dTrigrams;
+	// payload
+	void *						m_pWordReader;
+	void *						m_pSegments;
+	bool						m_bMergeWords;
+	// word
+	CSphString		m_sWord;
+	int				m_iLen;
+	int				m_dCodepoints[SPH_MAX_WORD_LEN];
+	int				m_iCodepoints;
+	bool			m_bUtf8;
+
+	SuggestResult_t () : m_pWordReader ( NULL ), m_pSegments ( NULL ), m_bMergeWords ( false ), m_iLen ( 0 ), m_iCodepoints ( 0 ), m_bUtf8 ( false )
+	{
+		m_dBuf.Reserve ( 8096 );
+		m_dMatched.Reserve ( 512 );
+	}
+
+	~SuggestResult_t ()
+	{
+		assert ( !m_pWordReader );
+		assert ( !m_pSegments );
+	}
+
+	bool SetWord ( const char * sWord, const ISphTokenizer * pTok, bool bUseLastWord );
+
+	void Flattern ( int iLimit );
+};
+
+class ISphWordlistSuggest
+{
+public:
+	virtual ~ISphWordlistSuggest () {}
+
+	virtual void SuffixGetChekpoints ( const SuggestResult_t & tRes, const char * sSuffix, int iLen, CSphVector<DWORD> & dCheckpoints ) const = 0;
+
+	virtual void SetCheckpoint ( SuggestResult_t & tRes, DWORD iCP ) const = 0;
+
+	struct DictWord_t
+	{
+		const char *	m_sWord;
+		int				m_iLen;
+		int				m_iDocs;
+	};
+
+	virtual bool ReadNextWord ( SuggestResult_t & tRes, DictWord_t & tWord ) const = 0;
+};
+
+void sphGetSuggest ( const ISphWordlistSuggest * pWordlist, int iInfixCodepointBytes, const SuggestArgs_t & tArgs, SuggestResult_t & tRes );
+
+
 class ISphWordlist
 {
 public:
@@ -1978,11 +2075,11 @@ struct ExpansionContext_t
 
 struct GetKeywordsSettings_t
 {
-	bool m_bStats;
-	bool m_bFoldLemmas;
-	bool m_bFoldBlended;
-	bool m_bFoldWildcards;
-	int  m_iExpansionLimit;
+	bool	m_bStats;
+	bool	m_bFoldLemmas;
+	bool	m_bFoldBlended;
+	bool	m_bFoldWildcards;
+	int		m_iExpansionLimit;
 
 	GetKeywordsSettings_t ();
 };
@@ -2117,7 +2214,7 @@ public:
 
 
 ISphInfixBuilder * sphCreateInfixBuilder ( int iCodepointBytes, CSphString * pError );
-bool sphLookupInfixCheckpoints ( const char * sInfix, int iBytes, const BYTE * pInfixes, const CSphVector<InfixBlock_t> & dInfixBlocks, int iInfixCodepointBytes, CSphVector<int> & dCheckpoints );
+bool sphLookupInfixCheckpoints ( const char * sInfix, int iBytes, const BYTE * pInfixes, const CSphVector<InfixBlock_t> & dInfixBlocks, int iInfixCodepointBytes, CSphVector<DWORD> & dCheckpoints );
 // calculate length, upto iInfixCodepointBytes chars from infix start
 int sphGetInfixLength ( const char * sInfix, int iBytes, int iInfixCodepointBytes );
 

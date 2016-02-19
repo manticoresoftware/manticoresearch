@@ -522,114 +522,6 @@ void CSphAutofile::SetProgressCallback ( CSphIndexProgress * pStat )
 }
 
 
-/////////////////////////////////////////////////////////////////////////////
-
-/// generic stateless priority queue
-template < typename T, typename COMP > class CSphQueue
-{
-protected:
-	T *		m_pData;
-	int		m_iUsed;
-	int		m_iSize;
-
-public:
-	/// ctor
-	explicit CSphQueue ( int iSize )
-		: m_iUsed ( 0 )
-		, m_iSize ( iSize )
-	{
-		assert ( iSize>0 );
-		m_pData = new T [ iSize ];
-		assert ( m_pData );
-	}
-
-	/// dtor
-	~CSphQueue ()
-	{
-		SafeDeleteArray ( m_pData );
-	}
-
-	/// add entry to the queue
-	bool Push ( const T & tEntry )
-	{
-		if ( m_iUsed==m_iSize )
-		{
-			// if it's worse that current min, reject it, else pop off current min
-			if ( COMP::IsLess ( tEntry, m_pData[0] ) )
-				return true;
-			else
-				Pop ();
-		}
-
-		// do add
-		m_pData [ m_iUsed ] = tEntry;
-		int iEntry = m_iUsed++;
-
-		// sift up if needed, so that worst (lesser) ones float to the top
-		while ( iEntry )
-		{
-			int iParent = ( iEntry-1 ) >> 1;
-			if ( !COMP::IsLess ( m_pData[iEntry], m_pData[iParent] ) )
-				break;
-
-			// entry is less than parent, should float to the top
-			Swap ( m_pData[iEntry], m_pData[iParent] );
-			iEntry = iParent;
-		}
-
-		return true;
-	}
-
-	/// remove root (ie. top priority) entry
-	void Pop ()
-	{
-		assert ( m_iUsed );
-		if ( !(--m_iUsed) ) // empty queue? just return
-			return;
-
-		// make the last entry my new root
-		m_pData[0] = m_pData[m_iUsed];
-
-		// sift down if needed
-		int iEntry = 0;
-		for ( ;; )
-		{
-			// select child
-			int iChild = (iEntry<<1) + 1;
-			if ( iChild>=m_iUsed )
-				break;
-
-			// select smallest child
-			if ( iChild+1<m_iUsed )
-				if ( COMP::IsLess ( m_pData[iChild+1], m_pData[iChild] ) )
-					iChild++;
-
-			// if smallest child is less than entry, do float it to the top
-			if ( COMP::IsLess ( m_pData[iChild], m_pData[iEntry] ) )
-			{
-				Swap ( m_pData[iChild], m_pData[iEntry] );
-				iEntry = iChild;
-				continue;
-			}
-
-			break;
-		}
-	}
-
-	/// get entries count
-	inline int GetLength () const
-	{
-		return m_iUsed;
-	}
-
-	/// get current root
-	inline const T & Root () const
-	{
-		assert ( m_iUsed );
-		return m_pData[0];
-	}
-};
-
 //////////////////////////////////////////////////////////////////////////
 
 /// possible bin states
@@ -1163,6 +1055,7 @@ private:
 
 public:
 	explicit		KeywordsBlockReader_c ( const BYTE * pBuf, bool bHaveSkiplists );
+	void			Reset ( const BYTE * pBuf );
 	bool			UnpackWord();
 
 	const char *	GetWord() const			{ return (const char*)m_sWord; }
@@ -1200,7 +1093,7 @@ struct ISphCheckpointReader
 
 
 // !COMMIT eliminate this, move it to proper dict impls
-class CWordlist : public ISphWordlist, public DictHeader_t
+class CWordlist : public ISphWordlist, public DictHeader_t, public ISphWordlistSuggest
 {
 public:
 	// !COMMIT slow data
@@ -1226,6 +1119,10 @@ public:
 	const BYTE *						AcquireDict ( const CSphWordlistCheckpoint * pCheckpoint ) const;
 	virtual void						GetPrefixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const;
 	virtual void						GetInfixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const;
+
+	virtual void						SuffixGetChekpoints ( const SuggestResult_t & tRes, const char * sSuffix, int iLen, CSphVector<DWORD> & dCheckpoints ) const;
+	virtual void						SetCheckpoint ( SuggestResult_t & tRes, DWORD iCP ) const;
+	virtual bool						ReadNextWord ( SuggestResult_t & tRes, DictWord_t & tWord ) const;
 
 	void								DebugPopulateCheckpoints();
 
@@ -1537,6 +1434,7 @@ public:
 	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, CSphString * pError ) const;
 	template <class Qword> bool	DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, bool bFillOnly, CSphString * pError ) const;
 	virtual bool 				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const;
+	virtual void				GetSuggest ( const SuggestArgs_t & tArgs, SuggestResult_t & tRes ) const;
 
 	virtual bool				Merge ( CSphIndex * pSource, const CSphVector<CSphFilterSettings> & dFilters, bool bMergeKillLists );
 
@@ -16516,6 +16414,21 @@ bool CSphIndex_VLN::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	return false;
 }
 
+void CSphIndex_VLN::GetSuggest ( const SuggestArgs_t & tArgs, SuggestResult_t & tRes ) const
+{
+	if ( m_tWordlist.m_tBuf.IsEmpty() || !m_tWordlist.m_dCheckpoints.GetLength() )
+		return;
+
+	assert ( !tRes.m_pWordReader );
+	tRes.m_pWordReader = new KeywordsBlockReader_c ( m_tWordlist.m_tBuf.GetWritePtr(), m_tWordlist.m_bHaveSkips );
+
+	sphGetSuggest ( &m_tWordlist, m_tWordlist.m_iInfixCodepointBytes, tArgs, tRes );
+
+	KeywordsBlockReader_c * pReader = (KeywordsBlockReader_c *)tRes.m_pWordReader;
+	SafeDelete ( pReader );
+	tRes.m_pWordReader = NULL;
+}
+
 
 DWORD sphParseMorphAot ( const char * sMorphology )
 {
@@ -30601,10 +30514,16 @@ const CSphWordlistCheckpoint * CWordlist::FindCheckpoint ( const char * sWord, i
 
 KeywordsBlockReader_c::KeywordsBlockReader_c ( const BYTE * pBuf, bool bSkips )
 {
+	m_bHaveSkips = bSkips;
+	Reset ( pBuf );
+}
+
+
+void KeywordsBlockReader_c::Reset ( const BYTE * pBuf )
+{
 	m_pBuf = pBuf;
 	m_sWord[0] = '\0';
 	m_iLen = 0;
-	m_bHaveSkips = bSkips;
 	m_sKeyword = m_sWord;
 }
 
@@ -30962,10 +30881,9 @@ bool operator < ( const char * a, const InfixBlock_t & b )
 }
 
 
-bool sphLookupInfixCheckpoints ( const char * sInfix, int iBytes, const BYTE * pInfixes, const CSphVector<InfixBlock_t> & dInfixBlocks, int iInfixCodepointBytes, CSphVector<int> & dCheckpoints )
+bool sphLookupInfixCheckpoints ( const char * sInfix, int iBytes, const BYTE * pInfixes, const CSphVector<InfixBlock_t> & dInfixBlocks, int iInfixCodepointBytes, CSphVector<DWORD> & dCheckpoints )
 {
 	assert ( pInfixes );
-	dCheckpoints.Resize ( 0 );
 
 	char dInfixBuf[3*SPH_MAX_WORD_LEN+4];
 	memcpy ( dInfixBuf, sInfix, iBytes );
@@ -31024,7 +30942,7 @@ bool sphLookupInfixCheckpoints ( const char * sInfix, int iBytes, const BYTE * p
 			while ( pBlock<pMax )
 			{
 				iLast += sphUnzipInt ( pBlock );
-				dCheckpoints.Add ( iLast );
+				dCheckpoints.Add ( (DWORD)iLast );
 			}
 			return true;
 		}
@@ -31068,7 +30986,7 @@ void CWordlist::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 
 	// lookup key1
 	// OPTIMIZE? maybe lookup key2 and reduce checkpoint set size, if possible?
-	CSphVector<int> dPoints;
+	CSphVector<DWORD> dPoints;
 	if ( !sphLookupInfixCheckpoints ( sSubstring, iBytes1, m_tBuf.GetWritePtr(), m_dInfixBlocks, m_iInfixCodepointBytes, dPoints ) )
 		return;
 
@@ -31098,6 +31016,468 @@ void CWordlist::GetInfixedWords ( const char * sSubstring, int iSubLen, const ch
 	}
 
 	tDict2Payload.Convert ( tArgs );
+}
+
+static int BuildUtf8Offsets ( const char * sWord, int iLen, int * pOff, int DEBUGARG ( iBufSize ) )
+{
+	const BYTE * s = (const BYTE *)sWord;
+	const BYTE * sEnd = s + iLen;
+	int * pStartOff = pOff;
+	*pOff = 0;
+	pOff++;
+	while ( s<sEnd )
+	{
+		sphUTF8Decode ( s );
+		*pOff = s-(const BYTE *)sWord;
+		pOff++;
+	}
+	assert ( pOff-pStartOff<iBufSize );
+	return pOff - pStartOff - 1;
+}
+
+void sphBuildNGrams ( const char * sWord, int iLen, char cDelimiter, CSphVector<char> & dNGrams )
+{
+	int dOff[SPH_MAX_WORD_LEN+1];
+	int iCodepoints = BuildUtf8Offsets ( sWord, iLen, dOff, sizeof ( dOff ) );
+	if ( iCodepoints<3 )
+		return;
+
+	dNGrams.Reserve ( iLen*3 );
+	for ( int iChar=0; iChar<=iCodepoints-3; iChar++ )
+	{
+		int iStart = dOff[iChar];
+		int iEnd = dOff[iChar+3];
+		int iGramLen = iEnd - iStart;
+
+		char * sDst = dNGrams.AddN ( iGramLen + 1 );
+		memcpy ( sDst, sWord+iStart, iGramLen );
+		sDst[iGramLen] = cDelimiter;
+	}
+	// n-grams split by delimiter
+	// however it's still null terminated
+	dNGrams.Last() = '\0';
+}
+
+template <typename T>
+int sphLevenshtein ( const T * sWord1, int iLen1, const T * sWord2, int iLen2 )
+{
+	if ( !iLen1 )
+		return iLen2;
+	if ( !iLen2 )
+		return iLen1;
+
+	int dTmp [ 3*SPH_MAX_WORD_LEN+1 ]; // FIXME!!! remove extra length after utf8->codepoints conversion
+
+	for ( int i=0; i<=iLen2; i++ )
+		dTmp[i] = i;
+
+	for ( int i=0; i<iLen1; i++ )
+	{
+		dTmp[0] = i+1;
+		int iWord1 = sWord1[i];
+		int iDist = i;
+
+		for ( int j=0; j<iLen2; j++ )
+		{
+			int iDistNext = dTmp[j+1];
+			dTmp[j+1] = ( iWord1==sWord2[j] ? iDist : ( 1 + Min ( Min ( iDist, iDistNext ), dTmp[j] ) ) );
+			iDist = iDistNext;
+		}
+	}
+
+	return dTmp[iLen2];
+}
+
+int sphLevenshtein ( const char * sWord1, int iLen1, const char * sWord2, int iLen2 )
+{
+	return sphLevenshtein<char> ( sWord1, iLen1, sWord2, iLen2 );
+}
+
+int sphLevenshtein ( const int * sWord1, int iLen1, const int * sWord2, int iLen2 )
+{
+	return sphLevenshtein<int> ( sWord1, iLen1, sWord2, iLen2 );
+}
+
+// sort by distance(uLen) desc, checkpoint index(uOff) asc
+struct CmpHistogram_fn
+{
+	inline bool IsLess ( const Slice_t & a, const Slice_t & b ) const
+	{
+		return ( a.m_uLen>b.m_uLen || ( a.m_uLen==b.m_uLen && a.m_uOff<b.m_uOff ) );
+	}
+};
+
+// convert utf8 to unicode string
+int DecodeUtf8 ( const BYTE * sWord, int * pBuf )
+{
+	int * pCur = pBuf;
+	while ( *sWord )
+	{
+		*pCur = sphUTF8Decode ( sWord );
+		pCur++;
+	}
+	return pCur - pBuf;
+}
+
+
+bool SuggestResult_t::SetWord ( const char * sWord, const ISphTokenizer * pTok, bool bUseLastWord )
+{
+	CSphScopedPtr<ISphTokenizer> pTokenizer ( pTok->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT ) );
+	pTokenizer->SetBuffer ( (BYTE *)sWord, strlen ( sWord ) );
+
+	const BYTE * pToken = pTokenizer->GetToken();
+	for ( ; pToken!=NULL; )
+	{
+		m_sWord = (const char *)pToken;
+		if ( !bUseLastWord )
+			break;
+
+		if ( pTokenizer->TokenIsBlended() )
+			pTokenizer->SkipBlended();
+		pToken = pTokenizer->GetToken();
+	}
+
+
+	m_iLen = m_sWord.Length();
+	m_iCodepoints = DecodeUtf8 ( (const BYTE *)m_sWord.cstr(), m_dCodepoints );
+	m_bUtf8 = ( m_iCodepoints!=m_iLen );
+
+	bool bValidWord = ( m_iCodepoints>=3 );
+	if ( bValidWord )
+		sphBuildNGrams ( m_sWord.cstr(), m_iLen, '\0', m_dTrigrams );
+
+	return bValidWord;
+}
+
+void SuggestResult_t::Flattern ( int iLimit )
+{
+	int iCount = Min ( m_dMatched.GetLength(), iLimit );
+	m_dMatched.Resize ( iCount );
+}
+
+struct SliceInt_t
+{
+	int		m_iOff;
+	int		m_iEnd;
+};
+
+static void SuggestGetChekpoints ( const ISphWordlistSuggest * pWordlist, int iInfixCodepointBytes, const CSphVector<char> & dTrigrams, CSphVector<Slice_t> & dCheckpoints, SuggestResult_t & tStats )
+{
+	CSphVector<DWORD> dWordCp; // FIXME!!! add mask that trigram matched
+	// v1 - current index, v2 - end index
+	CSphVector<SliceInt_t> dMergeIters;
+
+	int iReserveLen = 0;
+	int iLastLen = 0;
+	const char * sTrigram = dTrigrams.Begin();
+	const char * sTrigramEnd = sTrigram + dTrigrams.GetLength();
+	for ( ;; )
+	{
+		int iTrigramLen = strlen ( sTrigram );
+		int iInfixLen = sphGetInfixLength ( sTrigram, iTrigramLen, iInfixCodepointBytes );
+
+		// count how many checkpoint we will get
+		iReserveLen = Max ( iReserveLen, dWordCp.GetLength() - iLastLen );
+		iLastLen = dWordCp.GetLength();
+
+		dMergeIters.Add().m_iOff = dWordCp.GetLength();
+		pWordlist->SuffixGetChekpoints ( tStats, sTrigram, iInfixLen, dWordCp );
+
+		sTrigram += iTrigramLen + 1;
+		if ( sTrigram>=sTrigramEnd )
+			break;
+
+		if ( sphInterrupted() )
+			return;
+	}
+	if ( !dWordCp.GetLength() )
+		return;
+
+	for ( int i=0; i<dMergeIters.GetLength()-1; i++ )
+	{
+		dMergeIters[i].m_iEnd = dMergeIters[i+1].m_iOff;
+	}
+	dMergeIters.Last().m_iEnd = dWordCp.GetLength();
+
+	// v1 - checkpoint index, v2 - checkpoint count
+	dCheckpoints.Reserve ( iReserveLen );
+	dCheckpoints.Resize ( 0 );
+
+	// merge sorting of already ordered checkpoints
+	for ( ;; )
+	{
+		DWORD iMinCP = UINT_MAX;
+		DWORD iMinIndex = UINT_MAX;
+		ARRAY_FOREACH ( i, dMergeIters )
+		{
+			const SliceInt_t & tElem = dMergeIters[i];
+			if ( tElem.m_iOff<tElem.m_iEnd && dWordCp[tElem.m_iOff]<iMinCP )
+			{
+				iMinIndex = i;
+				iMinCP = dWordCp[tElem.m_iOff];
+			}
+		}
+
+		if ( iMinIndex==UINT_MAX )
+			break;
+
+		if ( dCheckpoints.GetLength()==0 || iMinCP!=dCheckpoints.Last().m_uOff )
+		{
+			dCheckpoints.Add().m_uOff = iMinCP;
+			dCheckpoints.Last().m_uLen = 1;
+		} else
+		{
+			dCheckpoints.Last().m_uLen++;
+		}
+
+		assert ( iMinIndex!=UINT_MAX && iMinCP!=UINT_MAX );
+		assert ( dMergeIters[iMinIndex].m_iOff<dMergeIters[iMinIndex].m_iEnd );
+		dMergeIters[iMinIndex].m_iOff++;
+	}
+	dCheckpoints.Sort ( CmpHistogram_fn() );
+}
+
+
+void CWordlist::SuffixGetChekpoints ( const SuggestResult_t & , const char * sSuffix, int iLen, CSphVector<DWORD> & dCheckpoints ) const
+{
+	sphLookupInfixCheckpoints ( sSuffix, iLen, m_tBuf.GetWritePtr(), m_dInfixBlocks, m_iInfixCodepointBytes, dCheckpoints );
+}
+
+void CWordlist::SetCheckpoint ( SuggestResult_t & tRes, DWORD iCP ) const
+{
+	assert ( tRes.m_pWordReader );
+	KeywordsBlockReader_c * pReader = (KeywordsBlockReader_c *)tRes.m_pWordReader;
+	pReader->Reset ( m_tBuf.GetWritePtr() + m_dCheckpoints[iCP-1].m_iWordlistOffset );
+}
+
+bool CWordlist::ReadNextWord ( SuggestResult_t & tRes, DictWord_t & tWord ) const
+{
+	KeywordsBlockReader_c * pReader = (KeywordsBlockReader_c *)tRes.m_pWordReader;
+	if ( !pReader->UnpackWord() )
+		return false;
+
+	tWord.m_sWord = pReader->GetWord();
+	tWord.m_iLen = pReader->GetWordLen();
+	tWord.m_iDocs = pReader->m_iDocs;
+	return true;
+}
+
+struct CmpSuggestOrder_fn
+{
+	bool IsLess ( const SuggestWord_t & a, const SuggestWord_t & b )
+	{
+		if ( a.m_iDistance==b.m_iDistance )
+			return a.m_iDocs>b.m_iDocs;
+
+		return a.m_iDistance<b.m_iDistance;
+	}
+};
+
+void SuggestMergeDocs ( CSphVector<SuggestWord_t> & dMatched )
+{
+	if ( !dMatched.GetLength() )
+		return;
+
+	dMatched.Sort ( bind ( &SuggestWord_t::m_iNameHash ) );
+
+	int iSrc = 1;
+	int iDst = 1;
+	while ( iSrc<dMatched.GetLength() )
+	{
+		if ( dMatched[iDst-1].m_iNameHash==dMatched[iSrc].m_iNameHash )
+		{
+			dMatched[iDst-1].m_iDocs += dMatched[iSrc].m_iDocs;
+			iSrc++;
+		} else
+		{
+			dMatched[iDst++] = dMatched[iSrc++];
+		}
+	}
+
+	dMatched.Resize ( iDst );
+}
+
+template <bool SINGLE_BYTE_CHAR>
+void SuggestMatchWords ( const ISphWordlistSuggest * pWordlist, const CSphVector<Slice_t> & dCheckpoints, const SuggestArgs_t & tArgs, SuggestResult_t & tRes )
+{
+	// walk those checkpoints, check all their words
+
+	const int iMinWordLen = ( tArgs.m_iDeltaLen>0 ? Max ( 0, tRes.m_iCodepoints - tArgs.m_iDeltaLen ) : -1 );
+	const int iMaxWordLen = ( tArgs.m_iDeltaLen>0 ? tRes.m_iCodepoints + tArgs.m_iDeltaLen : INT_MAX );
+
+	CSphHash<int> dHashTrigrams;
+	const char * s = tRes.m_dTrigrams.Begin ();
+	const char * sEnd = s + tRes.m_dTrigrams.GetLength();
+	while ( s<sEnd )
+	{
+		dHashTrigrams.Add ( sphCRC32 ( s ), 1 );
+		while ( *s ) s++;
+		s++;
+	}
+	int dCharOffset[SPH_MAX_WORD_LEN+1];
+	int dDictWordCodepoints[SPH_MAX_WORD_LEN];
+
+	const int iQLen = Max ( tArgs.m_iQueueLen, tArgs.m_iLimit );
+	const int iRejectThr = tArgs.m_iRejectThr;
+	int iQueueRejected = 0;
+	int iLastBad = 0;
+	bool bSorted = true;
+	const bool bMergeWords = tRes.m_bMergeWords;
+	const int iMaxEdits = tArgs.m_iMaxEdits;
+	tRes.m_dMatched.Reserve ( iQLen * 2 );
+	CmpSuggestOrder_fn fnCmp;
+
+	ARRAY_FOREACH ( i, dCheckpoints )
+	{
+		DWORD iCP = dCheckpoints[i].m_uOff;
+		pWordlist->SetCheckpoint ( tRes, iCP );
+
+		ISphWordlistSuggest::DictWord_t tWord;
+		while ( pWordlist->ReadNextWord ( tRes, tWord ) )
+		{
+			const char * sDictWord = tWord.m_sWord;
+			int iDictWordLen = tWord.m_iLen;
+			int iDictCodepoints = iDictWordLen;
+
+			if_const ( SINGLE_BYTE_CHAR )
+			{
+				if ( iDictWordLen<=iMinWordLen || iDictWordLen>=iMaxWordLen )
+					continue;
+			}
+
+			int iChars = 0;
+
+			const BYTE * s = (const BYTE *)sDictWord;
+			const BYTE * sEnd = s + iDictWordLen;
+			bool bGotNonChar = false;
+			while ( !bGotNonChar && s<sEnd )
+			{
+				dCharOffset[iChars] = s - (const BYTE *)sDictWord;
+				int iCode = sphUTF8Decode ( s );
+				bGotNonChar = ( iCode<'A' || ( iCode>'Z' && iCode<'a' ) ); // skip words with any numbers or special characters
+				if_const ( !SINGLE_BYTE_CHAR )
+				{
+					dDictWordCodepoints[iChars] = iCode;
+				}
+				iChars++;
+			}
+			dCharOffset[iChars] = s - (const BYTE *)sDictWord;
+			iDictCodepoints = iChars;
+
+			if_const ( !SINGLE_BYTE_CHAR )
+			{
+				if ( iDictCodepoints<=iMinWordLen || iDictCodepoints>=iMaxWordLen )
+					continue;
+			}
+
+			// skip word in case of non char symbol found
+			if ( bGotNonChar )
+				continue;
+
+			// FIXME!!! should we skip in such cases
+			// utf8 reference word			!=	single byte dictionary word
+			// single byte reference word	!=	utf8 dictionary word
+
+			bool bGotMatch = false;
+			for ( int iChar=0; iChar<=iDictCodepoints-3 && !bGotMatch; iChar++ )
+			{
+				int iStart = dCharOffset[iChar];
+				int iEnd = dCharOffset[iChar+3];
+				bGotMatch = ( dHashTrigrams.Find ( sphCRC32 ( sDictWord + iStart, iEnd - iStart ) )!=NULL );
+			}
+
+			// skip word in case of no trigrams matched
+			if ( !bGotMatch )
+				continue;
+
+			int iDist = INT_MAX;
+			if_const ( SINGLE_BYTE_CHAR )
+				iDist = sphLevenshtein ( tRes.m_sWord.cstr(), tRes.m_iLen, sDictWord, iDictWordLen );
+			else
+				iDist = sphLevenshtein ( tRes.m_dCodepoints, tRes.m_iCodepoints, dDictWordCodepoints, iDictCodepoints );
+
+			// skip word in case of too many edits
+			if ( iDist>iMaxEdits )
+				continue;
+
+			SuggestWord_t tElem;
+			tElem.m_iNameOff = tRes.m_dBuf.GetLength();
+			tElem.m_iLen = iDictWordLen;
+			tElem.m_iDistance = iDist;
+			tElem.m_iDocs = tWord.m_iDocs;
+
+			// store in k-buffer up to 2*QLen words
+			if ( !iLastBad || fnCmp.IsLess ( tElem, tRes.m_dMatched[iLastBad] ) )
+			{
+				if ( bMergeWords )
+					tElem.m_iNameHash = sphCRC32 ( sDictWord, iDictWordLen );
+
+				tRes.m_dMatched.Add ( tElem );
+				BYTE * sWord = tRes.m_dBuf.AddN ( iDictWordLen+1 );
+				memcpy ( sWord, sDictWord, iDictWordLen );
+				sWord[iDictWordLen] = '\0';
+				iQueueRejected = 0;
+				bSorted = false;
+			} else
+			{
+				iQueueRejected++;
+			}
+
+			// sort k-buffer in case of threshold overflow
+			if ( tRes.m_dMatched.GetLength()>iQLen*2 )
+			{
+				if ( bMergeWords )
+					SuggestMergeDocs ( tRes.m_dMatched );
+				int iTotal = tRes.m_dMatched.GetLength();
+				tRes.m_dMatched.Sort ( CmpSuggestOrder_fn() );
+				bSorted = true;
+
+				// there might be less than necessary elements after merge operation
+				if ( iTotal>iQLen )
+				{
+					iQueueRejected += iTotal - iQLen;
+					tRes.m_dMatched.Resize ( iQLen );
+				}
+				iLastBad = tRes.m_dMatched.GetLength()-1;
+			}
+		}
+
+		if ( sphInterrupted () )
+			break;
+
+		// stop dictionary unpacking in case queue rejects a lot of matched words
+		if ( iQueueRejected && iQueueRejected>iQLen*iRejectThr )
+			break;
+	}
+
+	// sort at least once or any unsorted
+	if ( !bSorted )
+	{
+		if ( bMergeWords )
+			SuggestMergeDocs ( tRes.m_dMatched );
+		tRes.m_dMatched.Sort ( CmpSuggestOrder_fn() );
+	}
+}
+
+
+void sphGetSuggest ( const ISphWordlistSuggest * pWordlist, int iInfixCodepointBytes, const SuggestArgs_t & tArgs, SuggestResult_t & tRes )
+{
+	assert ( pWordlist );
+
+	CSphVector<Slice_t> dCheckpoints;
+	SuggestGetChekpoints ( pWordlist, iInfixCodepointBytes, tRes.m_dTrigrams, dCheckpoints, tRes );
+	if ( !dCheckpoints.GetLength() )
+		return;
+
+	if ( tRes.m_bUtf8 )
+		SuggestMatchWords<false> ( pWordlist, dCheckpoints, tArgs, tRes );
+	else
+		SuggestMatchWords<true> ( pWordlist, dCheckpoints, tArgs, tRes );
+
+	if ( sphInterrupted() )
+		return;
+
+	tRes.Flattern ( tArgs.m_iLimit );
 }
 
 

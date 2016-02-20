@@ -377,9 +377,18 @@ void SnippetsDocIndex_c::AddHits ( SphWordID_t iWordID, const BYTE * sWord, int 
 	}
 }
 
-static bool HasStars ( const XQKeyword_t & w )
+static bool HasWildcards ( const char * sWord )
 {
-	return w.m_sWord.Begins("*") || w.m_sWord.Ends("*");
+	if ( !sWord )
+		return false;
+
+	for ( ; *sWord; sWord++ )
+	{
+		if ( sphIsWild ( *sWord ) )
+			return true;
+	}
+
+	return false;
 }
 
 
@@ -438,7 +447,7 @@ void SnippetsDocIndex_c::ParseQuery ( const char * sQuery, ISphTokenizer * pToke
 			SphWordID_t uWordID = pDict->GetWordID ( sWord );
 			if ( uWordID )
 			{
-				if ( sWord[0]=='*' || sWord [ strlen ( (const char*)sWord )-1 ]=='*' )
+				if ( HasWildcards ( (const char *)sWord ) )
 					AddWordStar ( (const char *)sWord, pTokenizer->GetLastTokenLen(), iQPos );
 				else
 					AddWord ( uWordID, pTokenizer->GetLastTokenLen(), iQPos );
@@ -529,7 +538,7 @@ void SnippetsDocIndex_c::ParseQuery ( const char * sQuery, ISphTokenizer * pToke
 
 			ARRAY_FOREACH ( j, pChild->m_dWords )
 			{
-				if ( HasStars ( pChild->m_dWords[j] ) )
+				if ( HasWildcards ( pChild->m_dWords[j].m_sWord.cstr() ) )
 					continue;
 
 				const BYTE * sWord = (const BYTE *)pChild->m_dWords[j].m_sWord.cstr();
@@ -601,7 +610,7 @@ int SnippetsDocIndex_c::ExtractWords ( XQNode_t * pNode, ISphTokenizer * pTokeni
 		const XQKeyword_t & tWord = pNode->m_dWords[i];
 
 		int iLenCP = sphUTF8Len ( tWord.m_sWord.cstr() );
-		if ( HasStars ( tWord ) )
+		if ( HasWildcards ( tWord.m_sWord.cstr() ) )
 		{
 			AddWordStar ( tWord.m_sWord.cstr(), iLenCP, iQpos );
 			iQpos++;
@@ -1259,7 +1268,7 @@ public:
 	const CSphVector<int> * GetHitlist ( const XQKeyword_t & tWord ) const
 	{
 		int iWord = -1;
-		if ( HasStars ( tWord ) )
+		if ( HasWildcards ( tWord.m_sWord.cstr() ) )
 			iWord = m_tContainer.FindStarred ( tWord.m_sWord.cstr() );
 		else
 		{

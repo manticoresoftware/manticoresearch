@@ -2195,7 +2195,11 @@ public:
 			// legacy query mode should handle exact form modifier and star wildcard
 			m_pQueryTokenizer = pIndex->GetTokenizer()->Clone ( SPH_CLONE_INDEX );
 			if ( pIndex->IsStarDict() )
+			{
 				m_pQueryTokenizer->AddPlainChar ( '*' );
+				m_pQueryTokenizer->AddPlainChar ( '?' );
+				m_pQueryTokenizer->AddPlainChar ( '%' );
+			}
 			if ( pIndex->GetSettings().m_bIndexExactWords )
 				m_pQueryTokenizer->AddPlainChar ( '=' );
 		}

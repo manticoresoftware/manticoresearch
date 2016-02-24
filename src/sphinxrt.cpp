@@ -8218,20 +8218,31 @@ bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 		GetReaderChunks ( tGuard );
 		SaveDiskChunk ( m_iTID, tGuard, m_tStats );
 
+		int64_t iKeep = 0;
+
 		// kill-list drying up
 		for ( int iIndex=m_dDiskChunks.GetLength()-1; iIndex>=0 && iCount; iIndex-- )
 		{
 			const CSphIndex * pDiskIndex = m_dDiskChunks[iIndex];
-			for ( int i=0; i<iCount; i++ )
+			for ( int64_t iID=iKeep; iID<iCount; iID++ )
 			{
-				SphDocID_t uDocid = pCombined[i];
+				SphDocID_t uDocid = pCombined[iID];
 				if ( !pDiskIndex->HasDocid ( (SphDocID_t)uDocid ) )
+				{
+					// no duplicates - no need to keep ID in kill-list
+					if ( iIndex==0 )
+					{
+						// RemoveFast
+						pCombined[iID] = pCombined[iCount-1];
+						iCount--;
+					}
 					continue;
+				}
 
 				// we just found the most recent chunk with our suspect docid
 				// let's check whether it's already killed by subsequent chunks, or gets killed now
 				bool bKeep = true;
-				for ( int k=i+1; k<m_dDiskChunks.GetLength() && bKeep; k++ )
+				for ( int k=iIndex+1; k<m_dDiskChunks.GetLength() && bKeep; k++ )
 				{
 					const CSphIndex * pKilled = m_dDiskChunks[k];
 					bKeep = ( sphBinarySearch ( pKilled->GetKillList(), pKilled->GetKillList() + pKilled->GetKillListSize() - 1, uDocid )==NULL );
@@ -8240,8 +8251,12 @@ bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 				if ( !bKeep )
 				{
 					// RemoveFast
-					pCombined[i] = pCombined[iCount-1];
+					pCombined[iID] = pCombined[iCount-1];
 					iCount--;
+				} else
+				{
+					Swap ( pCombined[iID], pCombined[iKeep] );
+					iKeep++;
 				}
 			}
 		}

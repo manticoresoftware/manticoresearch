@@ -85,6 +85,27 @@ index multi_fm
 	path			= <data_path/>/multi_fm
 	wordforms		= <this_test/>/wf_multi.txt
 }
+
+source src_multi22
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT 1 id, 11 idd, 'Dummy man utd product' text UNION SELECT 2 id, 11 idd, 'Dummy man united product' text UNION SELECT 3 id, 11 idd, 'Dummy uniman product' text
+	sql_attr_uint = idd
+}
+
+index multi22
+{
+	source			= src_multi22
+	path			= <data_path/>/multi22
+	wordforms		= <this_test/>/wf_multi2.txt
+    dict 			= keywords
+	min_infix_len 	= 2
+	charset_table 	= 0..9, A..Z->a..z, @, a..z	
+	morphology		= stem_en
+	index_exact_words = 1	
+}
 </config>
 
 <queries>
@@ -172,6 +193,13 @@ index multi_fm
 <!-- regression multiforms vs field modifiers -->
 <sphinxql>SELECT * FROM multi_fm WHERE MATCH('^rdogs$')</sphinxql>
 <sphinxql>SELECT * FROM multi_fm WHERE MATCH('^red dogs$')</sphinxql>
+
+<!-- regression multiforms vs stemmer -->
+<sphinxql>SELECT * FROM multi22 WHERE MATCH('uniman')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi22 WHERE MATCH('man utd')</sphinxql>
+<sphinxql>show meta</sphinxql>
+
 </sphqueries>
 
 <db_create>

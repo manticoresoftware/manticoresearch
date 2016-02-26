@@ -892,8 +892,6 @@ public:
 
 	static int					GetThreshold ( const XQNode_t & tNode, int iQwords );
 
-private:
-
 	struct TermTuple_t
 	{
 		ExtNode_i *			m_pTerm;		///< my children nodes (simply ExtTerm_c for now, not true anymore)
@@ -902,6 +900,8 @@ private:
 		int					m_iCount;		///< terms count in case of dupes
 		bool				m_bStandStill;	///< should we emit hits to proceed further
 	};
+
+private:
 
 	ExtHit_t					m_dQuorumHits[MAX_HITS];	///< buffer for all my quorum hits; inherited m_dHits will receive filtered results
 	int							m_iMyHitCount;				///< hits collected so far
@@ -2581,6 +2581,8 @@ const ExtHit_t * ExtConditional<T,ExtBase>::GetHitsChunk ( const ExtDoc_t * pDoc
 		m_uDoneFor = ( pDocs-1 )->m_uDocid;
 		m_uHitStartDocid = pStart->m_uDocid;
 	}
+	if ( iFilteredHits && m_dFilteredHits[iFilteredHits-1].m_uDocid>m_uDoneFor )
+		m_uDoneFor = m_dFilteredHits[iFilteredHits-1].m_uDocid;
 
 	PrintHitsChunk ( iFilteredHits, ExtBase::m_iAtomPos, m_dFilteredHits, "cond", this );
 
@@ -4016,6 +4018,15 @@ struct QuorumDupeNodeHash_t
 	}
 };
 
+struct QuorumNodeAtomPos_fn
+{
+	inline bool IsLess ( const ExtQuorum_c::TermTuple_t & a, const ExtQuorum_c::TermTuple_t & b ) const
+	{
+		return a.m_pTerm->m_iAtomPos<b.m_pTerm->m_iAtomPos;
+	}
+};
+
+
 ExtQuorum_c::ExtQuorum_c ( CSphVector<ExtNode_i*> & dQwords, const XQNode_t & tNode, const ISphQwordSetup & tSetup )
 {
 	assert ( tNode.GetOp()==SPH_QUERY_QUORUM );
@@ -4068,6 +4079,9 @@ ExtQuorum_c::ExtQuorum_c ( CSphVector<ExtNode_i*> & dQwords, const XQNode_t & tN
 				m_bHasDupes = true;
 			}
 		}
+
+		// sort back to qpos order
+		m_dInitialChildren.Sort ( QuorumNodeAtomPos_fn() );
 	}
 
 	ARRAY_FOREACH ( i, m_dInitialChildren )

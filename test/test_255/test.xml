@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>RECONFIGURE in RT indexes</name>
+
+<requires></requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	binlog_path =
+	workers = threads
+}
+
+index rt1
+{
+    type = rt
+    path = <data_path/>/rt1
+    charset_table = a..z, _, A..Z->a..z	
+    dict = keywords
+    rt_field = name
+    rt_attr_uint = idd
+    morphology = stem_en
+    wordforms = <this_test/>/wf1.txt
+}
+
+source src_dummy
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT id, gid, text FROM test_table
+  sql_attr_uint   = gid
+}
+
+index test_dummy
+{
+  source      = src_dummy
+  path      = <data_path/>/test_dummy
+}
+</config>
+
+<db_drop>drop table if exists test_table</db_drop>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	text varchar(255) not null,
+	gid int
+);
+</db_create>
+
+<db_insert>
+insert into test_table values ( 1, 'first',  1 )
+</db_insert>
+
+<custom_test><![CDATA[
+
+$results = array();
+$ql->Reconnect();
+
+$results[] = 'initial commit';
+$results[] = "\n" . $ql->Query ( "REPLACE INTO rt1 (id, name, idd) VALUES (1, 'TOFU', 1)" );
+$results[] = 'query SOY';
+$results[] = "\n" . $ql->Query ( "SELECT * FROM rt1 WHERE MATCH ( 'SOY' )" );
+$results[] = 'query TOFU';
+$results[] = "\n" . $ql->Query ( "SELECT * FROM rt1 WHERE MATCH ( 'TOFU' )" );
+
+$orig_conf = file('config.conf');
+
+$new_conf = '';
+foreach ( $orig_conf as $line )
+{
+	if ( strstr ( $line, 'wordforms' ) )
+	{
+		$line = '#' . $line;
+	}
+	$new_conf .= $line;
+}
+file_put_contents('config.conf', $new_conf);
+
+$results[] = "\n" . $ql->Query ( "ALTER RTINDEX rt1 RECONFIGURE" );
+
+$results[] = 'add 2nd doc';
+$results[] = "\n" . $ql->Query ( "REPLACE INTO rt1 (id, name, idd) VALUES (2, 'TOFU', 1)" );
+$results[] = 'query SOY';
+$results[] = "\n" . $ql->Query ( "SELECT * FROM rt1 WHERE MATCH ( 'SOY' )" );
+$results[] = 'query TOFU';
+$results[] = "\n" . $ql->Query ( "SELECT * FROM rt1 WHERE MATCH ( 'TOFU' )" );
+
+$results[] = 'replace 1st doc';
+$results[] = "\n" . $ql->Query ( "REPLACE INTO rt1 (id, name, idd) VALUES (1, 'TOFU', 1)" );
+$results[] = 'query SOY';
+$results[] = "\n" . $ql->Query ( "SELECT * FROM rt1 WHERE MATCH ( 'SOY' )" );
+$results[] = 'query TOFU';
+$results[] = "\n" . $ql->Query ( "SELECT * FROM rt1 WHERE MATCH ( 'TOFU' )" );
+
+
+]]></custom_test>
+
+</test>

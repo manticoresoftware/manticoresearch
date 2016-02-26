@@ -8417,20 +8417,31 @@ bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 		ChunkStats_t s ( m_tStats, m_dFieldLensRam );
 		SaveDiskChunk ( m_iTID, tGuard, s );
 
+		int64_t iKeep = 0;
+
 		// kill-list drying up
 		for ( int iIndex=m_dDiskChunks.GetLength()-1; iIndex>=0 && iCount; iIndex-- )
 		{
 			const CSphIndex * pDiskIndex = m_dDiskChunks[iIndex];
-			for ( int i=0; i<iCount; i++ )
+			for ( int64_t iID=iKeep; iID<iCount; iID++ )
 			{
-				SphDocID_t uDocid = pCombined[i];
+				SphDocID_t uDocid = pCombined[iID];
 				if ( !pDiskIndex->HasDocid ( (SphDocID_t)uDocid ) )
+				{
+					// no duplicates - no need to keep ID in kill-list
+					if ( iIndex==0 )
+					{
+						// RemoveFast
+						pCombined[iID] = pCombined[iCount-1];
+						iCount--;
+					}
 					continue;
+				}
 
 				// we just found the most recent chunk with our suspect docid
 				// let's check whether it's already killed by subsequent chunks, or gets killed now
 				bool bKeep = true;
-				for ( int k=i+1; k<m_dDiskChunks.GetLength() && bKeep; k++ )
+				for ( int k=iIndex+1; k<m_dDiskChunks.GetLength() && bKeep; k++ )
 				{
 					const CSphIndex * pKilled = m_dDiskChunks[k];
 					bKeep = ( sphBinarySearch ( pKilled->GetKillList(), pKilled->GetKillList() + pKilled->GetKillListSize() - 1, uDocid )==NULL );
@@ -8439,8 +8450,12 @@ bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 				if ( !bKeep )
 				{
 					// RemoveFast
-					pCombined[i] = pCombined[iCount-1];
+					pCombined[iID] = pCombined[iCount-1];
 					iCount--;
+				} else
+				{
+					Swap ( pCombined[iID], pCombined[iKeep] );
+					iKeep++;
 				}
 			}
 		}
@@ -8791,8 +8806,16 @@ bool RtIndex_t::IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconf
 		return true;
 	}
 
-	// multiforms
-	tTokenizer = ISphTokenizer::CreateMultiformFilter ( tTokenizer.LeakPtr(), m_pDict->GetMultiWordforms() );
+	// dict setup second
+	CSphScopedPtr<CSphDict> tDict ( sphCreateDictionaryCRC ( tSettings.m_tDict, NULL, tTokenizer.Ptr(), m_sIndexName.cstr(), sError ) );
+	if ( !tDict.Ptr() )
+	{
+		sError.SetSprintf ( "'%s' failed to create dictionary, error '%s'", m_sIndexName.cstr(), sError.cstr() );
+		return true;
+	}
+
+	// multiforms right after dict
+	tTokenizer = ISphTokenizer::CreateMultiformFilter ( tTokenizer.LeakPtr(), tDict->GetMultiWordforms() );
 
 	// bigram filter
 	if ( tSettings.m_tIndex.m_eBigramIndex!=SPH_BIGRAM_NONE && tSettings.m_tIndex.m_eBigramIndex!=SPH_BIGRAM_ALL )
@@ -8804,14 +8827,6 @@ bool RtIndex_t::IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconf
 			tSettings.m_tIndex.m_dBigramWords.Add() = (const char*)pTok;
 
 		tSettings.m_tIndex.m_dBigramWords.Sort();
-	}
-
-	// FIXME!!! check missed embedded files
-	CSphScopedPtr<CSphDict> tDict ( sphCreateDictionaryCRC ( tSettings.m_tDict, NULL, tTokenizer.Ptr(), m_sIndexName.cstr(), sError ) );
-	if ( !tDict.Ptr() )
-	{
-		sError.SetSprintf ( "'%s' failed to create dictionary, error '%s'", m_sIndexName.cstr(), sError.cstr() );
-		return true;
 	}
 
 	bool bNeedExact = ( tDict->HasMorphology() || tDict->GetWordformsFileInfos().GetLength() );

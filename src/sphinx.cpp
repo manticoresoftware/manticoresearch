@@ -20925,6 +20925,22 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 			pContainer->m_pMultiWordforms->m_iMaxTokens = Max ( pContainer->m_pMultiWordforms->m_iMaxTokens, pNewWordforms->m_iMaxTokens );
 			pContainer->m_pMultiWordforms->m_Hash.Add ( pNewWordforms, dTokens[0] );
 		}
+
+		// let's add destination form to regular wordform to keep destination from being stemmed
+		// FIXME!!! handle multiple destination tokens and ~flag for wordforms
+		if ( !bAfterMorphology && dDestTokens.GetLength()==1 && !pContainer->m_dHash.Exists ( dDestTokens[0].m_sForm ) )
+		{
+			CSphStoredNF tForm;
+			tForm.m_sWord = dDestTokens[0].m_sForm;
+			tForm.m_bAfterMorphology = bAfterMorphology;
+			pContainer->m_bHavePostMorphNF |= bAfterMorphology;
+			if ( !pContainer->m_dNormalForms.GetLength()
+				|| pContainer->m_dNormalForms.Last().m_sWord!=dDestTokens[0].m_sForm
+				|| pContainer->m_dNormalForms.Last().m_bAfterMorphology!=bAfterMorphology )
+				pContainer->m_dNormalForms.Add ( tForm );
+
+			pContainer->m_dHash.Add ( pContainer->m_dNormalForms.GetLength()-1, dDestTokens[0].m_sForm );
+		}
 	} else
 	{
 		if ( bAfterMorphology )

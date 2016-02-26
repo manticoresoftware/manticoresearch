@@ -106,4 +106,13 @@ foreach ( $tests as $test )
 }
 
 </custom_test>
+
+<sphqueries>
+	<!-- regression wildcards matching beside only statted words -->
+	<sphinxql>CALL SNIPPETS ( 'test of testing case', 'test_idx', 't?st*', 1 AS query_mode, 0 as limit )</sphinxql>
+	<sphinxql>CALL SNIPPETS ( 'test of testing case', 'test_idx', 't?st*', 0 AS query_mode, 0 as limit )</sphinxql>
+	<sphinxql>CALL SNIPPETS ( 'some dummy words here test of testing case and long tail also here', 'test_idx', 't?st*', 1 AS query_mode, 30 as limit )</sphinxql>
+	<sphinxql>CALL SNIPPETS ( 'some dummy words here test of testing case and long tail also here', 'test_idx', 't?st*', 0 AS query_mode, 30 as limit )</sphinxql>
+</sphqueries>
+
 </test>

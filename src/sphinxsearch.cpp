@@ -2560,6 +2560,8 @@ const ExtHit_t * ExtConditional<T,ExtBase>::GetHitsChunk ( const ExtDoc_t * pDoc
 		m_uDoneFor = ( pDocs-1 )->m_uDocid;
 		m_uHitStartDocid = pStart->m_uDocid;
 	}
+	if ( iFilteredHits && m_dFilteredHits[iFilteredHits-1].m_uDocid>m_uDoneFor )
+		m_uDoneFor = m_dFilteredHits[iFilteredHits-1].m_uDocid;
 
 	PrintHitsChunk ( iFilteredHits, ExtBase::m_iAtomPos, m_dFilteredHits, "cond", this );
 

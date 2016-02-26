@@ -8404,7 +8404,9 @@ bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 		}
 
 		SphDocID_t * pCombined = new SphDocID_t[(size_t)( iCount + pIndex->GetKillListSize() )];
-		memcpy ( pCombined, pIndexDocList, (size_t)( sizeof(SphDocID_t) * iCount ) );
+		// can not use memcpy as sizeof(SphAttr_t)!=sizeof(SphDocID_t) for id32 build
+		for ( int64_t i=0; i<iCount; i++ )
+			pCombined[i] = (SphDocID_t)pIndexDocList[i];
 		memcpy ( pCombined+iCount, pIndex->GetKillList(), sizeof(SphDocID_t) * pIndex->GetKillListSize() );
 		iCount += pIndex->GetKillListSize();
 		SafeDeleteArray ( pIndexDocList );

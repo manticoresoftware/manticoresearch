@@ -132,19 +132,19 @@ index mva_mixed
 
 <!-- here is going regression mva64 hasn't indexed -->
 <query mode="extended2" index="mva64"></query>
-<query mode="extended2" index="mva64" sortmode="extended" sortby="mva1 asc"></query>
-<query mode="extended2" index="mva64" sortmode="extended" sortby="mva2 desc"></query>
+<query mode="extended2" index="mva64" sortmode="extended" sortby="id asc"></query>
+<query mode="extended2" index="mva64" sortmode="extended" sortby="id desc"></query>
 <query mode="extended2" index="mva_mixed"></query>
-<query mode="extended2" index="mva_mixed" sortmode="extended" sortby="mva2 desc"></query>
+<query mode="extended2" index="mva_mixed" sortmode="extended" sortby="id desc"></query>
 </queries>
 
 <sphqueries>
 <sphinxql>SELECT * FROM mva64</sphinxql>
-<sphinxql>SELECT * FROM mva64 ORDER BY mva1 desc</sphinxql>
-<sphinxql>SELECT * FROM mva64 ORDER BY mva2 asc</sphinxql>
+<sphinxql>SELECT * FROM mva64 ORDER BY id desc</sphinxql>
+<sphinxql>SELECT * FROM mva64 ORDER BY id asc</sphinxql>
 <sphinxql>SELECT * FROM mva_mixed</sphinxql>
-<sphinxql>SELECT * FROM mva_mixed GROUP BY mva ORDER BY mva2 desc</sphinxql>
-<sphinxql>SELECT * FROM mva_mixed ORDER BY mva2 desc</sphinxql>
+<sphinxql>SELECT * FROM mva_mixed GROUP BY mva ORDER BY id desc</sphinxql>
+<sphinxql>SELECT * FROM mva_mixed ORDER BY id desc</sphinxql>
 </sphqueries>
 
 <db_create>

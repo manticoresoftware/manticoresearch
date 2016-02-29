@@ -41,19 +41,19 @@ index rt1
 <sphinxql>select * from rt1 where mva1!=100</sphinxql>
 <sphinxql>select * from rt1 where match ('the')  and mva1!=100</sphinxql>
 <sphinxql>insert into rt1 (id, idd, str1, mva1, mva2, body) values ( 3, 3, '', ( 200, 201, 210),  (300, 301, 310), 'the' )</sphinxql>
-<sphinxql>select * from rt1 order by mva1 asc</sphinxql>
-<sphinxql>select * from rt1 where match ('the') order by mva1 asc</sphinxql>
-<sphinxql>select * from rt1 order by mva1 desc</sphinxql>
-<sphinxql>select * from rt1 where match ('the') order by mva1 desc</sphinxql>
-<sphinxql>select * from rt1 group by mva1 within group order by mva2 desc</sphinxql>
-<sphinxql>select * from rt1 where match ('the') group by mva1 within group order by mva2 desc</sphinxql>
+<sphinxql>select * from rt1 order by id asc</sphinxql>
+<sphinxql>select * from rt1 where match ('the') order by id asc</sphinxql>
+<sphinxql>select * from rt1 order by id desc</sphinxql>
+<sphinxql>select * from rt1 where match ('the') order by id desc</sphinxql>
+<sphinxql>select * from rt1 group by mva1 within group order by id desc</sphinxql>
+<sphinxql>select * from rt1 where match ('the') group by mva1 within group order by id desc</sphinxql>
 <sphinxql>insert into rt1 (id, idd, str1, mva1, mva2, body) values ( 4, 4, '', ( 200, 210),  (100, 101, 102), 'the' )</sphinxql>
-<sphinxql>select *, count (*) as c from rt1 group by mva1 within group order by mva2 desc</sphinxql>
-<sphinxql>select *, count (*) as c from rt1 where match ('the') group by mva1 within group order by mva2 desc</sphinxql>
-<sphinxql>select *, count (distinct mva2) as c from rt1 group by mva1 within group order by mva2 desc</sphinxql>
-<sphinxql>select *, count (*) as c from rt1 where match ('the') group by mva1 within group order by mva2 desc</sphinxql>
-<sphinxql>select *, count (distinct mva1) as c from rt1 group by mva1 within group order by mva2 desc</sphinxql>
-<sphinxql>select *, count (distinct mva2) as c from rt1 where match ('the') group by mva1 within group order by mva2 desc</sphinxql>
+<sphinxql>select *, count (*) as c from rt1 group by mva1 within group order by id desc</sphinxql>
+<sphinxql>select *, count (*) as c from rt1 where match ('the') group by mva1 within group order by id desc</sphinxql>
+<sphinxql>select *, count (distinct mva2) as c from rt1 group by mva1 within group order by id desc</sphinxql>
+<sphinxql>select *, count (*) as c from rt1 where match ('the') group by mva1 within group order by id desc</sphinxql>
+<sphinxql>select *, count (distinct mva1) as c from rt1 group by mva1 within group order by id desc</sphinxql>
+<sphinxql>select *, count (distinct mva2) as c from rt1 where match ('the') group by mva1 within group order by id desc</sphinxql>
 <!-- checking mva aliases -->
 <sphinxql>select mva1 as somemva from rt1</sphinxql>
 

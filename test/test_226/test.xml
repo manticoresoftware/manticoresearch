@@ -157,6 +157,13 @@ insert into facetdemo (id,price,brand_id,title,brand_name,property,categories,j)
 <!-- multi-queries with string filters -->
 <sphinxql>select id, title, property from facetdemo2 where match ('product') and property='Four' order by id asc; select id, title, property from facetdemo2 where match ('product') and property='Seven' order by id asc</sphinxql>
 
+<!-- count(*) statement with different spacing -->
+<sphinxql>select id from facetdemo limit 0,1 facet brand_id order by count(*) asc;</sphinxql>
+<sphinxql>select id from facetdemo limit 0,1 facet brand_id order by count(  *) asc;</sphinxql>
+<sphinxql>select id from facetdemo limit 0,1 facet brand_id order by count ( *  ) asc;</sphinxql>
+<sphinxql>select id from facetdemo limit 0,1 facet brand_id order by count (* ) asc;</sphinxql>
+<sphinxql>select id from facetdemo limit 0,1 facet brand_id order by count(* ) asc;</sphinxql>
+
 </sphqueries>
 
 </test>

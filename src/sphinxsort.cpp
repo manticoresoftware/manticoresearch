@@ -3528,8 +3528,8 @@ static const int MAX_SORT_FIELDS = 5; // MUST be in sync with CSphMatchComparato
 class SortClauseTokenizer_t
 {
 protected:
-	char * m_pCur;
-	char * m_pMax;
+	const char * m_pCur;
+	const char * m_pMax;
 	char * m_pBuf;
 
 protected:
@@ -3580,6 +3580,31 @@ public:
 		while ( *m_pCur )
 			m_pCur++;
 		return sRes;
+	}
+
+	bool IsSparseCount ( const char * sTok )
+	{
+		const char * sSeq = "(*)";
+		for ( ; sTok<m_pMax && *sSeq; sTok++ )
+		{
+			bool bGotSeq = ( *sSeq==*sTok );
+			if ( bGotSeq )
+				sSeq++;
+
+			// stop checking on any non space char outside sequence or sequence end
+			if ( ( !bGotSeq && !sphIsSpace ( *sTok ) && *sTok!='\0' ) || !*sSeq )
+				break;
+		}
+
+		if ( !*sSeq && sTok+1<m_pMax && !sTok[1] )
+		{
+			// advance token iterator after composite count(*) token
+			m_pCur = sTok+1;
+			return true;
+		} else
+		{
+			return false;
+		}
 	}
 };
 
@@ -3667,6 +3692,9 @@ ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, const char
 				pTok = "@count";
 			else if ( !strcasecmp ( pTok, "facet()" ) )
 				pTok = "@groupby"; // facet() is essentially a @groupby alias
+			else if ( strcasecmp ( pTok, "count" )>=0 && tTok.IsSparseCount ( pTok + sizeof ( "count" ) - 1 ) ) // epression count(*) with various spaces
+				pTok = "@count";
+
 
 			// try to lookup plain attr in sorter schema
 			int iAttr = tSchema.GetAttrIndex ( pTok );

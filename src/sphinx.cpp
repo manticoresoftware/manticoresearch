@@ -18635,7 +18635,10 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 		// do not expand prefixes under min length
 		int iMinLen = Max ( tCtx.m_iMinPrefixLen, tCtx.m_iMinInfixLen );
 		if ( iPrefix<iMinLen )
+		{
+			tCtx.m_pResult->m_sWarning.SetSprintf ( "Query word length is less than min prefix length. word: '%s' ", sFull );
 			return pNode;
+		}
 
 		// prefix expansion should work on nonstemmed words only
 		char sFixed [ MAX_KEYWORD_BYTES ];
@@ -18674,7 +18677,10 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 
 		// do not expand infixes under min_infix_len
 		if ( iMaxInfix < tCtx.m_iMinInfixLen )
+		{
+			tCtx.m_pResult->m_sWarning.SetSprintf ( "Query word length is less than min infix length. word: '%s' ", sFull );
 			return pNode;
+		}
 
 		// ignore heading star
 		tCtx.m_pWordlist->GetInfixedWords ( sMaxInfix, iMaxInfix, sFull, tWordlist );

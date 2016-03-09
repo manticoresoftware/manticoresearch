@@ -76,6 +76,13 @@ index dist_warn
 	local = warn2
 }
 
+index warn3
+{
+	source			= src_warn
+	path			= <data_path/>/warn3
+	min_infix_len = 5
+}
+
 </config>
 
 <sphqueries>
@@ -88,6 +95,17 @@ index dist_warn
 <sphinxql>show meta</sphinxql>
 <sphinxql>select * from warn1, warn2 where match (' the box* ' )</sphinxql>
 <sphinxql>show meta</sphinxql>
+<!-- no warnings for short wildcards -->
+<sphinxql>select * from warn3 where match (' box* ' )</sphinxql>
+<sphinxql>show warnings</sphinxql>
+<sphinxql>select * from warn3 where match (' *box ' )</sphinxql>
+<sphinxql>show warnings</sphinxql>
+<sphinxql>select * from warn3 where match (' b*x ' )</sphinxql>
+<sphinxql>show warnings</sphinxql>
+<sphinxql>select * from warn3 where match (' b?x ' )</sphinxql>
+<sphinxql>show warnings</sphinxql>
+<sphinxql>select * from warn3 where match (' b%x ' )</sphinxql>
+<sphinxql>show warnings</sphinxql>
 </sphqueries>
 
 <db_create>

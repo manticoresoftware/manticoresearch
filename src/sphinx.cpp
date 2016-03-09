@@ -17253,7 +17253,10 @@ XQNode_t * sphExpandXQNode ( XQNode_t * pNode, ExpansionContext_t & tCtx )
 	ISphWordlist::Args_t tWordlist ( bUseTermMerge, tCtx.m_iExpansionLimit, tCtx.m_bHasMorphology, tCtx.m_eHitless, tCtx.m_pIndexData );
 
 	if ( !sphExpandGetWords ( sFull, tCtx, tWordlist ) )
+	{
+		tCtx.m_pResult->m_sWarning.SetSprintf ( "Query word length is less than min %s length. word: '%s' ", ( tCtx.m_iMinInfixLen>0 ? "infix" : "prefix" ), sFull );
 		return pNode;
+	}
 
 	// no real expansions?
 	// mark source word as expanded to prevent warning on terms mismatch in statistics

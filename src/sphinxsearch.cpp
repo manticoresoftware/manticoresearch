@@ -244,7 +244,7 @@ protected:
 		return iCount ? m_dDocs : NULL;
 	}
 
-	inline const ExtHit_t * ReturnHitsChunk ( int iCount, const char * sNode )
+	inline const ExtHit_t * ReturnHitsChunk ( int iCount, const char * sNode, bool bReverse )
 	{
 		assert ( iCount>=0 && iCount<MAX_HITS );
 		m_dHits[iCount].m_uDocid = DOCID_MAX;
@@ -252,8 +252,9 @@ protected:
 #ifndef NDEBUG
 		for ( int i=1; i<iCount; i++ )
 		{
+			bool bQPosPassed = ( ( bReverse && m_dHits[i-1].m_uQuerypos>=m_dHits[i].m_uQuerypos ) || ( !bReverse && m_dHits[i-1].m_uQuerypos<=m_dHits[i].m_uQuerypos ) );
 			assert ( m_dHits[i-1].m_uDocid!=m_dHits[i].m_uDocid ||
-					( m_dHits[i-1].m_uHitpos<m_dHits[i].m_uHitpos || ( m_dHits[i-1].m_uHitpos==m_dHits[i].m_uHitpos && m_dHits[i-1].m_uQuerypos<=m_dHits[i].m_uQuerypos ) ) );
+					( m_dHits[i-1].m_uHitpos<m_dHits[i].m_uHitpos || ( m_dHits[i-1].m_uHitpos==m_dHits[i].m_uHitpos && bQPosPassed ) ) );
 		}
 #endif
 
@@ -568,12 +569,20 @@ protected:
 class ExtAnd_c : public ExtTwofer_c
 {
 public:
-								ExtAnd_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const ISphQwordSetup & tSetup ) : ExtTwofer_c ( pFirst, pSecond, tSetup ) {}
-								ExtAnd_c() {} ///< to be used with Init()
+								ExtAnd_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const ISphQwordSetup & tSetup ) : ExtTwofer_c ( pFirst, pSecond, tSetup ), m_bQPosReverse ( false ) {}
+								ExtAnd_c() : m_bQPosReverse ( false ) {} ///< to be used with Init()
 	virtual const ExtDoc_t *	GetDocsChunk();
 	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs );
 
 	void DebugDump ( int iLevel ) { DebugDumpT ( "ExtAnd", iLevel ); }
+
+	void SetQPosReverse ()
+	{
+		m_bQPosReverse = true;
+	}
+
+protected:
+	bool m_bQPosReverse;
 };
 
 class ExtAndZonespanned_c : public ExtAnd_c
@@ -683,6 +692,8 @@ protected:
 			pCurEx->SetNodePos ( uLPos, uRPos );
 			uLPos = 0;
 		}
+		if ( pCurEx )
+			pCurEx->SetQPosReverse();
 		m_pNode = pCur;
 	}
 };
@@ -2148,7 +2159,7 @@ const ExtHit_t * ExtTerm_c::GetHitsChunk ( const ExtDoc_t * pMatched )
 	if ( m_pNanoBudget )
 		*m_pNanoBudget -= g_iPredictorCostHit*iHit;
 
-	return ReturnHitsChunk ( iHit, "term" );
+	return ReturnHitsChunk ( iHit, "term", false );
 }
 
 int ExtTerm_c::GetQwords ( ExtQwordsHash_t & hQwords )
@@ -2701,6 +2712,15 @@ const ExtDoc_t * ExtAnd_c::GetDocsChunk()
 	return ReturnDocsChunk ( iDoc, "and" );
 }
 
+struct CmpAndHitReverse_fn
+{
+	inline bool IsLess ( const ExtHit_t & a, const ExtHit_t & b ) const
+	{
+		return ( a.m_uDocid<b.m_uDocid || ( a.m_uDocid==b.m_uDocid && a.m_uHitpos<b.m_uHitpos ) || ( a.m_uDocid==b.m_uDocid && a.m_uHitpos==b.m_uHitpos && a.m_uQuerypos>b.m_uQuerypos ) );
+	}
+};
+
+
 const ExtHit_t * ExtAnd_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 {
 	const ExtHit_t * pCur0 = m_pCurHit[0];
@@ -2724,7 +2744,7 @@ const ExtHit_t * ExtAnd_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 				while ( iHit<MAX_HITS-1 )
 			{
 				if ( ( pCur0->m_uHitpos < pCur1->m_uHitpos )
-					|| ( pCur0->m_uHitpos==pCur1->m_uHitpos && pCur0->m_uQuerypos>pCur1->m_uQuerypos ) )
+					|| ( pCur0->m_uHitpos==pCur1->m_uHitpos && pCur0->m_uQuerypos<=pCur1->m_uQuerypos ) )
 				{
 					m_dHits[iHit] = *pCur0++;
 					if ( uNodePos0!=0 )
@@ -2812,9 +2832,10 @@ const ExtHit_t * ExtAnd_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 	m_pCurHit[0] = pCur0;
 	m_pCurHit[1] = pCur1;
 
-	assert ( iHit>=0 && iHit<MAX_HITS );
-	m_dHits[iHit].m_uDocid = DOCID_MAX;
-	return iHit ? m_dHits : NULL;
+	if ( iHit && m_bQPosReverse )
+		sphSort ( m_dHits, iHit, CmpAndHitReverse_fn() );
+
+	return ReturnHitsChunk ( iHit, "and", m_bQPosReverse );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -2857,7 +2878,7 @@ const ExtHit_t * ExtAndZonespanned_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 				while ( iHit<MAX_HITS-1 )
 				{
 					if ( ( pCur0->m_uHitpos < pCur1->m_uHitpos )
-						|| ( pCur0->m_uHitpos==pCur1->m_uHitpos && pCur0->m_uQuerypos>pCur1->m_uQuerypos ) )
+						|| ( pCur0->m_uHitpos==pCur1->m_uHitpos && pCur0->m_uQuerypos<=pCur1->m_uQuerypos ) )
 					{
 						if ( IsSameZonespan ( pCur0, pCur1 ) )
 						{
@@ -2945,7 +2966,10 @@ const ExtHit_t * ExtAndZonespanned_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 	m_pCurHit[0] = pCur0;
 	m_pCurHit[1] = pCur1;
 
-	return ReturnHitsChunk ( iHit, "and-zonespan" );
+	if ( iHit && m_bQPosReverse )
+		sphSort ( m_dHits, iHit, CmpAndHitReverse_fn() );
+
+	return ReturnHitsChunk ( iHit, "and-zonespan", m_bQPosReverse );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -3120,7 +3144,7 @@ const ExtHit_t * ExtOr_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 	m_pCurHit[0] = pCur0;
 	m_pCurHit[1] = pCur1;
 
-	return ReturnHitsChunk ( iHit, "or" );
+	return ReturnHitsChunk ( iHit, "or", false );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -4269,7 +4293,7 @@ const ExtHit_t * ExtQuorum_c::GetHitsChunkDupesTail ()
 			m_dChildren[iMinChild].m_pCurHit = m_dChildren[iMinChild].m_pTerm->GetHitsChunk ( dTailDocs );
 	}
 
-	return ReturnHitsChunk ( iHit, "quorum-dupes-tail" );
+	return ReturnHitsChunk ( iHit, "quorum-dupes-tail", false );
 }
 
 struct QuorumCmpHitPos_fn
@@ -4348,7 +4372,7 @@ const ExtHit_t * ExtQuorum_c::GetHitsChunkDupes ( const ExtDoc_t * pDocs )
 			m_uMatchedDocid = uDocid;
 	}
 
-	return ReturnHitsChunk ( iHit, "quorum-dupes" );
+	return ReturnHitsChunk ( iHit, "quorum-dupes", false );
 }
 
 const ExtHit_t * ExtQuorum_c::GetHitsChunkSimple ( const ExtDoc_t * pDocs )
@@ -4445,7 +4469,7 @@ const ExtHit_t * ExtQuorum_c::GetHitsChunkSimple ( const ExtDoc_t * pDocs )
 			m_dChildren[iMinChild].m_pCurHit = m_dChildren[iMinChild].m_pTerm->GetHitsChunk ( pDocs );
 	}
 
-	return ReturnHitsChunk ( iHit, "quorum-simple" );
+	return ReturnHitsChunk ( iHit, "quorum-simple", false );
 }
 
 int ExtQuorum_c::GetThreshold ( const XQNode_t & tNode, int iQwords )

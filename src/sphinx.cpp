@@ -31281,7 +31281,7 @@ CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & s
 			{
 				if ( iEscapeStart>=0 && iEscapeStart+1==iOff ) // next to escape symbol proceed as regular
 				{
-					*d++ = *s;
+					*d++ = *s++;
 				} else // escape just started
 				{
 					iEscapeStart = iOff;

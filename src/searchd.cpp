@@ -2078,6 +2078,8 @@ static char		g_sMinidump[SPH_TIME_PID_MAX_SIZE] = "";
 
 SphThreadKey_t SphCrashLogger_c::m_tTLS = SphThreadKey_t ();
 
+static CrashQuery_t g_tUnhandled;
+
 void SphCrashLogger_c::Init ()
 {
 	Verify ( sphThreadKeyCreate ( &m_tTLS ) );
@@ -2245,8 +2247,13 @@ void SphCrashLogger_c::SetupTLS ()
 CrashQuery_t SphCrashLogger_c::GetQuery()
 {
 	SphCrashLogger_c * pCrashLogger = (SphCrashLogger_c *)sphThreadGet ( m_tTLS );
-	assert ( pCrashLogger );
-	return pCrashLogger->m_tQuery;
+
+	// in case TLS not set \ found handler still should process crash
+	// FIXME!!! some service threads use raw threads instead ThreadCreate
+	if ( !pCrashLogger )
+		return g_tUnhandled;
+	else
+		return pCrashLogger->m_tQuery;
 }
 
 bool SphCrashLogger_c::ThreadCreate ( SphThread_t * pThread, void (*pCall)(void*), void * pArg, bool bDetached )

@@ -33,6 +33,7 @@ extern int				g_iPersistentPoolSize;
 
 extern int				g_iAgentConnectTimeout;
 extern int				g_iAgentQueryTimeout;	// global (default). May be override by index-scope values, if one specified
+extern bool				g_bHostnameLookup;
 
 
 const int	STATS_MAX_AGENTS	= 4096;				///< we'll track stats for this much remote agents

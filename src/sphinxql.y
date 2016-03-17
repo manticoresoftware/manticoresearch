@@ -67,6 +67,7 @@
 %token	TOK_GROUPBY
 %token	TOK_GROUP_CONCAT
 %token	TOK_HAVING
+%token	TOK_HOSTNAMES
 %token	TOK_ID
 %token	TOK_IN
 %token	TOK_INDEX
@@ -218,6 +219,7 @@ statement:
 	| drop_plugin
 	| reload_plugins
 	| reload_index
+	| flush_hostnames
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -239,7 +241,7 @@ ident_set:
 	| TOK_COMMITTED | TOK_COUNT | TOK_CREATE | TOK_DATABASES | TOK_DELETE
 	| TOK_DESC | TOK_DESCRIBE  | TOK_DISTINCT  | TOK_DOUBLE | TOK_DROP
 	| TOK_FLOAT | TOK_FLUSH | TOK_FOR| TOK_FUNCTION | TOK_GLOBAL | TOK_GROUP
-	| TOK_GROUP_CONCAT | TOK_GROUPBY | TOK_HAVING  | TOK_INDEX | TOK_INDEXOF | TOK_INSERT
+	| TOK_GROUP_CONCAT | TOK_GROUPBY | TOK_HAVING | TOK_HOSTNAMES | TOK_INDEX | TOK_INDEXOF | TOK_INSERT
 	| TOK_INT | TOK_INTEGER | TOK_INTO | TOK_ISOLATION | TOK_JSON | TOK_LEVEL
 	| TOK_LIKE | TOK_MATCH | TOK_MAX | TOK_META | TOK_MIN | TOK_MULTI
 	| TOK_MULTI64 | TOK_OPTIMIZE | TOK_OPTION | TOK_PLAN | TOK_PLUGIN
@@ -1539,6 +1541,14 @@ flush_index:
 			tStmt.m_eStmt = STMT_FLUSH_INDEX;
 		}
 	;
+	
+flush_hostnames:
+	TOK_FLUSH TOK_HOSTNAMES
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_FLUSH_HOSTNAMES;
+		}
+	;	
 	
 //////////////////////////////////////////////////////////////////////////
 

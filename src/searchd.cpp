@@ -204,6 +204,7 @@ const int	MAX_RETRY_DELAY		= 1000;
 
 static int				g_iAgentRetryCount = 0;
 static int				g_iAgentRetryDelay = MAX_RETRY_DELAY/2;	// global (default) values. May be override by the query options 'retry_count' and 'retry_timeout'
+bool					g_bHostnameLookup = false;
 
 
 struct ListNode_t
@@ -1667,6 +1668,8 @@ DWORD sphGetAddress ( const char * sHost, bool bFatal )
 	{
 		if ( bFatal )
 			sphFatal ( "no AF_INET address found for: %s", sHost );
+		else
+			sphLogDebugv ( "no AF_INET address found for: %s", sHost );
 		return 0;
 	}
 
@@ -8406,7 +8409,8 @@ static const char * g_dSqlStmts[] =
 	"show_collation", "show_character_set", "optimize_index", "show_agent_status",
 	"show_index_status", "show_profile", "alter_add", "alter_drop", "show_plan",
 	"select_dual", "show_databases", "create_plugin", "drop_plugin", "show_plugins", "show_threads",
-	"facet", "alter_reconfigure", "show_index_settings", "flush_index", "reload_plugins", "reload_index"
+	"facet", "alter_reconfigure", "show_index_settings", "flush_index", "reload_plugins", "reload_index",
+	"flush_hostnames"
 };
 
 
@@ -12958,6 +12962,69 @@ void HandleMysqlShowThreads ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 }
 
 
+void HandleMysqlFlushHostnames ( SqlRowBuffer_c & tOut )
+{
+	CSphVector<AgentConn_t> dAgents;
+	SmallStringHash_T<DWORD> hHosts;
+
+	// copy distributed agents for further processing
+	g_tDistLock.Lock();
+
+	g_hDistIndexes.IterateStart();
+	while ( g_hDistIndexes.IterateNext() )
+	{
+		g_hDistIndexes.IterateGet().GetAllAgents ( &dAgents );
+		if ( !dAgents.GetLength() )
+			continue;
+
+		ARRAY_FOREACH ( i, dAgents )
+		{
+			const AgentConn_t & tAgent = dAgents[i];
+			if ( tAgent.m_iFamily==AF_INET && !tAgent.m_sHost.IsEmpty() )
+				hHosts.Add ( tAgent.m_uAddr, tAgent.m_sHost );
+		}
+
+		dAgents.Resize ( 0 );
+	}
+	g_tDistLock.Unlock();
+
+	hHosts.IterateStart();
+	while ( hHosts.IterateNext() )
+	{
+		DWORD uRenew = sphGetAddress ( hHosts.IterateGetKey().cstr(), false );
+		if ( uRenew )
+			hHosts.IterateGet() = uRenew;
+	}
+
+	// copy back renew hosts to distributed agents
+	g_tDistLock.Lock();
+
+	g_hDistIndexes.IterateStart();
+	while ( g_hDistIndexes.IterateNext() )
+	{
+		g_hDistIndexes.IterateGet().GetAllAgents ( &dAgents );
+		if ( !dAgents.GetLength() )
+			continue;
+
+		ARRAY_FOREACH ( i, dAgents )
+		{
+			AgentConn_t & tAgent = dAgents[i];
+			if ( tAgent.m_iFamily==AF_INET && !tAgent.m_sHost.IsEmpty() )
+			{
+				DWORD * pRenew = hHosts ( tAgent.m_sHost );
+				if ( pRenew && *pRenew )
+					tAgent.m_uAddr = *pRenew;
+			}
+		}
+
+		dAgents.Resize ( 0 );
+	}
+	g_tDistLock.Unlock();
+
+	tOut.Ok ( hHosts.GetLength() );
+}
+
+
 // The pinger
 struct PingRequestBuilder_t : public IRequestBuilder_t
 {
@@ -15737,6 +15804,10 @@ public:
 
 		case STMT_RELOAD_INDEX:
 			HandleMysqlReloadIndex ( tOut, *pStmt );
+			return true;
+
+		case STMT_FLUSH_HOSTNAMES:
+			HandleMysqlFlushHostnames ( tOut );
 			return true;
 
 		default:
@@ -21310,6 +21381,9 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	s.m_iThreshMsec = hSearchd.GetInt ( "qcache_thresh_msec", s.m_iThreshMsec );
 	s.m_iTtlSec = hSearchd.GetInt ( "qcache_ttl_sec", s.m_iTtlSec );
 	QcacheSetup ( s.m_iMaxBytes, s.m_iThreshMsec, s.m_iTtlSec );
+
+	// hostname_lookup = {config_load | request}
+	g_bHostnameLookup = ( strcmp ( hSearchd.GetStr ( "hostname_lookup", "" ), "request" )==0 );
 
 	//////////////////////////////////////////////////
 	// prebuild MySQL wire protocol handshake packets

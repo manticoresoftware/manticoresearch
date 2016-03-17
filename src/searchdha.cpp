@@ -1073,9 +1073,17 @@ void RemoteConnectToAgent ( AgentConn_t & tAgent )
 
 	if ( ss.ss_family==AF_INET )
 	{
+		DWORD uAddr = tAgent.m_uAddr;
+		if ( g_bHostnameLookup && !tAgent.m_sHost.IsEmpty() )
+		{
+			DWORD uRenew = sphGetAddress ( tAgent.m_sHost.cstr(), false );
+			if ( uRenew )
+				uAddr = uRenew;
+		}
+
 		struct sockaddr_in *in = (struct sockaddr_in *)&ss;
 		in->sin_port = htons ( (unsigned short)tAgent.m_iPort );
-		in->sin_addr.s_addr = tAgent.m_uAddr;
+		in->sin_addr.s_addr = uAddr;
 		len = sizeof(*in);
 	}
 #if !USE_WINDOWS

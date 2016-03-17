@@ -31253,6 +31253,20 @@ CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & s
 			bool bQuot = ( *s=='"' );
 			bool bEscape = ( *s=='\\' );
 			int iOff = s - m_dBuf.Begin();
+			bool bEscaped = ( iEscapeStart>=0 && iEscapeStart+1==iOff );
+
+			if ( bEscape || bEscaped ) // not quoted escape symbol
+			{
+				if ( bEscaped ) // next to escape symbol proceed as regular
+				{
+					*d++ = *s++;
+				} else // escape just started
+				{
+					iEscapeStart = iOff;
+					s++;
+				}
+				continue;
+			}
 
 			// [ " ... " ]
 			// [ " ... "" ... " ]
@@ -31266,27 +31280,15 @@ CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & s
 
 				// any symbol inside quotation proceed as regular
 				// but not quotation itself
-				// but quoted quotation proceed as regular symbol
+				// but quoted quotation proceed as regular symbol or escaped quotation
 				bool bOdd = ( ( iQuoteCount%2 )==1 );
-				if ( bOdd && ( !bQuot || ( iQuoteStart!=-1 && iQuoteStart+1==iOff ) ) ) // regular symbol inside quotation or quoted quotation
+				// regular symbol inside quotation or quoted quotation or escaped quotation
+				if ( bOdd && ( !bQuot || ( iQuoteStart!=-1 && iQuoteStart+1==iOff ) ) )
 					*d++ = *s;
 				s++;
 
 				if ( bQuot )
 					iQuoteStart = iOff;
-				continue;
-			}
-
-			if ( bEscape ) // not quoted escape symbol
-			{
-				if ( iEscapeStart>=0 && iEscapeStart+1==iOff ) // next to escape symbol proceed as regular
-				{
-					*d++ = *s++;
-				} else // escape just started
-				{
-					iEscapeStart = iOff;
-					s++;
-				}
 				continue;
 			}
 

@@ -2069,7 +2069,7 @@ DECLARE_TERNARY ( Expr_Mul3_c,	FIRST*SECOND*THIRD,					INTFIRST*INTSECOND*INTTHI
 		{ \
 			time_t ts = (time_t)INTFIRST;	\
 			struct tm s; \
-			gmtime_r ( &ts, &s ); \
+			localtime_r ( &ts, &s ); \
 			return _expr; \
 		} \
 	};

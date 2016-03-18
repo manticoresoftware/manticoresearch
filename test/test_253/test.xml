@@ -104,14 +104,9 @@ CREATE TABLE test_table
 <sphinxql>select gid a1, gid a2, a1 and a2 b1, a1 or a2 b2, b1+b2 c from test where match('title') and c>0</sphinxql> <!-- Expr_AndInt_c/Expr_OrInt_c -->
 <sphinxql>select bint a1, bint a2, a1 and a2 b1, a1 or a2 b2, b1+b2 c from test where match('title') and c>0</sphinxql> <!-- Expr_AndInt64_c/Expr_OrInt64_c -->
 <sphinxql>select flt a1, flt a2, atan2(a1,a2) b from test where match('title') and b=0</sphinxql> <!-- Expr_Atan2_c -->
-<!-- This two tests are commented out since it produces different results depends from TZ settings
-<sphinxql>select 1449690488 a, day(a) b, month(a) c, year(a) d,
-yearmonth(a) e, yearmonthday(a) f, b+c+d+e+f g from test where
-match('title') and g>0</sphinxql> --> <!-- Expr_Day_c/Expr_Month_c/Expr_Year_c/Expr_YearMonth_c/Expr_YearMonthDay_c -->
-<!-- 
-<sphinxql>select 1449690488 a, hour(a)=0 b, minute(a) c, second(a) d,
+<sphinxql>select 1449690488 a, day(a)-day(a) b, month(a)-month(a) c, year(a) d, yearmonth(a) e, yearmonthday(a)-yearmonthday(a) f, b+c+d+e+f g from test where match('title') and g>0</sphinxql> --> <!-- Expr_Day_c/Expr_Month_c/Expr_Year_c/Expr_YearMonth_c/Expr_YearMonthDay_c -->
+<sphinxql>select 1449690488 a, hour(a)-hour(a) b, minute(a)-minute(a) c, second(a) d,
 b+c+d e from test where match('title') and e>0</sphinxql> --> <!-- Expr_Hour_c/Expr_Minute_c/Expr_Second_c -->
--->
 <sphinxql>select flt a, flt-1.0 b1, flt+1.0 b2, if ( a>0, b1, b2 ) c from test where match('title') and c>0</sphinxql>					<!-- Expr_If_c -->
 <sphinxql>select flt a1, flt a2, flt a3, madd(a1,a2,a3) b, mul3(a1,a2,a3) c, b+c d from test where match('title') and d>0</sphinxql>	<!-- Expr_Madd_c/Expr_Mul3_c -->
 <sphinxql>select flt x, flt y, CONTAINS(POLY2D(1.0,1.0,2.0,2.0,3.0,3.0),x,y) a from test where match('title') and a>0</sphinxql>		<!-- Expr_ContainsConstvec_c -->

@@ -6818,7 +6818,12 @@ struct SelectBounds_t
 };
 #define YYSTYPE SelectBounds_t
 class SelectParser_t;
-#include "yysphinxselect.h"
+
+#ifdef CMAKE_GENERATED_GRAMMAR
+	#include "bissphinxselect.h"
+#else
+	#include "yysphinxselect.h"
+#endif
 
 
 class SelectParser_t
@@ -6854,7 +6859,13 @@ void yyerror ( SelectParser_t * pParser, const char * sMessage )
 	pParser->m_sParserError.SetSprintf ( "%s near '%s'", sMessage, pParser->m_pLastTokenStart );
 }
 
+#ifdef CMAKE_GENERATED_GRAMMAR
+#include "bissphinxselect.c"
+#else
+
 #include "yysphinxselect.c"
+
+#endif
 
 
 int SelectParser_t::GetToken ( YYSTYPE * lvalp )
@@ -28049,7 +28060,10 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 #if USE_MYSQL
 #if DL_MYSQL
 
+#ifndef MYSQL_LIB
 #define MYSQL_LIB "libmysqlclient.so"
+#endif
+
 #define MYSQL_NUM_FUNCS (15)
 
 #if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC) || defined(__ECC) || defined(__GNUC__)
@@ -28816,7 +28830,9 @@ struct CSphSchemaConfigurator
 
 #if USE_LIBEXPAT
 #if DL_EXPAT
+#ifndef EXPAT_LIB
 #define EXPAT_LIB "libexpat.so"
+#endif
 #define EXPAT_NUM_FUNCS (11)
 
 #if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC) || defined(__ECC) || defined(__GNUC__)

@@ -1677,7 +1677,13 @@ struct UdfCall_t
 // PARSER INTERNALS
 //////////////////////////////////////////////////////////////////////////
 class ExprParser_t;
-#include "yysphinxexpr.h"
+
+#ifdef 	CMAKE_GENERATED_GRAMMAR
+	#include "bissphinxexpr.h"
+#else
+	#include "yysphinxexpr.h"
+#endif
+
 
 /// known functions
 enum Func_e
@@ -5501,7 +5507,11 @@ void yyerror ( ExprParser_t * pParser, const char * sMessage )
 #pragma warning(push,1)
 #endif
 
-#include "yysphinxexpr.c"
+#ifdef CMAKE_GENERATED_GRAMMAR
+	#include "bissphinxexpr.c"
+#else
+	#include "yysphinxexpr.c"
+#endif
 
 #if USE_WINDOWS
 #pragma warning(pop)

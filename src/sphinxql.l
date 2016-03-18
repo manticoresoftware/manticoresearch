@@ -1,5 +1,9 @@
 %{
-#include "yysphinxql.h"
+#ifdef CMAKE_GENERATED_GRAMMAR
+	#include "bissphinxql.h"
+#else
+	#include "yysphinxql.h"
+#endif
 
 #if USE_WINDOWS
 #pragma warning(push,1)

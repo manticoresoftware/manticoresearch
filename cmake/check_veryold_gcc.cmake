@@ -10,6 +10,7 @@ if ( ${CMAKE_COMPILER_IS_GNUCXX} )
 	#endif
 	")
 
+	include (CheckCXXSourceCompiles)
 	CHECK_CXX_SOURCE_COMPILES("${_CHECK_OLDCOMPILER_SOURCE_CODE}" _RESULT)
 	if (NOT _RESULT)
 		message(FATAL_ERROR "Gcc version error. Minspec is 3.4")

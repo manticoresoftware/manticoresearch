@@ -1,5 +1,9 @@
 %{
-#include "yysphinxjson.h"
+#ifdef CMAKE_GENERATED_GRAMMAR
+	#include "bissphinxjson.h"
+#else
+	#include "yysphinxjson.h"
+#endif
 
 #if USE_WINDOWS
 #pragma warning(push,1)

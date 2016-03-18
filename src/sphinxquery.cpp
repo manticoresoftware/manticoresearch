@@ -1015,6 +1015,14 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 				if ( sphIsSpace ( m_pTokenizer->GetTokenStart() [ -1 ] ) )
 					continue;
 
+				// right after overshort
+				if ( m_pTokenizer->GetOvershortCount()==1 )
+				{
+					m_iPendingNulls = 0;
+					lvalp->pNode = AddKeyword ( NULL, iSkippedPosBeforeToken );
+					return TOK_KEYWORD;
+				}
+
 				Warning ( "modifiers must be applied to keywords, not operators" );
 
 				// this special is handled in HandleModifiers()

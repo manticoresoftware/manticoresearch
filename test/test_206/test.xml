@@ -806,5 +806,7 @@ Two'</sphinxql>
 <sphinxql>select j.f[0], j.f[1] from json_inplace where id=1</sphinxql>
 <sphinxql>update json_inplace_rt set j.f[0]=345345345354, j.f[1]=777 where id=1</sphinxql>
 <sphinxql>select j.f[0], j.f[1] from json_inplace_rt where id=1</sphinxql>
+<!-- type autoconversion for 64-bit values -->
+<sphinxql>select j.f, indexof(x>345345345353 for x in j.f) as p from json_inplace where p=0</sphinxql>
 </sphqueries>
 </test>

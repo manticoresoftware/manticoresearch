@@ -694,7 +694,7 @@ public:
 	{
 		if ( eCmd==SPH_EXPR_SET_STRING_POOL )
 			m_pStrings = (const BYTE*)pArg;
-		else if ( eCmd==SPH_EXPR_GET_DEPENDENT_COLS )
+		else if ( eCmd==SPH_EXPR_GET_DEPENDENT_COLS && m_iLocator!=-1 )
 			static_cast < CSphVector<int>* > ( pArg )->Add ( m_iLocator );
 		ARRAY_FOREACH ( i, m_dArgs )
 			if ( m_dArgs[i] )
@@ -3863,13 +3863,19 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 	}
 
 #define LOC_SPAWN_POLY(_classname) \
-	if ( m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_JSON_FIELD && m_dNodes[tNode.m_iLeft].m_iToken==TOK_ATTR_JSON ) \
-		pLeft = new Expr_JsonFieldConv_c ( pLeft ); \
-		if ( m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_JSON_FIELD && m_dNodes[tNode.m_iRight].m_iToken==TOK_ATTR_JSON ) \
-		pRight = new Expr_JsonFieldConv_c ( pRight ); \
 	if ( tNode.m_eArgType==SPH_ATTR_INTEGER )		return new _classname##Int_c ( pLeft, pRight ); \
 	else if ( tNode.m_eArgType==SPH_ATTR_BIGINT )	return new _classname##Int64_c ( pLeft, pRight ); \
 	else											return new _classname##Float_c ( pLeft, pRight );
+
+	int iOp = tNode.m_iToken;
+	if ( iOp=='+' || iOp=='-' || iOp=='*' || iOp=='/' || iOp=='&' || iOp=='|' || iOp=='%' || iOp=='<' || iOp=='>'
+		|| iOp==TOK_LTE || iOp==TOK_GTE || iOp==TOK_EQ || iOp==TOK_NE || iOp==TOK_AND || iOp==TOK_OR || iOp==TOK_NOT )
+	{
+		if ( pLeft && m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_JSON_FIELD && m_dNodes[tNode.m_iLeft].m_iToken==TOK_ATTR_JSON )
+			pLeft = new Expr_JsonFieldConv_c ( pLeft );
+		if ( pRight && m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_JSON_FIELD && m_dNodes[tNode.m_iRight].m_iToken==TOK_ATTR_JSON )
+			pRight = new Expr_JsonFieldConv_c ( pRight );
+	}
 
 	switch ( tNode.m_iToken )
 	{
@@ -3919,7 +3925,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 								else if ( ( m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_JSON_FIELD ) &&
 									( m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRING ||
 									m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRINGPTR ) )
-									return new Expr_StrEq_c ( new Expr_JsonFieldConv_c ( pLeft ), pRight, m_eCollation );
+									return new Expr_StrEq_c ( pLeft, pRight, m_eCollation );
 								LOC_SPAWN_POLY ( Expr_Eq ); break;
 		case TOK_NE:			LOC_SPAWN_POLY ( Expr_Ne ); break;
 		case TOK_AND:			LOC_SPAWN_POLY ( Expr_And ); break;
@@ -5537,6 +5543,13 @@ ESphAttr ExprParser_t::GetWidestRet ( int iLeft, int iRight )
 			? SPH_ATTR_INTEGER
 			: SPH_ATTR_BIGINT;
 	}
+
+	// if json vs numeric then return numeric type (for the autoconversion)
+	if ( uLeftType==SPH_ATTR_JSON_FIELD && IsNumeric ( uRightType ) )
+		uRes = uRightType;
+	else if ( uRightType==SPH_ATTR_JSON_FIELD && IsNumeric ( uLeftType ) )
+		uRes = uLeftType;
+
 	return uRes;
 }
 
@@ -6245,7 +6258,7 @@ int ExprParser_t::AddNodeIdent ( const char * sKey, int iLeft )
 	tNode.m_sIdent = sKey;
 	tNode.m_iLeft = iLeft;
 	tNode.m_iToken = TOK_IDENT;
-	tNode.m_eRetType = SPH_ATTR_FLOAT;
+	tNode.m_eRetType = SPH_ATTR_JSON_FIELD;
 	return m_dNodes.GetLength()-1;
 }
 
@@ -6267,6 +6280,11 @@ struct TypeCheck_fn
 		{
 			bool bLeftNumeric =	tNode.m_iLeft==-1 ? false : IsNumericNode ( dNodes[tNode.m_iLeft] );
 			bool bRightNumeric = tNode.m_iRight==-1 ? false : IsNumericNode ( dNodes[tNode.m_iRight] );
+
+			// if json vs numeric then let it pass (for the autoconversion)
+			if ( ( bLeftNumeric && dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_JSON_FIELD )
+				|| ( bRightNumeric && dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_JSON_FIELD ) )
+					return;
 
 			if ( !bLeftNumeric || !bRightNumeric )
 			{

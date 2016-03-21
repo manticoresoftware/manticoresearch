@@ -27948,6 +27948,23 @@ const char * CSphSource_XMLPipe2::DecorateMessageVA ( const char * sTemplate, va
 	return sBuf;
 }
 
+static bool SourceCheckSchema ( const CSphSchema & tSchema, CSphString & sError )
+{
+	SmallStringHash_T<int> hAttrs;
+	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
+	{
+		const CSphColumnInfo & tAttr = tSchema.GetAttr ( i );
+		bool bUniq = hAttrs.Add ( 1, tAttr.m_sName );
+
+		if ( !bUniq )
+		{
+			sError.SetSprintf ( "attribute %s declared multiple times", tAttr.m_sName.cstr() );
+			return false;
+		}
+	}
+
+	return true;
+}
 
 bool CSphSource_XMLPipe2::Setup ( int iFieldBufferMax, bool bFixupUTF8, FILE * pPipe, const CSphConfigSection & hSource, CSphString & sError )
 {
@@ -27975,6 +27992,9 @@ bool CSphSource_XMLPipe2::Setup ( int iFieldBufferMax, bool bFixupUTF8, FILE * p
 	bOk &= ConfigureAttrs ( hSource("xmlpipe_field_string"),	SPH_ATTR_STRING,	m_tSchema, sError );
 
 	if ( !bOk )
+		return false;
+
+	if ( !SourceCheckSchema ( m_tSchema, sError ) )
 		return false;
 
 	ConfigureFields ( hSource("xmlpipe_field"), bWordDict, m_tSchema );
@@ -29548,6 +29568,9 @@ bool CSphSource_BaseSV::Setup ( const CSphConfigSection & hSource, FILE * pPipe,
 	if ( !SetupSchema ( hSource, bWordDict, sError ) )
 		return false;
 
+	if ( !SourceCheckSchema ( m_tSchema, sError ) )
+		return false;
+
 	int nFields = m_tSchema.m_dFields.GetLength();
 	m_dFields.Reset ( nFields );
 	m_dFieldLengths.Reset ( nFields );
@@ -29707,7 +29730,6 @@ bool CSphSource_BaseSV::IterateStart ( CSphString & sError )
 	// space out BOM like xml-pipe does
 	if ( m_iBufUsed>(int)sizeof(g_dBOM) && memcmp ( m_dBuf.Begin(), g_dBOM, sizeof ( g_dBOM ) )==0 )
 		memset ( m_dBuf.Begin(), ' ', sizeof(g_dBOM) );
-
 	return true;
 }
 
@@ -29979,6 +30001,20 @@ CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & s
 			bool bQuot = ( *s=='"' );
 			bool bEscape = ( *s=='\\' );
 			int iOff = s - m_dBuf.Begin();
+			bool bEscaped = ( iEscapeStart>=0 && iEscapeStart+1==iOff );
+
+			if ( bEscape || bEscaped ) // not quoted escape symbol
+			{
+				if ( bEscaped ) // next to escape symbol proceed as regular
+				{
+					*d++ = *s++;
+				} else // escape just started
+				{
+					iEscapeStart = iOff;
+					s++;
+				}
+				continue;
+			}
 
 			// [ " ... " ]
 			// [ " ... "" ... " ]
@@ -29992,27 +30028,15 @@ CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & s
 
 				// any symbol inside quotation proceed as regular
 				// but not quotation itself
-				// but quoted quotation proceed as regular symbol
+				// but quoted quotation proceed as regular symbol or escaped quotation
 				bool bOdd = ( ( iQuoteCount%2 )==1 );
-				if ( bOdd && ( !bQuot || ( iQuoteStart!=-1 && iQuoteStart+1==iOff ) ) ) // regular symbol inside quotation or quoted quotation
+				// regular symbol inside quotation or quoted quotation or escaped quotation
+				if ( bOdd && ( !bQuot || ( iQuoteStart!=-1 && iQuoteStart+1==iOff ) ) )
 					*d++ = *s;
 				s++;
 
 				if ( bQuot )
 					iQuoteStart = iOff;
-				continue;
-			}
-
-			if ( bEscape ) // not quoted escape symbol
-			{
-				if ( iEscapeStart>=0 && iEscapeStart+1==iOff ) // next to escape symbol proceed as regular
-				{
-					*d++ = *s;
-				} else // escape just started
-				{
-					iEscapeStart = iOff;
-					s++;
-				}
 				continue;
 			}
 

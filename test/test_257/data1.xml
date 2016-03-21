@@ -1,0 +1,18 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<sphinx:docset>
+
+<sphinx:document id="1">
+<title>test one</title>
+<content>this is my test document number one. also checking search within phrases.</content>
+<gid>11</gid>
+<uid>11</uid>
+</sphinx:document>
+
+<sphinx:document id="2">
+<title>test two</title>
+<content>this is my test document number two</content>
+<gid>12</gid>
+<uid>12</uid>
+</sphinx:document>
+
+</sphinx:docset>

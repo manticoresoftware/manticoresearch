@@ -30,6 +30,15 @@ index test
 	dict			= keywords
 	min_prefix_len	= 2
 }
+
+index test1
+{
+	source			= test
+	path			= <data_path/>/test1
+
+	dict			= keywords
+	min_word_len	= 2
+}
 </config>
 
 <db_create>
@@ -52,12 +61,15 @@ CREATE TABLE test_table
 </db_insert>
 
 <queries>
-<query mode="extended2">abcx</query>
-<query mode="extended2">^abcx</query>
-<query mode="extended2">abcm</query>
-<query mode="extended2">^abcm</query>
-<query mode="extended2">abc*</query>
-<query mode="extended2">^abc*</query>
+<query mode="extended2" index="test">abcx</query>
+<query mode="extended2" index="test">^abcx</query>
+<query mode="extended2" index="test">abcm</query>
+<query mode="extended2" index="test">^abcm</query>
+<query mode="extended2" index="test">abc*</query>
+<query mode="extended2" index="test">^abc*</query>
+
+<!-- regression field modifier vs overshort word -->
+<query mode="extended2" index="test1">@title ^a$</query>
 </queries>
 
 </test>

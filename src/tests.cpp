@@ -3823,6 +3823,12 @@ void TestSource ()
 		"8,cool,so far,\"Sup\n extra, duper,\",tmp,tmp,tmp,11\n",
 		"cool", "so far", "Sup\n extra, duper,", "tmp", "tmp", "tmp",
 
+		"9,//\\\\match//\\\\,//\\\\double//\\\\,//\\\\escape//\\\\,tmp,tmp,tmp,11\n",
+		"//\\match//\\", "//\\double//\\", "//\\escape//\\", "tmp", "tmp", "tmp",
+
+		"10,ma\\\"tch,me,ten\\\"der,tmp,tmp,tmp,11\n",
+		"ma\"tch", "me", "ten\"der", "tmp", "tmp", "tmp",
+
 		NULL };
 
 	// write csv file

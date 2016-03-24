@@ -8682,7 +8682,11 @@ static int yylex ( YYSTYPE * lvalp, SqlParser_c * pParser )
 }
 #endif
 
-#include "yysphinxql.c"
+#ifdef CMAKE_GENERATED_GRAMMAR
+	#include "bissphinxql.c"
+#else
+	#include "yysphinxql.c"
+#endif
 
 //////////////////////////////////////////////////////////////////////////
 

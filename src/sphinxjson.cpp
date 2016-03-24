@@ -42,7 +42,6 @@ struct JsonNode_t
 
 // must be included after YYSTYPE declaration
 class JsonParser_c;
-#include "yysphinxjson.h"
 
 /// actually, JSON-to-SphinxBSON converter helper, but who cares
 class JsonParser_c : ISphNoncopyable
@@ -537,7 +536,11 @@ public:
 #define YY_NO_UNISTD_H 1
 #define YY_DECL static int my_lex ( YYSTYPE * lvalp, void * yyscanner, JsonParser_c * pParser )
 
-#include "llsphinxjson.c"
+#ifdef CMAKE_GENERATED_LEXER
+	#include "flexsphinxjson.c"
+#else
+	#include "llsphinxjson.c"
+#endif
 
 void yyerror ( JsonParser_c * pParser, const char * sMessage )
 {
@@ -550,7 +553,11 @@ static int yylex ( YYSTYPE * lvalp, JsonParser_c * pParser )
 	return my_lex ( lvalp, pParser->m_pScanner, pParser );
 }
 
-#include "yysphinxjson.c"
+#ifdef CMAKE_GENERATED_GRAMMAR
+	#include "bissphinxjson.c"
+#else
+	#include "yysphinxjson.c"
+#endif
 
 bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool bToLowercase, CSphString & sError )
 {

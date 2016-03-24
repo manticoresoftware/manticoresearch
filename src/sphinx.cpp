@@ -5647,7 +5647,12 @@ struct SelectBounds_t
 };
 #define YYSTYPE SelectBounds_t
 class SelectParser_t;
-#include "yysphinxselect.h"
+
+#ifdef CMAKE_GENERATED_GRAMMAR
+	#include "bissphinxselect.h"
+#else
+	#include "yysphinxselect.h"
+#endif
 
 
 class SelectParser_t
@@ -5683,7 +5688,13 @@ void yyerror ( SelectParser_t * pParser, const char * sMessage )
 	pParser->m_sParserError.SetSprintf ( "%s near '%s'", sMessage, pParser->m_pLastTokenStart );
 }
 
+#ifdef CMAKE_GENERATED_GRAMMAR
+#include "bissphinxselect.c"
+#else
+
 #include "yysphinxselect.c"
+
+#endif
 
 
 int SelectParser_t::GetToken ( YYSTYPE * lvalp )
@@ -26783,7 +26794,10 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 #if USE_MYSQL
 #if DL_MYSQL
 
+#ifndef MYSQL_LIB
 #define MYSQL_LIB "libmysqlclient.so"
+#endif
+
 #define MYSQL_NUM_FUNCS (15)
 
 #if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC) || defined(__ECC) || defined(__GNUC__)
@@ -27136,7 +27150,11 @@ bool CSphSource_MySQL::Setup ( const CSphSourceParams_MySQL & tParams )
 
 #if USE_PGSQL
 #if DL_PGSQL
-#define POSGRESQL_LIB "libpq.so"
+
+#ifndef PGSQL_LIB
+#define PGSQL_LIB "libpq.so"
+#endif
+
 #define POSTRESQL_NUM_FUNCS (12)
 
 #if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC) || defined(__ECC) || defined(__GNUC__)
@@ -27189,7 +27207,7 @@ class CPosgresql : public CSphDynamicLibrary
 public:
 	bool Init()
 	{
-		if ( !CSphDynamicLibrary::Init ( POSGRESQL_LIB, true ) )
+		if ( !CSphDynamicLibrary::Init ( PGSQL_LIB, true ) )
 			return false;
 		if ( !LoadSymbols ( sFuncs, pFuncs, POSTRESQL_NUM_FUNCS ) )
 			return false;
@@ -27550,7 +27568,9 @@ struct CSphSchemaConfigurator
 
 #if USE_LIBEXPAT
 #if DL_EXPAT
+#ifndef EXPAT_LIB
 #define EXPAT_LIB "libexpat.so"
+#endif
 #define EXPAT_NUM_FUNCS (11)
 
 #if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC) || defined(__ECC) || defined(__GNUC__)
@@ -28800,7 +28820,11 @@ CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE *
 
 #if USE_ODBC
 #if DL_UNIXODBC
-// ODBC lib might be libodbc.so or libiodbc.so
+
+#ifndef UNIXODBC_LIB
+#define UNIXODBC_LIB "libodbc.so"
+#endif
+
 #define ODBC_NUM_FUNCS (13)
 
 #if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC) || defined(__ECC) || defined(__GNUC__)
@@ -28883,9 +28907,8 @@ class CODBC : public CSphDynamicLibrary
 public:
 	bool Init()
 	{
-		if ( ( !CSphDynamicLibrary::Init ( "libodbc.so", true ) )
-			&& ( !CSphDynamicLibrary::Init ( "libiodbc.so", true ) ) )
-				return false;
+		if ( !CSphDynamicLibrary::Init ( UNIXODBC_LIB, true ) )
+			return false;
 		if ( !LoadSymbols ( sFuncs, pFuncs, ODBC_NUM_FUNCS ) )
 			return false;
 		return true;

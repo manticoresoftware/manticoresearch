@@ -23,7 +23,11 @@
 // EXTENDED PARSER RELOADED
 //////////////////////////////////////////////////////////////////////////
 class XQParser_t;
-#include "yysphinxquery.h"
+#ifdef CMAKE_GENERATED_GRAMMAR
+	#include "bissphinxquery.h"
+#else
+	#include "yysphinxquery.h"
+#endif
 
 // #define XQDEBUG 1
 // #define XQ_DUMP_TRANSFORMED_TREE 1
@@ -169,7 +173,12 @@ void yyerror ( XQParser_t * pParser, const char * sMessage )
 #pragma warning(disable:4702) // unreachable code
 #endif
 
-#include "yysphinxquery.c"
+#ifdef CMAKE_GENERATED_GRAMMAR
+	#include "bissphinxquery.c"
+#else
+	#include "yysphinxquery.c"
+#endif
+
 
 #if USE_WINDOWS
 #pragma warning(pop)

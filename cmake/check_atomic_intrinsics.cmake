@@ -6,7 +6,7 @@ int interlocked_routine ( )
 	volatile int ia=0;
 	__sync_fetch_and_add( &ia, 1 );
 	__sync_fetch_and_sub( &ia, 1 );
-    }
+}
 #ifdef __CLASSIC_C__
 int main() {
 	int ac;
@@ -19,7 +19,7 @@ int main(int ac, char*av[]){
 	{
 		return *av[0];
 	}
-    return 0;
+	return 0;
 }")
 
 include(CheckCXXSourceCompiles)

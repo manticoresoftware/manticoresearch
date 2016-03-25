@@ -36,7 +36,7 @@ if (WIN32)
 				set (DL_EXPAT 1)
 				set (EXPAT_LIB libexpat.dll)
 			else( DL_EXPAT )
-                list (APPEND EXTRA_LIBRARIES ${expat_LIB})
+				list (APPEND EXTRA_LIBRARIES ${expat_LIB})
 			endif ()
 			install (FILES ${expat_ROOT}/libs/libexpat.dll DESTINATION bin COMPONENT APPLICATIONS)
 		endif ()
@@ -63,7 +63,7 @@ if (WIN32)
 				set (DL_MYSQL 1)
 				set (MYSQL_LIB libmysql.dll)
 			else( DL_MYSQL )
-                list (APPEND EXTRA_LIBRARIES ${mysql_LIB})
+				list (APPEND EXTRA_LIBRARIES ${mysql_LIB})
 			endif ()
 			install (FILES ${mysql_ROOT}/bin/libmysql.dll DESTINATION bin COMPONENT APPLICATIONS)
 		endif ()
@@ -348,8 +348,6 @@ else (WIN32)
 		endif (PostgreSQL_FOUND)
 	endif (WITH_PGSQL)
 
-
-
 endif (WIN32)
 
 if (NOT CMAKE_BUILD_TYPE MATCHES Debug)
@@ -359,14 +357,26 @@ endif ()
 find_package (BISON)
 if (BISON_FOUND)
 	option (USE_BISON "Will use bison generated grammars" ON)
-	set ( CMAKE_GENERATED_GRAMMAR ON )
 endif (BISON_FOUND)
 
 find_package (FLEX)
 if (FLEX_FOUND)
 	option (USE_FLEX "Use fresh flex generated lexers" ON)
-	set (CMAKE_GENERATED_LEXER ON)
 endif (FLEX_FOUND)
+
+if (USE_BISON)
+	set (CMAKE_GENERATED_GRAMMAR ON)
+else()
+	unset(CMAKE_GENERATED_GRAMMAR)
+	include_directories("${CMAKE_CURRENT_SOURCE_DIR}/src")
+endif()
+
+if (USE_FLEX)
+	set (CMAKE_GENERATED_LEXER ON)
+else ()
+	unset (CMAKE_GENERATED_LEXER)
+	include_directories ("${CMAKE_CURRENT_SOURCE_DIR}/src")
+endif ()
 
 message (STATUS "Option ENABLE_ID64 ${ENABLE_ID64}")
 option (ENABLE_ID64 "use 64-bit document and word IDs" ON)
@@ -431,7 +441,7 @@ if (WITH_RE2)
 						message (STATUS "Downloading RE2")
 						file (DOWNLOAD ${RE2_URL} ${SPHINXSEARCH_BINARY_DIR}/master.zip SHOW_PROGRESS)
 					endif()
-                    message (STATUS "Unpack RE2 from ${SPHINXSEARCH_BINARY_DIR}/master.zip")
+					message (STATUS "Unpack RE2 from ${SPHINXSEARCH_BINARY_DIR}/master.zip")
 					execute_process (
 							COMMAND "${CMAKE_COMMAND}" -E tar xfz "${SPHINXSEARCH_BINARY_DIR}/master.zip"
 							WORKING_DIRECTORY "${SPHINXSEARCH_BINARY_DIR}")
@@ -480,7 +490,7 @@ if (WITH_RE2)
 				endif()
 			endif()
 		endif ()
-        if (NOT EXISTS "${RE2_BASEDIR}/is_patched.txt")
+		if (NOT EXISTS "${RE2_BASEDIR}/is_patched.txt")
 			message (ERROR "Couldn't patch RE2 distro. No Git or Patch found")
 		endif()
 
@@ -511,7 +521,7 @@ IF (WITH_STEMMER)
 			list (APPEND EXTRA_LIBRARIES ${STEMMER_LIBRARY})
 		endif (STEMMER_INTERNAL)
 	else(STEMMER_FOUND)
-        if (EXISTS "${SPHX_LIBX}/libstemmer_c.tgz")
+		if (EXISTS "${SPHX_LIBX}/libstemmer_c.tgz")
 			message (STATUS "Unpack Stemmer from ${SPHX_LIBX}/libstemmer_c.tgz")
 			execute_process (
 					COMMAND "${CMAKE_COMMAND}" -E tar xfz "${SPHX_LIBX}/libstemmer_c.tgz"
@@ -529,7 +539,7 @@ IF (WITH_STEMMER)
 					WORKING_DIRECTORY "${SPHINXSEARCH_BINARY_DIR}")
 		endif (EXISTS "${SPHX_LIBX}/libstemmer_c.tgz")
 		set (STEMMER_BASEDIR "${SPHINXSEARCH_BINARY_DIR}/libstemmer_c")
-        # copy our CMakeLists there
+		# copy our CMakeLists there
 		if (NOT EXISTS "${STEMMER_BASEDIR}/CMakeLists.txt")
 			configure_file ("${CMAKE_SOURCE_DIR}/libstemmer_c/CMakeLists.txt" "${STEMMER_BASEDIR}/CMakeLists.txt" @ONLY)
 		endif ()
@@ -590,9 +600,6 @@ add_subdirectory (src)
 
 enable_testing ()
 add_subdirectory (test)
-
-#install(FILES sphinx-min.conf.dist DESTINATION /etc/sphinx COMPONENT config)
-#install(FILES doc/sphinx.html doc/sphinx.txt DESTINATION share/doc COMPONENT doc)
 
 # a bit of installation stuff
 install (DIRECTORY api doc contrib DESTINATION share/doc COMPONENT doc)
@@ -677,7 +684,5 @@ if (SPHINX_ARCH)
 else()
 	set (CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${FULL_VERSION}")
 endif()
-
-
 
 include (CPack)

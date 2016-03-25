@@ -56,7 +56,7 @@ MACRO(_MYSQL_CONFIG VAR _regex _opt)
 	STRING(REGEX REPLACE "[\r\n]$" "" _mysql_config_output "${_mysql_config_output}")
 	STRING(REGEX REPLACE "${_regex}" "" _mysql_config_output "${_mysql_config_output}")
 	SEPARATE_ARGUMENTS(_mysql_config_output)
-    SET(${VAR} ${_mysql_config_output})
+	SET(${VAR} ${_mysql_config_output})
 ENDMACRO(_MYSQL_CONFIG _regex _opt)
 
 
@@ -93,9 +93,9 @@ IF(MYSQL_CONFIG_EXECUTABLE)
 ELSE (MYSQL_CONFIG_EXECUTABLE)
 	MESSAGE(STATUS "ENV{MYSQL_DIR} = $ENV{MYSQL_DIR}")
 	FIND_PATH(MYSQL_INCLUDE_DIR mysql.h
-	        ${WITH_MYSQL_INCLUDES}
-	        ${WITH_MYSQL_ROOT}/include
-	        ${WITH_MYSQL_ROOT}/include/mysql
+			${WITH_MYSQL_INCLUDES}
+			${WITH_MYSQL_ROOT}/include
+			${WITH_MYSQL_ROOT}/include/mysql
 			$ENV{MYSQL_INCLUDE_DIR}
 			$ENV{MYSQL_DIR}/include
 			/usr/include/mysql
@@ -110,32 +110,32 @@ ENDIF (MYSQL_CONFIG_EXECUTABLE)
 
 #----------------- FIND MYSQL_LIB_DIR -------------------
 IF (MYSQL_CONFIG_EXECUTABLE)
-    _MYSQL_CONFIG(MYSQL_LIBRARIES    "(^| )-l" "--libs")
-    _MYSQL_CONFIG(MYSQL_LIB_DIR "(^| )-L" "--libs")
+	_MYSQL_CONFIG(MYSQL_LIBRARIES    "(^| )-l" "--libs")
+	_MYSQL_CONFIG(MYSQL_LIB_DIR "(^| )-L" "--libs")
 	FIND_LIBRARY(MYSQL_LIB NAMES mysqlclient HINTS ${MYSQL_LIB_DIR})
-    GET_FILENAME_COMPONENT (MYSQL_LIB ${MYSQL_LIB} NAME)
+	GET_FILENAME_COMPONENT (MYSQL_LIB ${MYSQL_LIB} NAME)
 
 ELSE (MYSQL_CONFIG_EXECUTABLE)
-    FIND_LIBRARY(MYSQL_LIB NAMES mysqlclient
-        	     ${WITH_MYSQL_LIBS}
-        	     ${WITH_MYSQL_ROOT}/lib
-        	     ${WITH_MYSQL_ROOT}/lib/mysql
-                 PATHS
-                 $ENV{MYSQL_DIR}/libmysql_r/.libs
-                 $ENV{MYSQL_DIR}/lib
-                 $ENV{MYSQL_DIR}/lib/mysql
-                 /usr/lib/mysql
-                 /usr/local/lib/mysql
-                 /usr/local/mysql/lib
-                 /usr/local/mysql/lib/mysql
-                 /opt/mysql/mysql/lib
-                 /opt/mysql/mysql/lib/mysql)
-    SET(MYSQL_LIBRARIES mysqlclient )
-    IF(MYSQL_LIB)
-        GET_FILENAME_COMPONENT(MYSQL_LIB_DIR ${MYSQL_LIB} PATH)
-        SET(MYSQL_LIBRARIES MYSQL_LIB)
+	FIND_LIBRARY(MYSQL_LIB NAMES mysqlclient
+				${WITH_MYSQL_LIBS}
+				${WITH_MYSQL_ROOT}/lib
+				${WITH_MYSQL_ROOT}/lib/mysql
+				PATHS
+				$ENV{MYSQL_DIR}/libmysql_r/.libs
+				$ENV{MYSQL_DIR}/lib
+				$ENV{MYSQL_DIR}/lib/mysql
+				/usr/lib/mysql
+				/usr/local/lib/mysql
+				/usr/local/mysql/lib
+				/usr/local/mysql/lib/mysql
+				/opt/mysql/mysql/lib
+				/opt/mysql/mysql/lib/mysql)
+	SET(MYSQL_LIBRARIES mysqlclient )
+	IF(MYSQL_LIB)
+		GET_FILENAME_COMPONENT(MYSQL_LIB_DIR ${MYSQL_LIB} PATH)
+		SET(MYSQL_LIBRARIES MYSQL_LIB)
 		GET_FILENAME_COMPONENT(MYSQL_LIB ${MYSQL_LIB} NAME)
-    ENDIF(MYSQL_LIB)
+	ENDIF(MYSQL_LIB)
 ENDIF (MYSQL_CONFIG_EXECUTABLE)
 
 SET(VERBOSE 1)

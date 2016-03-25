@@ -9,19 +9,19 @@ if (EXISTS "${SOURCE_DIR}/.git")
 	find_package(Git)
 	if (GIT_FOUND)
 		execute_process(COMMAND "${GIT_EXECUTABLE}" log -1 --format=%h
-        	WORKING_DIRECTORY "${SOURCE_DIR}"
-        	RESULT_VARIABLE res
-        	OUTPUT_VARIABLE HEAD_HASH
-        	ERROR_QUIET
-        	OUTPUT_STRIP_TRAILING_WHITESPACE)
-        execute_process(COMMAND "${GIT_EXECUTABLE}" status -s -b
 			WORKING_DIRECTORY "${SOURCE_DIR}"
-            RESULT_VARIABLE res
-            OUTPUT_VARIABLE HEAD_BRANCH
-            ERROR_QUIET
-            OUTPUT_STRIP_TRAILING_WHITESPACE)
-        string(REGEX REPLACE "\n.*$" "" HEAD_BRANCH "${HEAD_BRANCH}")
-        string(REPLACE "## " "" HEAD_BRANCH "${HEAD_BRANCH}")
+			RESULT_VARIABLE res
+			OUTPUT_VARIABLE HEAD_HASH
+			ERROR_QUIET
+			OUTPUT_STRIP_TRAILING_WHITESPACE)
+		execute_process(COMMAND "${GIT_EXECUTABLE}" status -s -b
+			WORKING_DIRECTORY "${SOURCE_DIR}"
+			RESULT_VARIABLE res
+			OUTPUT_VARIABLE HEAD_BRANCH
+			ERROR_QUIET
+			OUTPUT_STRIP_TRAILING_WHITESPACE)
+		string(REGEX REPLACE "\n.*$" "" HEAD_BRANCH "${HEAD_BRANCH}")
+		string(REPLACE "## " "" HEAD_BRANCH "${HEAD_BRANCH}")
 	else (GIT_FOUND)
 		# first try to use git revision as the most modern flow
 		set(GIT_DIR "${SOURCE_DIR}/.git")

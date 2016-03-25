@@ -81,8 +81,8 @@ endif (USE_BISON)
 if (USE_FLEX)
 	set (FLEX_DIR "${SPHINXSEARCH_BINARY_DIR}/config")
 
-	FLEX_TARGET (SQLlex sphinxql.l ${FLEX_DIR}/flexsphinxql.c)
-	FLEX_TARGET (Jsonlex sphinxjson.l ${FLEX_DIR}/flexsphinxjson.c COMPILE_FLAGS "-Pyy2")
+	FLEX_TARGET (SQLlex sphinxql.l ${FLEX_DIR}/flexsphinxql.c COMPILE_FLAGS "-i")
+	FLEX_TARGET (Jsonlex sphinxjson.l ${FLEX_DIR}/flexsphinxjson.c COMPILE_FLAGS "-i -Pyy2")
 
 	set_property (SOURCE searchd.cpp APPEND PROPERTY
 			OBJECT_DEPENDS ${FLEX_SQLlex_OUTPUTS})

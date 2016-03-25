@@ -1,10 +1,10 @@
 /* Striped config.h.in especially for cmake.  */
 
 /* Define to use the just-compiled grammar (will be defined if we have bison available). */
-#cmakedefine01 CMAKE_GENERATED_GRAMMAR
+#cmakedefine CMAKE_GENERATED_GRAMMAR 1
 
 /* Define to use the just-compiled lexer (will be defined if we have flex available). */
-#cmakedefine01 CMAKE_GENERATED_LEXER
+#cmakedefine CMAKE_GENERATED_LEXER 1
 
 /* Define to be the name of the compiler. */
 #cmakedefine COMPILER "${COMPILER}"

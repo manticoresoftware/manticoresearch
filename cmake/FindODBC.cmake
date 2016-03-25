@@ -38,10 +38,8 @@ message (STATUS "ODBC_LIBRARY is ${ODBC_LIBRARY}")
 #  itself includes this FindLibArchive when built with an older CMake that does
 #  not provide it.  The older CMake also does not have CMAKE_CURRENT_LIST_DIR.)
 include(${CMAKE_ROOT}/Modules/FindPackageHandleStandardArgs.cmake)
-find_package_handle_standard_args(ODBC
-                                  REQUIRED_VARS ODBC_INCLUDE_DIRS ODBC_LIBRARY
-  )
+find_package_handle_standard_args(ODBC 	REQUIRED_VARS ODBC_INCLUDE_DIRS ODBC_LIBRARY)
 
 if(ODBC_FOUND)
-  set(ODBC_LIBRARIES    ${ODBC_LIBRARY})
+	set(ODBC_LIBRARIES    ${ODBC_LIBRARY})
 endif()

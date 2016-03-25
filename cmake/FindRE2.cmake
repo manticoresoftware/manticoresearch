@@ -84,10 +84,8 @@ mark_as_advanced(RE2_INCLUDE_DIRS RE2_LIBRARY)
 #  itself includes this FindLibArchive when built with an older CMake that does
 #  not provide it.  The older CMake also does not have CMAKE_CURRENT_LIST_DIR.)
 include(${CMAKE_ROOT}/Modules/FindPackageHandleStandardArgs.cmake)
-find_package_handle_standard_args(RE2
-                                  REQUIRED_VARS RE2_INCLUDE_DIRS RE2_LIBRARY
-  )
+find_package_handle_standard_args(RE2 REQUIRED_VARS RE2_INCLUDE_DIRS RE2_LIBRARY)
 
 if(RE2_FOUND)
-  set(RE2_LIBRARIES    ${RE2_LIBRARY})
+	set(RE2_LIBRARIES    ${RE2_LIBRARY})
 endif()

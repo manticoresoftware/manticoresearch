@@ -28,8 +28,8 @@ if (!( iRes==0x01020304 || iRes==0x04030201 ))
 return 0;
 }")
 
-    include(CheckCXXSourceRuns)
-    CHECK_CXX_SOURCE_RUNS("${_CHECK_UNALIGNED_PROG}" _UNALIGNED_RAM)
+	include(CheckCXXSourceRuns)
+	CHECK_CXX_SOURCE_RUNS("${_CHECK_UNALIGNED_PROG}" _UNALIGNED_RAM)
 endif()
 
 if (_UNALIGNED_RAM)

@@ -11,6 +11,13 @@ ENDFOREACH ()
 set (CMAKE_USER_MAKE_RULES_OVERRIDE ${CMAKE_CURRENT_SOURCE_DIR}/cmake/c_flag_overrides.cmake)
 set (CMAKE_USER_MAKE_RULES_OVERRIDE_CXX ${CMAKE_CURRENT_SOURCE_DIR}/cmake/cxx_flag_overrides.cmake)
 
+# set default build type to RelWithDebInfo (if nothing else provided from outside yet)
+IF (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+	SET (CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Choose the type of build." FORCE)
+	set_property (CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release"
+			"MinSizeRel" "RelWithDebInfo")
+ENDIF ()
+
 PROJECT (SPHINXSEARCH)
 SET (SPHINXSEARCH_CMAKE_DIR "${SPHINXSEARCH_SOURCE_DIR}/cmake")
 SET (CMAKE_MODULE_PATH "${SPHINXSEARCH_SOURCE_DIR}/cmake")

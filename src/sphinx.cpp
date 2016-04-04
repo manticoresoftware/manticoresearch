@@ -28828,6 +28828,25 @@ struct CSphSchemaConfigurator
 };
 
 
+static bool SourceCheckSchema ( const CSphSchema & tSchema, CSphString & sError )
+{
+	SmallStringHash_T<int> hAttrs;
+	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
+	{
+		const CSphColumnInfo & tAttr = tSchema.GetAttr ( i );
+		bool bUniq = hAttrs.Add ( 1, tAttr.m_sName );
+
+		if ( !bUniq )
+		{
+			sError.SetSprintf ( "attribute %s declared multiple times", tAttr.m_sName.cstr() );
+			return false;
+		}
+	}
+
+	return true;
+}
+
+
 #if USE_LIBEXPAT
 #if DL_EXPAT
 #ifndef EXPAT_LIB
@@ -29228,23 +29247,6 @@ const char * CSphSource_XMLPipe2::DecorateMessageVA ( const char * sTemplate, va
 	return sBuf;
 }
 
-static bool SourceCheckSchema ( const CSphSchema & tSchema, CSphString & sError )
-{
-	SmallStringHash_T<int> hAttrs;
-	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
-	{
-		const CSphColumnInfo & tAttr = tSchema.GetAttr ( i );
-		bool bUniq = hAttrs.Add ( 1, tAttr.m_sName );
-
-		if ( !bUniq )
-		{
-			sError.SetSprintf ( "attribute %s declared multiple times", tAttr.m_sName.cstr() );
-			return false;
-		}
-	}
-
-	return true;
-}
 
 bool CSphSource_XMLPipe2::Setup ( int iFieldBufferMax, bool bFixupUTF8, FILE * pPipe, const CSphConfigSection & hSource, CSphString & sError )
 {

@@ -1253,6 +1253,32 @@ inline int sphUTF8Len ( const char * pStr, int iMax )
 	return iRes;
 }
 
+/// quick check for UTF-8
+inline bool sphIsUTF8 ( const char * pStr )
+{
+	while ( *pStr )
+	{
+		if ( *pStr < 0 )
+			return true;
+		pStr++;
+	}
+	return false;
+}
+
+/// convert UTF-8 to codepoints, return string length
+inline int sphUTF8ToWideChar ( const char * pSrc, int * pDst, int iMaxLen )
+{
+	const BYTE * p = (const BYTE*) pSrc;
+	int iLen = 0, iCode;
+	while ( ( iCode = sphUTF8Decode(p) )!=0 && iLen<iMaxLen )
+	{
+		*pDst++ = iCode;
+		iLen++;
+	}
+	*pDst = 0;
+	return iLen;
+}
+
 //////////////////////////////////////////////////////////////////////////
 // MATCHING ENGINE INTERNALS
 //////////////////////////////////////////////////////////////////////////

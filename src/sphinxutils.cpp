@@ -120,14 +120,14 @@ void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn, const char * sB
 	}
 }
 
-
-static bool sphWildcardMatchRec ( const char * sString, const char * sPattern )
+template < typename T >
+static bool sphWildcardMatchRec ( const T * sString, const T * sPattern )
 {
 	if ( !sString || !sPattern )
 		return false;
 
-	const char * s = sString;
-	const char * p = sPattern;
+	const T * s = sString;
+	const T * p = sPattern;
 	while ( *s )
 	{
 		switch ( *p )
@@ -228,13 +228,13 @@ static bool sphWildcardMatchRec ( const char * sString, const char * sPattern )
 		|| ( p[0]=='%' && p[1]=='\0' );
 }
 
-
-static bool sphWildcardMatchDP ( const char * sString, const char * sPattern )
+template < typename T >
+static bool sphWildcardMatchDP ( const T * sString, const T * sPattern )
 {
 	assert ( sString && sPattern && *sString && *sPattern );
 
-	const char * s = sString;
-	const char * p = sPattern;
+	const T * s = sString;
+	const T * p = sPattern;
 	bool bEsc = false;
 	int iEsc = 0;
 
@@ -298,25 +298,45 @@ static bool sphWildcardMatchDP ( const char * sString, const char * sPattern )
 }
 
 
-bool sphWildcardMatch ( const char * sString, const char * sPattern )
+template < typename T >
+bool sphWildcardMatchSpec ( const T * sString, const T * sPattern )
 {
 	if ( !sString || !sPattern || !*sString || !*sPattern )
 		return false;
 
+	int iLen = 0;
 	int iStars = 0;
-	const char * p = sPattern;
+	const T * p = sPattern;
 	while ( *p )
 	{
 		iStars += ( *p=='*' );
+		iLen++;
 		p++;
 	}
 
-	if ( iStars>10 || ( iStars>5 && strlen ( sString )>17 ) )
+	if ( iStars>10 || ( iStars>5 && iLen>17 ) )
 		return sphWildcardMatchDP ( sString, sPattern );
 	else
 		return sphWildcardMatchRec ( sString, sPattern );
 }
 
+
+bool sphWildcardMatch ( const char * sString, const char * sPattern, const int * pPattern )
+{
+	if ( pPattern || sphIsUTF8 ( sString ) || sphIsUTF8 ( sPattern ) )
+	{
+		int dString [ SPH_MAX_WORD_LEN + 1 ];
+		sphUTF8ToWideChar ( sString, dString, SPH_MAX_WORD_LEN );
+		if ( !pPattern )
+		{
+			int dPattern [ SPH_MAX_WORD_LEN + 1 ];
+			sphUTF8ToWideChar ( sPattern, dPattern, SPH_MAX_WORD_LEN );
+			return sphWildcardMatchSpec ( dString, dPattern );
+		}
+		return sphWildcardMatchSpec ( dString, pPattern );
+	}
+	return sphWildcardMatchSpec ( sString, sPattern );
+}
 
 //////////////////////////////////////////////////////////////////////////
 

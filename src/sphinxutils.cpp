@@ -120,14 +120,14 @@ void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn, const char * sB
 	}
 }
 
-template < typename T >
-static bool sphWildcardMatchRec ( const T * sString, const T * sPattern )
+template < typename T1, typename T2 >
+static bool sphWildcardMatchRec ( const T1 * sString, const T2 * sPattern )
 {
 	if ( !sString || !sPattern )
 		return false;
 
-	const T * s = sString;
-	const T * p = sPattern;
+	const T1 * s = sString;
+	const T2 * p = sPattern;
 	while ( *s )
 	{
 		switch ( *p )
@@ -228,13 +228,13 @@ static bool sphWildcardMatchRec ( const T * sString, const T * sPattern )
 		|| ( p[0]=='%' && p[1]=='\0' );
 }
 
-template < typename T >
-static bool sphWildcardMatchDP ( const T * sString, const T * sPattern )
+template < typename T1, typename T2 >
+static bool sphWildcardMatchDP ( const T1 * sString, const T2 * sPattern )
 {
 	assert ( sString && sPattern && *sString && *sPattern );
 
-	const T * s = sString;
-	const T * p = sPattern;
+	const T1 * s = sString;
+	const T2 * p = sPattern;
 	bool bEsc = false;
 	int iEsc = 0;
 
@@ -298,15 +298,12 @@ static bool sphWildcardMatchDP ( const T * sString, const T * sPattern )
 }
 
 
-template < typename T >
-bool sphWildcardMatchSpec ( const T * sString, const T * sPattern )
+template < typename T1, typename T2 >
+bool sphWildcardMatchSpec ( const T1 * sString, const T2 * sPattern )
 {
-	if ( !sString || !sPattern || !*sString || !*sPattern )
-		return false;
-
 	int iLen = 0;
 	int iStars = 0;
-	const T * p = sPattern;
+	const T2 * p = sPattern;
 	while ( *p )
 	{
 		iStars += ( *p=='*' );
@@ -323,19 +320,28 @@ bool sphWildcardMatchSpec ( const T * sString, const T * sPattern )
 
 bool sphWildcardMatch ( const char * sString, const char * sPattern, const int * pPattern )
 {
-	if ( pPattern || sphIsUTF8 ( sString ) || sphIsUTF8 ( sPattern ) )
-	{
-		int dString [ SPH_MAX_WORD_LEN + 1 ];
-		sphUTF8ToWideChar ( sString, dString, SPH_MAX_WORD_LEN );
-		if ( !pPattern )
-		{
-			int dPattern [ SPH_MAX_WORD_LEN + 1 ];
-			sphUTF8ToWideChar ( sPattern, dPattern, SPH_MAX_WORD_LEN );
-			return sphWildcardMatchSpec ( dString, dPattern );
-		}
-		return sphWildcardMatchSpec ( dString, pPattern );
-	}
-	return sphWildcardMatchSpec ( sString, sPattern );
+	if ( !sString || !sPattern || !*sString || !*sPattern )
+		return false;
+
+	// there are basically 4 codepaths, because both string and pattern may or may not contain utf-8 chars
+	// pPattern and pString are pointers to unpacked utf-8, pPattern can be precalculated (default is NULL)
+
+	int dString [ SPH_MAX_WORD_LEN + 1 ];
+	const int * pString = ( sphIsUTF8 ( sString ) && sphUTF8ToWideChar ( sString, dString, SPH_MAX_WORD_LEN ) ) ? dString : NULL;
+
+	if ( !pString && !pPattern )
+		return sphWildcardMatchSpec ( sString, sPattern ); // ascii vs ascii
+
+	if ( pString && !pPattern )
+		return sphWildcardMatchSpec ( pString, sPattern ); // utf-8 vs ascii
+
+	if ( !pString && pPattern )
+		return sphWildcardMatchSpec ( sString, pPattern ); // ascii vs utf-8
+
+	if ( pString && pPattern )
+		return sphWildcardMatchSpec ( pString, pPattern ); // utf-8 vs utf-8
+
+	return false;
 }
 
 //////////////////////////////////////////////////////////////////////////

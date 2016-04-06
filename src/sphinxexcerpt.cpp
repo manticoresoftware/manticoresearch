@@ -310,7 +310,10 @@ bool SnippetsDocIndex_c::MatchStar ( const Keyword_t & tTok, const BYTE * sWord 
 {
 	assert ( tTok.m_bStar );
 	const BYTE * sKeyword = m_dStarBuffer.Begin() + tTok.m_iWord;
-	return sphWildcardMatch ( (const char*)sWord, (const char*)sKeyword );
+	const char * sWildcard = (const char*) sKeyword;
+	int dWildcard [ SPH_MAX_WORD_LEN + 1 ];
+	int * pWildcard = ( sphIsUTF8 ( sWildcard ) && sphUTF8ToWideChar ( sWildcard, dWildcard, SPH_MAX_WORD_LEN ) ) ? dWildcard : NULL;
+	return sphWildcardMatch ( (const char*)sWord, (const char*)sKeyword, pWildcard );
 }
 
 

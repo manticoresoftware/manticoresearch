@@ -35,7 +35,7 @@ index idx1
 }
 </config>
 
-<db_create>CREATE TABLE `test_table` ( `id` int(11) NOT NULL, `text` varchar(16384) NOT NULL )</db_create>
+<db_create>CREATE TABLE `test_table` ( `id` int(11) NOT NULL, `text` varchar(16384) CHARACTER SET utf8 NOT NULL )</db_create>
 <db_drop>DROP TABLE IF EXISTS `test_table`</db_drop>
 <db_insert>SET NAMES utf8</db_insert>
 <db_insert>

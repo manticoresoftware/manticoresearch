@@ -808,5 +808,7 @@ Two'</sphinxql>
 <sphinxql>select j.f[0], j.f[1] from json_inplace_rt where id=1</sphinxql>
 <!-- type autoconversion for 64-bit values -->
 <sphinxql>select j.f, indexof(x>345345345353 for x in j.f) as p from json_inplace where p=0</sphinxql>
+<!-- group by aliased field -->
+<sphinxql>select id, count(*), groupby(), j.a as p from arrays where id=123 group by p</sphinxql>
 </sphqueries>
 </test>

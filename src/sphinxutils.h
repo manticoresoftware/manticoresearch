@@ -46,7 +46,8 @@ inline bool sphIsModifier ( int iSymbol )
 
 
 /// all wildcards
-inline bool sphIsWild ( char c )
+template < typename T >
+inline bool sphIsWild ( T c )
 {
 	return c=='*' || c=='?' || c=='%';
 }
@@ -59,7 +60,7 @@ void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn );
 void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn, const char * sBounds );
 
 /// string wildcard matching (case-sensitive, supports * and ? patterns)
-bool sphWildcardMatch ( const char * sSstring, const char * sPattern );
+bool sphWildcardMatch ( const char * sSstring, const char * sPattern, const int * pPattern = NULL );
 
 //////////////////////////////////////////////////////////////////////////
 

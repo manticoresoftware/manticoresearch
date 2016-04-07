@@ -111,7 +111,7 @@ static void EncodeResultJson ( const AggrResult_t & tRes, CSphStringBuilderJson 
 						for ( ; nValues; nValues-=iStep, pValues+=iStep )
 						{
 							int64_t iVal = ( bWide ? MVA_UPSIZE ( pValues ) : *pValues );
-							tOut.Appendf ( "%s"INT64_FMT, sSep, iVal );
+							tOut.Appendf ( "%s" INT64_FMT, sSep, iVal );
 							sSep = ",";
 						}
 					}
@@ -246,7 +246,7 @@ static void EncodeResultJson ( const AggrResult_t & tRes, CSphStringBuilderJson 
 	AppendJsonKey ( "meta", tOut );
 	tOut += "{";
 
-	tOut.Appendf ( "\"total\":%d, \"total_found\":"INT64_FMT", \"time\":%d.%03d,", tRes.m_iMatches, tRes.m_iTotalMatches, tRes.m_iQueryTime/1000, tRes.m_iQueryTime%1000 );
+	tOut.Appendf ( "\"total\":%d, \"total_found\":" INT64_FMT ", \"time\":%d.%03d,", tRes.m_iMatches, tRes.m_iTotalMatches, tRes.m_iQueryTime/1000, tRes.m_iQueryTime%1000 );
 
 	// word statistics
 	AppendJsonKey ( "words", tOut );
@@ -256,7 +256,7 @@ static void EncodeResultJson ( const AggrResult_t & tRes, CSphStringBuilderJson 
 	while ( tRes.m_hWordStats.IterateNext() )
 	{
 		const CSphQueryResultMeta::WordStat_t & tStat = tRes.m_hWordStats.IterateGet();
-		tOut.Appendf ( "%s{\"word\":\"%s\", \"docs\":"INT64_FMT", \"hits\":"INT64_FMT"}", sSep, tRes.m_hWordStats.IterateGetKey().cstr(), tStat.m_iDocs, tStat.m_iHits );
+		tOut.Appendf ( "%s{\"word\":\"%s\", \"docs\":" INT64_FMT ", \"hits\":" INT64_FMT "}", sSep, tRes.m_hWordStats.IterateGetKey().cstr(), tStat.m_iDocs, tStat.m_iHits );
 		sSep = ",";
 	}
 	tOut += "]}";

@@ -2476,10 +2476,10 @@ public:
 		if ( pData==MAP_FAILED )
 		{
 			if ( iLength>(int64_t)0x7fffffffUL )
-				sError.SetSprintf ( "mmap() failed: %s (length="INT64_FMT" is over 2GB, impossible on some 32-bit systems)",
+				sError.SetSprintf ( "mmap() failed: %s (length=" INT64_FMT " is over 2GB, impossible on some 32-bit systems)",
 					strerror(errno), iLength );
 			else
-				sError.SetSprintf ( "mmap() failed: %s (length="INT64_FMT")", strerror(errno), iLength );
+				sError.SetSprintf ( "mmap() failed: %s (length=" INT64_FMT ")", strerror(errno), iLength );
 			return false;
 		}
 
@@ -2600,7 +2600,7 @@ public:
 			pData = (T *)::MapViewOfFile ( m_iMap, iAccessMode, 0, 0, 0 );
 			if ( !pData )
 			{
-				sError.SetSprintf ( "failed to map file '%s': (errno %d, length="INT64_FMT")", sFile, ::GetLastError(), (int64_t)tLen.QuadPart );
+				sError.SetSprintf ( "failed to map file '%s': (errno %d, length=" INT64_FMT ")", sFile, ::GetLastError(), (int64_t)tLen.QuadPart );
 				Reset();
 				return false;
 			}
@@ -2631,7 +2631,7 @@ public:
 			pData = (T *)mmap ( NULL, iFileSize, iProt, iFlags, iFD, 0 );
 			if ( pData==MAP_FAILED )
 			{
-				sError.SetSprintf ( "failed to mmap file '%s': %s (length="INT64_FMT")", sFile, strerror(errno), iFileSize );
+				sError.SetSprintf ( "failed to mmap file '%s': %s (length=" INT64_FMT ")", sFile, strerror(errno), iFileSize );
 				Reset();
 				return false;
 			}

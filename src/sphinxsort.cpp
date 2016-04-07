@@ -4136,6 +4136,11 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const ISphSchema & 
 				{
 					iGroupBy = tSchema.GetAttrIndex ( pQuery->m_dItems[i].m_sAlias.cstr() );
 					break;
+
+				} else if ( pQuery->m_sGroupBy==pQuery->m_dItems[i].m_sAlias )
+				{
+					iGroupBy = tSchema.GetAttrIndex ( pQuery->m_dItems[i].m_sExpr.cstr() );
+					break;
 				}
 		}
 
@@ -4154,9 +4159,8 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const ISphSchema & 
 			case SPH_GROUPBY_MONTH:		tSettings.m_pGrouper = new CSphGrouperMonth ( tLoc ); break;
 			case SPH_GROUPBY_YEAR:		tSettings.m_pGrouper = new CSphGrouperYear ( tLoc ); break;
 			case SPH_GROUPBY_ATTR:
-				if ( eType==SPH_ATTR_JSON )
+				if ( eType==SPH_ATTR_JSON || eType==SPH_ATTR_JSON_FIELD )
 				{
-					// allow group by top-level json array
 					ISphExpr * pExpr = sphExprParse ( pQuery->m_sGroupBy.cstr(), tSchema, NULL, NULL, sError, NULL, pQuery->m_eCollation );
 					tSettings.m_pGrouper = new CSphGrouperJsonField ( tLoc, pExpr );
 					tSettings.m_bJson = true;

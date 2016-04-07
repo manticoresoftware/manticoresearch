@@ -29,6 +29,7 @@
 	#define USE_RLP			0	/// whether to compile RLP support
 	#define USE_WINDOWS		1	/// whether to compile for Windows
 	#define USE_SYSLOG		0	/// whether to use syslog for logging
+	#define HAVE_STRNLEN	1	
 
 	#define UNALIGNED_RAM_ACCESS	1
 	#define USE_LITTLE_ENDIAN		1

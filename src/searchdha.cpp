@@ -274,7 +274,7 @@ static void LogAgentWeights ( const WORD * pOldWeights, const WORD * pCurWeights
 		return;
 
 	ARRAY_FOREACH ( i, dAgents )
-		sphLogDebug ( "client=%s:%d, mirror=%d, weight=%d, %d, timer="INT64_FMT, dAgents[i].m_sHost.cstr (), dAgents[i].m_iPort, i, pCurWeights[i], pOldWeights[i], pTimers[i] );
+		sphLogDebug ( "client=%s:%d, mirror=%d, weight=%d, %d, timer=" INT64_FMT, dAgents[i].m_sHost.cstr (), dAgents[i].m_iPort, i, pCurWeights[i], pOldWeights[i], pTimers[i] );
 }
 
 AgentDesc_c * MetaAgentDesc_t::StDiscardDead ()
@@ -349,7 +349,7 @@ AgentDesc_c * MetaAgentDesc_t::StDiscardDead ()
 	// only one node with lowest error rating. Return it.
 	if ( !dCandidates.GetLength() )
 	{
-		sphLogDebug ( "client=%s:%d, HA selected %d node with best num of errors a row ("INT64_FMT")", m_dHosts[iBestAgent].m_sHost.cstr(), m_dHosts[iBestAgent].m_iPort, iBestAgent, iErrARow );
+		sphLogDebug ( "client=%s:%d, HA selected %d node with best num of errors a row (" INT64_FMT ")", m_dHosts[iBestAgent].m_sHost.cstr(), m_dHosts[iBestAgent].m_iPort, iBestAgent, iErrARow );
 		return &m_dHosts[iBestAgent];
 	}
 
@@ -361,7 +361,7 @@ AgentDesc_c * MetaAgentDesc_t::StDiscardDead ()
 		const char * sLogStr = NULL;
 		const HostDashboard_t & dDash = GetCommonStat ( iBestAgent );
 		fAge = ( dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime ) / 1000.0f;
-		sLogStr = "client=%s:%d, HA selected %d node by weighted random, with best EaR ("INT64_FMT"), last answered in %.3f milliseconds";
+		sLogStr = "client=%s:%d, HA selected %d node by weighted random, with best EaR (" INT64_FMT "), last answered in %.3f milliseconds";
 		sphLogDebugv ( sLogStr, m_dHosts[iBestAgent].m_sHost.cstr(), m_dHosts[iBestAgent].m_iPort, iBestAgent, iErrARow, fAge );
 	}
 

@@ -414,7 +414,7 @@ public:
 		switch ( eType )
 		{
 		case JSON_INT32: printf ( "JSON_INT32 %d\n", sphJsonLoadInt ( &p ) ); break;
-		case JSON_INT64: printf ( "JSON_INT64 "INT64_FMT"\n", sphJsonLoadBigint ( &p ) ); break;
+		case JSON_INT64: printf ( "JSON_INT64 " INT64_FMT "\n", sphJsonLoadBigint ( &p ) ); break;
 		case JSON_DOUBLE: printf ( "JSON_DOUBLE %lf\n", sphQW2D ( sphJsonLoadBigint ( &p ) ) ); break;
 		case JSON_STRING:
 			{

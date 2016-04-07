@@ -394,7 +394,7 @@ int CSphConfigSection::GetSize ( const char * sKey, int iDefault ) const
 	if ( iSize>INT_MAX )
 	{
 		iSize = INT_MAX;
-		sphWarning ( "'%s = "INT64_FMT"' clamped to %d(INT_MAX)", sKey, iSize, INT_MAX );
+		sphWarning ( "'%s = " INT64_FMT "' clamped to %d(INT_MAX)", sKey, iSize, INT_MAX );
 	}
 	return (int)iSize;
 }

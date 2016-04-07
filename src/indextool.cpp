@@ -490,7 +490,7 @@ bool BuildIDF ( const CSphString & sFilename, const CSphVector<CSphString> & dFi
 			break;
 	}
 
-	fprintf ( stdout, INT64_FMT" documents, "INT64_FMT" words ("INT64_FMT" read, "INT64_FMT" merged, "INT64_FMT" skipped)\n",
+	fprintf ( stdout, INT64_FMT" documents, " INT64_FMT " words (" INT64_FMT " read, " INT64_FMT " merged, " INT64_FMT " skipped)\n",
 		iTotalDocuments, iTotalWords, iReadWords, iMergedWords, iSkippedWords );
 
 	// write to disk
@@ -643,7 +643,7 @@ bool MergeIDF ( const CSphString & sFilename, const CSphVector<CSphString> & dFi
 	ARRAY_FOREACH ( i, dFiles )
 		SafeDeleteArray ( dBuffers[i] );
 
-	fprintf ( stdout, INT64_FMT" documents, "INT64_FMT" words ("INT64_FMT" read, "INT64_FMT" merged, "INT64_FMT" skipped)\n",
+	fprintf ( stdout, INT64_FMT" documents, " INT64_FMT " words (" INT64_FMT " read, " INT64_FMT " merged, " INT64_FMT " skipped)\n",
 		iTotalDocuments, iTotalWords, iReadWords, iMergedWords, iSkippedWords );
 
 	int tmWallMsec = (int)( ( sphMicroTimer() - tmStart )/1000 );
@@ -1170,7 +1170,7 @@ int main ( int argc, char ** argv )
 				fprintf ( stdout, "dumping dictionary for index '%s'...\n", sIndex.cstr() );
 
 			if ( bStats )
-				fprintf ( stdout, "total-documents: "INT64_FMT"\n", pIndex->GetStats().m_iTotalDocuments );
+				fprintf ( stdout, "total-documents: " INT64_FMT "\n", pIndex->GetStats().m_iTotalDocuments );
 			pIndex->DebugDumpDict ( stdout );
 			break;
 		}

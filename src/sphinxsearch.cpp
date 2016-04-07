@@ -8755,7 +8755,7 @@ float RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::TermTC ( int iTerm,
 		if ( m_dAtcProcessedTerms.BitGet ( tCur.m_uQuerypos ) || iHitpos==tCur.m_iHitpos )
 			continue;
 
-		float fWeightedDist = pow ( float ( abs ( iHitpos - tCur.m_iHitpos ) ), XRANK_ATC_EXP );
+		float fWeightedDist = (float)pow ( float ( abs ( iHitpos - tCur.m_iHitpos ) ), XRANK_ATC_EXP );
 		float fTermTC = ( m_dIDF[tCur.m_uQuerypos] / fWeightedDist );
 		if ( bGotDup )
 			fTermTC *= XRANK_ATC_DUP_DIV;
@@ -8804,7 +8804,7 @@ void RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::UpdateATC ( bool bFl
 			m_dAtcTerms[i] = 0.0f;
 		}
 
-		m_dAtc[m_uAtcField] = log ( 1.0f + fWeightedSum );
+		m_dAtc[m_uAtcField] = (float)log ( 1.0f + fWeightedSum );
 		m_iAtcHitStart = 0;
 		m_iAtcHitCount = 0;
 		m_bAtcHeadProcessed = false;

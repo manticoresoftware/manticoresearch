@@ -1423,7 +1423,7 @@ struct Expr_MinTopSortval : public ISphExpr
 
 #define DECLARE_UNARY_INT(_classname,_expr,_expr2,_expr3) \
 		DECLARE_UNARY_TRAITS ( _classname ) \
-		virtual float Eval ( const CSphMatch & tMatch ) const { return _expr; } \
+		virtual float Eval ( const CSphMatch & tMatch ) const { return (float)_expr; } \
 		virtual int IntEval ( const CSphMatch & tMatch ) const { return _expr2; } \
 		virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return _expr3; } \
 	};
@@ -1448,7 +1448,7 @@ DECLARE_UNARY_TRAITS ( Expr_Ln_c )
        {
                float fFirst = m_pFirst->Eval ( tMatch );
                // ideally this would be SQLNULL instead of plain 0.0f
-               return fFirst>0.0f ? log ( fFirst ) : 0.0f;
+               return fFirst>0.0f ? (float)log ( fFirst ) : 0.0f;
        }
 DECLARE_END()
 
@@ -1476,7 +1476,7 @@ DECLARE_UNARY_TRAITS ( Expr_Sqrt_c )
                float fFirst = m_pFirst->Eval ( tMatch );
                // ideally this would be SQLNULL instead of plain 0.0f in case of negative argument
                // MEGA optimization: do not call sqrt for 0.0f
-               return fFirst>0.0f ? sqrt ( fFirst ) : 0.0f;
+               return fFirst>0.0f ? (float)sqrt ( fFirst ) : 0.0f;
        }
 DECLARE_END()
 
@@ -2793,17 +2793,17 @@ void ExprParser_t::ConstantFoldPass ( int iNode )
 				if ( pLeft->m_iToken==TOK_CONST_INT )
 					pRoot->m_iConst = IABS ( pLeft->m_iConst );
 				else
-					pRoot->m_fConst = fabs ( fArg );
+					pRoot->m_fConst = (float)fabs ( fArg );
 				break;
 			case FUNC_CEIL:		pRoot->m_iToken = TOK_CONST_INT; pRoot->m_iLeft = -1; pRoot->m_iConst = (int)ceil ( fArg ); break;
 			case FUNC_FLOOR:	pRoot->m_iToken = TOK_CONST_INT; pRoot->m_iLeft = -1; pRoot->m_iConst = (int)floor ( fArg ); break;
 			case FUNC_SIN:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float ( sin ( fArg) ); break;
 			case FUNC_COS:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float ( cos ( fArg ) ); break;
-			case FUNC_LN:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = fArg>0.0f ? log(fArg) : 0.0f; break;
+			case FUNC_LN:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = fArg>0.0f ? (float) log(fArg) : 0.0f; break;
 			case FUNC_LOG2:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = fArg>0.0f ? (float)( log(fArg)*M_LOG2E ) : 0.0f; break;
 			case FUNC_LOG10:	pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = fArg>0.0f ? (float)( log(fArg)*M_LOG10E ) : 0.0f; break;
 			case FUNC_EXP:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = float ( exp ( fArg ) ); break;
-			case FUNC_SQRT:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = fArg>0.0f ? sqrt(fArg) : 0.0f; break;
+			case FUNC_SQRT:		pRoot->m_iToken = TOK_CONST_FLOAT; pRoot->m_iLeft = -1; pRoot->m_fConst = fArg>0.0f ? (float)sqrt(fArg) : 0.0f; break;
 			default:			break;
 		}
 		return;
@@ -3374,7 +3374,7 @@ inline float GeodistSphereDeg ( float lat1, float lon1, float lat2, float lon2 )
 
 static inline float GeodistDegDiff ( float f )
 {
-	f = fabs(f);
+	f = (float)fabs(f);
 	while ( f>360 )
 		f -= 360;
 	if ( f>180 )
@@ -3398,7 +3398,7 @@ float GeodistFlatDeg ( float fLat1, float fLon1, float fLat2, float fLon2 )
 
 static inline float GeodistFastCos ( float x )
 {
-	float y = fabs(x)*float(GEODIST_TABLE_COS/PI/2);
+	float y = (float)(fabs(x)*GEODIST_TABLE_COS/PI/2);
 	int i = int(y);
 	y -= i;
 	i &= ( GEODIST_TABLE_COS-1 );
@@ -3408,7 +3408,7 @@ static inline float GeodistFastCos ( float x )
 
 static inline float GeodistFastSin ( float x )
 {
-	float y = fabs(x)*float(GEODIST_TABLE_COS/PI/2);
+	float y = float(fabs(x)*GEODIST_TABLE_COS/PI/2);
 	int i = int(y);
 	y -= i;
 	i = ( i - GEODIST_TABLE_COS/4 ) & ( GEODIST_TABLE_COS-1 ); // cos(x-pi/2)=sin(x), costable/4=pi/2
@@ -3423,7 +3423,7 @@ static inline float GeodistFastAsinSqrt ( float x )
 	if ( x<0.122 )
 	{
 		// distance under 4546km, Taylor error under 0.00072%
-		float y = sqrt(x);
+		float y = (float)sqrt(x);
 		return y + x*y*0.166666666666666f + x*x*y*0.075f + x*x*x*y*0.044642857142857f;
 	}
 	if ( x<0.948 )
@@ -3433,7 +3433,7 @@ static inline float GeodistFastAsinSqrt ( float x )
 		int i = int(x);
 		return g_GeoAsin[i] + ( g_GeoAsin[i+1] - g_GeoAsin[i] )*( x-i );
 	}
-	return asin ( sqrt(x) ); // distance over 17083km, just compute honestly
+	return (float)asin ( sqrt(x) ); // distance over 17083km, just compute honestly
 }
 
 
@@ -3508,7 +3508,7 @@ static inline void GeoTesselate ( CSphVector<float> & dIn )
 		int iLatBand = (int) floor ( fabs ( fMinLat ) / 5.0f );
 		iLatBand = iLatBand % 18;
 
-		float d = 60.0f*( LAT_MINUTE*fabs ( fLat1-fLat2 ) + LON_MINUTE [ iLatBand ]*fabs ( fLon1-fLon2 ) );
+		float d = (float) (60.0f*( LAT_MINUTE*fabs ( fLat1-fLat2 ) + LON_MINUTE [ iLatBand ]*fabs ( fLon1-fLon2 ) ) );
 		if ( d<=TESSELATE_TRESH )
 			continue;
 
@@ -3527,22 +3527,22 @@ static inline void GeoTesselate ( CSphVector<float> & dIn )
 
 		// compute arc distance
 		// OPTIMIZE! maybe combine with CalcGeodist?
-		d = acos ( sin(fLat1)*sin(fLat2) + cos(fLat1)*cos(fLat2)*cos(fLon1-fLon2) );
-		const float isd = 1.0f / sin(d);
-		const float clat1 = cos(fLat1);
-		const float slat1 = sin(fLat1);
-		const float clon1 = cos(fLon1);
-		const float slon1 = sin(fLon1);
-		const float clat2 = cos(fLat2);
-		const float slat2 = sin(fLat2);
-		const float clon2 = cos(fLon2);
-		const float slon2 = sin(fLon2);
+		d = (float)acos ( sin(fLat1)*sin(fLat2) + cos(fLat1)*cos(fLat2)*cos(fLon1-fLon2) );
+		const float isd = (float)(1.0f / sin(d));
+		const float clat1 = (float)cos(fLat1);
+		const float slat1 = (float)sin(fLat1);
+		const float clon1 = (float)cos(fLon1);
+		const float slon1 = (float)sin(fLon1);
+		const float clat2 = (float)cos(fLat2);
+		const float slat2 = (float)sin(fLat2);
+		const float clon2 = (float)cos(fLon2);
+		const float slon2 = (float)sin(fLon2);
 
 		for ( int j=1; j<iSegments; j++ )
 		{
 			float f = float(j) / float(iSegments); // needed distance fraction
-			float a = sin ( (1-f)*d ) * isd;
-			float b = sin ( f*d ) * isd;
+			float a = (float)sin ( (1-f)*d ) * isd;
+			float b = (float)sin ( f*d ) * isd;
 			float x = a*clat1*clon1 + b*clat2*clon2;
 			float y = a*clat1*slon1 + b*clat2*slon2;
 			float z = a*slat1 + b*slat2;

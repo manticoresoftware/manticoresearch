@@ -1351,7 +1351,7 @@ CSphRwlock::CSphRwlock ()
 {}
 
 
-bool CSphRwlock::Init ()
+bool CSphRwlock::Init ( bool )
 {
 	assert ( !m_bInitialized );
 	assert ( !m_hWriteMutex && !m_hReadEvent && !m_iReaders );
@@ -1469,11 +1469,37 @@ CSphRwlock::CSphRwlock ()
 	: m_bInitialized ( false )
 {}
 
-bool CSphRwlock::Init ()
+bool CSphRwlock::Init ( bool bPreferWriter )
 {
 	assert ( !m_bInitialized );
 
-	m_bInitialized = ( pthread_rwlock_init ( &m_tLock, NULL )==0 );
+	pthread_rwlockattr_t tAttr;
+	pthread_rwlockattr_t * pAttr = NULL;
+
+	while ( bPreferWriter )
+	{
+		bool bOk = ( pthread_rwlockattr_init ( &tAttr )==0 );
+		assert ( bOk );
+		if ( !bOk )
+			break;
+
+		bOk = ( pthread_rwlockattr_setkind_np ( &tAttr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP )==0 );
+		assert ( bOk );
+		if ( !bOk )
+		{
+			pthread_rwlockattr_destroy ( &tAttr );
+			break;
+		}
+
+		pAttr = &tAttr;
+		break;
+	}
+
+	m_bInitialized = ( pthread_rwlock_init ( &m_tLock, pAttr )==0 );
+
+	if ( pAttr )
+		pthread_rwlockattr_destroy ( &tAttr );
+
 	return m_bInitialized;
 }
 

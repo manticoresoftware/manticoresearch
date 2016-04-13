@@ -581,6 +581,8 @@ bool sphPluginReload ( const char * sName, CSphString & sError )
 	assert ( pNewLib->m_iHashedPlugins==0 );
 	pNewLib->m_iHashedPlugins = dNewPlugins.GetLength();
 
+	sphLogDebug ( "reloaded %d plugins", dNewPlugins.GetLength() );
+
 	return true;
 #endif // HAVE_DLOPEN
 }

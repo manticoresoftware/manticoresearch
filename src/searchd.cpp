@@ -526,6 +526,7 @@ void ServedIndex_c::ReadLock () const
 
 void ServedIndex_c::WriteLock () const
 {
+	sphLogDebugvv ( "WriteLock %p wait", this );
 	if ( m_tLock.WriteLock() )
 		sphLogDebugvv ( "WriteLock %p", this );
 	else
@@ -537,7 +538,7 @@ void ServedIndex_c::WriteLock () const
 
 bool ServedIndex_c::InitLock() const
 {
-	return m_tLock.Init();
+	return m_tLock.Init ( true );
 }
 
 void ServedIndex_c::Unlock () const

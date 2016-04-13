@@ -2837,7 +2837,7 @@ public:
 	CSphRwlock ();
 	~CSphRwlock () {}
 
-	bool Init ();
+	bool Init ( bool bPreferWriter=false );
 	bool Done ();
 
 	bool ReadLock ();

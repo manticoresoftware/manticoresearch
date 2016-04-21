@@ -116,6 +116,9 @@ void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn, const char * sB
 
 		// add the token, skip the char
 		dOut.Add().SetBinary ( sNext, p-sNext );
+		if ( *p=='\0' )
+			break;
+
 		p++;
 	}
 }

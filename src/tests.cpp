@@ -1580,6 +1580,15 @@ void TestMisc ()
 	}
 
 	printf ( "ok\n" );
+
+	printf ( "testing string split... " );
+	CSphVector<CSphString> dStr;
+	sphSplit ( dStr, "test:me\0off\0", ":" );
+	assert ( dStr.GetLength()==2 );
+	assert ( dStr[0]=="test" );
+	assert ( dStr[1]=="me" );
+
+	printf ( "ok\n" );
 }
 #endif
 

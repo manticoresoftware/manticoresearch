@@ -1915,7 +1915,8 @@ int main ( int argc, char ** argv )
 	CSphIOStats tIO;
 	tIO.Start();
 
-	bool bIndexedOk = false; // if any of the indexes are ok
+	int iIndexed = 0;
+	int iFailed = 0;
 	if ( bMerge )
 	{
 		if ( dIndexes.GetLength()!=2 )
@@ -1927,9 +1928,13 @@ int main ( int argc, char ** argv )
 		if ( !hConf["index"](dIndexes[1]) )
 			sphDie ( "no merge source index '%s'", dIndexes[1] );
 
-		bIndexedOk = DoMerge (
+		bool bLastOk = DoMerge (
 			hConf["index"][dIndexes[0]], dIndexes[0],
 			hConf["index"][dIndexes[1]], dIndexes[1], dMergeDstFilters, g_bRotate, bMergeKillLists );
+		if ( bLastOk )
+			iIndexed++;
+		else
+			iFailed++;
 	} else if ( bIndexAll )
 	{
 		uint64_t tmRotated = sphMicroTimer();
@@ -1937,9 +1942,10 @@ int main ( int argc, char ** argv )
 		while ( hConf["index"].IterateNext() )
 		{
 			bool bLastOk = DoIndex ( hConf["index"].IterateGet (), hConf["index"].IterateGetKey().cstr(), hConf["source"], bVerbose, fpDumpRows );
-			bIndexedOk |= bLastOk;
 			if ( bLastOk && ( sphMicroTimer() - tmRotated > ROTATE_MIN_INTERVAL ) && g_bSendHUP && SendRotate ( hConf, false ) )
 				tmRotated = sphMicroTimer();
+			if ( bLastOk )
+				iIndexed++;
 		}
 	} else
 	{
@@ -1951,9 +1957,12 @@ int main ( int argc, char ** argv )
 			else
 			{
 				bool bLastOk = DoIndex ( hConf["index"][dIndexes[j]], dIndexes[j], hConf["source"], bVerbose, fpDumpRows );
-				bIndexedOk |= bLastOk;
 				if ( bLastOk && ( sphMicroTimer() - tmRotated > ROTATE_MIN_INTERVAL ) && g_bSendHUP && SendRotate ( hConf, false ) )
 					tmRotated = sphMicroTimer();
+				if ( bLastOk )
+					iIndexed++;
+				else
+					iFailed++;
 			}
 		}
 	}
@@ -1973,6 +1982,12 @@ int main ( int argc, char ** argv )
 	// rotating searchd indices
 	////////////////////////////
 
+	// documentation stated
+	// 0, everything went ok
+	// 1, there was a problem while indexing (and if --rotate was specified, it was skipped)
+	// 2, indexing went ok, but --rotate attempt failed
+
+	bool bIndexedOk = ( iIndexed>0 && iFailed==0 ); // if all indexes are ok
 	int iExitCode = bIndexedOk ? 0 : 1;
 
 	if ( bIndexedOk && g_bRotate && g_bSendHUP )

@@ -6955,7 +6955,7 @@ int SelectParser_t::GetToken ( YYSTYPE * lvalp )
 			const char cEnd = *m_pCur;
 			for ( const char * s = m_pCur+1; *s; s++ )
 			{
-				if ( *s==cEnd )
+				if ( *s==cEnd && s-1>=m_pCur && *(s-1)!='\\' )
 				{
 					m_pCur = s+1;
 					return TOK_CONST_STRING;

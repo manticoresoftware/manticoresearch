@@ -91,6 +91,34 @@ index strings_dist
 	type = distributed
 	agent = <my_address/>:strings
 }
+
+source test1
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT id, 11 as idd, string_value FROM string_table1
+	sql_attr_uint = idd
+	sql_field_string = string_value
+}
+
+index test1
+{
+	source	= test1
+	path	= <data_path/>/test1
+}
+
+index test1_loc
+{
+	type = distributed
+	local = test1
+}
+
+index test1_dist
+{
+	type = distributed
+	agent = <my_address/>:test1
+}
+
 </config>
 
 <db_create>
@@ -126,9 +154,18 @@ CREATE TABLE string_table
 );
 </db_create>
 
+<db_create>
+CREATE TABLE string_table1
+(
+	id INT NOT NULL,
+	string_value VARCHAR(255) NOT NULL
+);
+</db_create>
+
 <db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
 <db_drop>DROP TABLE IF EXISTS cmp_table;</db_drop>
 <db_drop>DROP TABLE IF EXISTS string_table;</db_drop>
+<db_drop>DROP TABLE IF EXISTS string_table1;</db_drop>
 
 
 <db_insert>
@@ -151,6 +188,14 @@ INSERT INTO string_table VALUES
 (1, 'asdf'),
 (2, 'ASDF'),
 (3, 'qwer'),
+(4, '')
+</db_insert>
+
+<db_insert>
+INSERT INTO string_table1 VALUES
+(1, 'as\'df'),
+(2, 'ASDF'),
+(3, 'as df'),
 (4, '')
 </db_insert>
 
@@ -335,6 +380,10 @@ INSERT INTO string_table VALUES
 
 <!-- JDBC, MySQL Connector/J 5.1.36+ multiple sysvars select -->
 <sphinxql>select @@session.auto_increment_increment AS v1, @@character_set_client as v2</sphinxql>
+
+<!-- regression escaped quote cut at distributed index -->
+<sphinxql>SELECT id, IN(string_value,'as\'df') FROM test1_loc order by id asc</sphinxql>
+<sphinxql>SELECT id, IN(string_value,'as\'df') FROM test1_dist order by id asc</sphinxql>
 
 </sphqueries>
 

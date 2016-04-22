@@ -4160,6 +4160,150 @@ static void FormatFilter ( CSphStringBuilder & tBuf, const CSphFilterSettings & 
 	}
 }
 
+static const CSphQuery g_tDefaultQuery;
+
+static void FormatList ( const CSphVector<CSphNamedInt> & dValues, CSphStringBuilder & tBuf )
+{
+	ARRAY_FOREACH ( i, dValues )
+		tBuf.Appendf ( "%s%s=%d", i==0 ? "" : ", ", dValues[i].m_sName.cstr(), dValues[i].m_iValue );
+}
+
+static void FormatOption ( const CSphQuery & tQuery, CSphStringBuilder & tBuf )
+{
+	int iOpts = 0;
+
+	if ( tQuery.m_iMaxMatches!=DEFAULT_MAX_MATCHES )
+	{
+		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
+		tBuf.Appendf ( "max_matches=%d", tQuery.m_iMaxMatches );
+	}
+
+	if ( !tQuery.m_sComment.IsEmpty() )
+	{
+		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
+		tBuf.Appendf ( "comment='%s'", tQuery.m_sComment.cstr() ); // FIXME! escape, replace newlines..
+	}
+
+	if ( tQuery.m_eRanker!=SPH_RANK_DEFAULT )
+	{
+		const char * sRanker = sphGetRankerName ( tQuery.m_eRanker );
+		if ( !sRanker )
+			sRanker = sphGetRankerName ( SPH_RANK_DEFAULT );
+
+		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
+		tBuf.Appendf ( "ranker=%s", sRanker );
+
+		if ( !tQuery.m_sRankerExpr.IsEmpty() )
+			tBuf.Appendf ( "(\'%s\')", tQuery.m_sRankerExpr.scstr() );
+	}
+
+	if ( tQuery.m_iAgentQueryTimeout!=g_iAgentQueryTimeout )
+	{
+		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
+		tBuf.Appendf ( "agent_query_timeout=%d", tQuery.m_iAgentQueryTimeout );
+	}
+
+	if ( tQuery.m_iCutoff!=g_tDefaultQuery.m_iCutoff )
+	{
+		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
+		tBuf.Appendf ( "cutoff=%d", tQuery.m_iCutoff );
+	}
+
+	if ( tQuery.m_dFieldWeights.GetLength() )
+	{
+		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
+		tBuf.Appendf ( "field_weights=(" );
+		FormatList ( tQuery.m_dFieldWeights, tBuf );
+		tBuf.Appendf ( ")" );
+	}
+
+	if ( tQuery.m_bGlobalIDF!=g_tDefaultQuery.m_bGlobalIDF )
+	{
+		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
+		tBuf.Appendf ( "global_idf=1" );
+	}
+
+	if ( tQuery.m_bPlainIDF || !tQuery.m_bNormalizedTFIDF )
+	{
+		const char * sIDF1 = ( tQuery.m_bPlainIDF ? "plain" : "normalized" );
+		const char * sIDF2 = ( tQuery.m_bNormalizedTFIDF ? "tfidf_normalized" : "tfidf_unnormalized" );
+		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
+		tBuf.Appendf ( "idf='%s,%s'", sIDF1, sIDF2 );
+	}
+
+	if ( tQuery.m_bLocalDF!=g_tDefaultQuery.m_bLocalDF )
+	{
+		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
+		tBuf.Appendf ( "local_df=1" );
+	}
+
+	if ( tQuery.m_dIndexWeights.GetLength() )
+	{
+		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
+		tBuf.Appendf ( "index_weights=(" );
+		FormatList ( tQuery.m_dIndexWeights, tBuf );
+		tBuf.Appendf ( ")" );
+	}
+
+	if ( tQuery.m_uMaxQueryMsec!=g_tDefaultQuery.m_uMaxQueryMsec )
+	{
+		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
+		tBuf.Appendf ( "max_query_time=%u", tQuery.m_uMaxQueryMsec );
+	}
+
+	if ( tQuery.m_iMaxPredictedMsec!=g_tDefaultQuery.m_iMaxPredictedMsec )
+	{
+		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
+		tBuf.Appendf ( "max_predicted_time=%d", tQuery.m_iMaxPredictedMsec );
+	}
+
+	if ( tQuery.m_iRetryCount!=g_iAgentRetryCount )
+	{
+		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
+		tBuf.Appendf ( "retry_count=%d", tQuery.m_iRetryCount );
+	}
+
+	if ( tQuery.m_iRetryDelay!=g_iAgentRetryDelay )
+	{
+		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
+		tBuf.Appendf ( "retry_delay=%d", tQuery.m_iRetryDelay );
+	}
+
+	if ( tQuery.m_iRandSeed!=g_tDefaultQuery.m_iRandSeed )
+	{
+		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
+		tBuf.Appendf ( "rand_seed="INT64_FMT, tQuery.m_iRandSeed );
+	}
+
+	if ( !tQuery.m_sQueryTokenFilterLib.IsEmpty() )
+	{
+		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
+		if ( tQuery.m_sQueryTokenFilterOpts.IsEmpty() )
+			tBuf.Appendf ( "token_filter = '%s:%s'", tQuery.m_sQueryTokenFilterLib.cstr(), tQuery.m_sQueryTokenFilterName.cstr() );
+		else
+			tBuf.Appendf ( "token_filter = '%s:%s:%s'", tQuery.m_sQueryTokenFilterLib.cstr(), tQuery.m_sQueryTokenFilterName.cstr(), tQuery.m_sQueryTokenFilterOpts.cstr() );
+	}
+
+	if ( tQuery.m_bIgnoreNonexistent )
+	{
+		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
+		tBuf.Appendf ( "ignore_nonexistent_columns=1" );
+	}
+
+	if ( tQuery.m_bIgnoreNonexistentIndexes )
+	{
+		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
+		tBuf.Appendf ( "ignore_nonexistent_indexes=1" );
+	}
+
+	if ( tQuery.m_bStrict )
+	{
+		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
+		tBuf.Appendf ( "strict=1" );
+	}
+}
+
+
 static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const CSphVector<int64_t> & dAgentTimes, int iCid )
 {
 	assert ( g_eLogFormat==LOG_FORMAT_SPHINXQL );
@@ -4245,32 +4389,7 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes
 		tBuf.Appendf ( " LIMIT %d,%d", q.m_iOffset, q.m_iLimit );
 
 	// OPTION clause
-	int iOpts = 0;
-
-	if ( q.m_iMaxMatches!=DEFAULT_MAX_MATCHES )
-	{
-		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
-		tBuf.Appendf ( "max_matches=%d", q.m_iMaxMatches );
-	}
-
-	if ( !q.m_sComment.IsEmpty() )
-	{
-		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
-		tBuf.Appendf ( "comment='%s'", q.m_sComment.cstr() ); // FIXME! escape, replace newlines..
-	}
-
-	if ( q.m_eRanker!=SPH_RANK_DEFAULT )
-	{
-		const char * sRanker = sphGetRankerName ( q.m_eRanker );
-		if ( !sRanker )
-			sRanker = sphGetRankerName ( SPH_RANK_DEFAULT );
-
-		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
-		tBuf.Appendf ( "ranker=%s", sRanker );
-
-		if ( !q.m_sRankerExpr.IsEmpty() )
-			tBuf.Appendf ( "(\'%s\')", q.m_sRankerExpr.scstr() );
-	}
+	FormatOption ( q, tBuf );
 
 	// outer order by, limit
 	if ( q.m_bHasOuter )

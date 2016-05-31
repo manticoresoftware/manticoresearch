@@ -9094,6 +9094,9 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 	{
 		m_pStmt->m_tQuery.m_iRandSeed = int64_t(DWORD(tValue.m_iValue));
 
+	} else if ( sOpt=="sync" )
+	{
+		m_pQuery->m_bSync = ( tValue.m_iValue!=0 );
 	} else
 	{
 		m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", sOpt.cstr() );
@@ -14882,6 +14885,14 @@ void HandleMysqlOptimize ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 
 	if ( bValid )
 	{
+		if ( tStmt.m_tQuery.m_bSync )
+		{
+			const ServedIndex_c * pServed = g_pLocalIndexes->GetRlockedEntry ( tStmt.m_sIndex );
+			if ( pServed && pServed->m_pIndex && pServed->m_bEnabled )
+				static_cast<ISphRtIndex *>( pServed->m_pIndex )->Optimize ( &g_bShutdown, &g_tRtThrottle );
+			return;
+		}
+
 		g_tOptimizeQueueMutex.Lock();
 		g_dOptimizeQueue.Add ( tStmt.m_sIndex );
 		g_tOptimizeQueueMutex.Unlock();

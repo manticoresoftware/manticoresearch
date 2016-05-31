@@ -698,6 +698,7 @@ static KeyDesc_t g_dKeysCommon[] =
 	{ "rlp_max_batch_size",		0, NULL },
 	{ "rlp_max_batch_docs",		0, NULL },
 	{ "plugin_dir",				0, NULL },
+	{ "progressive_merge",		0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -2410,6 +2411,8 @@ void sphConfigureCommon ( const CSphConfig & hConf )
 	CSphConfigSection & hCommon = hConf["common"]["common"];
 	g_sLemmatizerBase = hCommon.GetStr ( "lemmatizer_base" );
 	sphConfigureRLP ( hCommon );
+
+	g_bProgressiveMerge = ( hCommon.GetInt ( "progressive_merge", 1 )!=0 );
 
 	bool bJsonStrict = false;
 	bool bJsonAutoconvNumbers = false;

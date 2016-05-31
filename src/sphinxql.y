@@ -1595,7 +1595,7 @@ truncate:
 //////////////////////////////////////////////////////////////////////////
 
 optimize_index:
-	TOK_OPTIMIZE TOK_INDEX ident
+	TOK_OPTIMIZE TOK_INDEX ident opt_option_clause
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_OPTIMIZE_INDEX;

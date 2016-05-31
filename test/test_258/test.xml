@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>rtmerge</name>
+<skip_indexer/>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+common
+{
+	<dynamic>
+		<variant>
+			progressive_merge = 0
+		</variant>
+		<variant>
+			progressive_merge = 1
+		</variant>
+	</dynamic>
+}
+
+index rt
+{
+	type			= rt
+	path			= data/rt
+	rt_attr_string	= title
+	rt_field		= text
+}
+</config>
+
+<sphqueries>
+
+<!-- integrity test 1, should be 123 ver3 -->
+<sphinxql>insert into rt ( id, title ) values ( 123, 'ver1' )</sphinxql>
+<sphinxql>flush ramchunk rt</sphinxql>
+
+<sphinxql>delete from rt where id=123</sphinxql>
+<sphinxql>insert into rt ( id, title ) values ( 123, 'ver2' )</sphinxql>
+<sphinxql>flush ramchunk rt</sphinxql>
+
+<sphinxql>delete from rt where id=123</sphinxql>
+<sphinxql>insert into rt ( id, title ) values ( 123, 'ver3' )</sphinxql>
+<sphinxql>flush ramchunk rt</sphinxql>
+
+<sphinxql>optimize index rt option sync=1</sphinxql>
+<sphinxql>select * from rt</sphinxql>
+
+
+<!-- integrity test 2, should be 124 ver2, 125 ver1 -->
+<sphinxql>insert into rt ( id, title ) values ( 124, 'ver1' )</sphinxql>
+<sphinxql>flush ramchunk rt</sphinxql>
+
+<sphinxql>delete from rt where id=124</sphinxql>
+<sphinxql>insert into rt ( id, title ) values ( 124, 'ver2' )</sphinxql>
+<sphinxql>flush ramchunk rt</sphinxql>
+
+<sphinxql>insert into rt ( id, title ) values ( 125, 'ver1' )</sphinxql>
+<sphinxql>flush ramchunk rt</sphinxql>
+
+<sphinxql>optimize index rt option sync=1</sphinxql>
+<sphinxql>select * from rt</sphinxql>
+
+
+<!-- integrity test 3, should be 127 ver1 -->
+<sphinxql>insert into rt ( id, title ) values ( 126, 'ver1' )</sphinxql>
+<sphinxql>flush ramchunk rt</sphinxql>
+
+<sphinxql>delete from rt where id=126</sphinxql>
+<sphinxql>insert into rt ( id, title ) values ( 126, 'ver2' )</sphinxql>
+<sphinxql>flush ramchunk rt</sphinxql>
+
+<sphinxql>delete from rt where id=126</sphinxql>
+<sphinxql>insert into rt ( id, title ) values ( 127, 'ver1' )</sphinxql>
+<sphinxql>flush ramchunk rt</sphinxql>
+
+<sphinxql>optimize index rt option sync=1</sphinxql>
+<sphinxql>select * from rt</sphinxql>
+
+</sphqueries>
+
+</test>

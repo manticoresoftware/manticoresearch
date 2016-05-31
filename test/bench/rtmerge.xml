@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>rtmerge</name>
+
+<requires><reindex-rt/></requires>
+
+<config>
+
+searchd
+{
+	<searchd_settings/>
+}
+
+index rt1
+{
+	type 			= rt
+	path 			= <local>data</local>/rt1
+	rt_attr_string	= title
+	rt_field		= text
+	rt_mem_limit	= 512M
+}
+
+index rt2
+{
+	type 			= rt
+	path 			= <local>data</local>/rt2
+	rt_attr_string	= title
+	rt_field		= text
+	rt_mem_limit	= 512M
+}
+
+index rt3
+{
+	type 			= rt
+	path 			= <local>data</local>/rt3
+	rt_attr_string	= title
+	rt_field		= text
+	rt_mem_limit	= 512M
+}
+
+index rt4
+{
+	type 			= rt
+	path 			= <local>data</local>/rt4
+	rt_attr_string	= title
+	rt_field		= text
+	rt_mem_limit	= 512M
+}
+
+common
+{
+	progressive_merge = 1
+}
+
+</config>
+
+<custom_test>
+<![CDATA[
+
+function RandomWords ( $n, $seed )
+{
+	srand ( $seed );
+	$words = [];
+	for ( $k=0; $k<$n; $k++ )
+		$words[] = substr ( str_shuffle ( 'abcdefghijklmnopqrstuvwxyz' ), 0, 5 );
+	return join ( $words, " " );
+}
+
+$ql->Reconnect();
+$results = array();
+
+$indexes = [
+	"rt1" => 5,
+	"rt2" => 10,
+	"rt3" => 25,
+	"rt4" => 50
+];
+
+$error = 0;
+
+foreach ( $indexes as $index=>$inserts )
+{
+	$res = array ( 'total'=>0, 'total_found'=>0, 'time'=>0, 'query'=>'', 'tag'=>'', 'error'=>'' );
+
+	$id = 0;
+	$total_docs = 1000;
+	$docs = $total_docs/$inserts;
+
+	for ( $i=0; $i<$inserts; $i++ )
+	{
+		$rows = [];
+		for ( $j=0; $j<$docs; $j++ )
+		{
+			$rows[] = sprintf ( "(%d,'%s','%s')", $id, RandomWords ( 10, $id ), RandomWords ( 1000, $id ) );
+			$id++;
+		}
+
+		$sql = sprintf ( "insert into %s (id, title, text) values\n  %s", $index, join ( $rows, ",\n  " ) );
+		$r = $ql->Query ( $sql );
+
+		if ( stristr ( $r, "NOT CONNECTED" ) || stristr ( $r, "ERROR:" ) )
+		{
+				$res['error']  = $r;
+				$res['total_found'] = $id;
+				printf ("error in '%s' : %s", $index, $r );
+				$error = 1;
+				break;
+		}
+
+		if ( $error )
+			break;
+
+		$ql->Query ( "flush ramchunk $index" );
+
+		file_put_contents ( "php://stderr", sprintf ("\r%s, inserting %d/%d        ", $index, $id, $total_docs ) );
+	}
+
+	usleep ( 250 * 1000 );
+
+	$start = MyMicrotime();
+	$optimize = false;
+	$bytes = 0;
+
+	for ( ;; )
+	{
+		$s = $ql->Query ( "show index $index status" );
+
+		preg_match ( '/disk_chunks \| (\d+)/s', $s, $m ) || die ( 'no match in ' . $s );
+		$c = (int)$m[1];
+
+		preg_match ( '/disk_bytes \| (\d+)/s', $s, $m ) || die ( 'no match in ' . $s );
+		$bytes = (int)$m[1];
+
+		if ( !$optimize )
+		{
+			$chunks = $c;
+			$start = MyMicrotime();
+			$ql->Query ( "optimize index $index" );
+			$optimize = true;
+		}
+
+		if ( $c==1 )
+			break;
+
+		usleep ( 250 * 1000 );
+
+		file_put_contents ( "php://stderr", sprintf("\r%s, merging: %d/%d       ", $index, $c, $chunks ) );
+	}
+
+	file_put_contents ( "php://stderr", "\r" );
+
+	$dt = MyMicrotime() - $start;
+	$bpc = (int)( $bytes/$chunks );
+
+	// printf ( "index %s, %d inserts, %d chunks, %d docs/insert, %d/%d bytes, %f seconds\n", $index, $inserts, $chunks, $docs, $bpc, $bytes, $dt ) );
+
+	$res['time'] = MyMicrotime() - $start;
+	$res['total'] = $total_docs;
+	$res['total_found'] = $total_docs;
+	$res['tag'] = sprintf ( "%d chunks, %d/%d bytes", $chunks, $bpc, $bytes );
+
+	$results[] = $res;
+}
+
+]]></custom_test>
+
+</test>
+

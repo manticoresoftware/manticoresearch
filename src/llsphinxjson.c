@@ -54,6 +54,7 @@ typedef int flex_int32_t;
 typedef unsigned char flex_uint8_t; 
 typedef unsigned short int flex_uint16_t;
 typedef unsigned int flex_uint32_t;
+#endif /* ! C99 */
 
 /* Limits of integral types. */
 #ifndef INT8_MIN
@@ -83,8 +84,6 @@ typedef unsigned int flex_uint32_t;
 #ifndef UINT32_MAX
 #define UINT32_MAX             (4294967295U)
 #endif
-
-#endif /* ! C99 */
 
 #endif /* ! FLEXINT_H */
 
@@ -159,15 +158,7 @@ typedef void* yyscan_t;
 
 /* Size of default input buffer. */
 #ifndef YY_BUF_SIZE
-#ifdef __ia64__
-/* On IA-64, the buffer size is 16k, not 8k.
- * Moreover, YY_BUF_SIZE is 2*YY_READ_BUF_SIZE in the general case.
- * Ditto for the __ia64__ case accordingly.
- */
-#define YY_BUF_SIZE 32768
-#else
 #define YY_BUF_SIZE 16384
-#endif /* __ia64__ */
 #endif
 
 /* The state buf must be large enough to hold one state per character in the main buffer.
@@ -490,7 +481,11 @@ static yyconst flex_int16_t yy_chk[157] =
 #define YY_RESTORE_YY_MORE_OFFSET
 #line 1 "sphinxjson.l"
 #line 2 "sphinxjson.l"
-#include "yysphinxjson.h"
+#ifdef CMAKE_GENERATED_GRAMMAR
+	#include "bissphinxjson.h"
+#else
+	#include "yysphinxjson.h"
+#endif
 
 #if USE_WINDOWS
 #pragma warning(push,1)
@@ -504,7 +499,7 @@ static yyconst flex_int16_t yy_chk[157] =
 	}
 
 
-#line 508 "llsphinxjson.c"
+#line 503 "llsphinxjson.c"
 
 #define INITIAL 0
 #define ccomment 1
@@ -622,12 +617,7 @@ static int input (yyscan_t yyscanner );
 
 /* Amount of stuff to slurp up with each read. */
 #ifndef YY_READ_BUF_SIZE
-#ifdef __ia64__
-/* On IA-64, the buffer size is 16k, not 8k */
-#define YY_READ_BUF_SIZE 16384
-#else
 #define YY_READ_BUF_SIZE 8192
-#endif /* __ia64__ */
 #endif
 
 /* Copy whatever the last rule matched to the standard output. */
@@ -635,7 +625,7 @@ static int input (yyscan_t yyscanner );
 /* This used to be an fputs(), but since the string might contain NUL's,
  * we now use fwrite().
  */
-#define ECHO do { if (fwrite( yytext, yyleng, 1, yyout )) {} } while (0)
+#define ECHO fwrite( yytext, yyleng, 1, yyout )
 #endif
 
 /* Gets input and stuffs it into "buf".  number of characters read, or YY_NULL,
@@ -729,10 +719,10 @@ YY_DECL
 	register int yy_act;
     struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
 
-#line 28 "sphinxjson.l"
+#line 32 "sphinxjson.l"
 
 
-#line 736 "llsphinxjson.c"
+#line 726 "llsphinxjson.c"
 
 	if ( !yyg->yy_init )
 		{
@@ -817,99 +807,99 @@ do_action:	/* This label is used only to access EOF actions. */
 
 case 1:
 YY_RULE_SETUP
-#line 30 "sphinxjson.l"
+#line 34 "sphinxjson.l"
 { BEGIN(ccomment); }
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
-#line 31 "sphinxjson.l"
+#line 35 "sphinxjson.l"
 { BEGIN(ccomment); }
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
-#line 32 "sphinxjson.l"
+#line 36 "sphinxjson.l"
 { }
 	YY_BREAK
 case 4:
 /* rule 4 can match eol */
 YY_RULE_SETUP
-#line 33 "sphinxjson.l"
+#line 37 "sphinxjson.l"
 { BEGIN(INITIAL); }
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 35 "sphinxjson.l"
+#line 39 "sphinxjson.l"
 { STORE_BOUNDS; lvalp->m_eType = JSON_TRUE; return TOK_TRUE; }
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
-#line 36 "sphinxjson.l"
+#line 40 "sphinxjson.l"
 { STORE_BOUNDS; lvalp->m_eType = JSON_FALSE; return TOK_FALSE; }
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 37 "sphinxjson.l"
+#line 41 "sphinxjson.l"
 { STORE_BOUNDS; lvalp->m_eType = JSON_NULL; return TOK_NULL; }
 	YY_BREAK
 case 8:
 /* rule 8 can match eol */
 YY_RULE_SETUP
-#line 39 "sphinxjson.l"
+#line 43 "sphinxjson.l"
 { STORE_BOUNDS; lvalp->m_eType = JSON_STRING; return TOK_STRING; }
 	YY_BREAK
 case 9:
 /* rule 9 can match eol */
 YY_RULE_SETUP
-#line 40 "sphinxjson.l"
+#line 44 "sphinxjson.l"
 { STORE_BOUNDS; lvalp->m_eType = JSON_STRING; return TOK_STRING; }
 	YY_BREAK
 case 10:
 YY_RULE_SETUP
-#line 42 "sphinxjson.l"
+#line 46 "sphinxjson.l"
 { STORE_BOUNDS; lvalp->m_eType = JSON_DOUBLE; lvalp->m_fValue = strtod ( yytext, NULL ); return TOK_FLOAT; }
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
-#line 43 "sphinxjson.l"
+#line 47 "sphinxjson.l"
 { STORE_BOUNDS; lvalp->m_eType = JSON_DOUBLE; lvalp->m_fValue = strtod ( yytext, NULL ); return TOK_FLOAT; }
 	YY_BREAK
 case 12:
 YY_RULE_SETUP
-#line 44 "sphinxjson.l"
+#line 48 "sphinxjson.l"
 { STORE_BOUNDS; lvalp->m_eType = JSON_DOUBLE; lvalp->m_fValue = strtod ( yytext, NULL ); return TOK_FLOAT; }
 	YY_BREAK
 case 13:
 YY_RULE_SETUP
-#line 45 "sphinxjson.l"
+#line 49 "sphinxjson.l"
 { STORE_BOUNDS; lvalp->m_eType = JSON_DOUBLE; lvalp->m_fValue = strtod ( yytext, NULL ); return TOK_FLOAT; }
 	YY_BREAK
 case 14:
 YY_RULE_SETUP
-#line 46 "sphinxjson.l"
+#line 50 "sphinxjson.l"
 { STORE_BOUNDS; lvalp->m_eType = JSON_INT64; lvalp->m_iValue = strtoll ( yytext, NULL, 10 ); return TOK_INT; }
 	YY_BREAK
 case 15:
 YY_RULE_SETUP
-#line 47 "sphinxjson.l"
+#line 51 "sphinxjson.l"
 { STORE_BOUNDS; lvalp->m_eType = JSON_STRING; return TOK_IDENT; }
 	YY_BREAK
 case 16:
 /* rule 16 can match eol */
 YY_RULE_SETUP
-#line 49 "sphinxjson.l"
+#line 53 "sphinxjson.l"
 { ; }
 	YY_BREAK
 case 17:
 YY_RULE_SETUP
-#line 50 "sphinxjson.l"
+#line 54 "sphinxjson.l"
 { STORE_BOUNDS; return yytext[0]; }
 	YY_BREAK
 case 18:
 YY_RULE_SETUP
-#line 52 "sphinxjson.l"
+#line 56 "sphinxjson.l"
 ECHO;
 	YY_BREAK
-#line 913 "llsphinxjson.c"
+#line 903 "llsphinxjson.c"
 case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(ccomment):
 	yyterminate();
@@ -1644,8 +1634,8 @@ YY_BUFFER_STATE yy2_scan_string (yyconst char * yystr , yyscan_t yyscanner)
 
 /** Setup the input buffer state to scan the given bytes. The next call to yy2lex() will
  * scan from a @e copy of @a bytes.
- * @param yybytes the byte buffer to scan
- * @param _yybytes_len the number of bytes in the buffer pointed to by @a bytes.
+ * @param bytes the byte buffer to scan
+ * @param len the number of bytes in the buffer pointed to by @a bytes.
  * @param yyscanner The scanner object.
  * @return the newly allocated buffer state object.
  */
@@ -2027,7 +2017,7 @@ void yy2free (void * ptr , yyscan_t yyscanner)
 
 #define YYTABLES_NAME "yytables"
 
-#line 52 "sphinxjson.l"
+#line 56 "sphinxjson.l"
 
 
 

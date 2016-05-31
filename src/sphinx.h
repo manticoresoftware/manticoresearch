@@ -2718,6 +2718,7 @@ public:
 	bool			m_bIgnoreNonexistent; ///< whether to warning or not about non-existent columns in select list
 	bool			m_bIgnoreNonexistentIndexes; ///< whether to error or not about non-existent indexes in index list
 	bool			m_bStrict;			///< whether to warning or not about incompatible types
+	bool			m_bSync;			///< whether or not use synchronous operations (optimize, etc.)
 
 	ISphTableFunc *	m_pTableFunc;		///< post-query NOT OWNED, WILL NOT BE FREED in dtor.
 	CSphFilterSettings	m_tHaving;		///< post aggregate filtering (got applied only on master)
@@ -3514,6 +3515,7 @@ void				sphCollationInit ();
 //////////////////////////////////////////////////////////////////////////
 
 extern CSphString g_sLemmatizerBase;
+extern bool g_bProgressiveMerge;
 
 /////////////////////////////////////////////////////////////////////////////
 

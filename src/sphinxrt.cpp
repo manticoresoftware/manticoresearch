@@ -1122,7 +1122,7 @@ struct RtIndex_t : public ISphRtIndex, public ISphNoncopyable, public ISphWordli
 {
 private:
 	static const DWORD			META_HEADER_MAGIC	= 0x54525053;	///< my magic 'SPRT' header
-	static const DWORD			META_VERSION		= 11;			///< current version
+	static const DWORD			META_VERSION		= 12;			///< current version
 
 private:
 	int							m_iStride;
@@ -1171,6 +1171,7 @@ private:
 	CSphFixedVector<int64_t>	m_dFieldLens;						///< total field lengths over entire index
 	CSphFixedVector<int64_t>	m_dFieldLensRam;					///< field lengths summed over current RAM chunk
 	CSphFixedVector<int64_t>	m_dFieldLensDisk;					///< field lengths summed over all disk chunks
+	CSphVector<int>				m_dDiskChunkList;					///< disk chunk numbers (since meta v.12)
 
 public:
 	explicit					RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict );
@@ -1188,6 +1189,7 @@ public:
 	virtual bool				AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError );
 	virtual bool				Truncate ( CSphString & sError );
 	virtual void				Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pThrottle );
+	virtual void				ProgressiveMerge ( volatile bool * pForceTerminate, ThrottleState_t * pThrottle );
 	CSphIndex *					GetDiskChunk ( int iChunk ) { return m_dDiskChunks.GetLength()>iChunk ? m_dDiskChunks[iChunk] : NULL; }
 	virtual ISphTokenizer *		CloneIndexingTokenizer() const { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
 
@@ -4005,6 +4007,10 @@ void RtIndex_t::SaveMeta ( int iDiskChunks, int64_t iTID )
 	// meta v.11
 	SaveFieldFilterSettings ( wrMeta, m_pFieldFilter );
 
+	// meta v.12
+	wrMeta.PutDword ( m_dDiskChunkList.GetLength () );
+	wrMeta.PutBytes ( m_dDiskChunkList.Begin(), m_dDiskChunkList.GetSizeBytes() );
+
 	wrMeta.CloseFile(); // FIXME? handle errors?
 
 	// rename
@@ -4268,6 +4274,16 @@ bool RtIndex_t::Prealloc ( bool bStripPath )
 		}
 
 		SetFieldFilter ( pFieldFilter );
+	}
+
+	if ( uVersion>=12 )
+	{
+		int iLen = (int)rdMeta.GetDword();
+		m_dDiskChunkList.Resize ( iLen );
+		rdMeta.GetBytes ( m_dDiskChunkList.Begin(), iLen*sizeof(int) );
+
+		ARRAY_FOREACH ( i, m_dDiskChunkList )
+			sphLogDebugvv ( "Chunk %d: %d", i, m_dDiskChunkList[i] );
 	}
 
 	///////////////
@@ -8589,12 +8605,19 @@ bool RtIndex_t::Truncate ( CSphString & )
 	return true;
 }
 
+
 //////////////////////////////////////////////////////////////////////////
 // OPTIMIZE
 //////////////////////////////////////////////////////////////////////////
 
 void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pThrottle )
 {
+	if ( g_bProgressiveMerge )
+	{
+		ProgressiveMerge ( pForceTerminate, pThrottle );
+		return;
+	}
+
 	assert ( pForceTerminate && pThrottle );
 	int64_t tmStart = sphMicroTimer();
 
@@ -8733,6 +8756,246 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 		// we might remove old index files
 		sphUnlinkIndex ( sRename.cstr(), true );
 		sphUnlinkIndex ( sOldest.cstr(), true );
+		// FIXEME: wipe out 'merged' index files in case of error
+	}
+
+	m_bOptimizing = false;
+	int64_t tmPass = sphMicroTimer() - tmStart;
+
+	if ( *pForceTerminate )
+	{
+		sphWarning ( "rt: index %s: optimization terminated chunk(s) %d ( of %d ) in %d.%03d sec",
+			m_sIndexName.cstr(), iChunks-m_dDiskChunks.GetLength(), iChunks, (int)(tmPass/1000000), (int)((tmPass/1000)%1000) );
+	} else
+	{
+		sphInfo ( "rt: index %s: optimized chunk(s) %d ( of %d ) in %d.%03d sec",
+			m_sIndexName.cstr(), iChunks-m_dDiskChunks.GetLength(), iChunks, (int)(tmPass/1000000), (int)((tmPass/1000)%1000) );
+	}
+}
+
+
+//////////////////////////////////////////////////////////////////////////
+// PROGRESSIVE MERGE
+//////////////////////////////////////////////////////////////////////////
+
+int64_t GetChunkSize ( CSphVector<CSphIndex*> & dDiskChunks, int iIndex )
+{
+	CSphIndexStatus tDisk;
+	dDiskChunks[iIndex]->GetStatus(&tDisk);
+	return tDisk.m_iDiskUse;
+}
+
+
+int GetNextSmallestChunk ( CSphVector<CSphIndex*> & dDiskChunks, int iIndex=-1 )
+{
+	int iRes = -1;
+	int64_t iLastSize = INT64_MAX;
+	ARRAY_FOREACH ( i, dDiskChunks )
+	{
+		int64_t iSize = GetChunkSize ( dDiskChunks, i );
+		if ( iSize<iLastSize && ( iIndex==-1 || iIndex!=i ) )
+		{
+			iLastSize = iSize;
+			iRes = i;
+		}
+	}
+
+	return iRes;
+}
+
+
+void RtIndex_t::ProgressiveMerge ( volatile bool * pForceTerminate, ThrottleState_t * pThrottle )
+{
+	// How does this work:
+	// In order to minimize IO operations we merge chunks in order from the smallest to the largest to build a progression
+	// Applying kill-lists is where it all gets complicated (kill-lists must take the chronology into account)
+	// 1) On every step, select two smallest chunks, A and B (A also should be older than B).
+	// 2) collect all kill-lists from A to B (inclusive)
+	// 3) check if A+1 isn't B, merge A and A+1 kill-lists, write them to A+1
+	// 4) merge A and B chunk data to A, apply all kill lists collected on step 2
+	// the timeline is: [older chunks], ..., A (iDst), A+1, ..., B (iSrc), ..., [younger chunks]
+	// this also needs meta v.12 (chunk list with possible skips, instead of a base chunk + length as in meta v.11)
+
+	assert ( pForceTerminate && pThrottle );
+	int64_t tmStart = sphMicroTimer();
+
+	CSphScopedLock<CSphMutex> tOptimizing ( m_tOptimizingLock );
+	m_bOptimizing = true;
+
+	int iChunks = m_dDiskChunks.GetLength();
+	CSphSchema tSchema = m_tSchema;
+	CSphString sError;
+
+	while ( m_dDiskChunks.GetLength()>1 && !*pForceTerminate && !m_bOptimizeStop )
+	{
+		CSphVector<SphDocID_t> dKlist;
+
+		// make kill-list
+		// initially add RAM kill-list
+		dKlist.Resize ( 0 );
+		m_tKlist.Flush ( dKlist );
+
+		Verify ( m_tChunkLock.ReadLock () );
+
+		// merge 'smallest'(pSrc) to 'smaller'(pDst) and get 'merged' that names like 'dst'+.tmp
+		// to get rid of keeping actual kill-list
+		// however 'merged' got placed at 'src' position and 'merged' renamed to 'src' name
+
+		// TODO: presort a list of chunks by size before the main loop?
+		int iSrc = GetNextSmallestChunk ( m_dDiskChunks );
+		int iDst = GetNextSmallestChunk ( m_dDiskChunks, iSrc );
+
+		// in order to merge kill-lists correctly we need to make sure that iDst is the oldest one
+		// indexes go from oldest to newest so iDst must go before iSrc (iDst is always older than iSrc)
+		if ( iDst > iSrc )
+			Swap ( iSrc, iDst );
+
+		sphLogDebug ( "Progressive merge - merging %d (%d bytes) with %d (%d bytes)", iDst, (int)GetChunkSize ( m_dDiskChunks, iDst ), iSrc, (int)GetChunkSize ( m_dDiskChunks, iSrc ) );
+
+		const CSphIndex * pSrc = m_dDiskChunks[iSrc];
+		const CSphIndex * pDst = m_dDiskChunks[iDst];
+
+		// so we're merging chunk A (older) with the (younger) B, so A < B
+		// we have to merge chunk's A kill-list to chunk A+1 to maintain the integrity
+		// (chunks A and B are respectively iDst and iSrc)
+
+		// collect all kill-lists from A to B (inclusive)
+		for ( int iChunk=iDst; iChunk<=iSrc; iChunk++ )
+		{
+			if ( *pForceTerminate || m_bOptimizeStop )
+				break;
+
+			const CSphIndex * pIndex = m_dDiskChunks[iChunk];
+			if ( !pIndex->GetKillListSize() )
+				continue;
+
+			int iOff = dKlist.GetLength();
+			dKlist.Resize ( iOff+pIndex->GetKillListSize() );
+			memcpy ( dKlist.Begin()+iOff, pIndex->GetKillList(), sizeof(SphDocID_t)*pIndex->GetKillListSize() );
+		}
+
+		// check if A+1 isn't B, merge A and A+1 kill-lists, write to A+1
+		if ( iDst+1!=iSrc )
+		{
+			CSphVector<SphDocID_t> dMergedKlist;
+			for ( int iChunk=iDst; iChunk<=iDst+1; iChunk++ )
+			{
+				const CSphIndex * pIndex = m_dDiskChunks[iChunk];
+				if ( !pIndex->GetKillListSize() )
+					continue;
+
+				int iOff = dMergedKlist.GetLength();
+				dMergedKlist.Resize ( iOff+pIndex->GetKillListSize() );
+				memcpy ( dMergedKlist.Begin()+iOff, pIndex->GetKillList(), sizeof(SphDocID_t)*pIndex->GetKillListSize() );
+			}
+			m_dDiskChunks[iDst+1]->ReplaceKillList ( dMergedKlist.Begin(), dMergedKlist.GetLength() );
+		}
+
+		Verify ( m_tChunkLock.Unlock() );
+
+		dKlist.Add ( 0 );
+		dKlist.Add ( DOCID_MAX );
+		dKlist.Uniq();
+
+		CSphString sSrc, sDst, sRename, sMerged;
+		sSrc.SetSprintf ( "%s", pSrc->GetFilename() );
+		sDst.SetSprintf ( "%s", pDst->GetFilename() );
+		sRename.SetSprintf ( "%s.old", pSrc->GetFilename() );
+		sMerged.SetSprintf ( "%s.tmp", pDst->GetFilename() );
+
+		// check forced exit after long operation
+		if ( *pForceTerminate || m_bOptimizeStop )
+			break;
+
+		// merge data to disk ( data is constant during that phase )
+		CSphIndexProgress tProgress;
+		bool bMerged = sphMerge ( pDst, pSrc, dKlist, sError, tProgress, pThrottle, pForceTerminate, &m_bOptimizeStop );
+		if ( !bMerged )
+		{
+			sphWarning ( "rt optimize: index %s: failed to merge %s to %s (error %s)",
+				m_sIndexName.cstr(), sSrc.cstr(), sDst.cstr(), sError.cstr() );
+			break;
+		}
+
+		// check forced exit after long operation
+		if ( *pForceTerminate || m_bOptimizeStop )
+			break;
+
+		CSphScopedPtr<CSphIndex> pMerged ( LoadDiskChunk ( sMerged.cstr(), sError ) );
+		if ( !pMerged.Ptr() )
+		{
+			sphWarning ( "rt optimize: index %s: failed to load merged chunk (error %s)",
+				m_sIndexName.cstr(), sError.cstr() );
+			break;
+		}
+
+		// check forced exit after long operation
+		if ( *pForceTerminate || m_bOptimizeStop )
+			break;
+
+		// lets rotate indexes
+
+		// rename older disk chunk to 'old'
+		if ( !const_cast<CSphIndex *>( pSrc )->Rename ( sRename.cstr() ) )
+		{
+			sphWarning ( "rt optimize: index %s: cur to old rename failed (error %s)",
+				m_sIndexName.cstr(), pSrc->GetLastError().cstr() );
+			break;
+		}
+		// rename merged disk chunk to 0
+		if ( !pMerged->Rename ( sSrc.cstr() ) )
+		{
+			sphWarning ( "rt optimize: index %s: merged to cur rename failed (error %s)",
+				m_sIndexName.cstr(), pMerged->GetLastError().cstr() );
+			if ( !const_cast<CSphIndex *>( pSrc )->Rename ( sSrc.cstr() ) )
+			{
+				sphWarning ( "rt optimize: index %s: old to cur rename failed (error %s)",
+					m_sIndexName.cstr(), pSrc->GetLastError().cstr() );
+			}
+			break;
+		}
+
+		if ( *pForceTerminate || m_bOptimizeStop ) // protection
+			break;
+
+		Verify ( m_tWriting.Lock() );
+		Verify ( m_tChunkLock.WriteLock() );
+
+		// update disk chunk list, stored in the header (since meta v.12)
+		m_dDiskChunkList.Resize ( m_dDiskChunks.GetLength() );
+		for ( int i=0; i<m_dDiskChunkList.GetLength(); i++ )
+			m_dDiskChunkList[i] = m_iDiskBase+i;
+		m_dDiskChunkList.Remove ( iSrc );
+
+		m_dDiskChunks[iDst] = pMerged.LeakPtr();
+		m_dDiskChunks.Remove ( iSrc );
+		m_iDiskBase++;
+		int iDiskChunksCount = m_dDiskChunks.GetLength();
+
+		Verify ( m_tChunkLock.Unlock() );
+		SaveMeta ( iDiskChunksCount, m_iTID );
+		Verify ( m_tWriting.Unlock() );
+
+		if ( *pForceTerminate || m_bOptimizeStop )
+		{
+			sphWarning ( "rt optimize: index %s: forced to shutdown, remove old index files manually '%s', '%s'",
+				m_sIndexName.cstr(), sRename.cstr(), sDst.cstr() );
+			break;
+		}
+
+		// exclusive reader (to make sure that disk chunks not used any more) and writer lock here
+		Verify ( m_tReading.WriteLock() );
+		Verify ( m_tWriting.Lock() );
+
+		SafeDelete ( pSrc );
+		SafeDelete ( pDst );
+
+		Verify ( m_tWriting.Unlock() );
+		Verify ( m_tReading.Unlock() );
+
+		// we might remove old index files
+		sphUnlinkIndex ( sRename.cstr(), true );
+		sphUnlinkIndex ( sDst.cstr(), true );
 		// FIXEME: wipe out 'merged' index files in case of error
 	}
 

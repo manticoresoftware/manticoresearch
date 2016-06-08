@@ -7953,7 +7953,8 @@ void SendResult ( int iVer, NetOutputBuffer_c & tOut, const CSphQueryResult * pR
 			tOut.SendString ( tCol.m_sName.cstr() );
 
 			ESphAttr eCol = tCol.m_eAttrType;
-			if ( ( tCol.m_eAttrType==SPH_ATTR_JSON && !bSendJson ) || ( tCol.m_eAttrType==SPH_ATTR_JSON_FIELD && !bSendJsonField ) )
+			if ( ( tCol.m_eAttrType==SPH_ATTR_JSON && !bSendJson ) || ( tCol.m_eAttrType==SPH_ATTR_JSON_FIELD && !bSendJsonField )
+				 || ( tCol.m_eAttrType==SPH_ATTR_STRINGPTR && !bAgentMode ) )
 				eCol = SPH_ATTR_STRING;
 			tOut.SendDword ( (DWORD)eCol );
 		}

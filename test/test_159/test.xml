@@ -144,5 +144,6 @@ INSERT INTO `test_table` VALUES
 <queries>
 <!-- regression crash on sort by string attr -->
 <query mode="extended2" index="plain" sortmode="attr_desc" sortby="str1"></query>
+<query select="to_string(idd1) i1, idd1" index="plain" sortmode="attr_desc" sortby="str1"></query>
 </queries>
 </test>

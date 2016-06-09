@@ -1717,7 +1717,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 	m_pPlugin = NULL;
 	m_pPluginData = NULL;
 
-	if ( pQuery && pQuery->m_sQueryTokenFilterName.cstr() )
+	if ( pQuery && !pQuery->m_sQueryTokenFilterName.IsEmpty() )
 	{
 		CSphString sError;
 		m_pPlugin = static_cast < PluginQueryTokenFilter_c * > ( sphPluginAcquire ( pQuery->m_sQueryTokenFilterLib.cstr(),

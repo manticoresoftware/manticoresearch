@@ -420,7 +420,7 @@ static CSphAtomic							g_iPersistentInUse;
 /// master-agent API protocol extensions version
 enum
 {
-	VER_MASTER = 13
+	VER_MASTER = 14
 };
 
 
@@ -2416,7 +2416,9 @@ CSphString InputBuffer_c::GetString ()
 		return sRes;
 	}
 
-	sRes.SetBinary ( (char*)m_pCur, iLen );
+	if ( iLen )
+		sRes.SetBinary ( (char*)m_pCur, iLen );
+
 	m_pCur += iLen;
 	return sRes;
 }
@@ -2432,7 +2434,9 @@ CSphString InputBuffer_c::GetRawString ( int iLen )
 		return sRes;
 	}
 
-	sRes.SetBinary ( (char*)m_pCur, iLen );
+	if ( iLen )
+		sRes.SetBinary ( (char*)m_pCur, iLen );
+
 	m_pCur += iLen;
 	return sRes;
 }
@@ -2756,7 +2760,7 @@ protected:
 
 int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuery & q, bool bAgentWeight ) const
 {
-	int iReqSize = 136 + 2*sizeof(SphDocID_t) + 4*q.m_dWeights.GetLength()
+	int iReqSize = 156 + 2*sizeof(SphDocID_t) + 4*q.m_dWeights.GetLength()
 		+ q.m_sSortBy.Length()
 		+ strlen ( sIndexes )
 		+ q.m_sGroupBy.Length()
@@ -2764,7 +2768,12 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 		+ q.m_sGroupDistinct.Length()
 		+ q.m_sComment.Length()
 		+ q.m_sSelect.Length()
-		+ q.m_sOuterOrderBy.Length();
+		+ q.m_sOuterOrderBy.Length()
+		+ q.m_sUDRanker.Length()
+		+ q.m_sUDRankerOpts.Length()
+		+ q.m_sQueryTokenFilterLib.Length()
+		+ q.m_sQueryTokenFilterName.Length()
+		+ q.m_sQueryTokenFilterOpts.Length();
 	iReqSize += q.m_sRawQuery.IsEmpty()
 		? q.m_sQuery.Length()
 		: q.m_sRawQuery.Length();
@@ -2992,6 +3001,11 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 	if ( q.m_bHasOuter )
 		tOut.SendInt ( q.m_iOuterOffset + q.m_iOuterLimit );
 	tOut.SendInt ( q.m_iGroupbyLimit );
+	tOut.SendString ( q.m_sUDRanker.cstr() );
+	tOut.SendString ( q.m_sUDRankerOpts.cstr() );
+	tOut.SendString ( q.m_sQueryTokenFilterLib.cstr() );
+	tOut.SendString ( q.m_sQueryTokenFilterName.cstr() );
+	tOut.SendString ( q.m_sQueryTokenFilterOpts.cstr() );
 }
 
 
@@ -3854,6 +3868,15 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	if ( iMasterVer>=6 )
 	{
 		tQuery.m_iGroupbyLimit = tReq.GetInt();
+	}
+
+	if ( iMasterVer>=14 )
+	{
+		tQuery.m_sUDRanker = tReq.GetString();
+		tQuery.m_sUDRankerOpts = tReq.GetString();
+		tQuery.m_sQueryTokenFilterLib = tReq.GetString();
+		tQuery.m_sQueryTokenFilterName = tReq.GetString();
+		tQuery.m_sQueryTokenFilterOpts = tReq.GetString();
 	}
 
 	/////////////////////
@@ -4868,7 +4891,8 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const CSphQueryResult * pRe
 			tOut.SendString ( tCol.m_sName.cstr() );
 
 			ESphAttr eCol = tCol.m_eAttrType;
-			if ( ( tCol.m_eAttrType==SPH_ATTR_JSON && !bSendJson ) || ( tCol.m_eAttrType==SPH_ATTR_JSON_FIELD && !bSendJsonField ) )
+			if ( ( tCol.m_eAttrType==SPH_ATTR_JSON && !bSendJson ) || ( tCol.m_eAttrType==SPH_ATTR_JSON_FIELD && !bSendJsonField )
+				 || ( tCol.m_eAttrType==SPH_ATTR_STRINGPTR && !bAgentMode ) )
 				eCol = SPH_ATTR_STRING;
 			tOut.SendDword ( (DWORD)eCol );
 		}

@@ -19025,6 +19025,7 @@ enum NetEvent_e
 	NE_HUP = 1UL<<2,
 	NE_ERR = 1UL<<3,
 	NE_REMOVE = 1UL<<4,
+	NE_REMOVED = 1UL<<5,
 };
 
 struct NetStateCommon_t;
@@ -19353,7 +19354,6 @@ class CSphEventsEpoll
 private:
 	List_t						m_tWork;
 	CSphVector<epoll_event>		m_dReady;
-	CSphHash<int>				m_hValidWork;
 	int							m_iLastReportedErrno;
 	int							m_iReady;
 	int							m_iEFD;
@@ -19396,7 +19396,6 @@ public:
 		assert ( eSetup==NE_IN || eSetup==NE_OUT );
 
 		m_tWork.Add ( pWork );
-		m_hValidWork.Add ( (int64_t)pWork, 1 );
 
 		epoll_event tEv;
 		tEv.data.ptr = pWork;
@@ -19455,33 +19454,27 @@ public:
 
 	bool IterateNextReady ()
 	{
-		for ( ;; )
+		m_iIterEv++;
+		if ( m_iReady<=0 || m_iIterEv>=m_iReady )
 		{
-			m_iIterEv++;
-			if ( m_iReady<=0 || m_iIterEv>=m_iReady )
-			{
-				m_tIter.m_pWork = NULL;
-				m_tIter.m_uEvents = 0;
-				return false;
-			}
-
-			const epoll_event & tEv = m_dReady[m_iIterEv];
-
-			m_tIter.m_pWork = (ISphNetAction *)tEv.data.ptr;
+			m_tIter.m_pWork = NULL;
 			m_tIter.m_uEvents = 0;
-
-			if ( tEv.events & EPOLLIN )
-				m_tIter.m_uEvents |= NE_IN;
-			if ( tEv.events & EPOLLOUT )
-				m_tIter.m_uEvents |= NE_OUT;
-			if ( tEv.events & EPOLLHUP )
-				m_tIter.m_uEvents |= NE_HUP;
-			if ( tEv.events & EPOLLERR )
-				m_tIter.m_uEvents |= NE_ERR;
-
-			if ( m_hValidWork.Find ( (int64_t)m_tIter.m_pWork ) )
-				break;
+			return false;
 		}
+
+		const epoll_event & tEv = m_dReady[m_iIterEv];
+
+		m_tIter.m_pWork = (ISphNetAction *)tEv.data.ptr;
+		m_tIter.m_uEvents = 0;
+
+		if ( tEv.events & EPOLLIN )
+			m_tIter.m_uEvents |= NE_IN;
+		if ( tEv.events & EPOLLOUT )
+			m_tIter.m_uEvents |= NE_OUT;
+		if ( tEv.events & EPOLLHUP )
+			m_tIter.m_uEvents |= NE_HUP;
+		if ( tEv.events & EPOLLERR )
+			m_tIter.m_uEvents |= NE_ERR;
 
 		return true;
 	}
@@ -19513,7 +19506,6 @@ public:
 
 		ISphNetAction * pPrev = (ISphNetAction *)m_tIter.m_pWork->m_pPrev;
 		m_tWork.Remove ( m_tIter.m_pWork );
-		m_hValidWork.Delete ( (int64_t)m_tIter.m_pWork );
 		m_tIter.m_pWork = pPrev;
 		// SafeDelete ( m_tIter.m_pWork );
 	}
@@ -20049,9 +20041,10 @@ private:
 				}
 
 				m_tPrf.StartAr();
-				if ( eEv==NE_REMOVE )
+				if ( eEv==NE_REMOVE || eEv==NE_REMOVED )
 				{
-					m_tEvents.IterateRemove ();
+					if ( eEv==NE_REMOVE )
+						RemoveIterEvent();
 					dCleanup.Add ( pWork );
 				} else
 				{
@@ -20154,6 +20147,11 @@ public:
 		Verify ( m_tExtLock.Unlock() );
 		if ( m_pWakeupExternal )
 			m_pWakeupExternal->Wakeup();
+	}
+
+	void RemoveIterEvent ()
+	{
+		m_tEvents.IterateRemove();
 	}
 
 	// main thread wrapper
@@ -20475,6 +20473,7 @@ void NetReceiveDataAPI_t::SetupBodyPhase()
 void NetReceiveDataAPI_t::AddJobAPI ( CSphNetLoop * pLoop )
 {
 	assert ( m_tState.Ptr() );
+	pLoop->RemoveIterEvent();
 	bool bStart = m_tState->m_bVIP;
 	int iLen = m_tState->m_dBuf.GetLength();
 	ThdJobAPI_t * pJob = new ThdJobAPI_t ( pLoop, m_tState.LeakPtr() );
@@ -20589,7 +20588,7 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 			if ( !m_tState->m_iLeft ) // command without body
 			{
 				AddJobAPI ( pLoop );
-				return NE_REMOVE;
+				return NE_REMOVED;
 			}
 		}
 		break;
@@ -20631,6 +20630,7 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 			} else
 			{
 				AddJobAPI ( pLoop );
+				return NE_REMOVED;
 			}
 			return NE_REMOVE;
 		}
@@ -20847,6 +20847,8 @@ NetEvent_e NetReceiveDataQL_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction
 
 					if ( iCmd==MYSQL_COM_QUERY )
 					{
+						pLoop->RemoveIterEvent();
+
 						// going to actual work now
 						bool bStart = m_tState->m_bVIP;
 						ThdJobQL_t * pJob = new ThdJobQL_t ( pLoop, m_tState.LeakPtr() );
@@ -20855,7 +20857,7 @@ NetEvent_e NetReceiveDataQL_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction
 						else
 							g_pThdPool->AddJob ( pJob );
 
-						return NE_REMOVE;
+						return NE_REMOVED;
 					} else
 					{
 						// short-cuts to keep action in place and don't dive to job then get back here
@@ -21175,13 +21177,15 @@ NetEvent_e NetReceiveDataHttp_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActi
 			m_tState->m_dBuf.Resize ( iReqSize );
 		}
 
+		pLoop->RemoveIterEvent();
+
 		sphLogDebugv ( "%p HTTP buf=%d, header=%d, content-len=%d, sock=%d, tick=%u", this, m_tState->m_dBuf.GetLength(), m_tHeadParser.m_iHeaderEnd, m_tHeadParser.m_iFieldContentLenVal, m_iSock, pLoop->m_uTick );
 
 		// no VIP for http for now
 		ThdJobHttp_t * pJob = new ThdJobHttp_t ( pLoop, m_tState.LeakPtr() );
 		g_pThdPool->AddJob ( pJob );
 
-		return NE_REMOVE;
+		return NE_REMOVED;
 	}
 }
 

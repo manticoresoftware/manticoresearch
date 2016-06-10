@@ -31,87 +31,263 @@ function sphFormatTime ( $time )
 	return sprintf ( '%d%s:%d%s', $time / 60, $u[0], $time % 60, $u[1] );
 }
 
-function mysql_wr ($q, $conn)
-{
-//	printf ( "$q\n");
-	return @mysql_query ( $q, $conn );
-}
 
 function mysqli_wr ($q, $conn)
 {
 //	printf ( "$q\n");
-	return @mysqli_query ( $conn, $q );
+	return @$conn->query ( $q );
 }
 
+$gl_conn = false;
+
+// The wrappers for fresh php without php_mysql.
+// We use mysqli instead in the code here,
+// but custom tests still know nothing about it,
+// so make old-fashion wrappers for them.
+if ( !function_exists("mysql_query") ) {
+
+	function mysql_query($query, $conn = NULL)
+	{
+		global $gl_conn;
+
+		if ($conn == NULL)
+			return $gl_conn->query($query);
+		else
+			return $conn->query($query);
+	}
+
+	function mysql_connect($host, $user, $password, $newlink)
+	{
+		global $gl_conn;
+		$gl_conn = new mysqli($host,$user,$password);
+		if ($gl_conn->connect_error)
+			return false;
+		return $gl_conn;
+	}
+
+	function mysql_select_db($db, $conn=NULL)
+	{
+		global $gl_conn;
+
+		if ( $conn == NULL )
+			return $gl_conn->select_db($db);
+		else
+			return $conn->select_db($db);
+	}
+
+	function mysql_close ( $link=NULL )
+	{
+		if ($link!=NULL) {
+			$link->close();
+			return;
+		}
+
+		global $gl_conn;
+		if ($gl_conn!=NULL)
+			$gl_conn->close();
+	}
+
+	function mysql_errno ( $link=NULL )
+	{
+		global $gl_conn;
+		if ($link)
+			return $link->errno;
+		else
+			return $gl_conn->errno;
+	}
+
+	function mysql_error ( $link=NULL )
+	{
+		global $gl_conn;
+		if ($link)
+			return $link->error;
+		else
+			return $gl_conn->error;
+	}
+
+	function mysql_affected_rows($conn = NULL)
+	{
+		if ($conn != NULL)
+			return $conn->affected_rows;
+
+		global $gl_conn;
+		return $gl_conn->affected_rows;
+	}
+
+	function mysql_num_rows($res)
+	{
+		return $res->num_rows;
+	}
+
+	define('MYSQL_ASSOC', MYSQLI_ASSOC);
+	define('MYSQL_NUM', MYSQLI_NUM);
+	define('MYSQL_BOTH', MYSQLI_BOTH);
+
+	function mysql_fetch_array($res,$restype=MYSQL_BOTH)
+	{
+		if ($res===true)
+			return false;
+
+		$result = $res->fetch_array($restype);
+		if ($result===NULL)
+			return false;
+
+		return $result;
+	}
+
+	function mysql_fetch_assoc($res)
+	{
+		return $res->fetch_assoc();
+	}
+
+	function mysql_free_result($res)
+	{
+		if ($res===true)
+			return;
+		$res->free();
+	}
+	$mysql_simulated = true;
+} // function_exists ("mysql_query")
+ else {
+	$mysql_simulated = false;
+ }
+
+// will use mysql_query from php, or our redefined
+function legacy_mysql_wr ($q, $conn)
+{
+//	printf ( "$q\n");
+	return @mysql_query($q, $conn);
+}
 
 function ConnectDB ()
 {
 	global $g_locals;
 
-	if ( !function_exists ( "mysql_connect" ) )
-	{
-		print ( "ERROR: missing required mysql_connect(); add php_mysql.so (.dll on Windows) to your php.ini!\n" );
-		exit ( 1 );
-	}
 	if ( !function_exists ( "mysqli_connect" ) )
 	{
 		print ( "ERROR: missing required mysqli_connect(); add php_mysqli.so (.dll on Windows) to your php.ini!\n" );
 		exit ( 1 );
 	}
 
-	$conn = @mysql_connect (
-		$g_locals["db-host"] . ":" . $g_locals["db-port"],
+	$conn = new mysqli(
+		$g_locals["db-host"],
 		$g_locals["db-user"],
 		$g_locals["db-password"],
-		true );
-
-	if ( $conn === false ||
-		!mysql_wr ( "CREATE DATABASE IF NOT EXISTS " . $g_locals['db-name'], $conn ) ||
-		!@mysql_select_db ( $g_locals['db-name'], $conn ) )
-			return false;
+		$g_locals['db-name'],
+		$g_locals['db-port']);
 
 	return $conn;
 }
 
+// will use either system mysql, either our wrapper in order to be in sync with client used in custom tests.
+function LegacyConnectDB ()
+{
+	global $g_locals;
+
+	$conn = @mysql_connect (
+			$g_locals["db-host"] . ":" . $g_locals["db-port"],
+			$g_locals["db-user"],
+			$g_locals["db-password"],
+			true );
+
+	if ( $conn === false ||
+			!@mysql_query ( "CREATE DATABASE IF NOT EXISTS " . $g_locals['db-name'], $conn ) ||
+			!@mysql_select_db ( $g_locals['db-name'], $conn ) )
+		return false;
+
+	return $conn;
+}
+
+function LegacyCreateDB ( $db_drop, $db_create, $db_insert, $custom_insert )
+{
+	$conn = LegacyConnectDB();
+
+	foreach ( $db_drop as $q )
+		if ( !legacy_mysql_wr ( $q, $conn ) )
+			return false;
+
+	foreach ( $db_create as $q )
+	{
+		if ( stripos ( $q, "create table")!==false )
+		{
+			if ( stripos ( $q, "engine=")===false )
+			{
+				$q = trim ( $q, " \t\n\r;" );
+				$q .= " ENGINE=MEMORY";
+			}
+		}
+		if ( !legacy_mysql_wr ( $q, $conn ) )
+			return false;
+	}
+
+	$oneok = count($db_insert)==0;
+	foreach ( $db_insert as $q )
+		if ( legacy_mysql_wr ( $q, $conn ) )
+			$oneok = true;
+
+	if ( !$oneok )
+		return false;
+
+	foreach ( $custom_insert as $code )
+	{
+		$function = create_function( '', $code );
+		$function();
+	}
+
+	return $conn;
+}
 
 function CreateDB ( $db_drop, $db_create, $db_insert, $custom_insert, $skip )
 {
-	$conn = ConnectDB ();
+	if ($skip)
+		return ConnectDB();
 
-	if (!$skip)
+	// here we split codepaths for old (php5) and new (php7 without php_mysql).
+	// if there is no custom inserts, we just use mysqli.
+	// but if we have them, we need to support mysql syntax since custom inserts use it.
+	// This is done by LegacyConnectDB.After it, it we actually doesn't have mysql (i.e. if we
+	// use wrappers) we just continue to use the connection as mysqli.
+	// but otherwise we have to close mysql conn and reconnect as mysqli to avoid too many changes
+	// of the existing code.
+	global $mysql_simulated;
+	if ( count($custom_insert)>0 )
 	{
-		foreach ( $db_drop as $q )
-			if ( !mysql_wr ( $q, $conn ) )
-				return false;
-
-		foreach ( $db_create as $q )
-		{
-			if ( stripos ( $q, "create table")!==false )
-			{
-				if ( stripos ( $q, "engine=")===false )
-				{
-					$q = trim ( $q, " \t\n\r;" );
-					$q .= " ENGINE=MEMORY";
-				}
-			}
-			if ( !mysql_wr ( $q, $conn ) )
-				return false;
+		$conn = LegacyCreateDB ( $db_drop, $db_create, $db_insert, $custom_insert );
+		if (!$mysql_simulated) {
+			@mysql_close($conn);
+			$conn = ConnectDB();
 		}
+		return $conn;
+	}
+	$conn = ConnectDB();
 
-		$oneok = count($db_insert)==0;
-		foreach ( $db_insert as $q )
-			if ( mysql_wr ( $q, $conn ) )
-				$oneok = true;
 
-		if ( !$oneok )
+	foreach ( $db_drop as $q )
+		if ( !mysqli_wr ( $q, $conn ) )
 			return false;
 
-		foreach ( $custom_insert as $code )
+	foreach ( $db_create as $q )
+	{
+		if ( stripos ( $q, "create table")!==false )
 		{
-			$function = create_function( '', $code );
-			$function();
+			if ( stripos ( $q, "engine=")===false )
+			{
+				$q = trim ( $q, " \t\n\r;" );
+				$q .= " ENGINE=MEMORY";
+			}
 		}
+		if ( !mysqli_wr ( $q, $conn ) )
+			return false;
 	}
+
+	$oneok = count($db_insert)==0;
+	foreach ( $db_insert as $q )
+		if ( mysqli_wr ( $q, $conn ) )
+			$oneok = true;
+
+	if ( !$oneok )
+		return false;
+
 
 	return $conn;
 }
@@ -1235,7 +1411,7 @@ class SphinxConfig
 				} else
 				{
 					$query_result["total_rows"] = mysqli_num_rows($result);
-					while ($row = mysqli_fetch_array($result, MYSQL_ASSOC))
+					while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC))
 					{
 						if ( $no_time===true && array_key_exists ( 'Variable_name', $row ) && $row['Variable_name']=='time' )
 							continue;
@@ -1257,7 +1433,7 @@ class SphinxConfig
 							$query_result["total_rows"] = mysqli_num_rows ($result);
 							if (array_key_exists ("rows", $query_result) )
 								unset ($query_result["rows"]);
-							while ($row = mysqli_fetch_array($result, MYSQL_ASSOC))
+							while ($row = mysqli_fetch_array($result, MYSQLI_ASSOC))
 							{
 								if ( $no_time===true && array_key_exists ( 'Variable_name', $row ) && $row['Variable_name']=='time' )
 									continue;
@@ -1510,16 +1686,16 @@ class SphinxConfig
 			$results = false;
 			$run_func = create_function( '$client, $ql, &$results', $this->_custom_test );
 
-			if ( !@mysql_connect ( $g_locals['db-host'].":".$g_locals['db-port'], $g_locals['db-user'], $g_locals['db-password'] ) )
-				return FALSE;
-			if ( !@mysql_select_db ( $g_locals['db-name'] ) )
+			if ( !LegacyConnectDB())
 				return FALSE;
 
 			$GLOBALS["this_test"] = $this->_testdir;
 			$ql = new QLClient();
 			$run_func ( $cl, $ql, $results );
 
+
 			@mysql_close();
+			$gl_conn = NULL;
 
 			if ( $results )
 				$bOk = TRUE;
@@ -1802,12 +1978,12 @@ class SphinxConfig
 		$idcol = "";
 
 		if ( $this->IsNeedDB() )
-			$r = mysql_query ( "DESC test_table", $this->_connection );
+			$r = $this->_connection->query ( "DESC test_table" );
 		else
 			$r = false;
 		if ( $r )
 		{
-			while ( $row = mysql_fetch_assoc($r) )
+			while ( $row = $r->fetch_assoc() )
 			{
 				$idcand = strtolower ( $row["Field"] );
 				if ( in_array ( $idcand, array ( "id", "document_id" ) ) )
@@ -1850,13 +2026,12 @@ class SphinxConfig
 				if ( $idcol )
 				{
 					if ( $this->IsNeedDB() )
-						$query_res = mysql_query ( "select * from test_table where $idcol = $doc_id",
-							$this->_connection);
+						$query_res = $this->_connection->query ( "select * from test_table where $idcol = $doc_id" );
 					else
 						$query_res = false;
 					if ( $query_res )
 					{
-						$row = mysql_fetch_assoc ( $query_res );
+						$row = $query_res->fetch_assoc ();
 						if ( $row )
 							foreach ( $row as $col_name => $col_content )
 								if ( array_search ( $col_name, $result["fields"] )!==false )
@@ -2064,8 +2239,7 @@ class SphinxConfig
 
 				// now let's connect to MySQL, run the query, and fetch the values
 				$conn = ConnectDB();
-				if ( !$conn )
-				{
+				if (mysqli_connect_error()) {
 					$msg = "can't connect or select the database";
 					return false;
 				}
@@ -2073,37 +2247,37 @@ class SphinxConfig
 				// gotta run pre-queries first!
 				foreach ( $sql_query_pre as $q )
 				{
-					if ( mysql_wr ( $q, $conn ) )
+					if ( mysqli_wr ( $q, $conn ) )
 						continue;
 
-					$msg = sprintf ( "sql_query_pre failed (query=%s, error=%s)", $q, mysql_error ( $conn ) );
-					mysql_close ( $conn );
+					$msg = sprintf ( "sql_query_pre failed (query=%s, error=%s)", $q, $conn->error );
+					$conn->close ();
 					return false;
 				}
 
 				// run main query
-				$res = mysql_wr ( $sql_query, $conn );
+				$res = mysqli_wr ( $sql_query, $conn );
 				if ( !$res )
 				{
-					$msg = sprintf ( "sql_query failed (query=%s, error=%s)", $sql_query, mysql_error ( $conn ) );
-					$msg = "sql_query can't fetch test data: " . mysql_error ( $conn );
-					mysql_close ( $conn );
+					$msg = sprintf ( "sql_query failed (query=%s, error=%s)", $sql_query, $conn->error );
+					$msg = "sql_query can't fetch test data: " . $conn->error;
+					$conn->close ();
 					return false;
 				}
 
 				// fetch fields
 				$insert_schema = array ( "id" => 0 );
-				for ( $i=1; $i < mysql_num_fields($res); $i++ )
-					$insert_schema [ mysql_fetch_field ( $res, $i )->name ] = $i;
+				for ( $i=1; $i < $conn->field_count; $i++ )
+					$insert_schema [ $res->fetch_field ( $i )->name ] = $i;
 
 				// fetch data
 				$insert_values = array();
-				while ( $row = mysql_fetch_row($res) )
+				while ( $row = $res->fetch_row() )
 					$insert_values[] = array_values ( $row );
 
 				// cleanup
-				mysql_free_result ( $res );
-				mysql_close ( $conn );
+				$res->close();
+				$conn->close();
 
 				// store
 				$schema = array();
@@ -2271,8 +2445,8 @@ class SphinxConfig
 				$port = $data["sqlport"];
 				$connect_string = "$address:$port";
 				if ( $cn !== false )
-					mysql_close ( $cn );
-				$cn = @mysql_connect ( $connect_string );
+					$cn->close();
+				$cn = new mysqli( $connect_string );
 			}
 			if ( $cn === false )
 				return false;
@@ -2288,15 +2462,15 @@ class SphinxConfig
 				{
 					if ( $query!="" )
 						$query .=",";
-					$query .="'".mysql_escape_string($column)."'";
+					$query .="'".$cn->escape_string($column)."'";
 				}
 				
 				if ( ( strlen ($accum) + strlen ($query) ) > 1024000 ) ///<checkit!
 				{
-					$result = mysql_wr ( $prefix.$accum, $cn );
+					$result = mysqli_wr ( $prefix.$accum, $cn );
 					if ( $result === false )
 					{
-						$error = mysql_error ( $cn );
+						$error = $cn->error;
 						return false;
 					}
 					$accum="";
@@ -2309,16 +2483,16 @@ class SphinxConfig
 			// final chunk;
 			if ( $accum !="" )
 			{
-				$result = @mysql_query ( $prefix.$accum, $cn );
+				$result = @$cn->query ( $prefix.$accum );
 				if ( $result === false )
 				{
-					$error = mysql_error ( $cn );
+					$error = $cn->error;
 					return false;
 				}
 			}
 		}
 		if ( $cn )
-			mysql_close ( $cn );
+			$cn->close();
 		return true;
 	}
 
@@ -2652,7 +2826,7 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 		$connection = CreateDB ( $config->DB_Drop(), $config->DB_Create(), $config->DB_Insert(), $config->DB_CustomInsert(), $sd_skip_indexer );
 		if ( $connection === false )
 		{
-			printf ( "$prefix FAILED, error creating test DB: %s\n", mysql_error() );
+			printf ( "$prefix FAILED, error creating test DB" );
 			return;
 		}
 		$config->SetConnection($connection);
@@ -2905,7 +3079,7 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 	// cleanup DB after ourselves
 	if ( !array_key_exists ('no_drop_db', $g_locals) && isset($connection) )
 		foreach ( $config->DB_Drop() as $q )
-			mysql_wr ( $q, $connection );
+			mysqli_wr ( $q, $connection );
 
 	return array ( "tests_total"=>$total, "tests_failed"=>$nfailed, "tests_skipped"=>0 );
 }

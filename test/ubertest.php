@@ -144,13 +144,13 @@ else
 	print ( "PERFORMING AUTOMATED TESTING\n\n" );
 
 $testconn = ConnectDB();
-if ( !$testconn )
+if ( mysqli_connect_error() )
 {
-	print ( "ERROR: failed to connect to MySQL: " . mysql_error() . "\n" );
+	print ( "ERROR: failed to connect to MySQL: " . mysqli_connect_error() . "\n" );
 	exit ( 1 );
 } else
 {
-	mysql_close ( $testconn );
+	$testconn->close();
 }
 
 $t = MyMicrotime ();

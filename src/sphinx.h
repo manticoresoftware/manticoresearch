@@ -2411,6 +2411,7 @@ protected:
 		CSphVector<char>	m_dRaw;
 		CSphString			m_sName;
 		SQLLEN				m_iInd;
+		int					m_iBytes;		///< size of actual data in m_dContents, in bytes
 		int					m_iBufferSize;	///< size of m_dContents and m_dRaw buffers, in bytes
 		bool				m_bUCS2;		///< whether this column needs UCS-2 to UTF-8 translation
 		bool				m_bTruncated;	///< whether data was truncated when fetching rows

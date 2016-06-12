@@ -27156,13 +27156,14 @@ bool CSphSource_MySQL::Setup ( const CSphSourceParams_MySQL & tParams )
 #define PGSQL_LIB "libpq.so"
 #endif
 
-#define POSTRESQL_NUM_FUNCS (12)
+#define POSTRESQL_NUM_FUNCS (13)
 
 #if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC) || defined(__ECC) || defined(__GNUC__)
 
 // use non-standard compiler extension __typeof__
 // it allow to declare pointer to the function without using it's declaration
 typedef __typeof__ ( PQgetvalue ) *xPQgetvalue;
+typedef __typeof__ ( PQgetlength ) *xPQgetlength;
 typedef __typeof__ ( PQclear ) *xPQclear;
 typedef __typeof__ ( PQsetdbLogin ) *xPQsetdbLogin;
 typedef __typeof__ ( PQstatus ) *xPQstatus;
@@ -27184,6 +27185,7 @@ typedef __typeof__ ( PQerrorMessage ) *xPQerrorMessage;
 as in libpq-fe.h. Correct the code below if this is not so.
 
 typedef char* (*xPQgetvalue)(const PGresult *res, int tup_num, int field_num); //NOLINT
+typedef int (*xPQgetlength)(const PGresult *res, int tup_num, int field_num); //NOLINT
 typedef void (*xPQclear)(PGresult *res); //NOLINT
 typedef PGconn *(*xPQsetdbLogin)(const char *pghost, const char *pgport, //NOLINT
 			 const char *pgoptions, const char *pgtty, //NOLINT
@@ -27220,6 +27222,7 @@ public:
 	}
 
 	static xPQgetvalue m_pPQgetvalue;
+	static xPQgetlength m_pPQgetlength;
 	static xPQclear m_pPQclear;
 	static xPQsetdbLogin m_pPQsetdbLogin;
 	static xPQstatus m_pPQstatus;
@@ -27234,6 +27237,7 @@ public:
 };
 
 #define sph_PQgetvalue (*CPosgresql::m_pPQgetvalue)
+#define sph_PQgetlength (*CPosgresql::m_pPQgetlength)
 #define sph_PQclear (*CPosgresql::m_pPQclear)
 #define sph_PQsetdbLogin (*CPosgresql::m_pPQsetdbLogin)
 #define sph_PQstatus (*CPosgresql::m_pPQstatus)
@@ -27246,17 +27250,18 @@ public:
 #define sph_PQfinish (*CPosgresql::m_pPQfinish)
 #define sph_PQerrorMessage (*CPosgresql::m_pPQerrorMessage)
 
-const char* CPosgresql::sFuncs[POSTRESQL_NUM_FUNCS] = {"PQgetvalue", "PQclear",
+const char* CPosgresql::sFuncs[POSTRESQL_NUM_FUNCS] = {"PQgetvalue", "PQgetlength", "PQclear",
 	"PQsetdbLogin", "PQstatus", "PQsetClientEncoding", "PQexec",
 	"PQresultStatus", "PQntuples", "PQfname", "PQnfields",
 	"PQfinish", "PQerrorMessage" };
-void** CPosgresql::pFuncs[] = {(void**)&m_pPQgetvalue, (void**)&m_pPQclear,
+void** CPosgresql::pFuncs[] = {(void**)&m_pPQgetvalue, (void**)&m_pPQgetlength, (void**)&m_pPQclear,
 	(void**)&m_pPQsetdbLogin, (void**)&m_pPQstatus, (void**)&m_pPQsetClientEncoding,
 	(void**)&m_pPQexec, (void**)&m_pPQresultStatus, (void**)&m_pPQntuples,
 	(void**)&m_pPQfname, (void**)&m_pPQnfields, (void**)&m_pPQfinish,
 	(void**)&m_pPQerrorMessage};
 
 xPQgetvalue CPosgresql::m_pPQgetvalue = (xPQgetvalue)CPosgresql::Stub;
+xPQgetvalue CPosgresql::m_pPQgetlength = (xPQgetlength)CPosgresql::Stub;
 xPQclear CPosgresql::m_pPQclear = (xPQclear)CPosgresql::Stub;
 xPQsetdbLogin CPosgresql::m_pPQsetdbLogin = (xPQsetdbLogin)CPosgresql::Stub;
 xPQstatus CPosgresql::m_pPQstatus = (xPQstatus)CPosgresql::Stub;
@@ -27279,6 +27284,7 @@ bool InitDynamicPosgresql()
 #else // !DL_PGSQL
 
 #define sph_PQgetvalue PQgetvalue
+#define sph_PQgetlength PQgetlength
 #define sph_PQclear PQclear
 #define sph_PQsetdbLogin PQsetdbLogin
 #define sph_PQstatus PQstatus
@@ -27481,9 +27487,9 @@ bool CSphSource_PgSQL::SqlFetchRow ()
 }
 
 
-DWORD CSphSource_PgSQL::SqlColumnLength ( int )
+DWORD CSphSource_PgSQL::SqlColumnLength ( int iIndex )
 {
-	return 0;
+	return sph_PQgetlength ( m_pPgResult, m_iPgRow, iIndex );
 }
 
 #endif // USE_PGSQL
@@ -29092,6 +29098,7 @@ bool CSphSource_ODBC::SqlQuery ( const char * sQuery )
 		tCol.m_dContents.Resize ( iBuffLen + MS_SQL_BUFFER_GAP );
 		tCol.m_dRaw.Resize ( iBuffLen + MS_SQL_BUFFER_GAP );
 		tCol.m_iInd = 0;
+		tCol.m_iBytes = 0;
 		tCol.m_iBufferSize = iBuffLen;
 		tCol.m_bUCS2 = m_bUnicode && ( iDataType==SQL_WCHAR || iDataType==SQL_WVARCHAR || iDataType==SQL_WLONGVARCHAR );
 		tCol.m_bTruncated = false;
@@ -29214,6 +29221,7 @@ bool CSphSource_ODBC::SqlFetchRow ()
 		{
 			case SQL_NULL_DATA:
 				tCol.m_dContents[0] = '\0';
+				tCol.m_iBytes = 0;
 				break;
 
 			default:
@@ -29231,6 +29239,7 @@ bool CSphSource_ODBC::SqlFetchRow ()
 							iConv = tCol.m_iBufferSize-1;
 
 					tCol.m_dContents[iConv] = '\0';
+					tCol.m_iBytes = iConv;
 
 				} else
 #endif
@@ -29239,6 +29248,7 @@ bool CSphSource_ODBC::SqlFetchRow ()
 					{
 						// data fetched ok; add trailing zero
 						tCol.m_dContents[tCol.m_iInd] = '\0';
+						tCol.m_iBytes = tCol.m_iInd;
 
 					} else if ( tCol.m_iInd>=tCol.m_iBufferSize && !tCol.m_bTruncated )
 					{
@@ -29246,6 +29256,7 @@ bool CSphSource_ODBC::SqlFetchRow ()
 						tCol.m_bTruncated = true;
 						sphWarn ( "'%s' column truncated (buffer=%d, got=%d); consider revising sql_column_buffers",
 							tCol.m_sName.cstr(), tCol.m_iBufferSize-1, (int) tCol.m_iInd );
+						tCol.m_iBytes = tCol.m_iBufferSize;
 					}
 				}
 			break;
@@ -29271,9 +29282,9 @@ const char * CSphSource_ODBC::SqlFieldName ( int iIndex )
 }
 
 
-DWORD CSphSource_ODBC::SqlColumnLength ( int )
+DWORD CSphSource_ODBC::SqlColumnLength ( int iIndex )
 {
-	return 0;
+	return m_dColumns[iIndex].m_iBytes;
 }
 
 

@@ -2426,16 +2426,16 @@ class SphinxConfig
 					// apply query range
 					if ( $sql_query_range )
 					{
-						$res = mysql_wr ( $sql_query_range, $conn );
+						$res = mysqli_wr ( $sql_query_range, $conn );
 						if ( !$res )
 						{
-							$msg = sprintf ( "sql_query failed (query=%s, error=%s)", $sql_query, mysql_error ( $conn ) );
-							mysql_close ( $conn );
+							$msg = sprintf ( "sql_query failed (query=%s, error=%s)", $sql_query, $conn->error );
+							$conn->close();
 							return false;
 						}
 
 						$range_values = array();
-						while ( $row = mysql_fetch_row($res) )
+						while ( $row = $res->fetch_row() )
 							$range_values[] = array_values ( $row );
 
 						if ( count($range_values)>=1 )
@@ -2458,7 +2458,7 @@ class SphinxConfig
 					// fetch fields
 					$insert_schema = array ( "id" => 0 );
 					for ( $i=1; $i < $conn->field_count; $i++ )
-						$insert_schema [ $res->fetch_field ( $i )->name ] = $i;
+						$insert_schema [ $res->fetch_field_direct ( $i )->name ] = $i;
 
 					// fetch data
 					while ( $row = $res->fetch_row() )
@@ -2466,7 +2466,7 @@ class SphinxConfig
 
 					// cleanup
 					$res->close();
-					$conn->close();
+
 					// parse mva statements
 					foreach ( $sql_attr_multi as $q )
 					{
@@ -2487,25 +2487,24 @@ class SphinxConfig
 						if ( $source_type=="query" )
 						{
 							// query mva_pairs
-							$res = mysql_wr ( $sql_query, $conn );
-							if ( !$res )
+							$res = mysqli_wr ( $sql_query, $conn );
+							if ( $res == false )
 							{
-								$msg = sprintf ( "sql_query failed (query=%s, error=%s)", $sql_query, mysql_error ( $conn ) );
-								$msg = "sql_query can't fetch test data: " . mysql_error ( $conn );
-								mysql_close ( $conn );
+								$msg = sprintf ( "sql_query failed (query=%s, error=%s)", $sql_query, $conn->error );
+								$conn->close();
 								return false;
 							}
 
 							// fetch mva pairs (id, value), group by id
 							$mva =  array();
-							while ( $row = mysql_fetch_row($res) )
+							while ( $row = $res->fetch_row() )
 							{
 								list ( $id, $value ) = array_values ( $row );
 								$mva[$id][] = $value;
 							}
 
-							// cleanup mysql
-							mysql_free_result ( $res );
+							// cleanup mysqli
+							$res->close();
 
 							// add mva attribute to the schema
 							$attr_index = count ( $insert_schema );
@@ -2533,6 +2532,9 @@ class SphinxConfig
 						}
 					}
 
+					// cleanup
+					$conn->close();
+
 					// load files
 					foreach ($sql_file_fields as $ff)
 					{
@@ -2541,7 +2543,7 @@ class SphinxConfig
 							$insert_values[$i][$index] = @file_get_contents($insert_values[$i][$index]); // FIXME? handle errors
 					}
 
-					// cleanup
+
 				}
 
 				// store
@@ -2723,7 +2725,7 @@ class SphinxConfig
 				$connect_string = "$address:$port";
 				if ( $cn !== false )
 					$cn->close();
-				$cn = new mysqli( $connect_string );
+				$cn = new mysqli( $address, "", "", "", $port );
 			}
 			if ( $cn === false )
 				return false;
@@ -2746,7 +2748,7 @@ class SphinxConfig
 				{
 					if ( $query!="" )
 						$query .=",";
-					$query .="'".$cn->escape_string($column)."'";
+					$s = $cn->real_escape_string($column);
 					$query .= ( array_key_exists ( $i, $is_mva ) && $is_mva[$i] ) ? '('.$s.')' : "'".$s."'";
 					$i++;
 				}
@@ -2769,7 +2771,7 @@ class SphinxConfig
 			// final chunk;
 			if ( $accum !="" )
 			{
-				$result = @$cn->query ( $prefix.$accum );
+				$result = mysqli_wr ( $prefix.$accum, $cn );
 				if ( $result === false )
 				{
 					$error = $cn->error;

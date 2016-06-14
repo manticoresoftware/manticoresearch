@@ -2268,7 +2268,7 @@ class SphinxConfig
 				// fetch fields
 				$insert_schema = array ( "id" => 0 );
 				for ( $i=1; $i < $conn->field_count; $i++ )
-					$insert_schema [ $res->fetch_field ( $i )->name ] = $i;
+					$insert_schema [ $res->fetch_field_direct ( $i )->name ] = $i;
 
 				// fetch data
 				$insert_values = array();
@@ -2446,7 +2446,7 @@ class SphinxConfig
 				$connect_string = "$address:$port";
 				if ( $cn !== false )
 					$cn->close();
-				$cn = new mysqli( $connect_string );
+				$cn = new mysqli( $address, "", "", "", $port );
 			}
 			if ( $cn === false )
 				return false;

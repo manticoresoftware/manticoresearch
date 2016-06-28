@@ -1111,6 +1111,9 @@ public:
 			case JSON_INT32:	return EvalValues ( sphGetDword ( pValue ) );
 			case JSON_INT64:	return EvalValues ( sphJsonLoadBigint ( &pValue ) );
 			case JSON_DOUBLE:	return EvalValues ( (SphAttr_t)sphQW2D ( sphJsonLoadBigint ( &pValue ) ) );
+			case JSON_TRUE:		return !EvalValues (0);
+			case JSON_FALSE:
+			case JSON_NULL:		return EvalValues (0);
 			default:			return false;
 		}
 	}
@@ -1142,6 +1145,9 @@ public:
 				else
 					return fValue>m_iMinValue && fValue<m_iMaxValue;
 			}
+			case JSON_TRUE:		return !EvalRange<HAS_EQUALS>(0, m_iMinValue, m_iMaxValue);
+			case JSON_FALSE:
+			case JSON_NULL:		return EvalRange<HAS_EQUALS>(0, m_iMinValue, m_iMaxValue);
 			default:
 				return false;
 		}

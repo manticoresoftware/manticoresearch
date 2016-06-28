@@ -810,5 +810,8 @@ Two'</sphinxql>
 <sphinxql>select j.f, indexof(x>345345345353 for x in j.f) as p from json_inplace where p=0</sphinxql>
 <!-- group by aliased field -->
 <sphinxql>select id, count(*), groupby(), j.a as p from arrays where id=123 group by p</sphinxql>
+<!-- true/false/null filtered as integers -->
+<sphinxql>select j from objects where id=9 and j[0]=0 and j[1]=1 and j[2]=0</sphinxql>
+<sphinxql>select j from objects where id=9 and j[0]!=1 and j[1]&gt;1 and j[2]&lt;1</sphinxql>
 </sphqueries>
 </test>

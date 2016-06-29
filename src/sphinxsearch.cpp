@@ -9209,6 +9209,7 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 			tTermSetup.m_bSetQposMask = true;
 			pRanker = new ExtRanker_Export_c ( tXQ, tTermSetup, pQuery->m_sRankerExpr.cstr(), pIndex->GetMatchSchema() );
 			break;
+
 		default:
 			pResult->m_sWarning.SetSprintf ( "unknown ranking mode %d; using default", (int)pQuery->m_eRanker );
 			if ( bGotDupes )
@@ -9216,13 +9217,25 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 			else
 				pRanker = new ExtRanker_T < RankerState_Proximity_fn<true,false> > ( tXQ, tTermSetup );
 			break;
+
 		case SPH_RANK_PLUGIN:
 			{
 				const PluginRanker_c * p = (const PluginRanker_c *) sphPluginGet ( PLUGIN_RANKER, pQuery->m_sUDRanker.cstr() );
-				assert ( p );
-				pRanker = new ExtRanker_T < RankerState_Plugin_fn > ( tXQ, tTermSetup );
-				pRanker->ExtraData ( EXTRA_SET_RANKER_PLUGIN, (void**)p );
-				pRanker->ExtraData ( EXTRA_SET_RANKER_PLUGIN_OPTS, (void**)pQuery->m_sUDRankerOpts.cstr() );
+				// might be a case for query to distributed index
+				if ( p )
+				{
+					pRanker = new ExtRanker_T < RankerState_Plugin_fn > ( tXQ, tTermSetup );
+					pRanker->ExtraData ( EXTRA_SET_RANKER_PLUGIN, (void**)p );
+					pRanker->ExtraData ( EXTRA_SET_RANKER_PLUGIN_OPTS, (void**)pQuery->m_sUDRankerOpts.cstr() );
+				} else
+				{
+					// create default ranker in case of missed plugin
+					pResult->m_sWarning.SetSprintf ( "unknown ranker plugin '%s'; using default", pQuery->m_sUDRanker.cstr() );
+					if ( bGotDupes )
+						pRanker = new ExtRanker_T < RankerState_Proximity_fn<true,true> > ( tXQ, tTermSetup );
+					else
+						pRanker = new ExtRanker_T < RankerState_Proximity_fn<true,false> > ( tXQ, tTermSetup );
+				}
 			}
 			break;
 	}

@@ -19870,6 +19870,9 @@ uint64_t sphFNV64 ( const void * s, int iLen, uint64_t uPrev )
 uint64_t sphFNV64cont ( const void * s, uint64_t uPrev )
 {
 	const BYTE * p = (const BYTE*)s;
+	if ( !p )
+		return uPrev;
+
 	uint64_t hval = uPrev;
 	while ( *p )
 	{

@@ -21285,6 +21285,8 @@ void ThdJobQL_t::Call ()
 
 	CSphString sQuery; // to keep data alive for SphCrashQuery_c
 	bool bProfile = m_tState->m_tSession.m_tVars.m_bProfile; // the current statement might change it
+	if ( bProfile )
+		m_tState->m_tSession.m_tProfile.Start ( SPH_QSTATE_TOTAL );
 
 	MemInputBuffer_c tIn ( m_tState->m_dBuf.Begin(), m_tState->m_dBuf.GetLength() );
 	ISphOutputBuffer tOut;

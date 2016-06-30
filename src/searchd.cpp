@@ -21818,7 +21818,7 @@ void MySetServiceStatus ( DWORD dwCurrentState, DWORD dwWin32ExitCode, DWORD dwW
 	if ( dwCurrentState==SERVICE_START_PENDING )
 		g_ss.dwControlsAccepted = 0;
 	else
-		g_ss.dwControlsAccepted = SERVICE_ACCEPT_STOP;
+		g_ss.dwControlsAccepted = SERVICE_ACCEPT_STOP | SERVICE_ACCEPT_SHUTDOWN;
 
 	g_ss.dwCurrentState = dwCurrentState;
 	g_ss.dwWin32ExitCode = dwWin32ExitCode;
@@ -21838,6 +21838,7 @@ void WINAPI ServiceControl ( DWORD dwControlCode )
 	switch ( dwControlCode )
 	{
 		case SERVICE_CONTROL_STOP:
+		case SERVICE_CONTROL_SHUTDOWN:
 			MySetServiceStatus ( SERVICE_STOP_PENDING, NO_ERROR, 0 );
 			g_bServiceStop = true;
 			break;

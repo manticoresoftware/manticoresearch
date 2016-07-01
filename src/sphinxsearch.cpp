@@ -6216,8 +6216,8 @@ int ExtRanker_T<STATE>::GetMatches ()
 			if ( !pDocs )
 				break;
 
-			// we do, get some hits
-			pHlist = m_pRoot->GetHitsChunk ( pDocs );
+			// we do, get some hits with proper profile
+			pHlist = RankerGetHits ( pProfile, m_pRoot, pDocs );
 			assert ( pHlist ); // fresh docs block, must have hits
 		}
 

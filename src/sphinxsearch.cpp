@@ -2267,6 +2267,17 @@ const ExtHit_t * ExtTermHitless_c::GetHitsChunk ( const ExtDoc_t * pMatched )
 	// hit emission
 	int iHit = 0;
 	m_bTail = false;
+	DWORD uMaxFields = SPH_MAX_FIELDS;
+	if ( !m_bHasWideFields )
+	{
+		uMaxFields = 0;
+		DWORD uFields = pDoc->m_uDocFields;
+		while ( uFields ) // count up to highest bit, max value is 32
+		{
+			uFields >>= 1;
+			uMaxFields++;
+		}
+	}
 	for ( ;; )
 	{
 		if ( ( m_uFieldPos<32 && ( pDoc->m_uDocFields & ( 1 << m_uFieldPos ) ) ) // not necessary
@@ -2283,7 +2294,7 @@ const ExtHit_t * ExtTermHitless_c::GetHitsChunk ( const ExtDoc_t * pMatched )
 				break;
 		}
 
-		if ( m_uFieldPos<SPH_MAX_FIELDS-1 )
+		if ( m_uFieldPos<uMaxFields-1 )
 		{
 			m_uFieldPos++;
 			continue;
@@ -6278,8 +6289,8 @@ int ExtRanker_T<STATE>::GetMatches ()
 			if ( !pDocs )
 				break;
 
-			// we do, get some hits
-			pHlist = m_pRoot->GetHitsChunk ( pDocs );
+			// we do, get some hits with proper profile
+			pHlist = RankerGetHits ( pProfile, m_pRoot, pDocs );
 			assert ( pHlist ); // fresh docs block, must have hits
 		}
 

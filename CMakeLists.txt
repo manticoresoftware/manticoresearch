@@ -135,7 +135,7 @@ else (WIN32)
 			set (CFLAGS "${CFLAGS} -O3 -g")
 		endif ()
 		set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CFLAGS}")
-		set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CFLAGS} -fno-rtti")
+		set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CFLAGS} -fno-rtti -std=c++11")
 	endif (HAVE_GCC_LIKE)
 
 	message (STATUS "Storing compiler version")

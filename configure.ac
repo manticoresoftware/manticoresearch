@@ -36,17 +36,17 @@ AC_ARG_WITH([assert],
 
 AC_MSG_CHECKING([whether to compile debug version])
 if test x$ac_cv_use_debug != xno; then
-	SPHINX_CFLAGS="-fno-rtti -Wall -g -D_FILE_OFFSET_BITS=64"
 	SPHINX_INJECT_FLAGS="-D_FILE_OFFSET_BITS=64"
+	SPHINX_CFLAGS="$SPHINX_INJECT_FLAGS -Wall -g"
 	AC_MSG_RESULT([yes])
 else
 	if test x$ac_cv_use_assert != xno; then
-		SPHINX_CFLAGS="-fno-rtti -Wall -g -D_FILE_OFFSET_BITS=64 -O2"
 		SPHINX_INJECT_FLAGS="-D_FILE_OFFSET_BITS=64"
+		SPHINX_CFLAGS="$SPHINX_INJECT_FLAGS -Wall -g -O2"
 		AC_MSG_RESULT([asserts only])
 	else
-		SPHINX_CFLAGS="-fno-rtti -Wall -g -D_FILE_OFFSET_BITS=64 -O3 -DNDEBUG"
 		SPHINX_INJECT_FLAGS="-D_FILE_OFFSET_BITS=64 -DNDEBUG"
+		SPHINX_CFLAGS="$SPHINX_INJECT_FLAGS -DNDEBUG -Wall -g -O3"
 		AC_MSG_RESULT([no])
 	fi
 fi
@@ -62,9 +62,9 @@ fi
 dnl set flags for C++ compiler if there are no user overrides
 dnl inject required defines if there are
 if test x$ac_env_CXXFLAGS_set != xset; then
-	CXXFLAGS=$SPHINX_CFLAGS
+	CXXFLAGS="$SPHINX_CFLAGS -fno-rtti -std=c++11"
 else
-	CXXFLAGS="$CXXFLAGS $SPHINX_INJECT_FLAGS"
+	CXXFLAGS="$CXXFLAGS $SPHINX_INJECT_FLAGS -fno-rtti -std=c++11"
 fi
 
 AC_PROG_CC

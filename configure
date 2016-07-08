@@ -2986,19 +2986,19 @@ fi
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to compile debug version" >&5
 $as_echo_n "checking whether to compile debug version... " >&6; }
 if test x$ac_cv_use_debug != xno; then
-	SPHINX_CFLAGS="-fno-rtti -Wall -g -D_FILE_OFFSET_BITS=64"
 	SPHINX_INJECT_FLAGS="-D_FILE_OFFSET_BITS=64"
+	SPHINX_CFLAGS="$SPHINX_INJECT_FLAGS -Wall -g"
 	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 $as_echo "yes" >&6; }
 else
 	if test x$ac_cv_use_assert != xno; then
-		SPHINX_CFLAGS="-fno-rtti -Wall -g -D_FILE_OFFSET_BITS=64 -O2"
 		SPHINX_INJECT_FLAGS="-D_FILE_OFFSET_BITS=64"
+		SPHINX_CFLAGS="$SPHINX_INJECT_FLAGS -Wall -g -O2"
 		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: asserts only" >&5
 $as_echo "asserts only" >&6; }
 	else
-		SPHINX_CFLAGS="-fno-rtti -Wall -g -D_FILE_OFFSET_BITS=64 -O3 -DNDEBUG"
 		SPHINX_INJECT_FLAGS="-D_FILE_OFFSET_BITS=64 -DNDEBUG"
+		SPHINX_CFLAGS="$SPHINX_INJECT_FLAGS -DNDEBUG -Wall -g -O3"
 		{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
 $as_echo "no" >&6; }
 	fi
@@ -3011,9 +3011,9 @@ else
 fi
 
 if test x$ac_env_CXXFLAGS_set != xset; then
-	CXXFLAGS=$SPHINX_CFLAGS
+	CXXFLAGS="$SPHINX_CFLAGS -fno-rtti -std=c++11"
 else
-	CXXFLAGS="$CXXFLAGS $SPHINX_INJECT_FLAGS"
+	CXXFLAGS="$CXXFLAGS $SPHINX_INJECT_FLAGS -fno-rtti -std=c++11"
 fi
 
 ac_ext=c

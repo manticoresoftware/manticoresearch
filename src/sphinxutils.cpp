@@ -2123,11 +2123,11 @@ void sphBacktrace ( int iFD, bool bSafe )
 #endif
 
 #ifdef CONFIGURE_FLAGS
-	sphSafeInfo ( iFD, "Configured with flags: "CONFIGURE_FLAGS );
+	sphSafeInfo ( iFD, "Configured with flags: " CONFIGURE_FLAGS );
 #endif
 
 #ifdef OS_UNAME
-	sphSafeInfo ( iFD, "Host OS is "OS_UNAME );
+	sphSafeInfo ( iFD, "Host OS is " OS_UNAME );
 #endif
 
 	bool bOk = true;

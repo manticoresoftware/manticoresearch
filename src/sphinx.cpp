@@ -26545,7 +26545,7 @@ const char * CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, DWORD & uUnpacke
 				{
 					m_bUnpackFailed = true;
 					sphWarn ( "failed to unpack '%s', invalid column size (size=%d), "
-						"docid="DOCID_FMT, SqlFieldName(iIndex), iPackedLen, m_tDocInfo.m_uDocID );
+						"docid=" DOCID_FMT, SqlFieldName(iIndex), iPackedLen, m_tDocInfo.m_uDocID );
 				}
 				return NULL;
 			}
@@ -26561,7 +26561,7 @@ const char * CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, DWORD & uUnpacke
 				{
 					m_bUnpackOverflow = true;
 					sphWarn ( "failed to unpack '%s', column size limit exceeded (size=%d),"
-						" docid="DOCID_FMT, SqlFieldName(iIndex), (int)uSize, m_tDocInfo.m_uDocID );
+						" docid=" DOCID_FMT, SqlFieldName(iIndex), (int)uSize, m_tDocInfo.m_uDocID );
 				}
 				return NULL;
 			}

@@ -129,6 +129,11 @@ else (WIN32)
 		endif ()
 		set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CFLAGS}")
 		set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CFLAGS} -fno-rtti")
+
+		# eliminate also some too noisy warnings from CLang
+		if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+			set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-register -Wno-missing-exception-spec")
+		endif()
 	endif (HAVE_GCC_LIKE)
 
 	message (STATUS "Storing compiler version")

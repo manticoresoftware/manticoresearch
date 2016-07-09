@@ -1177,7 +1177,7 @@ CSphSemaphore::~CSphSemaphore ()
 	assert ( !m_bInitialized );
 }
 
-bool CSphSemaphore::Init()
+bool CSphSemaphore::Init(const char*)
 {
 	assert ( !m_bInitialized );
 	m_hSem = CreateSemaphore ( NULL, 0, INT_MAX, NULL );
@@ -1228,6 +1228,13 @@ bool CSphMutex::Lock ()
 
 bool CSphMutex::TimedLock ( int iMsec )
 {
+
+// pthread_mutex_timedlock is not available on Mac Os. Fallback to lock without a timer.
+#if defined(_POSIX_TIMEOUTS) && (_POSIX_TIMEOUTS - 200112L) >= 0L
+	/* POSIX Timeouts are supported - option group [TMO] */
+#if defined(_POSIX_THREADS) && (_POSIX_THREADS - 200112L) >= 0L
+	/* POSIX threads are supported - option group [THR] */
+
 	struct timespec ts;
 	clock_gettime ( CLOCK_REALTIME, &ts );
 
@@ -1237,6 +1244,10 @@ bool CSphMutex::TimedLock ( int iMsec )
 
 	int iRes = pthread_mutex_timedlock ( &m_tMutex, &ts );
 	return iRes==0;
+#endif
+#else
+	return Lock();
+#endif
 }
 
 bool CSphMutex::Unlock ()
@@ -1300,12 +1311,12 @@ CSphSemaphore::~CSphSemaphore ()
 }
 
 
-bool CSphSemaphore::Init ()
+bool CSphSemaphore::Init (const char* sName)
 {
 	assert ( !m_bInitialized );
-	m_pSem = new sem_t;
-	int iRes = sem_init ( m_pSem, 0, 0 );
-	m_bInitialized = ( iRes==0 );
+	m_pSem = sem_open (sName, O_CREAT, 0, 0);
+	m_sName = sName;
+	m_bInitialized = ( m_pSem!=SEM_FAILED );
 	return m_bInitialized;
 }
 
@@ -1315,8 +1326,8 @@ bool CSphSemaphore::Done ()
 		return true;
 
 	m_bInitialized = false;
-	int iRes = sem_destroy ( m_pSem );
-	SafeDelete ( m_pSem );
+	int iRes = sem_close ( m_pSem );
+	sem_unlink (m_sName.cstr());
 	return ( iRes==0 );
 }
 
@@ -1476,6 +1487,8 @@ bool CSphRwlock::Init ( bool bPreferWriter )
 	pthread_rwlockattr_t tAttr;
 	pthread_rwlockattr_t * pAttr = NULL;
 
+// Mac OS X knows nothing about PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP
+#ifdef PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP
 	while ( bPreferWriter )
 	{
 		bool bOk = ( pthread_rwlockattr_init ( &tAttr )==0 );
@@ -1494,7 +1507,7 @@ bool CSphRwlock::Init ( bool bPreferWriter )
 		pAttr = &tAttr;
 		break;
 	}
-
+#endif
 	m_bInitialized = ( pthread_rwlock_init ( &m_tLock, pAttr )==0 );
 
 	if ( pAttr )
@@ -1686,18 +1699,10 @@ DWORD sphCRC32 ( const void * s, int iLen, DWORD uPrevCRC )
 
 CSphAtomic::CSphAtomic ( long iValue )
 	: m_iValue ( iValue )
-{
-#if NO_ATOMIC
-	m_tLock.Init();
-#endif
-}
+{}
 
 CSphAtomic::~CSphAtomic ()
-{
-#if NO_ATOMIC
-	m_tLock.Done();
-#endif
-}
+{}
 
 
 #if USE_WINDOWS
@@ -1784,14 +1789,14 @@ class CSphThdPool : public ISphThdPool
 	int								m_iStatQueuedJobs;
 
 public:
-	explicit CSphThdPool ( int iThreads )
+	explicit CSphThdPool ( int iThreads, const char* sName )
 		: m_dWorkers ( 0 )
 		, m_pHead ( NULL )
 		, m_pTail ( NULL )
 		, m_bShutdown ( false )
 		, m_iStatQueuedJobs ( 0 )
 	{
-		Verify ( m_tWorkSem.Init () );
+		Verify ( m_tWorkSem.Init (sName) );
 
 		iThreads = Max ( iThreads, 1 );
 		m_dWorkers.Reset ( iThreads );
@@ -1933,9 +1938,9 @@ private:
 };
 
 
-ISphThdPool * sphThreadPoolCreate ( int iThreads )
+ISphThdPool * sphThreadPoolCreate ( int iThreads, const char * sName )
 {
-	return new CSphThdPool ( iThreads );
+	return new CSphThdPool ( iThreads, sName );
 }
 
 int sphCpuThreadsCount ()

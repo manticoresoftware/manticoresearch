@@ -139,7 +139,7 @@ else (WIN32)
 
 		# eliminate also some too noisy warnings from CLang
 		if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-			set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-register -Wno-missing-exception-spec")
+			set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-register -Wno-missing-exception-spec -Wno-implicit-exception-spec-mismatch")
 		endif()
 	endif (HAVE_GCC_LIKE)
 

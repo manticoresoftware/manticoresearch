@@ -2792,7 +2792,7 @@ public:
 	CSphSemaphore ();
 	~CSphSemaphore();
 
-	bool Init ();
+	bool Init (const char* sName=NULL);
 	bool Done();
 	void Post();
 	bool Wait();
@@ -2803,6 +2803,7 @@ protected:
 	HANDLE	m_hSem;
 #else
 	sem_t *	m_pSem;
+	CSphString m_sName;	// unnamed semaphores are deprecated and removed in some OS
 #endif
 };
 
@@ -3145,7 +3146,7 @@ struct ISphThdPool
 	virtual int GetQueueLength () const = 0;
 };
 
-ISphThdPool * sphThreadPoolCreate ( int iThreads );
+ISphThdPool * sphThreadPoolCreate ( int iThreads, const char* sName=NULL );
 
 int sphCpuThreadsCount ();
 

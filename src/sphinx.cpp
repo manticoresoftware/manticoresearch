@@ -14631,10 +14631,13 @@ public:
 		if ( !SetThreadPriority ( GetCurrentThread(), THREAD_PRIORITY_IDLE ) )
 			return;
 #else
+	#ifdef SCHED_IDLE
 		struct sched_param p;
 		p.sched_priority = 0;
+
 		if ( pthread_setschedparam ( pthread_self(), SCHED_IDLE, &p ) )
 			return;
+	#endif
 #endif
 
 		m_bRestore = true;
@@ -14649,10 +14652,13 @@ public:
 		if ( !SetThreadPriority ( GetCurrentThread(), THREAD_PRIORITY_NORMAL ) )
 			return;
 #else
+    // Mac OS knows nothing about SCHED_IDLE
+	#ifdef SCHED_IDLE
 		struct sched_param p;
 		p.sched_priority = 0;
 		if ( pthread_setschedparam ( pthread_self(), SCHED_OTHER, &p ) )
 			return;
+	#endif
 #endif
 	}
 };

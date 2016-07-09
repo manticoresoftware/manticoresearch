@@ -1,7 +1,5 @@
 #find if the unaligned RAM access is possible on the build system
 if ( "${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang" )
-MESSAGE (STATUS "Compiler is ${CMAKE_CXX_COMPILER_ID}")
-#if ( ${CMAKE_COMPILER_IS_GNUCXX} )
 	set (_CHECK_UNALIGNED_PROG "
 #include <stdlib.h>
 #include <string.h>

@@ -1230,11 +1230,7 @@ bool CSphMutex::TimedLock ( int iMsec )
 {
 
 // pthread_mutex_timedlock is not available on Mac Os. Fallback to lock without a timer.
-#if defined(_POSIX_TIMEOUTS) && (_POSIX_TIMEOUTS - 200112L) >= 0L
-	/* POSIX Timeouts are supported - option group [TMO] */
-#if defined(_POSIX_THREADS) && (_POSIX_THREADS - 200112L) >= 0L
-	/* POSIX threads are supported - option group [THR] */
-
+#if defined (HAVE_PTHREAD_MUTEX_TIMEDLOCK)
 	struct timespec ts;
 	clock_gettime ( CLOCK_REALTIME, &ts );
 
@@ -1244,9 +1240,22 @@ bool CSphMutex::TimedLock ( int iMsec )
 
 	int iRes = pthread_mutex_timedlock ( &m_tMutex, &ts );
 	return iRes==0;
-#endif
+
 #else
-	return Lock();
+	int iRes = EBUSY;
+	int64_t tmTill = sphMicroTimer () + iMsec;
+	do
+	{
+		iRes = pthread_mutex_trylock ( &m_tMutex );
+		if ( iRes!=EBUSY )
+			break;
+		sphSleepMsec ( 1 );
+	} while ( sphMicroTimer ()<tmTill );
+	if ( iRes==EBUSY )
+		iRes = pthread_mutex_trylock ( &m_tMutex );
+
+	return iRes!=EBUSY;
+
 #endif
 }
 

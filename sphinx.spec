@@ -217,7 +217,6 @@ fi
 %defattr(-,root,root,-)
 /usr/share/man/man1/indexer.1.gz
 /usr/share/man/man1/indextool.1.gz
-/usr/share/man/man1/search.1.gz
 /usr/share/man/man1/searchd.1.gz
 /usr/share/man/man1/spelldump.1.gz
 /usr/local/include/re2/filtered_re2.h

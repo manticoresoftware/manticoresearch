@@ -2857,7 +2857,7 @@ integer math and thus numbers 48th and up will be returned modulo 2^32.
 <term id="expr-func-geopoly2d">GEOPOLY2D()</term>
 <listitem><para>GEOPOLY2D(x1,y1,x2,y2,x3,y3...) produces a polygon to be used with the <link linkend="expr-func-contains">CONTAINS()</link> function.
 This function takes into account the Earth's curvature by tessellating the polygon into smaller ones,
-and should be used for larger areas; see the <link linkend="expr-func-poly2d">POLY2D()</link> function.
+and should be used for larger areas; see the <link linkend="expr-func-poly2d">POLY2D()</link> function. The function expects coordinates to be in degrees, if radians are used it will give same result as POLY2D().
 </para>
 </listitem>
 </varlistentry>
@@ -5595,6 +5595,12 @@ FACET categories ORDER BY FACET() ASC;
 +------------+----------+
 </programlisting>
 </para>
+</listitem>
+<listitem>
+ <para>
+ subselects, starting with 2.2.1-beta, in format SELECT * FROM (SELECT ... ORDER BY cond1 LIMIT X) ORDER BY cond2 LIMIT Y. The outer select allows only ORDER BY and LIMIT clauses.
+ See <ulink url="http://sphinxsearch.com/blog/2013/05/14/subselects/">http://sphinxsearch.com/blog/2013/05/14/subselects/</ulink> for more details. 
+ </para>
 </listitem>
 </itemizedlist>
 </para>
@@ -11292,14 +11298,8 @@ on itself. However, indexing prefixes will make the index grow significantly
 and searching times.
 </para>
 <para>
-There's no automatic way to rank perfect word matches higher
-in a prefix index, but there's a number of tricks to achieve that.
-First, you can setup two indexes, one with prefix indexing and one
-without it, search through both, and use <link linkend="api-func-setindexweights">SetIndexWeights()</link>
-call to combine weights. Second, you can rewriteyour extended-mode queries:
-<programlisting>
-$cl->Query ( "( keyword | keyword* ) other keywords" );
-</programlisting>
+Perfect word matches can be differentiated from prefix matches, and ranked higher, by utilizing all of the following options: a) dict=keywords (on by default), b) index_exact_words=1 (off by default), and c) expand_keywords=1 (also off by default).
+Note that either with the legacy dict=crc mode (which you should ditch anyway!), or with any of the above options disable, there is no data to differentiate between the prefixes and full words, and thus perfect word matches can't be ranked higher.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
@@ -11326,9 +11326,8 @@ indexing infixes will make the index grow significantly (because of
 many more indexed keywords), and will degrade both indexing and
 searching times.</para>
 <para>
-There's no automatic way to rank perfect word matches higher
-in an infix index, but the same tricks as with <link linkend="conf-min-prefix-len">prefix indexes</link>
-can be applied.
+Perfect word matches can be differentiated from infix matches, and ranked higher, by utilizing all of the following options: a) dict=keywords (on by default), b) index_exact_words=1 (off by default), and c) expand_keywords=1 (also off by default).
+Note that either with the legacy dict=crc mode (which you should ditch anyway!), or with any of the above options disable, there is no data to differentiate between the infixes and full words, and thus perfect word matches can't be ranked higher.
 </para>
 <bridgehead>Example:</bridgehead>
 <programlisting>
@@ -11383,7 +11382,7 @@ max_substring_len = 12
 
 <sect2 id="conf-prefix-fields"><title>prefix_fields</title>
 <para>
-The list of full-text fields to limit prefix indexing to.
+The list of full-text fields to limit prefix indexing to. Applies to dict=crc only.
 Optional, default is empty (index all fields in prefix mode).
 </para>
 <para>
@@ -11403,7 +11402,7 @@ prefix_fields = url, domain
 
 <sect2 id="conf-infix-fields"><title>infix_fields</title>
 <para>
-The list of full-text fields to limit infix indexing to.
+The list of full-text fields to limit infix indexing to. Applies to dict=crc only.
 Optional, default is empty (index all fields in infix mode).
 </para>
 <para>

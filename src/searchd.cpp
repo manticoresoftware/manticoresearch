@@ -7395,7 +7395,7 @@ static void FormatOption ( const CSphQuery & tQuery, CSphStringBuilder & tBuf )
 	if ( tQuery.m_iRandSeed!=g_tDefaultQuery.m_iRandSeed )
 	{
 		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
-		tBuf.Appendf ( "rand_seed="INT64_FMT, tQuery.m_iRandSeed );
+		tBuf.Appendf ( "rand_seed=" INT64_FMT, tQuery.m_iRandSeed );
 	}
 
 	if ( !tQuery.m_sQueryTokenFilterLib.IsEmpty() )

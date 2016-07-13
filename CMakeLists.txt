@@ -109,7 +109,7 @@ if (WIN32)
 			endif ()
 		endif ()
 	endif ()
-
+	mark_as_advanced(CMAKE_CONFIGURATION_TYPES)
 else (WIN32)
 
 	include (helpers)
@@ -442,10 +442,10 @@ if (WITH_RE2)
 				endif ()
 			else() # No git executable found
 				# check whether we have local copy (to not disturb network)
-				if (EXISTS "${SPHX_LIBX}/master.zip")
-					message (STATUS "Unpack RE2 from ${SPHX_LIBX}/master.zip")
+				if (EXISTS "${LIBS_BUNDLE}/master.zip")
+					message (STATUS "Unpack RE2 from ${LIBS_BUNDLE}/master.zip")
 					execute_process (
-							COMMAND "${CMAKE_COMMAND}" -E tar xfz "${SPHX_LIBX}/master.zip"
+							COMMAND "${CMAKE_COMMAND}" -E tar xfz "${LIBS_BUNDLE}/master.zip"
 							WORKING_DIRECTORY "${SPHINXSEARCH_BINARY_DIR}")
 				# download from github as zip archive
 				else()
@@ -534,13 +534,13 @@ IF (WITH_STEMMER)
 			list (APPEND EXTRA_LIBRARIES ${STEMMER_LIBRARY})
 		endif (STEMMER_INTERNAL)
 	else(STEMMER_FOUND)
-		if (EXISTS "${SPHX_LIBX}/libstemmer_c.tgz")
-			message (STATUS "Unpack Stemmer from ${SPHX_LIBX}/libstemmer_c.tgz")
+		if (EXISTS "${LIBS_BUNDLE}/libstemmer_c.tgz")
+			message (STATUS "Unpack Stemmer from ${LIBS_BUNDLE}/libstemmer_c.tgz")
 			execute_process (
-					COMMAND "${CMAKE_COMMAND}" -E tar xfz "${SPHX_LIBX}/libstemmer_c.tgz"
+					COMMAND "${CMAKE_COMMAND}" -E tar xfz "${LIBS_BUNDLE}/libstemmer_c.tgz"
 					WORKING_DIRECTORY "${SPHINXSEARCH_BINARY_DIR}")
 			# download from github as zip archive
-		else(EXISTS "${SPHX_LIBX}/libstemmer_c.tgz")
+		else(EXISTS "${LIBS_BUNDLE}/libstemmer_c.tgz")
 			set (STEMMER_URL "http://snowball.tartarus.org/dist/libstemmer_c.tgz")
 			if (NOT EXISTS "${SPHINXSEARCH_BINARY_DIR}/libstemmer_c.tgz")
 				message (STATUS "Downloading Stemmer")
@@ -550,7 +550,7 @@ IF (WITH_STEMMER)
 			execute_process (
 					COMMAND "${CMAKE_COMMAND}" -E tar xfz "${SPHINXSEARCH_BINARY_DIR}/libstemmer_c.tgz"
 					WORKING_DIRECTORY "${SPHINXSEARCH_BINARY_DIR}")
-		endif (EXISTS "${SPHX_LIBX}/libstemmer_c.tgz")
+		endif (EXISTS "${LIBS_BUNDLE}/libstemmer_c.tgz")
 		set (STEMMER_BASEDIR "${SPHINXSEARCH_BINARY_DIR}/libstemmer_c")
 		# copy our CMakeLists there
 		if (NOT EXISTS "${STEMMER_BASEDIR}/CMakeLists.txt")

@@ -1,4 +1,4 @@
-man1_MANS = searchd.1 search.1 indexer.1 indextool.1 spelldump.1
+man1_MANS = searchd.1 indexer.1 indextool.1 spelldump.1
 
 # apt-get install docbook-xsl
 # apt-get install xsltproc

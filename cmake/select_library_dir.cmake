@@ -3,8 +3,8 @@
 # like having all in c:/work, we can investigate c:/work/mysql, c:/work/expat*, etc to find headers and libs,
 # or c:/work/mysql-x64, c:/work/expat*-x64, etc to find headers and libs for x64 arch build
 
-SET (SPHX_LIBX "${SPHX_LIBX}" CACHE PATH "Choose the path to the dir which contains all helper libs like expat, mysql, etc." FORCE )
-if (SPHX_LIBX)
+SET (LIBS_BUNDLE "${LIBS_BUNDLE}" CACHE PATH "Choose the path to the dir which contains all helper libs like expat, mysql, etc." FORCE )
+if (LIBS_BUNDLE)
 	set (is64bit FALSE)
 	IF (CMAKE_EXE_LINKER_FLAGS MATCHES "x64")
 		SET(is64bit TRUE)
@@ -12,7 +12,7 @@ if (SPHX_LIBX)
 
 	# here is the list of the libs we expect to find
 	foreach (req_lib expat iconv mysql pq)
-		file(GLOB list_libs "${SPHX_LIBX}/*${req_lib}*" "${SPHX_LIBX}/*pgsql*")
+		file(GLOB list_libs "${LIBS_BUNDLE}/*${req_lib}*" "${LIBS_BUNDLE}/*pgsql*")
 		SET (flib FALSE)
 		# select whether we need -x64 or simple lib for our current arch
 		FOREACH (lib ${list_libs})

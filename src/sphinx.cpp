@@ -101,34 +101,36 @@
 	#define struct_stat		struct stat
 #endif
 
-#if ( USE_WINDOWS && USE_MYSQL )
+#if ( USE_WINDOWS && !BUILD_WITH_CMAKE ) // on windows with cmake manual linkage is not necessary
+#if ( USE_MYSQL )
 	#pragma comment(linker, "/defaultlib:libmysql.lib")
 	#pragma message("Automatically linking with libmysql.lib")
 #endif
 
-#if ( USE_WINDOWS && USE_PGSQL )
+#if ( USE_PGSQL )
 	#pragma comment(linker, "/defaultlib:libpq.lib")
 	#pragma message("Automatically linking with libpq.lib")
 #endif
 
-#if ( USE_WINDOWS && USE_LIBSTEMMER )
+#if ( USE_LIBSTEMMER )
 	#pragma comment(linker, "/defaultlib:libstemmer_c.lib")
 	#pragma message("Automatically linking with libstemmer_c.lib")
 #endif
 
-#if ( USE_WINDOWS && USE_LIBEXPAT )
+#if ( USE_LIBEXPAT )
 	#pragma comment(linker, "/defaultlib:libexpat.lib")
 	#pragma message("Automatically linking with libexpat.lib")
 #endif
 
-#if ( USE_WINDOWS && USE_LIBICONV )
+#if ( USE_LIBICONV )
 	#pragma comment(linker, "/defaultlib:iconv.lib")
 	#pragma message("Automatically linking with iconv.lib")
 #endif
 
-#if ( USE_WINDOWS && USE_RE2 )
+#if ( USE_RE2 )
 	#pragma comment(linker, "/defaultlib:re2.lib")
 	#pragma message("Automatically linking with re2.lib")
+#endif
 #endif
 
 /////////////////////////////////////////////////////////////////////////////

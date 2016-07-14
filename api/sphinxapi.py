@@ -4,8 +4,8 @@
 # Python version of Sphinx searchd client (Python API)
 #
 # Copyright (c) 2006, Mike Osadnik
-# Copyright (c) 2006-2015, Andrew Aksyonoff
-# Copyright (c) 2008-2015, Sphinx Technologies Inc
+# Copyright (c) 2006-2016, Andrew Aksyonoff
+# Copyright (c) 2008-2016, Sphinx Technologies Inc
 # All rights reserved
 #
 # This program is free software; you can redistribute it and/or modify

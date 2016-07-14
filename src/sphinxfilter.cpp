@@ -638,19 +638,18 @@ struct Filter_StringValues_c: FilterString_c
 		int iOfs = 0;
 		for ( int i=0; i<iCount; i++ )
 		{
-			CSphString sRef;
-			SqlUnescape ( sRef, (pRef+i)->cstr(), (pRef+i)->Length() );
-			int iLen = sRef.Length();
+			const char * sRef = ( pRef + i )->cstr();
+			int iLen = ( pRef + i )->Length();
 
 			if ( m_bPacked )
 			{
 				m_dVal.Resize ( iOfs+iLen+4 );
 				int iPacked = sphPackStrlen ( m_dVal.Begin() + iOfs, iLen );
-				memcpy ( m_dVal.Begin() + iOfs + iPacked, sRef.cstr(), iLen );
+				memcpy ( m_dVal.Begin() + iOfs + iPacked, sRef, iLen );
 			} else
 			{
 				m_dVal.Resize ( iOfs+iLen+1 );
-				memcpy ( m_dVal.Begin() + iOfs, sRef.cstr(), iLen );
+				memcpy ( m_dVal.Begin() + iOfs, sRef, iLen );
 				m_dVal[iOfs+iLen] = '\0';
 			}
 

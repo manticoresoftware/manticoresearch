@@ -283,6 +283,7 @@ static SymbolDesc_t g_dSymbolsQueryTokenFilter[] =
 	{ static_cast<int>( offsetof(PluginQueryTokenFilter_c, m_fnInit)),			"init",			false },
 	{ static_cast<int>( offsetof(PluginQueryTokenFilter_c, m_fnPreMorph)),		"pre_morph",	false },
 	{ static_cast<int>( offsetof(PluginQueryTokenFilter_c, m_fnPostMorph)),	"post_morph",	false },
+	{ static_cast<int>( offsetof(PluginQueryTokenFilter_c, m_fnPushToken)),	"push_token",	false },
 	{ static_cast<int>( offsetof(PluginQueryTokenFilter_c, m_fnDeinit)),		"deinit",		false },
 	{ -1, 0, 0 }
 };

@@ -42,7 +42,7 @@ define ( "SEARCHD_COMMAND_STATUS",		5 );
 define ( "SEARCHD_COMMAND_FLUSHATTRS",	7 );
 
 /// current client-side command implementation versions
-define ( "VER_COMMAND_SEARCH",		0x11E );
+define ( "VER_COMMAND_SEARCH",		0x120 );
 define ( "VER_COMMAND_EXCERPT",		0x104 );
 define ( "VER_COMMAND_UPDATE",		0x103 );
 define ( "VER_COMMAND_KEYWORDS",	0x100 );
@@ -90,6 +90,7 @@ define ( "SPH_FILTER_VALUES",		0 );
 define ( "SPH_FILTER_RANGE",		1 );
 define ( "SPH_FILTER_FLOATRANGE",	2 );
 define ( "SPH_FILTER_STRING",	3 );
+define ( "SPH_FILTER_STRING_LIST",	6 );
 
 /// known attribute types
 define ( "SPH_ATTR_INTEGER",		1 );
@@ -446,6 +447,9 @@ class SphinxClient
 	var $_outeroffset; ///< outer offset
 	var $_outerlimit; ///< outer limit
 	var $_hasouter;
+	var $_token_filter_library; ///< token_filter plugin library name
+	var $_token_filter_name; ///< token_filter plugin name
+	var $_token_filter_opts; ///< token_filter plugin options
 
 	var $_error;		///< last error message
 	var $_warning;		///< last warning message
@@ -501,6 +505,9 @@ class SphinxClient
 		$this->_outeroffset = 0;
 		$this->_outerlimit = 0;
 		$this->_hasouter = false;
+		$this->_token_filter_library = '';
+		$this->_token_filter_name = '';
+		$this->_token_filter_opts = '';
 
 		$this->_error		= ""; // per-reply fields (for single-query case)
 		$this->_warning		= "";
@@ -872,6 +879,19 @@ class SphinxClient
 		assert ( is_string($value) );
 		$this->_filters[] = array ( "type"=>SPH_FILTER_STRING, "attr"=>$attribute, "exclude"=>$exclude, "value"=>$value );
 	}	
+	
+	/// set string list filter
+	function SetFilterStringList ( $attribute, $value, $exclude=false )
+	{
+		assert ( is_string($attribute) );
+		assert ( is_array($value) );
+		
+		foreach ( $value as $v )
+			assert ( is_string($v) );
+		
+		$this->_filters[] = array ( "type"=>SPH_FILTER_STRING_LIST, "attr"=>$attribute, "exclude"=>$exclude, "values"=>$value );
+	}	
+	
 
 	/// set range filter
 	/// only match records if $attribute value is beetwen $min and $max (inclusive)
@@ -1016,6 +1036,17 @@ class SphinxClient
 		$this->_hasouter = true;
 	}
 
+	/// set outer order by parameters
+	function SetTokenFilter ( $library, $name, $opts="" )
+	{
+		assert ( is_string($library) );
+		assert ( is_string($name) );
+		assert ( is_string($opts) );
+		
+		$this->_token_filter_library = $library;
+		$this->_token_filter_name = $name;
+		$this->_token_filter_opts = $opts;
+	}
 	
 	//////////////////////////////////////////////////////////////////////////////
 
@@ -1133,6 +1164,12 @@ class SphinxClient
 					$req .= pack ( "N", strlen($filter["value"]) ) . $filter["value"];
 					break;
 
+				case SPH_FILTER_STRING_LIST:
+					$req .= pack ( "N", count($filter["values"]) );
+					foreach ( $filter["values"] as $value )
+						$req .= pack ( "N", strlen($value) ) . $value;
+					break;
+					
 				default:
 					assert ( 0 && "internal error: unhandled filter type" );
 			}
@@ -1209,6 +1246,11 @@ class SphinxClient
 			$req .= pack ( "N", 1 );
 		else
 			$req .= pack ( "N", 0 );
+		
+		// token_filter
+		$req .= pack ( "N", strlen($this->_token_filter_library) ) . $this->_token_filter_library;
+		$req .= pack ( "N", strlen($this->_token_filter_name) ) . $this->_token_filter_name;
+		$req .= pack ( "N", strlen($this->_token_filter_opts) ) . $this->_token_filter_opts;
 
 		// mbstring workaround
 		$this->_MBPop ();

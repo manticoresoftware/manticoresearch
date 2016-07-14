@@ -48,6 +48,7 @@ typedef void			(*TokenFilterDeinit_fn)			( void * userdata );
 typedef int				(*QueryTokenFilterInit_fn)		( void ** userdata, int max_len, const char * options, char * error );
 typedef void			(*QueryTokenFilterPreMorph_fn)	( void * userdata, char * token, int * stopword );
 typedef int				(*QueryTokenFilterPostMorph_fn)	( void * userdata, char * token, int * stopword );
+typedef char *			(*QueryTokenFilterPushToken_fn)	( void * userdata, char * token, int * delta, const char * raw_token_start, int raw_token_len );
 typedef void			(*QueryTokenFilterDeinit_fn)	( void * userdata );
 
 //////////////////////////////////////////////////////////////////////////
@@ -136,6 +137,7 @@ public:
 	QueryTokenFilterInit_fn			m_fnInit;
 	QueryTokenFilterPreMorph_fn		m_fnPreMorph;
 	QueryTokenFilterPostMorph_fn	m_fnPostMorph;
+	QueryTokenFilterPushToken_fn	m_fnPushToken;
 	QueryTokenFilterDeinit_fn		m_fnDeinit;
 
 	explicit						PluginQueryTokenFilter_c ( PluginLib_c * pLib ) : PluginDesc_c ( pLib ) {}

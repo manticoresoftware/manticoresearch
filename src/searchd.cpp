@@ -3874,6 +3874,10 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	{
 		tQuery.m_sUDRanker = tReq.GetString();
 		tQuery.m_sUDRankerOpts = tReq.GetString();
+	}
+
+	if ( iMasterVer>=14 || iVer>=0x120 )
+	{
 		tQuery.m_sQueryTokenFilterLib = tReq.GetString();
 		tQuery.m_sQueryTokenFilterName = tReq.GetString();
 		tQuery.m_sQueryTokenFilterOpts = tReq.GetString();
@@ -9497,7 +9501,7 @@ bool SqlParser_c::AddStringListFilter ( const SqlNode_t & tCol, SqlNode_t & tVal
 		uint64_t uVal = ( *tVal.m_pValues.Ptr() )[i];
 		int iOff = ( uVal>>32 );
 		int iLen = ( uVal & 0xffffffff );
-		pFilter->m_dStrings[i].SetBinary ( m_pBuf + iOff, iLen );
+		SqlUnescape ( pFilter->m_dStrings[i], m_pBuf + iOff, iLen );
 	}
 	tVal.m_pValues = NULL;
 	pFilter->m_bExclude = bExclude;

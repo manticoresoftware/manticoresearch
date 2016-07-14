@@ -867,8 +867,12 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		m_bWasBlended = m_pTokenizer->TokenIsBlended();
 		m_bEmpty = false;
 
+		int iPrevDeltaPos = 0;
+		if ( m_pPlugin && m_pPlugin->m_fnPushToken )
+			sToken = m_pPlugin->m_fnPushToken ( m_pPluginData, (char*)sToken, &iPrevDeltaPos, m_pTokenizer->GetTokenStart(), m_pTokenizer->GetTokenEnd() - m_pTokenizer->GetTokenStart() );
+
 		m_iPendingNulls = m_pTokenizer->GetOvershortCount() * m_iOvershortStep;
-		m_iAtomPos += 1+m_iPendingNulls;
+		m_iAtomPos += 1 + m_iPendingNulls + iPrevDeltaPos;
 
 		// handle NEAR (must be case-sensitive, and immediately followed by slash and int)
 		if ( sToken && p && !m_pTokenizer->m_bPhrase && strncmp ( p, "NEAR/", 5 )==0 && isdigit(p[5]) )

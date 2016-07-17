@@ -856,6 +856,27 @@ public:
 		return m_iLength ? m_pData : NULL;
 	}
 
+	/// make happy C++11 ranged for loops
+	T * begin ()
+	{
+		return Begin ();
+	}
+
+	const T * begin () const
+	{
+		return Begin ();
+	}
+
+	T * end ()
+	{
+		return m_iLength ? m_pData + m_iLength : NULL;
+	}
+
+	const T * end () const
+	{
+		return m_iLength ? m_pData + m_iLength : NULL;
+	}
+
 	/// get last entry
 	T & Last ()
 	{
@@ -1225,6 +1246,27 @@ public:
 	T * Begin () const
 	{
 		return m_pData;
+	}
+
+	/// make happy C++11 ranged for loops
+	T * begin ()
+	{
+		return Begin ();
+	}
+	
+	const T * begin () const
+	{
+		return Begin ();
+	}
+	
+	T * end ()
+	{
+		return m_iSize ? m_pData + m_iSize : NULL;
+	}
+	
+	const T * end () const
+	{
+		return m_iSize ? m_pData + m_iSize : NULL;
 	}
 
 	T & Last () const

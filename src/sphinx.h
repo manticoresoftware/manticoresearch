@@ -201,11 +201,11 @@ inline const	DWORD *	STATIC2DOCINFO ( const DWORD * pAttrs )	{ return STATIC2DOC
 #endif
 
 #ifndef SPHINX_TAG
-#define SPHINX_TAG "-release"
+#define SPHINX_TAG "-dev"
 #endif
 
 // below is for easier extraction of the ver. by any external scripts
-#define SPHINX_VERSION_NUMBERS    "2.2.11"
+#define SPHINX_VERSION_NUMBERS    "2.2.12"
 
 #define SPHINX_VERSION           SPHINX_VERSION_NUMBERS SPHINX_BITS_TAG SPHINX_TAG " (" SPH_GIT_COMMIT_ID ")"
 #define SPHINX_BANNER			"Sphinx " SPHINX_VERSION "\nCopyright (c) 2001-2016, Andrew Aksyonoff\nCopyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)\n\n"

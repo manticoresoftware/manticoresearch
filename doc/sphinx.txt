@@ -1,4 +1,4 @@
-Sphinx 2.2.11-release reference manual
+Sphinx 2.2.12-dev reference manual
 ==================================
 
 Free open-source SQL full-text search engine

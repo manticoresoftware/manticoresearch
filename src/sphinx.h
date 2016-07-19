@@ -201,7 +201,7 @@ inline const	DWORD *	STATIC2DOCINFO ( const DWORD * pAttrs )	{ return STATIC2DOC
 #endif
 
 #ifndef SPHINX_TAG
-#define SPHINX_TAG "-dev"
+#define SPHINX_TAG "-release"
 #endif
 
 // below is for easier extraction of the ver. by any external scripts

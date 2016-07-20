@@ -1316,7 +1316,7 @@ CSphSemaphore::CSphSemaphore ()
 CSphSemaphore::~CSphSemaphore ()
 {
 	assert ( !m_bInitialized );
-	SafeDelete ( m_pSem );
+	sem_close ( m_pSem );
 }
 
 

@@ -193,6 +193,20 @@ $results[] = $client->BuildExcerpts ( array ( $doc ), 'hi2', $query, array('quer
 $results[] = $client->BuildExcerpts ( array ( $doc ), 'hi2', $query, array('query_mode'=>false, 'limit'=>200) );
 $results[] = $client->BuildExcerpts ( array ( $doc ), 'hi2', $query, array('query_mode'=>false, 'limit'=>0) );
 
+// crash daemon on either no documents or empty query
+$opts = array (
+array('query_mode'=>false, 'allow_empty'=>false),
+array('query_mode'=>true, 'allow_empty'=>false),
+array('query_mode'=>false, 'allow_empty'=>true),
+array('query_mode'=>true, 'allow_empty'=>true) );
+
+foreach ( $opts as $o )
+{
+	$results[] = $o;
+	$results[] = $client->BuildExcerpts ( array (''), 'test', 'test me', $o );
+	$results[] = $client->BuildExcerpts ( array ('test me'), 'test', '', $o );
+}
+
 ]]></custom_test>
 
 </test>

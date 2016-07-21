@@ -1558,27 +1558,30 @@ void XQParser_t::PhraseShiftQpos ( XQNode_t * pNode )
 	const int * pLast = m_dPhraseStar.Begin();
 	const int * pEnd = m_dPhraseStar.Begin() + m_dPhraseStar.GetLength();
 	int iQposShiftStart = *pLast;
-	int iQposShift = 1;
+	int iQposShift = 0;
+	int iLastStarPos = *pLast;
 
 	ARRAY_FOREACH ( iWord, pNode->m_dWords )
 	{
 		XQKeyword_t & tWord = pNode->m_dWords[iWord];
 
+		// fold stars in phrase till current term position
+		while ( pLast<pEnd && *(pLast)<=tWord.m_iAtomPos )
+		{
+			iLastStarPos = *pLast;
+			pLast++;
+			iQposShift++;
+		}
+
 		// star dictionary passes raw star however regular dictionary suppress it
 		// raw star also might be suppressed by min_word_len option
 		// so remove qpos shift from duplicated raw star term
-		if ( tWord.m_sWord.IsEmpty() || tWord.m_sWord=="*" )
+		// however not stopwords that is also term with empty word
+		if ( tWord.m_sWord=="*" || ( tWord.m_sWord.IsEmpty() && tWord.m_iAtomPos==iLastStarPos ) )
 		{
 			pNode->m_dWords.Remove ( iWord-- );
 			iQposShift--;
 			continue;
-		}
-
-		// fold stars in phrase till current term position
-		while ( pLast+1<pEnd && *(pLast+1)<=tWord.m_iAtomPos )
-		{
-			pLast++;
-			iQposShift++;
 		}
 
 		if ( iQposShiftStart<=tWord.m_iAtomPos )

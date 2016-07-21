@@ -171,6 +171,15 @@ index phrase_shift_min_wlen
 	min_word_len = 2
 }
 
+index phrase_shift_stop
+{
+	source			= src_phrase_shift
+	path			= <data_path/>/phrase_shift_stop
+	charset_table = 0..9, a..z, A..Z->a..z
+	dict = keywords
+	stopwords		= stopwords.txt
+}
+
 source src_4codepoint : srctest
 {
        sql_query               = SELECT 1 id, 5 idd, CONCAT ( 'the boxed state ', REPEAT( CHAR(0xf3be80bb), 7  ) ) as title
@@ -365,6 +374,11 @@ REPLACE INTO rt (id, id1, title) VALUES ( 1, 1, 'work worked working workings wo
 <sphinxql>SELECT * FROM phrase_shift_min_wlen WHERE MATCH(' "that * box" ')</sphinxql>
 <sphinxql>SELECT * FROM phrase_shift_min_wlen WHERE MATCH(' "that * * * box" ')</sphinxql>
 <sphinxql>SELECT * FROM phrase_shift_min_wlen WHERE MATCH(' "that * box might * * not yellow" ')</sphinxql>
+<!-- regression crash on phrase shift with stopwords -->
+<sphinxql>SELECT * FROM phrase_shift_stop WHERE MATCH(' "a the end that * box of" ')</sphinxql>
+<sphinxql>SELECT * FROM phrase_shift WHERE MATCH(' "* * * box always" ')</sphinxql>
+<sphinxql>SELECT * FROM phrase_shift_star WHERE MATCH(' "* * * box always" ')</sphinxql>
+<sphinxql>SELECT * FROM phrase_shift_min_wlen WHERE MATCH(' "* * * box always" ')</sphinxql>
 
 <!-- regression word with exact modifier that breaks infix builder -->
 <sphinxql>REPLACE INTO rt_i (id, idd, title) VALUES (20,11,'long word ___________________________________________ that crashed')</sphinxql>

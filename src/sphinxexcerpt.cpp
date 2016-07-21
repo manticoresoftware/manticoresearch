@@ -440,7 +440,7 @@ void SnippetsDocIndex_c::ParseQuery ( const char * sQuery, ISphTokenizer * pToke
 	if ( !m_bQueryMode )
 	{
 		// parse bag-of-words query
-		int iQueryLen = strlen ( sQuery ); // FIXME!!! get length as argument
+		int iQueryLen = sQuery ? strlen ( sQuery ) : 0; // FIXME!!! get length as argument
 		pTokenizer->SetBuffer ( (BYTE *)sQuery, iQueryLen );
 
 		BYTE * sWord = NULL;
@@ -2997,7 +2997,6 @@ static void TokenizeDocument ( T & tFunctor, const CSphHTMLStripper * pStripper,
 	const char * pStartPtr = pTokenizer->GetBufferPtr ();
 	const char * pLastTokenEnd = pStartPtr;
 	const char * pBufferEnd = pTokenizer->GetBufferEnd();
-	assert ( pStartPtr && pLastTokenEnd );
 
 	BYTE sNonStemmed [ 3*SPH_MAX_WORD_LEN+4];
 
@@ -3853,7 +3852,7 @@ void sphBuildExcerpt ( ExcerptQuery_t & tOptions, const CSphIndex * pIndex, cons
 		pStripper = NULL;
 
 	// FIXME!!! check on real data (~100 Mb) as stripper changes len
-	int iDataLen = strlen ( pData );
+	int iDataLen = pData ? strlen ( pData ) : 0;
 
 	DoHighlighting ( tOptions, pIndex->GetSettings(), tExtQuery, eExtQuerySPZ, pData, iDataLen, pDict, pDocTokenizer, pStripper,
 		sWarning, sError, pQueryTokenizer, tOptions.m_dRes );

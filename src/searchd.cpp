@@ -20553,7 +20553,7 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 			bool bBadCommand = ( m_iCommand<0 || m_iCommand>=SEARCHD_COMMAND_TOTAL );
 			bool bBadLength = ( m_tState->m_iLeft<0 || m_tState->m_iLeft>g_iMaxPacketSize );
 			bool bMaxedOut = ( g_iThdQueueMax && !m_tState->m_bVIP && g_pThdPool->GetQueueLength()>=g_iThdQueueMax );
-			if ( bBadLength || bBadLength || bMaxedOut )
+			if ( bBadCommand || bBadLength || bMaxedOut )
 			{
 				m_tState->m_bKeepSocket = false;
 

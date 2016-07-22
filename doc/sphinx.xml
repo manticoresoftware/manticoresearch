@@ -11919,7 +11919,7 @@ Starting with 2.2.9-release, the value can additionally enumerate per agent
 options such as:
 <itemizedlist>
 <listitem><para><link linkend="conf-ha-strategy">ha_strategy</link> - random,
-roundrobin, nodeads, noerrors (replces index <link linkend="conf-ha-strategy">ha_strategy</link>
+roundrobin, nodeads, noerrors (replaces index <link linkend="conf-ha-strategy">ha_strategy</link>
 for particular agent)</para></listitem>
 <listitem><para><link linkend="conf-agent-persistent">conn</link> - pconn,
 persistent (same as <link linkend="conf-agent-persistent">agent_persistent</link>
@@ -14445,6 +14445,18 @@ The last defined in distributed (network) indexes, or also may be overrided per-
 Integer, specifies how many times sphinx will try to connect and query remote agents in distributed index before reporting 
 fatal query error. Default is 0 (i.e. no retries). This value may be also specified on per-query basis using 
 'OPTION retry_count=XXX' clause. If per-query option exists, it will override the one specified in config.
+</para>
+<para>
+Note, that if you use <link linkend="conf-agent">agent mirrors</link> in definition of your distributed
+index, then before every attempt of connect sphinx will select different
+mirror, according to specified <link
+linkend="conf-ha-strategy">ha_strategy</link>specified.
+</para>
+<para>
+For example, if you have 10 mirrors, and surely know, that at least one of them
+alive, then you can definitely take the answer to a correct query,
+specifying options <code>ha_strategy = roundrobin</code> and
+<code>agent_retry_count = 9</code> in your config.
 </para>
 </sect2>
 

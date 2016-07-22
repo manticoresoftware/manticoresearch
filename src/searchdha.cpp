@@ -590,6 +590,7 @@ void AgentConn_t::SpecifyAndSelectMirror ( MetaAgentDesc_t * pMirrorChooser )
 void AgentConn_t::Fail ( AgentStats_e eStat, const char* sMessage, ... )
 {
 	Close ();
+	m_eState = AGENT_RETRY; // since it became AGENT_UNUSED after Close()
 	va_list ap;
 	va_start ( ap, sMessage );
 	m_sFailure.SetSprintfVa ( sMessage, ap );
@@ -2278,6 +2279,7 @@ void SetNextRetry ( AgentWorkContext_t * pCtx )
 	pCtx->m_iRetries++;
 	pCtx->m_tmWait = tmNextTry;
 	pCtx->m_pAgents->m_eState = AGENT_RETRY;
+	pCtx->m_pAgents->SpecifyAndSelectMirror ();
 }
 
 void ThdWorkParallel ( AgentWorkContext_t * pCtx )
@@ -2317,16 +2319,25 @@ void ThdWorkSequental ( AgentWorkContext_t * pCtx )
 
 	pCtx->m_iAgentsDone += RemoteQueryAgents ( pCtx );
 
-	int iToRetry = 0;
-	for ( int i=0; i<pCtx->m_iAgentCount; i++ )
-		iToRetry += ( pCtx->m_pAgents[i].m_eState==AGENT_RETRY );
-
-	if ( iToRetry )
-		pCtx->m_iRetries++;
+	bool bNeedRetry = false;
+	if ( pCtx->m_iRetriesMax )
+	{
+		for ( int i = 0; i<pCtx->m_iAgentCount; i++ )
+			if ( pCtx->m_pAgents[i].m_eState==AGENT_RETRY )
+			{
+				bNeedRetry = true;
+				break;
+			}
+	}
 
 	pCtx->m_pfn = NULL;
-	if ( iToRetry && pCtx->m_iRetriesMax && pCtx->m_iRetries<=pCtx->m_iRetriesMax )
+	if ( bNeedRetry && ++pCtx->m_iRetries<=pCtx->m_iRetriesMax )
+	{
 		pCtx->m_pfn = ThdWorkSequental;
+		for ( int i = 0; i<pCtx->m_iAgentCount; i++ )
+			if ( pCtx->m_pAgents[i].m_eState==AGENT_RETRY )
+				pCtx->m_pAgents[i].SpecifyAndSelectMirror ();
+	}
 }
 
 class CSphRemoteAgentsController : public ISphRemoteAgentsController

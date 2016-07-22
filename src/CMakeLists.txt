@@ -18,6 +18,7 @@ set (TESTS_SRCS tests.cpp)
 # The headers is not neccessary for executable build, but nesessary for MSVC and other projects
 # all the (non-generated) headers
 file (GLOB HEADERS "sphinx*.h" lz4.h lz4hc.h http/http_parser.h)
+file (GLOB SEARCHD_H "searchd*.h" )
 
 file (GLOB GHEADERS "yysphinx*.h")
 source_group ("Generated Header Files" FILES ${GHEADERS})
@@ -44,7 +45,7 @@ add_dependencies (libsphinx generate_sphinxversion)
 # our executables
 add_executable (indexer ${INDEXER_SRCS})
 add_executable (indextool ${INDEXTOOL_SRCS})
-add_executable (searchd ${SEARCHD_SRCS})
+add_executable (searchd ${SEARCHD_SRCS} ${SEARCHD_H})
 add_executable (spelldump ${SPELLDUMP_SRCS})
 add_executable (tests ${TESTS_SRCS})
 target_link_libraries (indexer libsphinx ${EXTRA_LIBRARIES})

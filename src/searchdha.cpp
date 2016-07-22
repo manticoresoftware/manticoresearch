@@ -21,6 +21,8 @@
 #include "searchdaemon.h"
 #include "searchdha.h"
 
+#include <utility>
+
 
 int				g_iPingInterval		= 0;		// by default ping HA agents every 1 second
 DWORD			g_uHAPeriodKarma	= 60;		// by default use the last 1 minute statistic to determine the best HA agent
@@ -39,7 +41,7 @@ CSphString AgentDesc_c::GetMyUrl() const
 }
 
 
-void HostDashboard_t::Init ( AgentDesc_c * pAgent )
+void HostDashboard_t::Init ( const AgentDesc_c * pAgent )
 {
 	m_iRefCount = 1;
 	m_iLastQueryTime = m_iLastAnswerTime = sphMicroTimer() - g_iPingInterval*1000;
@@ -82,39 +84,32 @@ AgentDash_t*	HostDashboard_t::GetCurrentStat()
 	return &dStats;
 }
 
-int HostDashboard_t::GetDashStat ( AgentDash_t* pRes, int iPeriods ) const
+AgentDash_t && HostDashboard_t::GetCollectedStat ( int iPeriods ) const
 {
-	assert ( pRes );
-	pRes->Reset();
-
-	int iCollected = 0;
+	AgentDash_t tResult;
+	tResult.Reset ();
 
 	DWORD uSeconds = GetCurSeconds();
 	if ( (uSeconds % g_uHAPeriodKarma) < (g_uHAPeriodKarma/2) )
 		++iPeriods;
 
-	int iLimit = Min ( iPeriods, STATS_DASH_TIME );
-	int iMaxExpected = iLimit + 1;
+	iPeriods = Min ( iPeriods, STATS_DASH_TIME );
+
 	DWORD uTime = uSeconds/g_uHAPeriodKarma;
 	int iIdx = uTime % STATS_DASH_TIME;
 	// pRes->m_uTimestamp = uTime;
 
-	for ( ; iLimit>0 ; --iLimit )
+	for ( ; iPeriods>0 ; --iPeriods )
 	{
 		const AgentDash_t & dStats = m_dStats[iIdx];
 		if ( dStats.m_uTimestamp==uTime ) // it might be no queries at all in the fixed time
-		{
-			pRes->Add ( dStats );
-			iCollected = iLimit;
-		}
-
+			tResult.Add ( dStats );
 		--uTime;
 		--iIdx;
 		if ( iIdx<0 )
 			iIdx = STATS_DASH_TIME-1;
 	}
-
-	return iMaxExpected - iCollected;
+	return std::move ( tResult );
 }
 
 static CSphVector<int>	g_dPersistentConnections; // protect by CSphScopedLock<ThreadsOnlyMutex_t> tLock ( g_tPersLock );
@@ -169,8 +164,17 @@ void ClosePersistentSockets()
 	}
 }
 
-
 //////////////////////////////////////////////////////////////////////////
+
+void MetaAgentDesc_t::SetOptions ( const AgentOptions_t& tOpt )
+{
+	m_eStrategy = tOpt.m_eStrategy;
+	for ( auto& dHost : m_dHosts )
+	{
+		dHost.m_bPersistent = tOpt.m_bPersistent;
+		dHost.m_bBlackhole = tOpt.m_bBlackhole;
+	}
+}
 
 void MetaAgentDesc_t::SetHAData ( int * pRRCounter, WORD * pWeights, InterWorkerStorage * pLock )
 {
@@ -191,37 +195,29 @@ AgentDesc_c * MetaAgentDesc_t::NewAgent()
 	return & tAgent;
 }
 
-AgentDesc_c * MetaAgentDesc_t::LastAgent()
-{
-	assert ( m_dHosts.GetLength()>0 );
-	return &m_dHosts.Last();
-}
-
 AgentDesc_c * MetaAgentDesc_t::RRAgent ()
 {
 	assert ( m_pRRCounter );
 	assert ( m_pLock );
 
-	if ( m_dHosts.GetLength()==1 )
+	if ( !IsHA() )
 		return GetAgent(0);
 
 	CSphScopedLock<InterWorkerStorage> tLock ( *m_pLock );
 
 	++*m_pRRCounter;
-	if ( *m_pRRCounter<0 || *m_pRRCounter>(m_dHosts.GetLength()-1) )
+	if ( *m_pRRCounter<0 || *m_pRRCounter> ( GetLength ()-1 ) )
 		*m_pRRCounter = 0;
 
-
-	AgentDesc_c * pAgent = GetAgent ( *m_pRRCounter );
-	return pAgent;
+	return GetAgent ( *m_pRRCounter );
 }
 
 AgentDesc_c * MetaAgentDesc_t::RandAgent ()
 {
-	return GetAgent ( sphRand() % m_dHosts.GetLength() );
+	return GetAgent ( sphRand() % GetLength() );
 }
 
-void MetaAgentDesc_t::WeightedRandAgent ( int * pBestAgent, CSphVector<int> & dCandidates )
+void MetaAgentDesc_t::ChooseWeightedRandAgent ( int * pBestAgent, CSphVector<int> & dCandidates )
 {
 	assert ( m_pWeights );
 	assert ( pBestAgent );
@@ -229,43 +225,25 @@ void MetaAgentDesc_t::WeightedRandAgent ( int * pBestAgent, CSphVector<int> & dC
 	CSphScopedLock<InterWorkerStorage> tLock ( *m_pLock );
 	DWORD uBound = m_pWeights[*pBestAgent];
 	DWORD uLimit = uBound;
-	ARRAY_FOREACH ( i, dCandidates )
-		uLimit += m_pWeights[dCandidates[i]];
+	for ( auto j : dCandidates )
+		uLimit += m_pWeights[j];
 	DWORD uChance = sphRand() % uLimit;
 
 	if ( uChance<=uBound )
 		return;
 
-	ARRAY_FOREACH ( i, dCandidates )
+	for ( auto j : dCandidates )
 	{
-		uBound += m_pWeights[dCandidates[i]];
-		*pBestAgent = dCandidates[i];
+		uBound += m_pWeights[j];
+		*pBestAgent = j;
 		if ( uChance<=uBound )
 			break;
 	}
 }
 
-inline const HostDashboard_t& MetaAgentDesc_t::GetCommonStat ( int iAgent ) const
+inline const HostDashboard_t& MetaAgentDesc_t::GetDashForAgent ( int iAgent ) const
 {
 	return g_tStats.m_dDashboard.m_dItemStats[m_dHosts[iAgent].m_iDashIndex];
-}
-
-inline int64_t MetaAgentDesc_t::GetBestDelay ( int * pBestAgent, CSphVector<int> & dCandidates ) const
-{
-	assert ( pBestAgent );
-	int64_t iBestAnswerTime = GetCommonStat ( *pBestAgent ).m_iLastAnswerTime
-		- GetCommonStat ( *pBestAgent ).m_iLastQueryTime;
-	ARRAY_FOREACH ( i, dCandidates )
-	{
-		if ( iBestAnswerTime > ( GetCommonStat ( dCandidates[i] ).m_iLastAnswerTime
-			- GetCommonStat ( dCandidates[i] ).m_iLastQueryTime ) )
-		{
-			*pBestAgent = dCandidates[i];
-			iBestAnswerTime = GetCommonStat ( *pBestAgent ).m_iLastAnswerTime
-				- GetCommonStat ( *pBestAgent ).m_iLastQueryTime;
-		}
-	}
-	return iBestAnswerTime;
 }
 
 static void LogAgentWeights ( const WORD * pOldWeights, const WORD * pCurWeights, const int64_t * pTimers, const CSphVector<AgentDesc_c> & dAgents )
@@ -279,7 +257,7 @@ static void LogAgentWeights ( const WORD * pOldWeights, const WORD * pCurWeights
 
 AgentDesc_c * MetaAgentDesc_t::StDiscardDead ()
 {
-	if ( m_dHosts.GetLength()==1 )
+	if ( !IsHA() )
 		return GetAgent(0);
 
 	// threshold errors-a-row to be counted as dead
@@ -289,16 +267,15 @@ AgentDesc_c * MetaAgentDesc_t::StDiscardDead ()
 	int64_t iErrARow = -1;
 	int64_t iThisErrARow = -1;
 	CSphVector<int> dCandidates;
-	CSphFixedVector<int64_t> dTimers ( m_dHosts.GetLength() );
-	dCandidates.Reserve ( m_dHosts.GetLength() );
+	CSphFixedVector<int64_t> dTimers ( GetLength() );
+	dCandidates.Reserve ( GetLength() );
 
 	ARRAY_FOREACH ( i, m_dHosts )
 	{
 		// no locks for g_pStats since we just reading, and read data is not critical.
-		const HostDashboard_t & dDash = GetCommonStat ( i );
+		const HostDashboard_t & dDash = GetDashForAgent ( i );
 
-		AgentDash_t dDashStat;
-		dDash.GetDashStat ( &dDashStat, 1 ); // look at last 30..90 seconds.
+		AgentDash_t dDashStat { dDash.GetCollectedStat () }; // look at last 30..90 seconds.
 		uint64_t uQueries = 0;
 		for ( int j=0; j<eMaxCounters; ++j )
 			uQueries += dDashStat.m_iStats[j];
@@ -339,7 +316,7 @@ AgentDesc_c * MetaAgentDesc_t::StDiscardDead ()
 		memcpy ( m_pWeights, dWeights.Begin(), sizeof ( dWeights[0] ) * dWeights.GetLength() );
 	}
 
-	// nothing to select, sorry. Just plain RR...
+	// nothing to select, sorry. Just random agent...
 	if ( iBestAgent < 0 )
 	{
 		sphLogDebug ( "HA selector discarded all the candidates and just fall into simple Random" );
@@ -354,12 +331,12 @@ AgentDesc_c * MetaAgentDesc_t::StDiscardDead ()
 	}
 
 	// several nodes. Let's select the one.
-	WeightedRandAgent ( &iBestAgent, dCandidates );
+	ChooseWeightedRandAgent ( &iBestAgent, dCandidates );
 	if ( g_eLogLevel>=SPH_LOG_VERBOSE_DEBUG )
 	{
 		float fAge = 0.0;
 		const char * sLogStr = NULL;
-		const HostDashboard_t & dDash = GetCommonStat ( iBestAgent );
+		const HostDashboard_t & dDash = GetDashForAgent ( iBestAgent );
 		fAge = ( dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime ) / 1000.0f;
 		sLogStr = "client=%s:%d, HA selected %d node by weighted random, with best EaR (" INT64_FMT "), last answered in %.3f milliseconds";
 		sphLogDebugv ( sLogStr, m_dHosts[iBestAgent].m_sHost.cstr(), m_dHosts[iBestAgent].m_iPort, iBestAgent, iErrARow, fAge );
@@ -370,7 +347,7 @@ AgentDesc_c * MetaAgentDesc_t::StDiscardDead ()
 
 AgentDesc_c * MetaAgentDesc_t::StLowErrors()
 {
-	if ( m_dHosts.GetLength()==1 )
+	if ( !IsHA() )
 		return GetAgent(0);
 
 	// how much error rating is allowed
@@ -386,10 +363,9 @@ AgentDesc_c * MetaAgentDesc_t::StLowErrors()
 	ARRAY_FOREACH ( i, m_dHosts )
 	{
 		// no locks for g_pStats since we just reading, and read data is not critical.
-		const HostDashboard_t & dDash = GetCommonStat ( i );
+		const HostDashboard_t & dDash = GetDashForAgent ( i );
 
-		AgentDash_t dDashStat;
-		dDash.GetDashStat ( &dDashStat, 1 ); // look at last 30..90 seconds.
+		AgentDash_t dDashStat { dDash.GetCollectedStat () }; // look at last 30..90 seconds.
 		uint64_t uQueries = 0;
 		uint64_t uCriticalErrors = 0;
 		uint64_t uAllErrors = 0;
@@ -458,7 +434,6 @@ AgentDesc_c * MetaAgentDesc_t::StLowErrors()
 		CSphScopedLock<InterWorkerStorage> tLock ( *m_pLock );
 		LogAgentWeights ( m_pWeights, dWeights.Begin(), dTimers.Begin(), m_dHosts );
 		memcpy ( m_pWeights, dWeights.Begin(), sizeof ( dWeights[0] ) * dWeights.GetLength() );
-
 	}
 
 	// nothing to select, sorry. Just plain RR...
@@ -476,12 +451,12 @@ AgentDesc_c * MetaAgentDesc_t::StLowErrors()
 	}
 
 	// several nodes. Let's select the one.
-	WeightedRandAgent ( &iBestAgent, dCandidates );
+	ChooseWeightedRandAgent ( &iBestAgent, dCandidates );
 	if ( g_eLogLevel>=SPH_LOG_VERBOSE_DEBUG )
 	{
 		float fAge = 0.0f;
 		const char * sLogStr = NULL;
-		const HostDashboard_t & dDash = GetCommonStat ( iBestAgent );
+		const HostDashboard_t & dDash = GetDashForAgent ( iBestAgent );
 		fAge = ( dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime ) / 1000.0f;
 		sLogStr = "client=%s:%d, HA selected %d node by weighted random, with best error rating (%.2f), answered %f seconds ago";
 		sphLogDebugv ( sLogStr, m_dHosts[iBestAgent].m_sHost.cstr(), m_dHosts[iBestAgent].m_iPort, iBestAgent, fBestCriticalErrors, fAge );
@@ -491,18 +466,18 @@ AgentDesc_c * MetaAgentDesc_t::StLowErrors()
 }
 
 
-AgentDesc_c * MetaAgentDesc_t::GetRRAgent ()
+const AgentDesc_c & MetaAgentDesc_t::ChooseAgent ()
 {
 	switch ( m_eStrategy )
 	{
 	case HA_AVOIDDEAD:
-		return StDiscardDead();
+		return * StDiscardDead();
 	case HA_AVOIDERRORS:
-		return StLowErrors();
+		return * StLowErrors();
 	case HA_ROUNDROBIN:
-		return RRAgent();
+		return * RRAgent();
 	default:
-		return RandAgent();
+		return * RandAgent();
 	}
 }
 
@@ -516,16 +491,6 @@ void MetaAgentDesc_t::QueuePings()
 	ARRAY_FOREACH ( i, m_dHosts )
 		g_tStats.m_dDashboard.m_dItemStats[m_dHosts[i].m_iDashIndex].m_bNeedPing = true;
 	g_tStatsMutex.Unlock();
-}
-
-const CSphVector<AgentDesc_c>& MetaAgentDesc_t::GetAgents() const
-{
-	return m_dHosts;
-}
-
-const WORD* MetaAgentDesc_t::GetWeights() const
-{
-	return m_pWeights;
 }
 
 MetaAgentDesc_t & MetaAgentDesc_t::operator= ( const MetaAgentDesc_t & rhs )
@@ -558,6 +523,7 @@ AgentConn_t::AgentConn_t ()
 	, m_iStoreTag ( 0 )
 	, m_iWeight ( -1 )
 	, m_bPing ( false )
+	, m_pMirrorChooser { nullptr }
 {}
 
 AgentConn_t::~AgentConn_t ()
@@ -602,13 +568,19 @@ AgentConn_t & AgentConn_t::operator = ( const AgentDesc_c & rhs )
 	return *this;
 }
 
-// works like =, but also adopt the persistent connection, if any.
-void AgentConn_t::TakeTraits ( AgentDesc_c & rhs )
+void AgentConn_t::SpecifyAndSelectMirror ( MetaAgentDesc_t * pMirrorChooser )
 {
-	*this = rhs;
+	if ( pMirrorChooser )
+	{
+		assert ( !m_pMirrorChooser && "Can't redefine already assigned mirror" );
+		m_pMirrorChooser = pMirrorChooser;
+	}
+
+	assert ( m_pMirrorChooser );
+	*this = m_pMirrorChooser->ChooseAgent ();
 	if ( m_bPersistent )
 	{
-		m_iSock = m_dPersPool.RentConnection();
+		m_iSock = m_dPersPool.RentConnection ();
 		if ( m_iSock==-2 ) // no free persistent connections. This connection will be not persistent
 			m_bPersistent = false;
 	}
@@ -634,7 +606,7 @@ void agent_stats_inc ( AgentConn_t & tAgent, AgentStats_e iCounter )
 	{
 		g_tStatsMutex.Lock ();
 		uint64_t* pCurStat = g_tStats.m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].GetCurrentStat()->m_iStats;
-		if ( iCounter==eMaxMsecs || iCounter==eAverageMsecs )
+		if ( iCounter==eMaxMsecs )
 		{
 			++pCurStat[eConnTries];
 			int64_t iConnTime = sphMicroTimer() - tAgent.m_iStartQuery;
@@ -661,7 +633,6 @@ void agent_stats_inc ( AgentConn_t & tAgent, AgentStats_e iCounter )
 				// only count errors
 				if ( !tAgent.m_bPing )
 					pCurStat[eTotalMsecs]+=tAgent.m_iEndQuery-tAgent.m_iStartQuery;
-
 			}
 		}
 		g_tStatsMutex.Unlock ();
@@ -693,14 +664,90 @@ static bool IsAgentDelimiter ( char c )
 }
 
 
-enum AgentParse_e { apInHost, apInPort, apStartIndexList, apIndexList, apOptions, apDone };
-
-bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgent, const char * szIndexName, AgentOptions_t tDesc )
+bool ValidateAndAddDashboard ( AgentDesc_c * pNewAgent, const CSphVariant * pAgentName, const char * szIndexName )
 {
-	AgentDesc_c * pCurrent = tAgent.NewAgent();
+	assert ( pNewAgent );
+
+	// lookup address (if needed)
+	if ( pNewAgent->m_iFamily==AF_INET )
+	{
+		if ( pNewAgent->m_sHost.IsEmpty () )
+		{
+			sphWarning ( "index '%s': agent '%s': invalid host name 'empty' - SKIPPING AGENT",
+				szIndexName, pAgentName->cstr () );
+			return false;
+		}
+
+		pNewAgent->m_uAddr = sphGetAddress ( pNewAgent->m_sHost.cstr () );
+		if ( pNewAgent->m_uAddr==0 )
+		{
+			sphWarning ( "index '%s': agent '%s': failed to lookup host name '%s' (error=%s) - SKIPPING AGENT",
+				szIndexName, pAgentName->cstr (), pNewAgent->m_sHost.cstr (), sphSockError () );
+			return false;
+		}
+	}
+
+	// hash for dashboard
+	CSphString sHashKey = pNewAgent->GetMyUrl ();
+	// allocate stats slot
+	// let us cheat and also allocate the dashboard slot under the same lock
+	g_tStatsMutex.Lock ();
+
+	pNewAgent->m_iStatsIndex = g_tStats.m_dAgentStats.AllocItem ();
+	if ( pNewAgent->m_iStatsIndex<0 )
+		sphWarning ( "index '%s': agent '%s': failed to allocate slot for stats, HA (if any) might be wrong",
+			szIndexName, pAgentName->cstr () );
+
+	if ( g_tStats.m_hDashBoard.Exists ( sHashKey ) )
+	{
+		pNewAgent->m_iDashIndex = g_tStats.m_hDashBoard[sHashKey];
+		g_tStats.m_dDashboard.m_dItemStats[pNewAgent->m_iDashIndex].m_iRefCount++;
+	} else
+	{
+		pNewAgent->m_iDashIndex = g_tStats.m_dDashboard.AllocItem ();
+		if ( pNewAgent->m_iDashIndex<0 )
+		{
+			sphWarning ( "index '%s': agent '%s': failed to allocate slot for stat-dashboard, HA (if any) might be wrong",
+				szIndexName, pAgentName->cstr () );
+		} else
+		{
+			g_tStats.m_dDashboard.m_dItemStats[pNewAgent->m_iDashIndex].Init ( pNewAgent );
+			g_tStats.m_hDashBoard.Add ( pNewAgent->m_iDashIndex, sHashKey );
+		}
+	}
+
+	g_tStatsMutex.Unlock ();
+	return true;
+}
+
+// convert all 'host mirrors' (i.e. agents without indices) into 'index mirrors'
+// it allows to write agents as 'host1|host2|host3:index' instead of 'host1:index|host2:index|host3:index'.
+void FixupOrphanedAgents ( MetaAgentDesc_t & tMultiAgent )
+{
+	if ( !tMultiAgent.IsHA () )
+		return;
+
+	CSphString sIndexes;
+	for ( int i = tMultiAgent.GetLength ()-1; i>=0; --i )
+	{
+		AgentDesc_c * pMyAgent = tMultiAgent.GetAgent ( i );
+		if ( pMyAgent->m_sIndexes.IsEmpty () )
+		{
+			pMyAgent->m_sIndexes = sIndexes;
+			if ( sIndexes.IsEmpty () )
+				sphWarning ( "Agent %s in list specified without index(es) it serves!", pMyAgent->GetMyUrl().cstr() );
+		} else
+			sIndexes = pMyAgent->m_sIndexes;
+	}
+}
+
+bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgentStr, const char * szIndexName, AgentOptions_t tDesc )
+{
+	AgentDesc_c * pNewAgent = tAgent.NewAgent();
+	enum AgentParse_e { apInHost, apInPort, apStartIndexList, apIndexList, apOptions, apDone };
 
 	// extract host name or path
-	const char * p = pAgent->cstr();
+	const char * p = pAgentStr->cstr();
 	while ( *p && isspace ( *p ) )
 		p++;
 	AgentParse_e eState = apDone;
@@ -740,32 +787,32 @@ bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgent, cons
 				if ( *p!=':' )
 				{
 					sphWarning ( "index '%s': agent '%s': colon expected near '%s' - SKIPPING AGENT",
-						szIndexName, pAgent->cstr(), p );
+						szIndexName, pAgentStr->cstr(), p );
 					return false;
 				}
-				CSphString sSub = pAgent->strval().SubString ( pAnchor-pAgent->cstr(), p-pAnchor );
+				CSphString sSub = pAgentStr->strval().SubString ( pAnchor-pAgentStr->cstr(), p-pAnchor );
 				if ( sSub.cstr()[0]=='/' )
 				{
 #if USE_WINDOWS
 					sphWarning ( "index '%s': agent '%s': UNIX sockets are not supported on Windows - SKIPPING AGENT",
-						szIndexName, pAgent->cstr() );
+						szIndexName, pAgentStr->cstr() );
 					return false;
 #else
 					if ( strlen ( sSub.cstr() ) + 1 > sizeof(((struct sockaddr_un *)0)->sun_path) )
 					{
 						sphWarning ( "index '%s': agent '%s': UNIX socket path is too long - SKIPPING AGENT",
-							szIndexName, pAgent->cstr() );
+							szIndexName, pAgentStr->cstr() );
 						return false;
 					}
 
-					pCurrent->m_iFamily = AF_UNIX;
-					pCurrent->m_sPath = sSub;
+					pNewAgent->m_iFamily = AF_UNIX;
+					pNewAgent->m_sPath = sSub;
 					p--;
 #endif
 				} else
 				{
-					pCurrent->m_iFamily = AF_INET;
-					pCurrent->m_sHost = sSub;
+					pNewAgent->m_iFamily = AF_INET;
+					pNewAgent->m_sHost = sSub;
 				}
 				eState = apInPort;
 				pAnchor = p+1;
@@ -777,21 +824,21 @@ bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgent, cons
 					break;
 
 #if !USE_WINDOWS
-				if ( pCurrent->m_iFamily!=AF_UNIX )
+				if ( pNewAgent->m_iFamily!=AF_UNIX )
 				{
 #endif
 					if ( p==pAnchor )
 					{
 						sphWarning ( "index '%s': agent '%s': port number expected near '%s' - SKIPPING AGENT",
-							szIndexName, pAgent->cstr(), p );
+							szIndexName, pAgentStr->cstr(), p );
 						return false;
 					}
-					pCurrent->m_iPort = atoi ( pAnchor );
+					pNewAgent->m_iPort = atoi ( pAnchor );
 
-					if ( !IsPortInRange ( pCurrent->m_iPort ) )
+					if ( !IsPortInRange ( pNewAgent->m_iPort ) )
 					{
 						sphWarning ( "index '%s': agent '%s': invalid port number near '%s' - SKIPPING AGENT",
-							szIndexName, pAgent->cstr(), p );
+							szIndexName, pAgentStr->cstr(), p );
 						return false;
 					}
 #if !USE_WINDOWS
@@ -802,16 +849,16 @@ bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgent, cons
 				{
 					eState = ( *p=='|' ? apInHost : apOptions );
 					pAnchor = p+1;
-					if ( !ValidateAgentDesc ( tAgent, pAgent, szIndexName ) )
+					if ( !ValidateAndAddDashboard ( pNewAgent, pAgentStr, szIndexName ) )
 						return false;
-					pCurrent = tAgent.NewAgent();
+					pNewAgent = tAgent.NewAgent();
 					break;
 				}
 
 				if ( *p!=':' )
 				{
 					sphWarning ( "index '%s': agent '%s': colon expected near '%s' - SKIPPING AGENT",
-						szIndexName, pAgent->cstr(), p );
+						szIndexName, pAgentStr->cstr(), p );
 					return false;
 				}
 
@@ -831,24 +878,24 @@ bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgent, cons
 				if ( sphIsAlpha(*p) || isspace(*p) || *p==',' )
 					break;
 
-				CSphString sIndexes = pAgent->strval().SubString ( pAnchor-pAgent->cstr(), p-pAnchor );
+				CSphString sIndexes = pAgentStr->strval().SubString ( pAnchor-pAgentStr->cstr(), p-pAnchor );
 
 				if ( *p && !IsAgentDelimiter ( *p ) )
 				{
 					sphWarning ( "index '%s': agent '%s': index list expected near '%s' - SKIPPING AGENT",
-						szIndexName, pAgent->cstr(), p );
+						szIndexName, pAgentStr->cstr(), p );
 					return false;
 				}
-				pCurrent->m_sIndexes = sIndexes;
+				pNewAgent->m_sIndexes = sIndexes;
 
 				if ( IsAgentDelimiter ( *p ) )
 				{
 					if ( *p=='|' )
 					{
 						eState = apInHost;
-						if ( !ValidateAgentDesc ( tAgent, pAgent, szIndexName ) )
+						if ( !ValidateAndAddDashboard ( pNewAgent, pAgentStr, szIndexName ) )
 							return false;
-						pCurrent = tAgent.NewAgent();
+						pNewAgent = tAgent.NewAgent();
 					} else
 						eState = apOptions;
 
@@ -895,7 +942,7 @@ bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgent, cons
 							{
 								CSphString sInvalid;
 								sInvalid.SetBinary ( sOptName, p-sOptName );
-								sphWarning ( "index '%s': agent '%s': unknown agent option '%s' ", szIndexName, pAgent->cstr(), sInvalid.cstr() );
+								sphWarning ( "index '%s': agent '%s': unknown agent option '%s' ", szIndexName, pAgentStr->cstr(), sInvalid.cstr() );
 							}
 						}
 
@@ -932,88 +979,15 @@ bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgent, cons
 		p++;
 	} // while (eState!=apDone)
 
-	bool bRes = ValidateAgentDesc ( tAgent, pAgent, szIndexName );
-	tAgent.QueuePings();
-	if ( tDesc.m_bPersistent )
-		tAgent.SetPersistent();
-	if ( tDesc.m_bBlackhole )
-		tAgent.SetBlackhole();
-	tAgent.SetStrategy ( tDesc.m_eStrategy );
+	bool bRes = ValidateAndAddDashboard ( pNewAgent, pAgentStr, szIndexName );
 
+	FixupOrphanedAgents ( tAgent );
+	tAgent.SetOptions ( tDesc );
+	tAgent.QueuePings();
 	return bRes;
 }
 
 #undef sphStrMatchStatic
-
-bool ValidateAgentDesc ( MetaAgentDesc_t & tAgent, const CSphVariant * pLine, const char * szIndexName )
-{
-	AgentDesc_c * pAgent = tAgent.LastAgent();
-	assert ( pAgent );
-
-	// lookup address (if needed)
-	if ( pAgent->m_iFamily==AF_INET )
-	{
-		if ( pAgent->m_sHost.IsEmpty() )
-		{
-			sphWarning ( "index '%s': agent '%s': invalid host name 'empty' - SKIPPING AGENT",
-						szIndexName, pLine->cstr() );
-			return false;
-		}
-
-		pAgent->m_uAddr = sphGetAddress ( pAgent->m_sHost.cstr() );
-		if ( pAgent->m_uAddr==0 )
-		{
-			sphWarning ( "index '%s': agent '%s': failed to lookup host name '%s' (error=%s) - SKIPPING AGENT",
-				szIndexName, pLine->cstr(), pAgent->m_sHost.cstr(), sphSockError() );
-			return false;
-		}
-	}
-
-	// hash for dashboard
-	CSphString sHashKey = pAgent->GetMyUrl();
-	// allocate stats slot
-	// let us cheat and also allocate the dashboard slot under the same lock
-	g_tStatsMutex.Lock();
-
-	pAgent->m_iStatsIndex = g_tStats.m_dAgentStats.AllocItem();
-	if ( pAgent->m_iStatsIndex<0 )
-		sphWarning ( "index '%s': agent '%s': failed to allocate slot for stats%s",
-		szIndexName, pLine->cstr(), ( tAgent.IsHA() ? ", HA might be wrong" : "" ) );
-
-	if ( g_tStats.m_hDashBoard.Exists ( sHashKey ) )
-	{
-		pAgent->m_iDashIndex = g_tStats.m_hDashBoard[sHashKey];
-		g_tStats.m_dDashboard.m_dItemStats[pAgent->m_iDashIndex].m_iRefCount++;
-	} else
-	{
-		pAgent->m_iDashIndex = g_tStats.m_dDashboard.AllocItem();
-		if ( pAgent->m_iDashIndex<0 )
-		{
-			sphWarning ( "index '%s': agent '%s': failed to allocate slot for stat-dashboard%s",
-				szIndexName, pLine->cstr(), ( tAgent.IsHA() ? ", HA might be wront" : "" ) );
-		} else
-		{
-			g_tStats.m_dDashboard.m_dItemStats[pAgent->m_iDashIndex].Init ( pAgent );
-			g_tStats.m_hDashBoard.Add ( pAgent->m_iDashIndex, sHashKey );
-		}
-	}
-
-	g_tStatsMutex.Unlock();
-
-	// for now just convert all 'host mirrors' (i.e. agents without indices) into 'index mirrors'
-	if ( tAgent.GetLength()>1 && !pAgent->m_sIndexes.IsEmpty() )
-	{
-		for ( int i=tAgent.GetLength()-2; i>=0; --i )
-		{
-			AgentDesc_c * pMyAgent = tAgent.GetAgent(i);
-			if ( pMyAgent->m_sIndexes.IsEmpty() )
-				pMyAgent->m_sIndexes = pAgent->m_sIndexes;
-			else
-				break;
-		}
-	}
-	return true;
-}
 
 void FreeDashboard ( const AgentDesc_c & dAgent, DashBoard_t & dDashBoard, SmallStringHash_T<int> & hDashBoard )
 {

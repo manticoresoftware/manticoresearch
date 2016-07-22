@@ -151,6 +151,7 @@ public:
 	CSphString GetMyUrl() const;
 };
 
+struct MetaAgentDesc_t;
 /// remote agent connection (local per-query state)
 struct AgentConn_t : public AgentDesc_c
 {
@@ -176,6 +177,7 @@ struct AgentConn_t : public AgentDesc_c
 	int				m_iStoreTag;
 	int				m_iWeight;
 	bool			m_bPing;
+	MetaAgentDesc_t*	m_pMirrorChooser; ///< used to select another mirror if this one is broken
 
 public:
 	AgentConn_t ();
@@ -186,7 +188,7 @@ public:
 	AgentConn_t & operator = ( const AgentDesc_c & rhs );
 
 	// works like =, but also adopt the persistent connection, if any.
-	void TakeTraits ( AgentDesc_c & rhs );
+	void SpecifyAndSelectMirror ( MetaAgentDesc_t * pMirrorChooser = nullptr );
 };
 
 void agent_stats_inc ( AgentConn_t & tAgent, AgentStats_e iCounter );
@@ -207,12 +209,13 @@ struct AgentStats_t
 			m_iStats[i] += rhs.m_iStats[i];
 
 		if ( m_iStats[eConnTries] )
-			m_iStats[eAverageMsecs] = ( m_iStats[eAverageMsecs] + rhs.m_iStats[eAverageMsecs] ) / 2;
+			m_iStats[eAverageMsecs] =
+				( m_iStats[eAverageMsecs] * m_iStats[eConnTries] + rhs.m_iStats[eAverageMsecs] * rhs.m_iStats[eConnTries] )
+				/ (m_iStats[eConnTries] + rhs.m_iStats[eConnTries] );
 		else
 			m_iStats[eAverageMsecs] = rhs.m_iStats[eAverageMsecs];
 		m_iStats[eMaxMsecs] = Max ( m_iStats[eMaxMsecs], rhs.m_iStats[eMaxMsecs] );
 		m_iStats[eConnTries] += rhs.m_iStats[eConnTries];
-
 	}
 };
 
@@ -236,12 +239,12 @@ private:
 	AgentDash_t	m_dStats[STATS_DASH_TIME];
 
 public:
-	void Init ( AgentDesc_c * pAgent );
+	void Init ( const AgentDesc_c * pAgent );
 	bool IsOlder ( int64_t iTime ) const;
 	static DWORD GetCurSeconds();
 	static bool IsHalfPeriodChanged ( DWORD * pLast );
 	AgentDash_t*	GetCurrentStat();
-	int GetDashStat ( AgentDash_t* pRes, int iPeriods=1 ) const;
+	AgentDash_t && GetCollectedStat ( int iPeriods=1 ) const;
 };
 
 template <class DATA, int SIZE> class StaticStorage_T : public ISphNoncopyable
@@ -281,6 +284,13 @@ public:
 
 typedef StaticStorage_T<HostDashboard_t,STATS_MAX_DASH> DashBoard_t;
 
+struct AgentOptions_t
+{
+	bool m_bBlackhole;
+	bool m_bPersistent;
+	HAStrategies_e m_eStrategy;
+};
+
 /// descriptor for set of agents (mirrors) (stored in a global hash)
 /// remote agent descriptor (stored in a global hash)
 struct MetaAgentDesc_t
@@ -307,43 +317,19 @@ public:
 		*this = rhs;
 	}
 
-	inline void SetPersistent ()
-	{
-		ARRAY_FOREACH ( i, m_dHosts )
-			m_dHosts[i].m_bPersistent = true;
-	}
+	MetaAgentDesc_t & operator= ( const MetaAgentDesc_t & rhs );
 
-	void SetBlackhole ()
-	{
-		ARRAY_FOREACH ( i, m_dHosts )
-			m_dHosts[i].m_bBlackhole = true;
-	}
+	AgentDesc_c * NewAgent ();
+	AgentDesc_c * GetAgent ( int iAgent=0 );
+	const AgentDesc_c & ChooseAgent ();
 
-	void SetStrategy ( HAStrategies_e eStrategy )
-	{
-		m_eStrategy = eStrategy;
-	}
-
+	void SetOptions ( const AgentOptions_t& tOpt );
 	void SetHAData ( int * pRRCounter, WORD * pWeights, InterWorkerStorage * pLock );
-
-	AgentDesc_c * GetAgent ( int iAgent );
-	AgentDesc_c * NewAgent();
-	AgentDesc_c * LastAgent();
-	AgentDesc_c * RRAgent ();
-	AgentDesc_c * RandAgent ();
-	void RecalculateWeights ( const CSphVector<int64_t> &dTimers );
-	void WeightedRandAgent ( int * pBestAgent, CSphVector<int> & dCandidates );
-
-	const HostDashboard_t& GetCommonStat ( int iAgent ) const;
-	int64_t GetBestDelay ( int * pBestAgent, CSphVector<int> & dCandidates ) const;
-
-	AgentDesc_c * StDiscardDead ();
-	AgentDesc_c * StLowErrors();
-	AgentDesc_c * GetRRAgent ();
+	void QueuePings ();
 
 	inline bool IsHA() const
 	{
-		return m_dHosts.GetLength() > 1;
+		return GetLength() > 1;
 	}
 
 	inline int GetLength() const
@@ -351,13 +337,25 @@ public:
 		return m_dHosts.GetLength();
 	}
 
-	void QueuePings();
+	const CSphVector<AgentDesc_c>& GetAgents() const
+	{
+		return m_dHosts;
+	}
 
-	const CSphVector<AgentDesc_c>& GetAgents() const;
+	const WORD* GetWeights () const
+	{
+		return m_pWeights;
+	}
 
-	const WORD* GetWeights() const;
+private:
 
-	MetaAgentDesc_t & operator= ( const MetaAgentDesc_t & rhs );
+	AgentDesc_c * RRAgent ();
+	AgentDesc_c * RandAgent ();
+	AgentDesc_c * StDiscardDead ();
+	AgentDesc_c * StLowErrors ();
+
+	void ChooseWeightedRandAgent ( int * pBestAgent, CSphVector<int> & dCandidates );
+	const HostDashboard_t& GetDashForAgent ( int iAgent ) const;
 };
 
 struct SearchdStats_t
@@ -429,13 +427,6 @@ struct WarnInfo_t
 	{}
 };
 
-struct AgentOptions_t
-{
-	bool m_bBlackhole;
-	bool m_bPersistent;
-	HAStrategies_e m_eStrategy;
-};
-
 bool ParseStrategyHA ( const char * sName, HAStrategies_e & eStrategy );
 
 // try to parse hostname/ip/port or unixsocket on current pConfigLine.
@@ -444,9 +435,6 @@ bool ParseAddressPort ( AgentDesc_c * pAgent, const char ** ppLine, const WarnIn
 
 bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgent, const char * szIndexName, AgentOptions_t tDesc );
 
-
-// add the host identified by url under the watching of stats
-bool ValidateAgentDesc ( MetaAgentDesc_t & tAgent, const CSphVariant * pLine, const char * szIndexName );
 void FreeAgentStats ( const AgentDesc_c& dAgent );
 void FreeDashboard ( const AgentDesc_c&, DashBoard_t&, SmallStringHash_T<int>& );
 void FreeHostStats ( MetaAgentDesc_t & tHosts );

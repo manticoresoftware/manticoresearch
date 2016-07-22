@@ -2672,42 +2672,42 @@ void DistributedIndex_t::ShareHACounters()
 {
 	int iSharedValues = 0;
 	int iRRCounters = 0;
-	ARRAY_FOREACH ( i, m_dAgents )
-		if ( m_dAgents[i].IsHA() )
+	for ( const auto& dAgent : m_dAgents )
+		if ( dAgent.IsHA() )
 		{
-			iSharedValues += m_dAgents[i].GetLength();
+			iSharedValues += dAgent.GetLength();
 			++iRRCounters;
 		}
 
-		// nothing to share.
-		if ( !iSharedValues )
-			return;
+	// nothing to share.
+	if ( !iSharedValues )
+		return;
 
-		// so, we need to share between workers iFloatValues floats and iRRCounters ints.
-		int iBufSize = iRRCounters * sizeof(int) + iSharedValues * sizeof(WORD) * 2; // NOLINT
-		m_pHAStorage = new InterWorkerStorage;
-		m_pHAStorage->Init ( iBufSize );
+	// so, we need to share between workers iFloatValues floats and iRRCounters ints.
+	int iBufSize = iRRCounters * sizeof(int) + iSharedValues * sizeof(WORD) * 2; // NOLINT
+	m_pHAStorage = new InterWorkerStorage;
+	m_pHAStorage->Init ( iBufSize );
 
-		// do the sharing.
-		BYTE* pBuffer = m_pHAStorage->GetSharedData();
-		ARRAY_FOREACH ( i, m_dAgents )
-			if ( m_dAgents[i].IsHA() )
-			{
-				MetaAgentDesc_t & dAgent = m_dAgents[i];
-				WORD* pWeights = (WORD*) ( pBuffer + sizeof(int) ); // NOLINT
-				WORD dFrac = WORD ( 0xFFFF / dAgent.GetLength() );
-				ARRAY_FOREACH ( j, dAgent ) ///< works since dAgent has method GetLength()
-					pWeights[j] = dFrac;
-				dAgent.SetHAData ( (int*)pBuffer, pWeights, m_pHAStorage );
-				pBuffer += sizeof(int) + sizeof(float)*dAgent.GetLength(); // NOLINT
-			}
+	// provide the information to all agents
+	BYTE* pBuffer = m_pHAStorage->GetSharedData();
+	for ( auto& dAgent : m_dAgents )
+		if ( dAgent.IsHA() )
+		{
+			WORD* pWeights = (WORD*) ( pBuffer + sizeof(int) ); // NOLINT
+			*(int*) pBuffer = 0; // initialize round-robin counter
+			WORD dFrac = WORD ( 0xFFFF / dAgent.GetLength() );
+			ARRAY_FOREACH ( j, dAgent ) ///< works since dAgent has method GetLength()
+				pWeights[j] = dFrac;
+			dAgent.SetHAData ( (int*)pBuffer, pWeights, m_pHAStorage );
+			pBuffer += sizeof(int) + sizeof(float)*dAgent.GetLength(); // NOLINT
+		}
 }
 
 void DistributedIndex_t::RemoveHACounters()
 {
-	ARRAY_FOREACH ( i, m_dAgents )
-		if ( m_dAgents[i].IsHA() )
-			m_dAgents[i].SetHAData ( NULL, NULL, NULL );
+	for ( auto& dAgent : m_dAgents )
+		if ( dAgent.IsHA () )
+			dAgent.SetHAData ( NULL, NULL, NULL );
 	SafeDelete ( m_pHAStorage );
 }
 
@@ -7808,7 +7808,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				dAgents.Reserve ( dAgents.GetLength() + pDist->m_dAgents.GetLength() );
 				ARRAY_FOREACH ( j, pDist->m_dAgents )
 				{
-					dAgents.Add().TakeTraits ( *pDist->m_dAgents[j].GetRRAgent() );
+					dAgents.Add().SpecifyAndSelectMirror ( &pDist->m_dAgents[j] );
 					dAgents.Last().m_iStoreTag = iTagsCount;
 					dAgents.Last().m_iWeight = iWeight;
 					iTagsCount += iTagStep;
@@ -8290,10 +8290,9 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	if ( dAgents.GetLength() )
 	{
 		int64_t tmWait = 0;
-		ARRAY_FOREACH ( i, dAgents )
-		{
-			tmWait += dAgents[i].m_iWaited;
-		}
+		for ( const auto& dAgent : dAgents )
+			tmWait += dAgent.m_iWaited;
+
 		// do *not* count queries to dist indexes w/o actual remote agents
 		g_tStats.m_iDistQueries++;
 		g_tStats.m_iDistWallTime += tmSubset;
@@ -10037,7 +10036,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 		dDistLocal = pDist->m_dLocal;
 		dRemoteSnippets.m_dAgents.Resize ( pDist->m_dAgents.GetLength() );
 		ARRAY_FOREACH ( i, pDist->m_dAgents )
-			dRemoteSnippets.m_dAgents[i].TakeTraits ( *pDist->m_dAgents[i].GetRRAgent() );
+			dRemoteSnippets.m_dAgents[i].SpecifyAndSelectMirror ( &pDist->m_dAgents[i] );
 	}
 	g_tDistLock.Unlock();
 
@@ -11137,12 +11136,11 @@ void BuildOneAgentStatus ( VectorLike & dStatus, const CSphString& sAgent, const
 	if ( dStatus.MatchAddVa ( "%s_errorsarow", sPrefix ) )
 		dStatus.Add().SetSprintf ( FMT64, dDash.m_iErrorsARow );
 
-	AgentDash_t dDashStat;
 	int iPeriods = 1;
 
 	while ( iPeriods>0 )
 	{
-		dDash.GetDashStat ( &dDashStat, iPeriods );
+		AgentDash_t dDashStat { dDash.GetCollectedStat ( iPeriods ) };
 		uint64_t uQueries = 0;
 
 		{
@@ -12933,21 +12931,21 @@ void HandleMysqlDescribe ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 	if ( pDistr )
 	{
 		tOut.HeadTuplet ( "Agent", "Type" );
-		ARRAY_FOREACH ( i, pDistr->m_dLocal )
-			dCondOut.MatchDataTuplet ( pDistr->m_dLocal[i].cstr(), "local" );
+		for ( const auto& sIdx : pDistr->m_dLocal )
+			dCondOut.MatchDataTuplet ( sIdx.cstr(), "local" );
 
 		ARRAY_FOREACH ( i, pDistr->m_dAgents )
 		{
 			MetaAgentDesc_t & tAgents = pDistr->m_dAgents[i];
-			if ( tAgents.GetAgents().GetLength() > 1 )
+			if ( tAgents.IsHA() )
 			{
 				ARRAY_FOREACH ( j, tAgents.GetAgents() )
 				{
 					CSphString sKey;
 					sKey.SetSprintf ( "remote_%d_mirror_%d", i+1, j+1 );
-					const AgentDesc_c & dDesc = tAgents.GetAgents()[j];
+					const AgentDesc_c * pDesc = tAgents.GetAgent(j);
 					CSphString sValue;
-					sValue.SetSprintf ( "%s:%s", dDesc.GetMyUrl().cstr(), dDesc.m_sIndexes.cstr() );
+					sValue.SetSprintf ( "%s:%s", pDesc->GetMyUrl().cstr(), pDesc->m_sIndexes.cstr() );
 					dCondOut.MatchDataTuplet ( sValue.cstr(), sKey.cstr() );
 				}
 			} else
@@ -12955,7 +12953,7 @@ void HandleMysqlDescribe ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 				CSphString sKey;
 				sKey.SetSprintf ( "remote_%d", i+1 );
 				CSphString sValue;
-				sValue.SetSprintf ( "%s:%s", tAgents.GetAgents()[0].GetMyUrl().cstr(), tAgents.GetAgents()[0].m_sIndexes.cstr() );
+				sValue.SetSprintf ( "%s:%s", tAgents.GetAgent()->GetMyUrl().cstr(), tAgents.GetAgent()->m_sIndexes.cstr() );
 				dCondOut.MatchDataTuplet ( sValue.cstr(), sKey.cstr() );
 			}
 		}
@@ -17306,10 +17304,7 @@ static void ConfigureDistributedIndex ( DistributedIndex_t * pIdx, const char * 
 			tIdx.m_dKillBreak.BitSet ( dKillBreak[i] );
 	}
 
-	AgentOptions_t tAgentOptions;
-	tAgentOptions.m_bBlackhole = false;
-	tAgentOptions.m_bPersistent = false;
-	tAgentOptions.m_eStrategy = tIdx.m_eHaStrategy;
+	AgentOptions_t tAgentOptions { false, false, tIdx.m_eHaStrategy };
 	// add remote agents
 	for ( CSphVariant * pAgent = hIndex("agent"); pAgent; pAgent = pAgent->m_pNext )
 	{

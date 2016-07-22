@@ -2588,10 +2588,10 @@ void RebalanceWeights ( const CSphFixedVector<int64_t> & dTimers, WORD * pWeight
 	assert ( dTimers.GetLength () );
 	int64_t iSum = 0;
 	int iCounters = 0;
-	ARRAY_FOREACH ( i, dTimers )
+	for ( auto iTime : dTimers )
 	{
-		iSum += dTimers[i];
-		iCounters += ( dTimers[i]>0 );
+		iSum += iTime;
+		iCounters += ( iTime>0 );
 	}
 
 	// no statistics, all timers bad, keep previous weights
@@ -2619,7 +2619,7 @@ void RebalanceWeights ( const CSphFixedVector<int64_t> & dTimers, WORD * pWeight
 		else if ( iCounters==1 ) // case when only one mirror has valid counter
 			fWeight = 1.0f - fEmptiesPercent;
 
-		int iWeight = int( fWeight * 65535.0f );
+		int iWeight = int ( fWeight * 65535.0f );
 		assert ( iWeight>=0 && iWeight<=65535 );
 		pWeights[i] = (WORD)iWeight;
 		iCheck += pWeights[i];

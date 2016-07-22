@@ -462,18 +462,7 @@ if (WITH_RE2)
 		# RE2 sources cloned. Now patch them, if necessary
 		if (NOT EXISTS "${RE2_BASEDIR}/is_patched.txt")
 			set (PATCH_FILE "${CMAKE_SOURCE_DIR}/libre2/libre2.patch")
-			if (WIN32) # prepare patch - change <LF> to <CR><LF>
-				if (NOT EXISTS ${RE2_BASEDIR}/libre2.patch)
-					unset (_CONTENT)
-					message(STATUS "Fix line endings in patch file")
-					FILE (READ "${PATCH_FILE}" _CONTENT)
-					# magic - \n to \n, not to \n\r!
-					STRING (REGEX REPLACE "\n" "\n" _CONTENT "${_CONTENT}")
-					FILE (WRITE ${RE2_BASEDIR}/libre2.patch "${_CONTENT}")
-				endif()
-				unset (PATCH_FILE)
-				set (PATCH_FILE ${RE2_BASEDIR}/libre2.patch)
-			endif(WIN32)
+
 			mark_as_advanced (PATCH_FILE)
 			message (STATUS "Patching RE2")
 			find_package (Git QUIET)
@@ -488,7 +477,7 @@ if (WITH_RE2)
 				if ( PATCH_PROG )
 					mark_as_advanced(PATCH_PROG)
 					execute_process (
-							COMMAND "${PATCH_PROG}" -p1 -i "${PATCH_FILE}"
+							COMMAND "${PATCH_PROG}" -p1 --binary -i "${PATCH_FILE}"
 							WORKING_DIRECTORY "${RE2_BASEDIR}"
 					)
 					file (WRITE "${RE2_BASEDIR}/is_patched.txt" "ok")

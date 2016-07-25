@@ -97,7 +97,7 @@ void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn )
 		while ( sphIsAlpha(*p) )
 			p++;
 		if ( sNext!=p )
-			dOut.Add().SetBinary ( sNext, p-sNext );
+			dOut.Add().SetBinary ( sNext, int (p-sNext) );
 	}
 }
 
@@ -116,7 +116,7 @@ void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn, const char * sB
 			p++;
 
 		// add the token, skip the char
-		dOut.Add().SetBinary ( sNext, p-sNext );
+		dOut.Add().SetBinary ( sNext, int (p-sNext) );
 		if ( *p=='\0' )
 			break;
 
@@ -181,9 +181,7 @@ static bool sphWildcardMatchRec ( const T1 * sString, const T2 * sPattern )
 
 			// could not decide yet
 			// so just recurse both options
-			if ( sphWildcardMatchRec ( s, p ) )
-				return true;
-			if ( sphWildcardMatchRec ( s+1, p ) )
+			if ( sphWildcardMatchRec ( s, p ) || sphWildcardMatchRec ( s+1, p ) )
 				return true;
 			return false;
 
@@ -262,7 +260,7 @@ static bool sphWildcardMatchDP ( const T1 * sString, const T2 * sPattern )
 		}
 
 		s = sString;
-		int iPattern = p - sPattern + 1 - iEsc;
+		int iPattern = int (p - sPattern) + 1 - iEsc;
 		int iPrev = ( iPattern + 1 ) % iBufCount;
 		int iCur = iPattern % iBufCount;
 
@@ -278,7 +276,7 @@ static bool sphWildcardMatchDP ( const T1 * sString, const T2 * sPattern )
 
 		while ( *s )
 		{
-			int j = s - sString + 1;
+			int j = int (s - sString) + 1;
 			if ( !bEsc && *p=='*' )
 			{
 				dTmp[iCur][j] = dTmp[iPrev][j-1] || dTmp[iCur][j-1] || dTmp[iPrev][j];
@@ -360,7 +358,7 @@ int64_t CSphConfigSection::GetSize64 ( const char * sKey, int64_t iDefault ) con
 	strncpy ( sMemLimit, pEntry->cstr(), sizeof(sMemLimit) );
 	sMemLimit [ sizeof(sMemLimit)-1 ] = '\0';
 
-	int iLen = strlen ( sMemLimit );
+	size_t iLen = strlen ( sMemLimit );
 	if ( !iLen )
 		return iDefault;
 
@@ -911,7 +909,7 @@ bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dRe
 		dResult.Resize ( iTotalRead + BUFFER_SIZE );
 		for ( ;; )
 		{
-			iBytesRead = read ( iRead, (void*)&(dResult [iTotalRead]), BUFFER_SIZE );
+			iBytesRead = (int) read ( iRead, (void*)&(dResult [iTotalRead]), BUFFER_SIZE );
 			if ( iBytesRead==-1 && errno==EINTR ) // we can get SIGCHLD just before eof
 				continue;
 			break;
@@ -1056,7 +1054,7 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 				break; // FIXME! check for read error
 
 			m_iLine++;
-			int iLen = strlen(sBuf);
+			size_t iLen = strlen(sBuf);
 			if ( iLen<=0 )
 				LOC_ERROR ( "internal error; fgets() returned empty string" );
 
@@ -1253,7 +1251,7 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 			sCtx = sBuf;
 
 		char sStepback [ L_STEPBACK+1 ];
-		memcpy ( sStepback, sCtx, iCtx );
+		memcpy ( sStepback, sCtx, size_t ( iCtx ) );
 		sStepback[iCtx] = '\0';
 
 		fprintf ( stdout, "ERROR: %s in %s line %d col %d.\n", m_sError, m_sFileName.cstr(), m_iLine, iCol );
@@ -1349,7 +1347,7 @@ void sphConfDictionary ( const CSphConfigSection & hIndex, CSphDictSettings & tS
 				if ( !szPathName )
 					continue;
 
-				int iLen = strlen ( szPathName );
+				size_t iLen = strlen ( szPathName );
 				if ( !iLen || szPathName[iLen-1]=='/' )
 					continue;
 
@@ -1909,8 +1907,8 @@ static int sphVSprintf ( char * pOutput, const char * sFmt, va_list ap )
 {
 	enum eStates { SNORMAL, SPERCENT, SHAVEFILL, SINWIDTH, SINPREC };
 	eStates state = SNORMAL;
-	int iPrec = 0;
-	int iWidth = 0;
+	size_t iPrec = 0;
+	size_t iWidth = 0;
 	char cFill = ' ';
 	const char * pBegin = pOutput;
 	bool bHeadingSpace = true;
@@ -1982,7 +1980,7 @@ static int sphVSprintf ( char * pOutput, const char * sFmt, va_list ap )
 				const char * pValue = va_arg ( ap, const char * );
 				if ( !pValue )
 					pValue = "(null)";
-				int iValue = strlen ( pValue );
+				size_t iValue = strlen ( pValue );
 
 				if ( iWidth && bHeadingSpace )
 					while ( iValue < iWidth-- )
@@ -2037,7 +2035,7 @@ static int sphVSprintf ( char * pOutput, const char * sFmt, va_list ap )
 
 	// final zero to EOL
 	*pOutput++ = '\n';
-	return pOutput - pBegin;
+	return int ( pOutput - pBegin );
 }
 
 
@@ -2058,7 +2056,7 @@ void sphSafeInfo ( int iFD, const char * sFmt, ... )
 	va_start ( ap, sFmt );
 	int iLen = sphVSprintf ( g_sSafeInfoBuf, sFmt, ap ); // FIXME! make this vsnprintf
 	va_end ( ap );
-	sphWrite ( iFD, g_sSafeInfoBuf, iLen );
+	sphWrite ( iFD, g_sSafeInfoBuf, size_t (iLen) );
 }
 
 
@@ -2106,9 +2104,9 @@ const char * DoBacktrace ( int iDepth, int iSkip )
 	return g_pBacktrace; ///< sorry, no backtraces on Windows...
 }
 #else
-const char * DoBacktrace ( int iDepth, int iSkip )
+const char * DoBacktrace ( int, int )
 {
-	return NULL; ///< sorry, no backtraces on Windows...
+	return nullptr; ///< sorry, no backtraces...
 }
 #endif
 
@@ -2270,7 +2268,7 @@ void sphBacktrace ( int iFD, bool bSafe )
 			const char * s = g_pArgv[i];
 			while ( *s )
 				s++;
-			int iLen = s-g_pArgv[i];
+			size_t iLen = s-g_pArgv[i];
 			sphWrite ( iFD, g_pArgv[i], iLen );
 			sphWrite ( iFD, " ", 1 );
 			int iWas = iColumn % 80;
@@ -2415,7 +2413,7 @@ void sphConfigureCommon ( const CSphConfig & hConf )
 	g_bProgressiveMerge = ( hCommon.GetInt ( "progressive_merge", 1 )!=0 );
 
 	bool bJsonStrict = false;
-	bool bJsonAutoconvNumbers = false;
+	bool bJsonAutoconvNumbers;
 	bool bJsonKeynamesToLowercase = false;
 
 	if ( hCommon("on_json_attr_error") )

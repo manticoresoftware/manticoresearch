@@ -48,6 +48,7 @@ typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag
 #include <ctype.h>
 #include <stdarg.h>
 #include <limits.h>
+#include <utility>
 
 // for 64-bit types
 #if HAVE_STDINT_H
@@ -407,8 +408,8 @@ public:
 								ISphNoncopyable () {}
 
 private:
-								ISphNoncopyable ( const ISphNoncopyable & ) {}
-	const ISphNoncopyable &		operator = ( const ISphNoncopyable & ) { return *this; }
+	ISphNoncopyable ( const ISphNoncopyable & ) = delete;
+	const ISphNoncopyable &		operator = ( const ISphNoncopyable & ) = delete;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1235,6 +1236,26 @@ public:
 	~CSphFixedVector ()
 	{
 		SafeDeleteArray ( m_pData );
+	}
+
+	CSphFixedVector ( CSphFixedVector&& rhs )
+		: m_pData (std::move(rhs.m_pData))
+		, m_iSize (std::move(rhs.m_iSize))
+	{
+		rhs.m_pData = nullptr;
+		rhs.m_iSize = 0;
+	}
+
+	CSphFixedVector& operator= ( CSphFixedVector&& rhs )
+	{
+		if ( &rhs!=this )
+		{
+			m_pData = std::move ( rhs.m_pData );
+			m_iSize = std::move ( rhs.m_iSize );
+			rhs.m_pData = nullptr;
+			rhs.m_iSize = 0;
+		}
+		return *this;
 	}
 
 	T & operator [] ( int iIndex ) const
@@ -2962,28 +2983,60 @@ private:
 };
 
 
+/// rwlock with no need to manually init/done.
+class CSphManagedRwlock : public CSphRwlock
+{
+public:
+	CSphManagedRwlock ( bool bPreferWriter = false )
+	{
+		Init ( bPreferWriter );
+	}
+	~CSphManagedRwlock ()
+	{
+		Done ();
+	}
+};
+
+
 /// scoped RW lock
 class CSphScopedRWLock : ISphNoncopyable
 {
 public:
 	/// lock on creation
 	CSphScopedRWLock ( CSphRwlock & tLock, bool bRead )
-		: m_tLock ( tLock )
+		: m_pLock { &tLock }
 	{
 		if ( bRead )
-			m_tLock.ReadLock();
+			m_pLock->ReadLock();
 		else
-			m_tLock.WriteLock();
+			m_pLock->WriteLock();
+	}
+
+	CSphScopedRWLock ( CSphScopedRWLock&& rhs )
+		: m_pLock { std::move(rhs.m_pLock) }
+	{
+		rhs.m_pLock = nullptr;
+	}
+
+	CSphScopedRWLock& operator= ( CSphScopedRWLock&& rhs )
+	{
+		if ( &rhs != this )
+		{
+			m_pLock = std::move(rhs.m_pLock);
+			rhs.m_pLock = nullptr;
+		}
+		return *this;
 	}
 
 	/// unlock on going out of scope
 	~CSphScopedRWLock ()
 	{
-		m_tLock.Unlock ();
+		if ( m_pLock )
+			m_pLock->Unlock ();
 	}
 
 protected:
-	CSphRwlock & m_tLock;
+	CSphRwlock * m_pLock;
 };
 
 #if USE_WINDOWS
@@ -3143,58 +3196,122 @@ public:
 #define NO_ATOMIC 1
 #endif
 
-class CSphAtomic : public ISphNoncopyable
+template<typename TLONG>
+class CSphAtomic_T : public ISphNoncopyable
 {
-	volatile mutable long	m_iValue;
+	volatile mutable TLONG	m_iValue;
 #if NO_ATOMIC
 	mutable CSphMutex		m_tLock;
 #endif
 
 public:
-	explicit CSphAtomic ( long iValue=0 );
-	~CSphAtomic ();
+	explicit CSphAtomic_T ( TLONG iValue = 0 )
+		: m_iValue ( iValue )
+	{
+		// FIXME! research whether alignment to the size of pointer (sizeof &m_iValue),
+		// or to the size of data itself (sizeof m_iValue) is really necessary.
+		assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0
+			&& "unaligned atomic!" );
+	}
+
+	~CSphAtomic_T ()
+	{}
 
 #ifdef HAVE_SYNC_FETCH
-	long GetValue() const
+	TLONG GetValue () const
 	{
+		assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
 		return __sync_fetch_and_add ( &m_iValue, 0 );
-	}
+}
 
 	// return value here is original value, prior to operation took place
-	inline long Inc()
+	inline TLONG Inc ()
 	{
+		assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
 		return __sync_fetch_and_add ( &m_iValue, 1 );
 	}
-	inline long Dec()
+
+	inline TLONG Dec ()
 	{
+		assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
 		return __sync_fetch_and_sub ( &m_iValue, 1 );
 	}
+
+	inline TLONG Add ( TLONG iValue )
+	{
+		assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+		return __sync_fetch_and_add ( &m_iValue, iValue );
+	}
+
+	inline TLONG Sub ( TLONG iValue )
+	{
+		assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+		return __sync_fetch_and_sub ( &m_iValue, iValue );
+	}
+
+	void SetValue ( TLONG iValue )
+	{
+		assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+		for ( ;; )
+		{
+			TLONG iOld = GetValue ();
+			if ( __sync_bool_compare_and_swap ( &m_iValue, iOld, iValue ) )
+				break;
+		}
+	}
 #elif USE_WINDOWS
-	long GetValue() const;
-	long Inc();
-	long Dec();
+	TLONG GetValue () const;
+	TLONG Inc ();
+	TLONG Dec ();
+	TLONG Add ( TLONG );
+	TLONG Sub ( TLONG );
+	void SetValue ( TLONG iValue );
 #endif
 
 #if NO_ATOMIC
-	long GetValue() const
+	TLONG GetValue () const
 	{
 		CSphScopedLock<CSphMutex> tLock ( m_tLock );
 		return m_iValue;
 	}
-	inline long Inc()
+
+	inline TLONG Inc ()
 	{
 		CSphScopedLock<CSphMutex> tLock ( m_tLock );
 		return m_iValue++;
 	}
-	inline long Dec()
+
+	inline TLONG Dec ()
 	{
 		CSphScopedLock<CSphMutex> tLock ( m_tLock );
 		return m_iValue--;
 	}
+
+	inline TLONG Add ( TLONG iValue )
+	{
+		CSphScopedLock<CSphMutex> tLock ( m_tLock );
+		TLONG iPrev = m_iValue;
+		m_iValue += iValue;
+		return iPrev;
+	}
+
+	inline TLONG Sub ( TLONG iValue )
+	{
+		CSphScopedLock<CSphMutex> tLock ( m_tLock );
+		TLONG iPrev = m_iValue;
+		m_iValue -= iValue;
+		return iPrev;
+	}
+
+	void SetValue ( TLONG iValue )
+	{
+		CSphScopedLock<CSphMutex> tLock ( m_tLock );
+		m_iValue = iValue;
+	}
 #endif
-};
+	};
 
-
+typedef CSphAtomic_T<long> CSphAtomic;
 
 /// MT-aware refcounted base (might be a mutex protected and slow)
 struct ISphRefcountedMT : public ISphNoncopyable

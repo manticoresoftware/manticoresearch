@@ -21,6 +21,8 @@
 #ifndef _searchdha_
 #define _searchdha_
 
+#include <utility>
+
 /////////////////////////////////////////////////////////////////////////////
 // SOME SHARED GLOBAL VARIABLES
 /////////////////////////////////////////////////////////////////////////////
@@ -244,7 +246,7 @@ public:
 	static DWORD GetCurSeconds();
 	static bool IsHalfPeriodChanged ( DWORD * pLast );
 	AgentDash_t*	GetCurrentStat();
-	AgentDash_t && GetCollectedStat ( int iPeriods=1 ) const;
+	AgentDash_t GetCollectedStat ( int iPeriods=1 ) const;
 };
 
 template <class DATA, int SIZE> class StaticStorage_T : public ISphNoncopyable
@@ -297,22 +299,22 @@ struct MetaAgentDesc_t
 {
 private:
 	CSphVector<AgentDesc_c> m_dHosts;
-	WORD *					m_pWeights; /// pointer not owned, pointee IPC-shared
-	int *					m_pRRCounter; /// pointer not owned, pointee IPC-shared
-	InterWorkerStorage *	m_pLock; /// pointer not owned, lock for threads/IPC
-	DWORD					m_uTimestamp;
+	CSphAtomic				m_iRRCounter;	/// round-robin counter
+	mutable CSphManagedRwlock		m_dWeightLock;	/// manages access to m_pWeights
+	CSphFixedVector<WORD>	m_dWeights;		/// the weights of the hosts
+	DWORD					m_uTimestamp;	/// timestamp of last weight's actualization
 	HAStrategies_e			m_eStrategy;
 
 public:
 	MetaAgentDesc_t ()
-		: m_pWeights ( NULL )
-		, m_pRRCounter ( NULL )
-		, m_pLock ( NULL )
-		, m_uTimestamp ( HostDashboard_t::GetCurSeconds() )
-		, m_eStrategy ( HA_DEFAULT )
-	{}
+		: m_dWeights {0}
+		, m_uTimestamp { HostDashboard_t::GetCurSeconds () }
+		, m_eStrategy { HA_DEFAULT }
+	{
+	}
 
 	MetaAgentDesc_t ( const MetaAgentDesc_t & rhs )
+		: m_dWeights(0)
 	{
 		*this = rhs;
 	}
@@ -324,7 +326,7 @@ public:
 	const AgentDesc_c & ChooseAgent ();
 
 	void SetOptions ( const AgentOptions_t& tOpt );
-	void SetHAData ( int * pRRCounter, WORD * pWeights, InterWorkerStorage * pLock );
+	void FinalizeInitialization ();
 	void QueuePings ();
 
 	inline bool IsHA() const
@@ -337,14 +339,22 @@ public:
 		return m_dHosts.GetLength();
 	}
 
+	inline bool IsInitFinished() const
+	{
+		return m_dHosts.GetLength () == m_dWeights.GetLength ();
+	}
+
 	const CSphVector<AgentDesc_c>& GetAgents() const
 	{
 		return m_dHosts;
 	}
 
-	const WORD* GetWeights () const
+	CSphFixedVector<WORD> GetWeights () const
 	{
-		return m_pWeights;
+		CSphFixedVector<WORD> dResult ( m_dWeights.GetLength () );
+		CSphScopedRWLock tLock ( m_dWeightLock, true );
+		memcpy ( dResult.Begin (), m_dWeights.Begin (), m_dWeights.GetSizeBytes () );
+		return dResult;
 	}
 
 private:
@@ -355,6 +365,7 @@ private:
 	AgentDesc_c * StLowErrors ();
 
 	void ChooseWeightedRandAgent ( int * pBestAgent, CSphVector<int> & dCandidates );
+	void CheckRecalculateWeights ( const CSphFixedVector<int64_t> &dTimers );
 	const HostDashboard_t& GetDashForAgent ( int iAgent ) const;
 };
 

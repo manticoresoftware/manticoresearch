@@ -1698,27 +1698,77 @@ DWORD sphCRC32 ( const void * s, int iLen, DWORD uPrevCRC )
 	return ~crc;
 }
 
-
-CSphAtomic::CSphAtomic ( long iValue )
-	: m_iValue ( iValue )
-{}
-
-CSphAtomic::~CSphAtomic ()
-{}
-
-
 #if USE_WINDOWS
-long CSphAtomic::GetValue () const
+template<> long CSphAtomic_T<long>::GetValue () const
 {
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
 	return InterlockedExchangeAdd ( &m_iValue, 0 );
 }
-long CSphAtomic::Inc()
+
+template<> int64_t CSphAtomic_T<int64_t>::GetValue () const
 {
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	return InterlockedExchangeAdd64 ( &m_iValue, 0 );
+}
+
+template<> long CSphAtomic_T<long>::Inc ()
+{
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
 	return InterlockedIncrement ( &m_iValue )-1;
 }
-long CSphAtomic::Dec()
+
+template<> int64_t CSphAtomic_T<int64_t>::Inc ()
 {
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	return InterlockedIncrement64 ( &m_iValue )-1;
+}
+
+template<> long CSphAtomic_T<long>::Dec ()
+{
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
 	return InterlockedDecrement ( &m_iValue )+1;
+}
+
+template<> int64_t CSphAtomic_T<int64_t>::Dec ()
+{
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	return InterlockedDecrement64 ( &m_iValue )+1;
+}
+
+template<> long CSphAtomic_T<long>::Add ( long iValue )
+{
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	return InterlockedExchangeAdd ( &m_iValue, iValue );
+}
+
+template<> int64_t CSphAtomic_T<int64_t>::Add ( int64_t iValue )
+{
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	return InterlockedExchangeAdd64 ( &m_iValue, iValue );
+}
+
+template<> long CSphAtomic_T<long>::Sub ( long iValue )
+{
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	return InterlockedExchangeAdd ( &m_iValue, -iValue );
+}
+
+template<> int64_t CSphAtomic_T<int64_t>::Sub ( int64_t iValue )
+{
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	return InterlockedExchangeAdd64 ( &m_iValue, -iValue );
+}
+
+template<> void CSphAtomic_T<long>::SetValue ( long iValue )
+{
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	InterlockedExchange ( &m_iValue, iValue );
+}
+
+template<> void CSphAtomic_T<int64_t>::SetValue ( int64_t iValue )
+{
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	InterlockedExchange64 ( &m_iValue, iValue );
 }
 #endif
 

@@ -411,32 +411,6 @@ private:
 	static SphThreadKey_t	m_tTLS;	// pointer to on-stack instance of this class
 };
 
-
-
-// IPC storage (whenever we use threads of forks)
-class InterWorkerStorage : public ISphNoncopyable
-{
-	CSphMutex					m_tThdMutex;	///< mutex for thread workers
-	CSphFixedVector<BYTE>		m_dBuffer;		///< inter-workers storage
-
-public:
-
-	explicit InterWorkerStorage ()
-		: m_dBuffer ( 0 )
-	{}
-
-	void Init ( int iBufSize );
-
-	inline BYTE * GetSharedData()
-	{
-		return m_dBuffer.Begin();
-	}
-
-	bool Lock();
-	bool Unlock();
-};
-
-
 enum
 {
 	QUERY_STATS_INTERVAL_1MIN,

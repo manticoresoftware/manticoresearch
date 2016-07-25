@@ -84,7 +84,7 @@ AgentDash_t*	HostDashboard_t::GetCurrentStat()
 	return &dStats;
 }
 
-AgentDash_t && HostDashboard_t::GetCollectedStat ( int iPeriods ) const
+AgentDash_t HostDashboard_t::GetCollectedStat ( int iPeriods ) const
 {
 	AgentDash_t tResult;
 	tResult.Reset ();
@@ -109,7 +109,7 @@ AgentDash_t && HostDashboard_t::GetCollectedStat ( int iPeriods ) const
 		if ( iIdx<0 )
 			iIdx = STATS_DASH_TIME-1;
 	}
-	return std::move ( tResult );
+	return tResult;
 }
 
 static CSphVector<int>	g_dPersistentConnections; // protect by CSphScopedLock<ThreadsOnlyMutex_t> tLock ( g_tPersLock );
@@ -176,11 +176,9 @@ void MetaAgentDesc_t::SetOptions ( const AgentOptions_t& tOpt )
 	}
 }
 
-void MetaAgentDesc_t::SetHAData ( int * pRRCounter, WORD * pWeights, InterWorkerStorage * pLock )
+void MetaAgentDesc_t::FinalizeInitialization ()
 {
-	m_pRRCounter = pRRCounter;
-	m_pWeights = pWeights;
-	m_pLock = pLock;
+
 }
 
 AgentDesc_c * MetaAgentDesc_t::GetAgent ( int iAgent )
@@ -197,19 +195,17 @@ AgentDesc_c * MetaAgentDesc_t::NewAgent()
 
 AgentDesc_c * MetaAgentDesc_t::RRAgent ()
 {
-	assert ( m_pRRCounter );
-	assert ( m_pLock );
-
 	if ( !IsHA() )
 		return GetAgent(0);
 
-	CSphScopedLock<InterWorkerStorage> tLock ( *m_pLock );
+	auto iRRCounter = m_iRRCounter.Inc ();
+	if ( iRRCounter<0 || iRRCounter> ( GetLength ()-1 ) )
+	{
+		m_iRRCounter.SetValue ( 1 );
+		iRRCounter = 0;
+	}
 
-	++*m_pRRCounter;
-	if ( *m_pRRCounter<0 || *m_pRRCounter> ( GetLength ()-1 ) )
-		*m_pRRCounter = 0;
-
-	return GetAgent ( *m_pRRCounter );
+	return GetAgent ( iRRCounter );
 }
 
 AgentDesc_c * MetaAgentDesc_t::RandAgent ()
@@ -219,14 +215,13 @@ AgentDesc_c * MetaAgentDesc_t::RandAgent ()
 
 void MetaAgentDesc_t::ChooseWeightedRandAgent ( int * pBestAgent, CSphVector<int> & dCandidates )
 {
-	assert ( m_pWeights );
+	assert ( IsInitFinished() );
 	assert ( pBestAgent );
-	assert ( m_pLock );
-	CSphScopedLock<InterWorkerStorage> tLock ( *m_pLock );
-	DWORD uBound = m_pWeights[*pBestAgent];
+	CSphScopedRWLock tLock ( m_dWeightLock, true );
+	DWORD uBound = m_dWeights[*pBestAgent];
 	DWORD uLimit = uBound;
 	for ( auto j : dCandidates )
-		uLimit += m_pWeights[j];
+		uLimit += m_dWeights[j];
 	DWORD uChance = sphRand() % uLimit;
 
 	if ( uChance<=uBound )
@@ -234,7 +229,7 @@ void MetaAgentDesc_t::ChooseWeightedRandAgent ( int * pBestAgent, CSphVector<int
 
 	for ( auto j : dCandidates )
 	{
-		uBound += m_pWeights[j];
+		uBound += m_dWeights[j];
 		*pBestAgent = j;
 		if ( uChance<=uBound )
 			break;
@@ -304,17 +299,8 @@ AgentDesc_c * MetaAgentDesc_t::StDiscardDead ()
 	}
 
 	// check if it is a time to recalculate the agent's weights
-	if ( m_pWeights && dTimers.GetLength () && HostDashboard_t::IsHalfPeriodChanged ( &m_uTimestamp ) )
-	{
-		CSphFixedVector<WORD> dWeights ( m_dHosts.GetLength() );
-		memcpy ( dWeights.Begin(), m_pWeights, sizeof ( dWeights[0] ) * dWeights.GetLength() );
-		RebalanceWeights ( dTimers, dWeights.Begin() );
+	CheckRecalculateWeights ( dTimers );
 
-		assert ( m_pLock );
-		CSphScopedLock<InterWorkerStorage> tLock ( *m_pLock );
-		LogAgentWeights ( m_pWeights, dWeights.Begin(), dTimers.Begin(), m_dHosts );
-		memcpy ( m_pWeights, dWeights.Begin(), sizeof ( dWeights[0] ) * dWeights.GetLength() );
-	}
 
 	// nothing to select, sorry. Just random agent...
 	if ( iBestAgent < 0 )
@@ -345,7 +331,22 @@ AgentDesc_c * MetaAgentDesc_t::StDiscardDead ()
 	return &m_dHosts[iBestAgent];
 }
 
-AgentDesc_c * MetaAgentDesc_t::StLowErrors()
+// Check the time and recalculate mirror weights, if necessary.
+void MetaAgentDesc_t::CheckRecalculateWeights ( const CSphFixedVector<int64_t> &dTimers )
+{
+	if ( IsInitFinished() && dTimers.GetLength () && HostDashboard_t::IsHalfPeriodChanged ( &m_uTimestamp ) )
+	{
+		CSphFixedVector<WORD> dWeights ( GetLength () );
+		// since we'll update values anyway, aquire w-lock.
+		CSphScopedRWLock tRLock ( m_dWeightLock, false );
+		memcpy ( dWeights.Begin (), m_dWeights.Begin (), sizeof ( dWeights[0] ) * dWeights.GetLength () );
+		RebalanceWeights ( dTimers, dWeights.Begin () );
+		LogAgentWeights ( m_dWeights.Begin(), dWeights.Begin (), dTimers.Begin (), m_dHosts );
+		memcpy ( m_dWeights.Begin(), dWeights.Begin (), sizeof ( dWeights[0] ) * dWeights.GetLength () );
+	}
+}
+
+AgentDesc_c * MetaAgentDesc_t::StLowErrors ()
 {
 	if ( !IsHA() )
 		return GetAgent(0);
@@ -424,17 +425,7 @@ AgentDesc_c * MetaAgentDesc_t::StLowErrors()
 	}
 
 	// check if it is a time to recalculate the agent's weights
-	if ( m_pWeights && dTimers.GetLength () && HostDashboard_t::IsHalfPeriodChanged ( &m_uTimestamp ) )
-	{
-		CSphFixedVector<WORD> dWeights ( m_dHosts.GetLength() );
-		memcpy ( dWeights.Begin(), m_pWeights, sizeof ( dWeights[0] ) * dWeights.GetLength() );
-		RebalanceWeights ( dTimers, dWeights.Begin() );
-
-		assert ( m_pLock );
-		CSphScopedLock<InterWorkerStorage> tLock ( *m_pLock );
-		LogAgentWeights ( m_pWeights, dWeights.Begin(), dTimers.Begin(), m_dHosts );
-		memcpy ( m_pWeights, dWeights.Begin(), sizeof ( dWeights[0] ) * dWeights.GetLength() );
-	}
+	CheckRecalculateWeights ( dTimers );
 
 	// nothing to select, sorry. Just plain RR...
 	if ( iBestAgent < 0 )
@@ -498,10 +489,20 @@ MetaAgentDesc_t & MetaAgentDesc_t::operator= ( const MetaAgentDesc_t & rhs )
 	if ( this==&rhs )
 		return *this;
 	m_dHosts = rhs.GetAgents();
-	m_pWeights = rhs.m_pWeights;
-	m_pRRCounter = rhs.m_pRRCounter;
-	m_pLock = rhs.m_pLock;
+	m_iRRCounter.SetValue ( rhs.m_iRRCounter.GetValue () );
 	m_eStrategy = rhs.m_eStrategy;
+	m_eStrategy = rhs.m_eStrategy;
+	if ( rhs.IsInitFinished () )
+	{
+		CSphScopedRWLock _wlock ( m_dWeightLock, false );
+		m_dWeights.Reset ( rhs.GetLength () );
+		CSphScopedRWLock _rlock ( rhs.m_dWeightLock, true );
+		memcpy ( m_dWeights.Begin (), rhs.m_dWeights.Begin (), rhs.GetLength () * sizeof ( WORD ) );
+	} else if ( IsInitFinished() )
+	{
+		CSphScopedRWLock _wlock ( m_dWeightLock, false );
+		m_dWeights.Reset ( 0 );
+	}
 	return *this;
 }
 
@@ -984,6 +985,7 @@ bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgentStr, c
 
 	FixupOrphanedAgents ( tAgent );
 	tAgent.SetOptions ( tDesc );
+	tAgent.FinalizeInitialization ();
 	tAgent.QueuePings();
 	return bRes;
 }

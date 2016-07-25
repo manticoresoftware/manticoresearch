@@ -2814,22 +2814,6 @@ void SendErrorReply ( ISphOutputBuffer & tOut, const char * sTemplate, ... )
 // DISTRIBUTED QUERIES
 /////////////////////////////////////////////////////////////////////////////
 
-void InterWorkerStorage::Init ( int iBufSize )
-{
-	assert ( !m_dBuffer.GetLength() );
-	m_dBuffer.Reset ( iBufSize );
-}
-
-bool InterWorkerStorage::Lock()
-{
-	return m_tThdMutex.Lock();
-}
-
-bool InterWorkerStorage::Unlock()
-{
-	return m_tThdMutex.Unlock();
-}
-
 /// distributed index
 struct DistributedIndex_t
 {
@@ -2841,7 +2825,6 @@ struct DistributedIndex_t
 	bool						m_bToDelete;				///< should be deleted
 	bool						m_bDivideRemoteRanges;			///< whether we divide big range onto agents or not
 	HAStrategies_e				m_eHaStrategy;				///< how to select the best of my agents
-	InterWorkerStorage *		m_pHAStorage;				///< IPC HA arrays
 
 public:
 	DistributedIndex_t ()
@@ -2850,15 +2833,12 @@ public:
 		, m_bToDelete ( false )
 		, m_bDivideRemoteRanges ( false )
 		, m_eHaStrategy ( HA_DEFAULT )
-		, m_pHAStorage ( NULL )
 	{}
 	~DistributedIndex_t()
 	{
 		// m_pHAStorage has to be freed separately.
 	}
 	void GetAllAgents ( CSphVector<AgentConn_t> * pTarget ) const;
-	void ShareHACounters();
-	void RemoveHACounters();
 };
 
 void DistributedIndex_t::GetAllAgents ( CSphVector<AgentConn_t> * pTarget ) const
@@ -2870,49 +2850,6 @@ void DistributedIndex_t::GetAllAgents ( CSphVector<AgentConn_t> * pTarget ) cons
 		AgentDesc_c & dAgent = pTarget->Add();
 		dAgent = m_dAgents[i].GetAgents()[j];
 	}
-}
-
-void DistributedIndex_t::ShareHACounters()
-{
-	int iSharedValues = 0;
-	int iRRCounters = 0;
-	for ( const auto& dAgent : m_dAgents )
-		if ( dAgent.IsHA() )
-		{
-			iSharedValues += dAgent.GetLength();
-			++iRRCounters;
-		}
-
-	// nothing to share.
-	if ( !iSharedValues )
-		return;
-
-	// so, we need to share between workers iFloatValues floats and iRRCounters ints.
-	int iBufSize = iRRCounters * sizeof(int) + iSharedValues * sizeof(WORD) * 2; // NOLINT
-	m_pHAStorage = new InterWorkerStorage;
-	m_pHAStorage->Init ( iBufSize );
-
-	// provide the information to all agents
-	BYTE* pBuffer = m_pHAStorage->GetSharedData();
-	for ( auto& dAgent : m_dAgents )
-		if ( dAgent.IsHA() )
-		{
-			WORD* pWeights = (WORD*) ( pBuffer + sizeof(int) ); // NOLINT
-			*(int*) pBuffer = 0; // initialize round-robin counter
-			WORD dFrac = WORD ( 0xFFFF / dAgent.GetLength() );
-			ARRAY_FOREACH ( j, dAgent ) ///< works since dAgent has method GetLength()
-				pWeights[j] = dFrac;
-			dAgent.SetHAData ( (int*)pBuffer, pWeights, m_pHAStorage );
-			pBuffer += sizeof(int) + sizeof(float)*dAgent.GetLength(); // NOLINT
-		}
-}
-
-void DistributedIndex_t::RemoveHACounters()
-{
-	for ( auto& dAgent : m_dAgents )
-		if ( dAgent.IsHA () )
-			dAgent.SetHAData ( NULL, NULL, NULL );
-	SafeDelete ( m_pHAStorage );
 }
 
 /// global distributed index definitions hash
@@ -11409,6 +11346,8 @@ void BuildDistIndexStatus ( VectorLike & dStatus, const CSphString& sIndex )
 		if ( dStatus.MatchAddVa ( "dstindex_%d_is_ha", i+1 ) )
 			dStatus.Add ( tAgents.IsHA()? "1": "0" );
 
+		auto dWeights = tAgents.GetWeights ();
+
 		ARRAY_FOREACH ( j, tAgents.GetAgents() )
 		{
 			if ( tAgents.IsHA() )
@@ -11422,7 +11361,7 @@ void BuildDistIndexStatus ( VectorLike & dStatus, const CSphString& sIndex )
 				dStatus.Add().SetSprintf ( "%s:%s", dDesc.GetMyUrl().cstr(), dDesc.m_sIndexes.cstr() );
 
 			if ( tAgents.IsHA() && dStatus.MatchAddVa ( "%s_probability_weight", sKey.cstr() ) )
-				dStatus.Add().SetSprintf ( "%d", (DWORD)(tAgents.GetWeights()[j]) ); // FIXME! IPC unsafe, if critical need to be locked.
+				dStatus.Add().SetSprintf ( "%d", (DWORD)( dWeights[j]) );
 
 			if ( dStatus.MatchAddVa ( "%s_is_blackhole", sKey.cstr() ) )
 				dStatus.Add ( dDesc.m_bBlackhole ? "1" : "0" );
@@ -17624,18 +17563,12 @@ static void ConfigureDistributedIndex ( DistributedIndex_t * pIdx, const char * 
 	// configure ha_strategy
 	if ( bSetHA && !bHaveHA )
 		sphWarning ( "index '%s': ha_strategy defined, but no ha agents in the index", szIndexName );
-
-	tIdx.ShareHACounters();
 }
 
 void FreeAgentsStats ( DistributedIndex_t & tIndex )
 {
 	ARRAY_FOREACH ( i, tIndex.m_dAgents )
 		FreeHostStats ( tIndex.m_dAgents[i] );
-
-	g_tStatsMutex.Lock();
-	tIndex.RemoveHACounters();
-	g_tStatsMutex.Unlock();
 }
 
 

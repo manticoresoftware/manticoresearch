@@ -84,40 +84,33 @@ endif (NOT HEAD_HASH)
 
 # still nothing. Use the last chance - extract version from ID in the sources/headers
 if (NOT HEAD_HASH)
-	message (STATUS "Using full source scan to provide branch and tag data")
-	file(GLOB RAWSRC "${SOURCE_DIR}/src/*.cpp" "${SOURCE_DIR}/src/*.h")
-	set (ID 0)
-	foreach(RAW ${RAWSRC})
-		file(READ "${RAW}" CNT LIMIT 1024)
-		if ( CNT MATCHES "\\\$Id: [a-zA-Z.]+ ([0-9]+)" )
-			set(IDD ${CMAKE_MATCH_1})
-			message(STATUS "Matched ${RAW} ${IDD}")
-			if (IDD GREATER ID)
-				set (ID ${IDD})
-			endif()
-		endif()
-	endforeach()
-	set (HEAD_HASH "${ID}")
+	if (EXISTS "${SOURCE_DIR}/src/sphinxversion.h")
+		configure_file ("${SOURCE_DIR}/src/sphinxversion.h" "${BINARY_DIR}/config/gen_sphinxversion.h" @ONLY)
+	else()
+		message (SEND_ERROR "The sources are not svn repo or git clone, neither contain pre-created sphinxversion.h header. Please, put this file to your src/ folder manually")
+	endif()
+else()
+	message (STATUS "Branch is ${HEAD_BRANCH}, hash is ${HEAD_HASH}")
+	if (HEAD_BRANCH)
+		set (HEAD_TAGREV "${HEAD_BRANCH}_${HEAD_HASH}")
+	else (HEAD_BRANCH)
+		set (HEAD_TAGREV "${HEAD_HASH}")
+	endif (HEAD_BRANCH)
+
+	if (SPHINX_TAG)
+		set (HEAD_BRANCH "${HEAD_BRANCH}, tag ${SPHINX_TAG}")
+		set (HEAD_TAGREV "${HEAD_TAGREV}, tag ${SPHINX_TAG}")
+	endif (SPHINX_TAG)
+
+	file (WRITE ${BINARY_DIR}/config/sphinxversion.h.txt
+			"#define SPH_SVN_TAG \"@HEAD_BRANCH@\"\n
+			#define SPH_SVN_REV @HEAD_HASH@\n
+			#define SPH_SVN_REVSTR \"@HEAD_HASH@\"\n
+			#define SPH_GIT_COMMIT_ID \"@HEAD_HASH@\"\n
+			#define SPH_SVN_TAGREV \"@HEAD_TAGREV@\"\n")
+
+	configure_file ("${BINARY_DIR}/config/sphinxversion.h.txt" "${BINARY_DIR}/config/gen_sphinxversion.h" @ONLY)
 endif (NOT HEAD_HASH)
 
-message(STATUS "Branch is ${HEAD_BRANCH}, hash is ${HEAD_HASH}")
-if (HEAD_BRANCH)
-	set (HEAD_TAGREV "${HEAD_BRANCH}_${HEAD_HASH}")
-else (HEAD_BRANCH)
-	set (HEAD_TAGREV "${HEAD_HASH}")
-endif (HEAD_BRANCH)
 
-if ( SPHINX_TAG )
-	set (HEAD_BRANCH "${HEAD_BRANCH}, tag ${SPHINX_TAG}")
-	set (HEAD_TAGREV "${HEAD_TAGREV}, tag ${SPHINX_TAG}")
-endif ( SPHINX_TAG )
-
-file(WRITE ${BINARY_DIR}/config/sphinxversion.h.txt
-	"#define SPH_SVN_TAG \"@HEAD_BRANCH@\"\n
-	#define SPH_SVN_REV @HEAD_HASH@\n
-	#define SPH_SVN_REVSTR \"@HEAD_HASH@\"\n
-	#define SPH_GIT_COMMIT_ID \"@HEAD_HASH@\"\n
-	#define SPH_SVN_TAGREV \"@HEAD_TAGREV@\"\n")
-
-configure_file("${BINARY_DIR}/config/sphinxversion.h.txt" "${BINARY_DIR}/config/gen_sphinxversion.h" @ONLY)
 

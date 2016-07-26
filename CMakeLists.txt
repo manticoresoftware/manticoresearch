@@ -133,13 +133,15 @@ else (WIN32)
 			set (SPLIT_SYMBOLS OFF)
 		elseif (NOT CMAKE_BUILD_TYPE MATCHES Debug)
 			set (CFLAGS "${CFLAGS} -O3 -g")
+		else()
+			set (CLANGFLAGS "-Wthread-safety" )
 		endif ()
 		set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CFLAGS}")
 		set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CFLAGS} -fno-rtti -std=c++11")
 
 		# eliminate also some too noisy warnings from CLang
 		if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-			set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-register -Wno-missing-exception-spec -Wno-implicit-exception-spec-mismatch")
+			set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-register -Wno-missing-exception-spec -Wno-implicit-exception-spec-mismatch -Wno-invalid-offsetof ${CLANGFLAGS}")
 		endif()
 	endif (HAVE_GCC_LIKE)
 

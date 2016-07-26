@@ -6856,18 +6856,50 @@ struct SphFinalArenaCopy_t : ISphMatchProcessor
 struct SphRtFinalMatchCalc_t : ISphMatchProcessor, ISphNoncopyable
 {
 	const CSphQueryContext &	m_tCtx;
+	int							m_iSeg;
 	int							m_iSegments;
+	// count per segments matches
+	// to skip iteration of matches at sorter and pool setup for segment without matches at sorter
+	CSphBitvec					m_dSegments;
 
 	SphRtFinalMatchCalc_t ( int iSegments, const CSphQueryContext & tCtx )
 		: m_tCtx ( tCtx )
+		, m_iSeg ( 0 )
 		, m_iSegments ( iSegments )
-	{}
+	{
+		m_dSegments.Init ( iSegments );
+	}
+
+	bool NextSegment ( int iSeg )
+	{
+		m_iSeg = iSeg;
+
+		bool bSegmentGotRows = m_dSegments.BitGet ( iSeg );
+
+		// clear current row
+		m_dSegments.BitClear ( iSeg );
+
+		// also clear 0 segment as it got forced to process
+		m_dSegments.BitClear ( 0 );
+
+		// also force to process 0 segment to mark all used segments
+		return ( iSeg==0 || bSegmentGotRows );
+	}
+
+	bool HasSegments () const
+	{
+		return ( m_iSeg==0 || m_dSegments.BitCount()>0 );
+	}
 
 	virtual void Process ( CSphMatch * pMatch )
 	{
 		int iMatchSegment = pMatch->m_iTag-1;
-		if ( iMatchSegment>=0 && iMatchSegment<m_iSegments && pMatch->m_pStatic )
-			m_tCtx.CalcPostAggregate ( *pMatch );
+		if ( iMatchSegment==m_iSeg && pMatch->m_pStatic )
+			m_tCtx.CalcFinal ( *pMatch );
+
+		// count all used segments at 0 pass
+		if ( m_iSeg==0 && iMatchSegment<m_iSegments )
+			m_dSegments.BitSet ( iMatchSegment );
 	}
 };
 
@@ -7179,7 +7211,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	// setup calculations and result schema
 	CSphQueryContext tCtx ( *pQuery );
 	tCtx.m_pProfile = pProfiler;
-	if ( !tCtx.SetupCalc ( pResult, dSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, NULL, false, true ) )
+	if ( !tCtx.SetupCalc ( pResult, dSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, NULL, false ) )
 		return false;
 
 	tCtx.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
@@ -7386,7 +7418,6 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 						tMatch.m_iWeight = ( sphRand() & 0xffff ) * tArgs.m_iIndexWeight;
 
 					tCtx.CalcSort ( tMatch );
-					tCtx.CalcFinal ( tMatch ); // OPTIMIZE? could be possibly done later
 
 					// storing segment in matches tag for finding strings attrs offset later, biased against default zero
 					tMatch.m_iTag = iSeg+1;
@@ -7398,7 +7429,6 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 					// stringptr expressions should be duplicated (or taken over) at this point
 					tCtx.FreeStrFilter ( tMatch );
 					tCtx.FreeStrSort ( tMatch );
-					tCtx.FreeStrFinal ( tMatch );
 
 					// handle cutoff
 					if ( bNewMatch )
@@ -7474,12 +7504,10 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 							pMatch[i].m_iWeight = ( sphRand() & 0xffff ) * tArgs.m_iIndexWeight;
 
 						tCtx.CalcSort ( pMatch[i] );
-						tCtx.CalcFinal ( pMatch[i] ); // OPTIMIZE? could be possibly done later
 
 						if ( tCtx.m_pWeightFilter && !tCtx.m_pWeightFilter->Eval ( pMatch[i] ) )
 						{
 							tCtx.FreeStrSort ( pMatch[i] );
-							tCtx.FreeStrFinal ( pMatch[i] );
 							continue;
 						}
 
@@ -7488,11 +7516,18 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 						bool bNewMatch = false;
 						ARRAY_FOREACH ( iSorter, dSorters )
+						{
 							bNewMatch |= dSorters[iSorter]->Push ( pMatch[i] );
+
+							if ( tCtx.m_uPackedFactorFlags & SPH_FACTOR_ENABLE )
+							{
+								pRanker->ExtraData ( EXTRA_SET_MATCHPUSHED, (void**)&(ppSorters[iSorter]->m_iJustPushed) );
+								pRanker->ExtraData ( EXTRA_SET_MATCHPOPPED, (void**)&(ppSorters[iSorter]->m_dJustPopped) );
+							}
+						}
 
 						// stringptr expressions should be duplicated (or taken over) at this point
 						tCtx.FreeStrSort ( pMatch[i] );
-						tCtx.FreeStrFinal ( pMatch[i] );
 
 						if ( bNewMatch )
 							if ( --iCutoff==0 )
@@ -7510,14 +7545,28 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	}
 
 	// do final expression calculations
-	if ( tCtx.m_dCalcPostAggregate.GetLength () )
+	if ( tCtx.m_dCalcFinal.GetLength () )
 	{
 		const int iSegmentsTotal = tGuard.m_dRamChunks.GetLength ();
+
+		// at 0 pass processor also fills bitmask of segments these has matches at sorter
+		// then skip sorter processing for these 'empty' segments
 		SphRtFinalMatchCalc_t tFinal ( iSegmentsTotal, tCtx );
-		for ( int iSorter = 0; iSorter<iSorters; iSorter++ )
+
+		ARRAY_FOREACH_COND ( iSeg, tGuard.m_dRamChunks, tFinal.HasSegments() )
 		{
-			ISphMatchSorter * pTop = ppSorters[iSorter];
-			pTop->Finalize ( tFinal, false );
+			if ( !tFinal.NextSegment ( iSeg ) )
+				continue;
+
+			// set string pool for string on_sort expression fix up
+			tCtx.SetStringPool ( tGuard.m_dRamChunks[iSeg]->m_dStrings.Begin() );
+			tCtx.SetMVAPool ( tGuard.m_dRamChunks[iSeg]->m_dMvas.Begin(), false );
+
+			for ( int iSorter = 0; iSorter<iSorters; iSorter++ )
+			{
+				ISphMatchSorter * pTop = ppSorters[iSorter];
+				pTop->Finalize ( tFinal, false );
+			}
 		}
 	}
 

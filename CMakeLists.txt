@@ -605,8 +605,12 @@ add_subdirectory (test)
 
 # a bit of installation stuff
 install (DIRECTORY api doc contrib DESTINATION share/doc COMPONENT doc)
-install (FILES COPYING INSTALL sphinx.conf.in sphinx-min.conf.in example.sql
-		DESTINATION share/doc COMPONENT doc)
+install (FILES COPYING INSTALL example.sql DESTINATION share/doc COMPONENT doc)
+install (FILES COPYING INSTALL sphinx.conf.in sphinx-min.conf.in
+		DESTINATION share/doc COMPONENT config)
+
+configure_file ("${SPHINXSEARCH_SOURCE_DIR}/COPYING"
+		"${SPHINXSEARCH_BINARY_DIR}/COPYING.txt")
 
 set (CPACK_SOURCE_IGNORE_FILES "/\\\\.idea/" "/\\\\.git/"
 		"/\\\\.svn/" "/autom4te\\\\.cache/" "/bin/" "/junk/" "/win/"
@@ -614,14 +618,22 @@ set (CPACK_SOURCE_IGNORE_FILES "/\\\\.idea/" "/\\\\.git/"
 set (CPACK_SOURCE_GENERATOR TGZ)
 
 set (CPACK_COMPONENT_APPLICATIONS_GROUP "bin")
+set (CPACK_COMPONENT_GROUP_BIN_DISPLAY_NAME "Runtime")
+set (CPACK_COMPONENT_APPLICATIONS_DISPLAY_NAME "Sphinx applications")
 set (CPACK_COMPONENT_CONFIG_GROUP "bin")
+set (CPACK_COMPONENT_CONFIG_DISPLAY_NAME "Configuration examples")
 set (CPACK_COMPONENT_DOC_GROUP "bin")
+set (CPACK_COMPONENT_DOC_DISPLAY_NAME "Documentation")
 set (CPACK_COMPONENT_DBGSYMBOLS_GROUP "dbg")
+set (CPACK_COMPONENT_GROUP_DBG_DISPLAY_NAME "Development")
+set (CPACK_COMPONENT_DBGSYMBOLS_DISPLAY_NAME "Debug symbols")
+set (CPACK_COMPONENT_DBGSYMBOLS_DEPENDS applications)
 set (CPACK_DEB_COMPONENT_INSTALL 1)
 set (CPACK_RPM_COMPONENT_INSTALL 1)
 set (CPACK_ARCHIVE_COMPONENT_INSTALL 1)
 set (CPACK_PACKAGE_NAME "sphinx")
 set (CPACK_PACKAGE_VENDOR "Sphinx Technologies Inc.")
+set (CPACK_RESOURCE_FILE_LICENSE "${SPHINXSEARCH_BINARY_DIR}/COPYING.txt")
 
 # fallback falues
 SET (CPACK_PACKAGE_VERSION_MAJOR 0)
@@ -662,15 +674,19 @@ SET (CPACK_RPM_PACKAGE_LICENSE "GNU General Public License v. 2 (GPL2)")
 set (FULL_VERSION "${CPACK_PACKAGE_VERSION}")
 
 if (WIN32)
-	set (CPACK_GENERATOR "ZIP")
+	set (SUGGEST_GENERATOR "ZIP")
 	set (SPHINX_ARCH "win32")
 	IF (CMAKE_EXE_LINKER_FLAGS MATCHES "x64")
 		set (SPHINX_ARCH "x64")
 	endif ()
 elseif(APPLE)
-	set (CPACK_GENERATOR "TGZ")
+	set (SUGGEST_GENERATOR "TGZ")
 else()
-	set (CPACK_GENERATOR "DEB")
+	set (SUGGEST_GENERATOR "DEB")
+endif ()
+
+if (NOT CPACK_GENERATOR)
+	set (CPACK_GENERATOR "${SUGGEST_GENERATOR}")
 endif ()
 
 if (SPHINX_TAG)

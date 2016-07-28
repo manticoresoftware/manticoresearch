@@ -9,7 +9,6 @@
 searchd
 {
 	<searchd_settings/>
-	workers = threads
 	agent_retry_delay = 100
 }
 

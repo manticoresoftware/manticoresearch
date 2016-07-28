@@ -4095,6 +4095,58 @@ void TestLevenshtein()
 	printf ( "ok\n" );
 }
 
+
+void TestTDigest()
+{
+	printf ( "testing t-digest... " );
+
+	{
+		sphSrand(0);
+
+		// simple
+		CSphScopedPtr<TDigest_i> pDigest ( sphCreateTDigest() );
+
+		for ( int i = 1; i <= 100; i++ )
+			pDigest->Add ( i, 1 );
+
+		Verify ( pDigest->Percentile(50)==51 );
+		Verify ( pDigest->Percentile(95)==96 );
+		Verify ( pDigest->Percentile(99)==100 );
+	}
+
+	{
+		sphSrand(0);
+
+		// dupes
+		CSphScopedPtr<TDigest_i> pDigest ( sphCreateTDigest() );
+
+		for ( int j = 0; j < 3; j++ )
+			for ( int i = 0; i < 10000; i++ )
+				pDigest->Add ( i/100 + 1, 1 );
+
+		Verify ( fabs ( (double)pDigest->Percentile(50)-51 ) <= 1.0 );
+		Verify ( fabs ( (double)pDigest->Percentile(95)-96 ) <= 1.0 );
+		Verify ( fabs ( (double)pDigest->Percentile(99)-100 ) <= 1.0 );
+	}
+
+	{
+		sphSrand(0);
+
+		// compression
+		CSphScopedPtr<TDigest_i> pDigest ( sphCreateTDigest() );
+
+		for ( int i = 0; i < 10000; i++ )
+			pDigest->Add ( i + 1, 1 );
+
+		Verify ( fabs ( (double)pDigest->Percentile(50)-5001 ) <= 1.0 );
+		Verify ( fabs ( (double)pDigest->Percentile(95)-9501 ) <= 1.0 );
+		Verify ( fabs ( (double)pDigest->Percentile(99)-9901 ) <= 1.0 );
+	}
+
+	printf ( "ok\n" );
+}
+
+
 #endif
 
 //////////////////////////////////////////////////////////////////////////
@@ -4152,6 +4204,7 @@ int main ()
 	TestRankerFactors ();
 	TestRebalance();
 	TestLevenshtein();
+	TestTDigest();
 #endif
 
 	unlink ( g_sTmpfile );

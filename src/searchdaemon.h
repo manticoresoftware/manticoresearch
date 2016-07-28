@@ -437,6 +437,70 @@ public:
 };
 
 
+enum
+{
+	QUERY_STATS_INTERVAL_1MIN,
+	QUERY_STATS_INTERVAL_5MIN,
+	QUERY_STATS_INTERVAL_15MIN,
+	QUERY_STATS_INTERVAL_ALLTIME,
+
+	QUERY_STATS_INTERVAL_TOTAL
+};
+
+
+enum
+{
+	QUERY_STATS_TYPE_AVG,
+	QUERY_STATS_TYPE_MIN,
+	QUERY_STATS_TYPE_MAX,
+	QUERY_STATS_TYPE_95,
+	QUERY_STATS_TYPE_99,
+
+	QUERY_STATS_TYPE_TOTAL,
+};
+
+
+struct QueryStatElement_t
+{
+	uint64_t	m_dData[QUERY_STATS_TYPE_TOTAL];
+	uint64_t	m_uTotalQueries;
+
+				QueryStatElement_t();
+};
+
+
+struct QueryStats_t
+{
+	QueryStatElement_t	m_dStats[QUERY_STATS_INTERVAL_TOTAL];
+};
+
+
+struct QueryStatRecord_t
+{
+	uint64_t	m_uQueryTimeMin;
+	uint64_t	m_uQueryTimeMax;
+	uint64_t	m_uQueryTimeSum;
+	uint64_t	m_uFoundRowsMin;
+	uint64_t	m_uFoundRowsMax;
+	uint64_t	m_uFoundRowsSum;
+
+	uint64_t	m_uTimestamp;
+	int			m_iCount;
+};
+
+
+class QueryStatContainer_c
+{
+public:
+	void								Add ( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp );
+	int									GetNumRecords() const;
+	const QueryStatRecord_t &			GetRecord ( int iRecord ) const;
+
+private:
+	CircularBuffer_T<QueryStatRecord_t>	m_dRecords;
+};
+
+
 struct ServedDesc_t
 {
 	CSphIndex *			m_pIndex;
@@ -458,7 +522,39 @@ struct ServedDesc_t
 	~ServedDesc_t ();
 };
 
-class ServedIndex_c : public ISphNoncopyable, public ServedDesc_t
+
+class ServedStats_c
+{
+public:
+						ServedStats_c();
+						~ServedStats_c();
+	
+	void				AddQueryStat ( uint64_t uFoundRows, uint64_t uQueryTime );
+	void				CalculateQueryStats ( QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const;
+
+protected:
+	mutable CSphRwlock	m_tStatsLock;
+
+private:
+	QueryStatContainer_c m_tQueryStatRecords;
+	TDigest_i *			m_pQueryTimeDigest;
+	TDigest_i *			m_pRowsFoundDigest;
+
+	uint64_t			m_uTotalFoundRowsMin;
+	uint64_t			m_uTotalFoundRowsMax;
+	uint64_t			m_uTotalFoundRowsSum;
+
+	uint64_t			m_uTotalQueryTimeMin;
+	uint64_t			m_uTotalQueryTimeMax;
+	uint64_t			m_uTotalQueryTimeSum;
+
+	uint64_t			m_uTotalQueries;
+
+	void				CalcStatsForInterval ( QueryStatElement_t & tRowResult, QueryStatElement_t & tTimeResult, uint64_t uTimestamp, uint64_t uInterval ) const;
+};
+
+
+class ServedIndex_c : public ISphNoncopyable, public ServedDesc_t, public ServedStats_c
 {
 public:
 	ServedIndex_c () {}
@@ -498,7 +594,7 @@ public:
 	bool					Add ( const ServedDesc_t & tDesc, const CSphString & tKey );
 	bool					Delete ( const CSphString & tKey );
 
-	const ServedIndex_c *	GetRlockedEntry ( const CSphString & tKey ) const;
+	ServedIndex_c *			GetRlockedEntry ( const CSphString & tKey ) const;
 	ServedIndex_c *			GetWlockedEntry ( const CSphString & tKey ) const;
 	ServedIndex_c &			GetUnlockedEntry ( const CSphString & tKey ) const;
 	ServedIndex_c *			GetUnlockedEntryPtr ( const CSphString & tKey ) const;

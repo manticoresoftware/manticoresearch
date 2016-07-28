@@ -39,6 +39,7 @@ extern "C"
 #include <stdarg.h>
 #include <limits.h>
 #include <locale.h>
+#include <math.h>
 
 #include "searchdaemon.h"
 #include "searchdha.h"
@@ -489,6 +490,69 @@ void ReleaseTTYFlag()
 		*g_bHaveTTY.GetWritePtr() = 1;
 }
 
+//////////////////////////////////////////////////////////////////////////
+QueryStatElement_t::QueryStatElement_t()
+	: m_uTotalQueries ( 0 )
+{
+	memset ( m_dData, 0, sizeof ( m_dData ) );
+	m_dData[QUERY_STATS_TYPE_MIN] = UINT64_MAX;
+}
+
+//////////////////////////////////////////////////////////////////////////
+void QueryStatContainer_c::Add ( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp )
+{
+	if ( !m_dRecords.IsEmpty() )
+	{
+		QueryStatRecord_t & tLast = m_dRecords.Last();
+		const uint64_t BUCKET_TIME_DELTA = 100000;
+		if ( uTimestamp-tLast.m_uTimestamp<=BUCKET_TIME_DELTA )
+		{
+			tLast.m_uFoundRowsMin = Min ( uFoundRows, tLast.m_uFoundRowsMin );
+			tLast.m_uFoundRowsMax = Max ( uFoundRows, tLast.m_uFoundRowsMax );
+			tLast.m_uFoundRowsSum += uFoundRows;
+
+			tLast.m_uQueryTimeMin = Min ( uQueryTime, tLast.m_uQueryTimeMin );
+			tLast.m_uQueryTimeMax = Max ( uQueryTime, tLast.m_uQueryTimeMax );
+			tLast.m_uQueryTimeSum += uQueryTime;
+
+			tLast.m_iCount++;
+
+			return;
+		}
+	}
+
+	const int MAX_TIME_DELTA = 15*60*1000000;
+	while ( !m_dRecords.IsEmpty() && ( uTimestamp-m_dRecords[0].m_uTimestamp ) > MAX_TIME_DELTA )
+		m_dRecords.Pop();
+
+	QueryStatRecord_t & tRecord = m_dRecords.Push();
+	tRecord.m_uFoundRowsMin = uFoundRows;
+	tRecord.m_uFoundRowsMax = uFoundRows;
+	tRecord.m_uFoundRowsSum = uFoundRows;
+
+	tRecord.m_uQueryTimeMin = uQueryTime;
+	tRecord.m_uQueryTimeMax = uQueryTime;
+	tRecord.m_uQueryTimeSum = uQueryTime;
+
+	tRecord.m_uTimestamp = uTimestamp;
+	tRecord.m_iCount = 1;
+}
+
+
+const QueryStatRecord_t & QueryStatContainer_c::GetRecord ( int iRecord ) const
+{
+	return m_dRecords[iRecord];
+}
+
+
+int QueryStatContainer_c::GetNumRecords() const
+{
+	return m_dRecords.GetLength();
+}
+
+
+//////////////////////////////////////////////////////////////////////////
+
 ServedDesc_t::ServedDesc_t ()
 	: m_pIndex ( NULL )
 	, m_bEnabled ( true )
@@ -507,6 +571,146 @@ ServedDesc_t::~ServedDesc_t ()
 {
 	SafeDelete ( m_pIndex );
 }
+
+
+
+//////////////////////////////////////////////////////////////////////////
+ServedStats_c::ServedStats_c()
+	: m_uTotalFoundRowsMin ( UINT64_MAX )
+	, m_uTotalFoundRowsMax ( 0 )
+	, m_uTotalFoundRowsSum ( 0 )
+	, m_uTotalQueryTimeMin ( UINT64_MAX )
+	, m_uTotalQueryTimeMax ( 0 )
+	, m_uTotalQueryTimeSum ( 0 )
+	, m_uTotalQueries ( 0 )
+{
+	m_pQueryTimeDigest = sphCreateTDigest();
+	m_pRowsFoundDigest = sphCreateTDigest();
+	assert ( m_pQueryTimeDigest && m_pRowsFoundDigest );
+}
+
+
+ServedStats_c::~ServedStats_c()
+{
+	Verify ( m_tStatsLock.Done() );
+	SafeDelete ( m_pQueryTimeDigest );
+	SafeDelete ( m_pRowsFoundDigest );
+}
+
+
+void ServedStats_c::AddQueryStat ( uint64_t uFoundRows, uint64_t uQueryTime )
+{
+	CSphScopedRWLock tStatsLock ( m_tStatsLock, false );
+
+	m_pRowsFoundDigest->Add ( (double)uFoundRows );
+	m_pQueryTimeDigest->Add ( (double)uQueryTime );
+
+	uint64_t uTimeStamp = sphMicroTimer();
+	m_tQueryStatRecords.Add ( uFoundRows, uQueryTime, uTimeStamp );
+	
+	m_uTotalFoundRowsMin = Min ( uFoundRows, m_uTotalFoundRowsMin );
+	m_uTotalFoundRowsMax = Max ( uFoundRows, m_uTotalFoundRowsMax );
+	m_uTotalFoundRowsSum+= uFoundRows;
+	
+	m_uTotalQueryTimeMin = Min ( uQueryTime, m_uTotalQueryTimeMin );
+	m_uTotalQueryTimeMax = Max ( uQueryTime, m_uTotalQueryTimeMax );
+	m_uTotalQueryTimeSum+= uQueryTime;
+	
+	m_uTotalQueries++;
+}
+
+
+void ServedStats_c::CalculateQueryStats ( QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const
+{
+	static const uint64_t dIntervals[]=
+	{
+		1*60*1000000,
+		5*60*1000000,
+		15*60*1000000
+	};
+	
+	uint64_t uTimestamp = sphMicroTimer();
+	
+	CSphScopedRWLock tStatsLock ( m_tStatsLock, true );
+
+	for ( int i = QUERY_STATS_INTERVAL_1MIN; i<=QUERY_STATS_INTERVAL_15MIN; i++ )
+		CalcStatsForInterval ( tRowsFoundStats.m_dStats[i], tQueryTimeStats.m_dStats[i], uTimestamp, dIntervals[i] );
+
+	tRowsFoundStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME].m_dData[QUERY_STATS_TYPE_AVG] = m_uTotalQueries ? m_uTotalFoundRowsSum/m_uTotalQueries : 0;
+	tRowsFoundStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME].m_dData[QUERY_STATS_TYPE_MIN] = m_uTotalFoundRowsMin;
+	tRowsFoundStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME].m_dData[QUERY_STATS_TYPE_MAX] = m_uTotalFoundRowsMax;
+	tRowsFoundStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME].m_dData[QUERY_STATS_TYPE_95] = m_pRowsFoundDigest->Percentile(95);
+	tRowsFoundStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME].m_dData[QUERY_STATS_TYPE_99] = m_pRowsFoundDigest->Percentile(99);
+	tRowsFoundStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME].m_uTotalQueries = m_uTotalQueries;
+	
+	tQueryTimeStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME].m_dData[QUERY_STATS_TYPE_AVG] = m_uTotalQueries ? m_uTotalQueryTimeSum/m_uTotalQueries : 0;
+	tQueryTimeStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME].m_dData[QUERY_STATS_TYPE_MIN] = m_uTotalQueryTimeMin;
+	tQueryTimeStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME].m_dData[QUERY_STATS_TYPE_MAX] = m_uTotalQueryTimeMax;
+	tQueryTimeStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME].m_dData[QUERY_STATS_TYPE_95] = m_pQueryTimeDigest->Percentile(95);
+	tQueryTimeStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME].m_dData[QUERY_STATS_TYPE_99] = m_pQueryTimeDigest->Percentile(99);
+	tQueryTimeStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME].m_uTotalQueries = m_uTotalQueries;
+}
+
+
+void ServedStats_c::CalcStatsForInterval ( QueryStatElement_t & tRowResult, QueryStatElement_t & tTimeResult, uint64_t uTimestamp, uint64_t uInterval ) const
+{
+	tRowResult.m_dData[QUERY_STATS_TYPE_AVG] = 0;
+	tRowResult.m_dData[QUERY_STATS_TYPE_MIN] = UINT64_MAX;
+	tRowResult.m_dData[QUERY_STATS_TYPE_MAX] = 0;
+	
+	tTimeResult.m_dData[QUERY_STATS_TYPE_AVG] = 0;
+	tTimeResult.m_dData[QUERY_STATS_TYPE_MIN] = UINT64_MAX;
+	tTimeResult.m_dData[QUERY_STATS_TYPE_MAX] = 0;
+	
+	CSphTightVector<uint64_t> dFound, dTime;
+	dFound.Reserve ( m_tQueryStatRecords.GetNumRecords() );
+	dTime.Reserve ( m_tQueryStatRecords.GetNumRecords() );
+
+	DWORD uTotalQueries = 0;
+	for ( int i = 0; i < m_tQueryStatRecords.GetNumRecords(); i++ )
+	{
+		const QueryStatRecord_t & tRecord = m_tQueryStatRecords.GetRecord ( i );
+
+		if ( uTimestamp-tRecord.m_uTimestamp<=uInterval )
+		{
+			tRowResult.m_dData[QUERY_STATS_TYPE_MIN] = Min ( tRecord.m_uFoundRowsMin, tRowResult.m_dData[QUERY_STATS_TYPE_MIN] );
+			tRowResult.m_dData[QUERY_STATS_TYPE_MAX] = Max ( tRecord.m_uFoundRowsMax, tRowResult.m_dData[QUERY_STATS_TYPE_MAX] );
+
+			tTimeResult.m_dData[QUERY_STATS_TYPE_MIN] = Min ( tRecord.m_uQueryTimeMin, tTimeResult.m_dData[QUERY_STATS_TYPE_MIN] );
+			tTimeResult.m_dData[QUERY_STATS_TYPE_MAX] = Max ( tRecord.m_uQueryTimeMax, tTimeResult.m_dData[QUERY_STATS_TYPE_MAX] );
+
+			dFound.Add ( tRecord.m_uFoundRowsSum/tRecord.m_iCount );
+			dTime.Add ( tRecord.m_uQueryTimeSum/tRecord.m_iCount );
+
+			tTimeResult.m_dData[QUERY_STATS_TYPE_AVG] += tRecord.m_uQueryTimeSum;
+			tRowResult.m_dData[QUERY_STATS_TYPE_AVG] += tRecord.m_uFoundRowsSum;
+			uTotalQueries += tRecord.m_iCount;
+		}
+	}
+	
+	dFound.Sort();
+	dTime.Sort();
+
+	tRowResult.m_uTotalQueries = uTotalQueries;
+	tTimeResult.m_uTotalQueries = uTotalQueries;
+	
+	if ( !dFound.GetLength() )
+		return;
+	
+	tRowResult.m_dData[QUERY_STATS_TYPE_AVG]/= uTotalQueries;
+	tTimeResult.m_dData[QUERY_STATS_TYPE_AVG]/= uTotalQueries;
+	
+	DWORD u95 = Max ( 0, Min ( DWORD ( ceilf ( dFound.GetLength()*0.95f ) + 0.5f )-1, dFound.GetLength()-1 ) );
+	DWORD u99 = Max ( 0, Min ( DWORD ( ceilf ( dFound.GetLength()*0.99f ) + 0.5f )-1, dFound.GetLength()-1 ) );
+
+	tRowResult.m_dData[QUERY_STATS_TYPE_95] = dFound[u95];
+	tRowResult.m_dData[QUERY_STATS_TYPE_99] = dFound[u99];
+	
+	tTimeResult.m_dData[QUERY_STATS_TYPE_95] = dTime[u95];
+	tTimeResult.m_dData[QUERY_STATS_TYPE_99] = dTime[u99];
+}
+
+//////////////////////////////////////////////////////////////////////////
 
 ServedIndex_c::~ServedIndex_c ()
 {
@@ -538,7 +742,7 @@ void ServedIndex_c::WriteLock () const
 
 bool ServedIndex_c::InitLock() const
 {
-	return m_tLock.Init ( true );
+	return m_tLock.Init ( true ) && m_tStatsLock.Init ( true );
 }
 
 void ServedIndex_c::Unlock () const
@@ -655,7 +859,7 @@ bool IndexHash_c::Delete ( const CSphString & tKey )
 }
 
 
-const ServedIndex_c * IndexHash_c::GetRlockedEntry ( const CSphString & tKey ) const
+ServedIndex_c * IndexHash_c::GetRlockedEntry ( const CSphString & tKey ) const
 {
 	Rlock();
 	ServedIndex_c * pEntry = BASE::operator() ( tKey );
@@ -6490,7 +6694,7 @@ protected:
 	bool							m_bGotLocalDF;
 	bool							m_bMaster;
 
-	const ServedIndex_c *			UseIndex ( int iLocal ) const;
+	ServedIndex_c *					UseIndex ( int iLocal ) const;
 	void							ReleaseIndex ( int iLocal ) const;
 
 	void							OnRunFinished ();
@@ -6544,7 +6748,7 @@ SearchHandler_c::~SearchHandler_c ()
 }
 
 
-const ServedIndex_c * SearchHandler_c::UseIndex ( int iLocal ) const
+ServedIndex_c * SearchHandler_c::UseIndex ( int iLocal ) const
 {
 	assert ( iLocal>=0 && iLocal<m_dLocal.GetLength() );
 	const CSphString & sName = m_dLocal[iLocal].m_sName;
@@ -6553,7 +6757,7 @@ const ServedIndex_c * SearchHandler_c::UseIndex ( int iLocal ) const
 	int * pUseCount = m_hUsed ( sName );
 	assert ( ( m_pUpdates && pUseCount && *pUseCount>0 ) || !m_pUpdates );
 
-	const ServedIndex_c * pServed = NULL;
+	ServedIndex_c * pServed = NULL;
 	if ( pUseCount && *pUseCount>0 )
 	{
 		pServed = &g_pLocalIndexes->GetUnlockedEntry ( sName );
@@ -7040,6 +7244,8 @@ void SearchHandler_c::RunLocalSearchesMT ()
 			// move external attributes storage from tRaw to actual result
 			tRaw.LeakStorages ( tRes );
 
+			int iQTimeForStats = tRes.m_iQueryTime / ( m_iEnd-m_iStart+1 );
+
 			tRes.m_bHasPrediction |= tRaw.m_bHasPrediction;
 			tRes.m_iMultiplier = m_bMultiQueue ? iQueries : 1;
 			tRes.m_iCpuTime += tRaw.m_iCpuTime / tRes.m_iMultiplier;
@@ -7085,7 +7291,7 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 	int64_t iCpuTime = -sphCpuTimer();
 
 	const int iQueries = m_iEnd-m_iStart+1;
-	const ServedIndex_c * pServed = UseIndex ( iLocal );
+	ServedIndex_c * pServed = UseIndex ( iLocal );
 	if ( !pServed || !pServed->m_bEnabled )
 	{
 		// FIXME! submit a failure?
@@ -7207,7 +7413,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, DWORD u
 		int iOrderTag = m_dLocal[iLocal].m_iOrderTag;
 		int iIndexWeight = m_dLocal[iLocal].m_iWeight;
 
-		const ServedIndex_c * pServed = UseIndex ( iLocal );
+		ServedIndex_c * pServed = UseIndex ( iLocal );
 		if ( !pServed || !pServed->m_bEnabled )
 		{
 			if ( sParentIndex )
@@ -7394,6 +7600,8 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, DWORD u
 				if ( iBadRows )
 					tRes.m_sWarning.SetSprintf ( "query result is inaccurate because of " INT64_FMT " missed documents", iBadRows );
 
+				int iQTimeForStats = tRes.m_iQueryTime;
+
 				// multi-queue only returned one result set meta, so we need to replicate it
 				if ( m_bMultiQueue )
 				{
@@ -7406,6 +7614,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, DWORD u
 					tRes.m_bArenaProhibit = tStats.m_bArenaProhibit;
 					MergeWordStats ( tRes, tStats.m_hWordStats, &m_dFailuresSet[iQuery], sLocal, sParentIndex );
 					tRes.m_iMultiplier = m_iEnd-m_iStart+1;
+					iQTimeForStats = tStats.m_iQueryTime / ( m_iEnd-m_iStart+1 );
 				} else if ( tRes.m_iMultiplier==-1 )
 				{
 					m_dFailuresSet[iQuery].Submit ( sLocal, sParentIndex, tRes.m_sError.cstr() );
@@ -7417,6 +7626,8 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, DWORD u
 				tRes.m_tSchema = pSorter->GetSchema();
 				tRes.m_iTotalMatches += pSorter->GetTotalCount();
 				tRes.m_iPredictedTime = tRes.m_bHasPrediction ? CalcPredictedTimeMsec ( tRes ) : 0;
+
+				pServed->AddQueryStat ( pSorter->GetTotalCount(), iQTimeForStats );
 
 				// extract matches from sorter
 				FlattenToRes ( pSorter, tRes, iOrderTag+iQuery-m_iStart );
@@ -15114,6 +15325,43 @@ void HandleMysqlShowVariables ( SqlRowBuffer_c & dRows, const SqlStmt_t & tStmt,
 }
 
 
+static void AddQueryStats ( SqlRowBuffer_c & tOut, const char * szPrefix, const QueryStats_t & tStats, void (*FormatFn)( CSphString & sBuf, uint64_t uQueries, uint64_t uStat ) )
+{
+	static const char * dStatIntervalNames[QUERY_STATS_INTERVAL_TOTAL]=
+	{
+		"1min",
+		"5min",
+		"15min",
+		"total"
+	};
+
+	static const char * dStatTypeNames[QUERY_STATS_TYPE_TOTAL] =
+	{
+		"avg",
+		"min",
+		"max",
+		"95",
+		"99"
+	};
+
+	for ( int i = 0; i < QUERY_STATS_INTERVAL_TOTAL; i++ )
+	{
+		CSphString sName;
+		sName.SetSprintf ( "%s_%s_total_queries", szPrefix, dStatIntervalNames[i] );
+		tOut.DataTuplet ( sName.cstr(), tStats.m_dStats[i].m_uTotalQueries );
+
+		for ( int j = 0; j < QUERY_STATS_TYPE_TOTAL; j++ )
+		{
+			CSphString sFormatted;
+			sName.SetSprintf ( "%s_%s_%s", szPrefix, dStatIntervalNames[i], dStatTypeNames[j] );
+			FormatFn ( sFormatted, tStats.m_dStats[i].m_uTotalQueries, tStats.m_dStats[i].m_dData[j] );
+		
+			tOut.DataTuplet ( sName.cstr(), sFormatted.cstr() );
+		}
+	}
+}
+
+
 void HandleMysqlShowIndexStatus ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 {
 	CSphString sError;
@@ -15160,6 +15408,27 @@ void HandleMysqlShowIndexStatus ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt
 		tOut.DataTuplet ( "disk_chunks", tStatus.m_iNumChunks );
 		tOut.DataTuplet ( "mem_limit", tStatus.m_iMemLimit );
 	}
+
+	QueryStats_t tQueryTimeStats, tRowsFoundStats;
+	pServed->CalculateQueryStats ( tRowsFoundStats, tQueryTimeStats );
+
+	AddQueryStats ( tOut, "query_time", tQueryTimeStats,
+		[]( CSphString & sBuf, uint64_t uQueries, uint64_t uStat )
+		{
+			if ( uQueries )
+				sBuf.SetSprintf ( "%d.%03d sec", DWORD(uStat/1000), DWORD(uStat%1000) );
+			else 
+				sBuf = "-";
+		} );
+
+	AddQueryStats ( tOut, "found_rows", tRowsFoundStats,
+		[]( CSphString & sBuf, uint64_t uQueries, uint64_t uStat )
+		{
+			if ( uQueries )
+				sBuf.SetSprintf ( UINT64_FMT, uStat );
+			else
+				sBuf = "-";
+		} );
 
 	pServed->Unlock();
 	tOut.Eof();

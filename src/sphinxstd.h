@@ -3532,6 +3532,115 @@ public:
 };
 
 
+// simple circular buffer
+template < typename T >
+class CircularBuffer_T
+{
+public:
+	explicit CircularBuffer_T ( int iInitialSize=256, float fGrowFactor=1.5f )
+		: m_dValues ( iInitialSize )
+		, m_fGrowFactor ( fGrowFactor )
+		, m_iHead ( 0 )
+		, m_iTail ( 0 )
+		, m_iUsed ( 0 )
+	{}
+
+	void Push ( const T & tValue )
+	{
+		if ( m_iUsed==m_dValues.GetLength() )
+			Resize ( int(m_iUsed*m_fGrowFactor) );
+
+		m_dValues[m_iTail] = tValue;
+		m_iTail = ( m_iTail+1 ) % m_dValues.GetLength();
+		m_iUsed++;
+	}
+
+	T & Push()
+	{
+		if ( m_iUsed==m_dValues.GetLength() )
+			Resize ( int ( m_iUsed*m_fGrowFactor ) );
+
+		int iOldTail = m_iTail;
+		m_iTail = (m_iTail + 1) % m_dValues.GetLength ();
+		m_iUsed++;
+
+		return m_dValues[iOldTail];
+	}
+
+
+	T & Pop()
+	{
+		assert ( !IsEmpty() );
+		int iOldHead = m_iHead;
+		m_iHead = ( m_iHead+1 ) % m_dValues.GetLength();
+		m_iUsed--;
+
+		return m_dValues[iOldHead];
+	}
+
+	const T & Last() const
+	{
+		assert (!IsEmpty());
+		return operator[](GetLength()-1);
+	}
+
+	T & Last()
+	{
+		assert (!IsEmpty());
+		int iIndex = GetLength()-1;
+		return m_dValues[(iIndex+m_iHead) % m_dValues.GetLength()];
+	}
+
+	const T & operator [] ( int iIndex ) const
+	{
+		assert ( iIndex < m_iUsed );
+		return m_dValues[(iIndex+m_iHead) % m_dValues.GetLength()];
+	}
+
+	bool IsEmpty() const
+	{
+		return m_iUsed==0;
+	}
+
+	int GetLength() const
+	{
+		return m_iUsed;
+	}
+
+private:
+	CSphFixedVector<T>	m_dValues;
+	float				m_fGrowFactor;
+	int					m_iHead;
+	int					m_iTail;
+	int					m_iUsed;
+
+	void Resize ( int iNewLength )
+	{
+		CSphFixedVector<T> dNew ( iNewLength );
+		for ( int i = 0; i < GetLength(); i++ )
+			dNew[i] = m_dValues[(i+m_iHead) % m_dValues.GetLength()];
+
+		m_dValues.SwapData(dNew);
+
+		m_iHead = 0;
+		m_iTail = m_iUsed;
+	}
+};
+
+
+//////////////////////////////////////////////////////////////////////////
+class TDigest_i
+{
+public:
+	virtual				~TDigest_i() {}
+
+	virtual void		Add ( double fValue, int iWeight = 1 ) = 0;
+	virtual double		Percentile ( int iPercent ) const = 0;
+};
+
+TDigest_i * sphCreateTDigest();
+
+
 #endif // _sphinxstd_
 
 //

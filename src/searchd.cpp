@@ -521,7 +521,7 @@ void QueryStatContainer_c::Add ( uint64_t uFoundRows, uint64_t uQueryTime, uint6
 		}
 	}
 
-	const int MAX_TIME_DELTA = 15*60*1000000;
+	const uint64_t MAX_TIME_DELTA = 15*60*1000000;
 	while ( !m_dRecords.IsEmpty() && ( uTimestamp-m_dRecords[0].m_uTimestamp ) > MAX_TIME_DELTA )
 		m_dRecords.Pop();
 
@@ -700,8 +700,8 @@ void ServedStats_c::CalcStatsForInterval ( QueryStatElement_t & tRowResult, Quer
 	tRowResult.m_dData[QUERY_STATS_TYPE_AVG]/= uTotalQueries;
 	tTimeResult.m_dData[QUERY_STATS_TYPE_AVG]/= uTotalQueries;
 	
-	DWORD u95 = Max ( 0, Min ( DWORD ( ceilf ( dFound.GetLength()*0.95f ) + 0.5f )-1, dFound.GetLength()-1 ) );
-	DWORD u99 = Max ( 0, Min ( DWORD ( ceilf ( dFound.GetLength()*0.99f ) + 0.5f )-1, dFound.GetLength()-1 ) );
+	int u95 = Max ( 0, Min ( int ( ceilf ( dFound.GetLength()*0.95f ) + 0.5f )-1, dFound.GetLength()-1 ) );
+	int u99 = Max ( 0, Min ( int ( ceilf ( dFound.GetLength()*0.99f ) + 0.5f )-1, dFound.GetLength()-1 ) );
 
 	tRowResult.m_dData[QUERY_STATS_TYPE_95] = dFound[u95];
 	tRowResult.m_dData[QUERY_STATS_TYPE_99] = dFound[u99];
@@ -7243,8 +7243,6 @@ void SearchHandler_c::RunLocalSearchesMT ()
 
 			// move external attributes storage from tRaw to actual result
 			tRaw.LeakStorages ( tRes );
-
-			int iQTimeForStats = tRes.m_iQueryTime / ( m_iEnd-m_iStart+1 );
 
 			tRes.m_bHasPrediction |= tRaw.m_bHasPrediction;
 			tRes.m_iMultiplier = m_bMultiQueue ? iQueries : 1;

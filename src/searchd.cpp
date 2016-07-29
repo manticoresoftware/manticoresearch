@@ -11997,10 +11997,12 @@ void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iAffectedR
 class IDataTupleter
 {
 public:
-	virtual ~IDataTupleter() = default;
+	virtual ~IDataTupleter();
 	virtual void DataTuplet ( const char *, const char *) = 0;
 	virtual void DataTuplet ( const char *, int64_t ) = 0;
 };
+
+IDataTupleter::~IDataTupleter() = default;
 
 #define SPH_MAX_NUMERIC_STR 64
 class SqlRowBuffer_c : public ISphNoncopyable, public IDataTupleter

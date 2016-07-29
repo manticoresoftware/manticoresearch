@@ -26728,178 +26728,90 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 	return &m_tHits;
 }
 
+// a little staff for using static/dynamic libraries.
+// for dynamic we declare the type and define the originally nullptr pointer.
+// for static we define const pointer as alias to target function.
+
+#define F_DL(name) static decltype(&name) sph_##name = nullptr
+#define F_DR(name) static constexpr decltype(&name) sph_##name = &name
+
+#if DL_MYSQL
+	#define MYSQL_F(name) F_DL(name)
+#else
+	#define MYSQL_F(name) F_DR(name)
+#endif
+
+#if DL_EXPAT
+	#define EXPAT_F(name) F_DL(name)
+#else
+	#define EXPAT_F(name) F_DR(name)
+#endif
+
+#if DL_PGSQL
+	#define PGSQL_F(name) F_DL(name)
+#else
+	#define PGSQL_F(name) F_DR(name)
+#endif
+
+
+#if DL_UNIXODBC
+	#define ODBC_F(name) F_DL(name)
+#else
+	#define ODBC_F( name ) F_DR(name)
+#endif
+
+
 /////////////////////////////////////////////////////////////////////////////
 // MYSQL SOURCE
 /////////////////////////////////////////////////////////////////////////////
 #if USE_MYSQL
-#if DL_MYSQL
 
-#ifndef MYSQL_LIB
-#define MYSQL_LIB "libmysqlclient.so"
-#endif
+	MYSQL_F ( mysql_free_result );
+	MYSQL_F ( mysql_next_result );
+	MYSQL_F ( mysql_use_result );
+	MYSQL_F ( mysql_num_rows );
+	MYSQL_F ( mysql_query );
+	MYSQL_F ( mysql_errno );
+	MYSQL_F ( mysql_error );
+	MYSQL_F ( mysql_init );
+	MYSQL_F ( mysql_ssl_set );
+	MYSQL_F ( mysql_real_connect );
+	MYSQL_F ( mysql_close );
+	MYSQL_F ( mysql_num_fields );
+	MYSQL_F ( mysql_fetch_row );
+	MYSQL_F ( mysql_fetch_fields );
+	MYSQL_F ( mysql_fetch_lengths );
 
-#define MYSQL_NUM_FUNCS (15)
+	#if DL_MYSQL
+		#ifndef MYSQL_LIB
+			#define MYSQL_LIB "libmysqlclient.so"
+		#endif
 
-#if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC) || defined(__ECC) || defined(__GNUC__)
+		#define MYSQL_NUM_FUNCS (15)
 
-// use non-standard compiler extension __typeof__
-// it allow to declare pointer to the function without using it's declaration
-typedef __typeof__ ( mysql_free_result ) *xmysql_free_result;
-typedef __typeof__ ( mysql_next_result ) *xmysql_next_result;
-typedef __typeof__ ( mysql_use_result ) *xmysql_use_result;
-typedef __typeof__ ( mysql_num_rows ) *xmysql_num_rows;
-typedef __typeof__ ( mysql_query ) *xmysql_query;
-typedef __typeof__ ( mysql_errno ) *xmysql_errno;
-typedef __typeof__ ( mysql_error ) *xmysql_error;
-typedef __typeof__ ( mysql_init ) *xmysql_init;
-typedef __typeof__ ( mysql_ssl_set ) *xmysql_ssl_set;
-typedef __typeof__ ( mysql_real_connect ) *xmysql_real_connect;
-typedef __typeof__ ( mysql_close ) *xmysql_close;
-typedef __typeof__ ( mysql_num_fields ) *xmysql_num_fields;
-typedef __typeof__ ( mysql_fetch_row ) *xmysql_fetch_row;
-typedef __typeof__ ( mysql_fetch_fields ) *xmysql_fetch_fields;
-typedef __typeof__ ( mysql_fetch_lengths ) *xmysql_fetch_lengths;
+		bool InitDynamicMysql()
+		{
+			const char * sFuncs[] = { "mysql_free_result", "mysql_next_result", "mysql_use_result"
+				, "mysql_num_rows", "mysql_query", "mysql_errno", "mysql_error"
+				, "mysql_init", "mysql_ssl_set", "mysql_real_connect", "mysql_close"
+				, "mysql_num_fields", "mysql_fetch_row", "mysql_fetch_fields"
+				, "mysql_fetch_lengths" };
 
-#else // compilers which are not known about __typeof__ support
+			void ** pFuncs[] = { (void **) &sph_mysql_free_result, (void **) &sph_mysql_next_result
+				, (void **) &sph_mysql_use_result, (void **) &sph_mysql_num_rows, (void **) &sph_mysql_query
+				, (void **) &sph_mysql_errno, (void **) &sph_mysql_error, (void **) &sph_mysql_init
+				, (void **) &sph_mysql_ssl_set, (void **) &sph_mysql_real_connect, (void **) &sph_mysql_close
+				, (void **) &sph_mysql_num_fields, (void **) &sph_mysql_fetch_row
+				, (void **) &sph_mysql_fetch_fields, (void **) &sph_mysql_fetch_lengths };
 
-// declarations below are directly copy-pasted from mysql.h,
-// and then (*x...) is placed around the function names.
-// In mostly cases this code will not be used, and the declarations
-// from previous block will be used instead.
-#warning Be sure that the mysql function signatures are the same \
-as in mysql.h. Correct the code below if this is not so.
-
-typedef void STDCALL (*xmysql_free_result)(MYSQL_RES *result); //NOLINT
-typedef int STDCALL (*xmysql_next_result)(MYSQL *mysql); //NOLINT
-typedef MYSQL_RES * STDCALL (*xmysql_use_result)(MYSQL *mysql); //NOLINT
-typedef my_ulonglong STDCALL (*xmysql_num_rows)(MYSQL_RES *res); //NOLINT
-typedef int     STDCALL (*xmysql_query)(MYSQL *mysql, const char *q); //NOLINT
-typedef unsigned int STDCALL (*xmysql_errno)(MYSQL *mysql); //NOLINT
-typedef const char * STDCALL (*xmysql_error)(MYSQL *mysql); //NOLINT
-typedef MYSQL *		STDCALL (*xmysql_init)(MYSQL *mysql); //NOLINT
-typedef my_bool		STDCALL (*xmysql_ssl_set)(MYSQL *mysql, const char *key, //NOLINT
-				      const char *cert, const char *ca, //NOLINT
-				      const char *capath, const char *cipher); //NOLINT
-typedef MYSQL *     STDCALL (*xmysql_real_connect)(MYSQL *mysql, const char *host, //NOLINT
-                      const char *user, //NOLINT
-                      const char *passwd, //NOLINT
-                      const char *db, //NOLINT
-                      unsigned int port, //NOLINT
-                      const char *unix_socket, //NOLINT
-                      unsigned long clientflag); //NOLINT
-typedef void STDCALL (*xmysql_close)(MYSQL *sock); //NOLINT
-typedef unsigned int STDCALL (*xmysql_num_fields)(MYSQL_RES *res); //NOLINT
-typedef MYSQL_ROW   STDCALL (*xmysql_fetch_row)(MYSQL_RES *result); //NOLINT
-typedef MYSQL_FIELD * STDCALL (*xmysql_fetch_fields)(MYSQL_RES *res); //NOLINT
-typedef unsigned long * STDCALL (*xmysql_fetch_lengths)(MYSQL_RES *result); //NOLINT
-#endif
-
-class CMysql : public CSphDynamicLibrary
-{
-	static const char* sFuncs[MYSQL_NUM_FUNCS];
-	static void** pFuncs[MYSQL_NUM_FUNCS];
-
-public:
-	bool Init()
-	{
-		if ( !CSphDynamicLibrary::Init ( MYSQL_LIB, true ) )
-			return false;
-		if ( !LoadSymbols ( sFuncs, pFuncs, MYSQL_NUM_FUNCS ) )
-			return false;
-		return true;
-	}
-	static void 	STDCALL	Stub()
-	{
-		sphLogDebug ( "Error! Mysql func is null!" );
-	}
-	static xmysql_free_result m_pmysql_free_result;
-	static xmysql_next_result m_pmysql_next_result;
-	static xmysql_use_result m_pmysql_use_result;
-	static xmysql_num_rows m_pmysql_num_rows;
-	static xmysql_query m_pmysql_query;
-	static xmysql_errno m_pmysql_errno;
-	static xmysql_error m_pmysql_error;
-	static xmysql_init m_pmysql_init;
-	static xmysql_ssl_set m_pmysql_ssl_set;
-	static xmysql_real_connect m_pmysql_real_connect;
-	static xmysql_close m_pmysql_close;
-	static xmysql_num_fields m_pmysql_num_fields;
-	static xmysql_fetch_row m_pmysql_fetch_row;
-	static xmysql_fetch_fields m_pmysql_fetch_fields;
-	static xmysql_fetch_lengths m_pmysql_fetch_lengths;
-};
-
-#define sph_mysql_free_result (*CMysql::m_pmysql_free_result)
-#define sph_mysql_next_result (*CMysql::m_pmysql_next_result)
-#define sph_mysql_use_result (*CMysql::m_pmysql_use_result)
-#define sph_mysql_num_rows (*CMysql::m_pmysql_num_rows)
-#define sph_mysql_query (*CMysql::m_pmysql_query)
-#define sph_mysql_errno (*CMysql::m_pmysql_errno)
-#define sph_mysql_error (*CMysql::m_pmysql_error)
-#define sph_mysql_init (*CMysql::m_pmysql_init)
-#define sph_mysql_ssl_set (*CMysql::m_pmysql_ssl_set)
-#define sph_mysql_real_connect (*CMysql::m_pmysql_real_connect)
-#define sph_mysql_close (*CMysql::m_pmysql_close)
-#define sph_mysql_num_fields (*CMysql::m_pmysql_num_fields)
-#define sph_mysql_fetch_row (*CMysql::m_pmysql_fetch_row)
-#define sph_mysql_fetch_fields (*CMysql::m_pmysql_fetch_fields)
-#define sph_mysql_fetch_lengths (*CMysql::m_pmysql_fetch_lengths)
-
-const char* CMysql::sFuncs[MYSQL_NUM_FUNCS] = {"mysql_free_result", "mysql_next_result",
-	"mysql_use_result", "mysql_num_rows", "mysql_query", "mysql_errno",
-	"mysql_error", "mysql_init", "mysql_ssl_set", "mysql_real_connect",
-	"mysql_close", "mysql_num_fields", "mysql_fetch_row", "mysql_fetch_fields",
-	"mysql_fetch_lengths"};
-void** CMysql::pFuncs[] = {(void**)&m_pmysql_free_result, (void**)&m_pmysql_next_result,
-	(void**)&m_pmysql_use_result, (void**)&m_pmysql_num_rows, (void**)&m_pmysql_query,
-	(void**)&m_pmysql_errno, (void**)&m_pmysql_error, (void**)&m_pmysql_init,
-	(void**)&m_pmysql_ssl_set, (void**)&m_pmysql_real_connect, (void**)&m_pmysql_close,
-	(void**)&m_pmysql_num_fields, (void**)&m_pmysql_fetch_row, (void**)&m_pmysql_fetch_fields,
-	(void**)&m_pmysql_fetch_lengths};
-
-xmysql_free_result CMysql::m_pmysql_free_result = (xmysql_free_result)CMysql::Stub;
-xmysql_next_result CMysql::m_pmysql_next_result = (xmysql_next_result)CMysql::Stub;
-xmysql_use_result CMysql::m_pmysql_use_result = (xmysql_use_result)CMysql::Stub;
-xmysql_num_rows CMysql::m_pmysql_num_rows = (xmysql_num_rows)CMysql::Stub;
-xmysql_query CMysql::m_pmysql_query = (xmysql_query)CMysql::Stub;
-xmysql_errno CMysql::m_pmysql_errno = (xmysql_errno)CMysql::Stub;
-xmysql_error CMysql::m_pmysql_error = (xmysql_error)CMysql::Stub;
-xmysql_init CMysql::m_pmysql_init = (xmysql_init)CMysql::Stub;
-xmysql_ssl_set CMysql::m_pmysql_ssl_set = (xmysql_ssl_set)CMysql::Stub;
-xmysql_real_connect CMysql::m_pmysql_real_connect = (xmysql_real_connect)CMysql::Stub;
-xmysql_close CMysql::m_pmysql_close = (xmysql_close)CMysql::Stub;
-xmysql_num_fields CMysql::m_pmysql_num_fields = (xmysql_num_fields)CMysql::Stub;
-xmysql_fetch_row CMysql::m_pmysql_fetch_row = (xmysql_fetch_row)CMysql::Stub;
-xmysql_fetch_fields CMysql::m_pmysql_fetch_fields = (xmysql_fetch_fields)CMysql::Stub;
-xmysql_fetch_lengths CMysql::m_pmysql_fetch_lengths = (xmysql_fetch_lengths)CMysql::Stub;
-
-CMysql MysqlHoder;
-
-bool InitDynamicMysql()
-{
-	return MysqlHoder.Init();
-}
-
-#else // !DL_MYSQL
-
-#define sph_mysql_free_result mysql_free_result
-#define sph_mysql_next_result mysql_next_result
-#define sph_mysql_use_result mysql_use_result
-#define sph_mysql_num_rows mysql_num_rows
-#define sph_mysql_query mysql_query
-#define sph_mysql_errno mysql_errno
-#define sph_mysql_error mysql_error
-#define sph_mysql_init mysql_init
-#define sph_mysql_ssl_set mysql_ssl_set
-#define sph_mysql_real_connect mysql_real_connect
-#define sph_mysql_close mysql_close
-#define sph_mysql_num_fields mysql_num_fields
-#define sph_mysql_fetch_row mysql_fetch_row
-#define sph_mysql_fetch_fields mysql_fetch_fields
-#define sph_mysql_fetch_lengths mysql_fetch_lengths
-#define InitDynamicMysql() (true)
-
-#endif // DL_MYSQL
+			static CSphDynamicLibrary dLib ( MYSQL_LIB );
+			if ( !dLib.LoadSymbols ( sFuncs, pFuncs, MYSQL_NUM_FUNCS ) )
+				return false;
+			return true;
+		}
+	#else
+		#define InitDynamicMysql() (true)
+	#endif
 
 CSphSourceParams_MySQL::CSphSourceParams_MySQL ()
 	: m_iFlags ( 0 )
@@ -27089,155 +27001,50 @@ bool CSphSource_MySQL::Setup ( const CSphSourceParams_MySQL & tParams )
 /////////////////////////////////////////////////////////////////////////////
 
 #if USE_PGSQL
-#if DL_PGSQL
 
-#ifndef PGSQL_LIB
-#define PGSQL_LIB "libpq.so"
-#endif
+	PGSQL_F ( PQgetvalue );
+	PGSQL_F ( PQgetlength );
+	PGSQL_F ( PQclear );
+	PGSQL_F ( PQsetdbLogin );
+	PGSQL_F ( PQstatus );
+	PGSQL_F ( PQsetClientEncoding );
+	PGSQL_F ( PQexec );
+	PGSQL_F ( PQresultStatus );
+	PGSQL_F ( PQntuples );
+	PGSQL_F ( PQfname );
+	PGSQL_F ( PQnfields );
+	PGSQL_F ( PQfinish );
+	PGSQL_F ( PQerrorMessage );
 
-#define POSTRESQL_NUM_FUNCS (13)
+	#if DL_PGSQL
+		#ifndef PGSQL_LIB
+			#define PGSQL_LIB "libpq.so"
+		#endif
 
-#if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC) || defined(__ECC) || defined(__GNUC__)
+		#define POSTRESQL_NUM_FUNCS (13)
 
-// use non-standard compiler extension __typeof__
-// it allow to declare pointer to the function without using it's declaration
-typedef __typeof__ ( PQgetvalue ) *xPQgetvalue;
-typedef __typeof__ ( PQgetlength ) *xPQgetlength;
-typedef __typeof__ ( PQclear ) *xPQclear;
-typedef __typeof__ ( PQsetdbLogin ) *xPQsetdbLogin;
-typedef __typeof__ ( PQstatus ) *xPQstatus;
-typedef __typeof__ ( PQsetClientEncoding ) *xPQsetClientEncoding;
-typedef __typeof__ ( PQexec ) *xPQexec;
-typedef __typeof__ ( PQresultStatus ) *xPQresultStatus;
-typedef __typeof__ ( PQntuples ) *xPQntuples;
-typedef __typeof__ ( PQfname ) *xPQfname;
-typedef __typeof__ ( PQnfields ) *xPQnfields;
-typedef __typeof__ ( PQfinish ) *xPQfinish;
-typedef __typeof__ ( PQerrorMessage ) *xPQerrorMessage;
+		bool InitDynamicPosgresql ()
+		{
+			const char * sFuncs[] = {"PQgetvalue", "PQgetlength", "PQclear",
+					"PQsetdbLogin", "PQstatus", "PQsetClientEncoding", "PQexec",
+					"PQresultStatus", "PQntuples", "PQfname", "PQnfields",
+					"PQfinish", "PQerrorMessage" };
 
-#else // compilers which are not known about __typeof__ support
-// declarations below are directly copy-pasted from libpq-fe.h,
-// and then (*x...) is placed around the function names.
-// In mostly cases this code will not be used, and the declarations
-// from previous block will be used instead.
-#warning Be sure that the posgresql function signatures are the same \
-as in libpq-fe.h. Correct the code below if this is not so.
+			void ** pFuncs[] = {(void**)&sph_Qgetvalue, (void**)&sph_PQgetlength, (void**)&sph_PQclear,
+					(void**)&sph_PQsetdbLogin, (void**)&sph_PQstatus, (void**)&sph_PQsetClientEncoding,
+					(void**)&sph_PQexec, (void**)&sph_PQresultStatus, (void**)&sph_PQntuples,
+					(void**)&sph_PQfname, (void**)&sph_PQnfields, (void**)&sph_PQfinish,
+					(void**)&sph_PQerrorMessage};
 
-typedef char* (*xPQgetvalue)(const PGresult *res, int tup_num, int field_num); //NOLINT
-typedef int (*xPQgetlength)(const PGresult *res, int tup_num, int field_num); //NOLINT
-typedef void (*xPQclear)(PGresult *res); //NOLINT
-typedef PGconn *(*xPQsetdbLogin)(const char *pghost, const char *pgport, //NOLINT
-			 const char *pgoptions, const char *pgtty, //NOLINT
-			 const char *dbName, //NOLINT
-			 const char *login, const char *pwd); //NOLINT
-typedef ConnStatusType (*xPQstatus)(const PGconn *conn); //NOLINT
-typedef int	(*xPQsetClientEncoding)(PGconn *conn, const char *encoding); //NOLINT
-typedef PGresult *(*xPQexec)(PGconn *conn, const char *query); //NOLINT
-typedef ExecStatusType (*xPQresultStatus)(const PGresult *res); //NOLINT
-typedef int	(*xPQntuples)(const PGresult *res); //NOLINT
-typedef char *(*xPQfname)(const PGresult *res, int field_num); //NOLINT
-typedef int	(*xPQnfields)(const PGresult *res); //NOLINT
-typedef void (*xPQfinish)(PGconn *conn); //NOLINT
-typedef char *(*xPQerrorMessage)(const PGconn *conn); //NOLINT
-#endif
+			static CSphDynamicLibrary dLib ( PGSQL_LIB );
+			if ( !dLib.LoadSymbols ( sFuncs, pFuncs, POSTRESQL_NUM_FUNCS))
+				return false;
+			return true;
+		}
 
-class CPosgresql : public CSphDynamicLibrary
-{
-	static const char* sFuncs[POSTRESQL_NUM_FUNCS];
-	static void** pFuncs[POSTRESQL_NUM_FUNCS];
-
-public:
-	bool Init()
-	{
-		if ( !CSphDynamicLibrary::Init ( PGSQL_LIB, true ) )
-			return false;
-		if ( !LoadSymbols ( sFuncs, pFuncs, POSTRESQL_NUM_FUNCS ) )
-			return false;
-		return true;
-	}
-	static void 	Stub()
-	{
-		sphLogDebug ( "Error! Posgresql func is null!" );
-	}
-
-	static xPQgetvalue m_pPQgetvalue;
-	static xPQgetlength m_pPQgetlength;
-	static xPQclear m_pPQclear;
-	static xPQsetdbLogin m_pPQsetdbLogin;
-	static xPQstatus m_pPQstatus;
-	static xPQsetClientEncoding m_pPQsetClientEncoding;
-	static xPQexec m_pPQexec;
-	static xPQresultStatus m_pPQresultStatus;
-	static xPQntuples m_pPQntuples;
-	static xPQfname m_pPQfname;
-	static xPQnfields m_pPQnfields;
-	static xPQfinish m_pPQfinish;
-	static xPQerrorMessage m_pPQerrorMessage;
-};
-
-#define sph_PQgetvalue (*CPosgresql::m_pPQgetvalue)
-#define sph_PQgetlength (*CPosgresql::m_pPQgetlength)
-#define sph_PQclear (*CPosgresql::m_pPQclear)
-#define sph_PQsetdbLogin (*CPosgresql::m_pPQsetdbLogin)
-#define sph_PQstatus (*CPosgresql::m_pPQstatus)
-#define sph_PQsetClientEncoding (*CPosgresql::m_pPQsetClientEncoding)
-#define sph_PQexec (*CPosgresql::m_pPQexec)
-#define sph_PQresultStatus (*CPosgresql::m_pPQresultStatus)
-#define sph_PQntuples (*CPosgresql::m_pPQntuples)
-#define sph_PQfname (*CPosgresql::m_pPQfname)
-#define sph_PQnfields (*CPosgresql::m_pPQnfields)
-#define sph_PQfinish (*CPosgresql::m_pPQfinish)
-#define sph_PQerrorMessage (*CPosgresql::m_pPQerrorMessage)
-
-const char* CPosgresql::sFuncs[POSTRESQL_NUM_FUNCS] = {"PQgetvalue", "PQgetlength", "PQclear",
-	"PQsetdbLogin", "PQstatus", "PQsetClientEncoding", "PQexec",
-	"PQresultStatus", "PQntuples", "PQfname", "PQnfields",
-	"PQfinish", "PQerrorMessage" };
-void** CPosgresql::pFuncs[] = {(void**)&m_pPQgetvalue, (void**)&m_pPQgetlength, (void**)&m_pPQclear,
-	(void**)&m_pPQsetdbLogin, (void**)&m_pPQstatus, (void**)&m_pPQsetClientEncoding,
-	(void**)&m_pPQexec, (void**)&m_pPQresultStatus, (void**)&m_pPQntuples,
-	(void**)&m_pPQfname, (void**)&m_pPQnfields, (void**)&m_pPQfinish,
-	(void**)&m_pPQerrorMessage};
-
-xPQgetvalue CPosgresql::m_pPQgetvalue = (xPQgetvalue)CPosgresql::Stub;
-xPQgetvalue CPosgresql::m_pPQgetlength = (xPQgetlength)CPosgresql::Stub;
-xPQclear CPosgresql::m_pPQclear = (xPQclear)CPosgresql::Stub;
-xPQsetdbLogin CPosgresql::m_pPQsetdbLogin = (xPQsetdbLogin)CPosgresql::Stub;
-xPQstatus CPosgresql::m_pPQstatus = (xPQstatus)CPosgresql::Stub;
-xPQsetClientEncoding CPosgresql::m_pPQsetClientEncoding = (xPQsetClientEncoding)CPosgresql::Stub;
-xPQexec CPosgresql::m_pPQexec = (xPQexec)CPosgresql::Stub;
-xPQresultStatus CPosgresql::m_pPQresultStatus = (xPQresultStatus)CPosgresql::Stub;
-xPQntuples CPosgresql::m_pPQntuples = (xPQntuples)CPosgresql::Stub;
-xPQfname CPosgresql::m_pPQfname = (xPQfname)CPosgresql::Stub;
-xPQnfields CPosgresql::m_pPQnfields = (xPQnfields)CPosgresql::Stub;
-xPQfinish CPosgresql::m_pPQfinish = (xPQfinish)CPosgresql::Stub;
-xPQerrorMessage CPosgresql::m_pPQerrorMessage = (xPQerrorMessage)CPosgresql::Stub;
-
-CPosgresql MyPosgreSqlHolder;
-
-bool InitDynamicPosgresql()
-{
-	return MyPosgreSqlHolder.Init();
-}
-
-#else // !DL_PGSQL
-
-#define sph_PQgetvalue PQgetvalue
-#define sph_PQgetlength PQgetlength
-#define sph_PQclear PQclear
-#define sph_PQsetdbLogin PQsetdbLogin
-#define sph_PQstatus PQstatus
-#define sph_PQsetClientEncoding PQsetClientEncoding
-#define sph_PQexec PQexec
-#define sph_PQresultStatus PQresultStatus
-#define sph_PQntuples PQntuples
-#define sph_PQfname PQfname
-#define sph_PQnfields PQnfields
-#define sph_PQfinish PQfinish
-#define sph_PQerrorMessage PQerrorMessage
-#define InitDynamicPosgresql() (true)
-
-#endif // DL_PGSQL
+	#else
+		#define InitDynamicPosgresql() (true)
+	#endif
 
 CSphSourceParams_PgSQL::CSphSourceParams_PgSQL ()
 {
@@ -27532,144 +27339,49 @@ static bool SourceCheckSchema ( const CSphSchema & tSchema, CSphString & sError 
 
 
 #if USE_LIBEXPAT
-#if DL_EXPAT
-#ifndef EXPAT_LIB
-#define EXPAT_LIB "libexpat.so"
-#endif
-#define EXPAT_NUM_FUNCS (11)
 
-#if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC) || defined(__ECC) || defined(__GNUC__)
+	EXPAT_F ( XML_ParserFree );
+	EXPAT_F ( XML_Parse );
+	EXPAT_F ( XML_GetCurrentColumnNumber );
+	EXPAT_F ( XML_GetCurrentLineNumber );
+	EXPAT_F ( XML_GetErrorCode );
+	EXPAT_F ( XML_ErrorString );
+	EXPAT_F ( XML_ParserCreate );
+	EXPAT_F ( XML_SetUserData );
+	EXPAT_F ( XML_SetElementHandler );
+	EXPAT_F ( XML_SetCharacterDataHandler );
+	EXPAT_F ( XML_SetUnknownEncodingHandler );
 
-// use non-standard compiler extension __typeof__
-// it allow to declare pointer to the function without using it's declaration
-typedef __typeof__ ( XML_ParserFree ) *xXML_ParserFree;
-typedef __typeof__ ( XML_Parse ) *xXML_Parse;
-typedef __typeof__ ( XML_GetCurrentColumnNumber ) *xXML_GetCurrentColumnNumber;
-typedef __typeof__ ( XML_GetCurrentLineNumber ) *xXML_GetCurrentLineNumber;
-typedef __typeof__ ( XML_GetErrorCode ) *xXML_GetErrorCode;
-typedef __typeof__ ( XML_ErrorString ) *xXML_ErrorString;
-typedef __typeof__ ( XML_ParserCreate ) *xXML_ParserCreate;
-typedef __typeof__ ( XML_SetUserData ) *xXML_SetUserData;
-typedef __typeof__ ( XML_SetElementHandler ) *xXML_SetElementHandler;
-typedef __typeof__ ( XML_SetCharacterDataHandler ) *xXML_SetCharacterDataHandler;
-typedef __typeof__ ( XML_SetUnknownEncodingHandler ) *xXML_SetUnknownEncodingHandler;
+	#if DL_EXPAT
+		#ifndef EXPAT_LIB
+			#define EXPAT_LIB "libexpat.so"
+		#endif
 
-#else // compilers which are not known about __typeof__ support
-// declarations below are directly copy-pasted from expat.h,
-// and then (*x...) is placed around the function names.
-// In mostly cases this code will not be used, and the declarations
-// from previous block will be used instead.
-#warning Be sure that the expat function signatures are the same \
-as in expat.h. Correct the code below if this is not so.
-typedef XMLPARSEAPI(void) (*xXML_ParserFree)(XML_Parser); //NOLINT
-typedef XMLPARSEAPI(enum XML_Status) (*xXML_Parse)(XML_Parser, const char *, int, int); //NOLINT
-typedef XMLPARSEAPI(XML_Size) (*xXML_GetCurrentColumnNumber)(XML_Parser); //NOLINT
-typedef XMLPARSEAPI(XML_Size) (*xXML_GetCurrentLineNumber)(XML_Parser); //NOLINT
-typedef XMLPARSEAPI(enum XML_Error) (*xXML_GetErrorCode)(XML_Parser); //NOLINT
-typedef XMLPARSEAPI(const XML_LChar *) (*xXML_ErrorString)(enum XML_Error code); //NOLINT
-typedef XMLPARSEAPI(XML_Parser) (*xXML_ParserCreate)(const XML_Char *encoding); //NOLINT
-typedef XMLPARSEAPI(void) (*xXML_SetUserData)(XML_Parser, void *); //NOLINT
-typedef XMLPARSEAPI(void) (*xXML_SetElementHandler)(XML_Parser, //NOLINT
-                      XML_StartElementHandler, //NOLINT
-                      XML_EndElementHandler); //NOLINT
-typedef XMLPARSEAPI(void) (*xXML_SetCharacterDataHandler)(XML_Parser, //NOLINT
-                            XML_CharacterDataHandler); //NOLINT
-typedef XMLPARSEAPI(void) (*xXML_SetUnknownEncodingHandler)(XML_Parser, //NOLINT
-                              XML_UnknownEncodingHandler, //NOLINT
-                              void *); //NOLINT
-#endif
+		#define EXPAT_NUM_FUNCS (11)
 
-class CExpat : public CSphDynamicLibrary
-{
-	static const char* sFuncs[EXPAT_NUM_FUNCS];
-	static void** pFuncs[EXPAT_NUM_FUNCS];
+		bool InitDynamicExpat ()
+		{
+			const char * sFuncs[] = { "XML_ParserFree", "XML_Parse",
+					"XML_GetCurrentColumnNumber", "XML_GetCurrentLineNumber", "XML_GetErrorCode", "XML_ErrorString",
+					"XML_ParserCreate", "XML_SetUserData", "XML_SetElementHandler", "XML_SetCharacterDataHandler",
+					"XML_SetUnknownEncodingHandler" };
 
-public:
-	bool Init()
-	{
-		if ( !CSphDynamicLibrary::Init ( EXPAT_LIB, true ) )
-			return false;
-		if ( !LoadSymbols ( sFuncs, pFuncs, EXPAT_NUM_FUNCS ) )
-			return false;
-		return true;
-	}
-	static void 	Stub()
-	{
-		sphLogDebug ( "Error! Expat func is null!" );
-	}
+			void ** pFuncs[] = { (void **) & sph_XML_ParserFree, (void **) & sph_XML_Parse,
+					(void **) & sph_XML_GetCurrentColumnNumber, (void **) & sph_XML_GetCurrentLineNumber,
+					(void **) & sph_XML_GetErrorCode, (void **) & sph_XML_ErrorString,
+					(void **) & sph_XML_ParserCreate, (void **) & sph_XML_SetUserData,
+					(void **) & sph_XML_SetElementHandler, (void **) & sph_XML_SetCharacterDataHandler,
+					(void **) & sph_XML_SetUnknownEncodingHandler };
 
-	static xXML_ParserFree m_pXML_ParserFree;
-	static xXML_Parse m_pXML_Parse;
-	static xXML_GetCurrentColumnNumber m_pXML_GetCurrentColumnNumber;
-	static xXML_GetCurrentLineNumber m_pXML_GetCurrentLineNumber;
-	static xXML_GetErrorCode m_pXML_GetErrorCode;
-	static xXML_ErrorString m_pXML_ErrorString;
-	static xXML_ParserCreate m_pXML_ParserCreate;
-	static xXML_SetUserData m_pXML_SetUserData;
-	static xXML_SetElementHandler m_pXML_SetElementHandler;
-	static xXML_SetCharacterDataHandler m_pXML_SetCharacterDataHandler;
-	static xXML_SetUnknownEncodingHandler m_pXML_SetUnknownEncodingHandler;
-};
+			static CSphDynamicLibrary dLib ( EXPAT_LIB );
+			if ( !dLib.LoadSymbols ( sFuncs, pFuncs, EXPAT_NUM_FUNCS))
+				return false;
+			return true;
+		}
 
-#define sph_XML_ParserFree (*CExpat::m_pXML_ParserFree)
-#define sph_XML_Parse (*CExpat::m_pXML_Parse)
-#define sph_XML_GetCurrentColumnNumber (*CExpat::m_pXML_GetCurrentColumnNumber)
-#define sph_XML_GetCurrentLineNumber (*CExpat::m_pXML_GetCurrentLineNumber)
-#define sph_XML_GetErrorCode (*CExpat::m_pXML_GetErrorCode)
-#define sph_XML_ErrorString (*CExpat::m_pXML_ErrorString)
-#define sph_XML_ParserCreate (*CExpat::m_pXML_ParserCreate)
-#define sph_XML_SetUserData (*CExpat::m_pXML_SetUserData)
-#define sph_XML_SetElementHandler (*CExpat::m_pXML_SetElementHandler)
-#define sph_XML_SetCharacterDataHandler (*CExpat::m_pXML_SetCharacterDataHandler)
-#define sph_XML_SetUnknownEncodingHandler (*CExpat::m_pXML_SetUnknownEncodingHandler)
-
-const char* CExpat::sFuncs[] = {"XML_ParserFree", "XML_Parse",
-	"XML_GetCurrentColumnNumber", "XML_GetCurrentLineNumber", "XML_GetErrorCode", "XML_ErrorString",
-	"XML_ParserCreate", "XML_SetUserData", "XML_SetElementHandler", "XML_SetCharacterDataHandler",
-	"XML_SetUnknownEncodingHandler" };
-void** CExpat::pFuncs[] = {(void**)&m_pXML_ParserFree, (void**)&m_pXML_Parse,
-	(void**)&m_pXML_GetCurrentColumnNumber, (void**)&m_pXML_GetCurrentLineNumber,
-	(void**)&m_pXML_GetErrorCode, (void**)&m_pXML_ErrorString,
-	(void**)&m_pXML_ParserCreate, (void**)&m_pXML_SetUserData,
-	(void**)&m_pXML_SetElementHandler, (void**)&m_pXML_SetCharacterDataHandler,
-	(void**)&m_pXML_SetUnknownEncodingHandler};
-
-
-xXML_ParserFree CExpat::m_pXML_ParserFree = (xXML_ParserFree)CExpat::Stub;
-xXML_Parse CExpat::m_pXML_Parse = (xXML_Parse)CExpat::Stub;
-xXML_GetCurrentColumnNumber CExpat::m_pXML_GetCurrentColumnNumber = (xXML_GetCurrentColumnNumber)CExpat::Stub;
-xXML_GetCurrentLineNumber CExpat::m_pXML_GetCurrentLineNumber = (xXML_GetCurrentLineNumber)CExpat::Stub;
-xXML_GetErrorCode CExpat::m_pXML_GetErrorCode = (xXML_GetErrorCode)CExpat::Stub;
-xXML_ErrorString CExpat::m_pXML_ErrorString = (xXML_ErrorString)CExpat::Stub;
-xXML_ParserCreate CExpat::m_pXML_ParserCreate = (xXML_ParserCreate)CExpat::Stub;
-xXML_SetUserData CExpat::m_pXML_SetUserData = (xXML_SetUserData)CExpat::Stub;
-xXML_SetElementHandler CExpat::m_pXML_SetElementHandler = (xXML_SetElementHandler)CExpat::Stub;
-xXML_SetCharacterDataHandler CExpat::m_pXML_SetCharacterDataHandler = (xXML_SetCharacterDataHandler)CExpat::Stub;
-xXML_SetUnknownEncodingHandler CExpat::m_pXML_SetUnknownEncodingHandler = (xXML_SetUnknownEncodingHandler)CExpat::Stub;
-
-CExpat MyExpatHolder;
-
-bool InitDynamicExpat()
-{
-	return MyExpatHolder.Init();
-}
-
-#else // !DL_EXPAT
-
-#define sph_XML_ParserFree XML_ParserFree
-#define sph_XML_Parse XML_Parse
-#define sph_XML_GetCurrentColumnNumber XML_GetCurrentColumnNumber
-#define sph_XML_GetCurrentLineNumber XML_GetCurrentLineNumber
-#define sph_XML_GetErrorCode XML_GetErrorCode
-#define sph_XML_ErrorString XML_ErrorString
-#define sph_XML_ParserCreate XML_ParserCreate
-#define sph_XML_SetUserData XML_SetUserData
-#define sph_XML_SetElementHandler XML_SetElementHandler
-#define sph_XML_SetCharacterDataHandler XML_SetCharacterDataHandler
-#define sph_XML_SetUnknownEncodingHandler XML_SetUnknownEncodingHandler
-#define InitDynamicExpat() (true)
-
-#endif // DL_EXPAT
+	#else
+		#define InitDynamicExpat() (true)
+	#endif
 
 /// XML pipe source implementation (v2)
 class CSphSource_XMLPipe2 : public CSphSource_Document, public CSphSchemaConfigurator<CSphSource_XMLPipe2>
@@ -28765,186 +28477,51 @@ CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE *
 
 #endif
 
-
 #if USE_ODBC
-#if DL_UNIXODBC
 
-#ifndef UNIXODBC_LIB
-#define UNIXODBC_LIB "libodbc.so"
-#endif
+	ODBC_F ( SQLFreeHandle );
+	ODBC_F ( SQLDisconnect );
+	ODBC_F ( SQLCloseCursor );
+	ODBC_F ( SQLGetDiagRec );
+	ODBC_F ( SQLSetEnvAttr );
+	ODBC_F ( SQLAllocHandle );
+	ODBC_F ( SQLFetch );
+	ODBC_F ( SQLExecDirect );
+	ODBC_F ( SQLNumResultCols );
+	ODBC_F ( SQLDescribeCol );
+	ODBC_F ( SQLBindCol );
+	ODBC_F ( SQLDrivers );
+	ODBC_F ( SQLDriverConnect );
 
-#define ODBC_NUM_FUNCS (13)
+	#if DL_UNIXODBC
+		#ifndef UNIXODBC_LIB
+			#define UNIXODBC_LIB "libodbc.so"
+		#endif
 
-#if defined(__INTEL_COMPILER) || defined(__ICL) || defined(__ICC) || defined(__ECC) || defined(__GNUC__)
+		#define ODBC_NUM_FUNCS (13)
 
-// use non-standard compiler extension __typeof__
-// it allow to declare pointer to the function without using it's declaration
-typedef __typeof__ ( SQLFreeHandle ) *xSQLFreeHandle;
-typedef __typeof__ ( SQLDisconnect ) *xSQLDisconnect;
-typedef __typeof__ ( SQLCloseCursor ) *xSQLCloseCursor;
-typedef __typeof__ ( SQLGetDiagRec ) *xSQLGetDiagRec;
-typedef __typeof__ ( SQLSetEnvAttr ) *xSQLSetEnvAttr;
-typedef __typeof__ ( SQLAllocHandle ) *xSQLAllocHandle;
-typedef __typeof__ ( SQLFetch ) *xSQLFetch;
-typedef __typeof__ ( SQLExecDirect ) *xSQLExecDirect;
-typedef __typeof__ ( SQLNumResultCols ) *xSQLNumResultCols;
-typedef __typeof__ ( SQLDescribeCol ) *xSQLDescribeCol;
-typedef __typeof__ ( SQLBindCol ) *xSQLBindCol;
-typedef __typeof__ ( SQLDrivers ) *xSQLDrivers;
-typedef __typeof__ ( SQLDriverConnect ) *xSQLDriverConnect;
+		bool InitDynamicOdbc ()
+		{
+			const char * sFuncs[] = {"SQLFreeHandle", "SQLDisconnect",
+					"SQLCloseCursor", "SQLGetDiagRec", "SQLSetEnvAttr", "SQLAllocHandle",
+					"SQLFetch", "SQLExecDirect", "SQLNumResultCols", "SQLDescribeCol",
+					"SQLBindCol", "SQLDrivers", "SQLDriverConnect" };
 
-#else // compilers which are not known about __typeof__ support
-// declarations below are directly copy-pasted from expat.h,
-// and then (*x...) is placed around the function names.
-// In mostly cases this code will not be used, and the declarations
-// from previous block will be used instead.
-#warning Be sure that the unixodbc function signatures are the same \
-as in sql.h and sqlext.h Correct the code below if this is not so.
-typedef SQLRETURN  SQL_API (*xSQLFreeHandle)(SQLSMALLINT HandleType, SQLHANDLE Handle) //NOLINT
-typedef SQLRETURN  SQL_API (*xSQLDisconnect)(SQLHDBC ConnectionHandle); //NOLINT
-typedef SQLRETURN  SQL_API (*xSQLCloseCursor)(SQLHSTMT StatementHandle); //NOLINT
-typedef SQLRETURN  SQL_API (*xSQLGetDiagRec)(SQLSMALLINT HandleType, SQLHANDLE Handle, //NOLINT
-                                     SQLSMALLINT RecNumber, SQLCHAR *Sqlstate, //NOLINT
-                                     SQLINTEGER *NativeError, SQLCHAR *MessageText, //NOLINT
-                                     SQLSMALLINT BufferLength, SQLSMALLINT *TextLength); //NOLINT
-typedef SQLRETURN  SQL_API (*xSQLSetEnvAttr)(SQLHENV EnvironmentHandle, //NOLINT
-                                     SQLINTEGER Attribute, SQLPOINTER Value, //NOLINT
-                                     SQLINTEGER StringLength); //NOLINT
-typedef SQLRETURN  SQL_API (*xSQLAllocHandle)(SQLSMALLINT HandleType, //NOLINT
-                                      SQLHANDLE InputHandle, SQLHANDLE *OutputHandle); //NOLINT
-typedef SQLRETURN  SQL_API (*xSQLFetch)(SQLHSTMT StatementHandle); //NOLINT
-typedef SQLRETURN  SQL_API (*xSQLExecDirect)(SQLHSTMT StatementHandle, //NOLINT
-                                     SQLCHAR *StatementText, SQLINTEGER TextLength); //NOLINT
-typedef SQLRETURN  SQL_API (*xSQLNumResultCols)(SQLHSTMT StatementHandle, //NOLINT
-                                        SQLSMALLINT *ColumnCount); //NOLINT
-typedef SQLRETURN  SQL_API (*xSQLDescribeCol)(SQLHSTMT StatementHandle, //NOLINT
-                                      SQLUSMALLINT ColumnNumber, SQLCHAR *ColumnName, //NOLINT
-                                      SQLSMALLINT BufferLength, SQLSMALLINT *NameLength, //NOLINT
-                                      SQLSMALLINT *DataType, SQLULEN *ColumnSize, //NOLINT
-                                      SQLSMALLINT *DecimalDigits, SQLSMALLINT *Nullable); //NOLINT
-typedef SQLRETURN  SQL_API (*xSQLBindCol)(SQLHSTMT StatementHandle, //NOLINT
-                                  SQLUSMALLINT ColumnNumber, SQLSMALLINT TargetType, //NOLINT
-                                  SQLPOINTER TargetValue, SQLLEN BufferLength, //NOLINT
-                                  SQLLEN *StrLen_or_Ind); //NOLINT
-// these two from sqlext.h
-typedef SQLRETURN SQL_API (*xSQLDrivers)( //NOLINT
-    SQLHENV            henv, //NOLINT
-    SQLUSMALLINT       fDirection, //NOLINT
-    SQLCHAR 		  *szDriverDesc, //NOLINT
-    SQLSMALLINT        cbDriverDescMax, //NOLINT
-    SQLSMALLINT 	  *pcbDriverDesc, //NOLINT
-    SQLCHAR 		  *szDriverAttributes, //NOLINT
-    SQLSMALLINT        cbDrvrAttrMax, //NOLINT
-    SQLSMALLINT 	  *pcbDrvrAttr); //NOLINT
-typedef SQLRETURN SQL_API (*xSQLDriverConnect)( //NOLINT
-    SQLHDBC            hdbc, //NOLINT
-    SQLHWND            hwnd, //NOLINT
-    SQLCHAR 		  *szConnStrIn, //NOLINT
-    SQLSMALLINT        cbConnStrIn, //NOLINT
-    SQLCHAR           *szConnStrOut, //NOLINT
-    SQLSMALLINT        cbConnStrOutMax, //NOLINT
-    SQLSMALLINT 	  *pcbConnStrOut, //NOLINT
-    SQLUSMALLINT       fDriverCompletion); //NOLINT
-#endif
+			void ** pFuncs[] = {(void**)&sph_SQLFreeHandle, (void**)&sph_SQLDisconnect,
+					(void**)&sph_SQLCloseCursor, (void**)&sph_SQLGetDiagRec, (void**)&sph_SQLSetEnvAttr,
+					(void**)&sph_SQLAllocHandle, (void**)&sph_SQLFetch, (void**)&sph_SQLExecDirect,
+					(void**)&sph_SQLNumResultCols, (void**)&sph_SQLDescribeCol, (void**)&sph_SQLBindCol,
+					(void**)&sph_SQLDrivers, (void**)&sph_SQLDriverConnect };
 
-class CODBC : public CSphDynamicLibrary
-{
-	static const char* sFuncs[ODBC_NUM_FUNCS];
-	static void** pFuncs[ODBC_NUM_FUNCS];
+			static CSphDynamicLibrary dLib ( UNIXODBC_LIB );
+			if ( !dLib.LoadSymbols ( sFuncs, pFuncs, ODBC_NUM_FUNCS))
+				return false;
+			return true;
+		}
 
-public:
-	bool Init()
-	{
-		if ( !CSphDynamicLibrary::Init ( UNIXODBC_LIB, true ) )
-			return false;
-		if ( !LoadSymbols ( sFuncs, pFuncs, ODBC_NUM_FUNCS ) )
-			return false;
-		return true;
-	}
-	static void 	Stub()
-	{
-		sphLogDebug ( "Error! Odbc func is null!" );
-	}
-
-static xSQLFreeHandle m_pSQLFreeHandle;
-static xSQLDisconnect m_pSQLDisconnect;
-static xSQLCloseCursor m_pSQLCloseCursor;
-static xSQLGetDiagRec m_pSQLGetDiagRec;
-static xSQLSetEnvAttr m_pSQLSetEnvAttr;
-static xSQLAllocHandle m_pSQLAllocHandle;
-static xSQLFetch m_pSQLFetch;
-static xSQLExecDirect m_pSQLExecDirect;
-static xSQLNumResultCols m_pSQLNumResultCols;
-static xSQLDescribeCol m_pSQLDescribeCol;
-static xSQLBindCol m_pSQLBindCol;
-static xSQLDrivers m_pSQLDrivers;
-static xSQLDriverConnect m_pSQLDriverConnect;
-};
-
-#define sph_SQLFreeHandle (*CODBC::m_pSQLFreeHandle)
-#define sph_SQLDisconnect (*CODBC::m_pSQLDisconnect)
-#define sph_SQLCloseCursor (*CODBC::m_pSQLCloseCursor)
-#define sph_SQLGetDiagRec (*CODBC::m_pSQLGetDiagRec)
-#define sph_SQLSetEnvAttr (*CODBC::m_pSQLSetEnvAttr)
-#define sph_SQLAllocHandle (*CODBC::m_pSQLAllocHandle)
-#define sph_SQLFetch (*CODBC::m_pSQLFetch)
-#define sph_SQLExecDirect (*CODBC::m_pSQLExecDirect)
-#define sph_SQLNumResultCols (*CODBC::m_pSQLNumResultCols)
-#define sph_SQLDescribeCol (*CODBC::m_pSQLDescribeCol)
-#define sph_SQLBindCol (*CODBC::m_pSQLBindCol)
-#define sph_SQLDrivers (*CODBC::m_pSQLDrivers)
-#define sph_SQLDriverConnect (*CODBC::m_pSQLDriverConnect)
-
-const char* CODBC::sFuncs[] = {"SQLFreeHandle", "SQLDisconnect",
-	"SQLCloseCursor", "SQLGetDiagRec", "SQLSetEnvAttr", "SQLAllocHandle",
-	"SQLFetch", "SQLExecDirect", "SQLNumResultCols", "SQLDescribeCol",
-	"SQLBindCol", "SQLDrivers", "SQLDriverConnect" };
-void** CODBC::pFuncs[] = {(void**)&m_pSQLFreeHandle, (void**)&m_pSQLDisconnect,
-	(void**)&m_pSQLCloseCursor, (void**)&m_pSQLGetDiagRec, (void**)&m_pSQLSetEnvAttr,
-	(void**)&m_pSQLAllocHandle, (void**)&m_pSQLFetch, (void**)&m_pSQLExecDirect,
-	(void**)&m_pSQLNumResultCols, (void**)&m_pSQLDescribeCol, (void**)&m_pSQLBindCol,
-	(void**)&m_pSQLDrivers, (void**)&m_pSQLDriverConnect };
-
-xSQLFreeHandle CODBC::m_pSQLFreeHandle = (xSQLFreeHandle)CODBC::Stub;
-xSQLDisconnect CODBC::m_pSQLDisconnect = (xSQLDisconnect)CODBC::Stub;
-xSQLCloseCursor CODBC::m_pSQLCloseCursor = (xSQLCloseCursor)CODBC::Stub;
-xSQLGetDiagRec CODBC::m_pSQLGetDiagRec = (xSQLGetDiagRec)CODBC::Stub;
-xSQLSetEnvAttr CODBC::m_pSQLSetEnvAttr = (xSQLSetEnvAttr)CODBC::Stub;
-xSQLAllocHandle CODBC::m_pSQLAllocHandle = (xSQLAllocHandle)CODBC::Stub;
-xSQLFetch CODBC::m_pSQLFetch = (xSQLFetch)CODBC::Stub;
-xSQLExecDirect CODBC::m_pSQLExecDirect = (xSQLExecDirect)CODBC::Stub;
-xSQLNumResultCols CODBC::m_pSQLNumResultCols = (xSQLNumResultCols)CODBC::Stub;
-xSQLDescribeCol CODBC::m_pSQLDescribeCol = (xSQLDescribeCol)CODBC::Stub;
-xSQLBindCol CODBC::m_pSQLBindCol = (xSQLBindCol)CODBC::Stub;
-xSQLDrivers CODBC::m_pSQLDrivers = (xSQLDrivers)CODBC::Stub;
-xSQLDriverConnect CODBC::m_pSQLDriverConnect = (xSQLDriverConnect)CODBC::Stub;
-
-CODBC MyOdbcHolder;
-
-bool InitDynamicOdbc()
-{
-	return MyOdbcHolder.Init();
-}
-
-#else // !DL_UNIXODBC
-
-#define sph_SQLFreeHandle SQLFreeHandle
-#define sph_SQLDisconnect SQLDisconnect
-#define sph_SQLCloseCursor SQLCloseCursor
-#define sph_SQLGetDiagRec SQLGetDiagRec
-#define sph_SQLSetEnvAttr SQLSetEnvAttr
-#define sph_SQLAllocHandle SQLAllocHandle
-#define sph_SQLFetch SQLFetch
-#define sph_SQLExecDirect SQLExecDirect
-#define sph_SQLNumResultCols SQLNumResultCols
-#define sph_SQLDescribeCol SQLDescribeCol
-#define sph_SQLBindCol SQLBindCol
-#define sph_SQLDrivers SQLDrivers
-#define sph_SQLDriverConnect SQLDriverConnect
-#define InitDynamicOdbc() (true)
-
-#endif // DL_UNIXODBC
-
+	#else
+		#define InitDynamicOdbc() (true)
+	#endif
 
 CSphSourceParams_ODBC::CSphSourceParams_ODBC ()
 	: m_bWinAuth	( false )

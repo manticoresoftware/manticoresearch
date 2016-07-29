@@ -2502,47 +2502,15 @@ const char * sphGetRankerName ( ESphRankMode eRanker )
 
 #if HAVE_DLOPEN
 
-void CSphDynamicLibrary::FillError ( const char * sMessage )
+CSphDynamicLibrary::CSphDynamicLibrary ( const char * sPath )
+	: m_bReady ( false )
+	, m_pLibrary ( nullptr )
 {
-	const char* sDlerror = dlerror();
-	if ( sMessage )
-		m_sError.SetSprintf ( "%s: %s", sMessage, sDlerror ? sDlerror : "(null)" );
+	m_pLibrary = dlopen ( sPath, RTLD_NOW | RTLD_GLOBAL );
+	if ( !m_pLibrary )
+		sphLogDebug ( "dlopen(%s) failed", sPath );
 	else
-		m_sError.SetSprintf ( "%s", sDlerror ? sDlerror : "(null)" );
-}
-
-bool CSphDynamicLibrary::Init ( const char * sPath, bool bGlobal )
-{
-	if ( m_pLibrary )
-		return true;
-	int iFlags = bGlobal?(RTLD_NOW | RTLD_GLOBAL):(RTLD_LAZY|RTLD_LOCAL);
-	m_pLibrary = dlopen ( sPath, iFlags );
-	if ( !m_pLibrary )
-	{
-		FillError ( "dlopen() failed" );
-		return false;
-	}
-	sphLogDebug ( "dlopen(%s)=%p", sPath, m_pLibrary );
-	m_bReady = true;
-	return m_bReady;
-}
-
-bool CSphDynamicLibrary::LoadSymbol ( const char* sName, void** ppFunc )
-{
-	if ( !m_pLibrary )
-		return false;
-
-	if ( !m_bReady )
-		return false;
-
-	void * pResult = dlsym ( m_pLibrary, sName );
-	if ( !pResult )
-	{
-		FillError ( "Symbol not found" );
-		return false;
-	}
-	*ppFunc = pResult;
-	return true;
+		sphLogDebug ( "dlopen(%s)=%p", sPath, m_pLibrary );
 }
 
 bool CSphDynamicLibrary::LoadSymbols ( const char** sNames, void*** pppFuncs, int iNum )
@@ -2550,15 +2518,15 @@ bool CSphDynamicLibrary::LoadSymbols ( const char** sNames, void*** pppFuncs, in
 	if ( !m_pLibrary )
 		return false;
 
-	if ( !m_bReady )
-		return false;
+	if ( m_bReady )
+		return true;
 
 	for ( int i=0; i<iNum; ++i )
 	{
 		void* pResult = dlsym ( m_pLibrary, sNames[i] );
 		if ( !pResult )
 		{
-			FillError ( "Symbol not found" );
+			sphLogDebug ( "Symbol %s not found", sNames[i] );
 			return false;
 		}
 		// yes, it is void*** - triple pointer.
@@ -2569,15 +2537,13 @@ bool CSphDynamicLibrary::LoadSymbols ( const char** sNames, void*** pppFuncs, in
 		// one more level of indirection. void*** actually is void**[]
 		*pppFuncs[i] = pResult;
 	}
-
+	m_bReady = true;
 	return true;
 };
 
 #else
 
-void CSphDynamicLibrary::FillError ( const char * e ) { m_sError = e; }
-bool CSphDynamicLibrary::Init ( const char *, bool ) { return false; }
-bool CSphDynamicLibrary::LoadSymbol ( const char *, void ** ) { return false; }
+CSphDynamicLibrary::CSphDynamicLibrary ( const char * ) {};
 bool CSphDynamicLibrary::LoadSymbols ( const char **, void ***, int ) { return false; }
 
 #endif

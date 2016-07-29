@@ -250,23 +250,13 @@ class CSphDynamicLibrary : public ISphNoncopyable
 	void *		m_pLibrary; // internal handle
 
 public:
-	CSphDynamicLibrary()
-		: m_bReady ( false )
-		, m_pLibrary ( NULL )
-		, m_sError ( "" )
-		{}
-	virtual ~CSphDynamicLibrary()
-	{}
+	CSphDynamicLibrary ( const char* sPath );
 
-	bool		Init ( const char* sPath, bool bGlobal=true );
-	bool		LoadSymbol ( const char* sName, void** ppFunc );
+	// We are suppose, that library is loaded once when necessary, and will alive whole lifetime of utility.
+	// So, no need to explicitly desctruct it, this is intended leak.
+	~CSphDynamicLibrary () = default;
+
 	bool		LoadSymbols ( const char** sNames, void*** pppFuncs, int iNum );
-
-public:
-	CSphString	m_sError;
-
-private:
-	void		FillError ( const char* sMessage=NULL );
 };
 
 #endif // _sphinxutils_

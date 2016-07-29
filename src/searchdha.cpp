@@ -178,7 +178,13 @@ void MetaAgentDesc_t::SetOptions ( const AgentOptions_t& tOpt )
 
 void MetaAgentDesc_t::FinalizeInitialization ()
 {
-
+	if ( IsHA () )
+	{
+		WORD uFrac = WORD ( 0xFFFF / GetLength () );
+		m_dWeights.Reset ( GetLength () );
+		for ( WORD& uWeight : m_dWeights )
+			uWeight = uFrac;
+	}
 }
 
 AgentDesc_c * MetaAgentDesc_t::GetAgent ( int iAgent )

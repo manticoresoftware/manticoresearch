@@ -11992,8 +11992,18 @@ void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iAffectedR
 
 //////////////////////////////////////////////////////////////////////////
 // Mysql row buffer and command handler
+
+// filter interface for named data
+class IDataTupleter
+{
+public:
+	virtual ~IDataTupleter() = default;
+	virtual void DataTuplet ( const char *, const char *) = 0;
+	virtual void DataTuplet ( const char *, int64_t ) = 0;
+};
+
 #define SPH_MAX_NUMERIC_STR 64
-class SqlRowBuffer_c : public ISphNoncopyable
+class SqlRowBuffer_c : public ISphNoncopyable, public IDataTupleter
 {
 public:
 
@@ -12177,14 +12187,14 @@ public:
 	}
 
 	// popular pattern of 2 columns of data
-	inline void DataTuplet ( const char * pLeft, const char * pRight )
+	void DataTuplet ( const char * pLeft, const char * pRight ) override
 	{
 		PutString ( pLeft );
 		PutString ( pRight );
 		Commit();
 	}
 
-	inline void DataTuplet ( const char * pLeft, int64_t iRight )
+	void DataTuplet ( const char * pLeft, int64_t iRight ) override
 	{
 		char sTmp[SPH_MAX_NUMERIC_STR];
 		snprintf ( sTmp, sizeof(sTmp), INT64_FMT, iRight );
@@ -12206,6 +12216,7 @@ private:
 
 class TableLike : public CheckLike
 				, public ISphNoncopyable
+				, public IDataTupleter
 {
 	SqlRowBuffer_c & m_tOut;
 public:
@@ -12244,10 +12255,21 @@ public:
 			m_tOut.DataTuplet ( pLeft, pRight );
 	}
 
-	inline void MatchDataTuplet ( const char * pLeft, int iRight )
+	inline void MatchDataTuplet ( const char * pLeft, int64_t iRight )
 	{
 		if ( Match ( pLeft ) )
 			m_tOut.DataTuplet ( pLeft, iRight );
+	}
+
+	// popular pattern of 2 columns of data
+	void DataTuplet ( const char * pLeft, const char * pRight ) override
+	{
+		MatchDataTuplet ( pLeft, pRight );
+	}
+
+	void DataTuplet ( const char * pLeft, int64_t iRight ) override
+	{
+		MatchDataTuplet ( pLeft, iRight );
 	}
 };
 
@@ -15262,7 +15284,7 @@ void HandleMysqlShowVariables ( SqlRowBuffer_c & dRows, const SqlStmt_t & tStmt,
 }
 
 
-static void AddQueryStats ( SqlRowBuffer_c & tOut, const char * szPrefix, const QueryStats_t & tStats, void (*FormatFn)( CSphString & sBuf, uint64_t uQueries, uint64_t uStat ) )
+static void AddQueryStats ( IDataTupleter & tOut, const char * szPrefix, const QueryStats_t & tStats, void (*FormatFn)( CSphString & sBuf, uint64_t uQueries, uint64_t uStat ) )
 {
 	static const char * dStatIntervalNames[QUERY_STATS_INTERVAL_TOTAL]=
 	{

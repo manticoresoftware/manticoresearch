@@ -16,6 +16,11 @@ public class Example
 			MySqlDataReader r;
 			r = cmd.ExecuteReader();
 
+			// dump columns to make sure if "id" is really System.UInt64
+			DataTable schemaTable = r.GetSchemaTable();
+			foreach (DataRow myField in schemaTable.Rows)
+				Console.WriteLine(myField["ColumnName"] + " = " + myField["DataType"]);
+
 			while(r.Read())
 			{
 				Console.WriteLine(

@@ -4109,9 +4109,9 @@ void TestTDigest()
 		for ( int i = 1; i <= 100; i++ )
 			pDigest->Add ( i, 1 );
 
-		Verify ( pDigest->Percentile(50)==51 );
-		Verify ( pDigest->Percentile(95)==96 );
-		Verify ( pDigest->Percentile(99)==100 );
+		Verify ( fabs ( (double)pDigest->Percentile(50)-51 ) <= 1.0 );
+		Verify ( fabs ( (double)pDigest->Percentile(95)-96 ) <= 1.0 );
+		Verify ( fabs ( (double)pDigest->Percentile(99)-100 ) <= 1.0 );
 	}
 
 	{

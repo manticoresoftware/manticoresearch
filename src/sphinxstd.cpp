@@ -1490,7 +1490,7 @@ bool CSphRwlock::Init ( bool bPreferWriter )
 	pthread_rwlockattr_t * pAttr = NULL;
 
 // Mac OS X knows nothing about PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP
-#ifdef PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP
+#ifndef __APPLE__
 	while ( bPreferWriter )
 	{
 		bool bOk = ( pthread_rwlockattr_init ( &tAttr )==0 );

@@ -463,17 +463,46 @@ struct QueryStatRecord_t
 };
 
 
-class QueryStatContainer_c
+class QueryStatContainer_i
 {
 public:
-	void								Add ( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp );
-	int									GetNumRecords() const;
-	const QueryStatRecord_t &			GetRecord ( int iRecord ) const;
+	virtual void						Add ( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp ) = 0;
+	virtual void						GetRecord ( int iRecord, QueryStatRecord_t & tRecord ) const = 0;
+	virtual int							GetNumRecords() const = 0;
+};
+
+
+class QueryStatContainer_c : public QueryStatContainer_i
+{
+public:
+	virtual void						Add ( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp );
+	virtual void						GetRecord ( int iRecord, QueryStatRecord_t & tRecord ) const;
+	virtual int							GetNumRecords() const;
 
 private:
 	CircularBuffer_T<QueryStatRecord_t>	m_dRecords;
 };
 
+
+#ifndef NDEBUG
+class QueryStatContainerExact_c : public QueryStatContainer_i
+{
+public:
+	virtual void						Add ( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp );
+	virtual void						GetRecord ( int iRecord, QueryStatRecord_t & tRecord ) const;
+	virtual int							GetNumRecords() const;
+
+private:
+	struct QueryStatRecordExact_t
+	{
+		uint64_t	m_uQueryTime;
+		uint64_t	m_uFoundRows;
+		uint64_t	m_uTimestamp;
+	};
+
+	CircularBuffer_T<QueryStatRecordExact_t> m_dRecords;
+};
+#endif
 
 struct ServedDesc_t
 {
@@ -505,12 +534,23 @@ public:
 	
 	void				AddQueryStat ( uint64_t uFoundRows, uint64_t uQueryTime );
 	void				CalculateQueryStats ( QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const;
+#ifndef NDEBUG
+	void				CalculateQueryStatsExact ( QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const;
+#endif
+
+	ServedStats_c &		operator = ( const ServedStats_c & rhs );
 
 protected:
-	mutable CSphRwlock	m_tStatsLock;
+	virtual void		LockStats ( bool /*bReader*/ ) const {};
+	virtual void		UnlockStats() const {};
 
 private:
 	QueryStatContainer_c m_tQueryStatRecords;
+
+#ifndef NDEBUF
+	QueryStatContainerExact_c m_tQueryStatRecordsExact;
+#endif
+
 	TDigest_i *			m_pQueryTimeDigest;
 	TDigest_i *			m_pRowsFoundDigest;
 
@@ -524,7 +564,9 @@ private:
 
 	uint64_t			m_uTotalQueries;
 
-	void				CalcStatsForInterval ( QueryStatElement_t & tRowResult, QueryStatElement_t & tTimeResult, uint64_t uTimestamp, uint64_t uInterval ) const;
+	void				Reset();
+	void				CalcStatsForInterval ( const QueryStatContainer_i * pContainer, QueryStatElement_t & tRowResult, QueryStatElement_t & tTimeResult, uint64_t uTimestamp, uint64_t uInterval ) const;
+	void				DoStatCalcStats ( const QueryStatContainer_i * pContainer, QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const;
 };
 
 
@@ -540,8 +582,13 @@ public:
 
 	bool				InitLock () const;
 
+protected:
+	virtual void		LockStats ( bool bReader ) const;
+	virtual void		UnlockStats() const;
+
 private:
 	mutable CSphRwlock	m_tLock;
+	mutable CSphRwlock	m_tStatsLock;
 };
 
 /// global index hash

@@ -547,7 +547,7 @@ protected:
 private:
 	QueryStatContainer_c m_tQueryStatRecords;
 
-#ifndef NDEBUF
+#ifndef NDEBUG
 	QueryStatContainerExact_c m_tQueryStatRecordsExact;
 #endif
 

@@ -12129,9 +12129,13 @@ enum MysqlColumnType_e
 	MYSQL_COL_STRING	= 254
 };
 
+enum MysqlColumnFlag_e
+{
+	MYSQL_COL_UNSIGNED_FLAG = 32
+};
 
 
-void SendMysqlFieldPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, const char * sCol, MysqlColumnType_e eType )
+void SendMysqlFieldPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, const char * sCol, MysqlColumnType_e eType, WORD uFlags )
 {
 	const char * sDB = "";
 	const char * sTable = "";
@@ -12161,7 +12165,8 @@ void SendMysqlFieldPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, const char 
 	tOut.SendByte ( 0 ); // charset_nr
 	tOut.SendLSBDword ( iColLen ); // length
 	tOut.SendByte ( BYTE(eType) ); // type (0=decimal)
-	tOut.SendWord ( 0 ); // flags
+	tOut.SendByte ( uFlags&255 );
+	tOut.SendByte ( uFlags>>8 );
 	tOut.SendByte ( 0 ); // decimals
 	tOut.SendWord ( 0 ); // filler
 }
@@ -12427,10 +12432,10 @@ public:
 	}
 
 	// add the next column. The EOF after the tull set will be fired automatically
-	inline void HeadColumn ( const char * sName, MysqlColumnType_e uType=MYSQL_COL_STRING )
+	inline void HeadColumn ( const char * sName, MysqlColumnType_e uType=MYSQL_COL_STRING, WORD uFlags=0 )
 	{
 		assert ( m_iSize>0 && "you try to send more mysql columns than declared in InitHead" );
-		SendMysqlFieldPacket ( m_tOut, m_uPacketID++, sName, uType );
+		SendMysqlFieldPacket ( m_tOut, m_uPacketID++, sName, uType, uFlags );
 		--m_iSize;
 	}
 
@@ -14373,7 +14378,7 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 	if ( !tRes.m_dMatches.GetLength() && !bReturnZeroCount )
 	{
 		// in case there are no matches, send a dummy schema
-		dRows.HeadColumn ( "id", USE_64BIT ? MYSQL_COL_LONGLONG : MYSQL_COL_LONG );
+		dRows.HeadColumn ( "id", USE_64BIT ? MYSQL_COL_LONGLONG : MYSQL_COL_LONG, MYSQL_COL_UNSIGNED_FLAG );
 	} else
 	{
 		for ( int i=0; i<iSchemaAttrsCount; i++ )
@@ -14388,7 +14393,7 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 				eType = MYSQL_COL_LONGLONG;
 			if ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_STRINGPTR || tCol.m_eAttrType==SPH_ATTR_FACTORS || tCol.m_eAttrType==SPH_ATTR_FACTORS_JSON )
 				eType = MYSQL_COL_STRING;
-			dRows.HeadColumn ( tCol.m_sName.cstr(), eType );
+			dRows.HeadColumn ( tCol.m_sName.cstr(), eType, tCol.m_sName=="id" ? MYSQL_COL_UNSIGNED_FLAG : 0 );
 		}
 	}
 
@@ -15442,7 +15447,7 @@ void HandleMysqlShowCollations ( SqlRowBuffer_c & tOut )
 	tOut.HeadBegin(6);
 	tOut.HeadColumn ( "Collation" );
 	tOut.HeadColumn ( "Charset" );
-	tOut.HeadColumn ( "Id", MYSQL_COL_LONGLONG );
+	tOut.HeadColumn ( "Id", MYSQL_COL_LONGLONG, MYSQL_COL_UNSIGNED_FLAG );
 	tOut.HeadColumn ( "Default" );
 	tOut.HeadColumn ( "Compiled" );
 	tOut.HeadColumn ( "Sortlen" );

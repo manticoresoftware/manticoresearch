@@ -18317,8 +18317,10 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP )
 			pServedIndex->m_bToDelete = false;
 			nChecked++;
 			pServedIndex->Unlock();
-
-		} else if ( hIndex.Exists("type") && hIndex["type"]=="distributed" )
+			continue;
+		}
+		
+		if ( hIndex.Exists("type") && hIndex["type"]=="distributed" )
 		{
 			CSphScopedLock<CSphMutex> tLock ( g_tDistLock );
 
@@ -18341,32 +18343,35 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP )
 				}
 
 				nChecked++;
+				continue;
 			}
-		} else if ( ServedIndex_c * pTemplateIndex = g_pTemplateIndexes->GetWlockedEntry ( sIndexName ) )
+		}
+		
+		if ( ServedIndex_c * pTemplateIndex = g_pTemplateIndexes->GetWlockedEntry ( sIndexName ) )
 		{
 			ConfigureTemplateIndex ( *pTemplateIndex, hIndex );
 			pTemplateIndex->m_bToDelete = false;
 			nChecked++;
 			pTemplateIndex->Unlock();
-
-		} else // add new index
+			continue;
+		}
+		
+		// add new index
+		ESphAddIndex eType = AddIndex ( sIndexName, hIndex );
+		if ( eType==ADD_LOCAL )
 		{
-			ESphAddIndex eType = AddIndex ( sIndexName, hIndex );
-			if ( eType==ADD_LOCAL )
+			if ( ServedIndex_c * pIndex = g_pLocalIndexes->GetWlockedEntry ( sIndexName ) )
 			{
-				if ( ServedIndex_c * pIndex = g_pLocalIndexes->GetWlockedEntry ( sIndexName ) )
-				{
-					pIndex->m_bOnlyNew = true;
-					pIndex->Unlock();
-				}
-			} else if ( eType==ADD_RT )
-			{
-				ServedIndex_c & tIndex = g_pLocalIndexes->GetUnlockedEntry ( sIndexName );
-
-				tIndex.m_bOnlyNew = false;
-				if ( PrereadNewIndex ( tIndex, hIndex, sIndexName ) )
-					tIndex.m_bEnabled = true;
+				pIndex->m_bOnlyNew = true;
+				pIndex->Unlock();
 			}
+		} else if ( eType==ADD_RT )
+		{
+			ServedIndex_c & tIndex = g_pLocalIndexes->GetUnlockedEntry ( sIndexName );
+
+			tIndex.m_bOnlyNew = false;
+			if ( PrereadNewIndex ( tIndex, hIndex, sIndexName ) )
+				tIndex.m_bEnabled = true;
 		}
 	}
 

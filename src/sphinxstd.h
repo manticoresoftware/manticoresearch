@@ -3814,7 +3814,7 @@ class TDigest_i
 public:
 	virtual				~TDigest_i() {}
 
-	virtual void		Add ( double fValue, int iWeight = 1 ) = 0;
+	virtual void		Add ( double fValue, int64_t iWeight = 1 ) = 0;
 	virtual double		Percentile ( int iPercent ) const = 0;
 };
 

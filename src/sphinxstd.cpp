@@ -2028,7 +2028,7 @@ public:
 		Reset();
 	}
 
-	virtual void Add ( double fValue, int iWeight = 1 )
+	virtual void Add ( double fValue, int64_t iWeight = 1 )
 	{
 		if ( m_dMap.empty() )
 		{
@@ -2124,7 +2124,7 @@ public:
 			if ( fPercent < iTotalCount + i->second )
 			{
 				if ( i==iMapFirst || i==iMapLast )
-					return uint64_t(i->first+0.5);
+					return i->first;
 				else
 				{
 					// get mean from previous iterator; get mean from next iterator; calc delta

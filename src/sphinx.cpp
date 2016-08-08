@@ -26733,7 +26733,7 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 // for static we define const pointer as alias to target function.
 
 #define F_DL(name) static decltype(&name) sph_##name = nullptr
-#define F_DR(name) static constexpr decltype(&name) sph_##name = &name
+#define F_DR(name) static decltype(&name) sph_##name = &name
 
 #if DL_MYSQL
 	#define MYSQL_F(name) F_DL(name)

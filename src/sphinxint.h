@@ -1992,8 +1992,9 @@ struct SuggestResult_t
 	int				m_dCodepoints[SPH_MAX_WORD_LEN];
 	int				m_iCodepoints;
 	bool			m_bUtf8;
+	bool			m_bHasExactDict;
 
-	SuggestResult_t () : m_pWordReader ( NULL ), m_pSegments ( NULL ), m_bMergeWords ( false ), m_iLen ( 0 ), m_iCodepoints ( 0 ), m_bUtf8 ( false )
+	SuggestResult_t () : m_pWordReader ( NULL ), m_pSegments ( NULL ), m_bMergeWords ( false ), m_iLen ( 0 ), m_iCodepoints ( 0 ), m_bUtf8 ( false ), m_bHasExactDict ( false )
 	{
 		m_dBuf.Reserve ( 8096 );
 		m_dMatched.Reserve ( 512 );

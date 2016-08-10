@@ -49,6 +49,42 @@ index rt1
 	min_infix_len = 3
 }
 
+source test2
+{
+	type = mysql
+	<sql_settings/>
+	sql_query_pre 		= SET NAMES utf8
+	sql_query 			= SELECT id, body, idd FROM test_table where id in (1,4,6)
+	sql_attr_uint		= idd
+}
+
+index plain2
+{
+	source			= test2
+	path = <data_path/>/plain2
+	docinfo			= extern
+	dict = keywords
+    charset_table = a..z, _, A..Z->a..z
+	min_infix_len = 3
+	morphology = stem_en
+	index_exact_words = 1
+}
+
+index rt2
+{
+	type = rt
+	path			= <data_path/>/rt2
+	docinfo = extern
+	rt_mem_limit = 128M
+	rt_field		= body
+	rt_attr_uint	= idd
+	dict = keywords
+    charset_table = a..z, _, A..Z->a..z
+	min_infix_len = 3
+	morphology = stem_en
+	index_exact_words = 1
+}
+
 </config>
 
 <db_create>
@@ -106,6 +142,14 @@ CREATE TABLE test_table
 	<sphinxql>CALL QSUGGEST ( 'tests passed well because of taster', 'rt1')</sphinxql>
 	<sphinxql>CALL QSUGGEST ( 'с превеликой благодраностью', 'plain1')</sphinxql>
 	<sphinxql>CALL QSUGGEST ( 'с превеликой благодраностью', 'rt1')</sphinxql>
+
+	<!-- regression suggest on dict with morph and exact_words -->
+	<sphinxql>INSERT INTO rt2 (id, idd, body) VALUES ( 1, 11, 'The role of a software tester in an Agile environment goes beyond')</sphinxql>
+	<sphinxql>INSERT INTO rt2 (id, idd, body) VALUES ( 4, 11, 'aquia magic rester' )</sphinxql>
+	<sphinxql>INSERT INTO rt2 (id, idd, body) VALUES ( 6, 11, 'was arrested for stealing a tester bottle' )</sphinxql>
+	<sphinxql>CALL SUGGEST ( 'taster', 'plain2')</sphinxql>
+	<sphinxql>CALL SUGGEST ( 'taster', 'rt2')</sphinxql>
+	
 </sphqueries>
 
 </test>

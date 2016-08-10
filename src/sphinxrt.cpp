@@ -6496,6 +6496,7 @@ void RtIndex_t::GetSuggest ( const SuggestArgs_t & tArgs, SuggestResult_t & tRes
 		assert ( !tRes.m_pWordReader && !tRes.m_pSegments );
 		tRes.m_pWordReader = new RtWordReader_t ( dSegments[0], true, m_iWordsCheckpoint );
 		tRes.m_pSegments = &tGuard.m_dRamChunks;
+		tRes.m_bHasExactDict = m_tSettings.m_bIndexExactWords;
 
 		// FIXME!!! cache InfixCodepointBytes as it is slow - GetMaxCodepointLength is charset_table traverse
 		sphGetSuggest ( this, m_pTokenizer->GetMaxCodepointLength(), tArgs, tRes );

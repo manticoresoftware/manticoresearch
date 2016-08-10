@@ -16440,6 +16440,7 @@ void CSphIndex_VLN::GetSuggest ( const SuggestArgs_t & tArgs, SuggestResult_t & 
 
 	assert ( !tRes.m_pWordReader );
 	tRes.m_pWordReader = new KeywordsBlockReader_c ( m_tWordlist.m_tBuf.GetWritePtr(), m_tWordlist.m_bHaveSkips );
+	tRes.m_bHasExactDict = m_tSettings.m_bIndexExactWords;
 
 	sphGetSuggest ( &m_tWordlist, m_tWordlist.m_iInfixCodepointBytes, tArgs, tRes );
 
@@ -30999,6 +31000,7 @@ void SuggestMatchWords ( const ISphWordlistSuggest * pWordlist, const CSphVector
 	int iLastBad = 0;
 	bool bSorted = true;
 	const bool bMergeWords = tRes.m_bMergeWords;
+	const bool bHasExactDict = tRes.m_bHasExactDict;
 	const int iMaxEdits = tArgs.m_iMaxEdits;
 	tRes.m_dMatched.Reserve ( iQLen * 2 );
 	CmpSuggestOrder_fn fnCmp;
@@ -31014,6 +31016,18 @@ void SuggestMatchWords ( const ISphWordlistSuggest * pWordlist, const CSphVector
 			const char * sDictWord = tWord.m_sWord;
 			int iDictWordLen = tWord.m_iLen;
 			int iDictCodepoints = iDictWordLen;
+
+			// for stemmer \ lematizer suggest should match only original words
+			if ( bHasExactDict && sDictWord[0]!=MAGIC_WORD_HEAD_NONSTEMMED )
+				continue;
+
+			if ( bHasExactDict )
+			{
+				// skip head MAGIC_WORD_HEAD_NONSTEMMED char
+				sDictWord++;
+				iDictWordLen--;
+				iDictCodepoints--;
+			}
 
 			if_const ( SINGLE_BYTE_CHAR )
 			{

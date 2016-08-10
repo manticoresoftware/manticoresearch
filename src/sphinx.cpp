@@ -1452,7 +1452,7 @@ public:
 
 	bool						EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const;
 
-	virtual void				SetKeepAttrs ( const CSphString & sKeepAttrs ) { m_sKeepAttrs = sKeepAttrs; }
+	virtual void				SetKeepAttrs ( const CSphString & sKeepAttrs, const CSphVector<CSphString> & dAttrs ) { m_sKeepAttrs = sKeepAttrs; m_dKeepAttrs = dAttrs; }
 
 	virtual SphDocID_t *		GetKillList () const;
 	virtual int					GetKillListSize () const;
@@ -1478,6 +1478,7 @@ private:
 	SphDocID_t						m_uMinDocid;
 	CSphFixedVector<int64_t>		m_dFieldLens;	///< total per-field lengths summed over entire indexed data, in tokens
 	CSphString						m_sKeepAttrs;			///< retain attributes of that index reindexing
+	CSphVector<CSphString>			m_dKeepAttrs;
 
 private:
 
@@ -1534,7 +1535,7 @@ private:
 	const DWORD *				FindDocinfo ( SphDocID_t uDocID ) const;
 	void						CopyDocinfo ( const CSphQueryContext * pCtx, CSphMatch & tMatch, const DWORD * pFound ) const;
 
-	bool						BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphFixedVector<CSphWordHit> & dHits, int iArenaSize, int iFieldFD, int nFieldMVAs, int iFieldMVAInPool, CSphIndex_VLN * pPrevIndex );
+	bool						BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphFixedVector<CSphWordHit> & dHits, int iArenaSize, int iFieldFD, int nFieldMVAs, int iFieldMVAInPool, CSphIndex_VLN * pPrevIndex, const CSphBitvec * pPrevMva );
 
 	bool						IsStarDict() const;
 	CSphDict *					SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict ) const;
@@ -10841,7 +10842,7 @@ struct MvaEntryCmp_fn
 
 
 bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphFixedVector<CSphWordHit> & dHits,
-		int iArenaSize, int iFieldFD, int nFieldMVAs, int iFieldMVAInPool, CSphIndex_VLN * pPrevIndex )
+		int iArenaSize, int iFieldFD, int nFieldMVAs, int iFieldMVAInPool, CSphIndex_VLN * pPrevIndex, const CSphBitvec * pPrevMva )
 {
 	// initialize writer (data file must always exist)
 	CSphWriter wrMva;
@@ -10917,7 +10918,9 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphFix
 
 				while ( pSource->IterateMultivaluedNext () )
 				{
-					if ( pPrevIndex && pPrevIndex->FindDocinfo ( pSource->m_tDocInfo.m_uDocID ) )
+					// keep all mva from old index or
+					// keep only enumerated mva
+					if ( pPrevIndex && pPrevIndex->FindDocinfo ( pSource->m_tDocInfo.m_uDocID ) && ( !pPrevMva || ( pPrevMva && pPrevMva->BitGet ( iAttr ) ) ) )
 						continue;
 
 					pMva->m_uDocID = pSource->m_tDocInfo.m_uDocID;
@@ -11263,6 +11266,16 @@ private:
 	CSphVector<CSphAutofile*> m_dAutofiles;
 };
 
+static void CopyRow ( const CSphRowitem * pSrc, const ISphSchema & tSchema, const CSphVector<int> & dAttrs, CSphRowitem * pDst )
+{
+	assert ( pSrc && pDst );
+	ARRAY_FOREACH ( i, dAttrs )
+	{
+		const CSphAttrLocator & tLoc = tSchema.GetAttr ( dAttrs[i] ).m_tLocator;
+		SphAttr_t uVal = sphGetRowAttr ( pSrc, tLoc );
+		sphSetRowAttr ( pDst, tLoc, uVal );
+	}
+}
 
 int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer )
 {
@@ -11469,6 +11482,11 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	int nFieldMVAs = 0;
 
 	CSphScopedPtr<CSphIndex_VLN> pPrevIndex(NULL);
+	CSphVector<int>	dPrevAttrsPlain;
+	CSphBitvec dPrevAttrsMva;
+	CSphBitvec dPrevAttrsString;
+	bool bKeepSelectedAttrMva = false;
+	bool bKeepSelectedAttrString = false;
 	if ( !m_sKeepAttrs.IsEmpty() )
 	{
 		CSphString sWarning;
@@ -11494,6 +11512,38 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				pPrevIndex.Reset();
 			}
 		}
+
+		if ( pPrevIndex.Ptr() && m_dKeepAttrs.GetLength() )
+		{
+			dPrevAttrsMva.Init ( m_tSchema.GetAttrsCount() );
+			dPrevAttrsString.Init ( m_tSchema.GetAttrsCount() );
+
+			ARRAY_FOREACH ( i, m_dKeepAttrs )
+			{
+				int iCol = m_tSchema.GetAttrIndex ( m_dKeepAttrs[i].cstr() );
+				if ( iCol==-1 )
+				{
+					sphWarn ( "no attribute found '%s'; ignoring --keep-attrs", m_dKeepAttrs[i].cstr() );
+					pPrevIndex.Reset();
+					break;
+				}
+
+				const CSphColumnInfo & tCol = m_tSchema.GetAttr ( iCol );
+				if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET )
+				{
+					dPrevAttrsMva.BitSet ( iCol );
+					bKeepSelectedAttrMva = true;
+				} else if ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_JSON )
+				{
+					dPrevAttrsString.BitSet ( iCol );
+					bKeepSelectedAttrString = true;
+				} else
+				{
+					dPrevAttrsPlain.Add ( iCol );
+				}
+			}
+		}
+
 		if ( pPrevIndex.Ptr() )
 			pPrevIndex->Preread();
 	}
@@ -11646,16 +11696,20 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			g_iIndexerCurrentDocID = pSource->m_tDocInfo.m_uDocID;
 			g_iIndexerCurrentHits = pHits-dHits.Begin();
 
-			DWORD * pPrevDocinfo = NULL;
+			const DWORD * pPrevDocinfo = NULL;
 			if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && pPrevIndex.Ptr() )
-				pPrevDocinfo = const_cast<DWORD*>( pPrevIndex->FindDocinfo ( pSource->m_tDocInfo.m_uDocID ) );
+				pPrevDocinfo = pPrevIndex->FindDocinfo ( pSource->m_tDocInfo.m_uDocID );
 
 			if ( dMvaIndexes.GetLength() && pPrevDocinfo && pPrevIndex->m_tMva.GetWritePtr() )
 			{
 				// fetch old mva values
 				ARRAY_FOREACH ( i, dMvaIndexes )
 				{
-					const CSphColumnInfo & tCol = m_tSchema.GetAttr ( dMvaIndexes[i] );
+					int iAttr = dMvaIndexes[i];
+					if ( bKeepSelectedAttrMva && !dPrevAttrsMva.BitGet ( iAttr ) )
+						continue;
+
+					const CSphColumnInfo & tCol = m_tSchema.GetAttr ( iAttr );
 					SphAttr_t uOff = sphGetRowAttr ( DOCINFO2ATTRS ( pPrevDocinfo ), tCol.m_tLocator );
 					if ( !uOff )
 						continue;
@@ -11690,8 +11744,9 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 						}
 					}
 				}
+			}
 
-			} else if ( bHaveFieldMVAs )
+			if ( bHaveFieldMVAs )
 			{
 				// store field MVAs
 				ARRAY_FOREACH ( i, dFieldMvaIndexes )
@@ -11700,6 +11755,9 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					int iMVA = dFieldMvaIndexes[i].m_iMVAAttr;
 					bool bMva64 = dFieldMvaIndexes[i].m_bMva64;
 					int iStep = ( bMva64 ? 2 : 1 );
+
+					if ( pPrevDocinfo && ( !bKeepSelectedAttrMva || ( bKeepSelectedAttrMva && dPrevAttrsMva.BitGet ( iAttr ) ) ) )
+						continue;
 
 					// store per-document MVAs
 					SphRange_t tFieldMva = pSource->IterateFieldMVAStart ( iAttr );
@@ -11736,59 +11794,39 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			}
 
 			// store strings and JSON blobs
-			if ( pPrevDocinfo )
-			{
-				CSphRowitem * pPrevAttrs = DOCINFO2ATTRS ( pPrevDocinfo );
-				ARRAY_FOREACH ( i, dStringAttrs )
-				{
-					const CSphAttrLocator & tLoc = m_tSchema.GetAttr ( dStringAttrs[i] ).m_tLocator;
-					SphAttr_t uPrevOff = sphGetRowAttr ( pPrevAttrs, tLoc );
-					BYTE * pBase = pPrevIndex->m_tString.GetWritePtr();
-					if ( !uPrevOff || !pBase )
-						sphSetRowAttr ( pPrevAttrs, tLoc, 0 );
-					else
-					{
-						const BYTE * pStr = NULL;
-						int iLen = sphUnpackStr ( pBase+uPrevOff, &pStr );
-						if ( !iLen )
-							sphSetRowAttr ( pPrevAttrs, tLoc, 0 );
-						else
-						{
-							SphOffset_t uOff = tStrWriter.GetPos();
-							if ( uint64_t(uOff)>>32 )
-							{
-								m_sLastError.SetSprintf ( "too many string attributes (current index format allows up to 4 GB)" );
-								return 0;
-							}
-
-							sphSetRowAttr ( pPrevAttrs, tLoc, DWORD(uOff) );
-
-							BYTE dPackedLen[4];
-							int iLenLen = sphPackStrlen ( dPackedLen, iLen );
-							tStrWriter.PutBytes ( &dPackedLen, iLenLen );
-							tStrWriter.PutBytes ( pStr, iLen );
-						}
-					}
-				}
-			} else
 			{
 				ARRAY_FOREACH ( i, dStringAttrs )
 				{
 					// FIXME! optimize locators etc?
 					// FIXME! support binary strings w/embedded zeroes?
 					// get data, calc length
-					const char * sData = pSource->m_dStrAttrs[dStringAttrs[i]].cstr();
-					int iLen = sData ? strlen ( sData ) : 0;
+					int iStrAttr = dStringAttrs[i];
+					const CSphColumnInfo & tCol = m_tSchema.GetAttr ( iStrAttr );
+					bool bKeepPrevAttr = ( pPrevDocinfo && ( !bKeepSelectedAttrString || ( bKeepSelectedAttrString && dPrevAttrsString.BitGet ( iStrAttr ) ) ) );
+					const char * sData = NULL;
+					int iLen = 0;
+
+					if ( !bKeepPrevAttr )
+					{
+						sData = pSource->m_dStrAttrs[iStrAttr].cstr();
+						iLen = pSource->m_dStrAttrs[iStrAttr].Length();
+					} else
+					{
+						SphAttr_t uPrevOff = sphGetRowAttr ( DOCINFO2ATTRS ( pPrevDocinfo ), tCol.m_tLocator );
+						BYTE * pBase = pPrevIndex->m_tString.GetWritePtr();
+						if ( uPrevOff && pBase )
+							iLen = sphUnpackStr ( pBase+uPrevOff, (const BYTE **)&sData );
+					}
 
 					// no data
 					if ( !iLen )
 					{
-						pSource->m_tDocInfo.SetAttr ( m_tSchema.GetAttr ( dStringAttrs[i] ).m_tLocator, 0 );
+						pSource->m_tDocInfo.SetAttr ( tCol.m_tLocator, 0 );
 						continue;
 					}
 
 					// handle JSON
-					if ( m_tSchema.GetAttr ( dStringAttrs[i] ).m_eAttrType==SPH_ATTR_JSON ) // FIXME? optimize?
+					if ( tCol.m_eAttrType==SPH_ATTR_JSON && !bKeepPrevAttr ) // FIXME? optimize?
 					{
 						// WARNING, tricky bit
 						// flex lexer needs last two (!) bytes to be zeroes
@@ -11801,7 +11839,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 						if ( !sphJsonParse ( dBson, pData, g_bJsonAutoconvNumbers, g_bJsonKeynamesToLowercase, m_sLastError ) )
 						{
 							m_sLastError.SetSprintf ( "document " DOCID_FMT ", attribute %s: JSON error: %s",
-								pSource->m_tDocInfo.m_uDocID, m_tSchema.GetAttr ( dStringAttrs[i] ).m_sName.cstr(),
+								pSource->m_tDocInfo.m_uDocID, tCol.m_sName.cstr(),
 								m_sLastError.cstr() );
 
 							// bail?
@@ -11811,13 +11849,13 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 							// warn and ignore
 							sphWarning ( "%s", m_sLastError.cstr() );
 							m_sLastError = "";
-							pSource->m_tDocInfo.SetAttr ( m_tSchema.GetAttr ( dStringAttrs[i] ).m_tLocator, 0 );
+							pSource->m_tDocInfo.SetAttr ( tCol.m_tLocator, 0 );
 							continue;
 						}
 						if ( !dBson.GetLength() )
 						{
 							// empty SphinxBSON, need not save any data
-							pSource->m_tDocInfo.SetAttr ( m_tSchema.GetAttr ( dStringAttrs[i] ).m_tLocator, 0 );
+							pSource->m_tDocInfo.SetAttr ( tCol.m_tLocator, 0 );
 							continue;
 						}
 
@@ -11833,7 +11871,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 						m_sLastError.SetSprintf ( "too many string attributes (current index format allows up to 4 GB)" );
 						return 0;
 					}
-					pSource->m_tDocInfo.SetAttr ( m_tSchema.GetAttr ( dStringAttrs[i] ).m_tLocator, DWORD(uOff) );
+					pSource->m_tDocInfo.SetAttr ( tCol.m_tLocator, DWORD(uOff) );
 
 					// pack length, emit it, emit data
 					BYTE dPackedLen[4];
@@ -11964,9 +12002,38 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				// store next entry
 				DOCINFOSETID ( pDocinfo, pSource->m_tDocInfo.m_uDocID );
 
-				// old docinfo found, use it instead of the new one
-				const DWORD * pSrc = pPrevDocinfo ? DOCINFO2ATTRS ( pPrevDocinfo ) : pSource->m_tDocInfo.m_pDynamic;
-				memcpy ( DOCINFO2ATTRS ( pDocinfo ), pSrc, sizeof(CSphRowitem)*m_tSchema.GetRowSize() );
+				CSphRowitem * pAttr = DOCINFO2ATTRS ( pDocinfo );
+				if ( !pPrevDocinfo )
+				{
+					memcpy ( pAttr, pSource->m_tDocInfo.m_pDynamic, sizeof(CSphRowitem)*m_tSchema.GetRowSize() );
+				} else
+				{
+					if ( !m_dKeepAttrs.GetLength() )
+					{
+						// copy whole row from old index
+						memcpy ( pAttr, DOCINFO2ATTRS ( pPrevDocinfo ), sizeof(CSphRowitem)*m_tSchema.GetRowSize() );
+
+						// copy some strings attributes
+						// 2nd stage - copy offsets from source, data already copied at string indexing
+						if ( dStringAttrs.GetLength() )
+							CopyRow ( pSource->m_tDocInfo.m_pDynamic, m_tSchema, dStringAttrs, pAttr );
+
+					} else
+					{
+						// copy new attributes, however keep some of them from old index
+						memcpy ( pAttr, pSource->m_tDocInfo.m_pDynamic, sizeof(CSphRowitem)*m_tSchema.GetRowSize() );
+
+						// copy some plain attributes
+						if ( dPrevAttrsPlain.GetLength() )
+							CopyRow ( DOCINFO2ATTRS ( pPrevDocinfo ), m_tSchema, dPrevAttrsPlain, pAttr );
+
+						// copy some strings attributes
+						// 2nd stage - copy offsets from source, data already copied at string indexing
+						if ( dStringAttrs.GetLength() )
+							CopyRow ( pSource->m_tDocInfo.m_pDynamic, m_tSchema, dStringAttrs, pAttr );
+					}
+				}
+
 				pDocinfo += iDocinfoStride;
 
 				// if not inlining, flush buffer if it's full
@@ -12129,7 +12196,11 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	///////////////////////////////////////
 	// collect and sort multi-valued attrs
 	///////////////////////////////////////
-	if ( !BuildMVA ( dSources, dHits, iHitsMax*sizeof(CSphWordHit), fdTmpFieldMVAs.GetFD (), nFieldMVAs, iMaxPoolFieldMVAs, pPrevIndex.Ptr() ) )
+	const CSphBitvec * pPrevAttrsMva = NULL;
+	if ( bKeepSelectedAttrMva )
+		pPrevAttrsMva = &dPrevAttrsMva;
+
+	if ( !BuildMVA ( dSources, dHits, iHitsMax*sizeof(CSphWordHit), fdTmpFieldMVAs.GetFD (), nFieldMVAs, iMaxPoolFieldMVAs, pPrevIndex.Ptr(), pPrevAttrsMva ) )
 		return 0;
 
 	// reset persistent mva update pool

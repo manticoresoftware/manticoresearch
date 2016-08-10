@@ -45,7 +45,7 @@ static bool			g_bProgress		= true;
 static bool			g_bPrintQueries	= false;
 static bool			g_bKeepAttrs	= false;
 static CSphString	g_sKeepAttrsPath;
-static const char	g_sKeepAttrsKey[] = "--keep-attrs";
+static CSphVector<CSphString> g_dKeepAttrs;
 
 static const char *	g_sBuildStops	= NULL;
 static int				g_iTopStops		= 100;
@@ -1213,9 +1213,9 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 		if ( g_bKeepAttrs )
 		{
 			if ( g_sKeepAttrsPath.IsEmpty() )
-				pIndex->SetKeepAttrs ( hIndex["path"].strval() );
+				pIndex->SetKeepAttrs ( hIndex["path"].strval(), g_dKeepAttrs );
 			else
-				pIndex->SetKeepAttrs ( g_sKeepAttrsPath );
+				pIndex->SetKeepAttrs ( g_sKeepAttrsPath, g_dKeepAttrs );
 		}
 		pIndex->Setup ( tSettings );
 
@@ -1671,24 +1671,21 @@ int main ( int argc, char ** argv )
 		{
 			g_bPrintQueries = true;
 
-		} else if ( strcasecmp ( argv[i], g_sKeepAttrsKey )>=0 )
+		} else if ( strcasecmp ( argv[i], "--keep-attrs" )>=0 )
 		{
-			const char * sArg = argv[i];
-			int iArgLen = strlen ( sArg );
-			int iKeyLen = sizeof ( g_sKeepAttrsKey )-1;
-			int iKeyMatched = 0;
-			for ( iKeyMatched=0; iKeyMatched<Min ( iArgLen, iKeyLen ); iKeyMatched++ )
+			CSphString sArg ( argv[i] );
+			if ( sArg.Begins ( "--keep-attrs=" ) )
 			{
-				if ( sArg[iKeyMatched]!=g_sKeepAttrsKey[iKeyMatched] )
-					break;
+				int iKeyLen = sizeof ( "--keep-attrs=" )-1;
+				g_sKeepAttrsPath = sArg.cstr() + iKeyLen;
+			}
+			if ( sArg.Begins ( "--keep-attrs-names=" ) )
+			{
+				int iKeyLen = sizeof ( "--keep-attrs-names=" )-1;
+				sphSplit ( g_dKeepAttrs, sArg.cstr() + iKeyLen, "," );
 			}
 
-			if ( iKeyMatched>=iKeyLen )
-			{
-				g_bKeepAttrs = true;
-				if ( iKeyLen+1<iArgLen )
-					g_sKeepAttrsPath = sArg + iKeyLen + 1;
-			}
+			g_bKeepAttrs = true;
 
 		} else
 		{

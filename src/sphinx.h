@@ -3273,7 +3273,7 @@ public:
 	void						SetDictionary ( CSphDict * pDict );
 	CSphDict *					GetDictionary () const { return m_pDict; }
 	CSphDict *					LeakDictionary ();
-	virtual void				SetKeepAttrs ( const CSphString & ) {}
+	virtual void				SetKeepAttrs ( const CSphString & , const CSphVector<CSphString> & ) {}
 	virtual void				Setup ( const CSphIndexSettings & tSettings );
 	const CSphIndexSettings &	GetSettings () const { return m_tSettings; }
 	bool						IsStripperInited () const { return m_bStripperInited; }

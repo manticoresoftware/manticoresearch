@@ -9844,9 +9844,6 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 	if ( !m_iDocinfo || !uRows )
 		return 0;
 
-	if ( m_bBinlog && g_pBinlog )
-		g_pBinlog->BinlogUpdateAttributes ( &m_iTID, m_sIndexName.cstr(), tUpd );
-
 	// remap update schema to index schema
 	int iUpdLen = tUpd.m_dAttrs.GetLength();
 	CSphVector<CSphAttrLocator> dLocators ( iUpdLen );
@@ -10257,6 +10254,9 @@ int CSphIndex_VLN::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, C
 			return -1;
 		}
 	}
+
+	if ( uUpdateMask && m_bBinlog && g_pBinlog )
+		g_pBinlog->BinlogUpdateAttributes ( &m_iTID, m_sIndexName.cstr(), tUpd );
 
 	*m_pAttrsStatus |= uUpdateMask; // FIXME! add lock/atomic?
 	return iUpdated;

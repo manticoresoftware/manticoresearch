@@ -667,9 +667,9 @@ expr_ident:
 				YYERROR;
 		}
 	| json_expr
-	| TOK_INTEGER '(' json_expr ')'
-	| TOK_DOUBLE '(' json_expr ')'
-	| TOK_BIGINT '(' json_expr ')'
+	| TOK_INTEGER '(' json_expr ')'	{ TRACK_BOUNDS ( $$, $1, $4 ); }
+	| TOK_DOUBLE '(' json_expr ')'	{ TRACK_BOUNDS ( $$, $1, $4 ); }
+	| TOK_BIGINT '(' json_expr ')'	{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	| TOK_FACET '(' ')'
 	;
 

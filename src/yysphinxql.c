@@ -3543,6 +3543,24 @@ yyreduce:
 
     break;
 
+  case 226:
+
+    { TRACK_BOUNDS ( (yyval), (yyvsp[-3]), (yyvsp[0]) ); }
+
+    break;
+
+  case 227:
+
+    { TRACK_BOUNDS ( (yyval), (yyvsp[-3]), (yyvsp[0]) ); }
+
+    break;
+
+  case 228:
+
+    { TRACK_BOUNDS ( (yyval), (yyvsp[-3]), (yyvsp[0]) ); }
+
+    break;
+
   case 230:
 
     { (yyval) = (yyvsp[-1]); (yyval).m_iType = TOK_ANY; }

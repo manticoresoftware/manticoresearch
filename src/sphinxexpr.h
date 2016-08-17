@@ -239,6 +239,8 @@ ISphExpr * sphExprParse ( const char * sExpr, const ISphSchema & tSchema, ESphAt
 	CSphString & sError, CSphQueryProfile * pProfiler, ESphCollation eCollation=SPH_COLLATION_DEFAULT, ISphExprHook * pHook=NULL,
 	bool * pZonespanlist=NULL, DWORD * pPackedFactorsFlags=NULL, ESphEvalStage * pEvalStage=NULL );
 
+ISphExpr * sphJsonFieldConv ( ISphExpr * pExpr );
+
 //////////////////////////////////////////////////////////////////////////
 
 /// init tables used by our geodistance functions

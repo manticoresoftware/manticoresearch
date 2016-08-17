@@ -1164,7 +1164,7 @@ protected:
 	virtual ESphJsonType GetKey ( const BYTE ** ppKey, const CSphMatch & tMatch ) const
 	{
 		assert ( ppKey );
-		if ( !m_pStrings )
+		if ( !m_pStrings || !m_pArg )
 			return JSON_EOF;
 		uint64_t uValue = m_pArg->Int64Eval ( tMatch );
 		*ppKey = m_pStrings + ( uValue & 0xffffffff );
@@ -7136,6 +7136,12 @@ ISphExpr * sphExprParse ( const char * sExpr, const ISphSchema & tSchema, ESphAt
 	if ( pPackedFactorsFlags )
 		*pPackedFactorsFlags = tParser.m_uPackedFactorFlags;
 	return pRes;
+}
+
+/// json type autoconversion
+ISphExpr * sphJsonFieldConv ( ISphExpr * pExpr )
+{
+	return new Expr_JsonFieldConv_c ( pExpr );
 }
 
 //

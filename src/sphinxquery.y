@@ -1,6 +1,7 @@
 %{
 #if USE_WINDOWS
 #pragma warning(push,1)
+#pragma warning(disable:4702) // unreachable code
 #endif
 %}
 

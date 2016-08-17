@@ -490,7 +490,11 @@ static yyconst flex_int16_t yy_chk[157] =
 #define YY_RESTORE_YY_MORE_OFFSET
 #line 1 "sphinxjson.l"
 #line 2 "sphinxjson.l"
-#include "yysphinxjson.h"
+#ifdef CMAKE_GENERATED_GRAMMAR
+	#include "bissphinxjson.h"
+#else
+	#include "yysphinxjson.h"
+#endif
 
 #if USE_WINDOWS
 #pragma warning(push,1)
@@ -504,7 +508,7 @@ static yyconst flex_int16_t yy_chk[157] =
 	}
 
 
-#line 508 "llsphinxjson.c"
+#line 512 "llsphinxjson.c"
 
 #define INITIAL 0
 #define ccomment 1
@@ -729,10 +733,10 @@ YY_DECL
 	register int yy_act;
     struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
 
-#line 28 "sphinxjson.l"
+#line 32 "sphinxjson.l"
 
 
-#line 736 "llsphinxjson.c"
+#line 740 "llsphinxjson.c"
 
 	if ( !yyg->yy_init )
 		{
@@ -817,99 +821,99 @@ do_action:	/* This label is used only to access EOF actions. */
 
 case 1:
 YY_RULE_SETUP
-#line 30 "sphinxjson.l"
+#line 34 "sphinxjson.l"
 { BEGIN(ccomment); }
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
-#line 31 "sphinxjson.l"
+#line 35 "sphinxjson.l"
 { BEGIN(ccomment); }
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
-#line 32 "sphinxjson.l"
+#line 36 "sphinxjson.l"
 { }
 	YY_BREAK
 case 4:
 /* rule 4 can match eol */
 YY_RULE_SETUP
-#line 33 "sphinxjson.l"
+#line 37 "sphinxjson.l"
 { BEGIN(INITIAL); }
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 35 "sphinxjson.l"
+#line 39 "sphinxjson.l"
 { STORE_BOUNDS; lvalp->m_eType = JSON_TRUE; return TOK_TRUE; }
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
-#line 36 "sphinxjson.l"
+#line 40 "sphinxjson.l"
 { STORE_BOUNDS; lvalp->m_eType = JSON_FALSE; return TOK_FALSE; }
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 37 "sphinxjson.l"
+#line 41 "sphinxjson.l"
 { STORE_BOUNDS; lvalp->m_eType = JSON_NULL; return TOK_NULL; }
 	YY_BREAK
 case 8:
 /* rule 8 can match eol */
 YY_RULE_SETUP
-#line 39 "sphinxjson.l"
+#line 43 "sphinxjson.l"
 { STORE_BOUNDS; lvalp->m_eType = JSON_STRING; return TOK_STRING; }
 	YY_BREAK
 case 9:
 /* rule 9 can match eol */
 YY_RULE_SETUP
-#line 40 "sphinxjson.l"
+#line 44 "sphinxjson.l"
 { STORE_BOUNDS; lvalp->m_eType = JSON_STRING; return TOK_STRING; }
 	YY_BREAK
 case 10:
 YY_RULE_SETUP
-#line 42 "sphinxjson.l"
+#line 46 "sphinxjson.l"
 { STORE_BOUNDS; lvalp->m_eType = JSON_DOUBLE; lvalp->m_fValue = strtod ( yytext, NULL ); return TOK_FLOAT; }
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
-#line 43 "sphinxjson.l"
+#line 47 "sphinxjson.l"
 { STORE_BOUNDS; lvalp->m_eType = JSON_DOUBLE; lvalp->m_fValue = strtod ( yytext, NULL ); return TOK_FLOAT; }
 	YY_BREAK
 case 12:
 YY_RULE_SETUP
-#line 44 "sphinxjson.l"
+#line 48 "sphinxjson.l"
 { STORE_BOUNDS; lvalp->m_eType = JSON_DOUBLE; lvalp->m_fValue = strtod ( yytext, NULL ); return TOK_FLOAT; }
 	YY_BREAK
 case 13:
 YY_RULE_SETUP
-#line 45 "sphinxjson.l"
+#line 49 "sphinxjson.l"
 { STORE_BOUNDS; lvalp->m_eType = JSON_DOUBLE; lvalp->m_fValue = strtod ( yytext, NULL ); return TOK_FLOAT; }
 	YY_BREAK
 case 14:
 YY_RULE_SETUP
-#line 46 "sphinxjson.l"
+#line 50 "sphinxjson.l"
 { STORE_BOUNDS; lvalp->m_eType = JSON_INT64; lvalp->m_iValue = strtoll ( yytext, NULL, 10 ); return TOK_INT; }
 	YY_BREAK
 case 15:
 YY_RULE_SETUP
-#line 47 "sphinxjson.l"
+#line 51 "sphinxjson.l"
 { STORE_BOUNDS; lvalp->m_eType = JSON_STRING; return TOK_IDENT; }
 	YY_BREAK
 case 16:
 /* rule 16 can match eol */
 YY_RULE_SETUP
-#line 49 "sphinxjson.l"
+#line 53 "sphinxjson.l"
 { ; }
 	YY_BREAK
 case 17:
 YY_RULE_SETUP
-#line 50 "sphinxjson.l"
+#line 54 "sphinxjson.l"
 { STORE_BOUNDS; return yytext[0]; }
 	YY_BREAK
 case 18:
 YY_RULE_SETUP
-#line 52 "sphinxjson.l"
+#line 56 "sphinxjson.l"
 ECHO;
 	YY_BREAK
-#line 913 "llsphinxjson.c"
+#line 917 "llsphinxjson.c"
 case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(ccomment):
 	yyterminate();
@@ -2027,7 +2031,7 @@ void yy2free (void * ptr , yyscan_t yyscanner)
 
 #define YYTABLES_NAME "yytables"
 
-#line 52 "sphinxjson.l"
+#line 56 "sphinxjson.l"
 
 
 

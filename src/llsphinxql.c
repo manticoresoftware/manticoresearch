@@ -906,7 +906,11 @@ static yyconst flex_int16_t yy_chk[1286] =
 #define YY_RESTORE_YY_MORE_OFFSET
 #line 1 "sphinxql.l"
 #line 2 "sphinxql.l"
-#include "yysphinxql.h"
+#ifdef CMAKE_GENERATED_GRAMMAR
+	#include "bissphinxql.h"
+#else
+	#include "yysphinxql.h"
+#endif
 
 #if USE_WINDOWS
 #pragma warning(push,1)
@@ -922,7 +926,7 @@ static yyconst flex_int16_t yy_chk[1286] =
 	}
 
 
-#line 926 "llsphinxql.c"
+#line 930 "llsphinxql.c"
 
 #define INITIAL 0
 #define ccomment 1
@@ -1147,10 +1151,10 @@ YY_DECL
 	register int yy_act;
     struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
 
-#line 31 "sphinxql.l"
+#line 35 "sphinxql.l"
 
 
-#line 1154 "llsphinxql.c"
+#line 1158 "llsphinxql.c"
 
 	if ( !yyg->yy_init )
 		{
@@ -1235,708 +1239,708 @@ do_action:	/* This label is used only to access EOF actions. */
 
 case 1:
 YY_RULE_SETUP
-#line 33 "sphinxql.l"
+#line 37 "sphinxql.l"
 { BEGIN(ccomment); }
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
-#line 34 "sphinxql.l"
+#line 38 "sphinxql.l"
 { }
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
-#line 35 "sphinxql.l"
+#line 39 "sphinxql.l"
 { BEGIN(INITIAL); }
 	YY_BREAK
 case 4:
 YY_RULE_SETUP
-#line 37 "sphinxql.l"
+#line 41 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_AGENT; }
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 38 "sphinxql.l"
+#line 42 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_ALTER; }
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
-#line 39 "sphinxql.l"
+#line 43 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_ADD; }
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 40 "sphinxql.l"
+#line 44 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_AND; }
 	YY_BREAK
 case 8:
 YY_RULE_SETUP
-#line 41 "sphinxql.l"
+#line 45 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_AS; }
 	YY_BREAK
 case 9:
 YY_RULE_SETUP
-#line 42 "sphinxql.l"
+#line 46 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_ASC; }
 	YY_BREAK
 case 10:
 YY_RULE_SETUP
-#line 43 "sphinxql.l"
+#line 47 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_ATTACH; }
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
-#line 44 "sphinxql.l"
+#line 48 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_ATTRIBUTES; }
 	YY_BREAK
 case 12:
 YY_RULE_SETUP
-#line 45 "sphinxql.l"
+#line 49 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_AVG; }
 	YY_BREAK
 case 13:
 YY_RULE_SETUP
-#line 46 "sphinxql.l"
+#line 50 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_BEGIN; }
 	YY_BREAK
 case 14:
 YY_RULE_SETUP
-#line 47 "sphinxql.l"
+#line 51 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_BETWEEN; }
 	YY_BREAK
 case 15:
 YY_RULE_SETUP
-#line 48 "sphinxql.l"
+#line 52 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_BIGINT; }
 	YY_BREAK
 case 16:
 YY_RULE_SETUP
-#line 49 "sphinxql.l"
+#line 53 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_BOOL; }
 	YY_BREAK
 case 17:
 YY_RULE_SETUP
-#line 50 "sphinxql.l"
+#line 54 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_BY; }
 	YY_BREAK
 case 18:
 YY_RULE_SETUP
-#line 51 "sphinxql.l"
+#line 55 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_CALL; }
 	YY_BREAK
 case 19:
 YY_RULE_SETUP
-#line 52 "sphinxql.l"
+#line 56 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_CHARACTER; }
 	YY_BREAK
 case 20:
 YY_RULE_SETUP
-#line 53 "sphinxql.l"
+#line 57 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_CHUNK; }
 	YY_BREAK
 case 21:
 YY_RULE_SETUP
-#line 54 "sphinxql.l"
+#line 58 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_COLLATION; }
 	YY_BREAK
 case 22:
 YY_RULE_SETUP
-#line 55 "sphinxql.l"
+#line 59 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_COLUMN; }
 	YY_BREAK
 case 23:
 YY_RULE_SETUP
-#line 56 "sphinxql.l"
+#line 60 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_COMMIT; }
 	YY_BREAK
 case 24:
 YY_RULE_SETUP
-#line 57 "sphinxql.l"
+#line 61 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_COMMITTED; }
 	YY_BREAK
 case 25:
 YY_RULE_SETUP
-#line 58 "sphinxql.l"
+#line 62 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_COUNT; }
 	YY_BREAK
 case 26:
 YY_RULE_SETUP
-#line 59 "sphinxql.l"
+#line 63 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_CREATE; }
 	YY_BREAK
 case 27:
 YY_RULE_SETUP
-#line 60 "sphinxql.l"
+#line 64 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_DATABASES; }
 	YY_BREAK
 case 28:
 YY_RULE_SETUP
-#line 61 "sphinxql.l"
+#line 65 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_DELETE; }
 	YY_BREAK
 case 29:
 YY_RULE_SETUP
-#line 62 "sphinxql.l"
+#line 66 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_DESC; }
 	YY_BREAK
 case 30:
 YY_RULE_SETUP
-#line 63 "sphinxql.l"
+#line 67 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_DESCRIBE; }
 	YY_BREAK
 case 31:
 YY_RULE_SETUP
-#line 64 "sphinxql.l"
+#line 68 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_DISTINCT; }
 	YY_BREAK
 case 32:
 YY_RULE_SETUP
-#line 65 "sphinxql.l"
+#line 69 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_DIV; }
 	YY_BREAK
 case 33:
 YY_RULE_SETUP
-#line 66 "sphinxql.l"
+#line 70 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_DOUBLE; }
 	YY_BREAK
 case 34:
 YY_RULE_SETUP
-#line 67 "sphinxql.l"
+#line 71 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_DROP; }
 	YY_BREAK
 case 35:
 YY_RULE_SETUP
-#line 68 "sphinxql.l"
+#line 72 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_FACET; }
 	YY_BREAK
 case 36:
 YY_RULE_SETUP
-#line 69 "sphinxql.l"
+#line 73 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_FALSE; }
 	YY_BREAK
 case 37:
 YY_RULE_SETUP
-#line 70 "sphinxql.l"
+#line 74 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_FLOAT; }
 	YY_BREAK
 case 38:
 YY_RULE_SETUP
-#line 71 "sphinxql.l"
+#line 75 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_FLUSH; }
 	YY_BREAK
 case 39:
 YY_RULE_SETUP
-#line 72 "sphinxql.l"
+#line 76 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_FOR; }
 	YY_BREAK
 case 40:
 YY_RULE_SETUP
-#line 73 "sphinxql.l"
+#line 77 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_FROM; }
 	YY_BREAK
 case 41:
 YY_RULE_SETUP
-#line 74 "sphinxql.l"
+#line 78 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_FUNCTION; }
 	YY_BREAK
 case 42:
 YY_RULE_SETUP
-#line 75 "sphinxql.l"
+#line 79 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_GLOBAL; }
 	YY_BREAK
 case 43:
 YY_RULE_SETUP
-#line 76 "sphinxql.l"
+#line 80 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_GROUP; }
 	YY_BREAK
 case 44:
 YY_RULE_SETUP
-#line 77 "sphinxql.l"
+#line 81 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_GROUPBY; }
 	YY_BREAK
 case 45:
 YY_RULE_SETUP
-#line 78 "sphinxql.l"
+#line 82 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_GROUP_CONCAT; }
 	YY_BREAK
 case 46:
 YY_RULE_SETUP
-#line 79 "sphinxql.l"
+#line 83 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_HAVING; }
 	YY_BREAK
 case 47:
 YY_RULE_SETUP
-#line 80 "sphinxql.l"
+#line 84 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_ID; }
 	YY_BREAK
 case 48:
 YY_RULE_SETUP
-#line 81 "sphinxql.l"
+#line 85 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_IN; }
 	YY_BREAK
 case 49:
 YY_RULE_SETUP
-#line 82 "sphinxql.l"
+#line 86 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_INDEX; }
 	YY_BREAK
 case 50:
 YY_RULE_SETUP
-#line 83 "sphinxql.l"
+#line 87 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_INSERT; }
 	YY_BREAK
 case 51:
 YY_RULE_SETUP
-#line 84 "sphinxql.l"
+#line 88 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_INTEGER; }
 	YY_BREAK
 case 52:
 YY_RULE_SETUP
-#line 85 "sphinxql.l"
+#line 89 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_INT; }
 	YY_BREAK
 case 53:
 YY_RULE_SETUP
-#line 86 "sphinxql.l"
+#line 90 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_INTO; }
 	YY_BREAK
 case 54:
 YY_RULE_SETUP
-#line 87 "sphinxql.l"
+#line 91 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_IS; }
 	YY_BREAK
 case 55:
 YY_RULE_SETUP
-#line 88 "sphinxql.l"
+#line 92 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_ISOLATION; }
 	YY_BREAK
 case 56:
 YY_RULE_SETUP
-#line 89 "sphinxql.l"
+#line 93 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_JSON; }
 	YY_BREAK
 case 57:
 YY_RULE_SETUP
-#line 90 "sphinxql.l"
+#line 94 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_LEVEL; }
 	YY_BREAK
 case 58:
 YY_RULE_SETUP
-#line 91 "sphinxql.l"
+#line 95 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_LIKE; }
 	YY_BREAK
 case 59:
 YY_RULE_SETUP
-#line 92 "sphinxql.l"
+#line 96 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_LIMIT; }
 	YY_BREAK
 case 60:
 YY_RULE_SETUP
-#line 93 "sphinxql.l"
+#line 97 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_MATCH; }
 	YY_BREAK
 case 61:
 YY_RULE_SETUP
-#line 94 "sphinxql.l"
+#line 98 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_MAX; }
 	YY_BREAK
 case 62:
 YY_RULE_SETUP
-#line 95 "sphinxql.l"
+#line 99 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_META; }
 	YY_BREAK
 case 63:
 YY_RULE_SETUP
-#line 96 "sphinxql.l"
+#line 100 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_MIN; }
 	YY_BREAK
 case 64:
 YY_RULE_SETUP
-#line 97 "sphinxql.l"
+#line 101 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_MOD; }
 	YY_BREAK
 case 65:
 YY_RULE_SETUP
-#line 98 "sphinxql.l"
+#line 102 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_MULTI; }
 	YY_BREAK
 case 66:
 YY_RULE_SETUP
-#line 99 "sphinxql.l"
+#line 103 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_MULTI64; }
 	YY_BREAK
 case 67:
 YY_RULE_SETUP
-#line 100 "sphinxql.l"
+#line 104 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_NAMES; }
 	YY_BREAK
 case 68:
 YY_RULE_SETUP
-#line 101 "sphinxql.l"
+#line 105 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_NOT; }
 	YY_BREAK
 case 69:
 YY_RULE_SETUP
-#line 102 "sphinxql.l"
+#line 106 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_NULL; }
 	YY_BREAK
 case 70:
 YY_RULE_SETUP
-#line 103 "sphinxql.l"
+#line 107 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_OPTION; }
 	YY_BREAK
 case 71:
 YY_RULE_SETUP
-#line 104 "sphinxql.l"
+#line 108 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_OPTIMIZE; }
 	YY_BREAK
 case 72:
 YY_RULE_SETUP
-#line 105 "sphinxql.l"
+#line 109 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_OR; }
 	YY_BREAK
 case 73:
 YY_RULE_SETUP
-#line 106 "sphinxql.l"
+#line 110 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_ORDER; }
 	YY_BREAK
 case 74:
 YY_RULE_SETUP
-#line 107 "sphinxql.l"
+#line 111 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_PLAN; }
 	YY_BREAK
 case 75:
 YY_RULE_SETUP
-#line 108 "sphinxql.l"
+#line 112 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_PLUGIN; }
 	YY_BREAK
 case 76:
 YY_RULE_SETUP
-#line 109 "sphinxql.l"
+#line 113 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_PLUGINS; }
 	YY_BREAK
 case 77:
 YY_RULE_SETUP
-#line 110 "sphinxql.l"
+#line 114 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_PROFILE; }
 	YY_BREAK
 case 78:
 YY_RULE_SETUP
-#line 111 "sphinxql.l"
+#line 115 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_RAMCHUNK; }
 	YY_BREAK
 case 79:
 YY_RULE_SETUP
-#line 112 "sphinxql.l"
+#line 116 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_RAND; }
 	YY_BREAK
 case 80:
 YY_RULE_SETUP
-#line 113 "sphinxql.l"
+#line 117 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_READ; }
 	YY_BREAK
 case 81:
 YY_RULE_SETUP
-#line 114 "sphinxql.l"
+#line 118 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_RECONFIGURE; }
 	YY_BREAK
 case 82:
 YY_RULE_SETUP
-#line 115 "sphinxql.l"
+#line 119 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_REPEATABLE; }
 	YY_BREAK
 case 83:
 YY_RULE_SETUP
-#line 116 "sphinxql.l"
+#line 120 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_REPLACE; }
 	YY_BREAK
 case 84:
 YY_RULE_SETUP
-#line 117 "sphinxql.l"
+#line 121 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_REMAP; }
 	YY_BREAK
 case 85:
 YY_RULE_SETUP
-#line 118 "sphinxql.l"
+#line 122 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_RETURNS; }
 	YY_BREAK
 case 86:
 YY_RULE_SETUP
-#line 119 "sphinxql.l"
+#line 123 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_ROLLBACK; }
 	YY_BREAK
 case 87:
 YY_RULE_SETUP
-#line 120 "sphinxql.l"
+#line 124 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_RTINDEX; }
 	YY_BREAK
 case 88:
 YY_RULE_SETUP
-#line 121 "sphinxql.l"
+#line 125 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_SELECT; }
 	YY_BREAK
 case 89:
 YY_RULE_SETUP
-#line 122 "sphinxql.l"
+#line 126 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_SERIALIZABLE; }
 	YY_BREAK
 case 90:
 YY_RULE_SETUP
-#line 123 "sphinxql.l"
+#line 127 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_SET; }
 	YY_BREAK
 case 91:
 YY_RULE_SETUP
-#line 124 "sphinxql.l"
+#line 128 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_SETTINGS; }
 	YY_BREAK
 case 92:
 YY_RULE_SETUP
-#line 125 "sphinxql.l"
+#line 129 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_SESSION; }
 	YY_BREAK
 case 93:
 YY_RULE_SETUP
-#line 126 "sphinxql.l"
+#line 130 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_SHOW; }
 	YY_BREAK
 case 94:
 YY_RULE_SETUP
-#line 127 "sphinxql.l"
+#line 131 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_SONAME; }
 	YY_BREAK
 case 95:
 YY_RULE_SETUP
-#line 128 "sphinxql.l"
+#line 132 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_START; }
 	YY_BREAK
 case 96:
 YY_RULE_SETUP
-#line 129 "sphinxql.l"
+#line 133 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_STATUS; }
 	YY_BREAK
 case 97:
 YY_RULE_SETUP
-#line 130 "sphinxql.l"
+#line 134 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_STRING; }
 	YY_BREAK
 case 98:
 YY_RULE_SETUP
-#line 131 "sphinxql.l"
+#line 135 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_SUM; }
 	YY_BREAK
 case 99:
 YY_RULE_SETUP
-#line 132 "sphinxql.l"
+#line 136 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_TABLE; }
 	YY_BREAK
 case 100:
 YY_RULE_SETUP
-#line 133 "sphinxql.l"
+#line 137 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_TABLES; }
 	YY_BREAK
 case 101:
 YY_RULE_SETUP
-#line 134 "sphinxql.l"
+#line 138 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_THREADS; }
 	YY_BREAK
 case 102:
 YY_RULE_SETUP
-#line 135 "sphinxql.l"
+#line 139 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_TO; }
 	YY_BREAK
 case 103:
 YY_RULE_SETUP
-#line 136 "sphinxql.l"
+#line 140 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_TRANSACTION; }
 	YY_BREAK
 case 104:
 YY_RULE_SETUP
-#line 137 "sphinxql.l"
+#line 141 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_TRUE; }
 	YY_BREAK
 case 105:
 YY_RULE_SETUP
-#line 138 "sphinxql.l"
+#line 142 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_TRUNCATE; }
 	YY_BREAK
 case 106:
 YY_RULE_SETUP
-#line 139 "sphinxql.l"
+#line 143 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_TYPE; }
 	YY_BREAK
 case 107:
 YY_RULE_SETUP
-#line 140 "sphinxql.l"
+#line 144 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_UNCOMMITTED; }
 	YY_BREAK
 case 108:
 YY_RULE_SETUP
-#line 141 "sphinxql.l"
+#line 145 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_UPDATE; }
 	YY_BREAK
 case 109:
 YY_RULE_SETUP
-#line 142 "sphinxql.l"
+#line 146 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_VALUES; }
 	YY_BREAK
 case 110:
 YY_RULE_SETUP
-#line 143 "sphinxql.l"
+#line 147 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_VARIABLES; }
 	YY_BREAK
 case 111:
 YY_RULE_SETUP
-#line 144 "sphinxql.l"
+#line 148 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_WARNINGS; }
 	YY_BREAK
 case 112:
 YY_RULE_SETUP
-#line 145 "sphinxql.l"
+#line 149 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_WEIGHT; }
 	YY_BREAK
 case 113:
 YY_RULE_SETUP
-#line 146 "sphinxql.l"
+#line 150 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_WHERE; }
 	YY_BREAK
 case 114:
 YY_RULE_SETUP
-#line 147 "sphinxql.l"
+#line 151 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_WITHIN; }
 	YY_BREAK
 case 115:
 YY_RULE_SETUP
-#line 149 "sphinxql.l"
+#line 153 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_NE; }
 	YY_BREAK
 case 116:
 YY_RULE_SETUP
-#line 150 "sphinxql.l"
+#line 154 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_NE; }
 	YY_BREAK
 case 117:
 YY_RULE_SETUP
-#line 151 "sphinxql.l"
+#line 155 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_LTE; }
 	YY_BREAK
 case 118:
 YY_RULE_SETUP
-#line 152 "sphinxql.l"
+#line 156 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_GTE; }
 	YY_BREAK
 case 119:
 YY_RULE_SETUP
-#line 153 "sphinxql.l"
+#line 157 "sphinxql.l"
 { YYSTOREBOUNDS; return '='; }
 	YY_BREAK
 case 120:
 /* rule 120 can match eol */
 YY_RULE_SETUP
-#line 155 "sphinxql.l"
+#line 159 "sphinxql.l"
 { YYSTOREBOUNDS; pParser->m_pLastTokenStart = yytext; lvalp->m_iValue = ( (SphAttr_t)lvalp->m_iStart<<32 ) | ( lvalp->m_iEnd-lvalp->m_iStart ); return TOK_QUOTED_STRING; }
 	YY_BREAK
 case 121:
 YY_RULE_SETUP
-#line 157 "sphinxql.l"
+#line 161 "sphinxql.l"
 { YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
 	YY_BREAK
 case 122:
 YY_RULE_SETUP
-#line 158 "sphinxql.l"
+#line 162 "sphinxql.l"
 { YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_DOT_NUMBER; }
 	YY_BREAK
 case 123:
 YY_RULE_SETUP
-#line 159 "sphinxql.l"
+#line 163 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_SUBKEY; }
 	YY_BREAK
 case 124:
 YY_RULE_SETUP
-#line 160 "sphinxql.l"
+#line 164 "sphinxql.l"
 { YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
 	YY_BREAK
 case 125:
 YY_RULE_SETUP
-#line 161 "sphinxql.l"
+#line 165 "sphinxql.l"
 { YYSTOREBOUNDS; lvalp->m_iValue = (int64_t)strtoull ( yytext, NULL, 10 ); return TOK_CONST_INT; }
 	YY_BREAK
 case 126:
 YY_RULE_SETUP
-#line 163 "sphinxql.l"
+#line 167 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_ATIDENT; }
 	YY_BREAK
 case 127:
 YY_RULE_SETUP
-#line 164 "sphinxql.l"
+#line 168 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_ATIDENT; }
 	YY_BREAK
 case 128:
 YY_RULE_SETUP
-#line 165 "sphinxql.l"
+#line 169 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_ATIDENT; }
 	YY_BREAK
 case 129:
 YY_RULE_SETUP
-#line 166 "sphinxql.l"
+#line 170 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_IDENT; }
 	YY_BREAK
 case 130:
 YY_RULE_SETUP
-#line 167 "sphinxql.l"
+#line 171 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_BAD_NUMERIC; }
 	YY_BREAK
 case 131:
 YY_RULE_SETUP
-#line 168 "sphinxql.l"
+#line 172 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_USERVAR; }
 	YY_BREAK
 case 132:
 YY_RULE_SETUP
-#line 169 "sphinxql.l"
+#line 173 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_SYSVAR; }
 	YY_BREAK
 case 133:
 YY_RULE_SETUP
-#line 170 "sphinxql.l"
+#line 174 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_SYSVAR; }
 	YY_BREAK
 case 134:
 YY_RULE_SETUP
-#line 171 "sphinxql.l"
+#line 175 "sphinxql.l"
 { YYSTOREBOUNDS; lvalp->m_iStart++; lvalp->m_iEnd--; return TOK_ID; }
 	YY_BREAK
 case 135:
 YY_RULE_SETUP
-#line 172 "sphinxql.l"
+#line 176 "sphinxql.l"
 { YYSTOREBOUNDS; lvalp->m_iStart++; lvalp->m_iEnd--; return TOK_IDENT; }
 	YY_BREAK
 case 136:
 YY_RULE_SETUP
-#line 173 "sphinxql.l"
+#line 177 "sphinxql.l"
 { YYSTOREBOUNDS; lvalp->m_iStart++; lvalp->m_iEnd--; return TOK_IDENT; } // allow `123xyz` column names
 	YY_BREAK
 case 137:
 /* rule 137 can match eol */
 YY_RULE_SETUP
-#line 175 "sphinxql.l"
+#line 179 "sphinxql.l"
 { ; }
 	YY_BREAK
 case 138:
 /* rule 138 can match eol */
 YY_RULE_SETUP
-#line 176 "sphinxql.l"
+#line 180 "sphinxql.l"
 { YYSTOREBOUNDS; return TOK_SUBKEY; }
 	YY_BREAK
 case 139:
 YY_RULE_SETUP
-#line 177 "sphinxql.l"
+#line 181 "sphinxql.l"
 { YYSTOREBOUNDS; return yytext[0]; }
 	YY_BREAK
 case 140:
 YY_RULE_SETUP
-#line 179 "sphinxql.l"
+#line 183 "sphinxql.l"
 ECHO;
 	YY_BREAK
-#line 1940 "llsphinxql.c"
+#line 1944 "llsphinxql.c"
 case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(ccomment):
 	yyterminate();
@@ -3054,7 +3058,7 @@ void yyfree (void * ptr , yyscan_t yyscanner)
 
 #define YYTABLES_NAME "yytables"
 
-#line 179 "sphinxql.l"
+#line 183 "sphinxql.l"
 
 
 

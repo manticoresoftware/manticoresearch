@@ -812,6 +812,9 @@ Two'</sphinxql>
 <sphinxql>select id, count(*), groupby(), j.a as p from arrays where id=123 group by p</sphinxql>
 <!-- true/false/null filtered as integers -->
 <sphinxql>select j from objects where id=9 and j[0]=0 and j[1]=1 and j[2]=0</sphinxql>
-<sphinxql>select j from objects where id=9 and j[0]!=1 and j[1]&gt;1 and j[2]&lt;1</sphinxql>
+<sphinxql>select j from objects where id=9 and j[0]!=1 and j[1]&gt;0 and j[2]&lt;1</sphinxql>
+<!-- type conversion in where clause -->
+<sphinxql>select j from objects where id=9 and integer(j[0])=0 and integer(j[1])=1 and integer(j[2])=0</sphinxql>
+<sphinxql>select j from objects where id=9 and integer(j[0])!=1 and double(j[1])&gt;0 and bigint(j[2])&lt;1</sphinxql>
 </sphqueries>
 </test>

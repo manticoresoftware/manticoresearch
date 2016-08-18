@@ -607,10 +607,16 @@ add_subdirectory (test)
 
 # a bit of installation stuff
 install (DIRECTORY api doc contrib DESTINATION share/doc COMPONENT doc)
-install (FILES COPYING INSTALL example.sql DESTINATION share/doc COMPONENT doc)
-install (FILES COPYING INSTALL sphinx.conf.in sphinx-min.conf.in
+install (FILES example.sql DESTINATION share/doc COMPONENT doc)
+if (WIN32)
+ install (FILES COPYING INSTALL sphinx.conf.in sphinx-min.conf.in
+		DESTINATION . COMPONENT config)
+ install (DIRECTORY DESTINATION log COMPONENT config)
+ install (DIRECTORY DESTINATION data COMPONENT config)
+else()
+ install (FILES COPYING INSTALL sphinx.conf.in sphinx-min.conf.in
 		DESTINATION share/doc COMPONENT config)
-
+endif ()
 configure_file ("${SPHINXSEARCH_SOURCE_DIR}/COPYING"
 		"${SPHINXSEARCH_BINARY_DIR}/COPYING.txt")
 

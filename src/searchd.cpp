@@ -15555,9 +15555,9 @@ void HandleMysqlShowVariables ( SqlRowBuffer_c & dRows, const SqlStmt_t & tStmt,
 }
 
 
-static void AddQueryStats ( IDataTupleter & tOut, const char * szPrefix, const QueryStats_t & tStats, void (*FormatFn)( CSphString & sBuf, uint64_t uQueries, uint64_t uStat ) )
+static void AddQueryStats ( IDataTupleter & tOut, const char * szPrefix, const QueryStats_t & tStats, void (*FormatFn)( CSphStringBuilder & sBuf, uint64_t uQueries, uint64_t uStat, const char * sType ) )
 {
-	static const char * dStatIntervalNames[QUERY_STATS_INTERVAL_TOTAL]=
+	static const char * dStatIntervalNames[QUERY_STATS_INTERVAL_TOTAL] =
 	{
 		"1min",
 		"5min",
@@ -15570,26 +15570,27 @@ static void AddQueryStats ( IDataTupleter & tOut, const char * szPrefix, const Q
 		"avg",
 		"min",
 		"max",
-		"95",
-		"99"
+		"pct95",
+		"pct99"
 	};
 
+	CSphStringBuilder sBuf;
+	CSphStringBuilder sName;
 	for ( int i = 0; i < QUERY_STATS_INTERVAL_TOTAL; i++ )
 	{
-		CSphString sValue;
-		sValue.SetSprintf ( "\"queries\":" UINT64_FMT, tStats.m_dStats[i].m_uTotalQueries );
-
+		sBuf.Clear();
+		sBuf.Appendf ( "{\"queries\":" UINT64_FMT, tStats.m_dStats[i].m_uTotalQueries );
 		for ( int j = 0; j < QUERY_STATS_TYPE_TOTAL; j++ )
 		{
-			CSphString sFormatted;
-			FormatFn ( sFormatted, tStats.m_dStats[i].m_uTotalQueries, tStats.m_dStats[i].m_dData[j] );			
-			sValue.SetSprintf ( "%s, \"%s\":%s", sValue.cstr(), dStatTypeNames[j], sFormatted.cstr() );
+			sBuf += ", ";
+			FormatFn ( sBuf, tStats.m_dStats[i].m_uTotalQueries, tStats.m_dStats[i].m_dData[j], dStatTypeNames[j] );
 		}
+		sBuf += "}";
 
-		CSphString sName;
-		sName.SetSprintf ( "%s_%s", szPrefix, dStatIntervalNames[i] );
-		sValue.SetSprintf( "{%s}", sValue.cstr() );
-		tOut.DataTuplet ( sName.cstr(), sValue.cstr() );
+		sName.Clear();
+		sName.Appendf ( "%s_%s", szPrefix, dStatIntervalNames[i] );
+
+		tOut.DataTuplet ( sName.cstr(), sBuf.cstr() );
 	}
 }
 
@@ -15597,12 +15598,12 @@ static void AddQueryStats ( IDataTupleter & tOut, const char * szPrefix, const Q
 static void AddQueryTimeStatsToOutput ( SqlRowBuffer_c & tOut, const char * szPrefix, const QueryStats_t & tQueryTimeStats )
 {
 	AddQueryStats ( tOut, szPrefix, tQueryTimeStats,
-		[]( CSphString & sBuf, uint64_t uQueries, uint64_t uStat )
+		[]( CSphStringBuilder & sBuf, uint64_t uQueries, uint64_t uStat, const char * sType )
 		{
 			if ( uQueries )
-				sBuf.SetSprintf ( "%d.%03d sec", DWORD(uStat/1000), DWORD(uStat%1000) );
-			else 
-				sBuf = " - ";
+				sBuf.Appendf ( "\"%s_sec\":%d.%03d", sType, DWORD ( uStat/1000 ), DWORD ( uStat%1000 ) );
+			else
+				sBuf.Appendf ( "\"%s\":\"-\"", sType );
 		} );
 }
 
@@ -15610,12 +15611,13 @@ static void AddQueryTimeStatsToOutput ( SqlRowBuffer_c & tOut, const char * szPr
 static void AddFoundRowsStatsToOutput ( SqlRowBuffer_c & tOut, const char * szPrefix, const QueryStats_t & tRowsFoundStats )
 {
 	AddQueryStats ( tOut, szPrefix, tRowsFoundStats,
-		[]( CSphString & sBuf, uint64_t uQueries, uint64_t uStat )
+		[]( CSphStringBuilder & sBuf, uint64_t uQueries, uint64_t uStat, const char * sType )
 		{
+			sBuf.Appendf ( "\"%s\":", sType );
 			if ( uQueries )
-				sBuf.SetSprintf ( UINT64_FMT, uStat );
+				sBuf.Appendf ( UINT64_FMT, uStat );
 			else
-				sBuf = " - ";
+				sBuf += "\"-\"";
 		} );
 }
 
@@ -15689,7 +15691,7 @@ static void AddDistibutedIndexStatus ( SqlRowBuffer_c & tOut, DistributedIndex_t
 	tOut.HeadTuplet ( "Variable_name", "Value" );
 	tOut.DataTuplet ( "index_type", "distributed" );
 
-	AddIndexQueryStats ( tOut, pIndex );	
+	AddIndexQueryStats ( tOut, pIndex );
 
 	tOut.Eof();
 }

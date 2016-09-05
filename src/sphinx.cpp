@@ -31272,13 +31272,15 @@ CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & s
 	int iColumns = m_dRemap.GetLength();
 	int iCol = 0;
 	int iColumnStart = m_iDataStart;
-	int iQuoteCount = 0;
-	int iQuoteStart = -1;
+	int iQuotPrev = -1;
 	int	iEscapeStart = -1;
 	const BYTE * s = m_dBuf.Begin() + m_iDataStart; // parse this line
 	BYTE * d = m_dBuf.Begin() + m_iDataStart; // do parsing in place
 	const BYTE * pEnd = m_dBuf.Begin() + m_iBufUsed; // until we reach the end of current buffer
 	m_iDocStart = m_iDataStart;
+	bool bOnlySpace = true;
+	bool bQuoted = false;
+	bool bHasQuot = false;
 
 	for ( ;; )
 	{
@@ -31286,22 +31288,24 @@ CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & s
 
 		// move to next control symbol
 		while ( s<pEnd && *s && *s!=m_iDelimiter && *s!='"' && *s!='\\' && *s!='\r' && *s!='\n' )
+		{
+			bOnlySpace &= sphIsSpace ( *s );
 			*d++ = *s++;
+		}
 
 		if ( s<pEnd )
 		{
 			assert ( !*s || *s==m_iDelimiter || *s=='"' || *s=='\\' || *s=='\r' || *s=='\n' );
 			bool bNull = !*s;
 			bool bEOL = ( *s=='\r' || *s=='\n' );
-#ifndef NDEBUG
 			bool bDelimiter = ( *s==m_iDelimiter );
-#endif
 			bool bQuot = ( *s=='"' );
 			bool bEscape = ( *s=='\\' );
 			int iOff = s - m_dBuf.Begin();
 			bool bEscaped = ( iEscapeStart>=0 && iEscapeStart+1==iOff );
 
-			if ( bEscape || bEscaped ) // not quoted escape symbol
+			// escape symbol outside double quotation
+			if ( !bQuoted && !bDelimiter && ( bEscape || bEscaped ) )
 			{
 				if ( bEscaped ) // next to escape symbol proceed as regular
 				{
@@ -31314,33 +31318,49 @@ CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & s
 				continue;
 			}
 
+			// double quote processing
 			// [ " ... " ]
 			// [ " ... "" ... " ]
 			// [ " ... """ ]
 			// [ " ... """" ... " ]
-			if ( bQuot || ( iQuoteCount%2 )==1 ) // quotation
+			// any symbol inside double quote proceed as regular
+			// but quoted quote proceed as regular symbol
+			if ( bQuot )
 			{
-				// order of operations with quotation counter and offset matter
-				if ( bQuot )
-					iQuoteCount++;
-
-				// any symbol inside quotation proceed as regular
-				// but not quotation itself
-				// but quoted quotation proceed as regular symbol or escaped quotation
-				bool bOdd = ( ( iQuoteCount%2 )==1 );
-				// regular symbol inside quotation or quoted quotation or escaped quotation
-				if ( bOdd && ( !bQuot || ( iQuoteStart!=-1 && iQuoteStart+1==iOff ) ) )
+				if ( bOnlySpace && iQuotPrev==-1 )
+				{
+					// enable double quote
+					bQuoted = true;
+					bHasQuot = true;
+				} else if ( bQuoted )
+				{
+					// close double quote on 2st quote symbol
+					bQuoted = false;
+				} else if ( bHasQuot && iQuotPrev!=-1 && iQuotPrev+1==iOff )
+				{
+					// escaped quote found, re-enable double quote and copy symbol itself
+					bQuoted = true;
+					*d++ = '"';
+				} else
+				{
 					*d++ = *s;
-				s++;
+				}
 
-				if ( bQuot )
-					iQuoteStart = iOff;
+				s++;
+				iQuotPrev = iOff;
+				continue;
+			}
+
+			if ( bQuoted )
+			{
+				*d++ = *s++;
 				continue;
 			}
 
 			int iLen = d - m_dBuf.Begin() - iColumnStart;
 			assert ( iLen>=0 );
-			m_dColumnsLen[iCol] = iLen;
+			if ( iCol<m_dColumnsLen.GetLength() )
+				m_dColumnsLen[iCol] = iLen;
 			*d++ = '\0';
 			s++;
 			iCol++;
@@ -31360,6 +31380,10 @@ CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & s
 			assert ( bDelimiter );
 			// column separator found
 			iColumnStart = d - m_dBuf.Begin();
+			bOnlySpace = true;
+			bQuoted = false;
+			bHasQuot = false;
+			iQuotPrev = -1;
 			continue;
 		}
 
@@ -31379,7 +31403,7 @@ CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & s
 			iDstOff -= m_iDataStart;
 			iSrcOff -= m_iDataStart;
 			iColumnStart -= m_iDataStart;
-			iQuoteStart -= m_iDataStart;
+			iQuotPrev -= m_iDataStart;
 			iEscapeStart -= m_iDataStart;
 			m_iDataStart = 0;
 			m_iDocStart = 0;
@@ -31400,9 +31424,16 @@ CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & s
 				return CSphSource_BaseSV::DATA_OVER;
 			}
 
-			// error in case no data left in middle of data stream
-			sError.SetSprintf ( "source '%s': read error '%s' (line=%d, docid=" DOCID_FMT ")",
-				m_tSchema.m_sName.cstr(), strerror(errno), m_iLine, m_tDocInfo.m_uDocID );
+			if ( iCol!=iColumns )
+			{
+				sError.SetSprintf ( "source '%s': not all columns found (found=%d, total=%d, line=%d, docid=" DOCID_FMT ", error='%s')",
+					m_tSchema.m_sName.cstr(), iCol, iColumns, m_iLine, m_tDocInfo.m_uDocID, strerror(errno) );
+			} else
+			{
+				// error in case no data left in middle of data stream
+				sError.SetSprintf ( "source '%s': read error '%s' (line=%d, docid=" DOCID_FMT ")",
+					m_tSchema.m_sName.cstr(), strerror(errno), m_iLine, m_tDocInfo.m_uDocID );
+			}
 			return CSphSource_BaseSV::PARSING_FAILED;
 		}
 		m_iBufUsed += iGot;

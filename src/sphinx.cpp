@@ -25272,6 +25272,9 @@ static inline int HtmlEntityLookup ( const BYTE * str, int len )
 
 void CSphHTMLStripper::Strip ( BYTE * sData ) const
 {
+	if ( !sData )
+		return;
+
 	const BYTE * s = sData;
 	BYTE * d = sData;
 	for ( ;; )

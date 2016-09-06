@@ -206,6 +206,8 @@ foreach ( $opts as $o )
 	$results[] = $client->BuildExcerpts ( array (''), 'test', 'test me', $o );
 	$results[] = $client->BuildExcerpts ( array ('test me'), 'test', '', $o );
 }
+$results[] = $client->BuildExcerpts ( array (''), 'hi2', 'test me', array('query_mode'=>true, 'allow_empty'=>false) );
+$results[] = $client->BuildExcerpts ( array ('test me'), 'hi2', '', array('query_mode'=>true, 'allow_empty'=>false) );
 
 ]]></custom_test>
 

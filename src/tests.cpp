@@ -3838,6 +3838,42 @@ void TestSource ()
 		"10,ma\\\"tch,me,ten\\\"der,tmp,tmp,tmp,11\n",
 		"ma\"tch", "me", "ten\"der", "tmp", "tmp", "tmp",
 
+		"11,"
+		"test fest \\\" best"
+		",tmp,tmp,tmp,tmp,tmp,11\n",
+		"test fest \" best",
+		"tmp", "tmp", "tmp", "tmp", "tmp",
+
+		"12,"
+		"\"test fest \\\" be\"st\""
+		",tmp,tmp,tmp,tmp,tmp,11\n",
+		"test fest \\ be\"st\"",
+		"tmp", "tmp", "tmp", "tmp", "tmp",
+
+		"13,"
+		"\"test fest, be\"st of, the\""
+		",tmp,tmp,tmp,tmp,11\n",
+		"test fest, best of", " the\"",
+		"tmp", "tmp", "tmp", "tmp",
+
+		"14,"
+		"\"test fest, best of, th\"e"
+		",tmp,tmp,tmp,tmp,tmp,11\n",
+		"test fest, best of, the",
+		"tmp", "tmp", "tmp", "tmp", "tmp",
+
+		"15,"
+		"\"test fest\\, best of th\"e"
+		",tmp,tmp,tmp,tmp,tmp,11\n",
+		"test fest\\, best of the",
+		"tmp", "tmp", "tmp", "tmp", "tmp",
+
+		"16,"
+		"test \"fest\\, best of th\"e"
+		",tmp,tmp,tmp,tmp,11\n",
+		"test \"fest", " best of th\"e",
+		"tmp", "tmp", "tmp", "tmp",
+
 		NULL };
 
 	// write csv file

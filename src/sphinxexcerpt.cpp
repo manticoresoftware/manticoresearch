@@ -3233,7 +3233,10 @@ static void TokenizeDocument ( T & tFunctor, const CSphHTMLStripper * pStripper,
 		}
 
 		pLastTokenEnd = pTokenizer->GetTokenEnd ();
-		int iWordLen = pLastTokenEnd - pTokenStart;
+
+		// might differ when sbsc got replaced by utf codepoint
+		int iTokenLen = pLastTokenEnd - pTokenStart;
+		int iWordLen = strlen ( ( const char *)sWord );
 
 		bool bPopExactMulti = false;
 		if ( tFunctor.m_bIndexExactWords )
@@ -3262,7 +3265,7 @@ static void TokenizeDocument ( T & tFunctor, const CSphHTMLStripper * pStripper,
 
 		tTok.m_uPosition = ( iWord || tTok.m_bStopWord ) ? uPosition : 0;
 		tTok.m_iStart = pTokenStart - pStartPtr;
-		tTok.m_iLen = iWordLen;
+		tTok.m_iLen = iTokenLen;
 		tTok.m_bWord = !!iWord;
 
 		// match & emit

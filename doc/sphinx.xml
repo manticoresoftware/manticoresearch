@@ -6330,11 +6330,11 @@ processing settings.
 that specifies whether to return document and hit occurrence statistics.
 <option>options</option> starting with 2.3.2-beta, can also accept parameters for configuring folding depending on tokenization settings:
 <itemizedlist>
-<listitem><para><option>stats<option> - show statistics of keywords, default is 0</para></listitem>
-<listitem><para><option>fold_wildcards<option> -  fold wildcards, default is 1</para></listitem>
-<listitem><para><option>fold_lemmas<option> - fold morphological lemmas, default is 0</para></listitem>
-<listitem><para><option>fold_blended<option> - fold blended words, default is 0 </para></listitem>
-<listitem><para><option>expansion_limit<option> - override expansion_limit defined in configuration, default is 0 (use value from configuration) </para></listitem>
+<listitem><para><option>stats</option> - show statistics of keywords, default is 0</para></listitem>
+<listitem><para><option>fold_wildcards</option> -  fold wildcards, default is 1</para></listitem>
+<listitem><para><option>fold_lemmas</option> - fold morphological lemmas, default is 0</para></listitem>
+<listitem><para><option>fold_blended</option> - fold blended words, default is 0 </para></listitem>
+<listitem><para><option>expansion_limit</option> - override expansion_limit defined in configuration, default is 0 (use value from configuration) </para></listitem>
 </itemizedlist>
 <programlisting>
 call keywords(
@@ -6368,14 +6368,14 @@ CALL QSUGGEST statement, introduced in version 2.3.2-beta,  enumerates for a giv
 It returns the suggested keywords, Levenshtein  distance between the suggested and original keyword and the docs statistic of the suggested keyword.
 Several options are supported for customization:
 <itemizedlist>
-<listitem><para><option>limit<option> - returned N top matches, default is 5</para></listitem>
-<listitem><para><option>max_edits<option> -  keep only dictionary words which Levenshtein distance is less or equal, default is 4</para></listitem>
-<listitem><para><option>result_stats<option> - provide Levenshtein distance and document count of the found words, default is 1 (enabled)</para></listitem>
-<listitem><para><option>delta_len<option> - keep only dictionary words whose length difference is less, default is 3 </para></listitem>
-<listitem><para><option>max_matches<option> - number of matches to keep, default is 25 </para></listitem>
-<listitem><para><option>reject<option> - defaults to 4; rejected words are matches that are not better than those already in the match queue. They are put in a rejected queue that gets reset in case one actually can go in the match queue.
+<listitem><para><option>limit</option> - returned N top matches, default is 5</para></listitem>
+<listitem><para><option>max_edits</option> -  keep only dictionary words which Levenshtein distance is less or equal, default is 4</para></listitem>
+<listitem><para><option>result_stats</option> - provide Levenshtein distance and document count of the found words, default is 1 (enabled)</para></listitem>
+<listitem><para><option>delta_len</option> - keep only dictionary words whose length difference is less, default is 3 </para></listitem>
+<listitem><para><option>max_matches</option> - number of matches to keep, default is 25 </para></listitem>
+<listitem><para><option>reject</option> - defaults to 4; rejected words are matches that are not better than those already in the match queue. They are put in a rejected queue that gets reset in case one actually can go in the match queue.
 This parameter defines the size of the rejected queue (as reject*max(max_matched,limit)). If the rejected queue is filled, the engine stops looking for potential matches. </para></listitem>
-<listitem><para><option>result_line<option> - alternate mode to display the data by returning all suggests, distances and docs each per one row, default is 0 </para></listitem>
+<listitem><para><option>result_line</option> - alternate mode to display the data by returning all suggests, distances and docs each per one row, default is 0 </para></listitem>
 </itemizedlist>
 <programlisting>
 mysql> CALL QSUGGEST('automaticlly ','forum', 5 as limit, 4 as max_edits,1 as result_stats,3 as delta_len,0 as result_line,25 as max_matches,4 as reject );
@@ -7217,6 +7217,8 @@ for ranking purposes). Only available for indexes built with index_field_lengths
 <listitem><b>ram_bytes</b>, total size (in bytes) of the RAM-resident
 index portion.
 </listitem>
+<listitem>queries time statistics of last 1 minute, 5 minutes, 15 minutes and total since daemon start;data is encapsulated as a JSON object which includes number of queries, min,max,avg,95 and 99 percentile values; introduced in 2.3.2-beta</listitem>
+<listitem>queries found rows statistics of last 1 minute, 5 minutes, 15 minutes and total since daemon start;data is encapsulated as a JSON object which includes number of queries, min,max,avg,95 and 99 percentile values; introduced in 2.3.2-beta</listitem>
 </itemizedlist>
 </para>
 <programlisting>
@@ -14816,7 +14818,7 @@ plugin_dir = /usr/local/sphinx/lib
 
 <appendix id="changelog"><title>Sphinx revision history</title>
 
-<sect1 id="rel232"><title>Version 2.3.2-beta, 03 aug 2016</title>
+<sect1 id="rel232"><title>Version 2.3.2-beta, 09 sep 2016</title>
 <bridgehead>Major features</bridgehead>
 <itemizedlist>
 <listitem>Searchd now uses mmap(). Daemon is available immediately and spawns a separate thread that loads the indexes. </listitem>
@@ -14832,6 +14834,7 @@ plugin_dir = /usr/local/sphinx/lib
 </itemizedlist>
 <bridgehead>Changes and improvements</bridgehead>
 <itemizedlist>
+<listitem>changed <link linked="sphinxql-show-index-status">SHOW INDEX STATUS</link> now displays performed  number of queries, query times and found rows of last 1,5,15 minutes and total since daemon start</listitem>
 <listitem>changed <link linked="conf-retry-count">retry_count</link> behaviour</listitem>
 <listitem>added wildcard support and new options for <link linked="sphinxql-call-keywords">CALL KEYWORDS</link> SphinxQL statement</listitem>
 <listitem>faster RT inserts</listitem>
@@ -14841,17 +14844,14 @@ plugin_dir = /usr/local/sphinx/lib
 <listitem>daemon now picks changed index path when it receives HUP</listitem>
 <listitem>added alias support for MVA attributes</listitem>
 <listitem>added SphinxQL support for comparison, IN, and BETWEEN conditions over ANY/ALL(mva)</listitem>
+<listitem>added explicit JSON type conversion in WHERE clause</listitem>
 </itemizedlist>
 
 <bridgehead>Bug fixes</bridgehead>
 <itemizedlist>
-<listitem><para>fixed #2167, <option>--keep_attrs</option> did not work with <option>--rotate</option></para></listitem>
-<listitem><para>fixed #2161, RT indexing could fail with <option>index_token_filter</option> because of multiple errorneous filter loads</para></listitem>
-<listitem><para>fixed #2154, crash in <code>ZONE</code> operator</para></listitem>
-</itemizedlist>
-<bridgehead>Bug fixes</bridgehead>
-<itemizedlist>
-<listitem><para>Simplify refactoring</para></listitem>
+<listitem><para>fixed #2503 update of attributes at index prevents binlog from clean</para></listitem>
+<listitem><para>fixed #2516 suggest for index with exact_word or morphology options</para></listitem>
+<listitem><para>fixed #2507 .NET Connector overflow exception (unsigned id support)</para></listitem>
 <listitem><para>Fixed initial round-robin counter</para></listitem>
 <listitem><para>Thread-safety checks added (backported)</para></listitem>
 <listitem><para>Refactored dl-staff</para></listitem>

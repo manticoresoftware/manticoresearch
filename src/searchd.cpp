@@ -18503,7 +18503,8 @@ void CheckRotate ()
 
 			bool bWasAdded = tIndex.m_bOnlyNew;
 			CSphString sError;
-			if ( !RotateIndexGreedy ( tIndex, sIndex, sError ) )
+			bool bOk = RotateIndexGreedy ( tIndex, sIndex, sError );
+			if ( !bOk )
 				sphWarning ( "%s", sError.cstr() );
 			if ( bWasAdded && tIndex.m_bEnabled && g_pCfg.m_tConf.Exists ( "index" ) )
 			{
@@ -18517,10 +18518,11 @@ void CheckRotate ()
 						tIndex.m_bEnabled = false;
 					}
 				}
-
-				if ( tIndex.m_bEnabled )
-					tIndex.m_pIndex->Preread();
 			}
+
+			if ( bOk && tIndex.m_bEnabled )
+				tIndex.m_pIndex->Preread();
+
 			tIndex.Unlock();
 		}
 

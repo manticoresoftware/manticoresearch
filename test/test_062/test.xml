@@ -53,6 +53,27 @@ index hi2
 	html_strip		= 1
 }
 
+source test_utf
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1, 'title 201601731000120000873 and filler goes' as s, 'title 201601731000120000873 and filler goes' as text, 11 as idd UNION SELECT 2, 'title 123 and filler goes' as s, 'title 123 and filler goes' as text, 22 as idd 
+	
+	sql_attr_uint = idd
+	sql_attr_string = s
+}
+
+index test_utf
+{
+	source = test_utf
+	path = <data_path/>/test_utf
+	docinfo			= extern
+	dict = keywords
+    charset_table	= 0->U+043E, 1..2, 3->U+0437, 4..9, A..Z->a..z, _, a..z
+	min_infix_len	= 2
+	index_exact_words	= 1
+}
+
 </config>
 
 <db_insert>select 1;</db_insert>
@@ -208,6 +229,21 @@ foreach ( $opts as $o )
 }
 $results[] = $client->BuildExcerpts ( array (''), 'hi2', 'test me', array('query_mode'=>true, 'allow_empty'=>false) );
 $results[] = $client->BuildExcerpts ( array ('test me'), 'hi2', '', array('query_mode'=>true, 'allow_empty'=>false) );
+
+// sbsc char converted to utf-8
+$client->SetMatchMode ( SPH_MATCH_EXTENDED2 );
+
+$client->SetSelect ( "id, SNIPPET(s, '12* ', 'limit=500', 'query_mode=1' )" );
+$results[] = $client->Query ( '12*', 'test_utf' )["matches"];
+
+$client->SetSelect ( "id, SNIPPET(s, '*873* ', 'limit=500', 'query_mode=1' )" );
+$results[] = $client->Query ( '*873*', 'test_utf' )["matches"];
+
+$client->SetSelect ( "id, SNIPPET(s, '12* ', 'limit=20', 'query_mode=1' )" );
+$results[] = $client->Query ( '12*', 'test_utf' )["matches"];
+
+$client->SetSelect ( "id, SNIPPET(s, '*873* ', 'limit=30', 'query_mode=1' )" );
+$results[] = $client->Query ( '*873*', 'test_utf' )["matches"];
 
 ]]></custom_test>
 

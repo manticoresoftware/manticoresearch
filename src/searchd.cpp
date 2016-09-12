@@ -18314,7 +18314,7 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP )
 		if ( ServedIndex_c * pServedIndex = g_pLocalIndexes->GetWlockedEntry ( sIndexName ) )
 		{
 			ConfigureLocalIndex ( *pServedIndex, hIndex );
-			if ( hIndex["path"].strval()!=pServedIndex->m_sIndexPath )
+			if ( hIndex.Exists ( "path" ) && hIndex["path"].strval()!=pServedIndex->m_sIndexPath )
 				pServedIndex->m_sNewPath = hIndex["path"].strval();
 			pServedIndex->m_bToDelete = false;
 			nChecked++;

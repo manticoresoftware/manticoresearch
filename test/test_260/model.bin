@@ -1,0 +1,20 @@
+a:1:{i:0;a:1:{i:0;a:8:{i:0;s:16:"
+before rotation";i:1;s:23:"
+tmp1 | template
+1 rows";i:2;s:15:"
+after rotation";i:3;s:53:"
+plain1 | local
+plain2 | local
+tmp1 | template
+3 rows";i:4;s:6:"plain1";i:5;s:57:"
+1 | 1
+2 | 1
+3 | 2
+4 | 2
+5 | 3
+6 | 3
+10 | 4
+11 | 4
+8 rows";i:6;s:4:"tmp1";i:7;s:38:"
+<b>Kph</b> on Europe road 1110
+1 rows";}}}

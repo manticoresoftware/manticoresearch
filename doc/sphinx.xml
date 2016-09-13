@@ -3807,6 +3807,14 @@ Full SphinxQL reference is available in <xref linkend="sphinxql-reference"/>.
 <sect1 id="http-rest"><title>HTTP protocol</title>
 <para>
 Starting with 2.3.2-beta, Sphinx search daemon supports HTTP protocol and can be accessed with regular HTTP clients.
+Available only with workers = thread_pool. </para>
+<para>
+To enabled the HTTP protocol, a <link linkend="conf-listen">listen</link> directive with http specified as a protocol needs to be declared:
+<programlisting>
+listen = localhost:8080:http
+</programlisting>
+</para>
+<para>
 Supported endpoints:
 <itemizedlist>
 <listitem><para>/ - default response, returns a simple HTML page</para>

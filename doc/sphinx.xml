@@ -6373,7 +6373,8 @@ call keywords(
 CALL QSUGGEST(word, index [,options])
 </programlisting>
 CALL QSUGGEST statement, introduced in version 2.3.2-beta,  enumerates for a giving word all suggestions from the dictionary. This statement works only on indexes with infixing enabled and dict=keywords. 
-It returns the suggested keywords, Levenshtein  distance between the suggested and original keyword and the docs statistic of the suggested keyword.
+It returns the suggested keywords, Levenshtein  distance between the suggested and original keyword and the docs statistic of the suggested keyword. 
+If the first parameter is a bag of words, the function will return suggestions only for the last word, ignoring the rest.
 Several options are supported for customization:
 <itemizedlist>
 <listitem><para><option>limit</option> - returned N top matches, default is 5</para></listitem>
@@ -6399,7 +6400,13 @@ mysql> CALL QSUGGEST('automaticlly ','forum', 5 as limit, 4 as max_edits,1 as re
 5 rows in set (0.00 sec)
 </programlisting>
 </sect1>
-
+<sect1 id="sphinxql-call-suggest"><title>CALL SUGGEST syntax</title>
+<programlisting>
+CALL SUGGEST(word, index [,options])
+</programlisting>
+CALL SUGGEST statement, introduced in version 2.3.2-beta. Works the same as CALL QUSUGGEST, except that if a bag of words is present, the statement will return suggestions only for the first word, ignoring the rest.
+If the first paramenter is a word, the functionality of CALL SUGGEST and CALL QSUGGEST is the same.
+</sect1>
 <sect1 id="sphinxql-show-tables"><title>SHOW TABLES syntax</title>
 <programlisting>
 SHOW TABLES [ LIKE pattern ]

@@ -850,11 +850,13 @@ struct Expr_ToString_c : public Expr_Unary_c
 protected:
 	ESphAttr	m_eArg;
 	mutable CSphStringBuilder m_sBuilder;
+	const BYTE * m_pStrings;
 
 public:
 	Expr_ToString_c ( ISphExpr * pArg, ESphAttr eArg )
 		: Expr_Unary_c ( "Expr_ToString_c", pArg )
 		, m_eArg ( eArg )
+		, m_pStrings ( NULL )
 	{}
 
 	virtual float Eval ( const CSphMatch & ) const
@@ -866,6 +868,11 @@ public:
 	virtual int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
 	{
 		m_sBuilder.Clear();
+		int64_t iPacked = 0;
+		ESphJsonType eJson = JSON_NULL;
+		DWORD uOff = 0;
+		int iLen = 0;
+
 		switch ( m_eArg )
 		{
 			case SPH_ATTR_INTEGER:	m_sBuilder.Appendf ( "%u", m_pFirst->IntEval ( tMatch ) ); break;
@@ -904,6 +911,25 @@ public:
 			case SPH_ATTR_STRINGPTR:
 				return m_pFirst->StringEval ( tMatch, ppStr );
 
+			case SPH_ATTR_JSON_FIELD:
+				iPacked = m_pFirst->Int64Eval ( tMatch );
+				eJson = ESphJsonType ( iPacked>>32 );
+				uOff = (DWORD)iPacked;
+				if ( !uOff || eJson==JSON_NULL )
+				{
+					*ppStr = NULL;
+					iLen = 0;
+				} else
+				{
+					CSphVector<BYTE> dTmp;
+					sphJsonFieldFormat ( dTmp, m_pStrings+uOff, eJson, false );
+					if ( dTmp.GetLength() )
+						dTmp.Add ( '\0' );
+					iLen = dTmp.GetLength();
+					*ppStr = dTmp.LeakData();
+				}
+				return iLen;
+
 			default:
 				assert ( 0 && "unhandled arg type in TO_STRING()" );
 				break;
@@ -920,6 +946,14 @@ public:
 	virtual bool IsStringPtr() const
 	{
 		return true;
+	}
+
+	virtual void Command ( ESphExprCommand eCmd, void * pArg )
+	{
+		if ( eCmd==SPH_EXPR_SET_STRING_POOL )
+			m_pStrings = (const BYTE*)pArg;
+
+		m_pFirst->Command ( eCmd, pArg );
 	}
 };
 
@@ -3408,12 +3442,14 @@ protected:
 	mutable CSphVector<int64_t>		m_dArgvals;
 	mutable char					m_bError;
 	CSphQueryProfile *				m_pProfiler;
+	const BYTE *					m_pStrings;						
 
 public:
 	explicit Expr_Udf_c ( UdfCall_t * pCall, CSphQueryProfile * pProfiler )
 		: m_pCall ( pCall )
 		, m_bError ( 0 )
 		, m_pProfiler ( pProfiler )
+		, m_pStrings ( NULL )
 	{
 		SPH_UDF_ARGS & tArgs = m_pCall->m_tArgs;
 
@@ -3439,6 +3475,11 @@ public:
 
 	void FillArgs ( const CSphMatch & tMatch ) const
 	{
+		int64_t iPacked = 0;
+		ESphJsonType eJson = JSON_NULL;
+		DWORD uOff = 0;
+		CSphVector<BYTE> dTmp;
+
 		// FIXME? a cleaner way to reinterpret?
 		SPH_UDF_ARGS & tArgs = m_pCall->m_tArgs;
 		ARRAY_FOREACH ( i, m_dArgs )
@@ -3452,6 +3493,23 @@ public:
 				case SPH_UDF_TYPE_UINT32SET:	tArgs.arg_values[i] = (char*) m_dArgs[i]->MvaEval ( tMatch ); break;
 				case SPH_UDF_TYPE_UINT64SET:	tArgs.arg_values[i] = (char*) m_dArgs[i]->MvaEval ( tMatch ); break;
 				case SPH_UDF_TYPE_FACTORS:		tArgs.arg_values[i] = (char*) m_dArgs[i]->FactorEval ( tMatch ); break;
+
+				case SPH_UDF_TYPE_JSON:
+					iPacked = m_dArgs[i]->Int64Eval ( tMatch );
+					eJson = ESphJsonType ( iPacked>>32 );
+					uOff = (DWORD)iPacked;
+					if ( !uOff || eJson==JSON_NULL )
+					{
+						tArgs.arg_values[i] = NULL;
+						tArgs.str_lengths[i] = 0;
+					} else
+					{
+						sphJsonFieldFormat ( dTmp, m_pStrings+uOff, eJson, false );
+						tArgs.str_lengths[i] = dTmp.GetLength();
+						tArgs.arg_values[i] = (char *)dTmp.LeakData();
+					}
+				break;
+
 				default:						assert ( 0 ); m_dArgvals[i] = 0; break;
 			}
 		}
@@ -3473,6 +3531,8 @@ public:
 			*((bool*)pArg) = true;
 			return;
 		}
+		if ( eCmd==SPH_EXPR_SET_STRING_POOL )
+			m_pStrings = (const BYTE*)pArg;
 		ARRAY_FOREACH ( i, m_dArgs )
 			m_dArgs[i]->Command ( eCmd, pArg );
 	}
@@ -6662,6 +6722,8 @@ int ExprParser_t::AddNodeUdf ( int iCall, int iArg )
 				const ExprNode_t & tNode = m_dNodes[iCur];
 				if ( tNode.m_iToken==TOK_FUNC && ( tNode.m_iFunc==FUNC_PACKEDFACTORS || tNode.m_iFunc==FUNC_RANKFACTORS || tNode.m_iFunc==FUNC_FACTORS ) )
 					pCall->m_dArgs2Free.Add ( dArgTypes.GetLength() );
+				if ( tNode.m_eRetType==SPH_ATTR_JSON || tNode.m_eRetType==SPH_ATTR_JSON_FIELD )
+					pCall->m_dArgs2Free.Add ( dArgTypes.GetLength() );
 				dArgTypes.Add ( tNode.m_eRetType );
 				break;
 			}
@@ -6672,6 +6734,8 @@ int ExprParser_t::AddNodeUdf ( int iCall, int iArg )
 				const ExprNode_t & tNode = m_dNodes[iRight];
 				assert ( tNode.m_iToken!=',' );
 				if ( tNode.m_iToken==TOK_FUNC && ( tNode.m_iFunc==FUNC_PACKEDFACTORS || tNode.m_iFunc==FUNC_RANKFACTORS || tNode.m_iFunc==FUNC_FACTORS) )
+					pCall->m_dArgs2Free.Add ( dArgTypes.GetLength() );
+				if ( tNode.m_eRetType==SPH_ATTR_JSON || tNode.m_eRetType==SPH_ATTR_JSON_FIELD )
 					pCall->m_dArgs2Free.Add ( dArgTypes.GetLength() );
 				dArgTypes.Add ( tNode.m_eRetType );
 			}
@@ -6713,6 +6777,9 @@ int ExprParser_t::AddNodeUdf ( int iCall, int iArg )
 					break;
 				case SPH_ATTR_FACTORS:
 					eRes = SPH_UDF_TYPE_FACTORS;
+					break;
+				case SPH_ATTR_JSON_FIELD:
+					eRes = SPH_UDF_TYPE_JSON;
 					break;
 				default:
 					m_sParserError.SetSprintf ( "internal error: unmapped UDF argument type (arg=%d, type=%d)", i, dArgTypes[i] );

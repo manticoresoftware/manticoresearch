@@ -554,7 +554,10 @@ public:
 
 	virtual uint64_t GetWordID () const
 	{
-		return m_pChildren[0]->GetWordID() ^ m_pChildren[1]->GetWordID();
+		uint64_t dHash[2];
+		dHash[0] = m_pChildren[0]->GetWordID();
+		dHash[1] = m_pChildren[1]->GetWordID();
+		return sphFNV64 ( dHash, sizeof(dHash) );
 	}
 
 protected:
@@ -4151,9 +4154,12 @@ void ExtQuorum_c::GetTerms ( const ExtQwordsHash_t & hQwords, CSphVector<TermPos
 
 uint64_t ExtQuorum_c::GetWordID() const
 {
-	uint64_t uHash = 0;
+	uint64_t uHash = SPH_FNV64_SEED;
 	ARRAY_FOREACH ( i, m_dChildren )
-		uHash ^= m_dChildren[i].m_pTerm->GetWordID();
+	{
+		uint64_t uCur = m_dChildren[i].m_pTerm->GetWordID();
+		uHash = sphFNV64 ( &uCur, sizeof(uCur), uHash );
+	}
 
 	return uHash;
 }
@@ -4954,9 +4960,12 @@ void ExtOrder_c::GetTerms ( const ExtQwordsHash_t & hQwords, CSphVector<TermPos_
 
 uint64_t ExtOrder_c::GetWordID () const
 {
-	uint64_t uHash = 0;
+	uint64_t uHash = SPH_FNV64_SEED;
 	ARRAY_FOREACH ( i, m_dChildren )
-		uHash ^= m_dChildren[i]->GetWordID();
+	{
+		uint64_t uCur = m_dChildren[i]->GetWordID();
+		uHash = sphFNV64 ( &uCur, sizeof(uCur), uHash );
+	}
 
 	return uHash;
 }
@@ -5043,9 +5052,10 @@ void ExtUnit_c::GetTerms ( const ExtQwordsHash_t & hQwords, CSphVector<TermPos_t
 
 uint64_t ExtUnit_c::GetWordID() const
 {
-	uint64_t uHash = m_pArg1->GetWordID();
-	uHash ^= m_pArg2->GetWordID();
-	return uHash;
+	uint64_t dHash[2];
+	dHash[0] = m_pArg1->GetWordID();
+	dHash[1] = m_pArg2->GetWordID();
+	return sphFNV64 ( dHash, sizeof(dHash) );
 }
 
 /// skips hits until their docids are less than the given limit

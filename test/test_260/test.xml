@@ -3,6 +3,7 @@
 <test>
 <name>rotate indexes wo path</name>
 <skip_indexer/>
+<requires><non-rt/></requires>
 
 <config>
 searchd

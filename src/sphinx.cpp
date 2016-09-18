@@ -2655,7 +2655,6 @@ private:
 	int								m_iStart;
 	int								m_iOutputPending;
 	const CSphMultiform *			m_pCurrentForm;
-	const char *					m_szPendingBufferPtr;
 
 	bool				m_bBuildMultiform;
 	BYTE				m_sTokenizedMultiform [ 3*SPH_MAX_WORD_LEN+4 ];
@@ -6423,7 +6422,6 @@ CSphMultiformTokenizer::CSphMultiformTokenizer ( ISphTokenizer * pTokenizer, con
 	, m_iStart	( 0 )
 	, m_iOutputPending ( -1 )
 	, m_pCurrentForm ( NULL )
-	, m_szPendingBufferPtr ( NULL )
 	, m_bBuildMultiform	( false )
 {
 	assert ( pTokenizer && pContainer );
@@ -6445,16 +6443,11 @@ BYTE * CSphMultiformTokenizer::GetToken ()
 		if ( ++m_iOutputPending>=m_pCurrentForm->m_dNormalForm.GetLength() )
 		{
 			m_iOutputPending = -1;
-			m_szPendingBufferPtr = NULL;
 			m_pCurrentForm = NULL;
 		} else
 		{
-			bool bLastForm = ( m_iOutputPending==m_pCurrentForm->m_dNormalForm.GetLength()-1 );
-
 			StoredToken_t & tStart = m_dStoredTokens[m_iStart];
 			strncpy ( (char *)tStart.m_sToken, m_pCurrentForm->m_dNormalForm[m_iOutputPending].m_sForm.cstr(), sizeof(tStart.m_sToken) );
-			if ( bLastForm )
-				tStart.m_pBufferPtr = m_szPendingBufferPtr;
 
 			tStart.m_iTokenLen = m_pCurrentForm->m_dNormalForm[m_iOutputPending].m_iLengthCP;
 			tStart.m_bBoundary = false;
@@ -6595,7 +6588,7 @@ BYTE * CSphMultiformTokenizer::GetToken ()
 		if ( !bBlended )
 		{
 			// fold regular tokens to form
-			StoredToken_t & tStart = m_dStoredTokens[m_iStart];
+			const StoredToken_t & tStart = m_dStoredTokens[m_iStart];
 			StoredToken_t & tEnd = m_dStoredTokens[m_iStart+iFormTokCount];
 			m_iStart += iFormTokCount;
 
@@ -6611,8 +6604,6 @@ BYTE * CSphMultiformTokenizer::GetToken ()
 			if ( pCurForm->m_dNormalForm.GetLength()>1 )
 			{
 				m_iOutputPending = 0;
-				m_szPendingBufferPtr = tEnd.m_szTokenStart;
-				tEnd.m_pBufferPtr = m_szPendingBufferPtr;
 				m_pCurrentForm = pCurForm;
 			}
 		} else

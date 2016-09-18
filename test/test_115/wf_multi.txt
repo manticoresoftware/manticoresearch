@@ -1,0 +1,2 @@
+hello test > hello 3 1 2 all
+~appl > appl fruit

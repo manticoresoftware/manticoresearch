@@ -59,7 +59,7 @@ public:
 	int				ParseZone ( const char * pZone );
 
 	bool			IsSpecial ( char c );
-	bool			GetNumber ( const char * p );
+	bool			GetNumber ( const char * p, const char * sRestart );
 	int				GetToken ( YYSTYPE * lvalp );
 
 	void			HandleModifiers ( XQKeyword_t & tKeyword );
@@ -113,8 +113,7 @@ public:
 
 	BYTE *					m_sQuery;
 	int						m_iQueryLen;
-	const char *			m_pLastTokenStart;
-	const char *			m_pLastTokenEnd;
+	const char *			m_pErrorAt;
 
 	const CSphSchema *		m_pSchema;
 	ISphTokenizer *			m_pTokenizer;
@@ -165,7 +164,7 @@ int yylex ( YYSTYPE * lvalp, XQParser_t * pParser )
 void yyerror ( XQParser_t * pParser, const char * sMessage )
 {
 	if ( pParser->m_pParsed->m_sParseError.IsEmpty() )
-		pParser->m_pParsed->m_sParseError.SetSprintf ( "%s near '%s'", sMessage, pParser->m_pLastTokenStart );
+		pParser->m_pParsed->m_sParseError.SetSprintf ( "%s near '%s'", sMessage, pParser->m_pErrorAt );
 }
 
 #ifdef CMAKE_GENERATED_GRAMMAR
@@ -391,8 +390,7 @@ static int GetNodeChildIndex ( const XQNode_t * pParent, const XQNode_t * pNode 
 
 XQParser_t::XQParser_t ()
 	: m_pParsed ( NULL )
-	, m_pLastTokenStart ( NULL )
-	, m_pLastTokenEnd ( NULL )
+	, m_pErrorAt ( NULL )
 	, m_pRoot ( NULL )
 	, m_bStopOnInvalid ( true )
 	, m_bWasBlended ( false )
@@ -726,7 +724,7 @@ int XQParser_t::ParseZone ( const char * pZone )
 }
 
 
-bool XQParser_t::GetNumber ( const char * p )
+bool XQParser_t::GetNumber ( const char * p, const char * sRestart )
 {
 	int iDots = 0;
 	const char * sToken = p;
@@ -758,10 +756,10 @@ bool XQParser_t::GetNumber ( const char * p )
 		if ( bTok && m_pTokenizer->TokenIsBlended() && !( bQuorum || bQuorumPercent ) ) // number with blended should be tokenized as usual
 		{
 			m_pTokenizer->SkipBlended();
-			m_pTokenizer->SetBufferPtr ( m_pLastTokenStart );
+			m_pTokenizer->SetBufferPtr ( sRestart );
 		} else if ( bTok && m_pTokenizer->WasTokenSynonym() && !( bQuorum || bQuorumPercent ) )
 		{
-			m_pTokenizer->SetBufferPtr ( m_pLastTokenStart );
+			m_pTokenizer->SetBufferPtr ( sRestart );
 		} else
 		{
 			// got not a very long number followed by a whitespace or special, handle it
@@ -827,17 +825,18 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		// we need to manually check for numbers in certain states (currently, just after proximity or quorum operator)
 		// required because if 0-9 are not in charset_table, or min_word_len is too high,
 		// the tokenizer will *not* return the number as a token!
-		m_pLastTokenStart = m_pTokenizer->GetBufferPtr ();
-		m_pLastTokenEnd = m_pTokenizer->GetTokenEnd();
-		const char * sEnd = m_pTokenizer->GetBufferEnd ();
+		const char * pTokenStart = m_pTokenizer->GetBufferPtr();
+		const char * pLastTokenEnd = m_pTokenizer->GetTokenEnd();
+		const char * sEnd = m_pTokenizer->GetBufferEnd();
+		m_pErrorAt = pTokenStart;
 
-		const char * p = m_pLastTokenStart;
+		const char * p = pTokenStart;
 		while ( p<sEnd && isspace ( *(BYTE*)p ) ) p++; // to avoid CRT assertions on Windows
 
 		if ( m_bCheckNumber )
 		{
 			m_bCheckNumber = false;
-			if ( GetNumber(p) )
+			if ( GetNumber ( p, pTokenStart ) )
 				break;
 		}
 
@@ -861,8 +860,15 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		m_iPendingNulls = m_pTokenizer->GetOvershortCount() * m_iOvershortStep;
 		m_iAtomPos += 1+m_iPendingNulls;
 
+		bool bMultiDestHead = false;
+		bool bMultiDest = false;
+		int iDestCount = 0;
+		// do nothing inside phrase
+		if ( !m_pTokenizer->m_bPhrase )
+			bMultiDest = m_pTokenizer->WasTokenMultiformDestination ( bMultiDestHead, iDestCount );
+
 		// handle NEAR (must be case-sensitive, and immediately followed by slash and int)
-		if ( sToken && p && !m_pTokenizer->m_bPhrase && strncmp ( p, "NEAR/", 5 )==0 && isdigit(p[5]) )
+		if ( !bMultiDest && sToken && p && !m_pTokenizer->m_bPhrase && strncmp ( p, "NEAR/", 5 )==0 && isdigit(p[5]) )
 		{
 			// extract that int
 			int iVal = 0;
@@ -879,7 +885,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		}
 
 		// handle SENTENCE
-		if ( sToken && p && !m_pTokenizer->m_bPhrase && !strcasecmp ( sToken, "sentence" ) && !strncmp ( p, "SENTENCE", 8 ) )
+		if ( !bMultiDest && sToken && p && !m_pTokenizer->m_bPhrase && !strcasecmp ( sToken, "sentence" ) && !strncmp ( p, "SENTENCE", 8 ) )
 		{
 			// we just lexed our next token
 			m_iPendingType = TOK_SENTENCE;
@@ -888,7 +894,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		}
 
 		// handle PARAGRAPH
-		if ( sToken && p && !m_pTokenizer->m_bPhrase && !strcasecmp ( sToken, "paragraph" ) && !strncmp ( p, "PARAGRAPH", 9 ) )
+		if ( !bMultiDest && sToken && p && !m_pTokenizer->m_bPhrase && !strcasecmp ( sToken, "paragraph" ) && !strncmp ( p, "PARAGRAPH", 9 ) )
 		{
 			// we just lexed our next token
 			m_iPendingType = TOK_PARAGRAPH;
@@ -897,7 +903,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		}
 
 		// handle MAYBE
-		if ( sToken && p && !m_pTokenizer->m_bPhrase && !strcasecmp ( sToken, "maybe" ) && !strncmp ( p, "MAYBE", 5 ) )
+		if ( !bMultiDest && sToken && p && !m_pTokenizer->m_bPhrase && !strcasecmp ( sToken, "maybe" ) && !strncmp ( p, "MAYBE", 5 ) )
 		{
 			// we just lexed our next token
 			m_iPendingType = TOK_MAYBE;
@@ -906,7 +912,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		}
 
 		// handle ZONE
-		if ( sToken && p && !m_pTokenizer->m_bPhrase && !strncmp ( p, "ZONE:", 5 )
+		if ( !bMultiDest && sToken && p && !m_pTokenizer->m_bPhrase && !strncmp ( p, "ZONE:", 5 )
 			&& ( sphIsAlpha(p[5]) || p[5]=='(' ) )
 		{
 			// ParseZone() will update tokenizer buffer ptr as needed
@@ -922,7 +928,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		}
 
 		// handle ZONESPAN
-		if ( sToken && p && !m_pTokenizer->m_bPhrase && !strncmp ( p, "ZONESPAN:", 9 )
+		if ( !bMultiDest && sToken && p && !m_pTokenizer->m_bPhrase && !strncmp ( p, "ZONESPAN:", 9 )
 			&& ( sphIsAlpha(p[9]) || p[9]=='(' ) )
 		{
 			// ParseZone() will update tokenizer buffer ptr as needed
@@ -939,7 +945,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 
 		// count [ * ] at phrase node for qpos shift
 		// FIXME! RLP can return tokens from several buffers, all this pointer arithmetic will lead to crashes
-		if ( m_pTokenizer->m_bPhrase && m_pLastTokenEnd )
+		if ( m_pTokenizer->m_bPhrase && pLastTokenEnd )
 		{
 			if ( strncmp ( sToken, "*", 1 )==0 )
 			{
@@ -948,15 +954,15 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			{
 				int iSpace = 0;
 				int iStar = 0;
-				const char * sCur = m_pLastTokenEnd;
+				const char * sCur = pLastTokenEnd;
 				const char * sEnd = m_pTokenizer->GetTokenStart();
 				for ( ; sCur<sEnd; sCur++ )
 				{
-					int iCur = sCur - m_pLastTokenEnd;
+					int iCur = sCur - pLastTokenEnd;
 					switch ( *sCur )
 					{
 					case '*':
-						iStar = sCur - m_pLastTokenEnd;
+						iStar = sCur - pLastTokenEnd;
 						break;
 					case ' ':
 						if ( iSpace+2==iCur && iStar+1==iCur ) // match only [ * ] (separate single star) as valid shift operator
@@ -1098,13 +1104,6 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			if ( m_bEmptyStopword )
 				m_iAtomPos--;
 		}
-
-		bool bMultiDestHead = false;
-		bool bMultiDest = false;
-		int iDestCount = 0;
-		// do nothing inside phrase
-		if ( !m_pTokenizer->m_bPhrase )
-			bMultiDest = m_pTokenizer->WasTokenMultiformDestination ( bMultiDestHead, iDestCount );
 
 		if ( bMultiDest && !bMultiDestHead )
 		{

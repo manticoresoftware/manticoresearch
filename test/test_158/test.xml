@@ -4,8 +4,14 @@
 <name>multiforms vs quorum</name>
 
 <skip_indexer/>
+<requires><lemmatizer_base/></requires>
 
 <config>
+common
+{
+	lemmatizer_base	= <local>lemmatizer_base</local>
+}
+
 indexer
 {
 	mem_limit		= 16M
@@ -29,6 +35,20 @@ index rt
 	
 	rt_mem_limit	= 8M 
 }
+
+index rt2
+{
+	type 			= rt
+	path			= <data_path/>/rt2
+	rt_mem_limit	= 8M
+
+	charset_table 	= english, _, 0..9, russian
+	morphology 		= lemmatize_ru_all, stem_en
+	index_exact_words = 1
+
+	rt_attr_uint	= gid
+	rt_field		= body
+}
 </config>
 
 <sphqueries>
@@ -39,6 +59,14 @@ index rt
 <sphinxql>select * from rt where match ('shandrydan')</sphinxql>
 <sphinxql>select * from rt where match ('"something antediluvian"/1')</sphinxql>
 <sphinxql>select * from rt where match ('"battered shandrydan"/1')</sphinxql>
+
+<!-- regression terms counted as duplicates at quorum  -->
+<sphinxql>insert into rt2 ( id, gid, body ) values ( 1, 1, ' канада когда рухнет 1 доллар' )</sphinxql>
+<sphinxql>insert into rt2 ( id, gid, body ) values ( 2, 2, ' канада никогда не рухнет ни 1 доллар' )</sphinxql>
+<sphinxql>flush ramchunk rt2</sphinxql>
+<sphinxql>insert into rt2 ( id, gid, body ) values ( 3, 3, ' канада всегда пухнет 1 доллар' )</sphinxql>
+<sphinxql>select id from rt2 where match('( (" канада 1 доллар 1987"/3 ) )') order by id asc</sphinxql>
+<sphinxql>show meta</sphinxql>
 </sphqueries>
 
 </test>

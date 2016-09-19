@@ -191,6 +191,7 @@ public:
 
 	// works like =, but also adopt the persistent connection, if any.
 	void SpecifyAndSelectMirror ( MetaAgentDesc_t * pMirrorChooser = nullptr );
+	int NumOfMirrors () const;
 };
 
 void agent_stats_inc ( AgentConn_t & tAgent, AgentStats_e iCounter );

@@ -266,7 +266,6 @@ AgentDesc_c * MetaAgentDesc_t::StDiscardDead ()
 
 	int iBestAgent = -1;
 	int64_t iErrARow = -1;
-	int64_t iThisErrARow = -1;
 	CSphVector<int> dCandidates;
 	CSphFixedVector<int64_t> dTimers ( GetLength() );
 	dCandidates.Reserve ( GetLength() );
@@ -285,7 +284,7 @@ AgentDesc_c * MetaAgentDesc_t::StDiscardDead ()
 		else
 			dTimers[i] = 0;
 
-		iThisErrARow = ( dDash.m_iErrorsARow<=iDeadThr ) ? 0 : dDash.m_iErrorsARow;
+		int64_t iThisErrARow = ( dDash.m_iErrorsARow<=iDeadThr ) ? 0 : dDash.m_iErrorsARow;
 
 		if ( iErrARow < 0 )
 			iErrARow = iThisErrARow;
@@ -330,8 +329,8 @@ AgentDesc_c * MetaAgentDesc_t::StDiscardDead ()
 		const char * sLogStr = NULL;
 		const HostDashboard_t & dDash = GetDashForAgent ( iBestAgent );
 		fAge = ( dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime ) / 1000.0f;
-		sLogStr = "client=%s:%d, HA selected %d node by weighted random, with best EaR (" INT64_FMT "), last answered in %.3f milliseconds";
-		sphLogDebugv ( sLogStr, m_dHosts[iBestAgent].m_sHost.cstr(), m_dHosts[iBestAgent].m_iPort, iBestAgent, iErrARow, fAge );
+		sLogStr = "client=%s:%d, HA selected %d node by weighted random, with best EaR (" INT64_FMT "), last answered in %.3f milliseconds, among %d candidates";
+		sphLogDebugv ( sLogStr, m_dHosts[iBestAgent].m_sHost.cstr(), m_dHosts[iBestAgent].m_iPort, iBestAgent, iErrARow, fAge, dCandidates.GetLength()+1 );
 	}
 
 	return &m_dHosts[iBestAgent];
@@ -592,6 +591,13 @@ void AgentConn_t::SpecifyAndSelectMirror ( MetaAgentDesc_t * pMirrorChooser )
 			m_bPersistent = false;
 	}
 	m_bFresh = ( m_bPersistent && m_iSock<0 );
+}
+
+int AgentConn_t::NumOfMirrors () const
+{
+	if ( !m_pMirrorChooser )
+		return 1;
+	return m_pMirrorChooser->GetLength ();
 }
 
 void AgentConn_t::Fail ( AgentStats_e eStat, const char* sMessage, ... )
@@ -2094,12 +2100,14 @@ struct AgentWorkContext_t : public AgentConnectionContext_t
 	ThdWorker_fn	m_pfn;			///< work functor & flag of dummy element
 	int64_t			m_tmWait;
 	int				m_iRetries;
+	int				m_iRetryMultiplier;
 	int				m_iAgentsDone;
 
 	AgentWorkContext_t ()
 		: m_pfn ( NULL )
 		, m_tmWait ( 0 )
 		, m_iRetries ( 0 )
+		, m_iRetryMultiplier ( 1 )
 		, m_iAgentsDone ( 0 )
 	{}
 };
@@ -2318,6 +2326,7 @@ void ThdWorkSequental ( AgentWorkContext_t * pCtx )
 
 	for ( int iAgent=0; iAgent<pCtx->m_iAgentCount; iAgent++ )
 	{
+
 		AgentConn_t & tAgent = pCtx->m_pAgents[iAgent];
 		if ( !pCtx->m_iRetries || tAgent.m_eState==AGENT_RETRY )
 		{
@@ -2339,12 +2348,21 @@ void ThdWorkSequental ( AgentWorkContext_t * pCtx )
 	}
 
 	pCtx->m_pfn = NULL;
-	if ( bNeedRetry && ++pCtx->m_iRetries<=pCtx->m_iRetriesMax )
+	if ( bNeedRetry && pCtx->m_iRetries<pCtx->m_iRetriesMax )
 	{
 		pCtx->m_pfn = ThdWorkSequental;
+		int iRetryPerHost = pCtx->m_iRetriesMax/pCtx->m_iRetryMultiplier;
 		for ( int i = 0; i<pCtx->m_iAgentCount; i++ )
-			if ( pCtx->m_pAgents[i].m_eState==AGENT_RETRY )
-				pCtx->m_pAgents[i].SpecifyAndSelectMirror ();
+		{
+			AgentConn_t & tAgent = pCtx->m_pAgents[i];
+			if ( tAgent.m_eState==AGENT_RETRY )
+			{
+				if ( pCtx->m_iRetries<( tAgent.NumOfMirrors ()*iRetryPerHost ) )
+					tAgent.SpecifyAndSelectMirror ();
+				else
+					tAgent.m_eState = AGENT_UNUSED;
+			}
+		}
 	}
 }
 
@@ -2394,7 +2412,6 @@ CSphRemoteAgentsController::CSphRemoteAgentsController ( int iThreads,
 	tCtx.m_iAgentCount = 1;
 	tCtx.m_pfn = ThdWorkParallel;
 	tCtx.m_iDelay = iDelay;
-	tCtx.m_iRetriesMax = iRetryMax;
 	tCtx.m_iTimeout = iTimeout;
 
 
@@ -2404,6 +2421,8 @@ CSphRemoteAgentsController::CSphRemoteAgentsController ( int iThreads,
 		ARRAY_FOREACH ( i, dAgents )
 		{
 			tCtx.m_pAgents = dAgents.Begin()+i;
+			tCtx.m_iRetryMultiplier = tCtx.m_pAgents->NumOfMirrors ();
+			tCtx.m_iRetriesMax = iRetryMax * tCtx.m_iRetryMultiplier;
 			m_tWorkerPool.RawPush ( tCtx );
 		}
 	} else
@@ -2411,6 +2430,11 @@ CSphRemoteAgentsController::CSphRemoteAgentsController ( int iThreads,
 		m_tWorkerPool.SetWorksCount ( 1 );
 		tCtx.m_pAgents = dAgents.Begin();
 		tCtx.m_iAgentCount = dAgents.GetLength();
+		int iRetryMultiplier = 1;
+		for ( const auto& dAgent : dAgents )
+			iRetryMultiplier = Max ( iRetryMultiplier, dAgent.NumOfMirrors () );
+		tCtx.m_iRetryMultiplier = iRetryMultiplier;
+		tCtx.m_iRetriesMax = iRetryMax * tCtx.m_iRetryMultiplier;
 		tCtx.m_pfn = ThdWorkSequental;
 		m_tWorkerPool.RawPush ( tCtx );
 	}

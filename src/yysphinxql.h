@@ -1,8 +1,8 @@
-/* A Bison parser, made by GNU Bison 3.0.2.  */
+/* A Bison parser, made by GNU Bison 3.0.4.  */
 
 /* Bison interface for Yacc-like parsers in C
 
-   Copyright (C) 1984, 1989-1990, 2000-2013 Free Software Foundation, Inc.
+   Copyright (C) 1984, 1989-1990, 2000-2015 Free Software Foundation, Inc.
 
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -169,14 +169,15 @@ extern int yydebug;
     TOK_WARNINGS = 379,
     TOK_WEIGHT = 380,
     TOK_WHERE = 381,
-    TOK_WITHIN = 382,
-    TOK_OR = 383,
-    TOK_AND = 384,
-    TOK_NE = 385,
-    TOK_LTE = 386,
-    TOK_GTE = 387,
-    TOK_NOT = 388,
-    TOK_NEG = 389
+    TOK_WITH = 382,
+    TOK_WITHIN = 383,
+    TOK_OR = 384,
+    TOK_AND = 385,
+    TOK_NE = 386,
+    TOK_LTE = 387,
+    TOK_GTE = 388,
+    TOK_NOT = 389,
+    TOK_NEG = 390
   };
 #endif
 

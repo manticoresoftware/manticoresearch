@@ -15202,6 +15202,7 @@ void HandleMysqlAttach ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 {
 	const CSphString & sFrom = tStmt.m_sIndex;
 	const CSphString & sTo = tStmt.m_sStringParam;
+	bool bTrucate = ( tStmt.m_iIntParam==1 );
 	CSphString sError;
 
 	ServedIndex_c * pFrom = g_pLocalIndexes->GetWlockedEntry ( sFrom );
@@ -15229,8 +15230,9 @@ void HandleMysqlAttach ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	}
 
 	ISphRtIndex * pRtTo = (ISphRtIndex*)pTo->m_pIndex;
-	bool bOk = pRtTo->AttachDiskIndex ( pFrom->m_pIndex, sError );
-	if ( !bOk )
+
+	if ( ( bTrucate && !pRtTo->Truncate ( sError ) ) ||
+		 !pRtTo->AttachDiskIndex ( pFrom->m_pIndex, sError ) )
 	{
 		pFrom->Unlock();
 		pTo->Unlock();

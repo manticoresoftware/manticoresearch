@@ -128,6 +128,24 @@ index rt_d1
 	rt_attr_uint	= gid
 } 
 
+index rt_trunc
+{
+	type			= rt
+	path			= data/rt_trunc
+	rt_attr_uint	= gid1
+	rt_attr_uint	= gid2
+	rt_field		= title
+	rt_field		= content
+	charset_table	= a..z, A..Z->a..z, _
+}
+
+index disk_trunc
+{
+	source			= disk
+	path			= <data_path/>/disk_trunc
+	charset_table	= english, russian
+}
+
 </config>
 
 <db_create>
@@ -180,6 +198,13 @@ INSERT INTO test_table VALUES
 <sphinxql>ATTACH INDEX disk2 TO RTINDEX rt_d1</sphinxql>
 <sphinxql>ATTACH INDEX disk3 TO RTINDEX rt_d1</sphinxql>
 <sphinxql>SELECT * FROM rt_d1</sphinxql>
+
+<!-- feature to trucate RT index with same ATTACH command -->
+<sphinxql>INSERT INTO rt_trunc ( id, gid1, gid2, title ) VALUES ( 10, 22, 33, 'I dub thee unforgiven' )</sphinxql>
+<sphinxql>ATTACH INDEX disk_trunc TO RTINDEX rt_trunc</sphinxql>
+<sphinxql>SELECT * FROM rt_trunc</sphinxql>
+<sphinxql>ATTACH INDEX disk_trunc TO RTINDEX rt_trunc WITH TRUNCATE</sphinxql>
+<sphinxql>SELECT * FROM rt_trunc</sphinxql>
 </sphqueries>
 
 </test>

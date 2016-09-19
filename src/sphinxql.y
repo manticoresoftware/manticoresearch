@@ -135,6 +135,7 @@
 %token	TOK_WARNINGS
 %token	TOK_WEIGHT
 %token	TOK_WHERE
+%token	TOK_WITH
 %token	TOK_WITHIN
 
 %left TOK_OR
@@ -251,7 +252,7 @@ ident_set:
 	| TOK_SETTINGS | TOK_SHOW | TOK_SONAME | TOK_START | TOK_STATUS | TOK_STRING
 	| TOK_SUM | TOK_TABLE | TOK_TABLES | TOK_THREADS | TOK_TO | TOK_TRUNCATE
 	| TOK_TYPE | TOK_UNCOMMITTED | TOK_UPDATE | TOK_VALUES | TOK_VARIABLES
-	| TOK_WARNINGS | TOK_WEIGHT | TOK_WHERE | TOK_WITHIN
+	| TOK_WARNINGS | TOK_WEIGHT | TOK_WHERE | TOK_WITH | TOK_WITHIN
 	;
 
 ident:
@@ -1505,12 +1506,20 @@ drop_function:
 ////////////////////////////////////////////////////////////
 
 attach_index:
-	TOK_ATTACH TOK_INDEX ident TOK_TO TOK_RTINDEX ident
+	TOK_ATTACH TOK_INDEX ident TOK_TO TOK_RTINDEX ident opt_with_truncate
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_ATTACH_INDEX;
 			pParser->ToString ( tStmt.m_sIndex, $3 );
 			pParser->ToString ( tStmt.m_sStringParam, $6 );
+		}
+	;
+	
+opt_with_truncate:
+	// empty
+	| TOK_WITH TOK_TRUNCATE
+		{
+			pParser->m_pStmt->m_iIntParam = 1;
 		}
 	;
 

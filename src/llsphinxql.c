@@ -54,6 +54,7 @@ typedef int flex_int32_t;
 typedef unsigned char flex_uint8_t; 
 typedef unsigned short int flex_uint16_t;
 typedef unsigned int flex_uint32_t;
+#endif /* ! C99 */
 
 /* Limits of integral types. */
 #ifndef INT8_MIN
@@ -83,8 +84,6 @@ typedef unsigned int flex_uint32_t;
 #ifndef UINT32_MAX
 #define UINT32_MAX             (4294967295U)
 #endif
-
-#endif /* ! C99 */
 
 #endif /* ! FLEXINT_H */
 
@@ -159,15 +158,7 @@ typedef void* yyscan_t;
 
 /* Size of default input buffer. */
 #ifndef YY_BUF_SIZE
-#ifdef __ia64__
-/* On IA-64, the buffer size is 16k, not 8k.
- * Moreover, YY_BUF_SIZE is 2*YY_READ_BUF_SIZE in the general case.
- * Ditto for the __ia64__ case accordingly.
- */
-#define YY_BUF_SIZE 32768
-#else
 #define YY_BUF_SIZE 16384
-#endif /* __ia64__ */
 #endif
 
 /* The state buf must be large enough to hold one state per character in the main buffer.
@@ -358,8 +349,8 @@ static void yy_fatal_error (yyconst char msg[] ,yyscan_t yyscanner );
 	*yy_cp = '\0'; \
 	yyg->yy_c_buf_p = yy_cp;
 
-#define YY_NUM_RULES 145
-#define YY_END_OF_BUFFER 146
+#define YY_NUM_RULES 146
+#define YY_END_OF_BUFFER 147
 /* This struct is not used in this scanner,
    but its presence is necessary. */
 struct yy_trans_info
@@ -369,67 +360,67 @@ struct yy_trans_info
 	};
 static yyconst flex_int16_t yy_accept[566] =
     {   0,
-        0,    0,    0,    0,  146,  144,  142,  142,  144,  144,
-      144,  144,  130,  144,  144,  144,  144,  134,  134,  134,
-      134,  134,  134,  134,  134,  134,  134,  134,  134,  134,
-      134,  134,  134,  134,  134,  134,  134,  134,  144,    2,
-      145,    2,  142,  120,    0,  125,    0,    0,  127,  143,
-        1,  126,  130,  135,  135,  124,  122,  121,  123,    0,
-      136,  136,  136,  136,  134,  134,  134,  134,  134,   10,
-      134,  134,  134,  134,  134,   19,  134,  134,  134,  134,
-      134,  134,  134,  134,  134,  134,  134,  134,  134,  134,
-      134,  134,  134,  134,   50,   51,   58,  134,  134,  134,
+        0,    0,    0,    0,  147,  145,  143,  143,  145,  145,
+      145,  145,  131,  145,  145,  145,  145,  135,  135,  135,
+      135,  135,  135,  135,  135,  135,  135,  135,  135,  135,
+      135,  135,  135,  135,  135,  135,  135,  135,  145,    2,
+      146,    2,  143,  121,    0,  126,    0,    0,  128,  144,
+        1,  127,  131,  136,  136,  125,  123,  122,  124,    0,
+      137,  137,  137,  137,  135,  135,  135,  135,  135,   10,
+      135,  135,  135,  135,  135,   19,  135,  135,  135,  135,
+      135,  135,  135,  135,  135,  135,  135,  135,  135,  135,
+      135,  135,  135,  135,   50,   51,   58,  135,  135,  135,
 
-      134,  134,  134,  134,  134,  134,  134,  134,  134,   76,
-      134,  134,  134,  134,  134,  134,  134,  134,  134,  134,
-      134,  134,  134,  107,  134,  134,  134,  134,  134,  134,
-      134,  134,  134,    0,    0,    0,    3,    0,  128,  128,
-      143,  126,    0,    0,  129,  137,  136,  136,  131,  136,
-        4,  134,    6,  134,    8,    9,   11,  134,   14,  134,
-      134,  134,  134,  134,  134,  134,  134,  134,  134,  134,
-      134,  134,  134,  134,   34,  134,  134,  134,  134,  134,
-      134,   41,  134,  134,  134,  134,  134,  134,  134,  134,
-       56,  134,  134,  134,  134,  134,  134,   65,  134,   67,
+      135,  135,  135,  135,  135,  135,  135,  135,  135,   76,
+      135,  135,  135,  135,  135,  135,  135,  135,  135,  135,
+      135,  135,  135,  107,  135,  135,  135,  135,  135,  135,
+      135,  135,  135,    0,    0,    0,    3,    0,  129,  129,
+      144,  127,    0,    0,  130,  138,  137,  137,  132,  137,
+        4,  135,    6,  135,    8,    9,   11,  135,   14,  135,
+      135,  135,  135,  135,  135,  135,  135,  135,  135,  135,
+      135,  135,  135,  135,   34,  135,  135,  135,  135,  135,
+      135,   41,  135,  135,  135,  135,  135,  135,  135,  135,
+       56,  135,  135,  135,  135,  135,  135,   65,  135,   67,
 
-       68,  134,  134,   72,  134,  134,  134,  134,  134,  134,
-      134,  134,  134,  134,  134,  134,  134,  134,  134,  134,
-      134,  134,  134,   95,  134,  134,  134,  134,  103,  134,
-      134,  134,  134,  134,  134,  134,  134,  134,  134,  134,
-      134,  134,    0,    0,  140,    0,  128,    0,  127,    0,
-      126,  129,    0,  137,  136,  136,  134,  134,  134,  134,
-      134,  134,  134,   18,   20,  134,  134,  134,  134,  134,
-      134,  134,  134,  134,   31,  134,  134,   36,  134,  134,
-      134,  134,   42,  134,  134,  134,  134,  134,  134,  134,
-      134,   57,  134,   60,  134,   62,  134,  134,   66,  134,
+       68,  135,  135,   72,  135,  135,  135,  135,  135,  135,
+      135,  135,  135,  135,  135,  135,  135,  135,  135,  135,
+      135,  135,  135,   95,  135,  135,  135,  135,  103,  135,
+      135,  135,  135,  135,  135,  135,  135,  135,  135,  135,
+      135,  135,    0,    0,  141,    0,  129,    0,  128,    0,
+      127,  130,    0,  138,  137,  137,  135,  135,  135,  135,
+      135,  135,  135,   18,   20,  135,  135,  135,  135,  135,
+      135,  135,  135,  135,   31,  135,  135,   36,  135,  135,
+      135,  135,   42,  135,  135,  135,  135,  135,  135,  135,
+      135,   57,  135,   60,  135,   62,  135,  135,   66,  135,
 
-      134,   73,  134,  134,   78,  134,  134,  134,   83,   84,
-      134,  134,  134,  134,  134,  134,  134,  134,  134,  134,
-      134,  134,   98,  134,  134,  134,  134,  134,  134,  134,
-      109,  134,  111,  134,  134,  134,  134,  134,  134,  134,
-      134,    0,  141,  139,  127,  138,  136,  136,    5,    7,
-      134,  134,   15,  134,  134,  134,   22,  134,  134,  134,
-       27,  134,  134,  134,  134,  134,  134,   37,   38,   39,
-       40,  134,  134,   45,  134,  134,   52,  134,  134,  134,
-       61,   63,   64,   69,   71,  134,  134,   77,  134,  134,
-      134,  134,  134,   89,  134,  134,  134,  134,  134,  134,
+      135,   73,  135,  135,   78,  135,  135,  135,   83,   84,
+      135,  135,  135,  135,  135,  135,  135,  135,  135,  135,
+      135,  135,   98,  135,  135,  135,  135,  135,  135,  135,
+      109,  135,  111,  135,  135,  135,  135,  135,  135,  135,
+      119,    0,  142,  140,  128,  139,  137,  137,    5,    7,
+      135,  135,   15,  135,  135,  135,   22,  135,  135,  135,
+       27,  135,  135,  135,  135,  135,  135,   37,   38,   39,
+       40,  135,  135,   45,  135,  135,   52,  135,  135,  135,
+       61,   63,   64,   69,   71,  135,  135,   77,  135,  135,
+      135,  135,  135,   89,  135,  135,  135,  135,  135,  135,
 
-      134,  134,  134,  134,  100,  134,  134,  104,  134,  134,
-      134,  134,  134,  134,  134,  134,  134,  118,  134,  138,
-      133,  136,   12,  134,  134,   17,  134,  134,   24,   25,
-       28,  134,   30,  134,  134,   35,  134,   44,  134,  134,
-       48,  134,  134,   54,  134,  134,  134,  134,   74,   79,
-      134,  134,  134,   86,  134,  134,  134,  134,  134,   93,
-      134,  134,  134,   99,  101,  102,  105,  134,  134,  134,
-      134,  113,  114,  134,  134,  117,  119,  132,  134,   16,
-      134,  134,  134,  134,  134,  134,  134,   46,  134,  134,
-       53,   55,  134,   70,  134,   80,   81,  134,  134,  134,
+      135,  135,  135,  135,  100,  135,  135,  104,  135,  135,
+      135,  135,  135,  135,  135,  135,  135,  118,  135,  139,
+      134,  137,   12,  135,  135,   17,  135,  135,   24,   25,
+       28,  135,   30,  135,  135,   35,  135,   44,  135,  135,
+       48,  135,  135,   54,  135,  135,  135,  135,   74,   79,
+      135,  135,  135,   86,  135,  135,  135,  135,  135,   93,
+      135,  135,  135,   99,  101,  102,  105,  135,  135,  135,
+      135,  113,  114,  135,  135,  117,  120,  133,  135,   16,
+      135,  135,  135,  135,  135,  135,  135,   46,  135,  135,
+       53,   55,  135,   70,  135,   80,   81,  135,  135,  135,
 
-       88,   90,  134,   92,  134,   97,  134,  106,  134,  134,
-      134,  134,  134,  134,  134,  134,  134,  134,   32,   33,
-       43,  134,  134,  134,   75,   82,  134,  134,   91,  134,
-       96,  134,  110,  134,  134,  116,  134,   21,   23,   26,
-       29,  134,   49,   59,  134,  134,  134,  134,  134,  115,
-       13,  134,  134,   87,  134,  134,  134,  134,   85,  134,
+       88,   90,  135,   92,  135,   97,  135,  106,  135,  135,
+      135,  135,  135,  135,  135,  135,  135,  135,   32,   33,
+       43,  135,  135,  135,   75,   82,  135,  135,   91,  135,
+       96,  135,  110,  135,  135,  116,  135,   21,   23,   26,
+       29,  135,   49,   59,  135,  135,  135,  135,  135,  115,
+       13,  135,  135,   87,  135,  135,  135,  135,   85,  135,
       108,  112,   47,   94,    0
     } ;
 
@@ -940,7 +931,7 @@ static yyconst flex_int16_t yy_chk[1317] =
 	}
 
 
-#line 944 "llsphinxql.c"
+#line 935 "llsphinxql.c"
 
 #define INITIAL 0
 #define ccomment 1
@@ -1058,12 +1049,7 @@ static int input (yyscan_t yyscanner );
 
 /* Amount of stuff to slurp up with each read. */
 #ifndef YY_READ_BUF_SIZE
-#ifdef __ia64__
-/* On IA-64, the buffer size is 16k, not 8k */
-#define YY_READ_BUF_SIZE 16384
-#else
 #define YY_READ_BUF_SIZE 8192
-#endif /* __ia64__ */
 #endif
 
 /* Copy whatever the last rule matched to the standard output. */
@@ -1071,7 +1057,7 @@ static int input (yyscan_t yyscanner );
 /* This used to be an fputs(), but since the string might contain NUL's,
  * we now use fwrite().
  */
-#define ECHO do { if (fwrite( yytext, yyleng, 1, yyout )) {} } while (0)
+#define ECHO fwrite( yytext, yyleng, 1, yyout )
 #endif
 
 /* Gets input and stuffs it into "buf".  number of characters read, or YY_NULL,
@@ -1168,7 +1154,7 @@ YY_DECL
 #line 35 "sphinxql.l"
 
 
-#line 1172 "llsphinxql.c"
+#line 1158 "llsphinxql.c"
 
 	if ( !yyg->yy_init )
 		{
@@ -1844,12 +1830,12 @@ YY_RULE_SETUP
 case 119:
 YY_RULE_SETUP
 #line 156 "sphinxql.l"
-{ YYSTOREBOUNDS; return TOK_WITHIN; }
+{ YYSTOREBOUNDS; return TOK_WITH; }
 	YY_BREAK
 case 120:
 YY_RULE_SETUP
-#line 158 "sphinxql.l"
-{ YYSTOREBOUNDS; return TOK_NE; }
+#line 157 "sphinxql.l"
+{ YYSTOREBOUNDS; return TOK_WITHIN; }
 	YY_BREAK
 case 121:
 YY_RULE_SETUP
@@ -1859,53 +1845,53 @@ YY_RULE_SETUP
 case 122:
 YY_RULE_SETUP
 #line 160 "sphinxql.l"
-{ YYSTOREBOUNDS; return TOK_LTE; }
+{ YYSTOREBOUNDS; return TOK_NE; }
 	YY_BREAK
 case 123:
 YY_RULE_SETUP
 #line 161 "sphinxql.l"
-{ YYSTOREBOUNDS; return TOK_GTE; }
+{ YYSTOREBOUNDS; return TOK_LTE; }
 	YY_BREAK
 case 124:
 YY_RULE_SETUP
 #line 162 "sphinxql.l"
-{ YYSTOREBOUNDS; return '='; }
+{ YYSTOREBOUNDS; return TOK_GTE; }
 	YY_BREAK
 case 125:
-/* rule 125 can match eol */
 YY_RULE_SETUP
-#line 164 "sphinxql.l"
-{ YYSTOREBOUNDS; pParser->m_pLastTokenStart = yytext; lvalp->m_iValue = ( (SphAttr_t)lvalp->m_iStart<<32 ) | ( lvalp->m_iEnd-lvalp->m_iStart ); return TOK_QUOTED_STRING; }
+#line 163 "sphinxql.l"
+{ YYSTOREBOUNDS; return '='; }
 	YY_BREAK
 case 126:
+/* rule 126 can match eol */
 YY_RULE_SETUP
-#line 166 "sphinxql.l"
-{ YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
+#line 165 "sphinxql.l"
+{ YYSTOREBOUNDS; pParser->m_pLastTokenStart = yytext; lvalp->m_iValue = ( (SphAttr_t)lvalp->m_iStart<<32 ) | ( lvalp->m_iEnd-lvalp->m_iStart ); return TOK_QUOTED_STRING; }
 	YY_BREAK
 case 127:
 YY_RULE_SETUP
 #line 167 "sphinxql.l"
-{ YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_DOT_NUMBER; }
+{ YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
 	YY_BREAK
 case 128:
 YY_RULE_SETUP
 #line 168 "sphinxql.l"
-{ YYSTOREBOUNDS; return TOK_SUBKEY; }
+{ YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_DOT_NUMBER; }
 	YY_BREAK
 case 129:
 YY_RULE_SETUP
 #line 169 "sphinxql.l"
-{ YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
+{ YYSTOREBOUNDS; return TOK_SUBKEY; }
 	YY_BREAK
 case 130:
 YY_RULE_SETUP
 #line 170 "sphinxql.l"
-{ YYSTOREBOUNDS; lvalp->m_iValue = (int64_t)strtoull ( yytext, NULL, 10 ); return TOK_CONST_INT; }
+{ YYSTOREBOUNDS; lvalp->m_fValue = (float)strtod ( yytext, NULL ); return TOK_CONST_FLOAT; }
 	YY_BREAK
 case 131:
 YY_RULE_SETUP
-#line 172 "sphinxql.l"
-{ YYSTOREBOUNDS; return TOK_ATIDENT; }
+#line 171 "sphinxql.l"
+{ YYSTOREBOUNDS; lvalp->m_iValue = (int64_t)strtoull ( yytext, NULL, 10 ); return TOK_CONST_INT; }
 	YY_BREAK
 case 132:
 YY_RULE_SETUP
@@ -1920,22 +1906,22 @@ YY_RULE_SETUP
 case 134:
 YY_RULE_SETUP
 #line 175 "sphinxql.l"
-{ YYSTOREBOUNDS; return TOK_IDENT; }
+{ YYSTOREBOUNDS; return TOK_ATIDENT; }
 	YY_BREAK
 case 135:
 YY_RULE_SETUP
 #line 176 "sphinxql.l"
-{ YYSTOREBOUNDS; return TOK_BAD_NUMERIC; }
+{ YYSTOREBOUNDS; return TOK_IDENT; }
 	YY_BREAK
 case 136:
 YY_RULE_SETUP
 #line 177 "sphinxql.l"
-{ YYSTOREBOUNDS; return TOK_USERVAR; }
+{ YYSTOREBOUNDS; return TOK_BAD_NUMERIC; }
 	YY_BREAK
 case 137:
 YY_RULE_SETUP
 #line 178 "sphinxql.l"
-{ YYSTOREBOUNDS; return TOK_SYSVAR; }
+{ YYSTOREBOUNDS; return TOK_USERVAR; }
 	YY_BREAK
 case 138:
 YY_RULE_SETUP
@@ -1945,41 +1931,46 @@ YY_RULE_SETUP
 case 139:
 YY_RULE_SETUP
 #line 180 "sphinxql.l"
-{ YYSTOREBOUNDS; lvalp->m_iStart++; lvalp->m_iEnd--; return TOK_ID; }
+{ YYSTOREBOUNDS; return TOK_SYSVAR; }
 	YY_BREAK
 case 140:
 YY_RULE_SETUP
 #line 181 "sphinxql.l"
-{ YYSTOREBOUNDS; lvalp->m_iStart++; lvalp->m_iEnd--; return TOK_IDENT; }
+{ YYSTOREBOUNDS; lvalp->m_iStart++; lvalp->m_iEnd--; return TOK_ID; }
 	YY_BREAK
 case 141:
 YY_RULE_SETUP
 #line 182 "sphinxql.l"
-{ YYSTOREBOUNDS; lvalp->m_iStart++; lvalp->m_iEnd--; return TOK_IDENT; } // allow `123xyz` column names
+{ YYSTOREBOUNDS; lvalp->m_iStart++; lvalp->m_iEnd--; return TOK_IDENT; }
 	YY_BREAK
 case 142:
-/* rule 142 can match eol */
 YY_RULE_SETUP
-#line 184 "sphinxql.l"
-{ ; }
+#line 183 "sphinxql.l"
+{ YYSTOREBOUNDS; lvalp->m_iStart++; lvalp->m_iEnd--; return TOK_IDENT; } // allow `123xyz` column names
 	YY_BREAK
 case 143:
 /* rule 143 can match eol */
 YY_RULE_SETUP
 #line 185 "sphinxql.l"
-{ YYSTOREBOUNDS; return TOK_SUBKEY; }
+{ ; }
 	YY_BREAK
 case 144:
+/* rule 144 can match eol */
 YY_RULE_SETUP
 #line 186 "sphinxql.l"
-{ YYSTOREBOUNDS; return yytext[0]; }
+{ YYSTOREBOUNDS; return TOK_SUBKEY; }
 	YY_BREAK
 case 145:
 YY_RULE_SETUP
-#line 188 "sphinxql.l"
+#line 187 "sphinxql.l"
+{ YYSTOREBOUNDS; return yytext[0]; }
+	YY_BREAK
+case 146:
+YY_RULE_SETUP
+#line 189 "sphinxql.l"
 ECHO;
 	YY_BREAK
-#line 1983 "llsphinxql.c"
+#line 1974 "llsphinxql.c"
 case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(ccomment):
 	yyterminate();
@@ -2714,8 +2705,8 @@ YY_BUFFER_STATE yy_scan_string (yyconst char * yystr , yyscan_t yyscanner)
 
 /** Setup the input buffer state to scan the given bytes. The next call to yylex() will
  * scan from a @e copy of @a bytes.
- * @param yybytes the byte buffer to scan
- * @param _yybytes_len the number of bytes in the buffer pointed to by @a bytes.
+ * @param bytes the byte buffer to scan
+ * @param len the number of bytes in the buffer pointed to by @a bytes.
  * @param yyscanner The scanner object.
  * @return the newly allocated buffer state object.
  */
@@ -3097,7 +3088,7 @@ void yyfree (void * ptr , yyscan_t yyscanner)
 
 #define YYTABLES_NAME "yytables"
 
-#line 188 "sphinxql.l"
+#line 189 "sphinxql.l"
 
 
 

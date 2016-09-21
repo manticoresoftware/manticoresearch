@@ -38,13 +38,13 @@ does not depend on nor require any specific database to function.
 </para>
 <para>
 Applications can access Sphinx search daemon (searchd) using any of
-the three different access methods: a) via Sphinx own implementation of MySQL 
+the three different access methods: a) via Sphinx own implementation of MySQL
 network protocol (using a small SQL subset called SphinxQL, this is recommended
 way), b) via native search API (SphinxAPI) or c) via MySQL server with a
 pluggable storage engine (SphinxSE).
 </para>
 <para>
-Official native SphinxAPI implementations for PHP, Perl, Python, Ruby and Java 
+Official native SphinxAPI implementations for PHP, Perl, Python, Ruby and Java
 are included within the distribution package. API is very lightweight
 so porting it to a new language is known to take a few hours or days.
 Third party API ports and plugins exist for Perl, C#, Haskell,
@@ -236,8 +236,8 @@ during last years, the obvious decision is to continue developing Sphinx
 
 <sect1 id="supported-system"><title>Supported systems</title>
 <para>
-Sphinx can be compiled either from source or installed using prebuilt 
-packages. Most modern UNIX systems with a C++ compiler should be able 
+Sphinx can be compiled either from source or installed using prebuilt
+packages. Most modern UNIX systems with a C++ compiler should be able
 to compile and run Sphinx without any modifications.
 </para>
 <para>
@@ -372,7 +372,7 @@ do not seem to help you, please don't hesitate to contact me.
 <para>PPA repository (Ubuntu only).</para>
 <para>Installing Sphinx is much easier from Sphinxsearch PPA repository, because you will get all dependencies and can also update Sphinx to the latest version with the same command.</para>
 <orderedlist>
-<listitem>    
+<listitem>
     <para>First, add Sphinxsearch repository and update the list of packages:</para>
     <para><userinput>$ sudo add-apt-repository ppa:builds/sphinxsearch-rel22</userinput></para>
     <para><userinput>$ sudo apt-get update</userinput></para></listitem>
@@ -385,7 +385,7 @@ do not seem to help you, please don't hesitate to contact me.
 </sect1>
 
 <sect1 id="installing-redhat"><title>Installing Sphinx packages on RedHat and CentOS</title>
-<para>Currently we distribute Sphinx RPMS and SRPMS on our website for both 5.x and 6.x 
+<para>Currently we distribute Sphinx RPMS and SRPMS on our website for both 5.x and 6.x
 versions of Red Hat Enterprise Linux, but they can be installed on CentOS as well.</para>
 <orderedlist>
 <listitem>
@@ -484,7 +484,7 @@ possible that someone may use it. And now we're urging you: don't use it.
 The default value is 'inline' and it's a new standard. 'plain' hit_format
 is obsolete and will be removed in the near future.</para></listitem>
 <listitem><para>docinfo=inline is deprecated. You can now use
-<link linkend="conf-ondisk-attrs">ondisk_attrs</link> or 
+<link linkend="conf-ondisk-attrs">ondisk_attrs</link> or
 <link linkend="conf-ondisk-attrs-default">ondisk_attrs_default</link> instead.</para>
 </listitem>
 <listitem><para>workers=threads is a new default for all OS now.
@@ -755,6 +755,7 @@ Attributes are <emphasis>not</emphasis> full-text indexed; they are stored in th
 Currently supported attribute types are:
 <itemizedlist>
 <listitem><para>unsigned integers (1-bit to 32-bit wide);</para></listitem>
+<listitem><para>signed big integers (64-bit wide);</para></listitem>
 <listitem><para>UNIX timestamps;</para></listitem>
 <listitem><para>floating point values (32-bit, IEEE 754 single precision);</para></listitem>
 <listitem><para><link linkend="conf-sql-attr-string">strings</link> (since 1.10-beta);</para></listitem>
@@ -1532,6 +1533,7 @@ usage quirks. Those quirks are listed in this section.
 <listitem><para>Default conservative RAM chunk limit (<option>rt_mem_limit</option>)
 of 32M can lead to poor performance on bigger indexes, you should raise it to
 256..1024M if you're planning to index gigabytes.</para></listitem>
+<listitem>The only attribute storage mode is 'extern' which requires at least one attribute to be present.</listitem>
 <listitem><para>High DELETE/REPLACE rate can lead to kill-list fragmentation
 and impact searching performance.</para></listitem>
 <listitem><para>No transaction size limits are currently imposed;
@@ -2587,7 +2589,7 @@ atc = log(1+sum(pair_tc))
 Note that this final dampening logarithm is exactly the reason you should use
 OPTION idf=plain, because without it, the expression inside the log() could be negative.
 </para><para>
-Having closer keyword occurrences actually contributes <emphasis>much</emphasis> more 
+Having closer keyword occurrences actually contributes <emphasis>much</emphasis> more
 to ATC than having more frequent keywords. Indeed, when the keywords are right next to
 each other, distance=1 and k=1; when there just one word in between them, distance=2 and
 k=0.297, with two words between, distance=3 and k=0.146, and so on. At the same time
@@ -3192,10 +3194,10 @@ LENGTH(json_attr.some_array) returns number of elements in array.
 <term id="expr-func-packedfactors">PACKEDFACTORS()</term>
 <listitem>
 <para>
-PACKEDFACTORS(), introduced in version 2.1.1-beta, can be used in queries, 
+PACKEDFACTORS(), introduced in version 2.1.1-beta, can be used in queries,
 either to just see all the weighting factors calculated when doing the matching, or to
 provide a binary attribute that can be used to write a custom ranking UDF.
-This function works only if expression ranker is specified and the query 
+This function works only if expression ranker is specified and the query
 is not a full scan, otherwise it will return an error. Starting with 2.2.2-beta
 PACKEDFACTORS() can take an optional argument that disables ATC ranking factor calculation:
 <programlisting>
@@ -3279,7 +3281,7 @@ WHERE match('hello')
 ORDER BY r DESC
 OPTION ranker=expr('1');
 </programlisting>
-Where CUSTOM_RANK() is a function implemented in an UDF. It should declare a 
+Where CUSTOM_RANK() is a function implemented in an UDF. It should declare a
 SPH_UDF_FACTORS structure (defined in <filename>sphinxudf.h</filename>), initialize this structure,
 unpack the factors into it before usage, and deinitialize it afterwards, as follows:
 <programlisting>
@@ -4086,7 +4088,7 @@ is able to import standard C header, and emit standard dynamic libraries with
 properly exported functions. Of course, the path of least resistance is to write
 in either C++ or plain C. We provide an example UDF library written in plain C
 and implementing several functions (demonstrating a few different techniques)
-along with our source code, see 
+along with our source code, see
 <ulink url="http://code.google.com/p/sphinxsearch/source/browse/trunk/src/udfexample.c">src/udfexample.c</ulink>.
 That example includes
 <ulink url="http://code.google.com/p/sphinxsearch/source/browse/trunk/src/sphinxudf.h">src/sphinxudf.h</ulink>
@@ -5113,8 +5115,8 @@ is useful when you want to check your index before actually using it.
 <filename>wordbreaker</filename> is one of the helper tools within
 the Sphinx package, introduced in version 2.1.1-beta. It is used to
 split compound words, as usual in URLs, into its component words.
-For example, this tool can split "lordoftherings" into its four 
-component words, or "http://manofsteel.warnerbros.com" into "man 
+For example, this tool can split "lordoftherings" into its four
+component words, or "http://manofsteel.warnerbros.com" into "man
 of steel warner bros". This helps searching, without requiring
 prefixes or infixes: searching for "sphinx" wouldn't match "sphinxsearch"
 but if you break the compound word and index the separate components,
@@ -5134,16 +5136,16 @@ the splitting functionality.
 <para>Wordbreaker
 Wordbreaker needs a dictionary to recognize individual substrings within a string. To
 differentiate between different guesses, it uses the relative frequency of each
-word in the dictionary: higher frequency means higher split probability. You can 
+word in the dictionary: higher frequency means higher split probability. You can
 generate such a file using the <filename>indexer</filename> tool, as in
 <programlisting>
-indexer --buildstops dict.txt 100000 --buildfreqs myindex -c /path/to/sphinx.conf   
+indexer --buildstops dict.txt 100000 --buildfreqs myindex -c /path/to/sphinx.conf
 </programlisting>
 which will write the 100,000 most frequent words, along with their counts, from
 myindex into dict.txt. The output file is a text file, so you can edit it by hand,
 if need be, to add or remove words.
 </para>
-<para>See 
+<para>See
 <ulink url="http://sphinxsearch.com/blog/2013/01/29/a-new-tool-in-the-trunk-wordbreaker/">
 http://sphinxsearch.com/blog/2013/01/29/a-new-tool-in-the-trunk-wordbreaker/</ulink>
 for more on this tool.
@@ -5413,7 +5415,7 @@ OPTION &lt;optionname&gt;=&lt;value&gt; [ , ... ]
 </programlisting>
 Supported options and respectively allowed values are:
 <itemizedlist>
-<listitem><para>'agent_query_timeout' - integer (max time in milliseconds to wait for remote queries to complete, 
+<listitem><para>'agent_query_timeout' - integer (max time in milliseconds to wait for remote queries to complete,
 see <link linkend="conf-agent-query-timeout">agent_query_timeout</link> under Index configuration options for details)</para></listitem>
 <listitem><para>'boolean_simplify' - 0 or 1, enables simplifying the query to speed it up</para></listitem>
 <listitem><para>'comment' - string, user comment that gets copied to a query log file</para></listitem>
@@ -5599,7 +5601,7 @@ FACET categories ORDER BY FACET() ASC;
 <listitem>
  <para>
  subselects, starting with 2.2.1-beta, in format SELECT * FROM (SELECT ... ORDER BY cond1 LIMIT X) ORDER BY cond2 LIMIT Y. The outer select allows only ORDER BY and LIMIT clauses.
- See <ulink url="http://sphinxsearch.com/blog/2013/05/14/subselects/">http://sphinxsearch.com/blog/2013/05/14/subselects/</ulink> for more details. 
+ See <ulink url="http://sphinxsearch.com/blog/2013/05/14/subselects/">http://sphinxsearch.com/blog/2013/05/14/subselects/</ulink> for more details.
  </para>
 </listitem>
 </itemizedlist>
@@ -5626,7 +5628,7 @@ SHOW META [ LIKE pattern ]
 </programlisting>
 <para><b>SHOW META</b> shows additional meta-information about the latest
 query such as query time and keyword statistics. IO and CPU counters will only be available if searchd was started with --iostats and --cpustats switches respectively.
-Additional predicted_time, dist_predicted_time, [{local|dist}]_fetched_[{docs|hits|skips}] counters will only be available if searchd was configured with  
+Additional predicted_time, dist_predicted_time, [{local|dist}]_fetched_[{docs|hits|skips}] counters will only be available if searchd was configured with
 <link  linkend="conf-predicted-time-costs">predicted time costs</link> and query  had  predicted_time in OPTION clause.
 <programlisting>
 mysql> SELECT * FROM test1 WHERE MATCH('test|one|two');
@@ -6446,7 +6448,7 @@ added in 2.2.2-beta.
 Implementation details. As of 2.2.1-beta, the querying of an index is
 impossible (because of a write lock) while adding a column. This may change
 in the future. The newly created attribute values are set to 0. ALTER will
-not work for distributed indexes and indexes without any attributes. 
+not work for distributed indexes and indexes without any attributes.
 DROP COLUMN will fail if an index has only one attribute.
 </para>
 <programlisting>
@@ -8224,8 +8226,8 @@ star-syntax available in queries.
 <varlistentry>
     <term>"before_match":</term>
     <listitem><para>A string to insert before a keyword match. Starting with version 1.10-beta,
-    a %PASSAGE_ID% macro can be used in this string. The first match of the macro is replaced 
-    with an incrementing passage number within a current snippet. Numbering starts at 1 
+    a %PASSAGE_ID% macro can be used in this string. The first match of the macro is replaced
+    with an incrementing passage number within a current snippet. Numbering starts at 1
     by default but can be overridden with "start_passage_id" option. In a multi-document call,
     %PASSAGE_ID% would restart at every given document. Default is "&lt;b&gt;".</para></listitem>
 </varlistentry>
@@ -14227,8 +14229,8 @@ The last defined in distributed (network) indexes, or also may be overrided per-
 
 <sect2 id="conf-agent-retry-count"><title>agent_retry_count</title>
 <para>
-Integer, specifies how many times sphinx will try to connect and query remote agents in distributed index before reporting 
-fatal query error. Default is 0 (i.e. no retries). This value may be also specified on per-query basis using 
+Integer, specifies how many times sphinx will try to connect and query remote agents in distributed index before reporting
+fatal query error. Default is 0 (i.e. no retries). This value may be also specified on per-query basis using
 'OPTION retry_count=XXX' clause. If per-query option exists, it will override the one specified in config.
 </para>
 </sect2>
@@ -14236,8 +14238,8 @@ fatal query error. Default is 0 (i.e. no retries). This value may be also specif
 <sect2 id="conf-agent-retry-delay"><title>agent_retry_delay</title>
 <para>
 Integer, in milliseconds. Specifies the delay sphinx rest before retrying to query a remote agent in case it fails.
-The value has sense only if non-zero <link linkend="conf-agent-retry-count">agent_retry_count</link> 
-or non-zero per-query OPTION retry_count specified. Default is 500. This value may be also specified 
+The value has sense only if non-zero <link linkend="conf-agent-retry-count">agent_retry_count</link>
+or non-zero per-query OPTION retry_count specified. Default is 500. This value may be also specified
 on per-query basis using 'OPTION retry_delay=XXX' clause. If per-query option exists, it will override the one specified in config.
 </para>
 </sect2>
@@ -14933,7 +14935,7 @@ plugin_dir = /usr/local/sphinx/lib
   <listitem><para>fixed #1799, crash in queries to distributed indexes with <link linkend="sphinxql-select">GROUP BY</link> on multiple values</para></listitem>
   <listitem><para>fixed #1718, <option>expand_keywords</option> option lost in disk chunks of RT indexes</para></listitem>
   <listitem><para>fixed documentation on <link linkend="conf-rt-flush-period">rt_flush_period</link></para></listitem>
-  <listitem><para>fixed network protocol issue which results in timeouts of <filename>libmysqlclient</filename> for big Sphinx responses</para></listitem>  
+  <listitem><para>fixed network protocol issue which results in timeouts of <filename>libmysqlclient</filename> for big Sphinx responses</para></listitem>
 </itemizedlist>
 </sect1>
 
@@ -14973,7 +14975,7 @@ plugin_dir = /usr/local/sphinx/lib
   <listitem><para>added <link linkend="ref-indextool">indextool</link> <option>--fold</option> command and <option>-q</option> switch</para></listitem>
   <listitem><para>added JSON debug check for RT index RAM chunk</para></listitem>
   <listitem><para>added <link linkend="expr-func-length">LENGTH()</link> function for MVA</para></listitem>
-  <listitem><para>added missing <link linkend="conf-rt-attr-bool">rt_attr_bool</link> directive</para></listitem> 
+  <listitem><para>added missing <link linkend="conf-rt-attr-bool">rt_attr_bool</link> directive</para></listitem>
   <listitem><para>added support for selecting over 250 columns via SphinxQL</para></listitem>
   <listitem><para>deprecated custom sort mode, and <option>str2ordinal</option> and <option>str2wordcount</option> attribute types</para></listitem>
   <listitem><para>optimized <code>SELECT</code>, <code>UPDATE</code> for indexes with many attributes (up to 3.5x speedup in extreme cases)</para></listitem>
@@ -15022,7 +15024,7 @@ plugin_dir = /usr/local/sphinx/lib
   <listitem><para>fixed #1439, filters on float values in JSON issue, string values quoting issue</para></listitem>
   <listitem><para>fixed #1399, filter error message on string attribute</para></listitem>
   <listitem><para>fixed #1384, added possibility to define any own DSN line with <link linkend="confgroup-source">source=mssql</link> (like as in <code>source=odbc</code>)</para></listitem>
-  <listitem><para>fixed <link linkend="sphinxql-attach-index">ATTACH</link> vs wordforms or stopwords; after daemon was restarted this setting was getting lost in RT indexes</para></listitem>  
+  <listitem><para>fixed <link linkend="sphinxql-attach-index">ATTACH</link> vs wordforms or stopwords; after daemon was restarted this setting was getting lost in RT indexes</para></listitem>
   <listitem><para>fixed balancing of agents in HA</para></listitem>
   <listitem><para>fixed co-working of <code>index_exact_word</code> + AOT lemmatizer</para></listitem>
   <listitem><para>fixed epoll invoking and turned on by default</para></listitem>
@@ -15036,7 +15038,7 @@ plugin_dir = /usr/local/sphinx/lib
   <listitem><para>fixed rotation of global IDF for <option>workers=threads</option> and <option>seamless_rotate=1</option></para></listitem>
   <listitem><para>fixed rotation of old indexes</para></listitem>
   <listitem><para>fixed RT kill list survives <code>TRUNCATE</code> and works in newly <code>ATTACH</code>ed index</para></listitem>
-  <listitem><para>fixed saving id32 RT index with id64 daemon</para></listitem>  
+  <listitem><para>fixed saving id32 RT index with id64 daemon</para></listitem>
   <listitem><para>fixed stemmer vs RT index <code>INSERT</code></para></listitem>
   <listitem><para>fixed string case error with JSON attributes in select list of a query</para></listitem>
   <listitem><para>fixed <code>TOP_COUNT</code> usage in <filename>misc/suggest</filename> and updated to PHP 5.3 and UTF-8</para></listitem>

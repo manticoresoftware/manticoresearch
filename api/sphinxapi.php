@@ -853,9 +853,8 @@ class SphinxClient
 	{
 		assert ( is_string($attribute) );
 		assert ( is_array($values) );
-		assert ( count($values) );
 
-		if ( is_array($values) && count($values) )
+		if ( count($values) )
 		{
 			foreach ( $values as $value )
 				assert ( is_numeric($value) );
@@ -1787,7 +1786,6 @@ class SphinxClient
 			return false;
 		}
 
-		$res = substr ( $response, 4 ); // just ignore length, error handling, etc
 		$p = 0;
 		list ( $rows, $cols ) = array_values ( unpack ( "N*N*", substr ( $response, $p, 8 ) ) ); $p += 8;
 

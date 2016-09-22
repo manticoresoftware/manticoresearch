@@ -163,6 +163,22 @@ $ql->Reconnect();
 $results[] = $ql->Query ( "SHOW STATUS LIKE 'connections'" );
 $results[] = $ql->Query ( "SHOW STATUS LIKE 'command_status'" );
 $results[] = $ql->Query ( "SHOW STATUS LIKE 'queries'" );
+
+// regression crash on SphinxQL empty query
+global $g_locals, $sd_address, $sd_sphinxql_port;
+$sockStr = "$sd_address:$sd_sphinxql_port";
+if ($sd_address == "localhost")
+	$sockStr = "127.0.0.1:$sd_sphinxql_port";
+$sock1 = @mysql_connect (
+	$sockStr,
+	$g_locals['db-user'],
+	$g_locals['db-password'] ,
+	true );
+if ( $sock1 === false )
+	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock1 ) . " : " . @mysql_error ( $sock1 );
+$results[] = @mysql_query( "", $sock1 );
+$results[] = @mysql_error ( $sock1 );
+
 ]]></custom_test>
 
 <db_create>

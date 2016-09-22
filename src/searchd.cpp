@@ -9975,7 +9975,11 @@ void SqlParser_c::FreeNamedVec ( int )
 
 bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation )
 {
-	assert ( sQuery );
+	if ( !sQuery || !iLen )
+	{
+		sError = "query was empty";
+		return false;
+	}
 
 	SqlParser_c tParser ( dStmt, eCollation );
 	tParser.m_pBuf = sQuery;

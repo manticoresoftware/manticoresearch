@@ -1180,7 +1180,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 				if ( tAgent.m_iSock<=0 || ( tAgent.m_sPath.IsEmpty() && tAgent.m_iPort<=0 ) )
 				{
 					tAgent.Fail ( eConnectFailures, "invalid agent in querying. Socket %d, Path %s, Port %d", tAgent.m_iSock, tAgent.m_sPath.cstr(), tAgent.m_iPort );
-					tAgent.m_eState = AGENT_RETRY; // do retry on connect() failures
+					// tAgent.m_eState = AGENT_RETRY; // do retry on connect() failures // commented out since already set by Fail
 					continue;
 				}
 				dEvent.events = ( tAgent.m_eState==AGENT_CONNECTING || tAgent.m_eState==AGENT_ESTABLISHED ) ? EPOLLOUT : EPOLLIN;
@@ -1285,7 +1285,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 						// agent closed the connection
 						// this might happen in out-of-sync connect-accept case; so let's retry
 						tAgent.Fail ( eUnexpectedClose, "handshake failure (connection was closed)" );
-						tAgent.m_eState = AGENT_RETRY;
+						// tAgent.m_eState = AGENT_RETRY; // commented out since it is done in Fail()
 					}
 					continue;
 				}
@@ -1306,6 +1306,11 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 					tOut.SendInt ( 4 ); // request body length
 					tOut.SendInt ( 1 ); // set persistent to 1.
 					tOut.Flush ();
+					if ( tOut.GetError () )
+					{
+						tAgent.Fail ( eNetworkErrors, "%s", tOut.GetErrorMsg() );
+						continue;
+					}
 					tAgent.m_bFresh = false;
 				}
 
@@ -1321,7 +1326,12 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 				// send request
 				NetOutputBuffer_c tOut ( tAgent.m_iSock );
 				pCtx->m_pBuilder->BuildRequest ( tAgent, tOut );
-				tOut.Flush (); // FIXME! handle flush failure?
+				tOut.Flush ();
+				if ( tOut.GetError () )
+				{
+					tAgent.Fail ( eNetworkErrors, "%s", tOut.GetErrorMsg () );
+					continue;
+				}
 				tAgent.m_eState = AGENT_QUERYED;
 				iAgents++;
 				dEvent.events = EPOLLIN;
@@ -1357,7 +1367,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 			// however, there's no way to tell the two from each other
 			// so we just account both cases as connect() failure
 			tAgent.Fail ( eTimeoutsConnect, "connect() timed out" );
-			tAgent.m_eState = AGENT_RETRY; // do retry on connect() failures
+			// tAgent.m_eState = AGENT_RETRY; // do retry on connect() failures // commented out since done by Fail() call
 		}
 	}
 
@@ -1459,9 +1469,8 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 
 					if ( sphSockRecv ( tAgent.m_iSock, (char*)&tReplyHeader, sizeof(tReplyHeader) )!=sizeof(tReplyHeader) )
 					{
-						// bail out if failed
-						tAgent.m_sFailure.SetSprintf ( "failed to receive reply header" );
-						agent_stats_inc ( tAgent, eNetworkErrors );
+						// bail out if failed						
+						tAgent.Fail ( eNetworkErrors, "failed to receive reply header" );
 						break;
 					}
 
@@ -1472,9 +1481,8 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 					// check the packet
 					if ( tReplyHeader.m_iLength<0 || tReplyHeader.m_iLength>g_iMaxPacketSize ) // FIXME! add reasonable max packet len too
 					{
-						tAgent.m_sFailure.SetSprintf ( "invalid packet size (status=%d, len=%d, max_packet_size=%d)",
+						tAgent.Fail ( eWrongReplies, "invalid packet size (status=%d, len=%d, max_packet_size=%d)",
 							tReplyHeader.m_iStatus, tReplyHeader.m_iLength, g_iMaxPacketSize );
-						agent_stats_inc ( tAgent, eWrongReplies );
 						break;
 					}
 
@@ -1505,8 +1513,7 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 					// bail out if read failed
 					if ( iRes<=0 )
 					{
-						tAgent.m_sFailure.SetSprintf ( "failed to receive reply body: %s", sphSockError() );
-						agent_stats_inc ( tAgent, eNetworkErrors );
+						tAgent.Fail ( eNetworkErrors, "failed to receive reply body: %s", sphSockError() );
 						break;
 					}
 
@@ -1551,8 +1558,7 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 					// check if there was enough data
 					if ( tReq.GetError() )
 					{
-						tAgent.m_sFailure.SetSprintf ( "incomplete reply" );
-						agent_stats_inc ( tAgent, eWrongReplies );
+						tAgent.Fail ( eWrongReplies, "incomplete reply" );
 						break;
 					}
 
@@ -1652,7 +1658,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 			{
 				tAgent.Fail ( eConnectFailures, "invalid agent in querying. Socket %d, Path %s, Port %d",
 					tAgent.m_iSock, tAgent.m_sPath.cstr(), tAgent.m_iPort );
-				tAgent.m_eState = AGENT_RETRY; // do retry on connect() failures
+				// tAgent.m_eState = AGENT_RETRY; // do retry on connect() failures // commented out since done by Fail()
 				continue;
 			}
 

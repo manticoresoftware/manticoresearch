@@ -252,16 +252,19 @@ class NetOutputBuffer_c : public ISphOutputBuffer
 public:
 	explicit	NetOutputBuffer_c ( int iSock );
 
-	virtual void	Flush ();
-	virtual bool	GetError () const { return m_bError; }
-	virtual int		GetSentCount () const { return m_iSent; }
-	virtual void	SetProfiler ( CSphQueryProfile * pProfiler ) { m_pProfile = pProfiler; }
+	virtual void	Flush () override;
+	virtual bool	GetError () const override { return m_bError; }
+	virtual int		GetSentCount () const override { return m_iSent; }
+	virtual void	SetProfiler ( CSphQueryProfile * pProfiler ) override { m_pProfile = pProfiler; }
+	const char*		GetErrorMsg () const;
 
 private:
 	CSphQueryProfile *	m_pProfile;
 	int			m_iSock;			///< my socket
 	int			m_iSent;
 	bool		m_bError;
+	CSphString	m_sError;
+
 };
 
 

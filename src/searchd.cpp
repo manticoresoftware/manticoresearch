@@ -2614,7 +2614,6 @@ void ISphOutputBuffer::SendOutput ( const ISphOutputBuffer & tOut )
 		SendBytes ( tOut.m_dBuf.Begin(), iLen );
 }
 
-
 NetOutputBuffer_c::NetOutputBuffer_c ( int iSock )
 	: m_pProfile ( NULL )
 	, m_iSock ( iSock )
@@ -2622,6 +2621,11 @@ NetOutputBuffer_c::NetOutputBuffer_c ( int iSock )
 	, m_bError ( false )
 {
 	assert ( m_iSock>0 );
+}
+
+const char* NetOutputBuffer_c::GetErrorMsg () const
+{
+	return m_sError.cstr ();
 }
 
 void NetOutputBuffer_c::Flush ()
@@ -2651,7 +2655,8 @@ void NetOutputBuffer_c::Flush ()
 				continue;
 			if ( iErrno!=EAGAIN && iErrno!=EWOULDBLOCK )
 			{
-				sphWarning ( "send() failed: %d: %s", iErrno, sphSockError(iErrno) );
+				m_sError.SetSprintf ( "send() failed: %d: %s", iErrno, sphSockError ( iErrno ) );
+				sphWarning ( "%s", m_sError.cstr () );
 				m_bError = true;
 				break;
 			}
@@ -2678,7 +2683,8 @@ void NetOutputBuffer_c::Flush ()
 
 			case 0: // timed out
 			{
-				sphWarning ( "timed out while trying to flush network buffers" );
+				m_sError.SetSprintf ( "timed out while trying to flush network buffers" );
+				sphWarning ( "%s", m_sError.cstr () );
 				m_bError = true;
 				break;
 			}
@@ -2688,7 +2694,8 @@ void NetOutputBuffer_c::Flush ()
 				int iErrno = sphSockGetErrno();
 				if ( iErrno==EINTR )
 					break;
-				sphWarning ( "select() failed: %d: %s", iErrno, sphSockError(iErrno) );
+				m_sError.SetSprintf ( "select() failed: %d: %s", iErrno, sphSockError(iErrno) );
+				sphWarning ( "%s", m_sError.cstr () );
 				m_bError = true;
 				break;
 			}

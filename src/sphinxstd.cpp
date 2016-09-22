@@ -85,7 +85,7 @@ struct CSphMemHeader
 	CSphMemHeader *	m_pPrev;
 };
 
-static CSphStaticMutex	g_tAllocsMutex;
+static CSphMutex		g_tAllocsMutex;
 
 static int				g_iCurAllocs	= 0;
 static int				g_iAllocsId		= 0;
@@ -341,7 +341,7 @@ void operator delete [] ( void * pPtr )
 
 #undef new
 
-static CSphStaticMutex	g_tAllocsMutex;
+static CSphMutex		g_tAllocsMutex;
 static int				g_iAllocsId		= 0;
 static int				g_iCurAllocs	= 0;
 static int64_t			g_iCurBytes		= 0;

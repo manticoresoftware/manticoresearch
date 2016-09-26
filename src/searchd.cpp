@@ -8331,10 +8331,11 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		while ( !bDistDone )
 		{
 			// don't forget to check incoming replies after send was over
-			tDistCtrl->WaitAgentsEvent();
+			if (!tDistCtrl->HasReadyAgents ())
+				tDistCtrl->WaitAgentsEvent();
 			bDistDone = tDistCtrl->IsDone();
 			// wait for remote queries to complete
-			if ( tDistCtrl->HasReadyAgents() )
+			if ( tDistCtrl->FetchReadyAgents() )
 			{
 				CSphVector<DWORD> dMvaStorage;
 				CSphVector<BYTE> dStringStorage;
@@ -8343,6 +8344,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				SearchReplyParser_t tParser ( iStart, iEnd, dMvaStorage, dStringStorage );
 				int iMsecLeft = iAgentQueryTimeout - (int)( tmLocal/1000 );
 				int iReplys = RemoteWaitForAgents ( dAgents, Max ( iMsecLeft, 0 ), tParser );
+				if ( tDistCtrl->RetryFailed ()>0 )
+					bDistDone = false;
 				// check if there were valid (though might be 0-matches) replies, and merge them
 				if ( iReplys )
 				{

@@ -505,9 +505,17 @@ public:
 	virtual int Finish () = 0;
 
 	// check that some agents are done at this iteration
-	virtual bool HasReadyAgents () = 0;
+	virtual bool HasReadyAgents () const = 0;
 
+	// check that some agents are done, and reset counter of them
+	virtual bool FetchReadyAgents () = 0;
+
+	// block execution while some works finished
 	virtual void WaitAgentsEvent () = 0;
+
+	// reschedule agents with retry status
+	// returns num of them.
+	virtual int RetryFailed () = 0;
 };
 
 ISphRemoteAgentsController* GetAgentsController ( int iThreads, CSphVector<AgentConn_t> & dAgents,

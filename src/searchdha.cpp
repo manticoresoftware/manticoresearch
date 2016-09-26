@@ -602,8 +602,8 @@ int AgentConn_t::NumOfMirrors () const
 
 void AgentConn_t::Fail ( AgentStats_e eStat, const char* sMessage, ... )
 {
+	m_eState = AGENT_RETRY;
 	Close ();
-	m_eState = AGENT_RETRY; // since it became AGENT_UNUSED after Close()
 	va_list ap;
 	va_start ( ap, sMessage );
 	m_sFailure.SetSprintfVa ( sMessage, ap );
@@ -1470,7 +1470,7 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 					if ( sphSockRecv ( tAgent.m_iSock, (char*)&tReplyHeader, sizeof(tReplyHeader) )!=sizeof(tReplyHeader) )
 					{
 						// bail out if failed						
-						tAgent.Fail ( eNetworkErrors, "failed to receive reply header" );
+						tAgent.Fail ( eNetworkErrors, "failed to receive reply headerr" );
 						break;
 					}
 
@@ -2126,6 +2126,8 @@ private:
 	CSphMutex m_tStatLock;
 public:
 	CSphAutoEvent m_tChanged;
+	CSphAtomic m_iActiveThreads;
+
 private:
 	AgentWorkContext_t * m_dData;	// works array
 	int m_iLen;
@@ -2133,9 +2135,10 @@ private:
 	int m_iHead;					// ring buffer begin
 	int m_iTail;					// ring buffer end
 
-	volatile int m_iWorksCount;			// count of works to be done
+	CSphAtomic m_iWorksCount;			// count of works to be done
 	volatile int m_iAgentsDone;				// count of agents that finished their works
 	volatile int m_iAgentsReported;			// count of agents that reported of their work done
+	volatile bool m_bIsDestroying;		// help to keep at least 1 worker thread active
 
 	CrashQuery_t m_tCrashQuery;		// query that got reported on crash
 
@@ -2148,7 +2151,8 @@ public:
 
 	void Push ( const AgentWorkContext_t & tElem );
 	void RawPush ( const AgentWorkContext_t & tElem );
-	int GetReadyCount ();
+	int GetReadyCount () const;
+	int FetchReadyCount (); // each call returns new portion of number
 
 	int GetReadyTotal () const
 	{
@@ -2157,12 +2161,17 @@ public:
 
 	bool HasIncompleteWorks () const
 	{
-		return ( m_iWorksCount>0 );
+		return ( m_iWorksCount.GetValue ()>0 );
 	}
 
 	void SetWorksCount ( int iWorkers )
 	{
-		m_iWorksCount = iWorkers;
+		m_iWorksCount.SetValue (iWorkers);
+	}
+
+	void AddWorksCount ( int iWorkers )
+	{
+		m_iWorksCount.Add ( iWorkers );
 	}
 
 	static void PoolThreadFunc ( void * pArg );
@@ -2174,8 +2183,9 @@ ThdWorkPool_c::ThdWorkPool_c ( int iLen )
 
 	m_iLen = iLen+1;
 	m_iTail = m_iHead = 0;
-	m_iWorksCount = 0;
+	m_iWorksCount.SetValue (0);
 	m_iAgentsDone = m_iAgentsReported = 0;
+	m_bIsDestroying = false;
 
 	m_dData = new AgentWorkContext_t[m_iLen];
 #ifndef NDEBUG
@@ -2188,6 +2198,10 @@ ThdWorkPool_c::ThdWorkPool_c ( int iLen )
 
 ThdWorkPool_c::~ThdWorkPool_c ()
 {
+
+	m_bIsDestroying = true;
+	while ( m_iActiveThreads.GetValue ()>0 )
+		sphSleepMsec ( 1 );
 	m_tChanged.Done();
 	SafeDeleteArray ( m_dData );
 }
@@ -2218,9 +2232,8 @@ void ThdWorkPool_c::Push ( const AgentWorkContext_t & tElem )
 	if ( !tElem.m_pfn )
 		return;
 
-	m_tDataLock.Lock();
+	CSphScopedLock<CSphMutex> tData ( m_tDataLock );
 	RawPush ( tElem );
-	m_tDataLock.Unlock();
 }
 
 void ThdWorkPool_c::RawPush ( const AgentWorkContext_t & tElem )
@@ -2230,20 +2243,28 @@ void ThdWorkPool_c::RawPush ( const AgentWorkContext_t & tElem )
 	m_iTail = ( m_iTail+1 ) % m_iLen;
 }
 
-int ThdWorkPool_c::GetReadyCount ()
+int ThdWorkPool_c::FetchReadyCount ()
 {
 	// it could be better to lock here to get accurate value of m_iAgentsDone
 	// however that make lock contention of 1 sec on 1000 query ~ total 3.2sec vs 2.2 sec ( trunk )
-	int iAgentsDone = m_iAgentsDone;
-	int iNowDone = iAgentsDone - m_iAgentsReported;
-	m_iAgentsReported = iAgentsDone;
+	int iNowDone = GetReadyCount();
+	m_iAgentsReported += iNowDone;
 	return iNowDone;
+}
+
+int ThdWorkPool_c::GetReadyCount () const
+{
+	// it could be better to lock here to get accurate value of m_iAgentsDone
+	// however that make lock contention of 1 sec on 1000 query ~ total 3.2sec vs 2.2 sec ( trunk )
+	return m_iAgentsDone - m_iAgentsReported;
 }
 
 void ThdWorkPool_c::PoolThreadFunc ( void * pArg )
 {
 	ThdWorkPool_c * pPool = (ThdWorkPool_c *)pArg;
-
+	assert (pPool);
+	pPool->m_iActiveThreads.Inc ();
+	sphLogDebugv ("Thread func started for %p, now %d threads active", pArg, (DWORD)pPool->m_iActiveThreads.GetValue ());
 	SphCrashLogger_c::SetLastQuery ( pPool->m_tCrashQuery );
 
 	int iSpinCount = 0;
@@ -2257,7 +2278,19 @@ void ThdWorkPool_c::PoolThreadFunc ( void * pArg )
 			++iPopCount;
 			tNext = pPool->Pop();
 			if ( !tNext.m_pfn ) // if there is no work at queue - worker done
+			{
+				// this is last worker. Let us keep it while pool is alive.
+				if ( !pPool->m_bIsDestroying && pPool->m_iActiveThreads.GetValue ()==1 )
+				{
+					// this thread is 'virtually' inactive also
+					if ( !pPool->m_iWorksCount.GetValue () )
+					{
+						sphSleepMsec ( 1 );
+						continue;
+					}
+				}
 				break;
+			}
 		}
 
 		tNext.m_pfn ( &tNext );
@@ -2265,7 +2298,8 @@ void ThdWorkPool_c::PoolThreadFunc ( void * pArg )
 		{
 			CSphScopedLock<CSphMutex> tStat ( pPool->m_tStatLock );
 			pPool->m_iAgentsDone += tNext.m_iAgentsDone;
-			pPool->m_iWorksCount -= ( tNext.m_pfn==NULL );
+			if (!tNext.m_pfn)
+				pPool->m_iWorksCount.Dec();
 			pPool->m_tChanged.SetEvent();
 		}
 
@@ -2274,12 +2308,15 @@ void ThdWorkPool_c::PoolThreadFunc ( void * pArg )
 		{
 			pPool->Push ( tNext );
 			tNext = AgentWorkContext_t();
-		} else if ( pPool->m_iWorksCount>1 && iPopCount>pPool->m_iWorksCount ) // should sleep on queue wrap
+		} else if ( pPool->m_iWorksCount.GetValue ()>1 && iPopCount>pPool->m_iWorksCount.GetValue () ) // should sleep on queue wrap
 		{
 			iPopCount = 0;
 			sphSleepMsec ( 1 );
 		}
+
 	}
+	pPool->m_iActiveThreads.Dec ();
+	sphLogDebugv ( "Thread func finished for %p, now %d threads active", pArg, (DWORD)pPool->m_iActiveThreads.GetValue () );
 }
 
 void ThdWorkParallel ( AgentWorkContext_t * );
@@ -2382,33 +2419,54 @@ public:
 
 
 	// check that there are no works to do
-	virtual bool IsDone () const
+	virtual bool IsDone () const override
 	{
-		return m_tWorkerPool.HasIncompleteWorks()==0;
+		return m_pWorkerPool->HasIncompleteWorks()==0;
 	}
 
 	// block execution while there are works to do
-	virtual int Finish ();
+	virtual int Finish () override;
 
 	// check that some agents are done at this iteration
-	virtual bool HasReadyAgents ()
+	virtual bool HasReadyAgents () const override
 	{
-		return ( m_tWorkerPool.GetReadyCount()>0 );
+		return (m_pWorkerPool->GetReadyCount()>0 );
 	}
 
-	virtual void WaitAgentsEvent ();
+	virtual bool FetchReadyAgents () override
+	{
+		return (m_pWorkerPool->FetchReadyCount ()>0);
+	}
+
+	virtual void WaitAgentsEvent () override;
+
+	virtual int RetryFailed () override;
 
 private:
-	ThdWorkPool_c m_tWorkerPool;
+	ThdWorkPool_c * m_pWorkerPool;
 	CSphVector<SphThread_t> m_dThds;
+
+	// stores params from ctr to work of RetryFailed
+	CSphVector<AgentConn_t> * m_pAgents;
+	const IRequestBuilder_t * m_pBuilder;
+	int m_iTimeout;
+	int m_iRetryMax;
+	int m_iDelay;
+
 };
 
 CSphRemoteAgentsController::CSphRemoteAgentsController ( int iThreads,
 														CSphVector<AgentConn_t> & dAgents, const IRequestBuilder_t & tBuilder,
 														int iTimeout, int iRetryMax, int iDelay )
-														: m_tWorkerPool ( dAgents.GetLength() )
+														: m_pWorkerPool ( new ThdWorkPool_c (dAgents.GetLength()) )
 {
 	assert ( dAgents.GetLength() );
+
+	m_pAgents = &dAgents;
+	m_pBuilder = &tBuilder;
+	m_iTimeout = iTimeout;
+	m_iRetryMax = iRetryMax;
+	m_iDelay = iDelay;
 
 	iThreads = Max ( 1, Min ( iThreads, dAgents.GetLength() ) );
 	m_dThds.Resize ( iThreads );
@@ -2420,20 +2478,19 @@ CSphRemoteAgentsController::CSphRemoteAgentsController ( int iThreads,
 	tCtx.m_iDelay = iDelay;
 	tCtx.m_iTimeout = iTimeout;
 
-
 	if ( iThreads>1 )
 	{
-		m_tWorkerPool.SetWorksCount ( dAgents.GetLength() );
+		m_pWorkerPool->SetWorksCount ( dAgents.GetLength() );
 		ARRAY_FOREACH ( i, dAgents )
 		{
 			tCtx.m_pAgents = dAgents.Begin()+i;
 			tCtx.m_iRetryMultiplier = tCtx.m_pAgents->NumOfMirrors ();
 			tCtx.m_iRetriesMax = iRetryMax * tCtx.m_iRetryMultiplier;
-			m_tWorkerPool.RawPush ( tCtx );
+			m_pWorkerPool->RawPush ( tCtx );
 		}
 	} else
 	{
-		m_tWorkerPool.SetWorksCount ( 1 );
+		m_pWorkerPool->SetWorksCount ( 1 );
 		tCtx.m_pAgents = dAgents.Begin();
 		tCtx.m_iAgentCount = dAgents.GetLength();
 		int iRetryMultiplier = 1;
@@ -2442,15 +2499,16 @@ CSphRemoteAgentsController::CSphRemoteAgentsController ( int iThreads,
 		tCtx.m_iRetryMultiplier = iRetryMultiplier;
 		tCtx.m_iRetriesMax = iRetryMax * tCtx.m_iRetryMultiplier;
 		tCtx.m_pfn = ThdWorkSequental;
-		m_tWorkerPool.RawPush ( tCtx );
+		m_pWorkerPool->RawPush ( tCtx );
 	}
 
 	ARRAY_FOREACH ( i, m_dThds )
-		SphCrashLogger_c::ThreadCreate ( m_dThds.Begin()+i, ThdWorkPool_c::PoolThreadFunc, &m_tWorkerPool );
+		SphCrashLogger_c::ThreadCreate ( m_dThds.Begin()+i, ThdWorkPool_c::PoolThreadFunc, m_pWorkerPool );
 }
 
 CSphRemoteAgentsController::~CSphRemoteAgentsController ()
 {
+	SafeDelete (m_pWorkerPool);
 	ARRAY_FOREACH ( i, m_dThds )
 		sphThreadJoin ( m_dThds.Begin()+i );
 
@@ -2463,12 +2521,47 @@ int CSphRemoteAgentsController::Finish ()
 	while ( !IsDone() )
 		WaitAgentsEvent();
 
-	return m_tWorkerPool.GetReadyTotal();
+	return m_pWorkerPool->GetReadyTotal();
 }
 
 void CSphRemoteAgentsController::WaitAgentsEvent ()
 {
-	m_tWorkerPool.m_tChanged.WaitEvent();
+	m_pWorkerPool->m_tChanged.WaitEvent();
+}
+
+int CSphRemoteAgentsController::RetryFailed ()
+{
+	AgentWorkContext_t tCtx;
+	tCtx.m_pBuilder = m_pBuilder;
+	tCtx.m_iDelay = m_iDelay;
+	tCtx.m_iTimeout = m_iTimeout;
+
+	tCtx.m_pAgents = m_pAgents->Begin ();
+	tCtx.m_iAgentCount = m_pAgents->GetLength ();
+	int iRetryMultiplier = 1;
+	int iRetries=0;
+	for ( auto &dAgent : *m_pAgents )
+	{
+		if ( dAgent.m_eState==AGENT_RETRY )
+		{
+			dAgent.m_dResults.Reset();
+			dAgent.SpecifyAndSelectMirror ();
+			iRetryMultiplier = Max ( iRetryMultiplier, dAgent.NumOfMirrors () );
+			++iRetries;
+		}
+	}
+	if (!iRetries)
+		return 0;
+	sphLogDebugv ( "Found %d agents in state AGENT_RETRY, reschedule them", iRetries );
+	tCtx.m_iRetryMultiplier = iRetryMultiplier;
+	// FIXME! That is rescheduled retries; need to calculate them more accurately
+	// (i.e., if it is value 5, and it were 4 unsuccessfull tries to connect,
+	// then now we have to set it to 5-4, not to 5 again.
+	tCtx.m_iRetriesMax = m_iRetryMax * tCtx.m_iRetryMultiplier;
+	tCtx.m_pfn = ThdWorkSequental;
+	m_pWorkerPool->Push ( tCtx );
+	m_pWorkerPool->AddWorksCount ( 1 );
+	return iRetries;
 }
 
 ISphRemoteAgentsController* GetAgentsController ( int iThreads, CSphVector<AgentConn_t> & dAgents,

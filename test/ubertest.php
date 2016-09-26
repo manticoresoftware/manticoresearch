@@ -45,6 +45,7 @@ if ( !is_array($args) || empty($args) )
 	print ( "--skip-indexer\t\tskip DB creation and indexer stages and go directly to queries/custom tests\n");
 	print ( "--rt\t\t\ttest RT backend (auto-convert all local indexes)\n" );
 	print ( "--no-drop-db\t\tKeep test db tables after the test (for debugging)\n");
+	print ( "--keep-all\t\tKeep test db and all test data (like generated configs, etc.) after the test (for debugging)\n");
 	print ( "--no-demo\t\tJust skip all tests without models. Else - run them, but never fail (for debugging)\n");
 	print ( "--no-marks\t\tDon't mark the output of every test in the logs.\n");
 	print ( "--ignore-weights\tIgnore differences in weights. (Useful for testing that reference database changes are ok.)\n" );
@@ -95,6 +96,7 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="--strict-verbose" )			{ $g_strict = true; $g_strictverbose = true; }
 	else if ( $arg=="--ignore-weights" )			$g_ignore_weights = true;
 	else if ( $arg=="--no-drop-db" )				$locals['no_drop_db'] = true;
+	else if ( $arg=="--keep-all" )					$locals['keep_all'] = true;
 	else if ( $arg=="--no-demo" )					$g_skipdemo = true;
 	else if ( $arg=="--no-marks" )					$g_usemarks = false;
 	else if ( $arg=="--cwd" )						chdir ( DIRNAME ( __FILE__ ) );
@@ -272,24 +274,24 @@ foreach ( $tests as $test )
 }
 
 // cleanup
-@unlink ( "config.conf" );
-@unlink ( "error.txt" );
-
-$nfile = 1;
-while ( file_exists ( "config_$nfile.conf" ) )
+if ( !array_key_exists ('keep_all', $g_locals) )
 {
-	@unlink ( "config_$nfile.conf" );
-	$nfile++;
-}
+	@unlink("config.conf");
+	@unlink("error.txt");
 
-$nfile = 1;
-while ( file_exists ( "error_$nfile.txt" ) )
-{
-	// FIXME? not when there were actual errors?
-	@unlink ( "error_$nfile.txt" );
-	$nfile++;
-}
+	$nfile = 1;
+	while (file_exists("config_$nfile.conf")) {
+		@unlink("config_$nfile.conf");
+		$nfile++;
+	}
 
+	$nfile = 1;
+	while (file_exists("error_$nfile.txt")) {
+		// FIXME? not when there were actual errors?
+		@unlink("error_$nfile.txt");
+		$nfile++;
+	}
+}
 // summarize
 if ( $total_tests_failed )
 {

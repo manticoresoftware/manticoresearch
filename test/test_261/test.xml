@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>php mysql specific behavior (PHP5)</name>
+
+<requires><php_mysql /></requires>
+
+<config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	max_filter_values 	= 500000
+	max_packet_size 	= 18M
+	dist_threads			= 4
+	read_timeout			= 1
+	workers = threads
+}
+
+source src1
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, group_id, title, mva FROM test_table
+	sql_attr_uint	= group_id
+	sql_attr_multi = uint mva from field
+}
+
+index block1
+{
+	source			= src1
+	path			= <data_path/>/block1
+	docinfo			= extern
+	min_word_len	= 1
+}
+
+index rt
+{
+	type = rt
+	path			= <data_path/>/rt
+	docinfo = extern
+	rt_mem_limit = 128k
+	rt_field		= title
+	rt_attr_uint	= gid
+}
+</config>
+
+<custom_test>
+<![CDATA[
+$results = array ();
+
+// regression crash on SphinxQL empty query
+global $g_locals, $sd_address, $sd_sphinxql_port;
+$sockStr = "$sd_address:$sd_sphinxql_port";
+if ($sd_address == "localhost")
+	$sockStr = "127.0.0.1:$sd_sphinxql_port";
+$sock1 = @mysql_connect (
+	$sockStr,
+	$g_locals['db-user'],
+	$g_locals['db-password'] ,
+	true );
+if ( $sock1 === false )
+	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock1 ) . " : " . @mysql_error ( $sock1 );
+$results[] = @mysql_query( "", $sock1 );
+$results[] = @mysql_error ( $sock1 );
+
+]]></custom_test>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id			INTEGER PRIMARY KEY NOT NULL AUTO_INCREMENT,
+	group_id	INTEGER NOT NULL,
+	title		VARCHAR(255) NOT NULL,
+	mva		VARCHAR(255) NOT NULL
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table ( id, group_id, title, mva ) VALUES 
+( 1, 1, 'test one', '10 11' ),
+( 2, 1, 'test two', '10 11' ),
+( 3, 2, 'test three', '10 11' ),
+( 4, 2, 'test four', '10 11' )
+</db_insert>
+
+</test>

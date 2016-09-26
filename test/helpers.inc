@@ -2995,11 +2995,10 @@ function CopyDirContents ( $from, $to )
 
 function CheckConfig ( $config, $path )
 {
-	global $g_id64, $g_re2, $g_rlp, $g_odbc, $windows, $g_locals;
+	global $g_id64, $g_re2, $g_rlp, $g_odbc, $windows, $g_locals, $mysql_simulated;
 	
-	if ( $config->Requires("id64") && !$g_id64 )
-	{
-		printf ( "SKIPPING %s, %s - enable id64 to run this test\n", $path, $config->Name () );
+	if ( $config->Requires("id64") && !$g_id64 ) {
+		printf("SKIPPING %s, %s - enable id64 to run this test\n", $path, $config->Name());
 		return false;
 	}
 
@@ -3046,6 +3045,12 @@ function CheckConfig ( $config, $path )
             return false;
         }
     }
+
+	if ( $config->Requires("php_mysql") && $mysql_simulated )
+	{
+		printf ( "SKIPPING %s, %s - need php_mysql (not simulated by mysqli) to run this test\n", $path, $config->Name () );
+		return false;
+	}
 
 	if ( $config->NeedIndexerEx() && $config->IsRt() )
 	{

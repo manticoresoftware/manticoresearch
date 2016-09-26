@@ -1470,7 +1470,7 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 					if ( sphSockRecv ( tAgent.m_iSock, (char*)&tReplyHeader, sizeof(tReplyHeader) )!=sizeof(tReplyHeader) )
 					{
 						// bail out if failed						
-						tAgent.Fail ( eNetworkErrors, "failed to receive reply headerr" );
+						tAgent.Fail ( eNetworkErrors, "failed to receive reply header" );
 						break;
 					}
 
@@ -1481,7 +1481,8 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 					// check the packet
 					if ( tReplyHeader.m_iLength<0 || tReplyHeader.m_iLength>g_iMaxPacketSize ) // FIXME! add reasonable max packet len too
 					{
-						tAgent.Fail ( eWrongReplies, "invalid packet size (status=%d, len=%d, max_packet_size=%d)",
+						agent_stats_inc ( tAgent, eWrongReplies );
+						tAgent.m_sFailure.SetSprintf ( "invalid packet size (status=%d, len=%d, max_packet_size=%d)",
 							tReplyHeader.m_iStatus, tReplyHeader.m_iLength, g_iMaxPacketSize );
 						break;
 					}

@@ -2550,16 +2550,21 @@ bool CSphDynamicLibrary::LoadSymbols ( const char **, void ***, int ) { return f
 void RebalanceWeights ( const CSphFixedVector<int64_t> & dTimers, WORD * pWeights )
 {
 	assert ( dTimers.GetLength () );
-	int64_t iSum = 0;
+	float fSum = 0.0;
 	int iCounters = 0;
-	for ( auto iTime : dTimers )
+
+	// weights are proportional to frequencies (inverse to timers)
+	CSphFixedVector<float> dFrequencies ( dTimers.GetLength() );
+	ARRAY_FOREACH ( i, dTimers )
+	if ( dTimers[i]>0 )
 	{
-		iSum += iTime;
-		iCounters += ( iTime>0 );
+		dFrequencies[i] = (float)1000/dTimers[i];
+		fSum += dFrequencies[i];
+		++iCounters;
 	}
 
 	// no statistics, all timers bad, keep previous weights
-	if ( iSum<=0 )
+	if ( fSum<=0 )
 		return;
 
 	// in case of mirror without response still set small probability to it
@@ -2568,10 +2573,10 @@ void RebalanceWeights ( const CSphFixedVector<int64_t> & dTimers, WORD * pWeight
 
 	// balance weights
 	int64_t iCheck = 0;
-	ARRAY_FOREACH ( i, dTimers )
+	ARRAY_FOREACH ( i, dFrequencies )
 	{
 		// mirror weight is inverse of timer \ query time
-		float fWeight = 1.0f - (float)dTimers[i] / iSum;
+		float fWeight = dFrequencies[i] / fSum;
 
 		// subtract coef-empty percent to get sum eq to 1.0
 		if ( iEmpties )

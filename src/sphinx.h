@@ -819,7 +819,7 @@ struct CSphWordforms
 	~CSphWordforms ();
 
 	bool						IsEqual ( const CSphVector<CSphSavedFile> & dFiles );
-	bool						ToNormalForm ( BYTE * pWord, bool bBefore ) const;
+	bool						ToNormalForm ( BYTE * pWord, bool bBefore, bool bOnlyCheck ) const;
 };
 
 

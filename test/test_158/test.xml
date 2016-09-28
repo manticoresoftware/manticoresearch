@@ -49,6 +49,22 @@ index rt2
 	rt_attr_uint	= gid
 	rt_field		= body
 }
+
+index rt_ru_en
+{
+	type 			= rt
+	path			= <data_path/>/rt_ru_en
+	rt_mem_limit	= 8M
+
+	charset_table 	= english, _, 0..9, russian
+	morphology 		= stem_en, lemmatize_ru_all
+	index_exact_words = 1
+
+	rt_attr_uint	= gid
+	rt_field		= body
+	
+	wordforms		= <this_test/>/wf158.txt
+}
 </config>
 
 <sphqueries>
@@ -67,6 +83,11 @@ index rt2
 <sphinxql>insert into rt2 ( id, gid, body ) values ( 3, 3, ' канада всегда пухнет 1 доллар' )</sphinxql>
 <sphinxql>select id from rt2 where match('( (" канада 1 доллар 1987"/3 ) )') order by id asc</sphinxql>
 <sphinxql>show meta</sphinxql>
+
+<!-- regression multi-wordforms got stemmed  -->
+<sphinxql>insert into rt_ru_en ( id, gid, body ) values ( 1, 1, 'Тодун Натья. «Back to black» Amy Winehouse. Х-фактор 6.' )</sphinxql>
+<sphinxql>select id from rt_ru_en where match(' эми уайнхаус ') order by id asc</sphinxql>
+<sphinxql>select id from rt_ru_en where match(' amy winehouse ') order by id asc</sphinxql>
 </sphqueries>
 
 </test>

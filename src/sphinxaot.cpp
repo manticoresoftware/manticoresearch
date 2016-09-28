@@ -1517,7 +1517,7 @@ public:
 				m_iCurrent = -1;
 
 			if ( m_pWordforms && m_pWordforms->m_bHavePostMorphNF )
-				m_pWordforms->ToNormalForm ( m_sToken, false );
+				m_pWordforms->ToNormalForm ( m_sToken, false, false );
 
 			m_eTokenMorph = SPH_TOKEN_MORPH_GUESS;
 			return m_sToken;
@@ -1534,7 +1534,7 @@ public:
 			return pToken;
 
 		// pass-through matched wordforms
-		if ( m_pWordforms && m_pWordforms->ToNormalForm ( pToken, true ) )
+		if ( m_pWordforms && m_pWordforms->ToNormalForm ( pToken, true, false ) )
 			return pToken;
 
 		// pass-through 1-char "words"
@@ -1587,7 +1587,7 @@ public:
 
 		// suddenly, post-morphology wordforms
 		if ( m_pWordforms && m_pWordforms->m_bHavePostMorphNF )
-			m_pWordforms->ToNormalForm ( pToken, false );
+			m_pWordforms->ToNormalForm ( pToken, false, false );
 
 		m_eTokenMorph = SPH_TOKEN_MORPH_GUESS;
 		return pToken;
@@ -1644,7 +1644,7 @@ public:
 				m_iCurrent = -1;
 
 			if ( m_pWordforms && m_pWordforms->m_bHavePostMorphNF )
-				m_pWordforms->ToNormalForm ( m_sToken, false );
+				m_pWordforms->ToNormalForm ( m_sToken, false, false );
 
 			m_eTokenMorph = SPH_TOKEN_MORPH_GUESS;
 			return m_sToken;
@@ -1661,7 +1661,7 @@ public:
 			return pToken;
 
 		// pass-through matched wordforms
-		if ( m_pWordforms && m_pWordforms->ToNormalForm ( pToken, true ) )
+		if ( m_pWordforms && m_pWordforms->ToNormalForm ( pToken, true, false ) )
 			return pToken;
 
 		// pass-through 1-char "words"
@@ -1732,7 +1732,7 @@ public:
 
 		// suddenly, post-morphology wordforms
 		if ( m_pWordforms && m_pWordforms->m_bHavePostMorphNF )
-			m_pWordforms->ToNormalForm ( pToken, false );
+			m_pWordforms->ToNormalForm ( pToken, false, false );
 
 		m_eTokenMorph = SPH_TOKEN_MORPH_GUESS;
 		return pToken;

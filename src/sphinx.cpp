@@ -18949,7 +18949,7 @@ static void TransformAotFilterKeyword ( XQNode_t * pNode, const XQKeyword_t & tK
 		// OPTIMIZE? forms that are not found will (?) get looked up again in the dict
 		char sBuf [ MAX_KEYWORD_BYTES ];
 		strncpy ( sBuf, tKeyword.m_sWord.cstr(), sizeof(sBuf) );
-		if ( pWordforms->ToNormalForm ( (BYTE*)sBuf, true ) )
+		if ( pWordforms->ToNormalForm ( (BYTE*)sBuf, true, false ) )
 		{
 			if ( !pNode->m_dWords.GetLength() )
 				pNode->m_dWords.Add ( tKeyword );
@@ -18981,7 +18981,7 @@ static void TransformAotFilterKeyword ( XQNode_t * pNode, const XQKeyword_t & tK
 		ARRAY_FOREACH ( i, dLemmas )
 		{
 			strncpy ( sBuf, dLemmas[i].cstr(), sizeof(sBuf) );
-			if ( pWordforms->ToNormalForm ( (BYTE*)sBuf, false ) )
+			if ( pWordforms->ToNormalForm ( (BYTE*)sBuf, false, false ) )
 				dLemmas[i] = sBuf;
 		}
 	}
@@ -21332,7 +21332,7 @@ bool CSphWordforms::IsEqual ( const CSphVector<CSphSavedFile> & dFiles )
 }
 
 
-bool CSphWordforms::ToNormalForm ( BYTE * pWord, bool bBefore ) const
+bool CSphWordforms::ToNormalForm ( BYTE * pWord, bool bBefore, bool bOnlyCheck ) const
 {
 	int * pIndex = m_dHash ( (char *)pWord );
 	if ( !pIndex )
@@ -21346,6 +21346,9 @@ bool CSphWordforms::ToNormalForm ( BYTE * pWord, bool bBefore ) const
 
 	if ( m_dNormalForms[*pIndex].m_sWord.IsEmpty() )
 		return false;
+
+	if ( bOnlyCheck )
+		return true;
 
 	strcpy ( (char *)pWord, m_dNormalForms[*pIndex].m_sWord.cstr() ); // NOLINT
 	return true;
@@ -21642,7 +21645,7 @@ void CSphTemplateDictTraits::ApplyStemmers ( BYTE * pWord ) const
 		return;
 
 	// try wordforms
-	if ( !m_bDisableWordforms && m_pWordforms && m_pWordforms->ToNormalForm ( pWord, true ) )
+	if ( m_pWordforms && m_pWordforms->ToNormalForm ( pWord, true, m_bDisableWordforms ) )
 		return;
 
 	// check length
@@ -21654,8 +21657,8 @@ void CSphTemplateDictTraits::ApplyStemmers ( BYTE * pWord ) const
 				break;
 	}
 
-	if ( !m_bDisableWordforms && m_pWordforms && m_pWordforms->m_bHavePostMorphNF )
-		m_pWordforms->ToNormalForm ( pWord, false );
+	if ( m_pWordforms && m_pWordforms->m_bHavePostMorphNF )
+		m_pWordforms->ToNormalForm ( pWord, false, m_bDisableWordforms );
 }
 
 const CSphMultiformContainer * CSphTemplateDictTraits::GetMultiWordforms () const

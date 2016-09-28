@@ -478,9 +478,9 @@ public:
 class QueryStatContainer_c : public QueryStatContainer_i
 {
 public:
-	virtual void						Add ( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp );
-	virtual void						GetRecord ( int iRecord, QueryStatRecord_t & tRecord ) const;
-	virtual int							GetNumRecords() const;
+	virtual void						Add ( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp ) override;
+	virtual void						GetRecord ( int iRecord, QueryStatRecord_t & tRecord ) const override;
+	virtual int							GetNumRecords() const override;
 
 private:
 	CircularBuffer_T<QueryStatRecord_t>	m_dRecords;
@@ -542,6 +542,7 @@ public:
 #endif
 
 	ServedStats_c &		operator = ( const ServedStats_c & rhs );
+	ServedStats_c &		operator = ( ServedStats_c && rhs );
 
 protected:
 	virtual void		LockStats ( bool /*bReader*/ ) const {};
@@ -579,9 +580,9 @@ public:
 	ServedIndex_c () {}
 	~ServedIndex_c ();
 
-	void				ReadLock () const;
-	void				WriteLock () const;
-	void				Unlock () const;
+	void				ReadLock () const ACQUIRE_SHARED( m_tLock );
+	void				WriteLock () const ACQUIRE( m_tLock );
+	void				Unlock () const UNLOCK_FUNCTION( m_tLock );
 
 	bool				InitLock () const;
 
@@ -618,16 +619,16 @@ public:
 	bool					Add ( const ServedDesc_t & tDesc, const CSphString & tKey );
 	bool					Delete ( const CSphString & tKey );
 
-	ServedIndex_c *			GetRlockedEntry ( const CSphString & tKey ) const;
-	ServedIndex_c *			GetWlockedEntry ( const CSphString & tKey ) const;
-	ServedIndex_c &			GetUnlockedEntry ( const CSphString & tKey ) const;
-	ServedIndex_c *			GetUnlockedEntryPtr ( const CSphString & tKey ) const;
+	ServedIndex_c *			GetRlockedEntry ( const CSphString & tKey ) const EXCLUDES (m_tLock);
+	ServedIndex_c *			GetWlockedEntry ( const CSphString & tKey ) const EXCLUDES (m_tLock);
+	ServedIndex_c &			GetUnlockedEntry ( const CSphString & tKey ) const EXCLUDES ( m_tLock );
+	ServedIndex_c *			GetUnlockedEntryPtr ( const CSphString & tKey ) const EXCLUDES ( m_tLock );
 	bool					Exists ( const CSphString & tKey ) const;
 
 protected:
-	void					Rlock () const;
-	void					Wlock () const;
-	void					Unlock () const;
+	void					Rlock () const ACQUIRE_SHARED( m_tLock );
+	void					Wlock () const ACQUIRE( m_tLock );
+	void					Unlock () const UNLOCK_FUNCTION ( m_tLock );
 
 private:
 	mutable CSphRwlock		m_tLock;

@@ -239,21 +239,19 @@ public:
 
 	void Flush ( CSphVector<SphDocID_t> & dKlist )
 	{
-		m_tLock.ReadLock();
+		{
+			CSphScopedRLock tRguard ( m_tLock );
+			bool bGotHash = (m_hSmallKlist.GetLength ()>0);
+			if ( !bGotHash )
+				NakedCopy ( dKlist );
 
-		bool bGotHash = ( m_hSmallKlist.GetLength()>0 );
-		if ( !bGotHash )
-			NakedCopy ( dKlist );
+			if ( !bGotHash )
+				return;
+		}
 
-		m_tLock.Unlock();
-
-		if ( !bGotHash )
-			return;
-
-		m_tLock.WriteLock();
+		CSphScopedWLock tWguard ( m_tLock );
 		NakedFlush ( NULL, 0 );
 		NakedCopy ( dKlist );
-		m_tLock.Unlock();
 	}
 
 	inline void Add ( SphDocID_t * pDocs, int iCount )
@@ -261,7 +259,7 @@ public:
 		if ( !iCount )
 			return;
 
-		m_tLock.WriteLock();
+		CSphScopedWLock tWlock ( m_tLock );
 		if ( m_hSmallKlist.GetLength()+iCount>=MAX_SMALL_SIZE )
 		{
 			NakedFlush ( pDocs, iCount );
@@ -270,14 +268,12 @@ public:
 			while ( iCount-- )
 				m_hSmallKlist.Add ( true, *pDocs++ );
 		}
-		m_tLock.Unlock();
 	}
 
 	bool Exists ( SphDocID_t uDoc )
 	{
-		m_tLock.ReadLock();
+		CSphScopedRLock tRguard ( m_tLock );
 		bool bGot = ( m_hSmallKlist.Exists ( uDoc ) || m_dLargeKlist.BinarySearch ( uDoc )!=NULL );
-		m_tLock.Unlock();
 		return bGot;
 	}
 
@@ -1084,7 +1080,7 @@ private:
 };
 
 
-struct SphChunkGuard_t
+struct SCOPED_CAPABILITY SphChunkGuard_t
 {
 	CSphFixedVector<const RtSegment_t *>	m_dRamChunks;
 	CSphFixedVector<const CSphIndex *>		m_dDiskChunks;
@@ -3355,7 +3351,7 @@ struct Checkpoint_t
 };
 
 
-void RtIndex_t::ForceDiskChunk ()
+void RtIndex_t::ForceDiskChunk () NO_THREAD_SAFETY_ANALYSIS
 {
 	MEMORY ( MEM_INDEX_RT );
 
@@ -6905,7 +6901,7 @@ struct SphRtFinalMatchCalc_t : ISphMatchProcessor, ISphNoncopyable
 };
 
 
-void RtIndex_t::GetReaderChunks ( SphChunkGuard_t & tGuard ) const
+void RtIndex_t::GetReaderChunks ( SphChunkGuard_t & tGuard ) const NO_THREAD_SAFETY_ANALYSIS
 {
 	if ( !m_dRamChunks.GetLength() && !m_dDiskChunks.GetLength() )
 		return;

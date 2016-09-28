@@ -1109,6 +1109,22 @@ CSphMutex::~CSphMutex ()
 		sphDie ( "CloseHandle() failed" );
 }
 
+CSphMutex::CSphMutex (CSphMutex&& rhs)
+	: m_hMutex { rhs.m_hMutex }
+{
+	rhs.m_hMutex = NULL;
+}
+
+CSphMutex& CSphMutex::operator= (CSphMutex&& rhs)
+{
+	if ( &rhs!=this )
+	{
+		m_hMutex = std::move(rhs.m_hMutex);
+		rhs.m_hMutex = NULL;
+	}
+	return *this;
+}
+
 bool CSphMutex::Lock ()
 {
 	DWORD uWait = WaitForSingleObject ( m_hMutex, INFINITE );
@@ -1204,19 +1220,42 @@ bool CSphSemaphore::Wait()
 
 // UNIX mutex implementation
 
-CSphMutex::CSphMutex() {
-	if ( pthread_mutex_init ( &m_tMutex, NULL ) )
+CSphMutex::CSphMutex()
+{
+	m_pMutex = new pthread_mutex_t;
+	if ( pthread_mutex_init ( m_pMutex, NULL ) )
 		sphDie ( "pthread_mutex_init() failed %s", strerror ( errno ) );
 }
 
 CSphMutex::~CSphMutex() {
-	if ( pthread_mutex_destroy ( &m_tMutex ) )
+	if ( pthread_mutex_destroy ( m_pMutex ) )
 		sphDie ( "pthread_mutex_destroy() failed %s", strerror ( errno ) );
+	SafeDelete(m_pMutex);
 }
+
+CSphMutex::CSphMutex(CSphMutex&& rhs)
+	: m_pMutex { std::move (rhs.m_pMutex)}
+{
+	rhs.m_pMutex = nullptr;
+}
+
+CSphMutex& CSphMutex::operator= ( CSphMutex &&rhs )
+{
+	if (&rhs!=this)
+	{
+		if ( m_pMutex && pthread_mutex_destroy ( m_pMutex ) )
+			sphDie ( "pthread_mutex_destroy() failed %s", strerror ( errno ) );
+		SafeDelete ( m_pMutex );
+		m_pMutex = std::move(rhs.m_pMutex);
+		rhs.m_pMutex = nullptr;
+	}
+	return *this;
+}
+
 
 bool CSphMutex::Lock ()
 {
-	return ( pthread_mutex_lock ( &m_tMutex )==0 );
+	return ( pthread_mutex_lock ( m_pMutex )==0 );
 }
 
 bool CSphMutex::TimedLock ( int iMsec )
@@ -1231,7 +1270,7 @@ bool CSphMutex::TimedLock ( int iMsec )
 	ts.tv_sec += ( ns / 1000000000 ) + ( iMsec / 1000 );
 	ts.tv_nsec = ( ns % 1000000000 );
 
-	int iRes = pthread_mutex_timedlock ( &m_tMutex, &ts );
+	int iRes = pthread_mutex_timedlock ( m_pMutex, &ts );
 	return iRes==0;
 
 #else
@@ -1239,13 +1278,13 @@ bool CSphMutex::TimedLock ( int iMsec )
 	int64_t tmTill = sphMicroTimer () + iMsec;
 	do
 	{
-		iRes = pthread_mutex_trylock ( &m_tMutex );
+		iRes = pthread_mutex_trylock ( m_pMutex );
 		if ( iRes!=EBUSY )
 			break;
 		sphSleepMsec ( 1 );
 	} while ( sphMicroTimer ()<tmTill );
 	if ( iRes==EBUSY )
-		iRes = pthread_mutex_trylock ( &m_tMutex );
+		iRes = pthread_mutex_trylock ( m_pMutex );
 
 	return iRes!=EBUSY;
 
@@ -1254,7 +1293,7 @@ bool CSphMutex::TimedLock ( int iMsec )
 
 bool CSphMutex::Unlock ()
 {
-	return ( pthread_mutex_unlock ( &m_tMutex )==0 );
+	return ( pthread_mutex_unlock ( m_pMutex )==0 );
 }
 
 bool CSphAutoEvent::Init ( CSphMutex * pMutex )
@@ -1351,6 +1390,44 @@ bool CSphSemaphore::Wait ()
 //////////////////////////////////////////////////////////////////////////
 // RWLOCK
 //////////////////////////////////////////////////////////////////////////
+
+CSphRwlock::CSphRwlock ( CSphRwlock&& rhs )
+	: m_bInitialized ( rhs.m_bInitialized )
+{
+#if USE_WINDOWS
+	m_hWriteMutex = rhs.m_hWriteMutex;
+	rhs.m_hWriteMutex = INVALID_HANDLE_VALUE;
+	m_hReadEvent = rhs.m_hReadEvent;
+	rhs.m_hReadEvent = INVALID_HANDLE_VALUE;
+	m_iReaders = rhs.m_iReaders;
+#else
+	m_pLock = rhs.m_pLock;
+	rhs.m_pLock = nullptr;
+#endif
+}
+
+CSphRwlock& CSphRwlock::operator= ( CSphRwlock&& rhs )
+{
+	if ( this!=&rhs )
+	{
+		Done ();
+		m_bInitialized = rhs.m_bInitialized;
+#if USE_WINDOWS
+		m_hWriteMutex = rhs.m_hWriteMutex;
+		rhs.m_hWriteMutex = INVALID_HANDLE_VALUE;
+		m_hReadEvent = rhs.m_hReadEvent;
+		rhs.m_hReadEvent = INVALID_HANDLE_VALUE;
+		m_iReaders = rhs.m_iReaders;
+#else
+		m_pLock = rhs.m_pLock;
+		rhs.m_pLock = nullptr;
+#endif
+	}
+	return *this;
+}
+
+CSphManagedRwlock &CSphManagedRwlock::operator= ( CSphManagedRwlock &&rhs ) = default;
+CSphManagedRwlock::CSphManagedRwlock ( CSphManagedRwlock&& rhs ) = default;
 
 #if USE_WINDOWS
 
@@ -1480,11 +1557,14 @@ bool CSphRwlock::Unlock ()
 
 CSphRwlock::CSphRwlock ()
 	: m_bInitialized ( false )
-{}
+{
+	m_pLock = new pthread_rwlock_t;
+}
 
 bool CSphRwlock::Init ( bool bPreferWriter )
 {
 	assert ( !m_bInitialized );
+	assert ( m_pLock );
 
 	pthread_rwlockattr_t tAttr;
 	pthread_rwlockattr_t * pAttr = NULL;
@@ -1510,7 +1590,7 @@ bool CSphRwlock::Init ( bool bPreferWriter )
 		break;
 	}
 #endif
-	m_bInitialized = ( pthread_rwlock_init ( &m_tLock, pAttr )==0 );
+	m_bInitialized = ( pthread_rwlock_init ( m_pLock, pAttr )==0 );
 
 	if ( pAttr )
 		pthread_rwlockattr_destroy ( &tAttr );
@@ -1520,32 +1600,36 @@ bool CSphRwlock::Init ( bool bPreferWriter )
 
 bool CSphRwlock::Done ()
 {
+	assert ( m_pLock );
 	if ( !m_bInitialized )
 		return true;
 
-	m_bInitialized = !( pthread_rwlock_destroy ( &m_tLock )==0 );
+	m_bInitialized = !( pthread_rwlock_destroy ( m_pLock )==0 );
 	return !m_bInitialized;
 }
 
 bool CSphRwlock::ReadLock ()
 {
 	assert ( m_bInitialized );
+	assert ( m_pLock );
 
-	return pthread_rwlock_rdlock ( &m_tLock )==0;
+	return pthread_rwlock_rdlock ( m_pLock )==0;
 }
 
 bool CSphRwlock::WriteLock ()
 {
 	assert ( m_bInitialized );
+	assert ( m_pLock );
 
-	return pthread_rwlock_wrlock ( &m_tLock )==0;
+	return pthread_rwlock_wrlock ( m_pLock )==0;
 }
 
 bool CSphRwlock::Unlock ()
 {
 	assert ( m_bInitialized );
+	assert ( m_pLock );
 
-	return pthread_rwlock_unlock ( &m_tLock )==0;
+	return pthread_rwlock_unlock ( m_pLock )==0;
 }
 
 #endif
@@ -1770,6 +1854,19 @@ template<> void CSphAtomic_T<int64_t>::SetValue ( int64_t iValue )
 	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
 	InterlockedExchange64 ( &m_iValue, iValue );
 }
+
+template<> long CSphAtomic_T<long>::CAS ( long iOldVal, long iNewVal )
+{
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	return InterlockedCompareExchange ( &m_iValue, iNewVal, iOldVal );
+}
+
+template<> int64_t CSphAtomic_T<int64_t>::CAS ( int64_t iOldVal, int64_t iNewVal )
+{
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	return InterlockedCompareExchange64 ( &m_iValue, iNewVal, iOldVal );
+}
+
 #endif
 
 // fast check if we are built with right endianess settings

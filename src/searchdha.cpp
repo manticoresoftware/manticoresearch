@@ -29,7 +29,7 @@ DWORD			g_uHAPeriodKarma	= 60;		// by default use the last 1 minute statistic to
 
 int				g_iPersistentPoolSize	= 0;
 
-CSphString AgentDesc_c::GetMyUrl() const
+CSphString HostUrl_c::GetMyUrl() const
 {
 	CSphString sName;
 	switch ( m_iFamily )
@@ -40,14 +40,19 @@ CSphString AgentDesc_c::GetMyUrl() const
 	return sName;
 }
 
-
-void HostDashboard_t::Init ( const AgentDesc_c * pAgent )
+HostDashboard_t::HostDashboard_t ( const HostUrl_c * pAgent )
+	: m_tDescriptor ( *pAgent )
+	, m_bNeedPing ( false )
+	, m_iErrorsARow ( 0 )
+	, m_pPersPool (nullptr)
 {
 	m_iRefCount = 1;
-	m_iLastQueryTime = m_iLastAnswerTime = sphMicroTimer() - g_iPingInterval*1000;
-	m_iErrorsARow = 0;
-	m_tDescriptor = *pAgent;
-	m_bNeedPing = false;
+	m_iLastQueryTime = m_iLastAnswerTime = sphMicroTimer () - g_iPingInterval*1000;
+}
+
+HostDashboard_t::~HostDashboard_t ()
+{
+	SafeDelete ( m_pPersPool );
 }
 
 bool HostDashboard_t::IsOlder ( int64_t iTime ) const
@@ -84,10 +89,10 @@ AgentDash_t*	HostDashboard_t::GetCurrentStat()
 	return &dStats;
 }
 
-AgentDash_t HostDashboard_t::GetCollectedStat ( int iPeriods ) const
+void HostDashboard_t::GetCollectedStat ( HostStatSnapshot_t& dResult, int iPeriods ) const
 {
-	AgentDash_t tResult;
-	tResult.Reset ();
+	AgentDash_t tAccum;
+	tAccum.Reset ();
 
 	DWORD uSeconds = GetCurSeconds();
 	if ( (uSeconds % g_uHAPeriodKarma) < (g_uHAPeriodKarma/2) )
@@ -97,76 +102,133 @@ AgentDash_t HostDashboard_t::GetCollectedStat ( int iPeriods ) const
 
 	DWORD uTime = uSeconds/g_uHAPeriodKarma;
 	int iIdx = uTime % STATS_DASH_TIME;
-	// pRes->m_uTimestamp = uTime;
+
+	CSphScopedRLock tRguard ( m_dDataLock );
 
 	for ( ; iPeriods>0 ; --iPeriods )
 	{
 		const AgentDash_t & dStats = m_dStats[iIdx];
 		if ( dStats.m_uTimestamp==uTime ) // it might be no queries at all in the fixed time
-			tResult.Add ( dStats );
+			tAccum.Add ( dStats );
 		--uTime;
 		--iIdx;
 		if ( iIdx<0 )
 			iIdx = STATS_DASH_TIME-1;
 	}
-	return tResult;
+	for ( int i = 0; i<eMaxAgentStat; ++i )
+		dResult[i] = tAccum.m_dStats[i].GetValue ();
+	for ( int i = 0; i<ehMaxStat; ++i )
+		dResult[i+eMaxAgentStat] = tAccum.m_dHostStats[i];
 }
 
-static CSphVector<int>	g_dPersistentConnections; // protect by CSphScopedLock<ThreadsOnlyMutex_t> tLock ( g_tPersLock );
-CSphMutex				g_tPersLock;
+PersistentConnectionsPool_t::PersistentConnectionsPool_t ()
+	: m_bShutdown (false)
+	, m_iRit (0)
+	, m_iWit (0)
+	, m_iFreeWindow (0)
+{}
 
-
-int RentPersistent_c::RentConnection ()
+void PersistentConnectionsPool_t::Init ( int iPoolSize )
 {
-	// for the moment we try to return already connected socket.
-	CSphScopedLock<CSphMutex> tLock ( g_tPersLock );
-	int* pFree = &g_dPersistentConnections[m_iPersPool];
-	if ( *pFree==-1 ) // fresh pool, just cleared. All slots are free
-		*pFree = g_iPersistentPoolSize;
-	if ( !*pFree )
-		return -2; // means 'no free slots'
-	int iSocket = g_dPersistentConnections[m_iPersPool+*pFree];
-	g_dPersistentConnections[m_iPersPool+*pFree] = -1;
-	--(*pFree);
-	return iSocket;
+	CGuard tGuard ( m_dDataLock );
+	for ( int i = 0; i<( m_dSockets.GetLength ()-m_iFreeWindow ); ++i )
+	{
+		int iSock = m_dSockets[Step ( &m_iRit )];
+		if ( iSock>=0 )
+			sphSockClose ( iSock );
+	}
+	m_dSockets.Reset ();
+	m_dSockets.Reserve ( iPoolSize );
+	m_iRit = m_iWit = m_iFreeWindow = 0;
 }
 
-void RentPersistent_c::ReturnConnection ( int iSocket )
+// move the iterator to the next item, or loop the ring.
+int PersistentConnectionsPool_t::Step ( int* pVar )
 {
-	// for the moment we try to return already connected socket.
-	CSphScopedLock<CSphMutex> tLock ( g_tPersLock );
-	int* pFree = &g_dPersistentConnections[m_iPersPool];
-	assert ( *pFree<g_iPersistentPoolSize );
-	if ( *pFree==g_iPersistentPoolSize )
+	assert ( pVar );
+	int iRes = *pVar++;
+	if ( *pVar>=m_dSockets.GetLength () )
+		*pVar = 0;
+	return iRes;
+}
+
+// Rent first try to return the sockets which already were in work (i.e. which are connected)
+// If no such socket available and the limit is not reached, it will add the new one.
+int PersistentConnectionsPool_t::RentConnection ()
+{
+	CGuard tGuard ( m_dDataLock );
+	if ( m_iFreeWindow>0 )
+	{
+		--m_iFreeWindow;
+		return m_dSockets[Step ( &m_iRit )];
+	}
+	if ( m_dSockets.GetLength () == m_dSockets.GetLimit () )
+		return -2; // no more slots available;
+
+	// this branch will be executed only during initial 'heating'
+	m_dSockets.Add ( -1 );
+	return -1;
+}
+
+void PersistentConnectionsPool_t::ReturnConnection ( int iSocket )
+{
+	CGuard tGuard ( m_dDataLock );
+
+	// overloaded pool
+	if ( m_iFreeWindow >= m_dSockets.GetLength () )
+	{
+		// no place at all (i.e. if pool was resized, but some sockets rented before,
+		// and now they are returned, but we have no place for them)
+		if ( m_dSockets.GetLength () == m_dSockets.GetLimit () )
+		{
+			sphSockClose ( iSocket );
+			return;
+		}
+		// add the place for one more returned socket
+		m_dSockets.Add ();
+		m_iWit = m_dSockets.GetLength ()-1;
+	}
+	++m_iFreeWindow;
+	if ( m_bShutdown )
 	{
 		sphSockClose ( iSocket );
-		return;
+		iSocket = -1;
 	}
-	++(*pFree);
-	g_dPersistentConnections[m_iPersPool+*pFree] = iSocket;
+	// if there were no free sockets until now, point the reading iterator to just released socket
+	if ( m_iFreeWindow==1 )
+		m_iRit = m_iWit;
+	m_dSockets[Step ( &m_iWit )] = iSocket;
 }
 
-void ResizePersistentConnectionsPool ( int iSize )
+// close all the sockets in the pool.
+void PersistentConnectionsPool_t::Shutdown ()
 {
-	g_dPersistentConnections.Resize ( iSize );
-	ARRAY_FOREACH ( i, g_dPersistentConnections )
-		g_dPersistentConnections[i] = -1; // means "Not in use"
+	CGuard tGuard ( m_dDataLock );
+	m_bShutdown = true;
+	for ( int i = 0; i<( m_dSockets.GetLength ()-m_iFreeWindow ); ++i )
+	{
+		int& iSock = m_dSockets[Step ( &m_iRit )];
+		if ( iSock>=0 )
+		{
+			sphSockClose ( iSock );
+			iSock = -1;
+		}
+	}
 }
 
 void ClosePersistentSockets()
 {
-	CSphScopedLock<CSphMutex> tLock ( g_tPersLock );
-	ARRAY_FOREACH ( i, g_dPersistentConnections )
+	CSphVector<GuardedHostDashboard_t > dHosts;
+	g_tDashes.GetActiveDashes ( dHosts );
+	for ( auto& tHost : dHosts )
 	{
-		if ( ( i % g_iPersistentPoolSize ) && g_dPersistentConnections[i]>=0 )
-			sphSockClose ( g_dPersistentConnections[i] );
-		g_dPersistentConnections[i] = -1;
+		if ( tHost.RawPtr()->m_pPersPool )
+			tHost.RawPtr()->m_pPersPool->Shutdown ();
 	}
 }
 
 //////////////////////////////////////////////////////////////////////////
-
-void MetaAgentDesc_t::SetOptions ( const AgentOptions_t& tOpt )
+void MultiAgentDesc_t::SetOptions ( const AgentOptions_t& tOpt )
 {
 	m_eStrategy = tOpt.m_eStrategy;
 	for ( auto& dHost : m_dHosts )
@@ -176,7 +238,7 @@ void MetaAgentDesc_t::SetOptions ( const AgentOptions_t& tOpt )
 	}
 }
 
-void MetaAgentDesc_t::FinalizeInitialization ()
+void MultiAgentDesc_t::FinalizeInitialization ()
 {
 	if ( IsHA () )
 	{
@@ -187,43 +249,45 @@ void MetaAgentDesc_t::FinalizeInitialization ()
 	}
 }
 
-AgentDesc_c * MetaAgentDesc_t::GetAgent ( int iAgent )
+AgentDesc_c * MultiAgentDesc_t::GetAgent ( int iAgent )
 {
 	assert ( iAgent>=0 );
 	return &m_dHosts[iAgent];
 }
 
-AgentDesc_c * MetaAgentDesc_t::NewAgent()
+AgentDesc_c * MultiAgentDesc_t::NewAgent()
 {
 	AgentDesc_c & tAgent = m_dHosts.Add();
 	return & tAgent;
 }
 
-AgentDesc_c * MetaAgentDesc_t::RRAgent ()
+AgentDesc_c * MultiAgentDesc_t::RRAgent ()
 {
 	if ( !IsHA() )
 		return GetAgent(0);
 
-	auto iRRCounter = m_iRRCounter.Inc ();
-	if ( iRRCounter<0 || iRRCounter> ( GetLength ()-1 ) )
+	int iRRCounter = (int) m_iRRCounter++;
+	while ( iRRCounter<0 || iRRCounter> ( GetLength ()-1 ) )
 	{
-		m_iRRCounter.SetValue ( 1 );
-		iRRCounter = 0;
+		if ( iRRCounter+1 == (int) m_iRRCounter.CAS ( iRRCounter+1, 1 ) )
+			iRRCounter = 0;
+		else
+			iRRCounter = (int) m_iRRCounter++;
 	}
 
 	return GetAgent ( iRRCounter );
 }
 
-AgentDesc_c * MetaAgentDesc_t::RandAgent ()
+AgentDesc_c * MultiAgentDesc_t::RandAgent ()
 {
 	return GetAgent ( sphRand() % GetLength() );
 }
 
-void MetaAgentDesc_t::ChooseWeightedRandAgent ( int * pBestAgent, CSphVector<int> & dCandidates )
+void MultiAgentDesc_t::ChooseWeightedRandAgent ( int * pBestAgent, CSphVector<int> & dCandidates )
 {
-	assert ( IsInitFinished() );
 	assert ( pBestAgent );
-	CSphScopedRWLock tLock ( m_dWeightLock, true );
+	CSphScopedRLock tLock ( m_dWeightLock );
+	assert ( IsInitFinished () );
 	DWORD uBound = m_dWeights[*pBestAgent];
 	DWORD uLimit = uBound;
 	for ( auto j : dCandidates )
@@ -242,11 +306,6 @@ void MetaAgentDesc_t::ChooseWeightedRandAgent ( int * pBestAgent, CSphVector<int
 	}
 }
 
-inline const HostDashboard_t& MetaAgentDesc_t::GetDashForAgent ( int iAgent ) const
-{
-	return g_tStats.m_dDashboard.m_dItemStats[m_dHosts[iAgent].m_iDashIndex];
-}
-
 static void LogAgentWeights ( const WORD * pOldWeights, const WORD * pCurWeights, const int64_t * pTimers, const CSphVector<AgentDesc_c> & dAgents )
 {
 	if ( g_eLogLevel<SPH_LOG_DEBUG )
@@ -256,7 +315,7 @@ static void LogAgentWeights ( const WORD * pOldWeights, const WORD * pCurWeights
 		sphLogDebug ( "client=%s:%d, mirror=%d, weight=%d, %d, timer=" INT64_FMT, dAgents[i].m_sHost.cstr (), dAgents[i].m_iPort, i, pCurWeights[i], pOldWeights[i], pTimers[i] );
 }
 
-AgentDesc_c * MetaAgentDesc_t::StDiscardDead ()
+AgentDesc_c * MultiAgentDesc_t::StDiscardDead ()
 {
 	if ( !IsHA() )
 		return GetAgent(0);
@@ -273,18 +332,20 @@ AgentDesc_c * MetaAgentDesc_t::StDiscardDead ()
 	ARRAY_FOREACH ( i, m_dHosts )
 	{
 		// no locks for g_pStats since we just reading, and read data is not critical.
-		const HostDashboard_t & dDash = GetDashForAgent ( i );
+		const HostDashboard_t * pDash = m_dHosts[i].m_pDash;
 
-		AgentDash_t dDashStat { dDash.GetCollectedStat () }; // look at last 30..90 seconds.
+		HostStatSnapshot_t dDashStat;
+		pDash->GetCollectedStat (dDashStat);// look at last 30..90 seconds.
 		uint64_t uQueries = 0;
-		for ( int j=0; j<eMaxCounters; ++j )
-			uQueries += dDashStat.m_iStats[j];
+		for ( int j=0; j<eMaxAgentStat; ++j )
+			uQueries += dDashStat[j];
 		if ( uQueries > 0 )
-			dTimers[i] = dDashStat.m_iStats[eTotalMsecs]/uQueries;
+			dTimers[i] = dDashStat[ehTotalMsecs]/uQueries;
 		else
 			dTimers[i] = 0;
 
-		int64_t iThisErrARow = ( dDash.m_iErrorsARow<=iDeadThr ) ? 0 : dDash.m_iErrorsARow;
+		CSphScopedRLock tRguard ( pDash->m_dDataLock );
+		int64_t iThisErrARow = ( pDash->m_iErrorsARow<=iDeadThr ) ? 0 : pDash->m_iErrorsARow;
 
 		if ( iErrARow < 0 )
 			iErrARow = iThisErrARow;
@@ -328,6 +389,7 @@ AgentDesc_c * MetaAgentDesc_t::StDiscardDead ()
 		float fAge = 0.0;
 		const char * sLogStr = NULL;
 		const HostDashboard_t & dDash = GetDashForAgent ( iBestAgent );
+		CSphScopedRLock tRguard ( dDash.m_dDataLock );
 		fAge = ( dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime ) / 1000.0f;
 		sLogStr = "client=%s:%d, HA selected %d node by weighted random, with best EaR (" INT64_FMT "), last answered in %.3f milliseconds, among %d candidates";
 		sphLogDebugv ( sLogStr, m_dHosts[iBestAgent].m_sHost.cstr(), m_dHosts[iBestAgent].m_iPort, iBestAgent, iErrARow, fAge, dCandidates.GetLength()+1 );
@@ -337,13 +399,13 @@ AgentDesc_c * MetaAgentDesc_t::StDiscardDead ()
 }
 
 // Check the time and recalculate mirror weights, if necessary.
-void MetaAgentDesc_t::CheckRecalculateWeights ( const CSphFixedVector<int64_t> &dTimers )
+void MultiAgentDesc_t::CheckRecalculateWeights ( const CSphFixedVector<int64_t> &dTimers )
 {
+	CSphScopedWLock tWguard ( m_dWeightLock );
 	if ( IsInitFinished() && dTimers.GetLength () && HostDashboard_t::IsHalfPeriodChanged ( &m_uTimestamp ) )
 	{
 		CSphFixedVector<WORD> dWeights ( GetLength () );
 		// since we'll update values anyway, aquire w-lock.
-		CSphScopedRWLock tRLock ( m_dWeightLock, false );
 		memcpy ( dWeights.Begin (), m_dWeights.Begin (), sizeof ( dWeights[0] ) * dWeights.GetLength () );
 		RebalanceWeights ( dTimers, dWeights.Begin () );
 		LogAgentWeights ( m_dWeights.Begin(), dWeights.Begin (), dTimers.Begin (), m_dHosts );
@@ -351,7 +413,7 @@ void MetaAgentDesc_t::CheckRecalculateWeights ( const CSphFixedVector<int64_t> &
 	}
 }
 
-AgentDesc_c * MetaAgentDesc_t::StLowErrors ()
+AgentDesc_c * MultiAgentDesc_t::StLowErrors ()
 {
 	if ( !IsHA() )
 		return GetAgent(0);
@@ -371,25 +433,26 @@ AgentDesc_c * MetaAgentDesc_t::StLowErrors ()
 		// no locks for g_pStats since we just reading, and read data is not critical.
 		const HostDashboard_t & dDash = GetDashForAgent ( i );
 
-		AgentDash_t dDashStat { dDash.GetCollectedStat () }; // look at last 30..90 seconds.
+		HostStatSnapshot_t dDashStat;
+		dDash.GetCollectedStat (dDashStat); // look at last 30..90 seconds.
 		uint64_t uQueries = 0;
 		uint64_t uCriticalErrors = 0;
 		uint64_t uAllErrors = 0;
 		uint64_t uSuccesses = 0;
-		for ( int j=0; j<eMaxCounters; ++j )
+		for ( int j=0; j<eMaxAgentStat; ++j )
 		{
 			if ( j==eNetworkCritical )
 				uCriticalErrors = uQueries;
 			else if ( j==eNetworkNonCritical )
 			{
 				uAllErrors = uQueries;
-				uSuccesses = dDashStat.m_iStats[j];
+				uSuccesses = dDashStat[j];
 			}
-			uQueries += dDashStat.m_iStats[j];
+			uQueries += dDashStat[j];
 		}
 
 		if ( uQueries > 0 )
-			dTimers[i] = dDashStat.m_iStats[eTotalMsecs]/uQueries;
+			dTimers[i] = dDashStat[ehTotalMsecs]/uQueries;
 		else
 			dTimers[i] = 0;
 
@@ -453,6 +516,7 @@ AgentDesc_c * MetaAgentDesc_t::StLowErrors ()
 		float fAge = 0.0f;
 		const char * sLogStr = NULL;
 		const HostDashboard_t & dDash = GetDashForAgent ( iBestAgent );
+		CSphScopedRLock tRguard ( dDash.m_dDataLock );
 		fAge = ( dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime ) / 1000.0f;
 		sLogStr = "client=%s:%d, HA selected %d node by weighted random, with best error rating (%.2f), answered %f seconds ago";
 		sphLogDebugv ( sLogStr, m_dHosts[iBestAgent].m_sHost.cstr(), m_dHosts[iBestAgent].m_iPort, iBestAgent, fBestCriticalErrors, fAge );
@@ -462,7 +526,7 @@ AgentDesc_c * MetaAgentDesc_t::StLowErrors ()
 }
 
 
-const AgentDesc_c & MetaAgentDesc_t::ChooseAgent ()
+const AgentDesc_c & MultiAgentDesc_t::ChooseAgent ()
 {
 	switch ( m_eStrategy )
 	{
@@ -478,18 +542,16 @@ const AgentDesc_c & MetaAgentDesc_t::ChooseAgent ()
 }
 
 
-void MetaAgentDesc_t::QueuePings()
+void MultiAgentDesc_t::QueuePings()
 {
 	if ( !IsHA() )
 		return;
 
-	g_tStatsMutex.Lock();
 	ARRAY_FOREACH ( i, m_dHosts )
-		g_tStats.m_dDashboard.m_dItemStats[m_dHosts[i].m_iDashIndex].m_bNeedPing = true;
-	g_tStatsMutex.Unlock();
+		m_dHosts[i].m_pDash->m_bNeedPing = true;
 }
 
-MetaAgentDesc_t & MetaAgentDesc_t::operator= ( const MetaAgentDesc_t & rhs )
+MultiAgentDesc_t & MultiAgentDesc_t::operator= ( const MultiAgentDesc_t & rhs )
 {
 	if ( this==&rhs )
 		return *this;
@@ -497,17 +559,31 @@ MetaAgentDesc_t & MetaAgentDesc_t::operator= ( const MetaAgentDesc_t & rhs )
 	m_iRRCounter.SetValue ( rhs.m_iRRCounter.GetValue () );
 	m_eStrategy = rhs.m_eStrategy;
 	m_eStrategy = rhs.m_eStrategy;
+	CSphScopedWLock tWguard ( m_dWeightLock );
+	CSphScopedRLock tRguard ( rhs.m_dWeightLock );
 	if ( rhs.IsInitFinished () )
 	{
-		CSphScopedRWLock _wlock ( m_dWeightLock, false );
 		m_dWeights.Reset ( rhs.GetLength () );
-		CSphScopedRWLock _rlock ( rhs.m_dWeightLock, true );
 		memcpy ( m_dWeights.Begin (), rhs.m_dWeights.Begin (), rhs.GetLength () * sizeof ( WORD ) );
 	} else if ( IsInitFinished() )
-	{
-		CSphScopedRWLock _wlock ( m_dWeightLock, false );
 		m_dWeights.Reset ( 0 );
+	return *this;
+}
+
+MultiAgentDesc_t & MultiAgentDesc_t::operator= ( MultiAgentDesc_t && rhs )
+{
+	if ( this==&rhs )
+		return *this;
+	m_dHosts = std::move(rhs.m_dHosts);
+	m_iRRCounter.SetValue ( rhs.m_iRRCounter.GetValue () );
+	m_eStrategy = rhs.m_eStrategy;
+	m_eStrategy = rhs.m_eStrategy;
+	{
+		CSphScopedWLock tWguard ( m_dWeightLock );
+		CSphScopedRLock tRguard ( rhs.m_dWeightLock );
+		m_dWeights = std::move ( rhs.m_dWeights );
 	}
+	m_dWeightLock = std::move ( rhs.m_dWeightLock );
 	return *this;
 }
 
@@ -537,8 +613,8 @@ AgentConn_t::AgentConn_t ()
 AgentConn_t::~AgentConn_t ()
 {
 	Close ( false );
-	if ( m_bPersistent )
-		m_dPersPool.ReturnConnection ( m_iSock );
+	if ( m_bPersistent && m_pDash->m_pPersPool )
+		m_pDash->m_pPersPool->ReturnConnection ( m_iSock );
 }
 
 void AgentConn_t::Close ( bool bClosePersist )
@@ -559,24 +635,84 @@ void AgentConn_t::Close ( bool bClosePersist )
 	m_iWall += sphMicroTimer ();
 }
 
-AgentConn_t & AgentConn_t::operator = ( const AgentDesc_c & rhs )
+AgentDesc_c & AgentDesc_c::operator = ( const AgentDesc_c & rhs )
 {
-	m_sHost = rhs.m_sHost;
-	m_iPort = rhs.m_iPort;
-	m_sPath = rhs.m_sPath;
-	m_sIndexes = rhs.m_sIndexes;
-	m_bBlackhole = rhs.m_bBlackhole;
-	m_iFamily = rhs.m_iFamily;
-	m_uAddr = rhs.m_uAddr;
-	m_iStatsIndex = rhs.m_iStatsIndex;
-	m_iDashIndex = rhs.m_iDashIndex;
-	m_bPersistent = rhs.m_bPersistent;
-	m_dPersPool = rhs.m_dPersPool;
+	if ( this!=&rhs )
+	{
+		m_sHost = rhs.m_sHost;
+		m_iPort = rhs.m_iPort;
+		m_sPath = rhs.m_sPath;
+		m_iFamily = rhs.m_iFamily;
+
+		m_sIndexes = rhs.m_sIndexes;
+		m_bBlackhole = rhs.m_bBlackhole;
+		m_uAddr = rhs.m_uAddr;
+		m_bPersistent = rhs.m_bPersistent;
+
+		SafeRelease ( m_pStats );
+		SafeRelease ( m_pDash );
+
+		m_pStats = rhs.m_pStats;
+		if ( m_pStats )
+			m_pStats->AddRef ();
+		m_pDash = rhs.m_pDash;
+		if ( m_pDash )
+			m_pDash->AddRef ();
+	}
+
+	return *this;
+}
+AgentDesc_c & AgentDesc_c::operator = ( AgentDesc_c && rhs )
+{
+	if ( this!=&rhs )
+	{
+		m_sHost = std::move(rhs.m_sHost);
+		m_iPort = rhs.m_iPort;
+		m_sPath = std::move(rhs.m_sPath);
+		m_iFamily = rhs.m_iFamily;
+
+		m_sIndexes = std::move(rhs.m_sIndexes);
+		m_bBlackhole = rhs.m_bBlackhole;
+		m_uAddr = rhs.m_uAddr;
+		m_bPersistent = rhs.m_bPersistent;
+
+		SafeRelease ( m_pStats );
+		SafeRelease ( m_pDash );
+
+		m_pStats = rhs.m_pStats;
+		m_pDash = rhs.m_pDash;
+		rhs.m_pStats = nullptr;
+		rhs.m_pDash = nullptr;
+	}
 
 	return *this;
 }
 
-void AgentConn_t::SpecifyAndSelectMirror ( MetaAgentDesc_t * pMirrorChooser )
+AgentDesc_c & AgentDesc_c::operator = ( const HostUrl_c & rhs )
+{
+	if ( this!=&rhs )
+	{
+		m_sHost = rhs.m_sHost;
+		m_iPort = rhs.m_iPort;
+		m_sPath = rhs.m_sPath;
+		m_iFamily = rhs.m_iFamily;
+
+		m_bBlackhole = false;
+		m_uAddr = 0;
+		SafeRelease ( m_pStats );
+		SafeRelease ( m_pDash );
+		m_bPersistent = false;
+	}
+	return *this;
+}
+
+AgentConn_t & AgentConn_t::operator = ( const HostUrl_c & rhs )
+{
+	AgentDesc_c::operator = ( rhs );
+	return *this;
+}
+
+void AgentConn_t::SpecifyAndSelectMirror ( MultiAgentDesc_t * pMirrorChooser )
 {
 	if ( pMirrorChooser )
 	{
@@ -585,10 +721,10 @@ void AgentConn_t::SpecifyAndSelectMirror ( MetaAgentDesc_t * pMirrorChooser )
 	}
 
 	assert ( m_pMirrorChooser );
-	*this = m_pMirrorChooser->ChooseAgent ();
-	if ( m_bPersistent )
+	AgentDesc_c::operator=( m_pMirrorChooser->ChooseAgent ());
+	if ( m_bPersistent && m_pDash->m_pPersPool )
 	{
-		m_iSock = m_dPersPool.RentConnection ();
+		m_iSock = m_pDash->m_pPersPool->RentConnection ();
 		if ( m_iSock==-2 ) // no free persistent connections. This connection will be not persistent
 			m_bPersistent = false;
 	}
@@ -602,6 +738,56 @@ int AgentConn_t::NumOfMirrors () const
 	return m_pMirrorChooser->GetLength ();
 }
 
+
+SearchdStats_t			g_tStats;
+cDashStorage			g_tDashes;
+
+
+// generic stats track - always to agent stats, separately to dashboard.
+void agent_stats_inc ( AgentConn_t & tAgent, AgentStats_e iCounter )
+{
+	assert ( iCounter<=eMaxAgentStat );
+	assert ( tAgent.m_pDash );
+
+	if ( tAgent.m_pStats )
+		++tAgent.m_pStats->m_dStats[iCounter];
+
+	HostDashboard_t & tIndexDash = *tAgent.m_pDash;
+	CSphScopedWLock tWguard ( tIndexDash.m_dDataLock );
+	AgentDash_t & tAgentDash = *tIndexDash.GetCurrentStat ();
+	++tAgentDash.m_dStats[iCounter];
+	if ( iCounter>=eNetworkNonCritical && iCounter<eMaxAgentStat )
+		tIndexDash.m_iErrorsARow = 0;
+	else
+		++tIndexDash.m_iErrorsARow;
+
+	tAgent.m_iEndQuery = sphMicroTimer();
+	tIndexDash.m_iLastQueryTime = tAgent.m_iStartQuery;
+	tIndexDash.m_iLastAnswerTime = tAgent.m_iEndQuery;
+	// do not count query time for pings
+	// only count errors
+	if ( !tAgent.m_bPing )
+		tAgentDash.m_dHostStats[ehTotalMsecs]+=tAgent.m_iEndQuery-tAgent.m_iStartQuery;
+}
+
+// special case of stats - all is ok, just need to track the time in dashboard.
+void track_processing_time ( AgentConn_t & tAgent )
+{
+	assert ( tAgent.m_pDash );
+	CSphScopedWLock tWguard ( tAgent.m_pDash->m_dDataLock );
+	uint64_t* pCurStat = tAgent.m_pDash->GetCurrentStat ()->m_dHostStats;
+
+	++pCurStat[ehConnTries];
+	int64_t iConnTime = sphMicroTimer () - tAgent.m_iStartQuery;
+	if ( uint64_t ( iConnTime )>pCurStat[ehMaxMsecs] )
+		pCurStat[ehMaxMsecs] = iConnTime;
+
+	if ( pCurStat[ehConnTries]>1 )
+		pCurStat[ehAverageMsecs] = ( pCurStat[ehAverageMsecs]*( pCurStat[ehConnTries]-1 )+iConnTime )/pCurStat[ehConnTries];
+	else
+		pCurStat[ehAverageMsecs] = iConnTime;
+}
+
 void AgentConn_t::Fail ( AgentStats_e eStat, const char* sMessage, ... )
 {
 	m_eState = AGENT_RETRY;
@@ -613,50 +799,7 @@ void AgentConn_t::Fail ( AgentStats_e eStat, const char* sMessage, ... )
 	agent_stats_inc ( *this, eStat );
 }
 
-SearchdStats_t			g_tStats;
-CSphMutex				g_tStatsMutex;
-
-void agent_stats_inc ( AgentConn_t & tAgent, AgentStats_e iCounter )
-{
-	if ( tAgent.m_iStatsIndex>=0 && tAgent.m_iStatsIndex<STATS_MAX_AGENTS )
-	{
-		g_tStatsMutex.Lock ();
-		uint64_t* pCurStat = g_tStats.m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].GetCurrentStat()->m_iStats;
-		if ( iCounter==eMaxMsecs )
-		{
-			++pCurStat[eConnTries];
-			int64_t iConnTime = sphMicroTimer() - tAgent.m_iStartQuery;
-			if ( uint64_t(iConnTime)>pCurStat[eMaxMsecs] )
-				pCurStat[eMaxMsecs] = iConnTime;
-			if ( pCurStat[eConnTries]>1 )
-				pCurStat[eAverageMsecs] = (pCurStat[eAverageMsecs]*(pCurStat[eConnTries]-1)+iConnTime)/pCurStat[eConnTries];
-			else
-				pCurStat[eAverageMsecs] = iConnTime;
-		} else
-		{
-			g_tStats.m_dAgentStats.m_dItemStats [ tAgent.m_iStatsIndex ].m_iStats[iCounter]++;
-			if ( tAgent.m_iDashIndex>=0 && tAgent.m_iDashIndex<STATS_MAX_DASH )
-			{
-				++pCurStat[iCounter];
-				if ( iCounter>=eNoErrors && iCounter<eMaxCounters )
-					g_tStats.m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].m_iErrorsARow = 0;
-				else
-					g_tStats.m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].m_iErrorsARow += 1;
-				tAgent.m_iEndQuery = sphMicroTimer();
-				g_tStats.m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].m_iLastQueryTime = tAgent.m_iStartQuery;
-				g_tStats.m_dDashboard.m_dItemStats [ tAgent.m_iDashIndex ].m_iLastAnswerTime = tAgent.m_iEndQuery;
-				// do not count query time for pings
-				// only count errors
-				if ( !tAgent.m_bPing )
-					pCurStat[eTotalMsecs]+=tAgent.m_iEndQuery-tAgent.m_iStartQuery;
-			}
-		}
-		g_tStatsMutex.Unlock ();
-	}
-}
-
 #define sphStrMatchStatic(_str, _cstr) ( strncmp ( _str, _cstr, sizeof(_str)-1 )==0 )
-
 
 bool ParseStrategyHA ( const char * sName, HAStrategies_e & eStrategy )
 {
@@ -680,7 +823,7 @@ static bool IsAgentDelimiter ( char c )
 }
 
 
-bool ValidateAndAddDashboard ( AgentDesc_c * pNewAgent, const CSphVariant * pAgentName, const char * szIndexName )
+bool ValidateAndAddDashboard ( AgentDesc_c * pNewAgent, const char * sAgentID, const char * szIndexName )
 {
 	assert ( pNewAgent );
 
@@ -690,7 +833,7 @@ bool ValidateAndAddDashboard ( AgentDesc_c * pNewAgent, const CSphVariant * pAge
 		if ( pNewAgent->m_sHost.IsEmpty () )
 		{
 			sphWarning ( "index '%s': agent '%s': invalid host name 'empty' - SKIPPING AGENT",
-				szIndexName, pAgentName->cstr () );
+				szIndexName, sAgentID );
 			return false;
 		}
 
@@ -698,47 +841,22 @@ bool ValidateAndAddDashboard ( AgentDesc_c * pNewAgent, const CSphVariant * pAge
 		if ( pNewAgent->m_uAddr==0 )
 		{
 			sphWarning ( "index '%s': agent '%s': failed to lookup host name '%s' (error=%s) - SKIPPING AGENT",
-				szIndexName, pAgentName->cstr (), pNewAgent->m_sHost.cstr (), sphSockError () );
+				szIndexName, sAgentID, pNewAgent->m_sHost.cstr (), sphSockError () );
 			return false;
 		}
 	}
 
-	// hash for dashboard
-	CSphString sHashKey = pNewAgent->GetMyUrl ();
-	// allocate stats slot
-	// let us cheat and also allocate the dashboard slot under the same lock
-	g_tStatsMutex.Lock ();
+	pNewAgent->m_pStats = new AgentStats_t;
+	g_tDashes.AddAgent ( pNewAgent );
 
-	pNewAgent->m_iStatsIndex = g_tStats.m_dAgentStats.AllocItem ();
-	if ( pNewAgent->m_iStatsIndex<0 )
-		sphWarning ( "index '%s': agent '%s': failed to allocate slot for stats, HA (if any) might be wrong",
-			szIndexName, pAgentName->cstr () );
-
-	if ( g_tStats.m_hDashBoard.Exists ( sHashKey ) )
-	{
-		pNewAgent->m_iDashIndex = g_tStats.m_hDashBoard[sHashKey];
-		g_tStats.m_dDashboard.m_dItemStats[pNewAgent->m_iDashIndex].m_iRefCount++;
-	} else
-	{
-		pNewAgent->m_iDashIndex = g_tStats.m_dDashboard.AllocItem ();
-		if ( pNewAgent->m_iDashIndex<0 )
-		{
-			sphWarning ( "index '%s': agent '%s': failed to allocate slot for stat-dashboard, HA (if any) might be wrong",
-				szIndexName, pAgentName->cstr () );
-		} else
-		{
-			g_tStats.m_dDashboard.m_dItemStats[pNewAgent->m_iDashIndex].Init ( pNewAgent );
-			g_tStats.m_hDashBoard.Add ( pNewAgent->m_iDashIndex, sHashKey );
-		}
-	}
-
-	g_tStatsMutex.Unlock ();
+	assert ( pNewAgent->m_pStats );
+	assert ( pNewAgent->m_pDash );
 	return true;
 }
 
 // convert all 'host mirrors' (i.e. agents without indices) into 'index mirrors'
 // it allows to write agents as 'host1|host2|host3:index' instead of 'host1:index|host2:index|host3:index'.
-void FixupOrphanedAgents ( MetaAgentDesc_t & tMultiAgent )
+void FixupOrphanedAgents ( MultiAgentDesc_t & tMultiAgent )
 {
 	if ( !tMultiAgent.IsHA () )
 		return;
@@ -757,7 +875,7 @@ void FixupOrphanedAgents ( MetaAgentDesc_t & tMultiAgent )
 	}
 }
 
-bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgentStr, const char * szIndexName, AgentOptions_t tDesc )
+bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const CSphVariant * pAgentStr, const char * szIndexName, AgentOptions_t tDesc )
 {
 	AgentDesc_c * pNewAgent = tAgent.NewAgent();
 	enum AgentParse_e { apInHost, apInPort, apStartIndexList, apIndexList, apOptions, apDone };
@@ -865,7 +983,7 @@ bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgentStr, c
 				{
 					eState = ( *p=='|' ? apInHost : apOptions );
 					pAnchor = p+1;
-					if ( !ValidateAndAddDashboard ( pNewAgent, pAgentStr, szIndexName ) )
+					if ( !ValidateAndAddDashboard ( pNewAgent, pAgentStr->cstr (), szIndexName ) )
 						return false;
 					pNewAgent = tAgent.NewAgent();
 					break;
@@ -909,7 +1027,7 @@ bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgentStr, c
 					if ( *p=='|' )
 					{
 						eState = apInHost;
-						if ( !ValidateAndAddDashboard ( pNewAgent, pAgentStr, szIndexName ) )
+						if ( !ValidateAndAddDashboard ( pNewAgent, pAgentStr->cstr(), szIndexName ) )
 							return false;
 						pNewAgent = tAgent.NewAgent();
 					} else
@@ -995,7 +1113,7 @@ bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgentStr, c
 		p++;
 	} // while (eState!=apDone)
 
-	bool bRes = ValidateAndAddDashboard ( pNewAgent, pAgentStr, szIndexName );
+	bool bRes = ValidateAndAddDashboard ( pNewAgent, pAgentStr->cstr(), szIndexName );
 
 	FixupOrphanedAgents ( tAgent );
 	tAgent.SetOptions ( tDesc );
@@ -1006,33 +1124,63 @@ bool ConfigureAgent ( MetaAgentDesc_t & tAgent, const CSphVariant * pAgentStr, c
 
 #undef sphStrMatchStatic
 
-void FreeDashboard ( const AgentDesc_c & dAgent, DashBoard_t & dDashBoard, SmallStringHash_T<int> & hDashBoard )
+AgentDesc_c::~AgentDesc_c ()
 {
-	HostDashboard_t & dDash = dDashBoard.m_dItemStats[dAgent.m_iDashIndex];
+	SafeRelease ( m_pDash );
+	SafeRelease ( m_pStats );
+}
 
-	--dDash.m_iRefCount;
-	assert ( dDash.m_iRefCount>=0 );
-	if ( dDash.m_iRefCount<=0 ) // no more agents use this host. Delete record.
+void cDashStorage::AddAgent ( AgentDesc_c * pNewAgent )
+{
+	CSphScopedWLock tWguard ( m_tLock );
+	bool bFound = false;
+	ARRAY_FOREACH ( i, m_dDashes )
 	{
-		dDashBoard.FreeItem ( dAgent.m_iDashIndex );
-		hDashBoard.Delete ( dAgent.GetMyUrl() );
+		if ( m_dDashes[i]->GetRefcount ()==1 )
+		{
+			SafeRelease ( m_dDashes[i] );
+			m_dDashes.RemoveFast ( i );
+		} else if ( !bFound && pNewAgent->GetMyUrl ()==m_dDashes[i]->m_tDescriptor.GetMyUrl () )
+		{
+			m_dDashes[i]->AddRef();
+			pNewAgent->m_pDash = m_dDashes[i];
+			bFound = true;
+		}
+	}
+	if ( !bFound )
+	{
+		pNewAgent->m_pDash = new HostDashboard_t ( pNewAgent );
+		pNewAgent->m_pDash->AddRef();
+		assert (pNewAgent->m_pDash->GetRefcount ()==2);
+		m_dDashes.Add ( pNewAgent->m_pDash );
 	}
 }
 
-void FreeAgentStats ( const AgentDesc_c & dAgent )
+// Due to very rare template of usage, linear search is quite enough here
+GuardedHostDashboard_t cDashStorage::FindAgent ( const char* sAgent ) const
 {
-	g_tStatsMutex.Lock();
-	g_tStats.m_dAgentStats.FreeItem ( dAgent.m_iStatsIndex );
-
-	// now free the dashboard hosts also
-	FreeDashboard ( dAgent, g_tStats.m_dDashboard, g_tStats.m_hDashBoard );
-	g_tStatsMutex.Unlock ();
+	CSphScopedRLock tRguard ( m_tLock );
+	ARRAY_FOREACH ( i, m_dDashes )
+	{
+		if ( m_dDashes[i]->GetRefcount()==1 )
+			continue;
+		
+		if ( m_dDashes[i]->m_tDescriptor.GetMyUrl () == sAgent )
+			return m_dDashes[i];
+	}
+	return nullptr; // not found
 }
 
-void FreeHostStats ( MetaAgentDesc_t & tHosts )
+void cDashStorage::GetActiveDashes ( CSphVector<GuardedHostDashboard_t>& dAgents ) const
 {
-	ARRAY_FOREACH ( j, tHosts.GetAgents() )
-		FreeAgentStats ( tHosts.GetAgents()[j] );
+	dAgents.Reset ();
+	CSphScopedRLock tRguard ( m_tLock );
+	for ( auto pDash : m_dDashes )
+	{
+		if ( pDash->GetRefcount()==1 )
+			continue;
+		dAgents.Add ( GuardedHostDashboard_t ( pDash ));
+	}
 }
 
 void RemoteConnectToAgent ( AgentConn_t & tAgent )
@@ -1112,10 +1260,8 @@ void RemoteConnectToAgent ( AgentConn_t & tAgent )
 #endif
 
 	// count connects
-	g_tStatsMutex.Lock();
-	g_tStats.m_iAgentConnect++;
-	g_tStats.m_iAgentRetry += ( bAgentRetry );
-	g_tStatsMutex.Unlock();
+	++g_tStats.m_iAgentConnect;
+	g_tStats.m_iAgentRetry+= bAgentRetry;
 
 	tAgent.m_iStartQuery = sphMicroTimer();
 	tAgent.m_iWall -= tAgent.m_iStartQuery;
@@ -1136,7 +1282,7 @@ void RemoteConnectToAgent ( AgentConn_t & tAgent )
 	} else
 	{
 		// connect() success
-		agent_stats_inc ( tAgent, eMaxMsecs );
+		track_processing_time ( tAgent );
 		// send the client's proto version right now to avoid w-w-r pattern.
 		NetOutputBuffer_c tOut ( tAgent.m_iSock );
 		tOut.SendDword ( SPHINX_CLIENT_VERSION );
@@ -1248,7 +1394,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 				}
 
 				// connect() success
-				agent_stats_inc ( tAgent, eMaxMsecs );
+				track_processing_time ( tAgent );
 
 				// send the client's proto version right now to avoid w-w-r pattern.
 				NetOutputBuffer_c tOut ( tAgent.m_iSock );
@@ -1587,7 +1733,7 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 			{
 				ARRAY_FOREACH_COND ( i, tAgent.m_dResults, !bWarnings )
 					bWarnings = !tAgent.m_dResults[i].m_sWarning.IsEmpty();
-				agent_stats_inc ( tAgent, bWarnings ? eWarnings : eNoErrors );
+				agent_stats_inc ( tAgent, bWarnings ? eNetworkCritical : eNetworkNonCritical );
 			}
 		}
 	}
@@ -1740,7 +1886,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 
 				assert ( bWriteable ); // should never get empty or readable state
 				// connect() success
-				agent_stats_inc ( tAgent, eMaxMsecs );
+				track_processing_time ( tAgent );
 
 				// send the client's proto version right now to avoid w-w-r pattern.
 				NetOutputBuffer_c tOut ( tAgent.m_iSock );
@@ -2074,7 +2220,7 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 			{
 				ARRAY_FOREACH_COND ( i, tAgent.m_dResults, !bWarnings )
 					bWarnings = !tAgent.m_dResults[i].m_sWarning.IsEmpty();
-				agent_stats_inc ( tAgent, bWarnings ? eWarnings : eNoErrors );
+				agent_stats_inc ( tAgent, bWarnings ? eNetworkCritical : eNetworkNonCritical );
 			}
 		}
 	}
@@ -2199,7 +2345,7 @@ ThdWorkPool_c::~ThdWorkPool_c ()
 {
 
 	m_bIsDestroying = true;
-	while ( m_iActiveThreads.GetValue ()>0 )
+	while ( m_iActiveThreads>0 )
 		sphSleepMsec ( 1 );
 	m_tChanged.Done();
 	SafeDeleteArray ( m_dData );
@@ -2262,8 +2408,8 @@ void ThdWorkPool_c::PoolThreadFunc ( void * pArg )
 {
 	ThdWorkPool_c * pPool = (ThdWorkPool_c *)pArg;
 	assert (pPool);
-	pPool->m_iActiveThreads.Inc ();
-	sphLogDebugv ("Thread func started for %p, now %d threads active", pArg, (DWORD)pPool->m_iActiveThreads.GetValue ());
+	++pPool->m_iActiveThreads;
+	sphLogDebugv ("Thread func started for %p, now %d threads active", pArg, (DWORD)pPool->m_iActiveThreads);
 	SphCrashLogger_c::SetLastQuery ( pPool->m_tCrashQuery );
 
 	int iSpinCount = 0;
@@ -2279,7 +2425,7 @@ void ThdWorkPool_c::PoolThreadFunc ( void * pArg )
 			if ( !tNext.m_pfn ) // if there is no work at queue - worker done
 			{
 				// this is last worker. Let us keep it while pool is alive.
-				if ( !pPool->m_bIsDestroying && pPool->m_iActiveThreads.GetValue ()==1 )
+				if ( !pPool->m_bIsDestroying && pPool->m_iActiveThreads==1 )
 				{
 					// this thread is 'virtually' inactive also
 					if ( !pPool->m_iWorksCount.GetValue () )
@@ -2314,8 +2460,8 @@ void ThdWorkPool_c::PoolThreadFunc ( void * pArg )
 		}
 
 	}
-	pPool->m_iActiveThreads.Dec ();
-	sphLogDebugv ( "Thread func finished for %p, now %d threads active", pArg, (DWORD)pPool->m_iActiveThreads.GetValue () );
+	--pPool->m_iActiveThreads;
+	sphLogDebugv ( "Thread func finished for %p, now %d threads active", pArg, (DWORD)pPool->m_iActiveThreads );
 }
 
 void ThdWorkParallel ( AgentWorkContext_t * );

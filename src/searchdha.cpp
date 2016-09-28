@@ -2394,6 +2394,7 @@ void ThdWorkSequental ( AgentWorkContext_t * pCtx )
 			AgentConn_t & tAgent = pCtx->m_pAgents[i];
 			if ( tAgent.m_eState==AGENT_RETRY )
 			{
+				++tAgent.m_iRetries;
 				if ( tAgent.m_iRetries<tAgent.m_iRetryLimit )
 				{
 					pCtx->m_pfn = ThdWorkSequental;
@@ -2446,7 +2447,6 @@ private:
 	CSphVector<AgentConn_t> * m_pAgents;
 	const IRequestBuilder_t * m_pBuilder;
 	int m_iTimeout;
-	int m_iRetryMax;
 	int m_iDelay;
 
 };
@@ -2461,7 +2461,6 @@ CSphRemoteAgentsController::CSphRemoteAgentsController ( int iThreads,
 	m_pAgents = &dAgents;
 	m_pBuilder = &tBuilder;
 	m_iTimeout = iTimeout;
-	m_iRetryMax = iRetryMax;
 	m_iDelay = iDelay;
 
 	iThreads = Max ( 1, Min ( iThreads, dAgents.GetLength() ) );
@@ -2535,6 +2534,7 @@ int CSphRemoteAgentsController::RetryFailed ()
 	{
 		if ( dAgent.m_eState==AGENT_RETRY )
 		{
+			++dAgent.m_iRetries;
 			if ( dAgent.m_iRetries<dAgent.m_iRetryLimit )
 			{
 				dAgent.m_dResults.Reset ();

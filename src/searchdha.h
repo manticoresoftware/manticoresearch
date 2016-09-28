@@ -167,6 +167,8 @@ struct AgentConn_t : public AgentDesc_c
 	int				m_iReplyStatus;	///< reply status code
 	int				m_iReplySize;	///< how many reply bytes are there
 	int				m_iReplyRead;	///< how many reply bytes are alredy received
+	int 			m_iRetries;		///< count from 0 to m_iRetryLimit
+	int 			m_iRetryLimit;	///< how many times retry (m.b. with another mirror)
 	BYTE *			m_pReplyBuf;	///< reply buffer
 
 	CSphVector<CSphQueryResult>		m_dResults;		///< multi-query results
@@ -471,7 +473,6 @@ struct AgentConnectionContext_t
 	AgentConn_t	* m_pAgents;
 	int m_iAgentCount;
 	int m_iTimeout;
-	int m_iRetriesMax;
 	int m_iDelay;
 
 	AgentConnectionContext_t ()
@@ -479,7 +480,6 @@ struct AgentConnectionContext_t
 		, m_pAgents ( NULL )
 		, m_iAgentCount ( 0 )
 		, m_iTimeout ( 0 )
-		, m_iRetriesMax ( 0 )
 		, m_iDelay ( 0 )
 	{}
 };

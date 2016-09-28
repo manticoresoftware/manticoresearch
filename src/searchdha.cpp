@@ -520,6 +520,8 @@ AgentConn_t::AgentConn_t ()
 	, m_iReplyStatus ( -1 )
 	, m_iReplySize ( 0 )
 	, m_iReplyRead ( 0 )
+	, m_iRetries ( 0 )
+	, m_iRetryLimit ( 0 )
 	, m_pReplyBuf ( NULL )
 	, m_iWall ( 0 )
 	, m_iWaited ( 0 )
@@ -2106,15 +2108,11 @@ struct AgentWorkContext_t : public AgentConnectionContext_t
 {
 	ThdWorker_fn	m_pfn;			///< work functor & flag of dummy element
 	int64_t			m_tmWait;
-	int				m_iRetries;
-	int				m_iRetryMultiplier;
 	int				m_iAgentsDone;
 
 	AgentWorkContext_t ()
 		: m_pfn ( NULL )
 		, m_tmWait ( 0 )
-		, m_iRetries ( 0 )
-		, m_iRetryMultiplier ( 1 )
 		, m_iAgentsDone ( 0 )
 	{}
 };
@@ -2331,12 +2329,12 @@ void SetNextRetry ( AgentWorkContext_t * pCtx )
 	pCtx->m_pfn = NULL;
 	pCtx->m_pAgents->m_eState = AGENT_UNUSED;
 
-	if ( !pCtx->m_iRetriesMax || !pCtx->m_iDelay || pCtx->m_iRetries>pCtx->m_iRetriesMax )
+	if ( !pCtx->m_pAgents->m_iRetryLimit || !pCtx->m_iDelay || pCtx->m_pAgents->m_iRetries>pCtx->m_pAgents->m_iRetryLimit )
 		return;
 
 	int64_t tmNextTry = sphMicroTimer() + pCtx->m_iDelay*1000;
 	pCtx->m_pfn = ThdWorkWait;
-	pCtx->m_iRetries++;
+	++pCtx->m_pAgents->m_iRetries;
 	pCtx->m_tmWait = tmNextTry;
 	pCtx->m_pAgents->m_eState = AGENT_RETRY;
 	pCtx->m_pAgents->SpecifyAndSelectMirror ();
@@ -2365,23 +2363,20 @@ void ThdWorkParallel ( AgentWorkContext_t * pCtx )
 
 void ThdWorkSequental ( AgentWorkContext_t * pCtx )
 {
-	if ( pCtx->m_iRetries )
+	if ( pCtx->m_pAgents->m_iRetries )
 		sphSleepMsec ( pCtx->m_iDelay );
 
 	for ( int iAgent=0; iAgent<pCtx->m_iAgentCount; iAgent++ )
 	{
-
 		AgentConn_t & tAgent = pCtx->m_pAgents[iAgent];
-		if ( !pCtx->m_iRetries || tAgent.m_eState==AGENT_RETRY )
-		{
+		if ( !tAgent.m_iRetries || tAgent.m_eState==AGENT_RETRY )
 			RemoteConnectToAgent ( tAgent );
-		}
 	}
 
 	pCtx->m_iAgentsDone += RemoteQueryAgents ( pCtx );
 
 	bool bNeedRetry = false;
-	if ( pCtx->m_iRetriesMax )
+	if ( pCtx->m_pAgents->m_iRetryLimit )
 	{
 		for ( int i = 0; i<pCtx->m_iAgentCount; i++ )
 			if ( pCtx->m_pAgents[i].m_eState==AGENT_RETRY )
@@ -2392,18 +2387,18 @@ void ThdWorkSequental ( AgentWorkContext_t * pCtx )
 	}
 
 	pCtx->m_pfn = NULL;
-	if ( bNeedRetry && pCtx->m_iRetries<pCtx->m_iRetriesMax )
+	if ( bNeedRetry )
 	{
-		pCtx->m_pfn = ThdWorkSequental;
-		int iRetryPerHost = pCtx->m_iRetriesMax/pCtx->m_iRetryMultiplier;
 		for ( int i = 0; i<pCtx->m_iAgentCount; i++ )
 		{
 			AgentConn_t & tAgent = pCtx->m_pAgents[i];
 			if ( tAgent.m_eState==AGENT_RETRY )
 			{
-				if ( pCtx->m_iRetries<( tAgent.NumOfMirrors ()*iRetryPerHost ) )
+				if ( tAgent.m_iRetries<tAgent.m_iRetryLimit )
+				{
+					pCtx->m_pfn = ThdWorkSequental;
 					tAgent.SpecifyAndSelectMirror ();
-				else
+				} else
 					tAgent.m_eState = AGENT_UNUSED;
 			}
 		}
@@ -2485,8 +2480,7 @@ CSphRemoteAgentsController::CSphRemoteAgentsController ( int iThreads,
 		ARRAY_FOREACH ( i, dAgents )
 		{
 			tCtx.m_pAgents = dAgents.Begin()+i;
-			tCtx.m_iRetryMultiplier = tCtx.m_pAgents->NumOfMirrors ();
-			tCtx.m_iRetriesMax = iRetryMax * tCtx.m_iRetryMultiplier;
+			tCtx.m_pAgents->m_iRetryLimit = iRetryMax * tCtx.m_pAgents->NumOfMirrors ();
 			m_pWorkerPool->RawPush ( tCtx );
 		}
 	} else
@@ -2494,11 +2488,8 @@ CSphRemoteAgentsController::CSphRemoteAgentsController ( int iThreads,
 		m_pWorkerPool->SetWorksCount ( 1 );
 		tCtx.m_pAgents = dAgents.Begin();
 		tCtx.m_iAgentCount = dAgents.GetLength();
-		int iRetryMultiplier = 1;
-		for ( const auto& dAgent : dAgents )
-			iRetryMultiplier = Max ( iRetryMultiplier, dAgent.NumOfMirrors () );
-		tCtx.m_iRetryMultiplier = iRetryMultiplier;
-		tCtx.m_iRetriesMax = iRetryMax * tCtx.m_iRetryMultiplier;
+		for ( auto& dAgent : dAgents )
+			dAgent.m_iRetryLimit = iRetryMax * dAgent.NumOfMirrors ();
 		tCtx.m_pfn = ThdWorkSequental;
 		m_pWorkerPool->RawPush ( tCtx );
 	}
@@ -2539,26 +2530,23 @@ int CSphRemoteAgentsController::RetryFailed ()
 
 	tCtx.m_pAgents = m_pAgents->Begin ();
 	tCtx.m_iAgentCount = m_pAgents->GetLength ();
-	int iRetryMultiplier = 1;
 	int iRetries=0;
 	for ( auto &dAgent : *m_pAgents )
 	{
 		if ( dAgent.m_eState==AGENT_RETRY )
 		{
-			dAgent.m_dResults.Reset();
-			dAgent.SpecifyAndSelectMirror ();
-			iRetryMultiplier = Max ( iRetryMultiplier, dAgent.NumOfMirrors () );
-			++iRetries;
+			if ( dAgent.m_iRetries<dAgent.m_iRetryLimit )
+			{
+				dAgent.m_dResults.Reset ();
+				dAgent.SpecifyAndSelectMirror ();
+				++iRetries;
+			} else
+				dAgent.m_eState = AGENT_UNUSED;
 		}
 	}
 	if (!iRetries)
 		return 0;
 	sphLogDebugv ( "Found %d agents in state AGENT_RETRY, reschedule them", iRetries );
-	tCtx.m_iRetryMultiplier = iRetryMultiplier;
-	// FIXME! That is rescheduled retries; need to calculate them more accurately
-	// (i.e., if it is value 5, and it were 4 unsuccessfull tries to connect,
-	// then now we have to set it to 5-4, not to 5 again.
-	tCtx.m_iRetriesMax = m_iRetryMax * tCtx.m_iRetryMultiplier;
 	tCtx.m_pfn = ThdWorkSequental;
 	m_pWorkerPool->Push ( tCtx );
 	m_pWorkerPool->AddWorksCount ( 1 );

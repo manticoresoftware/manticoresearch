@@ -908,25 +908,33 @@ static bool IsAgentDelimiter ( char c )
 }
 
 
-bool ValidateAndAddDashboard ( AgentDesc_c * pNewAgent, const char * sAgentID, const char * szIndexName )
+bool ValidateAndAddDashboard ( AgentDesc_c * pNewAgent, WarnInfo_t* pInfo=nullptr )
 {
 	assert ( pNewAgent );
+	CSphString sPrefix;
+	if ( pInfo )
+	{
+		assert ( pInfo->m_szAgent );
+		if ( pInfo->m_szIndexName )
+			sPrefix.SetSprintf ( "index '%s': agent '%s':", pInfo->m_szIndexName, pInfo->m_szAgent );
+		else
+			sPrefix.SetSprintf ( "host '%s':", pInfo->m_szAgent );
+	}
 
 	// lookup address (if needed)
 	if ( pNewAgent->m_iFamily==AF_INET )
 	{
 		if ( pNewAgent->m_sHost.IsEmpty () )
 		{
-			sphWarning ( "index '%s': agent '%s': invalid host name 'empty' - SKIPPING AGENT",
-				szIndexName, sAgentID );
+			sphWarning ( "%s invalid host name 'empty' - SKIPPING AGENT", sPrefix.cstr() );
 			return false;
 		}
 
 		pNewAgent->m_uAddr = sphGetAddress ( pNewAgent->m_sHost.cstr () );
 		if ( pNewAgent->m_uAddr==0 )
 		{
-			sphWarning ( "index '%s': agent '%s': failed to lookup host name '%s' (error=%s) - SKIPPING AGENT",
-				szIndexName, sAgentID, pNewAgent->m_sHost.cstr (), sphSockError () );
+			sphWarning ( "%s failed to lookup host name '%s' (error=%s) - SKIPPING AGENT",
+				sPrefix.cstr (), pNewAgent->m_sHost.cstr (), sphSockError () );
 			return false;
 		}
 	}
@@ -1001,7 +1009,7 @@ bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const char * szAgent, const cha
 			if ( IsAgentDelimiter ( *p ) )
 			{
 				eState = ( *p=='|' ? AP_WANT_ADDRESS : AP_OPTIONS );
-				if ( !ValidateAndAddDashboard ( pNewAgent, szAgent, szIndexName ) )
+				if ( !ValidateAndAddDashboard ( pNewAgent, &dWI ) )
 					return false;
 				pNewAgent = tAgent.NewAgent();
 				++p;
@@ -1038,7 +1046,7 @@ bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const char * szAgent, const cha
 				{
 					++p;
 					eState = AP_WANT_ADDRESS;
-					if ( !ValidateAndAddDashboard ( pNewAgent, szAgent, szIndexName ) )
+					if ( !ValidateAndAddDashboard ( pNewAgent, &dWI ) )
 						return false;
 					pNewAgent = tAgent.NewAgent();
 				} else
@@ -1119,7 +1127,7 @@ bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const char * szAgent, const cha
 		} // switch (eState)
 	} // while (eState!=AP_DONE)
 
-	bool bRes = ValidateAndAddDashboard ( pNewAgent, szAgent, szIndexName );
+	bool bRes = ValidateAndAddDashboard ( pNewAgent, &dWI );
 
 	FixupOrphanedAgents ( tAgent );
 	tAgent.SetOptions ( tDesc );

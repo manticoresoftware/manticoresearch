@@ -788,6 +788,91 @@ void track_processing_time ( AgentConn_t & tAgent )
 		pCurStat[ehAverageMsecs] = iConnTime;
 }
 
+// try to parse hostname/ip/port or unixsocket on current pConfigLine.
+// fill pAgent fields on success and move ppLine pointer next after parsed instance
+bool ParseAddressPort ( HostUrl_c * pAgent, const char ** ppLine, const WarnInfo_t &dInfo )
+{
+	// extract host name or path
+	const char *&p = *ppLine;
+	const char * pAnchor = p;
+
+	if ( !p )
+		return false;
+
+#if !USE_WINDOWS
+	enum AddressType_e
+	{ apIP, apUNIX };
+	AddressType_e eState = apIP;
+#endif
+	if ( *p=='/' ) // whether we parse inet or unix socket
+	{
+#if USE_WINDOWS
+		sphWarning ( "index '%s': agent '%s': UNIX sockets are not supported on Windows - SKIPPING AGENT",
+			dInfo.m_szIndexName, dInfo.m_szAgent );
+		return false;
+#else
+		eState = apUNIX;
+#endif
+	}
+
+	while ( sphIsAlpha ( *p ) || *p=='.' || *p=='-' || *p=='/' )
+		++p;
+	if ( p==pAnchor )
+	{
+		sphWarning ( "index '%s': agent '%s': host name or path expected - SKIPPING AGENT", dInfo.m_szIndexName,
+			dInfo.m_szAgent );
+		return false;
+	}
+
+	CSphString sSub ( pAnchor, p-pAnchor );
+#if !USE_WINDOWS
+	if ( eState==apUNIX )
+	{
+		if ( strlen ( sSub.cstr () ) + 1>sizeof(((struct sockaddr_un *)0)->sun_path) )
+		{
+			sphWarning ( "index '%s': agent '%s': UNIX socket path is too long - SKIPPING AGENT", dInfo.m_szIndexName,
+				 dInfo.m_szAgent );
+			return false;
+		}
+
+		pAgent->m_iFamily = AF_UNIX;
+		pAgent->m_sPath = sSub;
+		return true;
+	}
+#endif
+	// below is only deal with inet sockets
+	pAgent->m_iFamily = AF_INET;
+	pAgent->m_sHost = sSub;
+	// expect ':' (and then portnum) after address
+	if ( *p!=':' )
+	{
+		sphWarning ( "index '%s': agent '%s': colon expected before '%s' - SKIPPING AGENT", dInfo.m_szIndexName,
+			 dInfo.m_szAgent, p );
+		return false;
+	}
+	pAnchor = ++p;
+
+	// parse portnum
+	while ( isdigit(*p) )
+		++p;
+
+	if ( p==pAnchor )
+	{
+		sphWarning ( "index '%s': agent '%s': port number expected before '%s' - SKIPPING AGENT", dInfo.m_szIndexName,
+			dInfo.m_szAgent, p );
+		return false;
+	}
+	pAgent->m_iPort = atoi ( pAnchor );
+
+	if ( !IsPortInRange ( pAgent->m_iPort ) )
+	{
+		sphWarning ( "index '%s': agent '%s': invalid port number near '%s' - SKIPPING AGENT", dInfo.m_szIndexName,
+			dInfo.m_szAgent, p );
+		return false;
+	}
+	return true;
+}
+
 void AgentConn_t::Fail ( AgentStats_e eStat, const char* sMessage, ... )
 {
 	m_eState = AGENT_RETRY;
@@ -875,172 +960,96 @@ void FixupOrphanedAgents ( MultiAgentDesc_t & tMultiAgent )
 	}
 }
 
-bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const CSphVariant * pAgentStr, const char * szIndexName, AgentOptions_t tDesc )
+bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const char * szAgent, const char * szIndexName, AgentOptions_t tDesc )
 {
+	enum AgentParse_e { AP_WANT_ADDRESS, AP_OPTIONS, AP_DONE };
+	AgentParse_e eState = AP_DONE;
 	AgentDesc_c * pNewAgent = tAgent.NewAgent();
-	enum AgentParse_e { apInHost, apInPort, apStartIndexList, apIndexList, apOptions, apDone };
+	WarnInfo_t dWI ( szIndexName, szAgent );
 
 	// extract host name or path
-	const char * p = pAgentStr->cstr();
-	while ( *p && isspace ( *p ) )
-		p++;
-	AgentParse_e eState = apDone;
-	// might be agent options at head
-	if ( *p )
-	{
-		if ( *p=='[' )
-		{
-			eState = apOptions;
-			p += 1;
-		} else
-			eState = apInHost;
-	}
-	const char * pAnchor = p;
+	const char * p = szAgent;
+	const char * pAnchor;
 
-	while ( eState!=apDone )
+	while ( *p && isspace ( *p ) )
+		++p;
+
+	// might be agent options at head
+	if ( *p=='[' )
+	{
+		eState = AP_OPTIONS;
+		++p;
+	} else if ( *p )
+		eState = AP_WANT_ADDRESS;
+
+	while ( eState!=AP_DONE )
 	{
 		switch ( eState )
 		{
-		case apInHost:
+		case AP_WANT_ADDRESS:
 			{
-				if ( !*p )
-				{
-					eState = apDone;
-					break;
-				}
-
-				if ( sphIsAlpha(*p) || *p=='.' || *p=='-' || *p=='/' )
-					break;
-
-				if ( p==pAnchor )
-				{
-					sphWarning ( "index '%s': agent '%s': host name or path expected - SKIPPING AGENT",
-						szIndexName, pAnchor );
+				if ( !ParseAddressPort ( pNewAgent, &p, dWI ) )
 					return false;
-				}
-				if ( *p!=':' )
-				{
-					sphWarning ( "index '%s': agent '%s': colon expected near '%s' - SKIPPING AGENT",
-						szIndexName, pAgentStr->cstr(), p );
-					return false;
-				}
-				CSphString sSub = pAgentStr->strval().SubString ( pAnchor-pAgentStr->cstr(), p-pAnchor );
-				if ( sSub.cstr()[0]=='/' )
-				{
-#if USE_WINDOWS
-					sphWarning ( "index '%s': agent '%s': UNIX sockets are not supported on Windows - SKIPPING AGENT",
-						szIndexName, pAgentStr->cstr() );
-					return false;
-#else
-					if ( strlen ( sSub.cstr() ) + 1 > sizeof(((struct sockaddr_un *)0)->sun_path) )
-					{
-						sphWarning ( "index '%s': agent '%s': UNIX socket path is too long - SKIPPING AGENT",
-							szIndexName, pAgentStr->cstr() );
-						return false;
-					}
+			}
 
-					pNewAgent->m_iFamily = AF_UNIX;
-					pNewAgent->m_sPath = sSub;
-					p--;
-#endif
-				} else
-				{
-					pNewAgent->m_iFamily = AF_INET;
-					pNewAgent->m_sHost = sSub;
-				}
-				eState = apInPort;
-				pAnchor = p+1;
+			if ( !*p )
+			{
+				eState = AP_DONE;
 				break;
 			}
-		case apInPort:
+
+			if ( IsAgentDelimiter ( *p ) )
 			{
-				if ( isdigit(*p) )
-					break;
-
-#if !USE_WINDOWS
-				if ( pNewAgent->m_iFamily!=AF_UNIX )
-				{
-#endif
-					if ( p==pAnchor )
-					{
-						sphWarning ( "index '%s': agent '%s': port number expected near '%s' - SKIPPING AGENT",
-							szIndexName, pAgentStr->cstr(), p );
-						return false;
-					}
-					pNewAgent->m_iPort = atoi ( pAnchor );
-
-					if ( !IsPortInRange ( pNewAgent->m_iPort ) )
-					{
-						sphWarning ( "index '%s': agent '%s': invalid port number near '%s' - SKIPPING AGENT",
-							szIndexName, pAgentStr->cstr(), p );
-						return false;
-					}
-#if !USE_WINDOWS
-				}
-#endif
-
-				if ( IsAgentDelimiter ( *p ) )
-				{
-					eState = ( *p=='|' ? apInHost : apOptions );
-					pAnchor = p+1;
-					if ( !ValidateAndAddDashboard ( pNewAgent, pAgentStr->cstr (), szIndexName ) )
-						return false;
-					pNewAgent = tAgent.NewAgent();
-					break;
-				}
-
-				if ( *p!=':' )
-				{
-					sphWarning ( "index '%s': agent '%s': colon expected near '%s' - SKIPPING AGENT",
-						szIndexName, pAgentStr->cstr(), p );
+				eState = ( *p=='|' ? AP_WANT_ADDRESS : AP_OPTIONS );
+				if ( !ValidateAndAddDashboard ( pNewAgent, szAgent, szIndexName ) )
 					return false;
-				}
-
-				eState = apStartIndexList;
-				pAnchor = p+1;
+				pNewAgent = tAgent.NewAgent();
+				++p;
 				break;
 			}
-		case apStartIndexList:
-			if ( isspace ( *p ) )
-				break;
+
+			if ( *p!=':' )
+			{
+				sphWarning ( "index '%s': agent '%s': colon expected near '%s' - SKIPPING AGENT",
+					dWI.m_szIndexName, dWI.m_szAgent, p );
+				return false;
+			}
+
+			++p; // step after ':'
+			while ( isspace ( *p ) )
+				++p;
 
 			pAnchor = p;
-			eState = apIndexList;
-			// no break;
-		case apIndexList:
+
+			while ( sphIsAlpha(*p) || isspace(*p) || *p==',' )
+				++p;
+
+			if ( *p && !IsAgentDelimiter ( *p ) )
 			{
-				if ( sphIsAlpha(*p) || isspace(*p) || *p==',' )
-					break;
-
-				CSphString sIndexes = pAgentStr->strval().SubString ( pAnchor-pAgentStr->cstr(), p-pAnchor );
-
-				if ( *p && !IsAgentDelimiter ( *p ) )
-				{
-					sphWarning ( "index '%s': agent '%s': index list expected near '%s' - SKIPPING AGENT",
-						szIndexName, pAgentStr->cstr(), p );
-					return false;
-				}
-				pNewAgent->m_sIndexes = sIndexes;
-
-				if ( IsAgentDelimiter ( *p ) )
-				{
-					if ( *p=='|' )
-					{
-						eState = apInHost;
-						if ( !ValidateAndAddDashboard ( pNewAgent, pAgentStr->cstr(), szIndexName ) )
-							return false;
-						pNewAgent = tAgent.NewAgent();
-					} else
-						eState = apOptions;
-
-					pAnchor = p+1;
-					break;
-				} else
-					eState = apDone;
+				sphWarning ( "index '%s': agent '%s': index list expected near '%s' - SKIPPING AGENT",
+					dWI.m_szIndexName, dWI.m_szAgent, p );
+				return false;
 			}
+			pNewAgent->m_sIndexes = CSphString ( pAnchor, p-pAnchor);
+
+			if ( IsAgentDelimiter ( *p ) )
+			{
+				if ( *p=='|' )
+				{
+					++p;
+					eState = AP_WANT_ADDRESS;
+					if ( !ValidateAndAddDashboard ( pNewAgent, szAgent, szIndexName ) )
+						return false;
+					pNewAgent = tAgent.NewAgent();
+				} else
+					eState = AP_OPTIONS;
+				break;
+			} else
+				eState = AP_DONE;
+
 			break;
 
-		case apOptions:
+		case AP_OPTIONS:
 			{
 				const char * sOptName = NULL;
 				const char * sOptValue = NULL;
@@ -1076,7 +1085,7 @@ bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const CSphVariant * pAgentStr, 
 							{
 								CSphString sInvalid;
 								sInvalid.SetBinary ( sOptName, p-sOptName );
-								sphWarning ( "index '%s': agent '%s': unknown agent option '%s' ", szIndexName, pAgentStr->cstr(), sInvalid.cstr() );
+								sphWarning ( "index '%s': agent '%s': unknown agent option '%s' ", szIndexName, szAgent, sInvalid.cstr() );
 							}
 						}
 
@@ -1093,27 +1102,24 @@ bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const CSphVariant * pAgentStr, 
 						else if ( bGotEq && !sOptValue )
 							sOptValue = p;
 					}
-
-					p++;
+					++p;
 				}
-
 				if ( IsAgentDelimiter ( *p ) )
 				{
-					eState = apInHost;
-					pAnchor = p+1;
+					eState = AP_WANT_ADDRESS;
+					++p;
 				} else
-					eState = apDone;
+					eState = AP_DONE;
 			}
 			break;
 
-		case apDone:
+		case AP_DONE:
 		default:
 			break;
 		} // switch (eState)
-		p++;
-	} // while (eState!=apDone)
+	} // while (eState!=AP_DONE)
 
-	bool bRes = ValidateAndAddDashboard ( pNewAgent, pAgentStr->cstr(), szIndexName );
+	bool bRes = ValidateAndAddDashboard ( pNewAgent, szAgent, szIndexName );
 
 	FixupOrphanedAgents ( tAgent );
 	tAgent.SetOptions ( tDesc );

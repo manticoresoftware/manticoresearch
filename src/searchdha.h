@@ -450,9 +450,9 @@ bool ParseStrategyHA ( const char * sName, HAStrategies_e & eStrategy );
 
 // try to parse hostname/ip/port or unixsocket on current pConfigLine.
 // fill pAgent fields on success and move ppLine pointer next after parsed instance
-bool ParseAddressPort ( AgentDesc_c * pAgent, const char ** ppLine, const WarnInfo_t& dInfo );
+bool ParseAddressPort ( HostUrl_c * pAgent, const char ** ppLine, const WarnInfo_t& dInfo );
 
-bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const CSphVariant * pAgent, const char * szIndexName, AgentOptions_t tDesc );
+bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const char * szAgent, const char * szIndexName, AgentOptions_t tDesc );
 
 struct IRequestBuilder_t : public ISphNoncopyable
 {

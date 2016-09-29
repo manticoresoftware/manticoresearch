@@ -17906,7 +17906,7 @@ static void ConfigureDistributedIndex ( DistributedIndex_t & tIdx, const char * 
 	for ( CSphVariant * pAgent = hIndex("agent"); pAgent; pAgent = pAgent->m_pNext )
 	{
 		MultiAgentDesc_t& tAgent = tIdx.m_dAgents.Add();
-		if ( !ConfigureAgent ( tAgent, pAgent, szIndexName, tAgentOptions ) )
+		if ( !ConfigureAgent ( tAgent, pAgent->cstr(), szIndexName, tAgentOptions ) )
 			tIdx.m_dAgents.Pop();
 	}
 
@@ -17917,7 +17917,7 @@ static void ConfigureDistributedIndex ( DistributedIndex_t & tIdx, const char * 
 	for ( CSphVariant * pAgent = hIndex("agent_persistent"); pAgent; pAgent = pAgent->m_pNext )
 	{
 		MultiAgentDesc_t& tAgent = tIdx.m_dAgents.Add ();
-		if ( !ConfigureAgent ( tAgent, pAgent, szIndexName, tAgentOptions ) )
+		if ( !ConfigureAgent ( tAgent, pAgent->cstr(), szIndexName, tAgentOptions ) )
 			tIdx.m_dAgents.Pop();
 	}
 
@@ -17926,7 +17926,7 @@ static void ConfigureDistributedIndex ( DistributedIndex_t & tIdx, const char * 
 	for ( CSphVariant * pAgent = hIndex("agent_blackhole"); pAgent; pAgent = pAgent->m_pNext )
 	{
 		MultiAgentDesc_t& tAgent = tIdx.m_dAgents.Add ();
-		if ( !ConfigureAgent ( tAgent, pAgent, szIndexName, tAgentOptions ) )
+		if ( !ConfigureAgent ( tAgent, pAgent->cstr(), szIndexName, tAgentOptions ) )
 			tIdx.m_dAgents.Pop();
 	}
 

@@ -11420,6 +11420,7 @@ static inline void FormatMsec ( CSphString & sOut, int64_t tmTime )
 void BuildStatus ( VectorLike & dStatus )
 {
 	const char * FMT64 = INT64_FMT;
+	const char * FLOAT = "%.2f";
 	const char * OFF = "OFF";
 
 	const int64_t iQueriesDiv = Max ( g_tStats.m_iQueries.GetValue(), 1 );
@@ -11479,13 +11480,22 @@ void BuildStatus ( VectorLike & dStatus )
 		ARRAY_FOREACH ( i, dAgents )
 			ARRAY_FOREACH ( j, dAgents[i].GetAgents() )
 		{
-			AgentStats_t * pStats = dAgents[i].GetAgents ()[j].m_pStats;
+			AgentDash_t * pStats = dAgents[i].GetAgents ()[j].m_pStats;
 			if ( !pStats )
 				continue;
 
 			for ( int k=0; k<eMaxAgentStat; ++k )
 				if ( dStatus.MatchAddVa ( "ag_%s_%d_%d_%s", sIdx, i+1, j+1, sAgentStatsNames[k] ) )
 					dStatus.Add().SetSprintf ( FMT64, (int64_t) pStats->m_dStats[k] );
+			for ( int k = 0; k<ehMaxStat; ++k )
+				if ( dStatus.MatchAddVa ( "ag_%s_%d_%d_%s", sIdx, i + 1, j + 1, sAgentStatsNames[eMaxAgentStat+k] ) )
+				{
+					if ( k==ehTotalMsecs || k==ehAverageMsecs || k==ehMaxMsecs )
+						dStatus.Add ().SetSprintf ( FLOAT, (float) pStats->m_dHostStats[k] / 1000.0 );
+					else
+						dStatus.Add ().SetSprintf ( FMT64, (int64_t) pStats->m_dHostStats[k] );
+				}
+
 		}
 	}
 	g_tDistLock.Unlock();
@@ -11591,53 +11601,50 @@ void BuildOneAgentStatus ( VectorLike & dStatus, HostDashboard_t* pDash, const c
 	const char * FMT64 = UINT64_FMT;
 	const char * FLOAT = "%.2f";
 
-	pDash->m_dDataLock.ReadLock ();
-	if ( dStatus.MatchAddVa ( "%s_hostname", sPrefix ) )
-		dStatus.Add().SetSprintf ( "%s", pDash->m_tDescriptor.GetMyUrl().cstr() );
+	{
+		CSphScopedRLock tGuard ( pDash->m_dDataLock );
+		if ( dStatus.MatchAddVa ( "%s_hostname", sPrefix ) )
+			dStatus.Add().SetSprintf ( "%s", pDash->m_tDescriptor.GetMyUrl().cstr() );
 
-	if ( dStatus.MatchAddVa ( "%s_references", sPrefix ) )
-		dStatus.Add().SetSprintf ( "%d", (int) pDash->GetRefcount()-1 ); // -1 since we currently also 'use' the agent, reading it's stats
-	uint64_t iCur = sphMicroTimer();
-	uint64_t iLastAccess = iCur - pDash->m_iLastQueryTime;
-	float fPeriod = (float)iLastAccess/1000000.0f;
-	if ( dStatus.MatchAddVa ( "%s_lastquery", sPrefix ) )
-		dStatus.Add().SetSprintf ( FLOAT, fPeriod );
-	iLastAccess = iCur - pDash->m_iLastAnswerTime;
-	fPeriod = (float)iLastAccess/1000000.0f;
-	if ( dStatus.MatchAddVa ( "%s_lastanswer", sPrefix ) )
-		dStatus.Add().SetSprintf ( FLOAT, fPeriod );
-	uint64_t iLastTimer = pDash->m_iLastAnswerTime-pDash->m_iLastQueryTime;
-	if ( dStatus.MatchAddVa ( "%s_lastperiodmsec", sPrefix ) )
-		dStatus.Add().SetSprintf ( FMT64, iLastTimer/1000 );
-	if ( dStatus.MatchAddVa ( "%s_errorsarow", sPrefix ) )
-		dStatus.Add().SetSprintf ( FMT64, pDash->m_iErrorsARow );
-	pDash->m_dDataLock.Unlock ();
+		if ( dStatus.MatchAddVa ( "%s_references", sPrefix ) )
+			dStatus.Add().SetSprintf ( "%d", (int) pDash->GetRefcount()-1 ); // -1 since we currently also 'use' the agent, reading it's stats
+		uint64_t iCur = sphMicroTimer();
+		uint64_t iLastAccess = iCur - pDash->m_iLastQueryTime;
+		float fPeriod = (float)iLastAccess/1000000.0f;
+		if ( dStatus.MatchAddVa ( "%s_lastquery", sPrefix ) )
+			dStatus.Add().SetSprintf ( FLOAT, fPeriod );
+		iLastAccess = iCur - pDash->m_iLastAnswerTime;
+		fPeriod = (float)iLastAccess/1000000.0f;
+		if ( dStatus.MatchAddVa ( "%s_lastanswer", sPrefix ) )
+			dStatus.Add().SetSprintf ( FLOAT, fPeriod );
+		uint64_t iLastTimer = pDash->m_iLastAnswerTime-pDash->m_iLastQueryTime;
+		if ( dStatus.MatchAddVa ( "%s_lastperiodmsec", sPrefix ) )
+			dStatus.Add().SetSprintf ( FMT64, iLastTimer/1000 );
+		if ( dStatus.MatchAddVa ( "%s_errorsarow", sPrefix ) )
+			dStatus.Add().SetSprintf ( FMT64, pDash->m_iErrorsARow );
+	}
 	int iPeriods = 1;
 
 	while ( iPeriods>0 )
 	{
 		HostStatSnapshot_t dDashStat;
 		pDash->GetCollectedStat ( dDashStat, iPeriods );
-		uint64_t uQueries = 0;
-
 		{
 			for ( int j = 0; j<ehMaxStat+eMaxAgentStat; ++j )
-				if ( j==ehTotalMsecs ) // hack. Avoid microseconds in human-readable statistic
+				// hack. Avoid microseconds in human-readable statistic
+				if ( j==ehTotalMsecs && dStatus.MatchAddVa ( "%s_%dperiods_msecsperqueryy", sPrefix, iPeriods ) )
 				{
-					if ( dStatus.MatchAddVa ( "%s_%dperiods_msecsperqueryy", sPrefix, iPeriods ) )
-					{
-						if ( uQueries>0 )
-						{
-							float fAverageLatency = (float) ((dDashStat[ehTotalMsecs] / 1000.0) / uQueries);
-							dStatus.Add ().SetSprintf ( FLOAT, fAverageLatency );
-						} else
-							dStatus.Add ( "n/a" );
-					}
-				} else
+					if ( dDashStat[ehConnTries]>0 )
+						dStatus.Add ().SetSprintf ( FLOAT, (float) ((dDashStat[ehTotalMsecs] / 1000.0)
+																	/ dDashStat[ehConnTries]) );
+					else
+						dStatus.Add ( "n/a" );
+				} else if ( dStatus.MatchAddVa ( "%s_%dperiods_%s", sPrefix, iPeriods, sAgentStatsNames[j] ) )
 				{
-					if ( dStatus.MatchAddVa ( "%s_%dperiods_%s", sPrefix, iPeriods, sAgentStatsNames[j] ) )
+					if ( j==ehMaxMsecs || j==ehAverageMsecs )
+						dStatus.Add ().SetSprintf ( FLOAT, (float) dDashStat[j] / 1000.0);
+					else
 						dStatus.Add ().SetSprintf ( FMT64, dDashStat[j] );
-					uQueries += dDashStat[j];
 				}
 		}
 

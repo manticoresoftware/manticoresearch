@@ -217,9 +217,7 @@ ag_dist_1_1_wrong_replies: 0
 ag_dist_1_1_unexpected_closings: 0
 ag_dist_1_1_warnings: 0
 ag_dist_1_1_succeeded_queries: 1
-ag_dist_1_1_connect_count: 0
-ag_dist_1_1_connect_avg: 0
-ag_dist_1_1_connect_max: 0
+ag_dist_1_1_connect_count: 1
 query_cpu: OFF
 dist_local: 0.000
 query_reads: OFF

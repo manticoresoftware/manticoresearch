@@ -767,25 +767,43 @@ void agent_stats_inc ( AgentConn_t & tAgent, AgentStats_e iCounter )
 	// do not count query time for pings
 	// only count errors
 	if ( !tAgent.m_bPing )
+	{
 		tAgentDash.m_dHostStats[ehTotalMsecs]+=tAgent.m_iEndQuery-tAgent.m_iStartQuery;
+		if ( tAgent.m_pStats )
+			tAgent.m_pStats->m_dHostStats[ehTotalMsecs] += tAgent.m_iEndQuery - tAgent.m_iStartQuery;
+	}
 }
 
 // special case of stats - all is ok, just need to track the time in dashboard.
 void track_processing_time ( AgentConn_t & tAgent )
 {
+	// first we count temporary statistic (into dashboard)
 	assert ( tAgent.m_pDash );
 	CSphScopedWLock tWguard ( tAgent.m_pDash->m_dDataLock );
 	uint64_t* pCurStat = tAgent.m_pDash->GetCurrentStat ()->m_dHostStats;
+	uint64_t uConnTime = (uint64_t) sphMicroTimer () - tAgent.m_iStartQuery;
 
 	++pCurStat[ehConnTries];
-	int64_t iConnTime = sphMicroTimer () - tAgent.m_iStartQuery;
-	if ( uint64_t ( iConnTime )>pCurStat[ehMaxMsecs] )
-		pCurStat[ehMaxMsecs] = iConnTime;
+	if ( uint64_t ( uConnTime )>pCurStat[ehMaxMsecs] )
+		pCurStat[ehMaxMsecs] = uConnTime;
 
 	if ( pCurStat[ehConnTries]>1 )
-		pCurStat[ehAverageMsecs] = ( pCurStat[ehAverageMsecs]*( pCurStat[ehConnTries]-1 )+iConnTime )/pCurStat[ehConnTries];
+		pCurStat[ehAverageMsecs] = ( pCurStat[ehAverageMsecs]*( pCurStat[ehConnTries]-1 )+uConnTime )/pCurStat[ehConnTries];
 	else
-		pCurStat[ehAverageMsecs] = iConnTime;
+		pCurStat[ehAverageMsecs] = uConnTime;
+
+	// then we count permanent statistic (for show status)
+	if ( tAgent.m_pStats )
+	{
+		uint64_t * pHStat = tAgent.m_pStats->m_dHostStats;
+		++pHStat[ehConnTries];
+		if ( uint64_t ( uConnTime )>pHStat[ehMaxMsecs] )
+			pHStat[ehMaxMsecs] = uConnTime;
+		if ( pHStat[ehConnTries]>1 )
+			pHStat[ehAverageMsecs] = ( pHStat[ehAverageMsecs] * ( pHStat[ehConnTries] - 1 ) + uConnTime ) / pHStat[ehConnTries];
+		else
+			pHStat[ehAverageMsecs] = uConnTime;
+	}
 }
 
 // try to parse hostname/ip/port or unixsocket on current pConfigLine.
@@ -939,7 +957,7 @@ bool ValidateAndAddDashboard ( AgentDesc_c * pNewAgent, WarnInfo_t* pInfo=nullpt
 		}
 	}
 
-	pNewAgent->m_pStats = new AgentStats_t;
+	pNewAgent->m_pStats = new AgentDash_t;
 	g_tDashes.AddAgent ( pNewAgent );
 
 	assert ( pNewAgent->m_pStats );

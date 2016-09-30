@@ -37,9 +37,6 @@ extern int				g_iAgentConnectTimeout;
 extern int				g_iAgentQueryTimeout;	// global (default). May be override by index-scope values, if one specified
 extern bool				g_bHostnameLookup;
 
-
-const int	STATS_MAX_AGENTS	= 8192;				///< we'll track stats for this much remote agents
-const int	STATS_MAX_DASH	= STATS_MAX_AGENTS / 4;	///< we'll track stats for RR of this much remote agents
 const int	STATS_DASH_TIME = 15;	///< store the history for last periods
 
 /////////////////////////////////////////////////////////////////////////////
@@ -145,13 +142,13 @@ struct AgentStats_t : public ISphRefcountedMT
 	}
 	void Add ( const AgentStats_t& rhs )
 	{
-		for ( int i = 0; i<=eMaxAgentStat; ++i )
+		for ( int i = 0; i<eMaxAgentStat; ++i )
 			m_dStats[i] += rhs.m_dStats[i];
 	}
 };
 
 struct HostDashboard_t;
-
+struct AgentDash_t;
 class HostUrl_c
 {
 public:
@@ -177,7 +174,7 @@ public:
 	CSphString		m_sIndexes;		///< remote index names to query
 	bool			m_bBlackhole;	///< blackhole agent flag
 	DWORD			m_uAddr;		///< IP address
-	mutable AgentStats_t*	m_pStats;		/// global agent stats
+	mutable AgentDash_t*	m_pStats;		/// global agent stats
 	mutable HostDashboard_t* m_pDash;		/// ha dashboard of the host
 	bool			m_bPersistent;	///< whether to keep the persistent connection to the agent.
 

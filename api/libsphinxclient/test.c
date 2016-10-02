@@ -365,7 +365,8 @@ void test_status ( sphinx_client * client )
 		&& strstr ( status[k], "wall" )==NULL 
 		&& strstr ( status[k], "wait" )==NULL 
 		&& strstr ( status[k], "connect_avg" )==NULL 
-		&& strstr ( status[k], "connect_max")==NULL ) )
+		&& strstr ( status[k], "connect_max")==NULL 
+		&& strstr ( status[k], "connect_count")==NULL ) )
 		{
 			for ( j=0; j<num_cols; j++, k++ )
 				printf ( ( j==0 ) ? "%s:" : " %s", status[k] );

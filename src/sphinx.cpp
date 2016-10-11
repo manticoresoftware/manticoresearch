@@ -17469,7 +17469,7 @@ bool CSphIndex_VLN::Preread ()
 
 	// persist MVA needs valid DocinfoHash
 	sphLogDebug ( "Prereading .mvp" );
-	if ( !LoadPersistentMVA ( m_sLastError ) )
+	if ( !m_bDebugCheck && !LoadPersistentMVA ( m_sLastError ) )
 		return false;
 
 	// build "indexes" for full-scan
@@ -20641,6 +20641,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 					bool bIsMvaCorrect = ( uLastMvaID<=uMvaID && uMvaID<=uLastID );
 					uLastMvaID = uMvaID;
 					bool bWasArena = false;
+					int iLastEmpty = INT_MAX;
 
 					// loop MVAs
 					ARRAY_FOREACH_COND ( iItem, dMvaItems, bIsMvaCorrect )
@@ -20649,13 +20650,18 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 						bool bArena = ( ( uSpaOffset & MVA_ARENA_FLAG )!=0 ) && !m_bArenaProhibit;
 						bWasArena |= bArena;
 
-						// zero offset means empty MVA in rt index
+						// zero offset means empty MVA in rt index, however plain index stores offset to zero length
 						if ( !uSpaOffset || bArena )
+						{
+							iLastEmpty = iItem;
 							continue;
+						}
 
-						if ( bWasArena )
+						// where also might be updated mva with zero length
+						if ( bWasArena || ( iLastEmpty==iItem-1 ) )
 							rdMva.SeekTo ( sizeof(DWORD)*uSpaOffset, READ_NO_SIZE_HINT );
 						bWasArena = false;
+						iLastEmpty = INT_MAX;
 
 						// check offset (index)
 						if ( uMvaID==uLastID && bIsSpaValid && rdMva.GetPos()!=SphOffset_t(sizeof(DWORD)*uSpaOffset) )

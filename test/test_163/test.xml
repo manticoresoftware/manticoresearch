@@ -408,6 +408,11 @@ INSERT INTO `test_table` VALUES
 <!-- empty result set with constant columns -->
 <sphinxql>select *, 123456, 2+2, sin(1.0), sin(idd), idd+1, count(*) from count2</sphinxql>
 <sphinxql>select *, 123456, 2+2, sin(1.0), sin(idd), idd+1, count(*) from count2 where id in (1,2)</sphinxql>
+
+<!-- empty result set with multiple counts -->
+<sphinxql>select idd i, count(*), idd b, count(*) c, count(distinct i) from count2  where id in (1,2)</sphinxql>
+<sphinxql>select idd i, count(*), idd b, count(*) c, count(distinct i) d from count2  where id in (1,2)</sphinxql>
+
 </sphqueries>
 
 <queries>

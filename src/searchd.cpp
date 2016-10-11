@@ -6014,7 +6014,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 		return false;
 	}
 
-	bool bReturnZeroCount = !tRes.m_sZeroCountName.IsEmpty();
+	bool bReturnZeroCount = ( tRes.m_dZeroCount.GetLength()!=0 );
 
 	// 0 matches via SphinxAPI? no fiddling with schemes is necessary
 	// (and via SphinxQL, we still need to return the right schema)
@@ -8604,16 +8604,13 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 		if ( tRes.m_iSuccesses>1 || tQuery.m_dItems.GetLength() || pAggrFilter )
 		{
-			auto tExtraSchema = pExtraSchema?pExtraSchema->RLock():nullptr;
+			auto tExtraSchema = ( pExtraSchema ? pExtraSchema->RLock() : nullptr );
 			if ( m_bMaster && tRes.m_iSuccesses && tQuery.m_dItems.GetLength() && tQuery.m_sGroupBy.IsEmpty() && tRes.m_dMatches.GetLength()==0 )
 			{
 				ARRAY_FOREACH ( i, tQuery.m_dItems )
 				{
-					if ( tQuery.m_dItems[i].m_sExpr=="count(*)" )
-					{
-						tRes.m_sZeroCountName = tQuery.m_dItems[i].m_sAlias;
-						break;
-					}
+					if ( tQuery.m_dItems[i].m_sExpr=="count(*)" || ( tQuery.m_dItems[i].m_sExpr=="@distinct" ) )
+						tRes.m_dZeroCount.Add ( tQuery.m_dItems[i].m_sAlias );
 				}
 			}
 
@@ -14398,15 +14395,17 @@ void sphFormatFactors ( CSphVector<BYTE> & dOut, const unsigned int * pFactors, 
 }
 
 
-static void ReturnZeroCount ( const CSphRsetSchema & tSchema, int iAttrsCount, const CSphString & sName, SqlRowBuffer_c & dRows )
+static void ReturnZeroCount ( const CSphRsetSchema & tSchema, int iAttrsCount, const CSphVector<CSphString> & dCounts, SqlRowBuffer_c & dRows )
 {
 	for ( int i=0; i<iAttrsCount; i++ )
 	{
-		const CSphColumnInfo & tCol = tSchema.GetAttr(i);
+		const CSphColumnInfo & tCol = tSchema.GetAttr ( i );
 
-		if ( tCol.m_sName==sName ) // @count or its alias
+		// @count or its alias or count(distinct attr_name)
+		if ( dCounts.Contains ( tCol.m_sName ) )
+		{
 			dRows.PutNumeric<DWORD> ( "%u", 0 );
-		else
+		} else
 		{
 			// essentially the same as SELECT_DUAL, parse and print constant expressions
 			ESphAttr eAttrType;
@@ -14454,7 +14453,7 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 	// bummer! lets protect ourselves against that
 	int iSchemaAttrsCount = 0;
 	int iAttrsCount = 1;
-	bool bReturnZeroCount = !tRes.m_sZeroCountName.IsEmpty();
+	bool bReturnZeroCount = ( tRes.m_dZeroCount.GetLength()!=0 );
 	if ( tRes.m_dMatches.GetLength() || bReturnZeroCount )
 	{
 		iSchemaAttrsCount = SendGetAttrCount ( tRes.m_tSchema );
@@ -14716,7 +14715,7 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 	}
 
 	if ( bReturnZeroCount )
-		ReturnZeroCount ( tRes.m_tSchema, iSchemaAttrsCount, tRes.m_sZeroCountName, dRows );
+		ReturnZeroCount ( tRes.m_tSchema, iSchemaAttrsCount, tRes.m_dZeroCount, dRows );
 
 	// eof packet
 	dRows.Eof ( bMoreResultsFollow, iWarns );

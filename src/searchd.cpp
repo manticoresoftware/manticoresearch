@@ -377,6 +377,7 @@ static bool				g_bOptNoDetach	= false;
 static bool				g_bOptNoLock	= false;
 static bool				g_bSafeTrace	= false;
 static bool				g_bStripPath	= false;
+static bool				g_bCoreDump		= false;
 
 static volatile bool	g_bDoDelete			= false;	// do we need to delete any indexes?
 
@@ -1712,7 +1713,15 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 #endif // !USE_WINDOWS
 {
 	if ( g_iLogFile<0 )
-		CRASH_EXIT;
+	{
+		if ( g_bCoreDump )
+		{
+			CRASH_EXIT_CORE;
+		} else
+		{
+			CRASH_EXIT;
+		}
+	}
 
 	// log [time][pid]
 	sphSeek ( g_iLogFile, 0, SEEK_END );
@@ -1831,7 +1840,13 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 
 	sphSafeInfo ( g_iLogFile, "------- CRASH DUMP END -------" );
 
-	CRASH_EXIT;
+	if ( g_bCoreDump )
+	{
+		CRASH_EXIT_CORE;
+	} else
+	{
+		CRASH_EXIT;
+	}
 }
 
 void SphCrashLogger_c::SetLastQuery ( const CrashQuery_t & tQuery )
@@ -22467,6 +22482,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		OPT1 ( "--vtune" )			g_bVtune = true;
 		OPT1 ( "--noqlog" )			bOptDebugQlog = false;
 		OPT1 ( "--force-preread" )	bForcedPreread = true;
+		OPT1 ( "--coredump" )		g_bCoreDump = true;
 
 		// FIXME! add opt=(csv)val handling here
 		OPT1 ( "--replay-flags=accept-desc-timestamp" )		uReplayFlags |= SPH_REPLAY_ACCEPT_DESC_TIMESTAMP;

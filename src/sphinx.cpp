@@ -20868,6 +20868,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 					iIndexEntry, uDocID, iBlock, uMinDocID, uMaxDocID ));
 
 			bool bIsFirstMva = true;
+			bool bWasArenaMva = false;
 
 			// check values vs blocks range
 			const DWORD * pSpaRow = DOCINFO2ATTRS ( dRow.Begin() );
@@ -20926,10 +20927,13 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 						SphAttr_t uOff = sphGetRowAttr ( pSpaRow, tCol.m_tLocator );
 						if ( !uOff || ( uOff & MVA_ARENA_FLAG )!=0 )
+						{
+							bWasArenaMva |= ( ( uOff & MVA_ARENA_FLAG )!=0 );
 							break;
+						}
 
 						SphDocID_t uMvaDocID = 0;
-						if ( bIsFirstMva )
+						if ( bIsFirstMva && !bWasArenaMva )
 						{
 							bIsFirstMva = false;
 							rdMva.SeekTo ( sizeof(DWORD) * uOff - sizeof(SphDocID_t), READ_NO_SIZE_HINT );
@@ -20942,7 +20946,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 						if ( uOff>=iMvaEnd )
 							break;
 
-						if ( uMvaDocID && uMvaDocID!=uDocID )
+						if ( uMvaDocID && uMvaDocID!=uDocID && !bWasArenaMva )
 						{
 							LOC_FAIL(( fp, "unexpected MVA docid (row=" INT64_FMT ", mvaattr=%d, expected=" DOCID_FMT ", got=" DOCID_FMT ", block=" INT64_FMT ", index=%u)",
 								iIndexEntry, iItem, uDocID, uMvaDocID, iBlock, (DWORD)uOff ));

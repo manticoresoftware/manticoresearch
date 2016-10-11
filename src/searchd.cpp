@@ -538,7 +538,6 @@ void QueryStatContainer_c::Add ( uint64_t uFoundRows, uint64_t uQueryTime, uint6
 	tRecord.m_iCount = 1;
 }
 
-
 void QueryStatContainer_c::GetRecord ( int iRecord, QueryStatRecord_t & tRecord ) const
 {
 	tRecord = m_dRecords[iRecord];
@@ -550,6 +549,18 @@ int QueryStatContainer_c::GetNumRecords() const
 	return m_dRecords.GetLength();
 }
 
+QueryStatContainer_c::QueryStatContainer_c() = default;
+
+QueryStatContainer_c::QueryStatContainer_c ( QueryStatContainer_c && tOther ) : m_dRecords { std::move ( tOther.m_dRecords ) }
+{
+}
+
+QueryStatContainer_c & QueryStatContainer_c::operator = ( QueryStatContainer_c && tOther )
+{
+	if ( &tOther!=this )
+		m_dRecords = std::move ( tOther.m_dRecords );
+	return *this;
+}
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -586,6 +597,19 @@ void QueryStatContainerExact_c::GetRecord ( int iRecord, QueryStatRecord_t & tRe
 
 	tRecord.m_uTimestamp = tExact.m_uTimestamp;
 	tRecord.m_iCount = 1;
+}
+
+QueryStatContainerExact_c::QueryStatContainerExact_c() = default;
+
+QueryStatContainerExact_c::QueryStatContainerExact_c ( QueryStatContainerExact_c && tOther ) : m_dRecords { std::move ( tOther.m_dRecords ) }
+{
+}
+
+QueryStatContainerExact_c & QueryStatContainerExact_c::operator = ( QueryStatContainerExact_c && tOther )
+{
+	if ( &tOther!=this )
+		m_dRecords = std::move ( tOther.m_dRecords );
+	return *this;
 }
 #endif
 

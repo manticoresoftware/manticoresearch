@@ -125,6 +125,22 @@ index test12_rt
 	blend_chars	= +, %, -, $
 }
 
+source test20
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1, 'RE: Lloyd 92X rear Cargo Rubber Mat' AS content
+}
+
+index test20
+{
+	source			= test20
+	path			= <data_path/>/test20
+
+	charset_table	= A..Z->a..z, _, a..z
+	blend_chars = 0..9, U+23, U+2E, U+2C, U+7C, U+3A, U+2F
+	blend_mode = trim_none
+}
 
 </config>
 
@@ -189,6 +205,11 @@ index test12_rt
 <sphinxql>SELECT id, weight() FROM test12_rt WHERE MATCH('путин-то')</sphinxql>
 
 <sphinxql>CALL KEYWORDS('intel e8500 cpu', 'test', 1)</sphinxql>
+
+<!-- regression blended head position -->
+<sphinxql>set profiling=1</sphinxql>
+<sphinxql>SELECT * FROM test20 WHERE MATCH ( ' "92X rear" ' )</sphinxql>
+<sphinxql>show plan</sphinxql>
 </sphqueries>
 
 </test>

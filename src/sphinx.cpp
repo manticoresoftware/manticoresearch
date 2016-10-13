@@ -9749,6 +9749,12 @@ bool CSphIndex::BuildDocList ( SphAttr_t ** ppDocList, int64_t * pCount, CSphStr
 	return true;
 }
 
+void CSphIndex::GetFieldFilterSettings ( CSphFieldFilterSettings & tSettings )
+{
+	if ( m_pFieldFilter )
+		m_pFieldFilter->GetSettings ( tSettings );
+}
+
 /////////////////////////////////////////////////////////////////////////////
 
 CSphIndex * sphCreateIndexPhrase ( const char* szIndexName, const char * sFilename )
@@ -16672,10 +16678,32 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 			fprintf ( fp, "\thtml_index_attrs = %s\n", m_tSettings.m_sHtmlIndexAttrs.cstr () );
 		if ( !m_tSettings.m_sHtmlRemoveElements.IsEmpty() )
 			fprintf ( fp, "\thtml_remove_elements = %s\n", m_tSettings.m_sHtmlRemoveElements.cstr () );
-		if ( m_tSettings.m_sZones.cstr() )
+		if ( !m_tSettings.m_sZones.IsEmpty() )
 			fprintf ( fp, "\tindex_zones = %s\n", m_tSettings.m_sZones.cstr() );
 		if ( m_tSettings.m_bIndexFieldLens )
 			fprintf ( fp, "\tindex_field_lengths = 1\n" );
+		if ( m_tSettings.m_bIndexSP )
+			fprintf ( fp, "\tindex_sp = 1\n" );
+		if ( m_tSettings.m_iBoundaryStep!=0 )
+			fprintf ( fp, "\tphrase_boundary_step = %d\n", m_tSettings.m_iBoundaryStep );
+		if ( m_tSettings.m_iStopwordStep!=1 )
+			fprintf ( fp, "\tstopword_step = %d\n", m_tSettings.m_iStopwordStep );
+		if ( m_tSettings.m_iOvershortStep!=1 )
+			fprintf ( fp, "\tovershort_step = %d\n", m_tSettings.m_iOvershortStep );
+		if ( m_tSettings.m_eBigramIndex!=SPH_BIGRAM_NONE )
+			fprintf ( fp, "\tbigram_index = %s\n", sphBigramName ( m_tSettings.m_eBigramIndex ) );
+		if ( !m_tSettings.m_sBigramWords.IsEmpty() )
+			fprintf ( fp, "\tbigram_freq_words = %s\n", m_tSettings.m_sBigramWords.cstr() );
+		if ( !m_tSettings.m_sRLPContext.IsEmpty() )
+			fprintf ( fp, "\trlp_context = %s\n", m_tSettings.m_sRLPContext.cstr() );
+		if ( !m_tSettings.m_sIndexTokenFilter.IsEmpty() )
+			fprintf ( fp, "\tindex_token_filter = %s\n", m_tSettings.m_sIndexTokenFilter.cstr() );
+
+
+		CSphFieldFilterSettings tFieldFilter;
+		GetFieldFilterSettings ( tFieldFilter );
+		ARRAY_FOREACH ( i, tFieldFilter.m_dRegexps )
+			fprintf ( fp, "\tregexp_filter = %s\n", tFieldFilter.m_dRegexps[i].cstr() );
 
 		if ( m_pTokenizer )
 		{
@@ -16683,7 +16711,8 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 			fprintf ( fp, "\tcharset_type = %s\n", ( tSettings.m_iType==TOKENIZER_UTF8 || tSettings.m_iType==TOKENIZER_NGRAM )
 					? "utf-8"
 					: "unknown tokenizer (deprecated sbcs?)" );
-			fprintf ( fp, "\tcharset_table = %s\n", tSettings.m_sCaseFolding.cstr () );
+			if ( !tSettings.m_sCaseFolding.IsEmpty() )
+				fprintf ( fp, "\tcharset_table = %s\n", tSettings.m_sCaseFolding.cstr () );
 			if ( tSettings.m_iMinWordLen>1 )
 				fprintf ( fp, "\tmin_word_len = %d\n", tSettings.m_iMinWordLen );
 			if ( tSettings.m_iNgramLen && !tSettings.m_sNgramChars.IsEmpty() )
@@ -16719,6 +16748,8 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 			}
 			if ( tSettings.m_iMinStemmingLen>1 )
 				fprintf ( fp, "\tmin_stemming_len = %d\n", tSettings.m_iMinStemmingLen );
+			if ( tSettings.m_bStopwordsUnstemmed )
+				fprintf ( fp, "\tstopwords_unstemmed = 1\n" );
 		}
 
 		fprintf ( fp, "}\n" );
@@ -16767,6 +16798,19 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 	fprintf ( fp, "html-index-attrs: %s\n", m_tSettings.m_sHtmlIndexAttrs.cstr () );
 	fprintf ( fp, "html-remove-elements: %s\n", m_tSettings.m_sHtmlRemoveElements.cstr () );
 	fprintf ( fp, "index-zones: %s\n", m_tSettings.m_sZones.cstr() );
+	fprintf ( fp, "index-field-lengths: %d\n", m_tSettings.m_bIndexFieldLens ? 1 : 0 );
+	fprintf ( fp, "index-sp: %d\n", m_tSettings.m_bIndexSP ? 1 : 0 );
+	fprintf ( fp, "phrase-boundary-step: %d\n", m_tSettings.m_iBoundaryStep );
+	fprintf ( fp, "stopword-step: %d\n", m_tSettings.m_iStopwordStep );
+	fprintf ( fp, "overshort-step: %d\n", m_tSettings.m_iOvershortStep );
+	fprintf ( fp, "bigram-index: %s\n", sphBigramName ( m_tSettings.m_eBigramIndex ) );
+	fprintf ( fp, "bigram-freq-words: %s\n", m_tSettings.m_sBigramWords.cstr() );
+	fprintf ( fp, "rlp-context: %s\n", m_tSettings.m_sRLPContext.cstr() );
+	fprintf ( fp, "index-token-filter: %s\n", m_tSettings.m_sIndexTokenFilter.cstr() );
+	CSphFieldFilterSettings tFieldFilter;
+	GetFieldFilterSettings ( tFieldFilter );
+	ARRAY_FOREACH ( i, tFieldFilter.m_dRegexps )
+		fprintf ( fp, "regexp-filter: %s\n", tFieldFilter.m_dRegexps[i].cstr() );
 
 	if ( m_pTokenizer )
 	{
@@ -16781,8 +16825,8 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 		fprintf ( fp, "tokenizer-ignore-chars: %s\n", tSettings.m_sIgnoreChars.cstr () );
 		fprintf ( fp, "tokenizer-blend-chars: %s\n", tSettings.m_sBlendChars.cstr () );
 		fprintf ( fp, "tokenizer-blend-mode: %s\n", tSettings.m_sBlendMode.cstr () );
+		fprintf ( fp, "tokenizer-blend-mode: %s\n", tSettings.m_sBlendMode.cstr () );
 
-		fprintf ( fp, "tokenizer-exceptions: %s\n", tSettings.m_sSynonymsFile.cstr () );
 		fprintf ( fp, "dictionary-embedded-exceptions: %d\n", tEmbeddedFiles.m_bEmbeddedSynonyms ? 1 : 0 );
 		if ( tEmbeddedFiles.m_bEmbeddedSynonyms )
 		{
@@ -16816,18 +16860,11 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 		}
 
 		fprintf ( fp, "min-stemming-len: %d\n", tSettings.m_iMinStemmingLen );
+		fprintf ( fp, "stopwords-unstemmed: %d\n", tSettings.m_bStopwordsUnstemmed ? 1 : 0 );
 	}
 
 	fprintf ( fp, "killlist-size: %u\n", m_uKillListSize );
 	fprintf ( fp, "min-max-index: " INT64_FMT "\n", m_iMinMaxIndex );
-
-	if ( m_pFieldFilter )
-	{
-		CSphFieldFilterSettings tSettings;
-		m_pFieldFilter->GetSettings ( tSettings );
-		ARRAY_FOREACH ( i, tSettings.m_dRegexps )
-			fprintf ( fp, "field-filter-regexp [%d]: %s\n", i, tSettings.m_dRegexps[i].cstr() );
-	}
 }
 
 

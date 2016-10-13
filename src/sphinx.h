@@ -3361,6 +3361,8 @@ public:
 	/// internal replace kill-list and rewrite spk file, DO NOT USE
 	virtual bool				ReplaceKillList ( const SphDocID_t *, int ) { return true; }
 
+	virtual void				GetFieldFilterSettings ( CSphFieldFilterSettings & tSettings );
+
 public:
 	int64_t						m_iTID;
 

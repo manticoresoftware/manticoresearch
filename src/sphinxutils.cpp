@@ -1384,6 +1384,25 @@ bool sphConfFieldFilter ( const CSphConfigSection & hIndex, CSphFieldFilterSetti
 }
 #endif
 
+const char * sphBigramName ( ESphBigram eType )
+{
+	switch ( eType )
+	{
+		case SPH_BIGRAM_ALL:
+			return "all";
+
+		case SPH_BIGRAM_FIRSTFREQ:
+			return "first_freq";
+
+		case SPH_BIGRAM_BOTHFREQ:
+			return "both_freq";
+
+		case SPH_BIGRAM_NONE:
+		default:
+			return "none";
+	}
+}
+
 bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSettings, CSphString & sError )
 {
 	// misc settings

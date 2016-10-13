@@ -169,6 +169,8 @@ bool			sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIn
 
 bool			sphInitCharsetAliasTable ( CSphString & sError );
 
+const char * sphBigramName ( ESphBigram eType );
+
 enum ESphLogLevel
 {
 	SPH_LOG_FATAL	= 0,

@@ -755,7 +755,7 @@ public:
 	static inline void Copy ( T * pNew, T * pData, int iLength )
 	{
 		for ( int i=0; i<iLength; i++ )
-			pNew[i] = std::move(pData[i]);
+			pNew[i] = std::move ( pData[i] );
 	}
 
 	static inline int Relimit ( int iLimit, int iNewLimit )
@@ -825,12 +825,12 @@ public:
 		m_pData [ m_iLength++ ] = tValue;
 	}
 
-	void Add ( T && tValue )
+	void Add ( T&& tValue )
 	{
 		assert ( ( &tValue<m_pData || &tValue>=( m_pData+m_iLength ) ) && "inserting own value (like last()) by ref!" );
 		if ( m_iLength>=m_iLimit )
 			Reserve ( 1+m_iLength );
-		m_pData[m_iLength++] = std::move(tValue);
+		m_pData [ m_iLength++ ] = std::move ( tValue );
 	}
 
 	/// add N more entries, and return a pointer to that buffer
@@ -1074,14 +1074,17 @@ public:
 	}
 
 	/// move
-	const CSphVector<T> &operator= ( CSphVector<T> &&rhs )
+	const CSphVector<T> & operator= ( CSphVector<T>&& rhs )
 	{
 		Reset ();
 
 		m_iLength = rhs.m_iLength;
 		m_iLimit = rhs.m_iLimit;
 		m_pData = rhs.m_pData;
+
 		rhs.m_pData = nullptr;
+		rhs.m_iLength = 0;
+		rhs.m_iLimit = 0;
 
 		return *this;
 	}
@@ -1260,19 +1263,20 @@ public:
 	}
 
 	CSphFixedVector ( CSphFixedVector&& rhs )
-		: m_pData (std::move(rhs.m_pData))
-		, m_iSize (std::move(rhs.m_iSize))
+		: m_pData ( std::move ( rhs.m_pData ) )
+		, m_iSize ( std::move ( rhs.m_iSize ) )
 	{
 		rhs.m_pData = nullptr;
 		rhs.m_iSize = 0;
 	}
 
-	CSphFixedVector& operator= ( CSphFixedVector&& rhs )
+	CSphFixedVector & operator= ( CSphFixedVector&& rhs )
 	{
 		if ( &rhs!=this )
 		{
 			m_pData = std::move ( rhs.m_pData );
 			m_iSize = std::move ( rhs.m_iSize );
+
 			rhs.m_pData = nullptr;
 			rhs.m_iSize = 0;
 		}
@@ -1490,7 +1494,7 @@ public:
 	/// add new entry
 	/// returns true on success
 	/// returns false if this key is already hashed
-	bool Add ( T&& tValue, const KEY &tKey )
+	bool Add ( T&& tValue, const KEY & tKey )
 	{
 		// check if this key is already hashed
 		HashEntry_t * pEntry = AddImpl ( tKey );
@@ -1775,8 +1779,8 @@ public:
 		*this = rhs;
 	}
 
-	CSphString ( CSphString && rhs )
-		: m_sValue { std::move ( rhs.m_sValue ) }
+	CSphString ( CSphString&& rhs )
+		: m_sValue ( std::move ( rhs.m_sValue ) )
 	{
 		rhs.m_sValue = nullptr;
 	}
@@ -1869,14 +1873,23 @@ public:
 		return *this;
 	}
 
-	CSphString & operator = ( CSphString && rhs )
+	CSphString & operator = ( CSphString&& rhs )
 	{
-		if ( &rhs!=this )
+		if ( m_sValue==rhs.m_sValue )
+			return *this;
+		if ( m_sValue!=EMPTY )
+			SafeDeleteArray ( m_sValue );
+
+		if ( rhs.m_sValue )
 		{
-			m_sValue = std::move ( rhs.m_sValue );
-			rhs.m_sValue = nullptr;
-			if ( !m_sValue || m_sValue[0]=='\0')
+			if ( rhs.m_sValue[0]=='\0' )
+			{
 				m_sValue = EMPTY;
+			} else
+			{
+				m_sValue = std::move ( rhs.m_sValue );
+				rhs.m_sValue = nullptr;
+			}
 		}
 		return *this;
 	}
@@ -2410,8 +2423,8 @@ public:
 		m_pPtr = rhs.m_pPtr;
 	}
 
-	CSphRefcountedPtr ( CSphRefcountedPtr && rhs )
-		: m_pPtr { std::move ( rhs.m_pPtr ) }
+	CSphRefcountedPtr ( CSphRefcountedPtr&& rhs )
+		: m_pPtr ( std::move ( rhs.m_pPtr ) )
 	{
 		rhs.m_pPtr = nullptr;
 	}
@@ -2441,7 +2454,7 @@ public:
 		return *this;
 	}
 
-	CSphRefcountedPtr<T> &operator= ( CSphRefcountedPtr<T> &&rhs )
+	CSphRefcountedPtr<T> & operator= ( CSphRefcountedPtr<T>&& rhs )
 	{
 		SafeRelease( m_pPtr );
 		m_pPtr = std::move ( rhs.m_pPtr );
@@ -2947,7 +2960,7 @@ bool sphIsLtLib();
 	THREAD_ANNOTATION_ATTRIBUTE__(unlock_function(__VA_ARGS__))
 
 /// mutex implementation
-class CAPABILITY ( "mutex" ) CSphMutex
+class CAPABILITY ( "mutex" ) CSphMutex : public ISphNoncopyable
 {
 public:
 	CSphMutex ();
@@ -2956,13 +2969,6 @@ public:
 	bool Lock () ACQUIRE();
 	bool Unlock () RELEASE();
 	bool TimedLock ( int iMsec ) TRY_ACQUIRE(false);
-
-	// For negative capabilities.
-	const CSphMutex& operator! () const { return * this; }
-
-	CSphMutex(CSphMutex&&);
-	// FIXME! moving is not MT-safe
-	CSphMutex& operator=(CSphMutex&&);
 
 protected:
 #if USE_WINDOWS
@@ -2978,7 +2984,7 @@ public:
 };
 
 // event implementation
-class CSphAutoEvent
+class CSphAutoEvent : public ISphNoncopyable
 {
 public:
 	CSphAutoEvent () {}
@@ -3001,7 +3007,7 @@ protected:
 };
 
 // semaphore implementation
-class CSphSemaphore
+class CSphSemaphore : public ISphNoncopyable
 {
 public:
 	CSphSemaphore ();
@@ -3025,7 +3031,7 @@ protected:
 
 /// scoped mutex lock
 template < typename T >
-class SCOPED_CAPABILITY CSphScopedLock : ISphNoncopyable
+class SCOPED_CAPABILITY CSphScopedLock : public ISphNoncopyable
 {
 public:
 	/// lock on creation
@@ -3057,19 +3063,12 @@ public:
 #endif
 	}
 
-	CSphRwlock ( CSphRwlock&& rhs );
-	// FIXME! moving is not MT-safe.
-	CSphRwlock& operator= ( CSphRwlock&& rhs );
-
 	bool Init ( bool bPreferWriter=false );
 	bool Done ();
 
 	bool ReadLock () ACQUIRE_SHARED();
 	bool WriteLock () ACQUIRE();
 	bool Unlock () UNLOCK_FUNCTION();
-
-	// For negative capabilities.
-	const CSphRwlock& operator! () const { return * this; }
 
 private:
 	bool				m_bInitialized;
@@ -3083,149 +3082,46 @@ private:
 };
 
 
-/// rwlock with no need to manually init/done.
-class CSphManagedRwlock : public CSphRwlock
-{
-public:
-	CSphManagedRwlock ( bool bPreferWriter = false )
-	{
-		Init ( bPreferWriter );
-	}
-	~CSphManagedRwlock ()
-	{
-		Done ();
-	}
-
-	CSphManagedRwlock( CSphManagedRwlock&& rhs);
-	CSphManagedRwlock& operator= ( CSphManagedRwlock&& rhs);
-};
-
-
 /// scoped shared (read) lock
 class SCOPED_CAPABILITY CSphScopedRLock : ISphNoncopyable
 {
 public:
 	/// lock on creation
 	CSphScopedRLock ( CSphRwlock & tLock ) ACQUIRE_SHARED( tLock )
-		: m_pLock { &tLock }
+		: m_tLock ( tLock )
 	{
-		m_pLock->ReadLock();
-	}
-
-	CSphScopedRLock ( CSphScopedRLock&& rhs )
-		: m_pLock { std::move(rhs.m_pLock) }
-	{
-		rhs.m_pLock = nullptr;
-	}
-
-	CSphScopedRLock& operator= ( CSphScopedRLock&& rhs )
-	{
-		if ( &rhs != this )
-		{
-			m_pLock = std::move(rhs.m_pLock);
-			rhs.m_pLock = nullptr;
-		}
-		return *this;
+		m_tLock.ReadLock();
 	}
 
 	/// unlock on going out of scope
 	~CSphScopedRLock () RELEASE ()
 	{
-		if ( m_pLock )
-			m_pLock->Unlock ();
+		m_tLock.Unlock();
 	}
 
 protected:
-	CSphRwlock * m_pLock;
+	CSphRwlock & m_tLock;
 };
 
-/// scoped exclusive (write) lock
+/// scoped shared (write) lock
 class SCOPED_CAPABILITY CSphScopedWLock : ISphNoncopyable
 {
 public:
 	/// lock on creation
-	CSphScopedWLock ( CSphRwlock &tLock ) ACQUIRE( tLock )
-		: m_pLock {&tLock}
+	CSphScopedWLock ( CSphRwlock & tLock ) ACQUIRE_SHARED( tLock )
+		: m_tLock ( tLock )
 	{
-		m_pLock->WriteLock ();
-	}
-
-	CSphScopedWLock ( CSphScopedWLock &&rhs )
-		: m_pLock {std::move ( rhs.m_pLock )}
-	{
-		rhs.m_pLock = nullptr;
-	}
-
-	CSphScopedWLock &operator= ( CSphScopedWLock &&rhs )
-	{
-		if ( &rhs!=this )
-		{
-			m_pLock = std::move ( rhs.m_pLock );
-			rhs.m_pLock = nullptr;
-		}
-		return *this;
+		m_tLock.WriteLock();
 	}
 
 	/// unlock on going out of scope
-	~CSphScopedWLock () RELEASE()
+	~CSphScopedWLock () RELEASE ()
 	{
-		if ( m_pLock )
-			m_pLock->Unlock ();
+		m_tLock.Unlock();
 	}
 
 protected:
-	CSphRwlock * m_pLock;
-};
-
-
-template<typename TUnlock>
-class SCOPED_CAPABILITY TUnlockGuard : ISphNoncopyable
-{
-public:
-	/// lock on creation
-	TUnlockGuard ( TUnlock * pLock=nullptr ) ACQUIRE ( m_pLock )
-		: m_pLock { pLock }
-	{
-		if ( m_pLock )
-			m_pLock->AddRef ();
-	}
-
-	TUnlockGuard ( TUnlockGuard&& rhs )
-		: m_pLock { std::move ( rhs.m_pLock ) }
-	{
-		rhs.m_pLock = nullptr;
-	}
-
-	TUnlockGuard& operator= ( TUnlockGuard&& rhs )
-	{
-		if ( &rhs != this )
-		{
-			m_pLock = std::move ( rhs.m_pLock );
-			rhs.m_pLock = nullptr;
-		}
-		return *this;
-	}
-
-
-	inline operator TUnlock * ( ) const
-	{
-		return m_pLock;
-	}
-
-	inline TUnlock* RawPtr () const
-	{
-		return m_pLock;
-	}
-
-	/// unlock on going out of scope
-	~TUnlockGuard () RELEASE ( m_pLock )
-	{
-		if ( m_pLock )
-			m_pLock->Release ();
-	}
-
-private:
-	TUnlock * m_pLock;
+	CSphRwlock & m_tLock;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -3966,16 +3862,19 @@ public:
 		, m_iUsed ( 0 )
 	{}
 
-	CircularBuffer_T ( CircularBuffer_T && rhs )
-		: m_dValues { std::move (rhs.m_dValues)}
-		, m_fGrowFactor { rhs.m_fGrowFactor}
-		, m_iHead { rhs.m_iHead}
-		, m_iTail { rhs.m_iTail}
-		, m_iUsed { rhs.m_iUsed}
+	CircularBuffer_T ( CircularBuffer_T&& rhs )
+		: m_dValues ( std::move ( rhs.m_dValues ) )
+		, m_fGrowFactor ( rhs.m_fGrowFactor )
+		, m_iHead ( rhs.m_iHead )
+		, m_iTail ( rhs.m_iTail )
+		, m_iUsed ( rhs.m_iUsed )
 	{
+		rhs.m_iHead = 0;
+		rhs.m_iTail = 0;
+		rhs.m_iUsed = 0;
 	}
 
-	CircularBuffer_T& operator= ( CircularBuffer_T&& rhs )
+	CircularBuffer_T & operator= ( CircularBuffer_T&& rhs )
 	{
 		if ( &rhs!=this )
 		{
@@ -3984,6 +3883,10 @@ public:
 			m_iHead = rhs.m_iHead;
 			m_iTail = rhs.m_iTail;
 			m_iUsed = rhs.m_iUsed;
+
+			rhs.m_iHead = 0;
+			rhs.m_iTail = 0;
+			rhs.m_iUsed = 0;
 		}
 		return *this;
 	}

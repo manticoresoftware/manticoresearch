@@ -274,7 +274,7 @@ struct HostDashboard_t : public ISphRefcountedMT
 	HostUrl_c		m_tDescriptor;			// only host info, no indices. Used for ping.
 	bool			m_bNeedPing;			// we'll ping only HA agents, not everyone
 
-	mutable CSphManagedRwlock	 m_dDataLock;	
+	mutable CSphRwlock	 m_dDataLock;	
 	int64_t		m_iLastAnswerTime GUARDED_BY ( m_dDataLock );		// updated when we get an answer from the host
 	int64_t		m_iLastQueryTime GUARDED_BY ( m_dDataLock );		// updated when we send a query to a host
 	int64_t		m_iErrorsARow GUARDED_BY ( m_dDataLock );			// num of errors a row, updated when we update the general statistic.
@@ -308,7 +308,7 @@ struct MultiAgentDesc_t
 private:
 	CSphVector<AgentDesc_c> m_dHosts;
 	CSphAtomic				m_iRRCounter;	/// round-robin counter
-	mutable CSphManagedRwlock	 m_dWeightLock;	/// manages access to m_pWeights
+	mutable CSphRwlock		m_dWeightLock;	/// manages access to m_pWeights
 	CSphFixedVector<WORD>	m_dWeights		/// the weights of the hosts
 			GUARDED_BY (m_dWeightLock);
 	DWORD					m_uTimestamp;	/// timestamp of last weight's actualization
@@ -316,16 +316,23 @@ private:
 
 public:
 	MultiAgentDesc_t ()
-		: m_dWeights {0}
-		, m_uTimestamp { HostDashboard_t::GetCurSeconds () }
-		, m_eStrategy { HA_DEFAULT }
+		: m_dWeights ( 0 )
+		, m_uTimestamp ( HostDashboard_t::GetCurSeconds () )
+		, m_eStrategy ( HA_DEFAULT )
 	{
+		m_dWeightLock.Init();
 	}
 
 	MultiAgentDesc_t ( const MultiAgentDesc_t & rhs )
-		: m_dWeights(0)
+		: m_dWeights ( 0 )
 	{
+		m_dWeightLock.Init();
 		*this = rhs;
+	}
+
+	~MultiAgentDesc_t()
+	{
+		m_dWeightLock.Done();
 	}
 
 	MultiAgentDesc_t & operator= ( const MultiAgentDesc_t & rhs ) EXCLUDES ( m_dWeightLock);
@@ -412,18 +419,29 @@ struct SearchdStats_t
 	}
 };
 
-using GuardedHostDashboard_t = TUnlockGuard<HostDashboard_t>;
-
 class cDashStorage : public ISphNoncopyable
 {
 	using cVector = CSphVector<HostDashboard_t*>;
 	cVector							m_dDashes GUARDED_BY(m_tLock);	// stores atomic pointer to active tRefVector
-	mutable CSphManagedRwlock		m_tLock;
+	mutable CSphRwlock				m_tLock;
 
 public:
 	void				AddAgent ( AgentDesc_c * pAgent );
-	GuardedHostDashboard_t	FindAgent ( const char* sAgent ) const;
-	void				GetActiveDashes ( CSphVector<GuardedHostDashboard_t>& dAgents ) const;
+	HostDashboard_t *	FindAgent ( const char* sAgent ) const;
+	void				GetActiveDashes ( CSphVector<HostDashboard_t *> & dAgents ) const;
+
+	cDashStorage ()
+	{
+		m_tLock.Init();
+	}
+
+	~cDashStorage()
+	{
+		m_tLock.Done();
+	}
+
+	void Lock () { m_tLock.ReadLock(); }
+	void Unlock () { m_tLock.Unlock(); }
 };
 
 

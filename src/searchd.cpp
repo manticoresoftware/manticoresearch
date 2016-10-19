@@ -2355,6 +2355,7 @@ int sphPoll ( int iSock, int64_t tmTimeout, bool bWrite=false )
 	CloseOnDestroy dEid ( eid );
 	epoll_event dEvent;
 	dEvent.events = bWrite ? EPOLLOUT : EPOLLIN;
+	dEvent.data.ptr = NULL; // to keep leak checker silent
 	epoll_ctl ( eid, EPOLL_CTL_ADD, iSock, &dEvent );
 	// do poll
 	return ::epoll_wait ( eid, &dEvent, 1, int ( tmTimeout/1000 ) );
@@ -2389,6 +2390,7 @@ bool sphSockEof ( int iSock )
 	CloseOnDestroy dEid ( eid );
 	epoll_event dEvent;
 	dEvent.events = EPOLLPRI | EPOLLIN;
+	dEvent.data.ptr = NULL; // to keep leak checker silent
 	epoll_ctl ( eid, EPOLL_CTL_ADD, iSock, &dEvent );
 	if ( ::epoll_wait ( eid, &dEvent, 1, 0 )<0 )
 		return true;
@@ -6437,14 +6439,13 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 
 /////////////////////////////////////////////////////////////////////////////
 
-class CSphSchemaMT;
-using GuardedSchemaMT = TUnlockGuard<CSphSchemaMT>;
-
+// TODO: DELETE!!!
 class CSphSchemaMT : public CSphSchema
 {
 public:
 	explicit				CSphSchemaMT ( const char * sName="(nameless)" ) : CSphSchema ( sName ), m_pLock ( NULL )
-	{}
+	{
+	}
 
 	void AwareMT()
 	{
@@ -6462,7 +6463,7 @@ public:
 	}
 
 	// get wlocked entry, only if it is not yet touched
-	inline GuardedSchemaMT GetVirgin () ACQUIRE ( )
+	inline CSphSchemaMT * GetVirgin () ACQUIRE ( )
 	{
 		if ( !m_pLock )
 			return this;
@@ -6472,7 +6473,7 @@ public:
 			if ( m_dAttrs.GetLength()!=0 ) // not already a virgin
 			{
 				m_pLock->Unlock();
-				return GuardedSchemaMT(NULL);
+				return nullptr;
 			}
 			return this;
 		} else
@@ -6484,7 +6485,7 @@ public:
 		return nullptr;
 	}
 
-	inline GuardedSchemaMT RLock() ACQUIRE_SHARED ( )
+	inline CSphSchemaMT * RLock() ACQUIRE_SHARED ( )
 	{
 		if ( !m_pLock )
 			return this;
@@ -6502,7 +6503,6 @@ public:
 		if ( m_pLock )
 			m_pLock->Unlock();
 	}
-	inline void AddRef () {};
 
 private:
 	mutable CSphRwlock * m_pLock;
@@ -7498,12 +7498,12 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 	{
 		CSphString & sError = ppResults[i]->m_sError;
 		const CSphQuery & tQuery = m_dQueries[i+m_iStart];
-		GuardedSchemaMT tExtraSchemaMT = tQuery.m_bAgent?m_dExtraSchemas[i+m_iStart].GetVirgin():nullptr;
+		CSphSchemaMT * pExtraSchemaMT = tQuery.m_bAgent ? m_dExtraSchemas[i+m_iStart].GetVirgin() : nullptr;
 
 		m_tHook.m_pIndex = pServed->m_pIndex;
 		SphQueueSettings_t tQueueSettings ( tQuery, pServed->m_pIndex->GetMatchSchema(), sError, m_pProfile );
 		tQueueSettings.m_bComputeItems = true;
-		tQueueSettings.m_pExtra = tExtraSchemaMT;
+		tQueueSettings.m_pExtra = pExtraSchemaMT;
 		tQueueSettings.m_pUpdate = m_pUpdates;
 		tQueueSettings.m_pDeletes = m_pDelete;
 		tQueueSettings.m_pHook = &m_tHook;
@@ -7518,6 +7518,9 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 		// can't use multi-query for sorter with string attribute at group by or sort
 		if ( ppSorters[i] && *pMulti )
 			*pMulti = ppSorters[i]->CanMulti();
+
+		if ( pExtraSchemaMT )
+			pExtraSchemaMT->Release();
 	}
 	if ( !iValidSorters )
 	{
@@ -8352,17 +8355,19 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		// we can reuse the very same sorter
 		if ( bAllEqual )
 		{
-			GuardedSchemaMT tExtraSchemaMT = m_dQueries[iStart].m_bAgent?m_dExtraSchemas[iStart].GetVirgin():NULL;
+			CSphSchemaMT * pExtraSchemaMT = m_dQueries[iStart].m_bAgent ? m_dExtraSchemas[iStart].GetVirgin() : NULL;
 
 			m_tHook.m_pIndex = pFirstIndex->m_pIndex;
 			SphQueueSettings_t tQueueSettings ( m_dQueries[iStart], tFirstSchema, sError, m_pProfile );
 			tQueueSettings.m_bComputeItems = true;
-			tQueueSettings.m_pExtra = tExtraSchemaMT;
+			tQueueSettings.m_pExtra = pExtraSchemaMT;
 			tQueueSettings.m_pHook = &m_tHook;
 
 			pLocalSorter = sphCreateQueue ( tQueueSettings );
 
 			uLocalPFFlags = tQueueSettings.m_uPackedFactorFlags;
+			if ( pExtraSchemaMT )
+				pExtraSchemaMT->Release();
 		}
 
 		ReleaseIndex ( 0 );
@@ -8604,7 +8609,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 		if ( tRes.m_iSuccesses>1 || tQuery.m_dItems.GetLength() || pAggrFilter )
 		{
-			auto tExtraSchema = ( pExtraSchema ? pExtraSchema->RLock() : nullptr );
+			if ( pExtraSchema )
+				pExtraSchema->RLock();
 			if ( m_bMaster && tRes.m_iSuccesses && tQuery.m_dItems.GetLength() && tQuery.m_sGroupBy.IsEmpty() && tRes.m_dMatches.GetLength()==0 )
 			{
 				ARRAY_FOREACH ( i, tQuery.m_dItems )
@@ -8614,7 +8620,11 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				}
 			}
 
-			if ( !MinimizeAggrResult ( tRes, tQuery, m_dLocal.GetLength(), dAgents.GetLength(), pExtraSchema, m_pProfile, m_bSphinxql, pAggrFilter ) )
+			bool bOk = MinimizeAggrResult ( tRes, tQuery, m_dLocal.GetLength(), dAgents.GetLength(), pExtraSchema, m_pProfile, m_bSphinxql, pAggrFilter );
+
+			if ( pExtraSchema )
+				pExtraSchema->Release();
+			if ( !bOk )
 			{
 				tRes.m_iSuccesses = 0;
 				return; // FIXME? really return, not just continue?
@@ -11772,7 +11782,8 @@ void BuildAgentStatus ( VectorLike & dStatus, const CSphString& sAgent )
 	if ( dStatus.MatchAdd ( "status_stored_periods" ) )
 		dStatus.Add().SetSprintf ( "%d", STATS_DASH_TIME );
 
-	CSphVector<GuardedHostDashboard_t> dAgents;
+	g_tDashes.Lock();
+	CSphVector<HostDashboard_t *> dAgents;
 	g_tDashes.GetActiveDashes ( dAgents );
 
 	CSphString sPrefix;
@@ -11781,6 +11792,7 @@ void BuildAgentStatus ( VectorLike & dStatus, const CSphString& sAgent )
 		sPrefix.SetSprintf ( "ag_%d", i );
 		BuildOneAgentStatus ( dStatus, dAgents[i], sPrefix.cstr() );
 	}
+	g_tDashes.Unlock();
 }
 
 
@@ -13786,11 +13798,11 @@ static void CheckPing ( CSphVector<AgentConn_t> & dAgents, int64_t iNow )
 	dAgents.Resize ( 0 );
 	int iCookie = (int)iNow;
 
-	CSphVector<GuardedHostDashboard_t> dDashes;
+	g_tDashes.Lock();
+	CSphVector<HostDashboard_t *> dDashes;
 	g_tDashes.GetActiveDashes ( dDashes );
-	for ( auto& tDash : dDashes )
+	for ( auto& pDash : dDashes )
 	{
-		HostDashboard_t* pDash = tDash.RawPtr ();
 		if ( pDash->m_bNeedPing )
 		{
 			CSphScopedRLock tRguard ( pDash->m_dDataLock );
@@ -13804,6 +13816,7 @@ static void CheckPing ( CSphVector<AgentConn_t> & dAgents, int64_t iNow )
 			}
 		}
 	}
+	g_tDashes.Unlock();
 
 	if ( !dAgents.GetLength() )
 		return;
@@ -18315,15 +18328,16 @@ void InitPersistentPool()
 {
 	if ( g_iPersistentPoolSize )
 	{
-		CSphVector<GuardedHostDashboard_t> tHosts;
+		g_tDashes.Lock();
+		CSphVector<HostDashboard_t *> tHosts;
 		g_tDashes.GetActiveDashes (tHosts);
-		for ( auto& tHost : tHosts )
+		for ( auto& pHost : tHosts )
 		{
-			HostDashboard_t* pHost = tHost.RawPtr ();
 			if ( !pHost->m_pPersPool )
 				pHost->m_pPersPool = new PersistentConnectionsPool_t;
 			pHost->m_pPersPool->Init ( g_iPersistentPoolSize );
 		}
+		g_tDashes.Unlock();
 	}
 }
 

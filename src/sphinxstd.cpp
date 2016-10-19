@@ -1109,22 +1109,6 @@ CSphMutex::~CSphMutex ()
 		sphDie ( "CloseHandle() failed" );
 }
 
-CSphMutex::CSphMutex ( CSphMutex && rhs )
-	: m_hMutex { rhs.m_hMutex }
-{
-	rhs.m_hMutex = NULL;
-}
-
-CSphMutex& CSphMutex::operator= ( CSphMutex && rhs )
-{
-	if ( &rhs!=this )
-	{
-		m_hMutex = std::move ( rhs.m_hMutex );
-		rhs.m_hMutex = NULL;
-	}
-	return *this;
-}
-
 bool CSphMutex::Lock ()
 {
 	DWORD uWait = WaitForSingleObject ( m_hMutex, INFINITE );
@@ -1233,26 +1217,6 @@ CSphMutex::~CSphMutex()
 		sphDie ( "pthread_mutex_destroy() failed %s", strerror ( errno ) );
 	SafeDelete ( m_pMutex );
 }
-
-CSphMutex::CSphMutex ( CSphMutex && rhs )
-	: m_pMutex { std::move ( rhs.m_pMutex ) }
-{
-	rhs.m_pMutex = nullptr;
-}
-
-CSphMutex & CSphMutex::operator= ( CSphMutex && rhs )
-{
-	if ( &rhs!=this )
-	{
-		if ( m_pMutex && pthread_mutex_destroy ( m_pMutex ) )
-			sphDie ( "pthread_mutex_destroy() failed %s", strerror ( errno ) );
-		SafeDelete ( m_pMutex );
-		m_pMutex = std::move ( rhs.m_pMutex );
-		rhs.m_pMutex = nullptr;
-	}
-	return *this;
-}
-
 
 bool CSphMutex::Lock ()
 {
@@ -1390,51 +1354,6 @@ bool CSphSemaphore::Wait ()
 //////////////////////////////////////////////////////////////////////////
 // RWLOCK
 //////////////////////////////////////////////////////////////////////////
-
-CSphRwlock::CSphRwlock ( CSphRwlock&& rhs )
-	: m_bInitialized ( rhs.m_bInitialized )
-{
-#if USE_WINDOWS
-	m_hWriteMutex = rhs.m_hWriteMutex;
-	rhs.m_hWriteMutex = INVALID_HANDLE_VALUE;
-	m_hReadEvent = rhs.m_hReadEvent;
-	rhs.m_hReadEvent = INVALID_HANDLE_VALUE;
-	m_iReaders = rhs.m_iReaders;
-#else
-	m_pLock = rhs.m_pLock;
-	rhs.m_pLock = nullptr;
-#endif
-}
-
-CSphRwlock& CSphRwlock::operator= ( CSphRwlock&& rhs )
-{
-	if ( this!=&rhs )
-	{
-		Done ();
-		m_bInitialized = rhs.m_bInitialized;
-#if USE_WINDOWS
-		m_hWriteMutex = rhs.m_hWriteMutex;
-		rhs.m_hWriteMutex = INVALID_HANDLE_VALUE;
-		m_hReadEvent = rhs.m_hReadEvent;
-		rhs.m_hReadEvent = INVALID_HANDLE_VALUE;
-		m_iReaders = rhs.m_iReaders;
-#else
-		m_pLock = rhs.m_pLock;
-		rhs.m_pLock = nullptr;
-#endif
-	}
-	return *this;
-}
-
-CSphManagedRwlock & CSphManagedRwlock::operator= ( CSphManagedRwlock && rhs )
-{
-	return (CSphManagedRwlock &)CSphRwlock::operator= ( (CSphRwlock &&)rhs );
-}
-
-CSphManagedRwlock::CSphManagedRwlock ( CSphManagedRwlock && rhs )
-	: CSphRwlock ( (CSphRwlock &&)rhs )
-{
-}
 
 #if USE_WINDOWS
 

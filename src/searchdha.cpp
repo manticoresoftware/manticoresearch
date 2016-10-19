@@ -48,10 +48,12 @@ HostDashboard_t::HostDashboard_t ( const HostUrl_c * pAgent )
 {
 	m_iRefCount = 1;
 	m_iLastQueryTime = m_iLastAnswerTime = sphMicroTimer () - g_iPingInterval*1000;
+	m_dDataLock.Init();
 }
 
 HostDashboard_t::~HostDashboard_t ()
 {
+	m_dDataLock.Done();
 	SafeDelete ( m_pPersPool );
 }
 
@@ -218,13 +220,15 @@ void PersistentConnectionsPool_t::Shutdown ()
 
 void ClosePersistentSockets()
 {
-	CSphVector<GuardedHostDashboard_t > dHosts;
+	g_tDashes.Lock();
+	CSphVector<HostDashboard_t *> dHosts;
 	g_tDashes.GetActiveDashes ( dHosts );
-	for ( auto& tHost : dHosts )
+	for ( auto& pHost : dHosts )
 	{
-		if ( tHost.RawPtr()->m_pPersPool )
-			tHost.RawPtr()->m_pPersPool->Shutdown ();
+		if ( pHost->m_pPersPool )
+			pHost->m_pPersPool->Shutdown ();
 	}
+	g_tDashes.Unlock();
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -583,7 +587,6 @@ MultiAgentDesc_t & MultiAgentDesc_t::operator= ( MultiAgentDesc_t && rhs )
 		CSphScopedRLock tRguard ( rhs.m_dWeightLock );
 		m_dWeights = std::move ( rhs.m_dWeights );
 	}
-	m_dWeightLock = std::move ( rhs.m_dWeightLock );
 	return *this;
 }
 
@@ -1189,7 +1192,7 @@ void cDashStorage::AddAgent ( AgentDesc_c * pNewAgent )
 }
 
 // Due to very rare template of usage, linear search is quite enough here
-GuardedHostDashboard_t cDashStorage::FindAgent ( const char* sAgent ) const
+HostDashboard_t * cDashStorage::FindAgent ( const char* sAgent ) const
 {
 	CSphScopedRLock tRguard ( m_tLock );
 	ARRAY_FOREACH ( i, m_dDashes )
@@ -1203,7 +1206,7 @@ GuardedHostDashboard_t cDashStorage::FindAgent ( const char* sAgent ) const
 	return nullptr; // not found
 }
 
-void cDashStorage::GetActiveDashes ( CSphVector<GuardedHostDashboard_t>& dAgents ) const
+void cDashStorage::GetActiveDashes ( CSphVector<HostDashboard_t *> & dAgents ) const
 {
 	dAgents.Reset ();
 	CSphScopedRLock tRguard ( m_tLock );
@@ -1211,7 +1214,7 @@ void cDashStorage::GetActiveDashes ( CSphVector<GuardedHostDashboard_t>& dAgents
 	{
 		if ( pDash->GetRefcount()==1 )
 			continue;
-		dAgents.Add ( GuardedHostDashboard_t ( pDash ));
+		dAgents.Add ( pDash );
 	}
 }
 

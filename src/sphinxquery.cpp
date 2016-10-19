@@ -827,7 +827,9 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		if ( m_bWasBlended )
 		{
 			iSkippedPosBeforeToken = m_pTokenizer->SkipBlended();
-			m_iAtomPos += iSkippedPosBeforeToken;
+			// just add all skipped blended parts except blended head (already added to atomPos)
+			if ( iSkippedPosBeforeToken>1 )
+				m_iAtomPos += iSkippedPosBeforeToken - 1;
 		}
 
 		// tricky stuff
@@ -1136,9 +1138,6 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			tMulti.m_iDestStart = m_dDestForms.GetLength();
 			tMulti.m_iDestCount = 0;
 		}
-
-		if ( m_pTokenizer->TokenIsBlended() )
-			m_iAtomPos--;
 
 		if ( !bMultiDest || bMultiDestHead )
 			break;

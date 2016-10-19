@@ -959,6 +959,12 @@ int main ( int argc, char ** argv )
 		if ( eCommand==CMD_BUILDIDF || eCommand==CMD_MERGEIDF )
 			break;
 
+		if ( eCommand==CMD_DUMPCONFIG && sDumpHeader.Ends ( ".sph" ) )
+			break;
+
+		if ( eCommand==CMD_DUMPHEADER && sDumpHeader.Ends ( ".sph" ) )
+			break;
+
 		if ( eCommand==CMD_DUMPDICT && !sDumpDict.Ends ( ".spi" ) )
 				sIndex = sDumpDict;
 

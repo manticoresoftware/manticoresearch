@@ -3381,6 +3381,8 @@ public:
 
 	virtual void				SetMemorySettings ( bool bMlock, bool bOndiskAttrs, bool bOndiskPool ) = 0;
 
+	virtual void				GetFieldFilterSettings ( CSphFieldFilterSettings & tSettings );
+
 public:
 	int64_t						m_iTID;					///< last committed transaction id
 

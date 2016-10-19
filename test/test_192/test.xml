@@ -146,6 +146,23 @@ index test_blend_all
 	blend_mode	= trim_none, trim_all, trim_both
 }
 
+source test20
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1, 'RE: Lloyd 92X rear Cargo Rubber Mat' AS content
+}
+
+index test20
+{
+	source			= test20
+	path			= <data_path/>/test20
+
+	charset_table	= A..Z->a..z, _, a..z
+	blend_chars = 0..9, U+23, U+2E, U+2C, U+7C, U+3A, U+2F
+	blend_mode = trim_none
+}
+
 </config>
 
 <db_insert>select 1;</db_insert>
@@ -217,6 +234,12 @@ index test_blend_all
 <sphinxql>SELECT id, content, SNIPPET(content, '"3rd * me"') s FROM test_blend_all WHERE MATCH(' "3rd * me"')</sphinxql>
 <sphinxql>SELECT id, content, SNIPPET(content, '"3rd45 * * * me"') s FROM test_blend_all WHERE MATCH(' "3rd45 * * * me"')</sphinxql>
 <sphinxql>SELECT id, content, SNIPPET(content, '"3rd45 * * * * off"') s FROM test_blend_all WHERE MATCH(' "3rd45 * * * * off"')</sphinxql>
+
+<!-- regression blended head position -->
+<sphinxql>set profiling=1</sphinxql>
+<sphinxql>SELECT * FROM test20 WHERE MATCH ( ' "92X rear" ' )</sphinxql>
+<sphinxql>show plan</sphinxql>
+
 </sphqueries>
 
 </test>

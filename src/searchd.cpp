@@ -22,6 +22,7 @@
 #include "sphinxjson.h"
 #include "sphinxplugin.h"
 #include "sphinxqcache.h"
+#include "sphinxrlp.h"
 
 extern "C"
 {
@@ -1522,6 +1523,7 @@ void Shutdown ()
 	sphShutdownWordforms ();
 	sphShutdownGlobalIDFs ();
 	sphAotShutdown ();
+	sphRLPDone();
 
 	ARRAY_FOREACH ( i, g_dListeners )
 		if ( g_dListeners[i].m_iSock>=0 )

@@ -382,6 +382,7 @@ T * CreateSourceWithProxy ( const char * sSourceName, bool )
 bool sphRLPCheckConfig ( CSphIndexSettings & tSettings, CSphString & sError );
 bool sphSpawnRLPFilter ( ISphFieldFilter * & pFieldFilter, const CSphIndexSettings & m_tSettings, const CSphTokenizerSettings & tTokSettings, const char * szIndex, CSphString & sError );
 void sphConfigureRLP ( CSphConfigSection & hCommon );
+void sphRLPDone();
 
 
 #endif // _sphinxrlp_

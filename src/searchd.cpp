@@ -9661,20 +9661,16 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 
 	if ( sOpt=="ranker" )
 	{
-		bool bUDR = sphPluginExists ( PLUGIN_RANKER, sVal.cstr() );
-		if ( sVal=="expr" || sVal=="export" || bUDR )
+		if ( sVal=="expr" || sVal=="export" )
 		{
-			if ( bUDR )
-			{
-				m_pQuery->m_eRanker = SPH_RANK_PLUGIN;
-				m_pQuery->m_sUDRanker = sVal;
-				ToStringUnescape ( m_pQuery->m_sUDRankerOpts, tArg );
-			} else
-			{
-				m_pQuery->m_eRanker = sVal=="expr" ? SPH_RANK_EXPR : SPH_RANK_EXPORT;
-				ToStringUnescape ( m_pQuery->m_sRankerExpr, tArg );
-			}
-
+			m_pQuery->m_eRanker = sVal=="expr" ? SPH_RANK_EXPR : SPH_RANK_EXPORT;
+			ToStringUnescape ( m_pQuery->m_sRankerExpr, tArg );
+			return true;
+		} else if ( sphPluginExists ( PLUGIN_RANKER, sVal.cstr() ) )
+		{
+			m_pQuery->m_eRanker = SPH_RANK_PLUGIN;
+			m_pQuery->m_sUDRanker = sVal;
+			ToStringUnescape ( m_pQuery->m_sUDRankerOpts, tArg );
 			return true;
 		}
 	}

@@ -31079,6 +31079,7 @@ void SuggestMatchWords ( const ISphWordlistSuggest * pWordlist, const CSphVector
 	const bool bMergeWords = tRes.m_bMergeWords;
 	const bool bHasExactDict = tRes.m_bHasExactDict;
 	const int iMaxEdits = tArgs.m_iMaxEdits;
+	const bool bNonCharAllowed = tArgs.m_bNonCharAllowed;
 	tRes.m_dMatched.Reserve ( iQLen * 2 );
 	CmpSuggestOrder_fn fnCmp;
 
@@ -31121,7 +31122,9 @@ void SuggestMatchWords ( const ISphWordlistSuggest * pWordlist, const CSphVector
 			{
 				dCharOffset[iChars] = s - (const BYTE *)sDictWord;
 				int iCode = sphUTF8Decode ( s );
-				bGotNonChar = ( iCode<'A' || ( iCode>'Z' && iCode<'a' ) ); // skip words with any numbers or special characters
+				if ( !bNonCharAllowed )
+					bGotNonChar = ( iCode<'A' || ( iCode>'Z' && iCode<'a' ) ); // skip words with any numbers or special characters
+
 				if_const ( !SINGLE_BYTE_CHAR )
 				{
 					dDictWordCodepoints[iChars] = iCode;

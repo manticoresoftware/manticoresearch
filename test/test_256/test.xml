@@ -47,6 +47,7 @@ index rt1
 	dict = keywords
     charset_table = a..z, _, A..Z->a..z, russian
 	min_infix_len = 3
+	blend_chars = U+0023
 }
 
 source test2
@@ -149,6 +150,13 @@ CREATE TABLE test_table
 	<sphinxql>INSERT INTO rt2 (id, idd, body) VALUES ( 6, 11, 'was arrested for stealing a tester bottle' )</sphinxql>
 	<sphinxql>CALL SUGGEST ( 'taster', 'plain2')</sphinxql>
 	<sphinxql>CALL SUGGEST ( 'taster', 'rt2')</sphinxql>
+
+	<!-- regression suggest on dict with morph and exact_words -->
+	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 21, 11, '#test from bunch of tester' )</sphinxql>
+	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 22, 11, '#test passed for #taster' )</sphinxql>
+	<sphinxql>INSERT INTO rt1 (id, idd, body) VALUES ( 23, 11, '#test #tests passes well' )</sphinxql>
+	<sphinxql>CALL SUGGEST ( '#trest', 'rt1')</sphinxql>
+	<sphinxql>CALL SUGGEST ( '#trest', 'rt1', 1 as non_char )</sphinxql>
 	
 </sphqueries>
 

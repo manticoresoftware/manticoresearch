@@ -1969,8 +1969,9 @@ struct SuggestArgs_t
 
 	bool			m_bResultOneline;
 	bool			m_bResultStats;
+	bool			m_bNonCharAllowed;
 
-	SuggestArgs_t () : m_iLimit ( 5 ), m_iMaxEdits ( 4 ), m_iDeltaLen ( 3 ), m_iQueueLen ( 25 ), m_iRejectThr ( 4 ), m_bQueryMode ( false ), m_bResultOneline ( false ), m_bResultStats ( true )
+	SuggestArgs_t () : m_iLimit ( 5 ), m_iMaxEdits ( 4 ), m_iDeltaLen ( 3 ), m_iQueueLen ( 25 ), m_iRejectThr ( 4 ), m_bQueryMode ( false ), m_bResultOneline ( false ), m_bResultStats ( true ), m_bNonCharAllowed ( false )
 	{}
 };
 

@@ -13349,6 +13349,9 @@ void HandleMysqlCallSuggest ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, bool bQu
 		} else if ( sOpt=="result_stats" )
 		{
 			tArgs.m_bResultStats = ( tStmt.m_dCallOptValues[i].m_iVal!=0 );
+		} else if ( sOpt=="non_char" )
+		{
+			tArgs.m_bNonCharAllowed = ( tStmt.m_dCallOptValues[i].m_iVal!=0 );
 		} else
 		{
 			sError.SetSprintf ( "unknown option %s", sOpt.cstr () );

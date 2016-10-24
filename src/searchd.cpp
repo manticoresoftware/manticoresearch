@@ -17460,6 +17460,15 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 
 		// save meta for SHOW *
 		tLastMeta = bUseFirstMeta ? tHandler.m_dResults[0] : tHandler.m_dResults.Last();
+
+		// fix up overall query time
+		if ( bUseFirstMeta )
+			for ( int i=1; i<tHandler.m_dResults.GetLength(); i++ )
+			{
+				tLastMeta.m_iQueryTime += tHandler.m_dResults[i].m_iQueryTime;
+				tLastMeta.m_iCpuTime += tHandler.m_dResults[i].m_iCpuTime;
+				tLastMeta.m_iAgentCpuTime += tHandler.m_dResults[i].m_iAgentCpuTime;
+			}
 	}
 
 	if ( !bSearchOK )

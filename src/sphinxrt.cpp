@@ -7244,7 +7244,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	if ( m_pFieldFilter )
 	{
 		pFieldFilter = m_pFieldFilter->Clone();
-		if ( pFieldFilter->Apply ( sModifiedQuery, strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
+		if ( pFieldFilter.Ptr() && pFieldFilter->Apply ( sModifiedQuery, strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
 			sModifiedQuery = dFiltered.Begin();
 	}
 

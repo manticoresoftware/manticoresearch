@@ -1365,7 +1365,7 @@ bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	if ( m_pFieldFilter && szQuery )
 	{
 		pFieldFilter = m_pFieldFilter->Clone();
-		if ( pFieldFilter->Apply ( sModifiedQuery, strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
+		if ( pFieldFilter.Ptr() && pFieldFilter->Apply ( sModifiedQuery, strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
 			sModifiedQuery = dFiltered.Begin();
 	}
 
@@ -16775,7 +16775,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	if ( m_pFieldFilter && szQuery )
 	{
 		pFieldFilter = m_pFieldFilter->Clone();
-		if ( pFieldFilter->Apply ( sModifiedQuery, strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
+		if ( pFieldFilter.Ptr() && pFieldFilter->Apply ( sModifiedQuery, strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
 			sModifiedQuery = dFiltered.Begin();
 	}
 
@@ -17852,7 +17852,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	if ( m_pFieldFilter )
 	{
 		pFieldFilter = m_pFieldFilter->Clone();
-		if ( pFieldFilter->Apply ( sModifiedQuery, strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
+		if ( pFieldFilter.Ptr() && pFieldFilter->Apply ( sModifiedQuery, strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
 			sModifiedQuery = dFiltered.Begin();
 	}
 

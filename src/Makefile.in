@@ -49,7 +49,6 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 LIBRARIES = $(noinst_LIBRARIES)
 AR = ar
-ARFLAGS = cru
 AM_V_AR = $(am__v_AR_@AM_V@)
 am__v_AR_ = $(am__v_AR_@AM_DEFAULT_V@)
 am__v_AR_0 = @echo "  AR    " $@;
@@ -252,6 +251,7 @@ SRC_SPHINX = sphinx.cpp sphinxexcerpt.cpp sphinxquery.cpp \
 	sphinxsearch.cpp sphinxrt.cpp sphinxjson.cpp sphinxudf.c sphinxaot.cpp sphinxplugin.cpp sphinxqcache.cpp \
 	sphinxrlp.cpp
 
+ARFLAGS = crU
 noinst_LIBRARIES = libsphinx.a
 libsphinx_a_SOURCES = $(SRC_SPHINX)
 indexer_SOURCES = indexer.cpp

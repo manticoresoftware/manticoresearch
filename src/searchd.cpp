@@ -208,71 +208,6 @@ static int				g_iAgentRetryCount = 0;
 static int				g_iAgentRetryDelay = MAX_RETRY_DELAY/2;	// global (default) values. May be override by the query options 'retry_count' and 'retry_timeout'
 bool					g_bHostnameLookup = false;
 
-
-struct ListNode_t
-{
-	ListNode_t * m_pPrev;
-	ListNode_t * m_pNext;
-	ListNode_t ()
-		: m_pPrev ( NULL )
-		, m_pNext ( NULL )
-	{ }
-};
-
-
-class List_t
-{
-public:
-	List_t ()
-	{
-		m_tStub.m_pPrev = &m_tStub;
-		m_tStub.m_pNext = &m_tStub;
-		m_iCount = 0;
-	}
-
-	void Add ( ListNode_t * pNode )
-	{
-		assert ( !pNode->m_pNext && !pNode->m_pPrev );
-		pNode->m_pNext = m_tStub.m_pNext;
-		pNode->m_pPrev = &m_tStub;
-		m_tStub.m_pNext->m_pPrev = pNode;
-		m_tStub.m_pNext = pNode;
-
-		m_iCount++;
-	}
-
-	void Remove ( ListNode_t * pNode )
-	{
-		assert ( pNode->m_pNext && pNode->m_pPrev );
-		pNode->m_pNext->m_pPrev = pNode->m_pPrev;
-		pNode->m_pPrev->m_pNext = pNode->m_pNext;
-		pNode->m_pNext = NULL;
-		pNode->m_pPrev = NULL;
-
-		m_iCount--;
-	}
-
-	int GetLength () const
-	{
-		return m_iCount;
-	}
-
-	const ListNode_t * Begin () const
-	{
-		return m_tStub.m_pNext;
-	}
-
-	const ListNode_t * End () const
-	{
-		return &m_tStub;
-	}
-
-private:
-	ListNode_t	m_tStub;	// stub node
-	int			m_iCount;	// elements counter
-};
-
-
 enum ThdState_e
 {
 	THD_HANDSHAKE = 0,
@@ -1957,16 +1892,22 @@ void SetSignalHandlers ( bool bAllowCtrlC=false )
 const int		WIN32_PIPE_BUFSIZE		= 32;
 
 /// on Windows, the wrapper just prevents the warnings
+
+#pragma warning(push) // store current warning values
+#pragma warning(disable:4127) // conditional expr is const
+#pragma warning(disable:4389) // signed/unsigned mismatch
+
 void sphFDSet ( int fd, fd_set * fdset )
 {
-	#pragma warning(push) // store current warning values
-	#pragma warning(disable:4127) // conditional expr is const
-	#pragma warning(disable:4389) // signed/unsigned mismatch
-
 	FD_SET ( fd, fdset );
-
-	#pragma warning(pop) // restore warnings
 }
+
+void sphFDClr ( int fd, fd_set * fdset )
+{
+	FD_SET ( fd, fdset );
+}
+
+#pragma warning(pop) // restore warnings
 
 #else // !USE_WINDOWS
 
@@ -1979,6 +1920,14 @@ void sphFDSet ( int fd, fd_set * set )
 		sphFatal ( "sphFDSet() failed fd=%d, FD_SETSIZE=%d", fd, FD_SETSIZE );
 	else
 		FD_SET ( fd, set );
+}
+
+void sphFDClr ( int fd, fd_set * set )
+{
+	if ( SPH_FDSET_OVERFLOW( fd ) )
+		sphFatal ( "sphFDClr() failed fd=%d, FD_SETSIZE=%d", fd, FD_SETSIZE );
+	else
+		FD_CLR ( fd, set );
 }
 
 #endif // USE_WINDOWS
@@ -2341,27 +2290,11 @@ int sphSetSockNB ( int iSock )
 	#endif
 }
 
-class CloseOnDestroy : public ISphNoncopyable
-{
-	int m_id;
-public:
-	explicit CloseOnDestroy ( int id ) : m_id ( id ) {}
-	~CloseOnDestroy() { close ( m_id ); }
-};
-
 /// wait until socket is readable or writable
 int sphPoll ( int iSock, int64_t tmTimeout, bool bWrite=false )
 {
-#if HAVE_EPOLL
-	int eid = epoll_create ( 1 );
-	CloseOnDestroy dEid ( eid );
-	epoll_event dEvent;
-	dEvent.events = bWrite ? EPOLLOUT : EPOLLIN;
-	dEvent.data.ptr = NULL; // to keep leak checker silent
-	epoll_ctl ( eid, EPOLL_CTL_ADD, iSock, &dEvent );
-	// do poll
-	return ::epoll_wait ( eid, &dEvent, 1, int ( tmTimeout/1000 ) );
-#elif HAVE_POLL
+	// don't need any epoll/kqueue here, since we check only 1 socket
+#if HAVE_POLL
 	struct pollfd pfd;
 	pfd.fd = iSock;
 	pfd.events = bWrite ? POLLOUT : POLLIN;
@@ -2378,50 +2311,6 @@ int sphPoll ( int iSock, int64_t tmTimeout, bool bWrite=false )
 
 	return ::select ( iSock+1, bWrite ? NULL : &fdSet, bWrite ? &fdSet : NULL, NULL, &tv );
 #endif
-}
-
-/// check if a socket is still connected
-bool sphSockEof ( int iSock )
-{
-	if ( iSock<0 )
-		return true;
-
-	char cBuf;
-#if HAVE_EPOLL
-	int eid = epoll_create ( 1 );
-	CloseOnDestroy dEid ( eid );
-	epoll_event dEvent;
-	dEvent.events = EPOLLPRI | EPOLLIN;
-	dEvent.data.ptr = NULL; // to keep leak checker silent
-	epoll_ctl ( eid, EPOLL_CTL_ADD, iSock, &dEvent );
-	if ( ::epoll_wait ( eid, &dEvent, 1, 0 )<0 )
-		return true;
-
-	if ( dEvent.events & (EPOLLPRI|EPOLLIN) )
-#elif HAVE_POLL
-	struct pollfd pfd;
-	pfd.fd = iSock;
-	pfd.events = POLLPRI | POLLIN;
-	if ( ::poll ( &pfd, 1, 0 )<0 )
-		return true;
-
-	if ( pfd.revents & (POLLIN|POLLPRI) )
-#else
-	fd_set fdrSet, fdeSet;
-	FD_ZERO ( &fdrSet );
-	FD_ZERO ( &fdeSet );
-	sphFDSet ( iSock, &fdrSet );
-	sphFDSet ( iSock, &fdeSet );
-	struct timeval tv = {0};
-	if ( ::select ( iSock+1, &fdrSet, NULL, &fdeSet, &tv )<0 )
-		return true;
-
-	if ( FD_ISSET ( iSock, &fdrSet ) || FD_ISSET ( iSock, &fdeSet ) )
-#endif
-		if ( ::recv ( iSock, &cBuf, sizeof(cBuf), MSG_PEEK )<=0 )
-			if ( sphSockGetErrno()!=EWOULDBLOCK )
-				return true;
-	return false;
 }
 
 
@@ -19837,327 +19726,119 @@ struct EventsIterator_t
 };
 
 
-#if HAVE_POLL
-class CSphEventsPoll
+class NetActionsPoller
 {
 private:
-	CSphVector<ISphNetAction *> m_dWork;
-	int					m_iIter;
 	EventsIterator_t	m_tIter;
+	ISphNetEvents*		m_pPoll;
 
-	CSphVector<pollfd>	m_dEvents;
-	int					m_iLastReportedErrno;
-	int					m_iReady;
-
-public:
-	CSphEventsPoll ()
-		: m_iIter ( -1 )
-		, m_iLastReportedErrno ( -1 )
-		, m_iReady ( 0 )
+	inline DWORD TranslateEvents ( DWORD uNetEvents )
 	{
-		m_dWork.Reserve ( 1000 );
+		DWORD uEvents = 0;
+		if ( uNetEvents & ISphNetEvents::SPH_POLL_RD )
+			uEvents |= NE_IN;
+		if ( uNetEvents & ISphNetEvents::SPH_POLL_WR )
+			uEvents |= NE_OUT;
+		if ( uNetEvents & ISphNetEvents::SPH_POLL_HUP )
+			uEvents |= NE_HUP;
+		if ( uNetEvents & ISphNetEvents::SPH_POLL_ERR )
+			uEvents |= NE_ERR;
+		return uEvents;
+	}
+public:
+	NetActionsPoller ()
+	{
 		m_tIter.m_pWork = NULL;
 		m_tIter.m_uEvents = 0;
+		m_pPoll = sphCreatePoll ( 1000 );
 	}
 
-	~CSphEventsPoll()
+	~NetActionsPoller()
 	{
-		ARRAY_FOREACH ( i, m_dWork )
-			SafeDelete ( m_dWork[i] );
+		if (m_pPoll)
+		{
+			m_pPoll->IterateStart ();
+			while (m_pPoll->IterateNextAll ())
+			{
+				ISphNetAction * pWork = (ISphNetAction *)m_pPoll->IterateGet ().m_pData;
+				SafeDelete (pWork);
+			}
+		}
+		SafeDelete ( m_pPoll );
 	}
 
 	void SetupEvent ( ISphNetAction * pWork, int64_t tmNow )
 	{
+		assert ( m_pPoll );
 		assert ( pWork && pWork->m_iSock>=0 );
 
 		NetEvent_e eSetup = pWork->Setup ( tmNow );
 		assert ( eSetup==NE_IN || eSetup==NE_OUT );
 
-		pollfd tEvent;
-		tEvent.fd = pWork->m_iSock;
-		tEvent.events = ( eSetup==NE_IN ? POLLIN : POLLOUT );
-
-		m_dEvents.Add ( tEvent );
-		m_dWork.Add ( pWork );
+		m_pPoll->SetupEvent ( pWork->m_iSock, 
+			( eSetup==NE_IN ? ISphNetEvents::SPH_POLL_RD : ISphNetEvents::SPH_POLL_WR ), pWork );
 	}
 
 	bool Wait ( int timeoutMs )
 	{
-		// need positive timeout for communicate threads back and shutdown
-		m_iReady = ::poll ( m_dEvents.Begin(), m_dEvents.GetLength(), timeoutMs );
-
-		if ( m_iReady<0 )
-		{
-			int iErrno = sphSockGetErrno();
-			// common recoverable errors
-			if ( iErrno==EINTR || iErrno==EAGAIN || iErrno==EWOULDBLOCK )
-				return false;
-
-			if ( m_iLastReportedErrno!=iErrno )
-			{
-				sphWarning ( "poll tick failed: %s", sphSockError(iErrno) );
-				m_iLastReportedErrno = iErrno;
-			}
-			return false;
-		}
-
-		return ( m_iReady>0 );
+		assert ( m_pPoll );
+		return m_pPoll->Wait ( timeoutMs );
 	}
 
 	bool IterateNextAll ()
 	{
-		assert ( m_dEvents.GetLength()==m_dWork.GetLength() );
-
-		m_iIter++;
-		m_tIter.m_pWork = ( m_iIter<m_dWork.GetLength() ? m_dWork[m_iIter] : NULL );
-
-		return ( m_iIter<m_dWork.GetLength() );
+		assert ( m_pPoll );
+		m_tIter.m_pWork = nullptr;
+		m_tIter.m_uEvents = 0;
+		bool bRes = m_pPoll->IterateNextAll ();
+		if ( bRes )
+		{
+			const NetEventsIterator_t& tBackendIterator = m_pPoll->IterateGet ();
+			m_tIter.m_pWork = (ISphNetAction*) tBackendIterator.m_pData;
+			m_tIter.m_uEvents = TranslateEvents( tBackendIterator.m_uEvents );
+		}
+		return bRes;
 	}
 
 	bool IterateNextReady ()
 	{
-		m_tIter.m_pWork = NULL;
+		assert ( m_pPoll );
+		m_tIter.m_pWork = nullptr;
 		m_tIter.m_uEvents = 0;
-
-		if ( m_iReady<=0 || m_iIter>=m_dEvents.GetLength() )
-			return false;
-
-		for ( ;; )
+		bool bRes = m_pPoll->IterateNextReady ();
+		if ( bRes )
 		{
-			m_iIter++;
-			if ( m_iIter>=m_dEvents.GetLength() )
-				return false;
-
-			if ( m_dEvents[m_iIter].revents==0 )
-				continue;
-
-			m_iReady--;
-
-			m_tIter.m_pWork = m_dWork[m_iIter];
-			m_tIter.m_uEvents = 0;
-
-			pollfd & tEv = m_dEvents[m_iIter];
-			if ( tEv.revents & POLLIN )
-				m_tIter.m_uEvents |= NE_IN;
-			if ( tEv.revents & POLLOUT )
-				m_tIter.m_uEvents |= NE_OUT;
-			if ( tEv.revents & POLLHUP )
-				m_tIter.m_uEvents |= NE_HUP;
-			if ( tEv.revents & POLLERR )
-				m_tIter.m_uEvents |= NE_ERR;
-
-			tEv.revents = 0;
-
-			return true;
+			const NetEventsIterator_t& tBackendIterator = m_pPoll->IterateGet ();
+			m_tIter.m_pWork = (ISphNetAction*) tBackendIterator.m_pData;
+			m_tIter.m_uEvents = TranslateEvents ( tBackendIterator.m_uEvents );
 		}
+		return bRes;
 	}
 
-	void IterateChangeEvent ( NetEvent_e eEv, ISphNetAction * )
+	void IterateChangeEvent ( NetEvent_e eEv, ISphNetAction * pAction)
 	{
-		assert ( m_iIter>=0 && m_iIter<m_dEvents.GetLength() );
-		m_dEvents[m_iIter].events = ( ( eEv & NE_IN )!=0 ? POLLIN : POLLOUT );
+		assert ( m_pPoll );		
+		m_pPoll->IterateChangeEvent ( pAction->m_iSock, ( eEv==NE_IN ? ISphNetEvents::SPH_POLL_RD : ISphNetEvents::SPH_POLL_WR ) );
 	}
 
 	void IterateRemove ()
 	{
-		assert ( m_iIter>=0 && m_iIter<m_dEvents.GetLength() );
-		assert ( m_dEvents.GetLength()==m_dWork.GetLength() );
+		assert ( m_pPoll );
+		const NetEventsIterator_t& tBackendIterator = m_pPoll->IterateGet ();
+		ISphNetAction* pAction = (ISphNetAction*) tBackendIterator.m_pData;
 
-		m_dEvents.RemoveFast ( m_iIter );
-		// SafeDelete ( m_dWork[m_iIter] );
-		m_dWork.RemoveFast ( m_iIter );
-
-		m_iIter--;
+		m_pPoll->IterateRemove ( pAction->m_iSock );
 		m_tIter.m_pWork = NULL;
 	}
 
 	int IterateStart ()
 	{
-		m_iIter = -1;
+		assert ( m_pPoll );
+
 		m_tIter.m_pWork = NULL;
 		m_tIter.m_uEvents = 0;
 
-		return m_iReady;
-	}
-
-	EventsIterator_t & IterateGet ()
-	{
-		assert ( m_iIter>=0 && m_iIter<m_dWork.GetLength() );
-		return m_tIter;
-	}
-};
-#endif
-
-#if HAVE_EPOLL
-
-class CSphEventsEpoll
-{
-private:
-	List_t						m_tWork;
-	CSphVector<epoll_event>		m_dReady;
-	int							m_iLastReportedErrno;
-	int							m_iReady;
-	int							m_iEFD;
-	EventsIterator_t			m_tIter;
-	int							m_iIterEv;
-
-public:
-	CSphEventsEpoll ()
-		: m_iLastReportedErrno ( -1 )
-		, m_iReady ( 0 )
-	{
-		m_iEFD = epoll_create ( 1000 );
-		if ( m_iEFD==-1 )
-			sphDie ( "failed to create epoll main FD, errno=%d, %s", errno, strerror(errno) );
-
-		m_dReady.Reserve ( 1000 );
-		m_tIter.m_pWork = NULL;
-		m_tIter.m_uEvents = 0;
-		m_iIterEv = -1;
-	}
-
-	~CSphEventsEpoll()
-	{
-		const ListNode_t * pIt = m_tWork.Begin();
-		while ( pIt!=m_tWork.End() )
-		{
-			ISphNetAction * pWork = (ISphNetAction *)pIt;
-			pIt = pIt->m_pNext;
-			SafeDelete ( pWork );
-		}
-
-		SafeClose ( m_iEFD );
-	}
-
-	void SetupEvent ( ISphNetAction * pWork, int64_t tmNow )
-	{
-		assert ( pWork && pWork->m_iSock>=0 );
-
-		NetEvent_e eSetup = pWork->Setup ( tmNow );
-		assert ( eSetup==NE_IN || eSetup==NE_OUT );
-
-		m_tWork.Add ( pWork );
-
-		epoll_event tEv;
-		tEv.data.ptr = pWork;
-		tEv.events = ( eSetup==NE_IN ? EPOLLIN : EPOLLOUT );
-
-		sphLogDebugv ( "%p epoll setup, ev=0x%u, sock=%d", pWork, tEv.events, pWork->m_iSock );
-
-		int iRes = epoll_ctl ( m_iEFD, EPOLL_CTL_ADD, pWork->m_iSock, &tEv );
-		if ( iRes==-1 )
-			sphWarning ( "failed to setup epoll event for sock %d, errno=%d, %s", pWork->m_iSock, errno, strerror(errno) );
-	}
-
-	bool Wait ( int timeoutMs )
-	{
-		m_dReady.Resize ( m_tWork.GetLength() );
-		// need positive timeout for communicate threads back and shutdown
-		m_iReady = epoll_wait ( m_iEFD, m_dReady.Begin(), m_dReady.GetLength(), timeoutMs );
-
-		if ( m_iReady<0 )
-		{
-			int iErrno = sphSockGetErrno();
-			// common recoverable errors
-			if ( iErrno==EINTR || iErrno==EAGAIN || iErrno==EWOULDBLOCK )
-				return false;
-
-			if ( m_iLastReportedErrno!=iErrno )
-			{
-				sphWarning ( "poll tick failed: %s", sphSockError(iErrno) );
-				m_iLastReportedErrno = iErrno;
-			}
-			return false;
-		}
-
-		return ( m_iReady>0 );
-	}
-
-	bool IterateNextAll ()
-	{
-		if ( !m_tIter.m_pWork )
-		{
-			if ( m_tWork.Begin()==m_tWork.End() )
-				return false;
-
-			m_tIter.m_pWork = (ISphNetAction *)m_tWork.Begin();
-			return true;
-		} else
-		{
-			m_tIter.m_pWork = (ISphNetAction *)m_tIter.m_pWork->m_pNext;
-			if ( m_tIter.m_pWork!=m_tWork.End() )
-				return true;
-
-			m_tIter.m_pWork = NULL;
-			return false;
-		}
-	}
-
-	bool IterateNextReady ()
-	{
-		m_iIterEv++;
-		if ( m_iReady<=0 || m_iIterEv>=m_iReady )
-		{
-			m_tIter.m_pWork = NULL;
-			m_tIter.m_uEvents = 0;
-			return false;
-		}
-
-		const epoll_event & tEv = m_dReady[m_iIterEv];
-
-		m_tIter.m_pWork = (ISphNetAction *)tEv.data.ptr;
-		m_tIter.m_uEvents = 0;
-
-		if ( tEv.events & EPOLLIN )
-			m_tIter.m_uEvents |= NE_IN;
-		if ( tEv.events & EPOLLOUT )
-			m_tIter.m_uEvents |= NE_OUT;
-		if ( tEv.events & EPOLLHUP )
-			m_tIter.m_uEvents |= NE_HUP;
-		if ( tEv.events & EPOLLERR )
-			m_tIter.m_uEvents |= NE_ERR;
-
-		return true;
-	}
-
-	void IterateChangeEvent ( NetEvent_e eEv, ISphNetAction * pWork )
-	{
-		epoll_event tEv;
-		tEv.data.ptr = pWork;
-		tEv.events = ( ( eEv & NE_IN )!=0 ? EPOLLIN : EPOLLOUT );
-
-		sphLogDebugv ( "%p epoll change, ev=0x%u, sock=%d", pWork, tEv.events, pWork->m_iSock );
-
-		int iRes = epoll_ctl ( m_iEFD, EPOLL_CTL_MOD, pWork->m_iSock, &tEv );
-		if ( iRes==-1 )
-			sphWarning ( "failed to modify epoll event for sock %d, errno=%d, %s", pWork->m_iSock, errno, strerror(errno) );
-	}
-
-	void IterateRemove ()
-	{
-		sphLogDebugv ( "%p epoll remove, ev=0x%u, sock=%d", m_tIter.m_pWork, m_tIter.m_uEvents, m_tIter.m_pWork->m_iSock );
-		assert ( m_tIter.m_pWork );
-
-		epoll_event tEv;
-		int iRes = epoll_ctl ( m_iEFD, EPOLL_CTL_DEL, m_tIter.m_pWork->m_iSock, &tEv );
-
-		// might be already closed by worker from thread pool
-		if ( iRes==-1 )
-			sphLogDebugv ( "failed to remove epoll event for sock %d(%p), errno=%d, %s", m_tIter.m_pWork->m_iSock, m_tIter.m_pWork, errno, strerror(errno) );
-
-		ISphNetAction * pPrev = (ISphNetAction *)m_tIter.m_pWork->m_pPrev;
-		m_tWork.Remove ( m_tIter.m_pWork );
-		m_tIter.m_pWork = pPrev;
-		// SafeDelete ( m_tIter.m_pWork );
-	}
-
-	int IterateStart ()
-	{
-		m_tIter.m_pWork = NULL;
-		m_tIter.m_uEvents = 0;
-		m_iIterEv = -1;
-
-		return m_iReady;
+		return m_pPoll->IterateStart ();
 	}
 
 	EventsIterator_t & IterateGet ()
@@ -20165,23 +19846,6 @@ public:
 		return m_tIter;
 	}
 };
-#endif
-
-class CSphEventsDummy
-{
-	EventsIterator_t m_tIter;
-
-public:
-	void SetupEvent ( ISphNetAction * , int64_t ) {}
-	bool Wait ( int ) { return false; } // NOLINT
-	bool IterateNextAll () { return false; }
-	bool IterateNextReady () { return false; }
-	void IterateChangeEvent ( NetEvent_e , ISphNetAction * ) {}
-	void IterateRemove () {}
-	int IterateStart () { return 0; }
-	EventsIterator_t & IterateGet () { return m_tIter; }
-};
-
 
 // event that wakes-up poll net loop from finished thread pool job
 class CSphWakeupEvent : public ISphNetAction
@@ -20558,13 +20222,7 @@ private:
 	CSphWakeupEvent *				m_pWakeupExternal; // FIXME!!! owned\deleted by event loop
 	CSphMutex						m_tExtLock;
 	LoopProfiler_t					m_tPrf;
-#if HAVE_EPOLL
-	CSphEventsEpoll					m_tEvents;
-#elif HAVE_POLL
-	CSphEventsPoll					m_tEvents;
-#else
-	CSphEventsDummy					m_tEvents;
-#endif
+	NetActionsPoller				m_tPoller;
 
 	explicit CSphNetLoop ( CSphVector<Listener_t> & dListeners )
 	{
@@ -20572,7 +20230,7 @@ private:
 		ARRAY_FOREACH ( i, dListeners )
 		{
 			NetActionAccept_t * pCur = new NetActionAccept_t ( dListeners[i] );
-			m_tEvents.SetupEvent ( pCur, tmNow );
+			m_tPoller.SetupEvent ( pCur, tmNow );
 		}
 
 		int iRead = -1;
@@ -20590,7 +20248,7 @@ private:
 		if ( iRead>=0 && iWrite>=0 )
 		{
 			m_pWakeupExternal = new CSphWakeupEvent ( iRead, iWrite );
-			m_tEvents.SetupEvent ( m_pWakeupExternal, tmNow );
+			m_tPoller.SetupEvent ( m_pWakeupExternal, tmNow );
 		}
 
 		m_bGotExternal = false;
@@ -20629,7 +20287,7 @@ private:
 
 			m_tPrf.StartPoll();
 			// need positive timeout for communicate threads back and shutdown
-			bool bGot = m_tEvents.Wait ( iSpinWait );
+			bool bGot = m_tPoller.Wait ( iSpinWait );
 			m_tPrf.EndTask();
 
 			m_uTick++;
@@ -20659,18 +20317,18 @@ private:
 			// handle events and collect stats
 			m_tPrf.StartTick();
 
-			int iGotEvents = m_tEvents.IterateStart();
+			int iGotEvents = m_tPoller.IterateStart();
 			sphLogDebugv ( "got events=%d, tick=%u", iGotEvents, m_uTick );
 
 			int iConnections = 0;
 			int iMaxIters = 0;
-			while ( m_tEvents.IterateNextReady() && ( !g_iThrottleAction || iMaxIters<g_iThrottleAction ) )
+			while ( m_tPoller.IterateNextReady() && ( !g_iThrottleAction || iMaxIters<g_iThrottleAction ) )
 			{
 				m_tPrf.StartAt();
-				assert ( m_tEvents.IterateGet().m_pWork && m_tEvents.IterateGet().m_uEvents );
-				ISphNetAction * pWork = m_tEvents.IterateGet().m_pWork;
+				assert ( m_tPoller.IterateGet().m_pWork && m_tPoller.IterateGet().m_uEvents );
+				ISphNetAction * pWork = m_tPoller.IterateGet().m_pWork;
 
-				NetEvent_e eEv = pWork->Tick ( m_tEvents.IterateGet().m_uEvents, dWorkNext, this );
+				NetEvent_e eEv = pWork->Tick ( m_tPoller.IterateGet().m_uEvents, dWorkNext, this );
 				pWork->GetStats ( iConnections );
 				m_tPrf.m_iPerfEv++;
 				iMaxIters++;
@@ -20689,7 +20347,7 @@ private:
 					dCleanup.Add ( pWork );
 				} else
 				{
-					m_tEvents.IterateChangeEvent ( eEv, pWork );
+					m_tPoller.IterateChangeEvent ( eEv, pWork );
 				}
 				m_tPrf.EndTask();
 				m_tPrf.EndTask();
@@ -20705,7 +20363,7 @@ private:
 			ARRAY_FOREACH ( i, dWorkNext )
 			{
 				ISphNetAction * pWork = dWorkNext[i];
-				m_tEvents.SetupEvent ( pWork, tmNow );
+				m_tPoller.SetupEvent ( pWork, tmNow );
 				if ( pWork->m_tmTimeout )
 					tmNextCheck = Min ( tmNextCheck, pWork->m_tmTimeout );
 			}
@@ -20736,11 +20394,11 @@ private:
 
 		// remove outdated items on no signals
 		tmNextCheck = INT64_MAX;
-		m_tEvents.IterateStart();
-		while ( m_tEvents.IterateNextAll() )
+		m_tPoller.IterateStart();
+		while ( m_tPoller.IterateNextAll() )
 		{
-			assert ( m_tEvents.IterateGet().m_pWork );
-			ISphNetAction * pWork = m_tEvents.IterateGet().m_pWork;
+			assert ( m_tPoller.IterateGet().m_pWork );
+			ISphNetAction * pWork = m_tPoller.IterateGet().m_pWork;
 			if ( !pWork->m_tmTimeout )
 				continue;
 
@@ -20751,7 +20409,7 @@ private:
 			}
 
 			sphLogDebugv ( "%p bailing on timeout no signal, sock=%d", pWork, pWork->m_iSock );
-			m_tEvents.IterateRemove ();
+			m_tPoller.IterateRemove ();
 			// SafeDelete ( pWork );
 			// close socket immediately to prevent write by client into persist connection that just timed out
 			// that does not need in case Work got removed at IterateRemove + SafeDelete ( pWork );
@@ -20790,7 +20448,7 @@ public:
 
 	void RemoveIterEvent ()
 	{
-		m_tEvents.IterateRemove();
+		m_tPoller.IterateRemove();
 	}
 
 	// main thread wrapper

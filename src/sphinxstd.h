@@ -3987,6 +3987,72 @@ public:
 
 TDigest_i * sphCreateTDigest();
 
+//////////////////////////////////////////////////////////////////////////
+/// simple linked list
+//////////////////////////////////////////////////////////////////////////
+struct ListNode_t
+{
+	ListNode_t * m_pPrev;
+	ListNode_t * m_pNext;
+
+	ListNode_t () : m_pPrev ( NULL ), m_pNext ( NULL )
+	{
+	}
+};
+
+
+class List_t
+{
+public:
+	List_t ()
+	{
+		m_tStub.m_pPrev = &m_tStub;
+		m_tStub.m_pNext = &m_tStub;
+		m_iCount = 0;
+	}
+
+	void Add ( ListNode_t * pNode )
+	{
+		assert ( !pNode->m_pNext && !pNode->m_pPrev );
+		pNode->m_pNext = m_tStub.m_pNext;
+		pNode->m_pPrev = &m_tStub;
+		m_tStub.m_pNext->m_pPrev = pNode;
+		m_tStub.m_pNext = pNode;
+
+		m_iCount++;
+	}
+
+	void Remove ( ListNode_t * pNode )
+	{
+		assert ( pNode->m_pNext && pNode->m_pPrev );
+		pNode->m_pNext->m_pPrev = pNode->m_pPrev;
+		pNode->m_pPrev->m_pNext = pNode->m_pNext;
+		pNode->m_pNext = NULL;
+		pNode->m_pPrev = NULL;
+
+		m_iCount--;
+	}
+
+	int GetLength () const
+	{
+		return m_iCount;
+	}
+
+	const ListNode_t * Begin () const
+	{
+		return m_tStub.m_pNext;
+	}
+
+	const ListNode_t * End () const
+	{
+		return &m_tStub;
+	}
+
+private:
+	ListNode_t m_tStub;    // stub node
+	int m_iCount;    // elements counter
+};
+
 
 #endif // _sphinxstd_
 

@@ -43,6 +43,9 @@
 /* Define if your system supports the epoll system calls */
 #cmakedefine HAVE_EPOLL ${HAVE_EPOLL}
 
+/* Define if your system supports the kqueue system calls */
+#cmakedefine HAVE_KQUEUE ${HAVE_KQUEUE}
+
 /* Define if your system supports the eventfd system calls */
 #cmakedefine01 HAVE_EVENTFD
 

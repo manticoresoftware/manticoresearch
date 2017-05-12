@@ -23,6 +23,12 @@
 
 #include <utility>
 
+#if HAVE_KQUEUE
+#include <sys/types.h>
+#include <sys/event.h>
+#include <sys/time.h>
+#endif
+
 /////////////////////////////////////////////////////////////////////////////
 // SOME SHARED GLOBAL VARIABLES
 /////////////////////////////////////////////////////////////////////////////
@@ -537,6 +543,69 @@ public:
 ISphRemoteAgentsController* GetAgentsController ( int iThreads, CSphVector<AgentConn_t> & dAgents,
 		const IRequestBuilder_t & tBuilder, int iTimeout, int iRetryMax=0, int iDelay=0 );
 
+
+//////////////////////////////////////////////////////////////////////////
+// Universal work with select/poll/epoll/kqueue
+//////////////////////////////////////////////////////////////////////////
+
+/// check if a non-blocked socket is still connected
+bool sphNBSockEof ( int iSock );
+
+// wrapper around epoll/kqueue/poll
+struct NetEventsIterator_t
+{
+	const void * 		m_pData;
+	bool 				m_bReadable;
+	bool 				m_bWritable;
+	DWORD				m_uEvents;
+	void Reset()
+	{
+		m_pData = nullptr;
+		m_uEvents = 0;
+		m_bReadable = false;
+		m_bWritable = false;
+	}
+};
+
+class ISphNetEvents : public ISphNoncopyable
+{
+public:
+	enum PoolEvents_e
+	{
+		SPH_POLL_RD = 1UL << 0,
+		SPH_POLL_WR = 1UL << 1,
+		SPH_POLL_HUP = 1UL << 2,
+		SPH_POLL_ERR = 1UL << 3,
+		SPH_POLL_PRI = 1UL << 4,
+	};
+public:
+	virtual ~ISphNetEvents ();
+	virtual void SetupEvent ( int iSocket, PoolEvents_e eFlags, const void* pData ) = 0;
+	virtual bool Wait ( int ) = 0;
+	virtual int IterateStart () = 0;
+	virtual bool IterateNextAll () = 0;
+	virtual bool IterateNextReady () = 0;
+	virtual void IterateChangeEvent ( int iSocket, PoolEvents_e eFlags ) = 0;
+	virtual void IterateRemove ( int iSocket ) = 0;
+	virtual NetEventsIterator_t & IterateGet () = 0;
+};
+
+// all fresh codeflows use version with poll/epoll/kqueue.
+// legacy also set bFallbackSelect and it invokes 'select' for the case
+// when nothing of poll/epoll/kqueue is available.
+ISphNetEvents* sphCreatePoll ( int iSizeHint, bool bFallbackSelect = false );
+
+// determine which branch will be used
+// defs placed here for easy switch between/debug
+#if HAVE_EPOLL
+#define POLLING_EPOLL 1
+#elif HAVE_KQUEUE
+#define POLLING_KQUEUE 1
+#elif HAVE_POLL
+#define POLLING_POLL 1
+#else
+#define POLLING_SELECT 1
+#endif
 
 #endif // _searchdha_
 

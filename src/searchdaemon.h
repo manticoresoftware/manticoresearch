@@ -102,8 +102,8 @@ int sphSockGetErrno ();
 void sphSockSetErrno ( int );
 int sphSockPeekErrno ();
 int sphSetSockNB ( int );
-bool sphSockEof ( int );
 void sphFDSet ( int fd, fd_set * fdset );
+void sphFDClr ( int fd, fd_set * fdset );
 DWORD sphGetAddress ( const char * sHost, bool bFatal=false );
 
 /////////////////////////////////////////////////////////////////////////////

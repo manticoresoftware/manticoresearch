@@ -1495,27 +1495,28 @@ bool CSphRwlock::Init ( bool bPreferWriter )
 	pthread_rwlockattr_t tAttr;
 	pthread_rwlockattr_t * pAttr = NULL;
 
-// Mac OS X knows nothing about PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP
-#ifndef __APPLE__
-	while ( bPreferWriter )
+	if ( bPreferWriter )
 	{
-		bool bOk = ( pthread_rwlockattr_init ( &tAttr )==0 );
+		bool bOk = (pthread_rwlockattr_init ( &tAttr )==0);
 		assert ( bOk );
-		if ( !bOk )
-			break;
 
-		bOk = ( pthread_rwlockattr_setkind_np ( &tAttr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP )==0 );
-		assert ( bOk );
-		if ( !bOk )
+		if ( bOk )
 		{
-			pthread_rwlockattr_destroy ( &tAttr );
-			break;
-		}
-
-		pAttr = &tAttr;
-		break;
-	}
+			// Mac OS X knows nothing about PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP
+#ifndef __APPLE__
+			bOk = (pthread_rwlockattr_setkind_np ( &tAttr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP )==0);
+#else
+			bOk = false;
+			#pragma message("No Prefer writer on Mac")
 #endif
+			assert ( bOk );
+
+			if ( !bOk )
+				pthread_rwlockattr_destroy ( &tAttr );
+			else
+				pAttr = &tAttr;
+		}
+	}
 	m_bInitialized = ( pthread_rwlock_init ( m_pLock, pAttr )==0 );
 
 	if ( pAttr )

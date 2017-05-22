@@ -131,6 +131,11 @@ public:
 	virtual uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) = 0;
 };
 
+/// set global behavior of grouping by day/week/month/year functions:
+/// if invoked true, params treated as UTC timestamps,
+/// and as local timestamps otherwise (default)
+void setGroupingInUtc ( bool b_GroupingInUtc );
+
 /// string expression traits
 /// can never be evaluated in floats or integers, only StringEval() is allowed
 struct ISphStringExpr : public ISphExpr

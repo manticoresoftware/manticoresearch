@@ -2118,6 +2118,66 @@ DECLARE_TIMESTAMP ( Expr_Hour_c, s.tm_hour )
 DECLARE_TIMESTAMP ( Expr_Minute_c, s.tm_min )
 DECLARE_TIMESTAMP ( Expr_Second_c, s.tm_sec )
 
+#define DECLARE_TIMESTAMP_UTC( _classname, _expr ) \
+    DECLARE_UNARY_TRAITS ( _classname ) \
+        virtual float Eval ( const CSphMatch & tMatch ) const { return (float)IntEval(tMatch); } \
+        virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return IntEval(tMatch); } \
+        virtual int IntEval ( const CSphMatch & tMatch ) const \
+        { \
+            time_t ts = (time_t)INTFIRST;    \
+            struct tm s; \
+            gmtime_r ( &ts, &s ); \
+            return _expr; \
+        } \
+    };
+
+DECLARE_TIMESTAMP_UTC ( Expr_Day_utc_c, s.tm_mday )
+DECLARE_TIMESTAMP_UTC ( Expr_Month_utc_c, s.tm_mon + 1 )
+DECLARE_TIMESTAMP_UTC ( Expr_Year_utc_c, s.tm_year + 1900 )
+DECLARE_TIMESTAMP_UTC ( Expr_YearMonth_utc_c, (s.tm_year + 1900) * 100 + s.tm_mon + 1 )
+DECLARE_TIMESTAMP_UTC ( Expr_YearMonthDay_utc_c, (s.tm_year + 1900) * 10000 + (s.tm_mon + 1) * 100 + s.tm_mday )
+
+extern bool bGroupingInUtc; // defined in searchd.cpp
+
+void setGroupingInUtc ( bool b_GroupingInUtc )
+{
+	bGroupingInUtc = b_GroupingInUtc;
+}
+
+Expr_Unary_c * ExprDay ( ISphExpr * pFirst )
+{
+	return bGroupingInUtc
+		   ? (Expr_Unary_c *) new Expr_Day_utc_c ( pFirst )
+		   : (Expr_Unary_c *) new Expr_Day_c ( pFirst );
+}
+
+Expr_Unary_c * ExprMonth ( ISphExpr * pFirst )
+{
+	return bGroupingInUtc
+		   ? (Expr_Unary_c *) new Expr_Month_utc_c ( pFirst )
+		   : (Expr_Unary_c *) new Expr_Month_c ( pFirst );
+}
+
+Expr_Unary_c * ExprYear ( ISphExpr * pFirst )
+{
+	return bGroupingInUtc
+		   ? (Expr_Unary_c *) new Expr_Year_utc_c ( pFirst )
+		   : (Expr_Unary_c *) new Expr_Year_c ( pFirst );
+}
+
+Expr_Unary_c * ExprYearMonth ( ISphExpr * pFirst )
+{
+	return bGroupingInUtc
+		   ? (Expr_Unary_c *) new Expr_YearMonth_utc_c ( pFirst )
+		   : (Expr_Unary_c *) new Expr_YearMonth_c ( pFirst );
+}
+
+Expr_Unary_c * ExprYearMonthDay ( ISphExpr * pFirst )
+{
+	return bGroupingInUtc
+		   ? (Expr_Unary_c *) new Expr_YearMonthDay_utc_c ( pFirst )
+		   : (Expr_Unary_c *) new Expr_YearMonthDay_c ( pFirst );
+}
 
 //////////////////////////////////////////////////////////////////////////
 // UDF CALL SITE
@@ -4532,11 +4592,11 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 					case FUNC_CRC32:	return new Expr_Crc32_c ( dArgs[0] );
 					case FUNC_FIBONACCI:return new Expr_Fibonacci_c ( dArgs[0] );
 
-					case FUNC_DAY:			return new Expr_Day_c ( dArgs[0] );
-					case FUNC_MONTH:		return new Expr_Month_c ( dArgs[0] );
-					case FUNC_YEAR:			return new Expr_Year_c ( dArgs[0] );
-					case FUNC_YEARMONTH:	return new Expr_YearMonth_c ( dArgs[0] );
-					case FUNC_YEARMONTHDAY:	return new Expr_YearMonthDay_c ( dArgs[0] );
+					case FUNC_DAY:			return ExprDay ( dArgs[0] );
+					case FUNC_MONTH:		return ExprMonth ( dArgs[0] );
+					case FUNC_YEAR:			return ExprYear ( dArgs[0] );
+					case FUNC_YEARMONTH:	return ExprYearMonth ( dArgs[0] );
+					case FUNC_YEARMONTHDAY:	return ExprYearMonthDay ( dArgs[0] );
 					case FUNC_HOUR:			return new Expr_Hour_c ( dArgs[0] );
 					case FUNC_MINUTE:		return new Expr_Minute_c ( dArgs[0] );
 					case FUNC_SECOND:		return new Expr_Second_c ( dArgs[0] );

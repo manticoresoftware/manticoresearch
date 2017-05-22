@@ -169,6 +169,7 @@ static int				g_iBacklog			= SEARCHD_BACKLOG;
 static int				g_iThdPoolCount		= 2;
 static int				g_iThdQueueMax		= 0;
 static int				g_tmWait = 1;
+bool					g_bGroupingInUtc	= false;
 
 struct Listener_t
 {
@@ -15167,6 +15168,10 @@ void HandleMysqlSet ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, SessionVars_t & 
 		} else if ( tStmt.m_sSetName=="net_wait" )
 		{
 			g_tmWait = (int)tStmt.m_iSetValue;
+		} else if ( tStmt.m_sSetName=="grouping_in_utc")
+		{
+			g_bGroupingInUtc = !!tStmt.m_iSetValue;
+			setGroupingInUtc ( g_bGroupingInUtc );
 		} else
 		{
 			sError.SetSprintf ( "Unknown system variable '%s'", tStmt.m_sSetName.cstr() );
@@ -15545,6 +15550,9 @@ void HandleMysqlShowVariables ( SqlRowBuffer_c & dRows, const SqlStmt_t & tStmt,
 
 	if ( dStatus.MatchAdd ( "character_set_connection" ) )
 		dStatus.Add ( "utf8" );
+
+	if ( dStatus.MatchAdd ( "grouping_in_utc" ) )
+		dStatus.Add ( g_bGroupingInUtc ? "1" : "0" );
 
 	// result set header packet
 	dRows.HeadTuplet ( "Variable_name", "Value" );
@@ -21823,6 +21831,12 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 
 	if ( hSearchd("seamless_rotate") )
 		g_bSeamlessRotate = ( hSearchd["seamless_rotate"].intval()!=0 );
+
+	if ( hSearchd ( "grouping_in_utc" ) )
+	{
+		g_bGroupingInUtc = (hSearchd["grouping_in_utc"].intval ()!=0);
+		setGroupingInUtc ( g_bGroupingInUtc );
+	}
 
 	if ( !g_bSeamlessRotate && g_bPreopenIndexes )
 		sphWarning ( "preopen_indexes=1 has no effect with seamless_rotate=0" );

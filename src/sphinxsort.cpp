@@ -679,13 +679,11 @@ static bool IsGroupbyMagic ( const CSphString & s )
 		} \
 	};
 
-
 #define GROUPER_BEGIN_SPLIT(_name) \
 	GROUPER_BEGIN(_name) \
 	time_t tStamp = (time_t)uValue; \
 	struct tm tSplit; \
 	localtime_r ( &tStamp, &tSplit );
-
 
 GROUPER_BEGIN ( CSphGrouperAttr )
 	return uValue;
@@ -695,7 +693,6 @@ GROUPER_END
 GROUPER_BEGIN_SPLIT ( CSphGrouperDay )
 	return (tSplit.tm_year+1900)*10000 + (1+tSplit.tm_mon)*100 + tSplit.tm_mday;
 GROUPER_END
-
 
 GROUPER_BEGIN_SPLIT ( CSphGrouperWeek )
 	int iPrevSunday = (1+tSplit.tm_yday) - tSplit.tm_wday; // prev Sunday day of year, base 1
@@ -713,15 +710,77 @@ GROUPER_BEGIN_SPLIT ( CSphGrouperWeek )
 	return iYear*1000 + iPrevSunday;
 GROUPER_END
 
-
 GROUPER_BEGIN_SPLIT ( CSphGrouperMonth )
 	return (tSplit.tm_year+1900)*100 + (1+tSplit.tm_mon);
 GROUPER_END
 
-
 GROUPER_BEGIN_SPLIT ( CSphGrouperYear )
 	return (tSplit.tm_year+1900);
 GROUPER_END
+
+#define GROUPER_BEGIN_SPLIT_UTC( _name ) \
+    GROUPER_BEGIN(_name) \
+    time_t tStamp = (time_t)uValue; \
+    struct tm tSplit; \
+    gmtime_r ( &tStamp, &tSplit );
+
+GROUPER_BEGIN_SPLIT_UTC ( CSphGrouperDayUtc )
+		return (tSplit.tm_year + 1900) * 10000 + (1 + tSplit.tm_mon) * 100 + tSplit.tm_mday;
+GROUPER_END
+
+GROUPER_BEGIN_SPLIT_UTC ( CSphGrouperWeekUtc )
+		int iPrevSunday = (1 + tSplit.tm_yday) - tSplit.tm_wday; // prev Sunday day of year, base 1
+		int iYear = tSplit.tm_year + 1900;
+		if ( iPrevSunday<=0 ) // check if we crossed year boundary
+		{
+			// adjust day and year
+			iPrevSunday += 365;
+			iYear--;
+
+			// adjust for leap years
+			if ( iYear % 4==0 && (iYear % 100!=0 || iYear % 400==0) )
+				iPrevSunday++;
+		}
+		return iYear * 1000 + iPrevSunday;
+GROUPER_END
+
+GROUPER_BEGIN_SPLIT_UTC ( CSphGrouperMonthUtc )
+		return (tSplit.tm_year + 1900) * 100 + (1 + tSplit.tm_mon);
+GROUPER_END
+
+GROUPER_BEGIN_SPLIT_UTC ( CSphGrouperYearUtc )
+		return (tSplit.tm_year + 1900);
+GROUPER_END
+
+bool bGroupingInUtc = false;
+
+CSphGrouper * getDayGrouper ( const CSphAttrLocator &tLoc )
+{
+	return bGroupingInUtc
+			? (CSphGrouper *) new CSphGrouperDayUtc ( tLoc )
+			: (CSphGrouper *) new CSphGrouperDay ( tLoc );
+}
+
+CSphGrouper * getWeekGrouper ( const CSphAttrLocator &tLoc )
+{
+	return bGroupingInUtc
+		   ? (CSphGrouper *) new CSphGrouperDayUtc ( tLoc )
+		   : (CSphGrouper *) new CSphGrouperDay ( tLoc );
+}
+
+CSphGrouper * getMonthGrouper ( const CSphAttrLocator &tLoc )
+{
+	return bGroupingInUtc
+		   ? (CSphGrouper *) new CSphGrouperDayUtc ( tLoc )
+		   : (CSphGrouper *) new CSphGrouperDay ( tLoc );
+}
+
+CSphGrouper * getYearGrouper ( const CSphAttrLocator &tLoc )
+{
+	return bGroupingInUtc
+		   ? (CSphGrouper *) new CSphGrouperDayUtc ( tLoc )
+		   : (CSphGrouper *) new CSphGrouperDay ( tLoc );
+}
 
 template <class PRED>
 class CSphGrouperString : public CSphGrouperAttr, public PRED
@@ -4154,10 +4213,10 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const ISphSchema & 
 		CSphAttrLocator tLoc = tSchema.GetAttr ( iGroupBy ).m_tLocator;
 		switch ( pQuery->m_eGroupFunc )
 		{
-			case SPH_GROUPBY_DAY:		tSettings.m_pGrouper = new CSphGrouperDay ( tLoc ); break;
-			case SPH_GROUPBY_WEEK:		tSettings.m_pGrouper = new CSphGrouperWeek ( tLoc ); break;
-			case SPH_GROUPBY_MONTH:		tSettings.m_pGrouper = new CSphGrouperMonth ( tLoc ); break;
-			case SPH_GROUPBY_YEAR:		tSettings.m_pGrouper = new CSphGrouperYear ( tLoc ); break;
+			case SPH_GROUPBY_DAY:		tSettings.m_pGrouper = getDayGrouper ( tLoc ); break;
+			case SPH_GROUPBY_WEEK:		tSettings.m_pGrouper = getWeekGrouper ( tLoc ); break;
+			case SPH_GROUPBY_MONTH:		tSettings.m_pGrouper = getMonthGrouper ( tLoc ); break;
+			case SPH_GROUPBY_YEAR:		tSettings.m_pGrouper = getYearGrouper ( tLoc ); break;
 			case SPH_GROUPBY_ATTR:
 				if ( eType==SPH_ATTR_JSON || eType==SPH_ATTR_JSON_FIELD )
 				{

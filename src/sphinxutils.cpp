@@ -681,6 +681,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "qcache_thresh_msec",		0, NULL },
 	{ "sphinxql_timeout",		0, NULL },
 	{ "hostname_lookup",		0, NULL },
+	{ "grouping_in_utc",		0, NULL },
 	{ NULL,						0, NULL }
 };
 

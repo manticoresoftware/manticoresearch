@@ -3060,6 +3060,7 @@ public:
 	~CSphRwlock () {
 #if !USE_WINDOWS
 		SafeDelete ( m_pLock );
+		SafeDelete ( m_pWritePreferHelper );
 #endif
 	}
 
@@ -3078,6 +3079,7 @@ private:
 	LONG				m_iReaders;
 #else
 	pthread_rwlock_t	* m_pLock;
+	CSphMutex			* m_pWritePreferHelper;
 #endif
 };
 

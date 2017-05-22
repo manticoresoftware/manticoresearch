@@ -1483,6 +1483,7 @@ bool CSphRwlock::Unlock ()
 
 CSphRwlock::CSphRwlock ()
 	: m_bInitialized ( false )
+	, m_pWritePreferHelper ( nullptr )
 {
 	m_pLock = new pthread_rwlock_t;
 }
@@ -1506,7 +1507,7 @@ bool CSphRwlock::Init ( bool bPreferWriter )
 #ifndef __APPLE__
 			bOk = (pthread_rwlockattr_setkind_np ( &tAttr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP )==0);
 #else
-			bOk = false;
+			m_pWritePreferHelper = new CSphMutex();
 			#pragma message("No Prefer writer on Mac")
 #endif
 			assert ( bOk );
@@ -1540,6 +1541,10 @@ bool CSphRwlock::ReadLock ()
 	assert ( m_bInitialized );
 	assert ( m_pLock );
 
+	if ( !m_pWritePreferHelper )
+		return pthread_rwlock_rdlock ( m_pLock )==0;
+
+	CSphScopedLock<CSphMutex>(* m_pWritePreferHelper);
 	return pthread_rwlock_rdlock ( m_pLock )==0;
 }
 
@@ -1548,6 +1553,10 @@ bool CSphRwlock::WriteLock ()
 	assert ( m_bInitialized );
 	assert ( m_pLock );
 
+	if ( !m_pWritePreferHelper )
+		return pthread_rwlock_wrlock ( m_pLock )==0;
+
+	CSphScopedLock<CSphMutex>(* m_pWritePreferHelper);
 	return pthread_rwlock_wrlock ( m_pLock )==0;
 }
 

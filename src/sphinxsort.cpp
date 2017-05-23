@@ -764,22 +764,22 @@ CSphGrouper * getDayGrouper ( const CSphAttrLocator &tLoc )
 CSphGrouper * getWeekGrouper ( const CSphAttrLocator &tLoc )
 {
 	return bGroupingInUtc
-		   ? (CSphGrouper *) new CSphGrouperDayUtc ( tLoc )
-		   : (CSphGrouper *) new CSphGrouperDay ( tLoc );
+		   ? (CSphGrouper *) new CSphGrouperWeekUtc ( tLoc )
+		   : (CSphGrouper *) new CSphGrouperWeek ( tLoc );
 }
 
 CSphGrouper * getMonthGrouper ( const CSphAttrLocator &tLoc )
 {
 	return bGroupingInUtc
-		   ? (CSphGrouper *) new CSphGrouperDayUtc ( tLoc )
-		   : (CSphGrouper *) new CSphGrouperDay ( tLoc );
+		   ? (CSphGrouper *) new CSphGrouperMonthUtc ( tLoc )
+		   : (CSphGrouper *) new CSphGrouperMonth ( tLoc );
 }
 
 CSphGrouper * getYearGrouper ( const CSphAttrLocator &tLoc )
 {
 	return bGroupingInUtc
-		   ? (CSphGrouper *) new CSphGrouperDayUtc ( tLoc )
-		   : (CSphGrouper *) new CSphGrouperDay ( tLoc );
+		   ? (CSphGrouper *) new CSphGrouperYearUtc ( tLoc )
+		   : (CSphGrouper *) new CSphGrouperYear ( tLoc );
 }
 
 template <class PRED>

@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test>
+
+<name>utc time grouping</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	grouping_in_utc = 1
+}
+
+source src
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * FROM test_table
+	sql_attr_uint	= tm
+}
+
+index idx
+{
+	source			= src
+	path			= <data_path/>/main
+}
+
+</config>
+
+<queries>
+	<query mode="extended2" groupattr="tm" groupfunc="day">aaaa</query>
+	<query mode="extended2" groupattr="tm" groupfunc="week">aaaa</query>
+	<query mode="extended2" groupattr="tm" groupfunc="month">aaaa</query>
+	<query mode="extended2" groupattr="tm" groupfunc="year">aaaa</query>
+</queries>
+
+<sphqueries>
+<sphinxql>select tm, day(tm) d from idx where match('aaaa') group by d</sphinxql>
+<sphinxql>select tm, month(tm) d from idx where match('aaaa') group by d</sphinxql>
+<sphinxql>select tm, year(tm) d from idx where match('aaaa') group by d</sphinxql>
+<sphinxql>select tm, yearmonth(tm) d from idx where match('aaaa') group by d</sphinxql>
+<sphinxql>select tm, yearmonthday(tm) d from idx where match('aaaa') group by d</sphinxql>
+<!-- check whether settings works at all -->
+<sphinxql>show variables like 'grouping%'</sphinxql>
+<sphinxql>set global grouping_in_utc=0</sphinxql>
+<sphinxql>show variables like 'grouping_in_utc'</sphinxql>
+<sphinxql>set global grouping_in_utc=1</sphinxql>
+<!-- check again -->
+<sphinxql>select tm, day(tm) d from idx where match('aaaa') group by d</sphinxql>
+<sphinxql>select tm, month(tm) d from idx where match('aaaa') group by d</sphinxql>
+<sphinxql>select tm, year(tm) d from idx where match('aaaa') group by d</sphinxql>
+<sphinxql>select tm, yearmonth(tm) d from idx where match('aaaa') group by d</sphinxql>
+<sphinxql>select tm, yearmonthday(tm) d from idx where match('aaaa') group by d</sphinxql>
+</sphqueries>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
+	tm INTEGER NOT NULL,
+	title TEXT NOT NULL
+) ENGINE=MYISAM
+</db_create>
+
+<custom_insert><![CDATA[
+$stamp=0;
+for ( $i=0; $i<365*24; ++$i )
+{
+	mysql_query ( "INSERT INTO test_table VALUES ( 0, $stamp, 'aaaa')" );
+	$stamp += 3600;
+}
+
+]]></custom_insert>
+<db_drop>DROP TABLE IF EXISTS test_table</db_drop>
+
+</test>

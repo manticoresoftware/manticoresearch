@@ -1304,13 +1304,15 @@ public:
 
 	void SubmitEx ( const char * sIndex, const char * sParentIndex, const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 4, 5 ) ) )
 	{
-		SearchFailure_t & tEntry = m_dLog.Add ();
+		SearchFailure_t &tEntry = m_dLog.Add ();
+		CSphStringBuilder tError;
 		va_list ap;
 		va_start ( ap, sTemplate );
-		tEntry.m_sIndex = sIndex;
-		tEntry.m_sError.SetSprintfVa ( sTemplate, ap );
+		tError.vAppendf ( sTemplate, ap );
 		va_end ( ap );
+		tEntry.m_sIndex = sIndex;
 		tEntry.m_sParentIndex = sParentIndex;
+		tEntry.m_sError.Adopt ( tError.Leak () );
 	}
 
 public:

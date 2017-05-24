@@ -2052,6 +2052,14 @@ public:
 		*sValue = nullptr;
 	}
 
+	void Adopt ( char * && sValue )
+	{
+		if ( m_sValue!=EMPTY )
+		SafeDeleteArray ( m_sValue );
+		m_sValue = std::move(sValue);
+		sValue = nullptr;
+	}
+
 	bool operator < ( const CSphString & b ) const
 	{
 		if ( !m_sValue && !b.m_sValue )
@@ -2101,20 +2109,13 @@ public:
 		SafeDeleteArray ( m_sBuffer );
 	}
 
-	void Reset ()
-	{
-		m_iSize = 256;
-		m_sBuffer = new char [ m_iSize ];
-		Clear ();
-	}
-
 	void Clear ()
 	{
 		m_sBuffer[0] = '\0';
 		m_iUsed = 0;
 	}
 
-	SphStringBuilder_T<T> & Appendf ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) )
+	SphStringBuilder_T<T> & vAppendf ( const char * sTemplate, va_list ap )
 	{
 		assert ( m_sBuffer );
 		assert ( m_iUsed<m_iSize );
@@ -2124,10 +2125,10 @@ public:
 			int iLeft = m_iSize - m_iUsed;
 
 			// try to append
-			va_list ap;
-			va_start ( ap, sTemplate );
-			int iPrinted = vsnprintf ( m_sBuffer+m_iUsed, iLeft, sTemplate, ap );
-			va_end ( ap );
+			va_list cp;
+			va_copy ( cp, ap );
+			int iPrinted = vsnprintf ( m_sBuffer + m_iUsed, iLeft, sTemplate, cp );
+			va_end( cp );
 
 			// success? bail
 			// note that we check for strictly less, not less or equal
@@ -2148,9 +2149,25 @@ public:
 		return *this;
 	}
 
+	SphStringBuilder_T<T> &Appendf ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) )
+	{
+		va_list ap;
+		va_start ( ap, sTemplate );
+		vAppendf ( sTemplate, ap );
+		va_end ( ap );
+		return *this;
+	}
+
 	const char * cstr() const
 	{
 		return m_sBuffer;
+	}
+
+	char* Leak()
+	{
+		char * tRes = m_sBuffer;
+		Reset();
+		return tRes;
 	}
 
 	int Length ()
@@ -2234,6 +2251,13 @@ private:
 		memcpy ( pNew, m_sBuffer, m_iUsed+1 );
 		Swap ( pNew, m_sBuffer );
 		SafeDeleteArray ( pNew );
+	}
+
+	void Reset ()
+	{
+		m_iSize = 256;
+		m_sBuffer = new char[m_iSize];
+		Clear ();
 	}
 };
 

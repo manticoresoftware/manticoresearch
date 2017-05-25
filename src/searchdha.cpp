@@ -812,7 +812,7 @@ void track_processing_time ( AgentConn_t & tAgent )
 
 // try to parse hostname/ip/port or unixsocket on current pConfigLine.
 // fill pAgent fields on success and move ppLine pointer next after parsed instance
-bool ParseAddressPort ( HostUrl_c * pAgent, const char ** ppLine, const WarnInfo_t &dInfo )
+bool ParseAddressPort ( HostUrl_c * pAgent, const char ** ppLine, const WarnInfo_t &dInfo, bool bUseDefaultPort )
 {
 	// extract host name or path
 	const char *&p = *ppLine;
@@ -865,12 +865,22 @@ bool ParseAddressPort ( HostUrl_c * pAgent, const char ** ppLine, const WarnInfo
 	// below is only deal with inet sockets
 	pAgent->m_iFamily = AF_INET;
 	pAgent->m_sHost = sSub;
+
 	// expect ':' (and then portnum) after address
 	if ( *p!=':' )
 	{
-		sphWarning ( "index '%s': agent '%s': colon expected before '%s' - SKIPPING AGENT", dInfo.m_szIndexName,
-			 dInfo.m_szAgent, p );
-		return false;
+		if ( bUseDefaultPort )
+		{
+			pAgent->m_iPort = IANA_PORT_SPHINXAPI;
+			sphWarning ( "index '%s': agent '%s': colon and portnum expected before '%s' - Using default IANA %d port", dInfo.m_szIndexName,
+				 dInfo.m_szAgent, p, pAgent->m_iPort );
+			return true;
+		} else
+		{
+			sphWarning ( "index '%s': agent '%s': colon expected before '%s' - SKIPPING AGENT", dInfo.m_szIndexName
+						 , dInfo.m_szAgent, p );
+			return false;
+		}
 	}
 	pAnchor = ++p;
 
@@ -880,9 +890,19 @@ bool ParseAddressPort ( HostUrl_c * pAgent, const char ** ppLine, const WarnInfo
 
 	if ( p==pAnchor )
 	{
-		sphWarning ( "index '%s': agent '%s': port number expected before '%s' - SKIPPING AGENT", dInfo.m_szIndexName,
-			dInfo.m_szAgent, p );
-		return false;
+		if ( bUseDefaultPort )
+		{
+			pAgent->m_iPort = IANA_PORT_SPHINXAPI;
+			sphWarning ( "index '%s': agent '%s': portnum expected before '%s' - Using default IANA %d port"
+						 , dInfo.m_szIndexName, dInfo.m_szAgent, p, pAgent->m_iPort );
+			--p; /// step back to ':'
+			return true;
+		} else
+		{
+			sphWarning ( "index '%s': agent '%s': port number expected before '%s' - SKIPPING AGENT"
+						 , dInfo.m_szIndexName, dInfo.m_szAgent, p );
+			return false;
+		}
 	}
 	pAgent->m_iPort = atoi ( pAnchor );
 
@@ -891,6 +911,7 @@ bool ParseAddressPort ( HostUrl_c * pAgent, const char ** ppLine, const WarnInfo
 		sphWarning ( "index '%s': agent '%s': invalid port number near '%s' - SKIPPING AGENT", dInfo.m_szIndexName,
 			dInfo.m_szAgent, p );
 		return false;
+
 	}
 	return true;
 }
@@ -1018,7 +1039,7 @@ bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const char * szAgent, const cha
 		{
 		case AP_WANT_ADDRESS:
 			{
-				if ( !ParseAddressPort ( pNewAgent, &p, dWI ) )
+				if ( !ParseAddressPort ( pNewAgent, &p, dWI, true ) )
 					return false;
 			}
 
@@ -1148,6 +1169,13 @@ bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const char * szAgent, const cha
 			break;
 		} // switch (eState)
 	} // while (eState!=AP_DONE)
+
+	if ( pNewAgent->m_sIndexes.IsEmpty () )
+	{
+		pNewAgent->m_sIndexes = szIndexName;
+		sphWarning ( "index '%s': agent '%s': no index name(s) defined. Assuming name of the current index ('%s') "
+					 , szIndexName, szAgent, szIndexName );
+	}
 
 	bool bRes = ValidateAndAddDashboard ( pNewAgent, &dWI );
 

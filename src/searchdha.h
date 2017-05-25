@@ -49,6 +49,14 @@ const int	STATS_DASH_TIME = 15;	///< store the history for last periods
 // MISC GLOBALS
 /////////////////////////////////////////////////////////////////////////////
 
+/// known default sphinx ports
+/// (assigned by IANA, see http://www.iana.org/assignments/port-numbers for details)
+enum IanaPorts_e
+{
+	IANA_PORT_SPHINXQL	= 9306,
+	IANA_PORT_SPHINXAPI	= 9312
+};
+
 /// known status return codes
 enum SearchdStatus_e
 {
@@ -308,7 +316,6 @@ struct AgentOptions_t
 };
 
 /// descriptor for set of agents (mirrors) (stored in a global hash)
-/// remote agent descriptor (stored in a global hash)
 struct MultiAgentDesc_t
 {
 private:
@@ -471,7 +478,8 @@ bool ParseStrategyHA ( const char * sName, HAStrategies_e & eStrategy );
 
 // try to parse hostname/ip/port or unixsocket on current pConfigLine.
 // fill pAgent fields on success and move ppLine pointer next after parsed instance
-bool ParseAddressPort ( HostUrl_c * pAgent, const char ** ppLine, const WarnInfo_t& dInfo );
+// bUseDefaultPort allows to skip :port in the line (IANA 9312 will be used in the case)
+bool ParseAddressPort ( HostUrl_c * pAgent, const char ** ppLine, const WarnInfo_t& dInfo, bool bUseDefaultPort = false );
 
 bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const char * szAgent, const char * szIndexName, AgentOptions_t tDesc );
 

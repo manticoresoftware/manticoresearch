@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test>
+<skip_indexer/>
+<name>different agent= syntax</name>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+}
+
+index idx_test_agents
+{
+	type = distributed
+	agent = 127.0.0.1:6655
+	agent = 127.0.0.1
+	agent = 127.0.0.1:idx
+	agent = 127.0.0.1:65537
+}
+</config>
+
+<sphqueries>
+<sphinxql>show tables</sphinxql>
+<sphinxql>describe idx_test_agents</sphinxql>
+</sphqueries>
+
+</test>

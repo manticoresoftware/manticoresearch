@@ -3599,6 +3599,9 @@ bool MinimizeSchema ( CSphRsetSchema & tDst, const ISphSchema & tSrc )
 static void ParseIndexList ( const CSphString & sIndexes, CSphVector<CSphString> & dOut )
 {
 	CSphString sSplit = sIndexes;
+	if ( sIndexes.IsEmpty() )
+		return;
+
 	char * p = (char*)sSplit.cstr();
 	while ( *p )
 	{

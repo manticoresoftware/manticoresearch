@@ -17,6 +17,7 @@
 #include "sphinxstd.h"
 #include "sphinxrt.h"
 #include "sphinxint.h"
+#include <errno.h>
 
 #include "searchdaemon.h"
 #include "searchdha.h"
@@ -2729,7 +2730,7 @@ public:
 
 	bool IterateNextReady () override
 	{
-		m_tIter.Reset ();
+		m_tIter.Reset();
 
 		if ( m_iReady<=0 || m_iIter>=m_dEvents.GetLength () )
 			return false;

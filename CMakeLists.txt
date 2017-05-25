@@ -601,9 +601,9 @@ configure_file ("${SPHINXSEARCH_SOURCE_DIR}/config/config_cmake.h.in"
 add_definitions (-DHAVE_CONFIG_H)
 include_directories ("${SPHINXSEARCH_BINARY_DIR}/config")
 
+enable_testing ()
 add_subdirectory (src)
 
-enable_testing ()
 add_subdirectory (test)
 
 # a bit of installation stuff

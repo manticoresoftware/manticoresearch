@@ -110,3 +110,8 @@ if (WIN32)
 	target_link_libraries (testrt libsphinx ${EXTRA_LIBRARIES})
 endif (WIN32)
 
+add_test (NAME "\"Internal src/tests\""
+		#    	CONFIGURATIONS Debug
+		WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+		COMMAND "tests")
+

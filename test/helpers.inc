@@ -2893,6 +2893,7 @@ class SphinxConfig
             case "odbc_settings":       $this->WriteOdbcSettings ( $fp, $node->attributes); return;
 			case "my_address":
 			case "agent0_address":		fwrite ( $fp, $agents[0]["address"].":".$agents[0]["port"] ); return;
+			case "my_port":				fwrite ( $fp, $agents[0]["port"]); return;
 			case "agent_address":
 			case "agent1_address":		fwrite ( $fp, $agents[1]["address"].":".$agents[1]["port"] ); return;
 			case "agent2_address":		fwrite ( $fp, $agents[2]["address"].":".$agents[2]["port"] ); return;

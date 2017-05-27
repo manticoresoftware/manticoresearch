@@ -2992,7 +2992,7 @@ public:
 
 	bool Lock () ACQUIRE();
 	bool Unlock () RELEASE();
-	bool TimedLock ( int iMsec ) TRY_ACQUIRE(false);
+	bool TimedLock ( int iMsec ) TRY_ACQUIRE(true);
 
 protected:
 #if USE_WINDOWS
@@ -3000,7 +3000,7 @@ protected:
 #else
 	pthread_mutex_t * m_pMutex;
 public:
-	inline pthread_mutex_t* GetInternalMutex() RETURN_CAPABILITY(this)
+	inline pthread_mutex_t* GetInternalMutex()
 	{
 		return m_pMutex;
 	}
@@ -3129,12 +3129,12 @@ protected:
 	CSphRwlock & m_tLock;
 };
 
-/// scoped shared (write) lock
+/// scoped exclusive (write) lock
 class SCOPED_CAPABILITY CSphScopedWLock : ISphNoncopyable
 {
 public:
 	/// lock on creation
-	CSphScopedWLock ( CSphRwlock & tLock ) ACQUIRE_SHARED( tLock )
+	CSphScopedWLock ( CSphRwlock & tLock ) ACQUIRE ( tLock )
 		: m_tLock ( tLock )
 	{
 		m_tLock.WriteLock();

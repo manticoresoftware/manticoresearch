@@ -2663,7 +2663,7 @@ public:
 
 	void IterateRemove ( int iSocket ) override
 	{
-		assert ( m_pIter.Data()==m_tIter.m_pData );
+		assert ( m_pIter->Data()==m_tIter.m_pData );
 
 		sphLogDebugv ( "%p kqueue remove, ev=0x%u, sock=%d", m_tIter.m_pData, m_tIter.m_uEvents, iSocket );
 		assert ( m_tIter.m_pData );

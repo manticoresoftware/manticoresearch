@@ -1239,7 +1239,7 @@ bool CSphMutex::TimedLock ( int iMsec )
 
 #else
 	int iRes = EBUSY;
-	int64_t tmTill = sphMicroTimer () + iMsec;
+	int64_t tmTill = sphMicroTimer () + iMsec * 1000;
 	do
 	{
 		iRes = pthread_mutex_trylock ( m_pMutex );

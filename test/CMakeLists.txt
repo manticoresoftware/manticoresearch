@@ -22,13 +22,21 @@ foreach(test ${tests})
     else()
     	set (test_name "")
     endif()
-    set (test_name "ubertest ${onetest} ${test_name}")
 
-    add_test(NAME "\"${test_name}\""
+	set ( tst_name "rt ubertest test_${onetest} ${test_name}" )
+	add_test ( NAME "\"${tst_name}\""
+#			CONFIGURATIONS "Debug"
+			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+			COMMAND php ubertest.php -s $<TARGET_FILE:searchd> -i $<TARGET_FILE:indexer> -u test --strict-verbose --no-demo --rt --ignore-weights t ${onetest} )
+	set_tests_properties ( "\"${tst_name}\"" PROPERTIES
+			PASS_REGULAR_EXPRESSION "ALL OK" FAIL_REGULAR_EXPRESSION "THERE WERE FAILURES" )
+
+	set ( tst_name "ubertest test_${onetest} ${test_name}")
+    add_test(NAME "\"${tst_name}\""
 #    	CONFIGURATIONS Debug
 		WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    	COMMAND php ubertest.php -s $<TARGET_FILE:searchd> -i $<TARGET_FILE:indexer> -u test --strict-verbose --no-demo --rt --ignore-weights t ${onetest})
-	set_tests_properties ("\"${test_name}\"" PROPERTIES
+    	COMMAND php ubertest.php -s $<TARGET_FILE:searchd> -i $<TARGET_FILE:indexer> -u test --strict-verbose --no-demo t ${onetest})
+	set_tests_properties ("\"${tst_name}\"" PROPERTIES
 			PASS_REGULAR_EXPRESSION "ALL OK" FAIL_REGULAR_EXPRESSION "THERE WERE FAILURES")
 
 endforeach()

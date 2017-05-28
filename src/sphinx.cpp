@@ -1820,12 +1820,24 @@ bool sphLockEx ( int iFile, bool bWait )
 	tLock.l_whence = SEEK_SET;
 	tLock.l_start = 0;
 	tLock.l_len = 0;
+	if ( !bWait )
+		return ( fcntl ( iFile, F_SETLK, &tLock )!=-1 );
+
 #if HAVE_F_SETLKW
-	int iCmd = bWait ? F_SETLKW : F_SETLK;
+	return ( fcntl ( iFile, F_SETLKW, &tLock )!=-1 );
 #else
-	int iCmd = F_SETLK;
+	for (;;)
+	{
+		int iResult = fcntl ( iFile, F_SETLK, &tLock )
+		if ( iResult!=-1 )
+			return true;
+		if ( errno==EACCES || errno==EAGAIN )
+			sphSleepMsec(10);
+		else
+			return false;
+	}
 #endif
-	return ( fcntl ( iFile, iCmd, &tLock )!=-1 );
+
 }
 
 

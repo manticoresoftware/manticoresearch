@@ -58,36 +58,14 @@ index index_with_very_long_name_enough_to_quickly_hit_default_1024_4
 	agent = 127.0.0.1:<my_port />:index_with_very_long_name_enough_to_quickly_hit_default_1024_3
 }
 
-index index_with_very_long_name_enough_to_quickly_hit_default_1024_5
-{
-	type = distributed
-	agent = 127.0.0.1:<my_port />:index_with_very_long_name_enough_to_quickly_hit_default_1024_0
-	agent = 127.0.0.1:<my_port />:index_with_very_long_name_enough_to_quickly_hit_default_1024_1
-	agent = 127.0.0.1:<my_port />:index_with_very_long_name_enough_to_quickly_hit_default_1024_2
-	agent = 127.0.0.1:<my_port />:index_with_very_long_name_enough_to_quickly_hit_default_1024_3
-	agent = 127.0.0.1:<my_port />:index_with_very_long_name_enough_to_quickly_hit_default_1024_4
-}
-
-index index_with_very_long_name_enough_to_quickly_hit_default_1024_6
-{
-	type = distributed
-	agent = 127.0.0.1:<my_port />:index_with_very_long_name_enough_to_quickly_hit_default_1024_0
-	agent = 127.0.0.1:<my_port />:index_with_very_long_name_enough_to_quickly_hit_default_1024_1
-	agent = 127.0.0.1:<my_port />:index_with_very_long_name_enough_to_quickly_hit_default_1024_2
-	agent = 127.0.0.1:<my_port />:index_with_very_long_name_enough_to_quickly_hit_default_1024_3
-	agent = 127.0.0.1:<my_port />:index_with_very_long_name_enough_to_quickly_hit_default_1024_4
-	agent = 127.0.0.1:<my_port />:index_with_very_long_name_enough_to_quickly_hit_default_1024_5
-}
-
 index idx
 {
 	type = distributed
 	agent = 127.0.0.1:<my_port />:index_with_very_long_name_enough_to_quickly_hit_default_1024_0
+	agent = 127.0.0.1:<my_port />:index_with_very_long_name_enough_to_quickly_hit_default_1024_1
 	agent = 127.0.0.1:<my_port />:index_with_very_long_name_enough_to_quickly_hit_default_1024_2
 	agent = 127.0.0.1:<my_port />:index_with_very_long_name_enough_to_quickly_hit_default_1024_3
 	agent = 127.0.0.1:<my_port />:index_with_very_long_name_enough_to_quickly_hit_default_1024_4
-	agent = 127.0.0.1:<my_port />:index_with_very_long_name_enough_to_quickly_hit_default_1024_5
-	agent = 127.0.0.1:<my_port />:index_with_very_long_name_enough_to_quickly_hit_default_1024_6
 }
 
 </config>

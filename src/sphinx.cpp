@@ -1820,8 +1820,11 @@ bool sphLockEx ( int iFile, bool bWait )
 	tLock.l_whence = SEEK_SET;
 	tLock.l_start = 0;
 	tLock.l_len = 0;
-
-	int iCmd = bWait ? F_SETLKW : F_SETLK; // FIXME! check for HAVE_F_SETLKW?
+#if HAVE_F_SETLKW
+	int iCmd = bWait ? F_SETLKW : F_SETLK;
+#else
+	int iCmd = F_SETLK;
+#endif
 	return ( fcntl ( iFile, iCmd, &tLock )!=-1 );
 }
 

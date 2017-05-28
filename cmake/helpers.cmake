@@ -24,6 +24,17 @@ macro (ac_check_funcs _FUNCTIONS)
 	endforeach(it)
 endmacro(ac_check_funcs)
 
+macro( ac_check_func_ex _FUNCTION _INCLUDES _LIBS )
+	string ( TOUPPER "${_FUNCTION}" __FUNCTION )
+	set ( saved_includes "${CMAKE_REQUIRED_INCLUDES}" )
+	set ( saved_libs "${CMAKE_REQUIRED_LIBRARIES}" )
+	set ( CMAKE_REQUIRED_INCLUDES "${_INCLUDES}" )
+	set ( CMAKE_REQUIRED_LIBRARIES "${_LIBS}" )
+	check_function_exists ( "${_FUNCTION}" "HAVE_${__FUNCTION}" )
+	set ( CMAKE_REQUIRED_INCLUDES "${saved_includes}" )
+	set ( CMAKE_REQUIRED_LIBRARIES "${saved_libs}" )
+endmacro( ac_check_func_ex _FUNCTION _INCLUDES _LIBS )
+
 # remove cr lf from input string
 #macro (remove_crlf _SOURCE _DESTINATION)
 #	string(REGEX REPLACE "\n" "" _DESTINATION "${_SOURCE}")
@@ -66,6 +77,35 @@ return 0;
 	CHECK_CXX_SOURCE_COMPILES("${_CHECK_PROTO_EXISTS_SOURCE_CODE}" ${_RESULT})
 endmacro(check_prototype_exists _SYMBOL _HEADER _RESULT)
 
+
+# - Check if the symbol is defined in thad header file
+# CHECK_SYMBOL_DEFINED (SYMBOL HEADER VARIABLE)
+#
+# SYMBOL - the name of the symbol you are looking for
+# HEADER - the header(s) where the symbol should be defined
+# VARIABLE - variable to store the result
+#
+macro( check_symbol_defined _SYMBOL _HEADER _RESULT )
+	set ( _INCLUDE_FILES )
+	foreach ( it ${_HEADER} )
+		set ( _INCLUDE_FILES "${_INCLUDE_FILES}#include <${it}>\n" )
+	endforeach ( it )
+
+	set ( _CHECK_PROTO_EXISTS_SOURCE_CODE "
+${_INCLUDE_FILES}
+#ifdef ${_SYMBOL}
+int main() { return 0; }
+#else
+#error NO_SYMBOLS
+#endif
+")
+	CHECK_CXX_SOURCE_COMPILES ( "${_CHECK_PROTO_EXISTS_SOURCE_CODE}" ${_RESULT} )
+endmacro( check_symbol_defined _SYMBOL _HEADER _RESULT )
+
+macro(SPHINX_CHECK_DEFINE _SYMBOL _HEADER)
+	string ( TOUPPER "${_SYMBOL}" __SYMBOL )
+	check_symbol_defined ( "${_SYMBOL}" "${_HEADER}" "HAVE_${__SYMBOL}" )
+endmacro( SPHINX_CHECK_DEFINE _SYMBOL _HEADER )
 # - Check if the DIR symbol exists like in AC_HEADER_DIRENT.
 # CHECK_DIRSYMBOL_EXISTS(FILES VARIABLE)
 #

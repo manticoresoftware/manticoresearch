@@ -35,8 +35,6 @@ cmd ()
 
 cmd "mysql -utest test < example.sql" "Documents setup failed. Log in into mysql as admin and perform: CREATE DATABASE test; CREATE USER test@localhost; GRANT ALL PRIVILEGES ON test.* TO test@localhost;"
 
-export CC='gcc -ftrapv'
-export CXX='g++ -ftrapv'
 for CONFARGS in "--with-debug" "--with-debug --disable-id64" "--with-debug --with-unixodbc";
 do
 	BANNER="testing $CONFARGS build"
@@ -57,8 +55,6 @@ do
 	cmd "cd ./api/libsphinxclient; ./smoke_test.sh" "$BANNER: C API tests failed" "pwd; cat smoke_diff.txt"
 	cd ../../ 
 done
-unset CXX
-unset CC
 
 make clean 1>/dev/null 2>&1
 [ -e "$FAILLOG" ] && rm "$FAILLOG"

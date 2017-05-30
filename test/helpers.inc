@@ -59,7 +59,17 @@ if ( !function_exists("mysql_query") ) {
 	function mysql_connect($host, $user, $password, $newlink)
 	{
 		global $gl_conn;
-		$gl_conn = new mysqli($host,$user,$password);
+		$conndetails = explode(":",$host);
+		if ( count($conndetails)==1 )
+			$gl_conn = new mysqli($host,$user,$password);
+		else
+		{
+			global $g_locals;
+			$dbname = $g_locals["db-name"];
+			$host = $conndetails[0];
+			$port = $conndetails[1];
+			$gl_conn = new mysqli($host, $user, $password, $dbname, (int)$port);
+		}
 		if ($gl_conn->connect_error)
 			return false;
 		return $gl_conn;

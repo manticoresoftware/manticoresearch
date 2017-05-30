@@ -7518,8 +7518,8 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 							if ( tCtx.m_uPackedFactorFlags & SPH_FACTOR_ENABLE )
 							{
-								pRanker->ExtraData ( EXTRA_SET_MATCHPUSHED, (void**)&(ppSorters[iSorter]->m_iJustPushed) );
-								pRanker->ExtraData ( EXTRA_SET_MATCHPOPPED, (void**)&(ppSorters[iSorter]->m_dJustPopped) );
+								pRanker->ExtraData ( EXTRA_SET_MATCHPUSHED, (void**)&(dSorters[iSorter]->m_iJustPushed) );
+								pRanker->ExtraData ( EXTRA_SET_MATCHPOPPED, (void**)&(dSorters[iSorter]->m_dJustPopped) );
 							}
 						}
 
@@ -7562,7 +7562,8 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			for ( int iSorter = 0; iSorter<iSorters; iSorter++ )
 			{
 				ISphMatchSorter * pTop = ppSorters[iSorter];
-				pTop->Finalize ( tFinal, false );
+				if ( pTop )
+					pTop->Finalize ( tFinal, false );
 			}
 		}
 	}

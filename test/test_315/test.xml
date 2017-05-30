@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>catching errors in multiqueries v2</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT id, best_seller, attributes_id, text FROM test_table
+
+	sql_attr_uint = best_seller
+	sql_attr_uint = attributes_id
+}
+
+index products
+{
+	source				= srctest
+	path				= <data_path/>/test
+}
+
+index rt_products
+{
+	type			= rt
+	path			= <data_path/>/rt_test
+	rt_field		= title	
+	rt_attr_uint 	= best_seller
+	rt_attr_uint 	= attributes_id
+	dict			= keywords
+}
+
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id integer primary key not null auto_increment,
+	best_seller int not null default 0,
+	attributes_id int not null default 0,
+	text varchar(256)
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table (best_seller, attributes_id, text) VALUES
+( 1, 1, 'text1 text' ),
+( 2, 1, 'text2 text' ),
+( 3, 2, 'text3 text' ),
+( 4, 2, 'text4 text' );
+</db_insert>
+
+<!--
+<sphqueries>
+<sphinxql>REPLACE INTO rt_products (id, best_seller, attributes_id, title) VALUES (1, 1, 1, 'text1 text'),(2, 2, 1, 'text2 text'), (3, 3, 2, 'text3 text'), (4, 4, 2, 'text4 text')</sphinxql>
+<sphinxql>select *, to_string(id) i from rt_products order by best_seller asc; select *, to_string(id) i from rt_products order by best_seller1 asc; select *, to_string(id) i from rt_products order by attributes_id asc</sphinxql>
+<sphinxql>select *, packedfactors() i from rt_products where match ('text') order by best_seller asc option ranker=expr('1'); select *, packedfactors() i from rt_products where match ('text') order by best_seller1 asc option ranker=expr('1'); select *, packedfactors() i from rt_products where match ('text') order by attributes_id asc option ranker=expr('1')</sphinxql>
+
+<sphinxql>select *, to_string(id) i from products order by best_seller asc; select *, to_string(id) i from products order by best_seller1 asc; select *, to_string(id) i from products order by attributes_id asc</sphinxql>
+<sphinxql>select *, packedfactors() i from products where match ('text') order by best_seller asc option ranker=expr('1'); select *, packedfactors() i from products where match ('text') order by best_seller1 asc option ranker=expr('1'); select *, packedfactors() i from products where match ('text') order by attributes_id asc option ranker=expr('1')</sphinxql>
+</sphqueries>
+-->
+
+<custom_test><![CDATA[
+// invalid sorter at multi-query
+
+$results = array();
+$ql->Reconnect();
+
+$results[] = "\n" . 'insert';
+$results[] = "\n" . $ql->Query ( "INSERT INTO rt_products (id, best_seller, attributes_id, title) VALUES (1, 1, 1, 'text1 text'),(2, 2, 1, 'text2 text'), (3, 3, 2, 'text3 text'), (4, 4, 2, 'text4 text')" );
+
+$results[] = "\n" . 'rt scan';
+$results[] = "\n" . $ql->MultiQuery ( "select *, to_string(id) i from rt_products order by best_seller asc; select *, to_string(id) i from rt_products order by best_seller1 asc; select *, to_string(id) i from rt_products order by attributes_id asc" );
+
+$results[] = "\n" . 'rt match';
+$results[] = "\n" . $ql->MultiQuery ( "select *, packedfactors() i from rt_products where match ('text') order by best_seller asc option ranker=expr('1'); select *, packedfactors() i from rt_products where match ('text') order by best_seller1 asc option ranker=expr('1'); select *, packedfactors() i from rt_products where match ('text') order by attributes_id asc option ranker=expr('1')" );
+
+$results[] = "\n" . 'plain scan';
+$results[] = "\n" . $ql->MultiQuery ( "select *, to_string(id) i from products order by best_seller asc; select *, to_string(id) i from products order by best_seller1 asc; select *, to_string(id) i from products order by attributes_id asc" );
+
+$results[] = "\n" . 'plain match';
+$results[] = "\n" . $ql->MultiQuery ( "select *, packedfactors() i from products where match ('text') order by best_seller asc option ranker=expr('1'); select *, packedfactors() i from products where match ('text') order by best_seller1 asc option ranker=expr('1'); select *, packedfactors() i from products where match ('text') order by attributes_id asc option ranker=expr('1')" );
+
+]]></custom_test>
+
+</test>

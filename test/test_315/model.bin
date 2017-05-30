@@ -1,0 +1,27 @@
+a:1:{i:0;a:1:{i:0;a:10:{i:0;s:7:"
+insert";i:1;s:3:"
+OK";i:2;s:8:"
+rt scan";i:3;s:63:"
+1 | 1 | 1 | 1
+2 | 2 | 1 | 2
+3 | 3 | 2 | 3
+4 | 4 | 2 | 4
+4 rows";i:4;s:9:"
+rt match";i:5;s:1407:"
+1 | 1 | 1 | bm25=304, bm25a=0.168710, field_mask=1, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=-0.430677, min_idf=-0.430677, max_idf=-0.430677, sum_idf=-0.430677, min_hit_pos=2, min_best_span_pos=2, exact_hit=0, max_window_hits=1, min_gaps=0, exact_order=1, lccs=1, wlccs=-0.430677, atc=0.000000), word0=(tf=1, idf=-0.430677)
+2 | 2 | 1 | bm25=304, bm25a=0.168710, field_mask=1, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=-0.430677, min_idf=-0.430677, max_idf=-0.430677, sum_idf=-0.430677, min_hit_pos=2, min_best_span_pos=2, exact_hit=0, max_window_hits=1, min_gaps=0, exact_order=1, lccs=1, wlccs=-0.430677, atc=0.000000), word0=(tf=1, idf=-0.430677)
+3 | 3 | 2 | bm25=304, bm25a=0.168710, field_mask=1, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=-0.430677, min_idf=-0.430677, max_idf=-0.430677, sum_idf=-0.430677, min_hit_pos=2, min_best_span_pos=2, exact_hit=0, max_window_hits=1, min_gaps=0, exact_order=1, lccs=1, wlccs=-0.430677, atc=0.000000), word0=(tf=1, idf=-0.430677)
+4 | 4 | 2 | bm25=304, bm25a=0.168710, field_mask=1, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=-0.430677, min_idf=-0.430677, max_idf=-0.430677, sum_idf=-0.430677, min_hit_pos=2, min_best_span_pos=2, exact_hit=0, max_window_hits=1, min_gaps=0, exact_order=1, lccs=1, wlccs=-0.430677, atc=0.000000), word0=(tf=1, idf=-0.430677)
+4 rows";i:6;s:11:"
+plain scan";i:7;s:63:"
+1 | 1 | 1 | 1
+2 | 2 | 1 | 2
+3 | 3 | 2 | 3
+4 | 4 | 2 | 4
+4 rows";i:8;s:12:"
+plain match";i:9;s:1407:"
+1 | 1 | 1 | bm25=304, bm25a=0.168710, field_mask=1, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=-0.430677, min_idf=-0.430677, max_idf=-0.430677, sum_idf=-0.430677, min_hit_pos=2, min_best_span_pos=2, exact_hit=0, max_window_hits=1, min_gaps=0, exact_order=1, lccs=1, wlccs=-0.430677, atc=0.000000), word0=(tf=1, idf=-0.430677)
+2 | 2 | 1 | bm25=304, bm25a=0.168710, field_mask=1, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=-0.430677, min_idf=-0.430677, max_idf=-0.430677, sum_idf=-0.430677, min_hit_pos=2, min_best_span_pos=2, exact_hit=0, max_window_hits=1, min_gaps=0, exact_order=1, lccs=1, wlccs=-0.430677, atc=0.000000), word0=(tf=1, idf=-0.430677)
+3 | 3 | 2 | bm25=304, bm25a=0.168710, field_mask=1, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=-0.430677, min_idf=-0.430677, max_idf=-0.430677, sum_idf=-0.430677, min_hit_pos=2, min_best_span_pos=2, exact_hit=0, max_window_hits=1, min_gaps=0, exact_order=1, lccs=1, wlccs=-0.430677, atc=0.000000), word0=(tf=1, idf=-0.430677)
+4 | 4 | 2 | bm25=304, bm25a=0.168710, field_mask=1, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=-0.430677, min_idf=-0.430677, max_idf=-0.430677, sum_idf=-0.430677, min_hit_pos=2, min_best_span_pos=2, exact_hit=0, max_window_hits=1, min_gaps=0, exact_order=1, lccs=1, wlccs=-0.430677, atc=0.000000), word0=(tf=1, idf=-0.430677)
+4 rows";}}}

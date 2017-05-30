@@ -751,6 +751,39 @@ class QLClient
 		$res .= "$n rows";
 		return $res;
 	}
+	
+	function MultiQuery($q)
+	{
+		if ($this->_conn===false)
+			return "NOT CONNECTED";
+
+		$r = @mysqli_multi_query($this->_conn, $q);
+		if (!$r)
+			return "ERROR: ".mysqli_error($this->_conn);
+
+		$res = "";
+		do
+		{
+			if ($result = mysqli_store_result($this->_conn))
+			{
+				$n = 0;
+				while ($row = mysqli_fetch_row($result))
+				{
+					$res .= join(" | ", $row) . "\n";
+					$n++;
+				}
+				$res .= "$n rows";
+				mysqli_free_result($result);
+			} else
+			{
+				$res .= "ERROR: " . mysqli_error($this->_conn);
+			}
+			if (!mysqli_more_results($this->_conn))
+				break;
+		} while (mysqli_next_result($this->_conn));
+
+		return $res;
+	}	
 }
 
 class APIClient extends SphinxClient

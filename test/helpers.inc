@@ -1486,18 +1486,32 @@ class SphinxConfig
 		return 0;
 	}
 
-
-	function FixupErrorMessage ( $s )
+	function FixupAgentAddress ( $s )
 	{
 		global $agents;
 		$tr = array(
 			$agents[0]["address"].":".$agents[0]["port"] => "<AGENT0_ADDRESS/>",
 			$agents[1]["address"].":".$agents[1]["port"] => "<AGENT1_ADDRESS/>",
 			$agents[2]["address"].":".$agents[2]["port"] => "<AGENT2_ADDRESS/>" );
-		$s = strtr ( $s, $tr );
+		return strtr ( $s, $tr );
+	}
+
+	function FixupErrorMessage ( $s )
+	{
+		$s = $this->FixupAgentAddress ( $s );
 		$s = preg_replace ( "/or \d+ other tokens/", "or N other tokens", $s );
 		return $s;
 	}
+
+
+	function FixupWarningMessage ( $s )
+	{
+		if ( strpos ( strtolower ( $s ), 'warning' ) !== false )
+			$s = $this->FixupAgentAddress ( $s );
+
+		return $s;
+	}
+
 
 	function RunQuerySphinxQL ( &$error, $bench=false )
 	{
@@ -1614,6 +1628,8 @@ class SphinxConfig
 							{
 								if ( $no_time===true && array_key_exists ( 'Variable_name', $row ) && $row['Variable_name']=='time' )
 									continue;
+								if ( array_key_exists ( 'Value', $row ) )
+									$row['Value'] = $this->FixupWarningMessage ( $row['Value'] );
 								$query_result["rows"][] = $row;
 							}
 							mysqli_free_result($result);
@@ -3057,6 +3073,12 @@ function CheckConfig ( $config, $path )
 	if ( $config->Requires("non-windows") && $windows )
 	{
 		printf ( "SKIPPING %s, %s - use non-Windows system to run this test\n", $path, $config->Name () );
+		return false;
+	}
+
+	if ( $config->Requires("windows") && !$windows )
+	{
+		printf ( "SKIPPING %s, %s - use Windows system to run this test\n", $path, $config->Name () );
 		return false;
 	}
 

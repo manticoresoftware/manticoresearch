@@ -12120,14 +12120,14 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					continue;
 
 				// store hits
-				int iHits = pHits - dHits.Begin();
-				sphSort ( dHits.Begin(), iHits, CmpHit_fn() );
-				m_pDict->HitblockPatch ( dHits.Begin(), iHits );
+				int iStoredHits = pHits - dHits.Begin();
+				sphSort ( dHits.Begin(), iStoredHits, CmpHit_fn() );
+				m_pDict->HitblockPatch ( dHits.Begin(), iStoredHits );
 
 				pHits = dHits.Begin();
-				m_tProgress.m_iHitsTotal += iHits;
+				m_tProgress.m_iHitsTotal += iStoredHits;
 
-				dHitBlocks.Add ( tHitBuilder.cidxWriteRawVLB ( fdHits.GetFD(), dHits.Begin(), iHits, NULL, 0, 0 ) );
+				dHitBlocks.Add ( tHitBuilder.cidxWriteRawVLB ( fdHits.GetFD(), dHits.Begin(), iStoredHits, NULL, 0, 0 ) );
 				if ( dHitBlocks.Last()<0 )
 					return 0;
 				m_pDict->HitblockReset ();
@@ -13912,20 +13912,20 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	if ( bMergeKillLists )
 	{
 		// merge spk
-		CSphVector<SphDocID_t> dKillList;
-		dKillList.Reserve ( pDstIndex->GetKillListSize()+pSrcIndex->GetKillListSize() );
-		for ( int i=0; i<pSrcIndex->GetKillListSize(); i++ ) dKillList.Add ( pSrcIndex->GetKillList()[i] );
-		for ( int i=0; i<pDstIndex->GetKillListSize(); i++ ) dKillList.Add ( pDstIndex->GetKillList()[i] );
-		dKillList.Uniq ();
+		CSphVector<SphDocID_t> dMergedKillList;
+		dMergedKillList.Reserve ( pDstIndex->GetKillListSize()+pSrcIndex->GetKillListSize() );
+		for ( int i=0; i<pSrcIndex->GetKillListSize(); i++ ) dMergedKillList.Add ( pSrcIndex->GetKillList()[i] );
+		for ( int i=0; i<pDstIndex->GetKillListSize(); i++ ) dMergedKillList.Add ( pDstIndex->GetKillList()[i] );
+		dMergedKillList.Uniq ();
 
-		tBuildHeader.m_uKillListSize = dKillList.GetLength ();
+		tBuildHeader.m_uKillListSize = dMergedKillList.GetLength ();
 
 		if ( *pGlobalStop || *pLocalStop )
 			return false;
 
-		if ( dKillList.GetLength() )
+		if ( dMergedKillList.GetLength() )
 		{
-			if ( !sphWriteThrottled ( tKillList.GetFD(), &dKillList[0], dKillList.GetLength()*sizeof(SphDocID_t), "kill_list", sError, pThrottle ) )
+			if ( !sphWriteThrottled ( tKillList.GetFD(), &dMergedKillList[0], dMergedKillList.GetLength()*sizeof(SphDocID_t), "kill_list", sError, pThrottle ) )
 				return false;
 		}
 	}
@@ -16656,10 +16656,10 @@ void ISphQueryFilter::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 	int iTokenizedTotal = dKeywords.GetLength();
 	for ( int iTokenized=0; iTokenized<iTokenizedTotal; iTokenized++ )
 	{
-		int iQpos = dKeywords[iTokenized].m_iQpos;
+		int iKeywordQpos = dKeywords[iTokenized].m_iQpos;
 
 		// do not transform expanded wild-cards
-		if ( tSkipTransform.GetSize() && tSkipTransform.BitGet ( iQpos ) )
+		if ( tSkipTransform.GetSize() && tSkipTransform.BitGet ( iKeywordQpos ) )
 			continue;
 
 		// MUST copy as Dict::GetWordID changes word and might add symbols
@@ -16684,7 +16684,7 @@ void ISphQueryFilter::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 				strncpy ( (char *)sTmp, dChildren[iChild]->m_dWords[iAotKeyword].m_sWord.scstr(), sizeof(sTmp) );
 				// prevent use-after-free-bug due to vector grow: AddKeywordsStats() calls dKeywords.Add()
 				strncpy ( (char *)sTmp2, dKeywords[iTokenized].m_sTokenized.scstr (), sizeof ( sTmp2 ) );
-				AddKeywordStats ( sTmp, sTmp2, iQpos, dKeywords );
+				AddKeywordStats ( sTmp, sTmp2, iKeywordQpos, dKeywords );
 			}
 
 			// push all child nodes at node to process list
@@ -20920,9 +20920,9 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 		bool bStop = ( !GetWordID ( pDestToken, strlen ( (const char*)pDestToken ), true ) );
 		if ( !bStop )
 		{
-			CSphNormalForm & tForm = dDestTokens.Add();
-			tForm.m_sForm = (const char *)pDestToken;
-			tForm.m_iLengthCP = pTokenizer->GetLastTokenLen();
+			CSphNormalForm & tNewForm = dDestTokens.Add();
+			tNewForm.m_sForm = (const char *)pDestToken;
+			tNewForm.m_iLengthCP = pTokenizer->GetLastTokenLen();
 		}
 
 		bStopwordsPresent |= bStop;
@@ -21035,14 +21035,14 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 		// FIXME!!! handle multiple destination tokens and ~flag for wordforms
 		if ( !bAfterMorphology && dDestTokens.GetLength()==1 && !pContainer->m_dHash.Exists ( dDestTokens[0].m_sForm ) )
 		{
-			CSphStoredNF tForm;
-			tForm.m_sWord = dDestTokens[0].m_sForm;
-			tForm.m_bAfterMorphology = bAfterMorphology;
+			CSphStoredNF tStoredForm;
+			tStoredForm.m_sWord = dDestTokens[0].m_sForm;
+			tStoredForm.m_bAfterMorphology = bAfterMorphology;
 			pContainer->m_bHavePostMorphNF |= bAfterMorphology;
 			if ( !pContainer->m_dNormalForms.GetLength()
 				|| pContainer->m_dNormalForms.Last().m_sWord!=dDestTokens[0].m_sForm
 				|| pContainer->m_dNormalForms.Last().m_bAfterMorphology!=bAfterMorphology )
-				pContainer->m_dNormalForms.Add ( tForm );
+				pContainer->m_dNormalForms.Add ( tStoredForm );
 
 			pContainer->m_dHash.Add ( pContainer->m_dNormalForms.GetLength()-1, dDestTokens[0].m_sForm );
 		}
@@ -21075,14 +21075,14 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 				sphWarning ( "index '%s': duplicate wordform found ( '%s' ). Fix your wordforms file '%s'.", pContainer->m_sIndexName.cstr(), sBuffer, szFile );
 		} else
 		{
-			CSphStoredNF tForm;
-			tForm.m_sWord = dDestTokens[0].m_sForm;
-			tForm.m_bAfterMorphology = bAfterMorphology;
+			CSphStoredNF tStoredForm;
+			tStoredForm.m_sWord = dDestTokens[0].m_sForm;
+			tStoredForm.m_bAfterMorphology = bAfterMorphology;
 			pContainer->m_bHavePostMorphNF |= bAfterMorphology;
 			if ( !pContainer->m_dNormalForms.GetLength()
 				|| pContainer->m_dNormalForms.Last().m_sWord!=dDestTokens[0].m_sForm
 				|| pContainer->m_dNormalForms.Last().m_bAfterMorphology!=bAfterMorphology)
-				pContainer->m_dNormalForms.Add ( tForm );
+				pContainer->m_dNormalForms.Add ( tStoredForm );
 
 			pContainer->m_dHash.Add ( pContainer->m_dNormalForms.GetLength()-1, dTokens[0] );
 		}
@@ -31097,13 +31097,13 @@ void SuggestMatchWords ( const ISphWordlistSuggest * pWordlist, const CSphVector
 	const int iMaxWordLen = ( tArgs.m_iDeltaLen>0 ? tRes.m_iCodepoints + tArgs.m_iDeltaLen : INT_MAX );
 
 	CSphHash<int> dHashTrigrams;
-	const char * s = tRes.m_dTrigrams.Begin ();
-	const char * sEnd = s + tRes.m_dTrigrams.GetLength();
-	while ( s<sEnd )
+	const char * sBuf = tRes.m_dTrigrams.Begin ();
+	const char * sEnd = sBuf + tRes.m_dTrigrams.GetLength();
+	while ( sBuf<sEnd )
 	{
-		dHashTrigrams.Add ( sphCRC32 ( s ), 1 );
-		while ( *s ) s++;
-		s++;
+		dHashTrigrams.Add ( sphCRC32 ( sBuf ), 1 );
+		while ( *sBuf ) sBuf++;
+		sBuf++;
 	}
 	int dCharOffset[SPH_MAX_WORD_LEN+1];
 	int dDictWordCodepoints[SPH_MAX_WORD_LEN];
@@ -31153,9 +31153,9 @@ void SuggestMatchWords ( const ISphWordlistSuggest * pWordlist, const CSphVector
 			int iChars = 0;
 
 			const BYTE * s = (const BYTE *)sDictWord;
-			const BYTE * sEnd = s + iDictWordLen;
+			const BYTE * sDictWordEnd = s + iDictWordLen;
 			bool bGotNonChar = false;
-			while ( !bGotNonChar && s<sEnd )
+			while ( !bGotNonChar && s<sDictWordEnd )
 			{
 				dCharOffset[iChars] = s - (const BYTE *)sDictWord;
 				int iCode = sphUTF8Decode ( s );

@@ -3870,7 +3870,7 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, SphDocID_t iMinDocID, i
 	SphOffset_t iCheckpointsPosition, DWORD iInfixBlocksOffset, int iInfixCheckpointWordsSize, DWORD uKillListSize, uint64_t uMinMaxSize,
 	const ChunkStats_t & tStats ) const
 {
-	static const DWORD INDEX_FORMAT_VERSION	= 39;			///< my format version
+	static const DWORD RT_INDEX_FORMAT_VERSION	= 39;			///< my format version
 
 	CSphWriter tWriter;
 	CSphString sName, sError;
@@ -3879,7 +3879,7 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, SphDocID_t iMinDocID, i
 
 	// format
 	tWriter.PutDword ( INDEX_MAGIC_HEADER );
-	tWriter.PutDword ( INDEX_FORMAT_VERSION );
+	tWriter.PutDword ( RT_INDEX_FORMAT_VERSION );
 
 	tWriter.PutDword ( USE_64BIT ); // use-64bit
 	tWriter.PutDword ( SPH_DOCINFO_EXTERN );

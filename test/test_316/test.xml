@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 
-<name>ha syntax and round-robin strategies (non-windows)</name>
+<name>ha syntax and round-robin strategies (windows)</name>
 
 <requires>
-<non-windows/>
+<windows/>
 </requires>
 
 <num_agents>3</num_agents>

@@ -2799,7 +2799,7 @@ public:
 	void IterateChangeEvent ( int iSocket, PoolEvents_e eFlags ) override
 	{
 		assert ( m_iIter>=0 && m_iIter<m_dEvents.GetLength () );
-		assert ( iSocket == m_dEvents[m_iIter].fd );
+		assert ( (SOCKET)iSocket == m_dEvents[m_iIter].fd );
 		m_dEvents[m_iIter].events = (eFlags==SPH_POLL_RD ? POLLIN : POLLOUT);
 	}
 
@@ -2807,7 +2807,7 @@ public:
 	{
 		assert ( m_iIter>=0 && m_iIter<m_dEvents.GetLength () );
 		assert ( m_dEvents.GetLength ()==m_dWork.GetLength () );
-		assert ( iSocket == m_dEvents[m_iIter].fd );
+		assert ( (SOCKET)iSocket == m_dEvents[m_iIter].fd );
 
 		m_dEvents.RemoveFast ( m_iIter );
 		// SafeDelete ( m_dWork[m_iIter] );

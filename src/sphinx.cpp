@@ -14784,9 +14784,12 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 			iMaxSchemaIndex = i;
 		}
 
+	CSphVector< const ISphSchema * > dSorterSchemas;
+	SorterSchemas ( ppSorters, iSorters, iMaxSchemaIndex, dSorterSchemas );
+
 	// setup calculations and result schema
 	CSphQueryContext tCtx ( *pQuery );
-	if ( !tCtx.SetupCalc ( pResult, ppSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, m_tMva.GetWritePtr(), m_bArenaProhibit ) )
+	if ( !tCtx.SetupCalc ( pResult, ppSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, m_tMva.GetWritePtr(), m_bArenaProhibit, dSorterSchemas ) )
 		return false;
 
 	// set string pool for string on_sort expression fix up
@@ -16324,8 +16327,23 @@ void CSphQueryContext::BindWeights ( const CSphQuery * pQuery, const CSphSchema 
 	}
 }
 
+static ESphEvalStage GetEarliestStage ( ESphEvalStage eStage, const CSphColumnInfo & tIn, const CSphVector<const ISphSchema *> & dSchemas )
+{
+	ARRAY_FOREACH ( iSchema, dSchemas )
+	{
+		const ISphSchema * pSchema = dSchemas[iSchema];
+		const CSphColumnInfo * pCol = pSchema->GetAttr ( tIn.m_sName.cstr() );
+		if ( !pCol )
+			continue;
+
+		eStage = Min ( eStage, pCol->m_eStage );
+	}
+
+	return eStage;
+}
+
 bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema & tInSchema,
-									const CSphSchema & tSchema, const DWORD * pMvaPool, bool bArenaProhibit )
+									const CSphSchema & tSchema, const DWORD * pMvaPool, bool bArenaProhibit, const CSphVector<const ISphSchema *> & dInSchemas )
 {
 	m_dCalcFilter.Resize ( 0 );
 	m_dCalcSort.Resize ( 0 );
@@ -16339,15 +16357,16 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema &
 		return false;
 	}
 
-	bool bGotAggregate = false;
-
 	// now match everyone
 	for ( int iIn=0; iIn<tInSchema.GetAttrsCount(); iIn++ )
 	{
 		const CSphColumnInfo & tIn = tInSchema.GetAttr(iIn);
-		bGotAggregate |= ( tIn.m_eAggrFunc!=SPH_AGGR_NONE );
 
-		switch ( tIn.m_eStage )
+		// recalculate stage as sorters set column at earlier stage
+		// FIXME!!! should we update column?
+		ESphEvalStage eStage = GetEarliestStage ( tIn.m_eStage, tIn, dInSchemas );
+
+		switch ( eStage )
 		{
 			case SPH_EVAL_STATIC:
 			case SPH_EVAL_OVERRIDE:
@@ -16362,7 +16381,7 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema &
 					return false;
 				}
 
-				if ( tIn.m_eStage==SPH_EVAL_OVERRIDE )
+				if ( eStage==SPH_EVAL_OVERRIDE )
 				{
 					// override; check for type/size match and dynamic part
 					if ( tIn.m_eAttrType!=pMy->m_eAttrType
@@ -16395,7 +16414,7 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema &
 				if ( !pExpr )
 				{
 					pResult->m_sError.SetSprintf ( "INTERNAL ERROR: incoming-schema expression missing evaluator (stage=%d, in=%s)",
-						(int)tIn.m_eStage, sphDumpAttr(tIn).cstr() );
+						(int)eStage, sphDumpAttr(tIn).cstr() );
 					return false;
 				}
 
@@ -16409,7 +16428,7 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema &
 				tMva.m_bArenaProhibit = bArenaProhibit;
 				tCalc.m_pExpr->Command ( SPH_EXPR_SET_MVA_POOL, &tMva );
 
-				switch ( tIn.m_eStage )
+				switch ( eStage )
 				{
 					case SPH_EVAL_PREFILTER:	m_dCalcFilter.Add ( tCalc ); break;
 					case SPH_EVAL_PRESORT:		m_dCalcSort.Add ( tCalc ); break;
@@ -16426,7 +16445,7 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema &
 				break;
 
 			default:
-				pResult->m_sError.SetSprintf ( "INTERNAL ERROR: unhandled eval stage=%d", (int)tIn.m_eStage );
+				pResult->m_sError.SetSprintf ( "INTERNAL ERROR: unhandled eval stage=%d", (int)eStage );
 				return false;
 		}
 	}
@@ -18101,12 +18120,15 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 			iMaxSchemaIndex = i;
 		}
 
+	CSphVector< const ISphSchema * > dSorterSchemas;
+	SorterSchemas ( ppSorters, iSorters, iMaxSchemaIndex, dSorterSchemas );
+
 	// setup calculations and result schema
 	CSphQueryContext tCtx ( *pQuery );
 	tCtx.m_pProfile = pProfile;
 	tCtx.m_pLocalDocs = tArgs.m_pLocalDocs;
 	tCtx.m_iTotalDocs = tArgs.m_iTotalDocs;
-	if ( !tCtx.SetupCalc ( pResult, ppSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, m_tMva.GetWritePtr(), m_bArenaProhibit ) )
+	if ( !tCtx.SetupCalc ( pResult, ppSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, m_tMva.GetWritePtr(), m_bArenaProhibit, dSorterSchemas ) )
 		return false;
 
 	// set string pool for string on_sort expression fix up
@@ -32435,6 +32457,25 @@ void sphShutdownGlobalIDFs ()
 	CSphVector<CSphString> dEmptyFiles;
 	sphUpdateGlobalIDFs ( dEmptyFiles );
 }
+
+//////////////////////////////////////////////////////////////////////////
+
+void SorterSchemas ( ISphMatchSorter ** ppSorters, int iCount, int iSkipSorter, CSphVector<const ISphSchema *> & dSchemas )
+{
+	if ( iCount<2 )
+		return;
+
+	dSchemas.Reserve ( iCount - 1 );
+	for ( int i=0; i<iCount; i++ )
+	{
+		if ( i==iSkipSorter || !ppSorters[i] )
+			continue;
+
+		const ISphSchema & tSchema = ppSorters[i]->GetSchema();
+		dSchemas.Add ( &tSchema );
+	}
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 

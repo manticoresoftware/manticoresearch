@@ -752,7 +752,7 @@ class QLClient
 		return $res;
 	}
 	
-	function MultiQuery($q)
+	function MultiQuery($q, $opt)
 	{
 		if ($this->_conn===false)
 			return "NOT CONNECTED";
@@ -760,8 +760,10 @@ class QLClient
 		$r = @mysqli_multi_query($this->_conn, $q);
 		if (!$r)
 			return "ERROR: ".mysqli_error($this->_conn);
-
+			
 		$res = "";
+		if (array_key_exists("dumpQuery", $opt) && $opt["dumpQuery"] === true)
+			$res .= $q . "\n---\n";
 		do
 		{
 			if ($result = mysqli_store_result($this->_conn))
@@ -772,7 +774,7 @@ class QLClient
 					$res .= join(" | ", $row) . "\n";
 					$n++;
 				}
-				$res .= "$n rows";
+				$res .= "$n rows" . "\n";
 				mysqli_free_result($result);
 			} else
 			{

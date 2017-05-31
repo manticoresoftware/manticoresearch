@@ -7205,10 +7205,13 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		}
 	}
 
+	CSphVector< const ISphSchema * > dSorterSchemas;
+	SorterSchemas ( dSorters.Begin(), dSorters.GetLength(), iMaxSchemaIndex, dSorterSchemas );
+
 	// setup calculations and result schema
 	CSphQueryContext tCtx ( *pQuery );
 	tCtx.m_pProfile = pProfiler;
-	if ( !tCtx.SetupCalc ( pResult, dSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, NULL, false ) )
+	if ( !tCtx.SetupCalc ( pResult, dSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, NULL, false, dSorterSchemas ) )
 		return false;
 
 	tCtx.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;

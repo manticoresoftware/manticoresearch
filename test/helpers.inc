@@ -751,41 +751,6 @@ class QLClient
 		$res .= "$n rows";
 		return $res;
 	}
-	
-	function MultiQuery($q, $opt)
-	{
-		if ($this->_conn===false)
-			return "NOT CONNECTED";
-
-		$r = @mysqli_multi_query($this->_conn, $q);
-		if (!$r)
-			return "ERROR: ".mysqli_error($this->_conn);
-			
-		$res = "";
-		if (array_key_exists("dumpQuery", $opt) && $opt["dumpQuery"] === true)
-			$res .= $q . "\n---\n";
-		do
-		{
-			if ($result = mysqli_store_result($this->_conn))
-			{
-				$n = 0;
-				while ($row = mysqli_fetch_row($result))
-				{
-					$res .= join(" | ", $row) . "\n";
-					$n++;
-				}
-				$res .= "$n rows" . "\n";
-				mysqli_free_result($result);
-			} else
-			{
-				$res .= "ERROR: " . mysqli_error($this->_conn);
-			}
-			if (!mysqli_more_results($this->_conn))
-				break;
-		} while (mysqli_next_result($this->_conn));
-
-		return $res;
-	}	
 }
 
 class APIClient extends SphinxClient
@@ -1512,6 +1477,15 @@ class SphinxConfig
 		return $s;
 	}
 
+	function PickResult ( $query_result )
+	{
+		$this->_results[] = $query_result;
+		if ( IsModelGenMode () )
+		{
+			$this->_results_model[$this->SubtestNo ()][] = $query_result;
+		}
+	}
+
 
 	function RunQuerySphinxQL ( &$error, $bench=false )
 	{
@@ -1610,10 +1584,12 @@ class SphinxConfig
 					}
 					mysqli_free_result($result);
 				}
-				$this->_results[] = $query_result;
+				$this->PickResult($query_result);
 			} else
 			{
 				$parts = explode (';',$query);
+				$haserror = true;
+				$erroneousquery = $query;
 				if ( mysqli_multi_query ($connection,$query) )
 				{
 					$resultset_num = 0;
@@ -1647,26 +1623,23 @@ class SphinxConfig
 						else
 							$query_result["sphinxql"]=($resultset_num<count($parts)?"$parts[$resultset_num] ":"")."/* result ".($resultset_num+1)." of previous multistatement */";
 						++$resultset_num;
-						$this->_results[] = $query_result;
+						$this->PickResult($query_result);
+						$erroneousquery = ($resultset_num<count($parts)?"$parts[$resultset_num] ":"")."/* result ".($resultset_num+1)." of previous multistatement */";
 						if (!mysqli_more_results($connection))
-							break;
-						if ( IsModelGenMode () )
 						{
-							$this->_results_model[$this->SubtestNo ()][] = $query_result;
+							$haserror = false;
+							break;
 						}
 						$query_result = array ();
 					} while (mysqli_next_result($connection));
-				} else
+				};
+				if ($haserror)
 				{
-					$query_result["sphinxql"]=$query;
+					$query_result["sphinxql"]=$erroneousquery;
 					$query_result["error"] = mysqli_error( $connection );
 					$query_result["errno"] = mysqli_errno( $connection );
-					$this->_results[] = $query_result;
+					$this->PickResult($query_result);
 				}
-			}
-			if ( IsModelGenMode () )
-			{
-				$this->_results_model[$this->SubtestNo ()][] = $query_result;
 			}
 		}
 		mysqli_close ( $connection );

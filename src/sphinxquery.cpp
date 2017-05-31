@@ -838,11 +838,11 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		// the tokenizer will *not* return the number as a token!
 		const char * pTokenStart = m_pTokenizer->GetBufferPtr();
 		const char * pLastTokenEnd = m_pTokenizer->GetTokenEnd();
-		const char * sEnd = m_pTokenizer->GetBufferEnd();
+		const char * sBufferEnd = m_pTokenizer->GetBufferEnd();
 		m_pErrorAt = pTokenStart;
 
 		const char * p = pTokenStart;
-		while ( p<sEnd && isspace ( *(BYTE*)p ) ) p++; // to avoid CRT assertions on Windows
+		while ( p<sBufferEnd && isspace ( *(BYTE*)p ) ) p++; // to avoid CRT assertions on Windows
 
 		if ( m_bCheckNumber )
 		{
@@ -1503,9 +1503,9 @@ static void CollectChildren ( XQNode_t * pNode, CSphVector<XQNode_t *> & dChildr
 	dChildren.Add ( pNode );
 	ARRAY_FOREACH ( i, dChildren )
 	{
-		const XQNode_t * pNode = dChildren[i];
-		ARRAY_FOREACH ( j, pNode->m_dChildren )
-			dChildren.Add ( pNode->m_dChildren[j] );
+		const XQNode_t * pChild = dChildren[i];
+		ARRAY_FOREACH ( j, pChild->m_dChildren )
+			dChildren.Add ( pChild->m_dChildren[j] );
 	}
 }
 
@@ -1528,13 +1528,11 @@ void XQParser_t::DeleteNodesWOFields ( XQNode_t * pNode )
 #endif
 			if ( dChildren.GetLength() )
 			{
-				ARRAY_FOREACH ( i, dChildren )
-					m_dSpawned.RemoveValue ( dChildren[i] );
+				ARRAY_FOREACH ( iChild, dChildren )
+					m_dSpawned.RemoveValue ( dChildren[iChild] );
 			} else
-			{
-			m_dSpawned.RemoveValue ( pChild );
-			}
-
+				m_dSpawned.RemoveValue ( pChild );
+			
 			// this should be a leaf node
 			SafeDelete ( pNode->m_dChildren[i] );
 			pNode->m_dChildren.RemoveFast ( i );

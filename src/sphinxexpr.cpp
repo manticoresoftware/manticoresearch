@@ -5853,10 +5853,10 @@ void ExprParser_t::GatherArgT ( int iNode, T & FUNCTOR )
 	while ( m_dGatherStack.GetLength()>0 )
 	{
 		StackNode_t & tCur = m_dGatherStack.Last();
-		const ExprNode_t & tNode = m_dNodes[tCur.m_iNode];
-		if ( tNode.m_iToken!=',' )
+		const ExprNode_t & tCurExprNode = m_dNodes[tCur.m_iNode];
+		if ( tCurExprNode.m_iToken!=',' )
 		{
-			FUNCTOR.Collect ( tCur.m_iNode, tNode );
+			FUNCTOR.Collect ( tCur.m_iNode, tCurExprNode );
 			m_dGatherStack.Pop();
 			continue;
 		}

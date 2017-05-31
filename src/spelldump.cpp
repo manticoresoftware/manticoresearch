@@ -1153,19 +1153,19 @@ int main ( int iArgs, char ** dArgs )
 				int iMatch = 0;
 				int iLength = 0;
 
-				ARRAY_FOREACH ( i, dWords )
+				ARRAY_FOREACH ( iWord, dWords )
 				{
-					if ( dWords[i].m_sWord==sKey )
+					if ( dWords[iWord].m_sWord==sKey )
 					{
-						iMatch = i;
+						iMatch = iWord;
 						break;
 					}
 
-					int iWordLength = strlen ( dWords[i].m_sWord.cstr() );
+					int iWordLength = strlen ( dWords[iWord].m_sWord.cstr() );
 					if ( iWordLength>iLength )
 					{
 						iLength = iWordLength;
-						iMatch = i;
+						iMatch = iWord;
 					}
 				}
 
@@ -1176,9 +1176,8 @@ int main ( int iArgs, char ** dArgs )
 			case M_DUPLICATES:
 				if ( dWords.GetLength()==1 ) break;
 			case M_DEBUG:
-				ARRAY_FOREACH ( i, dWords )
-					fprintf ( pFile, "%s > %s %s/%d\n", sKey, dWords[i].m_sWord.cstr(),
-						dWords[i].m_sRules, dWords.GetLength() );
+				ARRAY_FOREACH ( iWord, dWords )
+					fprintf ( pFile, "%s > %s %s/%d\n", sKey, dWords[iWord].m_sWord.cstr(),	dWords[iWord].m_sRules, dWords.GetLength() );
 				break;
 		}
 	}

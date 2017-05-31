@@ -3015,10 +3015,10 @@ public:
 				for ( int i=0;i<iLen;i++ )
 				{
 					DWORD uOff = pValue-pStrings;
-					int64_t iValue = ( ( (int64_t)uOff ) | ( ( (int64_t)JSON_STRING )<<32 ) );
+					int64_t iNewValue = ( ( (int64_t)uOff ) | ( ( (int64_t)JSON_STRING )<<32 ) );
 					int iStrLen = sphJsonUnpackInt ( &pValue );
 					uGroupkey = sphFNV64 ( pValue, iStrLen );
-					bRes |= this->PushEx ( tMatch, uGroupkey, false, false, &iValue );
+					bRes |= this->PushEx ( tMatch, uGroupkey, false, false, &iNewValue );
 					pValue += iStrLen;
 				}
 				return bRes;

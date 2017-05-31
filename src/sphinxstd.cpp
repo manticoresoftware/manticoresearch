@@ -1544,7 +1544,7 @@ bool CSphRwlock::ReadLock ()
 	if ( !m_pWritePreferHelper )
 		return pthread_rwlock_rdlock ( m_pLock )==0;
 
-	CSphScopedLock<CSphMutex>(* m_pWritePreferHelper);
+	CSphScopedLock<CSphMutex> tScopedLock (*m_pWritePreferHelper);
 	return pthread_rwlock_rdlock ( m_pLock )==0;
 }
 
@@ -1556,7 +1556,7 @@ bool CSphRwlock::WriteLock ()
 	if ( !m_pWritePreferHelper )
 		return pthread_rwlock_wrlock ( m_pLock )==0;
 
-	CSphScopedLock<CSphMutex>(* m_pWritePreferHelper);
+	CSphScopedLock<CSphMutex> tScopedLock(*m_pWritePreferHelper);
 	return pthread_rwlock_wrlock ( m_pLock )==0;
 }
 

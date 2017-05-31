@@ -41,6 +41,11 @@ typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag
 #include "config.h"
 #endif
 
+// supress C4577 ('noexcept' used with no exception handling mode specified)
+#if _MSC_VER==1900
+#pragma warning(disable:4577)
+#endif
+
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -2772,10 +2777,10 @@ public:
 			if ( bWrite )
 				iProtectMode = PAGE_READWRITE;
 			m_iMap = ::CreateFileMapping ( iFD, NULL, iProtectMode, 0, 0, NULL );
-			int iAccessMode = FILE_MAP_READ;
+			int iMapAccessMode = FILE_MAP_READ;
 			if ( bWrite )
-				iAccessMode |= FILE_MAP_WRITE;
-			pData = (T *)::MapViewOfFile ( m_iMap, iAccessMode, 0, 0, 0 );
+				iMapAccessMode |= FILE_MAP_WRITE;
+			pData = (T *)::MapViewOfFile ( m_iMap, iMapAccessMode, 0, 0, 0 );
 			if ( !pData )
 			{
 				sError.SetSprintf ( "failed to map file '%s': (errno %d, length=" INT64_FMT ")", sFile, ::GetLastError(), (int64_t)tLen.QuadPart );

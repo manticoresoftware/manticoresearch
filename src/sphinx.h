@@ -58,6 +58,7 @@
 
 #if USE_WINDOWS
 #include <winsock2.h>
+#include <WS2tcpip.h>
 #else
 #include <sys/types.h>
 #include <unistd.h>

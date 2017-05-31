@@ -1996,9 +1996,12 @@ static const bool GETADDR_STRICT = true; ///< strict check, will die with sphFat
 
 DWORD sphGetAddress ( const char * sHost, bool bFatal )
 {
-	struct hostent * pHost = gethostbyname ( sHost );
+	struct addrinfo tHints, *pResult = NULL;
+	memset ( &tHints, 0, sizeof(tHints));
+	tHints.ai_family = AF_INET;
 
-	if ( pHost==NULL || pHost->h_addrtype!=AF_INET )
+	int iResult = getaddrinfo ( sHost, NULL, &tHints, &pResult );
+	if ( iResult!=0 || !pResult )
 	{
 		if ( bFatal )
 			sphFatal ( "no AF_INET address found for: %s", sHost );
@@ -2007,19 +2010,17 @@ DWORD sphGetAddress ( const char * sHost, bool bFatal )
 		return 0;
 	}
 
-	struct in_addr ** ppAddrs = (struct in_addr **)pHost->h_addr_list;
-	assert ( ppAddrs[0] );
+	assert ( pResult );
+	struct sockaddr_in * pSockaddr_ipv4 = (struct sockaddr_in *) pResult->ai_addr;
+	DWORD uAddr = pSockaddr_ipv4->sin_addr.s_addr;
 
-	assert ( sizeof(DWORD)==pHost->h_length );
-	DWORD uAddr;
-	memcpy ( &uAddr, ppAddrs[0], sizeof(DWORD) );
-
-	if ( ppAddrs[1] )
+	if ( pResult->ai_next )
 	{
 		char sBuf [ SPH_ADDRESS_SIZE ];
-		sphWarning ( "multiple addresses found for '%s', using the first one (ip=%s)",
-			sHost, sphFormatIP ( sBuf, sizeof(sBuf), uAddr ) );
+		sphWarning ( "multiple addresses found for '%s', using the first one (ip=%s)", sHost, sphFormatIP ( sBuf, sizeof(sBuf), uAddr ) );
 	}
+
+	freeaddrinfo ( pResult );
 
 	return uAddr;
 }
@@ -3766,11 +3767,13 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		sphColumnToLowercase ( const_cast<char *>( tQuery.m_sSortBy.cstr() ) );
 	}
 	tQuery.m_sRawQuery = tReq.GetString ();
-	int iGot = 0;
-	if ( !tReq.GetDwords ( tQuery.m_dWeights, iGot, SPH_MAX_FIELDS ) )
 	{
-		SendErrorReply ( tOut, "invalid weight count %d (should be in 0..%d range)", iGot, SPH_MAX_FIELDS );
-		return false;
+		int iGot = 0;
+		if ( !tReq.GetDwords ( tQuery.m_dWeights, iGot, SPH_MAX_FIELDS ) )
+		{
+			SendErrorReply ( tOut, "invalid weight count %d (should be in 0..%d range)", iGot, SPH_MAX_FIELDS );
+			return false;
+		}
 	}
 	tQuery.m_sIndexes = tReq.GetString ();
 
@@ -6299,10 +6302,11 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 	if ( tQuery.m_bFacet )
 	{
 		// remap MVA/JSON column to @groupby/@groupbystr in facet queries
-		const CSphColumnInfo * p = tRes.m_tSchema.GetAttr ( "@groupbystr" );
-		if ( !p )
-			p = tRes.m_tSchema.GetAttr ( "@groupby" );
-		if ( p )
+		const CSphColumnInfo * pGroupByCol = tRes.m_tSchema.GetAttr ( "@groupbystr" );
+		if ( !pGroupByCol )
+			pGroupByCol = tRes.m_tSchema.GetAttr ( "@groupby" );
+
+		if ( pGroupByCol )
 		{
 			ARRAY_FOREACH ( i, dFrontend )
 			{
@@ -6312,9 +6316,9 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 					|| d.m_eAttrType==SPH_ATTR_UINT32SET
 					|| d.m_eAttrType==SPH_ATTR_JSON_FIELD ) )
 				{
-					d.m_tLocator = p->m_tLocator;
-					d.m_eAttrType = p->m_eAttrType;
-					d.m_eAggrFunc = p->m_eAggrFunc;
+					d.m_tLocator = pGroupByCol->m_tLocator;
+					d.m_eAttrType = pGroupByCol->m_eAttrType;
+					d.m_eAggrFunc = pGroupByCol->m_eAggrFunc;
 				}
 			}
 		}
@@ -10005,14 +10009,14 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 
 	dStmt.Pop(); // last query is always dummy
 
-	ARRAY_FOREACH ( i, dStmt )
+	ARRAY_FOREACH ( iStmt, dStmt )
 	{
 		// select expressions will be reparsed again, by an expression parser,
 		// when we have an index to actually bind variables, and create a tree
 		//
 		// so at SQL parse stage, we only do quick validation, and at this point,
 		// we just store the select list for later use by the expression parser
-		CSphQuery & tQuery = dStmt[i].m_tQuery;
+		CSphQuery & tQuery = dStmt[iStmt].m_tQuery;
 		if ( tQuery.m_iSQLSelectStart>=0 )
 		{
 			if ( tQuery.m_iSQLSelectStart-1>=0 && tParser.m_pBuf[tQuery.m_iSQLSelectStart-1]=='`' )
@@ -10027,9 +10031,9 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 		// validate tablefuncs
 		// tablefuncs are searchd-level builtins rather than common expression-level functions
 		// so validation happens here, expression parser does not know tablefuncs (ignorance is bliss)
-		if ( dStmt[i].m_eStmt==STMT_SELECT && !dStmt[i].m_sTableFunc.IsEmpty() )
+		if ( dStmt[iStmt].m_eStmt==STMT_SELECT && !dStmt[iStmt].m_sTableFunc.IsEmpty() )
 		{
-			CSphString & sFunc = dStmt[i].m_sTableFunc;
+			CSphString & sFunc = dStmt[iStmt].m_sTableFunc;
 			sFunc.ToUpper();
 
 			ISphTableFunc * pFunc = NULL;
@@ -10041,7 +10045,7 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 				sError.SetSprintf ( "unknown table function %s()", sFunc.cstr() );
 				return false;
 			}
-			if ( !pFunc->ValidateArgs ( dStmt[i].m_dTableFuncArgs, tQuery, sError ) )
+			if ( !pFunc->ValidateArgs ( dStmt[iStmt].m_dTableFuncArgs, tQuery, sError ) )
 			{
 				SafeDelete ( pFunc );
 				return false;
@@ -13340,11 +13344,11 @@ void HandleMysqlCallSuggest ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, bool bQu
 		tOut.HeadEnd ();
 
 		sBuf.Clear();
-		const char * sBuf = (const char *)( tRes.m_dBuf.Begin() );
+		const char * szResult = (const char *)( tRes.m_dBuf.Begin() );
 		ARRAY_FOREACH ( i, tRes.m_dMatched )
 		{
 			const SuggestWord_t & tWord = tRes.m_dMatched[i];
-			tOut.PutString ( sBuf + tWord.m_iNameOff );
+			tOut.PutString ( szResult + tWord.m_iNameOff );
 			if ( tArgs.m_bResultStats )
 			{
 				tOut.PutNumeric ( "%d", tWord.m_iDistance );
@@ -16087,9 +16091,9 @@ static void HandleMysqlReconfigure ( SqlRowBuffer_c & tOut, const SqlStmt_t & tS
 	// replace going with exclusive lock
 	if ( !bSame && sError.IsEmpty() )
 	{
-		const ServedIndex_c * pServed = g_pLocalIndexes->GetWlockedEntry ( tStmt.m_sIndex.cstr() );
-		( (ISphRtIndex *)pServed->m_pIndex )->Reconfigure ( tSetup );
-		pServed->Unlock();
+		const ServedIndex_c * pWlockedIndex = g_pLocalIndexes->GetWlockedEntry ( tStmt.m_sIndex.cstr() );
+		( (ISphRtIndex *)pWlockedIndex->m_pIndex )->Reconfigure ( tSetup );
+		pWlockedIndex->Unlock();
 	}
 
 	if ( sError.IsEmpty() )
@@ -16165,15 +16169,15 @@ static void HandleMysqlReloadIndex ( SqlRowBuffer_c & tOut, const SqlStmt_t & tS
 		}
 	} else
 	{
-		ServedIndex_c * pIndex = g_pLocalIndexes->GetWlockedEntry ( tStmt.m_sIndex );
-		if ( !RotateIndexGreedy ( *pIndex, tStmt.m_sIndex.cstr(), sError ) )
+		ServedIndex_c * pWlockedIndex = g_pLocalIndexes->GetWlockedEntry ( tStmt.m_sIndex );
+		if ( !RotateIndexGreedy ( *pWlockedIndex, tStmt.m_sIndex.cstr(), sError ) )
 		{
-			pIndex->Unlock();
+			pWlockedIndex->Unlock();
 			sphWarning ( "%s", sError.cstr() );
 			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 			return;
 		}
-		pIndex->Unlock();
+		pWlockedIndex->Unlock();
 	}
 
 	tOut.Ok();
@@ -18497,14 +18501,11 @@ void CheckRotate ()
 			{
 				const CSphConfigType & hConf = g_pCfg.m_tConf ["index"];
 				if ( hConf.Exists ( sIndex ) )
-				{
-					CSphString sError;
 					if ( !sphFixupIndexSettings ( tIndex.m_pIndex, hConf [sIndex], sError ) )
 					{
 						sphWarning ( "index '%s': %s - NOT SERVING", sIndex, sError.cstr() );
 						tIndex.m_bEnabled = false;
 					}
-				}
 			}
 
 			if ( bOk && tIndex.m_bEnabled )
@@ -22333,7 +22334,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 #if USE_WINDOWS
 		bool bTerminatedOk = false;
 
-		char szPipeName[64];
 		snprintf ( szPipeName, sizeof(szPipeName), "\\\\.\\pipe\\searchd_%d", iPid );
 
 		HANDLE hPipe = INVALID_HANDLE_VALUE;
@@ -22817,7 +22817,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		SphinxqlStateRead ( g_sSphinxqlState );
 		g_tmSphinxqlState = sphMicroTimer();
 
-		CSphString sError;
 		CSphWriter tWriter;
 		CSphString sNewState;
 		sNewState.SetSprintf ( "%s.new", g_sSphinxqlState.cstr() );
@@ -22857,19 +22856,19 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( g_pThdPool )
 	{
 		// net thread needs non-blocking sockets
-		ARRAY_FOREACH ( i, g_dListeners )
+		ARRAY_FOREACH ( iListener, g_dListeners )
 		{
-			if ( sphSetSockNB ( g_dListeners[i].m_iSock )<0 )
+			if ( sphSetSockNB ( g_dListeners[iListener].m_iSock )<0 )
 			{
 				sphWarning ( "sphSetSockNB() failed: %s", sphSockError() );
-				sphSockClose ( g_dListeners[i].m_iSock );
+				sphSockClose ( g_dListeners[iListener].m_iSock );
 			}
 		}
 
 		g_dTickPoolThread.Resize ( g_iNetWorkers );
-		ARRAY_FOREACH ( i, g_dTickPoolThread )
+		ARRAY_FOREACH ( iTick, g_dTickPoolThread )
 		{
-			if ( !sphThreadCreate ( g_dTickPoolThread.Begin()+i, CSphNetLoop::ThdTick, 0 ) )
+			if ( !sphThreadCreate ( g_dTickPoolThread.Begin()+iTick, CSphNetLoop::ThdTick, 0 ) )
 				sphDie ( "failed to create tick pool thread" );
 		}
 	}

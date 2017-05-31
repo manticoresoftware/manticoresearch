@@ -253,8 +253,8 @@ void QcacheEntry_c::Finish()
 	}
 
 #ifndef NDEBUG
-	ARRAY_FOREACH ( i, m_dWeights )
-		assert ( m_dWeights[i]>=0 );
+	ARRAY_FOREACH ( iCheck, m_dWeights )
+		assert ( m_dWeights[iCheck]>=0 );
 #endif
 
 	m_hWeights.Reset(0);

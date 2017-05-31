@@ -1007,7 +1007,7 @@ int main ( int argc, char ** argv )
 				continue;
 
 			// checking index presence by sph file available
-			CSphString sHeader, sError;
+			CSphString sHeader;
 			sHeader.SetSprintf ( "%s.sph", pPath->cstr() );
 			CSphAutoreader rdHeader;
 			if ( !rdHeader.Open ( sHeader, sError ) )
@@ -1055,7 +1055,6 @@ int main ( int argc, char ** argv )
 			break;
 
 		// preload that index
-		CSphString sError;
 		bool bDictKeywords = true;
 		if ( hConf["index"][sIndex].Exists ( "dict" ) )
 			bDictKeywords = ( hConf["index"][sIndex]["dict"]!="crc" );
@@ -1161,7 +1160,6 @@ int main ( int argc, char ** argv )
 				sIndex = sDumpDict.SubString ( 0, sDumpDict.Length()-4 );
 				pIndex = sphCreateIndexPhrase ( sIndex.cstr(), sIndex.cstr() );
 
-				CSphString sError;
 				if ( !pIndex )
 					sphDie ( "index '%s': failed to create (%s)", sIndex.cstr(), sError.cstr() );
 
@@ -1235,20 +1233,14 @@ int main ( int argc, char ** argv )
 			break;
 
 		case CMD_BUILDIDF:
-		{
-			CSphString sError;
 			if ( !BuildIDF ( sOut, dFiles, sError, bSkipUnique ) )
 				sphDie ( "ERROR: %s\n", sError.cstr() );
 			break;
-		}
 
 		case CMD_MERGEIDF:
-		{
-			CSphString sError;
 			if ( !MergeIDF ( sOut, dFiles, sError, bSkipUnique ) )
 				sphDie ( "ERROR: %s\n", sError.cstr() );
 			break;
-		}
 
 		case CMD_FOLD:
 			{

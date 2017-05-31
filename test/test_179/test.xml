@@ -87,6 +87,8 @@ CREATE TABLE test_table2
 <custom_test><![CDATA[
 $run_subtest = create_function ( '&$client, $index1, $index2, &$results, $sd_address, $sd_sphinxql_port', '
 {
+	global $g_locals;
+
 	$query = "word";
 
 	$client->SetGroupBy ( "gid", SPH_GROUPBY_ATTR );
@@ -95,7 +97,7 @@ $run_subtest = create_function ( '&$client, $index1, $index2, &$results, $sd_add
 	$client->ResetGroupBy();
 	$client->AddQuery ( $query, $index2 );
 
-	$sphinxql = @mysql_connect ( sprintf ( "%s:%s", $sd_address, $sd_sphinxql_port ) );
+	$sphinxql = @mysql_connect ( sprintf ( "%s:%s", $sd_address, $sd_sphinxql_port ) , $g_locals["db-user"], $g_locals["db-password"] , true );
 	@mysql_query ( "DELETE FROM test_rt" );
 	@mysql_query ( "INSERT INTO test_rt ( id, gid, title ) VALUES ( 4, 1, \'word | 4\' )" );
 	@mysql_query ( "INSERT INTO test_rt ( id, gid, title ) VALUES ( 5, 2, \'word | 5\' )" );

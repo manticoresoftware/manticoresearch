@@ -101,7 +101,7 @@ static void EncodeResultJson ( const AggrResult_t & tRes, CSphStringBuilderJson 
 					assert ( tMatch.GetAttr ( tLoc )==0 || tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pMva || ( MVA_DOWNSIZE ( tMatch.GetAttr ( tLoc ) ) & MVA_ARENA_FLAG ) );
 					const PoolPtrs_t & tPools = tRes.m_dTag2Pools [ tMatch.m_iTag ];
 					const DWORD * pValues = tMatch.GetAttrMVA ( tLoc, tPools.m_pMva, tPools.m_bArenaProhibit );
-					const char * sSep = "";
+					const char * sSeparator = "";
 					if ( pValues )
 					{
 						DWORD nValues = *pValues++;
@@ -111,8 +111,8 @@ static void EncodeResultJson ( const AggrResult_t & tRes, CSphStringBuilderJson 
 						for ( ; nValues; nValues-=iStep, pValues+=iStep )
 						{
 							int64_t iVal = ( bWide ? MVA_UPSIZE ( pValues ) : *pValues );
-							tOut.Appendf ( "%s" INT64_FMT, sSep, iVal );
-							sSep = ",";
+							tOut.Appendf ( "%s" INT64_FMT, sSeparator, iVal );
+							sSeparator = ",";
 						}
 					}
 					tOut += "]";
@@ -430,10 +430,10 @@ bool HttpRequestParser_t::ParseList ( const char * sAt, int iLen )
 		if ( *sCur!='&' && *sCur!='=' )
 			continue;
 
-		int iLen = sCur - sLast;
+		int iValueLen = sCur - sLast;
 		if ( *sCur=='&' )
 		{
-			sVal.SetBinary ( sLast, iLen );
+			sVal.SetBinary ( sLast, iValueLen );
 			UriPercentReplace ( sName );
 			UriPercentReplace ( sVal );
 			m_hOptions.Add ( sVal, sName );
@@ -441,7 +441,7 @@ bool HttpRequestParser_t::ParseList ( const char * sAt, int iLen )
 			sVal = "";
 		} else
 		{
-			sName.SetBinary ( sLast, iLen );
+			sName.SetBinary ( sLast, iValueLen );
 		}
 		sLast = sCur+1;
 	}
@@ -483,17 +483,17 @@ int HttpRequestParser_t::ParserUrl ( http_parser * pParser, const char * sAt, si
 	if ( ( tUri.field_set & uPath )!=0 )
 	{
 		const char * sPath = sAt + tUri.field_data[UF_PATH].off;
-		int iLen = tUri.field_data[UF_PATH].len;
+		int iPathLen = tUri.field_data[UF_PATH].len;
 		if ( *sPath=='/' )
 		{
 			sPath++;
-			iLen--;
+			iPathLen--;
 		}
-		ESphHttpEndpoint eEndpoint = ParseEndpointPath ( sPath, iLen );
+		ESphHttpEndpoint eEndpoint = ParseEndpointPath ( sPath, iPathLen );
 		( (HttpRequestParser_t *)pParser->data )->m_eEndpoint = eEndpoint;
 		if ( eEndpoint==SPH_HTTP_ENDPOINT_MISSED )
 		{
-			( (HttpRequestParser_t *)pParser->data )->m_sInvalidEndpoint.SetBinary ( sPath, iLen );
+			( (HttpRequestParser_t *)pParser->data )->m_sInvalidEndpoint.SetBinary ( sPath, iPathLen );
 		}
 	}
 

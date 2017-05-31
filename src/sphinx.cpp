@@ -5640,6 +5640,7 @@ CSphQuery::CSphQuery ()
 	, m_eCollation		( SPH_COLLATION_DEFAULT )
 	, m_bAgent			( false )
 	, m_bFacet			( false )
+	, m_bFacetHead		( false )
 {}
 
 

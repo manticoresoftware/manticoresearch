@@ -2733,6 +2733,7 @@ public:
 
 public:
 	CSphVector<CSphQueryItem>	m_dItems;		///< parsed select-list
+	CSphVector<CSphQueryItem>	m_dRefItems;	///< select-list prior replacing by facet
 	ESphCollation				m_eCollation;	///< ORDER BY collation
 	bool						m_bAgent;		///< agent mode (may need extra cols on output)
 
@@ -2747,6 +2748,7 @@ public:
 	/// parse select list string into items
 	bool			ParseSelectList ( CSphString & sError );
 	bool			m_bFacet;			///< whether this a facet query
+	bool			m_bFacetHead;
 };
 
 

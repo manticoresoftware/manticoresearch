@@ -5288,6 +5288,8 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 	CSphVector<int> dGroupColumns;
 	CSphGroupSorterSettings tSettings;
 	bool bImplicit = false;
+	// need schema with group related columns however not need grouper
+	bool bHeadWOGroup = ( pQuery->m_sGroupBy.IsEmpty() && pQuery->m_bFacetHead );
 
 	if ( pQuery->m_sGroupBy.IsEmpty() )
 		ARRAY_FOREACH_COND ( i, pQuery->m_dItems, !bImplicit )
@@ -5299,7 +5301,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 	if ( !SetupGroupbySettings ( pQuery, tSorterSchema, tSettings, dGroupColumns, sError, bImplicit ) )
 		return NULL;
 
-	const bool bGotGroupby = !pQuery->m_sGroupBy.IsEmpty() || tSettings.m_bImplicit; // or else, check in SetupGroupbySettings() would already fail
+	bool bGotGroupby = !pQuery->m_sGroupBy.IsEmpty() || tSettings.m_bImplicit; // or else, check in SetupGroupbySettings() would already fail
 	const bool bGotDistinct = ( tSettings.m_tDistinctLoc.m_iBitOffset>=0 );
 
 	if ( bHasGroupByExpr && !bGotGroupby )
@@ -5567,6 +5569,12 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 	///////////////////
 	// spawn the queue
 	///////////////////
+
+	if ( bHeadWOGroup && tSettings.m_bImplicit )
+	{
+		tSettings.m_bImplicit = false;
+		bGotGroupby = false;
+	}
 
 	if ( !bGotGroupby )
 	{

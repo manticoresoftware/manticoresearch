@@ -64,50 +64,21 @@ INSERT INTO test_table (best_seller, attributes_id, text) VALUES
 ( 4, 2, 'text4 text' );
 </db_insert>
 
-<custom_test><![CDATA[
-// invalid sorter at multi-query
+<sphqueries>
+<sphinxql>INSERT INTO rt_products (id, best_seller, attributes_id, title) VALUES (1, 1, 1, 'text1 text'),(2, 2, 1, 'text2 text'), (3, 3, 2, 'text3 text'), (4, 4, 2, 'text4 text')</sphinxql>
+<sphinxql>select *, to_string(id) i from rt_products order by best_seller asc; select *, to_string(id) i from rt_products order by best_seller1 asc; select *, to_string(id) i from rt_products order by attributes_id asc</sphinxql>
+<sphinxql>select *, packedfactors() i from rt_products where match ('text') order by best_seller asc option ranker=expr('1'); select *, packedfactors() i from rt_products where match ('text') order by best_seller1 asc option ranker=expr('1'); select *, packedfactors() i from rt_products where match ('text') order by attributes_id asc option ranker=expr('1')</sphinxql>
+<sphinxql>select *, to_string(id) i from products order by best_seller asc; select *, to_string(id) i from products order by best_seller1 asc; select *, to_string(id) i from products order by attributes_id asc</sphinxql>
+<sphinxql>select *, packedfactors() i from products where match ('text') order by best_seller asc option ranker=expr('1'); select *, packedfactors() i from products where match ('text') order by best_seller1 asc option ranker=expr('1'); select *, packedfactors() i from products where match ('text') order by attributes_id asc option ranker=expr('1')</sphinxql>
+<sphinxql>select 1 i, interval(attributes_id, 2) p, count(*) c from rt_products group by i; select 1 i, interval(attributes_id, 2) p, count(*) c from rt_products group by p</sphinxql>
+<sphinxql>select 1 i, interval(attributes_id, 2) p, count(*) c from rt_products group by p; select 1 i, interval(attributes_id, 2) p, count(*) c from rt_products group by i</sphinxql>
+<sphinxql>select 1 i, interval(attributes_id, 2) p, count(*) c from rt_products where match('text') group by i; select 1 i, interval(attributes_id, 2) p, count(*) c from rt_products where match('text') group by p</sphinxql>
+<sphinxql>select 1 i, interval(attributes_id, 2) p, count(*) c from rt_products where match('text') group by p; select 1 i, interval(attributes_id, 2) p, count(*) c from rt_products where match('text') group by i</sphinxql>
+<sphinxql>select 1 i, interval(attributes_id, 2) p, count(*) c from products group by i; select 1 i, interval(attributes_id, 2) p, count(*) c from products group by p</sphinxql>
+<sphinxql>select 1 i, interval(attributes_id, 2) p, count(*) c from products group by p; select 1 i, interval(attributes_id, 2) p, count(*) c from products group by i</sphinxql>
+<sphinxql>select 1 i, interval(attributes_id, 2) p, count(*) c from products where match('text') group by i; select 1 i, interval(attributes_id, 2) p, count(*) c from products where match('text') group by p</sphinxql>
+<sphinxql>select 1 i, interval(attributes_id, 2) p, count(*) c from products where match('text') group by p; select 1 i, interval(attributes_id, 2) p, count(*) c from products where match('text') group by i</sphinxql>
+</sphqueries>
 
-$results = array();
-$ql->Reconnect();
-$multiOpts = array();
-
-$results[] = "\n" . 'insert';
-$results[] = "\n" . $ql->Query ( "INSERT INTO rt_products (id, best_seller, attributes_id, title) VALUES (1, 1, 1, 'text1 text'),(2, 2, 1, 'text2 text'), (3, 3, 2, 'text3 text'), (4, 4, 2, 'text4 text')" );
-
-$results[] = "\n" . 'rt scan';
-$results[] = "\n" . $ql->MultiQuery ( "select *, to_string(id) i from rt_products order by best_seller asc; select *, to_string(id) i from rt_products order by best_seller1 asc; select *, to_string(id) i from rt_products order by attributes_id asc", $multiOpts );
-
-$results[] = "\n" . 'rt match';
-$results[] = "\n" . $ql->MultiQuery ( "select *, packedfactors() i from rt_products where match ('text') order by best_seller asc option ranker=expr('1'); select *, packedfactors() i from rt_products where match ('text') order by best_seller1 asc option ranker=expr('1'); select *, packedfactors() i from rt_products where match ('text') order by attributes_id asc option ranker=expr('1')", $multiOpts );
-
-$results[] = "\n" . 'plain scan';
-$results[] = "\n" . $ql->MultiQuery ( "select *, to_string(id) i from products order by best_seller asc; select *, to_string(id) i from products order by best_seller1 asc; select *, to_string(id) i from products order by attributes_id asc", $multiOpts );
-
-$results[] = "\n" . 'plain match';
-$results[] = "\n" . $ql->MultiQuery ( "select *, packedfactors() i from products where match ('text') order by best_seller asc option ranker=expr('1'); select *, packedfactors() i from products where match ('text') order by best_seller1 asc option ranker=expr('1'); select *, packedfactors() i from products where match ('text') order by attributes_id asc option ranker=expr('1')", $multiOpts );
-
-///
-// multi-query order case
-
-$multiOpts["dumpQuery"] = true;
-$results[] = "\n" . '--- multi-query order ---';
-
-$results[] = "\n" . 'rt scan';
-$results[] = "\n" . $ql->MultiQuery ( "select 1 i, interval(attributes_id, 2) p, count(*) c from rt_products group by i; select 1 i, interval(attributes_id, 2) p, count(*) c from rt_products group by p", $multiOpts );
-$results[] = "\n" . $ql->MultiQuery ( "select 1 i, interval(attributes_id, 2) p, count(*) c from rt_products group by p; select 1 i, interval(attributes_id, 2) p, count(*) c from rt_products group by i", $multiOpts );
-
-$results[] = "\n" . 'rt match';
-$results[] = "\n" . $ql->MultiQuery ( "select 1 i, interval(attributes_id, 2) p, count(*) c from rt_products where match('text') group by i; select 1 i, interval(attributes_id, 2) p, count(*) c from rt_products where match('text') group by p", $multiOpts );
-$results[] = "\n" . $ql->MultiQuery ( "select 1 i, interval(attributes_id, 2) p, count(*) c from rt_products where match('text') group by p; select 1 i, interval(attributes_id, 2) p, count(*) c from rt_products where match('text') group by i", $multiOpts );
-
-$results[] = "\n" . 'plain scan';
-$results[] = "\n" . $ql->MultiQuery ( "select 1 i, interval(attributes_id, 2) p, count(*) c from products group by i; select 1 i, interval(attributes_id, 2) p, count(*) c from products group by p", $multiOpts );
-$results[] = "\n" . $ql->MultiQuery ( "select 1 i, interval(attributes_id, 2) p, count(*) c from products group by p; select 1 i, interval(attributes_id, 2) p, count(*) c from products group by i", $multiOpts );
-
-$results[] = "\n" . 'plain match';
-$results[] = "\n" . $ql->MultiQuery ( "select 1 i, interval(attributes_id, 2) p, count(*) c from products where match('text') group by i; select 1 i, interval(attributes_id, 2) p, count(*) c from products where match('text') group by p", $multiOpts );
-$results[] = "\n" . $ql->MultiQuery ( "select 1 i, interval(attributes_id, 2) p, count(*) c from products where match('text') group by p; select 1 i, interval(attributes_id, 2) p, count(*) c from products where match('text') group by i", $multiOpts );
-
-]]></custom_test>
 
 </test>

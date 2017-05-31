@@ -5585,7 +5585,7 @@ void RemapResult ( const ISphSchema * pTarget, AggrResult_t * pRes )
 
 // rebuild the results itemlist expanding stars
 const CSphVector<CSphQueryItem> * ExpandAsterisk ( const ISphSchema & tSchema,
-	const CSphVector<CSphQueryItem> & tItems, CSphVector<CSphQueryItem> * pExpanded, bool bNoID )
+	const CSphVector<CSphQueryItem> & tItems, CSphVector<CSphQueryItem> * pExpanded, bool bNoID, bool bOnlyPlain )
 {
 	// the result schema usually is the index schema + calculated items + @-items
 	// we need to extract the index schema only - so, look at the items
@@ -5609,6 +5609,9 @@ const CSphVector<CSphQueryItem> * ExpandAsterisk ( const ISphSchema & tSchema,
 
 	while ( iSchemaBound && tSchema.GetAttr ( iSchemaBound-1 ).m_sName.cstr()[0]=='@' )
 		iSchemaBound--;
+	if ( bOnlyPlain && iSchemaBound>tSchema.GetStaticSize() )
+		iSchemaBound = tSchema.GetStaticSize();
+
 	ARRAY_FOREACH ( i, tItems )
 	{
 		if ( tItems[i].m_sExpr=="*" )
@@ -5941,9 +5944,11 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 		if ( !MinimizeSchema ( tRes.m_tSchema, tRes.m_dSchemas[i] ) )
 			bAllEqual = false;
 
+	const CSphVector<CSphQueryItem> & dQueryItems = ( tQuery.m_bFacet || tQuery.m_bFacetHead ) ? tQuery.m_dRefItems : tQuery.m_dItems;
+
 	// build a list of select items that the query asked for
 	CSphVector<CSphQueryItem> tExtItems;
-	const CSphVector<CSphQueryItem> * pItems = ExpandAsterisk ( tRes.m_tSchema, tQuery.m_dItems, &tExtItems, !bFromSphinxql );
+	const CSphVector<CSphQueryItem> * pItems = ExpandAsterisk ( tRes.m_tSchema, dQueryItems, &tExtItems, !bFromSphinxql, tQuery.m_bFacetHead );
 	const CSphVector<CSphQueryItem> & tItems = *pItems;
 
 	// api + index without attributes + select * case
@@ -6279,9 +6284,9 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 		}
 
 		// check aliases too
-		ARRAY_FOREACH ( j, tQuery.m_dItems )
+		ARRAY_FOREACH ( j, dQueryItems )
 		{
-			const CSphQueryItem & tItem = tQuery.m_dItems[j];
+			const CSphQueryItem & tItem = dQueryItems[j];
 			if ( tItem.m_sExpr=="groupby()" )
 			{
 				ARRAY_FOREACH ( i, dFrontend )
@@ -6299,7 +6304,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 	}
 
 	// facets
-	if ( tQuery.m_bFacet )
+	if ( tQuery.m_bFacet || tQuery.m_bFacetHead )
 	{
 		// remap MVA/JSON column to @groupby/@groupbystr in facet queries
 		const CSphColumnInfo * pGroupByCol = tRes.m_tSchema.GetAttr ( "@groupbystr" );
@@ -6322,14 +6327,6 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 				}
 			}
 		}
-
-		// skip all fields after count(*)
-		ARRAY_FOREACH ( i, dFrontend )
-			if ( dFrontend[i].m_sName=="count(*)" )
-			{
-				dFrontend.Resize ( i+1 );
-				break;
-			}
 	}
 
 	// all the merging and sorting is now done
@@ -8279,6 +8276,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	if ( m_bMultiQueue )
 		m_bMultiQueue = AllowsMulti ( iStart, iEnd );
 
+	assert( !m_bFacetQueue || AllowsMulti ( iStart, iEnd ) );
 	if ( !m_bMultiQueue )
 		m_bFacetQueue = false;
 
@@ -9977,6 +9975,31 @@ void SqlParser_c::FreeNamedVec ( int )
 	m_dNamedVec.Resize ( 0 );
 }
 
+struct QueryItemProxy_t
+{
+	DWORD m_uHash;
+	int m_iIndex;
+	CSphQueryItem * m_pItem;
+
+	bool operator < ( const QueryItemProxy_t & tItem ) const
+	{
+		return ( ( m_uHash<tItem.m_uHash ) || ( m_uHash==tItem.m_uHash && m_iIndex<tItem.m_iIndex ) );
+	}
+
+	bool operator == ( const QueryItemProxy_t & tItem ) const
+	{
+		return ( m_uHash==tItem.m_uHash );
+	}
+
+	void QueryItemHash ()
+	{
+		assert ( m_pItem );
+		m_uHash = sphCRC32 ( m_pItem->m_sAlias.cstr() );
+		m_uHash = sphCRC32 ( m_pItem->m_sExpr.cstr(), m_pItem->m_sExpr.Length(), m_uHash );
+		m_uHash = sphCRC32 ( (const void*)&m_pItem->m_eAggrFunc, sizeof(m_pItem->m_eAggrFunc), m_uHash );
+	}
+};
+
 bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation )
 {
 	if ( !sQuery || !iLen )
@@ -10075,35 +10098,83 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 	}
 
 	// facets
+	bool bGotFacet = false;
 	ARRAY_FOREACH ( i, dStmt )
 	{
-		CSphQuery & tQuery = dStmt[i].m_tQuery;
+		const SqlStmt_t & tHeadStmt = dStmt[i];
+		const CSphQuery & tHeadQuery = tHeadStmt.m_tQuery;
 		if ( dStmt[i].m_eStmt==STMT_SELECT )
 		{
-			while ( i+1<dStmt.GetLength() )
+			i++;
+			if ( i<dStmt.GetLength() && dStmt[i].m_eStmt==STMT_FACET )
 			{
-				SqlStmt_t & tStmt = dStmt[i+1];
-				if ( tStmt.m_eStmt!=STMT_FACET )
-					break;
+				bGotFacet = true;
+				const_cast<CSphQuery &>(tHeadQuery).m_bFacetHead = true;
+			}
 
+			for ( ; i<dStmt.GetLength() && dStmt[i].m_eStmt==STMT_FACET; i++ )
+			{
+				SqlStmt_t & tStmt = dStmt[i];
 				tStmt.m_tQuery.m_bFacet = true;
 
 				tStmt.m_eStmt = STMT_SELECT;
-				tStmt.m_tQuery.m_sIndexes = tQuery.m_sIndexes;
+				tStmt.m_tQuery.m_sIndexes = tHeadQuery.m_sIndexes;
 				tStmt.m_tQuery.m_sSelect = tStmt.m_tQuery.m_sFacetBy;
-				tStmt.m_tQuery.m_sQuery = tQuery.m_sQuery;
-				tStmt.m_tQuery.m_iMaxMatches = tQuery.m_iMaxMatches;
-
-				// append top-level expressions to a facet schema (for filtering)
-				ARRAY_FOREACH ( k, tQuery.m_dItems )
-					if ( tQuery.m_dItems[k].m_sAlias!=tQuery.m_dItems[k].m_sExpr )
-						tStmt.m_tQuery.m_dItems.Add ( tQuery.m_dItems[k] );
+				tStmt.m_tQuery.m_sQuery = tHeadQuery.m_sQuery;
+				tStmt.m_tQuery.m_iMaxMatches = tHeadQuery.m_iMaxMatches;
 
 				// append filters
-				ARRAY_FOREACH ( k, tQuery.m_dFilters )
-					tStmt.m_tQuery.m_dFilters.Add ( tQuery.m_dFilters[k] );
+				ARRAY_FOREACH ( k, tHeadQuery.m_dFilters )
+					tStmt.m_tQuery.m_dFilters.Add ( tHeadQuery.m_dFilters[k] );
+			}
+		}
+	}
 
-				i++;
+	if ( bGotFacet )
+	{
+		// need to keep order of query items same as at select list however do not duplicate items
+		// that is why raw Vector.Uniq does not work here
+		CSphVector<QueryItemProxy_t> dSelectItems;
+		ARRAY_FOREACH ( i, dStmt )
+		{
+			ARRAY_FOREACH ( k, dStmt[i].m_tQuery.m_dItems )
+			{
+				QueryItemProxy_t & tItem = dSelectItems.Add();
+				tItem.m_pItem = dStmt[i].m_tQuery.m_dItems.Begin() + k;
+				tItem.m_iIndex = dSelectItems.GetLength() - 1;
+				tItem.QueryItemHash();
+			}
+		}
+		// got rid of duplicates
+		dSelectItems.Uniq();
+		// sort back to select list appearance order
+		dSelectItems.Sort ( bind ( &QueryItemProxy_t::m_iIndex ) );
+		// get merged select list
+		CSphVector<CSphQueryItem> dItems ( dSelectItems.GetLength() );
+		ARRAY_FOREACH ( i, dSelectItems )
+		{
+			dItems[i] = *dSelectItems[i].m_pItem;
+		}
+
+		ARRAY_FOREACH ( i, dStmt )
+		{
+			SqlStmt_t & tStmt = dStmt[i];
+			// keep original items
+			tStmt.m_tQuery.m_dItems.SwapData ( dStmt[i].m_tQuery.m_dRefItems );
+			tStmt.m_tQuery.m_dItems = dItems;
+
+			// for FACET strip off group by expression items
+			// these come after count(*)
+			if ( tStmt.m_tQuery.m_bFacet )
+			{
+				ARRAY_FOREACH ( j, tStmt.m_tQuery.m_dRefItems )
+				{
+					if ( tStmt.m_tQuery.m_dRefItems[j].m_sAlias=="count(*)" )
+					{
+						tStmt.m_tQuery.m_dRefItems.Resize ( j+1 );
+						break;
+					}
+				}
 			}
 		}
 	}
@@ -11731,6 +11802,9 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 
 	if ( dStatus.MatchAdd ( "time" ) )
 		dStatus.Add().SetSprintf ( "%d.%03d", tMeta.m_iQueryTime/1000, tMeta.m_iQueryTime%1000 );
+
+	if ( tMeta.m_iMultiplier>1 && dStatus.MatchAdd ( "multiplier" ) )
+		dStatus.Add().SetSprintf ( "%d", tMeta.m_iMultiplier );
 
 	if ( g_bCpuStats )
 	{

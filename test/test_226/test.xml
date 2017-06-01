@@ -186,6 +186,12 @@ insert into facetdemo (id,price,brand_id,title,brand_name,property,categories,j)
 <sphinxql>select id from facetdemo limit 0,1 facet brand_id order by count (* ) asc;</sphinxql>
 <sphinxql>select id from facetdemo limit 0,1 facet brand_id order by count(* ) asc;</sphinxql>
 
+<!-- count(distinct) breaks multi-query -->
+<sphinxql>select brand_id, count(distinct price) d, count(*) c from facetdemo group by brand_id facet brand_id as x order by x asc;</sphinxql>
+<sphinxql>show meta like 'multiplier'</sphinxql>
+<sphinxql>select brand_id, count(distinct price) d, count(*) c from facetdemo2 group by brand_id facet brand_id as x order by x asc;</sphinxql>
+<sphinxql>show meta like 'multiplier'</sphinxql>
+
 </sphqueries>
 
 </test>

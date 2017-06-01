@@ -12713,6 +12713,10 @@ void HandleMysqlInsert ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt,
 
 	CSphVector<int> dAttrSchema ( tSchema.GetAttrsCount() );
 	CSphVector<int> dFieldSchema ( tSchema.m_dFields.GetLength() );
+	CSphVector<bool> dFieldAttrs ( tSchema.m_dFields.GetLength() );
+	ARRAY_FOREACH ( i, dFieldAttrs )
+		dFieldAttrs[i] = false;
+
 	int iIdIndex = 0;
 	if ( !tStmt.m_dInsertSchema.GetLength() )
 	{
@@ -12774,6 +12778,10 @@ void HandleMysqlInsert ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt,
 					break;
 				}
 				dFieldSchema[i] = iField;
+
+				// does an attribute with the same name exist?
+				if ( tSchema.GetAttr ( tSchema.m_dFields[i].m_sName.cstr() ) )
+					dFieldAttrs[i] = true;
 			} else
 				dFieldSchema[i] = -1;
 		}
@@ -12910,6 +12918,12 @@ void HandleMysqlInsert ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt,
 
 		// convert fields
 		CSphVector<const char*> dFields;
+
+		// if strings and fields share one value, it might be modified by html stripper etc
+		// we need to use separate storage for such string attributes and fields
+		CSphVector<CSphString> dTmpFieldStorage;
+		dTmpFieldStorage.Resize(tSchema.m_dFields.GetLength());
+
 		ARRAY_FOREACH ( i, tSchema.m_dFields )
 		{
 			int iQuerySchemaIdx = dFieldSchema[i];
@@ -12922,7 +12936,14 @@ void HandleMysqlInsert ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt,
 					sError.SetSprintf ( "row %d, column %d: string expected", 1+c, 1+iQuerySchemaIdx ); // 1 for human base
 					break;
 				}
-				dFields.Add ( tStmt.m_dInsertValues[ iQuerySchemaIdx + c * iExp ].m_sVal.cstr() );
+
+				const char * szFieldValue = tStmt.m_dInsertValues[ iQuerySchemaIdx + c * iExp ].m_sVal.cstr();
+				if ( dFieldAttrs[i] )
+				{
+					dTmpFieldStorage[i] = szFieldValue;
+					dFields.Add ( dTmpFieldStorage[i].cstr() );
+				} else
+					dFields.Add ( szFieldValue );
 			}
 		}
 		if ( !sError.IsEmpty() )

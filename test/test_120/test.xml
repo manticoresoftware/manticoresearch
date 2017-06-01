@@ -34,6 +34,19 @@ index test_idx
 	html_strip		= 1
 }
 
+index rt
+{
+	type			= rt
+	path			= <data_path/>/rt
+	docinfo			= extern
+	rt_mem_limit	= 128k
+	rt_field		= title
+	rt_attr_string	= title
+	rt_attr_string	= body
+	rt_attr_uint	= gid
+	html_strip		= 1
+}
+
 </Config>
 <DB_Create>
 CREATE TABLE test_table
@@ -56,6 +69,10 @@ INSERT INTO `test_table` VALUES
 	<SPHinxQL>select * from test_idx where match( 'div' )</SPHinxQL>
 	<SPHinxQL>select * from test_idx where match( 'span' )</SPHinxQL>
 	<SPHinxQL>select * from test_idx where match( 'end' )</SPHinxQL>
+
+	<sphinxql>INSERT INTO rt (id, gid, title, body) VALUES (1, 10, '&lt;div>&lt;span&gt;That paper also reminds me end point&lt;/span&gt;&lt;/div&gt;cool friend','&lt;div&gt;body&lt;/div&gt;')</sphinxql>
+	<sphinxql>select * from rt</sphinxql>
+	<sphinxql>select * from rt where match('div')</sphinxql>
 </SPHQueries>
 
 </Test>

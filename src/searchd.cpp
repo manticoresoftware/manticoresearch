@@ -10122,6 +10122,9 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 				tStmt.m_tQuery.m_sSelect = tStmt.m_tQuery.m_sFacetBy;
 				tStmt.m_tQuery.m_sQuery = tHeadQuery.m_sQuery;
 				tStmt.m_tQuery.m_iMaxMatches = tHeadQuery.m_iMaxMatches;
+				
+				// need to keep same wide result set schema
+				tStmt.m_tQuery.m_sGroupDistinct = tHeadQuery.m_sGroupDistinct;
 
 				// append filters
 				ARRAY_FOREACH ( k, tHeadQuery.m_dFilters )

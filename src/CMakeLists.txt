@@ -14,6 +14,10 @@ set (INDEXTOOL_SRCS indextool.cpp)
 set (SEARCHD_SRCS searchd.cpp searchdha.cpp http/http_parser.c searchdhttp.cpp)
 set (SPELLDUMP_SRCS spelldump.cpp)
 set (TESTS_SRCS tests.cpp)
+set ( LIBSPHINX_BISON sphinxexpr.y sphinxselect.y sphinxquery.y sphinxjson.y )
+set ( LIBSPHINX_FLEX sphinxjson.l )
+set ( SEARCHD_BISON sphinxql.y )
+set ( SEARCHD_FLEX sphinxql.l )
 
 # The headers is not neccessary for executable build, but nesessary for MSVC and other projects
 # all the (non-generated) headers
@@ -22,6 +26,8 @@ file (GLOB SEARCHD_H "searchd*.h" )
 
 file (GLOB GHEADERS "yysphinx*.h")
 source_group ("Generated Header Files" FILES ${GHEADERS})
+source_group ( "Grammar sources" FILES ${LIBSPHINX_BISON} ${SEARCHD_BISON} )
+source_group ( "Lexer sources" FILES ${LIBSPHINX_FLEX} ${SEARCHD_FLEX} )
 
 add_custom_target (
 		generate_sphinxversion
@@ -35,35 +41,18 @@ add_custom_target (
 include_directories ("${SPHINXSEARCH_BINARY_DIR}/config")
 add_definitions ("-DBUILD_WITH_CMAKE")
 
-# our mega-lib
-add_library (libsphinx STATIC ${LIBSPHINX_SRCS} ${HEADERS} ${GHEADERS})
-
-add_dependencies (libsphinx generate_sphinxversion)
-
 #message (STATUS "Extra libraries:${EXTRA_LIBRARIES}")
-
-# our executables
-add_executable (indexer ${INDEXER_SRCS})
-add_executable (indextool ${INDEXTOOL_SRCS})
-add_executable (searchd ${SEARCHD_SRCS} ${SEARCHD_H})
-add_executable (spelldump ${SPELLDUMP_SRCS})
-add_executable (tests ${TESTS_SRCS})
-target_link_libraries (indexer libsphinx ${EXTRA_LIBRARIES})
-target_link_libraries (indextool libsphinx ${EXTRA_LIBRARIES})
-target_link_libraries (searchd libsphinx ${EXTRA_LIBRARIES})
-target_link_libraries (spelldump libsphinx ${EXTRA_LIBRARIES})
-target_link_libraries (tests libsphinx ${EXTRA_LIBRARIES})
 
 # add the extra targets in the case we want on-the-fly grammar compiler
 if (USE_BISON)
 
 	set (BISON_DIR "${SPHINXSEARCH_BINARY_DIR}/config")
 
-	BISON_TARGET (ExprParser sphinxexpr.y ${BISON_DIR}/bissphinxexpr.c)
-	BISON_TARGET (SelectParser sphinxselect.y ${BISON_DIR}/bissphinxselect.c)
-	BISON_TARGET (QueryParser sphinxquery.y ${BISON_DIR}/bissphinxquery.c)
-	BISON_TARGET (SQLParser sphinxql.y ${BISON_DIR}/bissphinxql.c)
-	BISON_TARGET (JsonParser sphinxjson.y ${BISON_DIR}/bissphinxjson.c)
+	BISON_TARGET (ExprParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxexpr.y" ${BISON_DIR}/bissphinxexpr.c)
+	BISON_TARGET (SelectParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxselect.y" ${BISON_DIR}/bissphinxselect.c)
+	BISON_TARGET (QueryParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxquery.y" ${BISON_DIR}/bissphinxquery.c)
+	BISON_TARGET (SQLParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql.y" ${BISON_DIR}/bissphinxql.c)
+	BISON_TARGET (JsonParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxjson.y" ${BISON_DIR}/bissphinxjson.c)
 
 	set_property (SOURCE sphinxexpr.cpp APPEND PROPERTY
 			OBJECT_DEPENDS ${BISON_ExprParser_OUTPUT_SOURCE})
@@ -82,8 +71,8 @@ endif (USE_BISON)
 if (USE_FLEX)
 	set (FLEX_DIR "${SPHINXSEARCH_BINARY_DIR}/config")
 
-	FLEX_TARGET (SQLlex sphinxql.l ${FLEX_DIR}/flexsphinxql.c COMPILE_FLAGS "-i")
-	FLEX_TARGET (Jsonlex sphinxjson.l ${FLEX_DIR}/flexsphinxjson.c COMPILE_FLAGS "-i -Pyy2")
+	FLEX_TARGET (SQLlex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql.l" ${FLEX_DIR}/flexsphinxql.c COMPILE_FLAGS "-i")
+	FLEX_TARGET (Jsonlex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxjson.l" ${FLEX_DIR}/flexsphinxjson.c COMPILE_FLAGS "-i -Pyy2")
 
 	set_property (SOURCE searchd.cpp APPEND PROPERTY
 			OBJECT_DEPENDS ${FLEX_SQLlex_OUTPUTS})
@@ -91,6 +80,24 @@ if (USE_FLEX)
 			OBJECT_DEPENDS ${FLEX_Jsonlex_OUTPUTS})
 
 endif (USE_FLEX)
+
+# our mega-lib
+add_library ( libsphinx STATIC ${LIBSPHINX_SRCS} ${HEADERS} ${GHEADERS} ${LIBSPHINX_BISON} ${LIBSPHINX_FLEX} )
+
+add_dependencies ( libsphinx generate_sphinxversion )
+
+
+# our executables
+add_executable ( indexer ${INDEXER_SRCS} )
+add_executable ( indextool ${INDEXTOOL_SRCS} )
+add_executable ( searchd ${SEARCHD_SRCS} ${SEARCHD_H} ${SEARCHD_BISON} ${SEARCHD_FLEX} )
+add_executable ( spelldump ${SPELLDUMP_SRCS} )
+add_executable ( tests ${TESTS_SRCS} )
+target_link_libraries ( indexer libsphinx ${EXTRA_LIBRARIES} )
+target_link_libraries ( indextool libsphinx ${EXTRA_LIBRARIES} )
+target_link_libraries ( searchd libsphinx ${EXTRA_LIBRARIES} )
+target_link_libraries ( spelldump libsphinx ${EXTRA_LIBRARIES} )
+target_link_libraries ( tests libsphinx ${EXTRA_LIBRARIES} )
 
 
 if (SPLIT_SYMBOLS)

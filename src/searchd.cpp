@@ -9205,8 +9205,13 @@ protected:
 #define YY_NO_UNISTD_H 1
 #endif
 
-#include "llsphinxql.c"
+#ifdef CMAKE_GENERATED_LEXER
 
+#include "flexsphinxql.c"
+
+#else
+#include "llsphinxql.c"
+#endif
 
 void yyerror ( SqlParser_c * pParser, const char * sMessage )
 {

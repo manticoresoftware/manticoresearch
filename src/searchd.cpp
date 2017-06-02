@@ -15472,6 +15472,9 @@ void HandleMysqlOptimize ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 			const ServedIndex_c * pServed = g_pLocalIndexes->GetRlockedEntry ( tStmt.m_sIndex );
 			if ( pServed && pServed->m_pIndex && pServed->m_bEnabled )
 				static_cast<ISphRtIndex *>( pServed->m_pIndex )->Optimize ( &g_bShutdown, &g_tRtThrottle );
+			if ( pServed )
+				pServed->Unlock();
+
 			return;
 		}
 

@@ -204,15 +204,15 @@ public:
 
 	virtual void		LoadStopwords ( const char *, const ISphTokenizer * ) {}
 	virtual void		LoadStopwords ( const CSphVector<SphWordID_t> & ) {}
-	virtual void		WriteStopwords ( CSphWriter & ) {}
+	virtual void		WriteStopwords ( CSphWriter & ) const {}
 	virtual bool		LoadWordforms ( const CSphVector<CSphString> &, const CSphEmbeddedFiles *, const ISphTokenizer *, const char * ) { return true; }
-	virtual void		WriteWordforms ( CSphWriter & ) {}
+	virtual void		WriteWordforms ( CSphWriter & ) const {}
 	virtual int			SetMorphology ( const char *, CSphString & ) { return ST_OK; }
 
 	virtual void		Setup ( const CSphDictSettings & tSettings ) { m_tSettings = tSettings; }
 	virtual const CSphDictSettings & GetSettings () const { return m_tSettings; }
-	virtual const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () { return m_dSWFileInfos; }
-	virtual const CSphVector <CSphSavedFile> & GetWordformsFileInfos () { return m_dWFFileInfos; }
+	virtual const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () const { return m_dSWFileInfos; }
+	virtual const CSphVector <CSphSavedFile> & GetWordformsFileInfos () const { return m_dWFFileInfos; }
 	virtual const CSphMultiformContainer * GetMultiWordforms () const { return NULL; }
 	virtual uint64_t		GetSettingsFNV () const { return 0; }
 

@@ -566,7 +566,7 @@ public:
 	virtual bool					LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, CSphString & sError ) = 0;
 
 	/// write synonyms to file
-	virtual void					WriteSynonyms ( CSphWriter & tWriter ) = 0;
+	virtual void					WriteSynonyms ( CSphWriter & tWriter ) const = 0;
 
 	/// set phrase boundary chars
 	virtual bool					SetBoundary ( const char * sConfig, CSphString & sError );
@@ -854,13 +854,13 @@ public:
 	virtual void		LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) = 0;
 
 	/// write stopwords to a file
-	virtual void		WriteStopwords ( CSphWriter & tWriter ) = 0;
+	virtual void		WriteStopwords ( CSphWriter & tWriter ) const = 0;
 
 	/// load wordforms from a given list of files
 	virtual bool		LoadWordforms ( const CSphVector<CSphString> &, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) = 0;
 
 	/// write wordforms to a file
-	virtual void		WriteWordforms ( CSphWriter & tWriter ) = 0;
+	virtual void		WriteWordforms ( CSphWriter & tWriter ) const = 0;
 
 	/// get wordforms
 	virtual const CSphWordforms *	GetWordforms() { return NULL; }
@@ -885,10 +885,10 @@ public:
 	virtual const CSphDictSettings & GetSettings () const = 0;
 
 	/// stopwords file infos
-	virtual const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () = 0;
+	virtual const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () const = 0;
 
 	/// wordforms file infos
-	virtual const CSphVector <CSphSavedFile> & GetWordformsFileInfos () = 0;
+	virtual const CSphVector <CSphSavedFile> & GetWordformsFileInfos () const = 0;
 
 	/// get multiwordforms
 	virtual const CSphMultiformContainer * GetMultiWordforms () const = 0;

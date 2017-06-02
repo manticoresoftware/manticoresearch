@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>RECONFIGURE in RT indexes (chunk merge order)</name>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	binlog_path =
+	workers = threads
+}
+
+index rt
+{
+    type = rt
+    path = <data_path/>/rt
+    charset_table = a..z, _, A..Z->a..z	
+    dict = keywords
+    rt_field = name
+    rt_attr_uint = idd
+	#min_prefix_len = 3
+}
+
+source src_dummy
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT id, gid, text FROM test_table
+  sql_attr_uint   = gid
+}
+
+index test_dummy
+{
+  source      = src_dummy
+  path      = <data_path/>/test_dummy
+}
+</config>
+
+<db_drop>drop table if exists test_table</db_drop>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	text varchar(255) not null,
+	gid int
+);
+</db_create>
+
+<db_insert>
+insert into test_table values ( 1, 'first',  1 )
+</db_insert>
+
+<custom_test><![CDATA[
+
+$results = array();
+$ql->Reconnect();
+
+$results[] = 'initial commit';
+$results[] = "\n" . $ql->Query ( "REPLACE INTO rt (id, name, idd) VALUES (1, 'test', 1)" );
+$results[] = "\n" . $ql->Query ( "REPLACE INTO rt (id, name, idd) VALUES (2, 'test', 2)" );
+$results[] = 'query test';
+$results[] = "\n" . $ql->Query ( "SELECT * FROM rt WHERE MATCH ( 'test' )" );
+$results[] = 'query tes*';
+$results[] = "\n" . $ql->Query ( "SELECT * FROM rt WHERE MATCH ( 'tes*' )" );
+
+$orig_conf = file('config.conf');
+
+$new_conf = '';
+foreach ( $orig_conf as $line )
+{
+	if ( strstr ( $line, '#min_prefix_len' ) )
+	{
+		$line = 'min_prefix_len = 3' . "\n";
+	}
+	$new_conf .= $line;
+}
+file_put_contents('config.conf', $new_conf);
+
+$results[] = "\n" . $ql->Query ( "ALTER RTINDEX rt RECONFIGURE" );
+
+$results[] = "\n" . $ql->Query ( "REPLACE INTO rt (id, name, idd) VALUES (11, 'test', 11)" );
+$results[] = "\n" . $ql->Query ( "REPLACE INTO rt (id, name, idd) VALUES (12, 'test', 12)" );
+$results[] = 'query test';
+$results[] = "\n" . $ql->Query ( "SELECT * FROM rt WHERE MATCH ( 'test' )" );
+$results[] = 'query tes*';
+$results[] = "\n" . $ql->Query ( "SELECT * FROM rt WHERE MATCH ( 'tes*' )" );
+
+$results[] = "\n" . $ql->Query ( "FLUSH RAMCHUNK rt" );
+$results[] = "\n" . $ql->Query ( "OPTIMIZE INDEX rt option sync=1" );
+
+$results[] = 'query test';
+$results[] = "\n" . $ql->Query ( "SELECT * FROM rt WHERE MATCH ( 'test' )" );
+$results[] = 'query tes*';
+$results[] = "\n" . $ql->Query ( "SELECT * FROM rt WHERE MATCH ( 'tes*' )" );
+
+// regression rt index lock leaks after optimize command
+$results[] = "\n" . $ql->Query ( "truncate RTINDEX rt" );
+$results[] = "\n" . $ql->Query ( "SELECT * FROM rt" );
+
+]]></custom_test>
+
+</test>

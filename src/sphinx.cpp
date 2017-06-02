@@ -235,6 +235,10 @@ protected:
 static SmallStringHash_T <CSphGlobalIDF * >	g_hGlobalIDFs;
 static CSphMutex							g_tGlobalIDFLock;
 
+struct BuildHeader_t;
+struct WriteHeader_t;
+static bool IndexBuildDone ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, const CSphString & sFileName, CSphString & sError );
+
 /////////////////////////////////////////////////////////////////////////////
 // COMPILE-TIME CHECKS
 /////////////////////////////////////////////////////////////////////////////
@@ -1139,8 +1143,7 @@ class CSphHitBuilder;
 struct BuildHeader_t : public CSphSourceStats, public DictHeader_t
 {
 	explicit BuildHeader_t ( const CSphSourceStats & tStat )
-		: m_sHeaderExtension ( NULL )
-		, m_pThrottle ( NULL )
+		: m_pThrottle ( NULL )
 		, m_pMinRow ( NULL )
 		, m_uMinDocid ( 0 )
 		, m_uKillListSize ( 0 )
@@ -1151,13 +1154,22 @@ struct BuildHeader_t : public CSphSourceStats, public DictHeader_t
 		m_iTotalBytes = tStat.m_iTotalBytes;
 	}
 
-	const char *		m_sHeaderExtension;
 	ThrottleState_t *	m_pThrottle;
 	const CSphRowitem *	m_pMinRow;
 	SphDocID_t			m_uMinDocid;
 	DWORD				m_uKillListSize;
 	int64_t				m_iMinMaxIndex;
 	int					m_iTotalDups;
+};
+
+struct WriteHeader_t
+{
+	const CSphIndexSettings * m_pSettings;
+	const CSphSchema * m_pSchema;
+	const ISphTokenizer * m_pTokenizer;
+	const CSphDict * m_pDict;
+	const ISphFieldFilter * m_pFieldFilter;
+	const int64_t * m_pFieldLens;
 };
 
 const char* CheckFmtMagic ( DWORD uHeader )
@@ -1409,7 +1421,6 @@ public:
 	virtual	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn pfnProgress ) { m_tProgress.m_fnProgress = pfnProgress; }
 
 	virtual bool				LoadHeader ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, CSphString & sWarning );
-	virtual bool				WriteHeader ( const BuildHeader_t & tBuildHeader, CSphWriter & fdInfo ) const;
 
 	virtual void				DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool bConfig );
 	virtual void				DebugDumpDocids ( FILE * fp );
@@ -1442,7 +1453,7 @@ public:
 
 	template <class QWORDDST, class QWORDSRC>
 	static bool					MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, const CSphVector<SphDocID_t> & dKillList, SphDocID_t uMinID, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle, volatile bool * pGlobalStop, volatile bool * pLocalStop );
-	static bool					DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, bool bMergeKillLists, ISphFilter * pFilter, const CSphVector<SphDocID_t> & dKillList, CSphString & sError, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle, volatile bool * pGlobalStop, volatile bool * pLocalStop );
+	static bool					DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, bool bMergeKillLists, ISphFilter * pFilter, const CSphVector<SphDocID_t> & dKillList, CSphString & sError, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle, volatile bool * pGlobalStop, volatile bool * pLocalStop, bool bSrcSettings );
 
 	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError, CSphString & sWarning );
 	virtual bool				SaveAttributes ( CSphString & sError ) const;
@@ -1549,8 +1560,6 @@ private:
 
 	bool						JuggleFile ( const char* szExt, CSphString & sError, bool bNeedOrigin=true ) const;
 	XQNode_t *					ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta * pResult, CSphScopedPayload * pPayloads, DWORD uQueryDebugFlags ) const;
-
-	bool						BuildDone ( const BuildHeader_t & tBuildHeader, CSphString & sError ) const;
 };
 
 volatile int CSphIndex_VLN::m_iIndexTagSeq = 0;
@@ -2305,7 +2314,7 @@ public:
 
 	virtual bool			SetCaseFolding ( const char * sConfig, CSphString & sError );
 	virtual bool			LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, CSphString & sError );
-	virtual void			WriteSynonyms ( CSphWriter & tWriter );
+	virtual void			WriteSynonyms ( CSphWriter & tWriter ) const;
 	virtual void			CloneBase ( const CSphTokenizerBase * pFrom, ESphTokenizerClone eMode );
 
 	virtual const char *	GetTokenStart () const		{ return (const char *) m_pTokenStart; }
@@ -3408,7 +3417,7 @@ bool LoadTokenizerSettings ( CSphReader & tReader, CSphTokenizerSettings & tSett
 
 /// gets called from and MUST be in sync with RtIndex_t::SaveDiskHeader()!
 /// note that SaveDiskHeader() occasionaly uses some PREVIOUS format version!
-void SaveTokenizerSettings ( CSphWriter & tWriter, ISphTokenizer * pTokenizer, int iEmbeddedLimit )
+void SaveTokenizerSettings ( CSphWriter & tWriter, const ISphTokenizer * pTokenizer, int iEmbeddedLimit )
 {
 	assert ( pTokenizer );
 
@@ -3512,7 +3521,7 @@ void LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tSettings
 
 /// gets called from and MUST be in sync with RtIndex_t::SaveDiskHeader()!
 /// note that SaveDiskHeader() occasionaly uses some PREVIOUS format version!
-void SaveDictionarySettings ( CSphWriter & tWriter, CSphDict * pDict, bool bForceWordDict, int iEmbeddedLimit )
+void SaveDictionarySettings ( CSphWriter & tWriter, const CSphDict * pDict, bool bForceWordDict, int iEmbeddedLimit )
 {
 	assert ( pDict );
 	const CSphDictSettings & tSettings = pDict->GetSettings ();
@@ -3574,7 +3583,7 @@ void LoadFieldFilterSettings ( CSphReader & tReader, CSphFieldFilterSettings & t
 }
 
 
-void SaveFieldFilterSettings ( CSphWriter & tWriter, ISphFieldFilter * pFieldFilter )
+void SaveFieldFilterSettings ( CSphWriter & tWriter, const ISphFieldFilter * pFieldFilter )
 {
 	if ( !pFieldFilter )
 	{
@@ -4098,7 +4107,7 @@ bool CSphTokenizerBase::LoadSynonyms ( const char * sFilename, const CSphEmbedde
 }
 
 
-void CSphTokenizerBase::WriteSynonyms ( CSphWriter & tWriter )
+void CSphTokenizerBase::WriteSynonyms ( CSphWriter & tWriter ) const
 {
 	if ( m_pExc )
 		m_pExc->Export ( tWriter );
@@ -9548,7 +9557,6 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttr
 	int64_t iNewMinMaxIndex = m_iDocinfo * iNewStride;
 
 	BuildHeader_t tBuildHeader ( m_tStats );
-	tBuildHeader.m_sHeaderExtension = "sph.tmpnew";
 	tBuildHeader.m_pThrottle = &g_tThrottle;
 	tBuildHeader.m_pMinRow = dMinRow.Begin();
 	tBuildHeader.m_uMinDocid = m_uMinDocid;
@@ -9557,12 +9565,18 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttr
 
 	*(DictHeader_t*)&tBuildHeader = *(DictHeader_t*)&m_tWordlist;
 
-	CSphSchema tOldSchema = m_tSchema;
-	m_tSchema = tNewSchema;
+	CSphString sHeaderName = GetIndexFileName ( "sph.tmpnew" );
+	WriteHeader_t tWriteHeader;
+	tWriteHeader.m_pSettings = &m_tSettings;
+	tWriteHeader.m_pSchema = &tNewSchema;
+	tWriteHeader.m_pTokenizer = m_pTokenizer;
+	tWriteHeader.m_pDict = m_pDict;
+	tWriteHeader.m_pFieldFilter = m_pFieldFilter;
+	tWriteHeader.m_pFieldLens = m_dFieldLens.Begin();
 
 	// save the header
-	bool bBuildRes = BuildDone ( tBuildHeader, sError );
-	m_tSchema = tOldSchema;
+	bool bBuildRes = IndexBuildDone ( tBuildHeader, tWriteHeader, sHeaderName, sError );
+
 	if ( !bBuildRes )
 		return false;
 
@@ -9594,15 +9608,15 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttr
 		}
 	} else
 	{
-		int iAttrToRemove = tOldSchema.GetAttrIndex ( sAttrName.cstr() );
+		int iAttrToRemove = m_tSchema.GetAttrIndex ( sAttrName.cstr() );
 		assert ( iAttrToRemove>=0 );
 
 		CSphVector<int> dAttrMap;
-		CreateAttrMap ( dAttrMap, tOldSchema, tNewSchema, iAttrToRemove );
+		CreateAttrMap ( dAttrMap, m_tSchema, tNewSchema, iAttrToRemove );
 
 		for ( int i = 0; i < m_iDocinfo + (m_iDocinfoIndex+1)*2 && !tSPAWriter.IsError(); i++ )
 		{
-			pDocinfo = CopyRowAttrByAttr ( pDocinfo, dTmpDocinfos.Begin(), tOldSchema, tNewSchema, iAttrToRemove, dAttrMap, iOldStride );
+			pDocinfo = CopyRowAttrByAttr ( pDocinfo, dTmpDocinfos.Begin(), m_tSchema, tNewSchema, iAttrToRemove, dAttrMap, iOldStride );
 			tSPAWriter.PutBytes ( dTmpDocinfos.Begin(), iNewStride*sizeof(DWORD) );
 		}
 	}
@@ -10253,7 +10267,7 @@ void SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & tSettin
 }
 
 
-bool CSphIndex_VLN::WriteHeader ( const BuildHeader_t & tBuildHeader, CSphWriter & fdInfo ) const
+bool IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, CSphWriter & fdInfo )
 {
 	// version
 	fdInfo.PutDword ( INDEX_MAGIC_HEADER );
@@ -10263,15 +10277,15 @@ bool CSphIndex_VLN::WriteHeader ( const BuildHeader_t & tBuildHeader, CSphWriter
 	fdInfo.PutDword ( USE_64BIT );
 
 	// docinfo
-	fdInfo.PutDword ( m_tSettings.m_eDocinfo );
+	fdInfo.PutDword ( tWriteHeader.m_pSettings->m_eDocinfo );
 
 	// schema
-	WriteSchema ( fdInfo, m_tSchema );
+	WriteSchema ( fdInfo, *tWriteHeader.m_pSchema );
 
 	// min doc
 	fdInfo.PutOffset ( tBuildHeader.m_uMinDocid ); // was dword in v.1
-	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE )
-		fdInfo.PutBytes ( tBuildHeader.m_pMinRow, m_tSchema.GetRowSize()*sizeof(CSphRowitem) );
+	if ( tWriteHeader.m_pSettings->m_eDocinfo==SPH_DOCINFO_INLINE )
+		fdInfo.PutBytes ( tBuildHeader.m_pMinRow, tWriteHeader.m_pSchema->GetRowSize()*sizeof(CSphRowitem) );
 
 	// wordlist checkpoints
 	fdInfo.PutOffset ( tBuildHeader.m_iDictCheckpointsOffset );
@@ -10286,40 +10300,40 @@ bool CSphIndex_VLN::WriteHeader ( const BuildHeader_t & tBuildHeader, CSphWriter
 	fdInfo.PutDword ( tBuildHeader.m_iTotalDups );
 
 	// index settings
-	SaveIndexSettings ( fdInfo, m_tSettings );
+	SaveIndexSettings ( fdInfo, *tWriteHeader.m_pSettings );
 
 	// tokenizer info
-	assert ( m_pTokenizer );
-	SaveTokenizerSettings ( fdInfo, m_pTokenizer, m_tSettings.m_iEmbeddedLimit );
+	assert ( tWriteHeader.m_pTokenizer );
+	SaveTokenizerSettings ( fdInfo, tWriteHeader.m_pTokenizer, tWriteHeader.m_pSettings->m_iEmbeddedLimit );
 
 	// dictionary info
-	assert ( m_pDict );
-	SaveDictionarySettings ( fdInfo, m_pDict, false, m_tSettings.m_iEmbeddedLimit );
+	assert ( tWriteHeader.m_pDict );
+	SaveDictionarySettings ( fdInfo, tWriteHeader.m_pDict, false, tWriteHeader.m_pSettings->m_iEmbeddedLimit );
 
 	fdInfo.PutDword ( tBuildHeader.m_uKillListSize );
 	fdInfo.PutOffset ( tBuildHeader.m_iMinMaxIndex );
 
 	// field filter info
-	SaveFieldFilterSettings ( fdInfo, m_pFieldFilter );
+	SaveFieldFilterSettings ( fdInfo, tWriteHeader.m_pFieldFilter );
 
 	// average field lengths
-	if ( m_tSettings.m_bIndexFieldLens )
-		ARRAY_FOREACH ( i, m_tSchema.m_dFields )
-			fdInfo.PutOffset ( m_dFieldLens[i] );
+	if ( tWriteHeader.m_pSettings->m_bIndexFieldLens )
+		ARRAY_FOREACH ( i, tWriteHeader.m_pSchema->m_dFields )
+			fdInfo.PutOffset ( tWriteHeader.m_pFieldLens[i] );
 
 	return true;
 }
 
 
-bool CSphIndex_VLN::BuildDone ( const BuildHeader_t & tBuildHeader, CSphString & sError ) const
+bool IndexBuildDone ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, const CSphString & sFileName, CSphString & sError )
 {
 	CSphWriter fdInfo;
 	fdInfo.SetThrottle ( tBuildHeader.m_pThrottle );
-	fdInfo.OpenFile ( GetIndexFileName ( tBuildHeader.m_sHeaderExtension ), sError );
+	fdInfo.OpenFile ( sFileName, sError );
 	if ( fdInfo.IsError() )
 		return false;
 
-	if ( !WriteHeader ( tBuildHeader, fdInfo ) )
+	if ( !IndexWriteHeader ( tBuildHeader, tWriteHeader, fdInfo ) )
 		return false;
 
 	// close header
@@ -12859,7 +12873,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	if ( !tHitBuilder.cidxDone ( iMemoryLimit, m_tSettings.m_iMinInfixLen, m_pTokenizer->GetMaxCodepointLength(), &tBuildHeader ) )
 		return 0;
 
-	tBuildHeader.m_sHeaderExtension = "sph";
 	tBuildHeader.m_pMinRow = m_dMinRow.Begin();
 	tBuildHeader.m_uMinDocid = m_uMinDocid;
 	tBuildHeader.m_pThrottle = &g_tThrottle;
@@ -12867,8 +12880,17 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	tBuildHeader.m_iMinMaxIndex = m_iMinMaxIndex;
 	tBuildHeader.m_iTotalDups = iDupes;
 
+	CSphString sHeaderName = GetIndexFileName ( "sph" );
+	WriteHeader_t tWriteHeader;
+	tWriteHeader.m_pSettings = &m_tSettings;
+	tWriteHeader.m_pSchema = &m_tSchema;
+	tWriteHeader.m_pTokenizer = m_pTokenizer;
+	tWriteHeader.m_pDict = m_pDict;
+	tWriteHeader.m_pFieldFilter = m_pFieldFilter;
+	tWriteHeader.m_pFieldLens = m_dFieldLens.Begin();
+
 	// we're done
-	if ( !BuildDone ( tBuildHeader, m_sLastError ) )
+	if ( !IndexBuildDone ( tBuildHeader, tWriteHeader, sHeaderName, m_sLastError ) )
 		return 0;
 
 	// when the party's over..
@@ -13598,13 +13620,13 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, const CSphVector<CSphFilterSett
 	bool bGlobalStop = false;
 	bool bLocalStop = false;
 	return CSphIndex_VLN::DoMerge ( this, (const CSphIndex_VLN *)pSource, bMergeKillLists, pFilter.Ptr(),
-									dKillList, m_sLastError, m_tProgress, &g_tThrottle, &bGlobalStop, &bLocalStop );
+									dKillList, m_sLastError, m_tProgress, &g_tThrottle, &bGlobalStop, &bLocalStop, false );
 }
 
 bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex,
 							bool bMergeKillLists, ISphFilter * pFilter, const CSphVector<SphDocID_t> & dKillList
 							, CSphString & sError, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle,
-							volatile bool * pGlobalStop, volatile bool * pLocalStop )
+							volatile bool * pGlobalStop, volatile bool * pLocalStop, bool bSrcSettings )
 {
 	assert ( pDstIndex && pSrcIndex );
 
@@ -13636,6 +13658,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	}
 
 	BuildHeader_t tBuildHeader ( pDstIndex->m_tStats );
+	const CSphIndex_VLN * pSettings = ( bSrcSettings ? pSrcIndex : pDstIndex );
 
 	/////////////////////////////////////////
 	// merging attributes (.spa, .spm, .sps)
@@ -13862,11 +13885,11 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	if ( !sError.IsEmpty() || tTmpDict.GetFD()<0 || tDict.GetFD()<0 || *pGlobalStop || *pLocalStop )
 		return false;
 
-	CSphScopedPtr<CSphDict> pDict ( pDstIndex->m_pDict->Clone() );
+	CSphScopedPtr<CSphDict> pDict ( pSettings->m_pDict->Clone() );
 
 	int iHitBufferSize = 8 * 1024 * 1024;
 	CSphVector<SphWordID_t> dDummy;
-	CSphHitBuilder tHitBuilder ( pDstIndex->m_tSettings, dDummy, true, iHitBufferSize, pDict.Ptr(), &sError );
+	CSphHitBuilder tHitBuilder ( pSettings->m_tSettings, dDummy, true, iHitBufferSize, pDict.Ptr(), &sError );
 	tHitBuilder.SetThrottle ( pThrottle );
 
 	CSphFixedVector<CSphRowitem> dMinRow ( pDstIndex->m_dMinRow.GetLength() );
@@ -13945,14 +13968,22 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	tFlush.m_dFieldMask.UnsetAll();
 	tHitBuilder.cidxHit ( &tFlush, NULL );
 
-	if ( !tHitBuilder.cidxDone ( iHitBufferSize, pDstIndex->m_tSettings.m_iMinInfixLen,
-								pDstIndex->m_pTokenizer->GetMaxCodepointLength(), &tBuildHeader ) )
+	if ( !tHitBuilder.cidxDone ( iHitBufferSize, pSettings->m_tSettings.m_iMinInfixLen,
+								pSettings->m_pTokenizer->GetMaxCodepointLength(), &tBuildHeader ) )
 		return false;
 
-	tBuildHeader.m_sHeaderExtension = "tmp.sph";
 	tBuildHeader.m_pThrottle = pThrottle;
 
-	pDstIndex->BuildDone ( tBuildHeader, sError ); // FIXME? is this magic dict block constant any good?..
+	CSphString sHeaderName = pDstIndex->GetIndexFileName ( "tmp.sph" );
+	WriteHeader_t tWriteHeader;
+	tWriteHeader.m_pSettings = &pSettings->m_tSettings;
+	tWriteHeader.m_pSchema = &pSettings->m_tSchema;
+	tWriteHeader.m_pTokenizer = pSettings->m_pTokenizer;
+	tWriteHeader.m_pDict = pSettings->m_pDict;
+	tWriteHeader.m_pFieldFilter = pSettings->m_pFieldFilter;
+	tWriteHeader.m_pFieldLens = pSettings->m_dFieldLens.Begin();
+
+	IndexBuildDone ( tBuildHeader, tWriteHeader, sHeaderName, sError ); // FIXME? is this magic dict block constant any good?..
 
 	// we're done
 	tProgress.Show ( true );
@@ -13963,12 +13994,12 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 
 bool sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, const CSphVector<SphDocID_t> & dKillList,
 				CSphString & sError, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle,
-				volatile bool * pGlobalStop, volatile bool * pLocalStop )
+				volatile bool * pGlobalStop, volatile bool * pLocalStop, bool bSrcSettings )
 {
 	const CSphIndex_VLN * pDstIndex = (const CSphIndex_VLN *)pDst;
 	const CSphIndex_VLN * pSrcIndex = (const CSphIndex_VLN *)pSrc;
 
-	return CSphIndex_VLN::DoMerge ( pDstIndex, pSrcIndex, false, NULL, dKillList, sError, tProgress, pThrottle, pGlobalStop, pLocalStop );
+	return CSphIndex_VLN::DoMerge ( pDstIndex, pSrcIndex, false, NULL, dKillList, sError, tProgress, pThrottle, pGlobalStop, pLocalStop, bSrcSettings );
 }
 
 
@@ -14256,13 +14287,21 @@ bool CSphIndex_VLN::ReplaceKillList ( const SphDocID_t * pKillist, int iCount )
 
 	BuildHeader_t tBuildHeader ( m_tStats );
 	(DictHeader_t &)tBuildHeader = (DictHeader_t)m_tWordlist;
-	tBuildHeader.m_sHeaderExtension = "sph";
 	tBuildHeader.m_pThrottle = &g_tThrottle;
 	tBuildHeader.m_uMinDocid = m_uMinDocid;
 	tBuildHeader.m_uKillListSize = iCount;
 	tBuildHeader.m_iMinMaxIndex = m_iMinMaxIndex;
 
-	if ( !BuildDone ( tBuildHeader, m_sLastError ) )
+	CSphString sHeaderName = GetIndexFileName ( "sph" );
+	WriteHeader_t tWriteHeader;
+	tWriteHeader.m_pSettings = &m_tSettings;
+	tWriteHeader.m_pSchema = &m_tSchema;
+	tWriteHeader.m_pTokenizer = m_pTokenizer;
+	tWriteHeader.m_pDict = m_pDict;
+	tWriteHeader.m_pFieldFilter = m_pFieldFilter;
+	tWriteHeader.m_pFieldLens = m_dFieldLens.Begin();
+
+	if ( !IndexBuildDone ( tBuildHeader, tWriteHeader, sHeaderName, m_sLastError ) )
 		return false;
 
 	if ( !JuggleFile ( "spk", m_sLastError ) )
@@ -19812,9 +19851,9 @@ struct CSphTemplateDictTraits : CSphDict
 
 	virtual void		LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer );
 	virtual void		LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords );
-	virtual void		WriteStopwords ( CSphWriter & tWriter );
+	virtual void		WriteStopwords ( CSphWriter & tWriter ) const;
 	virtual bool		LoadWordforms ( const CSphVector<CSphString> & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex );
-	virtual void		WriteWordforms ( CSphWriter & tWriter );
+	virtual void		WriteWordforms ( CSphWriter & tWriter ) const;
 	virtual const CSphWordforms *	GetWordforms() { return m_pWordforms; }
 	virtual void		DisableWordforms() { m_bDisableWordforms = true; }
 	virtual int			SetMorphology ( const char * szMorph, CSphString & sMessage );
@@ -19823,8 +19862,8 @@ struct CSphTemplateDictTraits : CSphDict
 
 	virtual void		Setup ( const CSphDictSettings & tSettings ) { m_tSettings = tSettings; }
 	virtual const CSphDictSettings & GetSettings () const { return m_tSettings; }
-	virtual const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () { return m_dSWFileInfos; }
-	virtual const CSphVector <CSphSavedFile> & GetWordformsFileInfos () { return m_dWFFileInfos; }
+	virtual const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () const { return m_dSWFileInfos; }
+	virtual const CSphVector <CSphSavedFile> & GetWordformsFileInfos () const { return m_dWFFileInfos; }
 	virtual const CSphMultiformContainer * GetMultiWordforms () const;
 	virtual uint64_t	GetSettingsFNV () const;
 	static void			SweepWordformContainers ( const CSphVector<CSphSavedFile> & dFiles );
@@ -20723,7 +20762,7 @@ void CSphTemplateDictTraits::LoadStopwords ( const CSphVector<SphWordID_t> & dSt
 }
 
 
-void CSphTemplateDictTraits::WriteStopwords ( CSphWriter & tWriter )
+void CSphTemplateDictTraits::WriteStopwords ( CSphWriter & tWriter ) const
 {
 	tWriter.PutDword ( (DWORD)m_iStopwords );
 	for ( int i = 0; i < m_iStopwords; i++ )
@@ -21215,7 +21254,7 @@ bool CSphTemplateDictTraits::LoadWordforms ( const CSphVector<CSphString> & dFil
 }
 
 
-void CSphTemplateDictTraits::WriteWordforms ( CSphWriter & tWriter )
+void CSphTemplateDictTraits::WriteWordforms ( CSphWriter & tWriter ) const
 {
 	if ( !m_pWordforms )
 	{
@@ -23148,14 +23187,14 @@ public:
 
 	virtual void LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer ) { m_pBase->LoadStopwords ( sFiles, pTokenizer ); }
 	virtual void LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) { m_pBase->LoadStopwords ( dStopwords ); }
-	virtual void WriteStopwords ( CSphWriter & tWriter ) { m_pBase->WriteStopwords ( tWriter ); }
+	virtual void WriteStopwords ( CSphWriter & tWriter ) const { m_pBase->WriteStopwords ( tWriter ); }
 	virtual bool LoadWordforms ( const CSphVector<CSphString> & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) { return m_pBase->LoadWordforms ( dFiles, pEmbedded, pTokenizer, sIndex ); }
-	virtual void WriteWordforms ( CSphWriter & tWriter ) { m_pBase->WriteWordforms ( tWriter ); }
+	virtual void WriteWordforms ( CSphWriter & tWriter ) const { m_pBase->WriteWordforms ( tWriter ); }
 	virtual int SetMorphology ( const char * szMorph, CSphString & sMessage ) { return m_pBase->SetMorphology ( szMorph, sMessage ); }
 	virtual void Setup ( const CSphDictSettings & tSettings ) { m_pBase->Setup ( tSettings ); }
 	virtual const CSphDictSettings & GetSettings () const { return m_pBase->GetSettings(); }
-	virtual const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () { return m_pBase->GetStopwordsFileInfos(); }
-	virtual const CSphVector <CSphSavedFile> & GetWordformsFileInfos () { return m_pBase->GetWordformsFileInfos(); }
+	virtual const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () const { return m_pBase->GetStopwordsFileInfos(); }
+	virtual const CSphVector <CSphSavedFile> & GetWordformsFileInfos () const { return m_pBase->GetWordformsFileInfos(); }
 	virtual const CSphMultiformContainer * GetMultiWordforms () const { return m_pBase->GetMultiWordforms(); }
 	virtual bool IsStopWord ( const BYTE * pWord ) const { return m_pBase->IsStopWord ( pWord ); }
 	virtual const char * GetLastWarning() const { return m_iKeywordsOverrun ? m_sWarning.cstr() : NULL; }

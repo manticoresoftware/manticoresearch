@@ -1582,9 +1582,9 @@ public:
 
 	virtual void		LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer ) { m_pDict->LoadStopwords ( sFiles, pTokenizer ); }
 	virtual void		LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) { m_pDict->LoadStopwords ( dStopwords ); }
-	virtual void		WriteStopwords ( CSphWriter & tWriter ) { m_pDict->WriteStopwords ( tWriter ); }
+	virtual void		WriteStopwords ( CSphWriter & tWriter ) const { m_pDict->WriteStopwords ( tWriter ); }
 	virtual bool		LoadWordforms ( const CSphVector<CSphString> & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) { return m_pDict->LoadWordforms ( dFiles, pEmbedded, pTokenizer, sIndex ); }
-	virtual void		WriteWordforms ( CSphWriter & tWriter ) { m_pDict->WriteWordforms ( tWriter ); }
+	virtual void		WriteWordforms ( CSphWriter & tWriter ) const { m_pDict->WriteWordforms ( tWriter ); }
 	virtual int			SetMorphology ( const char * szMorph, CSphString & sMessage ) { return m_pDict->SetMorphology ( szMorph, sMessage ); }
 
 	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops ) { return m_pDict->GetWordID ( pWord, iLen, bFilterStops ); }
@@ -1593,8 +1593,8 @@ public:
 
 	virtual void		Setup ( const CSphDictSettings & ) {}
 	virtual const CSphDictSettings & GetSettings () const { return m_pDict->GetSettings (); }
-	virtual const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () { return m_pDict->GetStopwordsFileInfos (); }
-	virtual const CSphVector <CSphSavedFile> & GetWordformsFileInfos () { return m_pDict->GetWordformsFileInfos (); }
+	virtual const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () const { return m_pDict->GetStopwordsFileInfos (); }
+	virtual const CSphVector <CSphSavedFile> & GetWordformsFileInfos () const { return m_pDict->GetWordformsFileInfos (); }
 	virtual const CSphMultiformContainer * GetMultiWordforms () const { return m_pDict->GetMultiWordforms (); }
 	virtual const CSphWordforms * GetWordforms () { return m_pDict->GetWordforms(); }
 
@@ -1661,7 +1661,7 @@ public:
 	virtual bool					SetNgramChars ( const char * sConfig, CSphString & sError )		{ return m_pTokenizer->SetNgramChars ( sConfig, sError ); }
 	virtual void					SetNgramLen ( int iLen )										{ m_pTokenizer->SetNgramLen ( iLen ); }
 	virtual bool					LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, CSphString & sError ) { return m_pTokenizer->LoadSynonyms ( sFilename, pFiles, sError ); }
-	virtual void					WriteSynonyms ( CSphWriter & tWriter )							{ return m_pTokenizer->WriteSynonyms ( tWriter ); }
+	virtual void					WriteSynonyms ( CSphWriter & tWriter ) const					{ return m_pTokenizer->WriteSynonyms ( tWriter ); }
 	virtual bool					SetBoundary ( const char * sConfig, CSphString & sError )		{ return m_pTokenizer->SetBoundary ( sConfig, sError ); }
 	virtual void					Setup ( const CSphTokenizerSettings & tSettings )				{ m_pTokenizer->Setup ( tSettings ); }
 	virtual const CSphTokenizerSettings &	GetSettings () const									{ return m_pTokenizer->GetSettings (); }
@@ -1767,7 +1767,7 @@ void			sphColumnToLowercase ( char * sVal );
 bool			sphCheckQueryHeight ( const struct XQNode_t * pRoot, CSphString & sError );
 void			sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, bool bHasBooleanOptimization, const ISphKeywordsStat * pKeywords );
 void			TransformAotFilter ( XQNode_t * pNode, const CSphWordforms * pWordforms, const CSphIndexSettings& tSettings );
-bool			sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, const CSphVector<SphDocID_t> & dKillList, CSphString & sError, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle, volatile bool * pGlobalStop, volatile bool * pLocalStop );
+bool			sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, const CSphVector<SphDocID_t> & dKillList, CSphString & sError, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle, volatile bool * pGlobalStop, volatile bool * pLocalStop, bool bSrcSettings );
 CSphString		sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema );
 
 void			sphSetUnlinkOld ( bool bUnlink );
@@ -1777,12 +1777,12 @@ void			WriteSchema ( CSphWriter & fdInfo, const CSphSchema & tSchema );
 void			ReadSchema ( CSphReader & rdInfo, CSphSchema & m_tSchema, DWORD uVersion, bool bDynamic );
 void			SaveIndexSettings ( CSphWriter & tWriter, const CSphIndexSettings & tSettings );
 void			LoadIndexSettings ( CSphIndexSettings & tSettings, CSphReader & tReader, DWORD uVersion );
-void			SaveTokenizerSettings ( CSphWriter & tWriter, ISphTokenizer * pTokenizer, int iEmbeddedLimit );
+void			SaveTokenizerSettings ( CSphWriter & tWriter, const ISphTokenizer * pTokenizer, int iEmbeddedLimit );
 bool			LoadTokenizerSettings ( CSphReader & tReader, CSphTokenizerSettings & tSettings, CSphEmbeddedFiles & tEmbeddedFiles, DWORD uVersion, CSphString & sWarning );
-void			SaveDictionarySettings ( CSphWriter & tWriter, CSphDict * pDict, bool bForceWordDict, int iEmbeddedLimit );
+void			SaveDictionarySettings ( CSphWriter & tWriter, const CSphDict * pDict, bool bForceWordDict, int iEmbeddedLimit );
 void			LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tSettings, CSphEmbeddedFiles & tEmbeddedFiles, DWORD uVersion, CSphString & sWarning );
 void			LoadFieldFilterSettings ( CSphReader & tReader, CSphFieldFilterSettings & tFieldFilterSettings );
-void			SaveFieldFilterSettings ( CSphWriter & tWriter, ISphFieldFilter * pFieldFilter );
+void			SaveFieldFilterSettings ( CSphWriter & tWriter, const ISphFieldFilter * pFieldFilter );
 
 DWORD			ReadVersion ( const char * sPath, CSphString & sError );
 bool			AddFieldLens ( CSphSchema & tSchema, bool bDynamic, CSphString & sError );

@@ -1,0 +1,32 @@
+a:1:{i:0;a:1:{i:0;a:22:{i:0;s:14:"initial commit";i:1;s:3:"
+OK";i:2;s:3:"
+OK";i:3;s:10:"query test";i:4;s:19:"
+1 | 1
+2 | 2
+2 rows";i:5;s:10:"query tes*";i:6;s:7:"
+0 rows";i:7;s:3:"
+OK";i:8;s:3:"
+OK";i:9;s:3:"
+OK";i:10;s:10:"query test";i:11;s:35:"
+11 | 11
+12 | 12
+1 | 1
+2 | 2
+4 rows";i:12;s:10:"query tes*";i:13;s:23:"
+11 | 11
+12 | 12
+2 rows";i:14;s:3:"
+OK";i:15;s:3:"
+OK";i:16;s:10:"query test";i:17;s:35:"
+1 | 1
+2 | 2
+11 | 11
+12 | 12
+4 rows";i:18;s:10:"query tes*";i:19;s:35:"
+1 | 1
+2 | 2
+11 | 11
+12 | 12
+4 rows";i:20;s:3:"
+OK";i:21;s:7:"
+0 rows";}}}

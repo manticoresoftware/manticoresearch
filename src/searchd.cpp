@@ -1667,9 +1667,6 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 	sphSeek ( g_iLogFile, 0, SEEK_END );
 	sphWrite ( g_iLogFile, g_sCrashInfo, g_iCrashInfoLen );
 
-	// log query
-	CrashQuery_t tQuery = SphCrashLogger_c::GetQuery();
-
 	// head
 	sphWrite ( g_iLogFile, g_sCrashedBannerTail, sizeof ( g_sCrashedBannerTail ) - 1 );
 
@@ -1716,6 +1713,9 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 #endif
 
 	sphSafeInfo ( g_iLogFile, "------- BACKTRACE END -------" );
+
+	// log query
+	CrashQuery_t tQuery = SphCrashLogger_c::GetQuery ();
 
 	// request dump banner
 	int iBannerLen = ( tQuery.m_bMySQL ? sizeof(g_sCrashedBannerMySQL) : sizeof(g_sCrashedBannerAPI) ) - 1;

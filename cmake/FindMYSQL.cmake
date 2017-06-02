@@ -46,28 +46,28 @@
 # (To distribute this file outside of CMake, substitute the full
 #  License text for the above reference.)
 ##########################################################################
-MACRO(_MYSQL_CONFIG VAR _regex _opt)
-	EXECUTE_PROCESS(COMMAND ${MYSQL_CONFIG_EXECUTABLE} ${_opt}
+MACRO( _MYSQL_CONFIG VAR _regex _opt )
+	EXECUTE_PROCESS ( COMMAND ${MYSQL_CONFIG_EXECUTABLE} ${_opt}
 			OUTPUT_VARIABLE _mysql_config_output
 			)
-	SET(_var ${_mysql_config_output})
-	STRING(REGEX MATCHALL "${_regex}([^ ]+)" _mysql_config_output "${_mysql_config_output}")
-	STRING(REGEX REPLACE "^[ \t]+" "" _mysql_config_output "${_mysql_config_output}")
-	STRING(REGEX REPLACE "[\r\n]$" "" _mysql_config_output "${_mysql_config_output}")
-	STRING(REGEX REPLACE "${_regex}" "" _mysql_config_output "${_mysql_config_output}")
-	SEPARATE_ARGUMENTS(_mysql_config_output)
-	SET(${VAR} ${_mysql_config_output})
-ENDMACRO(_MYSQL_CONFIG _regex _opt)
+	SET ( _var ${_mysql_config_output} )
+	STRING ( REGEX MATCHALL "${_regex}([^ ]+)" _mysql_config_output "${_mysql_config_output}" )
+	STRING ( REGEX REPLACE "^[ \t]+" "" _mysql_config_output "${_mysql_config_output}" )
+	STRING ( REGEX REPLACE "[\r\n]$" "" _mysql_config_output "${_mysql_config_output}" )
+	STRING ( REGEX REPLACE "${_regex}" "" _mysql_config_output "${_mysql_config_output}" )
+	SEPARATE_ARGUMENTS ( _mysql_config_output )
+	SET ( ${VAR} ${_mysql_config_output} )
+ENDMACRO( _MYSQL_CONFIG _regex _opt )
 
 
-IF (NOT MYSQL_CONFIG_EXECUTABLE)
-	IF (EXISTS "$ENV{MYSQL_DIR}/bin/mysql_config")
-		SET(MYSQL_CONFIG_EXECUTABLE "$ENV{MYSQL_DIR}/bin/mysql_config")
-	ELSE (EXISTS "$ENV{MYSQL_DIR}/bin/mysql_config")
-		FIND_PROGRAM(MYSQL_CONFIG_EXECUTABLE
-			NAMES mysql_config
-			DOC "full path of mysql_config"
-			PATHS	/usr/bin
+IF ( NOT MYSQL_CONFIG_EXECUTABLE )
+	IF ( EXISTS "$ENV{MYSQL_DIR}/bin/mysql_config" )
+		SET ( MYSQL_CONFIG_EXECUTABLE "$ENV{MYSQL_DIR}/bin/mysql_config" )
+	ELSE ( EXISTS "$ENV{MYSQL_DIR}/bin/mysql_config" )
+		FIND_PROGRAM ( MYSQL_CONFIG_EXECUTABLE
+				NAMES mysql_config
+				DOC "full path of mysql_config"
+				PATHS /usr/bin
 				/usr/local/bin
 				/opt/local/lib/mysql55/bin
 				/opt/mysql/bin
@@ -75,24 +75,24 @@ IF (NOT MYSQL_CONFIG_EXECUTABLE)
 				/usr/local/mysql/bin
 				/usr/pkg/bin
 				${WITH_MYSQL_ROOT}/bin
-		)
-	ENDIF (EXISTS "$ENV{MYSQL_DIR}/bin/mysql_config")
-ENDIF (NOT MYSQL_CONFIG_EXECUTABLE)
+				)
+	ENDIF ( EXISTS "$ENV{MYSQL_DIR}/bin/mysql_config" )
+ENDIF ( NOT MYSQL_CONFIG_EXECUTABLE )
 
 #-------------- FIND MYSQL_INCLUDE_DIR ------------------
-SET(MYSQL_CXXFLAGS "")
-IF(MYSQL_CONFIG_EXECUTABLE)
-	_MYSQL_CONFIG(MYSQL_INCLUDE_DIR "(^| )-I" "--include")
-	MESSAGE(STATUS "mysql_config was found ${MYSQL_CONFIG_EXECUTABLE}")
-	EXECUTE_PROCESS(COMMAND ${MYSQL_CONFIG_EXECUTABLE} "--cflags"
-					OUTPUT_VARIABLE _mysql_config_output
-					)
-	STRING(REGEX MATCHALL "-m([^\r\n]+)" MYSQL_LINK_FLAGS "${_mysql_config_output}")
-	STRING(REGEX REPLACE "[\r\n]$" "" MYSQL_CXXFLAGS "${_mysql_config_output}")
-#	ADD_DEFINITIONS("${MYSQL_CXXFLAGS}")
-ELSE (MYSQL_CONFIG_EXECUTABLE)
-	MESSAGE(STATUS "ENV{MYSQL_DIR} = $ENV{MYSQL_DIR}")
-	FIND_PATH(MYSQL_INCLUDE_DIR mysql.h
+SET ( MYSQL_CXXFLAGS "" )
+IF ( MYSQL_CONFIG_EXECUTABLE )
+	_MYSQL_CONFIG ( MYSQL_INCLUDE_DIR "(^| )-I" "--include" )
+	MESSAGE ( STATUS "mysql_config was found ${MYSQL_CONFIG_EXECUTABLE}" )
+	EXECUTE_PROCESS ( COMMAND ${MYSQL_CONFIG_EXECUTABLE} "--cflags"
+			OUTPUT_VARIABLE _mysql_config_output
+			)
+	STRING ( REGEX MATCHALL "-m([^\r\n]+)" MYSQL_LINK_FLAGS "${_mysql_config_output}" )
+	STRING ( REGEX REPLACE "[\r\n]$" "" MYSQL_CXXFLAGS "${_mysql_config_output}" )
+	#	ADD_DEFINITIONS("${MYSQL_CXXFLAGS}")
+ELSE ( MYSQL_CONFIG_EXECUTABLE )
+	MESSAGE ( STATUS "ENV{MYSQL_DIR} = $ENV{MYSQL_DIR}" )
+	FIND_PATH ( MYSQL_INCLUDE_DIR mysql.h
 			${WITH_MYSQL_INCLUDES}
 			${WITH_MYSQL_ROOT}/include
 			${WITH_MYSQL_ROOT}/include/mysql
@@ -105,51 +105,51 @@ ELSE (MYSQL_CONFIG_EXECUTABLE)
 			/usr/local/mysql/include
 			/usr/local/mysql/include/mysql
 			$ENV{ProgramFiles}/MySQL/*/include
-			$ENV{SystemDrive}/MySQL/*/include)
-ENDIF (MYSQL_CONFIG_EXECUTABLE)
+			$ENV{SystemDrive}/MySQL/*/include )
+ENDIF ( MYSQL_CONFIG_EXECUTABLE )
 
 #----------------- FIND MYSQL_LIB_DIR -------------------
-IF (MYSQL_CONFIG_EXECUTABLE)
-	_MYSQL_CONFIG(MYSQL_LIBRARIES    "(^| )-l" "--libs")
-	_MYSQL_CONFIG(MYSQL_LIB_DIR "(^| )-L" "--libs")
-	FIND_LIBRARY(MYSQL_LIB NAMES mysqlclient HINTS ${MYSQL_LIB_DIR})
-	GET_FILENAME_COMPONENT (MYSQL_LIB ${MYSQL_LIB} NAME)
+IF ( MYSQL_CONFIG_EXECUTABLE )
+	_MYSQL_CONFIG ( MYSQL_LIBRARIES "(^| )-l" "--libs" )
+	_MYSQL_CONFIG ( MYSQL_LIB_DIR "(^| )-L" "--libs" )
+	FIND_LIBRARY ( MYSQL_LIB NAMES mysqlclient HINTS ${MYSQL_LIB_DIR} )
+	GET_FILENAME_COMPONENT ( MYSQL_LIB ${MYSQL_LIB} NAME )
 
-ELSE (MYSQL_CONFIG_EXECUTABLE)
-	FIND_LIBRARY(MYSQL_LIB NAMES mysqlclient
-				${WITH_MYSQL_LIBS}
-				${WITH_MYSQL_ROOT}/lib
-				${WITH_MYSQL_ROOT}/lib/mysql
-				PATHS
-				$ENV{MYSQL_DIR}/libmysql_r/.libs
-				$ENV{MYSQL_DIR}/lib
-				$ENV{MYSQL_DIR}/lib/mysql
-				/usr/lib/mysql
-				/usr/local/lib/mysql
-				/usr/local/mysql/lib
-				/usr/local/mysql/lib/mysql
-				/opt/mysql/mysql/lib
-				/opt/mysql/mysql/lib/mysql)
-	SET(MYSQL_LIBRARIES mysqlclient )
-	IF(MYSQL_LIB)
-		GET_FILENAME_COMPONENT(MYSQL_LIB_DIR ${MYSQL_LIB} PATH)
-		SET(MYSQL_LIBRARIES MYSQL_LIB)
-		GET_FILENAME_COMPONENT(MYSQL_LIB ${MYSQL_LIB} NAME)
-	ENDIF(MYSQL_LIB)
-ENDIF (MYSQL_CONFIG_EXECUTABLE)
+ELSE ( MYSQL_CONFIG_EXECUTABLE )
+	FIND_LIBRARY ( MYSQL_LIB NAMES mysqlclient
+			${WITH_MYSQL_LIBS}
+			${WITH_MYSQL_ROOT}/lib
+			${WITH_MYSQL_ROOT}/lib/mysql
+			PATHS
+			$ENV{MYSQL_DIR}/libmysql_r/.libs
+			$ENV{MYSQL_DIR}/lib
+			$ENV{MYSQL_DIR}/lib/mysql
+			/usr/lib/mysql
+			/usr/local/lib/mysql
+			/usr/local/mysql/lib
+			/usr/local/mysql/lib/mysql
+			/opt/mysql/mysql/lib
+			/opt/mysql/mysql/lib/mysql )
+	SET ( MYSQL_LIBRARIES mysqlclient )
+	IF ( MYSQL_LIB )
+		GET_FILENAME_COMPONENT ( MYSQL_LIB_DIR ${MYSQL_LIB} PATH )
+		SET ( MYSQL_LIBRARIES MYSQL_LIB )
+		GET_FILENAME_COMPONENT ( MYSQL_LIB ${MYSQL_LIB} NAME )
+	ENDIF ( MYSQL_LIB )
+ENDIF ( MYSQL_CONFIG_EXECUTABLE )
 
-SET(VERBOSE 1)
-IF (MYSQL_INCLUDE_DIR AND MYSQL_LIB_DIR)
+SET ( VERBOSE 1 )
+IF ( MYSQL_INCLUDE_DIR AND MYSQL_LIB_DIR )
 
-	MESSAGE(STATUS "MySQL Include dir: ${MYSQL_INCLUDE_DIR}")
-	MESSAGE(STATUS "MySQL Library    : ${MYSQL_LIBRARIES}")
-	MESSAGE(STATUS "MySQL Library dir: ${MYSQL_LIB_DIR}")
-	MESSAGE(STATUS "MySQL CXXFLAGS: ${MYSQL_CXXFLAGS}")
-	MESSAGE(STATUS "MySQL Link flags: ${MYSQL_LINK_FLAGS}")
-	MESSAGE(STATUS "MySQL Library Name   : ${MYSQL_LIB}")
+	MESSAGE ( STATUS "MySQL Include dir: ${MYSQL_INCLUDE_DIR}" )
+	MESSAGE ( STATUS "MySQL Library    : ${MYSQL_LIBRARIES}" )
+	MESSAGE ( STATUS "MySQL Library dir: ${MYSQL_LIB_DIR}" )
+	MESSAGE ( STATUS "MySQL CXXFLAGS: ${MYSQL_CXXFLAGS}" )
+	MESSAGE ( STATUS "MySQL Link flags: ${MYSQL_LINK_FLAGS}" )
+	MESSAGE ( STATUS "MySQL Library Name   : ${MYSQL_LIB}" )
 
-	SET(MYSQL_FOUND TRUE)
-ELSE (MYSQL_INCLUDE_DIR AND MYSQL_LIB_DIR)
-	MESSAGE(SEND_ERROR "mysql_config wasn't found, -DMYSQL_CONFIG_EXECUTABLE=...")
-	MESSAGE(FATAL_ERROR "Cannot find MySQL. Include dir: ${MYSQL_INCLUDE_DIR}  library dir: ${MYSQL_LIB_DIR} cxxflags: ${MYSQL_CXXFLAGS}")
-ENDIF (MYSQL_INCLUDE_DIR AND MYSQL_LIB_DIR)
+	SET ( MYSQL_FOUND TRUE )
+ELSE ( MYSQL_INCLUDE_DIR AND MYSQL_LIB_DIR )
+	MESSAGE ( SEND_ERROR "mysql_config wasn't found, -DMYSQL_CONFIG_EXECUTABLE=..." )
+	MESSAGE ( FATAL_ERROR "Cannot find MySQL. Include dir: ${MYSQL_INCLUDE_DIR}  library dir: ${MYSQL_LIB_DIR} cxxflags: ${MYSQL_CXXFLAGS}" )
+ENDIF ( MYSQL_INCLUDE_DIR AND MYSQL_LIB_DIR )

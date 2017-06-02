@@ -1670,6 +1670,53 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 	// log query
 	CrashQuery_t tQuery = SphCrashLogger_c::GetQuery();
 
+	// head
+	sphWrite ( g_iLogFile, g_sCrashedBannerTail, sizeof ( g_sCrashedBannerTail ) - 1 );
+
+	sphSafeInfo ( g_iLogFile, "Sphinx " SPHINX_VERSION );
+
+#if USE_WINDOWS
+	// mini-dump reference
+	int iMiniDumpLen = snprintf ( (char *)g_dCrashQueryBuff, sizeof(g_dCrashQueryBuff),
+		"%s %s.%p.mdmp\n", g_sMinidumpBanner, g_sMinidump, tQuery.m_pQuery );
+	sphWrite ( g_iLogFile, g_dCrashQueryBuff, iMiniDumpLen );
+	snprintf ( (char *)g_dCrashQueryBuff, sizeof(g_dCrashQueryBuff), "%s.%p.mdmp",
+		g_sMinidump, tQuery.m_pQuery );
+#endif
+
+	// log trace
+#if !USE_WINDOWS
+	sphSafeInfo ( g_iLogFile, "Handling signal %d", sig );
+	// print message to stdout during daemon start
+	if ( g_bLogStdout && g_iLogFile!=STDOUT_FILENO )
+		sphSafeInfo ( STDOUT_FILENO, "Crash!!! Handling signal %d", sig );
+	sphBacktrace ( g_iLogFile, g_bSafeTrace );
+#else
+	sphBacktrace ( pExc, (char *)g_dCrashQueryBuff );
+#endif
+
+	// threads table
+	// FIXME? should we try to lock threads table somehow?
+	sphSafeInfo ( g_iLogFile, "--- %d active threads ---", g_dThd.GetLength () );
+	const ListNode_t * pIt = g_dThd.Begin ();
+	int iThd = 0;
+	while ( pIt!=g_dThd.End () )
+	{
+		ThdDesc_t * pThd = ( ThdDesc_t * ) pIt;
+		sphSafeInfo ( g_iLogFile, "thd %d, proto %s, state %s, command %s", iThd, g_dProtoNames[pThd->m_eProto]
+					  , g_dThdStates[pThd->m_eThdState], pThd->m_sCommand ? pThd->m_sCommand : "-" );
+		pIt = pIt->m_pNext;
+		iThd++;
+	}
+
+	// memory info
+#if SPH_ALLOCS_PROFILER
+	sphWrite ( g_iLogFile, g_sMemoryStatBanner, sizeof ( g_sMemoryStatBanner )-1 );
+	sphMemStatDump ( g_iLogFile );
+#endif
+
+	sphSafeInfo ( g_iLogFile, "------- BACKTRACE END -------" );
+
 	// request dump banner
 	int iBannerLen = ( tQuery.m_bMySQL ? sizeof(g_sCrashedBannerMySQL) : sizeof(g_sCrashedBannerAPI) ) - 1;
 	const char * pBanner = tQuery.m_bMySQL ? g_sCrashedBannerMySQL : g_sCrashedBannerAPI;
@@ -1729,54 +1776,6 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 			sphWrite ( g_iLogFile, g_dCrashQueryBuff, iLeft );
 		}
 	}
-
-	// tail
-	sphWrite ( g_iLogFile, g_sCrashedBannerTail, sizeof(g_sCrashedBannerTail)-1 );
-
-	sphSafeInfo ( g_iLogFile, "Sphinx " SPHINX_VERSION );
-
-#if USE_WINDOWS
-	// mini-dump reference
-	int iMiniDumpLen = snprintf ( (char *)g_dCrashQueryBuff, sizeof(g_dCrashQueryBuff),
-		"%s %s.%p.mdmp\n", g_sMinidumpBanner, g_sMinidump, tQuery.m_pQuery );
-	sphWrite ( g_iLogFile, g_dCrashQueryBuff, iMiniDumpLen );
-	snprintf ( (char *)g_dCrashQueryBuff, sizeof(g_dCrashQueryBuff), "%s.%p.mdmp",
-		g_sMinidump, tQuery.m_pQuery );
-#endif
-
-	// log trace
-#if !USE_WINDOWS
-	sphSafeInfo ( g_iLogFile, "Handling signal %d", sig );
-	// print message to stdout during daemon start
-	if ( g_bLogStdout && g_iLogFile!=STDOUT_FILENO )
-		sphSafeInfo ( STDOUT_FILENO, "Crash!!! Handling signal %d", sig );
-	sphBacktrace ( g_iLogFile, g_bSafeTrace );
-#else
-	sphBacktrace ( pExc, (char *)g_dCrashQueryBuff );
-#endif
-
-	// threads table
-	// FIXME? should we try to lock threads table somehow?
-	sphSafeInfo ( g_iLogFile, "--- %d active threads ---", g_dThd.GetLength() );
-	const ListNode_t * pIt = g_dThd.Begin();
-	int iThd = 0;
-	while ( pIt!=g_dThd.End() )
-	{
-		ThdDesc_t * pThd = (ThdDesc_t *)pIt;
-		sphSafeInfo ( g_iLogFile, "thd %d, proto %s, state %s, command %s",
-			iThd,
-			g_dProtoNames[pThd->m_eProto],
-			g_dThdStates[pThd->m_eThdState],
-			pThd->m_sCommand ? pThd->m_sCommand : "-" );
-		pIt = pIt->m_pNext;
-		iThd++;
-	}
-
-	// memory info
-#if SPH_ALLOCS_PROFILER
-	sphWrite ( g_iLogFile, g_sMemoryStatBanner, sizeof ( g_sMemoryStatBanner )-1 );
-	sphMemStatDump ( g_iLogFile );
-#endif
 
 	sphSafeInfo ( g_iLogFile, "------- CRASH DUMP END -------" );
 

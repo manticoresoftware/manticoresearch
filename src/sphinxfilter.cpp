@@ -1171,13 +1171,15 @@ public:
 class ExprFilterNull_c : public ExprFilter_c<ISphFilter>
 {
 protected:
-	bool m_bEquals;
 	CSphAttrLocator m_tLoc;
+	const bool m_bEquals;
+	const bool m_bCheckOnlyKey;
 
 public:
-	ExprFilterNull_c ( ISphExpr * pExpr, bool bEquals )
+	ExprFilterNull_c ( ISphExpr * pExpr, bool bEquals, bool bCheckOnlyKey )
 		: ExprFilter_c<ISphFilter> ( pExpr )
 		, m_bEquals ( bEquals )
+		, m_bCheckOnlyKey ( bCheckOnlyKey )
 	{}
 
 	virtual void SetLocator ( const CSphAttrLocator & tLocator )
@@ -1185,17 +1187,15 @@ public:
 		m_tLoc = tLocator;
 	}
 
-	virtual ESphJsonType GetKey ( const BYTE ** ppKey, const CSphMatch & tMatch ) const
+	ESphJsonType GetKey ( const CSphMatch & tMatch ) const
 	{
-		assert ( ppKey );
 		if ( !m_pStrings || !m_pExpr )
 			return JSON_EOF;
 		uint64_t uValue = m_pExpr->Int64Eval ( tMatch );
 		if ( uValue==0 ) // either no data or invalid path
-			return JSON_NULL;
-		const BYTE * pValue = m_pStrings + ( uValue & 0xffffffff );
+			return JSON_EOF;
+
 		ESphJsonType eRes = (ESphJsonType)( uValue >> 32 );
-		*ppKey = pValue;
 		return eRes;
 	}
 
@@ -1213,9 +1213,14 @@ public:
 		}
 
 		// possibly json
-		const BYTE * pValue;
-		int64_t iRes = GetKey ( &pValue, tMatch );
-		return m_bEquals ^ ( iRes!=JSON_NULL );
+		ESphJsonType eRes = GetKey ( tMatch );
+		if ( m_bCheckOnlyKey )
+			return ( eRes!=JSON_EOF );
+
+		if ( m_bEquals )
+			return ( eRes==JSON_NULL );
+		else
+			return ( eRes != JSON_NULL && eRes != JSON_EOF );
 	}
 };
 
@@ -1243,7 +1248,7 @@ static ISphFilter * CreateFilterExpr ( ISphExpr * pExpr, ESphFilter eType, bool 
 		case SPH_FILTER_STRING:
 			return new ExprFilterString_c ( pExpr, eCollation, bRangeEq );
 		case SPH_FILTER_NULL:
-			return new ExprFilterNull_c ( pExpr, bRangeEq );
+			return new ExprFilterNull_c ( pExpr, bRangeEq, false );
 		default:
 			sError = "this filter type on expressions is not implemented yet";
 			return NULL;
@@ -1340,14 +1345,16 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 	float fMin = tSettings.m_fMinValue;
 	float fMax = tSettings.m_fMaxValue;
 
+	ESphAttr eAttrType = SPH_ATTR_NONE;
+	ISphExpr * pExpr = NULL;
+
 	if ( !pFilter )
 	{
 		const int iAttr = tSchema.GetAttrIndex ( sAttrName.cstr() );
 		if ( iAttr<0 )
 		{
 			// try expression
-			ESphAttr eAttrType;
-			ISphExpr * pExpr = sphExprParse ( sAttrName.cstr(), tSchema, &eAttrType, NULL, sError, NULL, eCollation );
+			pExpr = sphExprParse ( sAttrName.cstr(), tSchema, &eAttrType, NULL, sError, NULL, eCollation );
 			if ( pExpr )
 			{
 				pFilter = CreateFilterExpr ( pExpr, tSettings.m_eType, tSettings.m_bHasEqual, sError, eCollation, eAttrType );
@@ -1372,6 +1379,8 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 				if ( pAttr->m_pExpr.Ptr() )
 					pAttr->m_pExpr->AddRef(); // CreateFilterExpr() uses a refcounted pointer, but does not AddRef() itself, so help it
 
+				pExpr = pAttr->m_pExpr.Ptr();
+				eAttrType = pAttr->m_eAttrType;
 				pFilter = CreateFilterExpr ( pAttr->m_pExpr.Ptr(), tSettings.m_eType, tSettings.m_bHasEqual, sError, eCollation, pAttr->m_eAttrType );
 
 			} else
@@ -1418,6 +1427,17 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 
 		if ( tSettings.m_bExclude )
 			pFilter = new Filter_Not ( pFilter );
+
+
+		// filter for json || json.field needs to check that key exists
+		if ( ( eAttrType==SPH_ATTR_JSON || eAttrType==SPH_ATTR_JSON_FIELD ) && tSettings.m_eType!=SPH_FILTER_NULL && pFilter && pExpr )
+		{
+			pExpr->AddRef();
+			ISphFilter * pNotNull = new ExprFilterNull_c ( pExpr, false, true );
+			pNotNull->SetStringStorage ( pStrings );
+
+			pFilter = new Filter_And2 ( pFilter, pNotNull, true );
+		}
 	}
 
 	return pFilter;

@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>JSON attributes vs missed field vs NULL</name>
+
+<requires>
+<sphinxql_keep_null/>
+</requires>
+
+<config>
+common
+{
+	on_json_attr_error		= ignore_attr
+	json_autoconv_numbers	= 1
+}
+
+indexer
+{
+	mem_limit				= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+	collation_libc_locale = C
+	collation_server = binary	
+}
+
+source test
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+	sql_attr_uint	= gid
+	sql_attr_json	= json_data
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+}
+
+</config>
+
+<db_create>
+CREATE TABLE `test_table` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `gid` int(11) NOT NULL,
+  `title` varchar(255) NOT NULL,
+  `json_data` varchar(8192) NOT NULL,
+  PRIMARY KEY (`id`)
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS `test_table`;</db_drop>
+<db_insert>
+INSERT INTO `test_table` VALUES
+(1,1,'test 1','{}'),
+(2,1,'test 2','{"price":20}'),
+(3,1,'test 3','{"price":30}'),
+(4,1,'test 4','{"price":null}'),
+(5,1,'test 5','{}'),
+(6,1,'test 6','[]')
+</db_insert>
+
+<sphqueries>
+<sphinxql>select * from test where json_data.price is null</sphinxql>
+<sphinxql>select * from test where json_data.price is not null</sphinxql>
+<sphinxql>select * from test where json_data.price &lt; 25</sphinxql>
+<sphinxql>select * from test where json_data is not null</sphinxql>
+<sphinxql>select id i, json_data as j from test where j is not null</sphinxql>
+</sphqueries>
+</test>

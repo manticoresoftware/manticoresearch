@@ -30,6 +30,17 @@ source test
 	sql_attr_uint		= idd
 }
 
+
+source test2
+{
+	type = mysql
+	<sql_settings/>
+	sql_query 			= SELECT 1 id, 'синей синий синий тест' body, 11 idd UNION SELECT 2 id, 'синей синий синий тест' body, 22 idd
+	sql_field_string	= body
+	sql_attr_uint		= idd
+}
+
+
 index plain_blend
 {
 	source = test
@@ -100,6 +111,18 @@ index tpl_lemm
 	morphology = lemmatize_en_all
 }
 
+index wf_lemm
+{
+	source		= test2
+	path		= <data_path/>/wf_lemm
+	source		= test
+	docinfo		= extern
+	dict		= keywords
+	morphology	= lemmatize_ru_all
+	wordforms	= <this_test/>/wordforms.txt
+}
+
+
 </config>
 
 <sphqueries>
@@ -137,6 +160,10 @@ index tpl_lemm
 	<sphinxql>CALL KEYWORDS ( 'bus qu* me tests testing gone', 'tpl_lemm',		1 AS stats, 1 AS fold_wildcards, 0 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
 	<sphinxql>CALL KEYWORDS ( 'bus qu* me tests testing gone', 'tpl_lemm',		1 AS stats, 1 AS fold_wildcards, 1 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
 	<sphinxql>CALL KEYWORDS ( 'bus qu* me tests testing gone', 'tpl_lemm',		0 AS stats, 1 AS fold_wildcards, 1 AS fold_lemmas, 0 AS fold_blended )</sphinxql>
+
+	<!-- fold_lemmas vs hit count regression -->
+	<sphinxql>CALL KEYWORDS ( 'синей', 'wf_lemm',	1 AS stats, 0 AS fold_lemmas )</sphinxql>
+	<sphinxql>CALL KEYWORDS ( 'синей', 'wf_lemm',	1 AS stats, 1 AS fold_lemmas )</sphinxql>
 </sphqueries>
 
 </test>

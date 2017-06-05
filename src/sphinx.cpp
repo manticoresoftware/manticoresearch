@@ -16744,6 +16744,13 @@ void ISphQueryFilter::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 				dKeywords.Resize ( dKeywords.GetLength()-1 );
 			} else
 			{
+				int iKeywordWithMaxHits = iPreAotCount;
+				for ( int i=iPreAotCount+1; i<dKeywords.GetLength(); i++ )
+					if ( dKeywords[i].m_iHits > dKeywords[iKeywordWithMaxHits].m_iHits )
+						iKeywordWithMaxHits = i;
+
+				CSphString sNormalizedWithMaxHits = dKeywords[iKeywordWithMaxHits].m_sNormalized;
+
 				int iDocs = 0;
 				int iHits = 0;
 				if ( m_tFoldSettings.m_bStats )
@@ -16758,6 +16765,7 @@ void ISphQueryFilter::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 				dKeywords.Resize ( iPreAotCount );
 				dKeywords[iTokenized].m_iDocs = iDocs;
 				dKeywords[iTokenized].m_iHits = iHits;
+				dKeywords[iTokenized].m_sNormalized = sNormalizedWithMaxHits;
 			}
 		}
 	}

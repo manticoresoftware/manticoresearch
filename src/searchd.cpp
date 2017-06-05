@@ -1672,6 +1672,17 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 
 	sphSafeInfo ( g_iLogFile, "Sphinx " SPHINX_VERSION );
 
+	// log trace
+#if !USE_WINDOWS
+	sphSafeInfo ( g_iLogFile, "Handling signal %d", sig );
+	// print message to stdout during daemon start
+	if ( g_bLogStdout && g_iLogFile!=STDOUT_FILENO )
+		sphSafeInfo ( STDOUT_FILENO, "Crash!!! Handling signal %d", sig );
+	sphBacktrace ( g_iLogFile, g_bSafeTrace );
+#else
+	sphBacktrace ( pExc, (char *)g_dCrashQueryBuff );
+#endif
+
 	// log query
 	CrashQuery_t tQuery = SphCrashLogger_c::GetQuery ();
 
@@ -1682,17 +1693,6 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 	sphWrite ( g_iLogFile, g_dCrashQueryBuff, iMiniDumpLen );
 	snprintf ( (char *)g_dCrashQueryBuff, sizeof(g_dCrashQueryBuff), "%s.%p.mdmp",
 		g_sMinidump, tQuery.m_pQuery );
-#endif
-
-	// log trace
-#if !USE_WINDOWS
-	sphSafeInfo ( g_iLogFile, "Handling signal %d", sig );
-	// print message to stdout during daemon start
-	if ( g_bLogStdout && g_iLogFile!=STDOUT_FILENO )
-		sphSafeInfo ( STDOUT_FILENO, "Crash!!! Handling signal %d", sig );
-	sphBacktrace ( g_iLogFile, g_bSafeTrace );
-#else
-	sphBacktrace ( pExc, (char *)g_dCrashQueryBuff );
 #endif
 
 	// threads table

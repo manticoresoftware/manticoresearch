@@ -27224,7 +27224,7 @@ bool CSphSource_MySQL::Setup ( const CSphSourceParams_MySQL & tParams )
 					"PQresultStatus", "PQntuples", "PQfname", "PQnfields",
 					"PQfinish", "PQerrorMessage" };
 
-			void ** pFuncs[] = {(void**)&sph_Qgetvalue, (void**)&sph_PQgetlength, (void**)&sph_PQclear,
+			void ** pFuncs[] = {(void**)&sph_PQgetvalue, (void**)&sph_PQgetlength, (void**)&sph_PQclear,
 					(void**)&sph_PQsetdbLogin, (void**)&sph_PQstatus, (void**)&sph_PQsetClientEncoding,
 					(void**)&sph_PQexec, (void**)&sph_PQresultStatus, (void**)&sph_PQntuples,
 					(void**)&sph_PQfname, (void**)&sph_PQnfields, (void**)&sph_PQfinish,

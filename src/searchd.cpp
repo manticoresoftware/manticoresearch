@@ -1672,6 +1672,9 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 
 	sphSafeInfo ( g_iLogFile, "Sphinx " SPHINX_VERSION );
 
+	// log query
+	CrashQuery_t tQuery = SphCrashLogger_c::GetQuery ();
+
 #if USE_WINDOWS
 	// mini-dump reference
 	int iMiniDumpLen = snprintf ( (char *)g_dCrashQueryBuff, sizeof(g_dCrashQueryBuff),
@@ -1713,9 +1716,6 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 #endif
 
 	sphSafeInfo ( g_iLogFile, "------- BACKTRACE END -------" );
-
-	// log query
-	CrashQuery_t tQuery = SphCrashLogger_c::GetQuery ();
 
 	// request dump banner
 	int iBannerLen = ( tQuery.m_bMySQL ? sizeof(g_sCrashedBannerMySQL) : sizeof(g_sCrashedBannerAPI) ) - 1;

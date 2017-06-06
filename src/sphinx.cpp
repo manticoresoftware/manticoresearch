@@ -12089,6 +12089,9 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			SphDocID_t uDocId;
 			while ( pSource->IterateKillListNext ( uDocId ) )
 				dKillList.Add ( uDocId );
+		} else if ( !m_sLastError.IsEmpty() )
+		{
+			return 0;
 		}
 
 		// fetch joined fields

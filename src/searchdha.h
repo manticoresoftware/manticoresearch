@@ -352,6 +352,7 @@ public:
 	MultiAgentDesc_t & operator= ( MultiAgentDesc_t && rhs ) EXCLUDES ( m_dWeightLock );
 
 	AgentDesc_c * NewAgent ();
+	void RemoveLastAgent();
 	AgentDesc_c * GetAgent ( int iAgent=0 );
 	const AgentDesc_c & ChooseAgent ();
 

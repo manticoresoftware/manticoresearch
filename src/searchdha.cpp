@@ -266,6 +266,13 @@ AgentDesc_c * MultiAgentDesc_t::NewAgent()
 	return & tAgent;
 }
 
+void MultiAgentDesc_t::RemoveLastAgent()
+{
+	int iLast = m_dHosts.GetLength()-1;
+	assert ( !m_dHosts[iLast].m_pDash && !m_dHosts[iLast].m_pStats );
+	m_dHosts.Remove ( iLast );
+}
+
 AgentDesc_c * MultiAgentDesc_t::RRAgent ()
 {
 	if ( !IsHA() )
@@ -1053,7 +1060,11 @@ bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const char * szAgent, const cha
 			{
 				eState = ( *p=='|' ? AP_WANT_ADDRESS : AP_OPTIONS );
 				if ( !ValidateAndAddDashboard ( pNewAgent, &dWI ) )
+				{
+					tAgent.RemoveLastAgent();
 					return false;
+				}
+
 				pNewAgent = tAgent.NewAgent();
 				++p;
 				break;
@@ -1090,7 +1101,11 @@ bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const char * szAgent, const cha
 					++p;
 					eState = AP_WANT_ADDRESS;
 					if ( !ValidateAndAddDashboard ( pNewAgent, &dWI ) )
+					{
+						tAgent.RemoveLastAgent();
 						return false;
+					}
+
 					pNewAgent = tAgent.NewAgent();
 				} else
 					eState = AP_OPTIONS;
@@ -1178,6 +1193,8 @@ bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const char * szAgent, const cha
 	}
 
 	bool bRes = ValidateAndAddDashboard ( pNewAgent, &dWI );
+	if ( !bRes )
+		tAgent.RemoveLastAgent();
 
 	FixupOrphanedAgents ( tAgent );
 	tAgent.SetOptions ( tDesc );

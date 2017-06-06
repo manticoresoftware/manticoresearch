@@ -83,6 +83,13 @@ index warn3
 	min_infix_len = 5
 }
 
+<!-- regression for a crash when adding several invalid agents -->
+index dist_crash
+{
+	type = distributed
+	agent = unknown:test0
+	agent = unknown:8312:test0
+}
 </config>
 
 <sphqueries>

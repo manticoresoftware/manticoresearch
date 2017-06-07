@@ -25,6 +25,8 @@ SET ( EXTRA_LIBRARIES )
 SET ( BANNER )
 list ( APPEND BANNER "CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}" )
 
+include ( CTest )
+
 set ( SPHINX_TAG "" CACHE STRING "The tag which will be added to build" )
 set ( SPHINX_PACKAGE_SUFFIX "" )
 
@@ -134,7 +136,12 @@ else ( WIN32 )
 		elseif ( NOT CMAKE_BUILD_TYPE MATCHES Debug )
 			set ( CFLAGS "${CFLAGS} -O3 -g" )
 		else ()
+			OPTION ( COVERAGE_TEST "Test coverage" OFF )
+			if ( COVERAGE_TEST )
+				set ( CFLAGS "${CFLAGS} -fprofile-arcs -ftest-coverage" )
+			endif ( COVERAGE_TEST )
 			set ( CLANGFLAGS "-Wthread-safety" )
+			set ( SPLIT_SYMBOLS OFF )
 		endif ()
 		set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CFLAGS}" )
 		set ( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CFLAGS} -fno-rtti -std=c++11" )
@@ -616,7 +623,6 @@ configure_file ( "${SPHINXSEARCH_SOURCE_DIR}/config/config_cmake.h.in"
 add_definitions ( -DHAVE_CONFIG_H )
 include_directories ( "${SPHINXSEARCH_BINARY_DIR}/config" )
 
-enable_testing ()
 add_subdirectory ( src )
 
 add_subdirectory ( test )
@@ -726,5 +732,8 @@ if ( SPHINX_ARCH )
 else ()
 	set ( CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${FULL_VERSION}" )
 endif ()
+
+# ctest variables
+set ( DEFAULT_CTEST_CONFIGURATION_TYPE "Debug" )
 
 include ( CPack )

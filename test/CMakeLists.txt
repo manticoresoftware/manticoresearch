@@ -27,13 +27,13 @@ foreach ( test ${tests} )
 	add_test ( NAME "\"${tst_name}\""
 			#			CONFIGURATIONS "Debug"
 			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-			COMMAND php ubertest.php -s $<TARGET_FILE:searchd> -i $<TARGET_FILE:indexer> -u test --strict-verbose --no-demo --rt --ignore-weights t ${onetest} )
+			COMMAND php ubertest.php -s $<TARGET_FILE:searchd> -i $<TARGET_FILE:indexer> -d "${SPHINXSEARCH_BINARY_DIR}/src" -u test --strict-verbose --no-demo --rt --ignore-weights t ${onetest} )
 
 	set ( tst_name "ubertest test_${onetest} ${test_name}" )
 	add_test ( NAME "\"${tst_name}\""
 			#    	CONFIGURATIONS Debug
 			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-			COMMAND php ubertest.php -s $<TARGET_FILE:searchd> -i $<TARGET_FILE:indexer> -u test --strict-verbose --no-demo t ${onetest} )
+			COMMAND php ubertest.php -s $<TARGET_FILE:searchd> -i $<TARGET_FILE:indexer> -d "${SPHINXSEARCH_BINARY_DIR}/src" -u test --strict-verbose --no-demo t ${onetest} )
 
 endforeach ()
 

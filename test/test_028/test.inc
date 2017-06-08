@@ -1,11 +1,12 @@
 printf ( "testing $test_path, spelldump... " );
 
 $windows = isset($_SERVER["WINDIR"]) || isset($_SERVER["windir"]) || isset($_SERVER["HOMEDRIVE"]);
+global $locals;
 
 if ( $windows )
 	$spelldump_path = "..\\bin\\debug\\spelldump";
 else
-	$spelldump_path = "../src/spelldump";
+	$spelldump_path = $locals['srcdir']."/spelldump";
 
 global $g_model;
 if ( $g_model )

@@ -77,6 +77,7 @@ $run = false;
 $test_dirs = array();
 $test_range = array();
 $user_skip = false;
+$locals['srcdir'] = "../src";
 for ( $i=0; $i<count($args); $i++ )
 {
 	$arg = $args[$i];

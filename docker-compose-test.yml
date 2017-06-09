@@ -1,0 +1,66 @@
+version: "2"
+
+services:
+
+  db:
+    build:
+      context: .
+      dockerfile: misc/dockerfiles/mysql/Dockerfile
+    image: manticore_test_db
+    environment:
+        MYSQL_ROOT_PASSWORD: test
+        MYSQL_USER: test
+        MYSQL_PASSWORD: test
+        MYSQL_DATABASE: test
+    
+  test:
+    build:
+      context: .
+      dockerfile: misc/dockerfiles/test/Dockerfile
+    image: manticore_test_id64
+    volumes:
+      - ./:/search_src
+      - /home/stas/aot/:/aot
+    environment:
+        MYSQL_USER: test
+        MYSQL_PASSWORD: test
+        MYSQL_DATABASE: test
+    
+    # command: tail -f /dev/null
+    command: /search_src/misc/dockerfiles/scripts/smoke.sh
+    links:
+      - db
+
+  test32:
+    build:
+      context: .
+      dockerfile: misc/dockerfiles/test/Dockerfile
+    image: manticore_test_id32    
+    volumes:
+      - ./:/search_src
+      - /home/stas/aot/:/aot
+    environment:
+        MYSQL_USER: test
+        MYSQL_PASSWORD: test
+        MYSQL_DATABASE: test
+    
+    command: /search_src/misc/dockerfiles/scripts/smoke.sh -c disable-id64
+    links:
+      - db
+      
+  test_rt:
+    build:
+      context: .
+      dockerfile: misc/dockerfiles/test/Dockerfile
+    image: manticore_test_rt
+    volumes:
+      - ./:/search_src
+      - /home/stas/aot/:/aot
+    environment:
+        MYSQL_USER: test
+        MYSQL_PASSWORD: test
+        MYSQL_DATABASE: test
+    
+    command: /search_src/misc/dockerfiles/scripts/smoke.sh -t rt
+    links:
+      - db

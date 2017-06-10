@@ -54,6 +54,7 @@ typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag
 #include <stdarg.h>
 #include <limits.h>
 #include <utility>
+#include <memory>
 
 // for 64-bit types
 #if HAVE_STDINT_H
@@ -272,6 +273,8 @@ void			operator delete ( void * pPtr ) MYTHROW();
 void			operator delete [] ( void * pPtr ) MYTHROW();
 
 #endif // SPH_DEBUG_LEAKS || SPH_ALLOCS_PROFILER
+
+template<typename T> using managed_allocator = std::allocator<T>;
 
 /////////////////////////////////////////////////////////////////////////////
 // HELPERS

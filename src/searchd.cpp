@@ -1617,6 +1617,8 @@ const char		g_sCrashedBannerMySQL[] = "\n--- crashed SphinxQL request dump ---\n
 const char		g_sCrashedBannerTail[] = "\n--- request dump end ---\n";
 #if USE_WINDOWS
 const char		g_sMinidumpBanner[] = "minidump located at: ";
+#endif
+#if SPH_ALLOCS_PROFILER
 const char		g_sMemoryStatBanner[] = "\n--- memory statistics ---\n";
 #endif
 static BYTE		g_dCrashQueryBuff [4096];

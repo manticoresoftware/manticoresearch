@@ -375,7 +375,7 @@ void * sphDebugNew ( size_t iSize )
 {
 	BYTE * pBlock = (BYTE*) ::malloc ( iSize+sizeof(size_t)*2 );
 	if ( !pBlock )
-		sphDie ( "out of memory (unable to allocate %"PRIu64" bytes)", (uint64_t)iSize ); // FIXME! this may fail with malloc error too
+		sphDie ( "out of memory (unable to allocate %" PRIu64 " bytes)", (uint64_t)iSize ); // FIXME! this may fail with malloc error too
 
 	const int iMemType = sphMemStatGet();
 	assert ( iMemType>=0 && iMemType<MEM_TOTAL );

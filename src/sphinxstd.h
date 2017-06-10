@@ -233,6 +233,12 @@ void *			operator new ( size_t iSize, const char * sFile, int iLine );
 /// debug new that tracks memory leaks
 void *			operator new [] ( size_t iSize, const char * sFile, int iLine );
 
+/// debug allocate to use in custom allocator
+void * debugallocate ( size_t );
+
+/// debug deallocate to use in custom allocator
+void debugdeallocate ( void * );
+
 /// get current allocs count
 int				sphAllocsCount ();
 
@@ -272,10 +278,34 @@ void			operator delete ( void * pPtr ) MYTHROW();
 /// delete for my new
 void			operator delete [] ( void * pPtr ) MYTHROW();
 
-#endif // SPH_DEBUG_LEAKS || SPH_ALLOCS_PROFILER
+template<typename T>
+class managed_allocator
+{
+public:
+    typedef size_t size_type;
+    typedef T * pointer;
+    typedef const T * const_pointer;
+	typedef T value_type;
 
+    template<typename _Tp1>
+    struct rebind
+    {
+        typedef managed_allocator <_Tp1> other;
+    };
+
+    pointer allocate ( size_type n, const void * = 0 )
+    {
+		return ( T * ) debugallocate ( n * sizeof ( T ) );
+    }
+
+    void deallocate ( pointer p, size_type )
+    {
+		debugdeallocate (p);
+    }
+};
+#else
 template<typename T> using managed_allocator = std::allocator<T>;
-
+#endif // SPH_DEBUG_LEAKS || SPH_ALLOCS_PROFILER
 /////////////////////////////////////////////////////////////////////////////
 // HELPERS
 /////////////////////////////////////////////////////////////////////////////

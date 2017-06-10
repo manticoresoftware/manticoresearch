@@ -332,6 +332,19 @@ void operator delete [] ( void * pPtr ) MYTHROW()
 	sphDebugDelete ( pPtr, true );
 }
 
+/// debug allocate to use in custom allocator
+void * debugallocate ( size_t  iSize )
+{
+	return sphDebugNew ( iSize, __FILE__, __LINE__, false );
+}
+
+/// debug deallocate to use in custom allocator
+void debugdeallocate ( void * pPtr )
+{
+	sphDebugDelete ( pPtr, false);
+}
+
+
 //////////////////////////////////////////////////////////////////////////////
 // ALLOCACTIONS COUNT/SIZE PROFILER
 //////////////////////////////////////////////////////////////////////////////
@@ -445,6 +458,17 @@ void * operator new [] ( size_t iSize, const char *, int )	{ return sphDebugNew 
 void operator delete ( void * pPtr ) MYTHROW()				{ sphDebugDelete ( pPtr ); }
 void operator delete [] ( void * pPtr )	MYTHROW()			{ sphDebugDelete ( pPtr ); }
 
+/// debug allocate to use in custom allocator
+void * debugallocate ( size_t iSize )
+{
+	return sphDebugNew ( iSize );
+}
+
+/// debug deallocate to use in custom allocator
+void debugdeallocate ( void * pPtr )
+{
+	sphDebugDelete ( pPtr );
+}
 
 //////////////////////////////////////////////////////////////////////////////
 // MEMORY STATISTICS

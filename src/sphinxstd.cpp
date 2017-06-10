@@ -2047,7 +2047,15 @@ int sphCpuThreadsCount ()
 #pragma warning(disable:4530)
 #endif
 
+#if NEW_IS_OVERRIDED
+#undef new
+#endif
+
 #include <map>
+
+#if NEW_IS_OVERRIDED
+#define new        new(__FILE__,__LINE__)
+#endif
 
 #if USE_WINDOWS
 #pragma warning(pop)

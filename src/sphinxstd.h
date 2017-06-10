@@ -257,6 +257,7 @@ void			sphMemStatMMapDel ( int64_t iSize );
 
 #undef new
 #define new		new(__FILE__,__LINE__)
+#define NEW_IS_OVERRIDED 1
 
 #if USE_RE2
 void			operator delete ( void * pPtr ) throw ();

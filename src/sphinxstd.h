@@ -3004,11 +3004,12 @@ protected:
 #if USE_WINDOWS
 	HANDLE m_hMutex;
 #else
-	pthread_mutex_t * m_pMutex;
+	pthread_mutex_t m_tMutex;
+
 public:
 	inline pthread_mutex_t* GetInternalMutex()
 	{
-		return m_pMutex;
+		return &m_tMutex;
 	}
 #endif
 };

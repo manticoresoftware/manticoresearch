@@ -1206,21 +1206,19 @@ bool CSphSemaphore::Wait()
 
 CSphMutex::CSphMutex()
 {
-	m_pMutex = new pthread_mutex_t;
-	if ( pthread_mutex_init ( m_pMutex, NULL ) )
+	if ( pthread_mutex_init ( &m_tMutex, NULL ) )
 		sphDie ( "pthread_mutex_init() failed %s", strerror ( errno ) );
 }
 
 CSphMutex::~CSphMutex()
 {
-	if ( pthread_mutex_destroy ( m_pMutex ) )
+	if ( pthread_mutex_destroy ( &m_tMutex ) )
 		sphDie ( "pthread_mutex_destroy() failed %s", strerror ( errno ) );
-	SafeDelete ( m_pMutex );
 }
 
 bool CSphMutex::Lock ()
 {
-	return ( pthread_mutex_lock ( m_pMutex )==0 );
+	return ( pthread_mutex_lock ( &m_tMutex )==0 );
 }
 
 bool CSphMutex::TimedLock ( int iMsec )
@@ -1234,7 +1232,7 @@ bool CSphMutex::TimedLock ( int iMsec )
 	ts.tv_sec += ( ns / 1000000000 ) + ( iMsec / 1000 );
 	ts.tv_nsec = ( ns % 1000000000 );
 
-	int iRes = pthread_mutex_timedlock ( m_pMutex, &ts );
+	int iRes = pthread_mutex_timedlock ( &m_tMutex, &ts );
 	return iRes==0;
 
 #else
@@ -1242,13 +1240,13 @@ bool CSphMutex::TimedLock ( int iMsec )
 	int64_t tmTill = sphMicroTimer () + iMsec * 1000;
 	do
 	{
-		iRes = pthread_mutex_trylock ( m_pMutex );
+		iRes = pthread_mutex_trylock ( &m_tMutex );
 		if ( iRes!=EBUSY )
 			break;
 		sphSleepMsec ( 1 );
 	} while ( sphMicroTimer ()<tmTill );
 	if ( iRes==EBUSY )
-		iRes = pthread_mutex_trylock ( m_pMutex );
+		iRes = pthread_mutex_trylock ( &m_tMutex );
 
 	return iRes!=EBUSY;
 
@@ -1257,7 +1255,7 @@ bool CSphMutex::TimedLock ( int iMsec )
 
 bool CSphMutex::Unlock ()
 {
-	return ( pthread_mutex_unlock ( m_pMutex )==0 );
+	return ( pthread_mutex_unlock ( &m_tMutex )==0 );
 }
 
 bool CSphAutoEvent::Init ( CSphMutex * pMutex )

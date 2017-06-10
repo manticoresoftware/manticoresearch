@@ -321,13 +321,13 @@ void * operator new [] ( size_t iSize, const char * sFile, int iLine )
 }
 
 
-void operator delete ( void * pPtr )
+void operator delete ( void * pPtr ) MYTHROW()
 {
 	sphDebugDelete ( pPtr, false );
 }
 
 
-void operator delete [] ( void * pPtr )
+void operator delete [] ( void * pPtr ) MYTHROW()
 {
 	sphDebugDelete ( pPtr, true );
 }
@@ -442,8 +442,8 @@ void sphAllocsCheck ()			{}
 
 void * operator new ( size_t iSize, const char *, int )		{ return sphDebugNew ( iSize ); }
 void * operator new [] ( size_t iSize, const char *, int )	{ return sphDebugNew ( iSize ); }
-void operator delete ( void * pPtr )						{ sphDebugDelete ( pPtr ); }
-void operator delete [] ( void * pPtr )						{ sphDebugDelete ( pPtr ); }
+void operator delete ( void * pPtr ) MYTHROW()				{ sphDebugDelete ( pPtr ); }
+void operator delete [] ( void * pPtr )	MYTHROW()			{ sphDebugDelete ( pPtr ); }
 
 
 //////////////////////////////////////////////////////////////////////////////

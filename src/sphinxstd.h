@@ -260,15 +260,17 @@ void			sphMemStatMMapDel ( int64_t iSize );
 #define NEW_IS_OVERRIDED 1
 
 #if USE_RE2
-void			operator delete ( void * pPtr ) throw ();
-void			operator delete [] ( void * pPtr ) throw ();
+#define MYTHROW() throw()
 #else
-/// delete for my new
-void			operator delete ( void * pPtr );
+#define MYTHROW() noexcept
+#endif
 
 /// delete for my new
-void			operator delete [] ( void * pPtr );
-#endif
+void			operator delete ( void * pPtr ) MYTHROW();
+
+/// delete for my new
+void			operator delete [] ( void * pPtr ) MYTHROW();
+
 #endif // SPH_DEBUG_LEAKS || SPH_ALLOCS_PROFILER
 
 /////////////////////////////////////////////////////////////////////////////

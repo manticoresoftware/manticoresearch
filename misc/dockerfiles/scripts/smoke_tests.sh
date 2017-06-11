@@ -43,37 +43,19 @@ die()
 cp -R /search_src/* /search/
 cd /search/
 
-until nc -z -w30 db 3306
-do
-  printf "."
-  # wait for 5 seconds before check again
-  sleep 1
-done
-
-echo "\t mysql ready"
-
 cat >/root/.sphinx <<EOL
 (
-"db-host"=>"db",
-"db-user"=>"test",
-"db-password"=>"$MYSQL_PASSWORD",
 "data"=>"data",
 "lemmatizer_base"=>"/aot",
-'odbc_driver'=>'MyODBC'
 )
 EOL
-
-mysql -h db -utest -p"$MYSQL_PASSWORD" test < example.sql
 
 ./configure $CONFARGS
 make clean
 make $jobs
 
-cd ./test
-php ubertest.php t --keep-all $RT
+cd ./src
+./tests
 exit_code=$?
-
-cd /search/
-zip -q /search_src/$RESFILE ./test/test_*/report.txt ./test/error.txt
 
 exit $exit_code

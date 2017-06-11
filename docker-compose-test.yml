@@ -27,7 +27,7 @@ services:
         MYSQL_DATABASE: test
     
     # command: tail -f /dev/null
-    command: /search_src/misc/dockerfiles/scripts/smoke.sh
+    command: /search_src/misc/dockerfiles/scripts/smoke.sh -o result.zip
     links:
       - db
 
@@ -44,7 +44,7 @@ services:
         MYSQL_PASSWORD: test
         MYSQL_DATABASE: test
     
-    command: /search_src/misc/dockerfiles/scripts/smoke.sh -c disable-id64
+    command: /search_src/misc/dockerfiles/scripts/smoke.sh -c disable-id64 -o result_id32.zip
     links:
       - db
       
@@ -61,6 +61,35 @@ services:
         MYSQL_PASSWORD: test
         MYSQL_DATABASE: test
     
-    command: /search_src/misc/dockerfiles/scripts/smoke.sh -t rt
+    command: /search_src/misc/dockerfiles/scripts/smoke.sh -t rt -o result_rt.zip
     links:
       - db
+
+  test_unit:
+    build:
+      context: .
+      dockerfile: misc/dockerfiles/test/Dockerfile
+    image: manticore_test_unit
+    volumes:
+      - ./:/search_src
+      - /home/stas/aot/:/aot
+
+    command: /search_src/misc/dockerfiles/scripts/smoke_tests.sh
+
+  test_libclient:
+    build:
+      context: .
+      dockerfile: misc/dockerfiles/test/Dockerfile
+    image: manticore_test_libclient
+    volumes:
+      - ./:/search_src
+      - /home/stas/aot/:/aot
+    environment:
+        MYSQL_USER: test
+        MYSQL_PASSWORD: test
+        MYSQL_DATABASE: test
+    
+    command: /search_src/misc/dockerfiles/scripts/smoke_libclient.sh -o result_libclient.zip
+    links:
+      - db
+    

@@ -69,11 +69,11 @@ mysql -h db -utest -p"$MYSQL_PASSWORD" test < example.sql
 make clean
 make $jobs
 
-cd ./test
-php ubertest.php t --keep-all $RT
+cd ./api/libsphinxclient
+./smoke_test.sh
 exit_code=$?
 
 cd /search/
-zip -q /search_src/$RESFILE ./test/test_*/report.txt ./test/error.txt
+zip -q /search_src/$RESFILE ./api/libsphinxclient/smoke_diff.txt
 
 exit $exit_code

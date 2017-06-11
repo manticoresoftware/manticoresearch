@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y \
     libexpat1-dev \
     libmysqlclient-dev \
     mysql-client \
+    netcat \
     php php-curl php-mysql php-xml \
     python \
     zip && \

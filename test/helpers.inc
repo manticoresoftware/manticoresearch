@@ -699,12 +699,16 @@ function GetFirstChildValue ( $node, $name, $default="" )
 	return is_null($child) ? $default : $child->nodeValue;
 }
 
-function ConnectSpecificQL($agent)
+function ConnectSpecificQL($agent, $vip=false)
 {
 	global $agents;
 
 	$address = $agents[$agent]["address"];
-	$port = $agents[$agent]["sqlport"];
+	if ( $vip )
+		$port = $agents[$agent]["sqlport_vip"];
+	else
+		$port = $agents[$agent]["sqlport"];
+
 //	echo "Connecting to agent $address:$port\n";
 	if ($address == "localhost")
 		$address = "127.0.0.1";
@@ -915,6 +919,7 @@ class SphinxConfig
 	private	$_sd_port;
 	private $_sd_sphinxql_port;
 	private	$_sd_http_port;
+	private $_sd_sphinxql_port_vip;
 	private	$_sd_pid_file;
 	private $_num_agents;
 	private $_subtest;
@@ -935,7 +940,7 @@ class SphinxConfig
 
 	function SphinxConfig ()
 	{
-		global $sd_address, $sd_port, $sd_sphinxql_port, $sd_pid_file, $sd_http_port;
+		global $sd_address, $sd_port, $sd_sphinxql_port, $sd_pid_file, $sd_http_port, $sd_sphinxql_port_vip;
 
 		$this->_counters 		= array ();
 		$this->_dynamic_entries = array ();
@@ -956,6 +961,7 @@ class SphinxConfig
 		$this->_sd_port			= $sd_port;
 		$this->_sd_sphinxql_port	= $sd_sphinxql_port;
 		$this->_sd_http_port	= $sd_http_port;
+		$this->_sd_sphinxql_port_vip= $sd_sphinxql_port_vip;
 		$this->_sd_pid_file		= $sd_pid_file;
 		$this->_custom_test		= "";
 		$this->_compat098		= false;
@@ -1053,6 +1059,7 @@ class SphinxConfig
 		$this->_sd_address = $agent ["address"];
 		$this->_sd_port = $agent ["port"];
 		$this->_sd_sphinxql_port = $agent ["sqlport"];
+		$this->_sd_sphinxql_port_vip = $agent ["sqlport_vip"];
 	}
 
 	
@@ -1500,6 +1507,7 @@ class SphinxConfig
 		$qmin = 0;
 		$qmax = $qcount - 1;
 		$old_agent = -1;
+		$old_vip = -1;
 		$use_agent = 0;
 		$sleep_agent=0;
 		if ( $g_pick_query>0 )
@@ -1521,6 +1529,7 @@ class SphinxConfig
 			}
 			$sleep_agent=0;
 			$use_agent=0;
+			$vip_connection=0;
 			if (is_array($query))
 			{
 				foreach ( $query[1] as $k => $v )
@@ -1529,11 +1538,14 @@ class SphinxConfig
 						$use_agent = $v;
 					elseif ($k=="sleep")
 						$sleep_agent = $v;
+					elseif ($k=="vip")
+						$vip_connection = $v;
 				}
 				$query = $query[0];
 			}
 
-			if ($old_agent!=$use_agent) {
+			if ($old_agent!=$use_agent)
+			{
 				if ($old_agent!=-1)
 					mysqli_close($connection);
 				if ($sleep_agent>0)
@@ -1541,6 +1553,26 @@ class SphinxConfig
 				if (!($connection = ConnectSpecificQL($use_agent)))
 					return false;
 				$old_agent = $use_agent;
+			}
+
+			if ($this->Requires('vip') && ( $old_vip!=$vip_connection || $connection===NULL ))
+			{
+				if ( $connection )
+					mysqli_close($connection);
+
+				// this is needed to test non-vip connections in maintenance mode
+				if (!($connection = ConnectSpecificQL($use_agent,$vip_connection)))
+				{
+					$query_result = array();
+					$query_result["sphinxql"]=$query;
+					$query_result["error"] = mysqli_connect_error();
+					$query_result["errno"] = mysqli_connect_errno();
+					$this->PickResult($query_result);
+					$connection = NULL;
+					continue;
+				}
+
+				$old_vip = $vip_connection;
 			}
 
 			if ( $query=="RECONNECT" )
@@ -1557,6 +1589,8 @@ class SphinxConfig
 			}
 
 			$query_result = array ();
+			if ( $vip_connection )
+				$query_result["vip"]=1;
 			
 			$no_time = false;
 			if ( $bench===false && ( stripos ( $query, 'show' )!==false ) && ( stripos ( $query, 'meta' )!==false ) )
@@ -1642,7 +1676,10 @@ class SphinxConfig
 				}
 			}
 		}
-		mysqli_close ( $connection );
+
+		if ( $connection!==NULL )
+			mysqli_close ( $connection );
+
 		return true;
 	}
 
@@ -2052,7 +2089,10 @@ class SphinxConfig
 
 		if ( array_key_exists ("sphinxql", $result) )
 		{
-			$str = "sphinxql-$nquery> $result[sphinxql];\n";
+			$str = "sphinxql-$nquery";
+			if ( array_key_exists ("vip", $result ) )
+				$str.=" (vip)";
+			$str.= "> $result[sphinxql];\n";
 			if ( array_key_exists ("total_affected", $result) )
 			{
 				$str .= "Query OK, $result[total_affected] rows affected\n";
@@ -2868,7 +2908,11 @@ class SphinxConfig
 			fwrite ( $fp, "\tlisten		= {$this->_sd_address}:{$this->_sd_sphinxql_port}:mysql41\n" );
 			if ( $this->Requires("http") )
 				fwrite ( $fp, "\tlisten		= {$this->_sd_address}:{$this->_sd_http_port}:http\n" );
+
+			if ( $this->Requires("vip") )
+				fwrite ( $fp, "\tlisten		= {$this->_sd_address}:{$this->_sd_sphinxql_port_vip}:mysql41_vip\n" );
 		}
+
 		fwrite ( $fp, "\tlog			= $sd_log\n" );
 		fwrite ( $fp, "\tquery_log		= $sd_query_log\n" );
 		fwrite ( $fp, "\tread_timeout	= $sd_read_timeout\n" );

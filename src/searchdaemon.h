@@ -844,10 +844,25 @@ public:
 	virtual AggrResult_t *			GetResult ( int iResult ) = 0;
 };
 
+
+enum ESphHttpStatus
+{
+	SPH_HTTP_STATUS_200,
+	SPH_HTTP_STATUS_206,
+	SPH_HTTP_STATUS_400,
+	SPH_HTTP_STATUS_500,
+	SPH_HTTP_STATUS_501,
+	SPH_HTTP_STATUS_503,
+
+	SPH_HTTP_STATUS_TOTAL
+};
+
+
 bool CheckCommandVersion ( int iVer, int iDaemonVersion, ISphOutputBuffer & tOut );
 ISphSearchHandler * sphCreateSearchHandler ( int iQueries, bool bSphinxql, bool bMaster, int iCID );
 void sphFormatFactors ( CSphVector<BYTE> & dOut, const unsigned int * pFactors, bool bJson );
 bool sphLoopClientHttp ( CSphVector<BYTE> & dData, int iCID );
+void sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError );
 bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation );
 
 

@@ -267,18 +267,8 @@ static void EncodeResultJson ( const AggrResult_t & tRes, CSphStringBuilderJson 
 	tOut += "}";
 }
 
-enum ESphHttpStatus
-{
-	SPH_HTTP_STATUS_200,
-	SPH_HTTP_STATUS_206,
-	SPH_HTTP_STATUS_400,
-	SPH_HTTP_STATUS_500,
-	SPH_HTTP_STATUS_501,
 
-	SPH_HTTP_STATUS_TOTAL
-};
-
-const char * g_dHttpStatus[] = { "200 OK", "206 Partial Content", "400 Bad Request", "500 Internal Server Error", "501 Not Implemented" };
+const char * g_dHttpStatus[] = { "200 OK", "206 Partial Content", "400 Bad Request", "500 Internal Server Error", "501 Not Implemented", "503 Service Unavailable" };
 STATIC_ASSERT ( sizeof(g_dHttpStatus)/sizeof(g_dHttpStatus[0])==SPH_HTTP_STATUS_TOTAL, SPH_HTTP_STATUS_SHOULD_BE_SAME_AS_SPH_HTTP_STATUS_TOTAL );
 
 
@@ -675,4 +665,10 @@ bool sphLoopClientHttp ( CSphVector<BYTE> & dData, int iCID )
 	}
 
 	return tParser.m_bKeepAlive;
+}
+
+
+void sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError )
+{
+	HttpErrorReply( dData, eCode, "%s", szError );
 }

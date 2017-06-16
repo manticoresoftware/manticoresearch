@@ -6114,6 +6114,13 @@ Changes the <link linkend="qcache">query cache</link> minimum wall time threshol
 Changes the <link linkend="qcache">query cache</link> TTL for a cached result to a given value.
 </para></listitem>
 </varlistentry>
+<varlistentry>
+<term><code>MAINTENANCE = {0 | 1}</code></term>
+<listitem><para>
+When set to 1, puts the server in maintenance mode. Only clients with vip connections can execute queries in this mode.
+All new non-vip incoming connections are refused.
+</para></listitem>
+</varlistentry>
 </variablelist>
 </para>
 <para>

@@ -325,6 +325,7 @@ static volatile sig_atomic_t g_bGotSigusr1		= 0;	// we just received SIGUSR1; ne
 // pipe to watchdog to inform that daemon is going to close, so no need to restart it in case of crash
 static CSphLargeBuffer<DWORD, true>	g_bDaemonAtShutdown;
 volatile bool					g_bShutdown = false;
+volatile bool					g_bMaintenance = false;
 static CSphLargeBuffer<DWORD, true>	g_bHaveTTY;
 
 IndexHash_c *								g_pLocalIndexes = new IndexHash_c();	// served (local) indexes hash
@@ -14992,12 +14993,14 @@ struct SessionVars_t
 	bool			m_bInTransaction;
 	ESphCollation	m_eCollation;
 	bool			m_bProfile;
+	bool			m_bVIP;
 
 	SessionVars_t ()
 		: m_bAutoCommit ( true )
 		, m_bInTransaction ( false )
 		, m_eCollation ( g_eCollation )
 		, m_bProfile ( false )
+		, m_bVIP ( false )
 	{}
 };
 
@@ -15285,6 +15288,16 @@ void HandleMysqlSet ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, SessionVars_t & 
 		{
 			g_bGroupingInUtc = !!tStmt.m_iSetValue;
 			setGroupingInUtc ( g_bGroupingInUtc );
+		} else if ( tStmt.m_sSetName=="maintenance")
+		{
+			if ( tVars.m_bVIP )
+				g_bMaintenance = !!tStmt.m_iSetValue;
+			else
+			{
+				sError.SetSprintf ( "Only VIP connections can set maintenance mode" );
+				tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+				return;
+			}
 		} else
 		{
 			sError.SetSprintf ( "Unknown system variable '%s'", tStmt.m_sSetName.cstr() );
@@ -20772,6 +20785,13 @@ NetEvent_e NetActionAccept_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction 
 		}
 #endif
 
+		if ( g_bMaintenance && !m_tListener.m_bVIP )
+		{
+			sphWarning ( "server is in maintenance mode: refusing connection" );
+			sphSockClose ( iClientSock );
+			return NE_KEEP;
+		}
+
 		m_iConnections++;
 		int iConnID = ++g_iConnectionID;
 		if ( g_iConnectionID<0 )
@@ -21646,8 +21666,16 @@ void ThdJobAPI_t::Call ()
 	// handle that client
 	MemInputBuffer_c tBuf ( m_tState->m_dBuf.Begin(), m_tState->m_dBuf.GetLength() );
 	ISphOutputBuffer tOut;
-	bool bProceed = LoopClientSphinx ( m_iCommand, m_iCommandVer, m_tState->m_dBuf.GetLength(), m_tState->m_sClientName, m_tState->m_iConnID, &tThdDesc, tBuf, tOut, false );
-	m_tState->m_bKeepSocket |= bProceed;
+
+	if ( g_bMaintenance && !m_tState->m_bVIP )
+	{
+		SendErrorReply ( tOut, "server is in maintenance mode" );
+		m_tState->m_bKeepSocket = false;
+	} else
+	{
+		bool bProceed = LoopClientSphinx ( m_iCommand, m_iCommandVer, m_tState->m_dBuf.GetLength(), m_tState->m_sClientName, m_tState->m_iConnID, &tThdDesc, tBuf, tOut, false );
+		m_tState->m_bKeepSocket |= bProceed;
+	}
 
 	g_tThdMutex.Lock ();
 	g_dThd.Remove ( &tThdDesc );
@@ -21709,12 +21737,22 @@ void ThdJobQL_t::Call ()
 	MemInputBuffer_c tIn ( m_tState->m_dBuf.Begin(), m_tState->m_dBuf.GetLength() );
 	ISphOutputBuffer tOut;
 
-	bool bProceed = LoopClientMySQL ( m_tState->m_uPacketID, m_tState->m_tSession, sQuery, m_tState->m_dBuf.GetLength(), bProfile, &tThdDesc, tIn, tOut );
-	m_tState->m_bKeepSocket = bProceed;
+	// needed to check permission to turn maintenance mode on/off
+	m_tState->m_tSession.m_tVars.m_bVIP = m_tState->m_bVIP;
+
+	m_tState->m_bKeepSocket = false;
+	bool bSendResponse = true;
+	if ( g_bMaintenance && !m_tState->m_bVIP )
+		SendMysqlErrorPacket ( tOut, m_tState->m_uPacketID, NULL, "server is in maintenance mode", tThdDesc.m_iConnID, MYSQL_ERR_UNKNOWN_COM_ERROR );
+	else
+	{
+		bSendResponse = LoopClientMySQL ( m_tState->m_uPacketID, m_tState->m_tSession, sQuery, m_tState->m_dBuf.GetLength(), bProfile, &tThdDesc, tIn, tOut );
+		m_tState->m_bKeepSocket = bSendResponse;
+	}
 
 	sphLogDebugv ( "%p QL job done, tick=%u", this, m_pLoop->m_uTick );
 
-	if ( bProceed && !g_bShutdown )
+	if ( bSendResponse && !g_bShutdown )
 	{
 		assert ( m_pLoop );
 		tOut.SwapData ( m_tState->m_dBuf );
@@ -21793,7 +21831,12 @@ void ThdJobHttp_t::Call ()
 
 	assert ( m_tState.Ptr() );
 
-	m_tState->m_bKeepSocket = sphLoopClientHttp ( m_tState->m_dBuf, m_tState->m_iConnID );
+	if ( g_bMaintenance && !m_tState->m_bVIP )
+	{
+		sphHttpErrorReply ( m_tState->m_dBuf, SPH_HTTP_STATUS_503, "server is in maintenance mode" );
+		m_tState->m_bKeepSocket = false;
+	} else
+		m_tState->m_bKeepSocket = sphLoopClientHttp ( m_tState->m_dBuf, m_tState->m_iConnID );
 
 	g_tThdMutex.Lock ();
 	g_dThd.Remove ( &tThdDesc );

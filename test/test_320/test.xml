@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>maintenance mode</name>
+
+<requires>
+<vip/>
+<thread_pool/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	binlog_path =
+}
+
+source src
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT id, gid, text FROM test_table
+  sql_attr_uint   = gid
+}
+
+index test1
+{
+  source      = src
+  path      = <data_path/>/test_dummy
+}
+</config>
+
+<db_drop>drop table if exists test_table</db_drop>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	text varchar(255) not null,
+	gid int
+);
+</db_create>
+
+<db_insert>
+insert into test_table values ( 1, 'first',  1 )
+</db_insert>
+
+<sphqueries>
+<sphinxql vip="0">select * from test1 where match('first')</sphinxql>
+<sphinxql vip="1">select * from test1 where match('first')</sphinxql>
+<sphinxql vip="0">set global maintenance=1</sphinxql>
+<sphinxql vip="1">set global maintenance=1</sphinxql>
+<sphinxql vip="0">select * from test1 where match('first')</sphinxql>
+<sphinxql vip="1">select * from test1 where match('first')</sphinxql>
+<sphinxql vip="1">set global maintenance=0</sphinxql>
+<sphinxql vip="0">select * from test1 where match('first')</sphinxql>
+<sphinxql vip="1">select * from test1 where match('first')</sphinxql>
+</sphqueries>
+
+</test>

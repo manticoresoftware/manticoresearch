@@ -220,10 +220,11 @@ foreach ( $tests as $test )
 		$sd_port += 10;
 		$agent_port += 10;
 		$agent_port_sql += 10;
+		$agent_port_sql_vip += 10;
 		$agents	= array (
-			array ( "address" => $sd_address, "port" => $sd_port, "sqlport" => $sd_sphinxql_port ),
-			array ( "address" => $agent_address, "port" => $agent_port, "sqlport" => $agent_port_sql ),
-			array ( "address" => $agent_address, "port" => $agent_port+1, "sqlport" => $agent_port_sql+1 )
+			array ( "address" => $sd_address, "port" => $sd_port, "sqlport" => $sd_sphinxql_port, "sqlport_vip" => $sd_sphinxql_port_vip ),
+			array ( "address" => $agent_address, "port" => $agent_port, "sqlport" => $agent_port_sql, "sqlport_vip" => $agent_port_sql_vip ),
+			array ( "address" => $agent_address, "port" => $agent_port+1, "sqlport" => $agent_port_sql+1, "sqlport_vip" => $agent_port_sql_vip+1 )
 		);
 	}
 

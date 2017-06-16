@@ -4,6 +4,9 @@ $sd_address 		= "127.0.0.1";
 $sd_port 			= 6712;
 $sd_sphinxql_port	= 6706;
 $sd_http_port		= 6780;
+
+$sd_sphinxql_port_vip = 6709;
+
 $sd_log				= "searchd.log";
 $sd_query_log		= "query.log";
 $sd_read_timeout	= 5;
@@ -13,6 +16,7 @@ $sd_pid_file		= "searchd.pid";
 $agent_address		= "127.0.0.1";
 $agent_port			= 6713;
 $agent_port_sql		= 6707;
+$agent_port_sql_vip	= 6710;
 
 if ( array_key_exists ( "SPHINXDAEMON", $_ENV ) && $_ENV["SPHINXDAEMON"] ) 
 	$sd_address = $_ENV["SPHINXDAEMON"];
@@ -20,9 +24,9 @@ else if ( array_key_exists ( "SPHINXDAEMON", $_SERVER ) && $_SERVER["SPHINXDAEMO
 	$sd_address = $_SERVER["SPHINXDAEMON"];
 
 $agents 			= array (
-	array ( "address" => $sd_address, "port" => $sd_port, "sqlport" => $sd_sphinxql_port ),
-	array ( "address" => $agent_address, "port" => $agent_port, "sqlport" => $agent_port_sql ),
-	array ( "address" => $agent_address, "port" => $agent_port+1, "sqlport" => $agent_port_sql+1 ) );
+	array ( "address" => $sd_address, "port" => $sd_port, "sqlport" => $sd_sphinxql_port, "sqlport_vip" => $sd_sphinxql_port_vip ),
+	array ( "address" => $agent_address, "port" => $agent_port, "sqlport" => $agent_port_sql, "sqlport_vip" => $agent_port_sql_vip ),
+	array ( "address" => $agent_address, "port" => $agent_port+1, "sqlport" => $agent_port_sql+1, "sqlport_vip" => $agent_port_sql_vip+1 ) );
 
 $index_data_path	= "data";
 

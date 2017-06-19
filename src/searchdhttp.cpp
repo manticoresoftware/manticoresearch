@@ -219,7 +219,7 @@ static void EncodeResultJson ( const AggrResult_t & tRes, CSphStringBuilderJson 
 						// send string to client
 						dTmp.Resize ( 0 );
 						const BYTE * pStrings = tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pStrings;
-						sphJsonFieldFormat ( dTmp, pStrings+uOff, eJson, false );
+						sphJsonFieldFormat ( dTmp, pStrings+uOff, eJson, true );
 						dTmp.Add ( '\0' );
 						tOut += (const char *)dTmp.Begin();
 					}
@@ -262,7 +262,11 @@ static void EncodeResultJson ( const AggrResult_t & tRes, CSphStringBuilderJson 
 	tOut += "]}";
 
 	if ( !tRes.m_sWarning.IsEmpty() )
-		tOut.Appendf ( ",\"warning\":\"%s\"", tRes.m_sWarning.cstr() );
+	{
+		tOut.Appendf ( ",\"warning\":\"" );
+		tOut.AppendEscaped ( tRes.m_sWarning.cstr() );
+		tOut.Appendf ( "\"" );
+	}	
 
 	tOut += "}";
 }

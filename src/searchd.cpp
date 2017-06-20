@@ -326,6 +326,7 @@ static volatile sig_atomic_t g_bGotSigusr1		= 0;	// we just received SIGUSR1; ne
 static CSphLargeBuffer<DWORD, true>	g_bDaemonAtShutdown;
 volatile bool					g_bShutdown = false;
 volatile bool					g_bMaintenance = false;
+volatile bool					g_bPrereading = false;
 static CSphLargeBuffer<DWORD, true>	g_bHaveTTY;
 
 IndexHash_c *								g_pLocalIndexes = new IndexHash_c();	// served (local) indexes hash
@@ -1425,7 +1426,7 @@ void Shutdown ()
 
 	int64_t tmShutStarted = sphMicroTimer();
 	// stop search threads; up to shutdown_timeout seconds
-	while ( g_dThd.GetLength() > 0 && ( sphMicroTimer()-tmShutStarted )<g_iShutdownTimeout )
+	while ( ( g_dThd.GetLength() > 0 || g_bPrereading ) && ( sphMicroTimer()-tmShutStarted )<g_iShutdownTimeout )
 		sphSleepMsec ( 50 );
 
 	if ( g_pThdPool )
@@ -17593,6 +17594,7 @@ static void PrereadFunc ( void * )
 			dIndexes.Add ( it.GetKey() );
 	}
 
+	g_bPrereading = true;
 	sphInfo ( "prereading %d indexes", dIndexes.GetLength() );
 	int iReaded = 0;
 
@@ -17624,6 +17626,7 @@ static void PrereadFunc ( void * )
 		iReaded++;
 	}
 
+	g_bPrereading = false;
 	int64_t tmFinished = sphMicroTimer() - tmStart;
 	sphInfo ( "prereaded %d indexes in %0.3f sec", iReaded, float(tmFinished)/1000000.0f );
 }

@@ -425,170 +425,18 @@ else ()
 	list ( APPEND BANNER "ENABLE_ID64=OFF" )
 endif ( ENABLE_ID64 )
 
+# Check for RE2 build
 message ( STATUS "Option WITH_RE2 ${WITH_RE2}" )
 option ( WITH_RE2 "compile with re2 library support" OFF )
-set ( WITH_RE2_INCLUDES "" CACHE PATH "path to re2 header files" )
-set ( WITH_RE2_LIBS "" CACHE PATH "path to re2 libraries" )
-set ( WITH_RE2_ROOT "" CACHE PATH "path to the libre2 bundle (where both header and library lives)" )
-mark_as_advanced ( WITH_RE2_INCLUDES )
-mark_as_advanced ( WITH_RE2_LIBS )
-mark_as_advanced ( WITH_RE2_ROOT )
-
 if ( WITH_RE2 )
-	find_package ( RE2 )
-	if ( RE2_FOUND )
-		set ( USE_RE2 1 )
-		include_directories ( ${RE2_INCLUDE_DIRS} )
-		# check whether we will build RE2 from sources ourselves
-		if ( RE2_PATH )
-			add_subdirectory ( ${RE2_PATH} )
-			list ( APPEND EXTRA_LIBRARIES RE2 )
-		else ( RE2_PATH )
-			list ( APPEND EXTRA_LIBRARIES ${RE2_LIBRARIES} )
-		endif ( RE2_PATH )
-	else ( RE2_FOUND )
-		set ( RE2_BASEDIR "${SPHINXSEARCH_BINARY_DIR}/libre2" )
-		mark_as_advanced ( RE2_BASEDIR )
-		if ( NOT EXISTS "${RE2_BASEDIR}/Makefile" )
-			find_package ( Git QUIET )
-			if ( GIT_EXECUTABLE )
-				set ( RE2_REPO "https://github.com/sphinxsearch/re2.git" )
-				message ( STATUS "Cloning RE2 from ${RE2_REPO}" )
-				# here we have to clone remote libre2 repo
-				# c-p from cmake external project: try to clone 3 times in case of errors.
-				set ( error_code 1 )
-				set ( number_of_tries 0 )
-				while ( error_code AND number_of_tries LESS 3 )
-					execute_process (
-							COMMAND "${GIT_EXECUTABLE}" clone "${RE2_REPO}" "${RE2_BASEDIR}"
-							WORKING_DIRECTORY "${SPHINXSEARCH_BINARY_DIR}"
-							RESULT_VARIABLE error_code
-					)
-					math ( EXPR number_of_tries "${number_of_tries} + 1" )
-				endwhile ()
-				if ( error_code )
-					message ( FATAL_ERROR "Failed to clone repository: ${RE2_REPO}" )
-				endif ()
-			else () # No git executable found
-				# check whether we have local copy (to not disturb network)
-				if ( EXISTS "${LIBS_BUNDLE}/master.zip" )
-					message ( STATUS "Unpack RE2 from ${LIBS_BUNDLE}/master.zip" )
-					execute_process (
-							COMMAND "${CMAKE_COMMAND}" -E tar xfz "${LIBS_BUNDLE}/master.zip"
-							WORKING_DIRECTORY "${SPHINXSEARCH_BINARY_DIR}" )
-					# download from github as zip archive
-				else ()
-					set ( RE2_URL "https://github.com/sphinxsearch/re2/archive/master.zip" )
-					if ( NOT EXISTS "${SPHINXSEARCH_BINARY_DIR}/master.zip" )
-						message ( STATUS "Downloading RE2" )
-						file ( DOWNLOAD ${RE2_URL} ${SPHINXSEARCH_BINARY_DIR}/master.zip SHOW_PROGRESS )
-					endif ()
-					message ( STATUS "Unpack RE2 from ${SPHINXSEARCH_BINARY_DIR}/master.zip" )
-					execute_process (
-							COMMAND "${CMAKE_COMMAND}" -E tar xfz "${SPHINXSEARCH_BINARY_DIR}/master.zip"
-							WORKING_DIRECTORY "${SPHINXSEARCH_BINARY_DIR}" )
-				endif ()
-				file ( RENAME "${SPHINXSEARCH_BINARY_DIR}/re2-master" "${SPHINXSEARCH_BINARY_DIR}/libre2" )
-			endif ()
-			# for master we don't need to explicitly checkout
-
-			# also backup original Makefile; it is important step!
-			configure_file ( "${RE2_BASEDIR}/Makefile" "${RE2_BASEDIR}/MakefileOrig" @ONLY )
-		endif ( NOT EXISTS "${RE2_BASEDIR}/Makefile" )
-
-		# RE2 sources cloned. Now patch them, if necessary
-		if ( NOT EXISTS "${RE2_BASEDIR}/is_patched.txt" )
-			set ( PATCH_FILE "${CMAKE_SOURCE_DIR}/libre2/libre2.patch" )
-
-			mark_as_advanced ( PATCH_FILE )
-			message ( STATUS "Patching RE2" )
-			find_package ( Git QUIET )
-			if ( GIT_EXECUTABLE )
-				execute_process ( COMMAND "${GIT_EXECUTABLE}" apply ${PATCH_FILE}
-						WORKING_DIRECTORY "${RE2_BASEDIR}"
-						)
-				file ( WRITE "${RE2_BASEDIR}/is_patched.txt" "ok" )
-				# no git
-			else ()
-				find_program ( PATCH_PROG patch )
-				if ( PATCH_PROG )
-					mark_as_advanced ( PATCH_PROG )
-					execute_process (
-							COMMAND "${PATCH_PROG}" -p1 --binary -i "${PATCH_FILE}"
-							WORKING_DIRECTORY "${RE2_BASEDIR}"
-					)
-					file ( WRITE "${RE2_BASEDIR}/is_patched.txt" "ok" )
-				endif ()
-			endif ()
-		endif ()
-		if ( NOT EXISTS "${RE2_BASEDIR}/is_patched.txt" )
-			message ( ERROR "Couldn't patch RE2 distro. No Git or Patch found" )
-		endif ()
-
-		# copy our CMakeLists there
-		if ( NOT EXISTS "${RE2_BASEDIR}/CMakeLists.txt" )
-			message ( STATUS "${CMAKE_SOURCE_DIR} - source dir" )
-			configure_file ( "${CMAKE_SOURCE_DIR}/libre2/CMakeLists.txt" "${RE2_BASEDIR}/CMakeLists.txt" @ONLY )
-		endif ()
-		set ( USE_RE2 1 )
-		set ( RE2_INCLUDE_DIRS "${RE2_BASEDIR}" )
-		include_directories ( ${RE2_BASEDIR} )
-		add_subdirectory ( ${RE2_BASEDIR} ${RE2_BASEDIR} EXCLUDE_FROM_ALL )
-		list ( APPEND EXTRA_LIBRARIES RE2 )
-	endif ( RE2_FOUND )
+	include ( GetRE2 )
 endif ( WITH_RE2 )
 
+# Check for Libstemmer build
 message ( STATUS "Option WITH_STEMMER ${WITH_STEMMER}" )
 OPTION ( WITH_STEMMER "compile with stemmer support" OFF )
 IF ( WITH_STEMMER )
-	find_package ( stemmer )
-	if ( STEMMER_FOUND )
-		SET ( USE_LIBSTEMMER 1 )
-		include_directories ( ${STEMMER_INCLUDE_DIR} )
-		if ( STEMMER_INTERNAL )
-			add_subdirectory ( ${CMAKE_SOURCE_DIR}/libstemmer_c )
-			list ( APPEND EXTRA_LIBRARIES stemmer )
-		else ()
-			list ( APPEND EXTRA_LIBRARIES ${STEMMER_LIBRARY} )
-		endif ( STEMMER_INTERNAL )
-	else ( STEMMER_FOUND )
-		if ( EXISTS "${LIBS_BUNDLE}/libstemmer_c.tgz" )
-			message ( STATUS "Unpack Stemmer from ${LIBS_BUNDLE}/libstemmer_c.tgz" )
-			execute_process (
-					COMMAND "${CMAKE_COMMAND}" -E tar xfz "${LIBS_BUNDLE}/libstemmer_c.tgz"
-					WORKING_DIRECTORY "${SPHINXSEARCH_BINARY_DIR}" )
-			# download from github as zip archive
-		else ( EXISTS "${LIBS_BUNDLE}/libstemmer_c.tgz" )
-			set ( STEMMER_URL "http://snowball.tartarus.org/dist/libstemmer_c.tgz" )
-			if ( NOT EXISTS "${SPHINXSEARCH_BINARY_DIR}/libstemmer_c.tgz" )
-				message ( STATUS "Downloading Stemmer" )
-				file ( DOWNLOAD ${STEMMER_URL} ${SPHINXSEARCH_BINARY_DIR}/libstemmer_c.tgz SHOW_PROGRESS )
-			endif ()
-			message ( STATUS "Unpack Stemmer from ${SPHINXSEARCH_BINARY_DIR}/libstemmer_c.tgz" )
-			execute_process (
-					COMMAND "${CMAKE_COMMAND}" -E tar xfz "${SPHINXSEARCH_BINARY_DIR}/libstemmer_c.tgz"
-					WORKING_DIRECTORY "${SPHINXSEARCH_BINARY_DIR}" )
-		endif ( EXISTS "${LIBS_BUNDLE}/libstemmer_c.tgz" )
-		set ( STEMMER_BASEDIR "${SPHINXSEARCH_BINARY_DIR}/libstemmer_c" )
-		# copy our CMakeLists there
-		if ( NOT EXISTS "${STEMMER_BASEDIR}/CMakeLists.txt" )
-			configure_file ( "${CMAKE_SOURCE_DIR}/libstemmer_c/CMakeLists.txt" "${STEMMER_BASEDIR}/CMakeLists.txt" @ONLY )
-		endif ()
-		set ( USE_LIBSTEMMER 1 )
-		set ( STEMMER_INCLUDE_DIR "${STEMMER_BASEDIR}/include" )
-		include_directories ( ${STEMMER_BASEDIR}/include )
-		add_subdirectory ( ${STEMMER_BASEDIR} ${STEMMER_BASEDIR} EXCLUDE_FROM_ALL )
-		list ( APPEND EXTRA_LIBRARIES stemmer )
-		if ( NOT EXISTS "${STEMMER_BASEDIR}/CMakeLists.txt" )
-			message ( SEND_ERROR "missing libstemmer sources from libstemmer_c.
-Please download the C version of libstemmer library from
-http://snowball.tartarus.org/ and extract its sources over libstemmer_c/
-subdirectory in order to build Sphinx with libstemmer support. Or
-install the package named like 'libstemmer-dev' using your favorite
-package manager." )
-			unset ( WITH_STEMMER CACHE )
-		endif ()
-	ENDIF ( STEMMER_FOUND )
+	include ( GetStemmer )
 	set ( SPHINX_PACKAGE_SUFFIX "${SPHINX_PACKAGE_SUFFIX}-stemmer" )
 ENDIF ( WITH_STEMMER )
 

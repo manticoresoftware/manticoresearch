@@ -6420,7 +6420,7 @@ struct RankerState_Proximity_fn : public ISphExtra
 		}
 	}
 
-	DWORD Finalize ( const CSphMatch & tMatch )
+	int Finalize ( const CSphMatch & tMatch )
 	{
 		m_uCurLCS = 0;
 		m_iExpDelta = -1;
@@ -6434,14 +6434,14 @@ struct RankerState_Proximity_fn : public ISphExtra
 			m_uCurPos = 0;
 		}
 
-		DWORD uRank = 0;
+		int iRank = 0;
 		for ( int i=0; i<m_iFields; i++ )
 		{
-			uRank += m_uLCS[i]*m_pWeights[i];
+			iRank += (int)(m_uLCS[i])*m_pWeights[i];
 			m_uLCS[i] = 0;
 		}
 
-		return USE_BM25 ? tMatch.m_iWeight + uRank*SPH_BM25_SCALE : uRank;
+		return USE_BM25 ? tMatch.m_iWeight + iRank*SPH_BM25_SCALE : iRank;
 	}
 };
 
@@ -6518,22 +6518,22 @@ struct RankerState_ProximityBM25Exact_fn : public ISphExtra
 		m_uMinExpPos = HITMAN::GetPosWithField ( pHlist->m_uHitpos ) + 1;
 	}
 
-	DWORD Finalize ( const CSphMatch & tMatch )
+	int Finalize ( const CSphMatch & tMatch )
 	{
 		m_uCurLCS = 0;
 		m_iExpDelta = -1;
 		m_iLastHitPos = -1;
 
-		DWORD uRank = 0;
+		int iRank = 0;
 		for ( int i=0; i<m_iFields; i++ )
 		{
-			uRank += ( 4*m_uLCS[i] + 2*((m_uHeadHit>>i)&1) + ((m_uExactHit>>i)&1) )*m_pWeights[i];
+			iRank += (int)( 4*m_uLCS[i] + 2*((m_uHeadHit>>i)&1) + ((m_uExactHit>>i)&1) )*m_pWeights[i];
 			m_uLCS[i] = 0;
 		}
 		m_uHeadHit = 0;
 		m_uExactHit = 0;
 
-		return tMatch.m_iWeight + uRank*SPH_BM25_SCALE;
+		return tMatch.m_iWeight + iRank*SPH_BM25_SCALE;
 	}
 };
 
@@ -6561,23 +6561,23 @@ struct RankerState_ProximityPayload_fn : public RankerState_Proximity_fn<USE_BM2
 			RankerState_Proximity_fn<USE_BM25,false>::Update ( pHlist );
 	}
 
-	DWORD Finalize ( const CSphMatch & tMatch )
+	int Finalize ( const CSphMatch & tMatch )
 	{
 		// as usual, redundant 'this' is just because gcc is stupid
 		this->m_uCurLCS = 0;
 		this->m_iExpDelta = -1;
 		this->m_iLastHitPosWithField = -1;
 
-		DWORD uRank = m_uPayloadRank;
+		int iRank = (int)m_uPayloadRank;
 		for ( int i=0; i<this->m_iFields; i++ )
 		{
 			// no special care for payload fields as their LCS will be 0 anyway
-			uRank += this->m_uLCS[i]*this->m_pWeights[i];
+			iRank += (int)(this->m_uLCS[i])*this->m_pWeights[i];
 			this->m_uLCS[i] = 0;
 		}
 
 		m_uPayloadRank = 0;
-		return USE_BM25 ? tMatch.m_iWeight + uRank*SPH_BM25_SCALE : uRank;
+		return USE_BM25 ? tMatch.m_iWeight + iRank*SPH_BM25_SCALE : iRank;
 	}
 };
 
@@ -6604,22 +6604,22 @@ struct RankerState_MatchAny_fn : public RankerState_Proximity_fn<false,false>
 		m_uMatchMask [ HITMAN::GetField ( pHlist->m_uHitpos ) ] |= ( 1<<(pHlist->m_uQuerypos-1) );
 	}
 
-	DWORD Finalize ( const CSphMatch & )
+	int Finalize ( const CSphMatch & )
 	{
 		m_uCurLCS = 0;
 		m_iExpDelta = -1;
 		m_iLastHitPosWithField = -1;
 
-		DWORD uRank = 0;
+		int iRank = 0;
 		for ( int i=0; i<m_iFields; i++ )
 		{
 			if ( m_uMatchMask[i] )
-				uRank += ( sphBitCount ( m_uMatchMask[i] ) + ( m_uLCS[i]-1 )*m_iPhraseK )*m_pWeights[i];
+				iRank += (int)( sphBitCount ( m_uMatchMask[i] ) + ( m_uLCS[i]-1 )*m_iPhraseK )*m_pWeights[i];
 			m_uMatchMask[i] = 0;
 			m_uLCS[i] = 0;
 		}
 
-		return uRank;
+		return iRank;
 	}
 };
 
@@ -6627,13 +6627,13 @@ struct RankerState_MatchAny_fn : public RankerState_Proximity_fn<false,false>
 
 struct RankerState_Wordcount_fn : public ISphExtra
 {
-	DWORD m_uRank;
+	int m_iRank;
 	int m_iFields;
 	const int * m_pWeights;
 
 	bool Init ( int iFields, const int * pWeights, ExtRanker_c *, CSphString &, DWORD )
 	{
-		m_uRank = 0;
+		m_iRank = 0;
 		m_iFields = iFields;
 		m_pWeights = pWeights;
 		return true;
@@ -6641,14 +6641,14 @@ struct RankerState_Wordcount_fn : public ISphExtra
 
 	void Update ( const ExtHit_t * pHlist )
 	{
-		m_uRank += m_pWeights [ HITMAN::GetField ( pHlist->m_uHitpos ) ];
+		m_iRank += m_pWeights [ HITMAN::GetField ( pHlist->m_uHitpos ) ];
 	}
 
-	DWORD Finalize ( const CSphMatch & )
+	int Finalize ( const CSphMatch & )
 	{
-		DWORD uRes = m_uRank;
-		m_uRank = 0;
-		return uRes;
+		int iRes = m_iRank;
+		m_iRank = 0;
+		return iRes;
 	}
 };
 
@@ -6669,7 +6669,7 @@ struct RankerState_Fieldmask_fn : public ISphExtra
 		m_uRank |= 1UL << HITMAN::GetField ( pHlist->m_uHitpos );
 	}
 
-	DWORD Finalize ( const CSphMatch & )
+	int Finalize ( const CSphMatch & )
 	{
 		DWORD uRes = m_uRank;
 		m_uRank = 0;
@@ -6731,7 +6731,7 @@ struct RankerState_Plugin_fn : public ISphExtra
 		m_pPlugin->m_fnUpdate ( m_pData, &h );
 	}
 
-	DWORD Finalize ( const CSphMatch & tMatch )
+	int Finalize ( const CSphMatch & tMatch )
 	{
 		// at some point in the future, we might start passing the entire match,
 		// with blackjack, hookers, attributes, and their schema; but at this point,
@@ -7100,7 +7100,7 @@ public:
 
 	bool				Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError, DWORD uFactorFlags );
 	void				Update ( const ExtHit_t * pHlist );
-	DWORD				Finalize ( const CSphMatch & tMatch );
+	int					Finalize ( const CSphMatch & tMatch );
 	bool				IsTermSkipped ( int iTerm );
 
 public:
@@ -8800,7 +8800,7 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::ExtraDataImpl ( Extr
 
 /// finish document processing, compute weight from factors
 template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >
-DWORD RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Finalize ( const CSphMatch & tMatch )
+int RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Finalize ( const CSphMatch & tMatch )
 {
 #ifndef NDEBUG
 	// sanity check
@@ -8825,9 +8825,9 @@ DWORD RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Finalize ( const CS
 	}
 
 	// compute expression
-	DWORD uRes = ( m_eExprType==SPH_ATTR_INTEGER )
+	int iRes = ( m_eExprType==SPH_ATTR_INTEGER )
 		? m_pExpr->IntEval ( tMatch )
-		: (DWORD)m_pExpr->Eval ( tMatch );
+		: (int)m_pExpr->Eval ( tMatch );
 
 	if_const ( HANDLE_DUPES )
 	{
@@ -8847,7 +8847,7 @@ DWORD RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Finalize ( const CS
 	m_fWeightLCCS = 0.0f;
 
 	// done
-	return uRes;
+	return iRes;
 }
 
 
@@ -9004,7 +9004,7 @@ public:
 	CSphOrderedHash < CSphString, SphDocID_t, IdentityHash_fn, 256 > m_hFactors;
 
 public:
-	DWORD Finalize ( const CSphMatch & tMatch )
+	int Finalize ( const CSphMatch & tMatch )
 	{
 		// finalize factor computations
 		FinalizeDocFactors ( tMatch );
@@ -9057,13 +9057,13 @@ public:
 		m_hFactors.Add ( dVal.Begin(), tMatch.m_uDocID );
 
 		// compute sorting expression now
-		DWORD uRes = ( m_eExprType==SPH_ATTR_INTEGER )
+		int iRes = ( m_eExprType==SPH_ATTR_INTEGER )
 			? m_pExpr->IntEval ( tMatch )
-			: (DWORD)m_pExpr->Eval ( tMatch );
+			: (int)m_pExpr->Eval ( tMatch );
 
 		// cleanup and return!
 		ResetDocFactors();
-		return uRes;
+		return iRes;
 	}
 
 	virtual bool ExtraDataImpl ( ExtraData_e eType, void ** ppResult )

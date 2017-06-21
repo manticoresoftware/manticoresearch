@@ -16328,14 +16328,12 @@ CSphQueryContext::~CSphQueryContext ()
 
 void CSphQueryContext::BindWeights ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sWarning )
 {
-	const int MIN_WEIGHT = 1;
-	// const int HEAVY_FIELDS = 32;
 	const int HEAVY_FIELDS = SPH_MAX_FIELDS;
 
 	// defaults
 	m_iWeights = Min ( tSchema.m_dFields.GetLength(), HEAVY_FIELDS );
 	for ( int i=0; i<m_iWeights; i++ )
-		m_dWeights[i] = MIN_WEIGHT;
+		m_dWeights[i] = 1;
 
 	// name-bound weights
 	CSphString sFieldsNotFound;
@@ -16353,7 +16351,7 @@ void CSphQueryContext::BindWeights ( const CSphQuery * pQuery, const CSphSchema 
 			}
 
 			if ( j>=0 && j<HEAVY_FIELDS )
-				m_dWeights[j] = Max ( MIN_WEIGHT, pQuery->m_dFieldWeights[i].m_iValue );
+				m_dWeights[j] = pQuery->m_dFieldWeights[i].m_iValue;
 		}
 
 		if ( !sFieldsNotFound.IsEmpty() )
@@ -16366,7 +16364,7 @@ void CSphQueryContext::BindWeights ( const CSphQuery * pQuery, const CSphSchema 
 	if ( pQuery->m_dWeights.GetLength() )
 	{
 		for ( int i=0; i<Min ( m_iWeights, pQuery->m_dWeights.GetLength() ); i++ )
-			m_dWeights[i] = Max ( MIN_WEIGHT, (int)pQuery->m_dWeights[i] );
+			m_dWeights[i] = (int)pQuery->m_dWeights[i];
 	}
 }
 

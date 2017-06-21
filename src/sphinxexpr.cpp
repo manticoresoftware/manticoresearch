@@ -6362,7 +6362,7 @@ int ExprParser_t::AddNodeWeight ()
 {
 	ExprNode_t & tNode = m_dNodes.Add ();
 	tNode.m_iToken = TOK_WEIGHT;
-	tNode.m_eRetType = SPH_ATTR_INTEGER;
+	tNode.m_eRetType = SPH_ATTR_BIGINT;
 	return m_dNodes.GetLength()-1;
 }
 

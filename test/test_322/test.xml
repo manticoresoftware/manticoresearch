@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>field weights</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select id, gid, title, body, spam from test_table
+	sql_attr_uint	= gid
+	sql_field_string = title
+	sql_field_string = body
+	sql_field_string = spam
+}
+
+index test1
+{
+	source			= test1
+	path			= <data_path/>/test1
+}
+</config>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	gid bigint not null,
+	title varchar(255) not null,
+	body varchar(255) not null,
+	spam varchar(255) not null
+);
+</db_create>
+<db_drop>drop table if exists test_table;</db_drop>
+
+<db_insert>
+insert into test_table values
+( 1, 123, '|sample program', '|program flow direct', '|sample program flow' ),
+( 2, 234, '|one sample program', '|program rev flow', '|one rev flow' ),
+( 3, 345, '|sample two program', '|sub program flow', '|two sub program' ),
+
+( 100, 4294967295, 'unsigned', '', '' )
+</db_insert>
+
+<sphqueries>
+<!-- unsigned int at result set -->
+<sphinxql>select id, gid from test1 where gid > 1000</sphinxql>
+
+<sphinxql>select id, weight() w, spam, title, body from test1 where match('program flow') order by w desc, id asc option field_weights=(body=2, spam=1)</sphinxql>
+<sphinxql>select id, weight() w, spam, title, body from test1 where match('program flow') order by w desc, id asc option field_weights=(body=2, spam=10), ranker=proximity_bm25</sphinxql>
+<sphinxql>select id, weight() w, spam, title, body from test1 where match('program flow') order by w desc, id asc option field_weights=(body=2, spam=10), ranker=wordcount</sphinxql>
+
+<!-- weights 0 -->
+<sphinxql>select id, weight() w, spam, title, body from test1 where match('program flow') order by w desc, id asc option field_weights=(body=2, spam=0), ranker=proximity_bm25</sphinxql>
+<sphinxql>select id, weight() w, spam, title, body from test1 where match('program flow') order by w desc, id asc option field_weights=(body=2, spam=0), ranker=wordcount</sphinxql>
+
+<!-- weights negative -->
+<sphinxql>select id, weight() w, spam, title, body from test1 where match('program flow') order by w desc, id asc option field_weights=(body=2, spam=-2)</sphinxql>
+<sphinxql>select id, weight() w, spam, title, body from test1 where match('program flow') order by w desc, id asc option field_weights=(body=2, spam=-10), ranker=proximity_bm25</sphinxql>
+<sphinxql>select id, weight() w, spam, title, body from test1 where match('program flow') order by w desc, id asc option field_weights=(body=2, spam=-10), ranker=wordcount</sphinxql>
+
+</sphqueries>
+
+</test>

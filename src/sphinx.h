@@ -206,14 +206,19 @@ inline const	DWORD *	STATIC2DOCINFO ( const DWORD * pAttrs )	{ return STATIC2DOC
 #define SPHINX_TAG "-dev"
 #endif
 
-#ifndef SPH_SVN_TAGREV
-#define SPH_SVN_TAGREV "unknown"
+#ifndef GIT_TIMESTAMP_ID
+#define GIT_TIMESTAMP_ID "000101"
+#endif
+
+#ifndef GIT_BRANCH_ID
+#define GIT_BRANCH_ID "detached"
 #endif
 
 // below is for easier extraction of the ver. by any external scripts
+// this line is deprecated and no more used. Leaved here for a while.
 #define SPHINX_VERSION_NUMBERS    "2.3.3"
 
-#define SPHINX_VERSION           SPHINX_VERSION_NUMBERS SPHINX_BITS_TAG SPHINX_TAG " (" SPH_GIT_COMMIT_ID ")"
+#define SPHINX_VERSION          SPH_GIT_COMMIT_ID "@" GIT_TIMESTAMP_ID " " GIT_BRANCH_ID SPHINX_BITS_TAG SPHINX_TAG
 #define SPHINX_BANNER			"Manticore " SPHINX_VERSION "\nCopyright (c) 2001-2016, Andrew Aksyonoff\n" \
 	"Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)\n" \
 	"Copyright (c) 2017, Manticore Software LTD (http://manticoresearch.com)\n\n"

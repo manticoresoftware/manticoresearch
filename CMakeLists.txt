@@ -514,7 +514,7 @@ set ( CPACK_SOURCE_IGNORE_FILES "/\\\\.idea/" "/\\\\.git/"
 		".swp$" ".orig$" ".log$" ".deps/" )
 set ( CPACK_SOURCE_GENERATOR TGZ )
 
-set ( CPACK_PACKAGE_CONTACT "${PACKAGE_NAME} package builds <support@manticoresearch.com>" )
+set ( CPACK_PACKAGE_CONTACT "${PACKAGE_NAME} package builds <build@manticoresearch.com>" )
 set ( CPACK_COMPONENT_APPLICATIONS_GROUP "bin" )
 set ( CPACK_COMPONENT_GROUP_BIN_DISPLAY_NAME "Runtime" )
 set ( CPACK_COMPONENT_APPLICATIONS_DISPLAY_NAME "${PACKAGE_NAME} applications" )

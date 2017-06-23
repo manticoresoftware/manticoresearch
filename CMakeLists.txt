@@ -28,7 +28,9 @@ list ( APPEND BANNER "CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}" )
 include ( CTest )
 
 set ( SPHINX_TAG "" CACHE STRING "The tag which will be added to build" )
-set ( SPHINX_PACKAGE_SUFFIX "" )
+set ( PKGSUFFIXES ) # list of suffixes which will be append to package name, will be '-'-separated
+set ( PACKAGE_NAME  "manticore")
+set ( COMPANY_NAME "Manticore Software LTD")
 
 if ( WIN32 )
 	# on Win we skip all the tests and just use pre-defined folder
@@ -91,7 +93,7 @@ if ( WIN32 )
 			else ( DL_PGSQL )
 				list ( APPEND EXTRA_LIBRARIES ${pq_LIB} )
 			endif ()
-			set ( SPHINX_PACKAGE_SUFFIX "${SPHINX_PACKAGE_SUFFIX}-pgsql" )
+			LIST ( APPEND PKGSUFFIXES "pgsql" )
 			IF ( CMAKE_EXE_LINKER_FLAGS MATCHES "x64" )
 				install ( FILES
 						${pq_ROOT}/bin/libeay32.dll
@@ -437,7 +439,7 @@ message ( STATUS "Option WITH_STEMMER ${WITH_STEMMER}" )
 OPTION ( WITH_STEMMER "compile with stemmer support" OFF )
 IF ( WITH_STEMMER )
 	include ( GetStemmer )
-	set ( SPHINX_PACKAGE_SUFFIX "${SPHINX_PACKAGE_SUFFIX}-stemmer" )
+	LIST ( APPEND PKGSUFFIXES "stemmer" )
 ENDIF ( WITH_STEMMER )
 
 option ( SPLIT_SYMBOLS "whether to split debug symbols from binaries" ON )
@@ -475,6 +477,19 @@ configure_file ( "${SPHINXSEARCH_SOURCE_DIR}/config/config_cmake.h.in"
 add_definitions ( -DHAVE_CONFIG_H )
 include_directories ( "${SPHINXSEARCH_BINARY_DIR}/config" )
 
+if ( WIN32 )
+	IF ( CMAKE_EXE_LINKER_FLAGS MATCHES "x64" )
+		LIST ( APPEND PKGSUFFIXES "x64" )
+	else ()
+		LIST ( APPEND PKGSUFFIXES "win32" )
+	endif ()
+endif ()
+
+set ( SPHINX_PACKAGE_SUFFIX "" )
+FOREACH ( SUFFIX ${PKGSUFFIXES} )
+	set ( SPHINX_PACKAGE_SUFFIX "${SPHINX_PACKAGE_SUFFIX}-${SUFFIX}" )
+endforeach ()
+
 add_subdirectory ( src )
 
 add_subdirectory ( test )
@@ -499,9 +514,10 @@ set ( CPACK_SOURCE_IGNORE_FILES "/\\\\.idea/" "/\\\\.git/"
 		".swp$" ".orig$" ".log$" ".deps/" )
 set ( CPACK_SOURCE_GENERATOR TGZ )
 
+set ( CPACK_PACKAGE_CONTACT "${PACKAGE_NAME} package builds <support@manticoresearch.com>" )
 set ( CPACK_COMPONENT_APPLICATIONS_GROUP "bin" )
 set ( CPACK_COMPONENT_GROUP_BIN_DISPLAY_NAME "Runtime" )
-set ( CPACK_COMPONENT_APPLICATIONS_DISPLAY_NAME "Sphinx applications" )
+set ( CPACK_COMPONENT_APPLICATIONS_DISPLAY_NAME "${PACKAGE_NAME} applications" )
 set ( CPACK_COMPONENT_CONFIG_GROUP "bin" )
 set ( CPACK_COMPONENT_CONFIG_DISPLAY_NAME "Configuration examples" )
 set ( CPACK_COMPONENT_DOC_GROUP "bin" )
@@ -512,34 +528,11 @@ set ( CPACK_COMPONENT_DBGSYMBOLS_DISPLAY_NAME "Debug symbols" )
 set ( CPACK_COMPONENT_DBGSYMBOLS_DEPENDS applications )
 set ( CPACK_DEB_COMPONENT_INSTALL 1 )
 set ( CPACK_RPM_COMPONENT_INSTALL 1 )
+SET ( CPACK_RPM_PACKAGE_LICENSE "GNU General Public License v. 2 (GPL2)" )
 set ( CPACK_ARCHIVE_COMPONENT_INSTALL 1 )
-set ( CPACK_PACKAGE_NAME "sphinx" )
-set ( CPACK_PACKAGE_VENDOR "Sphinx Technologies Inc." )
+set ( CPACK_PACKAGE_NAME "${PACKAGE_NAME}" )
+set ( CPACK_PACKAGE_VENDOR "${COMPANY_NAME}" )
 set ( CPACK_RESOURCE_FILE_LICENSE "${SPHINXSEARCH_BINARY_DIR}/COPYING.txt" )
-
-# fallback falues
-SET ( CPACK_PACKAGE_VERSION_MAJOR 0 )
-SET ( CPACK_PACKAGE_VERSION_MINOR 0 )
-SET ( CPACK_PACKAGE_VERSION_PATCH 0 )
-
-# real string
-FILE ( STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/src/sphinx.h" _SPHINXH
-		LIMIT_COUNT 500
-		REGEX "^#define SPHINX_(TAG|VERSION_NUMBERS).*" )
-FOREACH ( LINE ${_SPHINXH} )
-	IF ( "${LINE}" MATCHES "SPHINX_TAG" )
-		STRING ( REGEX REPLACE "#define[ \t]+SPHINX_TAG[ \t]+\"-?(.*)\"$" "\\1" _TAG "${LINE}" )
-		set ( SPHINX_TAG "${_TAG}" )
-		LIST ( APPEND BANNER "SPHINX_TAG=${SPHINX_TAG}" )
-	ELSEIF ( "${LINE}" MATCHES "SPHINX_VERSION_NUMBERS" )
-		STRING ( REGEX REPLACE ".*\"(.*)\"(.*)$" "\\1" _VER "${LINE}" )
-		STRING ( REGEX REPLACE "\\." ";" _VER "${_VER}" )
-		LIST ( APPEND _VER "0;0;0" )
-		LIST ( GET _VER 0 CPACK_PACKAGE_VERSION_MAJOR )
-		LIST ( GET _VER 1 CPACK_PACKAGE_VERSION_MINOR )
-		LIST ( GET _VER 2 CPACK_PACKAGE_VERSION_PATCH )
-	ENDIF ()
-endforeach ()
 
 IF ( ${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64" )
 	SET ( CPACK_DEBIAN_PACKAGE_ARCHITECTURE amd64 )
@@ -549,18 +542,8 @@ ELSEIF ( ${CMAKE_SYSTEM_PROCESSOR} STREQUAL "i686" )
 	SET ( CPACK_RPM_PACKAGE_ARCHITECTURE "i386" )
 ENDIF ( ${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64" )
 
-set ( CPACK_PACKAGE_VERSION "${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}" )
-set ( CPACK_PACKAGE_CONTACT "Sphinx package builds <builds@sphinxsearch.com>" )
-SET ( CPACK_RPM_PACKAGE_LICENSE "GNU General Public License v. 2 (GPL2)" )
-
-set ( FULL_VERSION "${CPACK_PACKAGE_VERSION}" )
-
 if ( WIN32 )
 	set ( SUGGEST_GENERATOR "ZIP" )
-	set ( SPHINX_ARCH "win32" )
-	IF ( CMAKE_EXE_LINKER_FLAGS MATCHES "x64" )
-		set ( SPHINX_ARCH "x64" )
-	endif ()
 elseif ( APPLE )
 	set ( SUGGEST_GENERATOR "TGZ" )
 else ()
@@ -571,21 +554,9 @@ if ( NOT CPACK_GENERATOR )
 	set ( CPACK_GENERATOR "${SUGGEST_GENERATOR}" )
 endif ()
 
-if ( SPHINX_TAG )
-	set ( FULL_VERSION "${FULL_VERSION}-${SPHINX_TAG}" )
-endif ()
-
-if ( SPHINX_PACKAGE_SUFFIX )
-	set ( FULL_VERSION "${FULL_VERSION}${SPHINX_PACKAGE_SUFFIX}" )
-endif ()
-
-if ( SPHINX_ARCH )
-	set ( CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${FULL_VERSION}-${SPHINX_ARCH}" )
-else ()
-	set ( CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${FULL_VERSION}" )
-endif ()
-
 # ctest variables
 set ( DEFAULT_CTEST_CONFIGURATION_TYPE "Debug" )
+
+set ( CPACK_PROJECT_CONFIG_FILE "${SPHINXSEARCH_BINARY_DIR}/config/CPackOptions.cmake" )
 
 include ( CPack )

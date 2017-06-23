@@ -52,6 +52,7 @@ endif ()
 message ( STATUS "Branch is ${GIT_BRANCH_ID}, ${GIT_TIMESTAMP_ID}, ${SPH_GIT_COMMIT_ID}" )
 
 configure_file ( "${SOURCE_DIR}/src/sphinxversion.h.in" "${BINARY_DIR}/config/gen_sphinxversion.h" @ONLY )
+configure_file ( "${SOURCE_DIR}/CPackOptions.cmake.in" "${BINARY_DIR}/config/CPackOptions.cmake" @ONLY )
 
 
 

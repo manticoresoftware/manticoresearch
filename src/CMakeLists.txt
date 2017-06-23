@@ -30,12 +30,14 @@ source_group ( "Grammar sources" FILES ${LIBSPHINX_BISON} ${SEARCHD_BISON} )
 source_group ( "Lexer sources" FILES ${LIBSPHINX_FLEX} ${SEARCHD_FLEX} )
 
 add_custom_target (
-		generate_sphinxversion
+		vergen
 		COMMAND
 		${CMAKE_COMMAND}
 		-D SOURCE_DIR=${CMAKE_SOURCE_DIR}
 		-D BINARY_DIR=${CMAKE_BINARY_DIR}
 		-D SPHINX_TAG="${SPHINX_TAG}"
+		-D CPACK_SUFFIX="${SPHINX_PACKAGE_SUFFIX}"
+		-D PACKAGE_NAME="${PACKAGE_NAME}"
 		-P ${CMAKE_SOURCE_DIR}/sphinxrev.cmake
 )
 include_directories ( "${SPHINXSEARCH_BINARY_DIR}/config" )
@@ -84,7 +86,7 @@ endif ( USE_FLEX )
 # our mega-lib
 add_library ( libsphinx STATIC ${LIBSPHINX_SRCS} ${HEADERS} ${GHEADERS} ${LIBSPHINX_BISON} ${LIBSPHINX_FLEX} )
 
-add_dependencies ( libsphinx generate_sphinxversion )
+add_dependencies ( libsphinx vergen )
 
 
 # our executables

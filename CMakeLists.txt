@@ -38,6 +38,9 @@ endmacro()
 
 cfgvalue ( CMAKE_BUILD_TYPE )
 
+# ctest variables
+set ( DEFAULT_CTEST_CONFIGURATION_TYPE "Debug" )
+
 include ( CTest )
 
 set ( SPHINX_TAG "" CACHE STRING "The tag which will be added to build" )
@@ -504,7 +507,6 @@ FOREACH ( SUFFIX ${PKGSUFFIXES} )
 endforeach ()
 
 add_subdirectory ( src )
-
 add_subdirectory ( test )
 
 # a bit of installation stuff
@@ -520,7 +522,7 @@ else ()
 			DESTINATION share/doc COMPONENT config )
 endif ()
 configure_file ( "${SPHINXSEARCH_SOURCE_DIR}/COPYING"
-		"${SPHINXSEARCH_BINARY_DIR}/COPYING.txt" )
+		"${SPHINXSEARCH_BINARY_DIR}/COPYING.txt" @ONLY )
 
 set ( CPACK_SOURCE_IGNORE_FILES "/\\\\.idea/" "/\\\\.git/"
 		"/\\\\.svn/" "/autom4te\\\\.cache/" "/bin/" "/junk/" "/win/"
@@ -566,9 +568,6 @@ endif ()
 if ( NOT CPACK_GENERATOR )
 	set ( CPACK_GENERATOR "${SUGGEST_GENERATOR}" )
 endif ()
-
-# ctest variables
-set ( DEFAULT_CTEST_CONFIGURATION_TYPE "Debug" )
 
 set ( CPACK_PROJECT_CONFIG_FILE "${SPHINXSEARCH_BINARY_DIR}/config/CPackOptions.cmake" )
 

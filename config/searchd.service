@@ -1,0 +1,30 @@
+[Unit]
+Description=Manticore Search Engine
+After=network.target remote-fs.target nss-lookup.target
+After=syslog.target
+
+[Service]
+Type=forking
+User=manticore
+Group=manticore
+# Run ExecStartPre with root-permissions
+PermissionsStartOnly=true
+ExecStartPre=/bin/mkdir -p /var/run/manticore
+ExecStartPre=/bin/chown manticore.manticore /var/run/manticore
+# Run ExecStart with User=manticore / Group=manticore
+ExecStart=/usr/bin/searchd --config /etc/sphinx/sphinx.conf
+ExecStop=/usr/bin/searchd --config /etc/sphinx/sphinx.conf --stopwait
+KillMode=process
+KillSignal=SIGTERM
+SendSIGKILL=no
+LimitNOFILE=infinity
+TimeoutStartSec=infinity
+PIDFile=/var/run/manticore/searchd.pid
+
+[Install]
+WantedBy=multi-user.target
+Alias=sphinx.service
+Alias=sphinxsearch.service
+Alias=manticore.service
+Alias=manticoresearch.service
+

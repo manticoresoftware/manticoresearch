@@ -510,19 +510,16 @@ add_subdirectory ( src )
 add_subdirectory ( test )
 
 # a bit of installation stuff
-install ( DIRECTORY api doc contrib DESTINATION share/doc COMPONENT doc )
-install ( FILES example.sql DESTINATION share/doc COMPONENT doc )
 if ( WIN32 )
+	install ( DIRECTORY api doc contrib DESTINATION share/doc COMPONENT doc )
+	install ( FILES example.sql DESTINATION share/doc COMPONENT doc )
 	install ( FILES COPYING INSTALL sphinx.conf.in sphinx-min.conf.in
 			DESTINATION . COMPONENT config )
 	install ( DIRECTORY DESTINATION log COMPONENT config )
 	install ( DIRECTORY DESTINATION data COMPONENT config )
-else ()
-	install ( FILES COPYING INSTALL sphinx.conf.in sphinx-min.conf.in
-			DESTINATION share/doc COMPONENT config )
 endif ()
-configure_file ( "${SPHINXSEARCH_SOURCE_DIR}/COPYING"
-		"${SPHINXSEARCH_BINARY_DIR}/COPYING.txt" @ONLY )
+
+configure_file ( "COPYING" "${SPHINXSEARCH_BINARY_DIR}/COPYING.txt" @ONLY )
 
 set ( CPACK_SOURCE_IGNORE_FILES "/\\\\.idea/" "/\\\\.git/"
 		"/\\\\.svn/" "/autom4te\\\\.cache/" "/bin/" "/junk/" "/win/"
@@ -530,6 +527,10 @@ set ( CPACK_SOURCE_IGNORE_FILES "/\\\\.idea/" "/\\\\.git/"
 set ( CPACK_SOURCE_GENERATOR TGZ )
 
 set ( CPACK_PACKAGE_CONTACT "${PACKAGE_NAME} package builds <build@manticoresearch.com>" )
+set ( CPACK_PACKAGE_NAME "${PACKAGE_NAME}" )
+set ( CPACK_PACKAGE_VENDOR "${COMPANY_NAME}" )
+set ( CPACK_RESOURCE_FILE_LICENSE "${SPHINXSEARCH_BINARY_DIR}/COPYING.txt" )
+
 set ( CPACK_COMPONENT_APPLICATIONS_GROUP "bin" )
 set ( CPACK_COMPONENT_GROUP_BIN_DISPLAY_NAME "Runtime" )
 set ( CPACK_COMPONENT_APPLICATIONS_DISPLAY_NAME "${PACKAGE_NAME} applications" )
@@ -545,9 +546,7 @@ set ( CPACK_DEB_COMPONENT_INSTALL 1 )
 set ( CPACK_RPM_COMPONENT_INSTALL 1 )
 SET ( CPACK_RPM_PACKAGE_LICENSE "GNU General Public License v. 2 (GPL2)" )
 set ( CPACK_ARCHIVE_COMPONENT_INSTALL 1 )
-set ( CPACK_PACKAGE_NAME "${PACKAGE_NAME}" )
-set ( CPACK_PACKAGE_VENDOR "${COMPANY_NAME}" )
-set ( CPACK_RESOURCE_FILE_LICENSE "${SPHINXSEARCH_BINARY_DIR}/COPYING.txt" )
+
 
 IF ( ${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64" )
 	SET ( CPACK_DEBIAN_PACKAGE_ARCHITECTURE amd64 )
@@ -570,5 +569,38 @@ if ( NOT CPACK_GENERATOR )
 endif ()
 
 set ( CPACK_PROJECT_CONFIG_FILE "${SPHINXSEARCH_BINARY_DIR}/config/CPackOptions.cmake" )
+
+IF ( NOT DISTR_TYPE )
+	SET ( DISTR_TYPE Redhat7 CACHE STRING "Choose the distr." FORCE )
+	set_property ( CACHE DISTR_TYPE PROPERTY STRINGS "Redhat5" "Redhat6"
+			"Redhat7" )
+ENDIF ()
+
+if ( DISTR_TYPE MATCHES "Redhat7" )
+	message (STATUS "Will create RPM for RedHat/Centos 7")
+	set ( CPACK_GENERATOR "RPM" )
+	set ( CONFDIR "/var" )
+	configure_file ( "sphinx-min.conf.in"
+			"${SPHINXSEARCH_BINARY_DIR}/sphinx-min.conf.dist" @ONLY )
+	configure_file ( "sphinx.conf.in"
+			"${SPHINXSEARCH_BINARY_DIR}/sphinx.conf.dist" @ONLY )
+	install ( FILES ${SPHINXSEARCH_BINARY_DIR}/sphinx-min.conf.dist
+	    ${SPHINXSEARCH_BINARY_DIR}/sphinx.conf.dist
+			DESTINATION share/doc/${PACKAGE_NAME} COMPONENT doc )
+	install ( FILES doc/indexer.1 doc/indextool.1 doc/searchd.1 doc/spelldump.1
+			DESTINATION share/man/man1 COMPONENT doc )
+	install ( DIRECTORY api DESTINATION share/${PACKAGE_NAME} COMPONENT doc )
+	set ( CPACK_COMPONENT_ADMIN_GROUP "bin" )
+	set ( CPACK_COMPONENT_ADMIN_DISPLAY_NAME "Special scripts" )
+	install ( FILES COPYING doc/sphinx.html doc/sphinx.txt example.sql
+			DESTINATION share/doc/${PACKAGE_NAME} COMPONENT doc )
+	install ( FILES
+			${SPHINXSEARCH_SOURCE_DIR}/config/searchd.conf
+			DESTINATION /usr/lib/tmpfiles.d COMPONENT admin )
+	configure_file ( "${SPHINXSEARCH_SOURCE_DIR}/config/searchd.service"
+			"${SPHINXSEARCH_BINARY_DIR}/searchd.service" COPYONLY )
+	set ( CPACK_RPM_bin_USER_BINARY_SPECFILE "${CMAKE_CURRENT_SOURCE_DIR}/manticore_rhel7.spec.in" )
+	set ( CPACK_RPM_dbg_USER_BINARY_SPECFILE "" )
+endif()
 
 include ( CPack )

@@ -853,6 +853,57 @@ struct Filter_And: public ISphFilter
 	}
 };
 
+
+struct Filter_Or: public ISphFilter
+{
+	ISphFilter * m_pLeft;
+	ISphFilter * m_pRight;
+
+	Filter_Or ( ISphFilter * pLeft, ISphFilter * pRight )
+		: m_pLeft ( pLeft )
+		, m_pRight ( pRight )
+	{
+		m_bUsesAttrs |= pLeft->UsesAttrs();
+		m_bUsesAttrs |= pRight->UsesAttrs();
+	}
+
+	~Filter_Or ()
+	{
+		SafeDelete ( m_pLeft );
+		SafeDelete ( m_pRight );
+	}
+
+	virtual bool Eval ( const CSphMatch & tMatch ) const
+	{
+		return ( m_pLeft->Eval ( tMatch ) || m_pRight->Eval ( tMatch ) );
+	}
+
+	virtual bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const
+	{
+		return ( m_pLeft->EvalBlock ( pMinDocinfo, pMaxDocinfo ) || m_pRight->EvalBlock ( pMinDocinfo, pMaxDocinfo ) );
+	}
+
+	virtual void SetMVAStorage ( const DWORD * pMva, bool bArenaProhibit )
+	{
+		m_pLeft->SetMVAStorage ( pMva, bArenaProhibit );
+		m_pRight->SetMVAStorage ( pMva, bArenaProhibit );
+	}
+
+	virtual void SetStringStorage ( const BYTE * pStrings )
+	{
+		m_pLeft->SetStringStorage ( pStrings );
+		m_pRight->SetStringStorage ( pStrings );
+	}
+
+	virtual ISphFilter * Optimize()
+	{
+		m_pLeft->Optimize();
+		m_pRight->Optimize();
+		return this;
+	}
+};
+
+
 // not
 
 struct Filter_Not: public ISphFilter
@@ -1469,6 +1520,183 @@ ISphFilter * sphJoinFilters ( ISphFilter * pA, ISphFilter * pB )
 	if ( pA )
 		return pB ? pA->Join(pB) : pA;
 	return pB;
+}
+
+static bool IsWeightColumn ( const CSphString & sAttr, const ISphSchema & tSchema )
+{
+	if ( sAttr=="@weight" )
+		return true;
+
+	const CSphColumnInfo * pCol = tSchema.GetAttr ( sAttr.cstr() );
+	return ( pCol && pCol->m_bWeight );
+}
+
+CreateFilterContext_t::CreateFilterContext_t()
+	: m_pFilters ( NULL )
+	, m_pFilterTree ( NULL )
+	, m_pKillList ( NULL )
+	, m_pFilter ( NULL )
+	, m_pWeightFilter ( NULL )
+{
+}
+
+CreateFilterContext_t::~CreateFilterContext_t()
+{
+	SafeDelete ( m_pFilter );
+	SafeDelete ( m_pWeightFilter );
+
+	ARRAY_FOREACH ( i, m_dUserVals )
+		m_dUserVals[i]->Release();
+}
+
+
+static ISphFilter * CreateFilterNode ( CreateFilterContext_t & tCtx, int iNode, CSphString & sError, CSphString & sWarning, bool & bHasWeight )
+{
+	const FilterTreeItem_t * pCur = tCtx.m_pFilterTree->Begin() + iNode;
+	if ( pCur->m_iFilterItem!=-1 )
+	{
+		const CSphFilterSettings * pFilterSettings = tCtx.m_pFilters->Begin() + pCur->m_iFilterItem;
+		if ( pFilterSettings->m_sAttrName.IsEmpty() )
+		{
+			sError = "filter with empty name";
+			return NULL;
+		}
+
+		bHasWeight |= IsWeightColumn ( pFilterSettings->m_sAttrName, *tCtx.m_pSchema );
+
+		// bind user variable local to that daemon
+		CSphFilterSettings tUservar;
+		if ( pFilterSettings->m_eType==SPH_FILTER_USERVAR )
+		{
+			const CSphString * sVar = pFilterSettings->m_dStrings.GetLength()==1 ? pFilterSettings->m_dStrings.Begin() : NULL;
+			if ( !g_pUservarsHook || !sVar )
+			{
+				sError = "no global variables found";
+				return NULL;
+			}
+
+			const UservarIntSet_c * pUservar = g_pUservarsHook ( *sVar );
+			if ( !pUservar )
+			{
+				sError.SetSprintf ( "undefined global variable '%s'", sVar->cstr() );
+				return NULL;
+			}
+
+			tCtx.m_dUserVals.Add ( pUservar );
+			tUservar = *pFilterSettings;
+			tUservar.m_eType = SPH_FILTER_VALUES;
+			tUservar.SetExternalValues ( pUservar->Begin(), pUservar->GetLength() );
+			pFilterSettings = &tUservar;
+		}
+
+		ISphFilter * pFilter = sphCreateFilter ( *pFilterSettings, *tCtx.m_pSchema, tCtx.m_pMvaPool, tCtx.m_pStrings, sError, sWarning, tCtx.m_eCollation, tCtx.m_bArenaProhibit );
+		if ( !pFilter )
+			return NULL;
+
+		return pFilter;
+	}
+
+	assert ( pCur->m_iLeft!=-1 && pCur->m_iRight!=-1 );
+	ISphFilter * pLeft = CreateFilterNode ( tCtx, pCur->m_iLeft, sError, sWarning, bHasWeight );
+	ISphFilter * pRight = CreateFilterNode ( tCtx, pCur->m_iRight, sError, sWarning, bHasWeight );
+
+	if ( !pLeft || !pRight )
+	{
+		SafeDelete ( pLeft );
+		SafeDelete ( pRight );
+		return NULL;
+	}
+
+	if ( pCur->m_bOr )
+		return new Filter_Or ( pLeft, pRight );
+	else
+		return new Filter_And2 ( pLeft, pRight, pLeft->UsesAttrs() || pRight->UsesAttrs() );
+}
+
+
+bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphString & sWarning )
+{
+	bool bGotFilters = ( tCtx.m_pFilters && tCtx.m_pFilters->GetLength() );
+	bool bGotKlist = ( tCtx.m_pKillList && tCtx.m_pKillList->GetLength() );
+
+	if ( !bGotFilters && !bGotKlist )
+		return true;
+
+	bool bGotTree = ( tCtx.m_pFilterTree && tCtx.m_pFilterTree->GetLength() );
+	assert ( tCtx.m_pSchema );
+
+	if ( bGotFilters )
+	{
+		if ( !bGotTree )
+		{
+			bool bScan = tCtx.m_bScan;
+			ARRAY_FOREACH ( i, (*tCtx.m_pFilters) )
+			{
+				const CSphFilterSettings * pFilterSettings = tCtx.m_pFilters->Begin() + i;
+				if ( pFilterSettings->m_sAttrName.IsEmpty() )
+					continue;
+
+				bool bWeight = IsWeightColumn ( pFilterSettings->m_sAttrName, *tCtx.m_pSchema );
+				if ( bScan && bWeight )
+					continue; // @weight is not available in fullscan mode
+
+				// bind user variable local to that daemon
+				CSphFilterSettings tUservar;
+				if ( pFilterSettings->m_eType==SPH_FILTER_USERVAR )
+				{
+					const CSphString * sVar = pFilterSettings->m_dStrings.GetLength()==1 ? pFilterSettings->m_dStrings.Begin() : NULL;
+					if ( !g_pUservarsHook || !sVar )
+					{
+						sError = "no global variables found";
+						return false;
+					}
+
+					const UservarIntSet_c * pUservar = g_pUservarsHook ( *sVar );
+					if ( !pUservar )
+					{
+						sError.SetSprintf ( "undefined global variable '%s'", sVar->cstr() );
+						return false;
+					}
+
+					tCtx.m_dUserVals.Add ( pUservar );
+					tUservar = *pFilterSettings;
+					tUservar.m_eType = SPH_FILTER_VALUES;
+					tUservar.SetExternalValues ( pUservar->Begin(), pUservar->GetLength() );
+					pFilterSettings = &tUservar;
+				}
+
+				ISphFilter * pFilter = sphCreateFilter ( *pFilterSettings, *tCtx.m_pSchema, tCtx.m_pMvaPool, tCtx.m_pStrings, sError, sWarning, tCtx.m_eCollation, tCtx.m_bArenaProhibit );
+				if ( !pFilter )
+					return false;
+
+				ISphFilter ** pGroup = bWeight ? &tCtx.m_pWeightFilter : &tCtx.m_pFilter;
+				*pGroup = sphJoinFilters ( *pGroup, pFilter );
+			}
+		} else
+		{
+			bool bWeight = false;
+			ISphFilter * pFilter = CreateFilterNode ( tCtx, tCtx.m_pFilterTree->GetLength() - 1, sError, sWarning, bWeight );
+			if ( !pFilter )
+				return false;
+
+			// weight filter phase only on match path
+			if ( bWeight && tCtx.m_bScan )
+				tCtx.m_pWeightFilter = pFilter;
+			else
+				tCtx.m_pFilter = pFilter;
+		}
+	}
+
+	if ( bGotKlist )
+	{
+		ISphFilter * pFilter = sphCreateFilter ( *tCtx.m_pKillList );
+		if ( !pFilter )
+			return false;
+
+		tCtx.m_pFilter = sphJoinFilters ( tCtx.m_pFilter, pFilter );
+	}
+
+	return true;
 }
 
 //

@@ -60,6 +60,33 @@ ISphFilter * sphCreateAggrFilter ( const CSphFilterSettings * pSettings, const C
 ISphFilter * sphCreateFilter ( const KillListVector & dKillList );
 ISphFilter * sphJoinFilters ( ISphFilter *, ISphFilter * );
 
+// fwd
+class UservarIntSet_c;
+
+struct CreateFilterContext_t
+{
+	const CSphVector<CSphFilterSettings> * m_pFilters;
+	const CSphVector<FilterTreeItem_t> * m_pFilterTree;
+	const KillListVector * m_pKillList;
+
+	const ISphSchema * m_pSchema;
+	const DWORD * m_pMvaPool;
+	const BYTE * m_pStrings;
+	
+	ESphCollation m_eCollation;
+	bool m_bScan;
+	bool m_bArenaProhibit;
+
+	ISphFilter * m_pFilter;
+	ISphFilter * m_pWeightFilter;
+	CSphVector<const UservarIntSet_c *> m_dUserVals;
+
+	CreateFilterContext_t();
+	~CreateFilterContext_t();
+};
+
+bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphString & sWarning );
+
 #endif // _sphinxfilter_
 
 //

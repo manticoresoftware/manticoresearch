@@ -353,6 +353,10 @@ static bool CalcFilterHashes ( CSphVector<uint64_t> & dFilters, const CSphQuery 
 
 		dFilters.Add ( uFilterHash );
 	}
+	ARRAY_FOREACH ( i, q.m_dFilterTree )
+	{
+		dFilters.Add ( q.m_dFilterTree[i].GetHash() );
+	}
 
 	dFilters.Sort();
 	return true;

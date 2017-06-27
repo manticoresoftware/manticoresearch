@@ -2642,6 +2642,19 @@ struct CSphQueryItem
 	CSphQueryItem() : m_eAggrFunc ( SPH_AGGR_NONE ) {}
 };
 
+/// search query complex filter tree
+struct FilterTreeItem_t
+{
+	int m_iLeft;
+	int m_iRight;
+	int m_iFilterItem;
+	bool m_bOr;
+
+	FilterTreeItem_t ();
+	bool operator == ( const FilterTreeItem_t & rhs ) const;
+	bool operator != ( const FilterTreeItem_t & rhs ) const { return !( (*this)==rhs ); }
+	uint64_t GetHash() const;
+};
 
 /// table function interface
 class CSphQuery;
@@ -2688,6 +2701,7 @@ public:
 	DWORD			m_uDebugFlags;
 
 	CSphVector<CSphFilterSettings>	m_dFilters;	///< filters
+	CSphVector<FilterTreeItem_t>	m_dFilterTree;
 
 	CSphString		m_sGroupBy;			///< group-by attribute name(s)
 	CSphString		m_sFacetBy;			///< facet-by attribute name(s)

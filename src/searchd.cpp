@@ -3044,6 +3044,7 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 		: q.m_sRawQuery.Length();
 	if ( q.m_eRanker==SPH_RANK_EXPR || q.m_eRanker==SPH_RANK_EXPORT )
 		iReqSize += q.m_sRankerExpr.Length() + 4;
+	iReqSize += q.m_dFilterTree.GetLength() * 4 * 4 + 4; // 4 int fields; int array length
 	ARRAY_FOREACH ( j, q.m_dFilters )
 	{
 		const CSphFilterSettings & tFilter = q.m_dFilters[j];
@@ -3271,6 +3272,14 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 	tOut.SendString ( q.m_sQueryTokenFilterLib.cstr() );
 	tOut.SendString ( q.m_sQueryTokenFilterName.cstr() );
 	tOut.SendString ( q.m_sQueryTokenFilterOpts.cstr() );
+	tOut.SendInt ( q.m_dFilterTree.GetLength() );
+	ARRAY_FOREACH ( i, q.m_dFilterTree )
+	{
+		tOut.SendInt ( q.m_dFilterTree[i].m_iLeft );
+		tOut.SendInt ( q.m_dFilterTree[i].m_iRight );
+		tOut.SendInt ( q.m_dFilterTree[i].m_iFilterItem );
+		tOut.SendInt ( q.m_dFilterTree[i].m_bOr );
+	}
 }
 
 
@@ -4153,6 +4162,19 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		tQuery.m_sQueryTokenFilterOpts = tReq.GetString();
 	}
 
+	if ( iVer>=0x121 )
+	{
+		tQuery.m_dFilterTree.Resize ( tReq.GetInt() );
+		ARRAY_FOREACH ( i, tQuery.m_dFilterTree )
+		{
+			FilterTreeItem_t & tItem = tQuery.m_dFilterTree[i];
+			tItem.m_iLeft = tReq.GetInt();
+			tItem.m_iRight = tReq.GetInt();
+			tItem.m_iFilterItem = tReq.GetInt();
+			tItem.m_bOr = ( tReq.GetInt()!=0 );
+		}
+	}
+
 	/////////////////////
 	// additional checks
 	/////////////////////
@@ -4600,6 +4622,30 @@ static void FormatOption ( const CSphQuery & tQuery, CSphStringBuilder & tBuf )
 	}
 }
 
+static CSphString LogFilterTreeItem ( int iItem, const CSphVector<FilterTreeItem_t> & dTree, const CSphVector<CSphFilterSettings> & dFilters )
+{
+	const FilterTreeItem_t & tItem = dTree[iItem];
+	if ( tItem.m_iFilterItem!=-1 )
+	{
+		CSphStringBuilder tBuf;
+		FormatFilter ( tBuf, dFilters[tItem.m_iFilterItem] );
+		int iOff = ( tBuf.Length() && *tBuf.cstr()== ' ' ? 1 : 0 );
+		return tBuf.cstr() + iOff;
+	}
+
+	assert ( tItem.m_iLeft!=-1 && tItem.m_iRight!=-1 );
+	CSphString sLeft = LogFilterTreeItem ( tItem.m_iLeft, dTree, dFilters );
+	CSphString sRight = LogFilterTreeItem ( tItem.m_iRight, dTree, dFilters );
+
+	const char * sOp = tItem.m_bOr ? "OR" : "AND";
+	bool bLeftPts = ( dTree[tItem.m_iLeft].m_iFilterItem==-1 && dTree[tItem.m_iLeft].m_bOr!=tItem.m_bOr );
+	bool bRightPts = ( dTree[tItem.m_iRight].m_iFilterItem==-1 && dTree[tItem.m_iRight].m_bOr!=tItem.m_bOr );
+
+	CSphStringBuilder tBuf;
+	tBuf.Appendf ( "%s%s%s %s %s%s%s", ( bLeftPts ? "(" : "" ), sLeft.cstr(), ( bLeftPts ? ")" : "" ), sOp, ( bRightPts ? "(" : "" ), sRight.cstr(), ( bRightPts ? ")" : "" ) );
+
+	return tBuf.cstr();
+}
 
 static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const CSphVector<int64_t> & dAgentTimes, int iCid )
 {
@@ -4652,14 +4698,24 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes
 			bDeflowered = true;
 		}
 
-		ARRAY_FOREACH ( i, q.m_dFilters )
+		if ( !q.m_dFilterTree.GetLength() )
+		{
+			ARRAY_FOREACH ( i, q.m_dFilters )
+			{
+				if ( bDeflowered )
+					tBuf += " AND";
+				bDeflowered = true;
+
+				const CSphFilterSettings & f = q.m_dFilters[i];
+				FormatFilter ( tBuf, f );
+			}
+		} else
 		{
 			if ( bDeflowered )
 				tBuf += " AND";
 			bDeflowered = true;
-
-			const CSphFilterSettings & f = q.m_dFilters[i];
-			FormatFilter ( tBuf, f );
+			tBuf += " ";
+			tBuf += LogFilterTreeItem ( q.m_dFilterTree.GetLength() - 1, q.m_dFilterTree, q.m_dFilters ).cstr();
 		}
 	}
 
@@ -8031,6 +8087,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			( qCheck.m_eMode!=qFirst.m_eMode ) || // search mode
 			( qCheck.m_eRanker!=qFirst.m_eRanker ) || // ranking mode
 			( qCheck.m_dFilters.GetLength()!=qFirst.m_dFilters.GetLength() ) || // attr filters count
+			( qCheck.m_dFilterTree.GetLength()!=qFirst.m_dFilterTree.GetLength() ) ||
 			( qCheck.m_iCutoff!=qFirst.m_iCutoff ) || // cutoff
 			( qCheck.m_eSort==SPH_SORT_EXPR && qFirst.m_eSort==SPH_SORT_EXPR && qCheck.m_sSortBy!=qFirst.m_sSortBy ) || // sort expressions
 			( qCheck.m_bGeoAnchor!=qFirst.m_bGeoAnchor ) || // geodist expression
@@ -8043,12 +8100,23 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 		// filters must be the same too
 		assert ( qCheck.m_dFilters.GetLength()==qFirst.m_dFilters.GetLength() );
+		assert ( qCheck.m_dFilterTree.GetLength()==qFirst.m_dFilterTree.GetLength() );
 		ARRAY_FOREACH ( i, qCheck.m_dFilters )
+		{
 			if ( qCheck.m_dFilters[i]!=qFirst.m_dFilters[i] )
 			{
 				m_bMultiQueue = false;
 				break;
 			}
+		}
+		ARRAY_FOREACH ( i, qCheck.m_dFilterTree )
+		{
+			if ( qCheck.m_dFilterTree[i]!=qFirst.m_dFilterTree[i] )
+			{
+				m_bMultiQueue = false;
+				break;
+			}
+		}
 	}
 
 	// check for facets
@@ -9009,11 +9077,13 @@ struct SqlNode_t
 	int						m_iType;	///< TOK_xxx type for insert values; SPHINXQL_TOK_xxx code for special idents
 	float					m_fValue;
 	AttrValues_p			m_pValues;	///< filter values vector (FIXME? replace with numeric handles into parser state?)
+	int						m_iParsedOp;
 
 	SqlNode_t()
 		: m_iValue ( 0 )
 		, m_iType ( 0 )
 		, m_pValues ( NULL )
+		, m_iParsedOp ( -1 )
 	{}
 };
 #define YYSTYPE SqlNode_t
@@ -9086,6 +9156,11 @@ public:
 	CSphVector<SqlStmt_t> & m_dStmt;
 	ESphCollation	m_eCollation;
 	BYTE			m_uSyntaxFlags;
+
+	CSphVector<FilterTreeItem_t> m_dFilterTree;
+	CSphVector<int>				m_dFiltersPerStmt;
+	bool						m_bGotFilterAnd;
+	bool						m_bGotFilterOr;
 
 public:
 	explicit		SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollation );
@@ -9162,6 +9237,11 @@ public:
 	bool					AddStringListFilter ( const SqlNode_t & tCol, SqlNode_t & tVal, bool bExclude );
 	bool					AddNullFilter ( const SqlNode_t & tCol, bool bEqualsNull );
 	void			AddHaving ();
+
+	void			FilterGroup ( SqlNode_t & tNode, SqlNode_t & tExpr );
+	void			FilterOr ( SqlNode_t & tNode, const SqlNode_t & tLeft, const SqlNode_t & tRight );
+	void			FilterAnd ( SqlNode_t & tNode, const SqlNode_t & tLeft, const SqlNode_t & tRight );
+	void			SetOp ( SqlNode_t & tNode );
 
 	inline bool		SetOldSyntax()
 	{
@@ -9350,6 +9430,8 @@ SqlParser_c::SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollati
 	, m_eCollation ( eCollation )
 	, m_uSyntaxFlags ( 0 )
 	, m_bNamedVecBusy ( false )
+	, m_bGotFilterAnd ( false )
+	, m_bGotFilterOr ( false )
 {
 	assert ( !m_dStmt.GetLength() );
 	PushQuery ();
@@ -9366,6 +9448,8 @@ void SqlParser_c::PushQuery ()
 			m_pQuery->m_sSortBy = m_pQuery->m_sOrderBy;
 		else
 			m_pQuery->m_sGroupSortBy = m_pQuery->m_sOrderBy;
+
+		m_dFiltersPerStmt.Add ( m_dFilterTree.GetLength() );
 	}
 
 	// add new
@@ -9815,6 +9899,9 @@ CSphFilterSettings * SqlParser_c::AddFilter ( const SqlNode_t & tCol, ESphFilter
 {
 	CSphString sCol;
 	ToString ( sCol, tCol ); // do NOT lowercase just yet, might have to retain case for JSON cols
+	
+	FilterTreeItem_t & tElem = m_dFilterTree.Add();
+	tElem.m_iFilterItem = m_pQuery->m_dFilters.GetLength();
 
 	CSphFilterSettings * pFilter = &m_pQuery->m_dFilters.Add();
 	pFilter->m_sAttrName = ( !strcasecmp ( sCol.cstr(), "id" ) ) ? "@id" : sCol;
@@ -9983,6 +10070,38 @@ void SqlParser_c::FreeNamedVec ( int )
 	m_dNamedVec.Resize ( 0 );
 }
 
+void SqlParser_c::SetOp ( SqlNode_t & tNode )
+{
+	tNode.m_iParsedOp = m_dFilterTree.GetLength() - 1;
+}
+
+void SqlParser_c::FilterGroup ( SqlNode_t & tNode, SqlNode_t & tExpr )
+{
+	tNode.m_iParsedOp = tExpr.m_iParsedOp;
+}
+
+void SqlParser_c::FilterAnd ( SqlNode_t & tNode, const SqlNode_t & tLeft, const SqlNode_t & tRight )
+{
+	tNode.m_iParsedOp = m_dFilterTree.GetLength();
+	m_bGotFilterAnd = true;
+
+	FilterTreeItem_t & tElem = m_dFilterTree.Add();
+	tElem.m_iLeft = tLeft.m_iParsedOp;
+	tElem.m_iRight = tRight.m_iParsedOp;
+}
+
+void SqlParser_c::FilterOr ( SqlNode_t & tNode, const SqlNode_t & tLeft, const SqlNode_t & tRight )
+{
+	tNode.m_iParsedOp = m_dFilterTree.GetLength();
+	m_bGotFilterOr = true;
+
+	FilterTreeItem_t & tElem = m_dFilterTree.Add();
+	tElem.m_bOr = true;
+	tElem.m_iLeft = tLeft.m_iParsedOp;
+	tElem.m_iRight = tRight.m_iParsedOp;
+}
+
+
 struct QueryItemProxy_t
 {
 	DWORD m_uHash;
@@ -10007,6 +10126,30 @@ struct QueryItemProxy_t
 		m_uHash = sphCRC32 ( (const void*)&m_pItem->m_eAggrFunc, sizeof(m_pItem->m_eAggrFunc), m_uHash );
 	}
 };
+
+static void CreateFilterTree ( const CSphVector<FilterTreeItem_t> & dOps, bool bHasAnd, bool bHasOr, int iStart, int iCount, CSphQuery & tQuery )
+{
+	// all queries have only plain AND filters - no need for filter tree
+	if ( ( !bHasAnd && !bHasOr ) || ( bHasAnd && !bHasOr ) || !iCount )
+		return;
+
+	bHasAnd = false;
+	bHasOr = false;
+	CSphVector<FilterTreeItem_t> dTree ( iCount );
+	for ( int i = 0; i<iCount; i++ )
+	{
+		const FilterTreeItem_t & tItem = dOps[iStart + i];
+		dTree[i] = tItem;
+		bHasAnd |= ( tItem.m_iFilterItem==-1 && !tItem.m_bOr );
+		bHasOr |= ( tItem.m_iFilterItem==-1 && tItem.m_bOr );
+	}
+
+	// query has only plain AND filters - no need for filter tree
+	if ( ( !bHasAnd && !bHasOr ) || ( bHasAnd && !bHasOr ) )
+		return;
+
+	tQuery.m_dFilterTree.SwapData ( dTree );
+}
 
 bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation )
 {
@@ -10040,6 +10183,8 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 
 	dStmt.Pop(); // last query is always dummy
 
+	int iFilterStart = 0;
+	int iFilterCount = 0;
 	ARRAY_FOREACH ( iStmt, dStmt )
 	{
 		// select expressions will be reparsed again, by an expression parser,
@@ -10094,6 +10239,10 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 				return false;
 			}
 		}
+
+		iFilterCount = tParser.m_dFiltersPerStmt[iStmt];
+		CreateFilterTree ( tParser.m_dFilterTree, tParser.m_bGotFilterAnd, tParser.m_bGotFilterOr, iFilterStart, iFilterCount, tQuery );
+		iFilterStart += iFilterCount;
 	}
 
 	if ( iRes!=0 || !dStmt.GetLength() )
@@ -10137,6 +10286,8 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 				// append filters
 				ARRAY_FOREACH ( k, tHeadQuery.m_dFilters )
 					tStmt.m_tQuery.m_dFilters.Add ( tHeadQuery.m_dFilters[k] );
+				ARRAY_FOREACH ( k, tHeadQuery.m_dFilterTree )
+					tStmt.m_tQuery.m_dFilterTree.Add ( tHeadQuery.m_dFilterTree[k] );
 			}
 		}
 	}
@@ -14907,7 +15058,7 @@ void HandleMysqlDelete ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 	// all the values list immediatelly and don't have to run the heavy query here.
 	const CSphQuery& tQuery = tStmt.m_tQuery; // shortcut
 
-	if ( tQuery.m_sQuery.IsEmpty() && tQuery.m_dFilters.GetLength()==1 )
+	if ( tQuery.m_sQuery.IsEmpty() && tQuery.m_dFilters.GetLength()==1 && !tQuery.m_dFilterTree.GetLength() )
 	{
 		const CSphFilterSettings* pFilter = tQuery.m_dFilters.Begin();
 		if ( pFilter->m_bHasEqual && pFilter->m_eType==SPH_FILTER_VALUES

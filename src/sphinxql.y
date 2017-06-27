@@ -408,9 +408,9 @@ where_clause:
 	;
 
 where_expr:
-	where_item
-	| where_expr TOK_AND where_expr
-	| '(' where_expr ')'
+	where_item							
+	| filter_expr
+	| where_item TOK_AND filter_expr
 	;
 
 where_item:
@@ -419,8 +419,15 @@ where_item:
 			if ( !pParser->SetMatch($3) )
 				YYERROR;
 		}
-	| filter_item
 	;
+
+filter_expr:
+	filter_item							{ pParser->SetOp ( $$ ); }
+	| filter_expr TOK_AND filter_expr	{ pParser->FilterAnd ( $$, $1, $3 ); }
+	| filter_expr TOK_OR filter_expr	{ pParser->FilterOr ( $$, $1, $3 ); }
+	| '(' filter_expr ')'				{ pParser->FilterGroup ( $$, $2 ); }
+	;
+	
 	
 filter_item:	
 	expr_ident '=' const_int

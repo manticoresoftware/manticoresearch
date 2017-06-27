@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>OR filters</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select id, gid, pid, title from test_table
+	sql_attr_uint	= gid
+	sql_attr_uint	= pid
+	sql_field_string = title
+}
+
+index test1
+{
+	source			= test1
+	path			= <data_path/>/test1
+}
+
+source test21 : test1
+{
+	sql_query		= select id, gid, pid, title from test_table where id &lt; 4
+}
+
+source test22 : test1
+{
+	sql_query		= select id, gid, pid, title from test_table where id &gt; 10
+}
+
+index test21
+{
+	source			= test21
+	path			= <data_path/>/test21
+}
+
+index test22
+{
+	source			= test22
+	path			= <data_path/>/test22
+}
+
+
+index rt
+{
+    type = rt
+    path = <data_path/>/rt
+    dict = keywords
+    rt_field = title
+    rt_attr_uint = gid
+	rt_attr_uint = pid
+}
+
+index dist
+{
+	type = distributed
+	agent = 127.0.0.1:<my_port />:test21
+	agent = 127.0.0.1:<my_port />:test22
+	agent = 127.0.0.1:<my_port />:rt
+}
+
+</config>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	gid int not null,
+	pid int not null,
+	title varchar(255) not null
+);
+</db_create>
+<db_drop>drop table if exists test_table;</db_drop>
+
+<db_insert>
+insert into test_table values
+( 1, 11, 101, 'test' ),
+( 2, 12, 202, 'test' ),
+( 3, 13, 303, 'test' ),
+( 11, 21, 1011, 'test' ),
+( 12, 22, 1012, 'test' ),
+( 13, 23, 1013, 'test' )
+</db_insert>
+
+<sphqueries>
+<sphinxql>INSERT into rt VALUES (60, 'test', 70, 1100), (61, 'test', 71, 1101), (62, 'test', 72, 1102), (63, 'test', 73, 1103)</sphinxql>
+<sphinxql>select * from rt where match('test')</sphinxql>
+<sphinxql>select * from rt where match('test') and gid &gt; 72 OR pid &lt; 1101</sphinxql>
+<sphinxql>delete from rt where id &gt; 62 OR ( gid &lt; 72 AND pid IN (1101, 1102) )</sphinxql>
+<sphinxql>select * from rt</sphinxql>
+
+<sphinxql>select * from test1 where MATCH('test') AND gid &gt; 22 OR gid &lt; 12</sphinxql>
+<sphinxql>select * from test1 where ( gid &gt; 12 AND pid &lt; 1012 ) OR id &gt; 10</sphinxql>
+<sphinxql>select * from dist where MATCH('test')</sphinxql>
+<sphinxql>select * from dist where MATCH('test') AND gid &gt; 22 OR gid &lt; 12</sphinxql>
+<sphinxql>select * from dist where ( gid &gt; 12 AND pid &lt; 1012 ) OR id &gt; 60</sphinxql>
+</sphqueries>
+
+</test>

@@ -20,6 +20,7 @@
 #include "sphinxrt.h"
 #include "sphinxint.h"
 #include "sphinxstem.h"
+#include "json/cJSON.h"
 #include <math.h>
 
 #define SNOWBALL 0
@@ -4183,6 +4184,86 @@ void TestTDigest()
 }
 
 
+void TestCJson()
+{
+	printf ( "testing cjson... " );
+
+	struct MyIndex_t
+	{
+		CSphString m_sName;
+		CSphString m_sPath;
+	};
+
+	CSphVector<MyIndex_t> dIndexes;
+	dIndexes.Add ( { "test1", "test1_path"} );
+	dIndexes.Add ( { "test2", "test2_path"} );
+	dIndexes.Add ( { "test3", "test3_path"} );
+
+	{
+		cJSON * pRoot = cJSON_CreateObject();
+		assert ( pRoot );
+
+		cJSON * pIndexes = cJSON_CreateArray();
+		assert ( pIndexes );
+		cJSON_AddItemToObject ( pRoot, "indexes", pIndexes );
+
+		for ( auto i : dIndexes )
+		{
+			cJSON * pIndex = cJSON_CreateObject();
+			assert ( pIndex );
+			cJSON_AddItemToArray ( pIndexes, pIndex );
+			cJSON_AddStringToObject ( pIndex, "name", i.m_sName.cstr() );
+			cJSON_AddStringToObject ( pIndex, "path", i.m_sPath.cstr() );
+		}
+
+		CSphString sResult;
+		char * szResult = cJSON_Print ( pRoot );
+		sResult.Adopt ( &szResult );
+
+		FILE * pFile = fopen ( g_sTmpfile, "wt" );
+		assert ( pFile );
+		fwrite ( sResult.cstr(), sResult.Length(), 1, pFile );
+		fclose ( pFile );
+
+		cJSON_Delete(pRoot);
+	}
+
+	{
+		CSphVector<BYTE> dContents;
+		Verify ( sphFileGetContents ( g_sTmpfile, dContents ) );
+
+		cJSON * pRoot = cJSON_Parse ( (const char *)dContents.Begin() );
+		Verify ( pRoot );
+
+		cJSON * pIndexes = cJSON_GetObjectItem ( pRoot, "indexes" );
+		Verify ( pIndexes );
+
+		int iNumIndexes = cJSON_GetArraySize( pIndexes );
+		Verify ( iNumIndexes==dIndexes.GetLength() );
+
+		int iItem = 0;
+		for ( auto i : dIndexes )
+		{
+			cJSON * pIndex = cJSON_GetArrayItem ( pIndexes, iItem++ );
+			Verify ( pIndex );
+
+			cJSON * pJ;
+			pJ = cJSON_GetObjectItem( pIndex, "name" );
+			Verify ( pJ );
+			Verify ( i.m_sName==pJ->valuestring );
+
+			pJ = cJSON_GetObjectItem( pIndex, "path" );
+			Verify ( pJ );
+			Verify ( i.m_sPath==pJ->valuestring );
+		}
+
+		cJSON_Delete(pRoot);
+	}
+
+	printf ( "ok\n" );
+}
+
+
 #endif
 
 //////////////////////////////////////////////////////////////////////////
@@ -4241,6 +4322,7 @@ int main ()
 	TestRebalance();
 	TestLevenshtein();
 	TestTDigest();
+	TestCJson();
 #endif
 
 	unlink ( g_sTmpfile );

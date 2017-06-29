@@ -159,6 +159,7 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\src\json\cJSON.c" />
     <ClCompile Include="..\src\sphinx.cpp" />
     <ClCompile Include="..\src\sphinxaot.cpp" />
     <ClCompile Include="..\src\sphinxexcerpt.cpp" />
@@ -193,6 +194,7 @@
       <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(SolutionDir)\src\git_commit_id.cmd</Command>
       <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(SolutionDir)\src\nonexistent;%(Outputs)</Outputs>
     </CustomBuild>
+    <ClInclude Include="..\src\json\cJSON.h" />
     <ClInclude Include="..\src\sphinxexcerpt.h" />
     <ClInclude Include="..\src\sphinxexpr.h" />
     <ClInclude Include="..\src\sphinxfilter.h" />

@@ -8,7 +8,7 @@ dnl --------------------------------------------------------------------------
 SPHINX_CONFIGURE_PART([checking build environment])
 
 AC_CONFIG_AUX_DIR([config])
-AM_INIT_AUTOMAKE([-Wall -Werror foreign])
+AM_INIT_AUTOMAKE([-Wall -Werror foreign subdir-objects])
 AM_MAINTAINER_MODE
 AC_CONFIG_SRCDIR([src/searchd.cpp])
 AC_CONFIG_HEADER([config/config.h])
@@ -70,6 +70,7 @@ fi
 AC_PROG_CC
 AC_PROG_CXX
 AC_PROG_RANLIB
+AM_PROG_AR
 
 AC_COMPILE_IFELSE([AC_LANG_SOURCE([
 #ifdef __GNUC__

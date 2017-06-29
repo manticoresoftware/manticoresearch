@@ -49,6 +49,8 @@
 
 #endif
 
+#include <sys/stat.h>
+
 //////////////////////////////////////////////////////////////////////////
 // STRING FUNCTIONS
 //////////////////////////////////////////////////////////////////////////
@@ -1261,6 +1263,25 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 
 	return true;
 }
+
+
+bool sphFileGetContents ( const char * szFileName, CSphVector<BYTE> & dContents )
+{
+	struct stat st;
+	if ( stat ( szFileName, &st )<0 )
+		return false;
+
+	FILE * pFile = fopen ( szFileName, "rb" );
+	if ( !pFile )
+		return false;
+
+	dContents.Resize ( (int)st.st_size );
+	int iRead = fread ( dContents.Begin(), (int)st.st_size, 1, pFile );
+	fclose ( pFile );
+
+	return iRead==1;
+}
+
 
 /////////////////////////////////////////////////////////////////////////////
 

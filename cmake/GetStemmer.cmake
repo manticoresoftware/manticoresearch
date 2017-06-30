@@ -33,20 +33,20 @@ else ( STEMMER_FOUND )
 		message ( STATUS "Unpack Stemmer from ${LIBS_BUNDLE}/libstemmer_c.tgz" )
 		execute_process (
 				COMMAND "${CMAKE_COMMAND}" -E tar xfz "${LIBS_BUNDLE}/libstemmer_c.tgz"
-				WORKING_DIRECTORY "${SPHINXSEARCH_BINARY_DIR}" )
+				WORKING_DIRECTORY "${MANTICORE_BINARY_DIR}" )
 		# download from github as zip archive
 	else ( EXISTS "${LIBS_BUNDLE}/libstemmer_c.tgz" )
 		set ( STEMMER_URL "http://snowball.tartarus.org/dist/libstemmer_c.tgz" )
-		if ( NOT EXISTS "${SPHINXSEARCH_BINARY_DIR}/libstemmer_c.tgz" )
+		if ( NOT EXISTS "${MANTICORE_BINARY_DIR}/libstemmer_c.tgz" )
 			message ( STATUS "Downloading Stemmer" )
-			file ( DOWNLOAD ${STEMMER_URL} ${SPHINXSEARCH_BINARY_DIR}/libstemmer_c.tgz SHOW_PROGRESS )
+			file ( DOWNLOAD ${STEMMER_URL} ${MANTICORE_BINARY_DIR}/libstemmer_c.tgz SHOW_PROGRESS )
 		endif ()
-		message ( STATUS "Unpack Stemmer from ${SPHINXSEARCH_BINARY_DIR}/libstemmer_c.tgz" )
+		message ( STATUS "Unpack Stemmer from ${MANTICORE_BINARY_DIR}/libstemmer_c.tgz" )
 		execute_process (
-				COMMAND "${CMAKE_COMMAND}" -E tar xfz "${SPHINXSEARCH_BINARY_DIR}/libstemmer_c.tgz"
-				WORKING_DIRECTORY "${SPHINXSEARCH_BINARY_DIR}" )
+				COMMAND "${CMAKE_COMMAND}" -E tar xfz "${MANTICORE_BINARY_DIR}/libstemmer_c.tgz"
+				WORKING_DIRECTORY "${MANTICORE_BINARY_DIR}" )
 	endif ( EXISTS "${LIBS_BUNDLE}/libstemmer_c.tgz" )
-	set ( STEMMER_BASEDIR "${SPHINXSEARCH_BINARY_DIR}/libstemmer_c" )
+	set ( STEMMER_BASEDIR "${MANTICORE_BINARY_DIR}/libstemmer_c" )
 	# copy our CMakeLists there
 	if ( NOT EXISTS "${STEMMER_BASEDIR}/CMakeLists.txt" )
 		configure_file ( "${CMAKE_SOURCE_DIR}/libstemmer_c/CMakeLists.txt" "${STEMMER_BASEDIR}/CMakeLists.txt" @ONLY )

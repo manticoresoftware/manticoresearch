@@ -37,7 +37,7 @@ if ( RE2_FOUND )
 		list ( APPEND EXTRA_LIBRARIES ${RE2_LIBRARIES} )
 	endif ( RE2_PATH )
 else ( RE2_FOUND )
-	set ( RE2_BASEDIR "${SPHINXSEARCH_BINARY_DIR}/libre2" )
+	set ( RE2_BASEDIR "${MANTICORE_BINARY_DIR}/libre2" )
 	mark_as_advanced ( RE2_BASEDIR )
 	if ( NOT EXISTS "${RE2_BASEDIR}/Makefile" )
 		# check whether we have local copy (to not disturb network)
@@ -45,19 +45,19 @@ else ( RE2_FOUND )
 			message ( STATUS "Unpack RE2 from ${LIBS_BUNDLE}/master.zip" )
 			execute_process (
 					COMMAND "${CMAKE_COMMAND}" -E tar xfz "${LIBS_BUNDLE}/master.zip"
-					WORKING_DIRECTORY "${SPHINXSEARCH_BINARY_DIR}" )
+					WORKING_DIRECTORY "${MANTICORE_BINARY_DIR}" )
 			# download from github as zip archive
 		else ( EXISTS "${LIBS_BUNDLE}/master.zip" )
-			if ( NOT EXISTS "${SPHINXSEARCH_BINARY_DIR}/master.zip" )
+			if ( NOT EXISTS "${MANTICORE_BINARY_DIR}/master.zip" )
 				message ( STATUS "Downloading RE2" )
-				file ( DOWNLOAD ${RE2_URL} ${SPHINXSEARCH_BINARY_DIR}/master.zip SHOW_PROGRESS )
+				file ( DOWNLOAD ${RE2_URL} ${MANTICORE_BINARY_DIR}/master.zip SHOW_PROGRESS )
 			endif ()
-			message ( STATUS "Unpack RE2 from ${SPHINXSEARCH_BINARY_DIR}/master.zip" )
+			message ( STATUS "Unpack RE2 from ${MANTICORE_BINARY_DIR}/master.zip" )
 			execute_process (
-					COMMAND "${CMAKE_COMMAND}" -E tar xfz "${SPHINXSEARCH_BINARY_DIR}/master.zip"
-					WORKING_DIRECTORY "${SPHINXSEARCH_BINARY_DIR}" )
+					COMMAND "${CMAKE_COMMAND}" -E tar xfz "${MANTICORE_BINARY_DIR}/master.zip"
+					WORKING_DIRECTORY "${MANTICORE_BINARY_DIR}" )
 		endif ( EXISTS "${LIBS_BUNDLE}/master.zip" )
-		file ( RENAME "${SPHINXSEARCH_BINARY_DIR}/re2-master" "${RE2_BASEDIR}" )
+		file ( RENAME "${MANTICORE_BINARY_DIR}/re2-master" "${RE2_BASEDIR}" )
 
 		# also backup original Makefile; it is important step!
 		configure_file ( "${RE2_BASEDIR}/Makefile" "${RE2_BASEDIR}/MakefileOrig" @ONLY )

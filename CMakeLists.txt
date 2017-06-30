@@ -18,9 +18,9 @@ IF ( NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES )
 			"MinSizeRel" "RelWithDebInfo" )
 ENDIF ()
 
-PROJECT ( SPHINXSEARCH )
-SET ( SPHINXSEARCH_CMAKE_DIR "${SPHINXSEARCH_SOURCE_DIR}/cmake" )
-SET ( CMAKE_MODULE_PATH "${SPHINXSEARCH_SOURCE_DIR}/cmake" )
+PROJECT ( MANTICORE )
+SET ( MANTICORE_CMAKE_DIR "${MANTICORE_SOURCE_DIR}/cmake" )
+SET ( CMAKE_MODULE_PATH "${MANTICORE_SOURCE_DIR}/cmake" )
 SET ( EXTRA_LIBRARIES )
 
 # Collect build info which will be embedded into binaries
@@ -267,7 +267,7 @@ else ( WIN32 )
 	message ( STATUS "Option WITH_RLP ${WITH_RLP}" )
 	option ( WITH_RLP "compile with RLP library support" OFF )
 	if ( WITH_RLP )
-		if ( EXISTS "${SPHINXSEARCH_SOURCE_DIR}/rlp/rlp/include/bt_rlp_c.h" )
+		if ( EXISTS "${MANTICORE_SOURCE_DIR}/rlp/rlp/include/bt_rlp_c.h" )
 			set ( USE_RLP 1 )
 		else ()
 			message ( SEND_ERROR "missing RLP sources from librlp" )
@@ -488,10 +488,10 @@ FOREACH ( OPTION ${BANNER} )
 endforeach ()
 
 message ( STATUS "Generating config.h file" )
-configure_file ( "${SPHINXSEARCH_SOURCE_DIR}/config/config_cmake.h.in"
-		"${SPHINXSEARCH_BINARY_DIR}/config/config.h" )
+configure_file ( "${MANTICORE_SOURCE_DIR}/config/config_cmake.h.in"
+		"${MANTICORE_BINARY_DIR}/config/config.h" )
 add_definitions ( -DHAVE_CONFIG_H )
-include_directories ( "${SPHINXSEARCH_BINARY_DIR}/config" )
+include_directories ( "${MANTICORE_BINARY_DIR}/config" )
 
 if ( WIN32 )
 	IF ( CMAKE_EXE_LINKER_FLAGS MATCHES "x64" )
@@ -519,7 +519,7 @@ if ( WIN32 )
 	install ( DIRECTORY DESTINATION data COMPONENT config )
 endif ()
 
-configure_file ( "COPYING" "${SPHINXSEARCH_BINARY_DIR}/COPYING.txt" @ONLY )
+configure_file ( "COPYING" "${MANTICORE_BINARY_DIR}/COPYING.txt" @ONLY )
 
 set ( CPACK_SOURCE_IGNORE_FILES "/\\\\.idea/" "/\\\\.git/"
 		"/\\\\.svn/" "/autom4te\\\\.cache/" "/bin/" "/junk/" "/win/"
@@ -529,7 +529,7 @@ set ( CPACK_SOURCE_GENERATOR TGZ )
 set ( CPACK_PACKAGE_CONTACT "${PACKAGE_NAME} package builds <build@manticoresearch.com>" )
 set ( CPACK_PACKAGE_NAME "${PACKAGE_NAME}" )
 set ( CPACK_PACKAGE_VENDOR "${COMPANY_NAME}" )
-set ( CPACK_RESOURCE_FILE_LICENSE "${SPHINXSEARCH_BINARY_DIR}/COPYING.txt" )
+set ( CPACK_RESOURCE_FILE_LICENSE "${MANTICORE_BINARY_DIR}/COPYING.txt" )
 
 set ( CPACK_COMPONENT_APPLICATIONS_GROUP "bin" )
 set ( CPACK_COMPONENT_GROUP_BIN_DISPLAY_NAME "Runtime" )
@@ -568,7 +568,7 @@ if ( NOT CPACK_GENERATOR )
 	set ( CPACK_GENERATOR "${SUGGEST_GENERATOR}" )
 endif ()
 
-set ( CPACK_PROJECT_CONFIG_FILE "${SPHINXSEARCH_BINARY_DIR}/config/CPackOptions.cmake" )
+set ( CPACK_PROJECT_CONFIG_FILE "${MANTICORE_BINARY_DIR}/config/CPackOptions.cmake" )
 
 IF ( NOT DISTR_TYPE )
 	SET ( DISTR_TYPE Redhat7 CACHE STRING "Choose the distr." FORCE )
@@ -580,25 +580,16 @@ if ( DISTR_TYPE MATCHES "Redhat7" )
 	message (STATUS "Will create RPM for RedHat/Centos 7")
 	set ( CPACK_GENERATOR "RPM" )
 	set ( CONFDIR "/var" )
-	configure_file ( "sphinx-min.conf.in"
-			"${SPHINXSEARCH_BINARY_DIR}/sphinx-min.conf.dist" @ONLY )
-	configure_file ( "sphinx.conf.in"
-			"${SPHINXSEARCH_BINARY_DIR}/sphinx.conf.dist" @ONLY )
-	install ( FILES ${SPHINXSEARCH_BINARY_DIR}/sphinx-min.conf.dist
-	    ${SPHINXSEARCH_BINARY_DIR}/sphinx.conf.dist
+	configure_file ( "sphinx-min.conf.in" "${MANTICORE_BINARY_DIR}/sphinx-min.conf.dist" @ONLY )
+	configure_file ( "sphinx.conf.in" "${MANTICORE_BINARY_DIR}/sphinx.conf.dist" @ONLY )
+	install ( FILES ${MANTICORE_BINARY_DIR}/sphinx-min.conf.dist
+	${MANTICORE_BINARY_DIR}/sphinx.conf.dist
 			DESTINATION share/doc/${PACKAGE_NAME} COMPONENT doc )
 	install ( FILES doc/indexer.1 doc/indextool.1 doc/searchd.1 doc/spelldump.1
 			DESTINATION share/man/man1 COMPONENT doc )
 	install ( DIRECTORY api DESTINATION share/${PACKAGE_NAME} COMPONENT doc )
-	set ( CPACK_COMPONENT_ADMIN_GROUP "bin" )
-	set ( CPACK_COMPONENT_ADMIN_DISPLAY_NAME "Special scripts" )
 	install ( FILES COPYING doc/sphinx.html doc/sphinx.txt example.sql
 			DESTINATION share/doc/${PACKAGE_NAME} COMPONENT doc )
-	install ( FILES
-			${SPHINXSEARCH_SOURCE_DIR}/config/searchd.conf
-			DESTINATION /usr/lib/tmpfiles.d COMPONENT admin )
-	configure_file ( "${SPHINXSEARCH_SOURCE_DIR}/config/searchd.service"
-			"${SPHINXSEARCH_BINARY_DIR}/searchd.service" COPYONLY )
 	set ( CPACK_RPM_bin_USER_BINARY_SPECFILE "${CMAKE_CURRENT_SOURCE_DIR}/manticore_rhel7.spec.in" )
 	set ( CPACK_RPM_dbg_USER_BINARY_SPECFILE "" )
 endif()

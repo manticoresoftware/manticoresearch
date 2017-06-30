@@ -590,7 +590,7 @@ if ( DISTR_TYPE MATCHES "Redhat7" )
 	install ( DIRECTORY api DESTINATION share/${PACKAGE_NAME} COMPONENT doc )
 	install ( FILES COPYING doc/sphinx.html doc/sphinx.txt example.sql
 			DESTINATION share/doc/${PACKAGE_NAME} COMPONENT doc )
-	set ( CPACK_RPM_bin_USER_BINARY_SPECFILE "${CMAKE_CURRENT_SOURCE_DIR}/manticore_rhel7.spec.in" )
+	set ( CPACK_RPM_bin_USER_BINARY_SPECFILE "${CMAKE_CURRENT_SOURCE_DIR}/manticore.spec.in" )
 	set ( CPACK_RPM_dbg_USER_BINARY_SPECFILE "" )
 endif()
 

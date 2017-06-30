@@ -1,8 +1,13 @@
 # -*- rpm-spec -*-
+#
+# template spec file for manticore
+#
 
-#
-# spec file for manticore 
-#
+%if 0%{?fedora} >= 15 || 0%{?rhel} >= 7
+%global with_systemd 1
+%else
+%global with_systemd 0
+%endif
 
 %define vertag		-release
 %define manticore_user	manticore
@@ -19,7 +24,13 @@ Vendor:         @CPACK_PACKAGE_VENDOR@
 URL:            http://manticoresearch.com
 Packager:       Manticore Software Ltd.
 
+%if %{with_systemd}
 BuildRequires: systemd-units
+%else
+Requires(post): chkconfig
+Requires(preun): chkconfig
+Requires(preun): initscripts
+%endif
 
 @TMP_RPM_URL@
 @TMP_RPM_REQUIRES@
@@ -40,9 +51,18 @@ BuildRequires: systemd-units
 %define _rpmfilename @CPACK_RPM_FILE_NAME@
 %define _unpackaged_files_terminate_build 0
 %define _topdir @CPACK_RPM_DIRECTORY@
+%define _scripts @MANTICORE_SOURCE_DIR@/config
+%define _part @CPACK_RPM_PACKAGE_COMPONENT_PART_PATH@
+# 0%{?fedora} 0%{?dist} 1%{?dist} %{dist}
 @TMP_RPM_SPEC_INSTALL_POST@
 @CPACK_RPM_SPEC_MORE_DEFINE@
 @CPACK_RPM_COMPRESSION_TYPE_TMP@
+
+%if "%{_part}" == "/bin"
+%global isbin 1
+%else
+%global isbin 0
+%endif
 
 %description
 Manticore is a full-text search server that adds many advanced features
@@ -68,8 +88,13 @@ then
 fi
 mv "@CPACK_TOPLEVEL_DIRECTORY@/tmpBBroot" $RPM_BUILD_ROOT
 
-# Install sphinx initscript
-install -p -D -m 0644 @SPHINXSEARCH_BINARY_DIR@/searchd.service $RPM_BUILD_ROOT%{_unitdir}/searchd.service
+%if %{with_systemd}
+install -p -D -m 0644 %{_scripts}/searchd.service $RPM_BUILD_ROOT%{_unitdir}/searchd.service
+install -d -m 0755 %{buildroot}/usr/lib/tmpfiles.d/
+install -m 0644 %{_scripts}/searchd.conf %{buildroot}/usr/lib/tmpfiles.d/searchd.conf
+%else
+install -p -D -m 0755 %{_scripts}/%{name}.init $RPM_BUILD_ROOT%{_initrddir}/searchd
+%endif
 
 # Create /var/log/sphinx
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/manticore
@@ -82,7 +107,7 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/manticore
 
 # Create sphinx.conf
 mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/sphinx
-cp @SPHINXSEARCH_BINARY_DIR@/sphinx-min.conf.dist \
+cp @MANTICORE_BINARY_DIR@/sphinx-min.conf.dist \
     $RPM_BUILD_ROOT%{_sysconfdir}/sphinx/sphinx.conf
 
 # Updates sphinx.conf paths
@@ -135,25 +160,38 @@ echo "To rebuild all disk indexes:"
 echo "    sudo -u manticore indexer --all --rotate"
 echo
 echo "To start/stop search daemon:"
+%if %{with_systemd}
 echo "    systemctl start/stop searchd"
+%else
+echo "    service searchd start/stop"
+%endif
 echo
 echo "To query search daemon using MySQL client:"
 echo "    mysql -h 0 -P 9306"
 echo "    mysql> SELECT * FROM test1 WHERE MATCH('test');"
 echo
-echo "See the manual at /usr/share/doc/manticore for details."
+echo "See the manual at /usr/share/doc/manticore-%{version} for details."
 echo
 echo "For commercial support please contact Manticore Software Ltd at"
-echo "http://sphinxsearch.com/contacts.html"
+echo "http://manticoresearch.com/contacts.html"
 echo
 
 %preun
 @CPACK_RPM_SPEC_PREUNINSTALL@
+%if %{with_systemd}
 %systemd_preun searchd.service
+%else
+if [ "$1" = 0 ] ; then
+    /sbin/service searchd stop >/dev/null 2>&1
+    /sbin/chkconfig --del searchd
+fi
+%endif
 
 %postun
 @CPACK_RPM_SPEC_POSTUNINSTALL@
+%if %{with_systemd}
 %systemd_postun searchd.service
+%endif
 
 
 %files
@@ -165,6 +203,7 @@ echo
 @CPACK_RPM_USER_INSTALL_FILES@
 
 # additions
+%if %{isbin}
 %config(noreplace) %{_sysconfdir}/logrotate.d/manticore
 %dir %{_localstatedir}/log/manticore
 %dir %{_localstatedir}/run/manticore
@@ -173,7 +212,16 @@ echo
 %dir %{_sysconfdir}/sphinx
 %config(noreplace) %{_sysconfdir}/sphinx/sphinx.conf
 
+%if %{with_systemd}
 %{_unitdir}/searchd.service
+%else
+%{_initrddir}/searchd
+%endif
+
+%if %{with_systemd}
+/usr/lib/tmpfiles.d/searchd.conf
+%endif
+%endif
 
 %changelog
 @CPACK_RPM_SPEC_CHANGELOG@

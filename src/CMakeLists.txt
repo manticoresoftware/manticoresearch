@@ -41,7 +41,7 @@ add_custom_target (
 		-D PACKAGE_NAME="${PACKAGE_NAME}"
 		-P ${CMAKE_SOURCE_DIR}/sphinxrev.cmake
 )
-include_directories ( "${SPHINXSEARCH_BINARY_DIR}/config" )
+include_directories ( "${MANTICORE_BINARY_DIR}/config" )
 add_definitions ( "-DBUILD_WITH_CMAKE" )
 
 #message (STATUS "Extra libraries:${EXTRA_LIBRARIES}")
@@ -49,7 +49,7 @@ add_definitions ( "-DBUILD_WITH_CMAKE" )
 # add the extra targets in the case we want on-the-fly grammar compiler
 if ( USE_BISON )
 
-	set ( BISON_DIR "${SPHINXSEARCH_BINARY_DIR}/config" )
+	set ( BISON_DIR "${MANTICORE_BINARY_DIR}/config" )
 
 	BISON_TARGET ( ExprParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxexpr.y" ${BISON_DIR}/bissphinxexpr.c )
 	BISON_TARGET ( SelectParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxselect.y" ${BISON_DIR}/bissphinxselect.c )
@@ -72,7 +72,7 @@ endif ( USE_BISON )
 
 # add the extra targets in the case we want on-the-fly lex compiler
 if ( USE_FLEX )
-	set ( FLEX_DIR "${SPHINXSEARCH_BINARY_DIR}/config" )
+	set ( FLEX_DIR "${MANTICORE_BINARY_DIR}/config" )
 
 	FLEX_TARGET ( SQLlex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql.l" ${FLEX_DIR}/flexsphinxql.c COMPILE_FLAGS "-i" )
 	FLEX_TARGET ( Jsonlex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxjson.l" ${FLEX_DIR}/flexsphinxjson.c COMPILE_FLAGS "-i -Pyy2" )

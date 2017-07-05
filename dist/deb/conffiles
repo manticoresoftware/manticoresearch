@@ -1,0 +1,4 @@
+/etc/default/manticore
+/etc/init/manticore.conf
+/etc/sphinxsearch/sphinx.conf
+/etc/init.d/manticore

@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+# Automatically added by build_trusty.cmake
+if [ "$1" = install ] || [ "$1" = upgrade ]; then
+	if [ -e "/etc/init.d/manticore" ] && [ -L "/etc/init.d/manticore" ] \
+	   && [ $(readlink -f "/etc/init.d/manticore") = /lib/init/upstart-job ]
+	then
+		rm -f "/etc/init.d/manticore"
+	fi
+fi

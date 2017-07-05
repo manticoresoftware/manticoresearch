@@ -1,0 +1,6 @@
+#!/bin/sh
+set -e
+# Automatically added by build_wheezy, build_jessie
+if [ -x "/etc/init.d/manticore" ]; then
+	invoke-rc.d manticore stop || exit $?
+fi

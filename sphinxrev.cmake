@@ -51,12 +51,15 @@ if ( NOT SPH_GIT_COMMIT_ID )
 	endif ()
 endif ()
 
+# extract version number string from sphinx.h
+FILE ( STRINGS "${SOURCE_DIR}/src/sphinx.h" _STRINGS LIMIT_COUNT 500
+		REGEX "^#define[ \t]+SPHINX_VERSION_NUMBERS.*" )
+STRING ( REGEX REPLACE ".*\"(.*)\"(.*)$" "\\1" VERNUMBERS "${_STRINGS}" )
+
 # All info collected (we need SPH_GIT_COMMIT_ID, GIT_TIMESTAMP_ID, GIT_BRANCH_ID and SPHINX_TAG, if any)
 message ( STATUS "Branch is ${GIT_BRANCH_ID}, ${GIT_TIMESTAMP_ID}, ${SPH_GIT_COMMIT_ID}" )
 
 configure_file ( "${SOURCE_DIR}/src/sphinxversion.h.in" "${BINARY_DIR}/config/gen_sphinxversion.h" @ONLY )
 configure_file ( "${SOURCE_DIR}/CPackOptions.cmake.in" "${BINARY_DIR}/config/CPackOptions.cmake" @ONLY )
-
-
 
 

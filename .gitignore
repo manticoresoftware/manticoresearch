@@ -21,6 +21,7 @@
 
 # clion
 /.idea
+/cmake-build*
 
 # /config/
 /config/stamp-h1

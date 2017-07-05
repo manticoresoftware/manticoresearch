@@ -489,7 +489,7 @@ endforeach ()
 
 message ( STATUS "Generating config.h file" )
 configure_file ( "${MANTICORE_SOURCE_DIR}/config/config_cmake.h.in"
-		"${MANTICORE_BINARY_DIR}/config/config.h" )
+		"${MANTICORE_BINARY_DIR}/config/config.h" ESCAPE_QUOTES )
 add_definitions ( -DHAVE_CONFIG_H )
 include_directories ( "${MANTICORE_BINARY_DIR}/config" )
 

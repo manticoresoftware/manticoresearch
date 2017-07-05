@@ -269,8 +269,7 @@ function( INSTALL_DBG BINARYNAME )
 			message ( SEND_ERROR "Missed objcopy prog. Can't split symbols!" )
 			unset ( SPLIT_SYMBOLS CACHE )
 		endif ( NOT DEFINED CMAKE_OBJCOPY )
-		mark_as_advanced ( CMAKE_OBJCOPY )
-		mark_as_advanced ( BinUtils_DIR )
+		mark_as_advanced ( CMAKE_OBJCOPY BinUtils_DIR )
 
 		ADD_CUSTOM_COMMAND ( TARGET ${BINARYNAME} POST_BUILD
 				COMMAND ${CMAKE_OBJCOPY} --only-keep-debug $<TARGET_FILE:${BINARYNAME}> $<TARGET_FILE:${BINARYNAME}>.dbg

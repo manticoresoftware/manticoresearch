@@ -1267,7 +1267,16 @@ bool CSphMutex::TimedLock ( int iMsec )
 		iRes = pthread_mutex_trylock ( &m_tMutex );
 		if ( iRes!=EBUSY )
 			break;
-		sphSleepMsec ( 1 );
+		// below is inlined sphSleepMsec(1) - placed here to avoid dependency from libsphinx (for wordbreaker)
+#if USE_WINDOWS
+		Sleep ( 1 );
+#else
+		struct timeval tvTimeout;
+		tvTimeout.tv_sec = 0;
+		tvTimeout.tv_usec = 1000;
+		select ( 0, NULL, NULL, NULL, &tvTimeout );
+#endif
+
 	} while ( sphMicroTimer ()<tmTill );
 	if ( iRes==EBUSY )
 		iRes = pthread_mutex_trylock ( &m_tMutex );

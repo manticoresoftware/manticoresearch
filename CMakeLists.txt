@@ -501,14 +501,6 @@ if ( WIN32 )
 	endif ()
 endif ()
 
-set ( SPHINX_PACKAGE_SUFFIX "" )
-FOREACH ( SUFFIX ${PKGSUFFIXES} )
-	set ( SPHINX_PACKAGE_SUFFIX "${SPHINX_PACKAGE_SUFFIX}-${SUFFIX}" )
-endforeach ()
-
-add_subdirectory ( src )
-add_subdirectory ( test )
-
 # a bit of installation stuff
 if ( WIN32 )
 	install ( DIRECTORY api doc contrib DESTINATION share/doc COMPONENT doc )
@@ -519,7 +511,7 @@ if ( WIN32 )
 	install ( DIRECTORY DESTINATION data COMPONENT config )
 endif ()
 
-configure_file ( "COPYING" "${MANTICORE_BINARY_DIR}/COPYING.txt" @ONLY )
+configure_file ( "COPYING" "${MANTICORE_BINARY_DIR}/COPYING.txt" COPYONLY )
 
 set ( CPACK_SOURCE_IGNORE_FILES "/\\\\.idea/" "/\\\\.git/"
 		"/\\\\.svn/" "/autom4te\\\\.cache/" "/bin/" "/junk/" "/win/"
@@ -530,7 +522,6 @@ set ( CPACK_PACKAGE_CONTACT "${PACKAGE_NAME} package builds <build@manticoresear
 set ( CPACK_PACKAGE_NAME "${PACKAGE_NAME}" )
 set ( CPACK_PACKAGE_VENDOR "${COMPANY_NAME}" )
 set ( CPACK_RESOURCE_FILE_LICENSE "${MANTICORE_BINARY_DIR}/COPYING.txt" )
-
 set ( CPACK_COMPONENT_APPLICATIONS_GROUP "bin" )
 set ( CPACK_COMPONENT_GROUP_BIN_DISPLAY_NAME "Runtime" )
 set ( CPACK_COMPONENT_APPLICATIONS_DISPLAY_NAME "${PACKAGE_NAME} applications" )
@@ -542,19 +533,11 @@ set ( CPACK_COMPONENT_DBGSYMBOLS_GROUP "dbg" )
 set ( CPACK_COMPONENT_GROUP_DBG_DISPLAY_NAME "Development" )
 set ( CPACK_COMPONENT_DBGSYMBOLS_DISPLAY_NAME "Debug symbols" )
 set ( CPACK_COMPONENT_DBGSYMBOLS_DEPENDS applications )
-set ( CPACK_DEB_COMPONENT_INSTALL 1 )
+
 set ( CPACK_RPM_COMPONENT_INSTALL 1 )
-SET ( CPACK_RPM_PACKAGE_LICENSE "GNU General Public License v. 2 (GPL2)" )
+set ( CPACK_DEB_COMPONENT_INSTALL 1 )
 set ( CPACK_ARCHIVE_COMPONENT_INSTALL 1 )
 
-
-IF ( ${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64" )
-	SET ( CPACK_DEBIAN_PACKAGE_ARCHITECTURE amd64 )
-	SET ( CPACK_RPM_PACKAGE_ARCHITECTURE "x86_64" )
-ELSEIF ( ${CMAKE_SYSTEM_PROCESSOR} STREQUAL "i686" )
-	SET ( CPACK_DEBIAN_PACKAGE_ARCHITECTURE i386 )
-	SET ( CPACK_RPM_PACKAGE_ARCHITECTURE "i386" )
-ENDIF ( ${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64" )
 
 if ( WIN32 )
 	set ( SUGGEST_GENERATOR "ZIP" )
@@ -568,30 +551,18 @@ if ( NOT CPACK_GENERATOR )
 	set ( CPACK_GENERATOR "${SUGGEST_GENERATOR}" )
 endif ()
 
+
+include ( SetBuildType )
+
+
+set ( SPHINX_PACKAGE_SUFFIX "" )
+FOREACH ( SUFFIX ${PKGSUFFIXES} )
+	set ( SPHINX_PACKAGE_SUFFIX "${SPHINX_PACKAGE_SUFFIX}-${SUFFIX}" )
+endforeach ()
+
 set ( CPACK_PROJECT_CONFIG_FILE "${MANTICORE_BINARY_DIR}/config/CPackOptions.cmake" )
 
-IF ( NOT DISTR_TYPE )
-	SET ( DISTR_TYPE Redhat7 CACHE STRING "Choose the distr." FORCE )
-	set_property ( CACHE DISTR_TYPE PROPERTY STRINGS "Redhat5" "Redhat6"
-			"Redhat7" )
-ENDIF ()
-
-if ( DISTR_TYPE MATCHES "Redhat7" )
-	message (STATUS "Will create RPM for RedHat/Centos 7")
-	set ( CPACK_GENERATOR "RPM" )
-	set ( CONFDIR "/var" )
-	configure_file ( "sphinx-min.conf.in" "${MANTICORE_BINARY_DIR}/sphinx-min.conf.dist" @ONLY )
-	configure_file ( "sphinx.conf.in" "${MANTICORE_BINARY_DIR}/sphinx.conf.dist" @ONLY )
-	install ( FILES ${MANTICORE_BINARY_DIR}/sphinx-min.conf.dist
-	${MANTICORE_BINARY_DIR}/sphinx.conf.dist
-			DESTINATION share/doc/${PACKAGE_NAME} COMPONENT doc )
-	install ( FILES doc/indexer.1 doc/indextool.1 doc/searchd.1 doc/spelldump.1
-			DESTINATION share/man/man1 COMPONENT doc )
-	install ( DIRECTORY api DESTINATION share/${PACKAGE_NAME} COMPONENT doc )
-	install ( FILES COPYING doc/sphinx.html doc/sphinx.txt example.sql
-			DESTINATION share/doc/${PACKAGE_NAME} COMPONENT doc )
-	set ( CPACK_RPM_bin_USER_BINARY_SPECFILE "${CMAKE_CURRENT_SOURCE_DIR}/manticore.spec.in" )
-	set ( CPACK_RPM_dbg_USER_BINARY_SPECFILE "" )
-endif()
+add_subdirectory ( src )
+add_subdirectory ( test )
 
 include ( CPack )

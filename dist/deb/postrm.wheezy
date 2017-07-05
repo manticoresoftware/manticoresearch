@@ -1,0 +1,6 @@
+#!/bin/sh
+set -e
+# Automatically added by build_wheezy.cmake
+if [ "$1" = "purge" ] ; then
+	update-rc.d manticore remove >/dev/null
+fi

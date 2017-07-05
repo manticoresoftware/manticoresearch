@@ -51,7 +51,7 @@ Requires(preun): initscripts
 %define _rpmfilename @CPACK_RPM_FILE_NAME@
 %define _unpackaged_files_terminate_build 0
 %define _topdir @CPACK_RPM_DIRECTORY@
-%define _scripts @MANTICORE_SOURCE_DIR@/config
+%define _scripts @SOURCE_DIR@/dist/rpm
 %define _part @CPACK_RPM_PACKAGE_COMPONENT_PART_PATH@
 # 0%{?fedora} 0%{?dist} 1%{?dist} %{dist}
 @TMP_RPM_SPEC_INSTALL_POST@
@@ -107,7 +107,7 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/manticore
 
 # Create sphinx.conf
 mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/sphinx
-cp @MANTICORE_BINARY_DIR@/sphinx-min.conf.dist \
+cp @BINARY_DIR@/sphinx-min.conf.dist \
     $RPM_BUILD_ROOT%{_sysconfdir}/sphinx/sphinx.conf
 
 # Updates sphinx.conf paths

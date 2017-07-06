@@ -9429,9 +9429,9 @@ SqlParser_c::SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollati
 	, m_dStmt ( dStmt )
 	, m_eCollation ( eCollation )
 	, m_uSyntaxFlags ( 0 )
-	, m_bNamedVecBusy ( false )
 	, m_bGotFilterAnd ( false )
 	, m_bGotFilterOr ( false )
+	, m_bNamedVecBusy ( false )
 {
 	assert ( !m_dStmt.GetLength() );
 	PushQuery ();

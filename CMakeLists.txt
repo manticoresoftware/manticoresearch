@@ -307,50 +307,7 @@ else ( WIN32 )
 	mark_as_advanced ( WITH_MYSQL_ROOT )
 
 	if ( WITH_MYSQL )
-		find_package ( MYSQL )
-
-		if ( MYSQL_FOUND )
-			set ( USE_MYSQL 1 )
-			include_directories ( ${MYSQL_INCLUDE_DIR} )
-
-			# -DNDEBUG we set or reset on global level, so purge it from myqsl flags
-			string ( REPLACE "-DNDEBUG" "" MYSQL_CXXFLAGS "${MYSQL_CXXFLAGS}" )
-			# keep only defs, include paths and libs
-			string ( REGEX MATCHALL "-[DLIl]([^ ]+)" MYSQL_CXXFLAGS "${MYSQL_CXXFLAGS}" )
-			# convert list after MATCHALL back to plain string
-			string ( REGEX REPLACE ";" " " MYSQL_CXXFLAGS "${MYSQL_CXXFLAGS}" )
-
-			if ( MYSQL_CXXFLAGS )
-				set ( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MYSQL_CXXFLAGS}" )
-			endif ( MYSQL_CXXFLAGS )
-			CMAKE_DEPENDENT_OPTION ( DL_MYSQL "load mysql library dynamically" ON "MYSQL_FOUND;HAVE_DL;NOT STATIC_MYSQL" OFF )
-			CMAKE_DEPENDENT_OPTION ( STATIC_MYSQL "link to mysql library statically" OFF "MYSQL_FOUND;NOT DL_MYSQL" OFF )
-			if ( STATIC_MYSQL )
-				message ( STATUS "Mysql will be linked statically" )
-				string ( REGEX REPLACE "mysqlclient" "libmysqlclient.a" MYSQL_LIBRARIES "${MYSQL_LIBRARIES}" )
-			endif ( STATIC_MYSQL )
-			if ( DL_MYSQL )
-				message ( STATUS "Mysql will not be linked (will be loaded at runtime)" )
-				set ( DL_MYSQL 1 )
-				cfginfo ( "DL_MYSQL=ON" )
-			else ( DL_MYSQL )
-				list ( APPEND EXTRA_LIBRARIES ${MYSQL_LIBRARIES} )
-			endif ()
-			cfgvalue ( MYSQL_LIB )
-			cfgvalue ( MYSQL_CONFIG_EXECUTABLE )
-			mark_as_advanced ( MYSQL_CONFIG_EXECUTABLE )
-			mark_as_advanced ( MYSQL_LIB )
-		else ( MYSQL_FOUND )
-			message ( SEND_ERROR
-					"********************************************************************************
-					ERROR: cannot find MySQL libraries. If you want to compile with MySQL support,
-					you must either specify file locations explicitly using
-					-D WITH_MYSQL_INCLUDES=... and -D WITH_MYSQL_LIBS=... options, or make sure path to
-					mysql_config is listed in your PATH environment variable. Or specify the path usint
-					-D MYSQL_CONFIG_EXECUTABLE=/path/to/mysql_config. If you want to
-					disable MySQL support, use -D WITH_MYSQL=OFF option.
-					********************************************************************************" )
-		endif ( MYSQL_FOUND )
+		include ( GetMYSQL )
 	endif ( WITH_MYSQL )
 
 	# test for POSTGRESQL
@@ -362,46 +319,7 @@ else ( WIN32 )
 	mark_as_advanced ( WITH_PGSQL_INCLUDES )
 
 	if ( WITH_PGSQL )
-		if ( WITH_PGSQL_INCLUDES )
-			set ( PostgreSQL_INCLUDE_DIR ${WITH_PGSQL_INCLUDES} )
-		endif ( WITH_PGSQL_INCLUDES )
-
-		if ( WITH_PGSQL_LIBS )
-			set ( PostgreSQL_LIBRARIES ${WITH_PGSQL_LIBS}/libpq.so )
-		endif ( WITH_PGSQL_LIBS )
-
-		if ( NOT ( WITH_PGSQL_INCLUDES AND WITH_PGSQL_LIBS ))
-			find_package ( PostgreSQL )
-		endif ()
-
-		if ( PostgreSQL_FOUND )
-			set ( USE_PGSQL 1 )
-			include_directories ( ${PostgreSQL_INCLUDE_DIRS} )
-
-			CMAKE_DEPENDENT_OPTION ( DL_PGSQL "load pgsql library dynamically" ON "PostgreSQL_FOUND;HAVE_DL;NOT STATIC_PGSQL" OFF )
-			CMAKE_DEPENDENT_OPTION ( STATIC_PGSQL "link to pgsql library statically" OFF "PostgreSQL_FOUND;NOT DL_PGSQL" OFF )
-			if ( STATIC_PGSQL )
-				message ( STATUS "PosgreSQL will be linked statically" )
-				string ( REGEX REPLACE "pq" "libpq.a" PostgreSQL_LIBRARIES "${PostgreSQL_LIBRARIES}" )
-			endif ( STATIC_PGSQL )
-
-			if ( DL_PGSQL )
-				message ( STATUS "PosgreSQL will not be linked (will be loaded at runtime)" )
-				set ( DL_PGSQL 1 )
-				GET_FILENAME_COMPONENT ( PGSQL_LIB ${PostgreSQL_LIBRARY} NAME )
-			else ( DL_PGSQL )
-				list ( APPEND EXTRA_LIBRARIES ${PostgreSQL_LIBRARIES} )
-			endif ()
-		else ( PostgreSQL_FOUND )
-			message ( SEND_ERROR
-					"********************************************************************************
-					ERROR: cannot find PostgreSQL libraries. If you want to compile with PosgregSQL support,
-					you must either specify file locations explicitly using
-					-D WITH_PGSQL_INCLUDES=... and -D WITH_PGSQL_LIBS=... options, or make sure path to
-					pg_config is listed in your PATH environment variable. If you want to
-					disable PostgreSQL support, use -D WITH_PGSQL=OFF option.
-					********************************************************************************" )
-		endif ( PostgreSQL_FOUND )
+		include ( GetPGSQL )
 	endif ( WITH_PGSQL )
 
 endif ( WIN32 )

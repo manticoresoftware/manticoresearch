@@ -16,14 +16,11 @@
 # https://github.com/manticoresoftware/re2/archive/master.zip
 
 set ( RE2_URL "https://github.com/manticoresoftware/re2/archive/master.zip" )
-mark_as_advanced ( RE2_URL )
 
 set ( WITH_RE2_INCLUDES "" CACHE PATH "path to re2 header files" )
 set ( WITH_RE2_LIBS "" CACHE PATH "path to re2 libraries" )
 set ( WITH_RE2_ROOT "" CACHE PATH "path to the libre2 bundle (where both header and library lives)" )
-mark_as_advanced ( WITH_RE2_INCLUDES )
-mark_as_advanced ( WITH_RE2_LIBS )
-mark_as_advanced ( WITH_RE2_ROOT )
+mark_as_advanced ( RE2_URL WITH_RE2_INCLUDES WITH_RE2_LIBS WITH_RE2_ROOT )
 
 find_package ( RE2 )
 if ( RE2_FOUND )

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>n best group by with packedfactors</name>
+<requires><non-rt/></requires>
+
+<config>
+indexer
+{
+	mem_limit			= 28M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers					= threads
+}
+
+source src_xml1
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data.xml
+}
+
+index idx_factors
+{
+	source			= src_xml1
+	path			= <data_path/>/idx_factors
+	docinfo			= extern
+}
+
+source src_xml_rev
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data_rev.xml
+}
+
+index idx_factors_rev
+{
+	source			= src_xml_rev
+	path			= <data_path/>/idx_factors_rev
+	docinfo			= extern
+}
+
+
+</config>
+
+<sphqueries>
+<!-- regression packedfactors vs group by N -->
+<sphinxql>select id, groupby() g, count(*) c, t, packedfactors() p from idx_factors_rev where match ('this') group 2 by gid option max_matches=5, ranker=expr('1')</sphinxql>
+<sphinxql>select id, groupby() g, count(*) c, t, packedfactors() p from idx_factors_rev where match ('this') group 3 by gid option max_matches=17, ranker=expr('1')</sphinxql>
+
+<sphinxql>select id, groupby() g, count(*) c, t, packedfactors() p from idx_factors where match ('this') group 20 by gid option max_matches=1000, ranker=expr('1')</sphinxql>
+<sphinxql>select id, groupby() g, count(*) c, t, packedfactors() p from idx_factors where match ('this') group 2 by gid option max_matches=5, ranker=expr('1')</sphinxql>
+<sphinxql>select id, groupby() g, count(*) c, t, packedfactors() p from idx_factors where match ('this') group 3 by gid option max_matches=17, ranker=expr('1')</sphinxql>
+</sphqueries>
+
+</test>

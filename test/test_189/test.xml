@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>master vs agent compat mode</name>
+
+<num_agents>3</num_agents>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+<agent0>
+index dist
+{
+	type = distributed
+	agent = <agent1_address/>:loc1
+	agent = <agent2_address/>:loc2
+}
+</agent0>
+
+<agent1>
+source src_a1
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, idd, 1 as aagent, body FROM test_table where id in ( 1,2,3,4,5 )
+	sql_attr_uint	= aagent
+	sql_attr_uint	= idd
+}
+
+index loc1
+{
+	source			= src_a1
+    docinfo			= extern
+	path			= <data_path/>/a1
+}
+</agent1>
+
+<agent2>
+source src_a2
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, idd, 2 as aagent, body FROM test_table where id in ( 5,6,7, 8, 9 )
+	sql_attr_uint	= aagent
+	sql_attr_uint	= idd
+}
+
+index  loc2
+{
+	source			= src_a2
+    docinfo			= extern
+	path			= <data_path/>/a2
+}
+</agent2>
+
+</config>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`id` int(11) NOT NULL default '0',
+	`idd` int(11) NOT NULL default '0',
+	`body` varchar(1024) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 1,		'the dog' ),
+( 2, 10,	'the cat' ),
+( 3, 2,		'the bird' ), 
+( 4, 11,	'cat eats bird' ),
+( 5, 3, 		'dog eats cat' ), 
+( 6, 12,	'bird' ), 
+( 7, 4,		'the cat' ),
+( 8, 5,		'eats' ),
+( 9, 13, 	'the' )
+</db_insert>
+
+<sphqueries>
+<sphinxql>select * from dist</sphinxql>
+<sphinxql>select idd, aagent from dist group by idd</sphinxql>
+<sphinxql>select *, idd, aagent from dist group by idd</sphinxql>
+<sphinxql>select idd, @count, aagent from dist group by idd</sphinxql>
+<sphinxql>select idd, count(*), aagent from dist group by idd</sphinxql>
+<sphinxql>select idd, count(*), aagent from dist group by idD</sphinxql>
+<!-- regression schema attributes with alias -->
+<sphinxql>select idd, idd*2 as rr from dist</sphinxql>
+<sphinxql>select idd as r0, r0*2 as rr from dist</sphinxql>
+<!-- alias as shema attribute -->
+<sphinxql>select idd as agent from dist</sphinxql>
+<sphinxql>select agent as idd, idd * 3 as rr from dist</sphinxql>
+<sphinxql>select idd as agent, agent + 2 as idd, idd - 3 as rr from dist</sphinxql>
+</sphqueries>
+
+</test>

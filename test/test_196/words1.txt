@@ -1,0 +1,2 @@
+simple form => result1
+manuscript => book1

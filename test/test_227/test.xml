@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>API distributed updates; QL uberpackets</name>
+
+<config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	max_filter_values 	= 500000
+	max_packet_size 	= 18M
+	dist_threads			= 4
+	read_timeout			= 1
+	workers = threads
+}
+
+source src1
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, group_id, title, mva FROM test_table
+	sql_attr_uint	= group_id
+	sql_attr_multi = uint mva from field
+}
+
+source src2 : src1
+{
+	sql_query		= SELECT 10+id, group_id, title, mva FROM test_table
+}
+
+source src_i1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT id, title, group_id as gid FROM test_table
+	sql_attr_uint	= gid
+}
+
+source src_i2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT id + 100, title, group_id as gid FROM test_table
+	sql_attr_uint	= gid
+}
+<agent0>
+index block1
+{
+	source			= src1
+	path			= <data_path/>/block1
+	docinfo			= extern
+	min_word_len	= 1
+}
+</agent0>
+
+<agent1>
+index block2
+{
+	source			= src2
+	path			= <data_path/>/block2
+	docinfo			= extern
+	min_word_len	= 1
+}
+
+index dist_agent_2
+{
+	source			= src1
+	path			= <data_path/>/dist_agent_2
+	docinfo			= extern
+}
+
+</agent1>
+
+<agent0>
+index dist
+{
+	type					= distributed
+	local					= block1
+	agent					= <agent_address/>:block2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist2
+{
+	type					= distributed
+	agent					= <agent_address/>:dist_agent_2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index i1
+{
+	source			= src_i1
+	path			= <data_path/>/i1
+    docinfo			= extern
+}
+
+index i2
+{
+	source			= src_i2
+	path			= <data_path/>/i2
+    docinfo			= extern
+}
+
+index rt
+{
+	type = rt
+	path			= <data_path/>/rt
+	docinfo = extern
+	rt_mem_limit = 128k
+	rt_field		= title
+	rt_attr_uint	= gid
+}
+</agent0>
+</config>
+
+<num_agents>2</num_agents>
+
+<custom_test>
+<![CDATA[
+$results = array ();
+
+$results[] = $client->XQuery ( "", "dist" );
+$results[] = $client->XUpdateAttributes ( "dist", array("group_id"), array(11=>array(123)) );
+$results[] = $client->XUpdateAttributes ( "dist", array("mva"), array ( 4=>array(array(1001, 1002)), 11=>array(array(1011, 1012)) ), true );
+$results[] = $client->XQuery ( "", "dist" );
+
+// here is going regression master fails to send 4k attributes to agent
+$gid = array();
+for ( $i=0; $i<50000; $i++ )
+	$gid[] = $i;
+
+$client->SetFilter ( 'group_id', $gid );
+$results[] = $client->XQuery ( "", "dist2" );
+
+// just add one dummy connection for non RT mode to be on pair with RT mode
+global $g_locals;
+if ( !array_key_exists ('rt_mode', $g_locals) || !$g_locals['rt_mode'] )
+{
+	$ql->Reconnect();
+}
+
+// regression crash on SphinxQL packet overflow max_packet_size
+$ql->Reconnect();
+$results[] = $ql->Query ( "SHOW STATUS LIKE 'connections'" );
+$results[] = $ql->Query ( "SHOW STATUS LIKE 'command_status'" );
+$results[] = $ql->Query ( "SHOW STATUS LIKE 'queries'" );
+
+$ids = "2";
+for ( $i=3; $i<400000; $i++ )
+	$ids .= "    ,      " . $i;
+$ql->query ( "show meta IN ( group_id,1,$ids ) as c1, IN ( group_id,1,$ids ) as c2, IN ( group_id,1,$ids ) as c3" );
+
+$ql->Reconnect();
+
+$results[] = $ql->Query ( "SHOW STATUS LIKE 'connections'" );
+$results[] = $ql->Query ( "SHOW STATUS LIKE 'command_status'" );
+$results[] = $ql->Query ( "SHOW STATUS LIKE 'queries'" );
+
+]]></custom_test>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id			INTEGER PRIMARY KEY NOT NULL AUTO_INCREMENT,
+	group_id	INTEGER NOT NULL,
+	title		VARCHAR(255) NOT NULL,
+	mva		VARCHAR(255) NOT NULL
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table ( id, group_id, title, mva ) VALUES 
+( 1, 1, 'test one', '10 11' ),
+( 2, 1, 'test two', '10 11' ),
+( 3, 2, 'test three', '10 11' ),
+( 4, 2, 'test four', '10 11' )
+</db_insert>
+
+</test>

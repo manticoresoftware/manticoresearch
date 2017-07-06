@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>ranker internals (PACKEDFACTORS(), different IDF variants, etc)</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+	sql_attr_uint	= gid
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+	index_field_lengths	= 1
+}
+
+index test_stop
+{
+	source			= test
+	path			= <data_path/>/test_stop
+	stopwords = stopwords.txt
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	gid INTEGER NOT NULL,
+	title VARCHAR(255) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_insert>INSERT INTO test_table VALUES
+( 1, 123, 'THE document collection. Aiming for exactly 10 docs.' ),
+( 2, 123, 'the idftest2' ),
+( 3, 123, 'the idftest2 and idftest1' ),
+( 4, 123, 'the' ),
+( 5, 123, 'the' ),
+( 6, 123, 'the' ),
+( 7, 123, 'the' ),
+( 8, 123, 'the' ),
+( 9, 123, 'the' ),
+( 10, 123, 'the' )
+</db_insert>
+
+<sphqueries>
+<sphinxql>select *, weight(), packedfactors() from test where match('the') option ranker=expr('1000000+1000000*sum(sum_idf)')</sphinxql>
+<sphinxql>select *, weight(), packedfactors() from test where match('the') option idf=plain, ranker=expr('1000000+1000000*sum(sum_idf)')</sphinxql>
+<sphinxql>select *, weight(), packedfactors() from test where match('idftest1') option idf=normalized, ranker=expr('1000000+1000000*sum(sum_idf)')</sphinxql>
+<sphinxql>select *, weight(), packedfactors() from test where match('idftest1') option idf=plain, ranker=expr('1000000+1000000*sum(sum_idf)')</sphinxql>
+<sphinxql>select *, weight(), packedfactors() from test where match('idftest1') option idf='plain,tfidf_unnormalized', ranker=expr('1000000+1000000*sum(sum_idf)')</sphinxql>
+<sphinxql>select *, weight(), packedfactors() from test where match('idftest1 | fnord') option idf=normalized, ranker=expr('1000000+1000000*sum(sum_idf)')</sphinxql>
+<sphinxql>select *, weight(), packedfactors() from test where match('idftest1 | fnord') option idf=plain, ranker=expr('1000000+1000000*sum(sum_idf)')</sphinxql>
+<sphinxql>select *, weight(), packedfactors() from test where match('idftest1 | fnord') option idf='plain,tfidf_unnormalized', ranker=expr('1000000+1000000*sum(sum_idf)')</sphinxql>
+<!-- regression heavy factors got enabed along with packedfactors -->
+<sphinxql>select *, weight(), packedfactors() from test where match('idftest1 the') option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
+<sphinxql>select *, weight(), packedfactors() from test where match('and idftest1 the') option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
+<sphinxql>select *, weight(), packedfactors() from test where match('the idftest1') option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
+<sphinxql>select *, weight(), packedfactors() from test where match('the and idftest1') option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
+
+<!-- packedfactors with json output -->
+<sphinxql>select *, weight(), factors({json=1}) from test where match('idftest1 the') option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
+<sphinxql>select *, weight(), packedfactors({json=1}) from test where match('and idftest1 the')  option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
+<sphinxql>select *, weight(), factors({json=1}) from test where match('the idftest1')  option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
+<sphinxql>select *, weight(), packedfactors({json=1}) from test where match('the and idftest1')  option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
+<sphinxql>select *, weight(), packedfactors({json=1}) from test_stop where match('the and idftest1')  option idf='plain,tfidf_unnormalized', ranker=expr('1')</sphinxql>
+
+</sphqueries>
+
+</test>

@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>pick up indexes from new path using rotation</name>
+
+<requires><non-rt/><id64/></requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	binlog_path =
+	workers = threads
+	seamless_rotate = 1
+}
+
+source sql1
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = select id, text, mode from test_table where mode=1
+	sql_attr_uint = mode
+}
+
+index plain1
+{
+	source = sql1
+	path = <data_path/>/plain1
+	docinfo = extern
+}
+
+source sql2 : sql1
+{
+	sql_query = select id, text, mode from test_table where mode=2
+}
+
+
+index plain2
+{
+	source = sql2
+	path = <data_path/>/plain2
+	docinfo = extern
+}
+
+source sql3 : sql1
+{
+	sql_query = select id, text, mode from test_table where mode=3
+}
+
+
+index plain3
+{
+	source = sql3
+	path = <data_path/>/plain_old_location_3
+	docinfo = extern
+}
+
+source sql4 : sql1
+{
+	sql_query = select id, text, mode from test_table where mode=4
+}
+
+
+index plain4
+{
+	source = sql4
+	path = <data_path/>/plain_old_location_4
+	docinfo = extern
+}
+</config>
+
+<db_drop>drop table if exists test_table</db_drop>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	text varchar(255) not null,
+	mode int
+);
+</db_create>
+
+<db_insert>
+insert into test_table values
+( 1, 'first',  1 ),
+( 2, 'second',  1 ),
+( 3, 'third',  2 ),
+( 4, 'fourth', 2 ),
+( 5, 'fifth',  3 ),
+( 6, 'six',  3 ),
+
+( 10, 'many',    4 ),
+( 11, 'more',    4 )
+</db_insert>
+
+<custom_test><![CDATA[
+
+$results = array();
+$ql->Reconnect();
+
+$results[] = "\n" . $ql->Query ( "SHOW tables" );
+$results[] = 'plain2';
+$results[] = "\n" . $ql->Query ( "SELECT * FROM plain2" );
+$results[] = 'plain3';
+$results[] = "\n" . $ql->Query ( "SELECT * FROM plain3" );
+$results[] = 'plain4';
+$results[] = "\n" . $ql->Query ( "SELECT * FROM plain4" );
+
+$orig_conf = file('config.conf');
+
+$new_conf = '';
+foreach ( $orig_conf as $line )
+{
+	$got3path = strpos ( $line, 'plain_old_location_3' );
+	if ( $got3path )
+		$line = substr ( $line, 0, $got3path ) . 'plain_new_location_3' . "\n";
+	$got4path = strpos ( $line, 'plain_old_location_4' );
+	if ( $got4path )
+		$line = substr ( $line, 0, $got4path ) . 'plain_new_location_4' . "\n";
+	
+	$new_conf .= $line;
+}
+file_put_contents('config.conf', $new_conf);
+
+$extensions = array ( 'spa', 'spd', 'spe', 'sph', 'spi', 'spk', 'spm', 'spp', 'sps' );
+foreach ( $extensions as $e )
+	copy ( 'test_250/data/plain2.' . $e, 'data/plain_new_location_3.new.' . $e );
+foreach ( $extensions as $e )
+	copy ( 'test_250/data/plain2.' . $e, 'data/plain_new_location_4.' . $e );
+
+RunIndexer ( $errors, '--rotate plain1' ); // just to send SIGHUP to daemon
+sleep(2);
+
+$results[] = 'plain3 and plain4 changed paths';
+$results[] = 'plain3';
+$results[] = "\n" . $ql->Query ( "SELECT * FROM plain3" );
+$results[] = 'plain4';
+$results[] = "\n" . $ql->Query ( "SELECT * FROM plain4" );
+]]></custom_test>
+
+</test>

@@ -1,0 +1,63 @@
+# /
+/Makefile
+/config.status
+/config.log
+/sphinx-min.conf.dist
+/sphinx.conf.dist
+/bin
+/junk
+/*.suo
+/*.ncb
+/*.sdf
+/*.opensdf
+/.hg
+
+# /api/libsphinxclient/
+/api/libsphinxclient/*.ncb
+/api/libsphinxclient/*.suo
+/api/libsphinxclient/*.user
+/api/libsphinxclient/debug
+/api/libsphinxclient/release
+
+# clion
+/.idea
+
+# /config/
+/config/stamp-h1
+/config/config.h
+
+# /libstemmer_c/
+/libstemmer_c/Makefile
+/libstemmer_c/.deps
+
+# /src/
+/src/indexer
+/src/indextool
+/src/search
+/src/searchd
+/src/spelldump
+/src/tests
+/src/wordbreaker
+/src/Makefile
+/src/.deps
+/src/sphinxversion.h
+/src/*.o
+/src/libsphinx.a
+
+# /win/
+/win/*.user
+/win/*.filters
+
+# /doc
+/doc/Makefile
+
+# /test
+/test/test_*/report.txt
+/test/test_*/Conf
+/test/data
+
+# /test/ql/
+/test/ql/data/*.log
+/test/ql/data/*.lock
+/test/ql/*.class
+/test/ql/*.exe

@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>blend_mode</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * FROM test_table
+}
+
+index test
+{
+	source	= test
+	path	= <data_path/>/test
+
+	blend_chars = @, &amp;, ., !, -
+
+	<dynamic>
+		<variant>blend_mode = trim_none</variant>
+		<variant>blend_mode = trim_none, skip_pure</variant>
+		<variant>blend_mode = trim_tail</variant>
+		<variant>blend_mode = trim_head, trim_tail</variant>
+	</dynamic>
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INT NOT NULL,
+	text VARCHAR(255) NOT NULL
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table VALUES
+( 1, '@simple!' ),
+( 2, 'hey @dude! a-team was awesome!!'),
+( 3, 'hey @dude... a-team was @@!!! awesome');
+</db_insert>
+
+<queries>
+<query mode="extended2">simple</query>
+<query mode="extended2">\@simple</query>
+<query mode="extended2">\@simple\!</query>
+<query mode="extended2">simple\!</query>
+<query mode="extended2">"hey" "@dude!"</query>
+<query mode="extended2">"dude a-team"</query>
+<query mode="extended2">"a-team was"</query>
+<query mode="extended2">"@@!!!"</query>
+<query mode="extended2">"was @@!!! awesome"</query>
+</queries>
+
+</test>

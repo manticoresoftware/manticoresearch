@@ -1,0 +1,4 @@
+tried and true > time1 test1
+tripple and true > time2 for test2
+dou true > time3 for test3
+# comment for sure that whole line comment should not produce warning

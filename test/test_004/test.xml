@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Test>
+  <Name>prefix_fields/infix_fields (part 1)</Name>
+  <Config>
+    <Static>indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+</Static><Searchd_Settings/>
+<Static>
+}
+
+source srclj
+{
+	type			= mysql
+</Static>
+<Sql_Settings/>
+<Static>
+	sql_query = SELECT id, subject, body, author FROM test_table
+}
+</Static>
+<Static>
+index lj
+{
+	source			= srclj
+	path			= </Static><Data_Path/><Static>/lj
+	min_word_len	= 0
+</Static>
+	<Dynamic>
+	  <Variant>	min_infix_len	= 0
+	min_prefix_len	= 3</Variant>
+	</Dynamic>
+    <Dynamic>
+      <Variant>	prefix_fields	= </Variant>
+      <Variant>	prefix_fields	= subject</Variant>
+      <Variant>	prefix_fields	= body</Variant>
+      <Variant>	prefix_fields	= body, author</Variant>
+    </Dynamic>
+    <Dynamic>
+      <Variant>	infix_fields	= </Variant>
+      <Variant>	infix_fields	= SUBJECT</Variant>
+      <Variant>	infix_fields	= body</Variant>
+      <Variant>	infix_fields	= subject, AUTHOR</Variant>
+    </Dynamic>
+    <Static>}</Static>
+  </Config>
+  <Query>
+    <Query_0>enab*</Query_0>
+    <Query_1>grea*</Query_1>
+    <Query_2>Mak*</Query_2>
+    <Query_3>*ble*</Query_3>
+    <Query_4>*thor*</Query_4>
+    <Query_5>*oda*</Query_5>
+  </Query>
+  <DB_Create>
+CREATE TABLE `test_table` (
+  `id` int(11) NOT NULL default '0',
+  `document_id` int(5) NOT NULL default '0',
+  `subject` varchar(255) NOT NULL default '',
+  `body` varchar(255) NOT NULL default '',
+  `author` varchar(255) NOT NULL default ''
+)
+  </DB_Create>
+  <DB_Drop>
+DROP TABLE IF EXISTS `test_table`
+  </DB_Drop>
+  <DB_Insert>
+INSERT INTO `test_table` VALUES
+(1,1,'Problem with enable_star searches','Having star searches is great! Just what we needed','Maurice Makaay'),
+(2,2,'Problem with enable_star searches',' But the thing is, that I cannot search for authors anymore','admin'),
+(3,3,'Problem with enable_star searches','I will try to repro it here and update you','shodan')
+  </DB_Insert>
+</Test>

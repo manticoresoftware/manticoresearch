@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>merge vs empty index</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source empty
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = select * from (select 0, 'text') t where 0;
+}
+
+source delta
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = select 1, 'text';
+}
+
+index empty
+{
+	source			= empty
+	path			= <data_path/>/empty
+}
+
+index delta
+{
+	source			= delta
+	path			= <data_path/>/delta
+}
+</config>
+
+<db_insert>select 1;</db_insert>
+
+<indexer>
+<run>--merge empty delta</run>
+</indexer>
+
+<queries>
+	<query index="empty">text</query>
+</queries>
+
+</test>

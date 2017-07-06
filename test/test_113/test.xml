@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>catching errors in multiqueries</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+	binlog_path =
+}
+
+source srctest
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT id, best_seller, attributes_id, text FROM test_table
+
+	sql_attr_uint = best_seller
+	sql_attr_uint = attributes_id
+}
+
+index products
+{
+	source				= srctest
+	path				= <data_path/>/test
+}
+
+index idx2
+{
+	source				= srctest
+	path				= <data_path/>/idx2
+}
+
+source src3
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 10 id, 100 as other_seller, 101 attributes_id, 'test' text UNION SELECT 11 id, 101 as other_seller, 102 attributes_id, 'test' text 
+
+	sql_attr_uint = other_seller
+	sql_attr_uint = attributes_id
+}
+
+index idx3
+{
+	source				= src3
+	path				= <data_path/>/idx3
+}
+
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id integer primary key not null auto_increment,
+	best_seller int not null default 0,
+	attributes_id int not null default 0,
+	text varchar(256)
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table (best_seller, attributes_id, text) VALUES
+( 1, 1, 'text1' ),
+( 2, 1, 'text2' ),
+( 3, 2, 'text3' ),
+( 4, 2, 'text4' );
+</db_insert>
+
+  <Query_Settings><![CDATA[
+  $client->SetArrayResult (true);
+$client->SetMatchMode (SPH_MATCH_EXTENDED2);
+$client->SetSortMode (SPH_SORT_EXTENDED, 'best_seller ASC');
+$index = 'products';
+$query = "";
+
+// First Query
+$client->AddQuery ($query, $index);
+
+
+//Second query - note that manufacturers_id is absent in the schema, so it must fail the query, but *NOT* crash the searchd.
+$client->SetSelect('manufacturers_id');
+$client->SetGroupBy ('manufacturers_id', SPH_GROUPBY_ATTR, 'manufacturers_id desc');
+$client->AddQuery ($query, $index);
+
+//fullscan query should return something while in multiquery with fulltext query
+$client->SetSelect('*');
+$client->SetLimits(0, 1);
+$client->ResetGroupBy();
+$client->AddQuery ('text1', $index);
+
+//Run queries
+$results = $client->RunQueries(); 
+
+
+// regression crash on multiquery with one bad query
+$index = 'products, idx2';
+$query = 'text1';
+$client->SetSortMode (SPH_SORT_EXTENDED, 'best_seller asc');
+$client->SetSelect('*');
+$client->SetLimits(0, 10);
+
+$client->AddQuery ($query, $index);
+$client->SetGroupBy ('missed', SPH_GROUPBY_ATTR, 'missed desc');
+$client->AddQuery ($query, $index);
+$results[] = $client->RunQueries(); 
+
+$client->ResetGroupBy();
+$index = 'products, idx3';
+$client->SetSelect('');
+$client->SetLimits(0, 10);
+$client->SetSortMode (SPH_SORT_EXTENDED, 'attributes_id ASC');
+$results[] = $client->Query ('', $index);
+
+]]></Query_Settings>
+
+<Queries><Query/></Queries>
+
+<sphqueries>
+<sphinxql>select missed from products; select * from products</sphinxql>
+
+<!-- regression SET and new SHOW statements at multi query-->
+<sphinxql>set profiling=1; select id from idx3 where match ( 'test' ); show plan; show meta; set profiling=1; show plan; show meta</sphinxql>
+</sphqueries>
+
+</test>

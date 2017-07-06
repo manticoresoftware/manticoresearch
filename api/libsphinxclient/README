@@ -1,0 +1,51 @@
+Pure C searchd client API library
+Sphinx search engine, http://sphinxsearch.com/
+
+API notes
+----------
+
+1. API can either copy the contents of passed pointer arguments,
+or rely on the application that the pointer will not become invalid.
+This is controlled on per-client basis; see 'copy_args' argument
+to the sphinx_create() call.
+
+When 'copy_args' is true, API will create and manage a copy of every
+string and array passed to it. This causes additional malloc() pressure,
+but makes calling code easier to write.
+
+When 'copy_args' is false, API expects that pointers passed to
+sphinx_set_xxx() calls will still be valid at the time when sphinx_query()
+or sphinx_add_query() are called.
+
+Rule of thumb: when 'copy_args' is false, do not free query arguments
+until you have the search result. Example code for that case:
+
+VALID CODE:
+
+	char * my_filter_name;
+
+	my_filter_name = malloc ( 256 );
+	strncpy ( my_filter_name, "test", 256 );
+
+	sphinx_add_filter_range ( client, my_filter_name, 10, 20, false );
+	result = sphinx_query ( client );
+
+	free ( my_filter_name );
+	my_filter_name = NULL;
+
+INVALID CODE:
+
+	void setup_my_filter ( sphinx_client * client )
+	{
+		char buffer[256];
+		strncpy ( buffer, "test", sizeof(buffer) );
+
+		// INVALID! by the time when sphinx_query() is called,
+		// buffer will be out of scope
+		sphinx_add_filter_range ( client, buffer, 10, 20, false );
+	}
+
+	setup_my_filter ( client );
+	result = sphinx_query ( client );
+
+--eof--

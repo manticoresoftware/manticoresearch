@@ -1,0 +1,400 @@
+diff -r 319c65835581 CMakeLists.txt
+--- a/CMakeLists.txt	Sun Jun 20 15:15:01 2010 +0400
++++ b/CMakeLists.txt	Sun Jun 20 15:59:31 2010 +0400
+@@ -70,6 +70,10 @@
+   ADD_DEFINITIONS(-DHAVE_INNOBASE_DB)
+ ENDIF(WITH_INNOBASE_STORAGE_ENGINE)
+ 
++IF(WITH_SPHINX_STORAGE_ENGINE)
++  ADD_DEFINITIONS(-DHAVE_SPHINX_DB)
++ENDIF(WITH_SPHINX_STORAGE_ENGINE)
++
+ SET(localstatedir "C:\\mysql\\data")
+ CONFIGURE_FILE(${CMAKE_SOURCE_DIR}/support-files/my-huge.cnf.sh
+                ${CMAKE_SOURCE_DIR}/support-files/my-huge.ini @ONLY)
+diff -r 319c65835581 configure.in
+--- a/configure.in	Sun Jun 20 15:15:01 2010 +0400
++++ b/configure.in	Sun Jun 20 15:59:31 2010 +0400
+@@ -60,6 +60,7 @@
+ sinclude(config/ac-macros/ha_berkeley.m4)
+ sinclude(config/ac-macros/ha_blackhole.m4)
+ sinclude(config/ac-macros/ha_example.m4)
++sinclude(config/ac-macros/ha_sphinx.m4)
+ sinclude(config/ac-macros/ha_federated.m4)
+ sinclude(config/ac-macros/ha_innodb.m4)
+ sinclude(config/ac-macros/ha_ndbcluster.m4)
+@@ -2696,6 +2697,7 @@
+ MYSQL_CHECK_BDB
+ MYSQL_CHECK_INNODB
+ MYSQL_CHECK_EXAMPLEDB
++MYSQL_CHECK_SPHINXDB
+ MYSQL_CHECK_ARCHIVEDB
+ MYSQL_CHECK_CSVDB
+ MYSQL_CHECK_BLACKHOLEDB
+diff -r 319c65835581 libmysqld/Makefile.am
+--- a/libmysqld/Makefile.am	Sun Jun 20 15:15:01 2010 +0400
++++ b/libmysqld/Makefile.am	Sun Jun 20 15:59:31 2010 +0400
+@@ -29,6 +29,7 @@
+ 			-I$(top_builddir)/include -I$(top_srcdir)/include \
+ 			-I$(top_builddir)/sql -I$(top_srcdir)/sql \
+ 			-I$(top_srcdir)/sql/examples \
++			-I$(top_srcdir)/sql/sphinx \
+ 			-I$(top_srcdir)/regex \
+ 			$(openssl_includes) @ZLIB_INCLUDES@
+ 
+@@ -39,6 +40,7 @@
+ libmysqlsources =	errmsg.c get_password.c libmysql.c client.c pack.c \
+                         my_time.c
+ sqlexamplessources =	ha_example.cc ha_tina.cc
++sqlsphinxsources =	ha_sphinx.cc
+ 
+ noinst_HEADERS =	embedded_priv.h emb_qcache.h
+ 
+@@ -67,7 +69,7 @@
+ 	parse_file.cc sql_view.cc sql_trigger.cc my_decimal.cc \
+ 	ha_blackhole.cc ha_archive.cc my_user.c
+ 
+-libmysqld_int_a_SOURCES= $(libmysqld_sources) $(libmysqlsources) $(sqlsources) $(sqlexamplessources)
++libmysqld_int_a_SOURCES= $(libmysqld_sources) $(libmysqlsources) $(sqlsources) $(sqlexamplessources) $(sqlsphinxsources)
+ libmysqld_a_SOURCES=
+ 
+ # automake misses these
+@@ -147,12 +149,16 @@
+ 	    rm -f $$f; \
+ 	    @LN_CP_F@ $(top_srcdir)/sql/examples/$$f $$f; \
+ 	  done; \
++	  for f in $(sqlsphinxsources); do \
++	    rm -f $$f; \
++	    @LN_CP_F@ $(top_srcdir)/sql/sphinx/$$f $$f; \
++	  done; \
+ 	  rm -f client_settings.h; \
+ 	  @LN_CP_F@ $(top_srcdir)/libmysql/client_settings.h client_settings.h
+ 
+ 
+ clean-local:
+-	rm -f `echo $(sqlsources) $(libmysqlsources) $(sqlexamplessources) | sed "s;\.lo;.c;g"` \
++	rm -f `echo $(sqlsources) $(libmysqlsources) $(sqlexamplessources) $(sqlsphinxsources) | sed "s;\.lo;.c;g"` \
+ 	       $(top_srcdir)/linked_libmysqld_sources; \
+ 	rm -f client_settings.h
+ 
+diff -r 319c65835581 sql/CMakeLists.txt
+--- a/sql/CMakeLists.txt	Sun Jun 20 15:15:01 2010 +0400
++++ b/sql/CMakeLists.txt	Sun Jun 20 15:59:31 2010 +0400
+@@ -50,6 +50,7 @@
+                filesort.cc gstream.cc ha_blackhole.cc 
+                ha_archive.cc ha_heap.cc ha_myisam.cc ha_myisammrg.cc
+                ha_innodb.cc ha_federated.cc ha_berkeley.cc
++               sphinx/ha_sphinx.cc
+                handler.cc hash_filo.cc hash_filo.h 
+                hostname.cc init.cc item.cc item_buff.cc item_cmpfunc.cc 
+                item_create.cc item_func.cc item_geofunc.cc item_row.cc 
+diff -r 319c65835581 sql/Makefile.am
+--- a/sql/Makefile.am	Sun Jun 20 15:15:01 2010 +0400
++++ b/sql/Makefile.am	Sun Jun 20 15:59:31 2010 +0400
+@@ -68,6 +68,7 @@
+ 			sql_array.h sql_cursor.h \
+ 			examples/ha_example.h ha_archive.h \
+ 			examples/ha_tina.h ha_blackhole.h  \
++			sphinx/ha_sphinx.h \
+ 			ha_federated.h
+ mysqld_SOURCES =	sql_lex.cc sql_handler.cc \
+ 			item.cc item_sum.cc item_buff.cc item_func.cc \
+@@ -105,6 +106,7 @@
+ 			sp_cache.cc parse_file.cc sql_trigger.cc \
+ 			examples/ha_example.cc ha_archive.cc \
+ 			examples/ha_tina.cc ha_blackhole.cc \
++			sphinx/ha_sphinx.cc \
+ 			ha_federated.cc
+ 
+ gen_lex_hash_SOURCES =	gen_lex_hash.cc
+@@ -175,6 +177,10 @@
+ udf_example_la_SOURCES= udf_example.c
+ udf_example_la_LDFLAGS= -module -rpath $(pkglibdir)
+ 
++pkglib_LTLIBRARIES = sphinx/sphinx.la
++sphinx_sphinx_la_SOURCES = sphinx/snippets_udf.cc
++sphinx_sphinx_la_LDFLAGS = -module
++
+ 
+ # Don't update the files from bitkeeper
+ %::SCCS/s.%
+diff -r 319c65835581 sql/handler.cc
+--- a/sql/handler.cc	Sun Jun 20 15:15:01 2010 +0400
++++ b/sql/handler.cc	Sun Jun 20 15:59:31 2010 +0400
+@@ -77,6 +77,15 @@
+   NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+   HTON_NO_FLAGS };
+ #endif
++#ifdef HAVE_SPHINX_DB
++#include "sphinx/ha_sphinx.h"
++extern handlerton sphinx_hton;
++#else
++handlerton sphinx_hton = { "SPHINX", SHOW_OPTION_NO, "SPHINX storage engine",
++  DB_TYPE_SPHINX_DB, NULL, 0, 0, NULL, NULL,
++  NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
++  HTON_NO_FLAGS };
++#endif
+ #ifdef HAVE_INNOBASE_DB
+ #include "ha_innodb.h"
+ extern handlerton innobase_hton;
+@@ -141,6 +150,7 @@
+   &example_hton,
+   &archive_hton,
+   &tina_hton,
++  &sphinx_hton,
+   &ndbcluster_hton,
+   &federated_hton,
+   &myisammrg_hton,
+@@ -342,6 +352,12 @@
+       return new (alloc) ha_tina(table);
+     return NULL;
+ #endif
++#ifdef HAVE_SPHINX_DB
++  case DB_TYPE_SPHINX_DB:
++    if (have_sphinx_db == SHOW_OPTION_YES)
++      return new (alloc) ha_sphinx(table);
++    return NULL;
++#endif
+ #ifdef HAVE_NDBCLUSTER_DB
+   case DB_TYPE_NDBCLUSTER:
+     if (have_ndbcluster == SHOW_OPTION_YES)
+diff -r 319c65835581 sql/handler.h
+--- a/sql/handler.h	Sun Jun 20 15:15:01 2010 +0400
++++ b/sql/handler.h	Sun Jun 20 15:59:31 2010 +0400
+@@ -186,8 +186,9 @@
+   DB_TYPE_BERKELEY_DB, DB_TYPE_INNODB,
+   DB_TYPE_GEMINI, DB_TYPE_NDBCLUSTER,
+   DB_TYPE_EXAMPLE_DB, DB_TYPE_ARCHIVE_DB, DB_TYPE_CSV_DB,
+-  DB_TYPE_FEDERATED_DB,
++  DB_TYPE_FEDERATED_DB, 
+   DB_TYPE_BLACKHOLE_DB,
++  DB_TYPE_SPHINX_DB,
+   DB_TYPE_DEFAULT // Must be last
+ };
+ 
+diff -r 319c65835581 sql/mysql_priv.h
+--- a/sql/mysql_priv.h	Sun Jun 20 15:15:01 2010 +0400
++++ b/sql/mysql_priv.h	Sun Jun 20 15:59:31 2010 +0400
+@@ -1462,6 +1462,12 @@
+ #else
+ extern SHOW_COMP_OPTION have_csv_db;
+ #endif
++#ifdef HAVE_SPHINX_DB
++extern handlerton sphinx_hton;
++#define have_sphinx_db sphinx_hton.state
++#else
++extern SHOW_COMP_OPTION have_sphinx_db;
++#endif
+ #ifdef HAVE_FEDERATED_DB
+ extern handlerton federated_hton;
+ #define have_federated_db federated_hton.state
+diff -r 319c65835581 sql/mysqld.cc
+--- a/sql/mysqld.cc	Sun Jun 20 15:15:01 2010 +0400
++++ b/sql/mysqld.cc	Sun Jun 20 15:59:31 2010 +0400
+@@ -36,6 +36,10 @@
+ #include <sys/prctl.h>
+ #endif
+ 
++#ifdef HAVE_SPHINX_DB
++#include "sphinx/ha_sphinx.h"
++#endif
++
+ #ifdef HAVE_INNOBASE_DB
+ #define OPT_INNODB_DEFAULT 1
+ #else
+@@ -6721,6 +6725,13 @@
+ #ifdef COMMUNITY_SERVER
+   {"Uptime_since_flush_status",(char*) 0,                       SHOW_FLUSHTIME},
+ #endif
++#ifdef HAVE_SPHINX_DB
++   {"sphinx_total",            (char *)sphinx_showfunc_total,       SHOW_SPHINX_FUNC},
++   {"sphinx_total_found",      (char *)sphinx_showfunc_total_found, SHOW_SPHINX_FUNC},
++   {"sphinx_time",             (char *)sphinx_showfunc_time,        SHOW_SPHINX_FUNC},
++   {"sphinx_word_count",       (char *)sphinx_showfunc_word_count,  SHOW_SPHINX_FUNC},
++   {"sphinx_words",            (char *)sphinx_showfunc_words,       SHOW_SPHINX_FUNC},
++#endif
+   {NullS, NullS, SHOW_LONG}
+ };
+ 
+@@ -6964,6 +6975,11 @@
+ #else
+   have_csv_db= SHOW_OPTION_NO;
+ #endif
++#ifdef HAVE_SPHINX_DB
++  have_sphinx_db= SHOW_OPTION_YES;
++#else
++  have_sphinx_db= SHOW_OPTION_NO;
++#endif
+ #ifdef HAVE_NDBCLUSTER_DB
+   have_ndbcluster=SHOW_OPTION_DISABLED;
+ #else
+@@ -8087,6 +8103,7 @@
+ #undef have_example_db
+ #undef have_archive_db
+ #undef have_csv_db
++#undef have_sphinx_db
+ #undef have_federated_db
+ #undef have_partition_db
+ #undef have_blackhole_db
+@@ -8097,6 +8114,7 @@
+ SHOW_COMP_OPTION have_example_db= SHOW_OPTION_NO;
+ SHOW_COMP_OPTION have_archive_db= SHOW_OPTION_NO;
+ SHOW_COMP_OPTION have_csv_db= SHOW_OPTION_NO;
++SHOW_COMP_OPTION have_sphinx_db= SHOW_OPTION_NO;
+ SHOW_COMP_OPTION have_federated_db= SHOW_OPTION_NO;
+ SHOW_COMP_OPTION have_partition_db= SHOW_OPTION_NO;
+ SHOW_COMP_OPTION have_blackhole_db= SHOW_OPTION_NO;
+diff -r 319c65835581 sql/set_var.cc
+--- a/sql/set_var.cc	Sun Jun 20 15:15:01 2010 +0400
++++ b/sql/set_var.cc	Sun Jun 20 15:59:31 2010 +0400
+@@ -913,6 +913,7 @@
+   {"have_profiling",          (char*) &have_profiling,	            SHOW_HAVE},
+   {"have_crypt",	      (char*) &have_crypt,		    SHOW_HAVE},
+   {"have_csv",	              (char*) &have_csv_db,	            SHOW_HAVE},
++  {"have_sphinx",             (char*) &have_sphinx_db,              SHOW_HAVE},
+   {"have_dynamic_loading",    (char*) &have_dlopen,	            SHOW_HAVE},
+   {"have_example_engine",     (char*) &have_example_db,	            SHOW_HAVE},
+   {"have_federated_engine",   (char*) &have_federated_db,           SHOW_HAVE},
+diff -r 319c65835581 sql/sql_lex.h
+--- a/sql/sql_lex.h	Sun Jun 20 15:15:01 2010 +0400
++++ b/sql/sql_lex.h	Sun Jun 20 15:59:31 2010 +0400
+@@ -57,6 +57,7 @@
+   SQLCOM_SHOW_DATABASES, SQLCOM_SHOW_TABLES, SQLCOM_SHOW_FIELDS,
+   SQLCOM_SHOW_KEYS, SQLCOM_SHOW_VARIABLES, SQLCOM_SHOW_LOGS, SQLCOM_SHOW_STATUS,
+   SQLCOM_SHOW_INNODB_STATUS, SQLCOM_SHOW_NDBCLUSTER_STATUS, SQLCOM_SHOW_MUTEX_STATUS,
++  SQLCOM_SHOW_SPHINX_STATUS,
+   SQLCOM_SHOW_PROCESSLIST, SQLCOM_SHOW_MASTER_STAT, SQLCOM_SHOW_SLAVE_STAT,
+   SQLCOM_SHOW_GRANTS, SQLCOM_SHOW_CREATE, SQLCOM_SHOW_CHARSETS,
+   SQLCOM_SHOW_COLLATIONS, SQLCOM_SHOW_CREATE_DB, SQLCOM_SHOW_TABLE_STATUS,
+diff -r 319c65835581 sql/sql_parse.cc
+--- a/sql/sql_parse.cc	Sun Jun 20 15:15:01 2010 +0400
++++ b/sql/sql_parse.cc	Sun Jun 20 15:59:31 2010 +0400
+@@ -24,6 +24,9 @@
+ #ifdef HAVE_INNOBASE_DB
+ #include "ha_innodb.h"
+ #endif
++#ifdef HAVE_SPHINX_DB
++#include "sphinx/ha_sphinx.h"
++#endif
+ 
+ #ifdef HAVE_NDBCLUSTER_DB
+ #include "ha_ndbcluster.h"
+@@ -3166,6 +3169,15 @@
+       break;
+     }
+ #endif
++#ifdef HAVE_SPHINX_DB
++  case SQLCOM_SHOW_SPHINX_STATUS:
++    {
++      if (check_global_access(thd, SUPER_ACL))
++	goto error;
++      res = sphinx_show_status(thd);
++      break;
++    }
++#endif
+ #ifdef HAVE_REPLICATION
+   case SQLCOM_LOAD_MASTER_TABLE:
+   {
+diff -r 319c65835581 sql/sql_show.cc
+--- a/sql/sql_show.cc	Sun Jun 20 15:15:01 2010 +0400
++++ b/sql/sql_show.cc	Sun Jun 20 15:59:31 2010 +0400
+@@ -1500,6 +1500,16 @@
+           value= (char*) var->value_ptr(thd, value_type, &null_lex_str);
+           charset= var->charset(thd);
+         }
++		#ifdef HAVE_SPHINX_DB
++		else if (show_type == SHOW_SPHINX_FUNC)
++		{
++			SHOW_VAR var;
++			((int (*)(THD *, SHOW_VAR *, char *))value)(thd, &var, buff);
++
++			value = var.value;
++			show_type = var.type;
++		}
++		#endif /* HAVE_SPHINX_DB */
+ 
+         pos= end= buff;
+         switch (show_type) {
+diff -r 319c65835581 sql/sql_yacc.yy
+--- a/sql/sql_yacc.yy	Sun Jun 20 15:15:01 2010 +0400
++++ b/sql/sql_yacc.yy	Sun Jun 20 15:59:31 2010 +0400
+@@ -8342,6 +8342,9 @@
+ 	    case DB_TYPE_INNODB:
+ 	      Lex->sql_command = SQLCOM_SHOW_INNODB_STATUS;
+ 	      break;
++	    case DB_TYPE_SPHINX_DB:
++	      Lex->sql_command = SQLCOM_SHOW_SPHINX_STATUS;
++	      break;
+ 	    default:
+ 	      my_error(ER_NOT_SUPPORTED_YET, MYF(0), "STATUS");
+ 	      MYSQL_YYABORT;
+diff -r 319c65835581 sql/sql_yacc.cc
+--- a/sql/sql_yacc.cc	Sun Jun 20 15:15:01 2010 +0400
++++ b/sql/sql_yacc.cc	Sun Jun 20 15:59:31 2010 +0400
+@@ -27003,6 +27003,9 @@
+ 	    case DB_TYPE_INNODB:
+ 	      Lex->sql_command = SQLCOM_SHOW_INNODB_STATUS;
+ 	      break;
++	    case DB_TYPE_SPHINX_DB:
++	      Lex->sql_command = SQLCOM_SHOW_SPHINX_STATUS;
++	      break;
+ 	    default:
+ 	      my_error(ER_NOT_SUPPORTED_YET, MYF(0), "STATUS");
+ 	      MYSQL_YYABORT;
+diff -r 319c65835581 sql/structs.h
+--- a/sql/structs.h	Sun Jun 20 15:15:01 2010 +0400
++++ b/sql/structs.h	Sun Jun 20 15:59:31 2010 +0400
+@@ -194,6 +194,9 @@
+   SHOW_SSL_CTX_SESS_TIMEOUTS, SHOW_SSL_CTX_SESS_CACHE_FULL,
+   SHOW_SSL_GET_CIPHER_LIST,
+ #endif /* HAVE_OPENSSL */
++#ifdef HAVE_SPHINX_DB
++  SHOW_SPHINX_FUNC,
++#endif
+   SHOW_NET_COMPRESSION,
+   SHOW_RPL_STATUS, SHOW_SLAVE_RUNNING, SHOW_SLAVE_RETRIED_TRANS,
+   SHOW_KEY_CACHE_LONG, SHOW_KEY_CACHE_CONST_LONG, SHOW_KEY_CACHE_LONGLONG,
+diff -r 319c65835581 win/configure.js
+--- a/win/configure.js	Sun Jun 20 15:15:01 2010 +0400
++++ b/win/configure.js	Sun Jun 20 15:59:31 2010 +0400
+@@ -45,6 +45,7 @@
+             case "WITH_EXAMPLE_STORAGE_ENGINE":
+             case "WITH_FEDERATED_STORAGE_ENGINE":
+             case "WITH_INNOBASE_STORAGE_ENGINE":
++            case "WITH_SPHINX_STORAGE_ENGINE":
+             case "__NT__":
+             case "DISABLE_GRANT_OPTIONS":
+             case "EMBED_MANIFESTS":
+--- mysql-5.0.67/config/ac-macros/ha_sphinx.m4	1970-01-01 10:00:00.000000000 +1000
++++ mysql-5.0.67-sphinx/config/ac-macros/ha_sphinx.m4	2009-02-14 09:15:48.000000000 +1000
+@@ -0,0 +1,30 @@
++dnl ---------------------------------------------------------------------------
++dnl Macro: MYSQL_CHECK_EXAMPLEDB
++dnl Sets HAVE_SPHINX_DB if --with-sphinx-storage-engine is used
++dnl ---------------------------------------------------------------------------
++AC_DEFUN([MYSQL_CHECK_SPHINXDB], [
++  AC_ARG_WITH([sphinx-storage-engine],
++              [
++  --with-sphinx-storage-engine
++                          Enable the Sphinx Storage Engine],
++              [sphinxdb="$withval"],
++              [sphinxdb=no])
++  AC_MSG_CHECKING([for example storage engine])
++
++  case "$sphinxdb" in
++    yes )
++      AC_DEFINE([HAVE_SPHINX_DB], [1], [Builds Sphinx Engine])
++      AC_MSG_RESULT([yes])
++      [sphinxdb=yes]
++      ;;
++    * )
++      AC_MSG_RESULT([no])
++      [sphinxdb=no]
++      ;;
++  esac
++
++])
++dnl ---------------------------------------------------------------------------
++dnl END OF MYSQL_CHECK_EXAMPLE SECTION
++dnl ---------------------------------------------------------------------------
++

@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>Indexing of ODBC sources (mysql via ODBC connector)</name>
+
+<requires>
+<odbc/>
+<variant_match/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source src
+{
+	type			= odbc
+	<odbc_settings/>
+	sql_query		= SELECT id, idd1, str1, body FROM test_table
+	sql_attr_uint	= idd1
+	sql_attr_string	= str1
+}
+
+source src_mysql
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT id, idd1, str1, body FROM test_table
+	sql_attr_uint	= idd1
+	sql_attr_string	= str1
+}
+
+index plain
+{
+<dynamic>
+<variant>
+	source			= src
+</variant>
+<variant>
+	source			= src_mysql
+</variant>
+</dynamic>
+    docinfo			= extern
+	path			= <data_path/>/plain
+}
+</config>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`id` int(11) NOT NULL default '0',
+	`idd1` int(11) NOT NULL default '0',
+	`str1` varchar(1024) NOT NULL default '',
+	`body` varchar(1024) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 1,		'a aa',		'the dog' ),
+( 2, 11,	'c cc',		'the cat' ),
+( 3, 11,	'a a',		'the bird' ), 
+( 4, 11,	'cc c',		'cat eats bird' ),
+( 5, 3, 	'a a',		'dog eats cat' ), 
+( 6, 1,		'c cc',		'bird' ), 
+( 7, 1,		'a a',		'the cat' ),
+( 8, 1,		'a a',		'eats' ),
+( 9, 3, 	'c cc',		'the' ),
+( 10, 3, 	'c cc',		'the' ),
+( 11, 3, 	'б бб',		'собака' ),
+( 12, 5, 	'б бб',		'бывает' ),
+( 13, 5, 	'в вв',		'кусачей' ),
+( 14, 5, 	'г гг',		'когда не работает ODBC' ),
+( 15, 5, 	'д дд',		'в сфинксе' )
+</db_insert>
+
+<queries>
+<query mode="extended2" index="plain" groupattr="idd1" groupfunc="attr" groupsort="idd1 asc" sortmode="extended" sortby="str1 asc"></query>
+<query mode="extended2" index="plain" groupattr="idd1" groupfunc="attr" groupsort="idd1 asc" sortmode="extended" sortby="str1 desc"></query>
+<query mode="extended2" index="plain" groupattr="idd1" groupfunc="attr" groupsort="idd1 asc" sortmode="extended" sortby="str1 asc">the | dog | cat</query>
+<query mode="extended2" index="plain" groupattr="idd1" groupfunc="attr" groupsort="idd1 asc" sortmode="extended" sortby="str1 desc">the | eats | bird</query>
+</queries>
+
+<sphqueries>
+<sphinxql>select * from plain group by idd1 within group order by str1 asc</sphinxql>
+<sphinxql>select * from plain group by idd1 within group order by str1 desc</sphinxql>
+<sphinxql>select * from plain where match('the | dog | cat') group by idd1 within group order by str1 asc</sphinxql>
+<sphinxql>select * from plain where match('the | eats | bird') group by idd1 within group order by str1 desc</sphinxql>
+<sphinxql>select *, group_concat(id) from plain where match('the | eats | bird') group by idd1 within group order by str1 asc</sphinxql>
+<sphinxql>select * from ( select *, sum(id) as s1, sum(idd1) as s2, group_concat(id) from plain where match('the | eats | bird') group by idd1 within group order by str1 asc ) order by s1 asc</sphinxql>
+<sphinxql>select * from ( select *, sum(id) as s1, sum(idd1) as s2, s1+s2 as s3, group_concat(id) from plain where match('the | eats | bird') group by idd1 within group order by str1 asc ) order by s1 desc</sphinxql>
+<sphinxql>select * from ( select *, sum(id) as s1, sum(idd1) as s2, s1+s2 as s3, group_concat(id) from plain where match('the | eats | bird') group by idd1 within group order by str1 asc ) order by s2 desc</sphinxql>
+<sphinxql>select * from ( select *, sum(id) as s1, sum(idd1) as s2, s1+s2 as s3, group_concat(id) from plain where match('the | eats | bird') group by idd1 within group order by str1 asc ) order by s3 desc</sphinxql>
+<sphinxql>select * from plain where match('собака | бывает | кусачей') group by idd1 within group order by str1 desc</sphinxql>
+<sphinxql>select * from ( select *, sum(id) as s1, sum(idd1) as s2, s1+s2 as s3, group_concat(id) from plain where match('собака | бывает | ODBC') group by idd1 within group order by str1 asc ) order by s3 desc</sphinxql>
+</sphqueries>
+
+</test>

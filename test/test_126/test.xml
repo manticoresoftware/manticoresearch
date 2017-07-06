@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>expand keywords</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT * FROM test_table
+}
+
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+	morphology		= stem_en
+	index_exact_words	= 1
+	expand_keywords	= 1
+}
+
+source src_prefix
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT 1, 'force all' as content UNION SELECT 2, 'forcing me' as content UNION SELECT 3, 'foam stuff' as content
+}
+index prefix
+{
+	source			= src_prefix
+	path			= <data_path/>/prefix
+	expand_keywords	= 1
+	min_prefix_len = 2
+}
+
+index expanded_plain
+{
+	source			= srctest
+	path			= <data_path/>/expanded-plain
+	docinfo = extern
+	dict = keywords
+	expand_keywords	= 1
+	min_infix_len = 3
+}
+
+index expanded_rt
+{
+	type = rt
+	path			= <data_path/>/expanded-rt
+	dict = keywords
+	expand_keywords	= 1
+	min_infix_len = 3
+	rt_field = title
+	rt_attr_uint = idd	
+}
+
+<!-- regression crash of daemon with empty dict=keywords and infixes enabled -->
+source src_empty
+{
+        type                    = mysql
+	<sql_settings/>
+        sql_query               = SELECT * FROM empty_table
+        sql_attr_uint           = uid
+}
+
+index empty
+{
+        path                    = <data_path/>/empty_kw
+        source                  = src_empty
+        min_infix_len           = 3
+        dict                    = keywords
+}
+
+<!-- regression crash of daemon with docinfo=inline and dict=keywords -->
+source src_inline
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT *, document_id+100 as idd FROM test_table
+	sql_attr_uint = idd
+}
+
+index plain_inline
+{
+	source			= src_inline
+	path			= <data_path/>/plain-inline
+	docinfo = inline
+	dict = keywords
+	min_prefix_len = 1
+}
+
+</config>
+
+<queries>
+<query mode="extended2" index="test">dog run</query>
+<query mode="extended2" index="test">=dog =run</query>
+<query mode="phrase" index="test">dog run</query>
+<query mode="phrase" index="test">=dog =run</query>
+<query mode="phrase" index="test">dog* run</query>
+<!-- regression expand_keywords vs prefix -->
+<query mode="extended2" index="prefix">for</query>
+<query mode="extended2" index="prefix">fo</query>
+<query mode="extended2" index="test">dog run</query>
+<query mode="extended2" index="test">=dog =run</query>
+<query mode="phrase" index="test">dog run</query>
+<query mode="phrase" index="test">=dog =run</query>
+<query mode="phrase" index="test">dog* run</query>
+<!-- regression wrong word expansion -->
+<query mode="extended2" index="expanded_plain">run</query>
+<!-- regression crash of daemon with empty dict=keywords and infixes enabled -->
+<query mode="extended2" index="empty">*dog*</query>
+<!-- regression crash of daemon with docinfo=inline and dict=keywords -->
+<query mode="extended2" index="plain_inline">run*</query>
+</queries>
+
+<sphqueries>
+<sphinxql>insert into expanded_rt values ( 1,  'dog runs', 11 ), ( 2,  'dogs run', 22 ), ( 3,  'dogs running', 33 ), ( 4,  'dog run', 44 )</sphinxql>
+<sphinxql>select * from expanded_rt where match ( 'run' )</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from expanded_plain where match ( 'run' )</sphinxql>
+<sphinxql>show meta</sphinxql>
+</sphqueries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+<db_create>
+CREATE TABLE `empty_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS `test_table`</db_drop>
+<db_drop>DROP TABLE IF EXISTS `empty_table`</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1,  'dog runs' ),
+( 2,  'dogs run' ),
+( 3,  'dogs running' ),
+( 4,  'dog run' )
+</db_insert>
+
+</test>

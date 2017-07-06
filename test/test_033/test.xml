@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>ignore_chars vs specials</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT * FROM test_table
+}
+
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+
+    <Dynamic>
+      <Variant>	ignore_chars = U+002D </Variant>
+      <Variant>	</Variant>
+    </Dynamic>
+}
+</config>
+
+<queries>
+<query mode="extended2">hello -world</query>
+<query mode="extended2">-hello world</query>
+<query mode="extended2">hello world</query>
+</queries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1,  'hello world' ),
+( 2,  'hello' ),
+( 3,  'world' )
+</db_insert>
+
+</test>

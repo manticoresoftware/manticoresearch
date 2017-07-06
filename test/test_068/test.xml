@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>xmlpipe2 indexing</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src1
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data1.xml
+}
+
+source src2
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data2.xml
+}
+
+source src3
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data3.xml
+	xmlpipe_fixup_utf8 = 1
+}
+
+index idx1
+{
+	source = src1
+	path = <data_path/>/idx1
+}
+
+index idx2
+{
+	source = src2
+	path = <data_path/>/idx2
+}
+
+index idx3
+{
+	source = src3
+	path = <data_path/>/idx3
+}
+
+source src_embedded
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data_embedded.xml
+	
+	xmlpipe_field = body
+	xmlpipe_attr_uint	= idd
+}
+
+index embedded
+{
+	source = src_embedded
+	path = <data_path/>/embedded
+}
+
+source src_tsv1
+{
+	type = tsvpipe
+	tsvpipe_command = cat <this_test/>/data1.tsv
+	tsvpipe_field = title
+	tsvpipe_field = content
+	tsvpipe_attr_multi = tags
+	tsvpipe_attr_uint = gid:3
+}
+
+index tsv1
+{
+	source = src_tsv1
+	path = <data_path/>/tsv1
+}
+
+source src_csv1
+{
+	type = csvpipe
+	csvpipe_command = cat <this_test/>/data1.csv
+	csvpipe_field = title
+	csvpipe_field = Content
+	csvpipe_attr_multi = Tags
+	csvpipe_attr_uint = Gid
+}
+
+index csv1
+{
+	source = src_csv1
+	path = <data_path/>/csv1
+}
+
+source src_csv2
+{
+	type = csvpipe
+	csvpipe_command = cat <this_test/>/data2.csv
+	csvpipe_delimiter =  +  
+	csvpipe_field = title
+	csvpipe_field = Content
+	csvpipe_attr_multi = Tags
+	csvpipe_attr_uint = gid
+}
+
+index csv2
+{
+	source = src_csv2
+	path = <data_path/>/csv2
+}
+
+source src51
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data51.xml
+}
+
+index idx51
+{
+	source = src51
+	path = <data_path/>/idx51
+}
+
+source src_tsv_spec
+{
+	type = tsvpipe
+	tsvpipe_command = cat <this_test/>/data_spec.tsv
+	tsvpipe_field = title
+	tsvpipe_field = content
+	tsvpipe_attr_uint = gid
+}
+
+index tsv_spec
+{
+	source = src_tsv_spec
+	path = <data_path/>/tsv_spec
+}
+
+source src_csv_spec
+{
+	type = csvpipe
+	csvpipe_command = cat <this_test/>/data_spec.csv
+	csvpipe_field = title
+	csvpipe_field = content
+	csvpipe_attr_uint = gid
+}
+
+index csv_spec
+{
+	source = src_csv_spec
+	path = <data_path/>/csv_spec
+}
+
+source src_embedded1
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data_embedded1.xml
+}
+
+source src_embedded2
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data_embedded2.xml
+}
+
+index embedded1
+{
+	source = src_embedded1
+	source = src_embedded2
+	path = <data_path/>/embedded1
+}
+
+
+</config>
+
+<queries>
+<query index="idx1">test</query>
+<query index="idx2">test</query>
+<query index="idx1,idx2">test</query>
+<query index="idx3">est</query>
+<query index="idx3">test</query>
+<query index="embedded">test</query>
+<query index="idx1" mode="extended2">aaa bbb ccc</query>
+<query index="idx1" mode="extended2">^aaa ccc$</query>
+<query index="idx1" mode="extended2">^bbb | ^ccc | aaa$ | bbb$</query>
+<query index="tsv1">test</query>
+<query index="tsv1" mode="extended2">aaa bbb</query>
+<query index="tsv1" mode="extended2">^aaa ccc$</query>
+<query index="tsv1" mode="extended2">^bbb | ^ccc | aaa$ | bbb$</query>
+<query index="csv1">test</query>
+<query index="csv1" mode="extended2">aaa bbb</query>
+<query index="csv1" mode="extended2">^aaa ccc$</query>
+<query index="csv1" mode="extended2">^bbb | ^ccc | aaa$ | bbb$</query>
+<query index="csv1" mode="extended2">^bbb | ^ccc | aaa$ | bbb$</query>
+<query index="csv1" filter_value="2" filter="tags"></query>
+<query index="csv1" filter_value="4" filter="tags"></query>
+<query index="csv1" filter_value="5" filter="gid"></query>
+<query index="csv1">two</query>
+<query index="csv1">another</query>
+<query index="csv1">my</query>
+<query index="csv2">test</query>
+<query index="csv2" mode="extended2">aaa bbb</query>
+<query index="csv2" mode="extended2">^aaa ccc$</query>
+<query index="csv2" mode="extended2">^bbb | ^ccc | aaa$ | bbb$</query>
+<query index="csv2" filter_value="2" filter="tags"></query>
+<query index="csv2" filter_value="4" filter="tags"></query>
+<query index="csv2" filter_value="5" filter="gid"></query>
+<query index="csv2">two</query>
+<query index="csv2">another</query>
+<query index="csv2">my</query>
+<!-- regression tail hits from ext-conditional node -->
+<query index="idx51" mode="extended2">^go | go$</query>
+<!-- document end (^Z) at data source  -->
+<query index="tsv_spec" mode="extended2">"test one"</query>
+<query index="csv_spec" mode="extended2">"test one"</query>
+<query index="tsv_spec" mode="extended2">"document number"</query>
+<query index="csv_spec" mode="extended2">"document number"</query>
+<query index="embedded1">test</query>
+</queries>
+
+</test>

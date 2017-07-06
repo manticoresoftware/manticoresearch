@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>exceptions vs ext2 query grouping</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT *, 1 as idd FROM test_table
+}
+
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+	exceptions		= <this_test/>/synonyms.txt
+}
+
+source srcstar
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT *, 1 as idd FROM star_table
+}
+
+index star
+{
+	source			= srcstar
+	path			= <data_path/>/star
+	charset_table	= 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, *, %, ?
+	exceptions		= <this_test/>/synonyms2.txt
+	min_prefix_len = 1
+}
+
+index snip
+{
+	source			= srctest
+	path			= <data_path/>/snip
+	exceptions		= <this_test/>/synonyms3.txt
+}
+
+source src_wild1
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT 1 as id, 11 as idd, '50% of 20% not 30* found' as text
+	sql_attr_uint = idd
+}
+
+index wild1
+{
+	source				= src_wild1
+	path					= <data_path/>/wild1
+	charset_table	= a..z, _, A..Z->a..z
+}
+
+source src_e
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT 1, 'life:) on mars' text
+}
+
+index e
+{
+	source			= src_e
+	path			= <data_path/>/e
+	exceptions		= test_165/synonyms4.txt
+}
+</config>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_create>
+CREATE TABLE `star_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_drop>
+DROP TABLE IF EXISTS `star_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1,  'the X files is not X rated movie' ),
+( 2, 'the X files is silver sitcom' ),
+( 3, 'the x files is good on silver screen' )
+</db_insert>
+
+<db_insert>
+INSERT INTO `star_table` VALUES
+( 1,  'action*packed movies are not for family' ),
+( 2,  'action movies are mostly blockbasters' ),
+( 3,  'action packed movies published recently' ),
+( 4,  'recent DVD pack as collection' ),
+( 5,  'a?c x%z' )
+</db_insert>
+
+
+<sphqueries>
+<sphinxql>select * from test where match ('X files')</sphinxql>
+<sphinxql>select * from test where match ('(X files)')</sphinxql>
+<sphinxql>select * from test where match (' ( X files ) ')</sphinxql>
+<sphinxql>select * from test where match ('(x files) silver screen')</sphinxql>
+<sphinxql>select * from test where match (' X files silver screen')</sphinxql>
+<sphinxql>select * from test where match ('(x file) (silver screen)')</sphinxql>
+<sphinxql>select * from test where match ('(x file) | silver screen')</sphinxql>
+<sphinxql>select * from test where match ('(X files) | silver screen')</sphinxql>
+<sphinxql>select * from test where match ('(x files) | silver | screen')</sphinxql>
+<sphinxql>select * from test where match ('x file')</sphinxql>
+<sphinxql>select * from test where match ('the X file')</sphinxql>
+
+<sphinxql>select * from star where match ('action*packed')</sphinxql>
+<sphinxql>select * from star where match ('mov*')</sphinxql>
+<sphinxql>select * from star where match ('pack*')</sphinxql>
+<sphinxql>select * from star where match ('action')</sphinxql>
+
+<!-- regression tokenizer produces wrong token prt with exception -->
+<sphinxql>CALL SNIPPETS('; the test', 'snip', ';doggy the', 1 as force_all_words )</sphinxql>
+<sphinxql>CALL SNIPPETS('; the test', 'snip', 'doggy the', 1 as force_all_words )</sphinxql>
+<sphinxql>CALL SNIPPETS('; the test', 'snip', 'doggy the', 0 as force_all_words )</sphinxql>
+
+<sphinxql>select * from star where match ('a?c')</sphinxql>
+<sphinxql>select * from star where match ('x%z')</sphinxql>
+
+<!-- regression tokenizer produces wild chracters -->
+<sphinxql>select * from wild1 where match ('50? of 20% not 30* found')</sphinxql>
+<sphinxql>show meta</sphinxql>
+
+<!-- regression special vs synonym -->
+<sphinxql>select * from e where match ('life:\\)')</sphinxql>
+<sphinxql>show meta</sphinxql>
+
+<!-- regression escaped vs exception -->
+<sphinxql>select * from test where match ('so\\/dome')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+<sphinxql>select * from test where match ('si\\/dome')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+<sphinxql>select * from test where match ('X\\/dome')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+
+<!-- regression on exceptions ended with specials -->
+<sphinxql>select * from test where match('one')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from test where match('"one"')</sphinxql>
+<sphinxql>show meta</sphinxql>
+
+</sphqueries>
+
+</test>

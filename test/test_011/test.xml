@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Test>
+  <Name>postfixes</Name>
+  <Config>
+    <Static>indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+</Static>
+<Searchd_Settings/>
+<Static>
+}
+
+source srclj
+{
+	type			= mysql
+</Static>
+<Sql_Settings/>
+<Static>
+	sql_query = SELECT id, subject, body, author FROM test_table
+}
+</Static>
+<Static>
+index lj
+{
+	source			= srclj
+	path			= </Static><Data_Path/><Static>/lj
+</Static>
+    <Dynamic>
+      <Variant>	min_infix_len	= 0</Variant>
+      <Variant>	min_infix_len	= 1</Variant>
+      <Variant>	min_infix_len	= 3</Variant>
+    </Dynamic>
+    <Static>}</Static>
+  </Config>
+  <Query>
+    <Query_0>admin</Query_0>
+    <Query_1>*eat*</Query_1>
+    <Query_2>*search</Query_2>
+    <Query_3>*dmin</Query_3>
+    <Query_4>*rep</Query_4>
+	<!-- crash on very star -->
+	<Query_5>*</Query_5>
+  </Query>
+  <DB_Create>
+CREATE TABLE `test_table` (
+  `id` int(11) NOT NULL default '0',
+  `document_id` int(5) NOT NULL default '0',
+  `subject` varchar(255) NOT NULL default '',
+  `body` varchar(255) NOT NULL default '',
+  `author` varchar(255) NOT NULL default ''
+)
+  </DB_Create>
+  <DB_Drop>
+DROP TABLE IF EXISTS `test_table`
+  </DB_Drop>
+  <DB_Insert>
+INSERT INTO `test_table` VALUES
+(1,1,'Problem with enable_star searches','Having star searches is great! Just what we needed','Maurice Makaay'),
+(2,2,'Problem with enable_star searches',' But the thing is, that I cannot search for authors anymore','admin'),
+(3,3,'Problem with enable_star searches','I will try to repro it here and update you','shodan')
+  </DB_Insert>
+</Test>

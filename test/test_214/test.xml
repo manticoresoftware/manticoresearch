@@ -1,0 +1,239 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>ALTER in RT indexes</name>
+
+<config>
+indexer
+{
+	mem_limit				= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+
+source src
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT id, gid, title FROM test_table
+  sql_attr_uint   = gid
+}
+
+index test
+{
+  source      = src
+  path      = <data_path/>/test
+}
+
+index rt
+{
+	type = rt
+	path = <data_path/>/rt
+	rt_field = title
+	rt_attr_uint = data1
+	rt_attr_uint = data2
+	rt_attr_uint = data3
+	rt_attr_float = data4
+
+	rt_mem_limit 	= 128
+<dynamic>
+  <variant>index_field_lengths = 0</variant>
+  <variant>index_field_lengths = 1</variant>
+</dynamic>
+}
+</config>
+
+<db_create>
+CREATE TABLE `test_table` (
+  `id` int(11) NOT NULL,
+  `gid` int(11) NOT NULL,
+  `title` varchar(255) NOT NULL
+);
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS `test_table`;</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+(1,1,'test')
+</db_insert>
+
+<custom_test><![CDATA[
+$query = create_function('$query,$sock,&$results',
+'
+$results[] = "running query [$query]";
+
+$res = @mysql_query ( $query, $sock );
+if ($res===true)
+{
+	$results[] = "total_affected=" . @mysql_affected_rows($sock);
+}
+else if ($res===false)
+{
+	$results[] = "res=$res";
+	$results[] = "error: query: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+}
+else
+{
+	$results[] = "total_rows=" . @mysql_num_rows($res);
+	while ($row = @mysql_fetch_array($res, MYSQL_ASSOC))
+	{
+		foreach ($row as $key => $value)
+			$foo[$key] = $value;
+		$results[] = $foo;
+	}	
+}
+');
+
+global $g_locals, $sd_address, $sd_sphinxql_port;
+$results = array();
+$sockStr = "$sd_address:$sd_sphinxql_port";
+if ($sd_address == "localhost")
+	$sockStr = "127.0.0.1:$sd_sphinxql_port";
+$sock = @mysql_connect (
+	$sockStr,
+	$g_locals['db-user'],
+	$g_locals['db-password'] ,
+	true );
+
+if ( $sock === false )
+{
+	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+	return;
+}
+
+$inserted = 0;
+for ( $i=1; $i<=8000; $i++ )
+{
+	$data1 = $i*10;
+	$data2 = $i*10+1;
+	$data3 = $i*10+2;
+	$data4 = $i/5;
+	$title = "title_$i";
+	$str = "INSERT INTO rt ( id, title, data1, data2, data3, data4 ) VALUES ( $i, '$title', $data1, $data2, $data3, $data4 )";
+	$res = @mysql_query ( $str, $sock );
+	if ($res===true)
+	{
+		$inserted += mysql_affected_rows($sock);
+	}	
+	else
+	{
+		$results[] = "error: insert: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+		return;
+	}
+}
+$results[] = "total inserted=$inserted";
+
+$query ( "select * from rt where id between 10 and 12", $sock, $results );		// that should be disk chunk 0
+$query ( "select * from rt where id between 3500 and 3502", $sock, $results );	// that should be disk chunk 1
+$query ( "select * from rt where id between 6500 and 6502", $sock, $results );	// that should be ram chunk
+
+$query ( "alter table rt add column add1 integer", $sock, $results );
+
+$query ( "select * from rt where id between 10 and 12", $sock, $results );
+$query ( "select * from rt where id between 3500 and 3502", $sock, $results );
+$query ( "select * from rt where id between 6500 and 6502", $sock, $results );
+
+$query ( "update rt set add1=11 where id=11", $sock, $results );
+$query ( "update rt set add1=3501 where id=3501", $sock, $results );
+$query ( "update rt set add1=6501 where id=6501", $sock, $results );
+
+$query ( "select * from rt where id between 10 and 12", $sock, $results );
+$query ( "select * from rt where id between 3500 and 3502", $sock, $results );
+$query ( "select * from rt where id between 6500 and 6502", $sock, $results );
+
+$query ( "flush rtindex rt", $sock, $results );
+
+$query ( "select * from rt where id between 10 and 12", $sock, $results );
+$query ( "select * from rt where id between 3500 and 3502", $sock, $results );
+$query ( "select * from rt where id between 6500 and 6502", $sock, $results );
+
+$query ( "alter table rt add column add2 float", $sock, $results );
+
+$query ( "select * from rt where id between 10 and 12", $sock, $results );
+$query ( "select * from rt where id between 3500 and 3502", $sock, $results );
+$query ( "select * from rt where id between 6500 and 6502", $sock, $results );
+
+$query ( "update rt set add2=0.111 where id=10", $sock, $results );
+$query ( "update rt set add2=0.222 where id=3500", $sock, $results );
+$query ( "update rt set add2=0.333 where id=6500", $sock, $results );
+
+$query ( "select * from rt where id between 10 and 12", $sock, $results );
+$query ( "select * from rt where id between 3500 and 3502", $sock, $results );
+$query ( "select * from rt where id between 6500 and 6502", $sock, $results );
+
+$query ( "alter table rt drop column data1", $sock, $results );
+$query ( "select * from rt where id between 10 and 12", $sock, $results );
+$query ( "select * from rt where id between 3500 and 3502", $sock, $results );
+$query ( "select * from rt where id between 6500 and 6502", $sock, $results );
+
+$query ( "alter table rt drop column data1", $sock, $results );
+
+$query ( "alter table rt drop column data2", $sock, $results );
+$query ( "select * from rt where id between 10 and 12", $sock, $results );
+$query ( "select * from rt where id between 3500 and 3502", $sock, $results );
+$query ( "select * from rt where id between 6500 and 6502", $sock, $results );
+
+$query ( "alter table rt drop column data3", $sock, $results );
+$query ( "select * from rt where id between 10 and 12", $sock, $results );
+$query ( "select * from rt where id between 3500 and 3502", $sock, $results );
+$query ( "select * from rt where id between 6500 and 6502", $sock, $results );
+
+$query ( "alter table rt drop column data4", $sock, $results );
+$query ( "select * from rt where id between 10 and 12", $sock, $results );
+$query ( "select * from rt where id between 3500 and 3502", $sock, $results );
+$query ( "select * from rt where id between 6500 and 6502", $sock, $results );
+
+$query ( "alter table rt drop column add1", $sock, $results );
+$query ( "select * from rt where id between 10 and 12", $sock, $results );
+$query ( "select * from rt where id between 3500 and 3502", $sock, $results );
+$query ( "select * from rt where id between 6500 and 6502", $sock, $results );
+
+$query ( "alter table rt drop column add2", $sock, $results );
+$query ( "select * from rt where id between 10 and 12", $sock, $results );
+$query ( "select * from rt where id between 3500 and 3502", $sock, $results );
+$query ( "select * from rt where id between 6500 and 6502", $sock, $results );
+
+$query ( "alter table rt drop column add2", $sock, $results );
+
+$query ( "alter table rt add column add3 float", $sock, $results );
+$query ( "select * from rt where id between 10 and 12", $sock, $results );
+$query ( "select * from rt where id between 3500 and 3502", $sock, $results );
+$query ( "select * from rt where id between 6500 and 6502", $sock, $results );
+$query ( "update rt set add3=0.111 where id=10", $sock, $results );
+$query ( "update rt set add3=0.222 where id=3500", $sock, $results );
+$query ( "update rt set add3=0.333 where id=6500", $sock, $results );
+
+$query ( "select * from rt where id between 10 and 12", $sock, $results );
+$query ( "select * from rt where id between 3500 and 3502", $sock, $results );
+$query ( "select * from rt where id between 6500 and 6502", $sock, $results );
+
+$query ( "alter table rt drop column add3", $sock, $results );
+
+$query ( "select * from rt where id between 10 and 12", $sock, $results );
+$query ( "select * from rt where id between 3500 and 3502", $sock, $results );
+$query ( "select * from rt where id between 6500 and 6502", $sock, $results );
+
+// testing quoted columns vs expressions
+$query ( "alter table rt add column select integer", $sock, $results );
+$query ( "alter table rt add column `select` integer", $sock, $results );
+$query ( "select `select` from rt where id=10", $sock, $results );
+$query ( "select min(`select`,`select`+1) from rt where id=10", $sock, $results );
+$query ( "select `select`=1 from rt where id=10", $sock, $results );
+
+// add and drop attr named as field
+$query ( "alter table rt add column title integer", $sock, $results );
+$query ( "alter table rt add column title string", $sock, $results );
+$query ( "insert into rt (id, title) values (101, 'test me')", $sock, $results );
+$query ( "select id, title from rt where id=101", $sock, $results );
+
+@mysql_close($sock);
+	
+]]></custom_test>
+
+</test>

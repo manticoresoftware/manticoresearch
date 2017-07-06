@@ -1,0 +1,90 @@
+Index header/format changes
+============================
+
+v.1, 0.9.7-rc2, added versioned index format
+
+v.2, 0.9.8-dev, added bUse64 flag
+v.2, 0.9.8-dev, changed m_tMin.m_iDocID to use 64 bits (was 32)
+v.3, 0.9.8-dev, added separate hitlist storage, .spp file
+v.4, 0.9.8-dev, changed that .spm file is mandatory
+v.5, 0.9.8-dev, added bitfields, changed schema locators accordingly
+v.6, 0.9.8-dev, added m_iMinPrefixLen, prefix indexing vs star syntax, new dict mangling rules
+v.7, 0.9.8-dev, added m_iMinInfixLen, prefix/infix_fields and enable_star, new dict mangling rules
+v.8, 0.9.8-rc1, changed prefix/infix mangling rules again (finalized)
+
+v.9, 0.9.9-dev, added tokenizer and dict settings to header
+v.10, 0.9.9-dev, added m_iKillListSize, kill lists
+v.11, 0.9.9-dev, changed dictionary checkpoint offset to 64 bits (was 32)
+v.12, 0.9.9-dev, added m_bIndexExactWords
+v.13, 0.9.9-rc1, added m_iMinStemmingLen
+v.14, 0.9.9-rc2, changed dictionary checkpoint serializer (2x GetOffset() vs 1x GetBytes() call)
+
+v.15, 1.10-dev, added m_sBlendChars, blended characters
+v.16, 1.10-dev, added m_bPayload column flag, payloads
+v.17, 1.10-dev, added string attributes support, .sps file
+v.18, 1.10-dev, added m_eHitless, hitless keywords
+v.19, 1.10-dev, added m_eHitFormat, single hits inlined in doclist
+v.20, 1.10-beta, added m_uMinMaxIndex, saving block min/max index to .spa
+
+v.21, 2.0.1-dev, added m_bWordDict, dict=keywords
+v.21, 2.0.1-dev, added m_bIndexSP, sentence/paragraph support
+v.21, 2.0.1-dev, changed dictionary checkpoint size from 1024 to 64
+v.22, 2.0.1-dev, added m_sZones, alpha zones support
+v.23, 2.0.1-dev, added m_iBoundaryStep, m_iStopwordStep
+v.24, 2.0.1-dev, added m_sBlendMode
+v.25, 2.0.1-beta, changed m_sZones from a single prefix to a list of masks
+v.26, 2.0.2-beta, added 64-bit MVAs
+
+v.27, 2.1.1-dev, added m_iInfixCodepointBytes, m_iInfixBlocksOffset, infix index to dict=keywords
+v.28, 2.1.1-dev, added support for RE field filters
+v.28, 2.1.1-dev, added m_iOvershortStep
+v.29, 2.1.1-dev, added support for multiple wordforms files
+v.30, 2.1.1-dev, added m_iEmbeddedLimit, embedded synonyms, stopwords, wordforms files
+v.31, 2.1.1-dev, added skiplists (.spe file), changed dictionary entry (added optional skiplist offset)
+v.32, 2.1.1-dev, added bigram indexing, and phrase searching with bigrams (bigram_index, bigram_freq_words directives)
+v.33, 2.1.1-dev, changed m_uMinMaxIndex to 64 bits (was 32 bits, fixes #1274)
+v.34, 2.1.1-dev, added m_iInfixBlocksWordsSize (to fix memory fragmentation)
+v.35, 2.1.1-dev, added average field lengths (in tokens) to header
+
+Revisions that touched INDEX_FORMAT_VERSION
+--------------------------------------------
+
+v.1,  6b43c3fa:517,  2006-12-14, sphinx.cpp:1636, shodan
+v.2,  f7594ad0:609,  2007-04-05, sphinx.cpp:1701, shodan
+v.3,  c637af0e:639,  2007-05-27, sphinx.cpp:1988, shodan
+v.4,  be90b19b:673,  2007-06-17, sphinx.cpp:2001, shodan
+v.5,  49ad6143:675,  2007-06-20, sphinx.cpp:2001, shodan
+v.6,  562513a5:679,  2007-06-22, sphinx.cpp:2129, shodan
+v.7,  cee4c7db:825,  2007-09-21, sphinx.cpp:2130, glook
+v.8,  1e3b09cf:850,  2007-10-04, sphinx.cpp:2131, glook
+v.9,  681d33a5:1226, 2008-03-26, sphinx.cpp:1620, glook
+v.10, e63ae60c:1257, 2008-05-06, sphinx.cpp:1629, glook
+v.11, c50c34a9:1289, 2008-05-30, sphinx.cpp:1661, glook
+v.12, bc71e761:1435, 2008-09-10, sphinx.cpp:1702, glook
+v.13, 6a920738:1561, 2008-11-11, sphinx.cpp:1573, shodan
+v.14, c07346eb:1693, 2009-02-13, sphinx.cpp:1522, shodan
+v.15, bbc776e0:1811, 2009-05-22, sphinx.cpp:1522, xale
+v.16, fac1869b:1813, 2009-05-25, sphinx.cpp:1522, shodan
+v.17, d6c1806d:1822, 2009-06-08, sphinx.cpp:1534, shodan
+v.18, ca9094f0:1842, 2009-06-20, sphinx.cpp:1565, xale
+v.19, 46617dbc:1905, 2009-07-13, sphinx.cpp:1477, xale
+v.20, 592748bb:2039, 2009-10-30, sphinx.cpp:1254, klirichek
+v.22, 47fb4a88:2437, 2010-08-12, sphinx.cpp:1380, shodan
+v.23, b61bbd7e:2482, 2010-09-15, sphinx.cpp:1366, tomat
+v.24, 511f1acc:2636, 2011-01-17, sphinx.cpp:1368, shodan
+v.25, aeb94e83:2724, 2011-03-14, sphinx.cpp:1369, shodan
+v.25, aeb94e83:2724, 2011-03-14, sphinx.cpp:1369, shodan
+v.26, 41de7757:2876, 2011-07-08, sphinx.cpp:1381, tomat
+
+v.26, d651fd84:2929, 2011-08-29, sphinxint.h:47, shodan
+v.27, 61a9ed54:3067, 2012-01-20, sphinxint.h:47, shodan
+v.28, 1fc6a75d:3165, 2012-03-24, sphinxint.h:47, shodan
+v.29, 97976aef:3181, 2012-04-10, sphinxint.h:47, glook
+v.30, d70268d7:3182, 2012-04-13, sphinxint.h:47, glook
+v.31, 6a16550d:3259, 2012-06-18, sphinxint.h:47, shodan
+v.32, 5d0a1955bb1f:1417, 2012-06-27, sphinxint.h:47, shodan 
+v.33, 36d3ef73faa1:1564, 2012-08-16, sphinxint.h:47, tomat
+v.34, 1c18e86fd4e6:1570, 2012-08-17, sphinxint.h:47, tomat
+v.35, c7c6c05a57de:1906, 2012-08-31, sphinxint.h:47, shodan
+
+--eof--

@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>merge vs phantom killer</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source main
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = select 1 as id, 'phantom' as body, 2 as attr;
+	sql_attr_uint = attr
+}
+
+source delta
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT * FROM test_table;
+	sql_attr_uint = attr
+}
+
+index main
+{
+	source			= main
+	path			= <data_path/>/empty
+}
+
+index delta
+{
+	source			= delta
+	path			= <data_path/>/delta
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	`id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default '',
+	`attr` int(11) NOT NULL default '0'
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table VALUES 
+( 1, 'nophantom', 1 ),
+( 2, 'phantom', 0 )
+</db_insert>
+
+<indexer>
+<run>--merge main delta</run>
+</indexer>
+
+<queries>
+	<query index="main">phantom</query>
+</queries>
+
+</test>

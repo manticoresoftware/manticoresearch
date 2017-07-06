@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>multi-index queries</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest1
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT document_id, attr1, attr2, body FROM test_table
+	sql_attr_uint	= attr1
+	sql_attr_uint	= attr2
+}
+
+source srctest2
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT document_id, attr1, attr2, body FROM test_table
+	sql_attr_uint	= attr1:5
+	sql_attr_uint	= attr2:5
+}
+
+source srctest3
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT document_id, attr2, attr3, body FROM test_table
+	sql_attr_uint	= attr2
+	sql_attr_uint	= attr3
+}
+
+source srctest4
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT document_id, attr1, attr2, body FROM test_table
+	sql_attr_uint	= attr1
+	sql_attr_uint	= attr2
+}
+
+index test1
+{
+	source			= srctest1
+	path			= <data_path/>/test1
+	min_prefix_len	= 1
+}
+
+index test2
+{
+	source			= srctest2
+	path			= <data_path/>/test2
+	min_prefix_len	= 1
+}
+
+index test3
+{
+	source			= srctest3
+	path			= <data_path/>/test3
+	min_prefix_len	= 1
+}
+
+index test4
+{
+	source			= srctest4
+	path			= <data_path/>/test4
+	min_prefix_len	= 1
+}
+
+</config>
+
+<queries>
+<query index="test1 test2">word</query>
+<query index="test1 test2 test3">word</query>
+<query index="test1 test2 test3 test4">word</query>
+<query index="test2 test3">word</query>
+<query index="test2 test3 test4">word</query>
+<query index="test3 test4">word</query>
+<query index="test1 test3">word</query>
+<query index="test1 test4">word</query>
+<query index="test2 test4">word</query>
+</queries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`attr1` int(11) NOT NULL default '0',
+	`attr2` int(11) NOT NULL default '0',
+	`attr3` int(11) NOT NULL default '0',
+	`attr4` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1,	1, 	5,	9,	13,	'wordforms' ),
+( 2, 	2,	6,	10,	14,	'wordies' ),
+( 3,	3,	7,	11,	15,	'words' ),
+( 4, 	4,	8,	12,	16,	'word' )
+</db_insert>
+
+</test>

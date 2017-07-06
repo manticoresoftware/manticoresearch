@@ -1,0 +1,421 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>string attribute vs different indexes, attributes UNION</name>
+<num_agents>3</num_agents>
+<requires><sphinxql_keep_null/></requires>
+
+<config>
+
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source src_main
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, body, CONCAT(str1, ' main') AS str1, idd1, 100 as tag FROM test_table
+	sql_attr_uint	= idd1
+	sql_attr_uint	= tag
+	sql_attr_string = str1
+}
+
+source src_delta1
+{
+	type			= mysql
+	<sql_settings/>
+	
+	sql_query		= SELECT id, body, CONCAT(str1, ' delta1') AS str1, idd1, 101 as tag FROM test_table where id>3
+	sql_attr_uint	= idd1
+	sql_attr_uint	= tag
+	sql_attr_string = str1
+	sql_query_killlist = SELECT 2
+}
+
+source src_delta2
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, body, 'delta2' as str1, CONCAT(str1, ' delta2') AS str2, idd1, 102 as tag FROM test_table where id>4
+	sql_attr_uint	= idd1
+	sql_attr_uint	= tag
+	sql_attr_string = str1
+	sql_attr_string = str2
+	sql_query_killlist = SELECT 2
+}
+
+<agent0>
+index main
+{
+	source			= src_main
+    docinfo			= extern
+	path			= <data_path/>/main
+}
+
+
+index delta2
+{
+	source			= src_delta2
+    docinfo			= extern
+	path			= <data_path/>/delta2
+}
+
+index dist1
+{
+	type = distributed
+	local = main
+	agent = <agent1_address/>:agent1_delta2
+}
+
+index dist2
+{
+	type = distributed
+	local = delta2
+	agent = <agent2_address/>:agent2_delta1
+}
+
+index dist3
+{
+	type = distributed
+	agent = <agent1_address/>:agent1_main
+	agent = <agent2_address/>:agent2_delta1
+}
+
+source src_bool
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT id, body, idd1>2 as attr FROM test_table
+	sql_attr_bool	= attr
+}
+source src_uint
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT id, body, idd1*100 as attr FROM test_table
+	sql_attr_uint	= attr
+}
+source src_float
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT id, body, idd1/1.73 as attr FROM test_table
+	sql_attr_float	= attr
+}
+source src_bigint
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT id, body, idd1*100000000000 as attr FROM test_table
+	sql_attr_bigint	= attr
+}
+
+index u_bool
+{
+	source			= src_bool
+    docinfo			= extern
+	path			= <data_path/>/u_bool
+}
+index u_uint
+{
+	source			= src_uint
+    docinfo			= extern
+	path			= <data_path/>/u_uint
+}
+index u_float
+{
+	source			= src_float
+    docinfo			= extern
+	path			= <data_path/>/u_float
+}
+index u_bigint
+{
+	source			= src_bigint
+    docinfo			= extern
+	path			= <data_path/>/u_bigint
+}
+
+index u_dist10
+{
+	type = distributed
+	local = u_bool
+	local = u_float
+}
+index u_dist11
+{
+	type = distributed
+	local = u_float
+	local = u_bool
+}
+index u_dist20
+{
+	type = distributed
+	local = u_bool
+	local = u_uint
+	local = u_bigint
+}
+index u_dist21
+{
+	type = distributed
+	local = u_bool
+	local = u_bigint
+	local = u_uint
+}
+index u_dist22
+{
+	type = distributed
+	local = u_bigint
+	local = u_bool
+	local = u_uint
+}
+index u_dist23
+{
+	type = distributed
+	local = u_bigint
+	local = u_uint
+	local = u_bool
+}
+
+source src_attr1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT id, body, idd1 as attr1, 1 as tag FROM test_table where id in ( 1,2,3 )
+	sql_attr_uint	= attr1
+	sql_attr_uint = tag
+}
+source src_attr2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT id, body, idd1 as attr2, 2 as tag FROM test_table where id in ( 4, 5, 6 )
+	sql_attr_uint	= attr2
+	sql_attr_uint = tag
+}
+index idx_attr1
+{
+	source			= src_attr1
+    docinfo			= extern
+	path			= <data_path/>/idx_attr1
+}
+index idx_attr2
+{
+	source			= src_attr2
+    docinfo			= extern
+	path			= <data_path/>/idx_attr2
+}
+index u_dist_aa
+{
+	type = distributed
+	local = idx_attr1
+	local = idx_attr2
+}
+
+source src_mva
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT id, body, 2 as tag, '100, 400, 500' as mva  FROM test_table
+	sql_attr_uint = tag
+	sql_attr_multi = uint mva from field
+	sql_field_string = body
+}
+index idx_mva
+{
+	source			= src_mva
+	docinfo			= extern
+	path			= <data_path/>/idx_mva
+}
+
+source src_count1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT 1, 11 as idd, 'of the box' text UNION SELECT 2, 11 as idd, 'we are the boxes'
+	sql_attr_uint	= idd
+}
+
+source src_count2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT 10, 22 as idd, 'of the fox' text UNION SELECT 11, 22 as idd, 'we are the foxes'
+	sql_attr_uint	= idd
+}
+
+index count1
+{
+	source			= src_count1
+	docinfo			= extern
+	path			= <data_path/>/count1
+}
+
+index count2
+{
+	source			= src_count2
+	docinfo			= extern
+	path			= <data_path/>/count2
+}
+
+index dist_count1
+{
+	type					= distributed
+	local					= count1
+	local					= count2
+}
+
+index dist_count2
+{
+	type					= distributed
+	local					= count1
+	agent					= <my_address/>:count2
+}
+
+</agent0>
+
+<agent1>
+index agent1_main
+{
+	source			= src_main
+    docinfo			= extern
+	path			= <data_path/>/agent1_main
+}
+
+index agent1_delta2
+{
+	source			= src_delta2
+    docinfo			= extern
+	path			= <data_path/>/agent1_delta2
+}
+</agent1>
+
+<agent2>
+index agent2_delta1
+{
+	source			= src_delta1
+    docinfo			= extern
+	path			= <data_path/>/agent2_delta1
+}
+</agent2>
+
+
+</config>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`id` int(11) NOT NULL default '0',
+	`idd1` int(11) NOT NULL default '0',
+	`str1` varchar(255) NOT NULL default '',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS `test_table`</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 1,		'a aa',		'the dog' ),
+( 2, 11,	'c cc',		'the cat' ),
+( 3, 11,	'a a',		'the bird' ), 
+( 4, 11,	'cc c',		'cat eats bird' ),
+( 5, 3, 	'a a',		'dog eats cat' ), 
+( 6, 1,		'c cc',		'bird' ), 
+( 7, 1,		'a a',		'the cat' ),
+( 8, 1,		'a a',		'eats' ),
+( 9, 3, 	'c cc',		'the' )
+</db_insert>
+
+<sphqueries>
+<sphinxql>select * from dist1 order by str2 asc, idd1 desc</sphinxql>
+<sphinxql>select * from dist1 order by str2 desc, idd1 asc</sphinxql>
+<sphinxql>select * from dist2 order by str1 asc</sphinxql>
+<sphinxql>select * from dist2 order by str1 desc</sphinxql>
+<sphinxql>select * from dist3 order by str1 asc</sphinxql>
+<sphinxql>select * from dist3 order by str1 desc, idd1 desc</sphinxql>
+
+<!-- here is going new feature seamless conversion of result set attributes ( bool -> float ) | ( bool -> uint -> bigint ) -->
+<sphinxql>select * from u_bool, u_float</sphinxql>
+<sphinxql>select * from u_float, u_bool</sphinxql>
+<sphinxql>select * from u_bool, u_uint, u_bigint</sphinxql>
+<sphinxql>select * from u_uint, u_bool, u_bigint</sphinxql>
+<sphinxql>select * from u_uint, u_bigint, u_bool</sphinxql>
+<sphinxql>select * from u_bigint, u_uint, u_bool </sphinxql>
+<sphinxql>select * from u_dist10</sphinxql>
+<sphinxql>select * from u_dist11</sphinxql>
+<sphinxql>select * from u_dist20</sphinxql>
+<sphinxql>select * from u_dist21</sphinxql>
+<sphinxql>select * from u_dist22</sphinxql>
+<sphinxql>select * from u_dist23</sphinxql>
+<!-- still invalid -->
+<sphinxql>select * from u_float, u_uint</sphinxql>
+<sphinxql>select * from u_float, u_bigint</sphinxql>
+<sphinxql>select * from u_uint, u_float</sphinxql>
+<sphinxql>select * from u_bigint, u_float</sphinxql>
+<!-- test of exist function -->
+<sphinxql>select * from u_dist_aa</sphinxql>
+<sphinxql>select *, exist ( ' aTTr2', 11 ) as cnd from u_dist_aa where cnd=11</sphinxql>
+<sphinxql>select *, exist ( ' Attr1', 1 ) as cnd from u_dist_aa where cnd=1</sphinxql>
+<!-- regression schema attributes with alias -->
+<sphinxql>select tag, idd1, idd1 * 2 as rr from dist2</sphinxql>
+<sphinxql>select tag, idd1 as r0, r0 * 2 as rr from dist2</sphinxql>
+<!-- alias as shema attribute -->
+<sphinxql>select tag, idd1 as str1, str1 as str2 from dist2</sphinxql>
+<!-- checking attribute aliases -->
+<sphinxql>select str1 as str11 from main</sphinxql>
+
+<!-- regression exist -->
+<sphinxql>select *, exist ( 'mva', 1000 ) + id as cnd1 from idx_mva where cnd1 &lt; 5</sphinxql>
+<sphinxql>select *, exist ( 'body', 1 ) as b from idx_mva</sphinxql>
+
+<!--regression API count(*) vs compat -->
+<sphinxql>SELECT *, count(*) as cnt, 1 as gr FROM main GROUP BY gr</sphinxql>
+
+<!-- regression bigint function vs udf return type -->
+<sphinxql>select *, bigint(idd1) b, min( bigint(idd1)) c from main</sphinxql>
+<sphinxql>select *, bigint(idd1) b, min( bigint(idd1)) c, 1 as gr from main GROUP BY gr</sphinxql>
+
+<!-- empty result set with count(*) -->
+<sphinxql>select count(*) from count2 where id in (1,2); show meta</sphinxql>
+<sphinxql>select *, count(*) from count2 where id in (1,2); show meta</sphinxql>
+<sphinxql>select count(*) from count1, count2 where id in (1,2); show meta</sphinxql>
+<sphinxql>select count(*) from count2, count1 where id in (1,2); show meta</sphinxql>
+<sphinxql>select *, count(*) from count1, count2 where id in (1,2); show meta</sphinxql>
+<sphinxql>select *, count(*) from count2, count1 where id in (1,2); show meta</sphinxql>
+<sphinxql>select idd, count(*) from count1, count2 where id in (1,2); show meta</sphinxql>
+<sphinxql>select idd, count(*) from count2, count1 where id in (1,2); show meta</sphinxql>
+<sphinxql>select *, count(*) from count1, count2 where id in (100); show meta</sphinxql>
+<sphinxql>select idd, count(*) from count2, count1 where id in (100); show meta</sphinxql>
+<sphinxql>select count(*) from dist_count1 where id in (1,2); show meta</sphinxql>
+<sphinxql>select count(*) from dist_count2 where id in (1,2); show meta</sphinxql>
+<sphinxql>select *, count(*) from dist_count1 where id in (1,2); show meta</sphinxql>
+<sphinxql>select *, count(*) from dist_count2 where id in (1,2); show meta</sphinxql>
+<sphinxql>select idd, count(*) from dist_count1 where id in (1,2); show meta</sphinxql>
+<sphinxql>select idd, count(*) from dist_count2 where id in (10,11); show meta</sphinxql>
+<sphinxql>select *, count(*) from dist_count1 where id in (100); show meta</sphinxql>
+<sphinxql>select idd, count(*) from dist_count2 where id in (100); show meta</sphinxql>
+
+<!-- empty result set with constant columns -->
+<sphinxql>select *, 123456, 2+2, sin(1.0), sin(idd), idd+1, count(*) from count2</sphinxql>
+<sphinxql>select *, 123456, 2+2, sin(1.0), sin(idd), idd+1, count(*) from count2 where id in (1,2)</sphinxql>
+
+<!-- empty result set with multiple counts -->
+<sphinxql>select idd i, count(*), idd b, count(*) c, count(distinct i) from count2  where id in (1,2)</sphinxql>
+<sphinxql>select idd i, count(*), idd b, count(*) c, count(distinct i) d from count2  where id in (1,2)</sphinxql>
+
+</sphqueries>
+
+<queries>
+<query select="*, count(*) as cnt, 1 as gr " groupfunc="attr" groupattr="gr" index="main"/>
+</queries>
+</test>

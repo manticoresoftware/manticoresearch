@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>like operator</name>
+
+<config>
+indexer
+{
+  mem_limit   = 16M
+}
+
+searchd
+{
+  <searchd_settings/>
+  workers = threads
+  predicted_time_costs = doc=100000000, hit=1000000, skip=0, match=0
+}
+
+source src
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT document_id, group_id, group_id2, title, content FROM test_table
+  sql_attr_uint   = group_id
+  sql_attr_uint   = group_id2
+}
+
+index test
+{
+  source      = src
+  path      = <data_path/>/test
+}
+
+source srchalf1
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT 1, 11 idd, 'text goes here' text UNION SELECT 2, 11 idd, 'text goes there' text
+  sql_attr_uint   = idd
+}
+source srchalf2
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT 3, 11 idd, 'text everywhere but got text here' text UNION SELECT 4, 11 idd, 'got text hole' text
+  sql_attr_uint   = idd
+}
+
+index loc1
+{
+  source      = srchalf1
+  path      = <data_path/>/loc1
+}
+index loc2
+{
+  source      = srchalf2
+  path      = <data_path/>/loc2
+}
+index d1
+{
+	type = distributed
+	local = loc1
+	agent = <my_address/>:loc2
+}
+index end1
+{
+	type = distributed
+	agent = <my_address/>:loc1
+	agent = <my_address/>:loc2
+}
+index proxy1
+{
+	type = distributed
+	agent = <my_address/>:end1
+}
+index d2
+{
+	type = distributed
+	agent = <my_address/>:proxy1
+}
+index d3
+{
+	type = distributed
+	agent = <my_address/>:end1
+}
+
+source src10
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT document_id, group_id, group_id2, title, content FROM test_table where document_id in (1,2)
+  sql_attr_uint   = group_id
+  sql_attr_uint   = group_id2
+}
+
+index test10
+{
+  source      = src10
+  path      = <data_path/>/test10
+}
+source src11
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT document_id, group_id, group_id2, title, content FROM test_table where document_id in (3,4)
+  sql_attr_uint   = group_id
+  sql_attr_uint   = group_id2
+}
+
+index test11
+{
+  source      = src11
+  path      = <data_path/>/test11
+}
+index dist1
+{
+	type =distributed
+	agent = <my_address/>:test10
+	agent = <my_address/>:test11
+}
+
+source src20
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT document_id, group_id, group_id2, title, content FROM test_table where document_id in (1,3)
+  sql_attr_uint   = group_id
+  sql_attr_uint   = group_id2
+}
+
+index test20
+{
+  source      = src20
+  path      = <data_path/>/test20
+}
+source src21
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT document_id, group_id, group_id2, title, content FROM test_table where document_id in (2,4)
+  sql_attr_uint   = group_id
+  sql_attr_uint   = group_id2
+}
+
+index test21
+{
+  source      = src21
+  path      = <data_path/>/test21
+}
+index dist2
+{
+	type =distributed
+	agent = <my_address/>:test20
+	agent = <my_address/>:test21
+}
+</config>
+
+<sphqueries>
+<sphinxql>SHOW STATUS LIKE '%n_\_up%'</sphinxql>
+<sphinxql>SHOW META LIKE '%al%found'</sphinxql>
+<sphinxql>DESCRIBE test LIKE 'g_oup%'</sphinxql>
+<sphinxql>SHOW AGENT STATUS LIKE '%seconds%'</sphinxql>
+
+<sphinxql>SELECT *, GROUPBY(), COUNT(*) FROM test GROUP BY group_id, group_id2</sphinxql>
+<sphinxql>SELECT *, GROUPBY(), COUNT(*) FROM test GROUP BY group_id2, group_id, group_id2</sphinxql>
+
+<!-- regression fetched_docs, fetched_hits from (pure) distributed indexes -->
+<sphinxql>SELECT * FROM loc1 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000</sphinxql>
+<sphinxql>SHOW META LIKE 'local%'</sphinxql>
+<sphinxql>SHOW META LIKE 'dist%'</sphinxql>
+<sphinxql>SHOW META LIKE '%predict%'</sphinxql>
+<sphinxql>SELECT * FROM loc2 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000</sphinxql>
+<sphinxql>SHOW META LIKE 'local%'</sphinxql>
+<sphinxql>SHOW META LIKE 'dist%'</sphinxql>
+<sphinxql>SHOW META LIKE '%predict%'</sphinxql>
+<sphinxql>SELECT * FROM loc1, loc2 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000</sphinxql>
+<sphinxql>SHOW META LIKE 'local%'</sphinxql>
+<sphinxql>SHOW META LIKE 'dist%'</sphinxql>
+<sphinxql>SHOW META LIKE '%predict%'</sphinxql>
+<sphinxql>SELECT * FROM d1 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000</sphinxql>
+<sphinxql>SHOW META LIKE 'local%'</sphinxql>
+<sphinxql>SHOW META LIKE 'dist%'</sphinxql>
+<sphinxql>SHOW META LIKE '%predict%'</sphinxql>
+<sphinxql>SELECT * FROM d2 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000</sphinxql>
+<sphinxql>SHOW META LIKE 'local%'</sphinxql>
+<sphinxql>SHOW META LIKE 'dist%'</sphinxql>
+<sphinxql>SHOW META LIKE '%predict%'</sphinxql>
+<sphinxql>SELECT * FROM d3 WHERE MATCH ( 'text | got | here')  LIMIT 1 OPTION max_predicted_time=10000</sphinxql>
+<sphinxql>SHOW META LIKE 'local%'</sphinxql>
+<sphinxql>SHOW META LIKE 'dist%'</sphinxql>
+<sphinxql>SHOW META LIKE '%predict%'</sphinxql>
+<sphinxql>SELECT COUNT(*) FROM test</sphinxql>
+<sphinxql>SELECT id id1, COUNT(DISTINCT id1) FROM test</sphinxql>
+
+<!--regression group by multi vs distributed -->
+<sphinxql>SELECT *, GROUPBY(), COUNT(*) FROM dist1 GROUP BY group_id, group_id2</sphinxql>
+<sphinxql>SELECT *, GROUPBY(), COUNT(*) FROM dist1 GROUP BY group_id2, group_id, group_id2</sphinxql>
+<sphinxql>SELECT *, GROUPBY(), COUNT(*) FROM dist2 GROUP BY group_id, group_id2</sphinxql>
+<sphinxql>SELECT *, GROUPBY(), COUNT(*) FROM dist2 GROUP BY group_id2, group_id, group_id2</sphinxql>
+
+</sphqueries>
+
+<db_create>
+CREATE TABLE test_table
+(
+  document_id INTEGER PRIMARY KEY NOT NULL AUTO_INCREMENT,
+  group_id  INTEGER NOT NULL,
+  group_id2 INTEGER NOT NULL,
+  title   VARCHAR(255) NOT NULL,
+  content   VARCHAR(255) NOT NULL
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table ( document_id, group_id, group_id2, title, content ) VALUES
+  ( 1, 1, 5, 'test one', 'this is my test document number one. also checking search within phrases.' ),
+  ( 2, 1, 6, 'test two', 'this is my test document number two' ),
+  ( 3, 2, 7, 'test three', 'this is another group' ),
+  ( 4, 2, 8, 'test four', 'this is to test groups' )
+</db_insert>
+
+</test>

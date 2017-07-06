@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test>
+
+<name>phrase matching vs hit buffer boundary</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * FROM test_table
+}
+
+index idx
+{
+	source			= src
+	path			= <data_path/>/main
+}
+
+</config>
+
+<queries>
+	<!-- 510 regular hits, + one doc with two hits to check the edge hit condition -->
+	<query mode="extended2" ranker="wordcount">"aaaa bbbb"</query>
+	<!-- 510 regular hits, + one doc with 520 hits to check the more then 1 hits chunk condition -->
+	<query mode="extended2" ranker="wordcount">"cccc dddd"</query>
+</queries>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
+	title TEXT NOT NULL
+) ENGINE=MYISAM
+</db_create>
+
+<custom_insert><![CDATA[
+
+for ( $i=0; $i<510; ++$i )
+	mysql_query ( "INSERT INTO test_table VALUES ( 0, 'aaaa bbbb cccc dddd')" );
+$line = "";
+for ( $j=0; $j<520; ++$j )
+	$line .= " x cccc dddd";
+mysql_query ( "INSERT INTO test_table VALUES ( 0, 'aaaa bbbb x aaaa bbbb $line')" );
+
+]]></custom_insert>
+<db_drop>DROP TABLE IF EXISTS test_table</db_drop>
+
+</test>

@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>merge vs write buffer corruption</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+	write_buffer = 300000
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source main
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = select 2, 'X' as first, 'Y' as second;
+}
+
+index main
+{
+	source = main
+	path = <data_path/>/main
+}
+
+source delta
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = select id, first, second from sph_test
+}
+
+index delta
+{
+	source = delta
+	path = <data_path/>/delta
+}
+</config>
+
+<db_create>
+create table sph_test
+(
+	id int not null,
+	first text(1048576) not null,
+	second text(1048576) not null
+) ENGINE=MYISAM
+</db_create>
+
+<db_drop>
+drop table if exists sph_test;
+</db_drop>
+
+<indexer>
+	<run>--merge main delta</run>
+</indexer>
+
+<custom_insert><![CDATA[
+
+	$text = 'C';
+	for ( $i=0; $i<299991; $i++ )
+		$text .= ' C';
+	$text .= ' B A A A';
+	mysql_query ( "insert into sph_test values ( 1, '', '$text' )" );
+
+]]></custom_insert>
+
+<queries>
+	<query index="main" mode="extended2">C</query>
+	<query index="main" mode="extended2">@second[299992] B</query>
+	<query index="main" mode="extended2">@second[299993] B</query>
+	<query index="main" mode="extended2">@second[299994] B</query>
+	<query index="main" mode="extended2">"C B A A A"</query>
+	<query index="main" mode="extended2">"C B A A A$"</query>
+	<query index="main" mode="extended2">A</query>
+	<query index="main" mode="extended2">A$</query>
+	<query index="main" mode="extended2">X</query>
+	<query index="main" mode="extended2">Y</query>
+</queries>
+
+</test>

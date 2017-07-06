@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<requires>
+<id32/>
+</requires>
+
+<name>schema minimization, match copying/remapping, and other match/schema voodoo</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	dist_threads = 4
+
+	# needed for "do not fetch too much" test below
+	max_packet_size = 128K
+	workers = threads
+}
+
+source base
+{
+	type = mysql
+	<sql_settings/>
+}
+
+source t1 : base
+{
+	sql_query = SELECT 1 id, 'test one' title, 1 attr1, 234 attr2
+	sql_attr_bool = attr1
+	sql_attr_uint = attr2
+}
+
+source t2 : base
+{
+	sql_query = SELECT 2 id, 'test two' title, 123.0 attr1, 345 attr2
+	sql_attr_float = attr1
+	sql_attr_uint = attr2
+}
+
+source t3 : base
+{
+	# 4 rows, 10 cols, 4K/col = 160K total
+	sql_query = SELECT id, gid, title t1, title t2, title t3, title t4 FROM t3
+	sql_attr_uint = gid
+	sql_field_string = t1
+	sql_field_string = t2
+	sql_field_string = t3
+	sql_field_string = t4
+}
+
+index t1
+{
+	source = t1
+	path = data/t1
+}
+
+index t2
+{
+	source = t2
+	path = data/t2
+}
+
+index t3
+{
+	source = t3
+	path = data/t3
+}
+
+index dt3
+{
+	type = distributed
+	agent = <my_address/>:t3
+}
+
+source loc1 : base
+{
+	sql_query		= SELECT 1, 11 as idd, 'test', '1 2 3' as m, 10 as s UNION SELECT 2, 12 as idd, 'test', '4 5 6' as m, 10 as s UNION SELECT 3, 11 as idd, 'test', '7 8 9' as m, 10 as s UNION SELECT 4, 12 as idd, 'test', '10 11 12' as m, 10 as s
+	sql_attr_uint		= idd
+	sql_attr_uint		= s
+	sql_attr_multi		= uint m from field
+}
+
+source loc2 : base
+{
+	sql_query		= SELECT 101, 110 as idd, 'test', '100 200 300' as m, 100 as s UNION SELECT 102, 112 as idd, 'test', '40 50 60' as m, 100 as s UNION SELECT 103, 110 as idd, 'test', '70 80 90' as m, 100 as s UNION SELECT 104, 112 as idd, 'test', '100 110 120' as m, 100 as s
+	sql_attr_uint		= idd
+	sql_attr_uint		= s
+	sql_attr_multi		= uint m from field
+}
+
+index loc1
+{
+	source = loc1
+	path = data/loc1
+}
+
+index loc2
+{
+	source = loc2
+	path = data/loc2
+}
+
+index dist10
+{
+	type = distributed
+	local = loc2
+	agent = <my_address/>:loc1
+	agent_query_timeout = 5000
+}
+</config>
+
+<db_create>
+CREATE TABLE t3
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	gid INTEGER NOT NULL,
+	title VARCHAR(4096) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS t3;</db_drop>
+<db_insert>INSERT INTO t3 VALUES
+( 1, 123, REPEAT('abcdefghi ', 400) ),
+( 2, 123, REPEAT('abcdefghi ', 400) ),
+( 3, 123, REPEAT('abcdefghi ', 400) ),
+( 4, 123, REPEAT('abcdefghi ', 400) ),
+( 5, 123, REPEAT('abcdefghi ', 400) ),
+( 6, 123, REPEAT('abcdefghi ', 400) ),
+( 7, 123, REPEAT('abcdefghi ', 400) ),
+( 8, 123, REPEAT('abcdefghi ', 400) ),
+( 9, 123, REPEAT('abcdefghi ', 400) ),
+( 10, 123, REPEAT('abcdefghi ', 400) )
+</db_insert>
+
+<sphqueries>
+
+<!-- test that bool/float mixing works and returns correct results -->
+<sphinxql>select * from t1</sphinxql>
+<sphinxql>select * from t2</sphinxql>
+<sphinxql>select * from t1,t2</sphinxql>
+
+<!-- test.. something -->
+<sphinxql>select *,attr1 from t1</sphinxql>
+<sphinxql>select attr1 from t1</sphinxql>
+
+<!-- test that select id,gid does NOT fetch all atributes via network (we will hit max_packet_size if we do!) -->
+<sphinxql>select * from dt3</sphinxql>
+<sphinxql>select id,gid from dt3</sphinxql>
+
+<!--regression distributed vs no local matches-->
+<sphinxql>select * from dist10 where s=10</sphinxql>
+<sphinxql>select * from dist10 where s=10 group by idd</sphinxql>
+
+<!--GROUP BY id should work-->
+<sphinxql>select id from t1 group by id</sphinxql>
+</sphqueries>
+
+</test>

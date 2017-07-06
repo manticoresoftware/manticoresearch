@@ -1,0 +1,162 @@
+/* Striped config.h.in especially for cmake.  */
+
+/* Define to use the just-compiled grammar (will be defined if we have bison available). */
+#cmakedefine CMAKE_GENERATED_GRAMMAR 1
+
+/* Define to use the just-compiled lexer (will be defined if we have flex available). */
+#cmakedefine CMAKE_GENERATED_LEXER 1
+
+/* Define to be the name of the compiler. */
+#cmakedefine COMPILER "${COMPILER}"
+
+/* Flags used to configure me */
+#cmakedefine CONFIGURE_FLAGS "${CONFIGURE_FLAGS}"
+
+/* Define to 1 if you want runtime load libexpat using dlopen */
+#cmakedefine DL_EXPAT ${DL_EXPAT}
+#cmakedefine EXPAT_LIB "${EXPAT_LIB}"
+
+/* Define to 1 if you want runtime load mysql using dlopen */
+#cmakedefine DL_MYSQL ${DL_MYSQL}
+#cmakedefine MYSQL_LIB "${MYSQL_LIB}"
+
+/* Define to 1 if runtime load PosgreSQL using dlopen */
+#cmakedefine DL_PGSQL ${DL_PGSQL}
+#cmakedefine PGSQL_LIB "${PGSQL_LIB}"
+
+/* Define to 1 if you want runtime load odbc/iodbc using dlopen */
+#cmakedefine DL_UNIXODBC ${DL_UNIXODBC}
+#cmakedefine UNIXODBC_LIB "${UNIXODBC_LIB}"
+
+/* Define to 1 if you have the `backtrace' function. */
+#cmakedefine HAVE_BACKTRACE ${HAVE_BACKTRACE}
+
+/* Define to 1 if you have the `clock_gettime' function. */
+#cmakedefine HAVE_CLOCK_GETTIME ${HAVE_CLOCK_GETTIME}
+
+/* Define to 1 if you have the `dlerror' function. */
+#cmakedefine HAVE_DLERROR ${HAVE_DLERROR}
+
+/* Define to 1 if you have the `dlopen' function. */
+#cmakedefine HAVE_DLOPEN ${HAVE_DLOPEN}
+
+/* Define if your system supports the epoll system calls */
+#cmakedefine HAVE_EPOLL ${HAVE_EPOLL}
+
+/* Define if your system supports the kqueue system calls */
+#cmakedefine HAVE_KQUEUE ${HAVE_KQUEUE}
+
+/* Define if your system supports the eventfd system calls */
+#cmakedefine01 HAVE_EVENTFD
+
+/* Define to 1 if you have the <execinfo.h> header file. */
+#cmakedefine HAVE_EXECINFO_H ${HAVE_EXECINFO_H}
+
+/* Define if F_SETLKW is defined in fcntl.h */
+#cmakedefine HAVE_F_SETLKW ${HAVE_F_SETLKW}
+
+/* Define to 1 if you have the <inttypes.h> header file. */
+#cmakedefine HAVE_INTTYPES_H ${HAVE_INTTYPES_H}
+
+/* Define to 1 if you have the `logf' function. */
+#cmakedefine HAVE_LOGF ${HAVE_LOGF}
+
+/* Define to 1 if you have the 'mremap' function */
+#cmakedefine HAVE_MREMAP ${HAVE_MREMAP}
+
+/* Define to 1 if you have the 'nanosleep' function */
+#cmakedefine HAVE_NANOSLEEP ${HAVE_NANOSLEEP}
+
+/* Define to 1 if you have the `poll' function. */
+#cmakedefine HAVE_POLL ${HAVE_POLL}
+
+/* Define to 1 if you have the `pread' function. */
+#cmakedefine HAVE_PREAD ${HAVE_PREAD}
+
+/* Define to 1 if you have the `pthread_mutex_timedlock' function. */
+#cmakedefine HAVE_PTHREAD_MUTEX_TIMEDLOCK ${HAVE_PTHREAD_MUTEX_TIMEDLOCK}
+
+/* Define to 1 if you have the <stdint.h> header file. */
+#cmakedefine HAVE_STDINT_H ${HAVE_STDINT_H}
+
+/* Define to 1 if you have the `strnlen' function. */
+#cmakedefine HAVE_STRNLEN ${HAVE_STRNLEN}
+
+/* Whether we have internal atomic functions */
+#cmakedefine HAVE_SYNC_FETCH ${HAVE_SYNC_FETCH}
+
+/* Define to 1 if you have the <sys/types.h> header file. */
+#cmakedefine HAVE_SYS_TYPES_H ${HAVE_SYS_TYPES_H}
+
+/* whether 2nd arg to iconv() is const ptr */
+#cmakedefine ICONV_INBUF_CONST ${ICONV_INBUF_CONST}
+
+/* Full name OS */
+#cmakedefine OS_UNAME "${OS_UNAME}"
+
+/* Disable overriding of c++ memory routines */
+#cmakedefine SPH_DONT_OVERRIDE_MEMROUTINES ${SPH_DONT_OVERRIDE_MEMROUTINES}
+
+/* whether unaligned RAM access is possible */
+#cmakedefine UNALIGNED_RAM_ACCESS ${UNALIGNED_RAM_ACCESS}
+
+/* 64-bit document and word IDs */
+#cmakedefine USE_64BIT ${USE_64BIT}
+
+/* define to use expat XML library */
+#cmakedefine USE_LIBEXPAT ${USE_LIBEXPAT}
+
+/* define to use iconv library */
+#cmakedefine USE_LIBICONV ${USE_LIBICONV}
+
+/* libstemmer support */
+#cmakedefine USE_LIBSTEMMER ${USE_LIBSTEMMER}
+
+/* little-endian */
+#cmakedefine USE_LITTLE_ENDIAN ${USE_LITTLE_ENDIAN}
+
+/* Define to 1 if you want to compile with MySQL support */
+#cmakedefine USE_MYSQL ${USE_MYSQL}
+
+/* define to use ODBC library */
+#cmakedefine USE_ODBC ${USE_ODBC}
+
+/* Define to 1 if you want to compile with PostgreSQL support */
+#cmakedefine USE_PGSQL ${USE_PGSQL}
+
+/* re2 library support */
+#cmakedefine USE_RE2 ${USE_RE2}
+
+/* RLP library support */
+#cmakedefine USE_RLP ${USE_RLP}
+
+/* define to use POSIX Syslog for logging */
+#cmakedefine USE_SYSLOG ${USE_SYSLOG}
+
+/* define to use Zlib */
+#cmakedefine USE_ZLIB ${USE_ZLIB}
+
+/* Version number of package */
+#cmakedefine VERSION
+
+/* Name of package */
+#cmakedefine PACKAGE
+
+/* Define to the address where bug reports for ${} this package should be sent. */
+#cmakedefine PACKAGE_BUGREPORT
+
+/* Define to the full name of this package. */
+#cmakedefine PACKAGE_NAME
+
+/* Define to the full name and version of this package. */
+#cmakedefine PACKAGE_STRING
+
+/* Define to the one symbol short name of this package. */
+#cmakedefine PACKAGE_TARNAME
+
+/* Define to the home page for this package. */
+#cmakedefine PACKAGE_URL
+
+/* Define to the version of this package. */
+#cmakedefine PACKAGE_VERSION
+

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>ondisk_attrs for rt indexes</name>
+<skip_indexer/>
+<config>
+indexer
+{
+	mem_limit			= 28M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers					= threads
+}
+
+index rta
+{
+	type 			= rt
+	path                    = <data_path/>/rta
+	rt_field			= text
+	rt_attr_string 		= attrs
+	rt_attr_uint 		= tag
+}
+
+index rtb : rta
+{
+	path                    = <data_path/>/rtb
+	ondisk_attrs		= 1
+}
+
+</config>
+
+<sphqueries>
+
+<!-- rta -->
+<sphinxql>INSERT INTO `rta`(id,tag,text,attrs) VALUES ( 1, 102, 'first','ch1first'), ( 2, 102, 'second','ch1second'), ( 3, 103, 'third','ch1third')</sphinxql>
+<sphinxql>FLUSH RAMCHUNK rta</sphinxql>
+<!-- rtb -->
+<sphinxql>INSERT INTO rtb (id,tag,text,attrs) VALUES ( 4, 203, 'forth','ch2forth'), ( 2, 212, 'asecond','ch2second'), ( 3, 213, 'athird','ch2third')</sphinxql>
+<sphinxql>FLUSH RAMCHUNK rtb</sphinxql>
+
+<!-- control sample -->
+<sphinxql>select * from rta</sphinxql>
+<sphinxql>select * from rtb</sphinxql>
+
+<!-- updating -->
+<sphinxql>update rta set tag=400 where id=1</sphinxql>
+<!-- must fail because of undisk_attrs -->
+<sphinxql>update rtb set tag=400 where id=4</sphinxql>
+
+<!-- check sample -->
+<sphinxql>select * from rta</sphinxql>
+<sphinxql>select * from rtb</sphinxql>
+
+</sphqueries>
+</test>

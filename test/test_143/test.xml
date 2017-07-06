@@ -1,0 +1,280 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>snippets vs multiwordforms</name>
+<requires><sphinxql_keep_null/></requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+	dist_threads = 2
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1, 'text';
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+
+	wordforms = <this_test/>/wordforms.txt
+	blend_chars = +
+}
+
+source src_snip
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT 1 as id , 1 as idd, 2 as idd2, 'viva las mundos' as body
+	sql_attr_uint = idd
+	sql_attr_uint = idd2
+	sql_field_string = body
+}
+
+index snip2
+{
+	source			= src_snip
+	path			= <data_path/>/snip2
+}
+
+source src_snip22
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT 100 as id , 1 as idd, 20 as idd2, 'viva las mundos' as body
+	sql_attr_uint = idd
+	sql_attr_uint = idd2
+	sql_field_string = body
+}
+
+index snip22
+{
+	source			= src_snip22
+	path			= <data_path/>/snip22
+}
+
+source src_snip3
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT 10 as id , 1 as idd, 20 as pup, 'viva las mundos' as body
+	sql_attr_uint = pup
+	sql_attr_uint = idd
+	sql_field_string = body
+}
+
+index snip3
+{
+	source			= src_snip3
+	path			= <data_path/>/snip3
+}
+
+index dist1
+{
+	type = distributed
+	local = snip2
+	local = snip3
+}
+
+index dist2
+{
+	type = distributed
+	local = snip2
+	agent = <my_address/>:snip3
+}
+
+index dist3
+{
+	type = distributed
+	agent = <my_address/>:snip2
+	agent = <my_address/>:snip3
+}
+
+index dist11
+{
+	type = distributed
+	local = snip2
+	local = snip22
+}
+
+index dist12
+{
+	type = distributed
+	local = snip2
+	agent = <my_address/>:snip22
+}
+
+index dist13
+{
+	type = distributed
+	agent = <my_address/>:snip2
+	agent = <my_address/>:snip22
+}
+
+index test_milti
+{
+	type		= template
+	wordforms	= <this_test/>/wordforms_multi_dest.txt
+	charset_table = english, 0..9
+}
+
+index dist_all1
+{
+	type = distributed
+	local = snip2
+	local = snip22
+	local = snip3
+}
+
+source src_snip301
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT document_id+0 as id, idd+0 as idd, body FROM test_table
+	sql_attr_uint = idd
+	sql_field_string = body
+}
+source src_snip302
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT document_id+10 as id, idd+10 as idd, body FROM test_table
+	sql_attr_uint = idd
+	sql_field_string = body
+}
+source src_snip303
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT document_id+20 as id, idd+20 as idd, 1 as idd1, body FROM test_table
+	sql_field_string = body
+	sql_attr_uint = idd1
+}
+index snip301
+{
+	source			= src_snip301
+	path			= <data_path/>/snip301
+}
+index snip302
+{
+	source			= src_snip302
+	path			= <data_path/>/snip302
+}
+index snip303
+{
+	source			= src_snip303
+	path			= <data_path/>/snip303
+}
+
+index dist_all2
+{
+	type = distributed
+	local = snip301
+	local = snip302
+	local = snip303
+}
+
+</config>
+
+<db_create>
+CREATE TABLE `test_table` (
+  `document_id` int(5) NOT NULL default '0',
+  `idd` int(5) NOT NULL default '0',
+  `body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS `test_table`</db_drop>
+<db_insert>
+INSERT INTO `test_table` VALUES
+(1,1,'viva las mundos'),
+(2,2,'viva las mundos'),
+(3,3,'viva las mundos'),
+(4,4,'viva las mundos'),
+(5,5,'viva las mundos'),
+(6,6,'viva las mundos'),
+(7,7,'viva las mundos'),
+(8,8,'viva las mundos'),
+(9,9,'viva las mundos'),
+(10,10,'viva las mundos')
+</db_insert>
+
+<sphqueries>
+<sphinxql>CALL SNIPPETS('Kph on Europe road 1110', 'test', 'kph', 1 AS query_mode )</sphinxql>
+<sphinxql>CALL SNIPPETS('when you on+time do it', 'test', 'you on', 1 AS query_mode )</sphinxql>
+<sphinxql>CALL SNIPPETS('when you on+time do it', 'test', 'you time', 1 AS query_mode )</sphinxql>
+<sphinxql>CALL SNIPPETS('you on+time 0 es you 0 at', 'test', 'none', 1 AS query_mode )</sphinxql>
+<sphinxql>CALL SNIPPETS('you on+time 0 es you 0 at', 'test', '0', 1 AS query_mode )</sphinxql>
+
+<!-- regression SNIPPET crash -->
+<sphinxql>select id, SNIPPET('', '') as s from snip2 where match ('silver')</sphinxql>
+<sphinxql>select id, SNIPPET('body as las void', 'las') as s from snip2 where match ('las')</sphinxql>
+<sphinxql>select id, SNIPPET(body, 'las') as s from snip2 where match ('las')</sphinxql>
+<sphinxql>select id, SNIPPET('something', snip2) from snip2</sphinxql>
+
+<!-- regression SNIPPET expression from distributed index -->
+<sphinxql>select *, SNIPPET('body as las void', 'las') from dist3</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist3</sphinxql>
+<sphinxql>select *, SNIPPET('body as las void', 'las') from dist2</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist2</sphinxql>
+<sphinxql>select *, SNIPPET('body as las void', 'las') from dist1</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist1</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'cas') from dist2</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'cas') from dist1</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist11</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist12</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist13</sphinxql>
+<sphinxql>select id, body, SNIPPET(body, '','allow_empty=1', 'query_mode=1') from snip2</sphinxql>
+<sphinxql>select id, body, SNIPPET(body, '','allow_empty=0', 'query_mode=1') from snip2</sphinxql>
+
+<!-- start\whole doc on query\plain -->
+<sphinxql>CALL SNIPPETS('tried and true 1 12 11 11 11 11', 'test_milti', 'notfound', 1 AS query_mode, 25 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('tried and true 1 12 11 11 11 11', 'test_milti', 'notfound', 1 AS query_mode, 0 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('tried and true 1 12 11 11 11 11', 'test_milti', 'notfound', 0 AS query_mode, 25 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('tried and true 1 12 11 11 11 11', 'test_milti', 'notfound', 0 AS query_mode, 0 as limit )</sphinxql>
+<!-- higlight start\whole doc on query\plain -->
+<sphinxql>CALL SNIPPETS('tried and true 1 12 11 11 11 11', 'test_milti', 'time1', 1 AS query_mode, 25 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('tried and true 1 12 11 11 11 11', 'test_milti', 'test1', 1 AS query_mode, 0 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('tried and true 1 12 11 11 11 11', 'test_milti', 'time1', 0 AS query_mode, 25 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('tried and true 1 12 11 11 11 11', 'test_milti', 'test1', 0 AS query_mode, 0 as limit )</sphinxql>
+
+<sphinxql>CALL SNIPPETS('17 64 15 tripple and true 1 12 11 11 11 11', 'test_milti', 'time2', 1 AS query_mode, 25 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('17 64 15 tripple and true 1 12 11 11 11 11', 'test_milti', 'test2', 1 AS query_mode, 0 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('17 64 15 tripple and true 1 12 11 11 11 11', 'test_milti', 'time2', 0 AS query_mode, 25 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('17 64 15 tripple and true 1 12 11 11 11 11', 'test_milti', 'test2', 0 AS query_mode, 0 as limit )</sphinxql>
+
+<sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', 'time3', 1 AS query_mode, 25 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', 'test3', 1 AS query_mode, 0 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', 'time3', 0 AS query_mode, 25 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', 'test3', 0 AS query_mode, 0 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', 'time3 for', 1 AS query_mode, 25 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', 'for test3', 1 AS query_mode, 0 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', 'time3 for', 0 AS query_mode, 25 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', 'for test3', 0 AS query_mode, 0 as limit )</sphinxql>
+
+<sphinxql>CALL SNIPPETS('17 64 15 tripple and true 1 12 11 11 11 11', 'test_milti', '"for test2"', 1 AS query_mode, 25 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('17 64 15 tripple and true 1 12 11 11 11 11', 'test_milti', '"for test2"', 1 AS query_mode, 0 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', '"time3 for"', 1 AS query_mode, 25 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('17 64 15 dou true 1 12 11 11 11 11', 'test_milti', '"time3 for"', 1 AS query_mode, 0 as limit )</sphinxql>
+
+<sphinxql>select *, SNIPPET(body, 'las') from dist_all1</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist_all1 limit 1,2</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist_all1 limit 0,2</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist_all2 limit 0,20</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist_all2 limit 10,20</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist_all2 limit 20,20</sphinxql>
+<sphinxql>select *, SNIPPET(body, 'las') from dist_all2 limit 20,2</sphinxql>
+
+</sphqueries>
+
+</test>

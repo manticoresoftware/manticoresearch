@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>SphinxQL: floats without leading zero</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+	binlog_path =
+}
+
+index test
+{
+	type = rt
+	path = <data_path/>/test
+	rt_attr_float = flt
+	rt_field = title
+}
+
+source src_test2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT id, text, 1 as gid FROM table2
+	sql_attr_uint = gid
+}
+
+index test2
+{
+	source				= src_test2
+	path				= <data_path/>/test2
+	docinfo			= extern
+}
+</config>
+
+<sphqueries>
+<sphinxql>insert into test (id,flt,title) values (1,0.3,'zero'),(2,.3,'no zero')</sphinxql>
+<sphinxql>select .1 as zz, flt from test where match('zero')</sphinxql>
+<sphinxql>select 0.1 as zz, flt from test where match('zero')</sphinxql>
+<sphinxql>insert into test (id,flt,title) values (10,-123,'neg')</sphinxql>
+<sphinxql>select * from test where id=-10</sphinxql>
+<sphinxql>select * from test where id=10</sphinxql>
+<sphinxql>select * from test2</sphinxql>
+<sphinxql>select * from test2 where match ( 'c' )</sphinxql>
+</sphqueries>
+
+<db_create>
+CREATE TABLE `table2` (
+  `id` int(11),
+  `text` varchar(255) NOT NULL
+)
+</db_create>
+<db_drop>DROP TABLE IF EXISTS `table2`</db_drop>
+<db_insert>
+INSERT INTO `table2` VALUES
+( 1, 'a b c' ), ( 2, 'b c d' ), ( 3, 'c d e f' )
+</db_insert>
+
+</test>

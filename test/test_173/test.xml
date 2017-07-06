@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test>
+
+<name>processing error messages from local agents</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	dist_threads = 3
+}
+
+source src
+{
+	type			= mysql
+<sql_settings/>
+	sql_attr_uint	= attru
+	sql_attr_string	= attrs
+	sql_query		= SELECT * FROM test_table WHERE id BETWEEN $start AND $end
+	sql_query_range = SELECT 1,1
+}
+
+source src1: src
+{
+	sql_query_range = SELECT 2,2
+}
+
+index idx
+{
+	source			= src
+	path			= <data_path/>/main
+}
+
+index idx1
+{
+	source			= src1
+	path			= <data_path/>/main1
+}
+
+index idxx
+{
+	type = distributed
+	local = idx
+	local = idx1
+}
+
+<!-- regression: warning from dist_threads local index got lost -->
+source src_warn: src
+{
+	sql_query_range = SELECT 1,2
+}
+
+index warn1
+{
+	source			= src_warn
+	path			= <data_path/>/warn1
+	min_prefix_len = 5
+}
+
+index warn2
+{
+	source			= src_warn
+	path			= <data_path/>/warn2
+	min_prefix_len = 5
+}
+
+index dist_warn
+{
+	type = distributed
+	local = warn1
+	local = warn2
+}
+
+index warn3
+{
+	source			= src_warn
+	path			= <data_path/>/warn3
+	min_infix_len = 5
+}
+
+</config>
+
+<sphqueries>
+<sphinxql>select attru, attru+attrs ss from idx</sphinxql>
+<sphinxql>select attru, attru+attrs ss from idxx</sphinxql>
+<!-- regression: warning from dist_threads local index got lost -->
+<sphinxql>select * from warn1 where match (' the box* ' )</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from dist_warn where match (' the box* ' )</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from warn1, warn2 where match (' the box* ' )</sphinxql>
+<sphinxql>show meta</sphinxql>
+<!-- no warnings for short wildcards -->
+<sphinxql>select * from warn3 where match (' box* ' )</sphinxql>
+<sphinxql>show warnings</sphinxql>
+<sphinxql>select * from warn3 where match (' *box ' )</sphinxql>
+<sphinxql>show warnings</sphinxql>
+<sphinxql>select * from warn3 where match (' b*x ' )</sphinxql>
+<sphinxql>show warnings</sphinxql>
+<sphinxql>select * from warn3 where match (' b?x ' )</sphinxql>
+<sphinxql>show warnings</sphinxql>
+<sphinxql>select * from warn3 where match (' b%x ' )</sphinxql>
+<sphinxql>show warnings</sphinxql>
+</sphqueries>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	attru INTEGER NOT NULL,
+	attrs VARCHAR(10) NOT NULL,
+	text VARCHAR(10) NOT NULL
+) ENGINE=MYISAM
+</db_create>
+
+<db_insert>
+insert into test_table values
+( 1, 1, 'test', 'test' ), (2, 2, 'test', 'test')
+</db_insert>
+
+<db_drop>DROP TABLE IF EXISTS test_table</db_drop>
+
+</test>

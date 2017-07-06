@@ -1,0 +1,176 @@
+<test>
+<name>multi-index queries vs index weights</name>
+
+<requires> <variant_match /> </requires>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src_a
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = SELECT id, a, b, c, text FROM test_table WHERE idx = 'a';
+
+	sql_attr_uint = a
+	sql_attr_uint = b
+	sql_attr_uint = c:1
+}
+
+source src_delta
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = SELECT id, b, a, c, text FROM test_table WHERE idx = 'delta';
+
+	sql_attr_uint = a
+	sql_attr_uint = b
+	sql_attr_uint = c:1
+}
+
+source src_a2
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = SELECT id, a, b, c, text FROM test_table WHERE idx = 'a';
+
+	sql_attr_uint = a
+	sql_attr_uint = b
+	sql_attr_uint = c:2
+}
+
+source src_b
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = SELECT id, a, b, text FROM test_table WHERE idx = 'b';
+
+	sql_attr_uint = a
+	sql_attr_uint = b
+}
+
+source src_c
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = SELECT id, mva as a, text FROM test_table WHERE idx = 'c';
+<Dynamic>	
+	<Variant>sql_attr_multi = uint a from field</Variant>
+	<Variant>sql_attr_multi = bigint a from field</Variant>
+</Dynamic>	
+}
+
+index a
+{
+	source	= src_a
+	path	= <data_path/>/a
+}
+
+index delta
+{
+	source	= src_delta
+	path	= <data_path/>/delta
+}
+
+index a2
+{
+	source	= src_a2
+	path	= <data_path/>/a2
+}
+
+index b
+{
+	source	= src_b
+	path	= <data_path/>/b
+}
+
+index c
+{
+	source	= src_c
+	path	= <data_path/>/c
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INT NOT NULL,
+	a INT NOT NULL,
+	b INT NOT NULL,
+	c INT NOT NULL,
+	mva VARCHAR(255) NOT NULL,
+	text VARCHAR(255) NOT NULL DEFAULT 'text',
+	idx VARCHAR(255) NOT NULL
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table (id, a, b, c, mva, idx) VALUES
+(  1, 10, 20, 3, '', 'a' ),
+(  2, 10, 20, 3, '', 'a' ),
+(  3, 10, 20, 3, '', 'a' ),
+(  4, 10, 20, 3, '', 'a' ),
+
+(  1, 1, 21, 3, '', 'b' ),
+(  2, 2, 22, 3, '', 'b' ),
+(  3, 3, 23, 3, '', 'b' ),
+(  4, 4, 24, 3, '', 'b' ),
+
+(  1, 0, 0, 0, '1, 2, 3', 'c' ),
+(  3, 0, 0, 0, '4', 'c' ),
+( 10, 0, 0, 0, '5, 6', 'c' ),
+
+(  1, 101, 201, 0, 5, 'delta' ),
+(  2, 102, 202, 0, 5, 'delta' ),
+( 12, 112, 212, 0, 5, 'delta' );
+</db_insert>
+
+<query_attributes>
+	<attr>a</attr>
+	<attr>b</attr>
+	<attr>c</attr>
+</query_attributes>
+
+<queries>
+	<query index="a">text</query>
+	<query index="a2">text</query>
+	
+	<query index="a a2">text</query>
+	<query index="a2 a">text</query>
+
+	<query index="a b">text</query>
+	<query index="b a">text</query>
+
+	<query index="delta">text</query>
+	<query index="a	delta">text</query>
+	<query index="delta a">text</query>
+
+	<query index="c">text</query>
+	<query index="a c">text</query>
+	<query index="a b c">text</query>
+	<query index="c b a">text</query>
+
+	<query index="a delta" index_weights="a:1 delta:100" sortmode="extended" sortby="@id ASC">text</query>
+	<query index="delta a" index_weights="a:100 delta:1" sortmode="extended" sortby="@id ASC">text</query>
+</queries>
+
+</test>
+
+

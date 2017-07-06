@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>sorting</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT document_id,tag1,tag2,tag3,tag4,body FROM test_table
+	sql_attr_uint	= tag1
+	sql_attr_uint	= tag2:8
+	sql_attr_float	= tag3
+	sql_attr_float	= tag4
+}
+
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+	min_word_len	= 1
+	min_prefix_len	= 1
+}
+</config>
+
+<queries>
+<query mode="extended2" sortmode="expr" sortby="tag1/tag2-tag3">test*</query>
+<query mode="extended2" sortmode="expr" sortby="tag1+tag2*tag3">test*</query>
+<query mode="extended2" sortmode="expr" sortby="abs(tag3)">test*</query>
+<query mode="extended2" sortmode="expr" sortby="min(tag1,tag2)*2">test*</query>
+<query mode="extended2" sortmode="expr" sortby="ceil(tag4)">test*</query>
+<query mode="extended2" sortmode="expr" sortby="floor(tag4)">test*</query>
+<query mode="extended2" sortmode="expr" sortby="sin(tag4)+cos(tag4)" roundoff="6">test*</query>
+<query mode="extended2" sortmode="expr" sortby="ln(tag1)+log2(tag1)+log10(tag1)">test*</query>
+<query mode="extended2" sortmode="expr" sortby="exp(tag1)+sqrt(tag2)">test*</query>
+<query mode="extended2" sortmode="expr" sortby="if (tag1=tag2, 1, 0)">test*</query>
+<query mode="extended2" sortmode="expr" sortby="tag2">test*</query>
+<query mode="extended2" sortmode="expr" sortby="tag3">test*</query>
+<query mode="extended2" sortmode="extended" sortby="tag2 DESC">test*</query>
+<query mode="extended2" sortmode="extended" sortby="tag3 DESC">test*</query>
+</queries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`tag1` int(11) NOT NULL default '0',
+	`tag2` int(11) NOT NULL default '0',
+	`tag3` FLOAT,
+	`tag4` FLOAT,
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 1, 5, -4.0, 1.5,	'test1' ),
+( 2, 2, 7, 12.0, 3.14,	'test2' ),
+( 3, 2, 4, -8.0, 5.2,	'test3' ), 
+( 4, 3, 3, 5.0,  7.6,	'test4' ),
+( 5, 3, 8, 1.0,  45.2, 	'test5' ), 
+( 6, 3, 9, 4.0,  17.2,	'test6' ), 
+( 7, 4, 4, 6.0,  -0.8,	'test7' ), 
+( 8, 4, 1, 7.0,  99.0,	'test8' ), 
+( 9, 4, 3, 2.0,  -16.1,	'test9' ), 
+( 10,4, 2, 12.0, 0.0,	'test10' )
+</db_insert>
+
+</test>

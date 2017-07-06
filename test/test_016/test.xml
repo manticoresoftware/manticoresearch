@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>expr sorting vs filters</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT document_id, group_id, body FROM test_table
+	sql_attr_uint	= group_id
+}
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+}
+</config>
+
+<query_attributes>
+<attr>group_id</attr>
+<attr>@expr</attr>
+</query_attributes>
+
+<queries>
+<query mode="any" filter="group_id" filter_value="1" sortmode="expr" sortby="@weight">test it</query>
+<query mode="any" sortmode="expr" sortby="-@weight">test it</query>
+</queries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`group_id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 111, 1, 'this is test' ),
+( 222, 1, 'just a test' ),
+( 333, 2, 'for test-ing purposes' ),
+( 444, 1, 'lets test it' )
+</db_insert>
+
+</test>

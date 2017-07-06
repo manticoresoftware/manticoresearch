@@ -1,0 +1,137 @@
+<test>
+<name>bigint attrs</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = SELECT id, a, n, text FROM test_table;
+
+	sql_attr_uint	= a
+	sql_attr_bigint	= n
+}
+
+index test
+{
+	source	= test
+	path	= <data_path/>/test
+}
+
+source test_flt
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = SELECT id, n/1000000 as f, text FROM test_table;
+
+	sql_attr_float	= f
+}
+
+index flt
+{
+	source	= test_flt
+	path	= <data_path/>/flt
+}
+
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INT NOT NULL,
+	a INT UNSIGNED NOT NULL,
+	n BIGINT NOT NULL,
+	text VARCHAR(255) NOT NULL DEFAULT 'text'
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table (id, a, n) VALUES
+(   1,  10, -70000000000 ),
+(   2,  20, -60000000000 ),
+(   3,  30, -50000000000 ),
+(   4,  40,  50000000000 ),
+(   5,  50,  60000000000 ),
+(   6,  60,  70000000000 ),
+(   7,  70, -4611686018427387903 ),
+(   8,  80, -9223372036854775807 ),
+(   9,  90,  4611686018427387903 ),
+(  10, 100,  9223372036854775807 ),
+(  11, 110,  250000000000000000 ),
+( 101,   0, -1 ),
+( 102,   0, -2 );
+</db_insert>
+
+<query_attributes>
+	<attr>a</attr>
+	<attr>n</attr>
+	<attr>sel</attr>
+	<attr>@groupby</attr>
+	<attr>@count</attr>
+</query_attributes>
+
+<queries>
+	<query  index="test"/>
+
+	<query sortmode="expr" sortby="-n" index="test"/>
+
+	<query select="a, n, n + a as sel" index="test"/> <!-- doc_id=10 will warp-around -->
+
+	<query groupfunc="attr" groupattr="n" index="test"/>
+	<query select="abs(n) as sel, *" groupfunc="attr" groupattr="sel" index="test"/>
+
+	<query select="idiv(abs(n), 10000000000) as sel, *"
+		groupfunc="attr" groupattr="sel"
+		id_range="1 6" index="test"/>
+
+	<query select="idiv(70000000000, 10000000000) as sel, *"
+		groupfunc="attr" groupattr="sel"
+		id_range="1 6" index="test"/>
+
+	<query select="min(a, n) as sel, *" index="test"/>
+
+	<query filter="n" filter_value="-1" index="test" />
+	<query filter="n" filter_value="-4611686018427387903" index="test" />
+	<query filter="n" filter_value="4611686018427387903" index="test" />
+
+	<query filter="n" filter_range="-100000000000 0" index="test"/>
+	<query filter="n" filter_range="0 100000000000" index="test"/>
+	<query filter="n" filter_range="-4611686018427387903 -4611686018427387900" index="test" />
+</queries>
+
+<!-- Regression for issue #1062 -->
+<sphqueries>
+<sphinxql>select *, -n as x from test order by x desc</sphinxql>
+<sphinxql>select a, n, n+a as sel from test</sphinxql>
+<sphinxql>select * from test group by n order by n desc</sphinxql>
+<sphinxql>select abs(n) as sel, * from test group by sel order by sel desc</sphinxql>
+<sphinxql>select idiv(abs(n), 10000000000) as sel, * from test where id between 1 and 6 group by sel</sphinxql>
+<sphinxql>select idiv(70000000000, 10000000000) as sel, * from test where id between 1 and 6 group by sel</sphinxql>
+<sphinxql>select min(a,n) as sel, * from test</sphinxql>
+<sphinxql>select * from test where n=-1</sphinxql>
+<sphinxql>select * from test where n=-4611686018427387903</sphinxql>
+<sphinxql>select * from test where n=4611686018427387903</sphinxql>
+<sphinxql>select * from test where n between -100000000000 and 0</sphinxql>
+<sphinxql>select * from test where n between 0 and 100000000000</sphinxql>
+<sphinxql>select * from test where n between -4611686018427387903 and -4611686018427387900</sphinxql>
+<!-- regression BETWEEN int with float mixed -->
+<sphinxql>select * from flt where f between -1.1 and 70001</sphinxql>
+<sphinxql>select * from flt where f between 1 and 70000.1</sphinxql>
+</sphqueries>
+</test>

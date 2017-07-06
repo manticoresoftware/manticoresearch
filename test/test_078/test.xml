@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>merge vs hit mixing</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srcmain
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * FROM test1
+}
+
+source srcdelta
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * FROM test2
+}
+
+index main
+{
+	source			= srcmain
+	path			= <data_path/>/main
+}
+
+index delta
+{
+	source			= srcdelta
+	path			= <data_path/>/delta
+}
+</config>
+
+<indexer>
+<run>--merge main delta</run>
+</indexer>
+
+<queries>
+<query index="main">aaa</query>
+<query index="main">aaa ccc</query>
+<query index="main">yyy ddd</query>
+</queries>
+
+<db_create>CREATE TABLE test1 ( id INTEGER NOT NULL, body VARCHAR(255) NOT NULL );</db_create>
+<db_create>CREATE TABLE test2 ( id INTEGER NOT NULL, body VARCHAR(255) NOT NULL );</db_create>
+<db_drop>DROP TABLE IF EXISTS test1;</db_drop>
+<db_drop>DROP TABLE IF EXISTS test2;</db_drop>
+<db_insert>INSERT INTO test1 VALUES ( 1, 'xxx aaa yyy' );</db_insert>
+<db_insert>INSERT INTO test2 VALUES ( 1, 'aaa bbb ccc aaa ddd eee' );</db_insert>
+
+</test>

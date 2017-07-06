@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>ATTACH INDEX</name>
+
+<requires>
+<non-rt/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers			= threads
+}
+
+source disk
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+	sql_attr_uint	= gid
+}
+
+index disk
+{
+	source			= disk
+	path			= <data_path/>/disk
+	charset_table	= a..z, A..Z->a..z
+	html_strip = 1
+	html_remove_elements = stuff
+}
+
+index rt
+{
+	type			= rt
+	path			= data/rt
+	rt_attr_uint	= gid1
+	rt_attr_uint	= gid2
+	rt_field		= title
+	rt_field		= content
+	charset_table	= a..z, A..Z->a..z, _
+} 
+
+source src_plain
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select id, title, 'dummy for' as str1, '55, 15, 20' as mva1, '' as mva2, gid from test_table
+	sql_attr_string	= str1
+	sql_attr_multi	= uint mva1 from field
+	sql_attr_multi	= uint mva2 from field
+	sql_attr_uint	= gid
+}
+
+index plain
+{
+	source			= src_plain
+	path			= <data_path/>/plain
+}
+
+index rt_arena
+{
+	type			= rt
+	path			= data/rt_arena
+	
+	rt_field		= title
+	rt_attr_string = str1
+	rt_attr_multi = mva1
+	rt_attr_uint	= gid
+	
+} 
+
+source src_a1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select id, title, 'dummy' as body, gid from test_table
+	sql_attr_uint	= gid
+}
+
+index a1
+{
+	source			= src_a1
+	path			= <data_path/>/a1
+}
+
+index rt1
+{
+	type			= rt
+	path			= data/rt1
+	rt_field		= title
+	rt_field		= body
+	rt_attr_uint	= gid
+} 
+
+index disk1
+{
+	source			= disk
+	path			= <data_path/>/disk1
+	charset_table	= a..z, A..Z->a..z
+}
+
+index disk2
+{
+	source			= disk
+	path			= <data_path/>/disk2
+	charset_table	= a..z, A..Z->a..z
+}
+
+index disk3
+{
+	source			= disk
+	path			= <data_path/>/disk3
+	charset_table	= a..z, A..Z->a..z
+}
+
+index rt_d1
+{
+	type			= rt
+	path			= data/rt_d1
+	rt_field		= title
+	rt_attr_uint	= gid
+} 
+
+index rt_trunc
+{
+	type			= rt
+	path			= data/rt_trunc
+	rt_attr_uint	= gid1
+	rt_attr_uint	= gid2
+	rt_field		= title
+	rt_field		= content
+	charset_table	= a..z, A..Z->a..z, _
+}
+
+index disk_trunc
+{
+	source			= disk
+	path			= <data_path/>/disk_trunc
+	charset_table	= english, russian
+}
+
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	gid INTEGER NOT NULL,
+	title VARCHAR(255) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_insert><![CDATA[
+INSERT INTO test_table VALUES
+( 1, 11, 'Fare thee well' ),
+( 2, 11, 'And if for ever got' ),
+( 3, 11, 'Still for ever fare thee well' ),
+( 4, 11, 'under_score <stuff>got removed</stuff>' )
+]]></db_insert>
+
+<sphqueries>
+<sphinxql>SELECT * FROM rt</sphinxql>
+<sphinxql>SELECT * FROM disk</sphinxql>
+<sphinxql>SELECT * FROM disk WHERE MATCH('thee')</sphinxql>
+<sphinxql>SELECT * FROM disk WHERE MATCH('under')</sphinxql>
+<sphinxql>ATTACH INDEX disk TO RTINDEX rt</sphinxql>
+<sphinxql>SELECT * FROM rt</sphinxql>
+<sphinxql>SELECT * FROM disk</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('thee')</sphinxql>
+<sphinxql>DESC rt like '_i%'</sphinxql>
+<sphinxql>INSERT INTO rt ( id, gid, title ) VALUES ( 10, 22, 'I dub thee unforgiven' )</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('thee')</sphinxql>
+<sphinxql><![CDATA[INSERT INTO rt ( id, gid, title ) VALUES ( 11, 22, 'under_score_again <stuff>but got here</stuff>' )]]></sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('under')</sphinxql>
+<sphinxql>SELECT * FROM rt_arena</sphinxql>
+<sphinxql>ATTACH INDEX plain TO RTINDEX rt_arena</sphinxql>
+<sphinxql>SELECT * FROM rt_arena where mva1=15 order by id asc</sphinxql>
+<sphinxql>SELECT * FROM rt_arena where mva1=55 order by id desc</sphinxql>
+<sphinxql>SELECT * FROM rt_arena</sphinxql>
+<!-- regression index settings have not been copied on attach -->
+<sphinxql>SELECT * FROM rt WHERE MATCH('got')</sphinxql>
+<!-- regression attach to existed RT index -->
+<sphinxql>INSERT INTO rt1 ( id, gid, title, body ) VALUES ( 1, 22, 'dust me', 'well' ), ( 5, 22, 'dure me', 'thee off' ), ( 6, 22, 'dub me', 'thee well' )</sphinxql>
+<sphinxql>ATTACH INDEX a1 TO RTINDEX rt1</sphinxql>
+<sphinxql>SELECT * FROM rt1</sphinxql>
+<sphinxql>SELECT * FROM rt1 WHERE MATCH('well')</sphinxql>
+<sphinxql>SELECT * FROM rt1 WHERE MATCH('me | thee')</sphinxql>
+
+<!-- regression duplicates passed from attached plain to existed RT index -->
+<sphinxql>ATTACH INDEX disk1 TO RTINDEX rt_d1</sphinxql>
+<sphinxql>ATTACH INDEX disk2 TO RTINDEX rt_d1</sphinxql>
+<sphinxql>ATTACH INDEX disk3 TO RTINDEX rt_d1</sphinxql>
+<sphinxql>SELECT * FROM rt_d1</sphinxql>
+
+<!-- feature to trucate RT index with same ATTACH command -->
+<sphinxql>INSERT INTO rt_trunc ( id, gid1, gid2, title ) VALUES ( 10, 22, 33, 'I dub thee unforgiven' )</sphinxql>
+<sphinxql>ATTACH INDEX disk_trunc TO RTINDEX rt_trunc</sphinxql>
+<sphinxql>SELECT * FROM rt_trunc</sphinxql>
+<sphinxql>ATTACH INDEX disk_trunc TO RTINDEX rt_trunc WITH TRUNCATE</sphinxql>
+<sphinxql>SELECT * FROM rt_trunc</sphinxql>
+</sphqueries>
+
+</test>

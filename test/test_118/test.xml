@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Test>
+  <Name>RT: order vs ram chanks</Name>
+
+<skip_indexer/>
+<Config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+<Searchd_Settings/>
+	workers				= threads
+	binlog_path			=
+}
+
+index test
+{
+
+	type			= rt
+	path			= data/test
+	rt_attr_uint	= idd
+	rt_field		= content
+} 
+</Config>
+
+<SPHQueries>
+	<SPHinxQL>insert into test (id,idd,content) values (1,1,'content'),(2,2,'you')</SPHinxQL>
+	<SPHinxQL>insert into test (id,idd,content) values (10,10,'dog cat fish')</SPHinxQL>	
+	<SPHinxQL>insert into test (id,idd,content) values (11,11,'dog cat')</SPHinxQL>
+
+	<SPHinxQL>select * from test</SPHinxQL>
+	<SPHinxQL><![CDATA[select * from test where match( 'dog << cat' )]]></SPHinxQL>
+	<SPHinxQL>select * from test where match( '(dog | cat) -fish' )</SPHinxQL>
+</SPHQueries>
+
+</Test>

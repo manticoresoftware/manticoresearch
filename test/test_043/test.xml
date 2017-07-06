@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>unpack</name>
+
+<requires>
+<non-windows/>
+<non-rt/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT id, t_zlib, at_1, t_mysql, plain, at_2, at_3, t_mysql_2 FROM test_table
+
+	unpack_zlib = t_zlib
+	unpack_mysqlcompress = t_mysql
+	unpack_mysqlcompress = t_mysql_2
+
+	sql_attr_uint = at_1
+	sql_attr_uint = at_2
+	sql_attr_uint = at_3
+}
+
+index test_idx
+{
+	source				= srctest
+	path				= <data_path/>/test
+}
+
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id integer primary key not null auto_increment,
+	t_zlib blob,
+	t_mysql blob,
+	t_mysql_2 blob,
+	plain varchar(256),
+	at_1 int not null default 1,
+	at_2 int not null default 2,
+	at_3 int not null default 3
+) ENGINE=MYISAM
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table (t_zlib, t_mysql, t_mysql_2, plain) VALUES
+( substr(compress('zlib'), 5), NULL, NULL, 'plain' ),
+( NULL, compress('mysql'), NULL, NULL ),
+( substr(compress('test'), 5), compress('hello'), compress('world'), '' ),
+( 'malformed', 'broken', NULL, NULL ),
+( substr(COMPRESS ( REPEAT ( 'the dog with snoopy this book like ',  24000 ) ), 5), COMPRESS ( REPEAT ( 'spaceman is a hero not good mooman ',  24001 ) ), NULL, NULL ),
+( COMPRESS ( REPEAT ( 'the dog with snoopy ',  16384 ) ), COMPRESS ( REPEAT ( 'spaceman is a hero not as we ',  16384 ) ), NULL, NULL ),
+( NULL, 'a', NULL, NULL ),
+( '', '', '', '' );
+</db_insert>
+
+<queries>
+<query>zlib</query>
+<query>mysql</query>
+<query>hello world</query>
+<query>plain</query>
+<query>malformed</query>
+<query>broken</query>
+<query>the</query>
+<query>a</query>
+</queries>
+
+</test>

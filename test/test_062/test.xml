@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+
+<name>snippets vs query highlighting</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1, 'title' as title, 'text' as text;
+}
+
+index test
+{
+	source = test
+	path = <data_path/>/test
+
+	phrase_boundary = U+002C
+	phrase_boundary_step = 100
+
+	min_infix_len = 1
+}
+
+index hi1
+{
+	source = test
+	path = <data_path/>/hi1
+	docinfo			= extern
+	dict = keywords
+}
+
+index hi2
+{
+	source = test
+	path = <data_path/>/hi2
+	docinfo			= extern
+	dict = keywords
+	morphology		= stem_enru
+	min_prefix_len	= 1
+	index_exact_words	= 1
+	html_strip		= 1
+}
+
+source test_utf
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1, 'title 201601731000120000873 and filler goes' as s, 'title 201601731000120000873 and filler goes' as text, 11 as idd UNION SELECT 2, 'title 123 and filler goes' as s, 'title 123 and filler goes' as text, 22 as idd 
+	
+	sql_attr_uint = idd
+	sql_attr_string = s
+}
+
+index test_utf
+{
+	source = test_utf
+	path = <data_path/>/test_utf
+	docinfo			= extern
+	dict = keywords
+    charset_table	= 0->U+043E, 1..2, 3->U+0437, 4..9, A..Z->a..z, _, a..z
+	min_infix_len	= 2
+	index_exact_words	= 1
+}
+
+</config>
+
+<db_insert>select 1;</db_insert>
+
+<custom_test><![CDATA[
+
+$opts = array
+(
+	'before_match' => '[B]',
+	'after_match' => '[A]',
+	'chunk_separator' => ' ... ',
+	'limit' => 255,
+	'around' => 2,
+	'query_mode' => 1
+);
+
+$text = 'Sphinx clusters scale to billions of documents, terabytes of data, and billions of queries per month.';
+
+$queries = array
+(
+	'^sphinx month$',
+	'^sphinx queries$',
+	'^clusters month$',
+	'^*inx *bytes',
+	'*i*',
+	'*on*',
+	'*s',
+	'"clusters scale"',
+	'"clusters do not scale"', // false claims don't get highlighted
+	'"of d*"',
+	'terabyte* << quer*',
+	'data << terabyte*',
+	'"sphinx scale"~3',
+	'"sphinx billions"~3',
+	'"silly documents"/1',
+	'"clusters scale to billions"',
+	'"queries per month" | month | "per month"',
+	'"of d*" | "of data"',
+	'"of data" -"of hedgedogs"',
+	'"documents terabytes"', // crosses boundary
+	'@title sphinx',
+	'@text sphinx',
+	'@text[3] sphinx',
+	'@text[3] documents',
+	'@text[7] documents',
+
+	// case shouldn't matter
+	'SPHINX',
+	'SPH*',
+	'*PHI*',
+	'*INX',
+);
+
+$results = array();
+foreach ( $queries as $query )
+{
+	$reply = $client->BuildExcerpts ( array($text), 'test', $query, $opts );
+	$results [] = $query;
+	$results [] = $reply;
+}
+
+// regressions fast-path query mode starred vs regular term matches
+
+$query = ' "*mmitt* u" | ommitt* | "committed u" ';
+$results [] = $query;
+$results [] = $client->BuildExcerpts ( array ( 'support is just committed to Sphinx code base' ), 'test', $query, array ( 'query_mode' => 1 ) );
+
+$query = ' *ommitt* | "committed u" ';
+$results [] = $query;
+$results [] = $client->BuildExcerpts ( array ( 'support is just committed to Sphinx code base' ), 'test', $query, array ( 'query_mode' => 1 ) );
+
+$query = ' *ommitt* committed u ';
+$results [] = $query;
+$results [] = $client->BuildExcerpts ( array ( 'support is just committed to Sphinx code base' ), 'test', $query, array ( 'query_mode' => 0 ) );
+
+$query = ' committed* | "committed p" ';
+$results [] = $query;
+$results [] = $client->BuildExcerpts ( array ( 'support is just committed to Sphinx code base' ), 'test', $query, array ( 'query_mode' => 1 ) );
+
+$query = ' committed* committed p ';
+$results [] = $query;
+$results [] = $client->BuildExcerpts ( array ( 'support is just committed to Sphinx code base' ), 'test', $query, array ( 'query_mode' => 0 ) );
+
+$query = ' (support ("committed*")) ';
+$results [] = $query;
+$results [] = $client->BuildExcerpts ( array ( 'support is just committed to Sphinx code base' ), 'test', $query, array ( 'query_mode' => 1 ) );
+
+$query = ' (support ("code*" | "code test")) ';
+$results [] = $query;
+$results [] = $client->BuildExcerpts ( array ( 'support is just committed to Sphinx code base' ), 'test', $query, array ( 'query_mode' => 1, 'limit' => 25 ) );
+
+$doc = 'Prinal. Onenes din Pas onatif searst ang searst searst searst searst searst searst way as inge, as kin puble difute paii (for Unitio clas reappe Impand bants to a caly prommat to deady. A cous al fonsue abcingelonhe aaa bbb ccc abcingelonhe aaa bbb ccc abcingelonhe cc pheyse but the hing fiche lochns my produr in may bects of hatest herstat everre tor Scine face.';
+$query = 'din abcingelonhe';
+$results [] = $query;
+$results [] = $client->BuildExcerpts ( array ( $doc ), 'test', $query, array ( 'limit' => 38 ) );
+
+$doc = 'тест на подсветку начала документа в утф8';
+$query = 'din';
+$results[] = $client->BuildExcerpts ( array ( $doc ), 'test', $query, array('limit' => 4) );
+$results[] = $client->BuildExcerpts ( array ( $doc ), 'test', $query, array('limit' => 5) );
+$results[] = $client->BuildExcerpts ( array ( $doc ), 'test', $query, array('limit' => 6) );
+$results[] = $client->BuildExcerpts ( array ( $doc ), 'test', $query, array('limit' => 7) );
+$results[] = $client->BuildExcerpts ( array ( $doc ), 'test', $query, array('limit' => 8) );
+
+$doc = 'text starred some begin begin begin some starred text and more in between starred some text end';
+$query = 'some starr* text';
+$results[] = $client->BuildExcerpts ( array ( $doc ), 'test', $query, array('limit' => 35) );
+
+$doc = 'begin the text right mid mid mid the right text end';
+$query = 'the the right right text text';
+$results[] = $client->BuildExcerpts ( array ( $doc ), 'test', $query, array('limit' => 30) );
+
+// regression passage generation vs new path of snippet generation
+
+$doc = "Our company's core technology platform is based on Microsoft applications, including the Windows NT operating system and a SQL server relational database, all residing on scaleable hardware. The software is constructed using an advanced proprietary XML framework and resides on an N-tier architecture. The support of open systems allows integration with a large variety of existing commercial, proprietary and legacy applications.&#160;&#160;Other applications, which are also operational in a Microsoft NT environment, have been developed using Power Builder and are dependent on an Oracle relational database. running fast and runs out";
+$query = 'the the right right text text';
+$results[] = $client->BuildExcerpts(
+    array($doc),
+    'hi1','microsoft & xml',
+    array('query_mode'=>true,
+        'allow_empty' => true,
+        'before_match' => '<b>',
+        'after_match' => '</b>',
+        'chunk_separator' => '...',
+        'limit' => 5000,
+		'limit_words' => 50,
+        'limit_passages' =>5,
+        'around' => 25,
+        'exact_phrase' => false,
+        'force_all_words' => false,
+    )
+);
+
+// regression duplicates removal from query
+$query = 'on | on | the | software | an* | ap* | an* | al* | on | al* | running | runs | run';
+$results[] = $client->BuildExcerpts ( array ( $doc ), 'hi2', $query, array('query_mode'=>true, 'limit'=>200) );
+$results[] = $client->BuildExcerpts ( array ( $doc ), 'hi2', $query, array('query_mode'=>true, 'limit'=>0) );
+$results[] = $client->BuildExcerpts ( array ( $doc ), 'hi2', $query, array('query_mode'=>false, 'limit'=>200) );
+$results[] = $client->BuildExcerpts ( array ( $doc ), 'hi2', $query, array('query_mode'=>false, 'limit'=>0) );
+
+// crash daemon on either no documents or empty query
+$opts = array (
+array('query_mode'=>false, 'allow_empty'=>false),
+array('query_mode'=>true, 'allow_empty'=>false),
+array('query_mode'=>false, 'allow_empty'=>true),
+array('query_mode'=>true, 'allow_empty'=>true) );
+
+foreach ( $opts as $o )
+{
+	$results[] = $o;
+	$results[] = $client->BuildExcerpts ( array (''), 'test', 'test me', $o );
+	$results[] = $client->BuildExcerpts ( array ('test me'), 'test', '', $o );
+}
+$results[] = $client->BuildExcerpts ( array (''), 'hi2', 'test me', array('query_mode'=>true, 'allow_empty'=>false) );
+$results[] = $client->BuildExcerpts ( array ('test me'), 'hi2', '', array('query_mode'=>true, 'allow_empty'=>false) );
+
+// sbsc char converted to utf-8
+$client->SetMatchMode ( SPH_MATCH_EXTENDED2 );
+
+$client->SetSelect ( "id, SNIPPET(s, '12* ', 'limit=500', 'query_mode=1' )" );
+$results[] = $client->Query ( '12*', 'test_utf' )["matches"];
+
+$client->SetSelect ( "id, SNIPPET(s, '*873* ', 'limit=500', 'query_mode=1' )" );
+$results[] = $client->Query ( '*873*', 'test_utf' )["matches"];
+
+$client->SetSelect ( "id, SNIPPET(s, '12* ', 'limit=20', 'query_mode=1' )" );
+$results[] = $client->Query ( '12*', 'test_utf' )["matches"];
+
+$client->SetSelect ( "id, SNIPPET(s, '*873* ', 'limit=30', 'query_mode=1' )" );
+$results[] = $client->Query ( '*873*', 'test_utf' )["matches"];
+
+]]></custom_test>
+
+</test>

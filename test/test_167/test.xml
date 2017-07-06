@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>min_word_len vs tail of the query</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT * FROM test_table
+}
+
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+	<Dynamic>
+	<Variant></Variant>
+	<Variant>exceptions	= synonyms.txt</Variant>
+	</Dynamic>
+
+    <Dynamic>
+      <Variant>	min_word_len = 3 </Variant>
+      <Variant>	min_word_len = 4 </Variant>
+      <Variant>	min_word_len = 5 </Variant>
+    </Dynamic>
+
+    <Dynamic>
+      <Variant>	min_prefix_len = 3 </Variant>
+      <Variant>	min_prefix_len = 4 </Variant>
+      <Variant>	min_prefix_len = 5 </Variant>
+    </Dynamic>
+}
+</config>
+
+<sphqueries>
+<sphinxql>select * from test where match('@(author) luther @(title) ccc')</sphinxql>
+</sphqueries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`author` varchar(255) NOT NULL default '',
+	`title` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1,  'luther', 'a' ),
+( 2,  'luther', 'bb' ),
+( 3,  'luther', 'ccc' ),
+( 4,  'luther', 'dddd' ),
+( 5,  'luther', 'eeeee' ),
+( 6,  'luther', 'ffffff' ),
+( 7,  'luther', 'ggggggg' ),
+( 8,  'luther', 'hello world' ),
+( 9,  'luther', 'hello a world' ),
+( 10, 'luther', 'hello aa world' ),
+( 11, 'luther', 'hello aaa world' ),
+( 12, 'luther', 'hello aaaa world' ),
+( 13, 'luther', 'hello aaaaa world' ),
+( 14, 'luther', 'hello me world' ),
+( 15, 'luther', 'hello two world' ),
+( 16, 'luther', 'hello four world' )
+</db_insert>
+
+</test>

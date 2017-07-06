@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<sphinx:docset>
+
+<sphinx:schema>
+<sphinx:field name="title"/>
+<sphinx:field name="content"/>
+<sphinx:attr name="gid" type="int" default="1"/>
+</sphinx:schema>
+
+<sphinx:killlist>
+<id>2</id>
+<id>3</id>
+</sphinx:killlist>
+
+<sphinx:document id="1">
+<gid>123</gid>
+<title>test one</title>
+<title>duplicate title</title>
+<content>updated with new content and gid</content>
+</sphinx:document>
+
+<sphinx:document id="5">
+<gid>1</gid>
+<gid>2</gid>
+<title>test five</title>
+<content>newly inserted</content>
+</sphinx:document>
+
+</sphinx:docset>

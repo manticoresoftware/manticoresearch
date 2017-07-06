@@ -1,0 +1,26 @@
+Sphinx Java API notes
+----------------------
+
+0) THIS IS A WORK IN PROGRESS. COMPATIBILITY-BREAKING CLASS INTERFACE
+CHANGES STILL MIGHT BE PERFORMED. SUGGESTIONS ARE WELCOME.
+
+1) Officially supported JDKs are 1.5 and above.
+
+2) The code would probably build with prior JDK versions as well,
+but since JDK 1.4 is already in End-Of-Life transition period,
+this could be gradually dropped.
+
+3) To build `sphinxapi.jar':
+
+	- make sure that `javac' and `jar' are in PATH
+	- make sure JAVA_HOME is properly set
+	- issue `make'
+
+4) To run sample client program:
+
+	- issue `java -jar sphinxapi.jar'
+
+5) Warnings about "unchecked" mode on 1.5+ are caused by keeping
+the code compatible with 1.4. Fix suggestions are welcome.
+
+--eof--

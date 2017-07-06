@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>field-start modifier vs star-expansion vs tiny-keyword cache</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+	sql_attr_uint	= gid
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+
+	dict			= keywords
+	min_prefix_len	= 2
+}
+
+index test1
+{
+	source			= test
+	path			= <data_path/>/test1
+
+	dict			= keywords
+	min_word_len	= 2
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	gid INTEGER NOT NULL,
+	title VARCHAR(255) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_insert>INSERT INTO test_table VALUES
+(1, 1, 'one two abcx'),
+(2, 1, 'three abcx four'),
+(3, 1, 'five six seven abcx'),
+(4, 1, 'eight in abcx-nine'),
+(5, 1, 'one two three in abcm'),
+(6, 1, 'abcm ftw'),
+(7, 1, 'abcx test')
+</db_insert>
+
+<queries>
+<query mode="extended2" index="test">abcx</query>
+<query mode="extended2" index="test">^abcx</query>
+<query mode="extended2" index="test">abcm</query>
+<query mode="extended2" index="test">^abcm</query>
+<query mode="extended2" index="test">abc*</query>
+<query mode="extended2" index="test">^abc*</query>
+
+<!-- regression field modifier vs overshort word -->
+<query mode="extended2" index="test1">@title ^a$</query>
+</queries>
+
+</test>

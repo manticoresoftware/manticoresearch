@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>stemming</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * FROM test_table
+}
+
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+	charset_table	= -, 0..9, A..Z->a..z, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F
+	morphology		= stem_ru, stem_en
+}
+
+index morph0
+{
+	source			= srctest
+	path			= <data_path/>/morph0
+
+	dict			= keywords
+	min_prefix_len	= 1
+}
+
+index morph1
+{
+	source			= srctest
+	path			= <data_path/>/morph1
+
+	dict			= keywords
+	min_prefix_len	= 1
+	morphology = stem_en
+}
+
+source src_ru
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT *, 11 as idd FROM test_ru
+	sql_query_pre = SET NAMES utf8
+	sql_attr_uint = idd
+}
+
+index test_ru
+{
+	source			= src_ru
+	path			= <data_path/>/test_ru
+	dict				= keywords
+	morphology			= stem_ru
+	charset_table = 0..9, A..Z->a..z, _, ., -, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+0401->U+0435, U+0451->U+0435 
+}
+
+index rt
+{
+	type			= rt
+	path			= <data_path/>/rt
+	rt_field		= title	
+	rt_attr_uint	= idd
+	dict				= keywords
+	morphology			= stem_ru
+	charset_table = 0..9, A..Z->a..z, _, ., -, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+0401->U+0435, U+0451->U+0435 
+}
+
+source src_stop
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT 1, 11 as idd, 'running far' as text UNION SELECT 2, 22 as idd, 'runs me' as text UNION SELECT 3, 33 as idd, 'rufus my friend' as text
+	sql_query_pre = SET NAMES utf8
+	sql_attr_uint = idd
+}
+
+index test_stop
+{
+	source			= src_stop
+	path			= <data_path/>/test_stop
+	dict			= keywords
+	morphology		= stem_en
+	charset_table = 0..9, A..Z->a..z, _, ., -, a..z
+	stopwords		= <this_test/>/stopwords.txt
+	min_prefix_len	= 1
+	enable_star		= 1
+	index_exact_words = 1
+}
+
+index test_stop1
+{
+	source			= src_stop
+	path			= <data_path/>/test_stop1
+	dict			= crc
+	morphology		= stem_en
+	charset_table = 0..9, A..Z->a..z, _, ., -, a..z
+	stopwords		= <this_test/>/stopwords.txt
+	min_prefix_len	= 1
+	enable_star		= 1
+	index_exact_words = 1
+}
+
+source src_metaphone
+{
+	type			= mysql
+	<sql_settings/>
+	sql_field_string = name
+	sql_query = SELECT 1 as id, '加藤郁子アーティスト片山耕アーティストピューロキッズアーティスト金子知恵アーティスト井上かなえアーティスト他知恵アーティスト井上かなえアーティスト他' as name
+}
+
+index test_metaphone
+{
+	source 			= src_metaphone
+	path			= <data_path/>/test_metaphone
+	morphology 		= metaphone
+	charset_table 	= U+21..U+29, U+30..U+999, U+1000..U+FFFF
+}
+</config>
+
+<queries>
+<!-- long query after proximity length was not properly 0-terminated, and caused overlong token to be passed to stemmer, and crash -->
+<query mode="extended2" index="test morph0 morph1 test_ru rt test_stop test_stop1">"one two"~3                                                                                                                                                                                                                                                                                                                                                                            three</query>
+
+<!--here is going regression dict=keywords got broken by morphology-->
+<query mode="extended2" index="morph1">=running</query>
+<query mode="extended2" index="morph1">=run</query>
+<query mode="extended2" index="morph1">running*</query>
+<query mode="extended2" index="morph1">runnin*</query>
+<query mode="extended2" index="morph1">run*</query>
+<query mode="extended2" index="morph1">ru*</query>
+<query mode="extended2" index="morph1">=runnin*</query>
+<query mode="extended2" index="morph1">runnings*</query>
+<query mode="extended2" index="morph1">runnin</query>
+<query mode="extended2" index="morph1">running</query>
+<query mode="extended2" index="morph1">run</query>
+
+<query mode="extended2" index="morph0">=running</query>
+<query mode="extended2" index="morph0">=run</query>
+<query mode="extended2" index="morph0">running*</query>
+<query mode="extended2" index="morph0">runnin*</query>
+<query mode="extended2" index="morph0">run*</query>
+<query mode="extended2" index="morph0">ru*</query>
+<query mode="extended2" index="morph0">=runnin*</query>
+<query mode="extended2" index="morph0">runnings*</query>
+<query mode="extended2" index="morph0">runnin</query>
+<query mode="extended2" index="morph0">running</query>
+<query mode="extended2" index="morph0">run</query>
+
+<!-- regression stemmed word vs dict=keyword -->
+<query mode="extended2" index="test_ru">ордеру АВАВ</query>
+
+<!-- regression stemmed exact form from stoplist vs dict=keyword prefix -->
+<query mode="extended2" index="test_stop">run*</query>
+<query mode="extended2" index="test_stop">ru*</query>
+<query mode="extended2" index="test_stop">=runs</query>
+<query mode="extended2" index="test_stop">runs</query>
+<query mode="extended2" index="test_stop1">run*</query>
+<query mode="extended2" index="test_stop1">ru*</query>
+<query mode="extended2" index="test_stop1">=runs</query>
+<query mode="extended2" index="test_stop1">runs</query>
+</queries>
+
+<sphqueries>
+<!-- here is going regression 2byte vs 2byte + sbc -->
+<sphinxql>CALL KEYWORDS ('то-тический', 'test')</sphinxql>
+<sphinxql>CALL KEYWORDS ('тоЫтический', 'test')</sphinxql>
+<!-- regression stemmed word vs dict=keyword -->
+<sphinxql>INSERT INTO rt (id, idd, title) VALUES ( 1, 1, 'testing that' ),( 2, 1, 'ордеру АВАВ/А85/007' )</sphinxql>
+<sphinxql>SELECT * FROM test_ru WHERE MATCH('ордеру АВАВ')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('ордеру АВАВ')</sphinxql>
+<sphinxql>show meta</sphinxql>
+</sphqueries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1,  'and nothing else matters' ),
+( 2, 'running into trouble' )
+</db_insert>
+
+<db_create>
+CREATE TABLE `test_ru`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`body` varchar(255) CHARACTER SET UTF8 NOT NULL default ''
+)
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS `test_ru`</db_drop>
+<db_insert>SET NAMES utf8</db_insert>
+<db_insert>INSERT INTO `test_ru` (document_id, body) VALUES ( 1, 'testing that' ), ( 2, 'ордеру АВАВ/А85/007' )</db_insert>
+
+</test>

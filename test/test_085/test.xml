@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>merge vs dupecounter</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srcmain
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, body, id*10 AS xid FROM test_table WHERE id in (1,2,3)
+	sql_attr_uint	= xid
+}
+
+source srcdelta : srcmain
+{
+	sql_query		= SELECT id, body, id*100 AS xid FROM test_table WHERE id in (3,4,5)
+}
+
+index main
+{
+	source			= srcmain
+	path			= <data_path/>/main
+}
+
+index delta
+{
+	source			= srcdelta
+	path			= <data_path/>/delta
+}
+</config>
+
+<indexer>
+<run>--merge main delta</run>
+</indexer>
+
+<queries>
+<query index="main">one</query>
+<query index="main">three</query>
+<query index="main">five</query>
+</queries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 'one' ),
+( 2, 'two' ),
+( 3, 'three blind mice, how they run' ),
+( 4, 'four' ),
+( 5, 'five' )
+</db_insert>
+
+</test>

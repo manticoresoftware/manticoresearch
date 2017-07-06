@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>SENTENCE, PARAGRAPH, and ZONE operators</name>
+
+<requires>
+	<variant_match/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+	binlog_path = #
+}
+
+source test
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+	sql_attr_uint	= gid
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+	html_strip		= 1
+	index_sp		= 1
+	index_zones		= zone*
+	<Dynamic>
+		<Variant>dict = crc</Variant>
+		<Variant>dict = keywords</Variant>
+	</Dynamic>
+	<Dynamic>
+		<Variant></Variant>
+		<Variant>exceptions = synonyms.txt</Variant>
+	</Dynamic>
+}
+
+index rt
+{
+	type			= rt
+	path			= <data_path/>/rt
+	
+	rt_field	= title
+	rt_attr_uint	= idd
+	
+	html_strip		= 1
+	index_sp		= 1
+	index_zones		= zone*
+	<Dynamic>
+		<Variant>dict = crc</Variant>
+		<Variant>dict = keywords</Variant>
+	</Dynamic>
+}
+
+
+index sp10
+{
+	source			= test
+	path			= <data_path/>/sp10
+	html_strip		= 1
+	index_sp		= 1
+	morphology = none
+	dict = crc
+	min_prefix_len = 1
+}
+index sp11
+{
+	source			= test
+	path			= <data_path/>/sp11
+	html_strip		= 1
+	index_sp		= 1
+	morphology = none
+	dict = keywords
+	min_prefix_len = 1
+}
+
+source z1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select 600 id, 6 gid, '&lt;zone601&gt; back off &lt;/zone601&gt; from the &lt;zone602&gt; be the &lt;/zone602&gt; ' title
+	sql_attr_uint	= gid
+}
+
+index z1
+{
+	source			= z1
+	path			= <data_path/>/z1
+	html_strip		= 1
+	index_sp		= 1
+	index_zones		= zone*
+	dict = keywords
+	min_prefix_len	= 1
+}
+</config>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	gid int not null,
+	title varchar(16384) not null
+);
+</db_create>
+<db_drop>drop table if exists test_table;</db_drop>
+<db_insert>insert into test_table values ( 1, 1, 'One and one and one. And two. And three, all separate.' );</db_insert>
+<db_insert>insert into test_table values ( 2, 1, 'And then we\'ll have him, one two three! Kidnap the Sandy Clawz...' );</db_insert>
+<db_insert>insert into test_table values ( 3, 1, 'One two something. But not three.' );</db_insert>
+<db_insert>insert into test_table values ( 4, 1, 'Two says hello to one more three.' );</db_insert>
+<db_insert>insert into test_table values ( 5, 1, CONCAT(REPEAT('A ram zam zam. ', 171), 'Zam ram!') );</db_insert>
+<db_insert>insert into test_table values ( 6, 1, 'A ram zam zam, a ram zam zam, guli guli guli guli ram zam zam.' );</db_insert>
+
+<db_insert>insert into test_table values ( 100, 2, 'Quick brown fox&lt;p&gt;jumps over a lazy dog.' );</db_insert>
+<db_insert>insert into test_table values ( 101, 2, 'In paragraph, yes. Not in sentence, no.' );</db_insert>
+
+<db_insert><![CDATA[insert into test_table values ( 200, 3, '<zoneA>The time has come, <zoneB>the walrus said,</zoneB> to talk of many things.</zoneA>' );]]></db_insert>
+<db_insert><![CDATA[insert into test_table values ( 201, 3, 'Of shoes, <zoneC>and ships</zoneC>, and sealing wax, of cabbages, <zoneC>, and kings.</zoneC>' );]]></db_insert>
+<db_insert><![CDATA[insert into test_table values ( 211, 3, 'Of shoes, and ships, and sealing wax, of cabbages, <zoneC>, and kings.</zoneC>' );]]></db_insert>
+<db_insert><![CDATA[insert into test_table values ( 202, 3, '<zoneA>Sweet dreams are made of this.</zoneA><zoneB>Who am I to disagree?</zoneB>' );]]></db_insert>
+
+<db_insert>
+<![CDATA[insert into test_table values ( 300, 4, '<zoneA>Sweet of this.</zoneA><zoneLongWord1LongWord2LongWord3LongWord4LongWord5LongWord6LongWord7LongWord8LongWord9LongWord10LongWord11LongWord12LongWord13LongWord14LongWord15LongWord16LongWord17LongWord18LongWord19LongWord20LongWord21LongWord22LongWord23LongWord24LongWord25>Who am I to disagree?</zoneLongWord1LongWord2LongWord3LongWord4LongWord5LongWord6LongWord7LongWord8LongWord9LongWord10LongWord11LongWord12LongWord13LongWord14LongWord15LongWord16LongWord17LongWord18LongWord19LongWord20LongWord21LongWord22LongWord23LongWord24LongWord25>' );]]>
+</db_insert>
+<!-- crash case on search - should be last too as &#4
+<db_insert><![CDATA[insert into test_table values ( 301, 4, '>I like this.</zoneA> Sweet of &#1;&#2;&#3; this.' );]]></db_insert>
+<db_insert><![CDATA[insert into test_table values ( 301, 4, '<zoneA>I like this.</zoneA> Sweet of &#4; this.' );]]></db_insert>
+-->
+<db_insert><![CDATA[insert into test_table values ( 310, 4, '<zoneA>I like this.</zoneA> Sweet of &#1;&#2;&#3; this.' );]]></db_insert>
+<db_insert><![CDATA[insert into test_table values ( 311, 4, '<zoneA>I like this.</zoneA> Sweet of &#4; this.' );]]></db_insert>
+
+<db_insert><![CDATA[insert into test_table values ( 400, 5, CONCAT('Clock',CHAR(4),'strikes twelve and moondrops burst
+Out at you from their hiding place
+Like acid and oil on a madman\'s face
+His reason tends to fly away
+Like lesser birds on the four winds
+Like silver scraps in May
+Now the sands become a crust
+And most of you have gone away
+You have gone away'));]]></db_insert>
+
+<db_insert><![CDATA[insert into test_table values ( 500, 5, '<zone_5>asdf</zone_5');]]></db_insert>
+
+
+<queries>
+<query mode="extended2" index="test">one SENTENCE two</query>
+<query mode="extended2" index="test">one SENTENCE two three</query>
+<query mode="extended2" index="test">one SENTENCE two SENTENCE three</query>
+<query mode="extended2" index="test">"one two" SENTENCE three</query>
+<query mode="extended2" index="test">zam SENTENCE ram</query>
+
+<query mode="extended2" index="test">fox PARAGRAPH dog</query>
+<query mode="extended2" index="test">sentence SENTENCE paragraph</query>
+<query mode="extended2" index="test">sentence PARAGRAPH paragraph</query>
+
+<query mode="extended2" index="test">ZONE:zoneA walrus</query>
+<query mode="extended2" index="test">ZONE:zoneB walrus</query>
+<query mode="extended2" index="test">ZONE:zoneA walrus time</query>
+<query mode="extended2" index="test">ZONE:zoneB walrus time</query>
+<query mode="extended2" index="test">ZONE:zoneC cabbages and kings</query>
+<query mode="extended2" index="test">ZONE:zoneC kings and ships</query>
+<query mode="extended2" index="test">ZONE:(zoneA,zoneB) sweet disagree</query>
+<query mode="extended2" index="test">"Who am I"</query>
+<query mode="extended2" index="test">"of this"</query>
+<query mode="extended2" index="test">ZONE:zoneA "like this"</query>
+<query mode="extended2" index="test">strikes</query>
+
+<!--regression SP vs no morphology index -->
+<query mode="extended2" index="sp10">one SENTENCE two</query>
+<query mode="extended2" index="sp11">one SENTENCE two</query>
+<query mode="extended2" index="sp10">one SENTENCE three</query>
+<query mode="extended2" index="sp11">one SENTENCE three</query>
+
+<!-- regression zones vs expanded optimized terms -->
+<query mode="extended2" index="z1">ZONE:zone601 back</query>
+<query mode="extended2" index="z1">ZONE:zone602 back</query>
+<query mode="extended2" index="z1">ZONE:zone602 ba*</query>
+</queries>
+
+<sphqueries>
+<sphinxql><![CDATA[insert into rt values ( 1, 'One and one and one. And two. And three, all separate.', 1 )]]></sphinxql>
+<sphinxql><![CDATA[insert into rt values ( 2, 'And then we\'ll have him, one two three! Kidnap the Sandy Clawz...', 1 )]]></sphinxql>
+<sphinxql><![CDATA[insert into rt values ( 3, 'One two something. But not three.', 1 )]]></sphinxql>
+<sphinxql><![CDATA[insert into rt values ( 4, 'Two says hello to one more three.', 1 )]]></sphinxql>
+<sphinxql><![CDATA[insert into rt values ( 5, 'A ram zam zam. Zam ram!', 1 )]]></sphinxql>
+<sphinxql><![CDATA[insert into rt values ( 6, 'A ram zam zam, a ram zam zam, guli guli guli guli ram zam zam.', 1 )]]></sphinxql>
+<sphinxql><![CDATA[insert into rt values ( 101, 'In paragraph, yes. Not in sentence, no.', 2 )]]></sphinxql>
+<sphinxql><![CDATA[insert into rt values ( 200, '<zoneA>The time has come, <zoneB>the walrus said,</zoneB> to talk of many things.</zoneA>', 3 )]]></sphinxql>
+<sphinxql><![CDATA[insert into rt values ( 201, 'Of shoes, <zoneC>and ships</zoneC>, and sealing wax, of cabbages, <zoneC>, and kings.</zoneC>', 3 )]]></sphinxql>
+<sphinxql><![CDATA[insert into rt values ( 202, '<zoneA>Sweet dreams are made of this.</zoneA><zoneB>Who am I to disagree?</zoneB>', 3 )]]></sphinxql>
+<sphinxql><![CDATA[insert into rt values ( 300, '<zoneA>Sweet of this.</zoneA><zoneLongWord1LongWord2LongWord3LongWord4LongWord5LongWord6LongWord7LongWord8LongWord9LongWord10LongWord11LongWord12LongWord13LongWord14LongWord15LongWord16LongWord17LongWord18LongWord19LongWord20LongWord21LongWord22LongWord23LongWord24LongWord25>Who am I to disagree?</zoneLongWord1LongWord2LongWord3LongWord4LongWord5LongWord6LongWord7LongWord8LongWord9LongWord10LongWord11LongWord12LongWord13LongWord14LongWord15LongWord16LongWord17LongWord18LongWord19LongWord20LongWord21LongWord22LongWord23LongWord24LongWord25>', 4 )]]></sphinxql>
+<sphinxql><![CDATA[insert into rt values ( 301, '>I like this.</zoneA> Sweet of &#1;&#2;&#3; this.', 4 )]]></sphinxql>
+<sphinxql><![CDATA[insert into rt values ( 302, '<zoneA>I like this.</zoneA> Sweet of &#4; this.', 4 )]]></sphinxql>
+<sphinxql><![CDATA[insert into rt values ( 310, '<zoneA>I like this.</zoneA> Sweet of &#1;&#2;&#3; this.', 4 )]]></sphinxql>
+<sphinxql><![CDATA[insert into rt values ( 311, '<zoneA>I like this.</zoneA> Sweet of &#4; this.', 4 )]]></sphinxql>
+
+<sphinxql> select * from rt where match (' one SENTENCE two' ) </sphinxql>
+<sphinxql> select * from rt where match (' one SENTENCE two three' ) </sphinxql>
+<sphinxql> select * from rt where match (' one SENTENCE two SENTENCE three' ) </sphinxql>
+<sphinxql> select * from rt where match (' "one two" SENTENCE three' ) </sphinxql>
+<sphinxql> select * from rt where match (' zam SENTENCE ram' ) </sphinxql>
+
+<sphinxql> select * from rt where match (' fox PARAGRAPH dog' ) </sphinxql>
+<sphinxql> select * from rt where match (' sentence SENTENCE paragraph' ) </sphinxql>
+<sphinxql> select * from rt where match (' sentence PARAGRAPH paragraph' ) </sphinxql>
+
+<sphinxql> select * from rt where match (' ZONE:zoneA walrus' ) </sphinxql>
+<sphinxql> select * from rt where match (' ZONE:zoneB walrus' ) </sphinxql>
+<sphinxql> select * from rt where match (' ZONE:zoneA walrus time' ) </sphinxql>
+<sphinxql> select * from rt where match (' ZONE:zoneB walrus time' ) </sphinxql>
+<sphinxql> select * from rt where match (' ZONE:zoneC cabbages and kings' ) </sphinxql>
+<sphinxql> select * from rt where match (' ZONE:zoneC kings and ships' ) </sphinxql>
+<sphinxql> select * from rt where match (' ZONE:(zoneA,zoneB) sweet disagree' ) </sphinxql>
+<sphinxql> select * from rt where match (' "Who am I" ' ) </sphinxql>
+<sphinxql> select * from rt where match (' "of this" ' ) </sphinxql>
+<sphinxql> select * from rt where match (' ZONE:zoneA "like this" ' ) </sphinxql>
+</sphqueries>
+
+</test>

@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>rotation vs old index format</name>
+
+<requires>
+<non-rt/>
+<id32/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	binlog_path = #
+}
+
+indexer
+{
+	mem_limit = 16M
+}
+
+source dummy
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = select * from test_table
+	sql_attr_uint = group_id
+	sql_field_string = title
+}
+
+index small
+{
+	source = dummy
+	path = <data_path/>/small
+	docinfo = extern
+}
+
+source rot_dummy
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = select * from test_table
+	sql_attr_uint = group_id
+	sql_field_string = title
+}
+
+index rot_dummy
+{
+	source = rot_dummy
+	path = <data_path/>/rot_dummy
+	docinfo = extern
+}
+</config>
+
+<db_drop>drop table if exists test_table</db_drop>
+
+<db_create>
+create table test_table
+(
+	id			INTEGER PRIMARY KEY NOT NULL AUTO_INCREMENT,
+	group_id	INTEGER NOT NULL,
+	title		VARCHAR(255) NOT NULL,
+	content		VARCHAR(1024) NOT NULL
+)
+</db_create>
+
+<db_insert>
+insert into test_table values
+( 1, 1, 'test one', 'this is my test document number one. also checking search within phrases.' );
+</db_insert>
+
+<custom_test><![CDATA[
+
+global $index_data_path, $sd_pid_file;
+global $this_test;
+
+$query = create_function('$client,$words','$result = $client->Query ( $words, "small" );	if ( $result ) { unset ( $result["time"] ); return $result; } else return $client->GetLastError(); ');
+
+$results = array();
+$errors = '';
+
+$results[] = $query ( $client, '' );
+$results[] = $query ( $client, 'test' );
+
+foreach (explode(" ", "a d h i k m p s") as $c)
+	exec ( "cp $this_test/refdata/small1.sp$c $index_data_path/small.new.sp$c" );
+	
+RunIndexer ( $errors, 'rot_dummy --rotate' );
+sleep ( 1 );
+
+$results[] = $query ( $client, '' );
+$results[] = $query ( $client, 'test' );
+
+foreach (explode(" ", "a d h i k m p s") as $c)
+	exec ( "cp $this_test/refdata/small2.sp$c $index_data_path/small.new.sp$c" );
+RunIndexer ( $errors, 'rot_dummy --rotate' );
+sleep ( 1 );
+
+$results[] = $query ( $client, '' );
+$results[] = $query ( $client, 'test' );
+
+]]></custom_test>
+
+</test>

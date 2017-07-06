@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>reconfigure</name>
+
+<requires><re2/></requires>
+
+<config>
+searchd
+{
+	workers = threads
+	<searchd_settings/>
+}
+
+index rt_re
+{
+	type = rt
+	path			= <data_path/>/rt_re
+	docinfo = extern
+	rt_mem_limit = 128k
+	rt_field		= title
+	rt_attr_uint	= idd
+	#regexp_filter = (blue|red) => color
+}
+
+source test_tmp
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT 1 id, 'test1' body, 11 idd
+	sql_attr_uint	= idd
+}
+
+index test_tmp
+{
+	source			= test_tmp
+	path			= <data_path/>/test_tmp
+}
+</config>
+
+<custom_test><![CDATA[
+
+$results = array();
+$ql->Reconnect();
+
+$results[] = "insert 1";
+$results[] = "\n" . $ql->Query ( "INSERT into rt_re VALUES (1, 'blue table', 11)" );
+$results[] = "query: color table";
+$results[] = "\n" . $ql->Query ( "SELECT * FROM rt_re where match ( 'color table' )" );
+$results[] = "query: blue table";
+$results[] = "\n" . $ql->Query ( "SELECT * FROM rt_re where match ( 'blue table' )" );
+
+$orig_conf = file('config.conf');
+
+$new_conf = '';
+foreach ( $orig_conf as $line )
+{
+	$got_match = strpos ( $line, '#regexp_filter' );
+	if ( $got_match )
+		$line = '	regexp_filter = (blue|red) => color' . "\n";
+	$new_conf .= $line;
+}
+file_put_contents('config.conf', $new_conf);
+
+$results[] = "alter";
+$results[] = "\n" . $ql->Query ( "ALTER RTINDEX rt_re RECONFIGURE" );
+$results[] = "insert 2";
+$results[] = "\n" . $ql->Query ( "INSERT into rt_re VALUES (2, 'blue table', 11)" );
+$results[] = "query: color table";
+$results[] = "\n" . $ql->Query ( "SELECT * FROM rt_re where match ( 'color table' )" );
+$results[] = "query: blue table";
+$results[] = "\n" . $ql->Query ( "SELECT * FROM rt_re where match ( 'blue table' )" );
+]]></custom_test>
+
+</test>

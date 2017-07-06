@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>index weights + sort by expression test (fullscan too)</name>
+
+<config>
+indexer
+{
+	mem_limit		= 32M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source test1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table where id%2=0
+	sql_attr_uint	= attr
+}
+
+index test1
+{
+	source			= test1
+	path			= <data_path/>/test1
+}
+
+source test2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table where id%2=1
+}
+
+index test2
+{
+	source			= test2
+	path			= <data_path/>/test2
+}
+
+index test3
+{
+	type			= rt
+	path			= <data_path/>/test3
+	rt_field		= title
+	rt_attr_uint 	= dummy
+}
+
+index test4
+{
+	type			= rt
+	path			= <data_path/>/test4
+	rt_field		= title
+	rt_attr_uint 	= dummy
+}
+</config>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	title varchar(255) not null,
+	attr int not null
+);
+</db_create>
+<db_drop>drop table if exists test_table;</db_drop>
+<db_insert>insert into test_table values ( 1, 'asdf asdf asdf', 11 );</db_insert>
+<db_insert>insert into test_table values ( 2, 'asdf', 22 );</db_insert>
+
+<queries>
+<query mode="extended2" index="test1 test2" ranker="wordcount" sortmode="expr" sortby="@weight" index_weights="test1:10 test2:1">asdf</query>
+<query mode="extended2" index="test1" index_weights="test1:11"></query>
+<query mode="fullscan" index="test1" index_weights="test1:11"></query>
+<query mode="fullscan" index="test1" index_weights="test1:11">something</query>
+</queries>
+
+<sphqueries>
+<sphinxql>insert into test3 ( id, title ) values ( 1, 'asdf asdf asdf' )</sphinxql>
+<sphinxql>insert into test4 ( id, title ) values ( 2, 'asdf' )</sphinxql>
+<sphinxql>select id, weight() as skey from test3, test4 where match('asdf') option ranker=wordcount, index_weights=(test3=1, test4=10)</sphinxql>
+<sphinxql>select id from test3 option index_weights=(test3=10)</sphinxql>
+<!-- regression crash on reverse_scan, MOVED to separete test 239 to pass rt mode -->
+</sphqueries>
+
+</test>

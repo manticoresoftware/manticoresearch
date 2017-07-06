@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>snippets vs load_files</name>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1, 'text';
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+
+}
+</config>
+
+<db_insert>select 1;</db_insert>
+
+<custom_test><![CDATA[
+
+$results = array();
+
+$docs = array( 'test_130/load_file.txt' );
+$opts = array( 'load_files'=>true, 'limit'=>0 );
+
+$results[] = $client->BuildExcerpts($docs, 'test', 'end point', $opts );
+$results[] = $client->BuildExcerpts($docs, 'test', 'not_found', $opts );
+$results[] = $client->BuildExcerpts(array( 'test_130/empty.txt' ), 'test', 'end point', $opts );
+$results[] = $client->BuildExcerpts(array( '' ), 'test', 'not_found', $opts );
+$results[] = $client->GetLastError();
+$results[] = $client->BuildExcerpts ( array ( 'test_130/512k.xml' ), 'test', 'it builds', array ( "limit" => 100, "load_files" => true ) );
+
+]]></custom_test>
+
+</test>

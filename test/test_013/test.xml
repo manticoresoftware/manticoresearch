@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Test>
+  <Name>prefixes/infixes + UTF-8</Name>
+  <Config>
+    <Static>indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+</Static>
+<Searchd_Settings/>
+<Static>
+}
+
+source srclj
+{
+	type			= mysql
+</Static>
+<Sql_Settings/>
+<Static>
+	sql_query = SELECT id, subject, body, author FROM test_table
+	sql_query_pre = SET NAMES utf8
+}
+</Static>
+<Static>
+index lj
+{
+	source			= srclj
+	path			= </Static><Data_Path/><Static>/lj
+	min_infix_len	= 3
+}</Static>
+  </Config>
+  <Query>
+    <Query_0>числовым</Query_0>
+    <Query_1>*фры</Query_1>
+    <Query_2>умол*</Query_2>
+    <Query_3>*пис*</Query_3>
+    <Query_4>*hod*</Query_4>
+  </Query>
+  <DB_Create>
+CREATE TABLE `test_table` (
+  `id` int(11) NOT NULL default '0',
+  `document_id` int(5) NOT NULL default '0',
+  `subject` varchar(255) NOT NULL default '',
+  `body` varchar(255) NOT NULL default '',
+  `author` varchar(255) NOT NULL default ''
+) CHARACTER SET utf8;
+  </DB_Create>
+  <DB_Drop>
+DROP TABLE IF EXISTS `test_table`
+  </DB_Drop>
+  <DB_Insert>SET NAMES utf8</DB_Insert>
+  <DB_Insert>
+INSERT INTO `test_table` VALUES
+(1,1,'Поиск по числовым значениям','У меня вопрос насчет поиска по числовым значениям.','CAJAX'),
+(2,2,'Поиск по числовым значениям','В базе данных встречаются записи с числами, но поиск по ним не дает никаких результатов.','CAJAX'),
+(3,3,'Поиск по числовым значениям','Да, по умолчанию цифры считаются корректными символами.','shodan')
+  </DB_Insert>
+</Test>

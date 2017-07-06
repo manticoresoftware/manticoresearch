@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>snippets vs blend_chars</name>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1, 'text';
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+
+	blend_chars 		= +, -, ., U+23,U+40
+}
+</config>
+
+<db_insert>select 1;</db_insert>
+
+<custom_test><![CDATA[
+
+$results = array();
+
+$docs = array();
+$docs[0] = '+ben is bad';
+$docs[1] = 'who is ben. green-nice is... as no-body bad.';
+
+$query="ben is nice";
+
+$results[] = $client->BuildExcerpts($docs, 'test', $query );
+
+]]></custom_test>
+
+</test>

@@ -1,0 +1,427 @@
+'\" t
+.\"     Title: searchd
+.\"    Author: [see the "Author" section]
+.\" Generator: DocBook XSL Stylesheets v1.76.1 <http://docbook.sf.net/>
+.\"      Date: 09/08/2016
+.\"    Manual: Sphinxsearch
+.\"    Source: 2.3.3-dev
+.\"  Language: English
+.\"
+.TH "SEARCHD" "1" "09/08/2016" "2\&.3\&.3\-dev" "Sphinxsearch"
+.\" -----------------------------------------------------------------
+.\" * Define some portability stuff
+.\" -----------------------------------------------------------------
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.\" http://bugs.debian.org/507673
+.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.ie \n(.g .ds Aq \(aq
+.el       .ds Aq '
+.\" -----------------------------------------------------------------
+.\" * set default formatting
+.\" -----------------------------------------------------------------
+.\" disable hyphenation
+.nh
+.\" disable justification (adjust text to left margin only)
+.ad l
+.\" -----------------------------------------------------------------
+.\" * MAIN CONTENT STARTS HERE *
+.\" -----------------------------------------------------------------
+.SH "NAME"
+searchd \- Sphinxsearch network daemon\&.
+.SH "SYNOPSIS"
+.HP \w'\fBsearchd\fR\ 'u
+\fBsearchd\fR [\-\-config\ \fICONFIGFILE\fR] [\-\-cpustats] [\-\-iostats] [\-\-index\ \fIINDEX\fR] [\-\-port\ \fIPORT\fR]
+.HP \w'\fBsearchd\fR\ 'u
+\fBsearchd\fR \-\-status [\-\-config\ \fICONFIGFILE\fR] [\-\-pidfile\ \fIPIDFILE\fR]
+.HP \w'\fBsearchd\fR\ 'u
+\fBsearchd\fR \-\-stop [\-\-config\ \fICONFIGFILE\fR] [\-\-pidfile\ \fIPIDFILE\fR]
+.SH "DESCRIPTION"
+.PP
+Sphinx is a collection of programs that aim to provide high quality fulltext search\&.
+.PP
+Searchd is the second of the two principle tools as part of Sphinx\&.
+\fBsearchd\fR
+is the part of the system which actually handles searches; it functions as a server and is responsible for receiving queries, processing them and returning a dataset back to the different APIs for client applications\&.
+.PP
+Unlike
+\fBindexer\fR,
+\fBsearchd\fR
+is not designed to be run either from a regular script or command\-line calling, but instead either as a daemon to be called from
+\fIinit\&.d\fR
+(on Unix/Linux type systems) or to be called as a service (on Windows\-type systems)\&. so not all of the command line options will always apply, and so will be build\-dependent\&.
+.SH "OPTIONS"
+.PP
+These programs follow the usual GNU command line syntax, with long options starting with two dashes (`\-\*(Aq)\&.
+.PP
+The options available to searchd on all builds are:
+.PP
+\fB\-\-config\fR\fICONFIGFILE\fR, \fB\-c\fR\fICONFIGFILE\fR
+.RS 4
+Tell
+\fBsearchd\fR
+to use the given file as its configuration, just as with
+\fBindexer\fR\&.
+.RE
+.PP
+\fB\-\-console\fR
+.RS 4
+Force
+\fBsearchd\fR
+into console mode; typically it will be running as a conventional server application, and will aim to dump information into the log files (as specified in
+sphinx\&.conf)\&. Sometimes though, when debugging issues in the configuration or the daemon itself, or trying to diagnose hard\-to\-track\-down problems, it may be easier to force it to dump information directly to the console/command line from which it is being called\&. Running in console mode also means that the process will not be forked (so searches are done in sequence) and logs will not be written to\&. (It should be noted that console mode is not the intended method for running searchd\&.)
+.sp
+You can invoke it as such:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+$ searchd \-\-config /home/myuser/sphinx\&.conf \-\-console
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+\fB\-\-cpustats\fR
+.RS 4
+Used to provide actual CPU time report (in addition to wall time) in both query log file (for every given query) and status report (aggregated)\&. It depends on
+\fIclock_gettime()\fR
+system call and might therefore be unavailable on certain systems\&.
+.sp
+You might start searchd thus:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+$ searchd \-\-config /home/myuser/sphinx\&.conf \-\-cpustats
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+\fB\-\-help\fR, \fB\-h\fR, \fB\-\-?\fR, \fB\-?\fR
+.RS 4
+List all of the parameters that can be called in your particular build of
+\fBsearchd\fR\&.
+.RE
+.PP
+\fB\-\-index\fR\ \&\fIINDEX\fR, \fB\-i\fR\ \&\fIINDEX\fR
+.RS 4
+Serve only the specified index\&. Like
+\fB\-\-port\fR, this is usually for debugging purposes; more long\-term changes would generally be applied to the configuration file itself\&.
+.sp
+Usage example:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+$ searchd \-\-index myindex
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+\fB\-\-iostats\fR
+.RS 4
+Used in conjuction with the logging options (the
+\fBquery_log\fR
+will need to have been activated in
+sphinx\&.conf) to provide more detailed information on a per\-query basis as to the input/output operations carried out in the course of that query, with a slight performance hit and of course bigger logs\&. Further details are available under the query log format section\&.
+.sp
+You might start searchd thus:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+$ searchd \-\-config /home/myuser/sphinx\&.conf \-\-iostats
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+\fB\-\-listen\fR, \fB\-l\fR\ \&\fI( address ":" port | port | path ) [ ":" protocol ]\fR
+.RS 4
+Works as
+\fB\-\-port\fR, but allow you to specify not only the port, but full path, as IP address and port, or Unix\-domain socket path, that
+\fBsearchd\fR
+will listen on\&. Otherwords, you can specify either an IP address (or hostname) and port number, or just a port number, or Unix socket path\&. If you specify port number but not the address, searchd will listen on all network interfaces\&. Unix path is identified by a leading slash\&. As the last param you can also specify a protocol handler (listener) to be used for connections on this socket\&. Supported protocol values are \*(Aqsphinx\*(Aq (Sphinx 0\&.9\&.x API protocol) and \*(Aqmysql41\*(Aq (MySQL protocol used since 4\&.1 upto at least 5\&.1)\&.
+.RE
+.PP
+\fB\-\-logdebug, \-\-logdebugv, \-\-logdebugvv\fR
+.RS 4
+Enable additional debug output in the daemon log\&. Should only be needed rarely, to assist with debugging issues that could not be easily reproduced on request\&.
+\fB\-\-logdebug\fR
+causes daemon to fire general debug messages\&.
+\fB\-\-logdebugv\fR
+and
+\fB\-\-logdebugvv\fR
+points to \*(Aqverbose\*(Aq and \*(Aqvery verbose\*(Aq debug info\&. The last could really flood your logfile\&.
+.RE
+.PP
+\fB\-\-nodetach\fR
+.RS 4
+Do not \*(Aqdaemonize\*(Aq, or, do not detach into background\&. Apart debug purposes, this switch is useful when you manage sphinx with upstart init daemon\&. In this case actual \*(Aqdaemonizing\*(Aq will be done by upstart itself, and also all tasks like starting, stopping, reloading the config and respawning on crash will be done by the system, not the sphinx\&.
+.RE
+.PP
+\fB\-\-pidfile\fR \fIPIDFILE\fR
+.RS 4
+Explicitly state a PID file, where the process information is stored regarding
+\fBsearchd\fR, used for inter\-process communications (for example,
+\fBindexer\fR
+will need to know the PID to contact
+\fBsearchd\fR
+for rotating indexes)\&. Normally,
+\fBsearchd\fR
+would use a PID if running in regular mode (i\&.e\&. not with
+\fB\-\-console\fR), but it is possible that you will be running it in console mode whilst the index is being updated and rotated, for which a PID file will be needed\&.
+.sp
+Example:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+$ searchd \-\-config /home/myuser/sphinx\&.conf \-\-pidfile /home/myuser/sphinx\&.pid
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+\fB\-\-replay\-flags\fR\ \&\fIOPTIONS\fR
+.RS 4
+Specify a list of extra binary log replay options\&. The supported options are:
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+\fBaccept\-desc\-timestamp\fR, ignore descending transaction timestamps and replay such transactions anyway (the default behavior is to exit with an error)\&.
+.RE
+.sp
+Example:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+$ searchd \-\-replay\-flags=accept\-desc\-timestamp
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+\fB\-\-port\fR\ \&\fIPORT\fR, \fB\-p\fR\ \&\fIPORT\fR
+.RS 4
+Specify the
+\fIport\fR
+that
+\fBsearchd\fR
+should listen on, usually for debugging purposes\&. This will usually default to
+\fB9312\fR, but sometimes you need to run it on a different port\&. Specifying it on the command line will override anything specified in the configuration file\&. The valid range is 0 to 65535, but ports numbered 1024 and below usually require a privileged account in order to run\&. Look also the
+\fB\-\-listen\fR
+option, it will give you more possibilities to tune here\&.
+.sp
+An example of usage:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+$ searchd \-\-port 9313
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+\fB\-\-safetrace\fR
+.RS 4
+Forces
+\fBsearchd\fR
+to only use system backtrace() call in crash reports\&. In certain (rare) scenarios, this might be a "safer" way to get that report\&. This is a debugging option\&.
+.RE
+.PP
+\fB\-\-status\fR
+.RS 4
+Query running
+\fBsearchd\fR
+instance status, using the connection details from the (optionally) provided configuration file\&. It will try to connect to the running instance using the first configured UNIX socket or TCP port\&. On success, it will query for a number of status and performance counter values and print them\&. You can use
+\fIStatus()\fR
+API call to access the very same counters from your application\&.
+.sp
+Examples:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+$ searchd \-\-status
+$ searchd \-\-config /home/myuser/sphinx\&.conf \-\-status
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+\fB\-\-stop\fR
+.RS 4
+Asynchronously stop
+\fBsearchd\fR, using the details of the PID file as specified in the
+sphinx\&.conf
+file, so you may also need to confirm to
+\fBsearchd\fR
+which configuration file to use with the
+\fB\-\-config\fR
+option\&. NB, calling
+\fB\-\-stop\fR
+will also make sure any changes applied to the indexes with
+\fIUpdateAttributes()\fR
+will be applied to the index files themselves\&.
+.sp
+Example:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+$ searchd \-\-config /home/myuser/sphinx\&.conf \-\-stop
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+\fB\-\-stopwait\fR
+.RS 4
+Synchronously stop
+\fBsearchd\fR\&.
+\fB\-\-stop\fR
+essentially tells the running instance to exit (by sending it a
+\fISIGTERM\fR) and then immediately returns\&.
+\fB\-\-stopwait\fR
+will also attempt to wait until the running
+\fBsearchd\fR
+instance actually finishes the shutdown (eg\&. saves all the pending attribute changes) and exits\&.
+.sp
+Example:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+$ searchd \-\-config /home/myuser/sphinx\&.conf \-\-stopwait
+.fi
+.if n \{\
+.RE
+.\}
+.sp
+Possible exit codes are as follows:
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+0 on success;
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+1 if connection to running
+\fBsearchd\fR
+daemon failed;
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+2 if daemon reported an error during shutdown;
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+3 if daemon crashed during shutdown
+.RE
+.RE
+.PP
+\fB\-\-strip\-path\fR
+.RS 4
+Strip the path names from all the file names referenced from the index (\fIstopwords\fR,
+\fIwordforms\fR,
+\fIexceptions\fR, etc)\&. This is useful for picking up indexes built on another machine with possibly different path layouts\&.
+.RE
+.SH "SIGNALS"
+.PP
+Last but not least, as every other daemon,
+\fBsearchd\fR
+supports a number of signals\&.
+.PP
+.PP
+SIGTERM
+.RS 4
+Initiates a clean shutdown\&. New queries will not be handled; but queries that are already started will not be forcibly interrupted\&.
+.RE
+.PP
+SIGHUP
+.RS 4
+Initiates index rotation\&. Depending on the value of
+\fBseamless_rotate\fR
+setting, new queries might be shortly stalled; clients will receive temporary errors\&.
+.RE
+.PP
+SIGUSR1
+.RS 4
+Forces reopen of searchd log and query log files, letting you implement log file rotation\&.
+.RE
+.SH "AUTHOR"
+.PP
+Andrey Aksenoff (shodan@sphinxsearch\&.com)\&. This manual page is written by Alexey Vinogradov (klirichek@sphinxsearch\&.com), using the one written by Christian Hofstaedtler ch+debian\-packages@zeha\&.at for the
+\fBDebian\fR
+system (but may be used by others)\&. Permission is granted to copy, distribute and/or modify this document under the terms of the GNU General Public License, Version 2 any later version published by the Free Software Foundation\&.
+.PP
+On Debian systems, the complete text of the GNU General Public License can be found in
+/usr/share/common\-licenses/GPL\&.
+.SH "SEE ALSO"
+.PP
+\fBindexer\fR(1),
+\fBsearch\fR(1),
+\fBindextool\fR(1)
+.PP
+Sphinx and it\*(Aqs programs are documented fully by the
+\fISphinx reference manual\fR
+available in
+/usr/share/doc/sphinxsearch\&.

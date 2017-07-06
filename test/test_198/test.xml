@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>ZONESPAN operator prototype</name>
+
+<requires>
+	<variant_match/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+	sql_attr_uint	= gid
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+	html_strip		= 1
+	index_sp		= 1
+	index_zones		= zone*
+	<Dynamic>
+		<Variant>dict = crc</Variant>
+		<Variant>dict = keywords</Variant>
+	</Dynamic>
+	<Dynamic>
+		<Variant></Variant>
+		<Variant>exceptions = synonyms.txt</Variant>
+	</Dynamic>
+}
+
+</config>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	gid int not null,
+	title varchar(16384) not null
+);
+</db_create>
+<db_drop>drop table if exists test_table;</db_drop>
+<db_insert><![CDATA[insert into test_table values ( 201, 3, 'Of shoes, <zoneC>and kings</zoneC>, and sealing wax, of cabbages, <zoneC>and ships.</zoneC> bla' );]]></db_insert>
+
+<sphqueries>
+<sphinxql>select * from test where match('ZONESPAN:zoneC cabbages and kings')</sphinxql>
+<sphinxql>select * from test where match('ZONESPAN:zoneC kings and ships')</sphinxql>
+<sphinxql>select * from test where match('ZONESPAN:zoneC and ships')</sphinxql>
+<sphinxql>select * from test where match('ZONESPAN:zoneC kings and')</sphinxql>
+<sphinxql>select * from test,asdf where match('ZONESPAN:zoneC and kings') option ignore_nonexistent_indexes=1</sphinxql>
+<sphinxql>SELECT 2e-1 FROM test LIMIT 1</sphinxql>
+<sphinxql>SELECT .5E1 FROM test LIMIT 1</sphinxql>
+<sphinxql>SELECT 6.e+10 FROM test LIMIT 1</sphinxql>
+</sphqueries>
+
+</test>

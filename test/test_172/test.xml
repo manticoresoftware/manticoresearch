@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>AVG vs group sorting</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * FROM test_table
+	sql_attr_uint	= gid
+	sql_attr_uint	= price
+}
+
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+	docinfo			= extern
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	document_id		INTEGER NOT NULL PRIMARY KEY,
+	body			VARCHAR(255) NOT NULL,
+	gid				INTEGER NOT NULL,
+	price			INTEGER NOT NULL
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table VALUES
+( 1, 'dummy', 1, 5 ),
+( 2, 'dummy', 1, 5 ),
+( 3, 'dummy', 2, 15 ),
+( 4, 'dummy', 3, 30 ),
+( 5, 'dummy', 4, 10 ),
+( 6, 'dummy', 4, 10 ),
+( 7, 'dummy', 4, 10 ),
+( 8, 'dummy', 4, 10 ),
+( 9, 'dummy', 4, 10 ),
+( 10, 'dummy', 5, 1 ),
+( 11, 'dummy', 6, 2 ),
+( 12, 'dummy', 7, 3 ),
+( 13, 'dummy', 8, 4 ),
+( 14, 'dummy', 9, 5 ),
+( 15, 'dummy', 10, 6 )
+</db_insert>
+
+<sphqueries>
+<sphinxql>SELECT *, AVG(price) AS p FROM test GROUP BY gid ORDER BY p DESC option max_matches=2</sphinxql>
+<sphinxql>SELECT *, AVG(price) AS p FROM test GROUP BY gid ORDER BY p ASC option max_matches=2</sphinxql>
+<sphinxql>SELECT *, AVG(price) AS p FROM test WHERE price>4 GROUP BY gid ORDER BY p ASC option max_matches=2</sphinxql>
+</sphqueries>
+
+
+</test>

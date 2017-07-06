@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>select expressions parser vs IN() with 10K args</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT id, id AS tag, body FROM test_table
+	sql_attr_uint	= tag
+}
+
+index idx
+{
+	source			= src
+	path			= <data_path/>/main
+    docinfo			= extern
+}
+
+source src1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT id, id AS tag, body FROM test_table
+	sql_attr_uint	= tag
+	sql_field_string = body
+}
+
+index idx1
+{
+	source			= src1
+	path			= <data_path/>/main1
+    docinfo			= extern
+}
+
+</config>
+
+<custom_test><![CDATA[
+$results = array ();
+
+$idlist = "";
+for ( $i=10000; $i<20000; $i++ )
+	$idlist .= "$i,";
+
+$client->SetSelect ( "*, IN(@id,1," . $idlist . "3) AS q, crc32('the') as crc" );
+$client->SetFilter ( "q", array(1) );
+
+$r = $client->Query ( "", "idx" );
+if ( $r )
+{
+	unset ( $r["time"] );
+	$results[] = $r;
+} else
+	$results[] = $client->GetLastError();
+	
+// regression crash on not well formed filter	
+$client->ResetFilters();
+$client->SetSelect ( "*" );
+$client->SetFilter ( "body", array(0) );
+
+$r = $client->Query ( "", "idx1" );
+if ( $r )
+{
+	unset ( $r["time"] );
+	$results[] = $r;
+} else
+{
+	$results[] = $client->GetLastError();
+}	
+]]></custom_test>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id int(11) NOT NULL default '0',
+	body varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_insert>
+INSERT INTO test_table VALUES ( 1,'one' ), ( 2,'two' ), ( 3,'three' ), ( 4,'four' )
+</db_insert>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table
+</db_drop>
+
+</test>

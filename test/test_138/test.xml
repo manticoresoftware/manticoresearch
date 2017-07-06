@@ -1,0 +1,155 @@
+<test>
+<name>quorum vs decreased matched word</name>
+
+<requires>
+<non-rt/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test1
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT * FROM test_table1
+}
+
+index test1
+{
+	source	= test1
+	path	= <data_path/>/test1
+	docinfo	= extern
+}
+
+source test2
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT * FROM test_table2
+}
+
+index test2
+{
+	source	= test2
+	path	= <data_path/>/test2
+	docinfo	= extern
+}
+
+source test_kw
+{
+	type					= mysql
+	<sql_settings/>
+
+	sql_query				= select 1 id, 'of me' text, 11 idd UNION select 2 id, 'of me' text, 11 idd UNION select 3 id, 'of me' text, 11 idd UNION select 4 id, 'of me' text, 11 idd
+	sql_joined_field		= text from query; select id , text from test_kw_joined
+	sql_attr_uint			= idd
+}
+
+index test_kw
+{
+	source	= test_kw
+	path	= <data_path/>/test_kw
+
+	docinfo					= extern
+	dict = keywords
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table1
+(
+	document_id INT NOT NULL,
+	text VARCHAR(255) NOT NULL
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table1;
+</db_drop>
+
+<db_create>
+CREATE TABLE test_table2
+(
+	document_id INT NOT NULL,
+	text VARCHAR(255) NOT NULL
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table2;
+</db_drop>
+
+<db_create>
+create table test_kw_joined
+(
+	id int,
+	text text (4096000) not null
+) ENGINE=MYISAM
+</db_create>
+<db_drop>drop table if exists test_kw_joined</db_drop>
+
+<custom_insert><![CDATA[
+	$sql_data = array (
+		1=>'world space',
+		2=>'one',
+		3=>'two',
+		4=>'world',
+		5=>'space',
+		6=>'unused1',
+		7=>'unused2'
+		);
+	foreach ( $sql_data as $key => $value )
+	{
+		$text = sprintf ( "insert into test_table1 values ( %d, '%s' )", $key, $value );
+		mysql_query ( $text );
+	}
+	
+	$text = sprintf ( "insert into test_table2 values ( 1, '%s' )", $sql_data[1] );
+	for ( $i=1; $i < 513; $i++ )
+	{
+		$text = '';
+		$text = sprintf ( "insert into test_table2 values ( %d, '%s' )", $i, $sql_data[1] );
+		mysql_query ( $text );
+	}
+		foreach ( $sql_data as $key => $value )
+	{
+		$text = sprintf ( "insert into test_table2 values ( %d, '%s' )", 600+$key, $value );
+		mysql_query ( $text );
+	}
+	
+	for ( $i=1; $i<=4; $i++ )
+	{
+		$text = '';
+		$iend = 300000;
+		if ( $i==4 )
+			$iend = 150000;
+		for ( $j=0; $j<$iend; $j++ )
+		{
+			$text .= 'v ';
+		}
+		if ( $i==4 )
+			$text .= ' the box';
+		mysql_query ( " insert into test_kw_joined values ( $i, '$text' ) " ) or die( "$i:" . mysql_error() );
+	}
+]]></custom_insert>
+
+<queries>
+	<query mode="extended2" index="test1">"one two unused1 unused2 space world"/2</query>
+	<query mode="extended2" index="test2" limits="600">"one two unused1 unused2 space world"/2</query>
+	<!-- regression index missed tail of joined hits -->
+	<query mode="extended2" index="test_kw" ></query>
+	<query mode="extended2" index="test_kw" >of</query>
+	<query mode="extended2" index="test_kw" >the box</query>
+	<query mode="extended2" index="test_kw" >v</query>
+</queries>
+
+</test>

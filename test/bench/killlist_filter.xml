@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>kill-list filter</name>
+
+<config>
+indexer
+{
+	mem_limit = 512M
+}
+
+searchd
+{
+	<searchd_settings/>
+	dist_threads = 2
+}
+
+source i1
+{
+	type = mysql
+	<sql_settings sql_db="lj" />
+
+	sql_query = select id, UNCOMPRESS(content) body, title, channel_id idd, ts, published, url_crc, author_id from posting
+	sql_attr_uint		= idd
+	sql_attr_uint		= ts
+	sql_attr_uint		= published
+	sql_attr_uint		= url_crc
+	sql_attr_uint		= author_id
+}
+
+index i1
+{
+	source	= i1
+	path	= <local>data</local>/i1
+}
+
+source src2 : i1
+{
+	sql_query = select id, UNCOMPRESS(content) body, title, channel_id idd, ts, published, url_crc, author_id from posting where id&gt;100000 and id&lt;110000
+	sql_query_killlist = SELECT (id-100000)*10 FROM posting WHERE id&gt;100000 and id&lt;110000
+}
+
+index i2
+{
+	source	= src2
+	path	= <local>data</local>/i2
+}
+
+source src11 : src2
+{
+	sql_query 		= SELECT id, UNCOMPRESS(content) body, title, channel_id idd, ts, published, url_crc, author_id FROM posting where id&gt;100000 and id&lt;110000
+	sql_query_killlist = SELECT (id-100000)*10 FROM posting WHERE id&gt;100000 and id&lt;110000 and (id%2)=0
+}
+
+index i11
+{
+	source			= src11
+	path	= <local>data</local>/i11
+}
+
+source src12 : src2
+{
+	sql_query 		= SELECT id, UNCOMPRESS(content) body, title, channel_id idd, ts, published, url_crc, author_id FROM posting where id&gt;120000 and id&lt;130000
+	sql_query_killlist = SELECT (id-100000)*10 FROM posting WHERE id&gt;120000 and id&lt;130000 and (id%4)=0
+}
+
+index i12
+{
+	source			= src12
+	path			= <local>data</local>/i12
+}
+
+source src13 : src2
+{
+	sql_query 		= SELECT id, UNCOMPRESS(content) body, title, channel_id idd, ts, published, url_crc, author_id FROM posting where id&gt;130000 and id&lt;140000
+	sql_query_killlist = SELECT (id-100000)*10 FROM posting WHERE id&gt;130000 and id&lt;140000 and (id%7)=0
+}
+
+index i13
+{
+	source			= src13
+	path			= <local>data</local>/i13
+}
+
+source src14 : src2
+{
+	sql_query 		= SELECT id, UNCOMPRESS(content) body, title, channel_id idd, ts, published, url_crc, author_id FROM posting where id&gt;140000 and id&lt;150000
+	sql_query_killlist = SELECT (id-100000)*10 FROM posting WHERE id&gt;140000 and id&lt;150000 and (id%10)=0
+}
+
+index i14
+{
+	source			= src14
+	path			= <local>data</local>/i14
+}
+
+source src15 : src2
+{
+	sql_query 		= SELECT id, UNCOMPRESS(content) body, title, channel_id idd, ts, published, url_crc, author_id FROM posting where id&gt;150000 and id&lt;160000
+	sql_query_killlist = SELECT (id-100000)*10 FROM posting WHERE id&gt;150000 and id&lt;160000 and (id%30)=0
+}
+
+index i15
+{
+	source			= src15
+	path			= <local>data</local>/i15
+}
+
+source src16 : src2
+{
+	sql_query 		= SELECT id, UNCOMPRESS(content) body, title, channel_id idd, ts, published, url_crc, author_id FROM posting where id&gt;160000 and id&lt;170000
+	sql_query_killlist = SELECT (id-100000)*10 FROM posting WHERE id&gt;160000 and id&lt;170000 and (id%50)=0
+}
+
+index i16
+{
+	source			= src16
+	path			= <local>data</local>/i16
+}
+
+source src17 : src2
+{
+	sql_query 		= SELECT id, UNCOMPRESS(content) body, title, channel_id idd, ts, published, url_crc, author_id FROM posting where id&gt;170000 and id&lt;180000
+	sql_query_killlist = SELECT (id-100000)*10 FROM posting WHERE id&gt;170000 and id&lt;180000 and (id%100)=0
+}
+
+index i17
+{
+	source			= src17
+	path			= <local>data</local>/i17
+}
+
+source src18 : src2
+{
+	sql_query 		= SELECT id, UNCOMPRESS(content) body, title, channel_id idd, ts, published, url_crc, author_id FROM posting where id&gt;180000 and id&lt;190000
+	sql_query_killlist = SELECT (id-100000)*10 FROM posting WHERE id&gt;180000 and id&lt;190000 and (id%160)=0
+}
+
+index i18
+{
+	source			= src18
+	path			= <local>data</local>/i18
+}
+
+source src19 : src2
+{
+	sql_query 		= SELECT id, UNCOMPRESS(content) body, title, channel_id idd, ts, published, url_crc, author_id FROM posting where id&gt;190000 and id&lt;200000
+	sql_query_killlist = SELECT (id-100000)*10 FROM posting WHERE id&gt;190000 and id&lt;200000 and (id%200)=0
+}
+
+index i19
+{
+	source			= src19
+	path			= <local>data</local>/i19
+}
+</config>
+
+<sphqueries>
+
+<sphinxql>select id, idd%4 as c from i1, i2</sphinxql>
+<sphinxql>select id, idd%4 as c from i1, i11, i14, i15, i16, i17, i18, i19 where c=0</sphinxql>
+
+<sphinxql>select id from i1, i2 where match ('cincinnati')</sphinxql>
+<sphinxql>select id from i1, i2 where match ('channel')</sphinxql>
+<sphinxql>select id from i1, i2 where match ('poetry')</sphinxql>
+<sphinxql>select id from i1, i2 where match ('books')</sphinxql>
+<sphinxql>select id from i1, i2 where match ('i feel my savior love')</sphinxql>
+<sphinxql>select id from i1, i2 where match ('holidays music')</sphinxql>
+<sphinxql>select id from i1, i2 where match ('star this week')</sphinxql>
+
+<sphinxql>select id from i1, i11, i14, i15, i16, i17, i18, i19 where match ('cincinnati')</sphinxql>
+<sphinxql>select id from i1, i11, i14, i15, i16, i17, i18, i19 where match ('channel')</sphinxql>
+<sphinxql>select id from i1, i11, i14, i15, i16, i17, i18, i19 where match ('poetry')</sphinxql>
+<sphinxql>select id from i1, i11, i14, i15, i16, i17, i18, i19 where match ('books')</sphinxql>
+<sphinxql>select id from i1, i11, i14, i15, i16, i17, i18, i19 where match ('i feel my savior love')</sphinxql>
+<sphinxql>select id from i1, i11, i14, i15, i16, i17, i18, i19 where match ('holidays music')</sphinxql>
+<sphinxql>select id from i1, i11, i14, i15, i16, i17, i18, i19 where match ('star this week')</sphinxql>
+
+</sphqueries>
+
+
+</test>

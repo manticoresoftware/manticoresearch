@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>0 hit vs 0+ documents</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src0doc
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, gid, title FROM test_table where id=111
+	sql_attr_uint	= gid
+}
+
+index test0doc
+{
+	source			= src0doc
+	path			= <data_path/>/test0doc
+	docinfo	= extern
+}
+
+source src1doc
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, gid, title FROM test_table where id=11
+	sql_attr_uint	= gid
+}
+
+index test1doc
+{
+	source			= src1doc
+	path			= <data_path/>/test1doc
+	docinfo	= extern
+}
+</config>
+
+<queries>
+<query mode="extended2">the</query>
+<query mode="extended2"></query>
+</queries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`id` int(11) NOT NULL default '0',
+	`gid` int(11) NOT NULL default '0',
+	`title` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES ( 11, 1011,  '' )
+</db_insert>
+
+</test>

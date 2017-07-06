@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>block subindex builder vs orphaned MVA values</name>
+
+<requires>
+<variant_match />
+</requires>
+
+<config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT document_id, text, mva1 FROM main_table
+	<dynamic>
+	<variant>
+		sql_attr_multi = uint mva2 from query; SELECT word_document_id, word_tag_id FROM tag_table;
+		sql_attr_multi = uint mva1 from field mva1
+	</variant>
+	<variant>
+		sql_attr_multi = bigint mva2 from query; SELECT word_document_id, word_tag_id FROM tag_table;
+		sql_attr_multi = bigint mva1 from field mva1
+	</variant>
+	</dynamic>
+}
+
+index main
+{
+	path			= <data_path/>/main1
+	source			= src1
+	docinfo			= extern
+	min_word_len	= 1
+}
+</config>
+
+<queries>
+<query>test1</query>
+<query>test511</query>
+<query>test2048</query>
+<query>test4000</query>
+</queries>
+
+<db_create>
+CREATE TABLE `main_table` (
+  `document_id` int(11),
+  `text` varchar(255) NOT NULL,
+  `mva1` varchar(255) NOT NULL
+);
+</db_create>
+<db_create>
+CREATE TABLE `tag_table` (
+  `word_document_id` int(11) NOT NULL,
+  `word_tag_id` int(11) NOT NULL
+);
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS `main_table`</db_drop>
+<db_drop>DROP TABLE IF EXISTS `tag_table`</db_drop>
+
+<db_insert>
+INSERT INTO `main_table` VALUES
+( 1, 'test1',  'mva1' ),
+( 511, 'test511',  'mva511' ),
+( 2048, 'test2048',  'mva2048' ),
+( 4000, 'test4000',  'mva4000' );
+</db_insert>
+
+<db_insert>
+INSERT INTO `tag_table` VALUES (1,1), (1,1), (511,510), (511,511), (511,513),
+(620882,769), (1000,1000), (620882,1000);
+</db_insert>
+
+<custom_insert><![CDATA[
+$vals = array();
+for ($i=1; $i<5001; ++$i)
+	if ($i!=1000)
+		$vals[] = sprintf ("(%d,%d)",$i,$i+1);
+mysql_query ("INSERT INTO tag_table VALUES ".join(',',$vals));
+]]></custom_insert>
+
+</test>

@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>multiforms vs quorum</name>
+
+<skip_indexer/>
+<requires><lemmatizer_base/></requires>
+
+<config>
+common
+{
+	lemmatizer_base	= <local>lemmatizer_base</local>
+}
+
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+index rt
+{
+	type			= rt
+	docinfo			= extern
+	path			= <data_path/>/rt
+	wordforms		= wordforms.txt
+
+	rt_attr_uint	= gid
+	rt_field		= body
+	
+	rt_mem_limit	= 8M 
+}
+
+index rt2
+{
+	type 			= rt
+	path			= <data_path/>/rt2
+	rt_mem_limit	= 8M
+
+	charset_table 	= english, _, 0..9, russian
+	morphology 		= lemmatize_ru_all, stem_en
+	index_exact_words = 1
+
+	rt_attr_uint	= gid
+	rt_field		= body
+}
+
+index rt_ru_en
+{
+	type 			= rt
+	path			= <data_path/>/rt_ru_en
+	rt_mem_limit	= 8M
+
+	charset_table 	= english, _, 0..9, russian
+	morphology 		= stem_en, lemmatize_ru_all
+	index_exact_words = 1
+
+	rt_attr_uint	= gid
+	rt_field		= body
+	
+	wordforms		= <this_test/>/wf158.txt
+}
+</config>
+
+<sphqueries>
+<sphinxql>insert into rt (id, gid, body) values ( 1, 123, 'Although various ancient traditions refer to a lost antediluvian world, the one that stands out is the tradition in the early chapters of Genesis.' )</sphinxql>
+<sphinxql>insert into rt (id, gid, body) values ( 2, 123, 'There are many means of transportation all over India and Nepal which can be called shandrydan due to their awkwardness.' )</sphinxql>
+<sphinxql>insert into rt (id, gid, body) values ( 3, 123, 'If Walker was bothered by my hard look, he hid it well.' )</sphinxql>
+<sphinxql>select * from rt where match ('antediluvian')</sphinxql>
+<sphinxql>select * from rt where match ('shandrydan')</sphinxql>
+<sphinxql>select * from rt where match ('"something antediluvian"/1')</sphinxql>
+<sphinxql>select * from rt where match ('"battered shandrydan"/1')</sphinxql>
+
+<!-- regression terms counted as duplicates at quorum  -->
+<sphinxql>insert into rt2 ( id, gid, body ) values ( 1, 1, ' канада когда рухнет 1 доллар' )</sphinxql>
+<sphinxql>insert into rt2 ( id, gid, body ) values ( 2, 2, ' канада никогда не рухнет ни 1 доллар' )</sphinxql>
+<sphinxql>flush ramchunk rt2</sphinxql>
+<sphinxql>insert into rt2 ( id, gid, body ) values ( 3, 3, ' канада всегда пухнет 1 доллар' )</sphinxql>
+<sphinxql>select id from rt2 where match('( (" канада 1 доллар 1987"/3 ) )') order by id asc</sphinxql>
+<sphinxql>show meta</sphinxql>
+
+<!-- regression multi-wordforms got stemmed  -->
+<sphinxql>insert into rt_ru_en ( id, gid, body ) values ( 1, 1, 'Тодун Натья. «Back to black» Amy Winehouse. Х-фактор 6.' )</sphinxql>
+<sphinxql>select id from rt_ru_en where match(' эми уайнхаус ') order by id asc</sphinxql>
+<sphinxql>select id from rt_ru_en where match(' amy winehouse ') order by id asc</sphinxql>
+</sphqueries>
+
+</test>

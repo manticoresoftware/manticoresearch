@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>filter 3</name>
+
+<requires><reindex-rt/></requires>
+
+<config>
+indexer
+{
+	mem_limit = 512M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source main
+{
+	type = mysql
+	<sql_settings sql_db="lj" />
+
+	sql_query = select id, UNCOMPRESS(content) body, title, channel_id idd, ts, published, url_crc, author_id from posting where id&lt;100000
+	sql_attr_uint		= idd
+	sql_attr_uint		= ts
+	sql_attr_uint		= published
+	sql_attr_uint		= url_crc
+	sql_attr_uint		= author_id
+}
+
+index main
+{
+	source	= main
+	path	= <local>data</local>/main
+}
+
+source delta1 : main
+{
+	sql_query = select id, UNCOMPRESS(content) body, title, channel_id idd, ts, published, url_crc, author_id from posting where id&gt;100000 and id&lt;110000
+	sql_query_killlist = SELECT (id-100000)*10 FROM posting WHERE id&gt;100000 and id&lt;110000 and (id%10)=0
+}
+
+index delta1
+{
+	source	= delta1
+	path	= <local>data</local>/delta1
+}
+
+source delta10 : main
+{
+	sql_query = select id, UNCOMPRESS(content) body, title, channel_id idd, ts, published, url_crc, author_id from posting where id&gt;100000 and id&lt;110000
+	sql_query_killlist = SELECT (id-100000)*10 FROM posting WHERE id&gt;100000 and id&lt;110000
+}
+
+index delta10
+{
+	source	= delta10
+	path	= <local>data</local>/delta10
+}
+
+index rt_main
+{
+	type = rt
+	path			= <local>data</local>/rt_main
+	docinfo = extern
+	rt_mem_limit = 128M
+	rt_field		= body
+	rt_field		= title
+	rt_attr_uint	= idd
+	rt_attr_uint	= ts
+}
+index rt1
+{
+	type = rt
+	path			= <local>data</local>/rt1
+	docinfo = extern
+	rt_mem_limit = 128M
+	rt_field		= body
+	rt_field		= title
+	rt_attr_uint	= idd
+	rt_attr_uint	= ts
+}
+index rt10
+{
+	type = rt
+	path			= <local>data</local>/rt10
+	docinfo = extern
+	rt_mem_limit = 128M
+	rt_field		= body
+	rt_field		= title
+	rt_attr_uint	= idd
+	rt_attr_uint	= ts
+}
+</config>
+
+<custom_test>
+<![CDATA[
+
+$ql->Reconnect();
+$res = populate_rt ( 0, 100000, 500, $ql, 'rt_main' );
+$res['total'] = 500;
+$res['tag'] = 'insert rt_main';
+$results[] = $res;
+	
+$res = populate_rt ( 0, 100000, 500, $ql, 'rt1' );
+$res['total'] = 500;
+$res['tag'] = 'insert rt1';
+$results[] = $res;
+
+$res = populate_rt ( 0, 100000, 500, $ql, 'rt10' );
+$res['total'] = 500;
+$res['tag'] = 'insert rt10';
+$results[] = $res;
+
+//SELECT (id-100000)*10 FROM posting WHERE id&gt;100000 and id&lt;110000 and (id%10)=0
+//SELECT (id-100000)*10 FROM posting WHERE id&gt;100000 and id&lt;110000
+
+$ids = array();
+$id_step = 100000 / 1000;
+for ( $del=1; $del<=1000; $del++ )
+{
+	$ids[] = $del * $id_step; 
+}	
+$res = delete_from_rt ( $ids, $ql, 'rt1' );
+$res['tag'] = 'delete 1% from rt1';
+$results[] = $res;
+
+$ids = array();
+$id_step = 100000 / 10000;
+for ( $del=1; $del<=10000; $del++ )
+{
+	$ids[] = $del * $id_step; 
+}	
+$res = delete_from_rt ( $ids, $ql, 'rt10' );
+$res['tag'] = 'delete 10% from rt10';
+$results[] = $res;
+	
+]]></custom_test>
+
+<sphqueries>
+
+<sphinxql>select id from main option comment='main + scan'</sphinxql>
+<sphinxql>select id from main, delta1 option comment='main,delta1 + scan'</sphinxql>
+<sphinxql>select id from main, delta10 option comment='main,delta10 + scan'</sphinxql>
+<sphinxql>select id from rt_main option comment='rt_main + scan'</sphinxql>
+<sphinxql>select id from rt1 option comment='rt1 + scan'</sphinxql>
+<sphinxql>select id from rt10 option comment='rt10 + scan'</sphinxql>
+
+<sphinxql>select id, idd%4 as c from main where c=0 option comment='main + scan;idd%4'</sphinxql>
+<sphinxql>select id, idd%4 as c from delta1 where c=0 option comment='delta1 + scan;idd%4'</sphinxql>
+<sphinxql>select id, idd%4 as c from delta10 where c=0 option comment='delta10 + scan;idd%4'</sphinxql>
+<sphinxql>select id, idd%4 as c from main, delta1 where c=0 option comment='main,delta1 + scan;idd%4'</sphinxql>
+<sphinxql>select id, idd%4 as c from main, delta10 where c=0 option comment='main,delta10 + scan;idd%4'</sphinxql>
+<sphinxql>select id, idd%4 as c from rt_main where c=0 option comment='rt_main + scan;idd%4'</sphinxql>
+<sphinxql>select id, idd%4 as c from rt1 where c=0 option comment='rt1 + scan;idd%4'</sphinxql>
+<sphinxql>select id, idd%4 as c from rt10 where c=0 option comment='rt10 + scan;idd%4'</sphinxql>
+
+<sphinxql>select id from main, delta1 where match ('cincinnati') option comment='main,delta1 + [cincinnati]'</sphinxql>
+<sphinxql>select id from main, delta10 where match ('cincinnati') option comment='main,delta10 + [cincinnati]'</sphinxql>
+<sphinxql>select id from rt1 where match ('cincinnati') option comment='rt1 + [cincinnati]'</sphinxql>
+<sphinxql>select id from rt10 where match ('cincinnati') option comment='rt10 + [cincinnati]'</sphinxql>
+
+<sphinxql>select id from main, delta1 where match ('channel') option comment='main,delta1 + [channel]'</sphinxql>
+<sphinxql>select id from main, delta10 where match ('channel') option comment='main,delta10 + [channel]'</sphinxql>
+<sphinxql>select id from rt1 where match ('channel') option comment='rt1 + [channel]'</sphinxql>
+<sphinxql>select id from rt10 where match ('channel') option comment='rt10 + [channel]'</sphinxql>
+
+<sphinxql>select id from main, delta1 where match ('poetry') option comment='main,delta1 + [poetry]'</sphinxql>
+<sphinxql>select id from main, delta10 where match ('poetry') option comment='main,delta10 + [poetry]'</sphinxql>
+<sphinxql>select id from rt1 where match ('poetry') option comment='rt1 + [poetry]'</sphinxql>
+<sphinxql>select id from rt10 where match ('poetry') option comment='rt10 + [poetry]'</sphinxql>
+
+<sphinxql>select id from main, delta1 where match ('books') option comment='main,delta1 + [books]'</sphinxql>
+<sphinxql>select id from main, delta10 where match ('books') option comment='main,delta10 + [books]'</sphinxql>
+<sphinxql>select id from rt1 where match ('books') option comment='rt1 + [books]'</sphinxql>
+<sphinxql>select id from rt10 where match ('books') option comment='rt10 + [books]'</sphinxql>
+
+<sphinxql>select id from main, delta1 where match ('i feel my savior love') option comment='main,delta1 + [i feel my savior love]'</sphinxql>
+<sphinxql>select id from main, delta10 where match ('i feel my savior love') option comment='main,delta10 + [i feel my savior love]'</sphinxql>
+<sphinxql>select id from rt1 where match ('i feel my savior love') option comment='rt1 + [i feel my savior love]'</sphinxql>
+<sphinxql>select id from rt10 where match ('i feel my savior love') option comment='rt10 + [i feel my savior love]'</sphinxql>
+
+<sphinxql>select id from main, delta1 where match ('holidays music') option comment='main,delta1 + [holidays music]'</sphinxql>
+<sphinxql>select id from main, delta10 where match ('holidays music') option comment='main,delta10 + [holidays music]'</sphinxql>
+<sphinxql>select id from rt1 where match ('holidays music') option comment='rt1 + [holidays music]'</sphinxql>
+<sphinxql>select id from rt10 where match ('holidays music') option comment='rt10 + [holidays music]'</sphinxql>
+
+<sphinxql>select id from main, delta1 where match ('star this week') option comment='main,delta1 + [star this week]'</sphinxql>
+<sphinxql>select id from main, delta10 where match ('star this week') option comment='main,delta10 + [star this week]'</sphinxql>
+<sphinxql>select id from rt1 where match ('star this week') option comment='rt1 + [star this week]'</sphinxql>
+<sphinxql>select id from rt10 where match ('star this week') option comment='rt10 + [star this week]'</sphinxql>
+
+</sphqueries>
+
+
+</test>

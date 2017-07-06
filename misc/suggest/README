@@ -1,0 +1,18 @@
+Suggestions sample
+-------------------
+
+0) What's this.  This sample shows how to implement simple keyword
+correction suggestions (ie. "did you mean") using Sphinx.
+
+1) Requirements.  You will need Sphinx, MySQL, and PHP CLI.
+
+2) Quickstart.  (Skip first indexer command to use bundled sample.)
+
+indexer YOURINDEX --config YOURCONFIG.CONF --buildstops dict.txt 100000 --buildfreqs
+cat dict.txt | php suggest.php --builddict > dict.sql
+mysql -u root test < dict.sql
+indexer --config suggest.conf --all
+searchd --config suggest.conf
+php suggest.php --query sphynx
+
+--eof--

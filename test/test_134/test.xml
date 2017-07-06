@@ -1,0 +1,284 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>snippets vs SPZ</name>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	dist_threads	= 2
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1, 'text';
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+
+	html_strip		= 1
+	index_sp		= 1
+	index_zones		= zone_*
+	dict			= keywords
+}
+
+index test1
+{
+	source			= test
+	path			= <data_path/>/test1
+
+	html_strip		= 1
+	index_sp		= 1
+	index_zones		= zone_*
+	dict			= crc
+	charset_table = 0..9, a..z, A..Z->a..z
+}
+
+index test2
+{
+	source			= test
+	path			= <data_path/>/test2
+
+	html_strip		= 1
+	index_sp		= 1
+	index_zones		= zone_*
+	dict			= crc
+	charset_table = 0..9, a..z, A..Z->a..z
+	blend_chars = (, )
+}
+
+index test3
+{
+	source			= test
+	path			= <data_path/>/test3
+
+	html_strip		= 1
+	html_remove_elements = style, script, head
+	index_sp		= 1
+	dict			= crc
+}
+
+
+</config>
+
+<db_insert>select 1;</db_insert>
+
+<custom_test><![CDATA[
+
+$results = array();
+
+$query="it is";
+
+$refs = array();
+$opts = array();
+
+// 0 test
+$refs[] = array(
+		"doc"=>array (
+			"<P>The institutional investment manager it. Is Filing this report and. It is signed hereby represent. That it is all information. Statements are considered integral parts of this form.</P>" ),
+		"opt"=>array (
+			"limit"=>150
+			, "limit_words"=>60
+			, "limit_passages"=>4
+			, "around"=>7
+			, "html_strip_mode"=>"strip"
+			, 'chunk_separator'=>"\n<--->\n"
+			, "passage_boundary"=>"sentence"
+			, "emit_zones"=>false
+			, "exact_phrase"=>false )
+		);
+
+// 1 test
+$refs[] = array(
+		"doc"=>array (
+			"<P>The institutional investment manager it. Is Filing this report and. It is signed hereby represent. That it is all information. Statements are considered integral parts of this form.</P>" ),
+		"opt"=>array (
+			"limit"=>150
+			, "limit_words"=>60
+			, "limit_passages"=>4
+			, "around"=>7
+			, "html_strip_mode"=>"strip"
+			, 'chunk_separator'=>"\n<--->\n"
+			, "passage_boundary"=>"sentence"
+			, "emit_zones"=>false
+			, "exact_phrase"=>true )
+		);
+		
+// 2 test
+$refs[] = array(
+		"doc"=>array (
+			'<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<zone_unidentified_table>
+The institutional investment manager it. Is Filing this report and.
+<zone_test>
+It is signed hereby represent. That it is all information.
+are It or is
+</zone_test>
+<zone_2>
+cool It is cooler
+</zone_2>
+It is another place!
+</zone_unidentified_table>
+</HTML>' ),
+		"opt"=>array (
+			"limit"=>170
+			, "limit_words"=>60
+			, "limit_passages"=>8
+			, "around"=>8
+			, "html_strip_mode"=>"strip"
+			, 'chunk_separator'=>"\n<--->\n"
+			, "passage_boundary"=>"zone"
+			, "emit_zones"=>true
+			, "exact_phrase"=>false )
+		);
+
+// 3 test
+$refs[] = array(
+		"doc"=>array (
+			'<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<zone_unidentified_table>
+The institutional investment manager it. Is Filing this report and.
+<zone_test>
+It is signed hereby represent. That it is all information.
+are It or is
+</zone_test>
+<zone_2>
+cool It is cooler
+</zone_2>
+It is another place!
+</zone_unidentified_table>
+</HTML>' ),
+		"opt"=>array (
+			"limit"=>170
+			, "limit_words"=>60
+			, "limit_passages"=>8
+			, "around"=>8
+			, "html_strip_mode"=>"strip"
+			, 'chunk_separator'=>"\n<--->\n"
+			, "passage_boundary"=>"zone"
+			, "emit_zones"=>true
+			, "exact_phrase"=>true )
+		);
+
+// 4 test
+$refs[] = array(
+		"doc"=>array (
+			'<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<zone_unidentified_table>
+The institutional investment manager it. Is Filing this report and.
+<zone_test>
+It is signed hereby represent. That it is all information.
+are It or is
+</zone_test>
+<zone_2>
+cool It is cooler
+</zone_2>
+It is another place!
+</zone_unidentified_table>
+</HTML>' ),
+		"opt"=>array (
+			"limit"=>170
+			, "limit_words"=>60
+			, "limit_passages"=>8
+			, "around"=>8
+			, "html_strip_mode"=>"strip"
+			, 'chunk_separator'=>"\n<--->\n"
+			, "passage_boundary"=>"zone"
+			, "emit_zones"=>false
+			, "exact_phrase"=>false )
+		);
+
+// 5 test - HighlightAll path - no passages
+$refs[] = array(
+		"doc"=>array (
+			"The institutional investment manager it. Is Filing this report and. It is signed hereby represent. That it is all information. Statements are considered integral parts of this form." ),
+		"opt"=>array (
+			"limit"=>0
+			, "limit_passages"=>4
+			, "around"=>7
+			, "html_strip_mode"=>"strip"
+			, 'chunk_separator'=>"\n<--->\n"
+			, "passage_boundary"=>"sentence"
+			, "emit_zones"=>false
+			, "exact_phrase"=>false )
+		);
+		
+		
+foreach ( $refs as $ref )
+{
+	$results[] = $client->BuildExcerpts($ref["doc"], 'test', $query, $ref["opt"] );
+}
+
+// last test - nothing found - HighlightStart path
+$refs[3]['opt']['limit'] = 150;
+$results[] = $client->BuildExcerpts($refs[3]["doc"], 'test', "nothing found", $refs[3]["opt"] );
+
+// 7 test
+$docs7 = array ( '<zone_ma1> The manager it. Is Filing this report and.<zone_ma2>Is a signed hereby represent.</zone_ma2>Is another place!</zone_ma1>
+</HTML>' );
+$opts7 = array (
+	'query_mode'=>1
+	,'limit'=>70
+	, "limit_passages"=>4
+	, "around"=>8
+	, "html_strip_mode"=>"strip"
+	, 'chunk_separator'=>"\n<--->\n"
+	, "passage_boundary"=>"zone"
+	, "emit_zones"=>false);
+
+$results[] = $client->BuildExcerpts($docs7, 'test1', 'it is', $opts7 );
+
+// 8 test
+$opts7['query_mode'] = 0;
+$results[] = $client->BuildExcerpts($docs7, 'test1', 'it is', $opts7 );
+
+// 9 test
+$opts7['passage_boundary'] = 'sentence';
+$opts7['query_mode'] = 1;
+$results[] = $client->BuildExcerpts($docs7, 'test1', 'it is', $opts7 );
+
+// 10 test
+$opts7['query_mode'] = 0;
+$results[] = $client->BuildExcerpts($docs7, 'test1', 'it is', $opts7 );
+
+// 11 test
+$opts7['html_strip_mode'] = 'index';
+$opts7['passage_boundary'] = 'paragraph';
+$opts7['query_mode'] = 1;
+$opts7['limit_passages'] = 8;
+$results[] = $client->BuildExcerpts($docs7, 'test1', 'it | is | ma1 | ma2', $opts7 );
+
+$docs12 = array ('Leverage gains (if any). May fallback or go insolvent. Credit risk of the deal.');
+$words12 = 'fallback insolvent';
+
+// 12 test
+$opts12 = array ( 'limit'=>255, 'limit_words'=>12, 'limit_passages'=>5, 'passage_boundary'=>'paragraph', 'around'=>10 );
+$results[] = $client->BuildExcerpts($docs12, 'test2', $words12, $opts12 );
+
+// 13 test
+$opts12 = array ( 'limit'=>0, 'limit_words'=>0, 'limit_passages'=>0, 'passage_boundary'=>'paragraph', 'around'=>10 );
+$results[] = $client->BuildExcerpts($docs12, 'test2', $words12, $opts12 );
+
+// 14 test - differrent setup with dist_threads
+$docs14 = array ( '<head> this match should be removed </head> and this match pass is <p> split as well as this match <p> tail of documnet ', 
+	'<head> this match should be removed </head> and this match pass is <p> split as well as this match <p> tail of documnet ' );
+
+$opts14 = array ( 'limit'=>40, 'limit_words'=>0, 'limit_passages'=>0, 'passage_boundary'=>'paragraph', 'html_strip_mode'=>'index', 'around'=>25
+	, 'query_mode'=>1 );	
+$words14 = 'match | pass';
+$results[] = $client->BuildExcerpts($docs14, 'test3', $words14, $opts14 );	
+
+// 15 test
+$docs15 = array ( 'hex number &#x2116;1 test', 'normal number &#8470;2 test' );
+$opts15 = array ( "html_strip_mode"=>"strip", 'query_mode'=>1 );
+$results[] = $client->BuildExcerpts($docs15, 'test3', 'number', $opts15 );
+
+]]></custom_test>
+
+</test>

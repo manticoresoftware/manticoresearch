@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>quorum</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source test1
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT * FROM test_table where document_id in ( 1, 2 )
+}
+
+index test
+{
+	source	= test1
+	path	= <data_path/>/test
+}
+
+index test_crc
+{
+	source	= test1
+	path	= <data_path/>/crc
+	
+	dict			= crc
+	min_prefix_len	= 1
+}
+
+index test_kw
+{
+	source	= test1
+	path	= <data_path/>/kw
+	
+	dict			= keywords
+	min_prefix_len	= 1
+}
+
+source test2
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT * FROM test_table where document_id in ( 10, 11 )
+}
+
+index crc2
+{
+	source	= test2
+	path	= <data_path/>/crc2
+	
+	dict			= crc
+	min_infix_len	= 3
+}
+index kw2
+{
+	source	= test2
+	path	= <data_path/>/kw2
+	
+	dict			= keywords
+	min_infix_len	= 3
+}
+
+index rt_infix
+{
+	type	 = rt
+	path	= <data_path/>/rt-infix
+
+	dict					= keywords
+	min_infix_len	= 3
+
+	rt_field				= text
+	rt_attr_uint		= idd
+}
+
+source num1
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1 id, 11 idd, 'set up 3.51 from data' text
+}
+
+index num2t
+{
+	source	= num1
+	path	= <data_path/>/num1
+	charset_table	= 0..9, A..Z->a..z, _, a..z
+}
+
+index num1t
+{
+	source	= num1
+	path	= <data_path/>/num2
+	charset_table	= 0..9, A..Z->a..z, _, a..z, U+2E
+}
+
+source test_q1
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1 id, 11 idd, "есть и можешь купить набор" text
+	sql_attr_uint = idd
+}
+
+index test_q1
+{
+	source	= test_q1
+	path	= <data_path/>/test_q1
+	charset_table	= 0..9, A..Z->a..z, _, ., -, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+0401->U+0435, U+0451->U+0435 
+	morphology              = stem_enru
+	min_infix_len           = 1
+	index_exact_words       = 1
+	expand_keywords         = 1
+}
+
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	document_id INT NOT NULL,
+	text VARCHAR(255) NOT NULL
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table ( document_id, text ) VALUES
+( 1, 'hello world' ),
+( 2, 'one two three four five' ),
+( 10, 'al all' ),
+( 11, 'always' );
+</db_insert>
+
+<queries>
+	<query mode="extended2" index="test">"hello heaven"/1</query>
+	<query mode="extended2" index="test">"hello from above"/2</query>
+	<query mode="extended2" index="test">"one two foo bar"/3</query>
+	<query mode="extended2" index="test">"one two two bar"/3</query>
+	<query mode="extended2" index="test">"one two two bar"/2</query>
+	<query mode="extended2" index="test">"two two one three"/3</query>
+	<query mode="extended2" index="test">"two two one foo"/3</query>
+	
+	<!--here is going a couple of regresssion tests-->
+	<query mode="extended2" index="test_crc">"o* t*"/2</query>
+	<query mode="extended2" index="test_kw">"o* t*"/2</query>
+	<query mode="extended2" index="test_crc">"h* w* f*"/2</query>
+	<query mode="extended2" index="test_kw">"h* w* f*"/2</query>
+	
+	<!--here is going regresssion test-->
+	<query mode="extended2" index="test_kw">"one t* three four five"</query>
+	
+	<!--here is going regresssion test-->
+	<query mode="extended2" index="crc2">al*</query>
+	<query mode="extended2" index="crc2">alw*</query>
+	<query mode="extended2" index="kw2">al*</query>
+	<query mode="extended2" index="kw2">alw*</query>
+	<query mode="extended2" index="crc2">al* | alw*</query>
+	<query mode="extended2" index="kw2">al* | alw*</query>
+	<!-- here is precent quorum test -->
+	<query mode="extended2" index="test"> "one world"/0.1 </query>
+	<query mode="extended2" index="test"> "five tree oak one two hive"/0.4 </query>
+	<query mode="extended2" index="test"> "five tree oak one two hive"/0.59 </query>
+	<query mode="extended2" index="test"> "five tree oak one two hive"/0.60 </query>
+</queries>
+
+<sphqueries>
+	<!-- here is going regression crash on delete doc from RT with infix -->
+	<sphinxql>INSERT INTO rt_infix VALUES ( 1, 'dummy word', 11 )</sphinxql>
+	<sphinxql>delete from rt_infix where id=1</sphinxql>
+	<!-- regression float at full-text -->
+	<sphinxql>CALL KEYWORDS ( ' 3.51 ', 'num2t' )</sphinxql>
+	<sphinxql>CALL KEYWORDS ( ' 3.51 ', 'num1t' )</sphinxql>
+	<sphinxql>SELECT * FROM num2t WHERE MATCH ( ' 3.51 ' )</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM num1t WHERE MATCH ( ' 3.51 ' )</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM num2t WHERE MATCH ( ' 3 51 ' )</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM num2t WHERE MATCH ( ' "set of 3.51"/0.7 ' )</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM num1t WHERE MATCH ( ' "set of 3.51"/0.7 ' )</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM num2t WHERE MATCH ( ' "set of 3 51"/0.7 ' )</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM num1t WHERE MATCH ( ' "set of 3 51"/0.7 ' )</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
+
+	<!-- regression duplacates from multiple qpos -->
+	<sphinxql>SELECT id FROM test_q1 WHERE MATCH(' "наборы купить набор"/2 ') ORDER BY ID ASC</sphinxql>
+</sphqueries>
+
+</test>

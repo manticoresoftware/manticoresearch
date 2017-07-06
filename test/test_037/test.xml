@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>rankers</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * FROM test_table WHERE id BETWEEN 1 AND 10
+	sql_query_pre	= SET NAMES utf8
+}
+
+source srctest2 : srctest
+{
+	sql_query		= SELECT * FROM test_table WHERE id BETWEEN 11 AND 20
+}
+
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+	morphology		= stem_ru, stem_en
+	charset_table	= 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F
+}
+
+index test2
+{
+	source			= srctest2
+	path			= <data_path/>/test2
+}
+</config>
+
+<queries>
+<query mode="extended2" index="test" ranker="proximity_bm25">"зимние шины"</query>
+<query mode="extended2" index="test" ranker="bm25">"зимние шины"</query>
+<query mode="extended2" index="test" ranker="none">"зимние шины"</query>
+<query mode="extended2" index="test" ranker="wordcount">"зимние шины"</query>
+<query mode="extended2" index="test" ranker="bm25">@title test</query>
+
+<query mode="extended2" index="test2" ranker="sph04">market street</query>
+</queries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`id` int(11) NOT NULL default '0',
+	`title` varchar(255) NOT NULL default '',
+	`body` varchar(255) NOT NULL default ''
+) CHARACTER SET utf8
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>SET NAMES utf8</db_insert>
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1,  'зимние шины диски чего то тут зимние шины', '' ),
+( 2, 'test doc two', 'second stupid test document with random content' ),
+( 3, 'filler', 'filler' ),
+( 4, 'filler', 'filler' ),
+( 5, 'filler', 'filler' ),
+( 6, 'filler', 'filler' ),
+( 7, 'filler', 'filler' ),
+( 8, 'filler', 'filler' ),
+( 9, 'filler', 'filler' ),
+( 10, 'filler', 'filler' ),
+
+( 11, 'market street', '' ),
+( 12, 'market street west', '' ),
+( 13, 'north market street', '' ),
+( 14, 'farmers market street north', '' ),
+( 15, 'flower street market', '' ),
+( 16, 'market street is so very market street', '' )
+</db_insert>
+
+</test>

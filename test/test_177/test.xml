@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>dict=keywords vs crc collisions</name>
+
+<config>
+indexer
+{
+	mem_limit		= 24M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query			= select * from test_table
+	sql_attr_uint		= gid
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+	dict			= keywords
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	gid INTEGER NOT NULL,
+	title VARCHAR(255) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_insert>INSERT INTO test_table VALUES
+<!-- 2-way collision -->
+( 1, 1, 'hello eisenhower' ),
+( 2, 1, 'got petfood' ),
+
+<!-- 2+1 collision (X, X, X, X+1, X, X order) -->
+( 11, 2, '70_129_148_165' ),
+( 12, 2, 'c27e6' ),
+( 13, 2, '70_129_148_165' ),
+( 14, 2, '2242647928' ),
+( 15, 2, 'c27e6' ),
+( 16, 2, 'c27e6' ),
+
+<!-- 2+1 collision (X, X+1, X order) -->
+( 21, 3, 'r57rm9qgtx4e' ),
+( 22, 3, 'i59oqce31j1i' ),
+( 23, 3, 'wf68itlphvim' ),
+
+<!-- 2+2 collision (X, X, X+1, X+1 order) -->
+( 31, 4, '7mx9432vwcql' ),
+( 32, 4, '7voy0zfvaxva' ),
+( 33, 4, 'h9ws5m4gfju6' ),
+( 34, 4, 'kbnbi9uxnxun' ),
+
+<!-- 2+2 collision (X, X+1, X, X+1 order) -->
+( 41, 5, 'bx7ysl617uih' ),
+( 42, 5, 'veqihmlt2u94' ),
+( 43, 5, 'rbuslwua0rjw' ),
+( 44, 5, 'iil5o9qal9zp' ),
+
+<!-- 4-way collision -->
+( 51, 6, 'b4ps2tkcartn' ),
+( 52, 6, 'ec3bedwxkjap' ),
+( 53, 6, 'hcy80ejxaxy5' ),
+( 54, 6, 'zoplbj4l38ar' ),
+
+<!-- 3+1 collision (X, X, X, X+1 order) -->
+( 61, 7, '47m6max3ldms' ),
+( 62, 7, 'btdgsp6fahbo' ),
+( 63, 7, 'jx9t6gshfdb3' ),
+( 64, 7, '0nqiwe8ap0nt' ),
+
+<!-- 3+1 collision (X+1, X, X, X order) -->
+( 71, 8, 'a4qrs2snufyd' ),
+( 72, 8, 'dnvaj4d6w64n' ),
+( 73, 8, 'r9g3s3ry1snj' ),
+( 74, 8, 'w6w9m94wxwja' )
+</db_insert>
+
+<queries>
+<query mode="extended2">eisenhower</query>
+<query mode="extended2">petfood</query>
+
+<query mode="extended2">70_129_148_165</query>
+<query mode="extended2">c27e6</query>
+<query mode="extended2">2242647928</query>
+
+<query mode="extended2">r57rm9qgtx4e</query>
+<query mode="extended2">i59oqce31j1i</query>
+<query mode="extended2">wf68itlphvim</query>
+
+<query mode="extended2">7mx9432vwcql</query>
+<query mode="extended2">7voy0zfvaxva</query>
+<query mode="extended2">h9ws5m4gfju6</query>
+<query mode="extended2">kbnbi9uxnxun</query>
+
+<query mode="extended2">bx7ysl617uih</query>
+<query mode="extended2">veqihmlt2u94</query>
+<query mode="extended2">rbuslwua0rjw</query>
+<query mode="extended2">iil5o9qal9zp</query>
+
+<query mode="extended2">b4ps2tkcartn</query>
+<query mode="extended2">ec3bedwxkjap</query>
+<query mode="extended2">hcy80ejxaxy5</query>
+<query mode="extended2">zoplbj4l38ar</query>
+
+<query mode="extended2">47m6max3ldms</query>
+<query mode="extended2">btdgsp6fahbo</query>
+<query mode="extended2">jx9t6gshfdb3</query>
+<query mode="extended2">0nqiwe8ap0nt</query>
+
+<query mode="extended2">a4qrs2snufyd</query>
+<query mode="extended2">dnvaj4d6w64n</query>
+<query mode="extended2">r9g3s3ry1snj</query>
+<query mode="extended2">w6w9m94wxwja</query>
+</queries>
+
+</test>

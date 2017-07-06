@@ -1,0 +1,4 @@
+word11-11word11-11 > word11-11word11-11
+word2word2 > word11-11word11-11
+word2word2 word4word4 > word2word2
+word11-11word11-11 word5word5 > word11-11word11-11

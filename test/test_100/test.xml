@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>snippets vs force_all_words</name>
+<config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+source main
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = select 1 as id, 'body' as body;
+}
+
+index test_idx
+{
+	source = main
+	path			= <data_path/>/main
+	docinfo			= extern
+	min_word_len	= 1
+}
+</config>
+
+<custom_test><![CDATA[
+
+$docs = array
+(
+	"this is my test text to be highlighted, and for the sake of the testing we need to pump its length somewhat",
+	"another test text to be highlighted, below limit",
+	"test number three, without phrase match",
+	"final test, not only without phrase match, but also above limit and with swapped phrase text test as well",
+);
+$words = "test text";
+$index = "test_idx";
+$opts = array
+(
+	"before_match"		=> "<b>",
+	"after_match"		=> "</b>",
+	"chunk_separator"	=> " ... ",
+	"around"			=> 3
+);
+
+$results = array();
+
+for ($limit = 4; $limit < 60; ++$limit )
+foreach ( array(0,1) as $exact )
+foreach ( array(0,1) as $force )
+{
+	$opts["exact_phrase"] = $exact;
+	$opts["force_all_words"] = $force;
+	$opts["limit"] = $limit;
+	$rs["opts"]="phrase $exact, force $force, limit $limit";
+	$res = $client->BuildExcerpts ( $docs, $index, $words, $opts );
+	if ( !$res )
+		$rs["result"] = $client->GetLastError();
+	else
+		$rs["result"] = $res;
+	$results[] = $rs;
+}
+
+]]></custom_test>
+
+</test>

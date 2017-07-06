@@ -1,0 +1,206 @@
+<test>
+<name>field position limit vs many hits</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT * FROM test_table
+	sql_attr_uint	= idd
+	sql_file_field	= body
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+	docinfo			= extern
+	
+	html_strip		= 1	
+	index_sp		= 1
+	index_zones		= zone*
+}
+
+source start_end
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT id, body, 1 as idd FROM start_end_table
+	sql_attr_uint	= idd
+	sql_field_string	= body
+}
+
+index start_end
+{
+	source			= start_end
+	path			= <data_path/>/start_end
+	docinfo			= extern
+}
+
+source src_1
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1 as id, 'Footpath' as title, 'Republic of Ireland' as country
+	sql_field_string	= title
+	sql_field_string	= country
+}
+
+index i1
+{
+	source			= src_1
+	path			= <data_path/>/i1
+	docinfo			= extern
+	min_word_len = 1
+	morphology = stem_en
+	index_exact_words = 1
+}
+
+source src_fl
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1 as id, 'we are from here' as title, 'but live there all the time' as body UNION SELECT 2 as id, 'but live there all the time' as title, 'we are from here' as body
+	sql_field_string	= title
+	sql_field_string	= body
+}
+
+index fl
+{
+	source			= src_fl
+	path			= <data_path/>/fl
+	docinfo			= extern
+}
+
+source src_blend
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1 as id, 'dummy1 dummy1 dummy1 dummy1 X-COM' as title, 'dummy1 dummy1, dummy1, dummy1 dummy1 dummy1 valid dummy1 dummy1 dummy1 X-COM, dummy1' as body
+	sql_field_string	= title
+	sql_field_string	= body
+}
+
+index idx_blend_crc
+{
+	source			= src_blend
+	path			= <data_path/>/idx_blend_crc
+	docinfo			= extern
+	
+	morphology		= stem_enru
+	min_prefix_len	= 3
+	enable_star		= 1
+	index_exact_words	= 1
+	blend_mode		= trim_head, trim_tail, trim_both
+	blend_chars 	= +, %, -
+	dict = crc	
+}
+
+index idx_blend_kw
+{
+	source			= src_blend
+	path			= <data_path/>/idx_blend_kw
+	docinfo			= extern
+	
+	morphology		= stem_enru
+	min_prefix_len	= 3
+	enable_star		= 1
+	index_exact_words	= 1
+	blend_mode		= trim_head, trim_tail, trim_both
+	blend_chars 	= +, %, -
+	dict			= keywords
+}
+
+index rt
+{
+	type = rt
+	path			= <data_path/>/rt
+	docinfo = extern
+	rt_mem_limit = 128k
+	rt_attr_uint	= idd
+	rt_field = title
+	rt_field = description
+	dict = keywords
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INT NOT NULL,
+	body VARCHAR(2048) NOT NULL,
+	idd INT NOT NULL
+);
+</db_create>
+<db_create>
+CREATE TABLE start_end_table
+(
+	id INTEGER PRIMARY KEY NOT NULL AUTO_INCREMENT,
+	body VARCHAR(64) NOT NULL
+);
+</db_create>
+
+<db_drop>drop table if exists test_table;</db_drop>
+<db_drop>drop table if exists start_end_table;</db_drop>
+
+<db_insert>insert into test_table values ( 1, 'test_148/doc1.txt', 1 );</db_insert>
+<db_insert>insert into test_table values ( 2, 'test_148/doc2.txt', 2 );</db_insert>
+<db_insert>insert into test_table values ( 3, 'test_148/doc3.txt', 3 );</db_insert>
+
+<sphqueries>
+	<sphinxql>select * from test where match ('ZONE:zoneA dummy')</sphinxql>
+	<sphinxql>select * from test where match ('@body[1024] text')</sphinxql>
+	<sphinxql>select * from test where match ('@body[1024] dummy')</sphinxql>
+	<sphinxql>select * from start_end where match ('@body ABB') group by idd</sphinxql>
+	<sphinxql>select * from start_end where match ('@body ^ABB') group by idd</sphinxql>
+	<sphinxql>select * from start_end where match ('@body ABB$') group by idd</sphinxql>
+	<sphinxql>select * from start_end where match ('@body ^ABB$') group by idd</sphinxql>
+	<!-- regression of field end marker at exact term -->
+	<sphinxql>select * from i1 where match (' "=Republic =of =Ireland" ')</sphinxql>
+	<sphinxql>select * from i1 where match (' "^=Republic =of =Ireland" ')</sphinxql>
+	<sphinxql>select * from i1 where match (' "=Republic =of =Ireland$" ')</sphinxql>
+	<sphinxql>select * from i1 where match (' "^=Republic =of =Ireland$" ')</sphinxql>
+	<sphinxql>select * from i1 where match (' =Footpath$ ')</sphinxql>
+	<sphinxql>select * from i1 where match (' ^=Footpath$ ')</sphinxql>
+	
+	<!-- regression of field limit propagation -->
+	<sphinxql>select * from fl where match (' (@title we) live ')</sphinxql>
+	<sphinxql>select * from fl where match (' (@title we are) (@body live there) from time ')</sphinxql>
+	<sphinxql>select * from fl where match (' are (@body we) from time ')</sphinxql>
+	<sphinxql>select * from fl where match (' are (@body we) from (@title time the) here ')</sphinxql>
+	
+	<!-- regression of field end marker vs blended -->
+	<sphinxql>select * from idx_blend_crc where match (' x-com NEAR/10 valid')</sphinxql>
+	<sphinxql>select * from idx_blend_kw where match (' x-com NEAR/10 valid ')</sphinxql>
+	<sphinxql>CALL SNIPPETS ( 'dummy1 dummy1 valid dummy1 dummy1 dummy1 X-COM, dummy1', 'idx_blend_kw', 'x-com NEAR/10 valid', 1 as query_mode )</sphinxql>
+	
+	<!-- regression of field position limit vs RT index -->
+	<sphinxql>REPLACE INTO rt (id, title, description) VALUES (1, 'This is a simple test', 'This is a longer description of a simple test')</sphinxql>
+	<sphinxql>SELECT id FROM rt WHERE MATCH('@description test')</sphinxql>
+	<sphinxql>SELECT id FROM rt WHERE MATCH('@description[10] test')</sphinxql>
+	
+</sphqueries>
+
+<custom_insert><![CDATA[
+
+for ( $i=0; $i<98; ++$i )
+	mysql_query ( "insert into start_end_table (body) values ('ABB')" );
+mysql_query ( "insert into start_end_table (body) values ('ABB abc ABB')" );
+for ( $i=0; $i<501; ++$i )
+	mysql_query ( "insert into start_end_table (body) values ('ABB')" );
+
+]]></custom_insert>
+
+</test>

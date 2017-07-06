@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>kill-list (part 1)</name>
+
+<requires>
+<non-rt/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src_main
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT * FROM test_table
+}
+
+source src_delta1
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT * FROM test_table WHERE document_id=6
+	sql_query_killlist = SELECT 1
+}
+
+source src_delta2
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT * FROM test_table WHERE document_id=7
+	sql_query_killlist = SELECT 2
+}
+
+source src_delta3
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT * FROM test_table WHERE document_id=8
+	sql_query_killlist = SELECT 3
+}
+
+index idx_main
+{
+	source				= src_main
+	path				= <data_path/>/test_main
+}
+
+index idx_delta1
+{
+	source				= src_delta1
+	path				= <data_path/>/test_delta1
+}
+
+index idx_delta2
+{
+	source				= src_delta2
+	path				= <data_path/>/test_delta2
+}
+
+index idx_delta3
+{
+	source				= src_delta3
+	path				= <data_path/>/test_delta3
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	`document_id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table VALUES 
+( 1, 'test one' ),
+( 2, 'test two' ),
+( 3, 'test three' ),
+( 4, 'test four' ),
+( 5, 'test five' ),
+( 6, 'test delta1' ),
+( 7, 'test delta2' ),
+( 8, 'test delta3' )
+</db_insert>
+
+<queries>
+<query index="idx_main">test</query>
+<query index="idx_main idx_delta1">test</query>
+<query index="idx_main idx_delta2">test</query>
+<query sortmode="extended" sortby="@id DESC" index="idx_main idx_delta3">test</query>
+<query index="idx_main idx_delta1 idx_delta2">test</query>
+<query sortmode="extended" sortby="@id DESC" index="idx_main idx_delta2 idx_delta1">test</query>
+<query index="idx_main idx_delta1 idx_delta2 idx_delta3">test</query>
+<query sortmode="extended" sortby="@id DESC" index="idx_main idx_delta3 idx_delta2 idx_delta1">test</query>
+</queries>
+
+</test>

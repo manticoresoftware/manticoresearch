@@ -1,0 +1,93 @@
+wordchars	a	A
+wordchars	[bc]	[BC]
+wordchars	[de]	[DE]
+wordchars	[f-i]	[F-I]
+wordchars	[j-n]	[J-N]
+wordchars	o	O
+wordchars	[p-s]	[P-S]
+wordchars	[tu]	[TU]
+wordchars	[v-y]	[V-Y]
+wordchars	z	Z
+
+prefixes
+
+flag *A:
+    .		>	RE			# As in enter > reenter
+
+flag *I:
+    .		>	IN			# As in disposed > indisposed
+
+flag *U:
+    .		>	UN			# As in natural > unnatural
+
+suffixes
+
+flag V:
+    E		>	-E,IVE		# As in create > creative
+    [^E]	>	IVE			# As in prevent > preventive
+
+flag *N:
+    E		>	-E,ION		# As in create > creation
+    Y		>	-Y,ICATION	# As in multiply > multiplication
+    [^EY]	>	EN			# As in fall > fallen
+
+flag *X:
+    E		>	-E,IONS		# As in create > creations
+    Y		>	-Y,ICATIONS	# As in multiply > multiplications
+    [^EY]	>	ENS			# As in weak > weakens
+
+flag H:
+    Y		>	-Y,IETH		# As in twenty > twentieth
+    [^Y]	>	TH			# As in hundred > hundredth
+
+flag *Y:
+    Y		>	-Y,ILY		# As in messy > messily
+    [^Y]	>	LY			# As in quick > quickly
+
+flag *G:
+    E		>	-E,ING		# As in file > filing
+    [^E]	>	ING			# As in cross > crossing
+
+flag *J:
+    E		>	-E,INGS		# As in file > filings
+    [^E]	>	INGS		# As in cross > crossings
+
+flag *D:
+    E		>	D			# As in create > created
+    [^AEIOU]Y	>	-Y,IED	# As in imply > implied
+    [^EY]	>	ED			# As in cross > crossed
+    [AEIOU]Y	>	ED		# As in convey > conveyed
+
+flag T:
+    E		>	ST			# As in late > latest
+    [^AEIOU]Y	>	-Y,IEST	# As in dirty > dirtiest
+    [AEIOU]Y	>	EST		# As in gray > grayest
+    [^EY]	>	EST			# As in small > smallest
+
+flag *R:
+    E		>	R			# As in skate > skater
+    [^AEIOU]Y	>	-Y,IER	# As in multiply > multiplier
+    [AEIOU]Y	>	ER		# As in convey > conveyer
+    [^EY]	>	ER			# As in build > builder
+
+flag *Z:
+    E		>	RS			# As in skate > skaters
+    [^AEIOU]Y	>	-Y,IERS	# As in multiply > multipliers
+    [AEIOU]Y	>	ERS		# As in convey > conveyers
+    [^EY]	>	ERS			# As in build > builders
+
+flag *S:
+    [^AEIOU]Y	>	-Y,IES	# As in imply > implies
+    [AEIOU]Y	>	S		# As in convey > conveys
+    [CST]H	>	ES			# As in lash > lashes  (some TH's...)
+    [^CST]H	>	S			# As in cough > coughs
+    [SXZ]	>	ES			# As in fix > fixes
+    [^SXZHY]	>	S		# As in bat > bats
+
+flag *P:
+    [^AEIOU]Y	>	-Y,INESS	# As in cloudy > cloudiness
+    [AEIOU]Y	>	NESS	# As in gray > grayness
+    [^Y]	>	NESS		# As in late > lateness
+
+flag *M:
+    .		>	'S			# As in dog > dog's

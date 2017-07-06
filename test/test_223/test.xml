@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>template index (index type=template)</name>
+<skip_indexer/>
+
+<requires>
+<lemmatizer_base/>
+</requires>
+
+<config>
+
+common
+{
+	lemmatizer_base	= <local>lemmatizer_base</local>
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+# generic template (all default settings)
+index tmpl_generic
+{
+	type			= template
+}
+
+# test with wordforms
+index tmpl_wf
+{
+	type			= template
+	dict			= keywords
+	min_infix_len	= 2
+	blend_chars		= @, .
+	wordforms		= <this_test/>/wordforms.txt
+}
+
+# test with wordworms and index_exact
+index tmpl_wf_exact : tmpl_wf
+{
+	index_exact_words = 1
+}
+
+# test with crc dict
+index tmpl_crc : tmpl_generic
+{
+	dict = crc
+}
+
+# test with crc dict and index_exact_words
+index tmpl_crc_exact : tmpl_crc
+{
+	index_exact_words = 1
+}
+
+# test with lemmatize_all
+index tmpl_lemmatize_all
+{
+	type			= template
+	morphology		= lemmatize_ru_all
+	blend_chars		= @, .
+	wordforms		= <this_test/>/wordforms.txt
+}
+
+# test with lemmatize
+index tmpl_lemmatize : tmpl_lemmatize_all
+{
+	morphology		= lemmatize_ru
+}
+
+# test with lemmatize_all and index_exact_words
+index tmpl_lemmatize_exact : tmpl_lemmatize_all
+{
+	index_exact_words = 1
+	morphology		= stem_en,lemmatize_ru_all
+}
+
+# test prefixed
+index tmpl_prefixed
+{
+	type			= template
+	expand_keywords	= 1
+	min_prefix_len	= 2
+}
+
+# test plain expanded index
+index tmpl_expanded
+{
+	type			= template
+	docinfo			= extern
+	dict			= keywords
+	expand_keywords	= 1
+	min_infix_len	= 2
+}
+
+index wf_multi
+{
+	type		= template
+	wordforms	= <this_test/>/wordforms.txt
+	charset_table = english, 0..9
+	morphology	= lemmatize_en_all
+}
+
+</config>
+
+<metaindex name='META:tmpl'>
+<index>tmpl_generic</index>
+<index>tmpl_wf</index>
+<index>tmpl_wf_exact</index>
+<index>tmpl_crc</index>
+<index>tmpl_crc_exact</index>
+<index>tmpl_lemmatize_all</index>
+<index>tmpl_lemmatize</index>
+<index>tmpl_prefixed</index>
+<index>tmpl_expanded</index>
+<index>tmpl_lemmatize_exact</index>
+</metaindex>
+
+<sphqueries>
+
+<sphinxql>CALL KEYWORDS ( 'Фичин баг', 'META:tmpl' )</sphinxql>
+<sphinxql>CALL KEYWORDS ( '^Фичин баг$', 'META:tmpl' )</sphinxql>
+<sphinxql>CALL KEYWORDS ( '"Фичин баг"', 'META:tmpl' )</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'english text', 'META:tmpl' )</sphinxql>
+<sphinxql>CALL KEYWORDS ( '"english text"', 'META:tmpl' )</sphinxql>
+<sphinxql>CALL SNIPPETS('check vs checking fast path', 'META:tmpl', 'checki*', 1 AS query_mode, 0 AS limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('check vs checking regular path', 'META:tmpl', 'checki*', 1 AS query_mode, 0 AS limit, 1 AS limit_passages )</sphinxql>
+<sphinxql>CALL SNIPPETS('time is dying out like everething else here', 'META:tmpl', 'dying*', 1 AS query_mode, 20 AS limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('time is dying out like everething else here', 'META:tmpl', '*dying', 1 AS query_mode, 20 AS limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('time is dying out like everething else here', 'META:tmpl', '*dying*', 1 AS query_mode, 20 AS limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('time is dying out like everething else here', 'META:tmpl', 'nothing', 1 AS query_mode, 40 AS limit, 1 as allow_empty )</sphinxql>
+<sphinxql>CALL SNIPPETS('time is dying out like everething', 'META:tmpl', 'nothing', 1 AS query_mode, 40 AS limit, 1 as allow_empty  )</sphinxql>
+<sphinxql>CALL SNIPPETS('time is dying out like everething else here', 'META:tmpl', 'nothing', 40 AS limit, 1 as allow_empty  )</sphinxql>
+<sphinxql>CALL SNIPPETS('time is dying out like everething', 'META:tmpl', 'nothing', 40 AS limit, 1 as allow_empty  )</sphinxql>
+
+<!-- multi wordform with many destination tokens vs lemmas-->
+<sphinxql>CALL SNIPPETS('rock music', 'wf_multi', 'rock', 1 AS query_mode, 0 AS limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('rock music', 'wf_multi', 'and', 1 AS query_mode, 0 AS limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('rock music', 'wf_multi', 'roll', 1 AS query_mode, 0 AS limit )</sphinxql>
+<sphinxql>CALL SNIPPETS('trial period', 'wf_multi', 'test', 1 AS query_mode, 0 AS limit )</sphinxql>
+</sphqueries>
+
+</test>

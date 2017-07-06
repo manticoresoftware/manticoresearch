@@ -1,0 +1,3 @@
+Dummy file for automake.
+Should be overwritten after libstemmer_c.tgz is properly extracted.
+The latest should be available at http://snowball.tartarus.org/dist/libstemmer_c.tgz

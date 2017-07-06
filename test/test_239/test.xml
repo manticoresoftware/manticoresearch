@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>reverse scan</name>
+
+<requires>
+<non-rt/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit		= 32M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source test_rs
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+	sql_attr_uint	= attr
+}
+
+index test_rs
+{
+	source			= test_rs
+	path			= <data_path/>/test_rs
+	docinfo = extern
+}
+</config>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	title varchar(255) not null,
+	attr int not null
+);
+</db_create>
+<db_drop>drop table if exists test_table;</db_drop>
+<db_insert>insert into test_table values ( 1, 'asdf asdf asdf', 11 );</db_insert>
+<db_insert>insert into test_table values ( 2, 'asdf', 22 );</db_insert>
+
+<sphqueries>
+<!-- regression crash on reverse_scan -->
+<sphinxql>select * from test_rs option reverse_scan=1</sphinxql>
+<sphinxql>select * from test_rs where attr=22 option reverse_scan=1</sphinxql>
+<sphinxql>select * from test_rs option reverse_scan=1, cutoff=1</sphinxql>
+<sphinxql>select * from test_rs option cutoff=1</sphinxql>
+</sphqueries>
+
+</test>

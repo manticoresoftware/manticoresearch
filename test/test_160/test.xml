@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>snippets vs SPZ</name>
+
+<requires>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1, 'text';
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+
+	html_strip		= 1
+	index_sp		= 1
+	index_zones		= zone*
+	min_infix_len	= 1
+}
+
+index multiform
+{
+	source			= test
+	path			= <data_path/>/multiform
+
+	wordforms		= <this_test/>/multiwordorms.txt
+	min_infix_len	= 1
+}
+
+</config>
+
+<db_insert>select 1;</db_insert>
+
+<custom_test><![CDATA[
+
+$data = array();
+
+// pass 0
+$data[] = 'ZONE:zoneA these';
+$data[] = 'ZONE:zoneB these';
+$data[] = 'ZONE:(zoneA, zoneB) th*';
+$data[] = 'ZONE:(zoneA, zoneB) are';
+$data[] = 'ZONE:zoneZZ a* cool$';
+// pass 5
+$data[] = 'ZONE:zoneZZ to* a*';
+
+
+$results = array();
+$opts = array ( 'passage_boundary'=>'zone', 'limit'=>0 );
+$docs = array('<zoneZZ><zoneA> these words </zoneA><zoneB> and these to </zoneB> are cool </zoneZZ>');
+$pass = 0;
+
+$results[] = '[pass] (query/result=q/r) (fast path=1/0) (query_mode=1/0)';
+
+foreach ( array(0, 1) as $qmode )
+{
+	$opts['query_mode'] = $qmode;
+	foreach ( $data as $q )
+	{
+		$opts['limit_passages'] = 10;
+		$results["[$pass]q"] = $q;
+		$res = $client->BuildExcerpts($docs, 'test', $q, $opts );
+		$results["[$pass]r 0 $qmode"] = ( count($res)>0 ? $res[0] : '');
+		$opts['limit_passages'] = 0;
+		$res = $client->BuildExcerpts($docs, 'test', $q, $opts );
+		$results["[$pass]r 1 $qmode"] = ( count($res)>0 ? $res[0] : '' );
+		$pass += 1;
+	}
+}
+
+$results[] = $client->BuildExcerpts(array('small doc', 'one more'), 'multiform', 'crash on tokenizer from another doc', array ('query_mode'=>0) );
+
+// another regression - zone transformed by stripper in result set
+$opts = array ( 'query_mode'=>1, 'limit_words'=>6 );
+
+$opts['html_strip_mode'] = 'index';
+$res =  $client->BuildExcerpts($docs, 'test', 'these | are',  $opts);
+$res['html_strip_mode'] = $opts['html_strip_mode'];
+$results[] = $res;	
+	
+$opts['html_strip_mode'] = 'strip';
+$res= $client->BuildExcerpts($docs, 'test', 'these | are',  $opts);
+$res['html_strip_mode'] = $opts['html_strip_mode'];
+$results[] = $res;	
+
+$opts['html_strip_mode'] = 'index';
+$opts['passage_boundary'] = 'zone';
+$res =  $client->BuildExcerpts($docs, 'test', 'these | are',  $opts);
+$res['html_strip_mode'] = $opts['html_strip_mode'];
+$res['passage_boundary'] = $opts['passage_boundary'];
+$results[] = $res;	
+	
+$opts['html_strip_mode'] = 'strip';
+$res= $client->BuildExcerpts($docs, 'test', 'these',  $opts);
+$res['html_strip_mode'] = $opts['html_strip_mode'];
+$res['passage_boundary'] = $opts['passage_boundary'];
+$results[] = $res;	
+
+// regression retain vs SPZ
+$docs = array(
+'<zoneZZ><zoneA> these words </zoneA><zoneB> and these to </zoneB> are cool </zoneZZ>',
+'<zoneZZ><zoneA> these words <TR> and these to </zoneA> are cool </zoneZZ>'
+);
+$opts = array ( 'limit'=>0, 'html_strip_mode'=>'retain', 'query_mode'=>1 );
+
+$res =  $client->BuildExcerpts($docs, 'test', 'ZONE:zoneZZ these',  $opts);
+$res['zone'] = 'zoneZZ';
+$results[] = $res;
+
+$res =  $client->BuildExcerpts($docs, 'test', 'ZONE:zoneB these',  $opts);
+$res['zone'] = 'ZoneB';
+$results[] = $res;
+
+$res =  $client->BuildExcerpts($docs, 'test', 'and PARAGRAPH words',  $opts);
+$res['boundary'] = 'paragraph';
+$results[] = $res;
+
+$results[] = $client->BuildExcerpts(array('tokenizer filter crash at lc'), 'multiform', 'crash at lc',
+	array ('query_mode'=>1, 'html_strip_mode'=>'retain', 'limit'=>0) );
+
+$results[] = $client->BuildExcerpts(array('dog dummy! as the house nearby the dog'), 'test', 'the. dog!? as',
+	array ('query_mode'=>1, 'html_strip_mode'=>'retain', 'limit'=>0) );
+	
+// regression SPZ vs passage_boundary
+
+$opts = array ( 'query_mode'=>1, 'allow_empty'=>1 );
+
+$opts['limit'] = 0;
+$res =  $client->BuildExcerpts($docs, 'test', 'ZONE:zoneB these',  $opts);
+$res['ZoneB'] = 'fast-path';
+$results[] = $res;
+
+$opts['limit'] = 30;
+$res =  $client->BuildExcerpts($docs, 'test', 'ZONE:zoneB these',  $opts);
+$res['ZoneB'] = 'old-path';
+$results[] = $res;
+
+$opts['limit'] = 0;
+$res =  $client->BuildExcerpts($docs, 'test', 'and PARAGRAPH words',  $opts);
+$res['PARAGRAPH'] = 'fast-path';
+$results[] = $res;
+
+$opts['limit'] = 30;
+$res =  $client->BuildExcerpts($docs, 'test', 'and PARAGRAPH words',  $opts);
+$res['PARAGRAPH'] = 'old-path';
+$results[] = $res;
+
+// regression fast-path vs passage_boundary
+$opts['limit'] = 0;
+$opts['passage_boundary'] = 'paragraph';
+$res =  $client->BuildExcerpts($docs, 'test', 'and words',  $opts);
+$res['passage_boundary'] = 'paragraph';
+$results[] = $res;
+
+$opts['passage_boundary'] = 'zone';
+$res =  $client->BuildExcerpts($docs, 'test', 'and words',  $opts);
+$res['passage_boundary'] = 'zone';
+$results[] = $res;
+
+	
+// regression head SPZ overgrow + non fast path SPZ
+
+$docs = array ( 'Ultra long stuff is going here then store sales, which were going before of store closes. Same store sales for the quarter increased as ultra long dust was here since univerce was born. ' );
+$results[] = $client->BuildExcerpts ( $docs, 'test', '(store SENTENCE closes)', array ( 'query_mode'=>1, 'passage_boundary'=>'sentence', 'limit'=>90 ) );
+$results[] = $client->BuildExcerpts ( $docs, 'test', '(store SENTENCE closes)', array ( 'query_mode'=>1, 'passage_boundary'=>'sentence', 'limit'=>0 ) );
+
+$docs = array ( 'Ultra long stuff is going here then store sales, which were going before of store closes. Same store sales for the quarter increased as ultra long dust was here since univerce was born. And again store closes as usual ' );
+$results[] = $client->BuildExcerpts ( $docs, 'test', '(store SENTENCE closes)', array ( 'query_mode'=>1, 'passage_boundary'=>'sentence', 'limit'=>90 ) );
+$results[] = $client->BuildExcerpts ( $docs, 'test', '(store SENTENCE closes)', array ( 'query_mode'=>1, 'passage_boundary'=>'sentence', 'limit'=>0 ) );
+
+// regression fast path SPZ vs html_strip_mode = retain
+$docs = array ( 'Ultra long stuff is going here then store sales, which were going before of store closes. Same store sales for the quarter increased as ultra long dust was here since univerce was born. And again store closes as usual ' );
+$results[] = $client->BuildExcerpts ( $docs, 'test', '(store SENTENCE closes)', array ( 'query_mode'=>1, 'html_strip_mode'=>'retain', 'limit'=>0 ) );
+$results[] = $client->BuildExcerpts ( $docs, 'test', '(store PARAGRAPH closes)', array ( 'query_mode'=>1, 'html_strip_mode'=>'retain', 'limit'=>0 ) );
+
+$docs = array ( 'Ultra long stuff is going here then store sales, which were going before of store closes. <p> Same store sales for the quarter increased as ultra long dust was here since univerce was born. <p> And again store closes as usual ' );
+$results[] = $client->BuildExcerpts ( $docs, 'test', '(store SENTENCE closes)', array ( 'query_mode'=>1, 'html_strip_mode'=>'retain', 'limit'=>0 ) );
+$results[] = $client->BuildExcerpts ( $docs, 'test', '(store PARAGRAPH closes)', array ( 'query_mode'=>1, 'html_strip_mode'=>'retain', 'limit'=>0 ) );
+
+
+]]></custom_test>
+
+
+</test>

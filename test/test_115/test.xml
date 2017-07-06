@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>NEAR syntax</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * FROM test_table where id &lt; 100
+}
+
+index idx
+{
+	source			= src
+	path			= <data_path/>/main
+	blend_chars	= U+002D # '-'
+}
+
+source src1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT id, title, 11 as idd FROM test_table where id in (101, 102)
+	sql_attr_uint	= idd
+}
+
+index idx1
+{
+	source			= src1
+	path			= <data_path/>/idx1
+	wordforms		= <this_test/>/wf_multi.txt
+}
+
+source src2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT id, title, 11 as idd FROM test_table where id in (111, 112)
+	sql_attr_uint	= idd
+}
+
+index idx2
+{
+	source			= src2
+	path			= <data_path/>/idx2
+	wordforms		= <this_test/>/wf_multi.txt
+	morphology		= stem_en
+	index_exact_words = 1
+}
+
+</config>
+
+<queries>
+	<query index="idx" mode="extended2">"a b" NEAR/2 "c d"</query>
+	<query index="idx" mode="extended2">"c d" NEAR/2 "a b"</query>
+	<query index="idx" mode="extended2">a b NEAR/2 c d</query>
+	<query index="idx" mode="extended2">a NEAR/2 b NEAR/5 c NEAR/2 d</query>
+	<query index="idx" mode="extended2">a NEAR/3 b NEAR/3 c NEAR/3 d</query>
+	<query index="idx" mode="extended2">a NEAR/3 d NEAR/3 b NEAR/3 c</query>
+	<query index="idx" mode="extended2">(a b c) NEAR/3 d</query>
+	<query index="idx" mode="extended2">burden NEAR/2 (financial share)</query>
+	<query index="idx" mode="extended2">burden NEAR/2 (share financial) </query>
+	<query index="idx" mode="extended2">(share financial) NEAR/2 burden</query>
+	<query index="idx" mode="extended2">(financial share) NEAR/2 burden</query>
+	<query index="idx" mode="extended2">"a b" NEAR/2 "c d" NEAR/2 "f g"</query>
+	<query index="idx" mode="extended2">a NEAR/3 b NEAR/3 c NEAR/3 d</query>
+	<query index="idx" mode="all" >"ARE NEAR"</query>
+	<query index="idx" mode="any" >"ARE NEAR"</query>
+	<query index="idx" mode="phrase" >"ARE NEAR"</query>
+	<query index="idx" mode="extended" >"ARE NEAR"</query>
+	<query index="idx" mode="extended2" >"ARE NEAR"</query>
+	<query index="idx" mode="extended2">five NEAR/3 one</query>
+	<query index="idx" mode="extended2">six NEAR/3 one</query>
+	<query index="idx" mode="extended2">(five|six) NEAR/3 one</query>
+	<query index="idx" mode="extended2">aleph NEAR/2 gimel</query>
+	<query index="idx" mode="extended2">bet NEAR/3 he</query>
+	<query index="idx" mode="extended2">aleph-bet-gimel NEAR/3 he</query>
+</queries>
+
+<sphqueries>
+<sphinxql>select * from idx where match ('aleph NEAR/2 gimel')</sphinxql>
+<sphinxql>select * from idx where match ('bet NEAR/3 he')</sphinxql>
+<sphinxql>select * from idx where match ('bet NEAR/2 he')</sphinxql>
+<sphinxql>select * from idx where match ('aleph-bet-gimel NEAR/4 he')</sphinxql>
+<sphinxql>select * from idx where match ('aleph-bet-gimel NEAR/3 he')</sphinxql>
+<sphinxql>call snippets ('aleph-bet-gimel dalet he wav zajin het', 'idx', 'gimel NEAR/2 he', 1 as query_mode)</sphinxql>
+<sphinxql>call snippets ('aleph-bet-gimel dalet he wav zajin het', 'idx', 'bet NEAR/3 he', 1 as query_mode)</sphinxql>
+<sphinxql>call snippets ('aleph-bet-gimel dalet he wav zajin het', 'idx', 'aleph NEAR/2 gimel', 1 as query_mode)</sphinxql>
+<sphinxql>CALL SNIPPETS ('U.S.S.S.B s s s s today s s s s s tomorrow', 'idx', 'B NEAR/7 today', 1 as query_mode)</sphinxql>
+<sphinxql>CALL SNIPPETS ('U.S.S.S.A s s s s today s s s s s tomorrow', 'idx', 'A NEAR/7 today', 1 as query_mode)</sphinxql>
+<sphinxql>select * from idx where match ('oy NEAR/1 vey') and id>=22</sphinxql>
+<sphinxql>select * from idx where match ('x NEAR/2 x') and id=3</sphinxql>
+<sphinxql>select * from idx where match ('x NEAR/2 x NEAR/2 x') and id=9</sphinxql>
+
+<sphinxql>select * from idx where match ('\' &lt;abc&gt;')</sphinxql>
+
+<!-- regression multi wordform with NEAR -->
+
+<sphinxql>set profiling = 1</sphinxql>
+<sphinxql>select * from idx1 where match (' hello test NEAR/10 world ') order by id asc</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+
+<sphinxql>select * from idx2 where match (' apple ') order by id asc</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from idx2 where match (' apples ') order by id asc</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+
+</sphqueries>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
+	title VARCHAR(16384) NOT NULL
+);
+</db_create>
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 'a b c d' ),
+( 2, 'a x b c d' ),
+( 3, 'a x x b c d' ),
+( 4, 'a b x c d'), 
+( 5, 'a b x x c d' ),
+( 6, 'a b x x x c d' ),
+( 7, 'a b x x x x c d' ),
+( 8, 'a x b x x x x c x d' ),
+( 9, 'a x x b x x x c x x d' ),
+
+( 10, 'c d x x x x a b' ),
+( 11, 'c d x x x a b' ),
+( 12, 'c d x x a b' ),
+( 13, 'c d x a b' ),
+( 14, 'c d a b' ),
+
+( 15, '... is the clearinghouse associated with such exchange. In general, clearinghouses are backed by the corporate members of the clearinghouse who are required to share any financial burden resulting from the non-performance by one of their members and, as such, should significantly reduce this credit risk. In cases where the clearinghouse... is the clearinghouse associated with such exchange. In general, clearinghouses are backed by the corporate members of the clearinghouse who are required to share any financial burden resulting from the non-performance by one of their members and, as such, should significantly reduce this credit risk. In cases where the clearinghouse... be able to meet its obligations to a Trading Company. The counterparty for futures contracts traded in the United States and on most foreign exchanges is the clearinghouse associated with such exchange. In general, clearinghouses are backed by the corporate members of the clearinghouse who are required to share any financial...' ),
+( 16, 'one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteena' ),
+( 17, 'aleph-bet-gimel dalet he wav zajin het' ),
+
+( 20, 'ein oy vey' ),
+( 21, CONCAT('zwei ',REPEAT('oy vey ho ho ho ',1024)) ),
+( 22, 'oy vey drei' ),
+
+( 101, 'hello test world' ),
+( 102, 'hello test very large world' ),
+
+( 111, 'apple' ),
+( 112, 'apples' )
+
+</db_insert>
+<db_drop>DROP TABLE IF EXISTS test_table</db_drop>
+
+</test>

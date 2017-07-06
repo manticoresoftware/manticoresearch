@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>overrides</name>
+
+<requires>
+<non-rt/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT id, gid, body FROM test_table
+	sql_attr_uint	= gid
+}
+
+index test1
+{
+	source			= srctest
+	path			= <data_path/>/test1
+
+}
+</config>
+
+<db_create>
+CREATE TABLE `test_table` (
+  `id` int(11) NOT NULL default '0',
+  `gid` int(11) NOT NULL default '0',
+  `body` varchar(255) NOT NULL default ''
+)
+</db_create>
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 10, 'test' ),
+( 2, 20, 'test' ),
+( 3, 30, 'test' ),
+( 4, 40, 'test' ),
+( 5, 50, 'test' )
+</db_insert>
+
+<custom_test>
+$client->SetOverride ( "gid", SPH_ATTR_INTEGER, array ( 1=>123, 3=>15 ) );
+$client->SetSortMode ( SPH_SORT_ATTR_DESC, "gid" );
+$res = $client->Query ( "test", "test1" );
+if ( $res )
+{
+	unset ( $res["time"] );
+	$results = array ( $res );
+} else
+	$results = array ( $client->GetLastError() );
+</custom_test>
+</test>

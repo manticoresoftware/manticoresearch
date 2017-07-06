@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>merge vs basic main/delta</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srcmain
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT document_id, body, body sbody FROM test_table WHERE document_id in (1,2,11,12,13)
+	sql_attr_string	= sbody
+}
+
+source srcdelta
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT document_id, body, body sbody FROM test_table WHERE document_id in (3,4,14,15,16)
+	sql_attr_string	= sbody
+}
+
+index main
+{
+	source			= srcmain
+	path			= <data_path/>/main
+}
+
+index delta
+{
+	source			= srcdelta
+	path			= <data_path/>/delta
+}
+
+index main_kw
+{
+	source			= srcmain
+	path			= <data_path/>/main_kw
+	dict				= keywords
+	min_infix_len = 3
+}
+
+index delta_kw
+{
+	source			= srcdelta
+	path			= <data_path/>/delta_kw
+	dict				= keywords
+	min_infix_len = 3
+}
+
+</config>
+
+<indexer>
+<run>--merge main delta</run>
+<run>--merge main_kw delta_kw</run>
+</indexer>
+
+<queries>
+<query index="main">main1</query>
+<query index="main">main2</query>
+<query index="main">delta1</query>
+<query index="main">delta2</query>
+<query index="main">gamma0</query>
+<query index="main">aaa</query>
+<query index="main">xxx</query>
+<query index="main">yyy</query>
+<query index="main">zzz</query>
+
+<!-- regression that indexer crashes on merging indexes dict=keywords with infixes enabled -->
+<query index="main_kw">*lta*</query>
+</queries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 'main1' ),
+( 2, 'main2' ),
+( 3, 'delta1' ),
+( 4, 'delta2' ),
+( 11, 'xxx yyy zzz aaa' ),
+( 12, 'xxx aaa yyy' ),
+( 13, 'zzz' ),
+( 14, 'zzz' ),
+( 15, 'xxx aaa yyy' ),
+( 16, 'xxx aaa' )
+</db_insert>
+
+</test>

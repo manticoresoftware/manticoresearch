@@ -1,0 +1,28 @@
+Microsoft Visual Studio Solution File, Format Version 9.00
+# Visual Studio 2005
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test", "test.vcproj", "{AE8DBF77-DE4F-41E4-96F9-456D8DA6418C}"
+	ProjectSection(ProjectDependencies) = postProject
+		{E0393ED6-FE6B-4803-8BFD-9D79EF21603A} = {E0393ED6-FE6B-4803-8BFD-9D79EF21603A}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libsphinxclient", "libsphinxclient.vcproj", "{E0393ED6-FE6B-4803-8BFD-9D79EF21603A}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{AE8DBF77-DE4F-41E4-96F9-456D8DA6418C}.Debug|Win32.ActiveCfg = Debug|Win32
+		{AE8DBF77-DE4F-41E4-96F9-456D8DA6418C}.Debug|Win32.Build.0 = Debug|Win32
+		{AE8DBF77-DE4F-41E4-96F9-456D8DA6418C}.Release|Win32.ActiveCfg = Release|Win32
+		{AE8DBF77-DE4F-41E4-96F9-456D8DA6418C}.Release|Win32.Build.0 = Release|Win32
+		{E0393ED6-FE6B-4803-8BFD-9D79EF21603A}.Debug|Win32.ActiveCfg = Debug|Win32
+		{E0393ED6-FE6B-4803-8BFD-9D79EF21603A}.Debug|Win32.Build.0 = Debug|Win32
+		{E0393ED6-FE6B-4803-8BFD-9D79EF21603A}.Release|Win32.ActiveCfg = Release|Win32
+		{E0393ED6-FE6B-4803-8BFD-9D79EF21603A}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>filter</name>
+
+<config>
+indexer
+{
+	mem_limit = 128M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source fullscan
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = select id, value as a1, value as a2, value as a3, id as b1, id as b2, id as b3, text, mva, j, gid, tag, s1 as s1raw, CRC32(s1) as s1folded from fullscan
+	sql_attr_uint = a1
+	sql_attr_uint = a2
+	sql_attr_uint = a3
+	sql_attr_uint = b1
+	sql_attr_uint = b2
+	sql_attr_uint = b3
+	sql_attr_multi = uint mva from field
+	sql_attr_json	= j
+	sql_attr_uint = gid
+	sql_attr_uint = tag
+	sql_attr_string = s1raw
+	sql_attr_uint = s1folded
+}
+
+index fullscan
+{
+	source	= fullscan
+	path	= <local>data</local>/filter
+	docinfo	= extern
+}
+</config>
+
+<sphqueries>
+<!-- filter vs expr, attr vs json -->
+<sphinxql>select id from fullscan where gid=1 OPTION comment = 'filter attr'</sphinxql>
+<sphinxql>select id from fullscan where j.gid=1 OPTION comment = 'filter json'</sphinxql>
+<sphinxql>select id, gid=1 as cnd from fullscan where cnd=1 OPTION comment = 'expr attr'</sphinxql>
+<sphinxql>select id, j.gid=1 as cnd from fullscan where cnd=1 OPTION comment = 'expr json'</sphinxql>
+
+<!-- 2x filter vs expr, attr vs json -->
+<sphinxql>select id from fullscan where gid=100 and tag=761 OPTION comment = '2x filter attr'</sphinxql>
+<sphinxql>select id from fullscan where j.gid=100 and j.tag=761 OPTION comment = '2x filter json'</sphinxql>
+<sphinxql>select id, gid=1 and tag=761 as cnd from fullscan where cnd=1 OPTION comment = '2x expr attr'</sphinxql>
+<sphinxql>select id, j.gid=100 and j.tag=761 as cnd from fullscan where cnd=1 OPTION comment = '2x expr json'</sphinxql>
+
+<!-- filter json.string vs crc32 -->
+<sphinxql>select id from fullscan where s1folded=2212294583 OPTION comment = 'crc32 filter'</sphinxql>
+<sphinxql>select id from fullscan where j.s1='1' OPTION comment = 'str filter'</sphinxql>
+
+<!-- mva not using block filter so no difference vs filter and expression -->
+<sphinxql>select id from fullscan where mva in ( 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20)  OPTION comment = 'filter mva10'</sphinxql>
+<sphinxql>select id, in ( mva, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20) as cnd  from fullscan where cnd=1 OPTION comment = 'expr mva10'</sphinxql>
+<!-- expression uses sort but filter uses uniq so duplicates matter -->
+<sphinxql>select id from fullscan where mva in ( 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20 )  OPTION comment = 'filter mva10 dupes'</sphinxql>
+<sphinxql>select id, in ( mva,  10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20 ) as cnd  from fullscan where cnd=1 OPTION comment = 'expr mva10 dupes'</sphinxql>
+
+</sphqueries>
+
+</test>

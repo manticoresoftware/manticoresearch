@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>64 docids: signed vs unsigned</name>
+
+<skip_indexer/>
+<requires>
+	<id64/>
+	<force-rt/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+index test
+{
+	type = rt
+	path = <data_path/>/test
+	rt_field = title
+	rt_attr_uint = tag
+}
+</config>
+
+<sphqueries>
+<sphinxql>SELECT * FROM test</sphinxql>
+<sphinxql>INSERT INTO test VALUES(10400000001000000011,'a',1)</sphinxql>
+<sphinxql>INSERT INTO test VALUES(10400000001000000012,'b',2)</sphinxql>
+<sphinxql>INSERT INTO test VALUES(10400000001000000013,'c',3)</sphinxql>
+<sphinxql>INSERT INTO test VALUES(10400000001000000014,'d',4)</sphinxql>
+<sphinxql>INSERT INTO test VALUES(10400000001000000015,'e',5)</sphinxql>
+<sphinxql>SELECT * FROM test</sphinxql>
+<sphinxql>SELECT * FROM test WHERE id&gt;10400000001000000013</sphinxql>
+<sphinxql>SELECT * FROM test WHERE id&gt;=10400000001000000014</sphinxql>
+<sphinxql>SELECT * FROM test WHERE id&lt;10400000001000000014</sphinxql>
+<sphinxql>SELECT * FROM test WHERE id&lt;=10400000001000000013</sphinxql>
+<sphinxql>SELECT * FROM test WHERE id=10400000001000000011</sphinxql>
+<sphinxql>SELECT * FROM test WHERE id in (10400000001000000011,10400000001000000013, 10400000001000000015)</sphinxql>
+<sphinxql>UPDATE test SET tag=11 WHERE id=10400000001000000011</sphinxql>
+<sphinxql>UPDATE test SET tag=33 WHERE id=10400000001000000013</sphinxql>
+<sphinxql>UPDATE test SET tag=55 WHERE id=10400000001000000015</sphinxql>
+<sphinxql>UPDATE test SET tag=999 WHERE id in (10400000001000000012,10400000001000000014)</sphinxql>
+<sphinxql>SELECT * FROM test</sphinxql>
+<sphinxql>DELETE FROM test WHERE id in (10400000001000000012,10400000001000000014)</sphinxql>
+<sphinxql>SELECT * FROM test</sphinxql>
+<sphinxql>DELETE FROM test WHERE id=10400000001000000013</sphinxql>
+<sphinxql>SELECT * FROM test</sphinxql>
+</sphqueries>
+
+</test>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_workspace_file>
+	<Workspace title="Sphinx">
+		<Project filename="codeblocks/libsphinx.cbp" />
+		<Project filename="codeblocks/indexer.cbp">
+			<Depends filename="codeblocks/libsphinx.cbp" />
+		</Project>
+		<Project filename="codeblocks/indextool.cbp">
+			<Depends filename="codeblocks/libsphinx.cbp" />
+		</Project>
+		<Project filename="codeblocks/searchd.cbp">
+			<Depends filename="codeblocks/libsphinx.cbp" />
+		</Project>
+		<Project filename="codeblocks/spelldump.cbp">
+			<Depends filename="codeblocks/libsphinx.cbp" />
+		</Project>
+		<Project filename="codeblocks/tests.cbp">
+			<Depends filename="codeblocks/libsphinx.cbp" />
+		</Project>
+		<Project filename="codeblocks/testrt.cbp">
+			<Depends filename="codeblocks/libsphinx.cbp" />
+		</Project>
+	</Workspace>
+</CodeBlocks_workspace_file>

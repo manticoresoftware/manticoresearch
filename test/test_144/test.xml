@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>query vs stack overflow</name>
+
+<skip_indexer/>
+<config>
+searchd
+{
+	<searchd_settings/>
+	workers	= threads
+	thread_stack = 320K
+	binlog_path =
+}
+
+index test
+{
+	type	= rt
+	path	= <data_path/>/test
+	
+	rt_field		= text
+	rt_attr_uint	= idd
+	
+	rt_mem_limit = 16M
+}
+
+</config>
+
+<db_create>
+CREATE TABLE `test`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`text` varchar(25) NOT NULL default '',
+	`idd` int(11) NOT NULL default '0'
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test`
+</db_drop>
+
+<custom_test><![CDATA[
+
+global $sd_address, $sd_sphinxql_port;
+
+$results = array();
+$sockStr = "$sd_address:$sd_sphinxql_port";
+if ($sd_address == "localhost")
+	$sockStr = "127.0.0.1:$sd_sphinxql_port";
+$sock = @mysql_connect ($sockStr,'','',	true );
+
+if ( $sock === false )
+{
+	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+	return;
+}
+
+$query = "INSERT INTO test VALUES (1, 'word1 word10', 1 )";
+$results[] = $query;
+$res = mysql_query ( $query, $sock );
+if ($res===true)
+	$results[] = "total affected ".mysql_affected_rows($sock);
+else if ($res===false)
+	$results[] = "error ".@mysql_errno($sock)." : ".@mysql_error ($sock);
+else
+	$results[] = "total found ".mysql_num_rows ($res);
+	
+$match = '"word1 word2"~30 ';
+for ( $i=3; $i<520; $i++ )
+	$match = $match . ' | "word' . $i . ' word' . ( $i+1 ) . '"~30 ';
+
+$query = "SELECT * FROM test WHERE MATCH('$match')";
+$results[] = $query;
+$res = mysql_query ( $query, $sock );
+if ($res===true)
+	$results[] = "total affected ".mysql_affected_rows($sock);
+else if ($res===false)
+	$results[] = "error ".@mysql_errno($sock)." : ".@mysql_error ($sock);
+else
+	$results[] = "total found ".mysql_num_rows ($res);
+
+// regression ext query crash on snippet generation
+$match = 'fast ';
+for ( $i=1; $i<1520; $i++ )
+        $match = $match . " | ( word word$i )";
+
+$query = "CALL SNIPPETS ( 'fast path word word1000', 'test', '$match', 1 as query_mode, 0 as limit )";
+$results[] = 'snippets fast-path ext query stack overflow';
+$res = mysql_query ( $query, $sock );
+if ($res===true)
+        $results[] = "total affected ".mysql_affected_rows($sock);
+else if ($res===false)
+        $results[] = "error ".@mysql_errno($sock)." : ".@mysql_error ($sock);
+else
+{
+        while ($row = @mysql_fetch_array($res, MYSQL_ASSOC))
+        {
+                $foo = array();
+                foreach ($row as $key => $value)
+                        $foo[$key] = $value;
+                $results[] = $foo;
+        }
+}
+
+$query = "CALL SNIPPETS ( 'not a fast path is going here word word1000 and might be others', 'test', '$match', 1 as query_mode, 40 as limit )";
+$results[] = 'snippets ext query stack overflow';
+$res = mysql_query ( $query, $sock );
+if ($res===true)
+        $results[] = "total affected ".mysql_affected_rows($sock);
+else if ($res===false)
+        $results[] = "error ".@mysql_errno($sock)." : ".@mysql_error ($sock);
+else
+{
+        while ($row = @mysql_fetch_array($res, MYSQL_ASSOC))
+        {
+                $foo = array();
+                foreach ($row as $key => $value)
+                        $foo[$key] = $value;
+                $results[] = $foo;
+        }
+}
+	
+]]></custom_test>
+
+</test>

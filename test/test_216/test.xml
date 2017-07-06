@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>n best group by</name>
+<config>
+indexer
+{
+	mem_limit			= 28M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers					= threads
+}
+
+source src_full
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT id, tag, gr, text FROM test_table WHERE id&gt;=$start AND id&lt;=$end
+	sql_query_range = select 1, 20
+	sql_query_pre = SET NAMES UTF8
+	sql_attr_uint	= tag
+	sql_attr_uint	= gr
+}
+
+source src_half1 : src_full
+{
+	sql_query_range = select 1, 10
+}
+
+source src_half2 : src_full
+{
+	sql_query_range = select 11, 20
+}
+
+index rt_full
+{
+	type 			= rt
+	path                    = <data_path/>/rt_full
+	rt_field 		= text
+	rt_attr_uint 		= tag
+	rt_attr_uint 		= gr
+}
+index idx_full
+{
+	source			= src_full
+	path			= <data_path/>/idx_full
+	docinfo			= extern
+}
+
+index idx_half1 : idx_full
+{
+	source			= src_half1
+	path			= <data_path/>/idx_half1
+}
+
+index idx_half2 : idx_full
+{
+	source			= src_half2
+	path			= <data_path/>/idx_half2
+}
+
+index idx_ag1 : idx_half1
+{
+	path			= <data_path/>/idx_ag1
+}
+
+index idx_ag2 : idx_half2
+{
+	path			= <data_path/>/idx_ag2
+}
+
+index idx_local
+{
+	type					= distributed
+	local					= idx_half1
+	local					= idx_half2
+}
+
+index idx_combined
+{
+	type					= distributed
+	local					= idx_half1
+	agent					= <my_address/>:idx_ag2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index idx_remote
+{
+	type					= distributed
+	agent					= <my_address/>:idx_ag1
+	agent					= <my_address/>:idx_ag2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+</config>
+
+<!-- name made especially non-regular to avoid syntax messing with usual indexes -->
+<metaindex name='META:multi'>
+	<index>rt_full</index>
+	<index>idx_full</index>
+	<index>idx_local</index>
+	<index>idx_combined</index>
+	<index>idx_remote</index>
+</metaindex>
+
+<sphqueries>
+<!-- First, just show all the indexes -->
+<sphinxql>
+INSERT INTO `rt_full`(id,gr,tag,text) VALUES
+( 1, 102, 9, 'test'), ( 2, 102, 18, 'test'), ( 3, 103, 7, 'test'), ( 4, 103, 16, 'test'), ( 5, 104, 5, 'test'),
+( 6, 104, 14, 'test'), ( 7, 105, 3, 'test'), ( 8, 105, 12, 'test'), ( 9, 105, 1, 'test'), ( 10, 105, 10, 'test'),
+( 11, 102, 29, 'test'), ( 12, 102, 8, 'test'), ( 13, 103, 27, 'test'), ( 14, 103, 6, 'test'), ( 15, 104, 25, 'test'),
+( 16, 104, 4, 'test'), ( 17, 105, 23, 'test'), ( 18, 105, 2, 'test'), ( 19, 105, 21, 'test'), ( 20, 105, 0, 'test')
+
+</sphinxql>
+<sphinxql>select * from META:multi</sphinxql>
+
+<!-- Check the aggretage on different kind of dist indexes -->
+<sphinxql>select id, gr, <variants v1='sum(tag)' v2='avg(tag)' v3='min(tag)' v4='max(tag)'/> as t from META:multi where match ('test') group<variants v1='' v2='2' v3='4' v4='8'/> by gr<variants v1='' v2='within group order by tag asc' v3='within group order by tag desc' /></sphinxql>
+
+</sphqueries>
+
+<db_create>
+CREATE TABLE `test_table` (
+  `id` int(11),
+  `gr` int(11),
+  `tag` int(11),
+  `text` varchar(255) NOT NULL
+)
+</db_create>
+
+
+ <db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+
+<db_insert>SET NAMES utf8</db_insert>
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 102, 9, 'test'), ( 2, 102, 18, 'test'), ( 3, 103, 7, 'test'), ( 4, 103, 16, 'test'), ( 5, 104, 5, 'test'),
+( 6, 104, 14, 'test'), ( 7, 105, 3, 'test'), ( 8, 105, 12, 'test'), ( 9, 105, 1, 'test'), ( 10, 105, 10, 'test'),
+( 11, 102, 29, 'test'), ( 12, 102, 8, 'test'), ( 13, 103, 27, 'test'), ( 14, 103, 6, 'test'), ( 15, 104, 25, 'test'),
+( 16, 104, 4, 'test'), ( 17, 105, 23, 'test'), ( 18, 105, 2, 'test'), ( 19, 105, 21, 'test'), ( 20, 105, 0, 'test')
+</db_insert>
+
+</test>

@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>phrase matching vs duplicate keywords</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT document_id, body FROM test_table
+}
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+	charset_table	= 0..9, A..Z->a..z, _, a..z
+	ngram_chars		= U+410..U+42F->U+430..U+44F, U+430..U+44F
+	ngram_len 		= 1
+	stopwords		= <this_test/>/stops.txt
+}
+</config>
+
+<queries>
+<query mode="phrase">bar baz bar</query>
+<query mode="phrase">foo bar baz bar</query>
+<query mode="phrase">i did it</query>
+<query mode="phrase">zee lord of zee rings</query>
+<query mode="extended2">"bar baz bar"</query>
+<query mode="extended2">"foo bar baz bar"</query>
+<query mode="extended2">"i did it"</query>
+<query mode="extended2">"zee lord of zee rings"</query>
+<query mode="extended2">Braun 370\-2 3702 370 2 Braun Series 3 370 Shaver</query>
+</queries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 111, 'lets test foo bar baz bar stuff' ),
+( 222, 'bar baz foo' ),
+( 333, 'foo baz bar' ),
+( 444, 'i i did it it' ),
+( 555, 'zee lord of zee rings' ),
+( 666, 'Braun 370-2 3702 370 2 Braun Series 3 - 370 Shaver')
+</db_insert>
+
+</test>

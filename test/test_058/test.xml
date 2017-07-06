@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>rotation</name>
+
+<requires>
+<non-rt/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	expansion_limit = 2
+	seamless_rotate = 0
+	<dynamic>
+		<variant>
+			seamless_rotate = 0
+			workers = none
+		</variant>
+		<variant>
+			seamless_rotate = 0
+			workers = threads
+			binlog_path =
+		</variant>
+		<variant>
+			workers = threads
+			binlog_path =
+			preopen_indexes = 1
+			seamless_rotate = 0
+		</variant>
+		<variant>
+			workers = threads
+			binlog_path =
+			preopen_indexes = 1
+			seamless_rotate = 1
+		</variant>
+	</dynamic>
+}
+
+source sql
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = select id, text from test_table where mode = (select mode from test_table where id = 1000);
+}
+
+index index
+{
+	source = sql
+	path = <data_path/>/index
+}
+
+source locs
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = select id, text from test_table;
+}
+
+index loc1
+{
+	source = locs
+	path = <data_path/>/loc1
+}
+
+index loc2
+{
+	source = locs
+	path = <data_path/>/loc2
+}
+
+index loc3
+{
+	source = locs
+	path = <data_path/>/loc3
+}
+
+source src_expand
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = select 1, 'as' text UNION select 2, 'ask as' text UNION select 3, 'all' text UNION select 4, 'after ask' text
+}
+
+index expand
+{
+	source = src_expand
+	path = <data_path/>/expand
+	dict = keywords
+	min_prefix_len = 1
+}
+
+source src_attrs
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = select id, text, mode from test_table where mode=1;
+	sql_attr_uint = mode
+}
+
+index i_attrs
+{
+	source = src_attrs
+	path = <data_path/>/attrs
+}
+</config>
+
+<db_drop>drop table if exists test_table</db_drop>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	text varchar(255) not null,
+	mode int
+);
+</db_create>
+
+<db_insert>
+insert into test_table values
+( 1, 'first',  1 ),
+( 2, 'second', 1 ),
+( 3, 'third',  1 ),
+( 4, 'fourth', 1 ),
+( 5, 'fifth',  1 ),
+ 
+( 1, 'one',    2 ),
+( 2, 'two',    2 ),
+( 3, 'three',  2 ),
+
+( 1000, '', 1 );
+</db_insert>
+
+<custom_test><![CDATA[
+
+$query = create_function('$client,$words','
+$result = $client->Query ( $words, "index" );	if ( $result ) { unset ( $result["time"] ); return $result; } else return $client->GetLastError();
+');
+
+$mquery = create_function('$client','
+$client->AddQuery ( "second", "loc1" );
+$client->AddQuery ( "fifth", "loc2" );
+$client->AddQuery ( "third", "loc3" );
+	
+$res = $client->RunQueries ();
+if ( !$res )
+	return $client->GetLastError();
+	
+$result = array ();
+for ( $i=0; $i<count($res); $i++ ) 
+{
+	unset ( $res[$i]["time"] );
+	$result[] = $res[$i];
+}
+return $result;
+');
+
+$q1 = create_function('$client,$words,$index','
+$result = $client->Query ( $words, $index );	if ( $result ) { unset ( $result["time"] ); return $result; } else return $client->GetLastError();
+');
+
+$results = array();
+$errors = '';
+
+$results[] = $query ( $client, 'first' );
+$results[] = $query ( $client, 'one' );
+$results[] = $mquery ( $client );
+$results[] = $q1 ( $client, 'a*', 'expand' );
+
+mysql_query ( 'update test_table set mode = 3 where id = 1000' );
+RunIndexer ( $errors, '--all --rotate' );
+sleep(2);
+
+$results[] = $query ( $client, 'first' );
+$results[] = $query ( $client, 'one' );
+$results[] = $mquery ( $client );
+
+mysql_query ( 'update test_table set mode = 2 where id = 1000' );
+RunIndexer ( $errors, '--all --rotate' );
+sleep(2);
+
+$results[] = $query ( $client, 'first' );
+$results[] = $query ( $client, 'one' );
+$results[] = $mquery ( $client );
+$results[] = $q1 ( $client, 'a*', 'expand' );
+
+// regression keep-attrs vs rotate
+$results[] = $client->UpdateAttributes ( 'i_attrs', array('mode'), array(1=>array(10),3=>array(11)) );
+$results[] = $q1 ( $client, '', 'i_attrs' );
+$results[] = 'updated flush tag - ' . $client->FlushAttributes();
+RunIndexer ( $errors, 'i_attrs --rotate --keep-attrs' );
+sleep(2);
+$results[] = $q1 ( $client, '', 'i_attrs' );
+
+]]></custom_test>
+
+</test>

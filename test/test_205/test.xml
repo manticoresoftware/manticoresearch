@@ -1,0 +1,174 @@
+<test>
+<name>idf=plain vs distributed</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source src_base
+{
+	type = mysql
+	<sql_settings/>
+}
+
+source src_1 : src_base
+{
+	sql_query = SELECT * FROM test_table WHERE gid=1
+	sql_attr_uint = gid
+}
+
+source src_2 : src_1
+{
+	sql_query = SELECT * FROM test_table WHERE gid=2
+	sql_attr_uint = gid
+}
+
+index i1
+{
+	source			= src_1
+	path			= <data_path/>/i1
+	docinfo			= extern
+	
+}
+
+index i2
+{
+	source			= src_2
+	path			= <data_path/>/i2
+	docinfo			= extern
+	
+}
+
+index dd
+{
+	type			= distributed
+	agent			= <my_address/>:i1
+	agent			= <my_address/>:i2
+}
+
+
+source src_kw : src_1
+{
+	sql_query = SELECT 1 as idd, 11 as gid, 'test starts here' as text UNION SELECT 2 as idd, 11 as gid, 'the text from hox' as text UNION SELECT 3 as idd, 11 as gid, 'from moon to fox' as text UNION SELECT 4 as idd, 11 as gid, 'fox from the box' as text UNION SELECT 5 as idd, 11 as gid, 'home no here' as text
+	sql_attr_uint = gid
+}
+
+index kw
+{
+	source			= src_kw
+	path			= <data_path/>/kw
+	docinfo			= extern
+	min_prefix_len = 1
+	dict = keywords
+}
+
+source src_l1 : src_base
+{
+	sql_query = SELECT * FROM test_table WHERE gid=3
+	sql_attr_uint = gid
+}
+
+source src_l2 : src_1
+{
+	sql_query = SELECT * FROM test_table WHERE gid=4
+	sql_attr_uint = gid
+}
+
+index l1
+{
+	source			= src_l1
+	path			= <data_path/>/l1
+	docinfo			= extern
+}
+
+index l2
+{
+	source			= src_l2
+	path			= <data_path/>/l2
+	docinfo			= extern
+}
+
+index dl
+{
+	type			= distributed
+	agent			= <my_address/>:l1,l2
+}
+
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INT NOT NULL,
+	gid INT NOT NULL,
+	text VARCHAR(255) NOT NULL DEFAULT ''
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table VALUES
+( 1, 1, 'da one' ),
+( 2, 1, 'da two' ),
+( 3, 1, 'da three' ),
+
+( 11, 2, 'da blow' ),
+( 12, 2, 'da pills' ),
+( 13, 2, 'da yak' ),
+( 14, 2, 'da herb' ),
+( 15, 2, 'da blow' ),
+
+( 100, 3, 'da blow' ),
+( 101, 3, 'da win' ),
+( 102, 3, 'da yak' ),
+( 103, 3, 'da herb' ),
+( 104, 3, 'da blow' ),
+
+( 200, 4, 'da white' ),
+( 201, 4, 'da win' ),
+( 202, 4, 'da win' ),
+( 203, 4, 'da win' ),
+( 204, 4, 'da blow' )
+
+</db_insert>
+
+<sphqueries>
+<sphinxql>select *, weight() from dd where match('da')</sphinxql>
+<sphinxql>select *, weight() from dd where match('da') option idf=plain</sphinxql>
+<!-- regression idf options vs distributed index -->
+<sphinxql>select *, packedfactors() as f, weight() from i1,i2 where match('da blow') option idf=plain,idf=tfidf_unnormalized, ranker=expr('sum(lcs*user_weight)*1000+bm25')</sphinxql>
+<sphinxql>select *, packedfactors() as f, weight() from dd where match('da blow') option idf=plain,idf=tfidf_unnormalized, ranker=expr('sum(lcs*user_weight)*1000+bm25')</sphinxql>
+<sphinxql>select *, packedfactors() as f, weight() from i1,i2 where match('da blow') option idf=plain,idf=tfidf_normalized, ranker=expr('sum(lcs*user_weight)*1000+bm25')</sphinxql>
+<sphinxql>select *, packedfactors() as f, weight() from dd where match('da blow') option idf=plain,idf=tfidf_normalized, ranker=expr('sum(lcs*user_weight)*1000+bm25')</sphinxql>
+
+<!-- regression expression ranker crash on expanded terms -->
+<sphinxql>select *, weight() as w, packedfactors() as p from kw where match('t* here') option ranker=expr('sum(lcs)*1000+bm25'), debug_no_payload, idf=tfidf_unnormalized</sphinxql>
+<sphinxql>select *, weight() as w, packedfactors() as p from kw where match('t* starts h*') option ranker=expr('sum(lcs)*1000+bm25'), debug_no_payload, idf=tfidf_unnormalized</sphinxql>
+<sphinxql>select *, weight() as w, packedfactors() as p from kw where match('t* from h*') option ranker=expr('sum(lcs)*1000+bm25'), debug_no_payload, idf=tfidf_unnormalized</sphinxql>
+<sphinxql>select *, weight() as w, packedfactors() as p from kw where match('t* ( starts | from ) h*') option ranker=expr('sum(lcs)*1000+bm25'), debug_no_payload, idf=tfidf_unnormalized</sphinxql>
+
+<!-- regression local idf -->
+<sphinxql>select *, weight() from l1,l2 where match('da win') option local_df=1</sphinxql>
+<sphinxql>select *, weight() from l1,l2 where match('da win')</sphinxql>
+<sphinxql>select *, weight() from dl where match('da win') option local_df=1</sphinxql>
+<sphinxql>select *, weight() from dl where match('da win')</sphinxql>
+<sphinxql>select *, weight() from l1,l2 where match('blow') option local_df=1</sphinxql>
+<sphinxql>select *, weight() from l1,l2 where match('blow')</sphinxql>
+<sphinxql>select *, weight() from dl where match('blow') option local_df=1</sphinxql>
+<sphinxql>select *, weight() from dl where match('blow')</sphinxql>
+
+<sphinxql>select id from kw order by weight() asc</sphinxql>
+</sphqueries>
+
+</test>

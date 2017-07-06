@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>snippets vs NEAR</name>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1, 'text';
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+
+}
+
+index test_stops
+{
+	source			= test
+	path			= <data_path/>/test_stops
+	stopwords		= stopwords.txt
+}
+</config>
+
+<db_insert>select 1;</db_insert>
+
+<custom_test><![CDATA[
+
+$results = array();
+
+$docs = array( 'Was one rabiit. Now there are five rabbits.' );
+$opts = array( 'query_mode'=>true, "around"=> 2 );
+
+$results[] = $client->BuildExcerpts($docs, 'test', '(one) NEAR/35 ("five")', $opts );
+
+// regression crash on 0 docs snippet
+$results[] = $client->BuildExcerpts(array(), 'test', '(one) NEAR/35 ("five")', $opts );
+$results[] = $client->GetLastError();
+
+// regression for snippets vs stopwords vs proximity
+$docs = array( 'A section of dome lifted up' );
+$results[] = $client->BuildExcerpts($docs, 'test_stops', '"section of dome"~5', $opts );
+$results[] = $client->BuildExcerpts($docs, 'test_stops', '"section of dome"~5', array( 'query_mode'=>true, 'exact_phrase'=>true ) );
+
+]]></custom_test>
+
+</test>

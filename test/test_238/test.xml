@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>duplicates indexing</name>
+
+<requires>
+<non-rt/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source dup_end1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT 1 id, 11 gid, '1127206,819,100' title UNION SELECT 1 id, 11 gid, '1,2,3,4,5,1127206,819,100' title
+	sql_attr_uint	= gid
+}
+
+source dup_end2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT 1 id, 11 gid, '1127206,819,100' title UNION SELECT 1 id, 11 gid, '1,2,3,4,5,6,7,8,1127206,819,100,113,114,115,100' title
+	sql_attr_uint	= gid
+}
+
+index dup_end1
+{
+	source			= dup_end1
+	path			= <data_path/>/dup_end1
+}
+
+index dup_end2
+{
+	source			= dup_end2
+	path			= <data_path/>/dup_end2
+}
+</config>
+
+<sphqueries>
+<!-- regression field end hits vs duplicated doc -->
+<sphinxql>select * from dup_end1 where match (' 100 ' )</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from dup_end2 where match (' 100 ' )</sphinxql>
+<sphinxql>show meta</sphinxql>
+</sphqueries>
+
+</test>

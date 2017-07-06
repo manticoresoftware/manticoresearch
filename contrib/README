@@ -1,0 +1,19 @@
+User contributions
+-------------------
+
+This directory contains user-contributed Sphinx stuff -
+native API ports to different programming languages, useful
+scripts, not-yet-official patches, etc.
+
+All materials within this directory are copyright their
+respective authors, including (but not limited to):
+
+  * Perl API is copyright (c) 2006, Len Kranendonk
+    http://www.ilance.nl/sphinx_perl_api
+
+  * Ruby API is copyright (c) 2006, Dmytro Shteflyuk
+    http://kpumuk.info
+
+Many thanks to everyone who contributed!
+
+--eof--

@@ -1,0 +1,579 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>new and old syntax for id, count, weight, count distinct</name>
+<config>
+indexer
+{
+	mem_limit			= 28M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers					= threads
+}
+
+source auth
+{
+	type			= mysql
+	<sql_settings/>
+}
+
+source src : auth
+{
+	sql_query = SELECT id, tag, gr, text FROM test_table WHERE id&lt;4
+	sql_query_pre = SET NAMES UTF8
+	sql_attr_uint	= tag
+	sql_attr_uint	= gr
+}
+
+source src1 : src
+{
+	sql_query = SELECT id, tag, gr, text FROM test_table WHERE id&lt;3
+}
+
+source src2 : src
+{
+	sql_query = SELECT id, tag, gr, text FROM test_table WHERE id=3
+}
+
+source src_keys : auth
+{
+	sql_query = SELECT id, tag, text FROM test_keys
+	sql_field_string = text
+	sql_attr_uint	= tag
+}
+
+index idx_keys
+{
+	source			= src_keys
+	path			= <data_path/>/idx_keys
+}
+
+index dist_no
+{
+	source			= src
+	path			= <data_path/>/idx
+	docinfo			= extern
+	min_word_len	= 1
+}
+
+index idx1 : dist_no
+{
+	source			= src1
+	path			= <data_path/>/idx1
+}
+
+index idx2 : dist_no
+{
+	source			= src2
+	path			= <data_path/>/idx2
+}
+
+
+index dist0
+{
+	type					= distributed
+	local					= dist_no
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist1
+{
+	type					= distributed
+	local					= idx1
+	local					= idx2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist2
+{
+	type					= distributed
+	agent					= <my_address/>:idx1
+	local					= idx2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist3
+{
+	type					= distributed
+	local					= idx1
+	agent					= <my_address/>:idx2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+source distinct_s1 : src
+{
+    sql_query = select 1, 'cat', 10 as gr, 101 as tag union \
+	select 2, 'cat', 10 as gr, 101 as tag union \
+	select 3, 'cat', 10 as gr, 101 as tag union \
+	select 4, 'cat', 10 as gr, 101 as tag union \
+	select 5, 'cat', 10 as gr, 101 as tag union \
+	select 6, 'cat', 10 as gr, 101 as tag union \
+	select 7, 'cat', 10 as gr, 101 as tag union \
+	select 8, 'cat', 20 as gr, 101 as tag union \
+	select 9, 'cat', 30 as gr, 101 as tag union \
+	select 10, 'cat', 40 as gr, 101 as tag union \
+	select 11, 'cat', 30 as gr, 201 as tag 
+}
+
+source distinct_s2 : src
+{
+     sql_query = select 18, 'cat', 10 as gr, 101 as tag union \
+	select 19, 'cat', 10 as gr, 101 as tag union \
+	select 21, 'cat', 10 as gr, 101 as tag union \
+	select 24, 'cat', 10 as gr, 101 as tag union \
+	select 25, 'cat', 10 as gr, 101 as tag union \
+	select 26, 'cat', 10 as gr, 101 as tag union \
+	select 27, 'cat', 10 as gr, 101 as tag union \
+	select 28, 'cat', 10 as gr, 101 as tag union \
+	select 29, 'cat', 10 as gr, 101 as tag union \
+	select 40, 'cat', 10 as gr, 101 as tag union \
+	select 41, 'cat', 30 as gr, 201 as tag 
+} 
+
+index distinct1 : dist_no
+{
+	source			= distinct_s1
+	path			= <data_path/>/distinct1
+}
+
+index distinct2 : dist_no
+{
+	source			= distinct_s2
+	path			= <data_path/>/distinct2
+}
+
+<!-- regression sub select offset -->
+source sub_src_1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT id, 1 as tag, text FROM sub_table WHERE id%2=1
+	sql_attr_uint	= tag
+}
+source sub_src_2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT id, 1 as tag, text FROM sub_table WHERE id%2=0
+	sql_attr_uint	= tag
+}
+index sub_loc_1
+{
+	source			= sub_src_1
+	path			= <data_path/>/sub_loc_1
+	docinfo			= extern
+}
+index sub_loc_2
+{
+	source			= sub_src_2
+	path			= <data_path/>/sub_loc_2
+	docinfo			= extern
+}
+index sub_dist_loc
+{
+	type					= distributed
+	local					= sub_loc_1
+	local					= sub_loc_2
+}
+index sub_dist_1
+{
+	type					= distributed
+	agent				= <my_address/>:sub_loc_1
+	agent				= <my_address/>:sub_loc_2
+}
+index sub_dist_2
+{
+	type					= distributed
+	local					= sub_dist_1
+	agent				= <my_address/>:sub_loc_2
+}
+
+index dist_offset
+{
+	type					= distributed
+	agent				= <my_address/>:sub_loc_1
+	agent				= <my_address/>:sub_loc_2
+	divide_remote_ranges = 1
+}
+
+source words_src : src
+{
+     sql_query = SELECT 1 as id, 11 as idd, 'yes of' as title UNION  SELECT 2 as id, 22 as idd, 'yes pey' as title
+	sql_query_pre = SET NAMES UTF8
+	sql_attr_uint	= idd
+} 
+index words1
+{
+	source			= words_src
+	path			= <data_path/>/words1
+	docinfo			= extern
+	charset_table	= 0..9, A..Z->a..z, _, a..z
+}
+index words2
+{
+	source			= words_src
+	path			= <data_path/>/words2
+	docinfo			= extern
+	charset_table	= 0..9, A..X->a..x, _, a..x
+}
+index words_rt1
+{
+	type = rt
+	path			= <data_path/>/words_rt1
+	charset_table	= 0..9, A..Z->a..z, _, a..z
+	rt_field = title
+	rt_attr_uint = idd
+}
+index words_rt2
+{
+	type = rt
+	path			= <data_path/>/words_rt2
+	charset_table	= 0..9, A..X->a..x, _, a..x
+	rt_field = title
+	rt_attr_uint = idd
+}
+
+index dist_just1
+{
+	type					= distributed
+	agent				= <my_address/>:idx1
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+source src_j1 : auth
+{
+	sql_query = SELECT id, body, gr, j FROM json_table1 where id in ( 1,2 )
+	sql_query_pre = SET NAMES UTF8
+	sql_attr_uint	= gr
+	sql_attr_json	= j
+}
+index dist_j1
+{
+	source			= src_j1
+	path			= <data_path/>/j1
+	docinfo			= extern
+}
+
+source src_j2 : src_j1
+{
+	sql_query = SELECT id, body, gr, j FROM json_table1 where id in ( 100 )
+}
+index dist_j2 : dist_j1
+{
+	source			= src_j2
+	path			= <data_path/>/j2
+}
+
+index dist_j
+{
+	type					= distributed
+	local					= dist_j1
+	local					= dist_j2
+}
+</config>
+
+
+<sphqueries>
+
+<!-- Select count(*) on differend kind of dist indexes -->
+<sphinxql>select gr, count(*) cnt from dist_no group by gr</sphinxql>
+<sphinxql>select gr, count(*) cnt from dist0 group by gr</sphinxql>
+<sphinxql>select gr, count(*) cnt from dist1 group by gr</sphinxql>
+<sphinxql>select gr, count(*) cnt from dist2 group by gr</sphinxql>
+<sphinxql>select gr, count(*) cnt from dist3 group by gr</sphinxql>
+
+<!-- Select weight() :on differend kind of dist indexes -->
+<sphinxql>select id idd, weight() cnt from dist_no group by gr</sphinxql>
+<sphinxql>select id idd, weight() cnt from dist0 group by gr</sphinxql>
+<sphinxql>select id idd, weight() cnt from dist1 group by gr</sphinxql>
+<sphinxql>select id idd, weight() cnt from dist2 group by gr</sphinxql>
+<sphinxql>select id idd, weight() cnt from dist3 group by gr</sphinxql> 
+
+<!-- Select count(distinct) on differend kind of dist indexes -->
+<sphinxql>select count(*) cnt, count (distinct tag) tg from dist_no group by gr</sphinxql>
+<sphinxql>select count(*) cnt, count (distinct tag) tg from dist0 group by gr</sphinxql>
+<sphinxql>select count(*) cnt, count (distinct tag) tg from dist1 group by gr</sphinxql>
+<sphinxql>select count(*) cnt, count (distinct tag) tg from dist2 group by gr</sphinxql>
+<sphinxql>select count(*) cnt, count (distinct tag) tg from dist3 group by gr</sphinxql>
+
+<!-- Select simple id -->
+<sphinxql>select id, tag from dist_no where match ('test')</sphinxql>
+<sphinxql>select id, tag from dist0 where match ('test')</sphinxql>
+<sphinxql>select id, tag from dist1 where match ('test')</sphinxql>
+<sphinxql>select id, tag from dist2 where match ('test')</sphinxql>
+<sphinxql>select id, tag from dist3 where match ('test')</sphinxql>
+
+<!-- Select aliased id -->
+<sphinxql>select id idd, tag from dist_no where match ('test')</sphinxql>
+<sphinxql>select id idd, tag from dist0 where match ('test')</sphinxql>
+<sphinxql>select id idd, tag from dist1 where match ('test')</sphinxql>
+<sphinxql>select id idd, tag from dist2 where match ('test')</sphinxql>
+<sphinxql>select id idd, tag from dist3 where match ('test')</sphinxql>
+ 
+<!-- Select count(*) on differend kind of dist indexes - must be error since no group by -->
+<sphinxql>select gr, count(*) cnt from dist_no</sphinxql>
+<sphinxql>select gr, count(*) cnt from dist0</sphinxql>
+<sphinxql>select gr, count(*) cnt from dist1</sphinxql>
+<!-- <sphinxql>select gr, count(*) cnt from dist2</sphinxql> -->
+<!-- <sphinxql>select gr, count(*) cnt from dist3</sphinxql> -->
+
+<!-- Prohibited aggregates in where -->
+<sphinxql>select gr from dist_no where count(*)=1</sphinxql>
+<sphinxql>select gr from dist_no where @count=1</sphinxql>
+<sphinxql>select gr from dist_no where weight()=1</sphinxql>
+<sphinxql>select gr from dist_no where @weight=1</sphinxql>
+<sphinxql>select gr from dist0 where count(*)=1</sphinxql>
+<sphinxql>select gr from dist0 where @count=1</sphinxql>
+<sphinxql>select gr from dist0 where weight()=1</sphinxql>
+<sphinxql>select gr from dist0 where @weight=1</sphinxql>
+<sphinxql>select gr from dist1 where count(*)=1</sphinxql>
+<sphinxql>select gr from dist1 where @count=1</sphinxql>
+<sphinxql>select gr from dist1 where weight()=1</sphinxql>
+<sphinxql>select gr from dist1 where @weight=1</sphinxql>
+<sphinxql>select gr from dist2 where count(*)=1</sphinxql>
+<sphinxql>select gr from dist2 where @count=1</sphinxql>
+<sphinxql>select gr from dist2 where weight()=1</sphinxql>
+<sphinxql>select gr from dist2 where @weight=1</sphinxql>
+<sphinxql>select gr from dist3 where count(*)=1</sphinxql>
+<sphinxql>select gr from dist3 where @count=1</sphinxql>
+<sphinxql>select gr from dist3 where weight()=1</sphinxql>
+<sphinxql>select gr from dist3 where @weight=1</sphinxql>
+
+<!-- Checking group by result sets (formerly warnings on old syntax) -->
+<sphinxql>select id idd from dist_no where match('test')</sphinxql>
+<sphinxql>select count(*) cnt from dist_no group by gr</sphinxql>
+<sphinxql>select weight() cnt from dist_no group by gr</sphinxql>
+<sphinxql>select id idd from dist0 where match('test')</sphinxql>
+<sphinxql>select count(*) cnt from dist0 group by gr</sphinxql>
+<sphinxql>select weight() cnt from dist0 group by gr</sphinxql>
+<sphinxql>select id idd from dist1 where match('test')</sphinxql>
+<sphinxql>select count(*) cnt from dist1 group by gr</sphinxql>
+<sphinxql>select weight() cnt from dist1 group by gr</sphinxql>
+<sphinxql>select id idd from dist2 where match('test')</sphinxql>
+<sphinxql>select count(*) cnt from dist2 group by gr</sphinxql>
+<sphinxql>select weight() cnt from dist2 group by gr</sphinxql>
+<sphinxql>select id idd from dist3 where match('test')</sphinxql>
+<sphinxql>select count(*) cnt from dist3 group by gr</sphinxql>
+<sphinxql>select weight() cnt from dist3 group by gr</sphinxql>
+
+<!-- Mixing old and new syntax -->
+<sphinxql>select @id idd, count(*) cnt from dist_no group by gr</sphinxql>
+<sphinxql>select id idd, @count cnt from dist_no group by gr</sphinxql>
+<sphinxql>select id idd from dist_no where @count=1 group by gr</sphinxql>
+<sphinxql>select @id idd from dist_no where count(*)=1 group by gr</sphinxql>
+<sphinxql>select id idd from dist_no group by @count</sphinxql>
+<sphinxql>select @id idd from dist_no group by count(*)</sphinxql>
+<sphinxql>select @id idd, count(*) cnt from dist0 group by gr</sphinxql>
+<sphinxql>select id idd, @count cnt from dist0 group by gr</sphinxql>
+<sphinxql>select id idd from dist0 where @count=1 group by gr</sphinxql>
+<sphinxql>select @id idd from dist0 where count(*)=1 group by gr</sphinxql>
+<sphinxql>select id idd from dist0 group by @count</sphinxql>
+<sphinxql>select @id idd from dist0 group by count(*)</sphinxql>
+<sphinxql>select @id idd, count(*) cnt from dist1 group by gr</sphinxql>
+<sphinxql>select id idd, @count cnt from dist1 group by gr</sphinxql>
+<sphinxql>select id idd from dist1 where @count=1 group by gr</sphinxql>
+<sphinxql>select @id idd from dist1 where count(*)=1 group by gr</sphinxql>
+<sphinxql>select id idd from dist1 group by @count</sphinxql>
+<sphinxql>select @id idd from dist1 group by count(*)</sphinxql>
+<sphinxql>select @id idd, count(*) cnt from dist2 group by gr</sphinxql>
+<sphinxql>select id idd, @count cnt from dist2 group by gr</sphinxql>
+<sphinxql>select id idd from dist2 where @count=1 group by gr</sphinxql>
+<sphinxql>select @id idd from dist2 where count(*)=1 group by gr</sphinxql>
+<sphinxql>select id idd from dist2 group by @count</sphinxql>
+<sphinxql>select @id idd from dist2 group by count(*)</sphinxql>
+<sphinxql>select @id idd, count(*) cnt from dist3 group by gr</sphinxql>
+<sphinxql>select id idd, @count cnt from dist3 group by gr</sphinxql>
+<sphinxql>select id idd from dist3 where @count=1 group by gr</sphinxql>
+<sphinxql>select @id idd from dist3 where count(*)=1 group by gr</sphinxql>
+<sphinxql>select id idd from dist3 group by @count</sphinxql>
+<sphinxql>select @id idd from dist3 group by count(*)</sphinxql>
+
+<!-- regression select only count ( distinct attr1 ) but group by attr2 from distributed -->
+<sphinxql>select id, count (distinct tag) tg from dist2 group by gr</sphinxql>
+<sphinxql>select id, count (distinct tag) tg from idx1, idx2 group by gr</sphinxql>
+
+<!-- regression select only count ( distinct attr1 ) + group by attr1 -->
+<sphinxql>select id, count (distinct tag), count(*) from distinct1, distinct2 group by tag</sphinxql>
+<sphinxql>select id, count (distinct gr), count(*) from distinct1, distinct2 group by gr</sphinxql>
+<sphinxql>select id, count (distinct tag), count(*) from distinct1, distinct2 group by gr</sphinxql>
+<sphinxql>select id, count (distinct gr), count(*) from distinct1, distinct2 group by tag</sphinxql>
+<sphinxql>select id, count (distinct tag), count(*) from distinct1, distinct1 group by tag</sphinxql>
+<sphinxql>select id, count (distinct gr), count(*) from distinct1, distinct1 group by gr</sphinxql>
+<sphinxql>select id, count (distinct tag), count(*) from distinct1, distinct1 group by gr</sphinxql>
+<sphinxql>select id, count (distinct gr), count(*) from distinct1, distinct1 group by tag</sphinxql>
+
+<!-- incorrect(aggregate) filtering -->
+<sphinxql>select id, max(tag) as cond from idx1 where cond&lt;5 group by gr</sphinxql>
+
+<!-- regression sub select offset -->
+<sphinxql>SELECT * FROM ( SELECT * FROM sub_dist_loc ORDER BY id asc LIMIT 15 ) ORDER BY id desc LIMIT 3,5</sphinxql>
+<sphinxql>SELECT * FROM ( SELECT * FROM sub_dist_1 ORDER BY id desc LIMIT 7 ) ORDER BY id desc LIMIT 4,3</sphinxql>
+<sphinxql>SELECT * FROM ( SELECT * FROM sub_dist_2 ORDER BY id asc LIMIT 11 ) ORDER BY id desc LIMIT 1,5</sphinxql>
+<sphinxql>SELECT * FROM ( SELECT * FROM sub_dist_loc ORDER BY id asc LIMIT 5 ) ORDER BY id desc LIMIT 2,4</sphinxql>
+
+<!-- regression missed offset and wrong limit at agent with divide_remote_ranges -->
+<sphinxql>SELECT * FROM dist_offset ORDER BY id asc LIMIT 23, 5</sphinxql>
+
+<!-- regression missed warning when words statistics varies -->
+<sphinxql>INSERT INTO words_rt1 VALUES ( 100, 'yes of', 111 ), ( 102, 'yes pey', 122 )</sphinxql>
+<sphinxql>INSERT INTO words_rt2 VALUES ( 200, 'yes of', 211 ), ( 202, 'yes pey', 222 )</sphinxql>
+<sphinxql>select * from words1, words2 where match('yes | pey')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from words_rt1, words_rt2 where match('yes | pey')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from words_rt1, words2 where match('yes | pey')</sphinxql>
+<sphinxql>show meta</sphinxql>
+
+<!-- implicit group by -->
+<sphinxql>SELECT id, COUNT(*) FROM dist_no</sphinxql>
+<sphinxql>SELECT id, MIN(gr) FROM dist_no</sphinxql>
+<sphinxql>SELECT id, COUNT(DISTINCT gr) FROM dist_no</sphinxql>
+<sphinxql>SELECT id, COUNT(*) FROM dist_no WITHIN GROUP ORDER BY id DESC</sphinxql>
+
+<sphinxql>SELECT id, COUNT(*) FROM dist2</sphinxql>
+<sphinxql>SELECT id, MIN(gr) FROM dist2</sphinxql>
+<sphinxql>SELECT id, COUNT(DISTINCT gr) FROM dist2</sphinxql>
+
+<!-- < and > were <= and >= at distributed index -->
+<sphinxql>SELECT * FROM idx1</sphinxql>
+<sphinxql>SELECT * FROM idx1 WHERE id&gt;1</sphinxql>
+<sphinxql>SELECT * FROM dist_just1 WHERE id&gt;1</sphinxql>
+
+<!-- regression sub select order by weight -->
+<sphinxql>SELECT * FROM ( SELECT @id, @weight FROM sub_dist_loc WHERE MATCH ( 'test ( my | of )' ) ORDER BY @weight asc, @id desc LIMIT 15 ) ORDER BY @weight desc, @id asc LIMIT 0, 5</sphinxql>
+<!-- same, not using deprecated syntax -->
+<sphinxql>SELECT * FROM ( SELECT id, weight() as wgt FROM sub_dist_loc WHERE MATCH ( 'test ( my | of )' ) ORDER BY wgt asc, id desc LIMIT 15 ) ORDER BY wgt desc, id asc LIMIT 0, 5</sphinxql>
+
+<!-- having -->
+<sphinxql>SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist2 GROUP BY gr HAVING COUNT(*)&gt;=1</sphinxql>
+<sphinxql>SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist_no GROUP BY gr HAVING COUNT(*)&gt;=1</sphinxql>
+<sphinxql>SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist2 GROUP BY gr HAVING cc&lt;3</sphinxql>
+<sphinxql>SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist_no GROUP BY gr HAVING cc&lt;3</sphinxql>
+<sphinxql>SELECT id, COUNT(DISTINCT tag) cc, GROUPBY() gg FROM dist2 GROUP BY gr HAVING gg IN ( 1,2,3,10)</sphinxql>
+<sphinxql>SELECT id, COUNT(DISTINCT tag) cc, GROUPBY() gg FROM dist_no GROUP BY gr HAVING gg IN ( 1,2,3,10)</sphinxql>
+<sphinxql>SELECT id, MIN(gr) aa, COUNT(*) cc, GROUPBY() gg  FROM dist2 GROUP BY tag HAVING aa=2</sphinxql>
+<sphinxql>SELECT id, MIN(gr) aa, COUNT(*) cc, GROUPBY() gg  FROM dist_no GROUP BY tag HAVING aa=2</sphinxql>
+<sphinxql>SELECT id, MAX(gr) aa, COUNT(*) cc, GROUPBY() gg   FROM dist2 GROUP BY tag HAVING aa=3</sphinxql>
+<sphinxql>SELECT id, MAX(gr) aa, COUNT(*) cc, GROUPBY() gg   FROM dist_no GROUP BY tag HAVING aa=3</sphinxql>
+<sphinxql>SELECT id, SUM(gr) aa, COUNT(*) cc, GROUPBY() gg   FROM dist2 GROUP BY tag HAVING aa&gt;5</sphinxql>
+<sphinxql>SELECT id, SUM(gr) aa, COUNT(*) cc, GROUPBY() gg   FROM dist_no GROUP BY tag HAVING aa>5</sphinxql>
+<sphinxql>select id, MIN(tag)  aa, COUNT(*) cc, GROUPBY() gg FROM dist2 GROUP 8  BY gr HAVING COUNT(*)=2</sphinxql>
+<sphinxql>select id, SUM(tag)  aa, COUNT(*) cc, GROUPBY() gg FROM dist2 GROUP 8  BY gr HAVING aa=4</sphinxql>
+
+<!-- distinct vs strings -->
+<sphinxql>select count(*) from idx_keys</sphinxql>
+<sphinxql>select count(distinct text) from idx_keys</sphinxql>
+<sphinxql>select count(*) from idx_keys group by tag</sphinxql>
+<sphinxql>select count(distinct text) from idx_keys group by tag</sphinxql>
+
+<!-- regression prohibit HAVING on regular\pool'ed attribute -->
+<sphinxql>SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist_j GROUP BY j.j1 HAVING j.j1 IN ( 1,2 )</sphinxql>
+<sphinxql>SELECT id, COUNT(*) cc, GROUPBY() gg FROM dist_j GROUP BY j.j1 HAVING gg IN ( 1,2 )</sphinxql>
+</sphqueries>
+
+<db_create>
+CREATE TABLE `test_table` (
+  `id` int(11),
+  `tag` int(11),
+  `gr` int(11),
+  `text` varchar(255) NOT NULL
+)
+</db_create>
+
+
+ <db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+
+<db_insert>SET NAMES utf8</db_insert>
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 2, 3, 'test'),
+( 2, 2, 2, 'test'),
+( 3, 2, 3, 'test'),
+( 4, 2, 10, 'test'),
+( 5, 2, 9, 'test'),
+( 6, 2, 8, 'test'),
+( 7, 2, 7, 'test'),
+( 8, 2, 6, 'test'),
+( 9, 2, 5, 'test'),
+( 10, 2, 4, 'test')
+</db_insert>
+
+<db_create>
+CREATE TABLE `sub_table` (
+  `id` int(11),
+  `text` varchar(255) NOT NULL
+)
+</db_create>
+ <db_drop>
+DROP TABLE IF EXISTS `sub_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `sub_table` VALUES
+( 1, 'test of'),( 2, 'my test'),( 3, 'test is'),( 4, 'goes to test'),( 5, 'test was'),
+( 6, 'test of'),( 7, 'my test'),( 8, 'test is'),( 9, 'goes to test'),( 10, 'test was'),
+( 11, 'test of'),( 12, 'my test'),( 13, 'test is'),( 14, 'goes to test'),( 15, 'test was'),
+( 16, 'test of'),( 17, 'my test'),( 18, 'test is'),( 19, 'goes to test'),( 20, 'test was'),
+( 21, 'test of'),( 22, 'my test'),( 23, 'test is'),( 24, 'goes to test'),( 25, 'test was'),
+( 101, 'test of'),( 102, 'my test'),( 103, 'test is'),( 104, 'goes to test'),( 105, 'test was'),
+( 106, 'test of'),( 107, 'my test'),( 108, 'test is'),( 109, 'goes to test'),( 110, 'test was'),
+( 111, 'test of'),( 112, 'my test'),( 113, 'test is'),( 114, 'goes to test'),( 115, 'test was'),
+( 116, 'test of'),( 117, 'my test'),( 118, 'test is'),( 119, 'goes to test'),( 120, 'test was')
+</db_insert>
+
+
+<db_create>
+CREATE TABLE `test_keys` (
+  `id` int(11),
+  `tag` int(11),
+  `text` varchar(255) NOT NULL
+)
+</db_create>
+
+ <db_drop>
+DROP TABLE IF EXISTS `test_keys`
+</db_drop>
+
+<db_insert>SET NAMES utf8</db_insert>
+<db_insert>
+INSERT INTO `test_keys` VALUES
+( 1,  1, 'alpha'),
+( 2,  1, 'alpha'),
+( 3,  1, 'alpha'),
+( 4,  2, 'beta'),
+( 5,  2, 'gamma'),
+( 6,  2, 'delta'),
+( 7,  3, 'theta'),
+( 8,  3, 'theta')
+</db_insert>
+
+<db_create>
+CREATE TABLE `json_table1` (
+  `id` int(11),
+  `body` varchar(255) NOT NULL,
+  `gr` int(11),
+  `j` varchar(255) NOT NULL
+)
+</db_create>
+ <db_drop>
+DROP TABLE IF EXISTS `json_table1`
+</db_drop>
+
+<db_insert>
+INSERT INTO `json_table1` VALUES
+( 1, 'test', 1, '{"j0":"test string","j1":[1,2,3],"j2":3}' ),
+( 2, 'test', 2, '{"j1":[10,20,30],"j2":3}' ),
+( 100, 'test', 100, '{"j1":[1,200,300],"j2":3}' )
+</db_insert>
+
+</test>

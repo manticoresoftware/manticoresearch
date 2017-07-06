@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>ALTER</name>
+
+<config>
+indexer
+{
+	mem_limit				= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	<dynamic>
+		<variant>workers = threads</variant>
+		<variant>workers = fork</variant>
+		<variant>workers = prefork</variant>
+	</dynamic>
+}
+
+source test
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+	sql_attr_uint	= gid
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+}
+
+</config>
+
+<db_create>
+CREATE TABLE `test_table` (
+  `id` int(11) NOT NULL,
+  `gid` int(11) NOT NULL,
+  `title` varchar(255) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS `test_table`;</db_drop>
+<db_insert>
+INSERT INTO `test_table` VALUES
+(1,1,'test one'),
+(2,1,'test two'),
+(3,2,'another doc'),
+(4,2,'doc number four'),
+(5,3,'numeric fixup'),
+(6,3,'numeric fixup contd')
+</db_insert>
+
+<sphqueries>
+<sphinxql>select * from test</sphinxql>
+<sphinxql>select *, count(*) from test order by id asc</sphinxql>
+<sphinxql>select * from test group by gid</sphinxql>
+<sphinxql>select * from test where match ('four')</sphinxql>
+<sphinxql>select * from test where match ('doc') and gid=2</sphinxql>
+<sphinxql>select * from test where match ('fixup')</sphinxql>
+<sphinxql>alter table test add column add1 integer</sphinxql>
+<sphinxql>select * from test</sphinxql>
+<sphinxql>select *, count(*) from test order by id asc</sphinxql>
+<sphinxql>select * from test group by gid</sphinxql>
+<sphinxql>select * from test where match ('four')</sphinxql>
+<sphinxql>select * from test where match ('doc') and gid=2</sphinxql>
+<sphinxql>select * from test where match ('fixup')</sphinxql>
+<sphinxql>alter table test add column add2 float</sphinxql>
+<sphinxql>select * from test</sphinxql>
+<sphinxql>select *, count(*) from test order by id asc</sphinxql>
+<sphinxql>select * from test group by gid</sphinxql>
+<sphinxql>select * from test where match ('four')</sphinxql>
+<sphinxql>select * from test where match ('doc') and gid=2</sphinxql>
+<sphinxql>select * from test where match ('fixup')</sphinxql>
+<sphinxql>alter table test add column add3 bigint</sphinxql>
+<sphinxql>select * from test</sphinxql>
+<sphinxql>select *, count(*) from test order by id asc</sphinxql>
+<sphinxql>select * from test group by gid</sphinxql>
+<sphinxql>select * from test where match ('four')</sphinxql>
+<sphinxql>select * from test where match ('doc') and gid=2</sphinxql>
+<sphinxql>select * from test where match ('fixup')</sphinxql>
+
+<sphinxql>alter table test add column mva multi</sphinxql>
+<sphinxql>select * from test</sphinxql>
+<sphinxql>update test set mva=(1,2,3) where id=3</sphinxql>
+<sphinxql>select * from test</sphinxql>
+
+<sphinxql>alter table test add column mva64 multi64</sphinxql>
+<sphinxql>select * from test</sphinxql>
+<sphinxql>update test set mva64=(4,5,6) where id=4</sphinxql>
+<sphinxql>select * from test</sphinxql>
+
+<sphinxql>alter table test add column json1 json</sphinxql>
+<sphinxql>select * from test</sphinxql>
+
+<sphinxql>alter table test add column str1 string</sphinxql>
+<sphinxql>select * from test</sphinxql>
+
+<sphinxql>alter table test drop column str1</sphinxql>
+<sphinxql>select * from test</sphinxql>
+
+<sphinxql>alter table test drop column str1</sphinxql>
+<sphinxql>alter table test drop column str0</sphinxql>
+
+<sphinxql>alter table test drop column json1</sphinxql>
+<sphinxql>select * from test</sphinxql>
+
+<sphinxql>alter table test drop column mva64</sphinxql>
+<sphinxql>select * from test</sphinxql>
+
+<sphinxql>alter table test drop column mva</sphinxql>
+<sphinxql>select * from test</sphinxql>
+
+<sphinxql>alter table test drop column add1</sphinxql>
+<sphinxql>select * from test</sphinxql>
+
+<sphinxql>alter table test drop column add2</sphinxql>
+<sphinxql>select * from test</sphinxql>
+
+<sphinxql>alter table test drop column add3</sphinxql>
+<sphinxql>select * from test</sphinxql>
+
+<sphinxql>alter table test drop column gid</sphinxql>
+<sphinxql>select * from test</sphinxql>
+
+<sphinxql>alter table test add column add1 integer</sphinxql>
+<sphinxql>select * from test</sphinxql>
+
+<!-- regression ok reply from missed index and failed query -->
+<sphinxql>alter table missed_index add column add1 integer</sphinxql>
+
+</sphqueries>
+
+</test>

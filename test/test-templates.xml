@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>regular index test template</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+	sql_attr_uint	= gid
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	gid INTEGER NOT NULL,
+	title VARCHAR(255) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_insert>INSERT INTO test_table VALUES ( 1, 123, 'hello world' );</db_insert>
+
+<queries>
+<query mode="extended2">hello</query>
+</queries>
+
+</test>
+
+
+
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>RT: test template</name>
+
+<skip_indexer/>
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers			= threads
+}
+
+index test
+{
+	type			= rt
+	path			= data/test
+	rt_attr_uint	= gid
+	rt_field		= title
+} 
+</config>
+
+<sphqueries>
+<sphinxql>insert into test ( id, gid, title ) values ( 1, 123, 'hello world' )</sphinxql>
+<sphinxql>select * from test</sphinxql>
+</sphqueries>
+
+</test>

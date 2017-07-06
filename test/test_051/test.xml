@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>snippets vs exact_phrase + snippets vs passage duplication</name>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+}
+
+source src
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1, 'text';
+}
+
+index idx
+{
+	source			= src
+	path			= <data_path/>/test
+}
+
+index exact
+{
+	source			= src
+	path			= <data_path/>/exact
+	morphology = stem_en
+	index_exact_words = 1
+	blend_chars = (, ), -
+	blend_mode = trim_none, trim_head, trim_tail, trim_both, skip_pure
+}
+
+index idx_ru
+{
+	source			= src
+	path			= <data_path/>/idx_ru
+	min_word_len = 1
+    morphology = stem_enru
+}
+</config>
+
+<db_insert>select 1;</db_insert>
+
+<custom_test><![CDATA[
+
+$text = <<<END
+	one perfusate chubby profound chubby multiplicity promontory
+	chubby pilotfish pilotfish chubby bisect pilotfish perfusate
+	multiplicity whichsoever pilotfish INVALID CAJUPUT reedbuck
+	whichsoever disposition felspar pilotfish reedbuck pilotfish
+	detestable
+
+	two bisect reedbuck whichsoever profound comforter detestable
+	bisect comforter CAJUPUT felspar INVALID humanism profound multiplicity
+	promontory profound reedbuck perfusate promontory felspar
+	multiplicity reedbuck profound profound whirligig detestable
+	whirligig INVALID
+
+	three pilotfish promontory CAJUPUT INVALID CAJUPUT INVALID EXPOSITOR
+	whirligig felspar disposition pilotfish chubby promontory
+	pilotfish INVALID CAJUPUT detestable INVALID felspar whichsoever profound
+	whichsoever comforter humanism detestable promontory comforter
+	chubby CAJUPUT INVALID humanism CAJUPUT
+END;
+
+$words = array
+(
+	'cajuput invalid',
+	'cajuput invalid expositor'
+);
+
+$results = array();
+foreach ( $words as $query )
+{
+	$reply = $client->BuildExcerpts ( array($text), 'idx', $query, array('exact_phrase' => true) );
+	$results [] = $query;
+	$results [] = $reply;
+}
+
+$text = 'A native of Honolulu, Hawaii, Obama is a graduate of Columbia University and Harvard Law School, where he waas the president of the Harvard Law Review. He was a community organizer in Chicago before earning his law degree. He worrked as a civil rights attorney in Chicago and taught constitutional law at the University of Chicago Law School from 19992 to 2004.Obama served three terms in the Illinois Senate from 1997 to 2004.';
+$query = '"University and Harvard Law School" obama';
+$reply = $client->BuildExcerpts ( array($text), 'idx', $query ,array('query_mode'=>true, 'around'=>2) );
+$results [] = $query;
+$results [] = $reply;
+
+$text = 'This is a large house. Its a doggy house. The doggy house is most doggy here. There is no any doggy house around.';
+$query = '"the doggy house"';
+$reply = $client->BuildExcerpts ( array($text), 'idx', $query,
+	array('query_mode'=>true, 'around'=> 2, 'weight_order'=>true, 'limit_words'=>20) );
+$results [] = $query;
+$results [] = $reply;
+
+$query = 'the doggy house';
+
+$reply = $client->BuildExcerpts ( array($text), 'idx', $query, array( 'around'=> 3, 'limit'=>100, 'limit_passages'=>1 ) );
+$results [] = $query;
+$results [] = $reply;
+
+$reply = $client->BuildExcerpts ( array($text), 'idx', $query, array( 'around'=> 3, 'exact_phrase'=>true, 'limit'=>100, 'limit_passages'=>1 ) );
+$results [] = $query;
+$results [] = $reply;
+
+$reply = $client->BuildExcerpts ( array($text), 'idx', $query, array('around'=> 3, 'limit_words'=>6, 'exact_phrase'=>true) );
+$results [] = $query;
+$results [] = $reply;
+
+$query = 'is most';
+$reply = $client->BuildExcerpts ( array($text), 'idx', $query, array('around'=> 2, 'limit_words'=>4) );
+$results [] = $query;
+$results [] = $reply;
+
+$query = 'is house';
+$reply = $client->BuildExcerpts ( array($text), 'idx', $query, array('around'=> 2, 'before_match'=>'<start of %PASSAGE_ID%>', 'after_match'=>'<%PASSAGE_ID% ends>') );
+$results [] = $query;
+$results [] = $reply;
+
+$query = 'is house';
+$reply = $client->BuildExcerpts ( array($text), 'idx', $query, array('around'=> 2, 'limit_words'=>10, 'before_match'=>'%PASSAGE_ID% !-! ', 'after_match'=>' !-! %PASSAGE_ID%', 'start_passage_id'=>1000) );
+$results [] = $query;
+$results [] = $reply;
+
+$query = 'is house';
+$reply = $client->BuildExcerpts ( array($text), 'idx', $query, array('around'=> 2, 'limit_words'=>10, 'before_match'=>'<b>', 'after_match'=>'</b %PASSAGE_ID%>', 'start_passage_id'=>1000) );
+$results [] = $query;
+$results [] = $reply;
+
+$query = 'is house';
+$reply = $client->BuildExcerpts ( array($text), 'idx', $query, array('around'=> 2, 'limit_words'=>10, 'before_match'=>'<b %PASSAGE_ID%>', 'after_match'=>'</b>', 'start_passage_id'=>1000) );
+$results [] = $query;
+$results [] = $reply;
+
+$query = '=welcome';
+$reply = $client->BuildExcerpts ( array('=welcome', '=welcome'), 'exact', $query, array('query_mode'=>1) );
+$results [] = "crash on exact words and 2 documents with '=' symbol";
+$results [] = $reply;
+
+$query = ' =\(12b\-1\) ';
+$docs = array ( 'Distribution and Service (12b-1) fees' );
+
+$opts =array ( 'query_mode'=>1, 'limit'=>15, 'around'=>2, 'allows_empty'=>1 );
+$reply = $client->BuildExcerpts ( $docs, 'exact', $query, $opts );
+$results [] = 'exact-blened: plain path';
+$results [] = $reply;
+
+$opts =array ( 'query_mode'=>1, 'limit'=>0, 'around'=>0, 'allows_empty'=>1 );
+$reply = $client->BuildExcerpts ( $docs, 'exact', $query, $opts );
+$results [] = 'exact-blened: fast path';
+$results [] = $reply;
+
+$query = 'word1 word2';
+$docs = array ( 'Here are some word1 and word1 or word1, word1. More samples: word1, word1, word1. At the same time, there are more words like word2, word2, word2 and word2. But what should be highlighted is this: word1 or word2. Thats it.' );
+$opts = array( 'around'=> 3, 'limit'=>60 );
+$reply = $client->BuildExcerpts ( $docs, 'exact', $query, $opts );
+$results [] = 'explicit uniq qword weighting';
+$results [] = $reply;
+
+$results [] = $client->BuildExcerpts ( array('=welcome home'), 'exact', '=welcome', array('query_mode'=>1) );
+$results [] = $client->BuildExcerpts ( array('=welcome home'), 'exact', '\=welcome', array('query_mode'=>1) );
+$results [] = $client->BuildExcerpts ( array('=welcome home'), 'exact', '\=welcome', array('query_mode'=>0) );
+
+// regression weight ordered passage generation
+$query = 'масляков';
+$docs = array ( 'ждународного сeоюза КВН Александр Масляков и веедущий программы  Премьл Лига КВН  Александр Масляков младший   ши Масляков никогда не принимал' ); 
+$opts = array( 'around'=> 4, 'weight_order'=>true );
+$results [] = $client->BuildExcerpts ( $docs, 'idx_ru', $query, $opts );
+
+]]></custom_test>
+
+</test>

@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>attributes update vs workers vs API and SphinxQL</name>
+
+<requires>
+<non-rt/>
+<non-windows/>
+<variant_match/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	attr_flush_period = 10000
+	<dynamic>
+		<variant>workers = threads</variant>
+		<variant>workers = prefork</variant>
+		<variant>workers = fork</variant>
+	</dynamic>
+}
+
+source src
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT id, text, 1 as gid, mva1 FROM test_table
+	sql_attr_uint	= gid
+<Dynamic>	
+	<Variant>sql_attr_multi = uint mva1 from field mva1</Variant>
+	<Variant>sql_attr_multi = bigint mva1 from field mva1</Variant>
+</Dynamic>	
+}
+
+index idx
+{
+	source			= src
+	path			= <data_path/>/idx
+    docinfo			= extern
+}
+
+</config>
+
+<custom_test><![CDATA[
+$results = array ();
+
+$restartD = create_function('$client','
+	$results = array ();
+	$results[] = StopWaitSearchd ( "config.conf", "searchd.pid" );
+
+	$error = "";
+	$startSta = StartSearchd ( "config.conf", "error.txt", "searchd.pid", $error );
+	if ( $startSta == 0 || $startSta == 2 )
+	{
+		$results[] = "started=ok";
+	}
+	else
+		$results[] = sprintf("start.err=%d local=%s client=%s", $startSta, $error, $client->GetLastError());
+		
+	global $sd_address, $sd_sphinxql_port;
+	$sockStr = "$sd_address:$sd_sphinxql_port";
+	if ($sd_address == "localhost")
+		$sockStr = "127.0.0.1:$sd_sphinxql_port";
+	$sock = @mysql_connect ($sockStr,"","",	true );
+	if ( $sock === false )
+	{
+		$results[] = "error: can not connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+		return;
+	}
+	$res = @mysql_query ( "select * from idx" );
+	while ($row = @mysql_fetch_array($res, MYSQL_ASSOC))
+	{
+		$line = "";
+		foreach ($row as $key => $value)
+			$line .= $value . "; ";
+		$results[] = $line;
+	}	
+	
+	return $results;
+');
+
+
+global $sd_address, $sd_sphinxql_port;
+$sockStr = "$sd_address:$sd_sphinxql_port";
+if ($sd_address == "localhost")
+	$sockStr = "127.0.0.1:$sd_sphinxql_port";
+$sock = @mysql_connect ($sockStr,'','',	true );
+if ( $sock === false )
+{
+	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+	return;
+}
+@mysql_query ( 'update idx set mva1=(3,2, 1, 2), mva1=(1, 2) where id=1' );
+@mysql_close($sock);
+
+$results = array_merge ( $results, $restartD ( $client ) );
+
+$up = $client->UpdateAttributes ( "idx", array("mva1"), array(1=>array(array(2,3,4)), 3=>array(array(6,7,8))),true);
+if ( $up >= 0 )
+	$results[] = sprintf("up.ok=%d", $up);
+else
+	$results[] = sprintf("up.err=%s", $client->GetLastError());
+
+$results = array_merge ( $results, $restartD ( $client ) );
+
+// final fixup; we don't want to compare times
+for ( $i=0; $i<count($results); $i++ )
+	if ( is_array($results[$i]) )
+		unset ( $results[$i]["time"] );
+
+]]></custom_test>
+
+  <DB_Create>
+CREATE TABLE `test_table` (
+  `id` int(11) DEFAULT NULL,
+  `text` varchar (255) NOT NULL,
+  `mva1` varchar(255) NOT NULL
+)
+  </DB_Create>
+
+  <DB_Drop>
+DROP TABLE IF EXISTS `test_table`
+  </DB_Drop>
+
+  <DB_Insert>
+INSERT INTO `test_table` (`id`, `text`, `mva1`) VALUES
+(1, 'test1', '1001'),
+(2, 'test2', '1002 1023 4456'),
+(3, 'test3', '1003 1008 1010'),
+(4, 'test4', '1004 1005 1006');
+  </DB_Insert>
+
+</test>

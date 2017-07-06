@@ -1,0 +1,18 @@
+a:1:{i:0;a:1:{i:0;a:19:{i:0;s:14:"initial commit";i:1;s:3:"
+OK";i:2;s:9:"query SOY";i:3;s:13:"
+1 | 1
+1 rows";i:4;s:10:"query TOFU";i:5;s:13:"
+1 | 1
+1 rows";i:6;s:3:"
+OK";i:7;s:11:"add 2nd doc";i:8;s:3:"
+OK";i:9;s:9:"query SOY";i:10;s:13:"
+1 | 1
+1 rows";i:11;s:10:"query TOFU";i:12;s:19:"
+2 | 1
+1 | 1
+2 rows";i:13;s:15:"replace 1st doc";i:14;s:3:"
+OK";i:15;s:9:"query SOY";i:16;s:7:"
+0 rows";i:17;s:10:"query TOFU";i:18;s:19:"
+1 | 1
+2 | 1
+2 rows";}}}

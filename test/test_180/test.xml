@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>rt MVA</name>
+
+<skip_indexer/>
+<requires>
+	<force-rt/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+index rt1
+{
+	type			= rt
+    docinfo			= extern
+	path			= <data_path/>/rt1
+
+	rt_attr_uint	= idd
+	rt_attr_string	= str1
+	rt_attr_multi = mva1
+	rt_attr_multi = mva2
+	rt_field		= body
+}
+
+</config>
+
+
+<sphqueries>
+<sphinxql>insert into rt1 (id, idd, str1, mva1, body) values ( 1, 1, '', ( 100, 10, 1), 'the' )</sphinxql>
+<sphinxql>insert into rt1 (id, idd, str1, mva2, body) values ( 2, 2, '', ( 11, 13, 12), 'the' )</sphinxql>
+<sphinxql>select * from rt1 where mva1>12</sphinxql>
+<sphinxql>select * from rt1 where match ('the')  and mva1>12</sphinxql>
+<sphinxql>select * from rt1 where mva1=10</sphinxql>
+<sphinxql>select * from rt1 where match ('the')  and mva1=10</sphinxql>
+<sphinxql>select * from rt1 where mva1!=100</sphinxql>
+<sphinxql>select * from rt1 where match ('the')  and mva1!=100</sphinxql>
+<sphinxql>insert into rt1 (id, idd, str1, mva1, mva2, body) values ( 3, 3, '', ( 200, 201, 210),  (300, 301, 310), 'the' )</sphinxql>
+<sphinxql>select * from rt1 order by id asc</sphinxql>
+<sphinxql>select * from rt1 where match ('the') order by id asc</sphinxql>
+<sphinxql>select * from rt1 order by id desc</sphinxql>
+<sphinxql>select * from rt1 where match ('the') order by id desc</sphinxql>
+<sphinxql>select * from rt1 group by mva1 within group order by id desc</sphinxql>
+<sphinxql>select * from rt1 where match ('the') group by mva1 within group order by id desc</sphinxql>
+<sphinxql>insert into rt1 (id, idd, str1, mva1, mva2, body) values ( 4, 4, '', ( 200, 210),  (100, 101, 102), 'the' )</sphinxql>
+<sphinxql>select *, count (*) as c from rt1 group by mva1 within group order by id desc</sphinxql>
+<sphinxql>select *, count (*) as c from rt1 where match ('the') group by mva1 within group order by id desc</sphinxql>
+<sphinxql>select *, count (distinct mva2) as c from rt1 group by mva1 within group order by id desc</sphinxql>
+<sphinxql>select *, count (*) as c from rt1 where match ('the') group by mva1 within group order by id desc</sphinxql>
+<sphinxql>select *, count (distinct mva1) as c from rt1 group by mva1 within group order by id desc</sphinxql>
+<sphinxql>select *, count (distinct mva2) as c from rt1 where match ('the') group by mva1 within group order by id desc</sphinxql>
+<!-- checking mva aliases -->
+<sphinxql>select mva1 as somemva from rt1</sphinxql>
+
+<!-- regression crash on worst groups got cut -->
+<sphinxql>insert into rt1 (id, idd, str1, mva1, mva2, body) values ( 10, 10, '', ( 210, 211, 220),  (310, 311, 340), 'the' ),  ( 5, 5, '', ( 220, 221, 230),  (320, 321, 350), 'the' ),  ( 6, 6, '', ( 230, 231, 240),  (330, 331, 360), 'the' ),  ( 7, 7, '', ( 240, 241, 244),  (340, 341, 370), 'the' ),  ( 8, 8, '', ( 250, 251, 254),  (350, 351, 380), 'the' ),  ( 9, 9, '', ( 260, 261, 264),  (360, 361, 360), 'the' )</sphinxql>
+<sphinxql>select *, count (distinct mva1) as c from rt1 group by mva1 within group order by id asc option max_matches=2</sphinxql>
+
+<sphinxql>update rt1 set nonexistent=1.1, mva1=(210,211,220)  where id=10 option ignore_nonexistent_columns=1</sphinxql>
+</sphqueries>
+
+</test>

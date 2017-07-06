@@ -1,0 +1,245 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>blend_chars vs multiforms</name>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = \
+		SELECT 1, 'text' AS content UNION \
+		SELECT 2, '3+rd text' AS content UNION \
+		SELECT 3, '3-rd text' AS content UNION \
+		SELECT 4, '3@rd text' AS content
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+
+	wordforms		= <this_test/>/wordforms.txt
+	blend_chars		= +, U+2D, @
+    min_word_len	= 2
+}
+
+source test1
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1, 'test 3+3+3+3+real text' AS content
+}
+
+index test10
+{
+	source			= test1
+	path			= <data_path/>/test10
+
+	charset_table	= 0..9, A..Z->a..z, _, a..z
+	blend_chars		= +
+	min_word_len	= 2
+}
+
+index test11
+{
+	source			= test1
+	path			= <data_path/>/test11
+
+	charset_table	= 0..9, A..Z->a..z, _, a..z
+	blend_chars		= +
+	min_word_len	= 2
+	min_prefix_len = 2
+}
+
+source wb
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = \
+		SELECT 1, 'ru-tor' AS content UNION \
+		SELECT 2, 'pu-tor' AS content  UNION \
+		SELECT 10, 'rd the box' AS content  UNION \
+		SELECT 11, 'test+the box' AS content UNION \
+		SELECT 12, 'the-box-of-my goes-here' as content
+}
+
+index wb
+{
+	source			= wb
+	path			= <data_path/>/wb
+
+	wordforms		= <this_test/>/wordforms-wb.txt
+	blend_chars		=  U+2D
+}
+
+
+source test12
+{
+	type = mysql
+	<sql_settings/>
+	sql_query_pre = SET NAMES utf8
+	sql_query = \
+		SELECT 1, 'путин-то' AS content UNION \
+		SELECT 2, 'путиными' AS content  UNION \
+		SELECT 3, 'путена' AS content UNION \
+		SELECT 4, 'Военно-промышленная комиссия превратилась в авторитетную площадку диалога' AS content
+}
+
+
+index test12
+{
+	source			= test12
+	path			= <data_path/>/test12
+
+	wordforms		= <this_test/>/wordforms-12.txt
+	morphology		= stem_enru
+	min_prefix_len	= 3
+	html_strip		= 1
+	index_exact_words	= 1
+	blend_mode		= trim_head, trim_tail, trim_both
+	blend_chars 	= +, %, -, $
+}
+
+index test12_rt
+{
+	type		= rt
+	path		= <data_path/>/test12_rt
+	rt_field	= content
+	rt_attr_uint = dummy	
+	dict 		= keywords
+	
+	wordforms	= <this_test/>/wordforms-12.txt
+	morphology	= stem_enru
+	min_prefix_len	= 3
+	html_strip	= 1
+	index_exact_words	= 1
+	blend_mode	= trim_head, trim_tail, trim_both
+	blend_chars	= +, %, -, $
+}
+
+source test_all
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = \
+		SELECT 1, '3+rd me text off' AS content UNION \
+		SELECT 2, '3@rd+4+5 me off' AS content UNION \
+		SELECT 3, '+3@rd@ me text off' AS content
+		
+	sql_field_string = content
+}
+
+index test_blend_all
+{
+	source			= test_all
+	path			= <data_path/>/test_blend_all
+
+	blend_chars		= +, U+2D, @
+	blend_mode	= trim_none, trim_all, trim_both
+}
+
+source test20
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1, 'RE: Lloyd 92X rear Cargo Rubber Mat' AS content
+}
+
+index test20
+{
+	source			= test20
+	path			= <data_path/>/test20
+
+	charset_table	= A..Z->a..z, _, a..z
+	blend_chars = 0..9, U+23, U+2E, U+2C, U+7C, U+3A, U+2F
+	blend_mode = trim_none
+}
+
+</config>
+
+<db_insert>select 1;</db_insert>
+
+<sphqueries>
+<sphinxql>SELECT * FROM test WHERE MATCH('3+rd text')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+<sphinxql>SELECT * FROM test WHERE MATCH('3-rd text')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+<sphinxql>SELECT * FROM test WHERE MATCH('3\\@rd text')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'man', 'test' )</sphinxql>
+<!-- regression - incomplete multi-form vs blended part with wrong hit position -->
+<sphinxql>SELECT * FROM test WHERE MATCH('"a rd text"')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+<!-- regression - blended part vs overshort -->
+<sphinxql>SELECT * FROM test10 WHERE MATCH('"test a text"')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+<sphinxql>SELECT * FROM test11 WHERE MATCH('"test a text"')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+<sphinxql>CALL SNIPPETS ( 'test 3+3+3+3+real text' , 'test10', ' "test a text" ', 1 as query_mode )</sphinxql>
+<sphinxql>CALL SNIPPETS ( 'test 3+3+3+3+real text' , 'test10', ' "test a text" ', 0 as query_mode )</sphinxql>
+<sphinxql>CALL SNIPPETS ( 'test 3+3+3+3+real text' , 'test10', ' "test a text" ', 1 as query_mode, 0 as limit )</sphinxql>
+<sphinxql>CALL SNIPPETS ( 'test 3+3+3+3+real text' , 'test10', ' "test a text" ', 0 as query_mode, 0 as limit )</sphinxql>
+<sphinxql>SELECT * FROM test WHERE MATCH(' " 3 rd text " ')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+<!-- regression - incomplete multi-form vs blended part -->
+<sphinxql>CALL SNIPPETS ( 'the+ rd box+ must ' , 'test', ' not found ', 1 as query_mode, 0 as limit )</sphinxql>
+<sphinxql>SELECT * FROM test WHERE MATCH('other+none text')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+<sphinxql>CALL SNIPPETS ('черно-белый, черно-белая, черно-белым  черно-белыми', 'wb', 'черно-белый')</sphinxql>
+<sphinxql>SELECT * FROM wb WHERE MATCH ( ' ru-tor ' )</sphinxql>
+<sphinxql>SELECT * FROM wb WHERE MATCH ( ' ru tor ' )</sphinxql>
+<sphinxql>SELECT * FROM wb WHERE MATCH ( ' pu-tor ' )</sphinxql>
+<sphinxql>SELECT * FROM wb WHERE MATCH ( ' pu tor ' )</sphinxql>
+<sphinxql>SELECT * FROM wb WHERE MATCH ( ' "ru tor" ' )</sphinxql>
+<sphinxql>SELECT * FROM wb WHERE MATCH ( ' "pu tor" ' )</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'ru-tor', 'wb' )</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'ru tor', 'wb' )</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'pu-tor', 'wb' )</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'pu tor', 'wb' )</sphinxql>
+
+<sphinxql>SELECT * FROM wb WHERE MATCH(' "the box" ')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+<sphinxql>SELECT * FROM wb WHERE MATCH(' the box ')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+<sphinxql>SELECT * FROM wb WHERE MATCH(' rd text ')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+<sphinxql>CALL SNIPPETS( 'the-box-of-my goes-here', 'wb', 'the-box-of-my goes-here', 1 as query_mode)</sphinxql>
+<sphinxql>CALL SNIPPETS( 'the-box-of-my goes-here', 'wb', 'the-box-of goes-here', 1 as query_mode)</sphinxql>
+<sphinxql>CALL SNIPPETS( 'the-box-of-my goes-here', 'wb', 'box-of-my goes-here', 1 as query_mode)</sphinxql>
+<sphinxql>SELECT * FROM wb WHERE MATCH('the-box-of-my goes-here')</sphinxql>
+<sphinxql>SELECT * FROM wb WHERE MATCH('the-box-of goes-here')</sphinxql>
+<sphinxql>SELECT * FROM wb WHERE MATCH('box-of-my goes-here')</sphinxql>
+
+<sphinxql>SELECT * FROM test12 WHERE MATCH('путин')</sphinxql>
+<sphinxql>SELECT id, weight() FROM test12 WHERE MATCH('путин-то')</sphinxql>
+<sphinxql>SELECT * FROM test12 WHERE MATCH('"Военно-промышленная комиссия"')</sphinxql>
+
+<sphinxql>INSERT INTO test12_rt (id, content) VALUES (1, 'путин-то'), (2, 'путиными'), (3, 'путена'), (4, 'Военно-промышленная комиссия превратилась в авторитетную площадку диалога')</sphinxql>
+<sphinxql>SELECT id, weight() FROM test12_rt WHERE MATCH('путин-то')</sphinxql>
+
+<sphinxql>CALL KEYWORDS('intel e8500 cpu', 'test', 1)</sphinxql>
+
+<!-- trim_all blend_mode cases -->
+<sphinxql>SELECT id, content, SNIPPET(content, '3rd') s FROM test_blend_all WHERE MATCH(' 3rd ')</sphinxql>
+<sphinxql>SELECT id, content, SNIPPET(content, '3rd me') s FROM test_blend_all WHERE MATCH(' 3rd me')</sphinxql>
+<sphinxql>SELECT id, content, SNIPPET(content, '3rd45 me') s FROM test_blend_all WHERE MATCH(' 3rd45 me')</sphinxql>
+<sphinxql>SELECT id, content, SNIPPET(content, '"3rd * me"') s FROM test_blend_all WHERE MATCH(' "3rd * me"')</sphinxql>
+<sphinxql>SELECT id, content, SNIPPET(content, '"3rd45 * * * me"') s FROM test_blend_all WHERE MATCH(' "3rd45 * * * me"')</sphinxql>
+<sphinxql>SELECT id, content, SNIPPET(content, '"3rd45 * * * * off"') s FROM test_blend_all WHERE MATCH(' "3rd45 * * * * off"')</sphinxql>
+
+<!-- regression blended head position -->
+<sphinxql>set profiling=1</sphinxql>
+<sphinxql>SELECT * FROM test20 WHERE MATCH ( ' "92X rear" ' )</sphinxql>
+<sphinxql>show plan</sphinxql>
+
+</sphqueries>
+
+</test>

@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>snippets vs boundaries, utf-8</name>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1, 'text';
+}
+
+index index_utf8
+{
+	source			= test
+	path			= <data_path/>/index_utf8
+
+	morphology		= stem_enru	
+    min_word_len	= 3
+    min_prefix_len	= 0
+    min_infix_len	= 0
+	
+	phrase_boundary = .
+	phrase_boundary_step = 100
+
+}
+</config>
+
+<db_insert>select 1;</db_insert>
+
+<custom_test><![CDATA[
+
+$results = array();
+
+////// utf-8 //////
+
+// 1
+
+$docs = array();
+$docs[0] = 'С другом в саду я сидел. Мокрый склонился бамбук. Я шел по склону Фудзи. Старую женщину я.';
+$docs[1] = 'Я шел по склону Фудзи. Старую женщину я.';
+
+$opts = array();
+$opts['use_boundaries']    = true;
+$opts['single_passage']    = false;
+$opts['chunk_separator']   = '###';
+$opts['weight_order']      = false;
+$opts['exact_phrase']      = false;         
+$opts['limit']             = 25;
+
+$results[] = $client->BuildExcerpts($docs, 'index_utf8', 'шел', $opts);
+
+// 2
+
+$docs = array();
+$docs[0] = 'С другом в саду я сидел. Мокрый склонился бамбук. Я шел по склону Фудзи. Старую женщину я.  Шел не зная куда. ';
+
+$opts = array();
+$opts['use_boundaries']    = true;
+$opts['single_passage']    = false;
+$opts['chunk_separator']   = '###';
+$opts['weight_order']      = false;
+$opts['exact_phrase']      = true;         
+$opts['limit']             = 25;
+
+$results[] = $client->BuildExcerpts($docs, 'index_utf8', 'шел по склону', $opts);
+
+// 3
+
+$opts = array();
+$opts['use_boundaries']    = true;
+$opts['single_passage']    = false;
+$opts['chunk_separator']   = '###';
+$opts['weight_order']      = true;
+$opts['exact_phrase']      = true;         
+$opts['limit']             = 25;
+
+$results[] = $client->BuildExcerpts($docs, 'index_utf8', 'шел по склону', $opts);
+
+// 4
+
+$opts = array();
+$opts['use_boundaries']    = true;
+$opts['single_passage']    = false;
+$opts['chunk_separator']   = '###';
+$opts['weight_order']      = true;
+$opts['exact_phrase']      = false;         
+$opts['limit']             = 75;
+
+$results[] = $client->BuildExcerpts($docs, 'index_utf8', 'шел по склону', $opts);
+
+]]></custom_test>
+
+</test>

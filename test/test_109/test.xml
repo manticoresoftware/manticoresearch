@@ -1,0 +1,240 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>RT: kill-list and segments merge</name>
+
+<requires>
+<non-rt/>
+</requires>
+
+<config>
+searchd
+{
+<searchd_settings/>
+	seamless_rotate = 1
+	workers = threads
+	binlog_path =
+}
+
+index test
+{
+	type	= rt
+	path	= <data_path/>/testrt123
+	rt_mem_limit = 128K
+	rt_attr_uint = group_id
+	rt_field = title
+	rt_field = content
+}
+
+index seg1
+{
+	type	= rt
+	path	= <data_path/>/seg1
+	rt_mem_limit = 32K
+	rt_attr_uint = gid
+	rt_field = body
+}
+
+
+indexer
+{
+	mem_limit			= 16M
+}
+
+source dummysrc
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * FROM test_table where id=1
+}
+
+index dummysrcmain
+{
+	source			= dummysrc
+	path			= <data_path/>/dummysrcmain
+}
+
+source src_1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT *, 11 as idd FROM test_table where id &lt;= 100
+	sql_attr_uint	= idd
+}
+
+source src_2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT *, 11 as idd FROM test_table where id &gt; 100
+	sql_attr_uint	= idd
+}
+
+index i1_crc
+{
+	source			= src_1
+	path			= <data_path/>/i1_crc
+	docinfo			= extern
+	dict = crc	
+}
+
+index i2_crc
+{
+	source			= src_2
+	path			= <data_path/>/i2_crc
+	docinfo			= extern
+	dict = crc	
+}
+
+index i1_kw
+{
+	source			= src_1
+	path			= <data_path/>/i1_kw
+	docinfo			= extern
+	dict = keywords
+}
+
+index i2_kw
+{
+	source			= src_2
+	path			= <data_path/>/i2_kw
+	docinfo			= extern
+	dict = keywords	
+}
+
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL AUTO_INCREMENT,
+	title varchar(255) NOT NULL
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<custom_insert><![CDATA[
+	$q = "( 1, 'dummy word not another' )";
+	for ( $i=2; $i<1000; $i++ )
+		$q .= ", ( $i, 'dummy word not another' )";
+	mysql_query ( "insert into test_table values $q" );
+]]></custom_insert>
+
+<custom_test><![CDATA[
+
+global $g_locals, $sd_address, $sd_sphinxql_port;
+
+RunIndexer ( $errors, '--rotate --merge i1_crc i2_crc' );
+RunIndexer ( $errors, '--rotate --merge i1_kw i2_kw' );
+usleep ( 100000 );
+
+$results = array();
+$sockStr = "$sd_address:$sd_sphinxql_port";
+if ($sd_address == "localhost")
+	$sockStr = "127.0.0.1:$sd_sphinxql_port";
+$sock = @mysql_connect (
+	$sockStr,
+	$g_locals['db-user'],
+	$g_locals['db-password'] ,
+	true );
+
+if ( $sock === false )
+{
+	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+	return;
+}
+
+$title = "";
+$ctx = "";
+for ( $i=1; $i<20; $i++ )
+{
+	$title .= " title$i";
+	$ctx .= " ctx$i";
+}
+
+$inserted = 0;
+for ( $i=1; $i<1020; $i++ )
+{
+	$group = $i + 10000;
+	$str = "";
+	if ( $i == 450 || $i == 550 || $i == 900 )
+		$str = "REPLACE INTO test ( id, group_id, title, content ) VALUES ( 21, $group, '$title', 'there is gooddy stuff' )";
+	else
+		$str = "INSERT INTO test ( id, group_id, title, content ) VALUES ( $i, $group, '$title', '$ctx' )";
+	$res = @mysql_query ($str, $sock );
+	if ($res===true)
+	{
+		$inserted += mysql_affected_rows($sock);
+	}	
+	else
+	{
+		$results[] = "error: insert: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+		return;
+	}
+}
+$results[] = "total inserted=$inserted";
+
+$queries = array ( "id=21", "match('gooddy')" );
+for ( $i=0; $i<count ( $queries ); $i++ )
+{
+	$q = "select * from test where $queries[$i]";
+	$res = @mysql_query ( $q, $sock );
+	if ($res===true)
+	{
+		$results[] = "query $i: total_affected=" . mysql_affected_rows($sock);
+	}
+	else if ($res===false)
+	{
+		$results[] = "query $i: res=$res";
+		$results[] = "error: query: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+		return;
+	}
+	else
+	{
+		$results[] = $queries[$i] . " query $i: total_rows=" . @mysql_num_rows($res);
+		while ($row = @mysql_fetch_array($res, MYSQL_ASSOC))
+		{
+			foreach ($row as $key => $value)
+				$foo[$key] = $value;
+			$results[] = $foo;
+		}	
+	}
+}
+
+$replaced = 0;
+$queried = 0;
+for ( $i=0; $i<50; $i++ )
+{
+	$res = array ();
+	$res[] = @mysql_query ( "REPLACE INTO seg1 ( id, gid, body ) VALUES ( $i, $i, 'text $i' )" );
+	$res[] = @mysql_query ( "REPLACE INTO seg1 ( id, gid, body ) VALUES ( $i, $i, 'text $i' )" );
+	foreach ( $res as $r )
+	{
+		if ($r===true)
+			$replaced++;
+	}
+	$rq = @mysql_query ( "SELECT * FROM seg1 WHERE MATCH('text')" );
+	$queried += mysql_num_rows ($rq);
+}
+$results[] = "segments merge: replaced=$replaced, queried=$queried";
+
+// issues with merge+rotate and merge of indexes v31
+$queryAPI = create_function('$client,$words,$idx', '
+$result = $client->Query ( $words, $idx );	if ( $result ) { unset ( $result["time"] ); return $result; } else return $client->GetLastError();
+');
+
+usleep ( 100000 );
+$client->SetLimits ( 0, 1 );
+$results[] = "merge+rotate and merge of indexes v31";
+$results[] = $queryAPI ( $client, ' dummy ', 'i1_crc' );
+$results[] = $queryAPI ( $client, ' dummy ', 'i1_kw' );
+
+@mysql_close($sock);
+	
+]]></custom_test>
+
+</test>
+

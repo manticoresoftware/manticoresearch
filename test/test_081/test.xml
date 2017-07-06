@@ -1,0 +1,230 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>hitless indexes</name>
+
+<requires><lemmatizer_base/><non-rt/></requires>
+
+<config>
+common
+{
+	lemmatizer_base	= <local>lemmatizer_base</local>
+}
+
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = select * from sph_test;
+}
+
+index none
+{
+	source = test
+	path = <data_path/>/none
+}
+
+index some
+{
+	source = test
+	path = <data_path/>/some
+
+	hitless_words = <this_test/>/words1.txt <this_test/>/words2.txt
+}
+
+index all
+{
+	source = test
+	path = <data_path/>/all
+
+	hitless_words = all
+}
+
+index some1
+{
+	source = test
+	path = <data_path/>/some1
+
+	hitless_words = <this_test/>/words1.txt <this_test/>/words2.txt
+	html_strip		= 1
+	index_sp		= 1
+	index_zones		= zone*
+}
+
+source all2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table1
+	sql_attr_uint	= gid
+	sql_field_string = title
+}
+
+index all2
+{
+	source = all2
+	path = <data_path/>/all2
+	hitless_words = all
+}
+
+source hit_test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query		= SELECT 1 id, "protest, to teach, to feed, and" body, 11 idd UNION SELECT 2 id, "to and windows text" body, 12 idd
+	sql_attr_uint	= idd
+}
+
+index hit_0
+{
+	source = hit_test
+	path			= <data_path/>/hit_0
+	morphology		= lemmatize_en_all
+}
+
+index hit_1
+{
+	source = hit_test
+	path			= <data_path/>/hit_1
+	morphology		= lemmatize_en_all
+	hitless_words 	= <this_test/>/words3.txt
+}
+
+</config>
+
+<db_create>
+create table sph_test
+(
+	id int not null,
+	text varchar(255) not null
+);
+</db_create>
+<db_create>
+create table test_table1
+(
+	id int not null,
+	gid int not null,
+	title varchar(16384) not null
+);
+</db_create>
+
+<db_drop>drop table if exists sph_test;</db_drop>
+<db_drop>drop table if exists test_table1;</db_drop>
+
+<db_insert>
+insert into sph_test values
+( 1, 'The Tin Woodman gave a sigh of satisfaction and lowered his axe, which he leaned against the tree.' ),
+( 2, 'The Tin Woodman appeared to think deeply for a moment.' ),
+( 3, 'The Tin Woodman had asked Dorothy to put the oil-can in her basket.' );
+</db_insert>
+<db_insert>
+INSERT INTO test_table1 VALUES (10,1,'bbb bbb bbb bbb aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa aaa '),(11,1,'aaa aaa aaa aaa bbb bbb aaa aaa');
+</db_insert>
+
+<queries>
+	<!-- these should work, weights will differ due to lcs ranking -->
+	<query mode="extended2" index="none">tin woodman</query>
+	<query mode="extended2" index="some">tin woodman</query>
+	<query mode="extended2" index="all ">tin woodman</query>
+
+	<!-- these should give identical results -->
+	<query ranker="wordcount" mode="extended2" index="none">tin woodman</query>
+	<query ranker="wordcount" mode="extended2" index="some">tin woodman</query>
+	<query ranker="wordcount" mode="extended2" index="all ">tin woodman</query>
+
+	<query mode="extended2" index="none">lowered</query>
+	<query mode="extended2" index="some">lowered</query>
+	<query mode="extended2" index="all ">lowered</query>
+
+	<!-- some will fail -->
+	<query mode="extended2" index="none">"tin woodman"</query>
+	<query mode="extended2" index="some">"tin woodman"</query>
+	<query mode="extended2" index="all ">"tin woodman"</query>
+
+	<query mode="extended2" index="none">"and lowered"</query>
+	<query mode="extended2" index="some">"and lowered"</query>
+	<query mode="extended2" index="all ">"and lowered"</query>
+
+	<query mode="extended2" index="none">"tin woodman"~2</query>
+	<query mode="extended2" index="some">"tin woodman"~2</query>
+	<query mode="extended2" index="all ">"tin woodman"~2</query>
+
+	<!-- these will work on 'some', but not 'all' (conversion to AND) -->
+	<query mode="extended2" index="none">"lowered his axe"</query>
+	<query mode="extended2" index="some">"lowered his axe"</query>
+	<query mode="extended2" index="all ">"lowered his axe"</query>
+
+	<query mode="extended2" index="none">"and lowered his axe"</query>
+	<query mode="extended2" index="some">"and lowered his axe"</query>
+	<query mode="extended2" index="all ">"and lowered his axe"</query>
+
+	<!-- doesn't matter to quorum, weight will differ though -->
+	<query mode="extended2" index="none">"tin woodman"/1</query>
+	<query mode="extended2" index="some">"tin woodman"/1</query>
+	<query mode="extended2" index="all ">"tin woodman"/1</query>
+
+	<!-- these will work, but should give a warning sometimes. weights should match -->
+	<query mode="extended2" index="none">^the</query>
+	<query mode="extended2" index="some">^the</query>
+	<query mode="extended2" index="all ">^the</query>
+
+	<query mode="extended2" index="none">^tin</query>
+	<query mode="extended2" index="some">^tin</query>
+	<query mode="extended2" index="all ">^tin</query>
+
+	<query mode="extended2" index="none">basket</query>
+	<query mode="extended2" index="some">basket</query>
+	<query mode="extended2" index="all ">basket</query>
+
+	<query mode="extended2" index="none">basket$</query>
+	<query mode="extended2" index="some">basket$</query>
+	<query mode="extended2" index="all ">basket$</query>
+	
+	<!-- regressions hitless vs extended query operators -->
+	<query mode="extended2" index="some1">"and the tree" &lt;&lt; Woodman </query>
+	<query mode="extended2" index="some1">Tin Woodman "and the tree"</query>
+	<query mode="extended2" index="some1">ZONESPAN:(zoneC,zoneB) Tin Woodman "and the tree"</query>
+	<query mode="extended2" index="some1">Woodman NEAR/10 "and the tree"</query>
+
+</queries>
+
+<sphqueries>
+	<!-- regression hitless vs subtree cache -->
+	<sphinxql>select * from all2</sphinxql>
+	<sphinxql>
+	select * from all2 where match('("aaa bbb") ("aaa cc")');
+	select * from all2 where match('("aaa bbb") ("aaa cc")');
+	select * from all2 where match('("aaa bbb") ("aaa cc")');
+	show meta;
+	</sphinxql>
+	
+	<!-- regressions hitless vs multiple terms from lemmatizer -->
+	<sphinxql>SELECT * FROM hit_0 WHERE MATCH(' "teach to feed" ')</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM hit_1 WHERE MATCH(' "teach to feed" ')</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM hit_0 WHERE MATCH(' "to feed and" ')</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM hit_1 WHERE MATCH(' "to feed and" ')</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM hit_0 WHERE MATCH(' "to feed" ')</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM hit_1 WHERE MATCH(' "to feed" ')</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM hit_0 WHERE MATCH(' "to windows text" ')</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
+	<sphinxql>SELECT * FROM hit_1 WHERE MATCH(' "to windows text" ')</sphinxql>
+	<sphinxql>SHOW META</sphinxql>
+</sphqueries>
+
+</test>

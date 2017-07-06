@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>CJK via RLP</name>
+
+<requires>
+<rlp/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source test
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query_pre		= set names utf8
+	sql_query			= select * from test_table
+	sql_file_field 		= file_field
+}
+
+source test_xml
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data.xml
+}
+
+index base
+{
+	source			= test
+	path			= <data_path/>/base
+
+	charset_table	= 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, \
+			U+2E80..U+2EF3, U+2F00..U+2FD5, U+3105..U+312D, U+31C0..U+31E3, U+3400..U+4DB5, U+4E00..U+9FCC, \
+			U+F900..U+FAD9, U+20000..U+2FA1D
+			
+	<dynamic>
+		<variant>morphology 		= rlp_chinese, stem_enru</variant>
+		<variant>morphology 		= rlp_chinese_batched, stem_enru</variant>
+	</dynamic>
+	
+	blend_chars		= -, U+23
+	rlp_context		= ../rlp/samples/etc/rlp-chinese-context.xml
+}
+
+index test : base
+{
+	source			= test
+	path			= <data_path/>/test
+	wordforms		= <this_test/>/wordforms.txt
+}
+
+index test2 : base
+{
+	type			= rt
+	path			= <data_path/>/test2
+	rt_field		= title
+	rt_attr_uint	= tag
+}
+
+index test_stripped : base
+{
+	source			= test
+	path			= <data_path/>/test_stripped
+	html_strip		= 1
+}
+
+index test_xml : base
+{
+	source			= test_xml
+	path			= <data_path/>/test_xml
+	wordforms		= <this_test/>/wordforms.txt
+}
+
+source test_spec
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query_pre		= set names utf8
+	sql_query			= select 100 id, 'the 凤1 a' title, 11 as idd UNION select 200 id, '凤1' title, 11 as idd UNION select 300 id, '凤1 轉注转注' title, 11 as idd UNION select 400 id, '凤 注 轉凤'  title, 11 as idd  
+	
+	sql_field_string = title
+    sql_attr_uint = idd
+}
+
+index test_spec
+{
+	source			= test_spec
+	path			= <data_path/>/test_spec
+
+	charset_table	= 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, \
+			U+2E80..U+2EF3, U+2F00..U+2FD5, U+3105..U+312D, U+31C0..U+31E3, U+3400..U+4DB5, U+4E00..U+9FCC, \
+			U+F900..U+FAD9, U+20000..U+2FA1D
+			
+	morphology 		= rlp_chinese_batched
+	rlp_context		= ../rlp/samples/etc/rlp-chinese-context.xml
+}
+
+common
+{
+	rlp_root = ..
+	rlp_environment = ../rlp/etc/rlp-environment.xml
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	content VARCHAR(255) NOT NULL
+)
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table</db_drop>
+<db_insert>SET NAMES utf8</db_insert>
+<db_insert>
+INSERT INTO test_table VALUES
+( 100, 'this is some mixed text in english. and some blended aaa-bbb' ),
+( 101, '許多社區長青學苑多開設有書法、插花、土風舞班，' ),
+( 102, 'а это - текст на русском. mixed in fact. test tested. more blended aaa-bbb' ),
+( 103, '文山區長青學苑則有個十分特別的「英文歌唱班」，test; mixed blended aaa-bbb' ),
+( 104, '成員年齡均超過六十歲，tested' ),
+( 105, '這群白髮蒼蒼，test2' ),
+( 106, '這群白髮蒼蒼 RUINED 這群白髮蒼蒼' ),
+( 107, '&lt;div class="msgCnt"&gt;说说&lt;a href="http://k.t.qq.com/k/%E4%BB%8A%E5%A4%A9%E7%9A%84%E5%BF%83%E6%83%85"&gt;#今天的心情#&lt;/a&gt;：&lt;/div&gt;' ),
+( 108, '這群白inbetween1這群白' ),
+( 109, '#abc #中国地理' )
+</db_insert>
+
+<sphqueries>
+<sphinxql>select * from test where match('mix')</sphinxql>
+<sphinxql>select * from test where match('русский')</sphinxql>
+<sphinxql>select * from test where match('test')</sphinxql>
+<sphinxql>select * from test where match('test2')</sphinxql>
+<sphinxql>select * from test where match('許多')</sphinxql>
+<sphinxql>select * from test where match('則')</sphinxql>
+<sphinxql>select * from test where match('來')</sphinxql>
+<sphinxql>select * from test where match('這群白髮蒼蒼，')</sphinxql>
+<sphinxql>select * from test where match('ruin')</sphinxql>
+<sphinxql>select * from test where match('aaa')</sphinxql>
+<sphinxql>select * from test where match('bbb')</sphinxql>
+<sphinxql>select * from test where match('aaa-bbb')</sphinxql>
+<sphinxql>select * from test where match('msgCnt')</sphinxql>
+<sphinxql>select * from test where match('今天的心情')</sphinxql>
+<sphinxql>select * from test where match('@content 則')</sphinxql>
+<sphinxql>select * from test where match('querymapped')</sphinxql>
+
+<sphinxql>select * from test_xml where match('mix')</sphinxql>
+<sphinxql>select * from test_xml where match('русский')</sphinxql>
+<sphinxql>select * from test_xml where match('test')</sphinxql>
+<sphinxql>select * from test_xml where match('test2')</sphinxql>
+<sphinxql>select * from test_xml where match('許多')</sphinxql>
+<sphinxql>select * from test_xml where match('則')</sphinxql>
+<sphinxql>select * from test_xml where match('來')</sphinxql>
+<sphinxql>select * from test_xml where match('這群白髮蒼蒼，')</sphinxql>
+<sphinxql>select * from test_xml where match('ruin')</sphinxql>
+<sphinxql>select * from test_xml where match('aaa')</sphinxql>
+<sphinxql>select * from test_xml where match('bbb')</sphinxql>
+<sphinxql>select * from test_xml where match('aaa-bbb')</sphinxql>
+<sphinxql>select * from test_xml where match('msgCnt')</sphinxql>
+<sphinxql>select * from test_xml where match('今天的心情')</sphinxql>
+<sphinxql>select * from test_xml where match('@content 則')</sphinxql>
+
+<sphinxql>insert into test2 values(1,'this is some mixed text in english. and some blended aaa-bbb',10 )</sphinxql>
+<sphinxql>insert into test2 values(2,'許多社區長青學苑多開設有書法、插花、土風舞班，',11 )</sphinxql>
+<sphinxql>insert into test2 values(3,'а это - текст на русском. mixed in fact. test tested. more blended aaa-bbb',12 )</sphinxql>
+<sphinxql>insert into test2 values(4,'文山區長青學苑則有個十分特別的「英文歌唱班」，test; mixed blended aaa-bbb', 13 )</sphinxql>
+<sphinxql>insert into test2 values(5,'成員年齡均超過六十歲，tested', 14 )</sphinxql>
+<sphinxql>insert into test2 values(6,'這群白髮蒼蒼，test2', 15 )</sphinxql>
+<sphinxql>insert into test2 values(7,'這群白髮蒼蒼 RUINED 這群白髮蒼蒼', 16 )</sphinxql>
+<sphinxql>insert into test2 values(8,'&lt;div class="msgCnt"&gt;说说&lt;a href="http://k.t.qq.com/k/%E4%BB%8A%E5%A4%A9%E7%9A%84%E5%BF%83%E6%83%85"&gt;#今天的心情#&lt;/a&gt;：&lt;/div&gt;', 17 )</sphinxql>
+<sphinxql>select * from test2 where match('mix')</sphinxql>
+<sphinxql>select * from test2 where match('русский')</sphinxql>
+<sphinxql>select * from test2 where match('test')</sphinxql>
+<sphinxql>select * from test2 where match('test2')</sphinxql>
+<sphinxql>select * from test2 where match('許多')</sphinxql>
+<sphinxql>select * from test2 where match('則')</sphinxql>
+<sphinxql>select * from test2 where match('來')</sphinxql>
+<sphinxql>select * from test2 where match('這群白髮蒼蒼，')</sphinxql>
+<sphinxql>select * from test2 where match('ruin')</sphinxql>
+<sphinxql>select * from test2 where match('aaa')</sphinxql>
+<sphinxql>select * from test2 where match('bbb')</sphinxql>
+<sphinxql>select * from test2 where match('aaa-bbb')</sphinxql>
+<sphinxql>select * from test2 where match('msgCnt')</sphinxql>
+<sphinxql>select * from test2 where match('今天的心情')</sphinxql>
+<sphinxql>select * from test2 where match('@title 則')</sphinxql>
+
+<sphinxql>select * from test_stripped where match('msgCnt')</sphinxql>
+<sphinxql>select * from test_stripped where match('今天的心情')</sphinxql>
+
+<!-- regression number after RLP token and spicial chars around RLP token -->
+<sphinxql>select * from test_spec where match('凤1 凤凤凤 轉注转注')</sphinxql>
+<sphinxql>select * from test_spec where match('凤1  凤凤凤   轉注转注')</sphinxql>
+<sphinxql>select * from test_spec where match('"凤1"')</sphinxql>
+<sphinxql>select * from test_spec where match('凤1')</sphinxql>
+<sphinxql>select * from test_spec where match('^凤 轉注$')</sphinxql>
+<sphinxql>select * from test_spec where match('注 ^凤 轉凤$ 注')</sphinxql>
+<sphinxql>select * from test_spec where match('凤 !注')</sphinxql>
+
+<!-- regression for blend chars vs rlp -->
+<sphinxql>select * from test where match('#中国地理')</sphinxql>
+<sphinxql>select * from test where match('中国地理')</sphinxql>
+<sphinxql>select * from test where match('#abc')</sphinxql>
+<sphinxql>select * from test where match('abc')</sphinxql>
+<sphinxql>CALL KEYWORDS ( '#中国地理', 'test' )</sphinxql>
+<sphinxql>CALL KEYWORDS ( '#abc', 'test' )</sphinxql>
+
+
+</sphqueries>
+
+</test>

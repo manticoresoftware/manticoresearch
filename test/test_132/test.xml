@@ -1,0 +1,304 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>MVA persistent attribute updates</name>
+
+<requires> <variant_match /> </requires>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	binlog_path = #
+	workers = threads
+	attr_flush_period = 3600 # not autoflush during test run but be able to do FlushAttributes command
+}
+
+source src
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT id, text, section, mva1 FROM test_table
+	sql_attr_uint	= section
+<Dynamic>	
+	<Variant>sql_attr_multi = uint mva1 from field mva1</Variant>
+	<Variant>sql_attr_multi = bigint mva1 from field mva1</Variant>
+</Dynamic>	
+}
+
+index idx
+{
+	source			= src
+	path			= <data_path/>/main132
+    docinfo			= extern
+}
+
+index rt
+{
+	type = rt
+	path			= <data_path/>/rt
+	docinfo			= extern
+
+	rt_field			= body
+	rt_attr_multi	= mva1
+	rt_attr_uint	= gid
+	rt_attr_multi	= mva2
+}
+
+index hung
+{
+	type = rt
+	path			= <data_path/>/hung
+	docinfo			= extern
+
+	rt_field			= body
+	rt_attr_multi	= mva1
+	rt_attr_uint	= gid
+	rt_attr_multi	= mva2
+}
+
+index rt_mva
+{
+	type = rt
+	path			= <data_path/>/rt_mva
+	docinfo			= extern
+	rt_mem_limit = 128k
+
+	rt_field			= text
+	rt_attr_multi	= mva
+}
+
+source src_save
+{
+	type			= mysql
+	<sql_settings/>	
+	sql_query = SELECT id, 1 as idd, '1, 2, 3, 4, 5' as mva, 'dummy' as text FROM mva_table
+	sql_attr_uint	= idd
+	sql_attr_multi = uint mva from field
+}
+
+index mva_save
+{
+	source			= src_save
+	path			= <data_path/>/mva_save
+	docinfo			= extern
+}
+
+
+</config>
+
+<custom_test><![CDATA[
+$results = array ();
+
+$query = create_function ( '$q, $sock','
+	
+	$results = array( $q );
+	$res = @mysql_query ( $q, $sock );
+	if ( $res===false )
+	{
+		$results[]  = mysql_errno( $sock ) . "; " . mysql_error ( $sock );
+	} else
+	{	
+		while ($row = @mysql_fetch_array($res, MYSQL_ASSOC))
+		{
+			if ( array_key_exists ( "Variable_name", $row ) && $row["Variable_name"]=="time" )
+			{
+				continue;
+			}
+				
+			if ( !array_key_exists ( "Variable_name", $row ) || !array_key_exists ( "Value", $row ) )
+			{
+				$line = "";
+				foreach ( $row as $k=>$v )
+				{
+					$line .= $k . " = " . $v . "\t";
+				}
+				$results[] = $line;
+			} else
+			{
+				$results[] = $row["Variable_name"] . " = " . $row["Value"];
+			}
+		}	
+		@mysql_free_result ( $res );
+	}
+	
+	return $results;
+');
+
+global $sd_address, $sd_sphinxql_port;
+$sockStr = "$sd_address:$sd_sphinxql_port";
+if ($sd_address == "localhost")
+	$sockStr = "127.0.0.1:$sd_sphinxql_port";
+$sock = @mysql_connect ($sockStr,'','',	true );
+if ( $sock === false )
+{
+	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+	return;
+}
+@mysql_query ( "insert into rt (id, gid, mva1, mva2, body) values (1, 11, (1, 1), (2), 'dummy'), (3, 33, (3, 3), (3), 'dummy')" );
+@mysql_close($sock);
+
+// update that block
+for ( $i = 0; $i < 4; $i++)
+{
+	$results[] = sprintf( "iteration=%d", $i );
+	
+	$up = $client->UpdateAttributes ( "idx", array("mva1"), array(1=>array(array(2,3,4)), 3=>array(array(6,7,8))),true);
+	if ( $up >= 0 )
+		$results[] = sprintf("up.ok=%d", $up);
+	else	
+		$results[] = sprintf("up.err=%s", $client->GetLastError());
+
+	$sock = @mysql_connect ($sockStr,'','',	true );
+	if ( $sock === false )
+	{
+		$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+		return;
+	}
+	@mysql_query ( 'update idx set mva1=(3,2, 1, 2), mva1=(1, 2) where id=1' );
+	if ( @mysql_error() )
+		$results[] = @mysql_error();
+	@mysql_query ( 'update rt set mva1=(3,2, 1, 2), gid=3212, mva2=(1, 2, 3, 4, 5, 6), mva2=(3,4,5) where id=1' );
+	if ( @mysql_error() )
+		$results[] = @mysql_error();
+	@mysql_close($sock);
+		
+	StopSearchd ( 'config.conf', 'searchd.pid' );
+	
+	usleep ( 50000 );
+	
+	$error = "";
+	$startSta = StartSearchd ( 'config.conf', 'error.txt', 'searchd.pid', $error );
+	if ( $startSta == 0 || $startSta == 2 )
+	{
+		$results[] = "started=ok";
+	}
+	else
+		$results[] = sprintf("start.err=%d local=%s client=%s", $startSta, $error, $client->GetLastError());
+}
+
+// regression that rt deadlock on smart attributes update
+$sock = @mysql_connect ($sockStr,'','',	true );
+if ( $sock === false )
+{
+	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+	return;
+}
+for ( $i = 1; $i < 2001; $i++)
+{
+	$gid = $i * 1000;
+	$mva1 = $i * 1000 + 33;
+	$mva2 = $i * 1000 - 11;
+	@mysql_query ( "replace into hung (id, gid, mva1, mva2, body) values ($i, $gid, ($mva1, $mva2), ($mva1), 'dummy1')" );
+	if ( @mysql_error() )
+		$results[] = 'i=$i' . @mysql_error();
+}
+@mysql_close($sock);
+
+// regression that rt dumps MVA to plain index wrong way
+$sock = @mysql_connect ($sockStr,'','',	true );
+if ( $sock === false )
+{
+	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+	return;
+}
+
+$q = "INSERT INTO rt_mva (id, text, mva) VALUES ";
+for ( $i = 1; $i <= 16000; $i++)
+{
+	$q .= "( $i, ' ', ($i) )";
+	if ( ( $i%100 )!=0 )
+		$q.= ",";
+		
+	if ( ( $i%100 )==0 )
+	{
+		@mysql_query ( $q );
+		$q = "INSERT INTO rt_mva (id, text, mva) VALUES ";
+	}
+	if ( @mysql_error() )
+		$results[] = 'i=$i' . @mysql_error();
+}
+
+$results = array_merge ( $results, $query ( "select * from rt_mva order by id desc limit 3", $sock ) );
+$results = array_merge ( $results, $query ( "show meta", $sock ) );
+$results = array_merge ( $results, $query ( "select * from rt_mva where any(mva)<17000 order by id asc limit 3", $sock ) );
+$results = array_merge ( $results, $query ( "show meta", $sock ) );
+
+// regressions:
+// crash on INSERT .. ( id, text, mva ) values ( 1, '', 15 )
+// invalid syntax INSERT .. ( id, text, mva ) values ( 1, '', () )
+
+$results = array_merge ( $results, $query ( "replace into rt_mva (id, text, mva) values ( 1, ' ',  333 )", $sock ) );
+$results = array_merge ( $results, $query ( "replace into rt_mva (id, text, mva) values ( 2, ' ',  () )", $sock ) );
+$results = array_merge ( $results, $query ( "select * from rt_mva order by id asc limit 3", $sock ) );
+$results = array_merge ( $results, $query ( "show meta", $sock ) );
+
+// regression:
+//crash on SaveAttributes
+$results[] = 'pre update flush tag - ' . $client->FlushAttributes();
+for ( $i = 0; $i<100; $i++ )
+{
+	@mysql_query ( 'UPDATE mva_save SET mva=(3,2, 1, 2) WHERE id>0' );
+	if ( @mysql_error() )
+		$results[] = 'i=$i' . @mysql_error();	
+}
+
+
+// just fake flush tag for RT mode as RT does not support FlushAttributes command
+global $g_locals;
+if ( !array_key_exists ('rt_mode', $g_locals) || !$g_locals['rt_mode'] )
+{
+	$results[] = 'post update flush tag - ' . $client->FlushAttributes();
+} else
+{
+	$results[] = 'post update flush tag - 1';
+}
+
+@mysql_close($sock);
+
+
+]]></custom_test>
+
+<sphqueries>
+<sphinxql>select * from idx where match('test3')</sphinxql>
+<sphinxql>select * from rt</sphinxql>
+<sphinxql>select * from idx</sphinxql>
+<!-- regression that rt deadlock on smart attributes update -->
+<sphinxql>update hung set mva1=(3,2, 1, 2) where id>2</sphinxql>
+<sphinxql>select * from hung order by id asc</sphinxql>
+</sphqueries>
+
+<DB_Create>
+CREATE TABLE `test_table` (
+  `id` int(11) DEFAULT NULL,
+  `text` varchar (255) NOT NULL,
+  `section` int(11) DEFAULT NULL,
+  `mva1` varchar(255) NOT NULL  
+)
+</DB_Create>
+
+<DB_Create>CREATE TABLE `mva_table` (  `id` int(11) DEFAULT NULL)</DB_Create>
+
+<DB_Drop>DROP TABLE IF EXISTS `test_table`</DB_Drop>
+<DB_Drop>DROP TABLE IF EXISTS `mva_table`</DB_Drop>
+
+
+<custom_insert><![CDATA[
+
+mysql_query ( "INSERT INTO `test_table` (`id`, `text`, `section`, `mva1`) VALUES 
+(1, 'test1', 101, '1001'),
+(2, 'test2', 102, '1002 1023 4456'),
+(3, 'test3', 103, '1003 1008 1010'),
+(4, 'test4', 104, '1004 1005 1006')" );
+
+for ( $i = 1; $i<1001; $i++ )
+	mysql_query ( "INSERT INTO `mva_table` (`id` ) VALUES ( " . $i . " )" );
+
+]]></custom_insert>
+  
+</test>

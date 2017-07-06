@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>legacy matching modes emulation</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest1
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query			= SELECT document_id, group_id, group_id2, title, content FROM test_table
+	sql_attr_uint		= group_id
+	sql_attr_uint		= group_id2
+}
+
+source srctest2 : srctest1
+{
+	sql_query			= SELECT 10+document_id, group_id, group_id2, title, content FROM test_table
+}
+
+index test1
+{
+	source			= srctest1
+	path			= <data_path/>/test1
+}
+
+index test2
+{
+	source			= srctest2
+	path			= <data_path/>/test2
+}
+</config>
+
+<queries>
+<query index="test1 test2" mode="any">test"</query>
+</queries>
+
+<db_create>
+CREATE TABLE test_table
+(
+	document_id	INTEGER PRIMARY KEY NOT NULL AUTO_INCREMENT,
+	group_id	INTEGER NOT NULL,
+	group_id2	INTEGER NOT NULL,
+	title		VARCHAR(255) NOT NULL,
+	content		VARCHAR(255) NOT NULL
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table ( document_id, group_id, group_id2, title, content ) VALUES
+	( 1, 1, 5, 'test one', 'this is my test document number one. also checking search within phrases.' ),
+	( 2, 1, 6, 'test two', 'this is my test document number two' ),
+	( 3, 2, 7, 'another doc', 'this is another group' ),
+	( 4, 2, 8, 'doc number four', 'this is to test groups' )
+</db_insert>
+
+</test>

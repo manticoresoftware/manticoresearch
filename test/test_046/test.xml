@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>mva filtering</name>
+
+<requires> <variant_match /> </requires>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = SELECT id, text, mva FROM test_table;
+<Dynamic>	
+	<Variant>sql_attr_multi = uint mva from field</Variant>
+	<Variant>sql_attr_multi = bigint mva from field</Variant>
+</Dynamic>	
+}
+
+index test
+{
+	source	= test
+	path	= <data_path/>/test
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER NOT NULL,
+	text VARCHAR(255) NOT NULL DEFAULT 'text',
+	mva VARCHAR(255) NOT NULL
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table (id, mva) VALUES
+	( 10, '' ),
+	(  1, '100' ),
+	(  2, '100, 200' ),
+	(  4, '6, 12, 17, 20')
+</db_insert>
+
+<custom_test><![CDATA[
+
+$ID = 4;
+$results = array();
+
+// values
+$results [] = 'VALUES';
+$results [] = array();
+$filters = array(
+	array(  0, false),
+	array(  7, false),
+	array( 15, false),
+	array( 21, false),
+
+	array(  3,  8, 16, false),
+	array(  7, 18, 21, false),
+	
+	array(  6, true),
+	array( 12, true),
+	array( 20, true),
+
+	array(  5, 12, true),
+	array(  7, 17, true),
+	array( 15, 20, true),
+);
+
+$key = count($results) - 1;
+foreach ( $filters as &$filter )
+{
+	$last = count($filter) - 1;
+	$mva = array_slice ( $filter, 0,  $last );
+	
+	$client->ResetFilters();
+	$client->SetFilter ( 'mva', $mva );
+	$result = $client->Query ( '' );
+	if ( !$result )
+		break;
+
+	$len = array_key_exists ( 'matches', $result ) ? count ( $result['matches'] ) : 0;
+	$pass = $len == $filter[$last] ? 1 : 0;
+	if ( $len == 1)
+ 		$pass = $pass and array_key_exists ( $ID, $result['matches'] );
+	$results [$key] [ join(', ', $mva ) ] = $pass ? 'OK' : 'FAILED';
+	
+}
+
+// interval
+$results [] = 'INTERVAL';
+$results [] = array();
+$filters = array(
+	array(  1,  4, false),
+	array(  1,  5, false),
+	array(  1,  6, true),
+	array(  1,  7, true),
+	array(  1, 12, true),
+	array(  1, 15, true),
+	
+	array(  6,  9, true),
+	array(  7,  9, false),
+	array(  8, 10, false),
+	array(  9, 12, true),
+	array(  9, 15, true),
+	array(  9, 21, true),
+	array( 16, 21, true),
+	array( 17, 21, true),
+	array( 18, 19, false),
+    
+	array( 18, 25, true),
+	array( 19, 25, true),
+	array( 20, 25, true),
+
+	array( 21, 25, false),
+);
+
+$key = count($results) - 1;
+foreach ( $filters as &$filter )
+{
+	$client->ResetFilters();
+	$client->SetFilterRange ( 'mva', $filter[0], $filter[1] );
+	$result = $client->Query ( '' );
+	if ( !$result )
+		break;
+	
+	$len = array_key_exists ( 'matches', $result ) ? count ( $result['matches'] ) : 0;
+	$pass = $len == ( $filter[2] ? 1 : 0 );
+	if ( $len == 1)
+		$pass = $pass and array_key_exists ( $ID, $result['matches'] );
+	$results [$key] [$filter[0] . ' - ' . $filter[1]] = $pass ? 'OK' : 'FAILED';
+}
+
+]]></custom_test>
+
+</test>

@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>merge vs docinfo, range, mva</name>
+
+<requires> <variant_match /> </requires>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srcmain
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT * FROM test_table WHERE document_id in (1,2,3)
+	sql_attr_uint	= tag
+
+	<Dynamic>
+		<Variant> sql_attr_multi = uint mva from field </Variant>
+		<Variant> </Variant>
+		<Variant> sql_attr_multi = bigint mva from field </Variant>
+	</Dynamic>
+}
+
+source srcdelta
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT * FROM test_table WHERE document_id in (4,5,6)
+	sql_attr_uint	= tag
+
+	<Dynamic>
+		<Variant> sql_attr_multi = uint mva from field </Variant>
+		<Variant> </Variant>
+		<Variant> sql_attr_multi = bigint mva from field </Variant>
+	</Dynamic>
+}
+
+index main
+{
+	source			= srcmain
+	path			= <data_path/>/main
+
+    <Dynamic>
+      <Variant>	docinfo	= inline </Variant>
+      <Variant>	docinfo	= extern </Variant>
+    </Dynamic>
+}
+
+index delta
+{
+	source			= srcdelta
+	path			= <data_path/>/delta
+    <Dynamic>
+      <Variant>	docinfo	= inline </Variant>
+      <Variant>	docinfo	= extern </Variant>
+    </Dynamic>
+}
+</config>
+
+<indexer>
+<run>--merge main delta --merge-dst-range tag 1 2</run>
+</indexer>
+
+<queries>
+<query index="main">main1</query>
+<query index="main">main2</query>
+<query index="main">main3</query>
+<query index="main">delta1</query>
+<query index="main">delta2</query>
+<query index="main">delta3</query>
+<query index="main">gamma0</query>
+<query index="main" filter="mva" filter_value="1"></query>
+<query index="main" filter="mva" filter_value="100"></query>
+</queries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`tag` int(11) NOT NULL default '0',
+	`mva` varchar(255) NOT NULL default '',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 1, '1 11 111', 'main1' ),
+( 2, 2, '2 22 222', 'main2' ),
+( 3, 3, '3 33 333', 'main3' ),
+( 4, 11,'1 10 100', 'delta1' ),
+( 5, 22,'2 20 200', 'delta2' ),
+( 6, 33,'3 30 300', 'delta3' )
+</db_insert>
+
+</test>

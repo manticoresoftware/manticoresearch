@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>xmlpipe2 indexing vs prefix search</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src
+{
+	type				= xmlpipe2
+	xmlpipe_command		= cat <this_test/>/data1.xml
+	
+	xmlpipe_field		= title
+	xmlpipe_attr_uint	= paper_id
+}
+
+index test
+{
+	source			= src
+	path			= <data_path/>/test
+	min_prefix_len	= 1
+	
+    <Dynamic>
+		<Variant>dict = crc</Variant>
+		<Variant>dict = keywords</Variant>
+    </Dynamic>
+}
+</config>
+
+<queries>
+	<query mode="extended2" sortmode="extended" sortby="paper_id asc"></query>
+	<query mode="extended2" sortmode="extended" sortby="paper_id asc">flo*</query>
+	<query mode="extended2" sortmode="extended" sortby="paper_id asc">fa* | te*</query>
+	<query mode="extended2" sortmode="extended" sortby="paper_id asc">f*</query>
+	<query mode="extended2" sortmode="extended" sortby="paper_id asc">f* !t*</query>
+</queries>
+
+</test>

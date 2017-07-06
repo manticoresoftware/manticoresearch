@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<sphinx:docset>
+
+<sphinx:document id="1">
+<title>test flowing one</title>
+<paper_id>1</paper_id>
+</sphinx:document>
+
+<sphinx:document id="2">
+<title>test of flore two</title>
+<paper_id>2</paper_id>
+</sphinx:document>
+
+<sphinx:document id="3">
+<title>another fast doc</title>
+<paper_id>33</paper_id>
+</sphinx:document>
+
+<sphinx:document id="4">
+<title>doc number four</title>
+<paper_id>40</paper_id>
+</sphinx:document>
+
+</sphinx:docset>

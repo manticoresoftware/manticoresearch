@@ -1,0 +1,173 @@
+<test>
+<name>multi-index queries vs mva and string attributes</name>
+
+<requires>
+<variant_match />
+</requires>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	<Dynamic>
+		<Variant> dist_threads	= 0</Variant>
+		<Variant> dist_threads	= 2</Variant>
+	</Dynamic>
+}
+
+source src_base
+{
+	type = mysql
+	<sql_settings/>
+}
+
+<Dynamic>
+<Variant>
+source src_1 : src_base
+{
+	sql_query = SELECT id, attr1, mva1, mva2, str1, str2, text FROM test_table WHERE idx = 'i1';
+
+	sql_attr_multi = uint mva1 from field
+	sql_attr_multi = uint mva2 from field
+	sql_attr_string = str1
+	sql_attr_string = str2
+	sql_attr_uint	= attr1
+}
+
+source src_2 : src_base
+{
+	sql_query = SELECT  id, attr1, mva2, str1, str2, text FROM test_table WHERE idx = 'i2';
+
+	sql_attr_multi = uint mva2 from field
+	sql_attr_string	= str1
+	sql_attr_string = str2
+	sql_attr_uint	= attr1
+}
+
+source src_3 : src_base
+{
+	sql_query = SELECT  id, attr1, mva1, mva2, str2, text FROM test_table WHERE idx = 'i3';
+
+	sql_attr_multi = uint mva1 from field
+	sql_attr_multi = uint mva2 from field
+	sql_attr_string	= str2
+	sql_attr_uint	= attr1
+}
+</Variant>
+<Variant>
+source src_1 : src_base
+{
+	sql_query = SELECT id, attr1, mva1, mva2, str1, str2, text FROM test_table WHERE idx = 'i1';
+
+	sql_attr_multi = bigint mva1 from field
+	sql_attr_multi = bigint mva2 from field
+	sql_attr_string = str1
+	sql_attr_string = str2
+	sql_attr_uint	= attr1
+}
+
+source src_2 : src_base
+{
+	sql_query = SELECT  id, attr1, mva2, str1, str2, text FROM test_table WHERE idx = 'i2';
+
+	sql_attr_multi = bigint mva2 from field
+	sql_attr_string	= str1
+	sql_attr_string = str2
+	sql_attr_uint	= attr1
+}
+
+source src_3 : src_base
+{
+	sql_query = SELECT  id, attr1, mva1, mva2, str2, text FROM test_table WHERE idx = 'i3';
+
+	sql_attr_multi = bigint mva1 from field
+	sql_attr_multi = bigint mva2 from field
+	sql_attr_string	= str2
+	sql_attr_uint	= attr1
+}
+</Variant>
+</Dynamic>
+
+index i1
+{
+	source			= src_1
+	path			= <data_path/>/i1
+	docinfo			= extern
+	
+}
+
+index i2
+{
+	source			= src_2
+	path			= <data_path/>/i2
+	docinfo			= extern
+	
+}
+
+index i3
+{
+	source			= src_3
+	path			= <data_path/>/i3
+	docinfo			= extern
+	
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INT NOT NULL,
+	attr1 INT NOT NULL,
+	mva1 VARCHAR(255) NOT NULL,
+	mva2 VARCHAR(255) NOT NULL,
+	str1 VARCHAR(255) NOT NULL,
+	str2 VARCHAR(255) NOT NULL,
+	text VARCHAR(255) NOT NULL DEFAULT 'text',
+	idx VARCHAR(255) NOT NULL
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table (id, attr1, mva1, mva2, str1, str2, idx) VALUES
+(  1, 10, '101, 101, 103', '110, 111, 112', 'some data 100', 'another data 110', 'i1' ),
+(  2, 20, '201, 202, 203', '21, 211, 212', 'some data 200', 'another data 210', 'i1' ),
+(  3, 30, '12, 302, 303', '310, 312, 313', 'some data 300', 'another data 310', 'i1' ),
+
+(  1, 1000, '', '1000, 10000, 100000', 'aaa bbb', 'ccc ddd', 'i2' ),
+(  2, 2000, '', '2000, 20000, 21', 'eee fff', 'ggg hhh', 'i2' ),
+(  3, 3000, '', '3000, 30000, 300000', 'iii jjj', 'lll mmm', 'i2' ),
+
+(  1, 1, '2, 3, 4', '5, 6, 7', '', 'second string attribute in the 1st row', 'i3' ),
+(  2, 8, '9, 10, 11', '12, 13, 14', '', 'second string attribute in the 2nd row', 'i3' ),
+(  3, 15, '12, 17, 18', '19, 20, 21', '', 'second string attribute in the 3d row', 'i3' )
+</db_insert>
+
+
+<Query_Settings><![CDATA[
+	$client->SetMatchMode (SPH_MATCH_EXTENDED2);
+
+	$results = array();
+	
+	$q = "text";
+	$i = "*";
+
+	$client->ResetFilters();
+	$client->AddQuery ($q, $i);
+	$client->AddQuery ($q, $i);
+	$results =  $client->RunQueries();
+]]></Query_Settings>
+
+<Queries><Query/></Queries>
+
+</test>
+
+

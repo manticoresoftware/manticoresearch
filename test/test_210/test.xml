@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>stopwords_stem</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = select * from test_table
+	sql_attr_uint = gid
+}
+
+index test
+{
+	source = test
+	path = <data_path/>/test
+
+	morphology = stem_en
+	stopwords = <test_root/>/<this_test/>/stopwords.txt
+	<dynamic>
+	<variant></variant>
+	<variant>stopwords_unstemmed = 0</variant>
+	<variant>stopwords_unstemmed = 1</variant>
+	</dynamic>
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	gid INTEGER NOT NULL,
+	title VARCHAR(255) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_insert>INSERT INTO test_table VALUES
+( 1, 123, 'one busy' ),
+( 2, 123, 'one busier' ),
+( 3, 123, 'one busiest' ),
+( 4, 123, 'one business' ),
+( 5, 123, 'two run' ),
+( 6, 123, 'two runs' ),
+( 7, 123, 'two running' )
+</db_insert>
+
+<queries>
+<query mode="extended2">one busy</query>
+<query mode="extended2">one business</query>
+<query mode="extended2">two run</query>
+<query mode="extended2">two runs</query>
+</queries>
+
+</test>

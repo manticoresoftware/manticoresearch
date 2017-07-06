@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>regexps using RE2</name>
+
+<requires>
+<re2/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source test
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query_pre		= set names utf8
+	sql_query			= select * from test_table
+	sql_file_field 		= file_field
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+	
+	regexp_filter = (\pL\pL)-(\d+) => \1\2
+	regexp_filter = \b(\d+)\" => \1inch
+	regexp_filter = (blue|red) => color
+}
+
+source src_large
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query_pre		= set names utf8
+	sql_query			= select 1 id, 'test_194/file3.txt' file_field, 11 as idd
+	sql_file_field 		= file_field
+	sql_attr_uint		= idd
+}
+
+index test_large
+{
+	source			= src_large
+	path			= <data_path/>/test_large
+	
+	regexp_filter = (blue|red) => color
+}
+
+index rt1
+{
+	type 			= rt
+	path			= <data_path/>/rt1
+	docinfo = extern
+	rt_mem_limit = 8M
+	rt_attr_uint	= idd
+	rt_field		= title
+	dict = keywords
+	regexp_filter = (blue|red) => color
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	content VARCHAR(255) NOT NULL,
+	file_field VARCHAR(255) NOT NULL
+) CHARACTER SET utf8;
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table</db_drop>
+<db_insert>SET NAMES utf8</db_insert>
+<db_insert>
+INSERT INTO test_table VALUES
+( 100, '21" monitor', 'test_194/file1.txt' ),
+( 101, '21inch tires','test_194/file2.txt' ),
+( 102, 'самолёт як-42 - среднемагистральный трёхдвигательный пассажирский', '' ),
+( 103, 'Первый самолёт як42 поступил в авиакомпанию', '' ),
+( 104, 'blue socks and red shoes', '' )
+</db_insert>
+
+<sphqueries>
+<sphinxql>select * from test where match('як-42')</sphinxql>
+<sphinxql>select * from test where match('як42')</sphinxql>
+<sphinxql>select * from test where match('21"')</sphinxql>
+<sphinxql>select * from test where match('21inch')</sphinxql>
+<sphinxql>select * from test where match('inch')</sphinxql>
+<sphinxql>select * from test where match('color')</sphinxql>
+<sphinxql>select * from test where match('blue')</sphinxql>
+<sphinxql>select * from test where match('file1')</sphinxql>
+<sphinxql>select * from test where match('file2')</sphinxql>
+<sphinxql>select * from test where match('fx-35')</sphinxql>
+<sphinxql>select * from test where match('fx35')</sphinxql>
+<sphinxql>select * from test where match('car')</sphinxql>
+
+<!-- regression crash of indexer on indexing large data passed regexp_filter -->
+<sphinxql>select * from test_large where match('color')</sphinxql>
+
+<!-- regression crash of daemon on query RT index with disk chunk -->
+<sphinxql>INSERT INTO rt1 ( id, idd, title ) VALUES ( 1, 11, 'test another test')</sphinxql>
+<sphinxql>FLUSH RAMCHUNK rt1</sphinxql>
+<sphinxql>INSERT INTO rt1 ( id, idd, title ) VALUES ( 2, 22, 'test')</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'test', 'rt1', 1 )</sphinxql>
+
+</sphqueries>
+
+</test>

@@ -1,0 +1,1 @@
+@javadoc *.java -d doc

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<sphinx:docset>
+
+<sphinx:schema>
+<sphinx:field name="title"/>
+<sphinx:field name="content"/>
+<sphinx:attr name="gid" type="int" default="1"/>
+<sphinx:attr name="sgid" type="string" default=""/>
+<sphinx:field name="sgidf" attr="string"/>
+</sphinx:schema>
+
+<sphinx:document id="1">
+<title>test one</title>
+<sgid>here is string attribute</sgid>
+<sgidf>test1 is attr</sgidf>
+<content>this is my test document number one. also checking search within phrases.</content>
+</sphinx:document>
+
+<sphinx:document id="2">
+<title>test one</title>
+<sgid>here is the second string attribute</sgid>
+<sgidf>test2 is attr</sgidf>
+<content>this is my test document number two. also checking search within phrases.</content>
+</sphinx:document>
+
+</sphinx:docset>

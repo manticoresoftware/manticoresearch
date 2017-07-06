@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>RELOAD INDEX</name>
+
+<requires>
+<id64/>
+<non-rt/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+
+<dynamic>
+<variant>seamless_rotate = 1</variant>
+<variant>seamless_rotate = 0</variant>
+</dynamic>
+}
+
+source test
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query			= select * from test_table
+	sql_attr_uint		= gid
+	sql_field_string	= title
+}
+
+index test
+{
+	source				= test
+	path				= <data_path/>/test
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	gid INTEGER NOT NULL,
+	title VARCHAR(255) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_insert>INSERT INTO test_table VALUES ( 1, 123, 'hello world' )</db_insert>
+
+<custom_test><![CDATA[
+$results = array();
+$ql->Reconnect();
+$extensions = array ( 'spa', 'spd', 'spe', 'sph', 'spi', 'spk', 'spm', 'spp', 'sps' );
+
+$results[] = $ql->Query ( "SELECT * FROM test" );
+
+foreach ( $extensions as $e )
+	copy ( 'test_233/data/reload.' . $e, 'test_233/reload_path/reload.' . $e );
+$results[] = $ql->Query ( "RELOAD INDEX test FROM 'test_233/reload_path/reload'" );
+$results[] = $ql->Query ( "SELECT * FROM test" );
+
+foreach ( $extensions as $e )
+	copy ( 'test_233/data/test.' . $e, 'data/test.new.' . $e );
+$results[] = $ql->Query ( "RELOAD INDEX test" );
+$results[] = $ql->Query ( "SELECT * FROM test" );
+
+]]></custom_test>
+
+</test>

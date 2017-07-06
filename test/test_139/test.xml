@@ -1,0 +1,101 @@
+<test>
+<name>string attributes vs buffer ovverun</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT * FROM test_table
+	sql_attr_uint	= idd
+	sql_attr_string = attr1
+	sql_attr_string = attr2	
+}
+
+index test
+{
+	source	= test
+	path	= <data_path/>/test
+	docinfo	= extern
+}
+
+source utf1
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 101, CONCAT(CONCAT('12 dog ', UNHEX ('F4808080') ), '24 doggy show') title, 100 as idd
+	sql_attr_uint	= idd
+}
+
+index utf1
+{
+	source	= utf1
+	path	= <data_path/>/utf1
+	docinfo	= extern
+	min_infix_len = 3
+	dict = keywords	
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INT NOT NULL,
+	text VARCHAR(255) NOT NULL,
+	idd INT NOT NULL,
+	attr1 VARCHAR(5000) NOT NULL,
+	attr2 VARCHAR(5000) NOT NULL
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<custom_insert><![CDATA[
+	$attr = '';
+	for ( $i=1; $i < 400; $i++ )
+	{
+		$attr .= ' overrun'.$i;
+	}
+	
+	$text = sprintf ( "insert into test_table
+		(id, text, idd, attr1, attr2 ) values
+		( 1, 'text', 1, '%s', '%s' )",
+		$attr, $attr );
+	mysql_query ( $text );
+]]></custom_insert>
+
+<!--
+<queries>
+	<query mode="extended2" index="test"></query>
+</queries>
+-->
+<sphqueries>
+	<sphinxql>select * from test</sphinxql>
+</sphqueries>
+
+<custom_test><![CDATA[
+
+$client->AddQuery ( "dog \xF4\x80\x80\x8024", 'utf1' );
+$results = $client->RunQueries ();
+
+if ( is_array($results) )
+	for ( $i=0; $i<count($results); $i++ )
+		if ( is_array($results[$i]) )
+			unset ( $results[$i]["time"] );
+			
+$results[] = $client->BuildKeywords ( "dog \xF4\x80\x80\x8024", 'utf1', True );	
+]]></custom_test>
+			
+</test>

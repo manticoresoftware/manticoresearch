@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>select expressions vs eval stages</name>
+
+<requires> <variant_match /> </requires>
+
+<config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+<searchd_settings/>
+	workers			= threads
+	binlog_path		=
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * FROM test_table WHERE id IN (1,2, 3, 4 )
+	sql_attr_uint	= ival
+	sql_attr_float	= fval
+}
+
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+}
+
+index test_lengths
+{
+	source			= srctest
+	path			= <data_path/>/test_lengths
+	index_field_lengths = 1
+}
+
+source src_mva
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT id, 1 as idd, title as mva, 'test' FROM test_table WHERE id=10
+	sql_attr_uint	= idd
+<Dynamic>	
+	<Variant>sql_attr_multi = uint mva from field</Variant>
+	<Variant>sql_attr_multi = bigint mva from field</Variant>
+</Dynamic>	
+}
+
+index mva
+{
+	source			= src_mva
+	path			= <data_path/>/mva
+}
+
+source src_final
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT id, ival as idd1, id*1000 as idd2, 'test' FROM test_table
+	sql_attr_uint	= idd1
+	sql_attr_uint	= idd2
+}
+
+index final
+{
+	source			= src_final
+	path			= <data_path/>/final
+	docinfo = extern
+}
+
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER NOT NULL,
+	ival INTEGER NOT NULL,
+	fval INTEGER NOT NULL,
+	title VARCHAR(255) NOT NULL
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 11, 10, 'test one' ),
+( 2, 11, 20, 'test two' ),
+( 3, 11, -30, 'test three' ),
+( 4, 22, -40, 'test four' ),
+
+( 10, 1, 1, '10,11,12,13' ),
+
+( 20, 200, 1, '1' ), ( 21, 201, 1, '1' ), ( 22, 202, 1, '1' ), ( 23, 203, 1, '1' ), ( 24, 204, 1, '1' ), ( 25, 205, 1, '1' ),
+( 30, 300, 1, '1' ), ( 31, 301, 1, '1' ), ( 32, 302, 1, '1' ), ( 33, 303, 1, '1' ), ( 34, 304, 1, '1' ), ( 35, 305, 1, '1' )
+</db_insert>
+
+<sphqueries>
+<sphinxql>select * from test where match('test') order by fval asc</sphinxql>
+<sphinxql>select *, fval+1 as f1 from test where match('test') order by f1 desc</sphinxql>
+<sphinxql>select * from test group by fval</sphinxql>
+<sphinxql>select *, ival-1 as i1 from test group by i1</sphinxql>
+<sphinxql>select *, weight()+ival as i1 from test where match('test')</sphinxql>
+<sphinxql>select *, weight()+ival as i1 from test where match('test') and i1>1315</sphinxql>
+<sphinxql>select *, weight() as w, w+ival as i1, i1+10 as i2 from test where match('test') and i2>1325</sphinxql>
+<sphinxql>select *, 10+ival as i1, 50+i1 as i2 from test where match('test')</sphinxql>
+<sphinxql>select *, 10+ival as i1, 50+i1 as i2 from test</sphinxql>
+<sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*10 as i3 from test</sphinxql>
+<sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*10-i1 as i3 from test</sphinxql>
+<sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*fval as i3 from test</sphinxql>
+<sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*fval as i3 from test order by i3 asc</sphinxql>
+<sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*fval as i3 from test order by i1 asc, i3 desc</sphinxql>
+<sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*fval as i3 from test group by i2</sphinxql>
+<sphinxql>select *, 10+ival as i1, 50+i1 as i2, i2*id as i3 from test group by i3</sphinxql>
+
+<!-- here is going another regression from bug #800-->
+<sphinxql>select *, IN ( mva, 11 ) as cnd1 from mva where cnd1=1</sphinxql>
+<!-- regression sorter gives first matches instead bests -->
+<sphinxql>select id, idd1, idd2, idd1 + idd2 as i2 from final group by idd1 order by id desc limit 0,2 option max_matches=4</sphinxql>
+<sphinxql>select id, idd1, idd2, idd1 + idd2 as i2 from final group by idd1 order by id desc limit 2,2 option max_matches=4</sphinxql>
+
+<!-- regression float unhandled filters -->
+<sphinxql>select * from test where fval&lt;=10.0</sphinxql>
+<sphinxql>select * from test where fval&gt;=10.0</sphinxql>
+<sphinxql>select * from test where fval&lt;10.0</sphinxql>
+<sphinxql>select * from test where fval&gt;10.0</sphinxql>
+<sphinxql>select * from test where fval=10.0</sphinxql>
+<sphinxql>select * from test where fval&lt;&gt;10.0</sphinxql>
+
+<!-- regression: filters vs field lengths  -->
+<sphinxql>select * from test_lengths where title_len=0</sphinxql>
+<sphinxql>select * from test_lengths where title_len=2</sphinxql>
+
+<!-- regression bad complex expression -->
+<sphinxql>select 50+ival*10 as ii1, 50+bad*10 from test</sphinxql>
+
+<!-- regression: aggregate dependencies -->
+<sphinxql>select ival*ival as p, sum(p), avg(p), min(p), max(p) from test</sphinxql>
+
+</sphqueries>
+
+</test>

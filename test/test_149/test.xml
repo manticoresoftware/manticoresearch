@@ -1,0 +1,65 @@
+<test>
+<name>MySQL IN vs filter order</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT * FROM test_table
+	sql_attr_uint	= idd
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+	docinfo			= extern
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INT NOT NULL,
+	body VARCHAR(2048) NOT NULL,
+	idd INT NOT NULL
+);
+</db_create>
+
+<db_drop>drop table if exists test_table;</db_drop>
+
+<db_insert>insert into test_table values ( 1, 'test', 10 );</db_insert>
+<db_insert>insert into test_table values ( 2, 'test', 20 );</db_insert>
+<db_insert>insert into test_table values ( 3, 'test', 30 );</db_insert>
+<db_insert>insert into test_table values ( 4, 'test', 40 );</db_insert>
+<db_insert>insert into test_table values ( 5, 'test', 50 );</db_insert>
+<db_insert>insert into test_table values ( 6, 'test', 60 );</db_insert>
+<db_insert>insert into test_table values ( 7, 'test', 70 );</db_insert>
+
+<sphqueries>
+	<sphinxql>select * from test</sphinxql>
+	<sphinxql>select * from test where id IN (1,3,6,7)</sphinxql>
+	<sphinxql>select * from test where id IN (1,1000,3,6,7)</sphinxql>
+	<sphinxql>select * from test where id IN (1000,1,3,6,7)</sphinxql>
+	<sphinxql>select * from test where id IN (1,3,6,1000,7)</sphinxql>
+	<sphinxql>select * from test where idd IN (875,321,60,1010,20,457,20,311,20,750,70,10)</sphinxql>
+	<sphinxql>select * from test where idd NOT IN (60,1010,20,457,20,311,20,750,70,10)</sphinxql>
+	<!-- here is regression broken NOT IN @global -->
+	<sphinxql>set global @attr_filter=(10,20,30,70)</sphinxql>
+	<sphinxql>select * from test where idd IN @attr_filter</sphinxql>
+	<sphinxql>select * from test where idd NOT IN @attr_filter</sphinxql>
+</sphqueries>
+
+</test>

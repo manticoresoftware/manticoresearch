@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>joined fields indexing</name>
+
+<requires>
+<non-rt/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source pure
+{
+	type					= mysql
+	<sql_settings/>
+
+	sql_query				= select id, idd from test;
+	sql_attr_uint			= idd
+	sql_joined_field		= text from query; select id, text from test_joined;
+}
+
+index pure
+{
+	source	= pure
+	path	= <data_path/>/pure
+
+    docinfo					= extern
+}
+
+source test
+{
+	type					= mysql
+	<sql_settings/>
+
+	sql_query				= select id, text, idd from test;
+	sql_joined_field		= text from query; select id, text from test_joined;
+	sql_attr_uint			= idd
+}
+
+index test
+{
+	source	= test
+	path	= <data_path/>/test
+
+    docinfo					= extern
+	
+    phrase_boundary			= .
+    phrase_boundary_step	= 2
+	stopwords				= <this_test/>/stopwords.txt
+}
+
+source ignore_absent_joined_ids
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = SELECT 1, 'one two three'
+	sql_joined_field = test from query; SELECT 2, 'пыля безопастн'
+
+}
+
+index ignore_absent_joined_ids
+{
+	source = ignore_absent_joined_ids
+	path = <data_path/>/ignore_absent_joined_ids
+}
+
+source multi_joined
+{
+	type = mysql
+	<sql_settings/>
+	sql_attr_uint = idd
+
+	sql_query = SELECT 490495 id, 11 idd, 'Beast Obsessed 3 - Scene 12 - Future Works' t1, '' t2 UNION SELECT 490496 id, 11 idd, 'Hot Fonde Aaliyah Love Foo Her Stud Longer' t1, 'When Ryan comes into the picture' t2 UNION SELECT 490497 id, 11 idd, 'Daia Gloomer Big Noob In Prague' t1, 'Daia Gloomer Big Noob' t2
+
+	sql_joined_field = t1 from query; SELECT 0 id, 'aspirine brunette fooneling powder solo latina group salsa webcam gum idling shovel european killing too tan lines' t1 UNION SELECT 490495 id, 'job babe cow busty mugshot wire all full trip' t1 UNION SELECT 490496 id, 'hd fonde style glamour love madison ryan aaliyah' t1  UNION SELECT 490497 id, 'job salsa redhead famous shot tilt daia gloomer' t1
+	sql_joined_field = t1 from query; SELECT 490496 id, 'Aaliyah Love' t1
+}
+
+index multi_joined
+{
+	source = multi_joined
+	path = <data_path/>/multi_joined
+	
+	docinfo			= extern
+ 	charset_table		= 0..9, a..z, A..Z->a..z, _
+}
+
+</config>
+
+<db_create>
+create table test
+(
+	id int,
+	text varchar(255),
+	idd int
+);
+</db_create>
+
+<db_create>
+create table test_joined
+(
+	id int,
+	text varchar(255)
+);
+</db_create>
+
+<db_drop>drop table if exists test</db_drop>
+<db_drop>drop table if exists test_joined</db_drop>
+
+<db_insert>
+insert into test (id, text, idd) values
+	( 1, 'aaa', 1 ),
+	( 2, 'aaa bbb', 2 ),
+	( 3, 'bbb ccc', 3 );
+</db_insert>
+
+<db_insert>
+insert into test_joined (id, text) values
+	( 1, 'jjj kkk' ),
+	( 1, 'zzz. my' ),
+	( 1, 'cool' ),
+	( 2, 'yyy' ),
+	( 2, 'ttt' ),
+	( 3, 'ccc do. dog' ),
+	( 3, 'sleepy' );
+</db_insert>
+
+<queries>
+	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">aaa</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">bbb</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">aaa | bbb</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">"aaa bbb"</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">( kkk zzz ) | "do dog"</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">( kkk zzz ) | "do not as dog"</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">"kkk zzz"</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">"zzz not as not cool"</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">"zzz do dog look cool"/2</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">dog not as do sleepy</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">"dog not as do sleepy"</query>
+	<query mode="extended2" index="test" sortmode="extended" sortby="@id asc">"do not as dog sleepy"</query>
+	<!-- regression crash on pure joined fields index indexing -->
+	<query mode="extended2" index="pure" sortmode="extended" sortby="@id asc">( dog sleepy ) | my</query>
+	<!-- regression crash on joined fields index indexing with docid==0 and dupes -->
+	<query mode="extended2" index="multi_joined" sortmode="extended" sortby="@id asc"></query>
+</queries>
+
+</test>

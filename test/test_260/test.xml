@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>rotate indexes wo path</name>
+<skip_indexer/>
+<requires><non-rt/></requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	binlog_path =
+	workers = threads
+	seamless_rotate = 1
+}
+
+source sql1
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = select id, text, mode from test_table
+	sql_attr_uint = mode
+}
+
+index plain1
+{
+	source = sql1
+	charset_table	= 0..9, A..Z->a..z, _, a..z
+	docinfo = extern
+	# replace_path1
+}
+
+index plain2
+{
+	source = sql1
+	charset_table	= 0..9, A..Z->a..z, _, a..z
+	docinfo = extern
+	# replace_path2
+}
+
+index tmp1
+{
+	type			= template
+	dict			= keywords
+	charset_table	= 0..9, A..Z->a..z, _, a..z
+}
+</config>
+
+<db_drop>drop table if exists test_table</db_drop>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	text varchar(255) not null,
+	mode int
+);
+</db_create>
+
+<db_insert>
+insert into test_table values
+( 1, 'first',  1 ),
+( 2, 'second',  1 ),
+( 3, 'third',  2 ),
+( 4, 'fourth', 2 ),
+( 5, 'fifth',  3 ),
+( 6, 'six',  3 ),
+
+( 10, 'many',    4 ),
+( 11, 'more',    4 )
+</db_insert>
+
+<custom_test><![CDATA[
+
+$results = array();
+$ql->Reconnect();
+
+$results[] = "\nbefore rotation";
+$results[] = "\n" . $ql->Query ( "SHOW tables" );
+
+$orig_conf = file('config.conf');
+
+$new_conf = '';
+foreach ( $orig_conf as $line )
+{
+	$placeholder1 = strpos ( $line, '# replace_path1' );
+	if ( $placeholder1 )
+		$line = "path = data/plain1\n";
+	$placeholder2 = strpos ( $line, '# replace_path2' );
+	if ( $placeholder2 )
+		$line = "path = data/plain2 # replace_path2\n";
+	$new_conf .= $line;
+}
+file_put_contents('config.conf', $new_conf);
+
+RunIndexer ( $errors, '--rotate plain1 plain2' );
+sleep(2);
+
+$orig_conf = file('config.conf');
+
+$new_conf = '';
+foreach ( $orig_conf as $line )
+{
+	$placeholder2 = strpos ( $line, '# replace_path2' );
+	if ( $placeholder2 )
+		$line = "\n";
+	$new_conf .= $line;
+}
+file_put_contents('config.conf', $new_conf);
+
+RunIndexer ( $errors, '--rotate plain1' );
+sleep(2);
+
+$results[] = "\nafter rotation";
+$results[] = "\n" . $ql->Query ( "SHOW tables" );
+$results[] = 'plain1';
+$results[] = "\n" . $ql->Query ( "SELECT * FROM plain1 order by id asc" );
+$results[] = 'tmp1';
+$results[] = "\n" . $ql->Query ( " CALL SNIPPETS('Kph on Europe road 1110', 'tmp1', 'kph' ) " );
+]]></custom_test>
+
+</test>

@@ -1,0 +1,307 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>support for 256 fields in disk/RT indexes</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT * FROM test_table
+}
+
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+}
+source srctests
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT document_id, t21, t141, t241 FROM test_table
+}
+
+index tests
+{
+	source			= srctests
+	path			= <data_path/>/tests
+}
+
+index rt28
+{
+ type = rt
+ path = <data_path/>/rt28
+
+ rt_field = field1
+ rt_field = field2
+ rt_field = field3
+ rt_field = field4
+ rt_field = field5
+ rt_field = field6
+ rt_field = field7
+ rt_field = field8
+ rt_field = field9
+ rt_field = field10
+ rt_field = field11
+ rt_field = field12
+ rt_field = field13
+ rt_field = field14
+ rt_field = field15
+ rt_field = field16
+ rt_field = field17
+ rt_field = field18
+ rt_field = field19
+ rt_field = field20
+ rt_field = field21
+ rt_field = field22
+ rt_field = field23
+ rt_field = field24
+ rt_field = field25
+ rt_field = field26
+ rt_field = field27
+ rt_field = field28
+ rt_attr_uint = attr1
+}
+
+index rt40
+{
+ type = rt
+ path = <data_path/>/rt40
+
+ rt_field = field1
+ rt_field = field2
+ rt_field = field3
+ rt_field = field4
+ rt_field = field5
+ rt_field = field6
+ rt_field = field7
+ rt_field = field8
+ rt_field = field9
+ rt_field = field10
+ rt_field = field11
+ rt_field = field12
+ rt_field = field13
+ rt_field = field14
+ rt_field = field15
+ rt_field = field16
+ rt_field = field17
+ rt_field = field18
+ rt_field = field19
+ rt_field = field20
+ rt_field = field21
+ rt_field = field22
+ rt_field = field23
+ rt_field = field24
+ rt_field = field25
+ rt_field = field26
+ rt_field = field27
+ rt_field = field28
+ rt_field = field29
+ rt_field = field30
+ rt_field = field31
+ rt_field = field32
+ rt_field = field33
+ rt_field = field34
+ rt_field = field35
+ rt_field = field36
+ rt_field = field37
+ rt_field = field38
+ rt_field = field39
+ rt_field = field40
+ rt_attr_uint = attr1
+}
+
+source src_many_attr
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data_embedded.xml
+	xmlpipe_fixup_utf8 = 1
+}
+
+index many_attr
+{
+	source = src_many_attr
+	path = <data_path/>/src_many_attr
+}
+
+
+</config>
+
+<!-- NOTE: the test model is made wrong, since we postponed a feature.
+Look at http://sphinxsearch.com/bugs/view.php?id=952 for details -->
+<sphqueries>
+<sphinxql>select * from tests where match ('field_one')</sphinxql>
+<sphinxql>select * from test where match ('field_one')</sphinxql>
+<sphinxql>select * from tests where match ('field_two')</sphinxql>
+<sphinxql>select * from test where match ('field_two')</sphinxql>
+<sphinxql>select * from tests where match ('@t21 field_one')</sphinxql>
+<sphinxql>select * from tests where match ('@t141 field_one')</sphinxql>
+<sphinxql>select * from test where match ('@t21 field_one')</sphinxql>
+<sphinxql>select * from tests where match ('@t21 field_two')</sphinxql>
+<sphinxql>select * from test where match ('@t21 field_two')</sphinxql>
+<sphinxql>select * from tests where match ('@t141 field_three')</sphinxql>
+<sphinxql>select * from test where match ('@t141 field_three')</sphinxql>
+<sphinxql>select * from tests where match ('@t141 field_two')</sphinxql>
+<sphinxql>select * from test where match ('@t141 field_two')</sphinxql>
+<sphinxql>select * from tests where match ('@t241 field_two')</sphinxql>
+<sphinxql>select * from test where match ('@t241 field_two')</sphinxql>
+<sphinxql>select * from tests where match ('field_one field_two')</sphinxql>
+<sphinxql>select * from test where match ('field_one field_two')</sphinxql>
+<sphinxql>select * from tests where match ('field_one @t141 field_two')</sphinxql>
+<sphinxql>select * from test where match ('field_one @t141 field_two')</sphinxql>
+<sphinxql>select * from tests where match ('field_one @t21 field_two')</sphinxql>
+<sphinxql>select * from test where match ('field_one @t21 field_two')</sphinxql>
+
+<sphinxql>insert into rt40 (id,attr1,
+	field1,field2,field3,field4,field5,field6,field7,field8,field9,field10,
+	field11,field12,field13,field14,field15,field16,field17,field18,field19,field20,
+	field21,field22,field23,field24,field25,field26,field27,field28,field29,field30,
+	field31,field32,field33,field34,field35,field36,field37,field38,field39,field40)
+values (123,111,'kw1','kw2','kw3','kw4','kw5','kw6','kw7','kw8','kw9','kw10',
+	'kw11','kw12','kw13','kw14','kw15','kw16','kw17','kw18','kw19','kw20',
+	'kw21','kw22','kw23','kw24','kw25','kw26','kw27','kw28','kw29','kw30',
+	'kw31','kw32','kw33','kw34','kw35','kw36','kw37','kw38','kw39','kw40')</sphinxql>
+<sphinxql>select *, 1 as testid from rt40 where match('kw37')</sphinxql>
+<sphinxql>select *, 2 as testid from rt40 where match('@field5 kw37')</sphinxql>
+<sphinxql>select *, 3 as testid from rt40 where match('@field37 kw37')</sphinxql>
+
+<sphinxql>insert into rt28 (id,attr1,
+	field1,field2,field3,field4,field5,field6,field7,field8,field9,field10,
+	field11,field12,field13,field14,field15,field16,field17,field18,field19,field20,
+	field21,field22,field23,field24,field25,field26,field27,field28)
+values (124,222,
+	'kw1','kw2','kw3','kw4','kw5','kw6','kw7','kw8','kw9','kw10',
+	'kw11','kw12','kw13','kw14','kw15','kw16','kw17','kw18','kw19','kw20',
+	'kw21','kw22','kw23','kw24','kw25','kw26','kw27','kw28')</sphinxql>
+<sphinxql>select *, 1 as testid from rt28 where match('kw17')</sphinxql>
+<sphinxql>select *, 2 as testid from rt28 where match('@field17 kw17')</sphinxql>
+<sphinxql>select *, 3 as testid from rt28 where match('@field3 kw17')</sphinxql>
+
+<sphinxql>insert into rt40 (id,field37) values (125,'kw37 copy2')</sphinxql>
+<sphinxql>select * from rt40 where match('kw37')</sphinxql>
+<sphinxql>select * from rt40 where match('@field37 kw37')</sphinxql>
+
+<sphinxql>insert into rt40 (id,field37) values (126,'kw37 copy3 ')</sphinxql>
+<sphinxql>select * from rt40 where match('kw37')</sphinxql>
+<sphinxql>select * from rt40 where match('@field37 kw37')</sphinxql>
+
+<!-- insert a bunch of dummies to force a segment merge; FIXME? implicitly depends on merging strategy.. -->
+<sphinxql>insert into rt40 (id,field39) values (200, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (201, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (202, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (203, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (204, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (205, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (206, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (207, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (208, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (209, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (210, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (211, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (212, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (213, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (214, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (215, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (216, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (217, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (218, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (219, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (220, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (221, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (222, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (223, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (224, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (225, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (226, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (227, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (228, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (229, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (230, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (231, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (232, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (233, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (234, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (235, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (236, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (237, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (238, 'badger badger badger badger mushroom mushroom')</sphinxql>
+<sphinxql>insert into rt40 (id,field39) values (239, 'badger badger badger badger mushroom mushroom')</sphinxql>
+
+<sphinxql>select * from rt40 where match('kw37')</sphinxql>
+<sphinxql>select * from rt40 where match('@field37 kw37')</sphinxql>
+
+<sphinxql>select * from rt40 where match('@field39 badger') limit 40</sphinxql>
+<sphinxql>show meta</sphinxql>
+
+<!--regression sort \ group by on expr at column over 255 -->
+<sphinxql>select id, idd265 from many_attr order by idd265 desc</sphinxql>
+<sphinxql>select id, idd265 i from many_attr order by i desc</sphinxql>
+<sphinxql>select id, idd265 + 1 as i from many_attr order by i desc</sphinxql>
+<sphinxql>select id, idd265 + 1 as i, i as i1, i1 as i2 from many_attr order by i2 desc</sphinxql>
+<sphinxql>select id, idd265 from many_attr group by idd265</sphinxql>
+<sphinxql>select id, idd265 as i from many_attr group by i</sphinxql>
+<sphinxql>select id, ( ( idd265 - 1000 ) mod  3 ) as i from many_attr group by i</sphinxql>
+<sphinxql>select id, ( ( idd265 - 1000 ) mod  3 ) as i, i as i1, i1 as i2 from many_attr group by i2</sphinxql>
+
+</sphqueries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`t1` char(5),`t2` char(5),`t3` char(5),`t4` char(5),`t5` char(5),`t6` char(5),`t7` char(5),`t8` char(5),`t9` char(5),`t10` char(5),
+	`t11` char(5),`t12` char(5),`t13` char(5),`t14` char(5),`t15` char(5),`t16` char(5),`t17` char(5),`t18` char(5),`t19` char(5),`t20` char(5),
+	`t21` char(25),`t22` char(5),`t23` char(5),`t24` char(5),`t25` char(5),`t26` char(5),`t27` char(5),`t28` char(5),`t29` char(5),`t30` char(5),
+	`t31` char(5),`t32` char(5),`t33` char(5),`t34` char(5),`t35` char(5),`t36` char(5),`t37` char(5),`t38` char(5),`t39` char(5),`t40` char(5),
+	`t41` char(5),`t42` char(5),`t43` char(5),`t44` char(5),`t45` char(5),`t46` char(5),`t47` char(5),`t48` char(5),`t49` char(5),`t50` char(5),
+	`t51` char(5),`t52` char(5),`t53` char(5),`t54` char(5),`t55` char(5),`t56` char(5),`t57` char(5),`t58` char(5),`t59` char(5),`t60` char(5),
+	`t61` char(5),`t62` char(5),`t63` char(5),`t64` char(5),`t65` char(5),`t66` char(5),`t67` char(5),`t68` char(5),`t69` char(5),`t70` char(5),
+	`t71` char(5),`t72` char(5),`t73` char(5),`t74` char(5),`t75` char(5),`t76` char(5),`t77` char(5),`t78` char(5),`t79` char(5),`t80` char(5),
+	`t81` char(5),`t82` char(5),`t83` char(5),`t84` char(5),`t85` char(5),`t86` char(5),`t87` char(5),`t88` char(5),`t89` char(5),`t90` char(5),
+	`t91` char(5),`t92` char(5),`t93` char(5),`t94` char(5),`t95` char(5),`t96` char(5),`t97` char(5),`t98` char(5),`t99` char(5),`t100` char(5),
+	`t101` char(5),`t102` char(5),`t103` char(5),`t104` char(5),`t105` char(5),`t106` char(5),`t107` char(5),`t108` char(5),`t109` char(5),`t110` char(5),
+	`t111` char(5),`t112` char(5),`t113` char(5),`t114` char(5),`t115` char(5),`t116` char(5),`t117` char(5),`t118` char(5),`t119` char(5),`t120` char(5),
+	`t121` char(5),`t122` char(5),`t123` char(5),`t124` char(5),`t125` char(5),`t126` char(5),`t127` char(5),`t128` char(5),`t129` char(5),`t130` char(5),
+	`t131` char(5),`t132` char(5),`t133` char(5),`t134` char(5),`t135` char(5),`t136` char(5),`t137` char(5),`t138` char(5),`t139` char(5),`t140` char(5),
+	`t141` char(25),`t142` char(5),`t143` char(5),`t144` char(5),`t145` char(5),`t146` char(5),`t147` char(5),`t148` char(5),`t149` char(5),`t150` char(5),
+	`t151` char(5),`t152` char(5),`t153` char(5),`t154` char(5),`t155` char(5),`t156` char(5),`t157` char(5),`t158` char(5),`t159` char(5),`t160` char(5),
+	`t161` char(5),`t162` char(5),`t163` char(5),`t164` char(5),`t165` char(5),`t166` char(5),`t167` char(5),`t168` char(5),`t169` char(5),`t170` char(5),
+	`t171` char(5),`t172` char(5),`t173` char(5),`t174` char(5),`t175` char(5),`t176` char(5),`t177` char(5),`t178` char(5),`t179` char(5),`t180` char(5),
+	`t181` char(5),`t182` char(5),`t183` char(5),`t184` char(5),`t185` char(5),`t186` char(5),`t187` char(5),`t188` char(5),`t189` char(5),`t190` char(5),
+	`t191` char(5),`t192` char(5),`t193` char(5),`t194` char(5),`t195` char(5),`t196` char(5),`t197` char(5),`t198` char(5),`t199` char(5),`t200` char(5),
+	`t201` char(5),`t202` char(5),`t203` char(5),`t204` char(5),`t205` char(5),`t206` char(5),`t207` char(5),`t208` char(5),`t209` char(5),`t210` char(5),
+	`t211` char(5),`t212` char(5),`t213` char(5),`t214` char(5),`t215` char(5),`t216` char(5),`t217` char(5),`t218` char(5),`t219` char(5),`t220` char(5),
+	`t221` char(5),`t222` char(5),`t223` char(5),`t224` char(5),`t225` char(5),`t226` char(5),`t227` char(5),`t228` char(5),`t229` char(5),`t230` char(5),
+	`t231` char(5),`t232` char(5),`t233` char(5),`t234` char(5),`t235` char(5),`t236` char(5),`t237` char(5),`t238` char(5),`t239` char(5),`t240` char(5),
+	`t241` char(25),`t242` char(5),`t243` char(5),`t244` char(5),`t245` char(5),`t246` char(5),`t247` char(5),`t248` char(5),`t249` char(5),`t250` char(5),
+	`t251` char(5),`t252` char(5),`t253` char(5),`t254` char(5),`t255` char(5),`t256` char(5)
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`;
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` (document_id, t21, t141, t241) VALUES
+( 1, 'field_one', 'field_one field_one', 'field_one field_two' ),
+( 2, 'field_three', 'field_two', 'field_three' ),
+( 3, 'field_one', 'field_one', 'field_one');
+</db_insert>
+
+</test>

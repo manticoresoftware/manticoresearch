@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>expression based ranker</name>
+
+<config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+	binlog_path = #
+}
+
+source test
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query			= select *, '1,2,3' mva32, '1,2,3' mva64 from test_table
+	sql_attr_uint		= gid
+	sql_field_string	= title
+	sql_attr_multi		= uint mva32 from field mva32
+	sql_attr_multi		= bigint mva64 from field mva64
+}
+
+index test
+{
+	source				= test
+	path				= <data_path/>/test
+	index_field_lengths = 1
+}
+
+index dist
+{
+	type = distributed
+	agent = <my_address/>:test
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000	
+}
+
+source src_ext
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data_ext.xml
+	xmlpipe_field = title
+	xmlpipe_field = content
+	xmlpipe_attr_uint = gid
+}
+
+source src_int
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data_int.xml
+}
+
+index xml_ext
+{
+	source				= src_ext
+	path				= <data_path/>/xml_ext
+	docinfo				= extern
+	index_field_lengths = 1
+}
+
+index xml_int
+{
+	source				= src_int
+	path				= <data_path/>/xml_int
+	docinfo				= extern
+	index_field_lengths = 1
+}
+
+source dup
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query			= select 1 id, 11 idd, 'the who' f1, 'what the foo' f2 UNION SELECT 2 id, 11 idd, 'we are' f1, 'greatest' f2 UNION SELECT 3 id, 11 idd, 'If there were a schmillion hours in the day, maybe I d have enough time.' f1, 'Puerto Rico was fun 910 s of the time.  I ve been told time and time again that I need to wait and see how things play out, that it needs time.  It s not that simple, I m not a patient person in the least, and I feel like I don t have time to devote to all this shit.  I haven y begun any school work yet, anf now I m sick.  I can t begin to describe how alone I feel, how miserably alone.  Not just because I m home from PR and there s nobody around, but for so many other reasons I don t want to get into, and that s why this entry along with every other one ever written will remain vague.  Everything is a reminder.  While in I was down there I did something I haven t done for a long time.  I talked to God.  I mean I pray, but this was a conversation, just two people talking about everything that concerns me.  It was awesome.  I ve never had a strong relationship with my father,so I like it that God fills that role.  However I have realized I don t really have a very strong relationship with Jesus, I do with God, and I know they re all connected but, I never really pray to Jesus or talk to him.  I need to work on that, along with a crap load of other stiff. With All Due Respect, Corey Paul Florindi I' f2  UNION SELECT 4 id, 11 idd, 'great' f1, 'greatest' f2 
+	sql_attr_uint		= idd
+}
+
+index dup
+{
+	source				= dup
+	path				= <data_path/>/dup
+	index_field_lengths = 1
+}
+
+
+
+source src_fields
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data_fields.xml
+}
+
+index fields
+{
+	source				= src_fields
+	path				= <data_path/>/fields
+	docinfo				= extern
+}
+
+source src_str2
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query			= SELECT 1 id, 11 gid, 'who' title, 'Well who is that shouting?' content UNION SELECT 2 id, 12 gid, 'is' title, 'All he ever gives us is pain' content UNION SELECT 3 id, 13 gid, 'who' title, 'Well who is shoping there?' content 
+	sql_field_string 	= title
+	sql_attr_uint 		= gid
+}
+
+index str2
+{
+	source				= src_str2
+	path				= <data_path/>/str2
+	docinfo				= extern
+}
+
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	gid INTEGER NOT NULL,
+	title VARCHAR(255) NOT NULL,
+	content VARCHAR(255) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_insert>
+INSERT INTO test_table VALUES
+( 100, 1, 'Seven lies multiplied by seven', '' ),
+( 101, 1, 'Multiplied by seven again', '' ),
+( 102, 1, 'Seven angels with seven trumpets', '' ),
+( 103, 1, 'Send them home on a morning train', '' ),
+( 104, 1, 'Well who is that shouting?', '' ),
+( 105, 1, 'John the Revelator', '' ),
+( 106, 1, 'All he ever gives us is pain', '' ),
+( 107, 1, 'Well who is that shouting?', '' ),
+( 108, 1, 'John the Revelator', '' ),
+( 109, 1, 'He should bow his head in shame', '' ),
+
+( 110, 2, 'Mary vs Lamb', 'Mary had a little lamb little lamb little lamb' ),
+( 111, 2, 'Mary vs Lamb 2: Return of The Lamb', '...whose fleece was white as snow' ),
+( 112, 2, 'Mary vs Lamb 3: The Resurrection', 'Snow! Bloody snow!' )
+</db_insert>
+
+<sphqueries>
+<!-- check that expr yields same result as bultin proximity_bm25 -->
+<sphinxql>select id, gid, weight(), title from test where match('seven') and gid=1</sphinxql>
+<sphinxql>select id, gid, weight(), title from test where match('seven') and gid=1 option ranker=expr('sum(lcs)*1000+bm25')</sphinxql>
+<sphinxql>select id, gid, weight(), title from test where match('seven') and gid=1 option ranker=expr('sum(300*lcs+700*lcs)+bm25')</sphinxql>
+
+<!-- check that query_word_count stuff works okay (in general, with dupes, with NOTs etc) -->
+<sphinxql>select id, gid, weight(), title from test where match('seven|lies') and gid=1 option ranker=expr('query_word_count*100+sum(word_count)*10+sum(hit_count)')</sphinxql>
+<sphinxql>select id, gid, weight(), title from test where match('seven seven seven seven') and gid=1 option ranker=expr('query_word_count*100+sum(word_count)*10+sum(hit_count)')</sphinxql>
+<sphinxql>select id, gid, weight(), title from test where match('seven !se7en') and gid=1 option ranker=expr('query_word_count*100+sum(word_count)*10+sum(hit_count)')</sphinxql>
+<sphinxql>select id, gid, weight(), title from test where match('seven !(angels !by)') and gid=1 option ranker=expr('query_word_count*100+sum(word_count)*10+sum(hit_count)')</sphinxql>
+
+<!-- check that doc_word_count stuff works -->
+<sphinxql>select id, gid, weight(), title from test where match('lamb') and gid=2 option ranker=expr('doc_word_count*1000+sum(word_count)')</sphinxql>
+
+<!-- regression that expression has not sent to agents -->
+<sphinxql>select id, gid, weight(), title from dist where match('seven|lies') and gid=1 option ranker=expr('query_word_count*100+sum(word_count)*10+sum(hit_count)')</sphinxql>
+<sphinxql>select id, gid, weight(), title from dist where match('seven !(angels !by)') and gid=1 option ranker=expr('query_word_count*100+sum(word_count)*10+sum(hit_count)')</sphinxql>
+<sphinxql>select id, gid, weight(), title from dist where match('lamb') and gid=2 option ranker=expr('doc_word_count*1000+sum(word_count)')</sphinxql>
+
+<!-- check that duplicate query words work -->
+<sphinxql>select id, gid, weight(), title from test where match('seven|seven|seven') option ranker=expr('sum(lcs)*1000+bm25')</sphinxql>
+
++<!-- rel20 regressions -->
++<sphinxql>select id, gid, weight(), title from test where match('mary') option ranker=expr('crc32(title)')</sphinxql>
++<sphinxql>select id, gid, weight(), title from test where match('mary') option ranker=expr('in(mva32,1)')</sphinxql>
++<sphinxql>select id, gid, weight(), title from test where match('mary') option ranker=expr('in(mva64,1)')</sphinxql>
+
+<!-- bm25f expression vs ranker function -->
+<sphinxql>select id, weight() as w1, FLOOR ( bm25f(1.2, 0.8, {content=10}) * 100000 ) as w2 from test where match('Mary lamb') option ranker=expr('bm25f(1.2, 0.8, {content=10}) * 1000')</sphinxql>
+<sphinxql>select id, weight() as w1, FLOOR ( bm25f(1.2, 0.8, {content=1000}) * 100000 ) as w2 from test where match('Mary lamb') option ranker=expr('bm25f(1.2, 0.8, {content=10}) * 1000')</sphinxql>
+<sphinxql>select id, weight() as w1, FLOOR ( bm25f(2.2, 0.5) * 100000 ) as w2, FLOOR ( bm25f(1.2, 0.8, {content=10}) * 100000 ) as w3 from test where match('Mary lamb') option ranker=expr('bm25f(10.2, 0.5) * 1000')</sphinxql>
+<sphinxql>select id, weight() as w1, bm25f(2.2, 0.5) * 1000 as w2 from test where match('Mary lamb')</sphinxql>
+<sphinxql>show warnings</sphinxql>
+
+<!-- regression hash vs attr-name -->
+<sphinxql>select id, weight() as w1, FLOOR ( bm25f(1.2, 0.8, {title=10}) * 100000 ) as w2 from test where match('Mary lamb') option ranker=expr('bm25f(1.2, 0.8, {title=10}) * 1000')</sphinxql>
+<sphinxql>select id, weight() as w1, FLOOR ( bm25f(1.2, 0.8, {title=2}) * 100000 ) as w2 from test where match('Mary lamb') option ranker=expr('bm25f(1.2, 0.8, {title=10}) * 1000')</sphinxql>
+
+<!-- index_field_lengths vs xml schema config defined and embeded -->
+<sphinxql>select id, weight() as w1, FLOOR ( bm25f(2.2, 0.5) * 100000 ) as w2, FLOOR ( bm25f(1.2, 0.8, {content=10}) * 100000 ) as w3 from xml_ext where match('Mary lamb') option ranker=expr('bm25f(10.2, 0.5) * 1000')</sphinxql>
+<sphinxql>select id, weight() as w1, FLOOR ( bm25f(2.2, 0.5) * 100000 ) as w2, FLOOR ( bm25f(1.2, 0.8, {content=10}) * 100000 ) as w3 from xml_int where match('Mary lamb') option ranker=expr('bm25f(10.2, 0.5) * 1000')</sphinxql>
+
+<!-- regression bm25f expression vs agent -->
+<sphinxql>select id, weight() as w1, FLOOR ( bm25f(1.2, 0.8, {content=10}) * 100000 ) as w2 from dist where match('Mary lamb') option ranker=expr('bm25f(1.2, 0.8, {content=10}) * 1000')</sphinxql>
+
+<sphinxql>select title gid from test limit 1</sphinxql>
+
+<!-- regression bm25f for missed word expression vs ranker -->
+<sphinxql>select *, weight() as w1, FLOOR( bm25f(1.2, 0.8)*1000 ) as w2 from test where match('( the | missed1 | seven ) !missed2 ') ORDER by id ASC option ranker=expr('bm25f(1.2,0.8) * 1000')</sphinxql>
+
+<!-- regression duplicates at query vs expression ranker -->
+<sphinxql>select *, packedfactors() from dup where match(' "the I the"~1 ') ORDER by id ASC option ranker=expr('1'),  idf='plain,tfidf_unnormalized'</sphinxql>
+<sphinxql>select *, packedfactors() from dup where match(' "the I the"~100 ') ORDER by id ASC option ranker=expr('1'),  idf='plain,tfidf_unnormalized'</sphinxql>
+<sphinxql>select *, packedfactors() from dup where match(' "the I"~100 ') ORDER by id ASC option ranker=expr('1'),  idf='plain,tfidf_unnormalized'</sphinxql>
+<sphinxql>select *, packedfactors() from dup where match(' "the I the"~1 the ') ORDER by id ASC option ranker=expr('1'),  idf='plain,tfidf_unnormalized'</sphinxql>
+<sphinxql>select *, packedfactors() from dup where match(' "the I the"~100 the ') ORDER by id ASC option ranker=expr('1'),  idf='plain,tfidf_unnormalized'</sphinxql>
+<sphinxql>select *, packedfactors() from dup where match(' the "the I the"~1 ') ORDER by id ASC option ranker=expr('1'),  idf='plain,tfidf_unnormalized'</sphinxql>
+<sphinxql>select *, packedfactors() from dup where match(' the "the I the"~100 ') ORDER by id ASC option ranker=expr('1'),  idf='plain,tfidf_unnormalized'</sphinxql>
+<sphinxql>select *, packedfactors() from dup where match(' (the who) | (the foo) ') ORDER by id ASC option ranker=expr('1'),  idf='plain,tfidf_unnormalized'</sphinxql>
+<sphinxql>select *, packedfactors() from dup where match(' what | foo | what ') ORDER by id ASC option ranker=expr('1'),  idf='plain,tfidf_unnormalized'</sphinxql>
+<sphinxql>select *, packedfactors() from dup where match(' that | was | that ') ORDER by id ASC option ranker=expr('1'),  idf='plain,tfidf_unnormalized'</sphinxql>
+<sphinxql>select *, packedfactors() from dup where match(' "that was that"~10 ') ORDER by id ASC option ranker=expr('1'),  idf='plain,tfidf_unnormalized'</sphinxql>
+
+<!-- regression proximity, phrase, NEAR vs expression ranker -->
+<sphinxql>select *, packedfactors() from dup where match(' "maybe I" | "I m" ') ORDER by id ASC option ranker=expr('1'),  idf='plain,tfidf_unnormalized'</sphinxql>
+<sphinxql>select *, packedfactors() from dup where match(' ( I NEAR/10 work) | (I NEAR/20 there) ') ORDER by id ASC option ranker=expr('1'),  idf='plain,tfidf_unnormalized'</sphinxql>
+
+<!-- hits from over 32 field  -->
+<sphinxql>select *, weight() as w, packedfactors() from fields where match(' test ') option ranker=expr('sum(lcs)')</sphinxql>
+
+<sphinxql>update test set nonexistent=1.1, gid=1 where id=100 option ignore_nonexistent_columns=1</sphinxql>
+
+<!-- regression term related factors vs packedfactors flag -->
+<sphinxql>select id, weight() as w, packedfactors() from test where match(' "by seven" ') ORDER by id ASC option ranker=expr('sum(min_idf)*1000'), idf='plain,tfidf_unnormalized'</sphinxql>
+<sphinxql>select id, weight() as w, rankfactors() from test where match(' "by seven" ') ORDER by id ASC option ranker=export('sum(min_idf)*1000'), idf='plain,tfidf_unnormalized'</sphinxql>
+<sphinxql>select id, weight() as w from test where match(' "by seven" ') ORDER by id ASC option ranker=expr('sum(min_idf)*1000'), idf='plain,tfidf_unnormalized'</sphinxql>
+
+<!-- both ranker shoud return the same weights -->
+<sphinxql>select id, weight() from dup where match('the the') option ranker=proximity_bm25</sphinxql>
+<sphinxql>select id, weight() from dup where match('the the') option ranker=expr('sum(lcs*user_weight)*1000+bm25')</sphinxql>
+
+<!-- regression wlccs did not get reset between documents -->
+<sphinxql>select id, weight() from test where match('seven|lies') option ranker=expr('sum(1000*wlccs)')</sphinxql>
+
+<!-- regression string condition at expression and expression ranker -->
+<sphinxql>select id, weight() w, title=1 as c, title from str2 where match('who | is') option ranker=expr('sum(1000)')</sphinxql>
+<sphinxql>select id, weight() w, title='who' as c, title from str2 where match('who | is') option ranker=expr('sum(1000)')</sphinxql>
+<sphinxql>select id, weight() w, title from str2 where match('who | is') option ranker=expr('sum(1000) * (gid*10+(title=1))')</sphinxql>
+<sphinxql>select id, weight() w, title from str2 where match('who | is') option ranker=expr('sum(1000) * (gid*10+(title="who"))')</sphinxql>
+<sphinxql>select id, weight() w, title from str2 where match('who | is') option ranker=expr('sum(gid*10+(title="who"))')</sphinxql>
+<sphinxql>select id, weight() w, title from str2 where match('who | is') option ranker=expr('top(gid*10+(title="who"))')</sphinxql>
+
+</sphqueries>
+
+</test>

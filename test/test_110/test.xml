@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>naive guess about the block index</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT * FROM test_table
+	sql_attr_uint	= tag
+}
+
+index idx
+{
+	source			= src
+	path			= <data_path/>/main
+}
+
+</config>
+
+<queries>
+<query index="idx" mode="extended2" sortby="tag DESC" >one</query>
+
+<!-- Will fail on naive guess that the very last item of block index is the item of the whole index.
+	Since actually we have the block index 1 item shorter, then naive guessing, the last item will be zero,
+	and the rule of excluding the whole index on filtering will be applied, since no filter value lag into interval (0,0) -->
+<query index="idx" mode="extended2" sortby="tag DESC" filter="tag" filter_value="200">one</query>
+</queries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`tag` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_insert>INSERT INTO test_table VALUES ( 1,1,'' ), ( 2,2,'' ), ( 3,3,'' ), ( 4,4,'' )</db_insert>
+<db_insert>INSERT INTO test_table SELECT document_id+4, tag+4, body FROM test_table</db_insert>
+<db_insert>INSERT INTO test_table SELECT document_id+8, tag+8, body FROM test_table</db_insert>
+<db_insert>INSERT INTO test_table SELECT document_id+16, tag+16, body FROM test_table</db_insert>
+<db_insert>INSERT INTO test_table SELECT document_id+32, tag+32, body FROM test_table</db_insert>
+<db_insert>INSERT INTO test_table SELECT document_id+64, tag+64, body FROM test_table</db_insert>
+<!-- There must be at least 128 empty values to force the block index to be 1 item less -->
+<db_insert>INSERT INTO test_table VALUES ( 200,200,'one' ), ( 201,201,'one two' ), ( 202,202,'one three' ), ( 203,203,'one four' )</db_insert>
+
+<db_drop>DROP TABLE IF EXISTS test_table</db_drop>
+
+</test>

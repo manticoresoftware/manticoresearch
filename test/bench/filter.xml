@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>filter</name>
+
+<config>
+indexer
+{
+	mem_limit = 128M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source fullscan
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = select id, value as a1, value as a2, value as a3, id as b1, id as b2, id as b3, text, mva, j, gid, tag, s1 as s1raw, CRC32(s1) as s1folded from fullscan
+	sql_attr_uint = a1
+	sql_attr_uint = a2
+	sql_attr_uint = a3
+	sql_attr_uint = b1
+	sql_attr_uint = b2
+	sql_attr_uint = b3
+	sql_attr_multi = uint mva from field
+	sql_attr_json	= j
+	sql_attr_uint = gid
+	sql_attr_uint = tag
+	sql_attr_string = s1raw
+	sql_attr_uint = s1folded
+}
+
+index fullscan
+{
+	source	= fullscan
+	path	= <local>data</local>/filter
+	docinfo	= extern
+}
+</config>
+
+<sphqueries>
+<!-- and block filter vs no block expression -->
+<sphinxql tag="attr1 no block filter">select id from fullscan where a1=3 OPTION comment='filter attr1'</sphinxql>
+<sphinxql tag="attr1 no block filter">select id, a1=3 as cnd from fullscan where cnd=1 OPTION comment ='expr attr1'</sphinxql>
+<sphinxql tag="attr1 block filter">select id from fullscan where b1&lt;10000 OPTION comment = 'filter attr1 block'</sphinxql>
+<sphinxql tag="attr1 block filter">select id, b1&lt;6000 as cnd from fullscan where cnd=1 OPTION comment = 'expr attr1 block'</sphinxql>
+
+<!-- and2 block filter vs no block expression -->
+<sphinxql tag="attr2 no block filter">select id from fullscan where a1=3 and a2=3 OPTION comment = 'filter attr2'</sphinxql>
+<sphinxql tag="attr2 no block filter">select id, a1=3 and a2=3 as cnd from fullscan where cnd=1 OPTION comment = 'expr attr2'</sphinxql>
+<sphinxql tag="attr2 block filter">select id from fullscan where b1&lt;10000 and b2&lt;20000 OPTION comment = 'filter attr2 block'</sphinxql>
+<sphinxql tag="attr2 block filter">select id, b1&lt;10000 and b2&lt;20000 as cnd from fullscan where cnd=1 OPTION comment = 'expr attr2 block'</sphinxql>
+
+<!-- and3 block filter vs no block expression -->
+<sphinxql>select id from fullscan where a1=3 and a2=3 and a3=3 OPTION comment = 'filter attr3'</sphinxql>
+<sphinxql>select id, a1=3 and a2=3 and a3=3 as cnd from fullscan where cnd=1 OPTION comment = 'expr attr3'</sphinxql>
+<sphinxql>select id from fullscan where b1&lt;10000 and b2&lt;20000 and b3&lt;30000 OPTION comment = 'filter attr3 block'</sphinxql>
+<sphinxql>select id, b1&lt;10000 and b2&lt;20000 and b3&lt;30000 as cnd from fullscan where cnd=1 OPTION comment = 'expr attr3 block'</sphinxql>
+
+<!-- mva not using block filter so no difference vs filter and expression -->
+<sphinxql>select id from fullscan where mva in ( 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20)  OPTION comment = 'filter mva10'</sphinxql>
+<sphinxql>select id, in ( mva, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20) as cnd  from fullscan where cnd=1 OPTION comment = 'expr mva10'</sphinxql>
+<!-- expression uses sort but filter uses uniq so duplicates matter -->
+<sphinxql>select id from fullscan where mva in ( 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20 )  OPTION comment = 'filter mva10 dupes'</sphinxql>
+<sphinxql>select id, in ( mva,  10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20 ) as cnd  from fullscan where cnd=1 OPTION comment = 'expr mva10 dupes'</sphinxql>
+
+<!-- filter json.string vs crc32 -->
+<sphinxql>select id from fullscan where s1folded=2212294583 OPTION comment = 'crc32 filter'</sphinxql>
+<sphinxql>select id from fullscan where j.s1='1' OPTION comment = 'str filter'</sphinxql>
+
+<!-- group crc32 vs string vs json  -->
+<sphinxql>select id from fullscan group by s1folded OPTION comment = 'crc32 group'</sphinxql>
+<sphinxql>select id from fullscan group by s1raw OPTION comment = 'str group'</sphinxql>
+<sphinxql>select id from fullscan group by j.s1 OPTION comment = 'json group'</sphinxql>
+
+<!-- filter vs expr, attr vs json -->
+<sphinxql>select id from fullscan where gid=1 OPTION comment = 'filter attr'</sphinxql>
+<sphinxql>select id from fullscan where j.gid=1 OPTION comment = 'filter json'</sphinxql>
+<sphinxql>select id, gid=1 as cnd from fullscan where cnd=1 OPTION comment = 'expr attr'</sphinxql>
+<sphinxql>select id, j.gid=1 as cnd from fullscan where cnd=1 OPTION comment = 'expr json'</sphinxql>
+
+<!-- 2x filter vs expr, attr vs json -->
+<sphinxql>select id from fullscan where gid=100 and tag=761 OPTION comment = '2x filter attr'</sphinxql>
+<sphinxql>select id from fullscan where j.gid=100 and j.tag=761 OPTION comment = '2x filter json'</sphinxql>
+<sphinxql>select id, gid=1 and tag=761 as cnd from fullscan where cnd=1 OPTION comment = '2x expr attr'</sphinxql>
+<sphinxql>select id, j.gid=100 and j.tag=761 as cnd from fullscan where cnd=1 OPTION comment = '2x expr json'</sphinxql>
+
+<!-- group by vs N group -->
+<sphinxql>select id from fullscan group by gid OPTION comment = 'group N1 attr'</sphinxql>
+<sphinxql>select id from fullscan group 2 by gid OPTION comment = 'group N2 attr'</sphinxql>
+<sphinxql>select id from fullscan group 5 by gid OPTION comment = 'group N5 attr'</sphinxql>
+<sphinxql>select id from fullscan group by j.gid OPTION comment = 'group N1 json'</sphinxql>
+<sphinxql>select id from fullscan group 2 by j.gid OPTION comment = 'group N2 json'</sphinxql>
+<sphinxql>select id from fullscan group 5 by j.gid OPTION comment = 'group N5 json'</sphinxql>
+
+<!-- order by attr vs json vs expr vs 2 columns -->
+<sphinxql>select id from fullscan order by gid asc OPTION comment = 'order attr asc'</sphinxql>
+<sphinxql>select id from fullscan order by j.gid asc OPTION comment = 'order json asc'</sphinxql>
+<sphinxql>select id, gid+1 as o from fullscan order by o asc OPTION comment = 'order expr asc'</sphinxql>
+<sphinxql>select id from fullscan order by gid desc, tag asc OPTION comment = 'order 2 attr'</sphinxql>
+<sphinxql>select id from fullscan order by j.gid desc, j.tag asc OPTION comment = 'order 2 json'</sphinxql>
+<sphinxql>select id, gid+1 as o1, tag+1 o2 from fullscan order by o1 desc, o2 asc OPTION comment = 'order 2 expr'</sphinxql>
+
+<!-- order by string vs json -->
+<sphinxql>select id from fullscan order by s1raw desc OPTION comment = 'order string raw'</sphinxql>
+<sphinxql>select id from fullscan order by j.s1 desc OPTION comment = 'order string json'</sphinxql>
+
+</sphqueries>
+
+</test>

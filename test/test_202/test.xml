@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>adding indexes using rotation</name>
+
+<requires>
+<non-windows/>
+<non-rt/>
+</requires>
+
+<config>#!/usr/bin/python
+print """
+indexer
+{
+	mem_limit = 32M
+}
+
+searchd
+{
+	<searchd_settings/>
+	binlog_path =
+	<dynamic>
+		<variant>
+			workers = threads
+			seamless_rotate = 0
+		</variant>
+		<variant>
+			workers = threads
+			seamless_rotate = 1
+		</variant>
+		<variant>
+			workers = fork
+			seamless_rotate = 1
+		</variant>
+	</dynamic>
+}
+
+source sql
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = select id, text from test_table where mode = (select mode from test_table where id = 1000);
+}
+
+index plain1
+{
+	source = sql
+	path = <data_path/>/plain1
+	docinfo = none
+}
+
+index plain2
+{
+	source = sql
+	path = <data_path/>/plain2
+	docinfo = none
+}
+"""
+
+file_exists = False
+try:
+	with open('part.conf'):
+		file_exists = True
+except IOError:
+	pass
+
+if file_exists==True:
+	with open('part.conf') as f:
+		print f.read()
+</config>
+
+<db_drop>drop table if exists test_table</db_drop>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	text varchar(255) not null,
+	mode int
+);
+</db_create>
+
+<db_insert>
+insert into test_table values
+( 1, 'first',  1 ),
+( 2, 'second',  1 ),
+( 3, 'third',  1 ),
+( 4, 'fourth', 1 ),
+( 5, 'fifth',  1 ),
+ 
+( 1, 'one',    2 ),
+( 2, 'two',    2 ),
+( 3, 'three',  2 ),
+
+( 1000, '', 1 );
+</db_insert>
+
+<custom_test><![CDATA[
+
+$results = array();
+$error = '';
+
+$query = create_function('$client, $index','
+$result = $client->Query ( "first", $index );	if ( $result ) { unset ( $result["time"] ); return $result; } else return $client->GetLastError();
+');
+
+StopSearchd ('config.conf', 'searchd.pid');
+foreach ( array ( 'spa', 'spd', 'spe', 'spi', 'spk', 'spm', 'spp', 'sps', 'sph' ) as $ext )
+{
+	$path = 'data/plain2.' . $ext;
+	if ( file_exists ( $path ) )
+		unlink ( $path );
+	if ( file_exists ( $path ) )
+		print 'error';
+}
+$state = StartSearchd ('config.conf', 'error.txt', 'searchd.pid', $error);
+
+
+$results[] = $query ( $client, 'plain3' );
+$path = "part.conf";
+file_put_contents ( $path, "index plain3\n{\nsource = sql\npath = data/plain3\n}\n" );
+
+RunIndexer ( $errors, '--rotate p*lain2 plain3' ); // adding indexes
+sleep(2);
+
+unlink($path);
+$results[] = $query ( $client, 'plain3' );
+
+$results[] = $query ( $client, 'plain2' );
+
+]]></custom_test>
+
+</test>

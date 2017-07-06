@@ -1,0 +1,16 @@
+same => line
+~same => line
+error and #not >
+#thatsok
+# before > shouldnotbe
+before #> error1
+before ># error2
+before >#error3
+before and #not >
+test => success#comment
+~after #> success another comment
+~hash > mapped	# and this one is too
+drink drive > multi_before
+~smoke > wordform
+walked > ran
+~running > halt

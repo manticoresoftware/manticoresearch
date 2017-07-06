@@ -1,0 +1,124 @@
+<test>
+<name>groupby() function</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source src_base
+{
+	type = mysql
+	<sql_settings/>
+}
+
+source src_1 : src_base
+{
+	sql_query = SELECT id, attr1, mva1, mva2, str1, str2, text FROM test_table WHERE idx = 'i1';
+
+	sql_attr_multi = uint mva1 from field
+	sql_attr_multi = uint mva2 from field
+	sql_attr_string = str1
+	sql_attr_string = str2
+	sql_attr_uint	= attr1
+}
+
+source src_2 : src_1
+{
+	sql_query = SELECT id, attr1, mva1, mva2, str1, str2, text FROM test_table WHERE idx = 'i2';
+}
+
+index i1
+{
+	source			= src_1
+	path			= <data_path/>/i1
+	docinfo			= extern
+	
+}
+
+index i2
+{
+	source			= src_2
+	path			= <data_path/>/i2
+	docinfo			= extern
+	
+}
+
+index ll
+{
+	type			= distributed
+	local = i1
+	local = i2
+}
+
+index ld
+{
+	type			= distributed
+	local			= i1
+	agent			= <my_address/>:i2
+	local = i2
+}
+
+index dd
+{
+	type			= distributed
+	agent			= <my_address/>:i1
+	agent			= <my_address/>:i2
+}
+
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INT NOT NULL,
+	attr1 INT NOT NULL,
+	mva1 VARCHAR(255) NOT NULL,
+	mva2 VARCHAR(255) NOT NULL,
+	str1 VARCHAR(255) NOT NULL,
+	str2 VARCHAR(255) NOT NULL,
+	text VARCHAR(255) NOT NULL DEFAULT 'text',
+	idx VARCHAR(255) NOT NULL
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table;
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table (id, attr1, mva1, mva2, str1, str2, text, idx) VALUES
+(  1, 10, '101, 101, 103', '110, 111, 112', 'some data 100', 'another data 110', 'some text', 'i1' ),
+(  2, 20, '201, 202, 203', '21, 110, 212', 'some data 200', 'another data 210', 'some text', 'i1' ),
+(  3, 30, '12, 302, 303', '110, 312, 313', 'some data 300', 'another data 310', 'some text', 'i1' ),
+
+(  4, 10, '101, 101, 103', '110, 111, 112', 'some data 100', 'another data 110', 'some text', 'i2' ),
+(  5, 20, '201, 202, 203', '21, 110, 212', 'some data 200', 'another data 210', 'some text', 'i2' ),
+(  6, 30, '12, 302, 303', '110, 312, 313', 'some data 300', 'another data 310', 'some text', 'i2' )
+
+</db_insert>
+
+<sphqueries>
+<sphinxql>select * from i1 where match ('some')</sphinxql>
+<sphinxql>select attr1, groupby() from i1 where match ('some') group by mva1</sphinxql>
+<sphinxql>select attr1, groupby() from i1 where match ('some') group by mva2</sphinxql>
+<sphinxql>select attr1, groupby() from ld where match ('some') group by mva1</sphinxql>
+<sphinxql>select attr1, groupby() from ld where match ('some') group by mva2</sphinxql>
+<sphinxql>select attr1, groupby() from dd where match ('some') group by mva1</sphinxql>
+<sphinxql>select attr1, groupby() from dd where match ('some') group by mva2</sphinxql>
+<sphinxql>select mva1, least(mva1), greatest(mva1) from i1</sphinxql>
+<!-- string groupby() -->
+<sphinxql>select groupby() from i1 group by str1 order by str1 asc</sphinxql>
+<sphinxql>select groupby() from i1 group by str1 order by str1 desc</sphinxql>
+</sphqueries>
+
+</test>
+
+

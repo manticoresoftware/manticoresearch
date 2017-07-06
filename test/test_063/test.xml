@@ -1,0 +1,261 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>blend characters</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source test
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * FROM test_table
+}
+
+index test
+{
+	source	= test
+	path	= <data_path/>/test
+
+	blend_chars = @, |, +, ., *, !, (, ), [, ], {, }
+}
+
+source test1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT 1 as document_id, 'zzzzzz buzzzz' as text
+}
+
+index test1
+{
+	source	= test1
+	path	= <data_path/>/test1
+
+	blend_chars = ., @,
+	min_word_len = 2
+}
+
+source test2
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT 1 as document_id, 'dummy a11-22 text' as text UNION SELECT 2 as document_id, 'dummy 11-22 text' as text
+}
+
+index test2
+{
+	source	= test2
+	path	= <data_path/>/test2
+
+	blend_chars = -, @,
+}
+
+index star
+{
+	source	= test
+	path	= <data_path/>/star
+
+	blend_chars = @, ., !, (, ), [, ], {, }
+	min_infix_len = 2
+	dict = crc
+}
+
+index star_kw
+{
+	source	= test
+	path	= <data_path/>/star_kw
+
+	blend_chars = @, ., !, (, ), [, ], {, }
+	min_infix_len = 2
+	dict = keywords
+}
+
+source test3
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT 1 as document_id, ' the"dog of my friend ' as text UNION SELECT 2 as document_id, ' dog"is my friend ' as text
+}
+
+index test3
+{
+	source	= test3
+	path	= <data_path/>/test3
+
+	blend_chars = -, @, "
+}
+
+index rt
+{
+	type	 = rt
+	path	= <data_path/>/rt
+
+	blend_chars = @
+
+	rt_field	 = text
+	rt_attr_uint	 = idd
+}
+
+source test4
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT 1 as document_id, ' the dog of my friend ' as text UNION SELECT 2 as document_id, ' dog is my friend ' as text
+}
+
+index test4
+{
+	source	= test4
+	path	= <data_path/>/test4
+	blend_chars = U+2E
+}
+
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	document_id INT NOT NULL,
+	text VARCHAR(255) NOT NULL
+);
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table VALUES
+(  1, 'aaa bbb@ccc ddd @eee fff@ggg@hhh iii@ kkk' ),
+(  2, 'ggg@hhh' ),
+(  3, 'xxx @ yyy' ),
+(  4, 'aaa@bbb+ccc@ddd' ),
+(  5, 'aaa|eee|ccc' ),
+(  6, 'a+b+c+d e+f|g' ),
+(  7, 'aaa bbb*ccc ddd eee fff*ggg*hhh iii' ),
+(  8, 'ggg*hhh' ),
+(  9, 'aaa ddd ggg hhh' ),
+( 10, 'aaa bbb ccc ddd' ),
+( 11, 'hello, world. how is this gonna work if we need to handle U.S.A' ),
+( 20, 'its a must!!!' ),
+( 21, 'hey @dude wassup' ),
+( 30, 'posse' ),
+( 31, 'posse()' ),
+( 32, 'posse[]' ),
+( 33, 'posse{}' );
+</db_insert>
+
+<queries>
+	<query mode="extended2" index="test">bbb|ccc</query>
+	<query mode="extended2" index="test">bbb@ccc</query>
+
+	<query mode="extended2" index="test">bbb\|ccc</query>
+	<query mode="extended2" index="test">bbb\@ccc</query>
+
+	<query mode="extended2" index="test">bbb ccc</query>
+	<query mode="extended2" index="test">"bbb ccc"</query>
+
+	<query mode="extended2" index="test">aaa|eee|ccc</query>
+	<query mode="extended2" index="test">aaa\|eee\|ccc</query>
+	<query mode="extended2" index="test">"aaa|eee|ccc"</query>
+	<query mode="extended2" index="test">"aaa\|eee\|ccc"</query>
+
+	<query mode="extended2" index="test">a+b+c+d</query>
+	<query mode="extended2" index="test">a+b+c+d e</query>
+	<query mode="extended2" index="test">"a+b+c+d e f"</query>
+	<query mode="extended2" index="test">"a+b+c+d e+f|g"</query>
+
+	<query mode="extended2" index="test">"bbb@ccc ddd @eee"</query>
+	<query mode="extended2" index="test">"ddd @eee fff@ggg@hhh"</query>
+	<query mode="extended2" index="test">"fff@ggg@hhh iii@ kkk"</query>
+
+	<query mode="extended2" expect_error="1" index="test">@</query>
+	<query mode="extended2" index="test">\@</query>
+
+	<query mode="extended2" expect_error="1" index="test">@eee kkk</query>
+	<query mode="extended2" index="test">\@eee kkk</query>
+
+	<query mode="extended2" index="test">aaa\*ccc</query>
+	<query mode="extended2" index="test">aaa*ccc</query>
+  
+	<query mode="extended2" index="test">bbb\*ccc</query>
+	<query mode="extended2" index="test">bbb*ccc</query>
+
+	<query mode="extended2" index="test"> bbb ccc</query>
+	<query mode="extended2" index="test">"bbb ccc"</query>
+
+	<query mode="extended2" index="test">fff\*ggg</query>
+	<query mode="extended2" index="test">fff*ggg</query>
+	<query mode="extended2" index="test">fff*ggg*hhh</query>
+
+	<query mode="extended2" index="test">"bbb*ccc ddd"</query>
+	<query mode="extended2" index="test">"bbb*ccc ccc ddd"</query>
+	<query mode="extended2" index="test">bbb*ccc &lt;&lt; ddd</query>
+
+	<query mode="extended2" index="test">hello</query>
+	<query mode="extended2" index="test">"hello world"</query>
+	<query mode="extended2" index="test">hello U.S.A</query>
+
+	<query mode="extended2" index="test">must</query>
+	<query mode="extended2" index="test">must\!\!\!</query>
+	<query mode="extended2" index="test">dude</query>
+	<query mode="extended2" index="test">\@dude</query>
+
+	<query mode="extended2" index="test">posse</query>
+	<query mode="extended2" index="test">posse\(\)</query>
+	<query mode="extended2" index="test">posse\[\]</query>
+	<query mode="extended2" index="test">posse\{\}</query>
+	<query mode="extended2" index="test">"posse()"</query>
+	<query mode="extended2" index="test">"posse[]"</query>
+	<query mode="extended2" index="test">"posse{}"</query>
+	
+	<query mode="extended2" index="test">^ggg*hhh$</query>
+	<query mode="extended2" index="test">^ggg*hhh</query>
+	<query mode="extended2" index="test">ggg*hhh$</query>
+	<query mode="extended2" index="test">^ggg</query>
+	<query mode="extended2" index="test">hhh$</query>
+	<query mode="extended2" index="test">ggg$</query>
+	<query mode="extended2" index="test">^hhh</query>
+	
+	<query mode="extended2" index="star">^gg*</query>
+	<query mode="extended2" index="star">*hh$</query>
+	<query mode="extended2" index="star">^*gg*</query>
+	<query mode="extended2" index="star">^*hh*</query>
+	<query mode="extended2" index="star">*cc*$</query>
+	<!--regression for missed field modifier vs tiny expanded -->
+	<query mode="extended2" index="star_kw">*hh*</query>
+	<query mode="extended2" index="star_kw">*hh*$</query>
+</queries>
+
+<sphqueries>
+	<!-- here is going regression blend vs special character within query-->
+	<sphinxql>select * from test1 where match ( 'zzzzzz  .(buzzzz)' )</sphinxql>
+	<!-- here is going regression many overshort tokens in query-->
+	<sphinxql>select * from test1 where match ( 'a+b' )</sphinxql>
+	<!-- here is going regression blend_char into a numeric-->
+	<sphinxql>select * from test2 where match ( 'a11-22' )</sphinxql>
+	<sphinxql>select * from test2 where match ( '11-22' )</sphinxql>
+	<sphinxql>select * from test3 where match ( ' "the dog " ' )</sphinxql>
+	<sphinxql>select * from test3 where match ( ' dog " is my " ' )</sphinxql>
+	<sphinxql>select * from test3 where match ( ' dog ' )</sphinxql>
+	<!-- here is going regression many same hits at RT index -->
+	<sphinxql>INSERT INTO rt VALUES ( 1, 'thatsgoingverylongwordthathasblendedpartattheand@blendedpart and word at the end', 11 )</sphinxql>
+	<sphinxql>CALL KEYWORDS ( 'thatsgoingverylongwordthathasblendedpartattheand', 'rt', 1 )</sphinxql>
+	<sphinxql>INSERT INTO rt VALUES ( 2, 'thatsgoingverylongwordthathasblendedpartattheand@blendedpart', 11 )</sphinxql>
+	<sphinxql>CALL KEYWORDS ( 'thatsgoingverylongwordthathasblendedpartattheand', 'rt', 1 )</sphinxql>
+	<!-- regression blended vs quorum argument -->
+	<sphinxql>select * from test4 where match ( ' "dog of friend"/0.5 ' )</sphinxql>
+</sphqueries>
+
+</test>

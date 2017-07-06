@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>merge vs killlists</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srcmain
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query			= SELECT document_id, body, document_id*10 AS xid FROM test_table WHERE document_id in (3,4,5,6)
+	sql_attr_uint		= xid
+}
+
+source srcdelta : srcmain
+{
+	sql_query			= SELECT document_id, body, document_id*100 AS xid FROM test_table WHERE document_id in (1,2)
+	sql_query_killlist	= select 4 union select 6
+}
+
+index main
+{
+	source			= srcmain
+	path			= <data_path/>/main
+}
+
+index delta
+{
+	source			= srcdelta
+	path			= <data_path/>/delta
+}
+
+source srcm1
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query			= SELECT document_id, body, 1 xid FROM test_table WHERE document_id in (3,4,5,6)
+	sql_attr_uint		= xid
+	sql_query_killlist	= select 1 union select 2 union select 3
+}
+
+source srcd1 : srcmain
+{
+	sql_query			= SELECT document_id, body, 2 AS xid FROM test_table WHERE document_id in (1,2)
+	sql_query_killlist	= select 4 union select 6
+}
+
+index m1
+{
+	source			= srcm1
+	path			= <data_path/>/m1
+}
+
+index d1
+{
+	source			= srcd1
+	path			= <data_path/>/d1
+}
+
+index mmk
+{
+	source			= srcm1
+	path			= <data_path/>/mmk
+}
+
+</config>
+
+<indexer>
+<run>--merge main delta</run>
+<run>--merge m1 d1</run>
+<run>--merge mmk d1 --merge-killlists</run>
+<run>--merge m1 d1 --merge-dst-range xid 1 1</run>
+</indexer>
+
+<queries>
+<query index="main">one</query>
+<query index="main">three</query>
+<query index="main">four</query>
+<query index="main">five</query>
+<query index="main">six</query>
+<query index="m1"></query>
+<query index="mmk"></query>
+</queries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 'one' ),
+( 2, 'two' ),
+( 3, 'three blind mice, how they run' ),
+( 4, 'four became from three' ),
+( 5, 'five' ),
+( 6, 'six' )
+</db_insert>
+
+</test>

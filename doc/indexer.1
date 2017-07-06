@@ -1,0 +1,382 @@
+'\" t
+.\"     Title: indexer
+.\"    Author: [see the "Author" section]
+.\" Generator: DocBook XSL Stylesheets v1.76.1 <http://docbook.sf.net/>
+.\"      Date: 09/08/2016
+.\"    Manual: Sphinxsearch
+.\"    Source: 2.3.3-dev
+.\"  Language: English
+.\"
+.TH "INDEXER" "1" "09/08/2016" "2\&.3\&.3\-dev" "Sphinxsearch"
+.\" -----------------------------------------------------------------
+.\" * Define some portability stuff
+.\" -----------------------------------------------------------------
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.\" http://bugs.debian.org/507673
+.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.ie \n(.g .ds Aq \(aq
+.el       .ds Aq '
+.\" -----------------------------------------------------------------
+.\" * set default formatting
+.\" -----------------------------------------------------------------
+.\" disable hyphenation
+.nh
+.\" disable justification (adjust text to left margin only)
+.ad l
+.\" -----------------------------------------------------------------
+.\" * MAIN CONTENT STARTS HERE *
+.\" -----------------------------------------------------------------
+.SH "NAME"
+indexer \- Sphinxsearch fulltext index generator
+.SH "SYNOPSIS"
+.HP \w'\fBindexer\fR\ 'u
+\fBindexer\fR [\-\-config\ \fICONFIGFILE\fR] [\-\-rotate] [\-\-noprogress | \-\-quiet] [\-\-all | \fIINDEX\fR | \fI\&.\&.\&.\fR]
+.HP \w'\fBindexer\fR\ 'u
+\fBindexer\fR \-\-buildstops\ \fIOUTPUTFILE\fR \fICOUNT\fR [\-\-config\ \fICONFIGFILE\fR] [\-\-noprogress | \-\-quiet] [\-\-all | \fIINDEX\fR | \fI\&.\&.\&.\fR]
+.HP \w'\fBindexer\fR\ 'u
+\fBindexer\fR \-\-merge\ \fIMAIN_INDEX\fR \fIDELTA_INDEX\fR [\-\-config\ \fICONFIGFILE\fR] [\-\-rotate] [\-\-noprogress | \-\-quiet]
+.SH "DESCRIPTION"
+.PP
+Sphinx is a collection of programs that aim to provide high quality fulltext search\&.
+.PP
+\fBindexer\fR
+is the first of the two principle tools as part of Sphinx\&. Invoked from either the command line directly, or as part of a larger script,
+\fBindexer\fR
+is solely responsible for gathering the data that will be searchable\&.
+.PP
+The calling syntax for indexer is as follows:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+$ indexer [OPTIONS] [indexname1 [indexname2 [\&.\&.\&.]]]
+.fi
+.if n \{\
+.RE
+.\}
+.PP
+Essentially you would list the different possible indexes (that you would later make available to search) in
+sphinx\&.conf, so when calling
+\fBindexer\fR, as a minimum you need to be telling it what index (or indexes) you want to index\&.
+.PP
+If
+sphinx\&.conf
+contained details on 2 indexes,
+\fImybigindex\fR
+and
+\fImysmallindex\fR, you could do the following:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+$ indexer mybigindex
+$ indexer mysmallindex mybigindex
+.fi
+.if n \{\
+.RE
+.\}
+.PP
+As part of the configuration file,
+sphinx\&.conf, you specify one or more indexes for your data\&. You might call
+\fBindexer\fR
+to reindex one of them, ad\-hoc, or you can tell it to process all indexes \- you are not limited to calling just one, or all at once, you can always pick some combination of the available indexes\&.
+.SH "OPTIONS"
+.PP
+The majority of the options for
+\fBindexer\fR
+are given in the configuration file, however there are some options you might need to specify on the command line as well, as they can affect how the indexing operation is performed\&. These options are:
+.PP
+\fB\-\-all\fR
+.RS 4
+Tells
+\fBindexer\fR
+to update every index listed in
+sphinx\&.conf, instead of listing individual indexes\&. This would be useful in small configurations, or cron\-type or maintenance jobs where the entire index set will get rebuilt each day, or week, or whatever period is best\&.
+.sp
+Example usage:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+$ indexer \-\-config /home/myuser/sphinx\&.conf \-\-all
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+\fB\-\-buildstops\fR \fIoutfile\&.txt\fR \fINUM\fR
+.RS 4
+Reviews the index source, as if it were indexing the data, and produces a list of the terms that are being indexed\&. In other words, it produces a list of all the searchable terms that are becoming part of the index\&. Note; it does not update the index in question, it simply processes the data \*(Aqas if\*(Aq it were indexing, including running queries defined with
+\fIsql_query_pre\fR
+or
+\fIsql_query_post\fR\&.
+outputfile\&.txt
+will contain the list of words, one per line, sorted by frequency with most frequent first, and
+\fINUM\fR
+specifies the maximum number of words that will be listed; if sufficiently large to encompass every word in the index, only that many words will be returned\&. Such a dictionary list could be used for client application features around "Did you mean\&.\&.\&." functionality, usually in conjunction with
+\fB\-\-buildfreqs\fR, below\&.
+.sp
+Example:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+$ indexer myindex \-\-buildstops word_freq\&.txt 1000
+.fi
+.if n \{\
+.RE
+.\}
+.sp
+This would produce a document in the current directory,
+word_freq\&.txt
+with the 1,000 most common words in \*(Aqmyindex\*(Aq, ordered by most common first\&. Note that the file will pertain to the last index indexed when specified with multiple indexes or
+\fB\-\-all\fR
+(i\&.e\&. the last one listed in the configuration file)
+.RE
+.PP
+\fB\-\-buildfreqs\fR
+.RS 4
+Used in pair with
+\fB\-\-buildstops\fR
+(and is ignored if
+\fB\-\-buildstops\fR
+is not specified)\&. As
+\fB\-\-buildstops\fR
+provides the list of words used within the index,
+\fB\-\-buildfreqs\fR
+adds the quantity present in the index, which would be useful in establishing whether certain words should be considered stopwords if they are too prevalent\&. It will also help with developing "Did you mean\&.\&.\&." features where you can how much more common a given word compared to another, similar one\&.
+.sp
+Example:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+$ indexer myindex \-\-buildstops word_freq\&.txt 1000 \-\-buildfreqs
+.fi
+.if n \{\
+.RE
+.\}
+.sp
+This would produce the
+word_freq\&.txt
+as above, however after each word would be the number of times it occurred in the index in question\&.
+.RE
+.PP
+\fB\-\-config\fR\ \&\fICONFIGRILE\fR, \fB\-c\fR\ \&\fICONFIGFILE\fR
+.RS 4
+Use the given file as configuration\&. Normally, it will look for
+sphinx\&.conf
+in the installation directory (e\&.g\&./usr/local/sphinx/etc/sphinx\&.conf
+if installed into
+/usr/local/sphinx), followed by the current directory you are in when calling indexer from the shell\&. This is most of use in shared environments where the binary files are installed somewhere like
+/usr/local/sphinx/
+but you want to provide users with the ability to make their own custom Sphinx set\-ups, or if you want to run multiple instances on a single server\&. In cases like those you could allow them to create their own
+sphinx\&.conf
+files and pass them to
+\fBindexer\fR
+with this option\&.
+.sp
+For example:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+$ indexer \-\-config /home/myuser/sphinx\&.conf myindex
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+\fB\-\-dump\-rows\fR \fIFILE\fR
+.RS 4
+Dumps rows fetched by SQL source(s) into the specified file, in a MySQL compatible syntax\&. Resulting dumps are the exact representation of data as received by indexer and help to repeat indexing\-time issues\&.
+.RE
+.PP
+\fB\-\-merge\fR \fIDST\-INDEX\fR \fISRC\-INDEX\fR
+.RS 4
+Physically merge together two indexes\&. For example if you have a main+delta scheme, where the main index rarely changes, but the delta index is rebuilt frequently, and
+\fB\-\-merge\fR
+would be used to combine the two\&. The operation moves from right to left \- the contents of
+\fISRC\-INDEX\fR
+get examined and physically combined with the contents of
+\fIDST\-INDEX\fR
+and the result is left in
+\fIDST\-INDEX\fR\&. In pseudo\-code, it might be expressed as:
+\fIDST\-INDEX\fR
++=
+\fISRC\-INDEX\fR
+.sp
+An example:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+$ indexer \-\-merge main delta \-\-rotate
+.fi
+.if n \{\
+.RE
+.\}
+.sp
+In the above example, where the main is the master, rarely modified index, and delta is the less frequently modified one, you might use the above to call
+\fBindexer\fR
+to combine the contents of the delta into the main index and rotate the indexes\&.
+.RE
+.PP
+\fB\-\-merge\-dst\-range\fR \fIATTR\fR \fIMIN\fR \fIMAX\fR
+.RS 4
+Run the filter range given upon merging\&. Specifically, as the merge is applied to the destination index (as part of
+\fB\-\-merge\fR, and is ignored if
+\fB\-\-merge\fR
+is not specified),
+\fBindexer\fR
+will also filter the documents ending up in the destination index, and only documents will pass through the filter given will end up in the final index\&. This could be used for example, in an index where there is a \*(Aqdeleted\*(Aq attribute, where 0 means \*(Aqnot deleted\*(Aq\&. Such an index could be merged with:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+$ indexer \-\-merge main delta \-\-merge\-dst\-range deleted 0 0
+.fi
+.if n \{\
+.RE
+.\}
+.sp
+Any documents marked as deleted (value 1) would be removed from the newly\-merged destination index\&. It can be added several times to the command line, to add successive filters to the merge, all of which must be met in order for a document to become part of the final index\&.
+.RE
+.PP
+\fB\-\-merge\-killlists\fR, \fB\-\-merge\-klists\fR
+.RS 4
+Used in pair with
+\fB\-\-merge\fR\&. Usually when merging
+\fBindexer\fR
+uses kill\-list of source index (i\&.e\&., the one which is merged into) as the filter to wipe out the matching docs from the destination index\&. At the same time the kill\-list of the destination itself isn\*(Aqt touched at all\&. When using
+\fB\-\-merge\-killlists\fR, (or it shorter form
+\fB\-\-merge\-klists\fR) the
+\fBindexer\fR
+will not filter the dst\-index docs with src\-index killlist, but it will merge their kill\-lists together, so the final result index will have the kill\-list containing the merged source kill\-lists\&.
+.RE
+.PP
+\fB\-\-noprogress\fR
+.RS 4
+Don\*(Aqt display progress details as they occur; instead, the final status details (such as documents indexed, speed of indexing and so on are only reported at completion of indexing\&. In instances where the script is not being run on a console (or \*(Aqtty\*(Aq), this will be on by default\&.
+.sp
+Example usage:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+$ indexer \-\-rotate \-\-all \-\-noprogress
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+\fB\-\-print\-queries\fR
+.RS 4
+Prints out SQL queries that indexer sends to the database, along with SQL connection and disconnection events\&. That is useful to diagnose and fix problems with SQL sources\&.
+.RE
+.PP
+\fB\-\-quiet\fR
+.RS 4
+Tells
+\fBindexer\fR
+not to output anything, unless there is an error\&. Again, most used for cron\-type, or other script jobs where the output is irrelevant or unnecessary, except in the event of some kind of error\&.
+.sp
+Example usage:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+$ indexer \-\-rotate \-\-all \-\-quiet
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+\fB\-\-rotate\fR
+.RS 4
+Used for rotating indexes\&. Unless you have the situation where you can take the search function offline without troubling users, you will almost certainly need to keep search running whilst indexing new documents\&.
+\fB\-\-rotate\fR
+creates a second index, parallel to the first (in the same place, simply including
+\&.new
+in the filenames)\&. Once complete,
+\fBindexer\fR
+notifies
+\fBsearchd\fR
+via sending the
+\fISIGHUP\fR
+signal, and
+\fBsearchd\fR
+will attempt to rename the indexes (renaming the existing ones to include
+\&.old
+and renaming the
+\&.new
+to replace them), and then start serving from the newer files\&. Depending on the setting of
+\fBseamless_rotate\fR, there may be a slight delay in being able to search the newer indexes\&.
+.sp
+Example usage:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+$ indexer \-\-rotate \-\-all
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+\fB\-\-sighup\-each\fR
+.RS 4
+is useful when you are rebuilding many big indexes, and want each one rotated into
+\fBsearchd\fR
+as soon as possible\&. With
+\fB\-\-sighup\-each\fR,
+\fBindexer\fR
+will send a
+\fISIGHUP\fR
+signal to
+\fBsearchd\fR
+after succesfully completing the work on each index\&. (The default behavior is to send a single
+\fISIGHUP\fR
+after all the indexes were built\&.)
+.RE
+.PP
+\fB\-\-verbose\fR
+.RS 4
+Guarantees that every row that caused problems indexing (duplicate, zero, or missing document ID; or file field IO issues; etc) will be reported\&. By default, this option is off, and problem summaries may be reported instead\&.
+.RE
+.SH "AUTHOR"
+.PP
+Andrey Aksenoff (shodan@sphinxsearch\&.com)\&. This manual page is written by Alexey Vinogradov (klirichek@sphinxsearch\&.com), using the one written by Christian Hofstaedtler ch+debian\-packages@zeha\&.at for the
+\fBDebian\fR
+system (but may be used by others)\&. Permission is granted to copy, distribute and/or modify this document under the terms of the GNU General Public License, Version 2 any later version published by the Free Software Foundation\&.
+.PP
+On Debian systems, the complete text of the GNU General Public License can be found in
+/usr/share/common\-licenses/GPL\&.
+.SH "SEE ALSO"
+.PP
+\fBsearchd\fR(1),
+\fBsearch\fR(1),
+\fBindextool\fR(1),
+\fBspelldump\fR(1)
+.PP
+Sphinx and it\*(Aqs programs are documented fully by the
+\fISphinx reference manual\fR
+available in
+/usr/share/doc/sphinxsearch\&.

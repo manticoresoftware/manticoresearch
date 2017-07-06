@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>RT: ram vs disk chunk search</name>
+
+<skip_indexer/>
+<config>
+searchd
+{
+	<searchd_settings/>
+	workers = threads	
+	binlog_path =
+}
+
+index rt0
+{
+    docinfo			= extern
+    morphology		= none
+
+	type			= rt
+
+	rt_field		= title
+	rt_field		= content
+	rt_attr_uint	= id1
+	rt_attr_uint	= id2
+	
+	path = <data_path/>/index
+	rt_mem_limit      		= 128K
+}
+
+index rt_mva
+{
+	type			= rt
+	path = <data_path/>/mva
+	rt_mem_limit      		= 128K
+    docinfo			= extern
+
+	rt_field		= title
+	rt_field		= content
+	rt_attr_uint	= idd
+	rt_attr_multi	= mva1
+}
+
+index rt_rand
+{
+	type			= rt
+	path			= <data_path/>/rt_rand
+	rt_field		= text
+	rt_attr_uint	= gid
+}
+</config>
+
+<db_drop>
+drop table if exists rt0
+</db_drop>
+<db_create>
+create table rt0
+(
+	id int not null,
+	title varchar(255) not null,
+	content varchar(255) not null,
+	id1 int,
+	id2 int
+);
+</db_create>
+<db_insert>
+insert into rt0 values
+( 1000000, 'first title', 'first content',  1000000, 1000000 );
+</db_insert>
+
+<custom_test><![CDATA[
+
+global $g_locals, $sd_address, $sd_sphinxql_port;
+$results = array();
+$sockStr = "$sd_address:$sd_sphinxql_port";
+if ($sd_address == "localhost")
+	$sockStr = "127.0.0.1:$sd_sphinxql_port";
+$sock = @mysql_connect (
+	$sockStr,
+	$g_locals['db-user'],
+	$g_locals['db-password'] ,
+	true );
+
+if ( $sock === false )
+{
+	$results[] = "error: can't connect to searchd: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+	return;
+}
+
+$query = create_function('$q,$sock,$i','
+	$results = array();
+	$res = @mysql_query ( $q, $sock );
+	if ($res===true)
+	{
+		$results[] = "query $i: total_affected=" . mysql_affected_rows($sock);
+	}
+	else if ($res===false)
+	{
+		$results[] = "query $i: res=$res";
+		$results[] = "error: query: " . @mysql_errno ( $sock ) . " : " . @mysql_error ( $sock );
+	}
+	else
+	{
+		$results[] = "query $i: total_rows=" . @mysql_num_rows($res) . " q=" . $q;
+		while ($row = @mysql_fetch_array($res, MYSQL_ASSOC))
+		{
+			$foo = array();
+			foreach ($row as $key => $value)
+				$foo[$key] = $value;
+			$results[] = $foo;
+		}	
+	}
+	return $results;
+');
+
+$errors = '';
+
+mysql_query ( "INSERT INTO rt0 VALUES ( 1, 'submarine', 'submarine', 1001, 300001 )", $sock );
+
+$lastID = 300;
+$title = '';
+$content = '';
+for ( $i=2; $i<$lastID; $i++ )
+{
+	$title .= ' dusty' . $i;
+	$content .= ' itsupposedtobeaverylongrecord' . $i;
+	$id1 = $i + 1000;
+	$id2 = $i + 300000;
+
+	mysql_query ( "INSERT INTO rt0 VALUES ( $i, '$title', '$content', $id1, $id2 )", $sock );
+	
+	if ( $i % 50 == 0 )
+	{
+		$title = '';
+		$content = '';
+	}
+}
+
+$lastID = $lastID + 1;
+mysql_query ( "INSERT INTO rt0 VALUES ( $lastID, 'submarine', 'submarine', 77, 77 )", $sock);
+mysql_query ( "REPLACE INTO rt0 VALUES ( 1, 'submarine', 'submarine', 11, 11 )", $sock);
+
+$queries = array ( "match('submarine')", "id=1" );
+for ( $i=0; $i<count ( $queries ); $i++ )
+{
+	$results = array_merge ( $results, $query ( "select * from rt0 where $queries[$i]", $sock, $i ) );
+}
+
+// regression
+// crash on fetching updated MVA values from RT disk chunk
+$step = 100;
+$mva = '(1';
+for ($i=2; $i<101; $i++ ) $mva .= ",$i";
+$mva .= ")";
+for ( $i=2; $i<8; $i++ )
+{
+	$id = $i * $step;
+	$q = "INSERT INTO rt_mva ( id, title, content, idd, mva1 ) VALUES ( $id, 'dummy$i', 'stuff$i', $id, $mva )";
+	
+	while ( $id<$i * $step + $step )
+	{
+		$id += 1;
+		$q = $q . ", ( $id, 'dummy$id', 'stuff$id', $id, $mva )";
+	}
+	mysql_query ( $q, $sock );
+}
+
+$results = array_merge ( $results, $query ( "UPDATE rt_mva SET mva1 = (1000,1004,1001) WHERE id<400", $sock, 0 ) );
+$results = array_merge ( $results, $query ( "SELECT * FROM rt_mva WHERE id<203", $sock, 0 ) );
+
+$ROWS = 5;
+$RUNS = 5;
+$ids = array();
+$random_works = false;
+
+for ( $i=1; $i<=$ROWS; $i++ )
+	mysql_query ( "INSERT INTO rt_rand VALUES ($i, 'a', 1)", $sock );
+
+for ($i=0; $i<$RUNS; $i++)
+{
+	$res = mysql_query ( "SELECT id FROM rt_rand ORDER BY RAND()", $sock );
+	while  ( $row=mysql_fetch_assoc($res) )
+		$ids[] = $row['id'];
+}
+
+for ( $i=1; $i<$RUNS; $i++ )
+{
+	for ( $j=0; $j<$ROWS; $j++ )
+		$random_works |= ( $ids [ $j ]!=$ids [ $i*$ROWS+$j ] );
+}
+
+$results[] = $random_works;
+
+@mysql_close($sock);
+
+]]></custom_test>
+
+</test>

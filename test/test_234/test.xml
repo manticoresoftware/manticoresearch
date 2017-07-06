@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>http REST</name>
+
+<requires>
+<http/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query_pre = SET NAMES utf8
+	sql_query		= select * from test_table
+	sql_attr_uint	= gid
+	sql_field_string = title
+	sql_attr_json	= j
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+	min_prefix_len	= 3
+}
+
+</config>
+
+<db_create>
+CREATE TABLE `test_table` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `gid` int(11) NOT NULL,
+  `title` varchar(255) NOT NULL,
+  `j` varchar(8192) NOT NULL,
+  PRIMARY KEY (`id`)
+) CHARACTER SET utf8;
+</db_create>
+<db_drop>DROP TABLE IF EXISTS `test_table`;</db_drop>
+<DB_Insert>SET NAMES utf8</DB_Insert>
+<db_insert>
+INSERT INTO `test_table` VALUES
+(1,1,'test one и я','{"name":"Alice","uid":123}'),
+(2,1,'test two','{"name":"Bob","uid":234,"gid":12}'),
+(3,2,'another doc','{"name":"Charlie","uid":345}'),
+(4,2,'doc number four','{"name":"Damon","uid":456,"gid":23}'),
+(5,3,'numeric fixup','{"12":345, "34":"567"}'),
+(6,3,'numeric fixup contd','{"12":"346", "179":"971"}'),
+(8,3,'stringvector test','{sv:["one","two","three", "четыре"],gid:315}'),
+(9,3,'empty','{}'),
+(10,3,'empty v2',''),
+(11,3,'all the bitnesses','{"t1":123456789,"t2":-123456789,
+	"t3":3123456789,"t4":-3123456789,
+	"t5":9876543210,"t6":-9876543210}'),
+(12,3,'stringvector vs longer strings','{sv:["
+Mary had a little lamb, whose fleece was white as snow.
+another time, the age of wonders"],
+	"gid":316}'),
+(16,4,'unescaping','{nick:"One\nTwo"}'),
+(17,4,'unescaping','{nick:"One\\nTwo"}'),
+(18,4,'unescaping','{nick:"One
+Two"}')
+</db_insert>
+
+<custom_test><![CDATA[
+
+$results = array();
+$results[] = HttpQuery ( 'search', array ( 'index'=>'test', 'limit'=>'10', 'select'=>'*' ), NULL );
+$results[] = HttpQuery ( 'search', NULL, array ( 'index'=>'test', 'limit'=>'2', 'select'=>'*' ) );
+$results[] = HttpQuery ( 'sql', array ( 'query'=>'select+*+from+test+limit+2' ), NULL );
+$results[] = HttpQuery ( 'search', array ( 'index'=>'test', 'limit'=>'5', 'select'=>'*', 'match'=>'tes%2a' ), NULL );
+$results[] = HttpQuery ( 'search', NULL, array ( 'index'=>'test', 'limit'=>'5', 'select'=>'*', 'match'=>'tes%2a' ) );
+$results[] = HttpQuery ( 'sql', array ( 'query'=>"select%20%2A+from+test%20where+match('tes%2a')+limit+5" ), NULL );
+$results[] = HttpQuery ( 'search', array ( 'index'=>'test', 'limit'=>'10', 'select'=>'*', 'group'=>'gid' ), NULL );
+$results[] = HttpQuery ( 'search', NULL, array ( 'index'=>'test', 'limit'=>'5', 'select'=>'*', 'order_by'=>'j.uid+asc' ) );
+$results[] = HttpQuery ( 'sql', NULL, array ( 'query'=>"select%20%2A+from+test%20order+by+j.uid+asc+limit+5" ) );
+
+
+]]></custom_test>
+
+</test>

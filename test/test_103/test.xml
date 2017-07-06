@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Test>
+  <Name>fullscan filtering on virtual attributes</Name>
+  <Config>
+    <Static>indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+</Static><Searchd_Settings/>
+<Static>
+}
+
+source srclj
+{
+	type			= mysql
+</Static>
+<Sql_Settings/>
+<Static>
+	sql_query = SELECT id, adtext, heading, postcode, lng, lat, section, make_id, transmission_id FROM test_table
+
+	sql_attr_float	= lng
+	sql_attr_float	= lat
+	sql_attr_uint	= section
+	sql_attr_uint	= make_id
+	sql_attr_uint	= transmission_id
+}
+</Static>
+<Static>
+index lj
+{
+	source			= srclj
+	path			= </Static><Data_Path/><Static>/lj
+	docinfo			= extern
+	min_word_len	= 1
+}
+</Static>
+  </Config>
+
+  <Query_Attributes>
+	<Attr_1>lng</Attr_1>
+	<Attr_2>lat</Attr_2>
+	<Attr_3>@geodist</Attr_3>
+  </Query_Attributes>
+
+  <Query_Settings>
+	$client->SetGeoAnchor ('lng','lat',-0.0798578,0.937717 );
+	$client->SetFilterFloatRange ('@geodist', 0.0, 200000.0 );
+	$results = $client->Query ( $query, $index );
+  </Query_Settings>
+
+  <Query>
+    <Query_0></Query_0>
+  </Query>
+  <DB_Create>
+CREATE TABLE `test_table` (
+  `id` int(11) NOT NULL auto_increment,
+  `section` int(11) NOT NULL,
+  `system_id` tinyint(4) NOT NULL,
+  `adtext` varchar(255) NOT NULL,
+  `heading` varchar(500) NOT NULL,
+  `price` int(11) NOT NULL default '0',
+  `postcode` varchar(10) NOT NULL,
+  `gre` int(11) NOT NULL,
+  `grn` int(11) NOT NULL,
+  `str_at1` varchar(255) NOT NULL,
+  `str_at2` varchar(255) NOT NULL,
+  `str_at3` varchar(255) NOT NULL,
+  `str_at4` varchar(255) NOT NULL,
+  `str_at5` varchar(255) NOT NULL,
+  `int_at1` int(11) default NULL,
+  `int_at2` int(11) default NULL,
+  `int_at3` int(11) default NULL,
+  `int_at4` int(11) default NULL,
+  `int_at5` int(11) default NULL,
+  `float_at1` float default NULL,
+  `float_at2` float default NULL,
+  `float_at3` float default NULL,
+  `lng` float NOT NULL default '0',
+  `lat` float NOT NULL default '0',
+  `make_id` int(11) NOT NULL,
+  `transmission_id` tinyint(4) NOT NULL,
+  PRIMARY KEY  (`id`)
+)
+  </DB_Create>
+
+  <DB_Drop>
+DROP TABLE IF EXISTS `test_table`
+  </DB_Drop>
+
+  <DB_Insert>
+INSERT INTO `test_table` (`id`, `section`, `system_id`, `adtext`, `heading`, `price`, `postcode`, `gre`, `grn`, `str_at1`, `str_at2`, `str_at3`, `str_at4`, `str_at5`, `int_at1`, `int_at2`, `int_at3`, `int_at4`, `int_at5`, `float_at1`, `float_at2`, `float_at3`, `lng`, `lat`, `make_id`, `transmission_id`) VALUES 
+(1, 1, 2, 'FORD', 'Ford KA', 2790, 'EN3 5BT', 535000, 197400,  'Ford', 'KA', 'Grey', 'Diesel', '', 18662, NULL, NULL, NULL, NULL, NULL, NULL, NULL, -0.0798578, 0.937717, 8, 1),
+(2, 1, 0, 'until', 'Vauxhall Corsa', 5800, 'BN42 4RN', 524000, 106100, 'Vauxhall', 'Corsa', 'Red', 'Petrol', '', 19296, NULL, NULL, NULL, NULL, NULL, NULL, NULL, -0.0799989, 0.891975, 5, 0),
+(211250, 0, 1, 'Quattro Roadster', 'Audi TT', 13995, 'E9 7DG', 535600, 184200, '', '', '', '', '', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, -0.0721455, 0.926761, 29, 1);
+  </DB_Insert>
+</Test>

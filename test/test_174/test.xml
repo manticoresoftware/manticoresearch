@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>php fread from socket test</name>
+
+<config>
+indexer
+{
+       mem_limit               = 32M
+}
+
+searchd
+{
+       <searchd_settings/>
+}
+
+source test
+{
+       type                    = mysql
+       <sql_settings/>
+       sql_query               = select *, 'garbage' as garbage from test_table
+       sql_attr_string = garbage
+}
+
+index test
+{
+       source                  = test
+       path                    = <data_path/>/test
+}
+</config>
+
+<db_create>
+create table test_table
+(
+       id int not null,
+       title varchar(255) not null
+);
+</db_create>
+<db_drop>drop table if exists test_table;</db_drop>
+<custom_insert><![CDATA[
+
+for ( $i=1; $i<=1000; ++$i )
+   mysql_query ( "INSERT INTO test_table VALUES ( $i, 'hello world' ) " );
+
+]]></custom_insert>
+
+<queries>
+<query mode="extended2" limits="1000">hello</query>
+</queries>
+
+</test>

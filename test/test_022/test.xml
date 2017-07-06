@@ -1,0 +1,225 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>wordforms vs case folding</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT * FROM test_table
+}
+
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+	wordforms		= wordforms.txt
+}
+
+source src_num
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT 1 id, 11 idd, 's01e01 stuff' text UNION SELECT 2 id, 11 idd, 'season 1 episode 1 stuff' text UNION SELECT 3 id, 11 idd, 's02e02' text UNION SELECT 4 id, 11 idd, 's3 e3' text
+	sql_attr_uint = idd
+}
+
+index test_num
+{
+	source			= src_num
+	path			= <data_path/>/test_num
+	wordforms		= <this_test/>/wf_num.txt
+}
+
+source src_multi
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT 1 id, 11 idd, 'test me rd' text UNION SELECT 2 id, 11 idd, 'test me red dogs' text UNION SELECT 3 id, 11 idd, 'test me red dog' text
+	sql_attr_uint = idd
+}
+
+index multi1
+{
+	source			= src_multi
+	path			= <data_path/>/multi1
+	wordforms		= <this_test/>/wf_multi.txt
+}
+
+index multi2
+{
+	source			= src_multi
+	path			= <data_path/>/multi2
+	wordforms		= <this_test/>/wf_multi.txt
+	morphology		= stem_en
+	index_exact_words = 1
+}
+
+source src_multi_fm
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT 1 id, 11 idd, 'rdogs' text UNION SELECT 2 id, 11 idd, 'red dogs' text UNION SELECT 3 id, 11 idd, 'test me rdogs' text UNION SELECT 4 id, 11 idd, 'test me red dogs' text
+	sql_attr_uint = idd
+}
+
+index multi_fm
+{
+	source			= src_multi_fm
+	path			= <data_path/>/multi_fm
+	wordforms		= <this_test/>/wf_multi.txt
+}
+
+source src_multi22
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT 1 id, 11 idd, 'Dummy man utd product' text UNION SELECT 2 id, 11 idd, 'Dummy man united product' text UNION SELECT 3 id, 11 idd, 'Dummy uniman product' text
+	sql_attr_uint = idd
+}
+
+index multi22
+{
+	source			= src_multi22
+	path			= <data_path/>/multi22
+	wordforms		= <this_test/>/wf_multi2.txt
+    dict 			= keywords
+	min_infix_len 	= 2
+	charset_table 	= 0..9, A..Z->a..z, @, a..z	
+	morphology		= stem_en
+	index_exact_words = 1	
+}
+</config>
+
+<queries>
+<query index="test">FOLDED</query>
+<query index="test">folded</query>
+<query index="test">shortform</query>
+<query index="test">sOMEwHATmORElONGfORMtHATwOULDoVERFLOWsHORTfORMbUFFER</query>
+<query index="test_num">s01e01</query>
+<query index="test_num">season 1 episode 1</query>
+<query index="test_num">s02e02</query>
+<query index="test_num">season 2 episode 2</query>
+<query index="test_num">season 3 episode 3</query>
+
+<!-- regression wordform with leading number -->
+<!-- meta should match for all queries below-->
+<query index="test_num">test 1</query>
+<query index="test_num">1 test</query>
+<query index="test_num">test one</query>
+</queries>
+
+<sphqueries>
+<sphinxql>SELECT * FROM test_num WHERE MATCH('metallica')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+<sphinxql>SELECT * FROM test_num WHERE MATCH('metallica 2014')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+
+<!-- regression multi destination wordform vs operators -->
+<sphinxql>set profiling=1</sphinxql>
+<sphinxql>SELECT * FROM multi1 WHERE MATCH('me | rdogs')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi2 WHERE MATCH('me | rdogs')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi1 WHERE MATCH('me | dogs')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi2 WHERE MATCH('me | dogs')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi1 WHERE MATCH('me | (red dogs)')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi2 WHERE MATCH('me | (red dogs)')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi1 WHERE MATCH('meo | (red dog)')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi2 WHERE MATCH('meo | (red dog)')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi1 WHERE MATCH('me | =rdogs')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi2 WHERE MATCH('me | =rdogs')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi1 WHERE MATCH('me | rdogs$')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi2 WHERE MATCH('me | rdogs$')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi1 WHERE MATCH('me | =rdogs$')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi2 WHERE MATCH('me | =rdogs$')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi1 WHERE MATCH('test | "me rdogs" ')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi2 WHERE MATCH('test | "me rdogs" ')</sphinxql>
+<sphinxql>show plan</sphinxql>
+<sphinxql>show meta</sphinxql>
+
+<!-- regression multiforms vs numbers mess -->
+<sphinxql>SELECT * FROM test_num WHERE MATCH('24 mois')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+<sphinxql>SELECT * FROM test_num WHERE MATCH('"foo bar baz"/24 mois')</sphinxql>
+<sphinxql>SHOW PLAN</sphinxql>
+<sphinxql>SELECT * FROM test_num WHERE MATCH('foo ~ 24 mois')</sphinxql>
+
+<!-- regression multiforms vs field modifiers -->
+<sphinxql>SELECT * FROM multi_fm WHERE MATCH('^rdogs$')</sphinxql>
+<sphinxql>SELECT * FROM multi_fm WHERE MATCH('^red dogs$')</sphinxql>
+
+<!-- regression multiforms vs stemmer -->
+<sphinxql>SELECT * FROM multi22 WHERE MATCH('uniman')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM multi22 WHERE MATCH('man utd')</sphinxql>
+<sphinxql>show meta</sphinxql>
+
+</sphqueries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 'test FoLdEd' ),
+( 2, 'folded' ),
+( 3, 'shortform' ),
+( 4, 'SomeWhatMoreLongFormThatWouldOverflowShortFormBuffer' )
+</db_insert>
+
+</test>

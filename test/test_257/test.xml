@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>sv-base indexing 1</name>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src11
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data1.xml
+	xmlpipe_field = title
+	xmlpipe_field = content
+	xmlpipe_attr_uint = gid
+	xmlpipe_attr_uint = uid
+	xmlpipe_attr_uint = gid
+}
+
+index xml11
+{
+	source = src11
+	path = <data_path/>/xml11
+	docinfo = extern
+    dict = keywords
+}
+
+source src12
+{
+	type = xmlpipe2
+	xmlpipe_command = cat <this_test/>/data1.xml
+	xmlpipe_field = title
+	xmlpipe_field = content
+	xmlpipe_attr_uint = gid
+	xmlpipe_attr_uint = uid
+}
+
+index xml12
+{
+	source = src12
+	path = <data_path/>/xml12
+	docinfo = extern
+    dict = keywords
+}
+
+source src21
+{
+	type = tsvpipe
+	tsvpipe_command = cat <this_test/>/data1.tsv
+	tsvpipe_field = title
+	tsvpipe_field = content
+	tsvpipe_attr_uint = gid
+	tsvpipe_attr_uint = uid
+	tsvpipe_attr_uint = gid
+}
+
+index tsv21
+{
+	source = src21
+	path = <data_path/>/tsv21
+	docinfo = extern
+    dict = keywords
+}
+
+source src22
+{
+	type = tsvpipe
+	tsvpipe_command = cat <this_test/>/data1.tsv
+	tsvpipe_field = title
+	tsvpipe_field = content
+	tsvpipe_attr_uint = gid
+	tsvpipe_attr_uint = uid
+}
+
+index tsv22
+{
+	source = src22
+	path = <data_path/>/tsv22
+	docinfo = extern
+    dict = keywords
+}
+
+source src31
+{
+	type = csvpipe
+	csvpipe_command = cat <this_test/>/data1.csv
+	csvpipe_field = title
+	csvpipe_field = content
+	csvpipe_attr_uint = gid
+	csvpipe_attr_uint = uid
+	csvpipe_attr_uint = gid
+}
+
+index csv31
+{
+	source = src31
+	path = <data_path/>/csv31
+	docinfo = extern
+    dict = keywords
+}
+
+source src32
+{
+	type = csvpipe
+	csvpipe_command = cat <this_test/>/data1.csv
+	csvpipe_field = title
+	csvpipe_field = content
+	csvpipe_attr_uint = gid
+	csvpipe_attr_uint = uid
+}
+
+index csv32
+{
+	source = src32
+	path = <data_path/>/csv32
+	docinfo = extern
+    dict = keywords
+}
+</config>
+
+<sphqueries>
+<sphinxql>SELECT * FROM xml11 ORDER BY id asc</sphinxql>
+<sphinxql>SELECT * FROM xml12 ORDER BY id asc</sphinxql>
+<sphinxql>SELECT * FROM tsv21 ORDER BY id asc</sphinxql>
+<sphinxql>SELECT * FROM tsv22 ORDER BY id asc</sphinxql>
+<sphinxql>SELECT * FROM csv31 ORDER BY id asc</sphinxql>
+<sphinxql>SELECT * FROM csv32 ORDER BY id asc</sphinxql>
+</sphqueries>
+
+</test>

@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>ha syntax and round-robin strategies</name>
+
+<num_agents>3</num_agents>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	agent_retry_delay = 100
+}
+
+<agent0>
+index dist
+{
+	type = distributed
+	agent = <agent1_address/>:loc1|<agent2_address/>:loc2
+	ha_strategy = roundrobin
+}
+index dist2
+{
+	type = distributed
+	agent = <agent1_address/>|<agent2_address/>:loc2
+	ha_strategy = roundrobin
+}
+index dist3
+{
+	type = distributed
+	agent = 127.0.0.1:65432:loc|127.0.0.1:65432:loc|<agent1_address/>:loc1|<agent2_address/>:loc2
+	ha_strategy = roundrobin
+}
+
+</agent0>
+
+<agent1>
+source src_a1
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, idd, 1 as aagent, body FROM test_table where id in ( 1,2,3,4 )
+	sql_attr_uint	= aagent
+	sql_attr_uint	= idd
+}
+
+index loc1
+{
+	source			= src_a1
+    docinfo			= extern
+	path			= <data_path/>/a1
+}
+</agent1>
+
+<agent2>
+source src_a2
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, idd, 2 as aagent, body FROM test_table where id in ( 5,6,7, 8, 9 )
+	sql_attr_uint	= aagent
+	sql_attr_uint	= idd
+}
+
+index  loc2
+{
+	source			= src_a2
+    docinfo			= extern
+	path			= <data_path/>/a2
+}
+</agent2>
+
+</config>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`id` int(11) NOT NULL default '0',
+	`idd` int(11) NOT NULL default '0',
+	`body` varchar(1024) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 1,		'the dog' ),
+( 2, 10,	'the cat' ),
+( 3, 2,		'the bird' ), 
+( 4, 11,	'cat eats bird' ),
+( 5, 3, 		'dog eats cat' ), 
+( 6, 12,	'bird' ), 
+( 7, 4,		'the cat' ),
+( 8, 5,		'eats' ),
+( 9, 13, 	'the' )
+</db_insert>
+
+<sphqueries>
+<sphinxql>select * from dist</sphinxql>
+<sphinxql>select * from dist</sphinxql>
+<sphinxql>select * from dist2</sphinxql>
+<sphinxql>select * from dist2</sphinxql>
+<sphinxql>select * from dist3</sphinxql>
+<sphinxql>select * from dist3</sphinxql>
+<sphinxql>select * from dist3</sphinxql>
+<sphinxql>select * from dist3</sphinxql>
+<sphinxql>select * from dist3</sphinxql>
+<sphinxql>select * from dist3</sphinxql>
+<sphinxql>select * from dist2 OPTION retry_count=2</sphinxql>
+<sphinxql>select * from dist2 OPTION retry_count=2</sphinxql>
+<sphinxql>select * from dist3 OPTION retry_count=3</sphinxql>
+<sphinxql>select * from dist3 OPTION retry_count=3</sphinxql>
+<sphinxql>select * from dist3 OPTION retry_count=3</sphinxql>
+<sphinxql>select * from dist3 OPTION retry_count=3</sphinxql>
+<sphinxql>select * from dist3 OPTION retry_count=3</sphinxql>
+<sphinxql>select * from dist3 OPTION retry_count=3</sphinxql>
+<sphinxql>select * from dist3 OPTION retry_count=1</sphinxql>
+<sphinxql>select * from dist3 OPTION retry_count=1</sphinxql>
+<sphinxql>select * from dist3 OPTION retry_count=1</sphinxql>
+</sphqueries>
+
+</test>

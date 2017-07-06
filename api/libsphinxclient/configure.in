@@ -1,0 +1,78 @@
+dnl this file has to be processed by autoconf
+AC_PREREQ(2.59)
+
+MAJOR_VERSION=0
+MINOR_VERSION=0
+BUGFIX_VERSION=1
+EXTRA_VERSION="-dev"
+
+LIBSPHINXCLIENT_VERSION="${MAJOR_VERSION}.${MINOR_VERSION}.${BUGFIX_VERSION}${EXTRA_VERSION}"
+
+AC_INIT([libsphinxclient],[0.0.1])
+AC_CONFIG_SRCDIR([README])
+AC_CONFIG_SRCDIR(sphinxclient.h)
+AC_CONFIG_HEADERS(sphinxclient_config.h)
+AM_INIT_AUTOMAKE([no-define])
+AM_MAINTAINER_MODE
+
+dnl Checks for programs.
+AC_PROG_CC
+AC_PROG_LD
+
+m4_undefine([AC_PROG_CXX])
+m4_defun([AC_PROG_CXX],[])
+m4_undefine([AC_PROG_F77])
+m4_defun([AC_PROG_F77],[])
+AM_PROG_LIBTOOL
+
+AC_PROG_INSTALL
+
+dnl Checks for typedefs, structures, and compiler characteristics.
+AC_TYPE_SIZE_T
+
+dnl Checks for header files.
+AC_CHECK_HEADERS(string.h strings.h unistd.h stdint.h)
+
+AC_CHECK_LIB([nsl], gethostbyname)
+AC_CHECK_LIB([socket], connect)
+
+DEFAULT_INSTALL_PREFIX="/usr/local"
+
+AC_ARG_ENABLE(debug,
+  [AS_HELP_STRING([--enable-debug],[enable debugging symbols and compile flags])
+  ],
+  [
+    if test x"$enableval" = xyes ; then
+      debug="yes"
+    else
+      debug="no"
+    fi
+  ]
+)
+
+if test x"$debug" = xyes ; then
+  AC_DEFINE([SPHINXCLIENT_DEBUG], [], [debug build])
+
+  if test x"$GCC" = xyes; then
+
+    dnl Remove any optimization flags from CFLAGS
+    changequote({,})
+    CFLAGS=`echo "$CFLAGS" | /usr/bin/sed -e 's/-O[0-9s]*//g'`
+    CFLAGS=`echo "$CFLAGS" | /usr/bin/sed -e 's/-g[0-2]\? //g'`
+    changequote([,])
+    CFLAGS="$CFLAGS -g3 -Wall -O0"
+
+  fi
+
+  dnl Do not strip symbols from developer object files.
+  INSTALL_STRIP_FLAG=""
+else
+  dnl Make sure to strip symbols from non-developer object files.
+  INSTALL_STRIP_FLAG="-s"
+fi
+
+AC_SUBST(INSTALL_STRIP_FLAG)
+
+AC_CONFIG_FILES([Makefile])
+AC_OUTPUT
+

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>subtree cache qpos</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+	binlog_path = #
+    subtree_docs_cache  = 128k
+    subtree_hits_cache  = 128k
+}
+
+source test1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT 1 id, 'test1 test2 test3 test4 test5 test6 test7' body, 11 idd UNION SELECT 2 id, 'test1 test02 test03 test4 test05 test06 test7' body, 12 idd UNION SELECT 3 id, 'test1 test2 test3 test04 test05 test6 test7', 13 idd
+	sql_attr_uint	= gid
+}
+
+index test1
+{
+	source			= test1
+	path			= <data_path/>/test1
+	charset_table 	= 0..9, A..Z->a..z, _, a..z
+}
+</config>
+
+<sphqueries>
+<!--
+<sphinxql>SELECT id, packedfactors() p FROM test1 WHERE MATCH ('(test1 test2 test3 test4 test4 test6) | (test1 test2 test7)') OPTION ranker=expr('1')</sphinxql>
+-->
+<sphinxql>SELECT id, packedfactors() p FROM test1 WHERE MATCH ('(test1 test3 test4 test4 test7) (test1 test2 test7)') OPTION ranker=expr('1')</sphinxql>
+</sphqueries>
+
+</test>

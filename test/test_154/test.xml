@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>no hit documents in RT and plain index</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source src
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT id, idd1, body FROM test_table
+	sql_attr_uint	= idd1
+}
+
+index plain
+{
+	source			= src
+    docinfo			= extern
+	path			= <data_path/>/plain
+	stopwords		= <this_test/>/stopwords.txt
+	blend_chars = .
+	blend_mode = trim_both, trim_head	
+}
+
+index rt
+{
+	type			= rt
+    docinfo			= extern
+	path			= <data_path/>/rt
+	stopwords		= <this_test/>/stopwords.txt
+
+	rt_attr_uint	= idd1
+	rt_field		= body
+	
+	rt_mem_limit	= 8M 
+}
+
+index both
+{
+	type	= distributed
+	local	= plain
+	local	= rt
+}
+
+</config>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`id` int(11) NOT NULL default '0',
+	`idd1` int(11) NOT NULL default '0',
+	`body` varchar(1024) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 11, 'a dog.' ),
+( 2, 11, 'a cat' ),
+( 3, 11, 'a bird' ), 
+( 4, 12, 'cat eats bird' ),
+( 5, 13, 'dog eats cat' ), 
+( 6, 14, 'bird' )
+</db_insert>
+
+<sphqueries>
+<sphinxql>insert into rt (id, idd1, body) values ( 11, 14, 'bird' )</sphinxql>
+<sphinxql>insert into rt (id, idd1, body) values ( 12, 13, 'dog eats cat' )</sphinxql>
+<sphinxql>insert into rt (id, idd1, body) values ( 13, 12, 'cat eats bird' )</sphinxql>
+<sphinxql>insert into rt (id, idd1, body) values ( 14, 11, 'a bird' )</sphinxql>
+<sphinxql>insert into rt (id, idd1, body) values ( 15, 11, 'a cat' )</sphinxql>
+<sphinxql>insert into rt (id, idd1, body) values ( 16, 11, 'a dog' )</sphinxql>
+
+<sphinxql>select * from plain</sphinxql>
+<sphinxql>select * from rt</sphinxql>
+<sphinxql>select * from both</sphinxql>
+<sphinxql>select * from both where match ('a')</sphinxql>
+<sphinxql>select * from both where match ('bird')</sphinxql>
+<sphinxql>select * from both where idd1=11</sphinxql>
+<sphinxql>select * from both where idd1!=11</sphinxql>
+<sphinxql>select * from both where match ('bird') and idd1!=11</sphinxql>
+<sphinxql>select * from both where idd1!=10</sphinxql>
+
+<!-- regression stopwords missed on disk chunk save (either regular or forced) -->
+<sphinxql>flush ramchunk rt</sphinxql>
+<sphinxql>select * from rt where match ('a bird')</sphinxql>
+<sphinxql>call keywords ('a bird', 'rt', 1)</sphinxql>
+</sphqueries>
+
+</test>

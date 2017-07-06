@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>keywords dictionary vs expansion limit</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	<dynamic>
+		<variant>expansion_limit = 0</variant>
+		<variant>expansion_limit = 3</variant>
+		<variant>expansion_limit = 2</variant>
+	</dynamic>
+	workers = threads
+}
+
+source test
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+	sql_attr_uint	= gid
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+
+	dict			= keywords
+	min_prefix_len	= 2
+}
+
+index rt
+{
+	type			= rt
+	path			= <data_path/>/rt
+	docinfo			= extern
+	rt_field		= data
+	rt_attr_uint		= idd
+	dict			= keywords
+	min_prefix_len	= 1
+}
+
+source plain_prefix
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query_pre = SET NAMES utf8
+	sql_query		= select 1000 as id, 1 as gid, 'Москва родимая' as text
+	sql_attr_uint	= gid
+}
+index plain_prefix
+{
+	source			= plain_prefix
+	path			= <data_path/>/plain_prefix
+
+	dict			= keywords
+	min_prefix_len	= 1
+}
+index rt_prefix
+{
+	type			= rt
+	path			= <data_path/>/rt_prefix
+	docinfo			= extern
+	rt_field		= data
+	rt_attr_uint		= idd
+	dict			= keywords
+	min_prefix_len	= 1
+}
+
+source plain_substring
+{
+       type                    = mysql
+       <sql_settings/>
+       sql_query               = select 1 id, 1 gid, '12345' as text
+       sql_attr_uint   = gid
+}
+
+index plain_sub_prefix
+{
+       source                  = plain_substring
+       path                    = <data_path/>/plain_sub_prefix
+       min_prefix_len  = 2
+}
+
+index plain_sub_infix
+{
+       source                  = plain_substring
+       path                    = <data_path/>/plain_sub_infix
+       min_infix_len   = 2
+}
+
+source kw_infix
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1, '1' title, 100 as idd
+	sql_attr_uint	= idd
+}
+
+index kw_infix
+{
+	source	= kw_infix
+	path	= <data_path/>/kw_infix
+	docinfo	= extern
+	min_infix_len = 3
+	dict = keywords	
+}
+
+source kw_infix_morph
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT 1, 'running star' title, 100 as idd UNION SELECT 2, 'run off', 100 as idd
+	sql_attr_uint	= idd
+}
+
+index kw_infix_morph
+{
+	source	= kw_infix_morph
+	path	= <data_path/>/kw_infix_morph
+	docinfo	= extern
+	min_infix_len = 1
+	dict = keywords
+	morphology = stem_en
+}
+
+source plain_prefix_limit
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query_pre = SET NAMES utf8
+	sql_query		= select 1000 as id, 1 as gid, 'hello two world' as text
+	sql_attr_uint	= gid
+}
+index plain_prefix_limit
+{
+	source			= plain_prefix_limit
+	path			= <data_path/>/plain_prefix_limit
+	dict			= keywords
+	min_prefix_len	= 4
+}
+index rt_prefix_limit
+{
+	type			= rt
+	path			= <data_path/>/rt_prefix_limit
+	docinfo			= extern
+	rt_field		= data
+	rt_attr_uint	= idd
+	dict			= keywords
+	min_prefix_len	= 4
+}
+
+</config>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	gid int not null,
+	title varchar(255) not null
+);
+</db_create>
+<db_drop>drop table if exists test_table;</db_drop>
+<db_insert>insert into test_table values ( 1, 1, 'funny place.' );</db_insert>
+<db_insert>insert into test_table values ( 2, 1, 'is it function?' );</db_insert>
+<db_insert>insert into test_table values ( 3, 1, 'functional lang. quite funny.' );</db_insert>
+<db_insert>insert into test_table values ( 4, 1, 'functic sequence.' );</db_insert>
+<db_insert>insert into test_table values ( 5, 1, 'fun place. funny place.' );</db_insert>
+<db_insert>insert into test_table values ( 6, 1, 'its function.' );</db_insert>
+<db_insert>insert into test_table values ( 7, 1, 'functional is not place.' );</db_insert>
+<db_insert>insert into test_table values ( 8, 1, 'functic is not place.' );</db_insert>
+
+<queries>
+	<query index="test" mode="extended2">fu*</query>
+	<query index="test" mode="extended2">func*</query>
+</queries>
+
+<sphqueries>
+<sphinxql>insert into rt values ( 1, 'the test is going there', 11 )</sphinxql>
+<sphinxql>insert into rt values ( 2, 'a sojmething is going here', 12 )</sphinxql>
+<sphinxql>insert into rt values ( 3, 'testing is going not here', 13 )</sphinxql>
+<sphinxql>select * from rt where match ( 't*' )</sphinxql>
+<sphinxql>show meta</sphinxql>
+<!-- regression prefix vs utf-8 codepoint -->
+<sphinxql>insert into rt_prefix values ( 1001, 'Москва ква', 23 )</sphinxql>
+<sphinxql>select * from plain_prefix where match ( 'Мос*' )</sphinxql>
+<sphinxql>select * from rt_prefix where match ( 'Мос*' )</sphinxql>
+
+<sphinxql>select * from plain_sub_prefix where match('1*')</sphinxql>
+<sphinxql>select * from plain_sub_prefix where match('12*')</sphinxql>
+<sphinxql>select * from plain_sub_prefix where match('123*')</sphinxql>
+<sphinxql>select * from plain_sub_prefix where match('1234*')</sphinxql>
+
+<sphinxql>select * from plain_sub_infix where match('*5')</sphinxql>
+<sphinxql>select * from plain_sub_infix where match('*45')</sphinxql>
+<sphinxql>select * from plain_sub_infix where match('*345')</sphinxql>
+<sphinxql>select * from plain_sub_infix where match('*2345')</sphinxql>
+
+<!--regression no infix collected at dict=keywords -->
+<sphinxql>select * from kw_infix where match('1')</sphinxql>
+<!--regression exact form vs infix -->
+<sphinxql>select * from kw_infix_morph where match('r*')</sphinxql>
+
+<!--regression min_prefix_len at plain vs rt -->
+<sphinxql>insert into rt_prefix_limit values ( 1000, 'hello two world', 23 )</sphinxql>
+<sphinxql>select * from plain_prefix_limit where match('hello two* world')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from rt_prefix_limit where match('hello two* world')</sphinxql>
+<sphinxql>show meta</sphinxql>
+
+</sphqueries>
+
+</test>

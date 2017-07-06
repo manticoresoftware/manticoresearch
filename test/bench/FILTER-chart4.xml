@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>filter</name>
+
+<config>
+indexer
+{
+	mem_limit = 128M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source fullscan
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = select id, value as a1, value as a2, value as a3, id as b1, id as b2, id as b3, text, mva, j, gid, tag, s1 as s1raw, CRC32(s1) as s1folded from fullscan
+	sql_attr_uint = a1
+	sql_attr_uint = a2
+	sql_attr_uint = a3
+	sql_attr_uint = b1
+	sql_attr_uint = b2
+	sql_attr_uint = b3
+	sql_attr_multi = uint mva from field
+	sql_attr_json	= j
+	sql_attr_uint = gid
+	sql_attr_uint = tag
+	sql_attr_string = s1raw
+	sql_attr_uint = s1folded
+}
+
+index fullscan
+{
+	source	= fullscan
+	path	= <local>data</local>/filter
+	docinfo	= extern
+}
+</config>
+
+<sphqueries>
+<!-- order by attr vs json vs expr vs 2 columns -->
+<sphinxql>select id from fullscan order by gid asc OPTION comment = 'order attr asc'</sphinxql>
+<sphinxql>select id from fullscan order by j.gid asc OPTION comment = 'order json asc'</sphinxql>
+<sphinxql>select id, gid+1 as o from fullscan order by o asc OPTION comment = 'order expr asc'</sphinxql>
+<sphinxql>select id from fullscan order by gid desc, tag asc OPTION comment = 'order 2 attr'</sphinxql>
+<sphinxql>select id from fullscan order by j.gid desc, j.tag asc OPTION comment = 'order 2 json'</sphinxql>
+<sphinxql>select id, gid+1 as o1, tag+1 o2 from fullscan order by o1 desc, o2 asc OPTION comment = 'order 2 expr'</sphinxql>
+
+<!-- order by string vs json -->
+<sphinxql>select id from fullscan order by s1raw desc OPTION comment = 'order string raw'</sphinxql>
+<sphinxql>select id from fullscan order by j.s1 desc OPTION comment = 'order string json'</sphinxql>
+
+</sphqueries>
+
+</test>

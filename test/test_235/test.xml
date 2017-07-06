@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>non-RT specific stuff</name>
+
+<requires>
+<non-rt/>
+</requires>
+
+<config>
+indexer
+{
+  mem_limit   = 16M
+}
+
+searchd
+{
+  <searchd_settings/>
+  workers = threads
+  predicted_time_costs = doc=100000000, hit=1000000, skip=0, match=0
+}
+
+source src
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT document_id, group_id, group_id2, title, content FROM test_table
+  sql_attr_uint   = group_id
+  sql_attr_uint   = group_id2
+}
+
+index test
+{
+  source      = src
+  path      = <data_path/>/test
+}
+</config>
+
+<sphqueries>
+<sphinxql>SHOW STATUS LIKE '%n_\_up%'</sphinxql>
+<sphinxql>SHOW META LIKE '%al%found'</sphinxql>
+<sphinxql>DESCRIBE test LIKE 'g_oup%'</sphinxql>
+<sphinxql>SHOW TABLES LIKE '__s_'</sphinxql>
+</sphqueries>
+
+<db_create>
+CREATE TABLE test_table
+(
+  document_id INTEGER PRIMARY KEY NOT NULL AUTO_INCREMENT,
+  group_id  INTEGER NOT NULL,
+  group_id2 INTEGER NOT NULL,
+  title   VARCHAR(255) NOT NULL,
+  content   VARCHAR(255) NOT NULL
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS test_table
+</db_drop>
+
+<db_insert>
+INSERT INTO test_table ( document_id, group_id, group_id2, title, content ) VALUES
+  ( 1, 1, 5, 'test one', 'this is my test document number one. also checking search within phrases.' ),
+  ( 2, 1, 6, 'test two', 'this is my test document number two' ),
+  ( 3, 2, 7, 'test three', 'this is another group' ),
+  ( 4, 2, 8, 'test four', 'this is to test groups' )
+</db_insert>
+
+</test>

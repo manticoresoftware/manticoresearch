@@ -1,0 +1,418 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>index_exact_words</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT document_id, body FROM test_table
+}
+
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+
+	<dynamic>
+		<variant>index_exact_words = 0</variant>
+		<variant>index_exact_words = 1</variant>
+	</dynamic>
+
+	<dynamic>
+		<variant>morphology = none</variant>
+		<variant>morphology = stem_en</variant>
+	</dynamic>
+}
+
+index rt
+{
+	type			= rt
+	path			= <data_path/>/rt
+	rt_field		= title	
+	rt_attr_uint	= id1
+	index_exact_words = 1
+	morphology = stem_en
+}
+
+index rt_fix
+{
+	type			= rt
+	path			= <data_path/>/rt_fix
+	rt_field		= title	
+	rt_attr_uint	= id1
+	min_infix_len = 1
+	dict = keywords
+	morphology = stem_en
+}
+
+index wf
+{
+	source			= srctest
+	path			= <data_path/>/wf
+	dict = keywords
+	index_exact_words = 1
+	morphology = none
+	wordforms		= <this_test/>/wordforms.txt
+}
+
+source src_stem : srctest
+{
+	sql_query		= SELECT 1 id, 11 idd, 'busy' title UNION SELECT 2 id, 11 idd, 'busi' title UNION SELECT 3 id, 11 idd, 'feet' title UNION SELECT 4 id, 11 idd, 'foot' title UNION SELECT 5 id, 11 idd, 'fbusy' title UNION SELECT 6 id, 11 idd, 'fbusi' title
+	sql_attr_uint		= idd
+}
+
+index kw_p
+{
+	source			= src_stem
+	path			= <data_path/>/kw_p
+	charset_table = 0..9, a..z, A..Z->a..z
+	dict = keywords
+	min_prefix_len = 3
+	morphology		= stem_en
+	index_exact_words = 1
+}
+
+index kw_i
+{
+	source			= src_stem
+	path			= <data_path/>/kw_i
+	charset_table = 0..9, a..z, A..Z->a..z
+	dict = keywords
+	min_infix_len = 3
+	morphology		= stem_en
+	index_exact_words = 1
+}
+
+index rt_p
+{
+	type = rt
+	path			= <data_path/>/rt_p
+	rt_mem_limit = 128k
+	rt_field                = title
+	rt_attr_uint        = idd
+	dict = keywords
+	min_prefix_len = 3
+	morphology		= stem_en
+	index_exact_words = 1
+}
+
+index rt_i
+{
+	type = rt
+	path			= <data_path/>/rt_i
+	rt_mem_limit = 128k
+	rt_field                = title
+	rt_attr_uint        = idd
+	dict = keywords
+	min_infix_len = 3
+	morphology		= stem_en
+	index_exact_words = 1
+}
+
+source src_phrase : srctest
+{
+	sql_query		= SELECT 1 id, 11 idd, 'it running fast as you but can not' title UNION SELECT 2 id, 11 idd, 'as it runs me' title UNION SELECT 3 id, 11 idd, 'it run and has fun' title
+	sql_attr_uint		= idd
+}
+
+index phrase_idx
+{
+	source			= src_phrase
+	path			= <data_path/>/phrase_idx
+	charset_table = 0..9, a..z, A..Z->a..z
+	dict = keywords
+	morphology		= stem_en
+	index_exact_words = 1	
+}
+
+source src_phrase_shift : srctest
+{
+	sql_query		= SELECT 1 id, 11 idd, 'that orange box might be and not yellow' title UNION SELECT 2 id, 11 idd, 'however that is a green box always apears here as usual' title UNION SELECT 3 id, 11 idd, 'that orange box might be not yellow' title
+	sql_attr_uint		= idd
+}
+
+index phrase_shift
+{
+	source			= src_phrase_shift
+	path			= <data_path/>/phrase_shift
+	charset_table = 0..9, a..z, A..Z->a..z
+	dict = keywords
+}
+
+index phrase_shift_star
+{
+	source			= src_phrase_shift
+	path			= <data_path/>/phrase_shift_star
+	charset_table = 0..9, a..z, A..Z->a..z
+	dict = keywords
+	min_prefix_len = 1
+}
+
+index phrase_shift_min_wlen
+{
+	source			= src_phrase_shift
+	path			= <data_path/>/phrase_shift_min_wlen
+	charset_table = 0..9, a..z, A..Z->a..z
+	dict = keywords
+	min_word_len = 2
+}
+
+index phrase_shift_stop
+{
+	source			= src_phrase_shift
+	path			= <data_path/>/phrase_shift_stop
+	charset_table = 0..9, a..z, A..Z->a..z
+	dict = keywords
+	stopwords		= stopwords.txt
+}
+
+source src_4codepoint : srctest
+{
+       sql_query               = SELECT 1 id, 5 idd, CONCAT ( 'the boxed state ', REPEAT( CHAR(0xf3be80bb), 7  ) ) as title
+       sql_attr_uint           = idd
+}
+
+index codepoint
+{
+       source                  = src_4codepoint
+       path                    = <data_path/>/codepoint
+       dict = keywords
+       min_infix_len = 3
+       morphology              = stem_en
+       index_exact_words = 1
+       enable_star = 1
+       charset_type    = utf-8
+}
+
+source src_nostar1 : srctest
+{
+	sql_query		= SELECT 1 id, 11 idd, 'cool test' title
+	sql_attr_uint		= idd
+}
+
+index plain_nostar1
+{
+	source			= src_nostar1
+	path			= <data_path/>/plain_nostar1
+	docinfo			= extern
+	charset_table = 0..9, a..z, A..Z->a..z
+	dict = keywords
+	min_prefix_len = 0
+	min_infix_len = 0
+}
+
+index rt_nostar1
+{
+	type = rt
+	path			= <data_path/>/rt_nostar1
+	docinfo = extern
+	rt_mem_limit = 32M
+	rt_attr_uint	= idd
+	rt_field		= title
+	charset_table = 0..9, a..z, A..Z->a..z
+	dict = keywords
+	min_prefix_len = 0
+	min_infix_len = 0
+}
+
+index dist
+{
+	type = distributed
+	local = plain_nostar1
+	local = rt_nostar1
+}
+
+</config>
+
+<queries>
+<query mode="extended2" index="test">work</query>
+<query mode="extended2" index="test">worked</query>
+<query mode="extended2" index="test">worker</query>
+<query mode="extended2" index="test">=work</query>
+<query mode="extended2" index="test">=worked</query>
+<query mode="extended2" index="test">=worker</query>
+<query mode="extended2" index="test">run</query>
+<query mode="extended2" index="test">runs</query>
+<query mode="extended2" index="test">=run</query>
+<query mode="extended2" index="test">=runs</query>
+</queries>
+
+<sphqueries>
+<sphinxql>
+REPLACE INTO rt (id, id1, title) VALUES ( 1, 1, 'work worked working workings worker works workers' ),
+( 2, 1, 'run' ),
+( 3, 1, 'runs' ),
+( 4, 1, 'running' )
+</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('work')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('worked')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('worker')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('=work')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('=worked')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('=worker')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('run')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('runs')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('=run')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('=runs')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>REPLACE INTO rt_fix (id, id1, title) VALUES ( 1, 1, 'hi people how are you' )</sphinxql>
+<sphinxql>SELECT * FROM rt_fix WHERE MATCH('ho*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM wf WHERE MATCH('run')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM wf WHERE MATCH('runs')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM wf WHERE MATCH('=run')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM wf WHERE MATCH('=runs')</sphinxql>
+<sphinxql>show meta</sphinxql>
+
+<!--regression substring search at RT index -->
+<sphinxql>REPLACE INTO rt_fix (id, id1, title) VALUES ( 2, 1, 'howdy all around' )</sphinxql>
+<sphinxql>SELECT * FROM rt_fix WHERE MATCH('*eop*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt_fix WHERE MATCH('*ar*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt_fix WHERE MATCH('ho*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+
+<!--regression substring search vs stemmed terms -->
+<sphinxql>REPLACE INTO rt_p (id, idd, title) VALUES (1,11,'busy'), (2,11,'busi'), (3,11,'feet'), (4,11,'foot'), (5,11,'fbusy'), (6,11,'fbusi')</sphinxql>
+<sphinxql>REPLACE INTO rt_i (id, idd, title) VALUES (1,11,'busy'), (2,11,'busi'), (3,11,'feet'), (4,11,'foot'), (5,11,'fbusy'), (6,11,'fbusi')</sphinxql>
+<sphinxql>SELECT * FROM kw_p WHERE MATCH('busy*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM kw_i WHERE MATCH('busy*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt_p WHERE MATCH('busy*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt_i WHERE MATCH('busy*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM kw_p WHERE MATCH('busi*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM kw_i WHERE MATCH('busi*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt_p WHERE MATCH('busi*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt_i WHERE MATCH('busi*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM kw_i WHERE MATCH('*busy*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt_i WHERE MATCH('*busy*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM kw_i WHERE MATCH('*busi*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt_i WHERE MATCH('*busi*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM kw_p WHERE MATCH('foot*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM kw_i WHERE MATCH('foot*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt_p WHERE MATCH('foot*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt_i WHERE MATCH('foot*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM kw_p WHERE MATCH('feet*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM kw_i WHERE MATCH('feet*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt_p WHERE MATCH('feet*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt_i WHERE MATCH('feet*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM kw_i WHERE MATCH('*foot*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt_i WHERE MATCH('*foot*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM kw_i WHERE MATCH('*feet*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM rt_i WHERE MATCH('*feet*')</sphinxql>
+<sphinxql>show meta</sphinxql>
+
+<!-- new feature exact phrase - just shortcut for all words in phrase have exact modifier -->
+<sphinxql>SELECT * FROM phrase_idx WHERE MATCH(' "it run" ')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM phrase_idx WHERE MATCH(' ="it running" ')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM phrase_idx WHERE MATCH(' ="it runs" ')</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>SELECT * FROM phrase_idx WHERE MATCH(' ="it run" ')</sphinxql>
+<sphinxql>show meta</sphinxql>
+
+<!-- phrase shift -->
+<sphinxql>SELECT * FROM phrase_shift WHERE MATCH(' "that box" ')</sphinxql>
+<sphinxql>SELECT * FROM phrase_shift WHERE MATCH(' "that * box" ')</sphinxql>
+<sphinxql>SELECT * FROM phrase_shift WHERE MATCH(' "that * * * box" ')</sphinxql>
+<sphinxql>SELECT * FROM phrase_shift WHERE MATCH(' "that * box might * * not yellow" ')</sphinxql>
+<sphinxql>SELECT * FROM phrase_shift_star WHERE MATCH(' "that box" ')</sphinxql>
+<sphinxql>SELECT * FROM phrase_shift_star WHERE MATCH(' "that * box" ')</sphinxql>
+<sphinxql>SELECT * FROM phrase_shift_star WHERE MATCH(' "that * * * box" ')</sphinxql>
+<sphinxql>SELECT * FROM phrase_shift_star WHERE MATCH(' "that * box might * * not yellow" ')</sphinxql>
+<sphinxql>SELECT * FROM phrase_shift_min_wlen WHERE MATCH(' "that box" ')</sphinxql>
+<sphinxql>SELECT * FROM phrase_shift_min_wlen WHERE MATCH(' "that * box" ')</sphinxql>
+<sphinxql>SELECT * FROM phrase_shift_min_wlen WHERE MATCH(' "that * * * box" ')</sphinxql>
+<sphinxql>SELECT * FROM phrase_shift_min_wlen WHERE MATCH(' "that * box might * * not yellow" ')</sphinxql>
+<!-- regression crash on phrase shift with stopwords -->
+<sphinxql>SELECT * FROM phrase_shift_stop WHERE MATCH(' "a the end that * box of" ')</sphinxql>
+<sphinxql>SELECT * FROM phrase_shift WHERE MATCH(' "* * * box always" ')</sphinxql>
+<sphinxql>SELECT * FROM phrase_shift_star WHERE MATCH(' "* * * box always" ')</sphinxql>
+<sphinxql>SELECT * FROM phrase_shift_min_wlen WHERE MATCH(' "* * * box always" ')</sphinxql>
+
+<!-- regression word with exact modifier that breaks infix builder -->
+<sphinxql>REPLACE INTO rt_i (id, idd, title) VALUES (20,11,'long word ___________________________________________ that crashed')</sphinxql>
+<sphinxql>FLUSH RAMCHUNK rt_i</sphinxql>
+
+<!-- regression large codepoints vs infix builder -->
+<sphinxql>SELECT * FROM codepoint WHERE MATCH('*box*')</sphinxql>
+
+<!-- regression plain vs RT wildcard setup -->
+<sphinxql>SELECT * FROM dist WHERE MATCH('test*')</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'test*', 'plain_nostar1')</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'test*', 'rt_nostar1')</sphinxql>
+
+</sphqueries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`body` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 'work worked working workings worker works workers' ),
+( 2, 'run' ),
+( 3, 'runs' ),
+( 4, 'running' )
+</db_insert>
+
+</test>

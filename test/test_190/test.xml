@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>distributed snippets with load_files, load_files_scattered</name>
+
+<num_agents>3</num_agents>
+
+<config>
+indexer
+{
+	mem_limit		= 32M
+}
+
+searchd
+{
+	<agent0>
+		snippets_file_prefix	= <this_test/>/refdata/master/
+	</agent0>
+	<agent1>
+		snippets_file_prefix	= <this_test/>/refdata/agent1/
+	</agent1>
+	<agent2>
+		snippets_file_prefix	= <this_test/>/refdata/agent2/
+	</agent2>
+
+	<searchd_settings/>
+	<dynamic>
+		<variant>dist_threads = 2</variant>
+		<variant></variant>
+	</dynamic>
+}
+
+source src
+{
+	type					= mysql
+	<sql_settings/>
+	sql_query		= SELECT 1, 'dummy', 1 as idd
+	sql_attr_uint	= idd
+}
+<agent0>
+index idx
+{
+	source				= src
+	docinfo			= extern
+	path					= <data_path/>/idx
+}
+
+index dist
+{
+	type = distributed
+	agent = <agent1_address/>:idx1
+	agent = <agent2_address/>:idx2
+	local = idx
+}
+
+index distl0
+{
+	type = distributed
+	local = idx
+}
+</agent0>
+<agent1>
+index idx1
+{
+	source				= src
+	docinfo			= extern
+	path					= <data_path/>/idx1
+}
+
+index distl1
+{
+	type = distributed
+	local = idx1
+}
+</agent1>
+<agent2>
+index idx2
+{
+	source				= src
+	docinfo			= extern
+	path					= <data_path/>/idx2
+}
+
+index distl2
+{
+	type = distributed
+	local = idx2
+}
+</agent2>
+</config>
+
+
+<custom_test><![CDATA[
+
+$index = "dist";
+$words = '"Sphinxsearch dot com"';
+$docs = array ( "text1.txt", "text2.txt", "text3.txt", "text4.txt", "text5.txt", "text6.txt");
+$opts_all = array ( "load_files" => 1 );
+$opts_scattered = array ( "load_files" => 1, "load_files_scattered" => 1);
+$alldocs = array();
+$scatdocs = array();
+for ( $i=0; $i<count($docs); $i++)
+{
+	$alldocs[] = "allfiles/$docs[$i]";
+	$scatdocs[] = "scatteredfiles/$docs[$i]";
+}
+$tests = array( array($alldocs, $opts_all), array( $scatdocs, $opts_scattered) );
+$results = array();
+
+foreach ( $tests as $test )
+{
+	$res = $client->BuildExcerpts ( $test[0], $index, $words, $test[1] );
+	$results[] = $res;
+}
+]]> </custom_test>
+
+<sphqueries>
+<sphinxql>CALL SNIPPETS (('allfiles/text1.txt','allfiles/text2.txt','allfiles/text3.txt','allfiles/text4.txt','allfiles/text5.txt','allfiles/text6.txt'),'dist','"Sphinxsearch dot com"',1 AS load_files)</sphinxql>
+<sphinxql>CALL SNIPPETS (('scatteredfiles/text1.txt','scatteredfiles/text2.txt','scatteredfiles/text3.txt','scatteredfiles/text4.txt','scatteredfiles/text5.txt','scatteredfiles/text6.txt'),'dist','"Sphinxsearch dot com"',1 AS load_files,1 AS load_files_scattered)</sphinxql>
+
+</sphqueries>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
+	title VARCHAR(10) NOT NULL
+);
+</db_create>
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 'dummy' )
+</db_insert>
+<db_drop>DROP TABLE IF EXISTS test_table</db_drop>
+
+</test>

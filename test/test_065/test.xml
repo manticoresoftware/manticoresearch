@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>payload indexing</name>
+
+<requires>
+<non-rt/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+
+	sql_query = select * from sph_test;
+	sql_joined_field = tag from payload-query; select * from sph_test_tags;
+}
+
+index test
+{
+	source	= test
+	path	= <data_path/>/test
+
+	charset_table = 0..9, A..Z->a..z, _, a..z
+}
+</config>
+
+<db_create>
+create table sph_test
+(
+	id int,
+	text varchar(255)
+);
+</db_create>
+<db_drop>drop table if exists sph_test</db_drop>
+
+<db_create>
+create table sph_test_tags
+(
+	id int,
+	tag varchar(255),
+	weight int
+);
+</db_create>
+<db_drop>drop table if exists sph_test_tags</db_drop>
+
+<db_insert>
+insert into sph_test (id, text) values
+	( 1, 'aaa' ),
+	( 2, 'aaa bbb' ),
+	( 3, 'bbb ccc' );
+</db_insert>
+
+<db_insert>
+insert into sph_test_tags values
+	( 1, 'tag_1_a tag_1_b',	100 ),
+	( 1, 'tag_x',			200 ),
+	( 2, 'tag_2',			300 ),
+	( 2, 'tag_x',			400 );
+</db_insert>
+
+<queries>
+	<query mode="extended2" index="test">tag_1_a</query>
+	<query mode="extended2" index="test">tag_1_a aaa</query>
+	<query mode="extended2" index="test">tag_1_b</query>
+	<query mode="extended2" index="test">tag_1_a tag_1_b</query>
+	<query mode="extended2" index="test">tag_x</query>
+	<query mode="extended2" index="test">tag_1_a tag_x</query>
+	<query mode="extended2" index="test">tag_2</query>
+</queries>
+
+</test>

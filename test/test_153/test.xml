@@ -1,0 +1,511 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>aggregate, aliases, different sorting, grouping and schemas vs different type of distributed</name>
+
+<config>
+indexer
+{
+	mem_limit			= 28M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers					= threads
+}
+
+source auth
+{
+	type			= mysql
+	<sql_settings/>
+}
+
+source src : auth
+{
+	sql_query = SELECT id, tag, gr, text FROM test_table WHERE id&lt;4
+	sql_query_pre = SET NAMES UTF8
+	sql_attr_uint	= tag
+	sql_attr_uint	= gr
+}
+
+source src1 : src
+{
+	sql_query = SELECT id, tag, gr, text FROM test_table WHERE id&lt;3
+}
+
+source src2 : src
+{
+	sql_query = SELECT id, tag, gr, text FROM test_table WHERE id=3
+}
+
+source src51 : src
+{
+	sql_query = SELECT id, tag, gr, text FROM test_table WHERE id&lt;6
+}
+
+source src52 : src
+{
+	sql_query = SELECT id, tag, gr, text FROM test_table WHERE id&gt;5
+}
+
+source fake: auth
+{
+	sql_query = SELECT id, gr, text FROM test_table WHERE id&lt;4
+	sql_attr_uint	= gr
+}
+
+index dist_no
+{
+	source			= src
+	path			= <data_path/>/idx
+	docinfo			= extern
+	min_word_len	= 1
+}
+
+index idx1 : dist_no
+{
+	source			= src1
+	path			= <data_path/>/idx1
+}
+
+index idx2 : dist_no
+{
+	source			= src2
+	path			= <data_path/>/idx2
+}
+
+index idx51 : dist_no
+{
+	source			= src51
+	path			= <data_path/>/idx51
+}
+
+index idx52 : dist_no
+{
+	source			= src52
+	path			= <data_path/>/idx52
+}
+
+index idxfake : dist_no
+{
+	source			= fake
+	path			= <data_path/>/otheridx
+}
+
+
+index dist50
+{
+	type					= distributed
+	local					= idx51
+	agent					= <my_address/>:idx52
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist52
+{
+	type					= distributed
+	local					= idx51
+	local					= idx52
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+
+index dist0
+{
+	type					= distributed
+	local					= dist_no
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist1
+{
+	type					= distributed
+	local					= idx1
+	local					= idx2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist2
+{
+	type					= distributed
+	agent					= <my_address/>:idx1
+	local					= idx2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist3
+{
+	type					= distributed
+	local					= idx1
+	agent					= <my_address/>:idx2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist4
+{
+	type					= distributed
+	agent					= <my_address/>:idx1
+	agent					= <my_address/>:idx2
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index dist5
+{
+	type					= distributed
+	agent					= <my_address/>:dist_no
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index distfake
+{
+	type					= distributed
+	agent					= <my_address/>:idx51
+	agent					= <my_address/>:idxfake
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index disthfake
+{
+	type					= distributed
+	local					= idx51
+	agent					= <my_address/>:idxfake
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index disthfakeb
+{
+	type					= distributed
+	agent					= <my_address/>:idx51
+	local					= idxfake
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+index distlfake
+{
+	type					= distributed
+	local					= idx51
+	local					= idxfake
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+
+source src_proxy1 : auth
+{
+	sql_query = SELECT 1, 11 as idd, 'the box' text UNION SELECT 2, 11 as idd, 'the fox' text UNION SELECT 3, 11 as idd, 'the fort nox' text UNION SELECT 4, 11 as idd, 'of the box' text UNION SELECT 5, 11 as idd, 'not the box' text
+	sql_attr_uint	= idd
+}
+
+source src_proxy2 : auth
+{
+	sql_query = SELECT 5, 22 as idd, 'of the box' text UNION SELECT 6, 22 as idd, 'we are the boxes' text UNION SELECT 7, 22 as idd, 'how is the fox' text UNION SELECT 8, 22 as idd, 'for the nox' text UNION SELECT 9, 22 as idd, 'from the box' text
+	sql_attr_uint	= idd
+}
+
+
+index proxy_loc1 : dist_no
+{
+	source			= src_proxy1
+	path			= <data_path/>/proxy_loc1
+}
+
+index proxy_loc2 : dist_no
+{
+	source			= src_proxy2
+	path			= <data_path/>/proxy_loc2
+}
+
+
+index dist_w1
+{
+	type					= distributed
+	local					= proxy_loc2
+	agent					= <my_address/>:proxy_loc1
+}
+
+index dist_endpoint
+{
+	type					= distributed
+	local					= proxy_loc1
+}
+
+index dist_proxy1
+{
+	type					= distributed
+	agent					= <my_address/>:dist_endpoint
+}
+
+index dist_w2
+{
+	type					= distributed
+	local					= proxy_loc2
+	agent					= <my_address/>:dist_proxy1
+}
+
+<!-- regression empty agent string might cause crash on daemon start -->
+index dist_invalid
+{
+	type					= distributed
+	local					= proxy_loc2
+	agent					=
+}
+
+index dist_large5
+{
+	type					= distributed
+	local					= idx1
+	local					= idx2
+	local					= idx51
+	local					= idx52
+	local					= idxfake
+}
+
+index idx55 : dist_no
+{
+	source			= src52
+	path			= <data_path/>/idx55
+	charset_table = 0..9
+}
+
+index dist_large6
+{
+	type					= distributed
+	local					= idx55
+	local					= idx1
+	local					= idx2
+	local					= idx51
+	local					= idx52
+	local					= idxfake
+}
+
+</config>
+
+
+<queries>
+
+<!--This part is totally uncompatible. In compat mode we have to return result
+ in index column order, as always. But guys from #41 want the query column order, and it
+ may break the old legacy application which wants as the index order as before -->
+<query index="dist_no" select="gr,tag" groupattr="gr"/>
+<query index="dist_no" select="tag,gr" groupattr="gr"/>
+
+<!--First, test that aggregate works on distributed on example o Sum -->
+<query index="dist_no" select="gr,sum(tag) as t" groupattr="gr"/>
+<query index="dist0" select="gr,sum(tag) as t" groupattr="gr"/>
+<query index="dist1" select="gr,sum(tag) as t" groupattr="gr"/>
+<query index="dist2" select="gr,sum(tag) as t" groupattr="gr"/>
+<query index="dist3" select="gr,sum(tag) as t" groupattr="gr"/>
+<query index="dist4" select="gr,sum(tag) as t" groupattr="gr"/>
+<query index="dist5" select="gr,sum(tag) AS t" groupattr="gr"/>
+
+<!-- Test the schema transmitting to agent - t is in select, but groupattr and groupsort (gr) is not-->
+
+<query index="dist0" select="tag+1 AS t,tag,gr" groupattr="tag" groupsort="gr desc"/>
+<query index="dist4" select="tag+1 as t,tag,gr" groupattr="tag" groupsort="gr desc"/>
+<query index="dist4" select="tag,gr" groupattr="tag" groupsort="gr desc" />
+
+<!-- commented out, because different results in id64 returned - bigind vs int which causes fault -->
+<!-- <query index="dist4" select="@id as idd" groupsort="gr desc" /> 
+<query index="dist4" select="@id as idd" groupattr="tag" groupsort="gr desc" />  -->
+
+<query index="dist0">test</query>
+<query index="dist5">test</query>
+
+<!-- groupsort is not in the schema -->
+<query index="dist52" select="tag+1 as t,gr" groupattr="t" groupsort="gr asc"/>
+<query index="dist50" select="tag+1 as t,gr" groupsort="gr asc"/> -->
+
+<!-- Now test the dist contains different schemas -->
+<!-- Note that each index has 'idxfake' as part of it, and the last doesn't contain 'tag' attribute -->
+<!-- distfake - both remote, disthfake - fake remote, disthfakeb - fake local, distlfake - both local -->
+ <query index="distfake" select="gr+1 as t,tag" groupattr="t" groupsort="tag asc"/> 
+ <query index="disthfakeb" select="gr+1 as t,tag" groupattr="t" groupsort="tag asc"/> 
+ <query index="disthfake" select="gr+1 as t,tag" groupattr="t" groupsort="tag asc"/> 
+ <query index="distlfake" select="gr+1 as t,tag" groupattr="t" groupsort="tag asc"/> 
+
+<!-- Handle magic duplicates in API -->
+<query index="dist_no" select="gr" groupattr="gr"/>
+<query index="dist_no" select="gr, @groupby, @count" groupattr="gr"/>
+
+<!-- regression legacy API select list crashes daemon -->
+<query select="*,*" index="dist_no"/>
+
+<!-- regression index list got folded at more than 4 items -->
+<query index="dist_large5" mode="extended2" expect_error="1">one /test me</query>
+<query index="dist_large6" mode="extended2" expect_error="1">one /test me</query>
+</queries>
+
+
+<sphqueries>
+<!-- First, just show all the indexes -->
+ 
+<sphinxql>select * from dist_no</sphinxql>
+<sphinxql>select * from dist0</sphinxql>
+<sphinxql>select * from dist1</sphinxql>
+<sphinxql>select * from dist2</sphinxql>
+<sphinxql>select * from dist3</sphinxql>
+<sphinxql>select * from dist4</sphinxql>
+<sphinxql>select * from dist5</sphinxql>
+
+<!-- Check the aggretage on differend kind of dist indexes -->
+ 
+<sphinxql>select gr, sum(tag) as t from dist_no group by gr</sphinxql>
+<sphinxql>select gr, sum(tag) as t from dist0 group by gr</sphinxql>
+<sphinxql>select gr, sum(tag) as t from dist1 group by gr</sphinxql>
+<sphinxql>select gr, sum(tag) as t from dist2 group by gr</sphinxql>
+<sphinxql>select gr, sum(tag) as t from dist3 group by gr</sphinxql> 
+
+
+ <sphinxql>select tag,gr from dist4 group by tag order by gr asc</sphinxql> 
+
+
+ <sphinxql>select gr, sum(tag) as t from dist4 group by gr</sphinxql> 
+ <sphinxql>select gr, sum(tag) as t from dist5 group by gr</sphinxql>
+
+<!-- Group by (gr) is not in the schema - check if it work or not -->
+ 
+<sphinxql>select sum(tag) as t from dist0 group by gr</sphinxql>
+<sphinxql>select sum(tag) as t from dist5 group by gr</sphinxql> 
+
+<!-- Check two edge distr indexes - one totally local, one totally dist -->
+ 
+<sphinxql>select gr, tag+1 as t from dist0 group by gr</sphinxql>
+<sphinxql>select gr, tag+1 as t from dist5 group by gr</sphinxql>
+
+<!-- order by (gr) is not in the schema. Also use match to check weighting -->
+ 
+<sphinxql>select tag+1 as t from dist0 where match('test') ORDER BY gr ASC</sphinxql>
+<sphinxql>select tag+1 as t from dist5 where match('test') ORDER BY gr ASC</sphinxql>
+
+<!-- use match to check weighting. Also reorder -->
+ 
+<sphinxql>select tag+1 as t, gr from dist0 where match('test') ORDER BY gr ASC</sphinxql>
+<sphinxql>select tag+1 as t, gr from dist5 where match('test') ORDER BY gr ASC</sphinxql>
+<sphinxql>select tag+1 as t, gr, tag, gr from dist0 where match('test') ORDER BY gr ASC</sphinxql>
+<sphinxql>select tag+1 as t, gr, tag, gr from dist5 where match('test') ORDER BY gr ASC</sphinxql>
+<sphinxql>select tag+1 as t, gr, gr+1 as g from dist0 where match('test') ORDER BY gr ASC</sphinxql>
+<sphinxql>select tag+1 as t, gr, gr+1 as g from dist5 where match('test') ORDER BY gr ASC</sphinxql>
+<sphinxql>select tag+1 as t, gr, tag as tt, tag, tag from dist0 where match('test') ORDER BY gr ASC</sphinxql>
+<sphinxql>select tag+1 as t, gr, tag as tt, tag, tag from dist5 where match('test') ORDER BY gr ASC</sphinxql>
+
+<!-- Same as below, but without matching -->
+ 
+<sphinxql>select tag+1 as t from dist0 ORDER BY gr ASC</sphinxql>
+<sphinxql>select tag+1 as t from dist5 ORDER BY gr ASC</sphinxql>
+
+<!-- Just check the weighting -->
+ 
+<sphinxql>select * from dist0 where match('test')</sphinxql>
+<sphinxql>select * from dist5 where match('test')</sphinxql>
+
+
+<!-- gr is in and not in the schema (being ordered by). Dist50 is dist-1local, dist52 - dist-2local, idx51 is local -->
+ 
+<sphinxql>select @id as idd, gr,tag+1 as t from dist50 order by gr asc</sphinxql>
+<sphinxql>select @id as idd, tag+1 as t from dist50 order by gr asc</sphinxql>
+<sphinxql>select @id as idd, gr,tag+1 as t from dist52 order by gr asc</sphinxql>
+<sphinxql>select @id as idd, tag+1 as t from dist52 order by gr asc</sphinxql>
+<sphinxql>select @id as idd, gr,tag+1 as t from idx51 order by gr asc</sphinxql>
+<sphinxql>select @id as idd, tag+1 as t from idx51 order by gr asc</sphinxql>
+<!-- same, not using deprecated syntax -->
+<sphinxql>select id as idd, gr,tag+1 as t from dist50 order by gr asc</sphinxql>
+<sphinxql>select id as idd, tag+1 as t from dist50 order by gr asc</sphinxql>
+<sphinxql>select id as idd, gr,tag+1 as t from dist52 order by gr asc</sphinxql>
+<sphinxql>select id as idd, tag+1 as t from dist52 order by gr asc</sphinxql>
+<sphinxql>select id as idd, gr,tag+1 as t from idx51 order by gr asc</sphinxql>
+<sphinxql>select id as idd, tag+1 as t from idx51 order by gr asc</sphinxql>
+
+
+<!-- todo: Faked index: attr 'tag' is absent in some cases -->
+<sphinxql>select @id as idd, gr+1 as t from distfake group by t order by tag asc</sphinxql>
+<sphinxql>select @id as idd, gr+1 as t from disthfakeb group by t order by tag asc</sphinxql>
+<sphinxql>select @id as idd, gr+1 as t from disthfake group by t order by tag asc</sphinxql>
+<sphinxql>select @id as idd, gr+1 as t from distlfake group by t order by tag asc</sphinxql>
+<!-- same, not using deprecated syntax -->
+<sphinxql>select id as idd, gr+1 as t from distfake group by t order by tag asc</sphinxql>
+<sphinxql>select id as idd, gr+1 as t from disthfakeb group by t order by tag asc</sphinxql>
+<sphinxql>select id as idd, gr+1 as t from disthfake group by t order by tag asc</sphinxql>
+<sphinxql>select id as idd, gr+1 as t from distlfake group by t order by tag asc</sphinxql>
+
+
+<!-- another regression chrash on sort of 0 matches -->
+<sphinxql>select * from dist50 where match ( 'broken merge' )</sphinxql>
+
+<!-- Handle magic duplicates in SphinxQL -->
+<sphinxql>select gr from dist_no group by gr</sphinxql>
+<sphinxql>select gr, @groupby, @count from dist_no group by gr</sphinxql>
+<!-- same, not using deprecated syntax -->
+<sphinxql>select gr, groupby(), count(*) from dist_no group by gr</sphinxql>
+<!-- regression distributed with weight -->
+<sphinxql>SELECT *, weight() as w FROM dist_w1 ORDER BY id asc OPTION index_weights=(dist_w1=10)</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM dist_w2 ORDER BY id asc OPTION index_weights=(dist_w2=10)</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM dist_w1 WHERE MATCH ('the') ORDER BY id asc OPTION index_weights=(dist_w1=10)</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM dist_w2 WHERE MATCH ('the') ORDER BY id asc OPTION index_weights=(dist_w2=10)</sphinxql>
+<!-- regression mix of distributed and local with weight -->
+<sphinxql>SELECT *, weight() as w FROM proxy_loc2, dist_w1 ORDER BY id asc OPTION index_weights=(proxy_loc2=2, dist_w1=10, dist_w2=100)</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM dist_w1, proxy_loc2 ORDER BY id asc OPTION index_weights=(proxy_loc2=2, dist_w1=10, dist_w2=100)</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM proxy_loc2, dist_w1, dist_w2 ORDER BY id asc OPTION index_weights=(proxy_loc2=2, dist_w1=10, dist_w2=100)</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM dist_w2, dist_w1, proxy_loc2  ORDER BY id asc OPTION index_weights=(proxy_loc2=2, dist_w1=10, dist_w2=100)</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM proxy_loc2, dist_w1, dist_w2  WHERE MATCH ('the') ORDER BY id asc OPTION index_weights=(proxy_loc2=1, dist_w1=10, dist_w2=100)</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM dist_w2, dist_w1, proxy_loc2  WHERE MATCH ('the') ORDER BY id asc OPTION index_weights=(proxy_loc2=1, dist_w1=10, dist_w2=100)</sphinxql>
+<!-- regression index_weights vs rankers-->
+<sphinxql>SELECT *, weight() as w FROM proxy_loc2, dist_w1, dist_w2  WHERE MATCH ('the | box') ORDER BY id asc OPTION index_weights=(proxy_loc2=1, dist_w1=10, dist_w2=100)</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM dist_w2, dist_w1, proxy_loc2  WHERE MATCH ('the | box') ORDER BY id asc OPTION index_weights=(proxy_loc2=1, dist_w1=10, dist_w2=100)</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM proxy_loc2, dist_w1, dist_w2  WHERE MATCH ('the | box') ORDER BY id asc OPTION index_weights=(proxy_loc2=1, dist_w1=10, dist_w2=100), ranker=proximity_bm25</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM dist_w2, dist_w1, proxy_loc2  WHERE MATCH ('the | box') ORDER BY id asc OPTION index_weights=(proxy_loc2=1, dist_w1=10, dist_w2=100), ranker=proximity_bm25</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM proxy_loc2, dist_w1, dist_w2  WHERE MATCH ('the | box') ORDER BY id asc OPTION index_weights=(proxy_loc2=1, dist_w1=10, dist_w2=100), ranker=expr('sum(lcs)*1000+bm25')</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM dist_w2, dist_w1, proxy_loc2  WHERE MATCH ('the | box') ORDER BY id asc OPTION index_weights=(proxy_loc2=1, dist_w1=10, dist_w2=100), ranker=expr('sum(lcs)*1000+bm25')</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM proxy_loc2, dist_w1, dist_w2  WHERE MATCH ('the | box') ORDER BY id asc OPTION index_weights=(proxy_loc2=1, dist_w1=10, dist_w2=100), ranker=bm25</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM dist_w2, dist_w1, proxy_loc2  WHERE MATCH ('the | box') ORDER BY id asc OPTION index_weights=(proxy_loc2=1, dist_w1=10, dist_w2=100), ranker=bm25</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM proxy_loc2, dist_w1, dist_w2  WHERE MATCH ('the | box') ORDER BY id asc OPTION index_weights=(proxy_loc2=1, dist_w1=10, dist_w2=100), ranker=wordcount</sphinxql>
+<sphinxql>SELECT *, weight() as w FROM dist_w2, dist_w1, proxy_loc2  WHERE MATCH ('the | box') ORDER BY id asc OPTION index_weights=(proxy_loc2=1, dist_w1=10, dist_w2=100), ranker=wordcount</sphinxql>
+<!-- regression weight as expression at distributed -->
+<sphinxql>select id, weight() * 11 as w from dist50</sphinxql>
+<sphinxql>SHOW META</sphinxql>
+<!-- regression quotation at distributed -->
+<sphinxql>select `id`, `tag` t, `gr` from dist50</sphinxql>
+
+</sphqueries>
+
+<db_create>
+CREATE TABLE `test_table` (
+  `id` int(11),
+  `tag` int(11),
+  `gr` int(11),
+  `text` varchar(255) NOT NULL
+)
+</db_create>
+
+
+ <db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+
+<db_insert>SET NAMES utf8</db_insert>
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 2, 3, 'test'),
+( 2, 2, 2, 'test'),
+( 3, 2, 3, 'test'),
+( 4, 2, 10, 'test'),
+( 5, 2, 9, 'test'),
+( 6, 2, 8, 'test'),
+( 7, 2, 7, 'test'),
+( 8, 2, 6, 'test'),
+( 9, 2, 5, 'test'),
+( 10, 2, 4, 'test')
+</db_insert>
+
+</test>

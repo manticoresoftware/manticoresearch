@@ -1,0 +1,7 @@
+would be used > moderately
+implement > across
+forms > stopword
+anotherstopword > dictionary
+word forms are applied > morestopwords
+word stopword anotherstopword morestopwords > tokenizing
+stopword anotherstopword morestopwords > incoming

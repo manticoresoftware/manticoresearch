@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>stopwords vs wordforms vs multiforms</name>
+
+<config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+	collation_libc_locale = C
+	collation_server = binary
+}
+
+source test
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query			= select * from test_table
+}
+
+index test
+{
+	source				= test
+	path				= <data_path/>/test
+	stopwords			= <this_test/>/stopwords.txt
+	wordforms			= <this_test/>/wordforms.txt
+}
+
+source test2
+{
+       type                            = mysql
+       <sql_settings/>
+       sql_query                       = select 1, 'text', 'asdf' title union select 2, 'text', 'asdfg' title
+       sql_attr_string         			= title
+}
+
+index test2
+{
+       source                          = test2
+       path                            = <data_path/>/test2
+}
+
+source src_filter
+{
+       type					= mysql
+       <sql_settings/>
+       sql_query			= SELECT 1 id, 11 idd, 'Be' title, '{"title":"BE"}' j, 'BE alive' text UNION SELECT 2 id, 22 idd, 'BE alive' title, '{"title":"Be alive"}' j,'Be undead' text  UNION SELECT 3 id, 33 idd, '' title, '{"mantle":"be alone", "title":""}' j,'Be alone' text
+       sql_field_string		= title
+	   sql_attr_json		= j
+}
+
+index i_filter
+{
+       source                          = src_filter
+       path                            = <data_path/>/i_filter
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	content VARCHAR(255) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_insert>
+INSERT INTO test_table VALUES
+( 100, 'Normally, that would be used to bring different word forms stopword' ),
+( 101, 'It can also be used to implement stemming exceptions anotherstopword' ),
+( 102, 'Word forms are applied after the text morestopwords' )
+</db_insert>
+
+<sphqueries>
+<sphinxql>select * from test where match('moderately')</sphinxql>
+<sphinxql>select * from test where match('implement')</sphinxql>
+<sphinxql>select * from test where match('across')</sphinxql>
+<sphinxql>select * from test where match('forms')</sphinxql>
+<sphinxql>select * from test where match('dictionary')</sphinxql>
+<sphinxql>select * from test where match('incoming')</sphinxql>
+<sphinxql>select * from test where match('stopword')</sphinxql>
+<sphinxql>select * from test where match('anotherstopword')</sphinxql>
+<sphinxql>select * from test where match('morestopwords')</sphinxql>
+<sphinxql>select * from test where match('tokenizing')</sphinxql>
+
+<sphinxql>set collation_connection=libc_ci</sphinxql>
+<sphinxql>select title from test2 order by title asc</sphinxql>
+<sphinxql>select title from test2 order by title desc</sphinxql>
+<sphinxql>set collation_connection=libc_cs</sphinxql>
+<sphinxql>select title from test2 order by title asc</sphinxql>
+<sphinxql>select title from test2 order by title desc</sphinxql>
+<sphinxql>set collation_connection=utf8_general_ci</sphinxql>
+<sphinxql>select title from test2 order by title asc</sphinxql>
+<sphinxql>select title from test2 order by title desc</sphinxql>
+<sphinxql>set collation_connection=binary</sphinxql>
+<sphinxql>select title from test2 order by title asc</sphinxql>
+<sphinxql>select title from test2 order by title desc</sphinxql>
+
+<!-- regression string filter with collation -->
+<sphinxql>set collation_connection=binary</sphinxql>
+<sphinxql>SELECT * FROM i_filter WHERE title='Be'</sphinxql>
+<sphinxql>SELECT * FROM i_filter WHERE j.title='BE'</sphinxql>
+<sphinxql>SELECT * FROM i_filter WHERE title='be'</sphinxql>
+<sphinxql>SELECT * FROM i_filter WHERE j.title='be'</sphinxql>
+<sphinxql>SELECT * FROM i_filter WHERE MATCH ('be') AND title='BE alive'</sphinxql>
+<sphinxql>SELECT * FROM i_filter WHERE MATCH ('be') AND j.title='Be alive'</sphinxql>
+<sphinxql>SELECT * FROM i_filter WHERE MATCH ('be') AND title='be alive'</sphinxql>
+<sphinxql>SELECT * FROM i_filter WHERE MATCH ('be') AND j.title='be alive'</sphinxql>
+<sphinxql>set collation_connection=utf8_general_ci</sphinxql>
+<sphinxql>SELECT * FROM i_filter WHERE title='be'</sphinxql>
+<sphinxql>SELECT * FROM i_filter WHERE j.title='be'</sphinxql>
+<sphinxql>SELECT * FROM i_filter WHERE MATCH ('be') AND title='BE ALIVE'</sphinxql>
+<sphinxql>SELECT * FROM i_filter WHERE MATCH ('be') AND j.title='BE ALIVE'</sphinxql>
+<sphinxql>SELECT * FROM i_filter WHERE title!='be'</sphinxql>
+<sphinxql>SELECT * FROM i_filter WHERE MATCH ('be') AND j.title!='BE'</sphinxql>
+
+<!-- regression string expresion with missed json field -->
+<sphinxql>SELECT id, (j.mantle='be alone') as c, j FROM i_filter </sphinxql>
+
+
+</sphqueries>
+
+</test>

@@ -1,0 +1,157 @@
+Sphinx coding standard
+=======================
+
+WARNING. This document is just an internal note. It might or might not be
+in sync with the actual code. Use it as an overview; refer to the source
+for precise details.
+
+General
+--------
+
+This document describes C++ coding standard that MUST be used for
+Sphinx source code.
+
+It is not yet complete. Currently, we're not aiming for an exhaustive set
+of rules (that noone will read anyway). Rather, we're covering only those
+gray areas that are not immediately obvious from the source. However,
+you should also *first* refer to the source for general look and feel.
+
+Certain rules might change over time. However, the following rules are not
+going to be changed:
+
+- All source parts must look alike.
+- When in doubt, ask. If not answered, mimic. (And ask again.)
+
+1. General formatting rules
+----------------------------
+
+- No duplicate spaces, use tabs.
+- Indent is 1 tab.
+- Tab size is 4.
+
+2. Formatting C++ clauses
+--------------------------
+
+2.1. Enumeration
+-----------------
+
+enum ESphExample
+{
+	FIRST		= mandatory_value,
+	SECOND,
+	THIRD,
+	FOURTH
+};
+
+2.2. Switch statement
+----------------------
+
+switch ( tMyCondition )
+{
+	case FIRST:		iShortStatement = 1; break;
+	case SECOND:	iAnotherShortStatement = 2; break;
+	case THIRD:
+		iLongerStatement = 3;
+		DoSomething();
+		break;
+	case FOURTH:
+		{
+			int iEvenLongerStatementWithLocals = 4;
+			DoSomethingElse();
+			break;
+		}
+}
+
+2.3. Parentheses
+-----------------
+
+- 1 space around opening '('.
+- 1 space before closing ')'.
+- Empty argument lists in function calls can omit spaces.
+- Short 1-argument lists can omit spaces too.
+
+TypicalCall ( iFirst, sSecond );
+NullArglist();
+ShortArglist(i);
+StillShortArglist(iIdx);
+LongEnoughArglist ( iFirst );
+iVar = !( iCode & BOOLEAN_EXPRESSION );
+if ( i==1 || ( j==2 && k==3 ) ) { ... }
+if ( i )  {... }
+
+2.4. Class declaration layout
+------------------------------
+
+- Usually, variables go first, then functions.
+- Usually, public members go first, then protected, then private.
+- Repeat access specifier to highlight big blocks of members.
+- All the rules above are not mandatory, but generally suggested.
+
+class SampleClass
+{
+public:
+			SampleClass ();
+			~SampleClass ();
+
+	void	DoThings ();
+
+protected:
+	int		m_iLocalState;
+	bool	m_bSomeFlag;
+
+protected:
+	int		m_iAnotherLogicalBlock;
+	int		m_iOfMemberVariables;
+
+protected:
+	void	Helper1();
+	void	Helper2();
+};
+
+3. Naming conventions
+----------------------
+
+- Camel case, and reasonable subset of Hungarian notation.
+- Identifiers are "MultiWordName", not "multi_word_name" (this is CamelCase).
+- "m_" prefix on data members is mandatory (this is Hungarian).
+- Single-char typeid prefix on variables is mandatory (this is Hungarian).
+	- "i" means int
+	- "u" means unsigned
+	- "b" means boolean
+	- "c" means char
+	- "f" means float
+	- "h" means hash, i.e. associative array (like std::map)
+	- "p" means pointer
+	- "pp" means pointer to pointer
+	- "s" means string (both CSphString and char *)
+	- "e" means enum
+	- "d" means array (no idea why "d", maybe "data"?)
+	- "t" means any other (complex) type
+
+- No special rules for public/protected/private member names.
+
+- Special rules for entities exposed in sphinx.h to libsphinx callers:
+	- Enum names MUST start with "ESph"
+	- Interface names MUST start with "ISph"
+	- Class/struct names MUST start with "CSph"
+	- Function names MUST start with "sph"
+- Internal entities can either use or omit these prefixes.
+
+class SampleInternalClass
+{
+	int		m_iSomething;	// right, got both "m_" prefix and "i" typeid
+	char	iAnotherthing;	// WRONG, bad typeid char, bad capitalization
+	long	m_AnotherField;	// WRONG, missing typeid char
+	char *	m_lpszWtf;		// WRONG, typeid must be single char (or "pp")
+	...
+
+	/// right
+	void SampleCall ( RuleType_e eRule, char cKey, bool bFlag, char * sArg );
+};
+
+- constants, either typed or defined, must be all caps:
+
+	const bool FAIL_ON_NULL_SOURCE = false;
+	#define READ_NO_SIZE_HINT 0
+
+--eof--

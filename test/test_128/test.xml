@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>indexing ranged stored procedures</name>
+
+<requires>
+<non-rt/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query_range	= SELECT 1, 3
+	sql_range_step	= 1
+	sql_query		= CALL test_proc($start+$end-$end-1)
+	sql_attr_uint	= gid
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+}
+</config>
+
+<db_create>
+create procedure test_proc (in base int)
+begin
+	select * from test_table where id=2*base or id=2*base+1;
+end
+</db_create>
+<db_create>
+create table test_table
+(
+	id int not null,
+	gid int not null,
+	title varchar(255) not null
+);
+</db_create>
+<db_drop>drop procedure if exists test_proc;</db_drop>
+<db_drop>drop table if exists test_table;</db_drop>
+<db_insert>insert into test_table values ( 1, 100, 'hello one' );</db_insert>
+<db_insert>insert into test_table values ( 2, 200, 'hello two' );</db_insert>
+<db_insert>insert into test_table values ( 3, 300, 'hello three' );</db_insert>
+<db_insert>insert into test_table values ( 4, 400, 'hello four' );</db_insert>
+
+<queries>
+<query mode="extended2">hello</query>
+</queries>
+
+</test>

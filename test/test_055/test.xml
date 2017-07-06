@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>position anchors</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * FROM test_table
+}
+
+index test
+{
+	source			= srctest
+	path			= <data_path/>/test
+}
+</config>
+
+<queries>
+<query mode="extended2">^one two</query>
+<query mode="extended2">^other three</query>
+<query mode="extended2">three$</query>
+<query mode="extended2">^badger</query>
+</queries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`title` varchar(5120) NOT NULL default '',
+	`body` varchar(256) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, '', 'one' ),
+( 2, '', 'one and two' ),
+( 3, '', 'one but not the other one' ),
+( 4, '', 'two and one' ),
+
+( 9, '', 'other three' ),
+( 10, '', 'three' ),
+( 11, '', 'three' ),
+( 12, '', 'three' ),
+( 13, '', 'three' ),
+( 14, '', 'three' ),
+( 15, '', 'three' ),
+( 16, '', 'three' ),
+( 17, '', 'three' ),
+( 18, '', 'three' ),
+( 19, '', 'three' )
+</db_insert>
+<db_insert>INSERT INTO test_table SELECT document_id+10, title, body FROM test_table WHERE document_id>=10</db_insert>
+<db_insert>INSERT INTO test_table SELECT document_id+20, title, body FROM test_table WHERE document_id>=10</db_insert>
+<db_insert>INSERT INTO test_table SELECT document_id+40, title, body FROM test_table WHERE document_id>=10</db_insert>
+<db_insert>INSERT INTO test_table SELECT document_id+80, title, body FROM test_table WHERE document_id>=10</db_insert>
+<db_insert>INSERT INTO test_table SELECT document_id+160, title, body FROM test_table WHERE document_id>=10</db_insert>
+<db_insert>INSERT INTO test_table SELECT document_id+320, title, body FROM test_table WHERE document_id>=10</db_insert>
+<db_insert>INSERT INTO test_table VALUES ( 2000, REPEAT('badger ',600), 'badger badger mushroom' )</db_insert>
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1000, '', 'other' ),
+( 1001, '', 'other three blind mice' );
+</db_insert>
+
+</test>

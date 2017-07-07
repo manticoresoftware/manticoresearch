@@ -18,6 +18,8 @@
 
 find_package ( MYSQL )
 
+mark_as_advanced ( MYSQL_CONFIG_EXECUTABLE MYSQL_INCLUDE_DIR MYSQL_LIB )
+
 if ( MYSQL_FOUND )
 	set ( USE_MYSQL 1 )
 	include_directories ( ${MYSQL_INCLUDE_DIR} )
@@ -47,7 +49,6 @@ if ( MYSQL_FOUND )
 	endif ()
 	cfgvalue ( MYSQL_LIB )
 	cfgvalue ( MYSQL_CONFIG_EXECUTABLE )
-	mark_as_advanced ( MYSQL_CONFIG_EXECUTABLE MYSQL_LIB)
 else ( MYSQL_FOUND )
 	message ( SEND_ERROR
 			"********************************************************************************

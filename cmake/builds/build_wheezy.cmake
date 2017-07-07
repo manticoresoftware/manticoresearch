@@ -4,10 +4,6 @@
 
 message ( STATUS "Will create DEB for Debian (wheezy)" )
 
-# some wheezy-specific variables and files
-
-set ( DISTR_SUFFIX "~wheezy_${CPACK_DEBIAN_PACKAGE_ARCHITECTURE}" )
-
 # m.b. postinst.xenial, postinst.debian and postinst.trusty
 FILE ( READ dist/deb/postinst.debian POSTINST_SPECIFIC )
 
@@ -23,3 +19,6 @@ configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/postrm.wheezy"
 set ( EXTRA_SCRIPTS "${MANTICORE_BINARY_DIR}/postrm;" )
 
 include ( builds/CommonDeb )
+
+# some wheezy-specific variables and files
+set ( DISTR_SUFFIX "~wheezy_${CPACK_DEBIAN_PACKAGE_ARCHITECTURE}" )

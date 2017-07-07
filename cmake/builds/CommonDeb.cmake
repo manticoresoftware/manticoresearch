@@ -1,15 +1,23 @@
 # Common debian-specific build variables
 set ( CPACK_GENERATOR "DEB" )
 
-# dpkg --print-architecture. Too boring to include exact command.
-IF ( ${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64" )
-	SET ( CPACK_DEBIAN_PACKAGE_ARCHITECTURE amd64 )
-ELSEIF ( ${CMAKE_SYSTEM_PROCESSOR} STREQUAL "i686" )
-	SET ( CPACK_DEBIAN_PACKAGE_ARCHITECTURE i386 )
-ENDIF ( ${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64" )
+find_program ( DPKG_PROGRAM dpkg )
+if ( DPKG_PROGRAM )
+	# use dpkg to fix the package file name
+	execute_process (
+			COMMAND ${DPKG_PROGRAM} --print-architecture
+			OUTPUT_VARIABLE CPACK_DEBIAN_PACKAGE_ARCHITECTURE
+			OUTPUT_STRIP_TRAILING_WHITESPACE
+	)
+	mark_as_advanced( DPKG_PROGRAM )
+endif ( DPKG_PROGRAM )
+
+if ( NOT CPACK_DEBIAN_PACKAGE_ARCHITECTURE )
+	message ( WARNING "No arch for debian build found. Provide CPACK_PACKAGE_ARCHITECTURE var with the value" )
+endif ()
 
 # block below used to patch the minconf and full conf for debian
-file ( READ "sphinx-min.conf.in" _MINCONF LIMIT 10240 )
+file ( READ "sphinx-min.conf.in" _MINCONF )
 file ( READ "sphinx.conf.in" _FULLCONF )
 string ( REPLACE "@CONFDIR@/log/searchd.pid" "@RUNDIR@/searchd.pid" _MINCONF "${_MINCONF}" )
 string ( REPLACE "@CONFDIR@/log/searchd.pid" "@RUNDIR@/searchd.pid" _FULLCONF "${_FULLCONF}" )

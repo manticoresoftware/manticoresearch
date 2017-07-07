@@ -455,20 +455,6 @@ set ( CPACK_RPM_COMPONENT_INSTALL 1 )
 set ( CPACK_DEB_COMPONENT_INSTALL 1 )
 set ( CPACK_ARCHIVE_COMPONENT_INSTALL 1 )
 
-
-if ( WIN32 )
-	set ( SUGGEST_GENERATOR "ZIP" )
-elseif ( APPLE )
-	set ( SUGGEST_GENERATOR "TGZ" )
-else ()
-	set ( SUGGEST_GENERATOR "DEB" )
-endif ()
-
-if ( NOT CPACK_GENERATOR )
-	set ( CPACK_GENERATOR "${SUGGEST_GENERATOR}" )
-endif ()
-
-
 include ( SetBuildType )
 
 

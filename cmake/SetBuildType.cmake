@@ -23,6 +23,7 @@ endforeach ( CHOICE ${_BUILDS} )
 
 IF ( NOT DISTR )
 	SET ( DISTR rhel7 CACHE STRING "Choose the distr." FORCE )
+	message (STATUS "Provide distr with -DDISTR=<distr>, one of: ${MENUDISTR}")
 ENDIF ()
 
 set_property ( CACHE DISTR PROPERTY STRINGS ${MENUDISTR} )

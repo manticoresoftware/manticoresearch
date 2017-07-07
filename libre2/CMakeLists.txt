@@ -41,7 +41,7 @@ if ( _OBJ )
 	set ( SOURCES "" )
 	foreach ( OBJ ${_OBJ} )
 		get_filename_component ( NAME ${OBJ} NAME_WE )
-		get_filename_component ( DIR ${OBJ} DIRECTORY )
+		get_filename_component ( DIR ${OBJ} PATH )
 		# exclude leading 'obj/' from all the paths.
 		STRING ( REGEX REPLACE "^obj/" "" DIR "${DIR}" )
 		LIST ( APPEND SOURCES "${DIR}/${NAME}.cc" )

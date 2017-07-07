@@ -4,10 +4,6 @@
 
 message ( STATUS "Will create DEB for Debian (jessie)" )
 
-# some jessie-specific variables and files
-
-set ( DISTR_SUFFIX "~jessie_${CPACK_DEBIAN_PACKAGE_ARCHITECTURE}" )
-
 # m.b. postinst.xenial, postinst.debian and postinst.trusty
 FILE ( READ dist/deb/postinst.debian POSTINST_SPECIFIC )
 
@@ -27,3 +23,6 @@ include ( builds/CommonDeb )
 # everywhere, but not on wheezy
 install ( FILES dist/deb/manticore.service
 		DESTINATION /lib/systemd/system COMPONENT adm )
+
+# some jessie-specific variables and files
+set ( DISTR_SUFFIX "~jessie_${CPACK_DEBIAN_PACKAGE_ARCHITECTURE}" )

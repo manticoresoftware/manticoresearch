@@ -24,6 +24,19 @@ endforeach ( CHOICE ${_BUILDS} )
 IF ( NOT DISTR )
 	SET ( DISTR rhel7 CACHE STRING "Choose the distr." FORCE )
 	message (STATUS "Provide distr with -DDISTR=<distr>, one of: ${MENUDISTR}")
+
+	if ( WIN32 )
+		set ( SUGGEST_GENERATOR "ZIP" )
+	elseif ( APPLE )
+		set ( SUGGEST_GENERATOR "TGZ" )
+	else ()
+		set ( SUGGEST_GENERATOR "DEB" )
+	endif ()
+
+	if ( NOT CPACK_GENERATOR )
+		set ( CPACK_GENERATOR "${SUGGEST_GENERATOR}" )
+	endif ()
+
 ENDIF ()
 
 set_property ( CACHE DISTR PROPERTY STRINGS ${MENUDISTR} )

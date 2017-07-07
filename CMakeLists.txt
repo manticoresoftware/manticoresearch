@@ -23,6 +23,27 @@ SET ( MANTICORE_CMAKE_DIR "${MANTICORE_SOURCE_DIR}/cmake" )
 SET ( CMAKE_MODULE_PATH "${MANTICORE_SOURCE_DIR}/cmake" )
 SET ( EXTRA_LIBRARIES )
 
+
+# Make release build for the pointed distr
+# That will override defaults and give possibility to build
+# the distribution with minimal command line
+if ( DISTR_BUILD )
+	# set default options to be included into build
+	set ( DISTR "${DISTR_BUILD}" CACHE STRING "Choose the distr." )
+	set ( CMAKE_BUILD_TYPE "RelWithDebInfo" )
+	set ( SPLIT_SYMBOLS ON CACHE BOOLEAN "Forced Mysql" )
+	set ( WITH_MYSQL ON CACHE BOOLEAN "Forced Mysql" )
+	set ( WITH_EXPAT ON CACHE BOOLEAN "Forced Expat" )
+	set ( WITH_PGSQL ON CACHE BOOLEAN "Forced Pgsql" )
+	set ( WITH_RE2 ON CACHE BOOLEAN "Forced RE2" )
+	set ( WITH_STEMMER ON CACHE BOOLEAN "Forced Stemmer" )
+	set ( LIBS_BUNDLE "${MANTICORE_SOURCE_DIR}/../bundle" )
+	message (STATUS "DISTR_BUILD applied.
+Package will be set to ${DISTR_BUILD},
+also option forced to ON values: WITH_MYSQL, WITH_EXPAT, WITH_PGSQL, WITH_RE2, WITH_STEMMER.
+Also LIBS_BUNDLE is automatically set to folder 'bundle' placed one level above the sources")
+endif()
+
 # Collect build info which will be embedded into binaries
 SET ( BANNER )
 # append any text to build info

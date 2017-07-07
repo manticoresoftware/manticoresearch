@@ -23,6 +23,9 @@ endforeach ( CHOICE ${_BUILDS} )
 
 IF ( NOT DISTR )
 	SET ( DISTR rhel7 CACHE STRING "Choose the distr." FORCE )
+endif ()
+
+IF ( NOT DISTR )
 	message (STATUS "Provide distr with -DDISTR=<distr>, one of: ${MENUDISTR}")
 
 	if ( WIN32 )
@@ -46,6 +49,7 @@ list ( FIND MENUDISTR "${DISTR}" _idistr )
 if ( _idistr GREATER -1 )
 	list ( GET FILESDISTR ${_idistr} _RULES )
 	include (${_RULES})
+	message ( STATUS "Building for ${DISTR}" )
 else()
 	message ( STATUS "no distr selected " )
 endif()

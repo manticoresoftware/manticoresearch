@@ -1,3 +1,7 @@
+
+# versions below 3.3.2 doesn't correctly pack debian control extra.
+cmake_minimum_required ( VERSION 3.3.2 )
+
 # Common debian-specific build variables
 set ( CPACK_GENERATOR "DEB" )
 

@@ -11835,12 +11835,12 @@ The value specifies address, and also can additionally specify multiple
 alternatives (agent mirrors) for either the address only, or the address
 and index list:
 <programlisting>
-agent = address1 [ | address2 [...] ]:index-list
-agent = address1:index-list [ | address2:index-list [...] ]
+agent = address1 [ | address2 [...] ][:index-list]
+agent = address1[:index-list [ | address2[:index-list [...] ] ] ]
 </programlisting>
 In both cases the address specification must be one of the following:
 <programlisting>
-address = hostname:port # eg. server2:9312
+address = hostname[:port] # eg. server2:9312
 address = /absolute/unix/socket/path # eg. /var/run/sphinx2.sock
 </programlisting>
 Where
@@ -11848,6 +11848,13 @@ Where
 <code>port</code> is the remote TCP port number,
 <code>index-list</code> is a comma-separated list of index names,
 and square braces [] designate an optional clause.
+</para>
+<para>
+When index name is omited, it is assumed the same index as the one where this line is defined.
+I.e. when defining agents for distributed index 'mycoolindex' you can just point the address, and
+it is assumed to calll 'mycoolindex' index on agent's endpoints.</para>
+<para>When port number is omited, it is assumed to be default sphinxql IANA port (9312). However
+when portnumber is pointed, but invalid (say, port 70000), it will fail (skip) such agent.
 </para>
 <para>
 In other words, you can point every single agent to one or more remote

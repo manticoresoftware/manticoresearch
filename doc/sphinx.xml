@@ -6121,6 +6121,14 @@ When set to 1, puts the server in maintenance mode. Only clients with vip connec
 All new non-vip incoming connections are refused.
 </para></listitem>
 </varlistentry>
+<varlistentry>
+<term><code>GROUPING_IN_UTC = {0 | 1}</code></term>
+<listitem><para>
+When set to 1, cause timed grouping functions (day(), month(), year(), yearmonth(),
+yearmonthday()) to be calculated in utc. Read the doc for <link linkend="conf-grouping-in-utc">
+grouping_in_utc</link> config params for more details.
+</para></listitem>
+</varlistentry>
 </variablelist>
 </para>
 <para>
@@ -14403,6 +14411,26 @@ Refer to <link linkend="qcache">query cache</link> for details.
 <para>
 Integer, in seconds. The expiration period for a cached result set. Defaults to 60, or 1 minute.
 The minimum possible value is 1 second. Refer to <link linkend="qcache">query cache</link> for details.
+</para>
+</sect2>
+
+<sect2 id="conf-grouping-in-utc"><title>grouping_in_utc</title>
+<para>Specifies whether timed grouping in API and sphinxql will be calculated in local timezone,
+or in UTC. Optional, default is 0 (means 'local tz').
+</para>
+<para>
+By default all 'group by time' expressions (like group by day, week, month and year in
+API, also group by day, month, year, yearmonth, yearmonthday in Sphinxql) is done using
+local time. I.e. when you have docs with attributes timed '13:00 utc' and '15:00 utc' - in case of
+grouping they both will fall into facility group according to your local tz setting. Say, if you
+live in 'utc', it will be one day, but if you live in 'utc+10', then these docs will be matched
+into different 'group by day' facility groups (since 13:00 utc in UTC+10 tz 23:00 local time, but
+15:00 is 01:00 of the next day). Sometimes such behavior is unacceptable, and it is desirable to
+make time grouping not dependent from timezone. Of course, you can run the daemon with defined
+global TZ env variable, but it will affect not only grouping, but also timestamping in the logs,
+which may be also undesirable. Switching 'on' this option (either in config, either using 'set
+global' statement in sphinxql) will cause all time grouping expressions to be calculated in UTC,
+leaving the rest of time-depentend functions (i.e. logging of the daemon) in local TZ.
 </para>
 </sect2>
 

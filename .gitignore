@@ -21,6 +21,7 @@
 
 # clion
 /.idea
+/test/.idea
 /cmake-build*
 
 # /config/

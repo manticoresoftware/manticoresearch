@@ -2593,6 +2593,12 @@ struct CSphKeywordInfo
 	int				m_iDocs;
 	int				m_iHits;
 	int				m_iQpos;
+
+	CSphKeywordInfo()
+		: m_iDocs ( 0 )
+		, m_iHits ( 0 )
+		, m_iQpos ( 0 )
+	{}
 };
 
 inline void Swap ( CSphKeywordInfo & v1, CSphKeywordInfo & v2 )

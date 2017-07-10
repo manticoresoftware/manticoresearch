@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>distributed KEYWORDS</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select id, 1 as gid, title from test_table where id in (1)
+	sql_attr_uint	= gid
+}
+
+index test1
+{
+	source			= test1
+	path			= <data_path/>/test1
+	min_infix_len = 2
+}
+
+source test2 : test1
+{
+	sql_query		= select id, 1 as gid, title from test_table where id in (2,3)
+}
+
+source test3 : test1
+{
+	sql_query		= select id, 1 as gid, title from test_table where id in (4,5)
+}
+
+index test2
+{
+	source			= test2
+	path			= <data_path/>/test2
+	min_infix_len = 2
+}
+
+index test3
+{
+	source			= test3
+	path			= <data_path/>/test3
+	min_infix_len = 2
+}
+
+index dist1
+{
+	type = distributed
+	agent = 127.0.0.1:<my_port />:test1
+	agent = 127.0.0.1:<my_port />:test2
+	agent = 127.0.0.1:<my_port />:test3
+}
+
+index dist2
+{
+	type = distributed
+	local = test1
+	local = test2
+	local = test3
+}
+
+index dist3
+{
+	type = distributed
+	agent = 127.0.0.1:<my_port />:test1
+	agent = 127.0.0.1:<my_port />:test2
+	local = test3
+}
+</config>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	title varchar(255) not null
+);
+</db_create>
+<db_drop>drop table if exists test_table</db_drop>
+
+<db_insert>
+INSERT INTO test_table (id, title) VALUES
+(1, 'another quest test testers tests'),
+(2, 'quest sidequest other test'),
+(3, 'another quest test testers tests'),
+(4, 'sidequest is an optional section of quest'),
+(5, 'every sidequest listed below is questik')
+</db_insert>
+
+<sphqueries>
+<sphinxql>CALL KEYWORDS ( '*qu* test', 'dist1', 1 AS stats, 0 AS fold_wildcards )</sphinxql>
+<sphinxql>CALL KEYWORDS ( '*qu* test', 'dist2', 1 AS stats, 0 AS fold_wildcards )</sphinxql>
+<sphinxql>CALL KEYWORDS ( '*qu* test', 'dist3', 1 AS stats, 0 AS fold_wildcards )</sphinxql>
+
+<sphinxql>CALL KEYWORDS ( '*qu* te*', 'dist1', 1 AS stats, 1 AS fold_wildcards )</sphinxql>
+<sphinxql>CALL KEYWORDS ( '*qu* te*', 'dist2', 1 AS stats, 1 AS fold_wildcards )</sphinxql>
+<sphinxql>CALL KEYWORDS ( '*qu* te*', 'dist3', 1 AS stats, 1 AS fold_wildcards )</sphinxql>
+</sphqueries>
+
+</test>

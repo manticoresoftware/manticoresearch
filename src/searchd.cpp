@@ -11113,7 +11113,8 @@ void HandleCommandKeywords ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & 
 	{
 		iRespLen += 4 + strlen ( dKeywords[i].m_sTokenized.cstr () );
 		iRespLen += 4 + strlen ( dKeywords[i].m_sNormalized.cstr () );
-		iRespLen += 4;
+		if ( iVer>=0x101 )
+			iRespLen += 4;
 		if ( tSettings.m_bStats )
 			iRespLen += 8;
 	}
@@ -11126,7 +11127,8 @@ void HandleCommandKeywords ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & 
 	{
 		tOut.SendString ( dKeywords[i].m_sTokenized.cstr () );
 		tOut.SendString ( dKeywords[i].m_sNormalized.cstr () );
-		tOut.SendInt ( dKeywords[i].m_iQpos );
+		if ( iVer>=0x101 )
+			tOut.SendInt ( dKeywords[i].m_iQpos );
 		if ( tSettings.m_bStats )
 		{
 			tOut.SendInt ( dKeywords[i].m_iDocs );

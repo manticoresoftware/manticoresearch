@@ -1323,6 +1323,11 @@ public:
 		return m_dLog.GetLength()==0;
 	}
 
+	int GetReportsCount()
+	{
+		return m_dLog.GetLength();
+	}
+
 	void BuildReport ( CSphStringBuilder & sReport )
 	{
 		if ( IsEmpty() )
@@ -11073,6 +11078,13 @@ void HandleCommandKeywords ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & 
 	CSphString sQuery = tReq.GetString ();
 	CSphString sIndex = tReq.GetString ();
 	tSettings.m_bStats = !!tReq.GetInt ();
+	if ( iVer>=0x101 )
+	{
+		tSettings.m_bFoldLemmas = !!tReq.GetInt ();
+		tSettings.m_bFoldBlended = !!tReq.GetInt ();
+		tSettings.m_bFoldWildcards = !!tReq.GetInt ();
+		tSettings.m_iExpansionLimit = tReq.GetInt ();
+	}
 
 	const ServedIndex_c * pIndex = g_pLocalIndexes->GetRlockedEntry ( sIndex );
 	if ( !pIndex )
@@ -11101,6 +11113,7 @@ void HandleCommandKeywords ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & 
 	{
 		iRespLen += 4 + strlen ( dKeywords[i].m_sTokenized.cstr () );
 		iRespLen += 4 + strlen ( dKeywords[i].m_sNormalized.cstr () );
+		iRespLen += 4;
 		if ( tSettings.m_bStats )
 			iRespLen += 8;
 	}
@@ -11113,6 +11126,7 @@ void HandleCommandKeywords ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & 
 	{
 		tOut.SendString ( dKeywords[i].m_sTokenized.cstr () );
 		tOut.SendString ( dKeywords[i].m_sNormalized.cstr () );
+		tOut.SendInt ( dKeywords[i].m_iQpos );
 		if ( tSettings.m_bStats )
 		{
 			tOut.SendInt ( dKeywords[i].m_iDocs );
@@ -13327,7 +13341,29 @@ void HandleMysqlCallSnippets ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, ThdDesc
 }
 
 
-void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
+struct KeywordsRequestBuilder_t : public IRequestBuilder_t
+{
+	KeywordsRequestBuilder_t ( const GetKeywordsSettings_t & tSettings, const CSphString & sTerm );
+	virtual void BuildRequest ( AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const;
+
+protected:
+	const GetKeywordsSettings_t & m_tSettings;
+	const CSphString & m_sTerm;
+};
+
+
+struct KeywordsReplyParser_t : public IReplyParser_t
+{
+	KeywordsReplyParser_t ( bool bGetStats, CSphVector<CSphKeywordInfo> & dKeywords );
+	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const;
+
+	bool m_bStats;
+	CSphVector<CSphKeywordInfo> & m_dKeywords;
+};
+
+static void MergeKeywords ( CSphVector<CSphKeywordInfo> & dKeywords );
+
+void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphString & sWarning )
 {
 	CSphString sError;
 
@@ -13376,33 +13412,128 @@ void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 			return;
 		}
 	}
+	const CSphString & sTerm = tStmt.m_dInsertValues[0].m_sVal;
+	const CSphString & sIndex = tStmt.m_dInsertValues[1].m_sVal;
 
-	const ServedIndex_c * pServed = g_pLocalIndexes->GetRlockedEntry ( tStmt.m_dInsertValues[1].m_sVal );
-	if ( !pServed || !pServed->m_bEnabled || !pServed->m_pIndex )
+	bool bLocal = g_pLocalIndexes->Exists ( sIndex );
+	bool bTemplate = !bLocal && g_pTemplateIndexes->Exists ( sIndex );
+	bool bDistributed = false;
+	DistributedIndex_t tDistributed;
+	if ( !bLocal && !bTemplate )
 	{
-		if ( pServed )
-			pServed->Unlock();
+		// search amongst distributed and copy for further processing
+		g_tDistLock.Lock ();
+		const DistributedIndex_t * pDistIndex = g_hDistIndexes ( sIndex );
+		if ( pDistIndex )
+			tDistributed = *pDistIndex;
 
-		pServed = g_pTemplateIndexes->GetRlockedEntry ( tStmt.m_dInsertValues[1].m_sVal );
-		if ( !pServed || !pServed->m_bEnabled || !pServed->m_pIndex )
-		{
-			sError.SetSprintf ( "no such index %s", tStmt.m_dInsertValues[1].m_sVal.cstr() );
-			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
-			if ( pServed )
-				pServed->Unlock();
-			return;
-		}
+		g_tDistLock.Unlock ();
+		bDistributed = ( pDistIndex!=NULL );
 	}
 
-	CSphVector<CSphKeywordInfo> dKeywords;
-	bool bRes = pServed->m_pIndex->GetKeywords ( dKeywords, tStmt.m_dInsertValues[0].m_sVal.cstr(), tSettings, &sError );
-	pServed->Unlock ();
-
-	if ( !bRes )
+	if ( !bLocal && !bTemplate && !bDistributed )
 	{
-		sError.SetSprintf ( "keyword extraction failed: %s", sError.cstr() );
+		sError.SetSprintf ( "no such index %s", sIndex.cstr() );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
+	}
+
+	if ( bDistributed && !tDistributed.m_dLocal.GetLength() && !tDistributed.m_dAgents.GetLength() )
+	{
+		sError.SetSprintf ( "empty distributed index %s", sIndex.cstr() );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
+	SearchFailuresLog_c tFailureLog;
+	CSphVector<CSphKeywordInfo> dKeywords;
+
+	// just local plain or template index
+	if ( bLocal || bTemplate )
+	{
+		ServedIndex_c * pServed = NULL;
+		if ( bLocal )
+			pServed = g_pLocalIndexes->GetRlockedEntry ( sIndex );
+		else
+			pServed = g_pTemplateIndexes->GetRlockedEntry ( sIndex );
+
+		if ( !pServed || !pServed->m_bEnabled || !pServed->m_pIndex )
+		{
+			if ( pServed )
+				pServed->Unlock();
+			tFailureLog.Submit ( sIndex.cstr(), NULL, "missed index" );
+		} else
+		{
+			bool bRes = pServed->m_pIndex->GetKeywords ( dKeywords, sTerm.cstr(), tSettings, &sError );
+			pServed->Unlock ();
+
+			if ( !bRes )
+				tFailureLog.SubmitEx ( sIndex.cstr(), NULL, "keyword extraction failed: %s", sError.cstr() );
+		}
+	} else
+	{
+		// FIXME!!! g_iDistThreads thread pool for locals.
+		// locals
+		const CSphVector<CSphString> & dLocals = tDistributed.m_dLocal;
+		CSphVector<CSphKeywordInfo> dKeywordsLocal;
+		ARRAY_FOREACH ( iLocal, dLocals )
+		{
+			const CSphString & sLocal = dLocals[iLocal];
+			const ServedIndex_c * pServed = g_pLocalIndexes->GetRlockedEntry ( sLocal );
+			if ( !pServed || !pServed->m_bEnabled || !pServed->m_pIndex )
+			{
+				if ( pServed )
+					pServed->Unlock();
+				tFailureLog.Submit ( sLocal.cstr(), sIndex.cstr(), "missed index" );
+				continue;
+			}
+
+			bool bRes = pServed->m_pIndex->GetKeywords ( dKeywordsLocal, sTerm.cstr(), tSettings, &sError );
+			pServed->Unlock();
+
+			// copy back from local indexes terms or error
+			if ( bRes )
+			{
+				CSphKeywordInfo * pDst = dKeywords.AddN ( dKeywordsLocal.GetLength() );
+				ARRAY_FOREACH ( iTerm, dKeywordsLocal )
+					pDst[iTerm] = dKeywordsLocal[iTerm];
+				dKeywordsLocal.Resize ( 0 );
+			} else
+			{
+				tFailureLog.SubmitEx ( sLocal.cstr(), sIndex.cstr(), "keyword extraction failed: %s", sError.cstr() );
+			}
+		}
+
+		// remote agents requests send off thread
+		CSphVector<AgentConn_t> dAgents;
+		tDistributed.GetAllAgents ( &dAgents );
+
+		int iAgentsReply = 0;
+		if ( dAgents.GetLength() )
+		{
+			// connect to remote agents and query them
+			KeywordsRequestBuilder_t tReqBuilder ( tSettings, sTerm );
+			CSphScopedPtr<ISphRemoteAgentsController> tDistCtrl ( GetAgentsController ( g_iDistThreads, dAgents, tReqBuilder, tDistributed.m_iAgentConnectTimeout ) );
+
+			KeywordsReplyParser_t tParser ( tSettings.m_bStats, dKeywords );
+			int iAgentsDone = tDistCtrl->Finish();
+			if ( iAgentsDone )
+				iAgentsReply += RemoteWaitForAgents ( dAgents, tDistributed.m_iAgentQueryTimeout, tParser );
+
+			ARRAY_FOREACH ( i, dAgents )
+			{
+				const AgentConn_t & tAgent = dAgents[i];
+				if ( !tAgent.m_bSuccess && !tAgent.m_sFailure.IsEmpty() )
+				{
+					const char * sAgent = ( tAgent.m_bBlackhole ? "blackhole" : "agent" );
+					tFailureLog.SubmitEx ( tAgent.m_sIndexes.cstr(), sIndex.cstr(), "%s %s: %s", sAgent, tAgent.GetMyUrl().cstr(), tAgent.m_sFailure.cstr() );
+				}
+			}
+		}
+
+		// process result sets
+		if ( dLocals.GetLength() + iAgentsReply>1 )
+			MergeKeywords ( dKeywords );
 	}
 
 	// result set header packet
@@ -13434,9 +13565,112 @@ void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 		}
 		tOut.Commit();
 	}
-	tOut.Eof();
+
+	// put network errors and warnings to meta as warning
+	int iWarnings = 0;
+	if ( !tFailureLog.IsEmpty() )
+	{
+		iWarnings = tFailureLog.GetReportsCount();
+
+		CSphStringBuilder sErrorBuf;
+		tFailureLog.BuildReport ( sErrorBuf );
+		sphWarning ( "%s", sErrorBuf.cstr() );
+		sWarning = sErrorBuf.cstr();
+	}
+
+	tOut.Eof ( false, iWarnings );
 }
 
+KeywordsRequestBuilder_t::KeywordsRequestBuilder_t ( const GetKeywordsSettings_t & tSettings, const CSphString & sTerm )
+	: m_tSettings ( tSettings )
+	, m_sTerm ( sTerm )
+{
+}
+
+void KeywordsRequestBuilder_t::BuildRequest ( AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const
+{
+	const CSphString & sIndexes = tAgent.m_sIndexes;
+	int iReqLen = 28 + sIndexes.Length() + m_sTerm.Length();
+
+	tOut.SendWord ( SEARCHD_COMMAND_KEYWORDS ); // command id
+	tOut.SendWord ( VER_COMMAND_KEYWORDS ); // command version
+	tOut.SendInt ( iReqLen ); // request body length
+
+	tOut.SendString ( m_sTerm.cstr() );
+	tOut.SendString ( sIndexes.cstr() );
+	tOut.SendInt ( m_tSettings.m_bStats );
+	tOut.SendInt ( m_tSettings.m_bFoldLemmas );
+	tOut.SendInt ( m_tSettings.m_bFoldBlended );
+	tOut.SendInt ( m_tSettings.m_bFoldWildcards );
+	tOut.SendInt ( m_tSettings.m_iExpansionLimit );
+}
+
+KeywordsReplyParser_t::KeywordsReplyParser_t ( bool bGetStats, CSphVector<CSphKeywordInfo> & dKeywords )
+	: m_bStats ( bGetStats )
+	, m_dKeywords ( dKeywords )
+{
+}
+
+bool KeywordsReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const
+{
+	int iWords = tReq.GetInt();
+	int iLen = m_dKeywords.GetLength();
+	m_dKeywords.Resize ( iWords + iLen );
+	for ( int i=0; i<iWords; i++ )
+	{
+		CSphKeywordInfo & tWord = m_dKeywords[i + iLen];
+		tWord.m_sTokenized = tReq.GetString();
+		tWord.m_sNormalized = tReq.GetString();
+		tWord.m_iQpos = tReq.GetInt();
+		if ( m_bStats )
+		{
+			tWord.m_iDocs = tReq.GetInt();
+			tWord.m_iHits = tReq.GetInt();
+		}
+	}
+
+	return true;
+}
+
+struct KeywordSorter_fn
+{
+	bool IsLess ( const CSphKeywordInfo & a, const CSphKeywordInfo & b ) const
+	{
+		return ( ( a.m_iQpos<b.m_iQpos )
+			|| ( a.m_iQpos==b.m_iQpos && a.m_iHits>b.m_iHits )
+			|| ( a.m_iQpos==b.m_iQpos && a.m_iHits==b.m_iHits && a.m_sNormalized<b.m_sNormalized ) );
+	}
+};
+
+void MergeKeywords ( CSphVector<CSphKeywordInfo> & dSrc )
+{
+	CSphOrderedHash < CSphKeywordInfo, uint64_t, IdentityHash_fn, 256 > hWords;
+	ARRAY_FOREACH ( i, dSrc )
+	{
+		const CSphKeywordInfo & tInfo = dSrc[i];
+		uint64_t uKey = sphFNV64 ( &tInfo.m_iQpos, sizeof(tInfo.m_iQpos) );
+		uKey = sphFNV64 ( tInfo.m_sNormalized.cstr(), tInfo.m_sNormalized.Length(), uKey );
+
+		CSphKeywordInfo & tVal = hWords.AddUnique ( uKey );
+		if ( !tVal.m_iQpos )
+		{
+			tVal = tInfo;
+		} else
+		{
+			tVal.m_iDocs += tInfo.m_iDocs;
+			tVal.m_iHits += tInfo.m_iHits;
+		}
+	}
+
+	dSrc.Resize ( 0 );
+	hWords.IterateStart();
+	while ( hWords.IterateNext() )
+	{
+		dSrc.Add ( hWords.IterateGet() );
+	}
+
+	sphSort ( dSrc.Begin(), dSrc.GetLength(), KeywordSorter_fn() );
+}
 
 // sort by distance asc, document count desc, ABC asc
 struct CmpDistDocABC_fn
@@ -16676,7 +16910,7 @@ public:
 			} else if ( pStmt->m_sCallProc=="KEYWORDS" )
 			{
 				StatCountCommand ( SEARCHD_COMMAND_KEYWORDS );
-				HandleMysqlCallKeywords ( tOut, *pStmt );
+				HandleMysqlCallKeywords ( tOut, *pStmt, m_tLastMeta.m_sWarning );
 			} else if ( pStmt->m_sCallProc=="SUGGEST" )
 			{
 				HandleMysqlCallSuggest ( tOut, *pStmt, false );

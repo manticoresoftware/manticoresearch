@@ -629,9 +629,7 @@ public:
 
 	ServedIndex_c *			GetRlockedEntry ( const CSphString & tKey ) const EXCLUDES (m_tLock);
 	ServedIndex_c *			GetWlockedEntry ( const CSphString & tKey ) const EXCLUDES (m_tLock);
-	ServedIndex_c &			GetUnlockedEntry ( const CSphString & tKey ) const EXCLUDES ( m_tLock );
-	ServedIndex_c *			GetUnlockedEntryPtr ( const CSphString & tKey ) const EXCLUDES ( m_tLock );
-	bool					Exists ( const CSphString & tKey ) const;
+	bool					Exists ( const CSphString & tKey, ServedDesc_t * pDesc = NULL ) const;
 
 protected:
 	void					Rlock () const ACQUIRE_SHARED( m_tLock );

@@ -34,13 +34,17 @@ add_custom_target (
 		vergen
 		COMMAND
 		${CMAKE_COMMAND}
-		-D SOURCE_DIR=${CMAKE_SOURCE_DIR}
-		-D BINARY_DIR=${CMAKE_BINARY_DIR}
-		-D SPHINX_TAG="${SPHINX_TAG}"
-		-D CPACK_SUFFIX="${SPHINX_PACKAGE_SUFFIX}"
-		-D DISTR_SUFFIX="${DISTR_SUFFIX}"
-		-D PACKAGE_NAME="${PACKAGE_NAME}"
-		-P ${CMAKE_SOURCE_DIR}/sphinxrev.cmake
+			-D SOURCE_DIR=${CMAKE_SOURCE_DIR}
+			-D BINARY_DIR=${CMAKE_BINARY_DIR}
+			-D SPHINX_TAG=${SPHINX_TAG}
+			-D CPACK_SUFFIX=${SPHINX_PACKAGE_SUFFIX}
+			-D DISTR_SUFFIX=${DISTR_SUFFIX}
+			-D PACKAGE_NAME=${PACKAGE_NAME}
+			-P ${CMAKE_SOURCE_DIR}/sphinxrev.cmake
+		COMMENT "Generate version from sources"
+		VERBATIM
+		SOURCES ${CMAKE_SOURCE_DIR}/src/sphinxversion.h.in
+			${CMAKE_SOURCE_DIR}/CPackOptions.cmake.in
 )
 include_directories ( "${MANTICORE_BINARY_DIR}/config" )
 add_definitions ( "-DBUILD_WITH_CMAKE" )

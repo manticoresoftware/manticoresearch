@@ -30,7 +30,7 @@ index test
 index test1 : test
 {
 	path			= <data_path/>/test1
-	stopwords				= stopwords.txt
+	stopwords				= <test_root/>/stopwords.txt
 	min_word_len	= 2
 }
 

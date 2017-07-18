@@ -30,11 +30,11 @@ index test_idx
       <Variant>	min_word_len	= 3</Variant>
     </Dynamic>
     <Dynamic>
-      <Variant>	stopwords		= stopwords.txt</Variant>
+      <Variant>	stopwords		= <test_root/>/stopwords.txt</Variant>
       <Variant>	</Variant>
     </Dynamic>
     <Dynamic>
-      <Variant>	exceptions		= synonyms.txt </Variant>
+      <Variant>	exceptions		= <test_root/>/synonyms.txt </Variant>
       <Variant>	</Variant>
     </Dynamic>
 

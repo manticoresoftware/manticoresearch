@@ -26,7 +26,7 @@ index test
 {
 	source			= srctest
 	path			= <data_path/>/test
-	exceptions		= synonyms.txt
+	exceptions		= <test_root/>/synonyms.txt
 
     <Dynamic>
       <Variant>	min_word_len = 3 </Variant>

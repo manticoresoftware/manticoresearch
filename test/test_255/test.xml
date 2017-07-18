@@ -67,7 +67,7 @@ $results[] = "\n" . $ql->Query ( "SELECT * FROM rt1 WHERE MATCH ( 'SOY' )" );
 $results[] = 'query TOFU';
 $results[] = "\n" . $ql->Query ( "SELECT * FROM rt1 WHERE MATCH ( 'TOFU' )" );
 
-$orig_conf = file('config.conf');
+$orig_conf = file(testdir('config.conf'));
 
 $new_conf = '';
 foreach ( $orig_conf as $line )
@@ -78,7 +78,7 @@ foreach ( $orig_conf as $line )
 	}
 	$new_conf .= $line;
 }
-file_put_contents('config.conf', $new_conf);
+file_put_contents(testdir('config.conf'), $new_conf);
 
 $results[] = "\n" . $ql->Query ( "ALTER RTINDEX rt1 RECONFIGURE" );
 

@@ -28,7 +28,7 @@ index test
 	path			= <data_path/>/test
 	<Dynamic>
 	<Variant></Variant>
-	<Variant>exceptions	= synonyms.txt</Variant>
+	<Variant>exceptions	= <test_root/>/synonyms.txt</Variant>
 	</Dynamic>
 
     <Dynamic>

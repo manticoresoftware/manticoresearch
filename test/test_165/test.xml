@@ -81,7 +81,7 @@ index e
 {
 	source			= src_e
 	path			= <data_path/>/e
-	exceptions		= test_165/synonyms4.txt
+	exceptions		= <this_test/>/synonyms4.txt
 }
 </config>
 

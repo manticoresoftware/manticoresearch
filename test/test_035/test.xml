@@ -26,7 +26,7 @@ index test
 {
 	source			= srctest
 	path			= <data_path/>/test
-	stopwords		= stopwords.txt
+	stopwords		= <test_root/>/stopwords.txt
 
     <Dynamic>
 		<Variant>min_prefix_len = 3</Variant>

@@ -28,7 +28,7 @@ index test
 	path = <data_path/>/test
 
 	morphology = stem_en
-	stopwords = <test_root/>/<this_test/>/stopwords.txt
+	stopwords = <this_test/>/stopwords.txt
 	<dynamic>
 	<variant></variant>
 	<variant>stopwords_unstemmed = 0</variant>

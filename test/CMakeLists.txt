@@ -15,27 +15,46 @@ if ( BUILD_TESTING )
 
 		# check if we can extract the name for the test from it
 		if ( EXISTS "${test}/test.xml" )
-			# open the file with the test
-			file ( READ ${test}/test.xml test_name LIMIT 1024 )
-			# cut out all from the beginning to '<name>'
-			STRING ( REGEX REPLACE "^.*<[Nn][Aa][Mm][Ee]>" "" test_name "${test_name}" )
-			# cut out all from the </name> to the end
-			STRING ( REGEX REPLACE "</[Nn][Aa][Mm][Ee]>.*$" "" test_name "${test_name}" )
+			# open the file with the test and read _chunk of 512 bytes
+			file ( READ ${test}/test.xml test_name LIMIT 512 )
+
+			# convert it to lower (CMAKE regexes are case-sensitive)
+			STRING ( TOLOWER "${test_name}" _chunk )
+
+			# find pos and length of test name
+			STRING ( REGEX MATCH "(^.*<name>)(.*)</name>" _chunk "${_chunk}" )
+			STRING ( LENGTH "${CMAKE_MATCH_1}" _chunk )
+			STRING ( LENGTH "${CMAKE_MATCH_2}" _length )
+			# cut (substring) test name from original chunk
+			STRING ( SUBSTRING "${test_name}" ${_chunk} ${_length} test_name )
+
 		else ()
-			set ( test_name "" )
+			if ( onetest STREQUAL "028" )
+				set ( test_name "spelldump...")
+			else()
+				set ( test_name "" )
+			endif()
 		endif ()
 
-		set ( tst_name "rt ubertest test_${onetest} ${test_name}" )
-		add_test ( NAME "\"${tst_name}\""
-				#			CONFIGURATIONS "Debug"
-				WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-				COMMAND php ubertest.php -s $<TARGET_FILE:searchd> -i $<TARGET_FILE:indexer> -d "${SPHINXSEARCH_BINARY_DIR}/src" -u test --strict-verbose --no-demo --rt --ignore-weights t ${onetest} )
+		STRING ( CONFIGURE "${onetest} -- ${test_name}" tst_name @ONLY ESCAPE_QUOTES )
 
-		set ( tst_name "ubertest test_${onetest} ${test_name}" )
-		add_test ( NAME "\"${tst_name}\""
+		add_test ( NAME "\"test_${tst_name}\""
 				#    	CONFIGURATIONS Debug
 				WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-				COMMAND php ubertest.php -s $<TARGET_FILE:searchd> -i $<TARGET_FILE:indexer> -d "${SPHINXSEARCH_BINARY_DIR}/src" -u test --strict-verbose --no-demo t ${onetest} )
+				COMMAND php ubertest.php
+					-b "${MANTICORE_BINARY_DIR}/src/"
+					-t "${MANTICORE_BINARY_DIR}/test/"
+					-u test --strict-verbose --no-demo
+					t ${onetest} )
+		add_test ( NAME "\"rt_${tst_name}\""
+				#			CONFIGURATIONS "Debug"
+				WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+				COMMAND php ubertest.php
+				-b "${MANTICORE_BINARY_DIR}/src/"
+				-t "${MANTICORE_BINARY_DIR}/test/"
+				-u test --strict-verbose --no-demo
+				--rt --ignore-weights
+				t ${onetest} )
 
 	endforeach ()
 endif ()

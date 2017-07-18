@@ -22,7 +22,7 @@ foreach ( CHOICE ${_BUILDS} )
 endforeach ( CHOICE ${_BUILDS} )
 
 IF ( NOT DISTR )
-	SET ( DISTR rhel7 CACHE STRING "Choose the distr." )
+	SET ( DISTR default CACHE STRING "Choose the distr." )
 endif ()
 
 IF ( NOT DISTR )

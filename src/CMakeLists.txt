@@ -43,7 +43,8 @@ add_custom_target (
 			-P ${CMAKE_SOURCE_DIR}/sphinxrev.cmake
 		COMMENT "Generate version from sources"
 		VERBATIM
-		SOURCES ${CMAKE_SOURCE_DIR}/src/sphinxversion.h.in
+		SOURCES ${CMAKE_SOURCE_DIR}/sphinxrev.cmake
+			${CMAKE_SOURCE_DIR}/src/sphinxversion.h.in
 			${CMAKE_SOURCE_DIR}/CPackOptions.cmake.in
 )
 include_directories ( "${MANTICORE_BINARY_DIR}/config" )
@@ -94,22 +95,18 @@ add_library ( libsphinx STATIC ${LIBSPHINX_SRCS} ${HEADERS} ${GHEADERS} ${LIBSPH
 
 add_dependencies ( libsphinx vergen )
 
-
 # our executables
 add_executable ( indexer ${INDEXER_SRCS} )
 add_executable ( indextool ${INDEXTOOL_SRCS} )
 add_executable ( searchd ${SEARCHD_SRCS} ${SEARCHD_H} ${SEARCHD_BISON} ${SEARCHD_FLEX} )
 add_executable ( spelldump ${SPELLDUMP_SRCS} )
-add_executable ( tests ${TESTS_SRCS} )
 add_executable ( wordbreaker ${WORDBREAKER_SRCS} )
 add_dependencies ( wordbreaker vergen )
 target_link_libraries ( indexer libsphinx ${EXTRA_LIBRARIES} )
 target_link_libraries ( indextool libsphinx ${EXTRA_LIBRARIES} )
 target_link_libraries ( searchd libsphinx ${EXTRA_LIBRARIES} )
 target_link_libraries ( spelldump libsphinx ${EXTRA_LIBRARIES} )
-target_link_libraries ( tests libsphinx ${EXTRA_LIBRARIES} )
 target_link_libraries ( wordbreaker ${EXTRA_LIBRARIES} )
-
 
 if ( SPLIT_SYMBOLS )
 	include ( helpers )
@@ -117,19 +114,28 @@ if ( SPLIT_SYMBOLS )
 	install_dbg ( indextool )
 	install_dbg ( searchd )
 	install_dbg ( spelldump )
-	install_dbg ( tests )
 	install_dbg ( wordbreaker )
+	INSTALL ( PROGRAMS $<TARGET_FILE:indexer>
+			$<TARGET_FILE:indextool>
+			$<TARGET_FILE:searchd>
+			$<TARGET_FILE:spelldump>
+			$<TARGET_FILE:wordbreaker>
+			DESTINATION bin COMPONENT APPLICATIONS )
+else()
+	INSTALL ( TARGETS indexer indextool searchd spelldump wordbreaker RUNTIME DESTINATION bin COMPONENT APPLICATIONS )
 endif ( SPLIT_SYMBOLS )
 
-INSTALL ( TARGETS indexer indextool searchd spelldump wordbreaker RUNTIME DESTINATION bin COMPONENT APPLICATIONS )
-
-# testrt is win-only project
-if ( WIN32 )
-	add_executable ( testrt testrt.cpp )
-	target_link_libraries ( testrt libsphinx ${EXTRA_LIBRARIES} )
-endif ( WIN32 )
-
 if ( BUILD_TESTING )
+	add_executable ( tests ${TESTS_SRCS} )
+	target_link_libraries ( tests libsphinx ${EXTRA_LIBRARIES} )
+	if ( SPLIT_SYMBOLS )
+		install_dbg ( tests )
+	endif()
+    # testrt is win-only project
+	if ( WIN32 )
+		add_executable ( testrt testrt.cpp )
+		target_link_libraries ( testrt libsphinx ${EXTRA_LIBRARIES} )
+	endif ( WIN32 )
 	add_test ( NAME "\"Internal src/tests\""
 			#    	CONFIGURATIONS Debug
 			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"

@@ -27,6 +27,7 @@ PROJECT ( MANTICORE )
 SET ( MANTICORE_CMAKE_DIR "${MANTICORE_SOURCE_DIR}/cmake" )
 SET ( CMAKE_MODULE_PATH "${MANTICORE_SOURCE_DIR}/cmake" )
 SET ( EXTRA_LIBRARIES )
+SET ( BUILD_TESTING ON CACHE BOOLEAN "Whether to build with testing enabled" )
 
 # Make release build for the pointed distr
 # That will override defaults and give possibility to build
@@ -42,6 +43,7 @@ if ( DISTR_BUILD )
 	set ( WITH_RE2 ON CACHE BOOLEAN "Forced RE2" )
 	set ( WITH_STEMMER ON CACHE BOOLEAN "Forced Stemmer" )
 	set ( LIBS_BUNDLE "${MANTICORE_SOURCE_DIR}/../bundle" )
+	SET ( BUILD_TESTING OFF )
 	message (STATUS "DISTR_BUILD applied.
 Package will be set to ${DISTR_BUILD},
 also option forced to ON values: WITH_MYSQL, WITH_EXPAT, WITH_PGSQL, WITH_RE2, WITH_STEMMER.
@@ -66,7 +68,9 @@ cfgvalue ( CMAKE_BUILD_TYPE )
 # ctest variables
 set ( DEFAULT_CTEST_CONFIGURATION_TYPE "Debug" )
 
-include ( CTest )
+if ( BUILD_TESTING )
+	include ( CTest )
+endif ( BUILD_TESTING )
 
 set ( SPHINX_TAG "" CACHE STRING "The tag which will be added to build" )
 set ( PKGSUFFIXES ) # list of suffixes which will be append to package name, will be '-'-separated
@@ -348,7 +352,7 @@ else ( WIN32 )
 
 endif ( WIN32 )
 
-if ( NOT CMAKE_BUILD_TYPE MATCHES Debug )
+if ( NOT MSVC AND CMAKE_BUILD_TYPE MATCHES Debug )
 	add_definitions ( "-DNDEBUG" )
 endif ()
 
@@ -500,6 +504,9 @@ add_custom_target (
 		-D SOURCE_DIR=${CMAKE_SOURCE_DIR}
 		-D BINARY_DIR=${CMAKE_BINARY_DIR}
 		-P ${CMAKE_SOURCE_DIR}/cmake/mktarball.cmake
+		COMMENT "Making tarball source archive"
+		VERBATIM
+		SOURCES ${CMAKE_SOURCE_DIR}/cmake/mktarball.cmake
 )
 
 add_dependencies ( tarball vergen )

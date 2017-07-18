@@ -308,6 +308,7 @@ function RunIndexerOnce ( &$error, $params )
 	global $g_locals;
 
 	$path = $g_locals['indexer'];
+
 	if ( !is_executable($path) )
 	{
 		$error = "$path: indexer not found";
@@ -315,7 +316,7 @@ function RunIndexerOnce ( &$error, $params )
 	}
 
 	$retval = 0;
-	exec ( "$path --quiet --config config.conf $params", $error, $retval );
+	exec ( "$path --quiet --config ".testdir('config.conf')." $params", $error, $retval );
 
 	$error = join ( "\n", $error );
 	return ( $retval==0 && !empty($error) ) ? 2 : $retval;
@@ -369,6 +370,11 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 {
 	global $g_locals, $windows, $action_retries, $action_wait_timeout, $sd_address, $sd_port;
 
+
+	$abs_config_file = testdir($config_file);
+	$abs_error_file = testdir($error_file);
+	$abs_pidfile = testdir($pidfile);
+
 	$path = $g_locals['searchd'];
 	if ( !is_executable($path) )
 	{
@@ -376,9 +382,9 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 		return 1;
 	}
 
-	if ( !@touch($error_file) )
+	if ( !@touch($abs_error_file) )
 	{
-		$error = "$error_file: unable to create error file";
+		$error = "$abs_error_file: unable to create error file";
 		return 1;
 	}
 
@@ -388,32 +394,42 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 
 	if ( isset ( $g_locals['use_pool'] ) && $g_locals['use_pool'] )
 		$test_mode .= ' --test-thd-pool';
-		
+
+	$testdir = $g_locals['testdir'];
+	$cd = ( $testdir!='' );
+	if ($cd) {
+		$backdir = getcwd();
+		chdir($testdir);
+	}
+
 	$retval = 0;
 	if ( $windows )
 	{
 		// using start /min to fire it "in background"
 		// using cmd /c for redirection to work
-		if ( file_exists ( $pidfile ) )
-			unlink ( $pidfile );
-		$process = popen ("start /min cmd /c \"$path --config $config_file --pidfile --console $test_mode > $error_file\"", "r" );
+		if ( file_exists ( $abs_pidfile ) )
+			unlink ( $abs_pidfile );
+		$process = popen ("start /min cmd /c \"$path --config $abs_config_file --pidfile --console $test_mode > $abs_error_file\"", "r" );
 		pclose ( $process );
 	}
 	else
-		system ( "$path --config $config_file $test_mode > $error_file", $retval );
+		system ( "$path --config $abs_config_file $test_mode > $abs_error_file", $retval );
+
+	if ($cd)
+		chdir($backdir);
 
 	// wait until pid appears
-	for ( $i=0; $i<$action_retries && !file_exists($pidfile); $i++ )
+	for ( $i=0; $i<$action_retries && !file_exists($abs_pidfile); $i++ )
 		usleep ( $action_wait_timeout );
 
-	if ( !file_exists($pidfile) )
+	if ( !file_exists($abs_pidfile) )
 	{
-		$error = "PID file ($pidfile) was not created";
+		$error = "PID file ($abs_pidfile) was not created";
 		return 1;
 	}
 
 	// check for early crash
-	$error = CheckSearchdLog ( $error_file, $retval );
+	$error = CheckSearchdLog ( $abs_error_file, $retval );
 
 	// on windows, searchd starts *fully* async
 	// so lets also wait until pidfile gets real data
@@ -424,9 +440,9 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 		$STARTUP_TICK = 50000; // msec
 
 		// FIXME! add a better check that searchd is still alive than just file_exists
-		for ( $i=0; $i<$STARTUP_TRIES && file_exists($pidfile); $i++ )
+		for ( $i=0; $i<$STARTUP_TRIES && file_exists($abs_pidfile); $i++ )
 		{
-			$pid = file($pidfile);
+			$pid = file($abs_pidfile);
 			if ( count($pid) )
 				break;
 			usleep ( $STARTUP_TICK );
@@ -480,14 +496,17 @@ function StopSearchd ( $config, $pidfile )
 {
 	global $g_locals, $action_retries, $action_wait_timeout;
 
-	if ( file_exists($pidfile) && count(file($pidfile)) )
+	$abs_config = testdir($config);
+	$abs_pidfile = testdir($pidfile);
+
+	if ( file_exists($abs_pidfile) && count(file($abs_pidfile)) )
 	{
 		$path = $g_locals['searchd'];
 		$dummy = array();
-		exec ( "$path --config $config --stopwait", $dummy, $ret );
+		exec ( "$path --config $abs_config --stopwait", $dummy, $ret );
 
 		$i = 0;
-		while ( file_exists ( $pidfile ) && $i < $action_retries )
+		while ( file_exists ( $abs_pidfile ) && $i < $action_retries )
 		{
 			usleep ( $action_wait_timeout );
 			$i++;
@@ -497,14 +516,18 @@ function StopSearchd ( $config, $pidfile )
 
 function StopWaitSearchd ( $config, $pidfile )
 {
-	global $g_locals, $action_retries, $action_wait_timeout;
+	global $g_locals;
 	$ret = 0;
 
-	if ( file_exists($pidfile) && count(file($pidfile)) )
+	$abs_config = testdir($config);
+	$abs_pidfile = testdir($pidfile);
+
+
+	if ( file_exists($abs_pidfile) && count(file($abs_pidfile)) )
 	{
 		$path = $g_locals['searchd'];
 		$dummy = array();
-		exec ( "$path --config $config --stopwait", $dummy, $ret );
+		exec ( "$path --config $abs_config --stopwait", $dummy, $ret );
 	}
 	return $ret;
 }
@@ -512,21 +535,23 @@ function StopWaitSearchd ( $config, $pidfile )
 function KillSearchd ( $config, $pidfile, $signal, $unlinkpid=True )
 {
 	global $windows, $action_wait_timeout;
+
+	$abs_pidfile = testdir($pidfile);
 	
-	if ( file_exists($pidfile) && count(file($pidfile)) )
+	if ( file_exists($abs_pidfile) && count(file($abs_pidfile)) )
 	{
-		$fp = fopen($pidfile,"r");
-		$pid = fread ( $fp, filesize ( $pidfile ) );
+		$fp = fopen($abs_pidfile,"r");
+		$pid = fread ( $fp, filesize ( $abs_pidfile ) );
 		fclose ($fp);
 
 		if ( $windows )
 			exec ("kill -f -s $signal $pid");
 		else
 			exec ("kill -s $signal $pid");
-		if ( $unlinkpid && file_exists ( $pidfile ) )
+		if ( $unlinkpid && file_exists ( $abs_pidfile ) )
 		{
 			usleep ( $action_wait_timeout );
-			unlink ( $pidfile );
+			unlink ( $abs_pidfile );
 		}
 	}
 }
@@ -2345,7 +2370,7 @@ class SphinxConfig
 
 	function EraseIndexFiles ( $path )
 	{
-		$dh = glob ( "./$path.*" );
+		$dh = glob ( "$path.*" );
 		foreach ( $dh as $entry )
 		{
 			if ( is_file ($entry) )
@@ -2405,7 +2430,6 @@ class SphinxConfig
 				$sql_query_pre = array();
 				$sql_query = "";
 				$sql_query_range = "";
-				$sql_query_range_step = 1024;
 				$sql_file_fields = array();
 
 				if ( $match[$parent][0] != "" )
@@ -2467,7 +2491,6 @@ class SphinxConfig
 						case "sql_query_pre":		$sql_query_pre[] = $value; break;
 						case "sql_query":			$sql_query = $value; break;
 						case "sql_query_range":		$sql_query_range = $value; break;
-						case "sql_query_range_step":$sql_query_range_step = $value; break;
 						case "sql_file_field":		$sql_file_fields[] = $value; break;
 					}
 				}
@@ -2957,7 +2980,7 @@ class SphinxConfig
 
 	function Dump ( $node, $fp, $dynamic_only, $agentid )
 	{
-		global $index_data_path, $agents;
+		global $index_data_path, $agents, $g_locals;
 
 		$nodename = strtolower ( $node->nodeName );
 
@@ -2979,6 +3002,13 @@ class SphinxConfig
 			case "local":				fwrite ( $fp, $this->GetLocal ( $node->nodeValue ) ); return;
 			case "test_root":			fwrite ( $fp, dirname(__FILE__) ); return;
 			case "this_test":			fwrite ( $fp, $this->_testdir ); return;
+			case "testdir":	{
+				if ( $g_locals['testdir'] == '' ) {
+					fwrite($fp, dirname(__FILE__)."/");
+					return;
+				}
+				fwrite ( $fp, $g_locals['testdir'] ); return;
+			}
 			case "data_path": {
 				$subdir = GetfirstAttr($node);
 				if ($subdir==NULL) {
@@ -2994,12 +3024,8 @@ class SphinxConfig
 			}
 
 		}
-		
-		if ( $nodename=="variant" )
-		{
-			fwrite ( $fp, "$node->nodeValue\n" );
 
-		} else if ( $nodename=="dynamic" )
+		if ( $nodename=="dynamic" )
 		{
 			if ( !is_null($node->id) )
 			{
@@ -3166,16 +3192,15 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 			$sd_skip_indexer, $g_id64, $windows, $g_locals, $sd_log, $sd_query_log,
 			$g_pick_query;
 
+	$res_path = testdir($test_dir);
+
 	$model_file = $test_dir."/model.bin";
-	$conf_dir 	= $test_dir."/Conf";
+	$conf_dir 	= $res_path."/Conf";
+
 
 	$config = new SphinxConfig;
 	$lmodel = $config->LoadModel ( $model_file );
 	$isdemo = false;
-
-	$pick_query = -1;
-	if ( is_int($g_pick_query) && $g_pick_query>0 )
-		$pick_query = $g_pick_query;
 
 	if ( $lmodel==-1 )
 	{
@@ -3190,7 +3215,7 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 	if ( !$config->Load ( $test_dir."/test.xml" ) )
 		return;
 
-	$config->SetTestDir ( $test_dir );
+	$config->SetTestDir ( getcwd()."/".$test_dir );
 	$prefix = sprintf ( "testing %s, %s...", $test_dir, $config->Name () );
 
 	if ( !CheckConfig ( $config, $test_dir ) )
@@ -3216,7 +3241,7 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 	if ( !file_exists ( $conf_dir ) )
 		mkdir ( $conf_dir );
 	
-	$report_path = "$test_dir/report";
+	$report_path = "$res_path/report";
 	$report_file = "$report_path.txt";
 	$report = fopen ( $report_file, "w" );
 
@@ -3234,8 +3259,8 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 	{
 		$oldlog = $sd_log;
 		$oldquerylog = $sd_query_log;
-		$sd_log				= "$test_dir/searchd.log";
-		$sd_query_log		= "$test_dir/query.log";
+		$sd_log				= "$res_path/searchd.log";
+		$sd_query_log		= "$res_path/query.log";
 		if (file_exists($sd_log))
 			unlink ($sd_log);
 		if (file_exists($sd_query_log))
@@ -3268,13 +3293,13 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 			print ("Interrupted, $msg\n");
 			continue;
 		}
-		$config->WriteConfig ( "config.conf", "all", $msg, $config->NumAgents () < 2 );
+		$config->WriteConfig ( testdir("config.conf"), "all", $msg, $config->NumAgents () < 2 );
 
 		if ( !$sd_skip_indexer )
 			EraseDirContents ( $index_data_path );
 
 		if ( $config->Requires( "pre_copy_ref" ) )
-			CopyDirContents ( $test_dir . "/refdata/", "data/" );
+			CopyDirContents ( $test_dir . "/refdata/", testdir("data/") );
 
 		if ( $config->IsSkipIndexer()===false && $sd_managed_searchd===false && $sd_skip_indexer===false )
 		{
@@ -3317,7 +3342,7 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 			else
 				$searchd_ret = StartSearchd ( "config.conf", "error.txt", $sd_pid_file, $error, $config->Requires ( "watchdog" ) );
 			
-			$stop["config.conf"] = $sd_pid_file;
+			$stop[testdir("config.conf")] = $sd_pid_file;
 
 			if ( $searchd_ret == 1 )
 			{
@@ -3339,11 +3364,13 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 
 				$config_file = "config_".$agent_id.".conf";
 				$pid_file = "searchd_".$agent_id.".pid";
-				$stop[$config_file] = $pid_file;
+				$abs_config_file = testdir($config_file);
+				$abs_pid_file = testdir($pid_file);
+				$stop[$abs_config_file] = $abs_pid_file;
 				$msg = '';
 				$config->SetAgent ( $agents [$i] );
-				$config->SetPIDFile ( $pid_file );
-				if ( !$config->WriteConfig ( $config_file, $i, $msg ) )
+				$config->SetPIDFile ( $abs_pid_file );
+				if ( !$config->WriteConfig ( $abs_config_file, $i, $msg ) )
 					continue;
 
                 if ( $sd_managed_searchd )

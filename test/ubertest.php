@@ -39,7 +39,8 @@ if ( !is_array($args) || empty($args) )
 	print ( "-p, --password <PASS>\tuse 'PASS' as MySQL password\n" );
 	print ( "-i, --indexer <PATH>\tpath to indexer\n" );
 	print ( "-s, --searchd <PATH>\tpath to searchd\n" );
-	print ( "-d, --srcdir <PATH>\tpath to all binaries\n" );
+	print ( "-b, --bindir <PATH>\tpath to all binaries\n" );
+	print ( "-t, --testdir <PATH>\tpath where to work and create artefacts\n" );
 	print ( "--strict\t\tterminate on the first failure (for automatic runs)\n" );
 	print ( "--strict-verbose\tterminate on the first failure and copy the last report to report.txt (for automatic runs)\n" );
 	print ( "--managed\t\tdon't run searchd during test (for debugging)\n" );
@@ -66,6 +67,7 @@ if ( !is_array($args) || empty($args) )
 
 $locals = array();
 $locals['rt_mode'] = false;
+$locals['testdir'] = '';
 
 if ( array_key_exists ( "DBUSER", $_ENV ) && $_ENV["DBUSER"] )
 	$locals['db-user'] = $_ENV["DBUSER"];
@@ -77,7 +79,7 @@ $run = false;
 $test_dirs = array();
 $test_range = array();
 $user_skip = false;
-$locals['srcdir'] = "../src";
+
 for ( $i=0; $i<count($args); $i++ )
 {
 	$arg = $args[$i];
@@ -92,7 +94,8 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="-p" || $arg=="--password" )	$locals['db-password'] = $args[++$i];
 	else if ( $arg=="-i" || $arg=="--indexer" )		$locals['indexer'] = $args[++$i];
 	else if ( $arg=="-s" || $arg=="--searchd" )		$locals['searchd'] = $args[++$i];
-	else if ( $arg=="-d" || $arg=="--srcdir" )		$locals['srcdir'] = $args[++$i];
+	else if ( $arg=="-b" || $arg=="--bindir" )		$locals['bin'] = $args[++$i];
+	else if ( $arg=="-t" || $arg=="--testdir" )		$locals['testdir'] = $args[++$i];
 	else if ( $arg=="--rt" )						$locals['rt_mode'] = true;
 	else if ( $arg=="--test-thd-pool" )				$locals['use_pool'] = true;
 	else if ( $arg=="--strict" )					$g_strict = true;
@@ -132,11 +135,25 @@ if ( !$run )
 	exit ( 1 );
 }
 
+$index_data_path = $locals['testdir'].$index_data_path;
+if (!file_exists ($index_data_path))
+	mkdir ($index_data_path);
+
 PublishLocals ( $locals, false );
-GuessIdSize();
-GuessRE2();
-GuessRLP();
-GuessODBC();
+
+$sd_log				= testdir("searchd.log");
+$sd_query_log		= testdir("query.log");
+$sd_pid_file		= testdir("searchd.pid");
+
+global $g_guesscached;
+LoadCachedGuesses();
+if ( !$g_guesscached ) {
+	GuessIdSize();
+	GuessRE2();
+	GuessRLP();
+	GuessODBC();
+	CacheGuesses();
+}
 
 if ( $g_locals["malloc-scribble"] )
 {
@@ -214,6 +231,7 @@ $total_skipped = $user_skipped;
 $failed_tests = array();
 foreach ( $tests as $test )
 {
+	$res_path = testdir($test);
 	if ( $windows && !$sd_managed_searchd )
 	{
 		// avoid an issue with daemons stuck in exit(0) for some seconds
@@ -227,6 +245,11 @@ foreach ( $tests as $test )
 			array ( "address" => $agent_address, "port" => $agent_port+1, "sqlport" => $agent_port_sql+1, "sqlport_vip" => $agent_port_sql_vip+1 )
 		);
 	}
+
+
+	if (!$g_model)
+		if ( !file_exists ( $res_path ) )
+			mkdir ( $res_path );
 
 	if ( file_exists ( $test."/test.xml" ) )
 	{
@@ -252,9 +275,9 @@ foreach ( $tests as $test )
 			{
 				if ( $g_strictverbose )
 				{
-					$report = file_get_contents ( "$test/report.txt" );
+					$report = file_get_contents ( "$res_path/report.txt" );
 					$report.= "\n Test $test failed\n";
-					file_put_contents("report.txt",$report);
+					file_put_contents(testdir("report.txt"),$report);
 					$report = "";
 				}
 				break;

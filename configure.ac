@@ -1,7 +1,7 @@
 dnl Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.59)
-AC_INIT([manticore], [1.0.0], [builds(at)manticoresearch.com])
+AC_INIT([manticore], [2.3.3], [builds(at)manticoresearch.com])
 
 dnl --------------------------------------------------------------------------
 

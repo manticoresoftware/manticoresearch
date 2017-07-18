@@ -20,3 +20,4 @@ rm -f data/binlog.*
 # clean test runs logs
 rm -f *.log
 rm -f searchd.pid error.txt config.conf
+rm -f guess.txt

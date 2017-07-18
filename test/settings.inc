@@ -30,6 +30,7 @@ $agents 			= array (
 
 $index_data_path	= "data";
 
+$g_guesscached = false;
 $g_model	= false;
 $g_id64		= false;
 $g_re2		= false;
@@ -81,11 +82,52 @@ function GetBanner ()
 		return $output;
 }
 
+function LoadCachedGuesses ()
+{
+	global $g_locals;
+	$guessfile = $g_locals['testdir'].'guess.txt';
+
+	if ( file_exists ( $guessfile ))
+	{
+		$text = @file_get_contents ( $guessfile );
+		eval ( $text );
+	}
+}
+
+function CacheGuesses ()
+{
+	global $g_locals;
+	global $g_id64, $g_re2, $g_rlp, $g_odbc;
+
+	$guessfile = $g_locals['testdir'].'guess.txt';
+
+	$text = "global \$g_guesscached; \$g_guesscached = true;\n";
+	if ( $g_id64 ) $text .= "global \$g_id64; \$g_id64 = true;\n";
+	if ( $g_re2 ) $text .= "global \$g_re2; \$g_re2 = true;\n";
+	if ( $g_rlp ) $text .= "global \$g_rlp; \$g_rlp = true;\n";
+	if ( $g_odbc ) $text .= "global \$g_odbc; \$g_odbc = true;\n";
+
+	file_put_contents ( $guessfile, $text );
+}
+
 function GuessIdSize ()
 {
 	global $g_id64;
 	$banner = GetBanner();
 	$g_id64 = strstr ( $banner[0], 'id64' ) !== false;
+}
+
+function testdir ($path)
+{
+	global $g_locals;
+	if ( !$path || $path=='' )
+		return $g_locals['testdir'];
+
+	# linux absolute starts with /, windows have drive letter with :.
+	if ( substr ($path, 0, 1) === '/' || substr ($path, 1, 1) === ':' )
+		return $path;
+
+	return $g_locals['testdir'].$path;
 }
 
 function GuessFeature ($config, $testmsg)
@@ -135,7 +177,7 @@ function GetVersion ()
 	return $banner[0];
 }
 
-function PublishLocals ( $locals, $benchmark )
+function PublishLocals ( &$locals, $benchmark )
 {
 	global $g_locals, $g_site_defaults, $windows;
 	$sources = array();
@@ -149,7 +191,6 @@ function PublishLocals ( $locals, $benchmark )
 	$text = @file_get_contents ( getenv('HOME') . '/.sphinx' );
 	if ( !$text )
 	{
-		$path = '';
 		if ( $windows )
 			$path = $benchmark ? '..\\bin\\release\\' : '..\\bin\\debug\\';
 		else
@@ -181,11 +222,19 @@ function PublishLocals ( $locals, $benchmark )
 			$locals['bin'] = '../src/';
 	}
 
-	$ext = $windows ? ".exe" : "";
-	foreach ( array ( 'searchd', 'indexer' ) as $key )
+	if ( $windows ) {
+		$ext = ".exe";
+		$pref = $benchmark ? "RelWithDebInfo\\" : "Debug\\";
+	} else
+	{
+		$ext = '';
+		$pref = '';
+	}
+
+	foreach ( array ( 'searchd', 'indexer', 'spelldump' ) as $key )
 	{
 		if ( !array_key_exists ( $key, $locals ) )
-			$locals[$key] = $locals['bin'] . $key . $ext;
+			$locals[$key] = $locals['bin'] . $pref. $key . $ext;
 	}
 
 	$g_locals = $locals;

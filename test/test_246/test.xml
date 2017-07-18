@@ -88,7 +88,7 @@ $results[] = 'all index presents';
 $results[] = "\n" . $ql->Query ( "SHOW tables" );
 $results[] = "\n" . $ql->Query ( "SELECT * FROM plain1, plain2" );
 
-$orig_conf = file('config.conf');
+$orig_conf = file(testdir('config.conf'));
 
 $new_conf = '';
 $got_idx2 = false;
@@ -104,7 +104,7 @@ foreach ( $orig_conf as $line )
 	}
 	$new_conf .= $line;
 }
-file_put_contents('config.conf', $new_conf);
+file_put_contents(testdir('config.conf'), $new_conf);
 
 RunIndexer ( $errors, '--rotate plain1' ); // just to send SIGHUP to daemon
 sleep(2);
@@ -112,7 +112,7 @@ sleep(2);
 $results[] = 'plain2 disabled';
 $results[] = "\n" . $ql->Query ( "SHOW tables" );
 
-file_put_contents('config.conf', $orig_conf);
+file_put_contents(testdir('config.conf'), $orig_conf);
 RunIndexer ( $errors, '--rotate plain1' ); // just to send SIGHUP to daemon
 sleep(2);
 

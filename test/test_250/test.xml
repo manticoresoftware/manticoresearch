@@ -107,7 +107,7 @@ $results[] = "\n" . $ql->Query ( "SELECT * FROM plain3" );
 $results[] = 'plain4';
 $results[] = "\n" . $ql->Query ( "SELECT * FROM plain4" );
 
-$orig_conf = file('config.conf');
+$orig_conf = file(testdir('config.conf'));
 
 $new_conf = '';
 foreach ( $orig_conf as $line )
@@ -121,13 +121,15 @@ foreach ( $orig_conf as $line )
 	
 	$new_conf .= $line;
 }
-file_put_contents('config.conf', $new_conf);
+file_put_contents(testdir('config.conf'), $new_conf);
+
+global $this_test, $index_data_path;
 
 $extensions = array ( 'spa', 'spd', 'spe', 'sph', 'spi', 'spk', 'spm', 'spp', 'sps' );
 foreach ( $extensions as $e )
-	copy ( 'test_250/data/plain2.' . $e, 'data/plain_new_location_3.new.' . $e );
+	copy ( "$this_test/data/plain2.$e", "$index_data_path/plain_new_location_3.new.$e" );
 foreach ( $extensions as $e )
-	copy ( 'test_250/data/plain2.' . $e, 'data/plain_new_location_4.' . $e );
+	copy ( "$this_test/data/plain2.$e", "$index_data_path/plain_new_location_4.$e" );
 
 RunIndexer ( $errors, '--rotate plain1' ); // just to send SIGHUP to daemon
 sleep(2);

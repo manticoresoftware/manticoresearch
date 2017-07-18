@@ -60,13 +60,13 @@ index plain2
 
 file_exists = False
 try:
-	with open('part.conf'):
+	with open('<data_path/>/part.conf'):
 		file_exists = True
 except IOError:
 	pass
 
 if file_exists==True:
-	with open('part.conf') as f:
+	with open('<data_path/>/part.conf') as f:
 		print f.read()
 </config>
 
@@ -105,10 +105,12 @@ $query = create_function('$client, $index','
 $result = $client->Query ( "first", $index );	if ( $result ) { unset ( $result["time"] ); return $result; } else return $client->GetLastError();
 ');
 
+global $index_data_path;
+
 StopSearchd ('config.conf', 'searchd.pid');
 foreach ( array ( 'spa', 'spd', 'spe', 'spi', 'spk', 'spm', 'spp', 'sps', 'sph' ) as $ext )
 {
-	$path = 'data/plain2.' . $ext;
+	$path = "$index_data_path/plain2.$ext";
 	if ( file_exists ( $path ) )
 		unlink ( $path );
 	if ( file_exists ( $path ) )
@@ -118,8 +120,8 @@ $state = StartSearchd ('config.conf', 'error.txt', 'searchd.pid', $error);
 
 
 $results[] = $query ( $client, 'plain3' );
-$path = "part.conf";
-file_put_contents ( $path, "index plain3\n{\nsource = sql\npath = data/plain3\n}\n" );
+$path = "$index_data_path/part.conf";
+file_put_contents ( $path, "index plain3\n{\nsource = sql\npath = $index_data_path/plain3\n}\n" );
 
 RunIndexer ( $errors, '--rotate p*lain2 plain3' ); // adding indexes
 sleep(2);

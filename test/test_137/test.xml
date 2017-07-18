@@ -27,7 +27,7 @@ index test_stops
 {
 	source			= test
 	path			= <data_path/>/test_stops
-	stopwords		= stopwords.txt
+	stopwords		= <test_root/>/stopwords.txt
 }
 </config>
 

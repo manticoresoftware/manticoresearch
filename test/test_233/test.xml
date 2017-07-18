@@ -47,6 +47,7 @@ CREATE TABLE test_table
 <db_insert>INSERT INTO test_table VALUES ( 1, 123, 'hello world' )</db_insert>
 
 <custom_test><![CDATA[
+global $this_test, $index_data_path;
 $results = array();
 $ql->Reconnect();
 $extensions = array ( 'spa', 'spd', 'spe', 'sph', 'spi', 'spk', 'spm', 'spp', 'sps' );
@@ -54,12 +55,14 @@ $extensions = array ( 'spa', 'spd', 'spe', 'sph', 'spi', 'spk', 'spm', 'spp', 's
 $results[] = $ql->Query ( "SELECT * FROM test" );
 
 foreach ( $extensions as $e )
-	copy ( 'test_233/data/reload.' . $e, 'test_233/reload_path/reload.' . $e );
-$results[] = $ql->Query ( "RELOAD INDEX test FROM 'test_233/reload_path/reload'" );
+{
+	copy ( "$this_test/data/reload.$e", "$index_data_path/reload.$e" );
+}
+$results[] = $ql->Query ( "RELOAD INDEX test FROM '$index_data_path/reload'" );
 $results[] = $ql->Query ( "SELECT * FROM test" );
 
 foreach ( $extensions as $e )
-	copy ( 'test_233/data/test.' . $e, 'data/test.new.' . $e );
+	copy ( "$this_test/data/test.$e", "$index_data_path/test.new.$e" );
 $results[] = $ql->Query ( "RELOAD INDEX test" );
 $results[] = $ql->Query ( "SELECT * FROM test" );
 

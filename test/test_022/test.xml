@@ -26,7 +26,7 @@ index test
 {
 	source			= srctest
 	path			= <data_path/>/test
-	wordforms		= wordforms.txt
+	wordforms		= <test_root/>/wordforms.txt
 }
 
 source src_num

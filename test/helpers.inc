@@ -3484,6 +3484,12 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 
 	fclose ( $report );
 
+	if ($g_locals['ctest'])
+	{
+		$textreport = file_get_contents ($report_file);
+		printf ( "\n--------------Test report:------------\n%s\n--------------Done report.------------\n", $textreport );
+	}
+
 	// cleanup DB after ourselves
 	if ( !array_key_exists ('no_drop_db', $g_locals) && isset($connection) )
 		foreach ( $config->DB_Drop() as $q )

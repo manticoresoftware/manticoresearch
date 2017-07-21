@@ -148,6 +148,7 @@ static bool				g_bLogCompactIn		= false;			// whether to cut list in IN() clause
 static int				g_iQueryLogMinMsec	= 0;				// log 'slow' threshold for query
 static char				g_sLogFilter[SPH_MAX_FILENAME_LEN] = "\0";
 static int				g_iLogFilterLen = 0;
+static int				g_iLogFileMode = 0;
 
 static const int64_t	MS2SEC = I64C ( 1000000 );
 int						g_iReadTimeout		= 5;	// sec
@@ -1221,6 +1222,16 @@ static CSphString GetNamedPipeName ( int iPid )
 void LogWarning ( const char * sWarning )
 {
 	sphWarning ( "%s", sWarning );
+}
+
+void LogChangeMode ( int iFile, int iMode )
+{
+	if ( iFile<0 || iMode==0 || iFile==STDOUT_FILENO || iFile==STDERR_FILENO )
+		return;
+
+#if !USE_WINDOWS
+	fchmod ( iFile, iMode );
+#endif
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -18986,6 +18997,7 @@ void CheckReopen ()
 			::close ( g_iLogFile );
 			g_iLogFile = iFD;
 			g_bLogTty = ( isatty ( g_iLogFile )!=0 );
+			LogChangeMode ( g_iLogFile, g_iLogFileMode );
 			sphInfo ( "log reopened" );
 		}
 	}
@@ -19001,6 +19013,7 @@ void CheckReopen ()
 		{
 			::close ( g_iQueryLogFile );
 			g_iQueryLogFile = iFD;
+			LogChangeMode ( g_iQueryLogFile, g_iLogFileMode );
 			sphInfo ( "query log reopened" );
 		}
 	}
@@ -22348,6 +22361,21 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	// hostname_lookup = {config_load | request}
 	g_bHostnameLookup = ( strcmp ( hSearchd.GetStr ( "hostname_lookup", "" ), "request" )==0 );
 
+	CSphVariant * pLogMode = hSearchd ( "query_log_mode" );
+	if ( pLogMode && !pLogMode->strval().IsEmpty() )
+	{
+		errno = 0;
+		int iMode = strtol ( pLogMode->strval().cstr(), NULL, 8 );
+		int iErr = errno;
+		if ( iErr==ERANGE || iErr==EINVAL )
+		{
+			sphWarning ( "query_log_mode invalid value (value=%o, error=%s); skipped", iMode, strerror(iErr) );
+		} else
+		{
+			g_iLogFileMode = iMode;
+		}
+	}
+
 	//////////////////////////////////////////////////
 	// prebuild MySQL wire protocol handshake packets
 	//////////////////////////////////////////////////
@@ -22507,6 +22535,7 @@ void OpenDaemonLog ( const CSphConfigSection & hSearchd, bool bCloseIfOpened=fal
 				g_iLogFile = STDOUT_FILENO;
 				sphFatal ( "failed to open log file '%s': %s", sLog, strerror(errno) );
 			}
+			LogChangeMode ( g_iLogFile, g_iLogFileMode );
 		}
 
 		g_sLogFile = sLog;
@@ -22990,6 +23019,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 				g_iQueryLogFile = open ( hSearchd["query_log"].cstr(), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
 				if ( g_iQueryLogFile<0 )
 					sphFatal ( "failed to open query log file '%s': %s", hSearchd["query_log"].cstr(), strerror(errno) );
+
+				LogChangeMode ( g_iQueryLogFile, g_iLogFileMode );
 			}
 			g_sQueryLogFile = hSearchd["query_log"].cstr();
 		}

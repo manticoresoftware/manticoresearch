@@ -352,7 +352,8 @@ else ( WIN32 )
 
 endif ( WIN32 )
 
-if ( NOT MSVC AND CMAKE_BUILD_TYPE MATCHES Debug )
+if ( NOT CMAKE_BUILD_TYPE STREQUAL Debug )
+	message (STATUS "Added def NDEBUG")
 	add_definitions ( "-DNDEBUG" )
 endif ()
 

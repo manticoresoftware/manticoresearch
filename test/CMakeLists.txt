@@ -7,6 +7,10 @@ if ( BUILD_TESTING )
 	file ( GLOB tests "test_[0-9]*" )
 	list ( SORT tests )
 
+	add_test ( NAME "\"Cleaning guess cache\""
+			#    	CONFIGURATIONS Debug
+			COMMAND ${CMAKE_COMMAND} -E remove guess.txt )
+
 	foreach ( test ${tests} )
 		# get the last dir (filename)
 		get_filename_component ( onetest "${test}" NAME_WE )
@@ -55,6 +59,8 @@ if ( BUILD_TESTING )
 				--ctest -u test --strict-verbose --no-demo
 				--rt --ignore-weights
 				t ${onetest} )
+
+		set_tests_properties ( "\"test_${tst_name}\"" "\"rt_${tst_name}\"" PROPERTIES DEPENDS "\"Cleaning guess cache\"")
 
 	endforeach ()
 endif ()

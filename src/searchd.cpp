@@ -6961,7 +6961,10 @@ void SearchHandler_c::ReleaseIndex ( int iLocal ) const
 	ServedIndex_c * pServed = (ServedIndex_c *)tLocked.m_tIndex.GetValue();
 
 	if ( !iCount && pServed )
+	{
+		tLocked.m_tIndex.SetValue ( 0 );
 		pServed->Unlock();
+	}
 
 	m_tLockIndexes.Unlock();
 }

@@ -49,7 +49,7 @@ else ( STEMMER_FOUND )
 	set ( STEMMER_BASEDIR "${MANTICORE_BINARY_DIR}/libstemmer_c" )
 	# copy our CMakeLists there
 	if ( NOT EXISTS "${STEMMER_BASEDIR}/CMakeLists.txt" )
-		configure_file ( "${CMAKE_SOURCE_DIR}/libstemmer_c/CMakeLists.txt" "${STEMMER_BASEDIR}/CMakeLists.txt" @ONLY )
+		configure_file ( "${CMAKE_SOURCE_DIR}/libstemmer_c/CMakeLists.txt" "${STEMMER_BASEDIR}/CMakeLists.txt" COPYONLY )
 	endif ()
 	set ( USE_LIBSTEMMER 1 )
 	set ( STEMMER_INCLUDE_DIR "${STEMMER_BASEDIR}/include" )

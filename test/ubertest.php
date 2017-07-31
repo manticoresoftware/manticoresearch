@@ -81,6 +81,7 @@ $run = false;
 $test_dirs = array();
 $test_range = array();
 $user_skip = false;
+$force_guess = true;
 
 for ( $i=0; $i<count($args); $i++ )
 {
@@ -98,7 +99,7 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="-s" || $arg=="--searchd" )		$locals['searchd'] = $args[++$i];
 	else if ( $arg=="-b" || $arg=="--bindir" )		$locals['bin'] = $args[++$i];
 	else if ( $arg=="-t" || $arg=="--testdir" )		$locals['testdir'] = $args[++$i];
-	else if ( $arg=="--ctest" )						$locals['ctest'] = true;
+	else if ( $arg=="--ctest" )						{ $locals['ctest'] = true; $force_guess = false; }
 	else if ( $arg=="--rt" )						$locals['rt_mode'] = true;
 	else if ( $arg=="--test-thd-pool" )				$locals['use_pool'] = true;
 	else if ( $arg=="--strict" )					$g_strict = true;
@@ -149,13 +150,19 @@ $sd_query_log		= testdir("query.log");
 $sd_pid_file		= testdir("searchd.pid");
 
 global $g_guesscached;
-LoadCachedGuesses();
+
+if ( $force_guess )
+	$g_guesscached = false;
+else
+	LoadCachedGuesses();
+
 if ( !$g_guesscached ) {
 	GuessIdSize();
 	GuessRE2();
 	GuessRLP();
 	GuessODBC();
-	CacheGuesses();
+	if ( !$force_guess )
+		CacheGuesses();
 }
 
 if ( $g_locals["malloc-scribble"] )

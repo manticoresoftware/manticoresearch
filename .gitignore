@@ -19,10 +19,11 @@
 /api/libsphinxclient/debug
 /api/libsphinxclient/release
 
-# clion
+# clion build dir, also reserve /build
 /.idea
 /test/.idea
 /cmake-build*
+/build
 
 # /config/
 /config/stamp-h1

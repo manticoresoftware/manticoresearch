@@ -50,7 +50,7 @@ $results[] = "\n" . $ql->Query ( "SELECT * FROM rt_re where match ( 'color table
 $results[] = "query: blue table";
 $results[] = "\n" . $ql->Query ( "SELECT * FROM rt_re where match ( 'blue table' )" );
 
-$orig_conf = file('config.conf');
+$orig_conf = file(testdir('config.conf'));
 
 $new_conf = '';
 foreach ( $orig_conf as $line )
@@ -60,7 +60,7 @@ foreach ( $orig_conf as $line )
 		$line = '	regexp_filter = (blue|red) => color' . "\n";
 	$new_conf .= $line;
 }
-file_put_contents('config.conf', $new_conf);
+file_put_contents(testdir('config.conf'), $new_conf);
 
 $results[] = "alter";
 $results[] = "\n" . $ql->Query ( "ALTER RTINDEX rt_re RECONFIGURE" );

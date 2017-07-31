@@ -3464,6 +3464,7 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 			StopSearchd ( $conf, $pid );
 
 	$total = $config->SubtestNo()+1;
+	$dump_failed = false;
 	if ( IsModelGenMode () )
 	{
 		$variant = $config->CheckVariants ( $report_path."_variant.txt" );
@@ -3479,12 +3480,14 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 	}
 	else if ( $nfailed==0 )
 		printf ( "$prefix done; %d/%d subtests OK\n", $config->SubtestNo(), $nsubtests );
-	else
-		printf ( "$prefix done; %d/%d subtests FAILED:\n%s", $nfailed, $nsubtests, $log );
+	else {
+		printf("$prefix done; %d/%d subtests FAILED:\n%s", $nfailed, $nsubtests, $log);
+		$dump_failed = true;
+	}
 
 	fclose ( $report );
 
-	if ($g_locals['ctest'])
+	if ($dump_failed && $g_locals['ctest'])
 	{
 		$textreport = file_get_contents ($report_file);
 		printf ( "\n--------------Test report:------------\n%s\n--------------Done report.------------\n", $textreport );

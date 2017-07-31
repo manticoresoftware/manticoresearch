@@ -47,8 +47,7 @@ if ( MYSQL_FOUND )
 	else ( DL_MYSQL )
 		list ( APPEND EXTRA_LIBRARIES ${MYSQL_LIBRARIES} )
 	endif ()
-	cfgvalue ( MYSQL_LIB )
-	cfgvalue ( MYSQL_CONFIG_EXECUTABLE )
+	memcfgvalues ( MYSQL_LIB MYSQL_CONFIG_EXECUTABLE )
 else ( MYSQL_FOUND )
 	message ( SEND_ERROR
 			"********************************************************************************

@@ -57,7 +57,7 @@ else ( RE2_FOUND )
 		file ( RENAME "${MANTICORE_BINARY_DIR}/re2-master" "${RE2_BASEDIR}" )
 
 		# also backup original Makefile; it is important step!
-		configure_file ( "${RE2_BASEDIR}/Makefile" "${RE2_BASEDIR}/MakefileOrig" @ONLY )
+		configure_file ( "${RE2_BASEDIR}/Makefile" "${RE2_BASEDIR}/MakefileOrig" COPYONLY )
 	endif ( NOT EXISTS "${RE2_BASEDIR}/Makefile" )
 
 	# RE2 sources found. Now patch them, if necessary
@@ -92,7 +92,7 @@ else ( RE2_FOUND )
 	# copy our CMakeLists there
 	if ( NOT EXISTS "${RE2_BASEDIR}/CMakeLists.txt" )
 		message ( STATUS "${CMAKE_SOURCE_DIR} - source dir" )
-		configure_file ( "${CMAKE_SOURCE_DIR}/libre2/CMakeLists.txt" "${RE2_BASEDIR}/CMakeLists.txt" @ONLY )
+		configure_file ( "${CMAKE_SOURCE_DIR}/libre2/CMakeLists.txt" "${RE2_BASEDIR}/CMakeLists.txt" COPYONLY )
 	endif ()
 	set ( USE_RE2 1 )
 	set ( RE2_INCLUDE_DIRS "${RE2_BASEDIR}" )

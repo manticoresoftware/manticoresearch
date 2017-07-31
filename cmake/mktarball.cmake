@@ -5,6 +5,7 @@ set ( PACKDIR "${BINARY_DIR}/sources/${FNAME}" )
 
 file (COPY ${SOURCE_DIR}/ DESTINATION ${PACKDIR}
 		PATTERN "cmake-*" EXCLUDE
+		PATTERN "build-*" EXCLUDE
 		PATTERN ".*" EXCLUDE
 		)
 configure_file ("${BINARY_DIR}/config/gen_sphinxversion.h"

@@ -56,14 +56,18 @@ SET ( BANNER )
 macro ( cfginfo msgtext )
 	list ( APPEND BANNER "${msgtext}" )
 endmacro()
-# append value of given var to build info
-macro ( cfgvalue var )
-	if ( ${var} )
-		list ( APPEND BANNER "${var}=${${var}}" )
-	endif( ${var} )
+
+# append values of given var to build info
+macro( memcfgvalues )
+	FOREACH ( var ${ARGN} )
+		if ( ${var} )
+			list ( APPEND BANNER "${var}=${${var}}" )
+		endif ( ${var} )
+	endforeach()
 endmacro()
 
-cfgvalue ( CMAKE_BUILD_TYPE )
+
+memcfgvalues ( CMAKE_BUILD_TYPE )
 
 # ctest variables
 set ( DEFAULT_CTEST_CONFIGURATION_TYPE "Debug" )
@@ -423,27 +427,10 @@ endif()
 
 option ( SPLIT_SYMBOLS "whether to split debug symbols from binaries" ${SPLIT_SYMBOLS} )
 
-cfgvalue ( SPLIT_SYMBOLS )
-cfgvalue ( USE_BISON )
-cfgvalue ( USE_FLEX )
-cfgvalue ( USE_SYSLOG )
-cfgvalue ( WITH_EXPAT )
-cfgvalue ( WITH_ICONV )
-cfgvalue ( WITH_MYSQL )
-cfgvalue ( WITH_MYSQL_INCLUDES )
-cfgvalue ( WITH_MYSQL_LIBS )
-cfgvalue ( WITH_MYSQL_ROOT )
-cfgvalue ( WITH_ODBC )
-cfgvalue ( WITH_PGSQL )
-cfgvalue ( WITH_PGSQL_INCLUDES )
-cfgvalue ( WITH_PGSQL_LIBS )
-cfgvalue ( WITH_RE2 )
-cfgvalue ( WITH_RE2_INCLUDES )
-cfgvalue ( WITH_RE2_LIBS )
-cfgvalue ( WITH_RE2_ROOT )
-cfgvalue ( WITH_RLP )
-cfgvalue ( WITH_STEMMER )
-cfgvalue ( WITH_ZLIB )
+memcfgvalues ( SPLIT_SYMBOLS USE_BISON USE_FLEX USE_SYSLOG WITH_EXPAT WITH_ICONV WITH_MYSQL
+		WITH_MYSQL_INCLUDES WITH_MYSQL_LIBS WITH_MYSQL_ROOT WITH_ODBC WITH_PGSQL
+		 WITH_PGSQL_INCLUDES WITH_PGSQL_LIBS WITH_RE2 WITH_RE2_INCLUDES WITH_RE2_LIBS
+		 WITH_RE2_ROOT WITH_RLP WITH_STEMMER WITH_ZLIB )
 
 set ( CONFIGURE_FLAGS "Configured with CMake with these definitions:" )
 FOREACH ( OPTION ${BANNER} )

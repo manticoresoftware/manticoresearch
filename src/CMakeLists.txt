@@ -135,6 +135,10 @@ if ( BUILD_TESTING )
 	if ( WIN32 )
 		add_executable ( testrt testrt.cpp )
 		target_link_libraries ( testrt libsphinx ${EXTRA_LIBRARIES} )
+		add_test ( NAME "\"Internal rt src/tests\""
+			#	    	CONFIGURATIONS Debug
+				WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+				COMMAND "testrt" )
 	endif ( WIN32 )
 	add_test ( NAME "\"Internal src/tests\""
 			#    	CONFIGURATIONS Debug

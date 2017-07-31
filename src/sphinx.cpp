@@ -14835,6 +14835,9 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 
 	// start counting
 	int64_t tmQueryStart = sphMicroTimer();
+	int64_t tmMaxTimer = 0;
+	if ( pQuery->m_uMaxQueryMsec>0 )
+		tmMaxTimer = sphMicroTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
 
 	ScopedThreadPriority_c tPrio ( pQuery->m_bLowPriority );
 
@@ -14967,7 +14970,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 			}
 			int iDocinfoStep = bReverse ? -(int)uStride : (int)uStride;
 
-			if ( !tCtx.m_pOverrides && tCtx.m_pFilter && !pQuery->m_iCutoff && !tCtx.m_dCalcFilter.GetLength() && !tCtx.m_dCalcSort.GetLength() )
+			if ( !tCtx.m_pOverrides && tCtx.m_pFilter && !pQuery->m_iCutoff && !tCtx.m_dCalcFilter.GetLength() && !tCtx.m_dCalcSort.GetLength() && !tmMaxTimer )
 			{
 				// kinda fastpath
 				for ( const DWORD * pDocinfo=pBlockStart; pDocinfo!=pBlockEnd; pDocinfo+=iDocinfoStep )
@@ -15020,6 +15023,14 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 					// handle cutoff
 					if ( bNewMatch && --iCutoff==0 )
 					{
+						iIndexEntry = iEnd - iStep; // outer break
+						break;
+					}
+
+					// handle timer
+					if ( tmMaxTimer && sphMicroTimer()>=tmMaxTimer )
+					{
+						pResult->m_sWarning = "query time exceeded max_query_time";
 						iIndexEntry = iEnd - iStep; // outer break
 						break;
 					}

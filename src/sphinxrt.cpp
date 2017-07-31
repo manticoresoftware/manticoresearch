@@ -7475,6 +7475,14 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 					if ( bNewMatch )
 						if ( --iCutoff==0 )
 							break;
+
+					// handle timer
+					if ( tmMaxTimer && sphMicroTimer()>=tmMaxTimer )
+					{
+						pResult->m_sWarning = "query time exceeded max_query_time";
+						iSeg = tGuard.m_dRamChunks.GetLength() - 1;	// outer break
+						break;
+					}
 				}
 
 				if ( iCutoff==0 )

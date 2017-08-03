@@ -115,12 +115,6 @@ if ( SPLIT_SYMBOLS )
 	install_dbg ( searchd )
 	install_dbg ( spelldump )
 	install_dbg ( wordbreaker )
-	INSTALL ( PROGRAMS $<TARGET_FILE:indexer>
-			$<TARGET_FILE:indextool>
-			$<TARGET_FILE:searchd>
-			$<TARGET_FILE:spelldump>
-			$<TARGET_FILE:wordbreaker>
-			DESTINATION bin COMPONENT APPLICATIONS )
 else()
 	INSTALL ( TARGETS indexer indextool searchd spelldump wordbreaker RUNTIME DESTINATION bin COMPONENT APPLICATIONS )
 endif ( SPLIT_SYMBOLS )

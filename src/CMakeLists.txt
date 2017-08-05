@@ -50,7 +50,19 @@ add_custom_target (
 include_directories ( "${MANTICORE_BINARY_DIR}/config" )
 add_definitions ( "-DBUILD_WITH_CMAKE" )
 
-#message (STATUS "Extra libraries:${EXTRA_LIBRARIES}")
+add_custom_target (
+		tarball
+		COMMAND ${CMAKE_COMMAND}
+		-D SOURCE_DIR=${CMAKE_SOURCE_DIR}
+		-D BINARY_DIR=${CMAKE_BINARY_DIR}
+		-D USE_BISON=${USE_BISON}
+		-D USE_FLEX=${USE_FLEX}
+		-P ${CMAKE_SOURCE_DIR}/cmake/mktarball.cmake
+		COMMENT "Making tarball source archive"
+		VERBATIM
+		SOURCES ${CMAKE_SOURCE_DIR}/cmake/mktarball.cmake
+)
+add_dependencies ( tarball vergen )
 
 # add the extra targets in the case we want on-the-fly grammar compiler
 if ( USE_BISON )
@@ -74,6 +86,18 @@ if ( USE_BISON )
 	set_property ( SOURCE sphinxjson.cpp APPEND PROPERTY
 			OBJECT_DEPENDS ${BISON_JsonParser_OUTPUT_SOURCE} )
 
+	# also add dependencies for tarball (to always have fresh grammar inside)
+	set_property ( SOURCE ${CMAKE_SOURCE_DIR}/cmake/mktarball.cmake APPEND PROPERTY
+			OBJECT_DEPENDS ${BISON_ExprParser_OUTPUTS} )
+	set_property ( SOURCE ${CMAKE_SOURCE_DIR}/cmake/mktarball.cmake APPEND PROPERTY
+			OBJECT_DEPENDS ${BISON_SelectParser_OUTPUTS} )
+	set_property ( SOURCE ${CMAKE_SOURCE_DIR}/cmake/mktarball.cmake APPEND PROPERTY
+			OBJECT_DEPENDS ${BISON_QueryParser_OUTPUTS} )
+	set_property ( SOURCE ${CMAKE_SOURCE_DIR}/cmake/mktarball.cmake APPEND PROPERTY
+			OBJECT_DEPENDS ${BISON_SQLParser_OUTPUTS} )
+	set_property ( SOURCE ${CMAKE_SOURCE_DIR}/cmake/mktarball.cmake APPEND PROPERTY
+			OBJECT_DEPENDS ${BISON_JsonParser_OUTPUTS} )
+
 endif ( USE_BISON )
 
 # add the extra targets in the case we want on-the-fly lex compiler
@@ -88,11 +112,16 @@ if ( USE_FLEX )
 	set_property ( SOURCE sphinxjson.cpp APPEND PROPERTY
 			OBJECT_DEPENDS ${FLEX_Jsonlex_OUTPUTS} )
 
+	# also add dependencies for tarball (to always have fresh parsers inside)
+	set_property ( SOURCE SOURCE ${CMAKE_SOURCE_DIR}/cmake/mktarball.cmake APPEND PROPERTY
+			OBJECT_DEPENDS ${FLEX_SQLlex_OUTPUTS} )
+	set_property ( SOURCE SOURCE ${CMAKE_SOURCE_DIR}/cmake/mktarball.cmake APPEND PROPERTY
+			OBJECT_DEPENDS ${FLEX_Jsonlex_OUTPUTS} )
+
 endif ( USE_FLEX )
 
 # our mega-lib
 add_library ( libsphinx STATIC ${LIBSPHINX_SRCS} ${HEADERS} ${GHEADERS} ${LIBSPHINX_BISON} ${LIBSPHINX_FLEX} )
-
 add_dependencies ( libsphinx vergen )
 
 # our executables

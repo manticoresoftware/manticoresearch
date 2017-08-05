@@ -502,17 +502,4 @@ add_subdirectory ( src )
 add_subdirectory ( test )
 
 
-add_custom_target (
-		tarball
-		COMMAND ${CMAKE_COMMAND}
-		-D SOURCE_DIR=${CMAKE_SOURCE_DIR}
-		-D BINARY_DIR=${CMAKE_BINARY_DIR}
-		-P ${CMAKE_SOURCE_DIR}/cmake/mktarball.cmake
-		COMMENT "Making tarball source archive"
-		VERBATIM
-		SOURCES ${CMAKE_SOURCE_DIR}/cmake/mktarball.cmake
-)
-
-add_dependencies ( tarball vergen )
-
 include ( CPack )

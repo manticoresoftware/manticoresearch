@@ -173,7 +173,7 @@ echo
 echo "See the manual at /usr/share/doc/manticore-%{version} for details."
 echo
 echo "For commercial support please contact Manticore Software Ltd at"
-echo "http://manticoresearch.com/contacts.html"
+echo "https://manticoresearch.com/contact/"
 echo
 
 %preun

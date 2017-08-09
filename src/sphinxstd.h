@@ -2168,7 +2168,7 @@ protected:
 };
 
 template < typename T >
-class SphStringBuilder_T : public StringBuilder_c
+class EscapedStringBuilder_T : public StringBuilder_c
 {
 public:
 
@@ -2212,22 +2212,6 @@ public:
 	}
 };
 
-
-struct EscapeQuotation_t
-{
-	static bool IsEscapeChar ( char c )
-	{
-		return ( c=='\\' || c=='\'' );
-	}
-
-	static char GetEscapedChar ( char c )
-	{
-		return c;
-	}
-};
-
-
-typedef SphStringBuilder_T<EscapeQuotation_t> CSphStringBuilder;
 
 /////////////////////////////////////////////////////////////////////////////
 

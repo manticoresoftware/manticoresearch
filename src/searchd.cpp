@@ -4422,13 +4422,30 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 //////////////////////////////////////////////////////////////////////////
 
+struct EscapeQuotation_t
+{
+	static bool IsEscapeChar ( char c )
+	{
+		return ( c=='\\' || c=='\'' );
+	}
+
+	static char GetEscapedChar ( char c )
+	{
+		return c;
+	}
+};
+
+
+using QuotationEscapedBuilder = EscapedStringBuilder_T<EscapeQuotation_t>;
+
+
 void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 {
 	assert ( g_eLogFormat==LOG_FORMAT_PLAIN );
 	if ( ( !g_bQuerySyslog && g_iQueryLogFile<0 ) || !tRes.m_sError.IsEmpty() )
 		return;
 
-	CSphStringBuilder tBuf;
+	QuotationEscapedBuilder tBuf;
 
 	// [time]
 #if USE_SYSLOG
@@ -4873,7 +4890,7 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes
 	if ( g_iQueryLogFile<0 )
 		return;
 
-	CSphStringBuilder tBuf;
+	QuotationEscapedBuilder tBuf;
 
 	// time, conn id, wall, found
 	int iQueryTime = Max ( tRes.m_iQueryTime, 0 );

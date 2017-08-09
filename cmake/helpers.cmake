@@ -256,6 +256,7 @@ function ( GET_SONAME RAWLIB OUTVAR )
 			if ( NOT DEFINED CMAKE_OBJDUMP )
 				find_program ( CMAKE_OBJDUMP objdump )
 			endif ()
+			mark_as_advanced ( CMAKE_OBJDUMP BinUtils_DIR )
 			execute_process ( COMMAND "${CMAKE_OBJDUMP}" -p "${RAWLIB}"
 					WORKING_DIRECTORY "${SOURCE_DIR}"
 					RESULT_VARIABLE res

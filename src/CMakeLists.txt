@@ -153,6 +153,16 @@ else()
 endif ( SPLIT_SYMBOLS )
 
 if ( NOT DISABLE_TESTING )
+	# Read docs at https://github.com/google/googletest.git
+	include ( GetGoogletest )
+	if ( HAVE_GOOGLETEST )
+		set ( GTESTS_SRC gtests_rtstuff.cpp gtests_tokenizer.cpp gtests_text.cpp gtests_functions.cpp gtests_globalstate.cpp )
+		add_executable ( gmanticoretest ${GTESTS_SRC} )
+		target_link_libraries ( gmanticoretest gmock_main libsphinx ${EXTRA_LIBRARIES} )
+		find_package ( GTest QUIET )
+		GTEST_ADD_TESTS ( gmanticoretest "" AUTO )
+	endif ( HAVE_GOOGLETEST )
+
 	add_executable ( tests ${TESTS_SRCS} )
 	target_link_libraries ( tests libsphinx ${EXTRA_LIBRARIES} )
 	if ( SPLIT_SYMBOLS )

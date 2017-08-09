@@ -6,7 +6,7 @@
 
 #include "sphinxint.h"
 
-TEST (SHATests, stringbuilder) {
+TEST (StringBuilder, stringbuilder) {
 	StringBuilder_c builder;
 
 	builder += "Hello";
@@ -14,7 +14,6 @@ TEST (SHATests, stringbuilder) {
 	ASSERT_STREQ ( builder.cstr (), "Hello");
 
 }
-
 
 struct EscapeQuotation_t
 {
@@ -29,10 +28,9 @@ struct EscapeQuotation_t
 	}
 };
 
-
 using QuotationEscapedBuilder = EscapedStringBuilder_T<EscapeQuotation_t>;
 
-TEST( SHATests, EscapedBuildertest )
+TEST( StringBuilder, EscapedBuildertest )
 {
 	QuotationEscapedBuilder tBuilder;
 	tBuilder.AppendEscaped ("Hello");
@@ -40,6 +38,18 @@ TEST( SHATests, EscapedBuildertest )
 
 	tBuilder.AppendEscaped (" wo\\rl\'d");
 	ASSERT_STREQ ( tBuilder.cstr(), "Hello wo\\\\rl\\'d");
+
+	tBuilder.Clear ();
+	tBuilder.AppendEscaped("wo\\rl\'d",false);
+	ASSERT_STREQ ( tBuilder.cstr(), "wo\\rl\'d");
+
+	tBuilder.Clear();
+	tBuilder.AppendEscaped("space\t and\r tab\n here",false,false);
+	ASSERT_STREQ ( tBuilder.cstr (), "space\t and\r tab\n here" );
+
+	tBuilder.Clear ();
+	tBuilder.AppendEscaped ( "space\t and\r tab\n here");
+	ASSERT_STREQ ( tBuilder.cstr (), "space  and  tab  here" );
 }
 
 TEST( SHATests, TaggedHash20_t )

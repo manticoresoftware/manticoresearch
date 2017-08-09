@@ -2179,11 +2179,8 @@ public:
 
 		const char * pBuf = sText;
 		int iEsc = 0;
-		for ( ; *pBuf; )
-		{
-			char s = *pBuf++;
-			iEsc = ( bEscape && T::IsEscapeChar ( s ) ? ( iEsc + 1 ) : iEsc );
-		}
+		for ( ; *pBuf; pBuf++ )
+			iEsc += bEscape && T::IsEscapeChar ( *pBuf );
 
 		int iLen = pBuf - sText + iEsc;
 		int iLeft = m_iSize - m_iUsed;
@@ -2192,19 +2189,18 @@ public:
 
 		pBuf = sText;
 		char * pCur = m_sBuffer + m_iUsed;
-		for ( ; *pBuf; )
+		for ( char s = *pBuf; s; s=*++pBuf, ++pCur )
 		{
-			char s = *pBuf++;
 			if ( bEscape && T::IsEscapeChar ( s ) )
 			{
 				*pCur++ = '\\';
-				*pCur++ = T::GetEscapedChar ( s );
-			} else if ( bFixupSpace && ( s==' ' || s=='\t' || s=='\n' || s=='\r' ) )
+				*pCur = T::GetEscapedChar ( s );
+			} else if ( bFixupSpace && ( s=='\t' || s=='\n' || s=='\r' ) )
 			{
-				*pCur++ = ' ';
+				*pCur = ' ';
 			} else
 			{
-				*pCur++ = s;
+				*pCur = s;
 			}
 		}
 		*pCur = '\0';

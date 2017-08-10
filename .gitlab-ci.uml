@@ -1,0 +1,7 @@
+dev:
+  script:
+    - cd path/to/dev
+    - mkdir build
+    - cd build
+    - cmake ..
+    - make -j8

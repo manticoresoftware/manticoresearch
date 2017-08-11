@@ -1,7 +1,6 @@
 dev:
   script:
-    - cd path/to/dev
-    - mkdir build
-    - cd build
+    - rm -R build/ || /bin/true
+    - mkdir build && cd build
     - cmake ..
     - make -j8

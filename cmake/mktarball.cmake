@@ -1,6 +1,26 @@
 include ( "${BINARY_DIR}/config/CPackOptions.cmake" )
 
-set ( FNAME "${TARBALL_FILE_NAME}" )
+macro( packbis src )
+	if ( USE_BISON )
+		configure_file ( "${BINARY_DIR}/config/bis${src}.c"
+				"${PACKDIR}/src/yy${src}.c" COPYONLY )
+		configure_file ( "${BINARY_DIR}/config/bis${src}.h"
+				"${PACKDIR}/src/yy${src}.h" COPYONLY )
+	endif ()
+endmacro()
+
+macro( packflex src )
+	if ( USE_FLEX )
+		configure_file ( "${BINARY_DIR}/config/flex${src}.c"
+				"${PACKDIR}/src/ll${src}.c" COPYONLY )
+	endif ()
+endmacro()
+
+if ( WITH_STEMMER )
+	set (SUFFIX -stemmer)
+endif()
+
+set ( FNAME "${TARBALL_FILE_NAME}${SUFFIX}" )
 set ( PACKDIR "${BINARY_DIR}/sources/${FNAME}" )
 
 file (COPY ${SOURCE_DIR}/ DESTINATION ${PACKDIR}
@@ -12,21 +32,27 @@ file (COPY ${SOURCE_DIR}/ DESTINATION ${PACKDIR}
 configure_file ("${BINARY_DIR}/config/gen_sphinxversion.h"
 		"${PACKDIR}/src/sphinxversion.h" COPYONLY )
 
-macro (packbis src)
-	if ( USE_BISON )
-		configure_file ( "${BINARY_DIR}/config/bis${src}.c"
-				"${PACKDIR}/src/yy${src}.c" COPYONLY )
-		configure_file ( "${BINARY_DIR}/config/bis${src}.h"
-				"${PACKDIR}/src/yy${src}.h" COPYONLY )
-	endif()
-endmacro()
+if ( WITH_STEMMER AND STEMMER_BASEDIR )
+	message ( STATUS "Embedd stemmer sources... ${STEMMER_BASEDIR}" )
+	file ( COPY ${STEMMER_BASEDIR}/ DESTINATION ${PACKDIR}/libstemmer_c
+			PATTERN "CMakeFiles" EXCLUDE
+			PATTERN "CTestTestfile.cmake" EXCLUDE
+			PATTERN "cmake_install.cmake" EXCLUDE
+			PATTERN "CMakeLists.txt" EXCLUDE
+			)
+endif()
 
-macro( packflex src )
-	if ( USE_FLEX )
-		configure_file ( "${BINARY_DIR}/config/flex${src}.c"
-				"${PACKDIR}/src/ll${src}.c" COPYONLY )
-	endif ()
-endmacro()
+if ( WITH_RE2 AND RE2_BASEDIR )
+	message ( STATUS "Embedd RE2 sources... ${RE2_BASEDIR}" )
+	file ( COPY ${RE2_BASEDIR}/ DESTINATION ${PACKDIR}/libre2
+			PATTERN "CMakeFiles" EXCLUDE
+			PATTERN "CTestTestfile.cmake" EXCLUDE
+			PATTERN "cmake_install.cmake" EXCLUDE
+			PATTERN "CMakeLists.txt" EXCLUDE
+			PATTERN "*.a" EXCLUDE
+			)
+endif ()
+
 
 packbis ( sphinxexpr )
 packbis ( sphinxjson )

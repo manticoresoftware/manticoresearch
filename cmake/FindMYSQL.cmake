@@ -39,7 +39,6 @@
 #	MySQL Include dir: MYSQL_INCLUDE_DIR
 #	MySQL Library dir: MYSQL_LIB_DIR
 #	MySQL CXXFLAGS: MYSQL_CXXFLAGS
-#	MySQL Link flags: MYSQL_LINK_FLAGS
 #	MySQL dynamic load test library: MYSQLCPPCONN_DYNLOAD_MYSQL_LIB
 
 #=============================================================================
@@ -87,7 +86,6 @@ IF ( MYSQL_CONFIG_EXECUTABLE )
 	EXECUTE_PROCESS ( COMMAND ${MYSQL_CONFIG_EXECUTABLE} "--cflags"
 			OUTPUT_VARIABLE _mysql_config_output
 			)
-	STRING ( REGEX MATCHALL "-m([^\r\n]+)" MYSQL_LINK_FLAGS "${_mysql_config_output}" )
 	STRING ( REGEX REPLACE "[\r\n]$" "" MYSQL_CXXFLAGS "${_mysql_config_output}" )
 	#	ADD_DEFINITIONS("${MYSQL_CXXFLAGS}")
 ELSE ( MYSQL_CONFIG_EXECUTABLE )
@@ -145,7 +143,6 @@ IF ( MYSQL_INCLUDE_DIR AND MYSQL_LIB_DIR )
 	MESSAGE ( STATUS "MySQL Library    : ${MYSQL_LIBRARIES}" )
 	MESSAGE ( STATUS "MySQL Library dir: ${MYSQL_LIB_DIR}" )
 	MESSAGE ( STATUS "MySQL CXXFLAGS: ${MYSQL_CXXFLAGS}" )
-	MESSAGE ( STATUS "MySQL Link flags: ${MYSQL_LINK_FLAGS}" )
 	MESSAGE ( STATUS "MySQL Library Name   : ${MYSQL_LIB}" )
 
 	SET ( MYSQL_FOUND TRUE )

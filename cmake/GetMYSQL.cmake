@@ -27,9 +27,9 @@ if ( MYSQL_FOUND )
 	# -DNDEBUG we set or reset on global level, so purge it from myqsl flags
 	string ( REPLACE "-DNDEBUG" "" MYSQL_CXXFLAGS "${MYSQL_CXXFLAGS}" )
 	# keep only defs, include paths and libs
-	string ( REGEX MATCHALL "-[DLIl]([^ ]+)" MYSQL_CXXFLAGS "${MYSQL_CXXFLAGS}" )
+	string ( REGEX MATCHALL " -[DLIl]([^ ]+)" MYSQL_CXXFLAGS " ${MYSQL_CXXFLAGS}" )
 	# convert list after MATCHALL back to plain string
-	string ( REGEX REPLACE ";" " " MYSQL_CXXFLAGS "${MYSQL_CXXFLAGS}" )
+	string ( REGEX REPLACE ";" "" MYSQL_CXXFLAGS "${MYSQL_CXXFLAGS}" )
 
 	if ( MYSQL_CXXFLAGS )
 		set ( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${MYSQL_CXXFLAGS}" )

@@ -9608,7 +9608,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttr
 		return false;
 
 	// generate a new .SPA file
-	CSphWriter tSPAWriter;
+	WriterWithHash_c tSPAWriter ( "spa", nullptr );
 	tSPAWriter.SetBufferSize ( 524288 );
 	CSphString sSPAfile = GetIndexFileName ( "spa.tmpnew" );
 	if ( !tSPAWriter.OpenFile ( sSPAfile, sError ) )
@@ -18516,6 +18516,54 @@ public:
 	}
 };
 
+//////////////////////////////////////////////////////////////////////////
+// WriterWithHash_c - CSphWriter which also calc SHA1 on-the-fly
+//////////////////////////////////////////////////////////////////////////
+
+WriterWithHash_c::WriterWithHash_c ( const char * sExt, HashCollection_c * pCollector)
+	: m_pCollection { pCollector }
+	, m_sExt { sExt }
+{
+	m_pHasher = new SHA1_c;
+	m_pHasher->Init();
+}
+
+WriterWithHash_c::~WriterWithHash_c ()
+{
+	SafeDelete ( m_pHasher );
+}
+
+void WriterWithHash_c::Flush()
+{
+	assert ( !m_bHashDone ); // can't do anything with already finished hash
+	if ( m_iPoolUsed>0 )
+	{
+		m_pHasher->Update ( m_pBuffer, m_iPoolUsed );
+		CSphWriter::Flush();
+	}
+}
+
+/*const BYTE * WriterWithHash_c::GetHASHBlob () const
+{
+	assert ( m_bHashDone );
+	return m_dHashValue;
+}*/
+
+void WriterWithHash_c::CloseFile ()
+{
+	assert ( !m_bHashDone );
+	CSphWriter::CloseFile ();
+	m_pHasher->Final ( m_dHashValue );
+	if ( m_pCollection )
+		m_pCollection->AppendNewHash ( m_sExt, m_dHashValue );
+	m_bHashDone = true;
+}
+
+
+//////////////////////////////////////////////////////////////////////////
+// TaggedHash20_t - string tag (filename) with 20-bytes binary hash
+//////////////////////////////////////////////////////////////////////////
+
 const BYTE TaggedHash20_t::m_dZeroHash[HASH20_SIZE] = { 0 };
 
 // by tag + hash
@@ -18591,6 +18639,16 @@ bool TaggedHash20_t::operator== ( const BYTE * pRef ) const
 	assert ( pRef );
 	return !( bool ) memcmp ( m_dHashValue, pRef, HASH20_SIZE );
 }
+
+//////////////////////////////////////////////////////////////////////////
+// HashCollection_c
+//////////////////////////////////////////////////////////////////////////
+
+void HashCollection_c::AppendNewHash ( const char * sExt, const BYTE * pHash )
+{
+	m_dHashes.Add(TaggedHash20_t(sExt,pHash));
+}
+
 //////////////////////////////////////////////////////////////////////////
 // INDEX CHECKING
 //////////////////////////////////////////////////////////////////////////

@@ -2507,6 +2507,9 @@ inline void FlipEndianess ( DWORD* pData )
 /// SHA1 digests
 static const int HASH20_SIZE = 20;
 static const int SHA1_SIZE = HASH20_SIZE;
+class SHA1_c;
+
+
 
 // string and 20-bytes hash
 struct TaggedHash20_t
@@ -2515,7 +2518,7 @@ struct TaggedHash20_t
 	BYTE m_dHashValue[HASH20_SIZE] = { 0 };
 
 	// by tag + hash
-	explicit TaggedHash20_t ( const char* sTag, const BYTE* pHashValue = nullptr );
+	explicit TaggedHash20_t ( const char* sTag = nullptr, const BYTE* pHashValue = nullptr );
 
 	// convert to FIPS-180-1
 	CSphString ToFIPS() const;
@@ -2526,13 +2529,43 @@ struct TaggedHash20_t
 	// compare with raw hash
 	bool operator== ( const BYTE * pRef ) const;
 
-	inline bool Empty() const
-	{
-		return *this==m_dZeroHash;
-	}
+	inline bool Empty() const { return *this==m_dZeroHash; }
 
 	// helper zero hash
 	static const BYTE m_dZeroHash[HASH20_SIZE];
+};
+
+// set of tagged hashes
+class HashCollection_c
+{
+	CSphVector<TaggedHash20_t> m_dHashes;
+public:
+	void AppendNewHash ( const char* sExt, const BYTE* pHash);
+
+};
+
+// file writer with hashing on-the-fly.
+class WriterWithHash_c : public CSphWriter
+{
+public:
+	WriterWithHash_c ( const char* sExt, HashCollection_c* pCollector );
+	~WriterWithHash_c ();
+
+	virtual void Flush () override;
+	void CloseFile ();
+
+	// get resulting BLOB, is valid only after StopHashing()
+	//const BYTE * GetHASHBlob () const;
+
+private:
+	//void StopHashing ();
+
+	HashCollection_c * m_pCollection;
+	const char * m_sExt;
+
+	SHA1_c * m_pHasher;
+	bool m_bHashDone = false;
+	BYTE m_dHashValue[HASH20_SIZE] = { 0 };
 };
 
 

@@ -20832,7 +20832,7 @@ private:
 			// 3k qps for net-loop without spin-wait
 			// 5k qps for net-loop with spin-wait
 			int iSpinWait = 0;
-			if ( g_tmWait>0 && sphMicroTimer()-tmLastWait>I64C(10000)*g_tmWait )
+			if ( g_tmWait==-1 || ( g_tmWait>0 && sphMicroTimer()-tmLastWait>I64C(10000)*g_tmWait ) )
 				iSpinWait = 1;
 
 			m_tPrf.StartPoll();

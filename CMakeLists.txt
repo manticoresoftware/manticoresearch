@@ -81,6 +81,9 @@ set ( PKGSUFFIXES ) # list of suffixes which will be append to package name, wil
 set ( PACKAGE_NAME  "manticore")
 set ( COMPANY_NAME "Manticore Software LTD")
 
+message ( STATUS "Checking for endianess" )
+include ( SphEndianess )
+
 if ( WIN32 )
 	# on Win we skip all the tests and just use pre-defined folder
 	include ( select_library_dir )
@@ -169,8 +172,6 @@ else ( WIN32 )
 
 	message ( STATUS "Checking for gcc version" )
 	include ( check_veryold_gcc )
-	message ( STATUS "Checking for endianess" )
-	include ( SphEndianess )
 
 	if ( "${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang" )
 		set ( HAVE_GCC_LIKE ON )

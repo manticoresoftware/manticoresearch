@@ -1073,7 +1073,7 @@ set_global_stmt:
 			pParser->SetStatement ( $3, SET_GLOBAL_SVAR );
 			pParser->ToString ( pParser->m_pStmt->m_sSetValue, $5 ).Unquote();
 		}
-	| TOK_SET TOK_GLOBAL ident_set '=' TOK_CONST_INT
+	| TOK_SET TOK_GLOBAL ident_set '=' const_int
 		{
 			pParser->SetStatement ( $3, SET_GLOBAL_SVAR );
 			pParser->m_pStmt->m_iSetValue = $5.m_iValue;

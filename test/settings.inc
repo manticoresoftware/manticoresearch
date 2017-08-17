@@ -224,7 +224,7 @@ function PublishLocals ( &$locals, $benchmark )
 
 	if ( $windows ) {
 		$ext = ".exe";
-		$pref = $benchmark ? "RelWithDebInfo\\" : "Debug\\";
+		$pref = $benchmark ? "RelWithDebInfo\\" : "";
 	} else
 	{
 		$ext = '';

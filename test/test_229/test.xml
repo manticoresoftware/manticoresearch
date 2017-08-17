@@ -50,6 +50,11 @@ index rt
 <sphinxql>SHOW STATUS LIKE 'qcache_cached%'</sphinxql>
 <sphinxql>SHOW STATUS LIKE 'qcache_hits%'</sphinxql>
 <sphinxql>SELECT *,WEIGHT() FROM rt WHERE MATCH('another') OPTION ranker=expr('-1')</sphinxql>
+
+<!-- regression negative value for set global -->
+<sphinxql>SET GLOBAL query_log_min_msec=-1</sphinxql>
+<sphinxql>SET GLOBAL query_log_min_msec=1</sphinxql>
+<sphinxql>SET GLOBAL query_log_min_msec=0</sphinxql>
 </sphqueries>
 
 </test>

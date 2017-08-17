@@ -1258,6 +1258,136 @@ public:
 };
 
 
+template <typename T>
+T JsonAggr ( ESphJsonType eJson, const BYTE * pVal, ESphAggrFunc eFunc, CSphString * pBuf )
+{
+	if ( !pVal || ( eFunc!=SPH_AGGR_MIN && eFunc!=SPH_AGGR_MAX ) )
+		return 0;
+
+	switch ( eJson )
+	{
+	case JSON_INT32_VECTOR:
+		{
+			int iVals = sphJsonUnpackInt ( &pVal );
+			if ( iVals==0 )
+				return 0;
+
+			const int * p = (const int*) pVal;
+			int iRes = *p; // first value
+
+			switch ( eFunc )
+			{
+			case SPH_AGGR_MIN: while ( --iVals ) if ( *++p<iRes ) iRes = *p; break;
+			case SPH_AGGR_MAX: while ( --iVals ) if ( *++p>iRes ) iRes = *p; break;
+			default: return 0;
+			}
+			return (T)iRes;
+		}
+	case JSON_DOUBLE_VECTOR:
+		{
+			int iLen = sphJsonUnpackInt ( &pVal );
+			if ( !iLen || ( eFunc!=SPH_AGGR_MIN && eFunc!=SPH_AGGR_MAX ) )
+				return 0;
+
+			double fRes = ( eFunc==SPH_AGGR_MIN ? FLT_MAX : FLT_MIN );
+			const BYTE * p = pVal;
+			for ( int i=0; i<iLen; i++ )
+			{
+				double fStored = sphQW2D ( sphJsonLoadBigint ( &p ) );
+				switch ( eFunc )
+				{
+				case SPH_AGGR_MIN:
+					fRes = Min ( fRes, fStored );
+					break;
+				case SPH_AGGR_MAX:
+					fRes = Max ( fRes, fStored );
+					break;
+				default: return 0;
+				}
+			}
+			return (T)fRes;
+		}
+	case JSON_STRING_VECTOR:
+		{
+			if ( !pBuf )
+				return 0;
+
+			sphJsonUnpackInt ( &pVal ); // skip node length
+
+			int iVals = sphJsonUnpackInt ( &pVal );
+			if ( iVals==0 )
+				return 0;
+
+			// first value
+			int iLen = sphJsonUnpackInt ( &pVal );
+			const char * pRes = (const char* )pVal;
+			int iResLen = iLen;
+
+			while ( --iVals )
+			{
+				pVal += iLen;
+				iLen = sphJsonUnpackInt ( &pVal );
+
+				// binary string comparison
+				int iCmp = memcmp ( pRes, (const char*)pVal, iLen<iResLen ? iLen : iResLen );
+				if ( iCmp==0 && iLen!=iResLen )
+					iCmp = iResLen-iLen;
+
+				if ( ( eFunc==SPH_AGGR_MIN && iCmp>0 ) || ( eFunc==SPH_AGGR_MAX && iCmp<0 ) )
+				{
+					pRes = (const char*)pVal;
+					iResLen = iLen;
+				}
+			}
+
+			pBuf->SetBinary ( pRes, iResLen );
+			return (T)iResLen;
+		}
+	case JSON_MIXED_VECTOR:
+		{
+			sphJsonUnpackInt ( &pVal ); // skip node length
+			int iLen = sphJsonUnpackInt ( &pVal );
+			if ( !iLen || ( eFunc!=SPH_AGGR_MIN && eFunc!=SPH_AGGR_MAX ) )
+				return 0;
+
+			double fRes = ( eFunc==SPH_AGGR_MIN ? FLT_MAX : FLT_MIN );
+			for ( int i=0; i<iLen; i++ )
+			{
+				double fVal = ( eFunc==SPH_AGGR_MIN ? FLT_MAX : FLT_MIN );
+
+				ESphJsonType eType = (ESphJsonType)*pVal++;
+				switch (eType)
+				{
+					case JSON_INT32:
+					case JSON_INT64:
+						fVal = (double)( eType==JSON_INT32 ? sphJsonLoadInt ( &pVal ) : sphJsonLoadBigint ( &pVal ) );
+					break;
+					case JSON_DOUBLE:
+						fVal = sphQW2D ( sphJsonLoadBigint ( &pVal ) );
+						break;
+					default:
+						sphJsonSkipNode ( eType, &pVal );
+						break; // for weird subobjects, just let min
+				}
+
+				switch ( eFunc )
+				{
+				case SPH_AGGR_MIN:
+					fRes = Min ( fRes, fVal );
+					break;
+				case SPH_AGGR_MAX:
+					fRes = Max ( fRes, fVal );
+					break;
+				default: return 0;
+				}
+			}
+			return (T)fRes;
+		}
+	default: return 0;
+	}
+}
+
+
 struct Expr_JsonFieldAggr_c : public Expr_JsonFieldConv_c
 {
 protected:
@@ -1273,29 +1403,7 @@ public:
 	{
 		const BYTE * pVal = NULL;
 		ESphJsonType eJson = GetKey ( &pVal, tMatch );
-		switch ( eJson )
-		{
-		case JSON_INT32_VECTOR:
-			{
-				int iVals = sphJsonUnpackInt ( &pVal );
-				if ( iVals==0 )
-					return 0;
-
-				const int * p = (const int*) pVal;
-				int iRes = *p; // first value
-
-				switch ( m_eFunc )
-				{
-				case SPH_AGGR_MIN: while ( --iVals ) if ( *++p<iRes ) iRes = *p; break;
-				case SPH_AGGR_MAX: while ( --iVals ) if ( *++p>iRes ) iRes = *p; break;
-				default:
-					return 0;
-				}
-				return iRes;
-			}
-		default:
-			return 0;
-		}
+		return JsonAggr<int> ( eJson, pVal, m_eFunc, NULL );
 	}
 
 	virtual int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
@@ -1304,63 +1412,56 @@ public:
 		*ppStr = NULL;
 		const BYTE * pVal = NULL;
 		ESphJsonType eJson = GetKey ( &pVal, tMatch );
+
+		int iLen = 0;
+		int iVal = 0;
+		float fVal = 0.0f;
+		
 		switch ( eJson )
 		{
 		case JSON_INT32_VECTOR:
-			sBuf.SetSprintf ( "%u", IntEval ( tMatch ) );
+			iVal = JsonAggr<int> ( eJson, pVal, m_eFunc, NULL );
+			sBuf.SetSprintf ( "%u", iVal );
+			iLen = sBuf.Length();
 			*ppStr = (const BYTE *) sBuf.Leak();
-			return strlen ( (const char*) *ppStr );
+			return iLen;
 
 		case JSON_STRING_VECTOR:
-			{
-				sphJsonUnpackInt ( &pVal ); // skip node length
+			JsonAggr<int> ( eJson, pVal, m_eFunc, &sBuf );
+			iLen = sBuf.Length();
+			*ppStr = (const BYTE *) sBuf.Leak();
+			return iLen;
 
-				int iVals = sphJsonUnpackInt ( &pVal );
-				if ( iVals==0 )
-					return 0;
+		case JSON_DOUBLE_VECTOR:
+			fVal = JsonAggr<float> ( eJson, pVal, m_eFunc, NULL );
+			sBuf.SetSprintf ( "%f", fVal );
+			iLen = sBuf.Length();
+			*ppStr = (const BYTE *) sBuf.Leak();
+			return iLen;
 
-				switch ( m_eFunc )
-				{
-				case SPH_AGGR_MIN:
-				case SPH_AGGR_MAX:
-					{
-						// first value
-						int iLen = sphJsonUnpackInt ( &pVal );
-						const char *pRes = (const char*) pVal;
-						int iResLen = iLen;
+		case JSON_MIXED_VECTOR:
+			fVal = JsonAggr<float> ( eJson, pVal, m_eFunc, NULL );
+			sBuf.SetSprintf ( "%f", fVal );
+			iLen = sBuf.Length();
+			*ppStr = (const BYTE *) sBuf.Leak();
+			return iLen;
 
-						while ( --iVals )
-						{
-							pVal += iLen;
-							iLen = sphJsonUnpackInt ( &pVal );
-
-							// binary string comparison
-							int iCmp = memcmp ( pRes, (const char*)pVal, iLen<iResLen ? iLen : iResLen );
-							if ( iCmp==0 && iLen!=iResLen )
-								iCmp = iResLen-iLen;
-
-							if ( ( m_eFunc==SPH_AGGR_MIN && iCmp>0 ) || ( m_eFunc==SPH_AGGR_MAX && iCmp<0 ) )
-							{
-								pRes = (const char*)pVal;
-								iResLen = iLen;
-							}
-						}
-
-						sBuf.SetBinary ( pRes, iResLen );
-						*ppStr = (const BYTE *) sBuf.Leak();
-						return iResLen;
-					}
-				default:
-					return 0;
-				}
-			}
-		default:
-			return 0;
+		default: return 0;
 		}
 	}
 
-	virtual float	Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }
-	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t)IntEval ( tMatch ); }
+	virtual float Eval ( const CSphMatch & tMatch ) const
+	{
+		const BYTE * pVal = NULL;
+		ESphJsonType eJson = GetKey ( &pVal, tMatch );
+		return JsonAggr<float> ( eJson, pVal, m_eFunc, NULL );
+	}
+	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const
+	{
+		const BYTE * pVal = NULL;
+		ESphJsonType eJson = GetKey ( &pVal, tMatch );
+		return JsonAggr<int64_t> ( eJson, pVal, m_eFunc, NULL );
+	}
 	virtual bool IsStringPtr() const { return true; }
 
 	virtual uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
@@ -4818,6 +4919,7 @@ public:
 	/// take ownership of arg, pre-evaluate and dismiss turn points
 	Expr_ArgVsConstSet_c ( ISphExpr * pArg, CSphVector<ISphExpr *> & dArgs, int iSkip )
 		: Expr_ArgVsSet_c<T> ( pArg )
+		, m_bFloat ( false )
 	{
 		CSphMatch tDummy;
 		for ( int i=iSkip; i<dArgs.GetLength(); i++ )
@@ -4830,22 +4932,45 @@ public:
 	}
 
 	/// take ownership of arg, and copy that constlist
-	Expr_ArgVsConstSet_c ( ISphExpr * pArg, ConstList_c * pConsts )
+	Expr_ArgVsConstSet_c ( ISphExpr * pArg, ConstList_c * pConsts, bool bKeepFloat )
 		: Expr_ArgVsSet_c<T> ( pArg )
+		, m_bFloat ( false )
 	{
 		if ( !pConsts )
 			return; // can happen on uservar path
 		if ( pConsts->m_eRetType==SPH_ATTR_FLOAT )
 		{
 			m_dValues.Reserve ( pConsts->m_dFloats.GetLength() );
-			ARRAY_FOREACH ( i, pConsts->m_dFloats )
-				m_dValues.Add ( (T)pConsts->m_dFloats[i] );
+			if ( !bKeepFloat )
+			{
+				ARRAY_FOREACH ( i, pConsts->m_dFloats )
+					m_dValues.Add ( (T)pConsts->m_dFloats[i] );
+			} else
+			{
+				m_bFloat = true;
+				ARRAY_FOREACH ( i, pConsts->m_dFloats )
+					m_dValues.Add ( (T) sphF2DW ( pConsts->m_dFloats[i] ) );
+			}
 		} else
 		{
 			m_dValues.Reserve ( pConsts->m_dInts.GetLength() );
 			ARRAY_FOREACH ( i, pConsts->m_dInts )
 				m_dValues.Add ( (T)pConsts->m_dInts[i] );
 		}
+
+		CalcValueHash();
+	}
+
+	/// take ownership of arg, and copy that uservar
+	Expr_ArgVsConstSet_c ( ISphExpr * pArg, UservarIntSet_c * pUservar )
+		: Expr_ArgVsSet_c<T> ( pArg )
+		, m_bFloat ( false )
+	{
+		if ( !pUservar )
+			return; // can happen on uservar path
+		m_dValues.Reserve ( pUservar->GetLength() );
+		for ( int i=0; i<pUservar->GetLength(); i++ )
+			m_dValues.Add ( (T)*(pUservar->Begin() + i) );
 
 		CalcValueHash();
 	}
@@ -4859,6 +4984,7 @@ public:
 protected:
 	CSphVector<T>	m_dValues;
 	uint64_t		m_uValueHash;
+	bool			m_bFloat;
 
 	void CalcValueHash()
 	{
@@ -4952,7 +5078,7 @@ class Expr_In_c : public Expr_ArgVsConstSet_c<T>
 public:
 	/// pre-sort values for binary search
 	Expr_In_c ( ISphExpr * pArg, ConstList_c * pConsts ) :
-		Expr_ArgVsConstSet_c<T> ( pArg, pConsts )
+		Expr_ArgVsConstSet_c<T> ( pArg, pConsts, false )
 	{
 		this->m_dValues.Sort();
 	}
@@ -5018,7 +5144,7 @@ class Expr_MVAIn_c : public Expr_ArgVsConstSet_c<int64_t>, public ExprLocatorTra
 public:
 	/// pre-sort values for binary search
 	Expr_MVAIn_c ( const CSphAttrLocator & tLoc, int iLocator, ConstList_c * pConsts, UservarIntSet_c * pUservar )
-		: Expr_ArgVsConstSet_c<int64_t> ( NULL, pConsts )
+		: Expr_ArgVsConstSet_c<int64_t> ( NULL, pConsts, false )
 		, ExprLocatorTraits_t ( tLoc, iLocator )
 		, m_pMvaPool ( NULL )
 		, m_pUservar ( pUservar )
@@ -5288,18 +5414,17 @@ int64_t Expr_MVAAggr_c<true>::MvaAggr ( const DWORD * pMva, ESphAggrFunc eFunc )
 class Expr_JsonFieldIn_c : public Expr_ArgVsConstSet_c<int64_t>
 {
 public:
-	Expr_JsonFieldIn_c ( ConstList_c * pConsts, UservarIntSet_c * pUservar, ISphExpr * pArg )
-		: Expr_ArgVsConstSet_c<int64_t> ( pArg, pConsts )
-		, m_pUservar ( pUservar )
+	Expr_JsonFieldIn_c ( ConstList_c * pConsts, ISphExpr * pArg )
+		: Expr_ArgVsConstSet_c<int64_t> ( pArg, pConsts, true )
 		, m_pStrings ( NULL )
 	{
-		assert ( !pConsts || !pUservar );
+		assert ( pConsts );
 
 		const char * sExpr = pConsts->m_sExpr.cstr();
 		int iExprLen = pConsts->m_sExpr.Length();
 
-		const int64_t * pFilter = m_pUservar ? m_pUservar->Begin() : m_dValues.Begin();
-		const int64_t * pFilterMax = pFilter + ( m_pUservar ? m_pUservar->GetLength() : m_dValues.GetLength() );
+		const int64_t * pFilter = m_dValues.Begin();
+		const int64_t * pFilterMax = pFilter + m_dValues.GetLength();
 
 		for ( const int64_t * pCur=pFilter; pCur<pFilterMax; pCur++ )
 		{
@@ -5314,16 +5439,19 @@ public:
 			}
 		}
 
-		// consts are handled in Expr_ArgVsConstSet_c, we only need uservars
-		if ( m_pUservar )
-			m_uValueHash = sphFNV64 ( pFilter, (pFilterMax-pFilter)*sizeof(*pFilter) );
+		m_dHashes.Sort();
+	}
 
+	Expr_JsonFieldIn_c ( UservarIntSet_c * pUserVar, ISphExpr * pArg )
+		: Expr_ArgVsConstSet_c<int64_t> ( pArg, pUserVar )
+		, m_pStrings ( NULL )
+	{
+		assert ( pUserVar );
 		m_dHashes.Sort();
 	}
 
 	~Expr_JsonFieldIn_c()
 	{
-		SafeRelease ( m_pUservar );
 	}
 
 	virtual void Command ( ESphExprCommand eCmd, void * pArg )
@@ -5339,14 +5467,28 @@ public:
 	{
 		const BYTE * pVal = NULL;
 		ESphJsonType eJson = GetKey ( &pVal, tMatch );
+		int64_t iVal = 0;
 		switch ( eJson )
 		{
 			case JSON_INT32_VECTOR:		return ArrayEval<int> ( pVal );
 			case JSON_INT64_VECTOR:		return ArrayEval<int64_t> ( pVal );
 			case JSON_STRING_VECTOR:	return StringArrayEval ( pVal, false );
+			case JSON_DOUBLE_VECTOR:	return ArrayFloatEval ( pVal );
 			case JSON_STRING:			return StringArrayEval ( pVal, true );
-			case JSON_INT32:			return ValueEval ( (int64_t) sphJsonLoadInt ( &pVal ) );
-			case JSON_INT64:			return ValueEval ( sphJsonLoadBigint ( &pVal ) );
+			case JSON_INT32:
+			case JSON_INT64:
+				iVal = ( eJson==JSON_INT32 ? sphJsonLoadInt ( &pVal ) : sphJsonLoadBigint ( &pVal ) );
+				if ( m_bFloat )
+					return FloatEval ( (float)iVal );
+				else
+					return ValueEval ( iVal  );
+			case JSON_DOUBLE:
+				iVal = sphJsonLoadBigint ( &pVal );
+				if ( m_bFloat )
+					return FloatEval ( sphQW2D ( iVal ) );
+				else
+					return ValueEval ( iVal  );
+
 			case JSON_MIXED_VECTOR:
 				{
 					const BYTE * p = pVal;
@@ -5359,10 +5501,24 @@ public:
 						int iRes = 0;
 						switch (eType)
 						{
-							case JSON_STRING: iRes =  StringArrayEval ( pVal, true ); break;
-							case JSON_INT32: iRes = ValueEval ( (int64_t) sphJsonLoadInt ( &pVal ) ); break;
-							case JSON_INT64: iRes = ValueEval ( sphJsonLoadBigint ( &pVal ) ); break;
-							case JSON_DOUBLE: iRes = ValueEval ( (int64_t)sphQW2D ( sphJsonLoadBigint ( &pVal ) ) ); break;
+							case JSON_STRING:
+								iRes =  StringArrayEval ( pVal, true );
+							break;
+							case JSON_INT32:
+							case JSON_INT64:
+								iVal = ( eType==JSON_INT32 ? sphJsonLoadInt ( &pVal ) : sphJsonLoadBigint ( &pVal ) );
+								if ( m_bFloat )
+									iRes = FloatEval ( (float)iVal );
+								else
+									iRes = ValueEval ( iVal );
+							break;
+							case JSON_DOUBLE:
+								iVal = sphJsonLoadBigint ( &pVal );
+								if ( m_bFloat )
+									iRes = FloatEval ( sphQW2D ( iVal ) );
+								else
+									iRes = ValueEval ( iVal  );
+								break;
 							default: break; // for weird subobjects, just let IN() return false
 						}
 						if ( iRes )
@@ -5382,7 +5538,6 @@ public:
 	}
 
 protected:
-	UservarIntSet_c *	m_pUservar;
 	const BYTE *		m_pStrings;
 	CSphVector<int64_t>	m_dHashes;
 
@@ -5398,11 +5553,27 @@ protected:
 
 	int ValueEval ( const int64_t iVal ) const
 	{
-		const int64_t * pFilter = m_pUservar ? m_pUservar->Begin() : m_dValues.Begin();
-		const int64_t * pFilterMax = pFilter + ( m_pUservar ? m_pUservar->GetLength() : m_dValues.GetLength() );
+		const int64_t * pFilter = m_dValues.Begin();
+		const int64_t * pFilterMax = pFilter + m_dValues.GetLength();
 		for ( ; pFilter<pFilterMax; pFilter++ )
 			if ( iVal==*pFilter )
 				return 1;
+		return 0;
+	}
+
+	int FloatEval ( const double fVal ) const
+	{
+		assert ( m_bFloat );
+		const int64_t * pFilter = m_dValues.Begin();
+		const int64_t * pFilterMax = pFilter + m_dValues.GetLength();
+		for ( ; pFilter<pFilterMax; pFilter++ )
+		{
+			int64_t iFilterVal = *pFilter;
+			double fFilterVal = sphDW2F ( (DWORD)iFilterVal );
+
+			if ( fabs ( fVal - fFilterVal )<=1e-6 )
+				return 1;
+		}
 		return 0;
 	}
 
@@ -5410,8 +5581,8 @@ protected:
 	template <typename T>
 	int ArrayEval ( const BYTE * pVal ) const
 	{
-		const int64_t * pFilter = m_pUservar ? m_pUservar->Begin() : m_dValues.Begin();
-		const int64_t * pFilterMax = pFilter + ( m_pUservar ? m_pUservar->GetLength() : m_dValues.GetLength() );
+		const int64_t * pFilter = m_dValues.Begin();
+		const int64_t * pFilterMax = pFilter + m_dValues.GetLength();
 
 		int iLen = sphJsonUnpackInt ( &pVal );
 		const T * pArray = (const T *)pVal;
@@ -5441,6 +5612,29 @@ protected:
 		}
 		return 0;
 	}
+
+	int ArrayFloatEval ( const BYTE * pVal ) const
+	{
+		const int64_t * pFilter = m_dValues.Begin();
+		const int64_t * pFilterMax = pFilter + m_dValues.GetLength();
+
+		int iLen = sphJsonUnpackInt ( &pVal );
+
+		for ( ; pFilter<pFilterMax; pFilter++ )
+		{
+			int64_t iFilterVal = *pFilter;
+			double fFilterVal = ( m_bFloat ? sphDW2F ( (DWORD)iFilterVal ) : iFilterVal );
+
+			const BYTE * p = pVal;
+			for ( int i=0; i<iLen; i++ )
+			{
+				double fStored = sphQW2D ( sphJsonLoadBigint ( &p ) );
+				if ( fabs ( fStored - fFilterVal )<=1e-6 )
+					return 1;
+			}
+		}
+		return 0;
+	}
 };
 
 
@@ -5454,7 +5648,7 @@ protected:
 
 public:
 	Expr_StrIn_c ( const CSphAttrLocator & tLoc, int iLocator, ConstList_c * pConsts, UservarIntSet_c * pUservar, ESphCollation eCollation )
-		: Expr_ArgVsConstSet_c<int64_t> ( NULL, pConsts )
+		: Expr_ArgVsConstSet_c<int64_t> ( NULL, pConsts, false )
 		, ExprLocatorTraits_t ( tLoc, iLocator )
 		, m_pStrings ( NULL )
 		, m_pUservar ( pUservar )
@@ -5966,7 +6160,7 @@ ISphExpr * ExprParser_t::CreateInNode ( int iNode )
 				case TOK_ATTR_STRING:
 					return new Expr_StrIn_c ( tLeft.m_tLocator, tLeft.m_iLocator, tRight.m_pConsts, NULL, m_eCollation );
 				case TOK_ATTR_JSON:
-					return new Expr_JsonFieldIn_c ( tRight.m_pConsts, NULL, CreateTree ( m_dNodes [ iNode ].m_iLeft ) );
+					return new Expr_JsonFieldIn_c ( tRight.m_pConsts, CreateTree ( m_dNodes [ iNode ].m_iLeft ) );
 				default:
 				{
 					ISphExpr * pArg = CreateTree ( m_dNodes[iNode].m_iLeft );
@@ -6005,7 +6199,7 @@ ISphExpr * ExprParser_t::CreateInNode ( int iNode )
 				case TOK_ATTR_STRING:
 					return new Expr_StrIn_c ( tLeft.m_tLocator, tLeft.m_iLocator, NULL, pUservar, m_eCollation );
 				case TOK_ATTR_JSON:
-					return new Expr_JsonFieldIn_c ( NULL, pUservar, CreateTree ( m_dNodes[iNode].m_iLeft ) );
+					return new Expr_JsonFieldIn_c ( pUservar, CreateTree ( m_dNodes[iNode].m_iLeft ) );
 				default:
 					return new Expr_InUservar_c ( CreateTree ( m_dNodes[iNode].m_iLeft ), pUservar );
 			}

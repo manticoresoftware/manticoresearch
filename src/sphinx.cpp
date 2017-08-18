@@ -1143,23 +1143,17 @@ class CSphHitBuilder;
 struct BuildHeader_t : public CSphSourceStats, public DictHeader_t
 {
 	explicit BuildHeader_t ( const CSphSourceStats & tStat )
-		: m_pThrottle ( NULL )
-		, m_pMinRow ( NULL )
-		, m_uMinDocid ( 0 )
-		, m_uKillListSize ( 0 )
-		, m_iMinMaxIndex ( 0 )
-		, m_iTotalDups ( 0 )
 	{
 		m_iTotalDocuments = tStat.m_iTotalDocuments;
 		m_iTotalBytes = tStat.m_iTotalBytes;
 	}
 
-	ThrottleState_t *	m_pThrottle;
-	const CSphRowitem *	m_pMinRow;
-	SphDocID_t			m_uMinDocid;
-	DWORD				m_uKillListSize;
-	int64_t				m_iMinMaxIndex;
-	int					m_iTotalDups;
+	ThrottleState_t *	m_pThrottle = nullptr;
+	const CSphRowitem *	m_pMinRow = nullptr;
+	SphDocID_t			m_uMinDocid = 0;
+	DWORD				m_uKillListSize = 0;
+	int64_t				m_iMinMaxIndex = 0;
+	int					m_iTotalDups = 0;
 };
 
 struct WriteHeader_t
@@ -18649,7 +18643,7 @@ bool TaggedHash20_t::operator== ( const BYTE * pRef ) const
 
 void HashCollection_c::AppendNewHash ( const char * sExt, const BYTE * pHash )
 {
-	m_dHashes.Add(TaggedHash20_t(sExt,pHash));
+	m_dHashes.Add ( TaggedHash20_t ( sExt, pHash ) );
 }
 
 //////////////////////////////////////////////////////////////////////////

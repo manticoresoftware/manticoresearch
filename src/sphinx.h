@@ -1443,14 +1443,8 @@ inline void Swap ( CSphMatch & a, CSphMatch & b )
 /// source statistics
 struct CSphSourceStats
 {
-	int64_t			m_iTotalDocuments;	///< how much documents
-	int64_t			m_iTotalBytes;		///< how much bytes
-
-	/// ctor
-	CSphSourceStats ()
-	{
-		Reset ();
-	}
+	int64_t			m_iTotalDocuments = 0;	///< how much documents
+	int64_t			m_iTotalBytes = 0;		///< how much bytes
 
 	/// reset
 	void Reset ()

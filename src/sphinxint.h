@@ -1815,7 +1815,6 @@ enum ESphExtType
 enum ESphExt
 {
 	SPH_EXT_SPH = 0,
-	SPH_EXT_SPA = 1,
 	SPH_EXT_MVP = 9
 };
 

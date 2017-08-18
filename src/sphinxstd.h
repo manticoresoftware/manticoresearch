@@ -2704,6 +2704,9 @@ public:
 
 		if ( !SHARED )
 			madvise ( pData, iLength, MADV_DONTFORK );
+#ifdef MADV_DONTDUMP
+		madvise ( pData, iLength, MADV_DONTDUMP );
+#endif
 
 #if SPH_ALLOCS_PROFILER
 		sphMemStatMMapAdd ( iLength );
@@ -2856,6 +2859,9 @@ public:
 			}
 
 			madvise ( pData, iFileSize, MADV_DONTFORK );
+#ifdef MADV_DONTDUMP
+			madvise ( pData, iFileSize, MADV_DONTDUMP );
+#endif
 		}
 #endif
 

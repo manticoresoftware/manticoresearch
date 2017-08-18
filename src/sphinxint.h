@@ -2542,6 +2542,8 @@ class HashCollection_c
 public:
 	void AppendNewHash ( const char* sExt, const BYTE* pHash);
 
+	void /*REFACTOR*/ SaveSHA() {};
+
 };
 
 // file writer with hashing on-the-fly.

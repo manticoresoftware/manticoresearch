@@ -1564,6 +1564,8 @@ private:
 
 	bool						JuggleFile ( const char* szExt, CSphString & sError, bool bNeedOrigin=true ) const;
 	XQNode_t *					ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta * pResult, CSphScopedPayload * pPayloads, DWORD uQueryDebugFlags ) const;
+
+	mutable HashCollection_c	m_dHashes;
 };
 
 volatile int CSphIndex_VLN::m_iIndexTagSeq = 0;
@@ -9608,7 +9610,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttr
 		return false;
 
 	// generate a new .SPA file
-	WriterWithHash_c tSPAWriter ( "spa", nullptr );
+	WriterWithHash_c tSPAWriter ( "spa", &m_dHashes );
 	tSPAWriter.SetBufferSize ( 524288 );
 	CSphString sSPAfile = GetIndexFileName ( "spa.tmpnew" );
 	if ( !tSPAWriter.OpenFile ( sSPAfile, sError ) )
@@ -9655,6 +9657,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttr
 	}
 
 	tSPAWriter.CloseFile();
+	m_dHashes.SaveSHA();
 
 	if ( !JuggleFile ( "spa", sError ) )
 		return false;

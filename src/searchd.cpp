@@ -8312,8 +8312,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		return;
 	}
 
-	ARRAY_FOREACH ( i, m_dResults )
-		m_dResults[i].m_dTag2Pools.Resize ( iTagsCount );
+	for ( int iRes=iStart; iRes<=iEnd; iRes++ )
+		m_dResults[iRes].m_dTag2Pools.Resize ( iTagsCount );
 
 	/////////////////////////////////////////////////////
 	// optimize single-query, same-schema local searches

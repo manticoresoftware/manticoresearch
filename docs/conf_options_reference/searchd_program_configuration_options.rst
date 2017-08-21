@@ -686,6 +686,36 @@ Number of network threads for workers=thread_pool mode, default is 1.
 Useful for extremely high query rates, when just 1 thread is not enough
 to manage all the incoming queries.
 
+.. _net_wait_tm:
+
+net_wait_tm
+~~~~~~~~~~~~
+
+Control busy loop interval of a network thread for workers=thread_pool mode,
+default is 1, might be set to -1, 0, positive integer.
+
+In case daemon configured as pure master and routes requests to agents
+it is important to handle requests without delays and do not allow net-thread
+to sleep or cut out from CPU. Here is busy loop to do that. After incoming
+request network thread use CPU poll for ``10 * net_wait`` milliseconds
+in case ``net_wait_tm`` is positive number or polls only with CPU in
+case ``net_wait_tm`` is ``0``. Also busy loop might be disabled with ``net_wait_tm = -1``
+- this way poller set timeout of ``1ms`` for system poll call.
+
+.. _net_throttle_accept:
+.. _net_throttle_action:
+
+net_throttle_accept net_throttle_action
+~~~~~~~~~~~~
+
+Control network thread for workers=thread_pool mode,
+default is 0.
+
+These options define how many clients got accepted and how many requests
+processed on each iteration of network loop, in case of value above zero.
+Zero value means do not constrain network loop. These options might help to
+fine tune network loop throughput at high load scenario.
+
 .. _ondisk_attrs_default:
 
 ondisk_attrs_default

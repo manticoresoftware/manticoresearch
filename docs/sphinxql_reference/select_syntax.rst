@@ -89,9 +89,8 @@ several Manticore-specific extensions and has a few omissions (such as
    JOIN. Index name should be according to the rules of a C identifier.
 
 -  WHERE clause. This clause will map both to fulltext query and
-   filters. Comparison operators (=, !=, <, >, <=, >=), IN, AND, NOT,
-   and BETWEEN are all supported and map directly to filters. OR is not
-   supported yet but will be in the future. MATCH(‘query’) is supported
+   filters. Comparison operators (=, !=, <, >, <=, >=), IN, AND, OR, NOT,
+   and BETWEEN are all supported and map directly to filters. MATCH(‘query’) is supported
    and maps to fulltext query. Query will be interpreted according to
    :ref:`full-text query language rules <extended_query_syntax>`.
    There must be at most one MATCH() in the clause.

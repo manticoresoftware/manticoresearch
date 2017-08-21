@@ -309,21 +309,23 @@ else ( WIN32 )
 			unset ( USE_RLP CACHE )
 		endif ()
 
-		if ( NOT RLP_LIBPATH )
-			set ( RLP_LIBPATH "amd64-glibc25-gcc42" )
-		endif()
-
 		if ( USE_RLP )
+
+			if ( NOT RLP_LIBPATH )
+				file ( GLOB RLPLIBS "${RLP_PATH}/lib/*gcc*" )
+				message (STATUS "rlplibs ${RLPLIBS}")
+			endif()
+
 			include_directories ( "${RLP_PATH}/rlp/include" "${RLP_PATH}/utilities/include")
 			add_definitions ( "-D_REENTRANT" )
-			find_library ( LIBRLPC btrlpc HINT "${RLP_PATH}/lib/${RLP_LIBPATH}")
-			find_library ( LIBRLPCORE btrlpcore HINT "${RLP_PATH}/lib/${RLP_LIBPATH}" )
-			find_library ( LIBRLPUTILS btutils HINT "${RLP_PATH}/lib/${RLP_LIBPATH}" )
+			find_library ( LIBRLPC btrlpc HINT "${RLPLIBS}")
+			find_library ( LIBRLPCORE btrlpcore HINT "${RLPLIBS}" )
+			find_library ( LIBRLPUTILS btutils HINT "${RLPLIBS}" )
 			list ( APPEND EXTRA_LIBRARIES ${LIBRLPC} ${LIBRLPCORE} ${LIBRLPUTILS} )
 		endif()
-		message ( STATUS "Rlp from ${RLP_PATH}, libraries looked at lib/${RLP_LIBPATH}")
+		message ( STATUS "Rlp from ${RLP_PATH}, libraries looked at ${RLPLIBS}")
 	endif ( WITH_RLP )
-	mark_as_advanced ( USE_RLP RLP_PATH LIBRLPC LIBRLPCORE LIBRLPUTILS RLP_LIBPATH)
+	mark_as_advanced ( USE_RLP RLP_PATH LIBRLPC LIBRLPCORE LIBRLPUTILS RLP_LIBPATH RLPLIBS )
 
 	# test for EXPAT
 	message ( STATUS "Option WITH_EXPAT ${WITH_EXPAT}" )

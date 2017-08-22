@@ -73,7 +73,8 @@ install ( FILES dist/deb/manticore.upstart
 		DESTINATION /etc/init COMPONENT adm RENAME manticore.conf )
 
 install ( FILES dist/deb/manticore.init
-		DESTINATION /etc/init.d COMPONENT adm RENAME manticore )
+		DESTINATION /etc/init.d PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
+                      GROUP_EXECUTE GROUP_READ COMPONENT adm RENAME manticore )
 
 install ( DIRECTORY DESTINATION /var/lib/manticore/data COMPONENT adm)
 install ( DIRECTORY DESTINATION /var/run/manticore COMPONENT adm )

@@ -21,6 +21,7 @@
 
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 DAEMON=/usr/bin/searchd
+DAEMONOPTS='-c /etc/sphinxsearch/sphinx.conf'
 NAME=manticore
 DESC=manticore
 
@@ -104,11 +105,11 @@ do_start() {
             exit 1
         fi
 
-        start-stop-daemon --start --pidfile $PIDFILE  --exec ${DAEMON}
+        start-stop-daemon --start --pidfile $PIDFILE  --exec ${DAEMON} -- ${DAEMONOPTS}
 }
 do_stop() {
         start-stop-daemon --stop --quiet --oknodo --pidfile $PIDFILE \
-            --exec $DAEMON
+            --exec $DAEMON  -- ${DAEMONOPTS}
 }
 
 case "$1" in

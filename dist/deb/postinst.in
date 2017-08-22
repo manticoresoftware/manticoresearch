@@ -34,7 +34,28 @@ esac
 
 #update-rc.d manticore defaults
 echo ""
-echo "Do not forget to reindex all indexes by running: indexer --all"
+echo "Manticore installed!"
+echo ""
+echo "To manage indexes:"
+echo "    editor /etc/sphinxsearch/sphinx.conf"
+echo ""
+echo "To rebuild all disk indexes:"
+echo "    sudo -u manticore indexer --all --rotate"
+echo ""
+echo "To start/stop search daemon:"
+if [ -x "/usr/bin/deb-systemd-helper" ]; then
+echo "    systemctl start/stop manticore"
+else
+echo "    service manticore start/stop"
+fi
+echo "To query search daemon using MySQL client:"
+echo "    mysql -h 0 -P 9306"
+echo "    mysql> SELECT * FROM test1 WHERE MATCH('test');"
+echo ""
+echo "See the manual at docs.manticoresearch.com for details."
+echo ""
+echo "For commercial support please contact Manticore Software Ltd at"
+echo "https://manticoresearch.com/contact/"
 echo ""
 #start manticore service
 

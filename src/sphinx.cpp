@@ -3585,14 +3585,15 @@ void LoadFieldFilterSettings ( CSphReader & tReader, CSphFieldFilterSettings & t
 
 void SaveFieldFilterSettings ( CSphWriter & tWriter, const ISphFieldFilter * pFieldFilter )
 {
-	if ( !pFieldFilter )
+	CSphFieldFilterSettings tSettings;
+	if ( pFieldFilter )
+		pFieldFilter->GetSettings ( tSettings );
+
+	if ( !tSettings.m_dRegexps.GetLength() )
 	{
 		tWriter.PutDword ( 0 );
 		return;
 	}
-
-	CSphFieldFilterSettings tSettings;
-	pFieldFilter->GetSettings ( tSettings );
 
 	tWriter.PutDword ( tSettings.m_dRegexps.GetLength() );
 	ARRAY_FOREACH ( i, tSettings.m_dRegexps )

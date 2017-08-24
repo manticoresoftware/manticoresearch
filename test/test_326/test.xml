@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>RLP vs field_len</name>
+
+<requires><rlp/></requires>
+
+<config>
+indexer
+{
+	mem_limit			= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source test
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query_pre		= set names utf8
+	sql_query			= select *, 1 as gid from test_table
+	sql_attr_uint		= gid
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/base
+
+	charset_table	= 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, \
+			U+2E80..U+2EF3, U+2F00..U+2FD5, U+3105..U+312D, U+31C0..U+31E3, U+3400..U+4DB5, U+4E00..U+9FCC, \
+			U+F900..U+FAD9, U+20000..U+2FA1D
+			
+	morphology 		= rlp_chinese_batched, stem_enru
+	rlp_context		= ../rlp/samples/etc/rlp-chinese-context.xml
+	index_field_lengths = 1
+}
+
+index rt
+{
+	type = rt
+	path			= <data_path/>/rt
+
+	charset_table	= 0..9, A..Z->a..z, _, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, \
+			U+2E80..U+2EF3, U+2F00..U+2FD5, U+3105..U+312D, U+31C0..U+31E3, U+3400..U+4DB5, U+4E00..U+9FCC, \
+			U+F900..U+FAD9, U+20000..U+2FA1D
+			
+	morphology 		= rlp_chinese_batched, stem_enru
+	rlp_context		= ../rlp/samples/etc/rlp-chinese-context.xml
+	
+	rt_field = content
+	rt_field = text
+	rt_attr_uint = gid
+}
+
+common
+{
+	rlp_root = ..
+	rlp_environment = ../rlp/etc/rlp-environment.xml
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	content VARCHAR(255) NOT NULL,
+	text1 VARCHAR(255) NOT NULL,
+	text2 VARCHAR(255) NOT NULL
+)
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table</db_drop>
+<db_insert>SET NAMES utf8</db_insert>
+<db_insert>
+INSERT INTO test_table VALUES
+( 100, 'this is some mixed text in english. and more', 'dymmy', 'more dummy' ),
+( 102, 'а это - текст на русском. mixed in fact. test tested. more coming', 'dymmy', 'more dummy'  )
+</db_insert>
+
+<!-- regression index with RLP failed to load data from header after SaveFieldFilterSettings -->
+<!-- for plain index this is field_lengths -->
+<!-- for RT index this is dick chunk list after RT got saved, need daemon restart -->
+
+<custom_test><![CDATA[
+
+$RestartDaemon = create_function('','
+
+	$error = "";
+	$r = array();
+	$stop = StopWaitSearchd ( "config.conf", "searchd.pid" );
+	$r[] = "stoped=" . ( $stop==0 ? "ok" : "err" ) . "(code=" . $stop . ")";
+	usleep ( 150000 );
+	$started = StartSearchd ( "config.conf", "error.txt", "searchd.pid", $error );
+	if ( $started == 0 || $started == 2 )
+	{
+		$r[] = "started=ok";
+	} else {
+		$r[] = sprintf("start.err=%d local=%s", $started, $error);
+	}
+	
+	return $r;
+');
+
+$results = array();
+$ql->Reconnect();
+
+$results[] = 'populate commit';
+$sql = sprintf ( "insert into rt (id, content, text, gid) values ( 1, 'test mixed', 'test more' )");
+
+$results[] = 'query test';
+$results[] = "\n" . $ql->Query ( "select * from test where match('mixed')" );
+$results[] = "\n" . $ql->Query ( "select * from rt where match('mixed')"  );
+
+$res = $RestartDaemon();
+$results = array_merge ( $results, $res );
+$ql->Reconnect();
+
+$results[] = 'query test';
+$results[] = "\n" . $ql->Query ( "select * from test where match('mixed')" );
+$results[] = "\n" . $ql->Query ( "select * from rt where match('mixed')"  );
+
+]]></custom_test>
+
+
+</test>

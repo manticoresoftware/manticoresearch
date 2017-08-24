@@ -1,6 +1,36 @@
-dev:
+stages:
+  - build
+  - test_plain
+  - test_rt
+  
+job_build:
+  stage: build
   script:
     - rm -R build/ || /bin/true
     - mkdir build && cd build
     - cmake ..
     - make -j8
+    
+job_test_plain:
+  stage: test_plain
+  script:
+    - rm result_plain.zip || /bin/true
+    - ctest -E rt_ || EXIT_CODE=$?
+    - zip -q result_plain.zip test/test_*/report.txt ./test/error.txt
+    - exit ${EXIT_CODE}
+  artifacts:
+    when: always
+    paths:
+      - result_plain.zip
+
+job_test_rt:
+  stage: test_rt
+  script:
+    - rm result_rt.zip || /bin/true
+    - ctest -R rt_ || EXIT_CODE=$?
+    - zip -q result_rt.zip test/test_*/report.txt ./test/error.txt
+    - exit ${EXIT_CODE}
+  artifacts:
+    when: always
+    paths:
+      - result_rt.zip

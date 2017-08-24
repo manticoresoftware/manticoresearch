@@ -20,12 +20,12 @@ job_test_plain:
     - make -j8
     - rm result_plain.zip || /bin/true
     - ctest -E rt_ || EXIT_CODE=$?
-    - zip -q result_plain.zip test/test_*/report.txt ./test/error.txt
     - exit ${EXIT_CODE}
   artifacts:
     when: always
     paths:
-      - result_plain.zip
+      - test/test_*/report.txt
+      - test/error.txt
 
 job_test_rt:
   stage: test_rt
@@ -36,9 +36,9 @@ job_test_rt:
     - make -j8
     - rm result_rt.zip || /bin/true
     - ctest -R rt_ || EXIT_CODE=$?
-    - zip -q result_rt.zip test/test_*/report.txt ./test/error.txt
     - exit ${EXIT_CODE}
   artifacts:
     when: always
     paths:
-      - result_rt.zip
+      - test/test_*/report.txt
+      - test/error.txt

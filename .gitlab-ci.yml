@@ -24,8 +24,8 @@ job_test_plain:
   artifacts:
     when: always
     paths:
-      - test/test_*/report.txt
-      - test/error.txt
+      - build/test/test_*/report.txt
+      - build/test/error.txt
 
 job_test_rt:
   stage: test_rt

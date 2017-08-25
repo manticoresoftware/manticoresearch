@@ -2,6 +2,7 @@ stages:
   - build
   - test_plain
   - test_rt
+  - docs
   
 job_build:
   stage: build
@@ -41,4 +42,13 @@ job_test_rt:
     when: always
     paths:
       - build/test/test_*/report.txt
-      - build/test/error.txt
+      - build/test/error.txt 
+
+checkdocs:
+  stage: docs
+  image: python:2.7
+  script:
+    - pip install sphinx sphinx_rtd_theme sphinxprettysearchresults
+    - cd docs
+    - make html
+    - cd ..

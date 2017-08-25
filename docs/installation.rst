@@ -76,7 +76,6 @@ After preparing configuration file (see :ref:`Quick    tour <quick_usage_tour>`)
 Installing Manticore on Windows
 -------------------------------
 
-Windows version doesn't require external dependencies as they are static linked in the binaries.
 To install on Windows, you need to download the zip package and unpack it first.
 
 ::
@@ -111,21 +110,30 @@ Compiling Manticore from source
 Required tools
 ~~~~~~~~~~~~~~
 
-* a working compiler. 
+* a working compiler
 
-	* on Linux GNU gcc and clang can be used
-	* on Windows Microsoft Visual Studio  (community version is enough)
-	* on Mac OS XCode
+	* on Linux - GNU gcc (4.7.2 and above) and clang can be used
+	* on Windows - Microsoft Visual Studio  (community version is enough)
+	* on Mac OS - XCode
 
-* cmake - is used on all plaftorms 
+* cmake - used on all plaftorms 
 	
-* git, flex, bison 
-	* on Mac from macports/homebrew
-	* on Windows from cygwin
+CentOS/RHEL 6
+"""""""""""""
+
+The included gcc  in RHEL 6 based distributions is too old and a newer version is needed, which can be installed using devtools repositiory:
+
+.. code-block:: bash
+
+  $ wget http://people.centos.org/tru/devtools-2/devtools-2.repo -O /etc/yum.repos.d/devtools-2.repo
+  $ yum upgrade -y
+  $ yum install -y devtoolset-2-gcc devtoolset-2-binutils devtoolset-2-gcc-c++
+  $ export PATH=/opt/rh/devtoolset-2/root/usr/bin:$PATH
+ 
 	
 Optional dependencies
 ~~~~~~~~~~~~~~~~~~~~~
-
+* git, flex, bison -  needed if the sources are from cloned repository and not the source tarball
 * development version of MySQL client for  MySQL source driver
 * development version of unixODBC for the unixODBC source driver
 * development version of libPQ for the PostgreSQL source driver

@@ -706,7 +706,7 @@ case ``net_wait_tm`` is ``0``. Also busy loop might be disabled with ``net_wait_
 .. _net_throttle_action:
 
 net_throttle_accept net_throttle_action
-~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Control network thread for workers=thread_pool mode,
 default is 0.

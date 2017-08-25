@@ -1268,10 +1268,7 @@ public:
 		if ( m_bCheckOnlyKey )
 			return ( eRes!=JSON_EOF );
 
-		if ( m_bEquals )
-			return ( eRes==JSON_NULL );
-		else
-			return ( eRes != JSON_NULL && eRes != JSON_EOF );
+		return m_bEquals ^ ( eRes!=JSON_EOF && eRes!=JSON_NULL );
 	}
 };
 

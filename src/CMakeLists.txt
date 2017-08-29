@@ -146,7 +146,7 @@ else()
 	INSTALL ( TARGETS indexer indextool searchd spelldump wordbreaker RUNTIME DESTINATION bin COMPONENT APPLICATIONS )
 endif ( SPLIT_SYMBOLS )
 
-if ( BUILD_TESTING )
+if ( NOT DISABLE_TESTING )
 	add_executable ( tests ${TESTS_SRCS} )
 	target_link_libraries ( tests libsphinx ${EXTRA_LIBRARIES} )
 	if ( SPLIT_SYMBOLS )

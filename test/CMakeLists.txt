@@ -3,7 +3,7 @@ cmake_minimum_required ( VERSION 2.8 )
 # will add the tests from test suite
 # each test will be added as separate one
 
-if ( BUILD_TESTING )
+if ( NOT DISABLE_TESTING )
 	file ( GLOB tests "test_[0-9]*" )
 	list ( SORT tests )
 

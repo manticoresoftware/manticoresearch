@@ -27,7 +27,8 @@ PROJECT ( MANTICORE )
 SET ( MANTICORE_CMAKE_DIR "${MANTICORE_SOURCE_DIR}/cmake" )
 SET ( CMAKE_MODULE_PATH "${MANTICORE_SOURCE_DIR}/cmake" )
 SET ( EXTRA_LIBRARIES )
-SET ( BUILD_TESTING ON CACHE BOOLEAN "Whether to build with testing enabled" )
+
+option ( DISABLE_TESTING "Disable all testing (if you just build a distr)" OFF )
 
 # Make release build for the pointed distr
 # That will override defaults and give possibility to build
@@ -43,7 +44,7 @@ if ( DISTR_BUILD )
 	set ( WITH_RE2 ON CACHE BOOLEAN "Forced RE2" )
 	set ( WITH_STEMMER ON CACHE BOOLEAN "Forced Stemmer" )
 	set ( LIBS_BUNDLE "${MANTICORE_SOURCE_DIR}/../bundle" )
-	SET ( BUILD_TESTING OFF )
+	SET ( DISABLE_TESTING ON CACHE BOOLEAN "Forced no testing" )
 	message (STATUS "DISTR_BUILD applied.
 Package will be set to ${DISTR_BUILD},
 also option forced to ON values: WITH_MYSQL, WITH_EXPAT, WITH_PGSQL, WITH_RE2, WITH_STEMMER.
@@ -72,9 +73,9 @@ memcfgvalues ( CMAKE_BUILD_TYPE )
 # ctest variables
 set ( DEFAULT_CTEST_CONFIGURATION_TYPE "Debug" )
 
-if ( BUILD_TESTING )
+if ( NOT DISABLE_TESTING )
 	include ( CTest )
-endif ( BUILD_TESTING )
+endif ()
 
 set ( SPHINX_TAG "" CACHE STRING "The tag which will be added to build" )
 set ( PKGSUFFIXES ) # list of suffixes which will be append to package name, will be '-'-separated

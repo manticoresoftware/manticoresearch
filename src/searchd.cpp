@@ -15961,7 +15961,7 @@ void HandleMysqlShowCollations ( SqlRowBuffer_c & tOut )
 	tOut.HeadBegin(6);
 	tOut.HeadColumn ( "Collation" );
 	tOut.HeadColumn ( "Charset" );
-	tOut.HeadColumn ( "Id", MYSQL_COL_LONGLONG, MYSQL_COL_UNSIGNED_FLAG );
+	tOut.HeadColumn ( "Id", MYSQL_COL_LONGLONG );
 	tOut.HeadColumn ( "Default" );
 	tOut.HeadColumn ( "Compiled" );
 	tOut.HeadColumn ( "Sortlen" );

@@ -106,6 +106,10 @@ insert into test_table values
 <sphinxql>select * from dist where MATCH('test')</sphinxql>
 <sphinxql>select * from dist where MATCH('test') AND gid &gt; 22 OR gid &lt; 12</sphinxql>
 <sphinxql>select * from dist where ( gid &gt; 12 AND pid &lt; 1012 ) OR id &gt; 60</sphinxql>
+
+<sphinxql>select * from dist where MATCH('test') AND gid &lt; 12</sphinxql>
+<sphinxql>select * from dist where gid &lt; 12 AND MATCH('test')</sphinxql>
+<sphinxql>select * from dist where gid &gt; 10 AND MATCH('test') AND gid &lt; 12</sphinxql>
 </sphqueries>
 
 </test>

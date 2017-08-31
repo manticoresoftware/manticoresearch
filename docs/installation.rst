@@ -118,19 +118,6 @@ Required tools
 
 * cmake - used on all plaftorms 
 	
-CentOS/RHEL 6
-"""""""""""""
-
-The included gcc  in RHEL 6 based distributions is too old and a newer version is needed, which can be installed using devtools repositiory:
-
-.. code-block:: bash
-
-  $ wget http://people.centos.org/tru/devtools-2/devtools-2.repo -O /etc/yum.repos.d/devtools-2.repo
-  $ yum upgrade -y
-  $ yum install -y devtoolset-2-gcc devtoolset-2-binutils devtoolset-2-gcc-c++
-  $ export PATH=/opt/rh/devtoolset-2/root/usr/bin:$PATH
- 
-	
 Optional dependencies
 ~~~~~~~~~~~~~~~~~~~~~
 * git, flex, bison -  needed if the sources are from cloned repository and not the source tarball
@@ -167,7 +154,7 @@ Manticore uses cmake for building sources. We recommend using a folder outside t
 Next step is to configure the building with cmake. Available list of configuration options:
 
 
-* ``CMAKE_BUILD_TYPE`` -  can be Debug , Release , MinSizeRel and RelWithDebInfo. Default mode is RelWithDebInfo
+* ``CMAKE_BUILD_TYPE`` -  can be Debug , Release , MinSizeRel and RelWithDebInfo (default).
 * ``SPLIT_SYMBOLS`` (bool) - specify whenever to create separate files with debugging symbols. In the default build type,RelWithDebInfo, the binaries include the debug symbols. With this option specified, the binaries will be stripped of the debug symbols , which will be put in separate files
 * ``USE_BISON,USE_FLEX`` (bool)  - enabled by default, specifies whenever to enable bison and flex tools
 * ``LIBS_BUNDLE`` - filepath to a folder with different libraries. This is mostly relevant for Windows building
@@ -194,7 +181,30 @@ Next step is to configure the building with cmake. Available list of configurati
 
 Compiling on UNIX systems
 ~~~~~~~~~~~~~~~~~~~~~~~~~
-First step in compiling is to run cmake. We recommend using a separate folder for building instead of compiling in the source folder:
+
+
+To install all dependencies on Debian/Ubuntu:
+
+.. code-block:: bash
+
+   $ apt-get install build-essential cmake unixodbc-dev libpq-dev libexpat-dev libmysqlclient-dev git flex bison
+
+To install all dependencies on CentOS/RHEL:
+
+.. code-block:: bash
+   
+   $ yum install gcc gcc-c++ make cmake mysql-devel expat-devel postgresql-devel unixODBC-devel rpm-build systemd-units git flex bison
+   
+RHEL/CentOS 6  ship with a old version of the gcc compiler, which doesn't support `std-c++` standard, for compiling use `devtools` repository: 
+
+.. code-block:: bash
+
+  $ wget http://people.centos.org/tru/devtools-2/devtools-2.repo -O /etc/yum.repos.d/devtools-2.repo
+  $ yum upgrade -y
+  $ yum install -y devtoolset-2-gcc devtoolset-2-binutils devtoolset-2-gcc-c++
+  $ export PATH=/opt/rh/devtoolset-2/root/usr/bin:$PATH
+  
+We recommend using a separate folder for building instead of compiling in the source folder:
 
 ::
 

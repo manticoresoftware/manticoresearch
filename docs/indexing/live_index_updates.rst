@@ -14,7 +14,7 @@ First, you can use disk-based indexes, partition them manually, and only
 rebuild the smaller partitions (so-called “deltas”) frequently. By
 minimizing the rebuild size, you can reduce the average indexing lag to
 something as low as 30-60 seconds. On huge collections it actually might
-be the most efficient one. Refer to `the section called :ref:`delta_index_updates` for details.
+be the most efficient one. Refer to  :ref:`delta_index_updates` for details.
 
 Second, using real-time indexes (RT indexes for short) that on-the-fly
 updates of the full-text data. Updates on a RT index can appear in the

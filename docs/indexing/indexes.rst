@@ -1,12 +1,14 @@
 .. _indexes:
 
 Indexes
-=======================
+=======
 
 To be able to answer full-text search queries fast, Manticore needs to
 build a special data structure optimized for such queries from your text
 data. This structure is called *index*; and the process of building
 index from text is called *indexing*.
+
+An index identifier must be a single word, that can contain letters, numbers and underscores. It must start with a letter.
 
 Different index types are well suited for different tasks. For example,
 a disk-based tree-based index would be easy to update (ie. insert new
@@ -16,6 +18,9 @@ architecture allows internally for different *index types*, or
 
 Manticore provides 2 different backends: a **disk index** backend, and a
 **RT (realtime) index** backend.
+
+Offline/plain indexes
+~~~~~~~~~~~~~~~~~~~~~
 
 **Disk indexes** are designed to provide maximum indexing and
 searching speed, while keeping the RAM footprint as low as possible.
@@ -31,6 +36,9 @@ easily by setting up multiple disk indexes, searching through them all,
 and only rebuilding the one with a fraction of the most recently changed
 data. See :ref:`live_index_updates` for details.
 
+Real-Time indexes
+~~~~~~~~~~~~~~~~~
+
 **RT indexes** enable you to implement dynamic updates and
 incremental additions to the full text index. RT stands for Real Time
 and they are indeed “soft realtime” in terms of writes, meaning that
@@ -40,7 +48,10 @@ will still work even during that occasional writing stall.) Refer to
 :ref:`real-time_indexes`
 for details.
 
-Last but not least, Manticore supports so-called **distributed
+Distributed indexes
+~~~~~~~~~~~~~~~~~~~
+
+Manticore supports so-called **distributed
 indexes**. Compared to disk and RT indexes, those are not a real
 physical backend, but rather just lists of either local or remote
 indexes that can be searched transparently to the application, with
@@ -48,6 +59,11 @@ Manticore doing all the chores of sending search requests to remote
 machines in the cluster, aggregating the result sets, retrying the
 failed requests, and even doing some load balancing. See :ref:`distributed_searching` for a
 discussion of distributed indexes.
+
+Templates indexes
+~~~~~~~~~~~~~~~~~
+
+Template indexes are indexes with no storage backend. They can be used operations that involve only data from input, like keywords and snippets generation.
 
 There can be as many indexes per configuration file as necessary.
 ``indexer`` utility can reindex either all of them (if ``--all`` option

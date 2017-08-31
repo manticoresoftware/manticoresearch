@@ -171,7 +171,7 @@ Manticore is derived from Sphinx search engine created  by Andrew Aksyonoff.
 More details about people involved in Sphinx development can be found on this page:   http://sphinxsearch.com/docs/devel.html#credits.
 
 Manticore is developed and maintained by Manticore Software Ltd. 
-Current team members:
+Current team (in alphabetical order):
 
 -  Adrian Nuta
 -  Alexey Vinogradov

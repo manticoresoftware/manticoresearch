@@ -9,7 +9,7 @@ index. (Additional functionality such as index verification is planned
 in the future, hence the indextool name rather than just indexdump.) Its
 general usage is:
 
-::
+.. code-block:: mysql
 
 
     indextool <command> [options]

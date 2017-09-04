@@ -51,7 +51,7 @@ Compiling MySQL 5.0.x with SphinxSE
 1. copy ``sphinx.5.0.yy.diff`` patch file into MySQL sources directory
    and run
 
-   ::
+.. code-block:: bash
 
 
        patch -p1 < sphinx.5.0.yy.diff
@@ -62,7 +62,7 @@ Compiling MySQL 5.0.x with SphinxSE
 
 2. in MySQL sources directory, run
 
-   ::
+.. code-block:: bash
 
 
        sh BUILD/autorun.sh
@@ -71,21 +71,21 @@ Compiling MySQL 5.0.x with SphinxSE
    copy all files in ``mysqlse`` directory from Manticore sources there.
    Example:
 
-   ::
+.. code-block:: bash
 
 
        cp -R /root/builds/sphinx-0.9.7/mysqlse /root/builds/mysql-5.0.24/sql/sphinx
 
 4. configure MySQL and enable Manticore engine:
 
-   ::
+.. code-block:: bash
 
 
        ./configure --with-sphinx-storage-engine
 
 5. build and install MySQL:
 
-   ::
+.. code-block:: bash
 
 
        make
@@ -100,28 +100,28 @@ Compiling MySQL 5.1.x with SphinxSE
    and copy all files in ``mysqlse`` directory from Manticore sources
    there. Example:
 
-   ::
+.. code-block:: bash
 
 
        cp -R /root/builds/sphinx-0.9.7/mysqlse /root/builds/mysql-5.1.14/storage/sphinx
 
 2. in MySQL sources directory, run
 
-   ::
+.. code-block:: bash
 
 
        sh BUILD/autorun.sh
 
 3. configure MySQL and enable Manticore engine:
 
-   ::
+.. code-block:: bash
 
 
        ./configure --with-plugins=sphinx
 
 4. build and install MySQL:
 
-   ::
+.. code-block:: bash
 
 
        make
@@ -137,7 +137,7 @@ launch newly built servers, run mysql client and issue ``SHOW ENGINES``
 query. You should see a list of all available engines. Manticore should be
 present and “Support” column should contain “YES”:
 
-::
+.. code-block:: mysql
 
 
     mysql> show engines;
@@ -161,7 +161,7 @@ WHERE clause for query column.
 
 Let's begin with an example create statement and search query:
 
-::
+.. code-block:: mysql
 
 
     CREATE TABLE t1
@@ -203,14 +203,14 @@ connection string is specified in ``CREATE TABLE``, index name “\*" (ie.
 search all indexes) and localhost:9312 are assumed. Connection string
 syntax is as follows:
 
-::
+.. code-block:: mysql
 
 
     CONNECTION="sphinx://HOST:PORT/INDEXNAME"
 
 You can change the default connection string later:
 
-::
+.. code-block:: mysql
 
 
     ALTER TABLE t1 CONNECTION="sphinx://NEWHOST:NEWPORT/NEWINDEXNAME";
@@ -232,7 +232,7 @@ sign. Any number of options can be specified. Available options are:
    “relevance” attribute name (or sorting clause for “extended”) is also
    required after a colon:
 
-   ::
+.. code-block:: mysql
 
 
        ... WHERE query='test;sort=attr_asc:group_id';
@@ -244,7 +244,7 @@ sign. Any number of options can be specified. Available options are:
 
 -  index - names of the indexes to search:
 
-   ::
+.. code-block:: mysql
 
 
        ... WHERE query='test;index=test1;';
@@ -255,7 +255,7 @@ sign. Any number of options can be specified. Available options are:
 -  weights - comma-separated list of weights to be assigned to Manticore
    full-text fields:
 
-   ::
+.. code-block:: mysql
 
 
        ... WHERE query='test;weights=1,2,3;';
@@ -263,7 +263,7 @@ sign. Any number of options can be specified. Available options are:
 -  filter, !filter - comma-separated attribute name and a set of values
    to match:
 
-   ::
+.. code-block:: mysql
 
 
        # only include groups 1, 5 and 19
@@ -275,7 +275,7 @@ sign. Any number of options can be specified. Available options are:
 -  range, !range - comma-separated (integer or bigint) Manticore attribute
    name, and min and max values to match:
 
-   ::
+.. code-block:: mysql
 
 
        # include groups from 3 to 7, inclusive
@@ -287,7 +287,7 @@ sign. Any number of options can be specified. Available options are:
 -  floatrange, !floatrange - comma-separated (floating point) Manticore
    attribute name, and min and max values to match:
 
-   ::
+.. code-block:: mysql
 
 
        # filter by a float size
@@ -300,7 +300,7 @@ sign. Any number of options can be specified. Available options are:
    parameter to :ref:`SetLimits() <set_limits>`
    API call:
 
-   ::
+.. code-block:: mysql
 
 
        ... WHERE query='test;maxmatches=2000;';
@@ -308,7 +308,7 @@ sign. Any number of options can be specified. Available options are:
 -  cutoff - maximum allowed matches, as in cutoff parameter to
    :ref:`SetLimits() <set_limits>` API call:
 
-   ::
+.. code-block:: mysql
 
 
        ... WHERE query='test;cutoff=10000;';
@@ -317,7 +317,7 @@ sign. Any number of options can be specified. Available options are:
    :ref:`SetMaxQueryTime() <set_max_query_time>`
    API call:
 
-   ::
+.. code-block:: mysql
 
 
        ... WHERE query='test;maxquerytime=1000;';
@@ -325,7 +325,7 @@ sign. Any number of options can be specified. Available options are:
 -  groupby - group-by function and attribute, corresponding to
    :ref:`SetGroupBy() <set_groupby>` API call:
 
-   ::
+.. code-block:: mysql
 
 
        ... WHERE query='test;groupby=day:published_ts;';
@@ -333,7 +333,7 @@ sign. Any number of options can be specified. Available options are:
 
 -  groupsort - group-by sorting clause:
 
-   ::
+.. code-block:: mysql
 
 
        ... WHERE query='test;groupsort=@count desc;';
@@ -343,7 +343,7 @@ sign. Any number of options can be specified. Available options are:
    :ref:`SetGroupDistinct() <set_group_distinct>` API
    call:
 
-   ::
+.. code-block:: mysql
 
 
        ... WHERE query='test;groupby=attr:country_id;distinct=site_id';
@@ -351,7 +351,7 @@ sign. Any number of options can be specified. Available options are:
 -  indexweights - comma-separated list of index names and weights to use
    when searching through several indexes:
 
-   ::
+.. code-block:: mysql
 
 
        ... WHERE query='test;indexweights=idx_exact,2,idx_stemmed,1;';
@@ -359,7 +359,7 @@ sign. Any number of options can be specified. Available options are:
 -  fieldweights - comma-separated list of per-field weights that can be
    used by the ranker:
 
-   ::
+.. code-block:: mysql
 
 
        ... WHERE query='test;fieldweights=title,10,abstract,3,content,1;';
@@ -367,7 +367,7 @@ sign. Any number of options can be specified. Available options are:
 -  comment - a string to mark this query in query log (mapping to
    $comment parameter in :ref:`Query() <query>` API call):
 
-   ::
+.. code-block:: mysql
 
 
        ... WHERE query='test;comment=marker001;';
@@ -375,14 +375,14 @@ sign. Any number of options can be specified. Available options are:
 -  select - a string with expressions to compute (mapping to
    :ref:`SetSelect() <set_select>` API call):
 
-   ::
+.. code-block:: mysql
 
 
        ... WHERE query='test;select=2*a+3*** as myexpr;';
 
 -  host, port - remote ``searchd`` host name and TCP port, respectively:
 
-   ::
+.. code-block:: mysql
 
 
        ... WHERE query='test;host=sphinx-test.loc;port=7312;';
@@ -397,7 +397,7 @@ sign. Any number of options can be specified. Available options are:
    replaced with your specific ranking formula), and
    “export:EXPRESSION”:
 
-   ::
+.. code-block:: mysql
 
 
        ... WHERE query='test;mode=extended;ranker=bm25;';
@@ -412,7 +412,7 @@ sign. Any number of options can be specified. Available options are:
    the output of the RANKFACTORS() function that produces a string with
    all the field level factors for each document.
 
-   ::
+.. code-block:: mysql
 
 
            SELECT *, WEIGHT(), RANKFACTORS()
@@ -422,7 +422,7 @@ sign. Any number of options can be specified. Available options are:
 
    would produce something like
 
-   ::
+.. code-block:: mysql
 
 
        *************************** 1\. row ***************************
@@ -458,7 +458,7 @@ sign. Any number of options can be specified. Available options are:
    API call. Takes 4 parameters which are latitude and longitude
    attribute names, and anchor point coordinates respectively:
 
-   ::
+.. code-block:: mysql
 
 
        ... WHERE query='test;geoanchor=latattr,lonattr,0.123,0.456';
@@ -474,7 +474,7 @@ by SphinxSE.
 Additional query info besides result set could be retrieved with
 ``SHOW ENGINE SPHINX STATUS`` statement:
 
-::
+.. code-block:: mysql
 
 
     mysql> SHOW ENGINE SPHINX STATUS;
@@ -489,7 +489,7 @@ Additional query info besides result set could be retrieved with
 This information can also be accessed through status variables. Note
 that this method does not require super-user privileges.
 
-::
+.. code-block:: mysql
 
 
     mysql> SHOW STATUS LIKE 'sphinx_%';
@@ -507,7 +507,7 @@ that this method does not require super-user privileges.
 You could perform JOINs on SphinxSE search table and tables using other
 engines. Here's an example with “documents” from example.sql:
 
-::
+.. code-block:: mysql
 
 
     mysql> SELECT content, date_added FROM test.documents docs
@@ -546,7 +546,7 @@ for ``sphinx.so`` in the build directory and copy it to the plugins
 directory of your MySQL instance. After that, register the UDF using the
 following statement:
 
-::
+.. code-block:: mysql
 
 
     CREATE FUNCTION sphinx_snippets RETURNS STRING SONAME 'sphinx.so';
@@ -568,7 +568,7 @@ port).
 
 Usage examples:
 
-::
+.. code-block:: mysql
 
 
     SELECT sphinx_snippets('hello world doc', 'main', 'world',

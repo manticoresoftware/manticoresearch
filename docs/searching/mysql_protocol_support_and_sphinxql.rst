@@ -8,7 +8,7 @@ accessed with regular MySQL API. For instance, ‘mysql’ CLI client
 program works well. Here's an example of querying Manticore using MySQL
 client:
 
-::
+.. code-block:: mysql
 
 
     $ mysql -P 9306
@@ -40,7 +40,7 @@ matter of 1-line config change, adding a new
 :ref:`listener <listen>` with
 mysql41 specified as a protocol:
 
-::
+.. code-block:: mysql
 
 
     listen = localhost:9306:mysql41

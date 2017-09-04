@@ -3,7 +3,7 @@
 SELECT @@system_variable syntax
 --------------------------------
 
-::
+.. code-block:: mysql
 
 
     SELECT @@system_variable [LIMIT [offset,] row_count]

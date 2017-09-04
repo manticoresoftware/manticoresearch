@@ -3,7 +3,7 @@
 SET syntax
 ----------
 
-::
+.. code-block:: mysql
 
 
     SET [GLOBAL] server_variable_name = value
@@ -38,7 +38,7 @@ Global user variables might be either transferred to all agents of
 distributed index or set locally in case of local index defined at
 distibuted index. Example:
 
-::
+.. code-block:: mysql
 
 
     // in session 1
@@ -121,7 +121,7 @@ Known global server variables are:
 
 Examples:
 
-::
+.. code-block:: mysql
 
 
     mysql> SET autocommit=0;

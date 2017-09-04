@@ -3,7 +3,7 @@
 RELOAD INDEX syntax
 -------------------
 
-::
+.. code-block:: mysql
 
 
     RELOAD INDEX idx [ FROM '/path/to/index_files' ]
@@ -19,7 +19,7 @@ And if you additionally specify a path, daemon will look for index files
 in specified directory, move them to index :ref:`path`, rename from
 index_files.sp? to idx.new.sp? and rotate them.
 
-::
+.. code-block:: mysql
 
 
     mysql> RELOAD INDEX plain_index;

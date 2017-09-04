@@ -3,7 +3,7 @@
 CALL SUGGEST syntax
 -------------------
 
-::
+.. code-block:: mysql
 
 
     CALL SUGGEST(word, index [,options])

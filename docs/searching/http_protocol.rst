@@ -8,7 +8,7 @@ To enabled the HTTP protocol, a
 :ref:`listen`
 directive with http specified as a protocol needs to be declared:
 
-::
+.. code-block:: ini
 
 
     listen = localhost:8080:http
@@ -22,14 +22,14 @@ Supported endpoints:
    SELECT clause), group (grouping attribute), order (SQL-like sorting),
    limit (equivalent of LIMIT 0,N)
 
-   ::
+.. code-block:: bash
 
        curl -X POST 'http://manticoresearch:9308/search/' 
        -d 'index=forum&match=@subject php manticore&select=id,subject,author_id&limit=5'
 
 -  / sql - allows running a SELECT SphinxQL, set as query parameter
 
-   ::
+.. code-block:: bash
 
 
         curl -X POST 'http://manticoresearch:9308/sql/' 

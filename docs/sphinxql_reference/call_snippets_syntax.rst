@@ -3,7 +3,7 @@
 CALL SNIPPETS syntax
 --------------------
 
-::
+.. code-block:: mysql
 
 
     CALL SNIPPETS(data, index, query[, opt_value AS opt_name[, ...]])
@@ -18,7 +18,7 @@ processing settings. ``query`` is the full-text query to build snippets
 for. Additional options are documented in :ref:`build_excerpts`. Usage
 example:
 
-::
+.. code-block:: mysql
 
 
     CALL SNIPPETS('this is my document text', 'test1', 'hello world',

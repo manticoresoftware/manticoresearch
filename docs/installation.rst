@@ -23,20 +23,20 @@ Supported platforms:
 	
 Manticore requires a few libraries to be installed on Debian/Ubuntu. Use    apt-get to download and install these dependencies:
 
-::
+.. code-block:: bash
 
 	$ sudo apt-get install mysql-client unixodbc libpq5
 		
 Now you can install Manticore:
 
-::
+.. code-block:: bash
 
 	$ wget https://github.com/manticoresoftware/manticore/releases/download/2.3.3-170706/manticore_2.3.3-170706-9fbdd5f-1.jessie_amd64.deb
 	$ sudo dpkg -i manticore_2.3.3-170706-9fbdd5f-1.jessie_amd64.deb
 
 After preparing configuration file (see :ref:`Quick tour <quick_usage_tour>`), you can start searchd daemon:
 
-::
+.. code-block:: bash
   
 	$ systemctl manticore start
 		
@@ -56,20 +56,20 @@ Supported platforms:
 	
 Before installation make sure you have these packages installed:
 
-::
+.. code-block:: bash
    
 	$ yum install mysql-client postgresql-libs unixODBC
 
 Download RedHat RPM from Manticore website and install it:
 
-::
+.. code-block:: bash
 		
 	$ wget https://github.com/manticoresoftware/manticore/releases/download/2.3.3-170706/manticore-2.3.3.170706.9fbdd5f-1rhel7.x86_64.rpm
 	$ rpm -Uhv manticore-2.3.3.170706.9fbdd5f-1rhel7.x86_64.rpm
 
 After preparing configuration file (see :ref:`Quick    tour <quick_usage_tour>`), you can start searchd   daemon:
    
-::
+.. code-block:: bash
 	
 	$ systemctl searchd start
 
@@ -78,18 +78,17 @@ Installing Manticore on Windows
 
 To install on Windows, you need to download the zip package and unpack it first.
 
-::
+.. code-block:: bash
 	
 	cd C:\Manticore
 	unzip manticore-2.3.3-170706-9fbdd5f-dev-pgsql-stemmer-x64-bin.zip
 
 
-Edit the contents of sphinx.conf.in - specifically entries relating
-   to @CONFDIR@ - to paths suitable for your system.
+Edit the contents of sphinx.conf.in - specifically entries relating to @CONFDIR@ - to paths suitable for your system.
 
 Install the ``searchd`` system as a Windows service:
 
-::
+.. code-block:: bat
    
 	C:\Manticore\bin> C:\Manticore\bin\searchd --install --config C:\Manticore\sphinx.conf.in --servicename Manticore
    
@@ -134,11 +133,11 @@ General building options
 For compiling latest version of Manticore, recommended is checkout the latest code from the github repositiory.
 Alternative, for compiling a certain version, you can either checked that version from github or use it's respective source tarball.
 
-::
+.. code-block:: bash
 
    $ git clone https://github.com/manticoresoftware/manticore.git
 
-::
+.. code-block:: bash
 
    $ wget https://github.com/manticoresoftware/manticore/releases/download/2.3.3-170706/manticore-2.3.3.170706.9fbdd5f.tar.gz
    $ tar zcvf manticore-2.3.3.170706.9fbdd5f.tar.gz
@@ -146,7 +145,7 @@ Alternative, for compiling a certain version, you can either checked that versio
 
 Manticore uses cmake for building sources. We recommend using a folder outside the sources for the building workspace to keep clean the source folders.
 
-::
+.. code-block:: bash
 
    $ mkdir build
    $ cd build
@@ -185,19 +184,19 @@ Compiling on UNIX systems
 
 To install all dependencies on Debian/Ubuntu:
 
-.. code-block:: bash
+.. code-block.. code-block:: bash bash
 
    $ apt-get install build-essential cmake unixodbc-dev libpq-dev libexpat-dev libmysqlclient-dev git flex bison
 
 To install all dependencies on CentOS/RHEL:
 
-.. code-block:: bash
+.. code-block.. code-block:: bash bash
    
    $ yum install gcc gcc-c++ make cmake mysql-devel expat-devel postgresql-devel unixODBC-devel rpm-build systemd-units git flex bison
    
 RHEL/CentOS 6  ship with a old version of the gcc compiler, which doesn't support `std-c++` standard, for compiling use `devtools` repository: 
 
-.. code-block:: bash
+.. code-block.. code-block:: bash bash
 
   $ wget http://people.centos.org/tru/devtools-2/devtools-2.repo -O /etc/yum.repos.d/devtools-2.repo
   $ yum upgrade -y
@@ -206,7 +205,7 @@ RHEL/CentOS 6  ship with a old version of the gcc compiler, which doesn't suppor
   
 We recommend using a separate folder for building instead of compiling in the source folder:
 
-::
+.. code-block:: bash
 
    $ mkdir build
    $ cd build
@@ -214,13 +213,13 @@ We recommend using a separate folder for building instead of compiling in the so
 	   
 or if we use sources from tarball:
 
-::
+.. code-block:: bash
    
    $ cmake -D WITH_MYSQL=TRUE -DWITH_RE2=1 ../manticore-2.3.3.170706.9fbdd5f
 
 To simply compile:
 
-::
+.. code-block:: bash
    
    $ make -j4
 	   
@@ -228,13 +227,13 @@ To simply compile:
 This will create the binary files, however we want to either install Manticore or more convenient to create a package.
 To install just do 
 
-::
+.. code-block:: bash
    
    $ make -j4 install
 
 For packaging use ``package``
 
-::
+.. code-block:: bash
    
    $ make -j4 package
 		
@@ -242,7 +241,7 @@ For packaging use ``package``
 By default, if no operating system was targeted, ``package`` will create only a zip with the binaries.
 If, for example, we want to create a deb package for Debian Jessie, we need to specify to cmake the ``DISTR_BUILD`` parameter:
 
-::
+.. code-block:: bash
    
    $ cmake -D WITH_MYSQL=TRUE -DWITH_RE2=1  -DDISTR_BUILD=jessie../manticore
    $ make -j4 package	   
@@ -261,7 +260,7 @@ For building on Windows you need:
 
 For a simple building on x64:
 
-::
+.. code-block:: bat
 	   
    C:\build>"%PROGRAMW6432%\CMake\bin\cmake.exe" -G "Visual Studio 14 Win64" -DLIBS_BUNDLE="C:\bundle" -DDISTR=none -DCPACK_GENERATOR=ZIP "C:\manticore"
    C:\build>"%PROGRAMW6432%\CMake\bin\cmake.exe" -DWITH_PGSQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 .
@@ -274,13 +273,13 @@ Quick Manticore usage tour
 --------------------------
 We are going to use SphinxQL protocol as it's the current recommended way and it's also easy to play with. First we connect to Manticore with the normal MySQL client:
 
-::
+.. code-block:: bash
 
     $ mysql -h0 -P9306
 
 The default configuration comes with a sample Real-Time. A first step to see it in action is to add several documents to it, then you can start perform searches:
 	
-::
+.. code-block:: bash
 
     mysql> INSERT INTO rt VALUES (1, 'this is', 'a sample text', 11);
 	Query OK, 1 row affected (0.00 sec)
@@ -292,7 +291,7 @@ The default configuration comes with a sample Real-Time. A first step to see it 
 	Query OK, 1 row affected (0.00 sec)
 
 
-::
+.. code-block:: mysql
 
     mysql> SELECT *,weight() FROM rt  WHERE MATCH('text') ORDER BY WEIGHT() DESC;
 	+------+------+----------+
@@ -308,14 +307,14 @@ The default configuration comes with a sample Real-Time. A first step to see it 
 In the sample configuration there is also a plain index with MySQL source, which needs to be indexed first in order to start using it.
 First, we populate the sample table in MySQL:
 
-::
+.. code-block:: bash
 	
 	mysql> create database test;
 	$ mysql -u test <  /usr/share/doc/manticore/example-conf/example.sql
 
 The sample config uses a ``test`` with no password for connecting to MySQL. Adjust the credentials, then index:
 
-::
+.. code-block:: bash
 
 	$ sudo -u manticore indexer -c /etc/sphinxsearch/sphinx.conf test1 --rotate
 	Manticore 2.3.3 9b7033e@170806 master...origin/master-id64-dev
@@ -335,7 +334,7 @@ The sample config uses a ``test`` with no password for connecting to MySQL. Adju
 
 Now let's run several queries:	
 
-::
+.. code-block:: mysql
 
 	mysql> SELECT *, WEIGHT() FROM test1 WHERE MATCH('"document one"/1');SHOW META;
 	+------+----------+------------+----------+
@@ -362,7 +361,7 @@ Now let's run several queries:
 	9 rows in set (0.00 sec)
 
 
-::
+.. code-block:: mysql
 
 	mysql>  SET profiling=1;SELECT * FROM test1 WHERE id IN (1,2,4);SHOW PROFILE;
 	Query OK, 0 rows affected (0.00 sec)
@@ -393,7 +392,7 @@ Now let's run several queries:
 	10 rows in set (0.00 sec)
 
 
-::
+.. code-block:: mysql
 
 	mysql> SELECT id, id%3 idd FROM test1 WHERE MATCH('this is | nothing') GROUP BY idd;SHOW PROFILE;
 	+------+------+
@@ -413,7 +412,7 @@ Now let's run several queries:
 	1 row in set (0.00 sec)
 
 
-::
+.. code-block:: mysql
 
 	mysql> SELECT id FROM test1 WHERE MATCH('is this a good plan?');SHOW PLAN\G
 	Empty set (0.00 sec)
@@ -429,7 +428,7 @@ Now let's run several queries:
 	1 row in set (0.00 sec)
 
 
-::
+.. code-block:: mysql
 
     mysql>  SELECT COUNT(*) c, id%3 idd FROM test1 GROUP BY idd HAVING COUNT(*)>1;
 	+------+------+
@@ -439,7 +438,7 @@ Now let's run several queries:
 	+------+------+
 	1 row in set (0.00 sec)
 
-::
+.. code-block:: mysql
 
     mysql>  SELECT COUNT(*) FROM test1;
 	+----------+
@@ -449,7 +448,7 @@ Now let's run several queries:
 	+----------+
 	1 row in set (0.00 sec)
 
-::
+.. code-block:: mysql
 
 	mysql>   CALL KEYWORDS ('one two three', 'test1', 1);
 	+------+-----------+------------+------+------+

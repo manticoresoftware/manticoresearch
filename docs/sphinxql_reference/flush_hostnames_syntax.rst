@@ -3,7 +3,7 @@
 FLUSH HOSTNAMES syntax
 ----------------------
 
-::
+.. code-block:: mysql
 
 
     FLUSH HOSTNAMES
@@ -13,7 +13,7 @@ getting the host name IP, see
 :ref:`hostname_lookup <hostname_lookup>`
 directive.
 
-::
+.. code-block:: mysql
 
 
     mysql> FLUSH HOSTNAMES;

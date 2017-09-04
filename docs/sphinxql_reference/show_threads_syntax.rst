@@ -3,7 +3,7 @@
 SHOW THREADS syntax
 -------------------
 
-::
+.. code-block:: mysql
 
 
     SHOW THREADS [ OPTION columns=width ]
@@ -26,7 +26,7 @@ below). This column will contain raw SphinxQL queries and, if there are
 API queries, full text syntax and comments will be displayed. With an
 API-snippet, the data size will be displayed along with the query.
 
-::
+.. code-block:: mysql
 
 
     mysql> SHOW THREADS OPTION columns=50;

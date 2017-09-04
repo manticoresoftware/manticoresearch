@@ -74,7 +74,7 @@ constant specifying one of the known modes.
 mode constant name in quotes, that syntax specifies a string and is
 incorrect:
 
-::
+.. code-block:: php
 
 
     $cl->SetMatchMode ( "SPH_MATCH_ANY" ); // INCORRECT! will not work as expected
@@ -126,7 +126,7 @@ specifying one of the known modes.
 mode constant name in quotes, that syntax specifies a string and is
 incorrect:
 
-::
+.. code-block:: php
 
 
     $cl->SetSortMode ( "SPH_SORT_ATTR_DESC" ); // INCORRECT! will not work as expected

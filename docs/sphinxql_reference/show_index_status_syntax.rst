@@ -3,7 +3,7 @@
 SHOW INDEX STATUS syntax
 ------------------------
 
-::
+.. code-block:: mysql
 
 
     SHOW INDEX index_name STATUS
@@ -26,7 +26,7 @@ Displays various per-index statistics. Currently, those include:
    which includes number of queries, min,max,avg,95 and 99 percentile
    values.
 
-::
+.. code-block:: mysql
 
 
     mysql> SHOW INDEX lj STATUS;

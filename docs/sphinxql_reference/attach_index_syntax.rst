@@ -3,7 +3,7 @@
 ATTACH INDEX syntax
 -------------------
 
-::
+.. code-block:: mysql
 
 
     ATTACH INDEX diskindex TO RTINDEX rtindex
@@ -38,7 +38,7 @@ The complete list is as follows.
 
 -  Source disk index needs to have an empty index_zones setting.
 
-::
+.. code-block:: mysql
 
 
     mysql> DESC rt;

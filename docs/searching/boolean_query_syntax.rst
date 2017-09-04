@@ -7,13 +7,13 @@ Boolean queries allow the following special operators to be used:
 
 -  operator OR:
 
-   ::
+.. code-block:: mysql
 
        hello | world
 
 -  operator NOT:
 
-   ::
+.. code-block:: mysql
 
 
        hello -world
@@ -21,7 +21,7 @@ Boolean queries allow the following special operators to be used:
 
 -  grouping:
 
-   ::
+.. code-block:: mysql
 
        ( hello world )
 
@@ -30,7 +30,7 @@ Here's an example query which uses all these operators:
 Example 5.1. Boolean query example
                                   
 
-::
+.. code-block:: mysql
 
 
     ( cat -dog ) | ( cat -mouse)

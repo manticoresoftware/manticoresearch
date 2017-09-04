@@ -3,7 +3,7 @@
 SHOW PROFILE syntax
 -------------------
 
-::
+.. code-block:: mysql
 
 
     SHOW PROFILE
@@ -17,7 +17,7 @@ implications, and therefore the profile will be empty.
 
 Here's a complete instrumentation example:
 
-::
+.. code-block:: mysql
 
 
     mysql> SET profiling=1;

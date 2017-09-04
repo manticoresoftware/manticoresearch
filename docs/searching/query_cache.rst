@@ -22,7 +22,7 @@ following directives:
 These settings can be changed on the fly using the :ref:`SET
 GLOBAL <set_syntax>` statement:
 
-::
+.. code-block:: mysql
 
 
     mysql> SET GLOBAL qcache_max_bytes=128000000;
@@ -72,7 +72,7 @@ Current cache status can be inspected with in :ref:`SHOW
 STATUS <show_status_syntax>` through the ``qcache_XXX``
 variables:
 
-::
+.. code-block:: mysql
 
 
     mysql> SHOW STATUS LIKE 'qcache%';

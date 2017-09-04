@@ -3,7 +3,7 @@
 SHOW META syntax
 ----------------
 
-::
+.. code-block:: mysql
 
 
     SHOW META [ LIKE pattern ]
@@ -18,7 +18,7 @@ counters will only be available if searchd was configured with
 costs <predicted_time_costs>`
 and query had predicted_time in OPTION clause.
 
-::
+.. code-block:: mysql
 
 
     mysql> SELECT * FROM test1 WHERE MATCH('test|one|two');
@@ -69,7 +69,7 @@ variables that match a pattern. The pattern syntax is that of regular
 SQL wildcards, that is, ‘%’ means any number of any characters, and '_'
 means a single character:
 
-::
+.. code-block:: mysql
 
 
     mysql> SHOW META LIKE 'total%';

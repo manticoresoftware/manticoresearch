@@ -20,7 +20,7 @@ from the Manticore website.
 
 Example:
 
-::
+.. code-block:: ini
 
 
     lemmatizer_base = /usr/local/share/sphinx/dicts/
@@ -42,7 +42,7 @@ originating from either SQL or XMLpipe2 sources will all be affected.
 
 Example:
 
-::
+.. code-block:: ini
 
 
     json_autoconv_keynames = lowercase
@@ -65,7 +65,7 @@ affected.
 
 Example:
 
-::
+.. code-block:: ini
 
 
     json_autoconv_numbers = 1
@@ -88,7 +88,7 @@ error.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     on_json_attr_error = ignore_attr
@@ -111,7 +111,7 @@ take effect.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     plugin_dir = /usr/local/sphinx/lib
@@ -127,7 +127,7 @@ RLP environment configuration file. Mandatory if RLP is used.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     rlp_environment = /home/myuser/RLP/rlp-environment.xml
@@ -145,7 +145,7 @@ Optional, default is 50. This option has effect only if
 
 Example:
 
-::
+.. code-block:: ini
 
 
     rlp_max_batch_docs = 100
@@ -166,7 +166,7 @@ them by the RLP. This option has effect only if
 Example:
 
 
-::
+.. code-block:: ini
 
 
     rlp_max_batch_size = 100k
@@ -181,7 +181,7 @@ Path to the RLP root folder. Mandatory if RLP is used.
 
 Example:
 
-::
+.. code-block:: ini
 
 
     rlp_root = /home/myuser/RLP

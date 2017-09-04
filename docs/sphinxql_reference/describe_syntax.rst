@@ -3,7 +3,7 @@
 DESCRIBE syntax
 ---------------
 
-::
+.. code-block:: mysql
 
 
     {DESC | DESCRIBE} index [ LIKE pattern ]
@@ -17,7 +17,7 @@ and ``mva``. ID column will be typed either ``integer`` or ``bigint``
 based on whether the binaries were built with 32-bit or 64-bit document
 ID support. Example:
 
-::
+.. code-block:: mysql
 
 
     mysql> DESC rt;

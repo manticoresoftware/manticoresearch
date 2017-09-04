@@ -21,7 +21,7 @@ Grouping feature is very similar in nature to GROUP BY clause from SQL.
 Results produces by this function call are going to be the same as
 produced by the following pseudo code:
 
-::
+.. code-block:: mysql
 
 
     SELECT ... GROUP BY $func($attribute) ORDER BY $groupsort
@@ -56,7 +56,7 @@ permit), then the amount of distinct values will be calculated and
 returned to the client. This feature is similar to ``COUNT(DISTINCT)``
 clause in standard SQL; so these Manticore calls:
 
-::
+.. code-block:: php
 
 
     $cl->SetGroupBy ( "category", SPH_GROUPBY_ATTR, "@count desc" );
@@ -64,7 +64,7 @@ clause in standard SQL; so these Manticore calls:
 
 can be expressed using the following SQL clauses:
 
-::
+.. code-block:: mysql
 
 
     SELECT id, weight, all-attributes,

@@ -3,7 +3,7 @@
 CREATE PLUGIN syntax
 --------------------
 
-::
+.. code-block:: mysql
 
 
     CREATE PLUGIN plugin_name TYPE 'plugin_type' SONAME 'plugin_library'
@@ -20,7 +20,7 @@ specified plugin from it. The known plugin types are:
 Refer to :ref:`plugins`
 for more information regarding writing the plugins.
 
-::
+.. code-block:: mysql
 
 
     mysql> CREATE PLUGIN myranker TYPE 'ranker' SONAME 'myplugins.so';

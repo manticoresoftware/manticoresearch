@@ -37,7 +37,7 @@ mechanism, using magic names ‘@expr’ and ‘@geodist’ respectively.
 Example:
 
 
-::
+.. code-block:: php
 
 
     $cl->SetSelect ( "*, @weight+(user_karma+ln(pageviews))*0.1 AS myweight" );

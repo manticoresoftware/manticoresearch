@@ -78,7 +78,7 @@ will still occur at normal shut-down.
 
 Example:
 
-::
+.. code-block:: ini
 
 
     attr_flush_period = 900 # persist updates to disk every 15 minutes
@@ -115,7 +115,7 @@ protection against hardware ones.
 
 Example:
 
-::
+.. code-block:: ini
 
 
     binlog_flush = 1 # ultimate safety, low speed
@@ -136,7 +136,7 @@ workloads.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     binlog_max_log_size = 16M
@@ -173,7 +173,7 @@ the searchd will not start at all.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     binlog_path = # disable logging
@@ -190,7 +190,7 @@ connections. Optional, default is five minutes.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     client_timeout = 3600
@@ -209,7 +209,7 @@ the details.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     collation_libc_locale = fr_FR
@@ -228,7 +228,7 @@ available collations and other details.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     collation_server = utf8_ci
@@ -269,7 +269,7 @@ megabytes).
 Example:
 
 
-::
+.. code-block:: ini
 
 
     index dist_test
@@ -304,7 +304,7 @@ each wildcard in the query).
 Example:
 
 
-::
+.. code-block:: ini
 
 
     expansion_limit = 16
@@ -363,7 +363,7 @@ statement.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     ha_period_karma = 120
@@ -387,7 +387,7 @@ To disable pings, set ha_ping_interval to 0.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     ha_ping_interval = 0
@@ -421,7 +421,7 @@ value.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     listen_backlog = 20
@@ -436,7 +436,7 @@ path, that ``searchd`` will listen on.
 
 The informal grammar for ``listen`` setting is:
 
-::
+.. code-block:: ini
 
 
     listen = ( address ":" port | port | path ) [ ":" protocol ] [ "_vip" ]
@@ -461,7 +461,7 @@ stall or not let you connect via a regular port.
 Examples:
 ^
 
-::
+.. code-block:: ini
 
 
     listen = localhost
@@ -496,7 +496,7 @@ be configured ‘–with-syslog’ on building.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     log = /var/log/searchd.log
@@ -516,7 +516,7 @@ check.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     max_batch_queries = 256
@@ -565,7 +565,7 @@ throughput.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     max_children = 10
@@ -582,7 +582,7 @@ default is 256.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     max_filters = 1024
@@ -599,7 +599,7 @@ default is 4096.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     max_filter_values = 16384
@@ -617,7 +617,7 @@ affect RAM use or performance. Optional, default is 8M.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     max_packet_size = 32M
@@ -644,7 +644,7 @@ persistent storage mechanism.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     mva_updates_pool = 16M
@@ -671,7 +671,7 @@ default, it reports its own version.)
 Example:
 
 
-::
+.. code-block:: ini
 
 
     mysql_version_string = 5.0.37
@@ -752,7 +752,7 @@ option of the agents.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     persistent_connections_limit = 29 # assume that each host of agents has max_children = 30 (or 29).
@@ -775,7 +775,7 @@ automation scripts.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     pid_file = /var/run/searchd.pid
@@ -792,20 +792,20 @@ Terminating queries before completion based on their execution time (via
 either
 :ref:`SetMaxQueryTime() <set_max_query_time>`
 API call, or :ref:`SELECT … OPTION
-max_query_time <select_syntax>` SphinxQL statement) is a
+max_query_time <select_option>` SphinxQL statement) is a
 nice safety net, but it comes with an inborn drawback: indeterministic
 (unstable) results. That is, if you repeat the very same (complex)
 search query with a time limit several times, the time limit will get
 hit at different stages, and you will get *different* result sets.
 
 There is a new option, :ref:`SELECT … OPTION
-max_predicted_time <select_syntax>`, that lets you limit
+max_predicted_time <select_option>`, that lets you limit
 the query time *and* get stable, repeatable results. Instead of
 regularly checking the actual current time while evaluating the query,
 which is indeterministic, it predicts the current running time using a
 simple linear model instead:
 
-::
+.. code-block:: ini
 
 
     predicted_time =
@@ -840,7 +840,7 @@ strongly suggest to specify all of them, for readability.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     predicted_time_costs = doc=128, hit=96, skip=4096, match=128
@@ -867,7 +867,7 @@ recommended to preopen indexes.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     preopen_indexes = 1
@@ -881,7 +881,7 @@ Integer, in bytes. The maximum RAM allocated for cached result sets.
 Default is 0, meaning disabled. Refer to `query
 cache <query_cache>` for details.
 
-::
+.. code-block:: ini
 
 
     qcache_max_bytes = 16777216
@@ -922,7 +922,7 @@ discussion and format details.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     query_log_format = sphinxql
@@ -954,7 +954,7 @@ building.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     query_log = /var/log/query.log
@@ -986,7 +986,7 @@ but possibly decreasing IO time.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     read_buffer = 1M
@@ -1003,7 +1003,7 @@ fail to send a query within this timeout.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     read_timeout = 1
@@ -1027,7 +1027,7 @@ read_buffer.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     read_unhinted = 32K
@@ -1049,7 +1049,7 @@ binlog cleanup. See :ref:`binary_logging` for more details.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     rt_flush_period = 3600 # 1 hour
@@ -1072,7 +1072,7 @@ performance degradation caused by merging.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     rt_merge_iops = 40
@@ -1097,7 +1097,7 @@ of disk I/O per second.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     rt_merge_maxiosize = 1M
@@ -1156,7 +1156,7 @@ same.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     seamless_rotate = 1
@@ -1178,7 +1178,7 @@ load.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     shutdown_timeout = 5 # wait for up to 5 seconds
@@ -1212,7 +1212,7 @@ servers.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     snippets_file_prefix = /mnt/common/server1/
@@ -1234,7 +1234,7 @@ helps a graceful recovery with no such surprises.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     sphinxql_state = uservars.sql
@@ -1250,7 +1250,7 @@ interface. Optional, default is 15 minutes.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     sphinxql_timeout = 900
@@ -1270,7 +1270,7 @@ be spent to cache document entries per each query. Setting the limit to
 Example:
 
 
-::
+.. code-block:: ini
 
 
     subtree_docs_cache = 8M
@@ -1290,7 +1290,7 @@ limit to 0 disables the optimizer.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     subtree_hits_cache = 16M
@@ -1322,7 +1322,7 @@ required stack size in the error message.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     thread_stack = 256K
@@ -1338,7 +1338,7 @@ default is 1 (do unlink).
 Example:
 
 
-::
+.. code-block:: ini
 
 
     unlink_old = 0
@@ -1360,7 +1360,7 @@ in case of abnormal termination. Watchdog is enabled by default.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     watchdog = 0 # disable watchdog
@@ -1400,7 +1400,7 @@ to become the only MPM mode.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     workers = thread_pool

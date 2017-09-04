@@ -3,7 +3,7 @@
 SELECT syntax
 -------------
 
-::
+.. code-block:: mysql
 
 
     SELECT
@@ -22,112 +22,139 @@ SELECT syntax
 several Manticore-specific extensions and has a few omissions (such as
 (currently) missing support for JOINs). Specifically,
 
--  Column list clause. Column names, arbitrary expressions, and star
-   ('\*') are all allowed (ie.
-   ``SELECT id, group_id*123+456 AS expr1 FROM test1`` will work).
-   Unlike in regular SQL, all computed expressions must be aliased with
-   a valid identifier. ``AS`` is optional.
+Column list
+^^^^^^^^^^^
 
--  EXIST() function is supported. EXIST ( “attr-name”, default-value )
-   replaces non-existent columns with default values. It returns either
-   a value of an attribute specified by ‘attr-name’, or ‘default-value’
-   if that attribute does not exist. It does not support STRING or MVA
-   attributes. This function is handy when you are searching through
-   several indexes with different schemas.
+Column list clause. Column names, arbitrary expressions, and star   ('*') are all allowed 
+(ie.   ``SELECT id, group_id*123+456 AS expr1 FROM test1`` will work).   Unlike in regular SQL, all computed expressions must be aliased with   a valid identifier. ``AS`` is optional.
 
-   ::
+.. _select_exist:
+   
+EXIST()
+^^^^^^^
+
+EXIST ( “attr-name”, default-value )   replaces non-existent columns with default values. It returns either
+a value of an attribute specified by ‘attr-name’, or ‘default-value’
+if that attribute does not exist. It does not support STRING or MVA
+attributes. This function is handy when you are searching through
+several indexes with different schemas.
+
+.. code-block:: mysql
 
 
        SELECT *, EXIST('gid', 6) as cnd FROM i1, i2 WHERE cnd>5
 
--  SNIPPET() function is supported. This is a wrapper around the
-   snippets functionality, similar to what is available via CALL
-   SNIPPETS. The first two arguments are: the text to highlight, and a
-   query. It's possible to pass
-   :ref:`options <build_excerpts>` to
-   function. The intended use is as follows:
+.. _select_snippet:
+	   
+SNIPPET()
+^^^^^^^^^
 
-   ::
+This is a wrapper around the
+snippets functionality, similar to what is available via CALL
+SNIPPETS. The first two arguments are: the text to highlight, and a
+query. It's possible to pass
+:ref:`options <build_excerpts>` to
+function. The intended use is as follows:
+
+.. code-block:: mysql
 
 
        SELECT id, SNIPPET(myUdf(id), 'my.query', 'limit=100')
        FROM myIndex WHERE MATCH('my.query')
 
-   where myUdf() would be a UDF that fetches a document by its ID from
-   some external storage. This enables applications to fetch the entire
-   result set directly from Manticore in one query, without having to
-   separately fetch the documents in the application and then send them
-   back to Manticore for highlighting.
+where myUdf() would be a UDF that fetches a document by its ID from
+some external storage. This enables applications to fetch the entire
+result set directly from Manticore in one query, without having to
+separately fetch the documents in the application and then send them
+back to Manticore for highlighting.
 
-   SNIPPET() is a so-called “post limit” function, meaning that
-   computing snippets is postponed not just until the entire final
-   result set is ready, but even after the LIMIT clause is applied. For
-   example, with a LIMIT 20,10 clause, SNIPPET() will be called at most
-   10 times.
+SNIPPET() is a so-called “post limit” function, meaning that
+computing snippets is postponed not just until the entire final
+result set is ready, but even after the LIMIT clause is applied. For
+example, with a LIMIT 20,10 clause, SNIPPET() will be called at most
+10 times.
 
-   Table functions is a mechanism of post-query result set processing.
-   Table functions take an arbitrary result set as their input, and
-   return a new, processed set as their output. The first argument
-   should be the input result set, but a table function can optionally
-   take and handle more arguments. Table functions can completely change
-   the result set, including the schema. For now, only built in table
-   functions are supported. UDFs are planned when the internal call
-   interface is stabilized. Table functions work for both outer SELECT
-   and nested SELECT.
+Table functions is a mechanism of post-query result set processing.
+Table functions take an arbitrary result set as their input, and
+return a new, processed set as their output. The first argument
+should be the input result set, but a table function can optionally
+take and handle more arguments. Table functions can completely change
+the result set, including the schema. For now, only built in table
+functions are supported. UDFs are planned when the internal call
+interface is stabilized. Table functions work for both outer SELECT
+and nested SELECT.
 
-   -  REMOVE_REPEATS ( result_set, column, offset, limit ) - removes
-      repeated adjusted rows with the same ‘column’ value.
+.. _select_remove_repeats:
 
-   ::
+REMOVE_REPEATS()
+^^^^^^^^^^^^^^^^
+REMOVE_REPEATS ( result_set, column, offset, limit ) - removes repeated adjusted rows with the same ‘column’ value.
+
+.. code-block:: mysql
 
 
        SELECT REMOVE_REPEATS((SELECT * FROM dist1), gid, 0, 10)
 
--  FROM clause. FROM clause should contain the list of indexes to search
-   through. Unlike in regular SQL, comma means enumeration of full-text
-   indexes as in :ref:`Query() <query>` API call rather than
-   JOIN. Index name should be according to the rules of a C identifier.
+.. _select_from:
 
--  WHERE clause. This clause will map both to fulltext query and
-   filters. Comparison operators (=, !=, <, >, <=, >=), IN, AND, OR, NOT,
-   and BETWEEN are all supported and map directly to filters. MATCH(‘query’) is supported
-   and maps to fulltext query. Query will be interpreted according to
-   :ref:`full-text query language rules <extended_query_syntax>`.
-   There must be at most one MATCH() in the clause.
-   ``{col_name | expr_alias} [NOT] IN @uservar`` condition syntax is
-   supported. (Refer to :ref:`set_syntax` for a description of global user
-   variables.)
+FROM
+^^^^
 
--  GROUP BY clause. Supports grouping by multiple columns or computed
-   expressions:
+FROM clause should contain the list of indexes to search
+through. Unlike in regular SQL, comma means enumeration of full-text
+indexes as in :ref:`Query() <query>` API call rather than
+JOIN. Index name should be according to the rules of a C identifier.
 
-   ::
+.. _select_where:
+
+WHERE
+^^^^^
+   
+This clause will map both to fulltext query and
+filters. Comparison operators (=, !=, <, >, <=, >=), IN, AND, OR, NOT,
+and BETWEEN are all supported and map directly to filters. MATCH(‘query’) is supported
+and maps to fulltext query. Query will be interpreted according to
+:ref:`full-text query language rules <extended_query_syntax>`.
+There must be at most one MATCH() in the clause.
+``{col_name | expr_alias} [NOT] IN @uservar`` condition syntax is
+supported. (Refer to :ref:`set_syntax` for a description of global user
+variables.)
+
+.. _select_group_by:
+
+GROUP BY
+^^^^^^^^
+
+Supports grouping by multiple columns or computed
+expressions:
+
+.. code-block:: mysql
 
 
        SELECT *, group_id*1000+article_type AS gkey FROM example GROUP BY gkey
        SELECT id FROM products GROUP BY region, price
 
-   Implicit grouping supported when using aggregate functions without
-   specifiying a GROUP BY clause. Consider these two queries:
+Implicit grouping supported when using aggregate functions without
+specifiying a GROUP BY clause. Consider these two queries:
 
-   ::
+.. code-block:: mysql
 
 
        SELECT MAX(id), MIN(id), COUNT(*) FROM books
        SELECT MAX(id), MIN(id), COUNT(*), 1 AS grp FROM books GROUP BY grp
 
-   Aggregate functions (AVG(), MIN(), MAX(), SUM()) in column list
-   clause are supported. Arguments to aggregate functions can be either
-   plain attributes or arbitrary expressions. COUNT(\*), COUNT(DISTINCT
-   attr) are supported. Currently there can be at most one
-   COUNT(DISTINCT) per query and an argument needs to be an attribute.
-   Both current restrictions on COUNT(DISTINCT) might be lifted in the
-   future. A special GROUPBY() function is also supported. It returns
-   the GROUP BY key. That is particularly useful when grouping by an MVA
-   value, in order to pick the specific value that was used to create
-   the current group.
+Aggregate functions (AVG(), MIN(), MAX(), SUM()) in column list
+clause are supported. Arguments to aggregate functions can be either
+plain attributes or arbitrary expressions. COUNT(\*), COUNT(DISTINCT
+attr) are supported. Currently there can be at most one
+COUNT(DISTINCT) per query and an argument needs to be an attribute.
+Both current restrictions on COUNT(DISTINCT) might be lifted in the
+future. A special GROUPBY() function is also supported. It returns
+the GROUP BY key. That is particularly useful when grouping by an MVA
+value, in order to pick the specific value that was used to create
+the current group.
 
-   ::
+.. code-block:: mysql
 
 
        SELECT *, AVG(price) AS avgprice, COUNT(DISTINCT storeid), GROUPBY()
@@ -135,51 +162,67 @@ several Manticore-specific extensions and has a few omissions (such as
        WHERE MATCH('ipod')
        GROUP BY vendorid
 
-   GROUP BY on a string attribute is supported, with respect for current
-   collation (see `the section called
-   “Collations” <collations>`).
+GROUP BY on a string attribute is supported, with respect for current
+collation (see :ref:`collations`).
 
-   You can query Manticore to return (no more than) N top matches for each
-   group accordingly to WITHIN GROUP ORDER BY.
+You can query Manticore to return (no more than) N top matches for each
+group accordingly to WITHIN GROUP ORDER BY.
 
-   ::
+.. code-block:: mysql
 
 
        SELECT id FROM products GROUP 3 BY category
 
-   You can sort the result set by (an alias of) the aggregate value.
+You can sort the result set by (an alias of) the aggregate value.
 
-   ::
+.. code-block:: mysql
 
 
        SELECT group_id, MAX(id) AS max_id
        FROM my_index WHERE MATCH('the')
        GROUP BY group_id ORDER BY max_id DESC
 
--  GROUP_CONCAT() function is supported. When you group by an
-   attribute, the result set only shows attributes from a single
-   document representing the whole group. GROUP_CONCAT() produces a
-   comma-separated list of the attribute values of all documents in the
-   group.
 
-   ::
+.. _select_group_concat:
+
+GROUP_CONCAT() 
+^^^^^^^^^^^^^^
+
+When you group by an
+attribute, the result set only shows attributes from a single
+document representing the whole group. GROUP_CONCAT() produces a
+comma-separated list of the attribute values of all documents in the
+group.
+
+.. code-block:: mysql
 
 
        SELECT id, GROUP_CONCAT(price) as pricesList, GROUPBY() AS name FROM shops GROUP BY shopName;
 
--  ZONESPANLIST() function returns pairs of matched zone spans. Each
-   pair contains the matched zone span identifier, a colon, and the
-   order number of the matched zone span. For example, if a document
-   reads <emphasis role="bold"><i>text</i> the <i>text</i></emphasis>, and you query for
-   ‘ZONESPAN:(i,b) text’, then ZONESPANLIST() will return the string
-   “1:1 1:2 2:1” meaning that the first zone span matched “text” in
-   spans 1 and 2, and the second zone span in span 1 only.
 
--  WITHIN GROUP ORDER BY clause. This is a Manticore specific extension
-   that lets you control how the best row within a group will to be
-   selected. The syntax matches that of regular ORDER BY clause:
+.. _select_zoenspanlist:
 
-   ::
+ZONESPANLIST()
+^^^^^^^^^^^^^^
+
+ZONESPANLIST() function returns pairs of matched zone spans. Each
+pair contains the matched zone span identifier, a colon, and the
+order number of the matched zone span. For example, if a document
+reads <emphasis role="bold"><i>text</i> the <i>text</i></emphasis>, and you query for
+‘ZONESPAN:(i,b) text’, then ZONESPANLIST() will return the string
+“1:1 1:2 2:1” meaning that the first zone span matched “text” in
+spans 1 and 2, and the second zone span in span 1 only.
+
+.. _select_within_group_order_by:
+
+WITHIN GROUP ORDER BY
+^^^^^^^^^^^^^^^^^^^^^
+   
+This is a Manticore specific extension
+that lets you control how the best row within a group will to be
+selected. The syntax matches that of regular ORDER BY clause:
+
+.. code-block:: mysql
 
 
        SELECT *, INTERVAL(posted,NOW()-7*86400,NOW()-86400) AS timeseg, WEIGHT() AS w
@@ -191,59 +234,78 @@ several Manticore-specific extensions and has a few omissions (such as
    WITHIN GROUP ORDER BY on a string attribute is supported, with
    respect for current collation (see :ref:`collations`).
 
--  HAVING clause. This is used to filter on GROUP BY values. Currently
-   supports only one filtering condition.
+.. _select_having:
+   
+HAVING
+^^^^^^
 
-   ::
+This is used to filter on GROUP BY values. Currently
+supports only one filtering condition.
+
+.. code-block:: mysql
 
 
        SELECT id FROM plain GROUP BY title HAVING group_id=16;
        SELECT id FROM plain GROUP BY attribute HAVING COUNT(*)>1;
 
-   Because of HAVING is implemented as a whole result set
-   post-processing, result set for query with HAVING could be less than
-   ``max_matches`` allows.
+Because of HAVING is implemented as a whole result set
+post-processing, result set for query with HAVING could be less than
+`max_matches`` allows.
 
--  ORDER BY clause. Unlike in regular SQL, only column names (not
-   expressions) are allowed and explicit ASC and DESC are required. The
-   columns however can be computed expressions:
+.. _select_order_by:
+   
+ORDER BY
+^^^^^^^^
 
-   ::
+Unlike in regular SQL, only column names (not
+expressions) are allowed and explicit ASC and DESC are required. The
+columns however can be computed expressions:
+
+.. code-block:: mysql
 
 
        SELECT *, WEIGHT()*10+docboost AS skey FROM example ORDER BY skey
 
-   You can use subqueries to speed up specific searches, which involve
-   reranking, by postponing hard (slow) calculations as late as
-   possible. For example, SELECT id,a_slow_expression() AS cond FROM
-   an_index ORDER BY id ASC, cond DESC LIMIT 100; could be better
-   written as SELECT \* FROM (SELECT id,a_slow_expression() AS cond
-   FROM an_index ORDER BY id ASC LIMIT 100) ORDER BY cond DESC; because
-   in the first case the slow expression would be evaluated for the
-   whole set, while in the second one it would be evaluated just for a
-   subset of values.
+You can use subqueries to speed up specific searches, which involve
+reranking, by postponing hard (slow) calculations as late as
+possible. For example, SELECT id,a_slow_expression() AS cond FROM
+an_index ORDER BY id ASC, cond DESC LIMIT 100; could be better
+written as SELECT \* FROM (SELECT id,a_slow_expression() AS cond
+FROM an_index ORDER BY id ASC LIMIT 100) ORDER BY cond DESC; because
+in the first case the slow expression would be evaluated for the
+whole set, while in the second one it would be evaluated just for a
+subset of values.
 
-   ORDER BY on a string attribute is supported, with respect for current
-   collation (see `the section called
-   “Collations” <collations>`).
+ORDER BY on a string attribute is supported, with respect for current
+collation (see :ref:`collations`).
 
-   ORDER BY RAND() syntax is supported. Note that this syntax is
-   actually going to randomize the weight values and then order matches
-   by those randomized weights.
+ORDER BY RAND() syntax is supported. Note that this syntax is
+actually going to randomize the weight values and then order matches
+by those randomized weights.
 
--  LIMIT clause. Both LIMIT N and LIMIT M,N forms are supported. Unlike
-   in regular SQL (but like in Manticore API), an implicit LIMIT 0,20 is
-   present by default.
+.. _select_limit:
 
--  OPTION clause. This is a Manticore specific extension that lets you
-   control a number of per-query options. The syntax is:
+LIMIT
+^^^^^
+   
+Both LIMIT N and LIMIT M,N forms are supported. Unlike
+in regular SQL (but like in Manticore API), an implicit LIMIT 0,20 is
+present by default.
 
-   ::
+.. _select_option:
+
+OPTION
+^^^^^^
+
+This is a Manticore specific extension that lets you
+control a number of per-query options. The syntax is:
+
+.. code-block:: mysql
 
 
        OPTION <optionname>=<value> [ , ... ]
 
-   Supported options and respectively allowed values are:
+Supported options and respectively allowed values are:
 
    -  ``agent_query_timeout`` - integer (max time in milliseconds to
       wait for remote queries to complete, see
@@ -380,32 +442,38 @@ several Manticore-specific extensions and has a few omissions (such as
 
    -  ``low_priority`` - runs the query with idle priority.
 
-   Example:
+Example:
 
-   ::
+.. code-block:: mysql
 
 
        SELECT * FROM test WHERE MATCH('@title hello @body world')
        OPTION ranker=bm25, max_matches=3000,
            field_weights=(title=10, body=3), agent_query_timeout=10000
 
--  FACET clause. This Manticore specific extension enables faceted search
-   with subtree optimization. It is capable of returning multiple result
-   sets with a single SQL statement, without the need for complicated
-   :ref:`multi-queries <multi-statement_queries>`. FACET clauses
-   should be written at the very end of SELECT statements with spaces
-   between them.
 
-   ::
+.. _select_facet:
+
+FACET
+^^^^^
+
+This Manticore specific extension enables faceted search
+with subtree optimization. It is capable of returning multiple result
+sets with a single SQL statement, without the need for complicated
+:ref:`multi-queries <multi-statement_queries>`. FACET clauses
+should be written at the very end of SELECT statements with spaces
+between them.
+
+.. code-block:: mysql
 
 
        FACET {expr_list} [BY {expr_list}] [ORDER BY {expr | FACET()} {ASC | DESC}] [LIMIT [offset,] count]
        SELECT * FROM test FACET brand_id FACET categories;
        SELECT * FROM test FACET brand_name BY brand_id ORDER BY brand_name ASC FACET property;
 
-   Working example:
+Working example:
 
-   ::
+.. code-block:: mysql
 
 
        mysql> SELECT *, IN(brand_id,1,2,3,4) AS b FROM facetdemo WHERE MATCH('Product') AND b=1 LIMIT 0,10
@@ -469,49 +537,54 @@ several Manticore-specific extensions and has a few omissions (such as
        |         15 |      347 |
        +------------+----------+
 
--  subselects, in format ``SELECT * FROM (SELECT … ORDER BY cond1 LIMIT X) ORDER BY cond2 LIMIT Y``. 
-   The outer select allows only ORDER BY and
-   LIMIT clauses.
-   Subselects currently have 2 usage cases:
+
+.. _select_subselects:
+
+Subselects
+^^^^^^^^^^
+
+In format ``SELECT * FROM (SELECT … ORDER BY cond1 LIMIT X) ORDER BY cond2 LIMIT Y``. 
+The outer select allows only ORDER BY and LIMIT clauses.
+Subselects currently have 2 usage cases:
+  
+1. We have a query with 2 ranking UDFs, one very fast and the other one slow and we perform a full-text search will a big match result set. Without subselect the query would look like
    
-   1. We have a query with 2 ranking UDFs, one very fast and the other one slow and we perform a full-text search will a big match result set. Without subselect the query would look like
+   .. code-block:: mysql 
+
+    	SELECT id,slow_rank() as slow,fast_rank() as fast FROM index 
+    		WHERE MATCH(‘some common query terms’) ORDER BY fast DESC, slow DESC LIMIT 20 
+    		OPTION max_matches=1000;
    
-	::
+   
+   With subselects the query can be rewritten as :
+   
+   .. code-block:: mysql 
+   
+    	SELECT * FROM
+    		(SELECT id,slow_rank() as slow,fast_rank() as fast FROM index WHERE 
+    			MATCH(‘some common query terms’)
+    			ORDER BY fast DESC LIMIT 100 OPTION max_matches=1000)
+    	ORDER BY slow DESC LIMIT 20;
+   
+   In the initial query the slow_rank() UDF is computed for the entire match result set. With subselects, only fast_rank() is computed for the entire match result set, while slow_rank() is only computed for a limited set.
+   
 
-		SELECT id,slow_rank() as slow,fast_rank() as fast FROM index 
-			WHERE MATCH(‘some common query terms’) ORDER BY fast DESC, slow DESC LIMIT 20 
-			OPTION max_matches=1000;
+2. The second case comes handy for large result set coming from a distributed index.
+   
+   For this query:
+   
+   .. code-block:: mysql 
+   
+       SELECT * FROM my_dist_index WHERE some_conditions LIMIT 50000;
+   
+   If we have 20 nodes, each node can send back to master a number of 50K records, resulting in **20 x 50K = 1M records**, however as the master sends back only 50K (out of 1M), it might be good enough for us for the nodes to send only the top 10K records.
+   With subselect we can rewrite the query as:
+   
+   .. code-block:: mysql 
+   
+       SELECT * FROM 
+        	(SELECT * FROM my_dist_index WHERE some_conditions LIMIT 10000) 
+        ORDER by some_attr LIMIT 50000;
 
-
-	With subselects the query can be rewritten as :
-		
-	::
-	
-		SELECT * FROM
-			(SELECT id,slow_rank() as slow,fast_rank() as fast FROM index WHERE 
-				MATCH(‘some common query terms’)
-				ORDER BY fast DESC LIMIT 100 OPTION max_matches=1000)
-		ORDER BY slow DESC LIMIT 20;
-		
-    In the initial query the slow_rank() UDF is computed for the entire match result set. With subselects, only fast_rank() is computed for the entire match result set, while slow_rank() is only computed for a limited set.
-	
-
-   2. The second case comes handy for large result set coming from a distributed index.
-	
-	For this query:
-	
-	:: 
-	
-		SELECT * FROM my_dist_index WHERE some_conditions LIMIT 50000;
-	
-	if we have 20 nodes, each node can send back to master a number of 50K records, resulting in **20 x 50K = 1M records**, however as the master sends back only 50K (out of 1M), it might be good enough for us for the nodes to send only the top 10K records.
-	With subselect we can rewrite the query as:
-	
-	:: 
-	
-		SELECT * FROM 
-			(SELECT * FROM my_dist_index WHERE some_conditions LIMIT 10000) 
-		ORDER by some_attr LIMIT 50000;
-
-	In this case, the nodes receive only the inner query and execute. This means the master will receive only *20x10K=200K records*. The master will take all the records received, reorder them by the OUTER clause and return the best 50K records. The  subselect help reducing the traffic between the master and the nodes and also reduce the master's computation time (as it process only 200K instead of 1M).
-	
+   In this case, the nodes receive only the inner query and execute. This means the master will receive only *20x10K=200K records*. The master will take all the records received, reorder them by the OUTER clause and return the best 50K records. The  subselect help reducing the traffic between the master and the nodes and also reduce the master's computation time (as it process only 200K instead of 1M).
+   

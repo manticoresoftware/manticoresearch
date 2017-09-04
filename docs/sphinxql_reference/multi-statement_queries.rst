@@ -12,7 +12,7 @@ in Perl are known to work.
 
 Here's a PHP sample showing how to utilize mysqli interface with Manticore.
 
-::
+.. code-block:: php
 
 
     <?php
@@ -46,7 +46,7 @@ Here's a PHP sample showing how to utilize mysqli interface with Manticore.
 Its output with the sample ``test1`` index included with Manticore is as
 follows.
 
-::
+.. code-block:: bash
 
 
     $ php test_multi.php

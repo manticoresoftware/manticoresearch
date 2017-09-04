@@ -3,7 +3,7 @@
 SHOW DATABASES syntax
 ---------------------
 
-::
+.. code-block:: mysql
 
 
     SHOW DATABASES

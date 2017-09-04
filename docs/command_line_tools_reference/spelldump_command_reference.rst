@@ -9,7 +9,7 @@ It is used to extract the contents of a dictionary file that uses
 
 Its general usage is:
 
-::
+.. code-block:: bash
 
 
     spelldump [options] <dictionary> <affix> [result] [locale-name]
@@ -28,7 +28,7 @@ case conversion details.
 
 Examples of its usage are:
 
-::
+.. code-block:: bash
 
 
     spelldump en.dict en.aff
@@ -40,7 +40,7 @@ in alphabetical order, output in the format of a wordforms file, which
 you can use to customize for your specific circumstances. An example of
 the result file:
 
-::
+.. code-block:: bash
 
 
     zone > zone

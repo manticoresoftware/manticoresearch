@@ -3,7 +3,7 @@
 SHOW CHARACTER SET syntax
 -------------------------
 
-::
+.. code-block:: mysql
 
 
     SHOW CHARACTER SET
@@ -13,7 +13,7 @@ a UTF-8 character set is available. It was added in order to keep
 compatibility with frameworks and connectors that automatically execute
 this statement.
 
-::
+.. code-block:: mysql
 
 
     mysql> SHOW CHARACTER SET;

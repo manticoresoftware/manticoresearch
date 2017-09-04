@@ -51,7 +51,7 @@ grouping. Here as an example.
 Example sphinx.conf part:
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-::
+.. code-block:: mysql
 
 
     ...
@@ -67,7 +67,7 @@ Example sphinx.conf part:
 Example application code (in PHP):
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-::
+.. code-block:: mysql
 
 
     // only search posts by author whose ID is 123

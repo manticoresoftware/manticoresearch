@@ -3,7 +3,7 @@
 ALTER syntax
 ------------
 
-::
+.. code-block:: mysql
 
 
     ALTER TABLE index {ADD|DROP} COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON|STRING}]
@@ -19,7 +19,7 @@ The newly created attribute values are set to 0. ALTER will not work for
 distributed indexes and indexes without any attributes. DROP COLUMN will
 fail if an index has only one attribute.
 
-::
+.. code-block:: mysql
 
 
     ALTER RTINDEX index RECONFIGURE
@@ -33,7 +33,7 @@ new rows are tokenized using the new rules. Note that as the queries are
 currently parsed separately for every disk chunk, this might result in
 warnings regarding the keyword sets mismatch.
 
-::
+.. code-block:: mysql
 
 
     mysql> desc plain;

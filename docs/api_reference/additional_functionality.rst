@@ -188,7 +188,7 @@ occurrence statistics are required.
 
 Usage example:
 
-::
+.. code-block:: php
 
 
     $keywords = $cl->BuildKeywords ( "this.is.my query", "test1", false );
@@ -213,7 +213,7 @@ to escape all such characters at all times.
 
 Usage example:
 
-::
+.. code-block:: php
 
 
     $escaped = $cl->EscapeString ( "escaping-sample@query/string" );
@@ -249,7 +249,7 @@ therefore current flushed state remained the same (for all indexes).
 
 Usage example:
 
-::
+.. code-block:: php
 
 
     $status = $cl->FlushAttributes ();
@@ -269,7 +269,7 @@ value pairs.
 
 Usage example:
 
-::
+.. code-block:: php
 
 
     $status = $cl->Status ();
@@ -314,7 +314,7 @@ directive for details.
 
 Usage example:
 
-::
+.. code-block:: php
 
 
     $cl->UpdateAttributes ( "test1", array("group_id"), array(1=>array(456)) );

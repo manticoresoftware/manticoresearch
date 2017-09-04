@@ -3,7 +3,7 @@
 OPTIMIZE INDEX syntax
 ---------------------
 
-::
+.. code-block:: mysql
 
 
     OPTIMIZE INDEX index_name
@@ -41,7 +41,7 @@ At the moment, OPTIMIZE needs to be issued manually, the indexes will
 *not* be optimized automatically. That might change in the future
 releases.
 
-::
+.. code-block:: mysql
 
 
     mysql> OPTIMIZE INDEX rt;

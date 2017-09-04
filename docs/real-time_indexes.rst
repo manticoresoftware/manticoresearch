@@ -22,7 +22,7 @@ example:
 Example 4.1. RT index declaration
                                  
 
-::
+.. code-block:: bash
 
 
     index rt
@@ -38,7 +38,7 @@ RT index can be accessed using MySQL protocol. INSERT, REPLACE, DELETE,
 and SELECT statements against RT index are supported. For instance, this
 is an example session with the sample index above:
 
-::
+.. code-block:: mysql
 
 
     $ mysql -h 127.0.0.1 -P 9306
@@ -81,7 +81,7 @@ Deletions are also possible using DELETE statement; the only currently
 supported syntax is DELETE FROM <index> WHERE id=<id>. REPLACE is also
 supported, enabling you to implement updates.
 
-::
+.. code-block:: mysql
 
 
     mysql> INSERT INTO rt ( id, title ) VALUES ( 3, 'third row' ), ( 4, 'fourth entry' );

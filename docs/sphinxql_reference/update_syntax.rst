@@ -3,7 +3,7 @@
 UPDATE syntax
 -------------
 
-::
+.. code-block:: mysql
 
 
     UPDATE index SET col1 = newval1 [, ...] WHERE where_condition [OPTION opt_name = opt_value [, ...]]
@@ -32,7 +32,7 @@ assign () to it.
 UPDATE can be used to update integer and float values in JSON array. No
 strings, arrays and other types yet.
 
-::
+.. code-block:: mysql
 
 
     mysql> UPDATE myindex SET enabled=0 WHERE id=123;
@@ -49,7 +49,7 @@ strings, arrays and other types yet.
 OPTION clause. This is a Manticore specific extension that lets you control
 a number of per-update options. The syntax is:
 
-::
+.. code-block:: mysql
 
 
     OPTION <optionname>=<value> [ , ... ]

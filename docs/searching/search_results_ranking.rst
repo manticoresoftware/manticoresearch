@@ -36,7 +36,7 @@ not choose the ranker. You can only do that in the SPH_MATCH_EXTENDED
 mode. (Which is the only mode in SphinxQL and the suggested mode in
 SphinxAPI anyway.) To choose a non-default ranker you can either use
 :ref:`SetRankingMode() <set_ranking_mode>`
-with SphinxAPI, or :ref:`OPTION ranker <select_syntax>` clause in
+with SphinxAPI, or :ref:`OPTION ranker <select_option>` clause in
 ``SELECT`` statement when using SphinxQL.
 
 As a sidenote, legacy matching modes are internally implemented via the
@@ -112,7 +112,7 @@ call from the SphinxAPI. The API ports expose these as global constants.
 Using SphinxQL syntax, the prefix should be omitted and the ranker name
 is case insensitive. Example:
 
-::
+.. code-block:: mysql
 
 
     // SphinxAPI
@@ -265,7 +265,7 @@ to that per-field sum. Currently implemented field-level factors are:
 -  ``user_weight`` (integer), the user specified per-field weight (refer
    to
    :ref:`SetFieldWeights() <set_field_weights>`
-   in SphinxAPI and :ref:`OPTION field_weights <select_syntax>`
+   in SphinxAPI and :ref:`OPTION field_weights <select_option>`
    in SphinxQL respectively). The weights default to 1 if not specified
    explicitly.
 
@@ -397,18 +397,20 @@ to that per-field sum. Currently implemented field-level factors are:
    pairs in the document, and compute pairwise “closenesses” as the
    product of their IDFs scaled by the distance coefficient:
 
-   ::
+   .. code-block:: mysql
 
 
        pair_tc = idf(pair_word1) * idf(pair_word2) * pow(pair_distance, -1.75)
 
+
    We then sum such closenesses, and compute the final, log-dampened ATC
    value:
 
-   ::
+   .. code-block:: mysql
 
 
        atc = log(1+sum(pair_tc))
+
 
    Note that this final dampening logarithm is exactly the reason you
    should use OPTION idf=plain, because without it, the expression

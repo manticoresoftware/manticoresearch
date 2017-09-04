@@ -3,7 +3,7 @@
 SHOW AGENT STATUS
 -----------------
 
-::
+.. code-block:: mysql
 
 
     SHOW AGENT ['agent'|'index'] STATUS [ LIKE pattern ]
@@ -17,7 +17,7 @@ of them of
 :ref:`ha_period_karma <ha_period_karma>`
 seconds. The command exists only in sphinxql.
 
-::
+.. code-block:: mysql
 
 
     mysql> SHOW AGENT STATUS;
@@ -79,7 +79,7 @@ seconds. The command exists only in sphinxql.
 
 An optional LIKE clause is supported. Refer to :ref:`show_meta_syntax` for its syntax details.
 
-::
+.. code-block:: mysql
 
 
     mysql> SHOW AGENT STATUS LIKE '%5period%msec%';
@@ -96,7 +96,7 @@ You can specify a particular agent by its address. In this case only
 that agent's data will be displayed. Also, ``agent_`` prefix will be used
 instead of ``ag_N_``:
 
-::
+.. code-block:: mysql
 
 
     mysql> SHOW AGENT '192.168.0.202:6714' STATUS LIKE '%15periods%';
@@ -124,7 +124,7 @@ selection probability used when one of the :ref:`weighted-probability
 strategies <ha_strategy>` is in
 effect).
 
-::
+.. code-block:: mysql
 
 
     mysql> SHOW AGENT dist_index STATUS;

@@ -22,7 +22,7 @@ Plain log format
 By default, ``searchd`` logs all successfully executed search queries
 into a query log file. Here's an example:
 
-::
+.. code-block:: mysql
 
 
     [Fri Jun 29 21:17:58 2007] 0.004 sec 0.004 sec [all/0/rel 35254 (0,20)] [lj] test
@@ -30,7 +30,7 @@ into a query log file. Here's an example:
 
 This log format is as follows:
 
-::
+.. code-block:: mysql
 
 
     [query-date] real-time wall-time [match-mode/filters-count/sort-mode
@@ -76,7 +76,7 @@ be a block of data after where the index(es) searched are listed.
 
 A query log entry might take the form of:
 
-::
+.. code-block:: mysql
 
 
     [Fri Jun 29 21:17:58 2007] 0.004 sec [all/0/rel 35254 (0,20)] [lj]
@@ -106,7 +106,7 @@ via SphinxQL. In the new format, the example from the previous section
 would look as follows. (Wrapped below for readability, but with just one
 query per line in the actual log.)
 
-::
+.. code-block:: mysql
 
 
     /* Fri Jun 29 21:17:58.609 2007 2011 conn 2 real 0.004 wall 0.004 found 35254 */

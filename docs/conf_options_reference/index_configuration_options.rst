@@ -26,7 +26,7 @@ identical to regular
 Example:
 
 
-::
+.. code-block:: ini
 
 
     agent_blackhole = testbox:9312:testindex1,testindex2
@@ -48,7 +48,7 @@ retry will be initiated.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     agent_connect_timeout = 300
@@ -86,7 +86,7 @@ operation) will be used, and a warning will show up in the console.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     agent_persistent = remotebox:9312:index2
@@ -109,7 +109,7 @@ timeout is reached; a warning will be produced instead.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     agent_query_timeout = 10000 # our query can be long, allow up to 10 sec
@@ -129,7 +129,7 @@ essentially, pointers to networked indexes. The value specifies address,
 and also can additionally specify multiple alternatives (agent mirrors)
 for either the address only, or the address and index list:
 
-::
+.. code-block:: ini
 
 
     agent = address1 [ | address2 [...] ][:index-list]
@@ -137,7 +137,7 @@ for either the address only, or the address and index list:
 
 In both cases the address specification must be one of the following:
 
-::
+.. code-block:: ini
 
 
     address = hostname[:port] # eg. server2:9312
@@ -196,7 +196,7 @@ The value can additionally enumerate per agent options such as:
    :ref:`agent_blackhole <agent_blackhole>`
    agent declaration)
 
-::
+.. code-block:: ini
 
 
     agent = address1:index-list[[ha_strategy=value] | [conn=value] | [blackhole=value]]
@@ -204,7 +204,7 @@ The value can additionally enumerate per agent options such as:
 Example:
 
 
-::
+.. code-block:: ini
 
 
     # config on box2
@@ -238,7 +238,7 @@ track of mirror status (alive or dead) and response times, and does
 automatic failover and load balancing based on that. For example, this
 line:
 
-::
+.. code-block:: ini
 
 
     agent = box1:9312|box2:9312|box3:9312:chunk2
@@ -252,7 +252,7 @@ routing queries to all three boxes again.
 Another way to define the mirrors is to explicitly specify the index
 list for every mirror:
 
-::
+.. code-block:: ini
 
 
     agent = box1:9312:box1chunk2|box2:9312:box2chunk2
@@ -289,7 +289,7 @@ accumulated based on actual queries.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     # sharding index over 4 servers total
@@ -328,7 +328,7 @@ to determine whether to index a current word pair or not.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     bigram_freq_words = the, a, you, i
@@ -372,7 +372,7 @@ mileage may vary.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     bigram_freq_words = both_freq
@@ -419,7 +419,7 @@ glyphs.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     blend_chars = +, &, U+23
@@ -441,7 +441,7 @@ tokens indexed: “@dude!” (with all the blended characters) and “dude”
 ``blend_mode`` directive adds flexibility to this indexing behavior. It
 takes a comma-separated list of options.
 
-::
+.. code-block:: ini
 
 
     blend_mode = option [, option [, ...]]
@@ -488,7 +488,7 @@ Default behavior is to index the entire token, equivalent to
 Example:
 
 
-::
+.. code-block:: ini
 
 
     blend_mode = trim_tail, skip_pure
@@ -563,7 +563,7 @@ mapping.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     # default are English and Russian letters
@@ -647,7 +647,7 @@ many keywords (keywords dictionary).
 Example:
 
 
-::
+.. code-block:: ini
 
 
     dict = keywords
@@ -678,7 +678,7 @@ usage estimates.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     docinfo = inline
@@ -706,7 +706,7 @@ tiny delta index. So there needs to be a size threshold, and
 Example:
 
 
-::
+.. code-block:: ini
 
 
     embedded_limit = 32K
@@ -740,14 +740,14 @@ Short summary of the differences is as follows:
 The expected file format is also plain text, with one line per
 exception, and the line format is as follows:
 
-::
+.. code-block:: ini
 
 
     map-from-tokens => map-to-token
 
 Example file:
 
-::
+.. code-block:: ini
 
 
     at & t => at&t
@@ -804,7 +804,7 @@ the file it's required to reindex and restart ``searchd``.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     exceptions = /usr/local/sphinx/data/exceptions.txt
@@ -827,7 +827,7 @@ enabled, exact form is also added. Here's an example that shows how
 internal expansion works when all of the above (infixes, stemming, and
 exact words) are combined:
 
-::
+.. code-block:: ini
 
 
     running -> ( running | *running* | =running )
@@ -848,7 +848,7 @@ This directive does not affect ``indexer`` in any way, it only affects
 Example:
 
 
-::
+.. code-block:: ini
 
 
     expand_keywords = 1
@@ -890,7 +890,7 @@ information.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     global_idf = /usr/local/sphinx/var/global.idf
@@ -912,7 +912,7 @@ nodes. The following strategies are implemented:
 Simple random balancing
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-::
+.. code-block:: ini
 
     ha_strategy = random
 
@@ -970,7 +970,7 @@ The rationale here is, once the **observed latencies** stabilize, the
 adjustment iterations are supposed to converge at a point where the
 average latencies are (roughly) equal over all mirrors.
 
-::
+.. code-block:: ini
 
     ha_strategy = nodeads
 
@@ -978,7 +978,7 @@ Latency-weighted probabilities, but dead mirrors are excluded from the
 selection. “Dead” mirror is defined as a mirror that resulted in
 multiple hard errors (eg. network failure, or no answer, etc) in a row.
 
-::
+.. code-block:: ini
 
     ha_strategy = noerrors
 
@@ -988,7 +988,7 @@ ratio are excluded from the selection.
 Round-robin balancing
 ^^^^^^^^^^^^^^^^^^^^^
 
-::
+.. code-block:: ini
 
     ha_strategy = roundrobin
 
@@ -1038,7 +1038,7 @@ also “simon says” as an exact phrase.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     hitless_words = all
@@ -1058,7 +1058,7 @@ enumeration of indexable attributes, as shown in the example below.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     html_index_attrs = img=alt,title; a=title;
@@ -1084,7 +1084,7 @@ contents should be removed. Tag names are case insensitive.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     html_remove_elements = style, script
@@ -1128,7 +1128,7 @@ looks like a valid tag start, or end, or a comment will be stripped.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     html_strip = 1
@@ -1156,7 +1156,7 @@ charset_table.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     ignore_chars = U+AD
@@ -1178,7 +1178,7 @@ time. However, searching performance is not impacted at all.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     index_exact_words = 1
@@ -1213,7 +1213,7 @@ additional directive.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     index_field_lengths = 1
@@ -1268,7 +1268,7 @@ Both sentences and paragraphs increment the keyword position counter by
 Example:
 
 
-::
+.. code-block:: ini
 
 
     index_sp = 1
@@ -1303,7 +1303,7 @@ zones can then be used for matching with the ZONE operator, see :ref:`extended_q
 Example:
 
 
-::
+.. code-block:: ini
 
 
     index_zones = h*, th, title
@@ -1324,7 +1324,7 @@ but lets you limit infix-indexing to given fields.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     infix_fields = url, domain
@@ -1345,7 +1345,7 @@ This directive does not affect ``searchd`` in any way, it only affects
 Example:
 
 
-::
+.. code-block:: ini
 
 
     inplace_docinfo_gap = 1M
@@ -1383,7 +1383,7 @@ This directive does not affect ``searchd`` in any way, it only affects
 Example:
 
 
-::
+.. code-block:: ini
 
 
     inplace_enable = 1
@@ -1404,7 +1404,7 @@ This directive does not affect ``searchd`` in any way, it only affects
 Example:
 
 
-::
+.. code-block:: ini
 
 
     inplace_hit_gap = 1M
@@ -1424,7 +1424,7 @@ This directive does not affect ``searchd`` in any way, it only affects
 Example:
 
 
-::
+.. code-block:: ini
 
 
     inplace_reloc_factor = 0.1
@@ -1444,7 +1444,7 @@ This directive does not affect ``searchd`` in any way, it only affects
 Example:
 
 
-::
+.. code-block:: ini
 
 
     inplace_write_factor = 0.1
@@ -1477,7 +1477,7 @@ details). However, that creates redundant CPU and network load, and
 Example:
 
 
-::
+.. code-block:: ini
 
 
     local = chunk1
@@ -1521,7 +1521,7 @@ the length of a substring that you search for in the application code.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     max_substring_len = 12
@@ -1565,7 +1565,7 @@ your server.)
 Example:
 
 
-::
+.. code-block:: ini
 
 
     min_infix_len = 3
@@ -1604,7 +1604,7 @@ matches can't be ranked higher.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     min_prefix_len = 3
@@ -1631,7 +1631,7 @@ more finely grained control, refer to
 Example:
 
 
-::
+.. code-block:: ini
 
 
     min_stemming_len = 4
@@ -1650,7 +1650,7 @@ For instance, if min_word_len is 4, then ‘the’ won't be indexed, but
 Example:
 
 
-::
+.. code-block:: ini
 
 
     min_word_len = 4
@@ -1680,7 +1680,7 @@ index continues working.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     mlock = 1
@@ -1844,7 +1844,7 @@ used to implement stemming exceptions.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     morphology = stem_en, libstemmer_sv
@@ -1866,7 +1866,7 @@ N-gram indexing feature. The value format is identical to
 Example:
 
 
-::
+.. code-block:: ini
 
 
     ngram_chars = U+3000..U+2FA1F
@@ -1915,7 +1915,7 @@ multi-character word matches) to the top.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     ngram_len = 1
@@ -1959,7 +1959,7 @@ restart.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     ondisk_attrs = pool #keep pooled attributes on disk
@@ -1979,7 +1979,7 @@ This directive does not affect ``searchd`` in any way, it only affects
 Example:
 
 
-::
+.. code-block:: ini
 
 
     overshort_step = 1
@@ -2024,7 +2024,7 @@ For reference, different index files store the following data:
 Example:
 
 
-::
+.. code-block:: ini
 
 
     path = /var/data/test1
@@ -2058,7 +2058,7 @@ S.T.A.L.K.E.R or URLs being treated as several phrases.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     phrase_boundary = ., ?, !, U+2026 # horizontal ellipsis
@@ -2078,7 +2078,7 @@ for details.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     phrase_boundary_step = 100
@@ -2102,7 +2102,7 @@ comma-separated list of field names.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     prefix_fields = url, domain
@@ -2131,7 +2131,7 @@ This directive does not affect ``indexer`` in any way, it only affects
 Example:
 
 
-::
+.. code-block:: ini
 
 
     preopen = 1
@@ -2173,7 +2173,7 @@ switch. Binary packages should come with RE2 builtin.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     # index '13-inch' as '13inch'
@@ -2192,7 +2192,7 @@ RLP context configuration file. Mandatory if RLP is used.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     rlp_context = /home/myuser/RLP/rlp-context.xml
@@ -2208,7 +2208,7 @@ attributes is allowed), optional. Declares a signed 64-bit attribute.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     rt_attr_bigint = guid
@@ -2225,7 +2225,7 @@ attribute.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     rt_attr_bool = available
@@ -2242,7 +2242,7 @@ IEEE 754 format float attribute.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     rt_attr_float = gpa
@@ -2261,7 +2261,7 @@ for more details on the JSON attributes.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     rt_attr_json = properties
@@ -2279,7 +2279,7 @@ optional. Applies to RT indexes only.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     rt_attr_multi_64 = my_wide_tags
@@ -2297,7 +2297,7 @@ declared), optional. Applies to RT indexes only.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     rt_attr_multi = my_tags
@@ -2313,7 +2313,7 @@ attributes is allowed), optional.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     rt_attr_string = author
@@ -2329,7 +2329,7 @@ attributes is allowed), optional.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     rt_attr_timestamp = date_added
@@ -2346,7 +2346,7 @@ attribute.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     rt_attr_uint = gid
@@ -2366,7 +2366,7 @@ columns will have to be in the same order as configured.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     rt_field = author
@@ -2394,7 +2394,7 @@ allocating 3 MB, not 512 MB.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     rt_mem_limit = 512M
@@ -2423,7 +2423,7 @@ some additional information yourself. Two typical approaches include:
 
 1. mangling document ID and encoding source ID in it:
 
-   ::
+.. code-block:: ini
 
 
        source src1
@@ -2440,7 +2440,7 @@ some additional information yourself. Two typical approaches include:
 
 2. storing source ID simply as an attribute:
 
-   ::
+.. code-block:: ini
 
 
        source src1
@@ -2460,7 +2460,7 @@ some additional information yourself. Two typical approaches include:
 Example:
 
 
-::
+.. code-block:: ini
 
 
     source = srcpart1
@@ -2510,7 +2510,7 @@ that dictionary can usually be used as stopwords.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     stopwords = /usr/local/sphinx/data/stopwords.txt
@@ -2531,7 +2531,7 @@ This directive does not affect ``searchd`` in any way, it only affects
 Example:
 
 
-::
+.. code-block:: ini
 
 
     stopword_step = 1
@@ -2559,7 +2559,7 @@ word forms), and the tokens are stopped when token == stopword.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     stopwords_unstemmed = 1
@@ -2596,7 +2596,7 @@ local index type will be assumed.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     type = distributed
@@ -2640,7 +2640,7 @@ will be applied when the file is loaded. So basically it's as case
 sensitive as your other full-text indexed data, ie. typically case
 insensitive. Here's the file contents sample:
 
-::
+.. code-block:: ini
 
 
     walks > walk
@@ -2660,7 +2660,7 @@ You can use “=>” instead of “>”. Comments (starting with “#” are als
 allowed. Finally, if a line starts with a tilde (“~”) the wordform will
 be applied after morphology, instead of before.
 
-::
+.. code-block:: ini
 
 
     core 2 duo > c2d
@@ -2669,7 +2669,7 @@ be applied after morphology, instead of before.
 
 You can specify multiple destination tokens:
 
-::
+.. code-block:: ini
 
 
     s02e02 > season 2 episode 2
@@ -2678,7 +2678,7 @@ You can specify multiple destination tokens:
 Example:
 
 
-::
+.. code-block:: ini
 
 
     wordforms = /usr/local/sphinx/data/wordforms.txt

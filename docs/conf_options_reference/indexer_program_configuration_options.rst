@@ -47,7 +47,7 @@ performance.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     lemmatizer_cache = 256M # cache it all
@@ -76,7 +76,7 @@ entirely skipped.
 Example:
 
 
-::
+.. code-block:: ini
 
     max_file_field_buffer = 128M
 
@@ -105,7 +105,7 @@ degradation caused by indexing.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     max_iops = 40
@@ -131,7 +131,7 @@ higher than 256 KB must not affect anything.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     max_iosize = 1048576
@@ -147,7 +147,7 @@ default is 2 MB.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     max_xmlpipe2_field = 8M
@@ -177,7 +177,7 @@ raising timeouts on SQL server side or by lowering ``mem_limit``.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     mem_limit = 256M
@@ -220,7 +220,7 @@ indexed.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     on_file_field_error = skip_document
@@ -242,7 +242,7 @@ be allocated, proportionally increasing the RAM usage.
 Example:
 
 
-::
+.. code-block:: ini
 
 
     write_buffer = 4M

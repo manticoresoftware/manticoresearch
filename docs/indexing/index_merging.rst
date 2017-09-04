@@ -15,7 +15,7 @@ than the indexing from scratch requires).
 
 The basic command syntax is as follows:
 
-::
+.. code-block:: bash
 
 
     indexer --merge DSTINDEX SRCINDEX [--rotate]
@@ -33,7 +33,7 @@ by *both* keywords after the merge. You can supply an explicit condition
 to remove documents from DSTINDEX to mitigate that; the relevant switch
 is ``--merge-dst-range``:
 
-::
+.. code-block:: bash
 
 
     indexer --merge main delta --merge-dst-range deleted 0 0

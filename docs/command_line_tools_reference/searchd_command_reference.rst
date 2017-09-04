@@ -15,7 +15,7 @@ options will always apply, and so will be build-dependent.
 
 Calling ``searchd`` is simply a case of:
 
-::
+.. code-block:: bash
 
 
     $ searchd [OPTIONS]
@@ -37,7 +37,7 @@ The options available to ``searchd`` on all builds are:
    :ref:```UpdateAttributes()`` <update_attributes>`
    will be applied to the index files themselves. Example:
 
-   ::
+   .. code-block:: bash
 
 
        $ searchd --config /home/myuser/sphinx.conf --stop
@@ -49,7 +49,7 @@ The options available to ``searchd`` on all builds are:
    finishes the shutdown (eg. saves all the pending attribute changes)
    and exits. Example:
 
-   ::
+   .. code-block:: bash
 
 
        $ searchd --config /home/myuser/sphinx.conf --stopwait
@@ -73,7 +73,7 @@ The options available to ``searchd`` on all builds are:
    :ref:`Status() <status>` API call to
    access the very same counters from your application. Examples:
 
-   ::
+   .. code-block:: bash
 
 
        $ searchd --status
@@ -84,7 +84,7 @@ The options available to ``searchd`` on all builds are:
    options that say otherwise (for instance, ``--console``). This is a
    debugging option.
 
-   ::
+   .. code-block:: bash
 
 
        $ searchd --console --pidfile
@@ -101,7 +101,7 @@ The options available to ``searchd`` on all builds are:
    not be written to. (It should be noted that console mode is not the
    intended method for running ``searchd``.) You can invoke it as such:
 
-   ::
+   .. code-block:: bash
 
 
        $ searchd --config /home/myuser/sphinx.conf --console
@@ -122,7 +122,7 @@ The options available to ``searchd`` on all builds are:
    format <README>` section. You might
    start ``searchd`` thus:
 
-   ::
+   .. code-block:: bash
 
 
        $ searchd --config /home/myuser/sphinx.conf --iostats
@@ -133,7 +133,7 @@ The options available to ``searchd`` on all builds are:
    call and might therefore be unavailable on certain systems. You might
    start ``searchd`` thus:
 
-   ::
+   .. code-block:: bash
 
 
        $ searchd --config /home/myuser/sphinx.conf --cpustats
@@ -146,7 +146,7 @@ The options available to ``searchd`` on all builds are:
    65535, but ports numbered 1024 and below usually require a privileged
    account in order to run. An example of usage:
 
-   ::
+   .. code-block:: bash
 
 
        $ searchd --port 9313
@@ -170,7 +170,7 @@ The options available to ``searchd`` on all builds are:
    long-term changes would generally be applied to the configuration
    file itself. Example usage:
 
-   ::
+   .. code-block:: bash
 
 
        $ searchd --index myindex
@@ -189,7 +189,7 @@ The options available to ``searchd`` on all builds are:
 
    Example:
 
-   ::
+   .. code-block:: bash
 
 
        $ searchd --replay-flags=accept-desc-timestamp
@@ -213,7 +213,7 @@ you install it as a service.
    use for starting, stopping and restarting services would also apply
    to ``searchd``. Example:
 
-   ::
+   .. code-block:: bat
 
 
        C:\WINDOWS\system32> C:\Manticore\bin\searchd.exe --install
@@ -223,7 +223,7 @@ you install it as a service.
    ``searchd``, you would specify its option on the same line as the
    ``--install`` command thus:
 
-   ::
+   .. code-block:: bat
 
 
        C:\WINDOWS\system32> C:\Manticore\bin\searchd.exe --install
@@ -241,7 +241,7 @@ you install it as a service.
    to be specified with ``--servicename`` when calling to uninstall.
    Example:
 
-   ::
+   .. code-block:: bat
 
 
        C:\WINDOWS\system32> C:\Manticore\bin\searchd.exe --delete
@@ -255,7 +255,7 @@ you install it as a service.
    ``--install`` or ``--delete``, this option does not do anything.
    Example:
 
-   ::
+   .. code-block:: bat
 
 
        C:\WINDOWS\system32> C:\Manticore\bin\searchd.exe --install

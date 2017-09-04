@@ -3,7 +3,7 @@
 SET TRANSACTION syntax
 ----------------------
 
-::
+.. code-block:: mysql
 
 
     SET TRANSACTION ISOLATION LEVEL { READ UNCOMMITTED
@@ -17,7 +17,7 @@ frameworks that may need to run this statement when connecting.
 
 Example:
 
-::
+.. code-block:: mysql
 
 
     mysql> SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;

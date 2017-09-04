@@ -3,7 +3,7 @@
 SHOW PLUGINS syntax
 -------------------
 
-::
+.. code-block:: mysql
 
 
     SHOW PLUGINS
@@ -15,7 +15,7 @@ query. “Extra” column is intended for various additional plugin-type
 specific information; currently, it shows the return type for the UDFs
 and is empty for all the other plugin types.
 
-::
+.. code-block:: mysql
 
 
     mysql> SHOW PLUGINS;

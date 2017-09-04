@@ -3,7 +3,7 @@
 DROP FUNCTION syntax
 --------------------
 
-::
+.. code-block:: mysql
 
 
     DROP FUNCTION udf_name
@@ -15,7 +15,7 @@ queries. Pending concurrent queries will not be affected and the library
 unload, if necessary, will be postponed until those queries complete.
 Example:
 
-::
+.. code-block:: mysql
 
 
     mysql> DROP FUNCTION avgmva;

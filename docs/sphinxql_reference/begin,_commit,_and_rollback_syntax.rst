@@ -3,7 +3,7 @@
 BEGIN, COMMIT, and ROLLBACK syntax
 ----------------------------------
 
-::
+.. code-block:: mysql
 
 
     START TRANSACTION | BEGIN

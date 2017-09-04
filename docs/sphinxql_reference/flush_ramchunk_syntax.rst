@@ -3,7 +3,7 @@
 FLUSH RAMCHUNK syntax
 ---------------------
 
-::
+.. code-block:: mysql
 
 
     FLUSH RAMCHUNK rtindex
@@ -24,7 +24,7 @@ what you're doing. As the right way is to issue FLUSH RAMCHUNK with
 following :ref:`OPTIMIZE <optimize_index_syntax>` command. Such combo
 allows to keep RT index fragmentation on minimum.
 
-::
+.. code-block:: mysql
 
 
     mysql> FLUSH RAMCHUNK rt;

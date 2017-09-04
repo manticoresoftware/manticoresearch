@@ -3,7 +3,7 @@
 SHOW INDEX SETTINGS syntax
 --------------------------
 
-::
+.. code-block:: mysql
 
 
     SHOW INDEX index_name[.N | CHUNK N] SETTINGS

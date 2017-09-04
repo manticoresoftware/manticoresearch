@@ -3,7 +3,7 @@
 DROP PLUGIN syntax
 ------------------
 
-::
+.. code-block:: mysql
 
 
     DROP PLUGIN plugin_name TYPE 'plugin_type'
@@ -15,7 +15,7 @@ currently executing queries using it are completed, the plugin will be
 unloaded. Once all the plugins from the given library are unloaded, the
 library is also automatically unloaded.
 
-::
+.. code-block:: mysql
 
 
     mysql> DROP PLUGIN myranker TYPE 'ranker';

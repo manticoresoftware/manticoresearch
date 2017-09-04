@@ -127,7 +127,7 @@ Operators
 .. _expr-ari-ops:
 
 -  Arithmetic operators: +, -, \*, /, %, DIV, MOD
--  The standard arithmetic operators. Arithmetic calculations involving
+   The standard arithmetic operators. Arithmetic calculations involving
    those can be performed in three different modes: (a) using
    single-precision, 32-bit IEEE 754 floating point values (the
    default), (**) using signed 32-bit integers, (c) using 64-bit signed
@@ -148,7 +148,7 @@ Operators
 .. _expr-comp-ops:
 
 -  Comparison operators: <, > <=, >=, =, <>
--  Comparison operators (eg. = or <=) return 1.0 when the condition is
+   Comparison operators (eg. = or <=) return 1.0 when the condition is
    true and 0.0 otherwise. For instance, ``(a=b)+3`` will evaluate to 4
    when attribute ‘a’ is equal to attribute ‘b’, and to 3 when ‘a’ is
    not. Unlike MySQL, the equality comparisons (ie. = and <> operators)
@@ -159,7 +159,7 @@ Operators
 .. _expr-bool-ops:
    
 -  Boolean operators: AND, OR, NOT
--  Boolean operators (AND, OR, NOT) behave as usual. They are
+   Boolean operators (AND, OR, NOT) behave as usual. They are
    left-associative and have the least priority compared to other
    operators. NOT has more priority than AND and OR but nevertheless
    less than any other operator. AND and OR have the same priority so
@@ -169,7 +169,7 @@ Operators
 .. _expr-bitwise-ops:
 
 -  Bitwise operators: &, \|
--  These operators perform bitwise AND and OR respectively. The operands
+   These operators perform bitwise AND and OR respectively. The operands
    must be of an integer types.
 
    
@@ -181,23 +181,23 @@ Numeric functions
 .. _expr-func-abs:
 
 -  ABS()
--  Returns the absolute value of the argument.
+   Returns the absolute value of the argument.
 
 .. _expr-func-bitdot:
 
 -  BITDOT()
--  BITDOT(mask, w0, w1, …) returns the sum of products of an each bit of
+   BITDOT(mask, w0, w1, …) returns the sum of products of an each bit of
    a mask multiplied with its weight. ``bit0*w0 + bit1*w1 + ...``
 
  .. _expr-func-ceil:
 
 -  CEIL()
--  Returns the smallest integer value greater or equal to the argument.
+   Returns the smallest integer value greater or equal to the argument.
 
 .. _expr-func-contains:
 
 -  CONTAINS()
--  CONTAINS(polygon, x, y) checks whether the (x,y) point is within the
+   CONTAINS(polygon, x, y) checks whether the (x,y) point is within the
    given polygon, and returns 1 if true, or 0 if false. The polygon has
    to be specified using either the :ref:`POLY2D() <expr-func-poly2d>`
    function or the :ref:`GEOPOLY2D() <expr-func-poly2d>` function. The
@@ -210,24 +210,24 @@ Numeric functions
 .. _expr-func-cos:
 
 -  COS()
--  Returns the cosine of the argument.
+   Returns the cosine of the argument.
 
 .. _expr-func-double:
 
 -  DOUBLE()
--  Forcibly promotes given argument to floating point type. Intended to
+   Forcibly promotes given argument to floating point type. Intended to
    help enforce evaluation of numeric JSON fields.
 
 .. _expr-func-exp:
     
 -  EXP()
--  Returns the exponent of the argument (e=2.718… to the power of the
+   Returns the exponent of the argument (e=2.718… to the power of the
    argument).
 
 .. _expr-func-fibonacci:
    
 -  FIBONACCI()
--  Returns the N-th Fibonacci number, where N is the integer argument.
+   Returns the N-th Fibonacci number, where N is the integer argument.
    That is, arguments of 0 and up will generate the values 0, 1, 1, 2,
    3, 5, 8, 13 and so on. Note that the computations are done using
    32-bit integer math and thus numbers 48th and up will be returned
@@ -236,12 +236,12 @@ Numeric functions
 .. _expr-func-floor:
 
 -  FLOOR()
--  Returns the largest integer value lesser or equal to the argument.
+   Returns the largest integer value lesser or equal to the argument.
 
 .. _expr-func-geopoly2d:
 
 -  GEOPOLY2D()
--  GEOPOLY2D(x1,y1,x2,y2,x3,y3…) produces a polygon to be used with the
+   GEOPOLY2D(x1,y1,x2,y2,x3,y3…) produces a polygon to be used with the
    :ref:`CONTAINS() <expr-func-contains>` function. This function takes
    into account the Earth's curvature by tessellating the polygon into
    smaller ones, and should be used for larger areas; see the
@@ -252,39 +252,39 @@ Numeric functions
 .. _expr-func-idiv:
 
 -  IDIV()
--  Returns the result of an integer division of the first argument by
+   Returns the result of an integer division of the first argument by
    the second argument. Both arguments must be of an integer type.
 
 .. _expr-func-ln:
 
 -  LN()
--  Returns the natural logarithm of the argument (with the base of
+   Returns the natural logarithm of the argument (with the base of
    e=2.718…).
 
 .. _expr-func-log10:
    
 -  LOG10()
--  Returns the common logarithm of the argument (with the base of 10).
+   Returns the common logarithm of the argument (with the base of 10).
 
 .. _expr-func-log2:
 
 -  LOG2()
--  Returns the binary logarithm of the argument (with the base of 2).
+   Returns the binary logarithm of the argument (with the base of 2).
 
 .. _expr-func-max:
 
 -  MAX()
--  Returns the bigger of two arguments.
+   Returns the bigger of two arguments.
 
 .. _expr-func-min:
 
 -  MIN()
--  Returns the smaller of two arguments.
+   Returns the smaller of two arguments.
 
 .. _expr-func-poly2d:
 
 -  POLY2D()
--  POLY2D(x1,y1,x2,y2,x3,y3…) produces a polygon to be used with the
+   POLY2D(x1,y1,x2,y2,x3,y3…) produces a polygon to be used with the
    :ref:`CONTAINS() <expr-func-contains>` function. This polygon assumes a
    flat Earth, so it should not be too large; see the
    :ref:`POLY2D() <expr-func-poly2d>` function.
@@ -292,23 +292,23 @@ Numeric functions
 .. _expr-func-pow:
 
 -  POW()
--  Returns the first argument raised to the power of the second
+   Returns the first argument raised to the power of the second
    argument.
    
 .. _expr-func-sin:
 
 -  SIN()
--  Returns the sine of the argument.
+   Returns the sine of the argument.
 
 .. _expr-func-sqrt:
 
 -  SQRT()
--  Returns the square root of the argument.
+   Returns the square root of the argument.
 
 .. _expr-func-uint:
 
 -  UINT()
--  Forcibly reinterprets given argument to 64-bit unsigned type.
+   Forcibly reinterprets given argument to 64-bit unsigned type.
 
 
 .. _Date and time functions:
@@ -319,54 +319,54 @@ Date and time functions
 .. _expr-func-day:
 
 -  DAY()
--  Returns the integer day of month (in 1..31 range) from a timestamp
+   Returns the integer day of month (in 1..31 range) from a timestamp
    argument, according to the current timezone.
 
 .. _expr-func-month:
 
 -  MONTH()
--  Returns the integer month (in 1..12 range) from a timestamp argument,
+   Returns the integer month (in 1..12 range) from a timestamp argument,
    according to the current timezone.
 
 .. _expr-func-now:
 
 -  NOW()
--  Returns the current timestamp as an INTEGER.
+   Returns the current timestamp as an INTEGER.
 
 .. _expr-func-year:
 
 -  YEAR()
--  Returns the integer year (in 1969..2038 range) from a timestamp
+   Returns the integer year (in 1969..2038 range) from a timestamp
    argument, according to the current timezone.
 
 .. _expr-func-yearmonth:
 
 -  YEARMONTH()
--  Returns the integer year and month code (in 196912..203801 range)
+   Returns the integer year and month code (in 196912..203801 range)
    from a timestamp argument, according to the current timezone.
 
 .. _expr-func-yearmonthday:
 
 -  YEARMONTHDAY()
--  Returns the integer year, month, and date code (in 19691231..20380119
+   Returns the integer year, month, and date code (in 19691231..20380119
    range) from a timestamp argument, according to the current timezone.
 
 .. _expr-func-second:
 
 -  SECOND()
--  Returns the integer second (in 0..59 range) from a timestamp
+   Returns the integer second (in 0..59 range) from a timestamp
    argument, according to the current timezone.
 
 .. _expr-func-minute:
 
 -  MINUTE()
--  Returns the integer minute (in 0..59 range) from a timestamp
+   Returns the integer minute (in 0..59 range) from a timestamp
    argument, according to the current timezone.
 
 .. _expr-func-hour:
 
 -  HOUR()
--  Returns the integer hour (in 0..23 range) from a timestamp argument,
+   Returns the integer hour (in 0..23 range) from a timestamp argument,
    according to the current timezone.
 
    
@@ -378,7 +378,7 @@ Type conversion functions
 .. _expr-func-bigint:
 
 -  BIGINT()
--  Forcibly promotes the integer argument to 64-bit type, and does
+   Forcibly promotes the integer argument to 64-bit type, and does
    nothing on floating point argument. It's intended to help enforce
    evaluation of certain expressions (such as ``a*b``) in 64-bit mode
    even though all the arguments are 32-bit.
@@ -386,13 +386,13 @@ Type conversion functions
 .. _expr-func-integer:
 
 -  INTEGER()
--  Forcibly promotes given argument to 64-bit signed type. Intended to
+   Forcibly promotes given argument to 64-bit signed type. Intended to
    help enforce evaluation of numeric JSON fields.
 
 .. _expr-func-sint:
 
 -  SINT()
--  Forcibly reinterprets its 32-bit unsigned integer argument as signed,
+   Forcibly reinterprets its 32-bit unsigned integer argument as signed,
    and also expands it to 64-bit type (because 32-bit type is unsigned).
    It's easily illustrated by the following example: 1-2 normally
    evaluates to 4294967295, but SINT(1-2) evaluates to -1.
@@ -406,7 +406,7 @@ Comparison functions
 .. _expr-func-if:
 
 -  IF()
--  ``IF()`` behavior is slightly different that that of its MySQL
+   ``IF()`` behavior is slightly different that that of its MySQL
    counterpart. It takes 3 arguments, check whether the 1st argument is
    equal to 0.0, returns the 2nd argument if it is not zero, or the 3rd
    one when it is. Note that unlike comparison operators, ``IF()`` does
@@ -416,7 +416,7 @@ Comparison functions
    produce *different* results even though they are logically
    equivalent:
 
-   ::
+.. code-block:: mysql
 
 
        IF ( sqrt(3)*sqrt(3)-3<>0, a, b )
@@ -434,7 +434,7 @@ Comparison functions
 .. _expr-func-in:
 
 -  IN()
--  IN(expr,val1,val2,…) takes 2 or more arguments, and returns 1 if 1st
+   IN(expr,val1,val2,…) takes 2 or more arguments, and returns 1 if 1st
    argument (expr) is equal to any of the other arguments (val1..valN),
    or 0 otherwise. Currently, all the checked values (but not the
    expression itself!) are required to be constant. (Its technically
@@ -451,7 +451,7 @@ Comparison functions
 .. _expr-func-interval:
 
 -  INTERVAL()
--  INTERVAL(expr,point1,point2,point3,…), takes 2 or more arguments, and
+   INTERVAL(expr,point1,point2,point3,…), takes 2 or more arguments, and
    returns the index of the argument that is less than the first
    argument: it returns 0 if expr<point1, 1 if point1<=expr<point2, and
    so on. It is required that point1<point2<…<pointN for this function
@@ -466,12 +466,12 @@ Miscellaneous functions
 .. _expr-func-all:
 
 -  ALL()
--  ALL(cond FOR var IN json.array) applies to JSON arrays and returns 1
+   ALL(cond FOR var IN json.array) applies to JSON arrays and returns 1
    if condition is true for all elements in array and 0 otherwise.
    ‘cond’ is a general expression which additionally can use ‘var’ as
    current value of an array element within itself.
 
-   ::
+.. code-block:: mysql
 
 
        SELECT ALL(x>3 AND x<7 FOR x IN j.intarray) FROM test;
@@ -479,25 +479,25 @@ Miscellaneous functions
 .. _expr-func-any:
 
 -  ANY()
--  ANY(cond FOR var IN json.array) works similar to
+   ANY(cond FOR var IN json.array) works similar to
    :ref:`ALL() <expr-func-all>` except for it returns 1 if condition is
    true for any element in array.
 
 .. _expr-func-atan2:
 
 -  ATAN2()
--  Returns the arctangent function of two arguments, expressed in
+   Returns the arctangent function of two arguments, expressed in
    **radians**.
 
 .. _expr-func-crc32:
 
 -  CRC32()
--  Returns the CRC32 value of a string argument.
+   Returns the CRC32 value of a string argument.
 
 .. _expr-func-geodist:
 
 -  GEODIST()
--  GEODIST(lat1, lon1, lat2, lon2, […]) function computes geosphere
+   GEODIST(lat1, lon1, lat2, lon2, […]) function computes geosphere
    distance between two given points specified by their coordinates.
    Note that by default both latitudes and longitudes must be in
    **radians** and the result will be in **meters**. You can use
@@ -510,7 +510,7 @@ Miscellaneous functions
    geodistance formula to use. The complete syntax and a few examples
    are as follows:
 
-   ::
+.. code-block:: mysql
 
 
        GEODIST(lat1, lon1, lat2, lon2, { option=value, ... })
@@ -534,18 +534,18 @@ Miscellaneous functions
 .. _expr-func-greatest:
 
 -  GREATEST()
--  GREATEST(attr_json.some_array) function takes JSON array as the
+   GREATEST(attr_json.some_array) function takes JSON array as the
    argument, and returns the greatest value in that array. Also works
    for MVA.
 
 .. _expr-func-indexof:
 
 -  INDEXOF()
--  INDEXOF(cond FOR var IN json.array) function iterates through all
+   INDEXOF(cond FOR var IN json.array) function iterates through all
    elements in array and returns index of first element for which ‘cond’
    is true and -1 if ‘cond’ is false for every element in array.
 
-   ::
+.. code-block:: mysql
 
 
        SELECT INDEXOF(name='John' FOR name IN j.peoples) FROM test;
@@ -553,14 +553,14 @@ Miscellaneous functions
 .. _expr-func-least:
 
 -  LEAST()
--  LEAST(attr_json.some_array) function takes JSON array as the
+   LEAST(attr_json.some_array) function takes JSON array as the
    argument, and returns the least value in that array. Also works for
    MVA.
 
 .. _expr-func-length:
 
 -  LENGTH()
--  LENGTH(attr_mva) function returns amount of elements in MVA set. It
+   LENGTH(attr_mva) function returns amount of elements in MVA set. It
    works with both 32-bit and 64-bit MVA attributes. LENGTH(attr_json)
    returns length of a field in JSON. Return value depends on type of a
    field. For example LENGTH(json_attr.some_int) always returns 1 and
@@ -569,19 +569,19 @@ Miscellaneous functions
 .. _expr-func-min-top-sortval:
 
 -  MIN_TOP_SORTVAL()
--  Returns sort key value of the worst found element in the current
+   Returns sort key value of the worst found element in the current
    top-N matches if sort key is float and 0 otherwise.
 
 .. _expr-func-min-top-weight:
 
 -  MIN_TOP_WEIGHT()
--  Returns weight of the worst found element in the current top-N
+   Returns weight of the worst found element in the current top-N
    matches.
 
 .. _expr-func-packedfactors:
 
 -  PACKEDFACTORS()
--  PACKEDFACTORS() can be used in queries, either to just see all the
+   PACKEDFACTORS() can be used in queries, either to just see all the
    weighting factors calculated when doing the matching, or to provide a
    binary attribute that can be used to write a custom ranking UDF. This
    function works only if expression ranker is specified and the query
@@ -589,26 +589,28 @@ Miscellaneous functions
    PACKEDFACTORS() can take an optional argument that disables ATC
    ranking factor calculation:
 
-   ::
+   .. code-block:: mysql
 
 
        PACKEDFACTORS({no_atc=1})
+
 
    Calculating ATC slows down query processing considerably, so this
    option can be useful if you need to see the ranking factors, but do
    not need ATC. PACKEDFACTORS() can also be told to format its output
    as JSON:
 
-   ::
+   .. code-block:: mysql
 
 
        PACKEDFACTORS({json=1})
+
 
    The respective outputs in either key-value pair or JSON format would
    look as follows below. (Note that the examples below are wrapped for
    readability; actual returned values would be single-line.)
 
-   ::
+   .. code-block:: mysql
 
 
        mysql> SELECT id, PACKEDFACTORS() FROM test1
@@ -669,10 +671,11 @@ Miscellaneous functions
        }
        1 row in set (0.01 sec)
 
+
    This function can be used to implement custom ranking functions in
    UDFs, as in
 
-   ::
+   .. code-block:: mysql
 
 
        SELECT *, CUSTOM_RANK(PACKEDFACTORS()) AS r
@@ -680,20 +683,20 @@ Miscellaneous functions
        WHERE match('hello')
        ORDER BY r DESC
        OPTION ranker=expr('1');
-
+   
    Where CUSTOM_RANK() is a function implemented in an UDF. It should
    declare a SPH_UDF_FACTORS structure (defined in ``sphinxudf.h``),
    initialize this structure, unpack the factors into it before usage,
    and deinitialize it afterwards, as follows:
 
-   ::
-
+   .. code-block:: mysql
 
        SPH_UDF_FACTORS factors;
        sphinx_factors_init(&factors);
        sphinx_factors_unpack((DWORD*)args->arg_values[0], &factors);
        // ... can use the contents of factors variable here ...
        sphinx_factors_deinit(&factors);
+   
 
    PACKEDFACTORS() data is available at all query stages, not just when
    doing the initial matching and ranking pass. That enables another
@@ -713,7 +716,7 @@ Miscellaneous functions
    and then *re-rank* those with a complex one. We can do that just as
    well with subselects:
 
-   ::
+   .. code-block:: mysql
 
 
        SELECT * FROM (
@@ -745,12 +748,12 @@ Miscellaneous functions
 .. _expr-func-remap:
 
 -  REMAP()
--  REMAP(condition, expression, (cond1, cond2, …), (expr1, expr2, …))
+   REMAP(condition, expression, (cond1, cond2, …), (expr1, expr2, …))
    function allows you to make some exceptions of an expression values
    depending on condition values. Condition expression should always
    result integer, expression can result in integer or float.
 
-   ::
+.. code-block:: mysql
 
 
        SELECT REMAP(userid, karmapoints, (1, 67), (999, 0)) FROM users;
@@ -759,5 +762,5 @@ Miscellaneous functions
 .. _expr-func-rand:
 
 -  rand()
--  RAND(seed) function returns a random float between 0..1. Optional, an
+   RAND(seed) function returns a random float between 0..1. Optional, an
    integer seed value can be specified.

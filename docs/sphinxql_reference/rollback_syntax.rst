@@ -3,7 +3,7 @@
 ROLLBACK syntax
 ---------------
 
-::
+.. code-block:: mysql
 
 
     ROLLBACK

@@ -27,7 +27,7 @@ backtrace.
 Manticore tries to write crash backtrace to its log file. It may look like
 this:
 
-::
+.. code-block:: c
 
 
     ./indexer(_Z12sphBacktraceib+0x2d6)[0x5d337e]
@@ -53,7 +53,7 @@ names here.
 
 But sometimes backtrace may look like this:
 
-::
+.. code-block:: c
 
 
     /opt/piler/bin/indexer[0x4c4919]
@@ -73,7 +73,7 @@ provide symbols (function and variable names). If you've installed
 sphinx by building from the sources, run the following command over your
 binary:
 
-::
+.. code-block:: mysql
 
 
     nm -n indexer > indexer.sym

@@ -3,7 +3,7 @@
 CALL QSUGGEST syntax
 --------------------
 
-::
+.. code-block:: mysql
 
 
     CALL QSUGGEST(word, index [,options])
@@ -42,7 +42,7 @@ ignoring the rest. Several options are supported for customization:
 -  ``non_char`` - do not skip dictionary words with non alphabet
    symbols, default is 0 (skip such words)
 
-::
+.. code-block:: mysql
 
 
     mysql> CALL QSUGGEST('automaticlly ','forum', 5 as limit, 4 as max_edits,1 as result_stats,3 as delta_len,0 as result_line,25 as max_matches,4 as reject );

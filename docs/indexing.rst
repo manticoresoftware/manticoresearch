@@ -1,5 +1,6 @@
 Indexing
 =============================
+
 .. toctree::
 
    indexing/data_sources

@@ -3,7 +3,7 @@
 BEGIN syntax
 ------------
 
-::
+.. code-block:: mysql
 
 
     START TRANSACTION | BEGIN

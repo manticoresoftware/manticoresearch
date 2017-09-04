@@ -11,7 +11,7 @@ UDFs (User Defined Functions)
 Our expression engine can be extended with user defined functions, or
 UDFs for short, like this:
 
-::
+.. code-block:: mysql
 
 
     SELECT id, attr1, myudf(attr2, attr3+attr4) ...
@@ -57,7 +57,7 @@ file as a plain good old SQL script.
 Once you successfully load an UDF, you can use it in your SELECT or
 other statements just as well as any of the builtin functions:
 
-::
+.. code-block:: mysql
 
 
     SELECT id, MYCUSTOMFUNC(groupid, authorname), ... FROM myindex
@@ -96,7 +96,7 @@ LIBRARYNAME is the name of your library file, and you must return
 ``SPH_UDF_VERSION`` (a value defined in ``sphinxudf.h``) from it. Here's
 an example.
 
-::
+.. code-block:: c
 
 
     #include <sphinxudf.h>
@@ -154,7 +154,7 @@ use, or check upfront whether the arguments are of the supported types,
 then we would need to add two more functions, with UDF initialization
 and deinitialization, respectively.
 
-::
+.. code-block:: c
 
 
     int testfunc_init ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args,
@@ -358,7 +358,7 @@ stateless plugin, the interface lets you omit the ``_init()`` and
 To summarize, here goes the simplest complete ranker plugin, in just 3
 lines of C code.
 
-::
+.. code-block:: c
 
 
     // gcc -fPIC -shared -o myrank.so myrank.c
@@ -368,7 +368,7 @@ lines of C code.
 
 And this is how you use it:
 
-::
+.. code-block:: mysql
 
 
     mysql> CREATE PLUGIN myrank TYPE 'ranker' SONAME 'myrank.dll';
@@ -394,7 +394,7 @@ Ranker plugins let you implement a custom ranker that receives all the
 occurrences of the keywords matched in the document, and computes a
 WEIGHT() value. They can be called as follows:
 
-::
+.. code-block:: mysql
 
 
     SELECT id, attr1 FROM test WHERE match('hello')

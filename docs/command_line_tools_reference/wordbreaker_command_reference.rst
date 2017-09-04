@@ -12,7 +12,7 @@ match without the costs of prefix and infix larger index files.
 
 Examples of its usage are:
 
-::
+.. code-block:: bash
 
 
     echo manofsteel | bin/wordbreaker -dict dict.txt split
@@ -31,7 +31,7 @@ it uses the relative frequency of each word in the dictionary: higher
 frequency means higher split probability. You can generate such a file
 using the ``indexer`` tool, as in
 
-::
+.. code-block:: bash
 
 
     indexer --buildstops dict.txt 100000 --buildfreqs myindex -c /path/to/sphinx.conf

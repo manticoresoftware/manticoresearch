@@ -3,7 +3,7 @@
 SHOW STATUS syntax
 ------------------
 
-::
+.. code-block:: mysql
 
 
     SHOW STATUS [ LIKE pattern ]
@@ -12,7 +12,7 @@ SHOW STATUS syntax
 and CPU counters will only be available if searchd was started with
 –iostats and –cpustats switches respectively.
 
-::
+.. code-block:: mysql
 
 
     mysql> SHOW STATUS;

@@ -63,7 +63,7 @@ csvpipe declarations:
 :ref:`csvpipe_attr_string <xmlpipe_attr_string>`,
 :ref:`csvpipe_attr_json <xmlpipe_attr_json>`
 
-::
+.. code-block:: ini
 
 
     source tsv_test
@@ -74,7 +74,7 @@ csvpipe declarations:
         tsvpipe_attr_multi = genre_tags
     }
 
-::
+.. code-block:: ini
 
 
     1   Led Zeppelin    35,23,16

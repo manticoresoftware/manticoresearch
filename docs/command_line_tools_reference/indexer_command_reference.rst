@@ -10,7 +10,7 @@ will be searchable.
 
 The calling syntax for ``indexer`` is as follows:
 
-::
+.. code-block:: bash
 
 
     indexer [OPTIONS] [indexname1 [indexname2 [...]]]
@@ -23,7 +23,7 @@ calling ``indexer``, as a minimum you need to be telling it what index
 If ``sphinx.conf`` contained details on 2 indexes, ``mybigindex`` and
 ``mysmallindex``, you could do the following:
 
-::
+.. code-block:: bash
 
 
     $ indexer mybigindex
@@ -60,7 +60,7 @@ operation is performed. These options are:
    could allow them to create their own ``sphinx.conf`` files and pass
    them to ``indexer`` with this option. For example:
 
-   ::
+   .. code-block:: bash
 
 
        $ indexer --config /home/myuser/sphinx.conf myindex
@@ -71,7 +71,7 @@ operation is performed. These options are:
    where the entire index set will get rebuilt each day, or week, or
    whatever period is best. Example usage:
 
-   ::
+   .. code-block:: bash
 
 
        $ indexer --config /home/myuser/sphinx.conf --all
@@ -90,7 +90,7 @@ operation is performed. These options are:
    there may be a slight delay in being able to search the newer
    indexes. Example usage:
 
-   ::
+   .. code-block:: bash
 
 
        $ indexer --rotate --all
@@ -100,7 +100,7 @@ operation is performed. These options are:
    where the output is irrelevant or unnecessary, except in the event of
    some kind of error. Example usage:
 
-   ::
+   .. code-block:: bash
 
 
        $ indexer --rotate --all --quiet
@@ -111,7 +111,7 @@ operation is performed. These options are:
    instances where the script is not being run on a console (or ‘tty’),
    this will be on by default. Example usage:
 
-   ::
+   .. code-block:: bash
 
 
        $ indexer --rotate --all --noprogress
@@ -131,7 +131,7 @@ operation is performed. These options are:
    mean…” functionality, usually in conjunction with ``--buildfreqs``,
    below. Example:
 
-   ::
+   .. code-block:: bash
 
 
        $ indexer myindex --buildstops word_freq.txt 1000
@@ -151,7 +151,7 @@ operation is performed. These options are:
    where you can how much more common a given word compared to another,
    similar one. Example:
 
-   ::
+   .. code-block:: bash
 
 
        $ indexer myindex --buildstops word_freq.txt 1000 --buildfreqs
@@ -170,7 +170,7 @@ operation is performed. These options are:
    pseudo-code, it might be expressed as: ``dst-index += src-index`` An
    example:
 
-   ::
+   .. code-block:: bash
 
 
        $ indexer --merge main delta --rotate
@@ -190,7 +190,7 @@ operation is performed. These options are:
    ‘deleted’ attribute, where 0 means ‘not deleted’. Such an index could
    be merged with:
 
-   ::
+   .. code-block:: bash
 
 
        $ indexer --merge main delta --merge-dst-range deleted 0 0
@@ -220,7 +220,7 @@ operation is performed. These options are:
    attribute values from the previous index. It is possible to specify a
    path for index files to used instead of reference path from config:
 
-   ::
+   .. code-block:: bash
 
 
        indexer myindex --keep-attrs=/path/to/index/files

@@ -3,7 +3,7 @@
 RELOAD PLUGINS syntax
 ---------------------
 
-::
+.. code-block:: mysql
 
 
     RELOAD PLUGINS FROM SONAME 'plugin_library'
@@ -33,7 +33,7 @@ new version under the old name, and RELOAD will then work. After a
 succesful reload you will also be able to delete the renamed old
 library, too.
 
-::
+.. code-block:: mysql
 
 
     mysql> RELOAD PLUGINS FROM SONAME 'udfexample.dll';

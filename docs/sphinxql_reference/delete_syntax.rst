@@ -3,7 +3,7 @@
 DELETE syntax
 -------------
 
-::
+.. code-block:: mysql
 
 
     DELETE FROM index WHERE where_condition
@@ -18,7 +18,7 @@ which contains only RT indexes as agents It deletes existing rows
 :ref:`select_syntax` for
 details).
 
-::
+.. code-block:: mysql
 
 
     mysql> select * from rt;

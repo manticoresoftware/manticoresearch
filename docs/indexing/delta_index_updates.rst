@@ -26,7 +26,7 @@ and update it whenever the main index is reindexed.
 Example 3.3. Fully automated live updates
                                          
 
-::
+.. code-block:: ini
 
 
     # in MySQL

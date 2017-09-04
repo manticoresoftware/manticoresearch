@@ -3,7 +3,7 @@
 FLUSH RTINDEX syntax
 --------------------
 
-::
+.. code-block:: mysql
 
 
     FLUSH RTINDEX rtindex
@@ -25,7 +25,7 @@ causes the subsequent cleanup of (now-redundant) binary log files. Thus,
 recovering from a backup made just after FLUSH RTINDEX should be almost
 instant.
 
-::
+.. code-block:: mysql
 
 
     mysql> FLUSH RTINDEX rt;

@@ -49,7 +49,7 @@ modified query to fetch another chunk of documents. Here's an example.
 Example 3.1. Ranged query usage example
                                        
 
-::
+.. code-block:: ini
 
 
     # in sphinx.conf

@@ -3,7 +3,7 @@
 SHOW VARIABLES syntax
 ---------------------
 
-::
+.. code-block:: mysql
 
 
     SHOW [{GLOBAL | SESSION}] VARIABLES [WHERE variable_name='xxx']
@@ -15,7 +15,7 @@ this statement.
 It returns the current values of a few server-wide variables. Also,
 support for GLOBAL and SESSION clauses was added.
 
-::
+.. code-block:: mysql
 
 
     mysql> SHOW GLOBAL VARIABLES;

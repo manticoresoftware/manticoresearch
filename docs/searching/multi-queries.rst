@@ -66,7 +66,7 @@ identifies common full-text query parts (subtrees) in all queries, and
 caches them between queries. For instance, look at the following query
 batch:
 
-::
+.. code-block:: mysql
 
 
     donald trump president
@@ -86,7 +86,7 @@ match “i am” does not exhaust the RAM and instantly kill your server).
 Here's a code sample (in PHP) that fire the same query in 3 different
 sorting modes:
 
-::
+.. code-block:: php
 
 
     require ( "sphinxapi.php" );
@@ -105,7 +105,7 @@ How to tell whether the queries in the batch were actually optimized? If
 they were, respective query log will have a “multiplier” field that
 specifies how many queries were processed together:
 
-::
+.. code-block:: mysql
 
 
     [Sun Jul 12 15:18:17.000 2009] 0.040 sec x3 [ext/0/rel 747541 (0,20)] [lj] the
@@ -116,7 +116,7 @@ Note the “x3” field. It means that this query was optimized and
 processed in a sub-batch of 3 queries. For reference, this is how the
 regular log would look like if the queries were not batched:
 
-::
+.. code-block:: mysql
 
 
     [Sun Jul 12 15:18:17.062 2009] 0.059 sec [ext/0/rel 747541 (0,20)] [lj] the

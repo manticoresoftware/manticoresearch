@@ -3,7 +3,7 @@
 CREATE FUNCTION syntax
 ----------------------
 
-::
+.. code-block:: mysql
 
 
     CREATE FUNCTION udf_name
@@ -18,7 +18,7 @@ trusted
 directory. On success, the function is available for use in all
 subsequent queries that the server receives. Example:
 
-::
+.. code-block:: mysql
 
 
     mysql> CREATE FUNCTION avgmva RETURNS INTEGER SONAME 'udfexample.dll';

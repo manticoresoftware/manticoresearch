@@ -53,7 +53,7 @@ available locale using
 directive. The list of locales available on your system can usually be
 obtained with the ``locale`` command:
 
-::
+.. code-block:: mysql
 
 
     $ locale -a

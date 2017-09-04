@@ -3,7 +3,7 @@
 TRUNCATE RTINDEX syntax
 -----------------------
 
-::
+.. code-block:: mysql
 
 
     TRUNCATE RTINDEX rtindex
@@ -12,7 +12,7 @@ TRUNCATE RTINDEX clears the RT index completely. It disposes the
 in-memory data, unlinks all the index data files, and releases the
 associated binary logs.
 
-::
+.. code-block:: mysql
 
 
     mysql> TRUNCATE RTINDEX rt;

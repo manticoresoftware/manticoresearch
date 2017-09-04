@@ -9,7 +9,8 @@ csvpipe_delimiter
 csvpipe source fields delimiter. Optional, default value is ‘,’.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     csvpipe_delimiter = ;
@@ -28,7 +29,8 @@ authentication when connecting to MS SQL Server. Note that when running
 used to install the service.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     mssql_winauth = 1
@@ -64,7 +66,8 @@ may improve indexing time significantly (upto 20-30% of the total
 indexing time improvement was reported). Your mileage may vary.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     mysql_connect_flags = 32 # enable compression
@@ -83,7 +86,8 @@ These directives let you set up secure SSL connection between
 setting up MySQL server can be found in MySQL documentation.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     mysql_ssl_cert = /etc/ssl/client-cert.pem
@@ -103,7 +107,8 @@ password, etc) to use when connecting to ODBC data source. The format
 depends on specific ODBC driver used.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     odbc_dsn = Driver={Oracle ODBC Driver};Dbq=myDBName;Uid=myUsername;Pwd=myPassword
@@ -121,7 +126,8 @@ that unlike
 these values are **signed**.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     sql_attr_bigint = my_bigint_id
@@ -138,7 +144,8 @@ source types (``mysql``, ``pgsql``, ``mssql``) only. Equivalent to
 declaration with a bit count of 1.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     sql_attr_bool = is_deleted # will be packed to 1 bit
@@ -160,7 +167,8 @@ longitude values (in radians), for further usage in query-time geosphere
 distance calculations.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     sql_attr_float = lat_radians
@@ -179,7 +187,7 @@ When indexing JSON attributes, Manticore expects a text field with JSON
 formatted data. JSON attributes supports arbitrary JSON data with no
 limitation in nested levels or types.
 
-::
+.. code-block:: ini
 
 
     {
@@ -203,7 +211,8 @@ documents that don't include the key will simply be ignored.
 
 
 Example:
-::
+
+.. code-block:: ini
 
 
     sql_attr_json = properties
@@ -226,7 +235,7 @@ filtering or grouping to value lists.
 The declaration format is as follows (backslashes are for clarity only;
 everything can be declared in a single line as well):
 
-::
+.. code-block:: ini
 
 
     sql_attr_multi = ATTR-TYPE ATTR-NAME 'from' SOURCE-TYPE \
@@ -245,8 +254,8 @@ where
    to ‘sql_query_range’
 
 Example:
-::
 
+.. code-block:: ini
 
     sql_attr_multi = uint tag from query; SELECT id, tag FROM tags
     sql_attr_multi = bigint tag from ranged-query; \
@@ -274,8 +283,8 @@ BY, WITHIN GROUP ORDER BY). Note that attributes declared using
 directive for that.
 
 Example:
-::
 
+.. code-block:: ini
 
     sql_attr_string = title # will be stored but will not be indexed
 
@@ -308,7 +317,8 @@ only needs to work with dates, not times, consider TO_DAYS() function
 in MySQL instead.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     # sql_query = ... UNIX_TIMESTAMP(added_datetime) AS added_ts ...
@@ -337,7 +347,8 @@ data file. Bit size settings are ignored if using :ref:`inline
 storage <docinfo>`.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     sql_attr_uint = group_id
@@ -367,13 +378,14 @@ to save memory on actually shorter columns, or overcome the 8 MB limit
 on actually longer columns. The directive values must be a
 comma-separated lists of selected column names and sizes:
 
-::
+.. code-block:: ini
 
 
     sql_column_buffers = <colname>=<size>[K|M] [, ...]
 
 Example:
-::
+
+.. code-block:: ini
 
 
     sql_query = SELECT id, mytitle, mycontent FROM documents
@@ -389,7 +401,8 @@ further queries within. Mandatory, no default value. Applies to SQL
 source types (``mysql``, ``pgsql``, ``mssql``) only.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     sql_db = test
@@ -410,7 +423,8 @@ it as attribute. ``sql_field_string`` lets you do exactly that. Both the
 field and the attribute will be named the same.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     sql_field_string = title # will be both indexed and stored
@@ -432,7 +446,8 @@ missed limits, etc) will be reported as indexing warnings and will
 such files.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     sql_file_field = my_file_path # load and index files referred to by my_file_path
@@ -456,7 +471,8 @@ manual <http://dev.mysql.com/doc/refman/5.0/en/mysql-real-connect.html>`__
 for more details.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     sql_host = localhost
@@ -473,7 +489,7 @@ empty list of queries. Applies to SQL source types (``mysql``,
 ``sql_joined_field`` lets you use two different features: joined fields,
 and payloads (payload fields). It's syntax is as follows:
 
-::
+.. code-block:: ini
 
 
     sql_joined_field = FIELD-NAME 'from'  ( 'query' | 'payload-query' \
@@ -503,7 +519,7 @@ order returned from the query, and separating whitespace will be
 inserted between them. For instance, if joined field query returns the
 following rows:
 
-::
+.. code-block:: ini
 
 
     ( 1, 'red' )
@@ -545,7 +561,8 @@ fields, computes a sum of matched payloads multiplied by field weights,
 and adds that sum to the final rank.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     sql_joined_field = \
@@ -567,7 +584,8 @@ Mandatory, no default value. Applies to SQL source types (``mysql``,
 ``pgsql``, ``mssql``) only.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     sql_pass = mysecretpassword
@@ -584,7 +602,8 @@ types (``mysql``, ``pgsql``, ``mssql``) only. Note that it depends on
 setting whether this value will actually be used.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     sql_port = 3306
@@ -614,7 +633,7 @@ document 7 as we index ‘delta’; but does not occur in document 11 any
 more. We now reindex delta and then search through both these indexes in
 proper (least to most recent) order:
 
-::
+.. code-block:: ini
 
 
     $res = $cl->Query ( "test", "main delta" );
@@ -637,7 +656,8 @@ impact when the K-list is huge.) You will need to setup a separate
 per-server K-lists in that case.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     sql_query_killlist = \
@@ -660,7 +680,8 @@ document ID which was actually fetched from the database during
 indexing. If no documents were indexed, $maxid will be expanded to 0.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     sql_query_post_index = REPLACE INTO counters ( id, val ) \
@@ -688,7 +709,8 @@ query <sql_query_post_index>`
 instead.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     sql_query_post = DROP TABLE my_tmp_table
@@ -718,7 +740,7 @@ that the server will use for the rows it returns. Note that Manticore
 accepts only UTF-8 texts. Two MySQL specific examples of setting the
 encoding are:
 
-::
+.. code-block:: ini
 
 
     sql_query_pre = SET CHARACTER_SET_RESULTS=utf8
@@ -729,13 +751,14 @@ indexer connection only) in pre-query, because indexing queries are not
 going to be re-run frequently anyway, and there's no sense in caching
 their results. That could be achieved with:
 
-::
+.. code-block:: ini
 
 
     sql_query_pre = SET SESSION query_cache_type=OFF
 
 Example:
-::
+
+.. code-block:: ini
 
 
     sql_query_pre = SET NAMES utf8
@@ -771,7 +794,8 @@ illustrates that; note how it uses greater-or-equal and less-or-equal
 comparisons.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     sql_query_range = SELECT MIN(id),MAX(id) FROM documents
@@ -797,13 +821,15 @@ it builds with 32-bit IDs support but ``--enable-id64`` option to
 ``configure`` allows to build with 64-bit document and word IDs support.
 
 Example:
-::
+
+.. code-block:: ini
 
 
-    sql_query = \
-        SELECT id, group_id, UNIX_TIMESTAMP(date_added) AS date_added, \
-            title, content \
-        FROM documents
+  sql_query = \
+  SELECT id, group_id, UNIX_TIMESTAMP(date_added) AS date_added, \
+  title, content \
+  FROM documents
+
 
 .. _sql_ranged_throttle:
 
@@ -820,7 +846,8 @@ milliseconds once per each ranged query step. This sleep is
 unconditional, and is performed before the fetch query.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     sql_ranged_throttle = 1000 # sleep for 1 sec before each query step
@@ -851,7 +878,8 @@ several times with the following substitutions:
 -  $start=3012, $end=3456
 
 Example:
-::
+
+.. code-block:: ini
 
 
     sql_range_step = 1000
@@ -872,8 +900,7 @@ setting whether this value will actually be used.
 
 Example:
 
-
-::
+.. code-block:: ini
 
 
     sql_sock = /tmp/mysql.sock
@@ -890,7 +917,7 @@ Mandatory, no default value. Applies to SQL source types (``mysql``,
 
 Example:
 
-::
+.. code-block:: ini
 
     sql_user = test
 
@@ -915,7 +942,8 @@ natively and on Linux through `UnixODBC
 library <http://www.unixodbc.org/>`__.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     type = mysql
@@ -937,7 +965,8 @@ size. This option lets you control the buffer size, both to limit
 fields if necessary.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     unpack_mysqlcompress_maxsize = 1M
@@ -959,7 +988,8 @@ only available if zlib and zlib-devel were both available during build
 time.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     unpack_mysqlcompress = body_compressed
@@ -982,7 +1012,8 @@ is only available if zlib and zlib-devel were both available during
 build time.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     unpack_zlib = col1
@@ -999,7 +1030,8 @@ that of
 :ref:`sql_attr_bigint <sql_attr_bigint>`.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     xmlpipe_attr_bigint = my_bigint_id
@@ -1014,7 +1046,8 @@ xmlpipe boolean attribute declaration. Multi-value, optional. Applies to
 :ref:`sql_attr_bool <sql_attr_bool>`.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     xmlpipe_attr_bool = is_deleted # will be packed to 1 bit
@@ -1029,7 +1062,8 @@ Applies to ``xmlpipe2`` source type only. Syntax fully matches that of
 :ref:`sql_attr_float <sql_attr_float>`.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     xmlpipe_attr_float = lat_radians
@@ -1049,7 +1083,8 @@ later use. Refer to :ref:`sql_attr_json`
 for more details on the JSON attributes.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     xmlpipe_attr_json = properties
@@ -1070,7 +1105,8 @@ will constitute the MVA will be extracted, similar to how
 parses SQL column contents when ‘field’ MVA source type is specified.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     xmlpipe_attr_multi_64 = taglist
@@ -1090,7 +1126,8 @@ will constitute the MVA will be extracted, similar to how
 parses SQL column contents when ‘field’ MVA source type is specified.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     xmlpipe_attr_multi = taglist
@@ -1108,7 +1145,8 @@ contents of the specified tag will be parsed and stored as a string
 value.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     xmlpipe_attr_string = subject
@@ -1123,7 +1161,8 @@ Applies to ``xmlpipe2`` source type only. Syntax fully matches that of
 :ref:`sql_attr_timestamp <sql_attr_timestamp>`.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     xmlpipe_attr_timestamp = published
@@ -1138,7 +1177,8 @@ xmlpipe integer attribute declaration. Multi-value, optional. Applies to
 :ref:`sql_attr_uint <sql_attr_uint>`.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     xmlpipe_attr_uint = author_id
@@ -1156,7 +1196,8 @@ parsed for documents. Refer to :ref:`xmlpipe2_data_source` for specific format
 description.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     xmlpipe_command = cat /home/sphinx/test.xml
@@ -1170,7 +1211,8 @@ xmlpipe field declaration. Multi-value, optional. Applies to
 ``xmlpipe2`` source type only. Refer to :ref:`xmlpipe2_data_source`.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     xmlpipe_field = subject
@@ -1189,7 +1231,8 @@ string attribute. Equivalent to <sphinx:field name=“field”
 attr=“string”/> declaration within the XML file.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     xmlpipe_field_string = subject
@@ -1213,7 +1256,8 @@ preprocess the incoming stream before passing it to the XML parser and
 replace invalid UTF-8 sequences with spaces.
 
 Example:
-::
+
+.. code-block:: ini
 
 
     xmlpipe_fixup_utf8 = 1

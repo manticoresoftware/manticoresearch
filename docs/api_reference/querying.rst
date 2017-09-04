@@ -43,7 +43,7 @@ the query, and you can safely change them afterwards for subsequent
 ``AddQuery()`` calls. Already added queries will not be affected;
 there's actually no way to change them at all. Here's an example:
 
-::
+.. code-block:: php
 
 
     $cl->SetSortMode ( SPH_SORT_RELEVANCE );
@@ -105,7 +105,7 @@ considered a separator. Note that index name should not start with
 underscore character. Therefore, all of the following samples calls are
 valid and will search the same two indexes:
 
-::
+.. code-block:: php
 
 
     $cl->Query ( "test query", "main delta" );

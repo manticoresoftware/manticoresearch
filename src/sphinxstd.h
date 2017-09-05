@@ -1287,15 +1287,15 @@ template < typename T >
 class CSphFixedVector : public ISphNoncopyable
 {
 protected:
-	T *			m_pData;
-	int			m_iSize;
+	T *			m_pData = nullptr;
+	int			m_iSize = 0;
 
 public:
 	explicit CSphFixedVector ( int iSize )
 		: m_iSize ( iSize )
 	{
 		assert ( iSize>=0 );
-		m_pData = ( iSize>0 ) ? new T [ iSize ] : NULL;
+		m_pData = ( iSize>0 ) ? new T [ iSize ] : nullptr;
 	}
 
 	~CSphFixedVector ()
@@ -1303,20 +1303,21 @@ public:
 		SafeDeleteArray ( m_pData );
 	}
 
-	CSphFixedVector ( CSphFixedVector&& rhs )
-		: m_pData ( std::move ( rhs.m_pData ) )
-		, m_iSize ( std::move ( rhs.m_iSize ) )
+	CSphFixedVector ( CSphFixedVector&& rhs ) noexcept
+		: m_pData ( rhs.m_pData )
+		, m_iSize ( rhs.m_iSize )
 	{
 		rhs.m_pData = nullptr;
 		rhs.m_iSize = 0;
 	}
 
-	CSphFixedVector & operator= ( CSphFixedVector&& rhs )
+	CSphFixedVector & operator= ( CSphFixedVector&& rhs ) noexcept
 	{
 		if ( &rhs!=this )
 		{
-			m_pData = std::move ( rhs.m_pData );
-			m_iSize = std::move ( rhs.m_iSize );
+			SafeDeleteArray ( m_pData );
+			m_pData = rhs.m_pData;
+			m_iSize = rhs.m_iSize;
 
 			rhs.m_pData = nullptr;
 			rhs.m_iSize = 0;
@@ -1348,12 +1349,12 @@ public:
 	
 	T * end ()
 	{
-		return m_iSize ? m_pData + m_iSize : NULL;
+		return m_iSize ? m_pData + m_iSize : nullptr;
 	}
 	
 	const T * end () const
 	{
-		return m_iSize ? m_pData + m_iSize : NULL;
+		return m_iSize ? m_pData + m_iSize : nullptr;
 	}
 
 	T & Last () const
@@ -1365,7 +1366,7 @@ public:
 	{
 		SafeDeleteArray ( m_pData );
 		assert ( iSize>=0 );
-		m_pData = ( iSize>0 ) ? new T [ iSize ] : NULL;
+		m_pData = ( iSize>0 ) ? new T [ iSize ] : nullptr;
 		m_iSize = iSize;
 	}
 

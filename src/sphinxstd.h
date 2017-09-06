@@ -344,7 +344,7 @@ inline int sphLog2 ( uint64_t uValue )
 #elif __GNUC__ || __clang__
 	if ( !uValue )
 		return 0;
-	return 64 - __builtin_clzl(uValue);
+	return 64 - __builtin_clzll(uValue);
 #else
 	int iBits = 0;
 	while ( uValue )

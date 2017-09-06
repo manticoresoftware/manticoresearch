@@ -247,29 +247,62 @@ TEST ( functions, CJson )
 }
 
 //////////////////////////////////////////////////////////////////////////
+unsigned int nlog2 ( uint64_t x )
+{
+	x |= ( x >> 1 );
+	x |= ( x >> 2 );
+	x |= ( x >> 4 );
+	x |= ( x >> 8 );
+	x |= ( x >> 16 );
+	if ( x&0xFFFFFFFF00000000 )
+		return 32+ sphBitCount(x>>32);
+	return sphBitCount(x&0xFFFFFFFF);
+}
 
 TEST ( functions, Log2 )
 {
-	ASSERT_EQ ( sphLog2 ( 1 ), 1 );
-	ASSERT_EQ ( sphLog2 ( 2 ), 2 );
-	ASSERT_EQ ( sphLog2 ( 3 ), 2 );
-	ASSERT_EQ ( sphLog2 ( 4 ), 3 );
-	ASSERT_EQ ( sphLog2 ( 5 ), 3 );
-	ASSERT_EQ ( sphLog2 ( 6 ), 3 );
-	ASSERT_EQ ( sphLog2 ( 7 ), 3 );
-	ASSERT_EQ ( sphLog2 ( 8 ), 4 );
-	ASSERT_EQ ( sphLog2 ( 9 ), 4 );
-	ASSERT_EQ ( sphLog2 ( 10 ), 4 );
-	ASSERT_EQ ( sphLog2 ( 65535 ), 16 );
-	ASSERT_EQ ( sphLog2 ( 65536 ), 17 );
-	ASSERT_EQ ( sphLog2 ( 0xffffffffUL ), 32 );
-	ASSERT_EQ ( sphLog2 ( 0x100000000ULL ), 33 );
-	ASSERT_EQ ( sphLog2 ( 0x100000001ULL ), 33 );
-	ASSERT_EQ ( sphLog2 ( 0x1ffffffffULL ), 33 );
-	ASSERT_EQ ( sphLog2 ( 0x200000000ULL ), 34 );
-	ASSERT_EQ ( sphLog2 ( 0xffffffffffffffffULL ), 64 );
-	ASSERT_EQ ( sphLog2 ( 0xfffffffffffffffeULL ), 64 );
-	ASSERT_EQ ( sphLog2 ( 0xefffffffffffffffULL ), 64 );
+	EXPECT_EQ ( sphLog2 ( 1 ), 1 );
+	EXPECT_EQ ( sphLog2 ( 2 ), 2 );
+	EXPECT_EQ ( sphLog2 ( 3 ), 2 );
+	EXPECT_EQ ( sphLog2 ( 4 ), 3 );
+	EXPECT_EQ ( sphLog2 ( 5 ), 3 );
+	EXPECT_EQ ( sphLog2 ( 6 ), 3 );
+	EXPECT_EQ ( sphLog2 ( 7 ), 3 );
+	EXPECT_EQ ( sphLog2 ( 8 ), 4 );
+	EXPECT_EQ ( sphLog2 ( 9 ), 4 );
+	EXPECT_EQ ( sphLog2 ( 10 ), 4 );
+	EXPECT_EQ ( sphLog2 ( 65535 ), 16 );
+	EXPECT_EQ ( sphLog2 ( 65536 ), 17 );
+	EXPECT_EQ ( sphLog2 ( 0xffffffffUL ), 32 );
+	EXPECT_EQ ( sphLog2 ( 0x100000000ULL ), 33 );
+	EXPECT_EQ ( sphLog2 ( 0x100000001ULL ), 33 );
+	EXPECT_EQ ( sphLog2 ( 0x1ffffffffULL ), 33 );
+	EXPECT_EQ ( sphLog2 ( 0x200000000ULL ), 34 );
+	EXPECT_EQ ( sphLog2 ( 0xffffffffffffffffULL ), 64 );
+	EXPECT_EQ ( sphLog2 ( 0xfffffffffffffffeULL ), 64 );
+	EXPECT_EQ ( sphLog2 ( 0xefffffffffffffffULL ), 64 );
+	EXPECT_EQ ( sphLog2 ( 0x7fffffffffffffffULL ), 63 );
+
+	EXPECT_EQ ( nlog2 ( 1 ), 1 ) << "emulated";
+	EXPECT_EQ ( nlog2 ( 2 ), 2 );
+	EXPECT_EQ ( nlog2 ( 3 ), 2 );
+	EXPECT_EQ ( nlog2 ( 4 ), 3 );
+	EXPECT_EQ ( nlog2 ( 5 ), 3 );
+	EXPECT_EQ ( nlog2 ( 6 ), 3 );
+	EXPECT_EQ ( nlog2 ( 7 ), 3 );
+	EXPECT_EQ ( nlog2 ( 8 ), 4 );
+	EXPECT_EQ ( nlog2 ( 9 ), 4 );
+	EXPECT_EQ ( nlog2 ( 10 ), 4 );
+	EXPECT_EQ ( nlog2 ( 65535 ), 16 );
+	EXPECT_EQ ( nlog2 ( 65536 ), 17 );
+	EXPECT_EQ ( nlog2 ( 0xffffffffUL ), 32 );
+	EXPECT_EQ ( nlog2 ( 0x100000000ULL ), 33 );
+	EXPECT_EQ ( nlog2 ( 0x100000001ULL ), 33 );
+	EXPECT_EQ ( nlog2 ( 0x1ffffffffULL ), 33 );
+	EXPECT_EQ ( nlog2 ( 0x200000000ULL ), 34 );
+	EXPECT_EQ ( nlog2 ( 0xffffffffffffffffULL ), 64 );
+	EXPECT_EQ ( nlog2 ( 0xfffffffffffffffeULL ), 64 );
+	EXPECT_EQ ( nlog2 ( 0xefffffffffffffffULL ), 64 );
 	ASSERT_EQ ( sphLog2 ( 0x7fffffffffffffffULL ), 63 );
 }
 

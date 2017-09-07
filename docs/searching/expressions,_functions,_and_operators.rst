@@ -127,6 +127,7 @@ Operators
 .. _expr-ari-ops:
 
 -  Arithmetic operators: +, -, \*, /, %, DIV, MOD
+
    The standard arithmetic operators. Arithmetic calculations involving
    those can be performed in three different modes: (a) using
    single-precision, 32-bit IEEE 754 floating point values (the
@@ -148,6 +149,7 @@ Operators
 .. _expr-comp-ops:
 
 -  Comparison operators: <, > <=, >=, =, <>
+
    Comparison operators (eg. = or <=) return 1.0 when the condition is
    true and 0.0 otherwise. For instance, ``(a=b)+3`` will evaluate to 4
    when attribute ‘a’ is equal to attribute ‘b’, and to 3 when ‘a’ is
@@ -159,6 +161,7 @@ Operators
 .. _expr-bool-ops:
    
 -  Boolean operators: AND, OR, NOT
+
    Boolean operators (AND, OR, NOT) behave as usual. They are
    left-associative and have the least priority compared to other
    operators. NOT has more priority than AND and OR but nevertheless
@@ -169,6 +172,7 @@ Operators
 .. _expr-bitwise-ops:
 
 -  Bitwise operators: &, \|
+
    These operators perform bitwise AND and OR respectively. The operands
    must be of an integer types.
 
@@ -181,22 +185,26 @@ Numeric functions
 .. _expr-func-abs:
 
 -  ABS()
+
    Returns the absolute value of the argument.
 
 .. _expr-func-bitdot:
 
 -  BITDOT()
+
    BITDOT(mask, w0, w1, …) returns the sum of products of an each bit of
    a mask multiplied with its weight. ``bit0*w0 + bit1*w1 + ...``
 
  .. _expr-func-ceil:
 
 -  CEIL()
+
    Returns the smallest integer value greater or equal to the argument.
 
 .. _expr-func-contains:
 
 -  CONTAINS()
+
    CONTAINS(polygon, x, y) checks whether the (x,y) point is within the
    given polygon, and returns 1 if true, or 0 if false. The polygon has
    to be specified using either the :ref:`POLY2D() <expr-func-poly2d>`
@@ -210,6 +218,7 @@ Numeric functions
 .. _expr-func-cos:
 
 -  COS()
+
    Returns the cosine of the argument.
 
 .. _expr-func-double:
@@ -221,12 +230,14 @@ Numeric functions
 .. _expr-func-exp:
     
 -  EXP()
+
    Returns the exponent of the argument (e=2.718… to the power of the
    argument).
 
 .. _expr-func-fibonacci:
    
 -  FIBONACCI()
+
    Returns the N-th Fibonacci number, where N is the integer argument.
    That is, arguments of 0 and up will generate the values 0, 1, 1, 2,
    3, 5, 8, 13 and so on. Note that the computations are done using
@@ -236,11 +247,13 @@ Numeric functions
 .. _expr-func-floor:
 
 -  FLOOR()
+
    Returns the largest integer value lesser or equal to the argument.
 
 .. _expr-func-geopoly2d:
 
 -  GEOPOLY2D()
+
    GEOPOLY2D(x1,y1,x2,y2,x3,y3…) produces a polygon to be used with the
    :ref:`CONTAINS() <expr-func-contains>` function. This function takes
    into account the Earth's curvature by tessellating the polygon into
@@ -252,38 +265,45 @@ Numeric functions
 .. _expr-func-idiv:
 
 -  IDIV()
+
    Returns the result of an integer division of the first argument by
    the second argument. Both arguments must be of an integer type.
 
 .. _expr-func-ln:
 
 -  LN()
+
    Returns the natural logarithm of the argument (with the base of
    e=2.718…).
 
 .. _expr-func-log10:
    
 -  LOG10()
+
    Returns the common logarithm of the argument (with the base of 10).
 
 .. _expr-func-log2:
 
 -  LOG2()
+
    Returns the binary logarithm of the argument (with the base of 2).
 
 .. _expr-func-max:
 
 -  MAX()
+
    Returns the bigger of two arguments.
 
 .. _expr-func-min:
 
 -  MIN()
+
    Returns the smaller of two arguments.
 
 .. _expr-func-poly2d:
 
 -  POLY2D()
+
    POLY2D(x1,y1,x2,y2,x3,y3…) produces a polygon to be used with the
    :ref:`CONTAINS() <expr-func-contains>` function. This polygon assumes a
    flat Earth, so it should not be too large; see the
@@ -292,22 +312,26 @@ Numeric functions
 .. _expr-func-pow:
 
 -  POW()
+
    Returns the first argument raised to the power of the second
    argument.
    
 .. _expr-func-sin:
 
 -  SIN()
+
    Returns the sine of the argument.
 
 .. _expr-func-sqrt:
 
 -  SQRT()
+
    Returns the square root of the argument.
 
 .. _expr-func-uint:
 
 -  UINT()
+
    Forcibly reinterprets given argument to 64-bit unsigned type.
 
 
@@ -319,53 +343,62 @@ Date and time functions
 .. _expr-func-day:
 
 -  DAY()
+
    Returns the integer day of month (in 1..31 range) from a timestamp
    argument, according to the current timezone.
 
 .. _expr-func-month:
 
 -  MONTH()
+
    Returns the integer month (in 1..12 range) from a timestamp argument,
    according to the current timezone.
 
 .. _expr-func-now:
 
 -  NOW()
+
    Returns the current timestamp as an INTEGER.
 
 .. _expr-func-year:
 
 -  YEAR()
+
    Returns the integer year (in 1969..2038 range) from a timestamp
    argument, according to the current timezone.
 
 .. _expr-func-yearmonth:
 
 -  YEARMONTH()
+
    Returns the integer year and month code (in 196912..203801 range)
    from a timestamp argument, according to the current timezone.
 
 .. _expr-func-yearmonthday:
 
 -  YEARMONTHDAY()
+
    Returns the integer year, month, and date code (in 19691231..20380119
    range) from a timestamp argument, according to the current timezone.
 
 .. _expr-func-second:
 
 -  SECOND()
+
    Returns the integer second (in 0..59 range) from a timestamp
    argument, according to the current timezone.
 
 .. _expr-func-minute:
 
 -  MINUTE()
+
    Returns the integer minute (in 0..59 range) from a timestamp
    argument, according to the current timezone.
 
 .. _expr-func-hour:
 
 -  HOUR()
+
    Returns the integer hour (in 0..23 range) from a timestamp argument,
    according to the current timezone.
 
@@ -378,6 +411,7 @@ Type conversion functions
 .. _expr-func-bigint:
 
 -  BIGINT()
+
    Forcibly promotes the integer argument to 64-bit type, and does
    nothing on floating point argument. It's intended to help enforce
    evaluation of certain expressions (such as ``a*b``) in 64-bit mode
@@ -386,12 +420,14 @@ Type conversion functions
 .. _expr-func-integer:
 
 -  INTEGER()
+
    Forcibly promotes given argument to 64-bit signed type. Intended to
    help enforce evaluation of numeric JSON fields.
 
 .. _expr-func-sint:
 
 -  SINT()
+
    Forcibly reinterprets its 32-bit unsigned integer argument as signed,
    and also expands it to 64-bit type (because 32-bit type is unsigned).
    It's easily illustrated by the following example: 1-2 normally
@@ -406,6 +442,7 @@ Comparison functions
 .. _expr-func-if:
 
 -  IF()
+
    ``IF()`` behavior is slightly different that that of its MySQL
    counterpart. It takes 3 arguments, check whether the 1st argument is
    equal to 0.0, returns the 2nd argument if it is not zero, or the 3rd
@@ -434,6 +471,7 @@ Comparison functions
 .. _expr-func-in:
 
 -  IN()
+
    IN(expr,val1,val2,…) takes 2 or more arguments, and returns 1 if 1st
    argument (expr) is equal to any of the other arguments (val1..valN),
    or 0 otherwise. Currently, all the checked values (but not the
@@ -451,6 +489,7 @@ Comparison functions
 .. _expr-func-interval:
 
 -  INTERVAL()
+
    INTERVAL(expr,point1,point2,point3,…), takes 2 or more arguments, and
    returns the index of the argument that is less than the first
    argument: it returns 0 if expr<point1, 1 if point1<=expr<point2, and
@@ -466,37 +505,56 @@ Miscellaneous functions
 .. _expr-func-all:
 
 -  ALL()
+
    ALL(cond FOR var IN json.array) applies to JSON arrays and returns 1
    if condition is true for all elements in array and 0 otherwise.
    ‘cond’ is a general expression which additionally can use ‘var’ as
    current value of an array element within itself.
-
-.. code-block:: mysql
+   
+   .. code-block:: mysql
 
 
        SELECT ALL(x>3 AND x<7 FOR x IN j.intarray) FROM test;
+  
+   
+   ALL(mva) is a special constructor for multi value attributes. 
+   When used in conjunction with comparison operators it returns 1 if all values compared are found among the MVA values.
+
+   .. code-block:: mysql
+
+
+       SELECT * FROM test WHERE ALL(mymva)>10;
+  
 
 .. _expr-func-any:
 
 -  ANY()
+
    ANY(cond FOR var IN json.array) works similar to
    :ref:`ALL() <expr-func-all>` except for it returns 1 if condition is
    true for any element in array.
-
+   
+   ANY(mva) is a special constructor for multi value attributes. 
+   When used in conjunction with comparison operators it returns 1 if any of the  values compared are found among the MVA values.
+   ANY is used by default if no constructor is used, however a warning will be raised about missing constructor.
+   
 .. _expr-func-atan2:
 
 -  ATAN2()
+
    Returns the arctangent function of two arguments, expressed in
    **radians**.
 
 .. _expr-func-crc32:
 
 -  CRC32()
+
    Returns the CRC32 value of a string argument.
 
 .. _expr-func-geodist:
 
 -  GEODIST()
+
    GEODIST(lat1, lon1, lat2, lon2, […]) function computes geosphere
    distance between two given points specified by their coordinates.
    Note that by default both latitudes and longitudes must be in
@@ -510,13 +568,13 @@ Miscellaneous functions
    geodistance formula to use. The complete syntax and a few examples
    are as follows:
 
-.. code-block:: mysql
+   .. code-block:: mysql
 
+      GEODIST(lat1, lon1, lat2, lon2, { option=value, ... })
+  
+      GEODIST(40.7643929, -73.9997683, 40.7642578, -73.9994565, {in=degrees, out=feet})
 
-       GEODIST(lat1, lon1, lat2, lon2, { option=value, ... })
-
-       GEODIST(40.7643929, -73.9997683, 40.7642578, -73.9994565, {in=degrees, out=feet})
-       GEODIST(51.50, -0.12, 29.98, 31.13, {in=deg, out=mi}}
+      GEODIST(51.50, -0.12, 29.98, 31.13, {in=deg, out=mi}}
 
    The known options and their values are:
 
@@ -534,6 +592,7 @@ Miscellaneous functions
 .. _expr-func-greatest:
 
 -  GREATEST()
+
    GREATEST(attr_json.some_array) function takes JSON array as the
    argument, and returns the greatest value in that array. Also works
    for MVA.
@@ -541,6 +600,7 @@ Miscellaneous functions
 .. _expr-func-indexof:
 
 -  INDEXOF()
+
    INDEXOF(cond FOR var IN json.array) function iterates through all
    elements in array and returns index of first element for which ‘cond’
    is true and -1 if ‘cond’ is false for every element in array.
@@ -553,6 +613,7 @@ Miscellaneous functions
 .. _expr-func-least:
 
 -  LEAST()
+
    LEAST(attr_json.some_array) function takes JSON array as the
    argument, and returns the least value in that array. Also works for
    MVA.
@@ -560,6 +621,7 @@ Miscellaneous functions
 .. _expr-func-length:
 
 -  LENGTH()
+
    LENGTH(attr_mva) function returns amount of elements in MVA set. It
    works with both 32-bit and 64-bit MVA attributes. LENGTH(attr_json)
    returns length of a field in JSON. Return value depends on type of a
@@ -569,6 +631,7 @@ Miscellaneous functions
 .. _expr-func-min-top-sortval:
 
 -  MIN_TOP_SORTVAL()
+
    Returns sort key value of the worst found element in the current
    top-N matches if sort key is float and 0 otherwise.
 
@@ -581,6 +644,7 @@ Miscellaneous functions
 .. _expr-func-packedfactors:
 
 -  PACKEDFACTORS()
+
    PACKEDFACTORS() can be used in queries, either to just see all the
    weighting factors calculated when doing the matching, or to provide a
    binary attribute that can be used to write a custom ranking UDF. This
@@ -748,6 +812,7 @@ Miscellaneous functions
 .. _expr-func-remap:
 
 -  REMAP()
+
    REMAP(condition, expression, (cond1, cond2, …), (expr1, expr2, …))
    function allows you to make some exceptions of an expression values
    depending on condition values. Condition expression should always
@@ -762,5 +827,6 @@ Miscellaneous functions
 .. _expr-func-rand:
 
 -  rand()
+
    RAND(seed) function returns a random float between 0..1. Optional, an
    integer seed value can be specified.

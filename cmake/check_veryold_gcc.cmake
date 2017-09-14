@@ -2,9 +2,7 @@
 if ( ${CMAKE_COMPILER_IS_GNUCXX} )
 	set ( _CHECK_OLDCOMPILER_SOURCE_CODE "
 	#ifdef __GNUC__
-	#define GCC_VERSION (__GNUC__ * 10000 \
-                     + __GNUC_MINOR__ * 100 \
-                     + __GNUC_PATCHLEVEL__)
+	#define GCC_VERSION (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__)
 	#if GCC_VERSION > 40701
 	int main() {}
 	#else

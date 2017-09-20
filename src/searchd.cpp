@@ -1622,6 +1622,7 @@ typedef bool CopyQuery_fn ( QueryCopyState_t & tState );
 #define SPH_TIME_PID_MAX_SIZE 256
 const char		g_sCrashedBannerAPI[] = "\n--- crashed SphinxAPI request dump ---\n";
 const char		g_sCrashedBannerMySQL[] = "\n--- crashed SphinxQL request dump ---\n";
+const char		g_sCrashedBannerBad[] = "\n--- crashed invalid query ---\n";
 const char		g_sCrashedBannerTail[] = "\n--- request dump end ---\n";
 #if USE_WINDOWS
 const char		g_sMinidumpBanner[] = "minidump located at: ";
@@ -1680,13 +1681,35 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 	// log query
 	CrashQuery_t tQuery = SphCrashLogger_c::GetQuery();
 
+	bool bValidQuery = ( tQuery.m_pQuery && tQuery.m_iSize>0 );
+#if !USE_WINDOWS
+	if ( bValidQuery )
+	{
+		size_t iPageSize = getpagesize();
+		BYTE dPages = 0;
+
+		uintptr_t pPageStart = (uintptr_t )( tQuery.m_pQuery );
+		pPageStart &= ~( iPageSize - 1 );
+		bValidQuery &= ( mincore ( (void *)pPageStart, 1, &dPages )==0 );
+
+		uintptr_t pPageEnd = (uintptr_t )( tQuery.m_pQuery + tQuery.m_iSize - 1 );
+		pPageEnd &= ~( iPageSize - 1 );
+		bValidQuery &= ( mincore ( (void *)pPageEnd, 1, &dPages )==0 );
+	}
+#endif
+
 	// request dump banner
 	int iBannerLen = ( tQuery.m_bMySQL ? sizeof(g_sCrashedBannerMySQL) : sizeof(g_sCrashedBannerAPI) ) - 1;
 	const char * pBanner = tQuery.m_bMySQL ? g_sCrashedBannerMySQL : g_sCrashedBannerAPI;
+	if ( !bValidQuery )
+	{
+		iBannerLen = sizeof(g_sCrashedBannerBad) - 1;
+		pBanner = g_sCrashedBannerBad;
+	}
 	sphWrite ( g_iLogFile, pBanner, iBannerLen );
 
 	// query
-	if ( tQuery.m_iSize )
+	if ( bValidQuery )
 	{
 		QueryCopyState_t tCopyState;
 		tCopyState.m_pDst = g_dCrashQueryBuff;

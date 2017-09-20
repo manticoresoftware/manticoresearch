@@ -25,7 +25,7 @@ job_test_plain:
   script:
     - rm -R build/ || /bin/true
     - mkdir build && cd build
-    - cmake ..
+    - cmake -DCMAKE_BUILD_TYPE=Debug ..
     - make -j8
     - rm result_plain.zip || /bin/true
     - ctest -E rt_ || ctest --rerun-failed -E rt_ || EXIT_CODE=$?
@@ -42,7 +42,7 @@ job_test_rt:
   script:
     - rm -R build/ || /bin/true
     - mkdir build && cd build
-    - cmake ..
+    - cmake -DCMAKE_BUILD_TYPE=Debug ..
     - make -j8
     - rm result_rt.zip || /bin/true
     - ctest -R rt_ || ctest --rerun-failed -R rt_ || EXIT_CODE=$?

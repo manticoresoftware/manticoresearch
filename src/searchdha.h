@@ -219,6 +219,7 @@ struct AgentConn_t : public AgentDesc_c
 
 	bool			m_bSuccess;		///< whether last request was successful (ie. there are available results)
 	CSphString		m_sFailure;		///< failure message
+	bool			m_bDone;		///< agent got processed, no need to retry
 
 	int				m_iReplyStatus;	///< reply status code
 	int				m_iReplySize;	///< how many reply bytes are there

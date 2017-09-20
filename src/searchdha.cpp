@@ -604,6 +604,7 @@ AgentConn_t::AgentConn_t ()
 	, m_bFresh ( true )
 	, m_eState ( AGENT_UNUSED )
 	, m_bSuccess ( false )
+	, m_bDone ( false )
 	, m_iReplyStatus ( -1 )
 	, m_iReplySize ( 0 )
 	, m_iReplyRead ( 0 )
@@ -1783,6 +1784,7 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 					iAgents++;
 					tAgent.Close ( false );
 					tAgent.m_bSuccess = true;
+					tAgent.m_bDone = true;
 				}
 
 				bFailure = false;
@@ -2052,7 +2054,8 @@ void SetNextRetry ( AgentWorkContext_t * pCtx )
 	pCtx->m_pfn = NULL;
 	pCtx->m_pAgents->m_eState = AGENT_UNUSED;
 
-	if ( !pCtx->m_pAgents->m_iRetryLimit || !pCtx->m_iDelay || pCtx->m_pAgents->m_iRetries>pCtx->m_pAgents->m_iRetryLimit )
+	// reconnect only on state == UNUSED and agent not just finished sequence (m_bDone)
+	if ( pCtx->m_pAgents->m_bDone || !pCtx->m_pAgents->m_iRetryLimit || !pCtx->m_iDelay || pCtx->m_pAgents->m_iRetries>pCtx->m_pAgents->m_iRetryLimit )
 		return;
 
 	int64_t tmNextTry = sphMicroTimer() + pCtx->m_iDelay*1000;
@@ -2092,7 +2095,10 @@ void ThdWorkSequental ( AgentWorkContext_t * pCtx )
 	for ( int iAgent=0; iAgent<pCtx->m_iAgentCount; iAgent++ )
 	{
 		AgentConn_t & tAgent = pCtx->m_pAgents[iAgent];
-		if ( !tAgent.m_iRetries || tAgent.m_eState==AGENT_RETRY )
+		// connect or reconnect only
+		// + initially - iRetries == 0 and state == UNUSED and agent not just finished sequence (m_bDone)
+		// + retry - state == RETRY
+		if ( ( tAgent.m_iRetries==0 && tAgent.m_eState==AGENT_UNUSED && !tAgent.m_bDone ) || tAgent.m_eState==AGENT_RETRY )
 			RemoteConnectToAgent ( tAgent );
 	}
 

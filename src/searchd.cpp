@@ -372,8 +372,10 @@ enum
 /// command names
 static const char * g_dApiCommands[SEARCHD_COMMAND_TOTAL] =
 {
-	"search", "excerpt", "update", "keywords", "persist", "status", "query", "flushattrs", "query", "ping", "delete", "uvar"
+	"search", "excerpt", "update", "keywords", "persist", "status", "query", "flushattrs", "query", "ping", "delete", "set",  "insert", "replace", "commit", "suggest"
 };
+
+STATIC_ASSERT ( sizeof(g_dApiCommands)/sizeof(g_dApiCommands[0])==SEARCHD_COMMAND_TOTAL, SEARCHD_COMMAND_SHOULD_BE_SAME_AS_SEARCHD_COMMAND_TOTAL );
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -11659,6 +11661,16 @@ void BuildStatus ( VectorLike & dStatus )
 		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_STATUS] );
 	if ( dStatus.MatchAdd ( "command_flushattrs" ) )
 		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_FLUSHATTRS] );
+	if ( dStatus.MatchAdd ( "command_set" ) )
+		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_UVAR] );
+	if ( dStatus.MatchAdd ( "command_insert" ) )
+		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_INSERT] );
+	if ( dStatus.MatchAdd ( "command_replace" ) )
+		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_REPLACE] );
+	if ( dStatus.MatchAdd ( "command_commit" ) )
+		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_COMMIT] );
+	if ( dStatus.MatchAdd ( "command_suggest" ) )
+		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_SUGGEST] );
 	if ( dStatus.MatchAdd ( "agent_connect" ) )
 		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iAgentConnect );
 	if ( dStatus.MatchAdd ( "agent_retry" ) )
@@ -12156,7 +12168,7 @@ void HandleCommandFlush ( ISphOutputBuffer & tOut, int iVer )
 }
 
 void HandleCommandSphinxql ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tReq, ThdDesc_t * pThd ); // definition is below
-void StatCountCommand ( int iCmd, int iCount=1 );
+void StatCountCommand ( int iCmd );
 void HandleCommandUserVar ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tReq );
 
 /// ping/pong exchange over API
@@ -15420,7 +15432,8 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	CSphQueryResultMeta tPrevMeta = tLastMeta;
 
 	pThd->m_sCommand = g_dSqlStmts[STMT_SELECT];
-	StatCountCommand ( SEARCHD_COMMAND_SEARCH, iSelect );
+	for ( int i=0; i<iSelect; i++ )
+		StatCountCommand ( SEARCHD_COMMAND_SEARCH );
 
 	// setup query for searching
 	SearchHandler_c tHandler ( iSelect, true, true, pThd->m_iConnID );
@@ -16854,6 +16867,7 @@ public:
 			m_tLastMeta = CSphQueryResultMeta();
 			m_tLastMeta.m_sError = m_sError;
 			m_tLastMeta.m_sWarning = "";
+			StatCountCommand ( eStmt==STMT_INSERT ? SEARCHD_COMMAND_INSERT : SEARCHD_COMMAND_REPLACE );
 			HandleMysqlInsert ( tOut, *pStmt, eStmt==STMT_REPLACE,
 				m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction, m_tLastMeta.m_sWarning, m_tAcc );
 			return true;
@@ -16867,6 +16881,7 @@ public:
 			return true;
 
 		case STMT_SET:
+			StatCountCommand ( SEARCHD_COMMAND_UVAR );
 			HandleMysqlSet ( tOut, *pStmt, m_tVars, m_tAcc );
 			return false;
 
@@ -16905,9 +16920,13 @@ public:
 						return true;
 					}
 					if ( eStmt==STMT_COMMIT )
+					{
+						StatCountCommand ( SEARCHD_COMMAND_COMMIT );
 						pIndex->Commit ( NULL, pAccum );
-					else
+					} else
+					{
 						pIndex->RollBack ( pAccum );
+					}
 				}
 				tOut.Ok();
 				return true;
@@ -16927,9 +16946,11 @@ public:
 				HandleMysqlCallKeywords ( tOut, *pStmt, m_tLastMeta.m_sWarning );
 			} else if ( pStmt->m_sCallProc=="SUGGEST" )
 			{
+				StatCountCommand ( SEARCHD_COMMAND_SUGGEST );
 				HandleMysqlCallSuggest ( tOut, *pStmt, false );
 			} else if ( pStmt->m_sCallProc=="QSUGGEST" )
 			{
+				StatCountCommand ( SEARCHD_COMMAND_SUGGEST );
 				HandleMysqlCallSuggest ( tOut, *pStmt, true );
 			} else
 			{
@@ -17136,10 +17157,10 @@ void HandleCommandSphinxql ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & 
 }
 
 
-void StatCountCommand ( int iCmd, int iCount )
+void StatCountCommand ( int iCmd )
 {
 	if ( iCmd>=0 && iCmd<SEARCHD_COMMAND_TOTAL )
-		g_tStats.m_iCommandCount[iCmd] += iCount;
+		g_tStats.m_iCommandCount[iCmd]++;
 }
 
 static bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString & sQuery, int iPacketLen, bool bProfile, ThdDesc_t * pThd, InputBuffer_c & tIn, ISphOutputBuffer & tOut );

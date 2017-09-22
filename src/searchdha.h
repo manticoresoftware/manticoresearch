@@ -163,34 +163,22 @@ struct AgentStats_t : public ISphRefcountedMT
 
 struct HostDashboard_t;
 struct AgentDash_t;
-class HostUrl_c
-{
-public:
-	int				m_iFamily;		///< TCP or UNIX socket
-	CSphString		m_sPath;		///< local searchd UNIX socket path
-	CSphString		m_sHost;		///< remote searchd host
-	int				m_iPort;		///< remote searchd port, 0 if local
-
-public:
-	HostUrl_c ()
-		: m_iFamily ( AF_INET )
-		, m_iPort ( -1 )
-	{
-	}
-
-	CSphString GetMyUrl () const;
-};
 
 // generic descriptor of remote index (agent)
-class AgentDesc_c : public HostUrl_c
+class AgentDesc_c : public ISphNoncopyable
 {
 public:
 	CSphString		m_sIndexes;		///< remote index names to query
 	bool			m_bBlackhole;	///< blackhole agent flag
 	DWORD			m_uAddr;		///< IP address
-	mutable AgentDash_t*	m_pStats;		/// global agent stats
-	mutable HostDashboard_t* m_pDash;		/// ha dashboard of the host
+	mutable AgentDash_t *		m_pStats;		/// global agent stats
+	mutable HostDashboard_t *	m_pDash;		/// ha dashboard of the host
 	bool			m_bPersistent;	///< whether to keep the persistent connection to the agent.
+
+	int				m_iFamily;		///< TCP or UNIX socket
+	CSphString		m_sPath;		///< local searchd UNIX socket path
+	CSphString		m_sHost;		///< remote searchd host
+	int				m_iPort;		///< remote searchd port, 0 if local
 
 public:
 	AgentDesc_c ()
@@ -199,23 +187,22 @@ public:
 		, m_pStats ( nullptr )
 		, m_pDash ( nullptr )
 		, m_bPersistent ( false )
+		, m_iFamily ( AF_INET )
+		, m_iPort ( -1 )
 	{
 	}
 	~AgentDesc_c ();
 
-	// need operators since dashboard is ref-counted
-	AgentDesc_c & operator = ( const HostUrl_c & rhs );
-	AgentDesc_c & operator = ( const AgentDesc_c & rhs );
-	AgentDesc_c & operator = ( AgentDesc_c && rhs );
+	void CloneTo ( AgentDesc_c & tOther ) const;
+
+	CSphString GetMyUrl () const;
 };
 
-struct MultiAgentDesc_t;
 /// remote agent connection (local per-query state)
-struct AgentConn_t : public AgentDesc_c
+struct AgentConn_t : public ISphNoncopyable
 {
 	int				m_iSock;		///< socket number, -1 if not connected
 	bool			m_bFresh;		///< just created persistent connection, need SEARCHD_COMMAND_PERSIST
-	AgentState_e	m_eState;		///< current state
 
 	bool			m_bSuccess;		///< whether last request was successful (ie. there are available results)
 	CSphString		m_sFailure;		///< failure message
@@ -223,11 +210,11 @@ struct AgentConn_t : public AgentDesc_c
 
 	int				m_iReplyStatus;	///< reply status code
 	int				m_iReplySize;	///< how many reply bytes are there
-	int				m_iReplyRead;	///< how many reply bytes are alredy received
+	int				m_iReplyRead;	///< how many reply bytes are already received
 	int 			m_iRetries;		///< count from 0 to m_iRetryLimit
 	int 			m_iRetryLimit;	///< how many times retry (m.b. with another mirror)
-	BYTE *			m_pReplyBuf;	///< reply buffer
 
+	CSphFixedVector<BYTE>			m_dReplyBuf;
 	CSphVector<CSphQueryResult>		m_dResults;		///< multi-query results
 
 	int64_t			m_iWall;		///< wall time spent vs this agent
@@ -238,7 +225,14 @@ struct AgentConn_t : public AgentDesc_c
 	int				m_iStoreTag;
 	int				m_iWeight;
 	bool			m_bPing;
-	MultiAgentDesc_t*	m_pMirrorChooser; ///< used to select another mirror if this one is broken
+
+	AgentDesc_c		m_tDesc;
+
+private:
+	CSphString      m_sDistIndex;
+	int				m_iMirror;			// FIXME!!! got broken on agent removal
+	int				m_iMirrorsCount;
+	AgentState_e	m_eConnState;		///< current state
 
 public:
 	AgentConn_t ();
@@ -247,11 +241,30 @@ public:
 	void Close ( bool bClosePersist=true );
 	void Fail ( AgentStats_e eStat, const char* sMessage, ... ) __attribute__ ( ( format ( printf, 3, 4 ) ) );
 
-	// works like =, but also adopt the persistent connection, if any.
-	void SpecifyAndSelectMirror ( MultiAgentDesc_t * pMirrorChooser = nullptr );
-	int NumOfMirrors () const;
-	AgentConn_t & operator = ( const HostUrl_c & rhs );
+	void SetMirror ( const CSphString & sIndex, int iAgent, const AgentDesc_c & tDesc, int iMirrorsCount );
+	void NextMirror();
+	int GetMirrorsCount() const { return m_iMirrorsCount; }
+	AgentState_e State() const { return m_eConnState; } 
+	void State ( AgentState_e eState ); 
+
+private:
+	void SetupPersist();
 };
+
+typedef CSphVector<AgentConn_t *> AgentsVector;
+
+template <typename T>
+struct VectorPtrsGuard_T : public ISphNoncopyable
+{
+	CSphVector < T * > m_dPtrs;
+	VectorPtrsGuard_T() {}
+	~VectorPtrsGuard_T()
+	{
+		ARRAY_FOREACH ( i, m_dPtrs )
+			SafeDelete ( m_dPtrs[i] );
+	}
+};
+
 
 extern const char * sAgentStatsNames[eMaxAgentStat + ehMaxStat];
 
@@ -286,7 +299,7 @@ using HostStatSnapshot_t = uint64_t[eMaxAgentStat+ehMaxStat];
 /// per-host dashboard
 struct HostDashboard_t : public ISphRefcountedMT
 {
-	HostUrl_c		m_tDescriptor;			// only host info, no indices. Used for ping.
+	AgentDesc_c		m_tDescriptor;			// only host info, no indices. Used for ping.
 	bool			m_bNeedPing;			// we'll ping only HA agents, not everyone
 
 	mutable CSphRwlock	 m_dDataLock;	
@@ -300,7 +313,7 @@ private:
 	AgentDash_t	m_dStats[STATS_DASH_TIME] GUARDED_BY ( m_dDataLock );
 
 public:
-	explicit HostDashboard_t ( const HostUrl_c * pAgent );
+	explicit HostDashboard_t ( const AgentDesc_c & tAgent );
 	~HostDashboard_t ();
 	bool IsOlder ( int64_t iTime ) const REQUIRES_SHARED ( m_dDataLock );
 	static DWORD GetCurSeconds();
@@ -316,11 +329,13 @@ struct AgentOptions_t
 	HAStrategies_e m_eStrategy;
 };
 
+struct WarnInfo_t;
+
 /// descriptor for set of agents (mirrors) (stored in a global hash)
-struct MultiAgentDesc_t
+struct MultiAgentDesc_t : public ISphNoncopyable
 {
 private:
-	CSphVector<AgentDesc_c> m_dHosts;
+	CSphFixedVector<AgentDesc_c> m_dHosts;
 	CSphAtomic				m_iRRCounter;	/// round-robin counter
 	mutable CSphRwlock		m_dWeightLock;	/// manages access to m_pWeights
 	CSphFixedVector<WORD>	m_dWeights		/// the weights of the hosts
@@ -330,18 +345,12 @@ private:
 
 public:
 	MultiAgentDesc_t ()
-		: m_dWeights ( 0 )
+		: m_dHosts ( 0 )
+		, m_dWeights ( 0 )
 		, m_uTimestamp ( HostDashboard_t::GetCurSeconds () )
 		, m_eStrategy ( HA_DEFAULT )
 	{
 		m_dWeightLock.Init();
-	}
-
-	MultiAgentDesc_t ( const MultiAgentDesc_t & rhs )
-		: m_dWeights ( 0 )
-	{
-		m_dWeightLock.Init();
-		*this = rhs;
 	}
 
 	~MultiAgentDesc_t()
@@ -349,12 +358,9 @@ public:
 		m_dWeightLock.Done();
 	}
 
-	MultiAgentDesc_t & operator= ( const MultiAgentDesc_t & rhs ) EXCLUDES ( m_dWeightLock);
-	MultiAgentDesc_t & operator= ( MultiAgentDesc_t && rhs ) EXCLUDES ( m_dWeightLock );
-
-	AgentDesc_c * NewAgent ();
-	void RemoveLastAgent();
-	AgentDesc_c * GetAgent ( int iAgent=0 );
+	bool SetHosts ( const CSphVector<AgentDesc_c *> & dHosts, WarnInfo_t & tWarning );
+	const AgentDesc_c & GetAgent ( int iAgent ) const;
+	AgentDesc_c & GetAgent ( int iAgent );
 	const AgentDesc_c & ChooseAgent ();
 
 	void SetOptions ( const AgentOptions_t& tOpt );
@@ -371,12 +377,7 @@ public:
 		return m_dHosts.GetLength();
 	}
 
-	inline bool IsInitFinished() const REQUIRES_SHARED (m_dWeightLock)
-	{
-		return m_dHosts.GetLength () == m_dWeights.GetLength ();
-	}
-
-	const CSphVector<AgentDesc_c>& GetAgents() const
+	const CSphFixedVector<AgentDesc_c> & GetAgents() const
 	{
 		return m_dHosts;
 	}
@@ -391,10 +392,10 @@ public:
 
 private:
 
-	AgentDesc_c * RRAgent ();
-	AgentDesc_c * RandAgent ();
-	AgentDesc_c * StDiscardDead ();
-	AgentDesc_c * StLowErrors ();
+	const AgentDesc_c & RRAgent ();
+	const AgentDesc_c & RandAgent ();
+	const AgentDesc_c & StDiscardDead ();
+	const AgentDesc_c & StLowErrors ();
 
 	void ChooseWeightedRandAgent ( int * pBestAgent, CSphVector<int> & dCandidates ) EXCLUDES ( m_dWeightLock );
 	void CheckRecalculateWeights ( const CSphFixedVector<int64_t> &dTimers ) EXCLUDES (m_dWeightLock);
@@ -481,14 +482,14 @@ bool ParseStrategyHA ( const char * sName, HAStrategies_e & eStrategy );
 // try to parse hostname/ip/port or unixsocket on current pConfigLine.
 // fill pAgent fields on success and move ppLine pointer next after parsed instance
 // bUseDefaultPort allows to skip :port in the line (IANA 9312 will be used in the case)
-bool ParseAddressPort ( HostUrl_c * pAgent, const char ** ppLine, const WarnInfo_t& dInfo, bool bUseDefaultPort = false );
+bool ParseAddressPort ( AgentDesc_c * pAgent, const char ** ppLine, const WarnInfo_t& dInfo, bool bUseDefaultPort = false );
 
 bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const char * szAgent, const char * szIndexName, AgentOptions_t tDesc );
 
 struct IRequestBuilder_t : public ISphNoncopyable
 {
 	virtual ~IRequestBuilder_t () {} // to avoid gcc4 warns
-	virtual void BuildRequest ( AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const = 0;
+	virtual void BuildRequest ( const AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const = 0;
 };
 
 
@@ -502,14 +503,14 @@ struct IReplyParser_t
 struct AgentConnectionContext_t
 {
 	const IRequestBuilder_t * m_pBuilder;
-	AgentConn_t	* m_pAgents;
+	AgentConn_t	** m_ppAgents;
 	int m_iAgentCount;
 	int m_iTimeout;
 	int m_iDelay;
 
 	AgentConnectionContext_t ()
 		: m_pBuilder ( NULL )
-		, m_pAgents ( NULL )
+		, m_ppAgents ( NULL )
 		, m_iAgentCount ( 0 )
 		, m_iTimeout ( 0 )
 		, m_iDelay ( 0 )
@@ -521,7 +522,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx );
 
 // processing states AGENT_QUERY, AGENT_PREREPLY and AGENT_REPLY
 // may work in parallel with RemoteQueryAgents, so the state MAY change during a call.
-int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IReplyParser_t & tParser );
+int RemoteWaitForAgents ( AgentsVector & dAgents, int iTimeout, IReplyParser_t & tParser );
 
 
 class ISphRemoteAgentsController : ISphNoncopyable
@@ -550,7 +551,7 @@ public:
 	virtual int RetryFailed () = 0;
 };
 
-ISphRemoteAgentsController* GetAgentsController ( int iThreads, CSphVector<AgentConn_t> & dAgents,
+ISphRemoteAgentsController* GetAgentsController ( int iThreads, AgentsVector & dAgents,
 		const IRequestBuilder_t & tBuilder, int iTimeout, int iRetryMax=0, int iDelay=0 );
 
 
@@ -590,7 +591,7 @@ public:
 	};
 public:
 	virtual ~ISphNetEvents ();
-	virtual void SetupEvent ( int iSocket, PoolEvents_e eFlags, const void* pData ) = 0;
+	virtual void SetupEvent ( int iSocket, PoolEvents_e eFlags, const void * pData ) = 0;
 	virtual bool Wait ( int ) = 0;
 	virtual int IterateStart () = 0;
 	virtual bool IterateNextAll () = 0;
@@ -603,7 +604,7 @@ public:
 // all fresh codeflows use version with poll/epoll/kqueue.
 // legacy also set bFallbackSelect and it invokes 'select' for the case
 // when nothing of poll/epoll/kqueue is available.
-ISphNetEvents* sphCreatePoll ( int iSizeHint, bool bFallbackSelect = false );
+ISphNetEvents * sphCreatePoll ( int iSizeHint, bool bFallbackSelect = false );
 
 // determine which branch will be used
 // defs placed here for easy switch between/debug

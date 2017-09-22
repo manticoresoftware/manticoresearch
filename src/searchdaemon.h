@@ -545,20 +545,16 @@ class ServedStats_c
 {
 public:
 						ServedStats_c();
-						~ServedStats_c();
+	virtual				~ServedStats_c();
 	
 	void				AddQueryStat ( uint64_t uFoundRows, uint64_t uQueryTime );
 	void				CalculateQueryStats ( QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const;
 #ifndef NDEBUG
 	void				CalculateQueryStatsExact ( QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const;
 #endif
-
-	ServedStats_c &		operator = ( const ServedStats_c & rhs );
-	ServedStats_c &		operator = ( ServedStats_c && rhs );
-
 protected:
-	virtual void		LockStats ( bool /*bReader*/ ) const {};
-	virtual void		UnlockStats() const {};
+	virtual void		LockStats ( bool bReader ) const = 0;
+	virtual void		UnlockStats() const = 0;
 
 private:
 	QueryStatContainer_c m_tQueryStatRecords;
@@ -580,8 +576,7 @@ private:
 
 	uint64_t			m_uTotalQueries;
 
-	void				Reset();
-	void				CalcStatsForInterval ( const QueryStatContainer_i * pContainer, QueryStatElement_t & tRowResult, QueryStatElement_t & tTimeResult, uint64_t uTimestamp, uint64_t uInterval ) const;
+	static void			CalcStatsForInterval ( const QueryStatContainer_i * pContainer, QueryStatElement_t & tRowResult, QueryStatElement_t & tTimeResult, uint64_t uTimestamp, uint64_t uInterval, int iRecords );
 	void				DoStatCalcStats ( const QueryStatContainer_i * pContainer, QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const;
 };
 

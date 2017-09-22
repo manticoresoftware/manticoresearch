@@ -30,7 +30,7 @@ DWORD			g_uHAPeriodKarma	= 60;		// by default use the last 1 minute statistic to
 
 int				g_iPersistentPoolSize	= 0;
 
-CSphString HostUrl_c::GetMyUrl() const
+CSphString AgentDesc_c::GetMyUrl() const
 {
 	CSphString sName;
 	switch ( m_iFamily )
@@ -41,12 +41,12 @@ CSphString HostUrl_c::GetMyUrl() const
 	return sName;
 }
 
-HostDashboard_t::HostDashboard_t ( const HostUrl_c * pAgent )
-	: m_tDescriptor ( *pAgent )
-	, m_bNeedPing ( false )
+HostDashboard_t::HostDashboard_t ( const AgentDesc_c & tAgent )
+	: m_bNeedPing ( false )
 	, m_iErrorsARow ( 0 )
 	, m_pPersPool (nullptr)
 {
+	tAgent.CloneTo ( m_tDescriptor );
 	m_iRefCount = 1;
 	m_iLastQueryTime = m_iLastAnswerTime = sphMicroTimer () - g_iPingInterval*1000;
 	m_dDataLock.Init();
@@ -254,26 +254,34 @@ void MultiAgentDesc_t::FinalizeInitialization ()
 	}
 }
 
-AgentDesc_c * MultiAgentDesc_t::GetAgent ( int iAgent )
+const AgentDesc_c & MultiAgentDesc_t::GetAgent ( int iAgent ) const
 {
 	assert ( iAgent>=0 );
-	return &m_dHosts[iAgent];
+	return m_dHosts[iAgent];
 }
 
-AgentDesc_c * MultiAgentDesc_t::NewAgent()
+AgentDesc_c & MultiAgentDesc_t::GetAgent ( int iAgent )
 {
-	AgentDesc_c & tAgent = m_dHosts.Add();
-	return & tAgent;
+	assert ( iAgent>=0 );
+	return m_dHosts[iAgent];
 }
 
-void MultiAgentDesc_t::RemoveLastAgent()
+bool ValidateAndAddDashboard ( AgentDesc_c * pNewAgent, WarnInfo_t & tInfo );
+
+bool MultiAgentDesc_t::SetHosts ( const CSphVector<AgentDesc_c *> & dHosts, WarnInfo_t & tWarning )
 {
-	int iLast = m_dHosts.GetLength()-1;
-	assert ( !m_dHosts[iLast].m_pDash && !m_dHosts[iLast].m_pStats );
-	m_dHosts.Remove ( iLast );
+	m_dHosts.Reset ( dHosts.GetLength() );
+	ARRAY_FOREACH ( i, dHosts )
+	{
+		dHosts[i]->CloneTo ( m_dHosts[i] );
+		if ( !ValidateAndAddDashboard ( m_dHosts.Begin() + i, tWarning ) )
+			return false;
+	}
+
+	return true;
 }
 
-AgentDesc_c * MultiAgentDesc_t::RRAgent ()
+const AgentDesc_c & MultiAgentDesc_t::RRAgent ()
 {
 	if ( !IsHA() )
 		return GetAgent(0);
@@ -290,7 +298,7 @@ AgentDesc_c * MultiAgentDesc_t::RRAgent ()
 	return GetAgent ( iRRCounter );
 }
 
-AgentDesc_c * MultiAgentDesc_t::RandAgent ()
+const AgentDesc_c & MultiAgentDesc_t::RandAgent ()
 {
 	return GetAgent ( sphRand() % GetLength() );
 }
@@ -299,7 +307,6 @@ void MultiAgentDesc_t::ChooseWeightedRandAgent ( int * pBestAgent, CSphVector<in
 {
 	assert ( pBestAgent );
 	CSphScopedRLock tLock ( m_dWeightLock );
-	assert ( IsInitFinished () );
 	DWORD uBound = m_dWeights[*pBestAgent];
 	DWORD uLimit = uBound;
 	for ( auto j : dCandidates )
@@ -318,7 +325,7 @@ void MultiAgentDesc_t::ChooseWeightedRandAgent ( int * pBestAgent, CSphVector<in
 	}
 }
 
-static void LogAgentWeights ( const WORD * pOldWeights, const WORD * pCurWeights, const int64_t * pTimers, const CSphVector<AgentDesc_c> & dAgents )
+static void LogAgentWeights ( const WORD * pOldWeights, const WORD * pCurWeights, const int64_t * pTimers, const CSphFixedVector<AgentDesc_c> & dAgents )
 {
 	if ( g_eLogLevel<SPH_LOG_DEBUG )
 		return;
@@ -327,7 +334,7 @@ static void LogAgentWeights ( const WORD * pOldWeights, const WORD * pCurWeights
 		sphLogDebug ( "client=%s:%d, mirror=%d, weight=%d, %d, timer=" INT64_FMT, dAgents[i].m_sHost.cstr (), dAgents[i].m_iPort, i, pCurWeights[i], pOldWeights[i], pTimers[i] );
 }
 
-AgentDesc_c * MultiAgentDesc_t::StDiscardDead ()
+const AgentDesc_c & MultiAgentDesc_t::StDiscardDead ()
 {
 	if ( !IsHA() )
 		return GetAgent(0);
@@ -391,7 +398,7 @@ AgentDesc_c * MultiAgentDesc_t::StDiscardDead ()
 	if ( !dCandidates.GetLength() )
 	{
 		sphLogDebug ( "client=%s:%d, HA selected %d node with best num of errors a row (" INT64_FMT ")", m_dHosts[iBestAgent].m_sHost.cstr(), m_dHosts[iBestAgent].m_iPort, iBestAgent, iErrARow );
-		return &m_dHosts[iBestAgent];
+		return m_dHosts[iBestAgent];
 	}
 
 	// several nodes. Let's select the one.
@@ -407,17 +414,17 @@ AgentDesc_c * MultiAgentDesc_t::StDiscardDead ()
 		sphLogDebugv ( sLogStr, m_dHosts[iBestAgent].m_sHost.cstr(), m_dHosts[iBestAgent].m_iPort, iBestAgent, iErrARow, fAge, dCandidates.GetLength()+1 );
 	}
 
-	return &m_dHosts[iBestAgent];
+	return m_dHosts[iBestAgent];
 }
 
 // Check the time and recalculate mirror weights, if necessary.
-void MultiAgentDesc_t::CheckRecalculateWeights ( const CSphFixedVector<int64_t> &dTimers )
+void MultiAgentDesc_t::CheckRecalculateWeights ( const CSphFixedVector<int64_t> & dTimers )
 {
 	CSphScopedWLock tWguard ( m_dWeightLock );
-	if ( IsInitFinished() && dTimers.GetLength () && HostDashboard_t::IsHalfPeriodChanged ( &m_uTimestamp ) )
+	if ( dTimers.GetLength () && HostDashboard_t::IsHalfPeriodChanged ( &m_uTimestamp ) )
 	{
 		CSphFixedVector<WORD> dWeights ( GetLength () );
-		// since we'll update values anyway, aquire w-lock.
+		// since we'll update values anyway, acquire w-lock.
 		memcpy ( dWeights.Begin (), m_dWeights.Begin (), sizeof ( dWeights[0] ) * dWeights.GetLength () );
 		RebalanceWeights ( dTimers, dWeights.Begin () );
 		LogAgentWeights ( m_dWeights.Begin(), dWeights.Begin (), dTimers.Begin (), m_dHosts );
@@ -425,7 +432,7 @@ void MultiAgentDesc_t::CheckRecalculateWeights ( const CSphFixedVector<int64_t> 
 	}
 }
 
-AgentDesc_c * MultiAgentDesc_t::StLowErrors ()
+const AgentDesc_c & MultiAgentDesc_t::StLowErrors ()
 {
 	if ( !IsHA() )
 		return GetAgent(0);
@@ -518,7 +525,7 @@ AgentDesc_c * MultiAgentDesc_t::StLowErrors ()
 	if ( !dCandidates.GetLength() )
 	{
 		sphLogDebug ( "client=%s:%d, HA selected %d node with best error rating (%.2f)", m_dHosts[iBestAgent].m_sHost.cstr(), m_dHosts[iBestAgent].m_iPort, iBestAgent, fBestCriticalErrors );
-		return &m_dHosts[iBestAgent];
+		return m_dHosts[iBestAgent];
 	}
 
 	// several nodes. Let's select the one.
@@ -534,7 +541,7 @@ AgentDesc_c * MultiAgentDesc_t::StLowErrors ()
 		sphLogDebugv ( sLogStr, m_dHosts[iBestAgent].m_sHost.cstr(), m_dHosts[iBestAgent].m_iPort, iBestAgent, fBestCriticalErrors, fAge );
 	}
 
-	return &m_dHosts[iBestAgent];
+	return m_dHosts[iBestAgent];
 }
 
 
@@ -543,13 +550,13 @@ const AgentDesc_c & MultiAgentDesc_t::ChooseAgent ()
 	switch ( m_eStrategy )
 	{
 	case HA_AVOIDDEAD:
-		return * StDiscardDead();
+		return StDiscardDead();
 	case HA_AVOIDERRORS:
-		return * StLowErrors();
+		return StLowErrors();
 	case HA_ROUNDROBIN:
-		return * RRAgent();
+		return RRAgent();
 	default:
-		return * RandAgent();
+		return RandAgent();
 	}
 }
 
@@ -563,46 +570,10 @@ void MultiAgentDesc_t::QueuePings()
 		m_dHosts[i].m_pDash->m_bNeedPing = true;
 }
 
-MultiAgentDesc_t & MultiAgentDesc_t::operator= ( const MultiAgentDesc_t & rhs )
-{
-	if ( this==&rhs )
-		return *this;
-	m_dHosts = rhs.GetAgents();
-	m_iRRCounter.SetValue ( rhs.m_iRRCounter.GetValue () );
-	m_eStrategy = rhs.m_eStrategy;
-	m_eStrategy = rhs.m_eStrategy;
-	CSphScopedWLock tWguard ( m_dWeightLock );
-	CSphScopedRLock tRguard ( rhs.m_dWeightLock );
-	if ( rhs.IsInitFinished () )
-	{
-		m_dWeights.Reset ( rhs.GetLength () );
-		memcpy ( m_dWeights.Begin (), rhs.m_dWeights.Begin (), rhs.GetLength () * sizeof ( WORD ) );
-	} else if ( IsInitFinished() )
-		m_dWeights.Reset ( 0 );
-	return *this;
-}
-
-MultiAgentDesc_t & MultiAgentDesc_t::operator= ( MultiAgentDesc_t && rhs )
-{
-	if ( this==&rhs )
-		return *this;
-	m_dHosts = std::move(rhs.m_dHosts);
-	m_iRRCounter.SetValue ( rhs.m_iRRCounter.GetValue () );
-	m_eStrategy = rhs.m_eStrategy;
-	m_eStrategy = rhs.m_eStrategy;
-	{
-		CSphScopedWLock tWguard ( m_dWeightLock );
-		CSphScopedRLock tRguard ( rhs.m_dWeightLock );
-		m_dWeights = std::move ( rhs.m_dWeights );
-	}
-	return *this;
-}
-
 //////////////////////////////////////////////////////////////////////////
 AgentConn_t::AgentConn_t ()
 	: m_iSock ( -1 )
 	, m_bFresh ( true )
-	, m_eState ( AGENT_UNUSED )
 	, m_bSuccess ( false )
 	, m_bDone ( false )
 	, m_iReplyStatus ( -1 )
@@ -610,7 +581,7 @@ AgentConn_t::AgentConn_t ()
 	, m_iReplyRead ( 0 )
 	, m_iRetries ( 0 )
 	, m_iRetryLimit ( 0 )
-	, m_pReplyBuf ( NULL )
+	, m_dReplyBuf ( 0 )
 	, m_iWall ( 0 )
 	, m_iWaited ( 0 )
 	, m_iStartQuery ( 0 )
@@ -619,135 +590,60 @@ AgentConn_t::AgentConn_t ()
 	, m_iStoreTag ( 0 )
 	, m_iWeight ( -1 )
 	, m_bPing ( false )
-	, m_pMirrorChooser { nullptr }
+	, m_iMirror ( 0 )
+	, m_iMirrorsCount ( 1 )
+	, m_eConnState ( AGENT_UNUSED )
 {}
 
 AgentConn_t::~AgentConn_t ()
 {
 	Close ( false );
-	if ( m_bPersistent && m_pDash->m_pPersPool )
-		m_pDash->m_pPersPool->ReturnConnection ( m_iSock );
+	if ( m_tDesc.m_bPersistent && m_tDesc.m_pDash->m_pPersPool )
+		m_tDesc.m_pDash->m_pPersPool->ReturnConnection ( m_iSock );
+}
+
+void AgentConn_t::State ( AgentState_e eState )
+{
+	sphLogDebugv ( "state %d > %d, sock %d, order %d", m_eConnState, eState, m_iSock, m_iStoreTag );
+	m_eConnState = eState;
 }
 
 void AgentConn_t::Close ( bool bClosePersist )
 {
-	SafeDeleteArray ( m_pReplyBuf );
+	m_dReplyBuf.Reset ( 0 );
 	if ( m_iSock>0 )
 	{
 		m_bFresh = false;
-		if ( ( m_bPersistent && bClosePersist ) || !m_bPersistent )
+		if ( ( m_tDesc.m_bPersistent && bClosePersist ) || !m_tDesc.m_bPersistent )
 		{
 			sphSockClose ( m_iSock );
 			m_iSock = -1;
 			m_bFresh = true;
 		}
-		if ( m_eState!=AGENT_RETRY )
-			m_eState = AGENT_UNUSED;
+		if ( State()!=AGENT_RETRY )
+			State ( AGENT_UNUSED );
 	}
 	m_iWall += sphMicroTimer ();
 }
 
-AgentDesc_c & AgentDesc_c::operator = ( const AgentDesc_c & rhs )
+void AgentConn_t::SetMirror ( const CSphString & sIndex, int iAgent, const AgentDesc_c & tDesc, int iMirrorsCount )
 {
-	if ( this!=&rhs )
-	{
-		m_sHost = rhs.m_sHost;
-		m_iPort = rhs.m_iPort;
-		m_sPath = rhs.m_sPath;
-		m_iFamily = rhs.m_iFamily;
-
-		m_sIndexes = rhs.m_sIndexes;
-		m_bBlackhole = rhs.m_bBlackhole;
-		m_uAddr = rhs.m_uAddr;
-		m_bPersistent = rhs.m_bPersistent;
-
-		SafeRelease ( m_pStats );
-		SafeRelease ( m_pDash );
-
-		m_pStats = rhs.m_pStats;
-		if ( m_pStats )
-			m_pStats->AddRef ();
-		m_pDash = rhs.m_pDash;
-		if ( m_pDash )
-			m_pDash->AddRef ();
-	}
-
-	return *this;
-}
-AgentDesc_c & AgentDesc_c::operator = ( AgentDesc_c && rhs )
-{
-	if ( this!=&rhs )
-	{
-		m_sHost = std::move(rhs.m_sHost);
-		m_iPort = rhs.m_iPort;
-		m_sPath = std::move(rhs.m_sPath);
-		m_iFamily = rhs.m_iFamily;
-
-		m_sIndexes = std::move(rhs.m_sIndexes);
-		m_bBlackhole = rhs.m_bBlackhole;
-		m_uAddr = rhs.m_uAddr;
-		m_bPersistent = rhs.m_bPersistent;
-
-		SafeRelease ( m_pStats );
-		SafeRelease ( m_pDash );
-
-		m_pStats = rhs.m_pStats;
-		m_pDash = rhs.m_pDash;
-		rhs.m_pStats = nullptr;
-		rhs.m_pDash = nullptr;
-	}
-
-	return *this;
+	tDesc.CloneTo ( m_tDesc );
+	m_sDistIndex = sIndex;
+	m_iMirror = iAgent;
+	m_iMirrorsCount = iMirrorsCount;
+	SetupPersist();
 }
 
-AgentDesc_c & AgentDesc_c::operator = ( const HostUrl_c & rhs )
+void AgentConn_t::SetupPersist()
 {
-	if ( this!=&rhs )
+	if ( m_tDesc.m_bPersistent && m_tDesc.m_pDash->m_pPersPool )
 	{
-		m_sHost = rhs.m_sHost;
-		m_iPort = rhs.m_iPort;
-		m_sPath = rhs.m_sPath;
-		m_iFamily = rhs.m_iFamily;
-
-		m_bBlackhole = false;
-		m_uAddr = 0;
-		SafeRelease ( m_pStats );
-		SafeRelease ( m_pDash );
-		m_bPersistent = false;
-	}
-	return *this;
-}
-
-AgentConn_t & AgentConn_t::operator = ( const HostUrl_c & rhs )
-{
-	AgentDesc_c::operator = ( rhs );
-	return *this;
-}
-
-void AgentConn_t::SpecifyAndSelectMirror ( MultiAgentDesc_t * pMirrorChooser )
-{
-	if ( pMirrorChooser )
-	{
-		assert ( !m_pMirrorChooser && "Can't redefine already assigned mirror" );
-		m_pMirrorChooser = pMirrorChooser;
-	}
-
-	assert ( m_pMirrorChooser );
-	AgentDesc_c::operator=( m_pMirrorChooser->ChooseAgent ());
-	if ( m_bPersistent && m_pDash->m_pPersPool )
-	{
-		m_iSock = m_pDash->m_pPersPool->RentConnection ();
+		m_iSock = m_tDesc.m_pDash->m_pPersPool->RentConnection ();
 		if ( m_iSock==-2 ) // no free persistent connections. This connection will be not persistent
-			m_bPersistent = false;
+			m_tDesc.m_bPersistent = false;
 	}
-	m_bFresh = ( m_bPersistent && m_iSock<0 );
-}
-
-int AgentConn_t::NumOfMirrors () const
-{
-	if ( !m_pMirrorChooser )
-		return 1;
-	return m_pMirrorChooser->GetLength ();
+	m_bFresh = ( m_tDesc.m_bPersistent && m_iSock<0 );
 }
 
 
@@ -759,12 +655,12 @@ cDashStorage			g_tDashes;
 void agent_stats_inc ( AgentConn_t & tAgent, AgentStats_e iCounter )
 {
 	assert ( iCounter<=eMaxAgentStat );
-	assert ( tAgent.m_pDash );
+	assert ( tAgent.m_tDesc.m_pDash );
 
-	if ( tAgent.m_pStats )
-		++tAgent.m_pStats->m_dStats[iCounter];
+	if ( tAgent.m_tDesc.m_pStats )
+		++tAgent.m_tDesc.m_pStats->m_dStats[iCounter];
 
-	HostDashboard_t & tIndexDash = *tAgent.m_pDash;
+	HostDashboard_t & tIndexDash = *tAgent.m_tDesc.m_pDash;
 	CSphScopedWLock tWguard ( tIndexDash.m_dDataLock );
 	AgentDash_t & tAgentDash = *tIndexDash.GetCurrentStat ();
 	++tAgentDash.m_dStats[iCounter];
@@ -781,8 +677,8 @@ void agent_stats_inc ( AgentConn_t & tAgent, AgentStats_e iCounter )
 	if ( !tAgent.m_bPing )
 	{
 		tAgentDash.m_dHostStats[ehTotalMsecs]+=tAgent.m_iEndQuery-tAgent.m_iStartQuery;
-		if ( tAgent.m_pStats )
-			tAgent.m_pStats->m_dHostStats[ehTotalMsecs] += tAgent.m_iEndQuery - tAgent.m_iStartQuery;
+		if ( tAgent.m_tDesc.m_pStats )
+			tAgent.m_tDesc.m_pStats->m_dHostStats[ehTotalMsecs] += tAgent.m_iEndQuery - tAgent.m_iStartQuery;
 	}
 }
 
@@ -790,9 +686,9 @@ void agent_stats_inc ( AgentConn_t & tAgent, AgentStats_e iCounter )
 void track_processing_time ( AgentConn_t & tAgent )
 {
 	// first we count temporary statistic (into dashboard)
-	assert ( tAgent.m_pDash );
-	CSphScopedWLock tWguard ( tAgent.m_pDash->m_dDataLock );
-	uint64_t* pCurStat = tAgent.m_pDash->GetCurrentStat ()->m_dHostStats;
+	assert ( tAgent.m_tDesc.m_pDash );
+	CSphScopedWLock tWguard ( tAgent.m_tDesc.m_pDash->m_dDataLock );
+	uint64_t* pCurStat = tAgent.m_tDesc.m_pDash->GetCurrentStat ()->m_dHostStats;
 	uint64_t uConnTime = (uint64_t) sphMicroTimer () - tAgent.m_iStartQuery;
 
 	++pCurStat[ehConnTries];
@@ -805,9 +701,9 @@ void track_processing_time ( AgentConn_t & tAgent )
 		pCurStat[ehAverageMsecs] = uConnTime;
 
 	// then we count permanent statistic (for show status)
-	if ( tAgent.m_pStats )
+	if ( tAgent.m_tDesc.m_pStats )
 	{
-		uint64_t * pHStat = tAgent.m_pStats->m_dHostStats;
+		uint64_t * pHStat = tAgent.m_tDesc.m_pStats->m_dHostStats;
 		++pHStat[ehConnTries];
 		if ( uint64_t ( uConnTime )>pHStat[ehMaxMsecs] )
 			pHStat[ehMaxMsecs] = uConnTime;
@@ -820,7 +716,7 @@ void track_processing_time ( AgentConn_t & tAgent )
 
 // try to parse hostname/ip/port or unixsocket on current pConfigLine.
 // fill pAgent fields on success and move ppLine pointer next after parsed instance
-bool ParseAddressPort ( HostUrl_c * pAgent, const char ** ppLine, const WarnInfo_t &dInfo, bool bUseDefaultPort )
+bool ParseAddressPort ( AgentDesc_c * pAgent, const char ** ppLine, const WarnInfo_t &dInfo, bool bUseDefaultPort )
 {
 	// extract host name or path
 	const char *&p = *ppLine;
@@ -926,7 +822,7 @@ bool ParseAddressPort ( HostUrl_c * pAgent, const char ** ppLine, const WarnInfo
 
 void AgentConn_t::Fail ( AgentStats_e eStat, const char* sMessage, ... )
 {
-	m_eState = AGENT_RETRY;
+	State ( AGENT_RETRY );
 	Close ();
 	va_list ap;
 	va_start ( ap, sMessage );
@@ -959,18 +855,15 @@ static bool IsAgentDelimiter ( char c )
 }
 
 
-bool ValidateAndAddDashboard ( AgentDesc_c * pNewAgent, WarnInfo_t* pInfo=nullptr )
+bool ValidateAndAddDashboard ( AgentDesc_c * pNewAgent, WarnInfo_t & tInfo )
 {
 	assert ( pNewAgent );
 	CSphString sPrefix;
-	if ( pInfo )
-	{
-		assert ( pInfo->m_szAgent );
-		if ( pInfo->m_szIndexName )
-			sPrefix.SetSprintf ( "index '%s': agent '%s':", pInfo->m_szIndexName, pInfo->m_szAgent );
-		else
-			sPrefix.SetSprintf ( "host '%s':", pInfo->m_szAgent );
-	}
+	assert ( tInfo.m_szAgent );
+	if ( tInfo.m_szIndexName )
+		sPrefix.SetSprintf ( "index '%s': agent '%s':", tInfo.m_szIndexName, tInfo.m_szAgent );
+	else
+		sPrefix.SetSprintf ( "host '%s':", tInfo.m_szAgent );
 
 	// lookup address (if needed)
 	if ( pNewAgent->m_iFamily==AF_INET )
@@ -1008,14 +901,14 @@ void FixupOrphanedAgents ( MultiAgentDesc_t & tMultiAgent )
 	CSphString sIndexes;
 	for ( int i = tMultiAgent.GetLength ()-1; i>=0; --i )
 	{
-		AgentDesc_c * pMyAgent = tMultiAgent.GetAgent ( i );
-		if ( pMyAgent->m_sIndexes.IsEmpty () )
+		AgentDesc_c & tMyAgent = tMultiAgent.GetAgent ( i );
+		if ( tMyAgent.m_sIndexes.IsEmpty () )
 		{
-			pMyAgent->m_sIndexes = sIndexes;
+			tMyAgent.m_sIndexes = sIndexes;
 			if ( sIndexes.IsEmpty () )
-				sphWarning ( "Agent %s in list specified without index(es) it serves!", pMyAgent->GetMyUrl().cstr() );
+				sphWarning ( "Agent %s in list specified without index(es) it serves!", tMyAgent.GetMyUrl().cstr() );
 		} else
-			sIndexes = pMyAgent->m_sIndexes;
+			sIndexes = tMyAgent.m_sIndexes;
 	}
 }
 
@@ -1023,7 +916,10 @@ bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const char * szAgent, const cha
 {
 	enum AgentParse_e { AP_WANT_ADDRESS, AP_OPTIONS, AP_DONE };
 	AgentParse_e eState = AP_DONE;
-	AgentDesc_c * pNewAgent = tAgent.NewAgent();
+	VectorPtrsGuard_T<AgentDesc_c> tDescGuard;
+	CSphVector<AgentDesc_c *> & dHosts = tDescGuard.m_dPtrs;
+	AgentDesc_c * pNewAgent = new AgentDesc_c();
+	dHosts.Add ( pNewAgent );
 	WarnInfo_t dWI ( szIndexName, szAgent );
 
 	// extract host name or path
@@ -1060,13 +956,8 @@ bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const char * szAgent, const cha
 			if ( IsAgentDelimiter ( *p ) )
 			{
 				eState = ( *p=='|' ? AP_WANT_ADDRESS : AP_OPTIONS );
-				if ( !ValidateAndAddDashboard ( pNewAgent, &dWI ) )
-				{
-					tAgent.RemoveLastAgent();
-					return false;
-				}
-
-				pNewAgent = tAgent.NewAgent();
+				pNewAgent = new AgentDesc_c();
+				dHosts.Add ( pNewAgent );
 				++p;
 				break;
 			}
@@ -1101,13 +992,8 @@ bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const char * szAgent, const cha
 				{
 					++p;
 					eState = AP_WANT_ADDRESS;
-					if ( !ValidateAndAddDashboard ( pNewAgent, &dWI ) )
-					{
-						tAgent.RemoveLastAgent();
-						return false;
-					}
-
-					pNewAgent = tAgent.NewAgent();
+					pNewAgent = new AgentDesc_c();
+					dHosts.Add ( pNewAgent );
 				} else
 					eState = AP_OPTIONS;
 				break;
@@ -1193,10 +1079,7 @@ bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const char * szAgent, const cha
 					 , szIndexName, szAgent, szIndexName );
 	}
 
-	bool bRes = ValidateAndAddDashboard ( pNewAgent, &dWI );
-	if ( !bRes )
-		tAgent.RemoveLastAgent();
-
+	bool bRes = tAgent.SetHosts ( dHosts, dWI );
 	FixupOrphanedAgents ( tAgent );
 	tAgent.SetOptions ( tDesc );
 	tAgent.FinalizeInitialization ();
@@ -1210,6 +1093,28 @@ AgentDesc_c::~AgentDesc_c ()
 {
 	SafeRelease ( m_pDash );
 	SafeRelease ( m_pStats );
+}
+
+void AgentDesc_c::CloneTo ( AgentDesc_c & tOther ) const
+{
+	SafeRelease ( tOther.m_pDash );
+	SafeRelease ( tOther.m_pStats );
+
+	tOther.m_pDash = m_pDash;
+	tOther.m_pStats = m_pStats;
+	if ( tOther.m_pDash )
+		tOther.m_pDash->AddRef();
+	if ( tOther.m_pStats )
+		tOther.m_pStats->AddRef();
+
+	tOther.m_sIndexes = m_sIndexes;
+	tOther.m_bBlackhole = m_bBlackhole;
+	tOther.m_uAddr = m_uAddr;
+	tOther.m_bPersistent = m_bPersistent;
+	tOther.m_iFamily = m_iFamily;
+	tOther.m_sPath = m_sPath;
+	tOther.m_sHost = m_sHost;
+	tOther.m_iPort = m_iPort;
 }
 
 void cDashStorage::AddAgent ( AgentDesc_c * pNewAgent )
@@ -1231,7 +1136,7 @@ void cDashStorage::AddAgent ( AgentDesc_c * pNewAgent )
 	}
 	if ( !bFound )
 	{
-		pNewAgent->m_pDash = new HostDashboard_t ( pNewAgent );
+		pNewAgent->m_pDash = new HostDashboard_t ( *pNewAgent );
 		pNewAgent->m_pDash->AddRef();
 		assert (pNewAgent->m_pDash->GetRefcount ()==2);
 		m_dDashes.Add ( pNewAgent->m_pDash );
@@ -1267,14 +1172,14 @@ void cDashStorage::GetActiveDashes ( CSphVector<HostDashboard_t *> & dAgents ) c
 
 void RemoteConnectToAgent ( AgentConn_t & tAgent )
 {
-	bool bAgentRetry = ( tAgent.m_eState==AGENT_RETRY );
-	tAgent.m_eState = AGENT_UNUSED;
+	bool bAgentRetry = ( tAgent.State()==AGENT_RETRY );
+	tAgent.State ( AGENT_UNUSED );
 
 	if ( tAgent.m_iSock>=0 ) // already connected
 	{
 		if ( !sphNBSockEof ( tAgent.m_iSock ) )
 		{
-			tAgent.m_eState = AGENT_ESTABLISHED;
+			tAgent.State ( AGENT_ESTABLISHED );
 			tAgent.m_iStartQuery = sphMicroTimer();
 			tAgent.m_iWall -= tAgent.m_iStartQuery;
 			return;
@@ -1287,23 +1192,23 @@ void RemoteConnectToAgent ( AgentConn_t & tAgent )
 	socklen_t len = 0;
 	struct sockaddr_storage ss;
 	memset ( &ss, 0, sizeof(ss) );
-	ss.ss_family = (short)tAgent.m_iFamily;
+	ss.ss_family = (short)tAgent.m_tDesc.m_iFamily;
 #ifdef TCP_NODELAY
 	bool bUnixSocket = false;
 #endif
 
 	if ( ss.ss_family==AF_INET )
 	{
-		DWORD uAddr = tAgent.m_uAddr;
-		if ( g_bHostnameLookup && !tAgent.m_sHost.IsEmpty() )
+		DWORD uAddr = tAgent.m_tDesc.m_uAddr;
+		if ( g_bHostnameLookup && !tAgent.m_tDesc.m_sHost.IsEmpty() )
 		{
-			DWORD uRenew = sphGetAddress ( tAgent.m_sHost.cstr(), false );
+			DWORD uRenew = sphGetAddress ( tAgent.m_tDesc.m_sHost.cstr(), false );
 			if ( uRenew )
 				uAddr = uRenew;
 		}
 
 		struct sockaddr_in *in = (struct sockaddr_in *)&ss;
-		in->sin_port = htons ( (unsigned short)tAgent.m_iPort );
+		in->sin_port = htons ( (unsigned short)tAgent.m_tDesc.m_iPort );
 		in->sin_addr.s_addr = uAddr;
 		len = sizeof(*in);
 	}
@@ -1311,7 +1216,7 @@ void RemoteConnectToAgent ( AgentConn_t & tAgent )
 	else if ( ss.ss_family==AF_UNIX )
 	{
 		struct sockaddr_un *un = (struct sockaddr_un *)&ss;
-		snprintf ( un->sun_path, sizeof(un->sun_path), "%s", tAgent.m_sPath.cstr() );
+		snprintf ( un->sun_path, sizeof(un->sun_path), "%s", tAgent.m_tDesc.m_sPath.cstr() );
 		len = sizeof(*un);
 #ifdef TCP_NODELAY
 		bUnixSocket = true;
@@ -1319,7 +1224,7 @@ void RemoteConnectToAgent ( AgentConn_t & tAgent )
 	}
 #endif
 
-	tAgent.m_iSock = socket ( tAgent.m_iFamily, SOCK_STREAM, 0 );
+	tAgent.m_iSock = socket ( tAgent.m_tDesc.m_iFamily, SOCK_STREAM, 0 );
 	if ( tAgent.m_iSock<0 )
 	{
 		tAgent.m_sFailure.SetSprintf ( "socket() failed: %s", sphSockError() );
@@ -1353,13 +1258,13 @@ void RemoteConnectToAgent ( AgentConn_t & tAgent )
 		if ( iErr!=EINPROGRESS && iErr!=EINTR && iErr!=EWOULDBLOCK ) // check for EWOULDBLOCK is for winsock only
 		{
 			tAgent.Fail ( eConnectFailures, "connect() failed: errno=%d, %s", iErr, sphSockError(iErr) );
-			tAgent.m_eState = AGENT_RETRY; // do retry on connect() failures
+			tAgent.State ( AGENT_RETRY ); // do retry on connect() failures
 			return;
 
 		} else
 		{
 			// connection in progress
-			tAgent.m_eState = AGENT_CONNECTING;
+			tAgent.State ( AGENT_CONNECTING );
 		}
 	} else
 	{
@@ -1371,7 +1276,7 @@ void RemoteConnectToAgent ( AgentConn_t & tAgent )
 		tOut.Flush (); // FIXME! handle flush failure?
 
 		// socket connected, ready to read hello message
-		tAgent.m_eState = AGENT_HANDSHAKE;
+		tAgent.State ( AGENT_HANDSHAKE );
 	}
 }
 
@@ -1380,7 +1285,7 @@ void RemoteConnectToAgent ( AgentConn_t & tAgent )
 int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 {
 	assert ( pCtx->m_iTimeout>=0 );
-	assert ( pCtx->m_pAgents );
+	assert ( pCtx->m_ppAgents );
 	assert ( pCtx->m_iAgentCount );
 
 	int iAgents = 0;
@@ -1396,22 +1301,22 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 		{
 			for ( int i=0; i<pCtx->m_iAgentCount; i++ )
 			{
-				AgentConn_t & tAgent = pCtx->m_pAgents[i];
+				AgentConn_t * pAgent = pCtx->m_ppAgents[i];
 				// select only 'initial' agents - which are not send query response.
-				if ( tAgent.m_eState<AGENT_CONNECTING || tAgent.m_eState>AGENT_QUERYED )
+				if ( pAgent->State()<AGENT_CONNECTING || pAgent->State()>AGENT_QUERYED )
 					continue;
 
-				assert ( !tAgent.m_sPath.IsEmpty() || tAgent.m_iPort>0 );
-				assert ( tAgent.m_iSock>0 );
-				if ( tAgent.m_iSock<=0 || ( tAgent.m_sPath.IsEmpty() && tAgent.m_iPort<=0 ) )
+				assert ( !pAgent->m_tDesc.m_sPath.IsEmpty() || pAgent->m_tDesc.m_iPort>0 );
+				assert ( pAgent->m_iSock>0 );
+				if ( pAgent->m_iSock<=0 || ( pAgent->m_tDesc.m_sPath.IsEmpty() && pAgent->m_tDesc.m_iPort<=0 ) )
 				{
-					tAgent.Fail ( eConnectFailures, "invalid agent in querying. Socket %d, Path %s, Port %d", tAgent.m_iSock, tAgent.m_sPath.cstr(), tAgent.m_iPort );
+					pAgent->Fail ( eConnectFailures, "invalid agent in querying. Socket %d, Path %s, Port %d", pAgent->m_iSock, pAgent->m_tDesc.m_sPath.cstr(), pAgent->m_tDesc.m_iPort );
 					// tAgent.m_eState = AGENT_RETRY; // do retry on connect() failures // commented out since already set by Fail
 					continue;
 				}
-				pEvents->SetupEvent( tAgent.m_iSock, (tAgent.m_eState==AGENT_CONNECTING
-						  || tAgent.m_eState==AGENT_ESTABLISHED)
-						 ? ISphNetEvents::SPH_POLL_WR : ISphNetEvents::SPH_POLL_RD, &tAgent);
+				pEvents->SetupEvent( pAgent->m_iSock, ( pAgent->State()==AGENT_CONNECTING
+						  || pAgent->State()==AGENT_ESTABLISHED)
+						 ? ISphNetEvents::SPH_POLL_WR : ISphNetEvents::SPH_POLL_RD, pAgent );
 				++iEvents;
 			}
 		}
@@ -1419,11 +1324,11 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 		bool bDone = true;
 		for ( int i=0; i<pCtx->m_iAgentCount; i++ )
 		{
-			AgentConn_t & tAgent = pCtx->m_pAgents[i];
+			AgentConn_t * pAgent = pCtx->m_ppAgents[i];
 			// select only 'initial' agents - which are not send query response.
-			if ( tAgent.m_eState<AGENT_CONNECTING || tAgent.m_eState>AGENT_QUERYED )
+			if ( pAgent->State()<AGENT_CONNECTING || pAgent->State()>AGENT_QUERYED )
 				continue;
-			if ( tAgent.m_eState!=AGENT_QUERYED )
+			if ( pAgent->State()!=AGENT_QUERYED )
 				bDone = false;
 		}
 		if ( bDone )
@@ -1443,7 +1348,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 		bool bHaveSelected = pEvents->Wait( int( tmMicroLeft/1000 ) );
 
 		// update counters, and loop again if nothing happened
-		pCtx->m_pAgents->m_iWaited += sphMicroTimer() - tmSelect;
+		pCtx->m_ppAgents[0]->m_iWaited += sphMicroTimer() - tmSelect;
 		// todo: do we need to check for EINTR here? Or the fact of timeout is enough anyway?
 		if ( !bHaveSelected )
 			continue;
@@ -1457,7 +1362,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 			AgentConn_t & tAgent = *(AgentConn_t*)tEvent.m_pData;
 			bool bErr = ( (tEvent.m_uEvents & (ISphNetEvents::SPH_POLL_ERR | ISphNetEvents::SPH_POLL_HUP ) )!=0 );
 
-			if ( tAgent.m_eState==AGENT_CONNECTING && ( tEvent.m_bWritable || bErr ) )
+			if ( tAgent.State()==AGENT_CONNECTING && ( tEvent.m_bWritable || bErr ) )
 			{
 				if ( bErr )
 				{
@@ -1480,13 +1385,13 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 				tOut.SendDword ( SPHINX_CLIENT_VERSION );
 				tOut.Flush (); // FIXME! handle flush failure?
 				pEvents->IterateChangeEvent ( tAgent.m_iSock, ISphNetEvents::SPH_POLL_RD );
-				tAgent.m_eState = AGENT_HANDSHAKE;
+				tAgent.State ( AGENT_HANDSHAKE );
 
 				continue;
 			}
 
 			// check if hello was received
-			if ( tAgent.m_eState==AGENT_HANDSHAKE && tEvent.m_bReadable )
+			if ( tAgent.State()==AGENT_HANDSHAKE && tEvent.m_bReadable )
 			{
 				// read reply
 				int iRemoteVer;
@@ -1523,7 +1428,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 
 				NetOutputBuffer_c tOut ( tAgent.m_iSock );
 				// check if we need to reset the persistent connection
-				if ( tAgent.m_bFresh && tAgent.m_bPersistent )
+				if ( tAgent.m_bFresh && tAgent.m_tDesc.m_bPersistent )
 				{
 					tOut.SendWord ( SEARCHD_COMMAND_PERSIST );
 					tOut.SendWord ( 0 ); // dummy version
@@ -1538,12 +1443,12 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 					tAgent.m_bFresh = false;
 				}
 
-				tAgent.m_eState = AGENT_ESTABLISHED;
+				tAgent.State ( AGENT_ESTABLISHED );
 				pEvents->IterateChangeEvent ( tAgent.m_iSock, ISphNetEvents::SPH_POLL_WR );
 				continue;
 			}
 
-			if ( tAgent.m_eState==AGENT_ESTABLISHED && tEvent.m_bWritable )
+			if ( tAgent.State()==AGENT_ESTABLISHED && tEvent.m_bWritable )
 			{
 				// send request
 				NetOutputBuffer_c tOut ( tAgent.m_iSock );
@@ -1554,18 +1459,18 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 					tAgent.Fail ( eNetworkErrors, "%s", tOut.GetErrorMsg () );
 					continue;
 				}
-				tAgent.m_eState = AGENT_QUERYED;
+				tAgent.State ( AGENT_QUERYED );
 				++iAgents;
 				pEvents->IterateChangeEvent ( tAgent.m_iSock, ISphNetEvents::SPH_POLL_RD );
 				continue;
 			}
 
 			// check if queried agent replied while we were querying others
-			if ( tAgent.m_eState==AGENT_QUERYED && tEvent.m_bReadable )
+			if ( tAgent.State()==AGENT_QUERYED && tEvent.m_bReadable )
 			{
 				// do not account agent wall time from here; agent is probably ready
 				tAgent.m_iWall += sphMicroTimer();
-				tAgent.m_eState = AGENT_PREREPLY;
+				tAgent.State ( AGENT_PREREPLY );
 				pEvents->IterateRemove(tAgent.m_iSock);
 				--iEvents;
 				continue;
@@ -1577,16 +1482,16 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 	// check if connection timed out
 	for ( int i=0; i<pCtx->m_iAgentCount; i++ )
 	{
-		AgentConn_t & tAgent = pCtx->m_pAgents[i];
-		if ( bTimeout && ( tAgent.m_eState!=AGENT_QUERYED && tAgent.m_eState!=AGENT_UNUSED && tAgent.m_eState!=AGENT_RETRY && tAgent.m_eState!=AGENT_PREREPLY
-			&& tAgent.m_eState!=AGENT_REPLY ) )
+		AgentConn_t * pAgent = pCtx->m_ppAgents[i];
+		if ( bTimeout && ( pAgent->State()!=AGENT_QUERYED && pAgent->State()!=AGENT_UNUSED && pAgent->State()!=AGENT_RETRY && pAgent->State()!=AGENT_PREREPLY
+			&& pAgent->State()!=AGENT_REPLY ) )
 		{
 			// technically, we can end up here via two different routes
 			// a) connect() never finishes in given time frame
 			// b) agent actually accept()s the connection but keeps silence
 			// however, there's no way to tell the two from each other
 			// so we just account both cases as connect() failure
-			tAgent.Fail ( eTimeoutsConnect, "connect() timed out" );
+			pAgent->Fail ( eTimeoutsConnect, "connect() timed out" );
 			// tAgent.m_eState = AGENT_RETRY; // do retry on connect() failures // commented out since done by Fail() call
 		}
 	}
@@ -1596,14 +1501,14 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 
 // processing states AGENT_QUERY, AGENT_PREREPLY and AGENT_REPLY
 // may work in parallel with RemoteQueryAgents, so the state MAY change during a call.
-int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IReplyParser_t & tParser )
+int RemoteWaitForAgents ( AgentsVector & dAgents, int iTimeout, IReplyParser_t & tParser )
 {
 	assert ( iTimeout>=0 );
 
 	int iAgents = 0;
 	int64_t tmMaxTimer = sphMicroTimer() + iTimeout*1000; // in microseconds
 
-	ISphNetEvents * pEvents = sphCreatePoll ( dAgents.GetLength (), true );
+	ISphNetEvents * pEvents = sphCreatePoll ( dAgents.GetLength(), true );
 	int iEvents = 0;
 	bool bTimeout = false;
 
@@ -1614,15 +1519,15 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 			bool bDone = true;
 			ARRAY_FOREACH ( iAgent, dAgents )
 			{
-				AgentConn_t & tAgent = dAgents[iAgent];
-				if ( tAgent.m_bBlackhole )
+				AgentConn_t * pAgent = dAgents[iAgent];
+				if ( pAgent->m_tDesc.m_bBlackhole )
 					continue;
 
-				if ( tAgent.m_eState==AGENT_QUERYED || tAgent.m_eState==AGENT_REPLY || tAgent.m_eState==AGENT_PREREPLY )
+				if ( pAgent->State()==AGENT_QUERYED || pAgent->State()==AGENT_REPLY || pAgent->State()==AGENT_PREREPLY )
 				{
-					assert ( !tAgent.m_sPath.IsEmpty() || tAgent.m_iPort>0 );
-					assert ( tAgent.m_iSock>0 );
-					pEvents->SetupEvent ( tAgent.m_iSock, ISphNetEvents::SPH_POLL_RD, &tAgent);
+					assert ( !pAgent->m_tDesc.m_sPath.IsEmpty() || pAgent->m_tDesc.m_iPort>0 );
+					assert ( pAgent->m_iSock>0 );
+					pEvents->SetupEvent ( pAgent->m_iSock, ISphNetEvents::SPH_POLL_RD, pAgent );
 					++iEvents;
 					bDone = false;
 				}
@@ -1641,19 +1546,19 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 		}
 
 		bool bHaveAnswered = pEvents->Wait( int( tmMicroLeft/1000 ) );
-		dAgents.Begin()->m_iWaited += sphMicroTimer() - tmSelect;
+		dAgents[0]->m_iWaited += sphMicroTimer() - tmSelect;
 
 		if ( !bHaveAnswered )
 			continue;
 
-		pEvents->IterateStart ();
-		while ( pEvents->IterateNextReady () )
+		pEvents->IterateStart();
+		while ( pEvents->IterateNextReady() )
 		{
-			NetEventsIterator_t &tEvent = pEvents->IterateGet ();
-			AgentConn_t & tAgent = *(AgentConn_t*) tEvent.m_pData;
-			if ( tAgent.m_bBlackhole )
+			NetEventsIterator_t & tEvent = pEvents->IterateGet();
+			AgentConn_t & tAgent = *(AgentConn_t *)tEvent.m_pData;
+			if ( tAgent.m_tDesc.m_bBlackhole )
 				continue;
-			if (!( tAgent.m_eState==AGENT_QUERYED || tAgent.m_eState==AGENT_REPLY || tAgent.m_eState==AGENT_PREREPLY ))
+			if (!( tAgent.State()==AGENT_QUERYED || tAgent.State()==AGENT_REPLY || tAgent.State()==AGENT_PREREPLY ))
 				continue;
 
 			if (!(tEvent.m_bReadable ))
@@ -1662,15 +1567,17 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 			// if there was no reply yet, read reply header
 			bool bFailure = true;
 			bool bWarnings = false;
+			// need real socket for poller, however might be lost on agent failure
+			int iSock = tAgent.m_iSock;
 
 			for ( ;; )
 			{
-				if ( tAgent.m_eState==AGENT_QUERYED || tAgent.m_eState==AGENT_PREREPLY )
+				if ( tAgent.State()==AGENT_QUERYED || tAgent.State()==AGENT_PREREPLY )
 				{
-					if ( tAgent.m_eState==AGENT_PREREPLY )
+					if ( tAgent.State()==AGENT_PREREPLY )
 					{
 						tAgent.m_iWall -= sphMicroTimer();
-						tAgent.m_eState = AGENT_QUERYED;
+						tAgent.State ( AGENT_QUERYED );
 					}
 
 					// try to read
@@ -1703,14 +1610,14 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 					}
 
 					// header received, switch the status
-					assert ( tAgent.m_pReplyBuf==NULL );
-					tAgent.m_eState = AGENT_REPLY;
-					tAgent.m_pReplyBuf = new BYTE [ tReplyHeader.m_iLength ];
+					assert ( tAgent.m_dReplyBuf.Begin()==NULL );
+					tAgent.State ( AGENT_REPLY );
+					tAgent.m_dReplyBuf.Reset ( tReplyHeader.m_iLength );
 					tAgent.m_iReplySize = tReplyHeader.m_iLength;
 					tAgent.m_iReplyRead = 0;
 					tAgent.m_iReplyStatus = tReplyHeader.m_iStatus;
 
-					if ( !tAgent.m_pReplyBuf )
+					if ( !tAgent.m_dReplyBuf.Begin() )
 					{
 						// bail out if failed
 						tAgent.m_sFailure.SetSprintf ( "failed to alloc %d bytes for reply buffer", tAgent.m_iReplySize );
@@ -1719,11 +1626,11 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 				}
 
 				// if we are reading reply, read another chunk
-				if ( tAgent.m_eState==AGENT_REPLY )
+				if ( tAgent.State()==AGENT_REPLY )
 				{
 					// do read
 					assert ( tAgent.m_iReplyRead<tAgent.m_iReplySize );
-					int iRes = sphSockRecv ( tAgent.m_iSock, (char*)tAgent.m_pReplyBuf+tAgent.m_iReplyRead,
+					int iRes = sphSockRecv ( tAgent.m_iSock, (char*)tAgent.m_dReplyBuf.Begin() + tAgent.m_iReplyRead,
 						tAgent.m_iReplySize-tAgent.m_iReplyRead );
 
 					// bail out if read failed
@@ -1739,9 +1646,9 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 				}
 
 				// if reply was fully received, parse it
-				if ( tAgent.m_eState==AGENT_REPLY && tAgent.m_iReplyRead==tAgent.m_iReplySize )
+				if ( tAgent.State()==AGENT_REPLY && tAgent.m_iReplyRead==tAgent.m_iReplySize )
 				{
-					MemInputBuffer_c tReq ( tAgent.m_pReplyBuf, tAgent.m_iReplySize );
+					MemInputBuffer_c tReq ( tAgent.m_dReplyBuf.Begin(), tAgent.m_iReplySize );
 
 					// absolve thy former sins
 					tAgent.m_sFailure = "";
@@ -1755,7 +1662,7 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 
 					} else if ( tAgent.m_iReplyStatus==SEARCHD_RETRY )
 					{
-						tAgent.m_eState = AGENT_RETRY;
+						tAgent.State ( AGENT_RETRY );
 						CSphString sAgentError = tReq.GetString ();
 						tAgent.m_sFailure.SetSprintf ( "remote warning: %s", sAgentError.cstr() );
 						break;
@@ -1778,7 +1685,7 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 						break;
 					}
 
-					pEvents->IterateRemove ( tAgent.m_iSock );
+					pEvents->IterateRemove ( iSock );
 					--iEvents;
 					// all is well
 					iAgents++;
@@ -1793,7 +1700,8 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 
 			if ( bFailure )
 			{
-				pEvents->IterateRemove ( tAgent.m_iSock );
+				// agent.m_iSock is invalid after agent.Fail call
+				pEvents->IterateRemove ( iSock );
 				--iEvents;
 				tAgent.Close ();
 				tAgent.m_dResults.Reset ();
@@ -1806,20 +1714,20 @@ int RemoteWaitForAgents ( CSphVector<AgentConn_t> & dAgents, int iTimeout, IRepl
 		}
 	}
 
-	SafeDelete(pEvents);
+	SafeDelete ( pEvents );
 
 	// close timed-out agents
 	ARRAY_FOREACH ( iAgent, dAgents )
 	{
-		AgentConn_t & tAgent = dAgents[iAgent];
-		if ( tAgent.m_bBlackhole )
-			tAgent.Close ();
-		else if ( bTimeout && ( tAgent.m_eState==AGENT_QUERYED || tAgent.m_eState==AGENT_PREREPLY ||
-			( tAgent.m_eState==AGENT_REPLY && tAgent.m_iReplyRead!=tAgent.m_iReplySize ) ) )
+		AgentConn_t * pAgent = dAgents[iAgent];
+		if ( pAgent->m_tDesc.m_bBlackhole )
+			pAgent->Close ();
+		else if ( bTimeout && ( pAgent->State()==AGENT_QUERYED || pAgent->State()==AGENT_PREREPLY ||
+			( pAgent->State()==AGENT_REPLY && pAgent->m_iReplyRead!=pAgent->m_iReplySize ) ) )
 		{
-			assert ( !tAgent.m_dResults.GetLength() );
-			assert ( !tAgent.m_bSuccess );
-			tAgent.Fail ( eTimeoutsQuery, "query timed out" );
+			assert ( !pAgent->m_dResults.GetLength() );
+			assert ( !pAgent->m_bSuccess );
+			pAgent->Fail ( eTimeoutsQuery, "query timed out" );
 		}
 	}
 
@@ -1853,8 +1761,7 @@ public:
 	CSphAtomic m_iActiveThreads;
 
 private:
-	AgentWorkContext_t * m_dData;	// works array
-	int m_iLen;
+	CSphFixedVector<AgentWorkContext_t> m_dData;	// works array
 
 	int m_iHead;					// ring buffer begin
 	int m_iTail;					// ring buffer end
@@ -1871,7 +1778,7 @@ public:
 	~ThdWorkPool_c ();
 
 
-	AgentWorkContext_t Pop();
+	void Pop ( AgentWorkContext_t & tNext );
 
 	void Push ( const AgentWorkContext_t & tElem );
 	void RawPush ( const AgentWorkContext_t & tElem );
@@ -1902,53 +1809,43 @@ public:
 };
 
 ThdWorkPool_c::ThdWorkPool_c ( int iLen )
+	: m_dData ( iLen + 1 )
 {
 	m_tCrashQuery = SphCrashLogger_c::GetQuery(); // transfer query info for crash logger to new thread
 
-	m_iLen = iLen+1;
 	m_iTail = m_iHead = 0;
 	m_iWorksCount.SetValue (0);
 	m_iAgentsDone = m_iAgentsReported = 0;
 	m_bIsDestroying = false;
-
-	m_dData = new AgentWorkContext_t[m_iLen];
-#ifndef NDEBUG
-	for ( int i=0; i<m_iLen; i++ ) // to make sure that we don't rewrite valid elements
-		m_dData[i] = AgentWorkContext_t();
-#endif
 
 	m_tChanged.Init ( &m_tStatLock );
 }
 
 ThdWorkPool_c::~ThdWorkPool_c ()
 {
-
 	m_bIsDestroying = true;
 	while ( m_iActiveThreads>0 )
 		sphSleepMsec ( 1 );
 	m_tChanged.Done();
-	SafeDeleteArray ( m_dData );
 }
 
-AgentWorkContext_t ThdWorkPool_c::Pop()
+void ThdWorkPool_c::Pop ( AgentWorkContext_t & tNext )
 {
-	AgentWorkContext_t tRes;
+	tNext = AgentWorkContext_t();
 	if ( m_iTail==m_iHead ) // quick path for empty pool
-		return tRes;
+		return;
 
 	CSphScopedLock<CSphMutex> tData ( m_tDataLock ); // lock on create, unlock on destroy
 
 	if ( m_iTail==m_iHead ) // it might be empty now as another thread could steal work till that moment
-		return tRes;
+		return;
 
-	tRes = m_dData[m_iHead];
-	assert ( tRes.m_pfn );
+	tNext = m_dData[m_iHead];
+	assert ( tNext.m_pfn );
 #ifndef NDEBUG
 	m_dData[m_iHead] = AgentWorkContext_t(); // to make sure that we don't rewrite valid elements
 #endif
-	m_iHead = ( m_iHead+1 ) % m_iLen;
-
-	return tRes;
+	m_iHead = ( m_iHead+1 ) % m_dData.GetLength();
 }
 
 void ThdWorkPool_c::Push ( const AgentWorkContext_t & tElem )
@@ -1964,7 +1861,7 @@ void ThdWorkPool_c::RawPush ( const AgentWorkContext_t & tElem )
 {
 	assert ( !m_dData[m_iTail].m_pfn ); // to make sure that we don't rewrite valid elements
 	m_dData[m_iTail] = tElem;
-	m_iTail = ( m_iTail+1 ) % m_iLen;
+	m_iTail = ( m_iTail+1 ) % m_dData.GetLength();
 }
 
 int ThdWorkPool_c::FetchReadyCount ()
@@ -2000,7 +1897,7 @@ void ThdWorkPool_c::PoolThreadFunc ( void * pArg )
 		{
 			iSpinCount = 0;
 			++iPopCount;
-			tNext = pPool->Pop();
+			pPool->Pop ( tNext );
 			if ( !tNext.m_pfn ) // if there is no work at queue - worker done
 			{
 				// this is last worker. Let us keep it while pool is alive.
@@ -2052,31 +1949,33 @@ void ThdWorkWait ( AgentWorkContext_t * pCtx )
 void SetNextRetry ( AgentWorkContext_t * pCtx )
 {
 	pCtx->m_pfn = NULL;
-	pCtx->m_pAgents->m_eState = AGENT_UNUSED;
+	pCtx->m_ppAgents[0]->State ( AGENT_UNUSED );
 
 	// reconnect only on state == UNUSED and agent not just finished sequence (m_bDone)
-	if ( pCtx->m_pAgents->m_bDone || !pCtx->m_pAgents->m_iRetryLimit || !pCtx->m_iDelay || pCtx->m_pAgents->m_iRetries>pCtx->m_pAgents->m_iRetryLimit )
+	if ( pCtx->m_ppAgents[0]->m_bDone || !pCtx->m_ppAgents[0]->m_iRetryLimit || !pCtx->m_iDelay || pCtx->m_ppAgents[0]->m_iRetries>pCtx->m_ppAgents[0]->m_iRetryLimit )
 		return;
 
 	int64_t tmNextTry = sphMicroTimer() + pCtx->m_iDelay*1000;
 	pCtx->m_pfn = ThdWorkWait;
-	++pCtx->m_pAgents->m_iRetries;
+	++pCtx->m_ppAgents[0]->m_iRetries;
 	pCtx->m_tmWait = tmNextTry;
-	pCtx->m_pAgents->m_eState = AGENT_RETRY;
-	pCtx->m_pAgents->SpecifyAndSelectMirror ();
+	pCtx->m_ppAgents[0]->State ( AGENT_RETRY );
+	pCtx->m_ppAgents[0]->NextMirror();
 }
 
 void ThdWorkParallel ( AgentWorkContext_t * pCtx )
 {
-	RemoteConnectToAgent ( *pCtx->m_pAgents );
-	if ( pCtx->m_pAgents->m_eState==AGENT_UNUSED )
+	sphLogDebugv ( "parallel worker, sock=%d", pCtx->m_ppAgents[0]->m_iSock );
+
+	RemoteConnectToAgent ( *pCtx->m_ppAgents[0] );
+	if ( pCtx->m_ppAgents[0]->State()==AGENT_UNUSED )
 	{
 		SetNextRetry ( pCtx );
 		return;
 	}
 
 	RemoteQueryAgents ( pCtx );
-	if ( pCtx->m_pAgents->m_eState==AGENT_RETRY ) // next round of connect try
+	if ( pCtx->m_ppAgents[0]->State()==AGENT_RETRY ) // next round of connect try
 	{
 		SetNextRetry ( pCtx );
 	} else
@@ -2089,26 +1988,28 @@ void ThdWorkParallel ( AgentWorkContext_t * pCtx )
 
 void ThdWorkSequental ( AgentWorkContext_t * pCtx )
 {
-	if ( pCtx->m_pAgents->m_iRetries )
+	sphLogDebugv ( "seq worker" );
+
+	if ( pCtx->m_ppAgents[0]->m_iRetries )
 		sphSleepMsec ( pCtx->m_iDelay );
 
 	for ( int iAgent=0; iAgent<pCtx->m_iAgentCount; iAgent++ )
 	{
-		AgentConn_t & tAgent = pCtx->m_pAgents[iAgent];
+		AgentConn_t * pAgent = pCtx->m_ppAgents[iAgent];
 		// connect or reconnect only
 		// + initially - iRetries == 0 and state == UNUSED and agent not just finished sequence (m_bDone)
 		// + retry - state == RETRY
-		if ( ( tAgent.m_iRetries==0 && tAgent.m_eState==AGENT_UNUSED && !tAgent.m_bDone ) || tAgent.m_eState==AGENT_RETRY )
-			RemoteConnectToAgent ( tAgent );
+		if ( ( pAgent->m_iRetries==0 && pAgent->State()==AGENT_UNUSED && !pAgent->m_bDone ) || pAgent->State()==AGENT_RETRY )
+			RemoteConnectToAgent ( *pAgent );
 	}
 
 	pCtx->m_iAgentsDone += RemoteQueryAgents ( pCtx );
 
 	bool bNeedRetry = false;
-	if ( pCtx->m_pAgents->m_iRetryLimit )
+	if ( pCtx->m_ppAgents[0]->m_iRetryLimit )
 	{
-		for ( int i = 0; i<pCtx->m_iAgentCount; i++ )
-			if ( pCtx->m_pAgents[i].m_eState==AGENT_RETRY )
+		for ( int i=0; i<pCtx->m_iAgentCount; i++ )
+			if ( pCtx->m_ppAgents[i]->State()==AGENT_RETRY )
 			{
 				bNeedRetry = true;
 				break;
@@ -2120,16 +2021,16 @@ void ThdWorkSequental ( AgentWorkContext_t * pCtx )
 	{
 		for ( int i = 0; i<pCtx->m_iAgentCount; i++ )
 		{
-			AgentConn_t & tAgent = pCtx->m_pAgents[i];
-			if ( tAgent.m_eState==AGENT_RETRY )
+			AgentConn_t * pAgent = pCtx->m_ppAgents[i];
+			if ( pAgent->State()==AGENT_RETRY )
 			{
-				++tAgent.m_iRetries;
-				if ( tAgent.m_iRetries<tAgent.m_iRetryLimit )
+				++pAgent->m_iRetries;
+				if ( pAgent->m_iRetries<pAgent->m_iRetryLimit )
 				{
 					pCtx->m_pfn = ThdWorkSequental;
-					tAgent.SpecifyAndSelectMirror ();
+					pAgent->NextMirror();
 				} else
-					tAgent.m_eState = AGENT_UNUSED;
+					pAgent->State( AGENT_UNUSED );
 			}
 		}
 	}
@@ -2138,8 +2039,7 @@ void ThdWorkSequental ( AgentWorkContext_t * pCtx )
 class CSphRemoteAgentsController : public ISphRemoteAgentsController
 {
 public:
-	CSphRemoteAgentsController ( int iThreads, CSphVector<AgentConn_t> & dAgents,
-		const IRequestBuilder_t & tBuilder, int iTimeout, int iRetryMax=0, int iDelay=0 );
+	CSphRemoteAgentsController ( int iThreads, AgentsVector & dAgents, const IRequestBuilder_t & tBuilder, int iTimeout, int iRetryMax=0, int iDelay=0 );
 
 	virtual ~CSphRemoteAgentsController ();
 
@@ -2173,17 +2073,15 @@ private:
 	CSphVector<SphThread_t> m_dThds;
 
 	// stores params from ctr to work of RetryFailed
-	CSphVector<AgentConn_t> * m_pAgents;
+	AgentsVector * m_pAgents;
 	const IRequestBuilder_t * m_pBuilder;
 	int m_iTimeout;
 	int m_iDelay;
 
 };
 
-CSphRemoteAgentsController::CSphRemoteAgentsController ( int iThreads,
-														CSphVector<AgentConn_t> & dAgents, const IRequestBuilder_t & tBuilder,
-														int iTimeout, int iRetryMax, int iDelay )
-														: m_pWorkerPool ( new ThdWorkPool_c (dAgents.GetLength()) )
+CSphRemoteAgentsController::CSphRemoteAgentsController ( int iThreads, AgentsVector & dAgents, const IRequestBuilder_t & tBuilder, int iTimeout, int iRetryMax, int iDelay )
+	: m_pWorkerPool ( new ThdWorkPool_c ( dAgents.GetLength() ) )
 {
 	assert ( dAgents.GetLength() );
 
@@ -2207,17 +2105,17 @@ CSphRemoteAgentsController::CSphRemoteAgentsController ( int iThreads,
 		m_pWorkerPool->SetWorksCount ( dAgents.GetLength() );
 		ARRAY_FOREACH ( i, dAgents )
 		{
-			tCtx.m_pAgents = dAgents.Begin()+i;
-			tCtx.m_pAgents->m_iRetryLimit = iRetryMax * tCtx.m_pAgents->NumOfMirrors ();
+			tCtx.m_ppAgents = dAgents.Begin()+i;
+			tCtx.m_ppAgents[0]->m_iRetryLimit = iRetryMax * tCtx.m_ppAgents[0]->GetMirrorsCount();
 			m_pWorkerPool->RawPush ( tCtx );
 		}
 	} else
 	{
 		m_pWorkerPool->SetWorksCount ( 1 );
-		tCtx.m_pAgents = dAgents.Begin();
+		tCtx.m_ppAgents = dAgents.Begin();
 		tCtx.m_iAgentCount = dAgents.GetLength();
-		for ( auto& dAgent : dAgents )
-			dAgent.m_iRetryLimit = iRetryMax * dAgent.NumOfMirrors ();
+		for ( AgentConn_t * pAgent : dAgents )
+			pAgent->m_iRetryLimit = iRetryMax * pAgent->GetMirrorsCount();
 		tCtx.m_pfn = ThdWorkSequental;
 		m_pWorkerPool->RawPush ( tCtx );
 	}
@@ -2256,24 +2154,24 @@ int CSphRemoteAgentsController::RetryFailed ()
 	tCtx.m_iDelay = m_iDelay;
 	tCtx.m_iTimeout = m_iTimeout;
 
-	tCtx.m_pAgents = m_pAgents->Begin ();
-	tCtx.m_iAgentCount = m_pAgents->GetLength ();
+	tCtx.m_ppAgents = m_pAgents->Begin();
+	tCtx.m_iAgentCount = m_pAgents->GetLength();
 	int iRetries=0;
-	for ( auto &dAgent : *m_pAgents )
+	for ( AgentConn_t * pAgent : *m_pAgents )
 	{
-		if ( dAgent.m_eState==AGENT_RETRY )
+		if ( pAgent->State()==AGENT_RETRY )
 		{
-			++dAgent.m_iRetries;
-			if ( dAgent.m_iRetries<dAgent.m_iRetryLimit )
+			++pAgent->m_iRetries;
+			if ( pAgent->m_iRetries<pAgent->m_iRetryLimit )
 			{
-				dAgent.m_dResults.Reset ();
-				dAgent.SpecifyAndSelectMirror ();
+				pAgent->m_dResults.Reset ();
+				pAgent->NextMirror();
 				++iRetries;
 			} else
-				dAgent.m_eState = AGENT_UNUSED;
+				pAgent->State ( AGENT_UNUSED );
 		}
 	}
-	if (!iRetries)
+	if ( !iRetries )
 		return 0;
 	sphLogDebugv ( "Found %d agents in state AGENT_RETRY, reschedule them", iRetries );
 	tCtx.m_pfn = ThdWorkSequental;
@@ -2282,8 +2180,7 @@ int CSphRemoteAgentsController::RetryFailed ()
 	return iRetries;
 }
 
-ISphRemoteAgentsController* GetAgentsController ( int iThreads, CSphVector<AgentConn_t> & dAgents,
-		const IRequestBuilder_t & tBuilder, int iTimeout, int iRetryMax, int iDelay )
+ISphRemoteAgentsController* GetAgentsController ( int iThreads, AgentsVector & dAgents, const IRequestBuilder_t & tBuilder, int iTimeout, int iRetryMax, int iDelay )
 {
 	return new CSphRemoteAgentsController ( iThreads, dAgents, tBuilder, iTimeout, iRetryMax, iDelay );
 }
@@ -2305,33 +2202,23 @@ bool sphNBSockEof ( int iSock )
 
 ISphNetEvents::~ISphNetEvents () = default;
 
-#if POLLING_EPOLL || POLLING_KQUEUE
-
 // in case of epoll/kqueue the full set of polled sockets are stored
 // in a cache inside kernel, so once added, we can't iterate over all of the items.
 // So, we store them in linked list for that purpose.
+
+// wrap raw void* into ListNode_t to store it in List_t
+struct ListedData_t : public ListNode_t
+{
+	const void * m_pData;
+	explicit ListedData_t ( const void * pData ) : m_pData ( pData )
+	{}
+};
 
 
 // store and iterate over the list of items
 class IterableEvents_c : public ISphNetEvents
 {
 protected:
-
-	// wrap raw void* into ListNode_t to store it in List_t
-	class ListedData_t : public ListNode_t
-	{
-		const void * m_pData;
-	public:
-		explicit ListedData_t ( const void * pData ) : m_pData ( pData )
-		{
-		}
-
-		const void * Data () const
-		{
-			return m_pData;
-		}
-	};
-
 	List_t m_tWork;
 	NetEventsIterator_t m_tIter;
 	ListedData_t * m_pIter;
@@ -2340,7 +2227,7 @@ protected:
 	ListedData_t * AddNewEventData ( const void * pData )
 	{
 		assert ( pData );
-		auto pIntData = new ListedData_t ( pData );
+		ListedData_t * pIntData = new ListedData_t ( pData );
 		m_tWork.Add ( pIntData );
 		return pIntData;
 	}
@@ -2348,70 +2235,67 @@ protected:
 	void ResetIterator ()
 	{
 		m_tIter.Reset();
-		m_pIter = nullptr;
+		m_pIter = NULL;
 	}
 
 	void RemoveCurrentItem ()
 	{
 		assert ( m_pIter );
-		assert ( m_pIter->Data ()==m_tIter.m_pData );
+		assert ( m_pIter->m_pData==m_tIter.m_pData );
 		assert ( m_tIter.m_pData );
 
-		ListNode_t * pPrev = m_pIter->m_pPrev;
-		m_tWork.Remove ( (ListNode_t *) m_pIter );
+		ListedData_t * pPrev = (ListedData_t *)m_pIter->m_pPrev;
+		m_tWork.Remove ( m_pIter );
 		SafeDelete( m_pIter );
-		m_pIter = (ListedData_t *) pPrev;
-		m_tIter.m_pData = m_pIter->Data ();
+		m_pIter = pPrev;
+		m_tIter.m_pData = m_pIter->m_pData;
 	}
 
 public:
 	IterableEvents_c ()
 	{
-		m_tIter.Reset();
-		m_pIter = nullptr;
+		ResetIterator();
 	}
 
-	~IterableEvents_c ()
+	virtual ~IterableEvents_c ()
 	{
-		while (m_tWork.GetLength())
+		while ( m_tWork.GetLength() )
 		{
-			m_pIter = (ListedData_t *) m_tWork.Begin();
-			m_tWork.Remove(m_pIter);
-			SafeDelete( m_pIter );
+			ListedData_t * pIter = (ListedData_t *)m_tWork.Begin();
+			m_tWork.Remove ( pIter );
+			SafeDelete( pIter );
 		}
+		ResetIterator();
 	}
 
 	bool IterateNextAll () override
 	{
 		if ( !m_pIter )
 		{
-			if ( m_tWork.Begin ()==m_tWork.End () )
+			if ( m_tWork.Begin()==m_tWork.End() )
 				return false;
 
-			m_pIter = (ListedData_t *) m_tWork.Begin ();
-			m_tIter.m_pData = m_pIter->Data ();
+			m_pIter = (ListedData_t *)m_tWork.Begin();
+			m_tIter.m_pData = m_pIter->m_pData;
 			return true;
 		} else
 		{
-			m_pIter = (ListedData_t *) m_pIter->m_pNext;
-			m_tIter.m_pData = m_pIter->Data ();
-			if ( m_pIter!=m_tWork.End () )
+			m_pIter = (ListedData_t *)m_pIter->m_pNext;
+			m_tIter.m_pData = m_pIter->m_pData;
+			if ( m_pIter!=m_tWork.End() )
 				return true;
 
-			m_tIter.m_pData = nullptr;
-			m_pIter = nullptr;
+			m_tIter.m_pData = NULL;
+			m_pIter = NULL;
 			return false;
 		}
 	}
 
-	NetEventsIterator_t &IterateGet () override
+	NetEventsIterator_t & IterateGet() override
 	{
 		return m_tIter;
 	}
 };
-
-#endif
-
 
 
 #if POLLING_EPOLL
@@ -2439,15 +2323,16 @@ public:
 
 	~EpollEvents_c ()
 	{
+		sphLogDebugv ( "epoll %d closed", m_iEFD );
 		SafeClose ( m_iEFD );
 	}
 
-	void SetupEvent ( int iSocket, PoolEvents_e eFlags, const void* pData ) override
+	void SetupEvent ( int iSocket, PoolEvents_e eFlags, const void * pData ) override
 	{
 		assert ( pData && iSocket>=0 );
 		assert ( eFlags==SPH_POLL_WR || eFlags==SPH_POLL_RD );
 
-		auto pIntData = AddNewEventData(pData);
+		ListedData_t * pIntData = AddNewEventData ( pData );
 
 		epoll_event tEv;
 		tEv.data.ptr = pIntData;
@@ -2493,15 +2378,15 @@ public:
 
 	bool IterateNextReady () override
 	{
-		ResetIterator ();
+		ResetIterator();
 		++m_iIterEv;
 		if ( m_iReady<=0 || m_iIterEv>=m_iReady )
 			return false;
 
 		const epoll_event & tEv = m_dReady[m_iIterEv];
 
-		m_pIter = (ListedData_t *) tEv.data.ptr;
-		m_tIter.m_pData = m_pIter->Data ();
+		m_pIter = (ListedData_t *)tEv.data.ptr;
+		m_tIter.m_pData = m_pIter->m_pData;
 
 		if ( tEv.events & EPOLLIN )
 		{
@@ -2526,7 +2411,7 @@ public:
 	void IterateChangeEvent ( int iSocket, PoolEvents_e eFlags ) override
 	{
 		epoll_event tEv;
-		tEv.data.ptr = (void*) m_pIter;
+		tEv.data.ptr = (void *)m_pIter;
 		tEv.events = (eFlags==SPH_POLL_RD ? EPOLLIN : EPOLLOUT); ;
 
 		sphLogDebugv ( "%p epoll change, ev=0x%u, sock=%d", m_tIter.m_pData, tEv.events, iSocket );
@@ -2538,7 +2423,7 @@ public:
 
 	void IterateRemove ( int iSocket ) override
 	{
-		assert ( m_pIter->Data()==m_tIter.m_pData );
+		assert ( m_pIter->m_pData==m_tIter.m_pData );
 
 		sphLogDebugv ( "%p epoll remove, ev=0x%u, sock=%d", m_tIter.m_pData, m_tIter.m_uEvents, iSocket );
 		assert ( m_tIter.m_pData );
@@ -2550,7 +2435,7 @@ public:
 		if ( iRes==-1 )
 			sphLogDebugv ( "failed to remove epoll event for sock %d(%p), errno=%d, %s", iSocket, m_tIter.m_pData, errno, strerror ( errno ) );
 
-		RemoveCurrentItem ();
+		RemoveCurrentItem();
 	}
 };
 
@@ -2590,15 +2475,15 @@ public:
 		SafeClose ( m_iKQ );
 	}
 
-	void SetupEvent ( int iSocket, PoolEvents_e eFlags, const void* pData ) override
+	void SetupEvent ( int iSocket, PoolEvents_e eFlags, const void * pData ) override
 	{
 		assert ( pData && iSocket>=0 );
 		assert ( eFlags==SPH_POLL_WR || eFlags==SPH_POLL_RD );
 
-		auto pIntData = AddNewEventData(pData);
+		ListedData_t * pIntData = AddNewEventData ( pData );
 
 		struct kevent tEv;
-		EV_SET(&tEv, iSocket, (eFlags==SPH_POLL_RD ? EVFILT_READ : EVFILT_WRITE), EV_ADD, 0, 0, pIntData);
+		EV_SET ( &tEv, iSocket, (eFlags==SPH_POLL_RD ? EVFILT_READ : EVFILT_WRITE), EV_ADD, 0, 0, pIntData );
 
 		sphLogDebugv ( "%p kqueue setup, ev=0x%u, sock=%d", pData, tEv.flags, iSocket );
 
@@ -2657,7 +2542,7 @@ public:
 		const struct kevent & tEv = m_dReady[m_iIterEv];
 
 		m_pIter = (ListedData_t *) tEv.data;
-		m_tIter.m_pData = m_pIter->Data ();
+		m_tIter.m_pData = m_pIter->m_pData;
 
 		if ( tEv.flags & EVFILT_READ )
 		{
@@ -2686,7 +2571,7 @@ public:
 
 	void IterateRemove ( int iSocket ) override
 	{
-		assert ( m_pIter->Data()==m_tIter.m_pData );
+		assert ( m_pIter->m_pData==m_tIter.m_pData );
 
 		sphLogDebugv ( "%p kqueue remove, ev=0x%u, sock=%d", m_tIter.m_pData, m_tIter.m_uEvents, iSocket );
 		assert ( m_tIter.m_pData );
@@ -2703,7 +2588,7 @@ public:
 	}
 };
 
-ISphNetEvents* sphCreatePoll ( int iSizeHint, bool )
+ISphNetEvents * sphCreatePoll ( int iSizeHint, bool )
 {
 	return new KqueueEvents_c ( iSizeHint );
 }
@@ -2732,7 +2617,7 @@ public:
 
 	~PollEvents_c () = default;
 
-	void SetupEvent ( int iSocket, PoolEvents_e eFlags, const void* pData ) override
+	void SetupEvent ( int iSocket, PoolEvents_e eFlags, const void * pData ) override
 	{
 		assert ( pData && iSocket>=0 );
 		assert ( eFlags==SPH_POLL_WR || eFlags==SPH_POLL_RD );
@@ -2855,7 +2740,7 @@ public:
 	}
 };
 
-ISphNetEvents* sphCreatePoll ( int iSizeHint, bool )
+ISphNetEvents * sphCreatePoll ( int iSizeHint, bool )
 {
 	return new PollEvents_c ( iSizeHint );
 }
@@ -3038,7 +2923,7 @@ public:
 	NetEventsIterator_t & IterateGet () override { return m_tIter; }
 };
 
-ISphNetEvents* sphCreatePoll (int iSizeHint, bool bFallbackSelect)
+ISphNetEvents * sphCreatePoll (int iSizeHint, bool bFallbackSelect)
 {
 	if (!bFallbackSelect)
 		return new DummyEvents_c;

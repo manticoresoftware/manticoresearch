@@ -357,7 +357,7 @@ static CSphMutex							g_tOptimizeQueueMutex;
 static CSphVector<CSphString>				g_dOptimizeQueue;
 static ThrottleState_t						g_tRtThrottle;
 
-static CSphMutex							g_tDistLock;
+static CSphRwlock							g_tDistLock;
 static CSphMutex							g_tPersLock;
 
 static CSphAtomic							g_iPersistentInUse;
@@ -588,7 +588,20 @@ ServedStats_c::ServedStats_c()
 	: m_pQueryTimeDigest ( NULL )
 	, m_pRowsFoundDigest ( NULL )
 {
-	Reset();
+	m_uTotalFoundRowsMin = UINT64_MAX;
+	m_uTotalFoundRowsMax = 0;
+	m_uTotalFoundRowsSum = 0;
+	m_uTotalQueryTimeMin = UINT64_MAX;
+	m_uTotalQueryTimeMax = 0;
+	m_uTotalQueryTimeSum = 0;
+	m_uTotalQueries = 0;
+	
+	SafeDelete ( m_pQueryTimeDigest );
+	SafeDelete ( m_pRowsFoundDigest );
+
+	m_pQueryTimeDigest = sphCreateTDigest();
+	m_pRowsFoundDigest = sphCreateTDigest();
+	assert ( m_pQueryTimeDigest && m_pRowsFoundDigest );
 }
 
 
@@ -643,8 +656,9 @@ void ServedStats_c::DoStatCalcStats ( const QueryStatContainer_i * pContainer, Q
 
 	LockStats(true);
 
+	int iRecords = m_tQueryStatRecords.GetNumRecords();
 	for ( int i = QUERY_STATS_INTERVAL_1MIN; i<=QUERY_STATS_INTERVAL_15MIN; i++ )
-		CalcStatsForInterval ( pContainer, tRowsFoundStats.m_dStats[i], tQueryTimeStats.m_dStats[i], uTimestamp, g_dStatsIntervals[i] );
+		CalcStatsForInterval ( pContainer, tRowsFoundStats.m_dStats[i], tQueryTimeStats.m_dStats[i], uTimestamp, g_dStatsIntervals[i], iRecords );
 
 	tRowsFoundStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME].m_dData[QUERY_STATS_TYPE_AVG] = m_uTotalQueries ? m_uTotalFoundRowsSum/m_uTotalQueries : 0;
 	tRowsFoundStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME].m_dData[QUERY_STATS_TYPE_MIN] = m_uTotalFoundRowsMin;
@@ -678,63 +692,7 @@ void ServedStats_c::CalculateQueryStatsExact ( QueryStats_t & tRowsFoundStats, Q
 #endif // !NDEBUG
 
 
-ServedStats_c & ServedStats_c::operator = ( const ServedStats_c & /*rhs*/ )
-{
-	Reset();
-	return *this;
-}
-
-
-ServedStats_c & ServedStats_c::operator = ( ServedStats_c &&rhs )
-{
-	if ( this != &rhs )
-	{
-		m_tQueryStatRecords = std::move ( rhs.m_tQueryStatRecords );
-
-#ifndef NDEBUG
-		m_tQueryStatRecordsExact = std::move (rhs.m_tQueryStatRecordsExact);
-#endif
-
-		m_pQueryTimeDigest = rhs.m_pQueryTimeDigest;
-		rhs.m_pQueryTimeDigest = nullptr;
-
-		m_pRowsFoundDigest = rhs.m_pRowsFoundDigest;
-		rhs.m_pRowsFoundDigest = nullptr;
-
-		m_uTotalFoundRowsMin = rhs.m_uTotalFoundRowsMin;
-		m_uTotalFoundRowsMax = rhs.m_uTotalFoundRowsMax;
-		m_uTotalFoundRowsSum = rhs.m_uTotalFoundRowsSum;
-
-		m_uTotalQueryTimeMin = rhs.m_uTotalQueryTimeMin;
-		m_uTotalQueryTimeMax = rhs.m_uTotalQueryTimeMax;
-		m_uTotalQueryTimeSum = rhs.m_uTotalQueryTimeSum;
-
-		m_uTotalQueries = rhs.m_uTotalQueries;
-	}
-	return *this;
-}
-
-
-void ServedStats_c::Reset()
-{
-	m_uTotalFoundRowsMin = UINT64_MAX;
-	m_uTotalFoundRowsMax = 0;
-	m_uTotalFoundRowsSum = 0;
-	m_uTotalQueryTimeMin = UINT64_MAX;
-	m_uTotalQueryTimeMax = 0;
-	m_uTotalQueryTimeSum = 0;
-	m_uTotalQueries = 0;
-	
-	SafeDelete ( m_pQueryTimeDigest );
-	SafeDelete ( m_pRowsFoundDigest );
-
-	m_pQueryTimeDigest = sphCreateTDigest();
-	m_pRowsFoundDigest = sphCreateTDigest();
-	assert ( m_pQueryTimeDigest && m_pRowsFoundDigest );
-}
-
-
-void ServedStats_c::CalcStatsForInterval ( const QueryStatContainer_i * pContainer, QueryStatElement_t & tRowResult, QueryStatElement_t & tTimeResult, uint64_t uTimestamp, uint64_t uInterval ) const
+void ServedStats_c::CalcStatsForInterval ( const QueryStatContainer_i * pContainer, QueryStatElement_t & tRowResult, QueryStatElement_t & tTimeResult, uint64_t uTimestamp, uint64_t uInterval, int iRecords )
 {
 	assert ( pContainer );
 
@@ -747,8 +705,8 @@ void ServedStats_c::CalcStatsForInterval ( const QueryStatContainer_i * pContain
 	tTimeResult.m_dData[QUERY_STATS_TYPE_MAX] = 0;
 	
 	CSphTightVector<uint64_t> dFound, dTime;
-	dFound.Reserve ( m_tQueryStatRecords.GetNumRecords() );
-	dTime.Reserve ( m_tQueryStatRecords.GetNumRecords() );
+	dFound.Reserve ( iRecords );
+	dTime.Reserve ( iRecords );
 
 	DWORD uTotalQueries = 0;
 	QueryStatRecord_t tRecord;
@@ -1386,6 +1344,7 @@ static bool SaveIndexes ()
 	return bAllSaved;
 }
 
+static void ClearDistributedHash();
 
 void Shutdown ()
 {
@@ -1460,7 +1419,9 @@ void Shutdown ()
 		if ( it.Get().m_pIndex )
 			it.Get().m_pIndex->Unlock();
 
+	ClearDistributedHash();
 	g_pTemplateIndexes->Reset();
+	g_tDistLock.Done();
 
 	// clear shut down of rt indexes + binlog
 	SafeDelete ( g_pLocalIndexes );
@@ -2922,10 +2883,17 @@ void SendErrorReply ( ISphOutputBuffer & tOut, const char * sTemplate, ... )
 // DISTRIBUTED QUERIES
 /////////////////////////////////////////////////////////////////////////////
 
-/// distributed index
-struct DistributedIndex_t : public ServedStats_c
+struct AgentProcessor_t
 {
-	CSphVector<MultiAgentDesc_t>	m_dAgents;					///< remote agents
+	AgentProcessor_t() {}
+	virtual ~AgentProcessor_t() {}
+	virtual void Process ( AgentDesc_c & tDesc ) = 0;
+};
+
+/// distributed index
+struct DistributedIndex_t : public ServedStats_c, public ISphNoncopyable
+{
+	CSphVector<MultiAgentDesc_t *>	m_dAgents;					///< remote agents
 	CSphVector<CSphString>		m_dLocal;					///< local indexes
 	CSphBitvec					m_dKillBreak;
 	int							m_iAgentConnectTimeout;		///< in msec
@@ -2933,6 +2901,7 @@ struct DistributedIndex_t : public ServedStats_c
 	bool						m_bToDelete;				///< should be deleted
 	bool						m_bDivideRemoteRanges;			///< whether we divide big range onto agents or not
 	HAStrategies_e				m_eHaStrategy;				///< how to select the best of my agents
+	mutable CSphRwlock			m_tStatsLock;
 
 public:
 	DistributedIndex_t ()
@@ -2941,75 +2910,97 @@ public:
 		, m_bToDelete ( false )
 		, m_bDivideRemoteRanges ( false )
 		, m_eHaStrategy ( HA_DEFAULT )
-	{}
-	~DistributedIndex_t()
+	{
+		m_tStatsLock.Init ( true );
+	}
+
+	virtual ~DistributedIndex_t()
 	{
 		// m_pHAStorage has to be freed separately.
-	}
-	DistributedIndex_t ( DistributedIndex_t && rhs );
-	DistributedIndex_t& operator= ( DistributedIndex_t &&rhs );
-	DistributedIndex_t& operator= ( const DistributedIndex_t & rhs );
+		ARRAY_FOREACH ( i, m_dAgents )
+		{
+			SafeDelete ( m_dAgents[i] );
+		}
 
-	void GetAllAgents ( CSphVector<AgentConn_t> * pTarget ) const;
+		m_tStatsLock.Done();
+	}
+
+	void GetAllAgents ( AgentsVector & dTarget ) const;
+	void ForAgents ( AgentProcessor_t & tProcessor );
+
+	virtual void LockStats ( bool bReader ) const
+	{
+		if ( bReader )
+			m_tStatsLock.ReadLock();
+		else
+			m_tStatsLock.WriteLock();
+	}
+
+	virtual void UnlockStats() const
+	{
+		m_tStatsLock.Unlock();
+	}
 };
 
-DistributedIndex_t::DistributedIndex_t ( DistributedIndex_t && rhs )
-	: m_dAgents { std::move ( rhs.m_dAgents ) }
-	, m_dLocal { std::move ( rhs.m_dLocal ) }
-	, m_dKillBreak { std::move ( rhs.m_dKillBreak ) }
-	, m_iAgentConnectTimeout { rhs.m_iAgentConnectTimeout }
-	, m_iAgentQueryTimeout { rhs.m_iAgentQueryTimeout }
-	, m_bToDelete { rhs.m_bToDelete }
-	, m_bDivideRemoteRanges { rhs.m_bDivideRemoteRanges }
-	, m_eHaStrategy { rhs.m_eHaStrategy }
+void DistributedIndex_t::GetAllAgents ( AgentsVector & dTarget ) const
 {
-}
-
-DistributedIndex_t& DistributedIndex_t::operator= ( DistributedIndex_t &&rhs )
-{
-	if ( this!=&rhs )
-	{
-		m_dAgents = std::move ( rhs.m_dAgents );
-		m_dLocal = std::move ( rhs.m_dLocal );
-		m_dKillBreak = std::move ( rhs.m_dKillBreak );
-		m_iAgentConnectTimeout = rhs.m_iAgentConnectTimeout;
-		m_iAgentQueryTimeout = rhs.m_iAgentQueryTimeout;
-		m_bToDelete = rhs.m_bToDelete;
-		m_bDivideRemoteRanges = rhs.m_bDivideRemoteRanges;
-		m_eHaStrategy = rhs.m_eHaStrategy;
-	}
-	return *this;
-}
-
-DistributedIndex_t& DistributedIndex_t::operator= ( const DistributedIndex_t &rhs )
-{
-	if ( this!=&rhs )
-	{
-		m_dAgents = rhs.m_dAgents;
-		m_dLocal = rhs.m_dLocal;
-		m_dKillBreak = rhs.m_dKillBreak;
-		m_iAgentConnectTimeout = rhs.m_iAgentConnectTimeout;
-		m_iAgentQueryTimeout = rhs.m_iAgentQueryTimeout;
-		m_bToDelete = rhs.m_bToDelete;
-		m_bDivideRemoteRanges = rhs.m_bDivideRemoteRanges;
-		m_eHaStrategy = rhs.m_eHaStrategy;
-	}
-	return *this;
-}
-
-void DistributedIndex_t::GetAllAgents ( CSphVector<AgentConn_t> * pTarget ) const
-{
-	assert ( pTarget );
 	ARRAY_FOREACH ( i, m_dAgents )
-		ARRAY_FOREACH ( j, m_dAgents[i].GetAgents() )
 	{
-		AgentDesc_c & dAgent = pTarget->Add();
-		dAgent = m_dAgents[i].GetAgents()[j];
+		ARRAY_FOREACH ( j, m_dAgents[i]->GetAgents() )
+		{
+			AgentConn_t * pAgent = new AgentConn_t();
+			m_dAgents[i]->GetAgents()[j].CloneTo ( pAgent->m_tDesc );
+			dTarget.Add ( pAgent );
+		}
+	}
+}
+
+void DistributedIndex_t::ForAgents ( AgentProcessor_t & tProcessor )
+{
+	ARRAY_FOREACH ( i, m_dAgents )
+	{
+		ARRAY_FOREACH ( j, m_dAgents[i]->GetAgents() )
+		{
+			tProcessor.Process ( m_dAgents[i]->GetAgents()[j] );
+		}
 	}
 }
 
 /// global distributed index definitions hash
-static SmallStringHash_T < DistributedIndex_t >		g_hDistIndexes;
+typedef SmallStringHash_T < DistributedIndex_t * > DistributedHash_t;
+static DistributedHash_t g_hDistIndexes;
+
+static DistributedIndex_t * GetDistIndex ( const CSphString & sName )
+{
+	DistributedIndex_t ** ppIndex = g_hDistIndexes ( sName );
+	return ( ppIndex ? *ppIndex : NULL );
+}
+
+void ClearDistributedHash()
+{
+	void * pIt = NULL;
+	while ( g_hDistIndexes.IterateNext ( &pIt ) )
+	{
+		SafeDelete ( DistributedHash_t::IterateGet ( &pIt ) );
+	}
+	g_hDistIndexes.Reset();
+}
+
+void AgentConn_t::NextMirror()
+{
+	if ( m_iMirrorsCount==1 )
+		return;
+
+	g_tDistLock.ReadLock();
+	DistributedIndex_t * pDist = GetDistIndex ( m_sDistIndex );
+	if ( pDist && m_iMirror<pDist->m_dAgents.GetLength() )
+	{
+		// FIXME!!! got broken on agent removal or agent order change
+		pDist->m_dAgents[m_iMirror]->ChooseAgent().CloneTo ( m_tDesc );
+		SetupPersist();
+	}
+	g_tDistLock.Unlock();
+}
 
 /////////////////////////////////////////////////////////////////////////////
 // SEARCH HANDLER
@@ -3021,7 +3012,7 @@ struct SearchRequestBuilder_t : public IRequestBuilder_t
 		: m_dQueries ( dQueries ), m_iStart ( iStart ), m_iEnd ( iEnd ), m_iDivideLimits ( iDivideLimits )
 	{}
 
-	virtual void		BuildRequest ( AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const;
+	virtual void		BuildRequest ( const AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const;
 
 protected:
 	int					CalcQueryLen ( const char * sIndexes, const CSphQuery & q, bool bAgentWeight ) const;
@@ -3315,9 +3306,9 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 }
 
 
-void SearchRequestBuilder_t::BuildRequest ( AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const
+void SearchRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const
 {
-	const char* sIndexes = tAgent.m_sIndexes.cstr();
+	const char * sIndexes = tAgent.m_tDesc.m_sIndexes.cstr();
 	bool bAgentWeigth = ( tAgent.m_iWeight!=-1 );
 	int iReqLen = 8; // int num-queries
 	for ( int i=m_iStart; i<=m_iEnd; i++ )
@@ -4887,10 +4878,10 @@ void ReportIndexesName ( int iSpanStart, int iSpandEnd, const CSphVector<SearchF
 	// report distributed index in case all failures are from their locals
 	if ( iSpanLen>1 && !dLog[iSpanStart].m_sParentIndex.IsEmpty () && dLog[iSpanStart].m_sParentIndex==dLog[iSpandEnd-1].m_sParentIndex )
 	{
-		g_tDistLock.Lock ();
-		const DistributedIndex_t * pDist = g_hDistIndexes ( dLog[iSpanStart].m_sParentIndex );
+		g_tDistLock.ReadLock();
+		const DistributedIndex_t * pDist = GetDistIndex ( dLog[iSpanStart].m_sParentIndex );
 		int iChildCount = pDist ? pDist->m_dLocal.GetLength () : 0;
-		g_tDistLock.Unlock ();
+		g_tDistLock.Unlock();
 
 		if ( iSpanLen==iChildCount )
 		{
@@ -8162,7 +8153,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// build local indexes list
 	////////////////////////////
 
-	CSphVector<AgentConn_t> dAgents;
+	VectorPtrsGuard_T<AgentConn_t> dAgentsGuard;
+	AgentsVector & dAgents = dAgentsGuard.m_dPtrs;
 	CSphVector<DistrServedByAgent_t> dDistrServedByAgent;
 	int iDivideLimits = 1;
 	int iAgentConnectTimeout = 0, iAgentQueryTimeout = 0;
@@ -8191,11 +8183,11 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		int iDistCount = 0;
 		bool bDevideRemote = false;
 
-		g_tDistLock.Lock();
+		g_tDistLock.ReadLock();
 		ARRAY_FOREACH ( i, dLocal )
 		{
 			const CSphString & sIndex = dLocal[i];
-			DistributedIndex_t * pDist = g_hDistIndexes ( sIndex );
+			DistributedIndex_t * pDist = GetDistIndex ( sIndex );
 			if ( !pDist )
 			{
 				m_dLocal.Add().m_sName = dLocal[i];
@@ -8219,10 +8211,13 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				dAgents.Reserve ( dAgents.GetLength() + pDist->m_dAgents.GetLength() );
 				ARRAY_FOREACH ( j, pDist->m_dAgents )
 				{
+					MultiAgentDesc_t * pMirror = pDist->m_dAgents[j];
 					tDistr.m_dAgentIds.Add ( dAgents.GetLength() );
-					dAgents.Add().SpecifyAndSelectMirror ( &pDist->m_dAgents[j] );
-					dAgents.Last().m_iStoreTag = iTagsCount;
-					dAgents.Last().m_iWeight = iWeight;
+					AgentConn_t * pAgent = new AgentConn_t();
+					pAgent->SetMirror ( sIndex, j, pMirror->ChooseAgent(), pMirror->GetLength() );
+					pAgent->m_iStoreTag = iTagsCount;
+					pAgent->m_iWeight = iWeight;
+					dAgents.Add ( pAgent );
 					iTagsCount += iTagStep;
 				}
 
@@ -8392,8 +8387,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		int iRetryCount = Min ( Max ( tFirst.m_iRetryCount, 0 ), MAX_RETRY_COUNT ); // paranoid clamp
 
 		tReqBuilder = new SearchRequestBuilder_t ( m_dQueries, iStart, iEnd, iDivideLimits );
-		tDistCtrl = GetAgentsController ( g_iDistThreads, dAgents,
-			*tReqBuilder.Ptr(), iAgentConnectTimeout, iRetryCount, tFirst.m_iRetryDelay );
+		tDistCtrl = GetAgentsController ( g_iDistThreads, dAgents, *tReqBuilder.Ptr(), iAgentConnectTimeout, iRetryCount, tFirst.m_iRetryDelay );
 	}
 
 	/////////////////////
@@ -8445,13 +8439,17 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				// check if there were valid (though might be 0-matches) replies, and merge them
 				if ( iReplys )
 				{
+					sphLogDebugv ( "agents got %d", iReplys );
+
 					DWORD * pMva = dMvaStorage.Begin();
 					BYTE * pString = dStringStorage.Begin();
 					ARRAY_FOREACH ( iAgent, dAgents )
 					{
-						AgentConn_t & tAgent = dAgents[iAgent];
-						if ( !tAgent.m_bSuccess )
+						AgentConn_t * pAgent = dAgents[iAgent];
+						if ( !pAgent->m_bSuccess )
 							continue;
+
+						sphLogDebugv ( "agent %d, state %d, order %d, sock %d", iAgent, pAgent->State(), pAgent->m_iStoreTag, pAgent->m_iSock );
 
 						DistrServedByAgent_t * pDistr = NULL;
 						ARRAY_FOREACH ( iDistr, dDistrServedByAgent )
@@ -8464,21 +8462,21 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 							}
 						}
 
-						int iOrderTag = tAgent.m_iStoreTag;
+						int iOrderTag = pAgent->m_iStoreTag;
 						// merge this agent's results
 						for ( int iRes=iStart; iRes<=iEnd; iRes++ )
 						{
-							const CSphQueryResult & tRemoteResult = tAgent.m_dResults[iRes-iStart];
+							const CSphQueryResult & tRemoteResult = pAgent->m_dResults[iRes-iStart];
 
 							// copy errors or warnings
 							if ( !tRemoteResult.m_sError.IsEmpty() )
 								m_dFailuresSet[iRes].SubmitEx ( tFirst.m_sIndexes.cstr(), NULL,
 									"agent %s: remote query error: %s",
-									tAgent.GetMyUrl().cstr(), tRemoteResult.m_sError.cstr() );
+									pAgent->m_tDesc.GetMyUrl().cstr(), tRemoteResult.m_sError.cstr() );
 							if ( !tRemoteResult.m_sWarning.IsEmpty() )
 								m_dFailuresSet[iRes].SubmitEx ( tFirst.m_sIndexes.cstr(), NULL,
 									"agent %s: remote query warning: %s",
-									tAgent.GetMyUrl().cstr(), tRemoteResult.m_sWarning.cstr() );
+									pAgent->m_tDesc.GetMyUrl().cstr(), tRemoteResult.m_sWarning.cstr() );
 
 							if ( tRemoteResult.m_iSuccesses<=0 )
 								continue;
@@ -8526,9 +8524,9 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 						}
 
 						// dismissed
-						tAgent.m_dResults.Reset ();
-						tAgent.m_bSuccess = false;
-						tAgent.m_sFailure = "";
+						pAgent->m_dResults.Reset ();
+						pAgent->m_bSuccess = false;
+						pAgent->m_sFailure = "";
 					}
 
 					m_dMva2Free.Add ( dMvaStorage.LeakData() );
@@ -8544,21 +8542,21 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	{
 		ARRAY_FOREACH ( i, dAgents )
 		{
-			const AgentConn_t & tAgent = dAgents[i];
+			const AgentConn_t * pAgent = dAgents[i];
 
 			for ( int j=iStart; j<=iEnd; j++ )
 			{
-				assert ( tAgent.m_iWall>=0 );
-				if ( tAgent.m_iWall<0 )
-					m_dAgentTimes[j].Add ( ( tAgent.m_iWall + sphMicroTimer() ) / ( 1000 * ( iEnd-iStart+1 ) ) );
+				assert ( pAgent->m_iWall>=0 );
+				if ( pAgent->m_iWall<0 )
+					m_dAgentTimes[j].Add ( ( pAgent->m_iWall + sphMicroTimer() ) / ( 1000 * ( iEnd-iStart+1 ) ) );
 				else
-					m_dAgentTimes[j].Add ( ( tAgent.m_iWall ) / ( 1000 * ( iEnd-iStart+1 ) ) );
+					m_dAgentTimes[j].Add ( ( pAgent->m_iWall ) / ( 1000 * ( iEnd-iStart+1 ) ) );
 			}
 
-			if ( !tAgent.m_bSuccess && !tAgent.m_sFailure.IsEmpty() )
+			if ( !pAgent->m_bSuccess && !pAgent->m_sFailure.IsEmpty() )
 				for ( int j=iStart; j<=iEnd; j++ )
-					m_dFailuresSet[j].SubmitEx ( tFirst.m_sIndexes.cstr(), NULL, tAgent.m_bBlackhole ? "blackhole %s: %s" : "agent %s: %s",
-						tAgent.GetMyUrl().cstr(), tAgent.m_sFailure.cstr() );
+					m_dFailuresSet[j].SubmitEx ( tFirst.m_sIndexes.cstr(), NULL, pAgent->m_tDesc.m_bBlackhole ? "blackhole %s: %s" : "agent %s: %s",
+						pAgent->m_tDesc.GetMyUrl().cstr(), pAgent->m_sFailure.cstr() );
 		}
 	}
 
@@ -8780,11 +8778,11 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			ReleaseIndex ( m_dLocal[iLocal].m_sName );
 	}
 
-	g_tDistLock.Lock();
+	g_tDistLock.ReadLock();
 	ARRAY_FOREACH ( iDistr, dDistrServedByAgent )
 	{
 		DistrServedByAgent_t & tDistr = dDistrServedByAgent[iDistr];
-		DistributedIndex_t * pServedDistIndex = g_hDistIndexes ( tDistr.m_sIndex );
+		DistributedIndex_t * pServedDistIndex = GetDistIndex ( tDistr.m_sIndex );
 		if ( pServedDistIndex )
 			for ( int iQuery=iStart; iQuery<=iEnd; iQuery++ )
 			{
@@ -8803,8 +8801,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	if ( dAgents.GetLength() )
 	{
 		int64_t tmWait = 0;
-		for ( const auto& dAgent : dAgents )
-			tmWait += dAgent.m_iWaited;
+		for ( const AgentConn_t * pAgent : dAgents )
+			tmWait += pAgent->m_iWaited;
 
 		// do *not* count queries to dist indexes w/o actual remote agents
 		++g_tStats.m_iDistQueries;
@@ -10455,7 +10453,7 @@ struct SnippetWorker_t
 
 struct SnippetsRemote_t : ISphNoncopyable
 {
-	CSphVector<AgentConn_t>			m_dAgents;
+	AgentsVector					m_dAgents;
 	CSphVector<SnippetWorker_t>		m_dWorkers;
 	CSphVector<ExcerptQuery_t> &	m_dQueries;
 	int								m_iAgentConnectTimeout;
@@ -10466,6 +10464,14 @@ struct SnippetsRemote_t : ISphNoncopyable
 		, m_iAgentConnectTimeout ( 0 )
 		, m_iAgentQueryTimeout ( 0 )
 	{}
+
+	~SnippetsRemote_t()
+	{
+		ARRAY_FOREACH ( i, m_dAgents )
+		{
+			SafeDelete ( m_dAgents[i] );
+		}
+	}
 };
 
 struct SnippetThread_t
@@ -10498,7 +10504,7 @@ struct SnippetRequestBuilder_t : public IRequestBuilder_t
 		, m_iWorker ( 0 )
 	{
 	}
-	virtual void BuildRequest ( AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const;
+	virtual void BuildRequest ( const AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const;
 
 private:
 	const SnippetsRemote_t * m_pWorker;
@@ -10523,7 +10529,7 @@ private:
 };
 
 
-void SnippetRequestBuilder_t::BuildRequest ( AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const
+void SnippetRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const
 {
 	// it sends either all queries to each agent or sequence of queries to current agent
 	m_tWorkerMutex.Lock();
@@ -10533,9 +10539,9 @@ void SnippetRequestBuilder_t::BuildRequest ( AgentConn_t & tAgent, NetOutputBuff
 	const CSphVector<ExcerptQuery_t> & dQueries = m_pWorker->m_dQueries;
 	const ExcerptQuery_t & q = dQueries[0];
 	const SnippetWorker_t & tWorker = m_pWorker->m_dWorkers[iWorker];
-	tAgent.m_iWorkerTag = iWorker;
+	const_cast< AgentConn_t & >( tAgent ).m_iWorkerTag = iWorker;
 
-	const char* sIndex = tAgent.m_sIndexes.cstr();
+	const char * sIndex = tAgent.m_tDesc.m_sIndexes.cstr();
 
 	if ( m_iNumDocs < 0 )
 		m_bScattered = ( q.m_iLoadFiles & 2 )!=0;
@@ -10694,8 +10700,8 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 	CSphVector<CSphString> dDistLocal;
 	ExcerptQuery_t & q = dQueries[0];
 
-	g_tDistLock.Lock();
-	DistributedIndex_t * pDist = g_hDistIndexes ( sIndex );
+	g_tDistLock.ReadLock();
+	DistributedIndex_t * pDist = GetDistIndex ( sIndex );
 	bool bRemote = ( pDist!=NULL );
 
 	// hack! load_files && load_files_scattered is the 'final' call. It will report the absent files as errors.
@@ -10710,7 +10716,13 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 		dDistLocal = pDist->m_dLocal;
 		dRemoteSnippets.m_dAgents.Resize ( pDist->m_dAgents.GetLength() );
 		ARRAY_FOREACH ( i, pDist->m_dAgents )
-			dRemoteSnippets.m_dAgents[i].SpecifyAndSelectMirror ( &pDist->m_dAgents[i] );
+		{
+			AgentConn_t * pAgent = new AgentConn_t();
+			dRemoteSnippets.m_dAgents[i] = pAgent;
+
+			MultiAgentDesc_t * pMirror = pDist->m_dAgents[i];
+			pAgent->SetMirror ( sIndex, i, pMirror->ChooseAgent(), pMirror->GetLength() );
+		}
 	}
 	g_tDistLock.Unlock();
 
@@ -10835,6 +10847,8 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 		if ( bScattered && iAbsentHead==EOF_ITEM )
 		{
 			bRemote = false;
+			ARRAY_FOREACH ( i, dRemoteSnippets.m_dAgents )
+				SafeDelete ( dRemoteSnippets.m_dAgents[i] );
 			dRemoteSnippets.m_dAgents.Reset();
 		}
 
@@ -10891,8 +10905,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 		{
 			// connect to remote agents and query them
 			tReqBuilder = new SnippetRequestBuilder_t ( &dRemoteSnippets );
-			tDistCtrl = GetAgentsController ( g_iDistThreads, dRemoteSnippets.m_dAgents,
-				*tReqBuilder.Ptr(), dRemoteSnippets.m_iAgentConnectTimeout );
+			tDistCtrl = GetAgentsController ( g_iDistThreads, dRemoteSnippets.m_dAgents, *tReqBuilder.Ptr(), dRemoteSnippets.m_iAgentConnectTimeout );
 		}
 
 		SnippetThreadFunc ( &dThreads[0] );
@@ -11165,7 +11178,7 @@ void HandleCommandKeywords ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & 
 struct UpdateRequestBuilder_t : public IRequestBuilder_t
 {
 	explicit UpdateRequestBuilder_t ( const CSphAttrUpdate & pUpd ) : m_tUpd ( pUpd ) {}
-	virtual void BuildRequest ( AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const;
+	virtual void BuildRequest ( const AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const;
 
 protected:
 	const CSphAttrUpdate & m_tUpd;
@@ -11189,9 +11202,9 @@ protected:
 };
 
 
-void UpdateRequestBuilder_t::BuildRequest ( AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const
+void UpdateRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const
 {
-	const char* sIndexes = tAgent.m_sIndexes.cstr();
+	const char * sIndexes = tAgent.m_tDesc.m_sIndexes.cstr();
 	int iReqSize = 4+strlen(sIndexes); // indexes string
 	iReqSize += 8; // attrs array len, data, non-existent flags
 	ARRAY_FOREACH ( i, m_tUpd.m_dAttrs )
@@ -11325,31 +11338,35 @@ static ServedIndex_c * UpdateGetLockedIndex ( const CSphString & sName, bool bMv
 	return g_pLocalIndexes->GetWlockedEntry ( sName );
 }
 
-static const char *
-ExtractDistributedIndexes ( const CSphVector<CSphString> &dNames, CSphVector<DistributedIndex_t> &dDistributed )
+// FIXME!!! extract dLocal and clone dAgents not to depend on distributed index that might be deleted or rotated
+static void ExtractDistributedIndexes ( const CSphVector<CSphString> & dNames, CSphFixedVector<const DistributedIndex_t *> & dDistributed, CSphString & sMissed )
 {
 	assert ( dNames.GetLength ()==dDistributed.GetLength () );
+	ARRAY_FOREACH ( i, dDistributed )
+		dDistributed[i] = NULL;
+
 	ARRAY_FOREACH ( i, dNames )
 	{
 		if ( !g_pLocalIndexes->Exists ( dNames[i] ) )
 		{
 			// search amongst distributed and copy for further processing
-			g_tDistLock.Lock ();
-			const DistributedIndex_t * pDistIndex = g_hDistIndexes ( dNames[i] );
+			g_tDistLock.ReadLock();
+			const DistributedIndex_t * pDistIndex = GetDistIndex ( dNames[i] );
 
 			if ( pDistIndex )
 			{
-				dDistributed[i] = *pDistIndex;
+				dDistributed[i] = pDistIndex;
 			}
 
 			g_tDistLock.Unlock ();
 
 			if ( !pDistIndex )
-				return dNames[i].cstr ();
+			{
+				sMissed = dNames[i];
+				return;
+			}
 		}
 	}
-
-	return NULL;
 }
 
 
@@ -11442,13 +11459,14 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 		return;
 	}
 
-	CSphVector<DistributedIndex_t> dDistributed ( dIndexNames.GetLength() ); // lock safe storage for distributed indexes
+	CSphFixedVector<const DistributedIndex_t *> dDistributed ( dIndexNames.GetLength() ); // FIXME!!! UNsafe storage for distributed indexes
 
 	// copy distributed indexes description
-	const char * sMissedDist = NULL;
-	if ( (sMissedDist = ExtractDistributedIndexes ( dIndexNames, dDistributed ))!=NULL )
+	CSphString sMissedDist;
+	ExtractDistributedIndexes ( dIndexNames, dDistributed, sMissedDist );
+	if ( !sMissedDist.IsEmpty() )
 	{
-		SendErrorReply ( tOut, "unknown index '%s' in update request", sMissedDist );
+		SendErrorReply ( tOut, "unknown index '%s' in update request", sMissedDist.cstr() );
 		return;
 	}
 
@@ -11467,10 +11485,10 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 		{
 			DoCommandUpdate ( sReqIndex, NULL, tUpd, iSuccesses, iUpdated, dFails, pLocked );
 			pLocked->Unlock();
-		} else
+		} else if ( dDistributed[iIdx] )
 		{
-			assert ( dDistributed[iIdx].m_dLocal.GetLength() || dDistributed[iIdx].m_dAgents.GetLength() );
-			CSphVector<CSphString>& dLocal = dDistributed[iIdx].m_dLocal;
+			assert ( dDistributed[iIdx]->m_dLocal.GetLength() || dDistributed[iIdx]->m_dAgents.GetLength() );
+			const CSphVector<CSphString> & dLocal = dDistributed[iIdx]->m_dLocal;
 
 			ARRAY_FOREACH ( i, dLocal )
 			{
@@ -11483,21 +11501,22 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 		}
 
 		// update remote agents
-		if ( dDistributed[iIdx].m_dAgents.GetLength() )
+		if ( dDistributed[iIdx] && dDistributed[iIdx]->m_dAgents.GetLength() )
 		{
-			DistributedIndex_t & tDist = dDistributed[iIdx];
+			const DistributedIndex_t * pDist = dDistributed[iIdx];
 
-			CSphVector<AgentConn_t> dAgents;
-			tDist.GetAllAgents ( &dAgents );
+			VectorPtrsGuard_T<AgentConn_t> tAgentGuards;
+			AgentsVector & dAgents = tAgentGuards.m_dPtrs;
+			pDist->GetAllAgents ( dAgents );
 
 			// connect to remote agents and query them
 			UpdateRequestBuilder_t tReqBuilder ( tUpd );
-			CSphScopedPtr<ISphRemoteAgentsController> pDistCtrl ( GetAgentsController ( g_iDistThreads, dAgents, tReqBuilder, tDist.m_iAgentConnectTimeout ) );
+			CSphScopedPtr<ISphRemoteAgentsController> pDistCtrl ( GetAgentsController ( g_iDistThreads, dAgents, tReqBuilder, pDist->m_iAgentConnectTimeout ) );
 			int iAgentsDone = pDistCtrl->Finish();
 			if ( iAgentsDone )
 			{
 				UpdateReplyParser_t tParser ( &iUpdated );
-				iSuccesses += RemoteWaitForAgents ( dAgents, tDist.m_iAgentQueryTimeout, tParser ); // FIXME? profile update time too?
+				iSuccesses += RemoteWaitForAgents ( dAgents, pDist->m_iAgentQueryTimeout, tParser ); // FIXME? profile update time too?
 			}
 		}
 	}
@@ -11691,16 +11710,16 @@ void BuildStatus ( VectorLike & dStatus )
 			dStatus.Add().SetSprintf ( "%d", g_pThdPool->GetQueueLength() );
 	}
 
-	g_tDistLock.Lock();
-	g_hDistIndexes.IterateStart();
-	while ( g_hDistIndexes.IterateNext() )
+	g_tDistLock.ReadLock();
+	void * pIt = NULL;
+	while ( g_hDistIndexes.IterateNext ( &pIt ) )
 	{
-		const char * sIdx = g_hDistIndexes.IterateGetKey().cstr();
-		CSphVector<MultiAgentDesc_t> & dAgents = g_hDistIndexes.IterateGet().m_dAgents;
+		const char * sIdx = DistributedHash_t::IterateGetKey ( &pIt ).cstr();
+		const CSphVector<MultiAgentDesc_t *> & dAgents = DistributedHash_t::IterateGet ( &pIt )->m_dAgents;
 		ARRAY_FOREACH ( i, dAgents )
-			ARRAY_FOREACH ( j, dAgents[i].GetAgents() )
+			ARRAY_FOREACH ( j, dAgents[i]->GetAgents() )
 		{
-			AgentDash_t * pStats = dAgents[i].GetAgents ()[j].m_pStats;
+			const AgentDash_t * pStats = dAgents[i]->GetAgents ()[j].m_pStats;
 			if ( !pStats )
 				continue;
 
@@ -11879,9 +11898,8 @@ void BuildOneAgentStatus ( VectorLike & dStatus, HostDashboard_t* pDash, const c
 
 void BuildDistIndexStatus ( VectorLike & dStatus, const CSphString& sIndex )
 {
-	g_tDistLock.Lock();
-	DistributedIndex_t * pDistr = g_hDistIndexes(sIndex);
-	g_tDistLock.Unlock();
+	CSphScopedRLock tLock ( g_tDistLock );
+	DistributedIndex_t * pDistr = GetDistIndex ( sIndex );
 
 	if ( !pDistr )
 	{
@@ -11899,25 +11917,25 @@ void BuildDistIndexStatus ( VectorLike & dStatus, const CSphString& sIndex )
 	CSphString sKey;
 	ARRAY_FOREACH ( i, pDistr->m_dAgents )
 	{
-		MultiAgentDesc_t & tAgents = pDistr->m_dAgents[i];
+		MultiAgentDesc_t * tAgents = pDistr->m_dAgents[i];
 		if ( dStatus.MatchAddVa ( "dstindex_%d_is_ha", i+1 ) )
-			dStatus.Add ( tAgents.IsHA()? "1": "0" );
+			dStatus.Add ( tAgents->IsHA()? "1": "0" );
 
-		auto dWeights = tAgents.GetWeights ();
+		auto dWeights = tAgents->GetWeights ();
 
-		ARRAY_FOREACH ( j, tAgents.GetAgents() )
+		ARRAY_FOREACH ( j, tAgents->GetAgents() )
 		{
-			if ( tAgents.IsHA() )
+			if ( tAgents->IsHA() )
 				sKey.SetSprintf ( "dstindex_%dmirror%d", i+1, j+1 );
 			else
 				sKey.SetSprintf ( "dstindex_%dagent", i+1 );
 
-			const AgentDesc_c & dDesc = tAgents.GetAgents()[j];
+			const AgentDesc_c & dDesc = tAgents->GetAgents()[j];
 
 			if ( dStatus.MatchAddVa ( "%s_id", sKey.cstr() ) )
 				dStatus.Add().SetSprintf ( "%s:%s", dDesc.GetMyUrl().cstr(), dDesc.m_sIndexes.cstr() );
 
-			if ( tAgents.IsHA() && dStatus.MatchAddVa ( "%s_probability_weight", sKey.cstr() ) )
+			if ( tAgents->IsHA() && dStatus.MatchAddVa ( "%s_probability_weight", sKey.cstr() ) )
 				dStatus.Add().SetSprintf ( "%d", (DWORD)( dWeights[j]) );
 
 			if ( dStatus.MatchAddVa ( "%s_is_blackhole", sKey.cstr() ) )
@@ -11933,7 +11951,7 @@ void BuildAgentStatus ( VectorLike & dStatus, const CSphString& sAgent )
 {
 	if ( !sAgent.IsEmpty() )
 	{
-		if ( g_hDistIndexes.Exists(sAgent) )
+		if ( g_hDistIndexes.Exists ( sAgent ) )
 			BuildDistIndexStatus ( dStatus, sAgent );
 		else
 		{
@@ -13374,7 +13392,7 @@ void HandleMysqlCallSnippets ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, ThdDesc
 struct KeywordsRequestBuilder_t : public IRequestBuilder_t
 {
 	KeywordsRequestBuilder_t ( const GetKeywordsSettings_t & tSettings, const CSphString & sTerm );
-	virtual void BuildRequest ( AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const;
+	virtual void BuildRequest ( const AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const;
 
 protected:
 	const GetKeywordsSettings_t & m_tSettings;
@@ -13447,28 +13465,23 @@ void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphStr
 
 	bool bLocal = g_pLocalIndexes->Exists ( sIndex );
 	bool bTemplate = !bLocal && g_pTemplateIndexes->Exists ( sIndex );
-	bool bDistributed = false;
-	DistributedIndex_t tDistributed;
+	DistributedIndex_t * pDistributed = NULL;
 	if ( !bLocal && !bTemplate )
 	{
 		// search amongst distributed and copy for further processing
-		g_tDistLock.Lock ();
-		const DistributedIndex_t * pDistIndex = g_hDistIndexes ( sIndex );
-		if ( pDistIndex )
-			tDistributed = *pDistIndex;
-
+		g_tDistLock.ReadLock();
+		pDistributed = GetDistIndex ( sIndex );
 		g_tDistLock.Unlock ();
-		bDistributed = ( pDistIndex!=NULL );
 	}
 
-	if ( !bLocal && !bTemplate && !bDistributed )
+	if ( !bLocal && !bTemplate && !pDistributed )
 	{
 		sError.SetSprintf ( "no such index %s", sIndex.cstr() );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
-	if ( bDistributed && !tDistributed.m_dLocal.GetLength() && !tDistributed.m_dAgents.GetLength() )
+	if ( pDistributed && !pDistributed->m_dLocal.GetLength() && !pDistributed->m_dAgents.GetLength() )
 	{
 		sError.SetSprintf ( "empty distributed index %s", sIndex.cstr() );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
@@ -13504,7 +13517,7 @@ void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphStr
 	{
 		// FIXME!!! g_iDistThreads thread pool for locals.
 		// locals
-		const CSphVector<CSphString> & dLocals = tDistributed.m_dLocal;
+		const CSphVector<CSphString> & dLocals = pDistributed->m_dLocal;
 		CSphVector<CSphKeywordInfo> dKeywordsLocal;
 		ARRAY_FOREACH ( iLocal, dLocals )
 		{
@@ -13535,28 +13548,29 @@ void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphStr
 		}
 
 		// remote agents requests send off thread
-		CSphVector<AgentConn_t> dAgents;
-		tDistributed.GetAllAgents ( &dAgents );
+		VectorPtrsGuard_T<AgentConn_t> tAgentsGuard;
+		AgentsVector & dAgents = tAgentsGuard.m_dPtrs;
+		pDistributed->GetAllAgents ( dAgents );
 
 		int iAgentsReply = 0;
 		if ( dAgents.GetLength() )
 		{
 			// connect to remote agents and query them
 			KeywordsRequestBuilder_t tReqBuilder ( tSettings, sTerm );
-			CSphScopedPtr<ISphRemoteAgentsController> tDistCtrl ( GetAgentsController ( g_iDistThreads, dAgents, tReqBuilder, tDistributed.m_iAgentConnectTimeout ) );
+			CSphScopedPtr<ISphRemoteAgentsController> tDistCtrl ( GetAgentsController ( g_iDistThreads, dAgents, tReqBuilder, pDistributed->m_iAgentConnectTimeout ) );
 
 			KeywordsReplyParser_t tParser ( tSettings.m_bStats, dKeywords );
 			int iAgentsDone = tDistCtrl->Finish();
 			if ( iAgentsDone )
-				iAgentsReply += RemoteWaitForAgents ( dAgents, tDistributed.m_iAgentQueryTimeout, tParser );
+				iAgentsReply += RemoteWaitForAgents ( dAgents, pDistributed->m_iAgentQueryTimeout, tParser );
 
 			ARRAY_FOREACH ( i, dAgents )
 			{
-				const AgentConn_t & tAgent = dAgents[i];
-				if ( !tAgent.m_bSuccess && !tAgent.m_sFailure.IsEmpty() )
+				const AgentConn_t * pAgent = dAgents[i];
+				if ( !pAgent->m_bSuccess && !pAgent->m_sFailure.IsEmpty() )
 				{
-					const char * sAgent = ( tAgent.m_bBlackhole ? "blackhole" : "agent" );
-					tFailureLog.SubmitEx ( tAgent.m_sIndexes.cstr(), sIndex.cstr(), "%s %s: %s", sAgent, tAgent.GetMyUrl().cstr(), tAgent.m_sFailure.cstr() );
+					const char * sAgent = ( pAgent->m_tDesc.m_bBlackhole ? "blackhole" : "agent" );
+					tFailureLog.SubmitEx ( pAgent->m_tDesc.m_sIndexes.cstr(), sIndex.cstr(), "%s %s: %s", sAgent, pAgent->m_tDesc.GetMyUrl().cstr(), pAgent->m_sFailure.cstr() );
 				}
 			}
 		}
@@ -13617,9 +13631,9 @@ KeywordsRequestBuilder_t::KeywordsRequestBuilder_t ( const GetKeywordsSettings_t
 {
 }
 
-void KeywordsRequestBuilder_t::BuildRequest ( AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const
+void KeywordsRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const
 {
-	const CSphString & sIndexes = tAgent.m_sIndexes;
+	const CSphString & sIndexes = tAgent.m_tDesc.m_sIndexes;
 	int iReqLen = 28 + sIndexes.Length() + m_sTerm.Length();
 
 	tOut.SendWord ( SEARCHD_COMMAND_KEYWORDS ); // command id
@@ -13896,8 +13910,8 @@ void HandleMysqlDescribe ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 		{
 			if ( pServed )
 				pServed->Unlock();
-			g_tDistLock.Lock();
-			pDistr = g_hDistIndexes ( tStmt.m_sIndex );
+			g_tDistLock.ReadLock();
+			pDistr = GetDistIndex ( tStmt.m_sIndex );
 			g_tDistLock.Unlock();
 
 			if ( !pDistr )
@@ -13920,16 +13934,16 @@ void HandleMysqlDescribe ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 
 		ARRAY_FOREACH ( i, pDistr->m_dAgents )
 		{
-			MultiAgentDesc_t & tAgents = pDistr->m_dAgents[i];
-			if ( tAgents.IsHA() )
+			const MultiAgentDesc_t * pAgents = pDistr->m_dAgents[i];
+			if ( pAgents->IsHA() )
 			{
-				ARRAY_FOREACH ( j, tAgents.GetAgents() )
+				ARRAY_FOREACH ( j, pAgents->GetAgents() )
 				{
 					CSphString sKey;
 					sKey.SetSprintf ( "remote_%d_mirror_%d", i+1, j+1 );
-					const AgentDesc_c * pDesc = tAgents.GetAgent(j);
+					const AgentDesc_c & tDesc = pAgents->GetAgent(j);
 					CSphString sValue;
-					sValue.SetSprintf ( "%s:%s", pDesc->GetMyUrl().cstr(), pDesc->m_sIndexes.cstr() );
+					sValue.SetSprintf ( "%s:%s", tDesc.GetMyUrl().cstr(), tDesc.m_sIndexes.cstr() );
 					dCondOut.MatchDataTuplet ( sValue.cstr(), sKey.cstr() );
 				}
 			} else
@@ -13937,7 +13951,7 @@ void HandleMysqlDescribe ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 				CSphString sKey;
 				sKey.SetSprintf ( "remote_%d", i+1 );
 				CSphString sValue;
-				sValue.SetSprintf ( "%s:%s", tAgents.GetAgent()->GetMyUrl().cstr(), tAgents.GetAgent()->m_sIndexes.cstr() );
+				sValue.SetSprintf ( "%s:%s", pAgents->GetAgent(0).GetMyUrl().cstr(), pAgents->GetAgent(0).m_sIndexes.cstr() );
 				dCondOut.MatchDataTuplet ( sValue.cstr(), sKey.cstr() );
 			}
 		}
@@ -14009,12 +14023,12 @@ void HandleMysqlShowTables ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 		tIdx.m_iValue = 3;
 	}
 
-	g_tDistLock.Lock();
-	g_hDistIndexes.IterateStart();
-	while ( g_hDistIndexes.IterateNext() )
+	g_tDistLock.ReadLock();
+	void * pIt = NULL;
+	while ( g_hDistIndexes.IterateNext ( &pIt ) )
 	{
 		CSphNamedInt & tIdx = dIndexes.Add();
-		tIdx.m_sName = g_hDistIndexes.IterateGetKey();
+		tIdx.m_sName = DistributedHash_t::IterateGetKey ( &pIt );
 		tIdx.m_iValue = 1;
 	}
 	g_tDistLock.Unlock();
@@ -14114,30 +14128,49 @@ void HandleMysqlShowThreads ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	g_tThdMutex.Unlock();
 }
 
+struct HostsCollector_t : public AgentProcessor_t
+{
+	SmallStringHash_T<DWORD> & m_hHosts;
+	explicit HostsCollector_t ( SmallStringHash_T<DWORD> & hHosts )
+		: m_hHosts ( hHosts )
+	{}
+	virtual ~HostsCollector_t() {}
+	virtual void Process ( AgentDesc_c & tDesc )
+	{
+		if ( tDesc.m_iFamily==AF_INET && !tDesc.m_sHost.IsEmpty() )
+			m_hHosts.Add ( tDesc.m_uAddr, tDesc.m_sHost );
+	}
+};
+
+struct HostsUpdater_t : public AgentProcessor_t
+{
+	SmallStringHash_T<DWORD> & m_hHosts;
+	explicit HostsUpdater_t ( SmallStringHash_T<DWORD> & hHosts )
+		: m_hHosts ( hHosts )
+	{}
+	virtual ~HostsUpdater_t() {}
+	virtual void Process ( AgentDesc_c & tDesc )
+	{
+		if ( tDesc.m_iFamily==AF_INET && !tDesc.m_sHost.IsEmpty() )
+		{
+			DWORD * pRenew = m_hHosts ( tDesc.m_sHost );
+			if ( pRenew && *pRenew )
+				tDesc.m_uAddr = *pRenew;
+		}
+	}
+};
 
 void HandleMysqlFlushHostnames ( SqlRowBuffer_c & tOut )
 {
-	CSphVector<AgentConn_t> dAgents;
 	SmallStringHash_T<DWORD> hHosts;
+	HostsCollector_t tHostsCollector ( hHosts );
 
 	// copy distributed agents for further processing
-	g_tDistLock.Lock();
-
-	g_hDistIndexes.IterateStart();
-	while ( g_hDistIndexes.IterateNext() )
+	g_tDistLock.ReadLock();
+	void * pIt = NULL;
+	while ( g_hDistIndexes.IterateNext ( &pIt ) )
 	{
-		g_hDistIndexes.IterateGet().GetAllAgents ( &dAgents );
-		if ( !dAgents.GetLength() )
-			continue;
-
-		ARRAY_FOREACH ( i, dAgents )
-		{
-			const AgentConn_t & tAgent = dAgents[i];
-			if ( tAgent.m_iFamily==AF_INET && !tAgent.m_sHost.IsEmpty() )
-				hHosts.Add ( tAgent.m_uAddr, tAgent.m_sHost );
-		}
-
-		dAgents.Resize ( 0 );
+		DistributedHash_t::IterateGet ( &pIt )->ForAgents ( tHostsCollector );
 	}
 	g_tDistLock.Unlock();
 
@@ -14149,28 +14182,14 @@ void HandleMysqlFlushHostnames ( SqlRowBuffer_c & tOut )
 			hHosts.IterateGet() = uRenew;
 	}
 
+	HostsUpdater_t tHostsUpdater ( hHosts );
+
 	// copy back renew hosts to distributed agents
-	g_tDistLock.Lock();
-
-	g_hDistIndexes.IterateStart();
-	while ( g_hDistIndexes.IterateNext() )
+	g_tDistLock.WriteLock();
+	pIt = NULL;
+	while ( g_hDistIndexes.IterateNext ( &pIt ) )
 	{
-		g_hDistIndexes.IterateGet().GetAllAgents ( &dAgents );
-		if ( !dAgents.GetLength() )
-			continue;
-
-		ARRAY_FOREACH ( i, dAgents )
-		{
-			AgentConn_t & tAgent = dAgents[i];
-			if ( tAgent.m_iFamily==AF_INET && !tAgent.m_sHost.IsEmpty() )
-			{
-				DWORD * pRenew = hHosts ( tAgent.m_sHost );
-				if ( pRenew && *pRenew )
-					tAgent.m_uAddr = *pRenew;
-			}
-		}
-
-		dAgents.Resize ( 0 );
+		DistributedHash_t::IterateGet ( &pIt )->ForAgents ( tHostsUpdater );
 	}
 	g_tDistLock.Unlock();
 
@@ -14184,7 +14203,7 @@ struct PingRequestBuilder_t : public IRequestBuilder_t
 	explicit PingRequestBuilder_t ( int iCookie = 0 )
 		: m_iCookie ( iCookie )
 	{}
-	virtual void BuildRequest ( AgentConn_t &, NetOutputBuffer_c & tOut ) const
+	virtual void BuildRequest ( const AgentConn_t &, NetOutputBuffer_c & tOut ) const
 	{
 		// header
 		tOut.SendWord ( SEARCHD_COMMAND_PING );
@@ -14214,9 +14233,11 @@ protected:
 };
 
 
-static void CheckPing ( CSphVector<AgentConn_t> & dAgents, int64_t iNow )
+static void CheckPing ( int64_t iNow )
 {
-	dAgents.Resize ( 0 );
+	VectorPtrsGuard_T<AgentConn_t> tAgentsGuard;
+	AgentsVector & dAgents = tAgentsGuard.m_dPtrs;
+
 	int iCookie = (int)iNow;
 
 	g_tDashes.Lock();
@@ -14230,10 +14251,11 @@ static void CheckPing ( CSphVector<AgentConn_t> & dAgents, int64_t iNow )
 			if ( pDash->IsOlder ( iNow ) )
 			{
 				pDash->AddRef ();
-				AgentConn_t & dAgent = dAgents.Add ();
-				dAgent = pDash->m_tDescriptor;
-				dAgent.m_pDash = pDash;
-				dAgent.m_bPing = true;
+				AgentConn_t * pAgent = new AgentConn_t;
+				pDash->m_tDescriptor.CloneTo ( pAgent->m_tDesc );
+				pAgent->m_tDesc.m_pDash = pDash;
+				pAgent->m_bPing = true;
+				dAgents.Add ( pAgent );
 			}
 		}
 	}
@@ -14275,7 +14297,6 @@ static void PingThreadFunc ( void * )
 	tQueryTLS.SetupTLS ();
 
 	int64_t iLastCheck = 0;
-	CSphVector<AgentConn_t> dAgents;
 
 	while ( !g_bShutdown )
 	{
@@ -14287,7 +14308,7 @@ static void PingThreadFunc ( void * )
 			continue;
 		}
 
-		CheckPing ( dAgents, iNow );
+		CheckPing ( iNow );
 		iLastCheck = sphMicroTimer();
 	}
 }
@@ -14306,7 +14327,7 @@ struct UVarRequestBuilder_t : public IRequestBuilder_t
 		, m_iLength ( iLength )
 	{}
 
-	virtual void BuildRequest ( AgentConn_t &, NetOutputBuffer_c & tOut ) const
+	virtual void BuildRequest ( const AgentConn_t &, NetOutputBuffer_c & tOut ) const
 	{
 		// header
 		tOut.SendWord ( SEARCHD_COMMAND_UVAR );
@@ -14353,13 +14374,15 @@ static void SetLocalUserVar ( const CSphString & sName, CSphVector<SphAttr_t> & 
 
 static bool SendUserVar ( const char * sIndex, const char * sUserVarName, CSphVector<SphAttr_t> & dSetValues, CSphString & sError )
 {
-	CSphVector<AgentConn_t> dAgents;
+	VectorPtrsGuard_T<AgentConn_t> tAgentsGuard;
+	AgentsVector & dAgents = tAgentsGuard.m_dPtrs;
+
 	bool bGotLocal = false;
-	g_tDistLock.Lock();
-	const DistributedIndex_t * pIndex = g_hDistIndexes ( sIndex );
+	g_tDistLock.ReadLock();
+	const DistributedIndex_t * pIndex = GetDistIndex ( sIndex );
 	if ( pIndex )
 	{
-		pIndex->GetAllAgents ( &dAgents );
+		pIndex->GetAllAgents ( dAgents );
 		bGotLocal = ( pIndex->m_dLocal.GetLength()>0 );
 	}
 	g_tDistLock.Unlock();
@@ -14473,7 +14496,7 @@ struct SphinxqlRequestBuilder_t : public IRequestBuilder_t
 		, m_sEnd ( sQuery.cstr() + tStmt.m_iListEnd, sQuery.Length() - tStmt.m_iListEnd )
 	{
 	}
-	virtual void BuildRequest ( AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const;
+	virtual void BuildRequest ( const AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const;
 
 protected:
 	const CSphString m_sBegin;
@@ -14521,9 +14544,9 @@ protected:
 };
 
 
-void SphinxqlRequestBuilder_t::BuildRequest ( AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const
+void SphinxqlRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const
 {
-	const char* sIndexes = tAgent.m_sIndexes.cstr();
+	const char* sIndexes = tAgent.m_tDesc.m_sIndexes.cstr();
 	int iReqSize = strlen(sIndexes) + m_sBegin.Length() + m_sEnd.Length(); // indexes string
 
 	// header
@@ -14587,13 +14610,14 @@ void HandleMysqlUpdate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 		return;
 	}
 
-	// lock safe storage for distributed indexes
-	CSphVector<DistributedIndex_t> dDistributed ( dIndexNames.GetLength() );
+	// FIXME!!! UNsafe storage for distributed indexes
+	CSphFixedVector<const DistributedIndex_t *> dDistributed ( dIndexNames.GetLength() );
 	// copy distributed indexes description
-	const char * sMissedDist = NULL;
-	if ( ( sMissedDist = ExtractDistributedIndexes ( dIndexNames, dDistributed ) )!=NULL )
+	CSphString sMissedDist;
+	ExtractDistributedIndexes ( dIndexNames, dDistributed, sMissedDist );
+	if ( !sMissedDist.IsEmpty() )
 	{
-		sError.SetSprintf ( "unknown index '%s' in update request", sMissedDist );
+		sError.SetSprintf ( "unknown index '%s' in update request", sMissedDist.cstr() );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
@@ -14618,10 +14642,10 @@ void HandleMysqlUpdate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 		if ( pLocked )
 		{
 			DoExtendedUpdate ( sReqIndex, NULL, tStmt, iSuccesses, iUpdated, dFails, pLocked, sWarning, iCID );
-		} else
+		} else if ( dDistributed[iIdx] )
 		{
-			assert ( dDistributed[iIdx].m_dLocal.GetLength() || dDistributed[iIdx].m_dAgents.GetLength() );
-			CSphVector<CSphString>& dLocal = dDistributed[iIdx].m_dLocal;
+			assert ( dDistributed[iIdx]->m_dLocal.GetLength() || dDistributed[iIdx]->m_dAgents.GetLength() );
+			const CSphVector<CSphString> & dLocal = dDistributed[iIdx]->m_dLocal;
 
 			ARRAY_FOREACH ( i, dLocal )
 			{
@@ -14632,21 +14656,22 @@ void HandleMysqlUpdate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 		}
 
 		// update remote agents
-		if ( dDistributed[iIdx].m_dAgents.GetLength() )
+		if ( dDistributed[iIdx] && dDistributed[iIdx]->m_dAgents.GetLength() )
 		{
-			DistributedIndex_t & tDist = dDistributed[iIdx];
+			const DistributedIndex_t * pDist = dDistributed[iIdx];
 
-			CSphVector<AgentConn_t> dAgents;
-			tDist.GetAllAgents ( &dAgents );
+			VectorPtrsGuard_T<AgentConn_t> tAgentsGuard;
+			AgentsVector & dAgents = tAgentsGuard.m_dPtrs;
+			pDist->GetAllAgents ( dAgents );
 
 			// connect to remote agents and query them
 			SphinxqlRequestBuilder_t tReqBuilder ( sQuery, tStmt );
-			CSphScopedPtr<ISphRemoteAgentsController> pDistCtrl ( GetAgentsController ( g_iDistThreads, dAgents, tReqBuilder, tDist.m_iAgentConnectTimeout ) );
+			CSphScopedPtr<ISphRemoteAgentsController> pDistCtrl ( GetAgentsController ( g_iDistThreads, dAgents, tReqBuilder, pDist->m_iAgentConnectTimeout ) );
 			int iAgentsDone = pDistCtrl->Finish();
 			if ( iAgentsDone )
 			{
 				SphinxqlReplyParser_t tParser ( &iUpdated, &iWarns );
-				iSuccesses += RemoteWaitForAgents ( dAgents, tDist.m_iAgentQueryTimeout, tParser ); // FIXME? profile update time too?
+				iSuccesses += RemoteWaitForAgents ( dAgents, pDist->m_iAgentQueryTimeout, tParser ); // FIXME? profile update time too?
 			}
 		}
 	}
@@ -15287,9 +15312,9 @@ void HandleMysqlDelete ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 		return;
 	}
 
-	CSphVector<DistributedIndex_t> dDistributed ( dNames.GetLength() );
-	const char * sMissedDist = NULL;
-	if ( ( sMissedDist = ExtractDistributedIndexes ( dNames, dDistributed ) )!=NULL )
+	CSphFixedVector<const DistributedIndex_t *> dDistributed ( dNames.GetLength() );
+	ExtractDistributedIndexes ( dNames, dDistributed, sError );
+	if ( !sError.IsEmpty() )
 	{
 		sError.SetSprintf ( "unknown index '%s' in delete request", sError.cstr() );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
@@ -15301,7 +15326,7 @@ void HandleMysqlDelete ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 	{
 		ARRAY_FOREACH ( i, dDistributed )
 		{
-			if ( !dDistributed[i].m_dAgents.GetLength() )
+			if ( !dDistributed[i] || !dDistributed[i]->m_dAgents.GetLength() )
 				continue;
 
 			sError.SetSprintf ( "index '%s': DELETE not working on agents when autocommit=0", tStmt.m_sIndex.cstr() );
@@ -15351,10 +15376,10 @@ void HandleMysqlDelete ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 		if ( pLocal )
 		{
 			iAffected += LocalIndexDoDeleteDocuments ( sName, NULL, tStmt, pDocs, iDocsCount, pLocal, dErrors, bCommit, tAcc, iCID );
-		} else
+		} else if ( dDistributed[iIdx] )
 		{
-			assert ( dDistributed[iIdx].m_dLocal.GetLength() || dDistributed[iIdx].m_dAgents.GetLength() );
-			const CSphVector<CSphString> & dDistLocal = dDistributed[iIdx].m_dLocal;
+			assert ( dDistributed[iIdx]->m_dLocal.GetLength() || dDistributed[iIdx]->m_dAgents.GetLength() );
+			const CSphVector<CSphString> & dDistLocal = dDistributed[iIdx]->m_dLocal;
 
 			ARRAY_FOREACH ( i, dDistLocal )
 			{
@@ -15365,15 +15390,16 @@ void HandleMysqlDelete ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 		}
 
 		// delete for remote agents
-		if ( dDistributed[iIdx].m_dAgents.GetLength() )
+		if ( dDistributed[iIdx] && dDistributed[iIdx]->m_dAgents.GetLength() )
 		{
-			const DistributedIndex_t & tDist = dDistributed[iIdx];
-			CSphVector<AgentConn_t> dAgents;
-			tDist.GetAllAgents ( &dAgents );
+			const DistributedIndex_t * pDist = dDistributed[iIdx];
+			VectorPtrsGuard_T<AgentConn_t> tAgentsGuard;
+			AgentsVector & dAgents = tAgentsGuard.m_dPtrs;
+			pDist->GetAllAgents ( dAgents );
 
 			// connect to remote agents and query them
 			SphinxqlRequestBuilder_t tReqBuilder ( sQuery, tStmt );
-			CSphScopedPtr<ISphRemoteAgentsController> pDistCtrl ( GetAgentsController ( g_iDistThreads, dAgents, tReqBuilder, tDist.m_iAgentConnectTimeout ) );
+			CSphScopedPtr<ISphRemoteAgentsController> pDistCtrl ( GetAgentsController ( g_iDistThreads, dAgents, tReqBuilder, pDist->m_iAgentConnectTimeout ) );
 			int iAgentsDone = pDistCtrl->Finish();
 			if ( iAgentsDone )
 			{
@@ -15381,7 +15407,7 @@ void HandleMysqlDelete ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 				int iGot = 0;
 				int iWarns = 0;
 				SphinxqlReplyParser_t tParser ( &iGot, &iWarns );
-				RemoteWaitForAgents ( dAgents, tDist.m_iAgentQueryTimeout, tParser ); // FIXME? profile update time too?
+				RemoteWaitForAgents ( dAgents, pDist->m_iAgentQueryTimeout, tParser ); // FIXME? profile update time too?
 				iAffected += iGot;
 			}
 		}
@@ -16260,9 +16286,9 @@ void HandleMysqlShowIndexStatus ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt
 		if ( pServed )
 			pServed->Unlock();
 
-		g_tDistLock.Lock();
+		g_tDistLock.ReadLock();
 
-		DistributedIndex_t * pIndex = g_hDistIndexes ( tStmt.m_sIndex );
+		DistributedIndex_t * pIndex = GetDistIndex ( tStmt.m_sIndex );
 		if ( pIndex )
 			AddDistibutedIndexStatus ( tOut, pIndex );
 		else
@@ -16495,8 +16521,8 @@ static void HandleMysqlAlter ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, b
 	ARRAY_FOREACH_COND ( i, dNames, !bHaveDist )
 		if ( !g_pLocalIndexes->Exists ( dNames[i] ) )
 		{
-			g_tDistLock.Lock();
-			bHaveDist = !!g_hDistIndexes ( dNames[i] );
+			g_tDistLock.ReadLock();
+			bHaveDist = g_hDistIndexes.Exists ( dNames[i] );
 			g_tDistLock.Unlock();
 		}
 
@@ -18440,9 +18466,9 @@ static void ConfigureDistributedIndex ( DistributedIndex_t & tIdx, const char * 
 	// add remote agents
 	for ( CSphVariant * pAgent = hIndex("agent"); pAgent; pAgent = pAgent->m_pNext )
 	{
-		MultiAgentDesc_t& tAgent = tIdx.m_dAgents.Add();
-		if ( !ConfigureAgent ( tAgent, pAgent->cstr(), szIndexName, tAgentOptions ) )
-			tIdx.m_dAgents.Pop();
+		CSphScopedPtr<MultiAgentDesc_t> tAgent ( new MultiAgentDesc_t );
+		if ( ConfigureAgent ( *tAgent.Ptr(), pAgent->cstr(), szIndexName, tAgentOptions ) )
+			tIdx.m_dAgents.Add ( tAgent.LeakPtr() );
 	}
 
 	// for now work with client persistent connections only on per-thread basis,
@@ -18451,18 +18477,18 @@ static void ConfigureDistributedIndex ( DistributedIndex_t & tIdx, const char * 
 	tAgentOptions.m_bPersistent = bEnablePersistentConns;
 	for ( CSphVariant * pAgent = hIndex("agent_persistent"); pAgent; pAgent = pAgent->m_pNext )
 	{
-		MultiAgentDesc_t& tAgent = tIdx.m_dAgents.Add ();
-		if ( !ConfigureAgent ( tAgent, pAgent->cstr(), szIndexName, tAgentOptions ) )
-			tIdx.m_dAgents.Pop();
+		CSphScopedPtr<MultiAgentDesc_t> tAgent ( new MultiAgentDesc_t );
+		if ( ConfigureAgent ( *tAgent.Ptr(), pAgent->cstr(), szIndexName, tAgentOptions ) )
+			tIdx.m_dAgents.Add ( tAgent.LeakPtr() );
 	}
 
 	tAgentOptions.m_bBlackhole = true;
 	tAgentOptions.m_bPersistent = false;
 	for ( CSphVariant * pAgent = hIndex("agent_blackhole"); pAgent; pAgent = pAgent->m_pNext )
 	{
-		MultiAgentDesc_t& tAgent = tIdx.m_dAgents.Add ();
-		if ( !ConfigureAgent ( tAgent, pAgent->cstr(), szIndexName, tAgentOptions ) )
-			tIdx.m_dAgents.Pop();
+		CSphScopedPtr<MultiAgentDesc_t> tAgent ( new MultiAgentDesc_t );
+		if ( ConfigureAgent ( *tAgent.Ptr(), pAgent->cstr(), szIndexName, tAgentOptions ) )
+			tIdx.m_dAgents.Add ( tAgent.LeakPtr() );
 	}
 
 	// configure options
@@ -18484,7 +18510,7 @@ static void ConfigureDistributedIndex ( DistributedIndex_t & tIdx, const char * 
 			tIdx.m_iAgentQueryTimeout = hIndex["agent_query_timeout"].intval();
 	}
 
-	bool bHaveHA = ARRAY_ANY ( bHaveHA, tIdx.m_dAgents, tIdx.m_dAgents[_any].IsHA() );
+	bool bHaveHA = ARRAY_ANY ( bHaveHA, tIdx.m_dAgents, tIdx.m_dAgents[_any]->IsHA() );
 
 	// configure ha_strategy
 	if ( bSetHA && !bHaveHA )
@@ -18519,23 +18545,24 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		// configure distributed index
 		///////////////////////////////
 
-		DistributedIndex_t tIdx;
-		ConfigureDistributedIndex ( tIdx, szIndexName, hIndex );
+		CSphScopedPtr<DistributedIndex_t> tIdx ( new DistributedIndex_t );
+		ConfigureDistributedIndex ( *tIdx.Ptr(), szIndexName, hIndex );
 
 		// finally, check and add distributed index to global table
-		if ( tIdx.m_dAgents.GetLength()==0 && tIdx.m_dLocal.GetLength()==0 )
+		if ( tIdx->m_dAgents.GetLength()==0 && tIdx->m_dLocal.GetLength()==0 )
 		{
 			sphWarning ( "index '%s': no valid local/remote indexes in distributed index - NOT SERVING", szIndexName );
 			return ADD_ERROR;
 
 		} else
 		{
-			CSphScopedLock<CSphMutex> tGuard ( g_tDistLock );
-			if ( !g_hDistIndexes.Add ( std::move(tIdx), szIndexName ) )
+			CSphScopedWLock tGuard ( g_tDistLock );
+			if ( !g_hDistIndexes.Add ( tIdx.Ptr(), szIndexName ) )
 			{
 				sphWarning ( "index '%s': duplicate name - NOT SERVING", szIndexName );
 				return ADD_ERROR;
 			}
+			tIdx.LeakPtr(); // on succeed add - hash own index
 		}
 
 		return ADD_DISTR;
@@ -18831,14 +18858,18 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP )
 	for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
 		it.Get().m_bToDelete = true; ///< FIXME! What about write lock before doing this?
 
-	g_hDistIndexes.IterateStart ();
-	while ( g_hDistIndexes.IterateNext () )
-		g_hDistIndexes.IterateGet().m_bToDelete = true;
+	int iDistCount = 0;
+	g_tDistLock.WriteLock();
+	iDistCount = g_hDistIndexes.GetLength();
+	void * pIt = NULL;
+	while ( g_hDistIndexes.IterateNext ( &pIt ) )
+		DistributedHash_t::IterateGet ( &pIt )->m_bToDelete = true;
+	g_tDistLock.Unlock();
 
 	for ( IndexHashIterator_c it ( g_pTemplateIndexes ); it.Next(); )
 		it.Get().m_bToDelete = true;
 
-	int nTotalIndexes = g_pLocalIndexes->GetLength () + g_hDistIndexes.GetLength () + g_pTemplateIndexes->GetLength ();
+	int nTotalIndexes = g_pLocalIndexes->GetLength () + iDistCount + g_pTemplateIndexes->GetLength ();
 	int nChecked = 0;
 
 	if ( !tCP.m_tConf.Exists ( "index" ) )
@@ -18867,22 +18898,33 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP )
 		
 		if ( hIndex.Exists("type") && hIndex["type"]=="distributed" )
 		{
-			CSphScopedLock<CSphMutex> tLock ( g_tDistLock );
+			g_tDistLock.ReadLock();
+			bool bGot = g_hDistIndexes.Exists ( sIndexName );
+			g_tDistLock.Unlock();
 
-			DistributedIndex_t * pOldIdx = g_hDistIndexes ( sIndexName );
-			if ( pOldIdx )
+			if ( bGot )
 			{
-				DistributedIndex_t tNewIdx;
-				ConfigureDistributedIndex ( tNewIdx, sIndexName, hIndex );
+				CSphScopedPtr<DistributedIndex_t> tIdx ( new DistributedIndex_t );
+				ConfigureDistributedIndex ( *tIdx.Ptr(), sIndexName, hIndex );
 
 				// finally, check and add distributed index to global table
-				if ( tNewIdx.m_dAgents.GetLength()==0 && tNewIdx.m_dLocal.GetLength()==0 )
+				if ( tIdx->m_dAgents.GetLength()==0 && tIdx->m_dLocal.GetLength()==0 )
 				{
 					sphWarning ( "index '%s': no valid local/remote indexes in distributed index; using last valid definition", sIndexName );
-					pOldIdx->m_bToDelete = false;
+					g_tDistLock.WriteLock();
+					DistributedIndex_t * pDist = GetDistIndex ( sIndexName );
+					if ( pDist )
+						pDist->m_bToDelete = false;
+					g_tDistLock.Unlock();
 
 				} else
-					*pOldIdx = std::move(tNewIdx);
+				{
+					g_tDistLock.WriteLock();
+					DistributedIndex_t ** ppOld = &g_hDistIndexes.AddUnique ( sIndexName );
+					SafeDelete ( *ppOld );
+					*ppOld = tIdx.LeakPtr();
+					g_tDistLock.Unlock();
+				}
 
 				nChecked++;
 				continue;
@@ -18932,7 +18974,7 @@ void CheckDelete ()
 
 	CSphVector<const CSphString *> dToDelete;
 	CSphVector<const CSphString *> dTmplToDelete;
-	CSphVector<const CSphString *> dDistToDelete;
+	CSphVector<CSphString> dDistToDelete;
 	dToDelete.Reserve ( 8 );
 	dTmplToDelete.Reserve ( 8 );
 	dDistToDelete.Reserve ( 8 );
@@ -18952,13 +18994,15 @@ void CheckDelete ()
 	}
 
 
-	g_hDistIndexes.IterateStart ();
-	while ( g_hDistIndexes.IterateNext () )
+	g_tDistLock.ReadLock();
+	void * pIt = NULL;
+	while ( g_hDistIndexes.IterateNext ( &pIt ) )
 	{
-		DistributedIndex_t & tIndex = g_hDistIndexes.IterateGet ();
-		if ( tIndex.m_bToDelete )
-			dDistToDelete.Add ( &g_hDistIndexes.IterateGetKey () );
+		const DistributedIndex_t * pIndex = DistributedHash_t::IterateGet ( &pIt );
+		if ( pIndex->m_bToDelete )
+			dDistToDelete.Add ( DistributedHash_t::IterateGetKey ( &pIt ) ); // can not modify hash with external iterator
 	}
+	g_tDistLock.Unlock();
 
 	ARRAY_FOREACH ( i, dToDelete )
 		g_pLocalIndexes->Delete ( *dToDelete[i] ); // should result in automatic CSphIndex::Unlock() via dtor call
@@ -18966,11 +19010,13 @@ void CheckDelete ()
 	ARRAY_FOREACH ( i, dTmplToDelete )
 		g_pTemplateIndexes->Delete ( *dTmplToDelete[i] ); // should result in automatic CSphIndex::Unlock() via dtor call
 
-	g_tDistLock.Lock();
-
+	g_tDistLock.WriteLock();
 	ARRAY_FOREACH ( i, dDistToDelete )
-		g_hDistIndexes.Delete ( *dDistToDelete[i] );
-
+	{
+		DistributedIndex_t * pDist = GetDistIndex ( dDistToDelete[i] );
+		SafeDelete ( pDist );
+		g_hDistIndexes.Delete ( dDistToDelete[i] );
+	}
 	g_tDistLock.Unlock();
 
 	g_bDoDelete = false;
@@ -20293,7 +20339,7 @@ class NetActionsPoller
 {
 private:
 	EventsIterator_t	m_tIter;
-	ISphNetEvents*		m_pPoll;
+	ISphNetEvents *		m_pPoll;
 
 	inline DWORD TranslateEvents ( DWORD uNetEvents )
 	{
@@ -20318,13 +20364,13 @@ public:
 
 	~NetActionsPoller()
 	{
-		if (m_pPoll)
+		if ( m_pPoll )
 		{
 			m_pPoll->IterateStart ();
-			while (m_pPoll->IterateNextAll ())
+			while ( m_pPoll->IterateNextAll() )
 			{
-				ISphNetAction * pWork = (ISphNetAction *)m_pPoll->IterateGet ().m_pData;
-				SafeDelete (pWork);
+				ISphNetAction * pWork = (ISphNetAction *)m_pPoll->IterateGet().m_pData;
+				SafeDelete ( pWork );
 			}
 		}
 		SafeDelete ( m_pPoll );
@@ -20353,12 +20399,12 @@ public:
 		assert ( m_pPoll );
 		m_tIter.m_pWork = nullptr;
 		m_tIter.m_uEvents = 0;
-		bool bRes = m_pPoll->IterateNextAll ();
+		bool bRes = m_pPoll->IterateNextAll();
 		if ( bRes )
 		{
-			const NetEventsIterator_t& tBackendIterator = m_pPoll->IterateGet ();
-			m_tIter.m_pWork = (ISphNetAction*) tBackendIterator.m_pData;
-			m_tIter.m_uEvents = TranslateEvents( tBackendIterator.m_uEvents );
+			const NetEventsIterator_t & tBackendIterator = m_pPoll->IterateGet();
+			m_tIter.m_pWork = (ISphNetAction *)tBackendIterator.m_pData;
+			m_tIter.m_uEvents = TranslateEvents ( tBackendIterator.m_uEvents );
 		}
 		return bRes;
 	}
@@ -20368,11 +20414,11 @@ public:
 		assert ( m_pPoll );
 		m_tIter.m_pWork = nullptr;
 		m_tIter.m_uEvents = 0;
-		bool bRes = m_pPoll->IterateNextReady ();
+		bool bRes = m_pPoll->IterateNextReady();
 		if ( bRes )
 		{
-			const NetEventsIterator_t& tBackendIterator = m_pPoll->IterateGet ();
-			m_tIter.m_pWork = (ISphNetAction*) tBackendIterator.m_pData;
+			const NetEventsIterator_t & tBackendIterator = m_pPoll->IterateGet();
+			m_tIter.m_pWork = (ISphNetAction *)tBackendIterator.m_pData;
 			m_tIter.m_uEvents = TranslateEvents ( tBackendIterator.m_uEvents );
 		}
 		return bRes;
@@ -20387,8 +20433,8 @@ public:
 	void IterateRemove ()
 	{
 		assert ( m_pPoll );
-		const NetEventsIterator_t& tBackendIterator = m_pPoll->IterateGet ();
-		ISphNetAction* pAction = (ISphNetAction*) tBackendIterator.m_pData;
+		const NetEventsIterator_t & tBackendIterator = m_pPoll->IterateGet();
+		ISphNetAction * pAction = (ISphNetAction *)tBackendIterator.m_pData;
 
 		m_pPoll->IterateRemove ( pAction->m_iSock );
 		m_tIter.m_pWork = NULL;
@@ -20401,7 +20447,7 @@ public:
 		m_tIter.m_pWork = NULL;
 		m_tIter.m_uEvents = 0;
 
-		return m_pPoll->IterateStart ();
+		return m_pPoll->IterateStart();
 	}
 
 	EventsIterator_t & IterateGet ()
@@ -23238,6 +23284,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	if ( bTestMode ) // pass this flag here prior to index config
 		sphRTSetTestMode();
+
+	g_tDistLock.Init ( false );
 
 	ConfigureAndPreload ( hConf, dOptIndexes );
 

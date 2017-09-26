@@ -594,13 +594,14 @@ public:
 
 	bool				InitLock () const;
 
-	int					Release () const;
+	void				Release () const;
 	void				SetUnlink ( const char * sUnlnk );
 
 protected:
 	virtual void		LockStats ( bool bReader ) const;
 	virtual void		UnlockStats() const;
-	int					AddRef () const;
+
+	void				AddRef () const;
 
 private:
 	mutable CSphRwlock	m_tLock;
@@ -632,7 +633,7 @@ public:
 	void					Reset();
 
 	bool					Add ( const ServedDesc_t & tDesc, const CSphString & tKey );
-	void					Set ( const ServedDesc_t & tDesc, const CSphString & tKey );	
+	void					Set ( ServedDesc_t & tDesc, const CSphString & tKey );	
 	bool					Delete ( const CSphString & tKey );
 
 	ServedIndex_c *			GetRlockedEntry ( const CSphString & tKey ) const EXCLUDES (m_tLock);

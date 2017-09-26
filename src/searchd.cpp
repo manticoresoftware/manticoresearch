@@ -862,13 +862,12 @@ void ServedIndex_c::UnlockStats() const
 	m_tStatsLock.Unlock();
 }
 
-int ServedIndex_c::AddRef () const
+void ServedIndex_c::AddRef () const
 {
-	long iCount = m_tRefCount.Inc();
-	return iCount + 1;
+	m_tRefCount.Inc();
 }
 
-int ServedIndex_c::Release () const
+void ServedIndex_c::Release () const
 {
 	long iCount = m_tRefCount.Dec();
 	assert ( iCount>=1 );
@@ -884,7 +883,6 @@ int ServedIndex_c::Release () const
 
 		delete this;
 	}
-	return iCount - 1;
 }
 
 void ServedIndex_c::SetUnlink ( const char * sUnlnk )
@@ -988,7 +986,7 @@ bool IndexHash_c::Add ( const ServedDesc_t & tDesc, const CSphString & tKey )
 }
 
 
-void IndexHash_c::Set ( const ServedDesc_t & tDesc, const CSphString & tKey )
+void IndexHash_c::Set ( ServedDesc_t & tDesc, const CSphString & tKey )
 {
 	Wlock();
 
@@ -1002,6 +1000,7 @@ void IndexHash_c::Set ( const ServedDesc_t & tDesc, const CSphString & tKey )
 	*ppVal = new ServedIndex_c();
 	*( (ServedDesc_t *)*ppVal ) = tDesc;
 	Verify ( (*ppVal)->InitLock() );
+	tDesc.m_pIndex = NULL; // leak index ptr to prevent index delete
 
 	Unlock();
 }
@@ -1009,19 +1008,16 @@ void IndexHash_c::Set ( const ServedDesc_t & tDesc, const CSphString & tKey )
 
 bool IndexHash_c::Delete ( const CSphString & tKey )
 {
-	// tricky part
-	// hash itself might be unlocked, but entry (!) might still be locked
-	// hence, we also need to acquire a lock on entry, and an exclusive one
 	Wlock();
-	bool bRes = false;
+
 	ServedIndex_c ** ppEntry = m_hIndexes ( tKey );
+	// release entry - last owner will free it
 	if ( ppEntry )
-	{
-		bRes = m_hIndexes.Delete ( tKey );
-		(*ppEntry)->WriteLock();
-		(*ppEntry)->Unlock();
-		SafeDelete ( *ppEntry ) ;
-	}
+		(*ppEntry)->Release();
+
+	// remove from hash
+	bool bRes = m_hIndexes.Delete ( tKey );
+
 	Unlock();
 	return bRes;
 }
@@ -16638,24 +16634,21 @@ static bool RotateIndexGreedy ( ServedDesc_t & tIndex, const char * sIndex, CSph
 static void HandleMysqlReloadIndex ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 {
 	CSphString sError;
-	const ServedIndex_c * pIndex = g_pLocalIndexes->GetRlockedEntry ( tStmt.m_sIndex );
-	if ( !pIndex )
+	ServedDesc_t tIndex;
+	bool bGot = g_pLocalIndexes->Exists ( tStmt.m_sIndex, &tIndex );
+	if ( !bGot )
 	{
 		sError.SetSprintf ( "unknown plain index '%s'", tStmt.m_sIndex.cstr() );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
-	const char * sIndexPath = pIndex->m_sIndexPath.cstr();
-
-	if ( pIndex->m_bRT )
+	if ( tIndex.m_bRT )
 	{
-		pIndex->Unlock();
 		sError.SetSprintf ( "can not rotate RT index" );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
-	pIndex->Unlock();
 
 	// try move files from arbitrary path to current index path before rotate, if needed
 	if ( !tStmt.m_sStringParam.IsEmpty() )
@@ -16665,7 +16658,7 @@ static void HandleMysqlReloadIndex ( SqlRowBuffer_c & tOut, const SqlStmt_t & tS
 			char sFrom [ SPH_MAX_FILENAME_LEN ];
 			char sTo [ SPH_MAX_FILENAME_LEN ];
 			snprintf ( sFrom, sizeof(sFrom), "%s%s", tStmt.m_sStringParam.cstr(), sphGetExts ( SPH_EXT_TYPE_CUR, INDEX_FORMAT_VERSION )[i] );
-			snprintf ( sTo, sizeof(sTo), "%s%s", sIndexPath, sphGetExts ( SPH_EXT_TYPE_NEW, INDEX_FORMAT_VERSION )[i] );
+			snprintf ( sTo, sizeof(sTo), "%s%s", tIndex.m_sIndexPath.cstr(), sphGetExts ( SPH_EXT_TYPE_NEW, INDEX_FORMAT_VERSION )[i] );
 			if ( rename ( sFrom, sTo ) )
 			{
 				sError.SetSprintf ( "moving file from '%s' to '%s' failed: %s", sFrom, sTo, strerror(errno) );
@@ -17923,7 +17916,6 @@ static bool RotateIndexMT ( const CSphString & sIndex, CSphString & sError )
 	tNewIndex.m_bEnabled = true;
 	tNewIndex.m_sIndexPath = tNewIndex.m_pIndex->GetFilename();
 	g_pLocalIndexes->Set ( tNewIndex, sIndex );
-	tNewIndex.m_pIndex = NULL; // leak index ptr to keep index at hash
 
 	pServed->Unlock();
 	// free from IndexHash::Add after all locks passed
@@ -18473,7 +18465,7 @@ void PreCreatePlainIndex ( ServedDesc_t & tServed, const char * sName )
 }
 
 
-ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex )
+ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bNew )
 {
 	if ( hIndex("type") && hIndex["type"]=="distributed" )
 	{
@@ -18639,6 +18631,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		CSphIndexStatus tStatus;
 		tIdx.m_pIndex->GetStatus ( &tStatus );
 		tIdx.m_iMass = CalculateMass ( tStatus );
+		tIdx.m_bOnlyNew = bNew;
 
 		// done
 		if ( !g_pLocalIndexes->Add ( tIdx, szIndexName ) )
@@ -18861,15 +18854,8 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP )
 		}
 		
 		// add new index
-		ESphAddIndex eType = AddIndex ( sIndexName, hIndex );
-		if ( eType==ADD_LOCAL )
-		{
-			if ( ServedIndex_c * pIndex = g_pLocalIndexes->GetWlockedEntry ( sIndexName ) )
-			{
-				pIndex->m_bOnlyNew = true;
-				pIndex->Unlock();
-			}
-		} else if ( eType==ADD_RT )
+		ESphAddIndex eType = AddIndex ( sIndexName, hIndex, true );
+		if ( eType==ADD_RT )
 		{
 			ServedIndex_c & tIndex = *g_pLocalIndexes->GetRlockedEntry ( sIndexName );
 
@@ -18922,12 +18908,13 @@ void CheckDelete ()
 		if ( tIndex.m_bToDelete )
 			dDistToDelete.Add ( &g_hDistIndexes.IterateGetKey () );
 	}
-
+	
+	// index release then last owner will free it
 	ARRAY_FOREACH ( i, dToDelete )
-		g_pLocalIndexes->Delete ( *dToDelete[i] ); // should result in automatic CSphIndex::Unlock() via dtor call
+		g_pLocalIndexes->Delete ( *dToDelete[i] );
 
 	ARRAY_FOREACH ( i, dTmplToDelete )
-		g_pTemplateIndexes->Delete ( *dTmplToDelete[i] ); // should result in automatic CSphIndex::Unlock() via dtor call
+		g_pTemplateIndexes->Delete ( *dTmplToDelete[i] );
 
 	g_tDistLock.Lock();
 
@@ -22542,7 +22529,7 @@ void ConfigureAndPreload ( const CSphConfig & hConf, const CSphVector<const char
 				continue;
 		}
 
-		ESphAddIndex eAdd = AddIndex ( sIndexName, hIndex );
+		ESphAddIndex eAdd = AddIndex ( sIndexName, hIndex, false );
 		if ( eAdd==ADD_LOCAL || eAdd==ADD_RT )
 		{
 			ServedIndex_c & tIndex = *g_pLocalIndexes->GetRlockedEntry ( sIndexName );

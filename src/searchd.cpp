@@ -945,11 +945,13 @@ bool IndexHash_c::Exists ( const CSphString & tKey, ServedDesc_t * pDesc ) const
 	const ServedIndex_c * pEntry = BASE::operator() ( tKey );
 	if ( pDesc && pEntry )
 	{
+		pEntry->ReadLock();
 		*pDesc = *pEntry;
-		pDesc->m_pIndex = NULL;
+		pEntry->Unlock();
+		pDesc->m_pIndex = nullptr;
 	}
 	Unlock();
-	return ( pEntry!=NULL );
+	return ( pEntry!=nullptr );
 }
 
 

@@ -1,5 +1,11 @@
 cmake_minimum_required ( VERSION 2.8 )
 
+FOREACH ( policy CMP0054 CMP0057 )
+	IF ( POLICY ${policy} )
+		CMAKE_POLICY ( SET ${policy} NEW )
+	ENDIF ()
+ENDFOREACH ()
+
 # main bunch of sources (for libsphinx)
 set ( LIBSPHINX_SRCS sphinx.cpp sphinxexcerpt.cpp
 		sphinxquery.cpp sphinxsoundex.cpp sphinxmetaphone.cpp

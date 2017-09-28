@@ -11,6 +11,7 @@ if ( NOT DISABLE_TESTING )
 	add_test ( NAME "\"Cleaning guess cache\""
 			#    	CONFIGURATIONS Debug
 			COMMAND ${CMAKE_COMMAND} -E remove guess.txt )
+	SET_TESTS_PROPERTIES ( "\"Cleaning guess cache\"" PROPERTIES FIXTURES_SETUP UBER )
 
 	foreach ( test ${tests} )
 		# get the last dir (filename)
@@ -61,7 +62,11 @@ if ( NOT DISABLE_TESTING )
 				--rt --ignore-weights
 				t ${onetest} )
 
-		set_tests_properties ( "\"test_${tst_name}\"" "\"rt_${tst_name}\"" PROPERTIES DEPENDS "\"Cleaning guess cache\"")
+		SET_TESTS_PROPERTIES ( "\"rt_${tst_name}\"" PROPERTIES LABELS RT )
+		SET_TESTS_PROPERTIES ( "\"test_${tst_name}\"" PROPERTIES LABELS PLAIN )
+		SET_TESTS_PROPERTIES ( "\"test_${tst_name}\"" "\"rt_${tst_name}\"" PROPERTIES ATTACHED_FILES_ON_FAIL "${MANTICORE_BINARY_DIR}/test/test_${onetest}/report.txt" )
+		SET_TESTS_PROPERTIES ( "\"test_${tst_name}\"" "\"rt_${tst_name}\"" PROPERTIES FIXTURES_REQUIRED UBER)
+		SET_TESTS_PROPERTIES ( "\"test_${tst_name}\"" "\"rt_${tst_name}\"" PROPERTIES RESOURCE_LOCK DbAccess )
 
 	endforeach ()
 endif ()

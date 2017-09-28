@@ -23897,7 +23897,7 @@ UservarIntSet_c * UservarsHook ( const CSphString & sUservar )
 }
 
 
-int main ( int argc, char **argv )
+inline int mainimpl ( int argc, char **argv )
 {
 	// threads should be initialized before memory allocations
 	char cTopOfMainStack;
@@ -23945,6 +23945,13 @@ int main ( int argc, char **argv )
 
 	return ServiceMain ( argc, argv );
 }
+
+#ifndef SUPRESS_SEARCHD_MAIN
+int main ( int argc, char ** argv )
+{
+	return mainimpl ( argc, argv );
+}
+#endif
 
 //
 // $Id$

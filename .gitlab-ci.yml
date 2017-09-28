@@ -15,7 +15,6 @@ job_mirror:
 job_build:
   stage: build
   script:
-    - rm -R build/ || /bin/true
     - mkdir build && cd build
     - cmake ..
     - make -j8
@@ -23,36 +22,32 @@ job_build:
 job_test_plain:
   stage: test_plain
   script:
-    - rm -R build/ || /bin/true
     - mkdir build && cd build
     - cmake -DCMAKE_BUILD_TYPE=Debug ..
     - make -j8
-    - rm result_plain.zip || /bin/true
-    - ctest -E rt_ || ctest --rerun-failed -E rt_ || EXIT_CODE=$?
+    - ctest -LE RT || ctest --rerun-failed || EXIT_CODE=$?
     - exit ${EXIT_CODE}
   artifacts:
     when: always
     paths:
       - build/test/test_*/report.txt
-      - build/test/error.txt
-  retry: 2
+      - build/test/error*.txt
+      - build/test/searchd.log
 
 job_test_rt:
   stage: test_rt
   script:
-    - rm -R build/ || /bin/true
     - mkdir build && cd build
     - cmake -DCMAKE_BUILD_TYPE=Debug ..
     - make -j8
-    - rm result_rt.zip || /bin/true
-    - ctest -R rt_ || ctest --rerun-failed -R rt_ || EXIT_CODE=$?
+    - ctest -L RT || ctest --rerun-failed || EXIT_CODE=$?
     - exit ${EXIT_CODE}
   artifacts:
     when: always
     paths:
       - build/test/test_*/report.txt
-      - build/test/error.txt
-  retry: 2
+      - build/test/error*.txt
+      - build/test/searchd.log
 
 pages:
   stage: docs

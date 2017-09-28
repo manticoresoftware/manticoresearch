@@ -89,7 +89,7 @@ typedef off_t				SphOffset_t;
 #if USE_64BIT
 
 // use 64-bit unsigned integers to store document and word IDs
-#define SPHINX_BITS_TAG	"-id64"
+#define SPHINX_BITS_TAG	"id64"
 typedef uint64_t		SphWordID_t;
 typedef uint64_t		SphDocID_t;
 
@@ -210,15 +210,11 @@ inline const	DWORD *	STATIC2DOCINFO ( const DWORD * pAttrs )	{ return STATIC2DOC
 #define GIT_TIMESTAMP_ID "000101"
 #endif
 
-#ifndef GIT_BRANCH_ID
-#define GIT_BRANCH_ID "detached"
-#endif
-
 // below is for easier extraction of the ver. by any external scripts
 // this line is deprecated and no more used. Leaved here for a while.
 #define SPHINX_VERSION_NUMBERS    "2.3.3"
 
-#define SPHINX_VERSION          SPHINX_VERSION_NUMBERS " " SPH_GIT_COMMIT_ID "@" GIT_TIMESTAMP_ID " " GIT_BRANCH_ID SPHINX_BITS_TAG SPHINX_TAG
+#define SPHINX_VERSION          SPHINX_VERSION_NUMBERS " " SPH_GIT_COMMIT_ID "@" GIT_TIMESTAMP_ID " " SPHINX_BITS_TAG SPHINX_TAG
 #define SPHINX_BANNER			"Manticore " SPHINX_VERSION "\nCopyright (c) 2001-2016, Andrew Aksyonoff\n" \
 	"Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)\n" \
 	"Copyright (c) 2017, Manticore Software LTD (http://manticoresearch.com)\n\n"

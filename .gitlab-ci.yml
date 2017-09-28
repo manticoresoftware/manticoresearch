@@ -1,56 +1,26 @@
 stages:
-  - build
-  - test_plain
-  - test_rt
-  - docs
+  - unittests
 
-job_mirror:
-  stage: build
-  only:
-    - master
+simple_tests:
+  stage: unittests
+  tags:
+    - ubuntu
+    - specdocker
+  image: registry.gitlab.com/manticoresearch/dev/ubertests:latest
   script:
-    - ~/gitsync.sh
-  allow_failure: true
+    - ctest -V -S /work/gltest.cmake
 
-job_build:
-  stage: build
+disabled_id64_tests:
+  stage: unittests
+  tags:
+    - ubuntu
+    - specdocker
+  image: registry.gitlab.com/manticoresearch/dev/ubertests:latest
   script:
-    - mkdir build && cd build
-    - cmake ..
-    - make -j8
+    - ctest -V -DDISABLE_ID64=1 -S /work/gltest.cmake
 
-job_test_plain:
-  stage: test_plain
-  script:
-    - mkdir build && cd build
-    - cmake -DCMAKE_BUILD_TYPE=Debug ..
-    - make -j8
-    - ctest -LE RT || ctest --rerun-failed || EXIT_CODE=$?
-    - exit ${EXIT_CODE}
-  artifacts:
-    when: always
-    paths:
-      - build/test/test_*/report.txt
-      - build/test/error*.txt
-      - build/test/searchd.log
-
-job_test_rt:
-  stage: test_rt
-  script:
-    - mkdir build && cd build
-    - cmake -DCMAKE_BUILD_TYPE=Debug ..
-    - make -j8
-    - ctest -L RT || ctest --rerun-failed || EXIT_CODE=$?
-    - exit ${EXIT_CODE}
-  artifacts:
-    when: always
-    paths:
-      - build/test/test_*/report.txt
-      - build/test/error*.txt
-      - build/test/searchd.log
-
-pages:
-  stage: docs
+checkdocs:
+  stage: unittests
   tags:
     - docs
     - docker
@@ -58,12 +28,4 @@ pages:
   script:
     - cd docs
     - make html
-    - cd -
-    - mkdir .public
-    - cp -r docs/build/html/* .public
-    - mv .public public
-  artifacts:
-    paths:
-    - public
-  only:
-  - master
+    - cd ..

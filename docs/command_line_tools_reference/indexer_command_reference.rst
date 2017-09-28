@@ -220,11 +220,21 @@ operation is performed. These options are:
    attribute values from the previous index. It is possible to specify a
    path for index files to used instead of reference path from config:
 
+
    .. code-block:: bash
 
 
        indexer myindex --keep-attrs=/path/to/index/files
+	   
+-  ``--keep-attrs-names=<attributes list>`` allows to specify attributes
+   to reuse from existing index on reindexing. By default all attributes
+   from existed index reused at new “index”
 
+   .. code-block:: bash
+
+
+       indexer myindex --keep-attrs=/path/to/index/files --keep-attrs-names=update,state
+   
 -  ``--dump-rows <FILE>`` dumps rows fetched by SQL source(s) into
    the specified file, in a MySQL compatible syntax. Resulting dumps are
    the exact representation of data as received by ``indexer`` and help

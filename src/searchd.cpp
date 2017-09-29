@@ -257,23 +257,12 @@ struct ThdDesc_t : public ListNode_t
 		m_dBuf.Last() = '\0';
 	}
 
-	void SetSnippetThreadInfo ( const CSphVector<ExcerptQuery_t> & dSnippets )
-	{
-		int64_t iSize = 0;
-		ARRAY_FOREACH ( i, dSnippets )
-		{
-			if ( dSnippets[i].m_iSize )
-				iSize -= dSnippets[i].m_iSize; // because iSize negative for sorting purpose
-			else
-				iSize += dSnippets[i].m_sSource.Length();
-		}
-
-		iSize /= 100;
-		SetThreadInfo ( "api-snippet datasize=%d.%d""k query=\"%s\"", int ( iSize/10 ), int ( iSize%10 ), dSnippets[0].m_sWords.scstr() );
-	}
-
 	void SetThreadInfo ( const char * sTemplate, ... )
 	{
+		// thread safe modification of string at m_dBuf
+		m_dBuf[0] = '\0';
+		m_dBuf.Last() = '\0';
+
 		va_list ap;
 
 		va_start ( ap, sTemplate );
@@ -288,6 +277,35 @@ struct ThdDesc_t : public ListNode_t
 
 static CSphMutex				g_tThdMutex;
 static List_t					g_dThd;				///< existing threads table
+
+static void ThreadSetSnippetInfo ( const CSphVector<ExcerptQuery_t> & dSnippets, ThdDesc_t & tThd )
+{
+	int64_t iSize = 0;
+	ARRAY_FOREACH ( i, dSnippets )
+	{
+		if ( dSnippets[i].m_iSize )
+			iSize -= dSnippets[i].m_iSize; // because iSize negative for sorting purpose
+		else
+			iSize += dSnippets[i].m_sSource.Length();
+	}
+
+	iSize /= 100;
+	tThd.SetThreadInfo ( "api-snippet datasize=%d.%d""k query=\"%s\"", int ( iSize/10 ), int ( iSize%10 ), dSnippets[0].m_sWords.scstr() );
+}
+
+static void ThreadAdd ( ThdDesc_t * pThd )
+{
+	g_tThdMutex.Lock();
+	g_dThd.Add ( pThd );
+	g_tThdMutex.Unlock();
+}
+
+static void ThreadRemove ( ThdDesc_t * pThd )
+{
+	g_tThdMutex.Lock();
+	g_dThd.Remove ( pThd );
+	g_tThdMutex.Unlock();
+}
 
 static int						g_iConnectionID = 0;		///< global conn-id
 
@@ -10830,7 +10848,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 		}
 
 		// set correct data size for snippets
-		pThd->SetSnippetThreadInfo ( dQueries );
+		ThreadSetSnippetInfo ( dQueries, *pThd );
 
 		// tough jobs first
 		if ( !bScattered )
@@ -11057,7 +11075,7 @@ void HandleCommandExcerpt ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & t
 		}
 	}
 
-	pThd->SetSnippetThreadInfo ( dQueries );
+	ThreadSetSnippetInfo ( dQueries, *pThd );
 
 	if ( !MakeSnippets ( sIndex, dQueries, sError, pThd ) )
 	{
@@ -20093,9 +20111,7 @@ void HandlerThread ( void * pArg )
 	// FIXME? this is sort of automatic on UNIX (pthread_exit() gets implicitly called on return)
 	CloseHandle ( pThd->m_tThd );
 #endif
-	g_tThdMutex.Lock ();
-	g_dThd.Remove ( pThd );
-	g_tThdMutex.Unlock ();
+	ThreadRemove ( pThd );
 	SafeDelete ( pThd );
 }
 
@@ -20149,17 +20165,13 @@ void TickHead ()
 	pThd->m_iConnID = g_iConnectionID;
 	pThd->m_tmConnect = sphMicroTimer();
 
-	g_tThdMutex.Lock ();
-	g_dThd.Add ( pThd );
-	g_tThdMutex.Unlock ();
+	ThreadAdd ( pThd );
 
 	if ( !SphCrashLogger_c::ThreadCreate ( &pThd->m_tThd, HandlerThread, pThd, true ) )
 	{
 		sphSockClose ( iClientSock );
 		int iErr = errno;
-		g_tThdMutex.Lock ();
-		g_dThd.Remove ( pThd );
-		g_tThdMutex.Unlock ();
+		ThreadRemove ( pThd );
 		SafeDelete ( pThd );
 
 		FailClient ( iClientSock, SEARCHD_RETRY, "failed to create worker thread" );
@@ -22148,9 +22160,7 @@ void ThdJobAPI_t::Call ()
 	tThdDesc.m_tmConnect = sphMicroTimer();
 	tThdDesc.m_iTid = iTid;
 
-	g_tThdMutex.Lock ();
-	g_dThd.Add ( &tThdDesc );
-	g_tThdMutex.Unlock ();
+	ThreadAdd ( &tThdDesc );
 
 	assert ( m_tState.Ptr() );
 
@@ -22168,9 +22178,7 @@ void ThdJobAPI_t::Call ()
 		m_tState->m_bKeepSocket |= bProceed;
 	}
 
-	g_tThdMutex.Lock ();
-	g_dThd.Remove ( &tThdDesc );
-	g_tThdMutex.Unlock ();
+	ThreadRemove ( &tThdDesc );
 
 	sphLogDebugv ( "%p API job done, command=%d, tick=%u", this, m_iCommand, m_pLoop->m_uTick );
 
@@ -22216,9 +22224,7 @@ void ThdJobQL_t::Call ()
 	tThdDesc.m_tmConnect = sphMicroTimer();
 	tThdDesc.m_iTid = iTid;
 
-	g_tThdMutex.Lock();
-	g_dThd.Add ( &tThdDesc );
-	g_tThdMutex.Unlock();
+	ThreadAdd ( &tThdDesc );
 
 	CSphString sQuery; // to keep data alive for SphCrashQuery_c
 	bool bProfile = m_tState->m_tSession.m_tVars.m_bProfile; // the current statement might change it
@@ -22251,9 +22257,7 @@ void ThdJobQL_t::Call ()
 		JobDoSendNB ( pSend, m_pLoop );
 	}
 
-	g_tThdMutex.Lock();
-	g_dThd.Remove ( &tThdDesc );
-	g_tThdMutex.Unlock();
+	ThreadRemove ( &tThdDesc );
 }
 
 static void LogCleanup ( const CSphVector<ISphNetAction *> & dCleanup )
@@ -22316,9 +22320,7 @@ void ThdJobHttp_t::Call ()
 	tThdDesc.m_tmConnect = sphMicroTimer();
 	tThdDesc.m_iTid = iTid;
 
-	g_tThdMutex.Lock ();
-	g_dThd.Add ( &tThdDesc );
-	g_tThdMutex.Unlock ();
+	ThreadAdd ( &tThdDesc );
 
 	assert ( m_tState.Ptr() );
 
@@ -22329,9 +22331,7 @@ void ThdJobHttp_t::Call ()
 	} else
 		m_tState->m_bKeepSocket = sphLoopClientHttp ( m_tState->m_dBuf, m_tState->m_iConnID );
 
-	g_tThdMutex.Lock ();
-	g_dThd.Remove ( &tThdDesc );
-	g_tThdMutex.Unlock ();
+	ThreadRemove ( &tThdDesc );
 
 	sphLogDebugv ( "%p http job done, tick=%u", this, m_pLoop->m_uTick );
 

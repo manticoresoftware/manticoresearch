@@ -184,20 +184,20 @@ Compiling on UNIX systems
 
 To install all dependencies on Debian/Ubuntu:
 
-.. code-block:: bash bash
+.. code-block:: bash
 
    $ apt-get install build-essential cmake unixodbc-dev libpq-dev libexpat-dev libmysqlclient-dev git flex bison
 
 To install all dependencies on CentOS/RHEL:
 
-.. code-block:: bash bash
+.. code-block:: bash
 
    $ yum install gcc gcc-c++ make cmake mysql-devel expat-devel postgresql-devel unixODBC-devel rpm-build systemd-units git flex bison
 
 
 RHEL/CentOS 6  ship with a old version of the gcc compiler, which doesn't support `std-c++` standard, for compiling use `devtools` repository: 
 
-.. code-block:: bash bash
+.. code-block:: bash
 
    $ wget http://people.centos.org/tru/devtools-2/devtools-2.repo -O /etc/yum.repos.d/devtools-2.repo
    $ yum upgrade -y

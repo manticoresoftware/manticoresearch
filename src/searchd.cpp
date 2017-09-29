@@ -350,6 +350,7 @@ static CSphVector<SphThread_t>				g_dTickPoolThread;
 
 /// flush parameters of rt indexes
 static SphThread_t							g_tRtFlushThread;
+static SphThread_t							g_tBinlogFlushThread;
 
 // optimize thread
 static SphThread_t							g_tOptimizeThread;
@@ -1380,6 +1381,7 @@ void Shutdown ()
 
 	// tell flush-rt thread to shutdown, and wait until it does
 	sphThreadJoin ( &g_tRtFlushThread );
+	sphThreadJoin ( &g_tBinlogFlushThread );
 
 	// tell rotation thread to shutdown, and wait until it does
 	if ( g_bSeamlessRotate )
@@ -17795,6 +17797,18 @@ static void RtFlushThreadFunc ( void * )
 	}
 }
 
+static BinlogFlushInfo_t g_tBinlogAutoflush;
+static void RtBinlogAutoflushThreadFunc ( void * )
+{
+	assert ( g_tBinlogAutoflush.m_pLog && g_tBinlogAutoflush.m_fnWork );
+
+	while ( !g_bShutdown )
+	{
+		g_tBinlogAutoflush.m_fnWork ( g_tBinlogAutoflush.m_pLog );
+		sphSleepMsec ( 50 );
+	}
+}
+
 
 static bool RotateIndexMT ( const CSphString & sIndex, CSphString & sError )
 {
@@ -23446,8 +23460,10 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		if ( it.Get().m_bEnabled )
 			hIndexes.Add ( it.Get().m_pIndex, it.GetKey() );
 
-	sphReplayBinlog ( hIndexes, uReplayFlags, DumpMemStat );
+	sphReplayBinlog ( hIndexes, uReplayFlags, DumpMemStat, g_tBinlogAutoflush );
 	hIndexes.Reset();
+	if ( g_tBinlogAutoflush.m_fnWork && !sphThreadCreate ( &g_tBinlogFlushThread, RtBinlogAutoflushThreadFunc, 0 ) )
+		sphDie ( "failed to create binlog flush thread" );
 
 	if ( g_bIOStats && !sphInitIOStats () )
 		sphWarning ( "unable to init IO statistics" );

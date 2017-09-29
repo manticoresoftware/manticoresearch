@@ -240,6 +240,7 @@ struct ThdDesc_t : public ListNode_t
 	int				m_iTid;			///< OS thread id, or 0 if unknown
 	int64_t			m_tmConnect;	///< when did the client connect?
 	int64_t			m_tmStart;		///< when did the current request start?
+	bool			m_bSystem;
 	CSphFixedVector<char> m_dBuf;	///< current request description
 
 	ThdDesc_t ()
@@ -251,6 +252,7 @@ struct ThdDesc_t : public ListNode_t
 		, m_iTid ( 0 )
 		, m_tmConnect ( 0 )
 		, m_tmStart ( 0 )
+		, m_bSystem ( false )
 		, m_dBuf ( 512 )
 	{
 		m_dBuf[0] = '\0';
@@ -306,6 +308,32 @@ static void ThreadRemove ( ThdDesc_t * pThd )
 	g_dThd.Remove ( pThd );
 	g_tThdMutex.Unlock();
 }
+
+// forward
+int GetOsThreadId ();
+
+static const char * g_sSystemName = "SYSTEM";
+struct ThreadSystem_t
+{
+	ThdDesc_t m_tDesc;
+
+	explicit ThreadSystem_t ( const char * sName )
+	{
+		m_tDesc.m_bSystem = true;
+		m_tDesc.m_tmStart = sphMicroTimer();
+		m_tDesc.m_iTid = GetOsThreadId();
+		m_tDesc.SetThreadInfo ( "SYSTEM %s", sName );
+		m_tDesc.m_sCommand = g_sSystemName;
+
+		ThreadAdd ( &m_tDesc );
+	}
+
+	~ThreadSystem_t()
+	{
+		ThreadRemove ( &m_tDesc );
+	}
+};
+
 
 static int						g_iConnectionID = 0;		///< global conn-id
 
@@ -979,7 +1007,6 @@ bool IndexHash_c::Exists ( const CSphString & tKey, ServedDesc_t * pDesc ) const
 /////////////////////////////////////////////////////////////////////////////
 
 void Shutdown (); // forward ref for sphFatal()
-int GetOsThreadId ();
 
 
 /// format current timestamp for logging
@@ -14137,8 +14164,8 @@ void HandleMysqlShowThreads ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 		}
 
 		tOut.PutNumeric ( "%d", pThd->m_iTid );
-		tOut.PutString ( g_dProtoNames [ pThd->m_eProto ] );
-		tOut.PutString ( g_dThdStates [ pThd->m_eThdState ] );
+		tOut.PutString ( pThd->m_bSystem ? "-" : g_dProtoNames [ pThd->m_eProto ] );
+		tOut.PutString ( pThd->m_bSystem ? "-" : g_dThdStates [ pThd->m_eThdState ] );
 		tOut.PutMicrosec ( tmNow - pThd->m_tmStart );
 		tOut.PutString ( pThd->m_dBuf.Begin() );
 
@@ -14329,6 +14356,8 @@ static void PingThreadFunc ( void * )
 			sphSleepMsec ( 50 );
 			continue;
 		}
+
+		ThreadSystem_t tThdSystemDesc ( "PING" );
 
 		CheckPing ( iNow );
 		iLastCheck = sphMicroTimer();
@@ -17786,6 +17815,8 @@ static void RtFlushThreadFunc ( void * )
 			continue;
 		}
 
+		ThreadSystem_t tThdSystemDesc ( "FLUSH RT" );
+
 		// collecting available rt indexes at save time
 		CSphVector<CSphString> dRtIndexes;
 		for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
@@ -17822,6 +17853,7 @@ static void RtBinlogAutoflushThreadFunc ( void * )
 
 	while ( !g_bShutdown )
 	{
+		ThreadSystem_t tThdSystemDesc ( "FLUSH RT BINLOG" );
 		g_tBinlogAutoflush.m_fnWork ( g_tBinlogAutoflush.m_pLog );
 		sphSleepMsec ( 50 );
 	}
@@ -18048,6 +18080,8 @@ void RotationThreadFunc ( void * )
 		CSphString sIndex = g_dRotateQueue.Pop();
 		g_tRotateQueueMutex.Unlock();
 
+		// want to track rotation thread only at work
+		ThreadSystem_t tThdSystemDesc ( "ROTATION" );
 		CSphString sError;
 		if ( !RotateIndexMT ( sIndex, sError ) )
 			sphWarning ( "%s", sError.cstr() );
@@ -18067,6 +18101,8 @@ void RotationThreadFunc ( void * )
 
 static void PrereadFunc ( void * )
 {
+	ThreadSystem_t tThdSystemDesc ( "PREREAD" );
+
 	int64_t tmStart = sphMicroTimer();
 
 	CSphVector<CSphString> dIndexes;
@@ -18163,6 +18199,8 @@ static void SphinxqlStateThreadFunc ( void * )
 		/////////////
 		// save UDFs
 		/////////////
+
+		ThreadSystem_t tThdSystemDesc ( "SphinxQL state save" );
 
 		sphPluginSaveState ( tWriter );
 
@@ -18382,6 +18420,9 @@ void OptimizeThreadFunc ( void * )
 			pServed->Unlock();
 			continue;
 		}
+
+		// want to track optimize only at work
+		ThreadSystem_t tThdSystemDesc ( "OPTIMIZE" );
 
 		// FIXME: MVA update would wait w-lock here for a very long time
 		assert ( pServed->m_bRT );
@@ -19066,6 +19107,8 @@ void CheckRotateGlobalIDFs ()
 		if ( tIndex.m_bEnabled && !tIndex.m_sGlobalIDFPath.IsEmpty() )
 			dFiles.Add ( tIndex.m_sGlobalIDFPath );
 	}
+
+	ThreadSystem_t tThdSystemDesc ( "ROTATE global IDF" );
 	sphUpdateGlobalIDFs ( dFiles );
 }
 
@@ -19242,6 +19285,7 @@ void CheckReopen ()
 
 static void ThdSaveIndexes ( void * )
 {
+	ThreadSystem_t tThdSystemDesc ( "SAVE indexes" );
 	SaveIndexes ();
 
 	// we're no more flushing

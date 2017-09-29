@@ -19,14 +19,14 @@ Supported releases:
 Supported platforms:
 
 * x86
-* x86_64	
-	
+* x86_64
+
 Manticore requires a few libraries to be installed on Debian/Ubuntu. Use    apt-get to download and install these dependencies:
 
 .. code-block:: bash
 
 	$ sudo apt-get install mysql-client unixodbc libpq5
-		
+
 Now you can install Manticore:
 
 .. code-block:: bash
@@ -37,9 +37,9 @@ Now you can install Manticore:
 After preparing configuration file (see :ref:`Quick tour <quick_usage_tour>`), you can start searchd daemon:
 
 .. code-block:: bash
-  
+
 	$ systemctl manticore start
-		
+
 
 Installing Manticore packages on RedHat and CentOS
 --------------------------------------------------
@@ -52,25 +52,25 @@ Supported releases:
 Supported platforms:
 
 * x86
-* x86_64	
-	
+* x86_64
+
 Before installation make sure you have these packages installed:
 
 .. code-block:: bash
-   
+
 	$ yum install mysql-client postgresql-libs unixODBC
 
 Download RedHat RPM from Manticore website and install it:
 
 .. code-block:: bash
-		
+
 	$ wget https://github.com/manticoresoftware/manticore/releases/download/2.3.3-170706/manticore-2.3.3.170706.9fbdd5f-1rhel7.x86_64.rpm
 	$ rpm -Uhv manticore-2.3.3.170706.9fbdd5f-1rhel7.x86_64.rpm
 
 After preparing configuration file (see :ref:`Quick    tour <quick_usage_tour>`), you can start searchd   daemon:
-   
+
 .. code-block:: bash
-	
+
 	$ systemctl searchd start
 
 Installing Manticore on Windows
@@ -89,9 +89,9 @@ Edit the contents of sphinx.conf.in - specifically entries relating to @CONFDIR@
 Install the ``searchd`` system as a Windows service:
 
 .. code-block:: bat
-   
+
 	C:\Manticore\bin> C:\Manticore\bin\searchd --install --config C:\Manticore\sphinx.conf.in --servicename Manticore
-   
+
 
 4. The ``searchd`` service will now be listed in the Services panel
    within the Management Console, available from Administrative Tools.
@@ -116,7 +116,7 @@ Required tools
 	* on Mac OS - XCode
 
 * cmake - used on all plaftorms 
-	
+
 Optional dependencies
 ~~~~~~~~~~~~~~~~~~~~~
 * git, flex, bison -  needed if the sources are from cloned repository and not the source tarball
@@ -141,7 +141,7 @@ Alternative, for compiling a certain version, you can either checked that versio
 
    $ wget https://github.com/manticoresoftware/manticore/releases/download/2.3.3-170706/manticore-2.3.3.170706.9fbdd5f.tar.gz
    $ tar zcvf manticore-2.3.3.170706.9fbdd5f.tar.gz
-	   
+
 
 Manticore uses cmake for building sources. We recommend using a folder outside the sources for the building workspace to keep clean the source folders.
 
@@ -191,18 +191,19 @@ To install all dependencies on Debian/Ubuntu:
 To install all dependencies on CentOS/RHEL:
 
 .. code-block.. code-block:: bash bash
-   
+
    $ yum install gcc gcc-c++ make cmake mysql-devel expat-devel postgresql-devel unixODBC-devel rpm-build systemd-units git flex bison
-   
+
+
 RHEL/CentOS 6  ship with a old version of the gcc compiler, which doesn't support `std-c++` standard, for compiling use `devtools` repository: 
 
 .. code-block.. code-block:: bash bash
 
-  $ wget http://people.centos.org/tru/devtools-2/devtools-2.repo -O /etc/yum.repos.d/devtools-2.repo
-  $ yum upgrade -y
-  $ yum install -y devtoolset-2-gcc devtoolset-2-binutils devtoolset-2-gcc-c++
-  $ export PATH=/opt/rh/devtoolset-2/root/usr/bin:$PATH
-  
+   $ wget http://people.centos.org/tru/devtools-2/devtools-2.repo -O /etc/yum.repos.d/devtools-2.repo
+   $ yum upgrade -y
+   $ yum install -y devtoolset-2-gcc devtoolset-2-binutils devtoolset-2-gcc-c++
+   $ export PATH=/opt/rh/devtoolset-2/root/usr/bin:$PATH
+
 We recommend using a separate folder for building instead of compiling in the source folder:
 
 .. code-block:: bash
@@ -210,39 +211,39 @@ We recommend using a separate folder for building instead of compiling in the so
    $ mkdir build
    $ cd build
    $ cmake -D WITH_MYSQL=TRUE -DWITH_RE2=1 ../manticore
-	   
+
 or if we use sources from tarball:
 
 .. code-block:: bash
-   
+
    $ cmake -D WITH_MYSQL=TRUE -DWITH_RE2=1 ../manticore-2.3.3.170706.9fbdd5f
 
 To simply compile:
 
 .. code-block:: bash
-   
+
    $ make -j4
-	   
-	   
+
+
 This will create the binary files, however we want to either install Manticore or more convenient to create a package.
 To install just do 
 
 .. code-block:: bash
-   
+
    $ make -j4 install
 
 For packaging use ``package``
 
 .. code-block:: bash
-   
+
    $ make -j4 package
-		
+
 
 By default, if no operating system was targeted, ``package`` will create only a zip with the binaries.
 If, for example, we want to create a deb package for Debian Jessie, we need to specify to cmake the ``DISTR_BUILD`` parameter:
 
 .. code-block:: bash
-   
+
    $ cmake -D WITH_MYSQL=TRUE -DWITH_RE2=1  -DDISTR_BUILD=jessie../manticore
    $ make -j4 package	   
 
@@ -261,14 +262,14 @@ For building on Windows you need:
 For a simple building on x64:
 
 .. code-block:: bat
-	   
+
    C:\build>"%PROGRAMW6432%\CMake\bin\cmake.exe" -G "Visual Studio 14 Win64" -DLIBS_BUNDLE="C:\bundle" -DDISTR=none -DCPACK_GENERATOR=ZIP "C:\manticore"
    C:\build>"%PROGRAMW6432%\CMake\bin\cmake.exe" -DWITH_PGSQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 .
    C:\build>"%PROGRAMW6432%\CMake\bin\cmake.exe" --build . --target package --config RelWithDebInfo
-	   
+
 
 .. _quick_usage_tour:
-   
+
 Quick Manticore usage tour
 --------------------------
 We are going to use SphinxQL protocol as it's the current recommended way and it's also easy to play with. First we connect to Manticore with the normal MySQL client:
@@ -308,7 +309,7 @@ In the sample configuration there is also a plain index with MySQL source, which
 First, we populate the sample table in MySQL:
 
 .. code-block:: bash
-	
+
 	mysql> create database test;
 	$ mysql -u test <  /usr/share/doc/manticore/example-conf/example.sql
 
@@ -321,7 +322,7 @@ The sample config uses a ``test`` with no password for connecting to MySQL. Adju
 	Copyright (c) 2001-2016, Andrew Aksyonoff
 	Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
 	Copyright (c) 2017, Manticore Software LTD (http://manticoresearch.com)
-	
+
 	using config file '/etc/sphinxsearch/sphinx.conf'...
 	indexing index 'test1'...
 	collected 4 docs, 0.0 MB
@@ -344,7 +345,7 @@ Now let's run several queries:
 	|    2 |        1 | 1502280778 |     1528 |
 	+------+----------+------------+----------+
 	2 rows in set (0.00 sec)
-	
+
 	+---------------+----------+
 	| Variable_name | Value    |
 	+---------------+----------+

@@ -45,16 +45,16 @@ if ( DISTR_BUILD )
 	set ( WITH_STEMMER ON CACHE BOOLEAN "Forced Stemmer" )
 	set ( LIBS_BUNDLE "${MANTICORE_SOURCE_DIR}/../bundle" )
 	SET ( DISABLE_TESTING ON CACHE BOOLEAN "Forced no testing" )
-	message (STATUS "DISTR_BUILD applied.
+	message ( STATUS "DISTR_BUILD applied.
 Package will be set to ${DISTR_BUILD},
 also option forced to ON values: WITH_MYSQL, WITH_EXPAT, WITH_PGSQL, WITH_RE2, WITH_STEMMER.
-Also LIBS_BUNDLE is automatically set to folder 'bundle' placed one level above the sources")
-endif()
+Also LIBS_BUNDLE is automatically set to folder 'bundle' placed one level above the sources" )
+endif ()
 
 # Collect build info which will be embedded into binaries
 SET ( BANNER )
 # append any text to build info
-macro ( cfginfo msgtext )
+macro( cfginfo msgtext )
 	list ( APPEND BANNER "${msgtext}" )
 endmacro()
 
@@ -64,7 +64,7 @@ macro( memcfgvalues )
 		if ( ${var} )
 			list ( APPEND BANNER "${var}=${${var}}" )
 		endif ( ${var} )
-	endforeach()
+	endforeach ()
 endmacro()
 
 
@@ -79,8 +79,8 @@ endif ()
 
 set ( SPHINX_TAG "" CACHE STRING "The tag which will be added to build" )
 set ( PKGSUFFIXES ) # list of suffixes which will be append to package name, will be '-'-separated
-set ( PACKAGE_NAME  "manticore")
-set ( COMPANY_NAME "Manticore Software LTD")
+set ( PACKAGE_NAME "manticore" )
+set ( COMPANY_NAME "Manticore Software LTD" )
 
 message ( STATUS "Checking for endianess" )
 include ( SphEndianess )
@@ -177,7 +177,7 @@ else ( WIN32 )
 	if ( "${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang" )
 		set ( HAVE_GCC_LIKE ON )
 	endif ()
-	mark_as_advanced( CMAKE_CXX_COMPILER CMAKE_C_COMPILER )
+	mark_as_advanced ( CMAKE_CXX_COMPILER CMAKE_C_COMPILER )
 
 	if ( HAVE_GCC_LIKE )
 		set ( CFLAGS "-fno-strict-aliasing -Wall -g" )
@@ -281,7 +281,7 @@ else ( WIN32 )
 	CMAKE_DEPENDENT_OPTION ( DL_UNIXODBC "load UnixODBC library dynamically" ON "USE_ODBC;HAVE_DL" OFF )
 	if ( DL_UNIXODBC )
 		set ( DL_UNIXODBC 1 )
-		GET_FILENAME_COMPONENT ( UNIXODBC_LIB ${_DUMMY_LIB} NAME )
+		GET_SONAME ( ${_DUMMY_LIB} UNIXODBC_LIB )
 		message ( STATUS "ODBC will be loaded dynamically in runtime as ${UNIXODBC_LIB}" )
 		cfginfo ( "DL_UNIXODBC=ON" )
 	else ( DL_UNIXODBC )
@@ -298,36 +298,36 @@ else ( WIN32 )
 		SET ( RLP_ROOT "${MANTICORE_SOURCE_DIR}/rlp" CACHE PATH "RLP root folder." )
 		if ( RLP_PATH )
 			if ( NOT RLP_ROOT )
-				set (RLP_ROOT "${RLP_PATH}")
+				set ( RLP_ROOT "${RLP_PATH}" )
 				message ( STATUS "Option RLP_PATH is deprecated. Use RLP_ROOT instead." )
-			else()
+			else ()
 				message ( STATUS "Option RLP_PATH is deprecated. Will use value of RLP_ROOT." )
-			endif()
-		endif()
+			endif ()
+		endif ()
 
 		if ( RLP_ROOT )
 			if ( EXISTS "${RLP_ROOT}/rlp/include/bt_rlp_c.h" )
 				set ( USE_RLP 1 )
 			else ()
 				message ( SEND_ERROR "missing RLP sources from ${RLP_ROOT}" )
-			endif()
+			endif ()
 		endif ()
 
 		if ( USE_RLP )
 			if ( NOT RLP_LIBPATH )
 				file ( GLOB RLPLIBS "${RLP_ROOT}/lib/*gcc*" )
-			endif()
+			endif ()
 
-			include_directories ( "${RLP_ROOT}/rlp/include" "${RLP_ROOT}/utilities/include")
+			include_directories ( "${RLP_ROOT}/rlp/include" "${RLP_ROOT}/utilities/include" )
 			add_definitions ( "-D_REENTRANT" )
-			find_library ( LIBRLPC btrlpc HINT "${RLPLIBS}")
+			find_library ( LIBRLPC btrlpc HINT "${RLPLIBS}" )
 			find_library ( LIBRLPCORE btrlpcore HINT "${RLPLIBS}" )
 			find_library ( LIBRLPUTILS btutils HINT "${RLPLIBS}" )
 			list ( APPEND EXTRA_LIBRARIES ${LIBRLPC} ${LIBRLPCORE} ${LIBRLPUTILS} )
 			message ( STATUS "RLP from ${RLP_ROOT}, libraries looked at ${RLPLIBS}" )
-		else()
+		else ()
 			message ( STATUS "RLP is not active, check path of RLP_ROOT (${RLP_ROOT})" )
-		endif()
+		endif ()
 
 		mark_as_advanced ( USE_RLP RLP_PATH LIBRLPC LIBRLPCORE LIBRLPUTILS RLP_LIBPATH RLPLIBS )
 	endif ( WITH_RLP )
@@ -339,7 +339,7 @@ else ( WIN32 )
 	CMAKE_DEPENDENT_OPTION ( DL_EXPAT "load expat library dynamically" ON "USE_LIBEXPAT;HAVE_DL" OFF )
 	if ( DL_EXPAT )
 		set ( DL_EXPAT 1 )
-		GET_FILENAME_COMPONENT ( EXPAT_LIB ${_DUMMY_LIB} NAME )
+		GET_SONAME ( ${_DUMMY_LIB} EXPAT_LIB )
 		message ( STATUS "EXPAT will be loaded dynamically in runtime as ${EXPAT_LIB}" )
 		cfginfo ( "DL_EXPAT=ON" )
 	else ( DL_EXPAT )
@@ -359,7 +359,7 @@ else ( WIN32 )
 	set ( WITH_MYSQL_INCLUDES "" CACHE PATH "path to MySQL header files" )
 	set ( WITH_MYSQL_LIBS "" CACHE PATH "path to MySQL library" )
 	set ( WITH_MYSQL_ROOT "" CACHE PATH "path to the MySQL bundle (where both header and library lives)" )
-	mark_as_advanced ( WITH_MYSQL_INCLUDES WITH_MYSQL_LIBS WITH_MYSQL_ROOT)
+	mark_as_advanced ( WITH_MYSQL_INCLUDES WITH_MYSQL_LIBS WITH_MYSQL_ROOT )
 
 
 	if ( WITH_MYSQL )
@@ -380,7 +380,7 @@ else ( WIN32 )
 endif ( WIN32 )
 
 if ( NOT CMAKE_BUILD_TYPE STREQUAL Debug )
-	message (STATUS "Added def NDEBUG")
+	message ( STATUS "Added def NDEBUG" )
 	add_definitions ( "-DNDEBUG" )
 endif ()
 
@@ -455,15 +455,15 @@ if ( HAVE_GCC_LIKE AND CMAKE_BUILD_TYPE STREQUAL Debug )
 
 	set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${POSTCFLAGS}" )
 	set ( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${POSTCFLAGS}" )
-endif()
+endif ()
 
 
 option ( SPLIT_SYMBOLS "whether to split debug symbols from binaries" ${SPLIT_SYMBOLS} )
 
 memcfgvalues ( SPLIT_SYMBOLS USE_BISON USE_FLEX USE_SYSLOG WITH_EXPAT WITH_ICONV WITH_MYSQL
 		WITH_MYSQL_INCLUDES WITH_MYSQL_LIBS WITH_MYSQL_ROOT WITH_ODBC WITH_PGSQL
-		 WITH_PGSQL_INCLUDES WITH_PGSQL_LIBS WITH_RE2 WITH_RE2_INCLUDES WITH_RE2_LIBS
-		 WITH_RE2_ROOT WITH_RLP WITH_STEMMER WITH_ZLIB )
+		WITH_PGSQL_INCLUDES WITH_PGSQL_LIBS WITH_RE2 WITH_RE2_INCLUDES WITH_RE2_LIBS
+		WITH_RE2_ROOT WITH_RLP WITH_STEMMER WITH_ZLIB )
 
 set ( CONFIGURE_FLAGS "Configured with CMake with these definitions:" )
 FOREACH ( OPTION ${BANNER} )

@@ -2223,7 +2223,7 @@ public:
 	}
 
 private:
-	using BalancedTree_c = std::multimap<double, int64_t, std::less<double>, managed_allocator <std::pair<double,int64_t>> >;
+	using BalancedTree_c = std::multimap<double, int64_t, std::less<double>, managed_allocator<std::pair<const double, int64_t>>>;
 	BalancedTree_c		m_dMap;
 	int64_t				m_iCount;
 

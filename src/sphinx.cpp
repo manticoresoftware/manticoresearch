@@ -27076,7 +27076,9 @@ bool CSphSource_MySQL::SqlIsError ()
 
 const char * CSphSource_MySQL::SqlError ()
 {
-	return sph_mysql_error ( &m_tMysqlDriver );
+	if ( sph_mysql_error!=nullptr )
+		return sph_mysql_error ( &m_tMysqlDriver );
+	return "MySQL source wasn't initialized. Wrong name in dlopen?";
 }
 
 

@@ -26945,7 +26945,7 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 	MYSQL_F ( mysql_fetch_lengths );
 
 	#ifndef MYSQL_LIB
-		#define MYSQL_LIB "libmysqlclient.so"
+		#define MYSQL_LIB "no_mysql"
 	#endif
 
 	#if DL_MYSQL
@@ -27176,7 +27176,7 @@ bool CSphSource_MySQL::Setup ( const CSphSourceParams_MySQL & tParams )
 	PGSQL_F ( PQerrorMessage );
 
 	#ifndef PGSQL_LIB
-			#define PGSQL_LIB "libpq.so"
+			#define PGSQL_LIB "no_pgsql"
 	#endif
 	#if DL_PGSQL
 		bool InitDynamicPosgresql ()
@@ -27511,7 +27511,7 @@ static bool SourceCheckSchema ( const CSphSchema & tSchema, CSphString & sError 
 	EXPAT_F ( XML_SetUnknownEncodingHandler );
 
 	#ifndef EXPAT_LIB
-		#define EXPAT_LIB "libexpat.so"
+		#define EXPAT_LIB "no_expat"
 	#endif
 
 	#if DL_EXPAT
@@ -28650,7 +28650,7 @@ CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE *
 	ODBC_F ( SQLDriverConnect );
 
 	#ifndef UNIXODBC_LIB
-		#define UNIXODBC_LIB "libodbc.so"
+		#define UNIXODBC_LIB "no_unixodbc"
 	#endif
 
 	#if DL_UNIXODBC

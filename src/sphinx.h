@@ -2018,17 +2018,17 @@ public:
 	virtual void						PostIndex () {}
 
 protected:
-	ISphTokenizer *						m_pTokenizer;	///< my tokenizer
-	CSphDict *							m_pDict;		///< my dict
-	ISphFieldFilter	*					m_pFieldFilter;	///< my field filter
+	ISphTokenizer *						m_pTokenizer = nullptr;	///< my tokenizer
+	CSphDict *							m_pDict = nullptr;		///< my dict
+	ISphFieldFilter	*					m_pFieldFilter = nullptr;	///< my field filter
 
 	CSphSourceStats						m_tStats;		///< my stats
 	CSphSchema							m_tSchema;		///< my schema
 
-	CSphHTMLStripper *					m_pStripper;	///< my HTML stripper
+	CSphHTMLStripper *					m_pStripper = nullptr;	///< my HTML stripper
 
-	int			m_iNullIds;
-	int			m_iMaxIds;
+	int			m_iNullIds = 0;
+	int			m_iMaxIds = 0;
 
 	SphDocID_t	VerifyID ( SphDocID_t uID );
 };
@@ -2052,11 +2052,11 @@ public:
 	explicit				CSphSource_Document ( const char * sName );
 
 	/// dtor
-	virtual					~CSphSource_Document () { SafeDeleteArray ( m_pReadFileBuffer ); }
+							~CSphSource_Document () override { SafeDeleteArray ( m_pReadFileBuffer ); }
 
 	/// my generic tokenizer
-	virtual bool			IterateDocument ( CSphString & sError );
-	virtual ISphHits *		IterateHits ( CSphString & sError );
+	bool			IterateDocument ( CSphString & sError ) override;
+	ISphHits *		IterateHits ( CSphString & sError ) override;
 	void					BuildHits ( CSphString & sError, bool bSkipEndMarker );
 
 	/// field data getter
@@ -2064,11 +2064,11 @@ public:
 	virtual BYTE **			NextDocument ( CSphString & sError ) = 0;
 	virtual const int *		GetFieldLengths () const = 0;
 
-	virtual void			SetDumpRows ( FILE * fpDumpRows ) { m_fpDumpRows = fpDumpRows; }
+	void			SetDumpRows ( FILE * fpDumpRows ) override { m_fpDumpRows = fpDumpRows; }
 
-	virtual SphRange_t		IterateFieldMVAStart ( int iAttr );
-	virtual bool			IterateFieldMVAStart ( int, CSphString & ) { assert ( 0 && "not implemented" ); return false; }
-	virtual bool			HasJoinedFields () { return m_iPlainFieldsLength!=m_tSchema.m_dFields.GetLength(); }
+	SphRange_t		IterateFieldMVAStart ( int iAttr ) override;
+	//virtual bool			IterateFieldMVAStart ( int, CSphString & ) { assert ( 0 && "not implemented" ); return false; }
+	bool			HasJoinedFields () override { return m_iPlainFieldsLength!=m_tSchema.m_dFields.GetLength(); }
 
 protected:
 	int						ParseFieldMVA ( CSphVector < DWORD > & dMva, const char * szValue, bool bMva64 ) const;
@@ -2089,16 +2089,16 @@ protected:
 	ISphHits				m_tHits;				///< my hitvector
 
 protected:
-	char *					m_pReadFileBuffer;
-	int						m_iReadFileBufferSize;	///< size of read buffer for the 'sql_file_field' fields
-	int						m_iMaxFileBufferSize;	///< max size of read buffer for the 'sql_file_field' fields
-	ESphOnFileFieldError	m_eOnFileFieldError;
-	FILE *					m_fpDumpRows;
-	int						m_iPlainFieldsLength;
-	DWORD *					m_pFieldLengthAttrs;	///< pointer into the part of m_tDocInfo where field lengths are stored
+	char *					m_pReadFileBuffer = nullptr;
+	int						m_iReadFileBufferSize = 256*1024;	///< size of read buffer for the 'sql_file_field' fields
+	int						m_iMaxFileBufferSize = 2*1024*1024;	///< max size of read buffer for the 'sql_file_field' fields
+	ESphOnFileFieldError	m_eOnFileFieldError = FFE_IGNORE_FIELD;
+	FILE *					m_fpDumpRows = nullptr;
+	int						m_iPlainFieldsLength = 0;
+	DWORD *					m_pFieldLengthAttrs = nullptr;	///< pointer into the part of m_tDocInfo where field lengths are stored
 
-	CSphVector<SphDocID_t>	m_dAllIds;				///< used for joined fields FIXME! unlimited RAM use
-	bool					m_bIdsSorted;			///< we sort array to use binary search
+	CSphVector<SphDocID_t>	m_dAllIds;						///< used for joined fields FIXME! unlimited RAM use
+	bool					m_bIdsSorted = false;			///< we sort array to use binary search
 
 protected:
 	struct CSphBuildHitsState_t
@@ -2193,29 +2193,29 @@ struct CSphSourceParams_SQL
 struct CSphSource_SQL : CSphSource_Document
 {
 	explicit			CSphSource_SQL ( const char * sName );
-	virtual				~CSphSource_SQL () {}
+						~CSphSource_SQL () override = default;
 
 	bool				Setup ( const CSphSourceParams_SQL & pParams );
-	virtual bool		Connect ( CSphString & sError );
-	virtual void		Disconnect ();
+	bool		Connect ( CSphString & sError ) override;
+	void		Disconnect () override;
 
-	virtual bool		IterateStart ( CSphString & sError );
-	virtual BYTE **		NextDocument ( CSphString & sError );
-	virtual const int *	GetFieldLengths () const;
-	virtual void		PostIndex ();
+	bool		IterateStart ( CSphString & sError ) override;
+	BYTE **		NextDocument ( CSphString & sError ) override;
+	const int *	GetFieldLengths () const override;
+	void		PostIndex () override;
 
-	virtual bool		HasAttrsConfigured () { return m_tParams.m_dAttrs.GetLength()!=0; }
+	bool		HasAttrsConfigured () override { return m_tParams.m_dAttrs.GetLength()!=0; }
 
-	virtual ISphHits *	IterateJoinedHits ( CSphString & sError );
+	ISphHits *	IterateJoinedHits ( CSphString & sError ) override;
 
-	virtual bool		IterateMultivaluedStart ( int iAttr, CSphString & sError );
-	virtual bool		IterateMultivaluedNext ();
+	bool		IterateMultivaluedStart ( int iAttr, CSphString & sError ) override;
+	bool		IterateMultivaluedNext () override;
 
-	virtual bool		IterateKillListStart ( CSphString & sError );
-	virtual bool		IterateKillListNext ( SphDocID_t & tDocId );
+	bool		IterateKillListStart ( CSphString & sError ) override;
+	bool		IterateKillListNext ( SphDocID_t & tDocId ) override;
 
 private:
-	bool				m_bSqlConnected;	///< am i connected?
+	bool				m_bSqlConnected = false;	///< am i connected?
 
 protected:
 	CSphString			m_sSqlDSN;
@@ -2224,23 +2224,23 @@ protected:
 	int					m_dFieldLengths [ SPH_MAX_FIELDS ];
 	ESphUnpackFormat	m_dUnpack [ SPH_MAX_FIELDS ];
 
-	SphDocID_t			m_uMinID;			///< grand min ID
-	SphDocID_t			m_uMaxID;			///< grand max ID
-	SphDocID_t			m_uCurrentID;		///< current min ID
-	SphDocID_t			m_uMaxFetchedID;	///< max actually fetched ID
-	int					m_iMultiAttr;		///< multi-valued attr being currently fetched
-	int					m_iSqlFields;		///< field count (for row dumper)
+	SphDocID_t			m_uMinID = 0;			///< grand min ID
+	SphDocID_t			m_uMaxID = 0;			///< grand max ID
+	SphDocID_t			m_uCurrentID = 0;		///< current min ID
+	SphDocID_t			m_uMaxFetchedID = 0;	///< max actually fetched ID
+	int					m_iMultiAttr = -1;		///< multi-valued attr being currently fetched
+	int					m_iSqlFields = 0;		///< field count (for row dumper)
 
 	CSphSourceParams_SQL		m_tParams;
 
-	bool				m_bCanUnpack;
-	bool				m_bUnpackFailed;
-	bool				m_bUnpackOverflow;
+	bool				m_bCanUnpack = false;
+	bool				m_bUnpackFailed = false;
+	bool				m_bUnpackOverflow = false;
 	CSphVector<char>	m_dUnpackBuffers [ SPH_MAX_FIELDS ];
 
-	int					m_iJoinedHitField;	///< currently pulling joined hits from this field (index into schema; -1 if not pulling)
-	SphDocID_t			m_iJoinedHitID;		///< last document id
-	int					m_iJoinedHitPos;	///< last hit position
+	int					m_iJoinedHitField = -1;	///< currently pulling joined hits from this field (index into schema; -1 if not pulling)
+	SphDocID_t			m_iJoinedHitID = 0;		///< last document id
+	int					m_iJoinedHitPos = 0;	///< last hit position
 
 	static const int			MACRO_COUNT = 2;
 	static const char * const	MACRO_VALUES [ MACRO_COUNT ];
@@ -2298,11 +2298,11 @@ struct CSphSource_MySQL : CSphSource_SQL
 	bool					Setup ( const CSphSourceParams_MySQL & tParams );
 
 protected:
-	MYSQL_RES *				m_pMysqlResult;
-	MYSQL_FIELD *			m_pMysqlFields;
-	MYSQL_ROW				m_tMysqlRow;
+	MYSQL_RES *				m_pMysqlResult = nullptr;
+	MYSQL_FIELD *			m_pMysqlFields = nullptr;
+	MYSQL_ROW				m_tMysqlRow = nullptr;
 	MYSQL					m_tMysqlDriver;
-	unsigned long *			m_pMysqlLengths;
+	unsigned long *			m_pMysqlLengths = nullptr;
 
 	CSphString				m_sMysqlUsock;
 	int						m_iMysqlConnectFlags;

@@ -1498,25 +1498,24 @@ class CSphSource_StringVector : public CSphSource_Document
 {
 public:
 	explicit			CSphSource_StringVector ( int iFields, const char ** ppFields, const CSphSchema & tSchema );
-	virtual				~CSphSource_StringVector () {}
+						~CSphSource_StringVector () override = default;
 
-	virtual bool		Connect ( CSphString & );
-	virtual void		Disconnect ();
+	bool		Connect ( CSphString & ) override;
+	void		Disconnect () override;
 
-	virtual bool		HasAttrsConfigured () { return false; }
-	virtual bool		IterateStart ( CSphString & ) { m_iPlainFieldsLength = m_tSchema.m_dFields.GetLength(); return true; }
+	bool		HasAttrsConfigured () override { return false; }
+	bool		IterateStart ( CSphString & ) override { m_iPlainFieldsLength = m_tSchema.m_dFields.GetLength(); return true; }
 
-	virtual bool		IterateMultivaluedStart ( int, CSphString & ) { return false; }
-	virtual bool		IterateMultivaluedNext () { return false; }
+	bool		IterateMultivaluedStart ( int, CSphString & ) override { return false; }
+	bool		IterateMultivaluedNext () override { return false; }
 
-	virtual bool		IterateFieldMVAStart ( int, CSphString & ) { return false; }
-	virtual bool		IterateFieldMVANext () { return false; }
+	SphRange_t			IterateFieldMVAStart ( int ) override { return {}; }
 
-	virtual bool		IterateKillListStart ( CSphString & ) { return false; }
-	virtual bool		IterateKillListNext ( SphDocID_t & ) { return false; }
+	bool		IterateKillListStart ( CSphString & ) override { return false; }
+	bool		IterateKillListNext ( SphDocID_t & ) override { return false; }
 
-	virtual BYTE **		NextDocument ( CSphString & ) { return m_dFields.Begin(); }
-	virtual const int *	GetFieldLengths () const { return m_dFieldLengths.Begin(); }
+	BYTE **		NextDocument ( CSphString & ) override { return m_dFields.Begin(); }
+	const int *	GetFieldLengths () const override { return m_dFieldLengths.Begin(); }
 
 protected:
 	CSphVector<BYTE *>			m_dFields;

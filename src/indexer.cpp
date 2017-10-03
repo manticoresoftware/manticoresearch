@@ -1718,6 +1718,15 @@ int main ( int argc, char ** argv )
 		} else
 		{
 			fprintf ( stdout,
+#ifdef COMPILER
+				"Built by gcc/clang v " COMPILER ",\n\n"
+#endif
+#ifdef OS_UNAME
+				"Built on " OS_UNAME "\n\n"
+#endif
+#ifdef CONFIGURE_FLAGS
+				CONFIGURE_FLAGS "\n\n"
+#endif
 				"Usage: indexer [OPTIONS] [indexname1 [indexname2 [...]]]\n"
 				"\n"
 				"Options are:\n"

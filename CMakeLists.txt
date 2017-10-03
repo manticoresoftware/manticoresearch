@@ -283,9 +283,10 @@ else ( WIN32 )
 		set ( DL_UNIXODBC 1 )
 		GET_SONAME ( ${_DUMMY_LIB} UNIXODBC_LIB )
 		message ( STATUS "ODBC will be loaded dynamically in runtime as ${UNIXODBC_LIB}" )
-		cfginfo ( "DL_UNIXODBC=ON" )
+		memcfgvalues ( DL_UNIXODBC UNIXODBC_LIB )
 	else ( DL_UNIXODBC )
 		list ( APPEND EXTRA_LIBRARIES ${_DUMMY_LIB} )
+		message ( STATUS "ODBC will be linked as ${_DUMMY_LIB}" )
 	endif ( DL_UNIXODBC )
 
 	message ( STATUS "Option WITH_ZLIB ${WITH_ZLIB}" )
@@ -341,9 +342,10 @@ else ( WIN32 )
 		set ( DL_EXPAT 1 )
 		GET_SONAME ( ${_DUMMY_LIB} EXPAT_LIB )
 		message ( STATUS "EXPAT will be loaded dynamically in runtime as ${EXPAT_LIB}" )
-		cfginfo ( "DL_EXPAT=ON" )
+		memcfgvalues ( DL_EXPAT EXPAT_LIB )
 	else ( DL_EXPAT )
 		list ( APPEND EXTRA_LIBRARIES ${_DUMMY_LIB} )
+		message ( STATUS "EXPAT will be linked as ${_DUMMY_LIB}" )
 	endif ()
 
 	# test for ICONV
@@ -465,7 +467,7 @@ memcfgvalues ( SPLIT_SYMBOLS USE_BISON USE_FLEX USE_SYSLOG WITH_EXPAT WITH_ICONV
 		WITH_PGSQL_INCLUDES WITH_PGSQL_LIBS WITH_RE2 WITH_RE2_INCLUDES WITH_RE2_LIBS
 		WITH_RE2_ROOT WITH_RLP WITH_STEMMER WITH_ZLIB )
 
-set ( CONFIGURE_FLAGS "Configured with CMake with these definitions:" )
+set ( CONFIGURE_FLAGS "Configured by CMake with these definitions:" )
 FOREACH ( OPTION ${BANNER} )
 	set ( CONFIGURE_FLAGS "${CONFIGURE_FLAGS} -D${OPTION}" )
 endforeach ()
@@ -475,6 +477,7 @@ configure_file ( "${MANTICORE_SOURCE_DIR}/config/config_cmake.h.in"
 		"${MANTICORE_BINARY_DIR}/config/config.h" ESCAPE_QUOTES )
 add_definitions ( -DHAVE_CONFIG_H )
 include_directories ( "${MANTICORE_BINARY_DIR}/config" )
+message (STATUS "${CONFIGURE_FLAGS}")
 
 if ( WIN32 )
 	IF ( CMAKE_EXE_LINKER_FLAGS MATCHES "x64" )

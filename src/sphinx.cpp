@@ -24745,13 +24745,7 @@ ESphWordpart CSphSourceSettings::GetWordpart ( const char * sField, bool bWordDi
 //////////////////////////////////////////////////////////////////////////
 
 CSphSource::CSphSource ( const char * sName )
-	: m_pTokenizer ( NULL )
-	, m_pDict ( NULL )
-	, m_pFieldFilter ( NULL )
-	, m_tSchema ( sName )
-	, m_pStripper ( NULL )
-	, m_iNullIds ( 0 )
-	, m_iMaxIds ( 0 )
+	: m_tSchema ( sName )
 {
 }
 
@@ -24944,7 +24938,7 @@ void CSphSource_Document::CSphBuildHitsState_t::Reset ()
 {
 	m_bProcessingHits = false;
 	m_bDocumentDone = false;
-	m_dFields = NULL;
+	m_dFields = nullptr;
 	m_dFieldLengths.Resize(0);
 	m_iStartPos = 0;
 	m_iHitPos = 0;
@@ -24963,14 +24957,6 @@ void CSphSource_Document::CSphBuildHitsState_t::Reset ()
 
 CSphSource_Document::CSphSource_Document ( const char * sName )
 	: CSphSource ( sName )
-	, m_pReadFileBuffer ( NULL )
-	, m_iReadFileBufferSize ( 256 * 1024 )
-	, m_iMaxFileBufferSize ( 2 * 1024 * 1024 )
-	, m_eOnFileFieldError ( FFE_IGNORE_FIELD )
-	, m_fpDumpRows ( NULL )
-	, m_iPlainFieldsLength ( 0 )
-	, m_pFieldLengthAttrs ( NULL )
-	, m_bIdsSorted ( false )
 	, m_iMaxHits ( MAX_SOURCE_HITS )
 {
 }
@@ -25728,19 +25714,6 @@ const char * const CSphSource_SQL::MACRO_VALUES [ CSphSource_SQL::MACRO_COUNT ] 
 
 CSphSource_SQL::CSphSource_SQL ( const char * sName )
 	: CSphSource_Document	( sName )
-	, m_bSqlConnected		( false )
-	, m_uMinID				( 0 )
-	, m_uMaxID				( 0 )
-	, m_uCurrentID			( 0 )
-	, m_uMaxFetchedID		( 0 )
-	, m_iMultiAttr			( -1 )
-	, m_iSqlFields			( 0 )
-	, m_bCanUnpack			( false )
-	, m_bUnpackFailed		( false )
-	, m_bUnpackOverflow		( false )
-	, m_iJoinedHitField		( -1 )
-	, m_iJoinedHitID		( 0 )
-	, m_iJoinedHitPos		( 0 )
 {
 }
 
@@ -26971,12 +26944,11 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 	MYSQL_F ( mysql_fetch_fields );
 	MYSQL_F ( mysql_fetch_lengths );
 
-	#if DL_MYSQL
-		#ifndef MYSQL_LIB
-			#define MYSQL_LIB "libmysqlclient.so"
-		#endif
+	#ifndef MYSQL_LIB
+		#define MYSQL_LIB "libmysqlclient.so"
+	#endif
 
-		#define MYSQL_NUM_FUNCS (15)
+	#if DL_MYSQL
 
 		bool InitDynamicMysql()
 		{
@@ -26994,7 +26966,7 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 				, (void **) &sph_mysql_fetch_fields, (void **) &sph_mysql_fetch_lengths };
 
 			static CSphDynamicLibrary dLib ( MYSQL_LIB );
-			if ( !dLib.LoadSymbols ( sFuncs, pFuncs, MYSQL_NUM_FUNCS ) )
+			if ( !dLib.LoadSymbols ( sFuncs, pFuncs, sizeof ( pFuncs ) / sizeof ( void ** ) ) )
 				return false;
 			return true;
 		}
@@ -27011,10 +26983,6 @@ CSphSourceParams_MySQL::CSphSourceParams_MySQL ()
 
 CSphSource_MySQL::CSphSource_MySQL ( const char * sName )
 	: CSphSource_SQL	( sName )
-	, m_pMysqlResult	( NULL )
-	, m_pMysqlFields	( NULL )
-	, m_tMysqlRow		( NULL )
-	, m_pMysqlLengths	( NULL )
 {
 	m_bCanUnpack = true;
 }
@@ -27087,7 +27055,7 @@ bool CSphSource_MySQL::SqlConnect ()
 	if_const ( !InitDynamicMysql() )
 	{
 		if ( m_tParams.m_bPrintQueries )
-			fprintf ( stdout, "SQL-CONNECT: FAIL (NO MYSQL CLIENT LIB)\n" );
+			fprintf ( stdout, "SQL-CONNECT: FAIL (NO MYSQL CLIENT LIB, tried " MYSQL_LIB ")\n" );
 		return false;
 	}
 
@@ -27207,13 +27175,10 @@ bool CSphSource_MySQL::Setup ( const CSphSourceParams_MySQL & tParams )
 	PGSQL_F ( PQfinish );
 	PGSQL_F ( PQerrorMessage );
 
-	#if DL_PGSQL
-		#ifndef PGSQL_LIB
+	#ifndef PGSQL_LIB
 			#define PGSQL_LIB "libpq.so"
-		#endif
-
-		#define POSTRESQL_NUM_FUNCS (13)
-
+	#endif
+	#if DL_PGSQL
 		bool InitDynamicPosgresql ()
 		{
 			const char * sFuncs[] = {"PQgetvalue", "PQgetlength", "PQclear",
@@ -27228,7 +27193,7 @@ bool CSphSource_MySQL::Setup ( const CSphSourceParams_MySQL & tParams )
 					(void**)&sph_PQerrorMessage};
 
 			static CSphDynamicLibrary dLib ( PGSQL_LIB );
-			if ( !dLib.LoadSymbols ( sFuncs, pFuncs, POSTRESQL_NUM_FUNCS))
+			if ( !dLib.LoadSymbols ( sFuncs, pFuncs, sizeof ( pFuncs ) / sizeof ( void ** ) ) )
 				return false;
 			return true;
 		}
@@ -27261,7 +27226,9 @@ bool CSphSource_PgSQL::SqlIsError ()
 
 const char * CSphSource_PgSQL::SqlError ()
 {
-	return sph_PQerrorMessage ( m_tPgDriver );
+	if ( sph_PQerrorMessage!=nullptr )
+		return sph_PQerrorMessage ( m_tPgDriver );
+	return "PgSQL source wasn't initialized. Wrong name in dlopen?";
 }
 
 
@@ -27312,7 +27279,7 @@ bool CSphSource_PgSQL::SqlConnect ()
 	if ( !InitDynamicPosgresql() )
 	{
 		if ( m_tParams.m_bPrintQueries )
-			fprintf ( stdout, "SQL-CONNECT: FAIL (NO POSGRES CLIENT LIB)\n" );
+			fprintf ( stdout, "SQL-CONNECT: FAIL (NO POSGRES CLIENT LIB, tried " PGSQL_LIB ")\n" );
 		return false;
 	}
 
@@ -27543,13 +27510,11 @@ static bool SourceCheckSchema ( const CSphSchema & tSchema, CSphString & sError 
 	EXPAT_F ( XML_SetCharacterDataHandler );
 	EXPAT_F ( XML_SetUnknownEncodingHandler );
 
+	#ifndef EXPAT_LIB
+		#define EXPAT_LIB "libexpat.so"
+	#endif
+
 	#if DL_EXPAT
-		#ifndef EXPAT_LIB
-			#define EXPAT_LIB "libexpat.so"
-		#endif
-
-		#define EXPAT_NUM_FUNCS (11)
-
 		bool InitDynamicExpat ()
 		{
 			const char * sFuncs[] = { "XML_ParserFree", "XML_Parse",
@@ -27565,7 +27530,7 @@ static bool SourceCheckSchema ( const CSphSchema & tSchema, CSphString & sError 
 					(void **) & sph_XML_SetUnknownEncodingHandler };
 
 			static CSphDynamicLibrary dLib ( EXPAT_LIB );
-			if ( !dLib.LoadSymbols ( sFuncs, pFuncs, EXPAT_NUM_FUNCS))
+			if ( !dLib.LoadSymbols ( sFuncs, pFuncs, sizeof ( pFuncs ) / sizeof ( void ** ) ) )
 				return false;
 			return true;
 		}
@@ -27882,7 +27847,7 @@ bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 
 	if_const ( !InitDynamicExpat() )
 	{
-		sError.SetSprintf ( "xmlpipe: failed to load libexpat library" );
+		sError.SetSprintf ( "xmlpipe: failed to load libexpat library (tried "  EXPAT_LIB ")" );
 		return false;
 	}
 
@@ -28684,12 +28649,11 @@ CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE *
 	ODBC_F ( SQLDrivers );
 	ODBC_F ( SQLDriverConnect );
 
-	#if DL_UNIXODBC
-		#ifndef UNIXODBC_LIB
-			#define UNIXODBC_LIB "libodbc.so"
-		#endif
+	#ifndef UNIXODBC_LIB
+		#define UNIXODBC_LIB "libodbc.so"
+	#endif
 
-		#define ODBC_NUM_FUNCS (13)
+	#if DL_UNIXODBC
 
 		bool InitDynamicOdbc ()
 		{
@@ -28705,7 +28669,7 @@ CSphSource * sphCreateSourceXmlpipe2 ( const CSphConfigSection * pSource, FILE *
 					(void**)&sph_SQLDrivers, (void**)&sph_SQLDriverConnect };
 
 			static CSphDynamicLibrary dLib ( UNIXODBC_LIB );
-			if ( !dLib.LoadSymbols ( sFuncs, pFuncs, ODBC_NUM_FUNCS))
+			if ( !dLib.LoadSymbols ( sFuncs, pFuncs, sizeof ( pFuncs ) / sizeof ( void ** ) ) )
 				return false;
 			return true;
 		}
@@ -28842,7 +28806,7 @@ bool CSphSource_ODBC::SqlConnect ()
 	if_const ( !InitDynamicOdbc() )
 	{
 		if ( m_tParams.m_bPrintQueries )
-			fprintf ( stdout, "SQL-CONNECT: FAIL (NO ODBC CLIENT LIB)\n" );
+			fprintf ( stdout, "SQL-CONNECT: FAIL (NO ODBC CLIENT LIB, tried " UNIXODBC_LIB ")\n" );
 		return false;
 	}
 

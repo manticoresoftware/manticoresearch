@@ -2328,7 +2328,6 @@ public:
 	bool IterateMultivaluedStart ( int, CSphString & ) { return false; }
 	bool IterateMultivaluedNext () { return false; }
 	bool IterateFieldMVAStart ( int, CSphString & ) { return false; }
-	bool IterateFieldMVANext () { return false; }
 	bool IterateKillListStart ( CSphString & ) { return false; }
 	bool IterateKillListNext ( SphDocID_t & ) { return false; }
 	int  GetFieldCount () const { return m_iFields; }
@@ -2571,7 +2570,6 @@ public:
 	bool IterateMultivaluedStart ( int, CSphString & ) { return false; }
 	bool IterateMultivaluedNext () { return false; }
 	bool IterateFieldMVAStart ( int, CSphString & ) { return false; }
-	bool IterateFieldMVANext () { return false; }
 	bool IterateKillListStart ( CSphString & ) { return false; }
 	bool IterateKillListNext ( SphDocID_t & ) { return false; }
 	int  GetFieldCount () const { return m_iMaxFields; }

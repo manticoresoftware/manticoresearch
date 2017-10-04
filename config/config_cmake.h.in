@@ -138,3 +138,6 @@
 
 /* define to use Zlib */
 #cmakedefine USE_ZLIB ${USE_ZLIB}
+
+/* define if mincore has unsigned 3-rd param */
+#cmakedefine HAVE_UNSIGNED_MINCORE ${HAVE_UNSIGNED_MINCORE}

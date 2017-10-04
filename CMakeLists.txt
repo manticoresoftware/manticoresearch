@@ -223,6 +223,8 @@ else ( WIN32 )
 	message ( STATUS "Checking for standard header files" )
 	include ( ac_header_stdc )
 
+	include ( mincore_test )
+
 	message ( STATUS "Checking for specific headers" )
 	ac_check_headers ( "execinfo.h;syslog.h;sys/eventfd.h" )
 

@@ -1651,15 +1651,23 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 	if ( bValidQuery )
 	{
 		size_t iPageSize = getpagesize();
+
+		// FIXME! That is too complex way, remove all of this and just move query dump to the bottom
+		// remove also mincore_test.cmake, it's invokation from CMakeLists.txt and HAVE_UNSIGNED_MINCORE
+		// declatarion from config_cmake.h.in
+#if HAVE_UNSIGNED_MINCORE
 		BYTE dPages = 0;
+#else
+		char dPages = 0;
+#endif
 
 		uintptr_t pPageStart = (uintptr_t )( tQuery.m_pQuery );
 		pPageStart &= ~( iPageSize - 1 );
-		bValidQuery &= ( mincore ( (void *)pPageStart, 1, &dPages )==0 );
+		bValidQuery &= ( mincore ( ( void * ) pPageStart, 1, &dPages )==0 );
 
 		uintptr_t pPageEnd = (uintptr_t )( tQuery.m_pQuery + tQuery.m_iSize - 1 );
 		pPageEnd &= ~( iPageSize - 1 );
-		bValidQuery &= ( mincore ( (void *)pPageEnd, 1, &dPages )==0 );
+		bValidQuery &= ( mincore ( ( void * ) pPageEnd, 1, &dPages )==0 );
 	}
 #endif
 

@@ -1,0 +1,23 @@
+<?php
+
+// This file is stub to conveniently run original ubertest.php in it's working context
+
+// these variables have to be configured from cmake with configure_file
+$bindir = "@MANTICORE_BINARY_DIR@/src/";
+$testdir = "@MANTICORE_BINARY_DIR@/test/";
+$testsrc = "@CMAKE_CURRENT_SOURCE_DIR@";
+
+$shellcmd = "cd \"$testsrc\"; " .PHP_BINARY . " ubertest.php";
+
+$args = $_SERVER["argv"];
+array_shift ( $args );
+if ( is_array($args) && !empty($args) )
+{
+	$shellcmd .= " -b \"$bindir\" -t \"$testdir\" ";
+	$shellcmd .= join(" ", $args);
+}
+
+echo "( $shellcmd )\n";
+passthru ($shellcmd);
+
+?>

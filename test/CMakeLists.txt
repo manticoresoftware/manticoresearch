@@ -6,6 +6,7 @@ cmake_minimum_required ( VERSION 2.8 )
 if ( NOT DISABLE_TESTING )
 	file ( GLOB tests "test_[0-9]*" )
 	list ( SORT tests )
+	configure_file( "ubertest.php.in" "${MANTICORE_BINARY_DIR}/test/ubertest.php" @ONLY)
 
 	add_test ( NAME "\"Cleaning guess cache\""
 			#    	CONFIGURATIONS Debug

@@ -3,7 +3,7 @@
 SHOW WARNINGS syntax
 --------------------
 
-.. code-block:: mysql
+.. code-block:: none
 
 
     SHOW WARNINGS
@@ -12,7 +12,7 @@ SHOW WARNINGS syntax
 produced by the latest query. The error message will be returned along
 with the query itself:
 
-.. code-block:: mysql
+.. code-block:: none
 
 
     mysql> SELECT * FROM test1 WHERE MATCH('@@title hello') \G

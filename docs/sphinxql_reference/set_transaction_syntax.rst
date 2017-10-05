@@ -3,7 +3,7 @@
 SET TRANSACTION syntax
 ----------------------
 
-.. code-block:: mysql
+.. code-block:: none
 
 
     SET TRANSACTION ISOLATION LEVEL { READ UNCOMMITTED

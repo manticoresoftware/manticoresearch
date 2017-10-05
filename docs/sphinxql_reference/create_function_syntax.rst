@@ -3,7 +3,7 @@
 CREATE FUNCTION syntax
 ----------------------
 
-.. code-block:: mysql
+.. code-block:: none
 
 
     CREATE FUNCTION udf_name

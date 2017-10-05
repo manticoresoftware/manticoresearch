@@ -413,7 +413,7 @@ Now let's run several queries:
 	1 row in set (0.00 sec)
 
 
-.. code-block:: mysql
+.. code-block:: none
 
 	mysql> SELECT id FROM test1 WHERE MATCH('is this a good plan?');SHOW PLAN\G
 	Empty set (0.00 sec)

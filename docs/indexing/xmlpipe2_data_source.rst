@@ -15,7 +15,7 @@ stream data:
 Example 3.2. xmlpipe2 document stream
                                      
 
-.. code-block:: xml
+.. code-block:: none
 
 
     <?xml version="1.0" encoding="utf-8"?>

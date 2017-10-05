@@ -54,9 +54,9 @@ Compiling MySQL 5.0.x with SphinxSE
 .. code-block:: bash
 
 
-       patch -p1 < sphinx.5.0.yy.diff
+       $ patch -p1 < sphinx.5.0.yy.diff
 
-   If there's no .diff file exactly for the specific version you need to
+If there's no .diff file exactly for the specific version you need to
    build, try applying .diff with closest version numbers. It is
    important that the patch should apply with no rejects.
 
@@ -65,7 +65,7 @@ Compiling MySQL 5.0.x with SphinxSE
 .. code-block:: bash
 
 
-       sh BUILD/autorun.sh
+       $ sh BUILD/autorun.sh
 
 3. in MySQL sources directory, create ``sql/sphinx`` directory in and
    copy all files in ``mysqlse`` directory from Manticore sources there.
@@ -74,22 +74,22 @@ Compiling MySQL 5.0.x with SphinxSE
 .. code-block:: bash
 
 
-       cp -R /root/builds/sphinx-0.9.7/mysqlse /root/builds/mysql-5.0.24/sql/sphinx
+       $ cp -R /root/builds/sphinx-0.9.7/mysqlse /root/builds/mysql-5.0.24/sql/sphinx
 
 4. configure MySQL and enable Manticore engine:
 
 .. code-block:: bash
 
 
-       ./configure --with-sphinx-storage-engine
+       $ ./configure --with-sphinx-storage-engine
 
 5. build and install MySQL:
 
 .. code-block:: bash
 
 
-       make
-       make install
+       $ make
+       $ make install
 
 .. _Compiling MySQL 5.1.x with SphinxSE:
 
@@ -103,29 +103,29 @@ Compiling MySQL 5.1.x with SphinxSE
 .. code-block:: bash
 
 
-       cp -R /root/builds/sphinx-0.9.7/mysqlse /root/builds/mysql-5.1.14/storage/sphinx
+       $ cp -R /root/builds/sphinx-0.9.7/mysqlse /root/builds/mysql-5.1.14/storage/sphinx
 
 2. in MySQL sources directory, run
 
 .. code-block:: bash
 
 
-       sh BUILD/autorun.sh
+       $ sh BUILD/autorun.sh
 
 3. configure MySQL and enable Manticore engine:
 
 .. code-block:: bash
 
 
-       ./configure --with-plugins=sphinx
+       $ ./configure --with-plugins=sphinx
 
 4. build and install MySQL:
 
 .. code-block:: bash
 
 
-       make
-       make install
+       $ make
+       $ make install
 
 .. _Checking SphinxSE installation:
 
@@ -203,7 +203,7 @@ connection string is specified in ``CREATE TABLE``, index name “\*" (ie.
 search all indexes) and localhost:9312 are assumed. Connection string
 syntax is as follows:
 
-.. code-block:: mysql
+.. code-block:: none
 
 
     CONNECTION="sphinx://HOST:PORT/INDEXNAME"
@@ -213,7 +213,7 @@ You can change the default connection string later:
 .. code-block:: mysql
 
 
-    ALTER TABLE t1 CONNECTION="sphinx://NEWHOST:NEWPORT/NEWINDEXNAME";
+    mysql> ALTER TABLE t1 CONNECTION="sphinx://NEWHOST:NEWPORT/NEWINDEXNAME";
 
 You can also override all these parameters per-query.
 
@@ -232,7 +232,7 @@ sign. Any number of options can be specified. Available options are:
    “relevance” attribute name (or sorting clause for “extended”) is also
    required after a colon:
 
-.. code-block:: mysql
+.. code-block:: none
 
 
        ... WHERE query='test;sort=attr_asc:group_id';
@@ -397,13 +397,13 @@ sign. Any number of options can be specified. Available options are:
    replaced with your specific ranking formula), and
    “export:EXPRESSION”:
 
-.. code-block:: mysql
+.. code-block:: none
 
 
        ... WHERE query='test;mode=extended;ranker=bm25;';
        ... WHERE query='test;mode=extended;ranker=expr:sum(lcs);';
 
-   The “export” ranker works exactly like ranker=expr, but it stores the
+The “export” ranker works exactly like ranker=expr, but it stores the
    per-document factor values, while ranker=expr discards them after
    computing the final WEIGHT() value. Note that ranker=export is meant
    to be used but rarely, only to train a ML (machine learning) function
@@ -422,7 +422,7 @@ sign. Any number of options can be specified. Available options are:
 
    would produce something like
 
-.. code-block:: mysql
+.. code-block:: none
 
 
        *************************** 1\. row ***************************

@@ -3,7 +3,7 @@
 SHOW VARIABLES syntax
 ---------------------
 
-.. code-block:: mysql
+.. code-block:: none
 
 
     SHOW [{GLOBAL | SESSION}] VARIABLES [WHERE variable_name='xxx']

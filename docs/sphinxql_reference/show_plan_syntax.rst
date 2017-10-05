@@ -3,7 +3,7 @@
 SHOW PLAN syntax
 ----------------
 
-.. code-block:: mysql
+.. code-block:: none
 
 
     SHOW PLAN
@@ -15,7 +15,7 @@ that statement. That can be done with a ``SET profiling=1`` statement.
 
 Here's a complete instrumentation example:
 
-.. code-block:: mysql
+.. code-block:: none
 
 
     mysql> SET profiling=1 \G
@@ -38,7 +38,7 @@ And here's a less trivial example that shows how the actually evaluated
 query tree can be rather different from the original one because of
 expansions and other transformations:
 
-.. code-block:: mysql
+.. code-block:: none
 
 
     mysql> SELECT * FROM test WHERE MATCH('@title abc* @body hey') \G SHOW PLAN \G

@@ -3,7 +3,7 @@
 INSERT and REPLACE syntax
 -------------------------
 
-.. code-block:: mysql
+.. code-block:: none
 
 
     {INSERT | REPLACE} INTO index [(column, ...)]

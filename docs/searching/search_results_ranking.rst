@@ -112,7 +112,7 @@ call from the SphinxAPI. The API ports expose these as global constants.
 Using SphinxQL syntax, the prefix should be omitted and the ranker name
 is case insensitive. Example:
 
-.. code-block:: mysql
+.. code-block:: php
 
 
     // SphinxAPI

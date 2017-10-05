@@ -75,7 +75,7 @@ SPH_SORT_EXTENDED mode
 In SPH_SORT_EXTENDED mode, you can specify an SQL-like sort expression
 with up to 5 attributes (including internal attributes), eg:
 
-.. code-block:: mysql
+.. code-block:: none
 
 
     @relevance DESC, price ASC, @id DESC
@@ -110,7 +110,7 @@ arithmetic expression, involving attribute values, internal attributes
 (@id and @weight), arithmetic operations, and a number of built-in
 functions. Here's an example:
 
-.. code-block:: mysql
+.. code-block:: php
 
 
     $cl->SetSortMode ( SPH_SORT_EXPR,

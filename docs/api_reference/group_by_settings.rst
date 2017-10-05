@@ -24,7 +24,7 @@ produced by the following pseudo code:
 .. code-block:: mysql
 
 
-    SELECT ... GROUP BY $func($attribute) ORDER BY $groupsort
+    SELECT ... GROUP BY func(attribute) ORDER BY groupsort
 
 Note that it's ``$groupsort`` that affects the order of matches in the
 final result set. Sorting mode (see :ref:`set_sort_mode`)

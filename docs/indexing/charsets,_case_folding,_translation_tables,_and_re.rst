@@ -32,7 +32,7 @@ do submit your tables for other languages!
 You can also specify text pattern replacement rules. For example, given
 the rules
 
-.. code-block:: mysql
+.. code-block:: none
 
 
     regexp_filter = \**(\d+)\" => \1 inch

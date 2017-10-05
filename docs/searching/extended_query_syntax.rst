@@ -8,19 +8,19 @@ extended matching mode:
 
 -  operator OR:
 
-.. code-block:: mysql
+.. code-block:: none
 
        hello | world
 
 -  operator MAYBE:
 
-.. code-block:: mysql
+.. code-block:: none
 
        hello MAYBE world
 
 -  operator NOT:
 
-.. code-block:: mysql
+.. code-block:: none
 
 
        hello -world
@@ -28,105 +28,105 @@ extended matching mode:
 
 -  field search operator:
 
-.. code-block:: mysql
+.. code-block:: none
 
        @title hello @body world
 
 -  field position limit modifier:
 
-.. code-block:: mysql
+.. code-block:: none
 
        @body[50] hello
 
 -  multiple-field search operator:
 
-.. code-block:: mysql
+.. code-block:: none
 
        @(title,body) hello world
 
 -  ignore field search operator (will ignore any matches of ‘hello
    world’ from field ‘title’):
 
-.. code-block:: mysql
+.. code-block:: none
 
        @!title hello world
 
 -  ignore multiple-field search operator (if we have fields title,
    subject and body then @!(title) is equivalent to @(subject,body)):
 
-.. code-block:: mysql
+.. code-block:: none
 
        @!(title,body) hello world
 
 -  all-field search operator:
 
-.. code-block:: mysql
+.. code-block:: none
 
        @* hello
 
 -  phrase search operator:
 
-.. code-block:: mysql
+.. code-block:: none
 
        "hello world"
 
 -  proximity search operator:
 
-.. code-block:: mysql
+.. code-block:: none
 
        "hello world"~10
 
 -  quorum matching operator:
 
-.. code-block:: mysql
+.. code-block:: none
 
        "the world is a wonderful place"/3
 
 -  strict order operator (aka operator “before”):
 
-.. code-block:: mysql
+.. code-block:: none
 
        aaa << bbb << ccc
 
 -  exact form modifier:
 
-.. code-block:: mysql
+.. code-block:: none
 
        raining =cats and =dogs
 
 -  field-start and field-end modifier:
 
-.. code-block:: mysql
+.. code-block:: none
 
        ^hello world$
 
 -  keyword IDF boost modifier:
 
-.. code-block:: mysql
+.. code-block:: none
 
        boosted^1.234 boostedfieldend$^1.234
 
 -  NEAR, generalized proximity operator:
 
-.. code-block:: mysql
+.. code-block:: none
 
        hello NEAR/3 world NEAR/4 "my test"
 
 -  SENTENCE operator:
 
-.. code-block:: mysql
+.. code-block:: none
 
        all SENTENCE words SENTENCE "in one sentence"
 
 -  PARAGRAPH operator:
 
-.. code-block:: mysql
+.. code-block:: none
 
        "Bill Gates" PARAGRAPH "Steve Jobs"
 
 -  ZONE limit operator:
 
-.. code-block:: mysql
+.. code-block:: none
 
        ZONE:(h3,h4)
 
@@ -134,7 +134,7 @@ extended matching mode:
 
 -  ZONESPAN limit operator:
 
-.. code-block:: mysql
+.. code-block:: none
 
        ZONESPAN:(h2)
 
@@ -145,7 +145,7 @@ Here's an example query that uses some of these operators:
 Example 5.2. Extended matching mode: query example
                                                   
 
-.. code-block:: mysql
+.. code-block:: none
 
 
     "hello world" @title "example program"~5 @body python -(php|perl) @* code
@@ -180,7 +180,7 @@ Normally, query will fail with an error message if given field name does
 not exist in the searched index. However, that can be suppressed by
 specifying “@@relaxed" option at the very beginning of the query:
 
-.. code-block:: mysql
+.. code-block:: none
 
 
     @@relaxed @nosuchfield my query
@@ -218,7 +218,7 @@ document. Order operator has the lowest priority. It can be applied both
 to just keywords and more complex expressions, ie. this is a valid
 query:
 
-.. code-block:: mysql
+.. code-block:: none
 
 
     (bag of words) << "exact phrase" << red|green|blue
@@ -237,7 +237,7 @@ operators. It is possible to apply an exact form modifier to the phrase
 operator. It's really just syntax sugar - it adds an exact form modifier
 to all terms contained within the phrase.
 
-.. code-block:: mysql
+.. code-block:: none
 
 
     ="exact phrase"
@@ -253,7 +253,7 @@ Arbitrarily nested brackets and negations are allowed. However, the
 query must be possible to compute without involving an implicit list of
 all documents:
 
-.. code-block:: mysql
+.. code-block:: none
 
 
     // correct query
@@ -269,7 +269,7 @@ Terms within the phrase operator are position significant. When the
 terms from that phrase query will be shifted. Therefore, ‘match any’ has
 no impact on search performance.
 
-.. code-block:: mysql
+.. code-block:: none
 
 
     "exact * phrase * * for terms"
@@ -298,7 +298,7 @@ its arguments are within the same sentence or the same paragraph of
 text, respectively. The arguments can be either keywords, or phrases, or
 the instances of the same operator. Here are a few examples:
 
-.. code-block:: mysql
+.. code-block:: none
 
 
     one SENTENCE two
@@ -319,7 +319,7 @@ single contiguous span of a given zone, and may match in multiple spans.
 For instance, ``(ZONE:th hello world)`` query *will* match this example
 document:
 
-.. code-block:: mysql
+.. code-block:: none
 
 
     <th>Table 1\. Local awareness of Hello Kitty brand.</th>

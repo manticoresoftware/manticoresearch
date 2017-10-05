@@ -453,7 +453,7 @@ Comparison functions
    produce *different* results even though they are logically
    equivalent:
 
-.. code-block:: mysql
+.. code-block:: none
 
 
        IF ( sqrt(3)*sqrt(3)-3<>0, a, b )
@@ -568,7 +568,7 @@ Miscellaneous functions
    geodistance formula to use. The complete syntax and a few examples
    are as follows:
 
-   .. code-block:: mysql
+   .. code-block:: none
 
       GEODIST(lat1, lon1, lat2, lon2, { option=value, ... })
   
@@ -653,7 +653,7 @@ Miscellaneous functions
    PACKEDFACTORS() can take an optional argument that disables ATC
    ranking factor calculation:
 
-   .. code-block:: mysql
+   .. code-block:: none
 
 
        PACKEDFACTORS({no_atc=1})
@@ -664,7 +664,7 @@ Miscellaneous functions
    not need ATC. PACKEDFACTORS() can also be told to format its output
    as JSON:
 
-   .. code-block:: mysql
+   .. code-block:: none
 
 
        PACKEDFACTORS({json=1})
@@ -674,7 +674,7 @@ Miscellaneous functions
    look as follows below. (Note that the examples below are wrapped for
    readability; actual returned values would be single-line.)
 
-   .. code-block:: mysql
+   .. code-block:: none
 
 
        mysql> SELECT id, PACKEDFACTORS() FROM test1

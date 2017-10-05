@@ -3,7 +3,7 @@
 DESCRIBE syntax
 ---------------
 
-.. code-block:: mysql
+.. code-block:: none
 
 
     {DESC | DESCRIBE} index [ LIKE pattern ]

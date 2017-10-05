@@ -3,7 +3,7 @@
 ALTER syntax
 ------------
 
-.. code-block:: mysql
+.. code-block:: none
 
 
     ALTER TABLE index {ADD|DROP} COLUMN column_name [{INTEGER|INT|BIGINT|FLOAT|BOOL|MULTI|MULTI64|JSON|STRING}]

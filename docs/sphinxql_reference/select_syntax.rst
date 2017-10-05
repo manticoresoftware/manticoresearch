@@ -3,7 +3,7 @@
 SELECT syntax
 -------------
 
-.. code-block:: mysql
+.. code-block:: none
 
 
     SELECT
@@ -464,7 +464,7 @@ sets with a single SQL statement, without the need for complicated
 should be written at the very end of SELECT statements with spaces
 between them.
 
-.. code-block:: mysql
+.. code-block:: none
 
 
        FACET {expr_list} [BY {expr_list}] [ORDER BY {expr | FACET()} {ASC | DESC}] [LIMIT [offset,] count]
@@ -549,7 +549,7 @@ Subselects currently have 2 usage cases:
   
 1. We have a query with 2 ranking UDFs, one very fast and the other one slow and we perform a full-text search will a big match result set. Without subselect the query would look like
    
-   .. code-block:: mysql 
+   .. code-block:: none 
 
     	SELECT id,slow_rank() as slow,fast_rank() as fast FROM index 
     		WHERE MATCH(‘some common query terms’) ORDER BY fast DESC, slow DESC LIMIT 20 
@@ -558,7 +558,7 @@ Subselects currently have 2 usage cases:
    
    With subselects the query can be rewritten as :
    
-   .. code-block:: mysql 
+   .. code-block:: none 
    
     	SELECT * FROM
     		(SELECT id,slow_rank() as slow,fast_rank() as fast FROM index WHERE 

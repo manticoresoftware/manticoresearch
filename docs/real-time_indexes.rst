@@ -38,7 +38,7 @@ RT index can be accessed using MySQL protocol. INSERT, REPLACE, DELETE,
 and SELECT statements against RT index are supported. For instance, this
 is an example session with the sample index above:
 
-.. code-block:: mysql
+.. code-block:: bash
 
 
     $ mysql -h 127.0.0.1 -P 9306

@@ -365,7 +365,7 @@ static CSphAtomic							g_iPersistentInUse;
 /// master-agent API protocol extensions version
 enum
 {
-	VER_MASTER = 14
+	VER_MASTER = 15
 };
 
 
@@ -3108,6 +3108,19 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 		iReqSize += 4; // outer limit
 	if ( q.m_iMaxPredictedMsec>0 )
 		iReqSize += 4;
+
+	iReqSize += 8 + 4 * ( q.m_dItems.GetLength() + q.m_dRefItems.GetLength() );
+	ARRAY_FOREACH ( i, q.m_dItems )
+	{
+		iReqSize += 4 + q.m_dItems[i].m_sAlias.Length();
+		iReqSize += 4 + q.m_dItems[i].m_sExpr.Length();
+	}
+	ARRAY_FOREACH ( i, q.m_dRefItems )
+	{
+		iReqSize += 4 + q.m_dRefItems[i].m_sAlias.Length();
+		iReqSize += 4 + q.m_dRefItems[i].m_sExpr.Length();
+	}
+
 	return iReqSize;
 }
 
@@ -3125,7 +3138,9 @@ enum
 	QFLAG_GLOBAL_IDF			= 1UL << 5,
 	QFLAG_NORMALIZED_TF			= 1UL << 6,
 	QFLAG_LOCAL_DF				= 1UL << 7,
-	QFLAG_LOW_PRIORITY			= 1UL << 8
+	QFLAG_LOW_PRIORITY			= 1UL << 8,
+	QFLAG_FACET					= 1UL << 9,
+	QFLAG_FACET_HEAD			= 1UL << 10
 };
 
 void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_c & tOut, const CSphQuery & q, bool bAgentWeight, int iWeight ) const
@@ -3142,6 +3157,8 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 	uFlags |= QFLAG_NORMALIZED_TF * q.m_bNormalizedTFIDF;
 	uFlags |= QFLAG_LOCAL_DF * q.m_bLocalDF;
 	uFlags |= QFLAG_LOW_PRIORITY * q.m_bLowPriority;
+	uFlags |= QFLAG_FACET * q.m_bFacet;
+	uFlags |= QFLAG_FACET_HEAD * q.m_bFacetHead;
 	tOut.SendDword ( uFlags );
 
 	// The Search Legacy
@@ -3304,6 +3321,22 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 		tOut.SendInt ( q.m_dFilterTree[i].m_iRight );
 		tOut.SendInt ( q.m_dFilterTree[i].m_iFilterItem );
 		tOut.SendInt ( q.m_dFilterTree[i].m_bOr );
+	}
+	tOut.SendInt( q.m_dItems.GetLength() );
+	ARRAY_FOREACH ( i, q.m_dItems )
+	{
+		const CSphQueryItem & tItem = q.m_dItems[i];
+		tOut.SendString ( tItem.m_sAlias.cstr() );
+		tOut.SendString ( tItem.m_sExpr.cstr() );
+		tOut.SendDword ( tItem.m_eAggrFunc );
+	}
+	tOut.SendInt( q.m_dRefItems.GetLength() );
+	ARRAY_FOREACH ( i, q.m_dRefItems )
+	{
+		const CSphQueryItem & tItem = q.m_dRefItems[i];
+		tOut.SendString ( tItem.m_sAlias.cstr() );
+		tOut.SendString ( tItem.m_sExpr.cstr() );
+		tOut.SendDword ( tItem.m_eAggrFunc );
 	}
 }
 
@@ -4103,8 +4136,9 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		if ( tQuery.m_sSelect.IsEmpty () )
 			tQuery.m_sSelect = "*";
 
+		// master sends items to agents sice master.version=15 
 		CSphString sError;
-		if ( !tQuery.ParseSelectList ( sError ) )
+		if ( iMasterVer<15 && !tQuery.ParseSelectList ( sError ) )
 		{
 			SendErrorReply ( tOut, "select: %s", sError.cstr() );
 
@@ -4138,6 +4172,8 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		tQuery.m_bGlobalIDF = !!( uFlags & QFLAG_GLOBAL_IDF );
 		tQuery.m_bLocalDF = !!( uFlags & QFLAG_LOCAL_DF );
 		tQuery.m_bLowPriority = !!( uFlags & QFLAG_LOW_PRIORITY );
+		tQuery.m_bFacet = !!( uFlags & QFLAG_FACET );
+		tQuery.m_bFacetHead = !!( uFlags & QFLAG_FACET_HEAD );
 
 		if ( iMasterVer>0 || iVer==0x11E )
 			tQuery.m_bNormalizedTFIDF = !!( uFlags & QFLAG_NORMALIZED_TF );
@@ -4197,6 +4233,26 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 			tItem.m_iRight = tReq.GetInt();
 			tItem.m_iFilterItem = tReq.GetInt();
 			tItem.m_bOr = ( tReq.GetInt()!=0 );
+		}
+	}
+
+	if ( iMasterVer>=15 )
+	{
+		tQuery.m_dItems.Resize ( tReq.GetInt() );
+		ARRAY_FOREACH ( i, tQuery.m_dItems )
+		{
+			CSphQueryItem & tItem = tQuery.m_dItems[i];
+			tItem.m_sAlias = tReq.GetString();
+			tItem.m_sExpr = tReq.GetString();
+			tItem.m_eAggrFunc = (ESphAggrFunc)tReq.GetDword();
+		}
+		tQuery.m_dRefItems.Resize ( tReq.GetInt() );
+		ARRAY_FOREACH ( i, tQuery.m_dRefItems )
+		{
+			CSphQueryItem & tItem = tQuery.m_dRefItems[i];
+			tItem.m_sAlias = tReq.GetString();
+			tItem.m_sExpr = tReq.GetString();
+			tItem.m_eAggrFunc = (ESphAggrFunc)tReq.GetDword();
 		}
 	}
 
@@ -5693,7 +5749,9 @@ const CSphVector<CSphQueryItem> * ExpandAsterisk ( const ISphSchema & tSchema,
 
 	while ( iSchemaBound && tSchema.GetAttr ( iSchemaBound-1 ).m_sName.cstr()[0]=='@' )
 		iSchemaBound--;
-	if ( bOnlyPlain && iSchemaBound>tSchema.GetStaticSize() )
+
+	// drop auto generated attributes
+	if ( bOnlyPlain && tSchema.GetStaticSize() && iSchemaBound>tSchema.GetStaticSize() )
 		iSchemaBound = tSchema.GetStaticSize();
 
 	ARRAY_FOREACH ( i, tItems )

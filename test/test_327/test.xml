@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>facet at distributed index</name>
+<config>
+searchd
+{
+	<searchd_settings/>
+	workers					= threads
+}
+
+index facetdemo1
+{
+	type              = rt
+	path              = <data_path/>/facetdemo
+	rt_field          = title
+	rt_field          = property
+	rt_attr_string    = title
+	rt_attr_string    = brand_name
+	rt_attr_string    = property
+	rt_attr_multi     = categories
+	rt_attr_uint      = price
+	rt_attr_uint      = brand_id
+	rt_attr_json      = j
+}
+
+index facetdemo2
+{
+	type              = rt
+	path              = <data_path/>/facetdemo22
+	rt_field          = title
+	rt_field          = property
+	rt_attr_string    = title
+	rt_attr_string    = brand_name
+	rt_attr_string    = property
+	rt_attr_multi     = categories
+	rt_attr_uint      = price
+	rt_attr_uint      = brand_id
+	rt_attr_json      = j
+}
+
+index facetdemo11
+{
+	type              = distributed
+	local             = facetdemo2
+	local             = facetdemo1
+}
+
+index facetdemo12
+{
+	type              = distributed
+	agent             = <my_address/>:facetdemo2
+	agent             = <my_address/>:facetdemo1
+}
+
+index facetdemo13
+{
+	type              = distributed
+	agent             = <my_address/>:facetdemo2
+	local             = facetdemo1
+}
+
+source src
+{
+	type              = mysql
+	<sql_settings/>
+	sql_query         = SELECT * FROM test_table
+	sql_attr_uint     = price
+	sql_attr_uint     = brand_id
+	sql_field_string  = title
+	sql_attr_string   = brand_name
+	sql_field_string  = property
+	sql_attr_multi    = uint categories from field
+	sql_attr_json     = j
+}
+
+index facet_dummy
+{
+	source            = src
+	path              = <data_path/>/facets
+}
+</config>
+
+<db_create>
+CREATE TABLE `test_table` (
+  `id` int(11),
+  `price` int(11),
+  `brand_id` int(11),
+  `title` varchar(255),
+  `brand_name` varchar(255),
+  `property` varchar(255),
+  `categories` varchar(255),
+  `j` varchar(255)
+);
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS `test_table`;</db_drop>
+
+<db_insert>
+insert into test_table (id,price,brand_id,title,brand_name,property,categories,j) values
+(1,529,9,'Product Five Two','Brand Nine','Four','(13,14)','{x:[13,14],a:["a13","a14"]}')
+</db_insert>
+
+<sphqueries>
+
+<sphinxql>
+insert into facetdemo1 (id,price,brand_id,title,brand_name,property,categories,j) values
+(1,529,9,'Product Five Two','Brand Nine','Four',(13,14),'{x:[13,14],a:["a13","a14"]}'),
+(2,173,10,'Product Five Seven','Brand Ten','Four',(10),'{x:[10],a:["a10"]}'),
+(3,121,1,'Product Seven Nine','Brand One','Five',(13,14,15),'{x:[13,14,15],a:["a13","a14","a15"]}'),
+(4,474,7,'Product Ten Three','Brand Seven','Nine',(10,11,12),'{x:[10,11,12],a:["a10","a11","a12"]}'),
+(5,20,7,'Product Ten Four','Brand Seven','Seven',(13),'{x:[13],a:["a13"]}')
+</sphinxql>
+
+<sphinxql>
+insert into facetdemo2 (id,price,brand_id,title,brand_name,property,categories,j) values
+(101,529,9,'Product Five Two','Brand Nine','Four',(13,14),'{x:[13,14],a:["a13","a14"]}'),
+(102,173,10,'Product Five Seven','Brand Ten','Four',(10),'{x:[10],a:["a10"]}'),
+(103,121,1,'Product Seven Nine','Brand One','Five',(13,14,15),'{x:[13,14,15],a:["a13","a14","a15"]}'),
+(104,474,7,'Product Ten Three','Brand Seven','Nine',(10,11,12),'{x:[10,11,12],a:["a10","a11","a12"]}'),
+(105,20,7,'Product Ten Four','Brand Seven','Seven',(13),'{x:[13],a:["a13"]}')
+</sphinxql>
+
+<!-- multi-queries require at least one ';' (see helpers.inc) -->
+
+<sphinxql>select * from facetdemo1 facet brand_id;</sphinxql>
+<sphinxql>select * from facetdemo2 facet brand_id;</sphinxql>
+
+<sphinxql>select * from facetdemo11 facet brand_id;</sphinxql>
+<sphinxql>select * from facetdemo12 facet brand_id;</sphinxql>
+<sphinxql>select * from facetdemo13 facet brand_id;</sphinxql>
+
+</sphqueries>
+
+</test>

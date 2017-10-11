@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>ranged-main-query mva attribute</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query			= SELECT id, gid, title FROM test where id between $start and $end
+	sql_query_range = select 1, 4
+
+	sql_attr_uint		= gid
+	sql_attr_multi = uint mva from ranged-main-query; select id, mva from mva where id between $start and $end
+}
+
+index test1
+{
+	source			= src1
+	path			= <data_path/>/test1
+}
+
+source src2 : src1
+{
+	sql_query_range = select 5, 8
+}
+
+index test2
+{
+	source			= src2
+	path			= <data_path/>/test2
+}
+
+</config>
+
+<db_create>
+create table test
+(
+	id int not null,
+	gid int not null,
+	title varchar(255) not null,
+	text varchar(255) not null
+);
+</db_create>
+<db_create>
+create table mva
+(
+	id int not null,
+	mva int not null
+);
+</db_create>
+
+<db_drop>drop table if exists test;</db_drop>
+<db_drop>drop table if exists mva;</db_drop>
+<db_insert>insert into test values ( 1, 101, 'not found',	'notice found' );</db_insert>
+<db_insert>insert into test values ( 2, 102, 'not anyone',	'notice goods' );</db_insert>
+<db_insert>insert into test values ( 3, 103, 'not grant',	'notice goods' );</db_insert>
+<db_insert>insert into test values ( 4, 104, 'not grant',	'everyone' );</db_insert>
+<db_insert>insert into test values ( 5, 105, 'not anyone',	'grant' );</db_insert>
+<db_insert>insert into test values ( 6, 106, 'not fun',		'natural6' );</db_insert>
+<db_insert>insert into test values ( 7, 107, 'not fun',		'natural7' );</db_insert>
+<db_insert>insert into test values ( 8, 108, 'not fun',		'natural8' );</db_insert>
+<db_insert>insert into mva values (1, 1001), (1, 2001);</db_insert>
+<db_insert>insert into mva values (2, 1002), (2, 2002);</db_insert>
+<db_insert>insert into mva values (3, 1003), (3, 2003);</db_insert>
+<db_insert>insert into mva values (4, 1004), (4, 2004);</db_insert>
+<db_insert>insert into mva values (5, 1005), (5, 2005);</db_insert>
+<db_insert>insert into mva values (6, 1006), (6, 2006);</db_insert>
+<db_insert>insert into mva values (7, 1007), (7, 2007);</db_insert>
+<db_insert>insert into mva values (8, 1008), (8, 2008);</db_insert>
+
+<sphqueries>
+<sphinxql>select * from test1</sphinxql>
+<sphinxql>select * from test2</sphinxql>
+</sphqueries>
+
+</test>

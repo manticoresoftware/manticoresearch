@@ -1466,7 +1466,8 @@ enum ESphAttrSrc
 	SPH_ATTRSRC_NONE		= 0,	///< not multi-valued
 	SPH_ATTRSRC_FIELD		= 1,	///< get attr values from text field
 	SPH_ATTRSRC_QUERY		= 2,	///< get attr values from SQL query
-	SPH_ATTRSRC_RANGEDQUERY	= 3		///< get attr values from ranged SQL query
+	SPH_ATTRSRC_RANGEDQUERY	= 3,		///< get attr values from ranged SQL query
+	SPH_ATTRSRC_RANGEDMAINQUERY	= 4		///< get attr values from main ranged SQL query, used for MVA query
 };
 
 

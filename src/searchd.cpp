@@ -5693,7 +5693,9 @@ const CSphVector<CSphQueryItem> * ExpandAsterisk ( const ISphSchema & tSchema,
 
 	while ( iSchemaBound && tSchema.GetAttr ( iSchemaBound-1 ).m_sName.cstr()[0]=='@' )
 		iSchemaBound--;
-	if ( bOnlyPlain && iSchemaBound>tSchema.GetStaticSize() )
+
+	// drop auto generated attributes
+	if ( bOnlyPlain && tSchema.GetStaticSize() && iSchemaBound>tSchema.GetStaticSize() )
 		iSchemaBound = tSchema.GetStaticSize();
 
 	ARRAY_FOREACH ( i, tItems )

@@ -2014,8 +2014,19 @@ DWORD sphGetAddress ( const char * sHost, bool bFatal )
 
 	if ( pResult->ai_next )
 	{
-		char sBuf [ SPH_ADDRESS_SIZE ];
-		sphWarning ( "multiple addresses found for '%s', using the first one (ip=%s)", sHost, sphFormatIP ( sBuf, sizeof(sBuf), uAddr ) );
+		const char * sSep = "";
+		CSphStringBuilder sBuf;
+		for ( ; pResult->ai_next; pResult = pResult->ai_next )
+		{
+			char sAddrBuf [ SPH_ADDRESS_SIZE ];
+			struct sockaddr_in * pAddr = (struct sockaddr_in *)pResult->ai_addr;
+			DWORD uNextAddr = pAddr->sin_addr.s_addr;
+			sphFormatIP ( sAddrBuf, sizeof(sAddrBuf), uNextAddr );
+			sBuf.Appendf ( "ip=%s%s", sBuf.cstr(), sSep );
+			sSep = "; ";
+		}
+
+		sphWarning ( "multiple addresses found for '%s', using the first one (%s)", sHost, sBuf.cstr() );
 	}
 
 	freeaddrinfo ( pResult );

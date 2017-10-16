@@ -1997,6 +1997,7 @@ DWORD sphGetAddress ( const char * sHost, bool bFatal )
 	struct addrinfo tHints, *pResult = NULL;
 	memset ( &tHints, 0, sizeof(tHints));
 	tHints.ai_family = AF_INET;
+	tHints.ai_socktype = SOCK_STREAM;
 
 	int iResult = getaddrinfo ( sHost, NULL, &tHints, &pResult );
 	if ( iResult!=0 || !pResult )

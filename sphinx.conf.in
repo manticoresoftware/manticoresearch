@@ -933,7 +933,7 @@ searchd
 	# optional, default is build-time configured data directory
 	#
 	# binlog_path		= # disable logging
-	# binlog_path		= @CONFDIR@/data # binlog.001 etc will be created there
+	binlog_path		= @CONFDIR@/data # binlog.001 etc will be created there
 
 
 	# binlog flush/sync mode

@@ -15,7 +15,8 @@ respawn limit 10 35
 kill timeout 30
 env DEFAULTFILE="/etc/default/manticore"
 pre-start script
-    mkdir -p -m 0755 -o manticore -g manticore /var/run/manticore
+    mkdir -p -m 0755 /var/run/manticore
+    chown manticore:manticore /var/run/manticore
     if [ -f "$DEFAULTFILE" ]; then
 	. "$DEFAULTFILE"
     fi
@@ -31,5 +32,5 @@ pre-start script
     fi
 end script
 
-exec start-stop-daemon --start --chuid $MANTICOREUSER --exec /usr/bin/searchd -- --nodetach
+exec start-stop-daemon --start --chuid $MANTICOREUSER --exec /usr/bin/searchd -- --nodetach -c /etc/sphinxsearch/sphinx.conf
 

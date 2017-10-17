@@ -203,7 +203,9 @@ inline const	DWORD *	STATIC2DOCINFO ( const DWORD * pAttrs )	{ return STATIC2DOC
 #endif
 
 #ifndef SPHINX_TAG
-#define SPHINX_TAG "-dev"
+#define BANNER_TAG "-dev"
+#else
+#define BANNER_TAG "-" SPHINX_TAG
 #endif
 
 #ifndef GIT_TIMESTAMP_ID
@@ -214,7 +216,7 @@ inline const	DWORD *	STATIC2DOCINFO ( const DWORD * pAttrs )	{ return STATIC2DOC
 // this line is deprecated and no more used. Leaved here for a while.
 #define SPHINX_VERSION_NUMBERS    "2.4.1"
 
-#define SPHINX_VERSION          SPHINX_VERSION_NUMBERS " " SPH_GIT_COMMIT_ID "@" GIT_TIMESTAMP_ID " " SPHINX_BITS_TAG SPHINX_TAG
+#define SPHINX_VERSION          SPHINX_VERSION_NUMBERS " " SPH_GIT_COMMIT_ID "@" GIT_TIMESTAMP_ID " " SPHINX_BITS_TAG BANNER_TAG
 #define SPHINX_BANNER			"Manticore " SPHINX_VERSION "\nCopyright (c) 2001-2016, Andrew Aksyonoff\n" \
 	"Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)\n" \
 	"Copyright (c) 2017, Manticore Software LTD (http://manticoresearch.com)\n\n"

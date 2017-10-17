@@ -489,7 +489,7 @@ bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const char * szAgent, const cha
 struct IRequestBuilder_t : public ISphNoncopyable
 {
 	virtual ~IRequestBuilder_t () {} // to avoid gcc4 warns
-	virtual void BuildRequest ( const AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const = 0;
+	virtual void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const = 0;
 };
 
 

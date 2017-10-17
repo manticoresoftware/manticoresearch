@@ -362,6 +362,10 @@ static CSphMutex							g_tPersLock;
 
 static CSphAtomic							g_iPersistentInUse;
 
+static SphThread_t							g_tBlackholeThread;
+static void BlackholeAddAgents ( AgentsVector & dAgents, const IRequestBuilder_t & tReq );
+static bool HasBlackhole ( AgentsVector & dAgents );
+
 /// master-agent API protocol extensions version
 enum
 {
@@ -3022,11 +3026,11 @@ struct SearchRequestBuilder_t : public IRequestBuilder_t
 		: m_dQueries ( dQueries ), m_iStart ( iStart ), m_iEnd ( iEnd ), m_iDivideLimits ( iDivideLimits )
 	{}
 
-	virtual void		BuildRequest ( const AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const;
+	virtual void		BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const;
 
 protected:
 	int					CalcQueryLen ( const char * sIndexes, const CSphQuery & q, bool bAgentWeight ) const;
-	void				SendQuery ( const char * sIndexes, NetOutputBuffer_c & tOut, const CSphQuery & q, bool bAgentWeight, int iWeight ) const;
+	void				SendQuery ( const char * sIndexes, ISphOutputBuffer & tOut, const CSphQuery & q, bool bAgentWeight, int iWeight ) const;
 
 protected:
 	const CSphVector<CSphQuery> &		m_dQueries;
@@ -3136,7 +3140,7 @@ enum
 	QFLAG_LOW_PRIORITY			= 1UL << 8
 };
 
-void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_c & tOut, const CSphQuery & q, bool bAgentWeight, int iWeight ) const
+void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, ISphOutputBuffer & tOut, const CSphQuery & q, bool bAgentWeight, int iWeight ) const
 {
 	// starting with command version 1.27, flags go first
 	// reason being, i might add flags that affect *any* of the subsequent data (eg. qflag_pack_ints)
@@ -3316,7 +3320,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, NetOutputBuffer_
 }
 
 
-void SearchRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const
+void SearchRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const
 {
 	const char * sIndexes = tAgent.m_tDesc.m_sIndexes.cstr();
 	bool bAgentWeigth = ( tAgent.m_iWeight!=-1 );
@@ -8388,6 +8392,12 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// main query loop (with multiple retries for distributed)
 	///////////////////////////////////////////////////////////
 
+	if ( dAgents.GetLength() && HasBlackhole ( dAgents ) )
+	{
+		SearchRequestBuilder_t tReq ( m_dQueries, iStart, iEnd, 1 );
+		BlackholeAddAgents ( dAgents, tReq );
+	}
+
 	// connect to remote agents and query them, if required
 	CSphScopedPtr<SearchRequestBuilder_t> tReqBuilder ( NULL );
 	CSphScopedPtr<ISphRemoteAgentsController> tDistCtrl ( NULL );
@@ -10516,7 +10526,7 @@ struct SnippetRequestBuilder_t : public IRequestBuilder_t
 		, m_iWorker ( 0 )
 	{
 	}
-	virtual void BuildRequest ( const AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const;
+	virtual void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const;
 
 private:
 	const SnippetsRemote_t * m_pWorker;
@@ -10541,7 +10551,7 @@ private:
 };
 
 
-void SnippetRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const
+void SnippetRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const
 {
 	// it sends either all queries to each agent or sequence of queries to current agent
 	m_tWorkerMutex.Lock();
@@ -11190,7 +11200,7 @@ void HandleCommandKeywords ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & 
 struct UpdateRequestBuilder_t : public IRequestBuilder_t
 {
 	explicit UpdateRequestBuilder_t ( const CSphAttrUpdate & pUpd ) : m_tUpd ( pUpd ) {}
-	virtual void BuildRequest ( const AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const;
+	virtual void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const;
 
 protected:
 	const CSphAttrUpdate & m_tUpd;
@@ -11214,7 +11224,7 @@ protected:
 };
 
 
-void UpdateRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const
+void UpdateRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const
 {
 	const char * sIndexes = tAgent.m_tDesc.m_sIndexes.cstr();
 	int iReqSize = 4+strlen(sIndexes); // indexes string
@@ -13404,7 +13414,7 @@ void HandleMysqlCallSnippets ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, ThdDesc
 struct KeywordsRequestBuilder_t : public IRequestBuilder_t
 {
 	KeywordsRequestBuilder_t ( const GetKeywordsSettings_t & tSettings, const CSphString & sTerm );
-	virtual void BuildRequest ( const AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const;
+	virtual void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const;
 
 protected:
 	const GetKeywordsSettings_t & m_tSettings;
@@ -13643,7 +13653,7 @@ KeywordsRequestBuilder_t::KeywordsRequestBuilder_t ( const GetKeywordsSettings_t
 {
 }
 
-void KeywordsRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const
+void KeywordsRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const
 {
 	const CSphString & sIndexes = tAgent.m_tDesc.m_sIndexes;
 	int iReqLen = 28 + sIndexes.Length() + m_sTerm.Length();
@@ -14215,7 +14225,7 @@ struct PingRequestBuilder_t : public IRequestBuilder_t
 	explicit PingRequestBuilder_t ( int iCookie = 0 )
 		: m_iCookie ( iCookie )
 	{}
-	virtual void BuildRequest ( const AgentConn_t &, NetOutputBuffer_c & tOut ) const
+	virtual void BuildRequest ( const AgentConn_t &, ISphOutputBuffer & tOut ) const
 	{
 		// header
 		tOut.SendWord ( SEARCHD_COMMAND_PING );
@@ -14327,6 +14337,177 @@ static void PingThreadFunc ( void * )
 
 
 /////////////////////////////////////////////////////////////////////////////
+// blackhole thread
+
+struct AgentSendData_t
+{
+	AgentConn_t * m_pAgent;
+	CSphVector<BYTE> m_dOut;
+
+	AgentSendData_t ()
+		: m_pAgent ( NULL )
+	{}
+
+	~AgentSendData_t()
+	{
+		SafeDelete ( m_pAgent );
+	}
+};
+
+struct BlackholeRequestBuilder_t : public IRequestBuilder_t
+{
+	explicit BlackholeRequestBuilder_t ( const CSphVector<AgentSendData_t *> & dBlackholes )
+		: m_dBlackholes ( dBlackholes )
+	{}
+
+	virtual void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const;
+
+	const CSphVector<AgentSendData_t *> & m_dBlackholes;
+};
+
+struct BlackholeReplyParser_t : public IReplyParser_t
+{
+	BlackholeReplyParser_t ()
+	{}
+
+	virtual bool ParseReply ( MemInputBuffer_c & , AgentConn_t & ) const
+	{
+		return true;
+	}
+};
+
+
+CSphMutex g_tBlackholeLock;
+static CSphVector<AgentSendData_t *> g_dBlackholeAgents;
+
+static const int g_iBlackholeTimeout = 5;
+static const int g_iBlackholeRetries = 3;
+
+static void BlackholeTick()
+{
+	if ( !g_dBlackholeAgents.GetLength() )
+		return;
+
+	VectorPtrsGuard_T<AgentSendData_t> tBlackholes;
+	// grab blackholes under lock
+	g_tBlackholeLock.Lock();
+	tBlackholes.m_dPtrs.SwapData ( g_dBlackholeAgents );
+	g_tBlackholeLock.Unlock();
+
+	// agent vector for remote controller
+	AgentsVector dAgents;
+	AgentConn_t ** ppAgents = dAgents.AddN ( tBlackholes.m_dPtrs.GetLength() );
+	ARRAY_FOREACH ( i, tBlackholes.m_dPtrs )
+	{
+		AgentConn_t * pAgent = tBlackholes.m_dPtrs[i]->m_pAgent;
+		pAgent->m_iWorkerTag = i;
+		ppAgents[i] = pAgent;
+	}
+	assert ( dAgents.GetLength() && tBlackholes.m_dPtrs.GetLength() );
+
+	BlackholeRequestBuilder_t tReq ( tBlackholes.m_dPtrs );
+	CSphScopedPtr<ISphRemoteAgentsController> tDistCtrl ( GetAgentsController ( 1, dAgents, tReq, g_iBlackholeTimeout, g_iBlackholeRetries ) );
+	if ( g_bShutdown )
+		return;
+
+	bool bDistDone = false;
+	while ( !bDistDone )
+	{
+		if ( !tDistCtrl->HasReadyAgents () )
+			tDistCtrl->WaitAgentsEvent();
+		bDistDone = tDistCtrl->IsDone();
+
+		if ( g_bShutdown )
+			return;
+
+		// need to fetch data to prevent network error reports at agent(blackhole)
+		if ( tDistCtrl->FetchReadyAgents() )
+		{
+			BlackholeReplyParser_t tParser;
+			RemoteWaitForAgents ( dAgents, g_iBlackholeTimeout, tParser );
+			if ( tDistCtrl->RetryFailed()>0 )
+				bDistDone = false;
+		}
+	}
+}
+
+static void BlackholeThreadFunc ( void * )
+{
+	// crash logging for the thread
+	SphCrashLogger_c tQueryTLS;
+	tQueryTLS.SetupTLS ();
+
+	while ( !g_bShutdown )
+	{
+		if ( !g_dBlackholeAgents.GetLength() )
+		{
+			sphSleepMsec ( 1 );
+			continue;
+		}
+
+		BlackholeTick();
+	}
+
+	// clean up
+	g_tBlackholeLock.Lock();
+	ARRAY_FOREACH ( i, g_dBlackholeAgents )
+		SafeDelete ( g_dBlackholeAgents[i] );
+	g_dBlackholeAgents.Reset();
+	g_tBlackholeLock.Unlock();
+}
+
+void BlackholeAddAgents ( AgentsVector & dAgents, const IRequestBuilder_t & tReq )
+{
+	if ( g_bShutdown )
+		return;
+
+	CSphVector<AgentSendData_t *> dBlackholes;
+
+	// collect blackholes
+	ARRAY_FOREACH ( i, dAgents )
+	{
+		AgentConn_t * pAgent = dAgents[i];
+		if ( !dAgents[i]->m_tDesc.m_bBlackhole )
+			continue;
+
+		dAgents.RemoveFast ( i-- );
+
+		AgentSendData_t * pSend = new AgentSendData_t;
+		pSend->m_pAgent = pAgent;
+
+		// extract raw info for send to get rid of dependent data above
+		ISphOutputBuffer tTmp;
+		tReq.BuildRequest ( *pAgent, tTmp );
+		tTmp.SwapData ( pSend->m_dOut );
+
+		dBlackholes.Add ( pSend );
+	}
+
+	// move blackholes to pool for process
+	g_tBlackholeLock.Lock();
+
+	AgentSendData_t ** ppNew = g_dBlackholeAgents.AddN ( dBlackholes.GetLength() );
+	ARRAY_FOREACH ( i, dBlackholes )
+		ppNew[i] = dBlackholes[i];
+
+	g_tBlackholeLock.Unlock();
+}
+
+static bool HasBlackhole ( AgentsVector & dAgents )
+{
+	bool bHas = ARRAY_ANY ( bHas, dAgents, dAgents[_any]->m_tDesc.m_bBlackhole );
+	return bHas;
+}
+
+void BlackholeRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const
+{
+	CSphVector<BYTE> dCopy;
+	dCopy = m_dBlackholes[tAgent.m_iWorkerTag]->m_dOut;
+	tOut.SwapData ( dCopy );
+}
+
+
+/////////////////////////////////////////////////////////////////////////////
 // user variables these send from master to agents
 /////////////////////////////////////////////////////////////////////////////
 
@@ -14339,7 +14520,7 @@ struct UVarRequestBuilder_t : public IRequestBuilder_t
 		, m_iLength ( iLength )
 	{}
 
-	virtual void BuildRequest ( const AgentConn_t &, NetOutputBuffer_c & tOut ) const
+	virtual void BuildRequest ( const AgentConn_t &, ISphOutputBuffer & tOut ) const
 	{
 		// header
 		tOut.SendWord ( SEARCHD_COMMAND_UVAR );
@@ -14508,7 +14689,7 @@ struct SphinxqlRequestBuilder_t : public IRequestBuilder_t
 		, m_sEnd ( sQuery.cstr() + tStmt.m_iListEnd, sQuery.Length() - tStmt.m_iListEnd )
 	{
 	}
-	virtual void BuildRequest ( const AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const;
+	virtual void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const;
 
 protected:
 	const CSphString m_sBegin;
@@ -14556,7 +14737,7 @@ protected:
 };
 
 
-void SphinxqlRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, NetOutputBuffer_c & tOut ) const
+void SphinxqlRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const
 {
 	const char* sIndexes = tAgent.m_tDesc.m_sIndexes.cstr();
 	int iReqSize = strlen(sIndexes) + m_sBegin.Length() + m_sEnd.Length(); // indexes string
@@ -23497,6 +23678,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	if ( !sphThreadCreate ( &g_tPingThread, PingThreadFunc, 0 ) )
 		sphDie ( "failed to create ping service thread" );
+
+	if ( !sphThreadCreate ( &g_tBlackholeThread, BlackholeThreadFunc, 0 ) )
+		sphDie ( "failed to create blackhole service thread" );
 
 	if ( bForcedPreread )
 	{

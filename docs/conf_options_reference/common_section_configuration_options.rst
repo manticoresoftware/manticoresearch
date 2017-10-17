@@ -25,7 +25,14 @@ Example:
 
     lemmatizer_base = /usr/local/share/sphinx/dicts/
 	
+.. _progressive_merge:
 
+progressive_merge
+~~~~~~~~~~~~~~~~~
+
+Merge Real-Time index chunks during OPTIMIZE operation from smaller to bigger. Progressive merge merger faster and reads/write less data. 
+Enabled by default. If disabled, chunks are merged from first to last created. 
+	
 .. _json_autoconv_keynames:
 
 json_autoconv_keynames

@@ -315,22 +315,22 @@ grouping_in_utc
 ~~~~~~~~~~~~~~~~~
 
 Specifies whether timed grouping in API and sphinxql will be calculated
-in local timezone, or in UTC. Optional, default is 0 (means ‘local tz’).
+in local timezone, or in UTC. Optional, default is 0 (means 'local tz').
 
-By default all ‘group by time’ expressions (like group by day, week,
+By default all 'group by time' expressions (like group by day, week,
 month and year in API, also group by day, month, year, yearmonth,
-yearmonthday in Manticoreql) is done using local time. I.e. when you have
-docs with attributes timed ‘13:00 utc’ and ‘15:00 utc’ - in case of
+yearmonthday in SphinxQL) is done using local time. I.e. when you have
+docs with attributes timed ``13:00 utc`` and ``15:00 utc`` - in case of
 grouping they both will fall into facility group according to your local
-tz setting. Say, if you live in ‘utc’, it will be one day, but if you
-live in ‘utc+10’, then these docs will be matched into different ‘group
-by day’ facility groups (since 13:00 utc in UTC+10 tz 23:00 local time,
+tz setting. Say, if you live in ``utc``, it will be one day, but if you
+live in ``utc+10``, then these docs will be matched into different ``group
+by day`` facility groups (since 13:00 utc in UTC+10 tz 23:00 local time,
 but 15:00 is 01:00 of the next day). Sometimes such behavior is
 unacceptable, and it is desirable to make time grouping not dependent
 from timezone. Of course, you can run the daemon with defined global TZ
 env variable, but it will affect not only grouping, but also
 timestamping in the logs, which may be also undesirable. Switching ‘on’
-this option (either in config, either using ‘set global’ statement in
+this option (either in config, either using :ref:`set global <set_syntax>` statement in
 sphinxql) will cause all time grouping expressions to be calculated in
 UTC, leaving the rest of time-depentend functions (i.e. logging of the
 daemon) in local TZ.
@@ -697,7 +697,7 @@ default is 1, might be set to -1, 0, positive integer.
 In case daemon configured as pure master and routes requests to agents
 it is important to handle requests without delays and do not allow net-thread
 to sleep or cut out from CPU. Here is busy loop to do that. After incoming
-request network thread use CPU poll for ``10 * net_wait`` milliseconds
+request, network thread use CPU poll for ``10 * net_wait_tm`` milliseconds
 in case ``net_wait_tm`` is positive number or polls only with CPU in
 case ``net_wait_tm`` is ``0``. Also busy loop might be disabled with ``net_wait_tm = -1``
 - this way poller set timeout of ``1ms`` for system poll call.
@@ -959,6 +959,25 @@ Example:
 
     query_log = /var/log/query.log
 
+
+.. _query_log_mode:
+
+query_log_mode
+~~~~~~~~~~~~~~
+
+By default the searchd and query log files are created with 600 permission, so only the user under which daemon runs and root users can read the log files.
+query_log_mode allows settings a different permission. 
+This can be handy to allow other users to be able to read the log files (for example monitoring solutions running on non-root users).
+
+Example:
+
+.. code-block:: ini
+
+
+    query_log_mode  = 666
+
+   
+	
 .. _queue_max_length:
 
 queue_max_length

@@ -21,18 +21,23 @@ Supported platforms:
 * x86
 * x86_64
 
-Manticore requires a few libraries to be installed on Debian/Ubuntu. Use    apt-get to download and install these dependencies:
+Manticore requires no extra libraries to be installed on Debian/Ubuntu.
+However if you plan to use 'indexer' tool to create indexes from different sources,
+you'll need to install appropriate client libraries. Use apt-get to download and install these dependencies:
 
 .. code-block:: bash
 
-	$ sudo apt-get install mysql-client unixodbc libpq5
+	$ sudo apt-get install libmysqlclient20 libodbc1 libpq5 libexpat1
 
+Note, that you need only libs for types of sources you're going to use. So if you plan to make indexes only
+from mysql source, then installing 'libmysqlclient20' will be enough.
+If you don't going to use 'indexer' tool at all, you don't need to install these packages.
 Now you can install Manticore:
 
 .. code-block:: bash
 
-	$ wget https://github.com/manticoresoftware/manticore/releases/download/2.3.3-170706/manticore_2.3.3-170706-9fbdd5f-1.jessie_amd64.deb
-	$ sudo dpkg -i manticore_2.3.3-170706-9fbdd5f-1.jessie_amd64.deb
+	$ wget https://github.com/manticoresoftware/manticore/releases/download/2.4.1/manticore_2.4.1-171017-3b31a97-release-stemmer.jessie_amd64-bin.deb
+	$ sudo dpkg -i manticore_2.4.1-171017-3b31a97-release-stemmer.jessie_amd64-bin.deb
 
 After preparing configuration file (see :ref:`Quick tour <quick_usage_tour>`), you can start searchd daemon:
 
@@ -54,20 +59,25 @@ Supported platforms:
 * x86
 * x86_64
 
-Before installation make sure you have these packages installed:
+Manticore requires no extra libraries to be installed on RedHat/CentOS.
+However if you plan to use 'indexer' tool to create indexes from different sources,
+you'll need to install appropriate client libraries. Use yum to download and install these dependencies:
 
 .. code-block:: bash
 
-	$ yum install mysql-client postgresql-libs unixODBC
+	$ yum install mysql-libs postgresql-libs expat unixODBC
 
+Note, that you need only libs for types of sources you're going to use. So if you plan to make indexes only
+from mysql source, then installing 'mysql-libs' will be enough.
+If you don't going to use 'indexer' tool at all, you don't need to install these packages.
 Download RedHat RPM from Manticore website and install it:
 
 .. code-block:: bash
 
-	$ wget https://github.com/manticoresoftware/manticore/releases/download/2.3.3-170706/manticore-2.3.3.170706.9fbdd5f-1rhel7.x86_64.rpm
-	$ rpm -Uhv manticore-2.3.3.170706.9fbdd5f-1rhel7.x86_64.rpm
+	$ wget https://github.com/manticoresoftware/manticore/releases/download/2.4.1/manticore-2.4.1-171017-3b31a97-release-stemmer-rhel7-bin.rpm
+	$ rpm -Uhv manticore-2.4.1-171017-3b31a97-release-stemmer-rhel7-bin.rpm
 
-After preparing configuration file (see :ref:`Quick    tour <quick_usage_tour>`), you can start searchd   daemon:
+After preparing configuration file (see :ref:`Quick tour <quick_usage_tour>`), you can start searchd daemon:
 
 .. code-block:: bash
 
@@ -81,7 +91,7 @@ To install on Windows, you need to download the zip package and unpack it first.
 .. code-block:: bash
 	
 	cd C:\Manticore
-	unzip manticore-2.3.3-170706-9fbdd5f-dev-pgsql-stemmer-x64-bin.zip
+	unzip manticore-2.4.1-171017-3b31a97-release-pgsql-stemmer-x64-bin.zip
 
 
 Edit the contents of sphinx.conf.in - specifically entries relating to @CONFDIR@ - to paths suitable for your system.
@@ -97,8 +107,7 @@ Install the ``searchd`` system as a Windows service:
    within the Management Console, available from Administrative Tools.
    It will not have been started, as you will need to configure it and
    build your indexes with ``indexer`` before starting the service. A
-   guide to do this can be found under :ref:`Quick
-   tour <quick_usage_tour>`.
+   guide to do this can be found under :ref:`Quick tour <quick_usage_tour>`.
 
 
 Compiling Manticore from source
@@ -111,11 +120,11 @@ Required tools
 
 * a working compiler
 
-	* on Linux - GNU gcc (4.7.2 and above) and clang can be used
-	* on Windows - Microsoft Visual Studio  (community version is enough)
+	* on Linux - GNU gcc (4.7.2 and above) or clang can be used
+	* on Windows - Microsoft Visual Studio 2015 (community edition is enough)
 	* on Mac OS - XCode
 
-* cmake - used on all plaftorms 
+* cmake - used on all plaftorms (version 2.8 or above)
 
 Optional dependencies
 ~~~~~~~~~~~~~~~~~~~~~
@@ -132,6 +141,9 @@ General building options
 
 For compiling latest version of Manticore, recommended is checkout the latest code from the github repositiory.
 Alternative, for compiling a certain version, you can either checked that version from github or use it's respective source tarball.
+In last case avoid to use automatic tarballs from github (named there as 'Source code'), but use provided files as `manticore-2.4.1-171017-3b31a97-release.tar.gz`.
+When building from clone you need packages `git`, `flex`, `bison`. When building from tarball they are not necessary. This requirement
+may be essential to build on Windows.
 
 .. code-block:: bash
 
@@ -139,23 +151,15 @@ Alternative, for compiling a certain version, you can either checked that versio
 
 .. code-block:: bash
 
-   $ wget https://github.com/manticoresoftware/manticore/releases/download/2.3.3-170706/manticore-2.3.3.170706.9fbdd5f.tar.gz
-   $ tar zcvf manticore-2.3.3.170706.9fbdd5f.tar.gz
-
-
-Manticore uses cmake for building sources. We recommend using a folder outside the sources for the building workspace to keep clean the source folders.
-
-.. code-block:: bash
-
-   $ mkdir build
-   $ cd build
+   $ wget https://github.com/manticoresoftware/manticore/releases/download/2.4.1/manticore-2.4.1-171017-3b31a97-release.tar.gz
+   $ tar zcvf manticore-2.4.1-171017-3b31a97-release.tar.gz
 
 Next step is to configure the building with cmake. Available list of configuration options:
 
 
 * ``CMAKE_BUILD_TYPE`` -  can be Debug , Release , MinSizeRel and RelWithDebInfo (default).
 * ``SPLIT_SYMBOLS`` (bool) - specify whenever to create separate files with debugging symbols. In the default build type,RelWithDebInfo, the binaries include the debug symbols. With this option specified, the binaries will be stripped of the debug symbols , which will be put in separate files
-* ``USE_BISON,USE_FLEX`` (bool)  - enabled by default, specifies whenever to enable bison and flex tools
+* ``USE_BISON``,``USE_FLEX`` (bool)  - enabled by default, specifies whenever to enable bison and flex tools
 * ``LIBS_BUNDLE`` - filepath to a folder with different libraries. This is mostly relevant for Windows building
 * ``WITH_STEMMER`` (bool) - specifies if the build should include the libstemmer library. The library is searched in several places, starting with 
 
@@ -163,6 +167,7 @@ Next step is to configure the building with cmake. Available list of configurati
 	* common system path. Please note that in this case, the linking is dynamic and libstemmer should be available system-wide on the installed systems
 	* libstemmer_c.tgz in  ``LIBS_BUNDLE`` folder.
 	* download from snowball project website. This is done by cmake and no additional tool is required
+	* NOTE: if you have libstemmer in the system, but still want to use static version, say, to build a binary for a system without such lib, provide ``WITH_STEMMER_FORCE_STATIC=1`` in advance.
 	
 * ``WITH_RE2`` (bool) - specifies if the build should include the RE2 library. The library can be taken from the following locations:
 
@@ -171,12 +176,13 @@ Next step is to configure the building with cmake. Available list of configurati
 	* system wide search, while first looking for headers specified by ``WITH_RE2_INCLUDES`` folder and the lib files in ``WITH_RE2_LIBS`` folder
 	* check presence of master.zip in the ``LIBS_BUNDLE`` folder 
 	* Download from https://github.com/manticoresoftware/re2/archive/master.zip
+	* NOTE: if you have RE2 in the system, but still want to use static version, say, to build a binary for a system without such lib, provide ``WITH_RE2_FORCE_STATIC=1`` in advance.
 	
 * ``WITH_EXPAT`` (bool)	 enabled compiling with libexpat, used XMLpipe source driver
 * ``WITH_MYSQL`` (bool)	 enabled compiling with MySQL client library, used by MySQL source driver. Additional parameters ``WITH_MYSQL_ROOT``, ``WITH_MYSQL_LIBS`` and ``WITH_MYSQL_INCLUDES`` can be used for custom MySQL files
 * ``WITH_ODBC`` (bool)	 enabled compiling with ODBC client library, used by ODBC source driver
 * ``WITH_PGSQL`` (bool)	 enabled compiling with PostgreSQL client library, used by PostgreSQL source driver
-* ``DISTR_BUILD``  -  in case the target is packaging, it specifies the target operating system. Supported values are: centos6, centos7, wheezy, jessie, trusty, xenial, macos
+* ``DISTR_BUILD``  -  in case the target is packaging, it specifies the target operating system. Supported values are: `centos6`, `centos7`, `wheezy`, `jessie`, `trusty`, `xenial`, `macos`, `default`.
 
 Compiling on UNIX systems
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -194,8 +200,9 @@ To install all dependencies on CentOS/RHEL:
 
    $ yum install gcc gcc-c++ make cmake mysql-devel expat-devel postgresql-devel unixODBC-devel rpm-build systemd-units git flex bison
 
+(git, flex, bison doesn't necessary if you build from tarball)
 
-RHEL/CentOS 6  ship with a old version of the gcc compiler, which doesn't support `std-c++` standard, for compiling use `devtools` repository: 
+RHEL/CentOS 6  ship with a old version of the gcc compiler, which doesn't support `-std=c++11` flag, for compiling use `devtools` repository:
 
 .. code-block:: bash
 
@@ -204,19 +211,19 @@ RHEL/CentOS 6  ship with a old version of the gcc compiler, which doesn't suppor
    $ yum install -y devtoolset-2-gcc devtoolset-2-binutils devtoolset-2-gcc-c++
    $ export PATH=/opt/rh/devtoolset-2/root/usr/bin:$PATH
 
-We recommend using a separate folder for building instead of compiling in the source folder:
+Manticore uses `cmake` for building. We recommend to use a folder outside the sources to keep them clean.
 
 .. code-block:: bash
 
    $ mkdir build
    $ cd build
-   $ cmake -D WITH_MYSQL=TRUE -DWITH_RE2=1 ../manticore
+   $ cmake -D WITH_MYSQL=1 -DWITH_RE2=1 ../manticore
 
 or if we use sources from tarball:
 
 .. code-block:: bash
 
-   $ cmake -D WITH_MYSQL=TRUE -DWITH_RE2=1 ../manticore-2.3.3.170706.9fbdd5f
+   $ cmake -D WITH_MYSQL=1 -DWITH_RE2=1 ../manticore-2.4.1-171017-3b31a97-release
 
 To simply compile:
 
@@ -244,7 +251,7 @@ If, for example, we want to create a deb package for Debian Jessie, we need to s
 
 .. code-block:: bash
 
-   $ cmake -D WITH_MYSQL=TRUE -DWITH_RE2=1  -DDISTR_BUILD=jessie../manticore
+   $ cmake -DDISTR_BUILD=jessie ../manticore
    $ make -j4 package	   
 
 This will create 2 deb packages, a manticore-x.x.x-bin.deb and a manticore-x.x.x-dbg.deb which contains the version with debug symbols.
@@ -259,11 +266,14 @@ For building on Windows you need:
 * Cmake for Windows
 * Expat, MySQL and PostgreSQL in bundle directory.
 
+If you build from git clone, you also need to provide `git`, `flex`, `bison` tools. They may be fond in `cygwin` framework.
+When building from tarball these tools are not necessary.
+
 For a simple building on x64:
 
 .. code-block:: bat
 
-   C:\build>"%PROGRAMW6432%\CMake\bin\cmake.exe" -G "Visual Studio 14 Win64" -DLIBS_BUNDLE="C:\bundle" -DDISTR=none -DCPACK_GENERATOR=ZIP "C:\manticore"
+   C:\build>"%PROGRAMW6432%\CMake\bin\cmake.exe" -G "Visual Studio 14 Win64" -DLIBS_BUNDLE="C:\bundle" "C:\manticore"
    C:\build>"%PROGRAMW6432%\CMake\bin\cmake.exe" -DWITH_PGSQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 .
    C:\build>"%PROGRAMW6432%\CMake\bin\cmake.exe" --build . --target package --config RelWithDebInfo
 

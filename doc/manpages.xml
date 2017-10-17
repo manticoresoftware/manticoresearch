@@ -2,7 +2,7 @@
 <!DOCTYPE appendix PUBLIC "-//OASIS//DTD DocBook XML V4.5//EN"
 "http://www.oasis-open.org/docbook/xml/4.5/docbookx.dtd">
 <appendix>
-  <title>Sphinx manpages</title>
+  <title>Manticore Search manpages</title>
 
   <refentry id="indexer">
     <refmeta>
@@ -10,15 +10,14 @@
 
       <manvolnum>1</manvolnum>
 
-      <refmiscinfo class="manual">Sphinxsearch</refmiscinfo>
+      <refmiscinfo class="manual">Manticore Search</refmiscinfo>
 
-      <refmiscinfo class="version">2.3.3-dev</refmiscinfo>
     </refmeta>
 
     <refnamediv>
       <refname>indexer</refname>
 
-      <refpurpose>Sphinxsearch fulltext index generator</refpurpose>
+      <refpurpose>Manticore Search fulltext index generator</refpurpose>
     </refnamediv>
 
     <refsynopsisdiv>
@@ -92,11 +91,11 @@
     <refsect1>
       <title>Description</title>
 
-      <para>Sphinx is a collection of programs that aim to provide high
+      <para>Manticore Search is a collection of programs that aim to provide high
       quality fulltext search.</para>
 
       <para><command>indexer</command> is the first of the two principle tools
-      as part of Sphinx. Invoked from either the command line directly, or as
+      as part of Manticore Search. Invoked from either the command line directly, or as
       part of a larger script, <command>indexer</command> is solely
       responsible for gathering the data that will be searchable.</para>
 
@@ -223,7 +222,7 @@ $ indexer mysmallindex mybigindex</programlisting>
             shell. This is most of use in shared environments where the binary
             files are installed somewhere like
             <filename>/usr/local/sphinx/</filename> but you want to provide
-            users with the ability to make their own custom Sphinx set-ups, or
+            users with the ability to make their own custom Manticore Search set-ups, or
             if you want to run multiple instances on a single server. In cases
             like those you could allow them to create their own
             <filename>sphinx.conf</filename> files and pass them to
@@ -417,21 +416,18 @@ $ indexer mysmallindex mybigindex</programlisting>
 
     <refsect1>
       <title>Author</title>
-
-      <para>Andrey Aksenoff (<email>shodan@sphinxsearch.com</email>). This
-      manual page is written by Alexey Vinogradov
-      (<email>klirichek@sphinxsearch.com</email>), using the one written by
-      Christian Hofstaedtler ch+debian-packages@zeha.at for the <emphasis
-      remap="B">Debian</emphasis> system (but may be used by others).
-      Permission is granted to copy, distribute and/or modify this document
-      under the terms of the GNU General Public License, Version 2 any later
-      version published by the Free Software Foundation.</para>
-
-      <para>On Debian systems, the complete text of the GNU General Public
-      License can be found in
-      <filename>/usr/share/common-licenses/GPL</filename>.</para>
+      <para>  Manticore Software LTD (http://manticoresearch.com)</para>
     </refsect1>
 
+    <refsect1>
+		<title>Copyright</title>
+		<para>Copyright  2017 Manticore Software LTD (http://manticoresearch.com),  
+		2008-2016 Sphinx Technologies Inc (http://sphinxsearch.com),
+		2001-2016 Andrew Aksyonoff</para>
+		<para>Permission is granted to copy, distribute and/or modify this document
+      under the terms of the GNU General Public License, Version 2 any later
+      version published by the Free Software Foundation.</para>
+	</refsect1>
     <refsect1>
       <title>See also</title>
 
@@ -453,9 +449,9 @@ $ indexer mysmallindex mybigindex</programlisting>
           <manvolnum>1</manvolnum>
         </citerefentry></para>
 
-      <para id="docref">Sphinx and it's programs are documented fully by the
-      <emphasis remap="I">Sphinx reference manual</emphasis> available in
-      <filename>/usr/share/doc/sphinxsearch</filename>.</para>
+      <para id="docref">Manticore Search and it's programs are documented fully by the
+      <emphasis remap="I">Manticore Search reference manual</emphasis> available in
+      <filename>/usr/share/doc/manticore</filename>.</para>
     </refsect1>
   </refentry>
 
@@ -465,15 +461,14 @@ $ indexer mysmallindex mybigindex</programlisting>
 
       <manvolnum>1</manvolnum>
 
-      <refmiscinfo class="manual">Sphinxsearch</refmiscinfo>
+      <refmiscinfo class="manual">Manticore Search</refmiscinfo>
 
-      <refmiscinfo class="version">2.3.3-dev</refmiscinfo>
     </refmeta>
 
     <refnamediv>
       <refname>searchd</refname>
 
-      <refpurpose>Sphinxsearch network daemon.</refpurpose>
+      <refpurpose>Manticore Search daemon.</refpurpose>
     </refnamediv>
 
     <refsynopsisdiv>
@@ -515,11 +510,11 @@ $ indexer mysmallindex mybigindex</programlisting>
     <refsect1>
       <title>Description</title>
 
-      <para>Sphinx is a collection of programs that aim to provide high
+      <para>Manticore Search is a collection of programs that aim to provide high
       quality fulltext search.</para>
 
       <para>Searchd is the second of the two principle tools as part of
-      Sphinx. <command>searchd</command> is the part of the system which
+      Manticore Search. <command>searchd</command> is the part of the system which
       actually handles searches; it functions as a server and is responsible
       for receiving queries, processing them and returning a dataset back to
       the different APIs for client applications.</para>
@@ -674,7 +669,7 @@ $ indexer mysmallindex mybigindex</programlisting>
 
           <listitem>
             <para>Do not 'daemonize', or, do not detach into background. Apart
-            debug purposes, this switch is useful when you manage sphinx with
+            debug purposes, this switch is useful when you manage Manticore Search with
             upstart init daemon. In this case actual 'daemonizing' will be
             done by upstart itself, and also all tasks like starting,
             stopping, reloading the config and respawning on crash will be
@@ -886,20 +881,19 @@ $ searchd --config /home/myuser/sphinx.conf --status</programlisting>
 
     <refsect1>
       <title>Author</title>
+      <para>  Manticore Software LTD (http://manticoresearch.com)</para>
+    </refsect1>
 
-      <para>Andrey Aksenoff (<email>shodan@sphinxsearch.com</email>). This
-      manual page is written by Alexey Vinogradov
-      (<email>klirichek@sphinxsearch.com</email>), using the one written by
-      Christian Hofstaedtler ch+debian-packages@zeha.at for the <emphasis
-      remap="B">Debian</emphasis> system (but may be used by others).
-      Permission is granted to copy, distribute and/or modify this document
+    <refsect1>
+		<title>Copyright</title>
+		<para>Copyright  2017 Manticore Software LTD (http://manticoresearch.com),  
+		2008-2016 Sphinx Technologies Inc (http://sphinxsearch.com),
+		2001-2016 Andrew Aksyonoff</para>
+		<para>Permission is granted to copy, distribute and/or modify this document
       under the terms of the GNU General Public License, Version 2 any later
       version published by the Free Software Foundation.</para>
+	</refsect1>
 
-      <para>On Debian systems, the complete text of the GNU General Public
-      License can be found in
-      <filename>/usr/share/common-licenses/GPL</filename>.</para>
-    </refsect1>
 
     <refsect1>
       <title>See also</title>
@@ -918,9 +912,9 @@ $ searchd --config /home/myuser/sphinx.conf --status</programlisting>
           <manvolnum>1</manvolnum>
         </citerefentry></para>
 
-      <para>Sphinx and it's programs are documented fully by the <emphasis
-      remap="I">Sphinx reference manual</emphasis> available in
-      <filename>/usr/share/doc/sphinxsearch</filename>.</para>
+      <para>Manticore Search and it's programs are documented fully by the <emphasis
+      remap="I">Manticore Search reference manual</emphasis> available in
+      <filename>/usr/share/doc/manticore</filename>.</para>
     </refsect1>
   </refentry>
 
@@ -930,15 +924,15 @@ $ searchd --config /home/myuser/sphinx.conf --status</programlisting>
 
       <manvolnum>1</manvolnum>
 
-      <refmiscinfo class="manual">Sphinxsearch</refmiscinfo>
+      <refmiscinfo class="manual">Manticore Search</refmiscinfo>
 
-      <refmiscinfo class="version">2.3.3-dev</refmiscinfo>
+      <refmiscinfo class="version">2.4.1</refmiscinfo>
     </refmeta>
 
     <refnamediv>
       <refname>spelldump</refname>
 
-      <refpurpose>Sphinxsearch tool for extract the contents of a dictionary
+      <refpurpose>Manticore Search tool for extract the contents of a dictionary
       file.</refpurpose>
     </refnamediv>
 
@@ -961,7 +955,7 @@ $ searchd --config /home/myuser/sphinx.conf --status</programlisting>
     <refsect1>
       <title>Description</title>
 
-      <para>Sphinx is a collection of programs that aim to provide high
+      <para>Manticore Search is a collection of programs that aim to provide high
       quality fulltext search.</para>
 
       <para>spelldump is used to extract the contents of a dictionary file
@@ -1011,18 +1005,19 @@ zoning &gt; zoning </programlisting></para>
 
     <refsect1>
       <title>Author</title>
-
-      <para>Andrey Aksenoff (<email>shodan@sphinxsearch.com</email>). This
-      manual page is written by Alexey Vinogradov
-      (<email>klirichek@sphinxsearch.com</email>). Permission is granted to
-      copy, distribute and/or modify this document under the terms of the GNU
-      General Public License, Version 2 any later version published by the
-      Free Software Foundation.</para>
-
-      <para>On Debian systems, the complete text of the GNU General Public
-      License can be found in
-      <filename>/usr/share/common-licenses/GPL</filename>.</para>
+      <para>  Manticore Software LTD (http://manticoresearch.com)</para>
     </refsect1>
+
+    <refsect1>
+		<title>Copyright</title>
+		<para>Copyright  2017 Manticore Software LTD (http://manticoresearch.com),  
+		2008-2016 Sphinx Technologies Inc (http://sphinxsearch.com),
+		2001-2016 Andrew Aksyonoff</para>
+		<para>Permission is granted to copy, distribute and/or modify this document
+      under the terms of the GNU General Public License, Version 2 any later
+      version published by the Free Software Foundation.</para>
+	</refsect1>
+
 
     <refsect1>
       <title>See also</title>
@@ -1037,9 +1032,9 @@ zoning &gt; zoning </programlisting></para>
           <manvolnum>1</manvolnum>
         </citerefentry>.</para>
 
-      <para>Sphinx and it's programs are documented fully by the <emphasis
-      remap="I">Sphinx reference manual</emphasis> available in
-      <filename>/usr/share/doc/sphinxsearch</filename>.</para>
+      <para>Manticore Search and it's programs are documented fully by the <emphasis
+      remap="I">Manticore Search reference manual</emphasis> available in
+      <filename>/usr/share/doc/manticore</filename>.</para>
     </refsect1>
   </refentry>
 
@@ -1049,15 +1044,15 @@ zoning &gt; zoning </programlisting></para>
 
       <manvolnum>1</manvolnum>
 
-      <refmiscinfo class="manual">Sphinxsearch</refmiscinfo>
+      <refmiscinfo class="manual">Manticore Search</refmiscinfo>
 
-      <refmiscinfo class="version">2.3.3-dev</refmiscinfo>
+      <refmiscinfo class="version">2.4.1</refmiscinfo>
     </refmeta>
 
     <refnamediv>
       <refname>indextool</refname>
 
-      <refpurpose>Sphinxsearch tool dump miscellaneous debug information about
+      <refpurpose>Manticore Search tool dump miscellaneous debug information about
       the physical index.</refpurpose>
     </refnamediv>
 
@@ -1074,11 +1069,11 @@ zoning &gt; zoning </programlisting></para>
     <refsect1>
       <title>Description</title>
 
-      <para>Sphinx is a collection of programs that aim to provide high
+      <para>Manticore Search is a collection of programs that aim to provide high
       quality fulltext search.</para>
 
       <para><command>indextool</command> is one of the helper tools within the
-      Sphinx package. It is used to dump miscellaneous debug information about
+      Manticore Search package. It is used to dump miscellaneous debug information about
       the physical index. Apart ghe dumping <command>indextool</command> can
       perform index verification, hence the indextool name rather than just
       indexdump.</para>
@@ -1225,18 +1220,19 @@ zoning &gt; zoning </programlisting></para>
 
     <refsect1>
       <title>Author</title>
-
-      <para>Andrey Aksenoff (<email>shodan@sphinxsearch.com</email>). This
-      manual page is written by Alexey Vinogradov
-      (<email>klirichek@sphinxsearch.com</email>). Permission is granted to
-      copy, distribute and/or modify this document under the terms of the GNU
-      General Public License, Version 2 any later version published by the
-      Free Software Foundation.</para>
-
-      <para>On Debian systems, the complete text of the GNU General Public
-      License can be found in
-      <filename>/usr/share/common-licenses/GPL</filename>.</para>
+      <para>  Manticore Software LTD (http://manticoresearch.com)</para>
     </refsect1>
+
+    <refsect1>
+		<title>Copyright</title>
+		<para>Copyright  2017 Manticore Software LTD (http://manticoresearch.com),  
+		2008-2016 Sphinx Technologies Inc (http://sphinxsearch.com),
+		2001-2016 Andrew Aksyonoff</para>
+		<para>Permission is granted to copy, distribute and/or modify this document
+      under the terms of the GNU General Public License, Version 2 any later
+      version published by the Free Software Foundation.</para>
+	</refsect1>
+
 
     <refsect1>
       <title>See also</title>
@@ -1255,9 +1251,9 @@ zoning &gt; zoning </programlisting></para>
           <manvolnum>1</manvolnum>
         </citerefentry></para>
 
-      <para>Sphinx and it's programs are documented fully by the <emphasis
-      remap="I">Sphinx reference manual</emphasis> available in
-      <filename>/usr/share/doc/sphinxsearch</filename>.</para>
+      <para>Manticore Search and it's programs are documented fully by the <emphasis
+      remap="I">Manticore Search reference manual</emphasis> available in
+      <filename>/usr/share/doc/manticore</filename>.</para>
     </refsect1>
   </refentry>
 </appendix>

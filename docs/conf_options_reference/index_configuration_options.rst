@@ -152,7 +152,7 @@ this line is defined. I.e. when defining agents for distributed index
 ‘mycoolindex’ you can just point the address, and it is assumed to calll
 ‘mycoolindex’ index on agent's endpoints.
 
-When port number is omited, it is assumed to be default sphinxql IANA
+When port number is omited, it is assumed to be default SphinxQL IANA
 port (9312). However when portnumber is pointed, but invalid (say, port
 70000), it will fail (skip) such agent.
 

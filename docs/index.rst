@@ -21,5 +21,5 @@
    api_reference
    conf_options_reference
    reporting_bugs
-   changelog
+   releasenotes
    	

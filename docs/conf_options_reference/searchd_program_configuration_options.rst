@@ -314,7 +314,7 @@ Example:
 grouping_in_utc
 ~~~~~~~~~~~~~~~~~
 
-Specifies whether timed grouping in API and sphinxql will be calculated
+Specifies whether timed grouping in API and SphinxQL will be calculated
 in local timezone, or in UTC. Optional, default is 0 (means 'local tz').
 
 By default all 'group by time' expressions (like group by day, week,

@@ -26508,6 +26508,27 @@ bool CSphSource_SQL::IterateMultivaluedStart ( int iAttr, CSphString & sError )
 
 			break;
 
+	case SPH_ATTRSRC_RANGEDMAINQUERY:
+			if ( m_tParams.m_sQueryRange.IsEmpty() )
+			{
+				sError.SetSprintf ( "multi-valued attr '%s': empty main range query", tAttr.m_sName.cstr() );
+				return false;
+			}
+
+			m_tParams.m_iRangeStep = m_tParams.m_iRefRangeStep;
+
+			// setup ranges
+			sPrefix.SetSprintf ( "multi-valued attr '%s' ranged query: ", tAttr.m_sName.cstr() );
+			if ( !SetupRanges ( m_tParams.m_sQueryRange.cstr(), tAttr.m_sQuery.cstr(), sPrefix.cstr(), sError, SRE_MVA ) )
+				return false;
+
+			// run first step (in order to report errors)
+			m_uCurrentID = m_uMinID;
+			if ( !RunQueryStep ( tAttr.m_sQuery.cstr(), sError ) )
+				return false;
+
+			break;
+
 	default:
 		sError.SetSprintf ( "INTERNAL ERROR: unknown multi-valued attr source type %d", tAttr.m_eSrc );
 		return false;

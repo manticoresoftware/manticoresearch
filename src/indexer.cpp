@@ -348,7 +348,8 @@ bool ParseMultiAttr ( const char * sBuf, CSphColumnInfo & tAttr, const char * sS
 	if ( LOC_TOKEQ("field") )				tAttr.m_eSrc = SPH_ATTRSRC_FIELD;
 	else if ( LOC_TOKEQ("query") )			tAttr.m_eSrc = SPH_ATTRSRC_QUERY;
 	else if ( LOC_TOKEQ("ranged-query") )	tAttr.m_eSrc = SPH_ATTRSRC_RANGEDQUERY;
-	else									LOC_ERR ( "value source type ('field', or 'query', or 'ranged-query')", sTok );
+	else if ( LOC_TOKEQ("ranged-main-query") )	tAttr.m_eSrc = SPH_ATTRSRC_RANGEDMAINQUERY;
+	else									LOC_ERR ( "value source type ('field', or 'query', or 'ranged-query', or 'ranged-main-query')", sTok );
 
 	if ( tAttr.m_eSrc==SPH_ATTRSRC_FIELD )	return true;
 
@@ -357,7 +358,7 @@ bool ParseMultiAttr ( const char * sBuf, CSphColumnInfo & tAttr, const char * sS
 	if ( iTokLen )							tAttr.m_sQuery.SetBinary ( sTok, iTokLen );
 	else									LOC_ERR ( "query", sTok );
 
-	if ( tAttr.m_eSrc==SPH_ATTRSRC_QUERY )	return true;
+	if ( tAttr.m_eSrc==SPH_ATTRSRC_QUERY || tAttr.m_eSrc==SPH_ATTRSRC_RANGEDMAINQUERY )	return true;
 
 	// handle RANGE-QUERY
 	LOC_TEXT();

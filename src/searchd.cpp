@@ -14449,6 +14449,8 @@ static void BlackholeTick()
 	if ( !g_dBlackholeAgents.GetLength() )
 		return;
 
+	ThreadSystem_t tThdSystemDesc ( "BLACKHOLE" );
+
 	VectorPtrsGuard_T<AgentSendData_t> tBlackholes;
 	// grab blackholes under lock
 	g_tBlackholeLock.Lock();

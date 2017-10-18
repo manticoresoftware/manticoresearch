@@ -49,7 +49,7 @@ if ( MYSQL_FOUND )
 		list ( APPEND EXTRA_LIBRARIES ${MYSQL_LIBRARIES} )
 		message ( STATUS "MYSQL will be linked as ${MYSQL_LIBRARIES}" )
 	endif ()
-	memcfgvalues ( MYSQL_CONFIG_EXECUTABLE )
+#	memcfgvalues ( MYSQL_CONFIG_EXECUTABLE )
 else ( MYSQL_FOUND )
 	message ( SEND_ERROR
 			"********************************************************************************

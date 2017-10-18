@@ -115,8 +115,21 @@ enum ESphBinlogReplayFlags
 	SPH_REPLAY_IGNORE_OPEN_ERROR = 2
 };
 
+typedef void BinlogFlushWork_t ( void * pLog );
+
+struct BinlogFlushInfo_t
+{
+	void * m_pLog;
+	BinlogFlushWork_t * m_fnWork;
+
+	BinlogFlushInfo_t ()
+		: m_pLog ( NULL )
+		, m_fnWork ( NULL )
+	{}
+};
+
 /// replay stored binlog
-void sphReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, DWORD uReplayFlags, ProgressCallbackSimple_t * pfnProgressCallback=NULL );
+void sphReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, DWORD uReplayFlags, ProgressCallbackSimple_t * pfnProgressCallback, BinlogFlushInfo_t & tFlush );
 
 #endif // _sphinxrt_
 

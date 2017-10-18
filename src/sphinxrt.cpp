@@ -1019,7 +1019,7 @@ public:
 	void	Configure ( const CSphConfigSection & hSearchd, bool bTestMode );
 	void	Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, DWORD uReplayFlags, ProgressCallbackSimple_t * pfnProgressCallback );
 
-	void	CreateTimerThread ();
+	void	GetFlushInfo ( BinlogFlushInfo_t & tFlush );
 	bool	IsActive ()			{ return !m_bDisabled; }
 	void	CheckPath ( const CSphConfigSection & hSearchd, bool bTestMode );
 
@@ -1051,7 +1051,6 @@ private:
 
 	CSphString				m_sLogPath;
 
-	SphThread_t				m_tUpdateTread;
 	bool					m_bReplayMode; // replay mode indicator
 	bool					m_bDisabled;
 
@@ -9531,9 +9530,6 @@ RtBinlog_c::~RtBinlog_c ()
 	if ( !m_bDisabled )
 	{
 		m_iFlushPeriod = 0;
-		if ( m_eOnCommit!=ACTION_FSYNC )
-			sphThreadJoin ( &m_tUpdateTread );
-
 		DoCacheWrite();
 		m_tWriter.CloseFile();
 		LockFile ( false );
@@ -9843,12 +9839,13 @@ void RtBinlog_c::Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, DWORD 
 	OpenNewLog ( iLastLogState );
 }
 
-void RtBinlog_c::CreateTimerThread ()
+void RtBinlog_c::GetFlushInfo ( BinlogFlushInfo_t & tFlush )
 {
 	if ( !m_bDisabled && m_eOnCommit!=ACTION_FSYNC )
 	{
 		m_iFlushTimeLeft = sphMicroTimer() + m_iFlushPeriod;
-		sphThreadCreate ( &m_tUpdateTread, RtBinlog_c::DoAutoFlush, this );
+		tFlush.m_pLog = this;
+		tFlush.m_fnWork = RtBinlog_c::DoAutoFlush;
 	}
 }
 
@@ -9858,27 +9855,21 @@ void RtBinlog_c::DoAutoFlush ( void * pBinlog )
 	RtBinlog_c * pLog = (RtBinlog_c *)pBinlog;
 	assert ( !pLog->m_bDisabled );
 
-	while ( pLog->m_iFlushPeriod>0 )
+	if ( pLog->m_iFlushPeriod>0 && pLog->m_iFlushTimeLeft<sphMicroTimer() )
 	{
-		if ( pLog->m_iFlushTimeLeft < sphMicroTimer() )
+		MEMORY ( MEM_BINLOG );
+
+		pLog->m_iFlushTimeLeft = sphMicroTimer() + pLog->m_iFlushPeriod;
+
+		if ( pLog->m_eOnCommit==ACTION_NONE || pLog->m_tWriter.HasUnwrittenData() )
 		{
-			MEMORY ( MEM_BINLOG );
-
-			pLog->m_iFlushTimeLeft = sphMicroTimer() + pLog->m_iFlushPeriod;
-
-			if ( pLog->m_eOnCommit==ACTION_NONE || pLog->m_tWriter.HasUnwrittenData() )
-			{
-				Verify ( pLog->m_tWriteLock.Lock() );
-				pLog->m_tWriter.Flush();
-				Verify ( pLog->m_tWriteLock.Unlock() );
-			}
-
-			if ( pLog->m_tWriter.HasUnsyncedData() )
-				pLog->m_tWriter.Fsync();
+			Verify ( pLog->m_tWriteLock.Lock() );
+			pLog->m_tWriter.Flush();
+			Verify ( pLog->m_tWriteLock.Unlock() );
 		}
 
-		// sleep N msec before next iter or terminate because of shutdown
-		sphSleepMsec ( 100 );
+		if ( pLog->m_tWriter.HasUnsyncedData() )
+			pLog->m_tWriter.Fsync();
 	}
 }
 
@@ -10689,11 +10680,11 @@ void sphRTDone ()
 }
 
 
-void sphReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, DWORD uReplayFlags, ProgressCallbackSimple_t * pfnProgressCallback )
+void sphReplayBinlog ( const SmallStringHash_T<CSphIndex*> & hIndexes, DWORD uReplayFlags, ProgressCallbackSimple_t * pfnProgressCallback, BinlogFlushInfo_t & tFlush )
 {
 	MEMORY ( MEM_BINLOG );
 	g_pRtBinlog->Replay ( hIndexes, uReplayFlags, pfnProgressCallback );
-	g_pRtBinlog->CreateTimerThread();
+	g_pRtBinlog->GetFlushInfo ( tFlush );
 	g_bRTChangesAllowed = true;
 }
 

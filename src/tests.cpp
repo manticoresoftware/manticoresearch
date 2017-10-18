@@ -2381,7 +2381,8 @@ void TestRTInit ()
 	sphRTConfigure ( tRTConfig, true );
 
 	SmallStringHash_T<CSphIndex*> hIndexes;
-	sphReplayBinlog ( hIndexes, 0 );
+	BinlogFlushInfo_t tBinlogFlush;
+	sphReplayBinlog ( hIndexes, 0, NULL, tBinlogFlush );
 }
 
 

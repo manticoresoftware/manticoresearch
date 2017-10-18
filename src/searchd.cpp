@@ -240,6 +240,7 @@ struct ThdDesc_t : public ListNode_t
 	int				m_iTid;			///< OS thread id, or 0 if unknown
 	int64_t			m_tmConnect;	///< when did the client connect?
 	int64_t			m_tmStart;		///< when did the current request start?
+	bool			m_bSystem;
 	CSphFixedVector<char> m_dBuf;	///< current request description
 
 	ThdDesc_t ()
@@ -251,29 +252,19 @@ struct ThdDesc_t : public ListNode_t
 		, m_iTid ( 0 )
 		, m_tmConnect ( 0 )
 		, m_tmStart ( 0 )
+		, m_bSystem ( false )
 		, m_dBuf ( 512 )
 	{
 		m_dBuf[0] = '\0';
 		m_dBuf.Last() = '\0';
 	}
 
-	void SetSnippetThreadInfo ( const CSphVector<ExcerptQuery_t> & dSnippets )
-	{
-		int64_t iSize = 0;
-		ARRAY_FOREACH ( i, dSnippets )
-		{
-			if ( dSnippets[i].m_iSize )
-				iSize -= dSnippets[i].m_iSize; // because iSize negative for sorting purpose
-			else
-				iSize += dSnippets[i].m_sSource.Length();
-		}
-
-		iSize /= 100;
-		SetThreadInfo ( "api-snippet datasize=%d.%d""k query=\"%s\"", int ( iSize/10 ), int ( iSize%10 ), dSnippets[0].m_sWords.scstr() );
-	}
-
 	void SetThreadInfo ( const char * sTemplate, ... )
 	{
+		// thread safe modification of string at m_dBuf
+		m_dBuf[0] = '\0';
+		m_dBuf.Last() = '\0';
+
 		va_list ap;
 
 		va_start ( ap, sTemplate );
@@ -288,6 +279,61 @@ struct ThdDesc_t : public ListNode_t
 
 static CSphMutex				g_tThdMutex;
 static List_t					g_dThd;				///< existing threads table
+
+static void ThreadSetSnippetInfo ( const CSphVector<ExcerptQuery_t> & dSnippets, ThdDesc_t & tThd )
+{
+	int64_t iSize = 0;
+	ARRAY_FOREACH ( i, dSnippets )
+	{
+		if ( dSnippets[i].m_iSize )
+			iSize -= dSnippets[i].m_iSize; // because iSize negative for sorting purpose
+		else
+			iSize += dSnippets[i].m_sSource.Length();
+	}
+
+	iSize /= 100;
+	tThd.SetThreadInfo ( "api-snippet datasize=%d.%d""k query=\"%s\"", int ( iSize/10 ), int ( iSize%10 ), dSnippets[0].m_sWords.scstr() );
+}
+
+static void ThreadAdd ( ThdDesc_t * pThd )
+{
+	g_tThdMutex.Lock();
+	g_dThd.Add ( pThd );
+	g_tThdMutex.Unlock();
+}
+
+static void ThreadRemove ( ThdDesc_t * pThd )
+{
+	g_tThdMutex.Lock();
+	g_dThd.Remove ( pThd );
+	g_tThdMutex.Unlock();
+}
+
+// forward
+int GetOsThreadId ();
+
+static const char * g_sSystemName = "SYSTEM";
+struct ThreadSystem_t
+{
+	ThdDesc_t m_tDesc;
+
+	explicit ThreadSystem_t ( const char * sName )
+	{
+		m_tDesc.m_bSystem = true;
+		m_tDesc.m_tmStart = sphMicroTimer();
+		m_tDesc.m_iTid = GetOsThreadId();
+		m_tDesc.SetThreadInfo ( "SYSTEM %s", sName );
+		m_tDesc.m_sCommand = g_sSystemName;
+
+		ThreadAdd ( &m_tDesc );
+	}
+
+	~ThreadSystem_t()
+	{
+		ThreadRemove ( &m_tDesc );
+	}
+};
+
 
 static int						g_iConnectionID = 0;		///< global conn-id
 
@@ -350,6 +396,7 @@ static CSphVector<SphThread_t>				g_dTickPoolThread;
 
 /// flush parameters of rt indexes
 static SphThread_t							g_tRtFlushThread;
+static SphThread_t							g_tBinlogFlushThread;
 
 // optimize thread
 static SphThread_t							g_tOptimizeThread;
@@ -964,7 +1011,6 @@ bool IndexHash_c::Exists ( const CSphString & tKey, ServedDesc_t * pDesc ) const
 /////////////////////////////////////////////////////////////////////////////
 
 void Shutdown (); // forward ref for sphFatal()
-int GetOsThreadId ();
 
 
 /// format current timestamp for logging
@@ -1384,6 +1430,7 @@ void Shutdown ()
 
 	// tell flush-rt thread to shutdown, and wait until it does
 	sphThreadJoin ( &g_tRtFlushThread );
+	sphThreadJoin ( &g_tBinlogFlushThread );
 
 	// tell rotation thread to shutdown, and wait until it does
 	if ( g_bSeamlessRotate )
@@ -10860,7 +10907,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 		}
 
 		// set correct data size for snippets
-		pThd->SetSnippetThreadInfo ( dQueries );
+		ThreadSetSnippetInfo ( dQueries, *pThd );
 
 		// tough jobs first
 		if ( !bScattered )
@@ -11087,7 +11134,7 @@ void HandleCommandExcerpt ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & t
 		}
 	}
 
-	pThd->SetSnippetThreadInfo ( dQueries );
+	ThreadSetSnippetInfo ( dQueries, *pThd );
 
 	if ( !MakeSnippets ( sIndex, dQueries, sError, pThd ) )
 	{
@@ -14149,8 +14196,8 @@ void HandleMysqlShowThreads ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 		}
 
 		tOut.PutNumeric ( "%d", pThd->m_iTid );
-		tOut.PutString ( g_dProtoNames [ pThd->m_eProto ] );
-		tOut.PutString ( g_dThdStates [ pThd->m_eThdState ] );
+		tOut.PutString ( pThd->m_bSystem ? "-" : g_dProtoNames [ pThd->m_eProto ] );
+		tOut.PutString ( pThd->m_bSystem ? "-" : g_dThdStates [ pThd->m_eThdState ] );
 		tOut.PutMicrosec ( tmNow - pThd->m_tmStart );
 		tOut.PutString ( pThd->m_dBuf.Begin() );
 
@@ -14341,6 +14388,8 @@ static void PingThreadFunc ( void * )
 			sphSleepMsec ( 50 );
 			continue;
 		}
+
+		ThreadSystem_t tThdSystemDesc ( "PING" );
 
 		CheckPing ( iNow );
 		iLastCheck = sphMicroTimer();
@@ -17969,6 +18018,8 @@ static void RtFlushThreadFunc ( void * )
 			continue;
 		}
 
+		ThreadSystem_t tThdSystemDesc ( "FLUSH RT" );
+
 		// collecting available rt indexes at save time
 		CSphVector<CSphString> dRtIndexes;
 		for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
@@ -17995,6 +18046,19 @@ static void RtFlushThreadFunc ( void * )
 		}
 
 		tmNextCheck = sphMicroTimer() + SPH_RT_AUTO_FLUSH_CHECK_PERIOD;
+	}
+}
+
+static BinlogFlushInfo_t g_tBinlogAutoflush;
+static void RtBinlogAutoflushThreadFunc ( void * )
+{
+	assert ( g_tBinlogAutoflush.m_pLog && g_tBinlogAutoflush.m_fnWork );
+
+	while ( !g_bShutdown )
+	{
+		ThreadSystem_t tThdSystemDesc ( "FLUSH RT BINLOG" );
+		g_tBinlogAutoflush.m_fnWork ( g_tBinlogAutoflush.m_pLog );
+		sphSleepMsec ( 50 );
 	}
 }
 
@@ -18219,6 +18283,8 @@ void RotationThreadFunc ( void * )
 		CSphString sIndex = g_dRotateQueue.Pop();
 		g_tRotateQueueMutex.Unlock();
 
+		// want to track rotation thread only at work
+		ThreadSystem_t tThdSystemDesc ( "ROTATION" );
 		CSphString sError;
 		if ( !RotateIndexMT ( sIndex, sError ) )
 			sphWarning ( "%s", sError.cstr() );
@@ -18238,6 +18304,8 @@ void RotationThreadFunc ( void * )
 
 static void PrereadFunc ( void * )
 {
+	ThreadSystem_t tThdSystemDesc ( "PREREAD" );
+
 	int64_t tmStart = sphMicroTimer();
 
 	CSphVector<CSphString> dIndexes;
@@ -18334,6 +18402,8 @@ static void SphinxqlStateThreadFunc ( void * )
 		/////////////
 		// save UDFs
 		/////////////
+
+		ThreadSystem_t tThdSystemDesc ( "SphinxQL state save" );
 
 		sphPluginSaveState ( tWriter );
 
@@ -18553,6 +18623,9 @@ void OptimizeThreadFunc ( void * )
 			pServed->Unlock();
 			continue;
 		}
+
+		// want to track optimize only at work
+		ThreadSystem_t tThdSystemDesc ( "OPTIMIZE" );
 
 		// FIXME: MVA update would wait w-lock here for a very long time
 		assert ( pServed->m_bRT );
@@ -19237,6 +19310,8 @@ void CheckRotateGlobalIDFs ()
 		if ( tIndex.m_bEnabled && !tIndex.m_sGlobalIDFPath.IsEmpty() )
 			dFiles.Add ( tIndex.m_sGlobalIDFPath );
 	}
+
+	ThreadSystem_t tThdSystemDesc ( "ROTATE global IDF" );
 	sphUpdateGlobalIDFs ( dFiles );
 }
 
@@ -19413,6 +19488,7 @@ void CheckReopen ()
 
 static void ThdSaveIndexes ( void * )
 {
+	ThreadSystem_t tThdSystemDesc ( "SAVE indexes" );
 	SaveIndexes ();
 
 	// we're no more flushing
@@ -20282,9 +20358,7 @@ void HandlerThread ( void * pArg )
 	// FIXME? this is sort of automatic on UNIX (pthread_exit() gets implicitly called on return)
 	CloseHandle ( pThd->m_tThd );
 #endif
-	g_tThdMutex.Lock ();
-	g_dThd.Remove ( pThd );
-	g_tThdMutex.Unlock ();
+	ThreadRemove ( pThd );
 	SafeDelete ( pThd );
 }
 
@@ -20338,17 +20412,13 @@ void TickHead ()
 	pThd->m_iConnID = g_iConnectionID;
 	pThd->m_tmConnect = sphMicroTimer();
 
-	g_tThdMutex.Lock ();
-	g_dThd.Add ( pThd );
-	g_tThdMutex.Unlock ();
+	ThreadAdd ( pThd );
 
 	if ( !SphCrashLogger_c::ThreadCreate ( &pThd->m_tThd, HandlerThread, pThd, true ) )
 	{
 		sphSockClose ( iClientSock );
 		int iErr = errno;
-		g_tThdMutex.Lock ();
-		g_dThd.Remove ( pThd );
-		g_tThdMutex.Unlock ();
+		ThreadRemove ( pThd );
 		SafeDelete ( pThd );
 
 		FailClient ( iClientSock, SEARCHD_RETRY, "failed to create worker thread" );
@@ -22337,9 +22407,7 @@ void ThdJobAPI_t::Call ()
 	tThdDesc.m_tmConnect = sphMicroTimer();
 	tThdDesc.m_iTid = iTid;
 
-	g_tThdMutex.Lock ();
-	g_dThd.Add ( &tThdDesc );
-	g_tThdMutex.Unlock ();
+	ThreadAdd ( &tThdDesc );
 
 	assert ( m_tState.Ptr() );
 
@@ -22357,9 +22425,7 @@ void ThdJobAPI_t::Call ()
 		m_tState->m_bKeepSocket |= bProceed;
 	}
 
-	g_tThdMutex.Lock ();
-	g_dThd.Remove ( &tThdDesc );
-	g_tThdMutex.Unlock ();
+	ThreadRemove ( &tThdDesc );
 
 	sphLogDebugv ( "%p API job done, command=%d, tick=%u", this, m_iCommand, m_pLoop->m_uTick );
 
@@ -22405,9 +22471,7 @@ void ThdJobQL_t::Call ()
 	tThdDesc.m_tmConnect = sphMicroTimer();
 	tThdDesc.m_iTid = iTid;
 
-	g_tThdMutex.Lock();
-	g_dThd.Add ( &tThdDesc );
-	g_tThdMutex.Unlock();
+	ThreadAdd ( &tThdDesc );
 
 	CSphString sQuery; // to keep data alive for SphCrashQuery_c
 	bool bProfile = m_tState->m_tSession.m_tVars.m_bProfile; // the current statement might change it
@@ -22440,9 +22504,7 @@ void ThdJobQL_t::Call ()
 		JobDoSendNB ( pSend, m_pLoop );
 	}
 
-	g_tThdMutex.Lock();
-	g_dThd.Remove ( &tThdDesc );
-	g_tThdMutex.Unlock();
+	ThreadRemove ( &tThdDesc );
 }
 
 static void LogCleanup ( const CSphVector<ISphNetAction *> & dCleanup )
@@ -22505,9 +22567,7 @@ void ThdJobHttp_t::Call ()
 	tThdDesc.m_tmConnect = sphMicroTimer();
 	tThdDesc.m_iTid = iTid;
 
-	g_tThdMutex.Lock ();
-	g_dThd.Add ( &tThdDesc );
-	g_tThdMutex.Unlock ();
+	ThreadAdd ( &tThdDesc );
 
 	assert ( m_tState.Ptr() );
 
@@ -22518,9 +22578,7 @@ void ThdJobHttp_t::Call ()
 	} else
 		m_tState->m_bKeepSocket = sphLoopClientHttp ( m_tState->m_dBuf, m_tState->m_iConnID );
 
-	g_tThdMutex.Lock ();
-	g_dThd.Remove ( &tThdDesc );
-	g_tThdMutex.Unlock ();
+	ThreadRemove ( &tThdDesc );
 
 	sphLogDebugv ( "%p http job done, tick=%u", this, m_pLoop->m_uTick );
 
@@ -23649,8 +23707,10 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		if ( it.Get().m_bEnabled )
 			hIndexes.Add ( it.Get().m_pIndex, it.GetKey() );
 
-	sphReplayBinlog ( hIndexes, uReplayFlags, DumpMemStat );
+	sphReplayBinlog ( hIndexes, uReplayFlags, DumpMemStat, g_tBinlogAutoflush );
 	hIndexes.Reset();
+	if ( g_tBinlogAutoflush.m_fnWork && !sphThreadCreate ( &g_tBinlogFlushThread, RtBinlogAutoflushThreadFunc, 0 ) )
+		sphDie ( "failed to create binlog flush thread" );
 
 	if ( g_bIOStats && !sphInitIOStats () )
 		sphWarning ( "unable to init IO statistics" );

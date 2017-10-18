@@ -1220,11 +1220,13 @@ static const char * g_dNewExts17[] = { ".new.sph", ".new.spa", ".new.spi", ".new
 static const char * g_dOldExts17[] = { ".old.sph", ".old.spa", ".old.spi", ".old.spd", ".old.spp", ".old.spm", ".old.spk", ".old.sps", ".old.mvp" };
 static const char * g_dCurExts17[] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm", ".spk", ".sps", ".mvp" };
 static const char * g_dLocExts17[] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm", ".spk", ".sps", ".spl" };
+static const char * g_dLocAllExts17[] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm", ".spk", ".sps", ".spl", ".mvp" };
 
 static const char * g_dNewExts31[] = { ".new.sph", ".new.spa", ".new.spi", ".new.spd", ".new.spp", ".new.spm", ".new.spk", ".new.sps", ".new.spe" };
 static const char * g_dOldExts31[] = { ".old.sph", ".old.spa", ".old.spi", ".old.spd", ".old.spp", ".old.spm", ".old.spk", ".old.sps", ".old.spe", ".old.mvp" };
 static const char * g_dCurExts31[] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm", ".spk", ".sps", ".spe", ".mvp" };
 static const char * g_dLocExts31[] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm", ".spk", ".sps", ".spe", ".spl" };
+static const char * g_dLocAllExts31[] = { ".sph", ".spa", ".spi", ".spd", ".spp", ".spm", ".spk", ".sps", ".spe", ".spl", ".mvp" };
 
 static const char ** g_pppAllExts[] = { g_dCurExts31, g_dNewExts31, g_dOldExts31, g_dLocExts31 };
 
@@ -1239,6 +1241,7 @@ const char ** sphGetExts ( ESphExtType eType, DWORD uVersion )
 		case SPH_EXT_TYPE_OLD: return g_dOldExts17;
 		case SPH_EXT_TYPE_CUR: return g_dCurExts17;
 		case SPH_EXT_TYPE_LOC: return g_dLocExts17;
+		case SPH_EXT_TYPE_LOC_ALL: return g_dLocAllExts17;
 		}
 
 	} else
@@ -1249,6 +1252,7 @@ const char ** sphGetExts ( ESphExtType eType, DWORD uVersion )
 		case SPH_EXT_TYPE_OLD: return g_dOldExts31;
 		case SPH_EXT_TYPE_CUR: return g_dCurExts31;
 		case SPH_EXT_TYPE_LOC: return g_dLocExts31;
+		case SPH_EXT_TYPE_LOC_ALL: return g_dLocAllExts31;
 		}
 	}
 
@@ -16253,9 +16257,9 @@ bool CSphIndex_VLN::Rename ( const char * sNewBase )
 	char sFrom [ SPH_MAX_FILENAME_LEN ];
 	char sTo [ SPH_MAX_FILENAME_LEN ];
 
-	// +1 for ".spl"
-	int iExtCount = sphGetExtCount() + 1;
-	const char ** sExts = sphGetExts ( SPH_EXT_TYPE_LOC );
+	// +1 for ".spl" + +1 for ".mvp"
+	int iExtCount = sphGetExtCount() + 2;
+	const char ** sExts = sphGetExts ( SPH_EXT_TYPE_LOC_ALL );
 	DWORD uMask = 0;
 
 	int iExt;
@@ -16301,8 +16305,8 @@ bool CSphIndex_VLN::Rename ( const char * sNewBase )
 		if ( ::rename ( sFrom, sTo ) )
 		{
 			m_sLastError.SetSprintf ( "rename %s to %s failed: %s", sFrom, sTo, strerror(errno) );
-			// this is no reason to fail if spl is missing, since it is only lock and no data.
-			if ( strcmp ( sExt, ".spl" ) )
+			// this is no reason to fail if spl or mvp is missing, since it is only lock and no data.
+			if ( strcmp ( sExt, ".spl" )!=0 && strcmp ( sExt, ".mvp" )!=0 )
 				break;
 		}
 		uMask |= ( 1UL << iExt );

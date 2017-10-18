@@ -536,8 +536,8 @@ struct ServedDesc_t
 	bool				m_bOnDiskPools;
 	int64_t				m_iMass; // relative weight (by access speed) of the index
 
-	ServedDesc_t ();
-	~ServedDesc_t ();
+						ServedDesc_t ();
+	virtual				~ServedDesc_t ();
 };
 
 
@@ -584,8 +584,8 @@ private:
 class ServedIndex_c : public ISphNoncopyable, public ServedDesc_t, public ServedStats_c
 {
 public:
-	ServedIndex_c () {}
-	~ServedIndex_c ();
+	ServedIndex_c ();
+	virtual ~ServedIndex_c ();
 
 	void				ReadLock () const ACQUIRE_SHARED( m_tLock );
 	void				WriteLock () const ACQUIRE( m_tLock );
@@ -593,14 +593,23 @@ public:
 
 	bool				InitLock () const;
 
+	void				Release () const;
+	void				SetUnlink ( const char * sUnlnk );
+
 protected:
 	virtual void		LockStats ( bool bReader ) const;
 	virtual void		UnlockStats() const;
 
+	void				AddRef () const;
+
 private:
 	mutable CSphRwlock	m_tLock;
 	mutable CSphRwlock	m_tStatsLock;
+	mutable CSphAtomic	m_tRefCount;
+	CSphString			m_sUnlink;
 };
+
+typedef SmallStringHash_T<ServedIndex_c *> IndexHash_t;
 
 /// global index hash
 /// used in both non-threaded and multi-threaded modes
@@ -611,19 +620,19 @@ private:
 ///
 /// note that entry locks are held outside the hash
 /// and Delete() honours that by acquiring wlock on an entry first
-class IndexHash_c : protected SmallStringHash_T<ServedIndex_c>
+class IndexHash_c : public ISphNoncopyable 
 {
 	friend class IndexHashIterator_c;
-	typedef SmallStringHash_T<ServedIndex_c> BASE;
 
 public:
-	explicit				IndexHash_c ();
-	virtual					~IndexHash_c ();
+	IndexHash_c ();
+	~IndexHash_c ();
 
-	int						GetLength () const { return BASE::GetLength(); }
-	void					Reset () { BASE::Reset(); }
+	int						GetLength() const { return m_hIndexes.GetLength(); }
+	void					Reset();
 
 	bool					Add ( const ServedDesc_t & tDesc, const CSphString & tKey );
+	void					Set ( ServedDesc_t & tDesc, const CSphString & tKey );	
 	bool					Delete ( const CSphString & tKey );
 
 	ServedIndex_c *			GetRlockedEntry ( const CSphString & tKey ) const EXCLUDES (m_tLock);
@@ -636,7 +645,8 @@ protected:
 	void					Unlock () const UNLOCK_FUNCTION ( m_tLock );
 
 private:
-	mutable CSphRwlock		m_tLock;
+	mutable CSphRwlock m_tLock;
+	IndexHash_t m_hIndexes;
 };
 
 
@@ -652,8 +662,8 @@ public:
 	const CSphString &	GetKey ();
 
 private:
-	const IndexHash_c *			m_pHash;
-	IndexHash_c::HashEntry_t *	m_pIterator;
+	const IndexHash_c * m_pHash;
+	void *	m_pIterator;
 };
 
 extern IndexHash_c *						g_pLocalIndexes;	// served (local) indexes hash

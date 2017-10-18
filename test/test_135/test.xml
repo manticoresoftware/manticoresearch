@@ -73,7 +73,7 @@ $results[] = $client->Query ( "test3");
 // rotation reset index name and TID
 $results[] = 'rotaiting...';
 RunIndexer ( $errors, '--all --rotate' );
-usleep ( 50000 );
+usleep ( 100000 );
 $up = $client->UpdateAttributes ( "idx_130", array("mva1"), array(2=>array(array(1,2,7))),true);
 if ( $up >= 0 )
 	$results[] = sprintf("up.ok=%d", $up);
@@ -81,7 +81,7 @@ else
 	$results[] = sprintf("up.err=%s", $client->GetLastError());
 
 KillSearchd ( 'config.conf', 'searchd.pid', 'KILL', false );
-usleep ( 50000 );
+usleep ( 100000 );
 
 $error = "";
 $startSta = StartSearchd ( 'config.conf', 'error.txt', 'searchd.pid', $error );

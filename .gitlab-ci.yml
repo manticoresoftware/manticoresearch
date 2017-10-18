@@ -1,4 +1,6 @@
 stages:
+  - docs
+  - deploy
   - unittests
 
 simple_tests:
@@ -9,6 +11,9 @@ simple_tests:
   image: registry.gitlab.com/manticoresearch/dev/ubertests:latest
   script:
     - ctest -V -S /work/gltest.cmake
+  artifacts:
+    paths:
+    - build/here
 
 disabled_id64_tests:
   stage: unittests
@@ -18,9 +23,12 @@ disabled_id64_tests:
   image: registry.gitlab.com/manticoresearch/dev/ubertests:latest
   script:
     - ctest -V -DDISABLE_ID64=1 -S /work/gltest.cmake
+  artifacts:
+    paths:
+    - build/here
 
-checkdocs:
-  stage: unittests
+pages:
+  stage: docs
   tags:
     - docs
     - docker
@@ -28,4 +36,10 @@ checkdocs:
   script:
     - cd docs
     - make html
-    - cd ..
+    - cd -
+    - mkdir .public
+    - cp -r docs/build/html/* .public
+    - mv .public public
+  artifacts:
+    paths:
+    - public

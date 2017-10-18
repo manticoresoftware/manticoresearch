@@ -25,6 +25,8 @@ The ‘Info’ column will be cut at the width you've specified in the
 below). This column will contain raw SphinxQL queries and, if there are
 API queries, full text syntax and comments will be displayed. With an
 API-snippet, the data size will be displayed along with the query.
+This column will also contain active system thread started with SYSTEM
+and time since current iteration started in system endless loop.
 
 .. code-block:: none
 
@@ -36,6 +38,7 @@ API-snippet, the data size will be displayed along with the query.
     | 5168 | sphinxql | query | 0.000002 | show threads option columns=50                     |
     | 5175 | sphinxql | query | 0.000002 | select * from rt where match ( 'the box' )         |
     | 1168 | sphinxql | query | 0.000002 | select * from rt where match ( 'the box and faximi |
+    | 9580 | -        | -     | 0.019280 | SYSTEM OPTIMIZE                                    |
     +------+----------+-------+----------+----------------------------------------------------+
     3 row in set (0.00 sec)
 

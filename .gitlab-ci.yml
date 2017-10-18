@@ -54,9 +54,19 @@ job_test_rt:
       - build/test/error.txt
   retry: 2
 
-checkdocs:
+pages:
   stage: docs
+  tags:
+    - docs
+    - docker
+  image: registry.gitlab.com/manticoresearch/dev/manticoredocs:latest
   script:
     - cd docs
     - make html
-    - cd ..
+    - cd -
+    - mkdir .public
+    - cp -r docs/build/html/* .public
+    - mv .public public
+  artifacts:
+    paths:
+    - public

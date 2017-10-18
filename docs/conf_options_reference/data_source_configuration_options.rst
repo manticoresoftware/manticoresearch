@@ -240,7 +240,8 @@ everything can be declared in a single line as well):
 
     sql_attr_multi = ATTR-TYPE ATTR-NAME 'from' SOURCE-TYPE \
         [;QUERY] \
-        [;RANGE-QUERY]
+        [;RANGED-QUERY] \
+        [;RANGED-MAIN-QUERY]
 
 where
 
@@ -250,8 +251,10 @@ where
 
 -  QUERY is SQL query used to fetch all ( docid, attrvalue ) pairs
 
--  RANGE-QUERY is SQL query used to fetch min and max ID values, similar
+-  RANGED-QUERY is SQL query used to fetch min and max ID values, similar
    to ‘sql_query_range’
+   
+-  RANGED-MAIN-QUERY is option to use SQL query from ‘sql_query_range’   
 
 Example:
 

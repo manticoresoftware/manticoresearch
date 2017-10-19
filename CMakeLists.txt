@@ -69,6 +69,7 @@ endmacro()
 
 
 memcfgvalues ( CMAKE_BUILD_TYPE )
+memcfgvalues ( DISTR_BUILD )
 
 # ctest variables
 set ( DEFAULT_CTEST_CONFIGURATION_TYPE "Debug" )

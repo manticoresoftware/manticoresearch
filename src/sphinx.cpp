@@ -24684,10 +24684,6 @@ bool CSphFieldRegExps::AddRegExp ( const char * sRegExp, CSphString & sError )
 
 ISphFieldFilter * CSphFieldRegExps::Clone()
 {
-	ISphFieldFilter * pClonedParent = NULL;
-	if ( m_pParent )
-		pClonedParent = m_pParent->Clone();
-
 	CSphFieldRegExps * pCloned = new CSphFieldRegExps ( true );
 	pCloned->m_dRegexps = m_dRegexps;
 

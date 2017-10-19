@@ -22,23 +22,70 @@ Supported platforms:
 * x86
 * x86_64
 
-Manticore requires no extra libraries to be installed on Debian/Ubuntu.
-However if you plan to use 'indexer' tool to create indexes from different sources,
-you'll need to install appropriate client libraries. Use apt-get to download and install these dependencies:
-
-.. code-block:: bash
-
-	$ sudo apt-get install libmysqlclient20 libodbc1 libpq5 libexpat1
-
-Note, that you need only libs for types of sources you're going to use. So if you plan to make indexes only
-from mysql source, then installing 'libmysqlclient20' will be enough.
-If you don't going to use 'indexer' tool at all, you don't need to install these packages.
-Now you can install Manticore:
+You can install Manticore with command:
 
 .. code-block:: bash
 
 	$ wget https://github.com/manticoresoftware/manticore/releases/download/2.4.1/manticore_2.4.1-171017-3b31a97-release-stemmer.jessie_amd64-bin.deb
 	$ sudo dpkg -i manticore_2.4.1-171017-3b31a97-release-stemmer.jessie_amd64-bin.deb
+
+Manticore requires no extra libraries to be installed on Debian/Ubuntu.
+However if you plan to use 'indexer' tool to create indexes from different sources,
+you'll need to install appropriate client libraries.
+To know what exactly libraries, run `indexer` tool from Manticore and look at the top of it's output:
+
+.. code-block:: bash
+
+	$ indexer
+	Manticore 2.4.1 4258276@171019 id64-beta
+	Copyright (c) 2001-2016, Andrew Aksyonoff
+	Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)
+	Copyright (c) 2017, Manticore Software LTD (http://manticoresearch.com)
+
+	Built by gcc/clang v 6.3.0,
+
+	Built on Linux d2a57137d4f5 4.8.0-45-generic #48~16.04.1-Ubuntu SMP Fri Mar 24 12:46:56 UTC 2017 x86_64 GNU/Linux
+	Configured by CMake with these definitions: -DCMAKE_BUILD_TYPE=RelWithDebInfo -DDL_UNIXODBC=1 -DUNIXODBC_LIB=libodbc.so.2 -DDL_EXPAT=1 -DEXPAT_LIB=libexpat.so.1 -DDL_MYSQL=1 -DMYSQL_LIB=libmariadbclient.so.18 -DMYSQL_CONFIG_EXECUTABLE=/usr/bin/mysql_config -DDL_PGSQL=1 -DPGSQL_LIB=libpq.so.5 -DSPLIT_SYMBOLS=ON -DUSE_BISON=ON -DUSE_FLEX=ON -DUSE_SYSLOG=1 -DWITH_EXPAT=ON -DWITH_ICONV=ON -DWITH_MYSQL=ON -DWITH_ODBC=ON -DWITH_PGSQL=ON -DWITH_RE2=ON -DWITH_STEMMER=ON -DWITH_ZLIB=ON
+
+Here you can see mentions of `libodbc.so.2`, `libexpat.so.1`, `libmariadbclient.so.18`, and `libpq.so.5`.
+
+Below is the reference table with list of all client libraries for different debian/ubuntu distributions:
+
+
++---------+------------------------+------------+---------------+--------------+
+| Distr   | Mysql                  | PostgresQL | Xmlpipe       | Unixodbc     |
++=========+========================+============+===============+==============+
+| trusty  | libmysqlclient.so.18   | libpq.so.5 | libexpat.so.1 | libodbc.so.1 |
++---------+------------------------+------------+---------------+--------------+
+| xenial  | libmysqlclient.so.20   | libpq.so.5 | libexpat.so.1 | libodbc.so.2 |
++---------+------------------------+------------+---------------+--------------+
+| wheezy  | libmysqlclient.so.18   | libpq.so.5 | libexpat.so.1 | libodbc.so.1 |
++---------+------------------------+------------+---------------+--------------+
+| jessie  | libmysqlclient.so.18   | libpq.so.5 | libexpat.so.1 | libodbc.so.2 |
++---------+------------------------+------------+---------------+--------------+
+| stretch | libmariadbclient.so.18 | libpq.so.5 | libexpat.so.1 | libodbc.so.2 |
++---------+------------------------+------------+---------------+--------------+
+
+
+To find the packages which provide the libraries you can use, for example ``apt-file``:
+
+.. code-block:: bash
+
+	$ apt-file find libmysqlclient.so.20
+	libmysqlclient20: /usr/lib/x86_64-linux-gnu/libmysqlclient.so.20
+	libmysqlclient20: /usr/lib/x86_64-linux-gnu/libmysqlclient.so.20.2.0
+	libmysqlclient20: /usr/lib/x86_64-linux-gnu/libmysqlclient.so.20.3.6
+
+Note, that you need only libs for types of sources you're going to use. So if you plan to make indexes only
+from mysql source, then install only lib for mysql client (in case above - ``libmysqlclient20``).
+
+Finally install necessary packages:
+
+.. code-block:: bash
+
+	$ sudo apt-get install libmysqlclient20 libodbc1 libpq5 libexpat1
+
+If you aren't going to use ``indexer`` tool at all, you don't need find and install any libraries.
 
 After preparing configuration file (see :ref:`Quick tour <quick_usage_tour>`), you can start searchd daemon:
 
@@ -194,6 +241,8 @@ To install all dependencies on Debian/Ubuntu:
 .. code-block:: bash
 
    $ apt-get install build-essential cmake unixodbc-dev libpq-dev libexpat-dev libmysqlclient-dev git flex bison
+
+Note: on Debian 9 (stretch) package ``libmysqlclient-dev`` is absent. Use ``default-libmysqlclient-dev`` there instead.
 
 To install all dependencies on CentOS/RHEL:
 

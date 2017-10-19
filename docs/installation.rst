@@ -10,6 +10,7 @@ Supported releases:
 
 	* 7.0 (wheezy)
 	* 8.0 (jessie)
+	* 9.0 (stretch)
 	
 *  Ubuntu
 
@@ -182,7 +183,7 @@ Next step is to configure the building with cmake. Available list of configurati
 * ``WITH_MYSQL`` (bool)	 enabled compiling with MySQL client library, used by MySQL source driver. Additional parameters ``WITH_MYSQL_ROOT``, ``WITH_MYSQL_LIBS`` and ``WITH_MYSQL_INCLUDES`` can be used for custom MySQL files
 * ``WITH_ODBC`` (bool)	 enabled compiling with ODBC client library, used by ODBC source driver
 * ``WITH_PGSQL`` (bool)	 enabled compiling with PostgreSQL client library, used by PostgreSQL source driver
-* ``DISTR_BUILD``  -  in case the target is packaging, it specifies the target operating system. Supported values are: `centos6`, `centos7`, `wheezy`, `jessie`, `trusty`, `xenial`, `macos`, `default`.
+* ``DISTR_BUILD``  -  in case the target is packaging, it specifies the target operating system. Supported values are: `centos6`, `centos7`, `wheezy`, `jessie`, `stretch`, `trusty`, `xenial`, `macos`, `default`.
 
 Compiling on UNIX systems
 ~~~~~~~~~~~~~~~~~~~~~~~~~

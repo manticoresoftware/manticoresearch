@@ -197,21 +197,21 @@ static bool sphWildcardMatchRec ( const T1 * sString, const T2 * sPattern )
 						return p[1]=='\0';
 				}
 
-				// short-circuit trailing star
-				if ( !*p )
-					return true;
+			// short-circuit trailing star
+			if ( !*p )
+				return true;
 
-				// so our wildcard expects a real character
-				// scan forward for its occurrences and recurse
-				for ( ;; )
-				{
-					if ( !*s )
-						return false;
-					if ( *s==*p && sphWildcardMatchRec ( s+1, p+1 ) )
-						return true;
-					s++;
-				}
-				break;
+			// so our wildcard expects a real character
+			// scan forward for its occurrences and recurse
+			for ( ;; )
+			{
+				if ( !*s )
+					return false;
+				if ( *s==*p && sphWildcardMatchRec ( s+1, p+1 ) )
+					return true;
+				s++;
+			}
+			break;
 
 		default:
 			// default case, strict match
@@ -1196,7 +1196,8 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 			if ( !sToken[0]&&!sphIsAlpha(*p))	{ LOC_ERROR2 ( "named section: expected name, got '%c'", *p ); }
 
 			if ( !sToken[0] )				{ LOC_PUSH ( S_TOK ); LOC_BACK(); continue; }
-											if ( !AddSection ( m_sSectionType.cstr(), sToken ) ) break; sToken[0] = '\0';
+			if ( !AddSection ( m_sSectionType.cstr(), sToken ) ) break;
+			sToken[0] = '\0';
 			if ( *p==':' )					{ eState = S_SECBASE; continue; }
 			if ( *p=='{' )					{ eState = S_SEC; continue; }
 											LOC_ERROR2 ( "named section: expected ':' or '{', got '%c'", *p );
@@ -1931,18 +1932,18 @@ static void UItoA ( char** ppOutput, Uint uVal, int iBase=10, int iWidth=0, int 
 			iWidth--;
 		}
 
-		if ( iPrec )
+	if ( iPrec )
+	{
+		while ( uLen < iPrec )
 		{
-			while ( uLen < iPrec )
-			{
-				*pOutput++=cDigits[0];
-				iPrec--;
-			}
-			iPrec = uLen-iPrec;
+			*pOutput++=cDigits[0];
+			iPrec--;
 		}
+		iPrec = uLen-iPrec;
+	}
 
-		while ( pRes < CBuf+uMaxIndex-iPrec )
-			*pOutput++ = *++pRes;
+	while ( pRes < CBuf+uMaxIndex-iPrec )
+		*pOutput++ = *++pRes;
 }
 
 

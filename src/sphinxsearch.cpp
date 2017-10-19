@@ -2940,22 +2940,22 @@ const ExtHit_t * ExtAndZonespanned_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 					}
 				}
 
-				// our special GetDocsChunk made the things so simply, that we doesn't need to care about tail hits at all.
-				// copy tail, while possible, unless the other child is at the end of a hit block
-				if ( pCurL && pCurL->m_uDocid==m_uMatchedDocid && !( pCurR && pCurR->m_uDocid==DOCID_MAX ) )
+			// our special GetDocsChunk made the things so simply, that we doesn't need to care about tail hits at all.
+			// copy tail, while possible, unless the other child is at the end of a hit block
+			if ( pCurL && pCurL->m_uDocid==m_uMatchedDocid && !( pCurR && pCurR->m_uDocid==DOCID_MAX ) )
+			{
+				while ( pCurL->m_uDocid==m_uMatchedDocid && iHit<MAX_HITS-1 )
 				{
-					while ( pCurL->m_uDocid==m_uMatchedDocid && iHit<MAX_HITS-1 )
-					{
-						pCurL++;
-					}
+					pCurL++;
 				}
-				if ( pCurR && pCurR->m_uDocid==m_uMatchedDocid && !( pCurL && pCurL->m_uDocid==DOCID_MAX ) )
+			}
+			if ( pCurR && pCurR->m_uDocid==m_uMatchedDocid && !( pCurL && pCurL->m_uDocid==DOCID_MAX ) )
+			{
+				while ( pCurR->m_uDocid==m_uMatchedDocid && iHit<MAX_HITS-1 )
 				{
-					while ( pCurR->m_uDocid==m_uMatchedDocid && iHit<MAX_HITS-1 )
-					{
-						pCurR++;
-					}
+					pCurR++;
 				}
+			}
 		}
 
 		// move on

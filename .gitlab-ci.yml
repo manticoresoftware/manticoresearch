@@ -1,31 +1,7 @@
 stages:
   - docs
-  - deploy
   - unittests
-
-simple_tests:
-  stage: unittests
-  tags:
-    - ubuntu
-    - specdocker
-  image: registry.gitlab.com/manticoresearch/dev/ubertests:latest
-  script:
-    - ctest -V -S /work/gltest.cmake
-  artifacts:
-    paths:
-    - build/here
-
-disabled_id64_tests:
-  stage: unittests
-  tags:
-    - ubuntu
-    - specdocker
-  image: registry.gitlab.com/manticoresearch/dev/ubertests:latest
-  script:
-    - ctest -V -DDISABLE_ID64=1 -S /work/gltest.cmake
-  artifacts:
-    paths:
-    - build/here
+  - publish
 
 pages:
   stage: docs
@@ -43,3 +19,65 @@ pages:
   artifacts:
     paths:
     - public
+  only:
+  - master
+
+job_mirror:
+  stage: docs
+  only:
+    - master
+  script:
+    - ~/gitsync.sh
+  allow_failure: true
+
+simple_tests:
+  stage: unittests
+  tags:
+    - ubuntu
+    - specdocker
+  dependencies: []
+  image: registry.gitlab.com/manticoresearch/dev/ubertests:latest
+  script:
+    - ctest -V -S /work/gltest.cmake
+  artifacts:
+    paths:
+    - build/here
+    expire_in: 2 hrs
+    when: always
+  retry: 1
+
+disabled_id64_tests:
+  stage: unittests
+  tags:
+    - ubuntu
+    - specdocker
+  dependencies: []
+  image: registry.gitlab.com/manticoresearch/dev/ubertests:latest
+  script:
+    - ctest -V -DDISABLE_ID64=1 -S /work/gltest.cmake
+  artifacts:
+    paths:
+    - build/here
+    expire_in: 2 hrs
+    when: always
+  retry: 1
+
+push_results:
+  stage: publish
+  tags:
+    - ubuntu
+    - specdocker
+  image: registry.gitlab.com/manticoresearch/dev/ubertests:latest
+  dependencies:
+    - simple_tests
+    - disabled_id64_tests
+  variables:
+    GIT_STRATEGY: none
+  script:
+    - ctest -S /work/upload.cmake
+  when: always
+  environment:
+    name: ${CI_COMMIT_REF_NAME}_${CI_PIPELINE_ID}
+    url: http://$CDASH_URL/CDash/public/index.php?project=Manticoresearch&filtercount=1&field1=revision&compare1=63&value1=$CI_COMMIT_SHA
+
+

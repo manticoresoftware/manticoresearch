@@ -64,7 +64,8 @@ if ( NOT DISABLE_TESTING )
 
 		SET_TESTS_PROPERTIES ( "\"rt_${tst_name}\"" PROPERTIES LABELS RT )
 		SET_TESTS_PROPERTIES ( "\"test_${tst_name}\"" PROPERTIES LABELS PLAIN )
-		SET_TESTS_PROPERTIES ( "\"test_${tst_name}\"" "\"rt_${tst_name}\"" PROPERTIES ATTACHED_FILES_ON_FAIL "${MANTICORE_BINARY_DIR}/test/test_${onetest}/report.txt" )
+#		SET_TESTS_PROPERTIES ( "\"test_${tst_name}\"" "\"rt_${tst_name}\"" PROPERTIES ATTACHED_FILES_ON_FAIL "${MANTICORE_BINARY_DIR}/test/test_${onetest}/report.txt" )
+		SET_TESTS_PROPERTIES ( "\"test_${tst_name}\"" "\"rt_${tst_name}\"" PROPERTIES SKIP_RETURN_CODE 42 )
 		SET_TESTS_PROPERTIES ( "\"test_${tst_name}\"" "\"rt_${tst_name}\"" PROPERTIES FIXTURES_REQUIRED UBER)
 		SET_TESTS_PROPERTIES ( "\"test_${tst_name}\"" "\"rt_${tst_name}\"" PROPERTIES RESOURCE_LOCK DbAccess )
 

@@ -330,14 +330,19 @@ if ( !array_key_exists ('keep_all', $g_locals) )
 	}
 }
 // summarize
-if ( $total_tests_failed )
-{
-	printf ( "\nTo re-run failed tests only:\nphp ubertest.php t %s\n", join ( " ", $failed_tests ) );
-	printf ( "\n%d of %d tests and %d of %d subtests failed, %d tests skipped, %.2f sec elapsed\nTHERE WERE FAILURES!\n",
+if ( $total_tests_failed ) {
+	printf("\nTo re-run failed tests only:\nphp ubertest.php t %s\n", join(" ", $failed_tests));
+	printf("\n%d of %d tests and %d of %d subtests failed, %d tests skipped, %.2f sec elapsed\nTHERE WERE FAILURES!\n",
 		$total_tests_failed, $total_tests,
-		$total_subtests_failed, $total_subtests,$total_skipped,
+		$total_subtests_failed, $total_subtests, $total_skipped,
+		MyMicrotime() - $t);
+	exit (1);
+} elseif ( $total_skipped )
+{
+	printf ( "\n%d tests and %d subtests succesful, %d tests skipped, %.2f sec elapsed\nSKIPPED\n",
+		$total_tests, $total_subtests, $total_skipped,
 		MyMicrotime()-$t );
-	exit ( 1 );
+	exit ( 42 );
 } else
 {
 	printf ( "\n%d tests and %d subtests succesful, %d tests skipped, %.2f sec elapsed\nALL OK\n",

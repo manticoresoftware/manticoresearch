@@ -126,11 +126,8 @@ insert into facetdemo2 (id,price,brand_id,title,brand_name,property,categories,j
 <sphinxql>select * from facetdemo2 facet brand_id;</sphinxql>
 
 <sphinxql>select * from facetdemo11 facet brand_id;</sphinxql>
-
-<!-- disable till further fix
 <sphinxql>select * from facetdemo12 facet brand_id;</sphinxql>
 <sphinxql>select * from facetdemo13 facet brand_id;</sphinxql>
--->
 
 </sphqueries>
 

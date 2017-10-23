@@ -418,6 +418,7 @@ option ( ENABLE_ID64 "use 64-bit document and word IDs" ON )
 if ( ENABLE_ID64 )
 	SET ( USE_64BIT 1 )
 else ()
+	SET ( USE_64BIT 0 )
 	cfginfo ( "ENABLE_ID64=OFF" )
 endif ( ENABLE_ID64 )
 

@@ -3,6 +3,7 @@
 
 <requires>
 <id32/>
+<non-rt/>
 </requires>
 
 <name>schema minimization, match copying/remapping, and other match/schema voodoo</name>
@@ -57,19 +58,19 @@ source t3 : base
 index t1
 {
 	source = t1
-	path = data/t1
+	path = <data_path/>/t1
 }
 
 index t2
 {
 	source = t2
-	path = data/t2
+	path = <data_path/>/t2
 }
 
 index t3
 {
 	source = t3
-	path = data/t3
+	path = <data_path/>/t3
 }
 
 index dt3
@@ -97,13 +98,13 @@ source loc2 : base
 index loc1
 {
 	source = loc1
-	path = data/loc1
+	path = <data_path/>/loc1
 }
 
 index loc2
 {
 	source = loc2
-	path = data/loc2
+	path = <data_path/>/loc2
 }
 
 index dist10

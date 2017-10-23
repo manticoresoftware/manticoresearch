@@ -370,7 +370,7 @@ protected:
 struct Expr_GetZonespanlist_c : public ISphStringExpr
 {
 	const CSphVector<int> * m_pData;
-	mutable CSphStringBuilder m_sBuilder;
+	mutable StringBuilder_c m_sBuilder;
 
 	explicit Expr_GetZonespanlist_c ()
 		: m_pData ( NULL )
@@ -849,7 +849,7 @@ struct Expr_ToString_c : public Expr_Unary_c
 {
 protected:
 	ESphAttr	m_eArg;
-	mutable CSphStringBuilder m_sBuilder;
+	mutable StringBuilder_c m_sBuilder;
 	const BYTE * m_pStrings;
 
 public:

@@ -142,7 +142,7 @@ public:
 	int				m_dSwitches [ SPH_QSTATE_TOTAL+1 ];	///< number of switches to given state
 	int64_t			m_tmTotal [ SPH_QSTATE_TOTAL+1 ];	///< total time spent per state
 
-	CSphStringBuilder	m_sTransformedTree;					///< transformed query tree
+	StringBuilder_c	m_sTransformedTree;					///< transformed query tree
 
 public:
 	/// create empty and stopped profile
@@ -1815,7 +1815,6 @@ enum ESphExtType
 enum ESphExt
 {
 	SPH_EXT_SPH = 0,
-	SPH_EXT_SPA = 1,
 	SPH_EXT_MVP = 9
 };
 
@@ -2503,6 +2502,74 @@ inline void FlipEndianess ( DWORD* pData )
 	pB[1] = pB[2];
 	pB[2] = a;
 };
+
+/// SHA1 digests
+static const int HASH20_SIZE = 20;
+static const int SHA1_SIZE = HASH20_SIZE;
+class SHA1_c;
+
+
+
+// string and 20-bytes hash
+struct TaggedHash20_t
+{
+	CSphString m_sTagName;
+	BYTE m_dHashValue[HASH20_SIZE] = { 0 };
+
+	// by tag + hash
+	explicit TaggedHash20_t ( const char* sTag = nullptr, const BYTE* pHashValue = nullptr );
+
+	// convert to FIPS-180-1
+	CSphString ToFIPS() const;
+
+	// load from FIPS-180-1
+	int FromFIPS ( const char* sFIPS );
+
+	// compare with raw hash
+	bool operator== ( const BYTE * pRef ) const;
+
+	inline bool Empty() const { return *this==m_dZeroHash; }
+
+	// helper zero hash
+	static const BYTE m_dZeroHash[HASH20_SIZE];
+};
+
+// set of tagged hashes
+class HashCollection_c
+{
+	CSphVector<TaggedHash20_t> m_dHashes;
+public:
+	void AppendNewHash ( const char* sExt, const BYTE* pHash);
+
+	void /*REFACTOR*/ SaveSHA() {};
+
+};
+
+// file writer with hashing on-the-fly.
+class WriterWithHash_c : public CSphWriter
+{
+public:
+	WriterWithHash_c ( const char* sExt, HashCollection_c* pCollector );
+	~WriterWithHash_c ();
+
+	virtual void Flush () override;
+	void CloseFile ();
+
+	// get resulting BLOB, is valid only after StopHashing()
+	//const BYTE * GetHASHBlob () const;
+
+private:
+	//void StopHashing ();
+
+	HashCollection_c * m_pCollection;
+	const char * m_sExt;
+
+	SHA1_c * m_pHasher;
+	bool m_bHashDone = false;
+	BYTE m_dHashValue[HASH20_SIZE] = { 0 };
+};
+
+
 
 #endif // _sphinxint_
 

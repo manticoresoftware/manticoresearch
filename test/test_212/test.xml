@@ -57,9 +57,10 @@ index dummy_rot
 $results[] = $client->Query ( 'dummy', 'plain' );
 $results[] = $client->Query ( 'something', 'plain' );
 
+global $this_test, $index_data_path;
 $files = array ( 'spa', 'spd', 'sph', 'spi', 'spk', 'spm', 'spp', 'sps' );
 foreach ( $files as $ext )
-	copy ( "test_212/refdata/plain.new.$ext", "data/plain.new.$ext" );
+	copy ( "$this_test/refdata/plain.new.$ext", "$index_data_path/plain.new.$ext" );
 
 RunIndexer ( $errors, '--rotate dummy_rot' ); // just to send SIGHUP to daemon	
 sleep(2);

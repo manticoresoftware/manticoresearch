@@ -1143,23 +1143,17 @@ class CSphHitBuilder;
 struct BuildHeader_t : public CSphSourceStats, public DictHeader_t
 {
 	explicit BuildHeader_t ( const CSphSourceStats & tStat )
-		: m_pThrottle ( NULL )
-		, m_pMinRow ( NULL )
-		, m_uMinDocid ( 0 )
-		, m_uKillListSize ( 0 )
-		, m_iMinMaxIndex ( 0 )
-		, m_iTotalDups ( 0 )
 	{
 		m_iTotalDocuments = tStat.m_iTotalDocuments;
 		m_iTotalBytes = tStat.m_iTotalBytes;
 	}
 
-	ThrottleState_t *	m_pThrottle;
-	const CSphRowitem *	m_pMinRow;
-	SphDocID_t			m_uMinDocid;
-	DWORD				m_uKillListSize;
-	int64_t				m_iMinMaxIndex;
-	int					m_iTotalDups;
+	ThrottleState_t *	m_pThrottle = nullptr;
+	const CSphRowitem *	m_pMinRow = nullptr;
+	SphDocID_t			m_uMinDocid = 0;
+	DWORD				m_uKillListSize = 0;
+	int64_t				m_iMinMaxIndex = 0;
+	int					m_iTotalDups = 0;
 };
 
 struct WriteHeader_t
@@ -1564,6 +1558,8 @@ private:
 
 	bool						JuggleFile ( const char* szExt, CSphString & sError, bool bNeedOrigin=true ) const;
 	XQNode_t *					ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta * pResult, CSphScopedPayload * pPayloads, DWORD uQueryDebugFlags ) const;
+
+	mutable HashCollection_c	m_dHashes;
 };
 
 volatile int CSphIndex_VLN::m_iIndexTagSeq = 0;
@@ -9608,7 +9604,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttr
 		return false;
 
 	// generate a new .SPA file
-	CSphWriter tSPAWriter;
+	WriterWithHash_c tSPAWriter ( "spa", &m_dHashes );
 	tSPAWriter.SetBufferSize ( 524288 );
 	CSphString sSPAfile = GetIndexFileName ( "spa.tmpnew" );
 	if ( !tSPAWriter.OpenFile ( sSPAfile, sError ) )
@@ -9655,6 +9651,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttr
 	}
 
 	tSPAWriter.CloseFile();
+	m_dHashes.SaveSHA();
 
 	if ( !JuggleFile ( "spa", sError ) )
 		return false;
@@ -18414,6 +18411,239 @@ void CSphIndex_VLN::GetStatus ( CSphIndexStatus* pRes ) const
 		if ( stat ( sFile, &st )==0 )
 			pRes->m_iDiskUse += st.st_size;
 	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+// SHA1 digests
+//////////////////////////////////////////////////////////////////////////
+
+// SHA1 from https://github.com/shodanium/nanomysql/blob/master/nanomysql.cpp
+
+// nanomysql, a tiny MySQL client
+//
+// This program is free software; you can redistribute it and/or modify
+// it under the terms of the GNU General Public License. You should have
+// received a copy of the GPL license along with this program; if you
+// did not, you can find it at http://www.gnu.org/
+
+class SHA1_c
+{
+	DWORD state[5], count[2];
+	BYTE buffer[64];
+
+	void Transform ( const BYTE buf[64] )
+	{
+		DWORD a = state[0], b = state[1], c = state[2], d = state[3], e = state[4], block[16];
+		memset ( block, 0, sizeof ( block ) ); // initial conversion to big-endian units
+		for ( int i = 0; i<64; i++ )
+			block[i >> 2] += buf[i] << ( ( 3 - ( i & 3 ) ) * 8 );
+		for ( int i = 0; i<80; i++ ) // do hashing rounds
+		{
+#define _LROT( value, bits ) ( ( (value) << (bits) ) | ( (value) >> ( 32-(bits) ) ) )
+			if ( i>=16 )
+				block[i & 15] = _LROT (
+					block[( i + 13 ) & 15] ^ block[( i + 8 ) & 15] ^ block[( i + 2 ) & 15] ^ block[i & 15], 1 );
+
+			if ( i<20 )
+				e += ( ( b & ( c ^ d ) ) ^ d ) + 0x5A827999;
+			else if ( i<40 )
+				e += ( b ^ c ^ d ) + 0x6ED9EBA1;
+			else if ( i<60 )
+				e += ( ( ( b | c ) & d ) | ( b & c ) ) + 0x8F1BBCDC;
+			else
+				e += ( b ^ c ^ d ) + 0xCA62C1D6;
+
+			e += block[i & 15] + _LROT ( a, 5 );
+			DWORD t = e;
+			e = d;
+			d = c;
+			c = _LROT ( b, 30 );
+			b = a;
+			a = t;
+		}
+		state[0] += a; // save state
+		state[1] += b;
+		state[2] += c;
+		state[3] += d;
+		state[4] += e;
+	}
+
+public:
+	SHA1_c &Init ()
+	{
+		const DWORD dInit[5] = { 0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0 };
+		memcpy ( state, dInit, sizeof ( state ) );
+		count[0] = count[1] = 0;
+		return *this;
+	}
+
+	SHA1_c &Update ( const BYTE * data, int len )
+	{
+		int i, j = ( count[0] >> 3 ) & 63;
+		count[0] += ( len << 3 );
+		if ( count[0]<( DWORD ) ( len << 3 ) )
+			count[1]++;
+		count[1] += ( len >> 29 );
+		if ( ( j + len )>63 )
+		{
+			i = 64 - j;
+			memcpy ( &buffer[j], data, i );
+			Transform ( buffer );
+			for ( ; i + 63<len; i += 64 )
+				Transform ( data + i );
+			j = 0;
+		} else
+			i = 0;
+		memcpy ( &buffer[j], &data[i], len - i );
+		return *this;
+	}
+
+	void Final ( BYTE digest[SHA1_SIZE] )
+	{
+		BYTE finalcount[8];
+		for ( auto i = 0; i<8; i++ )
+			finalcount[i] = ( BYTE ) ( ( count[( i>=4 ) ? 0 : 1] >> ( ( 3 - ( i & 3 ) ) * 8 ) )
+				& 255 ); // endian independent
+		Update ( ( BYTE * ) "\200", 1 ); // add padding
+		while ( ( count[0] & 504 )!=448 )
+			Update ( ( BYTE * ) "\0", 1 );
+		Update ( finalcount, 8 ); // should cause a SHA1_Transform()
+		for ( auto i = 0; i<SHA1_SIZE; i++ )
+			digest[i] = ( BYTE ) ( ( state[i >> 2] >> ( ( 3 - ( i & 3 ) ) * 8 ) ) & 255 );
+	}
+};
+
+//////////////////////////////////////////////////////////////////////////
+// WriterWithHash_c - CSphWriter which also calc SHA1 on-the-fly
+//////////////////////////////////////////////////////////////////////////
+
+WriterWithHash_c::WriterWithHash_c ( const char * sExt, HashCollection_c * pCollector)
+	: m_pCollection { pCollector }
+	, m_sExt { sExt }
+{
+	m_pHasher = new SHA1_c;
+	m_pHasher->Init();
+}
+
+WriterWithHash_c::~WriterWithHash_c ()
+{
+	SafeDelete ( m_pHasher );
+}
+
+void WriterWithHash_c::Flush()
+{
+	assert ( !m_bHashDone ); // can't do anything with already finished hash
+	if ( m_iPoolUsed>0 )
+	{
+		m_pHasher->Update ( m_pBuffer, m_iPoolUsed );
+		CSphWriter::Flush();
+	}
+}
+
+/*const BYTE * WriterWithHash_c::GetHASHBlob () const
+{
+	assert ( m_bHashDone );
+	return m_dHashValue;
+}*/
+
+void WriterWithHash_c::CloseFile ()
+{
+	assert ( !m_bHashDone );
+	CSphWriter::CloseFile ();
+	m_pHasher->Final ( m_dHashValue );
+	if ( m_pCollection )
+		m_pCollection->AppendNewHash ( m_sExt, m_dHashValue );
+	m_bHashDone = true;
+}
+
+
+//////////////////////////////////////////////////////////////////////////
+// TaggedHash20_t - string tag (filename) with 20-bytes binary hash
+//////////////////////////////////////////////////////////////////////////
+
+const BYTE TaggedHash20_t::m_dZeroHash[HASH20_SIZE] = { 0 };
+
+// by tag + hash
+TaggedHash20_t::TaggedHash20_t ( const char* sTagName, const BYTE* pHashValue )
+	: m_sTagName ( sTagName )
+{
+	if ( !pHashValue )
+		pHashValue = m_dZeroHash;
+	memcpy ( m_dHashValue, pHashValue, HASH20_SIZE );
+}
+
+// serialize to FIPS form
+CSphString TaggedHash20_t::ToFIPS () const
+{
+	const char * sDigits = "0123456789abcdef";
+	char sHash [41];
+	StringBuilder_c sResult;
+
+	if ( Empty() )
+		return "";
+
+	for ( auto i = 0; i<HASH20_SIZE; ++i )
+	{
+		sHash[i << 1] = sDigits[m_dHashValue[i] >> 4];
+		sHash[1 + (i << 1)] = sDigits[m_dHashValue[i] & 0x0f];
+	}
+	sHash[40] = '\0';
+
+	// FIPS-180-1 - checksum, space, "*" (indicator of binary mode), tag
+	sResult.Appendf ("%s *%s\n", sHash, m_sTagName.cstr());
+	return sResult.cstr();
+}
+
+inline BYTE hex_char ( unsigned char c )
+{
+	if ( c>=0x30 && c<=0x39 )
+		return c - '0';
+	else if ( c>=0x61 && c<=0x66 )
+		return c - 'a' + 10;
+	assert ( false && "broken hex num - expected digits and a..f letters in the num" );
+	return 0;
+}
+
+// de-serialize from FIPS, returns len of parsed chunk of sFIPS or -1 on error
+int TaggedHash20_t::FromFIPS ( const char * sFIPS )
+{
+	// expects hash in form FIPS-180-1, that is:
+	// 45f44fd2db02b08b4189abf21e90edd712c9616d *rt_full.ram\n
+	// i.e. 40 symbols hex hash in small letters, space, '*' and tag, finished by '\n'
+
+	assert ( sFIPS[HASH20_SIZE * 2]==' ' && "broken FIPS - space expected after hash" );
+	assert ( sFIPS[HASH20_SIZE * 2 + 1]=='*' && "broken FIPS - * expected after hash and space" );
+
+	for ( auto i = 0; i<HASH20_SIZE; ++i )
+	{
+		auto &uCode = m_dHashValue[i];
+		uCode = hex_char ( sFIPS[i * 2] );
+		uCode = ( uCode << 4 ) + hex_char ( sFIPS[i * 2 + 1] );
+	}
+
+	sFIPS += 2 + HASH20_SIZE * 2;
+	auto len = strlen ( sFIPS );
+
+	if ( sFIPS[len - 1]!='\n' )
+		return -1;
+
+	m_sTagName.SetBinary ( sFIPS, len - 1 );
+	return len;
+}
+
+bool TaggedHash20_t::operator== ( const BYTE * pRef ) const
+{
+	assert ( pRef );
+	return !( bool ) memcmp ( m_dHashValue, pRef, HASH20_SIZE );
+}
+
+//////////////////////////////////////////////////////////////////////////
+// HashCollection_c
+//////////////////////////////////////////////////////////////////////////
+
+void HashCollection_c::AppendNewHash ( const char * sExt, const BYTE * pHash )
+{
+	m_dHashes.Add ( TaggedHash20_t ( sExt, pHash ) );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -31328,7 +31558,7 @@ void SphWordStatChecker_t::DumpDiffer ( const SmallStringHash_T<CSphQueryResultM
 	if ( !m_dSrcWords.GetLength() )
 		return;
 
-	CSphStringBuilder tWarningBuilder;
+	StringBuilder_c tWarningBuilder;
 	hStat.IterateStart();
 	while ( hStat.IterateNext() )
 	{

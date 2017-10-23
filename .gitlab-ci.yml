@@ -1,58 +1,7 @@
 stages:
-  - build
-  - test_plain
-  - test_rt
   - docs
-
-job_mirror:
-  stage: build
-  only:
-    - master
-  script:
-    - ~/gitsync.sh
-  allow_failure: true
-
-job_build:
-  stage: build
-  script:
-    - rm -R build/ || /bin/true
-    - mkdir build && cd build
-    - cmake ..
-    - make -j8
-
-job_test_plain:
-  stage: test_plain
-  script:
-    - rm -R build/ || /bin/true
-    - mkdir build && cd build
-    - cmake ..
-    - make -j8
-    - rm result_plain.zip || /bin/true
-    - ctest -E rt_ || ctest --rerun-failed -E rt_ || EXIT_CODE=$?
-    - exit ${EXIT_CODE}
-  artifacts:
-    when: always
-    paths:
-      - build/test/test_*/report.txt
-      - build/test/error.txt
-  retry: 2
-
-job_test_rt:
-  stage: test_rt
-  script:
-    - rm -R build/ || /bin/true
-    - mkdir build && cd build
-    - cmake ..
-    - make -j8
-    - rm result_rt.zip || /bin/true
-    - ctest -R rt_ || ctest --rerun-failed -R rt_ || EXIT_CODE=$?
-    - exit ${EXIT_CODE}
-  artifacts:
-    when: always
-    paths:
-      - build/test/test_*/report.txt
-      - build/test/error.txt
-  retry: 2
+  - unittests
+  - publish
 
 pages:
   stage: docs
@@ -72,3 +21,63 @@ pages:
     - public
   only:
   - master
+
+job_mirror:
+  stage: docs
+  only:
+    - master
+  script:
+    - ~/gitsync.sh
+  allow_failure: true
+
+simple_tests:
+  stage: unittests
+  tags:
+    - ubuntu
+    - specdocker
+  dependencies: []
+  image: registry.gitlab.com/manticoresearch/dev/ubertests:latest
+  script:
+    - ctest -V -S /work/gltest.cmake
+  artifacts:
+    paths:
+    - build/here
+    expire_in: 2 hrs
+    when: always
+  retry: 1
+
+disabled_id64_tests:
+  stage: unittests
+  tags:
+    - ubuntu
+    - specdocker
+  dependencies: []
+  image: registry.gitlab.com/manticoresearch/dev/ubertests:latest
+  script:
+    - ctest -V -DDISABLE_ID64=1 -S /work/gltest.cmake
+  artifacts:
+    paths:
+    - build/here
+    expire_in: 2 hrs
+    when: always
+  retry: 1
+
+push_results:
+  stage: publish
+  tags:
+    - ubuntu
+    - specdocker
+  image: registry.gitlab.com/manticoresearch/dev/ubertests:latest
+  dependencies:
+    - simple_tests
+    - disabled_id64_tests
+  variables:
+    GIT_STRATEGY: none
+  script:
+    - ctest -S /work/upload.cmake
+  when: always
+  environment:
+    name: ${CI_COMMIT_REF_NAME}_${CI_PIPELINE_ID}
+    url: http://$CDASH_URL/CDash/public/index.php?project=Manticoresearch&filtercount=1&field1=revision&compare1=63&value1=$CI_COMMIT_SHA
+
+

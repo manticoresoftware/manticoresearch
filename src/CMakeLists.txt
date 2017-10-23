@@ -1,5 +1,11 @@
 cmake_minimum_required ( VERSION 2.8 )
 
+FOREACH ( policy CMP0054 CMP0057 )
+	IF ( POLICY ${policy} )
+		CMAKE_POLICY ( SET ${policy} NEW )
+	ENDIF ()
+ENDFOREACH ()
+
 # main bunch of sources (for libsphinx)
 set ( LIBSPHINX_SRCS sphinx.cpp sphinxexcerpt.cpp
 		sphinxquery.cpp sphinxsoundex.cpp sphinxmetaphone.cpp
@@ -11,7 +17,8 @@ set ( LIBSPHINX_SRCS sphinx.cpp sphinxexcerpt.cpp
 		sphinxqcache.cpp sphinxrlp.cpp json/cJSON.c )
 set ( INDEXER_SRCS indexer.cpp )
 set ( INDEXTOOL_SRCS indextool.cpp )
-set ( SEARCHD_SRCS searchd.cpp searchdha.cpp http/http_parser.c searchdhttp.cpp )
+set ( SEARCHD_SRCS_TESTABLE searchdha.cpp http/http_parser.c searchdhttp.cpp )
+set ( SEARCHD_SRCS searchd.cpp ${SEARCHD_SRCS_TESTABLE} )
 set ( SPELLDUMP_SRCS spelldump.cpp )
 set ( TESTS_SRCS tests.cpp )
 set ( WORDBREAKER_SRCS sphinxstd.cpp wordbreaker.cpp)
@@ -67,7 +74,7 @@ if ( USE_BISON )
 			OBJECT_DEPENDS ${BISON_SelectParser_OUTPUT_SOURCE} )
 	set_property ( SOURCE sphinxquery.cpp APPEND PROPERTY
 			OBJECT_DEPENDS ${BISON_QueryParser_OUTPUT_SOURCE} )
-	set_property ( SOURCE searchd.cpp APPEND PROPERTY
+	set_property ( SOURCE searchd.cpp gtests_searchd.cpp APPEND PROPERTY
 			OBJECT_DEPENDS ${BISON_SQLParser_OUTPUT_SOURCE} )
 	set_property ( SOURCE sphinxjson.cpp APPEND PROPERTY
 			OBJECT_DEPENDS ${BISON_JsonParser_OUTPUT_SOURCE} )
@@ -88,7 +95,7 @@ if ( USE_FLEX )
 	FLEX_TARGET ( SQLlex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxql.l" ${FLEX_DIR}/flexsphinxql.c COMPILE_FLAGS "-i" )
 	FLEX_TARGET ( Jsonlex "${CMAKE_CURRENT_SOURCE_DIR}/sphinxjson.l" ${FLEX_DIR}/flexsphinxjson.c COMPILE_FLAGS "-i -Pyy2" )
 
-	set_property ( SOURCE searchd.cpp APPEND PROPERTY
+	set_property ( SOURCE searchd.cpp gtests_searchd.cpp APPEND PROPERTY
 			OBJECT_DEPENDS ${FLEX_SQLlex_OUTPUTS} )
 	set_property ( SOURCE sphinxjson.cpp APPEND PROPERTY
 			OBJECT_DEPENDS ${FLEX_Jsonlex_OUTPUTS} )
@@ -147,6 +154,17 @@ else()
 endif ( SPLIT_SYMBOLS )
 
 if ( NOT DISABLE_TESTING )
+	# Read docs at https://github.com/google/googletest.git
+	include ( GetGoogletest )
+	if ( HAVE_GOOGLETEST )
+		set ( GTESTS_SRC ${SEARCHD_SRCS_TESTABLE} gtests_rtstuff.cpp gtests_tokenizer.cpp gtests_text.cpp
+				gtests_functions.cpp gtests_globalstate.cpp gtests_searchd.cpp)
+		add_executable ( gmanticoretest ${GTESTS_SRC} )
+		target_link_libraries ( gmanticoretest gmock_main libsphinx ${EXTRA_LIBRARIES} )
+		find_package ( GTest QUIET )
+		GTEST_ADD_TESTS ( gmanticoretest "" AUTO )
+	endif ( HAVE_GOOGLETEST )
+
 	add_executable ( tests ${TESTS_SRCS} )
 	target_link_libraries ( tests libsphinx ${EXTRA_LIBRARIES} )
 	if ( SPLIT_SYMBOLS )

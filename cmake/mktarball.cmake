@@ -23,11 +23,13 @@ endif()
 set ( FNAME "${TARBALL_FILE_NAME}${SUFFIX}" )
 set ( PACKDIR "${BINARY_DIR}/sources/${FNAME}" )
 
+file (REMOVE_RECURSE ${PACKDIR})
 file (COPY ${SOURCE_DIR}/ DESTINATION ${PACKDIR}
 		PATTERN "cmake-*" EXCLUDE
 		PATTERN "build-*" EXCLUDE
 		PATTERN "build" EXCLUDE
 		PATTERN ".*" EXCLUDE
+		PATTERN "CMakeCache.txt" EXCLUDE
 		)
 configure_file ("${BINARY_DIR}/config/gen_sphinxversion.h"
 		"${PACKDIR}/src/sphinxversion.h" COPYONLY )
@@ -65,3 +67,5 @@ packbis ( sphinxselect )
 execute_process (
 		COMMAND "${CMAKE_COMMAND}" -E tar cfz "${BINARY_DIR}/${FNAME}.tar.gz" "${FNAME}"
 		WORKING_DIRECTORY "${BINARY_DIR}/sources" )
+file ( MD5 "${BINARY_DIR}/${FNAME}.tar.gz" MD5TARBALL )
+message ( "${MD5TARBALL}  ${FNAME}.tar.gz")

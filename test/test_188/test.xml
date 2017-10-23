@@ -6,6 +6,7 @@
 <requires>
 <pre_copy_ref/>
 <id32/>
+<non-rt/>
 </requires>
 
 <config>

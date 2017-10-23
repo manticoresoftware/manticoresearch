@@ -90,6 +90,7 @@ typedef off_t				SphOffset_t;
 
 // use 64-bit unsigned integers to store document and word IDs
 #define SPHINX_BITS_TAG	"id64"
+#define SPHINX_BITS_DELIM    "-"
 typedef uint64_t		SphWordID_t;
 typedef uint64_t		SphDocID_t;
 
@@ -104,6 +105,7 @@ STATIC_SIZE_ASSERT ( SphDocID_t, 8 );
 
 // use 32-bit unsigned integers to store document and word IDs
 #define SPHINX_BITS_TAG	""
+#define SPHINX_BITS_DELIM    ""
 typedef DWORD			SphWordID_t;
 typedef DWORD			SphDocID_t;
 
@@ -203,9 +205,9 @@ inline const	DWORD *	STATIC2DOCINFO ( const DWORD * pAttrs )	{ return STATIC2DOC
 #endif
 
 #ifndef SPHINX_TAG
-#define BANNER_TAG "-dev"
+#define BANNER_TAG SPHINX_BITS_DELIM "dev"
 #else
-#define BANNER_TAG "-" SPHINX_TAG
+#define BANNER_TAG SPHINX_BITS_DELIM SPHINX_TAG
 #endif
 
 #ifndef GIT_TIMESTAMP_ID
@@ -1443,14 +1445,8 @@ inline void Swap ( CSphMatch & a, CSphMatch & b )
 /// source statistics
 struct CSphSourceStats
 {
-	int64_t			m_iTotalDocuments;	///< how much documents
-	int64_t			m_iTotalBytes;		///< how much bytes
-
-	/// ctor
-	CSphSourceStats ()
-	{
-		Reset ();
-	}
+	int64_t			m_iTotalDocuments = 0;	///< how much documents
+	int64_t			m_iTotalBytes = 0;		///< how much bytes
 
 	/// reset
 	void Reset ()

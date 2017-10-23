@@ -1065,7 +1065,7 @@ bool IndexHash_c::Exists ( const CSphString & tKey, ServedDesc_t * pDesc ) const
 		(*ppEntry)->ReadLock();
 		*pDesc = *(*ppEntry);
 		(*ppEntry)->Unlock();
-		pDesc->m_pIndex = NULL;
+		pDesc->m_pIndex = nullptr;
 	}
 	Unlock();
 	return ( ppEntry!=NULL );
@@ -1367,7 +1367,7 @@ public:
 };
 
 
-static void ReportIndexesName ( int iSpanStart, int iSpandEnd, const CSphVector<SearchFailure_t> & dLog, CSphStringBuilder & sOut );
+static void ReportIndexesName ( int iSpanStart, int iSpandEnd, const CSphVector<SearchFailure_t> & dLog, StringBuilder_c & sOut );
 
 class SearchFailuresLog_c
 {
@@ -1386,7 +1386,7 @@ public:
 	void SubmitEx ( const char * sIndex, const char * sParentIndex, const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 4, 5 ) ) )
 	{
 		SearchFailure_t &tEntry = m_dLog.Add ();
-		CSphStringBuilder tError;
+		StringBuilder_c tError;
 		va_list ap;
 		va_start ( ap, sTemplate );
 		tError.vAppendf ( sTemplate, ap );
@@ -1407,7 +1407,7 @@ public:
 		return m_dLog.GetLength();
 	}
 
-	void BuildReport ( CSphStringBuilder & sReport )
+	void BuildReport ( StringBuilder_c & sReport )
 	{
 		if ( IsEmpty() )
 			return;
@@ -2143,7 +2143,7 @@ DWORD sphGetAddress ( const char * sHost, bool bFatal )
 	if ( pResult->ai_next )
 	{
 		const char * sSep = "";
-		CSphStringBuilder sBuf;
+		StringBuilder_c sBuf;
 		for ( ; pResult->ai_next; pResult = pResult->ai_next )
 		{
 			char sAddrBuf [ SPH_ADDRESS_SIZE ];
@@ -4284,7 +4284,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 			// we want to see a parse error in query_log_format=sphinxql mode too
 			if ( g_eLogFormat==LOG_FORMAT_SPHINXQL && g_iQueryLogFile>=0 )
 			{
-				CSphStringBuilder tBuf;
+				StringBuilder_c tBuf;
 				char sTimeBuf [ SPH_TIME_PID_MAX_SIZE ];
 				sphFormatCurrentTime ( sTimeBuf, sizeof(sTimeBuf) );
 
@@ -4422,13 +4422,30 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 //////////////////////////////////////////////////////////////////////////
 
+struct EscapeQuotation_t
+{
+	static bool IsEscapeChar ( char c )
+	{
+		return ( c=='\\' || c=='\'' );
+	}
+
+	static char GetEscapedChar ( char c )
+	{
+		return c;
+	}
+};
+
+
+using QuotationEscapedBuilder = EscapedStringBuilder_T<EscapeQuotation_t>;
+
+
 void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 {
 	assert ( g_eLogFormat==LOG_FORMAT_PLAIN );
 	if ( ( !g_bQuerySyslog && g_iQueryLogFile<0 ) || !tRes.m_sError.IsEmpty() )
 		return;
 
-	CSphStringBuilder tBuf;
+	QuotationEscapedBuilder tBuf;
 
 	// [time]
 #if USE_SYSLOG
@@ -4558,7 +4575,7 @@ public:
 	const char * cstr() { return m_pDst; }
 };
 
-static void FormatOrderBy ( CSphStringBuilder * pBuf, const char * sPrefix, ESphSortOrder eSort, const CSphString & sSort )
+static void FormatOrderBy ( StringBuilder_c * pBuf, const char * sPrefix, ESphSortOrder eSort, const CSphString & sSort )
 {
 	assert ( pBuf );
 	if ( eSort==SPH_SORT_EXTENDED && sSort=="@weight desc" )
@@ -4583,7 +4600,7 @@ static void FormatOrderBy ( CSphStringBuilder * pBuf, const char * sPrefix, ESph
 	}
 }
 
-static void FormatFilter ( CSphStringBuilder & tBuf, const CSphFilterSettings & f )
+static void FormatFilter ( StringBuilder_c & tBuf, const CSphFilterSettings & f )
 {
 	switch ( f.m_eType )
 	{
@@ -4701,13 +4718,13 @@ static void FormatFilter ( CSphStringBuilder & tBuf, const CSphFilterSettings & 
 
 static const CSphQuery g_tDefaultQuery;
 
-static void FormatList ( const CSphVector<CSphNamedInt> & dValues, CSphStringBuilder & tBuf )
+static void FormatList ( const CSphVector<CSphNamedInt> & dValues, StringBuilder_c & tBuf )
 {
 	ARRAY_FOREACH ( i, dValues )
 		tBuf.Appendf ( "%s%s=%d", i==0 ? "" : ", ", dValues[i].m_sName.cstr(), dValues[i].m_iValue );
 }
 
-static void FormatOption ( const CSphQuery & tQuery, CSphStringBuilder & tBuf )
+static void FormatOption ( const CSphQuery & tQuery, StringBuilder_c & tBuf )
 {
 	int iOpts = 0;
 
@@ -4847,7 +4864,7 @@ static CSphString LogFilterTreeItem ( int iItem, const CSphVector<FilterTreeItem
 	const FilterTreeItem_t & tItem = dTree[iItem];
 	if ( tItem.m_iFilterItem!=-1 )
 	{
-		CSphStringBuilder tBuf;
+		StringBuilder_c tBuf;
 		FormatFilter ( tBuf, dFilters[tItem.m_iFilterItem] );
 		int iOff = ( tBuf.Length() && *tBuf.cstr()== ' ' ? 1 : 0 );
 		return tBuf.cstr() + iOff;
@@ -4861,7 +4878,7 @@ static CSphString LogFilterTreeItem ( int iItem, const CSphVector<FilterTreeItem
 	bool bLeftPts = ( dTree[tItem.m_iLeft].m_iFilterItem==-1 && dTree[tItem.m_iLeft].m_bOr!=tItem.m_bOr );
 	bool bRightPts = ( dTree[tItem.m_iRight].m_iFilterItem==-1 && dTree[tItem.m_iRight].m_bOr!=tItem.m_bOr );
 
-	CSphStringBuilder tBuf;
+	StringBuilder_c tBuf;
 	tBuf.Appendf ( "%s%s%s %s %s%s%s", ( bLeftPts ? "(" : "" ), sLeft.cstr(), ( bLeftPts ? ")" : "" ), sOp, ( bRightPts ? "(" : "" ), sRight.cstr(), ( bRightPts ? ")" : "" ) );
 
 	return tBuf.cstr();
@@ -4873,7 +4890,7 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes
 	if ( g_iQueryLogFile<0 )
 		return;
 
-	CSphStringBuilder tBuf;
+	QuotationEscapedBuilder tBuf;
 
 	// time, conn id, wall, found
 	int iQueryTime = Max ( tRes.m_iQueryTime, 0 );
@@ -5054,7 +5071,7 @@ static void LogSphinxqlError ( const char * sStmt, const char * sError, int iCid
 		return;
 
 	// time, conn id, query, error
-	CSphStringBuilder tBuf;
+	StringBuilder_c tBuf;
 
 	char sTimeBuf[SPH_TIME_PID_MAX_SIZE];
 	sphFormatCurrentTime ( sTimeBuf, sizeof(sTimeBuf) );
@@ -5068,7 +5085,7 @@ static void LogSphinxqlError ( const char * sStmt, const char * sError, int iCid
 }
 
 
-void ReportIndexesName ( int iSpanStart, int iSpandEnd, const CSphVector<SearchFailure_t> & dLog, CSphStringBuilder & sOut )
+void ReportIndexesName ( int iSpanStart, int iSpandEnd, const CSphVector<SearchFailure_t> & dLog, StringBuilder_c & sOut )
 {
 	int iSpanLen = iSpandEnd - iSpanStart;
 
@@ -7183,13 +7200,13 @@ void SearchHandler_c::RunUpdates ( const CSphQuery & tQuery, const CSphString & 
 
 	if ( !tRes.m_iSuccesses )
 	{
-		CSphStringBuilder sFailures;
+		StringBuilder_c sFailures;
 		m_dFailuresSet[0].BuildReport ( sFailures );
 		*pUpdates->m_pError = sFailures.cstr();
 
 	} else if ( !tRes.m_sError.IsEmpty() )
 	{
-		CSphStringBuilder sFailures;
+		StringBuilder_c sFailures;
 		m_dFailuresSet[0].BuildReport ( sFailures );
 		tRes.m_sWarning = sFailures.cstr(); // FIXME!!! commit warnings too
 	}
@@ -7241,13 +7258,13 @@ void SearchHandler_c::RunDeletes ( const CSphQuery & tQuery, const CSphString & 
 
 	if ( !tRes.m_iSuccesses )
 	{
-		CSphStringBuilder sFailures;
+		StringBuilder_c sFailures;
 		m_dFailuresSet[0].BuildReport ( sFailures );
 		*pErrors = sFailures.cstr();
 
 	} else if ( !tRes.m_sError.IsEmpty() )
 	{
-		CSphStringBuilder sFailures;
+		StringBuilder_c sFailures;
 		m_dFailuresSet[0].BuildReport ( sFailures );
 		tRes.m_sWarning = sFailures.cstr(); // FIXME!!! commit warnings too
 	}
@@ -8739,7 +8756,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		// if there were no successful searches at all, this is an error
 		if ( !tRes.m_iSuccesses )
 		{
-			CSphStringBuilder sFailures;
+			StringBuilder_c sFailures;
 			m_dFailuresSet[iRes].BuildReport ( sFailures );
 
 			tRes.m_sError = sFailures.cstr();
@@ -8778,7 +8795,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 		if ( !m_dFailuresSet[iRes].IsEmpty() )
 		{
-			CSphStringBuilder sFailures;
+			StringBuilder_c sFailures;
 			m_dFailuresSet[iRes].BuildReport ( sFailures );
 			tRes.m_sWarning = sFailures.cstr();
 		}
@@ -11674,7 +11691,7 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 	}
 
 	// serve reply to client
-	CSphStringBuilder sReport;
+	StringBuilder_c sReport;
 	dFails.BuildReport ( sReport );
 
 	if ( !iSuccesses )
@@ -13768,7 +13785,7 @@ void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphStr
 	{
 		iWarnings = tFailureLog.GetReportsCount();
 
-		CSphStringBuilder sErrorBuf;
+		StringBuilder_c sErrorBuf;
 		tFailureLog.BuildReport ( sErrorBuf );
 		sphWarning ( "%s", sErrorBuf.cstr() );
 		sWarning = sErrorBuf.cstr();
@@ -13981,7 +13998,7 @@ void HandleMysqlCallSuggest ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, bool bQu
 	pServed->Unlock ();
 
 	// data
-	CSphStringBuilder sBuf;
+	StringBuilder_c sBuf;
 
 	if ( tArgs.m_bResultOneline )
 	{
@@ -15003,7 +15020,7 @@ void HandleMysqlUpdate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 		}
 	}
 
-	CSphStringBuilder sReport;
+	StringBuilder_c sReport;
 	dFails.BuildReport ( sReport );
 
 	if ( !iSuccesses )
@@ -15742,7 +15759,7 @@ void HandleMysqlDelete ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 
 	if ( !dErrors.IsEmpty() )
 	{
-		CSphStringBuilder sReport;
+		StringBuilder_c sReport;
 		dErrors.BuildReport ( sReport );
 		tOut.Error ( tStmt.m_sStmt, sReport.cstr() );
 		return;
@@ -16461,7 +16478,8 @@ void HandleMysqlShowVariables ( SqlRowBuffer_c & dRows, const SqlStmt_t & tStmt,
 }
 
 
-static void AddQueryStats ( IDataTupleter & tOut, const char * szPrefix, const QueryStats_t & tStats, void (*FormatFn)( CSphStringBuilder & sBuf, uint64_t uQueries, uint64_t uStat, const char * sType ) )
+static void AddQueryStats ( IDataTupleter & tOut, const char * szPrefix, const QueryStats_t & tStats,
+	void (*FormatFn)( StringBuilder_c & sBuf, uint64_t uQueries, uint64_t uStat, const char * sType ) )
 {
 	static const char * dStatIntervalNames[QUERY_STATS_INTERVAL_TOTAL] =
 	{
@@ -16480,8 +16498,8 @@ static void AddQueryStats ( IDataTupleter & tOut, const char * szPrefix, const Q
 		"pct99"
 	};
 
-	CSphStringBuilder sBuf;
-	CSphStringBuilder sName;
+	StringBuilder_c sBuf;
+	StringBuilder_c sName;
 	for ( int i = 0; i < QUERY_STATS_INTERVAL_TOTAL; i++ )
 	{
 		sBuf.Clear();
@@ -16504,7 +16522,7 @@ static void AddQueryStats ( IDataTupleter & tOut, const char * szPrefix, const Q
 static void AddQueryTimeStatsToOutput ( SqlRowBuffer_c & tOut, const char * szPrefix, const QueryStats_t & tQueryTimeStats )
 {
 	AddQueryStats ( tOut, szPrefix, tQueryTimeStats,
-		[]( CSphStringBuilder & sBuf, uint64_t uQueries, uint64_t uStat, const char * sType )
+		[]( StringBuilder_c & sBuf, uint64_t uQueries, uint64_t uStat, const char * sType )
 		{
 			if ( uQueries )
 				sBuf.Appendf ( "\"%s_sec\":%d.%03d", sType, DWORD ( uStat/1000 ), DWORD ( uStat%1000 ) );
@@ -16517,7 +16535,7 @@ static void AddQueryTimeStatsToOutput ( SqlRowBuffer_c & tOut, const char * szPr
 static void AddFoundRowsStatsToOutput ( SqlRowBuffer_c & tOut, const char * szPrefix, const QueryStats_t & tRowsFoundStats )
 {
 	AddQueryStats ( tOut, szPrefix, tRowsFoundStats,
-		[]( CSphStringBuilder & sBuf, uint64_t uQueries, uint64_t uStat, const char * sType )
+		[]( StringBuilder_c & sBuf, uint64_t uQueries, uint64_t uStat, const char * sType )
 		{
 			sBuf.Appendf ( "\"%s\":", sType );
 			if ( uQueries )
@@ -16630,21 +16648,21 @@ void HandleMysqlShowIndexStatus ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt
 }
 
 
-void DumpKey ( CSphStringBuilder & tBuf, const char * sKey, const char * sVal, bool bCond )
+void DumpKey ( StringBuilder_c & tBuf, const char * sKey, const char * sVal, bool bCond )
 {
 	if ( bCond )
 		tBuf.Appendf ( "%s = %s\n", sKey, sVal );
 }
 
 
-void DumpKey ( CSphStringBuilder & tBuf, const char * sKey, int iVal, bool bCond )
+void DumpKey ( StringBuilder_c & tBuf, const char * sKey, int iVal, bool bCond )
 {
 	if ( bCond )
 		tBuf.Appendf ( "%s = %d\n", sKey, iVal );
 }
 
 
-void DumpIndexSettings ( CSphStringBuilder & tBuf, CSphIndex * pIndex )
+void DumpIndexSettings ( StringBuilder_c & tBuf, CSphIndex * pIndex )
 {
 	const CSphIndexSettings & tSettings = pIndex->GetSettings();
 	DumpKey ( tBuf, "docinfo",				"inline",								tSettings.m_eDocinfo==SPH_DOCINFO_INLINE );
@@ -16691,7 +16709,7 @@ void DumpIndexSettings ( CSphStringBuilder & tBuf, CSphIndex * pIndex )
 	if ( pIndex->GetDictionary() )
 	{
 		const CSphDictSettings & tDictSettings = pIndex->GetDictionary()->GetSettings();
-		CSphStringBuilder tWordforms;
+		StringBuilder_c tWordforms;
 		ARRAY_FOREACH ( i, tDictSettings.m_dWordforms )
 			tWordforms.Appendf ( " %s", tDictSettings.m_dWordforms[i].cstr () );
 		DumpKey ( tBuf, "dict",				"keywords",								tDictSettings.m_bWordDict );
@@ -16725,7 +16743,7 @@ void HandleMysqlShowIndexSettings ( SqlRowBuffer_c & tOut, const SqlStmt_t & tSt
 
 	tOut.HeadTuplet ( "Variable_name", "Value" );
 
-	CSphStringBuilder sBuf;
+	StringBuilder_c sBuf;
 	DumpIndexSettings ( sBuf, pIndex );
 	tOut.DataTuplet ( "settings", sBuf.cstr() );
 
@@ -16899,7 +16917,7 @@ static void HandleMysqlAlter ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, b
 
 	if ( !dErrors.IsEmpty() )
 	{
-		CSphStringBuilder sReport;
+		StringBuilder_c sReport;
 		dErrors.BuildReport ( sReport );
 		tOut.Error ( tStmt.m_sStmt, sReport.cstr() );
 		return;
@@ -22561,7 +22579,7 @@ void ThdJobQL_t::Call ()
 
 static void LogCleanup ( const CSphVector<ISphNetAction *> & dCleanup )
 {
-	CSphStringBuilder sTmp;
+	StringBuilder_c sTmp;
 	ARRAY_FOREACH ( i, dCleanup )
 		sTmp.Appendf ( "%p(%d), ", dCleanup[i], dCleanup[i]->m_iSock );
 
@@ -23879,7 +23897,7 @@ UservarIntSet_c * UservarsHook ( const CSphString & sUservar )
 }
 
 
-int main ( int argc, char **argv )
+inline int mainimpl ( int argc, char **argv )
 {
 	// threads should be initialized before memory allocations
 	char cTopOfMainStack;
@@ -23927,6 +23945,13 @@ int main ( int argc, char **argv )
 
 	return ServiceMain ( argc, argv );
 }
+
+#ifndef SUPRESS_SEARCHD_MAIN
+int main ( int argc, char ** argv )
+{
+	return mainimpl ( argc, argv );
+}
+#endif
 
 //
 // $Id$

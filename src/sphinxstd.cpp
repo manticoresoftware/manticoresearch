@@ -2223,7 +2223,7 @@ public:
 	}
 
 private:
-	using BalancedTree_c = std::multimap<double, int64_t, std::less<double>, managed_allocator <std::pair<double,int64_t>> >;
+	using BalancedTree_c = std::multimap<double, int64_t, std::less<double>, managed_allocator<std::pair<const double, int64_t>>>;
 	BalancedTree_c		m_dMap;
 	int64_t				m_iCount;
 
@@ -2272,7 +2272,119 @@ TDigest_i * sphCreateTDigest()
 	return new TDigest_c;
 }
 
+//////////////////////////////////////////////////////////////////////////
+/// StringBuilder implementation
+//////////////////////////////////////////////////////////////////////////
 
+StringBuilder_c::StringBuilder_c ()
+{
+	Reset ();
+}
+
+StringBuilder_c::~StringBuilder_c ()
+{
+	SafeDeleteArray ( m_sBuffer );
+}
+
+StringBuilder_c & StringBuilder_c::vAppendf ( const char * sTemplate, va_list ap )
+{
+	assert ( m_sBuffer );
+	assert ( m_iUsed<m_iSize );
+
+	for ( ;; )
+	{
+		int iLeft = m_iSize - m_iUsed;
+
+		// try to append
+		va_list cp;
+		va_copy ( cp, ap );
+		int iPrinted = vsnprintf ( m_sBuffer + m_iUsed, iLeft, sTemplate, cp );
+		va_end( cp );
+
+		// success? bail
+		// note that we check for strictly less, not less or equal
+		// that is because vsnprintf does *not* count the trailing zero
+		// meaning that if we had N bytes left, and N bytes w/o the zero were printed,
+		// we do not have a trailing zero anymore, but vsnprintf succeeds anyway
+		if ( iPrinted>=0 && iPrinted<iLeft )
+		{
+			m_iUsed += iPrinted;
+			break;
+		}
+
+		// we need more chars!
+		// either 256 (happens on Windows; lets assume we need 256 more chars)
+		// or get all the needed chars and 64 more for future calls
+		Grow ( iPrinted<0 ? 256 : iPrinted - iLeft + 64 );
+	}
+	return *this;
+}
+
+StringBuilder_c & StringBuilder_c::Appendf ( const char * sTemplate, ... )
+{
+	va_list ap;
+	va_start ( ap, sTemplate );
+	vAppendf ( sTemplate, ap );
+	va_end ( ap );
+	return *this;
+}
+
+char * StringBuilder_c::Leak ()
+{
+	char * tRes = m_sBuffer;
+	Reset ();
+	return tRes;
+}
+
+const StringBuilder_c& StringBuilder_c::operator+= ( const char * sText )
+{
+	if ( !sText || *sText=='\0' )
+		return *this;
+
+	int iLen = strlen ( sText );
+	int iLeft = m_iSize - m_iUsed;
+	if ( iLen>=iLeft )
+		Grow ( iLen - iLeft + 64 );
+
+	memcpy ( m_sBuffer + m_iUsed, sText, iLen + 1 );
+	m_iUsed += iLen;
+	return *this;
+}
+
+const StringBuilder_c& StringBuilder_c::operator= ( const StringBuilder_c &rhs )
+{
+	if ( this!=&rhs )
+	{
+		m_iUsed = rhs.m_iUsed;
+		m_iSize = rhs.m_iSize;
+		SafeDeleteArray ( m_sBuffer );
+		m_sBuffer = new char[m_iSize];
+		memcpy ( m_sBuffer, rhs.m_sBuffer, m_iUsed + 1 );
+	}
+	return *this;
+}
+
+void StringBuilder_c::Grow ( int iLen )
+{
+	m_iSize += iLen;
+	char * pNew = new char[m_iSize];
+	memcpy ( pNew, m_sBuffer, m_iUsed + 1 );
+	Swap ( pNew, m_sBuffer );
+	SafeDeleteArray ( pNew );
+}
+
+void StringBuilder_c::Reset ()
+{
+	m_iSize = 256;
+	m_sBuffer = new char[m_iSize];
+	Clear ();
+}
+
+void StringBuilder_c::Clear ()
+{
+	m_sBuffer[0] = '\0';
+	m_iUsed = 0;
+}
 
 
 //

@@ -41,9 +41,9 @@ struct EscapeJsonString_t
 	}
 };
 
-typedef SphStringBuilder_T<EscapeJsonString_t> CSphStringBuilderJson;
+using JsonEscapedBuilder = EscapedStringBuilder_T <EscapeJsonString_t>;
 
-static void AppendJsonKey ( const char * sName, CSphStringBuilderJson & tOut )
+static void AppendJsonKey ( const char * sName, JsonEscapedBuilder & tOut )
 {
 	tOut += "\"";
 	tOut += sName;
@@ -51,7 +51,7 @@ static void AppendJsonKey ( const char * sName, CSphStringBuilderJson & tOut )
 }
 
 
-static void EncodeResultJson ( const AggrResult_t & tRes, CSphStringBuilderJson & tOut )
+static void EncodeResultJson ( const AggrResult_t & tRes, JsonEscapedBuilder & tOut )
 {
 	const CSphRsetSchema & tSchema = tRes.m_tSchema;
 	CSphVector<BYTE> dTmp;
@@ -571,7 +571,7 @@ static void HttpHandlerPage ( bool bPage, const CSphString & sInvalidEndpoint, C
 {
 	if ( bPage )
 	{
-		CSphStringBuilder sIndexPage;
+		StringBuilder_c sIndexPage;
 		sIndexPage.Appendf ( g_sIndexPage, SPHINX_VERSION );
 		HttpBuildReply ( dData, SPH_HTTP_STATUS_200, sIndexPage.cstr(), sIndexPage.Length(), true );
 	} else
@@ -637,7 +637,7 @@ static void HttpHandlerSearch ( bool bQL, const SmallStringHash_T<CSphString> & 
 	}
 
 	// coping result set
-	CSphStringBuilderJson tResBuilder;
+	JsonEscapedBuilder tResBuilder;
 	EncodeResultJson ( *pRes, tResBuilder );
 	HttpBuildReply ( dData, SPH_HTTP_STATUS_200, tResBuilder.cstr(), tResBuilder.Length(), false );
 }

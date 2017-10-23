@@ -344,7 +344,7 @@ inline int sphLog2 ( uint64_t uValue )
 #elif __GNUC__ || __clang__
 	if ( !uValue )
 		return 0;
-	return 64 - __builtin_clzl(uValue);
+	return 64 - __builtin_clzll(uValue);
 #else
 	int iBits = 0;
 	while ( uValue )
@@ -1287,15 +1287,15 @@ template < typename T >
 class CSphFixedVector : public ISphNoncopyable
 {
 protected:
-	T *			m_pData;
-	int			m_iSize;
+	T *			m_pData = nullptr;
+	int			m_iSize = 0;
 
 public:
 	explicit CSphFixedVector ( int iSize )
 		: m_iSize ( iSize )
 	{
 		assert ( iSize>=0 );
-		m_pData = ( iSize>0 ) ? new T [ iSize ] : NULL;
+		m_pData = ( iSize>0 ) ? new T [ iSize ] : nullptr;
 	}
 
 	~CSphFixedVector ()
@@ -1303,20 +1303,21 @@ public:
 		SafeDeleteArray ( m_pData );
 	}
 
-	CSphFixedVector ( CSphFixedVector&& rhs )
-		: m_pData ( std::move ( rhs.m_pData ) )
-		, m_iSize ( std::move ( rhs.m_iSize ) )
+	CSphFixedVector ( CSphFixedVector&& rhs ) noexcept
+		: m_pData ( rhs.m_pData )
+		, m_iSize ( rhs.m_iSize )
 	{
 		rhs.m_pData = nullptr;
 		rhs.m_iSize = 0;
 	}
 
-	CSphFixedVector & operator= ( CSphFixedVector&& rhs )
+	CSphFixedVector & operator= ( CSphFixedVector&& rhs ) noexcept
 	{
 		if ( &rhs!=this )
 		{
-			m_pData = std::move ( rhs.m_pData );
-			m_iSize = std::move ( rhs.m_iSize );
+			SafeDeleteArray ( m_pData );
+			m_pData = rhs.m_pData;
+			m_iSize = rhs.m_iSize;
 
 			rhs.m_pData = nullptr;
 			rhs.m_iSize = 0;
@@ -1348,12 +1349,12 @@ public:
 	
 	T * end ()
 	{
-		return m_iSize ? m_pData + m_iSize : NULL;
+		return m_iSize ? m_pData + m_iSize : nullptr;
 	}
 	
 	const T * end () const
 	{
-		return m_iSize ? m_pData + m_iSize : NULL;
+		return m_iSize ? m_pData + m_iSize : nullptr;
 	}
 
 	T & Last () const
@@ -1365,7 +1366,7 @@ public:
 	{
 		SafeDeleteArray ( m_pData );
 		assert ( iSize>=0 );
-		m_pData = ( iSize>0 ) ? new T [ iSize ] : NULL;
+		m_pData = ( iSize>0 ) ? new T [ iSize ] : nullptr;
 		m_iSize = iSize;
 	}
 
@@ -2131,8 +2132,7 @@ inline void Swap ( CSphString & v1, CSphString & v2 )
 /// string builder
 /// somewhat quicker than a series of SetSprintf()s
 /// lets you build strings bigger than 1024 bytes, too
-template <typename T>
-class SphStringBuilder_T
+class StringBuilder_c
 {
 protected:
 	char *	m_sBuffer;
@@ -2140,123 +2140,47 @@ protected:
 	int		m_iUsed;
 
 public:
-	SphStringBuilder_T ()
-	{
-		Reset ();
-	}
+	StringBuilder_c ();
+	~StringBuilder_c ();
 
-	~SphStringBuilder_T ()
-	{
-		SafeDeleteArray ( m_sBuffer );
-	}
-
-	void Clear ()
-	{
-		m_sBuffer[0] = '\0';
-		m_iUsed = 0;
-	}
-
-	SphStringBuilder_T<T> & vAppendf ( const char * sTemplate, va_list ap )
-	{
-		assert ( m_sBuffer );
-		assert ( m_iUsed<m_iSize );
-
-		for ( ;; )
-		{
-			int iLeft = m_iSize - m_iUsed;
-
-			// try to append
-			va_list cp;
-			va_copy ( cp, ap );
-			int iPrinted = vsnprintf ( m_sBuffer + m_iUsed, iLeft, sTemplate, cp );
-			va_end( cp );
-
-			// success? bail
-			// note that we check for strictly less, not less or equal
-			// that is because vsnprintf does *not* count the trailing zero
-			// meaning that if we had N bytes left, and N bytes w/o the zero were printed,
-			// we do not have a trailing zero anymore, but vsnprintf succeeds anyway
-			if ( iPrinted>=0 && iPrinted<iLeft )
-			{
-				m_iUsed += iPrinted;
-				break;
-			}
-
-			// we need more chars!
-			// either 256 (happens on Windows; lets assume we need 256 more chars)
-			// or get all the needed chars and 64 more for future calls
-			Grow ( iPrinted<0 ? 256 : iPrinted - iLeft + 64 );
-		}
-		return *this;
-	}
-
-	SphStringBuilder_T<T> &Appendf ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) )
-	{
-		va_list ap;
-		va_start ( ap, sTemplate );
-		vAppendf ( sTemplate, ap );
-		va_end ( ap );
-		return *this;
-	}
+	void Clear ();
+	StringBuilder_c& vAppendf ( const char * sTemplate, va_list ap );
+	StringBuilder_c& Appendf ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
 
 	const char * cstr() const
 	{
 		return m_sBuffer;
 	}
 
-	char* Leak()
-	{
-		char * tRes = m_sBuffer;
-		Reset();
-		return tRes;
-	}
+	char* Leak();
 
 	int Length ()
 	{
 		return m_iUsed;
 	}
 
-	const SphStringBuilder_T<T> & operator += ( const char * sText )
-	{
-		if ( !sText || *sText=='\0' )
-			return *this;
+	const StringBuilder_c& operator += ( const char * sText );
+	const StringBuilder_c& operator = ( const StringBuilder_c& rhs );
 
-		int iLen = strlen ( sText );
-		int iLeft = m_iSize - m_iUsed;
-		if ( iLen>=iLeft )
-			Grow ( iLen - iLeft + 64 );
+protected:
+	void Grow ( int iLen );
+	void Reset ();
+};
 
-		memcpy ( m_sBuffer+m_iUsed, sText, iLen+1 );
-		m_iUsed += iLen;
-		return *this;
-	}
+template < typename T >
+class EscapedStringBuilder_T : public StringBuilder_c
+{
+public:
 
-	const SphStringBuilder_T<T> & operator = ( const SphStringBuilder_T<T> & rhs )
-	{
-		if ( this!=&rhs )
-		{
-			m_iUsed = rhs.m_iUsed;
-			m_iSize = rhs.m_iSize;
-			SafeDeleteArray ( m_sBuffer );
-			m_sBuffer = new char [ m_iSize ];
-			memcpy ( m_sBuffer, rhs.m_sBuffer, m_iUsed+1 );
-		}
-		return *this;
-	}
-
-	// FIXME? move escaping to another place
-	void AppendEscaped ( const char * sText, bool bEscape=true, bool bFixupSpace=true )
+	void AppendEscaped ( const char * sText, bool bEscape = true, bool bFixupSpace = true )
 	{
 		if ( !sText || !*sText )
 			return;
 
 		const char * pBuf = sText;
 		int iEsc = 0;
-		for ( ; *pBuf; )
-		{
-			char s = *pBuf++;
-			iEsc = ( bEscape && T::IsEscapeChar ( s ) ? ( iEsc+1 ) : iEsc );
-		}
+		for ( ; *pBuf; pBuf++ )
+			iEsc += bEscape && T::IsEscapeChar ( *pBuf );
 
 		int iLen = pBuf - sText + iEsc;
 		int iLeft = m_iSize - m_iUsed;
@@ -2264,60 +2188,26 @@ public:
 			Grow ( iLen - iLeft + 64 );
 
 		pBuf = sText;
-		char * pCur = m_sBuffer+m_iUsed;
-		for ( ; *pBuf; )
+		char * pCur = m_sBuffer + m_iUsed;
+		for ( char s = *pBuf; s; s=*++pBuf, ++pCur )
 		{
-			char s = *pBuf++;
 			if ( bEscape && T::IsEscapeChar ( s ) )
 			{
 				*pCur++ = '\\';
-				*pCur++ = T::GetEscapedChar ( s );
-			} else if ( bFixupSpace && ( s==' ' || s=='\t' || s=='\n' || s=='\r' ) )
+				*pCur = T::GetEscapedChar ( s );
+			} else if ( bFixupSpace && ( s=='\t' || s=='\n' || s=='\r' ) )
 			{
-				*pCur++ = ' ';
+				*pCur = ' ';
 			} else
 			{
-				*pCur++ = s;
+				*pCur = s;
 			}
 		}
 		*pCur = '\0';
-		m_iUsed = pCur-m_sBuffer;
-	}
-
-private:
-	void Grow ( int iLen )
-	{
-		m_iSize += iLen;
-		char * pNew = new char [ m_iSize ];
-		memcpy ( pNew, m_sBuffer, m_iUsed+1 );
-		Swap ( pNew, m_sBuffer );
-		SafeDeleteArray ( pNew );
-	}
-
-	void Reset ()
-	{
-		m_iSize = 256;
-		m_sBuffer = new char[m_iSize];
-		Clear ();
+		m_iUsed = pCur - m_sBuffer;
 	}
 };
 
-
-struct EscapeQuotation_t
-{
-	static bool IsEscapeChar ( char c )
-	{
-		return ( c=='\\' || c=='\'' );
-	}
-
-	static char GetEscapedChar ( char c )
-	{
-		return c;
-	}
-};
-
-
-typedef SphStringBuilder_T<EscapeQuotation_t> CSphStringBuilder;
 
 /////////////////////////////////////////////////////////////////////////////
 

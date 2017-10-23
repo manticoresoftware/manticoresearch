@@ -2504,6 +2504,39 @@ inline void FlipEndianess ( DWORD* pData )
 	pB[2] = a;
 };
 
+/// SHA1 digests
+static const int HASH20_SIZE = 20;
+static const int SHA1_SIZE = HASH20_SIZE;
+
+// string and 20-bytes hash
+struct TaggedHash20_t
+{
+	CSphString m_sTagName;
+	BYTE m_dHashValue[HASH20_SIZE] = { 0 };
+
+	// by tag + hash
+	explicit TaggedHash20_t ( const char* sTag, const BYTE* pHashValue = nullptr );
+
+	// convert to FIPS-180-1
+	CSphString ToFIPS() const;
+
+	// load from FIPS-180-1
+	int FromFIPS ( const char* sFIPS );
+
+	// compare with raw hash
+	bool operator== ( const BYTE * pRef ) const;
+
+	inline bool Empty() const
+	{
+		return *this==m_dZeroHash;
+	}
+
+	// helper zero hash
+	static const BYTE m_dZeroHash[HASH20_SIZE];
+};
+
+
+
 #endif // _sphinxint_
 
 //

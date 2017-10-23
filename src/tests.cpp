@@ -4262,6 +4262,42 @@ void TestCJson()
 	printf ( "ok\n" );
 }
 
+void TestTaggedHash_Stuff()
+{
+	printf ( "testing TaggedHash20_t...\n" );
+	const char * sFIPS = "45f44fd2db02b08b4189abf21e90edd712c9616d *rt_full.ram\n";
+	const BYTE bytescheck[HASH20_SIZE] = { 0x45, 0xf4, 0x4f, 0xd2, 0xdb, 0x02, 0xb0, 0x8b, 0x41, 0x89, 0xab, 0xf2
+									, 0x1e, 0x90, 0xed, 0xd7, 0x12, 0xc9, 0x61, 0x6d };
+	const char * namecheck = "rt_full.ram";
+
+	TaggedHash20_t tHash ("HelloFips");
+	CSphString sFips = tHash.ToFIPS ();
+
+	Verify ( sFips == "" );
+	printf ( "- empty ok\n" );
+
+	tHash.FromFIPS ( sFIPS );
+	Verify ( tHash.m_sTagName == namecheck );
+	printf ( "- filename picked ok\n" );
+
+	Verify ( memcmp ( tHash.m_dHashValue, bytescheck, HASH20_SIZE )==0 );
+	printf ( "- digest decoded ok\n" );
+
+	sFips = tHash.ToFIPS ();
+	Verify ( sFips == sFIPS );
+	printf ( "- serialized ok\n" );
+
+	TaggedHash20_t tHash2 (namecheck, bytescheck);
+	Verify ( tHash2.ToFIPS () == sFIPS );
+	printf ( "- construct ok\n" );
+}
+
+void TestSHAStuff ()
+{
+	printf ( "testing different SHA1 stuff...\n" );
+	TestTaggedHash_Stuff();
+}
+
 
 #endif
 
@@ -4296,6 +4332,7 @@ int main ()
 	BenchLocators ();
 	BenchThreads ();
 #else
+	TestSHAStuff ();
 	TestMutex();
 	TestHash();
 	TestAppendf();

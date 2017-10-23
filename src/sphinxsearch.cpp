@@ -132,7 +132,7 @@ static bool operator < ( SphDocID_t uDocid, const ZoneInfo_t & tZone )
 static void PrintDocsChunk ( int QDEBUGARG(iCount), int QDEBUGARG(iAtomPos), const ExtDoc_t * QDEBUGARG(pDocs), const char * QDEBUGARG(sNode), void * QDEBUGARG(pNode) )
 {
 #if QDEBUG
-	CSphStringBuilder tRes;
+	StringBuilder_c tRes;
 	tRes.Appendf ( "node %s 0x%x:%p getdocs (%d) = [", sNode ? sNode : "???", iAtomPos, pNode, iCount );
 	for ( int i=0; i<iCount; i++ )
 		tRes.Appendf ( i ? ", 0x%x" : "0x%x", DWORD ( pDocs[i].m_uDocid ) );
@@ -144,7 +144,7 @@ static void PrintDocsChunk ( int QDEBUGARG(iCount), int QDEBUGARG(iAtomPos), con
 static void PrintHitsChunk ( int QDEBUGARG(iCount), int QDEBUGARG(iAtomPos), const ExtHit_t * QDEBUGARG(pHits), const char * QDEBUGARG(sNode), void * QDEBUGARG(pNode) )
 {
 #if QDEBUG
-	CSphStringBuilder tRes;
+	StringBuilder_c tRes;
 	tRes.Appendf ( "node %s 0x%x:%p gethits (%d) = [", sNode ? sNode : "???", iAtomPos, pNode, iCount );
 	for ( int i=0; i<iCount; i++ )
 		tRes.Appendf ( i ? ", 0x%x:0x%x" : "0x%x:0x%x", DWORD ( pHits[i].m_uDocid ), DWORD ( pHits[i].m_uHitpos ) );
@@ -5430,7 +5430,7 @@ const ExtHit_t * ExtUnit_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 //////////////////////////////////////////////////////////////////////////
 
 static void Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const CSphVector<CSphString> & dZones,
-	CSphStringBuilder & tRes, int iIdent )
+	StringBuilder_c & tRes, int iIdent )
 {
 	if ( iIdent )
 		tRes.Appendf ( "\n" );
@@ -5731,7 +5731,7 @@ const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 			m_dMyDocs[iDocs].m_uDocid = DOCID_MAX;
 
 			#if QDEBUG
-			CSphStringBuilder tRes;
+			StringBuilder_c tRes;
 			tRes.Appendf ( "matched %p docs (%d) = [", this, iDocs );
 			for ( int i=0; i<iDocs; i++ )
 				tRes.Appendf ( i ? ", 0x%x" : "0x%x", DWORD ( m_dMyDocs[i].m_uDocid ) );

@@ -31564,7 +31564,7 @@ void SphWordStatChecker_t::DumpDiffer ( const SmallStringHash_T<CSphQueryResultM
 	if ( !m_dSrcWords.GetLength() )
 		return;
 
-	CSphStringBuilder tWarningBuilder;
+	StringBuilder_c tWarningBuilder;
 	hStat.IterateStart();
 	while ( hStat.IterateNext() )
 	{

@@ -571,7 +571,7 @@ static void HttpHandlerPage ( bool bPage, const CSphString & sInvalidEndpoint, C
 {
 	if ( bPage )
 	{
-		CSphStringBuilder sIndexPage;
+		StringBuilder_c sIndexPage;
 		sIndexPage.Appendf ( g_sIndexPage, SPHINX_VERSION );
 		HttpBuildReply ( dData, SPH_HTTP_STATUS_200, sIndexPage.cstr(), sIndexPage.Length(), true );
 	} else

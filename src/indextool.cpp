@@ -1067,7 +1067,7 @@ int main ( int argc, char ** argv )
 		} else
 		{
 			const char * sPath = hConf["index"][sIndex]["path"].cstr();
-			CSphStringBuilder tPath;
+			StringBuilder_c tPath;
 			if ( bRotate )
 			{
 				tPath.Appendf ( "%s.tmp", sPath );

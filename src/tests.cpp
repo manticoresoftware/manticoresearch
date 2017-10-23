@@ -3497,7 +3497,7 @@ void TestArabicStemmer()
 
 void TestAppendf()
 {
-	CSphStringBuilder sRes;
+	StringBuilder_c sRes;
 	sRes.Appendf ( "12345678" );
 	sRes.Appendf ( "this is my rifle this is my gun" );
 	sRes.Appendf ( " int=%d float=%f string=%s", 123, 456.789, "helloworld" );
@@ -3507,7 +3507,7 @@ void TestAppendf()
 void BenchAppendf()
 {
 	int64_t tm1 = sphMicroTimer();
-	CSphStringBuilder sRes1;
+	StringBuilder_c sRes1;
 	for ( int i=0; i<200; i++ )
 		sRes1.Appendf ( "%d ", i );
 	tm1 = sphMicroTimer() - tm1;

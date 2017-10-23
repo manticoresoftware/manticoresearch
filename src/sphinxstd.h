@@ -2132,8 +2132,7 @@ inline void Swap ( CSphString & v1, CSphString & v2 )
 /// string builder
 /// somewhat quicker than a series of SetSprintf()s
 /// lets you build strings bigger than 1024 bytes, too
-template <typename T>
-class SphStringBuilder_T
+class StringBuilder_c
 {
 protected:
 	char *	m_sBuffer;
@@ -2141,112 +2140,39 @@ protected:
 	int		m_iUsed;
 
 public:
-	SphStringBuilder_T ()
-	{
-		Reset ();
-	}
+	StringBuilder_c ();
+	~StringBuilder_c ();
 
-	~SphStringBuilder_T ()
-	{
-		SafeDeleteArray ( m_sBuffer );
-	}
-
-	void Clear ()
-	{
-		m_sBuffer[0] = '\0';
-		m_iUsed = 0;
-	}
-
-	SphStringBuilder_T<T> & vAppendf ( const char * sTemplate, va_list ap )
-	{
-		assert ( m_sBuffer );
-		assert ( m_iUsed<m_iSize );
-
-		for ( ;; )
-		{
-			int iLeft = m_iSize - m_iUsed;
-
-			// try to append
-			va_list cp;
-			va_copy ( cp, ap );
-			int iPrinted = vsnprintf ( m_sBuffer + m_iUsed, iLeft, sTemplate, cp );
-			va_end( cp );
-
-			// success? bail
-			// note that we check for strictly less, not less or equal
-			// that is because vsnprintf does *not* count the trailing zero
-			// meaning that if we had N bytes left, and N bytes w/o the zero were printed,
-			// we do not have a trailing zero anymore, but vsnprintf succeeds anyway
-			if ( iPrinted>=0 && iPrinted<iLeft )
-			{
-				m_iUsed += iPrinted;
-				break;
-			}
-
-			// we need more chars!
-			// either 256 (happens on Windows; lets assume we need 256 more chars)
-			// or get all the needed chars and 64 more for future calls
-			Grow ( iPrinted<0 ? 256 : iPrinted - iLeft + 64 );
-		}
-		return *this;
-	}
-
-	SphStringBuilder_T<T> &Appendf ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) )
-	{
-		va_list ap;
-		va_start ( ap, sTemplate );
-		vAppendf ( sTemplate, ap );
-		va_end ( ap );
-		return *this;
-	}
+	void Clear ();
+	StringBuilder_c& vAppendf ( const char * sTemplate, va_list ap );
+	StringBuilder_c& Appendf ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
 
 	const char * cstr() const
 	{
 		return m_sBuffer;
 	}
 
-	char* Leak()
-	{
-		char * tRes = m_sBuffer;
-		Reset();
-		return tRes;
-	}
+	char* Leak();
 
 	int Length ()
 	{
 		return m_iUsed;
 	}
 
-	const SphStringBuilder_T<T> & operator += ( const char * sText )
-	{
-		if ( !sText || *sText=='\0' )
-			return *this;
+	const StringBuilder_c& operator += ( const char * sText );
+	const StringBuilder_c& operator = ( const StringBuilder_c& rhs );
 
-		int iLen = strlen ( sText );
-		int iLeft = m_iSize - m_iUsed;
-		if ( iLen>=iLeft )
-			Grow ( iLen - iLeft + 64 );
+protected:
+	void Grow ( int iLen );
+	void Reset ();
+};
 
-		memcpy ( m_sBuffer+m_iUsed, sText, iLen+1 );
-		m_iUsed += iLen;
-		return *this;
-	}
+template < typename T >
+class SphStringBuilder_T : public StringBuilder_c
+{
+public:
 
-	const SphStringBuilder_T<T> & operator = ( const SphStringBuilder_T<T> & rhs )
-	{
-		if ( this!=&rhs )
-		{
-			m_iUsed = rhs.m_iUsed;
-			m_iSize = rhs.m_iSize;
-			SafeDeleteArray ( m_sBuffer );
-			m_sBuffer = new char [ m_iSize ];
-			memcpy ( m_sBuffer, rhs.m_sBuffer, m_iUsed+1 );
-		}
-		return *this;
-	}
-
-	// FIXME? move escaping to another place
-	void AppendEscaped ( const char * sText, bool bEscape=true, bool bFixupSpace=true )
+	void AppendEscaped ( const char * sText, bool bEscape = true, bool bFixupSpace = true )
 	{
 		if ( !sText || !*sText )
 			return;
@@ -2256,7 +2182,7 @@ public:
 		for ( ; *pBuf; )
 		{
 			char s = *pBuf++;
-			iEsc = ( bEscape && T::IsEscapeChar ( s ) ? ( iEsc+1 ) : iEsc );
+			iEsc = ( bEscape && T::IsEscapeChar ( s ) ? ( iEsc + 1 ) : iEsc );
 		}
 
 		int iLen = pBuf - sText + iEsc;
@@ -2265,7 +2191,7 @@ public:
 			Grow ( iLen - iLeft + 64 );
 
 		pBuf = sText;
-		char * pCur = m_sBuffer+m_iUsed;
+		char * pCur = m_sBuffer + m_iUsed;
 		for ( ; *pBuf; )
 		{
 			char s = *pBuf++;
@@ -2282,24 +2208,7 @@ public:
 			}
 		}
 		*pCur = '\0';
-		m_iUsed = pCur-m_sBuffer;
-	}
-
-private:
-	void Grow ( int iLen )
-	{
-		m_iSize += iLen;
-		char * pNew = new char [ m_iSize ];
-		memcpy ( pNew, m_sBuffer, m_iUsed+1 );
-		Swap ( pNew, m_sBuffer );
-		SafeDeleteArray ( pNew );
-	}
-
-	void Reset ()
-	{
-		m_iSize = 256;
-		m_sBuffer = new char[m_iSize];
-		Clear ();
+		m_iUsed = pCur - m_sBuffer;
 	}
 };
 

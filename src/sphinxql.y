@@ -71,6 +71,7 @@
 %token	TOK_ID
 %token	TOK_IN
 %token	TOK_INDEX
+%token	TOK_INDEXES
 %token	TOK_INDEXOF
 %token	TOK_INSERT
 %token	TOK_INT
@@ -82,6 +83,7 @@
 %token	TOK_LEVEL
 %token	TOK_LIKE
 %token	TOK_LIMIT
+%token	TOK_LOGS
 %token	TOK_MATCH
 %token	TOK_MAX
 %token	TOK_META
@@ -220,7 +222,9 @@ statement:
 	| drop_plugin
 	| reload_plugins
 	| reload_index
+	| reload_indexes
 	| flush_hostnames
+	| flush_logs
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -1566,7 +1570,15 @@ flush_hostnames:
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_FLUSH_HOSTNAMES;
 		}
-	;	
+	;
+
+flush_logs:
+	TOK_FLUSH TOK_LOGS
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_FLUSH_LOGS;
+		}
+	;
 	
 //////////////////////////////////////////////////////////////////////////
 
@@ -1742,6 +1754,14 @@ reload_index:
 		{
 			pParser->m_pStmt->m_eStmt = STMT_RELOAD_INDEX;
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $3);
+		}
+	;
+
+reload_indexes:
+	TOK_RELOAD TOK_INDEXES
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_RELOAD_INDEXES;
 		}
 	;
 

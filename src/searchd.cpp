@@ -1587,7 +1587,6 @@ void Shutdown ()
 #endif
 }
 
-#if !USE_WINDOWS
 void sighup ( int )
 {
 	g_bGotSighup = 1;
@@ -1609,8 +1608,6 @@ void sigusr1 ( int )
 {
 	g_bGotSigusr1 = 1;
 }
-#endif // !USE_WINDOWS
-
 
 struct QueryCopyState_t
 {
@@ -9250,7 +9247,7 @@ static const char * g_dSqlStmts[] =
 	"show_index_status", "show_profile", "alter_add", "alter_drop", "show_plan",
 	"select_dual", "show_databases", "create_plugin", "drop_plugin", "show_plugins", "show_threads",
 	"facet", "alter_reconfigure", "show_index_settings", "flush_index", "reload_plugins", "reload_index",
-	"flush_hostnames"
+	"flush_hostnames", "flush_logs", "reload_indexes"
 };
 
 
@@ -14365,6 +14362,17 @@ void HandleMysqlFlushHostnames ( SqlRowBuffer_c & tOut )
 	tOut.Ok ( hHosts.GetLength() );
 }
 
+void HandleMysqlFlushLogs ( SqlRowBuffer_c &tOut )
+{
+	sigusr1(1);
+	tOut.Ok ();
+}
+
+void HandleMysqlReloadIndexes ( SqlRowBuffer_c &tOut )
+{
+	sighup(1);
+	tOut.Ok ();
+}
 
 // The pinger
 struct PingRequestBuilder_t : public IRequestBuilder_t
@@ -17487,6 +17495,12 @@ public:
 
 		case STMT_FLUSH_HOSTNAMES:
 			HandleMysqlFlushHostnames ( tOut );
+			return true;
+
+		case STMT_FLUSH_LOGS: HandleMysqlFlushLogs ( tOut );
+			return true;
+
+		case STMT_RELOAD_INDEXES: HandleMysqlReloadIndexes ( tOut );
 			return true;
 
 		default:

@@ -7,7 +7,8 @@ $bindir = "@MANTICORE_BINARY_DIR@/src/";
 $testdir = "@MANTICORE_BINARY_DIR@/test/";
 $testsrc = "@CMAKE_CURRENT_SOURCE_DIR@";
 
-$shellcmd = "cd \"$testsrc\"; " .PHP_BINARY . " ubertest.php";
+chdir ("$testsrc");
+$shellcmd = PHP_BINARY . " ubertest.php";
 
 $args = $_SERVER["argv"];
 array_shift ( $args );
@@ -17,7 +18,7 @@ if ( is_array($args) && !empty($args) )
 	$shellcmd .= join(" ", $args);
 }
 
-echo "( $shellcmd )\n";
-passthru ($shellcmd);
+echo "cd $testsrc\n$shellcmd\n";
+passthru ("$shellcmd");
 
 ?>

@@ -6,7 +6,11 @@ cmake_minimum_required ( VERSION 2.8 )
 if ( NOT DISABLE_TESTING )
 	file ( GLOB tests "test_[0-9]*" )
 	list ( SORT tests )
-	configure_file( "ubertest.php.in" "${MANTICORE_BINARY_DIR}/test/ubertest.php" @ONLY)
+
+	if ( NOT "${CMAKE_CURRENT_SOURCE_DIR}" STREQUAL "${CMAKE_CURRENT_BINARY_DIR}")
+		message ( STATUS "Create ubertest.php proxy" )
+		configure_file ( "ubertest.php.in" "${MANTICORE_BINARY_DIR}/test/ubertest.php" @ONLY )
+	endif()
 
 	add_test ( NAME "\"Cleaning guess cache\""
 			#    	CONFIGURATIONS Debug

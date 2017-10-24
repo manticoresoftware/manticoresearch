@@ -424,6 +424,10 @@ struct KeyDesc_t
 	const char *		m_sExtra;	///< extra stuff (deprecated name, for now)
 };
 
+/// Mandatory pattern: KeyDesc_t g_dKeys...
+/// It is searched by doc/check.pl when parsing the file
+/// and used to determine and collect all options
+
 /// allowed keys for source section
 static KeyDesc_t g_dKeysSource[] =
 {

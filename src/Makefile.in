@@ -137,7 +137,8 @@ indextool_OBJECTS = $(am_indextool_OBJECTS)
 indextool_LDADD = $(LDADD)
 indextool_DEPENDENCIES = $(am__DEPENDENCIES_2)
 am_searchd_OBJECTS = searchd.$(OBJEXT) searchdha.$(OBJEXT) \
-	http/http_parser.$(OBJEXT) searchdhttp.$(OBJEXT)
+	http/http_parser.$(OBJEXT) searchdhttp.$(OBJEXT) \
+	sphinxjsonquery.$(OBJEXT)
 searchd_OBJECTS = $(am_searchd_OBJECTS)
 searchd_LDADD = $(LDADD)
 searchd_DEPENDENCIES = $(am__DEPENDENCIES_2)
@@ -344,7 +345,7 @@ ARFLAGS = cr
 noinst_LIBRARIES = libsphinx.a
 libsphinx_a_SOURCES = $(SRC_SPHINX)
 indexer_SOURCES = indexer.cpp
-searchd_SOURCES = searchd.cpp searchdha.cpp http/http_parser.c searchdhttp.cpp
+searchd_SOURCES = searchd.cpp searchdha.cpp http/http_parser.c searchdhttp.cpp sphinxjsonquery.cpp
 spelldump_SOURCES = spelldump.cpp
 indextool_SOURCES = indextool.cpp
 tests_SOURCES = tests.cpp
@@ -505,6 +506,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxexpr.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxfilter.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxjson.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxjsonquery.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxmetaphone.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxplugin.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sphinxqcache.Po@am__quote@

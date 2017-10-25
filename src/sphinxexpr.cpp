@@ -5977,6 +5977,46 @@ private:
 
 //////////////////////////////////////////////////////////////////////////
 
+struct DistanceUnit_t
+{
+	CSphString	m_dNames[3];
+	float		m_fConversion;
+};
+
+
+bool sphGeoDistanceUnit ( const char * szUnit, float & fCoeff )
+{
+	static DistanceUnit_t dUnits[] = 
+	{
+		{ { "mi", "miles" },				1609.34f },
+		{ { "yd", "yards" },				0.9144f },
+		{ { "ft", "feet" },					0.3048f },
+		{ { "in", "inch" },					0.0254f },
+		{ { "km", "kilometers" },			1000.0f },
+		{ { "m", "meters" },				1.0f },
+		{ { "cm", "centimeters" },			0.01f },
+		{ { "mm", "millimeters" },			0.001f },
+		{ { "NM", "nmi", "nauticalmiles" },	1852.0f }
+	};
+
+	if ( !szUnit || !*szUnit )
+	{
+		fCoeff = 1.0f;
+		return true;
+	}
+
+	for ( const auto & i : dUnits )
+		for ( const auto & j : i.m_dNames )
+			if ( j==szUnit )
+			{
+				fCoeff = i.m_fConversion;
+				return true;
+			}
+
+	return false;
+}
+
+
 struct GatherArgTypes_t : ISphNoncopyable
 {
 	CSphVector<int> & m_dTypes;
@@ -6261,14 +6301,9 @@ ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 
 			} else if ( t.m_sKey=="out" )
 			{
-				if ( t.m_sValue=="km" || t.m_sValue=="kilometers" )
-					fOut = 1.0f / 1000.0f;
-				else if ( t.m_sValue=="mi" || t.m_sValue=="miles" )
-					fOut = 1.0f / 1609.34f;
-				else if ( t.m_sValue=="ft" || t.m_sValue=="feet" )
-					fOut = 1.0f / 0.3048f;
-				else if ( t.m_sValue=="m" || t.m_sValue=="meters" )
-					fOut = 1.0f;
+				float fCoeff = 1.0f;
+				if ( sphGeoDistanceUnit ( t.m_sValue.cstr(), fCoeff ) )
+					fOut = 1.0f / fCoeff;
 			} else if ( t.m_sKey=="method" )
 			{
 				if ( t.m_sValue=="haversine" )

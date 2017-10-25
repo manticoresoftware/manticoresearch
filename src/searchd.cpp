@@ -20,6 +20,7 @@
 #include "sphinxint.h"
 #include "sphinxquery.h"
 #include "sphinxjson.h"
+#include "sphinxjsonquery.h"
 #include "sphinxplugin.h"
 #include "sphinxqcache.h"
 #include "sphinxrlp.h"
@@ -3209,7 +3210,7 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 	ARRAY_FOREACH ( j, q.m_dFilters )
 	{
 		const CSphFilterSettings & tFilter = q.m_dFilters[j];
-		iReqSize += 20 + tFilter.m_sAttrName.Length(); // string attr-name; int type; int exclude-flag; int equal-flag; int mva-func
+		iReqSize += 32 + tFilter.m_sAttrName.Length(); // string attr-name; int type; int exclude-flag; 2x int equal-flag; 2x int open-flag; int mva-func
 		switch ( tFilter.m_eType )
 		{
 			case SPH_FILTER_VALUES:		iReqSize += 4 + 8*tFilter.GetNumValues (); break; // int values-count; uint64[] values
@@ -3357,7 +3358,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, ISphOutputBuffer
 				break;
 
 			case SPH_FILTER_NULL:
-				tOut.SendByte ( tFilter.m_bHasEqual );
+				tOut.SendByte ( tFilter.m_bIsNull );
 				break;
 
 			case SPH_FILTER_STRING_LIST:
@@ -3367,7 +3368,10 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, ISphOutputBuffer
 				break;
 		}
 		tOut.SendInt ( tFilter.m_bExclude );
-		tOut.SendInt ( tFilter.m_bHasEqual );
+		tOut.SendInt ( tFilter.m_bHasEqualMin );
+		tOut.SendInt ( tFilter.m_bHasEqualMax );
+		tOut.SendInt ( tFilter.m_bOpenLeft );
+		tOut.SendInt ( tFilter.m_bOpenRight );
 		tOut.SendInt ( tFilter.m_eMvaFunc );
 	}
 	tOut.SendInt ( q.m_eGroupFunc );
@@ -4058,7 +4062,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 						break;
 
 					case SPH_FILTER_NULL:
-						tFilter.m_bHasEqual = tReq.GetByte()!=0;
+						tFilter.m_bIsNull = tReq.GetByte()!=0;
 						break;
 
 					case SPH_FILTER_USERVAR:
@@ -4107,8 +4111,18 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 			if ( iVer>=0x106 )
 				tFilter.m_bExclude = !!tReq.GetDword ();
 
-			if ( iMasterVer>=5 )
-				tFilter.m_bHasEqual = !!tReq.GetDword();
+			if ( iMasterVer>=15 )
+			{
+				tFilter.m_bHasEqualMin = !!tReq.GetDword();
+				tFilter.m_bHasEqualMax = !!tReq.GetDword();
+			} else if ( iMasterVer>=5 )
+				tFilter.m_bHasEqualMin = tFilter.m_bHasEqualMax = !!tReq.GetDword();
+
+			if ( iMasterVer>=15 )
+			{
+				tFilter.m_bOpenLeft = !!tReq.GetDword();
+				tFilter.m_bOpenRight = !!tReq.GetDword();
+			}
 
 			tFilter.m_eMvaFunc = SPH_MVAFUNC_ANY;
 			if ( iMasterVer>=13 )
@@ -4599,6 +4613,8 @@ static void FormatOrderBy ( StringBuilder_c * pBuf, const char * sPrefix, ESphSo
 
 static void FormatFilter ( StringBuilder_c & tBuf, const CSphFilterSettings & f )
 {
+	bool bEqual = f.m_bHasEqualMin || f.m_bHasEqualMax;
+
 	switch ( f.m_eType )
 	{
 		case SPH_FILTER_VALUES:
@@ -4654,18 +4670,21 @@ static void FormatFilter ( StringBuilder_c & tBuf, const CSphFilterSettings & f 
 				// no min, thus (attr<maxval)
 				const char * sOps[2][2] = { { "<", "<=" }, { ">=", ">" } };
 				tBuf.Appendf ( " %s%s" INT64_FMT, f.m_sAttrName.cstr(),
-					sOps [ f.m_bExclude ][ f.m_bHasEqual ], f.m_iMaxValue );
+					sOps [ f.m_bExclude ][ f.m_bHasEqualMax ], f.m_iMaxValue );
 			} else if ( f.m_iMaxValue==INT64_MAX || ( f.m_iMaxValue==-1 && f.m_sAttrName=="@id" ) )
 			{
 				// mo max, thus (attr>minval)
 				const char * sOps[2][2] = { { ">", ">=" }, { "<", "<=" } };
 				tBuf.Appendf ( " %s%s" INT64_FMT, f.m_sAttrName.cstr(),
-					sOps [ f.m_bExclude ][ f.m_bHasEqual ], f.m_iMinValue );
+					sOps [ f.m_bExclude ][ f.m_bHasEqualMin ], f.m_iMinValue );
 			} else
 			{
-				tBuf.Appendf ( " %s%s BETWEEN " INT64_FMT " AND " INT64_FMT,
-					f.m_sAttrName.cstr(), f.m_bExclude ? " NOT" : "",
-					f.m_iMinValue + !f.m_bHasEqual, f.m_iMaxValue - !f.m_bHasEqual );
+				if ( f.m_bHasEqualMin!=f.m_bHasEqualMax)
+				{
+					const char * sOps[2]= { "<", "<=" };
+					tBuf.Appendf ( " %s " INT64_FMT "%s%s%s" INT64_FMT, f.m_bExclude ? "NOT ": "", f.m_iMinValue, sOps[f.m_bHasEqualMin], f.m_sAttrName.cstr(), sOps[f.m_bHasEqualMax], f.m_iMaxValue );
+				} else
+					tBuf.Appendf ( " %s%s BETWEEN " INT64_FMT " AND " INT64_FMT, f.m_sAttrName.cstr(), f.m_bExclude ? " NOT" : "", f.m_iMinValue + !f.m_bHasEqualMin, f.m_iMaxValue - !f.m_bHasEqualMax );
 			}
 			break;
 
@@ -4675,29 +4694,31 @@ static void FormatFilter ( StringBuilder_c & tBuf, const CSphFilterSettings & f 
 				// no min, thus (attr<maxval)
 				const char * sOps[2][2] = { { "<", "<=" }, { ">=", ">" } };
 				tBuf.Appendf ( " %s%s%f", f.m_sAttrName.cstr(),
-					sOps [ f.m_bExclude ][ f.m_bHasEqual ], f.m_fMaxValue );
+					sOps [ f.m_bExclude ][ f.m_bHasEqualMax ], f.m_fMaxValue );
 			} else if ( f.m_fMaxValue==FLT_MAX )
 			{
 				// mo max, thus (attr>minval)
 				const char * sOps[2][2] = { { ">", ">=" }, { "<", "<=" } };
 				tBuf.Appendf ( " %s%s%f", f.m_sAttrName.cstr(),
-					sOps [ f.m_bExclude ][ f.m_bHasEqual ], f.m_fMinValue );
+					sOps [ f.m_bExclude ][ f.m_bHasEqualMin ], f.m_fMinValue );
 			} else
 			{
-				// FIXME? need we handle m_bHasEqual here?
-				tBuf.Appendf ( " %s%s BETWEEN %f AND %f",
-					f.m_sAttrName.cstr(), f.m_bExclude ? " NOT" : "",
-					f.m_fMinValue, f.m_fMaxValue );
+				if ( f.m_bHasEqualMin!=f.m_bHasEqualMax)
+				{
+					const char * sOps[2]= { "<", "<=" };
+					tBuf.Appendf ( " %s%f%s%s%s%f", f.m_bExclude ? "NOT ": "", f.m_fMinValue, sOps[f.m_bHasEqualMin], f.m_sAttrName.cstr(), sOps[f.m_bHasEqualMax], f.m_fMaxValue );
+				} else // FIXME? need we handle m_bHasEqual here?					
+					tBuf.Appendf ( " %s%s BETWEEN %f AND %f", f.m_sAttrName.cstr(), f.m_bExclude ? " NOT" : "",	f.m_fMinValue, f.m_fMaxValue );
 			}
 			break;
 
 		case SPH_FILTER_USERVAR:
 		case SPH_FILTER_STRING:
-			tBuf.Appendf ( " %s%s'%s'", f.m_sAttrName.cstr(), ( f.m_bHasEqual ? "=" : "!=" ), ( f.m_dStrings.GetLength()==1 ? f.m_dStrings[0].cstr() : "" ) );
+			tBuf.Appendf ( " %s%s'%s'", f.m_sAttrName.cstr(), ( bEqual ? "=" : "!=" ), ( f.m_dStrings.GetLength()==1 ? f.m_dStrings[0].cstr() : "" ) );
 			break;
 
 		case SPH_FILTER_NULL:
-			tBuf.Appendf ( " %s %s", f.m_sAttrName.cstr(), ( f.m_bHasEqual ? "IS NULL" : "IS NOT NULL" ) );
+			tBuf.Appendf ( " %s %s", f.m_sAttrName.cstr(), ( f.m_bIsNull ? "IS NULL" : "IS NOT NULL" ) );
 			break;
 
 		case SPH_FILTER_STRING_LIST:
@@ -5120,7 +5141,7 @@ void ReportIndexesName ( int iSpanStart, int iSpandEnd, const CSphVector<SearchF
 //////////////////////////////////////////////////////////////////////////
 
 // internals attributes are last no need to send them
-static int SendGetAttrCount ( const ISphSchema & tSchema, bool bAgentMode=false )
+int sphSendGetAttrCount ( const ISphSchema & tSchema, bool bAgentMode )
 {
 	int iCount = tSchema.GetAttrsCount();
 
@@ -5166,7 +5187,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphTaggedV
 	// query stats
 	iRespLen += 20;
 
-	int iAttrsCount = SendGetAttrCount ( pRes->m_tSchema, bAgentMode );
+	int iAttrsCount = sphSendGetAttrCount ( pRes->m_tSchema, bAgentMode );
 
 	// schema
 	if ( iVer>=0x102 )
@@ -5436,7 +5457,7 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const CSphQueryResult * pRe
 			tOut.SendString ( pRes->m_sWarning.cstr() );
 	}
 
-	int iAttrsCount = SendGetAttrCount ( pRes->m_tSchema, bAgentMode );
+	int iAttrsCount = sphSendGetAttrCount ( pRes->m_tSchema, bAgentMode );
 
 	bool bSendJson = ( bAgentMode && iMasterVer>=3 );
 	bool bSendJsonField = ( bAgentMode && iMasterVer>=4 );
@@ -6199,8 +6220,7 @@ static void ProcessLocalPostlimit ( const CSphQuery & tQuery, AggrResult_t & tRe
 
 /// merges multiple result sets, remaps columns, does reorder for outer selects
 /// query is only (!) non-const to tweak order vs reorder clauses
-bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, int ,
-	CSphSchema * pExtraSchema, CSphQueryProfile * pProfiler, bool bFromSphinxql, const CSphFilterSettings * pAggrFilter )
+bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, CSphSchema * pExtraSchema, CSphQueryProfile * pProfiler, const CSphFilterSettings * pAggrFilter )
 {
 	// sanity check
 	// verify that the match counts are consistent
@@ -6218,11 +6238,11 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 
 	// 0 matches via SphinxAPI? no fiddling with schemes is necessary
 	// (and via SphinxQL, we still need to return the right schema)
-	if ( !bFromSphinxql && !tRes.m_dMatches.GetLength() )
+	if ( !tQuery.m_bSphinxQL && !tRes.m_dMatches.GetLength() )
 		return true;
 
 	// 0 result set schemes via SphinxQL? just bail
-	if ( bFromSphinxql && !tRes.m_dSchemas.GetLength() && !bReturnZeroCount )
+	if ( tQuery.m_bSphinxQL && !tRes.m_dSchemas.GetLength() && !bReturnZeroCount )
 		return true;
 
 	// build a minimal schema over all the (potentially different) schemes
@@ -6231,7 +6251,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 	if ( tRes.m_dSchemas.GetLength() )
 		tRes.m_tSchema = tRes.m_dSchemas[0];
 	bool bAgent = tQuery.m_bAgent;
-	bool bUsualApi = !bAgent && !bFromSphinxql;
+	bool bUsualApi = !bAgent && !tQuery.m_bSphinxQL;
 	bool bAllEqual = true;
 
 	// FIXME? add assert ( tRes.m_tSchema==tRes.m_dSchemas[0] );
@@ -6243,12 +6263,12 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 
 	// build a list of select items that the query asked for
 	CSphVector<CSphQueryItem> tExtItems;
-	const CSphVector<CSphQueryItem> * pItems = ExpandAsterisk ( tRes.m_tSchema, dQueryItems, &tExtItems, !bFromSphinxql, tQuery.m_bFacetHead );
+	const CSphVector<CSphQueryItem> * pItems = ExpandAsterisk ( tRes.m_tSchema, dQueryItems, &tExtItems, !tQuery.m_bSphinxQL, tQuery.m_bFacetHead );
 	const CSphVector<CSphQueryItem> & tItems = *pItems;
 
 	// api + index without attributes + select * case
 	// can not skip aggregate filtering
-	if ( !bFromSphinxql && !tItems.GetLength() && !pAggrFilter )
+	if ( !tQuery.m_bSphinxQL && !tItems.GetLength() && !pAggrFilter )
 		return true;
 
 	// build the final schemas!
@@ -6267,7 +6287,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 	ARRAY_FOREACH ( i, tItems )
 	{
 		int iCol = -1;
-		if ( bFromSphinxql && tItems[i].m_sAlias.IsEmpty() )
+		if ( tQuery.m_bSphinxQL && tItems[i].m_sAlias.IsEmpty() )
 			iCol = tRes.m_tSchema.GetAttrIndex ( tItems[i].m_sExpr.cstr() );
 
 		if ( iCol>=0 )
@@ -6764,17 +6784,23 @@ struct Expr_Snippet_c : public ISphStringExpr
 		m_pText = pArglist->GetArg(0);
 
 		CSphMatch tDummy;
-		char * pWords;
+		char * pQuery = NULL;
 		assert ( !pArglist->GetArg(1)->IsStringPtr() ); // aware of memleaks potentially caused by StringEval()
-		pArglist->GetArg(1)->StringEval ( tDummy, (const BYTE**)&pWords );
-		m_tHighlight.m_sWords = pWords;
+		pArglist->GetArg(1)->StringEval ( tDummy, (const BYTE**)&pQuery );
+		m_tHighlight.m_sWords = pQuery;
 
 		for ( int i = 2; i < pArglist->GetNumArgs(); i++ )
 		{
 			assert ( !pArglist->GetArg(i)->IsStringPtr() ); // aware of memleaks potentially caused by StringEval()
-			int iLen = pArglist->GetArg(i)->StringEval ( tDummy, (const BYTE**)&pWords );
-			if ( !pWords || !iLen )
+
+			char * pArg;
+			int iLen = pArglist->GetArg(i)->StringEval ( tDummy, (const BYTE**)&pArg );
+			if ( !pArg || !iLen )
 				continue;
+
+			CSphString sArgs;
+			sArgs.SetBinary ( pArg, iLen );
+			char * pWords = const_cast<char *> ( sArgs.cstr() );
 
 			const char * sEnd = pWords + iLen;
 			while ( pWords<sEnd && *pWords && sphIsSpace ( *pWords ) )	pWords++;
@@ -6821,7 +6847,12 @@ struct Expr_Snippet_c : public ISphStringExpr
 			else if ( !strcasecmp ( szOption, "allow_empty" ) )				{ m_tHighlight.m_bAllowEmpty= ( StringBinary2Number ( sValue, iStrValLen )!=0 ); }
 			else if ( !strcasecmp ( szOption, "passage_boundary" ) )		{ m_tHighlight.m_sRawPassageBoundary.SetBinary ( sValue, iStrValLen ); }
 			else if ( !strcasecmp ( szOption, "emit_zones" ) )				{ m_tHighlight.m_bEmitZones = ( StringBinary2Number ( sValue, iStrValLen )!=0 ); }
-			else
+			else if ( !strcasecmp ( szOption, "json_query" ) )
+			{
+				m_tHighlight.m_bJsonQuery = ( StringBinary2Number ( sValue, iStrValLen )!=0 );
+				if ( m_tHighlight.m_bJsonQuery )
+					m_tHighlight.m_bHighlightQuery = true;
+			} else
 			{
 				CSphString sBuf;
 				sBuf.SetBinary ( sValue, iStrValLen );
@@ -6870,9 +6901,15 @@ struct Expr_Snippet_c : public ISphStringExpr
 		sphBuildExcerpt ( m_tHighlight, m_pIndex, m_tCtx.m_tStripper.Ptr(), m_tCtx.m_tExtQuery, m_tCtx.m_eExtQuerySPZ,
 			sWarning, sError, m_tCtx.m_pDict, m_tCtx.m_tTokenizer.Ptr(), m_tCtx.m_pQueryTokenizer );
 
-		int iRes = m_tHighlight.m_dRes.GetLength();
-		*ppStr = m_tHighlight.m_dRes.LeakData();
-		return iRes;
+		if ( !m_tHighlight.m_bJsonQuery )
+		{
+			int iRes = m_tHighlight.m_dRes.GetLength();
+			*ppStr = m_tHighlight.m_dRes.LeakData();
+			return iRes;
+		} else
+		{
+			return PackSnippets ( m_tHighlight.m_dRes, m_tHighlight.m_dSeparators, m_tHighlight.m_sChunkSeparator.Length(), ppStr );
+		}
 	}
 
 	virtual void Command ( ESphExprCommand eCmd, void * pArg )
@@ -7020,13 +7057,15 @@ class SearchHandler_c : public ISphSearchHandler
 	friend void LocalSearchThreadFunc ( void * pArg );
 
 public:
-									SearchHandler_c ( int iQueries, bool bSphinxql, bool bMaster, int iCID );
+									SearchHandler_c ( int iQueries, const QueryParser_i * pParser, bool bSphinxQL, bool bMaster, int iCID );
 	virtual							~SearchHandler_c();
 	virtual void					RunQueries ();					///< run all queries, get all results
 	void							RunUpdates ( const CSphQuery & tQuery, const CSphString & sIndex, ServedIndex_c * pLocked, CSphAttrUpdateEx * pUpdates ); ///< run Update command instead of Search
 	void							RunDeletes ( const CSphQuery & tQuery, const CSphString & sIndex, ServedIndex_c * pLocked, CSphString * pErrors, CSphVector<SphDocID_t>* ); ///< run Delete command instead of Search
 
-	virtual CSphQuery *				GetQuery ( int iQuery ) { return m_dQueries.Begin() + iQuery; }
+	virtual void					SetQuery ( int iQuery, const CSphQuery & tQuery ) override;
+	virtual void					SetProfile ( CSphQueryProfile * pProfile );
+	virtual CSphQuery &				GetQuery ( int iQuery ) { return m_dQueries[iQuery]; }
 	virtual AggrResult_t *			GetResult ( int iResult ) { return m_dResults.Begin() + iResult; }
 
 public:
@@ -7035,7 +7074,6 @@ public:
 	CSphVector<StatsPerQuery_t>		m_dQueryIndexStats;				///< statistics for current query
 	CSphVector<SearchFailuresLog_c>	m_dFailuresSet;					///< failure logs for each query
 	CSphVector < CSphVector<int64_t> >	m_dAgentTimes;				///< per-agent time stats
-	CSphQueryProfile *				m_pProfile;
 	CSphVector<DWORD *>				m_dMva2Free;
 	CSphVector<BYTE *>				m_dString2Free;
 	int								m_iCid;
@@ -7058,6 +7096,9 @@ protected:
 	CSphAttrUpdateEx *				m_pUpdates;		///< holder for updates
 	CSphVector<SphDocID_t> *		m_pDelete;		///< this query is for deleting
 
+	CSphQueryProfile *				m_pProfile;
+	const QueryParser_i *			m_pQueryParser;	///< parser used for queries in this handler. e.g. plain or json-style
+
 	mutable ExprHook_t				m_tHook;
 
 	SmallStringHash_T < int64_t >	m_hLocalDocs;
@@ -7074,13 +7115,15 @@ protected:
 };
 
 
-ISphSearchHandler * sphCreateSearchHandler ( int iQueries, bool bSphinxql, bool bMaster, int iCID )
+ISphSearchHandler * sphCreateSearchHandler ( int iQueries, const QueryParser_i * pQueryParser, bool bSphinxQL, bool bMaster, int iCID )
 {
-	return new SearchHandler_c ( iQueries, bSphinxql, bMaster, iCID );
+	return new SearchHandler_c ( iQueries, pQueryParser, bSphinxQL, bMaster, iCID );
 }
 
 
-SearchHandler_c::SearchHandler_c ( int iQueries, bool bSphinxql, bool bMaster, int iCid )
+SearchHandler_c::SearchHandler_c ( int iQueries, const QueryParser_i * pQueryParser, bool bSphinxQL, bool bMaster, int iCid )
+	: m_bSphinxql ( bSphinxQL )
+	, m_pQueryParser ( pQueryParser )
 {
 	m_iStart = 0;
 	m_iEnd = 0;
@@ -7092,7 +7135,6 @@ SearchHandler_c::SearchHandler_c ( int iQueries, bool bSphinxql, bool bMaster, i
 	m_dFailuresSet.Resize ( iQueries );
 	m_dExtraSchemas.Resize ( iQueries );
 	m_dAgentTimes.Resize ( iQueries );
-	m_bSphinxql = bSphinxql;
 	m_pUpdates = NULL;
 	m_pDelete = NULL;
 
@@ -7102,6 +7144,12 @@ SearchHandler_c::SearchHandler_c ( int iQueries, bool bSphinxql, bool bMaster, i
 	m_bGotLocalDF = false;
 	m_bMaster = bMaster;
 	m_iCid = iCid;
+
+	for ( auto & i : m_dQueries )
+	{
+		i.m_pQueryParser = pQueryParser;
+		i.m_bSphinxQL = bSphinxQL;
+	}
 }
 
 
@@ -7119,6 +7167,8 @@ SearchHandler_c::~SearchHandler_c ()
 		SafeDeleteArray ( m_dMva2Free[i] );
 	ARRAY_FOREACH ( i, m_dString2Free )
 		SafeDeleteArray ( m_dString2Free[i] );
+
+	SafeDelete ( m_pQueryParser );
 }
 
 static void SetDesc ( ServedDesc_t * pDst, const ServedIndex_c * pSrc )
@@ -7165,7 +7215,7 @@ void SearchHandler_c::RunUpdates ( const CSphQuery & tQuery, const CSphString & 
 {
 	m_pUpdates = pUpdates;
 
-	m_dQueries[0] = tQuery;
+	SetQuery ( 0, tQuery );
 	m_dQueries[0].m_sIndexes = sIndex;
 
 	// lets add index to prevent deadlock
@@ -7223,7 +7273,7 @@ void SearchHandler_c::RunUpdates ( const CSphQuery & tQuery, const CSphString & 
 void SearchHandler_c::RunDeletes ( const CSphQuery & tQuery, const CSphString & sIndex, ServedIndex_c * pLocked, CSphString * pErrors, CSphVector<SphDocID_t>* pValues )
 {
 	m_pDelete = pValues;
-	m_dQueries[0] = tQuery;
+	SetQuery ( 0, tQuery );
 	m_dQueries[0].m_sIndexes = sIndex;
 
 	// lets add index to prevent deadlock
@@ -7277,6 +7327,22 @@ void SearchHandler_c::RunDeletes ( const CSphQuery & tQuery, const CSphString & 
 
 	LogQuery ( m_dQueries[0], m_dResults[0], m_dAgentTimes[0], m_iCid );
 }
+
+
+void SearchHandler_c::SetQuery ( int iQuery, const CSphQuery & tQuery )
+{
+	m_dQueries[iQuery] = tQuery;
+	m_dQueries[iQuery].m_pQueryParser = m_pQueryParser;
+	m_dQueries[iQuery].m_bSphinxQL = m_bSphinxql;
+}
+
+
+void SearchHandler_c::SetProfile ( CSphQueryProfile * pProfile )
+{
+	assert ( pProfile );
+	m_pProfile = pProfile;
+}
+
 
 void SearchHandler_c::RunQueries()
 {
@@ -8779,7 +8845,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				}
 			}
 
-			bool bOk = MinimizeAggrResult ( tRes, tQuery, m_dLocal.GetLength(), dAgents.GetLength(), pExtraSchema, m_pProfile, m_bSphinxql, pAggrFilter );
+			bool bOk = MinimizeAggrResult ( tRes, tQuery, m_dLocal.GetLength(), pExtraSchema, m_pProfile, pAggrFilter );
 
 			if ( pExtraSchema )
 				pExtraSchema->Release();
@@ -9077,7 +9143,7 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 		return;
 	}
 
-	SearchHandler_c tHandler ( iQueries, false, ( iMasterVer==0 ), pThd->m_iConnID );
+	SearchHandler_c tHandler ( iQueries, sphCreatePlainQueryParser(), false, ( iMasterVer==0 ), pThd->m_iConnID );
 	ARRAY_FOREACH ( i, tHandler.m_dQueries )
 		if ( !ParseSearchQuery ( tReq, tOut, tHandler.m_dQueries[i], iVer, iMasterVer ) )
 			return;
@@ -9346,7 +9412,6 @@ public:
 
 	CSphVector<FilterTreeItem_t> m_dFilterTree;
 	CSphVector<int>				m_dFiltersPerStmt;
-	bool						m_bGotFilterAnd;
 	bool						m_bGotFilterOr;
 
 public:
@@ -9528,6 +9593,25 @@ static int yylex ( YYSTYPE * lvalp, SqlParser_c * pParser )
 
 //////////////////////////////////////////////////////////////////////////
 
+int sphGetTokTypeInt()
+{
+	return TOK_CONST_INT;
+}
+
+
+int sphGetTokTypeFloat()
+{
+	return TOK_CONST_FLOAT;
+}
+
+
+int sphGetTokTypeStr()
+{
+	return TOK_QUOTED_STRING;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 class CSphMatchVariant : public CSphMatch
 {
 public:
@@ -9616,7 +9700,6 @@ SqlParser_c::SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollati
 	, m_dStmt ( dStmt )
 	, m_eCollation ( eCollation )
 	, m_uSyntaxFlags ( 0 )
-	, m_bGotFilterAnd ( false )
 	, m_bGotFilterOr ( false )
 	, m_bNamedVecBusy ( false )
 {
@@ -10104,7 +10187,8 @@ bool SqlParser_c::AddFloatRangeFilter ( const SqlNode_t & sAttr, float fMin, flo
 		return false;
 	pFilter->m_fMinValue = fMin;
 	pFilter->m_fMaxValue = fMax;
-	pFilter->m_bHasEqual = bHasEqual;
+	pFilter->m_bHasEqualMin = bHasEqual;
+	pFilter->m_bHasEqualMax = bHasEqual;
 	pFilter->m_bExclude = bExclude;
 	return true;
 }
@@ -10127,15 +10211,10 @@ bool SqlParser_c::AddIntFilterGreater ( const SqlNode_t & tAttr, int64_t iVal, b
 		return false;
 	bool bId = ( pFilter->m_sAttrName=="@id" ) || ( pFilter->m_sAttrName=="id" );
 	pFilter->m_iMaxValue = bId ? (SphAttr_t)ULLONG_MAX : LLONG_MAX;
-	if ( iVal==LLONG_MAX )
-	{
-		pFilter->m_iMinValue = iVal;
-		pFilter->m_bHasEqual = bHasEqual;
-	} else
-	{
-		pFilter->m_iMinValue = bHasEqual ? iVal : iVal+1;
-		pFilter->m_bHasEqual = true;
-	}
+	pFilter->m_iMinValue = iVal;
+	pFilter->m_bHasEqualMin = bHasEqual;
+	pFilter->m_bOpenRight = true;
+
 	return true;
 }
 
@@ -10146,15 +10225,10 @@ bool SqlParser_c::AddIntFilterLesser ( const SqlNode_t & tAttr, int64_t iVal, bo
 		return false;
 	bool bId = ( pFilter->m_sAttrName=="@id" ) || ( pFilter->m_sAttrName=="id" );
 	pFilter->m_iMinValue = bId ? 0 : LLONG_MIN;
-	if ( iVal==LLONG_MIN )
-	{
-		pFilter->m_iMaxValue = iVal;
-		pFilter->m_bHasEqual = bHasEqual;
-	} else
-	{
-		pFilter->m_iMaxValue = bHasEqual ? iVal : iVal-1;
-		pFilter->m_bHasEqual = true;
-	}
+	pFilter->m_iMaxValue = iVal;
+	pFilter->m_bHasEqualMax = bHasEqual;
+	pFilter->m_bOpenLeft = true;
+
 	return true;
 }
 
@@ -10207,7 +10281,7 @@ bool SqlParser_c::AddNullFilter ( const SqlNode_t & tCol, bool bEqualsNull )
 	CSphFilterSettings * pFilter = AddFilter ( tCol, SPH_FILTER_NULL );
 	if ( !pFilter )
 		return false;
-	pFilter->m_bHasEqual = bEqualsNull;
+	pFilter->m_bIsNull = bEqualsNull;
 	return true;
 }
 
@@ -10270,8 +10344,7 @@ void SqlParser_c::FilterGroup ( SqlNode_t & tNode, SqlNode_t & tExpr )
 void SqlParser_c::FilterAnd ( SqlNode_t & tNode, const SqlNode_t & tLeft, const SqlNode_t & tRight )
 {
 	tNode.m_iParsedOp = m_dFilterTree.GetLength();
-	m_bGotFilterAnd = true;
-
+	
 	FilterTreeItem_t & tElem = m_dFilterTree.Add();
 	tElem.m_iLeft = tLeft.m_iParsedOp;
 	tElem.m_iRight = tRight.m_iParsedOp;
@@ -10314,25 +10387,19 @@ struct QueryItemProxy_t
 	}
 };
 
-static void CreateFilterTree ( const CSphVector<FilterTreeItem_t> & dOps, bool bHasAnd, bool bHasOr, int iStart, int iCount, CSphQuery & tQuery )
+static void CreateFilterTree ( const CSphVector<FilterTreeItem_t> & dOps, int iStart, int iCount, CSphQuery & tQuery )
 {
-	// all queries have only plain AND filters - no need for filter tree
-	if ( ( !bHasAnd && !bHasOr ) || ( bHasAnd && !bHasOr ) || !iCount )
-		return;
-
-	bHasAnd = false;
-	bHasOr = false;
+	bool bHasOr = false;
 	CSphVector<FilterTreeItem_t> dTree ( iCount );
 	for ( int i = 0; i<iCount; i++ )
 	{
 		const FilterTreeItem_t & tItem = dOps[iStart + i];
 		dTree[i] = tItem;
-		bHasAnd |= ( tItem.m_iFilterItem==-1 && !tItem.m_bOr );
 		bHasOr |= ( tItem.m_iFilterItem==-1 && tItem.m_bOr );
 	}
 
 	// query has only plain AND filters - no need for filter tree
-	if ( ( !bHasAnd && !bHasOr ) || ( bHasAnd && !bHasOr ) )
+	if ( !bHasOr )
 		return;
 
 	tQuery.m_dFilterTree.SwapData ( dTree );
@@ -10428,7 +10495,9 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 		}
 
 		iFilterCount = tParser.m_dFiltersPerStmt[iStmt];
-		CreateFilterTree ( tParser.m_dFilterTree, tParser.m_bGotFilterAnd, tParser.m_bGotFilterOr, iFilterStart, iFilterCount, tQuery );
+		// all queries have only plain AND filters - no need for filter tree
+		if ( iFilterCount && tParser.m_bGotFilterOr )
+			CreateFilterTree ( tParser.m_dFilterTree, iFilterStart, iFilterCount, tQuery );
 		iFilterStart += iFilterCount;
 	}
 
@@ -12655,17 +12724,6 @@ void SendMysqlFieldPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, const char 
 }
 
 
-// from mysqld_error.h
-enum MysqlErrors_e
-{
-	MYSQL_ERR_UNKNOWN_COM_ERROR			= 1047,
-	MYSQL_ERR_SERVER_SHUTDOWN			= 1053,
-	MYSQL_ERR_PARSE_ERROR				= 1064,
-	MYSQL_ERR_FIELD_SPECIFIED_TWICE		= 1110,
-	MYSQL_ERR_NO_SUCH_TABLE				= 1146
-};
-
-
 void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, const char * sStmt,
 	const char * sError, int iCID, MysqlErrors_e iErr )
 {
@@ -13027,21 +13085,35 @@ public:
 	}
 };
 
-class CSphSessionAccum
+
+class StmtErrorReporter_c : public StmtErrorReporter_i
 {
 public:
-	explicit CSphSessionAccum ( bool bManage );
-	~CSphSessionAccum();
-	ISphRtAccum * GetAcc ( ISphRtIndex * pIndex, CSphString & sError );
-	ISphRtIndex * GetIndex ();
+	StmtErrorReporter_c ( SqlRowBuffer_c & tBuffer )
+		: m_tRowBuffer ( tBuffer )
+	{}
+
+	virtual void Ok ( int iAffectedRows, const CSphString & sWarning )
+	{
+		m_tRowBuffer.Ok ( iAffectedRows, sWarning.IsEmpty() ? 0 : 1 );
+	}
+
+	virtual void Ok ( int iAffectedRows, int nWarnings )
+	{
+		m_tRowBuffer.Ok ( iAffectedRows, nWarnings );
+	}
+
+	virtual void Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr )
+	{
+		m_tRowBuffer.Error ( sStmt, sError, iErr );
+	}
 
 private:
-	ISphRtAccum *		m_pAcc;
-	bool				m_bManage;
+	SqlRowBuffer_c & m_tRowBuffer;
 };
 
 
-void HandleMysqlInsert ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt,
+void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	bool bReplace, bool bCommit, CSphString & sWarning, CSphSessionAccum & tAcc )
 {
 	MEMORY ( MEM_SQL_INSERT );
@@ -13361,7 +13433,7 @@ void HandleMysqlInsert ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt,
 	pServed->Unlock();
 
 	// my OK packet
-	tOut.Ok ( tStmt.m_iRowsAffected, sWarning.IsEmpty() ? 0 : 1 );
+	tOut.Ok ( tStmt.m_iRowsAffected, sWarning );
 }
 
 
@@ -14926,7 +14998,7 @@ static void DoExtendedUpdate ( const char * sIndex, const char * sDistributed, c
 		return;
 	}
 
-	SearchHandler_c tHandler ( 1, true, false, iCID ); // handler unlocks index at destructor - no need to do it manually
+	SearchHandler_c tHandler ( 1, sphCreatePlainQueryParser(), true, false, iCID ); // handler unlocks index at destructor - no need to do it manually
 	CSphAttrUpdateEx tUpdate;
 	CSphString sError;
 
@@ -14948,7 +15020,7 @@ static void DoExtendedUpdate ( const char * sIndex, const char * sDistributed, c
 }
 
 
-void HandleMysqlUpdate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const CSphString & sQuery, CSphString & sWarning, int iCID )
+void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, const CSphString & sQuery, CSphString & sWarning, int iCID )
 {
 	CSphString sError;
 
@@ -15267,7 +15339,7 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 	bool bReturnZeroCount = ( tRes.m_dZeroCount.GetLength()!=0 );
 	if ( tRes.m_dMatches.GetLength() || bReturnZeroCount )
 	{
-		iSchemaAttrsCount = SendGetAttrCount ( tRes.m_tSchema );
+		iSchemaAttrsCount = sphSendGetAttrCount ( tRes.m_tSchema );
 		iAttrsCount = iSchemaAttrsCount;
 	}
 
@@ -15625,7 +15697,7 @@ static int LocalIndexDoDeleteDocuments ( const char * sName, const char * sDistr
 	CSphVector<SphDocID_t> dValues;
 	if ( !pDocs ) // needs to be deleted via query
 	{
-		pHandler = new SearchHandler_c ( 1, true, false, iCID ); // handler unlocks index at destructor - no need to do it manually
+		pHandler = new SearchHandler_c ( 1, sphCreatePlainQueryParser(), true, false, iCID ); // handler unlocks index at destructor - no need to do it manually
 		pHandler->RunDeletes ( tStmt.m_tQuery, sName, pLocked, &sError, &dValues );
 		pDocs = dValues.Begin();
 		iCount = dValues.GetLength();
@@ -15649,7 +15721,7 @@ static int LocalIndexDoDeleteDocuments ( const char * sName, const char * sDistr
 }
 
 
-void HandleMysqlDelete ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit, CSphSessionAccum & tAcc, int iCID )
+void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit, CSphSessionAccum & tAcc, int iCID )
 {
 	MEMORY ( MEM_SQL_DELETE );
 
@@ -15698,7 +15770,7 @@ void HandleMysqlDelete ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, const C
 	if ( tQuery.m_sQuery.IsEmpty() && tQuery.m_dFilters.GetLength()==1 && !tQuery.m_dFilterTree.GetLength() )
 	{
 		const CSphFilterSettings* pFilter = tQuery.m_dFilters.Begin();
-		if ( pFilter->m_bHasEqual && pFilter->m_eType==SPH_FILTER_VALUES
+		if ( ( pFilter->m_bHasEqualMin || pFilter->m_bHasEqualMax ) && pFilter->m_eType==SPH_FILTER_VALUES
 			&& pFilter->m_sAttrName=="@id" && !pFilter->m_bExclude )
 		{
 			if_const ( sizeof(SphAttr_t)==sizeof(SphDocID_t) ) // avoid copying in this case
@@ -15798,6 +15870,40 @@ struct SessionVars_t
 void HandleMysqlShowProfile ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p, bool bMoreResultsFollow );
 static void HandleMysqlShowPlan ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p, bool bMoreResultsFollow );
 
+
+class CSphQueryProfileMysql : public CSphQueryProfile
+{
+public:
+	virtual void			BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const CSphVector<CSphString> & dZones );
+	virtual cJSON *			LeakResultAsJson();
+	virtual const char *	GetResultAsStr() const;
+
+private:
+	CSphString				m_sResult;
+
+	void					Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const CSphVector<CSphString> & dZones, int iIdent );
+};
+
+
+void CSphQueryProfileMysql::BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const CSphVector<CSphString> & dZones )
+{
+	m_sResult = sphExplainQuery ( pRoot, tSchema, dZones );
+}
+
+
+cJSON * CSphQueryProfileMysql::LeakResultAsJson()
+{
+	assert ( 0 && "Not implemented" );
+	return nullptr;
+}
+
+
+const char * CSphQueryProfileMysql::GetResultAsStr() const
+{
+	return m_sResult.cstr();
+}
+
+
 void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResultMeta & tLastMeta,
 	SqlRowBuffer_c & dRows, ThdDesc_t * pThd, const CSphString& sWarning )
 {
@@ -15814,15 +15920,15 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 		StatCountCommand ( SEARCHD_COMMAND_SEARCH );
 
 	// setup query for searching
-	SearchHandler_c tHandler ( iSelect, true, true, pThd->m_iConnID );
+	SearchHandler_c tHandler ( iSelect, sphCreatePlainQueryParser(), true, true, pThd->m_iConnID );
 	SessionVars_t tVars;
-	CSphQueryProfile tProfile;
+	CSphQueryProfileMysql tProfile;
 
 	iSelect = 0;
 	ARRAY_FOREACH ( i, dStmt )
 	{
 		if ( dStmt[i].m_eStmt==STMT_SELECT )
-			tHandler.m_dQueries[iSelect++] = dStmt[i].m_tQuery;
+			tHandler.SetQuery ( iSelect++, dStmt[i].m_tQuery );
 		else if ( dStmt[i].m_eStmt==STMT_SET && dStmt[i].m_eSet==SET_LOCAL )
 		{
 			CSphString sSetName ( dStmt[i].m_sSetName );
@@ -15834,7 +15940,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	// use first meta for faceted search
 	bool bUseFirstMeta = ( tHandler.m_dQueries.GetLength()>1 && !tHandler.m_dQueries[0].m_bFacet && tHandler.m_dQueries[1].m_bFacet );
 	if ( tVars.m_bProfile )
-		tHandler.m_pProfile = &tProfile;
+		tHandler.SetProfile ( &tProfile );
 
 	// do search
 	bool bSearchOK = true;
@@ -17023,7 +17129,7 @@ static void HandleMysqlShowPlan ( SqlRowBuffer_c & tOut, const CSphQueryProfile 
 	tOut.HeadEnd ( bMoreResultsFollow );
 
 	tOut.PutString ( "transformed_tree" );
-	tOut.PutString ( p.m_sTransformedTree.cstr() );
+	tOut.PutString ( p.GetResultAsStr() );
 	tOut.Commit();
 
 	tOut.Eof ( bMoreResultsFollow );
@@ -17134,9 +17240,9 @@ private:
 	CSphSessionAccum	m_tAcc;
 
 public:
-	SessionVars_t		m_tVars;
-	CSphQueryProfile	m_tProfile;
-	CSphQueryProfile	m_tLastProfile;
+	SessionVars_t			m_tVars;
+	CSphQueryProfileMysql	m_tProfile;
+	CSphQueryProfileMysql	m_tLastProfile;
 
 public:
 	explicit CSphinxqlSession ( bool bManage )
@@ -17207,10 +17313,11 @@ public:
 				MEMORY ( MEM_SQL_SELECT );
 
 				StatCountCommand ( SEARCHD_COMMAND_SEARCH );
-				SearchHandler_c tHandler ( 1, true, true, pThd->m_iConnID );
-				tHandler.m_dQueries[0] = dStmt.Begin()->m_tQuery;
+				SearchHandler_c tHandler ( 1, sphCreatePlainQueryParser(), true, true, pThd->m_iConnID );
+				tHandler.SetQuery ( 0, dStmt.Begin()->m_tQuery );
+
 				if ( m_tVars.m_bProfile )
-					tHandler.m_pProfile = &m_tProfile;
+					tHandler.SetProfile ( &m_tProfile );
 
 				if ( HandleMysqlSelect ( tOut, tHandler ) )
 				{
@@ -17240,21 +17347,26 @@ public:
 
 		case STMT_INSERT:
 		case STMT_REPLACE:
-			m_tLastMeta = CSphQueryResultMeta();
-			m_tLastMeta.m_sError = m_sError;
-			m_tLastMeta.m_sWarning = "";
-			StatCountCommand ( eStmt==STMT_INSERT ? SEARCHD_COMMAND_INSERT : SEARCHD_COMMAND_REPLACE );
-			HandleMysqlInsert ( tOut, *pStmt, eStmt==STMT_REPLACE,
-				m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction, m_tLastMeta.m_sWarning, m_tAcc );
-			return true;
+			{
+				m_tLastMeta = CSphQueryResultMeta();
+				m_tLastMeta.m_sError = m_sError;
+				m_tLastMeta.m_sWarning = "";
+				StmtErrorReporter_c tErrorReporter ( tOut );
+				sphHandleMysqlInsert ( tErrorReporter, *pStmt, eStmt==STMT_REPLACE,
+					m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction, m_tLastMeta.m_sWarning, m_tAcc );
+				return true;
+			}
 
 		case STMT_DELETE:
-			m_tLastMeta = CSphQueryResultMeta();
-			m_tLastMeta.m_sError = m_sError;
-			m_tLastMeta.m_sWarning = "";
-			StatCountCommand ( SEARCHD_COMMAND_DELETE );
-			HandleMysqlDelete ( tOut, *pStmt, sQuery, m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction, m_tAcc, pThd->m_iConnID );
-			return true;
+			{
+				m_tLastMeta = CSphQueryResultMeta();
+				m_tLastMeta.m_sError = m_sError;
+				m_tLastMeta.m_sWarning = "";
+				StatCountCommand ( SEARCHD_COMMAND_DELETE );
+				StmtErrorReporter_c tErrorReporter ( tOut );
+				sphHandleMysqlDelete ( tErrorReporter, *pStmt, sQuery, m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction, m_tAcc, pThd->m_iConnID );
+				return true;
+			}
 
 		case STMT_SET:
 			StatCountCommand ( SEARCHD_COMMAND_UVAR );
@@ -17344,12 +17456,15 @@ public:
 			return true;
 
 		case STMT_UPDATE:
-			m_tLastMeta = CSphQueryResultMeta();
-			m_tLastMeta.m_sError = m_sError;
-			m_tLastMeta.m_sWarning = "";
-			StatCountCommand ( SEARCHD_COMMAND_UPDATE );
-			HandleMysqlUpdate ( tOut, *pStmt, sQuery, m_tLastMeta.m_sWarning, pThd->m_iConnID );
-			return true;
+			{
+				m_tLastMeta = CSphQueryResultMeta();
+				m_tLastMeta.m_sError = m_sError;
+				m_tLastMeta.m_sWarning = "";
+				StatCountCommand ( SEARCHD_COMMAND_UPDATE );
+				StmtErrorReporter_c tErrorReporter ( tOut );
+				sphHandleMysqlUpdate ( tErrorReporter, *pStmt, sQuery, m_tLastMeta.m_sWarning, pThd->m_iConnID );
+				return true;
+			}
 
 		case STMT_DUMMY:
 			tOut.Ok();
@@ -23665,6 +23780,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( g_bLogCompactIn && g_eLogFormat==LOG_FORMAT_PLAIN )
 		sphWarning ( "compact_in option only supported with query_log_format=sphinxql" );
 
+	sphInitCJson();
+
 	// prepare to detach
 	if ( !g_bOptNoDetach )
 	{
@@ -23954,6 +24071,8 @@ inline int mainimpl ( int argc, char **argv )
 		};
 		if ( !StartServiceCtrlDispatcher ( dDispatcherTable ) )
 			sphFatal ( "StartServiceCtrlDispatcher() failed: %s", WinErrorInfo() );
+
+		return 0;
 	} else
 #endif
 

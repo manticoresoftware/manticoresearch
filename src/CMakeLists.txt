@@ -14,7 +14,8 @@ set ( LIBSPHINX_SRCS sphinx.cpp sphinxexcerpt.cpp
 		sphinxsort.cpp sphinxexpr.cpp sphinxfilter.cpp
 		sphinxsearch.cpp sphinxrt.cpp sphinxjson.cpp
 		sphinxaot.cpp sphinxplugin.cpp sphinxudf.c
-		sphinxqcache.cpp sphinxrlp.cpp json/cJSON.c )
+		sphinxqcache.cpp sphinxrlp.cpp sphinxjsonquery.cpp
+		json/cJSON.c )
 set ( INDEXER_SRCS indexer.cpp )
 set ( INDEXTOOL_SRCS indextool.cpp )
 set ( SEARCHD_SRCS_TESTABLE searchdha.cpp http/http_parser.c searchdhttp.cpp )

@@ -12,7 +12,7 @@ bin_PROGRAMS = indexer searchd spelldump indextool wordbreaker
 noinst_PROGRAMS = tests
 
 indexer_SOURCES = indexer.cpp
-searchd_SOURCES = searchd.cpp searchdha.cpp http/http_parser.c searchdhttp.cpp
+searchd_SOURCES = searchd.cpp searchdha.cpp http/http_parser.c searchdhttp.cpp sphinxjsonquery.cpp
 spelldump_SOURCES = spelldump.cpp
 indextool_SOURCES = indextool.cpp
 tests_SOURCES = tests.cpp

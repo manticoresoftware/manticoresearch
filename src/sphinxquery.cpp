@@ -34,28 +34,620 @@ class XQParser_t;
 // #define XQ_DUMP_NODE_ADDR 1
 
 //////////////////////////////////////////////////////////////////////////
-
-struct MultiformNode_t
+void XQParseHelper_c::SetString ( const char * szString )
 {
-	XQNode_t *	m_pNode;
-	int			m_iDestStart;
-	int			m_iDestCount;
-};
+	assert ( m_pTokenizer );
+	m_pTokenizer->SetBuffer ( (const BYTE*)szString, strlen(szString) );
+	m_iAtomPos = 0;
+}
 
-class XQParser_t
+/// lookup field and add it into mask
+bool XQParseHelper_c::AddField ( FieldMask_t & dFields, const char * szField, int iLen )
 {
+	CSphString sField;
+	sField.SetBinary ( szField, iLen );
+
+	int iField = m_pSchema->GetFieldIndex ( sField.cstr () );
+	if ( iField<0 )
+	{
+		if ( m_bStopOnInvalid )
+			return Error ( "no field '%s' found in schema", sField.cstr () );
+		else
+			Warning ( "no field '%s' found in schema", sField.cstr () );
+	} else
+	{
+		if ( iField>=SPH_MAX_FIELDS )
+			return Error ( " max %d fields allowed", SPH_MAX_FIELDS );
+
+		dFields.Set ( iField );
+	}
+
+	return true;
+}
+
+
+/// parse fields block
+bool XQParseHelper_c::ParseFields ( FieldMask_t & dFields, int & iMaxFieldPos, bool & bIgnore )
+{
+	dFields.UnsetAll();
+	iMaxFieldPos = 0;
+	bIgnore = false;
+
+	const char * pPtr = m_pTokenizer->GetBufferPtr ();
+	const char * pLastPtr = m_pTokenizer->GetBufferEnd ();
+
+	if ( pPtr==pLastPtr )
+		return true; // silently ignore trailing field operator
+
+	bool bNegate = false;
+	bool bBlock = false;
+
+	// handle special modifiers
+	if ( *pPtr=='!' )
+	{
+		// handle @! and @!(
+		bNegate = true; pPtr++;
+		if ( *pPtr=='(' ) { bBlock = true; pPtr++; }
+
+	} else if ( *pPtr=='*' )
+	{
+		// handle @*
+		dFields.SetAll();
+		m_pTokenizer->SetBufferPtr ( pPtr+1 );
+		return true;
+	} else if ( HandleSpecialFields ( pPtr, dFields ) )
+		return true;
+	else
+		bBlock = HandleFieldBlockStart ( pPtr );
+
+	// handle invalid chars
+	if ( !sphIsAlpha(*pPtr) )
+	{
+		bIgnore = true;
+		m_pTokenizer->SetBufferPtr ( pPtr ); // ignore and re-parse (FIXME! maybe warn?)
+		return true;
+	}
+	assert ( sphIsAlpha(*pPtr) ); // i think i'm paranoid
+
+								  // handle field specification
+	if ( !bBlock )
+	{
+		// handle standalone field specification
+		const char * pFieldStart = pPtr;
+		while ( sphIsAlpha(*pPtr) && pPtr<pLastPtr )
+			pPtr++;
+
+		assert ( pPtr-pFieldStart>0 );
+		if ( !AddField ( dFields, pFieldStart, pPtr-pFieldStart ) )
+			return false;
+
+		m_pTokenizer->SetBufferPtr ( pPtr );
+		if ( bNegate )
+			dFields.Negate();
+
+	} else
+	{
+		// handle fields block specification
+		assert ( sphIsAlpha(*pPtr) && bBlock ); // and complicated
+
+		bool bOK = false;
+		const char * pFieldStart = NULL;
+		while ( pPtr<pLastPtr )
+		{
+			// accumulate field name, while we can
+			if ( sphIsAlpha(*pPtr) )
+			{
+				if ( !pFieldStart )
+					pFieldStart = pPtr;
+				pPtr++;
+				continue;
+			}
+
+			// separator found
+			if ( pFieldStart==NULL )
+			{
+				CSphString sContext;
+				sContext.SetBinary ( pPtr, (int)( pLastPtr-pPtr ) );
+				return Error ( "error parsing field list: invalid field block operator syntax near '%s'", sContext.cstr() ? sContext.cstr() : "" );
+
+			} else if ( *pPtr==',' )
+			{
+				if ( !AddField ( dFields, pFieldStart, pPtr-pFieldStart ) )
+					return false;
+
+				pFieldStart = NULL;
+				pPtr++;
+
+			} else if ( *pPtr==')' )
+			{
+				if ( !AddField ( dFields, pFieldStart, pPtr-pFieldStart ) )
+					return false;
+
+				m_pTokenizer->SetBufferPtr ( ++pPtr );
+				if ( bNegate )
+					dFields.Negate();
+
+				bOK = true;
+				break;
+
+			} else
+			{
+				return Error ( "error parsing field list: invalid character '%c' in field block operator", *pPtr );
+			}
+		}
+
+		if ( !bOK )
+		{
+			if ( NeedTrailingSeparator() )
+				return Error ( "error parsing field list: missing closing ')' in field block operator" );
+			else
+			{
+				if ( !AddField ( dFields, pFieldStart, pPtr-pFieldStart ) )
+					return false;
+
+				if ( bNegate )
+					dFields.Negate();
+
+				return true;
+			}
+		}
+	}
+
+	// handle optional position range modifier
+	if ( pPtr[0]=='[' && isdigit ( pPtr[1] ) )
+	{
+		// skip '[' and digits
+		const char * p = pPtr+1;
+		while ( *p && isdigit(*p) ) p++;
+
+		// check that the range ends with ']' (FIXME! maybe report an error if it does not?)
+		if ( *p!=']' )
+			return true;
+
+		// fetch my value
+		iMaxFieldPos = strtoul ( pPtr+1, NULL, 10 );
+		m_pTokenizer->SetBufferPtr ( p+1 );
+	}
+
+	// well done
+	return true;
+}
+
+
+void XQParseHelper_c::Setup ( const CSphSchema * pSchema, ISphTokenizer * pTokenizer, CSphDict * pDict, XQQuery_t * pXQQuery, const CSphIndexSettings & tSettings )
+{
+	m_pSchema = pSchema;
+	m_pTokenizer = pTokenizer;
+	m_pDict = pDict;
+	m_pParsed = pXQQuery;
+	m_iAtomPos = 0;
+	m_bEmptyStopword = ( tSettings.m_iStopwordStep==0 );
+}
+
+
+bool XQParseHelper_c::Error ( const char * sTemplate, ... )
+{
+	assert ( m_pParsed );
+	char sBuf[256];
+
+	const char * sPrefix = "query error: ";
+	int iPrefix = strlen(sPrefix);
+	memcpy ( sBuf, sPrefix, iPrefix );
+
+	va_list ap;
+	va_start ( ap, sTemplate );
+	vsnprintf ( sBuf+iPrefix, sizeof(sBuf)-iPrefix, sTemplate, ap );
+	va_end ( ap );
+
+	m_bError = true;
+	m_pParsed->m_sParseError = sBuf;
+	return false;
+}
+
+
+void XQParseHelper_c::Warning ( const char * sTemplate, ... )
+{
+	assert ( m_pParsed );
+	char sBuf[256];
+
+	const char * sPrefix = "query warning: ";
+	int iPrefix = strlen(sPrefix);
+	memcpy ( sBuf, sPrefix, iPrefix );
+
+	va_list ap;
+	va_start ( ap, sTemplate );
+	vsnprintf ( sBuf+iPrefix, sizeof(sBuf)-iPrefix, sTemplate, ap );
+	va_end ( ap );
+
+	m_pParsed->m_sParseWarning = sBuf;
+}
+
+
+void XQParseHelper_c::Cleanup()
+{
+	m_dSpawned.Uniq(); // FIXME! should eliminate this by testing
+
+	ARRAY_FOREACH ( i, m_dSpawned )
+	{
+		m_dSpawned[i]->m_dChildren.Reset ();
+		SafeDelete ( m_dSpawned[i] );
+	}
+	m_dSpawned.Reset ();
+}
+
+
+bool XQParseHelper_c::CheckQuorumProximity ( XQNode_t * pNode )
+{
+	if ( !pNode )
+		return true;
+
+	bool bQuorumPassed = ( pNode->GetOp()!=SPH_QUERY_QUORUM ||
+		( pNode->m_iOpArg>0 && ( !pNode->m_bPercentOp || pNode->m_iOpArg<=100 ) ) );
+	if ( !bQuorumPassed )
+	{
+		if ( pNode->m_bPercentOp )
+			return Error ( "quorum threshold out of bounds 0.0 and 1.0f (%f)", 1.0f / 100.0f * pNode->m_iOpArg );
+		else
+			return Error ( "quorum threshold too low (%d)", pNode->m_iOpArg );
+	}
+
+	if ( pNode->GetOp()==SPH_QUERY_PROXIMITY && pNode->m_iOpArg<1 )
+		return Error ( "proximity threshold too low (%d)", pNode->m_iOpArg );
+
+	bool bValid = ARRAY_ALL ( bValid, pNode->m_dChildren, CheckQuorumProximity ( pNode->m_dChildren[_all] ) );
+	return bValid;
+}
+
+
+static void FixupDegenerates ( XQNode_t * pNode, CSphString & sWarning )
+{
+	if ( !pNode )
+		return;
+
+	if ( pNode->m_dWords.GetLength()==1 &&
+		( pNode->GetOp()==SPH_QUERY_PHRASE || pNode->GetOp()==SPH_QUERY_PROXIMITY || pNode->GetOp()==SPH_QUERY_QUORUM ) )
+	{
+		if ( pNode->GetOp()==SPH_QUERY_QUORUM && !pNode->m_bPercentOp && pNode->m_iOpArg>1 )
+			sWarning.SetSprintf ( "quorum threshold too high (words=%d, thresh=%d); replacing quorum operator with AND operator", pNode->m_dWords.GetLength(), pNode->m_iOpArg );
+
+		pNode->SetOp ( SPH_QUERY_AND );
+		return;
+	}
+
+	ARRAY_FOREACH ( i, pNode->m_dChildren )
+		FixupDegenerates ( pNode->m_dChildren[i], sWarning );
+}
+
+
+XQNode_t * XQParseHelper_c::FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & tLimitSpec )
+{
+	FixupDestForms ();
+	DeleteNodesWOFields ( pRoot );
+	pRoot = SweepNulls ( pRoot );
+	FixupDegenerates ( pRoot, m_pParsed->m_sParseWarning );
+	FixupNulls ( pRoot );
+
+	if ( !FixupNots ( pRoot ) )
+	{
+		Cleanup ();
+		return NULL;
+	}
+
+	if ( !CheckQuorumProximity ( pRoot ) )
+	{
+		Cleanup();
+		return NULL;
+	}
+
+	if ( pRoot && pRoot->GetOp()==SPH_QUERY_NOT && !pRoot->m_iOpArg )
+	{
+		Cleanup ();
+		Error ( "query is non-computable (single NOT operator)" );
+		return NULL;
+	}
+
+	// all ok; might want to create a dummy node to indicate that
+	m_dSpawned.Reset();
+
+	if ( pRoot && pRoot->GetOp()==SPH_QUERY_NULL )
+		SafeDelete ( pRoot );
+
+	return pRoot ? pRoot : new XQNode_t ( tLimitSpec );
+}
+
+
+XQNode_t * XQParseHelper_c::SweepNulls ( XQNode_t * pNode )
+{
+	if ( !pNode )
+		return NULL;
+
+	// sweep plain node
+	if ( pNode->m_dWords.GetLength() )
+	{
+		ARRAY_FOREACH ( i, pNode->m_dWords )
+			if ( pNode->m_dWords[i].m_sWord.cstr()==NULL )
+				pNode->m_dWords.Remove ( i-- );
+
+		if ( pNode->m_dWords.GetLength()==0 )
+		{
+			m_dSpawned.RemoveValue ( pNode ); // OPTIMIZE!
+			SafeDelete ( pNode );
+			return NULL;
+		}
+
+		return pNode;
+	}
+
+	// sweep op node
+	ARRAY_FOREACH ( i, pNode->m_dChildren )
+	{
+		pNode->m_dChildren[i] = SweepNulls ( pNode->m_dChildren[i] );
+		if ( pNode->m_dChildren[i]==NULL )
+		{
+			pNode->m_dChildren.Remove ( i-- );
+			// use non-null iOpArg as a flag indicating that the sweeping happened.
+			++pNode->m_iOpArg;
+		}
+	}
+
+	if ( pNode->m_dChildren.GetLength()==0 )
+	{
+		m_dSpawned.RemoveValue ( pNode ); // OPTIMIZE!
+		SafeDelete ( pNode );
+		return NULL;
+	}
+
+	// remove redundancies if needed
+	if ( pNode->GetOp()!=SPH_QUERY_NOT && pNode->m_dChildren.GetLength()==1 )
+	{
+		XQNode_t * pRet = pNode->m_dChildren[0];
+		pNode->m_dChildren.Reset ();
+		pRet->m_pParent = pNode->m_pParent;
+		// expressions like 'la !word' (having min_word_len>len(la)) became a 'null' node.
+		if ( pNode->m_iOpArg && pRet->GetOp()==SPH_QUERY_NOT )
+		{
+			pRet->SetOp ( SPH_QUERY_NULL );
+			ARRAY_FOREACH ( i, pRet->m_dChildren )
+			{
+				m_dSpawned.RemoveValue ( pRet->m_dChildren[i] );
+				SafeDelete ( pRet->m_dChildren[i] )
+			}
+			pRet->m_dChildren.Reset();
+		}
+		pRet->m_iOpArg = pNode->m_iOpArg;
+
+		m_dSpawned.RemoveValue ( pNode ); // OPTIMIZE!
+		SafeDelete ( pNode );
+		return SweepNulls ( pRet );
+	}
+
+	// done
+	return pNode;
+}
+
+void XQParseHelper_c::FixupNulls ( XQNode_t * pNode )
+{
+	if ( !pNode )
+		return;
+
+	ARRAY_FOREACH ( i, pNode->m_dChildren )
+		FixupNulls ( pNode->m_dChildren[i] );
+
+	// smth OR null == smth.
+	if ( pNode->GetOp()==SPH_QUERY_OR )
+	{
+		CSphVector<XQNode_t*> dNotNulls;
+		ARRAY_FOREACH ( i, pNode->m_dChildren )
+		{
+			XQNode_t* pChild = pNode->m_dChildren[i];
+			if ( pChild->GetOp()!=SPH_QUERY_NULL )
+				dNotNulls.Add ( pChild );
+			else
+			{
+				m_dSpawned.RemoveValue ( pChild );
+				SafeDelete ( pChild );
+			}
+		}
+		pNode->m_dChildren.SwapData ( dNotNulls );
+		dNotNulls.Reset();
+		// smth AND null = null.
+	} else if ( pNode->GetOp()==SPH_QUERY_AND )
+	{
+		bool bHasNull = ARRAY_ANY ( bHasNull, pNode->m_dChildren, pNode->m_dChildren[_any]->GetOp()==SPH_QUERY_NULL );
+		if ( bHasNull )
+		{
+			pNode->SetOp ( SPH_QUERY_NULL );
+			ARRAY_FOREACH ( i, pNode->m_dChildren )
+			{
+				m_dSpawned.RemoveValue ( pNode->m_dChildren[i] );
+				SafeDelete ( pNode->m_dChildren[i] )
+			}
+			pNode->m_dChildren.Reset();
+		}
+	}
+}
+
+bool XQParseHelper_c::FixupNots ( XQNode_t * pNode )
+{
+	// no processing for plain nodes
+	if ( !pNode || pNode->m_dWords.GetLength() )
+		return true;
+
+	// process 'em children
+	ARRAY_FOREACH ( i, pNode->m_dChildren )
+		if ( !FixupNots ( pNode->m_dChildren[i] ) )
+			return false;
+
+	// extract NOT subnodes
+	CSphVector<XQNode_t*> dNots;
+	ARRAY_FOREACH ( i, pNode->m_dChildren )
+		if ( pNode->m_dChildren[i]->GetOp()==SPH_QUERY_NOT )
+		{
+			dNots.Add ( pNode->m_dChildren[i] );
+			pNode->m_dChildren.RemoveFast ( i-- );
+		}
+
+	// no NOTs? we're square
+	if ( !dNots.GetLength() )
+		return true;
+
+	// nothing but NOTs? we can't compute that
+	if ( !pNode->m_dChildren.GetLength() )
+		return Error ( "query is non-computable (node consists of NOT operators only)" );
+
+	// NOT within OR or MAYBE? we can't compute that
+	if ( pNode->GetOp()==SPH_QUERY_OR || pNode->GetOp()==SPH_QUERY_MAYBE || pNode->GetOp()==SPH_QUERY_NEAR )
+	{
+		XQOperator_e eOp = pNode->GetOp();
+		const char * sOp = ( eOp==SPH_QUERY_OR ? "OR" : ( eOp==SPH_QUERY_MAYBE ? "MAYBE" : "NEAR" ) );
+		return Error ( "query is non-computable (NOT is not allowed within %s)", sOp );
+	}
+
+	// NOT used in before operator
+	if ( pNode->GetOp()==SPH_QUERY_BEFORE )
+		return Error ( "query is non-computable (NOT cannot be used as before operand)" );
+
+	// must be some NOTs within AND at this point, convert this node to ANDNOT
+	assert ( pNode->GetOp()==SPH_QUERY_AND && pNode->m_dChildren.GetLength() && dNots.GetLength() );
+
+	XQNode_t * pAnd = new XQNode_t ( pNode->m_dSpec );
+	pAnd->SetOp ( SPH_QUERY_AND, pNode->m_dChildren );
+	m_dSpawned.Add ( pAnd );
+
+	XQNode_t * pNot = NULL;
+	if ( dNots.GetLength()==1 )
+	{
+		pNot = dNots[0];
+	} else
+	{
+		pNot = new XQNode_t ( pNode->m_dSpec );
+		pNot->SetOp ( SPH_QUERY_OR, dNots );
+		m_dSpawned.Add ( pNot );
+	}
+
+	pNode->SetOp ( SPH_QUERY_ANDNOT, pAnd, pNot );
+	return true;
+}
+
+
+static void CollectChildren ( XQNode_t * pNode, CSphVector<XQNode_t *> & dChildren )
+{
+	if ( !pNode->m_dChildren.GetLength() )
+		return;
+
+	dChildren.Add ( pNode );
+	ARRAY_FOREACH ( i, dChildren )
+	{
+		const XQNode_t * pChild = dChildren[i];
+		ARRAY_FOREACH ( j, pChild->m_dChildren )
+			dChildren.Add ( pChild->m_dChildren[j] );
+	}
+}
+
+
+void XQParseHelper_c::DeleteNodesWOFields ( XQNode_t * pNode )
+{
+	if ( !pNode )
+		return;
+
+	for ( int i = 0; i < pNode->m_dChildren.GetLength (); )
+	{
+		if ( pNode->m_dChildren[i]->m_dSpec.m_dFieldMask.TestAll ( false ) )
+		{
+			XQNode_t * pChild = pNode->m_dChildren[i];
+			CSphVector<XQNode_t *> dChildren;
+			CollectChildren ( pChild, dChildren );
+#ifndef NDEBUG
+			bool bAllEmpty = ARRAY_ALL ( bAllEmpty, dChildren, dChildren[_all]->m_dSpec.m_dFieldMask.TestAll ( false ) );
+			assert ( pChild->m_dChildren.GetLength()==0 || ( dChildren.GetLength() && bAllEmpty ) );
+#endif
+			if ( dChildren.GetLength() )
+			{
+				ARRAY_FOREACH ( iChild, dChildren )
+					m_dSpawned.RemoveValue ( dChildren[iChild] );
+			} else
+				m_dSpawned.RemoveValue ( pChild );
+
+			// this should be a leaf node
+			SafeDelete ( pNode->m_dChildren[i] );
+			pNode->m_dChildren.RemoveFast ( i );
+
+		} else
+		{
+			DeleteNodesWOFields ( pNode->m_dChildren[i] );
+			i++;
+		}
+	}
+}
+
+
+void XQParseHelper_c::FixupDestForms ()
+{
+	if ( !m_dMultiforms.GetLength() )
+		return;
+
+	CSphVector<XQNode_t *> dForms;
+
+	ARRAY_FOREACH ( iNode, m_dMultiforms )
+	{
+		const MultiformNode_t & tDesc = m_dMultiforms[iNode];
+		XQNode_t * pMultiParent = tDesc.m_pNode;
+		assert ( pMultiParent->m_dWords.GetLength()==1 && pMultiParent->m_dChildren.GetLength()==0 );
+
+		XQKeyword_t tKeyword;
+		Swap ( pMultiParent->m_dWords[0], tKeyword );
+		pMultiParent->m_dWords.Reset();
+
+		// FIXME: what about whildcard?
+		bool bExact = ( tKeyword.m_sWord.Length()>1 && tKeyword.m_sWord.cstr()[0]=='=' );
+		bool bFieldStart = tKeyword.m_bFieldStart;
+		bool bFieldEnd = tKeyword.m_bFieldEnd;
+		tKeyword.m_bFieldStart = false;
+		tKeyword.m_bFieldEnd = false;
+
+		XQNode_t * pMultiHead = new XQNode_t ( pMultiParent->m_dSpec );
+		pMultiHead->m_dWords.Add ( tKeyword );
+		m_dSpawned.Add ( pMultiHead );
+		dForms.Add ( pMultiHead );
+
+		for ( int iForm=0; iForm<tDesc.m_iDestCount; iForm++ )
+		{
+			tKeyword.m_iAtomPos++;
+			tKeyword.m_sWord = m_dDestForms [ tDesc.m_iDestStart + iForm ];
+
+			// propagate exact word flag to all destination forms
+			if ( bExact )
+				tKeyword.m_sWord.SetSprintf ( "=%s", tKeyword.m_sWord.cstr() );
+
+			XQNode_t * pMulti = new XQNode_t ( pMultiParent->m_dSpec );
+			pMulti->m_dWords.Add ( tKeyword );
+			m_dSpawned.Add ( pMulti );
+			dForms.Add ( pMulti );
+		}
+
+		// fix-up field start\end modifier
+		dForms[0]->m_dWords[0].m_bFieldStart = bFieldStart;
+		dForms.Last()->m_dWords[0].m_bFieldEnd = bFieldEnd;
+
+		pMultiParent->SetOp ( SPH_QUERY_AND, dForms );
+		dForms.Resize ( 0 );
+	}
+}
+
+
+//////////////////////////////////////////////////////////////////////////
+
+class XQParser_t : public XQParseHelper_c
+{
+	friend void yyerror ( XQParser_t * pParser, const char * sMessage );
+	friend int yyparse (XQParser_t * pParser);
+
 public:
 					XQParser_t ();
 					~XQParser_t ();
 
 public:
 	bool			Parse ( XQQuery_t & tQuery, const char * sQuery, const CSphQuery * pQuery, const ISphTokenizer * pTokenizer, const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings );
-
-	bool			Error ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
-	void			Warning ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
-
-	bool			AddField ( FieldMask_t & dFields, const char * szField, int iLen );
-	bool			ParseFields ( FieldMask_t & uFields, int & iMaxFieldPos, bool & bIgnore );
 	int				ParseZone ( const char * pZone );
 
 	bool			IsSpecial ( char c );
@@ -69,14 +661,9 @@ public:
 	XQNode_t *		AddKeyword ( XQNode_t * pLeft, XQNode_t * pRight );
 	XQNode_t *		AddOp ( XQOperator_e eOp, XQNode_t * pLeft, XQNode_t * pRight, int iOpArg=0 );
 	void			SetPhrase ( XQNode_t * pNode, bool bSetExact );
-
-	void			Cleanup ();
-	XQNode_t *		SweepNulls ( XQNode_t * pNode );
-	bool			FixupNots ( XQNode_t * pNode );
-	void			FixupNulls ( XQNode_t * pNode );
-	void			DeleteNodesWOFields ( XQNode_t * pNode );
 	void			PhraseShiftQpos ( XQNode_t * pNode );
-	void			FixupDestForms ();
+
+	virtual void	Cleanup () override;
 
 	inline void SetFieldSpec ( const FieldMask_t& uMask, int iMaxPos )
 	{
@@ -107,41 +694,24 @@ public:
 	}
 
 public:
-	static const int MAX_TOKEN_BYTES = 3*SPH_MAX_WORD_LEN + 16;
-
-	XQQuery_t *				m_pParsed;
-
 	BYTE *					m_sQuery;
 	int						m_iQueryLen;
 	const char *			m_pErrorAt;
 
-	const CSphSchema *		m_pSchema;
-	ISphTokenizer *			m_pTokenizer;
-	CSphDict *				m_pDict;
-
-	CSphVector<XQNode_t*>	m_dSpawned;
 	XQNode_t *				m_pRoot;
-
-	bool					m_bStopOnInvalid;
-	int						m_iAtomPos;
 
 	int						m_iPendingNulls;
 	int						m_iPendingType;
 	YYSTYPE					m_tPendingToken;
-	bool					m_bWasBlended;
 	bool					m_bWasKeyword;
 
 	bool					m_bEmpty;
 	bool					m_bQuoted;
-	bool					m_bEmptyStopword;
 	int						m_iOvershortStep;
 
 	int						m_iQuorumQuote;
 	int						m_iQuorumFSlash;
 	bool					m_bCheckNumber;
-
-	const PluginQueryTokenFilter_c * m_pPlugin;
-	void *					m_pPluginData;
 
 	CSphVector<CSphString>	m_dIntTokens;
 
@@ -150,8 +720,8 @@ public:
 	CSphVector<XQLimitSpec_t *>		m_dSpecPool;
 	CSphVector<int>					m_dPhraseStar;
 
-	CSphVector<CSphString>			m_dDestForms;
-	CSphVector<MultiformNode_t>		m_dMultiforms;
+protected:
+	virtual bool	HandleFieldBlockStart ( const char * & pPtr );
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -399,19 +969,13 @@ static int GetNodeChildIndex ( const XQNode_t * pParent, const XQNode_t * pNode 
 //////////////////////////////////////////////////////////////////////////
 
 XQParser_t::XQParser_t ()
-	: m_pParsed ( NULL )
-	, m_pErrorAt ( NULL )
+	: m_pErrorAt ( NULL )
 	, m_pRoot ( NULL )
-	, m_bStopOnInvalid ( true )
-	, m_bWasBlended ( false )
 	, m_bWasKeyword ( false )
 	, m_bQuoted ( false )
-	, m_bEmptyStopword ( false )
 	, m_iQuorumQuote ( -1 )
 	, m_iQuorumFSlash ( -1 )
 	, m_bCheckNumber ( false )
-	, m_pPlugin ( NULL )
-	, m_pPluginData ( NULL )
 {
 	m_dSpecPool.Add ( new XQLimitSpec_t() );
 	m_dStateSpec.Add ( m_dSpecPool.Last() );
@@ -427,53 +991,8 @@ XQParser_t::~XQParser_t ()
 /// cleanup spawned nodes (for bailing out on errors)
 void XQParser_t::Cleanup ()
 {
-	m_dSpawned.Uniq(); // FIXME! should eliminate this by testing
-
-	ARRAY_FOREACH ( i, m_dSpawned )
-	{
-		m_dSpawned[i]->m_dChildren.Reset ();
-		SafeDelete ( m_dSpawned[i] );
-	}
-	m_dSpawned.Reset ();
+	XQParseHelper_c::Cleanup();
 	m_dStateSpec.Reset();
-}
-
-
-
-bool XQParser_t::Error ( const char * sTemplate, ... )
-{
-	assert ( m_pParsed );
-	char sBuf[256];
-
-	const char * sPrefix = "query error: ";
-	int iPrefix = strlen(sPrefix);
-	memcpy ( sBuf, sPrefix, iPrefix );
-
-	va_list ap;
-	va_start ( ap, sTemplate );
-	vsnprintf ( sBuf+iPrefix, sizeof(sBuf)-iPrefix, sTemplate, ap );
-	va_end ( ap );
-
-	m_pParsed->m_sParseError = sBuf;
-	return false;
-}
-
-
-void XQParser_t::Warning ( const char * sTemplate, ... )
-{
-	assert ( m_pParsed );
-	char sBuf[256];
-
-	const char * sPrefix = "query warning: ";
-	int iPrefix = strlen(sPrefix);
-	memcpy ( sBuf, sPrefix, iPrefix );
-
-	va_list ap;
-	va_start ( ap, sTemplate );
-	vsnprintf ( sBuf+iPrefix, sizeof(sBuf)-iPrefix, sTemplate, ap );
-	va_end ( ap );
-
-	m_pParsed->m_sParseWarning = sBuf;
 }
 
 
@@ -481,167 +1000,6 @@ void XQParser_t::Warning ( const char * sTemplate, ... )
 bool XQParser_t::IsSpecial ( char c )
 {
 	return c=='(' || c==')' || c=='|' || c=='-' || c=='!' || c=='@' || c=='~' || c=='"' || c=='/';
-}
-
-
-/// lookup field and add it into mask
-bool XQParser_t::AddField ( FieldMask_t & dFields, const char * szField, int iLen )
-{
-	CSphString sField;
-	sField.SetBinary ( szField, iLen );
-
-	int iField = m_pSchema->GetFieldIndex ( sField.cstr () );
-	if ( iField<0 )
-	{
-		if ( m_bStopOnInvalid )
-			return Error ( "no field '%s' found in schema", sField.cstr () );
-		else
-			Warning ( "no field '%s' found in schema", sField.cstr () );
-	} else
-	{
-		if ( iField>=SPH_MAX_FIELDS )
-			return Error ( " max %d fields allowed", SPH_MAX_FIELDS );
-
-		dFields.Set ( iField );
-	}
-
-	return true;
-}
-
-
-/// parse fields block
-bool XQParser_t::ParseFields ( FieldMask_t & dFields, int & iMaxFieldPos, bool & bIgnore )
-{
-	dFields.UnsetAll();
-	iMaxFieldPos = 0;
-	bIgnore = false;
-
-	const char * pPtr = m_pTokenizer->GetBufferPtr ();
-	const char * pLastPtr = m_pTokenizer->GetBufferEnd ();
-
-	if ( pPtr==pLastPtr )
-		return true; // silently ignore trailing field operator
-
-	bool bNegate = false;
-	bool bBlock = false;
-
-	// handle special modifiers
-	if ( *pPtr=='!' )
-	{
-		// handle @! and @!(
-		bNegate = true; pPtr++;
-		if ( *pPtr=='(' ) { bBlock = true; pPtr++; }
-
-	} else if ( *pPtr=='*' )
-	{
-		// handle @*
-		dFields.SetAll();
-		m_pTokenizer->SetBufferPtr ( pPtr+1 );
-		return true;
-
-	} else if ( *pPtr=='(' )
-	{
-		// handle @(
-		bBlock = true; pPtr++;
-	}
-
-	// handle invalid chars
-	if ( !sphIsAlpha(*pPtr) )
-	{
-		bIgnore = true;
-		m_pTokenizer->SetBufferPtr ( pPtr ); // ignore and re-parse (FIXME! maybe warn?)
-		return true;
-	}
-	assert ( sphIsAlpha(*pPtr) ); // i think i'm paranoid
-
-	// handle field specification
-	if ( !bBlock )
-	{
-		// handle standalone field specification
-		const char * pFieldStart = pPtr;
-		while ( sphIsAlpha(*pPtr) && pPtr<pLastPtr )
-			pPtr++;
-
-		assert ( pPtr-pFieldStart>0 );
-		if ( !AddField ( dFields, pFieldStart, pPtr-pFieldStart ) )
-			return false;
-
-		m_pTokenizer->SetBufferPtr ( pPtr );
-		if ( bNegate )
-			dFields.Negate();
-
-	} else
-	{
-		// handle fields block specification
-		assert ( sphIsAlpha(*pPtr) && bBlock ); // and complicated
-
-		bool bOK = false;
-		const char * pFieldStart = NULL;
-		while ( pPtr<pLastPtr )
-		{
-			// accumulate field name, while we can
-			if ( sphIsAlpha(*pPtr) )
-			{
-				if ( !pFieldStart )
-					pFieldStart = pPtr;
-				pPtr++;
-				continue;
-			}
-
-			// separator found
-			if ( pFieldStart==NULL )
-			{
-				CSphString sContext;
-				sContext.SetBinary ( pPtr, (int)( pLastPtr-pPtr ) );
-				return Error ( "invalid field block operator syntax near '%s'", sContext.cstr() ? sContext.cstr() : "" );
-
-			} else if ( *pPtr==',' )
-			{
-				if ( !AddField ( dFields, pFieldStart, pPtr-pFieldStart ) )
-					return false;
-
-				pFieldStart = NULL;
-				pPtr++;
-
-			} else if ( *pPtr==')' )
-			{
-				if ( !AddField ( dFields, pFieldStart, pPtr-pFieldStart ) )
-					return false;
-
-				m_pTokenizer->SetBufferPtr ( ++pPtr );
-				if ( bNegate )
-					dFields.Negate();
-
-				bOK = true;
-				break;
-
-			} else
-			{
-				return Error ( "invalid character '%c' in field block operator", *pPtr );
-			}
-		}
-		if ( !bOK )
-			return Error ( "missing closing ')' in field block operator" );
-	}
-
-	// handle optional position range modifier
-	if ( pPtr[0]=='[' && isdigit ( pPtr[1] ) )
-	{
-		// skip '[' and digits
-		const char * p = pPtr+1;
-		while ( *p && isdigit(*p) ) p++;
-
-		// check that the range ends with ']' (FIXME! maybe report an error if it does not?)
-		if ( *p!=']' )
-			return true;
-
-		// fetch my value
-		iMaxFieldPos = strtoul ( pPtr+1, NULL, 10 );
-		m_pTokenizer->SetBufferPtr ( p+1 );
-	}
-
-	// well done
-	return true;
 }
 
 
@@ -1314,238 +1672,6 @@ void XQParser_t::SetPhrase ( XQNode_t * pNode, bool bSetExact )
 }
 
 
-XQNode_t * XQParser_t::SweepNulls ( XQNode_t * pNode )
-{
-	if ( !pNode )
-		return NULL;
-
-	// sweep plain node
-	if ( pNode->m_dWords.GetLength() )
-	{
-		ARRAY_FOREACH ( i, pNode->m_dWords )
-			if ( pNode->m_dWords[i].m_sWord.cstr()==NULL )
-				pNode->m_dWords.Remove ( i-- );
-
-		if ( pNode->m_dWords.GetLength()==0 )
-		{
-			m_dSpawned.RemoveValue ( pNode ); // OPTIMIZE!
-			SafeDelete ( pNode );
-			return NULL;
-		}
-
-		return pNode;
-	}
-
-	// sweep op node
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
-	{
-		pNode->m_dChildren[i] = SweepNulls ( pNode->m_dChildren[i] );
-		if ( pNode->m_dChildren[i]==NULL )
-		{
-			pNode->m_dChildren.Remove ( i-- );
-			// use non-null iOpArg as a flag indicating that the sweeping happened.
-			++pNode->m_iOpArg;
-		}
-	}
-
-	if ( pNode->m_dChildren.GetLength()==0 )
-	{
-		m_dSpawned.RemoveValue ( pNode ); // OPTIMIZE!
-		SafeDelete ( pNode );
-		return NULL;
-	}
-
-	// remove redundancies if needed
-	if ( pNode->GetOp()!=SPH_QUERY_NOT && pNode->m_dChildren.GetLength()==1 )
-	{
-		XQNode_t * pRet = pNode->m_dChildren[0];
-		pNode->m_dChildren.Reset ();
-		pRet->m_pParent = pNode->m_pParent;
-		// expressions like 'la !word' (having min_word_len>len(la)) became a 'null' node.
-		if ( pNode->m_iOpArg && pRet->GetOp()==SPH_QUERY_NOT )
-		{
-			pRet->SetOp ( SPH_QUERY_NULL );
-			ARRAY_FOREACH ( i, pRet->m_dChildren )
-			{
-				m_dSpawned.RemoveValue ( pRet->m_dChildren[i] );
-				SafeDelete ( pRet->m_dChildren[i] )
-			}
-			pRet->m_dChildren.Reset();
-		}
-		pRet->m_iOpArg = pNode->m_iOpArg;
-
-		m_dSpawned.RemoveValue ( pNode ); // OPTIMIZE!
-		SafeDelete ( pNode );
-		return SweepNulls ( pRet );
-	}
-
-	// done
-	return pNode;
-}
-
-void XQParser_t::FixupNulls ( XQNode_t * pNode )
-{
-	if ( !pNode )
-		return;
-
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		FixupNulls ( pNode->m_dChildren[i] );
-
-	// smth OR null == smth.
-	if ( pNode->GetOp()==SPH_QUERY_OR )
-	{
-		CSphVector<XQNode_t*> dNotNulls;
-		ARRAY_FOREACH ( i, pNode->m_dChildren )
-		{
-			XQNode_t* pChild = pNode->m_dChildren[i];
-			if ( pChild->GetOp()!=SPH_QUERY_NULL )
-				dNotNulls.Add ( pChild );
-			else
-			{
-				m_dSpawned.RemoveValue ( pChild );
-				SafeDelete ( pChild );
-			}
-		}
-		pNode->m_dChildren.SwapData ( dNotNulls );
-		dNotNulls.Reset();
-	// smth AND null = null.
-	} else if ( pNode->GetOp()==SPH_QUERY_AND )
-	{
-		bool bHasNull = ARRAY_ANY ( bHasNull, pNode->m_dChildren, pNode->m_dChildren[_any]->GetOp()==SPH_QUERY_NULL );
-		if ( bHasNull )
-		{
-			pNode->SetOp ( SPH_QUERY_NULL );
-			ARRAY_FOREACH ( i, pNode->m_dChildren )
-			{
-				m_dSpawned.RemoveValue ( pNode->m_dChildren[i] );
-				SafeDelete ( pNode->m_dChildren[i] )
-			}
-			pNode->m_dChildren.Reset();
-		}
-	}
-}
-
-bool XQParser_t::FixupNots ( XQNode_t * pNode )
-{
-	// no processing for plain nodes
-	if ( !pNode || pNode->m_dWords.GetLength() )
-		return true;
-
-	// process 'em children
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		if ( !FixupNots ( pNode->m_dChildren[i] ) )
-			return false;
-
-	// extract NOT subnodes
-	CSphVector<XQNode_t*> dNots;
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		if ( pNode->m_dChildren[i]->GetOp()==SPH_QUERY_NOT )
-	{
-		dNots.Add ( pNode->m_dChildren[i] );
-		pNode->m_dChildren.RemoveFast ( i-- );
-	}
-
-	// no NOTs? we're square
-	if ( !dNots.GetLength() )
-		return true;
-
-	// nothing but NOTs? we can't compute that
-	if ( !pNode->m_dChildren.GetLength() )
-	{
-		m_pParsed->m_sParseError.SetSprintf ( "query is non-computable (node consists of NOT operators only)" );
-		return false;
-	}
-
-	// NOT within OR or MAYBE? we can't compute that
-	if ( pNode->GetOp()==SPH_QUERY_OR || pNode->GetOp()==SPH_QUERY_MAYBE || pNode->GetOp()==SPH_QUERY_NEAR )
-	{
-		XQOperator_e eOp = pNode->GetOp();
-		const char * sOp = ( eOp==SPH_QUERY_OR ? "OR" : ( eOp==SPH_QUERY_MAYBE ? "MAYBE" : "NEAR" ) );
-		m_pParsed->m_sParseError.SetSprintf ( "query is non-computable (NOT is not allowed within %s)", sOp );
-		return false;
-	}
-
-	// NOT used in before operator
-	if ( pNode->GetOp()==SPH_QUERY_BEFORE )
-	{
-		m_pParsed->m_sParseError.SetSprintf ( "query is non-computable (NOT cannot be used as before operand)" );
-		return false;
-	}
-
-	// must be some NOTs within AND at this point, convert this node to ANDNOT
-	assert ( pNode->GetOp()==SPH_QUERY_AND && pNode->m_dChildren.GetLength() && dNots.GetLength() );
-
-	XQNode_t * pAnd = new XQNode_t ( pNode->m_dSpec );
-	pAnd->SetOp ( SPH_QUERY_AND, pNode->m_dChildren );
-	m_dSpawned.Add ( pAnd );
-
-	XQNode_t * pNot = NULL;
-	if ( dNots.GetLength()==1 )
-	{
-		pNot = dNots[0];
-	} else
-	{
-		pNot = new XQNode_t ( pNode->m_dSpec );
-		pNot->SetOp ( SPH_QUERY_OR, dNots );
-		m_dSpawned.Add ( pNot );
-	}
-
-	pNode->SetOp ( SPH_QUERY_ANDNOT, pAnd, pNot );
-	return true;
-}
-
-
-static void CollectChildren ( XQNode_t * pNode, CSphVector<XQNode_t *> & dChildren )
-{
-	if ( !pNode->m_dChildren.GetLength() )
-		return;
-
-	dChildren.Add ( pNode );
-	ARRAY_FOREACH ( i, dChildren )
-	{
-		const XQNode_t * pChild = dChildren[i];
-		ARRAY_FOREACH ( j, pChild->m_dChildren )
-			dChildren.Add ( pChild->m_dChildren[j] );
-	}
-}
-
-
-void XQParser_t::DeleteNodesWOFields ( XQNode_t * pNode )
-{
-	if ( !pNode )
-		return;
-
-	for ( int i = 0; i < pNode->m_dChildren.GetLength (); )
-	{
-		if ( pNode->m_dChildren[i]->m_dSpec.m_dFieldMask.TestAll ( false ) )
-		{
-			XQNode_t * pChild = pNode->m_dChildren[i];
-			CSphVector<XQNode_t *> dChildren;
-			CollectChildren ( pChild, dChildren );
-#ifndef NDEBUG
-			bool bAllEmpty = ARRAY_ALL ( bAllEmpty, dChildren, dChildren[_all]->m_dSpec.m_dFieldMask.TestAll ( false ) );
-			assert ( pChild->m_dChildren.GetLength()==0 || ( dChildren.GetLength() && bAllEmpty ) );
-#endif
-			if ( dChildren.GetLength() )
-			{
-				ARRAY_FOREACH ( iChild, dChildren )
-					m_dSpawned.RemoveValue ( dChildren[iChild] );
-			} else
-				m_dSpawned.RemoveValue ( pChild );
-			
-			// this should be a leaf node
-			SafeDelete ( pNode->m_dChildren[i] );
-			pNode->m_dChildren.RemoveFast ( i );
-
-		} else
-		{
-			DeleteNodesWOFields ( pNode->m_dChildren[i] );
-			i++;
-		}
-	}
-}
-
-
 void XQParser_t::PhraseShiftQpos ( XQNode_t * pNode )
 {
 	if ( !m_dPhraseStar.GetLength() )
@@ -1582,107 +1708,6 @@ void XQParser_t::PhraseShiftQpos ( XQNode_t * pNode )
 
 		if ( iQposShiftStart<=tWord.m_iAtomPos )
 			tWord.m_iAtomPos += iQposShift;
-	}
-}
-
-
-static bool CheckQuorumProximity ( XQNode_t * pNode, CSphString * pError )
-{
-	assert ( pError );
-	if ( !pNode )
-		return true;
-
-	bool bQuorumPassed = ( pNode->GetOp()!=SPH_QUERY_QUORUM ||
-		( pNode->m_iOpArg>0 && ( !pNode->m_bPercentOp || pNode->m_iOpArg<=100 ) ) );
-	if ( !bQuorumPassed )
-	{
-		if ( pNode->m_bPercentOp )
-			pError->SetSprintf ( "quorum threshold out of bounds 0.0 and 1.0f (%f)", 1.0f / 100.0f * pNode->m_iOpArg );
-		else
-			pError->SetSprintf ( "quorum threshold too low (%d)", pNode->m_iOpArg );
-		return false;
-	}
-
-	if ( pNode->GetOp()==SPH_QUERY_PROXIMITY && pNode->m_iOpArg<1 )
-	{
-		pError->SetSprintf ( "proximity threshold too low (%d)", pNode->m_iOpArg );
-		return false;
-	}
-
-	bool bValid = ARRAY_ALL ( bValid, pNode->m_dChildren, CheckQuorumProximity ( pNode->m_dChildren[_all], pError ) );
-	return bValid;
-}
-
-
-static void FixupDegenerates ( XQNode_t * pNode, CSphString & sWarning )
-{
-	if ( !pNode )
-		return;
-
-	if ( pNode->m_dWords.GetLength()==1 &&
-		( pNode->GetOp()==SPH_QUERY_PHRASE || pNode->GetOp()==SPH_QUERY_PROXIMITY || pNode->GetOp()==SPH_QUERY_QUORUM ) )
-	{
-		if ( pNode->GetOp()==SPH_QUERY_QUORUM && !pNode->m_bPercentOp && pNode->m_iOpArg>1 )
-			sWarning.SetSprintf ( "quorum threshold too high (words=%d, thresh=%d); replacing quorum operator with AND operator", pNode->m_dWords.GetLength(), pNode->m_iOpArg );
-
-		pNode->SetOp ( SPH_QUERY_AND );
-		return;
-	}
-
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		FixupDegenerates ( pNode->m_dChildren[i], sWarning );
-}
-
-void XQParser_t::FixupDestForms ()
-{
-	if ( !m_dMultiforms.GetLength() )
-		return;
-
-	CSphVector<XQNode_t *> dForms;
-
-	ARRAY_FOREACH ( iNode, m_dMultiforms )
-	{
-		const MultiformNode_t & tDesc = m_dMultiforms[iNode];
-		XQNode_t * pMultiParent = tDesc.m_pNode;
-		assert ( pMultiParent->m_dWords.GetLength()==1 && pMultiParent->m_dChildren.GetLength()==0 );
-
-		XQKeyword_t tKeyword;
-		Swap ( pMultiParent->m_dWords[0], tKeyword );
-		pMultiParent->m_dWords.Reset();
-
-		// FIXME: what about whildcard?
-		bool bExact = ( tKeyword.m_sWord.Length()>1 && tKeyword.m_sWord.cstr()[0]=='=' );
-		bool bFieldStart = tKeyword.m_bFieldStart;
-		bool bFieldEnd = tKeyword.m_bFieldEnd;
-		tKeyword.m_bFieldStart = false;
-		tKeyword.m_bFieldEnd = false;
-
-		XQNode_t * pMultiHead = new XQNode_t ( pMultiParent->m_dSpec );
-		pMultiHead->m_dWords.Add ( tKeyword );
-		m_dSpawned.Add ( pMultiHead );
-		dForms.Add ( pMultiHead );
-
-		for ( int iForm=0; iForm<tDesc.m_iDestCount; iForm++ )
-		{
-			tKeyword.m_iAtomPos++;
-			tKeyword.m_sWord = m_dDestForms [ tDesc.m_iDestStart + iForm ];
-
-			// propagate exact word flag to all destination forms
-			if ( bExact )
-				tKeyword.m_sWord.SetSprintf ( "=%s", tKeyword.m_sWord.cstr() );
-
-			XQNode_t * pMulti = new XQNode_t ( pMultiParent->m_dSpec );
-			pMulti->m_dWords.Add ( tKeyword );
-			m_dSpawned.Add ( pMulti );
-			dForms.Add ( pMulti );
-		}
-
-		// fix-up field start\end modifier
-		dForms[0]->m_dWords[0].m_bFieldStart = bFieldStart;
-		dForms.Last()->m_dWords[0].m_bFieldEnd = bFieldEnd;
-
-		pMultiParent->SetOp ( SPH_QUERY_AND, dForms );
-		dForms.Resize ( 0 );
 	}
 }
 
@@ -1731,23 +1756,19 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 	}
 
 	// setup parser
-	m_pParsed = &tParsed;
+	CSphDict * pMyDict = pDict;
+	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
+	if ( pDict->HasState() )
+		tDictCloned = pMyDict = pDict->Clone();
+
+	Setup ( pSchema, pMyTokenizer.Ptr(), pMyDict, &tParsed, tSettings );
 	m_sQuery = (BYTE*) sQuery;
 	m_iQueryLen = sQuery ? strlen(sQuery) : 0;
-	m_pTokenizer = pMyTokenizer.Ptr();
-	m_pSchema = pSchema;
-	m_iAtomPos = 0;
 	m_iPendingNulls = 0;
 	m_iPendingType = 0;
 	m_pRoot = NULL;
 	m_bEmpty = true;
-	m_bEmptyStopword = ( tSettings.m_iStopwordStep==0 );
 	m_iOvershortStep = tSettings.m_iOvershortStep;
-
-	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
-	m_pDict = pDict;
-	if ( pDict->HasState() )
-		tDictCloned = m_pDict = pDict->Clone();
 
 	m_pTokenizer->SetBuffer ( m_sQuery, m_iQueryLen );
 	int iRes = yyparse ( this );
@@ -1768,43 +1789,31 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 		return false;
 	}
 
-	FixupDestForms ();
-	DeleteNodesWOFields ( m_pRoot );
-	m_pRoot = SweepNulls ( m_pRoot );
-	FixupDegenerates ( m_pRoot, m_pParsed->m_sParseWarning );
-	FixupNulls ( m_pRoot );
-
-	if ( !FixupNots ( m_pRoot ) )
-	{
-		Cleanup ();
-		return false;
-	}
-
-	if ( !CheckQuorumProximity ( m_pRoot, &m_pParsed->m_sParseError ) )
+	XQNode_t * pNewRoot = FixupTree ( m_pRoot, *m_dStateSpec.Last());
+	if ( !pNewRoot )
 	{
 		Cleanup();
 		return false;
 	}
 
-	if ( m_pRoot && m_pRoot->GetOp()==SPH_QUERY_NOT && !m_pRoot->m_iOpArg )
-	{
-		Cleanup ();
-		m_pParsed->m_sParseError.SetSprintf ( "query is non-computable (single NOT operator)" );
-		return false;
-	}
+	tParsed.m_pRoot = pNewRoot;
 
-	// all ok; might want to create a dummy node to indicate that
-	m_dSpawned.Reset();
-
-	if ( m_pRoot && m_pRoot->GetOp()==SPH_QUERY_NULL )
-	{
-		delete m_pRoot;
-		m_pRoot = NULL;
-	}
-
-	tParsed.m_pRoot = m_pRoot ? m_pRoot : new XQNode_t ( *m_dStateSpec.Last() );
 	return true;
 }
+
+
+bool XQParser_t::HandleFieldBlockStart ( const char * & pPtr )
+{
+	if ( *pPtr=='(' )
+	{
+		// handle @(
+		pPtr++;
+		return true;
+	}
+
+	return false;
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -4410,7 +4419,7 @@ void sphOptimizeBoolean ( XQNode_t ** ppRoot, const ISphKeywordsStat * pKeywords
 }
 
 
-void sphSetupQueryTokenizer ( ISphTokenizer * pTokenizer, bool bWildcards, bool bExact )
+void sphSetupQueryTokenizer ( ISphTokenizer * pTokenizer, bool bWildcards, bool bExact, bool bJson )
 {
 	if ( bWildcards )
 	{
@@ -4421,13 +4430,47 @@ void sphSetupQueryTokenizer ( ISphTokenizer * pTokenizer, bool bWildcards, bool 
 	if ( bExact )
 	{
 		pTokenizer->AddPlainChar ( '=' );
-		pTokenizer->AddSpecials ( "()|-!@~\"/^$<=" );
+		if (!bJson)
+			pTokenizer->AddSpecials ( "()|-!@~\"/^$<=" );
 	} else
 	{
-		pTokenizer->AddSpecials ( "()|-!@~\"/^$<" );
+		if (!bJson)
+			pTokenizer->AddSpecials ( "()|-!@~\"/^$<" );
 	}
 }
 
+//////////////////////////////////////////////////////////////////////////
+class QueryParserPlain_c : public QueryParser_i
+{
+public:
+	virtual bool IsFullscan ( const CSphQuery & tQuery ) const;
+	virtual bool IsFullscan ( const XQQuery_t & tQuery ) const;
+	virtual bool ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const ISphTokenizer * pQueryTokenizer, const ISphTokenizer * pQueryTokenizerJson, const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings ) const;
+};
+
+
+bool QueryParserPlain_c::IsFullscan ( const CSphQuery & tQuery ) const
+{
+	return tQuery.m_sQuery.IsEmpty();
+}
+
+
+bool QueryParserPlain_c::IsFullscan ( const XQQuery_t & /*tQuery*/ ) const
+{
+	return false;
+}
+
+
+bool QueryParserPlain_c::ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const ISphTokenizer * pQueryTokenizer, const ISphTokenizer *, const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings ) const
+{
+	return sphParseExtendedQuery ( tParsed, sQuery, pQuery, pQueryTokenizer, pSchema, pDict, tSettings );
+}
+
+
+QueryParser_i * sphCreatePlainQueryParser()
+{
+	return new QueryParserPlain_c();
+}
 
 //
 // $Id$

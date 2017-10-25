@@ -1891,18 +1891,15 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 
 		// special case, AND over terms (internally reordered for speed)
 		bool bAndTerms = ( pNode->GetOp()==SPH_QUERY_AND );
-		bool bZonespan = true;
-		bool bZonespanChecked = false;
 		for ( int i=0; i<iChildren && bAndTerms; i++ )
 		{
 			const XQNode_t * pChildren = pNode->m_dChildren[i];
 			bAndTerms = ( pChildren->m_dWords.GetLength()==1 );
-			bZonespan &= pChildren->m_dSpec.m_bZoneSpan;
-			if ( !bZonespan )
-				break;
-			bZonespanChecked = true;
 		}
-		bZonespan &= bZonespanChecked;
+
+		bool bZonespan = bAndTerms;
+		for ( int i=0; i<iChildren && bZonespan; i++ )
+			bZonespan &= pNode->m_dChildren[i]->m_dSpec.m_bZoneSpan;
 
 		if ( bAndTerms )
 		{
@@ -5429,29 +5426,17 @@ const ExtHit_t * ExtUnit_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 
 //////////////////////////////////////////////////////////////////////////
 
-static void Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const CSphVector<CSphString> & dZones,
-	StringBuilder_c & tRes, int iIdent )
+static void Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const CSphVector<CSphString> * pZones, StringBuilder_c & tRes, int iIndent, const char * szIndent, const char * szLinebreak )
 {
-	if ( iIdent )
-		tRes.Appendf ( "\n" );
-	for ( int i=0; i<iIdent; i++ )
-		tRes.Appendf ( "  " );
-	switch ( pNode->GetOp() )
-	{
-		case SPH_QUERY_AND:			tRes.Appendf ( "AND(" ); break;
-		case SPH_QUERY_OR:			tRes.Appendf ( "OR(" ); break;
-		case SPH_QUERY_MAYBE:		tRes.Appendf ( "MAYBE(" ); break;
-		case SPH_QUERY_NOT:			tRes.Appendf ( "NOT(" ); break;
-		case SPH_QUERY_ANDNOT:		tRes.Appendf ( "ANDNOT(" ); break;
-		case SPH_QUERY_BEFORE:		tRes.Appendf ( "BEFORE(" ); break;
-		case SPH_QUERY_PHRASE:		tRes.Appendf ( "PHRASE(" ); break;
-		case SPH_QUERY_PROXIMITY:	tRes.Appendf ( "PROXIMITY(distance=%d, ", pNode->m_iOpArg ); break;
-		case SPH_QUERY_QUORUM:		tRes.Appendf ( "QUORUM(count=%d, ", pNode->m_iOpArg ); break;
-		case SPH_QUERY_NEAR:		tRes.Appendf ( "NEAR(distance=%d", pNode->m_iOpArg ); break;
-		case SPH_QUERY_SENTENCE:	tRes.Appendf ( "SENTENCE(" ); break;
-		case SPH_QUERY_PARAGRAPH:	tRes.Appendf ( "PARAGRAPH(" ); break;
-		default:					tRes.Appendf ( "OPERATOR-%d(", pNode->GetOp() ); break;
-	}
+	if ( iIndent )
+		tRes.Appendf ( "%s", szLinebreak );
+
+	for ( int i=0; i<iIndent; i++ )
+		tRes.Appendf ( "%s", szIndent );
+
+	tRes.Appendf ( "%s(%s", sphXQNodeToStr(pNode).cstr(), sphXQNodeGetExtraStr(pNode).cstr() );
+	if ( pNode->GetOp()==SPH_QUERY_PROXIMITY || pNode->GetOp()==SPH_QUERY_QUORUM )
+		tRes.Appendf ( ", " );
 
 	if ( pNode->m_dChildren.GetLength() && pNode->m_dWords.GetLength() )
 		tRes.Appendf("virtually-plain, ");
@@ -5479,7 +5464,7 @@ static void Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const 
 		if ( s.m_iFieldMaxPos )
 			tRes.Appendf ( "max_field_pos=%d, ", s.m_iFieldMaxPos );
 
-		if ( s.m_dZones.GetLength() )
+		if ( pZones && s.m_dZones.GetLength() )
 		{
 			tRes.Appendf ( s.m_bZoneSpan ? "zonespans=(" : "zones=(" );
 			bool bNeedComma = false;
@@ -5488,7 +5473,7 @@ static void Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const 
 				if ( bNeedComma )
 					tRes.Appendf ( ", " );
 				bNeedComma = true;
-				tRes.Appendf ( "%s", dZones [ s.m_dZones[i] ].cstr() );
+				tRes.Appendf ( "%s", (*pZones) [ s.m_dZones[i] ].cstr() );
 			}
 			tRes.Appendf ( "), " );
 		}
@@ -5500,7 +5485,7 @@ static void Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const 
 		{
 			if ( i>0 )
 				tRes.Appendf ( ", " );
-			Explain ( pNode->m_dChildren[i], tSchema, dZones, tRes, iIdent+1 );
+			Explain ( pNode->m_dChildren[i], tSchema, pZones, tRes, iIndent+1, szIndent, szLinebreak );
 		}
 	} else
 	{
@@ -5525,7 +5510,28 @@ static void Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const 
 			tRes.Appendf ( ")" );
 		}
 	}
+
 	tRes.Appendf(")");
+}
+
+
+CSphString sphExplainQuery ( const XQNode_t * pNode, const CSphSchema & tSchema, const CSphVector<CSphString> & dZones )
+{
+	StringBuilder_c tRes;
+	Explain ( pNode, tSchema, &dZones, tRes, 0, "  ", "\n" );
+	CSphString sRes;
+	sRes.Adopt ( tRes.Leak() );
+	return sRes;
+}
+
+
+CSphString sphExplainQueryBrief ( const XQNode_t * pNode, const CSphSchema & tSchema )
+{
+	StringBuilder_c tRes;
+	Explain ( pNode, tSchema, NULL, tRes, 0, "", " " );
+	CSphString sRes;
+	sRes.Adopt ( tRes.Leak() );
+	return sRes;
 }
 
 
@@ -5558,11 +5564,7 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup 
 	// tXQ.m_pRoot, passed to ranker from the index, is the transformed tree
 	// m_pRoot, internal to ranker, is the evaluation tree
 	if ( tSetup.m_pCtx->m_pProfile )
-	{
-		tSetup.m_pCtx->m_pProfile->m_sTransformedTree.Clear();
-		Explain ( tXQ.m_pRoot, tSetup.m_pIndex->GetMatchSchema(), tXQ.m_dZones,
-			tSetup.m_pCtx->m_pProfile->m_sTransformedTree, 0 );
-	}
+		tSetup.m_pCtx->m_pProfile->BuildResult ( tXQ.m_pRoot, tSetup.m_pIndex->GetMatchSchema(), tXQ.m_dZones );
 
 	m_pDoclist = NULL;
 	m_pHitlist = NULL;
@@ -9830,6 +9832,49 @@ ExtNode_i * CSphQueryNodeCache::CreateProxy ( ExtNode_i * pChild, const XQNode_t
 
 	assert ( pRawChild );
 	return m_pPool [ pRawChild->GetOrder() ].CreateCachedWrapper ( pChild, pRawChild, tSetup );
+}
+
+
+CSphString sphXQNodeToStr ( const XQNode_t * pNode )
+{
+	static const char * szNodeNames[] =
+	{
+		"AND",
+		"OR",
+		"MAYBE",
+		"NOT",
+		"ANDNOT",
+		"BEFORE",
+		"PHRASE",
+		"PROXIMITY",
+		"QUORUM",
+		"NEAR",
+		"SENTENCE",
+		"PARAGRAPH"
+	};
+
+	if ( pNode->GetOp()>=SPH_QUERY_AND && pNode->GetOp()<=SPH_QUERY_PARAGRAPH )
+		return szNodeNames [ pNode->GetOp()-SPH_QUERY_AND ];
+
+	CSphString sTmp;
+	sTmp.SetSprintf ( "OPERATOR-%d", pNode->GetOp() );
+	return sTmp; 
+}
+
+
+CSphString sphXQNodeGetExtraStr ( const XQNode_t * pNode )
+{
+	CSphString sTmp("");
+
+	switch ( pNode->GetOp() )
+	{
+	case SPH_QUERY_PROXIMITY:	sTmp.SetSprintf ( "distance=%d", pNode->m_iOpArg ); break;
+	case SPH_QUERY_QUORUM:		sTmp.SetSprintf ( "count=%d", pNode->m_iOpArg ); break;
+	case SPH_QUERY_NEAR:		sTmp.SetSprintf ( "distance=%d", pNode->m_iOpArg ); break;
+	default:					break;
+	}
+
+	return sTmp;
 }
 
 //

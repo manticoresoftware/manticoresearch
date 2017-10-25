@@ -666,6 +666,7 @@ public:
 	int		m_iDocLen;
 	int		m_iMatchesCount;
 	bool	m_bCollectExtraZoneInfo;
+	int		m_iSeparatorLen;
 
 	explicit TokenFunctorTraits_c ( SnippetsDocIndex_c & tContainer, ISphTokenizer * pTokenizer,
 		CSphDict * pDict, const ExcerptQuery_t & tQuery, const CSphIndexSettings & tSettingsIndex,
@@ -688,6 +689,8 @@ public:
 		m_pTokenizer->SetBuffer ( (BYTE*)sDoc, m_iDocLen );
 		m_pDoc = m_pTokenizer->GetBufferPtr();
 		m_pDocMax = m_pTokenizer->GetBufferEnd();
+
+		m_iSeparatorLen = m_sChunkSeparator.Length();
 	}
 
 	void ResultEmit ( const char * pSrc, int iLen, bool bHasPassageMacro=false, int iPassageId=0,
@@ -718,6 +721,12 @@ public:
 			memcpy ( dResult.Begin()+iOutLen, sBuf, iPassLen );
 		if ( iPostLen )
 			memcpy ( dResult.Begin()+iOutLen+iPassLen, pPost, iPostLen );
+	}
+
+	void EmitPassageSeparator ( CSphVector<BYTE> & dBuf )
+	{
+		m_dSeparators.Add ( m_dResult.GetLength() );
+		ResultEmit ( dBuf, m_sChunkSeparator.cstr(), m_iSeparatorLen );
 	}
 };
 
@@ -1831,7 +1840,7 @@ protected:
 
 		if ( !bLengthOk )
 		{
-			ResultEmit ( m_dStartResult, m_sChunkSeparator.cstr(), m_sChunkSeparator.Length() );
+			EmitPassageSeparator ( m_dStartResult );
 			m_bCollectionStopped = true;
 		}
 	}
@@ -2688,7 +2697,6 @@ public:
 		, m_dPassages ( dPassages )
 		, m_iCurToken ( 0 )
 		, m_iCurPassage	( -1 )
-		, m_iSeparatorLen ( m_sChunkSeparator.Length() )
 		, m_bLastWasSeparator ( false )
 		, m_pZoneInfo ( pZoneInfo )
 		, m_iOpenTill ( 0 )
@@ -2828,7 +2836,7 @@ private:
 			&& !( ( m_iCurPassage+1 )<m_dPassages.GetLength() && m_iCurToken>=pNext->m_iStart
 				&& m_iCurToken<( pNext->m_iStart + pNext->m_iTokens ) ) )
 		{
-			ResultEmit ( m_sChunkSeparator.cstr(), m_iSeparatorLen );
+			EmitPassageSeparator ( m_dResult );
 			m_bLastWasSeparator = true;
 		}
 
@@ -2852,7 +2860,7 @@ private:
 		{
 			if ( !m_bLastWasSeparator && m_iCurToken && !m_bWeightOrder )
 			{
-				ResultEmit ( m_sChunkSeparator.cstr(), m_iSeparatorLen );
+				EmitPassageSeparator ( m_dResult );
 				m_bLastWasSeparator = true;
 			}
 
@@ -3407,7 +3415,7 @@ int ConvertSPZ ( DWORD eSPZ )
 }
 
 
-static void EmitPassagesOrdered ( CSphVector<BYTE> & dResult, const CSphVector<BYTE> & dPassageText, const CSphVector<int> & dPassageHeads, CSphVector<Passage_t> & dPassages,
+static void EmitPassagesOrdered ( CSphVector<BYTE> & dResult, CSphVector<int> & dSeparators, const CSphVector<BYTE> & dPassageText, const CSphVector<int> & dPassageHeads, CSphVector<Passage_t> & dPassages,
 	const CSphString & sChunkSeparator )
 {
 	int iSeparatorLen = sChunkSeparator.Length();
@@ -3417,6 +3425,7 @@ static void EmitPassagesOrdered ( CSphVector<BYTE> & dResult, const CSphVector<B
 	int iOutLen = dResult.GetLength();
 	dResult.Resize ( iOutLen+iSeparatorLen );
 	memcpy ( &dResult[iOutLen], sChunkSeparator.cstr(), iSeparatorLen );
+	dSeparators.Add ( iOutLen );
 
 	ARRAY_FOREACH ( iPassage, dPassages )
 	{
@@ -3441,12 +3450,13 @@ static void EmitPassagesOrdered ( CSphVector<BYTE> & dResult, const CSphVector<B
 		iOutLen = dResult.GetLength();
 		dResult.Resize ( iOutLen+iSeparatorLen );
 		memcpy ( &dResult[iOutLen], sChunkSeparator.cstr(), iSeparatorLen );
+		dSeparators.Add ( iOutLen );
 	}
 }
 
 
 static void HighlightPassages ( CacheStreamer_c & tStreamer, ExtractExcerpts_c & tExtractor, ExcerptQuery_t & tFixedSettings, const CSphIndexSettings & tIndexSettings, SnippetsDocIndex_c & tContainer,
-	const char * sDoc, int iDocLen, CSphDict * pDict, ISphTokenizer * pTokenizer, const CSphVector<SphHitMark_t> * dMarked, FunctorZoneInfo_t * pZoneInfo, CSphVector<BYTE> & dRes )
+	const char * sDoc, int iDocLen, CSphDict * pDict, ISphTokenizer * pTokenizer, const CSphVector<SphHitMark_t> * dMarked, FunctorZoneInfo_t * pZoneInfo, CSphVector<BYTE> & dRes, CSphVector<int> & dSeparators )
 {
 	tFixedSettings.m_bWeightOrder = tExtractor.m_bFixedWeightOrder;
 
@@ -3460,11 +3470,14 @@ static void HighlightPassages ( CacheStreamer_c & tStreamer, ExtractExcerpts_c &
 		if ( tFixedSettings.m_bWeightOrder )
 		{
 			CSphVector<BYTE> dResult;
-			EmitPassagesOrdered ( dResult, tHighlighter.m_dResult, tHighlighter.m_dPassageHeads, tExtractor.m_dPassages, tFixedSettings.m_sChunkSeparator );
+			EmitPassagesOrdered ( dResult, dSeparators, tHighlighter.m_dResult, tHighlighter.m_dPassageHeads, tExtractor.m_dPassages, tFixedSettings.m_sChunkSeparator );
 			dRes.SwapData ( dResult );
 
 		} else
+		{
 			dRes.SwapData ( tHighlighter.m_dResult );
+			dSeparators.SwapData ( tHighlighter.m_dSeparators );
+		}
 
 	} else if ( !tFixedSettings.m_bAllowEmpty )
 	{
@@ -3532,7 +3545,7 @@ static void DoHighlighting ( const ExcerptQuery_t & tQuerySettings,
 	const CSphIndexSettings & tIndexSettings, const XQQuery_t & tExtQuery, DWORD eExtQuerySPZ,
 	const char * sDoc, int iDocLen,
 	CSphDict * pDict, ISphTokenizer * pTokenizer, const CSphHTMLStripper * pStripper,
-	CSphString & sWarning, CSphString & sError, ISphTokenizer * pQueryTokenizer, CSphVector<BYTE> & dRes )
+	CSphString & sWarning, CSphString & sError, ISphTokenizer * pQueryTokenizer, CSphVector<BYTE> & dRes, CSphVector<int> & dSeparators )
 {
 	assert ( !tIndexSettings.m_uAotFilterMask || ( !tQuerySettings.m_bExactPhrase && tQuerySettings.m_bHighlightQuery ) );
 	ExcerptQuery_t tFixedSettings ( tQuerySettings );
@@ -3600,7 +3613,7 @@ static void DoHighlighting ( const ExcerptQuery_t & tQuerySettings,
 			TokenizeDocument ( tExtractor, pStripper, iSPZ );
 
 			tStreamer.m_pZoneInfo = &tExtractor.m_tZoneInfo;
-			HighlightPassages ( tStreamer, tExtractor, tFixedSettings, tIndexSettings, tContainer, sDoc, iDocLen, pDict, pTokenizer, NULL, &tExtractor.m_tZoneInfo, dRes );
+			HighlightPassages ( tStreamer, tExtractor, tFixedSettings, tIndexSettings, tContainer, sDoc, iDocLen, pDict, pTokenizer, NULL, &tExtractor.m_tZoneInfo, dRes, dSeparators );
 		}
 
 		// add trailing zero, and return
@@ -3757,7 +3770,7 @@ static void DoHighlighting ( const ExcerptQuery_t & tQuerySettings,
 
 			tStreamer.Tokenize ( tExtractor );
 
-			HighlightPassages ( tStreamer, tExtractor, tFixedSettings, tIndexSettings, tContainer, sDoc, iDocLen, pDict, pTokenizer, &dMarked, pZoneInfo, dRes );
+			HighlightPassages ( tStreamer, tExtractor, tFixedSettings, tIndexSettings, tContainer, sDoc, iDocLen, pDict, pTokenizer, &dMarked, pZoneInfo, dRes, dSeparators );
 		}
 
 		dRes.Add(0);
@@ -3793,6 +3806,7 @@ ExcerptQuery_t::ExcerptQuery_t ()
 	, m_bHasBeforePassageMacro ( false )
 	, m_bHasAfterPassageMacro ( false )
 	, m_ePassageSPZ ( SPH_SPZ_NONE )
+	, m_bJsonQuery ( false )
 {
 }
 
@@ -3802,6 +3816,8 @@ ExcerptQuery_t::ExcerptQuery_t ()
 void sphBuildExcerpt ( ExcerptQuery_t & tOptions, const CSphIndex * pIndex, const CSphHTMLStripper * pStripper, const XQQuery_t & tExtQuery,
 						DWORD eExtQuerySPZ, CSphString & sWarning, CSphString & sError, CSphDict * pDict, ISphTokenizer * pDocTokenizer, ISphTokenizer * pQueryTokenizer )
 {
+	tOptions.m_dSeparators.Resize ( 0 );
+
 	if ( tOptions.m_sStripMode=="retain"
 		&& !( tOptions.m_iLimit==0 && tOptions.m_iLimitPassages==0 && tOptions.m_iLimitWords==0 ) )
 	{
@@ -3858,7 +3874,7 @@ void sphBuildExcerpt ( ExcerptQuery_t & tOptions, const CSphIndex * pIndex, cons
 	int iDataLen = pData ? strlen ( pData ) : 0;
 
 	DoHighlighting ( tOptions, pIndex->GetSettings(), tExtQuery, eExtQuerySPZ, pData, iDataLen, pDict, pDocTokenizer, pStripper,
-		sWarning, sError, pQueryTokenizer, tOptions.m_dRes );
+		sWarning, sError, pQueryTokenizer, tOptions.m_dRes, tOptions.m_dSeparators );
 }
 
 //

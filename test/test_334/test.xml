@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>json queries via http</name>
+
+<requires>
+<http/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	binlog_path =
+}
+
+source src1
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT id, gid, title, content FROM test_table where id&lt;10
+  sql_attr_uint   = gid
+}
+
+source src2
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT id, gid, title, content FROM test_table where id&gt;=10
+  sql_attr_uint   = gid
+}
+
+
+index test1
+{
+  source      = src1
+  path      = <data_path/>/test_dummy1
+}
+
+
+index test2
+{
+  source      = src2
+  path      = <data_path/>/test_dummy2
+}
+
+</config>
+
+<db_drop>drop table if exists test_table</db_drop>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	title varchar(255) not null,
+	content varchar(255) not null,
+	gid int
+);
+</db_create>
+
+<db_insert>
+insert into test_table values
+( 1, '1st', 'first',  1 ),
+( 2, '2nd', 'second', 2 ),
+( 3, '3rd', 'third',  3 ),
+( 4, '4th', 'fourth', 4 ),
+( 5, '5th', 'fifth',  5 ),
+(10, '10th', 'Trevize glanced now and then at Bliss`s face, which seemed entirely concentrated on Bander.', 10 ),
+(11, '11th', 'Trevize had grown quite certain he knew what was going on.', 11 ),
+(12, '12th', 'Bander, despite its paean to freedom, found this unique opportunity irresistible.', 12 ),
+(13, '13th', 'There was no way it could speak to robots on a basis of intellectual equality, and certainly not to animals.', 13 ),
+(14, '14th', 'To speak to its fellow-Solarians would be, to it, unpleasant, and what communication there must be would be forced, and never spontaneous.', 14 ),
+(15, '15th', 'No wonder, Trevize thought, it was indulging itself in this way.', 15 )
+</db_insert>
+
+<httpqueries>
+<!-- simple match query -->
+<query endpoint="json/search">{ "index": "test1", "query": { "match": { "content": "first" } } } }</query>
+<query endpoint="json/search">{ "index": "test1", "query": { "match": { "content,title": "1st second" } } } }</query>
+<query endpoint="json/search">{ "index": "test1", "query": { "match": { "content, title": "1st second" } } } }</query>
+<query endpoint="json/search">{ "index": "test1", "query": { "match": { "content": "3rd fourth" } } } }</query>
+<query endpoint="json/search">{ "index": "test1", "query": { "match": { "title": "3rd fourth" } } } }</query>
+
+<!-- old sphinx field syntax -->
+<query endpoint="json/search">{ "index": "test1", "query": { "match": { "*": "3rd fourth" } } } }</query>
+
+<!-- new sphinx field syntax -->
+<query endpoint="json/search">{ "index": "test1", "query": { "match": { "_all": "3rd fourth" } } } }</query>
+
+<!-- fullscan/match_all -->
+<query endpoint="json/search">{ "index": "test1", "query": { "match_all": {} } } }</query>
+
+<!-- index expansion -->
+<query endpoint="json/search">{ "index": "*", "query": { "match": { "_all": "first thought" } } } }</query>
+<query endpoint="json/search">{ "index": "_all", "query": { "match": { "_all": "first thought" } } } }</query>
+
+<!-- match with options -->
+<query endpoint="json/search">{ "index": "test2", "query": { "match": { "content,title": { "query":"glanced on", "operator":"and" } } } }</query>
+<query endpoint="json/search">{ "index": "test2", "query": { "match": { "content,title": { "query":"glanced on", "operator":"or" } } } }</query>
+
+<!-- bool queries -->
+<!-- "must" -->
+<query endpoint="json/search">{ "index": "test2", "query": { "bool" : { "must" : { "match" : { "_all" : "on" } } } } }</query>
+<query endpoint="json/search">{ "index": "test2", "query": { "bool" : { "must" : { "match" : { "_all" : "to" } } } } }</query>
+<query endpoint="json/search">{ "index": "test2", "query": { "bool" : { "must": [ { "match" : { "_all" : "to" } }, { "match" : { "_all" : "on" } } ] } } }</query>
+
+<!-- "should" -->
+<query endpoint="json/search">{ "index": "test2", "query": { "bool" : { "should" : { "match" : { "_all" : "glanced" } } } } }</query>
+<query endpoint="json/search">{ "index": "test2", "query": { "bool" : { "should" : { "match" : { "_all" : "despite" } } } } }</query>
+<query endpoint="json/search">{ "index": "test2", "query": { "bool" : { "should": [ { "match" : { "_all" : "glanced " } }, { "match" : { "_all" : "despite" } } ] } } }</query>
+
+<!-- "must+must_not" -->
+<query endpoint="json/search">{ "index": "test2", "query": { "bool": { "must": { "match" : { "_all" : "glanced grown paean" } },	"must_not":	{ "match" : { "_all" : "irresistible" } } } } }</query>
+<query endpoint="json/search">{ "index": "test2", "query": { "bool": { "must": { "match" : { "_all" : "glanced grown paean" } }, "must_not": [ { "match" : { "_all" : "irresistible" } }, { "match" : { "_all" : "certain" } } ] } } }</query>
+
+<!-- must+should -->
+<query endpoint="json/search">{ "index": "test2", "query": { "bool": { "must": { "match" : { "_all" : "glanced grown" } }, "should": { "match" : { "_all" : "paean" } } } } }</query>
+
+<!-- phrase -->
+<query endpoint="json/search">
+{
+  "index":"test2",
+  "query":
+  {
+	"match_phrase": { "_all" : "had grown quite" }
+  }
+}
+</query>
+
+<query endpoint="json/search">
+{
+  "index":"test2",
+  "query":
+  {
+	"match_phrase": { "_all" : "had grown not quite" }
+  }
+}
+</query>
+
+</httpqueries>
+
+</test>

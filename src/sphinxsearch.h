@@ -214,6 +214,13 @@ public:
 	ExtNode_i *						CreateProxy ( ExtNode_i * pChild, const XQNode_t * pRawChild, const ISphQwordSetup & tSetup );
 };
 
+//////////////////////////////////////////////////////////////////////////
+
+CSphString sphXQNodeToStr ( const XQNode_t * pNode );
+CSphString sphXQNodeGetExtraStr ( const XQNode_t * pNode );
+CSphString sphExplainQuery ( const XQNode_t * pNode, const CSphSchema & tSchema, const CSphVector<CSphString> & dZones );
+CSphString sphExplainQueryBrief ( const XQNode_t * pNode, const CSphSchema & tSchema );
+
 #endif // _sphinxsearch_
 
 //

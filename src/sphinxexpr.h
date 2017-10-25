@@ -266,6 +266,9 @@ float GeodistAdaptiveDeg ( float lat1, float lon1, float lat2, float lon2 );
 /// adaptive flat/haversine distance, radians
 float GeodistAdaptiveRad ( float lat1, float lon1, float lat2, float lon2 );
 
+/// get geodist conversion coeff
+bool sphGeoDistanceUnit ( const char * szUnit, float & fCoeff );
+
 #endif // _sphinxexpr_
 
 //

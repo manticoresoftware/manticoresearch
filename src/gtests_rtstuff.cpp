@@ -277,6 +277,7 @@ TEST_P ( RTN, WeightBoundary )
 	KillListVector kList;
 	CSphMultiQueryArgs tArgs ( kList, 1) ;
 	tQuery.m_sQuery = "@title cat";
+	tQuery.m_pQueryParser = sphCreatePlainQueryParser();
 
 	SphQueueSettings_t tQueueSettings ( tQuery, pIndex->GetMatchSchema (), tResult.m_sError, NULL );
 	tQueueSettings.m_bComputeItems = false;
@@ -287,9 +288,10 @@ TEST_P ( RTN, WeightBoundary )
 	ASSERT_EQ ( tResult.m_dMatches.GetLength (), 1 ) << "results found";
 	ASSERT_EQ ( tResult.m_dMatches[0].m_uDocID, 1 ) << "docID" ;
 	ASSERT_EQ ( tResult.m_dMatches[0].m_iWeight, GetParam ()) << "weight" ;
-	SafeDelete ( pSorter );
-	SafeDelete ( pIndex );
 
+	SafeDelete ( pSorter );
+	SafeDelete ( tQuery.m_pQueryParser );
+	SafeDelete ( pIndex );
 	SafeDelete ( pDict );
 	SafeDelete ( pSrc );
 }
@@ -371,6 +373,7 @@ TEST_F ( RT, RankerFactors )
 	tQuery.m_eSort = SPH_SORT_EXTENDED;
 	tQuery.m_sSortBy = "@weight desc";
 	tQuery.m_sOrderBy = "@weight desc";
+	tQuery.m_pQueryParser = sphCreatePlainQueryParser();
 	CSphQueryResult tResult;
 	KillListVector tKill;
 	CSphMultiQueryArgs tArgs ( tKill, 1 );
@@ -463,6 +466,8 @@ TEST_F ( RT, RankerFactors )
 			sphinx_factors_deinit ( &tUnpacked );
 		}
 	}
+
+	SafeDelete ( tQuery.m_pQueryParser );
 	SafeDelete ( pSorter );
 	SafeDelete ( pIndex );
 	SafeDelete ( pSrc );
@@ -516,6 +521,7 @@ TEST_F ( RT, SendVsMerge )
 	KillListVector tKill;
 	CSphMultiQueryArgs tArgs ( tKill, 1 );
 	tQuery.m_sQuery = "@title cat";
+	tQuery.m_pQueryParser = sphCreatePlainQueryParser();
 
 	SphQueueSettings_t tQueueSettings ( tQuery, pIndex->GetMatchSchema (), tResult.m_sError, NULL );
 	tQueueSettings.m_bComputeItems = false;
@@ -553,6 +559,8 @@ TEST_F ( RT, SendVsMerge )
 		ASSERT_TRUE ( ( SphDocID_t ) tTag1==uID + 1000 );
 		ASSERT_TRUE ( tTag2==1313 );
 	}
+
+	SafeDelete ( tQuery.m_pQueryParser );
 	SafeDelete ( pSorter );
 	SafeDelete ( pIndex );
 	SafeDelete ( pSrc );

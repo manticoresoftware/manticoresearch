@@ -7038,8 +7038,11 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	// wrappers
 	// OPTIMIZE! make a lightweight clone here? and/or remove double clone?
-	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( SPH_CLONE_QUERY ) );
-	sphSetupQueryTokenizer ( pTokenizer.Ptr(), IsStarDict(), m_tSettings.m_bIndexExactWords );
+	CSphScopedPtr<ISphTokenizer> pQueryTokenizerJson ( m_pTokenizer->Clone ( SPH_CLONE_QUERY ) );
+	sphSetupQueryTokenizer ( pQueryTokenizerJson.Ptr(), IsStarDict(), m_tSettings.m_bIndexExactWords, true );
+
+	CSphScopedPtr<ISphTokenizer> pQueryTokenizer ( m_pTokenizer->Clone ( SPH_CLONE_QUERY ) );
+	sphSetupQueryTokenizer ( pQueryTokenizer.Ptr(), IsStarDict(), m_tSettings.m_bIndexExactWords, false );
 
 	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
 	CSphDict * pDict = m_pDict;
@@ -7049,10 +7052,10 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	}
 
 	CSphScopedPtr<CSphDict> tDictStar ( NULL );
-	pDict = SetupStarDict ( tDictStar, pDict, pTokenizer.Ptr() );
+	pDict = SetupStarDict ( tDictStar, pDict, pQueryTokenizer.Ptr() );
 
 	CSphScopedPtr<CSphDict> tDictExact ( NULL );
-	pDict = SetupExactDict ( tDictExact, pDict, pTokenizer.Ptr(), true );
+	pDict = SetupExactDict ( tDictExact, pDict, pQueryTokenizer.Ptr(), true );
 
 	// calculate local idf for RT with disk chunks
 	// in case of local_idf set but no external hash no full-scan query and RT has disk chunks
@@ -7296,89 +7299,97 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	XQQuery_t tParsed;
 	// FIXME!!! provide segments list instead index to tTermSetup.m_pIndex
-	bool bParsed = sphParseExtendedQuery ( tParsed, (const char *)sModifiedQuery, pQuery, pTokenizer.Ptr(), &m_tSchema, pDict, m_tSettings );
 
-	if ( !bParsed )
-	{
-		pResult->m_sError = tParsed.m_sParseError;
-		return false;
-	}
-	if ( !tParsed.m_sParseWarning.IsEmpty() )
-		pResult->m_sWarning = tParsed.m_sParseWarning;
+	const QueryParser_i * pQueryParser = pQuery->m_pQueryParser;
+	assert ( pQueryParser );
 
-	// transform query if needed (quorum transform, etc.)
-	if ( pProfiler )
-		pProfiler->Switch ( SPH_QSTATE_TRANSFORMS );
-
-	// FIXME!!! provide segments list instead index
-	sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings, pQuery->m_bSimplify, this );
-
-	if ( m_bExpandKeywords )
-	{
-		tParsed.m_pRoot = sphQueryExpandKeywords ( tParsed.m_pRoot, m_tSettings );
-		tParsed.m_pRoot->Check ( true );
-	}
-
-	// this should be after keyword expansion
-	if ( m_tSettings.m_uAotFilterMask )
-		TransformAotFilter ( tParsed.m_pRoot, pDict->GetWordforms(), m_tSettings );
-
-	// expanding prefix in word dictionary case
+	CSphScopedPtr<ISphRanker> pRanker ( nullptr );
 	CSphScopedPayload tPayloads;
-	if ( m_bKeywordDict && IsStarDict() )
+
+	// no need to create ranker, etc if there's no query
+	if ( !pQueryParser->IsFullscan(*pQuery) )
 	{
-		ExpansionContext_t tExpCtx;
-		tExpCtx.m_pWordlist = this;
-		tExpCtx.m_pBuf = NULL;
-		tExpCtx.m_pResult = pResult;
-		tExpCtx.m_iMinPrefixLen = m_tSettings.m_iMinPrefixLen;
-		tExpCtx.m_iMinInfixLen = m_tSettings.m_iMinInfixLen;
-		tExpCtx.m_iExpansionLimit = m_iExpansionLimit;
-		tExpCtx.m_bHasMorphology = m_pDict->HasMorphology();
-		tExpCtx.m_bMergeSingles = ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_INLINE && ( pQuery->m_uDebugFlags & QUERY_DEBUG_NO_PAYLOAD )==0 );
-		tExpCtx.m_pPayloads = &tPayloads;
-		tExpCtx.m_pIndexData = &tGuard.m_dRamChunks;
+		if ( !pQueryParser->ParseQuery ( tParsed, (const char *)sModifiedQuery, pQuery, pQueryTokenizer.Ptr(), pQueryTokenizerJson.Ptr(), &m_tSchema, pDict, m_tSettings ) )
+		{
+			pResult->m_sError = tParsed.m_sParseError;
+			return false;
+		}
 
-		tParsed.m_pRoot = sphExpandXQNode ( tParsed.m_pRoot, tExpCtx );
+		if ( !tParsed.m_sParseWarning.IsEmpty() )
+			pResult->m_sWarning = tParsed.m_sParseWarning;
+
+		// transform query if needed (quorum transform, etc.)
+		if ( pProfiler )
+			pProfiler->Switch ( SPH_QSTATE_TRANSFORMS );
+
+		// FIXME!!! provide segments list instead index
+		sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings, pQuery->m_bSimplify, this );
+
+		if ( m_bExpandKeywords )
+		{
+			tParsed.m_pRoot = sphQueryExpandKeywords ( tParsed.m_pRoot, m_tSettings );
+			tParsed.m_pRoot->Check ( true );
+		}
+
+		// this should be after keyword expansion
+		if ( m_tSettings.m_uAotFilterMask )
+			TransformAotFilter ( tParsed.m_pRoot, pDict->GetWordforms(), m_tSettings );
+
+		// expanding prefix in word dictionary case
+		if ( m_bKeywordDict && IsStarDict() )
+		{
+			ExpansionContext_t tExpCtx;
+			tExpCtx.m_pWordlist = this;
+			tExpCtx.m_pBuf = NULL;
+			tExpCtx.m_pResult = pResult;
+			tExpCtx.m_iMinPrefixLen = m_tSettings.m_iMinPrefixLen;
+			tExpCtx.m_iMinInfixLen = m_tSettings.m_iMinInfixLen;
+			tExpCtx.m_iExpansionLimit = m_iExpansionLimit;
+			tExpCtx.m_bHasMorphology = m_pDict->HasMorphology();
+			tExpCtx.m_bMergeSingles = ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_INLINE && ( pQuery->m_uDebugFlags & QUERY_DEBUG_NO_PAYLOAD )==0 );
+			tExpCtx.m_pPayloads = &tPayloads;
+			tExpCtx.m_pIndexData = &tGuard.m_dRamChunks;
+
+			tParsed.m_pRoot = sphExpandXQNode ( tParsed.m_pRoot, tExpCtx );
+		}
+
+		if ( !sphCheckQueryHeight ( tParsed.m_pRoot, pResult->m_sError ) )
+			return false;
+
+		// set zonespanlist settings
+		tParsed.m_bNeedSZlist = pQuery->m_bZSlist;
+
+		if ( pProfiler )
+			pProfiler->Switch ( SPH_QSTATE_INIT );
+
+		// setup query
+		// must happen before index-level reject, in order to build proper keyword stats
+		pRanker = sphCreateRanker ( tParsed, pQuery, pResult, tTermSetup, tCtx, dSorters[iMaxSchemaIndex]->GetSchema() );
+		if ( !pRanker.Ptr() )
+			return false;
+
+		tCtx.SetupExtraData ( pRanker.Ptr(), iSorters==1 ? ppSorters[0] : NULL );
+
+		// check terms inconsistency disk chunks vs rt vs previous indexes
+		tDiskStat.DumpDiffer ( pResult->m_hWordStats, m_sIndexName.cstr(), pResult->m_sWarning );
+		tStat.DumpDiffer ( pResult->m_hWordStats, m_sIndexName.cstr(), pResult->m_sWarning );
+
+		pRanker->ExtraData ( EXTRA_SET_POOL_CAPACITY, (void**)&iMatchPoolSize );
+
+		// check for the possible integer overflow in m_dPool.Resize
+		int64_t iPoolSize = 0;
+		if ( pRanker->ExtraData ( EXTRA_GET_POOL_SIZE, (void**)&iPoolSize ) && iPoolSize>INT_MAX )
+		{
+			pResult->m_sError.SetSprintf ( "ranking factors pool too big (%d Mb), reduce max_matches", (int)( iPoolSize/1024/1024 ) );
+			return false;
+		}
 	}
-
-	if ( !sphCheckQueryHeight ( tParsed.m_pRoot, pResult->m_sError ) )
-		return false;
-
-	// set zonespanlist settings
-	tParsed.m_bNeedSZlist = pQuery->m_bZSlist;
-
-	if ( pProfiler )
-		pProfiler->Switch ( SPH_QSTATE_INIT );
-
-	// setup query
-	// must happen before index-level reject, in order to build proper keyword stats
-	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( tParsed, pQuery, pResult, tTermSetup, tCtx, dSorters[iMaxSchemaIndex]->GetSchema() ) );
-
-	if ( !pRanker.Ptr() )
-		return false;
-
-	tCtx.SetupExtraData ( pRanker.Ptr(), iSorters==1 ? ppSorters[0] : NULL );
-
-	// check terms inconsistency disk chunks vs rt vs previous indexes
-	tDiskStat.DumpDiffer ( pResult->m_hWordStats, m_sIndexName.cstr(), pResult->m_sWarning );
-	tStat.DumpDiffer ( pResult->m_hWordStats, m_sIndexName.cstr(), pResult->m_sWarning );
 
 	// empty index, empty result
 	if ( !tGuard.m_dRamChunks.GetLength() && !tGuard.m_dDiskChunks.GetLength() )
 	{
 		pResult->m_iQueryTime = 0;
 		return true;
-	}
-
-	pRanker->ExtraData ( EXTRA_SET_POOL_CAPACITY, (void**)&iMatchPoolSize );
-
-	// check for the possible integer overflow in m_dPool.Resize
-	int64_t iPoolSize = 0;
-	if ( pRanker->ExtraData ( EXTRA_GET_POOL_SIZE, (void**)&iPoolSize ) && iPoolSize>INT_MAX )
-	{
-		pResult->m_sError.SetSprintf ( "ranking factors pool too big (%d Mb), reduce max_matches", (int)( iPoolSize/1024/1024 ) );
-		return false;
 	}
 
 	// probably redundant, but just in case
@@ -7391,7 +7402,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	{
 		// setup filters
 		// FIXME! setup filters MVA pool
-		bool bFullscan = ( pQuery->m_eMode==SPH_MATCH_FULLSCAN || pQuery->m_sQuery.IsEmpty() );
+		bool bFullscan = pQuery->m_pQueryParser->IsFullscan ( *pQuery ) || pQuery->m_pQueryParser->IsFullscan ( tParsed );
 		if ( !tCtx.CreateFilters ( bFullscan, &pQuery->m_dFilters, dSorters[iMaxSchemaIndex]->GetSchema(), NULL, NULL, pResult->m_sError, pResult->m_sWarning, pQuery->m_eCollation, false, KillListVector(), &pQuery->m_dFilterTree ) )
 			return false;
 
@@ -7720,7 +7731,8 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		}
 	}
 
-	pRanker->FinalizeCache ( dSorters[iMaxSchemaIndex]->GetSchema() );
+	if ( pRanker.Ptr() )
+		pRanker->FinalizeCache ( dSorters[iMaxSchemaIndex]->GetSchema() );
 
 	//////////////////////
 	// fixing string offset and data in resulting matches
@@ -10724,8 +10736,8 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema * pSche
 
 	// attrs
 	const int iNumTypes = 9;
-	const char * sTypes[iNumTypes] = { "rt_attr_uint", "rt_attr_bigint", "rt_attr_float", "rt_attr_timestamp", "rt_attr_string", "rt_attr_multi", "rt_attr_multi_64", "rt_attr_json", "rt_attr_bool" };
-	const ESphAttr iTypes[iNumTypes] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_FLOAT, SPH_ATTR_TIMESTAMP, SPH_ATTR_STRING, SPH_ATTR_UINT32SET, SPH_ATTR_INT64SET, SPH_ATTR_JSON, SPH_ATTR_BOOL };
+	const char * sTypes[iNumTypes] = { "rt_attr_uint", "rt_attr_bigint", "rt_attr_timestamp", "rt_attr_bool", "rt_attr_float", "rt_attr_string", "rt_attr_json", "rt_attr_multi", "rt_attr_multi_64" };
+	const ESphAttr iTypes[iNumTypes] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_TIMESTAMP, SPH_ATTR_BOOL, SPH_ATTR_FLOAT, SPH_ATTR_STRING, SPH_ATTR_JSON, SPH_ATTR_UINT32SET, SPH_ATTR_INT64SET };
 
 	for ( int iType=0; iType<iNumTypes; iType++ )
 	{

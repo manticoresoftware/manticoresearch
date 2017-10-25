@@ -22,6 +22,7 @@
 #include "sphinxquery.h"
 #include "sphinxexcerpt.h"
 #include "sphinxudf.h"
+#include "sphinxjsonquery.h"
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -131,6 +132,7 @@ enum ESphQueryState
 };
 STATIC_ASSERT ( SPH_QSTATE_UNKNOWN==0, BAD_QUERY_STATE_ENUM_BASE );
 
+struct cJSON;
 
 /// search query profile
 class CSphQueryProfile
@@ -142,9 +144,6 @@ public:
 	int				m_dSwitches [ SPH_QSTATE_TOTAL+1 ];	///< number of switches to given state
 	int64_t			m_tmTotal [ SPH_QSTATE_TOTAL+1 ];	///< total time spent per state
 
-	StringBuilder_c	m_sTransformedTree;					///< transformed query tree
-
-public:
 	/// create empty and stopped profile
 	CSphQueryProfile()
 	{
@@ -178,6 +177,10 @@ public:
 	{
 		Switch ( SPH_QSTATE_TOTAL );
 	}
+
+	virtual void			BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const CSphVector<CSphString> & dZones ) = 0;
+	virtual cJSON *			LeakResultAsJson() = 0;
+	virtual const char *	GetResultAsStr() const = 0;
 };
 
 
@@ -2416,9 +2419,19 @@ public:
 
 		if ( tSettings.m_bHighlightQuery )
 		{
+			CSphScopedPtr<ISphTokenizer> tTokenizerJson ( NULL );
+			CSphScopedPtr<QueryParser_i> tParser ( NULL );
+			if ( !tSettings.m_bJsonQuery )
+			{
+				tParser = sphCreatePlainQueryParser();
+			} else
+			{
+				tTokenizerJson = pIndex->GetQueryTokenizer()->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT );
+				sphSetupQueryTokenizer ( tTokenizerJson.Ptr(), pIndex->IsStarDict(), pIndex->GetSettings().m_bIndexExactWords, true );
+				tParser = sphCreateJsonQueryParser();
+			}
 			// OPTIMIZE? double lightweight clone here? but then again it's lightweight
-			if ( !sphParseExtendedQuery ( m_tExtQuery, tSettings.m_sWords.cstr(), NULL, m_pQueryTokenizer,
-				&pIndex->GetMatchSchema(), m_pDict, pIndex->GetSettings() ) )
+			if ( !tParser->ParseQuery ( m_tExtQuery, tSettings.m_sWords.cstr(), NULL, m_pQueryTokenizer, tTokenizerJson.Ptr(), &pIndex->GetMatchSchema(), m_pDict, pIndex->GetSettings() ) )
 			{
 				sError = m_tExtQuery.m_sParseError;
 				return false;
@@ -2491,6 +2504,10 @@ CSphSource * sphCreateSourceCSVpipe ( const CSphConfigSection * pSource, FILE * 
 uint64_t sphCalcLocatorHash ( const CSphAttrLocator & tLoc, uint64_t uPrevHash );
 uint64_t sphCalcExprDepHash ( const char * szTag, ISphExpr * pExpr, const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable );
 uint64_t sphCalcExprDepHash ( ISphExpr * pExpr, const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable );
+
+// internals attributes are last no need to send them
+int sphSendGetAttrCount ( const ISphSchema & tSchema, bool bAgentMode=false );
+
 
 inline void FlipEndianess ( DWORD* pData )
 {

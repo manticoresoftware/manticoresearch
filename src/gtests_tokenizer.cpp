@@ -687,7 +687,7 @@ protected:
 		ASSERT_TRUE ( sError.IsEmpty() );
 
 		pTokenizer = pBase->Clone ( SPH_CLONE_QUERY );
-		sphSetupQueryTokenizer ( pTokenizer, true, false );
+		sphSetupQueryTokenizer ( pTokenizer, true, false, false );
 
 		CSphDictSettings tDictSettings;
 		tDictSettings.m_bWordDict = false;

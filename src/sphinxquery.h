@@ -76,7 +76,9 @@ enum XQOperator_e
 	SPH_QUERY_NEAR,
 	SPH_QUERY_SENTENCE,
 	SPH_QUERY_PARAGRAPH,
-	SPH_QUERY_NULL
+	SPH_QUERY_NULL,
+
+	SPH_QUERY_TOTAL
 };
 
 // the limit of field or zone or zonespan
@@ -298,10 +300,83 @@ struct XQQuery_t : public ISphNoncopyable
 	}
 };
 
+
+class QueryParser_i
+{
+public:
+	QueryParser_i () {}
+	virtual ~QueryParser_i () {}
+	virtual bool IsFullscan ( const CSphQuery & tQuery ) const = 0;
+	virtual bool IsFullscan ( const XQQuery_t & tQuery ) const = 0;
+	virtual bool ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const ISphTokenizer * pQueryTokenizer, const ISphTokenizer * pQueryTokenizerJson, const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings ) const = 0;
+};
+
+class PluginQueryTokenFilter_c;
+
+class XQParseHelper_c
+{
+public:
+	void			SetString ( const char * szString );
+
+	bool			AddField ( FieldMask_t & dFields, const char * szField, int iLen );
+	bool			ParseFields ( FieldMask_t & dFields, int & iMaxFieldPos, bool & bIgnore );
+
+	void			Setup ( const CSphSchema * pSchema, ISphTokenizer * pTokenizer, CSphDict * pDict, XQQuery_t * pXQQuery, const CSphIndexSettings & tSettings );
+	bool			Error ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
+	void			Warning ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
+	XQNode_t *		FixupTree ( XQNode_t * pRoot, const XQLimitSpec_t & tLimitSpec );
+	
+	bool			IsError() { return m_bError; }
+	virtual void	Cleanup();
+
+protected:
+	struct MultiformNode_t
+	{
+		XQNode_t *	m_pNode;
+		int			m_iDestStart;
+		int			m_iDestCount;
+	};
+
+	static const int MAX_TOKEN_BYTES = 3*SPH_MAX_WORD_LEN + 16;
+
+	const CSphSchema *		m_pSchema {nullptr};
+	ISphTokenizer *			m_pTokenizer {nullptr};
+	CSphDict *				m_pDict {nullptr};
+	bool					m_bStopOnInvalid {true};
+	XQQuery_t *				m_pParsed {nullptr};
+	bool					m_bError {false};
+
+	const PluginQueryTokenFilter_c * m_pPlugin {nullptr};
+	void *					m_pPluginData {nullptr};
+
+	int						m_iAtomPos {0};
+	bool					m_bEmptyStopword {false};
+	bool					m_bWasBlended {false};
+
+	CSphVector<XQNode_t*>		m_dSpawned;
+	CSphVector<CSphString>		m_dDestForms;
+	CSphVector<MultiformNode_t>	m_dMultiforms;
+
+	virtual bool	HandleFieldBlockStart ( const char * & pPtr ) = 0;
+	virtual bool	HandleSpecialFields ( const char * & /*pPtr*/, FieldMask_t & /*dFields*/ ) { return false; }
+	virtual bool	NeedTrailingSeparator() { return true; }
+
+private:
+	XQNode_t *		SweepNulls ( XQNode_t * pNode );
+	bool			FixupNots ( XQNode_t * pNode );
+	void			FixupNulls ( XQNode_t * pNode );
+	void			DeleteNodesWOFields ( XQNode_t * pNode );
+	void			FixupDestForms();
+	bool			CheckQuorumProximity ( XQNode_t * pNode );
+};
+
 //////////////////////////////////////////////////////////////////////////////
 
 /// setup tokenizer for query parsing (ie. add all specials and whatnot)
-void	sphSetupQueryTokenizer ( ISphTokenizer * pTokenizer, bool bWildcards, bool bExact );
+void	sphSetupQueryTokenizer ( ISphTokenizer * pTokenizer, bool bWildcards, bool bExact, bool bJson );
+
+// a wrapper for sphParseExtendedQuery
+QueryParser_i * sphCreatePlainQueryParser();
 
 /// parses the query and returns the resulting tree
 /// return false and fills tQuery.m_sParseError on error

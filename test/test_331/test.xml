@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>json queries expression</name>
+
+<requires>
+<http/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	binlog_path =
+}
+
+source src_test
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT id, gid, title FROM test_table
+  sql_attr_uint   = gid
+  sql_field_string = title
+}
+
+
+index test
+{
+  source      = src_test
+  path      = <data_path/>/test
+}
+
+</config>
+
+<db_drop>drop table if exists test_table</db_drop>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	title varchar(255) not null,
+	gid int
+);
+</db_create>
+
+<db_insert>
+insert into test_table values
+(10, '10th fill', 11 ),
+(11, '11th fill', 21 ),
+(12, '12th fill', 31 )
+</db_insert>
+
+<httpqueries>
+
+<query endpoint="json/search">{ "index": "test", "query": { "match_all": {} }, "script_fields": { "add_all":{ "script": { "inline": "( gid * 10 ) | crc32(title)" } }, "title_len":{ "script": { "inline": "crc32(title)" } } } }</query>
+<query endpoint="json/search">{ "index": "test", "query": { "match_all": {} }, "script_fields": { "cnd":{ "script": { "inline": "interval ( gid, 20, 30, 100)" } } } }</query>
+
+</httpqueries>
+
+</test>

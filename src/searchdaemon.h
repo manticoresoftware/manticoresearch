@@ -849,8 +849,44 @@ public:
 	virtual							~ISphSearchHandler() {}
 	virtual void					RunQueries () = 0;					///< run all queries, get all results
 
-	virtual CSphQuery *				GetQuery ( int iQuery ) = 0;
+	virtual void					SetQuery ( int iQuery, const CSphQuery & tQuery ) = 0;
+	virtual void					SetProfile ( CSphQueryProfile * pProfile ) = 0;
 	virtual AggrResult_t *			GetResult ( int iResult ) = 0;
+};
+
+
+class CSphSessionAccum
+{
+public:
+	explicit	CSphSessionAccum ( bool bManage );
+				~CSphSessionAccum();
+
+	ISphRtAccum * GetAcc ( ISphRtIndex * pIndex, CSphString & sError );
+	ISphRtIndex * GetIndex ();
+
+private:
+	ISphRtAccum *		m_pAcc;
+	bool				m_bManage;
+};
+
+
+// from mysqld_error.h
+enum MysqlErrors_e
+{
+	MYSQL_ERR_UNKNOWN_COM_ERROR			= 1047,
+	MYSQL_ERR_SERVER_SHUTDOWN			= 1053,
+	MYSQL_ERR_PARSE_ERROR				= 1064,
+	MYSQL_ERR_FIELD_SPECIFIED_TWICE		= 1110,
+	MYSQL_ERR_NO_SUCH_TABLE				= 1146
+};
+
+
+class StmtErrorReporter_i
+{
+public:
+	virtual void Ok ( int iAffectedRows, const CSphString & sWarning ) = 0;
+	virtual void Ok ( int iAffectedRows, int nWarnings=0 ) = 0;
+	virtual void Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr = MYSQL_ERR_PARSE_ERROR ) = 0;
 };
 
 
@@ -868,12 +904,19 @@ enum ESphHttpStatus
 
 
 bool CheckCommandVersion ( int iVer, int iDaemonVersion, ISphOutputBuffer & tOut );
-ISphSearchHandler * sphCreateSearchHandler ( int iQueries, bool bSphinxql, bool bMaster, int iCID );
+ISphSearchHandler * sphCreateSearchHandler ( int iQueries, const QueryParser_i * pQueryParser, bool bSphinxQL, bool bMaster, int iCID );
 void sphFormatFactors ( CSphVector<BYTE> & dOut, const unsigned int * pFactors, bool bJson );
 bool sphLoopClientHttp ( CSphVector<BYTE> & dData, int iCID );
 void sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError );
 bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation );
+void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, bool bReplace, bool bCommit, CSphString & sWarning, CSphSessionAccum & tAcc );
+void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, const CSphString & sQuery, CSphString & sWarning, int iCID );
+void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit, CSphSessionAccum & tAcc, int iCID );
 
+// get tokens from sphinxql
+int sphGetTokTypeInt();
+int sphGetTokTypeFloat();
+int sphGetTokTypeStr();
 
 
 #endif // _searchdaemon_

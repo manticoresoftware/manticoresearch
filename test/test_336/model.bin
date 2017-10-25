@@ -1,0 +1,373 @@
+a:1:{i:0;a:32:{i:0;a:2:{s:8:"sphinxql";s:142:"insert into test_rt values (1, '1st', 'Trevize glanced now and then at Bliss`s face, which seemed entirely concentrated on Bander.', 11, 1.1 )";s:14:"total_affected";i:1;}i:1;a:2:{s:8:"sphinxql";s:109:"insert into test_rt values (2, '2nd', 'Trevize had grown quite certain he knew what was going on.', 12, 1.2 )";s:14:"total_affected";i:1;}i:2;a:2:{s:8:"sphinxql";s:132:"insert into test_rt values (3, '3rd', 'Bander, despite its paean to freedom, found this unique opportunity irresistible.', 13, 1.3 )";s:14:"total_affected";i:1;}i:3;a:2:{s:8:"sphinxql";s:159:"insert into test_rt values (4, '4th', 'There was no way it could speak to robots on a basis of intellectual equality, and certainly not to animals.', 14, 1.4 )";s:14:"total_affected";i:1;}i:4;a:2:{s:8:"sphinxql";s:189:"insert into test_rt values (5, '5th', 'To speak to its fellow-Solarians would be, to it, unpleasant, and what communication there must be would be forced, and never spontaneous.', 15, 1.5 )";s:14:"total_affected";i:1;}i:5;a:2:{s:8:"sphinxql";s:115:"insert into test_rt values (6, '6th', 'No wonder, Trevize thought, it was indulging itself in this way.', 16, 1.6 )";s:14:"total_affected";i:1;}i:6;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:182:"
+{
+  "index":"test1",
+  "query":
+  {
+    "bool":
+    {
+      "must":
+      [
+		{ "match": {"_all":"on to it"} },
+        { "range": { "int_col": { "lt": 13 } } }
+      ]
+    }
+  }
+}
+";s:4:"rows";s:260:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"1","_score":1511,"_source":{"int_col":11,"flt_col":1.100000023841858,"attr_lat":51,"attr_lon":0}},{"_id":"2","_score":1511,"_source":{"int_col":12,"flt_col":1.2000000476837158,"attr_lat":46,"attr_lon":2}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:7;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:184:"
+{
+  "index":"test_rt",
+  "query":
+  {
+    "bool":
+    {
+      "must":
+      [
+		{ "match": {"_all":"on to it"} },
+        { "range": { "int_col": { "lt": 13 } } }
+      ]
+    }
+  }
+}
+";s:4:"rows";s:206:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"1","_score":1511,"_source":{"int_col":11,"flt_col":1.100000023841858}},{"_id":"2","_score":1511,"_source":{"int_col":12,"flt_col":1.2000000476837158}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:8;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:182:"
+{
+  "index":"test1",
+  "query":
+  {
+    "bool":
+    {
+      "must":
+      [
+		{ "match": {"_all":"on to it"} },
+        { "range": { "int_col": { "gt": 13 } } }
+      ]
+    }
+  }
+}
+";s:4:"rows";s:354:"{"timed_out":false,"hits":{"total":3,"hits":[{"_id":"5","_score":2528,"_source":{"int_col":15,"flt_col":1.5,"attr_lat":41,"attr_lon":12}},{"_id":"4","_score":1537,"_source":{"int_col":14,"flt_col":1.399999976158142,"attr_lat":39,"attr_lon":22}},{"_id":"6","_score":1511,"_source":{"int_col":16,"flt_col":1.600000023841858,"attr_lat":61,"attr_lon":11}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:9;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:184:"
+{
+  "index":"test_rt",
+  "query":
+  {
+    "bool":
+    {
+      "must":
+      [
+		{ "match": {"_all":"on to it"} },
+        { "range": { "int_col": { "gt": 13 } } }
+      ]
+    }
+  }
+}
+";s:4:"rows";s:270:"{"timed_out":false,"hits":{"total":3,"hits":[{"_id":"5","_score":2528,"_source":{"int_col":15,"flt_col":1.5}},{"_id":"4","_score":1537,"_source":{"int_col":14,"flt_col":1.399999976158142}},{"_id":"6","_score":1511,"_source":{"int_col":16,"flt_col":1.600000023841858}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:10;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:192:"
+{
+  "index":"test1",
+  "query":
+  {
+    "bool":
+    {
+      "must":
+      [
+		{ "match": {"_all":"on to it"} },
+        { "range": { "int_col": { "gt": 14, "lt": 16 } } }
+      ]
+    }
+  }
+}
+";s:4:"rows";s:140:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"5","_score":2528,"_source":{"int_col":15,"flt_col":1.5,"attr_lat":41,"attr_lon":12}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:11;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:194:"
+{
+  "index":"test_rt",
+  "query":
+  {
+    "bool":
+    {
+      "must":
+      [
+		{ "match": {"_all":"on to it"} },
+        { "range": { "int_col": { "gt": 14, "lt": 16 } } }
+      ]
+    }
+  }
+}
+";s:4:"rows";s:112:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"5","_score":2528,"_source":{"int_col":15,"flt_col":1.5}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:12;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:183:"
+{
+  "index":"test1",
+  "query":
+  {
+    "bool":
+    {
+      "must":
+      [
+		{ "match": {"_all":"on to it"} },
+        { "range": { "int_col": { "gte": 14 } } }
+      ]
+    }
+  }
+}
+";s:4:"rows";s:354:"{"timed_out":false,"hits":{"total":3,"hits":[{"_id":"5","_score":2528,"_source":{"int_col":15,"flt_col":1.5,"attr_lat":41,"attr_lon":12}},{"_id":"4","_score":1537,"_source":{"int_col":14,"flt_col":1.399999976158142,"attr_lat":39,"attr_lon":22}},{"_id":"6","_score":1511,"_source":{"int_col":16,"flt_col":1.600000023841858,"attr_lat":61,"attr_lon":11}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:13;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:185:"
+{
+  "index":"test_rt",
+  "query":
+  {
+    "bool":
+    {
+      "must":
+      [
+		{ "match": {"_all":"on to it"} },
+        { "range": { "int_col": { "gte": 14 } } }
+      ]
+    }
+  }
+}
+";s:4:"rows";s:270:"{"timed_out":false,"hits":{"total":3,"hits":[{"_id":"5","_score":2528,"_source":{"int_col":15,"flt_col":1.5}},{"_id":"4","_score":1537,"_source":{"int_col":14,"flt_col":1.399999976158142}},{"_id":"6","_score":1511,"_source":{"int_col":16,"flt_col":1.600000023841858}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:14;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:183:"
+{
+  "index":"test1",
+  "query":
+  {
+    "bool":
+    {
+      "must":
+      [
+		{ "match": {"_all":"on to it"} },
+        { "range": { "int_col": { "lte": 14 } } }
+      ]
+    }
+  }
+}
+";s:4:"rows";s:475:"{"timed_out":false,"hits":{"total":4,"hits":[{"_id":"4","_score":1537,"_source":{"int_col":14,"flt_col":1.399999976158142,"attr_lat":39,"attr_lon":22}},{"_id":"1","_score":1511,"_source":{"int_col":11,"flt_col":1.100000023841858,"attr_lat":51,"attr_lon":0}},{"_id":"2","_score":1511,"_source":{"int_col":12,"flt_col":1.2000000476837158,"attr_lat":46,"attr_lon":2}},{"_id":"3","_score":1511,"_source":{"int_col":13,"flt_col":1.2999999523162842,"attr_lat":51,"attr_lon":18}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:15;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:185:"
+{
+  "index":"test_rt",
+  "query":
+  {
+    "bool":
+    {
+      "must":
+      [
+		{ "match": {"_all":"on to it"} },
+        { "range": { "int_col": { "lte": 14 } } }
+      ]
+    }
+  }
+}
+";s:4:"rows";s:365:"{"timed_out":false,"hits":{"total":4,"hits":[{"_id":"4","_score":1537,"_source":{"int_col":14,"flt_col":1.399999976158142}},{"_id":"1","_score":1511,"_source":{"int_col":11,"flt_col":1.100000023841858}},{"_id":"2","_score":1511,"_source":{"int_col":12,"flt_col":1.2000000476837158}},{"_id":"3","_score":1511,"_source":{"int_col":13,"flt_col":1.2999999523162842}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:16;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:193:"
+{
+  "index":"test1",
+  "query":
+  {
+    "bool":
+    {
+      "must":
+      [
+		{ "match": {"_all":"on to it"} },
+        { "range": { "int_col": { "lt": 14, "gte": 12 } } }
+      ]
+    }
+  }
+}
+";s:4:"rows";s:262:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"2","_score":1511,"_source":{"int_col":12,"flt_col":1.2000000476837158,"attr_lat":46,"attr_lon":2}},{"_id":"3","_score":1511,"_source":{"int_col":13,"flt_col":1.2999999523162842,"attr_lat":51,"attr_lon":18}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:17;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:195:"
+{
+  "index":"test_rt",
+  "query":
+  {
+    "bool":
+    {
+      "must":
+      [
+		{ "match": {"_all":"on to it"} },
+        { "range": { "int_col": { "lt": 14, "gte": 12 } } }
+      ]
+    }
+  }
+}
+";s:4:"rows";s:207:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"2","_score":1511,"_source":{"int_col":12,"flt_col":1.2000000476837158}},{"_id":"3","_score":1511,"_source":{"int_col":13,"flt_col":1.2999999523162842}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:18;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:157:"
+{
+  "index":"test1",
+  "query":
+  {
+    "bool":
+    {
+      "must":
+      [
+        { "range": { "int_col": { "lt": 14, "gte": 12 } } }
+      ]
+    }
+  }
+}
+";s:4:"rows";s:256:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"2","_score":1,"_source":{"int_col":12,"flt_col":1.2000000476837158,"attr_lat":46,"attr_lon":2}},{"_id":"3","_score":1,"_source":{"int_col":13,"flt_col":1.2999999523162842,"attr_lat":51,"attr_lon":18}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:19;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:159:"
+{
+  "index":"test_rt",
+  "query":
+  {
+    "bool":
+    {
+      "must":
+      [
+        { "range": { "int_col": { "lt": 14, "gte": 12 } } }
+      ]
+    }
+  }
+}
+";s:4:"rows";s:201:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"2","_score":1,"_source":{"int_col":12,"flt_col":1.2000000476837158}},{"_id":"3","_score":1,"_source":{"int_col":13,"flt_col":1.2999999523162842}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:20;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:85:"
+{
+  "index":"test1",
+  "query":
+  {
+    "range": { "int_col": { "lte": 11 } }
+  }
+}
+";s:4:"rows";s:150:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.100000023841858,"attr_lat":51,"attr_lon":0}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:21;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:87:"
+{
+  "index":"test_rt",
+  "query":
+  {
+    "range": { "int_col": { "lte": 11 } }
+  }
+}
+";s:4:"rows";s:123:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.100000023841858}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:22;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:147:"
+{
+  "index":"test1",
+  "query":
+  {
+    "bool":
+    {
+      "must":
+      [
+        { "range": { "int_col": { "lte": 11 } } }
+      ]
+    }
+  }
+}
+";s:4:"rows";s:150:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.100000023841858,"attr_lat":51,"attr_lon":0}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:23;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:149:"
+{
+  "index":"test_rt",
+  "query":
+  {
+    "bool":
+    {
+      "must":
+      [
+        { "range": { "int_col": { "lte": 11 } } }
+      ]
+    }
+  }
+}
+";s:4:"rows";s:123:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.100000023841858}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:24;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:170:"
+{
+  "index":"test1",
+  "query":
+  {
+    "bool":
+    {
+      "must":
+      [
+		{ "match_all": {} },
+        { "range": { "int_col": { "lte": 11 } } }
+      ]
+    }
+  }
+}
+";s:4:"rows";s:150:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.100000023841858,"attr_lat":51,"attr_lon":0}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:25;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:172:"
+{
+  "index":"test_rt",
+  "query":
+  {
+    "bool":
+    {
+      "must":
+      [
+		{ "match_all": {} },
+        { "range": { "int_col": { "lte": 11 } } }
+      ]
+    }
+  }
+}
+";s:4:"rows";s:123:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.100000023841858}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:26;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:196:"
+{
+  "index":"test1",
+  "query":
+  {
+    "bool":
+    {
+      "must_not":
+      [
+        { "range": { "int_col": { "lte": 11 } } },
+		{ "range": { "int_col": { "gte": 13 } } }
+      ]
+    }
+  }
+}
+";s:4:"rows";s:151:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"2","_score":1,"_source":{"int_col":12,"flt_col":1.2000000476837158,"attr_lat":46,"attr_lon":2}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:27;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:198:"
+{
+  "index":"test_rt",
+  "query":
+  {
+    "bool":
+    {
+      "must_not":
+      [
+        { "range": { "int_col": { "lte": 11 } } },
+		{ "range": { "int_col": { "gte": 13 } } }
+      ]
+    }
+  }
+}
+";s:4:"rows";s:124:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"2","_score":1,"_source":{"int_col":12,"flt_col":1.2000000476837158}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:28;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:192:"
+{
+  "index":"test1",
+  "query":
+  {
+    "bool":
+    {
+      "should":
+      [
+        { "range": { "int_col": { "lt": 11 } } },
+		{ "range": { "int_col": { "gt": 13 } } }
+      ]
+    }
+  }
+}
+";s:4:"rows";s:345:"{"timed_out":false,"hits":{"total":3,"hits":[{"_id":"4","_score":1,"_source":{"int_col":14,"flt_col":1.399999976158142,"attr_lat":39,"attr_lon":22}},{"_id":"5","_score":1,"_source":{"int_col":15,"flt_col":1.5,"attr_lat":41,"attr_lon":12}},{"_id":"6","_score":1,"_source":{"int_col":16,"flt_col":1.600000023841858,"attr_lat":61,"attr_lon":11}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:29;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:194:"
+{
+  "index":"test_rt",
+  "query":
+  {
+    "bool":
+    {
+      "should":
+      [
+        { "range": { "int_col": { "lt": 11 } } },
+		{ "range": { "int_col": { "gt": 13 } } }
+      ]
+    }
+  }
+}
+";s:4:"rows";s:261:"{"timed_out":false,"hits":{"total":3,"hits":[{"_id":"4","_score":1,"_source":{"int_col":14,"flt_col":1.399999976158142}},{"_id":"5","_score":1,"_source":{"int_col":15,"flt_col":1.5}},{"_id":"6","_score":1,"_source":{"int_col":16,"flt_col":1.600000023841858}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:30;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:194:"
+{
+  "index":"test1",
+  "query":
+  {
+    "bool":
+    {
+      "must":
+      [
+        { "range": { "flt_col": { "gt": 1.25 } } },
+		{ "range": { "flt_col": { "lt": 1.45 } } }
+      ]
+    }
+  }
+}
+";s:4:"rows";s:256:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"3","_score":1,"_source":{"int_col":13,"flt_col":1.2999999523162842,"attr_lat":51,"attr_lon":18}},{"_id":"4","_score":1,"_source":{"int_col":14,"flt_col":1.399999976158142,"attr_lat":39,"attr_lon":22}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:31;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:196:"
+{
+  "index":"test_rt",
+  "query":
+  {
+    "bool":
+    {
+      "must":
+      [
+        { "range": { "flt_col": { "gt": 1.25 } } },
+		{ "range": { "flt_col": { "lt": 1.45 } } }
+      ]
+    }
+  }
+}
+";s:4:"rows";s:200:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"3","_score":1,"_source":{"int_col":13,"flt_col":1.2999999523162842}},{"_id":"4","_score":1,"_source":{"int_col":14,"flt_col":1.399999976158142}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}}}

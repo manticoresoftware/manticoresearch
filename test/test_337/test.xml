@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>json queries with highlights</name>
+
+<requires>
+<http/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	binlog_path =
+}
+
+source src1
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT id, gid, title, content FROM test_table
+  sql_attr_uint   = gid
+  sql_field_string = title
+  sql_field_string = content
+}
+
+
+index test1
+{
+  source      = src1
+  path      = <data_path/>/test_dummy1
+}
+
+</config>
+
+<db_drop>drop table if exists test_table</db_drop>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	title varchar(255) not null,
+	content varchar(255) not null,
+	gid int
+);
+</db_create>
+
+<db_insert>
+insert into test_table values
+( 1, '1st it was indulging itself in this way', 'first now and then at Bliss`s face',  1 ),
+( 2, '2nd No wonder', 'second he knew what was going on.', 2 ),
+( 3, '3rd To speak to its fellow-Solarians would be, to it', 'third its paean to freedom',  3 ),
+( 4, '4th was no way it could speak to ', 'fourth was no way it could speak to robots on a basis of ', 4 ),
+( 5, '5th  its paean to freedom', 'fifth it was indulging itself in this way',  5 ),
+(10, '10th he knew what was going on', 'Trevize glanced now and then at Bliss`s face, which seemed entirely concentrated on Bander.', 10 ),
+(11, '11th  it was indulging itself in this way', 'Trevize had grown quite certain he knew what was going on.', 11 ),
+(12, '12th  was no way it could speak to ', 'Bander, despite its paean to freedom, found this unique opportunity irresistible.', 12 ),
+(13, '13th third its paean to', 'There was no way it could speak to robots on a basis of intellectual equality, and certainly not to animals.', 13 ),
+(14, '14th what was going on', 'To speak to its fellow-Solarians would be, to it, unpleasant, and what communication there must be would be forced, and never spontaneous.', 14 ),
+(15, '15th and then at Bliss`s face', 'No wonder, Trevize thought, it was indulging itself in this way.', 15 )
+</db_insert>
+
+<httpqueries>
+<query endpoint="json/search">{ "index": "test1", "query": { "match": { "content": "and first" } }, "highlight": {"fields": { "content": {}, "title": {} } } } }</query>
+<!-- different match and highlight queries -->
+<query endpoint="json/search">{ "index": "test1", "query": { "match": { "content": "and first" } }, "highlight": { "fields": { "content": {}, "title": {} }, "highlight_query": { "match": { "_all":"on and not to be it first"} } } } }</query>
+<!-- allow empty -->
+<query endpoint="json/search">{ "index": "test1", "query": { "match": { "content": "and first" } }, "highlight": {"fields": { "content": {}, "title": {} }, "no_match_size": 1 } } }</query>
+<!-- passages -->
+<query endpoint="json/search">{ "index": "test1", "query": { "match": { "content": "and first" } }, "highlight": { "fields": { "content": {"fragment_size": 50}, "title": {} }, "highlight_query": { "match": { "_all":"on and not to be it first"} } } } }</query>
+<!-- passages weight sorted-->
+<query endpoint="json/search">{ "index": "test1", "query": { "match": { "content": "and first" } }, "highlight": { "fields": { "content": {"fragment_size": 50}, "title": {} }, "highlight_query": { "match": { "_all":"on and not to be it first"} }, "order": "score" } } }</query>
+<!-- custom tags -->
+<query endpoint="json/search">{ "index": "test1", "query": { "match": { "content": "and first" } }, "highlight": {"fields": { "content": {} }, "pre_tags":"*before_", "post_tags":"_after+" } } }</query>
+</httpqueries>
+
+</test>

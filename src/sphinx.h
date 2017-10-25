@@ -2543,7 +2543,11 @@ class CSphFilterSettings
 public:
 	CSphString			m_sAttrName;	///< filtered attribute name
 	bool				m_bExclude;		///< whether this is "include" or "exclude" filter (default is "include")
-	bool				m_bHasEqual;	///< has filter "equal" component (gte\lte) or pure greater\less
+	bool				m_bHasEqualMin;	///< has filter "equal" component or pure greater\less (for min)
+	bool				m_bHasEqualMax;	///< has filter "equal" component or pure greater\less (for max)
+	bool				m_bOpenLeft;
+	bool				m_bOpenRight;
+	bool				m_bIsNull;		///< for NULL or NOT NULL
 
 	ESphFilter			m_eType;		///< filter type
 	ESphMvaFunc			m_eMvaFunc;		///< MVA folding function
@@ -2669,6 +2673,7 @@ public:
 	virtual bool	LimitPushdown ( int, int ) { return false; } // FIXME! implement this
 };
 
+class QueryParser_i;
 
 /// search query
 class CSphQuery
@@ -2772,6 +2777,12 @@ public:
 	bool			ParseSelectList ( CSphString & sError );
 	bool			m_bFacet;			///< whether this a facet query
 	bool			m_bFacetHead;
+
+	bool			m_bSphinxQL {false};			///< queries from sphinxql require special handling
+	const QueryParser_i * m_pQueryParser {nullptr};	///< queries do not own this parser
+
+	CSphVector<CSphString> m_dIncludeItems;
+	CSphVector<CSphString> m_dExcludeItems;
 };
 
 
@@ -3441,6 +3452,7 @@ protected:
 	ISphFieldFilter *			m_pFieldFilter;
 	ISphTokenizer *				m_pTokenizer;
 	ISphTokenizer *				m_pQueryTokenizer;
+	ISphTokenizer *				m_pQueryTokenizerJson {nullptr};
 	CSphDict *					m_pDict;
 
 	int							m_iMaxCachedDocs;

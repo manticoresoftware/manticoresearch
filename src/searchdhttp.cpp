@@ -16,8 +16,10 @@
 #include "sphinx.h"
 #include "sphinxint.h"
 #include "sphinxjson.h"
+#include "sphinxjsonquery.h"
 
 #include "http/http_parser.h"
+#include "json/cJSON.h"
 #include "searchdaemon.h"
 
 struct EscapeJsonString_t
@@ -56,12 +58,7 @@ static void EncodeResultJson ( const AggrResult_t & tRes, JsonEscapedBuilder & t
 	const CSphRsetSchema & tSchema = tRes.m_tSchema;
 	CSphVector<BYTE> dTmp;
 
-	int iAttrsCount = tSchema.GetAttrsCount();
-	if ( iAttrsCount && sphIsSortStringInternal ( tSchema.GetAttr ( iAttrsCount-1 ).m_sName.cstr() ) )
-	{
-		for ( int i=iAttrsCount-1; i>=0 && sphIsSortStringInternal ( tSchema.GetAttr(i).m_sName.cstr() ); i-- )
-			iAttrsCount = i;
-	}
+	int iAttrsCount = sphSendGetAttrCount(tSchema);
 
 	tOut += "{";
 
@@ -292,7 +289,9 @@ static void HttpBuildReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, con
 
 static void HttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * sTemplate, ... )
 {
-	char sBuf[1024] = "{}";
+	cJSON * pError = cJSON_CreateObject();
+	assert ( pError );
+
 	char sErr[1008] = "\0";
 	if ( sTemplate && *sTemplate!='\0' )
 	{
@@ -300,10 +299,15 @@ static void HttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, con
 		va_start ( ap, sTemplate );
 		vsnprintf ( sErr, sizeof(sErr), sTemplate, ap );
 		va_end ( ap );
-		snprintf ( sBuf, sizeof(sBuf), "{\"error\":\"%s\"}", sErr );
+		
+		cJSON_AddStringToObject ( pError, "error", sErr );
 	}
 
-	HttpBuildReply ( dData, eCode, sBuf, strnlen ( sBuf, sizeof(sBuf) ), false );
+	CSphString sJsonError;
+	sJsonError.Adopt ( cJSON_Print ( pError ) );
+	cJSON_Delete ( pError );
+
+	HttpBuildReply ( dData, eCode, sJsonError.cstr(), sJsonError.Length(), false );
 }
 
 enum ESphHttpEndpoint
@@ -311,6 +315,14 @@ enum ESphHttpEndpoint
 	SPH_HTTP_ENDPOINT_INDEX,
 	SPH_HTTP_ENDPOINT_SEARCH,
 	SPH_HTTP_ENDPOINT_SQL,
+	SPH_HTTP_ENDPOINT_JSON_SEARCH,
+	SPH_HTTP_ENDPOINT_JSON_INDEX,
+	SPH_HTTP_ENDPOINT_JSON_CREATE,
+	SPH_HTTP_ENDPOINT_JSON_INSERT,
+	SPH_HTTP_ENDPOINT_JSON_REPLACE,
+	SPH_HTTP_ENDPOINT_JSON_UPDATE,
+	SPH_HTTP_ENDPOINT_JSON_DELETE,
+	SPH_HTTP_ENDPOINT_JSON_BULK,
 
 	SPH_HTTP_ENDPOINT_TOTAL,
 
@@ -318,13 +330,15 @@ enum ESphHttpEndpoint
 	SPH_HTTP_ENDPOINT_DEFAULT = SPH_HTTP_ENDPOINT_MISSED
 };
 
-const char * g_sEndpoints[] = { "index.html", "search", "sql" };
+const char * g_sEndpoints[] = { "index.html", "search", "sql", "json/search", "json/index", "json/create", "json/insert", "json/replace", "json/update", "json/delete", "json/bulk" };
 STATIC_ASSERT ( sizeof(g_sEndpoints)/sizeof(g_sEndpoints[0])==SPH_HTTP_ENDPOINT_TOTAL, SPH_HTTP_ENDPOINT_SHOULD_BE_SAME_AS_SPH_HTTP_ENDPOINT_TOTAL );
 
 
 struct HttpRequestParser_t : public ISphNoncopyable
 {
 	SmallStringHash_T<CSphString>	m_hOptions;
+	CSphString						m_sRawBody;
+
 	ESphHttpEndpoint				m_eEndpoint;
 	bool							m_bKeepAlive;
 
@@ -518,7 +532,9 @@ int HttpRequestParser_t::ParserHeaderValue ( http_parser * pParser, const char *
 int HttpRequestParser_t::ParserBody ( http_parser * pParser, const char * sAt, size_t iLen )
 {
 	assert ( pParser->data );
-	( (HttpRequestParser_t *)pParser->data )->ParseList ( sAt, iLen );
+	HttpRequestParser_t * pHttpParser = (HttpRequestParser_t *)pParser->data;
+	pHttpParser->ParseList ( sAt, iLen );
+	pHttpParser->m_sRawBody.SetBinary ( sAt, iLen );
 	return 0;
 }
 
@@ -580,54 +596,167 @@ static void HttpHandlerPage ( bool bPage, const CSphString & sInvalidEndpoint, C
 	}
 }
 
-static void HttpHandlerSearch ( bool bQL, const SmallStringHash_T<CSphString> & hOptions, int iCID, CSphVector<BYTE> & dData )
+struct HttpQuerySettings_t
 {
-	CSphScopedPtr<ISphSearchHandler> tHandler ( sphCreateSearchHandler ( 1, true, true, iCID ) );
-	CSphQuery * pQuery = tHandler->GetQuery ( 0 );
+	bool m_bProfile;
+	bool m_bSphinxQL;
+	bool m_bAttrHighlight;
 
-	if ( bQL )
+	HttpQuerySettings_t ()
+		: m_bProfile ( false )
+		, m_bSphinxQL ( false )
+		, m_bAttrHighlight ( false )
+	{}
+};
+
+static QueryParser_i * ParseQuerySql ( CSphQuery & tQuery, const HttpRequestParser_t & tParser, CSphVector<BYTE> & dData, HttpQuerySettings_t & tSettings )
+{
+	const CSphString * pRawQl = tParser.m_hOptions ( "query" );
+	if ( !pRawQl || pRawQl->IsEmpty() )
 	{
-		const CSphString * pRawQl = hOptions ( "query" );
-		if ( !pRawQl || pRawQl->IsEmpty() )
-		{
-			HttpErrorReply ( dData, SPH_HTTP_STATUS_400, "query missed" );
-			return;
-		}
-
-		CSphString sError;
-		CSphVector<SqlStmt_t> dStmt;
-		if ( !sphParseSqlQuery ( pRawQl->cstr(), pRawQl->Length(), dStmt, sError, SPH_COLLATION_DEFAULT ) )
-		{
-			HttpErrorReply ( dData, SPH_HTTP_STATUS_400, sError.cstr() );
-			return;
-		}
-
-		*pQuery = dStmt[0].m_tQuery;
-		if ( dStmt.GetLength()>1 )
-		{
-			HttpErrorReply ( dData, SPH_HTTP_STATUS_501, "multiple queries not supported" );
-			return;
-		} else if ( dStmt[0].m_eStmt!=STMT_SELECT )
-		{
-			HttpErrorReply ( dData, SPH_HTTP_STATUS_501, "only SELECT queries supported" );
-			return;
-		}
-	} else
-	{
-		CSphString sError;
-		ParseSearchOptions ( hOptions, *pQuery );
-		if ( !pQuery->ParseSelectList ( sError ) )
-		{
-			HttpErrorReply ( dData, SPH_HTTP_STATUS_400, sError.cstr() );
-			return;
-		}
-
-		if ( !pQuery->m_sSortBy.IsEmpty() )
-			pQuery->m_eSort = SPH_SORT_EXTENDED;
+		HttpErrorReply ( dData, SPH_HTTP_STATUS_400, "query missed" );
+		return NULL;
 	}
+
+	CSphString sError;
+	CSphVector<SqlStmt_t> dStmt;
+	if ( !sphParseSqlQuery ( pRawQl->cstr(), pRawQl->Length(), dStmt, sError, SPH_COLLATION_DEFAULT ) )
+	{
+		HttpErrorReply ( dData, SPH_HTTP_STATUS_400, sError.cstr() );
+		return NULL;
+	}
+
+	tQuery = dStmt[0].m_tQuery;
+	if ( dStmt.GetLength()>1 )
+	{
+		HttpErrorReply ( dData, SPH_HTTP_STATUS_501, "multiple queries not supported" );
+		return NULL;
+	} else if ( dStmt[0].m_eStmt!=STMT_SELECT )
+	{
+		HttpErrorReply ( dData, SPH_HTTP_STATUS_501, "only SELECT queries supported" );
+		return NULL;
+	}
+
+	tSettings.m_bSphinxQL = true;
+
+	return sphCreatePlainQueryParser();
+}
+
+
+static QueryParser_i * ParseQueryPlain ( CSphQuery & tQuery, const HttpRequestParser_t & tParser, CSphVector<BYTE> & dData, HttpQuerySettings_t & tSettings )
+{
+	CSphString sError;
+	ParseSearchOptions ( tParser.m_hOptions, tQuery );
+	if ( !tQuery.ParseSelectList ( sError ) )
+	{
+		HttpErrorReply ( dData, SPH_HTTP_STATUS_400, sError.cstr() );
+		return NULL;
+	}
+
+	if ( !tQuery.m_sSortBy.IsEmpty() )
+		tQuery.m_eSort = SPH_SORT_EXTENDED;
+
+	tSettings.m_bSphinxQL = true;
+
+	return sphCreatePlainQueryParser();
+}
+
+
+static QueryParser_i * ParseQueryJson ( CSphQuery & tQuery, const HttpRequestParser_t & tParser, CSphVector<BYTE> & dData, HttpQuerySettings_t & tSettings )
+{
+	CSphString sError;
+	if ( !sphParseJsonQuery ( tParser.m_sRawBody.cstr(), tQuery, tSettings.m_bProfile, tSettings.m_bAttrHighlight, sError ) )
+	{
+		sError.SetSprintf( "Error parsing json query: %s", sError.cstr() );
+		HttpErrorReply ( dData, SPH_HTTP_STATUS_400, sError.cstr() );
+		return NULL;
+	}
+
+	tSettings.m_bSphinxQL = true;
+
+	return sphCreateJsonQueryParser();
+}
+
+
+void EncodeResultPlain ( const AggrResult_t & tRes, const CSphQuery & , CSphQueryProfile *, bool , CSphString & sResult )
+{
+	JsonEscapedBuilder tResBuilder;
+	EncodeResultJson ( tRes, tResBuilder );
+	sResult.Adopt ( tResBuilder.Leak() );
+}
+
+
+class CSphQueryProfileJson : public CSphQueryProfile
+{
+public:
+	virtual					~CSphQueryProfileJson();
+
+	virtual void			BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const CSphVector<CSphString> & dZones );
+	virtual cJSON *			LeakResultAsJson();
+	virtual const char *	GetResultAsStr() const;
+
+private:
+	cJSON *					m_pResult {nullptr};
+};
+
+
+CSphQueryProfileJson::~CSphQueryProfileJson()
+{
+	cJSON_Delete(m_pResult);
+}
+
+
+void CSphQueryProfileJson::BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const CSphVector<CSphString> & /*dZones*/ )
+{
+	assert ( !m_pResult );
+	m_pResult = sphBuildProfileJson ( pRoot, tSchema );
+}
+
+
+cJSON *	CSphQueryProfileJson::LeakResultAsJson()
+{
+	cJSON * pTmp = m_pResult;
+	m_pResult = nullptr;
+	return pTmp;
+}
+
+
+const char * CSphQueryProfileJson::GetResultAsStr() const
+{
+	assert ( 0 && "Not implemented" );
+	return nullptr;
+}
+
+
+
+using ParseQueryFunc_fn = QueryParser_i * (CSphQuery &, const HttpRequestParser_t &, CSphVector<BYTE> &, HttpQuerySettings_t & );
+using ResultEncodeFunc_fn = void ( const AggrResult_t &, const CSphQuery &, CSphQueryProfile *, bool, CSphString & );
+
+static void HttpHandlerSearch ( ParseQueryFunc_fn * pParseQueryFunc, ResultEncodeFunc_fn * pResultEncodeFunc, const HttpRequestParser_t & tParser, int iCID, CSphVector<BYTE> & dData )
+{
+	assert ( pParseQueryFunc && pResultEncodeFunc );
+
+	HttpQuerySettings_t tQuerySettings;
+	CSphQuery tQuery;
+	QueryParser_i * pQueryParser = pParseQueryFunc ( tQuery, tParser, dData, tQuerySettings );
+	if ( !pQueryParser )
+		return;
+
+	CSphQueryProfileJson tProfile;
+
+	tQuery.m_pQueryParser = pQueryParser;
+	CSphScopedPtr<ISphSearchHandler> tHandler ( sphCreateSearchHandler ( 1, pQueryParser, tQuerySettings.m_bSphinxQL, true, iCID ) );
+
+	if ( tQuerySettings.m_bProfile )
+		tHandler->SetProfile ( &tProfile );
+
+	tHandler->SetQuery ( 0, tQuery );
 
 	// search
 	tHandler->RunQueries();
+
+	if ( tQuerySettings.m_bProfile )
+		tProfile.Stop();
 
 	AggrResult_t * pRes = tHandler->GetResult ( 0 );
 	if ( !pRes->m_sError.IsEmpty() )
@@ -636,10 +765,246 @@ static void HttpHandlerSearch ( bool bQL, const SmallStringHash_T<CSphString> & 
 		return;
 	}
 
-	// coping result set
-	JsonEscapedBuilder tResBuilder;
-	EncodeResultJson ( *pRes, tResBuilder );
-	HttpBuildReply ( dData, SPH_HTTP_STATUS_200, tResBuilder.cstr(), tResBuilder.Length(), false );
+	CSphString sResult;
+	pResultEncodeFunc ( *pRes, tQuery, tQuerySettings.m_bProfile ? &tProfile : NULL, tQuerySettings.m_bAttrHighlight, sResult );
+	HttpBuildReply ( dData, SPH_HTTP_STATUS_200, sResult.cstr(), sResult.Length(), false );
+}
+
+
+class HttpErrorReporter_c : public StmtErrorReporter_i
+{
+public:
+	virtual void	Ok ( int iAffectedRows, const CSphString & /*sWarning*/ ) { m_iAffected = iAffectedRows; }
+	virtual void	Ok ( int iAffectedRows, int /*nWarnings*/ ) { m_iAffected = iAffectedRows; }
+	virtual void	Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr );
+
+	bool			IsError() const { return m_bError; }
+	const char *	GetError() const { return m_sError.cstr(); }
+	int				GetAffectedRows() const { return m_iAffected; }
+
+private:
+	bool			m_bError {false};
+	CSphString		m_sError;
+	int				m_iAffected {0};
+};
+
+
+void HttpErrorReporter_c::Error ( const char * /*sStmt*/, const char * sError, MysqlErrors_e /*iErr*/ )
+{
+	m_bError = true;
+	m_sError = sError;
+}
+
+
+void CreateHttpResponse ( bool bResult, cJSON * pResult, CSphVector<BYTE> & dData )
+{
+	assert ( pResult );
+
+	CSphString sResult;
+	sResult.Adopt ( cJSON_Print ( pResult ) );
+	HttpBuildReply ( dData, bResult ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_500, sResult.cstr(), sResult.Length(), false );
+}
+
+
+static bool ProcessInsert ( SqlStmt_t & tStmt, SphDocID_t tDocId, bool bReplace, cJSON * & pResult )
+{
+	CSphSessionAccum tAcc ( false );
+	CSphString sWarning;
+	HttpErrorReporter_c tReporter;
+	sphHandleMysqlInsert ( tReporter, tStmt, bReplace, true, sWarning, tAcc );
+
+	if ( tReporter.IsError() )
+		pResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );
+	else
+		pResult = sphEncodeInsertResultJson ( tStmt.m_sIndex.cstr(), bReplace, tDocId );
+
+	return !tReporter.IsError();
+}
+
+
+static void HttpHandlerInsert ( const HttpRequestParser_t & tParser, CSphVector<BYTE> & dData, bool bReplace )
+{
+	SqlStmt_t tStmt;
+	SphDocID_t tDocId;
+	CSphString sError;
+	if ( !sphParseJsonInsert ( tParser.m_sRawBody.cstr(), tStmt, tDocId, bReplace, sError ) )
+	{
+		sError.SetSprintf( "Error parsing json query: %s", sError.cstr() );
+		HttpErrorReply ( dData, SPH_HTTP_STATUS_400, sError.cstr() );
+		return;
+	}
+
+	cJSON * pResult = NULL;
+	bool bResult = ProcessInsert ( tStmt, tDocId, bReplace, pResult );
+	CreateHttpResponse ( bResult, pResult, dData );
+	cJSON_Delete ( pResult );
+}
+
+
+static bool ProcessUpdate ( SqlStmt_t & tStmt, SphDocID_t tDocId, int iCID, cJSON * & pResult )
+{
+	HttpErrorReporter_c tReporter;
+	CSphString sWarning;
+	sphHandleMysqlUpdate ( tReporter, tStmt, "", sWarning, iCID );
+
+	if ( tReporter.IsError() )
+		pResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );
+	else
+		pResult = sphEncodeUpdateResultJson ( tStmt.m_sIndex.cstr(), tDocId, tReporter.GetAffectedRows() );
+
+	return !tReporter.IsError();
+}
+
+
+static void HttpHandlerUpdate ( const HttpRequestParser_t & tParser, int iCID, CSphVector<BYTE> & dData )
+{
+	SqlStmt_t tStmt;
+	SphDocID_t tDocId;
+	CSphString sError;
+	if ( !sphParseJsonUpdate ( tParser.m_sRawBody.cstr(), tStmt, tDocId, sError ) )
+	{
+		sError.SetSprintf( "Error parsing json query: %s", sError.cstr() );
+		HttpErrorReply ( dData, SPH_HTTP_STATUS_400, sError.cstr() );
+		return;
+	}
+
+	cJSON * pResult = NULL;
+	bool bResult = ProcessUpdate ( tStmt, tDocId, iCID, pResult );
+	CreateHttpResponse ( bResult, pResult, dData );
+	cJSON_Delete ( pResult );
+}
+
+
+static bool ProcessDelete ( SqlStmt_t & tStmt, SphDocID_t tDocId, int iCID, cJSON * & pResult )
+{
+	CSphSessionAccum tAcc ( false );
+	HttpErrorReporter_c tReporter;
+	CSphString sWarning;
+	sphHandleMysqlDelete ( tReporter, tStmt, "", true, tAcc, iCID );
+
+	if ( tReporter.IsError() )
+		pResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );
+	else
+		pResult = sphEncodeDeleteResultJson ( tStmt.m_sIndex.cstr(), tDocId, tReporter.GetAffectedRows() );
+
+	return !tReporter.IsError();
+}
+
+
+static void HttpHandlerDelete ( const HttpRequestParser_t & tParser, int iCID, CSphVector<BYTE> & dData )
+{
+	SqlStmt_t tStmt;
+	SphDocID_t tDocId;
+	CSphString sError;
+	if ( !sphParseJsonDelete ( tParser.m_sRawBody.cstr(), tStmt, tDocId, sError ) )
+	{
+		sError.SetSprintf( "Error parsing json query: %s", sError.cstr() );
+		HttpErrorReply ( dData, SPH_HTTP_STATUS_400, sError.cstr() );
+		return;
+	}
+
+	cJSON * pResult = NULL;
+	bool bResult = ProcessDelete ( tStmt, tDocId, iCID, pResult );
+	CreateHttpResponse ( bResult, pResult, dData );
+	cJSON_Delete ( pResult );
+}
+
+
+static void AddResultToBulk ( cJSON * pRoot, CSphString & sStmt, cJSON * pResult )
+{
+	assert ( pRoot && pResult );
+
+	cJSON * pItem = cJSON_CreateObject();
+	assert ( pItem );
+	cJSON_AddItemToArray ( pRoot, pItem );
+
+	cJSON_AddItemToObject( pItem, sStmt.cstr(), pResult );
+}
+
+
+static void HttpHandlerBulk ( const HttpRequestParser_t & tParser, int iCID, CSphVector<BYTE> & dData )
+{
+	if ( !tParser.m_hOptions.Exists ("Content-Type") )
+	{
+		CSphString sError = "Content-Type must be set";
+		HttpErrorReply ( dData, SPH_HTTP_STATUS_400, sError.cstr() );
+	}
+
+	if ( tParser.m_hOptions["Content-Type"].ToLower() != "application/x-ndjson" )
+	{
+		CSphString sError = "Content-Type must be application/x-ndjson";
+		HttpErrorReply ( dData, SPH_HTTP_STATUS_400, sError.cstr() );
+	}
+
+	cJSON * pRoot = cJSON_CreateObject();
+	cJSON * pItems = cJSON_CreateArray();
+	assert ( pRoot && pItems );
+	cJSON_AddItemToObject ( pRoot, "items", pItems );
+
+	char * p = const_cast<char*>(tParser.m_sRawBody.cstr());
+
+	bool bResult = false;
+	while ( *p )
+	{
+		char * szStmt = p;
+		while ( *p && *p!='\r' && *p!='\n' )
+			p++;
+
+		if ( p-szStmt==0 )
+			break;
+
+		*p++ = '\0';
+		SqlStmt_t tStmt;
+		SphDocID_t tDocId;
+		CSphString sStmt;
+		CSphString sError;
+		if ( !sphParseJsonStatement ( szStmt, tStmt, sStmt, tDocId, sError ) )
+		{
+			sError.SetSprintf( "Error parsing json query: %s", sError.cstr() );
+			HttpErrorReply ( dData, SPH_HTTP_STATUS_400, sError.cstr() );
+			cJSON_Delete ( pRoot );
+			return;
+		}
+
+		cJSON * pResult = NULL;
+		bResult = false;
+
+		switch ( tStmt.m_eStmt )
+		{
+		case STMT_INSERT:
+		case STMT_REPLACE:
+			bResult = ProcessInsert ( tStmt, tDocId, tStmt.m_eStmt==STMT_REPLACE, pResult );
+			break;
+
+		case STMT_UPDATE:
+			bResult = ProcessUpdate ( tStmt, tDocId, iCID, pResult );
+			break;
+
+		case STMT_DELETE:
+			bResult = ProcessDelete ( tStmt, tDocId, iCID, pResult );
+			break;
+
+		default:
+			sError = "Unknown statement";
+			HttpErrorReply ( dData, SPH_HTTP_STATUS_400, sError.cstr() );
+			cJSON_Delete ( pRoot );
+			return;
+		}
+
+		AddResultToBulk ( pItems, sStmt, pResult );
+		
+		// no further than the first error
+		if ( !bResult )
+			break;
+
+		while ( *p=='\r' || *p=='\n' )
+			p++;
+	}
+
+	cJSON_AddBoolToObject ( pRoot, "errors", bResult ? 0 : 1 );
+
+	CreateHttpResponse ( bResult, pRoot, dData );
+	cJSON_Delete ( pRoot );
 }
 
 
@@ -655,8 +1020,34 @@ bool sphLoopClientHttp ( CSphVector<BYTE> & dData, int iCID )
 	switch ( tParser.m_eEndpoint )
 	{
 	case SPH_HTTP_ENDPOINT_SEARCH:
+		HttpHandlerSearch ( ParseQueryPlain, EncodeResultPlain, tParser, iCID, dData );
+		break;
+
 	case SPH_HTTP_ENDPOINT_SQL:
-		HttpHandlerSearch ( tParser.m_eEndpoint==SPH_HTTP_ENDPOINT_SQL, tParser.m_hOptions, iCID, dData );
+		HttpHandlerSearch ( ParseQuerySql, EncodeResultPlain, tParser, iCID, dData );
+		break;
+
+	case SPH_HTTP_ENDPOINT_JSON_SEARCH:
+		HttpHandlerSearch ( ParseQueryJson, sphEncodeResultJson, tParser, iCID, dData );
+		break;
+
+	case SPH_HTTP_ENDPOINT_JSON_INDEX:
+	case SPH_HTTP_ENDPOINT_JSON_CREATE:
+	case SPH_HTTP_ENDPOINT_JSON_INSERT:
+	case SPH_HTTP_ENDPOINT_JSON_REPLACE:
+		HttpHandlerInsert ( tParser, dData, tParser.m_eEndpoint==SPH_HTTP_ENDPOINT_JSON_INDEX || tParser.m_eEndpoint==SPH_HTTP_ENDPOINT_JSON_REPLACE );
+		break;
+
+	case SPH_HTTP_ENDPOINT_JSON_UPDATE:
+		HttpHandlerUpdate ( tParser, iCID, dData );
+		break;
+
+	case SPH_HTTP_ENDPOINT_JSON_DELETE:
+		HttpHandlerDelete ( tParser, iCID, dData );
+		break;
+
+	case SPH_HTTP_ENDPOINT_JSON_BULK:
+		HttpHandlerBulk ( tParser, iCID, dData );
 		break;
 
 	case SPH_HTTP_ENDPOINT_INDEX:

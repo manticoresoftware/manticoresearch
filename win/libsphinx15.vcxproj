@@ -90,7 +90,7 @@
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>$(SolutionDir)/libstemmer_c/include; $(SolutionDir)/libexpat/lib;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_LIB;_CRT_SECURE_NO_DEPRECATE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ExceptionHandling>
       </ExceptionHandling>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
@@ -111,7 +111,7 @@
     <ClCompile>
       <Optimization>MaxSpeed</Optimization>
       <AdditionalIncludeDirectories>$(SolutionDir)/libstemmer_c/include; $(SolutionDir)/libexpat/lib;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_LIB;_CRT_SECURE_NO_DEPRECATE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ExceptionHandling>
       </ExceptionHandling>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
@@ -166,6 +166,7 @@
     <ClCompile Include="..\src\sphinxexpr.cpp" />
     <ClCompile Include="..\src\sphinxfilter.cpp" />
     <ClCompile Include="..\src\sphinxjson.cpp" />
+    <ClCompile Include="..\src\sphinxjsonquery.cpp" />
     <ClCompile Include="..\src\sphinxmetaphone.cpp" />
     <ClCompile Include="..\src\sphinxplugin.cpp" />
     <ClCompile Include="..\src\sphinxqcache.cpp" />
@@ -200,6 +201,7 @@
     <ClInclude Include="..\src\sphinxfilter.h" />
     <ClInclude Include="..\src\sphinxint.h" />
     <ClInclude Include="..\src\sphinxjson.h" />
+    <ClInclude Include="..\src\sphinxjsonquery.h" />
     <ClInclude Include="..\src\sphinxplugin.h" />
     <ClInclude Include="..\src\sphinxqcache.h" />
     <ClInclude Include="..\src\sphinxquery.h" />

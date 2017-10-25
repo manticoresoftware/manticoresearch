@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>json queries source columns</name>
+
+<requires>
+<http/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	binlog_path =
+}
+
+source src_test
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT id, gid101, gid102, fid105, bid201, sid202, title FROM test_table
+  sql_attr_uint   = gid101
+  sql_attr_uint   = gid102
+  sql_attr_uint   = fid105
+  sql_attr_uint   = bid201
+  sql_attr_uint   = sid202
+}
+
+
+index test
+{
+  source      = src_test
+  path      = <data_path/>/test
+}
+
+</config>
+
+<db_drop>drop table if exists test_table</db_drop>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	title varchar(255) not null,
+	gid101 int,
+	gid102 int,
+	fid105 int,
+	bid201 int,
+	sid202 int
+);
+</db_create>
+
+<db_insert>
+insert into test_table values
+(10, '10th fill', 11, 12, 13, 14, 15 ),
+(11, '11th fill', 21, 22, 23, 24, 25 ),
+(12, '12th fill', 31, 32, 33, 34, 35 )
+</db_insert>
+
+<httpqueries>
+
+<query endpoint="json/search">{ "index": "test", "query": { "match": { "title": "fill" } }, "_source": "*id*" }</query>
+<query endpoint="json/search">{ "index": "test", "query": { "match": { "title": "fill" } }, "_source": ["gi*", "*20*"] }</query>
+<query endpoint="json/search">{ "index": "test", "query": { "match": { "title": "fill" } }, "_source": { "includes":["*"], "excludes":[] } }</query>
+<query endpoint="json/search">{ "index": "test", "query": { "match": { "title": "fill" } }, "_source": { "excludes":["*02", "*id1*"] } }</query>
+
+</httpqueries>
+
+</test>

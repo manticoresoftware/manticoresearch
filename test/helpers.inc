@@ -563,6 +563,22 @@ function IsModelGenMode ()
 }
 
 
+function RoundFloatValues ( &$values, $roundoff )
+{
+	if ( !is_array ( $values ) )
+		return;
+
+	foreach ( $values as &$value )
+	{
+		if ( is_float ( $value ) )
+			$value = round ( $value, $roundoff );
+
+		if ( is_array ( $value ) )
+			RoundFloatValues ( $value, $roundoff );
+	}
+}
+
+
 function CompareResultSetFixup ( &$set, $roundoff, $variants_match )
 {
 	global $g_ignore_weights;
@@ -573,10 +589,23 @@ function CompareResultSetFixup ( &$set, $roundoff, $variants_match )
 	if ( $roundoff && !@$set["resarray"] ) // FIXME! support resarray too
 		foreach ( $set["attrs"] as $name=>$type )
 			if ( $type==SPH_ATTR_FLOAT )
+			{
+				foreach ( $set["matches"] as $id=>$match )
+					$set["matches"][$id]["attrs"][$name] = sprintf ( "%.{$roundoff}f", $set["matches"][$id]["attrs"][$name] );
+			}
+
+
+	// fixup floats in json via http
+	if ( isset ( $set["http"] ) && $set["http"]==1 && isset ( $set["rows"] ) )
 	{
-		foreach ( $set["matches"] as $id=>$match )
-			$set["matches"][$id]["attrs"][$name] = sprintf ( "%.{$roundoff}f",
-				$set["matches"][$id]["attrs"][$name] );
+		$rows = json_decode ( $set["rows"], 1 );
+		if ( isset ( $rows["hits"] ) && isset ( $rows["hits"]["hits"] ) )
+		{
+			foreach ( $rows["hits"]["hits"] as &$hit )
+				RoundFloatValues ( $hit, 6 );
+		}
+
+		$set["rows"] = json_encode ( $rows );
 	}
 
 	if ( $g_ignore_weights )
@@ -821,98 +850,52 @@ function FormatJsonRow ( $j )
 	return $str;
 }
 
-function HttpFormatResultSet ( $result )
+function HttpFormatResultSet ( $result, $nquery )
 {
 	$str = '';
-	$n = 0;
-	foreach ( $result as $res )
-	{
-		$http_endpoint = '';
-		$http_get = '';
-		$http_post = '';
-		$http_code = '';
-		$rows = array();
-		$attrs = array();
-		$matches = array();
-		$meta = array();
 
-		if ( is_array ( $res ) && array_key_exists ( 'http_endpoint', $res ) )
-			$http_endpoint = $res['http_endpoint'];
-		if ( is_array ( $res ) && array_key_exists ( 'http_get', $res ) )
-			$http_get = $res['http_get'];
-		if ( is_array ( $res ) && array_key_exists ( 'http_post', $res ) )
-			$http_post = $res['http_post'];
-		if ( is_array ( $res ) && array_key_exists ( 'http_code', $res ) )	
-			$http_code = $res['http_code'];
-		if ( is_array ( $res ) && array_key_exists ( 'rows', $res ) )	
-			$rows = json_decode ( $res['rows'], 1 );
-		
-		if ( is_array ( $rows ) && array_key_exists ( 'attrs', $rows ) )
-			$attrs = $rows['attrs'];
-		if ( is_array ( $rows ) && array_key_exists ( 'matches', $rows ) )	
-			$matches = $rows['matches'];
-		if ( is_array ( $rows ) && array_key_exists ( 'meta', $rows ) )
-			$meta = $rows['meta'];
-		
-		$str .= "http-$n> /$http_endpoint\n";
-		$str .= "\tStatus: $http_code\n";
-		if ( $http_get )
-			$str .= "\tGET $http_get\n";
-		if ( $http_post )
-			$str .= "\tPOST " . json_encode ( $http_post, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE ) . "\n";
-		$str .= "\n";
-		
-		$str .= "\tschema:" . json_encode ( $attrs, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
-		$str .= "\n";
-		$str .= "\tmatches:" . FormatJsonRow ( $matches );
-		$str .= "\n";
-		$str .= "\tmeta:" . json_encode ( $meta, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
-		$str .= "\n";
-		
-		// data tail
-		unset ( $rows['attrs'] );
-		unset ( $rows['matches'] );
-		unset ( $rows['meta'] );
-		if ( count ( $rows ) )
-			$str .= json_encode ( $rows, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
-			
-		$str .= "\n";
-		$n++;
-	}
-	return $str;
-}
+	$http_endpoint = '';
+	$http_request = '';
+	$http_method = '';
+	$http_code = '';
+	$rows = array();
+	$attrs = array();
+	$matches = array();
+	$meta = array();
 
-function Dict2String ( $dict )
-{
-	if ( is_null ( $dict ) )
-		return NULL;
-		
-	$str = '';
-	$delimiter = '';
-	foreach ( $dict as $name=>$val )
-	{
-		$str .= $delimiter . $name . '=' . $val;
-		$delimiter = '&';
-	}
-	return $str;
-}
+	if ( array_key_exists ( 'http_endpoint', $result ) )
+		$http_endpoint = $result['http_endpoint'];
 
-function HttpQuery ( $http_endpoint, $http_get, $http_post )
-{
-	global $sd_http_port;
-	$curl_desc = array ( CURLOPT_RETURNTRANSFER => 1, CURLOPT_CONNECTTIMEOUT=>1, CURLOPT_URL => "127.0.0.1:$sd_http_port/" . $http_endpoint );
-	$http_get = Dict2String ( $http_get );
-	$http_post = Dict2String ( $http_post );
+	if ( array_key_exists ( 'http_request', $result ) )
+		$http_request = $result['http_request'];
 
-	if ( $http_get )
-		$curl_desc[CURLOPT_URL] = $curl_desc[CURLOPT_URL] . '?' . $http_get;
+	if ( array_key_exists ( 'http_method', $result ) )
+		$http_method = $result['http_method'];
 
-	if ( $http_post )
-	{
-		$curl_desc[CURLOPT_POST] = 1;
-		$curl_desc[CURLOPT_POSTFIELDS] = $http_post;
-	}
+	if ( array_key_exists ( 'http_code', $result ) )	
+		$http_code = $result['http_code'];
+    
+	if ( array_key_exists ( 'rows', $result ) )	
+		$rows = json_decode ( $result['rows'], 1 );
+
+	$request = json_encode ( $http_request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+	$request = stripcslashes ( $request );
 	
+	$str .= "http-$nquery> /$http_endpoint\n";
+	$str .= "Status: $http_code\n";
+	$str .= "$http_method ". $request . "\n";
+				
+	if ( count ( $rows ) )
+		$str .= json_encode ( $rows, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE )."\n";
+
+	$str .= "\n";
+
+	return $str;
+}
+
+
+function RunCurl ( $curl_desc, &$rows )
+{
 	$con = curl_init();
 	
 	curl_setopt_array ( $con, $curl_desc );
@@ -922,8 +905,34 @@ function HttpQuery ( $http_endpoint, $http_get, $http_post )
 	
 	curl_close($con);
 	
-	return array ( 'http_endpoint'=>$http_endpoint, 'http_get'=>$http_get, 'http_post'=>$http_post, 'rows'=>$rows, 'http_code'=>$http_code );
+	return $http_code;
 }
+
+
+function HttpQueryGet ( $http_endpoint, $http_get )
+{
+	global $sd_http_port;
+	$curl_desc = array ( CURLOPT_RETURNTRANSFER => 1, CURLOPT_CONNECTTIMEOUT=>1, CURLOPT_URL => "127.0.0.1:$sd_http_port/" . $http_endpoint );
+	$curl_desc[CURLOPT_URL] = $curl_desc[CURLOPT_URL] . '?' . $http_get;
+
+	$rows = "";
+	$http_code = RunCurl( $curl_desc, $rows );
+	return array ( 'http_endpoint'=>$http_endpoint, 'http_method'=>'GET', 'http_request'=>$http_get, 'rows'=>$rows, 'http_code'=>$http_code );
+}
+
+
+function HttpQueryPost ( $http_endpoint, $http_post )
+{
+	global $sd_http_port;
+	$curl_desc = array ( CURLOPT_RETURNTRANSFER => 1, CURLOPT_CONNECTTIMEOUT=>1, CURLOPT_URL => "127.0.0.1:$sd_http_port/" . $http_endpoint );
+	$curl_desc[CURLOPT_POST] = 1;
+	$curl_desc[CURLOPT_POSTFIELDS] = $http_post;
+
+	$rows = "";
+	$http_code = RunCurl( $curl_desc, $rows );
+	return array ( 'http_endpoint'=>$http_endpoint, 'http_method'=>'POST', 'http_request'=>$http_post, 'rows'=>$rows, 'http_code'=>$http_code );
+}
+
 
 class SphinxConfig
 {
@@ -936,6 +945,7 @@ class SphinxConfig
 	private $_dynamic_entries;
 	private $_queries;
 	private $_sphqueries;
+	private $_httpqueries;
 	private $_query_settings;
 	private $_query_attributes;
 	private $_indexer_runs;
@@ -954,6 +964,7 @@ class SphinxConfig
 	private $_prereqs;
 	private $_config;				///< config DOM node
 	private $_use_sphinxql;			///< true, if sphinxql queries exist
+	private $_use_http;				///< true if http queries exist
 	private $_indexdata;			///< data for use "insert into" instead of run indexer
 	private $_connection;			///< mysql connection (since we cound use mysql ans sqphinxql together)
 	private $_testdir;				///< the path to the directory with current test (namely for accessing data without knowing the test name)
@@ -971,6 +982,7 @@ class SphinxConfig
 		$this->_dynamic_entries = array ();
 		$this->_queries 		= array ();
 		$this->_sphqueries		= array ();
+		$this->_httpqueries		= array ();
 		$this->_results			= array ();
 		$this->_results_model	= array ();
 		$this->_query_attributes = array ();
@@ -992,6 +1004,7 @@ class SphinxConfig
 		$this->_compat098		= false;
 		$this->_skip_indexer	= false;
 		$this->_use_sphinxql	= false;
+		$this->_use_http		= false;
 		$this->_indexdata		= array ();
 		$this->_connection		= false;
 		$this->_testdir			= "";
@@ -1011,6 +1024,7 @@ class SphinxConfig
 	function Requires ( $name )		{ return isset($this->_prereqs[$name]); }
 	function IsQueryTest ()			{ return strlen ( $this->_custom_test ) == 0;	}
 	function IsSphinxqlTest ()		{ return $this->_use_sphinxql; }
+	function IsHttpTest ()			{ return $this->_use_http; }
 	function IsNeedDB()				{ return ! ( empty ( $this->_db_drop )
 										&& empty ( $this->_db_create )
 										&& empty ( $this->_db_insert ) ); }
@@ -1188,6 +1202,64 @@ class SphinxConfig
 		return $vals;
 	}
 
+	function ExtractQueries( $xml, $encoding, $section_name, $item_name, $use_meta, $metaindexes, &$flag )
+	{
+		$queries = array();
+
+		// extract queries
+		$qs = GetFirstChild ( $xml, $section_name );
+		if ( $qs )
+		{
+			$flag = true;
+
+			// new and cool
+			if ( $use_meta )
+			{
+				foreach ( ChildrenArray ( $qs, $item_name ) as $q )
+				{
+					$attrs = $this->SphinxQLAttr($q);
+					$was_replaced = false;
+					foreach ( $metaindexes as $name=>$indexes )
+						foreach ($indexes as $index)
+						{
+							$foo = 0;
+							$res = str_replace ( $name, $index, GetVariants ( $q, $encoding ), $foo );
+							if ($foo>0)
+							{
+								$was_replaced = true;
+								if (!$attrs)
+									foreach ($res as $r)
+										$queries[]=$r;
+								else
+									foreach ($res as $r)
+										$queries[]=array($r,$attrs);
+							}
+						}
+					if (!$was_replaced) // no metaindexes; emit 'as is'
+					{
+						if (!$attrs)
+							foreach ( GetVariants ( $q, $encoding ) as $r)
+								$queries[]=$r;
+						else
+							foreach ( GetVariants ( $q, $encoding ) as $r)
+								$queries[]=array($r,$attrs);
+					}
+				}
+			} else
+			{
+				foreach ( ChildrenArray ( $qs, $item_name ) as $q )
+				{
+					$attrs = $this->SphinxQLAttr($q);
+					if (!$attrs)
+						$queries[] = iconv('utf-8', $encoding, $q->nodeValue);
+					else
+						$queries[] = array(iconv('utf-8', $encoding, $q->nodeValue),$attrs);
+				}
+			}
+		}
+
+		return $queries;
+	}
 
 	function Load ( $config_file )
 	{
@@ -1379,57 +1451,9 @@ class SphinxConfig
 			}
 		}
 
-		// extract queries
-		$qs = GetFirstChild ( $xml, "sphqueries" );
-		if ( $qs )
-		{
-			$this->_use_sphinxql = true;
-			// new and cool
-			if ( $use_meta )
-			{
-				foreach ( ChildrenArray ( $qs, "sphinxql" ) as $q )
-				{
-					$attrs = $this->SphinxQLAttr($q);
-					$was_replaced = false;
-					foreach ( $metaindexes as $name=>$indexes )
-						foreach ($indexes as $index)
-						{
-							$foo = 0;
-							$res = str_replace ( $name, $index, GetVariants ( $q, $doc->encoding ), $foo );
-							if ($foo>0)
-							{
-								$was_replaced = true;
-								if (!$attrs)
-									foreach ($res as $r)
-										$this->_sphqueries[]=$r;
-								else
-									foreach ($res as $r)
-										$this->_sphqueries[]=array($r,$attrs);
-							}
-						}
-					if (!$was_replaced) // no metaindexes; emit 'as is'
-					{
-						if (!$attrs)
-							foreach ( GetVariants ( $q, $doc->encoding ) as $r)
-								$this->_sphqueries[]=$r;
-						else
-							foreach ( GetVariants ( $q, $doc->encoding ) as $r)
-								$this->_sphqueries[]=array($r,$attrs);
-					}
-				}
-			} else
-			{
-				foreach ( ChildrenArray ( $qs, "sphinxql" ) as $q ) {
-					$attrs = $this->SphinxQLAttr($q);
-					if (!$attrs)
-						$this->_sphqueries[] = iconv('utf-8', $doc->encoding, $q->nodeValue);
-					else
-						$this->_sphqueries[] = array(iconv('utf-8', $doc->encoding, $q->nodeValue),$attrs);
-				}
-			}
-		}
-
-
+		// extract http queries
+		$this->_sphqueries = $this->ExtractQueries ( $xml, $doc->encoding, "sphqueries", "sphinxql", $use_meta, $metaindexes, $this->_use_sphinxql );
+		$this->_httpqueries = $this->ExtractQueries ( $xml, $doc->encoding, "httpqueries", "query", $use_meta, $metaindexes, $this->_use_http );
 
 		// extract my settings
 		$this->_config = GetFirstChild ( $xml, "config" );
@@ -1516,6 +1540,85 @@ class SphinxConfig
 		{
 			$this->_results_model[$this->SubtestNo ()][] = $query_result;
 		}
+	}
+
+	function RunQueryHttp ( &$error )
+	{
+		global $g_pick_query;
+
+		$total = $done = 0;
+		$qcount = count($this->_httpqueries);
+
+		$qmin = 0;
+		$qmax = $qcount - 1;
+		$http_endpoint = NULL;
+		$http_method = NULL;
+
+		if ( $g_pick_query>0 )
+		{
+			$qmin = $g_pick_query-1;
+			$qmax = $g_pick_query-1;
+		}
+		
+		for ( $n=$qmin; $n<=$qmax; $n++ )
+		{
+			$query = $this->_httpqueries[$n];
+
+			if ( !is_array($query) )
+			{
+				$error = "HTTP endpoint not specified";
+				return false;
+			}
+
+			foreach ( $query[1] as $k => $v )
+			{
+				if ($k=="endpoint")
+					$http_endpoint = $v;
+				elseif ($k=="method")
+					$http_method = $v;
+			}
+
+			$query = $query[0];
+
+			$http_method = strtoupper($http_method);
+			$post = NULL;
+			if ( !strlen($http_method) || $http_method=="POST" )
+				$post = true;
+			elseif ( $http_method=="GET" )
+				$post = false;
+
+			if ( $post===NULL )
+			{
+				$error = "Unknown HTTP method: ".$http_method;
+				return false;
+			}
+
+			if ( $post )
+				$query_result = HttpQueryPost ( $http_endpoint, $query );
+			else
+				$query_result = HttpQueryGet ( $http_endpoint, $query );
+
+			$query_result['http']=1;
+
+			if ( array_key_exists ( 'rows', $query_result ) )
+			{
+				$decoded_rows = json_decode ( $query_result['rows'] );
+				if ( !$decoded_rows )
+				{
+					$error = "Unable to decode repsonse json";
+					return false;
+				}
+
+				if ( property_exists ( $decoded_rows, 'took' ) )
+					unset ( $decoded_rows->took );
+
+				$query_result['rows'] = json_encode ( $decoded_rows, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+			}
+	
+			$this->PickResult ( $query_result );
+		}
+
+		return true;
 	}
 
 
@@ -2106,8 +2209,8 @@ class SphinxConfig
 	function FormatResultSet ( $nquery, $result, $opts=array() )
 	{
 		global $sd_skip_indexer;
-		if ( $this->Requires('http') )
-			return HttpFormatResultSet ( $result );
+		if ( array_key_exists ("http", $result) )
+			return HttpFormatResultSet ( $result, $nquery );
 
 		if ( !$this->IsQueryTest () || !is_array($result) )
 			return var_export ( $result, true )."\n";
@@ -3424,6 +3527,17 @@ function RunTest ( $test_dir, $skipdemo, $usemarks )
 		{
 			$error = "";
 			if ( ! $config->RunQuerySphinxQL ( $error ) )
+			{
+				if ( !HandleFailure ( $config, $report, "$error\n", $nfailed ) )
+					$log .= "\tsubtest $subtest: query error: $error\n";
+				continue;
+			}
+		}
+
+		if ( $config->IsHttpTest () )
+		{
+			$error = "";
+			if ( ! $config->RunQueryHttp ( $error ) )
 			{
 				if ( !HandleFailure ( $config, $report, "$error\n", $nfailed ) )
 					$log .= "\tsubtest $subtest: query error: $error\n";

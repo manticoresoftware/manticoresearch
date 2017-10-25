@@ -68,6 +68,8 @@ public:
 	CSphString		m_sAfterMatchPassage;
 
 	DWORD			m_ePassageSPZ;
+	bool			m_bJsonQuery;
+	CSphVector<int> m_dSeparators;
 
 public:
 	ExcerptQuery_t ();

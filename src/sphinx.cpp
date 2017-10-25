@@ -5506,7 +5506,11 @@ bool CSphMultiformTokenizer::WasTokenMultiformDestination ( bool & bHead, int & 
 CSphFilterSettings::CSphFilterSettings ()
 	: m_sAttrName	( "" )
 	, m_bExclude	( false )
-	, m_bHasEqual	( true )
+	, m_bHasEqualMin( true )
+	, m_bHasEqualMax( true )
+	, m_bOpenLeft	( false )
+	, m_bOpenRight	( false )
+	, m_bIsNull		( false )
 	, m_eMvaFunc	( SPH_MVAFUNC_NONE )
 	, m_iMinValue	( LLONG_MIN )
 	, m_iMaxValue	( LLONG_MAX )
@@ -8542,6 +8546,7 @@ CSphIndex::~CSphIndex ()
 	QcacheDeleteIndex ( m_iIndexId );
 	SafeDelete ( m_pFieldFilter );
 	SafeDelete ( m_pQueryTokenizer );
+	SafeDelete ( m_pQueryTokenizerJson );
 	SafeDelete ( m_pTokenizer );
 	SafeDelete ( m_pDict );
 }
@@ -8579,7 +8584,11 @@ void CSphIndex::SetupQueryTokenizer()
 	// that we can then use to create lightweight clones
 	SafeDelete ( m_pQueryTokenizer );
 	m_pQueryTokenizer = m_pTokenizer->Clone ( SPH_CLONE_QUERY );
-	sphSetupQueryTokenizer ( m_pQueryTokenizer, IsStarDict(), m_tSettings.m_bIndexExactWords );
+	sphSetupQueryTokenizer ( m_pQueryTokenizer, IsStarDict(), m_tSettings.m_bIndexExactWords, false );
+
+	SafeDelete ( m_pQueryTokenizerJson );
+	m_pQueryTokenizerJson = m_pTokenizer->Clone ( SPH_CLONE_QUERY );
+	sphSetupQueryTokenizer ( m_pQueryTokenizerJson, IsStarDict(), m_tSettings.m_bIndexExactWords, true );
 }
 
 
@@ -14807,7 +14816,6 @@ public:
 bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult,
 	int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const
 {
-	assert ( pQuery->m_sQuery.IsEmpty() );
 	assert ( tArgs.m_iTag>=0 );
 
 	// check if index is ready
@@ -15311,6 +15319,7 @@ void CSphIndex_VLN::Dealloc ()
 
 	SafeDelete ( m_pFieldFilter );
 	SafeDelete ( m_pQueryTokenizer );
+	SafeDelete ( m_pQueryTokenizerJson );
 	SafeDelete ( m_pTokenizer );
 	SafeDelete ( m_pDict );
 
@@ -17897,8 +17906,11 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	// non-random at the start, random at the end
 	dSorters.Sort ( CmpPSortersByRandom_fn() );
 
+	const QueryParser_i * pQueryParser = pQuery->m_pQueryParser;
+	assert ( pQueryParser );
+
 	// fast path for scans
-	if ( pQuery->m_sQuery.IsEmpty() )
+	if ( pQueryParser->IsFullscan ( *pQuery ) )
 		return MultiScan ( pQuery, pResult, iSorters, &dSorters[0], tArgs );
 
 	if ( pProfile )
@@ -17931,12 +17943,17 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 		pProfile->Switch ( SPH_QSTATE_PARSE );
 
 	XQQuery_t tParsed;
-	if ( !sphParseExtendedQuery ( tParsed, (const char*)sModifiedQuery, pQuery, m_pQueryTokenizer, &m_tSchema, pDict, m_tSettings ) )
+	if ( !pQueryParser->ParseQuery ( tParsed, (const char*)sModifiedQuery, pQuery, m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings ) )
 	{
 		// FIXME? might wanna reset profile to unknown state
 		pResult->m_sError = tParsed.m_sParseError;
 		return false;
 	}
+
+	// check again for fullscan
+	if ( pQueryParser->IsFullscan ( tParsed ) )
+		return MultiScan ( pQuery, pResult, iSorters, &dSorters[0], tArgs );
+
 	if ( !tParsed.m_sParseWarning.IsEmpty() )
 		pResult->m_sWarning = tParsed.m_sParseWarning;
 
@@ -18035,7 +18052,10 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 		ppResults[i]->m_tIOStats.Start();
 
 		// parse query
-		if ( sphParseExtendedQuery ( dXQ[i], pQueries[i].m_sQuery.cstr(), &(pQueries[i]), m_pQueryTokenizer, &m_tSchema, pDict, m_tSettings ) )
+		const QueryParser_i * pQueryParser = pQueries[i].m_pQueryParser;
+		assert ( pQueryParser );
+
+		if ( pQueryParser->ParseQuery ( dXQ[i], pQueries[i].m_sQuery.cstr(), &(pQueries[i]), m_pQueryTokenizer, m_pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings ) )
 		{
 			// transform query if needed (quorum transform, keyword expansion, etc.)
 			sphTransformExtendedQuery ( &dXQ[i].m_pRoot, m_tSettings, pQueries[i].m_bSimplify, this );
@@ -18634,7 +18654,7 @@ int TaggedHash20_t::FromFIPS ( const char * sFIPS )
 bool TaggedHash20_t::operator== ( const BYTE * pRef ) const
 {
 	assert ( pRef );
-	return !( bool ) memcmp ( m_dHashValue, pRef, HASH20_SIZE );
+	return !memcmp ( m_dHashValue, pRef, HASH20_SIZE );
 }
 
 //////////////////////////////////////////////////////////////////////////

@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>json queries sort</name>
+
+<requires>
+<http/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	binlog_path =
+}
+
+source src_geo
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT id, gid, title, attr_lat, attr_lon FROM test_geo
+  sql_attr_uint   = gid
+  sql_attr_float   = attr_lat
+  sql_attr_float   = attr_lon
+}
+
+
+index test_geo
+{
+  source      = src_geo
+  path      = <data_path/>/test_geo
+}
+
+source src_mva
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT id, gid, title, attr_mva FROM test_mva
+  sql_attr_uint   = gid
+  sql_attr_multi = uint attr_mva from field
+}
+
+
+index test_mva
+{
+  source      = src_mva
+  path      = <data_path/>/test_mva
+}
+
+</config>
+
+<db_drop>drop table if exists test_geo</db_drop>
+
+<db_create>
+create table test_geo
+(
+	id int not null,
+	title varchar(255) not null,
+	gid int,
+	attr_lat float,
+	attr_lon float
+);
+</db_create>
+
+<db_insert>
+insert into test_geo values
+(10, '10th he knew what was going on Trevize glanced now and then at Bliss`s face, which seemed entirely concentrated on Bander.', 10, 51, 0 ),
+(11, '11th  it was indulging itself in this way Trevize had grown quite certain he knew what was going on.', 11, 46, 2 ),
+(12, '12th  was no way it could speak to Bander, despite its paean to freedom, found this unique opportunity irresistible.', 12, 51, 18 ),
+(13, '13th third its paean to There was no way it could speak to robots on a basis of intellectual equality, and certainly not to animals.', 13, 39, 22 ),
+(14, '14th what was going on To speak to its fellow-Solarians would be, to it, unpleasant, and what communication there must be would be forced, and never spontaneous.', 14, 41, 12 ),
+(15, '15th and then at Bliss`s face No wonder, Trevize thought, it was indulging itself in this way.', 15, 61, 11 )
+</db_insert>
+
+<db_drop>drop table if exists test_mva</db_drop>
+
+<db_create>
+create table test_mva
+(
+	id int not null,
+	title varchar(255) not null,
+	gid int,
+	attr_mva varchar(255) not null
+);
+</db_create>
+
+<db_insert>
+insert into test_mva values
+(10, 'this 10th', 10, '12, 101' ),
+(11, 'this 11th', 11, '31, 65' ),
+(12, 'this 12th', 12, '13, 202' ),
+(13, 'this 13th', 13, '15, 21' ),
+(14, 'this 14th', 14, '9, 20' ),
+(15, 'this 15th', 15, '17, 303' )
+</db_insert>
+
+<httpqueries>
+
+<query endpoint="json/search">{ "index": "test_geo", "query": { "match": { "title": "what was" } }, "sort": [ "_score", "id" ] }</query>
+<query endpoint="json/search">{ "index": "test_geo", "query": { "match": { "title": "what was" } }, "sort": [ { "_score":"asc"}, "id" ] }</query>
+<query endpoint="json/search">{ "index": "test_geo", "query": { "match": { "title": "what was" } }, "sort": [ { "gid":{ "order":"desc"} } ] }</query>
+<query endpoint="json/search">{ "index": "test_geo", "query": { "match": { "title": "what was" } }, "sort": [ { "gid":{ "order":"desc"} } ], "track_scores":true }</query>
+<query endpoint="json/search">{ "index": "test_geo", "query": { "match": { "title": "what was" } }, "sort": [ { "gid":{ "order":"desc"} } ], "track_scores":false }</query>
+<query endpoint="json/search">{ "index": "test_geo", "query": { "match": { "title": "what was" } }, "sort": [ { "_geo_distance":{ "location_anchor":{"lat":49, "lon":15}, "location_source":"attr_lat, attr_lon" } } ] }</query>
+<query endpoint="json/search">{ "index": "test_geo", "query": { "match": { "title": "what was" } }, "sort": [ { "_geo_distance":{ "location_anchor":{"lat":41, "lon":32}, "location_source":["attr_lon", "attr_lat"] } } ] }</query>
+<query endpoint="json/search">{ "index": "test_mva", "query": { "match": { "title": "this" } }, "sort": [ { "attr_mva":{ "order":"desc", "mode":"max"} } ] }</query>
+<query endpoint="json/search">{ "index": "test_mva", "query": { "match": { "title": "this" } }, "sort": [ { "attr_mva":{ "order":"asc", "mode":"min"} } ] }</query>
+
+</httpqueries>
+
+</test>

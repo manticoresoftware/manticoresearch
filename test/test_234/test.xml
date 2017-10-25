@@ -73,20 +73,16 @@ another time, the age of wonders"],
 Two"}')
 </db_insert>
 
-<custom_test><![CDATA[
-
-$results = array();
-$results[] = HttpQuery ( 'search', array ( 'index'=>'test', 'limit'=>'10', 'select'=>'*' ), NULL );
-$results[] = HttpQuery ( 'search', NULL, array ( 'index'=>'test', 'limit'=>'2', 'select'=>'*' ) );
-$results[] = HttpQuery ( 'sql', array ( 'query'=>'select+*+from+test+limit+2' ), NULL );
-$results[] = HttpQuery ( 'search', array ( 'index'=>'test', 'limit'=>'5', 'select'=>'*', 'match'=>'tes%2a' ), NULL );
-$results[] = HttpQuery ( 'search', NULL, array ( 'index'=>'test', 'limit'=>'5', 'select'=>'*', 'match'=>'tes%2a' ) );
-$results[] = HttpQuery ( 'sql', array ( 'query'=>"select%20%2A+from+test%20where+match('tes%2a')+limit+5" ), NULL );
-$results[] = HttpQuery ( 'search', array ( 'index'=>'test', 'limit'=>'10', 'select'=>'*', 'group'=>'gid' ), NULL );
-$results[] = HttpQuery ( 'search', NULL, array ( 'index'=>'test', 'limit'=>'5', 'select'=>'*', 'order_by'=>'j.uid+asc' ) );
-$results[] = HttpQuery ( 'sql', NULL, array ( 'query'=>"select%20%2A+from+test%20order+by+j.uid+asc+limit+5" ) );
-
-
-]]></custom_test>
+<httpqueries>
+<query endpoint="search" method="get">index=test&amp;limit=10&amp;select=*</query>
+<query endpoint="search" method="post">index=test&amp;limit=2&amp;select=*</query>
+<query endpoint="sql" method="get">query=select+*+from+test+limit+2</query>
+<query endpoint="search" method="get">index=test&amp;limit=5&amp;select=*&amp;match=tes%2a</query>
+<query endpoint="search" method="post">index=test&amp;limit=5&amp;select=*&amp;match=tes%2a</query>
+<query endpoint="sql" method="get">query=select%20%2A+from+test%20where+match('tes%2a')+limit+5</query>
+<query endpoint="search" method="get">index=test&amp;limit=10&amp;select=*&amp;group=gid</query>
+<query endpoint="search" method="post">index=test&amp;limit=5&amp;select=*&amp;order_by=j.uid+asc</query>
+<query endpoint="sql" method="post">query=select%20%2A+from+test%20order+by+j.uid+asc+limit+5</query>
+</httpqueries>
 
 </test>

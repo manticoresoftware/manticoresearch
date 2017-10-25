@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>json queries: result set types</name>
+
+<requires>
+<http/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	binlog_path =
+}
+
+source src1
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query_pre 		= set time_zone='+0:00'
+  sql_query     		= SELECT id, int_col, bigint_col, UNIX_TIMESTAMP(time_col) as timestamp_col, bool_col, flt_col, str_col, json_col, mva_col, content FROM test_table
+  sql_attr_uint  		= int_col
+  sql_attr_bigint		= bigint_col
+  sql_attr_timestamp	= timestamp_col
+  sql_attr_bool			= bool_col
+  sql_attr_float 		= flt_col
+  sql_attr_string		= str_col
+  sql_attr_json			= json_col
+  sql_attr_multi		= uint mva_col from field
+}
+
+index test1
+{
+  source      = src1
+  path      = <data_path/>/test_dummy1
+}
+</config>
+
+<db_drop>drop table if exists test_table</db_drop>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	int_col int,
+	bigint_col bigint,
+	time_col date,
+	flt_col float,
+	bool_col int,
+	str_col varchar(255),
+	json_col varchar(255),
+	mva_col varchar(255),
+	content varchar(255)
+);
+</db_create>
+                                       
+<db_insert>
+insert into test_table values
+( 1, 123, 1111111111111, '2003-07-01', 1.1, 1, 'str1', '{"a":[1,2,3,4], "t":["t1", "t2", "t3"]}', '10,20,30', 'title' ),
+( 2, 234, 2222222222222, '2003-07-02', 2.2, 0, 'str2', '{"a":[2,3,4,5], "t":["t2", "t3", "t4"]}', '20,30,40', 'title' ),
+( 3, 345, 3333333333333, '2003-07-03', 3.3, 1, 'str3', '{"a":[3,4,5,1], "t":["t3", "t4", "t5"]}', '30,40,50', 'title' ),
+( 4, 456, 4444444444444, '2003-07-04', 4.4, 0, 'str4', '{"a":["4","5","6","2"], "t":["t4", "t5", "t6"]}', '40,50,60', 'title' ),
+( 5, 567, 5555555555555, '2003-07-05', 5.5, 1, 'str5', '["a","b"]', '50,60,70', 'title' )
+</db_insert>
+
+<httpqueries>
+<query endpoint="json/search">{ "index":"test1", "query": { "match_all":{} } }</query>
+</httpqueries>
+
+</test>

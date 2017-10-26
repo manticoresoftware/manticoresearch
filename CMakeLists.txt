@@ -168,6 +168,8 @@ if ( WIN32 )
 		endif ()
 	endif ()
 	mark_as_advanced ( CMAKE_CONFIGURATION_TYPES )
+	add_definitions ("-D_CRT_SECURE_NO_WARNINGS")
+    add_definitions ( "-wd4996" "-wd4706" "-wd4244" "-wd4702" )
 else ( WIN32 )
 
 	include ( helpers )

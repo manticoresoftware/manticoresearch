@@ -58,7 +58,7 @@ TEST( Text, HTMLStriper )
 		{ "testing &#xC0; &#x2116; &#x0116;1 numbers utf encoding", "", "", "testing \xC3\x80 \xE2\x84\x96 \xC4\x96\x31 numbers utf encoding" }
 	};
 
-	auto nTests = sizeof ( sTests ) / sizeof ( sTests[0] );
+	int nTests = sizeof ( sTests ) / sizeof ( sTests[0] );
 	for ( auto iTest = 0; iTest<nTests; ++iTest )
 	{
 		CSphString sError;

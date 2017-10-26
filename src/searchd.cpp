@@ -9542,7 +9542,16 @@ protected:
 
 #ifdef CMAKE_GENERATED_LEXER
 
+#ifdef __GNUC__
+	#pragma GCC diagnostic push 
+	#pragma GCC diagnostic ignored "-Wsign-compare"
+#endif
+
 #include "flexsphinxql.c"
+
+#ifdef __GNUC__
+	#pragma GCC diagnostic pop
+#endif
 
 #else
 #include "llsphinxql.c"

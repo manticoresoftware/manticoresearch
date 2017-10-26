@@ -537,7 +537,18 @@ public:
 #define YY_DECL static int my_lex ( YYSTYPE * lvalp, void * yyscanner, JsonParser_c * pParser )
 
 #ifdef CMAKE_GENERATED_LEXER
-	#include "flexsphinxjson.c"
+
+#ifdef __GNUC__
+	#pragma GCC diagnostic push 
+	#pragma GCC diagnostic ignored "-Wsign-compare"
+#endif
+
+#include "flexsphinxjson.c"
+
+#ifdef __GNUC__
+	#pragma GCC diagnostic pop
+#endif
+
 #else
 	#include "llsphinxjson.c"
 #endif

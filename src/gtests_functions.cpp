@@ -1068,7 +1068,7 @@ TEST ( functions, DISABLED_geodist )
 		// { 0, 0, 0.5, 179.7, 19944127.421 }, // antipodes, inverse Vincenty killer
 	};
 
-	for ( int i=0; i<sizeof(dTest)/sizeof(dTest[0]); i++ )
+	for ( int i=0; i<int(sizeof(dTest)/sizeof(dTest[0])); i++ )
 	{
 		double * t = dTest[i];
 		printf ( "%2d: ref %10.1f", i, t[4] );

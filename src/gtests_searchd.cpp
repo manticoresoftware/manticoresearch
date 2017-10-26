@@ -17,7 +17,7 @@ static CSphFixedVector<CSphString> g_dLocals ( 0 );
 
 static volatile bool g_bHas = false;
 static CSphString g_sNewPath;
-static DWORD g_iIter = 0;
+static DWORD g_uIter = 0;
 static const auto ITERATIONS = 100000;
 
 void ThdSearch ( void * )
@@ -44,15 +44,15 @@ void ThdRotate ( void * )
 {
 	for ( auto i = 0; i<ITERATIONS; ++i )
 	{
-		g_sNewPath.SetSprintf ( "/tmp/very-long-path/goes/here/new_%u", g_iIter );
-		g_iIter++;
+		g_sNewPath.SetSprintf ( "/tmp/very-long-path/goes/here/new_%u", g_uIter );
+		g_uIter++;
 
 		ServedIndex_c * pServed = g_pLocals->GetWlockedEntry ( g_sIndex );
 
 		pServed->m_sNewPath = "";
 		pServed->m_sIndexPath = g_sNewPath;
 		for ( int i = 0; i<100; i++ )
-			g_bHas = g_bHas ^ ( i + g_iIter );
+			g_bHas = g_bHas ^ (!!( i + g_uIter ));
 
 		pServed->Unlock ();
 	}

@@ -397,6 +397,7 @@ static CSphVector<SphThread_t>				g_dTickPoolThread;
 /// flush parameters of rt indexes
 static SphThread_t							g_tRtFlushThread;
 static SphThread_t							g_tBinlogFlushThread;
+static BinlogFlushInfo_t					g_tBinlogAutoflush;
 
 // optimize thread
 static SphThread_t							g_tOptimizeThread;
@@ -1497,7 +1498,8 @@ void Shutdown ()
 
 	// tell flush-rt thread to shutdown, and wait until it does
 	sphThreadJoin ( &g_tRtFlushThread );
-	sphThreadJoin ( &g_tBinlogFlushThread );
+	if ( g_tBinlogAutoflush.m_fnWork )
+		sphThreadJoin ( &g_tBinlogFlushThread );
 
 	// tell rotation thread to shutdown, and wait until it does
 	if ( g_bSeamlessRotate )
@@ -18275,7 +18277,6 @@ static void RtFlushThreadFunc ( void * )
 	}
 }
 
-static BinlogFlushInfo_t g_tBinlogAutoflush;
 static void RtBinlogAutoflushThreadFunc ( void * )
 {
 	assert ( g_tBinlogAutoflush.m_pLog && g_tBinlogAutoflush.m_fnWork );
@@ -23947,7 +23948,10 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		::unlink ( sNewState.cstr() );
 
 		if ( !bCanWrite )
+		{
 			sphWarning ( "sphinxql_state flush disabled: %s", sError.cstr() );
+			g_sSphinxqlState = ""; // need to disable thread join on shutdown 
+		}
 		else if ( !sphThreadCreate ( &g_tSphinxqlStateFlushThread, SphinxqlStateThreadFunc, NULL ) )
 			sphDie ( "failed to create sphinxql_state writer thread" );
 	}

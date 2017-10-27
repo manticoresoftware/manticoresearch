@@ -2221,6 +2221,10 @@ int sphCreateInetSocket ( DWORD uAddr, int iPort )
 	int iOn = 1;
 	if ( setsockopt ( iSock, SOL_SOCKET, SO_REUSEADDR, (char*)&iOn, sizeof(iOn) ) )
 		sphWarning ( "setsockopt() failed: %s", sphSockError() );
+#ifdef SO_REUSEPORT
+	if ( setsockopt ( iSock, SOL_SOCKET, SO_REUSEPORT, (char*)&iOn, sizeof(iOn) ) )
+		sphWarning ( "setsockopt() failed: %s", sphSockError() );
+#endif
 #ifdef TCP_NODELAY
 	if ( setsockopt ( iSock, IPPROTO_TCP, TCP_NODELAY, (char*)&iOn, sizeof(iOn) ) )
 		sphWarning ( "setsockopt() failed: %s", sphSockError() );

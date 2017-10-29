@@ -324,7 +324,7 @@ Example:
         {
           "location_anchor": {"lat":49, "lon":15},
           "location_source":"attr_lat, attr_lon",
-          "distance_type": "arc",
+          "distance_type": "adaptive",
           "distance":100km
         }
     }
@@ -334,8 +334,9 @@ Example:
 -  ``location_source``: specifies the attributes that contain latitude
    and longitude.
 -  ``distance_type``: specifies distance calculation function. Can be
-   either ``arc`` or ``plain``. ``plain`` is faster, but inaccurate on
-   long distances. Optional, defaults to ``arc``.
+   either ``adaptive`` or ``haversine``. ``adaptive`` is faster and
+   more precise, for more details see GEODIST() function in SphinxQL.
+   Optional, defaults to ``adaptive``.
 -  ``distance``: specifies the maximum distance from the pin locations.
    All documents within this distance match. The distance can be
    specified in various units. If no unit is specified, the distance is
@@ -357,6 +358,8 @@ following latitude/longitude formats:
 * an object with lat and lon keys: ``{ "lat":"attr_lat", "lon":"attr_lon" }``
 * a string of the following structure: ``"attr_lat,attr_lon"``
 * an array with the latitude and longitude in the following order: ``[attr_lon, attr_lat]``
+
+Latitude and longitude are specified in degrees.
 
 Sorting
 -------
@@ -446,7 +449,7 @@ Example:
           {
             "location_anchor": {"lat":41, "lon":32},
             "location_source": [ "attr_lon", "attr_lat" ],
-            "distance_type": "arc"
+            "distance_type": "adaptive"
           }
         }
       ]

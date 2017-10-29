@@ -24,7 +24,7 @@ struct XQNode_t;
 struct SqlStmt_t;
 
 QueryParser_i *	sphCreateJsonQueryParser();
-bool			sphParseJsonQuery ( const char * szQuery, CSphQuery & tQuery, bool & bProfile, bool & bAttrsHighlight, CSphString & sError );
+bool			sphParseJsonQuery ( const char * szQuery, CSphQuery & tQuery, bool & bProfile, bool & bAttrsHighlight, CSphString & sError, CSphString & sWarning );
 bool			sphParseJsonInsert ( const char * szInsert, SqlStmt_t & tStmt, SphDocID_t & tDocId, bool bReplace, CSphString & sError );
 bool			sphParseJsonUpdate ( const char * szUpdate, SqlStmt_t & tStmt, SphDocID_t & tDocId, CSphString & sError );
 bool			sphParseJsonDelete ( const char * szDelete, SqlStmt_t & tStmt, SphDocID_t & tDocId, CSphString & sError );

@@ -79,6 +79,10 @@ insert into test_table values
 <query endpoint="json/search">{ "index":"test1", "query": { "geo_distance": { "location_anchor":{"lat":49, "lon":15}, "location_source":"attr_lat, attr_lon", "distance":"539 NM"} } }</query>
 <query endpoint="json/search">{ "index":"test1", "query": { "geo_distance": { "location_anchor":{"lat":49, "lon":15}, "location_source":"attr_lat, attr_lon", "distance":"539nmi"} } }</query>
 <query endpoint="json/search">{ "index":"test1", "query": { "geo_distance": { "location_anchor":{"lat":49, "lon":15}, "location_source":"attr_lat, attr_lon", "distance":"539 nauticalmiles"} } }</query>
+
+<query endpoint="json/search">{ "index":"test1", "query": { "geo_distance": { "location_anchor":{"lat":49, "lon":15}, "location_source":"attr_lat, attr_lon", "distance":1000000, "distance_type":"adaptive" } } }</query>
+<query endpoint="json/search">{ "index":"test1", "query": { "geo_distance": { "location_anchor":{"lat":49, "lon":15}, "location_source":"attr_lat, attr_lon", "distance":1000000, "distance_type":"haversine" } } }</query>
+<query endpoint="json/search">{ "index":"test1", "query": { "geo_distance": { "location_anchor":{"lat":49, "lon":15}, "location_source":"attr_lat, attr_lon", "distance":1000000, "distance_type":"arc" } } }</query>
 </httpqueries>
 
 </test>

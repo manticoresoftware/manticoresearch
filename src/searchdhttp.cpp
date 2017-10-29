@@ -609,7 +609,7 @@ struct HttpQuerySettings_t
 	{}
 };
 
-static QueryParser_i * ParseQuerySql ( CSphQuery & tQuery, const HttpRequestParser_t & tParser, CSphVector<BYTE> & dData, HttpQuerySettings_t & tSettings )
+static QueryParser_i * ParseQuerySql ( CSphQuery & tQuery, const HttpRequestParser_t & tParser, CSphVector<BYTE> & dData, HttpQuerySettings_t & tSettings, CSphString & /*sWarning*/ )
 {
 	const CSphString * pRawQl = tParser.m_hOptions ( "query" );
 	if ( !pRawQl || pRawQl->IsEmpty() )
@@ -643,7 +643,7 @@ static QueryParser_i * ParseQuerySql ( CSphQuery & tQuery, const HttpRequestPars
 }
 
 
-static QueryParser_i * ParseQueryPlain ( CSphQuery & tQuery, const HttpRequestParser_t & tParser, CSphVector<BYTE> & dData, HttpQuerySettings_t & tSettings )
+static QueryParser_i * ParseQueryPlain ( CSphQuery & tQuery, const HttpRequestParser_t & tParser, CSphVector<BYTE> & dData, HttpQuerySettings_t & tSettings, CSphString & /*sWarning*/ )
 {
 	CSphString sError;
 	ParseSearchOptions ( tParser.m_hOptions, tQuery );
@@ -662,10 +662,10 @@ static QueryParser_i * ParseQueryPlain ( CSphQuery & tQuery, const HttpRequestPa
 }
 
 
-static QueryParser_i * ParseQueryJson ( CSphQuery & tQuery, const HttpRequestParser_t & tParser, CSphVector<BYTE> & dData, HttpQuerySettings_t & tSettings )
+static QueryParser_i * ParseQueryJson ( CSphQuery & tQuery, const HttpRequestParser_t & tParser, CSphVector<BYTE> & dData, HttpQuerySettings_t & tSettings, CSphString & sWarning )
 {
 	CSphString sError;
-	if ( !sphParseJsonQuery ( tParser.m_sRawBody.cstr(), tQuery, tSettings.m_bProfile, tSettings.m_bAttrHighlight, sError ) )
+	if ( !sphParseJsonQuery ( tParser.m_sRawBody.cstr(), tQuery, tSettings.m_bProfile, tSettings.m_bAttrHighlight, sError, sWarning ) )
 	{
 		sError.SetSprintf( "Error parsing json query: %s", sError.cstr() );
 		HttpErrorReply ( dData, SPH_HTTP_STATUS_400, sError.cstr() );
@@ -729,7 +729,7 @@ const char * CSphQueryProfileJson::GetResultAsStr() const
 
 
 
-using ParseQueryFunc_fn = QueryParser_i * (CSphQuery &, const HttpRequestParser_t &, CSphVector<BYTE> &, HttpQuerySettings_t & );
+using ParseQueryFunc_fn = QueryParser_i * (CSphQuery &, const HttpRequestParser_t &, CSphVector<BYTE> &, HttpQuerySettings_t &, CSphString & );
 using ResultEncodeFunc_fn = void ( const AggrResult_t &, const CSphQuery &, CSphQueryProfile *, bool, CSphString & );
 
 static void HttpHandlerSearch ( ParseQueryFunc_fn * pParseQueryFunc, ResultEncodeFunc_fn * pResultEncodeFunc, const HttpRequestParser_t & tParser, int iCID, CSphVector<BYTE> & dData )
@@ -738,7 +738,8 @@ static void HttpHandlerSearch ( ParseQueryFunc_fn * pParseQueryFunc, ResultEncod
 
 	HttpQuerySettings_t tQuerySettings;
 	CSphQuery tQuery;
-	QueryParser_i * pQueryParser = pParseQueryFunc ( tQuery, tParser, dData, tQuerySettings );
+	CSphString sWarning;
+	QueryParser_i * pQueryParser = pParseQueryFunc ( tQuery, tParser, dData, tQuerySettings, sWarning );
 	if ( !pQueryParser )
 		return;
 
@@ -765,6 +766,10 @@ static void HttpHandlerSearch ( ParseQueryFunc_fn * pParseQueryFunc, ResultEncod
 		return;
 	}
 
+	// fixme: handle more than one warning at once?
+	if ( pRes->m_sWarning.IsEmpty() )
+		pRes->m_sWarning = sWarning;
+	
 	CSphString sResult;
 	pResultEncodeFunc ( *pRes, tQuery, tQuerySettings.m_bProfile ? &tProfile : NULL, tQuerySettings.m_bAttrHighlight, sResult );
 	HttpBuildReply ( dData, SPH_HTTP_STATUS_200, sResult.cstr(), sResult.Length(), false );

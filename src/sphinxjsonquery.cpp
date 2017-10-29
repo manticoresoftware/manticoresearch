@@ -743,14 +743,14 @@ static bool ParseLocation ( const char * sName, cJSON * pLoc, LocationField_t * 
 class GeoDistInfo_c
 {
 public:
-	bool				Parse ( const cJSON * pRoot, bool bNeedDistance, CSphString & sError );
+	bool				Parse ( const cJSON * pRoot, bool bNeedDistance, CSphString & sError, CSphString & sWarning );
 	CSphString			BuildExprString() const;
 	bool				IsGeoDist() const { return m_bGeodist; }
 	float				GetDistance() const { return m_fDistance; }
 
 private:
 	bool				m_bGeodist {false};
-	bool				m_bGeodistArc {true};
+	bool				m_bGeodistAdaptive {true};
 	float				m_fDistance {0.0f};
 
 	LocationField_t		m_tLocAnchor;
@@ -760,7 +760,7 @@ private:
 };
 
 
-bool GeoDistInfo_c::Parse ( const cJSON * pRoot, bool bNeedDistance, CSphString & sError )
+bool GeoDistInfo_c::Parse ( const cJSON * pRoot, bool bNeedDistance, CSphString & sError, CSphString & sWarning )
 {
 	assert ( pRoot );
 
@@ -790,13 +790,12 @@ bool GeoDistInfo_c::Parse ( const cJSON * pRoot, bool bNeedDistance, CSphString 
 		}
 
 		CSphString sType = pType->valuestring;
-		if ( sType!="arc" && sType!="plane" )
+		if ( sType!="adaptive" && sType!="haversine" )
 		{
-			sError.SetSprintf ( "\"distance_type\" property type is invalid %s", sType.cstr() );
-			return false;
-		}
-
-		m_bGeodistArc = ( sType=="arc" );
+			sWarning.SetSprintf ( "\"distance_type\" property type is invalid: \"%s\", defaulting to \"adaptive\"", sType.cstr() );
+			m_bGeodistAdaptive = true;
+		} else
+			m_bGeodistAdaptive = ( sType=="adaptive" );
 	}
 
 	cJSON * pDistance = cJSON_GetObjectItem ( pRoot, "distance" );
@@ -871,7 +870,7 @@ bool GeoDistInfo_c::ParseDistance ( cJSON * pDistance, CSphString & sError )
 CSphString GeoDistInfo_c::BuildExprString() const
 {
 	CSphString sResult;
-	sResult.SetSprintf ( "GEODIST(%f, %f, %s, %s, {in=deg, out=m, method=%s})", m_tLocAnchor.m_fLat, m_tLocAnchor.m_fLon, m_tLocSource.m_sLat.cstr(), m_tLocSource.m_sLon.cstr(), m_bGeodistArc ? "adaptive" : "haversine" );
+	sResult.SetSprintf ( "GEODIST(%f, %f, %s, %s, {in=deg, out=m, method=%s})", m_tLocAnchor.m_fLat, m_tLocAnchor.m_fLon, m_tLocSource.m_sLat.cstr(), m_tLocSource.m_sLon.cstr(), m_bGeodistAdaptive ? "adaptive" : "haversine" );
 	return sResult;
 }
 
@@ -964,10 +963,10 @@ static bool ConstructRangeFilter ( const cJSON * pJson, CSphVector<CSphFilterSet
 }
 
 
-static bool ConstructGeoFilter ( const cJSON * pJson, CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphQueryItem> & dQueryItems, int & iQueryItemId, CSphString & sError )
+static bool ConstructGeoFilter ( const cJSON * pJson, CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphQueryItem> & dQueryItems, int & iQueryItemId, CSphString & sError, CSphString & sWarning )
 {
 	GeoDistInfo_c tGeoDist;
-	if ( !tGeoDist.Parse ( pJson, true, sError ) )
+	if ( !tGeoDist.Parse ( pJson, true, sError, sWarning ) )
 		return false;
 
 	CSphQueryItem & tQueryItem = dQueryItems.Add();
@@ -985,7 +984,7 @@ static bool ConstructGeoFilter ( const cJSON * pJson, CSphVector<CSphFilterSetti
 }
 
 
-static bool ConstructFilter ( const cJSON * pJson, CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphQueryItem> & dQueryItems, int & iQueryItemId, CSphString & sError )
+static bool ConstructFilter ( const cJSON * pJson, CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphQueryItem> & dQueryItems, int & iQueryItemId, CSphString & sError, CSphString & sWarning )
 {
 	if ( !IsFilter ( pJson ) )
 		return true;
@@ -994,14 +993,14 @@ static bool ConstructFilter ( const cJSON * pJson, CSphVector<CSphFilterSettings
 		return ConstructRangeFilter ( pJson, dFilters, sError );
 
 	if ( !strcmp ( pJson->string, "geo_distance" ) )
-		return ConstructGeoFilter ( pJson, dFilters, dQueryItems, iQueryItemId, sError );
+		return ConstructGeoFilter ( pJson, dFilters, dQueryItems, iQueryItemId, sError, sWarning );
 
 	sError.SetSprintf ( "unknown filter type: %s", pJson->string );
 	return false;
 }
 
 
-static bool ConstructBoolNodeFilters ( const cJSON * pClause, CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphQueryItem> & dQueryItems, int & iQueryItemId, CSphString & sError )
+static bool ConstructBoolNodeFilters ( const cJSON * pClause, CSphVector<CSphFilterSettings> & dFilters, CSphVector<CSphQueryItem> & dQueryItems, int & iQueryItemId, CSphString & sError, CSphString & sWarning )
 {
 	if ( cJSON_IsArray ( pClause ) )
 	{
@@ -1017,13 +1016,13 @@ static bool ConstructBoolNodeFilters ( const cJSON * pClause, CSphVector<CSphFil
 			cJSON * pItem = cJSON_GetArrayItem ( pObject, 0 );
 			assert ( pItem );
 
-			if ( !ConstructFilter ( pItem, dFilters, dQueryItems, iQueryItemId, sError ) )
+			if ( !ConstructFilter ( pItem, dFilters, dQueryItems, iQueryItemId, sError, sWarning ) )
 				return false;
 		}
 	} else if ( cJSON_IsObject ( pClause ) )
 	{
 		cJSON * pItem = cJSON_GetArrayItem ( pClause, 0 );
-		if ( !ConstructFilter ( pItem, dFilters, dQueryItems, iQueryItemId, sError ) )
+		if ( !ConstructFilter ( pItem, dFilters, dQueryItems, iQueryItemId, sError, sWarning ) )
 			return false;
 	} else
 	{
@@ -1035,7 +1034,7 @@ static bool ConstructBoolNodeFilters ( const cJSON * pClause, CSphVector<CSphFil
 }
 
 
-static bool ConstructBoolFilters ( cJSON * pBool, CSphQuery & tQuery, int & iQueryItemId, CSphString & sError )
+static bool ConstructBoolFilters ( cJSON * pBool, CSphQuery & tQuery, int & iQueryItemId, CSphString & sError, CSphString & sWarning )
 {
 	// non-recursive for now, maybe we should fix this later
 	if ( !cJSON_IsObject ( pBool ) )
@@ -1054,15 +1053,15 @@ static bool ConstructBoolFilters ( cJSON * pBool, CSphQuery & tQuery, int & iQue
 
 		if ( !strcmp ( pClause->string, "must" ) )
 		{
-			if ( !ConstructBoolNodeFilters ( pClause, dMust, dMustQI, iQueryItemId, sError ) )
+			if ( !ConstructBoolNodeFilters ( pClause, dMust, dMustQI, iQueryItemId, sError, sWarning ) )
 				return false;
 		} else if ( !strcmp ( pClause->string, "should" ) )
 		{
-			if ( !ConstructBoolNodeFilters ( pClause, dShould, dShouldQI, iQueryItemId, sError ) )
+			if ( !ConstructBoolNodeFilters ( pClause, dShould, dShouldQI, iQueryItemId, sError, sWarning ) )
 				return false;
 		} else if ( !strcmp ( pClause->string, "must_not" ) )
 		{
-			if ( !ConstructBoolNodeFilters ( pClause, dMustNot, dMustNotQI, iQueryItemId, sError ) )
+			if ( !ConstructBoolNodeFilters ( pClause, dMustNot, dMustNotQI, iQueryItemId, sError, sWarning ) )
 				return false;
 		} else
 		{
@@ -1126,7 +1125,7 @@ static bool ConstructBoolFilters ( cJSON * pBool, CSphQuery & tQuery, int & iQue
 }
 
 
-static bool ConstructFilters ( const cJSON * pJson, CSphQuery & tQuery, CSphString & sError )
+static bool ConstructFilters ( const cJSON * pJson, CSphQuery & tQuery, CSphString & sError, CSphString & sWarning )
 {
 	if ( !pJson || !pJson->string )
 		return false;
@@ -1141,7 +1140,7 @@ static bool ConstructFilters ( const cJSON * pJson, CSphQuery & tQuery, CSphStri
 
 	cJSON * pBool = cJSON_GetObjectItem ( pJson, "bool" );
 	if ( pBool )
-		return ConstructBoolFilters ( pBool, tQuery, iQueryItemId, sError );
+		return ConstructBoolFilters ( pBool, tQuery, iQueryItemId, sError, sWarning );
 
 	for ( int i = 0; i < cJSON_GetArraySize ( pJson ); i++ )
 	{
@@ -1151,7 +1150,7 @@ static bool ConstructFilters ( const cJSON * pJson, CSphQuery & tQuery, CSphStri
 		if ( IsFilter ( pChild ) )
 		{
 			int iFirstNewItem = tQuery.m_dItems.GetLength();
-			if ( !ConstructFilter ( pChild, tQuery.m_dFilters, tQuery.m_dItems, iQueryItemId, sError ) )
+			if ( !ConstructFilter ( pChild, tQuery.m_dFilters, tQuery.m_dItems, iQueryItemId, sError, sWarning ) )
 				return false;
 
 			AddToSelectList ( tQuery, tQuery.m_dItems, iFirstNewItem );
@@ -1167,7 +1166,7 @@ static bool ConstructFilters ( const cJSON * pJson, CSphQuery & tQuery, CSphStri
 //////////////////////////////////////////////////////////////////////////
 
 static bool ParseSnippet ( cJSON * pSnip, CSphQuery & tQuery, CSphString & sError );
-static bool ParseSort ( cJSON * pSort, CSphQuery & tQuery, bool & bGotWeight, CSphString & sError );
+static bool ParseSort ( cJSON * pSort, CSphQuery & tQuery, bool & bGotWeight, CSphString & sError, CSphString & sWarning );
 static bool ParseSelect ( cJSON * pSelect, CSphQuery & tQuery, CSphString & sError );
 static bool ParseExpr ( cJSON * pExpr, CSphQuery & tQuery, CSphString & sError );
 
@@ -1202,7 +1201,7 @@ QueryParser_i * sphCreateJsonQueryParser()
 }
 
 
-bool sphParseJsonQuery ( const char * szQuery, CSphQuery & tQuery, bool & bProfile, bool & bAttrsHighlight, CSphString & sError )
+bool sphParseJsonQuery ( const char * szQuery, CSphQuery & tQuery, bool & bProfile, bool & bAttrsHighlight, CSphString & sError, CSphString & sWarning )
 {
 	CJsonScopedPtr_c pRoot ( cJSON_Parse ( szQuery ) );
 	if ( !pRoot.Ptr() )
@@ -1258,7 +1257,7 @@ bool sphParseJsonQuery ( const char * szQuery, CSphQuery & tQuery, bool & bProfi
 	// because of the way sphinxql parsing was implemented
 	// we need to parse our query and extract filters now
 	// and parse the rest of the query later
-	if ( !ConstructFilters ( pQuery, tQuery, sError ) )
+	if ( !ConstructFilters ( pQuery, tQuery, sError, sWarning ) )
 		return false;
 
 	// expression columns go first to select list
@@ -1291,7 +1290,7 @@ bool sphParseJsonQuery ( const char * szQuery, CSphQuery & tQuery, bool & bProfi
 	if ( pSort )
 	{
 		bool bGotWeight = false;
-		if ( !ParseSort ( pSort, tQuery, bGotWeight, sError ) )
+		if ( !ParseSort ( pSort, tQuery, bGotWeight, sError, sWarning ) )
 			return false;
 
 		cJSON * pTrackScore = cJSON_GetObjectItem ( pRoot.Ptr(), "track_scores" );
@@ -1713,6 +1712,13 @@ void sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQuery, 
 
 	cJSON_AddNumberToObject ( pRoot, "took", tRes.m_iQueryTime );
 	cJSON_AddFalseToObject ( pRoot, "timed_out" );
+
+	if ( !tRes.m_sWarning.IsEmpty() )
+	{
+		cJSON * pWarning = cJSON_CreateObject();
+		cJSON_AddItemToObject ( pRoot, "warning", pWarning );
+		cJSON_AddStringToObject ( pWarning, "reason", tRes.m_sWarning.cstr() );
+	}
 
 	cJSON * pHitMeta = cJSON_CreateObject();
 	cJSON_AddItemToObject ( pRoot, "hits", pHitMeta );
@@ -2343,7 +2349,7 @@ struct SortField_t : public GeoDistInfo_c
 };
 
 
-bool ParseSort ( cJSON * pSort, CSphQuery & tQuery, bool & bGotWeight, CSphString & sError )
+bool ParseSort ( cJSON * pSort, CSphQuery & tQuery, bool & bGotWeight, CSphString & sError, CSphString & sWarning )
 {
 	assert ( pSort );
 	bGotWeight = false;
@@ -2481,7 +2487,7 @@ bool ParseSort ( cJSON * pSort, CSphQuery & tQuery, bool & bGotWeight, CSphStrin
 				return false;
 			}
 
-			if ( !tItem.Parse( pSortItem, false, sError ) )
+			if ( !tItem.Parse ( pSortItem, false, sError, sWarning ) )
 				return false;
 		}
 

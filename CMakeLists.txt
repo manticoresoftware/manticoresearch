@@ -264,6 +264,9 @@ else ( WIN32 )
 	message ( STATUS "Checking for unaligned RAM access" )
 	include ( check_unaligned_ram_access )
 
+	message ( STATUS "Checking for SO_REUSEPORT flag" )
+	include ( check_so_reuseport_availability )
+
 	message ( STATUS "Configuring the options..." )
 	message ( STATUS "Option DISABLE_MEMROUTINES ${DISABLE_MEMROUTINES}" )
 	option ( DISABLE_MEMROUTINES "If the build is broken because new/delete override, this option will disable the overriding in sphinx" )

@@ -2221,7 +2221,7 @@ int sphCreateInetSocket ( DWORD uAddr, int iPort )
 	int iOn = 1;
 	if ( setsockopt ( iSock, SOL_SOCKET, SO_REUSEADDR, (char*)&iOn, sizeof(iOn) ) )
 		sphWarning ( "setsockopt() failed: %s", sphSockError() );
-#ifdef SO_REUSEPORT
+#if HAVE_SO_REUSEPORT
 	if ( setsockopt ( iSock, SOL_SOCKET, SO_REUSEPORT, (char*)&iOn, sizeof(iOn) ) )
 		sphWarning ( "setsockopt() failed: %s", sphSockError() );
 #endif

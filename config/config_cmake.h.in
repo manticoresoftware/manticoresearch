@@ -49,6 +49,9 @@
 /* Define if your system supports the eventfd system calls */
 #cmakedefine01 HAVE_EVENTFD
 
+/* Define if your system supports flag SO_REUSEPORT */
+#cmakedefine01 HAVE_SO_REUSEPORT
+
 /* Define to 1 if you have the <execinfo.h> header file. */
 #cmakedefine HAVE_EXECINFO_H ${HAVE_EXECINFO_H}
 

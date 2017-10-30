@@ -23,6 +23,7 @@ Group:          Applications/Text
 Vendor:         @CPACK_PACKAGE_VENDOR@
 URL:            http://manticoresearch.com
 Packager:       Manticore Software Ltd.
+Prefix:			/
 
 %if %{with_systemd}
 BuildRequires: systemd-units
@@ -51,7 +52,7 @@ Requires(preun): initscripts
 %define _rpmfilename @CPACK_RPM_FILE_NAME@
 %define _unpackaged_files_terminate_build 0
 %define _topdir @CPACK_RPM_DIRECTORY@
-%define _scripts @SOURCE_DIR@/dist/rpm
+%define _scripts @BINARY_DIR@
 %define _part @CPACK_RPM_PACKAGE_COMPONENT_PART_PATH@
 # 0%{?fedora} 0%{?dist} 1%{?dist} %{dist}
 @TMP_RPM_SPEC_INSTALL_POST@
@@ -96,13 +97,13 @@ install -m 0644 %{_scripts}/searchd.conf %{buildroot}/usr/lib/tmpfiles.d/searchd
 install -p -D -m 0755 %{_scripts}/%{name}.init $RPM_BUILD_ROOT%{_initrddir}/searchd
 %endif
 
-# Create /var/log/sphinx
+# Create /var/log/manticore
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/manticore
 
-# Create /var/run/sphinx
+# Create /var/run/manticore
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/run/manticore
 
-# Create /var/lib/sphinx
+# Create /var/lib/manticore
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/manticore
 
 # Create sphinx.conf
@@ -193,7 +194,6 @@ fi
 %systemd_postun searchd.service
 %endif
 
-
 %files
 %defattr(-,root,root,-)
 @CPACK_RPM_INSTALL_FILES@
@@ -205,9 +205,6 @@ fi
 # additions
 %if %{isbin}
 %config(noreplace) %{_sysconfdir}/logrotate.d/manticore
-%dir %{_localstatedir}/log/manticore
-%dir %{_localstatedir}/run/manticore
-%dir %{_localstatedir}/lib/manticore
 
 %dir %{_sysconfdir}/sphinx
 %config(noreplace) %{_sysconfdir}/sphinx/sphinx.conf

@@ -1,6 +1,6 @@
 # Automatically added by build_trusty.cmake
-if [ -x "/etc/init.d/manticore" ] || [ -e "/etc/init/manticore.conf" ]; then
-	if [ ! -e "/etc/init/manticore.conf" ]; then
+if [ -x "@SYSCONFDIR@/init.d/manticore" ] || [ -e "@SYSCONFDIR@/init/manticore.conf" ]; then
+	if [ ! -e "@SYSCONFDIR@/init/manticore.conf" ]; then
 		update-rc.d manticore defaults >/dev/null
 	fi
 	invoke-rc.d manticore start || exit $?

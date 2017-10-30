@@ -10,21 +10,19 @@ Group=manticore
 # Run ExecStartPre with root-permissions
 PermissionsStartOnly=true
 ExecStartPre=/bin/mkdir -p /var/run/manticore
-ExecStartPre=/bin/chown manticore.manticore /var/run/manticore
+ExecStartPre=/bin/chown manticore.manticore @RUNDIR@
 # Run ExecStart with User=manticore / Group=manticore
-ExecStart=/usr/bin/searchd --config /etc/sphinx/sphinx.conf
-ExecStop=/usr/bin/searchd --config /etc/sphinx/sphinx.conf --stopwait
+ExecStart=@BINDIR@/searchd --config @SYSCONFDIR@/sphinxsearch/sphinx.conf
+ExecStop=@BINDIR@/searchd --config @SYSCONFDIR@/sphinxsearch/sphinx.conf --stopwait
 KillMode=process
 KillSignal=SIGTERM
 SendSIGKILL=no
 LimitNOFILE=infinity
-TimeoutStartSec=0
-PIDFile=/var/run/manticore/searchd.pid
+TimeoutStartSec=infinity
+PIDFile=@RUNDIR@/searchd.pid
 
 [Install]
 WantedBy=multi-user.target
-Alias=sphinx.service
-Alias=sphinxsearch.service
 Alias=manticore.service
-Alias=manticoresearch.service
+Alias=searchd.service
 

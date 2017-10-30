@@ -5,11 +5,11 @@
 message ( STATUS "Will create DEB for Debian (wheezy)" )
 
 # m.b. postinst.xenial, postinst.debian and postinst.trusty
-FILE ( READ dist/deb/postinst.debian POSTINST_SPECIFIC )
+FILE ( READ dist/deb/postinst.debian.in POSTINST_SPECIFIC )
 
 # m.b. prerm.ubuntu, prerm.debian
-configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/prerm.debian"
-		"${MANTICORE_BINARY_DIR}/prerm" COPYONLY )
+configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/prerm.debian.in"
+		"${MANTICORE_BINARY_DIR}/prerm" @ONLY )
 
 # m.b. posrtrm.systemd, posrtm.wheezy targeted to posrtm, and also preinst.trusty targeted to preinst
 configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/postrm.wheezy"

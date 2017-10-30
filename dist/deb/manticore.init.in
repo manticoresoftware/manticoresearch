@@ -20,15 +20,15 @@
 
 
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-DAEMON=/usr/bin/searchd
-DAEMONOPTS='-c /etc/sphinxsearch/sphinx.conf'
+DAEMON=@BINDIR@/searchd
+DAEMONOPTS='-c @SYSCONFDIR@/sphinxsearch/sphinx.conf'
 NAME=manticore
 DESC=manticore
 
 test -x $DAEMON || exit 0
 
-LOGDIR=/var/log/manticore
-PIDFILE=/var/run/manticore/searchd.pid
+LOGDIR=@LOGDIR@
+PIDFILE=@RUNDIR@/searchd.pid
 DODTIME=1                   # Time to wait for the server to die, in seconds
                             # If this value is set too low you might not
                             # let some servers to die gracefully and
@@ -37,12 +37,12 @@ DODTIME=1                   # Time to wait for the server to die, in seconds
 STARTDELAY=0.5
 
 # Include manticore defaults if available
-if [ -f /etc/default/manticore ] ; then
-    . /etc/default/manticore
+if [ -f @SYSCONFDIR@/default/manticore ] ; then
+    . @SYSCONFDIR@/default/manticore
 fi
 
 if [ "$START" != "yes" ]; then
-  echo "To enable $NAME, edit /etc/default/manticore and set START=yes"
+  echo "To enable $NAME, edit @SYSCONFDIR@/default/manticore and set START=yes"
   exit 0
 fi
 
@@ -96,12 +96,12 @@ do_force_stop() {
 }
 
 do_start() {
-	test -e /var/run/manticore || install -m 755 -o root -d root /var/run/manticore
+	test -e @RUNDIR@ || install -m 755 -o root -d root @RUNDIR@
         # Check if we have the configuration file
-        if [ ! -f /etc/sphinxsearch/sphinx.conf ]; then
+        if [ ! -f @SYSCONFDIR@/sphinxsearch/sphinx.conf ]; then
             echo "\n"
-            echo "Please create an /etc/sphinxsearch/sphinx.conf configuration file."
-            echo "A template is provided as /etc/sphinxsearch/sphinx.conf.sample."
+            echo "Please create an @SYSCONFDIR@/sphinxsearch/sphinx.conf configuration file."
+            echo "A template is provided as @SYSCONFDIR@/sphinxsearch/sphinx.conf.sample."
             exit 1
         fi
 
@@ -164,7 +164,7 @@ case "$1" in
     fi
     ;;
   *)
-    N=/etc/init.d/$NAME
+    N=@SYSCONFDIR@/init.d/$NAME
     # echo "Usage: $N {start|stop|restart|reload|force-reload}" >&2
     echo "Usage: $N {start|stop|restart|force-reload|status|force-stop}" >&2
     exit 1

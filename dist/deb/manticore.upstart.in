@@ -1,0 +1,36 @@
+# Manticore Service
+
+description     "Manticore Daemon"
+author          "Manticore Software LTD (www.manticoresearch.com)"
+env MANTICOREUSER="manticore"
+start on (net-device-up
+          and local-filesystems
+	  and runlevel [2345])
+stop on runlevel [016]
+
+respawn
+respawn limit 10 35
+
+# The default of 5 seconds is too low if we have rt indices and have to flush them
+kill timeout 30
+env DEFAULTFILE="@SYSCONFDIR@/default/manticore"
+pre-start script
+    mkdir -p -m 0755 @RUNDIR@
+    chown manticore:manticore @RUNDIR@
+    if [ -f "$DEFAULTFILE" ]; then
+	. "$DEFAULTFILE"
+    fi
+    if [ "z$START" != "zyes" ]; then
+	stop
+	logger "To enable manticore, edit @SYSCONFDIR@/default/manticore and set START=yes"
+	exit 0
+    fi
+    if [ ! -f @SYSCONFDIR@/sphinxsearch/sphinx.conf ]; then
+        logger "Please create an @SYSCONFDIR@/sphinxsearch/sphinx.conf configuration file."
+        logger "Templates are in the @DOCDIR@/example-conf/ directory."
+        exit 0
+    fi
+end script
+
+exec start-stop-daemon --start --chuid $MANTICOREUSER --exec @BINDIR@/searchd -- --nodetach -c @SYSCONFDIR@/sphinxsearch/sphinx.conf
+

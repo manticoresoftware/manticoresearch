@@ -19,15 +19,30 @@ string ( REGEX REPLACE "(binlog_path[ \t]+\\=[ \t]+\\@CONFDIR\\@/data)" "\\1/" _
 file ( WRITE "${MANTICORE_BINARY_DIR}/sphinx-min.conf.in" "${_MINCONF}")
 unset (_MINCONF)
 
-set ( CONFDIR "/var" )
+set ( CONFDIR "${LOCALSTATEDIR}" )
+set ( RUNDIR "${LOCALSTATEDIR}/run/manticore" )
+set ( LOGDIR "${LOCALSTATEDIR}/log/manticore" )
+
 configure_file ( "${MANTICORE_BINARY_DIR}/sphinx-min.conf.in" "${MANTICORE_BINARY_DIR}/sphinx-min.conf.dist" @ONLY )
 configure_file ( "sphinx.conf.in" "${MANTICORE_BINARY_DIR}/sphinx.conf.dist" @ONLY )
 
+configure_file ( "dist/rpm/manticore.init.in" "${MANTICORE_BINARY_DIR}/manticore.init" @ONLY )
+configure_file ( "dist/rpm/searchd.conf.in" "${MANTICORE_BINARY_DIR}/searchd.conf" @ONLY )
+configure_file ( "dist/rpm/searchd.service.in" "${MANTICORE_BINARY_DIR}/searchd.service" @ONLY )
+
 install ( FILES ${MANTICORE_BINARY_DIR}/sphinx-min.conf.dist
 		${MANTICORE_BINARY_DIR}/sphinx.conf.dist
-		DESTINATION share/doc/${PACKAGE_NAME} COMPONENT doc )
+		DESTINATION ${DOCDIR} COMPONENT doc )
 install ( FILES doc/indexer.1 doc/indextool.1 doc/searchd.1 doc/spelldump.1
 		DESTINATION share/man/man1 COMPONENT doc )
 install ( DIRECTORY api DESTINATION share/${PACKAGE_NAME} COMPONENT doc )
 install ( FILES COPYING doc/sphinx.html doc/sphinx.txt example.sql
-		DESTINATION share/doc/${PACKAGE_NAME} COMPONENT doc )
+		DESTINATION ${DOCDIR} COMPONENT doc )
+
+# Add one more component group
+set ( CPACK_COMPONENT_ADM_GROUP "bin" )
+set ( CPACK_COMPONENT_ADM_DISPLAY_NAME "Helper scripts" )
+
+install ( DIRECTORY DESTINATION ${LOCALSTATEDIR}/lib/manticore COMPONENT adm )
+install ( DIRECTORY DESTINATION ${LOCALSTATEDIR}/run/manticore COMPONENT adm )
+install ( DIRECTORY DESTINATION ${LOCALSTATEDIR}/log/manticore COMPONENT adm )

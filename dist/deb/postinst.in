@@ -11,10 +11,10 @@ fi
 if ! getent passwd manticore >/dev/null; then
    adduser --system --ingroup manticore  --no-create-home --shell /bin/bash manticore
 fi
-DATADIR=/var/lib/manticore
-LOGDIR=/var/log/manticore
-RUNDIR=/var/run/manticore
-SYSCONFDIR=/etc/sphinxsearch
+DATADIR=@LOCALSTATEDIR@/lib/manticore
+LOGDIR=@LOCALSTATEDIR@/log/manticore
+RUNDIR=@LOCALSTATEDIR@/run/manticore
+SYSCONFDIR=@SYSCONFDIR@/sphinxsearch
 chown manticore:manticore $DATADIR -R
 chown manticore:manticore $LOGDIR -R
 chown manticore:manticore $RUNDIR -R
@@ -37,7 +37,7 @@ echo ""
 echo "Manticore installed!"
 echo ""
 echo "To manage indexes:"
-echo "    editor /etc/sphinxsearch/sphinx.conf"
+echo "    editor @SYSCONFDIR@/sphinxsearch/sphinx.conf"
 echo ""
 echo "To rebuild all disk indexes:"
 echo "    sudo -u manticore indexer --all --rotate"

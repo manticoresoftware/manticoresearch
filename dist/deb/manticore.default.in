@@ -1,10 +1,10 @@
 #
 # Settings for the manticore searchd daemon
-# Please read /usr/share/doc/manticore/README.Debian for details.
+# Please read @DOCDIR@/README.Debian for details.
 #
 
 # Should manticore run automatically on startup? (default: no)
-# Before doing this you might want to modify /etc/sphinxsearch/sphinx.conf
+# Before doing this you might want to modify @SYSCONFDIR@/sphinxsearch/sphinx.conf
 # so that it works for you.
 START=no
 

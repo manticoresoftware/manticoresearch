@@ -44,12 +44,14 @@ if ( DISTR_BUILD )
 	set ( WITH_RE2 ON CACHE BOOLEAN "Forced RE2" )
 	set ( WITH_STEMMER ON CACHE BOOLEAN "Forced Stemmer" )
 	set ( LIBS_BUNDLE "${MANTICORE_SOURCE_DIR}/../bundle" )
-	SET ( DISABLE_TESTING ON CACHE BOOLEAN "Forced no testing" )
+	SET ( DISABLE_TESTING 1 CACHE BOOLEAN "Forced no testing" FORCE )
+	SET ( CMAKE_INSTALL_PREFIX "" CACHE FILEPATH "Forced install to /" FORCE )
 	message ( STATUS "DISTR_BUILD applied.
 Package will be set to ${DISTR_BUILD},
 also option forced to ON values: WITH_MYSQL, WITH_EXPAT, WITH_PGSQL, WITH_RE2, WITH_STEMMER.
 Also LIBS_BUNDLE is automatically set to folder 'bundle' placed one level above the sources" )
 endif ()
+
 
 # Collect build info which will be embedded into binaries
 SET ( BANNER )
@@ -393,6 +395,28 @@ else ( WIN32 )
 
 endif ( WIN32 )
 
+INCLUDE ( GNUInstallDirs )
+
+if ( "${CMAKE_INSTALL_FULL_DATAROOTDIR}" STREQUAL "/share" )
+	set ( CMAKE_INSTALL_FULL_DATAROOTDIR "/usr${CMAKE_INSTALL_FULL_DATAROOTDIR}" )
+	set ( CMAKE_INSTALL_FULL_DATADIR "/usr${CMAKE_INSTALL_FULL_DATADIR}" )
+	set ( CMAKE_INSTALL_FULL_MANDIR "/usr${CMAKE_INSTALL_FULL_MANDIR}" )
+	set ( CMAKE_INSTALL_FULL_DOCDIR "/usr${CMAKE_INSTALL_FULL_DOCDIR}" )
+endif()
+
+if ( "${CMAKE_INSTALL_FULL_BINDIR}" STREQUAL "/bin" )
+	set ( CMAKE_INSTALL_FULL_BINDIR "/usr${CMAKE_INSTALL_FULL_BINDIR}" )
+endif()
+
+SET ( LIBDIR ${CMAKE_INSTALL_FULL_LIBDIR} )
+SET ( LOCALSTATEDIR ${CMAKE_INSTALL_FULL_LOCALSTATEDIR} )
+SET ( DATADIR "${LOCALSTATEDIR}/data" )
+SET ( SHAREDIR "${CMAKE_INSTALL_FULL_DATADIR}" )
+SET ( BINDIR ${CMAKE_INSTALL_FULL_BINDIR} )
+SET ( MANDIR ${CMAKE_INSTALL_FULL_MANDIR} )
+SET ( SYSCONFDIR ${CMAKE_INSTALL_FULL_SYSCONFDIR} )
+SET ( DOCDIR ${CMAKE_INSTALL_FULL_DOCDIR} )
+
 find_package ( BISON )
 if ( BISON_FOUND )
 	option ( USE_BISON "Will use bison generated grammars" ON )
@@ -480,6 +504,8 @@ FOREACH ( OPTION ${BANNER} )
 	set ( CONFIGURE_FLAGS "${CONFIGURE_FLAGS} -D${OPTION}" )
 endforeach ()
 
+
+
 message ( STATUS "Generating config.h file" )
 configure_file ( "${MANTICORE_SOURCE_DIR}/config/config_cmake.h.in"
 		"${MANTICORE_BINARY_DIR}/config/config.h" ESCAPE_QUOTES )
@@ -497,8 +523,8 @@ endif ()
 
 # a bit of installation stuff
 if ( WIN32 )
-	install ( DIRECTORY api doc contrib DESTINATION share/doc COMPONENT doc )
-	install ( FILES example.sql DESTINATION share/doc COMPONENT doc )
+	install ( DIRECTORY api doc contrib DESTINATION ${CMAKE_INSTALL_DATADIR}/doc COMPONENT doc )
+	install ( FILES example.sql DESTINATION ${CMAKE_INSTALL_DATADIR}/doc COMPONENT doc )
 	install ( FILES COPYING INSTALL sphinx.conf.in sphinx-min.conf.in
 			DESTINATION . COMPONENT config )
 	install ( DIRECTORY DESTINATION log COMPONENT config )

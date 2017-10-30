@@ -3,6 +3,6 @@ Manticore
 
 searchd will start automatically however the default configuration does not supply
 any indexes. Therefore, searchd will not continue running. You have to edit
-/etc/sphinxsearch/sphinx.conf to get any meaningful mode of operation.
+@SYSCONFDIR@/sphinxsearch/sphinx.conf to get any meaningful mode of operation.
 
-Documentation is available in /usr/share/doc/manticore.
+Documentation is available in @DOCDIR@.

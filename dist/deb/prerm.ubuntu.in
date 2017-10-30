@@ -1,6 +1,6 @@
 #!/bin/sh
 set -e
 # Automatically added by build_xenial, build_trusty
-if [ -x "/etc/init.d/manticore" ] || [ -e "/etc/init/manticore.conf" ]; then
+if [ -x "@SYSCONFDIR@/init.d/manticore" ] || [ -e "@SYSCONFDIR@/init/manticore.conf" ]; then
 	invoke-rc.d manticore stop || exit $?
 fi

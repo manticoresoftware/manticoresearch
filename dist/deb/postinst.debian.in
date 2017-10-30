@@ -1,5 +1,5 @@
 # Automatically added by build_{wheezy|jessie}.cmake
-if [ -x "/etc/init.d/manticore" ]; then
+if [ -x "@SYSCONFDIR@/init.d/manticore" ]; then
 	update-rc.d manticore defaults >/dev/null
 	invoke-rc.d manticore start || exit $?
 fi

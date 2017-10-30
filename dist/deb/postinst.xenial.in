@@ -1,9 +1,9 @@
 # Automatically added by build_xenial.cmake
 if [ " $1" = "configure" ] || [ "$1" = "abort-upgrade" ]; then
-	if [ -x "/etc/init.d/manticore" ]; then
+	if [ -x "@SYSCONFDIR@/init.d/manticore" ]; then
 		update-rc.d manticore defaults >/dev/null
 	fi
-	if [ -x "/etc/init.d/manticore" ] || [ -e "/etc/init/manticore.conf" ]; then
+	if [ -x "@SYSCONFDIR@/init.d/manticore" ] || [ -e "@SYSCONFDIR@/init/manticore.conf" ]; then
 		invoke-rc.d manticore start || exit $?
 	fi
 fi

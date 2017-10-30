@@ -1,0 +1,4 @@
+@SYSCONFDIR@/default/manticore
+@SYSCONFDIR@/init/manticore.conf
+@SYSCONFDIR@/sphinxsearch/sphinx.conf
+@SYSCONFDIR@/init.d/manticore

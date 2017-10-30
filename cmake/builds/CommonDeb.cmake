@@ -32,15 +32,33 @@ file ( WRITE "${MANTICORE_BINARY_DIR}/sphinx.conf.in" "${_FULLCONF}" )
 unset ( _MINCONF )
 unset ( _FULLCONF )
 
-set ( CONFDIR "/var/lib/manticore" )
-set ( RUNDIR "/var/run/manticore" )
-set ( LOGDIR "/var/log/manticore" )
+set ( CONFDIR "${LOCALSTATEDIR}/lib/manticore" )
+set ( RUNDIR "${LOCALSTATEDIR}/run/manticore" )
+set ( LOGDIR "${LOCALSTATEDIR}/log/manticore" )
 configure_file ( "${MANTICORE_BINARY_DIR}/sphinx-min.conf.in" "${MANTICORE_BINARY_DIR}/sphinx-min.conf.dist" @ONLY )
 configure_file ( "${MANTICORE_BINARY_DIR}/sphinx.conf.in" "${MANTICORE_BINARY_DIR}/sphinx.conf.dist" @ONLY )
+
+
+string ( CONFIGURE "${POSTINST_SPECIFIC_IN}" POSTINST_SPECIFIC @ONLY )
 
 # install some internal admin sripts for debian
 configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/postinst.in"
 		"${MANTICORE_BINARY_DIR}/postinst" @ONLY )
+
+configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/conffiles.in"
+		"${MANTICORE_BINARY_DIR}/conffiles" @ONLY )
+
+configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/manticore.default.in"
+		"${MANTICORE_BINARY_DIR}/manticore" @ONLY )
+
+configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/manticore.init.in"
+		"${MANTICORE_BINARY_DIR}/manticore.init" @ONLY )
+
+configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/manticore.upstart.in"
+		"${MANTICORE_BINARY_DIR}/manticore.upstart" @ONLY )
+
+configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/README.Debian.in"
+		"${MANTICORE_BINARY_DIR}/README.Debian" @ONLY )
 
 # Add one more component group
 set ( CPACK_COMPONENT_ADM_GROUP "bin" )
@@ -48,37 +66,37 @@ set ( CPACK_COMPONENT_ADM_DISPLAY_NAME "Helper scripts" )
 
 # Copy a default configuration file
 INSTALL ( FILES ${MANTICORE_BINARY_DIR}/sphinx.conf.dist
-		DESTINATION /etc/sphinxsearch COMPONENT doc RENAME sphinx.conf )
+		DESTINATION ${SYSCONFDIR}/sphinxsearch COMPONENT doc RENAME sphinx.conf )
 
 install ( FILES doc/indexer.1 doc/indextool.1 doc/searchd.1 doc/spelldump.1
-		DESTINATION share/man/man1 COMPONENT doc )
+		DESTINATION ${MANDIR}/man1 COMPONENT doc )
 
-install ( DIRECTORY api DESTINATION share/${PACKAGE_NAME} COMPONENT doc )
+install ( DIRECTORY api DESTINATION ${SHAREDIR}/${PACKAGE_NAME} COMPONENT doc )
 
 install ( FILES doc/sphinx.html doc/sphinx.txt
 		doc/internals-index-format.txt doc/internals-format-versions.txt
 		doc/internals-coding-standard.txt
-		dist/deb/README.Debian
+		"${MANTICORE_BINARY_DIR}/README.Debian"
 		dist/deb/copyright
-		DESTINATION share/doc/${PACKAGE_NAME} COMPONENT doc )
+		DESTINATION ${DOCDIR} COMPONENT doc )
 
 install ( FILES example.sql ${MANTICORE_BINARY_DIR}/sphinx.conf.dist
 		${MANTICORE_BINARY_DIR}/sphinx-min.conf.dist
-		DESTINATION share/doc/${PACKAGE_NAME}/example-conf COMPONENT doc )
+		DESTINATION ${DOCDIR}/example-conf COMPONENT doc )
 
-install ( FILES dist/deb/manticore.default
-		DESTINATION /etc/default COMPONENT adm RENAME manticore)
+install ( FILES "${MANTICORE_BINARY_DIR}/manticore"
+		DESTINATION ${SYSCONFDIR}/default COMPONENT adm)
 
-install ( FILES dist/deb/manticore.upstart
-		DESTINATION /etc/init COMPONENT adm RENAME manticore.conf )
+install ( FILES "${MANTICORE_BINARY_DIR}/manticore.upstart"
+		DESTINATION ${SYSCONFDIR}/init COMPONENT adm RENAME manticore.conf )
 
-install ( FILES dist/deb/manticore.init
-		DESTINATION /etc/init.d PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
+install ( FILES "${MANTICORE_BINARY_DIR}/manticore.init"
+		DESTINATION ${SYSCONFDIR}/init.d PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
                       GROUP_EXECUTE GROUP_READ COMPONENT adm RENAME manticore )
 
-install ( DIRECTORY DESTINATION /var/lib/manticore/data COMPONENT adm)
-install ( DIRECTORY DESTINATION /var/run/manticore COMPONENT adm )
-install ( DIRECTORY DESTINATION /var/log/manticore COMPONENT adm )
+install ( DIRECTORY DESTINATION ${LOCALSTATEDIR}/lib/manticore/data COMPONENT adm)
+install ( DIRECTORY DESTINATION ${LOCALSTATEDIR}/run/manticore COMPONENT adm )
+install ( DIRECTORY DESTINATION ${LOCALSTATEDIR}/log/manticore COMPONENT adm )
 
 # tickets per components
 set ( CPACK_DEBIAN_PACKAGE_DESCRIPTION "Fast standalone full-text SQL search engine
@@ -102,7 +120,7 @@ set ( CPACK_DEBIAN_BIN_PACKAGE_NAME "manticore" )
 set ( CPACK_DEBIAN_BIN_PACKAGE_SHLIBDEPS "ON" )
 set ( CPACK_DEBIAN_BIN_PACKAGE_SECTION "misc" )
 set ( CPACK_DEBIAN_BIN_PACKAGE_PRIORITY "optional" )
-set ( CPACK_DEBIAN_BIN_PACKAGE_CONTROL_EXTRA "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/conffiles;${MANTICORE_BINARY_DIR}/postinst;${MANTICORE_BINARY_DIR}/prerm;${EXTRA_SCRIPTS}" )
+set ( CPACK_DEBIAN_BIN_PACKAGE_CONTROL_EXTRA "${MANTICORE_BINARY_DIR}/conffiles;${MANTICORE_BINARY_DIR}/postinst;${MANTICORE_BINARY_DIR}/prerm;${EXTRA_SCRIPTS}" )
 set ( CPACK_DEBIAN_BIN_PACKAGE_CONTROL_STRICT_PERMISSION "ON" )
 set ( CPACK_DEBIAN_BIN_PACKAGE_REPLACES "sphinxsearch" )
 

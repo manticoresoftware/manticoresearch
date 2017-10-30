@@ -21,10 +21,10 @@
 # Source function library.
 . /etc/rc.d/init.d/functions
 
-exec="/usr/bin/searchd"
+exec="@BINDIR@/searchd"
 prog="searchd"
 user="manticore"
-config="/etc/sphinx/sphinx.conf"
+config="@SYSCONFDIR@/sphinx/sphinx.conf"
 lockfile=/var/lock/subsys/searchd
 
 start() {

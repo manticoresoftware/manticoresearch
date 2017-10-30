@@ -417,6 +417,9 @@ SET ( MANDIR ${CMAKE_INSTALL_FULL_MANDIR} )
 SET ( SYSCONFDIR ${CMAKE_INSTALL_FULL_SYSCONFDIR} )
 SET ( DOCDIR ${CMAKE_INSTALL_FULL_DOCDIR} )
 
+add_definitions ( "-DDATADIR=\"${DATADIR}\"" )
+memcfgvalues ( DATADIR )
+
 find_package ( BISON )
 if ( BISON_FOUND )
 	option ( USE_BISON "Will use bison generated grammars" ON )
@@ -491,27 +494,12 @@ if ( HAVE_GCC_LIKE AND CMAKE_BUILD_TYPE STREQUAL Debug )
 	set ( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${POSTCFLAGS}" )
 endif ()
 
-
 option ( SPLIT_SYMBOLS "whether to split debug symbols from binaries" ${SPLIT_SYMBOLS} )
 
 memcfgvalues ( SPLIT_SYMBOLS USE_BISON USE_FLEX USE_SYSLOG WITH_EXPAT WITH_ICONV WITH_MYSQL
 		WITH_MYSQL_INCLUDES WITH_MYSQL_LIBS WITH_MYSQL_ROOT WITH_ODBC WITH_PGSQL
 		WITH_PGSQL_INCLUDES WITH_PGSQL_LIBS WITH_RE2 WITH_RE2_INCLUDES WITH_RE2_LIBS
 		WITH_RE2_ROOT WITH_RLP WITH_STEMMER WITH_ZLIB )
-
-set ( CONFIGURE_FLAGS "Configured by CMake with these definitions:" )
-FOREACH ( OPTION ${BANNER} )
-	set ( CONFIGURE_FLAGS "${CONFIGURE_FLAGS} -D${OPTION}" )
-endforeach ()
-
-
-
-message ( STATUS "Generating config.h file" )
-configure_file ( "${MANTICORE_SOURCE_DIR}/config/config_cmake.h.in"
-		"${MANTICORE_BINARY_DIR}/config/config.h" ESCAPE_QUOTES )
-add_definitions ( -DHAVE_CONFIG_H )
-include_directories ( "${MANTICORE_BINARY_DIR}/config" )
-message (STATUS "${CONFIGURE_FLAGS}")
 
 if ( WIN32 )
 	IF ( CMAKE_EXE_LINKER_FLAGS MATCHES "x64" )
@@ -560,6 +548,22 @@ set ( CPACK_ARCHIVE_COMPONENT_INSTALL 1 )
 
 include ( SetBuildType )
 
+if ( CONFFILEDIR )
+	add_definitions ( "-DSYSCONFDIR=\"${CONFFILEDIR}\"" )
+	cfginfo ( "SYSCONFDIR=${CONFFILEDIR}" )
+endif()
+
+set ( CONFIGURE_FLAGS "Configured by CMake with these definitions:" )
+FOREACH ( OPTION ${BANNER} )
+	set ( CONFIGURE_FLAGS "${CONFIGURE_FLAGS} -D${OPTION}" )
+endforeach ()
+
+message ( STATUS "Generating config.h file" )
+configure_file ( "${MANTICORE_SOURCE_DIR}/config/config_cmake.h.in"
+		"${MANTICORE_BINARY_DIR}/config/config.h" ESCAPE_QUOTES )
+add_definitions ( -DHAVE_CONFIG_H )
+include_directories ( "${MANTICORE_BINARY_DIR}/config" )
+message ( STATUS "${CONFIGURE_FLAGS}" )
 
 set ( SPHINX_PACKAGE_SUFFIX "" )
 FOREACH ( SUFFIX ${PKGSUFFIXES} )

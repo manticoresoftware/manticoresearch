@@ -31,7 +31,9 @@ static const char g_sOrder[] = "_@order_";
 class CJsonScopedPtr_c : public CSphScopedPtr<cJSON>
 {
 public:
-	using CSphScopedPtr <cJSON>::CSphScopedPtr;
+	CJsonScopedPtr_c ( cJSON * pPtr  )
+		: CSphScopedPtr<cJSON> ( pPtr )
+	{}
 
 	~CJsonScopedPtr_c()
 	{

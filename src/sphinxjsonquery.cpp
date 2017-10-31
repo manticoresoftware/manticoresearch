@@ -58,15 +58,6 @@ static bool	IsFilter ( const cJSON * pJson )
 }
 
 
-static bool IsInt ( const cJSON * pJson )
-{
-	if ( !cJSON_IsNumber ( pJson ) )
-		return false;
-
-	return (int)pJson->valuedouble==pJson->valueint;
-}
-
-
 //////////////////////////////////////////////////////////////////////////
 // Misc cJSON helpers
 cJSON * GetJSONPropertyString ( const cJSON * pNode, const char * szName, CSphString & sError )
@@ -91,7 +82,7 @@ cJSON * GetJSONPropertyString ( const cJSON * pNode, const char * szName, CSphSt
 }
 
 
-cJSON * GetJSONPropertyNumber ( const cJSON * pNode, const char * szName, CSphString & sError )
+cJSON * GetJSONPropertyInt ( const cJSON * pNode, const char * szName, CSphString & sError )
 {
 	if ( !pNode )
 		return nullptr;
@@ -103,9 +94,9 @@ cJSON * GetJSONPropertyNumber ( const cJSON * pNode, const char * szName, CSphSt
 		return nullptr;
 	}
 
-	if ( !cJSON_IsNumber ( pChild ) )
+	if ( !cJSON_IsInteger ( pChild ) )
 	{
-		sError.SetSprintf ( "\"%s\" property value should be a number", szName );
+		sError.SetSprintf ( "\"%s\" property value should be an integer", szName );
 		return nullptr;
 	}
 
@@ -819,7 +810,7 @@ bool GeoDistInfo_c::Parse ( const cJSON * pRoot, bool bNeedDistance, CSphString 
 
 bool GeoDistInfo_c::ParseDistance ( cJSON * pDistance, CSphString & sError )
 {
-	if ( cJSON_IsNumber ( pDistance ) )
+	if ( cJSON_IsNumeric ( pDistance ) )
 	{
 		// no units specified, meters assumed
 		m_fDistance = (float)pDistance->valuedouble;
@@ -1187,7 +1178,7 @@ static bool ParseIndexId ( cJSON * pRoot, SqlStmt_t & tStmt, SphDocID_t & tDocId
 
 	tStmt.m_sIndex = pIndex->valuestring;
 
-	cJSON * pId = GetJSONPropertyNumber ( pRoot, "_id", sError );
+	cJSON * pId = GetJSONPropertyInt ( pRoot, "_id", sError );
 	if ( !pId )
 		return false;
 
@@ -1349,7 +1340,7 @@ bool ParseJsonInsert ( cJSON * pRoot, SqlStmt_t & tStmt, SphDocID_t & tDocId, bo
 			{
 				tNewValue.m_iType = sphGetTokTypeFloat();
 				tNewValue.m_fVal = float(pItem->valuedouble);
-			} else if ( cJSON_IsBool ( pItem ) )
+			} else if ( cJSON_IsInteger ( pItem ) || cJSON_IsBool ( pItem ) )
 			{
 				tNewValue.m_iType = sphGetTokTypeInt();
 				tNewValue.m_iVal = pItem->valueint;
@@ -1401,13 +1392,13 @@ static bool ParseJsonUpdate ( cJSON * pRoot, SqlStmt_t & tStmt, SphDocID_t & tDo
 		cJSON * pItem = cJSON_GetArrayItem ( pSource, i );
 		assert ( pItem );
 
-		if ( cJSON_IsNumber ( pItem ) || cJSON_IsBool ( pItem ) )
+		if ( cJSON_IsNumeric ( pItem ) || cJSON_IsBool ( pItem ) )
 		{
 			CSphAttrUpdate & tUpd = tStmt.m_tUpdate;
 			CSphString sAttr = pItem->string;
 			tUpd.m_dAttrs.Add ( sAttr.ToLower().Leak() );
 
-			if ( cJSON_IsBool ( pItem ) || IsInt ( pItem ) )
+			if ( cJSON_IsBool ( pItem ) || cJSON_IsInteger ( pItem ) )
 			{
 				int64_t iValue = pItem->valueint;
 
@@ -2042,7 +2033,7 @@ static bool CheckField ( HttpSnippetField_t & tParsed, CSphString & sError, cons
 	}
 
 	const cJSON * pFragmentSize = cJSON_GetObjectItem ( pField, "fragment_size" );
-	if ( pFragmentSize && !cJSON_IsNumber ( pFragmentSize ) )
+	if ( pFragmentSize && !cJSON_IsInteger ( pFragmentSize ) )
 	{
 		sError = "\"fragment_size\" property value should be an integer";
 		return false;
@@ -2051,7 +2042,7 @@ static bool CheckField ( HttpSnippetField_t & tParsed, CSphString & sError, cons
 		tParsed.m_iFragmentSize = pFragmentSize->valueint;
 
 	const cJSON * pFragmentCount = cJSON_GetObjectItem ( pField, "number_of_fragments" );
-	if ( pFragmentCount && !cJSON_IsNumber ( pFragmentCount ) )
+	if ( pFragmentCount && !cJSON_IsInteger ( pFragmentCount ) )
 	{
 		sError = "\"number_of_fragments\" property value should be an integer";
 		return false;
@@ -2161,7 +2152,7 @@ bool ParseSnippet ( cJSON * pSnip, CSphQuery & tQuery, CSphString & sError )
 	const cJSON * pNoMatch = cJSON_GetObjectItem ( pSnip, "no_match_size" );
 	if ( pNoMatch )
 	{
-		if ( !cJSON_IsNumber ( pNoMatch ) )
+		if ( !cJSON_IsInteger ( pNoMatch ) )
 		{
 			sError = "\"no_match_size\" property value should be an integer";
 			return false;
@@ -2610,8 +2601,8 @@ bool ParseLocation ( const char * sName, cJSON * pLoc, LocationField_t * pField,
 			return false;
 		}
 
-		bool bLatChecked = bParseField ? !!cJSON_IsNumber ( pLat ) : !!cJSON_IsString ( pLat );
-		bool bLonChecked = bParseField ? !!cJSON_IsNumber ( pLon ) : !!cJSON_IsString ( pLon );
+		bool bLatChecked = bParseField ? !!cJSON_IsNumeric ( pLat ) : !!cJSON_IsString ( pLat );
+		bool bLonChecked = bParseField ? !!cJSON_IsNumeric ( pLon ) : !!cJSON_IsString ( pLon );
 		if ( !bLatChecked || !bLonChecked )
 		{
 			if ( !bLatChecked && !bLonChecked )
@@ -2692,8 +2683,8 @@ bool ParseLocation ( const char * sName, cJSON * pLoc, LocationField_t * pField,
 		return false;
 	}
 
-	bool bLatChecked = bParseField ? !!cJSON_IsNumber ( pLat ) : !!cJSON_IsString ( pLat );
-	bool bLonChecked = bParseField ? !!cJSON_IsNumber ( pLon ) : !!cJSON_IsString ( pLon );
+	bool bLatChecked = bParseField ? !!cJSON_IsNumeric ( pLat ) : !!cJSON_IsString ( pLat );
+	bool bLonChecked = bParseField ? !!cJSON_IsNumeric ( pLon ) : !!cJSON_IsString ( pLon );
 	if ( !bLatChecked || !bLonChecked )
 	{
 		if ( !bLatChecked && !bLonChecked )

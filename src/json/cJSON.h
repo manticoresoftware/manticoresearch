@@ -30,21 +30,22 @@ extern "C"
 
 /* project version */
 #define CJSON_VERSION_MAJOR 1
-#define CJSON_VERSION_MINOR 5
-#define CJSON_VERSION_PATCH 5
+#define CJSON_VERSION_MINOR 6
+#define CJSON_VERSION_PATCH 0
 
 #include <stddef.h>
 
 /* cJSON Types: */
 #define cJSON_Invalid (0)
-#define cJSON_False  (1 << 0)
-#define cJSON_True   (1 << 1)
-#define cJSON_NULL   (1 << 2)
-#define cJSON_Number (1 << 3)
-#define cJSON_String (1 << 4)
-#define cJSON_Array  (1 << 5)
-#define cJSON_Object (1 << 6)
-#define cJSON_Raw    (1 << 7) /* raw json */
+#define cJSON_False   (1)
+#define cJSON_True    (2)
+#define cJSON_NULL    (3)
+#define cJSON_Number  (4)
+#define cJSON_String  (5)
+#define cJSON_Array	  (6)
+#define cJSON_Object  (7)
+#define cJSON_Raw     (8) /* raw json */
+#define cJSON_Integer (9)
 
 #define cJSON_IsReference 256
 #define cJSON_StringIsConst 512
@@ -63,8 +64,9 @@ typedef struct cJSON
 
     /* The item's string, if type==cJSON_String  and type == cJSON_Raw */
     char *valuestring;
-    /* writing to valueint is DEPRECATED, use cJSON_SetNumberValue instead */
-    int valueint;
+    /* writing to valueint is DEPRECATED, use cJSON_SetNumberValue instead
+	use it when type==cJSON_Integer	*/
+    long long valueint;
     /* The item's number, if type==cJSON_Number */
     double valuedouble;
 
@@ -138,6 +140,10 @@ CJSON_PUBLIC(void) cJSON_InitHooks(cJSON_Hooks* hooks);
 /* Memory Management: the caller is always responsible to free the results from all variants of cJSON_Parse (with cJSON_Delete) and cJSON_Print (with stdlib free, cJSON_Hooks.free_fn, or cJSON_free as appropriate). The exception is cJSON_PrintPreallocated, where the caller has full responsibility of the buffer. */
 /* Supply a block of JSON, and this returns a cJSON object you can interrogate. */
 CJSON_PUBLIC(cJSON *) cJSON_Parse(const char *value);
+/* ParseWithOpts allows you to require (and check) that the JSON is null terminated, and to retrieve the pointer to the final byte parsed. */
+/* If you supply a ptr in return_parse_end and parsing fails, then return_parse_end will contain a pointer to the error so will match cJSON_GetErrorPtr(). */
+CJSON_PUBLIC(cJSON *) cJSON_ParseWithOpts(const char *value, const char **return_parse_end, cJSON_bool require_null_terminated);
+
 /* Render a cJSON entity to text for transfer/storage. */
 CJSON_PUBLIC(char *) cJSON_Print(const cJSON *item);
 /* Render a cJSON entity to text for transfer/storage without any formatting. */
@@ -168,6 +174,8 @@ CJSON_PUBLIC(cJSON_bool) cJSON_IsTrue(const cJSON * const item);
 CJSON_PUBLIC(cJSON_bool) cJSON_IsBool(const cJSON * const item);
 CJSON_PUBLIC(cJSON_bool) cJSON_IsNull(const cJSON * const item);
 CJSON_PUBLIC(cJSON_bool) cJSON_IsNumber(const cJSON * const item);
+CJSON_PUBLIC(cJSON_bool) cJSON_IsInteger(const cJSON * const item);
+CJSON_PUBLIC(cJSON_bool) cJSON_IsNumeric(const cJSON * const item);
 CJSON_PUBLIC(cJSON_bool) cJSON_IsString(const cJSON * const item);
 CJSON_PUBLIC(cJSON_bool) cJSON_IsArray(const cJSON * const item);
 CJSON_PUBLIC(cJSON_bool) cJSON_IsObject(const cJSON * const item);
@@ -179,6 +187,7 @@ CJSON_PUBLIC(cJSON *) cJSON_CreateTrue(void);
 CJSON_PUBLIC(cJSON *) cJSON_CreateFalse(void);
 CJSON_PUBLIC(cJSON *) cJSON_CreateBool(cJSON_bool boolean);
 CJSON_PUBLIC(cJSON *) cJSON_CreateNumber(double num);
+CJSON_PUBLIC(cJSON *) cJSON_CreateInteger(long long num);
 CJSON_PUBLIC(cJSON *) cJSON_CreateString(const char *string);
 /* raw json */
 CJSON_PUBLIC(cJSON *) cJSON_CreateRaw(const char *raw);
@@ -227,10 +236,6 @@ The item->next and ->prev pointers are always zero on return from Duplicate. */
  * case_sensitive determines if object keys are treated case sensitive (1) or case insensitive (0) */
 CJSON_PUBLIC(cJSON_bool) cJSON_Compare(const cJSON * const a, const cJSON * const b, const cJSON_bool case_sensitive);
 
-
-/* ParseWithOpts allows you to require (and check) that the JSON is null terminated, and to retrieve the pointer to the final byte parsed. */
-/* If you supply a ptr in return_parse_end and parsing fails, then return_parse_end will contain a pointer to the error. If not, then cJSON_GetErrorPtr() does the job. */
-CJSON_PUBLIC(cJSON *) cJSON_ParseWithOpts(const char *value, const char **return_parse_end, cJSON_bool require_null_terminated);
 
 CJSON_PUBLIC(void) cJSON_Minify(char *json);
 

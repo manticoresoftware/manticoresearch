@@ -35,7 +35,7 @@ index test1
 <db_create>
 create table test_table
 (
-	id int not null,
+	id bigint not null,
 	title varchar(255) not null,
 	content varchar(255) not null,
 	gid int
@@ -49,7 +49,8 @@ insert into test_table values
 (3, '3rd', 'Bander, despite its paean to freedom, found this unique opportunity irresistible.', 13 ),
 (4, '4th', 'There was no way it could speak to robots on a basis of intellectual equality, and certainly not to animals.', 14 ),
 (5, '5th', 'To speak to its fellow-Solarians would be, to it, unpleasant, and what communication there must be would be forced, and never spontaneous.', 15 ),
-(6, '6th', 'No wonder, Trevize thought, it was indulging itself in this way.', 16 )
+(6, '6th', 'No wonder, Trevize thought, it was indulging itself in this way.', 16 ),
+(100000000000, 'max', 'Huge id test', 16 )
 </db_insert>
 
 <httpqueries>

@@ -20,7 +20,7 @@
 // portable plain C, stay standalone, and change as rarely as possible.
 //
 // Refer to src/udfexample.c for a working UDF example, and refer to
-// doc/sphinx.html#extending-sphinx for more information on writing
+// docs/exdending.rst for more information on writing
 // plugins and UDFs.
 //
 

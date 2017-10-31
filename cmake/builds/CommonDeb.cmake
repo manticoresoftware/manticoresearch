@@ -73,7 +73,7 @@ install ( FILES doc/indexer.1 doc/indextool.1 doc/searchd.1 doc/spelldump.1
 
 install ( DIRECTORY api DESTINATION ${SHAREDIR}/${PACKAGE_NAME} COMPONENT doc )
 
-install ( FILES doc/sphinx.html doc/sphinx.txt
+install ( FILES
 		doc/internals-index-format.txt doc/internals-format-versions.txt
 		doc/internals-coding-standard.txt
 		"${MANTICORE_BINARY_DIR}/README.Debian"

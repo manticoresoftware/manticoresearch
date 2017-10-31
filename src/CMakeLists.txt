@@ -53,7 +53,7 @@ add_custom_target (
 		VERBATIM
 		SOURCES ${CMAKE_SOURCE_DIR}/sphinxrev.cmake
 			${CMAKE_SOURCE_DIR}/src/sphinxversion.h.in
-			${CMAKE_SOURCE_DIR}/CPackOptions.cmake.in
+			${CMAKE_SOURCE_DIR}/dist/CPackOptions.cmake.in
 )
 include_directories ( "${MANTICORE_BINARY_DIR}/config" )
 add_definitions ( "-DBUILD_WITH_CMAKE" )

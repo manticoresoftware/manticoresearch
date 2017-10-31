@@ -176,10 +176,11 @@ void BenchStripper ()
 {
 	printf ( "benchmarking HTML stripper\n" );
 
-	FILE * fp = fopen ( "doc/sphinx.html", "rb" );
+	const char * testfile = "test/bench/sphinx.html";
+	FILE * fp = fopen ( testfile, "rb" );
 	if ( !fp )
 	{
-		printf ( "benchmark failed: unable to read doc/sphinx.html\n" );
+		printf ( "benchmark failed: unable to read %s\n", testfile );
 		return;
 	}
 

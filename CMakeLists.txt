@@ -30,6 +30,10 @@ SET ( EXTRA_LIBRARIES )
 
 option ( DISABLE_TESTING "Disable all testing (if you just build a distr)" OFF )
 
+if ( NOT LIBS_BUNDLE )
+	SET ( LIBS_BUNDLE "${MANTICORE_SOURCE_DIR}/../bundle" )
+endif ()
+
 # Make release build for the pointed distr
 # That will override defaults and give possibility to build
 # the distribution with minimal command line
@@ -43,7 +47,6 @@ if ( DISTR_BUILD )
 	set ( WITH_PGSQL ON CACHE BOOLEAN "Forced Pgsql" )
 	set ( WITH_RE2 ON CACHE BOOLEAN "Forced RE2" )
 	set ( WITH_STEMMER ON CACHE BOOLEAN "Forced Stemmer" )
-	set ( LIBS_BUNDLE "${MANTICORE_SOURCE_DIR}/../bundle" )
 	SET ( DISABLE_TESTING 1 CACHE BOOLEAN "Forced no testing" FORCE )
 	SET ( CMAKE_INSTALL_PREFIX "" CACHE FILEPATH "Forced install to /" FORCE )
 	message ( STATUS "DISTR_BUILD applied.

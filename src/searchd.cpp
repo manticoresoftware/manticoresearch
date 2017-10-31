@@ -20993,7 +20993,12 @@ public:
 			assert ( m_iReadFD!=-1 );
 			uint64_t uVal = 0;
 #if HAVE_EVENTFD
-			::read ( m_iReadFD, &uVal, sizeof ( uVal ) );
+			for ( ;; )
+			{
+				auto iRead = ::read ( m_iReadFD, &uVal, sizeof ( uVal ) );
+				if ( iRead==sizeof ( uVal ) )
+					break;
+			}
 #else
 			// socket-pair case might stack up some values and these should be read
 			for ( ;; )

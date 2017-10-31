@@ -2621,8 +2621,7 @@ static int FuncHashCheck()
 	return 1;
 }
 
-
-static int G_FUNC_HASH_CHECK = FuncHashCheck();
+static int VARIABLE_IS_NOT_USED G_FUNC_HASH_CHECK = FuncHashCheck();
 
 //////////////////////////////////////////////////////////////////////////
 

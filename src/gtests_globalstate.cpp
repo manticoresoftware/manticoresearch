@@ -63,4 +63,4 @@ public:
 };
 
 // it will create 2 synonyms file before all tests (globally), and delete them on finish.
-::testing::Environment * const env = ::testing::AddGlobalTestEnvironment ( new Environment );
+::testing::Environment VARIABLE_IS_NOT_USED * const env = ::testing::AddGlobalTestEnvironment ( new Environment );

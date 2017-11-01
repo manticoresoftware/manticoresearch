@@ -1846,7 +1846,7 @@ template<> int64_t CSphAtomic_T<int64_t>::CAS ( int64_t iOldVal, int64_t iNewVal
 // fast check if we are built with right endianess settings
 const char*		sphCheckEndian()
 {
-	const char* sErrorMsg = "Oops! It seems that sphinx was built with wrong endianess (cross-compiling?)\n"
+	const char* sErrorMsg = "Oops! It seems that manticore was built with wrong endianess (cross-compiling?)\n"
 #if USE_LITTLE_ENDIAN
 		"either reconfigure and rebuild, defining ac_cv_c_bigendian=yes in the environment of ./configure script,\n"
 		"either ensure that '#define USE_LITTLE_ENDIAN = 0' in config/config.h\n";

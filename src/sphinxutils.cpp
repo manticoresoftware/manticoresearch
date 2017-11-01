@@ -2269,10 +2269,11 @@ void sphBacktrace ( int iFD, bool bSafe )
 	sphSafeInfo ( iFD, "-------------- backtrace ends here ---------------" );
 
 	if ( bOk )
-		sphSafeInfo ( iFD, "Please, create a bug report in our bug tracker (http://sphinxsearch.com/bugs) and attach there:\n"
-							"a) searchd log, b) searchd binary, c) searchd symbols.\n"
-							"Look into the chapter 'Reporting bugs' in the documentation\n"
-							"(/usr/share/doc/sphinx/sphinx.txt or http://sphinxsearch.com/docs/current.html#reporting-bugs)" );
+		sphSafeInfo ( iFD, "Please, create a bug report in our bug tracker (https://github.com/manticoresoftware/manticore/issues)\n"
+			"and attach there:\n"
+			"a) searchd log, b) searchd binary, c) searchd symbols.\n"
+			"Look into the chapter 'Reporting bugs' in the documentation\n"
+			"(http://docs.manticoresearch.com/latest/html/reporting_bugs.html)" );
 
 	// convert all BT addresses to source code lines
 	int iCount = Min ( iDepth, (int)( sizeof(g_pArgv)/sizeof(g_pArgv[0]) - SPH_BT_ADDRS - 1 ) );

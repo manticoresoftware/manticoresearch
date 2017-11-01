@@ -575,10 +575,10 @@ static const char * g_sIndexPage =
 "<!DOCTYPE html>"
 "<html>"
 "<head>"
-"<title>Sphinx</title>"
+"<title>Manticore</title>"
 "</head>"
 "<body>"
-"<h1>Sphinx daemon</h1>"
+"<h1>Manticore daemon</h1>"
 "<p>%s</p>"
 "</body>"
 "</html>";

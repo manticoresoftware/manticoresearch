@@ -87,6 +87,10 @@ if ( USE_BISON )
 	list ( APPEND TARBALLDEPENDS ${BISON_QueryParser_OUTPUTS} )
 	list ( APPEND TARBALLDEPENDS ${BISON_SQLParser_OUTPUTS} )
 	list ( APPEND TARBALLDEPENDS ${BISON_JsonParser_OUTPUTS} )
+else()
+	if ( NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/yysphinxselect.h" )
+		message ( SEND_ERROR "BISON is not active, and pre-generated parsers not found. Either install/activate bison, or build from 'tarball' generated on machine with bison installed")
+	endif()
 endif ( USE_BISON )
 
 # add the extra targets in the case we want on-the-fly lex compiler
@@ -104,7 +108,10 @@ if ( USE_FLEX )
 	# also add dependencies for tarball (to always have fresh parsers inside)
 	list ( APPEND TARBALLDEPENDS ${FLEX_SQLlex_OUTPUTS} )
 	list ( APPEND TARBALLDEPENDS ${FLEX_Jsonlex_OUTPUTS} )
-
+else ()
+	if ( NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/llsphinxql.c" )
+		message ( SEND_ERROR "FLEX is not active, and pre-generated parsers not found. Either install/activate flex, or build from 'tarball' generated on machine with flex installed" )
+	endif ()
 endif ( USE_FLEX )
 
 add_custom_target (

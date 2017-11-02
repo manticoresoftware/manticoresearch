@@ -87,7 +87,7 @@ public:
 
 	MOCK_METHOD2 ( IterateMultivaluedStart, bool ( int, CSphString& )); // return false;
 	MOCK_METHOD0 ( IterateMultivaluedNext, bool()); // return false;
-	MOCK_METHOD2 ( IterateFieldMVAStart, bool ( int, CSphString & ) ); // return false
+	MOCK_METHOD1 ( IterateFieldMVAStart, SphRange_t ( int ) ); // return false
 	MOCK_METHOD0 ( IterateFieldMVANext, bool() ); // return false;
 	MOCK_METHOD1 ( IterateKillListStart, bool (CSphString & ) ); // return false;
 	MOCK_METHOD1 ( IterateKillListNext, bool (SphDocID_t & ) ) ; // return false
@@ -159,7 +159,7 @@ public:
 
 	MOCK_METHOD2 ( IterateMultivaluedStart, bool ( int, CSphString & ) ); // return false;
 	MOCK_METHOD0 ( IterateMultivaluedNext, bool () ); // return false;
-	MOCK_METHOD2 ( IterateFieldMVAStart, bool ( int, CSphString & ) ); // return false
+	MOCK_METHOD1 ( IterateFieldMVAStart, SphRange_t ( int ) ); // return false
 	MOCK_METHOD0 ( IterateFieldMVANext, bool () ); // return false;
 	MOCK_METHOD1 ( IterateKillListStart, bool (CSphString & ) ); // return false;
 	MOCK_METHOD1 ( IterateKillListNext, bool (SphDocID_t & ) ); // return false

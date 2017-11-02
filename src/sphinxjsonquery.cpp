@@ -132,7 +132,7 @@ class QueryTreeBuilder_c : public XQParseHelper_c
 public:
 	void			CollectKeywords ( const char * szStr, XQNode_t * pNode, const XQLimitSpec_t & tLimitSpec );
 
-	virtual bool	HandleFieldBlockStart ( const char * & /*pPtr*/ ) { return true; }
+	bool			HandleFieldBlockStart ( const char * & /*pPtr*/ ) override { return true; }
 	virtual bool	HandleSpecialFields ( const char * & pPtr, FieldMask_t & dFields ) override;
 	virtual bool	NeedTrailingSeparator() override { return false; }
 

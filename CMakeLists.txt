@@ -198,7 +198,7 @@ else ( WIN32 )
 			set ( SPLIT_SYMBOLS OFF )
 			add_definitions ( "-DNDEBUG" )
 		elseif ( CMAKE_BUILD_TYPE STREQUAL Debug )
-			set ( CLANGFLAGS "-Wthread-safety" )
+#			set ( CLANGFLAGS "-Wthread-safety" ) # made a different option, off by default
 			add_definitions ( "-D_DEBUG" )
 			set ( SPLIT_SYMBOLS OFF )
 		else ()
@@ -480,6 +480,13 @@ if ( HAVE_GCC_LIKE AND CMAKE_BUILD_TYPE STREQUAL Debug )
 	if ( COVERAGE_TEST )
 		set ( POSTCFLAGS "-fprofile-arcs -ftest-coverage" )
 	endif ( COVERAGE_TEST )
+
+	if ( CMAKE_CXX_COMPILER_ID MATCHES "Clang" )
+		OPTION ( THREAD_SAFETY "Clang thread-safety warnings" ON )
+		if ( THREAD_SAFETY )
+			set ( POSTFLAGS "-Wthread-safety" )
+		endif ()
+	endif ()
 
 	SET ( SANITIZER None CACHE STRING "Choose a sanitizer checker" )
 	set_property ( CACHE SANITIZER PROPERTY STRINGS "None" "Thread"

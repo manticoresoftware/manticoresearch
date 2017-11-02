@@ -2778,7 +2778,6 @@ private:
 	const CSphVector<Passage_t> &	m_dPassages;
 	int								m_iCurToken;
 	int								m_iCurPassage;
-	int								m_iSeparatorLen;
 	bool							m_bLastWasSeparator;
 	TokenSpan_t						m_tTmpSpan;
 	CSphVector<Space_t>				m_dSpaces;

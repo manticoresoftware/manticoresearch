@@ -721,7 +721,7 @@ public:
 	CSphVector<int>					m_dPhraseStar;
 
 protected:
-	virtual bool	HandleFieldBlockStart ( const char * & pPtr );
+	bool			HandleFieldBlockStart ( const char * & pPtr ) override;
 };
 
 //////////////////////////////////////////////////////////////////////////

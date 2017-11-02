@@ -18,7 +18,7 @@ static CSphFixedVector<CSphString> g_dLocals ( 0 );
 static volatile bool g_bHas = false;
 static CSphString g_sNewPath;
 static DWORD g_uIter = 0;
-static const auto ITERATIONS = 100000;
+static const auto ITERATIONS = 10000;
 
 void ThdSearch ( void * )
 {

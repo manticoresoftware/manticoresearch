@@ -3851,10 +3851,10 @@ static void CheckQuery ( const CSphQuery & tQuery, CSphString & sError )
 
 	sError = NULL;
 
-	if ( tQuery.m_eMode<0 || tQuery.m_eMode>SPH_MATCH_TOTAL )
+	if ( (int)tQuery.m_eMode<0 || tQuery.m_eMode>SPH_MATCH_TOTAL )
 		LOC_ERROR1 ( "invalid match mode %d", tQuery.m_eMode );
 
-	if ( tQuery.m_eRanker<0 || tQuery.m_eRanker>SPH_RANK_TOTAL )
+	if ( (int)tQuery.m_eRanker<0 || tQuery.m_eRanker>SPH_RANK_TOTAL )
 		LOC_ERROR1 ( "invalid ranking mode %d", tQuery.m_eRanker );
 
 	if ( tQuery.m_iMaxMatches<1 )
@@ -7065,14 +7065,14 @@ class SearchHandler_c : public ISphSearchHandler
 public:
 									SearchHandler_c ( int iQueries, const QueryParser_i * pParser, bool bSphinxQL, bool bMaster, int iCID );
 	virtual							~SearchHandler_c();
-	virtual void					RunQueries ();					///< run all queries, get all results
+	void							RunQueries () override;					///< run all queries, get all results
 	void							RunUpdates ( const CSphQuery & tQuery, const CSphString & sIndex, ServedIndex_c * pLocked, CSphAttrUpdateEx * pUpdates ); ///< run Update command instead of Search
 	void							RunDeletes ( const CSphQuery & tQuery, const CSphString & sIndex, ServedIndex_c * pLocked, CSphString * pErrors, CSphVector<SphDocID_t>* ); ///< run Delete command instead of Search
 
 	virtual void					SetQuery ( int iQuery, const CSphQuery & tQuery ) override;
-	virtual void					SetProfile ( CSphQueryProfile * pProfile );
+	void							SetProfile ( CSphQueryProfile * pProfile ) override;
 	virtual CSphQuery &				GetQuery ( int iQuery ) { return m_dQueries[iQuery]; }
-	virtual AggrResult_t *			GetResult ( int iResult ) { return m_dResults.Begin() + iResult; }
+	AggrResult_t *					GetResult ( int iResult )  override { return m_dResults.Begin() + iResult; }
 
 public:
 	CSphVector<CSphQuery>			m_dQueries;						///< queries which i need to search
@@ -9551,6 +9551,8 @@ protected:
 #ifdef __GNUC__
 	#pragma GCC diagnostic push 
 	#pragma GCC diagnostic ignored "-Wsign-compare"
+	#pragma GCC diagnostic ignored "-Wpragmas"
+	#pragma GCC diagnostic ignored "-Wunneeded-internal-declaration"
 #endif
 
 #include "flexsphinxql.c"
@@ -20546,6 +20548,10 @@ int GetOsThreadId()
 {
 #if USE_WINDOWS
 	return GetCurrentThreadId();
+#elif defined ( __APPLE__ )
+	uint64_t tid;
+ 	pthread_threadid_np(NULL, &tid);
+	return tid;
 #elif defined(SYS_gettid)
 	return syscall ( SYS_gettid );
 #elif defined(__FreeBSD__)

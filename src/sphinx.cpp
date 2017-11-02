@@ -9806,7 +9806,6 @@ private:
 
 	ESphHitFormat				m_eHitFormat;
 	ESphHitless					m_eHitless;
-	bool						m_bMerging;
 
 	CSphVector<SkiplistEntry_t>	m_dSkiplist;
 };
@@ -9824,7 +9823,6 @@ CSphHitBuilder::CSphHitBuilder ( const CSphIndexSettings & tSettings,
 	, m_pLastError ( sError )
 	, m_eHitFormat ( tSettings.m_eHitFormat )
 	, m_eHitless ( tSettings.m_eHitless )
-	, m_bMerging ( bMerging )
 {
 	m_sLastKeyword[0] = '\0';
 	HitReset();
@@ -10102,7 +10100,7 @@ void CSphHitBuilder::cidxHit ( CSphAggregateHit * pHit, const CSphRowitem * pAtt
 		assert ( pHit->m_uWordID > m_tLastHit.m_uWordID
 			|| ( m_pDict->GetSettings().m_bWordDict &&
 				pHit->m_uWordID==m_tLastHit.m_uWordID && strcmp ( (char*)pHit->m_sKeyword, (char*)m_tLastHit.m_sKeyword )>0 )
-			|| m_bMerging );
+			);
 		m_tWord.m_iDoclistOffset = m_wrDoclist.GetPos();
 		m_tLastHit.m_uWordID = pHit->m_uWordID;
 		if ( m_pDict->GetSettings().m_bWordDict )
@@ -14096,7 +14094,6 @@ SphWordID_t	CSphDictStar::GetWordIDNonStemmed ( BYTE * pWord )
 
 CSphDictStarV8::CSphDictStarV8 ( CSphDict * pDict, bool bPrefixes, bool bInfixes )
 	: CSphDictStar	( pDict )
-	, m_bPrefixes	( bPrefixes )
 	, m_bInfixes	( bInfixes )
 {
 }
@@ -14173,8 +14170,6 @@ SphWordID_t	CSphDictStarV8::GetWordID ( BYTE * pWord )
 		////////////////////
 		// prefix-only mode
 		////////////////////
-
-		assert ( m_bPrefixes );
 
 		// always ignore head star in prefix mode
 		if ( bHeadStar )
@@ -16061,7 +16056,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath )
 		m_bIsEmpty = ( m_tWordlist.m_tBuf.GetLengthBytes()<=1 );
 
 	if ( ( m_tWordlist.m_tBuf.GetLengthBytes()<=1 )!=( m_tWordlist.m_dCheckpoints.GetLength()==0 ) )
-		sphWarning ( "wordlist size mismatch (size=" INT64_FMT ", checkpoints=%d)", m_tWordlist.m_tBuf.GetLengthBytes(), m_tWordlist.m_dCheckpoints.GetLength() );
+		sphWarning ( "wordlist size mismatch (size=%zu, checkpoints=%d)", m_tWordlist.m_tBuf.GetLengthBytes(), m_tWordlist.m_dCheckpoints.GetLength() );
 
 	// make sure checkpoints are loadable
 	// pre-11 indices use different offset type (this is fixed up later during the loading)
@@ -22739,7 +22734,7 @@ static void DictReadEntry ( CSphBin * pBin, DictKeywordTagged_t & tEntry, BYTE *
 	}
 
 	assert ( iKeywordLen>0 && iKeywordLen<MAX_KEYWORD_BYTES-1 );
-	if ( pBin->ReadBytes ( pKeyword, iKeywordLen )<0 )
+	if ( pBin->ReadBytes ( pKeyword, iKeywordLen )!=BIN_READ_OK )
 	{
 		assert ( pBin->IsError() );
 		return;

@@ -3851,10 +3851,10 @@ static void CheckQuery ( const CSphQuery & tQuery, CSphString & sError )
 
 	sError = NULL;
 
-	if ( (int)tQuery.m_eMode<0 || tQuery.m_eMode>SPH_MATCH_TOTAL )
+	if ( tQuery.m_eMode<0 || tQuery.m_eMode>SPH_MATCH_TOTAL )
 		LOC_ERROR1 ( "invalid match mode %d", tQuery.m_eMode );
 
-	if ( (int)tQuery.m_eRanker<0 || tQuery.m_eRanker>SPH_RANK_TOTAL )
+	if ( tQuery.m_eRanker<0 || tQuery.m_eRanker>SPH_RANK_TOTAL )
 		LOC_ERROR1 ( "invalid ranking mode %d", tQuery.m_eRanker );
 
 	if ( tQuery.m_iMaxMatches<1 )
@@ -7065,14 +7065,14 @@ class SearchHandler_c : public ISphSearchHandler
 public:
 									SearchHandler_c ( int iQueries, const QueryParser_i * pParser, bool bSphinxQL, bool bMaster, int iCID );
 	virtual							~SearchHandler_c();
-	void							RunQueries () override;					///< run all queries, get all results
+	virtual void					RunQueries ();					///< run all queries, get all results
 	void							RunUpdates ( const CSphQuery & tQuery, const CSphString & sIndex, ServedIndex_c * pLocked, CSphAttrUpdateEx * pUpdates ); ///< run Update command instead of Search
 	void							RunDeletes ( const CSphQuery & tQuery, const CSphString & sIndex, ServedIndex_c * pLocked, CSphString * pErrors, CSphVector<SphDocID_t>* ); ///< run Delete command instead of Search
 
 	virtual void					SetQuery ( int iQuery, const CSphQuery & tQuery ) override;
-	void							SetProfile ( CSphQueryProfile * pProfile ) override;
+	virtual void					SetProfile ( CSphQueryProfile * pProfile );
 	virtual CSphQuery &				GetQuery ( int iQuery ) { return m_dQueries[iQuery]; }
-	AggrResult_t *					GetResult ( int iResult )  override { return m_dResults.Begin() + iResult; }
+	virtual AggrResult_t *			GetResult ( int iResult ) { return m_dResults.Begin() + iResult; }
 
 public:
 	CSphVector<CSphQuery>			m_dQueries;						///< queries which i need to search

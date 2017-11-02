@@ -1544,6 +1544,7 @@ bool CSphRwlock::Init ( bool bPreferWriter )
 #ifdef NO_PREFER_WRITER
 			// Mac OS X knows nothing about PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP
 			m_pWritePreferHelper = new CSphMutex();
+#pragma message("No Prefer writer available. Mac?")
 #else
 			bOk = ( pthread_rwlockattr_setkind_np ( &tAttr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP )==0 );
 #endif

@@ -4,6 +4,8 @@
 
 if ( LIBS_BUNDLE AND EXISTS "${LIBS_BUNDLE}/googletestmaster.zip" )
 	set ( GTEST_URL "${LIBS_BUNDLE}/googletestmaster.zip" )
+	file ( SHA1 "${LIBS_BUNDLE}/googletestmaster.zip" MD5GLTEST )
+	set ( GTEST_URL_HASH "SHA1=${MD5GLTEST}" )
 	message ( STATUS "Use google-tests from ${LIBS_BUNDLE}/googletestmaster.zip" )
 else()
 	set ( GTEST_URL "https://github.com/google/googletest/archive/master.zip" )

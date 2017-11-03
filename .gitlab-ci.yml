@@ -78,7 +78,10 @@ push_results:
   when: always
   artifacts:
     paths:
-    - build/results.html
+    - results.html
+  environment:
+    name: ${CI_COMMIT_REF_NAME}
+    url: http://$CDASH_URL/CDash/public/index.php?project=Manticoresearch&filtercount=1&field1=revision&compare1=63&value1=$CI_COMMIT_SHA
 
 
 

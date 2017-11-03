@@ -76,8 +76,10 @@ push_results:
   script:
     - ctest -S /work/upload.cmake
   when: always
-  environment:
-    name: ${CI_COMMIT_REF_NAME}_${CI_PIPELINE_ID}
-    url: http://$CDASH_URL/CDash/public/index.php?project=Manticoresearch&filtercount=1&field1=revision&compare1=63&value1=$CI_COMMIT_SHA
+  artifacts:
+    paths:
+    - build/results.html
+
+
 
 

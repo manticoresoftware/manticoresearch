@@ -14,7 +14,6 @@ Searching
    searching/distributed_searching
    searching/searchd_query_log_formats
    searching/mysql_protocol_support_and_sphinxql
-   searching/http_protocol
    searching/multi-queries
    searching/collations
    searching/query_cache

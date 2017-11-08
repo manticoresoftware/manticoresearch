@@ -1512,12 +1512,6 @@ bool CSphRwlock::Unlock ()
 
 // UNIX rwlock implementation (pthreads wrapper)
 
-#ifndef NO_PREFER_WRITER
-#ifdef __APPLE__
-#define NO_PREFER_WRITER 1
-#endif
-#endif
-
 CSphRwlock::CSphRwlock ()
 	: m_bInitialized ( false )
 	, m_pWritePreferHelper ( nullptr )
@@ -1541,11 +1535,11 @@ bool CSphRwlock::Init ( bool bPreferWriter )
 		if ( bOk )
 		{
 
-#ifdef NO_PREFER_WRITER
+#if HAVE_RWLOCK_PREFER_WRITER
+			bOk = ( pthread_rwlockattr_setkind_np ( &tAttr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP )==0 );
+#else
 			// Mac OS X knows nothing about PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP
 			m_pWritePreferHelper = new CSphMutex();
-#else
-			bOk = ( pthread_rwlockattr_setkind_np ( &tAttr, PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP )==0 );
 #endif
 			assert ( bOk );
 

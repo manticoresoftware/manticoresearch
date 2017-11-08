@@ -52,6 +52,9 @@
 /* Define if your system supports flag SO_REUSEPORT */
 #cmakedefine01 HAVE_SO_REUSEPORT
 
+/* Define if your system supports flag PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP */
+#cmakedefine01 HAVE_RWLOCK_PREFER_WRITER
+
 /* Define to 1 if you have the <execinfo.h> header file. */
 #cmakedefine HAVE_EXECINFO_H ${HAVE_EXECINFO_H}
 
@@ -93,9 +96,6 @@
 
 /* whether 2nd arg to iconv() is const ptr */
 #cmakedefine ICONV_INBUF_CONST ${ICONV_INBUF_CONST}
-
-/* whether we have the flag PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP */
-#cmakedefine NO_PREFER_WRITER ${NO_PREFER_WRITER}
 
 /* Full name OS */
 #cmakedefine OS_UNAME "${OS_UNAME}"

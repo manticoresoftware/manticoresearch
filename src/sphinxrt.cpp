@@ -7325,7 +7325,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		// FIXME!!! provide segments list instead index
 		sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings, pQuery->m_bSimplify, this );
 
-		if ( m_bExpandKeywords )
+		if ( ExpandKeywords ( m_bExpandKeywords, pQuery->m_eExpandKeywords ) )
 		{
 			tParsed.m_pRoot = sphQueryExpandKeywords ( tParsed.m_pRoot, m_tSettings );
 			tParsed.m_pRoot->Check ( true );

@@ -9919,6 +9919,11 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 	} else if ( sOpt=="sync" )
 	{
 		m_pQuery->m_bSync = ( tValue.m_iValue!=0 );
+
+	} else if ( sOpt=="expand_keywords" )
+	{
+		m_pQuery->m_eExpandKeywords = ( tValue.m_iValue!=0 ? QUERY_OPT_ENABLED : QUERY_OPT_DISABLED );
+
 	} else
 	{
 		m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", sOpt.cstr() );

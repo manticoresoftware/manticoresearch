@@ -373,6 +373,7 @@ else ( WIN32 )
 	if ( WITH_EXPAT )
 		option_menu ( ICONV "compile with iconv support" USE_LIBICONV EXTRA_LIBRARIES )
 		mark_as_advanced ( WITH_ICONV )
+		memcfgvalues ( USE_LIBICONV )
 	endif ( WITH_EXPAT )
 
 	# test for MYSQL

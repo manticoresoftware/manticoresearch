@@ -28,11 +28,40 @@
 find_path ( ICONV_INCLUDE_DIRS iconv.h )
 
 include ( helpers )
-ac_search_libs ( "iconv;libiconv" "iconv" HAVE_LIBICONV LIBICONV_LIBRARY )
+
+set ( _CHECK_ICONVC "
+#include <iconv.h>
+#include <stdio.h>
+int main()
+{
+	iconv_t pDesc = iconv_open ( \"UTF-16\", \"UTF-8\" );
+}" )
+
+
+get_property ( dirs DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY INCLUDE_DIRECTORIES )
+SET (CMAKE_REQUIRED_INCLUDES "${dirs}")
+CHECK_CXX_SOURCE_COMPILES ( "${_CHECK_ICONVC}" HAVE_LIBICONV )
+
+if ( NOT HAVE_LIBICONV )
+	foreach ( LIB iconv libiconv )
+		UNSET ( _LIB_PATH CACHE )
+		find_library ( _LIB_PATH NAMES ${LIB} )
+		SET ( CMAKE_REQUIRED_LIBRARIES "${_LIB_PATH}")
+		UNSET ( HAVE_LIBICONV CACHE )
+		CHECK_CXX_SOURCE_COMPILES ( "${_CHECK_ICONVC}" HAVE_LIBICONV )
+		if ( HAVE_LIBICONV )
+			message ( STATUS "iconv found as  is ${_LIB_PATH}" )
+			set ( LIBICONV_LIBRARY "${_LIB_PATH}" )
+			break ()
+		endif ()
+	endforeach ( LIB )
+endif ()
+
+mark_as_advanced(_LIB_PATH)
 
 if ( HAVE_LIBICONV )
 	set ( _CHECK_ICONV "#include <iconv.h>
-#include <stdio.h>
+	#include <stdio.h>
 
 int main()
 {

@@ -49,6 +49,18 @@ index rt
 	rt_attr_uint = idd	
 }
 
+index dist_on
+{
+	type					= distributed
+	agent					= <my_address/>:exp_on
+}
+
+index dist_off
+{
+	type					= distributed
+	agent					= <my_address/>:exp_off
+}
+
 </config>
 
 <sphqueries>
@@ -66,6 +78,16 @@ index rt
 <sphinxql>show meta</sphinxql>
 <sphinxql>select * from exp_off where match ( 'run' ) option expand_keywords=1</sphinxql>
 <sphinxql>show meta</sphinxql>
+
+<sphinxql>select * from dist_on where match ( 'run' )</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from dist_on where match ( 'run' ) option expand_keywords=0</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from dist_off where match ( 'run' )</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from dist_off where match ( 'run' ) option expand_keywords=1</sphinxql>
+<sphinxql>show meta</sphinxql>
+
 
 </sphqueries>
 

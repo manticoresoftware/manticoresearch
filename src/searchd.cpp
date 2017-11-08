@@ -417,7 +417,7 @@ static bool HasBlackhole ( AgentsVector & dAgents );
 /// master-agent API protocol extensions version
 enum
 {
-	VER_MASTER = 15
+	VER_MASTER = 16
 };
 
 
@@ -3193,7 +3193,7 @@ protected:
 
 int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuery & q, bool bAgentWeight ) const
 {
-	int iReqSize = 156 + 2*sizeof(SphDocID_t) + 4*q.m_dWeights.GetLength()
+	int iReqSize = 160 + 2*sizeof(SphDocID_t) + 4*q.m_dWeights.GetLength()
 		+ q.m_sSortBy.Length()
 		+ strlen ( sIndexes )
 		+ q.m_sGroupBy.Length()
@@ -3484,6 +3484,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, ISphOutputBuffer
 		tOut.SendString ( tItem.m_sExpr.cstr() );
 		tOut.SendDword ( tItem.m_eAggrFunc );
 	}
+	tOut.SendDword ( q.m_eExpandKeywords );
 }
 
 
@@ -4411,6 +4412,9 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 			tItem.m_eAggrFunc = (ESphAggrFunc)tReq.GetDword();
 		}
 	}
+
+	if ( iMasterVer>=16 )
+		tQuery.m_eExpandKeywords = (QueryOption_e)tReq.GetDword();
 
 	/////////////////////
 	// additional checks

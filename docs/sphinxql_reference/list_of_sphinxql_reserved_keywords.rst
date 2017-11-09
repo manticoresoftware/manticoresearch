@@ -9,6 +9,6 @@ SphinxQL syntax (and therefore can not be used as identifiers).
 .. code-block:: mysql
 
 
-    AND, AS, BY, DIV, FACET, FALSE, FROM, ID, IN, IS, LIMIT,
-    MOD, NOT, NULL, OR, ORDER, SELECT, TRUE
+    AND, AS, BY, DIV, FACET, FALSE, FROM, ID, IN, INDEXES, IS, LIMIT,
+    LOGS, MOD, NOT, NULL, OR, ORDER, RELOAD, SELECT, TRUE
 

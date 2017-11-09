@@ -37,9 +37,9 @@ handled.append('TRANSACTION')
 res = sorted(diff(res, handled))
 
 # load reserved keywords list from docs
-r = re.search('<sect1 id="sphinxql-reserved-keywords">.*?<programlisting>(.*?)</programlisting>', load('../doc/sphinx.xml'), re.MULTILINE + re.DOTALL)
+r = re.search('\.\. code\-block:: mysql(.*)', load('../docs/sphinxql_reference/list_of_sphinxql_reserved_keywords.rst'), re.MULTILINE + re.DOTALL)
 if not r:
-	die('failed to extract reserved keywords from doc/sphinx.xml')
+	die('failed to extract reserved keywords from docs/sphinxql_reference/list_of_sphinxql_reserved_keywords.rst')
 doc = [k for k in re.findall('(\w+)', r.group(1))]
 
 # load reserved keywords list from sources
@@ -53,7 +53,7 @@ src = [k for k in re.findall('"(\w+)"', r.group(1))]
 not_in_docs = sorted(diff(res, doc))
 if not_in_docs:
 	print '=== reserved but not in docs: ' + ', '.join(not_in_docs) + '\n'
-	print '<programlisting>'
+	print '.. code-block:: mysql'
 	s = ''
 	for k in res:
 		if len(s) + len(k) >= 60:
@@ -62,7 +62,7 @@ if not_in_docs:
 		s += k + ', '
 	if s:
 		print s.strip()[:-1]
-	print '</programlisting>\n'
+	print '\n'
 
 not_in_src = sorted(diff(res, src))
 if not_in_src:
@@ -83,3 +83,6 @@ if docs_not_res:
 src_not_res = sorted(diff(src, res))
 if src_not_res:
 	print '=== in sources but not reserved: ' + ', '.join(src_not_res) + '\n'
+
+if not_in_docs or not_in_src or docs_not_res or src_not_res:
+	die('got errors')

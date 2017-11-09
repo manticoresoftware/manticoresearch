@@ -190,9 +190,14 @@ if ( NOT DISABLE_TESTING )
 		target_link_libraries ( testrt libsphinx ${EXTRA_LIBRARIES} )
 		add_test ( NAME "\"Internal rt src/tests\""
 			#	    	CONFIGURATIONS Debug
-				WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+				WORKING_DIRECTORY "$${MANTICORE_SOURCE_DIR}/src"
 				COMMAND "testrt" )
 	endif ( WIN32 )
+	# first check syntax
+	add_test ( NAME "\"Internal syntax check\""
+			#    	CONFIGURATIONS Debug
+			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+			COMMAND "python" "reserved.py" )
 	add_test ( NAME "\"Internal src/tests\""
 			#    	CONFIGURATIONS Debug
 			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"

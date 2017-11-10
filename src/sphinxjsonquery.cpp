@@ -1164,7 +1164,7 @@ static bool ParseSelect ( cJSON * pSelect, CSphQuery & tQuery, CSphString & sErr
 static bool ParseExpr ( cJSON * pExpr, CSphQuery & tQuery, CSphString & sError );
 
 
-static bool ParseIndexId ( cJSON * pRoot, SqlStmt_t & tStmt, SphDocID_t & tDocId, CSphString & sError )
+static bool ParseIndex ( cJSON * pRoot, SqlStmt_t & tStmt, CSphString & sError )
 {
 	if ( !pRoot )
 	{
@@ -1177,6 +1177,16 @@ static bool ParseIndexId ( cJSON * pRoot, SqlStmt_t & tStmt, SphDocID_t & tDocId
 		return false;
 
 	tStmt.m_sIndex = pIndex->valuestring;
+	tStmt.m_tQuery.m_sIndexes = tStmt.m_sIndex;
+
+	return true;
+}
+
+
+static bool ParseIndexId ( cJSON * pRoot, SqlStmt_t & tStmt, SphDocID_t & tDocId, CSphString & sError )
+{
+	if ( !ParseIndex ( pRoot, tStmt, sError ) )
+		return false;
 
 	cJSON * pId = GetJSONPropertyInt ( pRoot, "_id", sError );
 	if ( !pId )
@@ -1191,6 +1201,39 @@ static bool ParseIndexId ( cJSON * pRoot, SqlStmt_t & tStmt, SphDocID_t & tDocId
 QueryParser_i * sphCreateJsonQueryParser()
 {
 	return new QueryParserJson_c;
+}
+
+
+static bool ParseJsonQueryFilters ( cJSON * pQuery, CSphQuery & tQuery, CSphString & sError, CSphString & sWarning )
+{
+	if ( pQuery && !cJSON_IsObject ( pQuery ) )
+	{	
+		sError = "\"query\" property value should be an object";
+		return false;
+	}
+
+	CSphQueryItem & tItem = tQuery.m_dItems.Add();
+	tItem.m_sExpr = "*";
+	tItem.m_sAlias = "*";
+	tQuery.m_sSelect = "*";
+
+	// we need to know if the query is fullscan before re-parsing it to build AST tree
+	// so we need to do some preprocessing here
+	bool bFullscan = !pQuery || ( cJSON_GetArraySize(pQuery)==1 && cJSON_HasObjectItem ( pQuery, "match_all" ) );
+
+	if ( !bFullscan )
+		tQuery.m_sQuery.Adopt ( cJSON_Print ( pQuery ) );
+
+	// because of the way sphinxql parsing was implemented
+	// we need to parse our query and extract filters now
+	// and parse the rest of the query later
+	if ( pQuery )
+	{
+		if ( !ConstructFilters ( pQuery, tQuery, sError, sWarning ) )
+			return false;
+	}
+
+	return true;
 }
 
 
@@ -1216,11 +1259,10 @@ bool sphParseJsonQuery ( const char * szQuery, CSphQuery & tQuery, bool & bProfi
 		tQuery.m_sIndexes = "*";
 
 	cJSON * pQuery = cJSON_GetObjectItem ( pRoot.Ptr(), "query" );
-	if ( pQuery && !cJSON_IsObject ( pQuery ) )
-	{
-		sError = "\"query\" property value should be an object";
+
+	// common code used by search queries and update/delete by query
+	if ( !ParseJsonQueryFilters ( pQuery, tQuery, sError, sWarning ) )
 		return false;
-	}
 
 	bProfile = false;
 	cJSON * pProfile = cJSON_GetObjectItem ( pRoot.Ptr(), "profile" );
@@ -1234,24 +1276,6 @@ bool sphParseJsonQuery ( const char * szQuery, CSphQuery & tQuery, bool & bProfi
 
 		bProfile = !!cJSON_IsTrue ( pProfile );
 	}
-
-	CSphQueryItem & tItem = tQuery.m_dItems.Add();
-	tItem.m_sExpr = "*";
-	tItem.m_sAlias = "*";
-	tQuery.m_sSelect = "*";
-
-	// we need to know if the query is fullscan before re-parsing it to build AST tree
-	// so we need to do some preprocessing here
-	bool bFullscan = !pQuery || ( cJSON_GetArraySize(pQuery)==1 && cJSON_HasObjectItem ( pQuery, "match_all" ) );
-
-	if ( !bFullscan )
-		tQuery.m_sQuery.Adopt ( cJSON_Print ( pQuery ) );
-
-	// because of the way sphinxql parsing was implemented
-	// we need to parse our query and extract filters now
-	// and parse the rest of the query later
-	if ( !ConstructFilters ( pQuery, tQuery, sError, sWarning ) )
-		return false;
 
 	// expression columns go first to select list
 	cJSON * pExpr = cJSON_GetObjectItem ( pRoot.Ptr(), "script_fields" );
@@ -1335,7 +1359,7 @@ bool ParseJsonInsert ( cJSON * pRoot, SqlStmt_t & tStmt, SphDocID_t & tDocId, bo
 			if ( cJSON_IsString ( pItem ) )
 			{
 				tNewValue.m_iType = sphGetTokTypeStr();
-				tNewValue.m_sVal = pItem->string;
+				tNewValue.m_sVal = pItem->valuestring;
 			} else if ( cJSON_IsNumber ( pItem ) )
 			{
 				tNewValue.m_iType = sphGetTokTypeFloat();
@@ -1369,19 +1393,46 @@ bool sphParseJsonInsert ( const char * szInsert, SqlStmt_t & tStmt, SphDocID_t &
 }
 
 
+static bool ParseUpdateDeleteQueries ( cJSON * pRoot, SqlStmt_t & tStmt, SphDocID_t & tDocId, CSphString & sError )
+{	
+	tStmt.m_tQuery.m_sSelect = "*";
+	if ( !ParseIndex ( pRoot, tStmt, sError ) )
+		return false;
+
+	cJSON * pId = GetJSONPropertyInt ( pRoot, "_id", sError );
+	if ( pId )
+	{
+		CSphFilterSettings & tFilter = tStmt.m_tQuery.m_dFilters.Add();
+		tFilter.m_eType = SPH_FILTER_VALUES;
+		tFilter.m_dValues.Add ( pId->valueint );
+		tFilter.m_sAttrName = "@id";
+
+		tDocId = pId->valueint;
+	}
+
+	// "query" is optional
+	cJSON * pQuery = cJSON_GetObjectItem ( pRoot, "query" );
+	if ( pQuery && pId )
+	{
+		sError = "both \"_id\" and \"query\" specified";
+		return false;
+	}
+
+	CSphString sWarning; // fixme: add to results
+	if ( !ParseJsonQueryFilters ( pQuery, tStmt.m_tQuery, sError, sWarning ) )
+		return false;
+
+	return true;
+}
+
+
 static bool ParseJsonUpdate ( cJSON * pRoot, SqlStmt_t & tStmt, SphDocID_t & tDocId, CSphString & sError )
 {
 	tStmt.m_eStmt = STMT_UPDATE;
 	tStmt.m_tUpdate.m_dRowOffset.Add ( 0 );
-	tStmt.m_tQuery.m_sSelect = "*";
 
-	if ( !ParseIndexId ( pRoot, tStmt, tDocId, sError ) )
+	if ( !ParseUpdateDeleteQueries ( pRoot, tStmt, tDocId, sError ) )
 		return false;
-
-	CSphFilterSettings & tFilter = tStmt.m_tQuery.m_dFilters.Add();
-	tFilter.m_eType = SPH_FILTER_VALUES;
-	tFilter.m_dValues.Add ( tDocId );
-	tFilter.m_sAttrName = "@id";
 
 	cJSON * pSource = GetJSONPropertyObject ( pRoot, "doc", sError );
 	if ( !pSource )
@@ -1392,13 +1443,17 @@ static bool ParseJsonUpdate ( cJSON * pRoot, SqlStmt_t & tStmt, SphDocID_t & tDo
 		cJSON * pItem = cJSON_GetArrayItem ( pSource, i );
 		assert ( pItem );
 
-		if ( cJSON_IsNumeric ( pItem ) || cJSON_IsBool ( pItem ) )
+		bool bFloat = !!cJSON_IsNumber ( pItem );
+		bool bInt = !!cJSON_IsInteger ( pItem );
+		bool bBool = !!cJSON_IsBool ( pItem );
+
+		if ( bFloat || bInt || bBool )
 		{
 			CSphAttrUpdate & tUpd = tStmt.m_tUpdate;
 			CSphString sAttr = pItem->string;
 			tUpd.m_dAttrs.Add ( sAttr.ToLower().Leak() );
 
-			if ( cJSON_IsBool ( pItem ) || cJSON_IsInteger ( pItem ) )
+			if ( bInt || bBool )
 			{
 				int64_t iValue = pItem->valueint;
 
@@ -1439,16 +1494,7 @@ bool sphParseJsonUpdate ( const char * szUpdate, SqlStmt_t & tStmt, SphDocID_t &
 static bool ParseJsonDelete ( cJSON * pRoot, SqlStmt_t & tStmt, SphDocID_t & tDocId, CSphString & sError )
 {
 	tStmt.m_eStmt = STMT_DELETE;
-	tStmt.m_tQuery.m_sSelect = "*";
-	if ( !ParseIndexId ( pRoot, tStmt, tDocId, sError ) )
-		return false;
-
-	CSphFilterSettings & tFilter = tStmt.m_tQuery.m_dFilters.Add();
-	tFilter.m_eType = SPH_FILTER_VALUES;
-	tFilter.m_dValues.Add ( tDocId );
-	tFilter.m_sAttrName = "@id";
-
-	return true;
+	return ParseUpdateDeleteQueries ( pRoot, tStmt, tDocId, sError );
 }
 
 
@@ -1476,6 +1522,12 @@ bool sphParseJsonStatement ( const char * szStmt, SqlStmt_t & tStmt, CSphString 
 	}
 
 	sStmt = pStmt->string;
+
+	if ( !cJSON_IsObject(pStmt) )
+	{
+		sError.SetSprintf ( "statement %s should be an object", sStmt.cstr() );
+		return false;
+	}
 
 	if ( sStmt=="index" || sStmt=="replace" )
 	{
@@ -1827,8 +1879,14 @@ cJSON * sphEncodeUpdateResultJson( const char * szIndex, SphDocID_t tDocId, int 
 	assert ( pRoot );
 
 	cJSON_AddStringToObject ( pRoot, "_index", szIndex );
-	cJSON_AddNumberToObject ( pRoot, "_id", tDocId );
-	cJSON_AddStringToObject ( pRoot, "result", iAffected ? "updated" : "noop" );
+
+	if ( tDocId==DOCID_MAX )
+		cJSON_AddNumberToObject ( pRoot, "updated", iAffected );
+	else
+	{
+		cJSON_AddNumberToObject ( pRoot, "_id", tDocId );
+		cJSON_AddStringToObject ( pRoot, "result", iAffected ? "updated" : "noop" );
+	}
 
 	return pRoot;
 }
@@ -1840,9 +1898,15 @@ cJSON * sphEncodeDeleteResultJson ( const char * szIndex, SphDocID_t tDocId, int
 	assert ( pRoot );
 
 	cJSON_AddStringToObject ( pRoot, "_index", szIndex );
-	cJSON_AddNumberToObject ( pRoot, "_id", tDocId );
-	cJSON_AddBoolToObject ( pRoot, "found", iAffected ? 1 : 0 );
-	cJSON_AddStringToObject ( pRoot, "result", iAffected ? "deleted" : "not found" );
+
+	if ( tDocId==DOCID_MAX )
+		cJSON_AddNumberToObject ( pRoot, "deleted", iAffected );
+	else
+	{
+		cJSON_AddNumberToObject ( pRoot, "_id", tDocId );
+		cJSON_AddBoolToObject ( pRoot, "found", iAffected ? 1 : 0 );
+		cJSON_AddStringToObject ( pRoot, "result", iAffected ? "deleted" : "not found" );
+	}
 
 	return pRoot;
 }

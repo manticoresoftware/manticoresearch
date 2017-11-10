@@ -13130,8 +13130,17 @@ private:
 };
 
 
-void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
-	bool bReplace, bool bCommit, CSphString & sWarning, CSphSessionAccum & tAcc )
+class PlainParserFactory_c : public QueryParserFactory_i
+{
+public:
+	QueryParser_i * Create () const override
+	{
+		return sphCreatePlainQueryParser();
+	}
+};
+
+
+void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, bool bReplace, bool bCommit, CSphString & sWarning, CSphSessionAccum & tAcc )
 {
 	MEMORY ( MEM_SQL_INSERT );
 
@@ -15003,9 +15012,8 @@ void SphinxqlRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, ISphOu
 
 //////////////////////////////////////////////////////////////////////////
 
-static void DoExtendedUpdate ( const char * sIndex, const char * sDistributed, const SqlStmt_t & tStmt,
-							int & iSuccesses, int & iUpdated,
-							SearchFailuresLog_c & dFails, ServedIndex_c * pServed, CSphString & sWarning, int iCID )
+static void DoExtendedUpdate ( const char * sIndex, const QueryParserFactory_i & tQueryParserFactory, const char * sDistributed, const SqlStmt_t & tStmt, int & iSuccesses, int & iUpdated,
+	SearchFailuresLog_c & dFails, ServedIndex_c * pServed, CSphString & sWarning, int iCID )
 {
 	if ( !pServed || !pServed->m_pIndex || !pServed->m_bEnabled )
 	{
@@ -15015,7 +15023,7 @@ static void DoExtendedUpdate ( const char * sIndex, const char * sDistributed, c
 		return;
 	}
 
-	SearchHandler_c tHandler ( 1, sphCreatePlainQueryParser(), true, false, iCID ); // handler unlocks index at destructor - no need to do it manually
+	SearchHandler_c tHandler ( 1, tQueryParserFactory.Create(), true, false, iCID ); // handler unlocks index at destructor - no need to do it manually
 	CSphAttrUpdateEx tUpdate;
 	CSphString sError;
 
@@ -15037,7 +15045,7 @@ static void DoExtendedUpdate ( const char * sIndex, const char * sDistributed, c
 }
 
 
-void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, const CSphString & sQuery, CSphString & sWarning, int iCID )
+void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const QueryParserFactory_i & tQueryParserFactory, const SqlStmt_t & tStmt, const CSphString & sQuery, CSphString & sWarning, int iCID )
 {
 	CSphString sError;
 
@@ -15082,7 +15090,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		ServedIndex_c * pLocked = UpdateGetLockedIndex ( sReqIndex, bMvaUpdate );
 		if ( pLocked )
 		{
-			DoExtendedUpdate ( sReqIndex, NULL, tStmt, iSuccesses, iUpdated, dFails, pLocked, sWarning, iCID );
+			DoExtendedUpdate ( sReqIndex, tQueryParserFactory, NULL, tStmt, iSuccesses, iUpdated, dFails, pLocked, sWarning, iCID );
 		} else if ( dDistributed[iIdx] )
 		{
 			assert ( dDistributed[iIdx]->m_dLocal.GetLength() || dDistributed[iIdx]->m_dAgents.GetLength() );
@@ -15092,7 +15100,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			{
 				const char * sLocal = dLocal[i].cstr();
 				ServedIndex_c * pServed = UpdateGetLockedIndex ( sLocal, bMvaUpdate );
-				DoExtendedUpdate ( sLocal, sReqIndex, tStmt, iSuccesses, iUpdated, dFails, pServed, sWarning, iCID );
+				DoExtendedUpdate ( sLocal, tQueryParserFactory, sReqIndex, tStmt, iSuccesses, iUpdated, dFails, pServed, sWarning, iCID );
 			}
 		}
 
@@ -15681,8 +15689,8 @@ void HandleMysqlMeta ( SqlRowBuffer_c & dRows, const SqlStmt_t & tStmt, const CS
 }
 
 
-static int LocalIndexDoDeleteDocuments ( const char * sName, const char * sDistributed, const SqlStmt_t & tStmt, const SphDocID_t * pDocs, int iCount,
-											ServedIndex_c * pLocked, SearchFailuresLog_c & dErrors, bool bCommit, CSphSessionAccum & tAcc, int iCID )
+static int LocalIndexDoDeleteDocuments ( const char * sName, const QueryParserFactory_i & tQueryParserFactory, const char * sDistributed, const SqlStmt_t & tStmt,
+	const SphDocID_t * pDocs, int iCount, ServedIndex_c * pLocked, SearchFailuresLog_c & dErrors, bool bCommit, CSphSessionAccum & tAcc, int iCID )
 {
 	if ( !pLocked || !pLocked->m_pIndex )
 	{
@@ -15714,7 +15722,7 @@ static int LocalIndexDoDeleteDocuments ( const char * sName, const char * sDistr
 	CSphVector<SphDocID_t> dValues;
 	if ( !pDocs ) // needs to be deleted via query
 	{
-		pHandler = new SearchHandler_c ( 1, sphCreatePlainQueryParser(), true, false, iCID ); // handler unlocks index at destructor - no need to do it manually
+		pHandler = new SearchHandler_c ( 1, tQueryParserFactory.Create(), true, false, iCID ); // handler unlocks index at destructor - no need to do it manually
 		pHandler->RunDeletes ( tStmt.m_tQuery, sName, pLocked, &sError, &dValues );
 		pDocs = dValues.Begin();
 		iCount = dValues.GetLength();
@@ -15738,7 +15746,7 @@ static int LocalIndexDoDeleteDocuments ( const char * sName, const char * sDistr
 }
 
 
-void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit, CSphSessionAccum & tAcc, int iCID )
+void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const QueryParserFactory_i & tQueryParserFactory, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit, CSphSessionAccum & tAcc, int iCID )
 {
 	MEMORY ( MEM_SQL_DELETE );
 
@@ -15816,7 +15824,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		ServedIndex_c * pLocal = g_pLocalIndexes->GetRlockedEntry ( sName );
 		if ( pLocal )
 		{
-			iAffected += LocalIndexDoDeleteDocuments ( sName, NULL, tStmt, pDocs, iDocsCount, pLocal, dErrors, bCommit, tAcc, iCID );
+			iAffected += LocalIndexDoDeleteDocuments ( sName, tQueryParserFactory, NULL, tStmt, pDocs, iDocsCount, pLocal, dErrors, bCommit, tAcc, iCID );
 		} else if ( dDistributed[iIdx] )
 		{
 			assert ( dDistributed[iIdx]->m_dLocal.GetLength() || dDistributed[iIdx]->m_dAgents.GetLength() );
@@ -15826,7 +15834,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			{
 				const char * sDistLocal = dDistLocal[i].cstr();
 				ServedIndex_c * pDistLocal = g_pLocalIndexes->GetRlockedEntry ( sDistLocal );
-				iAffected += LocalIndexDoDeleteDocuments ( sDistLocal, sName, tStmt, pDocs, iDocsCount, pDistLocal, dErrors, bCommit, tAcc, iCID );
+				iAffected += LocalIndexDoDeleteDocuments ( sDistLocal, tQueryParserFactory, sName, tStmt, pDocs, iDocsCount, pDistLocal, dErrors, bCommit, tAcc, iCID );
 			}
 		}
 
@@ -17381,7 +17389,8 @@ public:
 				m_tLastMeta.m_sWarning = "";
 				StatCountCommand ( SEARCHD_COMMAND_DELETE );
 				StmtErrorReporter_c tErrorReporter ( tOut );
-				sphHandleMysqlDelete ( tErrorReporter, *pStmt, sQuery, m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction, m_tAcc, pThd->m_iConnID );
+				PlainParserFactory_c tParserFactory;
+				sphHandleMysqlDelete ( tErrorReporter, tParserFactory, *pStmt, sQuery, m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction, m_tAcc, pThd->m_iConnID );
 				return true;
 			}
 
@@ -17479,7 +17488,8 @@ public:
 				m_tLastMeta.m_sWarning = "";
 				StatCountCommand ( SEARCHD_COMMAND_UPDATE );
 				StmtErrorReporter_c tErrorReporter ( tOut );
-				sphHandleMysqlUpdate ( tErrorReporter, *pStmt, sQuery, m_tLastMeta.m_sWarning, pThd->m_iConnID );
+				PlainParserFactory_c tParserFactory;
+				sphHandleMysqlUpdate ( tErrorReporter, tParserFactory, *pStmt, sQuery, m_tLastMeta.m_sWarning, pThd->m_iConnID );
 				return true;
 			}
 

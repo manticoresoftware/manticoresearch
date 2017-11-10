@@ -909,11 +909,14 @@ function RunCurl ( $curl_desc, &$rows )
 }
 
 
-function HttpQueryGet ( $http_endpoint, $http_get )
+function HttpQueryGet ( $http_endpoint, $http_content, $http_get )
 {
 	global $sd_http_port;
 	$curl_desc = array ( CURLOPT_RETURNTRANSFER => 1, CURLOPT_CONNECTTIMEOUT=>1, CURLOPT_URL => "127.0.0.1:$sd_http_port/" . $http_endpoint );
 	$curl_desc[CURLOPT_URL] = $curl_desc[CURLOPT_URL] . '?' . $http_get;
+
+	if ( $http_content!==NULL )
+		$curl_desc[CURLOPT_HTTPHEADER] = array("Content-Type: ".$http_content);
 
 	$rows = "";
 	$http_code = RunCurl( $curl_desc, $rows );
@@ -921,12 +924,15 @@ function HttpQueryGet ( $http_endpoint, $http_get )
 }
 
 
-function HttpQueryPost ( $http_endpoint, $http_post )
+function HttpQueryPost ( $http_endpoint, $http_content, $http_post )
 {
 	global $sd_http_port;
 	$curl_desc = array ( CURLOPT_RETURNTRANSFER => 1, CURLOPT_CONNECTTIMEOUT=>1, CURLOPT_URL => "127.0.0.1:$sd_http_port/" . $http_endpoint );
 	$curl_desc[CURLOPT_POST] = 1;
 	$curl_desc[CURLOPT_POSTFIELDS] = $http_post;
+
+	if ( $http_content!==NULL )
+		$curl_desc[CURLOPT_HTTPHEADER] = array("Content-Type: ".$http_content);
 
 	$rows = "";
 	$http_code = RunCurl( $curl_desc, $rows );
@@ -1553,6 +1559,7 @@ class SphinxConfig
 		$qmax = $qcount - 1;
 		$http_endpoint = NULL;
 		$http_method = NULL;
+		$http_content = NULL;
 
 		if ( $g_pick_query>0 )
 		{
@@ -1576,6 +1583,8 @@ class SphinxConfig
 					$http_endpoint = $v;
 				elseif ($k=="method")
 					$http_method = $v;
+				elseif ($k=="content")
+					$http_content = $v;
 			}
 
 			$query = $query[0];
@@ -1594,9 +1603,9 @@ class SphinxConfig
 			}
 
 			if ( $post )
-				$query_result = HttpQueryPost ( $http_endpoint, $query );
+				$query_result = HttpQueryPost ( $http_endpoint, $http_content, $query );
 			else
-				$query_result = HttpQueryGet ( $http_endpoint, $query );
+				$query_result = HttpQueryGet ( $http_endpoint, $http_content, $query );
 
 			$query_result['http']=1;
 

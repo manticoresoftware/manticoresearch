@@ -846,11 +846,22 @@ static void HttpHandlerInsert ( const HttpRequestParser_t & tParser, CSphVector<
 }
 
 
+class JsonParserFactory_c : public QueryParserFactory_i
+{
+public:
+	virtual QueryParser_i * Create() const override
+	{
+		return sphCreateJsonQueryParser();
+	}
+};
+
+
 static bool ProcessUpdate ( SqlStmt_t & tStmt, SphDocID_t tDocId, int iCID, cJSON * & pResult )
 {
 	HttpErrorReporter_c tReporter;
 	CSphString sWarning;
-	sphHandleMysqlUpdate ( tReporter, tStmt, "", sWarning, iCID );
+	JsonParserFactory_c tFactory;
+	sphHandleMysqlUpdate ( tReporter, tFactory, tStmt, "", sWarning, iCID );
 
 	if ( tReporter.IsError() )
 		pResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );
@@ -861,31 +872,13 @@ static bool ProcessUpdate ( SqlStmt_t & tStmt, SphDocID_t tDocId, int iCID, cJSO
 }
 
 
-static void HttpHandlerUpdate ( const HttpRequestParser_t & tParser, int iCID, CSphVector<BYTE> & dData )
-{
-	SqlStmt_t tStmt;
-	SphDocID_t tDocId;
-	CSphString sError;
-	if ( !sphParseJsonUpdate ( tParser.m_sRawBody.cstr(), tStmt, tDocId, sError ) )
-	{
-		sError.SetSprintf( "Error parsing json query: %s", sError.cstr() );
-		HttpErrorReply ( dData, SPH_HTTP_STATUS_400, sError.cstr() );
-		return;
-	}
-
-	cJSON * pResult = NULL;
-	bool bResult = ProcessUpdate ( tStmt, tDocId, iCID, pResult );
-	CreateHttpResponse ( bResult, pResult, dData );
-	cJSON_Delete ( pResult );
-}
-
-
 static bool ProcessDelete ( SqlStmt_t & tStmt, SphDocID_t tDocId, int iCID, cJSON * & pResult )
 {
 	CSphSessionAccum tAcc ( false );
 	HttpErrorReporter_c tReporter;
 	CSphString sWarning;
-	sphHandleMysqlDelete ( tReporter, tStmt, "", true, tAcc, iCID );
+	JsonParserFactory_c tFactory;
+	sphHandleMysqlDelete ( tReporter, tFactory, tStmt, "", true, tAcc, iCID );
 
 	if ( tReporter.IsError() )
 		pResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );
@@ -896,12 +889,17 @@ static bool ProcessDelete ( SqlStmt_t & tStmt, SphDocID_t tDocId, int iCID, cJSO
 }
 
 
-static void HttpHandlerDelete ( const HttpRequestParser_t & tParser, int iCID, CSphVector<BYTE> & dData )
+using ParseRequestFunc_fn = bool ( const char *, SqlStmt_t &, SphDocID_t &, CSphString & );
+using Process_fn = bool ( SqlStmt_t &, SphDocID_t, int, cJSON * & );
+
+static void HttpHandlerUpdateDelete ( const HttpRequestParser_t & tParser, int iCID, CSphVector<BYTE> & dData, ParseRequestFunc_fn * pParseRequestFunc, Process_fn * pProcessFunc )
 {
+	assert ( pParseRequestFunc && pProcessFunc );
+
 	SqlStmt_t tStmt;
-	SphDocID_t tDocId;
+	SphDocID_t tDocId = DOCID_MAX;
 	CSphString sError;
-	if ( !sphParseJsonDelete ( tParser.m_sRawBody.cstr(), tStmt, tDocId, sError ) )
+	if ( !pParseRequestFunc ( tParser.m_sRawBody.cstr(), tStmt, tDocId, sError ) )
 	{
 		sError.SetSprintf( "Error parsing json query: %s", sError.cstr() );
 		HttpErrorReply ( dData, SPH_HTTP_STATUS_400, sError.cstr() );
@@ -909,7 +907,7 @@ static void HttpHandlerDelete ( const HttpRequestParser_t & tParser, int iCID, C
 	}
 
 	cJSON * pResult = NULL;
-	bool bResult = ProcessDelete ( tStmt, tDocId, iCID, pResult );
+	bool bResult = pProcessFunc ( tStmt, tDocId, iCID, pResult );
 	CreateHttpResponse ( bResult, pResult, dData );
 	cJSON_Delete ( pResult );
 }
@@ -933,12 +931,14 @@ static void HttpHandlerBulk ( const HttpRequestParser_t & tParser, int iCID, CSp
 	{
 		CSphString sError = "Content-Type must be set";
 		HttpErrorReply ( dData, SPH_HTTP_STATUS_400, sError.cstr() );
+		return;
 	}
 
 	if ( tParser.m_hOptions["Content-Type"].ToLower() != "application/x-ndjson" )
 	{
 		CSphString sError = "Content-Type must be application/x-ndjson";
 		HttpErrorReply ( dData, SPH_HTTP_STATUS_400, sError.cstr() );
+		return;
 	}
 
 	cJSON * pRoot = cJSON_CreateObject();
@@ -951,6 +951,9 @@ static void HttpHandlerBulk ( const HttpRequestParser_t & tParser, int iCID, CSp
 	bool bResult = false;
 	while ( *p )
 	{
+		while ( sphIsSpace(*p) )
+			p++;
+
 		char * szStmt = p;
 		while ( *p && *p!='\r' && *p!='\n' )
 			p++;
@@ -960,7 +963,7 @@ static void HttpHandlerBulk ( const HttpRequestParser_t & tParser, int iCID, CSp
 
 		*p++ = '\0';
 		SqlStmt_t tStmt;
-		SphDocID_t tDocId;
+		SphDocID_t tDocId = DOCID_MAX;
 		CSphString sStmt;
 		CSphString sError;
 		if ( !sphParseJsonStatement ( szStmt, tStmt, sStmt, tDocId, sError ) )
@@ -1002,7 +1005,7 @@ static void HttpHandlerBulk ( const HttpRequestParser_t & tParser, int iCID, CSp
 		if ( !bResult )
 			break;
 
-		while ( *p=='\r' || *p=='\n' )
+		while ( sphIsSpace(*p) )
 			p++;
 	}
 
@@ -1044,11 +1047,11 @@ bool sphLoopClientHttp ( CSphVector<BYTE> & dData, int iCID )
 		break;
 
 	case SPH_HTTP_ENDPOINT_JSON_UPDATE:
-		HttpHandlerUpdate ( tParser, iCID, dData );
+		HttpHandlerUpdateDelete ( tParser, iCID, dData, sphParseJsonUpdate, ProcessUpdate );
 		break;
 
 	case SPH_HTTP_ENDPOINT_JSON_DELETE:
-		HttpHandlerDelete ( tParser, iCID, dData );
+		HttpHandlerUpdateDelete ( tParser, iCID, dData, sphParseJsonDelete, ProcessDelete );
 		break;
 
 	case SPH_HTTP_ENDPOINT_JSON_BULK:

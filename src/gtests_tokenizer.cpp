@@ -33,15 +33,17 @@ protected:
 		ISphTokenizer * pTokenizer = ISphTokenizer::Create ( tSettings, NULL, sError );
 		if ( !( uMode & TOK_NO_DASH ) )
 		{
-			assert ( pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z, U+80..U+FF", sError ) );
+			Verify ( pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z, U+80..U+FF", sError ) );
 			pTokenizer->AddSpecials ( "!-" );
 		} else
 		{
-			assert ( pTokenizer->SetCaseFolding ( "0..9, A..Z->a..z, _, a..z, U+80..U+FF", sError ) );
+			Verify ( pTokenizer->SetCaseFolding ( "0..9, A..Z->a..z, _, a..z, U+80..U+FF", sError ) );
 			pTokenizer->AddSpecials ( "!" );
 		}
 		if ( uMode & TOK_EXCEPTIONS )
-			assert ( pTokenizer->LoadSynonyms ( g_sMagickTmpfile, NULL, sError ) );
+		{
+			Verify ( pTokenizer->LoadSynonyms ( g_sMagickTmpfile, NULL, sError ) );
+		}
 
 		// tricky little shit!
 		// we want to create a query mode tokenizer

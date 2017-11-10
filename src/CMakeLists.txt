@@ -190,14 +190,18 @@ if ( NOT DISABLE_TESTING )
 		target_link_libraries ( testrt libsphinx ${EXTRA_LIBRARIES} )
 		add_test ( NAME "\"Internal rt src/tests\""
 			#	    	CONFIGURATIONS Debug
-				WORKING_DIRECTORY "$${MANTICORE_SOURCE_DIR}/src"
+				WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
 				COMMAND "testrt" )
 	endif ( WIN32 )
 	# first check syntax
-	add_test ( NAME "\"Internal syntax check\""
-			#    	CONFIGURATIONS Debug
-			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-			COMMAND "python" "reserved.py" )
+	find_package ( PythonInterp QUIET )
+	if ( PYTHONINTERP_FOUND )
+		set ( RESERVED_TEST "\"SphinxQL reserved keywords consistency\"" )
+		add_test ( NAME ${RESERVED_TEST}
+				WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+				COMMAND ${PYTHON_EXECUTABLE} reserved.py )
+		SET_TESTS_PROPERTIES ( ${RESERVED_TEST} PROPERTIES LABELS LINTER )
+	endif()
 	add_test ( NAME "\"Internal src/tests\""
 			#    	CONFIGURATIONS Debug
 			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"

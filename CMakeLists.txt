@@ -18,11 +18,6 @@ IF ( NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES )
 			"MinSizeRel" "RelWithDebInfo" )
 ENDIF ()
 
-set ( CMAKE_DISABLE_FIND_PACKAGE_PkgConfig ON )
-# runaround to configure error caused by absence of pkg_check_modules
-macro( pkg_check_modules )
-endmacro()
-
 PROJECT ( MANTICORE )
 SET ( MANTICORE_CMAKE_DIR "${MANTICORE_SOURCE_DIR}/cmake" )
 SET ( CMAKE_MODULE_PATH "${MANTICORE_SOURCE_DIR}/cmake" )

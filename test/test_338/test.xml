@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>json queries: insert, delete, replace</name>
+
+<skip_indexer/>
+
+<requires>
+<http/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	binlog_path =
+}
+
+index test_rt
+{
+    type = rt
+    path = <data_path/>/rt
+    rt_field = title
+	rt_field = content
+    rt_attr_uint = int_col
+	rt_attr_float = flt_col
+}
+</config>
+
+<httpqueries>
+
+<!-- inserts -->
+<query endpoint="json/insert">
+{
+	"_index":"test_rt",
+	"_id":1,
+	"doc":
+	{
+	    "int_col" : 1,
+		"flt_col" : 1.1,
+	    "content" : "document one"
+	}
+}
+</query>
+
+<query endpoint="json/insert">
+{
+	"_index":"test_rt",
+	"_id":2,
+	"doc":
+	{
+	    "int_col" : 2,
+	    "flt_col" : 2.2,
+	    "content" : "document two"
+	}
+}
+</query>
+
+<query endpoint="json/insert">
+{
+	"_index":"test_rt",
+	"_id":3,
+	"doc":
+	{
+	    "int_col" : 3,
+	    "flt_col" : 3.3,
+	    "content" : "document three"
+	}
+}
+</query>
+
+<!-- fullscan -->
+<query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
+
+<!-- fulltext -->
+<query endpoint="json/search">{ "index": "test_rt", "query": { "match": { "*": "one" } } } }</query>
+<query endpoint="json/search">{ "index": "test_rt", "query": { "match": { "*": "two three" } } } }</query>
+
+<!-- "create"=="insert" -->
+<query endpoint="json/insert">
+{
+	"_index":"test_rt",
+	"_id":3
+}
+</query>
+
+<query endpoint="json/create">
+{
+	"_index":"test_rt",
+	"_id":3
+}
+</query>
+
+<!-- "index"=="replace" -->
+<query endpoint="json/replace">
+{
+	"_index":"test_rt",
+	"_id":3,
+	"doc":
+	{
+	    "int_col" : 33,
+	    "flt_col" : 33.3,
+	    "content" : "document three (replaced)"
+	}
+}
+</query>
+
+<query endpoint="json/index">
+{
+	"_index":"test_rt",
+	"_id":4,
+	"doc":
+	{
+	    "int_col" : 44,
+	    "flt_col" : 44.4,
+	    "content" : "document four (replaced)"
+	}
+}
+</query>
+
+<query endpoint="json/search">{ "index": "test_rt", "query": { "match": { "*": "replaced" } } } }</query>
+
+<!-- update -->
+<query endpoint="json/update">
+{
+	"_index":"test_rt",
+	"_id":3,
+	"doc":
+	{
+	    "int_col" : 333,
+	    "flt_col" : 333.3
+	}
+}
+</query>
+
+<query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
+
+<!-- delete -->
+<query endpoint="json/delete">
+{
+	"_index":"test_rt",
+	"_id":3
+}
+</query>
+
+<query endpoint="json/delete">
+{
+	"_index":"test_rt",
+	"_id":4
+}
+</query>
+
+<query endpoint="json/delete">
+{
+	"_index":"test_rt",
+	"_id":4
+}
+</query>
+
+<query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
+
+<!-- update-by-query -->
+<query endpoint="json/search">
+{
+	"index":"test_rt",
+	"query":{ "range": { "int_col": { "lte": 1 } } }
+}
+</query>
+
+<query endpoint="json/update">
+{
+	"_index":"test_rt",
+	"doc":
+	{
+	    "int_col" : 100,
+	    "flt_col" : 100.100
+	},
+
+	"query": { "range": { "int_col": { "lte": 1 } } }
+}
+</query>
+
+<query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
+
+<!-- use fulltext here -->
+<query endpoint="json/search">
+{
+  "index":"test_rt",
+  "query": { "match": { "*": "two" } } }
+}
+</query>
+
+<query endpoint="json/update">
+{
+	"_index":"test_rt",
+	"doc":
+	{
+	    "int_col" : 200,
+	    "flt_col" : 200.200
+	},
+
+	"query": { "match": { "*": "two" } } }
+}
+</query>
+
+<query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
+
+<!-- delete-by-query -->
+<query endpoint="json/delete">
+{
+	"_index":"test_rt",
+	"query": { "range": { "int_col": { "lte": 100 } } }
+}
+</query>
+
+<query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
+
+<query endpoint="json/delete">
+{
+	"_index":"test_rt",
+	"query": { "match": { "*": "two" } } }
+}
+</query>
+
+<query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
+
+</httpqueries>
+
+</test>

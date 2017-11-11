@@ -692,3 +692,141 @@ This feature is somewhat similar to ``SHOW PLAN`` statement in SphinxQL. The res
 * ``field_start``: keyword must occur at the very start of the field. Keyword nodes only.
 * ``field_end``: keyword must occur at the very end of the field. Keyword nodes only.
 * ``boost``: keyword IDF will be multiplied by this. Keyword nodes only.
+
+
+json/insert
+-----------
+
+Documents can be inserted into RT indexes using the ``/json/insert`` endpoint. As with SphinxQL's ``INSERT``, documents with ids that already exist will not be overwritten. You can also use the ``/json/create`` endpoint, it's a synonym for ``json/insert``.
+
+Here's how you can index a simple document:
+
+::
+
+	{
+	  "_index":"test",
+	  "_id":1
+	}
+
+This creates a document with an id specified by ``_id`` in an index specified by the ``_index`` property. This document has empty fulltext fields and all attributes are set to their default values. However, you can use the optional ``doc`` property to set field and attribute values:
+
+::
+
+	{
+	  "_index":"test",
+	  "_id":1,
+	  "doc":
+	  {
+	    "gid" : 10,
+	    "content" : "new document"
+	  }
+	}
+
+json/replace
+------------
+
+``json/replace`` works similar to SphinxQL's ``REPLACE``. It inserts a new document into an index and if the index already has a document with the same id, it is deleted before the new document is inserted. There's also a synonym endpoint, ``json/index``.
+
+
+json/update
+-----------
+
+This endpoint allows you to update attribute values in documents, same as SphinxQL's ``UPDATE``. Syntax is similar to ``json/insert``, but this time the ``doc`` property is mandatory.
+
+Example:
+
+::
+
+	{
+	  "_index":"test",
+	  "_id":1,
+	  "doc":
+	  {
+	    "gid" : 100,
+	    "price" : 1000
+	  }
+	}
+
+The id of the document that needs to be updated can be set directly using the ``_id`` property (as in the example above) or
+you can do an update by query and apply the update to all the documents that match the query:
+
+::
+
+	{
+	  "_index":"test",
+	  "doc":
+	  {
+	    "price" : 1000
+	  },
+
+	  "query":
+  	  {
+	    "match": { "*": "apple" }
+	  }
+	}
+
+Query syntax is the same as in the ``json/search`` endpoint. Note that you can't specify ``_id`` and ``query`` at the same time.
+
+json/delete
+-----------
+
+This endpoint allows you to delete documents from indexes, similar to SphinxQL's ``DELETE``.
+
+Example:
+
+::
+
+	{
+	  "_index":"test",
+	  "_id":1
+	}
+
+
+This deletes a document that has and id of 1 from an index named ``test``.
+
+As in ``json/update``, you can do a delete by query.
+
+::
+
+	{
+	  "_index":"test",
+
+	  "query":
+  	  {
+	    "match": { "*": "apple" }
+	  }
+	}
+
+This deletes all documents that match a given query.
+
+json/bulk
+---------
+
+The ``json/bulk`` endpoint allows you to perform several insert, update or delete operations in a single call. This endpoint only works with data that has ``Content-Type`` set to ``application/x-ndjson``. The data itself should be formatted as a newline-delimited json (NDJSON). Basically it means that each line should contain exactly one json statement and end with a newline ``\n`` and maybe a ``\r``.
+
+Example:
+
+::
+
+	{ "insert" : { "_index" : "test", "_id" : 1, "doc": { "gid" : 10, "content" : "doc one" } } }
+	{ "insert" : { "_index" : "test", "_id" : 2, "doc": { "gid" : 20, "content" : "doc two" } } }
+
+This inserts two documents to index ``test``. Each statement starts with an action type (in this case, ``insert``). Here's a list of the supported actions:
+
+* ``insert``: Inserts a document. Syntax is the same as in ``json/insert``.
+* ``create``: a synonym for ``insert``
+* ``replace``: Replaces a document. Syntax is the same as in ``json/replace``.
+* ``index``: a synonym for ``replace``
+* ``update``: Updates a document. Syntax is the same as in ``json/update``.
+* ``delete``: Deletes a document. Syntax is the same as in ``json/delete``.
+
+Updates by query and deletes by query are also supported.
+
+Example:
+
+::
+
+	{ "update" : { "_index" : "test", "doc": { "tag" : 1000 }, "query": { "range": { "price": { "gte": 1000 } } } } }
+	{ "delete" : { "_index" : "test", "query": { "range": { "price": { "lt": 1000 } } } } }
+
+Note that the bulk operation stops at the first query that results in an error.

@@ -112,8 +112,8 @@ Response is a JSON document containing an array of attrs,matches and meta simila
 	}
  
  
-/json API
----------
+/json API (Beta)
+----------------
 
 This endpoint expects request body with queries defined as JSON document. Responds with JSON documents containing result and/or information about executed query.
 

@@ -5760,10 +5760,7 @@ int SelectParser_t::GetToken ( YYSTYPE * lvalp )
 	if ( isdigit ( *m_pCur ) )
 	{
 		char * pEnd = NULL;
-		double fDummy; // to avoid gcc unused result warning
-		fDummy = strtod ( m_pCur, &pEnd );
-		fDummy *= 2; // to avoid gcc unused variable warning
-
+		double VARIABLE_IS_NOT_USED fDummy = strtod ( m_pCur, &pEnd );
 		m_pCur = pEnd;
 		lvalp->m_iEnd = m_pCur-m_pStart;
 		return SEL_TOKEN;
@@ -7994,9 +7991,9 @@ DWORD * CSphArena::Init ( int uMaxBytes )
 
 	m_pTagCount = (int*) pCur++;
 	m_pTags = (TagDesc_t*) pCur;
-	pCur += sizeof(TagDesc_t)*MAX_TAGS/sizeof(DWORD);
 
 #if ARENADEBUG
+	pCur += sizeof(TagDesc_t)*MAX_TAGS/sizeof(DWORD);
 	m_pTotalAllocs = (int*) pCur++;
 	m_pTotalBytes = (int*) pCur++;
 	*m_pTotalAllocs = 0;

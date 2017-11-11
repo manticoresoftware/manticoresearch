@@ -3190,26 +3190,40 @@ int ExprParser_t::GetToken ( YYSTYPE * lvalp )
 /// is add/sub?
 static inline bool IsAddSub ( const ExprNode_t * pNode )
 {
-	return pNode->m_iToken=='+' || pNode->m_iToken=='-';
+	if ( pNode )
+		return pNode->m_iToken=='+' || pNode->m_iToken=='-';
+	assert ( 0 && "null node passed to IsAddSub()" );
+	return false;
 }
 
 /// is unary operator?
 static inline bool IsUnary ( const ExprNode_t * pNode )
 {
-	return pNode->m_iToken==TOK_NEG || pNode->m_iToken==TOK_NOT;
+	if ( pNode )
+		return pNode->m_iToken==TOK_NEG || pNode->m_iToken==TOK_NOT;
+	assert ( 0 && "null node passed to IsUnary() ");
+	return false;
 }
 
 /// is arithmetic?
 static inline bool IsAri ( const ExprNode_t * pNode )
 {
-	int iTok = pNode->m_iToken;
-	return iTok=='+' || iTok=='-' || iTok=='*' || iTok=='/';
+	if ( pNode )
+	{
+		int iTok = pNode->m_iToken;
+		return iTok=='+' || iTok=='-' || iTok=='*' || iTok=='/';
+	}
+	assert ( 0 && "null node passed to IsAri()" );
+	return false;
 }
 
 /// is constant?
 static inline bool IsConst ( const ExprNode_t * pNode )
 {
-	return pNode->m_iToken==TOK_CONST_INT || pNode->m_iToken==TOK_CONST_FLOAT;
+    if ( pNode )
+		return pNode->m_iToken==TOK_CONST_INT || pNode->m_iToken==TOK_CONST_FLOAT;
+	assert ( 0 && "null node passed to IsConst()" );
+	return false;
 }
 
 /// float value of a constant
@@ -3234,7 +3248,7 @@ void ExprParser_t::CanonizePass ( int iNode )
 	ExprNode_t * pRight = ( pRoot->m_iRight>=0 ) ? &m_dNodes [ pRoot->m_iRight ] : NULL;
 
 	// canonize (expr op const), move const to the left
-	if ( IsAri ( pRoot ) && !IsConst ( pLeft ) && IsConst ( pRight ) )
+	if ( pLeft && pRight && IsAri ( pRoot ) && !IsConst ( pLeft ) && IsConst ( pRight ) )
 	{
 		Swap ( pRoot->m_iLeft, pRoot->m_iRight );
 		Swap ( pLeft, pRight );
@@ -3259,7 +3273,7 @@ void ExprParser_t::CanonizePass ( int iNode )
 	}
 
 	// promote children constants
-	if ( IsAri ( pRoot ) && IsAri ( pLeft ) && IsAddSub ( pLeft )==IsAddSub ( pRoot ) &&
+	if ( pLeft && IsAri ( pRoot ) && IsAri ( pLeft ) && IsAddSub ( pLeft )==IsAddSub ( pRoot ) &&
 		IsConst ( &m_dNodes [ pLeft->m_iLeft ] ) )
 	{
 		// ((const op lr) op2 right) gets replaced with (const op (lr op2/op right))
@@ -3297,9 +3311,6 @@ void ExprParser_t::CanonizePass ( int iNode )
 
 		pRoot->m_iRight = pRoot->m_iLeft;
 		pRoot->m_iLeft = iConst;
-
-		pLeft = &m_dNodes [ pRoot->m_iLeft ];
-		pRight = &m_dNodes [ pRoot->m_iRight ];
 	}
 
 	// MySQL Workbench fixup
@@ -3324,7 +3335,7 @@ void ExprParser_t::ConstantFoldPass ( int iNode )
 	ExprNode_t * pRight = ( pRoot->m_iRight>=0 ) ? &m_dNodes [ pRoot->m_iRight ] : NULL;
 
 	// unary arithmetic expression with constant
-	if ( IsUnary ( pRoot ) && IsConst ( pLeft ) )
+	if ( IsUnary ( pRoot ) && pLeft && IsConst ( pLeft ) )
 	{
 		if ( pLeft->m_iToken==TOK_CONST_INT )
 		{
@@ -3393,8 +3404,7 @@ void ExprParser_t::ConstantFoldPass ( int iNode )
 			IsConst ( &m_dNodes [ pRight->m_iLeft ] ) )
 		{
 			ExprNode_t * pConst = &m_dNodes [ pRight->m_iLeft ];
-			ExprNode_t * pExpr = &m_dNodes [ pRight->m_iRight ];
-			assert ( !IsConst ( pExpr ) ); // must had been optimized
+			assert ( !IsConst ( &m_dNodes [ pRight->m_iRight ] ) ); // must had been optimized
 
 			// optimize (left op (const op2 expr)) to ((left op const) op*op2 expr)
 			if ( IsAddSub ( pRoot ) )
@@ -3434,7 +3444,6 @@ void ExprParser_t::ConstantFoldPass ( int iNode )
 
 			// promote expr arg
 			pRoot->m_iRight = pRight->m_iRight;
-			pRight = pExpr;
 		}
 	}
 
@@ -3481,7 +3490,7 @@ void ExprParser_t::VariousOptimizationsPass ( int iNode )
 
 	// madd, mul3
 	// FIXME! separate pass for these? otherwise (2+(a*b))+3 won't get const folding
-	if ( ( pRoot->m_iToken=='+' || pRoot->m_iToken=='*' ) && ( pLeft->m_iToken=='*' || pRight->m_iToken=='*' ) )
+	if ( ( pRoot->m_iToken=='+' || pRoot->m_iToken=='*' ) && pLeft && pRight && ( pLeft->m_iToken=='*' || pRight->m_iToken=='*' ) )
 	{
 		if ( pLeft->m_iToken!='*' )
 		{
@@ -3507,7 +3516,7 @@ void ExprParser_t::VariousOptimizationsPass ( int iNode )
 	}
 
 	// division by a constant (replace with multiplication by inverse)
-	if ( pRoot->m_iToken=='/' && pRight->m_iToken==TOK_CONST_FLOAT )
+	if ( pRoot->m_iToken=='/' && pRight && pRight->m_iToken==TOK_CONST_FLOAT )
 	{
 		pRight->m_fConst = 1.0f / pRight->m_fConst;
 		pRoot->m_iToken = '*';
@@ -3516,10 +3525,8 @@ void ExprParser_t::VariousOptimizationsPass ( int iNode )
 
 
 	// SINT(int-attr)
-	if ( pRoot->m_iToken==TOK_FUNC && pRoot->m_iFunc==FUNC_SINT )
+	if ( pRoot->m_iToken==TOK_FUNC && pRoot->m_iFunc==FUNC_SINT && pLeft )
 	{
-		assert ( pLeft );
-
 		if ( pLeft->m_iToken==TOK_ATTR_INT || pLeft->m_iToken==TOK_ATTR_BITS )
 		{
 			pRoot->m_iToken = TOK_ATTR_SINT;
@@ -4645,11 +4652,10 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case TOK_AND:			LOC_SPAWN_POLY ( Expr_And ); break;
 		case TOK_OR:			LOC_SPAWN_POLY ( Expr_Or ); break;
 		case TOK_NOT:
-			if ( tNode.m_eArgType==SPH_ATTR_BIGINT )
-				return new Expr_NotInt64_c ( pLeft );
-			else
-				return new Expr_NotInt_c ( pLeft );
-			break;
+			SafeDelete ( pRight );
+			return ( tNode.m_eArgType==SPH_ATTR_BIGINT )
+				? (ISphExpr * ) new Expr_NotInt64_c ( pLeft )
+				: (ISphExpr * ) new Expr_NotInt_c ( pLeft );
 
 		case ',':
 			if ( pLeft && pRight )

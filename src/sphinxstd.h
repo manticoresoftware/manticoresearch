@@ -1969,9 +1969,10 @@ public:
 		if ( sValue[0]=='\0' || iLen==0 )
 		{
 			m_sValue = EMPTY;
-		} else
+		} else if ( m_sValue )
 		{
-			memcpy ( m_sValue, sValue, iLen );
+			if ( sValue )
+				memcpy ( m_sValue, sValue, iLen );
 			m_sValue [ iLen ] = '\0';
 		}
 	}

@@ -4588,8 +4588,8 @@ int sphCollateLibcCS ( const BYTE * pStr1, const BYTE * pStr2, bool bPacked )
 		} else
 		{
 			// big strings on heap
-			char * pBuf1 = new char [ iLen ];
-			char * pBuf2 = new char [ iLen ];
+			char * pBuf1 = new char [ iLen + 1 ];
+			char * pBuf2 = new char [ iLen + 1 ];
 
 			memcpy ( pBuf1, pStr1, iLen );
 			memcpy ( pBuf2, pStr2, iLen );

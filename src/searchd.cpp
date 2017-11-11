@@ -20699,7 +20699,7 @@ struct NetStateCommon_t
 	int					m_iPos;
 
 	NetStateCommon_t ();
-	~NetStateCommon_t ();
+	virtual ~NetStateCommon_t ();
 
 	void CloseSocket ();
 };

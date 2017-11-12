@@ -7992,8 +7992,11 @@ DWORD * CSphArena::Init ( int uMaxBytes )
 	m_pTagCount = (int*) pCur++;
 	m_pTags = (TagDesc_t*) pCur;
 
+#ifndef NDEBUG
+	pCur += sizeof ( TagDesc_t ) * MAX_TAGS / sizeof ( DWORD );
+#endif
+
 #if ARENADEBUG
-	pCur += sizeof(TagDesc_t)*MAX_TAGS/sizeof(DWORD);
 	m_pTotalAllocs = (int*) pCur++;
 	m_pTotalBytes = (int*) pCur++;
 	*m_pTotalAllocs = 0;

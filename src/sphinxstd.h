@@ -1966,10 +1966,9 @@ public:
 			return;
 		}
 
-		if ( sValue[0]=='\0' || iLen==0 )
-		{
+		if ( iLen==0 || ( !sValue ) || ( sValue && sValue[0]=='\0' ) )
 			m_sValue = EMPTY;
-		} else if ( m_sValue )
+		else
 		{
 			if ( sValue )
 				memcpy ( m_sValue, sValue, iLen );

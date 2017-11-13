@@ -6340,8 +6340,8 @@ bool CSphSchema::IsReserved ( const char * szToken )
 {
 	static const char * dReserved[] =
 	{
-		"AND", "AS", "BY", "DIV", "FACET", "FALSE", "FROM", "ID", "IN", "INDEXES", "IS", "LIMIT", "LOGS"
-		"MOD", "NOT", "NULL", "OR", "ORDER", "RELOAD", "SELECT", "TRUE", NULL
+		"AND", "AS", "BY", "DIV", "FACET", "FALSE", "FROM", "ID", "IN", "INDEXES", "IS", "LIMIT", "LOGS",
+		"MOD", "NOT", "NULL", "OR", "ORDER", "RELOAD", "SELECT", "TRUE", nullptr
 	};
 
 	const char ** p = dReserved;
@@ -6364,8 +6364,8 @@ void CSphSchema::RebuildHash ()
 	if ( m_dAttrs.GetLength()<HASH_THRESH )
 		return;
 
-	for ( int i=0; i<BUCKET_COUNT; i++ )
-		m_dBuckets[i] = 0xffff;
+	for ( WORD & uBucket : m_dBuckets )
+		uBucket = 0xffff;
 
 	ARRAY_FOREACH ( i, m_dAttrs )
 	{
@@ -6381,18 +6381,15 @@ void CSphSchema::UpdateHash ( int iStartIndex, int iAddVal )
 	if ( m_dAttrs.GetLength()<HASH_THRESH )
 		return;
 
-	ARRAY_FOREACH ( i, m_dAttrs )
+	for ( auto &dAttr : m_dAttrs )
 	{
-		WORD & uPos = m_dAttrs[i].m_uNext;
+		WORD &uPos = dAttr.m_uNext;
 		if ( uPos!=0xffff && uPos>iStartIndex )
 			uPos = (WORD)( uPos + iAddVal );
 	}
-	for ( int i=0; i<BUCKET_COUNT; i++ )
-	{
-		WORD & uPos = m_dBuckets[i];
+	for ( WORD &uPos : m_dBuckets )
 		if ( uPos!=0xffff && uPos>iStartIndex )
 			uPos = (WORD)( uPos + iAddVal );
-	}
 }
 
 

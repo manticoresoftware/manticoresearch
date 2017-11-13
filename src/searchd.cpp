@@ -20645,7 +20645,6 @@ void TickHead ()
 
 	if ( !SphCrashLogger_c::ThreadCreate ( &pThd->m_tThd, HandlerThread, pThd, true ) )
 	{
-		sphSockClose ( iClientSock );
 		int iErr = errno;
 		ThreadRemove ( pThd );
 		SafeDelete ( pThd );

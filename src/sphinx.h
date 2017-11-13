@@ -1144,15 +1144,11 @@ struct CSphWordHit
 struct CSphAttrLocator
 {
 	// OPTIMIZE? try packing these
-	int				m_iBitOffset;
-	int				m_iBitCount;
-	bool			m_bDynamic;
+	int				m_iBitOffset = -1;
+	int				m_iBitCount = -1;
+	bool			m_bDynamic = false;
 
-	CSphAttrLocator ()
-		: m_iBitOffset ( -1 )
-		, m_iBitCount ( -1 )
-		, m_bDynamic ( false )
-	{}
+	CSphAttrLocator () = default;
 
 	explicit CSphAttrLocator ( int iBitOffset, int iBitCount=ROWITEM_BITS )
 		: m_iBitOffset ( iBitOffset )
@@ -1390,7 +1386,7 @@ public:
 		if ( tLoc.m_iBitOffset>=0 )
 			return sphGetRowAttr ( tLoc.m_bDynamic ? m_pDynamic : m_pStatic, tLoc );
 		if ( tLoc.IsID() )
-			return m_uDocID;
+			return ( SphAttr_t ) m_uDocID;
 		assert ( false && "Unknown negative-bitoffset locator" );
 		return 0;
 	}
@@ -3032,7 +3028,7 @@ struct CSphMatchComparatorState
 	CSphMatchComparatorState ()
 		: m_uAttrDesc ( 0 )
 		, m_iNow ( 0 )
-		, m_fnStrCmp ( NULL )
+		, m_fnStrCmp ( nullptr )
 	{
 		for ( int i=0; i<MAX_ATTRS; i++ )
 		{

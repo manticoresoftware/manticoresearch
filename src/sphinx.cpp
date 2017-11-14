@@ -7846,7 +7846,7 @@ protected:
 	static const int		MAX_BITS	= 12;
 	static const int		NUM_SIZES	= MAX_BITS-MIN_BITS+2;	///< one for 0 (empty pages), and one for each size from min to max
 
-	static const int		PAGE_SIZE	= 1<<MAX_BITS;
+	static const int		ARENA_PAGE_SIZE	= 1<<MAX_BITS;
 	static const int		PAGE_ALLOCS	= 1<<( MAX_BITS-MIN_BITS);
 	static const int		PAGE_BITMAP	= ( PAGE_ALLOCS+8*sizeof(DWORD)-1 )/( 8*sizeof(DWORD) );
 
@@ -7957,9 +7957,9 @@ DWORD * CSphArena::ReInit ( int uMaxBytes )
 
 DWORD * CSphArena::Init ( int uMaxBytes )
 {
-	m_iPages = ( uMaxBytes+PAGE_SIZE-1 ) / PAGE_SIZE;
+	m_iPages = ( uMaxBytes+ARENA_PAGE_SIZE-1 ) / ARENA_PAGE_SIZE;
 
-	int iData = m_iPages*PAGE_SIZE; // data size, bytes
+	int iData = m_iPages*ARENA_PAGE_SIZE; // data size, bytes
 	int iMyTaglist = sizeof(int) + MAX_TAGS*sizeof(TagDesc_t); // int length, TagDesc_t[] tags; NOLINT
 	int iMy = m_iPages*sizeof(PageDesc_t) + NUM_SIZES*sizeof(int) + iMyTaglist; // my internal structures size, bytes; NOLINT
 #if ARENADEBUG
@@ -8087,7 +8087,7 @@ int CSphArena::RawAlloc ( int iBytes )
 		pPage->m_uBitmap[i] |= ( 1<<iFree );
 
 		pPage->m_iUsed++;
-		if ( pPage->m_iUsed==( PAGE_SIZE >> pPage->m_iSizeBits ) )
+		if ( pPage->m_iUsed==( ARENA_PAGE_SIZE >> pPage->m_iSizeBits ) )
 		{
 			// this page is full now, unchain from the free-list
 			assert ( m_pFreelistHeads[iSizeSlot]==pPage-m_pPages );
@@ -8107,7 +8107,7 @@ int CSphArena::RawAlloc ( int iBytes )
 
 		CheckFreelists ();
 
-		int iOffset = ( pPage-m_pPages )*PAGE_SIZE + ( i*32+iFree )*( 1<<iSizeBits ); // raw internal byte offset (FIXME! optimize with shifts?)
+		int iOffset = ( pPage-m_pPages )*ARENA_PAGE_SIZE + ( i*32+iFree )*( 1<<iSizeBits ); // raw internal byte offset (FIXME! optimize with shifts?)
 		int iIndex = 2 + ( iOffset/sizeof(DWORD) ); // dword index with tag and backtrack fixup
 
 		m_pBasePtr[iIndex-1] = DWORD(-1); // untagged by default
@@ -8125,7 +8125,7 @@ void CSphArena::RawFree ( int iIndex )
 	CheckFreelists ();
 
 	int iOffset = (iIndex-2)*sizeof(DWORD); // remove tag fixup, and go to raw internal byte offset
-	int iPage = iOffset / PAGE_SIZE;
+	int iPage = iOffset / ARENA_PAGE_SIZE;
 
 	if ( iPage<0 || iPage>m_iPages )
 	{
@@ -8134,8 +8134,8 @@ void CSphArena::RawFree ( int iIndex )
 	}
 
 	PageDesc_t * pPage = m_pPages + iPage;
-	int iBit = ( iOffset % PAGE_SIZE ) >> pPage->m_iSizeBits;
-	assert ( ( iOffset % PAGE_SIZE )==( iBit << pPage->m_iSizeBits ) && "internal error, freed offset is unaligned" );
+	int iBit = ( iOffset % ARENA_PAGE_SIZE ) >> pPage->m_iSizeBits;
+	assert ( ( iOffset % ARENA_PAGE_SIZE )==( iBit << pPage->m_iSizeBits ) && "internal error, freed offset is unaligned" );
 
 	if (!( pPage->m_uBitmap[iBit>>5] & ( 1UL<<(iBit & 31) ) ))
 	{
@@ -8155,7 +8155,7 @@ void CSphArena::RawFree ( int iIndex )
 
 	int iSizeSlot = pPage->m_iSizeBits-MIN_BITS+1;
 
-	if ( pPage->m_iUsed==( PAGE_SIZE >> pPage->m_iSizeBits )-1 )
+	if ( pPage->m_iUsed==( ARENA_PAGE_SIZE >> pPage->m_iSizeBits )-1 )
 	{
 		// this page was full, but it's semi-free now
 		// chain to free-list

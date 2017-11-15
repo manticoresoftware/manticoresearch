@@ -165,9 +165,9 @@ bool EvalBlockRangeAny ( T tMin1, T tMax1, T tMin2, T tMax2 )
 
 	bool bMaxOk;
 	if_const ( HAS_EQUAL_MAX )
-		bMaxOk = tMax2>=tMin2;
+		bMaxOk = tMax1>=tMin2;
 	else
-		bMaxOk = tMax2>tMin2;
+		bMaxOk = tMax1>tMin2;
 
 	return bMinOk && bMaxOk;
 }

@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>MVA n best group by</name>
+<config>
+indexer
+{
+	mem_limit			= 28M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers					= threads
+}
+
+source src_1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT id, tag, mva, text FROM test_table
+	sql_query_pre = SET NAMES UTF8
+	sql_attr_uint	= tag
+	sql_attr_multi	= uint mva from field
+}
+
+index test1
+{
+	source			= src_1
+	path			= <data_path/>/test1
+	docinfo			= extern
+}
+
+source src_11
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT id, tag, mva, text FROM test_table where id &lt; 11
+	sql_query_pre = SET NAMES UTF8
+	sql_attr_uint	= tag
+	sql_attr_multi	= uint mva from field
+}
+
+index test11
+{
+	source			= src_11
+	path			= <data_path/>/test11
+	docinfo			= extern
+}
+
+source src_12
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query = SELECT id, tag, mva, text FROM test_table where id &gt; 10
+	sql_query_pre = SET NAMES UTF8
+	sql_attr_uint	= tag
+	sql_attr_multi	= uint mva from field
+}
+
+index test12
+{
+	source			= src_12
+	path			= <data_path/>/test12
+	docinfo			= extern
+}
+
+index dist
+{
+	type					= distributed
+	agent					= <my_address/>:test11
+	agent					= <my_address/>:test12
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000
+}
+
+</config>
+
+<sphqueries>
+
+<sphinxql>select id, groupby() g, mva from test1 group 3 by mva order by g asc</sphinxql>
+<sphinxql>select id, groupby() g, mva from dist group 3 by mva order by g asc</sphinxql>
+
+</sphqueries>
+
+<db_create>
+CREATE TABLE `test_table` (
+  `id` int(11),
+  `tag` int(11),
+  `mva` varchar(255) NOT NULL,
+  `text` varchar(255) NOT NULL
+)
+</db_create>
+
+
+ <db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+
+<db_insert>SET NAMES utf8</db_insert>
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 102, '209, 212, 215', 'test'), ( 2, 102, '211, 218', 'test'), ( 3, 103, '207, 209, 213', 'test'), ( 4, 103, '210, 216', 'test'), ( 5, 104, '205, 211', 'test'),
+( 6, 104, '210, 211, 214', 'test'), ( 7, 105, '203, 205', 'test'), ( 8, 105, '212, 216', 'test'), ( 9, 105, '201, 205, 209', 'test'), ( 10, 105, '210, 214, 218', 'test'),
+( 11, 102, '211, 219', 'test'), ( 12, 102, '208, 212', 'test'), ( 13, 103, '211, 217', 'test'), ( 14, 103, '206, 210', 'test'), ( 15, 104, '211, 215, 218', 'test'),
+( 16, 104, '204, 209, 212', 'test'), ( 17, 105, '213, 217', 'test'), ( 18, 105, '202, 205, 209', 'test'), ( 19, 105, '211, 214', 'test'), ( 20, 105, '201, 210', 'test')
+</db_insert>
+
+</test>

@@ -2872,8 +2872,8 @@ protected:
 
 
 /// match sorter with k-buffering and group-by for MVAs
-template < typename COMPGROUP, bool DISTINCT, bool NOTIFICATIONS >
-class CSphKBufferMVAGroupSorter : public CSphKBufferGroupSorter < COMPGROUP, DISTINCT, NOTIFICATIONS >
+template < typename T >
+class MVAGroupSorter_T : public T
 {
 protected:
 	const DWORD *		m_pMva;		///< pointer to MVA pool for incoming matches
@@ -2883,8 +2883,8 @@ protected:
 
 public:
 	/// ctor
-	CSphKBufferMVAGroupSorter ( const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings )
-		: CSphKBufferGroupSorter < COMPGROUP, DISTINCT, NOTIFICATIONS > ( pComp, pQuery, tSettings )
+	MVAGroupSorter_T ( const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings )
+		: T ( pComp, pQuery, tSettings )
 		, m_pMva ( nullptr )
 		, m_bArenaProhibit ( false )
 		, m_bMva64 ( tSettings.m_bMva64 )
@@ -2949,6 +2949,30 @@ public:
 		// re-group it based on the group key
 		// (first 'this' is for icc; second 'this' is for gcc)
 		return this->PushEx ( tEntry, tEntry.GetAttr ( this->m_tLocGroupby ), true, bNewSet );
+	}
+};
+
+template < typename COMPGROUP, bool DISTINCT, bool NOTIFICATIONS >
+struct MvaGroupSorter_c : public MVAGroupSorter_T < CSphKBufferGroupSorter < COMPGROUP, DISTINCT, NOTIFICATIONS > >
+{
+	typedef MVAGroupSorter_T < CSphKBufferGroupSorter < COMPGROUP, DISTINCT, NOTIFICATIONS > > BASE;
+		/// ctor
+	MvaGroupSorter_c ( const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings )
+		: BASE ( pComp, pQuery, tSettings )
+	{
+	}
+};
+
+
+template < typename COMPGROUP, bool DISTINCT, bool NOTIFICATIONS >
+struct MvaNGroupSorter_c : public MVAGroupSorter_T < CSphKBufferNGroupSorter < COMPGROUP, DISTINCT, NOTIFICATIONS > >
+{
+	typedef MVAGroupSorter_T < CSphKBufferNGroupSorter < COMPGROUP, DISTINCT, NOTIFICATIONS > > BASE;
+
+	/// ctor
+	MvaNGroupSorter_c ( const ISphMatchComparator * pComp, const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings )
+		: BASE ( pComp, pQuery, tSettings )
+	{
 	}
 };
 
@@ -3889,13 +3913,13 @@ static ISphMatchSorter * sphCreateSorter3rd ( const ISphMatchComparator * pComp,
 	case 3:
 		return new CSphKBufferGroupSorter < COMPGROUP, true, true > ( pComp, pQuery, tSettings );
 	case 4:
-		return new CSphKBufferMVAGroupSorter < COMPGROUP, false, false > ( pComp, pQuery, tSettings );
+		return new MvaGroupSorter_c < COMPGROUP, false, false > ( pComp, pQuery, tSettings );
 	case 5:
-		return new CSphKBufferMVAGroupSorter < COMPGROUP, false, true > ( pComp, pQuery, tSettings );
+		return new MvaGroupSorter_c < COMPGROUP, false, true > ( pComp, pQuery, tSettings );
 	case 6:
-		return new CSphKBufferMVAGroupSorter < COMPGROUP, true, false > ( pComp, pQuery, tSettings);
+		return new MvaGroupSorter_c < COMPGROUP, true, false > ( pComp, pQuery, tSettings );
 	case 7:
-		return new CSphKBufferMVAGroupSorter < COMPGROUP, true, true > ( pComp, pQuery, tSettings);
+		return new MvaGroupSorter_c < COMPGROUP, true, true > ( pComp, pQuery, tSettings );
 	case 8:
 		return new CSphImplicitGroupSorter < COMPGROUP, false, false > ( pComp, pQuery, tSettings );
 	case 9:
@@ -3912,6 +3936,14 @@ static ISphMatchSorter * sphCreateSorter3rd ( const ISphMatchComparator * pComp,
 		return new CSphKBufferNGroupSorter < COMPGROUP, true, false > ( pComp, pQuery, tSettings );
 	case 19:
 		return new CSphKBufferNGroupSorter < COMPGROUP, true, true > ( pComp, pQuery, tSettings );
+	case 20:
+		return new MvaNGroupSorter_c < COMPGROUP, false, false > ( pComp, pQuery, tSettings );
+	case 21:
+		return new MvaNGroupSorter_c < COMPGROUP, false, true > ( pComp, pQuery, tSettings );
+	case 22:
+		return new MvaNGroupSorter_c < COMPGROUP, true, false > ( pComp, pQuery, tSettings );
+	case 23:
+		return new MvaNGroupSorter_c < COMPGROUP, true, true > ( pComp, pQuery, tSettings );
 	case 32:
 		return new CSphKBufferJsonGroupSorter < COMPGROUP, false, false > ( pComp, pQuery, tSettings );
 	case 33:

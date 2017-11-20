@@ -112,10 +112,14 @@ Response is a JSON document containing an array of attrs,matches and meta simila
 	}
  
  
-/json API (Beta)
-----------------
+/json API
+---------
 
 This endpoint expects request body with queries defined as JSON document. Responds with JSON documents containing result and/or information about executed query.
+
+.. warning::
+   Please note that this endpoint is in preview stage. Some functionalities are not yet complete and syntax may suffer changes in future.  
+   Read careful changelog of future updates to avoid possible breakages.
 
 
 .. toctree::

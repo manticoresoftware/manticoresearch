@@ -214,11 +214,13 @@ inline const	DWORD *	STATIC2DOCINFO ( const DWORD * pAttrs )	{ return STATIC2DOC
 #define GIT_TIMESTAMP_ID "000101"
 #endif
 
-// below is for easier extraction of the ver. by any external scripts
 // this line is deprecated and no more used. Leaved here for a while.
-#define SPHINX_VERSION_NUMBERS    "2.4.1"
+// numbers now to be defined via sphinxversion.h
+#ifndef VERNUMBERS
+	#define VERNUMBERS    "7.7.7"
+#endif
 
-#define SPHINX_VERSION          SPHINX_VERSION_NUMBERS " " SPH_GIT_COMMIT_ID "@" GIT_TIMESTAMP_ID " " SPHINX_BITS_TAG BANNER_TAG
+#define SPHINX_VERSION          VERNUMBERS " " SPH_GIT_COMMIT_ID "@" GIT_TIMESTAMP_ID " " SPHINX_BITS_TAG BANNER_TAG
 #define SPHINX_BANNER			"Manticore " SPHINX_VERSION "\nCopyright (c) 2001-2016, Andrew Aksyonoff\n" \
 	"Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)\n" \
 	"Copyright (c) 2017, Manticore Software LTD (http://manticoresearch.com)\n\n"

@@ -44,7 +44,7 @@ typedef int64_t				SphGroupKey_t;
 class CSphGrouper
 {
 public:
-	virtual					~CSphGrouper () = default;
+	virtual					~CSphGrouper () {}; // =default causes bunch of errors building on wheezy
 	virtual SphGroupKey_t	KeyFromValue ( SphAttr_t uValue ) const = 0;
 	virtual SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const = 0;
 	virtual void			GetLocator ( CSphAttrLocator & tOut ) const = 0;

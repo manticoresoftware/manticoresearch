@@ -21,9 +21,5 @@ int main(int ac, char*av[]){
 	return 0;
 }" )
 
-	include ( CheckCXXSourceCompiles )
-	CHECK_CXX_SOURCE_COMPILES ( "${_CHECK_INTERLOCKED_PROG}" _RESULT )
-
-if ( _RESULT )
-	set ( HAVE_SYNC_FETCH 1 )
-endif ( _RESULT )
+include ( CheckCXXSourceCompiles )
+CHECK_CXX_SOURCE_COMPILES ( "${_CHECK_INTERLOCKED_PROG}" HAVE_SYNC_FETCH )

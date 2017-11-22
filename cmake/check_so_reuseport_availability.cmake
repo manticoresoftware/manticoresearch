@@ -16,8 +16,4 @@ int main(int ac, char*av[]){
 }" )
 
 include ( CheckCXXSourceCompiles )
-CHECK_CXX_SOURCE_COMPILES ( "${_CHECK_SO_REUSEPORT_PROG}" _RESULT )
-
-if ( _RESULT )
-	set ( HAVE_SO_REUSEPORT 1 )
-endif ( _RESULT )
+CHECK_CXX_SOURCE_COMPILES ( "${_CHECK_SO_REUSEPORT_PROG}" HAVE_SO_REUSEPORT )

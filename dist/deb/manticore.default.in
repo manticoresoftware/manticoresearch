@@ -1,6 +1,6 @@
 #
 # Settings for the manticore searchd daemon
-# Please read @DOCDIR@/README.Debian for details.
+# Please read @DOCDIRFULL@/README.Debian for details.
 #
 
 # Should manticore run automatically on startup? (default: no)

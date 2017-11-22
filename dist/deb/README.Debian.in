@@ -5,4 +5,4 @@ searchd will start automatically however the default configuration does not supp
 any indexes. Therefore, searchd will not continue running. You have to edit
 @SYSCONFDIR@/sphinxsearch/sphinx.conf to get any meaningful mode of operation.
 
-Documentation is available in @DOCDIR@.
+Documentation is available in @DOCDIRFULL@.

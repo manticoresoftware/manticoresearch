@@ -27,7 +27,7 @@ pre-start script
     fi
     if [ ! -f @SYSCONFDIR@/sphinxsearch/sphinx.conf ]; then
         logger "Please create an @SYSCONFDIR@/sphinxsearch/sphinx.conf configuration file."
-        logger "Templates are in the @DOCDIR@/example-conf/ directory."
+        logger "Templates are in the @DOCDIRFULL@/example-conf/ directory."
         exit 0
     fi
 end script

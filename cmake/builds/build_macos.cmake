@@ -7,8 +7,6 @@ message ( STATUS "Will create TGZ with build for Mac Os X" )
 # configure specific stuff
 set ( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -arch x86_64" )
 set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -arch x86_64" )
-list ( APPEND CMAKE_LIBRARY_PATH "/opt/local/lib" )
-list ( APPEND CMAKE_INCLUDE_PATH "/opt/local/include" )
 
 # generate config files
 set ( CONFDIR "." )

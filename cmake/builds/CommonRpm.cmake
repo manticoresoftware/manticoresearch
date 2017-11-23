@@ -16,6 +16,9 @@ SET ( CPACK_RPM_PACKAGE_LICENSE "GNU General Public License v. 2 (GPL2)" )
 # block below used to patch the minconf - add a slash at the end of 'binlog_path' section
 file ( READ "sphinx-min.conf.in" _MINCONF LIMIT 10240 )
 string ( REGEX REPLACE "(binlog_path[ \t]+\\=[ \t]+\\@CONFDIR\\@/data)" "\\1/" _MINCONF "${_MINCONF}" )
+string ( REGEX REPLACE "(log/searchd.pid)" "run/manticore/searchd.pid" _MINCONF "${_MINCONF}" )
+string ( REGEX REPLACE "(@CONFDIR@/log/)" "@CONFDIR@/log/manticore/" _MINCONF "${_MINCONF}" )
+string ( REGEX REPLACE "(@CONFDIR@/data/)" "@CONFDIR@/lib/manticore/" _MINCONF "${_MINCONF}" )
 file ( WRITE "${MANTICORE_BINARY_DIR}/sphinx-min.conf.in" "${_MINCONF}")
 unset (_MINCONF)
 
@@ -27,14 +30,22 @@ configure_file ( "${MANTICORE_BINARY_DIR}/sphinx-min.conf.in" "${MANTICORE_BINAR
 configure_file ( "sphinx.conf.in" "${MANTICORE_BINARY_DIR}/sphinx.conf.dist" @ONLY )
 
 configure_file ( "dist/rpm/manticore.init.in" "${MANTICORE_BINARY_DIR}/manticore.init" @ONLY )
-configure_file ( "dist/rpm/searchd.conf.in" "${MANTICORE_BINARY_DIR}/searchd.conf" @ONLY )
-configure_file ( "dist/rpm/searchd.service.in" "${MANTICORE_BINARY_DIR}/searchd.service" @ONLY )
+configure_file ( "dist/rpm/manticore.tmpfiles.in" "${MANTICORE_BINARY_DIR}/searchd.conf" @ONLY )
+configure_file ( "dist/rpm/manticore.service.in" "${MANTICORE_BINARY_DIR}/searchd.service" @ONLY )
+configure_file ( "dist/rpm/manticore.logrotate.in" "${MANTICORE_BINARY_DIR}/manticore.logrotate" @ONLY )
 
 install ( FILES ${MANTICORE_BINARY_DIR}/sphinx-min.conf.dist
 		${MANTICORE_BINARY_DIR}/sphinx.conf.dist
 		DESTINATION ${DOCDIR} COMPONENT doc )
+
+install ( FILES ${MANTICORE_BINARY_DIR}/manticore.logrotate
+		DESTINATION ${SYSCONFDIR}/logrotate.d COMPONENT adm RENAME manticore)
+
+install ( FILES ${MANTICORE_BINARY_DIR}/sphinx-min.conf.dist
+		DESTINATION ${SYSCONFDIR}/sphinx COMPONENT adm RENAME sphinx.conf )
+
 install ( FILES doc/indexer.1 doc/indextool.1 doc/searchd.1 doc/spelldump.1
-		DESTINATION share/man/man1 COMPONENT doc )
+		DESTINATION ${MANDIR}/man1 COMPONENT doc )
 install ( DIRECTORY api DESTINATION share/${PACKAGE_NAME} COMPONENT doc )
 install ( FILES COPYING example.sql
 		DESTINATION ${DOCDIR} COMPONENT doc )

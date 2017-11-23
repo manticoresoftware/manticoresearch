@@ -12,8 +12,8 @@ PermissionsStartOnly=true
 ExecStartPre=/bin/mkdir -p /var/run/manticore
 ExecStartPre=/bin/chown manticore.manticore @RUNDIR@
 # Run ExecStart with User=manticore / Group=manticore
-ExecStart=@BINDIR@/searchd --config @SYSCONFDIR@/sphinxsearch/sphinx.conf
-ExecStop=@BINDIR@/searchd --config @SYSCONFDIR@/sphinxsearch/sphinx.conf --stopwait
+ExecStart=@BINDIRFULL@/searchd --config @SYSCONFDIR@/sphinxsearch/sphinx.conf
+ExecStop=@BINDIRFULL@/searchd --config @SYSCONFDIR@/sphinxsearch/sphinx.conf --stopwait
 KillMode=process
 KillSignal=SIGTERM
 SendSIGKILL=no

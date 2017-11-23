@@ -97,43 +97,6 @@ install -m 0644 %{_scripts}/searchd.conf %{buildroot}/usr/lib/tmpfiles.d/searchd
 install -p -D -m 0755 %{_scripts}/%{name}.init $RPM_BUILD_ROOT%{_initrddir}/searchd
 %endif
 
-# Create /var/log/manticore
-mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/manticore
-
-# Create /var/run/manticore
-mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/run/manticore
-
-# Create /var/lib/manticore
-mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/manticore
-
-# Create sphinx.conf
-mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/sphinx
-cp @BINARY_DIR@/sphinx-min.conf.dist \
-    $RPM_BUILD_ROOT%{_sysconfdir}/sphinx/sphinx.conf
-
-# Updates sphinx.conf paths
-sed -i 'sX/var/log/searchd.pidX/var/run/manticore/searchd.pidXg' \
-$RPM_BUILD_ROOT%{_sysconfdir}/sphinx/sphinx.conf
-
-sed -i 'sX/var/log/X/var/log/manticore/Xg' \
-$RPM_BUILD_ROOT%{_sysconfdir}/sphinx/sphinx.conf
-
-sed -i 'sX/var/data/X/var/lib/manticore/Xg' \
-$RPM_BUILD_ROOT%{_sysconfdir}/sphinx/sphinx.conf
-
-# Create /etc/logrotate.d/manticore
-mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d
-cat > $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/manticore << EOF
-/var/log/manticore/*.log {
-       weekly
-       rotate 10
-       copytruncate
-       delaycompress
-       compress
-       notifempty
-       missingok
-}
-EOF
 
 %clean
 

@@ -25,7 +25,7 @@ configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/manticore.service.in"
 
 # everywhere, but not on wheezy
 install ( FILES "${MANTICORE_BINARY_DIR}/manticore.service"
-		DESTINATION ${LIBDIR}/systemd/system COMPONENT adm )
+		DESTINATION lib/systemd/system COMPONENT adm )
 
 # some trusty-specific variables and files
 set ( DISTR_SUFFIX "~trusty_${CPACK_DEBIAN_PACKAGE_ARCHITECTURE}" )

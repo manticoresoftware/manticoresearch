@@ -21,7 +21,7 @@
 # Source function library.
 . /etc/rc.d/init.d/functions
 
-exec="@BINDIR@/searchd"
+exec="@BINDIRFULL@/searchd"
 prog="searchd"
 user="manticore"
 config="@SYSCONFDIR@/sphinx/sphinx.conf"

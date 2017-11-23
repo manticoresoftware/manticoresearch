@@ -20,7 +20,7 @@
 
 
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-DAEMON=@BINDIR@/searchd
+DAEMON=@BINDIRFULL@/searchd
 DAEMONOPTS='-c @SYSCONFDIR@/sphinxsearch/sphinx.conf'
 NAME=manticore
 DESC=manticore

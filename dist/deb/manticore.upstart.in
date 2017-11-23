@@ -32,5 +32,5 @@ pre-start script
     fi
 end script
 
-exec start-stop-daemon --start --chuid $MANTICOREUSER --exec @BINDIR@/searchd -- --nodetach -c @SYSCONFDIR@/sphinxsearch/sphinx.conf
+exec start-stop-daemon --start --chuid $MANTICOREUSER --exec @BINDIRFULL@/searchd -- --nodetach -c @SYSCONFDIR@/sphinxsearch/sphinx.conf
 

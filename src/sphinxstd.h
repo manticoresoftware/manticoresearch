@@ -446,9 +446,7 @@ template < typename T > inline void Swap ( T & v1, T & v2 )
 class ISphNoncopyable
 {
 public:
-								ISphNoncopyable () {}
-
-private:
+	ISphNoncopyable () = default;
 	ISphNoncopyable ( const ISphNoncopyable & ) = delete;
 	const ISphNoncopyable &		operator = ( const ISphNoncopyable & ) = delete;
 };
@@ -536,7 +534,7 @@ struct SphAccessor_T
 
 /// heap sort helper
 template < typename T, typename U, typename V >
-void sphSiftDown ( T * pData, int iStart, int iEnd, U COMP, V ACC )
+void sphSiftDown ( T * pData, int iStart, int iEnd, const U &COMP, const V &ACC )
 {
 	for ( ;; )
 	{
@@ -558,7 +556,7 @@ void sphSiftDown ( T * pData, int iStart, int iEnd, U COMP, V ACC )
 
 /// heap sort
 template < typename T, typename U, typename V >
-void sphHeapSort ( T * pData, int iCount, U COMP, V ACC )
+void sphHeapSort ( T * pData, int iCount, const U &COMP, const V &ACC )
 {
 	if ( !pData || iCount<=1 )
 		return;
@@ -578,7 +576,7 @@ void sphHeapSort ( T * pData, int iCount, U COMP, V ACC )
 
 /// generic sort
 template < typename T, typename U, typename V >
-void sphSort ( T * pData, int iCount, U COMP, V ACC )
+void sphSort ( T * pData, int iCount, const U &COMP, const V &ACC )
 {
 	if ( iCount<2 )
 		return;
@@ -667,7 +665,7 @@ void sphSort ( T * pData, int iCount, U COMP, V ACC )
 
 
 template < typename T, typename U >
-void sphSort ( T * pData, int iCount, U COMP )
+void sphSort ( T * pData, int iCount, const U& COMP )
 {
 	sphSort ( pData, iCount, COMP, SphAccessor_T<T>() );
 }
@@ -2351,7 +2349,7 @@ struct ISphRefcounted : public ISphNoncopyable
 {
 protected:
 					ISphRefcounted () : m_iRefCount ( 1 ) {}
-	virtual			~ISphRefcounted () {}
+	virtual			~ISphRefcounted () = default;
 
 public:
 	void			AddRef () const		{ m_iRefCount++; }

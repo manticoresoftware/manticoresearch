@@ -1392,8 +1392,10 @@ public:
 static ISphFilter * CreateFilterExpr ( ISphExpr * pExpr, const CSphFilterSettings & tSettings, CSphString & sError, ESphCollation eCollation, ESphAttr eAttrType )
 {
 	// autoconvert all json types except SPH_FILTER_NULL, it needs more info
-	if ( eAttrType==SPH_ATTR_JSON || eAttrType==SPH_ATTR_JSON_FIELD )
-		pExpr = tSettings.m_eType==SPH_FILTER_NULL ? pExpr : sphJsonFieldConv ( pExpr );
+	bool bAutoConvert = ( eAttrType==SPH_ATTR_JSON || eAttrType==SPH_ATTR_JSON_FIELD )
+		&& tSettings.m_eType!=SPH_FILTER_NULL;
+	if ( bAutoConvert )
+		pExpr = sphJsonFieldConv ( pExpr );
 
 	switch ( tSettings.m_eType )
 	{
@@ -1404,7 +1406,9 @@ static ISphFilter * CreateFilterExpr ( ISphExpr * pExpr, const CSphFilterSetting
 		case SPH_FILTER_NULL:			return new ExprFilterNull_c ( pExpr, tSettings.m_bIsNull, false );
 		default:
 			sError = "this filter type on expressions is not implemented yet";
-			return NULL;
+			if ( bAutoConvert )
+				SafeDelete ( pExpr );
+			return nullptr;
 	}
 }
 

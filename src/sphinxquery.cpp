@@ -4154,7 +4154,7 @@ static XQNode_t * sphMoveSiblingsUp ( XQNode_t * pNode )
 	// all children at grand now
 	pParent->m_dChildren.Resize(0);
 	delete ( pParent );
-	return pParent;
+	return nullptr;
 }
 
 

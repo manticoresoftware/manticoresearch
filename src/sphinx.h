@@ -1283,28 +1283,21 @@ class CSphMatch
 	friend class CSphRsetSchema;
 
 public:
-	SphDocID_t				m_uDocID;		///< document ID
-	const CSphRowitem *		m_pStatic;		///< static part (stored in and owned by the index)
-	CSphRowitem *			m_pDynamic;		///< dynamic part (computed per query; owned by the match)
-	int						m_iWeight;		///< my computed weight
-	int						m_iTag;			///< my index tag
+	SphDocID_t				m_uDocID = 0;		///< document ID
+	const CSphRowitem *		m_pStatic = nullptr;		///< static part (stored in and owned by the index)
+	CSphRowitem *			m_pDynamic = nullptr;		///< dynamic part (computed per query; owned by the match)
+	int						m_iWeight = 0;		///< my computed weight
+	int						m_iTag = 0;			///< my index tag
 
 public:
 	/// ctor. clears everything
-	CSphMatch ()
-		: m_uDocID ( 0 )
-		, m_pStatic ( NULL )
-		, m_pDynamic ( NULL )
-		, m_iWeight ( 0 )
-		, m_iTag ( 0 )
-	{
-	}
+	CSphMatch () = default;
 
 private:
 	/// copy ctor. just in case
 	CSphMatch ( const CSphMatch & rhs )
-		: m_pStatic ( 0 )
-		, m_pDynamic ( NULL )
+		: m_pStatic ( nullptr )
+		, m_pDynamic ( nullptr )
 	{
 		*this = rhs;
 	}
@@ -3000,10 +2993,10 @@ enum ESphSortKeyPart
 struct JsonKey_t
 {
 	CSphString		m_sKey;		///< name string
-	DWORD			m_uMask;	///< Bloom mask for this key
-	int				m_iLen;		///< name length, in bytes
+	DWORD			m_uMask = 0;	///< Bloom mask for this key
+	int				m_iLen = 0;		///< name length, in bytes
 
-	JsonKey_t ();
+	JsonKey_t () = default;
 	explicit JsonKey_t ( const char * sKey, int iLen );
 };
 
@@ -3035,6 +3028,8 @@ struct CSphMatchComparatorState
 		for ( int i=0; i<MAX_ATTRS; i++ )
 		{
 			m_eKeypart[i] = SPH_KEYPART_ID;
+			m_tSubExpr[i] = nullptr;
+			m_tSubType[i] = SPH_ATTR_NONE;
 			m_dAttrs[i] = -1;
 		}
 	}

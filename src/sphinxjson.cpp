@@ -1034,13 +1034,6 @@ bool sphJsonNameSplit ( const char * sName, CSphString * sColumn, CSphString * s
 	return true;
 }
 
-
-JsonKey_t::JsonKey_t ()
-	: m_uMask ( 0 )
-	, m_iLen ( 0 )
-{}
-
-
 JsonKey_t::JsonKey_t ( const char * sKey, int iLen )
 {
 	m_iLen = iLen;

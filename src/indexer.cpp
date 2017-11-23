@@ -102,6 +102,7 @@ public:
 				pHead = pNext;
 			}
 		}
+		SafeDeleteArray ( m_pData );
 	}
 
 	/// add record to hash
@@ -1295,12 +1296,15 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	}
 
 	// do the merge
-	CSphIndex * pSrc = sphCreateIndexPhrase ( NULL, hSrc["path"].cstr() );
-	CSphIndex * pDst = sphCreateIndexPhrase ( NULL, hDst["path"].cstr() );
+	CSphIndex * pSrc = sphCreateIndexPhrase ( nullptr, hSrc["path"].cstr() );
+	CSphIndex * pDst = sphCreateIndexPhrase ( nullptr, hDst["path"].cstr() );
 	assert ( pSrc );
 	assert ( pDst );
 
-	CSphString sError;
+	CSphScopedPtr<CSphIndex> dSrcGuard ( pSrc );
+	CSphScopedPtr<CSphIndex> dDstGuard ( pDst );
+
+		CSphString sError;
 	if ( !sphFixupIndexSettings ( pSrc, hSrc, sError ) )
 	{
 		fprintf ( stdout, "ERROR: index '%s': %s\n", sSrc, sError.cstr () );
@@ -1361,9 +1365,6 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 
 	if ( !bRenamed )
 		fprintf ( stdout, "ERROR: index '%s': failed to rename '%s' to '%s': %s", sDst, sFrom, sTo, pDst->GetLastError().cstr() );
-
-	SafeDelete ( pSrc );
-	SafeDelete ( pDst );
 
 	// all good?
 	return bRenamed;
@@ -1497,6 +1498,7 @@ bool SendRotate ( const CSphConfig & hConf, bool bForce )
 	if ( fscanf ( fp, "%d", &iPID )!=1 || iPID<=0 )
 	{
 		fprintf ( stdout, "WARNING: failed to scanf pid from pid_file '%s'.\n", hSearchd["pid_file"].cstr() );
+		fclose ( fp );
 		return false;
 	}
 	fclose ( fp );

@@ -256,11 +256,11 @@ class CSphDynamicLibrary : public ISphNoncopyable
 	void *		m_pLibrary; // internal handle
 
 public:
-	CSphDynamicLibrary ( const char* sPath );
+	explicit CSphDynamicLibrary ( const char* sPath );
 
 	// We are suppose, that library is loaded once when necessary, and will alive whole lifetime of utility.
 	// So, no need to explicitly desctruct it, this is intended leak.
-	~CSphDynamicLibrary () = default;
+	~CSphDynamicLibrary ();
 
 	bool		LoadSymbols ( const char** sNames, void*** pppFuncs, int iNum );
 };

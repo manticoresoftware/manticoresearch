@@ -312,7 +312,7 @@ static PluginLib_c * LoadPluginLibrary ( const char * sLibName, CSphString & sEr
 	{
 		const char * sDlerror = dlerror();
 		sError.SetSprintf ( "dlopen() failed: %s", sDlerror ? sDlerror : "(null)" );
-		return NULL;
+		return nullptr;
 	}
 	sphLogDebug ( "dlopen(%s)=%p", bLinuxReload ? sTmpfile.cstr() : sLibfile.cstr(), pHandle );
 
@@ -322,7 +322,8 @@ static PluginLib_c * LoadPluginLibrary ( const char * sLibName, CSphString & sEr
 		if ( ::rename ( sTmpfile.cstr(), sLibfile.cstr() ) )
 		{
 			sError.SetSprintf ( "failed to rename file (src=%s, dst=%s, errno=%d, error=%s)", sTmpfile.cstr(), sLibfile.cstr(), errno, strerror(errno) );
-			return NULL;
+			dlclose ( pHandle );
+			return nullptr;
 		}
 	}
 
@@ -337,14 +338,14 @@ static PluginLib_c * LoadPluginLibrary ( const char * sLibName, CSphString & sEr
 	{
 		sError.SetSprintf ( "symbol '%s_ver' not found in '%s': update your UDF implementation", sBasename.cstr(), sLibName );
 		dlclose ( pHandle );
-		return NULL;
+		return nullptr;
 	}
 
 	if ( fnVer() < SPH_UDF_VERSION )
 	{
 		sError.SetSprintf ( "library '%s' was compiled using an older version of sphinxudf.h; it needs to be recompiled", sLibName );
 		dlclose ( pHandle );
-		return NULL;
+		return nullptr;
 	}
 
 	return new PluginLib_c ( pHandle, sLibName );

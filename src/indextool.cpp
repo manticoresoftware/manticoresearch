@@ -477,7 +477,7 @@ bool BuildIDF ( const CSphString & sFilename, const CSphVector<CSphString> & dFi
 						iSkippedWords++;
 				}
 
-				strncpy ( sWord, dWords[i], sizeof ( dWords[i] ) );
+				strncpy ( sWord, dWords[i], sizeof ( dWords[i] ) - 1 );
 				iDocs = dDocs[i];
 			}
 		}

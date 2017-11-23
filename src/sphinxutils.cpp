@@ -2560,6 +2560,12 @@ CSphDynamicLibrary::CSphDynamicLibrary ( const char * sPath )
 		sphLogDebug ( "dlopen(%s)=%p", sPath, m_pLibrary );
 }
 
+CSphDynamicLibrary::~CSphDynamicLibrary()
+{
+	if ( m_pLibrary )
+		dlclose ( m_pLibrary );
+};
+
 bool CSphDynamicLibrary::LoadSymbols ( const char** sNames, void*** pppFuncs, int iNum )
 {
 	if ( !m_pLibrary )

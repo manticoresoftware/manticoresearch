@@ -376,8 +376,8 @@ bool HttpRequestParser_t::Parse ( const CSphVector<BYTE> & dData )
 	tParserSettings.on_body = HttpRequestParser_t::ParserBody;
 
 	http_parser tParser;
-	http_parser_init ( &tParser, HTTP_REQUEST );
 	tParser.data = this;
+	http_parser_init ( &tParser, HTTP_REQUEST );
 	int iParsed = http_parser_execute ( &tParser, &tParserSettings, (const char *)dData.Begin(), dData.GetLength() );
 
 	if ( iParsed!=dData.GetLength() )

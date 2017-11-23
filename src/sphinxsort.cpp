@@ -97,7 +97,7 @@ public:
 	}
 
 	/// dtor
-	virtual ~CSphMatchQueueTraits () override
+	~CSphMatchQueueTraits () override
 	{
 		for ( int i=0; i<m_iDataLength; ++i )
 			m_tSchema.FreeStringPtrs ( m_pData+i );
@@ -207,7 +207,7 @@ public:
 	/// add grouped entry (must not happen)
 	bool PushGrouped ( const CSphMatch &, bool ) override
 	{
-		assert ( 0 );
+		assert ( false );
 		return false;
 	}
 
@@ -315,11 +315,11 @@ struct MatchSort_fn : public MatchSortAccessor_t
 {
 	CSphMatchComparatorState	m_tState;
 
-	explicit MatchSort_fn ( CSphMatchComparatorState tState )
-		: m_tState ( std::move ( tState ) )
+	explicit MatchSort_fn ( const CSphMatchComparatorState & tState )
+		: m_tState ( tState )
 	{}
 
-	bool IsLess ( const MEDIAN_TYPE a, const MEDIAN_TYPE b )
+	bool IsLess ( const MEDIAN_TYPE a, const MEDIAN_TYPE b ) const
 	{
 		return COMP::IsLess ( *a, *b, m_tState );
 	}
@@ -3154,7 +3154,7 @@ public:
 		}
 
 		CSphVector<IAggrFunc *> dTmp;
-		ESphSortKeyPart dTmpKeypart[CSphMatchComparatorState::MAX_ATTRS];
+		ESphSortKeyPart dTmpKeypart[CSphMatchComparatorState::MAX_ATTRS] = { SPH_KEYPART_ID };
 		CSphAttrLocator dTmpLocator[CSphMatchComparatorState::MAX_ATTRS];
 		ExtractAggregates ( m_tSchema, m_tLocCount, dTmpKeypart, dTmpLocator, m_dAggregates, dTmp, m_tPregroup );
 		assert ( !dTmp.GetLength() );
@@ -3968,7 +3968,7 @@ static ISphMatchSorter * sphCreateSorter2nd ( ESphSortFunc eGroupFunc, const ISp
 		case FUNC_GENERIC4:		return sphCreateSorter3rd<MatchGeneric4_fn>	( pComp, pQuery, tSettings, bHasPackedFactors ); break;
 		case FUNC_GENERIC5:		return sphCreateSorter3rd<MatchGeneric5_fn>	( pComp, pQuery, tSettings, bHasPackedFactors ); break;
 		case FUNC_EXPR:			return sphCreateSorter3rd<MatchExpr_fn>		( pComp, pQuery, tSettings, bHasPackedFactors ); break;
-		default:				return nullptr;
+		default:				SafeDelete ( pComp ); return nullptr;
 	}
 }
 

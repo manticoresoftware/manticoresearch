@@ -147,7 +147,7 @@ static bool				g_bLogStdout		= true;				// extra copy of startup log messages to
 static LogFormat_e		g_eLogFormat		= LOG_FORMAT_PLAIN;
 static bool				g_bLogCompactIn		= false;			// whether to cut list in IN() clauses.
 static int				g_iQueryLogMinMsec	= 0;				// log 'slow' threshold for query
-static char				g_sLogFilter[SPH_MAX_FILENAME_LEN] = "\0";
+static char				g_sLogFilter[SPH_MAX_FILENAME_LEN+1] = "\0";
 static int				g_iLogFilterLen = 0;
 static int				g_iLogFileMode = 0;
 
@@ -1247,8 +1247,10 @@ void sphLog ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 		// case 1: got a message we can't accumulate
 		// case 2: got a periodic flush and been otherwise idle for a thresh period
 		char sLast[256];
+		iLen = Min ( iLen, 256 );
 		strncpy ( sLast, sBuf, iLen );
-		snprintf ( sLast+iLen, sizeof(sLast)-iLen, "last message repeated %d times", iLastRepeats );
+		if ( iLen < 256 )
+			snprintf ( sLast+iLen, sizeof(sLast)-iLen, "last message repeated %d times", iLastRepeats );
 		sphLogEntry ( eLastLevel, sLast, sLast + ( sTtyBuf-sBuf ) );
 
 		tmLastStamp = tmNow;
@@ -2127,6 +2129,7 @@ DWORD sphGetAddress ( const char * sHost, bool bFatal )
 	tHints.ai_socktype = SOCK_STREAM;
 
 	int iResult = getaddrinfo ( sHost, NULL, &tHints, &pResult );
+	auto pOrigResult = pResult;
 	if ( iResult!=0 || !pResult )
 	{
 		if ( bFatal )
@@ -2157,7 +2160,7 @@ DWORD sphGetAddress ( const char * sHost, bool bFatal )
 		sphWarning ( "multiple addresses found for '%s', using the first one (%s)", sHost, sBuf.cstr() );
 	}
 
-	freeaddrinfo ( pResult );
+	freeaddrinfo ( pOrigResult );
 
 	return uAddr;
 }
@@ -3874,7 +3877,7 @@ static void CheckQuery ( const CSphQuery & tQuery, CSphString & sError )
 		&& ( tQuery.m_iRetryCount<0 || tQuery.m_iRetryCount>MAX_RETRY_COUNT ) )
 			LOC_ERROR1 ( "retry count out of bounds (count=%d)", tQuery.m_iRetryCount );
 
-	if ( ( tQuery.m_iRetryCount!=g_iAgentRetryDelay )
+	if ( ( tQuery.m_iRetryDelay!=g_iAgentRetryDelay )
 		&& ( tQuery.m_iRetryDelay<0 || tQuery.m_iRetryDelay>MAX_RETRY_DELAY ) )
 			LOC_ERROR1 ( "retry delay out of bounds (delay=%d)", tQuery.m_iRetryDelay );
 
@@ -12463,6 +12466,12 @@ static bool LoopClientSphinx ( int iCommand, int iCommandVer, int iLength, const
 
 static void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 {
+	if ( iSock<0 )
+	{
+		sphWarning ( "invalid socket passed to HandleClientSphinx" );
+		return;
+	}
+
 	MEMORY ( MEM_API_HANDLE );
 	THD_STATE ( THD_HANDSHAKE );
 
@@ -12478,9 +12487,7 @@ static void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * 
 
 	// get client version and request
 	int iMagic = 0;
-	int iGot = 0;
-	if ( iSock>=0 )
-		iGot = sphSockRead ( iSock, &iMagic, sizeof(iMagic), g_iReadTimeout, false );
+	int iGot = sphSockRead ( iSock, &iMagic, sizeof(iMagic), g_iReadTimeout, false );
 
 	bool bReadErr = ( iGot!=sizeof(iMagic) );
 	sphLogDebugv ( "conn %s(" INT64_FMT "): got handshake, major v.%d, err %d", sClientIP, iCID, iMagic, (int)bReadErr );
@@ -16199,7 +16206,7 @@ void HandleMysqlSet ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, SessionVars_t & 
 		} else if ( tStmt.m_sSetName=="log_debug_filter" )
 		{
 			int iLen = tStmt.m_sSetValue.Length();
-			iLen = Min ( iLen, (int)( sizeof(g_sLogFilter)/sizeof(g_sLogFilter[0]) ) );
+			iLen = Min ( iLen, SPH_MAX_FILENAME_LEN );
 			memcpy ( g_sLogFilter, tStmt.m_sSetValue.cstr(), iLen );
 			g_sLogFilter[iLen] = '\0';
 			g_iLogFilterLen = iLen;
@@ -20322,6 +20329,7 @@ void QueryStatus ( CSphVariant * v )
 			if ( connect ( iSock, (struct sockaddr*)&uaddr, sizeof(uaddr) )<0 )
 			{
 				sphWarning ( "failed to connect to unix://%s: %s\n", tDesc.m_sUnix.cstr(), sphSockError() );
+				sphSockClose ( iSock );
 				continue;
 			}
 
@@ -20350,6 +20358,7 @@ void QueryStatus ( CSphVariant * v )
 			if ( connect ( iSock, (struct sockaddr*)&sin, sizeof(sin) )<0 )
 			{
 				sphWarning ( "failed to connect to %s:%d: %s\n", sphFormatIP ( sBuf, sizeof(sBuf), tDesc.m_uIP ), tDesc.m_iPort, sphSockError() );
+				sphSockClose ( iSock );
 				continue;
 			}
 		}

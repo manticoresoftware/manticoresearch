@@ -155,7 +155,7 @@ static inline const BYTE * UnzipT ( T * pValue, const BYTE * pIn )
 
 struct CmpHitPlain_fn
 {
-	inline bool IsLess ( const CSphWordHit & a, const CSphWordHit & b )
+	inline bool IsLess ( const CSphWordHit & a, const CSphWordHit & b ) const
 	{
 		return 	( a.m_uWordID<b.m_uWordID ) ||
 			( a.m_uWordID==b.m_uWordID && a.m_uDocID<b.m_uDocID ) ||
@@ -168,7 +168,7 @@ struct CmpHitKeywords_fn
 {
 	const BYTE * m_pBase;
 	explicit CmpHitKeywords_fn ( const BYTE * pBase ) : m_pBase ( pBase ) {}
-	inline bool IsLess ( const CSphWordHit & a, const CSphWordHit & b )
+	inline bool IsLess ( const CSphWordHit & a, const CSphWordHit & b ) const
 	{
 		const BYTE * pPackedA = m_pBase + a.m_uWordID;
 		const BYTE * pPackedB = m_pBase + b.m_uWordID;
@@ -2898,7 +2898,7 @@ RtSegment_t * RtIndex_t::MergeSegments ( const RtSegment_t * pSeg1, const RtSegm
 
 struct CmpSegments_fn
 {
-	inline bool IsLess ( const RtSegment_t * a, const RtSegment_t * b )
+	inline bool IsLess ( const RtSegment_t * a, const RtSegment_t * b ) const
 	{
 			return a->GetMergeFactor() > b->GetMergeFactor();
 	}

@@ -1418,14 +1418,16 @@ struct MatchSortAccessor_t
 	typedef CSphMatch T;
 	typedef CSphMatch * MEDIAN_TYPE;
 
-	CSphMatch m_tMedian;
+private:
+	mutable CSphMatch m_tMedian;
 
-	MatchSortAccessor_t () {}
+public:
+	MatchSortAccessor_t () = default;
 	MatchSortAccessor_t ( const MatchSortAccessor_t & ) {}
 
 	virtual ~MatchSortAccessor_t()
 	{
-		m_tMedian.m_pDynamic = NULL; // not yours
+		m_tMedian.m_pDynamic = nullptr; // not yours
 	}
 
 	MEDIAN_TYPE Key ( CSphMatch * a ) const
@@ -1433,7 +1435,7 @@ struct MatchSortAccessor_t
 		return a;
 	}
 
-	void CopyKey ( MEDIAN_TYPE * pMed, CSphMatch * pVal )
+	void CopyKey ( MEDIAN_TYPE * pMed, CSphMatch * pVal ) const
 	{
 		*pMed = &m_tMedian;
 		m_tMedian.m_uDocID = pVal->m_uDocID;
@@ -2146,7 +2148,7 @@ bool sphExpandGetWords ( const char * sWord, const ExpansionContext_t & tCtx, IS
 template<typename T>
 struct ExpandedOrderDesc_T
 {
-	bool IsLess ( const T & a, const T & b )
+	bool IsLess ( const T & a, const T & b ) const
 	{
 		return ( sphGetExpansionMagic ( a.m_iDocs, a.m_iHits )>sphGetExpansionMagic ( b.m_iDocs, b.m_iHits ) );
 	}

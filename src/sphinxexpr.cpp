@@ -1177,16 +1177,20 @@ protected:
 
 public:
 	explicit Expr_JsonFieldConv_c ( ISphExpr * pArg )
-		: m_pStrings ( NULL )
+		: m_pStrings ( nullptr )
 		, m_pArg ( pArg )
-	{}
-
-	~Expr_JsonFieldConv_c()
 	{
-		SafeRelease ( m_pArg );
+		if ( pArg )
+			pArg->AddRef ();
 	}
 
-	virtual void Command ( ESphExprCommand eCmd, void * pArg )
+	~Expr_JsonFieldConv_c() override
+	{
+		SafeRelease ( m_pArg ); // once - sync with addref
+		SafeRelease ( m_pArg ); // secondary - release ownership
+	}
+
+	void Command ( ESphExprCommand eCmd, void * pArg ) override
 	{
 		if ( eCmd==SPH_EXPR_SET_STRING_POOL )
 			m_pStrings = (const BYTE*)pArg;
@@ -1240,17 +1244,17 @@ protected:
 	}
 
 public:
-	virtual int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
+	int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const override
 	{
-		const BYTE * pVal = NULL;
+		const BYTE * pVal = nullptr;
 		ESphJsonType eJson = GetKey ( &pVal, tMatch );
 		return ( eJson==JSON_STRING ) ? sphUnpackStr ( pVal, ppStr ) : 0;
 	}
-	virtual float Eval ( const CSphMatch & tMatch ) const { return DoEval<float> ( tMatch ); }
-	virtual int IntEval ( const CSphMatch & tMatch ) const { return DoEval<int> ( tMatch ); }
-	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return DoEval<int64_t> ( tMatch ); }
+	float Eval ( const CSphMatch & tMatch ) const override { return DoEval<float> ( tMatch ); }
+	int IntEval ( const CSphMatch & tMatch ) const override { return DoEval<int> ( tMatch ); }
+	int64_t Int64Eval ( const CSphMatch & tMatch ) const override { return DoEval<int64_t> ( tMatch ); }
 
-	virtual uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
+	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override
 	{
 		EXPR_CLASS_NAME("Expr_JsonFieldConv_c");
 		return CALC_PARENT_HASH();
@@ -1399,18 +1403,18 @@ public:
 		, m_eFunc ( eFunc )
 	{}
 
-	virtual int IntEval ( const CSphMatch & tMatch ) const
+	int IntEval ( const CSphMatch & tMatch ) const override
 	{
-		const BYTE * pVal = NULL;
+		const BYTE * pVal = nullptr;
 		ESphJsonType eJson = GetKey ( &pVal, tMatch );
-		return JsonAggr<int> ( eJson, pVal, m_eFunc, NULL );
+		return JsonAggr<int> ( eJson, pVal, m_eFunc, nullptr );
 	}
 
-	virtual int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
+	int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const override
 	{
 		CSphString sBuf;
-		*ppStr = NULL;
-		const BYTE * pVal = NULL;
+		*ppStr = nullptr;
+		const BYTE * pVal = nullptr;
 		ESphJsonType eJson = GetKey ( &pVal, tMatch );
 
 		int iLen = 0;
@@ -1420,7 +1424,7 @@ public:
 		switch ( eJson )
 		{
 		case JSON_INT32_VECTOR:
-			iVal = JsonAggr<int> ( eJson, pVal, m_eFunc, NULL );
+			iVal = JsonAggr<int> ( eJson, pVal, m_eFunc, nullptr );
 			sBuf.SetSprintf ( "%u", iVal );
 			iLen = sBuf.Length();
 			*ppStr = (const BYTE *) sBuf.Leak();
@@ -1433,14 +1437,14 @@ public:
 			return iLen;
 
 		case JSON_DOUBLE_VECTOR:
-			fVal = JsonAggr<float> ( eJson, pVal, m_eFunc, NULL );
+			fVal = JsonAggr<float> ( eJson, pVal, m_eFunc, nullptr );
 			sBuf.SetSprintf ( "%f", fVal );
 			iLen = sBuf.Length();
 			*ppStr = (const BYTE *) sBuf.Leak();
 			return iLen;
 
 		case JSON_MIXED_VECTOR:
-			fVal = JsonAggr<float> ( eJson, pVal, m_eFunc, NULL );
+			fVal = JsonAggr<float> ( eJson, pVal, m_eFunc, nullptr );
 			sBuf.SetSprintf ( "%f", fVal );
 			iLen = sBuf.Length();
 			*ppStr = (const BYTE *) sBuf.Leak();
@@ -1450,21 +1454,21 @@ public:
 		}
 	}
 
-	virtual float Eval ( const CSphMatch & tMatch ) const
+	float Eval ( const CSphMatch & tMatch ) const override
 	{
-		const BYTE * pVal = NULL;
+		const BYTE * pVal = nullptr;
 		ESphJsonType eJson = GetKey ( &pVal, tMatch );
-		return JsonAggr<float> ( eJson, pVal, m_eFunc, NULL );
+		return JsonAggr<float> ( eJson, pVal, m_eFunc, nullptr );
 	}
-	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const
+	int64_t Int64Eval ( const CSphMatch & tMatch ) const override
 	{
-		const BYTE * pVal = NULL;
+		const BYTE * pVal = nullptr;
 		ESphJsonType eJson = GetKey ( &pVal, tMatch );
-		return JsonAggr<int64_t> ( eJson, pVal, m_eFunc, NULL );
+		return JsonAggr<int64_t> ( eJson, pVal, m_eFunc, nullptr );
 	}
-	virtual bool IsStringPtr() const { return true; }
+	bool IsStringPtr() const override { return true; }
 
-	virtual uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
+	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override
 	{
 		EXPR_CLASS_NAME("Expr_JsonFieldAggr_c");
 		CALC_POD_HASH(m_eFunc);
@@ -1480,17 +1484,17 @@ public:
 		: Expr_JsonFieldConv_c ( pArg )
 	{}
 
-	virtual int IntEval ( const CSphMatch & tMatch ) const
+	int IntEval ( const CSphMatch & tMatch ) const override
 	{
-		const BYTE * pVal = NULL;
+		const BYTE * pVal = nullptr;
 		ESphJsonType eJson = GetKey ( &pVal, tMatch );
 		return sphJsonFieldLength ( eJson, pVal );
 	}
 
-	virtual float	Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }
-	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t)IntEval ( tMatch ); }
+	float	Eval ( const CSphMatch & tMatch ) const override { return (float)IntEval ( tMatch ); }
+	int64_t Int64Eval ( const CSphMatch & tMatch ) const override { return (int64_t)IntEval ( tMatch ); }
 
-	virtual uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
+	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override
 	{
 		EXPR_CLASS_NAME("Expr_JsonFieldLength_c");
 		return CALC_PARENT_HASH();
@@ -1653,12 +1657,12 @@ struct Expr_ForIn_c : public Expr_JsonFieldConv_c
 
 	Expr_ForIn_c ( ISphExpr * pArg, bool bStrict, bool bIndex )
 		: Expr_JsonFieldConv_c ( pArg )
-		, m_pExpr ( NULL )
+		, m_pExpr ( nullptr )
 		, m_bStrict ( bStrict )
 		, m_bIndex ( bIndex )
 	{}
 
-	~Expr_ForIn_c ()
+	~Expr_ForIn_c () override
 	{
 		SafeRelease ( m_pExpr );
 	}
@@ -1673,7 +1677,7 @@ struct Expr_ForIn_c : public Expr_JsonFieldConv_c
 		m_pExpr = pExpr;
 	}
 
-	virtual void Command ( ESphExprCommand eCmd, void * pArg )
+	void Command ( ESphExprCommand eCmd, void * pArg ) override
 	{
 		Expr_JsonFieldConv_c::Command ( eCmd, pArg );
 		if ( m_pExpr )
@@ -1685,17 +1689,17 @@ struct Expr_ForIn_c : public Expr_JsonFieldConv_c
 		m_uData = ( ( (int64_t)( pVal-m_pStrings ) ) | ( ( (int64_t)eType )<<32 ) );
 		bool bMatch = m_pExpr->Eval ( tMatch )!=0;
 		*pResult = bMatch ? ( m_bIndex ? iIndex : 1 ) : ( m_bIndex ? -1 : 0 );
-		return m_bStrict ? bMatch : !bMatch;
+		return m_bStrict==bMatch;
 	}
 
-	virtual int IntEval ( const CSphMatch & tMatch ) const
+	int IntEval ( const CSphMatch & tMatch ) const override
 	{
 		int iResult = m_bIndex ? -1 : 0;
 
 		if ( !m_pExpr )
 			return iResult;
 
-		const BYTE * p = NULL;
+		const BYTE * p = nullptr;
 		ESphJsonType eJson = GetKey ( &p, tMatch );
 
 		switch ( eJson )
@@ -1732,7 +1736,7 @@ struct Expr_ForIn_c : public Expr_JsonFieldConv_c
 				int iLen = sphJsonUnpackInt ( &p );
 				for ( int i=0; i<iLen; i++ )
 				{
-					ESphJsonType eType = (ESphJsonType)*p++;
+					auto eType = (ESphJsonType)*p++;
 					if ( !ExprEval ( &iResult, tMatch, i, eType, p ) )
 						break;
 					sphJsonSkipNode ( eType, &p );
@@ -1746,10 +1750,10 @@ struct Expr_ForIn_c : public Expr_JsonFieldConv_c
 		return iResult;
 	}
 
-	virtual float Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }
-	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t)IntEval ( tMatch ); }
+	float Eval ( const CSphMatch & tMatch ) const override { return (float)IntEval ( tMatch ); }
+	int64_t Int64Eval ( const CSphMatch & tMatch ) const override { return (int64_t)IntEval ( tMatch ); }
 
-	virtual uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
+	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override
 	{
 		EXPR_CLASS_NAME("Expr_ForIn_c");
 		CALC_POD_HASH(m_bStrict);
@@ -1838,17 +1842,17 @@ struct Expr_JsonFieldIsNull_c : public Expr_JsonFieldConv_c
 		, m_bEquals ( bEquals )
 	{}
 
-	virtual int IntEval ( const CSphMatch & tMatch ) const
+	int IntEval ( const CSphMatch & tMatch ) const override
 	{
-		const BYTE * pVal = NULL;
+		const BYTE * pVal = nullptr;
 		ESphJsonType eJson = GetKey ( &pVal, tMatch );
 		return m_bEquals ^ ( eJson!=JSON_EOF && eJson!=JSON_NULL );
 	}
 
-	virtual float	Eval ( const CSphMatch & tMatch ) const { return (float)IntEval ( tMatch ); }
-	virtual int64_t Int64Eval ( const CSphMatch & tMatch ) const { return (int64_t)IntEval ( tMatch ); }
+	float	Eval ( const CSphMatch & tMatch ) const override { return (float)IntEval ( tMatch ); }
+	int64_t Int64Eval ( const CSphMatch & tMatch ) const override { return (int64_t)IntEval ( tMatch ); }
 
-	virtual uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable )
+	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override
 	{
 		EXPR_CLASS_NAME("Expr_JsonFieldIsNull_c");
 		CALC_POD_HASH(m_bEquals);

@@ -2779,7 +2779,7 @@ public:
 void FillStoredTokenInfo ( StoredToken_t & tToken, const BYTE * sToken, ISphTokenizer * pTokenizer )
 {
 	assert ( sToken && pTokenizer );
-	strncpy ( (char *)tToken.m_sToken, (const char *)sToken, sizeof(tToken.m_sToken) );
+	strncpy ( (char *)tToken.m_sToken, (const char *)sToken, sizeof(tToken.m_sToken)-1 );
 	tToken.m_szTokenStart = pTokenizer->GetTokenStart ();
 	tToken.m_szTokenEnd = pTokenizer->GetTokenEnd ();
 	tToken.m_iOvershortCount = pTokenizer->GetOvershortCount ();
@@ -4359,7 +4359,7 @@ BYTE * CSphTokenizerBase2::GetBlendedVariant ()
 
 		// we also have to stash the original blended token
 		// because accumulator contents may get trashed by caller (say, when stemming)
-		strncpy ( (char*)m_sAccumBlend, (char*)m_sAccum, sizeof(m_sAccumBlend) );
+		strncpy ( (char*)m_sAccumBlend, (char*)m_sAccum, sizeof(m_sAccumBlend)-1 );
 	}
 
 	// case 2, caller is checking for pending variants, have we even got any?
@@ -4915,7 +4915,7 @@ bool CSphTokenizerBase2::CheckException ( const BYTE * pStart, const BYTE * pCur
 	if ( !pMapTo )
 		return false;
 
-	strncpy ( (char*)m_sAccum, (char*)pMapTo, sizeof(m_sAccum) );
+	strncpy ( (char*)m_sAccum, (char*)pMapTo, sizeof(m_sAccum)-1 );
 	m_pCur = pMapEnd;
 	m_pTokenStart = pStart;
 	m_pTokenEnd = pMapEnd;
@@ -5263,11 +5263,11 @@ BYTE * CSphMultiformTokenizer::GetToken ()
 		if ( ++m_iOutputPending>=m_pCurrentForm->m_dNormalForm.GetLength() )
 		{
 			m_iOutputPending = -1;
-			m_pCurrentForm = NULL;
+			m_pCurrentForm = nullptr;
 		} else
 		{
 			StoredToken_t & tStart = m_dStoredTokens[m_iStart];
-			strncpy ( (char *)tStart.m_sToken, m_pCurrentForm->m_dNormalForm[m_iOutputPending].m_sForm.cstr(), sizeof(tStart.m_sToken) );
+			strncpy ( (char *)tStart.m_sToken, m_pCurrentForm->m_dNormalForm[m_iOutputPending].m_sForm.cstr(), sizeof(tStart.m_sToken)-1 );
 
 			tStart.m_iTokenLen = m_pCurrentForm->m_dNormalForm[m_iOutputPending].m_iLengthCP;
 			tStart.m_bBoundary = false;
@@ -5412,7 +5412,7 @@ BYTE * CSphMultiformTokenizer::GetToken ()
 			StoredToken_t & tEnd = m_dStoredTokens[m_iStart+iFormTokCount];
 			m_iStart += iFormTokCount;
 
-			strncpy ( (char *)tEnd.m_sToken, pCurForm->m_dNormalForm[0].m_sForm.cstr(), sizeof(tEnd.m_sToken) );
+			strncpy ( (char *)tEnd.m_sToken, pCurForm->m_dNormalForm[0].m_sForm.cstr(), sizeof(tEnd.m_sToken)-1 );
 			tEnd.m_szTokenStart = tStart.m_szTokenStart;
 			tEnd.m_iTokenLen = pCurForm->m_dNormalForm[0].m_iLengthCP;
 
@@ -5432,7 +5432,7 @@ BYTE * CSphMultiformTokenizer::GetToken ()
 			// FIXME: add multiple destination token support here (if needed)
 			assert ( pCurForm->m_dNormalForm.GetLength()==1 );
 			StoredToken_t & tDst = m_dStoredTokens[m_iStart];
-			strncpy ( (char *)tDst.m_sToken, pCurForm->m_dNormalForm[0].m_sForm.cstr(), sizeof(tDst.m_sToken) );
+			strncpy ( (char *)tDst.m_sToken, pCurForm->m_dNormalForm[0].m_sForm.cstr(), sizeof(tDst.m_sToken)-1 );
 			tDst.m_iTokenLen = pCurForm->m_dNormalForm[0].m_iLengthCP;
 		}
 		break;
@@ -17732,7 +17732,7 @@ static void TransformAotFilterKeyword ( XQNode_t * pNode, const XQKeyword_t & tK
 		// short => longlonglong wordform mapping would crash
 		// OPTIMIZE? forms that are not found will (?) get looked up again in the dict
 		char sBuf [ MAX_KEYWORD_BYTES ];
-		strncpy ( sBuf, tKeyword.m_sWord.cstr(), sizeof(sBuf) );
+		strncpy ( sBuf, tKeyword.m_sWord.cstr(), sizeof(sBuf)-1 );
 		if ( pWordforms->ToNormalForm ( (BYTE*)sBuf, true, false ) )
 		{
 			if ( !pNode->m_dWords.GetLength() )
@@ -17764,7 +17764,7 @@ static void TransformAotFilterKeyword ( XQNode_t * pNode, const XQKeyword_t & tK
 		char sBuf [ MAX_KEYWORD_BYTES ];
 		ARRAY_FOREACH ( i, dLemmas )
 		{
-			strncpy ( sBuf, dLemmas[i].cstr(), sizeof(sBuf) );
+			strncpy ( sBuf, dLemmas[i].cstr(), sizeof(sBuf)-1 );
 			if ( pWordforms->ToNormalForm ( (BYTE*)sBuf, false, false ) )
 				dLemmas[i] = sBuf;
 		}
@@ -21450,7 +21450,8 @@ CSphWordforms * CSphTemplateDictTraits::LoadWordformContainer ( const CSphVector
 			if ( !rdWordforms.Open ( szFile, sError ) )
 			{
 				sphWarning ( "index '%s': %s", sIndex, sError.cstr() );
-				return NULL;
+				SafeDelete ( pContainer );
+				return nullptr;
 			}
 
 			int iLen;
@@ -22095,7 +22096,7 @@ void InfixBuilder_c<SIZE>::AddWord ( const BYTE * pWord, int iWordLength, int iC
 
 	// build an offsets table into the bytestring
 	dBytes[0] = 0;
-	for ( const BYTE * p = (const BYTE*)pWord; p<pWord+iWordLength && iCodes<SPH_MAX_WORD_LEN; )
+	for ( const BYTE * p = pWord; p<pWord+iWordLength && iCodes<SPH_MAX_WORD_LEN; )
 	{
 		int iLen = 0;
 		BYTE uVal = *p;
@@ -22124,7 +22125,7 @@ void InfixBuilder_c<SIZE>::AddWord ( const BYTE * pWord, int iWordLength, int iC
 	for ( int p=0; p<=iCodes-2; p++ )
 	{
 		sKey.Reset();
-		BYTE * pKey = (BYTE*)sKey.m_Data;
+		auto pKey = (BYTE*)sKey.m_Data;
 
 		const BYTE * s = pWord + dBytes[p];
 		const BYTE * sMax = pWord + dBytes[ p+Min ( 6, iCodes-p ) ];
@@ -31326,7 +31327,7 @@ bool CWordlist::ReadNextWord ( SuggestResult_t & tRes, DictWord_t & tWord ) cons
 
 struct CmpSuggestOrder_fn
 {
-	bool IsLess ( const SuggestWord_t & a, const SuggestWord_t & b )
+	bool IsLess ( const SuggestWord_t & a, const SuggestWord_t & b ) const
 	{
 		if ( a.m_iDistance==b.m_iDistance )
 			return a.m_iDocs>b.m_iDocs;
@@ -32596,7 +32597,7 @@ DWORD CSphGlobalIDF::GetDocs ( const CSphString & sWord ) const
 	char sBuf [ 3*SPH_MAX_WORD_LEN+4 ];
 	if ( *s && *s=='=' )
 	{
-		strncpy ( sBuf, sWord.cstr(), sizeof(sBuf) );
+		strncpy ( sBuf, sWord.cstr(), sizeof(sBuf)-1 );
 		sBuf[0] = MAGIC_WORD_HEAD_NONSTEMMED;
 		s = sBuf;
 	}

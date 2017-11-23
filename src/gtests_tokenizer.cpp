@@ -623,7 +623,7 @@ INSTANTIATE_TEST_CASE_P ( Run3Times, TokenizerP, ::testing::Values ( 1, 2, 3 ) )
 
 struct CmpAtomPos_fn
 {
-	bool IsLess ( const XQKeyword_t * pA, const XQKeyword_t * pB )
+	bool IsLess ( const XQKeyword_t * pA, const XQKeyword_t * pB ) const
 	{
 		return pA->m_iAtomPos<pB->m_iAtomPos;
 	}

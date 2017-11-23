@@ -466,13 +466,13 @@ void SnippetsDocIndex_c::ParseQuery ( const char * sQuery, ISphTokenizer * pToke
 
 		if ( eExtQuerySPZ & SPH_SPZ_SENTENCE )
 		{
-			strncpy ( (char *)m_sTmpWord, MAGIC_WORD_SENTENCE, sizeof(m_sTmpWord) );
+			strncpy ( (char *)m_sTmpWord, MAGIC_WORD_SENTENCE, sizeof(m_sTmpWord)-1 );
 			AddWord ( pDict->GetWordID ( m_sTmpWord ), strlen ( (char*)m_sTmpWord ), iQPos );
 			iQPos++;
 		}
 		if ( eExtQuerySPZ & SPH_SPZ_PARAGRAPH )
 		{
-			strncpy ( (char *)m_sTmpWord, MAGIC_WORD_PARAGRAPH, sizeof(m_sTmpWord) );
+			strncpy ( (char *)m_sTmpWord, MAGIC_WORD_PARAGRAPH, sizeof(m_sTmpWord)-1 );
 			AddWord ( pDict->GetWordID ( m_sTmpWord ), strlen ( (char*)m_sTmpWord ), iQPos );
 			iQPos++;
 		}
@@ -480,7 +480,7 @@ void SnippetsDocIndex_c::ParseQuery ( const char * sQuery, ISphTokenizer * pToke
 		// should be in sync with ExtRanker_c constructor
 		ARRAY_FOREACH ( i, m_tQuery.m_dZones )
 		{
-			snprintf ( (char *)m_sTmpWord, sizeof(m_sTmpWord), "%c%s", MAGIC_CODE_ZONE, m_tQuery.m_dZones[i].cstr() );
+			snprintf ( (char *)m_sTmpWord, sizeof(m_sTmpWord)-1, "%c%s", MAGIC_CODE_ZONE, m_tQuery.m_dZones[i].cstr() );
 			AddWord ( pDict->GetWordID ( m_sTmpWord ), strlen ( (char*)m_sTmpWord ), iQPos );
 			iQPos++;
 		}
@@ -619,7 +619,7 @@ int SnippetsDocIndex_c::ExtractWords ( XQNode_t * pNode, ISphTokenizer * pTokeni
 			iQpos++;
 		} else
 		{
-			strncpy ( (char *)m_sTmpWord, tWord.m_sWord.cstr(), sizeof(m_sTmpWord) );
+			strncpy ( (char *)m_sTmpWord, tWord.m_sWord.cstr(), sizeof(m_sTmpWord)-1 );
 			SphWordID_t iWordID = pDict->GetWordID ( m_sTmpWord );
 			if ( iWordID )
 			{
@@ -1196,9 +1196,9 @@ public:
 		, m_uFoundWords ( 0 )
 		, m_tTokenContainer ( tTokenContainer )
 	{
-		strncpy ( (char *)m_sTmpWord, MAGIC_WORD_SENTENCE, sizeof(m_sTmpWord) );
+		strncpy ( (char *)m_sTmpWord, MAGIC_WORD_SENTENCE, sizeof(m_sTmpWord)-1 );
 		m_uSentenceID = pDict->GetWordID ( m_sTmpWord );
-		strncpy ( (char *)m_sTmpWord, MAGIC_WORD_PARAGRAPH, sizeof(m_sTmpWord) );
+		strncpy ( (char *)m_sTmpWord, MAGIC_WORD_PARAGRAPH, sizeof(m_sTmpWord)-1 );
 		m_uParagraphID = pDict->GetWordID ( m_sTmpWord );
 		m_tContainer.SetupHits();
 
@@ -1284,7 +1284,7 @@ public:
 			iWord = m_tContainer.FindStarred ( tWord.m_sWord.cstr() );
 		else
 		{
-			strncpy ( (char *)m_sTmpWord, tWord.m_sWord.cstr(), sizeof(m_sTmpWord) );
+			strncpy ( (char *)m_sTmpWord, tWord.m_sWord.cstr(), sizeof(m_sTmpWord)-1 );
 			SphWordID_t iWordID = m_pDict->GetWordID ( m_sTmpWord );
 			if ( iWordID )
 				iWord = m_tContainer.FindWord ( iWordID, NULL, 0 );

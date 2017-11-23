@@ -1,6 +1,33 @@
 Release notes
 ===================================
 
+Version 2.5.1, 23 November 2017
+----------------------------------
+
+Features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* JSON queries on :ref:`HTTP API protocol <httpapi_reference>`. Supported search, insert, update, delete, replace operations. Data manipulation commands can be also bulked, also there are some limitations currently as MVA and JSON attributes can't be used for inserts, replaces or updates.
+* :ref:`RELOAD INDEXES <reload_indexes_syntax>` command
+* :ref:`FLUSH LOGS <flush_logs_syntax>` command
+* :ref:`SHOW THREADS <show_threads_syntax>`  can show progress of optimize, rotation or flushes.
+* GROUP N BY  work correctly with MVA attributes
+* blackhole agents are run on separate thread to not affect master query anymore
+* implemented reference count on indexes, to avoid stalls caused by rotations and high load
+* SHA1 hashing implemented, not exposed yet externally
+* fixes for compiling on FreeBSD, macOS and Alpine
+
+Bugfixes
+~~~~~~~~
+
+* `989752b <https://github.com/manticoresoftware/manticore/commit/989752b>`__ filter regression with block index
+* `b1c3864 <https://github.com/manticoresoftware/manticore/commit/b1c3864>`__ rename PAGE_SIZE -> ARENA_PAGE_SIZE for compatibility with musl
+* `f2133cc <https://github.com/manticoresoftware/manticore/commit/f2133cc>`__ disable googletests for cmake < 3.1.0
+* `f30ec53 <https://github.com/manticoresoftware/manticore/commit/0839de7>`__ failed to bind socket on daemon restart
+* `0807240 <https://github.com/manticoresoftware/manticore/commit/0807240>`__ fixed  crash of daemon on shutdown
+* `3e3acc3 <https://github.com/manticoresoftware/manticore/commit/3e3acc3>`__ fixed show threads for system blackhole thread
+* `262c3fe <https://github.com/manticoresoftware/manticore/commit/262c3fe>`__ Refactored config check of iconv, fixes building on FreeBSD and Darwin
+
 Version 2.4.1 GA, 16 October 2017
 ----------------------------------
 

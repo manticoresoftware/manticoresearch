@@ -7,23 +7,34 @@
 #include "sphinx.h"
 #include "sphinxfilter.h"
 
-static void SetDefault ( CSphFilterSettings & tOpt )
+class filter_block_level : public ::testing::Test
 {
-	tOpt.m_sAttrName = "gid";
-	tOpt.m_bExclude = false;
-	tOpt.m_bHasEqualMin = true;
-	tOpt.m_bHasEqualMax = true;
-	tOpt.m_bOpenLeft = false;
-	tOpt.m_bOpenRight = false;
-	tOpt.m_eType = SPH_FILTER_RANGE;
-}
 
-TEST ( filter_block_level, range )
+protected:
+	void SetDefault ( )
+	{
+		tOpt.m_sAttrName = "gid";
+		tOpt.m_bExclude = false;
+		tOpt.m_bHasEqualMin = true;
+		tOpt.m_bHasEqualMax = true;
+		tOpt.m_bOpenLeft = false;
+		tOpt.m_bOpenRight = false;
+		tOpt.m_eType = SPH_FILTER_RANGE;
+	}
+
+	virtual void SetUp ()
+	{
+		SetDefault ();
+	}
+
+	CSphFilterSettings tOpt;
+};
+
+TEST_F ( filter_block_level, range )
 {
 	CSphString sWarning, sError;
 	CSphSchema tSchema;
 	CSphColumnInfo tCol;
-	CSphFilterSettings tOpt;
 	CSphFixedVector<DWORD> dMin ( DWSIZEOF(SphDocID_t) + 1 ), dMax ( DWSIZEOF(SphDocID_t) + 1 );
 	CSphScopedPtr<ISphFilter> tFilter ( NULL );
 
@@ -31,7 +42,6 @@ TEST ( filter_block_level, range )
 	tCol.m_sName = "gid";
 	tSchema.AddAttr ( tCol, false );
 	
-	SetDefault ( tOpt );
 	tOpt.m_iMinValue = 10;
 	tOpt.m_iMaxValue = 40;
 	tFilter = sphCreateFilter ( tOpt, tSchema, NULL, NULL, sError, sWarning, SPH_COLLATION_DEFAULT, false );
@@ -61,7 +71,7 @@ TEST ( filter_block_level, range )
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	///
-	SetDefault ( tOpt );
+	SetDefault();
 	tOpt.m_iMaxValue = 40;
 	tOpt.m_bOpenLeft = true;
 	tFilter = sphCreateFilter ( tOpt, tSchema, NULL, NULL, sError, sWarning, SPH_COLLATION_DEFAULT, false );
@@ -93,7 +103,7 @@ TEST ( filter_block_level, range )
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	///
-	SetDefault ( tOpt );
+	SetDefault ();
 	tOpt.m_iMinValue = 15;
 	tOpt.m_bOpenRight = true;
 	tFilter = sphCreateFilter ( tOpt, tSchema, NULL, NULL, sError, sWarning, SPH_COLLATION_DEFAULT, false );
@@ -124,7 +134,7 @@ TEST ( filter_block_level, range )
 	*DOCINFO2ATTRS ( dMax.Begin() ) = 5;
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
-	SetDefault ( tOpt );
+	SetDefault ();
 	tOpt.m_iMinValue = 10;
 	tOpt.m_iMaxValue = 40;
 	tOpt.m_bHasEqualMin = false;
@@ -160,7 +170,7 @@ TEST ( filter_block_level, range )
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	///
-	SetDefault ( tOpt );
+	SetDefault ();
 	tOpt.m_iMaxValue = 40;
 	tOpt.m_bOpenLeft = true;
 	tOpt.m_bHasEqualMax = false;
@@ -194,7 +204,7 @@ TEST ( filter_block_level, range )
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	///
-	SetDefault ( tOpt );
+	SetDefault ();
 	tOpt.m_iMinValue = 15;
 	tOpt.m_bOpenRight = true;
 	tOpt.m_bHasEqualMax = false;
@@ -223,12 +233,11 @@ TEST ( filter_block_level, range )
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 }
 
-TEST ( filter_block_level, range_float )
+TEST_F ( filter_block_level, range_float )
 {
 	CSphString sWarning, sError;
 	CSphSchema tSchema;
 	CSphColumnInfo tCol;
-	CSphFilterSettings tOpt;
 	CSphFixedVector<DWORD> dMin ( DWSIZEOF(SphDocID_t) + 1 ), dMax ( DWSIZEOF(SphDocID_t) + 1 );
 	CSphScopedPtr<ISphFilter> tFilter ( NULL );
 
@@ -236,7 +245,6 @@ TEST ( filter_block_level, range_float )
 	tCol.m_sName = "gid";
 	tSchema.AddAttr ( tCol, false );
 	
-	SetDefault ( tOpt );
 	tOpt.m_eType = SPH_FILTER_FLOATRANGE;
 	tOpt.m_fMinValue = 10.0f;
 	tOpt.m_fMaxValue = 40.0f;
@@ -269,7 +277,7 @@ TEST ( filter_block_level, range_float )
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	///
-	SetDefault ( tOpt );
+	SetDefault ();
 	tOpt.m_eType = SPH_FILTER_FLOATRANGE;
 	tOpt.m_fMinValue = 0.0f;
 	tOpt.m_fMaxValue = 40.0f;
@@ -313,7 +321,7 @@ TEST ( filter_block_level, range_float )
 	ASSERT_FALSE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) ); // FIXME!!! should be TRUE due to m_bOpenLeft option
 
 	///
-	SetDefault ( tOpt );
+	SetDefault ();
 	tOpt.m_eType = SPH_FILTER_FLOATRANGE;
 	tOpt.m_fMinValue = 15.0f;
 	tOpt.m_fMaxValue = 100.0f;
@@ -350,12 +358,11 @@ TEST ( filter_block_level, range_float )
 
 }
 
-TEST ( filter_block_level, values )
+TEST_F ( filter_block_level, values )
 {
 	CSphString sWarning, sError;
 	CSphSchema tSchema;
 	CSphColumnInfo tCol;
-	CSphFilterSettings tOpt;
 	CSphFixedVector<DWORD> dMin ( DWSIZEOF(SphDocID_t) + 1 ), dMax ( DWSIZEOF(SphDocID_t) + 1 );
 	CSphScopedPtr<ISphFilter> tFilter ( NULL );
 
@@ -363,7 +370,6 @@ TEST ( filter_block_level, values )
 	tCol.m_sName = "gid";
 	tSchema.AddAttr ( tCol, false );
 	
-	SetDefault ( tOpt );
 	tOpt.m_eType = SPH_FILTER_VALUES;
 	SphAttr_t dValues[] = { 10, 40, 100 };
 	tOpt.SetExternalValues ( dValues, sizeof ( dValues ) / sizeof ( dValues[0] ) );
@@ -392,7 +398,7 @@ TEST ( filter_block_level, values )
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 
 	/// single value
-	SetDefault ( tOpt );
+	SetDefault ();
 	tOpt.m_eType = SPH_FILTER_VALUES;
 	SphAttr_t dValuesSingle[] = { 10 };
 	tOpt.SetExternalValues ( dValuesSingle, sizeof ( dValuesSingle ) / sizeof ( dValuesSingle[0] ) );
@@ -416,12 +422,11 @@ TEST ( filter_block_level, values )
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 }
 
-TEST ( filter_block_level, and2 )
+TEST_F ( filter_block_level, and2 )
 {
 	CSphString sWarning, sError;
 	CSphSchema tSchema;
 	CSphColumnInfo tCol;
-	CSphFilterSettings tOpt;
 	CSphFixedVector<DWORD> dMin ( DWSIZEOF(SphDocID_t) + 1 ), dMax ( DWSIZEOF(SphDocID_t) + 1 );
 	CSphScopedPtr<ISphFilter> tFilter ( NULL );
 
@@ -429,7 +434,6 @@ TEST ( filter_block_level, and2 )
 	tCol.m_sName = "gid";
 	tSchema.AddAttr ( tCol, false );
 	
-	SetDefault ( tOpt );
 	tOpt.m_eType = SPH_FILTER_VALUES;
 	SphAttr_t dVal1[] = { 10 };
 	tOpt.SetExternalValues ( dVal1, sizeof ( dVal1 ) / sizeof ( dVal1[0] ) );
@@ -462,12 +466,11 @@ TEST ( filter_block_level, and2 )
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 }
 
-TEST ( filter_block_level, and3 )
+TEST_F ( filter_block_level, and3 )
 {
 	CSphString sWarning, sError;
 	CSphSchema tSchema;
 	CSphColumnInfo tCol;
-	CSphFilterSettings tOpt;
 	CSphFixedVector<DWORD> dMin ( DWSIZEOF(SphDocID_t) + 1 ), dMax ( DWSIZEOF(SphDocID_t) + 1 );
 	CSphScopedPtr<ISphFilter> tFilter ( NULL );
 
@@ -475,7 +478,6 @@ TEST ( filter_block_level, and3 )
 	tCol.m_sName = "gid";
 	tSchema.AddAttr ( tCol, false );
 	
-	SetDefault ( tOpt );
 	tOpt.m_eType = SPH_FILTER_VALUES;
 	SphAttr_t dVal1[] = { 10 };
 	tOpt.SetExternalValues ( dVal1, sizeof ( dVal1 ) / sizeof ( dVal1[0] ) );
@@ -514,12 +516,11 @@ TEST ( filter_block_level, and3 )
 	ASSERT_TRUE ( tFilter->EvalBlock ( dMin.Begin(), dMax.Begin() ) );
 }
 
-TEST ( filter_block_level, and )
+TEST_F ( filter_block_level, and )
 {
 	CSphString sWarning, sError;
 	CSphSchema tSchema;
 	CSphColumnInfo tCol;
-	CSphFilterSettings tOpt;
 	CSphFixedVector<DWORD> dMin ( DWSIZEOF(SphDocID_t) + 1 ), dMax ( DWSIZEOF(SphDocID_t) + 1 );
 	CSphScopedPtr<ISphFilter> tFilter ( NULL );
 
@@ -527,7 +528,6 @@ TEST ( filter_block_level, and )
 	tCol.m_sName = "gid";
 	tSchema.AddAttr ( tCol, false );
 	
-	SetDefault ( tOpt );
 	tOpt.m_eType = SPH_FILTER_VALUES;
 	SphAttr_t dVal1[] = { 10 };
 	tOpt.SetExternalValues ( dVal1, sizeof ( dVal1 ) / sizeof ( dVal1[0] ) );

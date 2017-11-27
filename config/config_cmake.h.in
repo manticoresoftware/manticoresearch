@@ -38,7 +38,7 @@
 #cmakedefine HAVE_DLERROR ${HAVE_DLERROR}
 
 /* Define to 1 if you have the `dlopen' function. */
-#cmakedefine HAVE_DLOPEN ${HAVE_DLOPEN}
+#cmakedefine01 HAVE_DLOPEN
 
 /* Define if your system supports the epoll system calls */
 #cmakedefine HAVE_EPOLL ${HAVE_EPOLL}

@@ -39,7 +39,7 @@
 #include <signal.h>
 #include <glob.h>
 
-#ifdef HAVE_DLOPEN
+#if HAVE_DLOPEN
 #include <dlfcn.h>
 #endif // HAVE_DLOPEN
 

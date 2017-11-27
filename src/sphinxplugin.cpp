@@ -20,7 +20,7 @@
 #if !USE_WINDOWS
 #include <unistd.h>
 #include <sys/time.h>
-#ifdef HAVE_DLOPEN
+#if HAVE_DLOPEN
 #include <dlfcn.h>
 #endif // HAVE_DLOPEN
 #endif // !USE_WINDOWS
@@ -146,8 +146,10 @@ PluginLib_c::PluginLib_c ( void * pHandle, const char * sName )
 
 PluginLib_c::~PluginLib_c()
 {
+#if HAVE_DLOPEN
 	int iRes = dlclose ( m_pHandle );
 	sphLogDebug ( "dlclose(%s)=%d", m_sName.cstr(), iRes );
+#endif
 }
 
 PluginDesc_c::PluginDesc_c ( PluginLib_c * pLib )
@@ -291,6 +293,12 @@ static SymbolDesc_t g_dSymbolsQueryTokenFilter[] =
 
 static PluginLib_c * LoadPluginLibrary ( const char * sLibName, CSphString & sError, bool bLinuxReload=false )
 {
+
+#if !HAVE_DLOPEN
+	sError = "no dlopen(), no plugins";
+	return nullptr;
+#else
+
 	CSphString sTmpfile;
 	CSphString sLibfile;
 	sLibfile.SetSprintf ( "%s/%s", g_sPluginDir.cstr(), sLibName );
@@ -303,7 +311,7 @@ static PluginLib_c * LoadPluginLibrary ( const char * sLibName, CSphString & sEr
 		if ( ::rename ( sLibfile.cstr(), sTmpfile.cstr() ) )
 		{
 			sError.SetSprintf ( "failed to rename file (src=%s, dst=%s, errno=%d, error=%s)", sLibfile.cstr(), sTmpfile.cstr(), errno, strerror(errno) );
-			return NULL;
+			return nullptr;
 		}
 	}
 
@@ -347,8 +355,8 @@ static PluginLib_c * LoadPluginLibrary ( const char * sLibName, CSphString & sEr
 		dlclose ( pHandle );
 		return nullptr;
 	}
-
 	return new PluginLib_c ( pHandle, sLibName );
+#endif
 }
 
 

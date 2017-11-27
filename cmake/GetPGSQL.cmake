@@ -93,7 +93,7 @@ endif()
 set ( USE_PGSQL 1 )
 include_directories ( ${PostgreSQL_INCLUDE_DIRS} )
 
-CMAKE_DEPENDENT_OPTION ( DL_PGSQL "load pgsql library dynamically" ON "PostgreSQL_FOUND;HAVE_DL;NOT STATIC_PGSQL" OFF )
+CMAKE_DEPENDENT_OPTION ( DL_PGSQL "load pgsql library dynamically" ON "PostgreSQL_FOUND;HAVE_DLOPEN;NOT STATIC_PGSQL" OFF )
 CMAKE_DEPENDENT_OPTION ( STATIC_PGSQL "link to pgsql library statically" OFF "PostgreSQL_FOUND;NOT DL_PGSQL" OFF )
 if ( STATIC_PGSQL )
 	message ( STATUS "PosgreSQL will be linked statically" )

@@ -687,11 +687,9 @@ void OptimizeRtKlists ( const CSphString & sIndex, const CSphConfig & hConf )
 
 		// fields
 		for ( CSphVariant * v=hIndex("rt_field"); v; v=v->m_pNext )
-		{
-			tCol.m_sName = v->cstr();
-			tSchema.m_dFields.Add ( tCol );
-		}
-		if ( !tSchema.m_dFields.GetLength() )
+			tSchema.AddField ( v->cstr() );
+
+		if ( !tSchema.GetFieldsCount() )
 		{
 			fprintf ( stdout, "index '%s': no fields configured (use rt_field directive) - skiped\n", sIndexName );
 			continue;

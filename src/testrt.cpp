@@ -202,10 +202,13 @@ int main ( int argc, char ** argv )
 		sphDie ( "update-schema failed: %s", sError.cstr() );
 
 	CSphSchema tSchema; // source schema must be all dynamic attrs; but index ones must be static
-	tSchema.m_dFields = tSrcSchema.m_dFields;
+	for ( int i=0; i<tSrcSchema.GetFieldsCount(); i++ )
+		tSchema.AddField ( tSrcSchema.GetField(i) );
+
 	for ( int i=0; i<tSrcSchema.GetAttrsCount(); i++ )
 		tSchema.AddAttr ( tSrcSchema.GetAttr(i), false );
-	g_iFieldsCount = tSrcSchema.m_dFields.GetLength();
+
+	g_iFieldsCount = tSrcSchema.GetFieldsCount();
 
 	CSphConfigSection tRTConfig;
 	sphRTInit ( tRTConfig, true );

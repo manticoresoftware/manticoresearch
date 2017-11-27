@@ -55,7 +55,7 @@ static void AppendJsonKey ( const char * sName, JsonEscapedBuilder & tOut )
 
 static void EncodeResultJson ( const AggrResult_t & tRes, JsonEscapedBuilder & tOut )
 {
-	const CSphRsetSchema & tSchema = tRes.m_tSchema;
+	const ISphSchema & tSchema = tRes.m_tSchema;
 	CSphVector<BYTE> dTmp;
 
 	int iAttrsCount = sphSendGetAttrCount(tSchema);
@@ -85,91 +85,30 @@ static void EncodeResultJson ( const AggrResult_t & tRes, JsonEscapedBuilder & t
 			CSphAttrLocator tLoc = tSchema.GetAttr(iAttr).m_tLocator;
 			ESphAttr eAttrType = tSchema.GetAttr(iAttr).m_eAttrType;
 
+			assert ( sphPlainAttrToPtrAttr(eAttrType)==eAttrType );
+
 			switch ( eAttrType )
 			{
 			case SPH_ATTR_FLOAT:
 				tOut.Appendf ( "%f", tMatch.GetAttrFloat(tLoc) );
 				break;
 
-			case SPH_ATTR_INT64SET:
-			case SPH_ATTR_UINT32SET:
+			case SPH_ATTR_UINT32SET_PTR:
+			case SPH_ATTR_INT64SET_PTR:
 				{
 					tOut += "[";
-					assert ( tMatch.GetAttr ( tLoc )==0 || tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pMva || ( MVA_DOWNSIZE ( tMatch.GetAttr ( tLoc ) ) & MVA_ARENA_FLAG ) );
-					const PoolPtrs_t & tPools = tRes.m_dTag2Pools [ tMatch.m_iTag ];
-					const DWORD * pValues = tMatch.GetAttrMVA ( tLoc, tPools.m_pMva, tPools.m_bArenaProhibit );
-					const char * sSeparator = "";
-					if ( pValues )
-					{
-						DWORD nValues = *pValues++;
-						assert ( eAttrType==SPH_ATTR_UINT32SET || ( nValues%2 )==0 );
-						bool bWide = ( eAttrType==SPH_ATTR_INT64SET );
-						int iStep = ( bWide ? 2 : 1 );
-						for ( ; nValues; nValues-=iStep, pValues+=iStep )
-						{
-							int64_t iVal = ( bWide ? MVA_UPSIZE ( pValues ) : *pValues );
-							tOut.Appendf ( "%s" INT64_FMT, sSeparator, iVal );
-							sSeparator = ",";
-						}
-					}
+					CSphVector<char> dStr;
+					sphPackedMVA2Str ( (const BYTE *)tMatch.GetAttr ( tLoc ), eAttrType==SPH_ATTR_INT64SET_PTR, dStr );
+					dStr.Add('\0');
+					tOut += dStr.Begin();
 					tOut += "]";
-				}
-				break;
-
-			case SPH_ATTR_STRING:
-			case SPH_ATTR_JSON:
-				{
-					const BYTE * pStrings = tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pStrings;
-					bool bStr = ( eAttrType==SPH_ATTR_STRING );
-
-					// get that string
-					const BYTE * pStr = NULL;
-					int iLen = 0;
-					DWORD uOffset = (DWORD) tMatch.GetAttr ( tLoc );
-					assert ( !uOffset || pStrings );
-					if ( uOffset )
-						iLen = sphUnpackStr ( pStrings+uOffset, &pStr );
-
-					if ( eAttrType==SPH_ATTR_JSON )
-					{
-						// no object at all? return NULL
-						if ( !pStr )
-						{
-							tOut += "null";
-							break;
-						}
-						dTmp.Resize ( 0 );
-						sphJsonFormat ( dTmp, pStr );
-						if ( !dTmp.GetLength() )
-						{
-							// empty string (no objects) - return NULL
-							// (canonical "{}" and "[]" are handled by sphJsonFormat)
-							tOut += "null";
-							break;
-						}
-					} else
-					{
-						dTmp.Resize ( iLen );
-						memcpy ( dTmp.Begin(), pStr, iLen );
-					}
-
-					dTmp.Add ( '\0' );
-					if ( bStr )
-					{
-						tOut += "\"";
-						tOut.AppendEscaped ( (const char *)dTmp.Begin(), true, false );
-						tOut += "\"";
-					} else
-					{
-						tOut += (const char *)dTmp.Begin();
-					}
 				}
 				break;
 
 			case SPH_ATTR_STRINGPTR:
 				{
-					const char * pString = (const char *)tMatch.GetAttr ( tLoc );
-					int iLen = pString && *pString ? strlen ( pString ) : 0;
+					const BYTE * pString = (const BYTE *)tMatch.GetAttr ( tLoc );
+					int iLen = sphUnpackPtrAttr ( pString, &pString );
 					dTmp.Resize ( iLen+1 );
 					memcpy ( dTmp.Begin(), pString, iLen );
 					dTmp[iLen] = '\0';
@@ -179,15 +118,43 @@ static void EncodeResultJson ( const AggrResult_t & tRes, JsonEscapedBuilder & t
 				}
 				break;
 
+			case SPH_ATTR_JSON_PTR:
+				{
+					const BYTE * pJSON = (const BYTE *)tMatch.GetAttr ( tLoc );
+					sphUnpackPtrAttr ( pJSON, &pJSON );
+
+					// no object at all? return NULL
+					if ( !pJSON )
+					{
+						tOut += "null";
+						break;
+					}
+
+					dTmp.Resize ( 0 );
+					sphJsonFormat ( dTmp, pJSON );
+					if ( !dTmp.GetLength() )
+					{
+						// empty string (no objects) - return NULL
+						// (canonical "{}" and "[]" are handled by sphJsonFormat)
+						tOut += "null";
+						break;
+					}
+
+					dTmp.Add(0);
+					tOut += (const char *)dTmp.Begin();
+				}
+				break;
+
 			case SPH_ATTR_FACTORS:
 			case SPH_ATTR_FACTORS_JSON:
 				{
-					const unsigned int * pFactors = (unsigned int *)tMatch.GetAttr ( tLoc );
-					if ( pFactors )
+					const BYTE * pFactors = (const BYTE *)tMatch.GetAttr ( tLoc );
+					sphUnpackPtrAttr ( pFactors, &pFactors );
+					if ( !pFactors )
 					{
 						bool bStr = ( eAttrType==SPH_ATTR_FACTORS );
 						dTmp.Resize ( 0 );
-						sphFormatFactors ( dTmp, pFactors, !bStr );
+						sphFormatFactors ( dTmp, (unsigned int *)pFactors, !bStr );
 						dTmp.Add ( '\0' );
 						if ( bStr )
 						{
@@ -195,19 +162,23 @@ static void EncodeResultJson ( const AggrResult_t & tRes, JsonEscapedBuilder & t
 							tOut.AppendEscaped ( (const char *)dTmp.Begin(), true, false );
 							tOut += "\"";
 						} else
-						{
 							tOut += (const char *)dTmp.Begin();
-						}
 					}
 				}
 				break;
 
-			case SPH_ATTR_JSON_FIELD:
+			case SPH_ATTR_JSON_FIELD_PTR:
 				{
-					uint64_t uTypeOffset = tMatch.GetAttr ( tLoc );
-					ESphJsonType eJson = ESphJsonType ( uTypeOffset>>32 );
-					DWORD uOff = (DWORD)uTypeOffset;
-					if ( !uOff || eJson==JSON_NULL )
+					const BYTE * pField = (const BYTE *)tMatch.GetAttr ( tLoc );
+					sphUnpackPtrAttr ( pField, &pField );
+					if ( !pField )
+					{
+						tOut += "null";
+						break;
+					}
+
+					ESphJsonType eJson = ESphJsonType ( *pField++ );
+					if ( eJson==JSON_NULL )
 					{
 						// no key found - NULL value
 						tOut += "null";
@@ -215,8 +186,7 @@ static void EncodeResultJson ( const AggrResult_t & tRes, JsonEscapedBuilder & t
 					{
 						// send string to client
 						dTmp.Resize ( 0 );
-						const BYTE * pStrings = tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pStrings;
-						sphJsonFieldFormat ( dTmp, pStrings+uOff, eJson, true );
+						sphJsonFieldFormat ( dTmp, pField, eJson, true );
 						dTmp.Add ( '\0' );
 						tOut += (const char *)dTmp.Begin();
 					}

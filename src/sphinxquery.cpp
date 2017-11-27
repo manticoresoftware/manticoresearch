@@ -1911,7 +1911,7 @@ CSphString sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSche
 					continue;
 
 				if ( pSchema )
-					sFields.SetSprintf ( "%s,%s", sFields.cstr(), pSchema->m_dFields[i].m_sName.cstr() );
+					sFields.SetSprintf ( "%s,%s", sFields.cstr(), pSchema->GetFieldName(i) );
 				else
 					sFields.SetSprintf ( "%s,%d", sFields.cstr(), pNode->m_dSpec.m_dFieldMask.GetMask32() );
 			}

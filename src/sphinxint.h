@@ -239,7 +239,6 @@ public:
 
 	void			ZipInt ( DWORD uValue );
 	void			ZipOffset ( uint64_t uValue );
-	void			ZipOffsets ( CSphVector<SphOffset_t> * pData );
 
 	bool			IsError () const	{ return m_bError; }
 	SphOffset_t		GetPos () const		{ return m_iPos; }
@@ -494,8 +493,8 @@ public:
 	void						CalcSort ( CSphMatch & tMatch ) const;
 	void						CalcFinal ( CSphMatch & tMatch ) const;
 
-	void						FreeStrFilter ( CSphMatch & tMatch ) const;
-	void						FreeStrSort ( CSphMatch & tMatch ) const;
+	void						FreeDataFilter ( CSphMatch & tMatch ) const;
+	void						FreeDataSort ( CSphMatch & tMatch ) const;
 
 	// note that RT index bind pools at segment searching, not at time it setups context
 	void						ExprCommand ( ESphExprCommand eCmd, void * pArg );
@@ -1909,10 +1908,10 @@ const CP * sphSearchCheckpoint ( const char * sWord, int iWordLen, SphWordID_t i
 }
 
 
-int sphCollateLibcCI ( const BYTE * pStr1, const BYTE * pStr2, bool bPacked );
-int sphCollateLibcCS ( const BYTE * pStr1, const BYTE * pStr2, bool bPacked );
-int sphCollateUtf8GeneralCI ( const BYTE * pArg1, const BYTE * pArg2, bool bPacked );
-int sphCollateBinary ( const BYTE * pStr1, const BYTE * pStr2, bool bPacked );
+int sphCollateLibcCI ( const BYTE * pStr1, const BYTE * pStr2, StringSource_e eStrSource, int iLen1, int iLen2 );
+int sphCollateLibcCS ( const BYTE * pStr1, const BYTE * pStr2, StringSource_e eStrSource, int iLen1, int iLen2 );
+int sphCollateUtf8GeneralCI ( const BYTE * pArg1, const BYTE * pArg2, StringSource_e eStrSource, int iLen1, int iLen2 );
+int sphCollateBinary ( const BYTE * pStr1, const BYTE * pStr2, StringSource_e eStrSource, int iLen1, int iLen2 );
 
 class ISphRtDictWraper : public CSphDict
 {
@@ -2482,6 +2481,24 @@ protected:
 };
 
 
+class MatchesToNewSchema_c : public ISphMatchProcessor
+{
+public:
+							MatchesToNewSchema_c ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema );
+	virtual void			Process ( CSphMatch * pMatch ) override;
+
+protected:
+	const ISphSchema *		m_pOldSchema;
+	const ISphSchema *		m_pNewSchema;
+	CSphVector<CSphAttrLocator>	m_dNewAttrs;
+	CSphVector<int>			m_dOld2New;
+
+	virtual const DWORD *	GetMVAPool ( const CSphMatch * pMatch ) = 0;
+	virtual const BYTE *	GetStringPool ( const CSphMatch * pMatch ) = 0;
+	virtual bool			GetArenaProhibitFlag ( const CSphMatch * pMatch ) = 0;
+};
+
+
 struct StoredToken_t
 {
 	BYTE			m_sToken [3*SPH_MAX_WORD_LEN+4];
@@ -2505,6 +2522,11 @@ CSphSource * sphCreateSourceCSVpipe ( const CSphConfigSection * pSource, FILE * 
 uint64_t sphCalcLocatorHash ( const CSphAttrLocator & tLoc, uint64_t uPrevHash );
 uint64_t sphCalcExprDepHash ( const char * szTag, ISphExpr * pExpr, const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable );
 uint64_t sphCalcExprDepHash ( ISphExpr * pExpr, const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable );
+
+void sphFixupLocator ( CSphAttrLocator & tLocator, const ISphSchema * pOldSchema, const ISphSchema * pNewSchema );
+ISphSchema * sphCreateStandaloneSchema ( const ISphSchema * pSchema );
+
+void sphPackedMVA2Str ( const BYTE * pMVA, bool b64bit, CSphVector<char> & dStr );
 
 // internals attributes are last no need to send them
 int sphSendGetAttrCount ( const ISphSchema & tSchema, bool bAgentMode=false );

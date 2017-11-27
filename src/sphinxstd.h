@@ -4016,6 +4016,43 @@ private:
 };
 
 
+template <typename T>
+inline int sphCalcZippedLen ( T tValue )
+{
+	int nBytes = 1;
+	tValue>>=7;
+	while ( tValue )
+	{
+		tValue >>= 7;
+		nBytes++;
+	}
+
+	return nBytes;
+}
+
+
+template <typename T, typename C>
+inline int sphZipValue ( T tValue, C * pClass, void (C::*fnPut)(int) )
+{
+	int nBytes = sphCalcZippedLen ( tValue );
+	for ( int i = nBytes-1; i>=0; i-- )
+		(pClass->*fnPut) ( ( 0x7f & ( tValue >> (7*i) ) ) | ( i ? 0x80 : 0 ) );
+
+	return nBytes;
+}
+
+
+template <typename T>
+inline int sphZipToPtr ( T tValue, BYTE * pData )
+{
+	int nBytes = sphCalcZippedLen ( tValue );
+	for ( int i = nBytes-1; i>=0; i-- )
+		*pData++ = ( 0x7f & ( tValue >> (7*i) ) ) | ( i ? 0x80 : 0 );
+
+	return nBytes;
+}
+
+
 #endif // _sphinxstd_
 
 //

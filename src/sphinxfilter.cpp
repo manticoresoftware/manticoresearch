@@ -623,7 +623,7 @@ private:
 protected:
 	SphStringCmp_fn			m_fnStrCmp;
 	const BYTE *			m_pStringBase;
-	bool					m_bPacked;
+	StringSource_e			m_eStrSource;
 
 public:
 	FilterString_c ( ESphCollation eCollation, ESphAttr eType, bool bEq )
@@ -631,7 +631,7 @@ public:
 		, m_bEq ( bEq )
 		, m_fnStrCmp ( CmpFn ( eCollation ) )
 		, m_pStringBase ( NULL )
-		, m_bPacked ( eType==SPH_ATTR_STRING )
+		, m_eStrSource ( eType==SPH_ATTR_STRING ? STRING_STATIC : STRING_DATAPTR )
 	{}
 
 	virtual void SetRefString ( const CSphString * pRef, int iCount )
@@ -639,16 +639,17 @@ public:
 		assert ( iCount<2 );
 		const char * sVal = pRef ? pRef->cstr() : NULL;
 		int iLen = pRef ? pRef->Length() : 0;
-		if ( m_bPacked )
+		if ( m_eStrSource==STRING_STATIC )
 		{
+			// pack string as it is stored in index (.sps file)
 			m_dVal.Reset ( iLen+4 );
 			int iPacked = sphPackStrlen ( m_dVal.Begin(), iLen );
 			memcpy ( m_dVal.Begin()+iPacked, sVal, iLen );
 		} else
 		{
-			m_dVal.Reset ( iLen+1 );
-			memcpy ( m_dVal.Begin(), sVal, iLen );
-			m_dVal[iLen] = '\0';
+			// pack string as it is stored in memory
+			m_dVal.Reset ( sphCalcPackedLength ( iLen ) );
+			sphPackPtrAttr ( m_dVal.Begin(), (const BYTE*)sVal, iLen );
 		}
 	}
 
@@ -659,7 +660,7 @@ public:
 
 	virtual bool Eval ( const CSphMatch & tMatch ) const
 	{
-		if ( m_bPacked && !m_pStringBase )
+		if ( m_eStrSource==STRING_STATIC && !m_pStringBase )
 			return !m_bEq;
 
 		SphAttr_t uVal = tMatch.GetAttr ( m_tLocator );
@@ -667,12 +668,15 @@ public:
 		const BYTE * pStr;
 		if ( !uVal )
 			pStr = (const BYTE*)"\0"; // 2 bytes, for packed strings
-		else if ( m_bPacked )
-			pStr = m_pStringBase + uVal;
 		else
-			pStr = (const BYTE *)uVal;
+		{
+			if ( m_eStrSource==STRING_STATIC )
+				pStr = m_pStringBase + uVal;
+			else
+				pStr = (const BYTE *)uVal;
+		}
 
-		bool bEq = ( m_fnStrCmp ( pStr, m_dVal.Begin(), m_bPacked )==0 );
+		bool bEq = m_fnStrCmp ( pStr, m_dVal.Begin(), m_eStrSource, 0, 0 )==0;
 		return ( m_bEq==bEq );
 	}
 };
@@ -698,16 +702,16 @@ struct Filter_StringValues_c: FilterString_c
 			const char * sRef = ( pRef + i )->cstr();
 			int iLen = ( pRef + i )->Length();
 
-			if ( m_bPacked )
+			if ( m_eStrSource==STRING_STATIC )
 			{
 				m_dVal.Resize ( iOfs+iLen+4 );
 				int iPacked = sphPackStrlen ( m_dVal.Begin() + iOfs, iLen );
 				memcpy ( m_dVal.Begin() + iOfs + iPacked, sRef, iLen );
 			} else
 			{
-				m_dVal.Resize ( iOfs+iLen+1 );
-				memcpy ( m_dVal.Begin() + iOfs, sRef, iLen );
-				m_dVal[iOfs+iLen] = '\0';
+				int iPackedLen = sphCalcPackedLength ( iLen );
+				m_dVal.Resize ( iOfs+iPackedLen );
+				sphPackPtrAttr ( m_dVal.Begin() + iOfs, (const BYTE*)sRef, iLen );
 			}
 
 			m_dOfs.Add ( iOfs );
@@ -722,13 +726,16 @@ struct Filter_StringValues_c: FilterString_c
 		const BYTE * pStr;
 		if ( !uVal )
 			pStr = (const BYTE*)"\0";
-		else if ( m_bPacked )
-			pStr = m_pStringBase + uVal;
 		else
-			pStr = (const BYTE *)uVal;
+		{
+			if ( m_eStrSource==STRING_STATIC )
+				pStr = m_pStringBase + uVal;
+			else
+				pStr = (const BYTE *)uVal;
+		}
 
 		ARRAY_FOREACH ( i, m_dOfs )
-			if ( m_fnStrCmp ( pStr, m_dVal.Begin() + m_dOfs[i], m_bPacked )==0 )
+			if ( m_fnStrCmp ( pStr, m_dVal.Begin() + m_dOfs[i], m_eStrSource, 0, 0 )==0 )
 				return true;
 
 		return false;
@@ -1301,14 +1308,15 @@ public:
 class ExprFilterString_c : public ExprFilter_c<ISphFilter>
 {
 protected:
-	CSphFixedVector<BYTE>	m_dVal;
+	CSphString				m_sVal;
+	int						m_iValLength;
 	SphStringCmp_fn			m_fnStrCmp;
 	bool					m_bEq;
 
 public:
 	explicit ExprFilterString_c ( ISphExpr * pExpr, ESphCollation eCollation, bool bEq )
 		: ExprFilter_c<ISphFilter> ( pExpr )
-		, m_dVal ( 0 )
+		, m_iValLength ( 0 )
 		, m_fnStrCmp ( CmpFn ( eCollation ) )
 		, m_bEq ( bEq )
 	{}
@@ -1316,20 +1324,18 @@ public:
 	virtual void SetRefString ( const CSphString * pRef, int iCount )
 	{
 		assert ( iCount<2 );
-		const char * sVal = pRef ? pRef->cstr() : NULL;
-		int iLen = pRef ? pRef->Length() : 0;
-		m_dVal.Reset ( iLen+4 );
-		int iPacked = sphPackStrlen ( m_dVal.Begin(), iLen );
-		memcpy ( m_dVal.Begin()+iPacked, sVal, iLen );
+		if ( pRef )
+		{
+			m_sVal = *pRef;
+			m_iValLength = m_sVal.Length();
+		}
 	}
 
 	virtual bool Eval ( const CSphMatch & tMatch ) const
 	{
 		const BYTE * pVal;
 		int iLen = m_pExpr->StringEval ( tMatch, &pVal );
-		int iPacked = iLen==0 ? 0 : iLen < 0x80 ? 1 : iLen < 0x4000 ? 2 : 3;
-		pVal = iLen ? pVal : (const BYTE*)"\0";
-		bool bEq = ( m_fnStrCmp ( pVal-iPacked, m_dVal.Begin(), true )==0 );
+		bool bEq = m_fnStrCmp ( pVal, (const BYTE*)m_sVal.cstr(), STRING_PLAIN, iLen, m_iValLength )==0;
 		return ( m_bEq==bEq );
 	}
 };

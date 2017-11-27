@@ -81,7 +81,7 @@ public:
 	bool IterateStart ( CSphString & )
 	{
 		m_tDocInfo.Reset ( m_tSchema.GetRowSize () );
-		m_iPlainFieldsLength = m_tSchema.m_dFields.GetLength ();
+		m_iPlainFieldsLength = m_tSchema.GetFieldsCount();
 		return true;
 	}
 
@@ -153,7 +153,7 @@ public:
 	bool IterateStart ( CSphString & )
 	{
 		m_tDocInfo.Reset ( m_tSchema.GetRowSize () );
-		m_iPlainFieldsLength = m_tSchema.m_dFields.GetLength ();
+		m_iPlainFieldsLength = m_tSchema.GetFieldsCount();
 		return true;
 	}
 
@@ -185,12 +185,8 @@ protected:
 		pTok = sphCreateUTF8Tokenizer ();
 
 		tSrcSchema.Reset ();
-
-		tCol.m_sName = "title";
-		tSrcSchema.m_dFields.Add ( tCol );
-
-		tCol.m_sName = "content";
-		tSrcSchema.m_dFields.Add ( tCol );
+		tSrcSchema.AddField ( "title" );
+		tSrcSchema.AddField ( "content" );
 	}
 
 	virtual void TearDown ()
@@ -238,9 +234,11 @@ TEST_P ( RTN, WeightBoundary )
 	EXPECT_TRUE ( pSrc->UpdateSchema ( &tSrcSchema, sError ) );
 
 	CSphSchema tSchema; // source schema must be all dynamic attrs; but index ones must be static
-	tSchema.m_dFields = tSrcSchema.m_dFields;
-	for ( int i = 0; i<tSrcSchema.GetAttrsCount (); i++ )
-		tSchema.AddAttr ( tSrcSchema.GetAttr ( i ), false );
+	for ( int i=0; i<tSrcSchema.GetFieldsCount(); i++ )
+		tSchema.AddField ( tSrcSchema.GetField(i) );
+
+	for ( int i=0; i<tSrcSchema.GetAttrsCount(); i++ )
+		tSchema.AddAttr ( tSrcSchema.GetAttr(i), false );
 
 	ISphRtIndex * pIndex = sphCreateIndexRT ( tSchema, "testrt", 32 * 1024 * 1024, RT_INDEX_FILE_NAME, false );
 
@@ -338,9 +336,11 @@ TEST_F ( RT, RankerFactors )
 	ASSERT_TRUE ( pSrc->UpdateSchema ( &tSrcSchema, sError ) );
 
 	CSphSchema tSchema; // source schema must be all dynamic attrs; but index ones must be static
-	tSchema.m_dFields = tSrcSchema.m_dFields;
-	for ( int i = 0; i<tSrcSchema.GetAttrsCount (); i++ )
-		tSchema.AddAttr ( tSrcSchema.GetAttr ( i ), false );
+	for ( int i=0; i<tSrcSchema.GetFieldsCount(); i++ )
+		tSchema.AddField ( tSrcSchema.GetField(i) );
+
+	for ( int i=0; i<tSrcSchema.GetAttrsCount(); i++ )
+		tSchema.AddAttr ( tSrcSchema.GetAttr(i), false );
 
 	auto pIndex = sphCreateIndexRT ( tSchema, "testrt", 128 * 1024, RT_INDEX_FILE_NAME, false );
 
@@ -381,23 +381,26 @@ TEST_F ( RT, RankerFactors )
 	tQueueSettings.m_bComputeItems = true;
 	tArgs.m_uPackedFactorFlags = SPH_FACTOR_ENABLE | SPH_FACTOR_CALC_ATC;
 
-	auto pSorter = sphCreateQueue ( tQueueSettings );
-	ASSERT_TRUE ( pSorter );
-
-	for ( int iQuery = 0; ( uint64_t ) iQuery<sizeof ( dQueries ) / sizeof ( dQueries[0] ); iQuery++ )
+	for ( auto szQuery : dQueries )
 	{
-		tQuery.m_sQuery = dQueries[iQuery];
+		tQuery.m_sQuery = szQuery;
 
+		auto pSorter = sphCreateQueue ( tQueueSettings );
+		ASSERT_TRUE ( pSorter );
 		ASSERT_TRUE ( pIndex->MultiQuery ( &tQuery, &tResult, 1, &pSorter, tArgs ) );
 		sphFlattenQueue ( pSorter, &tResult, 0 );
 
-		tResult.m_tSchema = pSorter->GetSchema (); // can SwapOut
+		tResult.m_tSchema = *pSorter->GetSchema ();
 		const CSphAttrLocator &tLoc = tResult.m_tSchema.GetAttr ( "pf" )->m_tLocator;
 
 		for ( int iMatch = 0; iMatch<tResult.m_dMatches.GetLength (); iMatch++ )
 		{
-			const unsigned int * pFactors = ( const unsigned int * ) tResult.m_dMatches[iMatch].GetAttr ( tLoc );
-			ASSERT_TRUE ( pFactors );
+			const BYTE * pAttr = (const BYTE *)tResult.m_dMatches[iMatch].GetAttr ( tLoc );
+			ASSERT_TRUE ( pAttr );
+
+			sphUnpackPtrAttr ( pAttr, &pAttr );
+
+			const unsigned int * pFactors = (const unsigned int *)pAttr;
 
 			SPH_UDF_FACTORS tUnpacked;
 			sphinx_factors_init ( &tUnpacked );
@@ -464,11 +467,12 @@ TEST_F ( RT, RankerFactors )
 			}
 
 			sphinx_factors_deinit ( &tUnpacked );
+
+			SafeDelete ( pSorter );
 		}
 	}
 
 	SafeDelete ( tQuery.m_pQueryParser );
-	SafeDelete ( pSorter );
 	SafeDelete ( pIndex );
 	SafeDelete ( pSrc );
 	pTok = nullptr; // owned and deleted by index
@@ -505,9 +509,11 @@ TEST_F ( RT, SendVsMerge )
 	ASSERT_TRUE ( pSrc->UpdateSchema ( &tSrcSchema, sError ) );
 
 	CSphSchema tSchema; // source schema must be all dynamic attrs; but index ones must be static
-	tSchema.m_dFields = tSrcSchema.m_dFields;
-	for ( int i = 0; i<tSrcSchema.GetAttrsCount (); i++ )
-		tSchema.AddAttr ( tSrcSchema.GetAttr ( i ), false );
+	for ( int i=0; i<tSrcSchema.GetFieldsCount(); i++ )
+		tSchema.AddField ( tSrcSchema.GetField(i) );
+
+	for ( int i=0; i<tSrcSchema.GetAttrsCount(); i++ )
+		tSchema.AddAttr ( tSrcSchema.GetAttr(i), false );
 
 	ISphRtIndex * pIndex = sphCreateIndexRT ( tSchema, "testrt", 128 * 1024, RT_INDEX_FILE_NAME, false );
 
@@ -549,7 +555,7 @@ TEST_F ( RT, SendVsMerge )
 
 	pSrc->Disconnect ();
 
-	tResult.m_tSchema = pSorter->GetSchema (); // can SwapOut
+	tResult.m_tSchema = *pSorter->GetSchema ();
 
 	for ( int i = 0; i<tResult.m_dMatches.GetLength (); i++ )
 	{

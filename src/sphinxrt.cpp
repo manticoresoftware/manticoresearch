@@ -1502,8 +1502,8 @@ public:
 	bool		Connect ( CSphString & ) override;
 	void		Disconnect () override;
 
-	bool		HasAttrsConfigured () override { return false; }
-	bool		IterateStart ( CSphString & ) override { m_iPlainFieldsLength = m_tSchema.m_dFields.GetLength(); return true; }
+	virtual bool HasAttrsConfigured () { return false; }
+	virtual bool IterateStart ( CSphString & ) override { m_iPlainFieldsLength = m_tSchema.GetFieldsCount(); return true; }
 
 	bool		IterateMultivaluedStart ( int, CSphString & ) override { return false; }
 	bool		IterateMultivaluedNext () override { return false; }
@@ -1913,9 +1913,9 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bRe
 	{
 		int iFirst = tSchema.GetAttrId_FirstFieldLen();
 		assert ( tSchema.GetAttr ( iFirst ).m_eAttrType==SPH_ATTR_TOKENCOUNT );
-		assert ( tSchema.GetAttr ( iFirst+tSchema.m_dFields.GetLength()-1 ).m_eAttrType==SPH_ATTR_TOKENCOUNT );
+		assert ( tSchema.GetAttr ( iFirst+tSchema.GetFieldsCount()-1 ).m_eAttrType==SPH_ATTR_TOKENCOUNT );
 		pFieldLens = pAttrs + ( tSchema.GetAttr ( iFirst ).m_tLocator.m_iBitOffset / 32 );
-		memset ( pFieldLens, 0, sizeof(int)*tSchema.m_dFields.GetLength() ); // NOLINT
+		memset ( pFieldLens, 0, sizeof(int)*tSchema.GetFieldsCount() ); // NOLINT
 	}
 
 	// accumulate hits
@@ -2977,7 +2977,7 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 	if ( pNewSeg && iFirstFieldLenAttr>=0 )
 	{
 		assert ( pNewSeg->GetStride()==m_iStride );
-		int iFields = m_tSchema.m_dFields.GetLength(); // shortcut
+		int iFields = m_tSchema.GetFieldsCount(); // shortcut
 		dLens.Resize ( iFields );
 		dLens.Fill ( 0 );
 		for ( int i=0; i<pNewSeg->m_iRows; i++ )
@@ -3268,7 +3268,7 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 	m_tStats.m_iTotalDocuments += iNewDocs - iTotalKilled;
 
 	if ( m_tSchema.GetAttrId_FirstFieldLen()>=0 )
-		ARRAY_FOREACH ( i, m_tSchema.m_dFields )
+		for ( int i = 0; i < m_tSchema.GetFieldsCount(); i++ )
 		{
 			m_dFieldLensRam[i] += dLens[i];
 			m_dFieldLens[i] = m_dFieldLensRam[i] + m_dFieldLensDisk[i];
@@ -3974,7 +3974,7 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, SphDocID_t iMinDocID, i
 
 	// field lengths
 	if ( m_tSettings.m_bIndexFieldLens )
-		ARRAY_FOREACH ( i, m_tSchema.m_dFields )
+		for ( int i=0; i <m_tSchema.GetFieldsCount(); i++ )
 			tWriter.PutOffset ( tStats.m_dFieldLens[i] );
 
 	// done
@@ -4351,7 +4351,7 @@ bool RtIndex_t::Prealloc ( bool bStripPath )
 		{
 			int64_t * pLens = pIndex->GetFieldLens();
 			if ( pLens )
-				ARRAY_FOREACH ( i, pIndex->GetMatchSchema().m_dFields )
+				for ( int i=0; i < pIndex->GetMatchSchema().GetFieldsCount(); i++ )
 					m_dFieldLensDisk[i] += pLens[i];
 		}
 	}
@@ -4512,8 +4512,8 @@ bool RtIndex_t::SaveRamChunk ()
 	}
 
 	// field lengths
-	wrChunk.PutDword ( m_tSchema.m_dFields.GetLength() );
-	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
+	wrChunk.PutDword ( m_tSchema.GetFieldsCount() );
+	for ( int i=0; i < m_tSchema.GetFieldsCount(); i++ )
 		wrChunk.PutOffset ( m_dFieldLensRam[i] );
 
 	wrChunk.CloseFile();
@@ -4669,7 +4669,7 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 	if ( uVersion>=10 )
 	{
 		int iFields = rdChunk.GetDword();
-		assert ( iFields==m_tSchema.m_dFields.GetLength() );
+		assert ( iFields==m_tSchema.GetFieldsCount() );
 
 		for ( int i=0; i<iFields; i++ )
 			m_dFieldLensRam[i] = rdChunk.GetOffset();
@@ -5119,12 +5119,12 @@ int RtIndex_t::DebugCheck ( FILE * fp )
 							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, (uint64_t)tDoc.m_uDocID ));
 					}
 
-					if ( (int)uFieldId>m_tSchema.m_dFields.GetLength() || uFieldId>SPH_MAX_FIELDS )
+					if ( (int)uFieldId>m_tSchema.GetFieldsCount() || uFieldId>SPH_MAX_FIELDS )
 					{
 						LOC_FAIL(( fp, "invalid field id in an embedded hit (segment=%d, word=%d, "
 							"wordid=" UINT64_FMT ", docid=" UINT64_FMT ", field_id=%u, total_fields=%d)",
 							iSegment, nWordsRead,
-							(uint64_t)tWord.m_uWordID, (uint64_t)tDoc.m_uDocID, uFieldId, m_tSchema.m_dFields.GetLength() ));
+							(uint64_t)tWord.m_uWordID, (uint64_t)tDoc.m_uDocID, uFieldId, m_tSchema.GetFieldsCount() ));
 					}
 
 					if ( !( tDoc.m_uDocFields & ( 1 << uFieldId ) ) )
@@ -5174,12 +5174,12 @@ int RtIndex_t::DebugCheck ( FILE * fp )
 						bool bLastInField = HITMAN::IsEnd ( uHitlistEntry );
 						DWORD uFieldId = HITMAN::GetField ( uHitlistEntry );
 
-						if ( (int)uFieldId>m_tSchema.m_dFields.GetLength() || uFieldId>SPH_MAX_FIELDS )
+						if ( (int)uFieldId>m_tSchema.GetFieldsCount() || uFieldId>SPH_MAX_FIELDS )
 						{
 							LOC_FAIL(( fp, "invalid field id in a hitlist (segment=%d, word=%d, "
 								"wordid=" UINT64_FMT ", docid=" UINT64_FMT ", field_id=%u, total_fields=%d)",
 								iSegment, nWordsRead,
-								(uint64_t)tWord.m_uWordID, (uint64_t)tDoc.m_uDocID, uFieldId, m_tSchema.m_dFields.GetLength() ));
+								(uint64_t)tWord.m_uWordID, (uint64_t)tDoc.m_uDocID, uFieldId, m_tSchema.GetFieldsCount() ));
 						}
 
 						if ( !( tDoc.m_uDocFields & ( 1 << uFieldId ) ) )
@@ -5216,11 +5216,11 @@ int RtIndex_t::DebugCheck ( FILE * fp )
 					uPrevHitOffset = tDoc.m_uHit;
 				}
 
-				DWORD uAvailFieldMask = ( 1 << m_tSchema.m_dFields.GetLength() ) - 1;
+				DWORD uAvailFieldMask = ( 1 << m_tSchema.GetFieldsCount() ) - 1;
 				if ( tDoc.m_uDocFields & ~uAvailFieldMask )
 				{
 					LOC_FAIL(( fp, "wrong document field mask (segment=%d, word=%d, wordid=" UINT64_FMT ", docid=" UINT64_FMT ", mask=%u, total_fields=%d",
-						iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, (uint64_t)tDoc.m_uDocID, tDoc.m_uDocFields, m_tSchema.m_dFields.GetLength() ));
+						iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, (uint64_t)tDoc.m_uDocID, tDoc.m_uDocFields, m_tSchema.GetFieldsCount() ));
 				}
 
 				if ( tSegment.GetKlist().BinarySearch ( tDoc.m_uDocID ) )
@@ -6723,171 +6723,6 @@ struct SphFinalMatchCounter_t : ISphMatchProcessor
 	}
 };
 
-struct SphFinalMatchCopy_t : ISphMatchProcessor
-{
-	CSphRowitem *	m_pStorage;
-	int				m_iSegments;
-	int				m_iStaticSize;
-	bool			m_bForce;
-#ifndef NDEBUG
-	CSphRowitem * m_pEnd;
-#endif
-
-	SphFinalMatchCopy_t ( CSphRowitem * pStorage, int iSegments, int iStaticSize, bool bForce )
-		: m_pStorage ( pStorage )
-		, m_iSegments ( iSegments )
-		, m_iStaticSize ( iStaticSize )
-		, m_bForce ( bForce )
-	{ }
-
-	virtual void Process ( CSphMatch * pMatch )
-	{
-		const int iMatchSegment = pMatch->m_iTag-1;
-		if ( pMatch->m_pStatic && ( m_bForce || ( iMatchSegment>=0 && iMatchSegment<m_iSegments ) ) )
-		{
-			assert ( m_pStorage+m_iStaticSize<=m_pEnd );
-
-			memcpy ( m_pStorage, STATIC2DOCINFO ( pMatch->m_pStatic ), sizeof(CSphRowitem)*m_iStaticSize );
-			pMatch->m_pStatic = DOCINFO2ATTRS ( m_pStorage );
-			DOCINFOSETID ( m_pStorage, (SphDocID_t)0 ); // the zero docid will show that the data was copied
-			m_pStorage += m_iStaticSize;
-		}
-	}
-};
-
-struct SphFinalArenaCopy_t : ISphMatchProcessor
-{
-	const CSphFixedVector<const RtSegment_t *> & m_dSegments;
-	const CSphVector<const BYTE *> & m_dDiskStrings;
-	const CSphVector<const DWORD *> & m_dDiskMva;
-	const CSphVector<CSphAttrTypedLocator> & m_dGetLoc;
-	const CSphVector<CSphAttrLocator> & m_dSetLoc;
-
-	CSphFixedVector<int> m_dJsonAssoc;
-	CSphVector<DWORD> m_dOriginalJson;
-	CSphVector<DWORD> m_dMovedJson;
-
-	CSphTightVector<BYTE> m_dStorageString;
-	CSphTightVector<DWORD> m_dStorageMva;
-	const CSphBitvec & m_dMvaArenaFlag;
-
-	SphFinalArenaCopy_t ( const CSphFixedVector<const RtSegment_t *> & dSegments, const CSphVector<const BYTE *> & dDiskStrings,
-		const CSphVector<const DWORD *> & dDiskMva, const CSphVector<CSphAttrTypedLocator> & dGetLoc, const CSphVector<CSphAttrLocator> & dSetLoc,
-		int iJsonFields, CSphBitvec & dMvaArenaFlag )
-		: m_dSegments ( dSegments )
-		, m_dDiskStrings ( dDiskStrings )
-		, m_dDiskMva ( dDiskMva )
-		, m_dGetLoc ( dGetLoc )
-		, m_dSetLoc ( dSetLoc )
-		, m_dJsonAssoc ( iJsonFields )
-		, m_dMvaArenaFlag ( dMvaArenaFlag )
-	{
-		m_dStorageString.Add ( 0 );
-		m_dStorageMva.Add ( 0 );
-		ARRAY_FOREACH ( i, m_dJsonAssoc )
-			m_dJsonAssoc[i] = -1;
-	}
-
-	virtual void Process ( CSphMatch * pMatch )
-	{
-		assert ( pMatch->m_iTag>=1 && pMatch->m_iTag<m_dSegments.GetLength()+m_dDiskStrings.GetLength()+1 );
-
-		if ( !pMatch->m_pStatic )
-			return;
-
-		const int iSegCount = m_dSegments.GetLength();
-		const int iStorageSrc = pMatch->m_iTag-1;
-		bool bSegmentMatch = ( iStorageSrc<iSegCount );
-		const BYTE * pBaseString = bSegmentMatch ? m_dSegments[iStorageSrc]->m_dStrings.Begin() : m_dDiskStrings[ iStorageSrc-iSegCount ];
-		const DWORD * pBaseMva = bSegmentMatch ? m_dSegments[iStorageSrc]->m_dMvas.Begin() : m_dDiskMva[ iStorageSrc-iSegCount ];
-		bool bArenaProhibit = bSegmentMatch ? true : m_dMvaArenaFlag.BitGet ( iStorageSrc-iSegCount );
-
-		int iJson = 0;
-		m_dOriginalJson.Resize ( 0 );
-		m_dMovedJson.Resize ( 0 );
-
-		ARRAY_FOREACH ( i, m_dGetLoc )
-		{
-			int64_t iAttr = 0;
-			const CSphAttrTypedLocator& tLoc = m_dGetLoc[i];
-
-			switch ( tLoc.m_eAttrType )
-			{
-			case SPH_ATTR_STRING:
-			case SPH_ATTR_JSON:
-			{
-				const SphAttr_t uOff = pMatch->GetAttr ( tLoc );
-				DWORD uRebased = 0;
-				if ( uOff>0 )
-				{
-					assert ( uOff<( I64C(1)<<32 ) ); // should be 32 bit offset
-					assert ( !bSegmentMatch || (int)uOff<m_dSegments[iStorageSrc]->m_dStrings.GetLength() );
-					uRebased = CopyPackedString ( pBaseString + uOff, m_dStorageString );
-					iAttr = uRebased;
-				}
-
-				// store the map of full jsons in order to map json fields
-				// note that m_dJsonAssoc mapping is calculated only once (see the m_dJsonAssoc[iJson]<0 condition)
-				// we have to consider empty fields too (if any) otherwise mapping will be incorrect or out of bounds
-				if ( tLoc.m_eAttrType==SPH_ATTR_JSON && m_dJsonAssoc.GetLength() )
-				{
-					m_dOriginalJson.Add ( (DWORD)uOff );
-					m_dMovedJson.Add ( uRebased );
-				}
-			}
-			break;
-			case SPH_ATTR_UINT32SET:
-			case SPH_ATTR_INT64SET:
-			{
-				const DWORD * pMva = pMatch->GetAttrMVA ( tLoc, pBaseMva, bArenaProhibit );
-				// have to fix up only existed attribute
-				if ( pMva )
-				{
-					assert ( ( pMatch->GetAttr ( tLoc ) & MVA_ARENA_FLAG )<( I64C(1)<<32 ) ); // should be 32 bit offset
-					assert ( !bSegmentMatch || (int)pMatch->GetAttr ( tLoc )<m_dSegments[iStorageSrc]->m_dMvas.GetLength() );
-					iAttr = CopyMva ( pMva, m_dStorageMva );
-				}
-			}
-			break;
-			case SPH_ATTR_JSON_FIELD:
-			{
-				iAttr = pMatch->GetAttr ( tLoc );
-				if ( iAttr )
-				{
-					ESphJsonType eJson = ESphJsonType ( iAttr>>32 );
-					DWORD uOff = (DWORD)iAttr;
-					if ( m_dJsonAssoc[iJson]<0 )
-					{
-						// tricky part. We have packed json field, but it points somewhere into original json.
-						// since all jsons already relocated, we have to find the original (source) and recalculate the locator
-						int k = -1;
-						int iDistance = -1;
-						ARRAY_FOREACH ( j, m_dOriginalJson )
-							if ( iDistance<0 || ( uOff>=m_dOriginalJson[j] && uOff<( m_dOriginalJson[j]+iDistance ) ) )
-							{
-								iDistance = uOff - m_dOriginalJson[j];
-								k = j;
-							}
-						assert ( k>=0 );
-						m_dJsonAssoc[iJson] = k;
-					}
-					DWORD uNew = m_dMovedJson [ m_dJsonAssoc[iJson] ] - m_dOriginalJson [ m_dJsonAssoc[iJson] ] + uOff;
-					++iJson;
-					iAttr = ( ( (int64_t)uNew ) | ( ( (int64_t)eJson )<<32 ) );
-				}
-			}
-			break;
-			default:
-				break;
-			}
-
-			const CSphAttrLocator & tSet = m_dSetLoc[i];
-			assert ( !tSet.m_bDynamic || tSet.GetMaxRowitem() < (int)pMatch->m_pDynamic[-1] );
-			sphSetRowAttr ( tSet.m_bDynamic ? pMatch->m_pDynamic : const_cast<CSphRowitem*>( pMatch->m_pStatic ), tSet, iAttr );
-		}
-	}
-};
-
 
 struct SphRtFinalMatchCalc_t : ISphMatchProcessor, ISphNoncopyable
 {
@@ -6938,6 +6773,71 @@ struct SphRtFinalMatchCalc_t : ISphMatchProcessor, ISphNoncopyable
 			m_dSegments.BitSet ( iMatchSegment );
 	}
 };
+
+
+class RTMatchesToNewSchema_c : public MatchesToNewSchema_c
+{
+public:
+	RTMatchesToNewSchema_c ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema, const SphChunkGuard_t & tGuard, const CSphVector<const DWORD *> & dMVA, const CSphVector<const BYTE *> & dStrings, const CSphBitvec & tMvaArenaFlag )
+		: MatchesToNewSchema_c ( pOldSchema, pNewSchema )
+		, m_tGuard ( tGuard )
+		, m_dDiskMVA ( dMVA )
+		, m_dDiskStrings ( dStrings )
+		, m_tMvaArenaFlag ( tMvaArenaFlag )
+	{}
+
+protected:
+	const SphChunkGuard_t &				m_tGuard;
+	const CSphVector<const DWORD *> &	m_dDiskMVA;
+	const CSphVector<const BYTE *> &	m_dDiskStrings;
+	const CSphBitvec &					m_tMvaArenaFlag;
+
+	virtual const DWORD * GetMVAPool ( const CSphMatch * pMatch ) override
+	{
+		int nRamChunks = m_tGuard.m_dRamChunks.GetLength();
+		int iChunkId = pMatch->m_iTag-1;
+		if ( iChunkId < nRamChunks )
+			return m_tGuard.m_dRamChunks[iChunkId]->m_dMvas.Begin();
+
+		return m_dDiskMVA[iChunkId-nRamChunks];
+	}
+
+	virtual const BYTE * GetStringPool ( const CSphMatch * pMatch ) override
+	{
+		int nRamChunks = m_tGuard.m_dRamChunks.GetLength();
+		int iChunkId = pMatch->m_iTag-1;
+		if ( iChunkId < nRamChunks )
+			return m_tGuard.m_dRamChunks[iChunkId]->m_dStrings.Begin();
+
+		return m_dDiskStrings[iChunkId-nRamChunks];
+	}
+
+	virtual bool GetArenaProhibitFlag ( const CSphMatch * pMatch ) override
+	{
+		int nRamChunks = m_tGuard.m_dRamChunks.GetLength();
+		int iChunkId = pMatch->m_iTag-1;
+		if ( iChunkId < nRamChunks )
+			return false;
+
+		return m_tMvaArenaFlag.BitGet ( iChunkId-nRamChunks );
+	}
+};
+
+
+static void TransformSorterSchema ( ISphMatchSorter * pSorter, const SphChunkGuard_t & tGuard, const CSphVector<const DWORD *> & dMVA, const CSphVector<const BYTE *> & dStrings, const CSphBitvec & tMvaArenaFlag )
+{
+	assert ( pSorter );
+
+	const ISphSchema * pOldSchema = pSorter->GetSchema();
+	ISphSchema * pNewSchema =  sphCreateStandaloneSchema ( pOldSchema );
+	assert ( pOldSchema && pNewSchema );
+
+	RTMatchesToNewSchema_c fnFinal ( pOldSchema, pNewSchema, tGuard, dMVA, dStrings, tMvaArenaFlag );
+	pSorter->Finalize ( fnFinal, false );
+
+	pSorter->SetSchema ( pNewSchema );
+	SafeDelete ( pOldSchema );
+}
 
 
 void RtIndex_t::GetReaderChunks ( SphChunkGuard_t & tGuard ) const NO_THREAD_SAFETY_ANALYSIS
@@ -7109,9 +7009,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	CSphVector<const DWORD *> dDiskMva ( tGuard.m_dDiskChunks.GetLength() );
 	CSphBitvec tMvaArenaFlag ( tGuard.m_dDiskChunks.GetLength() );
 	if ( tGuard.m_dDiskChunks.GetLength() )
-	{
 		m_tKlist.Flush ( dCumulativeKList );
-	}
 
 	for ( int iChunk = tGuard.m_dDiskChunks.GetLength()-1; iChunk>=0; iChunk-- )
 	{
@@ -7176,6 +7074,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		tMultiArgs.m_pLocalDocs = pLocalDocs;
 		tMultiArgs.m_iTotalDocs = iTotalDocs;
 
+		// we use sorters in both disk chunks and ram chunks, that's why we don't want to move to a new schema before we searched ram chunks
+		tMultiArgs.m_bModifySorterSchemas = false;
+
 		if ( !tGuard.m_dDiskChunks[iChunk]->MultiQuery ( pQuery, &tChunkResult, iSorters, ppSorters, tMultiArgs ) )
 		{
 			// FIXME? maybe handle this more gracefully (convert to a warning)?
@@ -7212,11 +7113,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		pResult->m_iBadRows += tChunkResult.m_iBadRows;
 
 		if ( pResult->m_bHasPrediction )
-		{
-			pResult->m_tStats.m_iFetchedDocs += tChunkResult.m_tStats.m_iFetchedDocs;
-			pResult->m_tStats.m_iFetchedHits += tChunkResult.m_tStats.m_iFetchedHits;
-			pResult->m_tStats.m_iSkips += tChunkResult.m_tStats.m_iSkips;
-		}
+			pResult->m_tStats.Add ( tChunkResult.m_tStats );
 
 		if ( iChunk && tmMaxTimer>0 && sphMicroTimer()>=tmMaxTimer )
 		{
@@ -7240,12 +7137,14 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	ARRAY_FOREACH ( i, dSorters )
 	{
 		iMatchPoolSize += dSorters[i]->m_iMatchCapacity;
-		if ( dSorters[i]->GetSchema ().GetAttrsCount ()>iMaxSchemaSize )
+		if ( dSorters[i]->GetSchema ()->GetAttrsCount ()>iMaxSchemaSize )
 		{
-			iMaxSchemaSize = dSorters[i]->GetSchema ().GetAttrsCount ();
+			iMaxSchemaSize = dSorters[i]->GetSchema ()->GetAttrsCount ();
 			iMaxSchemaIndex = i;
 		}
 	}
+
+	const ISphSchema & tMaxSorterSchema = *(dSorters[iMaxSchemaIndex]->GetSchema());
 
 	CSphVector< const ISphSchema * > dSorterSchemas;
 	SorterSchemas ( dSorters.Begin(), dSorters.GetLength(), iMaxSchemaIndex, dSorterSchemas );
@@ -7253,7 +7152,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	// setup calculations and result schema
 	CSphQueryContext tCtx ( *pQuery );
 	tCtx.m_pProfile = pProfiler;
-	if ( !tCtx.SetupCalc ( pResult, dSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, NULL, false, dSorterSchemas ) )
+	if ( !tCtx.SetupCalc ( pResult, tMaxSorterSchema, m_tSchema, NULL, false, dSorterSchemas ) )
 		return false;
 
 	tCtx.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
@@ -7265,7 +7164,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	tTermSetup.m_pDict = pDict;
 	tTermSetup.m_pIndex = this;
 	tTermSetup.m_eDocinfo = m_tSettings.m_eDocinfo;
-	tTermSetup.m_iDynamicRowitems = dSorters[iMaxSchemaIndex]->GetSchema().GetDynamicSize();
+	tTermSetup.m_iDynamicRowitems = tMaxSorterSchema.GetDynamicSize();
 	if ( pQuery->m_uMaxQueryMsec>0 )
 		tTermSetup.m_iMaxTimer = sphMicroTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
 	tTermSetup.m_pWarning = &pResult->m_sWarning;
@@ -7359,12 +7258,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		// set zonespanlist settings
 		tParsed.m_bNeedSZlist = pQuery->m_bZSlist;
 
-		if ( pProfiler )
-			pProfiler->Switch ( SPH_QSTATE_INIT );
-
 		// setup query
 		// must happen before index-level reject, in order to build proper keyword stats
-		pRanker = sphCreateRanker ( tParsed, pQuery, pResult, tTermSetup, tCtx, dSorters[iMaxSchemaIndex]->GetSchema() );
+		pRanker = sphCreateRanker ( tParsed, pQuery, pResult, tTermSetup, tCtx, tMaxSorterSchema );
 		if ( !pRanker.Ptr() )
 			return false;
 
@@ -7388,6 +7284,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	// empty index, empty result
 	if ( !tGuard.m_dRamChunks.GetLength() && !tGuard.m_dDiskChunks.GetLength() )
 	{
+		for ( auto i : dSorters )
+			TransformSorterSchema ( i, tGuard, dDiskMva, dDiskStrings, tMvaArenaFlag );
+
 		pResult->m_iQueryTime = 0;
 		return true;
 	}
@@ -7403,7 +7302,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		// setup filters
 		// FIXME! setup filters MVA pool
 		bool bFullscan = pQuery->m_pQueryParser->IsFullscan ( *pQuery ) || pQuery->m_pQueryParser->IsFullscan ( tParsed );
-		if ( !tCtx.CreateFilters ( bFullscan, &pQuery->m_dFilters, dSorters[iMaxSchemaIndex]->GetSchema(), NULL, NULL, pResult->m_sError, pResult->m_sWarning, pQuery->m_eCollation, false, KillListVector(), &pQuery->m_dFilterTree ) )
+		if ( !tCtx.CreateFilters ( bFullscan, &pQuery->m_dFilters, tMaxSorterSchema, NULL, NULL, pResult->m_sError, pResult->m_sWarning, pQuery->m_eCollation, false, KillListVector(), &pQuery->m_dFilterTree ) )
 			return false;
 
 		// FIXME! OPTIMIZE! check if we can early reject the whole index
@@ -7433,7 +7332,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 			// full scan
 			// FIXME? OPTIMIZE? add shortcuts here too?
 			CSphMatch tMatch;
-			tMatch.Reset ( dSorters[iMaxSchemaIndex]->GetSchema().GetDynamicSize() );
+			tMatch.Reset ( tMaxSorterSchema.GetDynamicSize() );
 			tMatch.m_iWeight = tArgs.m_iIndexWeight;
 
 			ARRAY_FOREACH ( iSeg, tGuard.m_dRamChunks )
@@ -7460,7 +7359,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 					tCtx.CalcFilter ( tMatch );
 					if ( tCtx.m_pFilter && !tCtx.m_pFilter->Eval ( tMatch ) )
 					{
-						tCtx.FreeStrFilter ( tMatch );
+						tCtx.FreeDataFilter ( tMatch );
 						continue;
 					}
 
@@ -7477,8 +7376,8 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 						bNewMatch |= dSorters[iSorter]->Push ( tMatch );
 
 					// stringptr expressions should be duplicated (or taken over) at this point
-					tCtx.FreeStrFilter ( tMatch );
-					tCtx.FreeStrSort ( tMatch );
+					tCtx.FreeDataFilter ( tMatch );
+					tCtx.FreeDataSort ( tMatch );
 
 					// handle cutoff
 					if ( bNewMatch )
@@ -7565,7 +7464,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 						if ( tCtx.m_pWeightFilter && !tCtx.m_pWeightFilter->Eval ( pMatch[i] ) )
 						{
-							tCtx.FreeStrSort ( pMatch[i] );
+							tCtx.FreeDataSort ( pMatch[i] );
 							continue;
 						}
 
@@ -7585,7 +7484,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 						}
 
 						// stringptr expressions should be duplicated (or taken over) at this point
-						tCtx.FreeStrSort ( pMatch[i] );
+						tCtx.FreeDataSort ( pMatch[i] );
 
 						if ( bNewMatch )
 							if ( --iCutoff==0 )
@@ -7631,149 +7530,27 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 
 	//////////////////////
-	// coping match's attributes to external storage in result set
+	// copying match's attributes to external storage in result set
 	//////////////////////
 
 	if ( pProfiler )
 		pProfiler->Switch ( SPH_QSTATE_FINALIZE );
 
-	CSphVector<CSphAttrTypedLocator> dGetLoc;
-	CSphVector<CSphAttrLocator> dSetLoc;
-	int iJsonFields = 0;
-	for ( int i=0; i<dSorters[iMaxSchemaIndex]->GetSchema().GetAttrsCount(); i++ )
-	{
-		const CSphColumnInfo & tSetInfo = dSorters[iMaxSchemaIndex]->GetSchema().GetAttr(i);
-		if ( tSetInfo.m_eAttrType==SPH_ATTR_STRING || tSetInfo.m_eAttrType==SPH_ATTR_JSON
-			|| tSetInfo.m_eAttrType==SPH_ATTR_UINT32SET || tSetInfo.m_eAttrType==SPH_ATTR_INT64SET )
-		{
-			const CSphColumnInfo * pCol = m_tSchema.GetAttr ( tSetInfo.m_sName.cstr() );
-			if ( !pCol && ( tSetInfo.m_eAttrType==SPH_ATTR_UINT32SET || tSetInfo.m_eAttrType==SPH_ATTR_INT64SET ) )
-			{
-				pCol = &tSetInfo;
-			}
-			assert ( pCol );
-
-			dGetLoc.Add().Set ( pCol->m_tLocator, tSetInfo.m_eAttrType );
-			dSetLoc.Add ( tSetInfo.m_tLocator );
-		}
-		iJsonFields += ( tSetInfo.m_eAttrType==SPH_ATTR_JSON_FIELD );
-	}
-
-	// put the json fields attrs at the very end (surely after all json attrs)
-	if ( iJsonFields )
-	{
-		for ( int i=0; i<dSorters[iMaxSchemaIndex]->GetSchema().GetAttrsCount(); i++ )
-		{
-			const CSphColumnInfo & tSetInfo = dSorters[iMaxSchemaIndex]->GetSchema().GetAttr(i);
-			if ( tSetInfo.m_eAttrType==SPH_ATTR_JSON_FIELD )
-			{
-				const int iInLocator = dSorters[iMaxSchemaIndex]->GetSchema().GetAttrIndex ( tSetInfo.m_sName.cstr() );
-				assert ( iInLocator>=0 );
-
-				dGetLoc.Add().Set ( dSorters[iMaxSchemaIndex]->GetSchema().GetAttr ( iInLocator ).m_tLocator, SPH_ATTR_JSON_FIELD );
-				dSetLoc.Add ( tSetInfo.m_tLocator );
-			}
-		}
-	}
-
-	// we're copying docinfo from RT segments to result set (segments got merged in RAM)
-	// also static part of docinfo:
-	// during optimize process (disk chunks are merged and removed from RT index)
-	// result set has arena attributes (STRING and MVA) (all these attrs should be at one pool)
-	bool bOptimizing = m_bOptimizing;
-	bool bHasArenaAttrs = ( dSetLoc.GetLength()>0 );
-	const int iSegmentsTotal = tGuard.m_dRamChunks.GetLength();
-	bool bSegmentMatchesFixup = ( m_tSchema.GetStaticSize()>0 && iSegmentsTotal>0 );
-	if ( bSegmentMatchesFixup || bHasArenaAttrs || bOptimizing )
-	{
-		MEMORY ( MEM_RT_RES_MATCHES );
-
-		// we need to count matches for allocating arena
-		// as we are going to fix match's m_pStatic pointers later
-		// and copy real match's data to arena
-
-		int iFixupCount = 0;
-		SphFinalMatchCounter_t fnCounter ( iSegmentsTotal );
-
-		ARRAY_FOREACH ( iSorter, dSorters )
-		{
-			ISphMatchSorter * pSorter = dSorters[iSorter];
-			const int iMatchesCount = pSorter->GetLength();
-
-			if ( bHasArenaAttrs || bOptimizing )
-			{
-				iFixupCount += iMatchesCount;
-				continue;
-			} else
-			{
-				// copying only RT segments docinfo (no need to copy docinfo from disk chunks)
-				pSorter->Finalize ( fnCounter, false );
-			}
-		}
-		iFixupCount += fnCounter.m_iCount;
-
-		if ( iFixupCount>0 || bHasArenaAttrs || bOptimizing )
-		{
-			const int iStaticSize = m_tSchema.GetStaticSize() + DWSIZEOF ( SphDocID_t );
-			CSphRowitem * pAttr = new CSphRowitem [ iFixupCount * iStaticSize ];
-			pResult->m_dStorage2Free.Add ( (BYTE*)pAttr );
-
-			SphFinalMatchCopy_t fnCopy ( pAttr, iSegmentsTotal, iStaticSize, ( bHasArenaAttrs || bOptimizing ) );
-#ifndef NDEBUG
-			fnCopy.m_pEnd = pAttr + iFixupCount * iStaticSize;
-#endif
-
-			ARRAY_FOREACH ( iSorter, dSorters )
-			{
-				ISphMatchSorter * pSorter = dSorters[iSorter];
-				pSorter->Finalize ( fnCopy, false );
-			}
-		}
-	}
-
 	if ( pRanker.Ptr() )
-		pRanker->FinalizeCache ( dSorters[iMaxSchemaIndex]->GetSchema() );
-
-	//////////////////////
-	// fixing string offset and data in resulting matches
-	//////////////////////
+		pRanker->FinalizeCache ( tMaxSorterSchema );
 
 	MEMORY ( MEM_RT_RES_STRINGS );
 
-	if ( bHasArenaAttrs || bOptimizing )
-	{
-		assert ( !pResult->m_pStrings && !pResult->m_pMva );
-		SphFinalArenaCopy_t fnArena ( tGuard.m_dRamChunks, dDiskStrings, dDiskMva, dGetLoc, dSetLoc, iJsonFields, tMvaArenaFlag );
-
-		ARRAY_FOREACH ( iSorter, dSorters )
-		{
-			ISphMatchSorter * pSorter = dSorters[iSorter];
-			pSorter->Finalize ( fnArena, false );
-		}
-
-		if ( fnArena.m_dStorageString.GetLength()>1 )
-		{
-			BYTE * pStrings = fnArena.m_dStorageString.LeakData ();
-			pResult->m_dStorage2Free.Add ( pStrings );
-			pResult->m_pStrings = pStrings;
-		}
-		if ( fnArena.m_dStorageMva.GetLength()>1 )
-		{
-			DWORD * pMva = fnArena.m_dStorageMva.LeakData();
-			pResult->m_dStorage2Free.Add ( (BYTE*)pMva );
-			pResult->m_pMva = pMva;
-		}
-	}
+	// create new standalone schema for sorters (independent of any external indexes/pools/storages)
+	// modify matches inside the sorters to work with the new schema
+	for ( auto i : dSorters )
+		TransformSorterSchema ( i, tGuard, dDiskMva, dDiskStrings, tMvaArenaFlag );
 
 	if ( pProfiler )
 		pProfiler->Switch ( SPH_QSTATE_UNKNOWN );
 
 	if ( pResult->m_bHasPrediction )
-	{
-		pResult->m_tStats.m_iFetchedDocs += tQueryStats.m_iFetchedDocs;
-		pResult->m_tStats.m_iFetchedHits += tQueryStats.m_iFetchedHits;
-		pResult->m_tStats.m_iSkips += tQueryStats.m_iSkips;
-	}
+		pResult->m_tStats.Add ( tQueryStats );
 
 	// query timer
 	pResult->m_iQueryTime = int ( ( sphMicroTimer()-tmQueryStart )/1000 );
@@ -10717,20 +10494,21 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema * pSche
 	SmallStringHash_T<BYTE> hFields;
 	for ( CSphVariant * v=hIndex("rt_field"); v; v=v->m_pNext )
 	{
-		tCol.m_sName = v->cstr();
-		tCol.m_sName.ToLower();
-		pSchema->m_dFields.Add ( tCol );
-		hFields.Add ( 1, tCol.m_sName );
+		CSphString sFieldName = v->cstr();
+		sFieldName.ToLower();
+		pSchema->AddField ( sFieldName.cstr() );
+		hFields.Add ( 1, sFieldName );
 	}
-	if ( !pSchema->m_dFields.GetLength() )
+
+	if ( !pSchema->GetFieldsCount() )
 	{
 		pError->SetSprintf ( "no fields configured (use rt_field directive)" );
 		return false;
 	}
 
-	if ( pSchema->m_dFields.GetLength()>SPH_MAX_FIELDS )
+	if ( pSchema->GetFieldsCount()>SPH_MAX_FIELDS )
 	{
-		pError->SetSprintf ( "too many fields (fields=%d, max=%d)", pSchema->m_dFields.GetLength(), SPH_MAX_FIELDS );
+		pError->SetSprintf ( "too many fields (fields=%d, max=%d)", pSchema->GetFieldsCount(), SPH_MAX_FIELDS );
 		return false;
 	}
 
@@ -10783,7 +10561,7 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema * pSche
 		}
 	}
 
-	if ( !pSchema->m_dAttrs.GetLength() && !g_bTestMode )
+	if ( !pSchema->GetAttrsCount() && !g_bTestMode )
 	{
 		pError->SetSprintf ( "no attribute configured (use rt_attr directive)" );
 		return false;

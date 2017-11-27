@@ -673,11 +673,8 @@ protected:
 
 	void SetUp () override
 	{
-		CSphColumnInfo tCol;
-		tCol.m_sName = "title";
-		tSchema.m_dFields.Add ( tCol );
-		tCol.m_sName = "body";
-		tSchema.m_dFields.Add ( tCol );
+		tSchema.AddField ( "title" );
+		tSchema.AddField ( "body" );
 
 		CSphScopedPtr<ISphTokenizer> pBase ( sphCreateUTF8Tokenizer () );
 		CSphTokenizerSettings tTokenizerSetup;

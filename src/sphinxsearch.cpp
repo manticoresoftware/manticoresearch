@@ -1979,7 +1979,7 @@ inline void ExtTerm_c::Init ( ISphQword * pQword, const FieldMask_t & dFields, c
 	m_bTail = false;
 	m_dQueriedFields = dFields;
 	m_bHasWideFields = false;
-	if ( tSetup.m_pIndex && tSetup.m_pIndex->GetMatchSchema().m_dFields.GetLength()>32 )
+	if ( tSetup.m_pIndex && tSetup.m_pIndex->GetMatchSchema().GetFieldsCount()>32 )
 		for ( int i=1; i<FieldMask_t::SIZE && !m_bHasWideFields; i++ )
 			if ( m_dQueriedFields[i] )
 				m_bHasWideFields = true;
@@ -1999,7 +1999,7 @@ ExtTerm_c::ExtTerm_c ( ISphQword * pQword, const ISphQwordSetup & tSetup )
 	m_uMatchChecked = 0;
 	m_bTail = false;
 	m_dQueriedFields.SetAll();
-	m_bHasWideFields = tSetup.m_pIndex && ( tSetup.m_pIndex->GetMatchSchema().m_dFields.GetLength()>32 );
+	m_bHasWideFields = tSetup.m_pIndex && ( tSetup.m_pIndex->GetMatchSchema().GetFieldsCount()>32 );
 	m_iMaxTimer = tSetup.m_iMaxTimer;
 	m_pStats = tSetup.m_pStats;
 	m_pNanoBudget = m_pStats ? m_pStats->m_pNanoBudget : NULL;
@@ -5450,13 +5450,13 @@ static void Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const 
 		{
 			tRes.Appendf ( "fields=(" );
 			bool bNeedComma = false;
-			ARRAY_FOREACH ( i, tSchema.m_dFields )
+			for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
 				if ( s.m_dFieldMask.Test(i) )
 				{
 					if ( bNeedComma )
 						tRes.Appendf ( ", " );
 					bNeedComma = true;
-					tRes.Appendf ( "%s", tSchema.m_dFields[i].m_sName.cstr() );
+					tRes.Appendf ( "%s", tSchema.GetFieldName(i) );
 				}
 			tRes.Appendf ( "), " );
 		}
@@ -7367,7 +7367,7 @@ enum ExprRankerNode_e
 
 /// generic field factor
 template < typename T >
-struct Expr_FieldFactor_c : public ISphExpr
+struct Expr_FieldFactor_c : public Expr_NoLocator_c
 {
 	const int *		m_pIndex;
 	const T *		m_pData;
@@ -7397,7 +7397,7 @@ struct Expr_FieldFactor_c : public ISphExpr
 
 /// bitmask field factor specialization
 template<>
-struct Expr_FieldFactor_c<bool> : public ISphExpr
+struct Expr_FieldFactor_c<bool> : public Expr_NoLocator_c
 {
 	const int *		m_pIndex;
 	const DWORD *	m_pData;
@@ -7426,7 +7426,7 @@ struct Expr_FieldFactor_c<bool> : public ISphExpr
 
 
 /// generic per-document int factor
-struct Expr_IntPtr_c : public ISphExpr
+struct Expr_IntPtr_c : public Expr_NoLocator_c
 {
 	DWORD * m_pVal;
 
@@ -7453,7 +7453,7 @@ struct Expr_IntPtr_c : public ISphExpr
 
 
 /// per-document field mask factor
-struct Expr_FieldMask_c : public ISphExpr
+struct Expr_FieldMask_c : public Expr_NoLocator_c
 {
 	const CSphBitvec & m_tFieldMask;
 
@@ -7481,7 +7481,7 @@ struct Expr_FieldMask_c : public ISphExpr
 
 /// bitvec field factor specialization
 template<>
-struct Expr_FieldFactor_c<CSphBitvec> : public ISphExpr
+struct Expr_FieldFactor_c<CSphBitvec> : public Expr_NoLocator_c
 {
 	const int *		m_pIndex;
 	const CSphBitvec & m_tField;
@@ -7510,7 +7510,7 @@ struct Expr_FieldFactor_c<CSphBitvec> : public ISphExpr
 
 
 /// generic per-document float factor
-struct Expr_FloatPtr_c : public ISphExpr
+struct Expr_FloatPtr_c : public Expr_NoLocator_c
 {
 	float * m_pVal;
 
@@ -7536,7 +7536,7 @@ struct Expr_FloatPtr_c : public ISphExpr
 };
 
 template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >
-struct Expr_BM25F_T : public ISphExpr
+struct Expr_BM25F_T : public Expr_NoLocator_c
 {
 	RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES> * m_pState;
 	float					m_fK1;
@@ -7673,6 +7673,11 @@ struct Expr_Sum_T : public ISphExpr
 		return iRes;
 	}
 
+	virtual void FixupLocator ( const ISphSchema * /*pOldSchema*/, const ISphSchema * /*pNewSchema*/ ) override
+	{
+		assert ( 0 && "ranker expressions in filters" );
+	}
+
 	virtual void Command ( ESphExprCommand eCmd, void * pArg )
 	{
 		assert ( m_pArg );
@@ -7740,6 +7745,11 @@ struct Expr_Top_T : public ISphExpr
 		return iRes;
 	}
 
+	virtual void FixupLocator ( const ISphSchema * /*pOldSchema*/, const ISphSchema * /*pNewSchema*/ ) override
+	{
+		assert ( 0 && "ranker expressions in filters" );
+	}
+
 	virtual void Command ( ESphExprCommand eCmd, void * pArg )
 	{
 		assert ( m_pArg );
@@ -7755,7 +7765,7 @@ struct Expr_Top_T : public ISphExpr
 
 
 // FIXME! cut/pasted from sphinxexpr; remove dupe
-struct Expr_GetIntConst_Rank_c : public ISphExpr
+struct Expr_GetIntConst_Rank_c : public Expr_NoLocator_c
 {
 	int m_iValue;
 	explicit Expr_GetIntConst_Rank_c ( int iValue ) : m_iValue ( iValue ) {}
@@ -9169,8 +9179,8 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 
 	// fill payload mask
 	DWORD uPayloadMask = 0;
-	ARRAY_FOREACH ( i, pIndex->GetMatchSchema().m_dFields )
-		uPayloadMask |= pIndex->GetMatchSchema().m_dFields[i].m_bPayload << i;
+	for ( int i=0; i < pIndex->GetMatchSchema().GetFieldsCount(); i++ )
+		uPayloadMask |= pIndex->GetMatchSchema().GetField(i).m_bPayload << i;
 
 	bool bGotDupes = HasQwordDupes ( tXQ.m_pRoot );
 

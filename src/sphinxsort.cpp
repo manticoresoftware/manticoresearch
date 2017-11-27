@@ -29,6 +29,47 @@
 // TRAITS
 //////////////////////////////////////////////////////////////////////////
 
+void sphFixupLocator ( CSphAttrLocator & tLocator, const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
+{
+	// first time schema setup?
+	if ( !pOldSchema )
+		return;
+
+	assert ( pNewSchema );
+	for ( int i = 0; i < pOldSchema->GetAttrsCount(); i++ )
+	{
+		const CSphColumnInfo & tAttr = pOldSchema->GetAttr(i);
+		if ( tLocator==tAttr.m_tLocator )
+		{
+			const CSphColumnInfo * pAttrInNewSchema = pNewSchema->GetAttr ( tAttr.m_sName.cstr() );
+			if ( pAttrInNewSchema )
+			{
+				tLocator = pAttrInNewSchema->m_tLocator;
+				return;
+			}
+		}
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+ISphMatchSorter::~ISphMatchSorter()
+{
+	SafeDelete ( m_pSchema );
+}
+
+
+void ISphMatchSorter::SetSchema ( ISphSchema * pSchema )
+{
+	assert ( pSchema );
+
+	for ( auto & i : m_tState.m_tLocator )
+		sphFixupLocator ( i, m_pSchema, pSchema );
+
+	m_pSchema = pSchema;
+}
+
+
 void ISphMatchSorter::SetState ( const CSphMatchComparatorState & tState )
 {
 	m_tState = tState;
@@ -99,8 +140,12 @@ public:
 	/// dtor
 	~CSphMatchQueueTraits () override
 	{
-		for ( int i=0; i<m_iDataLength; ++i )
-			m_tSchema.FreeStringPtrs ( m_pData+i );
+		if ( m_pSchema )
+		{
+			for ( int i=0; i<m_iDataLength; ++i )
+				m_pSchema->FreeDataPtrs ( m_pData+i );
+		}
+
 		SafeDeleteArray ( m_pData );
 	}
 
@@ -182,7 +227,7 @@ public:
 		}
 
 		// do add
-		m_tSchema.CloneMatch ( m_pData+m_iUsed, tEntry );
+		m_pSchema->CloneMatch ( m_pData+m_iUsed, tEntry );
 
 		if_const ( NOTIFICATIONS )
 			m_iJustPushed = tEntry.m_uDocID;
@@ -220,7 +265,7 @@ public:
 
 		// make the last entry my new root
 		Swap ( m_pData[0], m_pData[m_iUsed] );
-		m_tSchema.FreeStringPtrs ( &m_pData[m_iUsed] );
+		m_pSchema->FreeDataPtrs ( &m_pData[m_iUsed] );
 
 		if_const ( NOTIFICATIONS )
 		{
@@ -265,7 +310,7 @@ public:
 		while ( m_iUsed>0 )
 		{
 			--pTo;
-			m_tSchema.FreeStringPtrs ( pTo );
+			m_pSchema->FreeDataPtrs ( pTo );
 			Swap ( *pTo, *m_pData );
 			if ( iTag>=0 )
 				pTo->m_iTag = iTag;
@@ -376,7 +421,7 @@ public:
 		// fill the data, back to front
 		m_bFinalized = false;
 		m_iUsed++;
-		m_tSchema.CloneMatch ( m_pEnd-m_iUsed, tEntry );
+		m_pSchema->CloneMatch ( m_pEnd-m_iUsed, tEntry );
 
 		if_const ( NOTIFICATIONS )
 			m_iJustPushed = tEntry.m_uDocID;
@@ -404,6 +449,9 @@ public:
 					m_dJustPopped.Add ( pMatch->m_uDocID );
 			}
 
+			for ( CSphMatch * pMatch = m_pData; pMatch < m_pEnd-m_iSize; pMatch++ )
+				m_pSchema->FreeDataPtrs(pMatch);
+
 			m_iUsed = m_iSize;
 			m_pWorst = m_pEnd-m_iSize;
 			m_bFinalized = true;
@@ -428,6 +476,13 @@ public:
 		{
 			MatchSort_fn<COMP> tComp ( m_tState );
 			sphSort ( m_pEnd-m_iUsed, m_iUsed, tComp, tComp );
+			for ( int i = m_iSize; i < m_iUsed; i++ )
+			{
+				CSphMatch * pMatch = m_pEnd-i-1;
+				m_pSchema->FreeDataPtrs ( pMatch );
+				pMatch->ResetDynamic();
+			}
+
 			m_iUsed = Min ( m_iUsed, m_iSize );
 			m_bFinalized = true;
 		}
@@ -462,7 +517,7 @@ public:
 		// reverse copy
 		for ( int i=1; i<=Min ( m_iUsed, m_iSize ); i++ )
 		{
-			m_tSchema.FreeStringPtrs ( pTo );
+			m_pSchema->FreeDataPtrs ( pTo );
 			Swap ( *pTo, m_pEnd[-i] );
 			if ( iTag>=0 )
 				pTo->m_iTag = iTag;
@@ -503,15 +558,8 @@ private:
 		ARRAY_FOREACH ( i, m_tWorkSet.m_dDocids )
 		{
 			m_tWorkSet.m_dRowOffset[i] = 0;
-			m_tWorkSet.m_dDocids[i] = 0;
+			m_tWorkSet.m_dDocids[i] = m_pData[i].m_uDocID;
 			m_tWorkSet.m_dRows[i] = nullptr;
-			if ( !DOCINFO2ID ( STATIC2DOCINFO ( m_pData[i].m_pStatic ) ) ) // if static attributes were copied, so, they actually dynamic
-			{
-				m_tWorkSet.m_dDocids[i] = m_pData[i].m_uDocID;
-			} else // static attributes points to the active indexes - so, no lookup, 5 times faster update.
-			{
-				m_tWorkSet.m_dRows[i] = m_pData[i].m_pStatic - ( sizeof(SphDocID_t) / sizeof(CSphRowitem) );
-			}
 		}
 
 		*m_pAffected += m_pIndex->UpdateAttributes ( m_tWorkSet, -1, *m_pError, *m_pWarning );
@@ -559,7 +607,7 @@ public:
 			DoUpdate();
 
 		// do add
-		m_tSchema.CloneMatch ( &m_pData[m_iUsed++], tEntry );
+		m_pSchema->CloneMatch ( &m_pData[m_iUsed++], tEntry );
 		return true;
 	}
 
@@ -1339,6 +1387,8 @@ struct CSphGroupSorterSettings
 	CSphAttrLocator		m_tLocCount;		///< locator for @count
 	CSphAttrLocator		m_tLocDistinct;		///< locator for @distinct
 	CSphAttrLocator		m_tDistinctLoc;		///< locator for attribute to compute count(distinct) for
+	CSphAttrLocator		m_tLocGroupbyStr;	///< locator for @groupbystr
+
 	ESphAttr			m_eDistinctAttr = SPH_ATTR_NONE;	///< type of attribute to compute count(distinct) for
 	bool				m_bDistinct = false;///< whether we need distinct
 	bool				m_bMVA = false;		///< whether we're grouping by MVA attribute
@@ -1347,9 +1397,17 @@ struct CSphGroupSorterSettings
 	bool				m_bImplicit = false;///< for queries with aggregate functions but without group by clause
 	const ISphFilter *	m_pAggrFilterTrait = nullptr; ///< aggregate filter that got owned by grouper
 	bool				m_bJson = false;	///< whether we're grouping by Json attribute
-	CSphAttrLocator		m_tLocGroupbyStr;	///< locator for @groupbystr
 
 	CSphGroupSorterSettings () = default;
+
+	void FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
+	{
+		sphFixupLocator ( m_tLocGroupby, pOldSchema, pNewSchema );
+		sphFixupLocator ( m_tLocCount, pOldSchema, pNewSchema );
+		sphFixupLocator ( m_tLocDistinct, pOldSchema, pNewSchema );
+		sphFixupLocator ( m_tDistinctLoc, pOldSchema, pNewSchema );
+		sphFixupLocator ( m_tLocGroupbyStr, pOldSchema, pNewSchema );
+	}
 };
 
 
@@ -1508,8 +1566,13 @@ public:
 
 	void Update ( CSphMatch * pDst, const CSphMatch * pSrc, bool ) override
 	{
-		auto sDst = ( const char * ) pDst->GetAttr ( m_tLoc );
-		auto sSrc = ( const char * ) pSrc->GetAttr ( m_tLoc );
+		const BYTE * sSrc = (const BYTE*)pSrc->GetAttr(m_tLoc);
+		const BYTE * sDst = (const BYTE*)pDst->GetAttr(m_tLoc);
+		const BYTE * pOldDst = sDst;
+
+		int iSrc = sphUnpackPtrAttr ( sSrc, &sSrc );
+		int iDst = sphUnpackPtrAttr ( sDst, &sDst );
+
 		assert ( !sDst || *sDst ); // ensure the string is either nullptr, or has data
 		assert ( !sSrc || *sSrc );
 
@@ -1521,22 +1584,22 @@ public:
 		if ( !sDst )
 		{
 			if ( sSrc )
-				pDst->SetAttr ( m_tLoc, (SphAttr_t)strdup(sSrc) );
+				pDst->SetAttr ( m_tLoc, (SphAttr_t)sphPackPtrAttr ( sSrc, iSrc ) );
 			return;
 		}
 
 		// both source and destination present? append source to destination
 		// note that it gotta be manual copying here, as SetSprintf (currently) comes with a 1K limit
 		assert ( sDst && sSrc );
-		auto iSrc = strlen ( sSrc );
-		auto iDst = strlen ( sDst );
-		auto sNew = new char [ iSrc+iDst+2 ]; // OPTIMIZE? careful pre-reserve and/or realloc would be even faster
-		memcpy ( sNew, sDst, iDst );
-		sNew [ iDst ] = ',';
-		memcpy ( sNew+iDst+1, sSrc, iSrc );
-		sNew [ iSrc+iDst+1 ] = '\0';
-		pDst->SetAttr ( m_tLoc, (SphAttr_t)sNew );
-		SafeDeleteArray ( sDst );
+		CSphFixedVector<BYTE> dNew ( iSrc+iDst+1 ); // OPTIMIZE? careful pre-reserve and/or realloc would be even faster
+		memcpy ( dNew.Begin(), sDst, iDst );
+		dNew[iDst] = ',';
+		memcpy ( dNew.Begin()+iDst+1, sSrc, iSrc );
+
+		// clear dst to avoid leaks
+		SafeDeleteArray ( pOldDst );
+
+		pDst->SetAttr ( m_tLoc, (SphAttr_t)sphPackPtrAttr ( dNew.Begin(), iSrc+iDst+1 ) );
 	}
 };
 
@@ -1557,14 +1620,14 @@ struct MatchCloner_t
 	CSphFixedVector<CSphRowitem>	m_dRowBuf;
 	CSphVector<CSphAttrLocator>		m_dAttrsRaw;
 	CSphVector<CSphAttrLocator>		m_dAttrsPtr;
-	const CSphRsetSchema *			m_pSchema;
+	const ISphSchema *				m_pSchema;
 
 	MatchCloner_t ()
 		: m_dRowBuf ( 0 )
 		, m_pSchema ( nullptr )
 	{ }
 
-	void SetSchema ( const CSphRsetSchema * pSchema )
+	void SetSchema ( const ISphSchema * pSchema )
 	{
 		m_pSchema = pSchema;
 		m_dRowBuf.Reset ( m_pSchema->GetDynamicSize() );
@@ -1619,7 +1682,7 @@ struct MatchCloner_t
 };
 
 
-static void ExtractAggregates ( const CSphRsetSchema & tSchema, const CSphAttrLocator & tLocCount, const ESphSortKeyPart * m_pGroupSorterKeyparts, const CSphAttrLocator * m_pGroupSorterLocator,
+static void ExtractAggregates ( const ISphSchema & tSchema, const CSphAttrLocator & tLocCount, const ESphSortKeyPart * m_pGroupSorterKeyparts, const CSphAttrLocator * m_pGroupSorterLocator,
 								CSphVector<IAggrFunc *> & dAggregates, CSphVector<IAggrFunc *> & dAvgs, MatchCloner_t & tCloner )
 {
 	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
@@ -1716,6 +1779,25 @@ static SphAttr_t GetDistinctKey ( const CSphMatch & tEntry, const CSphAttrLocato
 }
 
 
+template <typename COMPGROUP>
+static void FixupSorterLocators ( CSphGroupSorterSettings & tSettings, ISphSchema * pOldSchema, const ISphSchema * pNewSchema, GroupSorter_fn<COMPGROUP> * pGroupSorter, CSphVector<IAggrFunc *> & dAggregates, MatchCloner_t & tPregroup )
+{
+	// this is the case when we are moving to a new schema with non-pooled attrs
+	if ( !pOldSchema )
+		return;
+
+	tSettings.FixupLocators ( pOldSchema, pNewSchema );
+	if ( pGroupSorter )
+		pGroupSorter->FixupLocators ( pOldSchema, pNewSchema );
+
+	for ( auto i : dAggregates )
+		SafeDelete(i);
+
+	dAggregates.Resize(0);
+	tPregroup.m_dAttrsRaw.Resize(0);
+}
+
+
 /// match sorter with k-buffering and group-by
 template < typename COMPGROUP, bool DISTINCT, bool NOTIFICATIONS >
 class CSphKBufferGroupSorter : public CSphMatchQueueTraits, protected CSphGroupSorterSettings
@@ -1765,17 +1847,19 @@ public:
 	}
 
 	/// schema setup
-	void SetSchema ( CSphRsetSchema & tSchema ) override
+	void SetSchema ( ISphSchema * pSchema ) override
 	{
-		m_tSchema = tSchema;
-		m_tPregroup.SetSchema ( &m_tSchema );
+		FixupSorterLocators ( *this, m_pSchema, pSchema, &m_tGroupSorter, m_dAggregates, m_tPregroup );
+		ISphMatchSorter::SetSchema ( pSchema );
+
+		m_tPregroup.SetSchema ( m_pSchema );
 		m_tPregroup.m_dAttrsRaw.Add ( m_tLocGroupby );
 		m_tPregroup.m_dAttrsRaw.Add ( m_tLocCount );
 		if_const ( DISTINCT )
-		{
 			m_tPregroup.m_dAttrsRaw.Add ( m_tLocDistinct );
-		}
-		ExtractAggregates ( m_tSchema, m_tLocCount, m_tGroupSorter.m_eKeypart, m_tGroupSorter.m_tLocator, m_dAggregates, m_dAvgs, m_tPregroup );
+
+		m_dAvgs.Resize(0);
+		ExtractAggregates ( *m_pSchema, m_tLocCount, m_tGroupSorter.m_eKeypart, m_tGroupSorter.m_tLocator, m_dAggregates, m_dAvgs, m_tPregroup );
 	}
 
 	/// dtor
@@ -1902,7 +1986,7 @@ public:
 		// do add
 		assert ( m_iUsed<m_iSize );
 		CSphMatch & tNew = m_pData [ m_iUsed++ ];
-		m_tSchema.CloneMatch ( &tNew, tEntry );
+		m_pSchema->CloneMatch ( &tNew, tEntry );
 
 		if_const ( NOTIFICATIONS )
 			m_iJustPushed = tNew.m_uDocID;
@@ -1977,7 +2061,7 @@ public:
 			if ( m_pAggrFilter && !m_pAggrFilter->Eval ( tMatch ) )
 				continue;
 
-			m_tSchema.CloneMatch ( pTo, tMatch );
+			m_pSchema->CloneMatch ( pTo, tMatch );
 			if ( iTag>=0 )
 				pTo->m_iTag = iTag;
 
@@ -2078,6 +2162,9 @@ protected:
 		for ( int i=0; i<iBound; i++ )
 			m_hGroup2Match.Add ( m_pData+i, m_pData[i].GetAttr ( m_tLocGroupby ) );
 
+		for ( int i = iBound; i < m_iUsed; i++ )
+			m_pSchema->FreeDataPtrs ( m_pData+i );
+
 		// cut groups
 		m_iUsed = iBound;
 	}
@@ -2095,6 +2182,9 @@ protected:
 
 		if ( m_iUsed>m_iLimit )
 			CutWorst ( m_iLimit );
+
+		for ( int i = m_iUsed; i < m_iSize; i++ )
+			m_pData[i].ResetDynamic();
 
 		// just evaluate in heap order
 		CSphMatch * pCur = m_pData;
@@ -2221,18 +2311,19 @@ public:
 	}
 
 	/// schema setup
-	void SetSchema ( CSphRsetSchema & tSchema ) override
+	void SetSchema ( ISphSchema * pSchema ) override
 	{
-		m_tSchema = tSchema;
+		FixupSorterLocators ( *this, m_pSchema, pSchema, &m_tGroupSorter, m_dAggregates, m_tPregroup );
+		ISphMatchSorter::SetSchema ( pSchema );
 
-		m_tPregroup.SetSchema ( &m_tSchema );
+		m_tPregroup.SetSchema ( m_pSchema );
 		m_tPregroup.m_dAttrsRaw.Add ( m_tLocGroupby );
 		m_tPregroup.m_dAttrsRaw.Add ( m_tLocCount );
 		if_const ( DISTINCT )
-		{
 			m_tPregroup.m_dAttrsRaw.Add ( m_tLocDistinct );
-		}
-		ExtractAggregates ( m_tSchema, m_tLocCount, m_tGroupSorter.m_eKeypart, m_tGroupSorter.m_tLocator, m_dAggregates, m_dAvgs, m_tPregroup );
+
+		m_dAvgs.Resize(0);
+		ExtractAggregates ( *m_pSchema, m_tLocCount, m_tGroupSorter.m_eKeypart, m_tGroupSorter.m_tLocator, m_dAggregates, m_dAvgs, m_tPregroup );
 	}
 
 	/// dtor
@@ -2293,7 +2384,7 @@ public:
 				m_dJustPopped.Add ( m_pData[iPos].m_uDocID );
 
 			int iLastPos = iPos;
-			m_tSchema.FreeStringPtrs ( m_pData + iPos );
+			m_pSchema->FreeDataPtrs ( m_pData + iPos );
 			iPos = m_dGroupByList[iPos];
 			m_dGroupByList[iLastPos] = -1;
 			if ( iLastPos>=m_iSize )
@@ -2337,7 +2428,7 @@ public:
 						iNew = m_dGroupByList[iNew];
 					}
 
-					m_tSchema.FreeStringPtrs ( m_pData + iNew );
+					m_pSchema->FreeDataPtrs ( m_pData + iNew );
 					m_dGroupByList[iPreLast] = -1;
 
 					if ( iPos==iNew ) // avoid cycle link to itself
@@ -2514,7 +2605,7 @@ public:
 		assert ( iNew>=0 && iNew<m_iSize );
 
 		CSphMatch & tNew = m_pData [ iNew ];
-		m_tSchema.CloneMatch ( &tNew, tEntry );
+		m_pSchema->CloneMatch ( &tNew, tEntry );
 
 		m_dGroupByList [ iNew ] = -1;
 		m_dGroupsLen [ iNew ] = 1;
@@ -2623,7 +2714,7 @@ public:
 			// copy top group match
 			if ( bTopPassed )
 			{
-				m_tSchema.CloneMatch ( pTo, *pMatch );
+				m_pSchema->CloneMatch ( pTo, *pMatch );
 				if ( iTag>=0 )
 					pTo->m_iTag = iTag;
 				pTo++;
@@ -2818,7 +2909,7 @@ protected:
 
 			if_const ( NOTIFICATIONS )
 				m_dJustPopped.Add ( pMatch->m_uDocID );
-			m_tSchema.FreeStringPtrs ( pMatch );
+			m_pSchema->FreeDataPtrs ( pMatch );
 			m_dGroupByList[i] = -1;
 			m_dGroupsLen[i] = 0;
 		}
@@ -2852,19 +2943,34 @@ protected:
 		if ( m_iUsed>m_iLimit )
 			CutWorst ( m_iLimit );
 
+		CSphBitvec dProcessedMatches ( CSphMatchQueueTraits::GetDataLength() );
+
+
 		for ( int iMatch=0; iMatch<m_iFreeHeads; iMatch++ )
 		{
 			// this is head match
-			CSphMatch * pMatch = m_pData + iMatch;
-			tProcessor.Process ( pMatch );
+			dProcessedMatches.BitSet ( iMatch );
 
 			int iNext = m_dGroupByList[iMatch];
 			int iCount = m_dGroupsLen[iMatch] - 1;
 			while ( iCount>0 )
 			{
-				tProcessor.Process ( m_pData + iNext );
+				dProcessedMatches.BitSet ( iNext );
 				iNext = m_dGroupByList[iNext];
 				iCount--;
+			}
+		}
+
+		for ( int i = 0; i < dProcessedMatches.GetBits(); i++ )
+		{
+			CSphMatch * pMatch = m_pData+i;
+
+			if ( dProcessedMatches.BitGet(i) )
+				tProcessor.Process ( pMatch );
+			else
+			{
+				m_pSchema->FreeDataPtrs ( pMatch );
+				pMatch->ResetDynamic();
 			}
 		}
 	}
@@ -3142,21 +3248,22 @@ public:
 	}
 
 	/// schema setup
-	void SetSchema ( CSphRsetSchema & tSchema ) override
+	void SetSchema ( ISphSchema * pSchema ) override
 	{
-		m_tSchema = tSchema;
-		m_tPregroup.SetSchema ( &m_tSchema );
+		FixupSorterLocators<void> ( *this, m_pSchema, pSchema, nullptr, m_dAggregates, m_tPregroup );
+
+		ISphMatchSorter::SetSchema ( pSchema );
+
+		m_tPregroup.SetSchema ( m_pSchema );
 		m_tPregroup.m_dAttrsRaw.Add ( m_tLocGroupby );
 		m_tPregroup.m_dAttrsRaw.Add ( m_tLocCount );
 		if_const ( DISTINCT )
-		{
 			m_tPregroup.m_dAttrsRaw.Add ( m_tLocDistinct );
-		}
 
 		CSphVector<IAggrFunc *> dTmp;
 		ESphSortKeyPart dTmpKeypart[CSphMatchComparatorState::MAX_ATTRS] = { SPH_KEYPART_ID };
 		CSphAttrLocator dTmpLocator[CSphMatchComparatorState::MAX_ATTRS];
-		ExtractAggregates ( m_tSchema, m_tLocCount, dTmpKeypart, dTmpLocator, m_dAggregates, dTmp, m_tPregroup );
+		ExtractAggregates ( *m_pSchema, m_tLocCount, dTmpKeypart, dTmpLocator, m_dAggregates, dTmp, m_tPregroup );
 		assert ( !dTmp.GetLength() );
 	}
 
@@ -3213,8 +3320,8 @@ public:
 		if ( !m_pAggrFilter || m_pAggrFilter->Eval ( m_tData ) )
 		{
 			iCopied = 1;
-			m_tSchema.CloneMatch ( pTo, m_tData );
-			m_tSchema.FreeStringPtrs ( &m_tData );
+			m_pSchema->CloneMatch ( pTo, m_tData );
+			m_pSchema->FreeDataPtrs ( &m_tData );
 			if ( iTag>=0 )
 				pTo->m_iTag = iTag;
 		}
@@ -3302,7 +3409,7 @@ protected:
 			return false;
 
 		// add first
-		m_tSchema.CloneMatch ( &m_tData, tEntry );
+		m_pSchema->CloneMatch ( &m_tData, tEntry );
 
 		if_const ( NOTIFICATIONS )
 			m_iJustPushed = m_tData.m_uDocID;
@@ -3687,12 +3794,21 @@ static inline ESphSortKeyPart Attr2Keypart ( ESphAttr eType )
 {
 	switch ( eType )
 	{
-		case SPH_ATTR_FLOAT:	return SPH_KEYPART_FLOAT;
-		case SPH_ATTR_STRING:	return SPH_KEYPART_STRING;
+		case SPH_ATTR_FLOAT:
+			return SPH_KEYPART_FLOAT;
+
+		case SPH_ATTR_STRING:
+			return SPH_KEYPART_STRING;
+
 		case SPH_ATTR_JSON:
+		case SPH_ATTR_JSON_PTR:
 		case SPH_ATTR_JSON_FIELD:
-		case SPH_ATTR_STRINGPTR: return SPH_KEYPART_STRINGPTR;
-		default:				return SPH_KEYPART_INT;
+		case SPH_ATTR_JSON_FIELD_PTR:
+		case SPH_ATTR_STRINGPTR:
+			return SPH_KEYPART_STRINGPTR;
+
+		default:
+			return SPH_KEYPART_INT;
 	}
 }
 
@@ -3758,8 +3874,6 @@ ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, const char
 
 		} else
 		{
-			ESphAttr eAttrType = SPH_ATTR_NONE;
-
 			if ( !strcasecmp ( pTok, "@group" ) )
 				pTok = "@groupby";
 			else if ( !strcasecmp ( pTok, "count(*)" ) )
@@ -3773,12 +3887,15 @@ ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, const char
 			// try to lookup plain attr in sorter schema
 			int iAttr = tSchema.GetAttrIndex ( pTok );
 
-			// do not order by mva (the result is undefined)
-			if ( iAttr>=0 && ( tSchema.GetAttr ( iAttr ).m_eAttrType==SPH_ATTR_UINT32SET
-				|| tSchema.GetAttr ( iAttr ).m_eAttrType==SPH_ATTR_INT64SET ) )
+			// do not order by mva (the result is undefined)			
+			if ( iAttr>=0 )
 			{
-				sError.SetSprintf ( "order by MVA is undefined" );
-				return SORT_CLAUSE_ERROR;
+				ESphAttr eAttrType = tSchema.GetAttr(iAttr).m_eAttrType;
+				if ( eAttrType==SPH_ATTR_UINT32SET || eAttrType==SPH_ATTR_INT64SET || eAttrType==SPH_ATTR_UINT32SET_PTR || eAttrType==SPH_ATTR_INT64SET_PTR )
+				{
+					sError.SetSprintf ( "order by MVA is undefined" );
+					return SORT_CLAUSE_ERROR;
+				}
 			}
 
 			// try to lookup aliased count(*) and aliased groupby() in select items
@@ -3805,8 +3922,16 @@ ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, const char
 			}
 
 			// try JSON attribute and use JSON attribute instead of JSON field
-			if ( iAttr<0 || ( iAttr>=0 && ( tSchema.GetAttr ( iAttr ).m_eAttrType==SPH_ATTR_JSON_FIELD
-				|| tSchema.GetAttr ( iAttr ).m_eAttrType==SPH_ATTR_JSON ) ) )
+			bool bJsonAttr = false;
+
+			if ( iAttr>=0 )
+			{
+				ESphAttr eAttrType = tSchema.GetAttr(iAttr).m_eAttrType;
+				if ( eAttrType==SPH_ATTR_JSON_FIELD || eAttrType==SPH_ATTR_JSON_FIELD_PTR || eAttrType==SPH_ATTR_JSON || eAttrType==SPH_ATTR_JSON_PTR )
+					bJsonAttr = true;
+			}
+
+			if ( iAttr<0 || bJsonAttr )
 			{
 				if ( iAttr>=0 )
 				{
@@ -3833,6 +3958,7 @@ ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, const char
 			}
 
 			// try json conversion functions (integer()/double()/bigint() in the order by clause)
+			ESphAttr eAttrType = SPH_ATTR_NONE;
 			if ( iAttr<0 )
 			{
 				ISphExpr * pExpr = sphExprParse ( pTok, tSchema, &eAttrType, nullptr, sError, nullptr );
@@ -4005,10 +4131,12 @@ struct ExprGeodist_t : public ISphExpr
 {
 public:
 						ExprGeodist_t () = default;
+
 	bool				Setup ( const CSphQuery * pQuery, const ISphSchema & tSchema, CSphString & sError );
-	float		Eval ( const CSphMatch & tMatch ) const override;
-	void		Command ( ESphExprCommand eCmd, void * pArg ) override;
-	uint64_t	GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override;
+	float				Eval ( const CSphMatch & tMatch ) const override;
+	void				FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override;
+	void				Command ( ESphExprCommand eCmd, void * pArg ) override;
+	uint64_t			GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) override;
 
 protected:
 	CSphAttrLocator		m_tGeoLatLoc;
@@ -4069,6 +4197,14 @@ float ExprGeodist_t::Eval ( const CSphMatch & tMatch ) const
 	double c = 2*asin ( Min ( 1.0, sqrt(a) ) );
 	return (float)(R*c);
 }
+
+
+void ExprGeodist_t::FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
+{
+	sphFixupLocator ( m_tGeoLatLoc, pOldSchema, pNewSchema );
+	sphFixupLocator ( m_tGeoLongLoc, pOldSchema, pNewSchema );
+}
+
 
 void ExprGeodist_t::Command ( ESphExprCommand eCmd, void * pArg )
 {
@@ -4183,7 +4319,7 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const ISphSchema & 
 			return false;
 		}
 
-		if ( tSchema.GetAttr(iAttr).m_eAttrType!=SPH_ATTR_JSON )
+		if ( tSchema.GetAttr(iAttr).m_eAttrType!=SPH_ATTR_JSON && tSchema.GetAttr(iAttr).m_eAttrType!=SPH_ATTR_JSON_PTR )
 		{
 			sError.SetSprintf ( "groupby: attribute '%s' does not have subfields (must be sql_attr_json)", sJsonColumn.cstr() );
 			return false;
@@ -4326,7 +4462,7 @@ static bool FixupDependency ( ISphSchema & tSchema, const int * pAttrs, int iAtt
 struct ExprSortStringAttrFixup_c : public ISphExpr
 {
 	const BYTE *			m_pStrings; ///< string pool; base for offset of string attributes
-	const CSphAttrLocator	m_tLocator; ///< string attribute to fix
+	CSphAttrLocator			m_tLocator; ///< string attribute to fix
 
 	explicit ExprSortStringAttrFixup_c ( const CSphAttrLocator & tLocator )
 		: m_pStrings ( nullptr )
@@ -4340,6 +4476,11 @@ struct ExprSortStringAttrFixup_c : public ISphExpr
 	{
 		SphAttr_t uOff = tMatch.GetAttr ( m_tLocator );
 		return (int64_t)( m_pStrings && uOff ? m_pStrings + uOff : nullptr );
+	}
+
+	virtual void FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
+	{
+		sphFixupLocator ( m_tLocator, pOldSchema, pNewSchema );
 	}
 
 	void Command ( ESphExprCommand eCmd, void * pArg ) override
@@ -4360,7 +4501,7 @@ struct ExprSortStringAttrFixup_c : public ISphExpr
 struct ExprSortJson2StringPtr_c : public ISphExpr
 {
 	const BYTE *			m_pStrings; ///< string pool; base for offset of string attributes
-	const CSphAttrLocator	m_tJsonCol; ///< JSON attribute to fix
+	CSphAttrLocator			m_tJsonCol; ///< JSON attribute to fix
 	CSphRefcountedPtr<ISphExpr>	m_pExpr;
 
 	ExprSortJson2StringPtr_c ( const CSphAttrLocator & tLocator, ISphExpr * pExpr )
@@ -4369,7 +4510,7 @@ struct ExprSortJson2StringPtr_c : public ISphExpr
 		, m_pExpr ( pExpr )
 	{}
 
-	bool IsStringPtr () const override { return true; }
+	bool IsDataPtrAttr () const override { return true; }
 
 	float Eval ( const CSphMatch & ) const override { assert ( 0 ); return 0.0f; }
 
@@ -4446,6 +4587,13 @@ struct ExprSortJson2StringPtr_c : public ISphExpr
 		return iStriLen;
 	}
 
+	virtual void FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
+	{
+		sphFixupLocator ( m_tJsonCol, pOldSchema, pNewSchema );
+		if ( m_pExpr.Ptr() )
+			m_pExpr->FixupLocator ( pOldSchema, pNewSchema );
+	}
+
 	void Command ( ESphExprCommand eCmd, void * pArg ) override
 	{
 		if ( eCmd==SPH_EXPR_SET_STRING_POOL )
@@ -4517,15 +4665,14 @@ static void SetupSortRemap ( CSphRsetSchema & tSorterSchema, CSphMatchComparator
 			}
 
 			iRemap = tSorterSchema.GetAttrsCount();
-			tSorterSchema.AddDynamicAttr ( tRemapCol );
+			tSorterSchema.AddAttr ( tRemapCol, true );
 		}
 		tState.m_tLocator[i] = tSorterSchema.GetAttr ( iRemap ).m_tLocator;
 	}
 }
 
 
-bool sphSortGetStringRemap ( const ISphSchema & tSorterSchema, const ISphSchema & tIndexSchema,
-	CSphVector<SphStringSorterRemap_t> & dAttrs )
+bool sphSortGetStringRemap ( const ISphSchema & tSorterSchema, const ISphSchema & tIndexSchema,	CSphVector<SphStringSorterRemap_t> & dAttrs )
 {
 	dAttrs.Resize ( 0 );
 	for ( int i=0; i<tSorterSchema.GetAttrsCount(); i++ )
@@ -4550,18 +4697,34 @@ bool sphSortGetStringRemap ( const ISphSchema & tSorterSchema, const ISphSchema 
 // BINARY COLLATION
 ////////////////////
 
-int sphCollateBinary ( const BYTE * pStr1, const BYTE * pStr2, bool bPacked )
+static const char * EMPTY_STR = "";
+
+inline static void UnpackStrings ( const BYTE * & pStr1, const BYTE * & pStr2, StringSource_e eStrSource, int & iLen1, int & iLen2 )
 {
-	if ( bPacked )
+	if ( eStrSource==STRING_STATIC || eStrSource==STRING_DATAPTR )
 	{
-		int iLen1 = sphUnpackStr ( pStr1, &pStr1 );
-		int iLen2 = sphUnpackStr ( pStr2, &pStr2 );
-		int iRes = memcmp ( (const char *)pStr1, (const char *)pStr2, Min ( iLen1, iLen2 ) );
-		return iRes ? iRes : ( iLen1-iLen2 );
-	} else
-	{
-		return strcmp ( (const char *)pStr1, (const char *)pStr2 );
+		if ( eStrSource==STRING_STATIC )
+		{
+			iLen1 = sphUnpackStr ( pStr1, &pStr1 );
+			iLen2 = sphUnpackStr ( pStr2, &pStr2 );
+		} else
+		{
+			iLen1 = sphUnpackPtrAttr ( pStr1, &pStr1 );
+			iLen2 = sphUnpackPtrAttr ( pStr2, &pStr2 );
+		}
 	}
+
+	if ( !pStr1 ) pStr1 = (const BYTE*)EMPTY_STR;
+	if ( !pStr2 ) pStr2 = (const BYTE*)EMPTY_STR;
+}
+
+
+int sphCollateBinary ( const BYTE * pStr1, const BYTE * pStr2, StringSource_e eStrSource, int iLen1, int iLen2 )
+{
+	UnpackStrings ( pStr1, pStr2, eStrSource, iLen1, iLen2 );
+
+	int iRes = memcmp ( (const char *)pStr1, (const char *)pStr2, Min ( iLen1, iLen2 ) );
+	return iRes ? iRes : ( iLen1-iLen2 );
 }
 
 ///////////////////////////////
@@ -4569,65 +4732,52 @@ int sphCollateBinary ( const BYTE * pStr1, const BYTE * pStr2, bool bPacked )
 ///////////////////////////////
 
 /// libc_ci, wrapper for strcasecmp
-int sphCollateLibcCI ( const BYTE * pStr1, const BYTE * pStr2, bool bPacked )
+int sphCollateLibcCI ( const BYTE * pStr1, const BYTE * pStr2, StringSource_e eStrSource, int iLen1, int iLen2 )
 {
-	if ( bPacked )
-	{
-		int iLen1 = sphUnpackStr ( pStr1, &pStr1 );
-		int iLen2 = sphUnpackStr ( pStr2, &pStr2 );
-		int iRes = strncasecmp ( (const char *)pStr1, (const char *)pStr2, Min ( iLen1, iLen2 ) );
-		return iRes ? iRes : ( iLen1-iLen2 );
-	} else
-	{
-		return strcasecmp ( (const char *)pStr1, (const char *)pStr2 );
-	}
+	UnpackStrings ( pStr1, pStr2, eStrSource, iLen1, iLen2 );
+
+	int iRes = strncasecmp ( (const char *)pStr1, (const char *)pStr2, Min ( iLen1, iLen2 ) );
+	return iRes ? iRes : ( iLen1-iLen2 );
 }
 
 
 /// libc_cs, wrapper for strcoll
-int sphCollateLibcCS ( const BYTE * pStr1, const BYTE * pStr2, bool bPacked )
+int sphCollateLibcCS ( const BYTE * pStr1, const BYTE * pStr2, StringSource_e eStrSource, int iLen1, int iLen2 )
 {
 	#define COLLATE_STACK_BUFFER 1024
 
-	if ( bPacked )
+	UnpackStrings ( pStr1, pStr2, eStrSource, iLen1, iLen2 );
+	
+	// strcoll wants asciiz strings, so we would have to copy them over
+	// lets use stack buffer for smaller ones, and allocate from heap for bigger ones
+	int iRes = 0;
+	int iLen = Min ( iLen1, iLen2 );
+	if ( iLen<COLLATE_STACK_BUFFER )
 	{
-		int iLen1 = sphUnpackStr ( pStr1, &pStr1 );
-		int iLen2 = sphUnpackStr ( pStr2, &pStr2 );
+		// small strings on stack
+		BYTE sBuf1[COLLATE_STACK_BUFFER];
+		BYTE sBuf2[COLLATE_STACK_BUFFER];
 
-		// strcoll wants asciiz strings, so we would have to copy them over
-		// lets use stack buffer for smaller ones, and allocate from heap for bigger ones
-		int iRes = 0;
-		int iLen = Min ( iLen1, iLen2 );
-		if ( iLen<COLLATE_STACK_BUFFER )
-		{
-			// small strings on stack
-			BYTE sBuf1[COLLATE_STACK_BUFFER];
-			BYTE sBuf2[COLLATE_STACK_BUFFER];
-
-			memcpy ( sBuf1, pStr1, iLen );
-			memcpy ( sBuf2, pStr2, iLen );
-			sBuf1[iLen] = sBuf2[iLen] = '\0';
-			iRes = strcoll ( (const char*)sBuf1, (const char*)sBuf2 );
-		} else
-		{
-			// big strings on heap
-			char * pBuf1 = new char [ iLen + 1 ];
-			char * pBuf2 = new char [ iLen + 1 ];
-
-			memcpy ( pBuf1, pStr1, iLen );
-			memcpy ( pBuf2, pStr2, iLen );
-			pBuf1[iLen] = pBuf2[iLen] = '\0';
-			iRes = strcoll ( (const char*)pBuf1, (const char*)pBuf2 );
-
-			SafeDeleteArray ( pBuf2 );
-			SafeDeleteArray ( pBuf1 );
-		}
-
-		return iRes ? iRes : ( iLen1-iLen2 );
+		memcpy ( sBuf1, pStr1, iLen );
+		memcpy ( sBuf2, pStr2, iLen );
+		sBuf1[iLen] = sBuf2[iLen] = '\0';
+		iRes = strcoll ( (const char*)sBuf1, (const char*)sBuf2 );
 	} else
 	{
-		return strcoll ( (const char *)pStr1, (const char *)pStr2 );
+		// big strings on heap
+		char * pBuf1 = new char [ iLen ];
+		char * pBuf2 = new char [ iLen ];
+
+		memcpy ( pBuf1, pStr1, iLen );
+		memcpy ( pBuf2, pStr2, iLen );
+		pBuf1[iLen] = pBuf2[iLen] = '\0';
+		iRes = strcoll ( (const char*)pBuf1, (const char*)pBuf2 );
+
+		SafeDeleteArray ( pBuf2 );
+		SafeDeleteArray ( pBuf1 );
 	}
+
+	return iRes ? iRes : ( iLen1-iLen2 );
 }
 
 /////////////////////////////
@@ -4808,21 +4958,14 @@ static inline int CollateUTF8CI ( int iCode )
 
 
 /// utf8_general_ci
-int sphCollateUtf8GeneralCI ( const BYTE * pArg1, const BYTE * pArg2, bool bPacked )
+int sphCollateUtf8GeneralCI ( const BYTE * pStr1, const BYTE * pStr2, StringSource_e eStrSource, int iLen1, int iLen2 )
 {
-	const BYTE * pStr1 = pArg1;
-	const BYTE * pStr2 = pArg2;
-	const BYTE * pMax1 = nullptr;
-	const BYTE * pMax2 = nullptr;
-	if ( bPacked )
-	{
-		int iLen1 = sphUnpackStr ( pStr1, (const BYTE**)&pStr1 );
-		int iLen2 = sphUnpackStr ( pStr2, (const BYTE**)&pStr2 );
-		pMax1 = pStr1 + iLen1;
-		pMax2 = pStr2 + iLen2;
-	}
+	UnpackStrings ( pStr1, pStr2, eStrSource, iLen1, iLen2 );
 
-	while ( ( bPacked && pStr1<pMax1 && pStr2<pMax2 ) || ( !bPacked && *pStr1 && *pStr2 ) )
+	const BYTE * pMax1 = pStr1 + iLen1;
+	const BYTE * pMax2 = pStr2 + iLen2;
+
+	while ( pStr1<pMax1 && pStr2<pMax2 )
 	{
 		// FIXME! on broken data, decode might go beyond buffer bounds
 		int iCode1 = sphUTF8Decode ( pStr1 );
@@ -4840,17 +4983,10 @@ int sphCollateUtf8GeneralCI ( const BYTE * pArg1, const BYTE * pArg2, bool bPack
 			return iCode1-iCode2;
 	}
 
-	if ( bPacked )
-	{
-		if ( pStr1>=pMax1 && pStr2>=pMax2 )
-			return 0;
-		return ( pStr1<pMax1 ) ? 1 : -1;
-	} else
-	{
-		if ( !*pStr1 && !*pStr2 )
-			return 0;
-		return ( *pStr1 ? 1 : -1 );
-	}
+	if ( pStr1>=pMax1 && pStr2>=pMax2 )
+		return 0;
+
+	return ( pStr1<pMax1 ) ? 1 : -1;
 }
 
 
@@ -5030,7 +5166,9 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 
 	// sorter schema
 	// adds computed expressions and groupby stuff on top of the original index schema
-	CSphRsetSchema tSorterSchema;
+	CSphScopedPtr<CSphRsetSchema> pSorterSchema ( new CSphRsetSchema );
+	CSphRsetSchema & tSorterSchema = *pSorterSchema.Ptr();
+
 	tSorterSchema = tSchema;
 
 	CSphVector<uint64_t> dQueryAttrs;
@@ -5053,7 +5191,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		CSphColumnInfo tCol;
 		tCol = tSorterSchema.GetAttr ( iIndex );
 		tCol.m_eStage = SPH_EVAL_OVERRIDE;
-		tSorterSchema.AddDynamicAttr ( tCol );
+		tSorterSchema.AddAttr ( tCol, true );
 		if ( pExtra )
 			pExtra->AddAttr ( tCol, true );
 		tSorterSchema.RemoveStaticAttr ( iIndex );
@@ -5073,7 +5211,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		CSphColumnInfo tCol ( "@geodist", SPH_ATTR_FLOAT );
 		tCol.m_pExpr = pExpr; // takes ownership, no need to for explicit pExpr release
 		tCol.m_eStage = SPH_EVAL_PREFILTER; // OPTIMIZE? actual stage depends on usage
-		tSorterSchema.AddDynamicAttr ( tCol );
+		tSorterSchema.AddAttr ( tCol, true );
 		if ( pExtra )
 			pExtra->AddAttr ( tCol, true );
 
@@ -5089,7 +5227,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		if ( !tCol.m_pExpr )
 			return nullptr;
 		tCol.m_eStage = SPH_EVAL_PRESORT;
-		tSorterSchema.AddDynamicAttr ( tCol );
+		tSorterSchema.AddAttr ( tCol, true );
 
 		dQueryAttrs.Add ( sphFNV64 ( tCol.m_sName.cstr() ) );
 	}
@@ -5270,11 +5408,11 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 			// add it!
 			// NOTE, "final" stage might need to be fixed up later
 			// we'll do that when parsing sorting clause
-			tSorterSchema.AddDynamicAttr ( tExprCol );
+			tSorterSchema.AddAttr ( tExprCol, true );
 		} else // some aggregate
 		{
 			tExprCol.m_eStage = SPH_EVAL_PRESORT; // sorter expects computed expression
-			tSorterSchema.AddDynamicAttr ( tExprCol );
+			tSorterSchema.AddAttr ( tExprCol, true );
 			if ( pExtra )
 				pExtra->AddAttr ( tExprCol, true );
 
@@ -5376,8 +5514,8 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		tCount.m_eStage = SPH_EVAL_SORTER;
 		tDistinct.m_eStage = SPH_EVAL_SORTER;
 
-		tSorterSchema.AddDynamicAttr ( tGroupby );
-		tSorterSchema.AddDynamicAttr ( tCount );
+		tSorterSchema.AddAttr ( tGroupby, true );
+		tSorterSchema.AddAttr ( tCount, true );
 		if ( pExtra )
 		{
 			pExtra->AddAttr ( tGroupby, true );
@@ -5385,7 +5523,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		}
 		if ( bGotDistinct )
 		{
-			tSorterSchema.AddDynamicAttr ( tDistinct );
+			tSorterSchema.AddAttr ( tDistinct, true );
 			if ( pExtra )
 				pExtra->AddAttr ( tDistinct, true );
 		}
@@ -5395,7 +5533,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		{
 			CSphColumnInfo tGroupbyStr ( "@groupbystr", SPH_ATTR_JSON_FIELD );
 			tGroupbyStr.m_eStage = SPH_EVAL_SORTER;
-			tSorterSchema.AddDynamicAttr ( tGroupbyStr );
+			tSorterSchema.AddAttr ( tGroupbyStr, true );
 		}
 	}
 
@@ -5635,7 +5773,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 	assert ( pTop );
 	pTop->SetState ( tStateMatch );
 	pTop->SetGroupState ( tStateGroup );
-	pTop->SetSchema ( tSorterSchema );
+	pTop->SetSchema ( pSorterSchema.LeakPtr() );
 	pTop->m_bRandomize = bRandomize;
 
 	if ( bRandomize )

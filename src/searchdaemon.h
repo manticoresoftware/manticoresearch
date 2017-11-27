@@ -830,7 +830,7 @@ struct SqlStmt_t
 /// result set aggregated across indexes
 struct AggrResult_t : CSphQueryResult
 {
-	CSphVector<CSphRsetSchema>		m_dSchemas;			///< aggregated result sets schemas (for schema minimization)
+	CSphVector<CSphSchema>			m_dSchemas;			///< aggregated result sets schemas (for schema minimization)
 	CSphVector<int>					m_dMatchCounts;		///< aggregated result sets lengths (for schema minimization)
 	CSphVector<const CSphIndex*>	m_dLockedAttrs;		///< indexes which are hold in the memory until sending result
 	CSphTaggedVector				m_dTag2Pools;		///< tag to MVA and strings storage pools mapping

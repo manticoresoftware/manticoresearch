@@ -53,7 +53,12 @@ enum ESphAttr
 	SPH_ATTR_MAPARG		= 1000,
 	SPH_ATTR_FACTORS	= 1001,			///< packed search factors (binary, in-memory, pooled)
 	SPH_ATTR_JSON_FIELD	= 1002,			///< points to particular field in JSON column subset
-	SPH_ATTR_FACTORS_JSON	= 1003		///< packed search factors (binary, in-memory, pooled, provided to client json encoded)
+	SPH_ATTR_FACTORS_JSON	= 1003,		///< packed search factors (binary, in-memory, pooled, provided to client json encoded)
+
+	SPH_ATTR_UINT32SET_PTR,				// in-memory version of MVA32
+	SPH_ATTR_INT64SET_PTR,				// in-memory version of MVA64
+	SPH_ATTR_JSON_PTR,					// in-memory version of JSON
+	SPH_ATTR_JSON_FIELD_PTR				// in-memory version of JSON_FIELD
 };
 
 /// column evaluation stage
@@ -97,14 +102,20 @@ public:
 	/// Evaluate string attr.
 	/// Note, that sometimes this method returns pointer to a static buffer
 	/// and sometimes it allocates a new buffer, so aware of memory leaks.
-	/// IsStringPtr() returns true if this method allocates a new buffer and false otherwise.
+	/// IsDataPtrAttr() returns true if this method allocates a new buffer and false otherwise.
 	virtual int StringEval ( const CSphMatch &, const BYTE ** ppStr ) const { *ppStr = NULL; return 0; }
+
+	/// Evaluate string as a packed data ptr attr. By default it re-packs StringEval result, but can be overridden
+	virtual const BYTE * StringEvalPacked ( const CSphMatch & tMatch ) const;
 
 	/// evaluate MVA attr
 	virtual const DWORD * MvaEval ( const CSphMatch & ) const { assert ( 0 ); return NULL; }
 
-	/// evaluate Packed factors
-	virtual const DWORD * FactorEval ( const CSphMatch & ) const { assert ( 0 ); return NULL; }
+	/// evaluate PACKEDFACTORS
+	virtual const BYTE * FactorEval ( const CSphMatch & ) const { assert ( 0 ); return NULL; }
+
+	/// evaluate PACKEDFACTORS as a packed data ptr attr
+	virtual const BYTE * FactorEvalPacked ( const CSphMatch & ) const { assert ( 0 ); return NULL; }
 
 	/// check for arglist subtype
 	/// FIXME? replace with a single GetType() call?
@@ -112,13 +123,16 @@ public:
 
 	/// check for stringptr subtype
 	/// FIXME? replace with a single GetType() call?
-	virtual bool IsStringPtr () const { return false; }
+	virtual bool IsDataPtrAttr () const { return false; }
 
 	/// get Nth arg of an arglist
 	virtual ISphExpr * GetArg ( int ) const { return NULL; }
 
 	/// get the number of args in an arglist
 	virtual int GetNumArgs() const { return 0; }
+
+	/// change the expressions's locator when changing schemas
+	virtual void FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) = 0;
 
 	/// run a tree wide action (1st arg is an action, 2nd is its parameter)
 	/// usually sets something into ISphExpr like string pool or gets something from it like dependent columns
@@ -189,8 +203,16 @@ struct CSphNamedVariant
 };
 
 
+// an expression that has no locator
+class Expr_NoLocator_c : public ISphExpr
+{
+public:
+	virtual void FixupLocator ( const ISphSchema * /*pOldSchema*/, const ISphSchema * /*pNewSchema*/ ) override {}
+};
+
+
 /// a container used to pass maps of constants/variables around the evaluation tree
-struct Expr_MapArg_c : public ISphExpr
+struct Expr_MapArg_c : public Expr_NoLocator_c
 {
 	CSphVector<CSphNamedVariant> m_dValues;
 

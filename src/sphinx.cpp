@@ -3850,8 +3850,8 @@ public:
 			m_pFilter->m_fnDeinit ( m_pUserdata );
 
 		CSphVector<const char*> dFields;
-		ARRAY_FOREACH ( i, s.m_dFields )
-			dFields.Add ( s.m_dFields[i].m_sName.cstr() );
+		for ( int i = 0; i < s.GetFieldsCount(); i++ )
+			dFields.Add ( s.GetFieldName(i) );
 
 		char sErrBuf[SPH_UDF_ERROR_LEN+1];
 		if ( m_pFilter->m_fnInit ( &m_pUserdata, dFields.GetLength(), dFields.Begin(), m_sOptions.cstr(), sErrBuf )==0 )
@@ -5991,6 +5991,84 @@ void sphColumnToLowercase ( char * sVal )
 	}
 }
 
+//////////////////////////////////////////////////////////////////////////
+DWORD sphUnzipInt ( const BYTE * & pBuf );
+
+int sphCalcPackedLength ( int iLengthBytes )
+{
+	return sphCalcZippedLen(iLengthBytes) + iLengthBytes;
+}
+
+
+BYTE * sphPackPtrAttr ( const BYTE * pData, int iLengthBytes )
+{
+	if ( !iLengthBytes )
+		return nullptr;
+
+	assert ( pData );
+
+	BYTE * pPacked = new BYTE [sphCalcPackedLength(iLengthBytes)];
+	sphPackPtrAttr ( pPacked, pData, iLengthBytes );
+	return pPacked;
+}
+
+
+void sphPackPtrAttr ( BYTE * pPrealloc, const BYTE * pData, int iLengthBytes )
+{
+	assert ( pPrealloc && pData );
+	pPrealloc += sphZipToPtr ( iLengthBytes, pPrealloc );
+	memcpy ( pPrealloc, pData, iLengthBytes );
+}
+
+
+BYTE * sphPackPtrAttr ( int iLengthBytes, BYTE * & pData )
+{
+	BYTE * pPacked = new BYTE [sphCalcPackedLength(iLengthBytes)];
+	pData = pPacked;
+	pData += sphZipToPtr ( iLengthBytes, pPacked );
+	return pPacked;
+}
+
+int sphUnpackPtrAttr ( const BYTE * pData, const BYTE ** ppUnpacked )
+{
+	if ( !pData )
+	{
+		if ( ppUnpacked )
+			*ppUnpacked = nullptr;
+
+		return 0;
+	}
+
+	int iLen = (int)sphUnzipInt ( pData );
+
+	if ( ppUnpacked )
+		*ppUnpacked = pData;
+
+	return iLen;
+}
+
+
+ESphAttr sphPlainAttrToPtrAttr ( ESphAttr eAttrType )
+{
+	switch ( eAttrType )
+	{
+	case SPH_ATTR_STRING:		return SPH_ATTR_STRINGPTR;
+	case SPH_ATTR_JSON:			return SPH_ATTR_JSON_PTR;
+	case SPH_ATTR_UINT32SET:	return SPH_ATTR_UINT32SET_PTR;
+	case SPH_ATTR_INT64SET:		return SPH_ATTR_INT64SET_PTR;
+	case SPH_ATTR_JSON_FIELD:	return SPH_ATTR_JSON_FIELD_PTR;
+	default:					return eAttrType;
+	};
+}
+
+
+bool sphIsDataPtrAttr ( ESphAttr eAttr )
+{
+	return eAttr==SPH_ATTR_STRINGPTR || eAttr==SPH_ATTR_FACTORS || eAttr==SPH_ATTR_FACTORS_JSON || eAttr==SPH_ATTR_UINT32SET_PTR ||
+		eAttr==SPH_ATTR_INT64SET_PTR || eAttr==SPH_ATTR_JSON_PTR || eAttr==SPH_ATTR_JSON_FIELD_PTR;
+}
+
+//////////////////////////////////////////////////////////////////////////
 
 CSphColumnInfo::CSphColumnInfo ( const char * sName, ESphAttr eType )
 	: m_sName ( sName )
@@ -6010,16 +6088,16 @@ CSphColumnInfo::CSphColumnInfo ( const char * sName, ESphAttr eType )
 	sphColumnToLowercase ( const_cast<char *>( m_sName.cstr() ) );
 }
 
-//////////////////////////////////////////////////////////////////////////
 
-void ISphSchema::Reset()
+bool CSphColumnInfo::IsDataPtr() const
 {
-	m_dPtrAttrs.Reset();
-	m_dFactorAttrs.Reset();
+	return sphIsDataPtrAttr ( m_eAttrType );
 }
 
 
-void ISphSchema::InsertAttr ( CSphVector<CSphColumnInfo> & dAttrs, CSphVector<int> & dUsed, int iPos, const CSphColumnInfo & tCol, bool bDynamic )
+//////////////////////////////////////////////////////////////////////////
+
+void CSphSchemaHelper::InsertAttr ( CSphVector<CSphColumnInfo> & dAttrs, CSphVector<int> & dUsed, int iPos, const CSphColumnInfo & tCol, bool bDynamic )
 {
 	assert ( 0<=iPos && iPos<=dAttrs.GetLength() );
 	assert ( tCol.m_eAttrType!=SPH_ATTR_NONE && !tCol.m_tLocator.IsID() ); // not via this orifice bro
@@ -6037,15 +6115,11 @@ void ISphSchema::InsertAttr ( CSphVector<CSphColumnInfo> & dAttrs, CSphVector<in
 	if ( tCol.m_eAttrType==SPH_ATTR_BIGINT || tCol.m_eAttrType==SPH_ATTR_JSON_FIELD )
 		iBits = 64;
 
-	if ( tCol.m_eAttrType==SPH_ATTR_STRINGPTR || tCol.m_eAttrType==SPH_ATTR_FACTORS || tCol.m_eAttrType==SPH_ATTR_FACTORS_JSON )
+	if ( tCol.IsDataPtr() )
 	{
 		assert ( bDynamic );
 		iBits = ROWITEMPTR_BITS;
-		CSphNamedInt & t = ( tCol.m_eAttrType==SPH_ATTR_STRINGPTR )
-			? m_dPtrAttrs.Add()
-			: m_dFactorAttrs.Add();
-		t.m_iValue = dUsed.GetLength();
-		t.m_sName = tCol.m_sName;
+		m_dDataPtrAttrs.Add ( dUsed.GetLength() );
 	}
 
 	tLoc.m_iBitCount = iBits;
@@ -6071,57 +6145,20 @@ void ISphSchema::InsertAttr ( CSphVector<CSphColumnInfo> & dAttrs, CSphVector<in
 }
 
 
-void ISphSchema::CloneWholeMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const
+void CSphSchemaHelper::Reset()
 {
-	assert ( pDst );
-	FreeStringPtrs ( pDst );
-	pDst->Combine ( rhs, GetRowSize() );
-	CopyPtrs ( pDst, rhs );
+	m_dDataPtrAttrs.Reset();
 }
 
 
-void ISphSchema::CopyPtrs ( CSphMatch * pDst, const CSphMatch & rhs ) const
-{
-	ARRAY_FOREACH ( i, m_dPtrAttrs )
-		*(const char**) (pDst->m_pDynamic+m_dPtrAttrs[i].m_iValue) = CSphString (*(const char**)(rhs.m_pDynamic+m_dPtrAttrs[i].m_iValue)).Leak();
-
-	// not immediately obvious: this is not needed while pushing matches to sorters; factors are held in an outer hash table
-	// but it is necessary to copy factors when combining results from several indexes via a sorter because at this moment matches are the owners of factor data
-	ARRAY_FOREACH ( i, m_dFactorAttrs )
-	{
-		int iOffset = m_dFactorAttrs[i].m_iValue;
-		BYTE * pData = *(BYTE**)(rhs.m_pDynamic+iOffset);
-		if ( pData )
-		{
-			DWORD uDataSize = *(DWORD*)pData;
-			assert ( uDataSize );
-
-			BYTE * pCopy = new BYTE[uDataSize];
-			memcpy ( pCopy, pData, uDataSize );
-			*(BYTE**)(pDst->m_pDynamic+iOffset) = pCopy;
-		}
-	}
-}
-
-
-void ISphSchema::FreeStringPtrs ( CSphMatch * pMatch ) const
+void CSphSchemaHelper::FreeDataPtrs ( CSphMatch * pMatch ) const
 {
 	assert ( pMatch );
 	if ( !pMatch->m_pDynamic )
 		return;
 
-	if ( m_dPtrAttrs.GetLength() )
+	for ( auto iOffset : m_dDataPtrAttrs )
 	{
-		CSphString sStr;
-		ARRAY_FOREACH ( i, m_dPtrAttrs )
-		{
-			sStr.Adopt ( (char**) (pMatch->m_pDynamic+m_dPtrAttrs[i].m_iValue));
-		}
-	}
-
-	ARRAY_FOREACH ( i, m_dFactorAttrs )
-	{
-		int iOffset = m_dFactorAttrs[i].m_iValue;
 		BYTE * pData = *(BYTE**)(pMatch->m_pDynamic+iOffset);
 		if ( pData )
 		{
@@ -6131,16 +6168,91 @@ void ISphSchema::FreeStringPtrs ( CSphMatch * pMatch ) const
 	}
 }
 
+
+void CSphSchemaHelper::CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const
+{
+	assert ( pDst );
+	FreeDataPtrs ( pDst );
+	pDst->Combine ( rhs, GetDynamicSize() );
+	CopyPtrs ( pDst, rhs );
+}
+
+
+void CSphSchemaHelper::CopyPtrs ( CSphMatch * pDst, const CSphMatch & rhs ) const
+{
+	// notes on PACKEDFACTORS
+	// not immediately obvious: this is not needed while pushing matches to sorters; factors are held in an outer hash table
+	// but it is necessary to copy factors when combining results from several indexes via a sorter because at this moment matches are the owners of factor data
+	for ( auto i : m_dDataPtrAttrs )
+	{
+		const BYTE * pData = *(BYTE**)(rhs.m_pDynamic+i);
+		if ( pData )
+		{
+			int nBytes = sphUnpackPtrAttr ( pData, &pData );
+			*(BYTE**)(pDst->m_pDynamic+i) = sphPackPtrAttr ( pData, nBytes );
+		}
+	}
+}
+
+
 //////////////////////////////////////////////////////////////////////////
 
 CSphSchema::CSphSchema ( const char * sName )
 	: m_sName ( sName )
-	, m_iStaticSize ( 0 )
 	, m_iFirstFieldLenAttr ( -1 )
 	, m_iLastFieldLenAttr ( -1 )
 {
 	for ( int i=0; i<BUCKET_COUNT; i++ )
 		m_dBuckets[i] = 0xffff;
+}
+
+
+CSphSchema & CSphSchema::operator = ( const ISphSchema & rhs )
+{
+	Reset();
+
+	m_sName = rhs.GetName();
+
+	for ( int i = 0; i < rhs.GetAttrsCount(); i++ )
+	{
+		const CSphColumnInfo & tAttr = rhs.GetAttr(i);
+
+		if ( tAttr.m_tLocator.m_bDynamic )
+			AddAttr ( tAttr, true );
+		else // static attr, keep previous storage
+			m_dAttrs.Add ( tAttr );
+	}
+
+	for ( int i = 0 ; i < rhs.GetFieldsCount(); i++ )
+		AddField ( rhs.GetField(i) );
+
+	RebuildHash();
+
+	return *this;
+}
+
+
+CSphSchema & CSphSchema::operator = ( CSphSchema && rhs )
+{
+	if ( this!=&rhs )
+	{
+		m_dDataPtrAttrs			= std::move ( rhs.m_dDataPtrAttrs );
+		m_iFirstFieldLenAttr	= m_iFirstFieldLenAttr;
+		m_iLastFieldLenAttr		= m_iLastFieldLenAttr;
+		m_sName					= std::move ( rhs.m_sName );
+		m_dFields				= std::move ( rhs.m_dFields );
+		m_dAttrs				= std::move ( rhs.m_dAttrs );
+		m_dStaticUsed			= std::move ( rhs.m_dStaticUsed );
+		m_dDynamicUsed			= std::move ( rhs.m_dDynamicUsed );
+	}
+
+	return *this;
+}
+
+
+const char * CSphSchema::GetName() const
+{
+	return m_sName.cstr();
 }
 
 
@@ -6250,14 +6362,14 @@ const CSphColumnInfo * CSphSchema::GetAttr ( const char * sName ) const
 
 void CSphSchema::Reset ()
 {
-	ISphSchema::Reset();
+	CSphSchemaHelper::Reset();
+
 	m_dFields.Reset();
 	m_dAttrs.Reset();
 	for ( int i=0; i<BUCKET_COUNT; i++ )
 		m_dBuckets[i] = 0xffff;
 	m_dStaticUsed.Reset();
 	m_dDynamicUsed.Reset();
-	m_iStaticSize = 0;
 }
 
 
@@ -6267,10 +6379,7 @@ void CSphSchema::InsertAttr ( int iPos, const CSphColumnInfo & tCol, bool bDynam
 	if ( iPos!=m_dAttrs.GetLength() )
 		UpdateHash ( iPos-1, 1 );
 
-	ISphSchema::InsertAttr ( m_dAttrs, bDynamic ? m_dDynamicUsed : m_dStaticUsed, iPos, tCol, bDynamic );
-
-	// update static size
-	m_iStaticSize = m_dStaticUsed.GetLength();
+	CSphSchemaHelper::InsertAttr ( m_dAttrs, bDynamic ? m_dDynamicUsed : m_dStaticUsed, iPos, tCol, bDynamic );
 
 	// update field length locators
 	if ( tCol.m_eAttrType==SPH_ATTR_TOKENCOUNT )
@@ -6302,12 +6411,9 @@ void CSphSchema::RemoveAttr ( const char * szAttr, bool bDynamic )
 	if ( bDynamic )
 		m_dDynamicUsed.Reset();
 	else
-	{
 		m_dStaticUsed.Reset();
-		m_iStaticSize = 0;
-	}
 
-	ISphSchema::Reset();
+	CSphSchemaHelper::Reset();
 	m_dAttrs.Reset();
 	m_iFirstFieldLenAttr = -1;
 	m_iLastFieldLenAttr = -1;
@@ -6321,6 +6427,19 @@ void CSphSchema::RemoveAttr ( const char * szAttr, bool bDynamic )
 void CSphSchema::AddAttr ( const CSphColumnInfo & tCol, bool bDynamic )
 {
 	InsertAttr ( m_dAttrs.GetLength(), tCol, bDynamic );
+}
+
+
+void CSphSchema::AddField ( const char * szFieldName )
+{
+	CSphColumnInfo & tField = m_dFields.Add();
+	tField.m_sName = szFieldName;
+}
+
+
+void CSphSchema::AddField ( const CSphColumnInfo & tField )
+{
+	m_dFields.Add ( tField );
 }
 
 
@@ -6398,6 +6517,28 @@ void CSphSchema::AssignTo ( CSphRsetSchema & lhs ) const
 	lhs = *this;
 }
 
+
+void CSphSchema::CloneWholeMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const
+{
+	assert ( pDst );
+	FreeDataPtrs ( pDst );
+	pDst->Combine ( rhs, GetRowSize() );
+	CopyPtrs ( pDst, rhs );
+}
+
+
+void CSphSchema::SetFieldWordpart ( int iField, ESphWordpart eWordpart )
+{
+	m_dFields[iField].m_eWordpart = eWordpart;
+}
+
+
+void CSphSchema::SwapAttrs ( CSphVector<CSphColumnInfo> & dAttrs )
+{
+	m_dAttrs.SwapData(dAttrs);
+	RebuildHash();
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 CSphRsetSchema::CSphRsetSchema()
@@ -6407,17 +6548,24 @@ CSphRsetSchema::CSphRsetSchema()
 
 void CSphRsetSchema::Reset ()
 {
-	ISphSchema::Reset();
+	CSphSchemaHelper::Reset();
+
 	m_pIndexSchema = NULL;
 	m_dExtraAttrs.Reset();
 	m_dDynamicUsed.Reset();
-	m_dFields.Reset();
 }
 
 
-void CSphRsetSchema::AddDynamicAttr ( const CSphColumnInfo & tCol )
+void CSphRsetSchema::AddAttr ( const CSphColumnInfo & tCol, bool bDynamic )
 {
-	ISphSchema::InsertAttr ( m_dExtraAttrs, m_dDynamicUsed, m_dExtraAttrs.GetLength(), tCol, true );
+	assert ( bDynamic );
+	InsertAttr ( m_dExtraAttrs, m_dDynamicUsed, m_dExtraAttrs.GetLength(), tCol, true );
+}
+
+
+const char * CSphRsetSchema::GetName() const
+{
+	return m_pIndexSchema ? m_pIndexSchema->GetName() : nullptr;
 }
 
 
@@ -6454,6 +6602,12 @@ int CSphRsetSchema::GetAttrsCount() const
 }
 
 
+int CSphRsetSchema::GetFieldsCount() const
+{
+	return m_pIndexSchema ? m_pIndexSchema->GetFieldsCount() : 0;
+}
+
+
 int CSphRsetSchema::GetAttrIndex ( const char * sName ) const
 {
 	ARRAY_FOREACH ( i, m_dExtraAttrs )
@@ -6474,6 +6628,13 @@ int CSphRsetSchema::GetAttrIndex ( const char * sName ) const
 		return iRes - iSub;
 	}
 	return -1;
+}
+
+
+const CSphColumnInfo & CSphRsetSchema::GetField ( int iIndex ) const
+{
+	assert ( m_pIndexSchema );
+	return m_pIndexSchema->GetField(iIndex);
 }
 
 
@@ -6528,12 +6689,15 @@ CSphRsetSchema & CSphRsetSchema::operator = ( const ISphSchema & rhs )
 CSphRsetSchema & CSphRsetSchema::operator = ( const CSphSchema & rhs )
 {
 	Reset();
-	m_dFields = rhs.m_dFields; // OPTIMIZE? sad but copied
 	m_pIndexSchema = &rhs;
 
 	// copy over dynamic rowitems map
 	// so that the new attributes we might add would not overlap
 	m_dDynamicUsed = rhs.m_dDynamicUsed;
+
+	// copy data ptr map. we might want to add proper access via virtual funcs later
+	m_dDataPtrAttrs = rhs.m_dDataPtrAttrs;
+
 	return *this;
 }
 
@@ -6578,15 +6742,6 @@ void CSphRsetSchema::SwapAttrs ( CSphVector<CSphColumnInfo> & dAttrs )
 #endif
 	m_dExtraAttrs.SwapData ( dAttrs );
 	m_pIndexSchema = NULL;
-}
-
-
-void CSphRsetSchema::CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const
-{
-	assert ( pDst );
-	FreeStringPtrs ( pDst );
-	pDst->Combine ( rhs, GetDynamicSize() );
-	CopyPtrs ( pDst, rhs );
 }
 
 
@@ -6740,65 +6895,13 @@ void CSphWriter::PutBytes ( const void * pData, int64_t iSize )
 
 void CSphWriter::ZipInt ( DWORD uValue )
 {
-	int iBytes = 1;
-
-	DWORD u = ( uValue>>7 );
-	while ( u )
-	{
-		u >>= 7;
-		iBytes++;
-	}
-
-	while ( iBytes-- )
-		PutByte (
-			( 0x7f & ( uValue >> (7*iBytes) ) )
-			| ( iBytes ? 0x80 : 0 ) );
+	sphZipValue ( uValue, this, &CSphWriter::PutByte );
 }
 
 
 void CSphWriter::ZipOffset ( uint64_t uValue )
 {
-	int iBytes = 1;
-
-	uint64_t u = ((uint64_t)uValue)>>7;
-	while ( u )
-	{
-		u >>= 7;
-		iBytes++;
-	}
-
-	while ( iBytes-- )
-		PutByte (
-			( 0x7f & (DWORD)( uValue >> (7*iBytes) ) )
-			| ( iBytes ? 0x80 : 0 ) );
-}
-
-
-void CSphWriter::ZipOffsets ( CSphVector<SphOffset_t> * pData )
-{
-	assert ( pData );
-
-	SphOffset_t * pValue = &((*pData)[0]);
-	int n = pData->GetLength ();
-
-	while ( n-->0 )
-	{
-		SphOffset_t uValue = *pValue++;
-
-		int iBytes = 1;
-
-		uint64_t u = ((uint64_t)uValue)>>7;
-		while ( u )
-		{
-			u >>= 7;
-			iBytes++;
-		}
-
-		while ( iBytes-- )
-			PutByte (
-				( 0x7f & (DWORD)( uValue >> (7*iBytes) ) )
-				| ( iBytes ? 0x80 : 0 ) );
-	}
+	sphZipValue ( uValue, this, &CSphWriter::PutByte );
 }
 
 
@@ -7274,7 +7377,6 @@ SphOffset_t sphUnzipOffset ( const BYTE * & pBuf )	{ SPH_VARINT_DECODE ( SphOffs
 DWORD CSphReader::UnzipInt ()			{ SPH_VARINT_DECODE ( DWORD, GetByte() ); }
 uint64_t CSphReader::UnzipOffset ()	{ SPH_VARINT_DECODE ( uint64_t, GetByte() ); }
 
-
 #if USE_64BIT
 #define sphUnzipWordid sphUnzipOffset
 #else
@@ -7408,20 +7510,8 @@ CSphQueryResult::CSphQueryResult ()
 
 CSphQueryResult::~CSphQueryResult ()
 {
-	ARRAY_FOREACH ( i, m_dStorage2Free )
-	{
-		SafeDeleteArray ( m_dStorage2Free[i] );
-	}
 	ARRAY_FOREACH ( i, m_dMatches )
-		m_tSchema.FreeStringPtrs ( &m_dMatches[i] );
-}
-
-void CSphQueryResult::LeakStorages ( CSphQueryResult & tDst )
-{
-	ARRAY_FOREACH ( i, m_dStorage2Free )
-		tDst.m_dStorage2Free.Add ( m_dStorage2Free[i] );
-
-	m_dStorage2Free.Reset();
+		m_tSchema.FreeDataPtrs ( &m_dMatches[i] );
 }
 
 
@@ -8651,6 +8741,196 @@ void CSphIndex::GetFieldFilterSettings ( CSphFieldFilterSettings & tSettings )
 	if ( m_pFieldFilter )
 		m_pFieldFilter->GetSettings ( tSettings );
 }
+
+//////////////////////////////////////////////////////////////////////////
+
+MatchesToNewSchema_c::MatchesToNewSchema_c ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
+	: m_pOldSchema ( pOldSchema )
+	, m_pNewSchema ( pNewSchema )
+{
+	assert ( pOldSchema && pNewSchema );
+
+	for ( int i=0; i < m_pNewSchema->GetAttrsCount(); i++ )
+		if ( !m_pOldSchema->GetAttr ( m_pNewSchema->GetAttr(i).m_sName.cstr() ) )
+			m_dNewAttrs.Add ( m_pNewSchema->GetAttr(i).m_tLocator );
+
+	m_dOld2New.Resize ( m_pOldSchema->GetAttrsCount() );
+	for ( int i=0; i < m_pOldSchema->GetAttrsCount(); i++ )
+		m_dOld2New[i] = m_pNewSchema->GetAttrIndex ( m_pOldSchema->GetAttr(i).m_sName.cstr() );
+}
+
+
+void MatchesToNewSchema_c::Process ( CSphMatch * pMatch )
+{
+	CSphMatch tResult;
+	tResult.Reset ( m_pNewSchema->GetDynamicSize() );
+
+	const BYTE * pStringPool = GetStringPool ( pMatch );
+	const DWORD * pMVAPool = GetMVAPool ( pMatch );
+	bool bArenaProhibit = GetArenaProhibitFlag ( pMatch );
+
+	for ( int i=0; i < m_pOldSchema->GetAttrsCount(); i++ )
+	{
+		if ( m_dOld2New[i]==-1 )
+			continue;
+
+		const CSphColumnInfo & tOld = m_pOldSchema->GetAttr(i);
+		const CSphColumnInfo & tNew = m_pNewSchema->GetAttr(m_dOld2New[i]);
+
+		if ( tOld.m_eAttrType==tNew.m_eAttrType )
+		{
+			tResult.SetAttr ( tNew.m_tLocator, pMatch->GetAttr ( tOld.m_tLocator ) );
+			continue;
+		}
+
+		assert ( !sphIsDataPtrAttr(tOld.m_eAttrType) && sphIsDataPtrAttr(tNew.m_eAttrType) );
+
+		switch ( tOld.m_eAttrType )
+		{
+		case SPH_ATTR_UINT32SET:
+		case SPH_ATTR_INT64SET:
+			{
+				const DWORD * pMva = pMatch->GetAttrMVA ( tOld.m_tLocator, pMVAPool, bArenaProhibit );
+				int iLengthBytes = pMva ? (*pMva)*sizeof(DWORD) : 0;
+				tResult.SetAttr ( tNew.m_tLocator, (SphAttr_t)sphPackPtrAttr ( (const BYTE*)(pMva+1), iLengthBytes ) );
+			}
+			break;
+
+		case SPH_ATTR_STRING:
+		case SPH_ATTR_JSON:
+			{
+				SphAttr_t uOffset = pMatch->GetAttr ( tOld.m_tLocator );
+				const BYTE * pStr = nullptr;
+				int iLengthBytes = 0;
+				if ( uOffset )
+					iLengthBytes = sphUnpackStr ( pStringPool + uOffset, &pStr );
+
+				tResult.SetAttr ( tNew.m_tLocator, (SphAttr_t)sphPackPtrAttr ( pStr, iLengthBytes ) );
+			}
+			break;
+
+		case SPH_ATTR_JSON_FIELD:
+			{
+				SphAttr_t uOffset = pMatch->GetAttr ( tOld.m_tLocator );
+				ESphJsonType eJson = ESphJsonType ( uOffset>>32 );
+				uOffset &= 0xFFFFFFFF;
+
+				const BYTE * pStr = pStringPool+uOffset;
+
+				if ( uOffset && eJson!=JSON_NULL )
+				{
+					int iLengthBytes = sphJsonNodeSize ( eJson, pStr );
+
+					BYTE * pData = nullptr;
+					BYTE * pPacked = sphPackPtrAttr ( iLengthBytes+1, pData );
+
+					// store field type before the field
+					*pData = (BYTE)eJson;
+					memcpy ( pData+1, pStr, iLengthBytes );
+
+					tResult.SetAttr ( tNew.m_tLocator, (SphAttr_t)pPacked );
+				} else
+					tResult.SetAttr ( tNew.m_tLocator, 0 );
+			}
+			break;
+
+		default:
+			assert ( 0 && "Unexpected attribute type" );
+			break;
+		}
+	}
+
+	for ( const auto & i : m_dNewAttrs )
+		tResult.SetAttr ( i, 0 );
+
+	Swap ( pMatch->m_pDynamic, tResult.m_pDynamic );
+	pMatch->m_pStatic = nullptr;
+}
+
+
+class DiskMatchesToNewSchema_c : public MatchesToNewSchema_c
+{
+public:
+	DiskMatchesToNewSchema_c ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema, const DWORD * pMVAPool, const BYTE * pStringPool, bool bArenaProhibit )
+		: MatchesToNewSchema_c ( pOldSchema, pNewSchema )
+		, m_pStringPool ( pStringPool )
+		, m_pMVAPool ( pMVAPool )
+		, m_bArenaProhibit ( bArenaProhibit )
+	{}
+
+private:
+	const BYTE *	m_pStringPool;
+	const DWORD *	m_pMVAPool;
+	bool			m_bArenaProhibit;
+
+	virtual const DWORD * GetMVAPool ( const CSphMatch * /*pMatch*/ ) override
+	{
+		return m_pMVAPool;
+	}
+
+	virtual const BYTE * GetStringPool ( const CSphMatch * /*pMatch*/ ) override
+	{
+		return m_pStringPool;
+	}
+
+	virtual bool GetArenaProhibitFlag ( const CSphMatch * /*pMatch*/ ) override
+	{
+		return m_bArenaProhibit;
+	}
+};
+
+//////////////////////////////////////////////////////////////////////////
+ISphSchema * sphCreateStandaloneSchema ( const ISphSchema * pSchema )
+{
+	assert ( pSchema );
+
+	CSphSchema * pResult = new CSphSchema ( "standalone" );
+	for ( int i = 0; i < pSchema->GetFieldsCount(); i++ )
+		pResult->AddField ( pSchema->GetField(i) );
+
+	for ( int i = 0; i < pSchema->GetAttrsCount(); i++ )
+	{
+		CSphColumnInfo tAttr = pSchema->GetAttr(i);
+		tAttr.m_eAttrType = sphPlainAttrToPtrAttr ( tAttr.m_eAttrType );
+		tAttr.m_tLocator.m_iBitOffset = -1;
+		tAttr.m_tLocator.m_iBitCount = -1;
+		pResult->AddAttr ( tAttr, true );
+	}
+
+	for ( int i = 0; i < pResult->GetAttrsCount(); i++ )
+	{
+		auto & pExpr = pResult->GetAttr(i).m_pExpr;
+		if ( pExpr.Ptr() )
+			pExpr->FixupLocator ( pSchema, pResult );
+	}
+
+	return pResult;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+static void PooledAttrsToPtrAttrs ( ISphMatchSorter ** ppSorters, int nSorters, const DWORD * pMVA, const BYTE * pStrings, bool bArenaProhibit )
+{
+	assert ( ppSorters );
+
+	for ( int i=0; i<nSorters; i++ )
+	{
+		ISphMatchSorter * pSorter = ppSorters[i];
+		if ( !pSorter )
+			continue;
+
+		const ISphSchema * pOldSchema = pSorter->GetSchema();
+		ISphSchema * pNewSchema =  sphCreateStandaloneSchema ( pOldSchema );
+		assert ( pOldSchema && pNewSchema );
+
+		DiskMatchesToNewSchema_c fnFinal ( pOldSchema, pNewSchema, pMVA, pStrings, bArenaProhibit );
+		pSorter->Finalize ( fnFinal, false );
+
+		pSorter->SetSchema ( pNewSchema );
+		SafeDelete ( pOldSchema );
+	}
+}
+
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -10231,12 +10511,15 @@ void ReadSchema ( CSphReader & rdInfo, CSphSchema & m_tSchema, DWORD uVersion, b
 {
 	m_tSchema.Reset ();
 
-	m_tSchema.m_dFields.Resize ( rdInfo.GetDword() );
-	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
-		ReadSchemaColumn ( rdInfo, m_tSchema.m_dFields[i], uVersion );
+	int iNumFields = rdInfo.GetDword();
+	for ( int i=0; i<iNumFields; i++ )
+	{
+		CSphColumnInfo tCol;
+		ReadSchemaColumn ( rdInfo, tCol, uVersion );
+		m_tSchema.AddField ( tCol );
+	}
 
 	int iNumAttrs = rdInfo.GetDword();
-
 	for ( int i=0; i<iNumAttrs; i++ )
 	{
 		CSphColumnInfo tCol;
@@ -10265,10 +10548,9 @@ static void WriteSchemaColumn ( CSphWriter & fdInfo, const CSphColumnInfo & tCol
 
 void WriteSchema ( CSphWriter & fdInfo, const CSphSchema & tSchema )
 {
-	// schema
-	fdInfo.PutDword ( tSchema.m_dFields.GetLength() );
-	ARRAY_FOREACH ( i, tSchema.m_dFields )
-		WriteSchemaColumn ( fdInfo, tSchema.m_dFields[i] );
+	fdInfo.PutDword ( tSchema.GetFieldsCount() );
+	for ( int i=0; i<tSchema.GetFieldsCount(); i++ )
+		WriteSchemaColumn ( fdInfo, tSchema.GetField(i) );
 
 	fdInfo.PutDword ( tSchema.GetAttrsCount() );
 	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
@@ -10353,7 +10635,7 @@ bool IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t 
 
 	// average field lengths
 	if ( tWriteHeader.m_pSettings->m_bIndexFieldLens )
-		ARRAY_FOREACH ( i, tWriteHeader.m_pSchema->m_dFields )
+		for ( int i=0; i < tWriteHeader.m_pSchema->GetFieldsCount(); i++ )
 			fdInfo.PutOffset ( tWriteHeader.m_pFieldLens[i] );
 
 	return true;
@@ -11377,7 +11659,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		return 0;
 	}
 
-	if ( m_tSchema.m_dFields.GetLength()==0 )
+	if ( m_tSchema.GetFieldsCount()==0 )
 	{
 		m_sLastError.SetSprintf ( "No fields in schema - will not index" );
 		return 0;
@@ -12053,7 +12335,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			// update total field lengths
 			if ( iFieldLens>=0 )
 			{
-				ARRAY_FOREACH ( i, m_tSchema.m_dFields )
+				for ( int i=0; i < m_tSchema.GetFieldsCount(); i++ )
 					m_dFieldLens[i] += pSource->m_tDocInfo.GetAttr ( m_tSchema.GetAttr ( i+iFieldLens ).m_tLocator );
 			}
 
@@ -14226,6 +14508,15 @@ SphWordID_t CSphDictExact::GetWordID ( BYTE * pWord )
 
 /////////////////////////////////////////////////////////////////////////////
 
+void CSphMatchComparatorState::FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
+{
+	for ( auto & i : m_tLocator )
+		sphFixupLocator ( i, pOldSchema, pNewSchema );
+}
+
+
+//////////////////////////////////////////////////////////////////////////
+
 inline bool sphGroupMatch ( SphAttr_t iGroup, const SphAttr_t * pGroups, int iGroups )
 {
 	if ( !pGroups ) return true;
@@ -14450,33 +14741,30 @@ static inline void CalcContextItems ( CSphMatch & tMatch, const CSphVector<CSphQ
 		{
 			case SPH_ATTR_INTEGER:
 				tMatch.SetAttr ( tCalc.m_tLoc, tCalc.m_pExpr->IntEval(tMatch) );
-			break;
+				break;
 
 			case SPH_ATTR_BIGINT:
 			case SPH_ATTR_JSON_FIELD:
 				tMatch.SetAttr ( tCalc.m_tLoc, tCalc.m_pExpr->Int64Eval(tMatch) );
-			break;
+				break;
 
 			case SPH_ATTR_STRINGPTR:
-			{
-				const BYTE * pStr = NULL;
-				tCalc.m_pExpr->StringEval ( tMatch, &pStr );
-				tMatch.SetAttr ( tCalc.m_tLoc, (SphAttr_t) pStr ); // FIXME! a potential leak of *previous* value?
-			}
-			break;
+				tMatch.SetAttr ( tCalc.m_tLoc, (SphAttr_t)tCalc.m_pExpr->StringEvalPacked ( tMatch ) ); // FIXME! a potential leak of *previous* value?
+				break;
 
 			case SPH_ATTR_FACTORS:
 			case SPH_ATTR_FACTORS_JSON:
-				tMatch.SetAttr ( tCalc.m_tLoc, (SphAttr_t)tCalc.m_pExpr->FactorEval(tMatch) );
-			break;
+				tMatch.SetAttr ( tCalc.m_tLoc, (SphAttr_t)tCalc.m_pExpr->FactorEvalPacked ( tMatch ) ); // FIXME! a potential leak of *previous* value?
+				break;
 
 			case SPH_ATTR_INT64SET:
 			case SPH_ATTR_UINT32SET:
 				tMatch.SetAttr ( tCalc.m_tLoc, (SphAttr_t)tCalc.m_pExpr->IntEval ( tMatch ) );
-			break;
+				break;
 
 			default:
 				tMatch.SetAttrFloat ( tCalc.m_tLoc, tCalc.m_pExpr->Eval(tMatch) );
+				break;
 		}
 	}
 }
@@ -14498,46 +14786,29 @@ void CSphQueryContext::CalcFinal ( CSphMatch & tMatch ) const
 	CalcContextItems ( tMatch, m_dCalcFinal );
 }
 
-static inline void FreeStrItems ( CSphMatch & tMatch, const CSphVector<CSphQueryContext::CalcItem_t> & dItems )
+static inline void FreeDataPtrAttrs ( CSphMatch & tMatch, const CSphVector<CSphQueryContext::CalcItem_t> & dItems )
 {
 	if ( !tMatch.m_pDynamic )
 		return;
 
-	ARRAY_FOREACH ( i, dItems )
-	{
-		const CSphQueryContext::CalcItem_t & tCalc = dItems[i];
-		switch ( tCalc.m_eType )
+	for ( const auto & i : dItems )
+		if ( sphIsDataPtrAttr ( i.m_eType ) )
 		{
-		case SPH_ATTR_STRINGPTR:
-			{
-				CSphString sStr;
-				sStr.Adopt ( (char**) (tMatch.m_pDynamic+tCalc.m_tLoc.m_iBitOffset/ROWITEM_BITS));
-			}
-			break;
-
-		case SPH_ATTR_FACTORS:
-		case SPH_ATTR_FACTORS_JSON:
-			{
-				BYTE * pData = (BYTE *)tMatch.GetAttr ( tCalc.m_tLoc );
-				delete [] pData;
-				tMatch.SetAttr ( tCalc.m_tLoc, 0 );
-			}
-			break;
-		default:
-			break;
+			BYTE * pData = (BYTE *)tMatch.GetAttr ( i.m_tLoc );
+			delete [] pData;
+			tMatch.SetAttr ( i.m_tLoc, 0 );
 		}
-	}
 }
 
-void CSphQueryContext::FreeStrFilter ( CSphMatch & tMatch ) const
+void CSphQueryContext::FreeDataFilter ( CSphMatch & tMatch ) const
 {
-	FreeStrItems ( tMatch, m_dCalcFilter );
+	FreeDataPtrAttrs ( tMatch, m_dCalcFilter );
 }
 
 
-void CSphQueryContext::FreeStrSort ( CSphMatch & tMatch ) const
+void CSphQueryContext::FreeDataSort ( CSphMatch & tMatch ) const
 {
-	FreeStrItems ( tMatch, m_dCalcSort );
+	FreeDataPtrAttrs ( tMatch, m_dCalcSort );
 }
 
 void CSphQueryContext::ExprCommand ( ESphExprCommand eCmd, void * pArg )
@@ -14679,7 +14950,7 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 
 			if ( pCtx->m_pWeightFilter && !pCtx->m_pWeightFilter->Eval ( pMatch[i] ) )
 			{
-				pCtx->FreeStrSort ( pMatch[i] );
+				pCtx->FreeDataSort ( pMatch[i] );
 				continue;
 			}
 
@@ -14707,7 +14978,7 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 					pRanker->ExtraData ( EXTRA_SET_MATCHPOPPED, (void**)&(ppSorters[iSorter]->m_dJustPopped) );
 				}
 			}
-			pCtx->FreeStrSort ( pMatch[i] );
+			pCtx->FreeDataSort ( pMatch[i] );
 
 			if ( bNewMatch )
 				if ( --iCutoff==0 )
@@ -14855,25 +15126,27 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	int iMaxSchemaSize = -1;
 	int iMaxSchemaIndex = -1;
 	for ( int i=0; i<iSorters; i++ )
-		if ( ppSorters[i]->GetSchema().GetAttrsCount() > iMaxSchemaSize )
+		if ( ppSorters[i]->GetSchema()->GetAttrsCount() > iMaxSchemaSize )
 		{
-			iMaxSchemaSize = ppSorters[i]->GetSchema().GetAttrsCount();
+			iMaxSchemaSize = ppSorters[i]->GetSchema()->GetAttrsCount();
 			iMaxSchemaIndex = i;
 		}
+
+	const ISphSchema & tMaxSorterSchema = *(ppSorters[iMaxSchemaIndex]->GetSchema());
 
 	CSphVector< const ISphSchema * > dSorterSchemas;
 	SorterSchemas ( ppSorters, iSorters, iMaxSchemaIndex, dSorterSchemas );
 
 	// setup calculations and result schema
 	CSphQueryContext tCtx ( *pQuery );
-	if ( !tCtx.SetupCalc ( pResult, ppSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, m_tMva.GetWritePtr(), m_bArenaProhibit, dSorterSchemas ) )
+	if ( !tCtx.SetupCalc ( pResult, tMaxSorterSchema, m_tSchema, m_tMva.GetWritePtr(), m_bArenaProhibit, dSorterSchemas ) )
 		return false;
 
 	// set string pool for string on_sort expression fix up
 	tCtx.SetStringPool ( m_tString.GetWritePtr() );
 
 	// setup filters
-	if ( !tCtx.CreateFilters ( true, &pQuery->m_dFilters, ppSorters[iMaxSchemaIndex]->GetSchema(),
+	if ( !tCtx.CreateFilters ( true, &pQuery->m_dFilters, tMaxSorterSchema,
 		m_tMva.GetWritePtr(), m_tString.GetWritePtr(), pResult->m_sError, pResult->m_sWarning, pQuery->m_eCollation, m_bArenaProhibit, tArgs.m_dKillList, &pQuery->m_dFilterTree ) )
 			return false;
 
@@ -14903,14 +15176,14 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	}
 
 	// setup overrides
-	if ( !tCtx.SetupOverrides ( pQuery, pResult, m_tSchema, ppSorters[iMaxSchemaIndex]->GetSchema() ) )
+	if ( !tCtx.SetupOverrides ( pQuery, pResult, m_tSchema, tMaxSorterSchema ) )
 		return false;
 
 	// prepare to work them rows
 	bool bRandomize = ppSorters[0]->m_bRandomize;
 
 	CSphMatch tMatch;
-	tMatch.Reset ( ppSorters[iMaxSchemaIndex]->GetSchema().GetDynamicSize() );
+	tMatch.Reset ( tMaxSorterSchema.GetDynamicSize() );
 	tMatch.m_iWeight = tArgs.m_iIndexWeight;
 	tMatch.m_iTag = tCtx.m_dCalcFinal.GetLength() ? -1 : tArgs.m_iTag;
 
@@ -14950,7 +15223,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 				ppSorters[iSorter]->Push ( tMatch );
 
 			// stringptr expressions should be duplicated (or taken over) at this point
-			tCtx.FreeStrSort ( tMatch );
+			tCtx.FreeDataSort ( tMatch );
 		}
 	} else
 	{
@@ -14996,7 +15269,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 							ppSorters[iSorter]->Push ( tMatch );
 					}
 					// stringptr expressions should be duplicated (or taken over) at this point
-					tCtx.FreeStrFilter ( tMatch );
+					tCtx.FreeDataFilter ( tMatch );
 				}
 			} else
 			{
@@ -15011,7 +15284,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 					tCtx.CalcFilter ( tMatch );
 					if ( tCtx.m_pFilter && !tCtx.m_pFilter->Eval ( tMatch ) )
 					{
-						tCtx.FreeStrFilter ( tMatch );
+						tCtx.FreeDataFilter ( tMatch );
 						continue;
 					}
 
@@ -15026,8 +15299,8 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 						bNewMatch |= ppSorters[iSorter]->Push ( tMatch );
 
 					// stringptr expressions should be duplicated (or taken over) at this point
-					tCtx.FreeStrFilter ( tMatch );
-					tCtx.FreeStrSort ( tMatch );
+					tCtx.FreeDataFilter ( tMatch );
+					tCtx.FreeDataSort ( tMatch );
 
 					// handle cutoff
 					if ( bNewMatch && --iCutoff==0 )
@@ -15062,6 +15335,9 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 		}
 		tCtx.m_iBadRows += tFinal.m_iBadRows;
 	}
+
+	if ( tArgs.m_bModifySorterSchemas )
+		PooledAttrsToPtrAttrs ( ppSorters, iSorters, m_tMva.GetWritePtr(), m_tString.GetWritePtr(), m_bArenaProhibit );
 
 	// done
 	pResult->m_pMva = m_tMva.GetWritePtr();
@@ -15578,7 +15854,7 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 
 
 	if ( m_uVersion>=35 && m_tSettings.m_bIndexFieldLens )
-		ARRAY_FOREACH ( i, m_tSchema.m_dFields )
+		for ( int i=0; i < m_tSchema.GetFieldsCount(); i++ )
 			m_dFieldLens[i] = rdInfo.GetOffset(); // FIXME? ideally 64bit even when off is 32bit..
 
 	// post-load stuff.. for now, bigrams
@@ -15621,8 +15897,8 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 		fprintf ( fp, "\nsource $dump\n{\n" );
 
 		fprintf ( fp, "\tsql_query = SELECT id \\\n" );
-		ARRAY_FOREACH ( i, m_tSchema.m_dFields )
-			fprintf ( fp, "\t, %s \\\n", m_tSchema.m_dFields[i].m_sName.cstr() );
+		for ( int i=0; i < m_tSchema.GetFieldsCount(); i++ )
+			fprintf ( fp, "\t, %s \\\n", m_tSchema.GetFieldName(i) );
 		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 		{
 			const CSphColumnInfo & tAttr = m_tSchema.GetAttr(i);
@@ -15759,9 +16035,9 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 		default:					fprintf ( fp, "unknown (value=%d)\n", m_tSettings.m_eDocinfo ); break;
 	}
 
-	fprintf ( fp, "fields: %d\n", m_tSchema.m_dFields.GetLength() );
-	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
-		fprintf ( fp, "  field %d: %s\n", i, m_tSchema.m_dFields[i].m_sName.cstr() );
+	fprintf ( fp, "fields: %d\n", m_tSchema.GetFieldsCount() );
+	for ( int i = 0; i < m_tSchema.GetFieldsCount(); i++ )
+		fprintf ( fp, "  field %d: %s\n", i, m_tSchema.GetFieldName(i) );
 
 	fprintf ( fp, "attrs: %d\n", m_tSchema.GetAttrsCount() );
 	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
@@ -16375,7 +16651,7 @@ void CSphQueryContext::BindWeights ( const CSphQuery * pQuery, const CSphSchema 
 	const int HEAVY_FIELDS = SPH_MAX_FIELDS;
 
 	// defaults
-	m_iWeights = Min ( tSchema.m_dFields.GetLength(), HEAVY_FIELDS );
+	m_iWeights = Min ( tSchema.GetFieldsCount(), HEAVY_FIELDS );
 	for ( int i=0; i<m_iWeights; i++ )
 		m_dWeights[i] = 1;
 
@@ -16482,6 +16758,7 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema &
 					// static; check for full match
 					if (!( tIn==*pMy ))
 					{
+						assert ( 0 );
 						pResult->m_sError.SetSprintf ( "INTERNAL ERROR: incoming-schema mismatch (in=%s, my=%s)",
 							sphDumpAttr(tIn).cstr(), sphDumpAttr(*pMy).cstr() );
 						return false;
@@ -17994,6 +18271,9 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	CSphQueryNodeCache tNodeCache ( iCommonSubtrees, m_iMaxCachedDocs, m_iMaxCachedHits );
 	bool bResult = ParsedMultiQuery ( pQuery, pResult, iSorters, &dSorters[0], tParsed, pDict, tArgs, &tNodeCache, tStatDiff );
 
+	if ( tArgs.m_bModifySorterSchemas )
+		PooledAttrsToPtrAttrs ( &dSorters[0], iSorters, m_tMva.GetWritePtr(), m_tString.GetWritePtr(), m_bArenaProhibit );
+
 	return bResult;
 }
 
@@ -18132,6 +18412,9 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 		}
 	}
 
+	if ( tArgs.m_bModifySorterSchemas )
+		PooledAttrsToPtrAttrs ( ppSorters, iQueries, m_tMva.GetWritePtr(), m_tString.GetWritePtr(), m_bArenaProhibit );
+
 	return bResult | bResultScan;
 }
 
@@ -18169,11 +18452,13 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	int iMaxSchemaSize = -1;
 	int iMaxSchemaIndex = -1;
 	for ( int i=0; i<iSorters; i++ )
-		if ( ppSorters[i]->GetSchema().GetRowSize() > iMaxSchemaSize )
+		if ( ppSorters[i]->GetSchema()->GetRowSize() > iMaxSchemaSize )
 		{
-			iMaxSchemaSize = ppSorters[i]->GetSchema().GetRowSize();
+			iMaxSchemaSize = ppSorters[i]->GetSchema()->GetRowSize();
 			iMaxSchemaIndex = i;
 		}
+
+	const ISphSchema & tMaxSorterSchema = *(ppSorters[iMaxSchemaIndex]->GetSchema());
 
 	CSphVector< const ISphSchema * > dSorterSchemas;
 	SorterSchemas ( ppSorters, iSorters, iMaxSchemaIndex, dSorterSchemas );
@@ -18183,7 +18468,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	tCtx.m_pProfile = pProfile;
 	tCtx.m_pLocalDocs = tArgs.m_pLocalDocs;
 	tCtx.m_iTotalDocs = tArgs.m_iTotalDocs;
-	if ( !tCtx.SetupCalc ( pResult, ppSorters[iMaxSchemaIndex]->GetSchema(), m_tSchema, m_tMva.GetWritePtr(), m_bArenaProhibit, dSorterSchemas ) )
+	if ( !tCtx.SetupCalc ( pResult, tMaxSorterSchema, m_tSchema, m_tMva.GetWritePtr(), m_bArenaProhibit, dSorterSchemas ) )
 		return false;
 
 	// set string pool for string on_sort expression fix up
@@ -18222,7 +18507,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 		tTermSetup.m_iInlineRowitems = m_tSchema.GetRowSize();
 		tTermSetup.m_pMinRow = m_dMinRow.Begin();
 	}
-	tTermSetup.m_iDynamicRowitems = ppSorters[iMaxSchemaIndex]->GetSchema().GetDynamicSize();
+	tTermSetup.m_iDynamicRowitems = tMaxSorterSchema.GetDynamicSize();
 
 	if ( pQuery->m_uMaxQueryMsec>0 )
 		tTermSetup.m_iMaxTimer = sphMicroTimer() + pQuery->m_uMaxQueryMsec*1000; // max_query_time
@@ -18244,7 +18529,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	// setup query
 	// must happen before index-level reject, in order to build proper keyword stats
-	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( tXQ, pQuery, pResult, tTermSetup, tCtx, ppSorters[iMaxSchemaIndex]->GetSchema() ) );
+	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( tXQ, pQuery, pResult, tTermSetup, tCtx, tMaxSorterSchema ) );
 	if ( !pRanker.Ptr() )
 		return false;
 
@@ -18281,7 +18566,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	assert ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN || !m_tAttr.IsEmpty() ); // check that docinfo is preloaded
 
 	// setup filters
-	if ( !tCtx.CreateFilters ( pQuery->m_sQuery.IsEmpty(), &pQuery->m_dFilters, ppSorters[iMaxSchemaIndex]->GetSchema(),
+	if ( !tCtx.CreateFilters ( pQuery->m_sQuery.IsEmpty(), &pQuery->m_dFilters, tMaxSorterSchema,
 		m_tMva.GetWritePtr(), m_tString.GetWritePtr(), pResult->m_sError, pResult->m_sWarning, pQuery->m_eCollation, m_bArenaProhibit, tArgs.m_dKillList, &pQuery->m_dFilterTree ) )
 			return false;
 
@@ -18317,7 +18602,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	}
 
 	// setup overrides
-	if ( !tCtx.SetupOverrides ( pQuery, pResult, m_tSchema, ppSorters[iMaxSchemaIndex]->GetSchema() ) )
+	if ( !tCtx.SetupOverrides ( pQuery, pResult, m_tSchema, tMaxSorterSchema ) )
 		return false;
 
 	//////////////////////////////////////
@@ -18369,7 +18654,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 		pResult->m_iBadRows += tProcessor.m_iBadRows;
 	}
 
-	pRanker->FinalizeCache ( ppSorters[iMaxSchemaIndex]->GetSchema() );
+	pRanker->FinalizeCache ( tMaxSorterSchema );
 
 	// mva and string pools ptrs
 	pResult->m_pMva = m_tMva.GetWritePtr();
@@ -18391,9 +18676,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 
 	if ( bCollectPredictionCounters )
 	{
-		pResult->m_tStats.m_iFetchedDocs += tQueryStats.m_iFetchedDocs;
-		pResult->m_tStats.m_iFetchedHits += tQueryStats.m_iFetchedHits;
-		pResult->m_tStats.m_iSkips += tQueryStats.m_iSkips;
+		pResult->m_tStats.Add ( tQueryStats );
 		pResult->m_bHasPrediction = true;
 	}
 
@@ -19403,7 +19686,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 					LOC_FAIL(( fp, "hit field out of bounds (wordid=" UINT64_FMT "(%s), docid=" DOCID_FMT ", field=%d)",
 						(uint64_t)uWordid, sWord, pQword->m_tDoc.m_uDocID, iField ));
 
-				} else if ( iField>=m_tSchema.m_dFields.GetLength() )
+				} else if ( iField>=m_tSchema.GetFieldsCount() )
 				{
 					LOC_FAIL(( fp, "hit field out of schema (wordid=" UINT64_FMT "(%s), docid=" DOCID_FMT ", field=%d)",
 						(uint64_t)uWordid, sWord, pQword->m_tDoc.m_uDocID, iField ));
@@ -19421,7 +19704,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				LOC_FAIL(( fp, "doc hit count mismatch (wordid=" UINT64_FMT "(%s), docid=" DOCID_FMT ", doclist=%d, hitlist=%d)",
 					(uint64_t)uWordid, sWord, pQword->m_tDoc.m_uDocID, pQword->m_uMatchHits, iDocHits ));
 
-			if ( GetMatchSchema().m_dFields.GetLength()>32 )
+			if ( GetMatchSchema().GetFieldsCount()>32 )
 				pQword->CollectHitMask();
 
 			// check the mask
@@ -25058,7 +25341,7 @@ bool CSphSource::UpdateSchema ( CSphSchema * pInfo, CSphString & sError )
 	assert ( pInfo );
 
 	// fill it
-	if ( pInfo->m_dFields.GetLength()==0 && pInfo->GetAttrsCount()==0 )
+	if ( pInfo->GetFieldsCount()==0 && pInfo->GetAttrsCount()==0 )
 	{
 		*pInfo = m_tSchema;
 		return true;
@@ -25266,7 +25549,7 @@ bool CSphSource_Document::IterateDocument ( CSphString & sError )
 			for ( int iField=0; iField<m_tState.m_iEndField && bOk; iField++ )
 			{
 				const BYTE * sFilename = m_tState.m_dFields[iField];
-				if ( m_tSchema.m_dFields[iField].m_bFilename )
+				if ( m_tSchema.GetField(iField).m_bFilename )
 					bOk &= CheckFileField ( sFilename );
 
 				if ( !bOk && m_eOnFileFieldError==FFE_FAIL_INDEX )
@@ -25285,7 +25568,7 @@ bool CSphSource_Document::IterateDocument ( CSphString & sError )
 			bool bHaveModifiedFields = false;
 			for ( int iField=0; iField<m_tState.m_iEndField; iField++ )
 			{
-				if ( m_tSchema.m_dFields[iField].m_bFilename )
+				if ( m_tSchema.GetField(iField).m_bFilename )
 				{
 					m_tState.m_dTmpFieldPtrs[iField] = m_tState.m_dFields[iField];
 					continue;
@@ -25402,10 +25685,10 @@ int CSphSource_Document::LoadFileField ( BYTE ** ppField, CSphString & sError )
 
 bool AddFieldLens ( CSphSchema & tSchema, bool bDynamic, CSphString & sError )
 {
-	ARRAY_FOREACH ( i, tSchema.m_dFields )
+	for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
 	{
 		CSphColumnInfo tCol;
-		tCol.m_sName.SetSprintf ( "%s_len", tSchema.m_dFields[i].m_sName.cstr() );
+		tCol.m_sName.SetSprintf ( "%s_len", tSchema.GetFieldName(i) );
 
 		int iGot = tSchema.GetAttrIndex ( tCol.m_sName.cstr() );
 		if ( iGot>=0 )
@@ -25449,11 +25732,11 @@ void CSphSource_Document::AllocDocinfo()
 
 	m_dStrAttrs.Resize ( m_tSchema.GetAttrsCount() );
 
-	if ( m_bIndexFieldLens && m_tSchema.GetAttrsCount() && m_tSchema.m_dFields.GetLength() )
+	if ( m_bIndexFieldLens && m_tSchema.GetAttrsCount() && m_tSchema.GetFieldsCount() )
 	{
 		int iFirst = m_tSchema.GetAttrId_FirstFieldLen();
 		assert ( m_tSchema.GetAttr ( iFirst ).m_eAttrType==SPH_ATTR_TOKENCOUNT );
-		assert ( m_tSchema.GetAttr ( iFirst+m_tSchema.m_dFields.GetLength()-1 ).m_eAttrType==SPH_ATTR_TOKENCOUNT );
+		assert ( m_tSchema.GetAttr ( iFirst+m_tSchema.GetFieldsCount()-1 ).m_eAttrType==SPH_ATTR_TOKENCOUNT );
 
 		m_pFieldLengthAttrs = m_tDocInfo.m_pDynamic + ( m_tSchema.GetAttr ( iFirst ).m_tLocator.m_iBitOffset / 32 );
 	}
@@ -25792,7 +26075,7 @@ void CSphSource_Document::BuildHits ( CSphString & sError, bool bSkipEndMarker )
 
 			// load files
 			const BYTE * sTextToIndex;
-			if ( m_tSchema.m_dFields[m_tState.m_iField].m_bFilename )
+			if ( m_tSchema.GetField(m_tState.m_iField).m_bFilename )
 			{
 				LoadFileField ( &sField, sError );
 				sTextToIndex = sField;
@@ -25829,7 +26112,7 @@ void CSphSource_Document::BuildHits ( CSphString & sError, bool bSkipEndMarker )
 			m_tState.m_iHitPos = HITMAN::Create ( m_tState.m_iField, m_tState.m_iStartPos );
 		}
 
-		const CSphColumnInfo & tField = m_tSchema.m_dFields[m_tState.m_iField];
+		const CSphColumnInfo & tField = m_tSchema.GetField ( m_tState.m_iField );
 
 		if ( tField.m_eWordpart!=SPH_WORDPART_WHOLE )
 			BuildSubstringHits ( uDocid, tField.m_bPayload, tField.m_eWordpart, bSkipEndMarker );
@@ -26385,7 +26668,7 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 
 		if ( tCol.m_eAttrType==SPH_ATTR_NONE || tCol.m_bIndexed )
 		{
-			m_tSchema.m_dFields.Add ( tCol );
+			m_tSchema.AddField ( tCol );
 			ARRAY_FOREACH ( k, m_tParams.m_dUnpack )
 			{
 				CSphUnpackInfo & tUnpack = m_tParams.m_dUnpack[k];
@@ -26396,7 +26679,7 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 						sError.SetSprintf ( "this source does not support column unpacking" );
 						return false;
 					}
-					int iIndex = m_tSchema.m_dFields.GetLength() - 1;
+					int iIndex = m_tSchema.GetFieldsCount() - 1;
 					if ( iIndex < SPH_MAX_FIELDS )
 					{
 						m_dUnpack[iIndex] = tUnpack.m_eFormat;
@@ -26440,7 +26723,7 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 			sphWarn ( "attribute '%s' not found - IGNORING", m_tParams.m_dAttrs[i].m_sName.cstr() );
 
 	// joined fields
-	m_iPlainFieldsLength = m_tSchema.m_dFields.GetLength();
+	m_iPlainFieldsLength = m_tSchema.GetFieldsCount();
 
 	ARRAY_FOREACH ( i, m_tParams.m_dJoinedFields )
 	{
@@ -26452,7 +26735,7 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 		tCol.m_eSrc = m_tParams.m_dJoinedFields[i].m_sRanged.IsEmpty() ? SPH_ATTRSRC_QUERY : SPH_ATTRSRC_RANGEDQUERY;
 		tCol.m_sQueryRange = m_tParams.m_dJoinedFields[i].m_sRanged;
 		tCol.m_eWordpart = GetWordpart ( tCol.m_sName.cstr(), bWordDict );
-		m_tSchema.m_dFields.Add ( tCol );
+		m_tSchema.AddField ( tCol );
 	}
 
 	// auto-computed length attributes
@@ -26463,19 +26746,19 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 	AllocDocinfo();
 
 	// check it
-	if ( m_tSchema.m_dFields.GetLength()>SPH_MAX_FIELDS )
+	if ( m_tSchema.GetFieldsCount()>SPH_MAX_FIELDS )
 		LOC_ERROR2 ( "too many fields (fields=%d, max=%d)",
-			m_tSchema.m_dFields.GetLength(), SPH_MAX_FIELDS );
+			m_tSchema.GetFieldsCount(), SPH_MAX_FIELDS );
 
 	// log it
 	if ( m_fpDumpRows )
 	{
-		const char * sTable = m_tSchema.m_sName.cstr();
+		const char * sTable = m_tSchema.GetName();
 
 		time_t iNow = time ( NULL );
 		fprintf ( m_fpDumpRows, "#\n# === source %s ts %d\n# %s#\n", sTable, (int)iNow, ctime ( &iNow ) );
-		ARRAY_FOREACH ( i, m_tSchema.m_dFields )
-			fprintf ( m_fpDumpRows, "# field %d: %s\n", i, m_tSchema.m_dFields[i].m_sName.cstr() );
+		for ( int i=0; i < m_tSchema.GetFieldsCount(); i++ )
+			fprintf ( m_fpDumpRows, "# field %d: %s\n", i, m_tSchema.GetFieldName(i) );
 
 		for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
 		{
@@ -26504,10 +26787,10 @@ void CSphSource_SQL::Disconnect ()
 	m_tHits.m_dData.Reset();
 
 	if ( m_iNullIds )
-		sphWarn ( "source %s: skipped %d document(s) with zero/NULL ids", m_tSchema.m_sName.cstr(), m_iNullIds );
+		sphWarn ( "source %s: skipped %d document(s) with zero/NULL ids", m_tSchema.GetName(), m_iNullIds );
 
 	if ( m_iMaxIds )
-		sphWarn ( "source %s: skipped %d document(s) with DOCID_MAX ids", m_tSchema.m_sName.cstr(), m_iMaxIds );
+		sphWarn ( "source %s: skipped %d document(s) with DOCID_MAX ids", m_tSchema.GetName(), m_iMaxIds );
 
 	m_iNullIds = 0;
 	m_iMaxIds = 0;
@@ -26597,8 +26880,8 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 			continue;
 		}
 		#endif
-		m_dFields[i] = (BYTE*) SqlColumn ( m_tSchema.m_dFields[i].m_iIndex );
-		m_dFieldLengths[i] = SqlColumnLength ( m_tSchema.m_dFields[i].m_iIndex );
+		m_dFields[i] = (BYTE*) SqlColumn ( m_tSchema.GetField(i).m_iIndex );
+		m_dFieldLengths[i] = SqlColumnLength ( m_tSchema.GetField(i).m_iIndex );
 	}
 
 	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
@@ -26651,7 +26934,7 @@ BYTE ** CSphSource_SQL::NextDocument ( CSphString & sError )
 	// log it
 	if ( m_fpDumpRows )
 	{
-		fprintf ( m_fpDumpRows, "INSERT INTO rows_%s VALUES (", m_tSchema.m_sName.cstr() );
+		fprintf ( m_fpDumpRows, "INSERT INTO rows_%s VALUES (", m_tSchema.GetName() );
 		for ( int i=0; i<m_iSqlFields; i++ )
 		{
 			if ( i )
@@ -26883,7 +27166,7 @@ void CSphSource_SQL::ReportUnpackError ( int iIndex, int iError )
 
 const char * CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, DWORD & uUnpackedLen, ESphUnpackFormat )
 {
-	int iIndex = m_tSchema.m_dFields[iFieldIndex].m_iIndex;
+	int iIndex = m_tSchema.GetField(iFieldIndex).m_iIndex;
 	uUnpackedLen = SqlColumnLength(iIndex);
 	return SqlColumn(iIndex);
 }
@@ -26892,7 +27175,7 @@ const char * CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, DWORD & uUnpacke
 
 const char * CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, DWORD & uUnpackedLen, ESphUnpackFormat eFormat )
 {
-	int iIndex = m_tSchema.m_dFields[iFieldIndex].m_iIndex;
+	int iIndex = m_tSchema.GetField(iFieldIndex).m_iIndex;
 	const char * pData = SqlColumn(iIndex);
 
 	if ( pData==NULL )
@@ -27015,7 +27298,7 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 	m_tHits.m_dData.Resize ( 0 );
 
 	// eof check
-	if ( m_iJoinedHitField>=m_tSchema.m_dFields.GetLength() )
+	if ( m_iJoinedHitField>=m_tSchema.GetFieldsCount() )
 	{
 		m_tDocInfo.m_uDocID = 0;
 		return &m_tHits;
@@ -27024,7 +27307,7 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 	bool bProcessingRanged = true;
 
 	// my fetch loop
-	while ( m_iJoinedHitField<m_tSchema.m_dFields.GetLength() )
+	while ( m_iJoinedHitField<m_tSchema.GetFieldsCount() )
 	{
 		if ( m_tState.m_bProcessingHits || SqlFetchRow() )
 		{
@@ -27042,8 +27325,7 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 			// docid asc requirement violated? report an error
 			if ( m_iJoinedHitID>m_tDocInfo.m_uDocID )
 			{
-				sError.SetSprintf ( "joined field '%s': query MUST return document IDs in ASC order",
-					m_tSchema.m_dFields[m_iJoinedHitField].m_sName.cstr() );
+				sError.SetSprintf ( "joined field '%s': query MUST return document IDs in ASC order", m_tSchema.GetFieldName(m_iJoinedHitField) );
 				return NULL;
 			}
 
@@ -27061,7 +27343,7 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 				m_tState.m_iStartField = m_iJoinedHitField;
 				m_tState.m_iEndField = m_iJoinedHitField+1;
 
-				if ( m_tSchema.m_dFields[m_iJoinedHitField].m_bPayload )
+				if ( m_tSchema.GetField(m_iJoinedHitField).m_bPayload )
 					m_tState.m_iStartPos = sphToDword ( SqlColumn(2) );
 				else
 					m_tState.m_iStartPos = m_iJoinedHitPos;
@@ -27076,7 +27358,7 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 			BuildHits ( sError, true );
 
 			// update current position
-			if ( !m_tSchema.m_dFields[m_iJoinedHitField].m_bPayload && !m_tState.m_bProcessingHits && m_tHits.Length() )
+			if ( !m_tSchema.GetField(m_iJoinedHitField).m_bPayload && !m_tState.m_bProcessingHits && m_tHits.Length() )
 				m_iJoinedHitPos = HITMAN::GetPos ( m_tHits.Last()->m_uWordPos );
 
 			if ( m_tState.m_bProcessingHits )
@@ -27090,8 +27372,8 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 		} else
 		{
 			int iLastField = m_iJoinedHitField;
-			bool bRanged = ( m_iJoinedHitField>=m_iPlainFieldsLength && m_iJoinedHitField<m_tSchema.m_dFields.GetLength()
-				&& m_tSchema.m_dFields[m_iJoinedHitField].m_eSrc==SPH_ATTRSRC_RANGEDQUERY );
+			bool bRanged = ( m_iJoinedHitField>=m_iPlainFieldsLength && m_iJoinedHitField<m_tSchema.GetFieldsCount()
+				&& m_tSchema.GetField(m_iJoinedHitField).m_eSrc==SPH_ATTRSRC_RANGEDQUERY );
 
 			// current field is over, continue to next field
 			if ( m_iJoinedHitField<0 )
@@ -27100,7 +27382,7 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 				m_iJoinedHitField++;
 
 			// eof check
-			if ( m_iJoinedHitField>=m_tSchema.m_dFields.GetLength() )
+			if ( m_iJoinedHitField>=m_tSchema.GetFieldsCount() )
 			{
 				m_tDocInfo.m_uDocID = ( m_tHits.Length() ? 1 : 0 ); // to eof or not to eof
 				SqlDismissResult ();
@@ -27111,7 +27393,7 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 
 			bProcessingRanged = false;
 			bool bCheckNumFields = true;
-			CSphColumnInfo & tJoined = m_tSchema.m_dFields[m_iJoinedHitField];
+			const CSphColumnInfo & tJoined = m_tSchema.GetField(m_iJoinedHitField);
 
 			// start fetching next field
 			if ( tJoined.m_eSrc!=SPH_ATTRSRC_RANGEDQUERY )
@@ -27145,10 +27427,10 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 					return NULL;
 			}
 
-			const int iExpected = m_tSchema.m_dFields[m_iJoinedHitField].m_bPayload ? 3 : 2;
+			const int iExpected = m_tSchema.GetField(m_iJoinedHitField).m_bPayload ? 3 : 2;
 			if ( bCheckNumFields && SqlNumFields()!=iExpected )
 			{
-				const char * sName = m_tSchema.m_dFields[m_iJoinedHitField].m_sName.cstr();
+				const char * sName = m_tSchema.GetField(m_iJoinedHitField).m_sName.cstr();
 				sError.SetSprintf ( "joined field '%s': query MUST return exactly %d columns, got %d", sName, iExpected, SqlNumFields() );
 				return NULL;
 			}
@@ -27729,8 +28011,8 @@ struct CSphSchemaConfigurator
 			const char * sFieldName = pCur->strval().cstr();
 
 			bool bFound = false;
-			for ( int i = 0; i < tSchema.m_dFields.GetLength () && !bFound; i++ )
-				bFound = ( tSchema.m_dFields[i].m_sName==sFieldName );
+			for ( int i = 0; i < tSchema.GetFieldsCount() && !bFound; i++ )
+				bFound = !strcmp ( tSchema.GetFieldName(i), sFieldName );
 
 			if ( bFound )
 				sphWarn ( "%s", ((T*)this)->DecorateMessage ( "duplicate field '%s'", sFieldName ) );
@@ -27743,7 +28025,7 @@ struct CSphSchemaConfigurator
 	{
 		CSphColumnInfo tCol ( sFieldName );
 		tCol.m_eWordpart = ((T*)this)->GetWordpart ( tCol.m_sName.cstr(), bWordDict );
-		tSchema.m_dFields.Add ( tCol );
+		tSchema.AddField ( tCol );
 	}
 };
 
@@ -27821,7 +28103,7 @@ public:
 	virtual bool	Connect ( CSphString & sError );			///< run the command and open the pipe
 	virtual void	Disconnect ();								///< close the pipe
 
-	virtual bool	IterateStart ( CSphString & ) { m_iPlainFieldsLength = m_tSchema.m_dFields.GetLength(); return true; }	///< Connect() starts getting documents automatically, so this one is empty
+	virtual bool	IterateStart ( CSphString & ) { m_iPlainFieldsLength = m_tSchema.GetFieldsCount(); return true; }	///< Connect() starts getting documents automatically, so this one is empty
 	virtual BYTE **	NextDocument ( CSphString & sError );			///< parse incoming chunk and emit some hits
 	virtual const int *	GetFieldLengths () const { return m_dFieldLengths.Begin(); }
 
@@ -28048,7 +28330,7 @@ const char * CSphSource_XMLPipe2::DecorateMessageVA ( const char * sTemplate, va
 {
 	static char sBuf[1024];
 
-	snprintf ( sBuf, sizeof(sBuf), "source '%s': ", m_tSchema.m_sName.cstr() );
+	snprintf ( sBuf, sizeof(sBuf), "source '%s': ", m_tSchema.GetName() );
 	int iBufLen = strlen ( sBuf );
 	int iLeft = sizeof(sBuf) - iBufLen;
 	char * szBufStart = sBuf + iBufLen;
@@ -28116,16 +28398,17 @@ bool CSphSource_XMLPipe2::Connect ( CSphString & sError )
 {
 	assert ( m_pBuffer && m_pFieldBuffer );
 
+	// source settings have been updated after ::Setup
+	for ( int i = 0; i < m_tSchema.GetFieldsCount(); i++ )
+	{
+		ESphWordpart eWordpart = GetWordpart ( m_tSchema.GetFieldName(i), m_pDict && m_pDict->GetSettings().m_bWordDict );
+		m_tSchema.SetFieldWordpart ( i, eWordpart );
+	}
+
 	if_const ( !InitDynamicExpat() )
 	{
 		sError.SetSprintf ( "xmlpipe: failed to load libexpat library (tried "  EXPAT_LIB ")" );
 		return false;
-	}
-
-	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
-	{
-		CSphColumnInfo & tCol = m_tSchema.m_dFields[i];
-		tCol.m_eWordpart = GetWordpart ( tCol.m_sName.cstr(), m_pDict && m_pDict->GetSettings().m_bWordDict );
 	}
 
 	if ( !AddAutoAttrs ( sError ) )
@@ -28295,7 +28578,7 @@ bool CSphSource_XMLPipe2::ParseNextChunk ( int iBufferLen, CSphString & sError )
 			uFailedID = m_dParsedDocuments.Last()->m_uDocID;
 
 		sError.SetSprintf ( "source '%s': XML parse error: %s (line=%d, pos=%d, docid=" DOCID_FMT ")",
-			m_tSchema.m_sName.cstr(), sph_XML_ErrorString ( sph_XML_GetErrorCode ( m_pParser ) ),
+			m_tSchema.GetName(), sph_XML_ErrorString ( sph_XML_GetErrorCode ( m_pParser ) ),
 			(int)sph_XML_GetCurrentLineNumber ( m_pParser ), (int)sph_XML_GetCurrentColumnNumber ( m_pParser ),
 			uFailedID );
 		m_tDocInfo.m_uDocID = 1;
@@ -28409,7 +28692,7 @@ BYTE **	CSphSource_XMLPipe2::NextDocument ( CSphString & sError )
 
 		m_bRemoveParsed = true;
 
-		int nFields = m_tSchema.m_dFields.GetLength ();
+		int nFields = m_tSchema.GetFieldsCount();
 		if ( !nFields )
 		{
 			m_tDocInfo.m_uDocID = 0;
@@ -28507,7 +28790,7 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 			return;
 		}
 
-		if ( m_tSchema.m_dFields.GetLength () > 0 || m_tSchema.GetAttrsCount () > 0 )
+		if ( m_tSchema.GetFieldsCount() > 0 || m_tSchema.GetAttrsCount () > 0 )
 		{
 			sphWarn ( "%s", DecorateMessage ( "both embedded and configured schemas found; using embedded" ) );
 			m_tSchema.Reset ();
@@ -28647,7 +28930,7 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 		if ( m_bInDocument )
 			return DocumentError ( "<sphinx:document>" );
 
-		if ( m_tSchema.m_dFields.GetLength()==0 && m_tSchema.GetAttrsCount()==0 )
+		if ( m_tSchema.GetFieldsCount()==0 && m_tSchema.GetAttrsCount()==0 )
 		{
 			Error ( "no schema configured, and no embedded schema found" );
 			return;
@@ -28659,7 +28942,7 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 		m_pCurDocument = new Document_t;
 
 		m_pCurDocument->m_uDocID = 0;
-		m_pCurDocument->m_dFields.Resize ( m_tSchema.m_dFields.GetLength () );
+		m_pCurDocument->m_dFields.Resize ( m_tSchema.GetFieldsCount() );
 		// for safety
 		ARRAY_FOREACH ( i, m_pCurDocument->m_dFields )
 			m_pCurDocument->m_dFields[i].Add ( '\0' );
@@ -28713,8 +28996,8 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 			return;
 		}
 
-		for ( int i = 0; i < m_tSchema.m_dFields.GetLength () && m_iCurField==-1; i++ )
-			if ( m_tSchema.m_dFields[i].m_sName==szName )
+		for ( int i = 0; i < m_tSchema.GetFieldsCount() && m_iCurField==-1; i++ )
+			if ( !strcmp ( m_tSchema.GetFieldName(i), szName ) )
 				m_iCurField = i;
 
 		m_iCurAttr = m_tSchema.GetAttrIndex ( szName );
@@ -28837,7 +29120,7 @@ void CSphSource_XMLPipe2::UnexpectedCharaters ( const char * pCharacters, int iL
 		CSphString sWarning;
 		sWarning.SetBinary ( pCharacters, Min ( iLen, MAX_WARNING_LENGTH ) );
 		sphWarn ( "source '%s': unexpected string '%s' (line=%d, pos=%d) %s",
-			m_tSchema.m_sName.cstr(), sWarning.cstr (),
+			m_tSchema.GetName(), sWarning.cstr (),
 			(int)sph_XML_GetCurrentLineNumber ( m_pParser ), (int)sph_XML_GetCurrentColumnNumber ( m_pParser ), szComment );
 	}
 }
@@ -28873,20 +29156,20 @@ void CSphSource_XMLPipe2::Characters ( const char * pCharacters, int iLen )
 
 	} else
 	{
-		const CSphString & sName = ( m_iCurField!=-1 ) ? m_tSchema.m_dFields[m_iCurField].m_sName : m_tSchema.GetAttr ( m_iCurAttr ).m_sName;
+		const char * szName = ( m_iCurField!=-1 ) ? m_tSchema.GetFieldName(m_iCurField) : m_tSchema.GetAttr(m_iCurAttr).m_sName.cstr();
 
 		bool bWarned = false;
 		for ( int i = 0; i < m_dWarned.GetLength () && !bWarned; i++ )
-			bWarned = m_dWarned[i]==sName;
+			bWarned = m_dWarned[i]==szName;
 
 		if ( !bWarned )
 		{
 			sphWarn ( "source '%s': field/attribute '%s' length exceeds max length (line=%d, pos=%d, docid=" DOCID_FMT ")",
-				m_tSchema.m_sName.cstr(), sName.cstr(),
+				m_tSchema.GetName(), szName,
 				(int)sph_XML_GetCurrentLineNumber ( m_pParser ), (int)sph_XML_GetCurrentColumnNumber ( m_pParser ),
 				m_pCurDocument->m_uDocID );
 
-			m_dWarned.Add ( sName );
+			m_dWarned.Add ( szName );
 		}
 	}
 }
@@ -29550,7 +29833,7 @@ bool CSphSource_BaseSV::Setup ( const CSphConfigSection & hSource, FILE * pPipe,
 	if ( !SourceCheckSchema ( m_tSchema, sError ) )
 		return false;
 
-	int nFields = m_tSchema.m_dFields.GetLength();
+	int nFields = m_tSchema.GetFieldsCount();
 	m_dFields.Reset ( nFields );
 	m_dFieldLengths.Reset ( nFields );
 
@@ -29559,10 +29842,10 @@ bool CSphSource_BaseSV::Setup ( const CSphConfigSection & hSource, FILE * pPipe,
 	SortedRemapXSV_t tElem;
 	tElem.m_iTag = -1;
 	tElem.m_iAttr = -1;
-	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
+	for ( int i=0; i < m_tSchema.GetFieldsCount(); i++ )
 	{
 		tElem.m_iField = i;
-		hSchema.Add ( tElem, m_tSchema.m_dFields[i].m_sName );
+		hSchema.Add ( tElem, m_tSchema.GetFieldName(i) );
 	}
 	tElem.m_iField = -1;
 	for ( int i=0; i<m_tSchema.GetAttrsCount(); i++ )
@@ -29641,11 +29924,11 @@ bool CSphSource_BaseSV::Setup ( const CSphConfigSection & hSource, FILE * pPipe,
 
 bool CSphSource_BaseSV::Connect ( CSphString & sError )
 {
-	bool bWordDict = ( m_pDict && m_pDict->GetSettings().m_bWordDict );
-	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
+	// source settings have been updated after ::Setup
+	for ( int i = 0; i < m_tSchema.GetFieldsCount(); i++ )
 	{
-		CSphColumnInfo & tCol = m_tSchema.m_dFields[i];
-		tCol.m_eWordpart = GetWordpart ( tCol.m_sName.cstr(), bWordDict );
+		ESphWordpart eWordpart = GetWordpart ( m_tSchema.GetFieldName(i), m_pDict && m_pDict->GetSettings().m_bWordDict );
+		m_tSchema.SetFieldWordpart ( i, eWordpart );
 	}
 
 	int iAttrs = m_tSchema.GetAttrsCount();
@@ -29688,7 +29971,7 @@ static const BYTE g_dBOM[] = { 0xEF, 0xBB, 0xBF };
 
 bool CSphSource_BaseSV::IterateStart ( CSphString & sError )
 {
-	if ( !m_tSchema.m_dFields.GetLength() )
+	if ( !m_tSchema.GetFieldsCount() )
 	{
 		sError.SetSprintf ( "No fields in schema - will not index" );
 		return false;
@@ -29701,10 +29984,10 @@ bool CSphSource_BaseSV::IterateStart ( CSphString & sError )
 	m_iBufUsed = fread ( m_dBuf.Begin(), 1, m_dBuf.GetLength(), m_pFP );
 	if ( !m_iBufUsed )
 	{
-		sError.SetSprintf ( "source '%s': read error '%s'", m_tSchema.m_sName.cstr(), strerror(errno) );
+		sError.SetSprintf ( "source '%s': read error '%s'", m_tSchema.GetName(), strerror(errno) );
 		return false;
 	}
-	m_iPlainFieldsLength = m_tSchema.m_dFields.GetLength();
+	m_iPlainFieldsLength = m_tSchema.GetFieldsCount();
 
 	// space out BOM like xml-pipe does
 	if ( m_iBufUsed>(int)sizeof(g_dBOM) && memcmp ( m_dBuf.Begin(), g_dBOM, sizeof ( g_dBOM ) )==0 )
@@ -29734,7 +30017,7 @@ BYTE **	CSphSource_BaseSV::NextDocument ( CSphString & sError )
 	// check doc_id
 	if ( !m_dColumnsLen[0] )
 	{
-		sError.SetSprintf ( "source '%s': no doc_id found (line=%d)", m_tSchema.m_sName.cstr(), m_iLine );
+		sError.SetSprintf ( "source '%s': no doc_id found (line=%d)", m_tSchema.GetName(), m_iLine );
 		return ReportDocumentError();
 	}
 
@@ -29744,7 +30027,7 @@ BYTE **	CSphSource_BaseSV::NextDocument ( CSphString & sError )
 	// check doc_id
 	if ( m_tDocInfo.m_uDocID==0 )
 	{
-		sError.SetSprintf ( "source '%s': invalid doc_id found (line=%d)", m_tSchema.m_sName.cstr(), m_iLine );
+		sError.SetSprintf ( "source '%s': invalid doc_id found (line=%d)", m_tSchema.GetName(), m_iLine );
 		return ReportDocumentError();
 	}
 
@@ -29822,7 +30105,7 @@ CSphSource_BaseSV::ESphParseResult CSphSource_TSV::SplitColumns ( CSphString & s
 		if ( iCol>=iColumns )
 		{
 			sError.SetSprintf ( "source '%s': too many columns found (found=%d, declared=%d, line=%d, docid=" DOCID_FMT ")",
-				m_tSchema.m_sName.cstr(), iCol, iColumns+m_iAutoCount, m_iLine, m_tDocInfo.m_uDocID );
+				m_tSchema.GetName(), iCol, iColumns+m_iAutoCount, m_iLine, m_tDocInfo.m_uDocID );
 			return CSphSource_BaseSV::PARSING_FAILED;
 		}
 
@@ -29892,7 +30175,7 @@ CSphSource_BaseSV::ESphParseResult CSphSource_TSV::SplitColumns ( CSphString & s
 
 			// error in case no data left in middle of data stream
 			sError.SetSprintf ( "source '%s': read error '%s' (line=%d, docid=" DOCID_FMT ")",
-				m_tSchema.m_sName.cstr(), strerror(errno), m_iLine, m_tDocInfo.m_uDocID );
+				m_tSchema.GetName(), strerror(errno), m_iLine, m_tDocInfo.m_uDocID );
 			return CSphSource_BaseSV::PARSING_FAILED;
 		}
 		m_iBufUsed += iGot;
@@ -29906,7 +30189,7 @@ CSphSource_BaseSV::ESphParseResult CSphSource_TSV::SplitColumns ( CSphString & s
 	if ( iCol!=iColumns )
 	{
 		sError.SetSprintf ( "source '%s': not all columns found (found=%d, total=%d, line=%d, docid=" DOCID_FMT ")",
-			m_tSchema.m_sName.cstr(), iCol, iColumns, m_iLine, m_tDocInfo.m_uDocID );
+			m_tSchema.GetName(), iCol, iColumns, m_iLine, m_tDocInfo.m_uDocID );
 		return CSphSource_BaseSV::PARSING_FAILED;
 	}
 
@@ -30109,12 +30392,12 @@ CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & s
 			if ( iCol!=iColumns )
 			{
 				sError.SetSprintf ( "source '%s': not all columns found (found=%d, total=%d, line=%d, docid=" DOCID_FMT ", error='%s')",
-					m_tSchema.m_sName.cstr(), iCol, iColumns, m_iLine, m_tDocInfo.m_uDocID, strerror(errno) );
+					m_tSchema.GetName(), iCol, iColumns, m_iLine, m_tDocInfo.m_uDocID, strerror(errno) );
 			} else
 			{
 				// error in case no data left in middle of data stream
 				sError.SetSprintf ( "source '%s': read error '%s' (line=%d, docid=" DOCID_FMT ")",
-					m_tSchema.m_sName.cstr(), strerror(errno), m_iLine, m_tDocInfo.m_uDocID );
+					m_tSchema.GetName(), strerror(errno), m_iLine, m_tDocInfo.m_uDocID );
 			}
 			return CSphSource_BaseSV::PARSING_FAILED;
 		}
@@ -30130,7 +30413,7 @@ CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & s
 	if ( iCol!=iColumns )
 	{
 		sError.SetSprintf ( "source '%s': not all columns found (found=%d, total=%d, line=%d, docid=" DOCID_FMT ")",
-			m_tSchema.m_sName.cstr(), iCol, iColumns, m_iLine, m_tDocInfo.m_uDocID );
+			m_tSchema.GetName(), iCol, iColumns, m_iLine, m_tDocInfo.m_uDocID );
 		return CSphSource_BaseSV::PARSING_FAILED;
 	}
 
@@ -31993,9 +32276,9 @@ void sphDictBuildSkiplists ( const char * sPath )
 		}
 	}
 
-	CSphFixedVector<uint64_t> dFieldLens ( tSchema.m_dFields.GetLength() );
+	CSphFixedVector<uint64_t> dFieldLens ( tSchema.GetFieldsCount() );
 	if ( uVersion>=35 && tIndexSettings.m_bIndexFieldLens )
-		ARRAY_FOREACH ( i, tSchema.m_dFields )
+		for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
 			dFieldLens[i] = rdHeader.GetOffset(); // FIXME? ideally 64bit even when off is 32bit..
 
 	if ( rdHeader.GetErrorFlag() )
@@ -32468,7 +32751,7 @@ void sphDictBuildSkiplists ( const char * sPath )
 
 	// average field lengths
 	if ( tIndexSettings.m_bIndexFieldLens )
-		ARRAY_FOREACH ( i, tSchema.m_dFields )
+		for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
 			wrHeader.PutOffset ( dFieldLens[i] );
 
 	wrHeader.CloseFile ();
@@ -32743,8 +33026,8 @@ void SorterSchemas ( ISphMatchSorter ** ppSorters, int iCount, int iSkipSorter, 
 		if ( i==iSkipSorter || !ppSorters[i] )
 			continue;
 
-		const ISphSchema & tSchema = ppSorters[i]->GetSchema();
-		dSchemas.Add ( &tSchema );
+		const ISphSchema * pSchema = ppSorters[i]->GetSchema();
+		dSchemas.Add ( pSchema );
 	}
 }
 

@@ -3174,22 +3174,22 @@ protected:
 };
 
 
-struct SearchReplyParser_t : public IReplyParser_t, public ISphNoncopyable
+class SearchReplyParser_c : public IReplyParser_t, public ISphNoncopyable
 {
-	SearchReplyParser_t ( int iStart, int iEnd, CSphVector<DWORD> & dMvaStorage, CSphVector<BYTE> & dStringsStorage )
+public:
+	SearchReplyParser_c ( int iStart, int iEnd )
 		: m_iStart ( iStart )
 		, m_iEnd ( iEnd )
-		, m_dMvaStorage ( dMvaStorage )
-		, m_dStringsStorage ( dStringsStorage )
 	{}
 
-	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const;
+	virtual bool		ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const;
 
-protected:
+private:
 	int					m_iStart;
 	int					m_iEnd;
-	CSphVector<DWORD> &	m_dMvaStorage;
-	CSphVector<BYTE> &	m_dStringsStorage;
+
+	void				ParseSchema ( CSphQueryResult & tRes, MemInputBuffer_c & tReq ) const;
+	void				ParseMatch ( CSphMatch & tMatch, MemInputBuffer_c & tReq, const CSphSchema & tSchema, bool bAgent64 ) const;
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -3510,7 +3510,114 @@ void SearchRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, ISphOutp
 
 /////////////////////////////////////////////////////////////////////////////
 
-bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const
+void SearchReplyParser_c::ParseMatch ( CSphMatch & tMatch, MemInputBuffer_c & tReq, const CSphSchema & tSchema, bool bAgent64 ) const
+{
+	tMatch.Reset ( tSchema.GetRowSize() );
+	tMatch.m_uDocID = bAgent64 ? (SphDocID_t)tReq.GetUint64() : tReq.GetDword();
+	tMatch.m_iWeight = tReq.GetInt ();
+	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
+	{
+		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
+
+		assert ( sphPlainAttrToPtrAttr(tAttr.m_eAttrType)==tAttr.m_eAttrType );
+
+		switch ( tAttr.m_eAttrType )
+		{
+		case SPH_ATTR_UINT32SET_PTR:
+		case SPH_ATTR_INT64SET_PTR:
+			{
+				int iValues = tReq.GetDword ();
+				BYTE * pData = nullptr;
+				BYTE * pPacked = sphPackPtrAttr ( iValues*sizeof(DWORD), pData );
+				tMatch.SetAttr ( tAttr.m_tLocator, (SphAttr_t)pPacked );
+				DWORD * pMVA = (DWORD *)pData;
+				if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET_PTR )
+				{
+					while ( iValues-- )
+						sphUnalignedWrite ( pMVA++, tReq.GetDword() );
+				} else
+				{
+					assert ( ( iValues%2 )==0 );
+					for ( ; iValues; iValues -= 2 )
+					{
+						uint64_t uMva = tReq.GetUint64();
+						sphUnalignedWrite ( pMVA, uMva );
+						pMVA += 2;
+					}
+				}
+			}
+			break;
+
+		case SPH_ATTR_STRINGPTR:
+		case SPH_ATTR_JSON_PTR:
+		case SPH_ATTR_FACTORS:
+		case SPH_ATTR_FACTORS_JSON:
+			{
+				int iLen = tReq.GetDword();
+				BYTE * pData = nullptr;
+				tMatch.SetAttr ( tAttr.m_tLocator, (SphAttr_t)sphPackPtrAttr ( iLen, pData ) );
+				if ( iLen )
+					tReq.GetBytes ( pData, iLen );
+			}
+			break;
+
+		case SPH_ATTR_JSON_FIELD_PTR:
+			{
+				// FIXME: no reason for json_field to be any different from other *_PTR attributes
+				ESphJsonType eJson = (ESphJsonType)tReq.GetByte();
+				if ( eJson==JSON_EOF )
+					tMatch.SetAttr ( tAttr.m_tLocator, 0 );
+				else
+				{
+					int iLen = tReq.GetDword();
+					BYTE * pData = nullptr;
+					tMatch.SetAttr ( tAttr.m_tLocator, (SphAttr_t)sphPackPtrAttr ( iLen+1, pData ) );
+					*pData++ = (BYTE)eJson;
+					tReq.GetBytes ( pData, iLen );
+				}
+			}
+			break;
+
+		case SPH_ATTR_FLOAT:
+			tMatch.SetAttr ( tAttr.m_tLocator, sphF2DW ( tReq.GetFloat() ) );
+			break;
+
+		case SPH_ATTR_BIGINT:
+			tMatch.SetAttr ( tAttr.m_tLocator, tReq.GetUint64() );
+			break;
+
+		default:
+			tMatch.SetAttr ( tAttr.m_tLocator, tReq.GetDword() );
+			break;
+		}
+	}
+}
+
+
+void SearchReplyParser_c::ParseSchema ( CSphQueryResult & tRes, MemInputBuffer_c & tReq ) const
+{
+	CSphSchema & tSchema = tRes.m_tSchema;
+	tSchema.Reset ();
+
+	int nFields = tReq.GetInt(); // FIXME! add a sanity check
+	for ( int j = 0; j < nFields; j++ )
+		tSchema.AddField ( tReq.GetString().cstr() );
+
+	int iNumAttrs = tReq.GetInt(); // FIXME! add a sanity check
+	for ( int j=0; j<iNumAttrs; j++ )
+	{
+		CSphColumnInfo tCol;
+		tCol.m_sName = tReq.GetString ();
+		tCol.m_eAttrType = (ESphAttr) tReq.GetDword (); // FIXME! add a sanity check
+
+		// we always work with plain attrs (not *_PTR) when working with agents
+		tCol.m_eAttrType = sphPlainAttrToPtrAttr ( tCol.m_eAttrType );
+		tSchema.AddAttr ( tCol, true ); // all attributes received from agents are dynamic
+	}
+}
+
+
+bool SearchReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const
 {
 	int iResults = m_iEnd-m_iStart+1;
 	assert ( iResults>0 );
@@ -3539,22 +3646,7 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 			}
 		}
 
-		// get schema
-		CSphRsetSchema & tSchema = tRes.m_tSchema;
-		tSchema.Reset ();
-
-		tSchema.m_dFields.Resize ( tReq.GetInt() ); // FIXME! add a sanity check
-		ARRAY_FOREACH ( j, tSchema.m_dFields )
-			tSchema.m_dFields[j].m_sName = tReq.GetString ();
-
-		int iNumAttrs = tReq.GetInt(); // FIXME! add a sanity check
-		for ( int j=0; j<iNumAttrs; j++ )
-		{
-			CSphColumnInfo tCol;
-			tCol.m_sName = tReq.GetString ();
-			tCol.m_eAttrType = (ESphAttr) tReq.GetDword (); // FIXME! add a sanity check
-			tSchema.AddDynamicAttr ( tCol ); // all attributes received from agents are dynamic
-		}
+		ParseSchema ( tRes, tReq );
 
 		// get matches
 		int iMatches = tReq.GetInt ();
@@ -3564,7 +3656,7 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 			return false;
 		}
 
-		int bAgent64 = tReq.GetInt ();
+		bool bAgent64 = !!tReq.GetInt();
 #if !USE_64BIT
 		if ( bAgent64 )
 			tAgent.m_sFailure.SetSprintf ( "id64 agent, id32 master, docids might be wrapped" );
@@ -3574,101 +3666,8 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 		if ( iMatches )
 		{
 			tRes.m_dMatches.Resize ( iMatches );
-			ARRAY_FOREACH ( i, tRes.m_dMatches )
-			{
-				CSphMatch & tMatch = tRes.m_dMatches[i];
-				tMatch.Reset ( tSchema.GetRowSize() );
-				tMatch.m_uDocID = bAgent64 ? (SphDocID_t)tReq.GetUint64() : tReq.GetDword();
-				tMatch.m_iWeight = tReq.GetInt ();
-				for ( int j=0; j<tSchema.GetAttrsCount(); j++ )
-				{
-					const CSphColumnInfo & tAttr = tSchema.GetAttr(j);
-					if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET || tAttr.m_eAttrType==SPH_ATTR_INT64SET )
-					{
-						tMatch.SetAttr ( tAttr.m_tLocator, m_dMvaStorage.GetLength() );
-
-						int iValues = tReq.GetDword ();
-						m_dMvaStorage.Add ( iValues );
-						if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET )
-						{
-							while ( iValues-- )
-								m_dMvaStorage.Add ( tReq.GetDword() );
-						} else
-						{
-							assert ( ( iValues%2 )==0 );
-							for ( ; iValues; iValues -= 2 )
-							{
-								uint64_t uMva = tReq.GetUint64();
-								m_dMvaStorage.Add ( (DWORD)uMva );
-								m_dMvaStorage.Add ( (DWORD)( uMva>>32 ) );
-							}
-						}
-
-					} else if ( tAttr.m_eAttrType==SPH_ATTR_FLOAT )
-					{
-						float fRes = tReq.GetFloat();
-						tMatch.SetAttr ( tAttr.m_tLocator, sphF2DW(fRes) );
-
-					} else if ( tAttr.m_eAttrType==SPH_ATTR_BIGINT )
-					{
-						tMatch.SetAttr ( tAttr.m_tLocator, tReq.GetUint64() );
-
-					} else if ( tAttr.m_eAttrType==SPH_ATTR_STRING || tAttr.m_eAttrType==SPH_ATTR_JSON )
-					{
-						int iLen = tReq.GetDword();
-						if ( !iLen )
-						{
-							tMatch.SetAttr ( tAttr.m_tLocator, 0 );
-						} else
-						{
-							int iOff = m_dStringsStorage.GetLength();
-							tMatch.SetAttr ( tAttr.m_tLocator, iOff );
-
-							m_dStringsStorage.Resize ( iOff+4+iLen );
-							int iPackedLen = sphPackStrlen ( m_dStringsStorage.Begin() + iOff, iLen );
-							tReq.GetBytes ( m_dStringsStorage.Begin() + iOff + iPackedLen, iLen );
-							m_dStringsStorage.Resize ( iOff+iPackedLen+iLen );
-						}
-
-					} else if ( tAttr.m_eAttrType==SPH_ATTR_STRINGPTR )
-					{
-						CSphString sValue = tReq.GetString();
-						tMatch.SetAttr ( tAttr.m_tLocator, (SphAttr_t) sValue.Leak() );
-					} else if ( tAttr.m_eAttrType==SPH_ATTR_FACTORS || tAttr.m_eAttrType==SPH_ATTR_FACTORS_JSON )
-					{
-						DWORD uLength = tReq.GetDword();
-						BYTE * pData = new BYTE[uLength];
-						*(DWORD *)pData = uLength;
-						tReq.GetBytes ( pData+sizeof(DWORD), uLength-sizeof(DWORD) );
-						tMatch.SetAttr ( tAttr.m_tLocator, (SphAttr_t) pData );
-
-					} else if ( tAttr.m_eAttrType==SPH_ATTR_JSON_FIELD )
-					{
-						ESphJsonType eJson = (ESphJsonType)tReq.GetByte();
-						if ( eJson==JSON_EOF )
-						{
-							tMatch.SetAttr ( tAttr.m_tLocator, 0 );
-						} else
-						{
-							int iOff = m_dStringsStorage.GetLength();
-							int64_t iTypeOffset = ( ( (int64_t)iOff ) | ( ( (int64_t)eJson )<<32 ) );
-							tMatch.SetAttr ( tAttr.m_tLocator, iTypeOffset );
-
-							// read node length if needed
-							int iLen = sphJsonNodeSize ( eJson, NULL );
-							if ( iLen<0 )
-								iLen = tReq.GetDword ();
-
-							m_dStringsStorage.Resize ( iOff+iLen );
-							tReq.GetBytes ( m_dStringsStorage.Begin()+iOff, iLen );
-						}
-
-					} else
-					{
-						tMatch.SetAttr ( tAttr.m_tLocator, tReq.GetDword() );
-					}
-				}
-			}
+			for ( auto & i : tRes.m_dMatches )
+				ParseMatch ( i, tReq, tRes.m_tSchema, bAgent64 );
 		}
 
 		// read totals (retrieved count, total count, query time, word count)
@@ -3727,7 +3726,7 @@ bool SearchReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 /////////////////////////////////////////////////////////////////////////////
 
 // returns true if incoming schema (src) is equal to existing (dst); false otherwise
-bool MinimizeSchema ( CSphRsetSchema & tDst, const ISphSchema & tSrc )
+bool MinimizeSchema ( CSphSchema & tDst, const ISphSchema & tSrc )
 {
 	// if dst is empty, result is also empty
 	if ( tDst.GetAttrsCount()==0 )
@@ -3801,17 +3800,20 @@ bool MinimizeSchema ( CSphRsetSchema & tDst, const ISphSchema & tSrc )
 
 	if ( !bEqual )
 	{
-		CSphVector<CSphColumnInfo> dFields;
-		Swap ( dFields, tDst.m_dFields );
+		CSphVector<CSphColumnInfo> dFields ( tDst.GetFieldsCount() );
+		for ( int i = 0; i < tDst.GetFieldsCount(); i++ )
+			dFields[i] = tDst.GetField(i);
+
 		tDst.Reset();
+
 		ARRAY_FOREACH ( i, dDst )
-			tDst.AddDynamicAttr ( dDst[i] );
-		Swap ( dFields, tDst.m_dFields );
+			tDst.AddAttr ( dDst[i], true );
+
+		ARRAY_FOREACH ( i, dFields )
+			tDst.AddField( dFields[i] );
 
 	} else
-	{
 		tDst.SwapAttrs ( dDst );
-	}
 
 	return bEqual;
 }
@@ -3957,6 +3959,90 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 }
 
 
+static bool ParseSearchFilter ( CSphFilterSettings & tFilter, InputBuffer_c & tReq, ISphOutputBuffer & tOut, int iMasterVer )
+{
+	tFilter.m_sAttrName = tReq.GetString ();
+	sphColumnToLowercase ( const_cast<char *>( tFilter.m_sAttrName.cstr() ) );
+
+	tFilter.m_eType = (ESphFilter) tReq.GetDword ();
+	switch ( tFilter.m_eType )
+	{
+	case SPH_FILTER_RANGE:
+		tFilter.m_iMinValue = tReq.GetUint64();
+		tFilter.m_iMaxValue = tReq.GetUint64();
+		break;
+
+	case SPH_FILTER_FLOATRANGE:
+		tFilter.m_fMinValue = tReq.GetFloat ();
+		tFilter.m_fMaxValue = tReq.GetFloat ();
+		break;
+
+	case SPH_FILTER_VALUES:
+		{
+			int iGot = 0;
+			bool bRes = tReq.GetQwords ( tFilter.m_dValues, iGot, g_iMaxFilterValues );
+			if ( !bRes )
+			{
+				SendErrorReply ( tOut, "invalid attribute '%s' set length %d (should be in 0..%d range)", tFilter.m_sAttrName.cstr(), iGot, g_iMaxFilterValues );
+				return false;
+			}
+		}
+		break;
+
+	case SPH_FILTER_STRING:
+		tFilter.m_dStrings.Add ( tReq.GetString() );
+		break;
+
+	case SPH_FILTER_NULL:
+		tFilter.m_bIsNull = tReq.GetByte()!=0;
+		break;
+
+	case SPH_FILTER_USERVAR:
+		tFilter.m_dStrings.Add ( tReq.GetString() );
+		break;
+
+	case SPH_FILTER_STRING_LIST:
+		{
+			int iCount = tReq.GetDword();
+			if ( iCount<0 || iCount>g_iMaxFilterValues )
+			{
+				SendErrorReply ( tOut, "invalid attribute '%s' set length %d (should be in 0..%d range)", tFilter.m_sAttrName.cstr(), iCount, g_iMaxFilterValues );
+				return false;
+			}
+			tFilter.m_dStrings.Resize ( iCount );
+			ARRAY_FOREACH ( iString, tFilter.m_dStrings )
+				tFilter.m_dStrings[iString] = tReq.GetString();
+		}
+		break;
+
+	default:
+		SendErrorReply ( tOut, "unknown filter type (type-id=%d)", tFilter.m_eType );
+		return false;
+	}
+
+	tFilter.m_bExclude = !!tReq.GetDword ();
+
+	if ( iMasterVer>=15 )
+	{
+		tFilter.m_bHasEqualMin = !!tReq.GetDword();
+		tFilter.m_bHasEqualMax = !!tReq.GetDword();
+	} else if ( iMasterVer>=5 )
+		tFilter.m_bHasEqualMin = tFilter.m_bHasEqualMax = !!tReq.GetDword();
+
+	if ( iMasterVer>=15 )
+	{
+		tFilter.m_bOpenLeft = !!tReq.GetDword();
+		tFilter.m_bOpenRight = !!tReq.GetDword();
+	}
+
+	tFilter.m_eMvaFunc = SPH_MVAFUNC_ANY;
+	if ( iMasterVer>=13 )
+		tFilter.m_eMvaFunc = (ESphMvaFunc)tReq.GetDword();
+
+	return true;
+}
+
+
 bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery & tQuery, int iVer, int iMasterVer )
 {
 	// daemon-level defaults
@@ -3973,18 +4059,13 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	tQuery.m_iOffset = tReq.GetInt ();
 	tQuery.m_iLimit = tReq.GetInt ();
 	tQuery.m_eMode = (ESphMatchMode) tReq.GetInt ();
-	if ( iVer>=0x110 )
-	{
-		tQuery.m_eRanker = (ESphRankMode) tReq.GetInt ();
-		if ( tQuery.m_eRanker==SPH_RANK_EXPR || tQuery.m_eRanker==SPH_RANK_EXPORT )
-			tQuery.m_sRankerExpr = tReq.GetString();
-	}
+	tQuery.m_eRanker = (ESphRankMode) tReq.GetInt ();
+	if ( tQuery.m_eRanker==SPH_RANK_EXPR || tQuery.m_eRanker==SPH_RANK_EXPORT )
+		tQuery.m_sRankerExpr = tReq.GetString();
+
 	tQuery.m_eSort = (ESphSortOrder) tReq.GetInt ();
-	if ( iVer>=0x102 )
-	{
-		tQuery.m_sSortBy = tReq.GetString ();
-		sphColumnToLowercase ( const_cast<char *>( tQuery.m_sSortBy.cstr() ) );
-	}
+	tQuery.m_sSortBy = tReq.GetString ();
+	sphColumnToLowercase ( const_cast<char *>( tQuery.m_sSortBy.cstr() ) );
 	tQuery.m_sRawQuery = tReq.GetString ();
 	{
 		int iGot = 0;
@@ -3994,11 +4075,9 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 			return false;
 		}
 	}
-	tQuery.m_sIndexes = tReq.GetString ();
 
-	bool bIdrange64 = false;
-	if ( iVer>=0x108 )
-		bIdrange64 = ( tReq.GetInt()!=0 );
+	tQuery.m_sIndexes = tReq.GetString ();
+	bool bIdrange64 = tReq.GetInt()!=0;
 
 	SphDocID_t uMinID = 0;
 	SphDocID_t uMaxID = DOCID_MAX;
@@ -4020,124 +4099,17 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	if ( uMaxID==0 )
 		uMaxID = DOCID_MAX;
 
-	// v.1.2
-	if ( iVer>=0x102 )
+	int iAttrFilters = tReq.GetInt ();
+	if ( iAttrFilters>g_iMaxFilters )
 	{
-		int iAttrFilters = tReq.GetInt ();
-		if ( iAttrFilters>g_iMaxFilters )
-		{
-			SendErrorReply ( tOut, "too much attribute filters (req=%d, max=%d)", iAttrFilters, g_iMaxFilters );
-			return false;
-		}
-
-		tQuery.m_dFilters.Resize ( iAttrFilters );
-		ARRAY_FOREACH ( iFilter, tQuery.m_dFilters )
-		{
-			CSphFilterSettings & tFilter = tQuery.m_dFilters[iFilter];
-			tFilter.m_sAttrName = tReq.GetString ();
-			sphColumnToLowercase ( const_cast<char *>( tFilter.m_sAttrName.cstr() ) );
-
-			if ( iVer>=0x10E )
-			{
-				// v.1.14+
-				tFilter.m_eType = (ESphFilter) tReq.GetDword ();
-				switch ( tFilter.m_eType )
-				{
-					case SPH_FILTER_RANGE:
-						tFilter.m_iMinValue = ( iVer>=0x114 ) ? tReq.GetUint64() : tReq.GetDword ();
-						tFilter.m_iMaxValue = ( iVer>=0x114 ) ? tReq.GetUint64() : tReq.GetDword ();
-						break;
-
-					case SPH_FILTER_FLOATRANGE:
-						tFilter.m_fMinValue = tReq.GetFloat ();
-						tFilter.m_fMaxValue = tReq.GetFloat ();
-						break;
-
-					case SPH_FILTER_VALUES:
-						{
-							int iGot = 0;
-							bool bRes = ( iVer>=0x114 )
-								? tReq.GetQwords ( tFilter.m_dValues, iGot, g_iMaxFilterValues )
-								: tReq.GetDwords ( tFilter.m_dValues, iGot, g_iMaxFilterValues );
-							if ( !bRes )
-							{
-								SendErrorReply ( tOut, "invalid attribute '%s'(%d) set length %d (should be in 0..%d range)", tFilter.m_sAttrName.cstr(), iFilter, iGot, g_iMaxFilterValues );
-								return false;
-							}
-						}
-						break;
-					case SPH_FILTER_STRING:
-						tFilter.m_dStrings.Add ( tReq.GetString() );
-						break;
-
-					case SPH_FILTER_NULL:
-						tFilter.m_bIsNull = tReq.GetByte()!=0;
-						break;
-
-					case SPH_FILTER_USERVAR:
-						tFilter.m_dStrings.Add ( tReq.GetString() );
-						break;
-
-					case SPH_FILTER_STRING_LIST:
-					{
-						int iCount = tReq.GetDword();
-						if ( iCount<0 || iCount>g_iMaxFilterValues )
-						{
-							SendErrorReply ( tOut, "invalid attribute '%s'(%d) set length %d (should be in 0..%d range)", tFilter.m_sAttrName.cstr(), iFilter, iCount, g_iMaxFilterValues );
-							return false;
-						}
-						tFilter.m_dStrings.Resize ( iCount );
-						ARRAY_FOREACH ( iString, tFilter.m_dStrings )
-							tFilter.m_dStrings[iString] = tReq.GetString();
-					}
-					break;
-
-					default:
-						SendErrorReply ( tOut, "unknown filter type (type-id=%d)", tFilter.m_eType );
-						return false;
-				}
-
-			} else
-			{
-				// pre-1.14
-				int iGot = 0;
-				if ( !tReq.GetDwords ( tFilter.m_dValues, iGot, g_iMaxFilterValues ) )
-				{
-					SendErrorReply ( tOut, "invalid attribute '%s'(%d) set length %d (should be in 0..%d range)", tFilter.m_sAttrName.cstr(), iFilter, iGot, g_iMaxFilterValues );
-					return false;
-				}
-
-				if ( !tFilter.m_dValues.GetLength() )
-				{
-					// 0 length means this is range, not set
-					tFilter.m_iMinValue = tReq.GetDword ();
-					tFilter.m_iMaxValue = tReq.GetDword ();
-				}
-
-				tFilter.m_eType = tFilter.m_dValues.GetLength() ? SPH_FILTER_VALUES : SPH_FILTER_RANGE;
-			}
-
-			if ( iVer>=0x106 )
-				tFilter.m_bExclude = !!tReq.GetDword ();
-
-			if ( iMasterVer>=15 )
-			{
-				tFilter.m_bHasEqualMin = !!tReq.GetDword();
-				tFilter.m_bHasEqualMax = !!tReq.GetDword();
-			} else if ( iMasterVer>=5 )
-				tFilter.m_bHasEqualMin = tFilter.m_bHasEqualMax = !!tReq.GetDword();
-
-			if ( iMasterVer>=15 )
-			{
-				tFilter.m_bOpenLeft = !!tReq.GetDword();
-				tFilter.m_bOpenRight = !!tReq.GetDword();
-			}
-
-			tFilter.m_eMvaFunc = SPH_MVAFUNC_ANY;
-			if ( iMasterVer>=13 )
-				tFilter.m_eMvaFunc = (ESphMvaFunc)tReq.GetDword();
-		}
+		SendErrorReply ( tOut, "too many attribute filters (req=%d, max=%d)", iAttrFilters, g_iMaxFilters );
+		return false;
 	}
+
+	tQuery.m_dFilters.Resize ( iAttrFilters );
+	for ( auto & i : tQuery.m_dFilters )
+		if ( !ParseSearchFilter ( i, tReq, tOut, iMasterVer ) )
+			return false;
 
 	// now add id range filter
 	if ( uMinID!=0 || uMaxID!=DOCID_MAX )
@@ -4149,175 +4121,98 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		tFilter.m_iMaxValue = uMaxID;
 	}
 
-	// v.1.3
-	if ( iVer>=0x103 )
+	tQuery.m_eGroupFunc = (ESphGroupBy) tReq.GetDword ();
+	tQuery.m_sGroupBy = tReq.GetString ();
+	sphColumnToLowercase ( const_cast<char *>( tQuery.m_sGroupBy.cstr() ) );
+
+	tQuery.m_iMaxMatches = tReq.GetInt ();
+	tQuery.m_sGroupSortBy = tReq.GetString ();
+	tQuery.m_iCutoff = tReq.GetInt();
+	tQuery.m_iRetryCount = tReq.GetInt ();
+	tQuery.m_iRetryDelay = tReq.GetInt ();
+	tQuery.m_sGroupDistinct = tReq.GetString ();
+	sphColumnToLowercase ( const_cast<char *>( tQuery.m_sGroupDistinct.cstr() ) );
+
+	tQuery.m_bGeoAnchor = ( tReq.GetInt()!=0 );
+	if ( tQuery.m_bGeoAnchor )
 	{
-		tQuery.m_eGroupFunc = (ESphGroupBy) tReq.GetDword ();
-		tQuery.m_sGroupBy = tReq.GetString ();
-		sphColumnToLowercase ( const_cast<char *>( tQuery.m_sGroupBy.cstr() ) );
+		tQuery.m_sGeoLatAttr = tReq.GetString ();
+		tQuery.m_sGeoLongAttr = tReq.GetString ();
+		tQuery.m_fGeoLatitude = tReq.GetFloat ();
+		tQuery.m_fGeoLongitude = tReq.GetFloat ();
 	}
 
-	// v.1.4
-	tQuery.m_iMaxMatches = DEFAULT_MAX_MATCHES;
-	if ( iVer>=0x104 )
-		tQuery.m_iMaxMatches = tReq.GetInt ();
+	tQuery.m_dIndexWeights.Resize ( tReq.GetInt() ); // FIXME! add sanity check
+	ARRAY_FOREACH ( i, tQuery.m_dIndexWeights )
+	{
+		tQuery.m_dIndexWeights[i].m_sName = tReq.GetString ();
+		tQuery.m_dIndexWeights[i].m_iValue = tReq.GetInt ();
+	}
 
-	// v.1.5, v.1.7
-	if ( iVer>=0x107 )
+	tQuery.m_uMaxQueryMsec = tReq.GetDword ();
+
+	tQuery.m_dFieldWeights.Resize ( tReq.GetInt() ); // FIXME! add sanity check
+	ARRAY_FOREACH ( i, tQuery.m_dFieldWeights )
 	{
-		tQuery.m_sGroupSortBy = tReq.GetString ();
-	} else if ( iVer>=0x105 )
+		tQuery.m_dFieldWeights[i].m_sName = tReq.GetString ();
+		tQuery.m_dFieldWeights[i].m_iValue = tReq.GetInt ();
+	}
+
+	tQuery.m_sComment = tReq.GetString ();
+
+	tQuery.m_dOverrides.Resize ( tReq.GetInt() ); // FIXME! add sanity check
+	ARRAY_FOREACH ( i, tQuery.m_dOverrides )
 	{
-		bool bSortByGroup = ( tReq.GetInt()!=0 );
-		if ( !bSortByGroup )
+		CSphAttrOverride & tOverride = tQuery.m_dOverrides[i];
+		tOverride.m_sAttr = tReq.GetString ();
+		tOverride.m_eAttrType = (ESphAttr) tReq.GetDword ();
+
+		tOverride.m_dValues.Resize ( tReq.GetInt() ); // FIXME! add sanity check
+		ARRAY_FOREACH ( iVal, tOverride.m_dValues )
 		{
-			char sBuf[256];
-			switch ( tQuery.m_eSort )
-			{
-			case SPH_SORT_RELEVANCE:
-				tQuery.m_sGroupSortBy = "@weight desc";
-				break;
+			CSphAttrOverride::IdValuePair_t & tEntry = tOverride.m_dValues[iVal];
+			tEntry.m_uDocID = (SphDocID_t) tReq.GetUint64 ();
 
-			case SPH_SORT_ATTR_DESC:
-			case SPH_SORT_ATTR_ASC:
-				snprintf ( sBuf, sizeof(sBuf), "%s %s", tQuery.m_sSortBy.cstr(),
-					tQuery.m_eSort==SPH_SORT_ATTR_ASC ? "asc" : "desc" );
-				tQuery.m_sGroupSortBy = sBuf;
-				break;
-
-			case SPH_SORT_EXTENDED:
-				tQuery.m_sGroupSortBy = tQuery.m_sSortBy;
-				break;
-
-			default:
-				SendErrorReply ( tOut, "INTERNAL ERROR: unsupported sort mode %d in groupby sort fixup", tQuery.m_eSort );
-				return false;
-			}
+			if ( tOverride.m_eAttrType==SPH_ATTR_FLOAT )		tEntry.m_fValue = tReq.GetFloat ();
+			else if ( tOverride.m_eAttrType==SPH_ATTR_BIGINT )	tEntry.m_uValue = tReq.GetUint64 ();
+			else												tEntry.m_uValue = tReq.GetDword ();
 		}
 	}
 
-	// v.1.9
-	if ( iVer>=0x109 )
-		tQuery.m_iCutoff = tReq.GetInt();
-
-	// v.1.10
-	if ( iVer>=0x10A )
+	tQuery.m_sSelect = tReq.GetString ();
+	tQuery.m_bAgent = ( iMasterVer>0 );
+	if ( tQuery.m_sSelect.Begins ( "*,*" ) ) // this is the legacy mark of agent for debug purpose
 	{
-		tQuery.m_iRetryCount = tReq.GetInt ();
-		tQuery.m_iRetryDelay = tReq.GetInt ();
+		tQuery.m_bAgent = true;
+		int iSelectLen = tQuery.m_sSelect.Length();
+		tQuery.m_sSelect = ( iSelectLen>4 ? tQuery.m_sSelect.SubString ( 4, iSelectLen-4 ) : "*" );
 	}
+	// fixup select list
+	if ( tQuery.m_sSelect.IsEmpty () )
+		tQuery.m_sSelect = "*";
 
-	// v.1.11
-	if ( iVer>=0x10B )
+	// master sends items to agents since master.version=15 
+	CSphString sError;
+	if ( iMasterVer<15 && !tQuery.ParseSelectList ( sError ) )
 	{
-		tQuery.m_sGroupDistinct = tReq.GetString ();
-		sphColumnToLowercase ( const_cast<char *>( tQuery.m_sGroupDistinct.cstr() ) );
-	}
+		SendErrorReply ( tOut, "select: %s", sError.cstr() );
 
-	// v.1.14
-	if ( iVer>=0x10E )
-	{
-		tQuery.m_bGeoAnchor = ( tReq.GetInt()!=0 );
-		if ( tQuery.m_bGeoAnchor )
+		// we want to see a parse error in query_log_format=sphinxql mode too
+		if ( g_eLogFormat==LOG_FORMAT_SPHINXQL && g_iQueryLogFile>=0 )
 		{
-			tQuery.m_sGeoLatAttr = tReq.GetString ();
-			tQuery.m_sGeoLongAttr = tReq.GetString ();
-			tQuery.m_fGeoLatitude = tReq.GetFloat ();
-			tQuery.m_fGeoLongitude = tReq.GetFloat ();
+			StringBuilder_c tBuf;
+			char sTimeBuf [ SPH_TIME_PID_MAX_SIZE ];
+			sphFormatCurrentTime ( sTimeBuf, sizeof(sTimeBuf) );
+
+			tBuf += "/""* ";
+			tBuf += sTimeBuf;
+			tBuf.Appendf ( "*""/ %s # error=%s\n", tQuery.m_sSelect.cstr(), sError.cstr() );
+
+			sphSeek ( g_iQueryLogFile, 0, SEEK_END );
+			sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.Length() );
 		}
-	}
 
-	// v.1.15
-	if ( iVer>=0x10F )
-	{
-		tQuery.m_dIndexWeights.Resize ( tReq.GetInt() ); // FIXME! add sanity check
-		ARRAY_FOREACH ( i, tQuery.m_dIndexWeights )
-		{
-			tQuery.m_dIndexWeights[i].m_sName = tReq.GetString ();
-			tQuery.m_dIndexWeights[i].m_iValue = tReq.GetInt ();
-		}
-	}
-
-	// v.1.17
-	if ( iVer>=0x111 )
-		tQuery.m_uMaxQueryMsec = tReq.GetDword ();
-
-	// v.1.18
-	if ( iVer>=0x112 )
-	{
-		tQuery.m_dFieldWeights.Resize ( tReq.GetInt() ); // FIXME! add sanity check
-		ARRAY_FOREACH ( i, tQuery.m_dFieldWeights )
-		{
-			tQuery.m_dFieldWeights[i].m_sName = tReq.GetString ();
-			tQuery.m_dFieldWeights[i].m_iValue = tReq.GetInt ();
-		}
-	}
-
-	// v.1.19
-	if ( iVer>=0x113 )
-		tQuery.m_sComment = tReq.GetString ();
-
-	// v.1.21
-	if ( iVer>=0x115 )
-	{
-		tQuery.m_dOverrides.Resize ( tReq.GetInt() ); // FIXME! add sanity check
-		ARRAY_FOREACH ( i, tQuery.m_dOverrides )
-		{
-			CSphAttrOverride & tOverride = tQuery.m_dOverrides[i];
-			tOverride.m_sAttr = tReq.GetString ();
-			tOverride.m_eAttrType = (ESphAttr) tReq.GetDword ();
-
-			tOverride.m_dValues.Resize ( tReq.GetInt() ); // FIXME! add sanity check
-			ARRAY_FOREACH ( iVal, tOverride.m_dValues )
-			{
-				CSphAttrOverride::IdValuePair_t & tEntry = tOverride.m_dValues[iVal];
-				tEntry.m_uDocID = (SphDocID_t) tReq.GetUint64 ();
-
-				if ( tOverride.m_eAttrType==SPH_ATTR_FLOAT )		tEntry.m_fValue = tReq.GetFloat ();
-				else if ( tOverride.m_eAttrType==SPH_ATTR_BIGINT )	tEntry.m_uValue = tReq.GetUint64 ();
-				else												tEntry.m_uValue = tReq.GetDword ();
-			}
-		}
-	}
-
-	// v.1.22
-	if ( iVer>=0x116 )
-	{
-		tQuery.m_sSelect = tReq.GetString ();
-		tQuery.m_bAgent = ( iMasterVer>0 );
-		if ( tQuery.m_sSelect.Begins ( "*,*" ) ) // this is the legacy mark of agent for debug purpose
-		{
-			tQuery.m_bAgent = true;
-			int iSelectLen = tQuery.m_sSelect.Length();
-			tQuery.m_sSelect = ( iSelectLen>4 ? tQuery.m_sSelect.SubString ( 4, iSelectLen-4 ) : "*" );
-		}
-		// fixup select list
-		if ( tQuery.m_sSelect.IsEmpty () )
-			tQuery.m_sSelect = "*";
-
-		// master sends items to agents sice master.version=15 
-		CSphString sError;
-		if ( iMasterVer<15 && !tQuery.ParseSelectList ( sError ) )
-		{
-			SendErrorReply ( tOut, "select: %s", sError.cstr() );
-
-			// we want to see a parse error in query_log_format=sphinxql mode too
-			if ( g_eLogFormat==LOG_FORMAT_SPHINXQL && g_iQueryLogFile>=0 )
-			{
-				StringBuilder_c tBuf;
-				char sTimeBuf [ SPH_TIME_PID_MAX_SIZE ];
-				sphFormatCurrentTime ( sTimeBuf, sizeof(sTimeBuf) );
-
-				tBuf += "/""* ";
-				tBuf += sTimeBuf;
-				tBuf.Appendf ( "*""/ %s # error=%s\n", tQuery.m_sSelect.cstr(), sError.cstr() );
-
-				sphSeek ( g_iQueryLogFile, 0, SEEK_END );
-				sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.Length() );
-			}
-
-			return false;
-		}
+		return false;
 	}
 
 	// v.1.27
@@ -4365,9 +4260,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	}
 
 	if ( iMasterVer>=6 )
-	{
 		tQuery.m_iGroupbyLimit = tReq.GetInt();
-	}
 
 	if ( iMasterVer>=14 )
 	{
@@ -4425,7 +4318,6 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		return false;
 	}
 
-	CSphString sError;
 	CheckQuery ( tQuery, sError );
 	if ( !sError.IsEmpty() )
 	{
@@ -5168,30 +5060,183 @@ int sphSendGetAttrCount ( const ISphSchema & tSchema, bool bAgentMode )
 	return iCount;
 }
 
+
+static int SendDataPtrAttr ( ISphOutputBuffer * pOut, const BYTE * pData )
+{
+	if ( pData ) // magic zero
+	{
+		int iLen = sphUnpackPtrAttr ( pData, &pData );
+		if ( pOut )
+		{
+			pOut->SendDword ( iLen );
+			pOut->SendBytes ( pData, iLen );
+		}
+
+		return iLen;
+	} else
+	{
+		if ( pOut )
+			pOut->SendDword ( 0 ); // null string
+	}
+
+	return 0;
+}
+
+
 static char g_sJsonNull[] = "{}";
 
-int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphTaggedVector & dTag2Pools, bool bAgentMode, const CSphQuery & tQuery, int iMasterVer )
+static int SendJsonAsString ( ISphOutputBuffer * pOut, const BYTE * pJSON )
+{
+	if ( pJSON )
+	{
+		int iLengthBytes = sphUnpackPtrAttr ( pJSON, &pJSON );
+		CSphVector<BYTE> dJson;
+		dJson.Reserve ( iLengthBytes*2 );
+		sphJsonFormat ( dJson, pJSON );
+
+		if ( pOut )
+		{
+			pOut->SendDword ( dJson.GetLength() );
+			pOut->SendBytes ( dJson.Begin(), dJson.GetLength() );
+		}
+		
+		return dJson.GetLength();
+	} else
+	{
+		// magic zero
+		int iLengthBytes = sizeof(g_sJsonNull)-1;
+		if ( pOut )
+		{
+			pOut->SendDword ( iLengthBytes );
+			pOut->SendBytes ( g_sJsonNull, iLengthBytes );
+		} 
+		
+		return iLengthBytes;
+	}
+}
+
+
+static int SendJson ( ISphOutputBuffer * pOut, const BYTE * pJSON, bool bSendJson )
+{
+	if ( bSendJson )
+		return SendDataPtrAttr ( pOut, pJSON ); // send BSON
+	else
+		return SendJsonAsString ( pOut, pJSON ); // send string
+}
+
+
+static int SendJsonFieldAsString ( ISphOutputBuffer * pOut, const BYTE * pJSON )
+{
+	if ( pJSON )
+	{
+		int iLengthBytes = sphUnpackPtrAttr ( pJSON, &pJSON );
+		CSphVector<BYTE> dJson;
+		dJson.Reserve ( iLengthBytes*2 );
+
+		ESphJsonType eJson = (ESphJsonType)*pJSON++;
+		sphJsonFieldFormat ( dJson, pJSON, eJson, false );
+
+		if ( pOut )
+		{
+			pOut->SendDword ( dJson.GetLength() );
+			pOut->SendBytes ( dJson.Begin(), dJson.GetLength() );
+		} else
+			return dJson.GetLength();
+	} else
+	{
+		if ( pOut )
+			pOut->SendDword ( 0 );
+	}
+
+	return 0;
+}
+
+
+static int SendJsonField ( ISphOutputBuffer * pOut, const BYTE * pJSON, bool bSendJsonField )
+{
+	if ( bSendJsonField )
+	{
+		int iLen = sphUnpackPtrAttr ( pJSON, &pJSON );
+		if ( iLen )
+		{
+			ESphJsonType eJson = (ESphJsonType)*pJSON++;
+			iLen--;
+
+			if ( pOut )
+			{
+				pOut->SendByte ( (BYTE)eJson );
+				pOut->SendDword ( iLen );
+				pOut->SendBytes ( pJSON, iLen );
+			}
+
+			return iLen+1;
+		}
+		else
+		{
+			if ( pOut )
+				pOut->SendByte ( JSON_EOF );
+
+			return -3; // 4 bytes by default, and we send only 1. this useless magic should be fixed
+		}
+	} else
+		return SendJsonFieldAsString ( pOut, pJSON );
+}
+
+
+static int SendMVA ( ISphOutputBuffer * pOut, const BYTE * pMVA, bool b64bit )
+{
+	if ( pMVA )
+	{
+		int iLengthBytes = sphUnpackPtrAttr( pMVA, &pMVA );
+		int iValues = iLengthBytes / sizeof(DWORD);
+		if ( pOut )
+			pOut->SendDword ( iValues );
+
+		const DWORD * pValues = (const DWORD *)pMVA;
+
+		if ( b64bit )
+		{
+			assert ( ( iValues%2 )==0 );
+			while ( iValues )
+			{
+				uint64_t uVal = (uint64_t)MVA_UPSIZE ( pValues );
+				if ( pOut )
+					pOut->SendUint64 ( uVal );
+				pValues += 2;
+				iValues -= 2;
+			}
+		} else
+		{
+			while ( iValues-- )
+			{
+				if ( pOut )
+					pOut->SendDword ( *pValues++ );
+			}
+		}
+
+		return iLengthBytes;
+	} else
+	{
+		if ( pOut )
+			pOut->SendDword ( 0 );
+	}
+
+	return 0;
+}
+
+
+int CalcResultLength ( int iVer, const CSphQueryResult * pRes, bool bAgentMode, const CSphQuery & tQuery, int iMasterVer )
 {
 	int iRespLen = 0;
 
-	// query status
-	if ( iVer>=0x10D )
-	{
-		// multi-query status
-		iRespLen += 4; // status code
+	// multi-query status
+	iRespLen += 4; // status code
 
-		if ( !pRes->m_sError.IsEmpty() )
-			return iRespLen + 4 +strlen ( pRes->m_sError.cstr() );
+	if ( !pRes->m_sError.IsEmpty() )
+		return iRespLen + 4 +strlen ( pRes->m_sError.cstr() );
 
-		if ( !pRes->m_sWarning.IsEmpty() )
-			iRespLen += 4+strlen ( pRes->m_sWarning.cstr() );
-
-	} else if ( iVer>=0x106 )
-	{
-		// warning message
-		if ( !pRes->m_sWarning.IsEmpty() )
-			iRespLen += 4 + strlen ( pRes->m_sWarning.cstr() );
-	}
+	if ( !pRes->m_sWarning.IsEmpty() )
+		iRespLen += 4+strlen ( pRes->m_sWarning.cstr() );
 
 	// query stats
 	iRespLen += 20;
@@ -5199,32 +5244,20 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphTaggedV
 	int iAttrsCount = sphSendGetAttrCount ( pRes->m_tSchema, bAgentMode );
 
 	// schema
-	if ( iVer>=0x102 )
-	{
-		iRespLen += 8; // 4 for field count, 4 for attr count
-		ARRAY_FOREACH ( i, pRes->m_tSchema.m_dFields )
-			iRespLen += 4 + strlen ( pRes->m_tSchema.m_dFields[i].m_sName.cstr() ); // namelen, name
-		for ( int i=0; i<iAttrsCount; i++ )
-			iRespLen += 8 + strlen ( pRes->m_tSchema.GetAttr(i).m_sName.cstr() ); // namelen, name, type
-	}
+	iRespLen += 8; // 4 for field count, 4 for attr count
+	for ( int i=0; i<pRes->m_tSchema.GetFieldsCount(); i++ )
+		iRespLen += 4 + strlen ( pRes->m_tSchema.GetFieldName(i) ); // namelen, name
+	for ( int i=0; i<iAttrsCount; i++ )
+		iRespLen += 8 + strlen ( pRes->m_tSchema.GetAttr(i).m_sName.cstr() ); // namelen, name, type
 
-	// matches
-	if ( iVer<0x102 )
-		iRespLen += 16*pRes->m_iCount; // matches
-	else if ( iVer<0x108 )
-		iRespLen += ( 8+4*iAttrsCount )*pRes->m_iCount; // matches
-	else
-		iRespLen += 4 + ( 8+4*USE_64BIT+4*iAttrsCount )*pRes->m_iCount; // id64 tag and matches
+	iRespLen += 4 + ( 8+4*USE_64BIT+4*iAttrsCount )*pRes->m_iCount; // id64 tag and matches
 
-	if ( iVer>=0x114 )
-	{
-		// 64bit matches
-		int iWideAttrs = 0;
-		for ( int i=0; i<iAttrsCount; i++ )
-			if ( pRes->m_tSchema.GetAttr(i).m_eAttrType==SPH_ATTR_BIGINT )
-				iWideAttrs++;
-		iRespLen += 4*pRes->m_iCount*iWideAttrs; // extra 4 bytes per attr per match
-	}
+	// 64bit matches
+	int iWideAttrs = 0;
+	for ( int i=0; i<iAttrsCount; i++ )
+		if ( pRes->m_tSchema.GetAttr(i).m_eAttrType==SPH_ATTR_BIGINT )
+			iWideAttrs++;
+	iRespLen += 4*pRes->m_iCount*iWideAttrs; // extra 4 bytes per attr per match
 
 	// agents send additional flag from words statistics
 	if ( bAgentMode )
@@ -5234,75 +5267,46 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphTaggedV
 	while ( pRes->m_hWordStats.IterateNext() ) // per-word stats
 		iRespLen += 12 + strlen ( pRes->m_hWordStats.IterateGetKey().cstr() ); // wordlen, word, docs, hits
 
-	bool bSendJson = ( bAgentMode && iMasterVer>=3 );
-	bool bSendJsonField = ( bAgentMode && iMasterVer>=4 );
+	bool bSendJson = bAgentMode && iMasterVer>=3;
+	bool bSendJsonField = bAgentMode && iMasterVer>=4;
 
-	// all pooled values
-	CSphVector<CSphAttrLocator> dMvaItems;
-	CSphVector<CSphAttrLocator> dStringItems;
-	CSphVector<CSphAttrLocator> dStringPtrItems;
-	CSphVector<CSphAttrLocator> dJsonItems;
-	CSphVector<CSphAttrLocator> dJsonFieldsItems;
-	CSphVector<CSphAttrLocator> dFactorItems;
-	for ( int i=0; i<iAttrsCount; i++ )
+	for ( int iAttr=0; iAttr<iAttrsCount; iAttr++ )
 	{
-		const CSphColumnInfo & tCol = pRes->m_tSchema.GetAttr(i);
-		switch ( tCol.m_eAttrType )
-		{
-		case SPH_ATTR_UINT32SET:
-		case SPH_ATTR_INT64SET:
-			dMvaItems.Add ( tCol.m_tLocator );
-			break;
-		case SPH_ATTR_STRING:
-			dStringItems.Add ( tCol.m_tLocator );
-			break;
-		case SPH_ATTR_STRINGPTR:
-			dStringPtrItems.Add ( tCol.m_tLocator );
-			break;
-		case SPH_ATTR_JSON:
-			dJsonItems.Add ( tCol.m_tLocator );
-			break;
-		case SPH_ATTR_JSON_FIELD:
-			dJsonFieldsItems.Add ( tCol.m_tLocator );
-			break;
-		case SPH_ATTR_FACTORS:
-		case SPH_ATTR_FACTORS_JSON:
-			dFactorItems.Add ( tCol.m_tLocator );
-			break;
-		default:
-			break;
-		}
-	}
+		const CSphColumnInfo & tCol = pRes->m_tSchema.GetAttr(iAttr);
+		assert ( sphPlainAttrToPtrAttr(tCol.m_eAttrType)==tCol.m_eAttrType );
 
-	if ( iVer>=0x10C && dMvaItems.GetLength() )
-	{
 		for ( int i=0; i<pRes->m_iCount; i++ )
 		{
-			const CSphMatch & tMatch = pRes->m_dMatches [ pRes->m_iOffset+i ];
-			const DWORD * pMvaPool = dTag2Pools [ tMatch.m_iTag ].m_pMva;
-			bool bArenaProhibit = dTag2Pools[tMatch.m_iTag].m_bArenaProhibit;
-			ARRAY_FOREACH ( j, dMvaItems )
-			{
-				assert ( tMatch.GetAttr ( dMvaItems[j] )==0 || pMvaPool );
-				const DWORD * pMva = tMatch.GetAttrMVA ( dMvaItems[j], pMvaPool, bArenaProhibit );
-				if ( pMva )
-					iRespLen += pMva[0]*4; // FIXME? maybe add some sanity check here
-			}
-		}
-	}
+			const CSphMatch & tMatch = pRes->m_dMatches[pRes->m_iOffset+i];
+			const BYTE * pData = (const BYTE*) tMatch.GetAttr ( tCol.m_tLocator );
 
-	if ( iVer>=0x117 && dStringItems.GetLength() )
-	{
-		for ( int i=0; i<pRes->m_iCount; i++ )
-		{
-			const CSphMatch & tMatch = pRes->m_dMatches [ pRes->m_iOffset+i ];
-			const BYTE * pStrings = dTag2Pools [ tMatch.m_iTag ].m_pStrings;
-			ARRAY_FOREACH ( j, dStringItems )
+			switch ( tCol.m_eAttrType )
 			{
-				DWORD uOffset = (DWORD) tMatch.GetAttr ( dStringItems[j] );
-				assert ( !uOffset || pStrings );
-				if ( uOffset ) // magic zero
-					iRespLen += sphUnpackStr ( pStrings+uOffset, NULL );
+			case SPH_ATTR_UINT32SET_PTR:
+			case SPH_ATTR_INT64SET_PTR:
+				iRespLen += SendMVA ( nullptr, pData, tCol.m_eAttrType==SPH_ATTR_INT64SET_PTR );
+				break;
+
+			case SPH_ATTR_STRINGPTR:
+				iRespLen += SendDataPtrAttr ( nullptr, pData );
+				break;
+
+			case SPH_ATTR_FACTORS:
+			case SPH_ATTR_FACTORS_JSON:
+				if ( iVer>=0x11C )
+					iRespLen += SendDataPtrAttr ( nullptr, pData );
+				break;
+
+			case SPH_ATTR_JSON_PTR:
+				iRespLen += SendJson ( nullptr, pData, bSendJson );
+				break;
+
+			case SPH_ATTR_JSON_FIELD_PTR:
+				iRespLen += SendJsonField ( nullptr, pData, bSendJsonField );
+				break;
+
+			default:
+				break;
 			}
 		}
 	}
@@ -5319,198 +5323,147 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, const CSphTaggedV
 		if ( tQuery.m_iMaxPredictedMsec > 0 )
 			iRespLen += 8;		// predicted time
 	}
+
 	// fetched_docs and fetched_hits from agent to master
 	if ( bAgentMode && iMasterVer>=7 )
 		iRespLen += 12;
-
-	if ( iVer>=0x117 && dStringPtrItems.GetLength() )
-	{
-		for ( int i=0; i<pRes->m_iCount; i++ )
-		{
-			const CSphMatch & tMatch = pRes->m_dMatches [ pRes->m_iOffset+i ];
-			ARRAY_FOREACH ( j, dStringPtrItems )
-			{
-				const char* pStr = (const char*) tMatch.GetAttr ( dStringPtrItems[j] );
-				if ( pStr )
-					iRespLen += strlen ( pStr );
-			}
-		}
-	}
-
-	if ( iVer>=0x117 && dJsonItems.GetLength() )
-	{
-		CSphVector<BYTE> dJson ( 512 );
-		// to master pass JSON as raw data
-		for ( int i=0; i<pRes->m_iCount; i++ )
-		{
-			const CSphMatch & tMatch = pRes->m_dMatches [ pRes->m_iOffset+i ];
-			const BYTE * pPool = dTag2Pools [ tMatch.m_iTag ].m_pStrings;
-			ARRAY_FOREACH ( j, dJsonItems )
-			{
-				DWORD uOffset = (DWORD) tMatch.GetAttr ( dJsonItems[j] );
-				assert ( !uOffset || pPool );
-				if ( !uOffset ) // magic zero
-				{
-					if ( !bSendJson ) // for client JSON magic zero is {}
-						iRespLen += sizeof(g_sJsonNull)-1;
-					continue;
-				}
-
-				const BYTE * pStr = NULL;
-				int iRawLen = sphUnpackStr ( pPool + uOffset, &pStr );
-
-				if ( bSendJson )
-				{
-					iRespLen += iRawLen;
-				} else
-				{
-					dJson.Resize ( 0 );
-					sphJsonFormat ( dJson, pStr );
-					iRespLen += dJson.GetLength();
-				}
-			}
-		}
-	}
-
-	if ( iVer>=0x117 && dJsonFieldsItems.GetLength() )
-	{
-		CSphVector<BYTE> dJson ( 512 );
-
-		for ( int i=0; i<pRes->m_iCount; i++ )
-		{
-			const CSphMatch & tMatch = pRes->m_dMatches [ pRes->m_iOffset+i ];
-			const BYTE * pStrings = dTag2Pools [ tMatch.m_iTag ].m_pStrings;
-			ARRAY_FOREACH ( j, dJsonFieldsItems )
-			{
-				// sizeof(DWORD) count already
-				uint64_t uTypeOffset = tMatch.GetAttr ( dJsonFieldsItems[j] );
-				assert ( !uTypeOffset || pStrings );
-				if ( !uTypeOffset ) // magic zero
-				{
-					if ( bSendJsonField )
-						iRespLen -= 3; // agent sends to master JSON type as BYTE
-					continue;
-				}
-
-				ESphJsonType eJson = ESphJsonType ( uTypeOffset>>32 );
-				DWORD uOff = (DWORD)uTypeOffset;
-				if ( bSendJsonField )
-				{
-					const BYTE * pData = pStrings+uOff;
-					iRespLen -= 3; // JSON type as BYTE
-					iRespLen += sphJsonNodeSize ( eJson, pData );
-					if ( sphJsonNodeSize ( eJson, NULL )<0 )
-						iRespLen += 4;
-				} else
-				{
-					// to client send as string
-					dJson.Resize ( 0 );
-					sphJsonFieldFormat ( dJson, pStrings+uOff, eJson, false );
-					iRespLen += dJson.GetLength();
-				}
-			}
-		}
-	}
-
-	if ( iVer>=0x11C && dFactorItems.GetLength() )
-	{
-		for ( int i=0; i<pRes->m_iCount; i++ )
-		{
-			const CSphMatch & tMatch = pRes->m_dMatches [ pRes->m_iOffset+i ];
-			ARRAY_FOREACH ( j, dFactorItems )
-			{
-				DWORD * pData = (DWORD *) tMatch.GetAttr ( dFactorItems[j] );
-				if ( pData )
-					iRespLen += *pData-sizeof(DWORD);
-			}
-		}
-	}
 
 	return iRespLen;
 }
 
 
-void SendResult ( int iVer, ISphOutputBuffer & tOut, const CSphQueryResult * pRes,
-					const CSphTaggedVector & dTag2Pools, bool bAgentMode, const CSphQuery & tQuery, int iMasterVer )
+static ESphAttr FixupAttrForNetwork ( ESphAttr eAttr, int iMasterVer, bool bAgentMode )
 {
-	// status
-	if ( iVer>=0x10D )
-	{
-		// multi-query status
-		bool bError = !pRes->m_sError.IsEmpty();
-		bool bWarning = !bError && !pRes->m_sWarning.IsEmpty();
-
-		if ( bError )
-		{
-			tOut.SendInt ( SEARCHD_ERROR );
-			tOut.SendString ( pRes->m_sError.cstr() );
-			if ( g_bOptNoDetach && g_eLogFormat!=LOG_FORMAT_SPHINXQL )
-				sphInfo ( "query error: %s", pRes->m_sError.cstr() );
-			return;
-
-		} else if ( bWarning )
-		{
-			tOut.SendInt ( SEARCHD_WARNING );
-			tOut.SendString ( pRes->m_sWarning.cstr() );
-			if ( g_bOptNoDetach && g_eLogFormat!=LOG_FORMAT_SPHINXQL )
-				sphInfo ( "query warning: %s", pRes->m_sWarning.cstr() );
-		} else
-		{
-			tOut.SendInt ( SEARCHD_OK );
-		}
-
-	} else
-	{
-		// single-query warning
-		if ( iVer>=0x106 && !pRes->m_sWarning.IsEmpty() )
-			tOut.SendString ( pRes->m_sWarning.cstr() );
-	}
-
-	int iAttrsCount = sphSendGetAttrCount ( pRes->m_tSchema, bAgentMode );
-
 	bool bSendJson = ( bAgentMode && iMasterVer>=3 );
 	bool bSendJsonField = ( bAgentMode && iMasterVer>=4 );
 
-	// send schema
-	if ( iVer>=0x102 )
+	switch ( eAttr )
 	{
-		tOut.SendInt ( pRes->m_tSchema.m_dFields.GetLength() );
-		ARRAY_FOREACH ( i, pRes->m_tSchema.m_dFields )
-			tOut.SendString ( pRes->m_tSchema.m_dFields[i].m_sName.cstr() );
+	case SPH_ATTR_UINT32SET_PTR:
+		return SPH_ATTR_UINT32SET;
 
-		tOut.SendInt ( iAttrsCount );
-		for ( int i=0; i<iAttrsCount; i++ )
-		{
-			const CSphColumnInfo & tCol = pRes->m_tSchema.GetAttr(i);
-			tOut.SendString ( tCol.m_sName.cstr() );
+	case SPH_ATTR_INT64SET_PTR:
+		return SPH_ATTR_INT64SET;
 
-			ESphAttr eCol = tCol.m_eAttrType;
-			if ( ( tCol.m_eAttrType==SPH_ATTR_JSON && !bSendJson ) || ( tCol.m_eAttrType==SPH_ATTR_JSON_FIELD && !bSendJsonField )
-				 || ( tCol.m_eAttrType==SPH_ATTR_STRINGPTR && !bAgentMode ) )
-				eCol = SPH_ATTR_STRING;
-			tOut.SendDword ( (DWORD)eCol );
-		}
+	case SPH_ATTR_STRINGPTR:
+		return SPH_ATTR_STRING;
+
+	case SPH_ATTR_JSON:
+	case SPH_ATTR_JSON_PTR:
+		return bSendJson ? SPH_ATTR_JSON : SPH_ATTR_STRING;
+
+	case SPH_ATTR_JSON_FIELD:
+	case SPH_ATTR_JSON_FIELD_PTR:
+		return bSendJsonField ? SPH_ATTR_JSON_FIELD : SPH_ATTR_STRING;
+
+	default: return eAttr;
+	} 
+}
+
+
+static void SendSchema ( ISphOutputBuffer & tOut, const CSphQueryResult & tRes, int iAttrsCount, int iMasterVer, bool bAgentMode )
+{
+	tOut.SendInt ( tRes.m_tSchema.GetFieldsCount() );
+	for ( int i=0; i < tRes.m_tSchema.GetFieldsCount(); i++ )
+		tOut.SendString ( tRes.m_tSchema.GetFieldName(i) );
+
+	tOut.SendInt ( iAttrsCount );
+	for ( int i=0; i<iAttrsCount; i++ )
+	{
+		const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
+		tOut.SendString ( tCol.m_sName.cstr() );
+
+		ESphAttr eCol = FixupAttrForNetwork ( tCol.m_eAttrType, iMasterVer, bAgentMode );
+		tOut.SendDword ( (DWORD)eCol );
 	}
+}
+
+
+static void SendAttribute ( ISphOutputBuffer & tOut, const CSphMatch & tMatch, const CSphColumnInfo & tAttr, int iVer, int iMasterVer, bool bAgentMode )
+{
+	// at this point we should not have any attributes that point to pooled data
+	assert ( sphPlainAttrToPtrAttr(tAttr.m_eAttrType)==tAttr.m_eAttrType );
+
+	// send binary json only to master
+	bool bSendJson = bAgentMode && iMasterVer>=3;
+	bool bSendJsonField = bAgentMode && iMasterVer>=4;
+
+	const CSphAttrLocator & tLoc = tAttr.m_tLocator;
+	
+	switch ( tAttr.m_eAttrType )
+	{
+	case SPH_ATTR_UINT32SET_PTR:
+	case SPH_ATTR_INT64SET_PTR:
+		SendMVA ( &tOut, (const BYTE*)tMatch.GetAttr(tLoc), tAttr.m_eAttrType==SPH_ATTR_INT64SET_PTR );
+		break;
+
+	case SPH_ATTR_JSON_PTR:
+		SendJson ( &tOut, (const BYTE*)tMatch.GetAttr(tLoc), bSendJson );
+		break;
+
+	case SPH_ATTR_STRINGPTR:
+		SendDataPtrAttr ( &tOut, (const BYTE*)tMatch.GetAttr(tLoc) );
+		break;
+
+	case SPH_ATTR_JSON_FIELD_PTR:
+		SendJsonField ( &tOut, (const BYTE*)tMatch.GetAttr(tLoc), bSendJsonField );
+		break;
+
+	case SPH_ATTR_FACTORS:
+	case SPH_ATTR_FACTORS_JSON:
+		if ( iVer<0x11C )
+		{
+			tOut.SendDword ( 0 );
+			break;
+		}
+
+		SendDataPtrAttr ( &tOut, (const BYTE*)tMatch.GetAttr(tLoc) );
+		break;
+
+	case SPH_ATTR_FLOAT:
+		tOut.SendFloat ( tMatch.GetAttrFloat(tLoc) );
+		break;
+	case SPH_ATTR_BIGINT:
+		tOut.SendUint64 ( tMatch.GetAttr(tLoc) );
+		break;
+	default:
+		tOut.SendDword ( (DWORD)tMatch.GetAttr(tLoc) );
+		break;
+	}
+}
+
+
+void SendResult ( int iVer, ISphOutputBuffer & tOut, const CSphQueryResult * pRes, bool bAgentMode, const CSphQuery & tQuery, int iMasterVer )
+{
+	// multi-query status
+	bool bError = !pRes->m_sError.IsEmpty();
+	bool bWarning = !bError && !pRes->m_sWarning.IsEmpty();
+
+	if ( bError )
+	{
+		tOut.SendInt ( SEARCHD_ERROR );
+		tOut.SendString ( pRes->m_sError.cstr() );
+		if ( g_bOptNoDetach && g_eLogFormat!=LOG_FORMAT_SPHINXQL )
+			sphInfo ( "query error: %s", pRes->m_sError.cstr() );
+		return;
+
+	} else if ( bWarning )
+	{
+		tOut.SendInt ( SEARCHD_WARNING );
+		tOut.SendString ( pRes->m_sWarning.cstr() );
+		if ( g_bOptNoDetach && g_eLogFormat!=LOG_FORMAT_SPHINXQL )
+			sphInfo ( "query warning: %s", pRes->m_sWarning.cstr() );
+	} else
+		tOut.SendInt ( SEARCHD_OK );
+
+	int iAttrsCount = sphSendGetAttrCount ( pRes->m_tSchema, bAgentMode );
+
+	// send schema
+	SendSchema ( tOut, *pRes, iAttrsCount, iMasterVer, bAgentMode );
 
 	// send matches
-	CSphAttrLocator iGIDLoc, iTSLoc;
-	if ( iVer<=0x101 )
-	{
-		for ( int i=0; i<pRes->m_tSchema.GetAttrsCount(); i++ )
-		{
-			const CSphColumnInfo & tAttr = pRes->m_tSchema.GetAttr(i);
-
-			if ( iTSLoc.m_iBitOffset<0 && tAttr.m_eAttrType==SPH_ATTR_TIMESTAMP )
-				iTSLoc = tAttr.m_tLocator;
-
-			if ( iGIDLoc.m_iBitOffset<0 && tAttr.m_eAttrType==SPH_ATTR_INTEGER )
-				iGIDLoc = tAttr.m_tLocator;
-		}
-	}
-
 	tOut.SendInt ( pRes->m_iCount );
-	if ( iVer>=0x108 )
-		tOut.SendInt ( USE_64BIT );
+	tOut.SendInt ( USE_64BIT );
 
 	CSphVector<BYTE> dJson ( 512 );
 
@@ -5518,218 +5471,21 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const CSphQueryResult * pRe
 	{
 		const CSphMatch & tMatch = pRes->m_dMatches [ pRes->m_iOffset+i ];
 #if USE_64BIT
-		if ( iVer>=0x108 )
-			tOut.SendUint64 ( tMatch.m_uDocID );
-		else
+		tOut.SendUint64 ( tMatch.m_uDocID );
+#else
+		tOut.SendDword ( (DWORD)tMatch.m_uDocID );
 #endif
-			tOut.SendDword ( (DWORD)tMatch.m_uDocID );
+		tOut.SendInt ( tMatch.m_iWeight );
 
-		if ( iVer<=0x101 )
-		{
-			tOut.SendDword ( iGIDLoc.m_iBitOffset>=0 ? (DWORD) tMatch.GetAttr ( iGIDLoc ) : 1 );
-			tOut.SendDword ( iTSLoc.m_iBitOffset>=0 ? (DWORD) tMatch.GetAttr ( iTSLoc ) : 1 );
-			tOut.SendInt ( tMatch.m_iWeight );
-		} else
-		{
-			tOut.SendInt ( tMatch.m_iWeight );
-
-			const DWORD * pMvaPool = dTag2Pools [ tMatch.m_iTag ].m_pMva;
-			const BYTE * pStrings = dTag2Pools [ tMatch.m_iTag ].m_pStrings;
-			bool bArenaProhibit = dTag2Pools[tMatch.m_iTag].m_bArenaProhibit;
-
-			assert ( tMatch.m_pStatic || !pRes->m_tSchema.GetStaticSize() );
+		assert ( tMatch.m_pStatic || !pRes->m_tSchema.GetStaticSize() );
 #if 0
-			// not correct any more because of internal attrs (such as string sorting ptrs)
-			assert ( tMatch.m_pDynamic || !pRes->m_tSchema.GetDynamicSize() );
-			assert ( !tMatch.m_pDynamic || (int)tMatch.m_pDynamic[-1]==pRes->m_tSchema.GetDynamicSize() );
+		// not correct any more because of internal attrs (such as string sorting ptrs)
+		assert ( tMatch.m_pDynamic || !pRes->m_tSchema.GetDynamicSize() );
+		assert ( !tMatch.m_pDynamic || (int)tMatch.m_pDynamic[-1]==pRes->m_tSchema.GetDynamicSize() );
 #endif
-
-			for ( int j=0; j<iAttrsCount; j++ )
-			{
-				const CSphColumnInfo & tAttr = pRes->m_tSchema.GetAttr(j);
-				switch ( tAttr.m_eAttrType )
-				{
-				case SPH_ATTR_UINT32SET:
-				case SPH_ATTR_INT64SET:
-					{
-						assert ( tMatch.GetAttr ( tAttr.m_tLocator )==0 || pMvaPool );
-						const DWORD * pValues = tMatch.GetAttrMVA ( tAttr.m_tLocator, pMvaPool, bArenaProhibit );
-						if ( iVer<0x10C || !pValues )
-						{
-							// for older clients, fixups column value to 0
-							// for newer clients, means that there are 0 values
-							tOut.SendDword ( 0 );
-						} else
-						{
-							// send MVA values
-							int iValues = *pValues++;
-							tOut.SendDword ( iValues );
-							if ( tAttr.m_eAttrType==SPH_ATTR_INT64SET )
-							{
-								assert ( ( iValues%2 )==0 );
-								while ( iValues )
-								{
-									uint64_t uVal = (uint64_t)MVA_UPSIZE ( pValues );
-									tOut.SendUint64 ( uVal );
-									pValues += 2;
-									iValues -= 2;
-								}
-							} else
-							{
-								while ( iValues-- )
-									tOut.SendDword ( *pValues++ );
-							}
-						}
-						break;
-					}
-				case SPH_ATTR_JSON:
-					{
-						if ( iVer<0x117 )
-						{
-							tOut.SendDword ( 0 );
-							break;
-						}
-						if ( !bSendJson )
-						{
-							// formatted string to client
-							DWORD uOffset = (DWORD) tMatch.GetAttr ( tAttr.m_tLocator );
-							assert ( !uOffset || pStrings );
-							if ( !uOffset ) // magic zero
-							{
-								tOut.SendDword ( sizeof(g_sJsonNull)-1 );
-								tOut.SendBytes ( g_sJsonNull, sizeof(g_sJsonNull)-1 );
-							} else
-							{
-								dJson.Resize ( 0 );
-								const BYTE * pStr = NULL;
-								sphUnpackStr ( pStrings + uOffset, &pStr );
-								sphJsonFormat ( dJson, pStr );
-
-								tOut.SendDword ( dJson.GetLength() );
-								tOut.SendBytes ( dJson.Begin(), dJson.GetLength() );
-							}
-							break;
-						}
-						// no break at the end, pass to SPH_ATTR_STRING
-					}
-				case SPH_ATTR_STRING:
-					{
-						if ( iVer<0x117 )
-						{
-							tOut.SendDword ( 0 );
-							break;
-						}
-						// for newer clients, send binary string either STRING or JSON attribute
-						DWORD uOffset = (DWORD) tMatch.GetAttr ( tAttr.m_tLocator );
-						if ( !uOffset ) // magic zero
-						{
-							tOut.SendDword ( 0 ); // null string
-						} else
-						{
-							const BYTE * pStr;
-							assert ( pStrings );
-							int iLen = sphUnpackStr ( pStrings+uOffset, &pStr );
-							tOut.SendDword ( iLen );
-							tOut.SendBytes ( pStr, iLen );
-						}
-						break;
-					}
-				case SPH_ATTR_STRINGPTR:
-					{
-						if ( iVer<0x117 )
-						{
-							tOut.SendDword ( 0 );
-							break;
-						}
-						// for newer clients, send binary string
-						const char* pString = (const char*) tMatch.GetAttr ( tAttr.m_tLocator );
-						if ( !pString ) // magic zero
-						{
-							tOut.SendDword ( 0 ); // null string
-						} else
-						{
-							int iLen = strlen ( pString );
-							tOut.SendDword ( iLen );
-							tOut.SendBytes ( pString, iLen );
-						}
-						break;
-					}
-				case SPH_ATTR_JSON_FIELD:
-					{
-						if ( iVer<0x117 )
-						{
-							tOut.SendDword ( 0 );
-							break;
-						}
-
-						uint64_t uTypeOffset = tMatch.GetAttr ( tAttr.m_tLocator );
-						ESphJsonType eJson = ESphJsonType ( uTypeOffset>>32 );
-						DWORD uOff = (DWORD)uTypeOffset;
-						assert ( !uOff || pStrings );
-						if ( !uOff )
-						{
-							// no key found - NULL value
-							if ( bSendJsonField )
-								tOut.SendByte ( JSON_EOF );
-							else
-								tOut.SendDword ( 0 );
-
-						} else if ( bSendJsonField )
-						{
-							// to master send packed data
-							tOut.SendByte ( (BYTE)eJson );
-
-							const BYTE * pData = pStrings+uOff;
-							int iLen = sphJsonNodeSize ( eJson, pData );
-							if ( sphJsonNodeSize ( eJson, NULL )<0 )
-								tOut.SendDword ( iLen );
-							tOut.SendBytes ( pData, iLen );
-						} else
-						{
-							// to client send data as string
-							dJson.Resize ( 0 );
-							sphJsonFieldFormat ( dJson, pStrings+uOff, eJson, false );
-							tOut.SendDword ( dJson.GetLength() );
-							tOut.SendBytes ( dJson.Begin(), dJson.GetLength() );
-						}
-						break;
-					}
-				case SPH_ATTR_FACTORS:
-				case SPH_ATTR_FACTORS_JSON:
-					{
-						if ( iVer<0x11C )
-						{
-							tOut.SendDword ( 0 );
-							break;
-						}
-						BYTE * pData = (BYTE*) tMatch.GetAttr ( tAttr.m_tLocator );
-						if ( !pData )
-							tOut.SendDword ( 0 );
-						else
-						{
-							DWORD uLength = *(DWORD*)pData;
-							tOut.SendDword ( uLength );
-							tOut.SendBytes ( pData+sizeof(DWORD), uLength-sizeof(DWORD) );
-						}
-						break;
-					}
-				case SPH_ATTR_FLOAT:
-					tOut.SendFloat ( tMatch.GetAttrFloat ( tAttr.m_tLocator ) );
-					break;
-				case SPH_ATTR_BIGINT:
-					if ( iVer>=0x114 )
-					{
-						tOut.SendUint64 ( tMatch.GetAttr ( tAttr.m_tLocator ) );
-						break;
-					}
-					// no break here
-				default:
-					tOut.SendDword ( (DWORD)tMatch.GetAttr ( tAttr.m_tLocator ) );
-					break;
-				} /// end switch ( tAttr.m_eAttrType )
-			} /// end for ( int j=0; j<iAttrsCount; j++ )
-		} /// end else if ( iVer<=0x101 )
-	} /// end for ( int i=0; i<pRes->m_iCount; i++ )
+		for ( int j=0; j<iAttrsCount; j++ )
+			SendAttribute ( tOut, tMatch, pRes->m_tSchema.GetAttr(j), iVer, iMasterVer, bAgentMode );
+	}
 
 	if ( tQuery.m_bAgent && tQuery.m_iLimit )
 		tOut.SendInt ( pRes->m_iCount );
@@ -5799,7 +5555,7 @@ void AggrResult_t::ClampMatches ( int iLimit, bool bCommonSchema )
 	if ( bCommonSchema )
 	{
 		for ( int i = iLimit; i < m_dMatches.GetLength(); i++ )
-			m_tSchema.FreeStringPtrs ( &m_dMatches[i] );
+			m_tSchema.FreeDataPtrs ( &m_dMatches[i] );
 	} else
 	{
 		int nMatches = 0;
@@ -5811,7 +5567,7 @@ void AggrResult_t::ClampMatches ( int iLimit, bool bCommonSchema )
 			{
 				int iFrom = Max ( iLimit, nMatches-m_dMatchCounts[i] );
 				for ( int j=iFrom; j<nMatches; j++ )
-					m_dSchemas[i].FreeStringPtrs ( &m_dMatches[j] );
+					m_dSchemas[i].FreeDataPtrs ( &m_dMatches[j] );
 			}
 		}
 	}
@@ -5853,7 +5609,7 @@ void RemapResult ( const ISphSchema * pTarget, AggrResult_t * pRes )
 	ARRAY_FOREACH ( iSchema, pRes->m_dSchemas )
 	{
 		dMapFrom.Resize ( 0 );
-		CSphRsetSchema & dSchema = pRes->m_dSchemas[iSchema];
+		CSphSchema & dSchema = pRes->m_dSchemas[iSchema];
 		for ( int i=0; i<pTarget->GetAttrsCount(); i++ )
 		{
 			dMapFrom.Add ( dSchema.GetAttrIndex ( pTarget->GetAttr(i).m_sName.cstr() ) );
@@ -5907,83 +5663,70 @@ void RemapResult ( const ISphSchema * pTarget, AggrResult_t * pRes )
 }
 
 // rebuild the results itemlist expanding stars
-const CSphVector<CSphQueryItem> * ExpandAsterisk ( const ISphSchema & tSchema,
-	const CSphVector<CSphQueryItem> & tItems, CSphVector<CSphQueryItem> * pExpanded, bool bNoID, bool bOnlyPlain )
+const CSphVector<CSphQueryItem> & ExpandAsterisk ( const ISphSchema & tSchema,
+	const CSphVector<CSphQueryItem> & tItems, CSphVector<CSphQueryItem> & tExpanded, bool bNoID, bool bOnlyPlain, bool & bHaveExprs )
 {
 	// the result schema usually is the index schema + calculated items + @-items
-	// we need to extract the index schema only - so, look at the items
-	// and cutoff from calculated or @.
-	int iSchemaBound = tSchema.GetAttrsCount();
-	bool bStar = false;
-	ARRAY_FOREACH ( i, tItems )
+	// we need to extract the index schema only
+	CSphVector<int> dIndexSchemaItems;
+	bool bHaveAsterisk = false;
+	for ( const auto & i : tItems )
 	{
-		const CSphQueryItem & tItem = tItems[i];
-		if ( tItem.m_sAlias.cstr() )
+		if ( i.m_sAlias.cstr() )
 		{
-			int j = tSchema.GetAttrIndex ( tItem.m_sAlias.cstr() );
+			int j = tSchema.GetAttrIndex ( i.m_sAlias.cstr() );
 			if ( j>=0 )
-				iSchemaBound = Min ( iSchemaBound, j );
+				dIndexSchemaItems.Add(j);
 		}
-		bStar = bStar || tItem.m_sExpr=="*";
+
+		bHaveAsterisk |= i.m_sExpr=="*";
 	}
+
 	// no stars? Nothing to do.
-	if ( !bStar )
-		return & tItems;
+	if ( !bHaveAsterisk )
+		return tItems;
 
-	while ( iSchemaBound && tSchema.GetAttr ( iSchemaBound-1 ).m_sName.cstr()[0]=='@' )
-		iSchemaBound--;
+	dIndexSchemaItems.Sort();
 
-	// drop auto generated attributes
-	if ( bOnlyPlain && tSchema.GetStaticSize() && iSchemaBound>tSchema.GetStaticSize() )
-		iSchemaBound = tSchema.GetStaticSize();
+	// find items that are in index schema but not in our requested item list
+	// not do not include @-items
+	CSphVector<int> dItemsLeftInSchema;
+	for ( int i = 0; i < tSchema.GetAttrsCount(); i++ )
+	{
+		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
+
+		if ( tAttr.m_pExpr.Ptr() )
+		{
+			bHaveExprs = true;
+
+			if ( bOnlyPlain )
+				continue;
+		}
+
+		if ( tAttr.m_sName.cstr()[0]!='@' && !dIndexSchemaItems.BinarySearch(i) )
+			dItemsLeftInSchema.Add(i);
+	}
 
 	ARRAY_FOREACH ( i, tItems )
 	{
 		if ( tItems[i].m_sExpr=="*" )
 		{ // asterisk expands to 'id' + all the items from the schema
 			if ( tSchema.GetAttrIndex ( "id" )<0 && !bNoID )
+				tExpanded.Add().m_sExpr = "id";
+
+			for ( auto j : dItemsLeftInSchema )
 			{
-				CSphQueryItem& tItem = pExpanded->Add();
-				tItem.m_sExpr = "id";
-			}
-			for ( int j=0; j<iSchemaBound; j++ )
-			{
-				if ( !j && bNoID && tSchema.GetAttr(j).m_sName=="id" )
+				const CSphString & sName = tSchema.GetAttr(j).m_sName;
+				if ( !j && bNoID && sName=="id" )
 					continue;
-				CSphQueryItem& tItem = pExpanded->Add();
-				tItem.m_sExpr = tSchema.GetAttr ( j ).m_sName;
+				
+				tExpanded.Add().m_sExpr = sName;
 			}
 		} else
-			pExpanded->Add ( tItems[i] );
+			tExpanded.Add ( tItems[i] );
 	}
-	return pExpanded;
-}
 
-
-static void RemapStrings ( ISphMatchSorter * pSorter, AggrResult_t & tRes )
-{
-	// do match ptr pre-calc if its "order by string" case
-	CSphVector<SphStringSorterRemap_t> dRemapAttr;
-	if ( pSorter && pSorter->UsesAttrs() && sphSortGetStringRemap ( pSorter->GetSchema(), tRes.m_tSchema, dRemapAttr ) )
-	{
-		int iCur = 0;
-		ARRAY_FOREACH ( iSchema, tRes.m_dSchemas )
-		{
-			for ( int i=iCur; i<iCur+tRes.m_dMatchCounts[iSchema]; i++ )
-			{
-				CSphMatch & tMatch = tRes.m_dMatches[i];
-				const BYTE * pStringBase = tRes.m_dTag2Pools[tMatch.m_iTag].m_pStrings;
-
-				ARRAY_FOREACH ( iAttr, dRemapAttr )
-				{
-					SphAttr_t uOff = tMatch.GetAttr ( dRemapAttr[iAttr].m_tSrc );
-					SphAttr_t uPtr = (SphAttr_t)( pStringBase && uOff ? pStringBase + uOff : 0 );
-					tMatch.SetAttr ( dRemapAttr[iAttr].m_tDst, uPtr );
-				}
-			}
-			iCur += tRes.m_dMatchCounts[iSchema];
-		}
-	}
+	return tExpanded;
 }
 
 
@@ -6027,7 +5770,7 @@ static int KillAllDupes ( ISphMatchSorter * pSorter, AggrResult_t & tRes )
 	}
 
 	ARRAY_FOREACH ( i, tRes.m_dMatches )
-		tRes.m_tSchema.FreeStringPtrs ( &(tRes.m_dMatches[i]) );
+		tRes.m_tSchema.FreeDataPtrs ( &(tRes.m_dMatches[i]) );
 
 	tRes.m_dMatches.Reset ();
 	sphFlattenQueue ( pSorter, &tRes, -1 );
@@ -6138,7 +5881,7 @@ struct AggregateColumnSort_fn
 };
 
 
-static void ExtractPostlimit ( const CSphRsetSchema & tSchema, CSphVector<const CSphColumnInfo *> & dPostlimit )
+static void ExtractPostlimit ( const ISphSchema & tSchema, CSphVector<const CSphColumnInfo *> & dPostlimit )
 {
 	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
 	{
@@ -6175,14 +5918,9 @@ static void ProcessPostlimit ( const CSphVector<const CSphColumnInfo *> & dPostl
 			else if ( pCol->m_eAttrType==SPH_ATTR_BIGINT )
 				tMatch.SetAttr ( pCol->m_tLocator, pCol->m_pExpr->Int64Eval(tMatch) );
 			else if ( pCol->m_eAttrType==SPH_ATTR_STRINGPTR )
-			{
-				const BYTE * pStr = NULL;
-				pCol->m_pExpr->StringEval ( tMatch, &pStr );
-				tMatch.SetAttr ( pCol->m_tLocator, (SphAttr_t) pStr ); // FIXME! a potential leak of *previous* value?
-			} else
-			{
+				tMatch.SetAttr ( pCol->m_tLocator, (SphAttr_t) pCol->m_pExpr->StringEvalPacked ( tMatch ) ); // FIXME! a potential leak of *previous* value?
+			else
 				tMatch.SetAttrFloat ( pCol->m_tLocator, pCol->m_pExpr->Eval(tMatch) );
-			}
 		}
 	}
 }
@@ -6271,21 +6009,18 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 	const CSphVector<CSphQueryItem> & dQueryItems = ( tQuery.m_bFacet || tQuery.m_bFacetHead ) ? tQuery.m_dRefItems : tQuery.m_dItems;
 
 	// build a list of select items that the query asked for
+	bool bHaveExprs = false;
 	CSphVector<CSphQueryItem> tExtItems;
-	const CSphVector<CSphQueryItem> * pItems = ExpandAsterisk ( tRes.m_tSchema, dQueryItems, &tExtItems, !tQuery.m_bSphinxQL, tQuery.m_bFacetHead );
-	const CSphVector<CSphQueryItem> & tItems = *pItems;
+	const CSphVector<CSphQueryItem> & tItems = ExpandAsterisk ( tRes.m_tSchema, dQueryItems, tExtItems, !tQuery.m_bSphinxQL, tQuery.m_bFacetHead, bHaveExprs );
 
 	// api + index without attributes + select * case
 	// can not skip aggregate filtering
-	if ( !tQuery.m_bSphinxQL && !tItems.GetLength() && !pAggrFilter )
+	if ( !tQuery.m_bSphinxQL && !tItems.GetLength() && !pAggrFilter && !bHaveExprs )
 		return true;
 
 	// build the final schemas!
 	// ???
 	CSphVector<CSphColumnInfo> dFrontend ( tItems.GetLength() );
-
-	// no select items => must be nothing in minimized schema, right?
-	assert ( !( tItems.GetLength()==0 && tRes.m_tSchema.GetAttrsCount()>0 ) );
 
 	// track select items that made it into the internal schema
 	CSphVector<int> dKnownItems;
@@ -6512,13 +6247,19 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 			CSphVector<SphStringSorterRemap_t> dRemapAttr;
 			sphSortGetStringRemap ( tRes.m_tSchema, tRes.m_tSchema, dRemapAttr );
 			int iRemapCount = dRemapAttr.GetLength();
-			sphSortGetStringRemap ( pSorter->GetSchema(), tRes.m_tSchema, dRemapAttr );
+			sphSortGetStringRemap ( *pSorter->GetSchema(), tRes.m_tSchema, dRemapAttr );
 
 			bAllEqual = ( dRemapAttr.GetLength()<=iRemapCount );
 		}
 
 		// sorter expects this
-		tRes.m_tSchema = pSorter->GetSchema();
+
+		// just doing tRes.m_tSchema = *pSorter->GetSchema() won't work here
+		// because pSorter->GetSchema() may already contain a pointer to tRes.m_tSchema as m_pIndexSchema
+		// that's why we explicitly copy a CSphRsetSchema to a plain CSphSchema and move it to tRes.m_tSchema
+		CSphSchema tSchemaCopy;
+		tSchemaCopy = *pSorter->GetSchema();
+		tRes.m_tSchema = std::move ( tSchemaCopy );
 
 		// convert all matches to sorter schema - at least to manage all static to dynamic
 		if ( !bAllEqual )
@@ -6532,7 +6273,6 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 
 			RemapResult ( &tRes.m_tSchema, &tRes );
 		}
-		RemapStrings ( pSorter, tRes );
 
 		// do the sort work!
 		tRes.m_iTotalMatches -= KillAllDupes ( pSorter, tRes );
@@ -6590,7 +6330,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 		if ( !tQuery.m_sGroupBy.IsEmpty() )
 		{
 			p = tRes.m_tSchema.GetAttr ( tQuery.m_sGroupBy.cstr() );
-			if ( p && ( p->m_eAttrType!=SPH_ATTR_STRING && p->m_eAttrType!=SPH_ATTR_STRINGPTR ) )
+			if ( p && p->m_eAttrType!=SPH_ATTR_STRINGPTR )
 				p = NULL;
 		}
 	}
@@ -6640,10 +6380,9 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 			ARRAY_FOREACH ( i, dFrontend )
 			{
 				CSphColumnInfo & d = dFrontend[i];
-				if ( tQuery.m_sGroupBy==d.m_sName &&
-					( d.m_eAttrType==SPH_ATTR_INT64SET
-					|| d.m_eAttrType==SPH_ATTR_UINT32SET
-					|| d.m_eAttrType==SPH_ATTR_JSON_FIELD ) )
+				ESphAttr eAttr = d.m_eAttrType;
+				// checking _PTR attrs only because we should not have and non-ptr attr at this point
+				if ( tQuery.m_sGroupBy==d.m_sName && ( eAttr==SPH_ATTR_UINT32SET_PTR || eAttr==SPH_ATTR_INT64SET_PTR || eAttr==SPH_ATTR_JSON_FIELD_PTR ) )
 				{
 					d.m_tLocator = pGroupByCol->m_tLocator;
 					d.m_eAttrType = pGroupByCol->m_eAttrType;
@@ -6793,22 +6532,20 @@ struct Expr_Snippet_c : public ISphStringExpr
 		m_pText = pArglist->GetArg(0);
 
 		CSphMatch tDummy;
-		char * pQuery = NULL;
-		assert ( !pArglist->GetArg(1)->IsStringPtr() ); // aware of memleaks potentially caused by StringEval()
-		pArglist->GetArg(1)->StringEval ( tDummy, (const BYTE**)&pQuery );
-		m_tHighlight.m_sWords = pQuery;
+		char * pWords;
+		assert ( !pArglist->GetArg(1)->IsDataPtrAttr() ); // aware of memleaks potentially caused by StringEval()
+		pArglist->GetArg(1)->StringEval ( tDummy, (const BYTE**)&pWords );
+		m_tHighlight.m_sWords = pWords;
 
 		for ( int i = 2; i < pArglist->GetNumArgs(); i++ )
 		{
-			assert ( !pArglist->GetArg(i)->IsStringPtr() ); // aware of memleaks potentially caused by StringEval()
-
-			char * pArg;
-			int iLen = pArglist->GetArg(i)->StringEval ( tDummy, (const BYTE**)&pArg );
-			if ( !pArg || !iLen )
+			assert ( !pArglist->GetArg(i)->IsDataPtrAttr() ); // aware of memleaks potentially caused by StringEval()
+			int iLen = pArglist->GetArg(i)->StringEval ( tDummy, (const BYTE**)&pWords );
+			if ( !pWords || !iLen )
 				continue;
 
 			CSphString sArgs;
-			sArgs.SetBinary ( pArg, iLen );
+			sArgs.SetBinary ( pWords, iLen );
 			char * pWords = const_cast<char *> ( sArgs.cstr() );
 
 			const char * sEnd = pWords + iLen;
@@ -6892,7 +6629,7 @@ struct Expr_Snippet_c : public ISphStringExpr
 
 		if ( !iLen )
 		{
-			if ( m_pText->IsStringPtr() )
+			if ( m_pText->IsDataPtrAttr() )
 				SafeDeleteArray ( sSource );
 			return 0;
 		}
@@ -6900,7 +6637,7 @@ struct Expr_Snippet_c : public ISphStringExpr
 		// for dynamic strings (eg. fetched by UDFs), just take ownership
 		// for static ones (eg. attributes), treat as binary (ie. mind that
 		// the trailing zero is NOT guaranteed), and copy them
-		if ( m_pText->IsStringPtr() )
+		if ( m_pText->IsDataPtrAttr() )
 			m_tHighlight.m_sSource.Adopt ( (char**)&sSource );
 		else
 			m_tHighlight.m_sSource.SetBinary ( (const char*)sSource, iLen );
@@ -6909,16 +6646,22 @@ struct Expr_Snippet_c : public ISphStringExpr
 		CSphString sWarning, sError;
 		sphBuildExcerpt ( m_tHighlight, m_pIndex, m_tCtx.m_tStripper.Ptr(), m_tCtx.m_tExtQuery, m_tCtx.m_eExtQuerySPZ,
 			sWarning, sError, m_tCtx.m_pDict, m_tCtx.m_tTokenizer.Ptr(), m_tCtx.m_pQueryTokenizer );
-
+		
 		if ( !m_tHighlight.m_bJsonQuery )
 		{
-			int iRes = m_tHighlight.m_dRes.GetLength();
+			assert ( m_tHighlight.m_dRes.Last()=='\0' );
+			int iResultLength = m_tHighlight.m_dRes.GetLength();
 			*ppStr = m_tHighlight.m_dRes.LeakData();
-			return iRes;
+			// skip trailing zero
+			return iResultLength-1;
 		} else
-		{
 			return PackSnippets ( m_tHighlight.m_dRes, m_tHighlight.m_dSeparators, m_tHighlight.m_sChunkSeparator.Length(), ppStr );
-		}
+	}
+
+	virtual void FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override
+	{
+		if ( m_pText )
+			m_pText->FixupLocator ( pOldSchema, pNewSchema );
 	}
 
 	virtual void Command ( ESphExprCommand eCmd, void * pArg )
@@ -7083,13 +6826,11 @@ public:
 	CSphVector<StatsPerQuery_t>		m_dQueryIndexStats;				///< statistics for current query
 	CSphVector<SearchFailuresLog_c>	m_dFailuresSet;					///< failure logs for each query
 	CSphVector < CSphVector<int64_t> >	m_dAgentTimes;				///< per-agent time stats
-	CSphVector<DWORD *>				m_dMva2Free;
-	CSphVector<BYTE *>				m_dString2Free;
 	int								m_iCid;
 
 protected:
 	void							RunSubset ( int iStart, int iEnd );	///< run queries against index(es) from first query in the subset
-	void							RunLocalSearches ( ISphMatchSorter * pLocalSorter, DWORD uFactorFlags );
+	void							RunLocalSearches();
 	void							RunLocalSearchesMT ();
 	bool							RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters, CSphQueryResult ** pResults, bool * pMulti ) const;
 	bool							AllowsMulti ( int iStart, int iEnd ) const;
@@ -7172,11 +6913,6 @@ SearchHandler_c::~SearchHandler_c ()
 		pIndex->Unlock();
 	}
 
-	ARRAY_FOREACH ( i, m_dMva2Free )
-		SafeDeleteArray ( m_dMva2Free[i] );
-	ARRAY_FOREACH ( i, m_dString2Free )
-		SafeDeleteArray ( m_dString2Free[i] );
-
 	SafeDelete ( m_pQueryParser );
 }
 
@@ -7241,7 +6977,7 @@ void SearchHandler_c::RunUpdates ( const CSphQuery & tQuery, const CSphString & 
 
 	int64_t tmLocal = -sphMicroTimer();
 
-	RunLocalSearches ( NULL, SPH_FACTOR_DISABLE );
+	RunLocalSearches();
 	tmLocal += sphMicroTimer();
 
 	OnRunFinished();
@@ -7299,7 +7035,7 @@ void SearchHandler_c::RunDeletes ( const CSphQuery & tQuery, const CSphString & 
 
 	int64_t tmLocal = -sphMicroTimer();
 
-	RunLocalSearches ( NULL, SPH_FACTOR_DISABLE );
+	RunLocalSearches();
 	tmLocal += sphMicroTimer();
 
 	OnRunFinished();
@@ -7515,7 +7251,8 @@ static void FlattenToRes ( ISphMatchSorter * pSorter, AggrResult_t & tRes, int i
 
 	if ( pSorter->GetLength() )
 	{
-		tRes.m_dSchemas.Add ( pSorter->GetSchema() );
+		CSphSchema & tNewSchema = tRes.m_dSchemas.Add();
+		tNewSchema = *pSorter->GetSchema();
 		PoolPtrs_t & tPoolPtrs = tRes.m_dTag2Pools[iTag];
 		assert ( !tPoolPtrs.m_pMva && !tPoolPtrs.m_pStrings );
 		tPoolPtrs.m_pMva = tRes.m_pMva;
@@ -7546,7 +7283,7 @@ static void RemoveMissedRows ( AggrResult_t & tRes )
 	{
 		if ( !pSrc->m_pStatic )
 		{
-			tRes.m_tSchema.FreeStringPtrs ( pSrc );
+			tRes.m_tSchema.FreeDataPtrs ( pSrc );
 			pSrc++;
 			continue;
 		}
@@ -7683,9 +7420,6 @@ void SearchHandler_c::RunLocalSearchesMT ()
 			tRes.m_bArenaProhibit = tRaw.m_bArenaProhibit;
 			MergeWordStats ( tRes, tRaw.m_hWordStats, &m_dFailuresSet[iQuery], sLocal, sParentIndex );
 
-			// move external attributes storage from tRaw to actual result
-			tRaw.LeakStorages ( tRes );
-
 			tRes.m_bHasPrediction |= tRaw.m_bHasPrediction;
 			tRes.m_iMultiplier = m_bMultiQueue ? iQueries : 1;
 			tRes.m_iCpuTime += tRaw.m_iCpuTime / tRes.m_iMultiplier;
@@ -7708,7 +7442,7 @@ void SearchHandler_c::RunLocalSearchesMT ()
 				RemoveMissedRows ( tRes );
 
 			// take over the schema from sorter, it doesn't need it anymore
-			tRes.m_tSchema = pSorter->GetSchema(); // can SwapOut
+			tRes.m_tSchema = *pSorter->GetSchema();
 
 			if ( !tRaw.m_sWarning.IsEmpty() )
 				m_dFailuresSet[iQuery].Submit ( sLocal, sParentIndex, tRaw.m_sWarning.cstr() );
@@ -7835,7 +7569,7 @@ bool SearchHandler_c::RunLocalSearch ( int iLocal, ISphMatchSorter ** ppSorters,
 }
 
 
-void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, DWORD uFactorFlags )
+void SearchHandler_c::RunLocalSearches()
 {
 	m_dQueryIndexStats.Resize ( m_dLocal.GetLength() );
 	ARRAY_FOREACH ( i, m_dQueryIndexStats )
@@ -7872,46 +7606,44 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, DWORD u
 		ARRAY_FOREACH ( i, dSorters )
 			dSorters[i] = NULL;
 
-		DWORD uTotalFactorFlags = uFactorFlags;
+		DWORD uTotalFactorFlags = SPH_FACTOR_DISABLE;
 		int iValidSorters = 0;
 		for ( int iQuery=m_iStart; iQuery<=m_iEnd; iQuery++ )
 		{
 			CSphString sError;
 			CSphQuery & tQuery = m_dQueries[iQuery];
 			auto tExtraSchema = tQuery.m_bAgent?m_dExtraSchemas[iQuery].GetVirgin():NULL;
-			// create sorter, if needed
-			ISphMatchSorter * pSorter = pLocalSorter;
-			if ( !pLocalSorter )
+			
+			// create queue
+			m_tHook.m_pIndex = pServed->m_pIndex;
+			SphQueueSettings_t tQueueSettings ( tQuery, pServed->m_pIndex->GetMatchSchema(), sError, m_pProfile );
+			tQueueSettings.m_bComputeItems = true;
+			tQueueSettings.m_pExtra = tExtraSchema;
+			tQueueSettings.m_pUpdate = m_pUpdates;
+			tQueueSettings.m_pDeletes = m_pDelete;
+			tQueueSettings.m_pHook = &m_tHook;
+
+			ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings );
+
+			uTotalFactorFlags |= tQueueSettings.m_uPackedFactorFlags;
+			tQuery.m_bZSlist = tQueueSettings.m_bZonespanlist;
+			if ( !pSorter )
 			{
-				// create queue
-				m_tHook.m_pIndex = pServed->m_pIndex;
-				SphQueueSettings_t tQueueSettings ( tQuery, pServed->m_pIndex->GetMatchSchema(), sError, m_pProfile );
-				tQueueSettings.m_bComputeItems = true;
-				tQueueSettings.m_pExtra = tExtraSchema;
-				tQueueSettings.m_pUpdate = m_pUpdates;
-				tQueueSettings.m_pDeletes = m_pDelete;
-				tQueueSettings.m_pHook = &m_tHook;
-
-				pSorter = sphCreateQueue ( tQueueSettings );
-
-				uTotalFactorFlags |= tQueueSettings.m_uPackedFactorFlags;
-				tQuery.m_bZSlist = tQueueSettings.m_bZonespanlist;
-				if ( !pSorter )
-				{
-					m_dFailuresSet[iQuery].Submit ( sLocal, sParentIndex, sError.cstr() );
-					continue;
-				}
-				if ( m_bMultiQueue )
-				{
-					// can't use multi-query for sorter with string attribute at group by or sort
-					m_bMultiQueue = pSorter->CanMulti();
-
-					if ( !m_bMultiQueue )
-						m_bFacetQueue = false;
-				}
-				if ( !sError.IsEmpty() )
-					m_dFailuresSet[iQuery].Submit ( sLocal, sParentIndex, sError.cstr() );
+				m_dFailuresSet[iQuery].Submit ( sLocal, sParentIndex, sError.cstr() );
+				continue;
 			}
+
+			if ( m_bMultiQueue )
+			{
+				// can't use multi-query for sorter with string attribute at group by or sort
+				m_bMultiQueue = pSorter->CanMulti();
+
+				if ( !m_bMultiQueue )
+					m_bFacetQueue = false;
+			}
+
+			if ( !sError.IsEmpty() )
+				m_dFailuresSet[iQuery].Submit ( sLocal, sParentIndex, sError.cstr() );
 
 			dSorters[iQuery-m_iStart] = pSorter;
 			iValidSorters++;
@@ -7933,7 +7665,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, DWORD u
 			}
 
 			assert ( pLastMulti && dSorters[i] );
-			m_bMultiQueue = pLastMulti->GetSchema().GetDynamicSize()==dSorters[i]->GetSchema().GetDynamicSize();
+			m_bMultiQueue = pLastMulti->GetSchema()->GetDynamicSize()==dSorters[i]->GetSchema()->GetDynamicSize();
 		}
 
 		// facets, sanity check for json fields (can't be multi-queried yet)
@@ -7941,8 +7673,8 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, DWORD u
 		{
 			if ( !dSorters[i] )
 				continue;
-			for ( int j=0; j<dSorters[i]->GetSchema().GetAttrsCount(); j++ )
-				if ( dSorters[i]->GetSchema().GetAttr(j).m_eAttrType==SPH_ATTR_JSON_FIELD )
+			for ( int j=0; j<dSorters[i]->GetSchema()->GetAttrsCount(); j++ )
+				if ( dSorters[i]->GetSchema()->GetAttr(j).m_eAttrType==SPH_ATTR_JSON_FIELD )
 				{
 					m_bMultiQueue = m_bFacetQueue = false;
 					break;
@@ -8054,7 +7786,7 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, DWORD u
 
 				tRes.m_iSuccesses++;
 				// lets do this schema copy just once
-				tRes.m_tSchema = pSorter->GetSchema();
+				tRes.m_tSchema = *pSorter->GetSchema();
 				tRes.m_iTotalMatches += pSorter->GetTotalCount();
 				tRes.m_iPredictedTime = tRes.m_bHasPrediction ? CalcPredictedTimeMsec ( tRes ) : 0;
 
@@ -8067,16 +7799,12 @@ void SearchHandler_c::RunLocalSearches ( ISphMatchSorter * pLocalSorter, DWORD u
 
 				if ( iBadRows )
 					RemoveMissedRows ( tRes );
-
-				// move external attributes storage from tStats to actual result
-				tStats.LeakStorages ( tRes );
 			}
 		}
 
 		// cleanup sorters
-		if ( !pLocalSorter )
-			ARRAY_FOREACH ( i, dSorters )
-				SafeDelete ( dSorters[i] );
+		ARRAY_FOREACH ( i, dSorters )
+			SafeDelete ( dSorters[i] );
 	}
 }
 
@@ -8546,68 +8274,13 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	for ( int iRes=iStart; iRes<=iEnd; iRes++ )
 		m_dResults[iRes].m_dTag2Pools.Resize ( iTagsCount );
 
-	/////////////////////////////////////////////////////
-	// optimize single-query, same-schema local searches
-	/////////////////////////////////////////////////////
-
-	DWORD uLocalPFFlags = SPH_FACTOR_DISABLE;
-	ISphMatchSorter * pLocalSorter = NULL;
-	while ( iStart==iEnd && m_dLocal.GetLength()>1 )
-	{
-		CSphString sError;
-
-		// check if all schemes are equal
-		bool bAllEqual = true;
-
-		const ServedIndex_c * pFirstIndex = GetIndex ( m_dLocal[0].m_sName );
-		if ( !pFirstIndex )
-			break;
-
-		const CSphSchema & tFirstSchema = pFirstIndex->m_pIndex->GetMatchSchema();
-		for ( int i=1; i<m_dLocal.GetLength() && bAllEqual; i++ )
-		{
-			const ServedIndex_c * pNextIndex = GetIndex ( m_dLocal[i].m_sName );
-			if ( !pNextIndex )
-			{
-				bAllEqual = false;
-				break;
-			}
-
-			if ( !tFirstSchema.CompareTo ( pNextIndex->m_pIndex->GetMatchSchema(), sError ) )
-				bAllEqual = false;
-		}
-
-		// we can reuse the very same sorter
-		if ( bAllEqual )
-		{
-			CSphSchemaMT * pExtraSchemaMT = m_dQueries[iStart].m_bAgent ? m_dExtraSchemas[iStart].GetVirgin() : NULL;
-
-			m_tHook.m_pIndex = pFirstIndex->m_pIndex;
-			SphQueueSettings_t tQueueSettings ( m_dQueries[iStart], tFirstSchema, sError, m_pProfile );
-			tQueueSettings.m_bComputeItems = true;
-			tQueueSettings.m_pExtra = pExtraSchemaMT;
-			tQueueSettings.m_pHook = &m_tHook;
-
-			pLocalSorter = sphCreateQueue ( tQueueSettings );
-
-			uLocalPFFlags = tQueueSettings.m_uPackedFactorFlags;
-			if ( pExtraSchemaMT )
-				pExtraSchemaMT->Release();
-		}
-
-		break;
-	}
-
-	// select lists must have no expressions
+ 	// select lists must have no expressions
 	if ( m_bMultiQueue )
 		m_bMultiQueue = AllowsMulti ( iStart, iEnd );
 
 	assert ( !m_bFacetQueue || AllowsMulti ( iStart, iEnd ) );
 	if ( !m_bMultiQueue )
 		m_bFacetQueue = false;
-
-	// these are mutual exclusive
-	assert ( !( m_bMultiQueue && pLocalSorter ) );
 
 	///////////////////////////////////////////////////////////
 	// main query loop (with multiple retries for distributed)
@@ -8647,7 +8320,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			m_pProfile->Switch ( SPH_QSTATE_LOCAL_SEARCH );
 
 		tmLocal = -sphMicroTimer();
-		RunLocalSearches ( pLocalSorter, uLocalPFFlags );
+		RunLocalSearches();
 		tmLocal += sphMicroTimer();
 	}
 
@@ -8670,11 +8343,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			// wait for remote queries to complete
 			if ( tDistCtrl->FetchReadyAgents() )
 			{
-				CSphVector<DWORD> dMvaStorage;
-				CSphVector<BYTE> dStringStorage;
-				dMvaStorage.Add ( 0 );
-				dStringStorage.Add ( 0 );
-				SearchReplyParser_t tParser ( iStart, iEnd, dMvaStorage, dStringStorage );
+				SearchReplyParser_c tParser ( iStart, iEnd );
 				int iMsecLeft = iAgentQueryTimeout - (int)( tmLocal/1000 );
 				int iReplys = RemoteWaitForAgents ( dAgents, Max ( iMsecLeft, 0 ), tParser );
 				if ( tDistCtrl->RetryFailed ()>0 )
@@ -8684,8 +8353,6 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				{
 					sphLogDebugv ( "agents got %d", iReplys );
 
-					DWORD * pMva = dMvaStorage.Begin();
-					BYTE * pString = dStringStorage.Begin();
 					ARRAY_FOREACH ( iAgent, dAgents )
 					{
 						AgentConn_t * pAgent = dAgents[iAgent];
@@ -8730,7 +8397,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 							assert ( !tRes.m_dTag2Pools[iOrderTag + iRes - iStart].m_pMva && !tRes.m_dTag2Pools[iOrderTag + iRes - iStart].m_pStrings );
 
-							tRes.m_dMatches.Reserve ( tRemoteResult.m_dMatches.GetLength() );
+							tRes.m_dMatches.Reserve ( tRes.m_dMatches.GetLength() + tRemoteResult.m_dMatches.GetLength() );
 							ARRAY_FOREACH ( i, tRemoteResult.m_dMatches )
 							{
 								tRes.m_dMatches.Add();
@@ -8738,10 +8405,10 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 								tRes.m_dMatches.Last().m_iTag = ( iOrderTag + iRes - iStart ) | 0x80000000;
 							}
 
-							tRes.m_pMva = pMva;
-							tRes.m_pStrings = pString;
-							tRes.m_dTag2Pools[iOrderTag+iRes-iStart].m_pMva = pMva;
-							tRes.m_dTag2Pools[iOrderTag+iRes-iStart].m_pStrings = pString;
+							tRes.m_pMva = nullptr;
+							tRes.m_pStrings = nullptr;
+							tRes.m_dTag2Pools[iOrderTag+iRes-iStart].m_pMva = nullptr;
+							tRes.m_dTag2Pools[iOrderTag+iRes-iStart].m_pStrings = nullptr;
 							tRes.m_dMatchCounts.Add ( tRemoteResult.m_dMatches.GetLength() );
 							tRes.m_dSchemas.Add ( tRemoteResult.m_tSchema );
 							// note how we do NOT add per-index weight here
@@ -8771,9 +8438,6 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 						pAgent->m_bSuccess = false;
 						pAgent->m_sFailure = "";
 					}
-
-					m_dMva2Free.Add ( dMvaStorage.LeakData() );
-					m_dString2Free.Add ( dStringStorage.LeakData() );
 				}
 			}
 		} // while ( !bDistDone )
@@ -8803,10 +8467,6 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		}
 	}
 
-	// cleanup
-	bool bWasLocalSorter = pLocalSorter!=NULL;
-	SafeDelete ( pLocalSorter );
-
 	/////////////////////
 	// merge all results
 	/////////////////////
@@ -8820,7 +8480,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	{
 		AggrResult_t & tRes = m_dResults[iRes];
 		CSphQuery & tQuery = m_dQueries[iRes];
-		CSphSchemaMT * pExtraSchema = tQuery.m_bAgent ? m_dExtraSchemas.Begin() + ( bWasLocalSorter ? 0 : iRes ) : NULL;
+		CSphSchemaMT * pExtraSchema = tQuery.m_bAgent ? m_dExtraSchemas.Begin() : NULL;
 
 		// minimize sorters needs these pointers
 		tIO.Add ( tRes.m_tIOStats );
@@ -9084,41 +8744,16 @@ void SendSearchResponse ( SearchHandler_c & tHandler, ISphOutputBuffer & tOut, i
 	int iReplyLen = 0;
 	bool bAgentMode = ( iMasterVer>0 );
 
-	if ( iVer<=0x10C )
-	{
-		assert ( tHandler.m_dQueries.GetLength()==1 );
-		assert ( tHandler.m_dResults.GetLength()==1 );
-		const AggrResult_t & tRes = tHandler.m_dResults[0];
+	ARRAY_FOREACH ( i, tHandler.m_dQueries )
+		iReplyLen += CalcResultLength ( iVer, &tHandler.m_dResults[i], bAgentMode, tHandler.m_dQueries[i], iMasterVer );
 
-		if ( !tRes.m_sError.IsEmpty() )
-		{
-			SendErrorReply ( tOut, "%s", tRes.m_sError.cstr() );
-			return;
-		}
+	// send it
+	tOut.SendWord ( (WORD)SEARCHD_OK );
+	tOut.SendWord ( VER_COMMAND_SEARCH );
+	tOut.SendInt ( iReplyLen );
 
-		iReplyLen = CalcResultLength ( iVer, &tRes, tRes.m_dTag2Pools, bAgentMode, tHandler.m_dQueries[0], iMasterVer );
-		bool bWarning = ( iVer>=0x106 && !tRes.m_sWarning.IsEmpty() );
-
-		// send it
-		tOut.SendWord ( (WORD)( bWarning ? SEARCHD_WARNING : SEARCHD_OK ) );
-		tOut.SendWord ( VER_COMMAND_SEARCH );
-		tOut.SendInt ( iReplyLen );
-
-		SendResult ( iVer, tOut, &tRes, tRes.m_dTag2Pools, bAgentMode, tHandler.m_dQueries[0], iMasterVer );
-
-	} else
-	{
-		ARRAY_FOREACH ( i, tHandler.m_dQueries )
-			iReplyLen += CalcResultLength ( iVer, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools, bAgentMode, tHandler.m_dQueries[i], iMasterVer );
-
-		// send it
-		tOut.SendWord ( (WORD)SEARCHD_OK );
-		tOut.SendWord ( VER_COMMAND_SEARCH );
-		tOut.SendInt ( iReplyLen );
-
-		ARRAY_FOREACH ( i, tHandler.m_dQueries )
-			SendResult ( iVer, tOut, &tHandler.m_dResults[i], tHandler.m_dResults[i].m_dTag2Pools, bAgentMode, tHandler.m_dQueries[i], iMasterVer );
-	}
+	ARRAY_FOREACH ( i, tHandler.m_dQueries )
+		SendResult ( iVer, tOut, &tHandler.m_dResults[i], bAgentMode, tHandler.m_dQueries[i], iMasterVer );
 
 	tOut.Flush ();
 	assert ( tOut.GetError()==true || tOut.GetSentCount()==iReplyLen+8 );
@@ -9132,9 +8767,14 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 	if ( !CheckCommandVersion ( iVer, VER_COMMAND_SEARCH, tOut ) )
 		return;
 
-	int iMasterVer = 0;
-	if ( iVer>=0x118 )
-		iMasterVer = tReq.GetInt();
+	const DWORD MIN_VERSION = 0x119;
+	if ( iVer<MIN_VERSION )
+	{
+		SendErrorReply ( tOut, "client version is too old; upgrade your client (client is v.%d.%d, min is v.%d.%d)", iVer>>8, iVer&0xff, MIN_VERSION>>8, MIN_VERSION&0xff );
+		return;
+	}
+
+	int iMasterVer = tReq.GetInt();
 	if ( iMasterVer<0 || iMasterVer>VER_MASTER )
 	{
 		SendErrorReply ( tOut, "master-agent version mismatch; update me first, then update master!" );
@@ -9142,9 +8782,7 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 	}
 
 	// parse request
-	int iQueries = 1;
-	if ( iVer>=0x10D )
-		iQueries = tReq.GetDword ();
+	int iQueries = tReq.GetDword ();
 
 	if ( g_iMaxBatchQueries>0 && ( iQueries<=0 || iQueries>g_iMaxBatchQueries ) )
 	{
@@ -9267,8 +8905,16 @@ public:
 
 			if ( iCur==iLastValue )
 				continue;
-			if ( iCur && iLastValue && t==SPH_ATTR_STRINGPTR && strcmp ( (const char*)iCur, (const char*)iLastValue )==0 )
-				continue;
+			if ( iCur && iLastValue && t==SPH_ATTR_STRINGPTR )
+			{
+				const BYTE * a = (const BYTE*) iCur;
+				const BYTE * b = (const BYTE*) iLastValue;
+				int iLen1 = sphUnpackPtrAttr ( a, &a );
+				int iLen2 = sphUnpackPtrAttr ( b, &b );
+				if ( iLen1==iLen2 && memcmp ( a, b, iLen1 )==0 )
+					continue;
+			}
+
 			if ( iCur && iLastValue && t==SPH_ATTR_STRING )
 			{
 				const BYTE * a = (const BYTE*) iCur;
@@ -13174,9 +12820,9 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 
 	// get schema, check values count
 	const CSphSchema & tSchema = pIndex->GetInternalSchema();
-	int iSchemaSz = tSchema.GetAttrsCount() + tSchema.m_dFields.GetLength() + 1;
+	int iSchemaSz = tSchema.GetAttrsCount() + tSchema.GetFieldsCount() + 1;
 	if ( pIndex->GetSettings().m_bIndexFieldLens )
-		iSchemaSz -= tSchema.m_dFields.GetLength();
+		iSchemaSz -= tSchema.GetFieldsCount();
 	int iExp = tStmt.m_iSchemaSz;
 	int iGot = tStmt.m_dInsertValues.GetLength();
 	if ( !tStmt.m_dInsertSchema.GetLength() && ( iSchemaSz!=tStmt.m_iSchemaSz ) )
@@ -13204,8 +12850,8 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	}
 
 	CSphVector<int> dAttrSchema ( tSchema.GetAttrsCount() );
-	CSphVector<int> dFieldSchema ( tSchema.m_dFields.GetLength() );
-	CSphVector<bool> dFieldAttrs ( tSchema.m_dFields.GetLength() );
+	CSphVector<int> dFieldSchema ( tSchema.GetFieldsCount() );
+	CSphVector<bool> dFieldAttrs ( tSchema.GetFieldsCount() );
 	ARRAY_FOREACH ( i, dFieldAttrs )
 		dFieldAttrs[i] = false;
 
@@ -13261,9 +12907,9 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		bool bIdDupe = false;
 		ARRAY_FOREACH ( i, dFieldSchema )
 		{
-			if ( dInsertSchema.Exists ( tSchema.m_dFields[i].m_sName ) )
+			if ( dInsertSchema.Exists ( tSchema.GetFieldName(i) ) )
 			{
-				int iField = dInsertSchema[tSchema.m_dFields[i].m_sName];
+				int iField = dInsertSchema[tSchema.GetFieldName(i)];
 				if ( iField==iIdIndex )
 				{
 					bIdDupe = true;
@@ -13272,7 +12918,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 				dFieldSchema[i] = iField;
 
 				// does an attribute with the same name exist?
-				if ( tSchema.GetAttr ( tSchema.m_dFields[i].m_sName.cstr() ) )
+				if ( tSchema.GetAttr ( tSchema.GetFieldName(i) ) )
 					dFieldAttrs[i] = true;
 			} else
 				dFieldSchema[i] = -1;
@@ -13324,7 +12970,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 
 		int iSchemaAttrCount = tSchema.GetAttrsCount();
 		if ( pIndex->GetSettings().m_bIndexFieldLens )
-			iSchemaAttrCount -= tSchema.m_dFields.GetLength();
+			iSchemaAttrCount -= tSchema.GetFieldsCount();
 		for ( int i=0; i<iSchemaAttrCount; i++ )
 		{
 			// shortcuts!
@@ -13414,9 +13060,9 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		// if strings and fields share one value, it might be modified by html stripper etc
 		// we need to use separate storage for such string attributes and fields
 		CSphVector<CSphString> dTmpFieldStorage;
-		dTmpFieldStorage.Resize(tSchema.m_dFields.GetLength());
+		dTmpFieldStorage.Resize(tSchema.GetFieldsCount());
 
-		ARRAY_FOREACH ( i, tSchema.m_dFields )
+		for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
 		{
 			int iQuerySchemaIdx = dFieldSchema[i];
 			if ( iQuerySchemaIdx < 0 )
@@ -14238,8 +13884,8 @@ void HandleMysqlDescribe ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 	dCondOut.MatchDataTuplet ( "id", USE_64BIT ? "bigint" : "uint" );
 
 	const CSphSchema & tSchema = pServed->m_pIndex->GetMatchSchema();
-	ARRAY_FOREACH ( i, tSchema.m_dFields )
-		dCondOut.MatchDataTuplet ( tSchema.m_dFields[i].m_sName.cstr(), "field" );
+	for ( int i=0; i < tSchema.GetFieldsCount(); i++ )
+		dCondOut.MatchDataTuplet ( tSchema.GetFieldName(i), "field" );
 
 	char sTmp[SPH_MAX_WORD_LEN];
 	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
@@ -15310,7 +14956,7 @@ void sphFormatFactors ( CSphVector<BYTE> & dOut, const unsigned int * pFactors, 
 }
 
 
-static void ReturnZeroCount ( const CSphRsetSchema & tSchema, int iAttrsCount, const CSphVector<CSphString> & dCounts, SqlRowBuffer_c & dRows )
+static void ReturnZeroCount ( const CSphSchema & tSchema, int iAttrsCount, const CSphVector<CSphString> & dCounts, SqlRowBuffer_c & dRows )
 {
 	for ( int i=0; i<iAttrsCount; i++ )
 	{
@@ -15352,6 +14998,39 @@ static void ReturnZeroCount ( const CSphRsetSchema & tSchema, int iAttrsCount, c
 		}
 	}
 	dRows.Commit();
+}
+
+
+template <typename T>
+static void MVA2Str ( const T * pMVA, int iLengthBytes, const char * szFmt, CSphVector<char> & dStr )
+{
+	dStr.Reserve ( (SPH_MAX_NUMERIC_STR+1)*iLengthBytes/sizeof(DWORD) );
+
+	int nValues = iLengthBytes / sizeof(T);
+	for ( int i = 0; i < nValues; i++ )
+	{
+		int iOldLength = dStr.GetLength();
+		dStr.Resize ( iOldLength+SPH_MAX_NUMERIC_STR+1 );
+		int iLen = snprintf ( dStr.Begin()+iOldLength, SPH_MAX_NUMERIC_STR, szFmt, pMVA[i] );
+		if ( i<nValues-1 )
+		{
+			dStr[iOldLength+iLen] = ',';
+			iLen++;
+		}
+
+		dStr.Resize ( iOldLength+iLen );
+	}
+}
+
+
+void sphPackedMVA2Str ( const BYTE * pMVA, bool b64bit, CSphVector<char> & dStr )
+{
+	int iLengthBytes = sphUnpackPtrAttr ( pMVA, &pMVA );
+
+	if ( b64bit )
+		MVA2Str ( (const uint64_t *)pMVA, iLengthBytes, INT64_FMT, dStr );
+	else
+		MVA2Str ( (const DWORD *)pMVA, iLengthBytes, "%u", dStr );
 }
 
 
@@ -15413,11 +15092,13 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 	{
 		const CSphMatch & tMatch = tRes.m_dMatches [ iMatch ];
 
-		const CSphRsetSchema & tSchema = tRes.m_tSchema;
+		const CSphSchema & tSchema = tRes.m_tSchema;
 		for ( int i=0; i<iSchemaAttrsCount; i++ )
 		{
 			CSphAttrLocator tLoc = tSchema.GetAttr(i).m_tLocator;
 			ESphAttr eAttrType = tSchema.GetAttr(i).m_eAttrType;
+
+			assert ( sphPlainAttrToPtrAttr(eAttrType)==eAttrType );
 
 			switch ( eAttrType )
 			{
@@ -15429,53 +15110,32 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 				break;
 
 			case SPH_ATTR_BIGINT:
-			{
-				const char * sName = tSchema.GetAttr(i).m_sName.cstr();
-				// how to get rid of this if?
-				if ( sName[0]=='i' && sName[1]=='d' && sName[2]=='\0' )
-					dRows.PutNumeric<SphDocID_t> ( DOCID_FMT, tMatch.m_uDocID );
-				else
-					dRows.PutNumeric<SphAttr_t> ( INT64_FMT, tMatch.GetAttr(tLoc) );
-				break;
+				{
+					const char * sName = tSchema.GetAttr(i).m_sName.cstr();
+					// how to get rid of this if?
+					if ( sName[0]=='i' && sName[1]=='d' && sName[2]=='\0' )
+						dRows.PutNumeric<SphDocID_t> ( DOCID_FMT, tMatch.m_uDocID );
+					else
+						dRows.PutNumeric<SphAttr_t> ( INT64_FMT, tMatch.GetAttr(tLoc) );
+					break;
 				}
 
 			case SPH_ATTR_FLOAT:
 				dRows.PutNumeric ( "%f", tMatch.GetAttrFloat(tLoc) );
 				break;
 
-			case SPH_ATTR_INT64SET:
-			case SPH_ATTR_UINT32SET:
+			case SPH_ATTR_INT64SET_PTR:
+			case SPH_ATTR_UINT32SET_PTR:
 				{
 					int iLenOff = dRows.Length();
 					dRows.Reserve ( 4 );
 					dRows.IncPtr ( 4 );
 
-					assert ( tMatch.GetAttr ( tLoc )==0 || tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pMva || ( MVA_DOWNSIZE ( tMatch.GetAttr ( tLoc ) ) & MVA_ARENA_FLAG ) );
-					const PoolPtrs_t & tPools = tRes.m_dTag2Pools [ tMatch.m_iTag ];
-					const DWORD * pValues = tMatch.GetAttrMVA ( tLoc, tPools.m_pMva, tPools.m_bArenaProhibit );
-					if ( pValues )
-					{
-						DWORD nValues = *pValues++;
-						assert ( eAttrType==SPH_ATTR_UINT32SET || ( nValues%2 )==0 );
-						if ( eAttrType==SPH_ATTR_UINT32SET )
-						{
-							while ( nValues-- )
-							{
-								dRows.Reserve ( SPH_MAX_NUMERIC_STR );
-								int iLen = snprintf ( dRows.Get(), SPH_MAX_NUMERIC_STR, nValues>0 ? "%u," : "%u", *pValues++ );
-								dRows.IncPtr ( iLen );
-							}
-						} else
-						{
-							for ( ; nValues; nValues-=2, pValues+=2 )
-							{
-								int64_t iVal = MVA_UPSIZE ( pValues );
-								dRows.Reserve ( SPH_MAX_NUMERIC_STR );
-								int iLen = snprintf ( dRows.Get(), SPH_MAX_NUMERIC_STR, nValues>2 ? INT64_FMT"," : INT64_FMT, iVal );
-								dRows.IncPtr ( iLen );
-							}
-						}
-					}
+					CSphVector<char> dStr;
+					sphPackedMVA2Str ( (const BYTE *)tMatch.GetAttr(tLoc), eAttrType==SPH_ATTR_INT64SET_PTR, dStr );
+					dRows.Reserve ( dStr.GetLength() );
+					memcpy ( dRows.Get(), dStr.Begin(), dStr.GetLength() );
+					dRows.IncPtr ( dStr.GetLength() );
 
 					// manually pack length, forcibly into exactly 3 bytes
 					int iLen = dRows.Length()-iLenOff-4;
@@ -15487,33 +15147,25 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 					break;
 				}
 
-			case SPH_ATTR_STRING:
-			case SPH_ATTR_JSON:
+			case SPH_ATTR_STRINGPTR:
+			case SPH_ATTR_JSON_PTR:
 				{
-					const BYTE * pStrings = tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pStrings;
-
-					// get that string
-					const BYTE * pStr = NULL;
 					int iLen = 0;
-
-					DWORD uOffset = (DWORD) tMatch.GetAttr ( tLoc );
-					if ( uOffset )
+					const BYTE * pString = (const BYTE*) tMatch.GetAttr ( tLoc );
+					if ( pString )
+						iLen = sphUnpackPtrAttr ( pString, &pString );
+					else
 					{
-						assert ( pStrings );
-						iLen = sphUnpackStr ( pStrings+uOffset, &pStr );
+						// stringptr is NULL - send NULL value
+						dRows.PutNULL();
+						break;
 					}
 
-					if ( eAttrType==SPH_ATTR_JSON )
+					if ( eAttrType==SPH_ATTR_JSON_PTR )
 					{
-						// no object at all? return NULL
-						if ( !pStr )
-						{
-							dRows.PutNULL();
-							break;
-						}
 						dTmp.Resize ( 0 );
-						sphJsonFormat ( dTmp, pStr );
-						pStr = dTmp.Begin();
+						sphJsonFormat ( dTmp, pString );
+						pString = dTmp.Begin();
 						iLen = dTmp.GetLength();
 						if ( iLen==0 )
 						{
@@ -15530,47 +15182,24 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 
 					// send string data
 					if ( iLen )
-						memcpy ( pOutStr, pStr, iLen );
-
-					dRows.IncPtr ( pOutStr-dRows.Get()+iLen );
-					break;
-				}
-
-			case SPH_ATTR_STRINGPTR:
-				{
-					int iLen = 0;
-					const char* pString = (const char*) tMatch.GetAttr ( tLoc );
-					if ( pString )
-						iLen = strlen ( pString );
-					else
-					{
-						// stringptr is NULL - send NULL value
-						dRows.PutNULL();
-						break;
-					}
-
-					// send length
-					dRows.Reserve ( iLen+4 );
-					char * pOutStr = (char*)MysqlPack ( dRows.Get(), iLen );
-
-					// send string data
-					if ( iLen )
 						memcpy ( pOutStr, pString, iLen );
 
 					dRows.IncPtr ( pOutStr-dRows.Get()+iLen );
-					break;
 				}
+				break;
 
 			case SPH_ATTR_FACTORS:
 			case SPH_ATTR_FACTORS_JSON:
 				{
+					const BYTE * pFactors = nullptr;
+					sphUnpackPtrAttr ( (const BYTE*)tMatch.GetAttr ( tLoc ), &pFactors );
+
 					int iLen = 0;
-					const BYTE * pStr = NULL;
-					const unsigned int * pFactors = (unsigned int*) tMatch.GetAttr ( tLoc );
+					const BYTE * pStr = nullptr;
 					if ( pFactors )
 					{
 						dTmp.Resize ( 0 );
-						sphFormatFactors ( dTmp, pFactors, eAttrType==SPH_ATTR_FACTORS_JSON );
+						sphFormatFactors ( dTmp, (const unsigned int *)pFactors, eAttrType==SPH_ATTR_FACTORS_JSON );
 						iLen = dTmp.GetLength();
 						pStr = dTmp.Begin();
 					}
@@ -15587,34 +15216,38 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 					break;
 				}
 
-			case SPH_ATTR_JSON_FIELD:
+			case SPH_ATTR_JSON_FIELD_PTR:
 				{
-					uint64_t uTypeOffset = tMatch.GetAttr ( tLoc );
-					ESphJsonType eJson = ESphJsonType ( uTypeOffset>>32 );
-					DWORD uOff = (DWORD)uTypeOffset;
-					if ( !uOff || eJson==JSON_NULL )
+					const BYTE * pField = (const BYTE *)tMatch.GetAttr ( tLoc );
+					if ( !pField )
 					{
-						// no key found - NULL value
 						dRows.PutNULL();
-
-					} else
-					{
-						// send string to client
-						dTmp.Resize ( 0 );
-						const BYTE * pStrings = tRes.m_dTag2Pools [ tMatch.m_iTag ].m_pStrings;
-						sphJsonFieldFormat ( dTmp, pStrings+uOff, eJson, false );
-
-						// send length
-						int iLen = dTmp.GetLength();
-						dRows.Reserve ( iLen+4 );
-						char * pOutStr = (char*)MysqlPack ( dRows.Get(), iLen );
-
-						// send string data
-						if ( iLen )
-							memcpy ( pOutStr, dTmp.Begin(), iLen );
-
-						dRows.IncPtr ( pOutStr-dRows.Get()+iLen );
+						break;
 					}
+
+					sphUnpackPtrAttr ( pField, &pField );
+					ESphJsonType eJson = ESphJsonType ( *pField++ );
+
+					if ( eJson==JSON_NULL )
+					{
+						dRows.PutNULL();
+						break;
+					}
+			
+					// send string to client
+					dTmp.Resize ( 0 );
+					sphJsonFieldFormat ( dTmp, pField, eJson, false );
+
+					// send length
+					int iLen = dTmp.GetLength();
+					dRows.Reserve ( iLen+4 );
+					char * pOutStr = (char*)MysqlPack ( dRows.Get(), iLen );
+
+					// send string data
+					if ( iLen )
+						memcpy ( pOutStr, dTmp.Begin(), iLen );
+
+					dRows.IncPtr ( pOutStr-dRows.Get()+iLen );
 					break;
 				}
 
@@ -16726,11 +16359,10 @@ static void AddPlainIndexStatus ( SqlRowBuffer_c & tOut, const ServedIndex_c * p
 	if ( pFieldLens )
 	{
 		int64_t iTotalTokens = 0;
-		const CSphVector<CSphColumnInfo> & dFields = pIndex->GetMatchSchema().m_dFields;
-		ARRAY_FOREACH ( i, dFields )
+		for ( int i=0; i < pIndex->GetMatchSchema().GetFieldsCount(); i++ )
 		{
 			CSphString sKey;
-			sKey.SetSprintf ( "field_tokens_%s", dFields[i].m_sName.cstr() );
+			sKey.SetSprintf ( "field_tokens_%s", pIndex->GetMatchSchema().GetFieldName(i) );
 			tOut.DataTuplet ( sKey.cstr(), pFieldLens[i] );
 			iTotalTokens += pFieldLens[i];
 		}

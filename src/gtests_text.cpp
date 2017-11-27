@@ -565,7 +565,7 @@ TEST ( Text, cvs_source )
 	// verify that config matches to source schema
 	CSphSchema tSchema;
 	ASSERT_TRUE ( pCSV->UpdateSchema ( &tSchema, sError ) );
-	int iColumns = tSchema.m_dFields.GetLength ();
+	int iColumns = tSchema.GetFieldsCount();
 
 	// check parsed fields
 	for ( int iTest = 1;; )

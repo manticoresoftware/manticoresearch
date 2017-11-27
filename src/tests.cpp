@@ -563,6 +563,7 @@ void SortDataRand01 ( DWORD * pData, int iCount )
 		pData[i] = ( sphRand()>>3 ) & 1;
 }
 
+
 typedef void (*SortDataGen_fn)( DWORD *, int );
 
 struct SortDataGenDesc_t

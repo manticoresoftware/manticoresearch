@@ -6237,8 +6237,8 @@ CSphSchema & CSphSchema::operator = ( CSphSchema && rhs )
 	if ( this!=&rhs )
 	{
 		m_dDataPtrAttrs			= std::move ( rhs.m_dDataPtrAttrs );
-		m_iFirstFieldLenAttr	= std::move ( m_iFirstFieldLenAttr );
-		m_iLastFieldLenAttr		= std::move ( m_iLastFieldLenAttr );
+		m_iFirstFieldLenAttr	= std::move ( rhs.m_iFirstFieldLenAttr );
+		m_iLastFieldLenAttr		= std::move ( rhs.m_iLastFieldLenAttr );
 		m_sName					= std::move ( rhs.m_sName );
 		m_dFields				= std::move ( rhs.m_dFields );
 		m_dAttrs				= std::move ( rhs.m_dAttrs );

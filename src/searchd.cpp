@@ -9276,6 +9276,11 @@ int sphGetTokTypeStr()
 	return TOK_QUOTED_STRING;
 }
 
+int sphGetTokTypeConstMVA()
+{
+	return TOK_CONST_MVA;
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 class CSphMatchVariant : public CSphMatch

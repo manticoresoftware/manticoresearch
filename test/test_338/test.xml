@@ -24,6 +24,8 @@ index test_rt
 	rt_field = content
     rt_attr_uint = int_col
 	rt_attr_float = flt_col
+	rt_attr_multi = mva_col
+	rt_attr_json = json_col
 }
 </config>
 
@@ -38,6 +40,14 @@ index test_rt
 	{
 	    "int_col" : 1,
 		"flt_col" : 1.1,
+		"mva_col" : [1,2,3,4,5],
+		"json_col":
+		{
+			"string": "name1",
+		    "int"   : 1,
+			"array" : [100,200],
+		    "object": {}
+		},
 	    "content" : "document one"
 	}
 }
@@ -51,6 +61,7 @@ index test_rt
 	{
 	    "int_col" : 2,
 	    "flt_col" : 2.2,
+		"json_col": "{\"string\":\"name2\",\"int\":2,\"array\":[300,400],\"object\":{}}",
 	    "content" : "document two"
 	}
 }
@@ -75,6 +86,10 @@ index test_rt
 <!-- fulltext -->
 <query endpoint="json/search">{ "index": "test_rt", "query": { "match": { "*": "one" } } } }</query>
 <query endpoint="json/search">{ "index": "test_rt", "query": { "match": { "*": "two three" } } } }</query>
+
+<!-- filter by json attr -->
+<query endpoint="json/search">{ "index": "test_rt", "query": { "range": { "json_col.int": { "lte": 1 } } } }</query>
+<query endpoint="json/search">{ "index": "test_rt", "query": { "range": { "json_col.int": { "gte": 2 } } } }</query>
 
 <!-- "create"=="insert" -->
 <query endpoint="json/insert">
@@ -129,6 +144,20 @@ index test_rt
 	{
 	    "int_col" : 333,
 	    "flt_col" : 333.3
+	}
+}
+</query>
+
+<query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
+
+<!-- update json -->
+<query endpoint="json/update">
+{
+	"_index":"test_rt",
+	"_id":1,
+	"doc":
+	{
+	    "json_col.int" : 111
 	}
 }
 </query>

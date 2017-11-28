@@ -924,6 +924,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const QueryParserFactory
 int sphGetTokTypeInt();
 int sphGetTokTypeFloat();
 int sphGetTokTypeStr();
+int sphGetTokTypeConstMVA();
 
 
 #endif // _searchdaemon_

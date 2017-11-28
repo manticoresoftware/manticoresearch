@@ -3,10 +3,6 @@
 json/bulk
 ---------
 
-.. warning::
-   This feature is in preview stage. MVA and JSON attributes are not handled yet.
-   
-
 The ``json/bulk`` endpoint allows you to perform several insert, update or delete operations in a single call. This endpoint only works with data that has ``Content-Type`` set to ``application/x-ndjson``. The data itself should be formatted as a newline-delimited json (NDJSON). Basically it means that each line should contain exactly one json statement and end with a newline ``\n`` and maybe a ``\r``.
 
 Example:

@@ -1368,6 +1368,30 @@ bool ParseJsonInsert ( cJSON * pRoot, SqlStmt_t & tStmt, SphDocID_t & tDocId, bo
 			{
 				tNewValue.m_iType = sphGetTokTypeInt();
 				tNewValue.m_iVal = pItem->valueint;
+			} else if ( cJSON_IsArray ( pItem ) )
+			{
+				tNewValue.m_iType = sphGetTokTypeConstMVA();
+				tNewValue.m_pVals = new RefcountedVector_c<SphAttr_t>;
+
+				int iCount = cJSON_GetArraySize ( pItem );
+				for ( int iItem=0; iItem<iCount; iItem++ )
+				{
+					cJSON * pArrayItem = cJSON_GetArrayItem ( pItem, iItem );
+					assert ( pArrayItem );
+
+					if ( !cJSON_IsInteger ( pArrayItem ) )
+					{
+						sError = "MVA elements should be integers";
+						return false;
+					}
+
+					tNewValue.m_pVals->Add ( pArrayItem->valueint );
+				}
+
+			} else if ( cJSON_IsObject ( pItem ) )
+			{
+				tNewValue.m_iType = sphGetTokTypeStr();
+				tNewValue.m_sVal = cJSON_Print ( pItem );
 			} else
 			{
 				sError = "unsupported value type";

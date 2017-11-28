@@ -93,9 +93,9 @@ public:
 		if ( !IsDocCacheEmpty() )
 			return CopyDoc();
 
-		if ( m_dFieldLengths.GetLength()!=T::m_tSchema.m_dFields.GetLength() )
+		if ( m_dFieldLengths.GetLength()!=T::m_tSchema.GetFieldsCount() )
 		{
-			int nFields = T::m_tSchema.m_dFields.GetLength();
+			int nFields = T::m_tSchema.GetFieldsCount();
 			m_dFieldLengths.Resize ( nFields );
 			m_dFieldHasChinese.Resize ( nFields );
 		}
@@ -115,7 +115,7 @@ public:
 
 			int iTotalFieldLen = 0;
 			bool bDocHasChinese = false;
-			for ( int i = 0; i < T::m_tSchema.m_dFields.GetLength(); i++ )
+			for ( int i = 0; i < T::m_tSchema.GetFieldsCount(); i++ )
 			{
 				m_dFieldLengths[i] = pFieldLengths[i];
 				m_dFieldHasChinese[i] = sphDetectChinese ( pFields[i], m_dFieldLengths[i] );
@@ -137,7 +137,7 @@ public:
 
 			int iCurDoc;
 			StoredDoc_t * pDoc = PushDoc ( iCurDoc );
-			int nFields = T::m_tSchema.m_dFields.GetLength();
+			int nFields = T::m_tSchema.GetFieldsCount();
 			CopyDocInfo ( pDoc->m_tDocInfo, T::m_tDocInfo );
 			pDoc->m_dMva = T::m_dMva;
 			pDoc->m_dStrAttrs = T::m_dStrAttrs;
@@ -147,7 +147,7 @@ public:
 
 			// fields that don't have chinese text will be stored in those docs
 			// fields that have chinese text will be added later, after a RLP field filter pass
-			for ( int i = 0; i < T::m_tSchema.m_dFields.GetLength(); i++ )
+			for ( int i = 0; i < T::m_tSchema.GetFieldsCount(); i++ )
 				if ( !m_dFieldHasChinese[i] )
 				{
 					int iFieldLength = m_dFieldLengths[i];
@@ -176,7 +176,7 @@ public:
 				AddNumber ( pCurDocPtr, iCurDoc );
 
 				// flatten all fields(+markers) to one buffer
-				for ( int i = 0; i < T::m_tSchema.m_dFields.GetLength(); i++ )
+				for ( int i = 0; i < T::m_tSchema.GetFieldsCount(); i++ )
 					if ( m_dFieldHasChinese[i] )
 					{
 						COPY_MARKER ( pCurDocPtr, m_pMarkerFieldStart );

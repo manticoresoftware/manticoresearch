@@ -8767,7 +8767,7 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 	if ( !CheckCommandVersion ( iVer, VER_COMMAND_SEARCH, tOut ) )
 		return;
 
-	const DWORD MIN_VERSION = 0x119;
+	const int MIN_VERSION = 0x119;
 	if ( iVer<MIN_VERSION )
 	{
 		SendErrorReply ( tOut, "client version is too old; upgrade your client (client is v.%d.%d, min is v.%d.%d)", iVer>>8, iVer&0xff, MIN_VERSION>>8, MIN_VERSION&0xff );

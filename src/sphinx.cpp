@@ -6237,8 +6237,8 @@ CSphSchema & CSphSchema::operator = ( CSphSchema && rhs )
 	if ( this!=&rhs )
 	{
 		m_dDataPtrAttrs			= std::move ( rhs.m_dDataPtrAttrs );
-		m_iFirstFieldLenAttr	= m_iFirstFieldLenAttr;
-		m_iLastFieldLenAttr		= m_iLastFieldLenAttr;
+		m_iFirstFieldLenAttr	= std::move ( m_iFirstFieldLenAttr );
+		m_iLastFieldLenAttr		= std::move ( m_iLastFieldLenAttr );
 		m_sName					= std::move ( rhs.m_sName );
 		m_dFields				= std::move ( rhs.m_dFields );
 		m_dAttrs				= std::move ( rhs.m_dAttrs );
@@ -19783,7 +19783,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		rdDocs.SeekTo ( pQword->m_rdDoclist.GetPos(), READ_NO_SIZE_HINT );
 
 		// cleanup
-		SafeDelete ( pInlineStorage );
+		SafeDeleteArray ( pInlineStorage );
 		SafeDelete ( pQword );
 
 		// progress bar

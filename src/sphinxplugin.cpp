@@ -102,6 +102,7 @@ static CSphOrderedHash<PluginDesc_c*, PluginKey_t, PluginKey_t, 256>	g_hPlugins;
 //////////////////////////////////////////////////////////////////////////
 
 #if USE_WINDOWS
+#undef HAVE_DLOPEN
 #define HAVE_DLOPEN		1
 #define RTLD_LAZY		0
 #define RTLD_LOCAL		0

@@ -215,6 +215,20 @@ All of these documents must not have a ``revision`` less than 15
 The following types of filters are supported: 
 
 
+**Equality filters**
+
+Equality filters are the simplest filters that work with integer, float and string attributes. Example:
+
+::
+
+    {
+      "index":"test1",
+      "query":
+      {
+	    "equals": { "price": 500 }
+      }
+    }
+
 **Range filters**
 
 
@@ -222,12 +236,18 @@ Range filters match documents that have attribute values within a specified rang
 
 ::
 
-    "range":
     {
-      "price":
+      "index":"test1",
+      "query":
       {
-        "gte": 500,
-        "lte": 1000
+        "range":
+        {
+          "price":
+          {
+            "gte": 500,
+            "lte": 1000
+          }
+        }
       }
     }
 

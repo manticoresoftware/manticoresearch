@@ -48,6 +48,9 @@ static bool	IsFilter ( const cJSON * pJson )
 	if ( !pJson || !pJson->string )
 		return false;
 
+	if ( !strcmp ( pJson->string, "equals" ) )
+		return true;
+
 	if ( !strcmp ( pJson->string, "range" ) )
 		return true;
 
@@ -876,23 +879,81 @@ static void AddToSelectList ( CSphQuery & tQuery, const CSphVector<CSphQueryItem
 }
 
 
-static bool ConstructRangeFilter ( const cJSON * pJson, CSphVector<CSphFilterSettings> & dFilters, CSphString & sError )
+static cJSON * GetFilterColumn ( const cJSON * pJson, CSphString & sError )
 {
 	if ( !cJSON_IsObject ( pJson ) )
 	{
 		sError = "filter should be an object";
-		return false;
+		return nullptr;
+	}
+
+	if ( cJSON_GetArraySize ( pJson )!=1 )
+	{
+		sError = "\"equals\" filter should have only one element";
+		return nullptr;
 	}
 
 	cJSON * pColumn = cJSON_GetArrayItem ( pJson, 0 );
 	if ( !pColumn )
 	{
 		sError = "empty filter found";
+		return nullptr;
+	}
+
+	return pColumn;
+}
+
+
+static bool ConstructEqualsFilter ( const cJSON * pJson, CSphVector<CSphFilterSettings> & dFilters, CSphString & sError )
+{
+	cJSON * pColumn = GetFilterColumn ( pJson, sError );
+	if ( !pColumn )
+		return false;
+
+	if ( !cJSON_IsNumeric ( pColumn ) && !cJSON_IsString ( pColumn ) )
+	{
+		sError = "\"equals\" filter expects numeric or string values";
 		return false;
 	}
 
+	CSphFilterSettings tFilter;
+	tFilter.m_sAttrName = ( !strcasecmp ( pColumn->string, "id" ) ) ? "@id" : pColumn->string;
+	sphColumnToLowercase ( const_cast<char *>( tFilter.m_sAttrName.cstr() ) );
+
+	if ( cJSON_IsInteger( pColumn ) )
+	{
+		tFilter.m_eType = SPH_FILTER_VALUES;
+		tFilter.m_dValues.Add ( pColumn->valueint );
+	} else if ( cJSON_IsNumber ( pColumn ) )
+	{
+		tFilter.m_eType = SPH_FILTER_FLOATRANGE;
+		tFilter.m_fMinValue = (float)pColumn->valuedouble;
+		tFilter.m_fMaxValue = (float)pColumn->valuedouble;
+		tFilter.m_bHasEqualMin = true;
+		tFilter.m_bHasEqualMax = true;
+		tFilter.m_bExclude = false;
+	} else
+	{
+		tFilter.m_eType = SPH_FILTER_STRING;
+		tFilter.m_dStrings.Add ( pColumn->valuestring );
+		tFilter.m_bExclude = false;
+	}
+
+	dFilters.Add ( tFilter );
+
+	return true;
+}
+
+
+static bool ConstructRangeFilter ( const cJSON * pJson, CSphVector<CSphFilterSettings> & dFilters, CSphString & sError )
+{
+	cJSON * pColumn = GetFilterColumn ( pJson, sError );
+	if ( !pColumn )
+		return false;
+
 	CSphFilterSettings tNewFilter;
 	tNewFilter.m_sAttrName = ( !strcasecmp ( pColumn->string, "id" ) ) ? "@id" : pColumn->string;
+	sphColumnToLowercase ( const_cast<char *>( tNewFilter.m_sAttrName.cstr() ) );
 
 	tNewFilter.m_bHasEqualMin = false;
 	tNewFilter.m_bHasEqualMax = false;
@@ -916,7 +977,13 @@ static bool ConstructRangeFilter ( const cJSON * pJson, CSphVector<CSphFilterSet
 		return false;
 	}
 
-	bool bIntFilter = ( ( pLess && ( pLess->valuedouble==(double)pLess->valueint ) ) || ( pGreater && ( pGreater->valuedouble==(double)pGreater->valueint ) ) );
+	if ( ( pLess && !cJSON_IsNumeric ( pLess ) ) || ( pGreater && !cJSON_IsNumeric ( pGreater ) ) )
+	{
+		sError = "range filter expects numeric values";
+		return false;
+	}
+
+	bool bIntFilter = ( pLess && cJSON_IsInteger ( pLess ) ) || ( pGreater && cJSON_IsInteger ( pGreater ) );
 
 	if ( pLess )
 	{
@@ -981,6 +1048,9 @@ static bool ConstructFilter ( const cJSON * pJson, CSphVector<CSphFilterSettings
 {
 	if ( !IsFilter ( pJson ) )
 		return true;
+
+	if ( !strcmp ( pJson->string, "equals" ) )
+		return ConstructEqualsFilter ( pJson, dFilters, sError );
 
 	if ( !strcmp ( pJson->string, "range" ) )
 		return ConstructRangeFilter ( pJson, dFilters, sError );

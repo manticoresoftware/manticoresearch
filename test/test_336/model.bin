@@ -13,7 +13,7 @@ a:1:{i:0;a:38:{i:0;a:3:{s:8:"sphinxql";s:150:"insert into test_rt values (1, '1s
     }
   }
 }
-";s:4:"rows";s:294:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"1","_score":1511,"_source":{"int_col":11,"flt_col":1.100000023841858,"str_col":"str1","attr_lat":51,"attr_lon":0}},{"_id":"2","_score":1511,"_source":{"int_col":12,"flt_col":1.2000000476837158,"str_col":"str2","attr_lat":46,"attr_lon":2}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:7;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:184:"
+";s:4:"rows";s:294:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"1","_score":1511,"_source":{"int_col":11,"flt_col":1.100000023841858,"attr_lat":51,"attr_lon":0,"str_col":"str1"}},{"_id":"2","_score":1511,"_source":{"int_col":12,"flt_col":1.2000000476837158,"attr_lat":46,"attr_lon":2,"str_col":"str2"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:7;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:184:"
 {
   "index":"test_rt",
   "query":
@@ -43,7 +43,7 @@ a:1:{i:0;a:38:{i:0;a:3:{s:8:"sphinxql";s:150:"insert into test_rt values (1, '1s
     }
   }
 }
-";s:4:"rows";s:405:"{"timed_out":false,"hits":{"total":3,"hits":[{"_id":"5","_score":2528,"_source":{"int_col":15,"flt_col":1.5,"str_col":"str5","attr_lat":41,"attr_lon":12}},{"_id":"4","_score":1537,"_source":{"int_col":14,"flt_col":1.399999976158142,"str_col":"str4","attr_lat":39,"attr_lon":22}},{"_id":"6","_score":1511,"_source":{"int_col":16,"flt_col":1.600000023841858,"str_col":"str6","attr_lat":61,"attr_lon":11}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:9;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:184:"
+";s:4:"rows";s:405:"{"timed_out":false,"hits":{"total":3,"hits":[{"_id":"5","_score":2528,"_source":{"int_col":15,"flt_col":1.5,"attr_lat":41,"attr_lon":12,"str_col":"str5"}},{"_id":"4","_score":1537,"_source":{"int_col":14,"flt_col":1.399999976158142,"attr_lat":39,"attr_lon":22,"str_col":"str4"}},{"_id":"6","_score":1511,"_source":{"int_col":16,"flt_col":1.600000023841858,"attr_lat":61,"attr_lon":11,"str_col":"str6"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:9;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:184:"
 {
   "index":"test_rt",
   "query":
@@ -73,7 +73,7 @@ a:1:{i:0;a:38:{i:0;a:3:{s:8:"sphinxql";s:150:"insert into test_rt values (1, '1s
     }
   }
 }
-";s:4:"rows";s:157:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"5","_score":2528,"_source":{"int_col":15,"flt_col":1.5,"str_col":"str5","attr_lat":41,"attr_lon":12}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:11;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:194:"
+";s:4:"rows";s:157:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"5","_score":2528,"_source":{"int_col":15,"flt_col":1.5,"attr_lat":41,"attr_lon":12,"str_col":"str5"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:11;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:194:"
 {
   "index":"test_rt",
   "query":
@@ -103,7 +103,7 @@ a:1:{i:0;a:38:{i:0;a:3:{s:8:"sphinxql";s:150:"insert into test_rt values (1, '1s
     }
   }
 }
-";s:4:"rows";s:405:"{"timed_out":false,"hits":{"total":3,"hits":[{"_id":"5","_score":2528,"_source":{"int_col":15,"flt_col":1.5,"str_col":"str5","attr_lat":41,"attr_lon":12}},{"_id":"4","_score":1537,"_source":{"int_col":14,"flt_col":1.399999976158142,"str_col":"str4","attr_lat":39,"attr_lon":22}},{"_id":"6","_score":1511,"_source":{"int_col":16,"flt_col":1.600000023841858,"str_col":"str6","attr_lat":61,"attr_lon":11}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:13;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:185:"
+";s:4:"rows";s:405:"{"timed_out":false,"hits":{"total":3,"hits":[{"_id":"5","_score":2528,"_source":{"int_col":15,"flt_col":1.5,"attr_lat":41,"attr_lon":12,"str_col":"str5"}},{"_id":"4","_score":1537,"_source":{"int_col":14,"flt_col":1.399999976158142,"attr_lat":39,"attr_lon":22,"str_col":"str4"}},{"_id":"6","_score":1511,"_source":{"int_col":16,"flt_col":1.600000023841858,"attr_lat":61,"attr_lon":11,"str_col":"str6"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:13;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:185:"
 {
   "index":"test_rt",
   "query":
@@ -133,7 +133,7 @@ a:1:{i:0;a:38:{i:0;a:3:{s:8:"sphinxql";s:150:"insert into test_rt values (1, '1s
     }
   }
 }
-";s:4:"rows";s:543:"{"timed_out":false,"hits":{"total":4,"hits":[{"_id":"4","_score":1537,"_source":{"int_col":14,"flt_col":1.399999976158142,"str_col":"str4","attr_lat":39,"attr_lon":22}},{"_id":"1","_score":1511,"_source":{"int_col":11,"flt_col":1.100000023841858,"str_col":"str1","attr_lat":51,"attr_lon":0}},{"_id":"2","_score":1511,"_source":{"int_col":12,"flt_col":1.2000000476837158,"str_col":"str2","attr_lat":46,"attr_lon":2}},{"_id":"3","_score":1511,"_source":{"int_col":13,"flt_col":1.2999999523162842,"str_col":"str3","attr_lat":51,"attr_lon":18}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:15;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:185:"
+";s:4:"rows";s:543:"{"timed_out":false,"hits":{"total":4,"hits":[{"_id":"4","_score":1537,"_source":{"int_col":14,"flt_col":1.399999976158142,"attr_lat":39,"attr_lon":22,"str_col":"str4"}},{"_id":"1","_score":1511,"_source":{"int_col":11,"flt_col":1.100000023841858,"attr_lat":51,"attr_lon":0,"str_col":"str1"}},{"_id":"2","_score":1511,"_source":{"int_col":12,"flt_col":1.2000000476837158,"attr_lat":46,"attr_lon":2,"str_col":"str2"}},{"_id":"3","_score":1511,"_source":{"int_col":13,"flt_col":1.2999999523162842,"attr_lat":51,"attr_lon":18,"str_col":"str3"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:15;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:185:"
 {
   "index":"test_rt",
   "query":
@@ -163,7 +163,7 @@ a:1:{i:0;a:38:{i:0;a:3:{s:8:"sphinxql";s:150:"insert into test_rt values (1, '1s
     }
   }
 }
-";s:4:"rows";s:296:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"2","_score":1511,"_source":{"int_col":12,"flt_col":1.2000000476837158,"str_col":"str2","attr_lat":46,"attr_lon":2}},{"_id":"3","_score":1511,"_source":{"int_col":13,"flt_col":1.2999999523162842,"str_col":"str3","attr_lat":51,"attr_lon":18}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:17;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:195:"
+";s:4:"rows";s:296:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"2","_score":1511,"_source":{"int_col":12,"flt_col":1.2000000476837158,"attr_lat":46,"attr_lon":2,"str_col":"str2"}},{"_id":"3","_score":1511,"_source":{"int_col":13,"flt_col":1.2999999523162842,"attr_lat":51,"attr_lon":18,"str_col":"str3"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:17;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:195:"
 {
   "index":"test_rt",
   "query":
@@ -192,7 +192,7 @@ a:1:{i:0;a:38:{i:0;a:3:{s:8:"sphinxql";s:150:"insert into test_rt values (1, '1s
     }
   }
 }
-";s:4:"rows";s:290:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"2","_score":1,"_source":{"int_col":12,"flt_col":1.2000000476837158,"str_col":"str2","attr_lat":46,"attr_lon":2}},{"_id":"3","_score":1,"_source":{"int_col":13,"flt_col":1.2999999523162842,"str_col":"str3","attr_lat":51,"attr_lon":18}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:19;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:159:"
+";s:4:"rows";s:290:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"2","_score":1,"_source":{"int_col":12,"flt_col":1.2000000476837158,"attr_lat":46,"attr_lon":2,"str_col":"str2"}},{"_id":"3","_score":1,"_source":{"int_col":13,"flt_col":1.2999999523162842,"attr_lat":51,"attr_lon":18,"str_col":"str3"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:19;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:159:"
 {
   "index":"test_rt",
   "query":
@@ -214,7 +214,7 @@ a:1:{i:0;a:38:{i:0;a:3:{s:8:"sphinxql";s:150:"insert into test_rt values (1, '1s
     "range": { "int_col": { "lte": 11 } }
   }
 }
-";s:4:"rows";s:167:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.100000023841858,"str_col":"str1","attr_lat":51,"attr_lon":0}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:21;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:87:"
+";s:4:"rows";s:167:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.100000023841858,"attr_lat":51,"attr_lon":0,"str_col":"str1"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:21;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:87:"
 {
   "index":"test_rt",
   "query":
@@ -236,7 +236,7 @@ a:1:{i:0;a:38:{i:0;a:3:{s:8:"sphinxql";s:150:"insert into test_rt values (1, '1s
     }
   }
 }
-";s:4:"rows";s:167:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.100000023841858,"str_col":"str1","attr_lat":51,"attr_lon":0}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:23;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:149:"
+";s:4:"rows";s:167:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.100000023841858,"attr_lat":51,"attr_lon":0,"str_col":"str1"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:23;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:149:"
 {
   "index":"test_rt",
   "query":
@@ -265,7 +265,7 @@ a:1:{i:0;a:38:{i:0;a:3:{s:8:"sphinxql";s:150:"insert into test_rt values (1, '1s
     }
   }
 }
-";s:4:"rows";s:167:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.100000023841858,"str_col":"str1","attr_lat":51,"attr_lon":0}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:25;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:172:"
+";s:4:"rows";s:167:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.100000023841858,"attr_lat":51,"attr_lon":0,"str_col":"str1"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:25;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:172:"
 {
   "index":"test_rt",
   "query":
@@ -295,7 +295,7 @@ a:1:{i:0;a:38:{i:0;a:3:{s:8:"sphinxql";s:150:"insert into test_rt values (1, '1s
     }
   }
 }
-";s:4:"rows";s:168:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"2","_score":1,"_source":{"int_col":12,"flt_col":1.2000000476837158,"str_col":"str2","attr_lat":46,"attr_lon":2}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:27;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:198:"
+";s:4:"rows";s:168:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"2","_score":1,"_source":{"int_col":12,"flt_col":1.2000000476837158,"attr_lat":46,"attr_lon":2,"str_col":"str2"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:27;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:198:"
 {
   "index":"test_rt",
   "query":
@@ -325,7 +325,7 @@ a:1:{i:0;a:38:{i:0;a:3:{s:8:"sphinxql";s:150:"insert into test_rt values (1, '1s
     }
   }
 }
-";s:4:"rows";s:396:"{"timed_out":false,"hits":{"total":3,"hits":[{"_id":"4","_score":1,"_source":{"int_col":14,"flt_col":1.399999976158142,"str_col":"str4","attr_lat":39,"attr_lon":22}},{"_id":"5","_score":1,"_source":{"int_col":15,"flt_col":1.5,"str_col":"str5","attr_lat":41,"attr_lon":12}},{"_id":"6","_score":1,"_source":{"int_col":16,"flt_col":1.600000023841858,"str_col":"str6","attr_lat":61,"attr_lon":11}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:29;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:194:"
+";s:4:"rows";s:396:"{"timed_out":false,"hits":{"total":3,"hits":[{"_id":"4","_score":1,"_source":{"int_col":14,"flt_col":1.399999976158142,"attr_lat":39,"attr_lon":22,"str_col":"str4"}},{"_id":"5","_score":1,"_source":{"int_col":15,"flt_col":1.5,"attr_lat":41,"attr_lon":12,"str_col":"str5"}},{"_id":"6","_score":1,"_source":{"int_col":16,"flt_col":1.600000023841858,"attr_lat":61,"attr_lon":11,"str_col":"str6"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:29;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:194:"
 {
   "index":"test_rt",
   "query":
@@ -355,7 +355,7 @@ a:1:{i:0;a:38:{i:0;a:3:{s:8:"sphinxql";s:150:"insert into test_rt values (1, '1s
     }
   }
 }
-";s:4:"rows";s:290:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"3","_score":1,"_source":{"int_col":13,"flt_col":1.2999999523162842,"str_col":"str3","attr_lat":51,"attr_lon":18}},{"_id":"4","_score":1,"_source":{"int_col":14,"flt_col":1.399999976158142,"str_col":"str4","attr_lat":39,"attr_lon":22}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:31;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:196:"
+";s:4:"rows";s:290:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"3","_score":1,"_source":{"int_col":13,"flt_col":1.2999999523162842,"attr_lat":51,"attr_lon":18,"str_col":"str3"}},{"_id":"4","_score":1,"_source":{"int_col":14,"flt_col":1.399999976158142,"attr_lat":39,"attr_lon":22,"str_col":"str4"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:31;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:196:"
 {
   "index":"test_rt",
   "query":
@@ -378,7 +378,7 @@ a:1:{i:0;a:38:{i:0;a:3:{s:8:"sphinxql";s:150:"insert into test_rt values (1, '1s
 	"equals": { "int_col": 12 }
   }
 }
-";s:4:"rows";s:168:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"2","_score":1,"_source":{"int_col":12,"flt_col":1.2000000476837158,"str_col":"str2","attr_lat":46,"attr_lon":2}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:33;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:74:"
+";s:4:"rows";s:168:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"2","_score":1,"_source":{"int_col":12,"flt_col":1.2000000476837158,"attr_lat":46,"attr_lon":2,"str_col":"str2"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:33;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:74:"
 {
   "index":"test_rt",
   "query":
@@ -394,7 +394,7 @@ a:1:{i:0;a:38:{i:0;a:3:{s:8:"sphinxql";s:150:"insert into test_rt values (1, '1s
 	"equals": { "str_col": "str6" }
   }
 }
-";s:4:"rows";s:168:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"6","_score":1,"_source":{"int_col":16,"flt_col":1.600000023841858,"str_col":"str6","attr_lat":61,"attr_lon":11}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:35;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:78:"
+";s:4:"rows";s:168:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"6","_score":1,"_source":{"int_col":16,"flt_col":1.600000023841858,"attr_lat":61,"attr_lon":11,"str_col":"str6"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:35;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:78:"
 {
   "index":"test_rt",
   "query":
@@ -417,7 +417,7 @@ a:1:{i:0;a:38:{i:0;a:3:{s:8:"sphinxql";s:150:"insert into test_rt values (1, '1s
     }
   }
 }
-";s:4:"rows";s:289:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.100000023841858,"str_col":"str1","attr_lat":51,"attr_lon":0}},{"_id":"3","_score":1,"_source":{"int_col":13,"flt_col":1.2999999523162842,"str_col":"str3","attr_lat":51,"attr_lon":18}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:37;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:176:"
+";s:4:"rows";s:289:"{"timed_out":false,"hits":{"total":2,"hits":[{"_id":"1","_score":1,"_source":{"int_col":11,"flt_col":1.100000023841858,"attr_lat":51,"attr_lon":0,"str_col":"str1"}},{"_id":"3","_score":1,"_source":{"int_col":13,"flt_col":1.2999999523162842,"attr_lat":51,"attr_lon":18,"str_col":"str3"}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:37;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:176:"
 {
   "index":"test_rt",
   "query":

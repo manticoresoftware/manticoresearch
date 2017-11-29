@@ -18,12 +18,12 @@ source src1
 {
   type      = mysql
   <sql_settings/>
-  sql_query     = SELECT id, int_col, flt_col, str_col, attr_lat, attr_lon, content FROM test_table
+  sql_query     = SELECT id, int_col, flt_col, attr_lat, attr_lon, str_col, content FROM test_table
   sql_attr_uint  = int_col
   sql_attr_float = flt_col
-  sql_attr_string = str_col
   sql_attr_float = attr_lat
   sql_attr_float = attr_lon
+  sql_attr_string = str_col
 }
 
 index test1

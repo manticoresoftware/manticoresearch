@@ -689,7 +689,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "hostname_lookup",		0, NULL },
 	{ "grouping_in_utc",		0, NULL },
 	{ "query_log_mode",			0, NULL },
-	{ "prefer_rotate",			KEY_REMOVED, NULL },
+	{ "prefer_rotate",			KEY_DEPRECATED, "seamless_rotate" },
 	{ NULL,						0, NULL }
 };
 
@@ -849,7 +849,7 @@ bool CSphConfigParser::ValidateKey ( const char * sKey )
 
 	if ( pDesc->m_iFlags & KEY_REMOVED )
 		if ( ++m_iWarnings<=WARNS_THRESH )
-			fprintf ( stdout, "WARNING: key '%s' was permanently removed from Sphinx configuration. Refer to documentation for details.\n", sKey );
+			fprintf ( stdout, "WARNING: key '%s' was permanently removed from configuration. Refer to documentation for details.\n", sKey );
 
 	return true;
 }

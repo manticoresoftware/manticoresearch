@@ -1,7 +1,7 @@
 .. _query_log_formats:
 
 Query log formats
------------------------------
+-----------------
 
 Two query log formats are supported. Plain text format is still the
 default one. However, while it might be more convenient for manual

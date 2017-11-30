@@ -1,7 +1,7 @@
 .. _flush_logs_syntax:
 
 FLUSH LOGS syntax
-----------------------
+-----------------
 
 .. code-block:: mysql
 

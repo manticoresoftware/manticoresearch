@@ -6,7 +6,7 @@
 .. _lemmatizer_cache:
 
 lemmatizer_cache
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 Lemmatizer cache size. Optional, default is 256K.
 
@@ -55,7 +55,7 @@ Example:
 .. _max_file_field_buffer:
 
 max_file_field_buffer
-~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
 
 Maximum file field adaptive buffer size, bytes. Optional, default is 8
 MB, minimum is 1 MB.
@@ -83,7 +83,7 @@ Example:
 .. _max_iops:
 
 max_iops
-~~~~~~~~~
+~~~~~~~~
 
 Maximum I/O operations per second, for I/O throttling. Optional, default
 is 0 (unlimited).
@@ -113,7 +113,7 @@ Example:
 .. _max_iosize:
 
 max_iosize
-~~~~~~~~~~~
+~~~~~~~~~~
 
 Maximum allowed I/O operation size, in bytes, for I/O throttling.
 Optional, default is 0 (unlimited).
@@ -139,7 +139,7 @@ Example:
 .. _max_xmlpipe2_field:
 
 max_xmlpipe2_field
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 Maximum allowed field size for XMLpipe2 source type, bytes. Optional,
 default is 2 MB.
@@ -155,7 +155,7 @@ Example:
 .. _mem_limit:
 
 mem_limit
-~~~~~~~~~~
+~~~~~~~~~
 
 Indexing RAM usage limit. Optional, default is 128M.
 
@@ -187,7 +187,7 @@ Example:
 .. _on_file_field_error:
 
 on_file_field_error
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
 
 How to handle IO errors in file fields. Optional, default is
 ``ignore_field``.
@@ -228,7 +228,7 @@ Example:
 .. _write_buffer:
 
 write_buffer
-~~~~~~~~~~~~~
+~~~~~~~~~~~~
 
 Write buffer size, bytes. Optional, default is 1 MB.
 

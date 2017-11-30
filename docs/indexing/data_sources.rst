@@ -1,7 +1,7 @@
 .. _data_sources:
 
 Data sources
-=======================
+============
 
 The data to be indexed can generally come from very different sources:
 SQL databases, plain text files, HTML files, mailboxes, and so on. From

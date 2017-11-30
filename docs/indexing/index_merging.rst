@@ -1,7 +1,7 @@
 .. _index_merging:
 
 Index merging
-=======================
+=============
 
 Merging two existing indexes can be more efficient than indexing the
 data from scratch, and desired in some cases (such as merging ‘main’ and

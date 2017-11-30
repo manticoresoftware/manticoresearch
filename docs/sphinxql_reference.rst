@@ -1,7 +1,7 @@
 .. _sphinxql_reference:
 
 SphinxQL reference
-=============================
+==================
 
 SphinxQL is our SQL dialect that exposes all of the search daemon
 functionality using a standard SQL syntax with a few Manticore-specific

@@ -36,7 +36,7 @@ in extended sorting mode, SPH_SORT_ATTR_ASC is equivalent to
 .. _SPH_SORT_TIME_SEGMENTS_mode:
 
 SPH_SORT_TIME_SEGMENTS mode
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 In SPH_SORT_TIME_SEGMENTS mode, attribute values are split into
 so-called time segments, and then sorted by time segment first, and by
@@ -70,7 +70,7 @@ which would not take relevance into account at all.
 .. _SPH_SORT_EXTENDED_mode:
 
 SPH_SORT_EXTENDED mode
-~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
 
 In SPH_SORT_EXTENDED mode, you can specify an SQL-like sort expression
 with up to 5 attributes (including internal attributes), eg:
@@ -103,7 +103,7 @@ Known internal attributes are:
 .. _SPH_SORT_EXPR_mode:
 
 SPH_SORT_EXPR mode
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 Expression sorting mode lets you sort the matches by an arbitrary
 arithmetic expression, involving attribute values, internal attributes

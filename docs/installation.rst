@@ -1,5 +1,5 @@
 Installation
-=======================
+============
 
 
 Installing Manticore packages on Debian and Ubuntu
@@ -207,7 +207,7 @@ Next step is to configure the building with cmake. Available list of configurati
 
 * ``CMAKE_BUILD_TYPE`` -  can be Debug , Release , MinSizeRel and RelWithDebInfo (default).
 * ``SPLIT_SYMBOLS`` (bool) - specify whenever to create separate files with debugging symbols. In the default build type,RelWithDebInfo, the binaries include the debug symbols. With this option specified, the binaries will be stripped of the debug symbols , which will be put in separate files
-* ``USE_BISON``,``USE_FLEX`` (bool)  - enabled by default, specifies whenever to enable bison and flex tools
+* ``USE_BISON``, ``USE_FLEX`` (bool)  - enabled by default, specifies whenever to enable bison and flex tools
 * ``LIBS_BUNDLE`` - filepath to a folder with different libraries. This is mostly relevant for Windows building
 * ``WITH_STEMMER`` (bool) - specifies if the build should include the libstemmer library. The library is searched in several places, starting with 
 

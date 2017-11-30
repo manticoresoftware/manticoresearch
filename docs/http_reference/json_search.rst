@@ -108,7 +108,7 @@ like this:
 It can be used to create fullscan queries. However, it is not required as you can just specify the filters without a fulltext query.
 
 Bool queries
-""""""""""""""""
+""""""""""""
 
 A bool query matches documents matching boolean combinations of other queries and/or filters. Queries and filters must be specified in
 ``"must"``, ``"should"`` or ``"must_not"`` sections. Example:
@@ -171,7 +171,7 @@ Example:
     }
 
 Filters
-""""""""""""""""
+"""""""
 
 JSON queries have two distinct entities: fulltext queries and filters. Both can be organised in a tree (using a bool query), but for now
 filters work only for the root element of the query. For example:
@@ -314,7 +314,7 @@ following latitude/longitude formats:
 Latitude and longitude are specified in degrees.
 
 Sorting
-""""""""""""""""
+"""""""
 
 **Sorting by attributes**
 
@@ -412,7 +412,7 @@ longitude and ``distance_type`` selects distance computation function
 (optional, defaults to “arc”).
 
 Expressions
-""""""""""""""""
+"""""""""""
 
 Expressions are supported via ``script_fields``:
 
@@ -557,7 +557,7 @@ The following options are supported:
 *  ``number_of_fragments``: Limits the maximum number of fragments in a snippet. Just as ``fragment_size``, can be global or per-field. Optional, default is 0 (no limit). Works similar to ``limit_passages`` in ``CALL SNIPPETS``.
 
 Result set format
-""""""""""""""""""
+"""""""""""""""""
 
 Query result is sent as a JSON document. Example:
 
@@ -629,7 +629,7 @@ while an empty list of excludes does not match anything. If an attribute
 matches both the includes and excludes, then the excludes win.
 
 Query profile
-""""""""""""""""
+"""""""""""""
 
 You can view the final transformed query tree with all normalized keywords by adding a ``"profile":true`` property:
 

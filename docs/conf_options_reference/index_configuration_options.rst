@@ -6,7 +6,7 @@ Index configuration options
 .. _agent_blackhole:
 
 agent_blackhole
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 Remote blackhole agent declaration in the `distributed
 index <distributed_searching>`. Multi-value, optional,
@@ -34,7 +34,7 @@ Example:
 .. _agent_connect_timeout:
 
 agent_connect_timeout
-~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
 
 Remote agent connection timeout, in milliseconds. Optional, default is
 1000 (ie. 1 second).
@@ -56,7 +56,7 @@ Example:
 .. _agent_persistent:
 
 agent_persistent
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 Persistently connected remote agent declaration. Multi-value, optional,
 default is empty.
@@ -94,7 +94,7 @@ Example:
 .. _agent_query_timeout:
 
 agent_query_timeout
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
 
 Remote agent query timeout, in milliseconds. Optional, default is 3000
 (ie. 3 seconds).
@@ -306,7 +306,7 @@ Example:
 .. _bigram_freq_words:
 
 bigram_freq_words
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 A list of keywords considered “frequent” when indexing bigrams.
 Optional, default is empty.
@@ -336,7 +336,7 @@ Example:
 .. _bigram_index:
 
 bigram_index
-~~~~~~~~~~~~~
+~~~~~~~~~~~~
 
 Bigram indexing mode. Optional, default is none.
 
@@ -380,7 +380,7 @@ Example:
 .. _blend_chars:
 
 blend_chars
-~~~~~~~~~~~~
+~~~~~~~~~~~
 
 Blended characters list. Optional, default is empty.
 
@@ -428,7 +428,7 @@ Example:
 .. _blend_mode:
 
 blend_mode
-~~~~~~~~~~~
+~~~~~~~~~~
 
 Blended tokens indexing mode. Optional, default is ``trim_none``.
 
@@ -496,7 +496,7 @@ Example:
 .. _charset_table:
 
 charset_table
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 Accepted characters table, with case folding rules. Optional, default
 value are latin and cyrillic characters.
@@ -686,7 +686,7 @@ Example:
 .. _embedded_limit:
 
 embedded_limit
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~
 
 Embedded exceptions, wordforms, or stopwords file size limit. Optional,
 default is 16K.
@@ -812,7 +812,7 @@ Example:
 .. _expand_keywords:
 
 expand_keywords
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 Expand keywords with exact forms and/or stars when possible. Optional,
 default is 0 (do not expand keywords).
@@ -856,7 +856,7 @@ Example:
 .. _global_idf:
 
 global_idf
-~~~~~~~~~~~
+~~~~~~~~~~
 
 The path to a file with global (cluster-wide) keyword IDFs. Optional,
 default is empty (use local IDFs).
@@ -898,7 +898,7 @@ Example:
 .. _ha_strategy:
 
 ha_strategy
-~~~~~~~~~~~~
+~~~~~~~~~~~
 
 Agent mirror selection strategy, for load balancing. Optional, default
 is random.
@@ -1002,7 +1002,7 @@ queries will be sent to the same mirror.
 .. _hitless_words:
 
 hitless_words
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 Hitless words list. Optional, allowed values are ‘all’, or a list file
 name.
@@ -1046,7 +1046,7 @@ Example:
 .. _html_index_attrs:
 
 html_index_attrs
-~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 A list of markup attributes to index when stripping HTML. Optional,
 default is empty (do not index markup attributes).
@@ -1066,7 +1066,7 @@ Example:
 .. _html_remove_elements:
 
 html_remove_elements
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
 
 A list of HTML elements for which to strip contents along with the
 elements themselves. Optional, default is empty string (do not strip
@@ -1092,8 +1092,7 @@ Example:
 .. _html_strip:
 
 html_strip
-~~~~~~~~~~~
-
+~~~~~~~~~~
 Whether to strip HTML markup from incoming full-text data. Optional,
 default is 0. Known values are 0 (disable stripping) and 1 (enable
 stripping).
@@ -1136,7 +1135,7 @@ Example:
 .. _ignore_chars:
 
 ignore_chars
-~~~~~~~~~~~~~
+~~~~~~~~~~~~
 
 Ignored characters list. Optional, default is empty.
 
@@ -1164,7 +1163,7 @@ Example:
 .. _index_exact_words:
 
 index_exact_words
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 Whether to index the original keywords along with the stemmed/remapped
 versions. Optional, default is 0 (do not index).
@@ -1186,7 +1185,7 @@ Example:
 .. _index_field_lengths:
 
 index_field_lengths
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
 
 Enables computing and storing of field lengths (both per-document and
 average per-index values) into the index. Optional, default is 0 (do not
@@ -1221,7 +1220,7 @@ Example:
 .. _index_sp:
 
 index_sp
-~~~~~~~~~
+~~~~~~~~
 
 Whether to detect and index sentence and paragraph boundaries. Optional,
 default is 0 (do not detect and index).
@@ -1276,7 +1275,7 @@ Example:
 .. _index_zones:
 
 index_zones
-~~~~~~~~~~~~
+~~~~~~~~~~~
 
 A list of in-field HTML/XML zones to index. Optional, default is empty
 (do not index zones).
@@ -1311,7 +1310,7 @@ Example:
 .. _infix_fields:
 
 infix_fields
-~~~~~~~~~~~~~
+~~~~~~~~~~~~
 
 The list of full-text fields to limit infix indexing to. Applies to
 dict=crc only. Optional, default is empty (index all fields in infix
@@ -1332,7 +1331,7 @@ Example:
 .. _inplace_docinfo_gap:
 
 inplace_docinfo_gap
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
 
 `In-place
 inversion <inplaceenable>`
@@ -1353,7 +1352,7 @@ Example:
 .. _inplace_enable:
 
 inplace_enable
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~
 
 Whether to enable in-place index inversion. Optional, default is 0 (use
 separate temporary files).
@@ -1391,7 +1390,7 @@ Example:
 .. _inplace_hit_gap:
 
 inplace_hit_gap
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 `In-place
 inversion <inplaceenable>`
@@ -1412,7 +1411,7 @@ Example:
 .. _inplace_reloc_factor:
 
 inplace_reloc_factor
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
 
 :ref:`inplace_reloc_factor` fine-tuning option.
 Controls relocation buffer size within indexing memory arena. Optional,
@@ -1432,7 +1431,7 @@ Example:
 .. _inplace_write_factor:
 
 inplace_write_factor
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
 
 :ref:`inplace_write_factor` fine-tuning option.
 Controls in-place write buffer size within indexing memory arena.
@@ -1486,7 +1485,7 @@ Example:
 .. _max_substring_len:
 
 max_substring_len
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 Maximum substring (either prefix or infix) length to index. Optional,
 default is 0 (do not limit indexed substrings). Applies to dict=crc
@@ -1529,7 +1528,7 @@ Example:
 .. _min_infix_len:
 
 min_infix_len
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 Minimum infix prefix length to index and search. Optional, default is 0
 (do not index infixes), and minimum allowed non-zero value is 2.
@@ -1573,7 +1572,7 @@ Example:
 .. _min_prefix_len:
 
 min_prefix_len
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~
 
 Minimum word prefix length to index. Optional, default is 0 (do not
 index prefixes).
@@ -1612,7 +1611,7 @@ Example:
 .. _min_stemming_len:
 
 min_stemming_len
-~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 Minimum word length at which to enable stemming. Optional, default is 1
 (stem everything).
@@ -1639,7 +1638,7 @@ Example:
 .. _min_word_len:
 
 min_word_len
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~
 
 Minimum indexed word length. Optional, default is 1 (index everything).
 
@@ -1852,7 +1851,7 @@ Example:
 .. _ngram_chars:
 
 ngram_chars
-~~~~~~~~~~~~
+~~~~~~~~~~~
 
 N-gram characters list. Optional, default is empty.
 
@@ -1874,7 +1873,7 @@ Example:
 .. _ngram_len:
 
 ngram_len
-~~~~~~~~~~
+~~~~~~~~~
 
 N-gram lengths for N-gram indexing. Optional, default is 0 (disable
 n-gram indexing). Known values are 0 and 1 (other lengths to be
@@ -1923,7 +1922,7 @@ Example:
 .. _ondisk_attrs:
 
 ondisk_attrs
-~~~~~~~~~~~~~
+~~~~~~~~~~~~
 
 Allows for fine-grain control over how attributes are loaded into memory
 when using indexes with external storage. It is possible to keep
@@ -1967,7 +1966,7 @@ Example:
 .. _overshort_step:
 
 overshort_step
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~
 
 Position increment on overshort (less that
 :ref:`min_word_len <min_word_len>`)
@@ -2032,7 +2031,7 @@ Example:
 .. _phrase_boundary:
 
 phrase_boundary
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 Phrase boundary characters list. Optional, default is empty.
 
@@ -2066,7 +2065,7 @@ Example:
 .. _phrase_boundary_step:
 
 phrase_boundary_step
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
 
 Phrase boundary word position increment. Optional, default is 0.
 
@@ -2086,7 +2085,7 @@ Example:
 .. _prefix_fields:
 
 prefix_fields
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 The list of full-text fields to limit prefix indexing to. Applies to
 dict=crc only. Optional, default is empty (index all fields in prefix
@@ -2139,7 +2138,7 @@ Example:
 .. _regexp_filter:
 
 regexp_filter
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 Regular expressions (regexps) to filter the fields and queries with.
 Optional, multi-value, default is an empty list of regexps.
@@ -2185,7 +2184,7 @@ Example:
 .. _rlp_context:
 
 rlp_context
-~~~~~~~~~~~~
+~~~~~~~~~~~
 
 RLP context configuration file. Mandatory if RLP is used.
 
@@ -2200,7 +2199,7 @@ Example:
 .. _rt_attr_bigint:
 
 rt_attr_bigint
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~
 
 BIGINT attribute declaration. Multi-value (an arbitrary number of
 attributes is allowed), optional. Declares a signed 64-bit attribute.
@@ -2216,7 +2215,7 @@ Example:
 .. _rt_attr_bool:
 
 rt_attr_bool
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~
 
 Boolean attribute declaration. Multi-value (there might be multiple
 attributes declared), optional. Declares a 1-bit unsigned integer
@@ -2233,7 +2232,7 @@ Example:
 .. _rt_attr_float:
 
 rt_attr_float
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 Floating point attribute declaration. Multi-value (an arbitrary number
 of attributes is allowed), optional. Declares a single precision, 32-bit
@@ -2250,7 +2249,7 @@ Example:
 .. _rt_attr_json:
 
 rt_attr_json
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~
 
 JSON attribute declaration. Multi-value (ie. there may be more than one
 such attribute declared), optional.
@@ -2269,7 +2268,7 @@ Example:
 .. _rt_attr_multi_64:
 
 rt_attr_multi_64
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 :ref:`Multi-valued attribute <mva_multi-valued_attributes>` (MVA)
 declaration. Declares the BIGINT (signed 64-bit) MVA attribute.
@@ -2287,7 +2286,7 @@ Example:
 .. _rt_attr_multi:
 
 rt_attr_multi
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 :ref:`Multi-valued attribute <mva_multi-valued_attributes>` (MVA)
 declaration. Declares the UNSIGNED INTEGER (unsigned 32-bit) MVA
@@ -2305,7 +2304,7 @@ Example:
 .. _rt_attr_string:
 
 rt_attr_string
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~
 
 String attribute declaration. Multi-value (an arbitrary number of
 attributes is allowed), optional.
@@ -2321,7 +2320,7 @@ Example:
 .. _rt_attr_timestamp:
 
 rt_attr_timestamp
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 Timestamp attribute declaration. Multi-value (an arbitrary number of
 attributes is allowed), optional.
@@ -2337,7 +2336,7 @@ Example:
 .. _rt_attr_uint:
 
 rt_attr_uint
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~
 
 Unsigned integer attribute declaration. Multi-value (an arbitrary number
 of attributes is allowed), optional. Declares an unsigned 32-bit
@@ -2354,7 +2353,7 @@ Example:
 .. _rt_field:
 
 rt_field
-~~~~~~~~~
+~~~~~~~~
 
 Full-text field declaration. Multi-value, mandatory
 
@@ -2376,7 +2375,7 @@ Example:
 .. _rt_mem_limit:
 
 rt_mem_limit
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~
 
 RAM chunk size limit. Optional, default is 128M.
 
@@ -2519,7 +2518,7 @@ Example:
 .. _stopword_step:
 
 stopword_step
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 Position increment on
 :ref:`stopwords <stopwords>`.
@@ -2539,7 +2538,7 @@ Example:
 .. _stopwords_unstemmed:
 
 stopwords_unstemmed
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
 
 Whether to apply stopwords before or after stemming. Optional, default
 is 0 (apply stopword filter after stemming).

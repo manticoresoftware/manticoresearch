@@ -6,7 +6,7 @@
 .. _agent_connect_timeout_searchd:
 
 agent_connect_timeout
-~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
 
 Instance-wide defaults for
 :ref:`agent_connect_timeout` parameter. The last
@@ -15,7 +15,7 @@ defined in distributed (network) indexes.
 .. _agent_query_timeout_searchd:
 
 agent_query_timeout
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
 
 Instance-wide defaults for
 :ref:`agent_query_timeout` parameter. The last
@@ -25,7 +25,7 @@ per-query using OPTION clause.
 .. _agent_retry_count:
 
 agent_retry_count
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 Integer, specifies how many times sphinx will try to connect and query
 remote agents in distributed index before reporting fatal query error.
@@ -47,7 +47,7 @@ query, specifying options ``ha_strategy = roundrobin`` and
 .. _agent_retry_delay:
 
 agent_retry_delay
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 Integer, in milliseconds. Specifies the delay sphinx rest before
 retrying to query a remote agent in case it fails. The value has sense
@@ -61,7 +61,7 @@ the one specified in config.
 .. _attr_flush_period:
 
 attr_flush_period
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 When calling ``UpdateAttributes()`` to update document attributes in
 real-time, changes are first written to the in-memory copy of attributes
@@ -87,7 +87,7 @@ Example:
 .. _binlog_flush:
 
 binlog_flush
-~~~~~~~~~~~~~
+~~~~~~~~~~~~
 
 Binary log transaction flush/sync mode. Optional, default is 2 (flush
 every transaction, sync every second).
@@ -123,7 +123,7 @@ Example:
 .. _binlog_max_log_size:
 
 binlog_max_log_size
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
 
 Maximum binary log file size. Optional, default is 0 (do not reopen
 binlog file based on size).
@@ -144,7 +144,7 @@ Example:
 .. _binlog_path:
 
 binlog_path
-~~~~~~~~~~~~
+~~~~~~~~~~~
 
 Binary log (aka transaction log) files path. Optional, default is
 build-time configured data directory.
@@ -182,7 +182,7 @@ Example:
 .. _client_timeout:
 
 client_timeout
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~
 
 Maximum time to wait between requests (in seconds) when using persistent
 connections. Optional, default is five minutes.
@@ -198,7 +198,7 @@ Example:
 .. _collation_libc_locale:
 
 collation_libc_locale
-~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
 
 Server libc locale. Optional, default is C.
 
@@ -217,7 +217,7 @@ Example:
 .. _collation_server:
 
 collation_server
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 Default server collation. Optional, default is libc_ci.
 
@@ -236,7 +236,7 @@ Example:
 .. _dist_threads:
 
 dist_threads
-~~~~~~~~~~~~~
+~~~~~~~~~~~~
 
 Max local worker threads to use for parallelizable requests (searching a
 distributed index; building a batch of snippets). Optional, default is
@@ -288,7 +288,7 @@ Example:
 .. _expansion_limit:
 
 expansion_limit
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 The maximum number of expanded keywords for a single wildcard. Optional,
 default is 0 (no limit).
@@ -312,7 +312,7 @@ Example:
 .. _grouping_in_utc:
 
 grouping_in_utc
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 Specifies whether timed grouping in API and SphinxQL will be calculated
 in local timezone, or in UTC. Optional, default is 0 (means 'local tz').
@@ -338,7 +338,7 @@ daemon) in local TZ.
 .. _ha_period_karma:
 
 ha_period_karma
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 Agent mirror statistics window size, in seconds. Optional, default is
 60.
@@ -371,7 +371,7 @@ Example:
 .. _ha_ping_interval:
 
 ha_ping_interval
-~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 Interval between agent mirror pings, in milliseconds. Optional, default
 is 1000.
@@ -395,7 +395,7 @@ Example:
 .. _hostname_lookup:
 
 hostname_lookup
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 Hostnames renew strategy. By default, IP addresses of agent host names
 are cached at daemon start to avoid extra flood to DNS. In some cases
@@ -407,7 +407,7 @@ can also be manually renewed with FLUSH HOSTNAMES command.
 .. _listen_backlog:
 
 listen_backlog
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~
 
 TCP listen backlog. Optional, default is 5.
 
@@ -504,7 +504,7 @@ Example:
 .. _max_batch_queries:
 
 max_batch_queries
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 Limits the amount of queries per batch. Optional, default is 32.
 
@@ -524,7 +524,7 @@ Example:
 .. _max_children:
 
 max_children
-~~~~~~~~~~~~~
+~~~~~~~~~~~~
 
 Maximum amount of worker threads (or in other words, concurrent queries
 to run in parallel). Optional, default is 0 (unlimited) in
@@ -573,7 +573,7 @@ Example:
 .. _max_filters:
 
 max_filters
-~~~~~~~~~~~~
+~~~~~~~~~~~
 
 Maximum allowed per-query filter count. Only used for internal sanity
 checks, does not directly affect RAM use or performance. Optional,
@@ -590,7 +590,7 @@ Example:
 .. _max_filter_values:
 
 max_filter_values
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 Maximum allowed per-filter values count. Only used for internal sanity
 checks, does not directly affect RAM use or performance. Optional,
@@ -607,7 +607,7 @@ Example:
 .. _max_packet_size:
 
 max_packet_size
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 Maximum allowed network packet size. Limits both query packets from
 clients, and response packets from remote agents in distributed
@@ -625,7 +625,7 @@ Example:
 .. _mva_updates_pool:
 
 mva_updates_pool
-~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 Shared pool size for in-memory MVA updates storage. Optional, default
 size is 1M.
@@ -652,7 +652,7 @@ Example:
 .. _mysql_version_string:
 
 mysql_version_string
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
 
 A server version string to return via MySQL protocol. Optional, default
 is empty (return Manticore version).
@@ -679,7 +679,7 @@ Example:
 .. _net_workers:
 
 net_workers
-~~~~~~~~~~~~
+~~~~~~~~~~~
 
 Number of network threads for workers=thread_pool mode, default is 1.
 
@@ -689,7 +689,7 @@ to manage all the incoming queries.
 .. _net_wait_tm:
 
 net_wait_tm
-~~~~~~~~~~~~
+~~~~~~~~~~~
 
 Control busy loop interval of a network thread for workers=thread_pool mode,
 default is 1, might be set to -1, 0, positive integer.
@@ -719,7 +719,7 @@ fine tune network loop throughput at high load scenario.
 .. _ondisk_attrs_default:
 
 ondisk_attrs_default
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
 
 Instance-wide defaults for
 :ref:`ondisk_attrs <ondisk_attrs>`
@@ -732,7 +732,7 @@ allowing for fine-grain control.
 .. _persistent_connections_limit:
 
 persistent_connections_limit
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The maximum # of simultaneous persistent connections to remote
 :ref:`persistent
@@ -760,7 +760,7 @@ Example:
 .. _pid_file:
 
 pid_file
-~~~~~~~~~
+~~~~~~~~
 
 ``searchd`` process ID file name. Mandatory.
 
@@ -783,7 +783,7 @@ Example:
 .. _predicted_time_costs:
 
 predicted_time_costs
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
 
 Costs for the query time prediction model, in nanoseconds. Optional,
 default is “doc=64, hit=48, skip=2048, match=64” (without the quotes).
@@ -848,7 +848,7 @@ Example:
 .. _preopen_indexes:
 
 preopen_indexes
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 Whether to forcibly preopen all indexes on startup. Optional, default is
 1 (preopen everything).
@@ -875,7 +875,7 @@ Example:
 .. _qcache_max_bytes:
 
 qcache_max_bytes
-~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 Integer, in bytes. The maximum RAM allocated for cached result sets.
 Default is 0, meaning disabled. Refer to `query
@@ -889,7 +889,7 @@ cache <query_cache>` for details.
 .. _qcache_thresh_msec:
 
 qcache_thresh_msec
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 Integer, in milliseconds. The minimum wall time threshold for a query
 result to be cached. Defaults to 3000, or 3 seconds. 0 means cache
@@ -898,7 +898,7 @@ everything. Refer to :ref:`query cache <query_cache>` for details.
 .. _qcache_ttl_sec:
 
 qcache_ttl_sec
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~
 
 Integer, in seconds. The expiration period for a cached result set.
 Defaults to 60, or 1 minute. The minimum possible value is 1 second.
@@ -907,7 +907,7 @@ Refer to :ref:`query cache <query_cache>` for details.
 .. _query_log_format:
 
 query_log_format
-~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 Query log format. Optional, allowed values are ‘plain’ and ‘sphinxql’,
 default is ‘plain’.
@@ -930,7 +930,7 @@ Example:
 .. _query_log_min_msec:
 
 query_log_min_msec
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 Limit (in milliseconds) that prevents the query from being written to
 the query log. Optional, default is 0 (all queries are written to the
@@ -940,7 +940,7 @@ times that exceed the specified limit will be logged.
 .. _query_log:
 
 query_log
-~~~~~~~~~~
+~~~~~~~~~
 
 Query log file name. Optional, default is empty (do not log queries).
 All search queries will be logged in this file. The format is described
@@ -981,7 +981,7 @@ Example:
 .. _queue_max_length:
 
 queue_max_length
-~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 Maximum pending queries queue length for workers=thread_pool mode,
 default is 0 (unlimited).
@@ -993,7 +993,7 @@ incoming queries at some point with a “maxed out” message.
 .. _read_buffer:
 
 read_buffer
-~~~~~~~~~~~~
+~~~~~~~~~~~
 
 Per-keyword read buffer size. Optional, default is 256K.
 
@@ -1013,7 +1013,7 @@ Example:
 .. _read_timeout:
 
 read_timeout
-~~~~~~~~~~~~~
+~~~~~~~~~~~~
 
 Network client request read timeout, in seconds. Optional, default is 5
 seconds. ``searchd`` will forcibly close the client connections which
@@ -1030,7 +1030,7 @@ Example:
 .. _read_unhinted:
 
 read_unhinted
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 Unhinted read size. Optional, default is 32K.
 
@@ -1054,7 +1054,7 @@ Example:
 .. _rt_flush_period:
 
 rt_flush_period
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 RT indexes RAM chunk flush check period, in seconds. Optional, default
 is 10 hours.
@@ -1076,7 +1076,7 @@ Example:
 .. _rt_merge_iops:
 
 rt_merge_iops
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 A maximum number of I/O operations (per second) that the RT chunks merge
 thread is allowed to start. Optional, default is 0 (no limit).
@@ -1099,7 +1099,7 @@ Example:
 .. _rt_merge_maxiosize:
 
 rt_merge_maxiosize
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 A maximum size of an I/O operation that the RT chunks merge thread is
 allowed to start. Optional, default is 0 (no limit).
@@ -1124,7 +1124,7 @@ Example:
 .. _seamless_rotate:
 
 seamless_rotate
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 Prevents ``searchd`` stalls while rotating indexes with huge amounts of
 data to precache. Optional, default is 1 (enable seamless rotation). On
@@ -1183,7 +1183,7 @@ Example:
 .. _shutdown_timeout:
 
 shutdown_timeout
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 searchd –stopwait wait time, in seconds. Optional, default is 3 seconds.
 
@@ -1205,7 +1205,7 @@ Example:
 .. _snippets_file_prefix:
 
 snippets_file_prefix
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
 
 A prefix to prepend to the local file names when generating snippets.
 Optional, default is empty.
@@ -1239,7 +1239,7 @@ Example:
 .. _sphinxql_state:
 
 sphinxql_state
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~
 
 Path to a file where current SphinxQL state will be serialized.
 
@@ -1261,7 +1261,7 @@ Example:
 .. _sphinxql_timeout:
 
 sphinxql_timeout
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 Maximum time to wait between requests (in seconds) when using sphinxql
 interface. Optional, default is 15 minutes.
@@ -1277,7 +1277,7 @@ Example:
 .. _subtree_docs_cache:
 
 subtree_docs_cache
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 Max common subtree document cache size, per-query. Optional, default is
 0 (disabled).
@@ -1297,7 +1297,7 @@ Example:
 .. _subtree_hits_cache:
 
 subtree_hits_cache
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 Max common subtree hit cache size, per-query. Optional, default is 0
 (disabled).
@@ -1317,7 +1317,7 @@ Example:
 .. _thread_stack:
 
 thread_stack
-~~~~~~~~~~~~~
+~~~~~~~~~~~~
 
 Per-thread stack size. Optional, default is 1M.
 
@@ -1349,7 +1349,7 @@ Example:
 .. _unlink_old:
 
 unlink_old
-~~~~~~~~~~~
+~~~~~~~~~~
 
 Whether to unlink .old index copies on successful rotation. Optional,
 default is 1 (do unlink).

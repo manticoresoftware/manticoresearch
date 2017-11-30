@@ -1,7 +1,7 @@
 .. _delta_index_updates:
 
 Delta index updates
-=======================
+===================
 
 There's a frequent situation when the total dataset is too big to be
 reindexed from scratch often, but the amount of new records is rather

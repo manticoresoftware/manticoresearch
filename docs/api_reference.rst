@@ -1,5 +1,5 @@
 API reference
-========================
+=============
 
 There is a number of native searchd client API implementations for
 Manticore. As of time of this writing, we officially support our own PHP,

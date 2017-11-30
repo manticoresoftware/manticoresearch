@@ -1,7 +1,7 @@
 .. _real-time_indexes:
 
 Real-time indexes
-============================
+=================
 
 Real-time indexes (or RT indexes for brevity) are a backend that lets
 you insert, update, or delete documents (rows) on the fly. While

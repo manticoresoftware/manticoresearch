@@ -1,10 +1,10 @@
-Data surce configuration options
-------------------------------------
+Data source configuration options
+---------------------------------
 
 .. _csvpipe_delimiter:
 
 csvpipe_delimiter
-~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 csvpipe source fields delimiter. Optional, default value is ‘,’.
 
@@ -18,7 +18,7 @@ Example:
 .. _mssql_winauth:
 
 mssql_winauth
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 MS SQL Windows authentication flag. Boolean, optional, default value is
 0 (false). Applies to ``mssql`` source type only.
@@ -38,7 +38,7 @@ Example:
 .. _mysql_connect_flags:
 
 mysql_connect_flags
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
 
 MySQL client connection flags. Optional, default value is 0 (do not set
 any flags). Applies to ``mysql`` source type only.
@@ -75,7 +75,7 @@ Example:
 .. _mysql_ssl_cert, mysql_ssl_key, mysql_ssl_ca:
 
 mysql_ssl_cert, mysql_ssl_key, mysql_ssl_ca
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 SSL certificate settings to use for connecting to MySQL server.
 Optional, default values are empty strings (do not use SSL). Applies to
@@ -97,7 +97,7 @@ Example:
 .. _odbc_dsn:
 
 odbc_dsn
-~~~~~~~~~
+~~~~~~~~
 
 ODBC DSN to connect to. Mandatory, no default value. Applies to ``odbc``
 source type only.
@@ -116,7 +116,7 @@ Example:
 .. _sql_attr_bigint:
 
 sql_attr_bigint
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 64-bit signed integer :ref:`attribute <attributes>` declaration.
 Multi-value (there might be multiple attributes declared), optional.
@@ -135,7 +135,7 @@ Example:
 .. _sql_attr_bool:
 
 sql_attr_bool
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 Boolean :ref:`attribute <attributes>` declaration. Multi-value
 (there might be multiple attributes declared), optional. Applies to SQL
@@ -153,7 +153,7 @@ Example:
 .. _sql_attr_float:
 
 sql_attr_float
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~
 
 Floating point :ref:`attribute <attributes>` declaration.
 Multi-value (there might be multiple attributes declared), optional.
@@ -177,7 +177,7 @@ Example:
 .. _sql_attr_json:
 
 sql_attr_json
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 JSON attribute declaration. Multi-value (ie. there may be more than one
 such attribute declared), optional. Applies to SQL source types
@@ -220,7 +220,7 @@ Example:
 .. _sql_attr_multi:
 
 sql_attr_multi
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~
 
 :ref:`Multi-valued attribute <mva_multi-valued_attributes>` (MVA)
 declaration. Multi-value (ie. there may be more than one such attribute
@@ -268,7 +268,7 @@ Example:
 .. _sql_attr_string:
 
 sql_attr_string
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 String attribute declaration. Multi-value (ie. there may be more than
 one such attribute declared), optional. Applies to SQL source types
@@ -294,7 +294,7 @@ Example:
 .. _sql_attr_timestamp:
 
 sql_attr_timestamp
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 UNIX timestamp :ref:`attribute <attributes>` declaration.
 Multi-value (there might be multiple attributes declared), optional.
@@ -330,7 +330,7 @@ Example:
 .. _sql_attr_uint:
 
 sql_attr_uint
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 Unsigned integer :ref:`attribute <attributes>` declaration.
 Multi-value (there might be multiple attributes declared), optional.
@@ -360,7 +360,7 @@ Example:
 .. _sql_column_buffers:
 
 sql_column_buffers
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 Per-column buffer sizes. Optional, default is empty (deduce the sizes
 automatically). Applies to ``odbc``, ``mssql`` source types only.
@@ -397,7 +397,7 @@ Example:
 .. _sql_db:
 
 sql_db
-~~~~~~~
+~~~~~~
 
 SQL database (in MySQL terms) to use after the connection and perform
 further queries within. Mandatory, no default value. Applies to SQL
@@ -413,7 +413,7 @@ Example:
 .. _sql_field_string:
 
 sql_field_string
-~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 Combined string attribute and full-text field declaration. Multi-value
 (ie. there may be more than one such attribute declared), optional.
@@ -435,7 +435,7 @@ Example:
 .. _sql_file_field:
 
 sql_file_field
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~
 
 File based field declaration. Applies to SQL source types (``mysql``,
 ``pgsql``, ``mssql``) only. Introduced in version 1.10-beta.
@@ -458,7 +458,7 @@ Example:
 .. _sql_host:
 
 sql_host
-~~~~~~~~~
+~~~~~~~~
 
 SQL server host to connect to. Mandatory, no default value. Applies to
 SQL source types (``mysql``, ``pgsql``, ``mssql``) only.
@@ -483,7 +483,7 @@ Example:
 .. _sql_joined_field:
 
 sql_joined_field
-~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~
 
 Joined/payload field fetch query. Multi-value, optional, default is
 empty list of queries. Applies to SQL source types (``mysql``,
@@ -579,7 +579,7 @@ Example:
 .. _sql_pass:
 
 sql_pass
-~~~~~~~~~
+~~~~~~~~
 
 SQL user password to use when connecting to
 :ref:`sql_host <sql_host>`.
@@ -596,7 +596,7 @@ Example:
 .. _sql_port:
 
 sql_port
-~~~~~~~~~
+~~~~~~~~
 
 SQL server IP port to connect to. Optional, default is 3306 for
 ``mysql`` source type and 5432 for ``pgsql`` type. Applies to SQL source
@@ -614,7 +614,7 @@ Example:
 .. _sql_query_killlist:
 
 sql_query_killlist
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 Kill-list query. Optional, default is empty (no query). Applies to SQL
 source types (``mysql``, ``pgsql``, ``mssql``) only.
@@ -670,7 +670,7 @@ Example:
 .. _sql_query_post_index:
 
 sql_query_post_index
-~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
 
 Post-index query. Optional, default value is empty. Applies to SQL
 source types (``mysql``, ``pgsql``, ``mssql``) only.
@@ -693,7 +693,7 @@ Example:
 .. _sql_query_post:
 
 sql_query_post
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~
 
 Post-fetch query. Optional, default value is empty. Applies to SQL
 source types (``mysql``, ``pgsql``, ``mssql``) only.
@@ -721,7 +721,7 @@ Example:
 .. _sql_query_pre:
 
 sql_query_pre
-~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 Pre-fetch query, or pre-query. Multi-value, optional, default is empty
 list of queries. Applies to SQL source types (``mysql``, ``pgsql``,
@@ -770,7 +770,7 @@ Example:
 .. _sql_query_range:
 
 sql_query_range
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 Range query setup. Optional, default is empty. Applies to SQL source
 types (``mysql``, ``pgsql``, ``mssql``) only.
@@ -806,7 +806,7 @@ Example:
 .. _sql_query:
 
 sql_query
-~~~~~~~~~~
+~~~~~~~~~
 
 Main document fetch query. Mandatory, no default value. Applies to SQL
 source types (``mysql``, ``pgsql``, ``mssql``) only.
@@ -837,7 +837,7 @@ Example:
 .. _sql_ranged_throttle:
 
 sql_ranged_throttle
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
 
 Ranged query throttling period, in milliseconds. Optional, default is 0
 (no throttling). Applies to SQL source types (``mysql``, ``pgsql``,
@@ -858,7 +858,7 @@ Example:
 .. _sql_range_step:
 
 sql_range_step
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~
 
 Range query step. Optional, default is 1024. Applies to SQL source types
 (``mysql``, ``pgsql``, ``mssql``) only.
@@ -890,7 +890,7 @@ Example:
 .. _sql_sock:
 
 sql_sock
-~~~~~~~~~
+~~~~~~~~
 
 UNIX socket name to connect to for local SQL servers. Optional, default
 value is empty (use client library default settings). Applies to SQL
@@ -911,7 +911,7 @@ Example:
 .. _sql_user:
 
 sql_user
-~~~~~~~~~
+~~~~~~~~
 
 SQL user to use when connecting to
 :ref:`sql_host <sql_host>`.
@@ -954,7 +954,7 @@ Example:
 .. _unpack_mysqlcompress_maxsize:
 
 unpack_mysqlcompress_maxsize
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Buffer size for UNCOMPRESS()ed data. Optional, default value is 16M.
 
@@ -977,7 +977,7 @@ Example:
 .. _unpack_mysqlcompress:
 
 unpack_mysqlcompress
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
 
 Columns to unpack using MySQL UNCOMPRESS() algorithm. Multi-value,
 optional, default value is empty list of columns. Applies to SQL source
@@ -1001,7 +1001,7 @@ Example:
 .. _unpack_zlib:
 
 unpack_zlib
-~~~~~~~~~~~~
+~~~~~~~~~~~
 
 Columns to unpack using zlib (aka deflate, aka gunzip). Multi-value,
 optional, default value is empty list of columns. Applies to SQL source
@@ -1025,7 +1025,7 @@ Example:
 .. _xmlpipe_attr_bigint:
 
 xmlpipe_attr_bigint
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
 
 xmlpipe signed 64-bit integer attribute declaration. Multi-value,
 optional. Applies to ``xmlpipe2`` source type only. Syntax fully matches
@@ -1042,7 +1042,7 @@ Example:
 .. _xmlpipe_attr_bool:
 
 xmlpipe_attr_bool
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 xmlpipe boolean attribute declaration. Multi-value, optional. Applies to
 ``xmlpipe2`` source type only. Syntax fully matches that of
@@ -1058,7 +1058,7 @@ Example:
 .. _xmlpipe_attr_float:
 
 xmlpipe_attr_float
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 xmlpipe floating point attribute declaration. Multi-value, optional.
 Applies to ``xmlpipe2`` source type only. Syntax fully matches that of
@@ -1075,7 +1075,7 @@ Example:
 .. _xmlpipe_attr_json:
 
 xmlpipe_attr_json
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 JSON attribute declaration. Multi-value (ie. there may be more than one
 such attribute declared), optional.
@@ -1095,7 +1095,7 @@ Example:
 .. _xmlpipe_attr_multi_64:
 
 xmlpipe_attr_multi_64
-~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
 
 xmlpipe MVA attribute declaration. Declares the BIGINT (signed 64-bit
 integer) MVA attribute. Multi-value, optional. Applies to ``xmlpipe2``
@@ -1117,7 +1117,7 @@ Example:
 .. _xmlpipe_attr_multi:
 
 xmlpipe_attr_multi
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 xmlpipe MVA attribute declaration. Multi-value, optional. Applies to
 ``xmlpipe2`` source type only.
@@ -1138,7 +1138,7 @@ Example:
 .. _xmlpipe_attr_string:
 
 xmlpipe_attr_string
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
 
 xmlpipe string declaration. Multi-value, optional. Applies to
 ``xmlpipe2`` source type only.
@@ -1157,7 +1157,7 @@ Example:
 .. _xmlpipe_attr_timestamp:
 
 xmlpipe_attr_timestamp
-~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
 
 xmlpipe UNIX timestamp attribute declaration. Multi-value, optional.
 Applies to ``xmlpipe2`` source type only. Syntax fully matches that of
@@ -1173,7 +1173,7 @@ Example:
 .. _xmlpipe_attr_uint:
 
 xmlpipe_attr_uint
-~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~
 
 xmlpipe integer attribute declaration. Multi-value, optional. Applies to
 ``xmlpipe2`` source type only. Syntax fully matches that of
@@ -1189,7 +1189,7 @@ Example:
 .. _xmlpipe_command:
 
 xmlpipe_command
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 Shell command that invokes xmlpipe2 stream producer. Mandatory. Applies
 to ``xmlpipe2`` source types only.
@@ -1208,7 +1208,7 @@ Example:
 .. _xmlpipe_field:
 
 xmlpipe_field
-~~~~~~~~~~~~~~
+~~~~~~~~~~~~~
 
 xmlpipe field declaration. Multi-value, optional. Applies to
 ``xmlpipe2`` source type only. Refer to :ref:`xmlpipe2_data_source`.
@@ -1224,7 +1224,7 @@ Example:
 .. _xmlpipe_field_string:
 
 xmlpipe_field_string
-~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
 
 xmlpipe field and string attribute declaration. Multi-value, optional.
 Applies to ``xmlpipe2`` source type only. Refer to :ref:`xmlpipe2_data_source`.
@@ -1243,7 +1243,7 @@ Example:
 .. _xmlpipe_fixup_utf8:
 
 xmlpipe_fixup_utf8
-~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 Perform Manticore-side UTF-8 validation and filtering to prevent XML parser
 from choking on non-UTF-8 documents. Optional, default is 0. Applies to

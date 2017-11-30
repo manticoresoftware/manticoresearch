@@ -1,7 +1,7 @@
 .. _full-text_fields:
 
 Full-text fields
-=======================
+================
 
 Full-text fields (or just *fields* for brevity) are the textual document
 contents that get indexed by Manticore, and can be (quickly) searched for

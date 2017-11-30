@@ -1,8 +1,8 @@
 Release notes
-===================================
+=============
 
 Version 2.5.1, 23 November 2017
-----------------------------------
+-------------------------------
 
 Features and improvements
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -29,7 +29,7 @@ Bugfixes
 * `262c3fe <https://github.com/manticoresoftware/manticore/commit/262c3fe>`__ Refactored config check of iconv, fixes building on FreeBSD and Darwin
 
 Version 2.4.1 GA, 16 October 2017
-----------------------------------
+---------------------------------
 
 Features and improvements
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -102,6 +102,6 @@ Bugfixes
 .. _release233:
 
 Version 2.3.3, 06 July 2017
-----------------------------------
+---------------------------
 
 - Manticore branding

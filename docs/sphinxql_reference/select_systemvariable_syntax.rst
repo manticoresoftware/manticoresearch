@@ -1,7 +1,7 @@
 .. _select_systemvariable_syntax:
 
 SELECT @@system_variable syntax
---------------------------------
+-------------------------------
 
 .. code-block:: mysql
 

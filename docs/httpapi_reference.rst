@@ -1,7 +1,7 @@
 .. _httpapi_reference:
 
 HTTP API reference
-===================
+==================
 
 Manticore search daemon supports HTTP protocol and can be accessed with
 regular HTTP clients. Available only with ``workers = thread_pool`` (see :ref:`workers`).

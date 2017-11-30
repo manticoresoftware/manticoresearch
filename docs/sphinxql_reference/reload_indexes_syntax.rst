@@ -1,7 +1,7 @@
 .. _reload_indexes_syntax:
 
 RELOAD INDEXES syntax
-----------------------
+---------------------
 
 .. code-block:: mysql
 

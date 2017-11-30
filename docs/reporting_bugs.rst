@@ -1,7 +1,7 @@
 .. _reporting_bugs:
 
 Reporting bugs
-==========================
+==============
 
 Unfortunately, Manticore is not yet 100% bug free (even though we're
 working hard towards that), so you might occasionally run into some

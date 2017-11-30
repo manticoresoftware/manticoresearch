@@ -1,12 +1,12 @@
 .. _extending:
 
 Extending
-===========================
+=========
 
 .. _udfs_user_defined_functions:
 
 UDFs (User Defined Functions)
-------------------------------------
+-----------------------------
 
 Our expression engine can be extended with user defined functions, or
 UDFs for short, like this:
@@ -265,7 +265,7 @@ might change in the future versions.
 .. _plugins:
 
 Plugins
---------------
+-------
 
 Here's the complete plugin type list.
 

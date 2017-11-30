@@ -6,7 +6,7 @@ Common section configuration options
 .. _lemmatizer_base:
 
 lemmatizer_base
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 Lemmatizer dictionaries base path. Optional, default is /usr/local/share
 (as in –datadir switch to ./configure script).
@@ -36,7 +36,7 @@ Enabled by default. If disabled, chunks are merged from first to last created.
 .. _json_autoconv_keynames:
 
 json_autoconv_keynames
-~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~
 
 Whether and how to auto-convert key names within JSON attributes. Known
 value is ‘lowercase’. Optional, default value is unspecified (do not
@@ -58,7 +58,7 @@ Example:
 .. _json_autoconv_numbers:
 
 json_autoconv_numbers
-~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
 
 Automatically detect and convert possible JSON strings that represent
 numbers, into numeric attributes. Optional, default value is 0 (do not
@@ -81,7 +81,7 @@ Example:
 .. _on_json_attr_error:
 
 on_json_attr_error
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 What to do if JSON format errors are found. Optional, default value is
 ``ignore_attr`` (ignore errors). Applies only to ``sql_attr_json``
@@ -104,7 +104,7 @@ Example:
 .. _plugin_dir:
 
 plugin_dir
-~~~~~~~~~~~
+~~~~~~~~~~
 
 Trusted location for the dynamic libraries (UDFs). Optional, default is
 empty (no location).
@@ -127,7 +127,7 @@ Example:
 .. _rlp_environment:
 
 rlp_environment
-~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 RLP environment configuration file. Mandatory if RLP is used.
 
@@ -144,7 +144,7 @@ Example:
 .. _rlp_max_batch_docs:
 
 rlp_max_batch_docs
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 Maximum number of documents batched before processing them by the RLP.
 Optional, default is 50. This option has effect only if
@@ -162,7 +162,7 @@ Example:
 .. _rlp_max_batch_size:
 
 rlp_max_batch_size
-~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~
 
 Maximum total size of documents batched before processing them by the
 RLP. Optional, default is 51200. Do not set this value to more than 10Mb
@@ -182,7 +182,7 @@ Example:
 .. _rlp_root:
 
 rlp_root
-~~~~~~~~~
+~~~~~~~~
 
 Path to the RLP root folder. Mandatory if RLP is used.
 

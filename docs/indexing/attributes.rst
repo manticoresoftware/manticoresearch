@@ -1,7 +1,7 @@
 .. _attributes:
 
 Attributes
-=======================
+==========
 
 Attributes are additional values associated with each document that can
 be used to perform additional filtering and sorting during search.

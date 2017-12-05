@@ -27813,8 +27813,8 @@ bool CSphSource_PgSQL::IterateStart ( CSphString & sError )
 	for ( int i = 0; i < m_tSchema.GetAttrsCount(); i++ )
 		iMaxIndex = Max ( iMaxIndex, m_tSchema.GetAttr(i).m_iIndex );
 
-	ARRAY_FOREACH ( i, m_tSchema.m_dFields )
-		iMaxIndex = Max ( iMaxIndex, m_tSchema.m_dFields[i].m_iIndex );
+	for ( int i = 0; i < m_tSchema.GetFieldsCount(); i++ )
+		iMaxIndex = Max ( iMaxIndex, m_tSchema.GetField(i).m_iIndex );
 
 	m_dIsColumnBool.Resize ( iMaxIndex + 1 );
 	ARRAY_FOREACH ( i, m_dIsColumnBool )

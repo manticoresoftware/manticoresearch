@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>morph fields</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source srctest
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query			= SELECT * FROM test_table
+	sql_field_string	= text1
+	sql_field_string	= text2
+	sql_field_string	= text3
+	sql_attr_uint		= idd
+}
+
+index test1
+{
+	source			= srctest
+	path			= <data_path/>/test1
+	index_exact_words = 1
+	morphology		= stem_en
+	morphology_skip_fields = text3
+}
+
+index test2
+{
+	source			= srctest
+	path			= <data_path/>/test2
+	index_exact_words = 1
+	morphology		= stem_en
+	morphology_skip_fields = text2, text3
+}
+
+index test3
+{
+	source			= srctest
+	path			= <data_path/>/test3
+	index_exact_words = 1
+	morphology		= stem_en
+	morphology_skip_fields = text3
+}
+
+index test4
+{
+	source			= srctest
+	path			= <data_path/>/test4
+	index_exact_words = 1
+	morphology		= stem_en
+	morphology_skip_fields = text2, text3
+}
+
+</config>
+
+<sphqueries>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('run') order by id asc</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('runs') order by id asc</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('running') order by id asc</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('=run') order by id asc</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('=runs') order by id asc</sphinxql>
+<sphinxql>SELECT * FROM test1 WHERE MATCH('=running') order by id asc</sphinxql>
+
+<sphinxql>SELECT * FROM test3 WHERE MATCH('run') order by id asc</sphinxql>
+<sphinxql>SELECT * FROM test3 WHERE MATCH('runs') order by id asc</sphinxql>
+<sphinxql>SELECT * FROM test3 WHERE MATCH('running') order by id asc</sphinxql>
+<sphinxql>SELECT * FROM test3 WHERE MATCH('=run') order by id asc</sphinxql>
+<sphinxql>SELECT * FROM test3 WHERE MATCH('=runs') order by id asc</sphinxql>
+<sphinxql>SELECT * FROM test3 WHERE MATCH('=running') order by id asc</sphinxql>
+
+<sphinxql>SELECT * FROM test2 WHERE MATCH('run') order by id asc</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('runs') order by id asc</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('running') order by id asc</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('=run') order by id asc</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('=runs') order by id asc</sphinxql>
+<sphinxql>SELECT * FROM test2 WHERE MATCH('=running') order by id asc</sphinxql>
+
+<sphinxql>SELECT * FROM test4 WHERE MATCH('run') order by id asc</sphinxql>
+<sphinxql>SELECT * FROM test4 WHERE MATCH('runs') order by id asc</sphinxql>
+<sphinxql>SELECT * FROM test4 WHERE MATCH('running') order by id asc</sphinxql>
+<sphinxql>SELECT * FROM test4 WHERE MATCH('=run') order by id asc</sphinxql>
+<sphinxql>SELECT * FROM test4 WHERE MATCH('=runs') order by id asc</sphinxql>
+<sphinxql>SELECT * FROM test4 WHERE MATCH('=running') order by id asc</sphinxql>
+
+</sphqueries>
+
+<db_create>
+CREATE TABLE `test_table`
+(
+	`document_id` int(11) NOT NULL default '0',
+	`idd` int(11),
+	`text1` varchar(255) NOT NULL default '',
+	`text2` varchar(255) NOT NULL default '',
+	`text3` varchar(255) NOT NULL default ''
+)
+</db_create>
+
+<db_drop>
+DROP TABLE IF EXISTS `test_table`
+</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 11, 'runs out of', 'more text',  'keep that' ),
+( 2, 12, 'out of me', 'running man',  'keep that' ),
+( 3, 13, 'out of me', 'more text',  'run up man' ),
+( 4, 14, 'more text',  'keep that', 'runs out of' ),
+( 5, 15, 'running man', 'out of me', 'keep that' ),
+( 6, 16, 'out of me', 'run up man', 'more text' )
+
+</db_insert>
+
+</test>

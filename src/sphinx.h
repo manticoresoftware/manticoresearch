@@ -754,6 +754,7 @@ ISphTokenizer *			sphCreateUTF8NgramTokenizer ();
 struct CSphDictSettings
 {
 	CSphString		m_sMorphology;
+	CSphString		m_sMorphFields;
 	CSphString		m_sStopwords;
 	CSphVector<CSphString> m_dWordforms;
 	int				m_iMinStemmingLen;
@@ -1568,6 +1569,7 @@ public:
 	virtual int						GetFieldsCount() const = 0;
 
 	virtual const CSphColumnInfo &	GetField ( int iIndex ) const = 0;
+	virtual const CSphVector<CSphColumnInfo> & GetFields () const = 0;
 
 	/// get attribute index by name, returns -1 if not found
 	virtual int						GetAttrIndex ( const char * sName ) const = 0;
@@ -1669,6 +1671,7 @@ public:
 	virtual int				GetFieldsCount() const			{ return m_dFields.GetLength(); }
 
 	virtual const CSphColumnInfo &	GetField ( int iIndex ) const { return m_dFields[iIndex]; }
+	virtual const CSphVector<CSphColumnInfo> & GetFields () const { return m_dFields; }
 
 	// most of the time we only need to get the field name
 	const char *			GetFieldName ( int iIndex ) const { return m_dFields[iIndex].m_sName.cstr(); }
@@ -1761,6 +1764,7 @@ public:
 	virtual int					GetFieldsCount() const;
 	virtual int					GetAttrIndex ( const char * sName ) const;
 	virtual const CSphColumnInfo &	GetField ( int iIndex ) const;
+	virtual const CSphVector<CSphColumnInfo> & GetFields () const;
 	virtual const CSphColumnInfo &	GetAttr ( int iIndex ) const;
 	virtual const CSphColumnInfo *	GetAttr ( const char * sName ) const;
 
@@ -1981,6 +1985,8 @@ public:
 	/// setup misc indexing settings (prefix/infix/exact-word indexing, position steps)
 	void								Setup ( const CSphSourceSettings & tSettings );
 
+	bool								SetupMorphFields ( CSphString & sError );
+
 public:
 	/// connect to the source (eg. to the database)
 	/// connection settings are specific for each source type and as such
@@ -2053,6 +2059,7 @@ protected:
 	CSphSchema 							m_tSchema;		///< my schema
 
 	CSphHTMLStripper *					m_pStripper = nullptr;	///< my HTML stripper
+	CSphBitvec							m_tMorphFields;
 
 	int			m_iNullIds = 0;
 	int			m_iMaxIds = 0;

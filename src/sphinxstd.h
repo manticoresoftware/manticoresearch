@@ -3155,6 +3155,13 @@ public:
 		memset ( m_pData, 0, sizeof(DWORD)*iSize );
 	}
 
+	void Set ()
+	{
+		int iSize = GetSize();
+		memset ( m_pData, 0xff, sizeof(DWORD)*iSize );
+	}
+
+
 	bool BitGet ( int iIndex ) const
 	{
 		assert ( m_pData );

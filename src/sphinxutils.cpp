@@ -597,6 +597,7 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "rlp_context",			0, NULL },
 	{ "ondisk_attrs",			0, NULL },
 	{ "index_token_filter",		0, NULL },
+	{ "morphology_skip_fields",	0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -1322,6 +1323,7 @@ void sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings 
 void sphConfDictionary ( const CSphConfigSection & hIndex, CSphDictSettings & tSettings )
 {
 	tSettings.m_sMorphology = hIndex.GetStr ( "morphology" );
+	tSettings.m_sMorphFields = hIndex.GetStr ( "morphology_skip_fields" );
 	tSettings.m_sStopwords = hIndex.GetStr ( "stopwords" );
 	tSettings.m_iMinStemmingLen = hIndex.GetInt ( "min_stemming_len", 1 );
 	tSettings.m_bStopwordsUnstemmed = hIndex.GetInt ( "stopwords_unstemmed" )!=0;
@@ -1744,7 +1746,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 	}
 
 	if ( pDict->GetSettings().m_bWordDict && pDict->HasMorphology() &&
-		( tSettings.m_iMinPrefixLen || tSettings.m_iMinInfixLen ) && !tSettings.m_bIndexExactWords )
+		( tSettings.m_iMinPrefixLen || tSettings.m_iMinInfixLen || !pDict->GetSettings().m_sMorphFields.IsEmpty() ) && !tSettings.m_bIndexExactWords )
 	{
 		tSettings.m_bIndexExactWords = true;
 		pIndex->Setup ( tSettings );

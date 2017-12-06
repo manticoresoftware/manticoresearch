@@ -6646,6 +6646,13 @@ const CSphColumnInfo & CSphRsetSchema::GetField ( int iIndex ) const
 }
 
 
+const CSphVector<CSphColumnInfo> & CSphRsetSchema::GetFields() const
+{
+	assert ( m_pIndexSchema );
+	return m_pIndexSchema->GetFields();
+}
+
+
 const CSphColumnInfo & CSphRsetSchema::GetAttr ( int iIndex ) const
 {
 	if ( !m_pIndexSchema )
@@ -11662,7 +11669,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	// connect 1st source and fetch its schema
 	if ( !dSources[0]->Connect ( m_sLastError )
 		|| !dSources[0]->IterateStart ( m_sLastError )
-		|| !dSources[0]->UpdateSchema ( &m_tSchema, m_sLastError ) )
+		|| !dSources[0]->UpdateSchema ( &m_tSchema, m_sLastError )
+		|| !dSources[0]->SetupMorphFields ( m_sLastError ) )
 	{
 		return 0;
 	}
@@ -11987,7 +11995,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		{
 			if ( !pSource->Connect ( m_sLastError )
 				|| !pSource->IterateStart ( m_sLastError )
-				|| !pSource->UpdateSchema ( &m_tSchema, m_sLastError ) )
+				|| !pSource->UpdateSchema ( &m_tSchema, m_sLastError )
+				|| !pSource->SetupMorphFields ( m_sLastError ) )
 			{
 				return 0;
 			}
@@ -25285,6 +25294,62 @@ ESphWordpart CSphSourceSettings::GetWordpart ( const char * sField, bool bWordDi
 
 //////////////////////////////////////////////////////////////////////////
 
+bool ParseMorphFields ( const CSphString & sMorphology, const CSphString & sMorphFields, const CSphVector<CSphColumnInfo> & dFields, CSphBitvec & tMorphFields, CSphString & sError )
+{
+	if ( sMorphology.IsEmpty() || sMorphFields.IsEmpty() )
+		return true;
+
+	CSphString sFields = sMorphFields;
+	sFields.ToLower();
+	sFields.Trim();
+	if ( !sFields.Length() )
+		return true;
+
+	CSphHash<int> hFields;
+	ARRAY_FOREACH ( i, dFields )
+		hFields.Add ( sphFNV64 ( dFields[i].m_sName.cstr() ), i );
+
+	StringBuilder_c sMissed;
+	int iFieldsGot = 0;
+	tMorphFields.Init ( dFields.GetLength() );
+	tMorphFields.Set(); // all fields have morphology by default
+
+	for ( const char * sCur=sFields.cstr(); ; )
+	{
+		while ( *sCur && ( sphIsSpace ( *sCur ) || *sCur==',' ) )
+			++sCur;
+		if ( !*sCur )
+			break;
+
+		const char * sStart = sCur;
+		while ( *sCur && !sphIsSpace ( *sCur ) && *sCur!=',' )
+			++sCur;
+
+		if ( sCur==sStart )
+			break;
+
+		int * pField = hFields.Find ( sphFNV64 ( sStart, sCur - sStart ) );
+		if ( !pField )
+		{
+			const char * sSep = sMissed.Length() ? ", " : "";
+			sMissed.Appendf ( "%s%.*s", sSep, (int)(sCur - sStart), sStart );
+			break;
+		}
+
+		iFieldsGot++;
+		tMorphFields.BitClear ( *pField );
+	}
+
+	// no fields set - need to reset bitvec to skip checks on indexing
+	if ( !iFieldsGot )
+		tMorphFields.Init ( 0 );
+
+	if ( sMissed.Length() )
+		sError.SetSprintf ( "morphology_skip_fields contains out of schema fields: %s", sMissed.cstr() );
+
+	return ( sMissed.Length()==0 );
+}
+
 CSphSource::CSphSource ( const char * sName )
 	: m_tSchema ( sName )
 {
@@ -25373,6 +25438,12 @@ void CSphSource::Setup ( const CSphSourceSettings & tSettings )
 	m_dPrefixFields = tSettings.m_dPrefixFields;
 	m_dInfixFields = tSettings.m_dInfixFields;
 	m_bIndexFieldLens = tSettings.m_bIndexFieldLens;
+}
+
+
+bool CSphSource::SetupMorphFields ( CSphString & sError )
+{
+	return ParseMorphFields ( m_pDict->GetSettings().m_sMorphology, m_pDict->GetSettings().m_sMorphFields, m_tSchema.GetFields(), m_tMorphFields, sError );
 }
 
 
@@ -25968,6 +26039,7 @@ void CSphSource_Document::BuildRegularHits ( SphDocID_t uDocid, bool bPayload, b
 
 	// FIELDEND_MASK at last token stream should be set for HEAD token too
 	int iBlendedHitsStart = -1;
+	bool bMorphDisabled = ( m_tMorphFields.GetBits()>0 && !m_tMorphFields.BitGet ( m_tState.m_iField ) );
 
 	// index words only
 	while ( ( m_iMaxHits==0 || m_tHits.m_dData.GetLength()+BUILD_REGULAR_HITS_COUNT<m_iMaxHits )
@@ -26003,7 +26075,7 @@ void CSphSource_Document::BuildRegularHits ( SphDocID_t uDocid, bool bPayload, b
 			sBuf[iBytes+1] = '\0';
 		}
 
-		if ( m_bIndexExactWords && eMorph==SPH_TOKEN_MORPH_ORIGINAL )
+		if ( m_bIndexExactWords && ( eMorph==SPH_TOKEN_MORPH_ORIGINAL || bMorphDisabled ) )
 		{
 			// can not use GetWordID here due to exception vs missed hit, ie
 			// stemmed sWord hasn't got added to hit stream but might be added as exception to dictionary

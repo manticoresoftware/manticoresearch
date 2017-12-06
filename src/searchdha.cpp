@@ -2545,7 +2545,7 @@ public:
 
 		const struct kevent & tEv = m_dReady[m_iIterEv];
 
-		m_pIter = (ListedData_t *) tEv.data;
+		m_pIter = (ListedData_t *) tEv.udata;
 		m_tIter.m_pData = m_pIter->m_pData;
 
 		if ( tEv.flags & EVFILT_READ )

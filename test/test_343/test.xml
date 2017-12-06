@@ -2,6 +2,7 @@
 <test>
 
 <name>morph fields</name>
+<requires><non-rt/></requires>
 
 <config>
 indexer

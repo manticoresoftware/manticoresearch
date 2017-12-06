@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>expand keywords - query option</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source srctest
+{
+	type			= mysql
+	<sql_settings/>
+
+	sql_query		= SELECT * FROM test_table
+	sql_attr_uint	= gid
+}
+
+index exp_on
+{
+	source			= srctest
+	path			= <data_path/>/test_on
+	expand_keywords	= 1
+	min_prefix_len = 2
+}
+
+index exp_off
+{
+	source			= srctest
+	path			= <data_path/>/test_off
+	min_prefix_len = 2
+}
+
+index rt
+{
+	type = rt
+	path			= <data_path/>/expanded-rt
+	dict = keywords
+	expand_keywords	= 1
+	min_infix_len = 2
+	rt_field = title
+	rt_attr_uint = idd	
+}
+
+index dist_on
+{
+	type					= distributed
+	agent					= <my_address/>:exp_on
+}
+
+index dist_off
+{
+	type					= distributed
+	agent					= <my_address/>:exp_off
+}
+
+</config>
+
+<sphqueries>
+<sphinxql>insert into rt values ( 1,  'dog runs', 11 ), ( 2,  'dogs run', 22 ), ( 3,  'dogs running', 33 ), ( 4,  'dog run', 44 )</sphinxql>
+<sphinxql>select * from rt where match ( 'run' )</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from rt where match ( 'run' ) option expand_keywords=0</sphinxql>
+<sphinxql>show meta</sphinxql>
+
+<sphinxql>select * from exp_on where match ( 'run' )</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from exp_on where match ( 'run' ) option expand_keywords=0</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from exp_off where match ( 'run' )</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from exp_off where match ( 'run' ) option expand_keywords=1</sphinxql>
+<sphinxql>show meta</sphinxql>
+
+<sphinxql>select * from dist_on where match ( 'run' )</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from dist_on where match ( 'run' ) option expand_keywords=0</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from dist_off where match ( 'run' )</sphinxql>
+<sphinxql>show meta</sphinxql>
+<sphinxql>select * from dist_off where match ( 'run' ) option expand_keywords=1</sphinxql>
+<sphinxql>show meta</sphinxql>
+
+
+</sphqueries>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	title varchar(255) not null,
+	gid int not null
+)
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS `test_table`</db_drop>
+
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1,  'dog runs', 11 ),
+( 2,  'dogs run', 22 ),
+( 3,  'dogs running', 33 ),
+( 4,  'dog run', 44 )
+</db_insert>
+
+</test>

@@ -417,7 +417,7 @@ static bool HasBlackhole ( AgentsVector & dAgents );
 /// master-agent API protocol extensions version
 enum
 {
-	VER_MASTER = 15
+	VER_MASTER = 16
 };
 
 
@@ -3196,7 +3196,7 @@ private:
 
 int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuery & q, bool bAgentWeight ) const
 {
-	int iReqSize = 156 + 2*sizeof(SphDocID_t) + 4*q.m_dWeights.GetLength()
+	int iReqSize = 160 + 2*sizeof(SphDocID_t) + 4*q.m_dWeights.GetLength()
 		+ q.m_sSortBy.Length()
 		+ strlen ( sIndexes )
 		+ q.m_sGroupBy.Length()
@@ -3487,6 +3487,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, ISphOutputBuffer
 		tOut.SendString ( tItem.m_sExpr.cstr() );
 		tOut.SendDword ( tItem.m_eAggrFunc );
 	}
+	tOut.SendDword ( q.m_eExpandKeywords );
 }
 
 
@@ -4307,6 +4308,9 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 			tItem.m_eAggrFunc = (ESphAggrFunc)tReq.GetDword();
 		}
 	}
+
+	if ( iMasterVer>=16 )
+		tQuery.m_eExpandKeywords = (QueryOption_e)tReq.GetDword();
 
 	/////////////////////
 	// additional checks
@@ -9574,6 +9578,11 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 	} else if ( sOpt=="sync" )
 	{
 		m_pQuery->m_bSync = ( tValue.m_iValue!=0 );
+
+	} else if ( sOpt=="expand_keywords" )
+	{
+		m_pQuery->m_eExpandKeywords = ( tValue.m_iValue!=0 ? QUERY_OPT_ENABLED : QUERY_OPT_DISABLED );
+
 	} else
 	{
 		m_pParseError->SetSprintf ( "unknown option '%s' (or bad argument type)", sOpt.cstr() );

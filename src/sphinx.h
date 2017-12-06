@@ -2702,6 +2702,13 @@ public:
 
 class QueryParser_i;
 
+enum QueryOption_e
+{
+	QUERY_OPT_DEFAULT = 0,
+	QUERY_OPT_DISABLED,
+	QUERY_OPT_ENABLED
+};
+
 /// search query
 class CSphQuery
 {
@@ -2732,6 +2739,7 @@ public:
 	bool			m_bLocalDF;			///< whether to use calculate DF among local indexes
 	bool			m_bLowPriority;		///< set low thread priority for this query
 	DWORD			m_uDebugFlags;
+	QueryOption_e	m_eExpandKeywords;	///< control automatic query-time keyword expansion
 
 	CSphVector<CSphFilterSettings>	m_dFilters;	///< filters
 	CSphVector<FilterTreeItem_t>	m_dFilterTree;

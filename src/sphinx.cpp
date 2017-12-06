@@ -5644,6 +5644,7 @@ CSphQuery::CSphQuery ()
 	, m_bLocalDF		( false )
 	, m_bLowPriority	( false )
 	, m_uDebugFlags		( 0 )
+	, m_eExpandKeywords ( QUERY_OPT_DEFAULT )
 	, m_eGroupFunc		( SPH_GROUPBY_ATTR )
 	, m_sGroupSortBy	( "@groupby desc" )
 	, m_sGroupDistinct	( "" )
@@ -5938,6 +5939,14 @@ bool CSphQuery::ParseSelectList ( CSphString & sError )
 
 	sError = tParser.m_sParserError;
 	return sError.IsEmpty ();
+}
+
+bool ExpandKeywords ( bool bIndexOpt, QueryOption_e eQueryOpt )
+{
+	if ( eQueryOpt==QUERY_OPT_DEFAULT )
+		return bIndexOpt;
+	else
+		return ( eQueryOpt==QUERY_OPT_ENABLED );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -18237,7 +18246,7 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 		pProfile->Switch ( SPH_QSTATE_TRANSFORMS );
 	sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings, pQuery->m_bSimplify, this );
 
-	if ( m_bExpandKeywords )
+	if ( ExpandKeywords ( m_bExpandKeywords, pQuery->m_eExpandKeywords ) )
 	{
 		tParsed.m_pRoot = sphQueryExpandKeywords ( tParsed.m_pRoot, m_tSettings );
 		tParsed.m_pRoot->Check ( true );
@@ -18338,7 +18347,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 			// transform query if needed (quorum transform, keyword expansion, etc.)
 			sphTransformExtendedQuery ( &dXQ[i].m_pRoot, m_tSettings, pQueries[i].m_bSimplify, this );
 
-			if ( m_bExpandKeywords )
+			if ( ExpandKeywords ( m_bExpandKeywords, pQueries[i].m_eExpandKeywords ) )
 			{
 				dXQ[i].m_pRoot = sphQueryExpandKeywords ( dXQ[i].m_pRoot, m_tSettings );
 				dXQ[i].m_pRoot->Check ( true );

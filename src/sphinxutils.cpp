@@ -2459,8 +2459,6 @@ void sphConfigureCommon ( const CSphConfig & hConf )
 	g_sLemmatizerBase = hCommon.GetStr ( "lemmatizer_base" );
 	sphConfigureRLP ( hCommon );
 
-	g_bProgressiveMerge = ( hCommon.GetInt ( "progressive_merge", 1 )!=0 );
-
 	bool bJsonStrict = false;
 	bool bJsonAutoconvNumbers;
 	bool bJsonKeynamesToLowercase = false;

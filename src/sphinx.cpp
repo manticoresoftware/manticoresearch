@@ -186,7 +186,6 @@ static int			g_iReadUnhinted			= DEFAULT_READ_UNHINTED;
 #endif
 
 CSphString			g_sLemmatizerBase		= SHAREDIR;
-bool				g_bProgressiveMerge		= false;
 
 // quick hack for indexer crash reporting
 // one day, these might turn into a callback or something

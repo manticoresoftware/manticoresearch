@@ -211,7 +211,7 @@ int main ( int argc, char ** argv )
 	g_iFieldsCount = tSrcSchema.GetFieldsCount();
 
 	CSphConfigSection tRTConfig;
-	sphRTInit ( tRTConfig, true );
+	sphRTInit ( tRTConfig, true, nullptr );
 	sphRTConfigure ( tRTConfig, true );
 	SmallStringHash_T< CSphIndex * > dTemp;
 	BinlogFlushInfo_t tBinlogFlush;

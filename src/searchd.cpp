@@ -23433,7 +23433,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	// startup
 	///////////
 
-	sphRTInit ( hSearchd, bTestMode );
+	sphRTInit ( hSearchd, bTestMode, hConf("common") ? hConf["common"]("common") : nullptr );
 
 	if ( hSearchd.Exists ( "snippets_file_prefix" ) )
 		g_sSnippetsFilePrefix = hSearchd["snippets_file_prefix"].cstr();

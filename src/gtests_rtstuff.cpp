@@ -31,7 +31,7 @@ void TestRTInit ()
 {
 	CSphConfigSection tRTConfig;
 
-	sphRTInit ( tRTConfig, true );
+	sphRTInit ( tRTConfig, true, nullptr );
 	sphRTConfigure ( tRTConfig, true );
 
 	SmallStringHash_T<CSphIndex *> hIndexes;

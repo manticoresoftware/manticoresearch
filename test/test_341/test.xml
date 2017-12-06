@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>optimize with progressive merge, apply klists</name>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	binlog_path =
+	workers = threads
+}
+
+common
+{
+	progressive_merge = 1
+}
+
+index rt
+{
+    type = rt
+    path = <data_path/>/rt
+    charset_table = a..z, _, A..Z->a..z	
+    dict = keywords
+    rt_field = title
+    rt_attr_uint = idd
+	rt_attr_string = text
+}
+
+source src_dummy
+{
+  type      = mysql
+  <sql_settings/>
+  sql_query     = SELECT id, gid, text FROM test_table
+  sql_attr_uint   = gid
+}
+
+index test_dummy
+{
+  source      = src_dummy
+  path      = <data_path/>/test_dummy
+}
+</config>
+
+<db_drop>drop table if exists test_table</db_drop>
+
+<db_create>
+create table test_table
+(
+	id int not null,
+	text varchar(255) not null,
+	gid int
+);
+</db_create>
+
+<db_insert>
+insert into test_table values ( 1, 'first',  1 )
+</db_insert>
+
+<custom_test><![CDATA[
+
+function RandomWords ( $n, $seed )
+{
+	srand ( $seed );
+	$words = [];
+	for ( $k=0; $k<$n; $k++ )
+		$words[] = substr ( str_shuffle ( 'abcdefghijklmnopqrstuvwxyz' ), 0, 5 );
+	return join ( $words, " " );
+}
+
+$results = array();
+$ql->Reconnect();
+
+$results[] = 'populate commit';
+
+$id = 1;
+$docs = array(60, 500, 100, 150);
+foreach ( $docs as $k=>$v )
+{
+	$rows = [];
+	for ( $j=0; $j<$v; $j++ )
+	{
+		$rows[] = sprintf ( "(%d,'%s','%s', %d)", $id, RandomWords ( 10, $id ), RandomWords ( 1000, $id ), $id );
+		$id++;
+	}
+	
+	$sql = sprintf ( "insert into rt (id, title, text, idd) values\n %s", join ( $rows, ",\n  " ) );
+	$results[] = $ql->Query ( $sql );
+	$results[] = $ql->Query ( "flush ramchunk rt" );
+	$results[] = "\n" . 'flushed ' . $id;
+}
+
+$results[] = "\n" . $ql->Query ( "OPTIMIZE INDEX rt option sync=1" );
+
+// regression - klists got applied in a wrong order
+$rows = [];
+$idd = 1;
+$docs = array(50, 300, 150);
+foreach ( $docs as $k=>$v )
+{
+	$id = 30;
+	$rows = [];
+	for ( $j=0; $j<$v; $j++ )
+	{
+		$rows[] = sprintf ( "(%d,'%s','%s', %d)", $id, RandomWords ( 10, $id ), RandomWords ( 1000, $id ), $idd );
+		$id++;
+	}
+	
+	$sql = sprintf ( "insert into rt (id, title, text, idd) values\n %s", join ( $rows, ",\n  " ) );
+	$results[] = $ql->Query ( $sql );
+	$results[] = $ql->Query ( "flush ramchunk rt" );
+	$results[] = "\n" . 'flushed ' . $id;
+	$idd++;
+}
+$results[] = "\n" . $ql->Query ( "SELECT id, idd FROM rt WHERE id > 30 and id < 60 order by id asc limit 3" );
+$results[] = "\n" . $ql->Query ( "OPTIMIZE INDEX rt option sync=1" );
+$results[] = "\n" . $ql->Query ( "SELECT id, idd FROM rt WHERE id > 30 and id < 60 order by id asc limit 3" );
+
+]]></custom_test>
+
+</test>

@@ -223,6 +223,13 @@ struct Expr_GetString_c : public Expr_WithLocator_c
 			}
 		} else
 		{
+			if ( !m_tLocator.m_bDynamic )
+			{
+				assert ( 0 && "unexpected static locator" );
+				*ppStr = NULL;
+				return 0;
+			}
+
 			const BYTE * pStr = (const BYTE *)tMatch.GetAttr ( m_tLocator );
 			return sphUnpackPtrAttr ( pStr, ppStr );
 		}

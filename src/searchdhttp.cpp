@@ -150,7 +150,7 @@ static void EncodeResultJson ( const AggrResult_t & tRes, JsonEscapedBuilder & t
 				{
 					const BYTE * pFactors = (const BYTE *)tMatch.GetAttr ( tLoc );
 					sphUnpackPtrAttr ( pFactors, &pFactors );
-					if ( !pFactors )
+					if ( pFactors )
 					{
 						bool bStr = ( eAttrType==SPH_ATTR_FACTORS );
 						dTmp.Resize ( 0 );
@@ -163,7 +163,8 @@ static void EncodeResultJson ( const AggrResult_t & tRes, JsonEscapedBuilder & t
 							tOut += "\"";
 						} else
 							tOut += (const char *)dTmp.Begin();
-					}
+					} else
+						tOut += "null";
 				}
 				break;
 

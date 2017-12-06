@@ -8790,12 +8790,13 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 		return;
 	}
 
+	assert ( pThd );
 	SearchHandler_c tHandler ( iQueries, sphCreatePlainQueryParser(), false, ( iMasterVer==0 ), pThd->m_iConnID );
 	ARRAY_FOREACH ( i, tHandler.m_dQueries )
 		if ( !ParseSearchQuery ( tReq, tOut, tHandler.m_dQueries[i], iVer, iMasterVer ) )
 			return;
 
-	if ( pThd && tHandler.m_dQueries.GetLength() )
+	if ( tHandler.m_dQueries.GetLength() )
 	{
 		const CSphQuery & q = tHandler.m_dQueries[0];
 		pThd->SetThreadInfo ( "api-search query=\"%s\" comment=\"%s\"", q.m_sQuery.scstr(), q.m_sComment.scstr() );

@@ -1848,6 +1848,25 @@ Example:
 
     morphology = stem_en, libstemmer_sv
 
+.. _morphology_skip_fields:
+
+morphology_skip_fields
+~~~~~~~~~~~~~~~~~~~~~~
+
+A list of fields there morphology preprocessors do not apply.
+Optional, default is empty (apply preprocessors to all fields).
+
+Used on indexing there only exact form of words got stored for defined fields.
+
+Example:
+
+
+.. code-block:: ini
+
+
+    morphology_skip_fields = tags, name
+
+
 .. _ngram_chars:
 
 ngram_chars

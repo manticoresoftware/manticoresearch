@@ -50,41 +50,29 @@ public:
 	// setup by query parser
 	CSphString		m_sWord;		///< my copy of word
 	CSphString		m_sDictWord;	///< word after being processed by dict (eg. stemmed)
-	SphWordID_t		m_uWordID;		///< word ID, from dictionary
-	TermPosFilter_e	m_iTermPos;
-	int				m_iAtomPos;		///< word position, from query
-	float			m_fBoost;		///< IDF keyword boost (multiplier)
-	bool			m_bExpanded;	///< added by prefix expansion
-	bool			m_bExcluded;	///< excluded by the query (rval to operator NOT)
+	SphWordID_t		m_uWordID = 0;	///< word ID, from dictionary
+	TermPosFilter_e	m_iTermPos = TERM_POS_NONE;
+	int				m_iAtomPos = 0;	///< word position, from query
+	float			m_fBoost = 1.0f;///< IDF keyword boost (multiplier)
+	bool			m_bExpanded = false;	///< added by prefix expansion
+	bool			m_bExcluded = false;	///< excluded by the query (rval to operator NOT)
 
 	// setup by QwordSetup()
-	int				m_iDocs;		///< document count, from wordlist
-	int				m_iHits;		///< hit count, from wordlist
-	bool			m_bHasHitlist;	///< hitlist presence flag
+	int				m_iDocs = 0;	///< document count, from wordlist
+	int				m_iHits = 0;	///< hit count, from wordlist
+	bool			m_bHasHitlist = true;	///< hitlist presence flag
 	CSphVector<SkiplistEntry_t>		m_dSkiplist;	///< skiplist for quicker document list seeks
 
 	// iterator state
 	FieldMask_t m_dQwordFields;	///< current match fields
-	DWORD			m_uMatchHits;	///< current match hits count
-	SphOffset_t		m_iHitlistPos;	///< current position in hitlist, from doclist
+	DWORD			m_uMatchHits = 0;	///< current match hits count
+	SphOffset_t		m_iHitlistPos = 0;	///< current position in hitlist, from doclist
 
 protected:
-	bool			m_bAllFieldsKnown; ///< whether the all match fields is known, or only low 32.
+	bool			m_bAllFieldsKnown = false; ///< whether the all match fields is known, or only low 32.
 
 public:
 	ISphQword ()
-		: m_uWordID ( 0 )
-		, m_iTermPos ( TERM_POS_NONE )
-		, m_iAtomPos ( 0 )
-		, m_fBoost ( 1.0f )
-		, m_bExpanded ( false )
-		, m_bExcluded ( false )
-		, m_iDocs ( 0 )
-		, m_iHits ( 0 )
-		, m_bHasHitlist ( true )
-		, m_uMatchHits ( 0 )
-		, m_iHitlistPos ( 0 )
-		, m_bAllFieldsKnown ( false )
 	{
 		m_dQwordFields.UnsetAll();
 	}

@@ -962,7 +962,7 @@ bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pA
 	ThreadCall_t * pCall = new ThreadCall_t;
 	pCall->m_pCall = fnThread;
 	pCall->m_pArg = pArg;
-	pCall->m_pNext = NULL;
+	pCall->m_pNext = nullptr;
 
 	// create thread
 #if USE_WINDOWS
@@ -1391,10 +1391,6 @@ bool CSphSemaphore::Wait ()
 // Windows rwlock implementation
 
 CSphRwlock::CSphRwlock ()
-	: m_bInitialized ( false )
-	, m_hWriteMutex ( NULL )
-	, m_hReadEvent ( NULL )
-	, m_iReaders ( 0 )
 {}
 
 
@@ -1513,8 +1509,6 @@ bool CSphRwlock::Unlock ()
 // UNIX rwlock implementation (pthreads wrapper)
 
 CSphRwlock::CSphRwlock ()
-	: m_bInitialized ( false )
-	, m_pWritePreferHelper ( nullptr )
 {
 	m_pLock = new pthread_rwlock_t;
 }
@@ -1525,7 +1519,7 @@ bool CSphRwlock::Init ( bool bPreferWriter )
 	assert ( m_pLock );
 
 	pthread_rwlockattr_t tAttr;
-	pthread_rwlockattr_t * pAttr = NULL;
+	pthread_rwlockattr_t * pAttr = nullptr;
 
 	if ( bPreferWriter )
 	{
@@ -1563,7 +1557,7 @@ bool CSphRwlock::Done ()
 	if ( !m_bInitialized )
 		return true;
 
-	m_bInitialized = !( pthread_rwlock_destroy ( m_pLock )==0 );
+	m_bInitialized = pthread_rwlock_destroy ( m_pLock )!=0;
 	return !m_bInitialized;
 }
 
@@ -1907,8 +1901,8 @@ class CSphThdPool : public ISphThdPool
 public:
 	explicit CSphThdPool ( int iThreads, const char* sName )
 		: m_dWorkers ( 0 )
-		, m_pHead ( NULL )
-		, m_pTail ( NULL )
+		, m_pHead ( nullptr )
+		, m_pTail ( nullptr )
 		, m_bShutdown ( false )
 		, m_iStatQueuedJobs ( 0 )
 	{
@@ -1916,20 +1910,23 @@ public:
 
 		iThreads = Max ( iThreads, 1 );
 		m_dWorkers.Reset ( iThreads );
-		ARRAY_FOREACH ( i, m_dWorkers )
+		int iStarted = 0;
+		for ( auto& dWorker : m_dWorkers )
 		{
-			sphThreadCreate ( m_dWorkers.Begin() + i, Tick, this );
+			if ( sphThreadCreate ( &dWorker, Tick, this ) )
+				++iStarted;
 		}
+		assert ( iStarted == iThreads );
 	}
 
-	virtual ~CSphThdPool ()
+	~CSphThdPool () final
 	{
 		Shutdown();
 
 		Verify ( m_tWorkSem.Done() );
 	}
 
-	virtual void Shutdown ()
+	void Shutdown () final
 	{
 		if ( m_bShutdown )
 			return;
@@ -1950,12 +1947,12 @@ public:
 		}
 	}
 
-	virtual void AddJob ( ISphJob * pItem )
+	void AddJob ( ISphJob * pItem ) final
 	{
 		assert ( pItem );
 		assert ( !m_bShutdown );
 
-		ThdJob_t * pJob = new ThdJob_t;
+		auto * pJob = new ThdJob_t;
 		pJob->m_pItem = pItem;
 
 		m_tJobLock.Lock();
@@ -1977,11 +1974,11 @@ public:
 		m_tJobLock.Unlock();
 	}
 
-	virtual void StartJob ( ISphJob * pItem )
+	bool StartJob ( ISphJob * pItem ) final
 	{
 		// FIXME!!! start thread only in case of no workers available to offload call site
 		SphThread_t tThd;
-		sphThreadCreate ( &tThd, Start, pItem, true );
+		return sphThreadCreate ( &tThd, Start, pItem, true );
 	}
 
 private:
@@ -1989,7 +1986,7 @@ private:
 	{
 		SetThdName ( "job" );
 
-		CSphThdPool * pPool = (CSphThdPool *)pArg;
+		auto * pPool = (CSphThdPool *)pArg;
 
 		while ( !pPool->m_bShutdown )
 		{
@@ -2031,23 +2028,23 @@ private:
 
 	static void Start ( void * pArg )
 	{
-		ISphJob * pJob = (ISphJob *)pArg;
+		auto * pJob = (ISphJob *)pArg;
 		if ( pJob )
 			pJob->Call();
 		SafeDelete ( pJob );
 	}
 
-	virtual int GetActiveWorkerCount () const
+	int GetActiveWorkerCount () const final
 	{
 		return m_tStatActiveWorkers.GetValue();
 	}
 
-	virtual int GetTotalWorkerCount () const
+	int GetTotalWorkerCount () const final
 	{
 		return m_dWorkers.GetLength();
 	}
 
-	virtual int GetQueueLength () const
+	int GetQueueLength () const final
 	{
 		return m_iStatQueuedJobs;
 	}

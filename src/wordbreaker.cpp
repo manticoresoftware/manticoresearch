@@ -28,6 +28,7 @@
 /// my own isalpha (let's build our own theme park!)
 inline int IsAlpha ( int c )
 {
+
 	return ( c>='a' && c<='z' );
 }
 
@@ -77,8 +78,8 @@ private:
 	typedef CSphOrderedHash < float, CSphString, CSphStrHashFunc, 1048576 > HashType_t;
 
 	HashType_t *	m_pHash;
-	int				m_iTotal;
-	float			m_fLogTotal;
+	int				m_iTotal = 0;
+	float			m_fLogTotal = 0.0f;
 
 public:
 	float			m_fLogMin;
@@ -494,9 +495,16 @@ void UrlBreakTest ( const char * sTestFile )
 	}
 
 	// results
-	printf ( "prec %.3f, wall %d msec, %d good, %d total\n",
+	if ( iTotal )
+		printf ( "prec %.3f, wall %d msec, %d good, %d total\n",
 		float(iGood)/iTotal, (int)( ( sphMicroTimer() - tmWall )/1000 ), iGood, iTotal );
-	printf ( "prec %.3f, %d total w/o nosplits\n", float(iGood)/(iTotal-iNosplit), iTotal-iNosplit );
+	else
+		printf ( "prec INF, wall %d msec, %d good, 0 total\n", (int) (
+			( sphMicroTimer () - tmWall ) / 1000 ), iGood );
+	if ( iTotal-iNosplit )
+		printf ( "prec %.3f, %d total w/o nosplits\n", float(iGood)/(iTotal-iNosplit), iTotal-iNosplit );
+	else
+		printf ( "prec INF, 0 total w/o nosplits\n" );
 }
 
 

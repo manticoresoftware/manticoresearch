@@ -449,36 +449,36 @@ public:
 	// searching-only, per-query
 	const CSphQuery &			m_tQuery;
 
-	int							m_iWeights;						///< search query field weights count
+	int							m_iWeights = 0;					///< search query field weights count
 	int							m_dWeights [ SPH_MAX_FIELDS ];	///< search query field weights
 
-	bool						m_bLookupFilter;				///< row data lookup required at filtering stage
-	bool						m_bLookupSort;					///< row data lookup required at sorting stage
+	bool						m_bLookupFilter = false;		///< row data lookup required at filtering stage
+	bool						m_bLookupSort = false;			///< row data lookup required at sorting stage
 
-	DWORD						m_uPackedFactorFlags;			///< whether we need to calculate packed factors (and some extra options)
+	DWORD						m_uPackedFactorFlags { SPH_FACTOR_DISABLE }; ///< whether we need to calculate packed factors (and some extra options)
 
-	ISphFilter *				m_pFilter;
-	ISphFilter *				m_pWeightFilter;
+	ISphFilter *				m_pFilter = nullptr;
+	ISphFilter *				m_pWeightFilter = nullptr;
 
 	struct CalcItem_t
 	{
 		CSphAttrLocator			m_tLoc;					///< result locator
-		ESphAttr				m_eType;				///< result type
-		ISphExpr *				m_pExpr;				///< evaluator (non-owned)
+		ESphAttr				m_eType { SPH_ATTR_NONE};	///< result type
+		ISphExpr *				m_pExpr = nullptr;		///< evaluator (non-owned)
 	};
 	CSphVector<CalcItem_t>		m_dCalcFilter;			///< items to compute for filtering
 	CSphVector<CalcItem_t>		m_dCalcSort;			///< items to compute for sorting/grouping
 	CSphVector<CalcItem_t>		m_dCalcFinal;			///< items to compute when finalizing result set
 
-	const CSphVector<CSphAttrOverride> *	m_pOverrides;		///< overridden attribute values
+	const CSphVector<CSphAttrOverride> *	m_pOverrides = nullptr;	///< overridden attribute values
 	CSphVector<CSphAttrLocator>				m_dOverrideIn;
 	CSphVector<CSphAttrLocator>				m_dOverrideOut;
 
-	const void *							m_pIndexData;			///< backend specific data
-	CSphQueryProfile *						m_pProfile;
-	const SmallStringHash_T<int64_t> *		m_pLocalDocs;
-	int64_t									m_iTotalDocs;
-	int64_t									m_iBadRows;
+	const void *							m_pIndexData = nullptr;	///< backend specific data
+	CSphQueryProfile *						m_pProfile = nullptr;
+	const SmallStringHash_T<int64_t> *		m_pLocalDocs = nullptr;
+	int64_t									m_iTotalDocs = 0;
+	int64_t									m_iBadRows = 0;
 
 public:
 	explicit CSphQueryContext ( const CSphQuery & q );
@@ -2376,7 +2376,7 @@ public:
 	bool Setup ( const CSphIndex * pIndex, const ExcerptQuery_t & tSettings, CSphString & sError )
 	{
 		assert ( pIndex );
-		CSphScopedPtr<CSphDict> tDictCloned ( NULL );
+		CSphScopedPtr<CSphDict> tDictCloned ( nullptr );
 		m_pDict = pIndex->GetDictionary();
 		if ( m_pDict->HasState() )
 			m_tDictCloned = m_pDict = m_pDict->Clone();
@@ -2398,7 +2398,7 @@ public:
 		else
 			m_tTokenizer = pIndex->GetTokenizer()->Clone ( SPH_CLONE_INDEX );
 
-		m_pQueryTokenizer = NULL;
+		m_pQueryTokenizer = nullptr;
 		if ( tSettings.m_bHighlightQuery || tSettings.m_bExactPhrase )
 		{
 			m_pQueryTokenizer =	pIndex->GetQueryTokenizer()->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT );
@@ -2421,8 +2421,8 @@ public:
 
 		if ( tSettings.m_bHighlightQuery )
 		{
-			CSphScopedPtr<ISphTokenizer> tTokenizerJson ( NULL );
-			CSphScopedPtr<QueryParser_i> tParser ( NULL );
+			CSphScopedPtr<ISphTokenizer> tTokenizerJson ( nullptr );
+			CSphScopedPtr<QueryParser_i> tParser ( nullptr );
 			if ( !tSettings.m_bJsonQuery )
 			{
 				tParser = sphCreatePlainQueryParser();
@@ -2433,7 +2433,7 @@ public:
 				tParser = sphCreateJsonQueryParser();
 			}
 			// OPTIMIZE? double lightweight clone here? but then again it's lightweight
-			if ( !tParser->ParseQuery ( m_tExtQuery, tSettings.m_sWords.cstr(), NULL, m_pQueryTokenizer, tTokenizerJson.Ptr(), &pIndex->GetMatchSchema(), m_pDict, pIndex->GetSettings() ) )
+			if ( !tParser->ParseQuery ( m_tExtQuery, tSettings.m_sWords.cstr(), nullptr, m_pQueryTokenizer, tTokenizerJson.Ptr(), &pIndex->GetMatchSchema(), m_pDict, pIndex->GetSettings() ) )
 			{
 				sError = m_tExtQuery.m_sParseError;
 				return false;
@@ -2464,14 +2464,13 @@ public:
 class CSphCharsetDefinitionParser
 {
 public:
-	CSphCharsetDefinitionParser () : m_bError ( false ) {}
 	bool				Parse ( const char * sConfig, CSphVector<CSphRemapRange> & dRanges );
 	const char *		GetLastError ();
 
 protected:
-	bool				m_bError;
+	bool				m_bError = false;
 	char				m_sError [ 1024 ];
-	const char *		m_pCurrent;
+	const char *		m_pCurrent = nullptr;
 
 	bool				Error ( const char * sMessage );
 	void				SkipSpaces ();

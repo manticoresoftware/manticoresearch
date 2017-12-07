@@ -64,7 +64,7 @@ HostDashboard_t::~HostDashboard_t ()
 
 bool HostDashboard_t::IsOlder ( int64_t iTime ) const
 {
-	return ( (iTime-m_iLastAnswerTime)>g_iPingInterval*1000 );
+	return ( (iTime-m_iLastAnswerTime)>g_iPingInterval*1000LL );
 }
 
 DWORD HostDashboard_t::GetCurSeconds()
@@ -580,7 +580,7 @@ AgentConn_t::AgentConn_t ()
 	, m_bFresh ( true )
 	, m_bSuccess ( false )
 	, m_bDone ( false )
-	, m_iReplyStatus ( -1 )
+	, m_eReplyStatus ( SEARCHD_ERROR )
 	, m_iReplySize ( 0 )
 	, m_iReplyRead ( 0 )
 	, m_iRetries ( 0 )
@@ -1375,7 +1375,8 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 
 					int iErr = 0;
 					socklen_t iErrLen = sizeof(iErr);
-					getsockopt ( tAgent.m_iSock, SOL_SOCKET, SO_ERROR, (char*)&iErr, &iErrLen );
+					if ( getsockopt ( tAgent.m_iSock, SOL_SOCKET, SO_ERROR, ( char * ) &iErr, &iErrLen )<0 )
+						sphWarning ( "failed to get error: %d '%s'", errno, strerror ( errno ) );
 					// connect() failure
 					tAgent.Fail ( eConnectFailures, "connect() failed: errno=%d, %s", iErr, sphSockError(iErr) );
 					continue;
@@ -1587,8 +1588,8 @@ int RemoteWaitForAgents ( AgentsVector & dAgents, int iTimeout, IReplyParser_t &
 					// try to read
 					struct
 					{
-						WORD	m_iStatus;
-						WORD	m_iVer;
+						WORD	m_uStatus;
+						WORD	m_uVer;
 						int		m_iLength;
 					} tReplyHeader;
 					STATIC_SIZE_ASSERT ( tReplyHeader, 8 );
@@ -1600,8 +1601,8 @@ int RemoteWaitForAgents ( AgentsVector & dAgents, int iTimeout, IReplyParser_t &
 						break;
 					}
 
-					tReplyHeader.m_iStatus = ntohs ( tReplyHeader.m_iStatus );
-					tReplyHeader.m_iVer = ntohs ( tReplyHeader.m_iVer );
+					tReplyHeader.m_uStatus = ntohs ( tReplyHeader.m_uStatus );
+					tReplyHeader.m_uVer = ntohs ( tReplyHeader.m_uVer );
 					tReplyHeader.m_iLength = ntohl ( tReplyHeader.m_iLength );
 
 					// check the packet
@@ -1609,7 +1610,7 @@ int RemoteWaitForAgents ( AgentsVector & dAgents, int iTimeout, IReplyParser_t &
 					{
 						agent_stats_inc ( tAgent, eWrongReplies );
 						tAgent.m_sFailure.SetSprintf ( "invalid packet size (status=%d, len=%d, max_packet_size=%d)",
-							tReplyHeader.m_iStatus, tReplyHeader.m_iLength, g_iMaxPacketSize );
+							tReplyHeader.m_uStatus, tReplyHeader.m_iLength, g_iMaxPacketSize );
 						break;
 					}
 
@@ -1619,7 +1620,7 @@ int RemoteWaitForAgents ( AgentsVector & dAgents, int iTimeout, IReplyParser_t &
 					tAgent.m_dReplyBuf.Reset ( tReplyHeader.m_iLength );
 					tAgent.m_iReplySize = tReplyHeader.m_iLength;
 					tAgent.m_iReplyRead = 0;
-					tAgent.m_iReplyStatus = tReplyHeader.m_iStatus;
+					tAgent.m_eReplyStatus = ( SearchdStatus_e ) tReplyHeader.m_uStatus;
 
 					if ( !tAgent.m_dReplyBuf.Begin() )
 					{
@@ -1658,25 +1659,28 @@ int RemoteWaitForAgents ( AgentsVector & dAgents, int iTimeout, IReplyParser_t &
 					tAgent.m_sFailure = "";
 
 					// check for general errors/warnings first
-					if ( tAgent.m_iReplyStatus==SEARCHD_WARNING )
+					auto bEscapeLoop = true;
+					switch ( tAgent.m_eReplyStatus )
 					{
-						CSphString sAgentWarning = tReq.GetString ();
-						tAgent.m_sFailure.SetSprintf ( "remote warning: %s", sAgentWarning.cstr() );
-						bWarnings = true;
-
-					} else if ( tAgent.m_iReplyStatus==SEARCHD_RETRY )
-					{
+					case SEARCHD_RETRY:
 						tAgent.State ( AGENT_RETRY );
-						CSphString sAgentError = tReq.GetString ();
-						tAgent.m_sFailure.SetSprintf ( "remote warning: %s", sAgentError.cstr() );
+						tAgent.m_sFailure.SetSprintf ( "remote warning: %s", tReq.GetString ().cstr () );
 						break;
 
-					} else if ( tAgent.m_iReplyStatus!=SEARCHD_OK )
-					{
-						CSphString sAgentError = tReq.GetString ();
-						tAgent.m_sFailure.SetSprintf ( "remote error: %s", sAgentError.cstr() );
+					case SEARCHD_ERROR:
+						tAgent.m_sFailure.SetSprintf ( "remote error: %s", tReq.GetString ().cstr () );
 						break;
+
+					case SEARCHD_WARNING:
+						tAgent.m_sFailure.SetSprintf ( "remote warning: %s", tReq.GetString ().cstr () );
+						bWarnings = true;
+						// no break;
+
+					case SEARCHD_OK:
+					default: bEscapeLoop = false;
 					}
+					if ( bEscapeLoop )
+						break;
 
 					// call parser
 					if ( !tParser.ParseReply ( tReq, tAgent ) )

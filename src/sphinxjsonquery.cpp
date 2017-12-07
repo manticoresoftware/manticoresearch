@@ -2610,7 +2610,7 @@ bool ParseSort ( cJSON * pSort, CSphQuery & tQuery, bool & bGotWeight, CSphStrin
 		cJSON * pMode = cJSON_GetObjectItem ( pSortItem, "mode" );
 		if ( pMode )
 		{
-			if ( !cJSON_IsString ( pMode ) )
+			if ( pAttrItems && !cJSON_IsString ( pMode ) )
 			{
 				sError.SetSprintf ( "\"mode\" property \"%s\" order is invalid", pAttrItems->string );
 				return false;

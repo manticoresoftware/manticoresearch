@@ -281,6 +281,7 @@ static cJSON_bool parse_number(cJSON * const item, parse_buffer * const input_bu
 		    case 'e':
             case 'E':
                 is_float = 1;
+				break;
             case '0':
             case '1':
             case '2':
@@ -1206,10 +1207,10 @@ fail:
         hooks->deallocate(buffer->buffer);
     }
 
-    if (printed != NULL)
+   /* if (printed != NULL)
     {
         hooks->deallocate(printed);
-    }
+    } */
 
     return NULL;
 }

@@ -228,33 +228,23 @@ static const char * g_dThdStates[THD_STATE_TOTAL] = {
 
 struct ThdDesc_t : public ListNode_t
 {
-	SphThread_t		m_tThd;
-	ProtocolType_e	m_eProto;
-	int				m_iClientSock;
+	SphThread_t		m_tThd {0};
+	ProtocolType_e	m_eProto { PROTO_MYSQL41 };
+	int				m_iClientSock = 0;
 	CSphString		m_sClientName;
 
-	ThdState_e		m_eThdState;
-	const char *	m_sCommand;
-	int				m_iConnID;		///< current conn-id for this thread
+	ThdState_e		m_eThdState { THD_HANDSHAKE };
+	const char *	m_sCommand = nullptr;
+	int				m_iConnID = -1;	///< current conn-id for this thread
 
 	// stuff for SHOW THREADS
-	int				m_iTid;			///< OS thread id, or 0 if unknown
-	int64_t			m_tmConnect;	///< when did the client connect?
-	int64_t			m_tmStart;		///< when did the current request start?
-	bool			m_bSystem;
-	CSphFixedVector<char> m_dBuf;	///< current request description
+	int				m_iTid = 0;		///< OS thread id, or 0 if unknown
+	int64_t			m_tmConnect = 0;	///< when did the client connect?
+	int64_t			m_tmStart = 0;	///< when did the current request start?
+	bool			m_bSystem = false;
+	CSphFixedVector<char> m_dBuf {512};	///< current request description
 
 	ThdDesc_t ()
-		: m_eProto ( PROTO_MYSQL41 )
-		, m_iClientSock ( 0 )
-		, m_eThdState ( THD_HANDSHAKE )
-		, m_sCommand ( NULL )
-		, m_iConnID ( -1 )
-		, m_iTid ( 0 )
-		, m_tmConnect ( 0 )
-		, m_tmStart ( 0 )
-		, m_bSystem ( false )
-		, m_dBuf ( 512 )
 	{
 		m_dBuf[0] = '\0';
 		m_dBuf.Last() = '\0';
@@ -3624,27 +3614,23 @@ bool SearchReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 	assert ( iResults>0 );
 
 	tAgent.m_dResults.Resize ( iResults );
-	for ( int iRes=0; iRes<iResults; iRes++ )
-		tAgent.m_dResults[iRes].m_iSuccesses = 0;
+	for ( auto & tRes : tAgent.m_dResults )
+		tRes.m_iSuccesses = 0;
 
-	for ( int iRes=0; iRes<iResults; iRes++ )
+	for ( auto & tRes : tAgent.m_dResults )
 	{
-		CSphQueryResult & tRes = tAgent.m_dResults [ iRes ];
 		tRes.m_sError = "";
 		tRes.m_sWarning = "";
 
 		// get status and message
-		DWORD eStatus = tReq.GetDword ();
-		if ( eStatus!=SEARCHD_OK )
+		auto eStatus = ( SearchdStatus_e ) tReq.GetDword ();
+		switch ( eStatus )
 		{
-			CSphString sMessage = tReq.GetString ();
-			switch ( eStatus )
-			{
-				case SEARCHD_ERROR:		tRes.m_sError = sMessage; continue;
-				case SEARCHD_RETRY:		tRes.m_sError = sMessage; break;
-				case SEARCHD_WARNING:	tRes.m_sWarning = sMessage; break;
-				default:				tAgent.m_sFailure.SetSprintf ( "internal error: unknown status %d", eStatus ); break;
-			}
+			case SEARCHD_ERROR:		tRes.m_sError = tReq.GetString (); continue;
+			case SEARCHD_RETRY:		tRes.m_sError = tReq.GetString (); break;
+			case SEARCHD_WARNING:	tRes.m_sWarning = tReq.GetString (); break;
+			default:				tAgent.m_sFailure.SetSprintf ( "internal error: unknown status %d, message %s", eStatus, tReq.GetString ().cstr() );
+			case SEARCHD_OK: break;
 		}
 
 		ParseSchema ( tRes, tReq );
@@ -4044,7 +4030,7 @@ static bool ParseSearchFilter ( CSphFilterSettings & tFilter, InputBuffer_c & tR
 }
 
 
-bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery & tQuery, int iVer, int iMasterVer )
+bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery & tQuery, WORD uVer, WORD uMasterVer )
 {
 	// daemon-level defaults
 	tQuery.m_iRetryCount = g_iAgentRetryCount;
@@ -4053,7 +4039,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 	// v.1.27+ flags come first
 	DWORD uFlags = 0;
-	if ( iVer>=0x11B )
+	if ( uVer>=0x11B )
 		uFlags = tReq.GetDword();
 
 	// v.1.0. mode, limits, weights, ID/TS ranges
@@ -4094,7 +4080,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		uMaxID = tReq.GetDword ();
 	}
 
-	if ( iVer<0x108 && uMaxID==0xffffffffUL )
+	if ( uVer<0x108 && uMaxID==0xffffffffUL )
 		uMaxID = 0; // fixup older clients which send 32-bit UINT_MAX by default
 
 	if ( uMaxID==0 )
@@ -4109,7 +4095,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 	tQuery.m_dFilters.Resize ( iAttrFilters );
 	for ( auto & i : tQuery.m_dFilters )
-		if ( !ParseSearchFilter ( i, tReq, tOut, iMasterVer ) )
+		if ( !ParseSearchFilter ( i, tReq, tOut, uMasterVer ) )
 			return false;
 
 	// now add id range filter
@@ -4181,7 +4167,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	}
 
 	tQuery.m_sSelect = tReq.GetString ();
-	tQuery.m_bAgent = ( iMasterVer>0 );
+	tQuery.m_bAgent = ( uMasterVer>0 );
 	if ( tQuery.m_sSelect.Begins ( "*,*" ) ) // this is the legacy mark of agent for debug purpose
 	{
 		tQuery.m_bAgent = true;
@@ -4194,7 +4180,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 	// master sends items to agents since master.version=15 
 	CSphString sError;
-	if ( iMasterVer<15 && !tQuery.ParseSelectList ( sError ) )
+	if ( uMasterVer<15 && !tQuery.ParseSelectList ( sError ) )
 	{
 		SendErrorReply ( tOut, "select: %s", sError.cstr() );
 
@@ -4217,7 +4203,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	}
 
 	// v.1.27
-	if ( iVer>=0x11B )
+	if ( uVer>=0x11B )
 	{
 		// parse simple flags
 		tQuery.m_bReverseScan = !!( uFlags & QFLAG_REVERSE_SCAN );
@@ -4230,7 +4216,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		tQuery.m_bFacet = !!( uFlags & QFLAG_FACET );
 		tQuery.m_bFacetHead = !!( uFlags & QFLAG_FACET_HEAD );
 
-		if ( iMasterVer>0 || iVer==0x11E )
+		if ( uMasterVer>0 || uVer==0x11E )
 			tQuery.m_bNormalizedTFIDF = !!( uFlags & QFLAG_NORMALIZED_TF );
 
 		// fetch optional stuff
@@ -4239,7 +4225,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	}
 
 	// v.1.29
-	if ( iVer>=0x11D )
+	if ( uVer>=0x11D )
 	{
 		tQuery.m_sOuterOrderBy = tReq.GetString();
 		tQuery.m_iOuterOffset = tReq.GetDword();
@@ -4249,34 +4235,34 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 	// extension v.1
 	tQuery.m_eCollation = g_eCollation;
-	if ( iMasterVer>=1 )
+	if ( uMasterVer>=1 )
 		tQuery.m_eCollation = (ESphCollation)tReq.GetDword();
 
 	// extension v.2
-	if ( iMasterVer>=2 )
+	if ( uMasterVer>=2 )
 	{
 		tQuery.m_sOuterOrderBy = tReq.GetString();
 		if ( tQuery.m_bHasOuter )
 			tQuery.m_iOuterLimit = tReq.GetInt();
 	}
 
-	if ( iMasterVer>=6 )
+	if ( uMasterVer>=6 )
 		tQuery.m_iGroupbyLimit = tReq.GetInt();
 
-	if ( iMasterVer>=14 )
+	if ( uMasterVer>=14 )
 	{
 		tQuery.m_sUDRanker = tReq.GetString();
 		tQuery.m_sUDRankerOpts = tReq.GetString();
 	}
 
-	if ( iMasterVer>=14 || iVer>=0x120 )
+	if ( uMasterVer>=14 || uVer>=0x120 )
 	{
 		tQuery.m_sQueryTokenFilterLib = tReq.GetString();
 		tQuery.m_sQueryTokenFilterName = tReq.GetString();
 		tQuery.m_sQueryTokenFilterOpts = tReq.GetString();
 	}
 
-	if ( iVer>=0x121 )
+	if ( uVer>=0x121 )
 	{
 		tQuery.m_dFilterTree.Resize ( tReq.GetInt() );
 		ARRAY_FOREACH ( i, tQuery.m_dFilterTree )
@@ -4289,7 +4275,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		}
 	}
 
-	if ( iMasterVer>=15 )
+	if ( uMasterVer>=15 )
 	{
 		tQuery.m_dItems.Resize ( tReq.GetInt() );
 		ARRAY_FOREACH ( i, tQuery.m_dItems )
@@ -4309,7 +4295,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		}
 	}
 
-	if ( iMasterVer>=16 )
+	if ( uMasterVer>=16 )
 		tQuery.m_eExpandKeywords = (QueryOption_e)tReq.GetDword();
 
 	/////////////////////
@@ -4653,8 +4639,8 @@ static void FormatOption ( const CSphQuery & tQuery, StringBuilder_c & tBuf )
 
 	if ( tQuery.m_iMaxMatches!=DEFAULT_MAX_MATCHES )
 	{
-		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
-		tBuf.Appendf ( "max_matches=%d", tQuery.m_iMaxMatches );
+		tBuf.Appendf ( " OPTION max_matches=%d", tQuery.m_iMaxMatches );
+		++iOpts;
 	}
 
 	if ( !tQuery.m_sComment.IsEmpty() )
@@ -5229,7 +5215,7 @@ static int SendMVA ( ISphOutputBuffer * pOut, const BYTE * pMVA, bool b64bit )
 }
 
 
-int CalcResultLength ( int iVer, const CSphQueryResult * pRes, bool bAgentMode, const CSphQuery & tQuery, int iMasterVer )
+int CalcResultLength ( WORD uVer, const CSphQueryResult * pRes, bool bAgentMode, const CSphQuery & tQuery, WORD uMasterVer )
 {
 	int iRespLen = 0;
 
@@ -5237,7 +5223,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, bool bAgentMode, 
 	iRespLen += 4; // status code
 
 	if ( !pRes->m_sError.IsEmpty() )
-		return iRespLen + 4 +strlen ( pRes->m_sError.cstr() );
+		return int ( iRespLen + 4 + strlen ( pRes->m_sError.cstr () ) );
 
 	if ( !pRes->m_sWarning.IsEmpty() )
 		iRespLen += 4+strlen ( pRes->m_sWarning.cstr() );
@@ -5271,8 +5257,8 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, bool bAgentMode, 
 	while ( pRes->m_hWordStats.IterateNext() ) // per-word stats
 		iRespLen += 12 + strlen ( pRes->m_hWordStats.IterateGetKey().cstr() ); // wordlen, word, docs, hits
 
-	bool bSendJson = bAgentMode && iMasterVer>=3;
-	bool bSendJsonField = bAgentMode && iMasterVer>=4;
+	bool bSendJson = bAgentMode && uMasterVer>=3;
+	bool bSendJsonField = bAgentMode && uMasterVer>=4;
 
 	for ( int iAttr=0; iAttr<iAttrsCount; iAttr++ )
 	{
@@ -5282,7 +5268,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, bool bAgentMode, 
 		for ( int i=0; i<pRes->m_iCount; i++ )
 		{
 			const CSphMatch & tMatch = pRes->m_dMatches[pRes->m_iOffset+i];
-			const BYTE * pData = (const BYTE*) tMatch.GetAttr ( tCol.m_tLocator );
+			auto * pData = (const BYTE*) tMatch.GetAttr ( tCol.m_tLocator );
 
 			switch ( tCol.m_eAttrType )
 			{
@@ -5297,7 +5283,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, bool bAgentMode, 
 
 			case SPH_ATTR_FACTORS:
 			case SPH_ATTR_FACTORS_JSON:
-				if ( iVer>=0x11C )
+				if ( uVer>=0x11C )
 					iRespLen += SendDataPtrAttr ( nullptr, pData );
 				break;
 
@@ -5315,7 +5301,7 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, bool bAgentMode, 
 		}
 	}
 
-	if ( iVer>=0x11A && bAgentMode )
+	if ( uVer>=0x11A && bAgentMode )
 	{
 		iRespLen += 1;			// stats mask
 		if ( g_bIOStats )
@@ -5329,17 +5315,17 @@ int CalcResultLength ( int iVer, const CSphQueryResult * pRes, bool bAgentMode, 
 	}
 
 	// fetched_docs and fetched_hits from agent to master
-	if ( bAgentMode && iMasterVer>=7 )
+	if ( bAgentMode && uMasterVer>=7 )
 		iRespLen += 12;
 
 	return iRespLen;
 }
 
 
-static ESphAttr FixupAttrForNetwork ( ESphAttr eAttr, int iMasterVer, bool bAgentMode )
+static ESphAttr FixupAttrForNetwork ( ESphAttr eAttr, WORD uMasterVer, bool bAgentMode )
 {
-	bool bSendJson = ( bAgentMode && iMasterVer>=3 );
-	bool bSendJsonField = ( bAgentMode && iMasterVer>=4 );
+	bool bSendJson = ( bAgentMode && uMasterVer>=3 );
+	bool bSendJsonField = ( bAgentMode && uMasterVer>=4 );
 
 	switch ( eAttr )
 	{
@@ -5365,7 +5351,7 @@ static ESphAttr FixupAttrForNetwork ( ESphAttr eAttr, int iMasterVer, bool bAgen
 }
 
 
-static void SendSchema ( ISphOutputBuffer & tOut, const CSphQueryResult & tRes, int iAttrsCount, int iMasterVer, bool bAgentMode )
+static void SendSchema ( ISphOutputBuffer & tOut, const CSphQueryResult & tRes, int iAttrsCount, WORD uMasterVer, bool bAgentMode )
 {
 	tOut.SendInt ( tRes.m_tSchema.GetFieldsCount() );
 	for ( int i=0; i < tRes.m_tSchema.GetFieldsCount(); i++ )
@@ -5377,20 +5363,20 @@ static void SendSchema ( ISphOutputBuffer & tOut, const CSphQueryResult & tRes, 
 		const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
 		tOut.SendString ( tCol.m_sName.cstr() );
 
-		ESphAttr eCol = FixupAttrForNetwork ( tCol.m_eAttrType, iMasterVer, bAgentMode );
+		ESphAttr eCol = FixupAttrForNetwork ( tCol.m_eAttrType, uMasterVer, bAgentMode );
 		tOut.SendDword ( (DWORD)eCol );
 	}
 }
 
 
-static void SendAttribute ( ISphOutputBuffer & tOut, const CSphMatch & tMatch, const CSphColumnInfo & tAttr, int iVer, int iMasterVer, bool bAgentMode )
+static void SendAttribute ( ISphOutputBuffer & tOut, const CSphMatch & tMatch, const CSphColumnInfo & tAttr, int iVer, WORD uMasterVer, bool bAgentMode )
 {
 	// at this point we should not have any attributes that point to pooled data
 	assert ( sphPlainAttrToPtrAttr(tAttr.m_eAttrType)==tAttr.m_eAttrType );
 
 	// send binary json only to master
-	bool bSendJson = bAgentMode && iMasterVer>=3;
-	bool bSendJsonField = bAgentMode && iMasterVer>=4;
+	bool bSendJson = bAgentMode && uMasterVer>=3;
+	bool bSendJsonField = bAgentMode && uMasterVer>=4;
 
 	const CSphAttrLocator & tLoc = tAttr.m_tLocator;
 	
@@ -5437,7 +5423,7 @@ static void SendAttribute ( ISphOutputBuffer & tOut, const CSphMatch & tMatch, c
 }
 
 
-void SendResult ( int iVer, ISphOutputBuffer & tOut, const CSphQueryResult * pRes, bool bAgentMode, const CSphQuery & tQuery, int iMasterVer )
+void SendResult ( int iVer, ISphOutputBuffer & tOut, const CSphQueryResult * pRes, bool bAgentMode, const CSphQuery & tQuery, WORD uMasterVer )
 {
 	// multi-query status
 	bool bError = !pRes->m_sError.IsEmpty();
@@ -5453,17 +5439,17 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const CSphQueryResult * pRe
 
 	} else if ( bWarning )
 	{
-		tOut.SendInt ( SEARCHD_WARNING );
+		tOut.SendDword ( SEARCHD_WARNING );
 		tOut.SendString ( pRes->m_sWarning.cstr() );
 		if ( g_bOptNoDetach && g_eLogFormat!=LOG_FORMAT_SPHINXQL )
 			sphInfo ( "query warning: %s", pRes->m_sWarning.cstr() );
 	} else
-		tOut.SendInt ( SEARCHD_OK );
+		tOut.SendDword ( SEARCHD_OK );
 
 	int iAttrsCount = sphSendGetAttrCount ( pRes->m_tSchema, bAgentMode );
 
 	// send schema
-	SendSchema ( tOut, *pRes, iAttrsCount, iMasterVer, bAgentMode );
+	SendSchema ( tOut, *pRes, iAttrsCount, uMasterVer, bAgentMode );
 
 	// send matches
 	tOut.SendInt ( pRes->m_iCount );
@@ -5488,7 +5474,7 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const CSphQueryResult * pRe
 		assert ( !tMatch.m_pDynamic || (int)tMatch.m_pDynamic[-1]==pRes->m_tSchema.GetDynamicSize() );
 #endif
 		for ( int j=0; j<iAttrsCount; j++ )
-			SendAttribute ( tOut, tMatch, pRes->m_tSchema.GetAttr(j), iVer, iMasterVer, bAgentMode );
+			SendAttribute ( tOut, tMatch, pRes->m_tSchema.GetAttr(j), iVer, uMasterVer, bAgentMode );
 	}
 
 	if ( tQuery.m_bAgent && tQuery.m_iLimit )
@@ -5527,11 +5513,11 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const CSphQueryResult * pRe
 		if ( bNeedPredictedTime )
 			tOut.SendUint64 ( pRes->m_iPredictedTime+pRes->m_iAgentPredictedTime );
 	}
-	if ( bAgentMode && iMasterVer>=7 )
+	if ( bAgentMode && uMasterVer>=7 )
 	{
 		tOut.SendDword ( pRes->m_tStats.m_iFetchedDocs + pRes->m_iAgentFetchedDocs );
 		tOut.SendDword ( pRes->m_tStats.m_iFetchedHits + pRes->m_iAgentFetchedHits );
-		if ( iMasterVer>=8 )
+		if ( uMasterVer>=8 )
 			tOut.SendDword ( pRes->m_tStats.m_iSkips + pRes->m_iAgentFetchedSkips );
 	}
 
@@ -6024,7 +6010,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 
 	// build the final schemas!
 	// ???
-	CSphVector<CSphColumnInfo> dFrontend ( tItems.GetLength() );
+	CSphVector<CSphColumnInfo> dFrontend { tItems.GetLength() };
 
 	// track select items that made it into the internal schema
 	CSphVector<int> dKnownItems;
@@ -6518,8 +6504,8 @@ static bool SnippetTransformPassageMacros ( CSphString & sSrc, CSphString & sPos
 struct Expr_Snippet_c : public ISphStringExpr
 {
 	ISphExpr *					m_pArgs;
-	ISphExpr *					m_pText;
-	const BYTE *				m_sWords;
+	ISphExpr *					m_pText = nullptr;
+	const BYTE *				m_sWords = nullptr;
 	CSphIndex *					m_pIndex;
 	SnippetContext_t			m_tCtx;
 	mutable ExcerptQuery_t		m_tHighlight;
@@ -6527,8 +6513,6 @@ struct Expr_Snippet_c : public ISphStringExpr
 
 	explicit Expr_Snippet_c ( ISphExpr * pArglist, CSphIndex * pIndex, CSphQueryProfile * pProfiler, CSphString & sError )
 		: m_pArgs ( pArglist )
-		, m_pText ( NULL )
-		, m_sWords ( NULL )
 		, m_pIndex ( pIndex )
 		, m_pProfiler ( pProfiler )
 	{
@@ -6622,7 +6606,7 @@ struct Expr_Snippet_c : public ISphStringExpr
 		SafeRelease ( m_pArgs );
 	}
 
-	virtual int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const
+	int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const override
 	{
 		CSphScopedProfile ( m_pProfiler, SPH_QSTATE_SNIPPET );
 
@@ -6662,13 +6646,13 @@ struct Expr_Snippet_c : public ISphStringExpr
 			return PackSnippets ( m_tHighlight.m_dRes, m_tHighlight.m_dSeparators, m_tHighlight.m_sChunkSeparator.Length(), ppStr );
 	}
 
-	virtual void FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override
+	void FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override
 	{
 		if ( m_pText )
 			m_pText->FixupLocator ( pOldSchema, pNewSchema );
 	}
 
-	virtual void Command ( ESphExprCommand eCmd, void * pArg )
+	void Command ( ESphExprCommand eCmd, void * pArg ) override
 	{
 		if ( eCmd!=SPH_EXPR_SET_STRING_POOL )
 			return;
@@ -6679,7 +6663,7 @@ struct Expr_Snippet_c : public ISphStringExpr
 			m_pText->Command ( SPH_EXPR_SET_STRING_POOL, pArg );
 	}
 
-	virtual uint64_t GetHash ( const ISphSchema &, uint64_t, bool & )
+	uint64_t GetHash ( const ISphSchema &, uint64_t, bool & ) override
 	{
 		assert ( 0 && "no snippets in filters" );
 		return 0;
@@ -6767,29 +6751,18 @@ struct LocalIndex_t
 {
 	CSphString	m_sName;
 	CSphString	m_sParentIndex;
-	int			m_iOrderTag;
-	int			m_iWeight;
-	int64_t		m_iMass;
-	bool		m_bKillBreak;
-	LocalIndex_t ()
-		: m_iOrderTag ( 0 )
-		, m_iWeight ( 1 )
-		, m_bKillBreak ( false )
-	{ }
+	int			m_iOrderTag = 0;
+	int			m_iWeight = 1;
+	int64_t		m_iMass = 0;
+	bool		m_bKillBreak = false;
 };
 
 
 struct QueryStatPerIndex_t
 {
-	uint64_t	m_uQueryTime;
-	uint64_t	m_uFoundRows;
-	int			m_iSuccesses;
-
-	QueryStatPerIndex_t()
-		: m_uQueryTime ( 0 )
-		, m_uFoundRows ( 0 )
-		, m_iSuccesses ( 0 )
-	{}
+	uint64_t	m_uQueryTime = 0;
+	uint64_t	m_uFoundRows = 0;
+	int			m_iSuccesses = 0;
 };
 
 
@@ -6814,15 +6787,15 @@ class SearchHandler_c : public ISphSearchHandler
 
 public:
 									SearchHandler_c ( int iQueries, const QueryParser_i * pParser, bool bSphinxQL, bool bMaster, int iCID );
-	virtual							~SearchHandler_c();
+									~SearchHandler_c() override;
 	void							RunQueries () override;					///< run all queries, get all results
 	void							RunUpdates ( const CSphQuery & tQuery, const CSphString & sIndex, ServedIndex_c * pLocked, CSphAttrUpdateEx * pUpdates ); ///< run Update command instead of Search
 	void							RunDeletes ( const CSphQuery & tQuery, const CSphString & sIndex, ServedIndex_c * pLocked, CSphString * pErrors, CSphVector<SphDocID_t>* ); ///< run Delete command instead of Search
 
-	virtual void					SetQuery ( int iQuery, const CSphQuery & tQuery ) override;
+	void							SetQuery ( int iQuery, const CSphQuery & tQuery ) override;
 	void							SetProfile ( CSphQueryProfile * pProfile ) override;
 	virtual CSphQuery &				GetQuery ( int iQuery ) { return m_dQueries[iQuery]; }
-	AggrResult_t *					GetResult ( int iResult )  override { return m_dResults.Begin() + iResult; }
+	AggrResult_t *					GetResult ( int iResult ) override { return m_dResults.Begin() + iResult; }
 
 public:
 	CSphVector<CSphQuery>			m_dQueries;						///< queries which i need to search
@@ -7170,25 +7143,18 @@ struct LocalSearch_t
 
 struct LocalSearchThreadContext_t
 {
-	SphThread_t					m_tThd;
-	SearchHandler_c *			m_pHandler;
+	SphThread_t					m_tThd {0};
+	SearchHandler_c *			m_pHandler = nullptr;
 	CrashQuery_t				m_tCrashQuery;
-	int							m_iSearches;
-	LocalSearch_t *				m_pSearches;
-	CSphAtomic *				m_pCurSearch;
-
-	LocalSearchThreadContext_t()
-		: m_pHandler ( NULL )
-		, m_iSearches ( 0 )
-		, m_pSearches ( NULL )
-		, m_pCurSearch ( NULL )
-	{}
+	int							m_iSearches = 0;
+	LocalSearch_t *				m_pSearches = nullptr;
+	CSphAtomic *				m_pCurSearch = nullptr;
 };
 
 
 void LocalSearchThreadFunc ( void * pArg )
 {
-	LocalSearchThreadContext_t * pContext = (LocalSearchThreadContext_t*) pArg;
+	auto * pContext = (LocalSearchThreadContext_t*) pArg;
 
 	SphCrashLogger_c::SetLastQuery ( pContext->m_tCrashQuery );
 
@@ -8724,57 +8690,57 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 }
 
 
-bool CheckCommandVersion ( int iVer, int iDaemonVersion, ISphOutputBuffer & tOut )
+bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, ISphOutputBuffer & tOut )
 {
-	if ( (iVer>>8)!=(iDaemonVersion>>8) )
+	if ( ( uVer>>8)!=( uDaemonVersion>>8) )
 	{
 		SendErrorReply ( tOut, "major command version mismatch (expected v.%d.x, got v.%d.%d)",
-			iDaemonVersion>>8, iVer>>8, iVer&0xff );
+			uDaemonVersion>>8, uVer>>8, uVer&0xff );
 		return false;
 	}
-	if ( iVer>iDaemonVersion )
+	if ( uVer>uDaemonVersion )
 	{
 		SendErrorReply ( tOut, "client version is higher than daemon version (client is v.%d.%d, daemon is v.%d.%d)",
-			iVer>>8, iVer&0xff, iDaemonVersion>>8, iDaemonVersion&0xff );
+			uVer>>8, uVer&0xff, uDaemonVersion>>8, uDaemonVersion&0xff );
 		return false;
 	}
 	return true;
 }
 
 
-void SendSearchResponse ( SearchHandler_c & tHandler, ISphOutputBuffer & tOut, int iVer, int iMasterVer )
+void SendSearchResponse ( SearchHandler_c & tHandler, ISphOutputBuffer & tOut, WORD uVer, WORD uMasterVer )
 {
 	// serve the response
 	int iReplyLen = 0;
-	bool bAgentMode = ( iMasterVer>0 );
+	bool bAgentMode = ( uMasterVer>0 );
 
 	ARRAY_FOREACH ( i, tHandler.m_dQueries )
-		iReplyLen += CalcResultLength ( iVer, &tHandler.m_dResults[i], bAgentMode, tHandler.m_dQueries[i], iMasterVer );
+		iReplyLen += CalcResultLength ( uVer, &tHandler.m_dResults[i], bAgentMode, tHandler.m_dQueries[i], uMasterVer );
 
 	// send it
-	tOut.SendWord ( (WORD)SEARCHD_OK );
+	tOut.SendWord ( SEARCHD_OK );
 	tOut.SendWord ( VER_COMMAND_SEARCH );
 	tOut.SendInt ( iReplyLen );
 
 	ARRAY_FOREACH ( i, tHandler.m_dQueries )
-		SendResult ( iVer, tOut, &tHandler.m_dResults[i], bAgentMode, tHandler.m_dQueries[i], iMasterVer );
+		SendResult ( uVer, tOut, &tHandler.m_dResults[i], bAgentMode, tHandler.m_dQueries[i], uMasterVer );
 
 	tOut.Flush ();
-	assert ( tOut.GetError()==true || tOut.GetSentCount()==iReplyLen+8 );
+	assert ( tOut.GetError() || tOut.GetSentCount()==iReplyLen+8 );
 }
 
 
-void HandleCommandSearch ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tReq, ThdDesc_t * pThd )
+void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq, ThdDesc_t * pThd )
 {
 	MEMORY ( MEM_API_SEARCH );
 
-	if ( !CheckCommandVersion ( iVer, VER_COMMAND_SEARCH, tOut ) )
+	if ( !CheckCommandVersion ( uVer, VER_COMMAND_SEARCH, tOut ) )
 		return;
 
-	const int MIN_VERSION = 0x119;
-	if ( iVer<MIN_VERSION )
+	const WORD MIN_VERSION = 0x119;
+	if ( uVer<MIN_VERSION )
 	{
-		SendErrorReply ( tOut, "client version is too old; upgrade your client (client is v.%d.%d, min is v.%d.%d)", iVer>>8, iVer&0xff, MIN_VERSION>>8, MIN_VERSION&0xff );
+		SendErrorReply ( tOut, "client version is too old; upgrade your client (client is v.%d.%d, min is v.%d.%d)", uVer>>8, uVer&0xff, MIN_VERSION>>8, MIN_VERSION&0xff );
 		return;
 	}
 
@@ -8784,6 +8750,7 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 		SendErrorReply ( tOut, "master-agent version mismatch; update me first, then update master!" );
 		return;
 	}
+	WORD uMasterVer { WORD (iMasterVer) };
 
 	// parse request
 	int iQueries = tReq.GetDword ();
@@ -8797,7 +8764,7 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 	assert ( pThd );
 	SearchHandler_c tHandler ( iQueries, sphCreatePlainQueryParser(), false, ( iMasterVer==0 ), pThd->m_iConnID );
 	ARRAY_FOREACH ( i, tHandler.m_dQueries )
-		if ( !ParseSearchQuery ( tReq, tOut, tHandler.m_dQueries[i], iVer, iMasterVer ) )
+		if ( !ParseSearchQuery ( tReq, tOut, tHandler.m_dQueries[i], uVer, uMasterVer ) )
 			return;
 
 	if ( tHandler.m_dQueries.GetLength() )
@@ -8808,7 +8775,7 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 
 	// run queries, send response
 	tHandler.RunQueries();
-	SendSearchResponse ( tHandler, tOut, iVer, iMasterVer );
+	SendSearchResponse ( tHandler, tOut, uVer, uMasterVer );
 
 	int64_t iTotalPredictedTime = 0;
 	int64_t iTotalAgentPredictedTime = 0;
@@ -8984,36 +8951,20 @@ STATIC_ASSERT ( sizeof(g_dSqlStmts)/sizeof(g_dSqlStmts[0])==STMT_TOTAL, STMT_DES
 /// CAUTION, nodes get copied in the parser all the time, must keep assignment slim
 struct SqlNode_t
 {
-	int						m_iStart;	///< first byte relative to m_pBuf, inclusive
-	int						m_iEnd;		///< last byte relative to m_pBuf, exclusive! thus length = end - start
-	int64_t					m_iValue;
-	int						m_iType;	///< TOK_xxx type for insert values; SPHINXQL_TOK_xxx code for special idents
-	float					m_fValue;
-	AttrValues_p			m_pValues;	///< filter values vector (FIXME? replace with numeric handles into parser state?)
-	int						m_iParsedOp;
+	int						m_iStart = 0;	///< first byte relative to m_pBuf, inclusive
+	int						m_iEnd = 0;		///< last byte relative to m_pBuf, exclusive! thus length = end - start
+	int64_t					m_iValue = 0;
+	int						m_iType = 0;	///< TOK_xxx type for insert values; SPHINXQL_TOK_xxx code for special idents
+	float					m_fValue = 0.0;
+	AttrValues_p			m_pValues { nullptr };	///< filter values vector (FIXME? replace with numeric handles into parser state?)
+	int						m_iParsedOp = -1;
 
-	SqlNode_t()
-		: m_iValue ( 0 )
-		, m_iType ( 0 )
-		, m_pValues ( NULL )
-		, m_iParsedOp ( -1 )
-	{}
+	SqlNode_t() = default;
+
 };
 #define YYSTYPE SqlNode_t
 
 SqlStmt_t::SqlStmt_t ()
-	: m_eStmt ( STMT_PARSE_ERROR )
-	, m_iRowsAffected ( 0 )
-	, m_sStmt ( NULL )
-	, m_iSchemaSz ( 0 )
-	, m_eSet ( SET_LOCAL )
-	, m_iSetValue ( 0 )
-	, m_bSetNull ( false )
-	, m_iListStart ( -1 )
-	, m_iListEnd ( -1 )
-	, m_eUdfType ( SPH_ATTR_NONE )
-	, m_iThreadsCols ( 0 )
-	, m_iIntParam ( -1 )
 {
 	m_tQuery.m_eMode = SPH_MATCH_EXTENDED2; // only new and shiny matching and sorting
 	m_tQuery.m_eSort = SPH_SORT_EXTENDED;
@@ -9059,20 +9010,20 @@ enum
 struct SqlParser_c : ISphNoncopyable
 {
 public:
-	void *			m_pScanner;
-	const char *	m_pBuf;
-	const char *	m_pLastTokenStart;
-	CSphString *	m_pParseError;
-	CSphQuery *		m_pQuery;
+	void *			m_pScanner = nullptr;
+	const char *	m_pBuf = nullptr;
+	const char *	m_pLastTokenStart = nullptr;
+	CSphString *	m_pParseError = nullptr;
+	CSphQuery *		m_pQuery = nullptr;
 	bool			m_bGotQuery;
-	SqlStmt_t *		m_pStmt;
+	SqlStmt_t *		m_pStmt = nullptr;
 	CSphVector<SqlStmt_t> & m_dStmt;
 	ESphCollation	m_eCollation;
-	BYTE			m_uSyntaxFlags;
+	BYTE			m_uSyntaxFlags = 0;
 
 	CSphVector<FilterTreeItem_t> m_dFilterTree;
 	CSphVector<int>				m_dFiltersPerStmt;
-	bool						m_bGotFilterOr;
+	bool						m_bGotFilterOr = false;
 
 public:
 	explicit		SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollation );
@@ -9187,7 +9138,7 @@ private:
 	void						GenericStatement ( SqlNode_t * pNode, SqlStmt_e iStmt );
 
 protected:
-	bool						m_bNamedVecBusy;
+	bool						m_bNamedVecBusy = false;
 	CSphVector<CSphNamedInt>	m_dNamedVec;
 };
 
@@ -9371,13 +9322,8 @@ public:
 };
 
 SqlParser_c::SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollation )
-	: m_pQuery ( NULL )
-	, m_pStmt ( NULL )
-	, m_dStmt ( dStmt )
+	: m_dStmt ( dStmt )
 	, m_eCollation ( eCollation )
-	, m_uSyntaxFlags ( 0 )
-	, m_bGotFilterOr ( false )
-	, m_bNamedVecBusy ( false )
 {
 	assert ( !m_dStmt.GetLength() );
 	PushQuery ();
@@ -9388,7 +9334,7 @@ void SqlParser_c::PushQuery ()
 	assert ( m_dStmt.GetLength() || ( !m_pQuery && !m_pStmt ) );
 
 	// post set proper result-set order
-	if ( m_dStmt.GetLength() )
+	if ( m_dStmt.GetLength() && m_pQuery )
 	{
 		if ( m_pQuery->m_sGroupBy.IsEmpty() )
 			m_pQuery->m_sSortBy = m_pQuery->m_sOrderBy;
@@ -10392,21 +10338,13 @@ struct SnippetsRemote_t : ISphNoncopyable
 
 struct SnippetThread_t
 {
-	SphThread_t					m_tThd;
-	CSphMutex *					m_pLock;
-	int							m_iQueries;
-	ExcerptQuery_t *			m_pQueries;
-	volatile int *				m_pCurQuery;
-	CSphIndex *					m_pIndex;
+	SphThread_t					m_tThd {0};
+	CSphMutex *					m_pLock = nullptr;
+	int							m_iQueries = 0;
+	ExcerptQuery_t *			m_pQueries = nullptr;
+	volatile int *				m_pCurQuery = nullptr;
+	CSphIndex *					m_pIndex = nullptr;
 	CrashQuery_t				m_tCrashQuery;
-
-	SnippetThread_t()
-		: m_pLock ( NULL )
-		, m_iQueries ( 0 )
-		, m_pQueries ( NULL )
-		, m_pCurQuery ( NULL )
-		, m_pIndex ( NULL )
-	{}
 };
 
 
@@ -10956,12 +10894,12 @@ void HandleCommandExcerpt ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & t
 		return;
 	}
 
-	CSphVector<ExcerptQuery_t> dQueries ( iCount );
+	CSphVector<ExcerptQuery_t> dQueries { iCount };
 
-	ARRAY_FOREACH ( i, dQueries )
+	for ( auto & dQuery : dQueries )
 	{
-		dQueries[i] = q; // copy settings
-		dQueries[i].m_sSource = tReq.GetString (); // fetch data
+		dQuery = q; // copy settings
+		dQuery.m_sSource = tReq.GetString (); // fetch data
 		if ( tReq.GetError() )
 		{
 			SendErrorReply ( tOut, "invalid or truncated request" );
@@ -11016,16 +10954,16 @@ void HandleCommandExcerpt ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & t
 // KEYWORDS HANDLER
 /////////////////////////////////////////////////////////////////////////////
 
-void HandleCommandKeywords ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tReq )
+void HandleCommandKeywords ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq )
 {
-	if ( !CheckCommandVersion ( iVer, VER_COMMAND_KEYWORDS, tOut ) )
+	if ( !CheckCommandVersion ( uVer, VER_COMMAND_KEYWORDS, tOut ) )
 		return;
 
 	GetKeywordsSettings_t tSettings;
 	CSphString sQuery = tReq.GetString ();
 	CSphString sIndex = tReq.GetString ();
 	tSettings.m_bStats = !!tReq.GetInt ();
-	if ( iVer>=0x101 )
+	if ( uVer>=0x101 )
 	{
 		tSettings.m_bFoldLemmas = !!tReq.GetInt ();
 		tSettings.m_bFoldBlended = !!tReq.GetInt ();
@@ -11060,7 +10998,7 @@ void HandleCommandKeywords ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & 
 	{
 		iRespLen += 4 + strlen ( dKeywords[i].m_sTokenized.cstr () );
 		iRespLen += 4 + strlen ( dKeywords[i].m_sNormalized.cstr () );
-		if ( iVer>=0x101 )
+		if ( uVer>=0x101 )
 			iRespLen += 4;
 		if ( tSettings.m_bStats )
 			iRespLen += 8;
@@ -11074,7 +11012,7 @@ void HandleCommandKeywords ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & 
 	{
 		tOut.SendString ( dKeywords[i].m_sTokenized.cstr () );
 		tOut.SendString ( dKeywords[i].m_sNormalized.cstr () );
-		if ( iVer>=0x101 )
+		if ( uVer>=0x101 )
 			tOut.SendInt ( dKeywords[i].m_iQpos );
 		if ( tSettings.m_bStats )
 		{
@@ -12006,9 +11944,9 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 }
 
 
-void HandleCommandStatus ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tReq )
+void HandleCommandStatus ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq )
 {
-	if ( !CheckCommandVersion ( iVer, VER_COMMAND_STATUS, tOut ) )
+	if ( !CheckCommandVersion ( uVer, VER_COMMAND_STATUS, tOut ) )
 		return;
 
 	bool bGlobalStat = tReq.GetDword ()!=0;
@@ -12069,9 +12007,9 @@ static int CommandFlush ()
 	return g_tFlush.m_iFlushTag;
 }
 
-void HandleCommandFlush ( ISphOutputBuffer & tOut, int iVer )
+void HandleCommandFlush ( ISphOutputBuffer & tOut, WORD uVer )
 {
-	if ( !CheckCommandVersion ( iVer, VER_COMMAND_FLUSHATTRS, tOut ) )
+	if ( !CheckCommandVersion ( uVer, VER_COMMAND_FLUSHATTRS, tOut ) )
 		return;
 
 	int iTag = CommandFlush ();
@@ -12101,14 +12039,14 @@ void HandleCommandFlush ( ISphOutputBuffer & tOut, int iVer )
 	ENABLE_CONST_COND_CHECK \
 }
 
-void HandleCommandSphinxql ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tReq, ThdDesc_t * pThd ); // definition is below
-void StatCountCommand ( int iCmd );
-void HandleCommandUserVar ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tReq );
+void HandleCommandSphinxql ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq, ThdDesc_t * pThd ); // definition is below
+void StatCountCommand ( SearchdCommand_e eCmd );
+void HandleCommandUserVar ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
 
 /// ping/pong exchange over API
-void HandleCommandPing ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tReq )
+void HandleCommandPing ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq )
 {
-	if ( !CheckCommandVersion ( iVer, VER_COMMAND_PING, tOut ) )
+	if ( !CheckCommandVersion ( uVer, VER_COMMAND_PING, tOut ) )
 		return;
 
 	// parse ping
@@ -12123,7 +12061,7 @@ void HandleCommandPing ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tReq
 	assert ( tOut.GetError()==true || tOut.GetSentCount()==12 ); // 8+resplen
 }
 
-static bool LoopClientSphinx ( int iCommand, int iCommandVer, int iLength, const char * sClientIP, int64_t iCID, ThdDesc_t * pThd, InputBuffer_c & tBuf, ISphOutputBuffer & tOut, bool bManagePersist );
+static bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength, const char * sClientIP, int64_t iCID, ThdDesc_t * pThd, InputBuffer_c & tBuf, ISphOutputBuffer & tOut, bool bManagePersist );
 
 static void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd )
 {
@@ -12213,8 +12151,8 @@ static void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * 
 		// okay, signal related mess should be over, try to parse the command
 		// (but some other socket error still might had happened, so beware)
 		THD_STATE ( THD_NET_READ );
-		int iCommand = tBuf.GetWord ();
-		int iCommandVer = tBuf.GetWord ();
+		auto eCommand = ( SearchdCommand_e ) tBuf.GetWord ();
+		WORD uCommandVer = tBuf.GetWord ();
 		int iLength = tBuf.GetInt ();
 		if ( tBuf.GetError() )
 		{
@@ -12227,18 +12165,18 @@ static void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * 
 		}
 
 		// check request
-		if ( iCommand<0 || iCommand>=SEARCHD_COMMAND_TOTAL || iLength<0 || iLength>g_iMaxPacketSize )
+		if ( eCommand>=SEARCHD_COMMAND_WRONG || iLength<0 || iLength>g_iMaxPacketSize )
 		{
 			// unknown command, default response header
-			SendErrorReply ( tOut, "invalid command (code=%d, len=%d)", iCommand, iLength );
+			SendErrorReply ( tOut, "invalid command (code=%d, len=%d)", eCommand, iLength );
 
 			// if request length is insane, low level comm is broken, so we bail out
 			if ( iLength<0 || iLength>g_iMaxPacketSize )
 				sphWarning ( "ill-formed client request (length=%d out of bounds)", iLength );
 
 			// if command is insane, low level comm is broken, so we bail out
-			if ( iCommand<0 || iCommand>=SEARCHD_COMMAND_TOTAL )
-				sphWarning ( "ill-formed client request (command=%d, SEARCHD_COMMAND_TOTAL=%d)", iCommand, SEARCHD_COMMAND_TOTAL );
+			if ( eCommand>=SEARCHD_COMMAND_WRONG )
+				sphWarning ( "ill-formed client request (command=%d, SEARCHD_COMMAND_TOTAL=%d)", eCommand, SEARCHD_COMMAND_TOTAL );
 
 			break;
 		}
@@ -12251,7 +12189,7 @@ static void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * 
 			break;
 		}
 
-		bPersist |= LoopClientSphinx ( iCommand, iCommandVer, iLength, sClientIP, iCID, pThd, tBuf, tOut, true );
+		bPersist |= LoopClientSphinx ( eCommand, uCommandVer, iLength, sClientIP, iCID, pThd, tBuf, tOut, true );
 	} while ( bPersist );
 
 	if ( bPersist )
@@ -12261,34 +12199,34 @@ static void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * 
 }
 
 
-bool LoopClientSphinx ( int iCommand, int iCommandVer, int iLength, const char * sClientIP, int64_t iCID, ThdDesc_t * pThd, InputBuffer_c & tBuf, ISphOutputBuffer & tOut, bool bManagePersist )
+bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength, const char * sClientIP, int64_t iCID, ThdDesc_t * pThd, InputBuffer_c & tBuf, ISphOutputBuffer & tOut, bool bManagePersist )
 {
 	// set on query guard
 	CrashQuery_t tCrashQuery;
 	tCrashQuery.m_pQuery = tBuf.GetBufferPtr();
 	tCrashQuery.m_iSize = iLength;
 	tCrashQuery.m_bMySQL = false;
-	tCrashQuery.m_uCMD = (WORD)iCommand;
-	tCrashQuery.m_uVer = (WORD)iCommandVer;
+	tCrashQuery.m_uCMD = eCommand;
+	tCrashQuery.m_uVer = uCommandVer;
 	SphCrashLogger_c::SetLastQuery ( tCrashQuery );
 
 	// handle known commands
-	assert ( iCommand>=0 && iCommand<SEARCHD_COMMAND_TOTAL );
+	assert ( eCommand<SEARCHD_COMMAND_WRONG );
 
 	// count commands
-	StatCountCommand ( iCommand );
+	StatCountCommand ( eCommand );
 
-	pThd->m_sCommand = g_dApiCommands[iCommand];
+	pThd->m_sCommand = g_dApiCommands[eCommand];
 	THD_STATE ( THD_QUERY );
 
 	bool bPersist = false;
-	sphLogDebugv ( "conn %s(" INT64_FMT "): got command %d, handling", sClientIP, iCID, iCommand );
-	switch ( iCommand )
+	sphLogDebugv ( "conn %s(" INT64_FMT "): got command %d, handling", sClientIP, iCID, eCommand );
+	switch ( eCommand )
 	{
-		case SEARCHD_COMMAND_SEARCH:	HandleCommandSearch ( tOut, iCommandVer, tBuf, pThd ); break;
-		case SEARCHD_COMMAND_EXCERPT:	HandleCommandExcerpt ( tOut, iCommandVer, tBuf, pThd ); break;
-		case SEARCHD_COMMAND_KEYWORDS:	HandleCommandKeywords ( tOut, iCommandVer, tBuf ); break;
-		case SEARCHD_COMMAND_UPDATE:	HandleCommandUpdate ( tOut, iCommandVer, tBuf ); break;
+		case SEARCHD_COMMAND_SEARCH:	HandleCommandSearch ( tOut, uCommandVer, tBuf, pThd ); break;
+		case SEARCHD_COMMAND_EXCERPT:	HandleCommandExcerpt ( tOut, uCommandVer, tBuf, pThd ); break;
+		case SEARCHD_COMMAND_KEYWORDS:	HandleCommandKeywords ( tOut, uCommandVer, tBuf ); break;
+		case SEARCHD_COMMAND_UPDATE:	HandleCommandUpdate ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_PERSIST:
 			{
 				bPersist = ( tBuf.GetInt()!=0 );
@@ -12309,11 +12247,11 @@ bool LoopClientSphinx ( int iCommand, int iCommandVer, int iLength, const char *
 				}
 			}
 			break;
-		case SEARCHD_COMMAND_STATUS:	HandleCommandStatus ( tOut, iCommandVer, tBuf ); break;
-		case SEARCHD_COMMAND_FLUSHATTRS:HandleCommandFlush ( tOut, iCommandVer ); break;
-		case SEARCHD_COMMAND_SPHINXQL:	HandleCommandSphinxql ( tOut, iCommandVer, tBuf, pThd ); break;
-		case SEARCHD_COMMAND_PING:		HandleCommandPing ( tOut, iCommandVer, tBuf ); break;
-		case SEARCHD_COMMAND_UVAR:		HandleCommandUserVar ( tOut, iCommandVer, tBuf ); break;
+		case SEARCHD_COMMAND_STATUS:	HandleCommandStatus ( tOut, uCommandVer, tBuf ); break;
+		case SEARCHD_COMMAND_FLUSHATTRS:HandleCommandFlush ( tOut, uCommandVer ); break;
+		case SEARCHD_COMMAND_SPHINXQL:	HandleCommandSphinxql ( tOut, uCommandVer, tBuf, pThd ); break;
+		case SEARCHD_COMMAND_PING:		HandleCommandPing ( tOut, uCommandVer, tBuf ); break;
+		case SEARCHD_COMMAND_UVAR:		HandleCommandUserVar ( tOut, uCommandVer, tBuf ); break;
 		default:						assert ( 0 && "INTERNAL ERROR: unhandled command" ); break;
 	}
 
@@ -14245,7 +14183,7 @@ static void PingThreadFunc ( void * )
 	{
 		// check if we have work to do
 		int64_t iNow = sphMicroTimer();
-		if ( ( iNow-iLastCheck )<g_iPingInterval*1000 )
+		if ( ( iNow-iLastCheck )<g_iPingInterval*1000LL )
 		{
 			sphSleepMsec ( 50 );
 			continue;
@@ -14562,9 +14500,9 @@ static bool SendUserVar ( const char * sIndex, const char * sUserVarName, CSphVe
 }
 
 
-void HandleCommandUserVar ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tReq )
+void HandleCommandUserVar ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq )
 {
-	if ( !CheckCommandVersion ( iVer, VER_COMMAND_UVAR, tOut ) )
+	if ( !CheckCommandVersion ( uVer, VER_COMMAND_UVAR, tOut ) )
 		return;
 
 	CSphString sUserVar = tReq.GetString();
@@ -16577,7 +16515,10 @@ void HandleMysqlShowProfile ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p,
 		tOut.PutString ( dStates[i] );
 		tOut.PutString ( sTime );
 		tOut.PutNumeric ( "%d", p.m_dSwitches[i] );
-		tOut.PutNumeric ( "%.2f", 100.0f * p.m_tmTotal[i]/tmTotal );
+		if ( tmTotal )
+			tOut.PutNumeric ( "%.2f", 100.0f * p.m_tmTotal[i]/tmTotal );
+		else
+			tOut.PutString ( "INF" );
 		tOut.Commit();
 	}
 	snprintf ( sTime, sizeof(sTime), "%d.%06d", int(tmTotal/1000000), int(tmTotal%1000000) );
@@ -17310,9 +17251,9 @@ public:
 
 
 /// sphinxql command over API
-void HandleCommandSphinxql ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tReq, ThdDesc_t * pThd )
+void HandleCommandSphinxql ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq, ThdDesc_t * pThd )
 {
-	if ( !CheckCommandVersion ( iVer, VER_COMMAND_SPHINXQL, tOut ) )
+	if ( !CheckCommandVersion ( uVer, VER_COMMAND_SPHINXQL, tOut ) )
 		return;
 
 	// parse request
@@ -17335,10 +17276,10 @@ void HandleCommandSphinxql ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & 
 }
 
 
-void StatCountCommand ( int iCmd )
+void StatCountCommand ( SearchdCommand_e eCmd )
 {
-	if ( iCmd>=0 && iCmd<SEARCHD_COMMAND_TOTAL )
-		g_tStats.m_iCommandCount[iCmd]++;
+	if ( eCmd<SEARCHD_COMMAND_TOTAL )
+		++g_tStats.m_iCommandCount[eCmd];
 }
 
 static bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString & sQuery, int iPacketLen, bool bProfile, ThdDesc_t * pThd, InputBuffer_c & tIn, ISphOutputBuffer & tOut );
@@ -18942,20 +18883,18 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 
 bool CheckConfigChanges ()
 {
-	struct stat tStat;
-	memset ( &tStat, 0, sizeof ( tStat ) );
-	if ( stat ( g_sConfigFile.cstr (), &tStat ) < 0 )
-		memset ( &tStat, 0, sizeof ( tStat ) );
-
 	DWORD uCRC32 = 0;
+	struct stat tStat = {0};
 
 #if !USE_WINDOWS
 	char sBuf [ 8192 ];
-	FILE * fp = NULL;
+	FILE * fp = nullptr;
 
 	fp = fopen ( g_sConfigFile.cstr (), "rb" );
 	if ( !fp )
 		return true;
+	if ( fstat ( fileno ( fp ), &tStat )<0 )
+		memset ( &tStat, 0, sizeof ( tStat ) );
 	bool bGotLine = fgets ( sBuf, sizeof(sBuf), fp );
 	fclose ( fp );
 	if ( !bGotLine )
@@ -18978,6 +18917,8 @@ bool CheckConfigChanges ()
 		sphCalcFileCRC32 ( g_sConfigFile.cstr (), uCRC32 );
 #else
 	sphCalcFileCRC32 ( g_sConfigFile.cstr (), uCRC32 );
+	if ( stat ( g_sConfigFile.cstr (), &tStat )<0 )
+		memset ( &tStat, 0, sizeof ( tStat ) );
 #endif
 
 	if ( g_uCfgCRC32==uCRC32 && tStat.st_size==g_tCfgStat.st_size
@@ -20097,7 +20038,11 @@ static const int g_iSphinxQLMaxedOutLen = 27;
 
 void MysqlMaxedOut ( int iSock )
 {
-	sphSockSend ( iSock, g_dSphinxQLMaxedOutPacket, g_iSphinxQLMaxedOutLen );
+	if ( sphSockSend ( iSock, g_dSphinxQLMaxedOutPacket, g_iSphinxQLMaxedOutLen ) <0 )
+	{
+		int iErrno = sphSockGetErrno ();
+		sphWarning ( "send() failed: %d: %s", iErrno, sphSockError ( iErrno ) );
+	}
 	sphSockClose ( iSock );
 }
 
@@ -20401,15 +20346,14 @@ struct NetReceiveDataAPI_t : public ISphNetAction
 
 	ActionAPI_e			m_ePhase;
 
-	int					m_iCommand;
-	int					m_iCommandVer;
+	SearchdCommand_e	m_eCommand = SEARCHD_COMMAND_WRONG;
+	WORD				m_uCommandVer = VER_COMMAND_WRONG;
 
 	explicit NetReceiveDataAPI_t ( NetStateAPI_t * pState );
-	virtual ~NetReceiveDataAPI_t() {}
 
-	virtual NetEvent_e		Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop );
-	virtual NetEvent_e		Setup ( int64_t tmNow );
-	virtual void			CloseSocket ();
+	NetEvent_e		Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop ) override;
+	NetEvent_e		Setup ( int64_t tmNow ) override;
+	void			CloseSocket () override;
 
 	void				SetupBodyPhase();
 	void				AddJobAPI ( CSphNetLoop * pLoop );
@@ -20434,11 +20378,10 @@ struct NetReceiveDataQL_t : public ISphNetAction
 	bool				m_bWrite;
 
 	explicit NetReceiveDataQL_t ( NetStateQL_t * pState );
-	virtual ~NetReceiveDataQL_t() {}
 
-	virtual NetEvent_e		Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop );
-	virtual NetEvent_e		Setup ( int64_t tmNow );
-	virtual void			CloseSocket ();
+	NetEvent_e		Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop ) override;
+	NetEvent_e		Setup ( int64_t tmNow ) override;
+	void			CloseSocket () override;
 
 	void				SetupHandshakePhase();
 	void				SetupBodyPhase();
@@ -20451,11 +20394,10 @@ struct NetSendData_t : public ISphNetAction
 	bool								m_bContinue;
 
 	NetSendData_t ( NetStateCommon_t * pState, ProtocolType_e eProto );
-	virtual ~NetSendData_t () {}
 
-	virtual NetEvent_e		Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop );
-	virtual NetEvent_e		Setup ( int64_t tmNow );
-	virtual void			CloseSocket ();
+	NetEvent_e		Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop ) override;
+	NetEvent_e		Setup ( int64_t tmNow ) override;
+	void			CloseSocket () override;
 
 	void SetContinue () { m_bContinue = true; }
 };
@@ -20480,17 +20422,16 @@ struct NetReceiveDataHttp_t : public ISphNetAction
 	HttpHeaderStreamParser_t		m_tHeadParser;
 
 	explicit NetReceiveDataHttp_t ( NetStateQL_t * pState );
-	virtual ~NetReceiveDataHttp_t() {}
 
-	virtual NetEvent_e		Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop );
-	virtual NetEvent_e		Setup ( int64_t tmNow );
-	virtual void			CloseSocket ();
+	NetEvent_e		Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop ) override;
+	NetEvent_e		Setup ( int64_t tmNow ) override;
+	void			CloseSocket () override;
 };
 
 struct EventsIterator_t
 {
-	ISphNetAction * m_pWork;
-	DWORD			m_uEvents;
+	ISphNetAction * m_pWork = nullptr;
+	DWORD			m_uEvents = 0;
 };
 
 
@@ -20516,8 +20457,6 @@ private:
 public:
 	NetActionsPoller ()
 	{
-		m_tIter.m_pWork = NULL;
-		m_tIter.m_uEvents = 0;
 		m_pPoll = sphCreatePoll ( 1000 );
 	}
 
@@ -20528,7 +20467,7 @@ public:
 			m_pPoll->IterateStart ();
 			while ( m_pPoll->IterateNextAll() )
 			{
-				ISphNetAction * pWork = (ISphNetAction *)m_pPoll->IterateGet().m_pData;
+				auto * pWork = (ISphNetAction *)m_pPoll->IterateGet().m_pData;
 				SafeDelete ( pWork );
 			}
 		}
@@ -20593,17 +20532,17 @@ public:
 	{
 		assert ( m_pPoll );
 		const NetEventsIterator_t & tBackendIterator = m_pPoll->IterateGet();
-		ISphNetAction * pAction = (ISphNetAction *)tBackendIterator.m_pData;
+		auto * pAction = (ISphNetAction *)tBackendIterator.m_pData;
 
 		m_pPoll->IterateRemove ( pAction->m_iSock );
-		m_tIter.m_pWork = NULL;
+		m_tIter.m_pWork = nullptr;
 	}
 
 	int IterateStart ()
 	{
 		assert ( m_pPoll );
 
-		m_tIter.m_pWork = NULL;
+		m_tIter.m_pWork = nullptr;
 		m_tIter.m_uEvents = 0;
 
 		return m_pPoll->IterateStart();
@@ -20626,7 +20565,7 @@ public:
 	{
 	}
 
-	virtual ~CSphWakeupEvent ()
+	~CSphWakeupEvent () override
 	{
 		CloseSocket();
 	}
@@ -20657,7 +20596,7 @@ public:
 		}
 	}
 
-	virtual NetEvent_e Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> &, CSphNetLoop * )
+	NetEvent_e Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> &, CSphNetLoop * ) override
 	{
 		if ( ( uGotEvents & NE_IN ) )
 		{
@@ -20683,13 +20622,13 @@ public:
 		return NE_KEEP;
 	}
 
-	virtual NetEvent_e Setup ( int64_t )
+	NetEvent_e Setup ( int64_t ) override
 	{
 		sphLogDebugv ( "%p wakeup setup, read=%d, write=%d", this, m_iReadFD, m_iWriteFD );
 		return NE_IN;
 	}
 
-	virtual void CloseSocket ()
+	void CloseSocket () override
 	{
 #if HAVE_EVENTFD
 		SafeClose ( m_iReadFD );
@@ -20846,8 +20785,8 @@ struct LoopProfiler_t
 #endif
 
 	bool					m_bEnable;
-	int64_t					m_tmTotal;
-	int m_iPerfEv, m_iPerfNext, m_iPerfExt, m_iPerfClean;
+	int64_t					m_tmTotal = 0;
+	int m_iPerfEv=0, m_iPerfNext=0, m_iPerfExt=0, m_iPerfClean=0;
 
 	LoopProfiler_t ()
 	{
@@ -20974,9 +20913,9 @@ struct ThdJobCleanup_t : public ISphJob
 	CSphVector<ISphNetAction *> m_dCleanup;
 
 	explicit ThdJobCleanup_t ( CSphVector<ISphNetAction *> & dCleanup );
-	virtual ~ThdJobCleanup_t ();
+	~ThdJobCleanup_t () override;
 
-	virtual void		Call ();
+	void				Call () override;
 	void				Clear();
 };
 
@@ -21002,7 +20941,7 @@ private:
 		int64_t tmNow = sphMicroTimer();
 		ARRAY_FOREACH ( i, dListeners )
 		{
-			NetActionAccept_t * pCur = new NetActionAccept_t ( dListeners[i] );
+			auto * pCur = new NetActionAccept_t ( dListeners[i] );
 			m_tPoller.SetupEvent ( pCur, tmNow );
 		}
 
@@ -21017,7 +20956,7 @@ private:
 			sphWarning ( "net-loop use timeout due to %s", sError.cstr() );
 #endif
 
-		m_pWakeupExternal = NULL;
+		m_pWakeupExternal = nullptr;
 		if ( iRead>=0 && iWrite>=0 )
 		{
 			m_pWakeupExternal = new CSphWakeupEvent ( iRead, iWrite );
@@ -21239,13 +21178,12 @@ struct ThdJobAPI_t : public ISphJob
 {
 	CSphScopedPtr<NetStateAPI_t>		m_tState;
 	CSphNetLoop *		m_pLoop;
-	int					m_iCommand;
-	int					m_iCommandVer;
+	SearchdCommand_e	m_eCommand = SEARCHD_COMMAND_WRONG;
+	WORD				m_uCommandVer = VER_COMMAND_WRONG;
 
 	ThdJobAPI_t ( CSphNetLoop * pLoop, NetStateAPI_t * pState );
-	virtual ~ThdJobAPI_t () {}
 
-	virtual void		Call ();
+	void		Call () final;
 };
 
 struct ThdJobQL_t : public ISphJob
@@ -21254,9 +21192,8 @@ struct ThdJobQL_t : public ISphJob
 	CSphNetLoop *		m_pLoop;
 
 	ThdJobQL_t ( CSphNetLoop * pLoop, NetStateQL_t * pState );
-	virtual ~ThdJobQL_t () {}
 
-	virtual void		Call ();
+	void		Call () final;
 };
 
 
@@ -21266,9 +21203,8 @@ struct ThdJobHttp_t : public ISphJob
 	CSphNetLoop *		m_pLoop;
 
 	ThdJobHttp_t ( CSphNetLoop * pLoop, NetStateQL_t * pState );
-	virtual ~ThdJobHttp_t () {}
 
-	virtual void		Call ();
+	void		Call () final;
 };
 
 static void JobDoSendNB ( NetSendData_t * pSend, CSphNetLoop * pLoop );
@@ -21353,8 +21289,8 @@ static DWORD NetBufGetLSBDword ( const BYTE * pBuf )
 
 static int NetBufGetInt ( const BYTE * pBuf )
 {
-	int uVal = sphUnalignedRead ( (int &)*pBuf );
-	return ntohl ( uVal );
+	int iVal = sphUnalignedRead ( (int &)*pBuf );
+	return ntohl ( iVal );
 }
 
 
@@ -21372,7 +21308,7 @@ NetEvent_e NetActionAccept_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction 
 
 	// handle all incoming requests at once but not too much
 	int iLastConn = m_iConnections;
-	sockaddr_storage saStorage;
+	sockaddr_storage saStorage = {0};
 	socklen_t uLength = sizeof(saStorage);
 
 	for ( ;; )
@@ -21514,8 +21450,8 @@ NetReceiveDataAPI_t::NetReceiveDataAPI_t ( NetStateAPI_t *	pState )
 {
 	m_ePhase = AAPI_HANDSHAKE_OUT;
 	m_tState->m_iPos = 0;
-	m_iCommand = 0;
-	m_iCommandVer = 0;
+	m_eCommand = SEARCHD_COMMAND_WRONG;
+	m_uCommandVer = VER_COMMAND_WRONG;
 
 	m_tState->m_dBuf.Resize ( 4 );
 	*(DWORD *)( m_tState->m_dBuf.Begin() ) = htonl ( SPHINX_SEARCHD_PROTO );
@@ -21554,8 +21490,8 @@ void NetReceiveDataAPI_t::AddJobAPI ( CSphNetLoop * pLoop )
 	bool bStart = m_tState->m_bVIP;
 	int iLen = m_tState->m_dBuf.GetLength();
 	ThdJobAPI_t * pJob = new ThdJobAPI_t ( pLoop, m_tState.LeakPtr() );
-	pJob->m_iCommand = m_iCommand;
-	pJob->m_iCommandVer = m_iCommandVer;
+	pJob->m_eCommand = m_eCommand;
+	pJob->m_uCommandVer = m_uCommandVer;
 	sphLogDebugv ( "%p receive API job created (%p), buf=%d, sock=%d, tick=%u", this, pJob, iLen, m_iSock, pLoop->m_uTick );
 	if ( bStart )
 		g_pThdPool->StartJob ( pJob );
@@ -21619,10 +21555,10 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 
 		case AAPI_COMMAND:
 		{
-			m_iCommand = NetBufGetWord ( m_tState->m_dBuf.Begin() );
-			m_iCommandVer = NetBufGetWord ( m_tState->m_dBuf.Begin() + 2 );
+			m_eCommand = ( SearchdCommand_e ) NetBufGetWord ( m_tState->m_dBuf.Begin () );
+			m_uCommandVer = NetBufGetWord ( m_tState->m_dBuf.Begin() + 2 );
 			m_tState->m_iLeft = NetBufGetInt ( m_tState->m_dBuf.Begin() + 4 );
-			bool bBadCommand = ( m_iCommand<0 || m_iCommand>=SEARCHD_COMMAND_TOTAL );
+			bool bBadCommand = ( m_eCommand>=SEARCHD_COMMAND_WRONG );
 			bool bBadLength = ( m_tState->m_iLeft<0 || m_tState->m_iLeft>g_iMaxPacketSize );
 			bool bMaxedOut = ( g_iThdQueueMax && !m_tState->m_bVIP && g_pThdPool->GetQueueLength()>=g_iThdQueueMax );
 			if ( bBadCommand || bBadLength || bMaxedOut )
@@ -21634,7 +21570,7 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 					sphWarning ( "ill-formed client request (length=%d out of bounds)", m_tState->m_iLeft );
 				// if command is insane, low level comm is broken, so we bail out
 				if ( bBadCommand )
-					sphWarning ( "ill-formed client request (command=%d, SEARCHD_COMMAND_TOTAL=%d)", m_iCommand, SEARCHD_COMMAND_TOTAL );
+					sphWarning ( "ill-formed client request (command=%d, SEARCHD_COMMAND_TOTAL=%d)", m_eCommand, SEARCHD_COMMAND_TOTAL );
 				// warning on thread pool work maxed out
 				if ( bMaxedOut )
 					sphWarning ( "%s", g_sMaxedOutMessage );
@@ -21643,7 +21579,7 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 				ISphOutputBuffer tOut ( m_tState->m_dBuf );
 				if ( !bMaxedOut )
 				{
-					SendErrorReply ( tOut, "invalid command (code=%d, len=%d)", m_iCommand, m_tState->m_iLeft );
+					SendErrorReply ( tOut, "invalid command (code=%d, len=%d)", m_eCommand, m_tState->m_iLeft );
 				} else
 				{
 					int iRespLen = 4 + strlen(g_sMaxedOutMessage);
@@ -21672,7 +21608,7 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 
 		case AAPI_BODY:
 		{
-			if ( m_iCommand==SEARCHD_COMMAND_PING )
+			if ( m_eCommand==SEARCHD_COMMAND_PING )
 			{
 				bool bGotError = false;
 				int iCookie = 0;
@@ -21686,10 +21622,10 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 
 				// dump invalid command here after out-buffer set
 				if ( bGotError )
-					SendErrorReply ( tOut, "invalid command (code=%d, len=%d)", m_iCommand, m_tState->m_iLeft );
+					SendErrorReply ( tOut, "invalid command (code=%d, len=%d)", m_eCommand, m_tState->m_iLeft );
 
 				// another check that command was sane
-				bGotError = !CheckCommandVersion ( m_iCommandVer, VER_COMMAND_PING, tOut );
+				bGotError = !CheckCommandVersion ( m_uCommandVer, VER_COMMAND_PING, tOut );
 
 				// out-buffer might have error message at this point
 				if ( !bGotError )
@@ -22284,7 +22220,7 @@ void ThdJobAPI_t::Call ()
 	SphCrashLogger_c tQueryTLS;
 	tQueryTLS.SetupTLS ();
 
-	sphLogDebugv ( "%p API job started, command=%d, tick=%u", this, m_iCommand, m_pLoop->m_uTick );
+	sphLogDebugv ( "%p API job started, command=%d, tick=%u", this, m_eCommand, m_pLoop->m_uTick );
 
 	int iTid = GetOsThreadId();
 
@@ -22310,13 +22246,13 @@ void ThdJobAPI_t::Call ()
 		m_tState->m_bKeepSocket = false;
 	} else
 	{
-		bool bProceed = LoopClientSphinx ( m_iCommand, m_iCommandVer, m_tState->m_dBuf.GetLength(), m_tState->m_sClientName, m_tState->m_iConnID, &tThdDesc, tBuf, tOut, false );
+		bool bProceed = LoopClientSphinx ( m_eCommand, m_uCommandVer, m_tState->m_dBuf.GetLength(), m_tState->m_sClientName, m_tState->m_iConnID, &tThdDesc, tBuf, tOut, false );
 		m_tState->m_bKeepSocket |= bProceed;
 	}
 
 	ThreadRemove ( &tThdDesc );
 
-	sphLogDebugv ( "%p API job done, command=%d, tick=%u", this, m_iCommand, m_pLoop->m_uTick );
+	sphLogDebugv ( "%p API job done, command=%d, tick=%u", this, m_eCommand, m_pLoop->m_uTick );
 
 	if ( g_bShutdown )
 		return;

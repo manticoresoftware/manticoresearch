@@ -2406,7 +2406,7 @@ public:
 	InsertRes_e InsertMatch ( int iPos, const CSphMatch & tEntry )
 	{
 		const int iHead = iPos;
-		int iPrev = -1;
+		int iPrev = 0;
 		const bool bDoAdd = ( m_dGroupsLen[iHead]<m_iGLimit );
 		while ( iPos>=0 )
 		{
@@ -2429,7 +2429,8 @@ public:
 					}
 
 					m_pSchema->FreeDataPtrs ( m_pData + iNew );
-					m_dGroupByList[iPreLast] = -1;
+					if ( iPreLast>=0 )
+						m_dGroupByList[iPreLast] = -1;
 
 					if ( iPos==iNew ) // avoid cycle link to itself
 						iPos = -1;
@@ -4478,7 +4479,7 @@ struct ExprSortStringAttrFixup_c : public ISphExpr
 		return (int64_t)( m_pStrings && uOff ? m_pStrings + uOff : nullptr );
 	}
 
-	virtual void FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
+	void FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override
 	{
 		sphFixupLocator ( m_tLocator, pOldSchema, pNewSchema );
 	}
@@ -4587,7 +4588,7 @@ struct ExprSortJson2StringPtr_c : public ISphExpr
 		return iStriLen;
 	}
 
-	virtual void FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
+	void FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override
 	{
 		sphFixupLocator ( m_tJsonCol, pOldSchema, pNewSchema );
 		if ( m_pExpr.Ptr() )
@@ -4765,8 +4766,8 @@ int sphCollateLibcCS ( const BYTE * pStr1, const BYTE * pStr2, StringSource_e eS
 	} else
 	{
 		// big strings on heap
-		char * pBuf1 = new char [ iLen ];
-		char * pBuf2 = new char [ iLen ];
+		char * pBuf1 = new char[iLen + 1];
+		char * pBuf2 = new char[iLen + 1];
 
 		memcpy ( pBuf1, pStr1, iLen );
 		memcpy ( pBuf2, pStr2, iLen );

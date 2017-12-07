@@ -25,18 +25,14 @@
 /// parser view on a generic node
 struct JsonNode_t
 {
-	ESphJsonType	m_eType;		///< node type
-	int64_t			m_iValue;		///< integer value, only used for JSON_INT32 and JSON_INT64
-	double			m_fValue;		///< floating point value, only used for JSON_DOUBLE
-	int				m_iStart;		///< string value, start index (inclusive) into m_pBuf, only used for JSON_STRING
-	int				m_iEnd;			///< string value, end index (exclusive) into m_pBuf, only used for JSON_STRING
-	int				m_iHandle;		///< subobject value, index into m_dNodes storage
-	int				m_iKeyStart;	///< node name, start index (inclusive) into m_pBuf
-	int				m_iKeyEnd;		///< node name, end index (exclusive) into m_pBuf
-
-	JsonNode_t ()
-		: m_eType ( JSON_TOTAL )
-	{}
+	ESphJsonType	m_eType { JSON_TOTAL };		///< node type
+	int64_t			m_iValue = 0;	///< integer value, only used for JSON_INT32 and JSON_INT64
+	double			m_fValue = 0.0f;	///< floating point value, only used for JSON_DOUBLE
+	int				m_iStart = 0;	///< string value, start index (inclusive) into m_pBuf, only used for JSON_STRING
+	int				m_iEnd = 0;		///< string value, end index (exclusive) into m_pBuf, only used for JSON_STRING
+	int				m_iHandle = 0;	///< subobject value, index into m_dNodes storage
+	int				m_iKeyStart = 0;	///< node name, start index (inclusive) into m_pBuf
+	int				m_iKeyEnd = 0;	///< node name, end index (exclusive) into m_pBuf
 };
 #define YYSTYPE JsonNode_t
 
@@ -47,21 +43,19 @@ class JsonParser_c;
 class JsonParser_c : ISphNoncopyable
 {
 public:
-	void *				m_pScanner;
-	const char *		m_pLastToken;
+	void *				m_pScanner = nullptr;
+	const char *		m_pLastToken = nullptr;
 	CSphVector<BYTE> &	m_dBuffer;
 	CSphString &		m_sError;
 	bool				m_bAutoconv;
 	bool				m_bToLowercase;
-	char *				m_pBuf;
+	char *				m_pBuf = nullptr;
 	CSphVector < CSphVector<JsonNode_t> >	m_dNodes;
 	CSphVector<JsonNode_t>					m_dEmpty;
 
 public:
 	JsonParser_c ( CSphVector<BYTE> & dBuffer, bool bAutoconv, bool bToLowercase, CSphString & sError )
-		: m_pScanner ( NULL )
-		, m_pLastToken ( NULL )
-		, m_dBuffer ( dBuffer )
+		: m_dBuffer ( dBuffer )
 		, m_sError ( sError )
 		, m_bAutoconv ( bAutoconv )
 		, m_bToLowercase ( bToLowercase )

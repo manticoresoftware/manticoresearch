@@ -292,14 +292,13 @@ void			sphDoneIOStats ();
 class CSphIOStats
 {
 public:
-	int64_t		m_iReadTime;
-	DWORD		m_iReadOps;
-	int64_t		m_iReadBytes;
-	int64_t		m_iWriteTime;
-	DWORD		m_iWriteOps;
-	int64_t		m_iWriteBytes;
+	int64_t		m_iReadTime = 0;
+	DWORD		m_iReadOps = 0;
+	int64_t		m_iReadBytes = 0;
+	int64_t		m_iWriteTime = 0;
+	DWORD		m_iWriteOps = 0;
+	int64_t		m_iWriteBytes = 0;
 
-	CSphIOStats ();
 	~CSphIOStats ();
 
 	void		Start();
@@ -309,8 +308,8 @@ public:
 	bool		IsEnabled() { return m_bEnabled; }
 
 private:
-	bool		m_bEnabled;
-	CSphIOStats * m_pPrev;
+	bool		m_bEnabled = false;
+	CSphIOStats * m_pPrev = nullptr;
 };
 
 
@@ -425,7 +424,6 @@ class CSphLowercaser
 	friend class CSphTokenizerBase2;
 
 public:
-				CSphLowercaser ();
 				~CSphLowercaser ();
 
 	void		Reset ();
@@ -458,9 +456,9 @@ protected:
 	static const int	CHUNK_MASK	= CHUNK_SIZE - 1;
 	static const int	MAX_CODE	= CHUNK_COUNT * CHUNK_SIZE;
 
-	int					m_iChunks;					///< how much chunks are actually allocated
-	int *				m_pData;					///< chunks themselves
-	int *				m_pChunk [ CHUNK_COUNT ];	///< pointers to non-empty chunks
+	int					m_iChunks = 0;					///< how much chunks are actually allocated
+	int *				m_pData = nullptr;					///< chunks themselves
+	int *				m_pChunk [ CHUNK_COUNT ] { nullptr };	///< pointers to non-empty chunks
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -545,9 +543,6 @@ class CSphWriter;
 class ISphTokenizer
 {
 public:
-	/// trivial ctor
-									ISphTokenizer();
-
 	/// trivial dtor
 	virtual							~ISphTokenizer () {}
 
@@ -710,32 +705,32 @@ protected:
 	static const BYTE				BLEND_TRIM_ALL		= 16;
 
 	CSphLowercaser					m_tLC;						///< my lowercaser
-	int								m_iLastTokenLen;			///< last token length, in codepoints
-	bool							m_bTokenBoundary;			///< last token boundary flag (true after boundary codepoint followed by separator)
-	bool							m_bBoundary;				///< boundary flag (true immediately after boundary codepoint)
-	int								m_iBoundaryOffset;			///< boundary character offset (in bytes)
-	bool							m_bWasSpecial;				///< special token flag
-	bool							m_bWasSynonym;				///< last token is a synonym token
-	bool							m_bEscaped;					///< backslash handling flag
-	int								m_iOvershortCount;			///< skipped overshort tokens count
-	ESphTokenMorph					m_eTokenMorph;				///< whether last token was a generated morphological guess
+	int								m_iLastTokenLen = 0;		///< last token length, in codepoints
+	bool							m_bTokenBoundary = false;	///< last token boundary flag (true after boundary codepoint followed by separator)
+	bool							m_bBoundary = false;		///< boundary flag (true immediately after boundary codepoint)
+	int								m_iBoundaryOffset = 0;		///< boundary character offset (in bytes)
+	bool							m_bWasSpecial = false;		///< special token flag
+	bool							m_bWasSynonym = false;		///< last token is a synonym token
+	bool							m_bEscaped = false;			///< backslash handling flag
+	int								m_iOvershortCount = 0;		///< skipped overshort tokens count
+	ESphTokenMorph					m_eTokenMorph {SPH_TOKEN_MORPH_RAW}; ///< whether last token was a generated morphological guess
 
-	bool							m_bBlended;					///< whether last token (as in just returned from GetToken()) was blended
-	bool							m_bNonBlended;				///< internal, whether there were any normal chars in that blended token
-	bool							m_bBlendedPart;				///< whether last token is a normal subtoken of a blended token
-	bool							m_bBlendAdd;				///< whether we have more pending blended variants (of current accumulator) to return
-	BYTE							m_uBlendVariants;			///< mask of blended variants as requested by blend_mode (see BLEND_TRIM_xxx flags)
-	BYTE							m_uBlendVariantsPending;	///< mask of pending blended variants (we clear bits as we return variants)
-	bool							m_bBlendSkipPure;			///< skip purely blended tokens
+	bool							m_bBlended = false;			///< whether last token (as in just returned from GetToken()) was blended
+	bool							m_bNonBlended = true;		///< internal, whether there were any normal chars in that blended token
+	bool							m_bBlendedPart = false;		///< whether last token is a normal subtoken of a blended token
+	bool							m_bBlendAdd = false;		///< whether we have more pending blended variants (of current accumulator) to return
+	BYTE							m_uBlendVariants {BLEND_TRIM_NONE};	///< mask of blended variants as requested by blend_mode (see BLEND_TRIM_xxx flags)
+	BYTE							m_uBlendVariantsPending = 0;///< mask of pending blended variants (we clear bits as we return variants)
+	bool							m_bBlendSkipPure = false;	///< skip purely blended tokens
 
-	bool							m_bShortTokenFilter;		///< short token filter flag
-	bool							m_bDetectSentences;			///< should we detect sentence boundaries?
+	bool							m_bShortTokenFilter = false;///< short token filter flag
+	bool							m_bDetectSentences = false;	///< should we detect sentence boundaries?
 
 	CSphTokenizerSettings			m_tSettings;				///< tokenizer settings
 	CSphSavedFile					m_tSynFileInfo;				///< synonyms file info
 
 public:
-	bool							m_bPhrase;
+	bool							m_bPhrase = false;
 };
 
 /// parse charset table
@@ -774,14 +769,14 @@ struct CSphDictSettings
 /// some of the fields might be unused depending on specific dictionary type
 struct CSphDictEntry
 {
-	SphWordID_t		m_uWordID;			///< keyword id (for dict=crc)
-	const BYTE *	m_sKeyword;			///< keyword text (for dict=keywords)
-	int				m_iDocs;			///< number of matching documents
-	int				m_iHits;			///< number of occurrences
-	SphOffset_t		m_iDoclistOffset;	///< absolute document list offset (into .spd)
-	SphOffset_t		m_iDoclistLength;	///< document list length in bytes
-	SphOffset_t		m_iSkiplistOffset;	///< absolute skiplist offset (into .spe)
-	int				m_iDoclistHint;		///< raw document list length hint value (0..255 range, 1 byte)
+	SphWordID_t		m_uWordID = 0;			///< keyword id (for dict=crc)
+	const BYTE *	m_sKeyword = nullptr;	///< keyword text (for dict=keywords)
+	int				m_iDocs = 0;			///< number of matching documents
+	int				m_iHits = 0;			///< number of occurrences
+	SphOffset_t		m_iDoclistOffset = 0;	///< absolute document list offset (into .spd)
+	SphOffset_t		m_iDoclistLength = 0;	///< document list length in bytes
+	SphOffset_t		m_iSkiplistOffset = 0;	///< absolute skiplist offset (into .spe)
+	int				m_iDoclistHint = 0;		///< raw document list length hint value (0..255 range, 1 byte)
 };
 
 
@@ -1121,16 +1116,16 @@ struct FieldMask_t
 	bool TestAll ( bool bSet ) const
 	{
 		DWORD uTest = bSet ? 0xffffffff : 0;
-		for ( int i=0; i<SIZE; i++ )
-			if ( m_dMask[i]!=uTest )
+		for ( auto uMask : m_dMask )
+			if ( uMask!=uTest )
 				return false;
 		return true;
 	}
 
 	void Negate()
 	{
-		for ( int i=0; i<SIZE; i++ )
-			m_dMask[i] = ~m_dMask[i];
+		for ( auto& uMask : m_dMask )
+			uMask = ~uMask;
 	}
 };
 
@@ -2186,9 +2181,9 @@ struct CSphSourceParams_SQL
 	CSphString						m_sQuery;
 	CSphString						m_sQueryRange;
 	CSphString						m_sQueryKilllist;
-	int64_t							m_iRangeStep;
-	int64_t							m_iRefRangeStep;
-	bool							m_bPrintQueries;
+	int64_t							m_iRangeStep = 1024;
+	int64_t							m_iRefRangeStep = 1024;
+	bool							m_bPrintQueries = false;
 
 	CSphVector<CSphString>			m_dQueryPre;
 	CSphVector<CSphString>			m_dQueryPost;
@@ -2196,12 +2191,12 @@ struct CSphSourceParams_SQL
 	CSphVector<CSphColumnInfo>		m_dAttrs;
 	CSphVector<CSphString>			m_dFileFields;
 
-	int								m_iRangedThrottle;
-	int								m_iMaxFileBufferSize;
-	ESphOnFileFieldError			m_eOnFileFieldError;
+	int								m_iRangedThrottle = 0;
+	int								m_iMaxFileBufferSize = 0;
+	ESphOnFileFieldError			m_eOnFileFieldError {FFE_IGNORE_FIELD};
 
 	CSphVector<CSphUnpackInfo>		m_dUnpack;
-	DWORD							m_uUnpackMemoryLimit;
+	DWORD							m_uUnpackMemoryLimit = 0;
 
 	CSphVector<CSphJoinedField>		m_dJoinedFields;
 
@@ -2210,14 +2205,12 @@ struct CSphSourceParams_SQL
 	CSphString						m_sUser;
 	CSphString						m_sPass;
 	CSphString						m_sDB;
-	int								m_iPort;
+	unsigned int					m_uPort = 0;
 
 	// hooks
 	CSphString						m_sHookConnect;
 	CSphString						m_sHookQueryRange;
 	CSphString						m_sHookPostIndex;
-
-	CSphSourceParams_SQL ();
 };
 
 
@@ -2253,9 +2246,9 @@ private:
 protected:
 	CSphString			m_sSqlDSN;
 
-	BYTE *				m_dFields [ SPH_MAX_FIELDS ];
+	BYTE *				m_dFields [ SPH_MAX_FIELDS ] { nullptr };
 	int					m_dFieldLengths [ SPH_MAX_FIELDS ];
-	ESphUnpackFormat	m_dUnpack [ SPH_MAX_FIELDS ];
+	ESphUnpackFormat	m_dUnpack [ SPH_MAX_FIELDS ] { SPH_UNPACK_NONE };
 
 	SphDocID_t			m_uMinID = 0;			///< grand min ID
 	SphDocID_t			m_uMaxID = 0;			///< grand max ID
@@ -2338,23 +2331,23 @@ protected:
 	unsigned long *			m_pMysqlLengths = nullptr;
 
 	CSphString				m_sMysqlUsock;
-	int						m_iMysqlConnectFlags;
+	unsigned long			m_iMysqlConnectFlags = 0;
 	CSphString				m_sSslKey;
 	CSphString				m_sSslCert;
 	CSphString				m_sSslCA;
 
 protected:
-	virtual void			SqlDismissResult ();
-	virtual bool			SqlQuery ( const char * sQuery );
-	virtual bool			SqlIsError ();
-	virtual const char *	SqlError ();
-	virtual bool			SqlConnect ();
-	virtual void			SqlDisconnect ();
-	virtual int				SqlNumFields();
-	virtual bool			SqlFetchRow();
-	virtual DWORD			SqlColumnLength ( int iIndex );
-	virtual const char *	SqlColumn ( int iIndex );
-	virtual const char *	SqlFieldName ( int iIndex );
+	void			SqlDismissResult () override;
+	bool			SqlQuery ( const char * sQuery ) override;
+	bool			SqlIsError () override;
+	const char *	SqlError () override;
+	bool			SqlConnect () override;
+	void			SqlDisconnect () override;
+	int				SqlNumFields() override;
+	bool			SqlFetchRow() override;
+	DWORD			SqlColumnLength ( int iIndex ) override;
+	const char *	SqlColumn ( int iIndex ) override;
+	const char *	SqlFieldName ( int iIndex ) override;
 };
 #endif // USE_MYSQL
 
@@ -2374,30 +2367,30 @@ struct CSphSource_PgSQL : CSphSource_SQL
 {
 	explicit				CSphSource_PgSQL ( const char * sName );
 	bool					Setup ( const CSphSourceParams_PgSQL & pParams );
-	virtual bool			IterateStart ( CSphString & sError );
+	bool					IterateStart ( CSphString & sError ) final;
 
 protected:
-	PGresult * 				m_pPgResult;	///< postgresql execution restult context
-	PGconn *				m_tPgDriver;	///< postgresql connection context
+	PGresult * 				m_pPgResult = nullptr;	///< postgresql execution restult context
+	PGconn *				m_tPgDriver = nullptr;	///< postgresql connection context
 
-	int						m_iPgRows;		///< how much rows last step returned
-	int						m_iPgRow;		///< current row (0 based, as in PQgetvalue)
+	int						m_iPgRows = 0;		///< how much rows last step returned
+	int						m_iPgRow = 0;		///< current row (0 based, as in PQgetvalue)
 
 	CSphString				m_sPgClientEncoding;
 	CSphVector<bool>		m_dIsColumnBool;
 
 protected:
-	virtual void			SqlDismissResult ();
-	virtual bool			SqlQuery ( const char * sQuery );
-	virtual bool			SqlIsError ();
-	virtual const char *	SqlError ();
-	virtual bool			SqlConnect ();
-	virtual void			SqlDisconnect ();
-	virtual int				SqlNumFields();
-	virtual bool			SqlFetchRow();
-	virtual DWORD	SqlColumnLength ( int iIndex );
-	virtual const char *	SqlColumn ( int iIndex );
-	virtual const char *	SqlFieldName ( int iIndex );
+	void			SqlDismissResult () final;
+	bool			SqlQuery ( const char * sQuery ) final;
+	bool			SqlIsError () final;
+	const char *	SqlError () final;
+	bool			SqlConnect () final;
+	void			SqlDisconnect () final;
+	int				SqlNumFields() final;
+	bool			SqlFetchRow() final;
+	DWORD	SqlColumnLength ( int iIndex ) final;
+	const char *	SqlColumn ( int iIndex ) final;
+	const char *	SqlFieldName ( int iIndex ) final;
 };
 #endif // USE_PGSQL
 
@@ -2575,31 +2568,31 @@ enum  ESphMvaFunc
 class CSphFilterSettings
 {
 public:
-	CSphString			m_sAttrName;	///< filtered attribute name
-	bool				m_bExclude;		///< whether this is "include" or "exclude" filter (default is "include")
-	bool				m_bHasEqualMin;	///< has filter "equal" component or pure greater\less (for min)
-	bool				m_bHasEqualMax;	///< has filter "equal" component or pure greater\less (for max)
-	bool				m_bOpenLeft;
-	bool				m_bOpenRight;
-	bool				m_bIsNull;		///< for NULL or NOT NULL
+	CSphString			m_sAttrName = "";	///< filtered attribute name
+	bool				m_bExclude = false;		///< whether this is "include" or "exclude" filter (default is "include")
+	bool				m_bHasEqualMin = true;	///< has filter "equal" component or pure greater\less (for min)
+	bool				m_bHasEqualMax = true;	///< has filter "equal" component or pure greater\less (for max)
+	bool				m_bOpenLeft = false;
+	bool				m_bOpenRight = false;
+	bool				m_bIsNull = false;		///< for NULL or NOT NULL
 
-	ESphFilter			m_eType;		///< filter type
-	ESphMvaFunc			m_eMvaFunc;		///< MVA folding function
+	ESphFilter			m_eType = SPH_FILTER_VALUES;		///< filter type
+	ESphMvaFunc			m_eMvaFunc = SPH_MVAFUNC_NONE;		///< MVA folding function
 	union
 	{
-		SphAttr_t		m_iMinValue;	///< range min
+		SphAttr_t		m_iMinValue = LLONG_MIN;	///< range min
 		float			m_fMinValue;	///< range min
 	};
 	union
 	{
-		SphAttr_t		m_iMaxValue;	///< range max
+		SphAttr_t		m_iMaxValue = LLONG_MAX;	///< range max
 		float			m_fMaxValue;	///< range max
 	};
 	CSphVector<SphAttr_t>	m_dValues;	///< integer values set
 	CSphVector<CSphString>	m_dStrings;	///< string values
 
 public:
-						CSphFilterSettings ();
+						CSphFilterSettings () = default;
 
 	void				SetExternalValues ( const SphAttr_t * pValues, int nValues );
 
@@ -2613,8 +2606,8 @@ public:
 	uint64_t			GetHash() const;
 
 protected:
-	const SphAttr_t *	m_pValues;		///< external value array
-	int					m_nValues;		///< external array size
+	const SphAttr_t *	m_pValues = nullptr;		///< external value array
+	int					m_nValues = 0;		///< external array size
 };
 
 
@@ -2846,45 +2839,40 @@ struct CSphQueryStats
 class CSphQueryResultMeta
 {
 public:
-	int						m_iQueryTime;		///< query time, milliseconds
-	int						m_iRealQueryTime;	///< query time, measured just from start to finish of the query. In milliseconds
-	int64_t					m_iCpuTime;			///< user time, microseconds
-	int						m_iMultiplier;		///< multi-query multiplier, -1 to indicate error
+	int						m_iQueryTime = 0;		///< query time, milliseconds
+	int						m_iRealQueryTime = 0;	///< query time, measured just from start to finish of the query. In milliseconds
+	int64_t					m_iCpuTime = 0;			///< user time, microseconds
+	int						m_iMultiplier = 1;		///< multi-query multiplier, -1 to indicate error
 
 	struct WordStat_t
 	{
-		int64_t					m_iDocs;			///< document count for this term
-		int64_t					m_iHits;			///< hit count for this term
-
-		WordStat_t()
-			: m_iDocs ( 0 )
-			, m_iHits ( 0 )
-		{}
+		int64_t					m_iDocs = 0;		///< document count for this term
+		int64_t					m_iHits = 0;		///< hit count for this term
 	};
-	SmallStringHash_T<WordStat_t>	m_hWordStats; ///< hash of i-th search term (normalized word form)
+	SmallStringHash_T<WordStat_t>	m_hWordStats; 	///< hash of i-th search term (normalized word form)
 
-	int						m_iMatches;			///< total matches returned (upto MAX_MATCHES)
-	int64_t					m_iTotalMatches;	///< total matches found (unlimited)
+	int						m_iMatches = 0;			///< total matches returned (upto MAX_MATCHES)
+	int64_t					m_iTotalMatches = 0;	///< total matches found (unlimited)
 
-	CSphIOStats				m_tIOStats;			///< i/o stats for the query
-	int64_t					m_iAgentCpuTime;	///< agent cpu time (for distributed searches)
-	CSphIOStats				m_tAgentIOStats;	///< agent IO stats (for distributed searches)
+	CSphIOStats				m_tIOStats;				///< i/o stats for the query
+	int64_t					m_iAgentCpuTime = 0;	///< agent cpu time (for distributed searches)
+	CSphIOStats				m_tAgentIOStats;		///< agent IO stats (for distributed searches)
 
-	int64_t					m_iPredictedTime;		///< local predicted time
-	int64_t					m_iAgentPredictedTime;	///< distributed predicted time
-	DWORD					m_iAgentFetchedDocs;	///< distributed fetched docs
-	DWORD					m_iAgentFetchedHits;	///< distributed fetched hits
-	DWORD					m_iAgentFetchedSkips;	///< distributed fetched skips
+	int64_t					m_iPredictedTime = 0;		///< local predicted time
+	int64_t					m_iAgentPredictedTime = 0;	///< distributed predicted time
+	DWORD					m_iAgentFetchedDocs = 0;	///< distributed fetched docs
+	DWORD					m_iAgentFetchedHits = 0;	///< distributed fetched hits
+	DWORD					m_iAgentFetchedSkips = 0;	///< distributed fetched skips
 
-	CSphQueryStats 			m_tStats;			///< query prediction counters
-	bool					m_bHasPrediction;	///< is prediction counters set?
+	CSphQueryStats 			m_tStats;					///< query prediction counters
+	bool					m_bHasPrediction = false;	///< is prediction counters set?
 
-	CSphString				m_sError;			///< error message
-	CSphString				m_sWarning;			///< warning message
-	int64_t					m_iBadRows;
+	CSphString				m_sError;				///< error message
+	CSphString				m_sWarning;				///< warning message
+	int64_t					m_iBadRows = 0;
 
-	CSphQueryResultMeta ();													///< ctor
-	virtual					~CSphQueryResultMeta () {}						///< dtor
+							CSphQueryResultMeta () = default;			///< ctor
+	virtual					~CSphQueryResultMeta () {}					///< dtor
 	void					AddStat ( const CSphString & sWord, int64_t iDocs, int64_t iHits );
 };
 
@@ -2895,22 +2883,18 @@ class CSphQueryResult : public CSphQueryResultMeta
 {
 public:
 	CSphSwapVector<CSphMatch>	m_dMatches;			///< top matching documents, no more than MAX_MATCHES
-
-	CSphSchema				m_tSchema;			///< result schema
-	const DWORD *			m_pMva;				///< pointer to MVA storage
-	const BYTE *			m_pStrings;			///< pointer to strings storage
-	bool					m_bArenaProhibit;
-
-	int						m_iOffset;			///< requested offset into matches array
-	int						m_iCount;			///< count which will be actually served (computed from total, offset and limit)
-
-	int						m_iSuccesses;
-
-	CSphQueryProfile *		m_pProfile;			///< filled when query profiling is enabled; NULL otherwise
+	CSphSchema				m_tSchema;				///< result schema
+	const DWORD *			m_pMva = nullptr;		///< pointer to MVA storage
+	const BYTE *			m_pStrings = nullptr;	///< pointer to strings storage
+	bool					m_bArenaProhibit = false;
+	int						m_iOffset = 0;			///< requested offset into matches array
+	int						m_iCount = 0;			///< count which will be actually served (computed from total, offset and limit)
+	int						m_iSuccesses = 0;
+	CSphQueryProfile *		m_pProfile = nullptr;	///< filled when query profiling is enabled; NULL otherwise
 
 public:
-							CSphQueryResult ();		///< ctor
-	virtual					~CSphQueryResult ();	///< dtor, which releases all owned stuff
+							CSphQueryResult () = default;	///< ctor
+							~CSphQueryResult () override; 	///< dtor, which releases all owned stuff
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -2925,18 +2909,13 @@ struct CSphAttrUpdate
 	CSphVector<SphDocID_t>			m_dDocids;		///< document IDs vector
 	CSphVector<const CSphRowitem*>	m_dRows;		///< document attribute's vector, used instead of m_dDocids.
 	CSphVector<int>					m_dRowOffset;	///< document row offsets in the pool (1 per doc, i.e. the length is the same as of m_dDocids)
-	bool							m_bIgnoreNonexistent;	///< whether to warn about non-existen attrs, or just silently ignore them
-	bool							m_bStrict;		///< whether to check for incompatible types first, or just ignore them
-
-	CSphAttrUpdate()
-		: m_bIgnoreNonexistent ( false )
-		, m_bStrict ( false )
-	{}
+	bool							m_bIgnoreNonexistent = false;	///< whether to warn about non-existen attrs, or just silently ignore them
+	bool							m_bStrict = false;				///< whether to check for incompatible types first, or just ignore them
 
 	~CSphAttrUpdate()
 	{
-		ARRAY_FOREACH ( i, m_dAttrs )
-			SafeDeleteArray ( m_dAttrs[i] );
+		for ( auto & pAttrs : m_dAttrs )
+			SafeDeleteArray ( pAttrs );
 	}
 };
 
@@ -2959,38 +2938,25 @@ struct CSphIndexProgress
 		PHASE_PRECOMPUTE			///< searchd startup, indexing attributes
 	};
 
-	Phase_e			m_ePhase;		///< current indexing phase
+	Phase_e			m_ePhase { PHASE_COLLECT };		///< current indexing phase
 
-	int64_t			m_iDocuments;	///< PHASE_COLLECT: documents collected so far
-	int64_t			m_iBytes;		///< PHASE_COLLECT: bytes collected so far;
-									///< PHASE_PREREAD: bytes read so far;
-	int64_t			m_iBytesTotal;	///< PHASE_PREREAD: total bytes to read;
+	int64_t			m_iDocuments = 0;	///< PHASE_COLLECT: documents collected so far
+	int64_t			m_iBytes = 0;		///< PHASE_COLLECT: bytes collected so far;
+										///< PHASE_PREREAD: bytes read so far;
+	int64_t			m_iBytesTotal = 0;	///< PHASE_PREREAD: total bytes to read;
 
-	int64_t			m_iAttrs;		///< PHASE_COLLECT_MVA, PHASE_SORT_MVA: attrs processed so far
-	int64_t			m_iAttrsTotal;	///< PHASE_SORT_MVA: attrs total
+	int64_t			m_iAttrs = 0;		///< PHASE_COLLECT_MVA, PHASE_SORT_MVA: attrs processed so far
+	int64_t			m_iAttrsTotal = 0;	///< PHASE_SORT_MVA: attrs total
 
-	SphOffset_t		m_iHits;		///< PHASE_SORT: hits sorted so far
-	SphOffset_t		m_iHitsTotal;	///< PHASE_SORT: hits total
+	SphOffset_t		m_iHits {0};		///< PHASE_SORT: hits sorted so far
+	SphOffset_t		m_iHitsTotal {0};	///< PHASE_SORT: hits total
 
-	int				m_iWords;		///< PHASE_MERGE: words merged so far
+	int				m_iWords = 0;		///< PHASE_MERGE: words merged so far
 
-	int				m_iDone;		///< generic percent, 0..1000 range
+	int				m_iDone = 0;		///< generic percent, 0..1000 range
 
 	typedef void ( *IndexingProgress_fn ) ( const CSphIndexProgress * pStat, bool bPhaseEnd );
-	IndexingProgress_fn m_fnProgress;
-
-	CSphIndexProgress ()
-		: m_ePhase ( PHASE_COLLECT )
-		, m_iDocuments ( 0 )
-		, m_iBytes ( 0 )
-		, m_iBytesTotal ( 0 )
-		, m_iAttrs ( 0 )
-		, m_iAttrsTotal ( 0 )
-		, m_iHits ( 0 )
-		, m_iHitsTotal ( 0 )
-		, m_iWords ( 0 )
-		, m_fnProgress ( NULL )
-	{}
+	IndexingProgress_fn m_fnProgress {nullptr};
 
 	/// builds a message to print
 	/// WARNING, STATIC BUFFER, NON-REENTRANT

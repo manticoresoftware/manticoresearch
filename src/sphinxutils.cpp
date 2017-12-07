@@ -331,7 +331,7 @@ bool sphWildcardMatch ( const char * sString, const char * sPattern, const int *
 	// pPattern and pString are pointers to unpacked utf-8, pPattern can be precalculated (default is NULL)
 
 	int dString [ SPH_MAX_WORD_LEN + 1 ];
-	const int * pString = ( sphIsUTF8 ( sString ) && sphUTF8ToWideChar ( sString, dString, SPH_MAX_WORD_LEN ) ) ? dString : NULL;
+	const int * pString = ( sphIsUTF8 ( sString ) && sphUTF8ToWideChar ( sString, dString, SPH_MAX_WORD_LEN ) ) ? dString : nullptr;
 
 	if ( !pString && !pPattern )
 		return sphWildcardMatchSpec ( sString, sPattern ); // ascii vs ascii
@@ -345,7 +345,7 @@ bool sphWildcardMatch ( const char * sString, const char * sPattern, const int *
 	if ( pString && pPattern )
 		return sphWildcardMatchSpec ( pString, pPattern ); // utf-8 vs utf-8
 
-	return false;
+	return false; // dead, but causes warn either by compiler, either by analysis. Leave as is.
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -728,13 +728,6 @@ static KeySection_t g_dConfigSections[] =
 };
 
 //////////////////////////////////////////////////////////////////////////
-
-CSphConfigParser::CSphConfigParser ()
-	: m_sFileName ( "" )
-	, m_iLine ( -1 )
-{
-}
-
 bool CSphConfigParser::IsPlainSection ( const char * sKey )
 {
 	assert ( sKey );
@@ -1014,7 +1007,7 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 	const int L_TOKEN		= 64;
 	const int L_BUFFER		= 8192;
 
-	FILE * fp = NULL;
+	FILE * fp = nullptr;
 	if ( !pBuffer )
 	{
 		// open file
@@ -1028,10 +1021,10 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 	m_iLine = 0;
 	m_iWarnings = 0;
 
-	char * p = NULL;
-	char * pEnd = NULL;
-
 	char sBuf [ L_BUFFER ] = { 0 };
+
+	char * p = sBuf;
+	char * pEnd = p;
 
 	char sToken [ L_TOKEN ] = { 0 };
 	int iToken = 0;
@@ -1041,7 +1034,7 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 	int iStack = 0;
 
 	int iValue = 0, iValueMax = 65535;
-	char * sValue = new char [ iValueMax+1 ];
+	auto * sValue = new char [ iValueMax+1 ];
 
 	#define LOC_ERROR(_msg) { strncpy ( m_sError, _msg, sizeof(m_sError) ); break; }
 	#define LOC_ERROR2(_msg,_a) { snprintf ( m_sError, sizeof(m_sError), _msg, _a ); break; }
@@ -1254,7 +1247,7 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 
 	if ( strlen(m_sError) )
 	{
-		int iCol = (int)(p-sBuf+1);
+		auto iCol = (int)(p-sBuf+1);
 
 		int iCtx = Min ( L_STEPBACK, iCol ); // error context is upto L_STEPBACK chars back, but never going to prev line
 		const char * sCtx = p-iCtx+1;
@@ -1275,16 +1268,19 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 
 bool sphFileGetContents ( const char * szFileName, CSphVector<BYTE> & dContents )
 {
-	struct stat st;
-	if ( stat ( szFileName, &st )<0 )
-		return false;
-
 	FILE * pFile = fopen ( szFileName, "rb" );
 	if ( !pFile )
 		return false;
 
+	struct stat st = { 0 };
+	if ( fstat ( fileno ( pFile ), &st )<0 )
+	{
+		fclose ( pFile );
+		return false;
+	}
+
 	dContents.Resize ( (int)st.st_size );
-	int iRead = fread ( dContents.Begin(), (int)st.st_size, 1, pFile );
+	auto iRead = fread ( dContents.Begin(), (int)st.st_size, 1, pFile );
 	fclose ( pFile );
 
 	return iRead==1;
@@ -1719,13 +1715,12 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 
 	if ( !pIndex->GetFieldFilter() )
 	{
-		ISphFieldFilter * pFieldFilter = NULL;
+		ISphFieldFilter * pFieldFilter = nullptr;
 		CSphFieldFilterSettings tFilterSettings;
 		if ( sphConfFieldFilter ( hIndex, tFilterSettings, sError ) )
 			pFieldFilter = sphCreateRegexpFilter ( tFilterSettings, sError );
 
-		sphSpawnRLPFilter ( pFieldFilter, pIndex->GetSettings(), pIndex->GetTokenizer()->GetSettings(), pIndex->GetName(), sError );
-		if ( !sError.IsEmpty () )
+		if ( !sphSpawnRLPFilter ( pFieldFilter, pIndex->GetSettings(), pIndex->GetTokenizer()->GetSettings(), pIndex->GetName(), sError ) )
 			sphWarning ( "index '%s': %s", pIndex->GetName(), sError.cstr() );
 
 		pIndex->SetFieldFilter ( pFieldFilter );

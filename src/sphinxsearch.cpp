@@ -242,7 +242,7 @@ protected:
 		m_dDocs[iCount].m_uDocid = DOCID_MAX;
 
 		PrintDocsChunk ( iCount, m_iAtomPos, m_dDocs, sNode, this );
-		return iCount ? m_dDocs : NULL;
+		return iCount ? m_dDocs : nullptr;
 	}
 
 	inline const ExtHit_t * ReturnHitsChunk ( int iCount, const char * sNode, bool bReverse )
@@ -260,7 +260,7 @@ protected:
 #endif
 
 		PrintHitsChunk ( iCount, m_iAtomPos, m_dHits, sNode, this );
-		return iCount ? m_dHits : NULL;
+		return iCount ? m_dHits : nullptr;
 	}
 };
 
@@ -270,26 +270,27 @@ protected:
 class ExtTerm_c : public ExtNode_i, ISphNoncopyable
 {
 public:
-	ExtTerm_c ( ISphQword * pQword, const FieldMask_t& uFields, const ISphQwordSetup & tSetup, bool bNotWeighted );
+	ExtTerm_c ( ISphQword * pQword, const FieldMask_t &dFields, const ISphQwordSetup &tSetup, bool bNotWeighted );
 	ExtTerm_c ( ISphQword * pQword, const ISphQwordSetup & tSetup );
-	ExtTerm_c () {} ///< to be used in pair with Init()
-	~ExtTerm_c ()
+	ExtTerm_c () { m_dQueriedFields.UnsetAll (); } ///< to be used in pair with Init()
+	~ExtTerm_c () override
 	{
 		SafeDelete ( m_pQword );
 	}
 
-	void						Init ( ISphQword * pQword, const FieldMask_t& uFields, const ISphQwordSetup & tSetup, bool bNotWeighted );
-	virtual void				Reset ( const ISphQwordSetup & tSetup );
-	virtual const ExtDoc_t *	GetDocsChunk();
-	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs );
+	void				Init ( ISphQword * pQword, const FieldMask_t &dFields, const ISphQwordSetup &tSetup
+							   , bool bNotWeighted );
+	void				Reset ( const ISphQwordSetup & tSetup ) override;
+	const ExtDoc_t *	GetDocsChunk() override;
+	const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pMatched ) override;
 
-	virtual int					GetQwords ( ExtQwordsHash_t & hQwords );
-	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
-	virtual void				GetTerms ( const ExtQwordsHash_t & hQwords, CSphVector<TermPos_t> & dTermDupes ) const;
-	virtual bool				GotHitless () { return false; }
-	virtual int					GetDocsCount () { return m_pQword->m_iDocs; }
-	virtual int					GetHitsCount () { return m_pQword->m_iHits; }
-	virtual uint64_t			GetWordID () const
+	int					GetQwords ( ExtQwordsHash_t & hQwords ) override;
+	void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords ) override;
+	void				GetTerms ( const ExtQwordsHash_t & hQwords, CSphVector<TermPos_t> & dTermDupes ) const override;
+	bool				GotHitless () override { return false; }
+	int					GetDocsCount () override { return m_pQword->m_iDocs; }
+	int					GetHitsCount () override{ return m_pQword->m_iHits; }
+	uint64_t			GetWordID () const override
 	{
 		if ( m_pQword->m_uWordID )
 			return m_pQword->m_uWordID;
@@ -297,7 +298,7 @@ public:
 			return sphFNV64 ( m_pQword->m_sDictWord.cstr() );
 	}
 
-	virtual void HintDocid ( SphDocID_t uMinID )
+	void HintDocid ( SphDocID_t uMinID ) override
 	{
 		m_pQword->HintDocid ( uMinID );
 		if ( m_pStats )
@@ -306,7 +307,7 @@ public:
 			*m_pNanoBudget -= g_iPredictorCostSkip;
 	}
 
-	virtual void DebugDump ( int iLevel )
+	void DebugDump ( int iLevel ) override
 	{
 		DebugIndent ( iLevel );
 		printf ( "ExtTerm: %s at: %d ", m_pQword->m_sWord.cstr(), m_pQword->m_iAtomPos );
@@ -332,19 +333,19 @@ public:
 	}
 
 protected:
-	ISphQword *					m_pQword;
-	FieldMask_t				m_dQueriedFields;	///< accepted fields mask
-	bool						m_bHasWideFields;	///< whether fields mask for this term refer to fields 32+
-	float						m_fIDF;				///< IDF for this term (might be 0.0f for non-1st occurences in query)
-	int64_t						m_iMaxTimer;		///< work until this timestamp
-	CSphString *				m_pWarning;
-	bool						m_bNotWeighted;
-	CSphQueryStats *			m_pStats;
-	int64_t *					m_pNanoBudget;
+	ISphQword *					m_pQword = nullptr;
+	FieldMask_t					m_dQueriedFields;	///< accepted fields mask
+	bool						m_bHasWideFields = false;	///< whether fields mask for this term refer to fields 32+
+	float						m_fIDF = 0.0f;		///< IDF for this term (might be 0.0f for non-1st occurences in query)
+	int64_t						m_iMaxTimer = 0;	///< work until this timestamp
+	CSphString *				m_pWarning = nullptr;
+	bool						m_bNotWeighted = true;
+	CSphQueryStats *			m_pStats = nullptr;
+	int64_t *					m_pNanoBudget = nullptr;
 
-	ExtDoc_t *					m_pLastChecked;		///< points to entry in m_dDocs which GetHitsChunk() currently emits hits for
-	SphDocID_t					m_uMatchChecked;	///< there are no more hits for matches block starting with this ID
-	bool						m_bTail;			///< should we emit more hits for current docid or proceed furthwer
+	ExtDoc_t *					m_pLastChecked = nullptr;	///< points to entry in m_dDocs which GetHitsChunk() currently emits hits for
+	SphDocID_t					m_uMatchChecked = 0;	///< there are no more hits for matches block starting with this ID
+	bool						m_bTail = false;		///< should we emit more hits for current docid or proceed furthwer
 
 public:
 	static volatile bool		m_bInterruptNow; ///< may be set from outside to indicate the globally received sigterm
@@ -372,9 +373,9 @@ public:
 		, m_uFieldPos ( 0 )
 	{}
 
-	virtual void				Reset ( const ISphQwordSetup & ) { m_uFieldPos = 0; }
-	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs );
-	virtual bool				GotHitless () { return true; }
+	void				Reset ( const ISphQwordSetup & ) override { m_uFieldPos = 0; }
+	const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pMatched ) override;
+	bool				GotHitless () override { return true; }
 
 protected:
 	DWORD	m_uFieldPos;
@@ -436,13 +437,6 @@ class BufferedNode_c
 {
 protected:
 	BufferedNode_c ()
-		: m_pRawDocs ( NULL )
-		, m_pRawDoc ( NULL )
-		, m_pRawHit ( NULL )
-		, m_uLastID ( 0 )
-		, m_eState ( COPY_DONE )
-		, m_uDoneFor ( 0 )
-		, m_uHitStartDocid ( 0 )
 		{
 			m_dMyDocs[0].m_uDocid = DOCID_MAX;
 			m_dMyHits[0].m_uDocid = DOCID_MAX;
@@ -451,9 +445,9 @@ protected:
 
 	void Reset ()
 	{
-		m_pRawDocs = NULL;
-		m_pRawDoc = NULL;
-		m_pRawHit = NULL;
+		m_pRawDocs = nullptr;
+		m_pRawDoc = nullptr;
+		m_pRawHit = nullptr;
 		m_uLastID = 0;
 		m_eState = COPY_DONE;
 		m_uDoneFor = 0;
@@ -464,38 +458,38 @@ protected:
 	}
 
 protected:
-	const ExtDoc_t *			m_pRawDocs;					///< chunk start as returned by raw GetDocsChunk() (need to store it for raw GetHitsChunk() calls)
-	const ExtDoc_t *			m_pRawDoc;					///< current position in raw docs chunk
-	const ExtHit_t *			m_pRawHit;					///< current position in raw hits chunk
-	SphDocID_t					m_uLastID;
+	const ExtDoc_t *			m_pRawDocs = nullptr;		///< chunk start as returned by raw GetDocsChunk() (need to store it for raw GetHitsChunk() calls)
+	const ExtDoc_t *			m_pRawDoc = nullptr;		///< current position in raw docs chunk
+	const ExtHit_t *			m_pRawHit = nullptr;		///< current position in raw hits chunk
+	SphDocID_t					m_uLastID = 0;
 	enum
 	{
 		COPY_FILTERED,
 		COPY_TRAILING,
 		COPY_DONE
-	}							m_eState;					///< internal GetHitsChunk() state (are we copying from my hits, or passing trailing raw hits, or done)
+	}							m_eState { COPY_DONE };					///< internal GetHitsChunk() state (are we copying from my hits, or passing trailing raw hits, or done)
 	ExtDoc_t					m_dMyDocs[ExtNode_i::MAX_DOCS];		///< all documents within the required pos range
 	ExtHit_t					m_dMyHits[ExtNode_i::MAX_HITS];		///< all hits within the required pos range
 	ExtHit_t					m_dFilteredHits[ExtNode_i::MAX_HITS];	///< hits from requested subset of the documents (for GetHitsChunk())
-	SphDocID_t					m_uDoneFor;
-	SphDocID_t					m_uHitStartDocid;
+	SphDocID_t					m_uDoneFor = 0;
+	SphDocID_t					m_uHitStartDocid = 0;
 };
 
 /// single keyword streamer, with term position filtering
 template < TermPosFilter_e T, class ExtBase=ExtTerm_c >
 class ExtConditional : public BufferedNode_c, public ExtBase, protected TermAcceptor_c<T>
 {
-	typedef TermAcceptor_c<T>	t_Acceptor;
+	using t_Acceptor = TermAcceptor_c<T>;
 protected:
 								ExtConditional ( ISphQword * pQword, const XQNode_t * pNode, const ISphQwordSetup & tSetup );
 public:
-	virtual void				Reset ( const ISphQwordSetup & tSetup );
-	virtual const ExtDoc_t *	GetDocsChunk();
-	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs );
-	virtual bool				GotHitless () { return false; }
+	void				Reset ( const ISphQwordSetup & tSetup ) final;
+	const ExtDoc_t *	GetDocsChunk() final;
+	const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs ) final;
+	bool				GotHitless () final { return false; }
 
 private:
-	virtual bool				ExtraDataImpl ( ExtraData_e eData, void ** ppResult );
+	bool				ExtraDataImpl ( ExtraData_e eData, void ** ppResult ) final;
 };
 
 /// single keyword streamer, with term position filtering
@@ -521,17 +515,17 @@ bool ExtConditional<T,ExtBase>::ExtraDataImpl ( ExtraData_e, void ** )
 class ExtTwofer_c : public ExtNode_i
 {
 public:
-								ExtTwofer_c ( ExtNode_i * pLeft, ExtNode_i * pRight, const ISphQwordSetup & tSetup );
-								ExtTwofer_c () {} ///< to be used in pair with Init();
-								~ExtTwofer_c ();
+						ExtTwofer_c ( ExtNode_i * pFirst, ExtNode_i * pSecond, const ISphQwordSetup &tSetup );
+						ExtTwofer_c () {} ///< to be used in pair with Init();
+						~ExtTwofer_c () override;
 
-			void				Init ( ExtNode_i * pFirst, ExtNode_i * pSecond, const ISphQwordSetup & tSetup );
-	virtual void				Reset ( const ISphQwordSetup & tSetup );
-	virtual int					GetQwords ( ExtQwordsHash_t & hQwords );
-	virtual void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords );
-	virtual void				GetTerms ( const ExtQwordsHash_t & hQwords, CSphVector<TermPos_t> & dTermDupes ) const;
+	void				Init ( ExtNode_i * pLeft, ExtNode_i * pRight, const ISphQwordSetup &tSetup );
+	void				Reset ( const ISphQwordSetup & tSetup ) override;
+	int					GetQwords ( ExtQwordsHash_t & hQwords ) override;
+	void				SetQwordsIDF ( const ExtQwordsHash_t & hQwords ) override;
+	void				GetTerms ( const ExtQwordsHash_t & hQwords, CSphVector<TermPos_t> & dTermDupes ) const override;
 
-	virtual bool				GotHitless () { return m_pLeft->GotHitless() || m_pRight->GotHitless(); }
+	bool				GotHitless () override { return m_pLeft->GotHitless() || m_pRight->GotHitless(); }
 
 	void DebugDumpT ( const char * sName, int iLevel )
 	{
@@ -547,13 +541,13 @@ public:
 		m_uNodePosR = uPosRight;
 	}
 
-	virtual void HintDocid ( SphDocID_t uMinID )
+	void HintDocid ( SphDocID_t uMinID ) override
 	{
 		m_pLeft->HintDocid ( uMinID );
 		m_pRight->HintDocid ( uMinID );
 	}
 
-	virtual uint64_t GetWordID () const
+	uint64_t GetWordID () const override
 	{
 		uint64_t dHash[2];
 		dHash[0] = m_pLeft->GetWordID();
@@ -562,15 +556,15 @@ public:
 	}
 
 protected:
-	ExtNode_i *					m_pLeft;
-	ExtNode_i *					m_pRight;
-	const ExtDoc_t *			m_pCurDocL;
-	const ExtDoc_t *			m_pCurDocR;
-	const ExtHit_t *			m_pCurHitL;
-	const ExtHit_t *			m_pCurHitR;
-	WORD						m_uNodePosL;
-	WORD						m_uNodePosR;
-	SphDocID_t					m_uMatchedDocid;
+	ExtNode_i *					m_pLeft = nullptr;
+	ExtNode_i *					m_pRight = nullptr;
+	const ExtDoc_t *			m_pCurDocL = nullptr;
+	const ExtDoc_t *			m_pCurDocR = nullptr;
+	const ExtHit_t *			m_pCurHitL = nullptr;
+	const ExtHit_t *			m_pCurHitR = nullptr;
+	WORD						m_uNodePosL = 0;
+	WORD						m_uNodePosR = 0;
+	SphDocID_t					m_uMatchedDocid = 0;
 };
 
 /// A-and-B streamer
@@ -579,10 +573,10 @@ class ExtAnd_c : public ExtTwofer_c
 public:
 								ExtAnd_c ( ExtNode_i * pLeft, ExtNode_i * pRight, const ISphQwordSetup & tSetup ) : ExtTwofer_c ( pLeft, pRight, tSetup ), m_bQPosReverse ( false ) {}
 								ExtAnd_c() : m_bQPosReverse ( false ) {} ///< to be used with Init()
-	virtual const ExtDoc_t *	GetDocsChunk();
-	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs );
+	const ExtDoc_t *	GetDocsChunk() override;
+	const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs ) override;
 
-	void DebugDump ( int iLevel ) { DebugDumpT ( "ExtAnd", iLevel ); }
+	void DebugDump ( int iLevel ) override { DebugDumpT ( "ExtAnd", iLevel ); }
 
 	void SetQPosReverse ()
 	{
@@ -596,13 +590,13 @@ protected:
 class ExtAndZonespanned_c : public ExtAnd_c
 {
 public:
-	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs );
-	void DebugDump ( int iLevel ) { DebugDumpT ( "ExtAndZonespan", iLevel ); }
+	const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs ) override;
+	void DebugDump ( int iLevel ) override { DebugDumpT ( "ExtAndZonespan", iLevel ); }
 
 protected:
 	bool IsSameZonespan ( const ExtHit_t * pHit1, const ExtHit_t * pHit2 ) const;
 
-	ISphZoneCheck * m_pZoneChecker;
+	ISphZoneCheck * m_pZoneChecker = nullptr;
 	CSphVector<int> m_dZones;
 };
 
@@ -799,8 +793,9 @@ typedef ExtNWay_c < FSMphrase > ExtPhrase_c;
 class FSMproximity
 {
 protected:
-								FSMproximity ( const CSphVector<ExtNode_i *> & dQwords, const XQNode_t & tNode, const ISphQwordSetup & tSetup );
-	bool						HitFSM ( const ExtHit_t* pHit, ExtHit_t* dTarget );
+								FSMproximity ( const CSphVector<ExtNode_i *> &dQwords, const XQNode_t &tNode
+											   , const ISphQwordSetup &tSetup );
+	bool						HitFSM ( const ExtHit_t * pHit, ExtHit_t * pTarget );
 
 	inline static const char *	GetName() { return "ExtProximity"; }
 	inline void ResetFSM()
@@ -817,12 +812,12 @@ protected:
 	DWORD						m_uWordsExpected;
 	DWORD						m_uMinQpos;
 	DWORD						m_uQLen;
-	DWORD						m_uExpPos;
+	DWORD						m_uExpPos = 0;
 	CSphVector<DWORD>			m_dProx; // proximity hit position for i-th word
 	CSphVector<int> 			m_dDeltas; // used for weight calculation
-	DWORD						m_uWords;
-	int							m_iMinQindex;
-	DWORD						m_uQposMask;
+	DWORD						m_uWords = 0;
+	int							m_iMinQindex = 65535;
+	DWORD						m_uQposMask = 0;
 };
 /// exact phrase streamer
 typedef ExtNWay_c<FSMproximity> ExtProximity_c;
@@ -832,7 +827,7 @@ class FSMmultinear
 {
 protected:
 								FSMmultinear ( const CSphVector<ExtNode_i *> & dNodes, const XQNode_t & tNode, const ISphQwordSetup & tSetup );
-	bool						HitFSM ( const ExtHit_t * pHit, ExtHit_t * dTarget );
+	bool						HitFSM ( const ExtHit_t * pHit, ExtHit_t * pTarget );
 
 	inline static const char *	GetName() { return "ExtMultinear"; }
 	inline void ResetFSM()
@@ -842,22 +837,22 @@ protected:
 
 protected:
 	int							m_iNear;			///< the NEAR distance
-	DWORD						m_uPrelastP;
-	DWORD						m_uPrelastML;
-	DWORD						m_uPrelastSL;
-	DWORD						m_uPrelastW;
-	DWORD						m_uLastP;			///< position of the last hit
-	DWORD						m_uLastML;			///< the length of the previous hit
-	DWORD						m_uLastSL;			///< the length of the previous hit in Query
-	DWORD						m_uLastW;			///< last weight
+	DWORD						m_uPrelastP = 0;
+	DWORD						m_uPrelastML = 0;
+	DWORD						m_uPrelastSL = 0;
+	DWORD						m_uPrelastW = 0;
+	DWORD						m_uLastP = 0;		///< position of the last hit
+	DWORD						m_uLastML = 0;		///< the length of the previous hit
+	DWORD						m_uLastSL = 0;		///< the length of the previous hit in Query
+	DWORD						m_uLastW = 0;		///< last weight
 	DWORD						m_uWordsExpected;	///< now many hits we're expect
-	DWORD						m_uWeight;			///< weight accum
-	DWORD						m_uFirstHit;		///< hitpos of the beginning of the match chain
-	WORD						m_uFirstNpos;		///< N-position of the head of the chain
-	WORD						m_uFirstQpos;		///< Q-position of the head of the chain (for twofers)
+	DWORD						m_uWeight = 0;		///< weight accum
+	DWORD						m_uFirstHit = 0;	///< hitpos of the beginning of the match chain
+	WORD						m_uFirstNpos = 0;	///< N-position of the head of the chain
+	WORD						m_uFirstQpos = 65535;		///< Q-position of the head of the chain (for twofers)
 	CSphVector<WORD>			m_dNpos;			///< query positions for multinear
 	CSphVector<ExtHit_t>		m_dRing;			///< ring buffer for multihit data
-	int							m_iRing;			///< the head of the ring
+	int							m_iRing = 0;		///< the head of the ring
 	bool						m_bTwofer;			///< if we have 2- or N-way NEAR
 	bool						m_bQposMask;
 private:
@@ -1096,23 +1091,23 @@ public:
 
 public:
 	CSphMatch					m_dMatches[ExtNode_i::MAX_DOCS];	///< exposed for caller
-	DWORD						m_uPayloadMask;						///< exposed for ranker state functors
-	int							m_iQwords;							///< exposed for ranker state functors
-	int							m_iMaxQpos;							///< max in-query pos among all keywords, including dupes; for ranker state functors
+	DWORD						m_uPayloadMask = 0;					///< exposed for ranker state functors
+	int							m_iQwords = 0;						///< exposed for ranker state functors
+	int							m_iMaxQpos = 0;						///< max in-query pos among all keywords, including dupes; for ranker state functors
 
 protected:
 	void						CleanupZones ( SphDocID_t uMaxDocid );
 	int							m_iInlineRowitems;
-	ExtNode_i *					m_pRoot;
-	const ExtDoc_t *			m_pDoclist;
-	const ExtHit_t *			m_pHitlist;
+	ExtNode_i *					m_pRoot = nullptr;
+	const ExtDoc_t *			m_pDoclist = nullptr;
+	const ExtHit_t *			m_pHitlist = nullptr;
 	ExtDoc_t					m_dMyDocs[ExtNode_i::MAX_DOCS];		///< my local documents pool; for filtering
 	CSphMatch					m_dMyMatches[ExtNode_i::MAX_DOCS];	///< my local matches pool; for filtering
 	CSphMatch					m_tTestMatch;
-	const CSphIndex *			m_pIndex;							///< this is he who'll do my filtering!
-	CSphQueryContext *			m_pCtx;
-	int64_t *					m_pNanoBudget;
-	QcacheEntry_c *				m_pQcacheEntry;						///< data to cache if we decide that the current query is worth caching
+	const CSphIndex *			m_pIndex = nullptr;					///< this is he who'll do my filtering!
+	CSphQueryContext *			m_pCtx = nullptr;
+	int64_t *					m_pNanoBudget = nullptr;
+	QcacheEntry_c *				m_pQcacheEntry = nullptr;			///< data to cache if we decide that the current query is worth caching
 
 protected:
 	CSphVector<CSphString>		m_dZones;
@@ -1122,7 +1117,7 @@ protected:
 	CSphVector<const ExtDoc_t*>	m_dZoneEnd;
 	CSphVector<SphDocID_t>		m_dZoneMax;				///< last docid we (tried) to cache
 	CSphVector<SphDocID_t>		m_dZoneMin;				///< first docid we (tried) to cache
-	ZoneVVector_t				m_dZoneInfo;
+	ZoneVVector_t				m_dZoneInfo {0};
 	bool						m_bZSlist;
 
 protected:
@@ -1138,8 +1133,8 @@ template < bool USE_BM25 = false >
 class ExtRanker_WeightSum_c : public ExtRanker_c
 {
 protected:
-	int				m_iWeights;
-	const int *		m_pWeights;
+	int				m_iWeights = 0;
+	const int *		m_pWeights = nullptr;
 
 public:
 					ExtRanker_WeightSum_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup ) : ExtRanker_c ( tXQ, tSetup ) {}
@@ -1992,17 +1987,14 @@ inline void ExtTerm_c::Init ( ISphQword * pQword, const FieldMask_t & dFields, c
 ExtTerm_c::ExtTerm_c ( ISphQword * pQword, const ISphQwordSetup & tSetup )
 	: m_pQword ( pQword )
 	, m_pWarning ( tSetup.m_pWarning )
-	, m_bNotWeighted ( true )
 {
 	m_iAtomPos = pQword->m_iAtomPos;
 	m_pLastChecked = m_dDocs;
-	m_uMatchChecked = 0;
-	m_bTail = false;
 	m_dQueriedFields.SetAll();
 	m_bHasWideFields = tSetup.m_pIndex && ( tSetup.m_pIndex->GetMatchSchema().GetFieldsCount()>32 );
 	m_iMaxTimer = tSetup.m_iMaxTimer;
 	m_pStats = tSetup.m_pStats;
-	m_pNanoBudget = m_pStats ? m_pStats->m_pNanoBudget : NULL;
+	m_pNanoBudget = m_pStats ? m_pStats->m_pNanoBudget : nullptr;
 	AllocDocinfo ( tSetup );
 }
 
@@ -2623,10 +2615,10 @@ inline void	ExtTwofer_c::Init ( ExtNode_i * pLeft, ExtNode_i * pRight, const ISp
 {
 	m_pLeft = pLeft;
 	m_pRight = pRight;
-	m_pCurHitL = NULL;
-	m_pCurHitR = NULL;
-	m_pCurDocL = NULL;
-	m_pCurDocR = NULL;
+	m_pCurHitL = nullptr;
+	m_pCurHitR = nullptr;
+	m_pCurDocL = nullptr;
+	m_pCurDocR = nullptr;
 	m_uNodePosL = 0;
 	m_uNodePosR = 0;
 	m_uMatchedDocid = 0;
@@ -2646,10 +2638,10 @@ void ExtTwofer_c::Reset ( const ISphQwordSetup & tSetup )
 {
 	m_pLeft->Reset ( tSetup );
 	m_pRight->Reset ( tSetup );
-	m_pCurHitL = NULL;
-	m_pCurHitR = NULL;
-	m_pCurDocL = NULL;
-	m_pCurDocR = NULL;
+	m_pCurHitL = nullptr;
+	m_pCurHitR = nullptr;
+	m_pCurDocL = nullptr;
+	m_pCurDocR = nullptr;
 	m_uMatchedDocid = 0;
 }
 
@@ -2874,10 +2866,10 @@ const ExtHit_t * ExtAnd_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 
 bool ExtAndZonespanned_c::IsSameZonespan ( const ExtHit_t * pHit1, const ExtHit_t * pHit2 ) const
 {
-	ARRAY_FOREACH ( i, m_dZones )
+	for ( auto iZone : m_dZones )
 	{
 		int iSpan1, iSpan2;
-		if ( m_pZoneChecker->IsInZone ( m_dZones[i], pHit1, &iSpan1 )==SPH_ZONE_FOUND && m_pZoneChecker->IsInZone ( m_dZones[i], pHit2, &iSpan2 )==SPH_ZONE_FOUND )
+		if ( m_pZoneChecker->IsInZone ( iZone, pHit1, &iSpan1 )==SPH_ZONE_FOUND && m_pZoneChecker->IsInZone ( iZone, pHit2, &iSpan2 )==SPH_ZONE_FOUND )
 		{
 			assert ( iSpan1>=0 && iSpan2>=0 );
 			if ( iSpan1==iSpan2 )
@@ -3719,8 +3711,6 @@ inline bool FSMphrase::HitFSM ( const ExtHit_t * pHit, ExtHit_t * pTarget )
 FSMproximity::FSMproximity ( const CSphVector<ExtNode_i *> & dQwords, const XQNode_t & tNode, const ISphQwordSetup & tSetup )
 	: m_iMaxDistance ( tNode.m_iOpArg )
 	, m_uWordsExpected ( dQwords.GetLength() )
-	, m_uExpPos ( 0 )
-	, m_uQposMask ( 0 )
 {
 	assert ( m_iMaxDistance>0 );
 	m_uMinQpos = dQwords[0]->m_iAtomPos;
@@ -3830,7 +3820,6 @@ inline bool FSMproximity::HitFSM ( const ExtHit_t* pHit, ExtHit_t* pTarget )
 FSMmultinear::FSMmultinear ( const CSphVector<ExtNode_i *> & dNodes, const XQNode_t & tNode, const ISphQwordSetup & tSetup )
 	: m_iNear ( tNode.m_iOpArg )
 	, m_uWordsExpected ( dNodes.GetLength() )
-	, m_uFirstQpos ( 65535 )
 	, m_bQposMask ( tSetup.m_bSetQposMask )
 {
 	if ( m_uWordsExpected==2 )
@@ -5536,7 +5525,6 @@ CSphString sphExplainQueryBrief ( const XQNode_t * pNode, const CSphSchema & tSc
 
 
 ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup )
-	: m_dZoneInfo ( 0 )
 {
 	assert ( tSetup.m_pCtx );
 
@@ -5566,10 +5554,6 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup 
 	if ( tSetup.m_pCtx->m_pProfile )
 		tSetup.m_pCtx->m_pProfile->BuildResult ( tXQ.m_pRoot, tSetup.m_pIndex->GetMatchSchema(), tXQ.m_dZones );
 
-	m_pDoclist = NULL;
-	m_pHitlist = NULL;
-	m_uPayloadMask = 0;
-	m_iQwords = 0;
 	m_pIndex = tSetup.m_pIndex;
 	m_pCtx = tSetup.m_pCtx;
 	m_pNanoBudget = tSetup.m_pStats ? tSetup.m_pStats->m_pNanoBudget : NULL;
@@ -5584,7 +5568,7 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup 
 	m_bZSlist = tXQ.m_bNeedSZlist;
 	m_dZoneInfo.Reset ( m_dZones.GetLength() );
 
-	CSphDict * pZonesDict = NULL;
+	CSphDict * pZonesDict = nullptr;
 	// workaround for a particular case with following conditions
 	if ( !m_pIndex->GetDictionary()->GetSettings().m_bWordDict && m_dZones.GetLength() )
 		pZonesDict = m_pIndex->GetDictionary()->Clone();
@@ -5595,21 +5579,21 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup 
 
 		tDot.m_sWord.SetSprintf ( "%c%s", MAGIC_CODE_ZONE, m_dZones[i].cstr() );
 		m_dZoneStartTerm.Add ( new ExtTerm_c ( CreateQueryWord ( tDot, tSetup, pZonesDict ), tSetup ) );
-		m_dZoneStart[i] = NULL;
+		m_dZoneStart[i] = nullptr;
 
 		tDot.m_sWord.SetSprintf ( "%c/%s", MAGIC_CODE_ZONE, m_dZones[i].cstr() );
 		m_dZoneEndTerm.Add ( new ExtTerm_c ( CreateQueryWord ( tDot, tSetup, pZonesDict ), tSetup ) );
-		m_dZoneEnd[i] = NULL;
+		m_dZoneEnd[i] = nullptr;
 	}
 
 	SafeDelete ( pZonesDict );
 
-	m_pQcacheEntry = NULL;
 	if ( QcacheGetStatus().m_iMaxBytes>0 )
 	{
 		m_pQcacheEntry = new QcacheEntry_c();
 		m_pQcacheEntry->m_iIndexId = m_pIndex->GetIndexId();
 	}
+	memset ( m_dMyDocs, 0, sizeof ( m_dMyDocs ) );
 }
 
 
@@ -5796,8 +5780,6 @@ static SphZoneHit_e ZoneCacheFind ( const ZoneVVector_t & dZones, int iZone, con
 		return SPH_ZONE_NO_DOCUMENT;
 
 	ZoneInfo_t * pZone = sphBinarySearch ( dZones[iZone].Begin(), &dZones[iZone].Last(), bind ( &ZoneInfo_t::m_uDocid ), pHit->m_uDocid );
-	if ( !pZone )
-		return SPH_ZONE_NO_DOCUMENT;
 
 	if ( pZone )
 	{
@@ -5953,7 +5935,7 @@ SphZoneHit_e ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit, int * pLa
 			SphDocID_t uCur = pStartHits->m_uDocid;
 
 			// FIXME!!! replace by iterate then add elements to vector instead of searching each time
-			ZoneHits_t * pZone = NULL;
+			ZoneHits_t * pZone = nullptr;
 			CSphVector<ZoneInfo_t> & dZones = m_dZoneInfo[iZone];
 			if ( dZones.GetLength() )
 			{
@@ -5966,18 +5948,23 @@ SphZoneHit_e ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit, int * pLa
 				if ( dZones.GetLength() && dZones.Last().m_uDocid>uCur )
 				{
 					int iInsertPos = FindSpan ( dZones, uCur );
-					assert ( iInsertPos>=0 );
-					dZones.Insert ( iInsertPos, ZoneInfo_t() );
-					dZones[iInsertPos].m_uDocid = uCur;
-					pZone = dZones[iInsertPos].m_pHits = new ZoneHits_t();
+					if ( iInsertPos>=0 )
+					{
+						dZones.Insert ( iInsertPos, ZoneInfo_t() );
+						dZones[iInsertPos].m_uDocid = uCur;
+						pZone = dZones[iInsertPos].m_pHits = new ZoneHits_t();
+					}
 				} else
 				{
 					ZoneInfo_t & tElem = dZones.Add ();
 					tElem.m_uDocid = uCur;
 					pZone = tElem.m_pHits = new ZoneHits_t();
 				}
-				pZone->m_dStarts.Reserve ( iReserve );
-				pZone->m_dEnds.Reserve ( iReserve );
+				if ( pZone )
+				{
+					pZone->m_dStarts.Reserve ( iReserve );
+					pZone->m_dEnds.Reserve ( iReserve );
+				}
 			}
 
 			assert ( pEndHits->m_uDocid==uCur );
@@ -6999,11 +6986,11 @@ public:
 	DWORD				m_uCurQposMask;
 	int					m_iExpDelta;
 	int					m_iLastHitPos;
-	int					m_iFields;
-	const int *			m_pWeights;
-	DWORD				m_uDocBM25;
+	int					m_iFields = 0;
+	const int *			m_pWeights = nullptr;
+	DWORD				m_uDocBM25 = 0;
 	CSphBitvec			m_tMatchedFields;
-	int					m_iCurrentField;
+	int					m_iCurrentField = 0;
 	DWORD				m_uHitCount[SPH_MAX_FIELDS];
 	DWORD				m_uWordCount[SPH_MAX_FIELDS];
 	CSphVector<float>	m_dIDF;
@@ -7016,61 +7003,61 @@ public:
 	CSphBitvec			m_tExactHit;
 	CSphBitvec			m_tExactOrder;
 	CSphBitvec			m_tKeywords;
-	DWORD				m_uDocWordCount;
+	DWORD				m_uDocWordCount = 0;
 	int					m_iMaxWindowHits[SPH_MAX_FIELDS];
 	CSphVector<int>		m_dTF;			///< for bm25a
-	float				m_fDocBM25A;	///< for bm25a
+	float				m_fDocBM25A = 0.0f;	///< for bm25a
 	CSphVector<int>		m_dFieldTF;		///< for bm25f, per-field layout (ie all field0 tfs, then all field1 tfs, etc)
 	int					m_iMinGaps[SPH_MAX_FIELDS];		///< number of gaps in the minimum matching window
 
-	const char *		m_sExpr;
-	ISphExpr *			m_pExpr;
-	ESphAttr			m_eExprType;
-	const CSphSchema *	m_pSchema;
+	const char *		m_sExpr = nullptr;
+	ISphExpr *			m_pExpr = nullptr;
+	ESphAttr			m_eExprType { SPH_ATTR_NONE };
+	const CSphSchema *	m_pSchema = nullptr;
 	CSphAttrLocator		m_tFieldLensLoc;
-	float				m_fAvgDocLen;
-	const int64_t *		m_pFieldLens;
-	int64_t				m_iTotalDocuments;
-	float				m_fParamK1;
-	float				m_fParamB;
-	int					m_iMaxQpos;			///< among all words, including dupes
+	float				m_fAvgDocLen = 0.0f;
+	const int64_t *		m_pFieldLens = nullptr;
+	int64_t				m_iTotalDocuments = 0;
+	float				m_fParamK1 = 1.2f;
+	float				m_fParamB = 0.75f;
+	int					m_iMaxQpos = 65535;		///< among all words, including dupes
 	CSphVector<WORD>	m_dTermDupes;
 	CSphVector<Hitpos_t>	m_dTermsHit;
 	CSphBitvec			m_tHasMultiQpos;
-	int					m_uLastSpanStart;
+	int					m_uLastSpanStart = 0;
 
 	FactorPool_c 		m_tFactorPool;
-	int					m_iPoolMatchCapacity;
+	int					m_iPoolMatchCapacity = 0;
 
 	// per-query stuff
-	int					m_iMaxLCS;
-	int					m_iQueryWordCount;
+	int					m_iMaxLCS = 0;
+	int					m_iQueryWordCount = 0;
 
 public:
 	// internal state, and factor settings
 	// max_window_hits(n)
 	CSphVector<DWORD>	m_dWindow;
-	int					m_iWindowSize;
+	int					m_iWindowSize = 1;
 
 	// min_gaps
-	int						m_iHaveMinWindow;			///< whether to compute minimum matching window, and over how many query words
-	int						m_iMinWindowWords;			///< how many unique words have we seen so far
+	int						m_iHaveMinWindow = 0;		///< whether to compute minimum matching window, and over how many query words
+	int						m_iMinWindowWords = 0;		///< how many unique words have we seen so far
 	CSphVector<LeanHit_t>	m_dMinWindowHits;			///< current minimum matching window candidate hits
 	CSphVector<int>			m_dMinWindowCounts;			///< maps querypos indexes to number of occurrencess in m_dMinWindowHits
 
 	// exact_order
-	int					m_iLastField;
-	int					m_iLastQuerypos;
-	int					m_iExactOrderWords;
+	int					m_iLastField = 0;
+	int					m_iLastQuerypos = 0;
+	int					m_iExactOrderWords = 0;
 
 	// LCCS and Weighted LCCS
 	BYTE				m_dLCCS[SPH_MAX_FIELDS];
 	float				m_dWLCCS[SPH_MAX_FIELDS];
 	CSphVector<WORD>	m_dNextQueryPos;				///< words positions might have gaps due to stop-words
-	WORD				m_iQueryPosLCCS;
-	int					m_iHitPosLCCS;
-	BYTE				m_iLenLCCS;
-	float				m_fWeightLCCS;
+	WORD				m_iQueryPosLCCS = 0;
+	int					m_iHitPosLCCS = 0;
+	BYTE				m_iLenLCCS = 0;
+	float				m_fWeightLCCS = 0.0f;
 
 	// ATC
 #define XRANK_ATC_WINDOW_LEN 10
@@ -7079,26 +7066,25 @@ public:
 #define XRANK_ATC_EXP 1.75f
 	struct AtcHit_t
 	{
-		int			m_iHitpos;
-		WORD		m_uQuerypos;
+		int			m_iHitpos = 0;
+		WORD		m_uQuerypos = 65535;
 	};
 	AtcHit_t			m_dAtcHits[XRANK_ATC_BUFFER_LEN];	///< ATC hits ring buffer
-	int					m_iAtcHitStart;						///< hits start at ring buffer
-	int					m_iAtcHitCount;						///< hits amount in buffer
+	int					m_iAtcHitStart = 0;					///< hits start at ring buffer
+	int					m_iAtcHitCount = 0;					///< hits amount in buffer
 	CSphVector<float>	m_dAtcTerms;						///< per-word ATC
 	CSphBitvec			m_dAtcProcessedTerms;				///< temporary processed mask
-	DWORD				m_uAtcField;						///< currently processed field
+	DWORD				m_uAtcField = 0;					///< currently processed field
 	float				m_dAtc[SPH_MAX_FIELDS];				///< ATC per-field values
-	bool				m_bAtcHeadProcessed;				///< flag for hits from buffer start to window start
-	bool				m_bHaveAtc;							///< calculate ATC?
-	bool				m_bWantAtc;
+	bool				m_bAtcHeadProcessed = false;		///< flag for hits from buffer start to window start
+	bool				m_bHaveAtc = false;					///< calculate ATC?
+	bool				m_bWantAtc = false;
 
 	void				UpdateATC ( bool bFlushField );
 	float				TermTC ( int iTerm, bool bLeft );
 
 public:
-						RankerState_Expr_fn ();
-						~RankerState_Expr_fn ();
+						~RankerState_Expr_fn () override;
 
 	bool				Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError, DWORD uFactorFlags );
 	void				Update ( const ExtHit_t * pHlist );
@@ -7323,7 +7309,7 @@ protected:
 	void			UpdateFreq ( WORD uQpos, DWORD uField );
 
 private:
-	virtual bool	ExtraDataImpl ( ExtraData_e eType, void ** ppResult );
+	bool			ExtraDataImpl ( ExtraData_e eType, void ** ppResult ) override;
 	int				GetMaxPackedLength();
 	BYTE *			PackFactors();
 };
@@ -7632,12 +7618,12 @@ struct Expr_Sum_T : public ISphExpr
 		, m_pArg ( pArg )
 	{}
 
-	virtual ~Expr_Sum_T()
+	virtual ~Expr_Sum_T() override
 	{
 		SafeRelease ( m_pArg );
 	}
 
-	float Eval ( const CSphMatch & tMatch ) const
+	float Eval ( const CSphMatch & tMatch ) const override
 	{
 		m_pState->m_iCurrentField = 0;
 		float fRes = 0;
@@ -7655,7 +7641,7 @@ struct Expr_Sum_T : public ISphExpr
 		return fRes;
 	}
 
-	int IntEval ( const CSphMatch & tMatch ) const
+	int IntEval ( const CSphMatch & tMatch ) const override
 	{
 		m_pState->m_iCurrentField = 0;
 		int iRes = 0;
@@ -7673,18 +7659,18 @@ struct Expr_Sum_T : public ISphExpr
 		return iRes;
 	}
 
-	virtual void FixupLocator ( const ISphSchema * /*pOldSchema*/, const ISphSchema * /*pNewSchema*/ ) override
+	void FixupLocator ( const ISphSchema * /*pOldSchema*/, const ISphSchema * /*pNewSchema*/ ) override
 	{
 		assert ( 0 && "ranker expressions in filters" );
 	}
 
-	virtual void Command ( ESphExprCommand eCmd, void * pArg )
+	void Command ( ESphExprCommand eCmd, void * pArg ) override
 	{
 		assert ( m_pArg );
 		m_pArg->Command ( eCmd, pArg );
 	}
 
-	virtual uint64_t GetHash ( const ISphSchema &, uint64_t, bool & )
+	uint64_t GetHash ( const ISphSchema &, uint64_t, bool & ) override
 	{
 		assert ( 0 && "ranker expressions in filters" );
 		return 0;
@@ -7704,12 +7690,12 @@ struct Expr_Top_T : public ISphExpr
 		, m_pArg ( pArg )
 	{}
 
-	virtual ~Expr_Top_T()
+	~Expr_Top_T() override
 	{
 		SafeRelease ( m_pArg );
 	}
 
-	float Eval ( const CSphMatch & tMatch ) const
+	float Eval ( const CSphMatch & tMatch ) const override
 	{
 		m_pState->m_iCurrentField = 0;
 		float fRes = FLT_MIN;
@@ -7727,7 +7713,7 @@ struct Expr_Top_T : public ISphExpr
 		return fRes;
 	}
 
-	int IntEval ( const CSphMatch & tMatch ) const
+	int IntEval ( const CSphMatch & tMatch ) const override
 	{
 		m_pState->m_iCurrentField = 0;
 		int iRes = INT_MIN;
@@ -7745,18 +7731,18 @@ struct Expr_Top_T : public ISphExpr
 		return iRes;
 	}
 
-	virtual void FixupLocator ( const ISphSchema * /*pOldSchema*/, const ISphSchema * /*pNewSchema*/ ) override
+	void FixupLocator ( const ISphSchema * /*pOldSchema*/, const ISphSchema * /*pNewSchema*/ ) override
 	{
 		assert ( 0 && "ranker expressions in filters" );
 	}
 
-	virtual void Command ( ESphExprCommand eCmd, void * pArg )
+	void Command ( ESphExprCommand eCmd, void * pArg ) override
 	{
 		assert ( m_pArg );
 		m_pArg->Command ( eCmd, pArg );
 	}
 
-	virtual uint64_t GetHash ( const ISphSchema &, uint64_t, bool & )
+	uint64_t GetHash ( const ISphSchema &, uint64_t, bool & ) override
 	{
 		assert ( 0 && "ranker expressions in filters" );
 		return 0;
@@ -8116,25 +8102,6 @@ public:
 		}
 	}
 };
-
-
-/// ctor
-template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >
-RankerState_Expr_fn <NEED_PACKEDFACTORS, HANDLE_DUPES>::RankerState_Expr_fn ()
-	: m_pWeights ( NULL )
-	, m_sExpr ( NULL )
-	, m_pExpr ( NULL )
-	, m_iPoolMatchCapacity ( 0 )
-	, m_iMaxLCS ( 0 )
-	, m_iQueryWordCount ( 0 )
-	, m_iAtcHitStart ( 0 )
-	, m_iAtcHitCount ( 0 )
-	, m_uAtcField ( 0 )
-	, m_bAtcHeadProcessed ( false )
-	, m_bHaveAtc ( false )
-	, m_bWantAtc ( false )
-{}
-
 
 /// dtor
 template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >
@@ -9546,9 +9513,10 @@ public:
 		if ( m_pNode->m_pSetup )
 		{
 			if ( m_pChild )
+			{
 				m_pChild->SetQwordsIDF ( hQwords );
-
-			m_pNode->WarmupCache ( m_pChild, m_iQwords );
+				m_pNode->WarmupCache ( m_pChild, m_iQwords );
+			}
 		}
 	}
 

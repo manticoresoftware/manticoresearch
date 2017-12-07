@@ -65,23 +65,22 @@ class UservarIntSet_c;
 
 struct CreateFilterContext_t
 {
-	const CSphVector<CSphFilterSettings> * m_pFilters;
-	const CSphVector<FilterTreeItem_t> * m_pFilterTree;
-	const KillListVector * m_pKillList;
+	const CSphVector<CSphFilterSettings> * m_pFilters = nullptr;
+	const CSphVector<FilterTreeItem_t> * m_pFilterTree = nullptr;
+	const KillListVector * m_pKillList = nullptr;
 
-	const ISphSchema * m_pSchema;
-	const DWORD * m_pMvaPool;
-	const BYTE * m_pStrings;
+	const ISphSchema * m_pSchema = nullptr;
+	const DWORD * m_pMvaPool = nullptr;
+	const BYTE * m_pStrings = nullptr;
 	
-	ESphCollation m_eCollation;
-	bool m_bScan;
-	bool m_bArenaProhibit;
+	ESphCollation m_eCollation { SPH_COLLATION_DEFAULT };
+	bool m_bScan = false;
+	bool m_bArenaProhibit = false;
 
-	ISphFilter * m_pFilter;
-	ISphFilter * m_pWeightFilter;
+	ISphFilter * m_pFilter = nullptr;
+	ISphFilter * m_pWeightFilter = nullptr;
 	CSphVector<const UservarIntSet_c *> m_dUserVals;
 
-	CreateFilterContext_t();
 	~CreateFilterContext_t();
 };
 

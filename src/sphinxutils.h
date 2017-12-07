@@ -113,7 +113,6 @@ public:
 	CSphConfig		m_tConf;
 
 public:
-					CSphConfigParser ();
 	bool			Parse ( const char * sFileName, const char * pBuffer = NULL );
 
 	// fail-save loading new config over existing.
@@ -121,12 +120,12 @@ public:
 
 protected:
 	CSphString		m_sFileName;
-	int				m_iLine;
+	int				m_iLine = -1;
 	CSphString		m_sSectionType;
 	CSphString		m_sSectionName;
 	char			m_sError [ 1024 ];
 
-	int					m_iWarnings;
+	int					m_iWarnings = 0;
 	static const int	WARNS_THRESH	= 5;
 
 protected:

@@ -131,7 +131,7 @@ bool XQParseHelper_c::ParseFields ( FieldMask_t & dFields, int & iMaxFieldPos, b
 		assert ( sphIsAlpha(*pPtr) && bBlock ); // and complicated
 
 		bool bOK = false;
-		const char * pFieldStart = NULL;
+		const char * pFieldStart = nullptr;
 		while ( pPtr<pLastPtr )
 		{
 			// accumulate field name, while we can
@@ -144,7 +144,7 @@ bool XQParseHelper_c::ParseFields ( FieldMask_t & dFields, int & iMaxFieldPos, b
 			}
 
 			// separator found
-			if ( pFieldStart==NULL )
+			if ( !pFieldStart )
 			{
 				CSphString sContext;
 				sContext.SetBinary ( pPtr, (int)( pLastPtr-pPtr ) );
@@ -155,7 +155,7 @@ bool XQParseHelper_c::ParseFields ( FieldMask_t & dFields, int & iMaxFieldPos, b
 				if ( !AddField ( dFields, pFieldStart, pPtr-pFieldStart ) )
 					return false;
 
-				pFieldStart = NULL;
+				pFieldStart = nullptr;
 				pPtr++;
 
 			} else if ( *pPtr==')' )
@@ -694,24 +694,24 @@ public:
 	}
 
 public:
-	BYTE *					m_sQuery;
-	int						m_iQueryLen;
-	const char *			m_pErrorAt;
+	BYTE *					m_sQuery = nullptr;
+	int						m_iQueryLen = 0;
+	const char *			m_pErrorAt = nullptr;
 
-	XQNode_t *				m_pRoot;
+	XQNode_t *				m_pRoot = nullptr;
 
-	int						m_iPendingNulls;
-	int						m_iPendingType;
+	int						m_iPendingNulls = 0;
+	int						m_iPendingType = 0;
 	YYSTYPE					m_tPendingToken;
-	bool					m_bWasKeyword;
+	bool					m_bWasKeyword = false;
 
-	bool					m_bEmpty;
-	bool					m_bQuoted;
-	int						m_iOvershortStep;
+	bool					m_bEmpty = false;
+	bool					m_bQuoted = false;
+	int						m_iOvershortStep = 0;
 
-	int						m_iQuorumQuote;
-	int						m_iQuorumFSlash;
-	bool					m_bCheckNumber;
+	int						m_iQuorumQuote = -1;
+	int						m_iQuorumFSlash = -1;
+	bool					m_bCheckNumber = false;
 
 	CSphVector<CSphString>	m_dIntTokens;
 
@@ -969,13 +969,6 @@ static int GetNodeChildIndex ( const XQNode_t * pParent, const XQNode_t * pNode 
 //////////////////////////////////////////////////////////////////////////
 
 XQParser_t::XQParser_t ()
-	: m_pErrorAt ( NULL )
-	, m_pRoot ( NULL )
-	, m_bWasKeyword ( false )
-	, m_bQuoted ( false )
-	, m_iQuorumQuote ( -1 )
-	, m_iQuorumFSlash ( -1 )
-	, m_bCheckNumber ( false )
 {
 	m_dSpecPool.Add ( new XQLimitSpec_t() );
 	m_dStateSpec.Add ( m_dSpecPool.Last() );
@@ -1217,7 +1210,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			if ( !( m_iPendingNulls || m_pTokenizer->GetBufferPtr()-p>0 ) )
 				return 0;
 			m_iPendingNulls = 0;
-			lvalp->pNode = AddKeyword ( NULL, iSkippedPosBeforeToken );
+			lvalp->pNode = AddKeyword ( nullptr, iSkippedPosBeforeToken );
 			m_bWasKeyword = true;
 			return TOK_KEYWORD;
 		}
@@ -1230,6 +1223,9 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		if ( m_pPlugin && m_pPlugin->m_fnPushToken )
 			sToken = m_pPlugin->m_fnPushToken ( m_pPluginData, (char*)sToken, &iPrevDeltaPos, m_pTokenizer->GetTokenStart(), m_pTokenizer->GetTokenEnd() - m_pTokenizer->GetTokenStart() );
 
+		if ( !sToken )
+			return 0;
+
 		m_iPendingNulls = m_pTokenizer->GetOvershortCount() * m_iOvershortStep;
 		m_iAtomPos += 1 + m_iPendingNulls + iPrevDeltaPos;
 
@@ -1241,7 +1237,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			bMultiDest = m_pTokenizer->WasTokenMultiformDestination ( bMultiDestHead, iDestCount );
 
 		// handle NEAR (must be case-sensitive, and immediately followed by slash and int)
-		if ( !bMultiDest && sToken && p && !m_pTokenizer->m_bPhrase && strncmp ( p, "NEAR/", 5 )==0 && isdigit(p[5]) )
+		if ( !bMultiDest && p && !m_pTokenizer->m_bPhrase && strncmp ( p, "NEAR/", 5 )==0 && isdigit(p[5]) )
 		{
 			// extract that int
 			int iVal = 0;
@@ -1258,7 +1254,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		}
 
 		// handle SENTENCE
-		if ( !bMultiDest && sToken && p && !m_pTokenizer->m_bPhrase && !strcasecmp ( sToken, "sentence" ) && !strncmp ( p, "SENTENCE", 8 ) )
+		if ( !bMultiDest && p && !m_pTokenizer->m_bPhrase && !strcasecmp ( sToken, "sentence" ) && !strncmp ( p, "SENTENCE", 8 ) )
 		{
 			// we just lexed our next token
 			m_iPendingType = TOK_SENTENCE;
@@ -1267,7 +1263,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		}
 
 		// handle PARAGRAPH
-		if ( !bMultiDest && sToken && p && !m_pTokenizer->m_bPhrase && !strcasecmp ( sToken, "paragraph" ) && !strncmp ( p, "PARAGRAPH", 9 ) )
+		if ( !bMultiDest && p && !m_pTokenizer->m_bPhrase && !strcasecmp ( sToken, "paragraph" ) && !strncmp ( p, "PARAGRAPH", 9 ) )
 		{
 			// we just lexed our next token
 			m_iPendingType = TOK_PARAGRAPH;
@@ -1276,7 +1272,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		}
 
 		// handle MAYBE
-		if ( !bMultiDest && sToken && p && !m_pTokenizer->m_bPhrase && !strcasecmp ( sToken, "maybe" ) && !strncmp ( p, "MAYBE", 5 ) )
+		if ( !bMultiDest && p && !m_pTokenizer->m_bPhrase && !strcasecmp ( sToken, "maybe" ) && !strncmp ( p, "MAYBE", 5 ) )
 		{
 			// we just lexed our next token
 			m_iPendingType = TOK_MAYBE;
@@ -1285,7 +1281,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		}
 
 		// handle ZONE
-		if ( !bMultiDest && sToken && p && !m_pTokenizer->m_bPhrase && !strncmp ( p, "ZONE:", 5 )
+		if ( !bMultiDest && p && !m_pTokenizer->m_bPhrase && !strncmp ( p, "ZONE:", 5 )
 			&& ( sphIsAlpha(p[5]) || p[5]=='(' ) )
 		{
 			// ParseZone() will update tokenizer buffer ptr as needed
@@ -1301,7 +1297,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 		}
 
 		// handle ZONESPAN
-		if ( !bMultiDest && sToken && p && !m_pTokenizer->m_bPhrase && !strncmp ( p, "ZONESPAN:", 9 )
+		if ( !bMultiDest && p && !m_pTokenizer->m_bPhrase && !strncmp ( p, "ZONESPAN:", 9 )
 			&& ( sphIsAlpha(p[9]) || p[9]=='(' ) )
 		{
 			// ParseZone() will update tokenizer buffer ptr as needed
@@ -1381,7 +1377,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 					if ( m_iPendingNulls>0 )
 					{
 						m_iPendingNulls = 0;
-						lvalp->pNode = AddKeyword ( NULL, iSkippedPosBeforeToken );
+						lvalp->pNode = AddKeyword ( nullptr, iSkippedPosBeforeToken );
 						m_bWasKeyword = true;
 						return TOK_KEYWORD;
 					}
@@ -1406,7 +1402,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 				if ( m_pTokenizer->GetOvershortCount()==1 )
 				{
 					m_iPendingNulls = 0;
-					lvalp->pNode = AddKeyword ( NULL, iSkippedPosBeforeToken );
+					lvalp->pNode = AddKeyword ( nullptr, iSkippedPosBeforeToken );
 					return TOK_KEYWORD;
 				}
 
@@ -1471,7 +1467,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 
 		if ( !uWordId )
 		{
-			sToken = NULL;
+			sToken = nullptr;
 			// stopwords with step=0 must not affect pos
 			if ( m_bEmptyStopword )
 				m_iAtomPos--;
@@ -1512,7 +1508,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 	if ( m_iPendingNulls>0 )
 	{
 		m_iPendingNulls--;
-		lvalp->pNode = AddKeyword ( NULL );
+		lvalp->pNode = AddKeyword ( nullptr );
 		m_bWasKeyword = true;
 		return TOK_KEYWORD;
 	}
@@ -4260,7 +4256,8 @@ bool CSphTransformation::TransformExcessAndNot ()
 
 				assert ( pGrandAnd->m_dChildren.Contains ( pParentAndNot ) );
 				int iChild = GetNodeChildIndex ( pGrandAnd, pParentAndNot );
-				pGrandAnd->m_dChildren[iChild] = pAnd;
+				if ( iChild >=0 )
+					pGrandAnd->m_dChildren[iChild] = pAnd;
 				pAnd->m_pParent = pGrandAnd;
 
 				// Delete excess nodes

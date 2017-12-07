@@ -50,18 +50,16 @@ public:
 	void *				GetHandle() const { return m_pHandle; }
 
 protected:
-						~PluginLib_c();
+						~PluginLib_c() final;
 };
 
 /// plugin key
 struct PluginKey_t
 {
-	PluginType_e		m_eType;
+	PluginType_e		m_eType { PLUGIN_FUNCTION };
 	CSphString			m_sName;
 
-	PluginKey_t()
-	{}
-
+	PluginKey_t() = default;
 	PluginKey_t ( PluginType_e eType, const char * sName )
 		: m_eType ( eType )
 		, m_sName ( sName )
@@ -227,7 +225,7 @@ static bool PluginLoadSymbols ( void * pDesc, const SymbolDesc_t * pSymbol, void
 	while ( pSymbol->m_iOffsetOf>=0 )
 	{
 		s.SetSprintf ( pSymbol->m_sPostfix[0] ? "%s_%s" : "%s%s", sName, pSymbol->m_sPostfix );
-		void ** ppFunc = (void**)((BYTE*)pDesc + pSymbol->m_iOffsetOf);
+		auto ** ppFunc = (void**)((BYTE*)pDesc + pSymbol->m_iOffsetOf);
 		*ppFunc = dlsym ( pHandle, s.cstr() );
 		if ( !*ppFunc && pSymbol->m_bRequired )
 		{
@@ -254,7 +252,7 @@ static SymbolDesc_t g_dSymbolsUDF[] =
 	{ static_cast<int>( offsetof(PluginUDF_c, m_fnInit)),		"init",		false },
 	{ static_cast<int>( offsetof(PluginUDF_c, m_fnFunc)),		"",			true },
 	{ static_cast<int>( offsetof(PluginUDF_c, m_fnDeinit)),	"deinit",	false },
-	{ -1, 0, 0 }
+	{ -1, nullptr, false }
 };
 
 
@@ -264,7 +262,7 @@ static SymbolDesc_t g_dSymbolsRanker[] =
 	{ static_cast<int>( offsetof(PluginRanker_c, m_fnUpdate)),		"update",	false },
 	{ static_cast<int>( offsetof(PluginRanker_c, m_fnFinalize)),	"finalize",	true },
 	{ static_cast<int>( offsetof(PluginRanker_c, m_fnDeinit)),		"deinit",	false },
-	{ -1, 0, 0 }
+	{ -1, nullptr, false }
 };
 
 
@@ -277,7 +275,7 @@ static SymbolDesc_t g_dSymbolsTokenFilter[] =
 	{ static_cast<int>( offsetof(PluginTokenFilter_c, m_fnGetExtraToken)),	"get_extra_token",	false },
 	{ static_cast<int>( offsetof(PluginTokenFilter_c, m_fnEndField)),		"end_field",		false },
 	{ static_cast<int>( offsetof(PluginTokenFilter_c, m_fnDeinit)),		"deinit",			false },
-	{ -1, 0, 0 }
+	{ -1, nullptr, false }
 };
 
 
@@ -288,7 +286,7 @@ static SymbolDesc_t g_dSymbolsQueryTokenFilter[] =
 	{ static_cast<int>( offsetof(PluginQueryTokenFilter_c, m_fnPostMorph)),	"post_morph",	false },
 	{ static_cast<int>( offsetof(PluginQueryTokenFilter_c, m_fnPushToken)),	"push_token",	false },
 	{ static_cast<int>( offsetof(PluginQueryTokenFilter_c, m_fnDeinit)),		"deinit",		false },
-	{ -1, 0, 0 }
+	{ -1, nullptr, false }
 };
 
 
@@ -342,7 +340,7 @@ static PluginLib_c * LoadPluginLibrary ( const char * sLibName, CSphString & sEr
 		sBasename = sBasename.SubString ( 0, pDot-sBasename.cstr() );
 
 	CSphString sTmp;
-	PluginVer_fn fnVer = (PluginVer_fn) dlsym ( pHandle, sTmp.SetSprintf ( "%s_ver", sBasename.cstr() ).cstr() );
+	auto fnVer = (PluginVer_fn) dlsym ( pHandle, sTmp.SetSprintf ( "%s_ver", sBasename.cstr() ).cstr() );
 	if ( !fnVer )
 	{
 		sError.SetSprintf ( "symbol '%s_ver' not found in '%s': update your UDF implementation", sBasename.cstr(), sLibName );
@@ -410,7 +408,7 @@ bool sphPluginCreate ( const char * szLib, PluginType_e eType, const char * sNam
 	}
 
 	// lookup or load library
-	PluginLib_c * pLib = NULL;
+	PluginLib_c * pLib = nullptr;
 	if ( g_hPluginLibs ( sLib ) )
 	{
 		pLib = g_hPluginLibs [ sLib ];
@@ -423,8 +421,8 @@ bool sphPluginCreate ( const char * szLib, PluginType_e eType, const char * sNam
 	}
 	assert ( pLib->GetHandle() );
 
-	PluginDesc_c * pPlugin = NULL;
-	const SymbolDesc_t * pSym = NULL;
+	PluginDesc_c * pPlugin = nullptr;
+	const SymbolDesc_t * pSym = nullptr;
 	switch ( eType )
 	{
 		case PLUGIN_RANKER:					pPlugin = new PluginRanker_c ( pLib ); pSym = g_dSymbolsRanker; break;
@@ -539,8 +537,8 @@ bool sphPluginReload ( const char * sName, CSphString & sError )
 	CSphVector<PluginDesc_c*> dNewPlugins;
 	ARRAY_FOREACH ( i, dPlugins )
 	{
-		PluginDesc_c * pDesc = NULL;
-		const SymbolDesc_t * pSym = NULL;
+		PluginDesc_c * pDesc = nullptr;
+		const SymbolDesc_t * pSym = nullptr;
 		switch ( dKeys[i].m_eType )
 		{
 			case PLUGIN_RANKER:					pDesc = new PluginRanker_c ( pNewLib ); pSym = g_dSymbolsRanker; break;
@@ -609,7 +607,7 @@ PluginDesc_c * sphPluginAcquire ( const char * szLib, PluginType_e eType, const 
 	if ( !pDesc )
 	{
 		if ( !sphPluginCreate ( szLib, eType, szName, SPH_ATTR_NONE, sError ) )
-			return NULL;
+			return nullptr;
 		return sphPluginGet ( eType, szName );
 	}
 
@@ -621,7 +619,7 @@ PluginDesc_c * sphPluginAcquire ( const char * szLib, PluginType_e eType, const 
 	sError.SetSprintf ( "unable to load plugin '%s' from '%s': it has already been loaded from library '%s'",
 		szName, sLib.cstr(), pDesc->GetLibName().cstr() );
 	pDesc->Release();
-	return NULL;
+	return nullptr;
 }
 
 
@@ -683,13 +681,13 @@ bool sphPluginExists ( PluginType_e eType, const char * sName )
 PluginDesc_c * sphPluginGet ( PluginType_e eType, const char * sName )
 {
 	if ( !g_bPluginsEnabled )
-		return NULL;
+		return nullptr;
 
 	CSphScopedLock<CSphMutex> tLock ( g_tPluginMutex );
 	PluginKey_t k ( eType, sName );
 	PluginDesc_c ** pp = g_hPlugins(k);
 	if ( !pp || !*pp )
-		return NULL;
+		return nullptr;
 	(**pp).AddRef();
 	return *pp;
 }

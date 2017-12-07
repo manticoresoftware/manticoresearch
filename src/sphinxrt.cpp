@@ -186,10 +186,10 @@ struct CmpHitKeywords_fn
 template < typename DOCID = SphDocID_t >
 struct RtDoc_T
 {
-	DOCID						m_uDocID;	///< my document id
-	DWORD						m_uDocFields;	///< fields mask
-	DWORD						m_uHits;	///< hit count
-	DWORD						m_uHit;		///< either index into segment hits, or the only hit itself (if hit count is 1)
+	DOCID						m_uDocID = 0;	///< my document id
+	DWORD						m_uDocFields = 0;	///< fields mask
+	DWORD						m_uHits = 0;	///< hit count
+	DWORD						m_uHit = 0;		///< either index into segment hits, or the only hit itself (if hit count is 1)
 };
 
 template < typename WORDID=SphWordID_t >
@@ -198,11 +198,11 @@ struct RtWord_T
 	union
 	{
 		WORDID					m_uWordID;	///< my keyword id
-		const BYTE *			m_sWord;
+		const BYTE *			m_sWord = nullptr;
 	};
-	DWORD						m_uDocs;	///< document count (for stats and/or BM25)
-	DWORD						m_uHits;	///< hit count (for stats and/or BM25)
-	DWORD						m_uDoc;		///< index into segment docs
+	DWORD						m_uDocs = 0;	///< document count (for stats and/or BM25)
+	DWORD						m_uHits = 0;	///< hit count (for stats and/or BM25)
+	DWORD						m_uDoc = 0;		///< index into segment docs
 };
 
 typedef RtDoc_T<> RtDoc_t;
@@ -1060,7 +1060,7 @@ private:
 	int						m_iRestartSize; // binlog size restart threshold
 
 	// replay stats
-	mutable int				m_iReplayedRows;
+	mutable int				m_iReplayedRows=0;
 
 private:
 	static void				DoAutoFlush ( void * pBinlog );
@@ -1351,7 +1351,8 @@ RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int6
 	, m_uDiskAttrStatus ( 0 )
 	, m_bKeywordDict ( bKeywordDict )
 	, m_iWordsCheckpoint ( RTDICT_CHECKPOINT_V5 )
-	, m_pTokenizerIndexing ( NULL )
+	, m_iMaxCodepointLength ( 0 )
+	, m_pTokenizerIndexing ( nullptr )
 	, m_dFieldLens ( SPH_MAX_FIELDS )
 	, m_dFieldLensRam ( SPH_MAX_FIELDS )
 	, m_dFieldLensDisk ( SPH_MAX_FIELDS )
@@ -1505,8 +1506,8 @@ public:
 	bool		Connect ( CSphString & ) override;
 	void		Disconnect () override;
 
-	virtual bool HasAttrsConfigured () { return false; }
-	virtual bool IterateStart ( CSphString & ) override { m_iPlainFieldsLength = m_tSchema.GetFieldsCount(); return true; }
+	bool HasAttrsConfigured () override { return false; }
+	bool IterateStart ( CSphString & ) override { m_iPlainFieldsLength = m_tSchema.GetFieldsCount(); return true; }
 
 	bool		IterateMultivaluedStart ( int, CSphString & ) override { return false; }
 	bool		IterateMultivaluedNext () override { return false; }
@@ -4549,12 +4550,15 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 	if ( !rdChunk.Open ( sChunk, m_sLastError ) )
 		return false;
 
-	bool bId64 = ( rdChunk.GetDword()!=0 );
-	if ( bId64!=USE_64BIT )
+	if ( ( rdChunk.GetDword ()!=0 )!=( USE_64BIT!=0 ) )
 	{
-		m_sLastError.SetSprintf ( "ram chunk dumped by %s binary; this binary is %s",
-			bId64 ? "id64" : "id32",
-			USE_64BIT ? "id64" : "id32" );
+		m_sLastError.SetSprintf (
+#if USE_64BIT
+			"ram chunk dumped by id32 binary; this binary is id64"
+#else
+			"ram chunk dumped by id64 binary; this binary is id32"
+#endif
+		);
 		return false;
 	}
 
@@ -7147,6 +7151,9 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		}
 	}
 
+	if ( iMaxSchemaSize==-1 || iMaxSchemaIndex==-1 )
+		return false;
+
 	const ISphSchema & tMaxSorterSchema = *(dSorters[iMaxSchemaIndex]->GetSchema());
 
 	CSphVector< const ISphSchema * > dSorterSchemas;
@@ -7155,7 +7162,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	// setup calculations and result schema
 	CSphQueryContext tCtx ( *pQuery );
 	tCtx.m_pProfile = pProfiler;
-	if ( !tCtx.SetupCalc ( pResult, tMaxSorterSchema, m_tSchema, NULL, false, dSorterSchemas ) )
+	if ( !tCtx.SetupCalc ( pResult, tMaxSorterSchema, m_tSchema, nullptr, false, dSorterSchemas ) )
 		return false;
 
 	tCtx.m_uPackedFactorFlags = tArgs.m_uPackedFactorFlags;
@@ -7609,7 +7616,7 @@ struct CSphRtQueryFilter : public ISphQueryFilter, public ISphNoncopyable
 {
 	const RtIndex_t *	m_pIndex;
 	RtQword_t *			m_pQword;
-	bool				m_bGetStats;
+	bool				m_bGetStats = false;
 	const SphChunkGuard_t & m_tGuard;
 
 	CSphRtQueryFilter ( const RtIndex_t * pIndex, RtQword_t * pQword, const SphChunkGuard_t & tGuard )
@@ -7618,7 +7625,7 @@ struct CSphRtQueryFilter : public ISphQueryFilter, public ISphNoncopyable
 		, m_tGuard ( tGuard )
 	{}
 
-	virtual void AddKeywordStats ( BYTE * sWord, const BYTE * sTokenized, int iQpos, CSphVector <CSphKeywordInfo> & dKeywords )
+	void AddKeywordStats ( BYTE * sWord, const BYTE * sTokenized, int iQpos, CSphVector <CSphKeywordInfo> & dKeywords ) final
 	{
 		assert ( m_pIndex && m_pQword );
 		m_pIndex->AddKeywordStats ( sWord, sTokenized, m_pDict, m_tFoldSettings.m_bStats, iQpos, m_pQword, dKeywords, m_tGuard );
@@ -8671,6 +8678,8 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 
 static int64_t GetChunkSize ( const CSphVector<CSphIndex*> & dDiskChunks, int iIndex )
 {
+	if (iIndex<0)
+		return 0;
 	CSphIndexStatus tDisk;
 	dDiskChunks[iIndex]->GetStatus(&tDisk);
 	return tDisk.m_iDiskUse;
@@ -8679,6 +8688,7 @@ static int64_t GetChunkSize ( const CSphVector<CSphIndex*> & dDiskChunks, int iI
 
 static int GetNextSmallestChunk ( const CSphVector<CSphIndex*> & dDiskChunks, int iIndex )
 {
+	assert (dDiskChunks.GetLength ()>1);
 	int iRes = -1;
 	int64_t iLastSize = INT64_MAX;
 	ARRAY_FOREACH ( i, dDiskChunks )
@@ -8690,7 +8700,6 @@ static int GetNextSmallestChunk ( const CSphVector<CSphIndex*> & dDiskChunks, in
 			iRes = i;
 		}
 	}
-
 	return iRes;
 }
 
@@ -8734,6 +8743,12 @@ void RtIndex_t::ProgressiveMerge ( volatile bool * pForceTerminate, ThrottleStat
 
 		int iA = GetNextSmallestChunk ( m_dDiskChunks, 0 );
 		int iB = GetNextSmallestChunk ( m_dDiskChunks, iA );
+
+		if ( iA<0 || iB<0 )
+		{
+			sError.SetSprintf ("Couldn't find smallest chunk");
+			return;
+		}
 
 		// in order to merge kill-lists correctly we need to make sure that A is the oldest one
 		// indexes go from oldest to newest so A must go before B (A is always older than B)

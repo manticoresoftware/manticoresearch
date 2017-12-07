@@ -816,18 +816,10 @@ template < typename T, typename POLICY=CSphVectorPolicy<T> > class CSphVector
 {
 public:
 	/// ctor
-	CSphVector ()
-		: m_iLength	( 0 )
-		, m_iLimit	( 0 )
-		, m_pData	( NULL )
-	{
-	}
+	CSphVector () = default;
 
 	/// ctor with initial size
 	explicit CSphVector ( int iCount )
-		: m_iLength	( 0 )
-		, m_iLimit	( 0 )
-		, m_pData	( NULL )
 	{
 		Resize ( iCount );
 	}
@@ -835,9 +827,6 @@ public:
 	/// copy ctor
 	CSphVector ( const CSphVector<T> & rhs )
 	{
-		m_iLength = 0;
-		m_iLimit = 0;
-		m_pData = NULL;
 		*this = rhs;
 	}
 
@@ -1001,12 +990,14 @@ public:
 
 		// realloc
 		// FIXME! optimize for POD case
-		T * pNew = NULL;
+		T * pNew = nullptr;
 		if ( m_iLimit )
+		{
 			pNew = new T [ m_iLimit ];
-		__analysis_assume ( m_iLength<=m_iLimit );
+			__analysis_assume ( m_iLength<=m_iLimit );
 
-		POLICY::Copy ( pNew, m_pData, m_iLength );
+			POLICY::Copy ( pNew, m_pData, m_iLength );
+		}
 		delete [] m_pData;
 
 		m_pData = pNew;
@@ -1202,9 +1193,9 @@ public:
 	}
 
 protected:
-	int		m_iLength;		///< entries actually used
-	int		m_iLimit;		///< entries allocated
-	T *		m_pData;		///< entries
+	int		m_iLength = 0;		///< entries actually used
+	int		m_iLimit = 0;		///< entries allocated
+	T *		m_pData = nullptr;	///< entries
 };
 
 
@@ -1268,15 +1259,11 @@ public:
 
 /// swap-vector
 template < typename T >
-class CSphSwapVector : public CSphVector < T, CSphSwapVectorPolicy<T> >
-{
-};
+using CSphSwapVector = CSphVector < T, CSphSwapVectorPolicy<T> >;
 
 /// tight-vector
 template < typename T >
-class CSphTightVector : public CSphVector < T, CSphTightVectorPolicy<T> >
-{
-};
+using CSphTightVector =  CSphVector < T, CSphTightVectorPolicy<T> >;
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -2349,7 +2336,7 @@ struct ISphRefcounted : public ISphNoncopyable
 {
 protected:
 					ISphRefcounted () : m_iRefCount ( 1 ) {}
-	virtual			~ISphRefcounted () = default;
+	virtual			~ISphRefcounted () {}; // gcc 4.7.2 hates `=default` here
 
 public:
 	void			AddRef () const		{ m_iRefCount++; }
@@ -2376,8 +2363,8 @@ public:
 		m_pPtr = rhs.m_pPtr;
 	}
 
-	CSphRefcountedPtr ( CSphRefcountedPtr&& rhs )
-		: m_pPtr ( std::move ( rhs.m_pPtr ) )
+	CSphRefcountedPtr ( CSphRefcountedPtr&& rhs ) noexcept
+		: m_pPtr ( rhs.m_pPtr )
 	{
 		rhs.m_pPtr = nullptr;
 	}
@@ -2407,10 +2394,12 @@ public:
 		return *this;
 	}
 
-	CSphRefcountedPtr<T> & operator= ( CSphRefcountedPtr<T>&& rhs )
+	CSphRefcountedPtr<T> & operator= ( CSphRefcountedPtr<T>&& rhs ) noexcept
 	{
+		if (this==&rhs)
+			return *this;
 		SafeRelease( m_pPtr );
-		m_pPtr = std::move ( rhs.m_pPtr );
+		m_pPtr = rhs.m_pPtr;
 		rhs.m_pPtr = nullptr;
 		return *this;
 	}
@@ -2947,7 +2936,6 @@ public:
 class CSphAutoEvent : public ISphNoncopyable
 {
 public:
-	CSphAutoEvent () {}
 	~CSphAutoEvent() {}
 
 	bool Init ( CSphMutex * pMutex );
@@ -2956,13 +2944,13 @@ public:
 	bool WaitEvent();
 
 protected:
-	bool m_bInitialized;
-	bool m_bSent;
+	bool m_bInitialized = false;
+	bool m_bSent = false;
 #if USE_WINDOWS
-	HANDLE m_hEvent;
+	HANDLE m_hEvent = 0;
 #else
 	pthread_cond_t m_tCond;
-	pthread_mutex_t* m_pMutex;
+	pthread_mutex_t* m_pMutex = nullptr;
 #endif
 };
 
@@ -2973,17 +2961,17 @@ public:
 	CSphSemaphore ();
 	~CSphSemaphore();
 
-	bool Init (const char* sName=NULL);
+	bool Init (const char* sName=nullptr);
 	bool Done();
 	void Post();
 	bool Wait();
 
 protected:
-	bool m_bInitialized;
+	bool m_bInitialized = false;
 #if USE_WINDOWS
-	HANDLE	m_hSem;
+	HANDLE	m_hSem = 0;
 #else
-	sem_t *	m_pSem;
+	sem_t *	m_pSem = nullptr;
 	CSphString m_sName;	// unnamed semaphores are deprecated and removed in some OS
 #endif
 };
@@ -3032,14 +3020,14 @@ public:
 	bool Unlock () UNLOCK_FUNCTION();
 
 private:
-	bool				m_bInitialized;
+	bool				m_bInitialized = false;
 #if USE_WINDOWS
-	HANDLE				m_hWriteMutex;
-	HANDLE				m_hReadEvent;
-	LONG				m_iReaders;
+	HANDLE				m_hWriteMutex = 0;
+	HANDLE				m_hReadEvent = 0;
+	LONG				m_iReaders = 0;
 #else
 	pthread_rwlock_t	* m_pLock;
-	CSphMutex			* m_pWritePreferHelper;
+	CSphMutex			* m_pWritePreferHelper = nullptr;
 #endif
 };
 
@@ -3093,15 +3081,12 @@ protected:
 class CSphBitvec
 {
 protected:
-	DWORD *		m_pData;
-	DWORD		m_uStatic[4];
-	int			m_iElements;
+	DWORD *		m_pData = nullptr;
+	DWORD		m_uStatic[4] {0};
+	int			m_iElements = 0;
 
 public:
-	CSphBitvec ()
-		: m_pData ( NULL )
-		, m_iElements ( 0 )
-	{}
+	CSphBitvec () = default;
 
 	explicit CSphBitvec ( int iElements )
 	{
@@ -3117,13 +3102,13 @@ public:
 	/// copy ctor
 	CSphBitvec ( const CSphBitvec & rhs )
 	{
-		m_pData = NULL;
+		m_pData = nullptr;
 		m_iElements = 0;
 		*this = rhs;
 	}
 
 	/// copy
-	const CSphBitvec & operator = ( const CSphBitvec & rhs )
+	CSphBitvec & operator = ( const CSphBitvec & rhs )
 	{
 		if ( m_pData!=m_uStatic )
 			SafeDeleteArray ( m_pData );
@@ -3197,6 +3182,14 @@ public:
 	int GetSize() const
 	{
 		return (m_iElements+31)/32;
+	}
+
+	bool IsEmpty() const
+	{
+		if (!m_pData)
+			return true;
+
+		return GetSize ()==0;
 	}
 
 	int GetBits() const
@@ -3424,9 +3417,6 @@ typedef CSphAtomic_T<int64_t> CSphAtomicL;
 struct ISphRefcountedMT : public ISphNoncopyable
 {
 protected:
-	ISphRefcountedMT ()
-		: m_iRefCount ( 1 )
-	{}
 
 	virtual ~ISphRefcountedMT ()
 	{}
@@ -3451,23 +3441,21 @@ public:
 	}
 
 protected:
-	mutable CSphAtomic	m_iRefCount;
+	mutable CSphAtomic m_iRefCount { 1 };
 };
 
 struct ISphJob
 {
-	ISphJob () {}
-	virtual ~ISphJob () {}
+	virtual ~ISphJob () {};
 	virtual void Call () = 0;
 };
 
 struct ISphThdPool
 {
-	ISphThdPool () {}
-	virtual ~ISphThdPool () {}
+	virtual ~ISphThdPool () {};
 	virtual void Shutdown () = 0;
 	virtual void AddJob ( ISphJob * pItem ) = 0;
-	virtual void StartJob ( ISphJob * pItem ) = 0;
+	virtual bool StartJob ( ISphJob * pItem ) = 0;
 
 	virtual int GetActiveWorkerCount () const = 0;
 	virtual int GetTotalWorkerCount () const = 0;

@@ -6878,10 +6878,13 @@ void CSphWriter::SeekTo ( SphOffset_t iPos )
 	} else
 	{
 		assert ( iPos<m_iWritten ); // seeking forward in a writer, we don't support it
-		auto uMoved = sphSeek ( m_iFD, iPos, SEEK_SET );
-		if ( uMoved!=iPos )
+		auto uSeek = sphSeek ( m_iFD, iPos, SEEK_SET );
+		if ( uSeek!=iPos )
 		{
-			sphWarn ( "CSphWriter::SeekTo seek error %lu expected, %lu returned", iPos, uMoved );
+			if ( uSeek<0 )
+				sphWarning ( "CSphWriter::SeekTo seek error. Error: %d '%s'", errno, strerror ( errno ) );
+			else
+				sphWarning ( "CSphWriter::SeekTo seek error. Expected: %zd, got %zd", iPos, uSeek );
 		}
 
 		// seeking outside the buffer; so the buffer must be discarded
@@ -7502,7 +7505,7 @@ int CSphBin::ReadByte ()
 				if ( uSeek<0 )
 					sphWarning ( "CSphBin::ReadBytes : failed seek. Error: %d '%s'", errno, strerror ( errno ) );
 				else
-					sphWarning ( "CSphBin::ReadBytes : failed seek. Expected: %lu, got %lu", m_iFilePos, uSeek );
+					sphWarning ( "CSphBin::ReadBytes : failed seek. Expected: %zd, got %zd", m_iFilePos, uSeek );
 				m_bError = true;
 				return BIN_READ_ERROR;
 			}
@@ -7564,7 +7567,7 @@ ESphBinRead CSphBin::ReadBytes ( void * pDest, int iBytes )
 				if ( uSeek<0 )
 					sphWarning ( "CSphBin::ReadBytes : failed seek. Error: %d '%s'", errno, strerror ( errno ) );
 				else
-					sphWarning ( "CSphBin::ReadBytes : failed seek. Expected: %lu, got %lu", m_iFilePos, uSeek );
+					sphWarning ( "CSphBin::ReadBytes : failed seek. Expected: %zd, got %zd", m_iFilePos, uSeek );
 				m_bError = true;
 				return BIN_READ_ERROR;
 			}
@@ -7778,7 +7781,7 @@ ESphBinRead CSphBin::Precache ()
 			if ( uSeek<0 )
 				sphWarning ( "CSphBin::Precache : failed seek. Error: %d '%s'", errno, strerror ( errno ) );
 			else
-				sphWarning ( "CSphBin::Precache : failed seek. Expected: %lu, got %lu", m_iFilePos, uSeek );
+				sphWarning ( "CSphBin::Precache : failed seek. Expected: %zd, got %zd", m_iFilePos, uSeek );
 			m_bError = true;
 			return BIN_PRECACHE_ERROR;
 		}
@@ -11391,11 +11394,13 @@ bool CSphIndex_VLN::RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSi
 
 	for ( int i = 0; i < nTransfers; i++ )
 	{
-		auto uMoved = sphSeek ( iFile, iBlockStart + uTotalRead, SEEK_SET );
-		if ( uMoved !=iBlockStart + uTotalRead )
+		auto uSeek = sphSeek ( iFile, iBlockStart + uTotalRead, SEEK_SET );
+		if ( uSeek !=iBlockStart + uTotalRead )
 		{
-			m_sLastError.SetSprintf ( "block relocation: seek error %lu expected, %lu returned",
-				iBlockStart + uTotalRead, uMoved );
+			if ( uSeek<0 )
+				sphWarning ( "block relocation: failed seek. Error: %d '%s'", errno, strerror ( errno ) );
+			else
+				sphWarning ( "block relocation: failed seek. Expected: %zd, got %zd", iBlockStart + uTotalRead, uSeek );
 			return false;
 		}
 
@@ -11408,10 +11413,13 @@ bool CSphIndex_VLN::RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSi
 			return false;
 		}
 
-		uMoved = sphSeek ( iFile, *pFileSize, SEEK_SET );
-		if ( uMoved!=*pFileSize )
+		uSeek = sphSeek ( iFile, *pFileSize, SEEK_SET );
+		if ( uSeek!=*pFileSize )
 		{
-			m_sLastError.SetSprintf ( "block relocation: seek error %lu expected, %lu returned", *pFileSize, uMoved );
+			if ( uSeek<0 )
+				sphWarning ( "block relocation: failed seek. Error: %d '%s'", errno, strerror ( errno ) );
+			else
+				sphWarning ( "block relocation: failed seek. Expected: %zd, got %zd", *pFileSize, uSeek );
 			return false;
 		}
 		uTotalRead += iToRead;
@@ -11862,7 +11870,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			if ( uSeek<0 )
 				m_sLastError.SetSprintf ( "CSphIndex_VLN::Build: failed seek. Error: %d '%s'", errno, strerror ( errno ) );
 			else
-				m_sLastError.SetSprintf ( "CSphIndex_VLN::Build: failed seek. Expected: %lu, got %lu", iHitsGap, uSeek );
+				m_sLastError.SetSprintf ( "CSphIndex_VLN::Build: failed seek. Expected: %zd, got %zd", iHitsGap, uSeek );
 			return 0;
 		}
 
@@ -11879,7 +11887,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				m_sLastError.SetSprintf ( "CSphIndex_VLN::Build: failed seek. Error: %d '%s'",
 					errno, strerror ( errno ) );
 			else
-				m_sLastError.SetSprintf ( "CSphIndex_VLN::Build: failed seek. Expected: %lu, got %lu",
+				m_sLastError.SetSprintf ( "CSphIndex_VLN::Build: failed seek. Expected: %zd got %zd",
 					iDocinfosGap, uSeek );
 			return 0;
 		}

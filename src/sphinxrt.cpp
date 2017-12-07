@@ -1180,7 +1180,7 @@ private:
 	int64_t						m_iDoubleBufferLimit;
 	CSphString					m_sPath;
 	bool						m_bPathStripped;
-	CSphVector<CSphIndex*>		m_dDiskChunks;
+	CSphVector<CSphIndex*>		m_dDiskChunks GUARDED_BY ( m_tChunkLock );
 	int							m_iLockFD;
 	mutable CSphKilllist		m_tKlist;							///< kill list for disk chunks and saved chunks
 	volatile bool				m_bOptimizing;
@@ -1572,15 +1572,13 @@ bool RtIndex_t::AddDocument ( ISphTokenizer * pTokenizer, int iFields, const cha
 
 	if ( !bReplace )
 	{
-		m_tChunkLock.ReadLock ();
-		bool bGotID = ARRAY_ANY ( bGotID, m_dRamChunks, ( m_dRamChunks[_any]->FindAliveRow ( tDoc.m_uDocID )!=NULL ) );
-		m_tChunkLock.Unlock ();
-
-		if ( bGotID )
-		{
-			sError.SetSprintf ( "duplicate id '" UINT64_FMT "'", (uint64_t)tDoc.m_uDocID );
-			return false; // already exists and not deleted; INSERT fails
-		}
+		CSphScopedRLock rLock { m_tChunkLock };
+		for ( auto& dRamChunk : m_dRamChunks )
+			if ( dRamChunk->FindAliveRow ( tDoc.m_uDocID) )
+			{
+				sError.SetSprintf ( "duplicate id '" UINT64_FMT "'", (uint64_t)tDoc.m_uDocID );
+				return false; // already exists and not deleted; INSERT fails
+			}
 	}
 
 	RtAccum_t * pAcc = AcquireAccum ( &sError, pAccExt, true );
@@ -8536,29 +8534,31 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 		dKlist.Resize ( 0 );
 		m_tKlist.Flush ( dKlist );
 
-		Verify ( m_tChunkLock.ReadLock () );
+		const CSphIndex * pOldest = nullptr;
+		const CSphIndex * pOlder = nullptr;
+		{ // m_tChunkLock scoped Readlock
+			CSphScopedRLock RChunkLock { m_tChunkLock };
+			// merge 'older'(pSrc) to 'oldest'(pDst) and get 'merged' that names like 'oldest'+.tmp
+			// to got rid of keeping actual kill-list
+			// however 'merged' got placed at 'older' position and 'merged' renamed to 'older' name
+			pOldest = m_dDiskChunks[0];
+			pOlder = m_dDiskChunks[1];
 
-		// merge 'older'(pSrc) to 'oldest'(pDst) and get 'merged' that names like 'oldest'+.tmp
-		// to got rid of keeping actual kill-list
-		// however 'merged' got placed at 'older' position and 'merged' renamed to 'older' name
-		const CSphIndex * pOldest = m_dDiskChunks[0];
-		const CSphIndex * pOlder = m_dDiskChunks[1];
+			// add disk chunks kill-lists
+			for ( int iChunk=1; iChunk<m_dDiskChunks.GetLength(); iChunk++ )
+			{
+				if ( *pForceTerminate || m_bOptimizeStop )
+					break;
 
-		// add disk chunks kill-lists
-		for ( int iChunk=1; iChunk<m_dDiskChunks.GetLength(); iChunk++ )
-		{
-			if ( *pForceTerminate || m_bOptimizeStop )
-				break;
+				const CSphIndex * pIndex = m_dDiskChunks[iChunk];
+				if ( !pIndex->GetKillListSize() )
+					continue;
 
-			const CSphIndex * pIndex = m_dDiskChunks[iChunk];
-			if ( !pIndex->GetKillListSize() )
-				continue;
-
-			int iOff = dKlist.GetLength();
-			dKlist.Resize ( iOff+pIndex->GetKillListSize() );
-			memcpy ( dKlist.Begin()+iOff, pIndex->GetKillList(), sizeof(SphDocID_t)*pIndex->GetKillListSize() );
-		}
-		Verify ( m_tChunkLock.Unlock() );
+				int iOff = dKlist.GetLength();
+				dKlist.Resize ( iOff+pIndex->GetKillListSize() );
+				memcpy ( dKlist.Begin()+iOff, pIndex->GetKillList(), sizeof(SphDocID_t)*pIndex->GetKillListSize() );
+			}
+		} // m_tChunkLock scoped Readlock
 
 		dKlist.Add ( 0 );
 		dKlist.Add ( DOCID_MAX );
@@ -8736,56 +8736,62 @@ void RtIndex_t::ProgressiveMerge ( volatile bool * pForceTerminate, ThrottleStat
 		dKlist.Resize ( 0 );
 		m_tKlist.Flush ( dKlist );
 
-		Verify ( m_tChunkLock.ReadLock () );
+		const CSphIndex * pOldest = nullptr;
+		const CSphIndex * pOlder = nullptr;
+		int iA = -1;
+		int iB = -1;
 
-		// merge 'smallest' to 'smaller' and get 'merged' that names like 'A'+.tmp
-		// however 'merged' got placed at 'B' position and 'merged' renamed to 'B' name
-
-		int iA = GetNextSmallestChunk ( m_dDiskChunks, 0 );
-		int iB = GetNextSmallestChunk ( m_dDiskChunks, iA );
-
-		if ( iA<0 || iB<0 )
 		{
-			sError.SetSprintf ("Couldn't find smallest chunk");
-			return;
-		}
+			CSphScopedRLock tChunkLock { m_tChunkLock };
 
-		// in order to merge kill-lists correctly we need to make sure that A is the oldest one
-		// indexes go from oldest to newest so A must go before B (A is always older than B)
-		if ( iA > iB )
-			Swap ( iB, iA );
+			// merge 'smallest' to 'smaller' and get 'merged' that names like 'A'+.tmp
+			// however 'merged' got placed at 'B' position and 'merged' renamed to 'B' name
 
-		sphLogDebug ( "progressive merge - merging %d (%d kb) with %d (%d kb)", iA, (int)(GetChunkSize ( m_dDiskChunks, iA )/1024), iB, (int)(GetChunkSize ( m_dDiskChunks, iB )/1024) );
+			iA = GetNextSmallestChunk ( m_dDiskChunks, 0 );
+			iB = GetNextSmallestChunk ( m_dDiskChunks, iA );
 
-		const CSphIndex * pOldest = m_dDiskChunks[iA];
-		const CSphIndex * pOlder = m_dDiskChunks[iB];
+			if ( iA<0 || iB<0 )
+			{
+				sError.SetSprintf ("Couldn't find smallest chunk");
+				return;
+			}
 
-		// so we're merging chunk A (older) with the (younger) B, so A < B
-		// we have to merge chunk's A kill-list to chunk A+1 to maintain the integrity
+			// in order to merge kill-lists correctly we need to make sure that A is the oldest one
+			// indexes go from oldest to newest so A must go before B (A is always older than B)
+			if ( iA > iB )
+				Swap ( iB, iA );
 
-		// collect all kill-lists from A to B (inclusive)
-		for ( int iChunk=iA+1; iChunk<=iB; iChunk++ )
-		{
-			if ( *pForceTerminate || m_bOptimizeStop )
-				break;
+			sphLogDebug ( "progressive merge - merging %d (%d kb) with %d (%d kb)", iA, (int)(GetChunkSize ( m_dDiskChunks, iA )/1024), iB, (int)(GetChunkSize ( m_dDiskChunks, iB )/1024) );
 
-			const CSphIndex * pIndex = m_dDiskChunks[iChunk];
-			if ( !pIndex->GetKillListSize() )
-				continue;
+			pOldest = m_dDiskChunks[iA];
+			pOlder = m_dDiskChunks[iB];
 
-			int iOff = dKlist.GetLength();
-			dKlist.Resize ( iOff+pIndex->GetKillListSize() );
-			memcpy ( dKlist.Begin()+iOff, pIndex->GetKillList(), sizeof(SphDocID_t)*pIndex->GetKillListSize() );
-		}
+			// so we're merging chunk A (older) with the (younger) B, so A < B
+			// we have to merge chunk's A kill-list to chunk A+1 to maintain the integrity
 
-		// merge klist from oldest disk chunk to next disk chunk
-		// that might be either A and A+1 or A and B
-		int iOff = pOldest->GetKillListSize();
-		CSphIndex * pNextChunk = m_dDiskChunks[iA+1];
-		dMergedKlist.Resize ( iOff + pNextChunk->GetKillListSize() );
-		memcpy ( dMergedKlist.Begin(), pOldest->GetKillList(), sizeof(SphDocID_t) * pOldest->GetKillListSize() );
-		memcpy ( dMergedKlist.Begin() + iOff, pNextChunk->GetKillList(), sizeof(SphDocID_t) * pNextChunk->GetKillListSize() );
+			// collect all kill-lists from A to B (inclusive)
+			for ( int iChunk=iA+1; iChunk<=iB; iChunk++ )
+			{
+				if ( *pForceTerminate || m_bOptimizeStop )
+					break;
 
+				const CSphIndex * pIndex = m_dDiskChunks[iChunk];
+				if ( !pIndex->GetKillListSize() )
+					continue;
+
+				int iOff = dKlist.GetLength();
+				dKlist.Resize ( iOff+pIndex->GetKillListSize() );
+				memcpy ( dKlist.Begin()+iOff, pIndex->GetKillList(), sizeof(SphDocID_t)*pIndex->GetKillListSize() );
+			}
+
+			// merge klist from oldest disk chunk to next disk chunk
+			// that might be either A and A+1 or A and B
+			int iOff = pOldest->GetKillListSize();
+			CSphIndex * pNextChunk = m_dDiskChunks[iA+1];
+			dMergedKlist.Resize ( iOff + pNextChunk->GetKillListSize() );
+			memcpy ( dMergedKlist.Begin(), pOldest->GetKillList(), sizeof(SphDocID_t) * pOldest->GetKillListSize() );
+			memcpy ( dMergedKlist.Begin() + iOff, pNextChunk->GetKillList(), sizeof(SphDocID_t) * pNextChunk->GetKillListSize() );
+		} // m_tChunkLock scope
 		Verify ( m_tChunkLock.Unlock() );
 
 		// for filtering have to set bounds

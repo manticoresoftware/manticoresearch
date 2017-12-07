@@ -6715,7 +6715,7 @@ int ExprParser_t::AddNodeID ()
 {
 	ExprNode_t & tNode = m_dNodes.Add ();
 	tNode.m_iToken = TOK_ID;
-	tNode.m_eRetType = USE_64BIT ? SPH_ATTR_BIGINT : SPH_ATTR_INTEGER;
+	tNode.m_eRetType = SPH_ATTR_BIGINT;
 	return m_dNodes.GetLength()-1;
 }
 

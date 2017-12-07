@@ -1,11 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <test>
-<name>RT: index format backwards compatibility</name>
+<name>RT: TRUNCATE vs ATTACH</name>
 
 <requires>
 <pre_copy_ref/>
-<id32/>
 <non-rt/>
 </requires>
 
@@ -15,42 +14,6 @@ searchd
 {
 	<searchd_settings/>
 	workers = threads
-}
-
-index v2
-{
-	type			= rt
-	path			= data/rt_v2
-	rt_field		= content
-	rt_attr_uint	= idd
-	dict			= crc
-}
-
-index v3
-{
-	type			= rt
-	path			= data/rt_v3
-	rt_field		= content
-	rt_attr_uint	= idd
-	dict			= crc
-}
-
-index v4
-{
-	type			= rt
-	path			= data/rt_v4
-	rt_field		= content
-	rt_attr_uint	= idd
-	dict			= crc
-}
-
-index v5
-{
-	type			= rt
-	path			= data/rt_v5
-	rt_field		= content
-	rt_attr_uint	= idd
-	dict			= crc
 }
 
 source plain_stem_src
@@ -65,7 +28,7 @@ index plain_stem
 	source			= plain_stem_src
 	path			= <data_path/>/plain_stem
 	docinfo			= extern
-	morphology = stem_en
+	morphology 		= stem_en
 	dict			= crc
 }
 index rt_stem
@@ -74,7 +37,7 @@ index rt_stem
 	path			= <data_path/>/rt_stem
 	rt_attr_uint	= gid
 	rt_field		= title
-	morphology = stem_en
+	morphology 		= stem_en
 	dict			= crc
 } 
 
@@ -180,15 +143,6 @@ $results = array ();
 
 $sock = $open ();
 
-$results = array_merge ( $results, $query ( "select * from v2 where match ( 'test700 | test1800' )", $sock ) );
-$results = array_merge ( $results, $query ( "show meta", $sock ) );
-$results = array_merge ( $results, $query ( "select * from v3 where match ( 'test700 | test1800' )", $sock ) );
-$results = array_merge ( $results, $query ( "show meta", $sock ) );
-$results = array_merge ( $results, $query ( "select * from v4 where match ( 'test700 | test1800' )", $sock ) );
-$results = array_merge ( $results, $query ( "show meta", $sock ) );
-$results = array_merge ( $results, $query ( "select * from v5 where match ( 'test700 | test1800' )", $sock ) );
-$results = array_merge ( $results, $query ( "show meta", $sock ) );
-
 $results = array_merge ( $results, $query ( "CALL KEYWORDS ( 'apple', 'plain_stem', 1 )", $sock ) );
 $results = array_merge ( $results, $query ( "CALL KEYWORDS ( 'apple', 'rt_stem', 1 )", $sock ) );
 $results = array_merge ( $results, $query ( "ATTACH INDEX plain_stem TO RTINDEX rt_stem", $sock ) );
@@ -205,11 +159,6 @@ $close ( $sock );
 $results = array_merge ( $results, $restartDaemon ( $client ) );
 
 $sock = $open ();
-
-$results = array_merge ( $results, $insert ( "v5", 1, 20, $query, $sock ) );
-
-$results = array_merge ( $results, $query ( "select * from v5 where match ( 'test700 | test1800')", $sock ) );
-$results = array_merge ( $results, $query ( "show meta", $sock ) );
 
 $results = array_merge ( $results, $query ( "CALL KEYWORDS ( 'apple', 'rt_stem', 1 )", $sock ) );
 $results = array_merge ( $results, $query ( "SELECT * FROM rt_stem", $sock ) );

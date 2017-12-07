@@ -3,7 +3,9 @@
 <test>
 <name>pick up indexes from new path using rotation</name>
 
-<requires><non-rt/><id64/></requires>
+<requires>
+<non-rt/>
+</requires>
 
 <config>
 searchd

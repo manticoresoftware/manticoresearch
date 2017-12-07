@@ -818,10 +818,7 @@ amount of attributes. All of the columns that are neither document ID
 (the first one) nor attributes will be full-text indexed.
 
 Document ID **MUST** be the very first field, and it **MUST BE UNIQUE
-UNSIGNED POSITIVE (NON-ZERO, NON-NEGATIVE) INTEGER NUMBER**. It can be
-either 32-bit or 64-bit, depending on how you built Manticore; by default
-it builds with 32-bit IDs support but ``--enable-id64`` option to
-``configure`` allows to build with 64-bit document and word IDs support.
+UNSIGNED POSITIVE (NON-ZERO, NON-NEGATIVE) INTEGER NUMBER**.
 
 Example:
 

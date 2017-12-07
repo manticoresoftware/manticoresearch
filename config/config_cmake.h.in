@@ -106,9 +106,6 @@
 /* whether unaligned RAM access is possible */
 #cmakedefine UNALIGNED_RAM_ACCESS ${UNALIGNED_RAM_ACCESS}
 
-/* 64-bit document and word IDs */
-#define USE_64BIT ${USE_64BIT}
-
 /* define to use expat XML library */
 #cmakedefine USE_LIBEXPAT ${USE_LIBEXPAT}
 

@@ -5,8 +5,7 @@
 
 <skip_indexer/>
 <requires>
-	<id64/>
-	<force-rt/>
+<force-rt/>
 </requires>
 
 <config>

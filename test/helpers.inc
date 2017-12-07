@@ -3212,19 +3212,8 @@ function CopyDirContents ( $from, $to )
 
 function CheckConfig ( $config, $path )
 {
-	global $g_id64, $g_re2, $g_rlp, $g_odbc, $windows, $g_locals, $mysql_simulated;
+	global $g_re2, $g_rlp, $g_odbc, $windows, $g_locals, $mysql_simulated;
 	
-	if ( $config->Requires("id64") && !$g_id64 ) {
-		printf("SKIPPING %s, %s - enable id64 to run this test\n", $path, $config->Name());
-		return false;
-	}
-
-	if ( $config->Requires("id32") && $g_id64 )
-	{
-		printf ( "SKIPPING %s, %s - disable id64 to run this test\n", $path, $config->Name () );
-		return false;
-	}
-
 	if ( $config->Requires("non-windows") && $windows )
 	{
 		printf ( "SKIPPING %s, %s - use non-Windows system to run this test\n", $path, $config->Name () );
@@ -3301,7 +3290,7 @@ function MarkTest ( $logfile, $test_dir )
 function RunTest ( $test_dir, $skipdemo, $usemarks )
 {
 	global	$index_data_path, $agents, $sd_pid_file, $sd_managed_searchd,
-			$sd_skip_indexer, $g_id64, $windows, $g_locals, $sd_log, $sd_query_log,
+			$sd_skip_indexer, $windows, $g_locals, $sd_log, $sd_query_log,
 			$g_pick_query;
 
 	$res_path = testdir($test_dir);

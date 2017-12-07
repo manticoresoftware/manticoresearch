@@ -1259,16 +1259,16 @@ public:
 		: ExprFilter_c<IFilter_Range> ( pExpr )
 	{}
 
-	float m_fMinValue;
-	float m_fMaxValue;
+	float m_fMinValue = 0.0f;
+	float m_fMaxValue = 0.0f;
 
-	virtual void SetRangeFloat ( float fMin, float fMax )
+	void SetRangeFloat ( float fMin, float fMax ) override
 	{
 		m_fMinValue = fMin;
 		m_fMaxValue = fMax;
 	}
 
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const override
 	{
 		return EvalRange<HAS_EQUAL_MIN, HAS_EQUAL_MAX> ( m_pExpr->Eval ( tMatch ), m_fMinValue, m_fMaxValue );
 	}
@@ -1641,15 +1641,6 @@ static bool IsWeightColumn ( const CSphString & sAttr, const ISphSchema & tSchem
 
 	const CSphColumnInfo * pCol = tSchema.GetAttr ( sAttr.cstr() );
 	return ( pCol && pCol->m_bWeight );
-}
-
-CreateFilterContext_t::CreateFilterContext_t()
-	: m_pFilters ( NULL )
-	, m_pFilterTree ( NULL )
-	, m_pKillList ( NULL )
-	, m_pFilter ( NULL )
-	, m_pWeightFilter ( NULL )
-{
 }
 
 CreateFilterContext_t::~CreateFilterContext_t()

@@ -58,7 +58,7 @@ enum IanaPorts_e
 };
 
 /// known status return codes
-enum SearchdStatus_e
+enum SearchdStatus_e : WORD
 {
 	SEARCHD_OK		= 0,	///< general success, command-specific reply follows
 	SEARCHD_ERROR	= 1,	///< general failure, error message follows
@@ -208,7 +208,7 @@ struct AgentConn_t : public ISphNoncopyable
 	CSphString		m_sFailure;		///< failure message
 	bool			m_bDone;		///< agent got processed, no need to retry
 
-	int				m_iReplyStatus;	///< reply status code
+	SearchdStatus_e	m_eReplyStatus;	///< reply status code
 	int				m_iReplySize;	///< how many reply bytes are there
 	int				m_iReplyRead;	///< how many reply bytes are already received
 	int 			m_iRetries;		///< count from 0 to m_iRetryLimit
@@ -405,7 +405,7 @@ private:
 
 struct SearchdStats_t
 {
-	DWORD		m_uStarted;
+	DWORD		m_uStarted = 0;
 	CSphAtomicL		m_iConnections;
 	CSphAtomicL		m_iMaxedOut;
 	CSphAtomicL		m_iCommandCount[SEARCHD_COMMAND_TOTAL];
@@ -427,12 +427,6 @@ struct SearchdStats_t
 
 	CSphAtomicL		m_iPredictedTime;	///< total agent predicted query time
 	CSphAtomicL		m_iAgentPredictedTime;	///< total agent predicted query time
-
-
-	SearchdStats_t ()
-		: m_uStarted { 0 }
-	{
-	}
 };
 
 class cDashStorage : public ISphNoncopyable

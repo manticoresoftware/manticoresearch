@@ -582,7 +582,7 @@ bool SqlParamsConfigure ( CSphSourceParams_SQL & tParams, const CSphConfigSectio
 	LOC_GETS ( tParams.m_sUser,				"sql_user" );
 	LOC_GETS ( tParams.m_sPass,				"sql_pass" );
 	LOC_GETS ( tParams.m_sDB,				"sql_db" );
-	LOC_GETI ( tParams.m_iPort,				"sql_port" );
+	LOC_GETI ( tParams.m_uPort,				"sql_port" );
 
 	LOC_GETS ( tParams.m_sQuery,			"sql_query" );
 	LOC_GETA ( tParams.m_dQueryPre,			"sql_query_pre" );

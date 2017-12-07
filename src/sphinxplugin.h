@@ -83,7 +83,7 @@ public:
 	PluginLib_c *		GetLib() const { return m_pLib; }
 
 protected:
-	virtual				~PluginDesc_c();
+						~PluginDesc_c() override;
 };
 
 /// registered user-defined function descriptor
@@ -91,9 +91,9 @@ class PluginUDF_c : public PluginDesc_c
 {
 public:
 	ESphAttr			m_eRetType;		///< function type, currently FLOAT or INT
-	UdfInit_fn			m_fnInit;		///< per-query init function, mandatory
-	UdfDeinit_fn		m_fnDeinit;		///< per-query deinit function, optional
-	void *				m_fnFunc;		///< per-row worker function, mandatory
+	UdfInit_fn			m_fnInit = nullptr;		///< per-query init function, mandatory
+	UdfDeinit_fn		m_fnDeinit = nullptr;	///< per-query deinit function, optional
+	void *				m_fnFunc = nullptr;		///< per-row worker function, mandatory
 
 	explicit PluginUDF_c ( PluginLib_c * pLib, ESphAttr eRetType )
 		: PluginDesc_c ( pLib )
@@ -107,10 +107,10 @@ public:
 class PluginRanker_c : public PluginDesc_c
 {
 public:
-	RankerInit_fn		m_fnInit;		///< init function (called once when ranker is created), optional
-	RankerUpdate_fn		m_fnUpdate;		///< per-hit update function, optional
-	RankerFinalize_fn	m_fnFinalize;	///< per-document finalize function, mandatory
-	RankerDeinit_fn		m_fnDeinit;		///< deinit function (called once when ranker is destroyed), optional
+	RankerInit_fn		m_fnInit = nullptr;		///< init function (called once when ranker is created), optional
+	RankerUpdate_fn		m_fnUpdate = nullptr;	///< per-hit update function, optional
+	RankerFinalize_fn	m_fnFinalize = nullptr;	///< per-document finalize function, mandatory
+	RankerDeinit_fn		m_fnDeinit = nullptr;	///< deinit function (called once when ranker is destroyed), optional
 
 	explicit			PluginRanker_c ( PluginLib_c * pLib ) : PluginDesc_c ( pLib ) {}
 };
@@ -119,13 +119,13 @@ public:
 class PluginTokenFilter_c : public PluginDesc_c
 {
 public:
-	TokenFilterInit_fn			m_fnInit;
-	TokenFilterBeginDocument_fn	m_fnBeginDocument;
-	TokenFilterBeginField_fn	m_fnBeginField;
-	TokenFilterPushToken_fn		m_fnPushToken;
-	TokenFilterGetExtraToken_fn	m_fnGetExtraToken;
-	TokenFilterEndField_fn		m_fnEndField;
-	TokenFilterDeinit_fn		m_fnDeinit;
+	TokenFilterInit_fn			m_fnInit = nullptr;
+	TokenFilterBeginDocument_fn	m_fnBeginDocument = nullptr;
+	TokenFilterBeginField_fn	m_fnBeginField = nullptr;
+	TokenFilterPushToken_fn		m_fnPushToken = nullptr;
+	TokenFilterGetExtraToken_fn	m_fnGetExtraToken = nullptr;
+	TokenFilterEndField_fn		m_fnEndField = nullptr;
+	TokenFilterDeinit_fn		m_fnDeinit = nullptr;
 
 	explicit					PluginTokenFilter_c ( PluginLib_c * pLib ) : PluginDesc_c ( pLib ) {}
 };
@@ -134,11 +134,11 @@ public:
 class PluginQueryTokenFilter_c : public PluginDesc_c
 {
 public:
-	QueryTokenFilterInit_fn			m_fnInit;
-	QueryTokenFilterPreMorph_fn		m_fnPreMorph;
-	QueryTokenFilterPostMorph_fn	m_fnPostMorph;
-	QueryTokenFilterPushToken_fn	m_fnPushToken;
-	QueryTokenFilterDeinit_fn		m_fnDeinit;
+	QueryTokenFilterInit_fn			m_fnInit = nullptr;
+	QueryTokenFilterPreMorph_fn		m_fnPreMorph = nullptr;
+	QueryTokenFilterPostMorph_fn	m_fnPostMorph = nullptr;
+	QueryTokenFilterPushToken_fn	m_fnPushToken = nullptr;
+	QueryTokenFilterDeinit_fn		m_fnDeinit = nullptr;
 
 	explicit						PluginQueryTokenFilter_c ( PluginLib_c * pLib ) : PluginDesc_c ( pLib ) {}
 };

@@ -179,6 +179,7 @@ protected:
 public:
 	explicit CLemmatizer ( bool IsGerman = false )
 		: m_bIsGerman ( IsGerman )
+		, m_iLang ( 0 )
 	{}
 	CSphVector<CFlexiaModel>	m_FlexiaModels;			///< flexia models
 	int							m_iLang;					///< my language
@@ -1418,15 +1419,15 @@ class CSphAotTokenizerTmpl : public CSphTokenFilter
 {
 protected:
 	BYTE		m_sForm [ SPH_MAX_WORD_LEN*3+4 ];	///< aka MAX_KEYWORD_BYTES
-	int			m_iFormLen;							///< in bytes, but in windows-1251 that is characters, too
-	bool		m_bFound;							///< found or predicted?
+	int			m_iFormLen = 0;						///< in bytes, but in windows-1251 that is characters, too
+	bool		m_bFound = false;					///< found or predicted?
 	DWORD		m_FindResults[12];					///< max results is like 6
-	int			m_iCurrent;							///< index in m_FindResults that was just returned, -1 means no blending
+	int			m_iCurrent = -1;							///< index in m_FindResults that was just returned, -1 means no blending
 	BYTE		m_sToken [ SPH_MAX_WORD_LEN*3+4 ];	///< to hold generated lemmas
 	BYTE		m_sOrigToken [ SPH_MAX_WORD_LEN*3+4 ];	///< to hold original token
 	bool		m_bIndexExact;
 
-	const CSphWordforms *	m_pWordforms;
+	const CSphWordforms *	m_pWordforms = nullptr;
 
 public:
 	CSphAotTokenizerTmpl ( ISphTokenizer * pTok, CSphDict * pDict, bool bIndexExact, int DEBUGARG(iLang) )
@@ -1434,9 +1435,7 @@ public:
 	{
 		assert ( pTok );
 		assert ( g_pLemmatizers[iLang] );
-		m_iCurrent = -1;
 		m_FindResults[0] = AOT_NOFORM;
-		m_pWordforms = NULL;
 		if ( pDict )
 		{
 			// tricky bit
@@ -1449,17 +1448,17 @@ public:
 		m_bIndexExact = bIndexExact;
 	}
 
-	void SetBuffer ( const BYTE * sBuffer, int iLength )
+	void SetBuffer ( const BYTE * sBuffer, int iLength ) final
 	{
 		m_pTokenizer->SetBuffer ( sBuffer, iLength );
 	}
 
-	bool TokenIsBlended() const
+	bool TokenIsBlended() const final
 	{
 		return m_iCurrent>=0 || m_pTokenizer->TokenIsBlended();
 	}
 
-	uint64_t GetSettingsFNV () const
+	uint64_t GetSettingsFNV () const final
 	{
 		uint64_t uHash = CSphTokenFilter::GetSettingsFNV();
 		uHash ^= (uint64_t)m_pWordforms;
@@ -1476,18 +1475,18 @@ public:
 		: CSphAotTokenizerTmpl ( pTok, pDict, bIndexExact, AOT_RU )
 	{}
 
-	ISphTokenizer * Clone ( ESphTokenizerClone eMode ) const
+	ISphTokenizer * Clone ( ESphTokenizerClone eMode ) const final
 	{
 		// this token filter must NOT be created as escaped
 		// it must only be used during indexing time, NEVER in searching time
 		assert ( eMode==SPH_CLONE_INDEX );
-		CSphAotTokenizerRu * pClone = new CSphAotTokenizerRu ( m_pTokenizer->Clone ( eMode ), NULL, m_bIndexExact );
+		auto * pClone = new CSphAotTokenizerRu ( m_pTokenizer->Clone ( eMode ), NULL, m_bIndexExact );
 		if ( m_pWordforms )
 			pClone->m_pWordforms = m_pWordforms;
 		return pClone;
 	}
 
-	BYTE * GetToken()
+	BYTE * GetToken() final
 	{
 		m_eTokenMorph = SPH_TOKEN_MORPH_RAW;
 
@@ -1527,7 +1526,7 @@ public:
 		assert ( m_iCurrent<0 );
 		BYTE * pToken = m_pTokenizer->GetToken();
 		if ( !pToken )
-			return NULL;
+			return nullptr;
 
 		// pass-through blended parts
 		if ( m_pTokenizer->TokenIsBlended() )
@@ -1603,18 +1602,18 @@ public:
 		, m_iLang ( AOT_LANGS(iLang) )
 	{}
 
-	ISphTokenizer * Clone ( ESphTokenizerClone eMode ) const
+	ISphTokenizer * Clone ( ESphTokenizerClone eMode ) const final
 	{
 		// this token filter must NOT be created as escaped
 		// it must only be used during indexing time, NEVER in searching time
 		assert ( eMode==SPH_CLONE_INDEX );
-		CSphAotTokenizer * pClone = new CSphAotTokenizer ( m_pTokenizer->Clone ( eMode ), NULL, m_bIndexExact, m_iLang );
+		auto * pClone = new CSphAotTokenizer ( m_pTokenizer->Clone ( eMode ), nullptr, m_bIndexExact, m_iLang );
 		if ( m_pWordforms )
 			pClone->m_pWordforms = m_pWordforms;
 		return pClone;
 	}
 
-	BYTE * GetToken()
+	BYTE * GetToken() final
 	{
 		m_eTokenMorph = SPH_TOKEN_MORPH_RAW;
 
@@ -1654,7 +1653,7 @@ public:
 		assert ( m_iCurrent<0 );
 		BYTE * pToken = m_pTokenizer->GetToken();
 		if ( !pToken )
-			return NULL;
+			return nullptr;
 
 		// pass-through blended parts
 		if ( m_pTokenizer->TokenIsBlended() )
@@ -1743,7 +1742,7 @@ public:
 CSphTokenFilter * sphAotCreateFilter ( ISphTokenizer * pTokenizer, CSphDict * pDict, bool bIndexExact, DWORD uLangMask )
 {
 	assert ( uLangMask!=0 );
-	CSphTokenFilter * pDerivedTokenizer = NULL;
+	CSphTokenFilter * pDerivedTokenizer = nullptr;
 	for ( int i=AOT_BEGIN; i<AOT_LENGTH; ++i )
 	{
 		if ( uLangMask & (1UL<<i) )
@@ -1761,8 +1760,8 @@ CSphTokenFilter * sphAotCreateFilter ( ISphTokenizer * pTokenizer, CSphDict * pD
 
 void sphAotShutdown ()
 {
-	for ( int i=0; i<AOT_LENGTH; i++ )
-		SafeDelete ( g_pLemmatizers[i] );
+	for ( auto& pLemmantizer : g_pLemmatizers )
+		SafeDelete ( pLemmantizer );
 }
 
 //

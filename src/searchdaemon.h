@@ -112,7 +112,7 @@ DWORD sphGetAddress ( const char * sHost, bool bFatal=false );
 
 /// known commands
 /// (shared here because at least SEARCHD_COMMAND_TOTAL used outside the core)
-enum SearchdCommand_e
+enum SearchdCommand_e : WORD
 {
 	SEARCHD_COMMAND_SEARCH		= 0,
 	SEARCHD_COMMAND_EXCERPT		= 1,
@@ -130,12 +130,13 @@ enum SearchdCommand_e
 	SEARCHD_COMMAND_COMMIT		= 14,
 	SEARCHD_COMMAND_SUGGEST		= 15,
 
-	SEARCHD_COMMAND_TOTAL
+	SEARCHD_COMMAND_TOTAL,
+	SEARCHD_COMMAND_WRONG = SEARCHD_COMMAND_TOTAL,
 };
 
 /// known command versions
 /// (shared here because of REPLICATE)
-enum
+enum SearchdCommandV_e : WORD
 {
 	VER_COMMAND_SEARCH		= 0x121, // 1.33
 	VER_COMMAND_EXCERPT		= 0x104,
@@ -146,6 +147,8 @@ enum
 	VER_COMMAND_SPHINXQL	= 0x100,
 	VER_COMMAND_PING		= 0x100,
 	VER_COMMAND_UVAR		= 0x100,
+
+	VER_COMMAND_WRONG = 0,
 };
 
 enum ESphAddIndex
@@ -746,14 +749,14 @@ typedef CSphRefcountedPtr < RefcountedVector_c<SphAttr_t> > AttrValues_p;
 /// insert value
 struct SqlInsert_t
 {
-	int						m_iType;
+	int						m_iType = 0;
 	CSphString				m_sVal;		// OPTIMIZE? use char* and point to node?
-	int64_t					m_iVal;
-	float					m_fVal;
+	int64_t					m_iVal = 0;
+	float					m_fVal = 0.0;
 	AttrValues_p			m_pVals;
 
 	SqlInsert_t ()
-		: m_pVals ( NULL )
+		: m_pVals ( nullptr )
 	{}
 };
 
@@ -761,9 +764,9 @@ struct SqlInsert_t
 /// one day, we will start subclassing this
 struct SqlStmt_t
 {
-	SqlStmt_e				m_eStmt;
-	int						m_iRowsAffected;
-	const char *			m_sStmt; // for error reporting
+	SqlStmt_e				m_eStmt = STMT_PARSE_ERROR;
+	int						m_iRowsAffected = 0;
+	const char *			m_sStmt = nullptr; // for error reporting
 
 	// SELECT specific
 	CSphQuery				m_tQuery;
@@ -777,15 +780,15 @@ struct SqlStmt_t
 	// INSERT (and CALL) specific
 	CSphVector<SqlInsert_t>	m_dInsertValues; // reused by CALL
 	CSphVector<CSphString>	m_dInsertSchema;
-	int						m_iSchemaSz;
+	int						m_iSchemaSz = 0;
 
 	// SET specific
 	CSphString				m_sSetName;		// reused by ATTACH
-	SqlSet_e				m_eSet;
-	int64_t					m_iSetValue;
+	SqlSet_e				m_eSet = SET_LOCAL;
+	int64_t					m_iSetValue = 0;
 	CSphString				m_sSetValue;
 	CSphVector<SphAttr_t>	m_dSetValues;
-	bool					m_bSetNull;
+	bool					m_bSetNull = false;
 
 	// CALL specific
 	CSphString				m_sCallProc;
@@ -795,20 +798,20 @@ struct SqlStmt_t
 
 	// UPDATE specific
 	CSphAttrUpdate			m_tUpdate;
-	int						m_iListStart; // < the position of start and end of index's definition in original query.
-	int						m_iListEnd;
+	int						m_iListStart = -1; // < the position of start and end of index's definition in original query.
+	int						m_iListEnd = -1;
 
 	// CREATE/DROP FUNCTION, INSTALL PLUGIN specific
 	CSphString				m_sUdfName; // FIXME! move to arg1?
 	CSphString				m_sUdfLib;
-	ESphAttr				m_eUdfType;
+	ESphAttr				m_eUdfType = SPH_ATTR_NONE;
 
 	// ALTER specific
 	CSphString				m_sAlterAttr;
-	ESphAttr				m_eAlterColType;
+	ESphAttr				m_eAlterColType = SPH_ATTR_NONE;
 
 	// SHOW THREADS specific
-	int						m_iThreadsCols;
+	int						m_iThreadsCols = 0;
 
 	// generic parameter, different meanings in different statements
 	// filter pattern in DESCRIBE, SHOW TABLES / META / VARIABLES
@@ -819,7 +822,7 @@ struct SqlStmt_t
 	CSphString				m_sStringParam;
 
 	// generic integer parameter, used in SHOW SETTINGS, default value -1
-	int						m_iIntParam;
+	int						m_iIntParam = -1;
 
 	SqlStmt_t ();
 	bool AddSchemaItem ( const char * psName );
@@ -910,7 +913,7 @@ enum ESphHttpStatus
 };
 
 
-bool CheckCommandVersion ( int iVer, int iDaemonVersion, ISphOutputBuffer & tOut );
+bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, ISphOutputBuffer & tOut );
 ISphSearchHandler * sphCreateSearchHandler ( int iQueries, const QueryParser_i * pQueryParser, bool bSphinxQL, bool bMaster, int iCID );
 void sphFormatFactors ( CSphVector<BYTE> & dOut, const unsigned int * pFactors, bool bJson );
 bool sphLoopClientHttp ( CSphVector<BYTE> & dData, int iCID );

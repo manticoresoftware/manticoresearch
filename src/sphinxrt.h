@@ -99,7 +99,7 @@ typedef void ProgressCallbackSimple_t ();
 class ISphRtAccum
 {
 protected:
-	ISphRtIndex * m_pIndex;		///< my current owner in this thread
+	ISphRtIndex * m_pIndex=nullptr;		///< my current owner in this thread
 	ISphRtAccum () {} // can not create such thing outside of RT index
 public:
 	virtual ~ISphRtAccum () {}

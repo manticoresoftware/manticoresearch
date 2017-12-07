@@ -84,11 +84,11 @@ enum XQOperator_e
 // the limit of field or zone or zonespan
 struct XQLimitSpec_t
 {
-	bool					m_bFieldSpec;	///< whether field spec was already explicitly set
-	FieldMask_t			m_dFieldMask;	///< fields mask (spec part)
-	int						m_iFieldMaxPos;	///< max position within field (spec part)
-	CSphVector<int>			m_dZones;		///< zone indexes in per-query zones list
-	bool					m_bZoneSpan;	///< if we need to hits within only one span
+	bool					m_bFieldSpec = false;	///< whether field spec was already explicitly set
+	FieldMask_t				m_dFieldMask;			///< fields mask (spec part)
+	int						m_iFieldMaxPos = 0;		///< max position within field (spec part)
+	CSphVector<int>			m_dZones;				///< zone indexes in per-query zones list
+	bool					m_bZoneSpan = false;	///< if we need to hits within only one span
 
 public:
 	XQLimitSpec_t ()
@@ -107,7 +107,7 @@ public:
 
 	bool IsEmpty() const
 	{
-		return m_bFieldSpec==false && m_iFieldMaxPos==0 && m_bZoneSpan==false && m_dZones.GetLength()==0;
+		return !m_bFieldSpec && m_iFieldMaxPos==0 && !m_bZoneSpan && m_dZones.GetLength()==0;
 	}
 
 	XQLimitSpec_t ( const XQLimitSpec_t& dLimit )

@@ -33,7 +33,7 @@ BYTE GetWordchar ( const char * & szSet )
 		memcpy ( szBuf, szSet+2, 2 );
 		szBuf[2] = 0;
 
-		char * szStop = NULL;
+		char * szStop = nullptr;
 		int iRes = strtol ( szBuf, &szStop, 16 );
 		if ( szStop!=szBuf+2 || iRes<0 || iRes>255 )
 			return 0;
@@ -56,7 +56,7 @@ bool IsInSet ( BYTE uLetter, const char * szSet )
 		++szSet;
 
 	const char * szSep = strchr ( szSet, '-' );
-	bool bRange = ( szSep!=NULL );
+	bool bRange = ( szSep!=nullptr );
 
 	if ( bRange )
 	{
@@ -126,7 +126,7 @@ public:
 
 private:
 	CSphVector < CISpellDictWord > m_dEntries;
-	int				m_iIterator;
+	int				m_iIterator = 0;
 };
 
 
@@ -197,7 +197,7 @@ void CISpellDict::IterateStart ()
 const CISpellDict::CISpellDictWord * CISpellDict::IterateNext ()
 {
 	if ( m_iIterator>=m_dEntries.GetLength() )
-		return NULL;
+		return nullptr;
 
 	return &m_dEntries [m_iIterator++];
 }
@@ -215,7 +215,7 @@ enum RuleType_e
 class CISpellAffixRule
 {
 public:
-				CISpellAffixRule () {}
+				CISpellAffixRule () = default;
 				CISpellAffixRule ( RuleType_e eRule, char cFlag, bool bCrossProduct, char * szCondition, char * szStrip, char * szAppend );
 
 	bool		Apply ( CSphString & sWord );
@@ -224,17 +224,17 @@ public:
 	bool		IsPrefix () const;
 
 private:
-	RuleType_e	m_eRule;
-	char		m_cFlag;
-	bool		m_bCrossProduct;
+	RuleType_e	m_eRule { RULE_NONE };
+	char		m_cFlag {0};
+	bool		m_bCrossProduct = false;
 	CSphString	m_sCondition;
 	CSphString	m_sStrip;
 	CSphString	m_sAppend;
 
-	int			m_iWordLen;
-	int			m_iCondLen;
-	int			m_iStripLen;
-	int			m_iAppendLen;
+	int			m_iWordLen = 0;
+	int			m_iCondLen = 0;
+	int			m_iStripLen = 0;
+	int			m_iAppendLen = 0;
 
 	bool		CheckSuffix ( const CSphString & sWord ) const;
 	bool		CheckPrefix ( const CSphString & sWord ) const;
@@ -447,14 +447,14 @@ public:
 private:
 	CSphVector < CISpellAffixRule > m_dRules;
 
-	char		m_dCharset [256];
-	bool		m_bFirstCaseConv;
+	char		m_dCharset [256] {0};
+	bool		m_bFirstCaseConv = true;
 	CSphString	m_sLocale;
 	CSphString	m_sCharsetFile;
-	bool		m_bCheckCrosses;
+	bool		m_bCheckCrosses = false;
 	CSphLowercaser m_LowerCaser;
-	bool		m_bUseLowerCaser;
-	bool		m_bUseDictConversion;
+	bool		m_bUseLowerCaser = false;
+	bool		m_bUseDictConversion = false;
 
 	bool		AddToCharset ( char * szRangeL, char * szRangeU );
 	void		AddCharPair ( BYTE uCharL, BYTE uCharU );
@@ -469,12 +469,8 @@ private:
 
 
 CISpellAffix::CISpellAffix ( const char * szLocale, const char * szCharsetFile )
-	: m_bFirstCaseConv	( true )
-	, m_sLocale			( szLocale )
+	: m_sLocale			( szLocale )
 	, m_sCharsetFile	( szCharsetFile )
-	, m_bCheckCrosses	( false )
-	, m_bUseLowerCaser	( false )
-	, m_bUseDictConversion	( false )
 {
 }
 
@@ -867,7 +863,7 @@ char CISpellAffix::ToLowerCase ( char cChar )
 	// user-defined character mapping
 	if ( m_bUseLowerCaser )
 	{
-		char cResult = (char)m_LowerCaser.ToLower ( (BYTE) cChar );
+		auto cResult = (char)m_LowerCaser.ToLower ( (BYTE) cChar );
 		return cResult ? cResult : cChar;
 	}
 
@@ -963,7 +959,7 @@ const char * dModeName[] =
 struct MapInfo_t
 {
 	CSphString	m_sWord;
-	char		m_sRules[3];
+	char		m_sRules[3] {0};
 };
 
 struct WordLess
@@ -1059,7 +1055,7 @@ int main ( int iArgs, char ** dArgs )
 		sphDie ( "Error loading dictionary file '%s'\n", sDict.IsEmpty () ? "" : sDict.cstr () );
 
 	printf ( "Loading affix file...\n" );
-	CISpellAffix Affix ( sLocale.cstr (), bUseCustomCharset ? sCharsetFile.cstr () : NULL );
+	CISpellAffix Affix ( sLocale.cstr (), bUseCustomCharset ? sCharsetFile.cstr () : nullptr );
 	if ( !Affix.Load ( sAffix.cstr () ) )
 		sphDie ( "Error loading affix file '%s'\n", sAffix.IsEmpty () ? "" : sAffix.cstr () );
 
@@ -1075,9 +1071,9 @@ int main ( int iArgs, char ** dArgs )
 
 	Dict.IterateStart ();
 	WordMap_t tWordMap;
-	const CISpellDict::CISpellDictWord * pWord = NULL;
+	const CISpellDict::CISpellDictWord * pWord = nullptr;
 	int nDone = 0;
-	while ( ( pWord = Dict.IterateNext () )!=NULL )
+	while ( ( pWord = Dict.IterateNext () )!=nullptr )
 	{
 		EmitResult ( tWordMap, pWord->m_sWord, pWord->m_sWord );
 

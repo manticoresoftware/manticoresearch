@@ -443,16 +443,6 @@ else ()
 	include_directories ( "${CMAKE_CURRENT_SOURCE_DIR}/src" )
 endif ()
 
-message ( STATUS "Option ENABLE_ID64 ${ENABLE_ID64}" )
-mark_as_advanced ( ENABLE_ID64 )
-option ( ENABLE_ID64 "use 64-bit document and word IDs" ON )
-if ( ENABLE_ID64 )
-	SET ( USE_64BIT 1 )
-else ()
-	SET ( USE_64BIT 0 )
-	cfginfo ( "ENABLE_ID64=OFF" )
-endif ( ENABLE_ID64 )
-
 # Check for RE2 build
 message ( STATUS "Option WITH_RE2 ${WITH_RE2}" )
 option ( WITH_RE2 "compile with re2 library support" OFF )

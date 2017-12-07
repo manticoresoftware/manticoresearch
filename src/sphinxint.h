@@ -225,17 +225,12 @@ public:
 	void			PutBytes ( const void * pData, int64_t iSize );
 	void			PutDword ( DWORD uValue ) { PutBytes ( &uValue, sizeof(DWORD) ); }
 	void			PutOffset ( SphOffset_t uValue ) { PutBytes ( &uValue, sizeof(SphOffset_t) ); }
+	void			PutDocid ( SphDocID_t uValue ) { PutOffset ( uValue ); }
 	void			PutString ( const char * szString );
 	void			PutString ( const CSphString & sString );
 	void			Tag ( const char * sTag );
 
 	void			SeekTo ( SphOffset_t pos ); ///< seeking inside the buffer will truncate it
-
-#if USE_64BIT
-	void			PutDocid ( SphDocID_t uValue ) { PutOffset ( uValue ); }
-#else
-	void			PutDocid ( SphDocID_t uValue ) { PutDword ( uValue ); }
-#endif
 
 	void			ZipInt ( DWORD uValue );
 	void			ZipOffset ( uint64_t uValue );
@@ -334,15 +329,9 @@ public:
 	const CSphString &		GetFilename() const			{ return m_sFilename; }
 	void					ResetError();
 
-#if USE_64BIT
 	SphDocID_t	GetDocid ()		{ return GetOffset(); }
 	SphDocID_t	UnzipDocid ()	{ return UnzipOffset(); }
 	SphWordID_t	UnzipWordid ()	{ return UnzipOffset(); }
-#else
-	SphDocID_t	GetDocid ()		{ return GetDword(); }
-	SphDocID_t	UnzipDocid ()	{ return UnzipInt(); }
-	SphWordID_t	UnzipWordid ()	{ return UnzipInt(); }
-#endif
 
 	const CSphReader &	operator = ( const CSphReader & rhs );
 	void		SetThrottle ( ThrottleState_t * pState ) { m_pThrottle = pState; }

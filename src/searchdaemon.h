@@ -223,12 +223,7 @@ public:
 		SendT<DWORD> ( htonl ( (DWORD)(iValue & 0xffffffffUL) ) );
 	}
 
-#if USE_64BIT
 	void		SendDocid ( SphDocID_t iValue )	{ SendUint64 ( iValue ); }
-#else
-	void		SendDocid ( SphDocID_t iValue )	{ SendDword ( iValue ); }
-#endif
-
 	void		SendString ( const char * sStr );
 
 	void		SendMysqlInt ( int iVal );

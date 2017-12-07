@@ -1,9 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
-<name>Crashing of indexer id64 with keywords dict</name>
-<requires>
-<id64/>
-</requires>
+<name>Crashing of indexer with keywords dict</name>
 <config>
 indexer
 {

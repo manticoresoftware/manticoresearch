@@ -82,15 +82,6 @@ typedef off_t				SphOffset_t;
 
 /////////////////////////////////////////////////////////////////////////////
 
-#ifndef USE_64BIT
-#define USE_64BIT 1
-#endif
-
-#if USE_64BIT
-
-// use 64-bit unsigned integers to store document and word IDs
-#define SPHINX_BITS_TAG	"id64"
-#define SPHINX_BITS_DELIM    "-"
 typedef uint64_t		SphWordID_t;
 typedef uint64_t		SphDocID_t;
 
@@ -100,23 +91,6 @@ typedef uint64_t		SphDocID_t;
 
 STATIC_SIZE_ASSERT ( SphWordID_t, 8 );
 STATIC_SIZE_ASSERT ( SphDocID_t, 8 );
-
-#else
-
-// use 32-bit unsigned integers to store document and word IDs
-#define SPHINX_BITS_TAG	""
-#define SPHINX_BITS_DELIM    ""
-typedef DWORD			SphWordID_t;
-typedef DWORD			SphDocID_t;
-
-#define DOCID_MAX		0xffffffffUL
-#define DOCID_FMT		"%u"
-#define DOCINFO_IDSIZE	1
-
-STATIC_SIZE_ASSERT ( SphWordID_t, 4 );
-STATIC_SIZE_ASSERT ( SphDocID_t, 4 );
-
-#endif // USE_64BIT
 
 #define DWSIZEOF(a) ( sizeof(a) / sizeof(DWORD) )
 
@@ -205,9 +179,9 @@ inline const	DWORD *	STATIC2DOCINFO ( const DWORD * pAttrs )	{ return STATIC2DOC
 #endif
 
 #ifndef SPHINX_TAG
-#define BANNER_TAG SPHINX_BITS_DELIM "dev"
+#define BANNER_TAG "dev"
 #else
-#define BANNER_TAG SPHINX_BITS_DELIM SPHINX_TAG
+#define BANNER_TAG SPHINX_TAG
 #endif
 
 #ifndef GIT_TIMESTAMP_ID
@@ -220,7 +194,7 @@ inline const	DWORD *	STATIC2DOCINFO ( const DWORD * pAttrs )	{ return STATIC2DOC
 	#define VERNUMBERS    "7.7.7"
 #endif
 
-#define SPHINX_VERSION          VERNUMBERS " " SPH_GIT_COMMIT_ID "@" GIT_TIMESTAMP_ID " " SPHINX_BITS_TAG BANNER_TAG
+#define SPHINX_VERSION          VERNUMBERS " " SPH_GIT_COMMIT_ID "@" GIT_TIMESTAMP_ID " " BANNER_TAG
 #define SPHINX_BANNER			"Manticore " SPHINX_VERSION "\nCopyright (c) 2001-2016, Andrew Aksyonoff\n" \
 	"Copyright (c) 2008-2016, Sphinx Technologies Inc (http://sphinxsearch.com)\n" \
 	"Copyright (c) 2017, Manticore Software LTD (http://manticoresearch.com)\n\n"

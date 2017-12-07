@@ -2,7 +2,6 @@
 <test>
 
 <requires>
-<id32/>
 <non-rt/>
 </requires>
 

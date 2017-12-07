@@ -43,11 +43,7 @@
 #define RTDICT_CHECKPOINT_V5			48
 #define SPH_RT_DOUBLE_BUFFER_PERCENT	10
 
-#if USE_64BIT
 #define WORDID_MAX				U64C(0xffffffffffffffff)
-#else
-#define	WORDID_MAX				0xffffffffUL
-#endif
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -142,17 +138,10 @@ static inline const BYTE * UnzipT ( T * pValue, const BYTE * pIn )
 #define UnzipDword UnzipT<DWORD>
 #define UnzipQword UnzipT<uint64_t>
 
-#if USE_64BIT
 #define ZipDocid ZipQword
 #define ZipWordid ZipQword
 #define UnzipDocid UnzipQword
 #define UnzipWordid UnzipQword
-#else
-#define ZipDocid ZipDword
-#define ZipWordid ZipDword
-#define UnzipDocid UnzipDword
-#define UnzipWordid UnzipDword
-#endif
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -3917,7 +3906,7 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, SphDocID_t iMinDocID, i
 	tWriter.PutDword ( INDEX_MAGIC_HEADER );
 	tWriter.PutDword ( RT_INDEX_FORMAT_VERSION );
 
-	tWriter.PutDword ( USE_64BIT ); // use-64bit
+	tWriter.PutDword ( 1 ); // use-64bit
 	tWriter.PutDword ( SPH_DOCINFO_EXTERN );
 
 	// schema
@@ -4468,7 +4457,7 @@ bool RtIndex_t::SaveRamChunk ()
 	if ( !wrChunk.OpenFile ( sNewChunk, m_sLastError ) )
 		return false;
 
-	wrChunk.PutDword ( USE_64BIT );
+	wrChunk.PutDword ( 1 ); // was USE_64BIT
 	RtSegment_t::m_tSegmentSeq.Lock();
 	wrChunk.PutDword ( RtSegment_t::m_iSegments );
 	RtSegment_t::m_tSegmentSeq.Unlock();
@@ -4550,15 +4539,10 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 	if ( !rdChunk.Open ( sChunk, m_sLastError ) )
 		return false;
 
-	if ( ( rdChunk.GetDword ()!=0 )!=( USE_64BIT!=0 ) )
+	bool bId64 = ( rdChunk.GetDword()!=0 );
+	if ( !bId64 )
 	{
-		m_sLastError.SetSprintf (
-#if USE_64BIT
-			"ram chunk dumped by id32 binary; this binary is id64"
-#else
-			"ram chunk dumped by id64 binary; this binary is id32"
-#endif
-		);
+		m_sLastError = "indexes with 32-bit docids are no longer supported";
 		return false;
 	}
 
@@ -4644,7 +4628,7 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 			CSphVector<SphDocID_t> dLegacy;
 			for ( int i=0; i<iLen; i++ )
 			{
-				SphDocID_t uDocid = USE_64BIT ? rdChunk.GetDword() : rdChunk.GetOffset();
+				SphDocID_t uDocid = rdChunk.GetDword();
 				if ( uDocid ) // hash might have 0
 					dLegacy.Add ( uDocid );
 			}
@@ -9755,9 +9739,8 @@ void RtBinlog_c::LoadMeta ()
 		sphDie ( "binlog meta file %s is v.%d, binary is v.%d; recovery requires previous binary version",
 			sMeta.cstr(), uVersion, BINLOG_VERSION );
 
-	if ( bLoaded64bit!=USE_64BIT )
-		sphDie ( "USE_64BIT inconsistency (binary=%d, binlog=%d); recovery requires previous binary version",
-			USE_64BIT, bLoaded64bit );
+	if ( !bLoaded64bit )
+		sphDie ( "USE_64BIT inconsistency (binary=%d, binlog=%d); indexes with 32-bit docids are no longer supported; recovery requires previous binary version" );
 
 	// load list of active log files
 	ARRAY_FOREACH ( i, m_dLogFiles )
@@ -9781,7 +9764,7 @@ void RtBinlog_c::SaveMeta ()
 
 	wrMeta.PutDword ( BINLOG_META_MAGIC );
 	wrMeta.PutDword ( BINLOG_VERSION );
-	wrMeta.PutByte ( USE_64BIT );
+	wrMeta.PutByte ( 1 ); // was USE_64BIT
 
 	// save list of active log files
 	wrMeta.ZipInt ( m_dLogFiles.GetLength() );

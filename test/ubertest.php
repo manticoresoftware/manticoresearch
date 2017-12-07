@@ -157,7 +157,6 @@ else
 	LoadCachedGuesses();
 
 if ( !$g_guesscached ) {
-	GuessIdSize();
 	GuessRE2();
 	GuessRLP();
 	GuessODBC();

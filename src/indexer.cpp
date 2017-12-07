@@ -1706,9 +1706,6 @@ int main ( int argc, char ** argv )
 		return 1;
 	}
 
-	if ( !g_bQuiet && sizeof(SphDocID_t)==4 )
-		fprintf ( stdout, "32-bit IDs are deprecated, rebuild your binaries with --enable-id64" );
-
 	if ( !isatty ( fileno(stdout) ) )
 		g_bProgress = false;
 

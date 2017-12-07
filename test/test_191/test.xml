@@ -3,10 +3,6 @@
 
 <name>bitfields vs inline docinfo vs merge</name>
 
-<requires>
-<id64/> <!-- otherwise, 'DESC rt' mismatches between builds -->
-</requires>
-
 <config>
 indexer
 {

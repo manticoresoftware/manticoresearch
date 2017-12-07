@@ -1741,13 +1741,7 @@ static int64_t sphToInt64 ( const char * s )
 	return strtoll ( s, NULL, 10 );
 }
 
-
-#if USE_64BIT
 #define sphToDocid sphToUint64
-#else
-#define sphToDocid sphToDword
-#endif
-
 
 #if USE_WINDOWS
 
@@ -7299,11 +7293,7 @@ SphOffset_t sphUnzipOffset ( const BYTE * & pBuf )	{ SPH_VARINT_DECODE ( SphOffs
 DWORD CSphReader::UnzipInt ()			{ SPH_VARINT_DECODE ( DWORD, GetByte() ); }
 uint64_t CSphReader::UnzipOffset ()	{ SPH_VARINT_DECODE ( uint64_t, GetByte() ); }
 
-#if USE_64BIT
 #define sphUnzipWordid sphUnzipOffset
-#else
-#define sphUnzipWordid sphUnzipInt
-#endif
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -10492,7 +10482,7 @@ bool IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t 
 	fdInfo.PutDword ( INDEX_FORMAT_VERSION );
 
 	// bits
-	fdInfo.PutDword ( USE_64BIT );
+	fdInfo.PutDword ( 1 ); // was USE_64BIT
 
 	// docinfo
 	fdInfo.PutDword ( tWriteHeader.m_pSettings->m_eDocinfo );
@@ -10827,11 +10817,6 @@ int CSphHitBuilder::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWO
 		assert ( pBuf<m_dWriteBuffer.Begin() + m_dWriteBuffer.GetLength() );
 
 		// encode deltas
-#if USE_64BIT
-#define LOC_ENCODE sphEncodeVLB8
-#else
-#define LOC_ENCODE encodeVLB
-#endif
 
 		// encode keyword
 		if ( d1 )
@@ -10839,7 +10824,7 @@ int CSphHitBuilder::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWO
 			if ( m_pDict->GetSettings().m_bWordDict )
 				pBuf += encodeKeyword ( pBuf, m_pDict->HitblockGetKeyword ( pHit->m_uWordID ) ); // keyword itself in case of keywords dict
 			else
-				pBuf += LOC_ENCODE ( pBuf, d1 ); // delta in case of CRC dict
+				pBuf += sphEncodeVLB8 ( pBuf, d1 ); // delta in case of CRC dict
 
 			assert ( pBuf<m_dWriteBuffer.Begin() + m_dWriteBuffer.GetLength() );
 		}
@@ -10847,11 +10832,9 @@ int CSphHitBuilder::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWO
 		// encode docid delta
 		if ( d2 )
 		{
-			pBuf += LOC_ENCODE ( pBuf, d2 );
+			pBuf += sphEncodeVLB8 ( pBuf, d2 );
 			assert ( pBuf<m_dWriteBuffer.Begin() + m_dWriteBuffer.GetLength() );
 		}
-
-#undef LOC_ENCODE
 
 		// encode attrs
 		if ( d2 && pAttrs )
@@ -15639,22 +15622,17 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 
 	// version
 	m_uVersion = rdInfo.GetDword();
-	if ( m_uVersion==0 || m_uVersion>INDEX_FORMAT_VERSION )
+	if ( m_uVersion<=1 || m_uVersion>INDEX_FORMAT_VERSION )
 	{
 		m_sLastError.SetSprintf ( "%s is v.%d, binary is v.%d", sHeaderName, m_uVersion, INDEX_FORMAT_VERSION );
 		return false;
 	}
 
 	// bits
-	bool bUse64 = false;
-	if ( m_uVersion>=2 )
-		bUse64 = ( rdInfo.GetDword ()!=0 );
-
-	if ( bUse64!=USE_64BIT )
+	bool bUse64 = !!rdInfo.GetDword();
+	if ( !bUse64 )
 	{
-		m_sLastError.SetSprintf ( "'%s' is id%d, and this binary is id%d",
-			GetIndexFileName("sph").cstr(),
-			bUse64 ? 64 : 32, USE_64BIT ? 64 : 32 );
+		m_sLastError.SetSprintf ( "'%s' indexes with 32-bit docids are no longer supported", GetIndexFileName("sph").cstr() );
 		return false;
 	}
 
@@ -15680,10 +15658,8 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 	// in case of *fork rotation we reuse min match from 1st rotated index ( it could be less than my size and inline ( m_pDynamic ) )
 	// min doc
 	m_dMinRow.Reset ( m_tSchema.GetRowSize() );
-	if ( m_uVersion>=2 )
-		m_uMinDocid = (SphDocID_t) rdInfo.GetOffset (); // v2+; losing high bits when !USE_64 is intentional, check is performed on bUse64 above
-	else
-		m_uMinDocid = rdInfo.GetDword(); // v1
+	m_uMinDocid = (SphDocID_t) rdInfo.GetOffset ();
+
 	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE )
 		rdInfo.GetBytes ( m_dMinRow.Begin(), sizeof(CSphRowitem)*m_tSchema.GetRowSize() );
 
@@ -15955,7 +15931,7 @@ void CSphIndex_VLN::DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool 
 	///////////////////////////////////////////////
 
 	fprintf ( fp, "version: %d\n",			m_uVersion );
-	fprintf ( fp, "idbits: %d\n",			USE_64BIT ? 64 : 32 );
+	fprintf ( fp, "idbits: 64\n" );
 	fprintf ( fp, "docinfo: " );
 	switch ( m_tSettings.m_eDocinfo )
 	{
@@ -23701,18 +23677,9 @@ CSphDict * sphCreateDictionaryTemplate ( const CSphDictSettings & tSettings,
 }
 
 
-CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings,
-	const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex,
-	CSphString & sError )
+CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, CSphString & sError )
 {
-	CSphDict * pDict = NULL;
-	if_const ( USE_64BIT )
-		pDict = new CSphDictCRC<false> ();
-	else
-		pDict = new CSphDictCRC<true> ();
-
-	if ( !pDict )
-		return NULL;
+	CSphDict * pDict = new CSphDictCRC<false>;
 	return SetupDictionary ( pDict, tSettings, pFiles, pTokenizer, sIndex, sError );
 }
 
@@ -30656,8 +30623,6 @@ bool CWordlist::Preread ( const char * sName, DWORD uVersion, bool bWordDict, CS
 		// read v.14 checkpoints
 		// or convert v.10 checkpoints
 		DWORD uFlags = 0x3; // 0x1 - WORD_WIDE, 0x2 - OFFSET_WIDE
-		if_const ( !USE_64BIT && uVersion<11 )
-			uFlags &= 0x2;
 		if ( uVersion<11 )
 			uFlags &= 0x1;
 		switch ( uFlags )
@@ -32145,9 +32110,8 @@ void sphDictBuildSkiplists ( const char * sPath )
 	ESphDocinfo eDocinfo = (ESphDocinfo) rdHeader.GetDword();
 	const DWORD uLowestVersion = 12;
 
-	if ( bUse64!=USE_64BIT )
-		sphDie ( "skiplists upgrade: USE_64BIT differs, index %s, binary %s",
-			bUse64 ? "enabled" : "disabled", USE_64BIT ? "enabled" : "disabled" );
+	if ( !bUse64 )
+		sphDie ( "skiplists upgrade: indexes with 32-bit docids are no longer supported" );
 	if ( uHeader!=INDEX_MAGIC_HEADER )
 		sphDie ( "skiplists upgrade: invalid header file" );
 	if ( uVersion<uLowestVersion )

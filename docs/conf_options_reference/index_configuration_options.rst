@@ -583,26 +583,24 @@ The keywords dictionary type. Known values are ‘crc’ and ‘keywords’.
 ‘keywords’.
 
 Keywords dictionary mode (dict=keywords), (greatly) reduces indexing
-impact and enable substring searches on huge collections. They also
-eliminate the chance of CRC32 collisions. That mode supported both for
-disk and RT indexes.
+impact and enable substring searches on huge collections. That mode
+is supported both for disk and RT indexes.
 
 CRC dictionaries never store the original keyword text in the index.
-Instead, keywords are replaced with their control sum value (either
-CRC32 or FNV64, depending whether Manticore was built with
-``--enable-id64``) both when searching and indexing, and that value is
+Instead, keywords are replaced with their control sum value (calculated
+using FNV64) both when searching and indexing, and that value is
 used internally in the index.
 
-That approach has two drawbacks. First, in CRC32 case there is a chance
-of control sum collision between several pairs of different keywords,
-growing quadratically with the number of unique keywords in the index.
-(FNV64 case is unaffected in practice, as a chance of a single FNV64
-collision in a dictionary of 1 billion entries is approximately 1:16, or
-6.25 percent. And most dictionaries will be much more compact that a
-billion keywords, as a typical spoken human language has in the region
-of 1 to 10 million word forms.) Second, and more importantly, substring
-searches are not directly possible with control sums. Manticore alleviated
-that by pre-indexing all the possible substrings as separate keywords
+That approach has two drawbacks. First, there is a chance of control sum
+collision between several pairs of different keywords, growing quadratically
+with the number of unique keywords in the index. However, it is not a big
+concern as a chance of a single FNV64 collision in a dictionary of 1 billion
+entries is approximately 1:16, or 6.25 percent. And most dictionaries will
+be much more compact that a billion keywords, as a typical spoken human
+language has in the region of 1 to 10 million word forms.) Second, and
+more importantly, substring searches are not directly possible with control
+sums. Manticore alleviated that by pre-indexing all the possible substrings
+as separate keywords
 (see :ref:`min_prefix_len`,
 :ref:`min_infix_len`
 directives). That actually has an added benefit of matching substrings

@@ -3324,7 +3324,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	ARRAY_FOREACH ( j, q.m_dWeights )
 		tOut.SendInt ( q.m_dWeights[j] ); // weights
 	tOut.SendString ( sIndexes ); // indexes
-	tOut.SendInt ( USE_64BIT ); // id range bits
+	tOut.SendInt ( 1 ); // id range bits
 	tOut.SendDocid ( 0 ); // default full id range (any client range must be in filters at this stage)
 	tOut.SendDocid ( DOCID_MAX );
 	tOut.SendInt ( q.m_dFilters.GetLength() );
@@ -3644,10 +3644,11 @@ bool SearchReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 		}
 
 		bool bAgent64 = !!tReq.GetInt();
-#if !USE_64BIT
-		if ( bAgent64 )
-			tAgent.m_sFailure.SetSprintf ( "id64 agent, id32 master, docids might be wrapped" );
-#endif
+		if ( !bAgent64 )
+		{
+			tAgent.m_sFailure.SetSprintf ( "agent has 32-bit docids; no longer supported" );
+			return false;
+		}
 
 		assert ( !tRes.m_dMatches.GetLength() );
 		if ( iMatches )
@@ -5240,7 +5241,7 @@ int CalcResultLength ( WORD uVer, const CSphQueryResult * pRes, bool bAgentMode,
 	for ( int i=0; i<iAttrsCount; i++ )
 		iRespLen += 8 + strlen ( pRes->m_tSchema.GetAttr(i).m_sName.cstr() ); // namelen, name, type
 
-	iRespLen += 4 + ( 8+4*USE_64BIT+4*iAttrsCount )*pRes->m_iCount; // id64 tag and matches
+	iRespLen += 4 + ( 12+4*iAttrsCount )*pRes->m_iCount; // id64 tag and matches
 
 	// 64bit matches
 	int iWideAttrs = 0;
@@ -5453,18 +5454,14 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const CSphQueryResult * pRe
 
 	// send matches
 	tOut.SendInt ( pRes->m_iCount );
-	tOut.SendInt ( USE_64BIT );
+	tOut.SendInt ( 1 ); // was USE_64BIT
 
 	CSphVector<BYTE> dJson ( 512 );
 
 	for ( int i=0; i<pRes->m_iCount; i++ )
 	{
 		const CSphMatch & tMatch = pRes->m_dMatches [ pRes->m_iOffset+i ];
-#if USE_64BIT
 		tOut.SendUint64 ( tMatch.m_uDocID );
-#else
-		tOut.SendDword ( (DWORD)tMatch.m_uDocID );
-#endif
 		tOut.SendInt ( tMatch.m_iWeight );
 
 		assert ( tMatch.m_pStatic || !pRes->m_tSchema.GetStaticSize() );
@@ -6146,7 +6143,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 			// "id" is not a part of a schema, so we gotta handle it here
 			d.m_tLocator.m_bDynamic = true;
 			d.m_sName = tItems[i].m_sAlias.IsEmpty() ? "id" : tItems[i].m_sAlias;
-			d.m_eAttrType = USE_64BIT ? SPH_ATTR_BIGINT : SPH_ATTR_INTEGER;
+			d.m_eAttrType = SPH_ATTR_BIGINT;
 			d.m_tLocator.m_iBitOffset = -8*(int)sizeof(SphDocID_t); // FIXME? move to locator method?
 			d.m_tLocator.m_iBitCount = 8*sizeof(SphDocID_t);
 		} else
@@ -13834,7 +13831,7 @@ void HandleMysqlDescribe ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 	tOut.HeadTuplet ( "Field", "Type" );
 
 	// data
-	dCondOut.MatchDataTuplet ( "id", USE_64BIT ? "bigint" : "uint" );
+	dCondOut.MatchDataTuplet ( "id", "bigint" );
 
 	const CSphSchema & tSchema = pServed->m_pIndex->GetMatchSchema();
 	for ( int i=0; i < tSchema.GetFieldsCount(); i++ )
@@ -15014,7 +15011,7 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 	if ( !tRes.m_dMatches.GetLength() && !bReturnZeroCount )
 	{
 		// in case there are no matches, send a dummy schema
-		dRows.HeadColumn ( "id", USE_64BIT ? MYSQL_COL_LONGLONG : MYSQL_COL_LONG, MYSQL_COL_UNSIGNED_FLAG );
+		dRows.HeadColumn ( "id", MYSQL_COL_LONGLONG, MYSQL_COL_UNSIGNED_FLAG );
 	} else
 	{
 		for ( int i=0; i<iSchemaAttrsCount; i++ )
@@ -22863,9 +22860,6 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	const char* sEndian = sphCheckEndian();
 	if ( sEndian )
 		sphDie ( "%s", sEndian );
-
-	if_const ( sizeof(SphDocID_t)==4 )
-		sphWarning ( "32-bit IDs are deprecated, rebuild your binaries with --enable-id64" );
 
 	//////////////////////
 	// parse command line

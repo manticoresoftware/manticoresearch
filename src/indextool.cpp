@@ -1001,7 +1001,7 @@ int main ( int argc, char ** argv )
 				continue;
 
 			const CSphVariant * pType = tIndex ( "type" );
-			if ( pType && ( *pType=="rt" || *pType=="distributed" ) )
+			if ( pType && ( *pType=="rt" || *pType=="distributed" || *pType=="percolate" ) )
 				continue;
 
 			// checking index presence by sph file available
@@ -1045,6 +1045,10 @@ int main ( int argc, char ** argv )
 		if ( eCommand==CMD_STRIP )
 			break;
 
+		CSphVariant * pType = hConf["index"][sIndex]("type");
+		if ( pType && ( *pType=="distributed" || *pType=="percolate" ) )
+			sphDie ( "index '%s': check of '%s' type is not supported'\n", sIndex.cstr(), pType->cstr() );
+
 		if ( !hConf["index"][sIndex]("path") )
 			sphDie ( "index '%s': missing 'path' in config'\n", sIndex.cstr() );
 
@@ -1060,7 +1064,7 @@ int main ( int argc, char ** argv )
 		if ( hConf["index"][sIndex]("type") && hConf["index"][sIndex]["type"]=="rt" )
 		{
 			CSphSchema tSchema;
-			if ( sphRTSchemaConfigure ( hConf["index"][sIndex], &tSchema, &sError ) )
+			if ( sphRTSchemaConfigure ( hConf["index"][sIndex], &tSchema, &sError, false ) )
 				pIndex = sphCreateIndexRT ( tSchema, sIndex.cstr(), 32*1024*1024, hConf["index"][sIndex]["path"].cstr(), bDictKeywords );
 		} else
 		{

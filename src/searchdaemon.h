@@ -533,6 +533,7 @@ struct ServedDesc_t
 	bool				m_bOnDiskAttrs;
 	bool				m_bOnDiskPools;
 	int64_t				m_iMass; // relative weight (by access speed) of the index
+	bool				m_bPercolate;
 
 						ServedDesc_t ();
 	virtual				~ServedDesc_t ();
@@ -720,6 +721,7 @@ enum SqlStmt_e
 	STMT_FLUSH_HOSTNAMES,
 	STMT_FLUSH_LOGS,
 	STMT_RELOAD_INDEXES,
+	STMT_SYSFILTERS,
 
 	STMT_TOTAL
 };
@@ -878,6 +880,7 @@ enum MysqlErrors_e
 	MYSQL_ERR_NO_SUCH_TABLE				= 1146
 };
 
+class SqlRowBuffer_c;
 
 class StmtErrorReporter_i
 {
@@ -885,6 +888,8 @@ public:
 	virtual void Ok ( int iAffectedRows, const CSphString & sWarning ) = 0;
 	virtual void Ok ( int iAffectedRows, int nWarnings=0 ) = 0;
 	virtual void Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr = MYSQL_ERR_PARSE_ERROR ) = 0;
+
+	virtual SqlRowBuffer_c * GetBuffer() = 0;
 };
 
 
@@ -914,7 +919,7 @@ void sphFormatFactors ( CSphVector<BYTE> & dOut, const unsigned int * pFactors, 
 bool sphLoopClientHttp ( CSphVector<BYTE> & dData, int iCID );
 void sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError );
 bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation );
-void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, bool bReplace, bool bCommit, CSphString & sWarning, CSphSessionAccum & tAcc );
+void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, bool bReplace, bool bCommit, CSphString & sWarning, CSphSessionAccum & tAcc, ESphCollation	eCollation );
 void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const QueryParserFactory_i & tQueryParserFactory, const SqlStmt_t & tStmt, const CSphString & sQuery, CSphString & sWarning, int iCID );
 void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const QueryParserFactory_i & tQueryParserFactory, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit, CSphSessionAccum & tAcc, int iCID );
 

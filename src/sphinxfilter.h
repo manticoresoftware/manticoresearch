@@ -86,6 +86,9 @@ struct CreateFilterContext_t
 
 bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphString & sWarning );
 
+void FormatFilterQL ( const CSphFilterSettings & tFilter, int iCompactIN, StringBuilder_c & tBuf );
+void FormatFiltersQL ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree, int iCompactIN, bool bDeflowered, StringBuilder_c & tBuf );
+
 #endif // _sphinxfilter_
 
 //

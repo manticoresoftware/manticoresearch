@@ -753,6 +753,7 @@ public:
 	virtual void	Ok ( int iAffectedRows, const CSphString & /*sWarning*/ ) { m_iAffected = iAffectedRows; }
 	virtual void	Ok ( int iAffectedRows, int /*nWarnings*/ ) { m_iAffected = iAffectedRows; }
 	virtual void	Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr );
+	virtual SqlRowBuffer_c * GetBuffer() { return NULL; }
 
 	bool			IsError() const { return m_bError; }
 	const char *	GetError() const { return m_sError.cstr(); }
@@ -787,7 +788,7 @@ static bool ProcessInsert ( SqlStmt_t & tStmt, SphDocID_t tDocId, bool bReplace,
 	CSphSessionAccum tAcc ( false );
 	CSphString sWarning;
 	HttpErrorReporter_c tReporter;
-	sphHandleMysqlInsert ( tReporter, tStmt, bReplace, true, sWarning, tAcc );
+	sphHandleMysqlInsert ( tReporter, tStmt, bReplace, true, sWarning, tAcc, SPH_COLLATION_DEFAULT );
 
 	if ( tReporter.IsError() )
 		pResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );

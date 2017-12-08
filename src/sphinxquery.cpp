@@ -966,6 +966,17 @@ static int GetNodeChildIndex ( const XQNode_t * pParent, const XQNode_t * pNode 
 	return -1;
 }
 
+XQQuery_t * XQQuery_t::Clone () const
+{
+	XQQuery_t * pQuery = new XQQuery_t;
+	pQuery->m_dZones = m_dZones;
+	pQuery->m_bNeedSZlist = m_bNeedSZlist;
+	pQuery->m_bSingleWord = m_bSingleWord;
+	pQuery->m_pRoot = m_pRoot->Clone();
+
+	return pQuery;
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 XQParser_t::XQParser_t ()

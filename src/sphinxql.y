@@ -121,6 +121,7 @@
 %token	TOK_START
 %token	TOK_STATUS
 %token	TOK_STRING
+%token	TOK_SYSFILTERS
 %token	TOK_SUM
 %token	TOK_TABLE
 %token	TOK_TABLES
@@ -225,6 +226,7 @@ statement:
 	| reload_indexes
 	| flush_hostnames
 	| flush_logs
+	| sysfilters
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -1764,6 +1766,14 @@ reload_indexes:
 			tStmt.m_eStmt = STMT_RELOAD_INDEXES;
 		}
 	;
+	
+sysfilters:
+	TOK_SYSFILTERS filter_expr
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_SYSFILTERS;
+		}
+	;		
 
 %%
 

@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>percolate query</name>
+
+<config>
+indexer
+{
+	mem_limit				= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source dummy
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+	sql_attr_uint	= gid
+}
+
+index dummy
+{
+	source			= dummy
+	path			= <data_path/>/dummy
+}
+
+index pq
+{
+	type = percolate
+	path			= <data_path/>/pq
+	min_infix_len	= 2
+	rt_field = title
+}
+
+index pq_filter
+{
+	type = percolate
+	path = <data_path/>/pq_filter
+	rt_field = title
+	rt_attr_uint = gid
+}
+
+</config>
+
+<db_create>
+CREATE TABLE `test_table` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `gid` int(11) NOT NULL,
+  `title` varchar(255) NOT NULL,
+  PRIMARY KEY (`id`)
+)
+</db_create>
+<db_drop>DROP TABLE IF EXISTS `test_table`;</db_drop>
+<db_insert>INSERT INTO `test_table` VALUES ( 1, 1, 'test 1' )</db_insert>
+
+<sphqueries>
+<sphinxql>INSERT INTO pq VALUES ( 'test' )</sphinxql>
+<sphinxql>INSERT INTO pq VALUES ( 'test | cat' )</sphinxql>
+<sphinxql>INSERT INTO pq VALUES ( 'tes*' )</sphinxql>
+<sphinxql>INSERT INTO pq VALUES ( '*ik*' )</sphinxql>
+<sphinxql>CALL PQ ('pq', 'test 1', 1 as docs, 0 as docs_json )</sphinxql>
+<sphinxql>CALL PQ ('pq', 'cat like me', 1 as docs, 0 as docs_json )</sphinxql>
+<sphinxql>CALL PQ ('pq', ('test of many fields goes on', 'many fields join together for testik'), 1 as docs, 0 as docs_json )</sphinxql>
+
+<!-- json documents -->
+<sphinxql>CALL PQ ('pq', ('{"title":"testik goes on"}', '{"title":"cat but not dog"}'), 1 as docs, 1 as docs_json )</sphinxql>
+
+<!-- query with position terms -->
+<sphinxql>INSERT INTO pq VALUES ( '"butter is"' )</sphinxql>
+<sphinxql>CALL PQ ('pq', ('{"title":"butter is good as"}', '{"title":"is butter"}'), 1 as docs, 1 as docs_json )</sphinxql>
+
+<!-- query management by tags -->
+<sphinxql>INSERT INTO pq (query, tags) VALUES ( 'test 1', 'base3 postid postid_11' )</sphinxql>
+<sphinxql>INSERT INTO pq (query, tags) VALUES ( 'test 2', 'base3 postid postid_12' )</sphinxql>
+<sphinxql>INSERT INTO pq (query, tags) VALUES ( 'test 3', 'base3 city' )</sphinxql>
+<sphinxql>SELECT * FROM pq where tags='base3'</sphinxql>
+<sphinxql>DELETE FROM pq where tags='postid'</sphinxql>
+<sphinxql>SELECT * FROM pq where tags='base3'</sphinxql>
+<sphinxql>DELETE FROM pq where tags='base3'</sphinxql>
+<sphinxql>SELECT * FROM pq where tags='base3'</sphinxql>
+
+<!-- filters -->
+<sphinxql>INSERT INTO pq_filter (query, filters) VALUES ( 'filter test', 'gid &gt;= 10' )</sphinxql>
+<sphinxql>INSERT INTO pq_filter (query, filters) VALUES ( 'filter test', 'gid &gt;= 10 OR gid &lt;= 3' )</sphinxql>
+<sphinxql>SELECT * FROM pq_filter</sphinxql>
+<sphinxql>CALL PQ ('pq_filter', ('{"title":"filter test doc1", "gid":2 }', '{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as docs_json )</sphinxql>
+
+</sphqueries>
+
+</test>

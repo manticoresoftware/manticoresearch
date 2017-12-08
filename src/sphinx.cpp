@@ -16541,11 +16541,17 @@ CSphQueryContext::CSphQueryContext ( const CSphQuery & q )
 
 CSphQueryContext::~CSphQueryContext ()
 {
+	ResetFilters();
+}
+
+void CSphQueryContext::ResetFilters()
+{
 	SafeDelete ( m_pFilter );
 	SafeDelete ( m_pWeightFilter );
 
 	ARRAY_FOREACH ( i, m_dUserVals )
 		m_dUserVals[i]->Release();
+	m_dUserVals.Reset();
 }
 
 void CSphQueryContext::BindWeights ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sWarning )
@@ -17174,7 +17180,7 @@ bool CSphQueryContext::CreateFilters ( bool bFullscan,
 	const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError, CSphString & sWarning, ESphCollation eCollation, bool bArenaProhibit,
 	const KillListVector & dKillList, const CSphVector<FilterTreeItem_t> * pFilterTree )
 {
-	if ( !pdFilters && !dKillList.GetLength() )
+	if ( ( !pdFilters || !pdFilters->GetLength() ) && !dKillList.GetLength() )
 		return true;
 
 	CreateFilterContext_t tCtx;

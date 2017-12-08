@@ -85,7 +85,7 @@ public:
 class CSphConfigSection;
 void sphRTInit ( const CSphConfigSection & hSearchd, bool bTestMode, const CSphConfigSection * pCommon );
 void sphRTConfigure ( const CSphConfigSection & hSearchd, bool bTestMode );
-bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema * pSchema, CSphString * pError );
+bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema * pSchema, CSphString * pError, bool bSkipValidation );
 void sphRTSetTestMode ();
 
 /// deinitialize subsystem
@@ -106,6 +106,60 @@ public:
 	ISphRtIndex * GetIndex() const { return m_pIndex; }
 };
 
+struct PercolateQueryProfiling_t
+{
+	uint64_t m_uUid;
+	uint64_t m_uTm;
+};
+
+struct PercolateMatchResult_t
+{
+	bool m_bGetDocs;
+
+	CSphVector<uint64_t> m_dQueries;
+	CSphFixedVector<SphDocID_t> m_dDocs;
+	int m_iQueriesMatched;
+	int m_iDocsMatched;
+	int64_t m_tmTotal;
+
+	// verbose data
+	bool m_bVerbose;
+	CSphFixedVector<PercolateQueryProfiling_t> m_dQueryTm;
+	int	m_iEarlyOutQueries;
+	int	m_iTotalQueries;
+	int m_iOnlyTerms;
+	int64_t m_tmSetup;
+
+	PercolateMatchResult_t ();
+	void Swap ( PercolateMatchResult_t & tOther );
+};
+
+struct PercolateQueryDesc
+{
+	uint64_t m_uID;
+	CSphString m_sQuery;
+	CSphString m_sTags;
+	CSphString m_sFilters;
+};
+
+class PercolateIndex_i : public ISphRtIndex
+{
+public:
+	PercolateIndex_i ( const char * sIndexName, const char * sFileName ) : ISphRtIndex ( sIndexName, sFileName ) {}
+	virtual bool	MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchResult_t & tResult ) = 0;
+	virtual int		DeleteQueries ( const uint64_t * pQueries, int iCount ) = 0;
+	virtual int		DeleteQueries ( const char * sTags ) = 0;
+	virtual bool	Query ( const char * sQuery, const char * sTags, const CSphVector<CSphFilterSettings> * pFilters, const CSphVector<FilterTreeItem_t> * pFilterTree, bool bReplace, uint64_t uId, CSphString & sError ) = 0;
+
+	virtual void	GetQueries ( const char * sFilterTags, CSphVector<PercolateQueryDesc> & dQueries ) = 0;
+
+	virtual bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError ) const = 0;
+	virtual void Reconfigure ( CSphReconfigureSetup & tSetup ) = 0;
+};
+
+/// percolate query index factory
+PercolateIndex_i * CreateIndexPercolate ( const CSphSchema & tSchema, const char * sIndexName, const char * sPath );
+void FixPercolateSchema ( CSphSchema & tSchema );
 
 //////////////////////////////////////////////////////////////////////////
 

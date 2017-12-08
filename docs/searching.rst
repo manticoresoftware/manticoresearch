@@ -18,3 +18,4 @@ Searching
    searching/collations
    searching/query_cache
    mysql_storage_engine_sphinxse
+   searching/percolate_query

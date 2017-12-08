@@ -2585,8 +2585,8 @@ Example:
 type
 ~~~~
 
-Index type. Known values are ``plain``, ``distributed``, ``rt`` and
-``template``. Optional, default is ‘plain’ (plain local index).
+Index type. Known values are ``plain``, ``distributed``, ``rt``,
+``template`` and ``percolate``. Optional, default is ‘plain’ (plain local index).
 
 Manticore supports several different types of indexes. 
 Plain local indexes

@@ -449,6 +449,8 @@ public:
 	ISphFilter *				m_pFilter = nullptr;
 	ISphFilter *				m_pWeightFilter = nullptr;
 
+	bool						m_bSkipQCache;					///< whether do not cache this query
+
 	struct CalcItem_t
 	{
 		CSphAttrLocator			m_tLoc;					///< result locator
@@ -490,6 +492,7 @@ public:
 	void						SetStringPool ( const BYTE * pStrings );
 	void						SetMVAPool ( const DWORD * pMva, bool bArenaProhibit );
 	void						SetupExtraData ( ISphRanker * pRanker, ISphMatchSorter * pSorter );
+	void						ResetFilters();
 
 private:
 	CSphVector<const UservarIntSet_c*>		m_dUserVals;
@@ -1686,6 +1689,7 @@ struct CSphReconfigureSettings
 	CSphDictSettings		m_tDict;
 	CSphIndexSettings		m_tIndex;
 	CSphFieldFilterSettings m_tFieldFilter;
+	CSphSchema				m_tSchema;
 };
 
 struct CSphReconfigureSetup
@@ -1694,6 +1698,7 @@ struct CSphReconfigureSetup
 	CSphDict *			m_pDict;
 	CSphIndexSettings	m_tIndex;
 	ISphFieldFilter *	m_pFieldFilter;
+	CSphSchema			m_tSchema;
 
 	CSphReconfigureSetup ();
 	~CSphReconfigureSetup ();

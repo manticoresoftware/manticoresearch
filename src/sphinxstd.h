@@ -1391,6 +1391,13 @@ public:
 	{
 		return sphBinarySearch ( m_pData, m_pData+m_iSize-1, tRef );
 	}
+
+
+	void Fill ( const T & rhs )
+	{
+		for ( int i = 0; i<m_iSize; i++ )
+			m_pData[i] = rhs;
+	}
 };
 
 //////////////////////////////////////////////////////////////////////////

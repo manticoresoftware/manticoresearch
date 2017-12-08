@@ -158,6 +158,8 @@ Install the ``searchd`` system as a Windows service:
    guide to do this can be found under :ref:`Quick tour <quick_usage_tour>`.
 
 
+.. _compiling_from_source:
+
 Compiling Manticore from source
 -------------------------------
 
@@ -169,7 +171,7 @@ Required tools
 * a working compiler
 
 	* on Linux - GNU gcc (4.7.2 and above) or clang can be used
-	* on Windows - Microsoft Visual Studio 2015 (community edition is enough)
+	* on Windows - Microsoft Visual Studio 2015 and above (community edition is enough)
 	* on Mac OS - XCode
 
 * cmake - used on all plaftorms (version 2.8 or above)
@@ -327,6 +329,21 @@ For a simple building on x64:
    C:\build>"%PROGRAMW6432%\CMake\bin\cmake.exe" -DWITH_PGSQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 .
    C:\build>"%PROGRAMW6432%\CMake\bin\cmake.exe" --build . --target package --config RelWithDebInfo
 
+Recompilation (update)
+~~~~~~~~~~~~~~~~~~~~~~
+
+If you didn't change path for sources and build, just move to you build folder and run:
+
+.. code-block:: bash
+
+   cmake .
+   make clean
+   make
+
+If by any reason it doesn't work, you can delete file ``CMakeCache.txt`` located in build folder.
+After this step you have to run cmake again, pointing to source folder and configuring the options.
+
+If it also doesn't help, just wipe out your build folder and begin clean :ref:`compiling from sources <compiling_from_source>`
 
 .. _quick_usage_tour:
 

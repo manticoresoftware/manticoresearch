@@ -1,10 +1,9 @@
 stages:
-  - docs
-  - unittests
+  - routines
   - publish
 
 pages:
-  stage: docs
+  stage: routines
   tags:
     - docs
     - docker
@@ -23,7 +22,7 @@ pages:
   - master
 
 job_mirror:
-  stage: docs
+  stage: routines
   only:
     - master
   script:
@@ -31,7 +30,7 @@ job_mirror:
   allow_failure: true
 
 simple_tests:
-  stage: unittests
+  stage: routines
   tags:
     - ubuntu
     - specdocker
@@ -39,22 +38,6 @@ simple_tests:
   image: registry.gitlab.com/manticoresearch/dev/ubertests:latest
   script:
     - ctest -V -S /work/gltest.cmake
-  artifacts:
-    paths:
-    - build/here
-    expire_in: 2 hrs
-    when: always
-  retry: 1
-
-disabled_id64_tests:
-  stage: unittests
-  tags:
-    - ubuntu
-    - specdocker
-  dependencies: []
-  image: registry.gitlab.com/manticoresearch/dev/ubertests:latest
-  script:
-    - ctest -V -DDISABLE_ID64=1 -S /work/gltest.cmake
   artifacts:
     paths:
     - build/here

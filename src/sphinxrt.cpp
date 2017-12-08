@@ -4537,8 +4537,7 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 	if ( !rdChunk.Open ( sChunk, m_sLastError ) )
 		return false;
 
-	bool bId64 = ( rdChunk.GetDword()!=0 );
-	if ( !bId64 )
+	if ( !rdChunk.GetDword () ) // !Id64
 	{
 		m_sLastError = "indexes with 32-bit docids are no longer supported";
 		return false;
@@ -4569,7 +4568,7 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 		if ( uVersion>=5 && m_bKeywordDict && !LoadVector ( rdChunk, pSeg->m_dKeywordCheckpoints, iSaneVecSize, "ram-checkpoints", m_sLastError ) )
 				return false;
 
-		const char * pCheckpoints = (const char *)pSeg->m_dKeywordCheckpoints.Begin();
+		auto * pCheckpoints = (const char *)pSeg->m_dKeywordCheckpoints.Begin();
 
 		int iCheckpointCount = rdChunk.GetDword();
 		if ( !CheckVectorLength ( iCheckpointCount, iSaneVecSize, "ram-checkpoints", m_sLastError ) )

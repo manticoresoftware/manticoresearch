@@ -10,5 +10,5 @@ SphinxQL syntax (and therefore can not be used as identifiers).
 
 
     AND, AS, BY, DIV, FACET, FALSE, FROM, ID, IN, INDEXES, IS, LIMIT,
-    LOGS, MOD, NOT, NULL, OR, ORDER, RELOAD, SELECT, TRUE
+    LOGS, MOD, NOT, NULL, OR, ORDER, RELOAD, SELECT, SYSFILTERS, TRUE
 

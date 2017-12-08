@@ -8776,7 +8776,6 @@ void RtIndex_t::ProgressiveMerge ( volatile bool * pForceTerminate, ThrottleStat
 			memcpy ( dMergedKlist.Begin(), pOldest->GetKillList(), sizeof(SphDocID_t) * pOldest->GetKillListSize() );
 			memcpy ( dMergedKlist.Begin() + iOff, pNextChunk->GetKillList(), sizeof(SphDocID_t) * pNextChunk->GetKillListSize() );
 		} // m_tChunkLock scope
-		Verify ( m_tChunkLock.Unlock() );
 
 		// for filtering have to set bounds
 		dKlist.Add ( 0 );
@@ -9746,7 +9745,7 @@ void RtBinlog_c::LoadMeta ()
 			sMeta.cstr(), uVersion, BINLOG_VERSION );
 
 	if ( !bLoaded64bit )
-		sphDie ( "USE_64BIT inconsistency (binary=%d, binlog=%d); indexes with 32-bit docids are no longer supported; recovery requires previous binary version" );
+		sphDie ( "indexes with 32-bit docids are no longer supported; recovery requires previous binary version" );
 
 	// load list of active log files
 	ARRAY_FOREACH ( i, m_dLogFiles )

@@ -4625,7 +4625,7 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 			CSphVector<SphDocID_t> dLegacy;
 			for ( int i=0; i<iLen; i++ )
 			{
-				SphDocID_t uDocid = rdChunk.GetDword();
+				SphDocID_t uDocid = rdChunk.GetOffset();
 				if ( uDocid ) // hash might have 0
 					dLegacy.Add ( uDocid );
 			}

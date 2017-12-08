@@ -1,32 +1,38 @@
-.. percolate_query:
+.. _percolate_query:
 
 Percolate query
------------------------------------
+---------------
+.. note::
+   This is a newly added feature. Possible changes may occur in future updates.
+   
+The percolate query is used to match documents against queries stored in a index. It is also called "search in reverse" as it works opposite than a regular search where  documents are stored and queries are issues against the index.
 
-The percolate query can be used to match queries stored in an index. Adding the document to that index will issue match with the stored queries.
-By using the percolate query, you are checking the document matches any of the predefined criteria. Common use cases include monitoring and events.
+The queries are stored in a special RealTime index and they can be added,deleted and listed using INSERT/DELETE/SELECT statements in a similar way as documents in a regular index.
 
-Query got stored with ``INSERT`` statement and matching issued with ``CALL PQ`` statement. Query also might have ``tags`` field that used for query
-management along with ``filters`` field to filter out document by attribute values on matching.
+Checking  if a document  matches any of the predefined criteria is made with the ``CALL PQ`` function , which returns a list of the matched queries.
+Note that it does not add the documents in the percolate index. You still need to use another index on which you will insert the documents for performing regular searches.
 
-.. percolate_query_tags:
+.. _percolate_query_tags:
+
 Tags
 ----
 
 Query might have ``tags``. ``tags`` set for query with ``INSERT`` statement. Later user might list query with specific ``tags`` with ``SELECT`` statement
 or delete query(es) with ``DELETE`` statement.
 
-.. percolate_query_filters:
+.. _percolate_query_filters:
+
 Filters
-----
+-------
 
 Query might have ``filters``. ``filters`` set for query with ``INSERT`` statement. Documents might be filtered with ``filters`` with ``CALL PQ`` statement.
 
-.. percolate_query_index:
+.. _percolate_query_index:
+
 Index
 -----
 
-Percolate query work only for ``percolate`` index :ref:`type <_type>`. Its configuration is similar to :ref:`Real-time index <_real-time_indexes>`
+Percolate query work only for ``percolate`` index :ref:`type <type>`. Its configuration is similar to :ref:`Real-time index <real-time_indexes>`
 however declaration of fields and attributes might been omitted, in that case index created with default field ``text`` and attribute ``gid``.
 
 .. code-block:: ini
@@ -40,7 +46,8 @@ however declaration of fields and attributes might been omitted, in that case in
     }
 
     
-.. percolate_query_insert:
+.. _percolate_query_insert:
+
 INSERT
 ------
 
@@ -57,9 +64,10 @@ To store query ``INSERT`` statement looks like
     
 where ``tags`` and ``filters`` are optional fields. In case no schema declared for ``INSERT`` statement 1st field will be full-text ``query``
 and optional 2nd field will be ``tags``.
-``filters`` is a string and has same format as ``SphinxQL`` :ref:`WHERE <_select_where>` clause.
+``filters`` is a string and has same format as ``SphinxQL`` :ref:`WHERE <select_where>` clause.
 
-.. percolate_query_call:
+.. _percolate_query_call:
+
 CALL PQ
 -------
 
@@ -93,7 +101,8 @@ There is default values for options:
 
 
 
-.. percolate_query_list:
+.. _percolate_query_list:
+
 List stored queries
 -------------------
 
@@ -121,9 +130,10 @@ should provide total amount of queries stored.
     +------+
 
     
-.. percolate_query_delete:
+.. _percolate_query_delete:
+
 Delete query
--------------------
+------------
 
 To delete stored query(es) at index ``DELETE`` statement looks like
 
@@ -136,7 +146,8 @@ To delete stored query(es) at index ``DELETE`` statement looks like
     
 In case ``tags`` provided query will be deleted if any ``tags`` from ``DELETE`` statement found at stored query.
 
-.. percolate_query_show_meta:
+.. _percolate_query_show_meta:
+
 Meta
 ----
 
@@ -166,9 +177,10 @@ With entries:
 -  Total queries stored - how many queries stored at index
 -  Term only queries - how many queries are with terms. The rest of queries are with extended query syntax
 
-.. percolate_query_reconfigure:
+.. _percolate_query_reconfigure:
+
 Reconfigure
-----
+-----------
 
 ``ALTER RECONFIGURE`` command is also supported for percolate query index. It allows to reconfigure ``percolate`` index on the fly without delete
 and repopulate index with queries back.

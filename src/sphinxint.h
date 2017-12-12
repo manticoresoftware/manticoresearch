@@ -449,7 +449,7 @@ public:
 	ISphFilter *				m_pFilter = nullptr;
 	ISphFilter *				m_pWeightFilter = nullptr;
 
-	bool						m_bSkipQCache;					///< whether do not cache this query
+	bool						m_bSkipQCache = false;			///< whether do not cache this query
 
 	struct CalcItem_t
 	{

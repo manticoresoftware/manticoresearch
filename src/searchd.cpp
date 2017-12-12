@@ -3905,9 +3905,6 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 {
 	assert ( pQuery && pQuery->m_sRawQuery.cstr() );
 
-	// fixup query
-	pQuery->m_sQuery = pQuery->m_sRawQuery;
-
 	if ( pQuery->m_eMode==SPH_MATCH_BOOLEAN )
 		pQuery->m_eRanker = SPH_RANK_NONE;
 

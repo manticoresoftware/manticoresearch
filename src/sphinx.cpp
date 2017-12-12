@@ -30547,16 +30547,13 @@ void CWordlist::Reset ()
 }
 
 
-template<bool WORD_WIDE, bool OFFSET_WIDE>
+template<bool OFFSET_WIDE>
 struct CheckpointReader_T : public ISphCheckpointReader
 {
 	CheckpointReader_T()
 	{
 		m_iSrcStride = 0;
-		if_const ( WORD_WIDE )
-			m_iSrcStride += sizeof(SphOffset_t);
-		else
-			m_iSrcStride += sizeof(DWORD);
+		m_iSrcStride += sizeof(SphOffset_t);
 
 		if_const ( OFFSET_WIDE )
 			m_iSrcStride += sizeof(SphOffset_t);
@@ -30566,15 +30563,8 @@ struct CheckpointReader_T : public ISphCheckpointReader
 
 	const BYTE * ReadEntry ( const BYTE * pBuf, CSphWordlistCheckpoint & tCP ) const
 	{
-		if_const ( WORD_WIDE )
-		{
-			tCP.m_uWordID = (SphWordID_t)sphUnalignedRead ( *(SphOffset_t *)pBuf );
-			pBuf += sizeof(SphOffset_t);
-		} else
-		{
-			tCP.m_uWordID = sphGetDword ( pBuf );
-			pBuf += sizeof(DWORD);
-		}
+		tCP.m_uWordID = (SphWordID_t)sphUnalignedRead ( *(SphOffset_t *)pBuf );
+		pBuf += sizeof(SphOffset_t);
 
 		if_const ( OFFSET_WIDE )
 		{
@@ -30636,17 +30626,10 @@ bool CWordlist::Preread ( const char * sName, DWORD uVersion, bool bWordDict, CS
 
 		// read v.14 checkpoints
 		// or convert v.10 checkpoints
-		DWORD uFlags = 0x3; // 0x1 - WORD_WIDE, 0x2 - OFFSET_WIDE
 		if ( uVersion<11 )
-			uFlags &= 0x1;
-		switch ( uFlags )
-		{
-			case 0x3:	m_tMapedCpReader = new CheckpointReader_T<true, true>(); break;
-			case 0x2:	m_tMapedCpReader = new CheckpointReader_T<false, true>(); break;
-			case 0x1:	m_tMapedCpReader = new CheckpointReader_T<true, false>(); break;
-			case 0x0:
-			default:	m_tMapedCpReader = new CheckpointReader_T<false, false>(); break;
-		}
+			m_tMapedCpReader = new CheckpointReader_T<false>;
+		else
+			m_tMapedCpReader = new CheckpointReader_T<true>;
 
 		return true;
 	}

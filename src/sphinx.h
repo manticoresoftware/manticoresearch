@@ -2674,6 +2674,13 @@ public:
 	virtual bool	LimitPushdown ( int, int ) { return false; } // FIXME! implement this
 };
 
+enum QueryType_e
+{
+	QUERY_API,
+	QUERY_SQL,
+	QUERY_JSON
+};
+
 class QueryParser_i;
 
 enum QueryOption_e
@@ -2787,7 +2794,7 @@ public:
 	bool			m_bFacet;			///< whether this a facet query
 	bool			m_bFacetHead;
 
-	bool			m_bSphinxQL {false};			///< queries from sphinxql require special handling
+	QueryType_e		m_eQueryType {QUERY_API};		///< queries from sphinxql require special handling
 	const QueryParser_i * m_pQueryParser {nullptr};	///< queries do not own this parser
 
 	CSphVector<CSphString> m_dIncludeItems;

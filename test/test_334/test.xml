@@ -44,6 +44,12 @@ index test2
   path      = <data_path/>/test_dummy2
 }
 
+index dist2
+{
+  type	= distributed
+  agent	= <my_address/>:test2
+}
+
 </config>
 
 <db_drop>drop table if exists test_table</db_drop>
@@ -134,6 +140,30 @@ insert into test_table values
   {
 	"match_phrase": { "_all" : "had grown not quite" }
   }
+}
+</query>
+
+<!-- distributed -->
+<query endpoint="json/search">
+{
+  "index":"dist2",
+  "query":
+  {
+	"match_phrase": { "_all" : "had grown quite" }
+  }
+}
+</query>
+
+<query endpoint="json/search">
+{
+  "index":"dist2",
+  "query": { "match_all": {} }
+}
+</query>
+
+<query endpoint="json/search">
+{
+  "index":"dist2"
 }
 </query>
 

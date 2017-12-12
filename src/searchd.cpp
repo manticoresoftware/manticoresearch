@@ -3202,9 +3202,16 @@ int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuer
 		+ q.m_sQueryTokenFilterLib.Length()
 		+ q.m_sQueryTokenFilterName.Length()
 		+ q.m_sQueryTokenFilterOpts.Length();
-	iReqSize += q.m_sRawQuery.IsEmpty()
-		? q.m_sQuery.Length()
-		: q.m_sRawQuery.Length();
+
+	if ( q.m_eQueryType==QUERY_JSON )
+		iReqSize += q.m_sQuery.Length();
+	else
+	{
+		iReqSize += q.m_sRawQuery.IsEmpty()
+			? q.m_sQuery.Length()
+			: q.m_sRawQuery.Length();
+	}
+
 	if ( q.m_eRanker==SPH_RANK_EXPR || q.m_eRanker==SPH_RANK_EXPORT )
 		iReqSize += q.m_sRankerExpr.Length() + 4;
 	iReqSize += q.m_dFilterTree.GetLength() * 4 * 4 + 4; // 4 int fields; int array length
@@ -3278,7 +3285,8 @@ enum
 	QFLAG_LOCAL_DF				= 1UL << 7,
 	QFLAG_LOW_PRIORITY			= 1UL << 8,
 	QFLAG_FACET					= 1UL << 9,
-	QFLAG_FACET_HEAD			= 1UL << 10
+	QFLAG_FACET_HEAD			= 1UL << 10,
+	QFLAG_JSON_QUERY			= 1UL << 11
 };
 
 void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, ISphOutputBuffer & tOut, const CSphQuery & q, bool bAgentWeight, int iWeight ) const
@@ -3297,6 +3305,10 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, ISphOutputBuffer
 	uFlags |= QFLAG_LOW_PRIORITY * q.m_bLowPriority;
 	uFlags |= QFLAG_FACET * q.m_bFacet;
 	uFlags |= QFLAG_FACET_HEAD * q.m_bFacetHead;
+
+	if ( q.m_eQueryType==QUERY_JSON )
+		uFlags |= QFLAG_JSON_QUERY;
+
 	tOut.SendDword ( uFlags );
 
 	// The Search Legacy
@@ -3318,10 +3330,17 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, ISphOutputBuffer
 		tOut.SendString ( q.m_sRankerExpr.cstr() );
 	tOut.SendInt ( q.m_eSort ); // sort mode
 	tOut.SendString ( q.m_sSortBy.cstr() ); // sort attr
-	if ( q.m_sRawQuery.IsEmpty() )
+
+	if ( q.m_eQueryType==QUERY_JSON )
 		tOut.SendString ( q.m_sQuery.cstr() );
 	else
-		tOut.SendString ( q.m_sRawQuery.cstr() ); // query
+	{
+		if ( q.m_sRawQuery.IsEmpty() )
+			tOut.SendString ( q.m_sQuery.cstr() );
+		else
+			tOut.SendString ( q.m_sRawQuery.cstr() ); // query
+	}
+
 	tOut.SendInt ( q.m_dWeights.GetLength() );
 	ARRAY_FOREACH ( j, q.m_dWeights )
 		tOut.SendInt ( q.m_dWeights[j] ); // weights
@@ -3886,14 +3905,6 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 {
 	assert ( pQuery && pQuery->m_sRawQuery.cstr() );
 
-	// sort filters
-	ARRAY_FOREACH ( i, pQuery->m_dFilters )
-		pQuery->m_dFilters[i].m_dValues.Sort();
-
-	// sort overrides
-	ARRAY_FOREACH ( i, pQuery->m_dOverrides )
-		pQuery->m_dOverrides[i].m_dValues.Sort ();
-
 	// fixup query
 	pQuery->m_sQuery = pQuery->m_sRawQuery;
 
@@ -3939,12 +3950,24 @@ void PrepareQueryEmulation ( CSphQuery * pQuery )
 		case SPH_MATCH_PHRASE:	pQuery->m_eRanker = SPH_RANK_PROXIMITY; *szRes++ = '\"'; *szRes = '\0'; break;
 		default:				return;
 	}
+}
 
-	if ( !pQuery->m_bHasOuter )
+
+static void FixupQuerySettings ( CSphQuery & tQuery )
+{
+	// sort filters
+	for ( auto & i : tQuery.m_dFilters )
+		i.m_dValues.Sort();
+
+	// sort overrides
+	for ( auto & i : tQuery.m_dOverrides )
+		i.m_dValues.Sort();
+
+	if ( !tQuery.m_bHasOuter )
 	{
-		pQuery->m_sOuterOrderBy = "";
-		pQuery->m_iOuterOffset = 0;
-		pQuery->m_iOuterLimit = 0;
+		tQuery.m_sOuterOrderBy = "";
+		tQuery.m_iOuterOffset = 0;
+		tQuery.m_iOuterLimit = 0;
 	}
 }
 
@@ -4218,6 +4241,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 		tQuery.m_bLowPriority = !!( uFlags & QFLAG_LOW_PRIORITY );
 		tQuery.m_bFacet = !!( uFlags & QFLAG_FACET );
 		tQuery.m_bFacetHead = !!( uFlags & QFLAG_FACET_HEAD );
+		tQuery.m_eQueryType = (uFlags & QFLAG_JSON_QUERY) ? QUERY_JSON : QUERY_API;
 
 		if ( uMasterVer>0 || uVer==0x11E )
 			tQuery.m_bNormalizedTFIDF = !!( uFlags & QFLAG_NORMALIZED_TF );
@@ -4319,7 +4343,12 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	}
 
 	// now prepare it for the engine
-	PrepareQueryEmulation ( &tQuery );
+	tQuery.m_sQuery = tQuery.m_sRawQuery;
+
+	if ( tQuery.m_eQueryType!=QUERY_JSON )
+		PrepareQueryEmulation ( &tQuery );
+
+	FixupQuerySettings ( tQuery );
 
 	// all ok
 	return true;
@@ -5806,14 +5835,15 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 	}
 
 	bool bReturnZeroCount = ( tRes.m_dZeroCount.GetLength()!=0 );
+	bool bQueryFromAPI = tQuery.m_eQueryType==QUERY_API;
 
 	// 0 matches via SphinxAPI? no fiddling with schemes is necessary
 	// (and via SphinxQL, we still need to return the right schema)
-	if ( !tQuery.m_bSphinxQL && !tRes.m_dMatches.GetLength() )
+	if ( bQueryFromAPI && !tRes.m_dMatches.GetLength() )
 		return true;
 
 	// 0 result set schemes via SphinxQL? just bail
-	if ( tQuery.m_bSphinxQL && !tRes.m_dSchemas.GetLength() && !bReturnZeroCount )
+	if ( !bQueryFromAPI && !tRes.m_dSchemas.GetLength() && !bReturnZeroCount )
 		return true;
 
 	// build a minimal schema over all the (potentially different) schemes
@@ -5822,7 +5852,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 	if ( tRes.m_dSchemas.GetLength() )
 		tRes.m_tSchema = tRes.m_dSchemas[0];
 	bool bAgent = tQuery.m_bAgent;
-	bool bUsualApi = !bAgent && !tQuery.m_bSphinxQL;
+	bool bUsualApi = !bAgent && bQueryFromAPI;
 	bool bAllEqual = true;
 
 	// FIXME? add assert ( tRes.m_tSchema==tRes.m_dSchemas[0] );
@@ -5835,11 +5865,11 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 	// build a list of select items that the query asked for
 	bool bHaveExprs = false;
 	CSphVector<CSphQueryItem> tExtItems;
-	const CSphVector<CSphQueryItem> & tItems = ExpandAsterisk ( tRes.m_tSchema, dQueryItems, tExtItems, !tQuery.m_bSphinxQL, tQuery.m_bFacetHead, bHaveExprs );
+	const CSphVector<CSphQueryItem> & tItems = ExpandAsterisk ( tRes.m_tSchema, dQueryItems, tExtItems, bQueryFromAPI, tQuery.m_bFacetHead, bHaveExprs );
 
 	// api + index without attributes + select * case
 	// can not skip aggregate filtering
-	if ( !tQuery.m_bSphinxQL && !tItems.GetLength() && !pAggrFilter && !bHaveExprs )
+	if ( bQueryFromAPI && !tItems.GetLength() && !pAggrFilter && !bHaveExprs )
 		return true;
 
 	// build the final schemas!
@@ -5855,7 +5885,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 	ARRAY_FOREACH ( i, tItems )
 	{
 		int iCol = -1;
-		if ( tQuery.m_bSphinxQL && tItems[i].m_sAlias.IsEmpty() )
+		if ( !bQueryFromAPI && tItems[i].m_sAlias.IsEmpty() )
 			iCol = tRes.m_tSchema.GetAttrIndex ( tItems[i].m_sExpr.cstr() );
 
 		if ( iCol>=0 )
@@ -6620,13 +6650,16 @@ class SearchHandler_c : public ISphSearchHandler
 	friend void LocalSearchThreadFunc ( void * pArg );
 
 public:
-									SearchHandler_c ( int iQueries, const QueryParser_i * pParser, bool bSphinxQL, bool bMaster, int iCID );
+									SearchHandler_c ( int iQueries, const QueryParser_i * pParser, QueryType_e eQueryType, bool bMaster, int iCID );
 									~SearchHandler_c() override;
+
 	void							RunQueries () override;					///< run all queries, get all results
 	void							RunUpdates ( const CSphQuery & tQuery, const CSphString & sIndex, ServedIndex_c * pLocked, CSphAttrUpdateEx * pUpdates ); ///< run Update command instead of Search
 	void							RunDeletes ( const CSphQuery & tQuery, const CSphString & sIndex, ServedIndex_c * pLocked, CSphString * pErrors, CSphVector<SphDocID_t>* ); ///< run Delete command instead of Search
 
 	void							SetQuery ( int iQuery, const CSphQuery & tQuery ) override;
+	void							SetQueryParser ( const QueryParser_i * pParser );
+	void							SetQueryType ( QueryType_e eQueryType );
 	void							SetProfile ( CSphQueryProfile * pProfile ) override;
 	virtual CSphQuery &				GetQuery ( int iQuery ) { return m_dQueries[iQuery]; }
 	AggrResult_t *					GetResult ( int iResult ) override { return m_dResults.Begin() + iResult; }
@@ -6653,11 +6686,11 @@ protected:
 	bool							m_bFacetQueue;	///< whether current subset is subject to facet-queue optimization
 	CSphVector<LocalIndex_t>		m_dLocal;		///< local indexes for the current subset
 	mutable CSphVector<CSphSchemaMT>		m_dExtraSchemas; ///< the extra fields for agents
-	bool							m_bSphinxql;	///< if the query get from sphinxql - to avoid applying sphinxql magick for others
 	CSphAttrUpdateEx *				m_pUpdates;		///< holder for updates
 	CSphVector<SphDocID_t> *		m_pDelete;		///< this query is for deleting
 
 	CSphQueryProfile *				m_pProfile;
+	QueryType_e						m_eQueryType {QUERY_API}; ///< queries from sphinxql require special handling
 	const QueryParser_i *			m_pQueryParser;	///< parser used for queries in this handler. e.g. plain or json-style
 
 	mutable ExprHook_t				m_tHook;
@@ -6676,15 +6709,13 @@ protected:
 };
 
 
-ISphSearchHandler * sphCreateSearchHandler ( int iQueries, const QueryParser_i * pQueryParser, bool bSphinxQL, bool bMaster, int iCID )
+ISphSearchHandler * sphCreateSearchHandler ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster, int iCID )
 {
-	return new SearchHandler_c ( iQueries, pQueryParser, bSphinxQL, bMaster, iCID );
+	return new SearchHandler_c ( iQueries, pQueryParser, eQueryType, bMaster, iCID );
 }
 
 
-SearchHandler_c::SearchHandler_c ( int iQueries, const QueryParser_i * pQueryParser, bool bSphinxQL, bool bMaster, int iCid )
-	: m_bSphinxql ( bSphinxQL )
-	, m_pQueryParser ( pQueryParser )
+SearchHandler_c::SearchHandler_c ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster, int iCid )
 {
 	m_iStart = 0;
 	m_iEnd = 0;
@@ -6706,11 +6737,8 @@ SearchHandler_c::SearchHandler_c ( int iQueries, const QueryParser_i * pQueryPar
 	m_bMaster = bMaster;
 	m_iCid = iCid;
 
-	for ( auto & i : m_dQueries )
-	{
-		i.m_pQueryParser = pQueryParser;
-		i.m_bSphinxQL = bSphinxQL;
-	}
+	SetQueryParser ( pQueryParser );
+	SetQueryType ( eQueryType );
 }
 
 
@@ -6727,6 +6755,23 @@ SearchHandler_c::~SearchHandler_c ()
 	SafeDelete ( m_pQueryParser );
 }
 
+
+void SearchHandler_c::SetQueryParser ( const QueryParser_i * pParser )
+{
+	m_pQueryParser = pParser;
+	for ( auto & i : m_dQueries )
+		i.m_pQueryParser = pParser;
+}
+
+
+void SearchHandler_c::SetQueryType ( QueryType_e eQueryType )
+{
+	m_eQueryType = eQueryType;
+	for ( auto & i : m_dQueries )
+		i.m_eQueryType = eQueryType;
+}
+
+
 static void SetDesc ( ServedDesc_t * pDst, const ServedIndex_c * pSrc )
 {
 	if ( !pDst || !pSrc )
@@ -6735,6 +6780,7 @@ static void SetDesc ( ServedDesc_t * pDst, const ServedIndex_c * pSrc )
 	*pDst = *pSrc;
 	pDst->m_pIndex = NULL; // do not want to free index at desc destructor
 }
+
 
 bool SearchHandler_c::LockIndex ( const CSphString & sName, ServedDesc_t * pDesc )
 {
@@ -6889,7 +6935,7 @@ void SearchHandler_c::SetQuery ( int iQuery, const CSphQuery & tQuery )
 {
 	m_dQueries[iQuery] = tQuery;
 	m_dQueries[iQuery].m_pQueryParser = m_pQueryParser;
-	m_dQueries[iQuery].m_bSphinxQL = m_bSphinxql;
+	m_dQueries[iQuery].m_eQueryType = m_eQueryType;
 }
 
 
@@ -8596,13 +8642,31 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 	}
 
 	assert ( pThd );
-	SearchHandler_c tHandler ( iQueries, sphCreatePlainQueryParser(), false, ( iMasterVer==0 ), pThd->m_iConnID );
+	SearchHandler_c tHandler ( iQueries, nullptr, QUERY_API, ( iMasterVer==0 ), pThd->m_iConnID );
 	ARRAY_FOREACH ( i, tHandler.m_dQueries )
 		if ( !ParseSearchQuery ( tReq, tOut, tHandler.m_dQueries[i], uVer, uMasterVer ) )
 			return;
 
 	if ( tHandler.m_dQueries.GetLength() )
 	{
+		QueryType_e eQueryType = tHandler.m_dQueries[0].m_eQueryType;
+
+#ifndef NDEBUG
+		// we assume that all incoming queries have the same type
+		for ( const auto & i: tHandler.m_dQueries )
+			assert ( i.m_eQueryType==eQueryType );
+#endif
+
+		QueryParser_i * pParser {nullptr};
+		if ( eQueryType==QUERY_JSON )
+			pParser = sphCreateJsonQueryParser();
+		else
+			pParser = sphCreatePlainQueryParser();
+
+		assert ( pParser );
+		tHandler.SetQueryParser ( pParser );
+		tHandler.SetQueryType ( eQueryType );
+
 		const CSphQuery & q = tHandler.m_dQueries[0];
 		pThd->SetThreadInfo ( "api-search query=\"%s\" comment=\"%s\"", q.m_sQuery.scstr(), q.m_sComment.scstr() );
 	}
@@ -15115,7 +15179,7 @@ static void DoExtendedUpdate ( const char * sIndex, const QueryParserFactory_i &
 		return;
 	}
 
-	SearchHandler_c tHandler ( 1, tQueryParserFactory.Create(), true, false, iCID ); // handler unlocks index at destructor - no need to do it manually
+	SearchHandler_c tHandler ( 1, tQueryParserFactory.Create(), tStmt.m_tQuery.m_eQueryType, false, iCID ); // handler unlocks index at destructor - no need to do it manually
 	CSphAttrUpdateEx tUpdate;
 	CSphString sError;
 
@@ -15842,7 +15906,7 @@ static int LocalIndexDoDeleteDocuments ( const char * sName, const QueryParserFa
 	CSphVector<SphDocID_t> dValues;
 	if ( !pDocs ) // needs to be deleted via query
 	{
-		pHandler = new SearchHandler_c ( 1, tQueryParserFactory.Create(), true, false, iCID ); // handler unlocks index at destructor - no need to do it manually
+		pHandler = new SearchHandler_c ( 1, tQueryParserFactory.Create(), tStmt.m_tQuery.m_eQueryType, false, iCID ); // handler unlocks index at destructor - no need to do it manually
 		pHandler->RunDeletes ( tStmt.m_tQuery, sName, pLocked, &sError, &dValues );
 		pDocs = dValues.Begin();
 		iCount = dValues.GetLength();
@@ -16066,7 +16130,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 		StatCountCommand ( SEARCHD_COMMAND_SEARCH );
 
 	// setup query for searching
-	SearchHandler_c tHandler ( iSelect, sphCreatePlainQueryParser(), true, true, pThd->m_iConnID );
+	SearchHandler_c tHandler ( iSelect, sphCreatePlainQueryParser(), QUERY_SQL, true, pThd->m_iConnID );
 	SessionVars_t tVars;
 	CSphQueryProfileMysql tProfile;
 
@@ -17478,7 +17542,7 @@ public:
 				}
 
 				StatCountCommand ( SEARCHD_COMMAND_SEARCH );
-				SearchHandler_c tHandler ( 1, sphCreatePlainQueryParser(), true, true, pThd->m_iConnID );
+				SearchHandler_c tHandler ( 1, sphCreatePlainQueryParser(), QUERY_SQL, true, pThd->m_iConnID );
 				tHandler.SetQuery ( 0, dStmt.Begin()->m_tQuery );
 
 				if ( m_tVars.m_bProfile )

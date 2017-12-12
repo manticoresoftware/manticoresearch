@@ -914,7 +914,7 @@ enum ESphHttpStatus
 
 
 bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, ISphOutputBuffer & tOut );
-ISphSearchHandler * sphCreateSearchHandler ( int iQueries, const QueryParser_i * pQueryParser, bool bSphinxQL, bool bMaster, int iCID );
+ISphSearchHandler * sphCreateSearchHandler ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster, int iCID );
 void sphFormatFactors ( CSphVector<BYTE> & dOut, const unsigned int * pFactors, bool bJson );
 bool sphLoopClientHttp ( CSphVector<BYTE> & dData, int iCID );
 void sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError );

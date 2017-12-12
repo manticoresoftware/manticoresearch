@@ -569,13 +569,13 @@ static void HttpHandlerPage ( bool bPage, const CSphString & sInvalidEndpoint, C
 
 struct HttpQuerySettings_t
 {
-	bool m_bProfile;
-	bool m_bSphinxQL;
-	bool m_bAttrHighlight;
+	bool		m_bProfile;
+	QueryType_e m_eQueryType;
+	bool		m_bAttrHighlight;
 
 	HttpQuerySettings_t ()
 		: m_bProfile ( false )
-		, m_bSphinxQL ( false )
+		, m_eQueryType ( QUERY_SQL )
 		, m_bAttrHighlight ( false )
 	{}
 };
@@ -608,7 +608,7 @@ static QueryParser_i * ParseQuerySql ( CSphQuery & tQuery, const HttpRequestPars
 		return NULL;
 	}
 
-	tSettings.m_bSphinxQL = true;
+	tSettings.m_eQueryType = QUERY_SQL;
 
 	return sphCreatePlainQueryParser();
 }
@@ -627,7 +627,7 @@ static QueryParser_i * ParseQueryPlain ( CSphQuery & tQuery, const HttpRequestPa
 	if ( !tQuery.m_sSortBy.IsEmpty() )
 		tQuery.m_eSort = SPH_SORT_EXTENDED;
 
-	tSettings.m_bSphinxQL = true;
+	tSettings.m_eQueryType = QUERY_SQL;
 
 	return sphCreatePlainQueryParser();
 }
@@ -643,7 +643,7 @@ static QueryParser_i * ParseQueryJson ( CSphQuery & tQuery, const HttpRequestPar
 		return NULL;
 	}
 
-	tSettings.m_bSphinxQL = true;
+	tSettings.m_eQueryType = QUERY_JSON;
 
 	return sphCreateJsonQueryParser();
 }
@@ -717,7 +717,7 @@ static void HttpHandlerSearch ( ParseQueryFunc_fn * pParseQueryFunc, ResultEncod
 	CSphQueryProfileJson tProfile;
 
 	tQuery.m_pQueryParser = pQueryParser;
-	CSphScopedPtr<ISphSearchHandler> tHandler ( sphCreateSearchHandler ( 1, pQueryParser, tQuerySettings.m_bSphinxQL, true, iCID ) );
+	CSphScopedPtr<ISphSearchHandler> tHandler ( sphCreateSearchHandler ( 1, pQueryParser, tQuerySettings.m_eQueryType, true, iCID ) );
 
 	if ( tQuerySettings.m_bProfile )
 		tHandler->SetProfile ( &tProfile );

@@ -1,0 +1,34 @@
+a:1:{i:0;a:10:{i:0;a:6:{s:13:"http_endpoint";s:9:"json/bulk";s:11:"http_method";s:4:"POST";s:12:"http_request";s:475:"
+{ "insert" : { "index" : "test_rt", "id" : 1, "doc": { "tag" : 1, "content" : "doc one" } } }
+{ "insert" : { "index" : "test_rt", "id" : 2, "doc": { "tag" : 2, "content" : "doc two" } } }
+{ "insert" : { "index" : "test_rt", "id" : 3, "doc": { "tag" : 3, "content" : "doc three" } } }
+{ "insert" : { "index" : "test_rt", "id" : 4, "doc": { "tag" : 4, "content" : "doc four" } } }
+{ "insert" : { "index" : "test_rt", "id" : 5, "doc": { "tag" : 5, "content" : "doc five" } } }
+";s:4:"rows";s:396:"{"items":[{"insert":{"_index":"test_rt","_id":1,"created":true,"result":"created"}},{"insert":{"_index":"test_rt","_id":2,"created":true,"result":"created"}},{"insert":{"_index":"test_rt","_id":3,"created":true,"result":"created"}},{"insert":{"_index":"test_rt","_id":4,"created":true,"result":"created"}},{"insert":{"_index":"test_rt","_id":5,"created":true,"result":"created"}}],"errors":false}";s:9:"http_code";i:200;s:4:"http";i:1;}i:1;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:51:"{ "index": "dist", "query": { "match_all": {} } } }";s:4:"rows";s:262:"{"timed_out":false,"hits":{"total":5,"hits":[{"_id":"1","_score":1,"_source":{"tag":1}},{"_id":"2","_score":1,"_source":{"tag":2}},{"_id":"3","_score":1,"_source":{"tag":3}},{"_id":"4","_score":1,"_source":{"tag":4}},{"_id":"5","_score":1,"_source":{"tag":5}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:2;a:6:{s:13:"http_endpoint";s:11:"json/update";s:11:"http_method";s:4:"POST";s:12:"http_request";s:62:"
+{
+	"index":"dist",
+	"id":1,
+	"doc":
+	{
+	    "tag" : 100
+	}
+}
+";s:4:"rows";s:44:"{"_index":"dist","_id":1,"result":"updated"}";s:9:"http_code";i:200;s:4:"http";i:1;}i:3;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:51:"{ "index": "dist", "query": { "match_all": {} } } }";s:4:"rows";s:264:"{"timed_out":false,"hits":{"total":5,"hits":[{"_id":"1","_score":1,"_source":{"tag":100}},{"_id":"2","_score":1,"_source":{"tag":2}},{"_id":"3","_score":1,"_source":{"tag":3}},{"_id":"4","_score":1,"_source":{"tag":4}},{"_id":"5","_score":1,"_source":{"tag":5}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:4;a:6:{s:13:"http_endpoint";s:11:"json/update";s:11:"http_method";s:4:"POST";s:12:"http_request";s:94:"
+{
+	"index":"dist",
+	"doc":
+	{
+	    "tag" : 200
+	},
+	"query": { "match": { "*": "doc" } } }
+}
+";s:4:"rows";s:29:"{"_index":"dist","updated":5}";s:9:"http_code";i:200;s:4:"http";i:1;}i:5;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:51:"{ "index": "dist", "query": { "match_all": {} } } }";s:4:"rows";s:272:"{"timed_out":false,"hits":{"total":5,"hits":[{"_id":"1","_score":1,"_source":{"tag":200}},{"_id":"2","_score":1,"_source":{"tag":200}},{"_id":"3","_score":1,"_source":{"tag":200}},{"_id":"4","_score":1,"_source":{"tag":200}},{"_id":"5","_score":1,"_source":{"tag":200}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:6;a:6:{s:13:"http_endpoint";s:11:"json/delete";s:11:"http_method";s:4:"POST";s:12:"http_request";s:30:"
+{
+	"index":"dist",
+	"id":1
+}
+";s:4:"rows";s:57:"{"_index":"dist","_id":1,"found":true,"result":"deleted"}";s:9:"http_code";i:200;s:4:"http";i:1;}i:7;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:51:"{ "index": "dist", "query": { "match_all": {} } } }";s:4:"rows";s:227:"{"timed_out":false,"hits":{"total":4,"hits":[{"_id":"2","_score":1,"_source":{"tag":200}},{"_id":"3","_score":1,"_source":{"tag":200}},{"_id":"4","_score":1,"_source":{"tag":200}},{"_id":"5","_score":1,"_source":{"tag":200}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}i:8;a:6:{s:13:"http_endpoint";s:9:"json/bulk";s:11:"http_method";s:4:"POST";s:12:"http_request";s:139:"
+{ "delete" : { "index" : "dist", "id" : 2 } }
+{ "delete" : { "index" : "dist", "id" : 3 } }
+{ "delete" : { "index" : "dist", "id" : 4 } }
+";s:4:"rows";s:233:"{"items":[{"delete":{"_index":"dist","_id":2,"found":true,"result":"deleted"}},{"delete":{"_index":"dist","_id":3,"found":true,"result":"deleted"}},{"delete":{"_index":"dist","_id":4,"found":true,"result":"deleted"}}],"errors":false}";s:9:"http_code";i:200;s:4:"http";i:1;}i:9;a:6:{s:13:"http_endpoint";s:11:"json/search";s:11:"http_method";s:4:"POST";s:12:"http_request";s:51:"{ "index": "dist", "query": { "match_all": {} } } }";s:4:"rows";s:92:"{"timed_out":false,"hits":{"total":1,"hits":[{"_id":"5","_score":1,"_source":{"tag":200}}]}}";s:9:"http_code";i:200;s:4:"http";i:1;}}}

@@ -129,6 +129,7 @@ enum SearchdCommand_e : WORD
 	SEARCHD_COMMAND_REPLACE		= 13,
 	SEARCHD_COMMAND_COMMIT		= 14,
 	SEARCHD_COMMAND_SUGGEST		= 15,
+	SEARCHD_COMMAND_JSON		= 16,
 
 	SEARCHD_COMMAND_TOTAL,
 	SEARCHD_COMMAND_WRONG = SEARCHD_COMMAND_TOTAL,
@@ -145,6 +146,7 @@ enum SearchdCommandV_e : WORD
 	VER_COMMAND_STATUS		= 0x101,
 	VER_COMMAND_FLUSHATTRS	= 0x100,
 	VER_COMMAND_SPHINXQL	= 0x100,
+	VER_COMMAND_JSON		= 0x100,
 	VER_COMMAND_PING		= 0x100,
 	VER_COMMAND_UVAR		= 0x100,
 
@@ -893,10 +895,15 @@ public:
 };
 
 
+struct IRequestBuilder_t;
+struct IReplyParser_t;
+
 class QueryParserFactory_i
 {
 public:
-	virtual QueryParser_i * Create() const = 0;
+	virtual QueryParser_i *		CreateQueryParser() const = 0;
+	virtual IRequestBuilder_t *	CreateRequestBuilder ( const CSphString & sQuery, const SqlStmt_t & tStmt ) const = 0;
+	virtual IReplyParser_t *	CreateReplyParser ( int & iUpdated, int & iWarnings ) const = 0;
 };
 
 
@@ -912,16 +919,36 @@ enum ESphHttpStatus
 	SPH_HTTP_STATUS_TOTAL
 };
 
+enum ESphHttpEndpoint
+{
+	SPH_HTTP_ENDPOINT_INDEX,
+	SPH_HTTP_ENDPOINT_SEARCH,
+	SPH_HTTP_ENDPOINT_SQL,
+	SPH_HTTP_ENDPOINT_JSON_SEARCH,
+	SPH_HTTP_ENDPOINT_JSON_INDEX,
+	SPH_HTTP_ENDPOINT_JSON_CREATE,
+	SPH_HTTP_ENDPOINT_JSON_INSERT,
+	SPH_HTTP_ENDPOINT_JSON_REPLACE,
+	SPH_HTTP_ENDPOINT_JSON_UPDATE,
+	SPH_HTTP_ENDPOINT_JSON_DELETE,
+	SPH_HTTP_ENDPOINT_JSON_BULK,
+
+	SPH_HTTP_ENDPOINT_TOTAL
+};
 
 bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, ISphOutputBuffer & tOut );
 ISphSearchHandler * sphCreateSearchHandler ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster, int iCID );
 void sphFormatFactors ( CSphVector<BYTE> & dOut, const unsigned int * pFactors, bool bJson );
-bool sphLoopClientHttp ( CSphVector<BYTE> & dData, int iCID );
-void sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError );
 bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation );
 void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, bool bReplace, bool bCommit, CSphString & sWarning, CSphSessionAccum & tAcc, ESphCollation	eCollation );
 void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const QueryParserFactory_i & tQueryParserFactory, const SqlStmt_t & tStmt, const CSphString & sQuery, CSphString & sWarning, int iCID );
 void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const QueryParserFactory_i & tQueryParserFactory, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit, CSphSessionAccum & tAcc, int iCID );
+
+bool				sphLoopClientHttp ( const BYTE * pRequest, int iRequestLen, CSphVector<BYTE> & dResult, int iCID );
+bool				sphProcessHttpQuery ( ESphHttpEndpoint eEndpoint, const CSphString & sQuery, const SmallStringHash_T<CSphString> & tOptions, int iCID, CSphVector<BYTE> & dResult, bool bNeedHttpResponse=false );
+void				sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError );
+ESphHttpEndpoint	sphStrToHttpEndpoint ( const CSphString & sEndpoint );
+CSphString			sphHttpEndpointToStr ( ESphHttpEndpoint eEndpoint );
 
 // get tokens from sphinxql
 int sphGetTokTypeInt();

@@ -10,8 +10,8 @@ Example:
 ::
 
 	{
-	  "_index":"test",
-	  "_id":1,
+	  "index":"test",
+	  "id":1,
 	  "doc":
 	  {
 	    "gid" : 100,
@@ -29,13 +29,13 @@ The daemon will respond with a JSON object stating if the operation was successf
     "result": "updated"
   }	
   
-The id of the document that needs to be updated can be set directly using the ``_id`` property (as in the example above) or
+The id of the document that needs to be updated can be set directly using the ``id`` property (as in the example above) or
 you can do an update by query and apply the update to all the documents that match the query:
 
 ::
 
 	{
-	  "_index":"test",
+	  "index":"test",
 	  "doc":
 	  {
 	    "price" : 1000
@@ -47,5 +47,5 @@ you can do an update by query and apply the update to all the documents that mat
 	  }
 	}
 
-Query syntax is the same as in the ``json/search`` endpoint. Note that you can't specify ``_id`` and ``query`` at the same time.
+Query syntax is the same as in the ``json/search`` endpoint. Note that you can't specify ``id`` and ``query`` at the same time.
 

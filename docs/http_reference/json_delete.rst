@@ -10,8 +10,8 @@ Example:
 ::
 
 	{
-	  "_index":"test",
-	  "_id":1
+	  "index":"test",
+	  "id":1
 	}
 
 	
@@ -33,7 +33,7 @@ As in ``json/update``, you can do a delete by query.
 ::
 
 	{
-	  "_index":"test",
+	  "index":"test",
 
 	  "query":
   	  {

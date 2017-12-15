@@ -10,17 +10,17 @@ Here's how you can index a simple document:
 ::
 
 	{
-	  "_index":"test",
-	  "_id":1
+	  "index":"test",
+	  "id":1
 	}
 
-This creates a document with an id specified by ``_id`` in an index specified by the ``_index`` property. This document has empty fulltext fields and all attributes are set to their default values. However, you can use the optional ``doc`` property to set field and attribute values:
+This creates a document with an id specified by ``id`` in an index specified by the ``index`` property. This document has empty fulltext fields and all attributes are set to their default values. However, you can use the optional ``doc`` property to set field and attribute values:
 
 ::
 
 	{
-	  "_index":"test",
-	  "_id":1,
+	  "index":"test",
+	  "id":1,
 	  "doc":
 	  {
 	    "gid" : 10,
@@ -45,8 +45,8 @@ MVA attributes are inserted as arrays of numbers. JSON attributes can be inserte
 ::
 
   {
-    "_index":"test",
-    "_id":1,
+    "index":"test",
+    "id":1,
     "doc":
     {
       "mva" : [1,2,3,4,5],

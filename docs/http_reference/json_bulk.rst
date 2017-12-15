@@ -9,8 +9,8 @@ Example:
 
 ::
 
-	{ "insert" : { "_index" : "test", "_id" : 1, "doc": { "gid" : 10, "content" : "doc one" } } }
-	{ "insert" : { "_index" : "test", "_id" : 2, "doc": { "gid" : 20, "content" : "doc two" } } }
+	{ "insert" : { "index" : "test", "id" : 1, "doc": { "gid" : 10, "content" : "doc one" } } }
+	{ "insert" : { "index" : "test", "id" : 2, "doc": { "gid" : 20, "content" : "doc two" } } }
 
 This inserts two documents to index ``test``. Each statement starts with an action type (in this case, ``insert``). Here's a list of the supported actions:
 
@@ -27,7 +27,7 @@ Example:
 
 ::
 
-	{ "update" : { "_index" : "test", "doc": { "tag" : 1000 }, "query": { "range": { "price": { "gte": 1000 } } } } }
-	{ "delete" : { "_index" : "test", "query": { "range": { "price": { "lt": 1000 } } } } }
+	{ "update" : { "index" : "test", "doc": { "tag" : 1000 }, "query": { "range": { "price": { "gte": 1000 } } } } }
+	{ "delete" : { "index" : "test", "query": { "range": { "price": { "lt": 1000 } } } } }
 
 Note that the bulk operation stops at the first query that results in an error.

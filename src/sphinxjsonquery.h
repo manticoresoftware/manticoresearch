@@ -28,12 +28,17 @@ bool			sphParseJsonQuery ( const char * szQuery, CSphQuery & tQuery, bool & bPro
 bool			sphParseJsonInsert ( const char * szInsert, SqlStmt_t & tStmt, SphDocID_t & tDocId, bool bReplace, CSphString & sError );
 bool			sphParseJsonUpdate ( const char * szUpdate, SqlStmt_t & tStmt, SphDocID_t & tDocId, CSphString & sError );
 bool			sphParseJsonDelete ( const char * szDelete, SqlStmt_t & tStmt, SphDocID_t & tDocId, CSphString & sError );
-bool			sphParseJsonStatement ( const char * szStmt, SqlStmt_t & tStmt, CSphString & sStmt, SphDocID_t & tDocId, CSphString & sError );
-void			sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQuery, CSphQueryProfile * pProfile, bool bAttrsHighlight, CSphString & sResult );
+bool			sphParseJsonStatement ( const char * szStmt, SqlStmt_t & tStmt, CSphString & sStmt, CSphString & sQuery, SphDocID_t & tDocId, CSphString & sError );
+CSphString		sphJsonToString ( const cJSON * pJson );
+
+CSphString		sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQuery, CSphQueryProfile * pProfile, bool bAttrsHighlight );
 cJSON *			sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, SphDocID_t tDocId );
 cJSON *			sphEncodeUpdateResultJson ( const char * szIndex, SphDocID_t tDocId, int iAffected );
 cJSON *			sphEncodeDeleteResultJson ( const char * szIndex, SphDocID_t tDocId, int iAffected );
 cJSON *			sphEncodeInsertErrorJson ( const char * szIndex, const char * szError );
+
+bool			sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings, bool bUpdate );
+
 cJSON *			sphBuildProfileJson ( XQNode_t * pNode, const CSphSchema & tSchema );
 void			sphInitCJson();
 

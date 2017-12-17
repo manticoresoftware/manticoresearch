@@ -4,7 +4,6 @@
 <name>RT: TRUNCATE vs ATTACH</name>
 
 <requires>
-<pre_copy_ref/>
 <non-rt/>
 </requires>
 

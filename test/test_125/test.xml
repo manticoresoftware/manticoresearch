@@ -345,6 +345,14 @@ INSERT INTO json_table VALUES
 <!-- .NET connector uses "select timediff(curtime(),utc_time());" -->
 <sphinxql>SELECT bigint(timediff(curtime(),utc_time())) % 15</sphinxql>
 
+<!-- BIGINT() function -->
+<sphinxql>SELECT 1000000*1000000</sphinxql>
+<sphinxql>SELECT bigint(1000000)*1000000</sphinxql>
+<sphinxql>SELECT 1000000*bigint(1000000)</sphinxql>
+<sphinxql>SELECT bigint(1000000.0)*1000000</sphinxql>
+<!-- expect false, because above. Fixme! -->
+<sphinxql>SELECT 1000000000000=bigint(1000000.0)*1000000</sphinxql>
+
 <!-- MySQL Workbench 6.0 and above -->
 <sphinxql>SHOW SESSION VARIABLES LIKE 'lower_case_table_names'</sphinxql>
 <sphinxql>SELECT current_user()</sphinxql>

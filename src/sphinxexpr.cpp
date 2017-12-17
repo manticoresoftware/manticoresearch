@@ -7016,11 +7016,9 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 			break;
 		}
 	case FUNC_BIGINT:
-		{
-			if ( tNode.m_eRetType==SPH_ATTR_FLOAT )
-				tNode.m_eRetType = SPH_ATTR_FLOAT; // enforce if we can; FIXME! silently ignores BIGINT() on floats; should warn or raise an error
-			break;
-		}
+		if ( tNode.m_eArgType==SPH_ATTR_FLOAT )
+			tNode.m_eRetType = SPH_ATTR_FLOAT; // enforce if we can; FIXME! silently ignores BIGINT() on floats; should warn or raise an error
+		break;
 	case FUNC_IF:
 	case FUNC_BITDOT: tNode.m_eRetType = tNode.m_eArgType ; break;
 	case FUNC_GREATEST:

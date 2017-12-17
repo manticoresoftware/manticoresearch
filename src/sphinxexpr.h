@@ -207,7 +207,7 @@ struct CSphNamedVariant
 class Expr_NoLocator_c : public ISphExpr
 {
 public:
-	virtual void FixupLocator ( const ISphSchema * /*pOldSchema*/, const ISphSchema * /*pNewSchema*/ ) override {}
+	void FixupLocator ( const ISphSchema * /*pOldSchema*/, const ISphSchema * /*pNewSchema*/ ) override {}
 };
 
 
@@ -221,13 +221,13 @@ struct Expr_MapArg_c : public Expr_NoLocator_c
 		m_dValues.SwapData ( dValues );
 	}
 
-	virtual float Eval ( const CSphMatch & ) const
+	float Eval ( const CSphMatch & ) const override
 	{
 		assert ( 0 && "one just does not simply evaluate a const hash" );
 		return 0.0f;
 	}
 
-	virtual uint64_t GetHash ( const ISphSchema &, uint64_t, bool & )
+	uint64_t GetHash ( const ISphSchema &, uint64_t, bool & ) override
 	{
 		assert ( 0 && "calling GetHash from a const hash" );
 		return 0;
@@ -264,7 +264,7 @@ enum ESphCollation
 class CSphQueryProfile;
 ISphExpr * sphExprParse ( const char * sExpr, const ISphSchema & tSchema, ESphAttr * pAttrType, bool * pUsesWeight,
 	CSphString & sError, CSphQueryProfile * pProfiler, ESphCollation eCollation=SPH_COLLATION_DEFAULT, ISphExprHook * pHook=NULL,
-	bool * pZonespanlist=NULL, DWORD * pPackedFactorsFlags=NULL, ESphEvalStage * pEvalStage=NULL );
+	bool * pZonespanlist=nullptr, DWORD * pPackedFactorsFlags=nullptr, ESphEvalStage * pEvalStage=nullptr );
 
 ISphExpr * sphJsonFieldConv ( ISphExpr * pExpr );
 

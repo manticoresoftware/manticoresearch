@@ -29,6 +29,7 @@
 %token <iFunc>			TOK_FUNC_RAND
 %token <iFunc>			TOK_FUNC_REMAP
 %token <iNode>			TOK_FUNC_PF
+%token <iNode>			TOK_FUNC_JA
 %token <iNode>			TOK_USERVAR
 %token <iNode>			TOK_UDF
 %token <iNode>			TOK_HOOK_IDENT
@@ -197,18 +198,18 @@ ident:
 	;
 
 function:
-	TOK_FUNC '(' arglist ')'		{ $$ = pParser->AddNodeFunc ( $1, $3 ); if ( $$<0 ) YYERROR; }
-	| TOK_FUNC '(' ')'				{ $$ = pParser->AddNodeFunc ( $1, -1 ); if ( $$<0 ) YYERROR; }
+	TOK_FUNC '(' ')'				{ $$ = pParser->AddNodeFunc0 ( $1 ); if ( $$<0 ) YYERROR; }
+	| TOK_FUNC '(' arglist ')'		{ $$ = pParser->AddNodeFunc ( $1, $3 ); if ( $$<0 ) YYERROR; }
 	| TOK_UDF '(' arglist ')'		{ $$ = pParser->AddNodeUdf ( $1, $3 ); if ( $$<0 ) YYERROR; }
 	| TOK_UDF '(' ')'				{ $$ = pParser->AddNodeUdf ( $1, -1 ); if ( $$<0 ) YYERROR; }
-	| TOK_FUNC_IN '(' arg ',' constlist_or_uservar ')'{ $$ = pParser->AddNodeFunc ( $1, $3, $5 ); }
+	| TOK_FUNC_IN '(' arg ',' constlist_or_uservar ')'{ $$ = pParser->AddNodeIn ( $3, $5 ); }
 	| TOK_HOOK_FUNC '(' arglist ')' { $$ = pParser->AddNodeHookFunc ( $1, $3 ); if ( $$<0 ) YYERROR; }
-	| TOK_FUNC '(' expr for_loop ')' { $$ = pParser->AddNodeFunc ( $1, $3, $4 ); }
-	| TOK_FUNC_REMAP '(' expr ',' expr ',' '(' constlist ')' ',' '(' constlist ')' ')' { $$ = pParser->AddNodeFunc ( $1, $3, $5, $8, $12 ); }
+	| TOK_FUNC_JA '(' expr for_loop ')' { $$ = pParser->AddNodeFor ( $1, $3, $4 ); }
+	| TOK_FUNC_REMAP '(' expr ',' expr ',' '(' constlist ')' ',' '(' constlist ')' ')' { $$ = pParser->AddNodeRemap ( $3, $5, $8, $12 ); }
 	| TOK_FUNC_PF '(' ')'			{ $$ = pParser->AddNodePF ( $1, -1 ); }
 	| TOK_FUNC_PF '(' arg ')'		{ $$ = pParser->AddNodePF ( $1, $3 ); }
-	| TOK_FUNC_RAND '(' ')'			{ $$ = pParser->AddNodeFunc ( $1, -1 ); }
-	| TOK_FUNC_RAND '(' arglist ')'	{ $$ = pParser->AddNodeFunc ( $1, $3 ); }
+	| TOK_FUNC_RAND '(' ')'			{ $$ = pParser->AddNodeRand ( -1 ); }
+	| TOK_FUNC_RAND '(' arglist ')'	{ $$ = pParser->AddNodeRand ( $3 ); }
 	;
 
 json_field:

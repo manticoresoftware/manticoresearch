@@ -10582,21 +10582,20 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema * pSche
 
 struct StoredQuery_t : ISphNoncopyable
 {
-	XQQuery_t *						m_pXQ;
+	XQQuery_t *						m_pXQ = nullptr;
 
 	CSphVector<uint64_t>			m_dRejectTerms;
-	CSphFixedVector<uint64_t>		m_dRejectWilds;
-	bool							m_bOnlyTerms; // flag of simple query, ie only words and no operators
+	CSphFixedVector<uint64_t>		m_dRejectWilds {0};
+	bool							m_bOnlyTerms = false; // flag of simple query, ie only words and no operators
 	CSphVector<uint64_t>			m_dTags;
 	CSphVector<CSphFilterSettings>	m_dFilters;
 	CSphVector<FilterTreeItem_t>	m_dFilterTree;
 
-	uint64_t						m_uUID;
+	uint64_t						m_uUID = 0;
 	// show status info
 	CSphString						m_sQuery;
 	CSphString						m_sTags;
 
-	StoredQuery_t () : m_pXQ ( NULL ), m_dRejectWilds(0) {}
 	~StoredQuery_t() { SafeDelete ( m_pXQ ); }
 };
 
@@ -11076,9 +11075,13 @@ bool PercolateIndex_c::AddDocument ( ISphTokenizer * pTokenizer, int iFields, co
 	if ( !pAcc )
 		return false;
 
+	CSphScopedPtr<ISphTokenizer> tTokenizer { nullptr };
 	// FIXME!!! move setup to preparation or CloneIndexingTokenizer
 	if ( m_tSettings.m_uAotFilterMask )
+	{
 		pTokenizer = sphAotCreateFilter ( pTokenizer, m_pDict, m_tSettings.m_bIndexExactWords, m_tSettings.m_uAotFilterMask );
+		tTokenizer.ReplacePtr ( pTokenizer );
+	}
 
 	// SPZ setup
 	if ( m_tSettings.m_bIndexSP && !pTokenizer->EnableSentenceIndexing ( sError ) )
@@ -11140,7 +11143,7 @@ public:
 	virtual const CSphMatch & GetNextDoc ( DWORD * )
 	{
 		m_iHits = 0;
-		for ( ;; )
+		while (true) // m.b. it looks better for coverity than for(;;)?
 		{
 			const RtDoc_t * pDoc = m_tDocReader.UnzipDoc();
 			if ( !pDoc && m_iDoc>=m_dDoclist.GetLength() )

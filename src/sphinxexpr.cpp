@@ -3632,16 +3632,12 @@ void ExprParser_t::Dump ( int iNode )
 /// fold arglist into array
 static void FoldArglist ( ISphExpr * pLeft, CSphVector<ISphExpr *> & dArgs )
 {
-	if ( !pLeft )
-		return;
-
-	if ( !pLeft->IsArglist() )
+	if ( !pLeft || !pLeft->IsArglist ())
 	{
 		dArgs.Add ( pLeft );
 		return;
 	}
 
-	// FIXME! Check, we just exchange and release previous dArgs, doesn't merge one into another. Is it right?
 	// do we have to pArgs->AddArgs instead?
 	auto * pArgs = (Expr_Arglist_c *)pLeft;
 	Swap ( dArgs, pArgs->m_dArgs );
@@ -4805,7 +4801,8 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 					case FUNC_MADD:		return new Expr_Madd_c ( dArgs[0], dArgs[1], dArgs[2] );
 					case FUNC_MUL3:		return new Expr_Mul3_c ( dArgs[0], dArgs[1], dArgs[2] );
 					case FUNC_ATAN2:	return new Expr_Atan2_c ( dArgs[0], dArgs[1] );
-					case FUNC_RAND:		return new Expr_Rand_c ( dArgs.GetLength() ? dArgs[0] : NULL, tNode.m_iLeft>=0 ? IsConst ( &m_dNodes[tNode.m_iLeft] ) : false );
+					case FUNC_RAND:		return new Expr_Rand_c ( dArgs.GetLength() ? dArgs[0] : nullptr,
+							tNode.m_iLeft<0 ? false : IsConst ( &m_dNodes[tNode.m_iLeft] ));
 
 					case FUNC_INTERVAL:	return CreateIntervalNode ( tNode.m_iLeft, dArgs );
 					case FUNC_IN:		return CreateInNode ( iNode );

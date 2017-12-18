@@ -90,6 +90,7 @@ CREATE TABLE `test_table` (
 <sphinxql>SELECT * FROM pq_filter</sphinxql>
 <sphinxql>CALL PQ ('pq_filter', ('{"title":"filter test doc1", "gid":2 }', '{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as docs_json )</sphinxql>
 
+<!-- filter uid -->
 <sphinxql>INSERT INTO pq (query, tags) VALUES ( 'test 1', 'base3 postid postid_11' )</sphinxql>
 <sphinxql>INSERT INTO pq (query, tags) VALUES ( 'test 2', 'base3 postid postid_12' )</sphinxql>
 <sphinxql>INSERT INTO pq (query, tags) VALUES ( 'test 3', 'base3 city' )</sphinxql>
@@ -98,6 +99,10 @@ CREATE TABLE `test_table` (
 <sphinxql>SELECT * FROM pq WHERE uid &lt; 2</sphinxql>
 <sphinxql>SELECT * FROM pq WHERE uid &gt;= 4</sphinxql>
 <sphinxql>SELECT * FROM pq WHERE uid &gt;= 4 and tags='postid'</sphinxql>
+
+<!-- query option -->
+<sphinxql>CALL PQ ('pq_filter', ('{"title":"filter test doc1", "gid":2 }', '{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as docs_json, 1 as query )</sphinxql>
+<sphinxql>CALL PQ ('pq', ('{"title":"testik goes on"}', '{"title":"cat but not dog"}'), 1 as docs, 1 as docs_json, 1 as query )</sphinxql>
 
 </sphqueries>
 

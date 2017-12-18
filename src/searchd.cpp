@@ -12822,13 +12822,24 @@ static void SendPercolateReply ( const PercolateMatchResult_t & tRes, const CSph
 	}
 
 	bool bDumpDocs = tRes.m_bGetDocs;
+	bool bQuery = tRes.m_bGetQuery;
 
 	// result set header packet. We will attach EOF manually at the end.
-	tOut.HeadBegin ( bDumpDocs ? 2 : 1 );
+	int iColumns = bDumpDocs ? 2 : 1;
+	if ( bQuery )
+		iColumns += 3;
+	tOut.HeadBegin ( iColumns );
 
 	tOut.HeadColumn ( "UID", MYSQL_COL_LONGLONG, MYSQL_COL_UNSIGNED_FLAG );
 	if ( bDumpDocs )
 		tOut.HeadColumn ( "Documents", MYSQL_COL_STRING );
+	if ( bQuery )
+	{
+		assert ( tRes.m_dQueries.GetLength()==tRes.m_dQueryDesc.GetLength() );
+		tOut.HeadColumn ( "Query" );
+		tOut.HeadColumn ( "Tags" );
+		tOut.HeadColumn ( "Filters" );
+	}
 
 	// EOF packet is sent explicitly due to non-default params.
 	BYTE iWarns = ( !sWarning.IsEmpty() ? 1 : 0 );
@@ -12861,6 +12872,13 @@ static void SendPercolateReply ( const PercolateMatchResult_t & tRes, const CSph
 				memcpy ( pOutStr, sDocs.cstr(), iLen );
 
 			tOut.IncPtr ( pOutStr - tOut.Get() + iLen );
+		}
+		if ( bQuery )
+		{
+			const PercolateQueryDesc & tDesc = tRes.m_dQueryDesc[i];
+			tOut.PutString ( tDesc.m_sQuery.cstr() );
+			tOut.PutString ( tDesc.m_sTags.cstr() );
+			tOut.PutString ( tDesc.m_sFilters.cstr() );
 		}
 
 		tOut.Commit();
@@ -12971,11 +12989,13 @@ struct PercolateOptions_t
 	bool m_bGetDocs;
 	bool m_bVerbose;
 	bool m_bJsonDocs;
+	bool m_bGetQuery;
 
 	PercolateOptions_t()
 		: m_bGetDocs ( false )
 		, m_bVerbose ( false )
 		, m_bJsonDocs ( true )
+		, m_bGetQuery ( false )
 	{}
 };
 
@@ -13145,6 +13165,7 @@ static void PercolateMatchDocuments ( const CSphVector<CSphString> & dDocs, cons
 	PercolateMatchResult_t tRes;
 	tRes.m_bGetDocs = tOpts.m_bGetDocs;
 	tRes.m_bVerbose = tOpts.m_bVerbose;
+	tRes.m_bGetQuery = tOpts.m_bGetQuery;
 
 	pIndex->MatchDocuments ( pAccum, tRes );
 
@@ -13201,6 +13222,7 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 		if ( sOpt=="docs" )				{ tOpts.m_bGetDocs = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
 		else if ( sOpt=="verbose" )		{ tOpts.m_bVerbose = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
 		else if ( sOpt=="docs_json" )	{ tOpts.m_bJsonDocs = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
+		else if ( sOpt=="query" )		{ tOpts.m_bGetQuery = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
 		else
 		{
 			sError.SetSprintf ( "unknown option %s", sOpt.cstr() );

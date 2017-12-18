@@ -11447,6 +11447,8 @@ bool PercolateIndex_c::MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchRes
 		dTM.Reset ( m_dStored.GetLength() );
 	int iQueriesMatched = 0;
 	int iDocsMatched = 0;
+	const bool bGetQuery = tRes.m_bGetQuery;
+	StringBuilder_c tFilterBuf;
 
 	int iEarlyPassed = 0;
 	int iOnlyTerms = 0;
@@ -11512,6 +11514,20 @@ bool PercolateIndex_c::MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchRes
 			dQueryMatched.Add ( pStored->m_uUID );
 			if ( bCollectDocs )
 				dDocsMatched[iDocsOff] = iMatchCount;
+			if ( bGetQuery )
+			{
+				PercolateQueryDesc & tDesc = tRes.m_dQueryDesc.Add();
+				tDesc.m_uID = pStored->m_uUID;
+				tDesc.m_sQuery = pStored->m_sQuery;
+				tDesc.m_sTags = pStored->m_sTags;
+
+				if ( pStored->m_dFilters.GetLength() )
+				{
+					tFilterBuf.Clear();
+					FormatFiltersQL ( pStored->m_dFilters, pStored->m_dFilterTree, 5, false, tFilterBuf );
+					tDesc.m_sFilters = tFilterBuf.cstr();
+				}
+			}
 		}
 
 		if ( tRes.m_bVerbose )
@@ -12091,6 +12107,7 @@ PercolateMatchResult_t::PercolateMatchResult_t()
 	, m_dQueryTm ( 0 )
 {
 	m_bGetDocs = false;
+	m_bGetQuery = false;
 	m_iQueriesMatched = 0;
 	m_iDocsMatched = 0;
 	m_tmTotal = 0;

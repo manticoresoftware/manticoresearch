@@ -112,11 +112,21 @@ struct PercolateQueryProfiling_t
 	uint64_t m_uTm;
 };
 
+struct PercolateQueryDesc
+{
+	uint64_t m_uID;
+	CSphString m_sQuery;
+	CSphString m_sTags;
+	CSphString m_sFilters;
+};
+
 struct PercolateMatchResult_t
 {
 	bool m_bGetDocs;
+	bool m_bGetQuery;
 
 	CSphVector<uint64_t> m_dQueries;
+	CSphVector<PercolateQueryDesc> m_dQueryDesc;
 	CSphFixedVector<SphDocID_t> m_dDocs;
 	int m_iQueriesMatched;
 	int m_iDocsMatched;
@@ -132,14 +142,6 @@ struct PercolateMatchResult_t
 
 	PercolateMatchResult_t ();
 	void Swap ( PercolateMatchResult_t & tOther );
-};
-
-struct PercolateQueryDesc
-{
-	uint64_t m_uID;
-	CSphString m_sQuery;
-	CSphString m_sTags;
-	CSphString m_sFilters;
 };
 
 class PercolateIndex_i : public ISphRtIndex

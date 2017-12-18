@@ -89,6 +89,20 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 void FormatFilterQL ( const CSphFilterSettings & tFilter, int iCompactIN, StringBuilder_c & tBuf );
 void FormatFiltersQL ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree, int iCompactIN, bool bDeflowered, StringBuilder_c & tBuf );
 
+
+// fwd
+class PercolateFilter_i
+{
+public:
+	PercolateFilter_i () {};
+	virtual ~PercolateFilter_i() {};
+
+	virtual bool Eval ( SphAttr_t uUID ) = 0;
+	virtual void SetRange ( SphAttr_t tMin, SphAttr_t tMax ) {}
+};
+
+PercolateFilter_i * CreatePercolateFilter ( const CSphFilterSettings * pUID );
+
 #endif // _sphinxfilter_
 
 //

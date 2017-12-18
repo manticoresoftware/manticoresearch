@@ -12810,7 +12810,7 @@ static void PercolateQuery ( const SqlStmt_t & tStmt, bool bReplace, ESphCollati
 	if ( !bOk )
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 	else
-		tOut.Ok();
+		tOut.Ok ( 1 );
 }
 
 static void SendPercolateReply ( const PercolateMatchResult_t & tRes, const CSphString & sWarning, const CSphString & sError, SqlRowBuffer_c & tOut )
@@ -12826,7 +12826,7 @@ static void SendPercolateReply ( const PercolateMatchResult_t & tRes, const CSph
 	// result set header packet. We will attach EOF manually at the end.
 	tOut.HeadBegin ( bDumpDocs ? 2 : 1 );
 
-	tOut.HeadColumn ( "Query", MYSQL_COL_LONGLONG, MYSQL_COL_UNSIGNED_FLAG );
+	tOut.HeadColumn ( "UID", MYSQL_COL_LONGLONG, MYSQL_COL_UNSIGNED_FLAG );
 	if ( bDumpDocs )
 		tOut.HeadColumn ( "Documents", MYSQL_COL_STRING );
 
@@ -12870,8 +12870,10 @@ static void SendPercolateReply ( const PercolateMatchResult_t & tRes, const CSph
 	tOut.Eof ( false, iWarns );
 }
 
-static bool PercolateShowStatus ( const CSphString & sIndex, const CSphString & sStmt, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<CSphQueryItem> & dSelect, SqlRowBuffer_c & tOut )
+static bool PercolateShowStatus ( const CSphString & sIndex, const CSphString & sStmt, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<CSphQueryItem> & dSelect, SqlRowBuffer_c & tOut, CSphQueryResultMeta & tMeta )
 {
+	tMeta = CSphQueryResultMeta();
+
 	CSphString sError;
 	const ServedIndex_c * pServed = g_pLocalIndexes->GetRlockedEntry ( sIndex );
 	if ( !pServed )
@@ -12892,18 +12894,25 @@ static bool PercolateShowStatus ( const CSphString & sIndex, const CSphString & 
 	PercolateIndex_i * pIndex = (PercolateIndex_i *)pServed->m_pIndex;
 	assert ( pIndex );
 
-	const char * sFilterTags = NULL;
+	StringBuilder_c tMissedFilter;
+	const char * sFilterTags = nullptr;
+	const CSphFilterSettings * pUID = nullptr;
 	ARRAY_FOREACH ( i, dFilters )
 	{
 		const CSphFilterSettings & tFilter = dFilters[i];
 		if ( tFilter.m_sAttrName=="tags" && tFilter.m_eType==SPH_FILTER_STRING && tFilter.m_dStrings.GetLength() )
 		{
 			sFilterTags = tFilter.m_dStrings[0].cstr();
-			break;
+		} else if ( tFilter.m_sAttrName=="uid" && ( tFilter.m_eType==SPH_FILTER_VALUES || tFilter.m_eType==SPH_FILTER_RANGE ) )
+		{
+			pUID = &tFilter;
+		} else
+		{
+			tMissedFilter.Appendf ( "%s%s", tMissedFilter.Length() ? ", " : "", tFilter.m_sAttrName.cstr() );
 		}
 	}
 
-	const char * sCountAlias = NULL;
+	const char * sCountAlias = nullptr;
 	ARRAY_FOREACH ( i, dSelect )
 	{
 		if ( dSelect[i].m_sExpr.Begins ( "count" ) )
@@ -12914,7 +12923,7 @@ static bool PercolateShowStatus ( const CSphString & sIndex, const CSphString & 
 	}
 
 	CSphVector<PercolateQueryDesc> dQueries;
-	pIndex->GetQueries ( sFilterTags, dQueries );
+	pIndex->GetQueries ( sFilterTags, pUID, dQueries );
 	pServed->Unlock();
 
 	if ( !sCountAlias )
@@ -12945,7 +12954,15 @@ static bool PercolateShowStatus ( const CSphString & sIndex, const CSphString & 
 		tOut.Commit();
 	}
 
-	tOut.Eof();
+	if ( tMissedFilter.Length() )
+	{
+		tOut.Eof ( false, 1 );
+		tMeta.m_sWarning.SetSprintf ( "unsupported filters '%s'", tMissedFilter.cstr() );
+	} else
+	{
+		tOut.Eof ();
+	}
+
 	return true;
 }
 
@@ -17534,7 +17551,7 @@ public:
 				if ( bLocal && tDesc.m_bPercolate )
 				{
 					const SqlStmt_t & tStmt = dStmt[0];
-					return PercolateShowStatus ( tStmt.m_tQuery.m_sIndexes, tStmt.m_sStmt, tStmt.m_tQuery.m_dFilters, tStmt.m_tQuery.m_dItems, tOut );
+					return PercolateShowStatus ( tStmt.m_tQuery.m_sIndexes, tStmt.m_sStmt, tStmt.m_tQuery.m_dFilters, tStmt.m_tQuery.m_dItems, tOut, m_tLastMeta );
 				}
 
 				StatCountCommand ( SEARCHD_COMMAND_SEARCH );

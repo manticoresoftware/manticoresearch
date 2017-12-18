@@ -1973,6 +1973,77 @@ void FormatFiltersQL ( const CSphVector<CSphFilterSettings> & dFilters, const CS
 	}
 }
 
+
+class PercolateFilterValues_c : public PercolateFilter_i
+{
+public:
+	PercolateFilterValues_c ( const CSphFilterSettings & tUID )
+		: m_pValues ( tUID.GetValueArray() )
+		, m_iCount ( tUID.GetNumValues() )
+	{}
+
+	virtual ~PercolateFilterValues_c()
+	{}
+
+	virtual bool Eval ( SphAttr_t uUID ) override
+	{
+		if ( !m_pValues || !m_iCount )
+			return true;
+
+		return ( sphBinarySearch ( m_pValues, m_pValues + m_iCount - 1, SphIdentityFunctor_T<SphAttr_t>(), uUID )!=nullptr );
+	}
+
+private:
+	const SphAttr_t * m_pValues;
+	int m_iCount;
+};
+
+template < bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT >
+class PercolateFilterRange_c : public PercolateFilter_i
+{
+public:
+	PercolateFilterRange_c ()
+	{}
+
+	virtual ~PercolateFilterRange_c()
+	{}
+
+	virtual bool Eval ( SphAttr_t uUID ) override
+	{
+		return EvalRange<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT> ( uUID, m_iMinValue, m_iMaxValue );
+	}
+
+	virtual void SetRange ( SphAttr_t tMin, SphAttr_t tMax ) override
+	{
+		m_iMinValue = tMin;
+		m_iMaxValue = tMax;
+	}
+
+	SphAttr_t m_iMinValue;
+	SphAttr_t m_iMaxValue;
+};
+
+static PercolateFilter_i * CreatePercolateRangeFilter ( const CSphFilterSettings & tOpt )
+{
+	CREATE_RANGE_FILTER_WITH_OPEN ( PercolateFilterRange_c, tOpt );
+}
+
+PercolateFilter_i * CreatePercolateFilter ( const CSphFilterSettings * pUID )
+{
+	if ( !pUID )
+		return nullptr;
+
+	const CSphFilterSettings & tOpt = *pUID;
+
+	if ( pUID->m_eType==SPH_FILTER_VALUES )
+		return new PercolateFilterValues_c ( tOpt );
+
+	PercolateFilter_i * pFilter = CreatePercolateRangeFilter ( tOpt );
+	pFilter->SetRange ( tOpt.m_iMinValue, tOpt.m_iMaxValue );
+	return pFilter;
+}
+
+
 //
 // $Id$
 //

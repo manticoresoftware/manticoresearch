@@ -10627,7 +10627,7 @@ public:
 	virtual ISphRtAccum * CreateAccum ( CSphString & sError );
 	virtual ISphTokenizer * CloneIndexingTokenizer() const { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
 	void SaveMeta ();
-	virtual void GetQueries ( const char * sFilterTags, CSphVector<PercolateQueryDesc> & dQueries );
+	virtual void GetQueries ( const char * sFilterTags, const CSphFilterSettings * pUID, CSphVector<PercolateQueryDesc> & dQueries );
 	virtual bool Truncate ( CSphString & );
 
 	// RT index stub
@@ -12026,13 +12026,17 @@ void PercolateIndex_c::SaveMeta()
 		sphWarning ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)", sMetaNew.cstr(), sMeta.cstr(), errno, strerror( errno ) );
 }
 
-void PercolateIndex_c::GetQueries ( const char * sFilterTags, CSphVector<PercolateQueryDesc> & dQueries )
+void PercolateIndex_c::GetQueries ( const char * sFilterTags, const CSphFilterSettings * pUID, CSphVector<PercolateQueryDesc> & dQueries )
 {
+	// FIXME!!! move to filter, add them via join
 	CSphVector<uint64_t> dTags;
 	PercolateTags ( sFilterTags, dTags );
 
+	// FIXME!!! add UID scan for UID IN (value list) queries
+	CSphScopedPtr<PercolateFilter_i> tFilter ( CreatePercolateFilter ( pUID ) );
+
 	// reserve size to store all queries
-	if ( !dTags.GetLength() )
+	if ( !dTags.GetLength() && !tFilter.Ptr() )
 		dQueries.Reserve ( m_dStored.GetLength() );
 
 	StringBuilder_c tBuf;
@@ -12049,6 +12053,9 @@ void PercolateIndex_c::GetQueries ( const char * sFilterTags, CSphVector<Percola
 			if ( !TagsMatched ( dTags.Begin(), dTags.GetLength(), pQuery->m_dTags.Begin(), pQuery->m_dTags.GetLength() ) )
 				continue;
 		}
+
+		if ( tFilter.Ptr() && !tFilter->Eval ( pQuery->m_uUID ) )
+			continue;
 
 		PercolateQueryDesc & tItem = dQueries.Add();
 		tItem.m_uID = pQuery->m_uUID;

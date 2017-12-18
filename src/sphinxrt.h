@@ -151,7 +151,7 @@ public:
 	virtual int		DeleteQueries ( const char * sTags ) = 0;
 	virtual bool	Query ( const char * sQuery, const char * sTags, const CSphVector<CSphFilterSettings> * pFilters, const CSphVector<FilterTreeItem_t> * pFilterTree, bool bReplace, uint64_t uId, CSphString & sError ) = 0;
 
-	virtual void	GetQueries ( const char * sFilterTags, CSphVector<PercolateQueryDesc> & dQueries ) = 0;
+	virtual void	GetQueries ( const char * sFilterTags, const CSphFilterSettings * pUID, CSphVector<PercolateQueryDesc> & dQueries ) = 0;
 
 	virtual bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError ) const = 0;
 	virtual void Reconfigure ( CSphReconfigureSetup & tSetup ) = 0;

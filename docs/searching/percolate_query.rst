@@ -98,6 +98,7 @@ There is default values for options:
 -  docs_json - 1 (enabled), to treat document(s) as ``JSON`` encoded string or raw string otherwise
 -  docs - 0 (disabled), to provide per query documents matched at result set
 -  verbose - 0 (disabled), to provide extended info on matching at :ref:`SHOW META <percolate_query_show_meta>`
+-  query - 0 (disabled), to provide all query fields stored, such as query, tags, filters
 
 
 

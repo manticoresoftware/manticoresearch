@@ -15,7 +15,7 @@ Note that it does not add the documents in the percolate index. You still need t
 .. _percolate_query_tags:
 
 Tags
-----
+~~~~
 
 Query might have ``tags``. ``tags`` set for query with ``INSERT`` statement. Later user might list query with specific ``tags`` with ``SELECT`` statement
 or delete query(es) with ``DELETE`` statement.
@@ -23,14 +23,14 @@ or delete query(es) with ``DELETE`` statement.
 .. _percolate_query_filters:
 
 Filters
--------
+~~~~~~~
 
 Query might have ``filters``. ``filters`` set for query with ``INSERT`` statement. Documents might be filtered with ``filters`` with ``CALL PQ`` statement.
 
 .. _percolate_query_index:
 
 Index
------
+~~~~~
 
 Percolate query work only for ``percolate`` index :ref:`type <type>`. Its configuration is similar to :ref:`Real-time index <real-time_indexes>`
 however declaration of fields and attributes might been omitted, in that case index created with default field ``text`` and attribute ``gid``.
@@ -49,7 +49,7 @@ however declaration of fields and attributes might been omitted, in that case in
 .. _percolate_query_insert:
 
 INSERT
-------
+~~~~~~
 
 To store query ``INSERT`` statement looks like
 
@@ -69,7 +69,7 @@ and optional 2nd field will be ``tags``.
 .. _percolate_query_call:
 
 CALL PQ
--------
+~~~~~~~
 
 To issue documents matching ``CALL PQ`` statement looks like
 
@@ -104,7 +104,7 @@ There is default values for options:
 .. _percolate_query_list:
 
 List stored queries
--------------------
+~~~~~~~~~~~~~~~~~~~
 
 To list stored queries at index ``SELECT`` statement looks like
 
@@ -113,9 +113,12 @@ To list stored queries at index ``SELECT`` statement looks like
 
     SELECT * FROM index_name;
     SELECT * FROM index_name WHERE tags='tags list';
+    SELECT * FROM index_name WHERE uid IN (11,35,101);
 
     
-In case ``tags`` provided query will be shown if any ``tags`` from ``SELECT`` statement found at stored query.
+In case ``tags`` provided query will be shown if any ``tags`` from ``SELECT`` statement found at stored query. In case ``uid`` provided range or
+value list filter will be used to filter out stored queries.
+
 ``SELECT`` supports of ``count(*)`` and ``count(*) alias`` to select list of percolate query. Any values just got ignored there however ``count(*)``
 should provide total amount of queries stored.
 
@@ -133,7 +136,7 @@ should provide total amount of queries stored.
 .. _percolate_query_delete:
 
 Delete query
-------------
+~~~~~~~~~~~~
 
 To delete stored query(es) at index ``DELETE`` statement looks like
 
@@ -149,7 +152,7 @@ In case ``tags`` provided query will be deleted if any ``tags`` from ``DELETE`` 
 .. _percolate_query_show_meta:
 
 Meta
-----
+~~~~
 
 Meta information keep for documents on matching call and might be retrieved with ``SHOW META`` call.
 
@@ -180,7 +183,7 @@ With entries:
 .. _percolate_query_reconfigure:
 
 Reconfigure
------------
+~~~~~~~~~~~
 
 ``ALTER RECONFIGURE`` command is also supported for percolate query index. It allows to reconfigure ``percolate`` index on the fly without delete
 and repopulate index with queries back.

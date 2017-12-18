@@ -1784,7 +1784,7 @@ struct IdentityHash_fn
 struct CSphString
 {
 protected:
-	char *				m_sValue;
+	char *				m_sValue = nullptr;
 	// Empty ("") string optimization.
 	static char EMPTY[];
 
@@ -1796,10 +1796,7 @@ private:
 	static const int	SAFETY_GAP = 4;
 
 public:
-	CSphString ()
-		: m_sValue ( nullptr )
-	{
-	}
+	CSphString () = default;
 
 	// take a note this is not an explicit constructor
 	// so a lot of silent constructing and deleting of strings is possible
@@ -1808,13 +1805,12 @@ public:
 	// ...
 	// hHash.Exists ( "asdf" ); // implicit CSphString construction and deletion here
 	CSphString ( const CSphString & rhs )
-		: m_sValue ( nullptr )
 	{
 		*this = rhs;
 	}
 
-	CSphString ( CSphString&& rhs )
-		: m_sValue ( std::move ( rhs.m_sValue ) )
+	CSphString ( CSphString&& rhs ) noexcept
+		: m_sValue ( rhs.m_sValue )
 	{
 		rhs.m_sValue = nullptr;
 	}
@@ -1872,19 +1868,15 @@ public:
 				strcpy ( m_sValue, sString ); // NOLINT
 				memset ( m_sValue+iLen, 0, SAFETY_GAP );
 			}
-		} else
-		{
-			m_sValue = NULL;
 		}
 	}
 
 	CSphString ( const char * sValue, int iLen )
-		: m_sValue ( NULL )
 	{
 		SetBinary ( sValue, iLen );
 	}
 
-	const CSphString & operator = ( const CSphString & rhs )
+	CSphString & operator = ( const CSphString & rhs )
 	{
 		if ( m_sValue==rhs.m_sValue )
 			return *this;
@@ -1907,7 +1899,7 @@ public:
 		return *this;
 	}
 
-	CSphString & operator = ( CSphString&& rhs )
+	CSphString & operator = ( CSphString&& rhs ) noexcept
 	{
 		if ( m_sValue==rhs.m_sValue )
 			return *this;
@@ -1921,7 +1913,7 @@ public:
 				m_sValue = EMPTY;
 			} else
 			{
-				m_sValue = std::move ( rhs.m_sValue );
+				m_sValue = rhs.m_sValue;
 				rhs.m_sValue = nullptr;
 			}
 		}
@@ -2068,7 +2060,7 @@ public:
 		if ( m_sValue==EMPTY )
 		{
 			m_sValue = nullptr;
-			char * pBuf = new char[1];
+			auto * pBuf = new char[1];
 			pBuf[0] = '\0';
 			return pBuf;
 		}
@@ -2090,7 +2082,7 @@ public:
 	{
 		if ( m_sValue!=EMPTY )
 		SafeDeleteArray ( m_sValue );
-		m_sValue = std::move(sValue);
+		m_sValue = sValue;
 		sValue = nullptr;
 	}
 

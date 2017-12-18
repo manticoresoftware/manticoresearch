@@ -11075,13 +11075,11 @@ bool PercolateIndex_c::AddDocument ( ISphTokenizer * pTokenizer, int iFields, co
 	if ( !pAcc )
 		return false;
 
-	CSphScopedPtr<ISphTokenizer> tTokenizer { nullptr };
 	// FIXME!!! move setup to preparation or CloneIndexingTokenizer
 	if ( m_tSettings.m_uAotFilterMask )
-	{
 		pTokenizer = sphAotCreateFilter ( pTokenizer, m_pDict, m_tSettings.m_bIndexExactWords, m_tSettings.m_uAotFilterMask );
-		tTokenizer.ReplacePtr ( pTokenizer );
-	}
+
+	CSphScopedPtr<ISphTokenizer> tTokenizer { pTokenizer };
 
 	// SPZ setup
 	if ( m_tSettings.m_bIndexSP && !pTokenizer->EnableSentenceIndexing ( sError ) )
@@ -11095,7 +11093,7 @@ bool PercolateIndex_c::AddDocument ( ISphTokenizer * pTokenizer, int iFields, co
 		!tSrc.SetStripHTML ( m_tSettings.m_sHtmlIndexAttrs.cstr(), m_tSettings.m_sHtmlRemoveElements.cstr(), m_tSettings.m_bIndexSP, m_tSettings.m_sZones.cstr(), sError ) )
 		return false;
 
-	CSphScopedPtr<ISphFieldFilter> pFieldFilter ( NULL );
+	CSphScopedPtr<ISphFieldFilter> pFieldFilter { nullptr };
 	if ( m_pFieldFilter )
 		pFieldFilter = m_pFieldFilter->Clone();
 
@@ -11143,7 +11141,7 @@ public:
 	virtual const CSphMatch & GetNextDoc ( DWORD * )
 	{
 		m_iHits = 0;
-		while (true) // m.b. it looks better for coverity than for(;;)?
+		while (true)
 		{
 			const RtDoc_t * pDoc = m_tDocReader.UnzipDoc();
 			if ( !pDoc && m_iDoc>=m_dDoclist.GetLength() )

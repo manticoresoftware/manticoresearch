@@ -1503,15 +1503,15 @@ inline void SqlUnescape ( CSphString & sRes, const char * sEscaped, int iLen )
 {
 	assert ( iLen>=2 );
 	assert (
-		( sEscaped[0]=='\'' && sEscaped[iLen-1]=='\'' ) ||
-		( sEscaped[0]=='"' && sEscaped[iLen-1]=='"' ) );
+		( sEscaped[0]=='\'' && sEscaped[iLen - 1]=='\'' ) ||
+			( sEscaped[0]=='"' && sEscaped[iLen - 1]=='"' ) );
 
 	// skip heading and trailing quotes
-	const char * s = sEscaped+1;
-	const char * sMax = s+iLen-2;
+	const char * s = sEscaped + 1;
+	const char * sMax = s + iLen - 2;
 
 	sRes.Reserve ( iLen );
-	char * d = (char*) sRes.cstr();
+	auto * d = ( char * ) sRes.cstr ();
 
 	while ( s<sMax )
 	{
@@ -1546,12 +1546,12 @@ inline void StripPath ( CSphString & sPath )
 		return;
 
 	const char * sLastSlash = s;
-	for ( ; *s; s++ )
+	for ( ; *s; ++s )
 		if ( *s=='/' )
 			sLastSlash = s;
 
-	int iPos = (int)( sLastSlash - sPath.cstr() + 1 );
-	int iLen = (int)( s - sPath.cstr() );
+	auto iPos = (int)( sLastSlash - sPath.cstr() + 1 );
+	auto iLen = (int)( s - sPath.cstr() );
 	sPath = sPath.SubString ( iPos, iLen - iPos );
 }
 

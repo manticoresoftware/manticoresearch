@@ -5730,22 +5730,25 @@ public:
 
 		m_fnStrCmp = GetCollationFn ( eCollation );
 
-		const char * sExpr = pConsts->m_sExpr.cstr();
-		int iExprLen = pConsts->m_sExpr.Length();
-
 		const int64_t * pFilter = m_pUservar ? m_pUservar->Begin() : m_dValues.Begin();
 		const int64_t * pFilterMax = pFilter + ( m_pUservar ? m_pUservar->GetLength() : m_dValues.GetLength() );
 
-		for ( const int64_t * pCur=pFilter; pCur<pFilterMax; pCur++ )
+		if ( pConsts )
 		{
-			int64_t iVal = *pCur;
-			auto iOfs = (int)( iVal>>32 );
-			auto iLen = (int)( iVal & 0xffffffffUL );
-			if ( iOfs>0 && iOfs+iLen<=iExprLen )
+			const char * sExpr = pConsts->m_sExpr.cstr ();
+			int iExprLen = pConsts->m_sExpr.Length ();
+
+			for ( const int64_t * pCur=pFilter; pCur<pFilterMax; pCur++ )
 			{
-				CSphString sRes;
-				SqlUnescape ( sRes, sExpr + iOfs, iLen );
-				m_dStringValues.Add ( sRes );
+				int64_t iVal = *pCur;
+				auto iOfs = (int)( iVal>>32 );
+				auto iLen = (int)( iVal & 0xffffffffUL );
+				if ( iOfs>0 && iOfs+iLen<=iExprLen )
+				{
+					CSphString sRes;
+					SqlUnescape ( sRes, sExpr + iOfs, iLen );
+					m_dStringValues.Add ( sRes );
+				}
 			}
 		}
 

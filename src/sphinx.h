@@ -3003,7 +3003,7 @@ enum StringSource_e
 };
 
 // iLen1 and iLen2 should be specified only in case of STRING_PLAIN
-typedef int ( *SphStringCmp_fn )( const BYTE * pStr1, const BYTE * pStr2, StringSource_e eStrSource, int iLen1, int iLen2 );
+using SphStringCmp_fn =  int ( * )( const BYTE * pStr1, const BYTE * pStr2, StringSource_e eStrSource, int iLen1, int iLen2 );
 
 /// match comparator state
 struct CSphMatchComparatorState

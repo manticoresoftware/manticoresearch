@@ -9792,7 +9792,7 @@ bool SqlParser_c::AddStringListFilter ( const SqlNode_t & tCol, SqlNode_t & tVal
 		int iLen = ( uVal & 0xffffffff );
 		SqlUnescape ( pFilter->m_dStrings[i], m_pBuf + iOff, iLen );
 	}
-	tVal.m_pValues = NULL;
+	tVal.m_pValues = nullptr;
 	pFilter->m_bExclude = bExclude;
 	return true;
 }
@@ -12292,14 +12292,14 @@ void SendMysqlEofPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iWarns, b
 }
 
 
-void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iAffectedRows=0, int iWarns=0, const char * sMessage=NULL, bool bMoreResults=false )
+void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iAffectedRows=0, int iWarns=0, const char * sMessage=nullptr, bool bMoreResults=false )
 {
 	DWORD iInsert_id = 0;
 	char sVarLen[20] = {0}; // max 18 for packed number, +1 more just for fun
 	void * pBuf = sVarLen;
 	pBuf = MysqlPack ( pBuf, iAffectedRows );
 	pBuf = MysqlPack ( pBuf, iInsert_id );
-	int iLen = (char *) pBuf - sVarLen;
+	auto iLen = (char *) pBuf - sVarLen;
 
 	int iMsgLen = 0;
 	if ( sMessage )
@@ -12314,7 +12314,8 @@ void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iAffectedR
 	if ( bMoreResults ) // order of WORDs is opposite to EOF packet
 		uWarnStatus |= ( SPH_MYSQL_FLAG_MORE_RESULTS );
 	tOut.SendLSBDword ( uWarnStatus );		// 0 status, N warnings
-	tOut.SendBytes ( sMessage, iMsgLen );
+	if ( sMessage )
+		tOut.SendBytes ( sMessage, iMsgLen );
 }
 
 
@@ -13039,8 +13040,6 @@ static void PercolateMatchDocuments ( const CSphVector<CSphString> & dDocs, cons
 	CSphString sTmp;
 	dFields.Fill ( sTmp.scstr() );
 
-	CSphScopedPtr<ISphTokenizer> tTok ( pIndex->CloneIndexingTokenizer() );
-
 	// set defaults
 	CSphMatchVariant tDoc;
 	tDoc.Reset ( tSchema.GetRowSize() );
@@ -13109,7 +13108,7 @@ static void PercolateMatchDocuments ( const CSphVector<CSphString> & dDocs, cons
 		}
 
 		// add document
-		pIndex->AddDocument ( tTok.Ptr(), iFieldsCount, dFields.Begin(), tDoc, true, sTokenFilterOpts, NULL, CSphVector<DWORD>(), sError, sWarning, pAccum );
+		pIndex->AddDocument ( pIndex->CloneIndexingTokenizer (), iFieldsCount, dFields.Begin(), tDoc, true, sTokenFilterOpts, NULL, CSphVector<DWORD>(), sError, sWarning, pAccum );
 
 		if ( pJsonStorage )
 			cJSON_Delete ( pJsonStorage );
@@ -18551,7 +18550,7 @@ static bool RotateIndexMT ( const CSphString & sIndex, CSphString & sError )
 	CSphString sNewPath = pRotating->m_sNewPath;
 	// don't need to hold the existing index any more now
 	pRotating->Unlock();
-	pRotating = NULL;
+	pRotating = nullptr;
 
 	RotateFrom_e eRot = CheckIndexHeaderRotate ( sIndexPath.cstr(), sNewPath.cstr(), tNewIndex.m_bOnlyNew );
 	if ( eRot==ROTATE_FROM_NONE )

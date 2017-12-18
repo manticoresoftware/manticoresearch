@@ -617,20 +617,18 @@ SphStringCmp_fn CmpFn ( ESphCollation eCollation )
 class FilterString_c : public IFilter_Attr
 {
 private:
-	CSphFixedVector<BYTE>	m_dVal;
+	CSphFixedVector<BYTE>	m_dVal {0};
 	bool					m_bEq;
 
 protected:
 	SphStringCmp_fn			m_fnStrCmp;
-	const BYTE *			m_pStringBase;
+	const BYTE *			m_pStringBase = nullptr;
 	StringSource_e			m_eStrSource;
 
 public:
 	FilterString_c ( ESphCollation eCollation, ESphAttr eType, bool bEq )
-		: m_dVal ( 0 )
-		, m_bEq ( bEq )
+		: m_bEq ( bEq )
 		, m_fnStrCmp ( CmpFn ( eCollation ) )
-		, m_pStringBase ( NULL )
 		, m_eStrSource ( eType==SPH_ATTR_STRING ? STRING_STATIC : STRING_DATAPTR )
 	{}
 

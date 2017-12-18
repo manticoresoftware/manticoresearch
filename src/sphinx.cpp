@@ -19495,7 +19495,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		pQword->m_rdHitlist.SetFile ( rdHits.GetFD(), rdHits.GetFilename().cstr() );
 		pQword->m_rdHitlist.SeekTo ( rdHits.GetPos(), READ_NO_SIZE_HINT );
 
-		CSphRowitem * pInlineStorage = NULL;
+		CSphRowitem * pInlineStorage = nullptr;
 		if ( pQword->m_iInlineAttrs )
 			pInlineStorage = new CSphRowitem [ pQword->m_iInlineAttrs ];
 
@@ -20496,13 +20496,11 @@ static bool GetFileStats ( const char * szFilename, CSphSavedFile & tInfo, CSphS
 
 	tInfo.m_sFilename = szFilename;
 
-	struct_stat tStat;
-	memset ( &tStat, 0, sizeof ( tStat ) );
+	struct_stat tStat = {0};
 	if ( stat ( szFilename, &tStat ) < 0 )
 	{
 		if ( pError )
 			*pError = strerror ( errno );
-		memset ( &tStat, 0, sizeof ( tStat ) );
 		return false;
 	}
 

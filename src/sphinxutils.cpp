@@ -342,10 +342,10 @@ bool sphWildcardMatch ( const char * sString, const char * sPattern, const int *
 	if ( !pString && pPattern )
 		return sphWildcardMatchSpec ( sString, pPattern ); // ascii vs utf-8
 
-	if ( pString && pPattern )
+//	if ( pString && pPattern )
 		return sphWildcardMatchSpec ( pString, pPattern ); // utf-8 vs utf-8
 
-	return false; // dead, but causes warn either by compiler, either by analysis. Leave as is.
+//	return false; // dead, but causes warn either by compiler, either by analysis. Leave as is.
 }
 
 //////////////////////////////////////////////////////////////////////////

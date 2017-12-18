@@ -1070,9 +1070,8 @@ bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const char * szAgent, const cha
 			}
 			break;
 
-		case AP_DONE:
-		default:
-			break;
+//		case AP_DONE: // AP_DONE catched by while() condition
+		default:;
 		} // switch (eState)
 	} // while (eState!=AP_DONE)
 

@@ -522,12 +522,10 @@ bool CISpellAffix::Load ( const char * szFilename )
 	{
 		fseek ( pFile, SEEK_SET, 0 );
 		printf ( "Using %s affix file format\n", AffixFormatName[eFormat] );
-		switch ( eFormat )
-		{
-			case AFFIX_FORMAT_MYSPELL:	bResult = LoadMySpell ( pFile ); break;
-			case AFFIX_FORMAT_ISPELL:	bResult = LoadISpell ( pFile ); break;
-			case AFFIX_FORMAT_UNKNOWN:	break;
-		}
+		if ( eFormat==AFFIX_FORMAT_MYSPELL )
+			bResult = LoadMySpell ( pFile );
+		else // if ( eFormat==AFFIX_FORMAT_ISPELL )
+			bResult = LoadISpell ( pFile );
 	}
 	fclose ( pFile );
 

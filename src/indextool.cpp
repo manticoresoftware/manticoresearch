@@ -266,7 +266,13 @@ bool DoKlistsOptimization ( int iRowSize, const char * sPath, int iChunkCount, C
 
 		if ( dLiveID.GetLength()>0 )
 		{
-			assert ( rdKList.GetFilesize()<INT_MAX );
+			auto uFsize = rdKList.GetFilesize ();
+			assert ( uFsize<INT_MAX );
+			if ( uFsize<0 )
+			{
+				fprintf ( stdout, "\nfailed to stat kill-list file, error %s\n", strerror ( errno ) );
+				return false;
+			}
 
 			dKlist.Resize ( (int)( rdKList.GetFilesize()/sizeof(SphAttr_t) ) );
 			rdKList.GetBytes ( dKlist.Begin(), (int)rdKList.GetFilesize() );

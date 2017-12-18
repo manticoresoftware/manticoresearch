@@ -12303,13 +12303,13 @@ void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iAffectedR
 	void * pBuf = sVarLen;
 	pBuf = MysqlPack ( pBuf, iAffectedRows );
 	pBuf = MysqlPack ( pBuf, iInsert_id );
-	auto iLen = (char *) pBuf - sVarLen;
+	int iLen = (char *) pBuf - sVarLen;
 
 	int iMsgLen = 0;
 	if ( sMessage )
 		iMsgLen = strlen(sMessage) + 1; // FIXME! does or doesn't the trailing zero necessary in Ok packet?
 
-	tOut.SendLSBDword ( (uPacketID<<24) + iLen + iMsgLen + 5);
+	tOut.SendLSBDword ( DWORD (uPacketID<<24) + iLen + iMsgLen + 5);
 	tOut.SendByte ( 0 );				// ok packet
 	tOut.SendBytes ( sVarLen, iLen );	// packed affected rows & insert_id
 	if ( iWarns<0 ) iWarns = 0;

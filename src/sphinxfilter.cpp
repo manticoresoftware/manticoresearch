@@ -1977,15 +1977,15 @@ void FormatFiltersQL ( const CSphVector<CSphFilterSettings> & dFilters, const CS
 class PercolateFilterValues_c : public PercolateFilter_i
 {
 public:
-	PercolateFilterValues_c ( const CSphFilterSettings & tUID )
+	explicit PercolateFilterValues_c ( const CSphFilterSettings & tUID )
 		: m_pValues ( tUID.GetValueArray() )
 		, m_iCount ( tUID.GetNumValues() )
 	{}
 
-	virtual ~PercolateFilterValues_c()
+	~PercolateFilterValues_c() final
 	{}
 
-	virtual bool Eval ( SphAttr_t uUID ) override
+	bool Eval ( SphAttr_t uUID ) final
 	{
 		if ( !m_pValues || !m_iCount )
 			return true;
@@ -2002,25 +2002,24 @@ template < bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIG
 class PercolateFilterRange_c : public PercolateFilter_i
 {
 public:
-	PercolateFilterRange_c ()
+	PercolateFilterRange_c () = default;
+
+	~PercolateFilterRange_c() final
 	{}
 
-	virtual ~PercolateFilterRange_c()
-	{}
-
-	virtual bool Eval ( SphAttr_t uUID ) override
+	bool Eval ( SphAttr_t uUID ) final
 	{
 		return EvalRange<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT> ( uUID, m_iMinValue, m_iMaxValue );
 	}
 
-	virtual void SetRange ( SphAttr_t tMin, SphAttr_t tMax ) override
+	void SetRange ( SphAttr_t tMin, SphAttr_t tMax ) final
 	{
 		m_iMinValue = tMin;
 		m_iMaxValue = tMax;
 	}
 
-	SphAttr_t m_iMinValue;
-	SphAttr_t m_iMaxValue;
+	SphAttr_t m_iMinValue = 0;
+	SphAttr_t m_iMaxValue = 0;
 };
 
 static PercolateFilter_i * CreatePercolateRangeFilter ( const CSphFilterSettings & tOpt )

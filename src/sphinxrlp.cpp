@@ -228,8 +228,8 @@ private:
 	CSphTightVector<BYTE>	m_dCJKBuffer;
 	CSphTightVector<BYTE>	m_dNonCJKBuffer;
 	CSphTightVector<TextChunk_t> m_dNonCJKChunks;
-	BYTE					m_dUTF8Buffer[MAX_TOKEN_LEN];
-	BYTE					m_pMarkerChunkSeparator[PROXY_MARKER_LEN];
+	BYTE					m_dUTF8Buffer[MAX_TOKEN_LEN+1] {0};
+	BYTE					m_pMarkerChunkSeparator[PROXY_MARKER_LEN] {0};
 	CSphVector<CSphRemapRange> m_dBlendChars;
 
 
@@ -270,7 +270,7 @@ private:
 		// reconstruct the buffer
 		BYTE * pToken;
 		int iCurNonCJKToken = 0;
-		while ( (pToken = GetNextTokenRLP())!=NULL )
+		while ( (pToken = GetNextTokenRLP())!=nullptr )
 		{
 			int iResLen = dOut.GetLength();
 			int iTokenLen = strlen ( (const char *)pToken );
@@ -278,8 +278,10 @@ private:
 			if ( iTokenLen==PROXY_MARKER_LEN && CMP_MARKER ( pToken, m_pMarkerChunkSeparator ) )
 			{
 				const TextChunk_t & tChunk = m_dNonCJKChunks[iCurNonCJKToken++];
-				BYTE * pChunkStart = m_dNonCJKBuffer.Begin()+tChunk.m_iStart;
-				bAddSpace &= !sphIsSpace( *pChunkStart ) && ( !bQuery || !IsSpecialQueryCode ( *pChunkStart ) ) && !IsBlendChar( *pChunkStart );
+				pChunkStart = m_dNonCJKBuffer.Begin()+tChunk.m_iStart;
+				bAddSpace &= !sphIsSpace( *pChunkStart )
+					&& ( !bQuery || !IsSpecialQueryCode ( *pChunkStart ) )
+					&& !IsBlendChar( *pChunkStart );
 				dOut.Resize ( iResLen + tChunk.m_iLength + ( bAddSpace ? 1 : 0 ) );
 				BYTE * pOut = dOut.Begin()+iResLen;
 				if ( bAddSpace )
@@ -290,7 +292,8 @@ private:
 				dOut.Resize ( iResLen + iTokenLen + ( bAddSpace ? 1 : 0 ) );
 				BYTE * pOut = dOut.Begin()+iResLen;
 				if ( iResLen )
-					bAddSpace &= ( !bQuery || !IsSpecialQueryCode ( pOut[-1] ) ) && !IsBlendChar( pOut[-1] );
+					bAddSpace &= ( !bQuery || !IsSpecialQueryCode ( pOut[-1] ) )
+						&& !IsBlendChar( pOut[-1] );
 
 				if ( bAddSpace )
 					*pOut++ = ' ';
@@ -334,7 +337,7 @@ private:
 			return iLength;
 
 		const BYTE * pCurBuf = pBuffer;
-		const BYTE * pLastSeparator = NULL;
+		const BYTE * pLastSeparator = nullptr;
 		int iLengthLeft = Min ( iLength, MAX_CHUNK_SIZE );
 		while ( pCurBuf<pBuffer+iLengthLeft )
 		{
@@ -366,7 +369,7 @@ private:
 		static const char * RPL_SPECIAL_STOPWORD = "rlpspecialstopword";
 
 		if ( !m_pTokenIterator )
-			return NULL;
+			return nullptr;
 
 		if ( m_iNextCompoundComponent!=-1 )
 		{
@@ -416,7 +419,7 @@ private:
 
 		DestroyIteratorRLP();
 
-		return NULL;
+		return nullptr;
 	}
 
 
@@ -425,7 +428,7 @@ private:
 		if ( m_pTokenIterator )
 		{
 			BT_RLP_TokenIterator_Destroy ( m_pTokenIterator );
-			m_pTokenIterator = NULL;
+			m_pTokenIterator = nullptr;
 		}
 
 		if ( m_pContext )
@@ -470,9 +473,9 @@ public:
 	CSphFieldFilterRLP ( const char * szRLPRoot, const char * szRLPEnv, const char * szRLPCtx );
 
 
-	virtual	int				Apply ( const BYTE * sField, int iLength, CSphVector<BYTE> & dStorage, bool bQuery );
-	virtual	void			GetSettings ( CSphFieldFilterSettings & tSettings ) const;
-	virtual ISphFieldFilter * Clone();
+	int				Apply ( const BYTE * sField, int iLength, CSphVector<BYTE> & dStorage, bool bQuery ) final;
+	void			GetSettings ( CSphFieldFilterSettings & tSettings ) const final;
+	ISphFieldFilter * Clone() final;
 };
 
 
@@ -526,7 +529,7 @@ void CSphFieldFilterRLP::GetSettings ( CSphFieldFilterSettings & tSettings ) con
 
 ISphFieldFilter * CSphFieldFilterRLP::Clone()
 {
-	ISphFieldFilter * pClonedParent = NULL;
+	ISphFieldFilter * pClonedParent = nullptr;
 	if ( m_pParent )
 		pClonedParent = m_pParent->Clone();
 
@@ -540,7 +543,7 @@ ISphFieldFilter * CSphFieldFilterRLP::Clone()
 
 ISphFieldFilter * sphCreateRLPFilter ( ISphFieldFilter * pParent, const char * szRLPRoot, const char * szRLPEnv, const char * szRLPCtx, const char * szBlendChars, CSphString & sError )
 {
-	CSphFieldFilterRLP * pFilter = new CSphFieldFilterRLP ( szRLPRoot, szRLPEnv, szRLPCtx );
+	auto * pFilter = new CSphFieldFilterRLP ( szRLPRoot, szRLPEnv, szRLPCtx );
 	if ( !pFilter->Init ( sError ) )
 	{
 		SafeDelete ( pFilter );

@@ -67,9 +67,6 @@ public:
 	explicit CSphSource_Proxy ( const char * sSourceName )
 		: T ( sSourceName )
 		, m_dBatchedDocs ( g_iRLPMaxBatchDocs )
-		, m_iDocStart ( 0 )
-		, m_iDocCount ( 0 )
-		, m_pBatchFieldFilter ( NULL )
 	{
 		assert ( sphUTF8Encode ( m_pMarkerDocStart, PROXY_DOCUMENT_START )==PROXY_MARKER_LEN );
 
@@ -161,40 +158,40 @@ public:
 					pDoc->m_dFields[i][iFieldLength] = '\0';
 				}
 
-				// document doesnt have any CJK, so no copying/segmenting/etc
-				if ( !bDocHasChinese )
-					continue;
+			// document doesnt have any CJK, so no copying/segmenting/etc
+			if ( !bDocHasChinese )
+				continue;
 
-				int iOldBufferLen = m_dDocBuffer.GetLength();
-				m_dDocBuffer.Resize ( iOldBufferLen+PROXY_MARKER_LEN+MAX_INDEX_LEN+2+iTotalFieldLen );
-				BYTE * pCurDocPtr = &(m_dDocBuffer[iOldBufferLen]);
+			int iOldBufferLen = m_dDocBuffer.GetLength();
+			m_dDocBuffer.Resize ( iOldBufferLen+PROXY_MARKER_LEN+MAX_INDEX_LEN+2+iTotalFieldLen );
+			BYTE * pCurDocPtr = &(m_dDocBuffer[iOldBufferLen]);
 
-				// document start tag
-				COPY_MARKER ( pCurDocPtr, m_pMarkerDocStart );
+			// document start tag
+			COPY_MARKER ( pCurDocPtr, m_pMarkerDocStart );
 
-				// document id
-				AddNumber ( pCurDocPtr, iCurDoc );
+			// document id
+			AddNumber ( pCurDocPtr, iCurDoc );
 
-				// flatten all fields(+markers) to one buffer
-				for ( int i = 0; i < T::m_tSchema.GetFieldsCount(); i++ )
-					if ( m_dFieldHasChinese[i] )
-					{
-						COPY_MARKER ( pCurDocPtr, m_pMarkerFieldStart );
+			// flatten all fields(+markers) to one buffer
+			for ( int i = 0; i < T::m_tSchema.GetFieldsCount(); i++ )
+				if ( m_dFieldHasChinese[i] )
+				{
+					COPY_MARKER ( pCurDocPtr, m_pMarkerFieldStart );
 
-						// field id
-						AddNumber ( pCurDocPtr, i );
-						*pCurDocPtr++ = ' ';
+					// field id
+					AddNumber ( pCurDocPtr, i );
+					*pCurDocPtr++ = ' ';
 
-						int iFieldLen = m_dFieldLengths[i];
-						memcpy ( pCurDocPtr, pFields[i], iFieldLen );
-						pCurDocPtr += iFieldLen;
-					}
+					int iFieldLen = m_dFieldLengths[i];
+					memcpy ( pCurDocPtr, pFields[i], iFieldLen );
+					pCurDocPtr += iFieldLen;
+				}
 
-					m_dDocBuffer.Resize ( pCurDocPtr-m_dDocBuffer.Begin() );
+			m_dDocBuffer.Resize ( pCurDocPtr-m_dDocBuffer.Begin() );
 		}
 
 		if ( IsDocCacheEmpty() )
-			return NULL;
+			return nullptr;
 
 		assert ( m_pBatchFieldFilter && !T::m_pFieldFilter );
 		int iResultLen = m_pBatchFieldFilter->Apply ( m_dDocBuffer.Begin(), m_dDocBuffer.GetLength(), m_dResult, false );
@@ -202,8 +199,8 @@ public:
 
 		BYTE * pSegmentedStart = m_dResult.Begin();
 		BYTE * pSegmentedEnd = pSegmentedStart+iResultLen;
-		BYTE * pFieldStart = NULL;
-		StoredDoc_t * pCurDoc = NULL;
+		BYTE * pFieldStart = nullptr;
+		StoredDoc_t * pCurDoc = nullptr;
 		int iFieldId = -1;
 
 		while ( pSegmentedStart < pSegmentedEnd )
@@ -215,7 +212,7 @@ public:
 				continue;
 
 			// we have a segmented field that we need to place into the appropriate cached document
-			if ( pFieldStart )
+			if ( pFieldStart && pCurDoc )
 			{
 				assert ( pCurDoc && iFieldId!=-1 );
 
@@ -232,9 +229,9 @@ public:
 				int iDoc = ReadNumber ( pSegmentedStart, pSegmentedEnd );
 				pCurDoc = &(m_dBatchedDocs[iDoc]);
 				iFieldId = -1;
-				pFieldStart = NULL;
+				pFieldStart = nullptr;
 
-			} else if ( iCode==PROXY_FIELD_START )
+			} else //if ( iCode==PROXY_FIELD_START )
 			{
 				// fetch field id
 				iFieldId = ReadNumber ( pSegmentedStart, pSegmentedEnd );
@@ -261,15 +258,14 @@ public:
 	}
 
 private:
-	CSphSource_Document *	m_pSource;
 	CSphFixedVector<StoredDoc_t> m_dBatchedDocs;
 	CSphTightVector<BYTE>	m_dDocBuffer;
 	CSphVector<BYTE>		m_dResult;
 	CSphTightVector<int>	m_dFieldLengths;
 	CSphVector<bool>		m_dFieldHasChinese;
-	int						m_iDocStart;
-	int						m_iDocCount;
-	ISphFieldFilter *		m_pBatchFieldFilter;
+	int						m_iDocStart = 0;
+	int						m_iDocCount = 0;
+	ISphFieldFilter *		m_pBatchFieldFilter = nullptr;
 
 	BYTE					m_pMarkerDocStart[PROXY_MARKER_LEN];
 	BYTE					m_pMarkerFieldStart[PROXY_MARKER_LEN];
@@ -316,13 +312,16 @@ private:
 		{
 			int iDynamic = T::m_tSchema.GetRowSize();
 
-			if ( !tTo.m_pDynamic )
-				tTo.Reset ( iDynamic );
+			if ( iDynamic )
+			{
+				if ( !tTo.m_pDynamic )
+					tTo.Reset ( iDynamic );
 
-			memcpy ( tTo.m_pDynamic, tFrom.m_pDynamic, iDynamic*sizeof(CSphRowitem) );
+				memcpy ( tTo.m_pDynamic, tFrom.m_pDynamic, iDynamic * sizeof ( CSphRowitem ) );
+			}
 		}
 
-		tTo.m_pStatic = NULL;
+		tTo.m_pStatic = nullptr;
 		tTo.m_uDocID = tFrom.m_uDocID;
 		tTo.m_iWeight = tFrom.m_iWeight;
 		tTo.m_iTag = tFrom.m_iTag;

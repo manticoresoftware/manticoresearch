@@ -203,7 +203,7 @@ static bool sphWildcardMatchRec ( const T1 * sString, const T2 * sPattern )
 
 			// so our wildcard expects a real character
 			// scan forward for its occurrences and recurse
-			for ( ;; )
+			while (true)
 			{
 				if ( !*s )
 					return false;
@@ -910,7 +910,7 @@ bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dRe
 	do
 	{
 		dResult.Resize ( iTotalRead + BUFFER_SIZE );
-		for ( ;; )
+		while (true)
 		{
 			iBytesRead = (int) read ( iRead, (void*)&(dResult [iTotalRead]), BUFFER_SIZE );
 			if ( iBytesRead==-1 && errno==EINTR ) // we can get SIGCHLD just before eof

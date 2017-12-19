@@ -536,7 +536,7 @@ struct SphAccessor_T
 template < typename T, typename U, typename V >
 void sphSiftDown ( T * pData, int iStart, int iEnd, const U &COMP, const V &ACC )
 {
-	for ( ;; )
+	while (true)
 	{
 		int iChild = iStart*2+1;
 		if ( iChild>iEnd )
@@ -3332,7 +3332,7 @@ public:
 	void SetValue ( TLONG iValue )
 	{
 		assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
-		for ( ;; )
+		while (true)
 		{
 			TLONG iOld = GetValue ();
 			if ( __sync_bool_compare_and_swap ( &m_iValue, iOld, iValue ) )
@@ -3532,7 +3532,7 @@ public:
 		DWORD uHash = GetHash(k);
 		int iIndex = uHash & ( m_iSize-1 );
 		int iDead = -1;
-		for ( ;; )
+		while (true)
 		{
 			// found matching key? great, return the value
 			Entry * p = m_pHash + iIndex;
@@ -3667,7 +3667,7 @@ protected:
 		assert ( k!=NO_ENTRY && k!=DEAD_ENTRY );
 		DWORD uHash = GetHash(k);
 		int iIndex = uHash & ( m_iSize-1 );
-		for ( ;; )
+		while (true)
 		{
 			Entry * p = m_pHash + iIndex;
 			if ( p->m_Key==k )
@@ -3766,7 +3766,7 @@ public:
 
 		// sift down if needed
 		int iEntry = 0;
-		for ( ;; )
+		while (true)
 		{
 			// select child
 			int iChild = ( iEntry<<1 ) + 1;

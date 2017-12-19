@@ -1575,7 +1575,7 @@ void ExtPayload_c::PopulateCache ( const ISphQwordSetup & tSetup, bool bFillStat
 
 	// read and cache all docs and hits
 	if ( bOk )
-		for ( ;; )
+		while (true)
 	{
 		const CSphMatch & tMatch = pQword->GetNextDoc ( NULL );
 		if ( !tMatch.m_uDocID )
@@ -2270,7 +2270,7 @@ const ExtHit_t * ExtTermHitless_c::GetHitsChunk ( const ExtDoc_t * pMatched )
 			uMaxFields++;
 		}
 	}
-	for ( ;; )
+	while (true)
 	{
 		if ( ( m_uFieldPos<32 && ( pDoc->m_uDocFields & ( 1 << m_uFieldPos ) ) ) // not necessary
 			&& m_dQueriedFields.Test ( m_uFieldPos ) )
@@ -2413,7 +2413,7 @@ const ExtDoc_t * ExtConditional<T,ExtBase>::GetDocsChunk()
 	SphDocID_t uLastID = m_uLastID = 0;
 
 	CSphRowitem * pDocinfo = ExtBase::m_pDocinfo;
-	for ( ;; )
+	while (true)
 	{
 		// try to fetch more hits for current raw docs block if we're out
 		if ( !pHit || pHit->m_uDocid==DOCID_MAX )
@@ -2519,7 +2519,7 @@ const ExtHit_t * ExtConditional<T,ExtBase>::GetHitsChunk ( const ExtDoc_t * pDoc
 	if ( m_eState==COPY_FILTERED )
 	{
 		const ExtHit_t * pMyHit = m_dMyHits;
-		for ( ;; )
+		while (true)
 		{
 			// skip hits that the caller is not interested in
 			while ( pMyHit->m_uDocid < pDocs->m_uDocid )
@@ -2673,7 +2673,7 @@ const ExtDoc_t * ExtAnd_c::GetDocsChunk()
 
 	int iDoc = 0;
 	CSphRowitem * pDocinfo = m_pDocinfo;
-	for ( ;; )
+	while (true)
 	{
 		// if any of the pointers is empty, *and* there is no data yet, process next child chunk
 		// if there is data, we can't advance, because child hitlist offsets would be lost
@@ -3273,7 +3273,7 @@ const ExtDoc_t * ExtAndNot_c::GetDocsChunk()
 		// perform filtering
 		assert ( pCurL );
 		assert ( pCurR );
-		for ( ;; )
+		while (true)
 		{
 			assert ( iDoc<MAX_DOCS-1 );
 			assert ( pCurL->m_uDocid!=DOCID_MAX );
@@ -4888,7 +4888,7 @@ const ExtHit_t * ExtOrder_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 	const ExtHit_t * pMyHits = m_dMyHits;
 	int iHit = 0;
 
-	for ( ;; )
+	while (true)
 	{
 		while ( pDocs->m_uDocid!=pMyHits->m_uDocid )
 		{
@@ -5068,7 +5068,7 @@ uint64_t ExtUnit_c::GetWordID() const
 /// skips hits until their docids are less than the given limit
 static inline void SkipHitsLtDocid ( const ExtHit_t * (*ppHits), SphDocID_t uMatch, ExtNode_i * pNode, const ExtDoc_t * pDocs )
 {
-	for ( ;; )
+	while (true)
 	{
 		const ExtHit_t * pHit = *ppHits;
 		if ( !pHit || pHit->m_uDocid==DOCID_MAX )
@@ -5094,7 +5094,7 @@ static inline void SkipHitsLtDocid ( const ExtHit_t * (*ppHits), SphDocID_t uMat
 static inline bool SkipHitsLtePos ( const ExtHit_t * (*ppHits), Hitpos_t uPos, ExtNode_i * pNode, const ExtDoc_t * pDocs )
 {
 	SphDocID_t uDocid = (*ppHits)->m_uDocid;
-	for ( ;; )
+	while (true)
 	{
 		const ExtHit_t * pHit = *ppHits;
 		if ( !pHit || pHit->m_uDocid==DOCID_MAX )
@@ -5372,7 +5372,7 @@ const ExtHit_t * ExtUnit_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 	int iHit = 0;
 	ExtHit_t * pMyHit = m_dMyHits;
 
-	for ( ;; )
+	while (true)
 	{
 		// skip filtered hits until next requested document
 		while ( pMyHit->m_uDocid!=pDocs->m_uDocid )
@@ -5671,7 +5671,7 @@ const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 	#endif
 
 	CSphScopedProfile ( m_pCtx->m_pProfile, SPH_QSTATE_GET_DOCS );
-	for ( ;; )
+	while (true)
 	{
 		// get another chunk
 		if ( m_pCtx->m_pProfile )
@@ -9352,7 +9352,7 @@ void CSphHitMarker::Mark ( CSphVector<SphHitMark_t> & dMarked )
 	if ( !pDocs )
 		return;
 
-	for ( ;; )
+	while (true)
 	{
 		pHits = m_pRoot->GetHitsChunk ( pDocs );
 		if ( !pHits )

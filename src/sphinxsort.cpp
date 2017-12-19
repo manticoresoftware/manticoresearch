@@ -277,7 +277,7 @@ public:
 
 		// sift down if needed
 		int iEntry = 0;
-		for ( ;; )
+		while (true)
 		{
 			// select child
 			int iChild = (iEntry<<1) + 1;

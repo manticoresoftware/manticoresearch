@@ -1184,7 +1184,7 @@ static CSphSEShare * get_share ( const char * table_name, TABLE * table )
 	pthread_mutex_lock ( &sphinx_mutex );
 
 	CSphSEShare * pShare = NULL;
-	for ( ;; )
+	while (true)
 	{
 		// check if we already have this share
 #if MYSQL_VERSION_ID>=50120
@@ -1574,7 +1574,7 @@ bool CSphSEQuery::ParseField ( char * sField )
 	} else if ( m_iFilters<SPHINXSE_MAX_FILTERS &&
 		( !strcmp ( sName, "range" ) || !strcmp ( sName, "!range" ) || !strcmp ( sName, "floatrange" ) || !strcmp ( sName, "!floatrange" ) ) )
 	{
-		for ( ;; )
+		while (true)
 		{
 			char * p = sName;
 			CSphSEFilter & tFilter = m_dFilters [ m_iFilters ];
@@ -1610,7 +1610,7 @@ bool CSphSEQuery::ParseField ( char * sField )
 	} else if ( m_iFilters<SPHINXSE_MAX_FILTERS &&
 		( !strcmp ( sName, "filter" ) || !strcmp ( sName, "!filter" ) ) )
 	{
-		for ( ;; )
+		while (true)
 		{
 			CSphSEFilter & tFilter = m_dFilters [ m_iFilters ];
 			tFilter.m_eType = SPH_FILTER_VALUES;
@@ -1695,7 +1695,7 @@ bool CSphSEQuery::ParseField ( char * sField )
 	} else if ( !strcmp ( sName, "geoanchor" ) )
 	{
 		m_bGeoAnchor = false;
-		for ( ;; )
+		while (true)
 		{
 			char * sLat = sValue;
 			char * p = sValue;
@@ -1729,7 +1729,7 @@ bool CSphSEQuery::ParseField ( char * sField )
 
 		// get name and type
 		char * sRest = sValue;
-		for ( ;; )
+		while (true)
 		{
 			sName = sRest;
 			if ( !*sName )
@@ -2730,7 +2730,7 @@ const Item * ha_sphinx::cond_push ( const Item *cond )
 #endif
 {
 	// catch the simplest case: query_column="some text"
-	for ( ;; )
+	while (true)
 	{
 		if ( cond->type()!=Item::FUNC_ITEM )
 			break;

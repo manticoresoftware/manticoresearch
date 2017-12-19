@@ -255,7 +255,7 @@ TEST_P ( RTN, WeightBoundary )
 
 	CSphVector<DWORD> dMvas;
 	CSphString sFilter;
-	for ( ;; )
+	while (true)
 	{
 		EXPECT_TRUE ( pSrc->IterateDocument ( sError ) );
 		if ( !pSrc->m_tDocInfo.m_uDocID )
@@ -351,7 +351,7 @@ TEST_F ( RT, RankerFactors )
 
 	CSphString sFilter;
 	CSphVector<DWORD> dMvas;
-	for ( ;; )
+	while (true)
 	{
 		Verify ( pSrc->IterateDocument ( sError ) );
 		if ( !pSrc->m_tDocInfo.m_uDocID )
@@ -536,7 +536,7 @@ TEST_F ( RT, SendVsMerge )
 
 	CSphString sFilter;
 	CSphVector<DWORD> dMvas;
-	for ( ;; )
+	while (true)
 	{
 		ASSERT_TRUE ( pSrc->IterateDocument ( sError ) );
 		if ( !pSrc->m_tDocInfo.m_uDocID )

@@ -435,7 +435,7 @@ public:
 				DWORD uMask = sphGetDword(p);
 				printf ( "%s (bloom mask: 0x%08x)\n", eType==JSON_OBJECT ? "JSON_OBJECT" : "JSON_ROOT", uMask );
 				p += 4; // skip bloom table
-				for ( ;; )
+				while (true)
 				{
 					ESphJsonType eInnerType = (ESphJsonType) *p++;
 					if ( eInnerType==JSON_EOF )
@@ -651,7 +651,7 @@ int sphJsonNodeSize ( ESphJsonType eType, const BYTE *pData )
 		if ( !p )
 			return -1;
 		p += 4; // skip filter
-		for ( ;; )
+		while (true)
 		{
 			ESphJsonType eNode = (ESphJsonType) *p++;
 			if ( eNode==JSON_EOF )
@@ -698,7 +698,7 @@ int sphJsonFieldLength ( ESphJsonType eType, const BYTE * pData )
 		if ( eType==JSON_OBJECT )
 			sphJsonUnpackInt ( &p ); // skip size
 		p += 4; // skip filter
-		for ( ;; )
+		while (true)
 		{
 			ESphJsonType eNode = (ESphJsonType) *p++;
 			if ( eNode==JSON_EOF )
@@ -741,7 +741,7 @@ ESphJsonType sphJsonFindByKey ( ESphJsonType eType, const BYTE ** ppValue, const
 		return JSON_EOF;
 
 	p += 4;
-	for ( ;; )
+	while (true)
 	{
 		eType = (ESphJsonType) *p++;
 		if ( eType==JSON_EOF )

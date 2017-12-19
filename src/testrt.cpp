@@ -82,7 +82,7 @@ void DoIndexing ( CSphSource_MySQL * pSrc, ISphRtIndex * pIndex )
 	int64_t tmAvgCommit = 0;
 	int64_t tmMaxCommit = 0;
 	int iCommits = 0;
-	for ( ;; )
+	while (true)
 	{
 		const char ** pFields = (const char **)pSrc->NextDocument ( sError );
 		if ( !pFields )

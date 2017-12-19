@@ -2220,7 +2220,7 @@ const RtWord_t * RtIndex_t::CopyWord ( RtSegment_t * pDst, RtWordWriter_t & tOut
 #endif
 
 	// copy docs
-	for ( ;; )
+	while (true)
 	{
 		const RtDoc_t * pDoc = tInDoc.UnzipDoc();
 		if ( !pDoc )
@@ -2831,7 +2831,7 @@ RtSegment_t * RtIndex_t::MergeSegments ( const RtSegment_t * pSeg1, const RtSegm
 	const RtWord_t * pWords2 = tIn2.UnzipWord ();
 
 	// merge while there are common words
-	for ( ;; )
+	while (true)
 	{
 		while ( pWords1 && pWords2 )
 		{
@@ -3117,7 +3117,7 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 			bool bRamAlive = false;
 			bool bSavedOrDiskAlive = false;
 			bool bAlreadyKilled = false;
-			for ( ;; )
+			while (true)
 			{
 				for ( int j=m_dRamChunks.GetLength()-1; j>=m_iDoubleBuffer && !bRamAlive; --j )
 					bRamAlive = !!m_dRamChunks[j]->FindAliveRow ( uDocid );
@@ -3477,7 +3477,7 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const SphChunkGuard_t
 	StorageStringWriter_t tStorageString ( m_tSchema, tStrWriter );
 	StorageMvaWriter_t tStorageMva ( m_tSchema, tMvaWriter );
 
-	for ( ;; )
+	while (true)
 	{
 		// find min row
 		int iMinRow = -1;
@@ -3575,7 +3575,7 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const SphChunkGuard_t
 	if ( m_tSettings.m_iMinInfixLen && m_pDict->GetSettings().m_bWordDict )
 		pInfixer = sphCreateInfixBuilder ( m_pTokenizer->GetMaxCodepointLength(), &sError );
 
-	for ( ;; )
+	while (true)
 	{
 		// find keyword with min id
 		const RTWORD * pWord = NULL;
@@ -3627,7 +3627,7 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const SphChunkGuard_t
 		int iDocs = 0;
 		int iHits = 0;
 		dSkiplist.Resize ( 0 );
-		for ( ;; )
+		while (true)
 		{
 			// find alive doc with min id
 			int iMinReader = -1;
@@ -5700,7 +5700,7 @@ public:
 
 	virtual const CSphMatch & GetNextDoc ( DWORD * )
 	{
-		for ( ;; )
+		while (true)
 		{
 			const RtDoc_t * pDoc = m_tDocReader.UnzipDoc();
 			if ( !pDoc )
@@ -5822,7 +5822,7 @@ public:
 	virtual const CSphMatch & GetNextDoc ( DWORD * )
 	{
 		m_iHits = 0;
-		for ( ;; )
+		while (true)
 		{
 			const RtDoc_t * pDoc = m_tDocReader.UnzipDoc();
 			if ( !pDoc && !m_uDoclistLeft )
@@ -7334,7 +7334,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 				}
 
 				RtRowIterator_t tIt ( tGuard.m_dRamChunks[iSeg], m_iStride, false, NULL, tGuard.m_dKill[iSeg]->m_dKilled );
-				for ( ;; )
+				while (true)
 				{
 					const CSphRowitem * pRow = tIt.GetNextAliveRow();
 					if ( !pRow )
@@ -7413,7 +7413,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 				pRanker->ExtraData ( EXTRA_SET_STRINGPOOL, (void**)tGuard.m_dRamChunks[iSeg]->m_dStrings.Begin() );
 
 				CSphMatch * pMatch = pRanker->GetMatchesBuffer();
-				for ( ;; )
+				while (true)
 				{
 					// ranker does profile switches internally in GetMatches()
 					int iMatches = pRanker->GetMatches();
@@ -7944,7 +7944,7 @@ int RtIndex_t::UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphS
 	{
 		// search segments first
 		bool bUpdated = false;
-		for ( ;; )
+		while (true)
 		{
 			const CSphRowitem * pRow = tUpd.m_dRows[iUpd];
 			SphDocID_t uDocid = tUpd.m_dDocids[iUpd];
@@ -11487,7 +11487,7 @@ bool PercolateIndex_c::MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchRes
 		int iDocsOff = dDocsMatched.GetLength();
 
 		const CSphMatch * pMatch = pRanker->GetMatchesBuffer();
-		for ( ;; )
+		while (true)
 		{
 			int iMatches = pRanker->GetMatches();
 			if ( !iMatches )

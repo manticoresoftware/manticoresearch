@@ -3084,7 +3084,7 @@ static void TokenizeDocument ( T & tFunctor, const CSphHTMLStripper * pStripper,
 			dMultiPosDelta.Add ( 0 );
 
 			int iToken = ( bWasBlended ? 0 : 1 );
-			for ( ;; )
+			while (true)
 			{
 				sWord = pTokenizer->GetToken ();
 				assert ( sWord );

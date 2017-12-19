@@ -9,7 +9,7 @@ ENDFOREACH ()
 # main bunch of sources (for libsphinx)
 set ( LIBSPHINX_SRCS sphinx.cpp sphinxexcerpt.cpp
 		sphinxquery.cpp sphinxsoundex.cpp sphinxmetaphone.cpp
-		sphinxstemen.cpp sphinxstemru.cpp sphinxstemcz.cpp
+		sphinxstemen.cpp sphinxstemru.cpp sphinxstemru.inl sphinxstemcz.cpp
 		sphinxstemar.cpp sphinxutils.cpp sphinxstd.cpp
 		sphinxsort.cpp sphinxexpr.cpp sphinxfilter.cpp
 		sphinxsearch.cpp sphinxrt.cpp sphinxjson.cpp

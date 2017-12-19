@@ -1298,7 +1298,7 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 	int iEvents = 0;
 	bool bTimeout = false;
 
-	for ( ;; )
+	while (true)
 	{
 		if ( !iEvents )
 		{
@@ -1516,7 +1516,7 @@ int RemoteWaitForAgents ( AgentsVector & dAgents, int iTimeout, IReplyParser_t &
 	int iEvents = 0;
 	bool bTimeout = false;
 
-	for ( ;; )
+	while (true)
 	{
 		if ( !iEvents )
 		{
@@ -1574,7 +1574,7 @@ int RemoteWaitForAgents ( AgentsVector & dAgents, int iTimeout, IReplyParser_t &
 			// need real socket for poller, however might be lost on agent failure
 			int iSock = tAgent.m_iSock;
 
-			for ( ;; )
+			while (true)
 			{
 				if ( tAgent.State()==AGENT_QUERYED || tAgent.State()==AGENT_PREREPLY )
 				{
@@ -1898,7 +1898,7 @@ void ThdWorkPool_c::PoolThreadFunc ( void * pArg )
 	int iSpinCount = 0;
 	int iPopCount = 0;
 	AgentWorkContext_t tNext;
-	for ( ;; )
+	while (true)
 	{
 		if ( !tNext.m_pfn ) // pop new work if current is done
 		{
@@ -2678,7 +2678,7 @@ public:
 		if ( m_iReady<=0 || m_iIter>=m_dEvents.GetLength () )
 			return false;
 
-		for ( ;; )
+		while (true)
 		{
 			++m_iIter;
 			if ( m_iIter>=m_dEvents.GetLength () )
@@ -2845,7 +2845,7 @@ public:
 		if ( m_iReady<=0 || m_iIter>=m_dWork.GetLength () )
 			return false;
 
-		for ( ;; )
+		while (true)
 		{
 			++m_iIter;
 			if ( m_iIter>=m_dWork.GetLength () )

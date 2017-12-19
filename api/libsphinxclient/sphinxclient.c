@@ -1489,7 +1489,7 @@ static sphinx_bool net_write ( int fd, const char * bytes, int len, sphinx_clien
 static sphinx_bool net_read ( int fd, char * buf, int len, sphinx_client * client )
 {
 	int res, err;
-	for ( ;; )
+	while (true)
 	{
 		res = recv ( fd, buf, len, 0 );
 

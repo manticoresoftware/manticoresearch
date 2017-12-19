@@ -1976,7 +1976,7 @@ void SetSignalHandlers ( bool bAllowCtrlC=false )
 	sa.sa_flags = SA_NOCLDSTOP;
 
 	bool bSignalsSet = false;
-	for ( ;; )
+	while (true)
 	{
 		sa.sa_handler = sigterm;	if ( sigaction ( SIGTERM, &sa, NULL )!=0 ) break;
 		if ( !bAllowCtrlC )
@@ -7035,7 +7035,7 @@ void LocalSearchThreadFunc ( void * pArg )
 
 	SphCrashLogger_c::SetLastQuery ( pContext->m_tCrashQuery );
 
-	for ( ;; )
+	while (true)
 	{
 		if ( pContext->m_pCurSearch->GetValue()>=pContext->m_iSearches )
 			return;
@@ -10386,7 +10386,7 @@ void SnippetThreadFunc ( void * pArg )
 	SnippetContext_t tCtx;
 	tCtx.Setup ( pDesc->m_pIndex, *pDesc->m_pQueries, pDesc->m_pQueries->m_sError );
 
-	for ( ;; )
+	while (true)
 	{
 		pDesc->m_pLock->Lock();
 		if ( *pDesc->m_pCurQuery==pDesc->m_iQueries )
@@ -18005,7 +18005,7 @@ static void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * p
 	bool bAuthed = false;
 	BYTE uPacketID = 1;
 
-	for ( ;; )
+	while (true)
 	{
 		NetOutputBuffer_c tOut ( iSock ); // OPTIMIZE? looks like buffer size matters a lot..
 		NetInputBuffer_c tIn ( iSock );
@@ -18331,7 +18331,7 @@ bool RotateIndexGreedy ( ServedDesc_t & tIndex, const char * sIndex, CSphString 
 		}
 
 		// holding the persistent MVA updates (.mvp).
-		for ( ;; )
+		while (true)
 		{
 			char sBuf [ SPH_MAX_FILENAME_LEN ];
 			snprintf ( sBuf, sizeof(sBuf), "%s%s", sPath, sphGetExt ( SPH_EXT_TYPE_CUR, SPH_EXT_MVP ) );
@@ -19060,7 +19060,7 @@ static void SphinxqlStateRead ( const CSphString & sName )
 
 	bool bEscaped = false;
 	int iLines = 0;
-	for ( ;; )
+	while (true)
 	{
 		const BYTE * pData = NULL;
 		int iRead = tReader.GetBytesZerocopy ( &pData, iReadBlock );
@@ -20438,7 +20438,7 @@ bool SetWatchDog ( int iDevNull )
 	bool bShutdown = false;
 	bool bStreamsActive = true;
 	int iRes = 0;
-	for ( ;; )
+	while (true)
 	{
 		if ( iReincarnate!=0 )
 			iRes = fork();
@@ -21289,7 +21289,7 @@ public:
 		if ( m_iWriteFD==-1 )
 			return;
 
-		for ( ;; )
+		while (true)
 		{
 			uint64_t uVal = 1;
 #if HAVE_EVENTFD
@@ -21317,7 +21317,7 @@ public:
 			assert ( m_iReadFD!=-1 );
 			uint64_t uVal = 0;
 #if HAVE_EVENTFD
-			for ( ;; )
+			while (true)
 			{
 				auto iRead = ::read ( m_iReadFD, &uVal, sizeof ( uVal ) );
 				if ( iRead==sizeof ( uVal ) )
@@ -21325,7 +21325,7 @@ public:
 			}
 #else
 			// socket-pair case might stack up some values and these should be read
-			for ( ;; )
+			while (true)
 			{
 				int iRead = sphSockRecv ( m_iReadFD, (char *)&uVal, sizeof ( uVal ) );
 				if ( iRead<=0 )
@@ -22025,7 +22025,7 @@ NetEvent_e NetActionAccept_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction 
 	sockaddr_storage saStorage = {0};
 	socklen_t uLength = sizeof(saStorage);
 
-	for ( ;; )
+	while (true)
 	{
 		if ( g_iThrottleAccept && g_iThrottleAccept<m_iConnections-iLastConn )
 		{
@@ -22224,7 +22224,7 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 
 	bool bWasWrite = ( m_ePhase==AAPI_HANDSHAKE_OUT );
 	// loop to handle similar operations at once
-	for ( ;; )
+	while (true)
 	{
 		bool bWrite = ( m_ePhase==AAPI_HANDSHAKE_OUT );
 		int iRes = NetManageSocket ( m_tState->m_iClientSock, (char *)( m_tState->m_dBuf.Begin() + m_tState->m_iPos ), m_tState->m_iLeft, bWrite, bWasWrite );
@@ -22446,7 +22446,7 @@ NetEvent_e NetReceiveDataQL_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction
 
 	bool bWrite = m_bWrite;
 	// loop to handle similar operations at once
-	for ( ;; )
+	while (true)
 	{
 		int iRes = NetManageSocket ( m_tState->m_iClientSock, (char *)( m_tState->m_dBuf.Begin() + m_tState->m_iPos ), m_tState->m_iLeft, m_bWrite, bWrite );
 		if ( iRes==-1 )
@@ -22867,7 +22867,7 @@ NetEvent_e NetReceiveDataHttp_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActi
 		return NE_REMOVE;
 
 	// loop to handle similar operations at once
-	for ( ;; )
+	while (true)
 	{
 		int iRes = NetManageSocket ( m_tState->m_iClientSock, (char *)( m_tState->m_dBuf.Begin() + m_tState->m_iPos ), m_tState->m_iLeft, false, false );
 		if ( iRes==-1 )
@@ -24343,7 +24343,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( !g_bOptNoDetach )
 		g_bLogStdout = false;
 
-	for ( ;; )
+	while (true)
 	{
 		SphCrashLogger_c::SetupTimePID();
 		TickHead();

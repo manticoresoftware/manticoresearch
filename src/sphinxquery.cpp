@@ -1054,7 +1054,7 @@ int XQParser_t::ParseZone ( const char * pZone )
 		p = ++pZone;
 
 		// scan names
-		for ( ;; )
+		while (true)
 		{
 			// syntax error, name expected!
 			if ( !sphIsAlpha(*p) )
@@ -1178,7 +1178,7 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 
 	// what, noone's pending for a bending?!
 	if ( !m_iPendingType )
-		for ( ;; )
+		while (true)
 	{
 		assert ( m_iPendingNulls==0 );
 

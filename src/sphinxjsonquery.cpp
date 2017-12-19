@@ -150,7 +150,7 @@ void QueryTreeBuilder_c::CollectKeywords ( const char * szStr, XQNode_t * pNode,
 {
 	m_pTokenizer->SetBuffer ( (const BYTE*)szStr, strlen ( szStr ) );
 
-	for ( ;; )
+	while (true)
 	{
 		int iSkippedPosBeforeToken = 0;
 		if ( m_bWasBlended )

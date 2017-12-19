@@ -412,7 +412,7 @@ bool BuildIDF ( const CSphString & sFilename, const CSphVector<CSphString> & dFi
 	for ( int i=0;; )
 	{
 		// read next input
-		for ( ;; )
+		while (true)
 		{
 			int iLen;
 			char * sBuffer = dWords[i];
@@ -958,7 +958,7 @@ int main ( int argc, char ** argv )
 
 	CSphConfigParser cp;
 	CSphConfig & hConf = cp.m_tConf;
-	for ( ;; )
+	while (true)
 	{
 		if ( eCommand==CMD_BUILDIDF || eCommand==CMD_MERGEIDF )
 			break;

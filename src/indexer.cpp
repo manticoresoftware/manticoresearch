@@ -1420,7 +1420,7 @@ void SetSignalHandlers ()
 	sigfillset ( &sa.sa_mask );
 
 	bool bSignalsSet = false;
-	for ( ;; )
+	while (true)
 	{
 		sa.sa_flags = SA_NOCLDSTOP;
 		sa.sa_handler = SIG_IGN; if ( sigaction ( SIGCHLD, &sa, NULL )!=0 ) break;

@@ -478,7 +478,7 @@ void LOC_PREFIX(stem_ru) ( LOC_CHAR_TYPE * word )
 	#define BRK(_arg) { len -= _arg; break; }
 	#define CHK(_func) { i = LOC_PREFIX(_func) ( word, len ); if ( i ) BRK ( i ); }
 
-	for ( ;; )
+	while (true)
 	{
 		CHK ( stem_ru_dear_i );
 

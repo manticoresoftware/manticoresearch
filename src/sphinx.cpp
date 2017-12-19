@@ -3821,7 +3821,7 @@ public:
 		}
 
 		// state (b), push raw tokens, return results
-		for ( ;; )
+		while (true)
 		{
 			// get next raw token, handle field end
 			BYTE * pRaw = m_pTokenizer->GetToken();
@@ -4849,7 +4849,7 @@ BYTE * CSphTokenizerBase2::DoGetToken ()
 	bool bGotSoft = false; // hey Beavis he said soft huh huhhuh
 
 	m_pTokenStart = nullptr;
-	for ( ;; )
+	while (true)
 	{
 		// get next codepoint
 		const BYTE * const pCur = m_pCur; // to redo special char, if there's a token already
@@ -7237,7 +7237,7 @@ int CSphReader::GetLine ( char * sBuffer, int iMaxLen )
 	}
 
 	// skip everything until the newline or eof
-	for ( ;; )
+	while (true)
 	{
 		// read next chunk if necessary
 		if ( m_iBuffPos>=m_iBuffUsed )
@@ -7651,7 +7651,7 @@ int CSphBin::ReadHit ( CSphAggregateHit * pOut, int iRowitems, CSphRowitem * pRo
 	}
 
 	CSphAggregateHit & tHit = m_tHit; // shortcut
-	for ( ;; )
+	while (true)
 	{
 		// SPH_MAX_WORD_LEN is now 42 only to keep ReadVLB() below
 		// technically, we can just use different functions on different paths, if ever needed
@@ -9570,7 +9570,7 @@ bool CSphIndex_VLN::SaveAttributes ( CSphString & sError ) const
 
 	assert ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && m_iDocinfo && m_tAttr.GetWritePtr() );
 
-	for ( ; uAttrStatus & ATTRS_MVA_UPDATED ; )
+	while ( uAttrStatus & ATTRS_MVA_UPDATED )
 	{
 		// collect the indexes of MVA schema attributes
 		CSphVector<CSphAttrLocator> dMvaLocators;
@@ -10998,7 +10998,7 @@ public:
 
 		// sift down if needed
 		int iEntry = 0;
-		for ( ;; )
+		while (true)
 		{
 			// select child
 			int iChild = (iEntry<<1) + 1;
@@ -11268,7 +11268,7 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphFix
 	CSphVector < CSphVector<int64_t> > dCurInfo;
 	dCurInfo.Resize ( dMvaIndexes.GetLength() );
 
-	for ( ;; )
+	while (true)
 	{
 		// flush previous per-document info-list
 		if ( !qMva.GetLength() || qMva.Root().m_uDocID!=uCurID )
@@ -11939,7 +11939,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		bool bGotJoined = ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_INLINE ) && pSource->HasJoinedFields();
 
 		// fetch documents
-		for ( ;; )
+		while (true)
 		{
 			// get next doc, and handle errors
 			bool bGotDoc = pSource->IterateDocument ( m_sLastError );
@@ -12356,7 +12356,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 				m_pDict->HitblockReset ();
 			}
 
-			for ( ;; )
+			while (true)
 			{
 				// get next doc, and handle errors
 				ISphHits * pJoinedHits = pSource->IterateJoinedHits ( m_sLastError );
@@ -13503,7 +13503,7 @@ public:
 	template < typename QWORD >
 	inline bool NextDocument ( QWORD & tQword, const CSphIndex_VLN * pSourceIndex, const ISphFilter * pFilter, const CSphVector<SphDocID_t> & dKillList )
 	{
-		for ( ;; )
+		while (true)
 		{
 			tQword.GetNextDoc ( m_dInlineRow.Begin() );
 			if ( tQword.m_tDoc.m_uDocID )
@@ -14844,7 +14844,7 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 
 	// do searching
 	CSphMatch * pMatch = pRanker->GetMatchesBuffer();
-	for ( ;; )
+	while (true)
 	{
 		// ranker does profile switches internally in GetMatches()
 		int iMatches = pRanker->GetMatches();
@@ -16145,7 +16145,7 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 	CSphVector<CSphRowitem> dAttrs ( iSize );
 
 	// press play on tape
-	for ( ;; )
+	while (true)
 	{
 		tKeyword.GetNextDoc ( iSize ? &dAttrs[0] : NULL );
 		if ( !tKeyword.m_tDoc.m_uDocID )
@@ -19086,7 +19086,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 	const CSphDictSettings & tDictSettings = m_pDict->GetSettings ();
 	const char * pStop = tDictSettings.m_sStopwords.cstr();
-	for ( ;; )
+	while (true)
 	{
 		// find next name start
 		while ( pStop && *pStop && isspace(*pStop) ) pStop++;
@@ -19510,7 +19510,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		pQword->m_bHasHitlist = !bHitless;
 
 		CSphVector<SkiplistEntry_t> dDoclistSkips;
-		for ( ;; )
+		while (true)
 		{
 			// skiplist state is saved just *before* decoding those boundary entries
 			if ( m_bHaveSkips && ( iDoclistDocs & ( SPH_SKIPLIST_BLOCK-1 ) )==0 )
@@ -21121,7 +21121,7 @@ void CSphTemplateDictTraits::LoadStopwords ( const char * sFiles, const ISphToke
 
 	CSphVector<SphWordID_t> dStop;
 
-	for ( ;; )
+	while (true)
 	{
 		// find next name start
 		while ( *pCur && isspace(*pCur) ) pCur++;
@@ -22849,7 +22849,7 @@ SphWordID_t CSphDictKeywords::HitblockGetID ( const char * sWord, int iLen, SphW
 
 		// need to assign a new unique wordid now
 		// keep scanning both exceptions and keywords for collisions
-		for ( ;; )
+		while (true)
 		{
 			// iExc must be either the first exception greater or equal to current candidate, or out of bounds
 			assert ( iExc==iExcLen || m_dExceptions[iExc].m_pEntry->m_uWordid>=uWordid );
@@ -23247,7 +23247,7 @@ void CSphDictKeywords::DictEntry ( const CSphDictEntry & tEntry )
 	DictKeyword_t * pWord = NULL;
 	int iLen = strlen ( (char*)tEntry.m_sKeyword ) + 1;
 
-	for ( ;; )
+	while (true)
 	{
 		// alloc dict entry
 		if ( !m_iDictChunkFree )
@@ -24509,7 +24509,7 @@ void CSphHTMLStripper::Strip ( BYTE * sData ) const
 
 	const BYTE * s = sData;
 	BYTE * d = sData;
-	for ( ;; )
+	while (true)
 	{
 		/////////////////////////////////////
 		// scan until eof, or tag, or entity
@@ -24831,7 +24831,7 @@ void CSphHTMLStripper::Strip ( BYTE * sData ) const
 
 		// skip everything until the closing tag
 		// FIXME! should we handle insane cases with quoted closing tag within tag?
-		for ( ;; )
+		while (true)
 		{
 			while ( *s && ( s[0]!='<' || s[1]!='/' ) ) s++;
 			if ( !*s ) break;
@@ -25483,7 +25483,7 @@ bool CSphSource_Document::IterateDocument ( CSphString & sError )
 	m_dMva.Resize ( 1 ); // must not have zero offset
 
 	// fetch next document
-	for ( ;; )
+	while (true)
 	{
 		m_tState.m_dFields = NextDocument ( sError );
 		if ( m_tDocInfo.m_uDocID==0 )
@@ -26537,7 +26537,7 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 		SqlDismissResult ();
 	}
 
-	for ( ;; )
+	while (true)
 	{
 		m_tParams.m_iRangeStep = 0;
 
@@ -26914,7 +26914,7 @@ void CSphSource_SQL::PostIndex ()
 	{
 #define LOC_SQL_ERROR(_msg) { sSqlError = _msg; break; }
 
-		for ( ;; )
+		while (true)
 		{
 			if ( !SqlConnect () )
 				LOC_SQL_ERROR ( "mysql_real_connect" );
@@ -27197,7 +27197,7 @@ const char * CSphSource_SQL::SqlUnpackColumn ( int iFieldIndex, DWORD & uUnpacke
 			if ( iResult!=Z_OK )
 				return NULL;
 
-			for ( ;; )
+			while (true)
 			{
 				tStream.next_out = (Bytef *)&tBuffer[iBufferOffset];
 				tStream.avail_out = tBuffer.GetLength() - iBufferOffset - 1;
@@ -29595,7 +29595,7 @@ void CSphSource_MSSQL::OdbcPostConnect ()
 	SQLSMALLINT iDir = SQL_FETCH_FIRST;
 
 	CSphString sDriver;
-	for ( ;; )
+	while (true)
 	{
 		SQLRETURN iRet = sph_SQLDrivers ( m_hEnv, iDir, (SQLCHAR*)szDriver, MAX_LEN, &iDescLen, (SQLCHAR*)szDriverAttrs, MAX_LEN, &iAttrLen );
 		if ( iRet==SQL_NO_DATA )
@@ -30039,7 +30039,7 @@ CSphSource_BaseSV::ESphParseResult CSphSource_TSV::SplitColumns ( CSphString & s
 	const BYTE * pEnd = m_dBuf.Begin() + m_iBufUsed;
 	m_iDocStart = m_iDataStart;
 
-	for ( ;; )
+	while (true)
 	{
 		if ( iCol>=iColumns )
 		{
@@ -30185,7 +30185,7 @@ CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & s
 	bool bQuoted = false;
 	bool bHasQuot = false;
 
-	for ( ;; )
+	while (true)
 	{
 		assert ( d<=s );
 
@@ -30830,7 +30830,7 @@ bool CWordlist::GetWord ( const BYTE * pBuf, SphWordID_t iWordID, CSphDictEntry 
 	SphWordID_t iLastID = 0;
 	SphOffset_t uLastOff = 0;
 
-	for ( ;; )
+	while (true)
 	{
 		// unpack next word ID
 		const SphWordID_t iDeltaWord = sphUnzipWordid ( pBuf ); // FIXME! slow with 32bit wordids
@@ -31148,7 +31148,7 @@ bool sphLookupInfixCheckpoints ( const char * sInfix, int iBytes, const BYTE * p
 	// block entry is { byte edit_code, byte[] key_append, zint data_len, zint data_deltas[] }
 	// zero edit_code marks block end
 	BYTE sKey[32];
-	for ( ;; )
+	while (true)
 	{
 		// unpack next key
 		int iCode = *pBlock++;
@@ -31426,7 +31426,7 @@ static void SuggestGetChekpoints ( const ISphWordlistSuggest * pWordlist, int iI
 	int iLastLen = 0;
 	const char * sTrigram = dTrigrams.Begin();
 	const char * sTrigramEnd = sTrigram + dTrigrams.GetLength();
-	for ( ;; )
+	while (true)
 	{
 		int iTrigramLen = strlen ( sTrigram );
 		int iInfixLen = sphGetInfixLength ( sTrigram, iTrigramLen, iInfixCodepointBytes );
@@ -31459,7 +31459,7 @@ static void SuggestGetChekpoints ( const ISphWordlistSuggest * pWordlist, int iI
 	dCheckpoints.Resize ( 0 );
 
 	// merge sorting of already ordered checkpoints
-	for ( ;; )
+	while (true)
 	{
 		DWORD iMinCP = UINT_MAX;
 		DWORD iMinIndex = UINT_MAX;
@@ -32247,7 +32247,7 @@ void sphDictBuildSkiplists ( const char * sPath )
 		SphOffset_t uHitPosition = 0;
 		DWORD uDocs = 0;
 
-		for ( ;; )
+		while (true)
 		{
 			// save current entry position
 			SphOffset_t uPos = rdDocs.GetPos();

@@ -2281,7 +2281,7 @@ StringBuilder_c & StringBuilder_c::vAppendf ( const char * sTemplate, va_list ap
 	assert ( m_sBuffer );
 	assert ( m_iUsed<m_iSize );
 
-	for ( ;; )
+	while (true)
 	{
 		int iLeft = m_iSize - m_iUsed;
 

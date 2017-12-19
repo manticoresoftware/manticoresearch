@@ -3075,9 +3075,13 @@ class SphinxConfig
     {
         global $g_locals;
 
+        // params works for official mysql connector
+		// available at https://dev.mysql.com/downloads/connector/odbc/
+		// after installing, provide full path to libmyodbc*.so as 'odbc_driver' local.
+
         $dsn=array();
         $dsn[] = "Driver=" . $g_locals['odbc_driver'];
-        $dsn[] = "Servername=" . $g_locals['db-host'];
+        $dsn[] = "Server=" . $g_locals['db-host'];
         $dsn[] = "Port=" . $g_locals['db-port'];
         $dsn[] = "UID=" . $g_locals['db-user'];
         $dsn[] = "PWD=" . $g_locals['db-password'];

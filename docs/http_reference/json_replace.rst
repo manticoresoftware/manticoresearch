@@ -8,8 +8,8 @@ json/replace
 ::
 
 	{
-	  "_index":"test",
-	  "_id":1,
+	  "index":"test",
+	  "id":1,
 	  "doc":
 	  {
 	    "gid" : 10,

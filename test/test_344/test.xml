@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>distributed json updates</name>
+
+<skip_indexer/>
+
+<requires>
+<http/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	binlog_path =
+}
+
+index test_rt
+{
+    type = rt
+    path = <data_path/>/rt
+	rt_field = content
+    rt_attr_uint = tag
+}
+
+index dist
+{
+	type	= distributed
+	agent	= <my_address/>:test_rt
+}
+</config>
+
+<httpqueries>
+
+<query endpoint="json/bulk" content="application/x-ndjson">
+{ "insert" : { "index" : "test_rt", "id" : 1, "doc": { "tag" : 1, "content" : "doc one" } } }
+{ "insert" : { "index" : "test_rt", "id" : 2, "doc": { "tag" : 2, "content" : "doc two" } } }
+{ "insert" : { "index" : "test_rt", "id" : 3, "doc": { "tag" : 3, "content" : "doc three" } } }
+{ "insert" : { "index" : "test_rt", "id" : 4, "doc": { "tag" : 4, "content" : "doc four" } } }
+{ "insert" : { "index" : "test_rt", "id" : 5, "doc": { "tag" : 5, "content" : "doc five" } } }
+</query>
+
+<query endpoint="json/search">{ "index": "dist", "query": { "match_all": {} } } }</query>
+
+<query endpoint="json/update">
+{
+	"index":"dist",
+	"id":1,
+	"doc":
+	{
+	    "tag" : 100
+	}
+}
+</query>
+
+<query endpoint="json/search">{ "index": "dist", "query": { "match_all": {} } } }</query>
+
+<query endpoint="json/update">
+{
+	"index":"dist",
+	"doc":
+	{
+	    "tag" : 200
+	},
+	"query": { "match": { "*": "doc" } } }
+}
+</query>
+
+<query endpoint="json/search">{ "index": "dist", "query": { "match_all": {} } } }</query>
+
+<query endpoint="json/delete">
+{
+	"index":"dist",
+	"id":1
+}
+</query>
+
+<query endpoint="json/search">{ "index": "dist", "query": { "match_all": {} } } }</query>
+
+<query endpoint="json/bulk" content="application/x-ndjson">
+{ "delete" : { "index" : "dist", "id" : 2 } }
+{ "delete" : { "index" : "dist", "id" : 3 } }
+{ "delete" : { "index" : "dist", "id" : 4 } }
+</query>
+
+<query endpoint="json/search">{ "index": "dist", "query": { "match_all": {} } } }</query>
+
+</httpqueries>
+
+</test>

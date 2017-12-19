@@ -34,8 +34,8 @@ index test_rt
 <!-- inserts -->
 <query endpoint="json/insert">
 {
-	"_index":"test_rt",
-	"_id":1,
+	"index":"test_rt",
+	"id":1,
 	"doc":
 	{
 	    "int_col" : 1,
@@ -55,8 +55,8 @@ index test_rt
 
 <query endpoint="json/insert">
 {
-	"_index":"test_rt",
-	"_id":2,
+	"index":"test_rt",
+	"id":2,
 	"doc":
 	{
 	    "int_col" : 2,
@@ -69,8 +69,8 @@ index test_rt
 
 <query endpoint="json/insert">
 {
-	"_index":"test_rt",
-	"_id":3,
+	"index":"test_rt",
+	"id":3,
 	"doc":
 	{
 	    "int_col" : 3,
@@ -94,23 +94,23 @@ index test_rt
 <!-- "create"=="insert" -->
 <query endpoint="json/insert">
 {
-	"_index":"test_rt",
-	"_id":3
+	"index":"test_rt",
+	"id":3
 }
 </query>
 
 <query endpoint="json/create">
 {
-	"_index":"test_rt",
-	"_id":3
+	"index":"test_rt",
+	"id":3
 }
 </query>
 
 <!-- "index"=="replace" -->
 <query endpoint="json/replace">
 {
-	"_index":"test_rt",
-	"_id":3,
+	"index":"test_rt",
+	"id":3,
 	"doc":
 	{
 	    "int_col" : 33,
@@ -122,8 +122,8 @@ index test_rt
 
 <query endpoint="json/index">
 {
-	"_index":"test_rt",
-	"_id":4,
+	"index":"test_rt",
+	"id":4,
 	"doc":
 	{
 	    "int_col" : 44,
@@ -138,8 +138,8 @@ index test_rt
 <!-- update -->
 <query endpoint="json/update">
 {
-	"_index":"test_rt",
-	"_id":3,
+	"index":"test_rt",
+	"id":3,
 	"doc":
 	{
 	    "int_col" : 333,
@@ -153,8 +153,8 @@ index test_rt
 <!-- update json -->
 <query endpoint="json/update">
 {
-	"_index":"test_rt",
-	"_id":1,
+	"index":"test_rt",
+	"id":1,
 	"doc":
 	{
 	    "json_col.int" : 111
@@ -167,22 +167,22 @@ index test_rt
 <!-- delete -->
 <query endpoint="json/delete">
 {
-	"_index":"test_rt",
-	"_id":3
+	"index":"test_rt",
+	"id":3
 }
 </query>
 
 <query endpoint="json/delete">
 {
-	"_index":"test_rt",
-	"_id":4
+	"index":"test_rt",
+	"id":4
 }
 </query>
 
 <query endpoint="json/delete">
 {
-	"_index":"test_rt",
-	"_id":4
+	"index":"test_rt",
+	"id":4
 }
 </query>
 
@@ -198,7 +198,7 @@ index test_rt
 
 <query endpoint="json/update">
 {
-	"_index":"test_rt",
+	"index":"test_rt",
 	"doc":
 	{
 	    "int_col" : 100,
@@ -221,7 +221,7 @@ index test_rt
 
 <query endpoint="json/update">
 {
-	"_index":"test_rt",
+	"index":"test_rt",
 	"doc":
 	{
 	    "int_col" : 200,
@@ -237,7 +237,7 @@ index test_rt
 <!-- delete-by-query -->
 <query endpoint="json/delete">
 {
-	"_index":"test_rt",
+	"index":"test_rt",
 	"query": { "range": { "int_col": { "lte": 100 } } }
 }
 </query>
@@ -246,7 +246,7 @@ index test_rt
 
 <query endpoint="json/delete">
 {
-	"_index":"test_rt",
+	"index":"test_rt",
 	"query": { "match": { "*": "two" } } }
 }
 </query>

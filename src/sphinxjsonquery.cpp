@@ -1242,7 +1242,7 @@ static bool ParseIndex ( cJSON * pRoot, SqlStmt_t & tStmt, CSphString & sError )
 		return false;
 	}
 
-	cJSON * pIndex = GetJSONPropertyString ( pRoot, "_index", sError );
+	cJSON * pIndex = GetJSONPropertyString ( pRoot, "index", sError );
 	if ( !pIndex )
 		return false;
 
@@ -1258,7 +1258,7 @@ static bool ParseIndexId ( cJSON * pRoot, SqlStmt_t & tStmt, SphDocID_t & tDocId
 	if ( !ParseIndex ( pRoot, tStmt, sError ) )
 		return false;
 
-	cJSON * pId = GetJSONPropertyInt ( pRoot, "_id", sError );
+	cJSON * pId = GetJSONPropertyInt ( pRoot, "id", sError );
 	if ( !pId )
 		return false;
 
@@ -1292,7 +1292,7 @@ static bool ParseJsonQueryFilters ( cJSON * pQuery, CSphQuery & tQuery, CSphStri
 	bool bFullscan = !pQuery || ( cJSON_GetArraySize(pQuery)==1 && cJSON_HasObjectItem ( pQuery, "match_all" ) );
 
 	if ( !bFullscan )
-		tQuery.m_sQuery.Adopt ( cJSON_Print ( pQuery ) );
+		tQuery.m_sQuery = sphJsonToString ( pQuery );
 
 	// because of the way sphinxql parsing was implemented
 	// we need to parse our query and extract filters now
@@ -1461,7 +1461,7 @@ bool ParseJsonInsert ( cJSON * pRoot, SqlStmt_t & tStmt, SphDocID_t & tDocId, bo
 			} else if ( cJSON_IsObject ( pItem ) )
 			{
 				tNewValue.m_iType = sphGetTokTypeStr();
-				tNewValue.m_sVal = cJSON_Print ( pItem );
+				tNewValue.m_sVal = sphJsonToString ( pItem );
 			} else
 			{
 				sError = "unsupported value type";
@@ -1493,7 +1493,7 @@ static bool ParseUpdateDeleteQueries ( cJSON * pRoot, SqlStmt_t & tStmt, SphDocI
 	if ( !ParseIndex ( pRoot, tStmt, sError ) )
 		return false;
 
-	cJSON * pId = GetJSONPropertyInt ( pRoot, "_id", sError );
+	cJSON * pId = GetJSONPropertyInt ( pRoot, "id", sError );
 	if ( pId )
 	{
 		CSphFilterSettings & tFilter = tStmt.m_tQuery.m_dFilters.Add();
@@ -1508,7 +1508,7 @@ static bool ParseUpdateDeleteQueries ( cJSON * pRoot, SqlStmt_t & tStmt, SphDocI
 	cJSON * pQuery = cJSON_GetObjectItem ( pRoot, "query" );
 	if ( pQuery && pId )
 	{
-		sError = "both \"_id\" and \"query\" specified";
+		sError = "both \"id\" and \"query\" specified";
 		return false;
 	}
 
@@ -1599,7 +1599,7 @@ bool sphParseJsonDelete ( const char * szDelete, SqlStmt_t & tStmt, SphDocID_t &
 }
 
 
-bool sphParseJsonStatement ( const char * szStmt, SqlStmt_t & tStmt, CSphString & sStmt, SphDocID_t & tDocId, CSphString & sError )
+bool sphParseJsonStatement ( const char * szStmt, SqlStmt_t & tStmt, CSphString & sStmt, CSphString & sQuery, SphDocID_t & tDocId, CSphString & sError )
 {
 	CJsonScopedPtr_c pRoot ( cJSON_Parse ( szStmt ) );
 	if ( !pRoot.Ptr() )
@@ -1644,6 +1644,8 @@ bool sphParseJsonStatement ( const char * szStmt, SqlStmt_t & tStmt, CSphString 
 		sError.SetSprintf ( "unknown bulk operation: %s", pStmt->string );
 		return false;
 	}
+
+	sQuery = sphJsonToString ( pStmt );
 
 	return true;
 }
@@ -1826,7 +1828,17 @@ static bool NeedToSkipAttr ( const CSphString & sName, const CSphQuery & tQuery 
 }
 
 
-void sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQuery, CSphQueryProfile * pProfile, bool bAttrsHighlight, CSphString & sResult )
+CSphString sphJsonToString ( const cJSON * pJson )
+{
+	// we can't take this string and just adopt it because we need extra 'gap' bytes at the end
+	char * szResult = cJSON_PrintUnformatted ( pJson );
+	CSphString sResult ( szResult );
+	SafeDeleteArray ( szResult );
+	return sResult;
+}
+
+
+CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQuery, CSphQueryProfile * pProfile, bool bAttrsHighlight )
 {
 	CJsonScopedPtr_c pJsonRoot ( cJSON_CreateObject() );
 	cJSON * pRoot = pJsonRoot.Ptr();
@@ -1838,12 +1850,7 @@ void sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQuery, 
 		cJSON_AddItemToObject ( pRoot, "error", pError );
 		cJSON_AddStringToObject ( pError, "type", "Error" );
 		cJSON_AddStringToObject ( pError, "reason", tRes.m_sError.cstr() );
-
-		char * szResult = cJSON_Print ( pRoot );
-		assert ( szResult );
-		sResult.Adopt ( &szResult );
-
-		return;
+		return sphJsonToString ( pRoot );
 	}
 
 	cJSON_AddNumberToObject ( pRoot, "took", tRes.m_iQueryTime );
@@ -1945,12 +1952,11 @@ void sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQuery, 
 			cJSON_AddNullToObject ( pRoot, "profile" );
 	}
 
-	char * szResult = cJSON_Print ( pRoot );
-	sResult.Adopt ( &szResult );
+	return sphJsonToString ( pRoot );
 }
 
 
-cJSON * sphEncodeInsertResultJson( const char * szIndex, bool bReplace, SphDocID_t tDocId )
+cJSON * sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, SphDocID_t tDocId )
 {
 	cJSON * pRoot = cJSON_CreateObject();
 	assert ( pRoot );
@@ -1964,7 +1970,7 @@ cJSON * sphEncodeInsertResultJson( const char * szIndex, bool bReplace, SphDocID
 }
 
 
-cJSON * sphEncodeUpdateResultJson( const char * szIndex, SphDocID_t tDocId, int iAffected )
+cJSON * sphEncodeUpdateResultJson ( const char * szIndex, SphDocID_t tDocId, int iAffected )
 {
 	cJSON * pRoot = cJSON_CreateObject();
 	assert ( pRoot );
@@ -2018,6 +2024,42 @@ cJSON * sphEncodeInsertErrorJson ( const char * szIndex, const char * szError )
 	cJSON_AddNumberToObject ( pRoot, "status", 500 );
 
 	return pRoot;
+}
+
+
+bool sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings, bool bUpdate )
+{
+	CJsonScopedPtr_c pJsonRoot ( cJSON_Parse ( szResult ) );
+	if ( !pJsonRoot.Ptr() )
+		return false;
+
+	// no warnings in json results for now
+	iWarnings = 0;
+
+	if ( cJSON_GetObjectItem ( pJsonRoot.Ptr(), "error" ) )
+	{
+		iAffected = 0;
+		return true;
+	}
+
+	// its either update or delete
+	CSphString sError;
+	cJSON * pAffected = GetJSONPropertyInt ( pJsonRoot.Ptr(), bUpdate ? "updated" : "deleted", sError );
+	if ( pAffected )
+	{
+		iAffected = pAffected->valueint;
+		return true;
+	}
+
+	// it was probably a query with an "_id"
+	cJSON * pId = GetJSONPropertyInt ( pJsonRoot.Ptr(), "_id", sError );
+	if ( pId )
+	{
+		iAffected = 1;
+		return true;
+	}
+
+	return false;
 }
 
 
@@ -2270,7 +2312,7 @@ bool ParseSnippet ( cJSON * pSnip, CSphQuery & tQuery, CSphString & sError )
 			sError = "\"highlight_query\" property value should be an object";
 			return false;
 		}
-		sQuery = cJSON_Print ( pQuery );
+		sQuery = sphJsonToString ( pQuery );
 	}
 
 	CSphString sPreTag;

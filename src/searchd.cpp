@@ -415,7 +415,7 @@ enum
 /// command names
 static const char * g_dApiCommands[SEARCHD_COMMAND_TOTAL] =
 {
-	"search", "excerpt", "update", "keywords", "persist", "status", "query", "flushattrs", "query", "ping", "delete", "set",  "insert", "replace", "commit", "suggest"
+	"search", "excerpt", "update", "keywords", "persist", "status", "query", "flushattrs", "query", "ping", "delete", "set",  "insert", "replace", "commit", "suggest", "json"
 };
 
 STATIC_ASSERT ( sizeof(g_dApiCommands)/sizeof(g_dApiCommands[0])==SEARCHD_COMMAND_TOTAL, SEARCHD_COMMAND_SHOULD_BE_SAME_AS_SEARCHD_COMMAND_TOTAL );
@@ -6682,7 +6682,7 @@ protected:
 	bool							m_bMultiQueue;	///< whether current subset is subject to multi-queue optimization
 	bool							m_bFacetQueue;	///< whether current subset is subject to facet-queue optimization
 	CSphVector<LocalIndex_t>		m_dLocal;		///< local indexes for the current subset
-	mutable CSphVector<CSphSchemaMT>		m_dExtraSchemas; ///< the extra fields for agents
+	mutable CSphVector<CSphSchemaMT> m_dExtraSchemas; ///< the extra fields for agents
 	CSphAttrUpdateEx *				m_pUpdates;		///< holder for updates
 	CSphVector<SphDocID_t> *		m_pDelete;		///< this query is for deleting
 
@@ -10964,7 +10964,7 @@ void UpdateRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, ISphOutp
 	bool bMva = false;
 	ARRAY_FOREACH ( i, m_tUpd.m_dTypes )
 	{
-		assert ( m_tUpd.m_dTypes[i]!=SPH_ATTR_INT64SET ); // mva64 goes only via SphinxQL (SphinxqlRequestBuilder_t)
+		assert ( m_tUpd.m_dTypes[i]!=SPH_ATTR_INT64SET ); // mva64 goes only via SphinxQL (SphinxqlRequestBuilder_c)
 		bMva |= ( m_tUpd.m_dTypes[i]==SPH_ATTR_UINT32SET );
 	}
 
@@ -11024,7 +11024,7 @@ void UpdateRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, ISphOutp
 		// size down in case of MVA
 		// MVA stored as mva64 in pool but API could handle only mva32 due to HandleCommandUpdate
 		// SphinxQL only could work either mva32 or mva64 and only SphinxQL could receive mva64 updates
-		// SphinxQL master communicate to agent via SphinxqlRequestBuilder_t
+		// SphinxQL master communicate to agent via SphinxqlRequestBuilder_c
 
 		ARRAY_FOREACH ( iDoc, m_tUpd.m_dDocids )
 		{
@@ -11439,6 +11439,8 @@ void BuildStatus ( VectorLike & dStatus )
 		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_COMMIT] );
 	if ( dStatus.MatchAdd ( "command_suggest" ) )
 		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_SUGGEST] );
+	if ( dStatus.MatchAdd ( "command_json" ) )
+		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_JSON] );
 	if ( dStatus.MatchAdd ( "agent_connect" ) )
 		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iAgentConnect );
 	if ( dStatus.MatchAdd ( "agent_retry" ) )
@@ -11935,6 +11937,7 @@ void HandleCommandFlush ( ISphOutputBuffer & tOut, WORD uVer )
 }
 
 void HandleCommandSphinxql ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq, ThdDesc_t * pThd ); // definition is below
+void HandleCommandJson ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq, ThdDesc_t * pThd );
 void StatCountCommand ( SearchdCommand_e eCmd );
 void HandleCommandUserVar ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
 
@@ -12145,6 +12148,7 @@ bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength
 		case SEARCHD_COMMAND_STATUS:	HandleCommandStatus ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_FLUSHATTRS:HandleCommandFlush ( tOut, uCommandVer ); break;
 		case SEARCHD_COMMAND_SPHINXQL:	HandleCommandSphinxql ( tOut, uCommandVer, tBuf, pThd ); break;
+		case SEARCHD_COMMAND_JSON:		HandleCommandJson ( tOut, uCommandVer, tBuf, pThd ); break;
 		case SEARCHD_COMMAND_PING:		HandleCommandPing ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_UVAR:		HandleCommandUserVar ( tOut, uCommandVer, tBuf ); break;
 		default:						assert ( 0 && "INTERNAL ERROR: unhandled command" ); break;
@@ -13311,13 +13315,15 @@ void HandleMysqlPercolateMeta ( const PercolateMatchResult_t & tMeta, SqlRowBuff
 }
 
 
-class PlainParserFactory_c : public QueryParserFactory_i
+class SphinxqlRequestBuilder_c : public IRequestBuilder_t
 {
 public:
-	QueryParser_i * Create () const override
-	{
-		return sphCreatePlainQueryParser();
-	}
+			SphinxqlRequestBuilder_c ( const CSphString & sQuery, const SqlStmt_t & tStmt );
+	void	BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const override;
+
+protected:
+	const CSphString m_sBegin;
+	const CSphString m_sEnd;
 };
 
 
@@ -15130,21 +15136,6 @@ void HandleCommandUserVar ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & 
 // SMART UPDATES HANDLER
 /////////////////////////////////////////////////////////////////////////////
 
-struct SphinxqlRequestBuilder_t : public IRequestBuilder_t
-{
-	explicit SphinxqlRequestBuilder_t ( const CSphString& sQuery, const SqlStmt_t & tStmt )
-		: m_sBegin ( sQuery.cstr(), tStmt.m_iListStart )
-		, m_sEnd ( sQuery.cstr() + tStmt.m_iListEnd, sQuery.Length() - tStmt.m_iListEnd )
-	{
-	}
-	virtual void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const;
-
-protected:
-	const CSphString m_sBegin;
-	const CSphString m_sEnd;
-};
-
-
 struct SphinxqlReplyParser_t : public IReplyParser_t
 {
 	explicit SphinxqlReplyParser_t ( int * pUpd, int * pWarns )
@@ -15185,7 +15176,14 @@ protected:
 };
 
 
-void SphinxqlRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const
+SphinxqlRequestBuilder_c::SphinxqlRequestBuilder_c ( const CSphString& sQuery, const SqlStmt_t & tStmt )
+	: m_sBegin ( sQuery.cstr(), tStmt.m_iListStart )
+	, m_sEnd ( sQuery.cstr() + tStmt.m_iListEnd, sQuery.Length() - tStmt.m_iListEnd )
+{
+}
+
+
+void SphinxqlRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const
 {
 	const char* sIndexes = tAgent.m_tDesc.m_sIndexes.cstr();
 	int iReqSize = strlen(sIndexes) + m_sBegin.Length() + m_sEnd.Length(); // indexes string
@@ -15201,6 +15199,26 @@ void SphinxqlRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, ISphOu
 	tOut.SendBytes ( m_sEnd.cstr(), m_sEnd.Length() );
 }
 
+
+class PlainParserFactory_c : public QueryParserFactory_i
+{
+public:
+	QueryParser_i * CreateQueryParser () const override
+	{
+		return sphCreatePlainQueryParser();
+	}
+
+	IRequestBuilder_t * CreateRequestBuilder ( const CSphString & sQuery, const SqlStmt_t & tStmt ) const override
+	{
+		return new SphinxqlRequestBuilder_c ( sQuery, tStmt );
+	}
+
+	IReplyParser_t * CreateReplyParser ( int & iUpdated, int & iWarnings ) const override
+	{
+		return new SphinxqlReplyParser_t ( &iUpdated, &iWarnings );
+	}
+};
+
 //////////////////////////////////////////////////////////////////////////
 
 static void DoExtendedUpdate ( const char * sIndex, const QueryParserFactory_i & tQueryParserFactory, const char * sDistributed, const SqlStmt_t & tStmt, int & iSuccesses, int & iUpdated,
@@ -15214,7 +15232,7 @@ static void DoExtendedUpdate ( const char * sIndex, const QueryParserFactory_i &
 		return;
 	}
 
-	SearchHandler_c tHandler ( 1, tQueryParserFactory.Create(), tStmt.m_tQuery.m_eQueryType, false, iCID ); // handler unlocks index at destructor - no need to do it manually
+	SearchHandler_c tHandler ( 1, tQueryParserFactory.CreateQueryParser(), tStmt.m_tQuery.m_eQueryType, false, iCID ); // handler unlocks index at destructor - no need to do it manually
 	CSphAttrUpdateEx tUpdate;
 	CSphString sError;
 
@@ -15305,13 +15323,13 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const QueryParserFactory
 			pDist->GetAllAgents ( dAgents );
 
 			// connect to remote agents and query them
-			SphinxqlRequestBuilder_t tReqBuilder ( sQuery, tStmt );
-			CSphScopedPtr<ISphRemoteAgentsController> pDistCtrl ( GetAgentsController ( g_iDistThreads, dAgents, tReqBuilder, pDist->m_iAgentConnectTimeout ) );
+			CSphScopedPtr<IRequestBuilder_t> pRequestBuilder ( tQueryParserFactory.CreateRequestBuilder ( sQuery, tStmt ) ) ;
+			CSphScopedPtr<ISphRemoteAgentsController> pDistCtrl ( GetAgentsController ( g_iDistThreads, dAgents, *pRequestBuilder.Ptr(), pDist->m_iAgentConnectTimeout ) );
 			int iAgentsDone = pDistCtrl->Finish();
 			if ( iAgentsDone )
 			{
-				SphinxqlReplyParser_t tParser ( &iUpdated, &iWarns );
-				iSuccesses += RemoteWaitForAgents ( dAgents, pDist->m_iAgentQueryTimeout, tParser ); // FIXME? profile update time too?
+				CSphScopedPtr<IReplyParser_t> pReplyParser ( tQueryParserFactory.CreateReplyParser ( iUpdated, iWarns ) );
+				iSuccesses += RemoteWaitForAgents ( dAgents, pDist->m_iAgentQueryTimeout, *pReplyParser.Ptr() ); // FIXME? profile update time too?
 			}
 		}
 	}
@@ -15941,7 +15959,7 @@ static int LocalIndexDoDeleteDocuments ( const char * sName, const QueryParserFa
 	CSphVector<SphDocID_t> dValues;
 	if ( !pDocs ) // needs to be deleted via query
 	{
-		pHandler = new SearchHandler_c ( 1, tQueryParserFactory.Create(), tStmt.m_tQuery.m_eQueryType, false, iCID ); // handler unlocks index at destructor - no need to do it manually
+		pHandler = new SearchHandler_c ( 1, tQueryParserFactory.CreateQueryParser(), tStmt.m_tQuery.m_eQueryType, false, iCID ); // handler unlocks index at destructor - no need to do it manually
 		pHandler->RunDeletes ( tStmt.m_tQuery, sName, pLocked, &sError, &dValues );
 		pDocs = dValues.Begin();
 		iCount = dValues.GetLength();
@@ -16067,16 +16085,16 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const QueryParserFactory
 			pDist->GetAllAgents ( dAgents );
 
 			// connect to remote agents and query them
-			SphinxqlRequestBuilder_t tReqBuilder ( sQuery, tStmt );
-			CSphScopedPtr<ISphRemoteAgentsController> pDistCtrl ( GetAgentsController ( g_iDistThreads, dAgents, tReqBuilder, pDist->m_iAgentConnectTimeout ) );
+			CSphScopedPtr<IRequestBuilder_t> pRequestBuilder ( tQueryParserFactory.CreateRequestBuilder ( sQuery, tStmt ) ) ;
+			CSphScopedPtr<ISphRemoteAgentsController> pDistCtrl ( GetAgentsController ( g_iDistThreads, dAgents, *pRequestBuilder.Ptr(), pDist->m_iAgentConnectTimeout ) );
 			int iAgentsDone = pDistCtrl->Finish();
 			if ( iAgentsDone )
 			{
 				// FIXME!!! report error & warnings from agents
 				int iGot = 0;
 				int iWarns = 0;
-				SphinxqlReplyParser_t tParser ( &iGot, &iWarns );
-				RemoteWaitForAgents ( dAgents, pDist->m_iAgentQueryTimeout, tParser ); // FIXME? profile update time too?
+				CSphScopedPtr<IReplyParser_t> pReplyParser ( tQueryParserFactory.CreateReplyParser ( iGot, iWarns ) );
+				RemoteWaitForAgents ( dAgents, pDist->m_iAgentQueryTimeout, *pReplyParser.Ptr() ); // FIXME? profile update time too?
 				iAffected += iGot;
 			}
 		}
@@ -17922,6 +17940,35 @@ void HandleCommandSphinxql ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c &
 	tSession.Execute ( sCommand, tMemOut, uDummy, pThd );
 
 	tOut.SendOutput ( tMemOut );
+	tOut.Flush();
+}
+
+/// json command over API
+void HandleCommandJson ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq, ThdDesc_t * pThd )
+{
+	if ( !CheckCommandVersion ( uVer, VER_COMMAND_JSON, tOut ) )
+		return;
+
+	// parse request
+	CSphString sEndpoint = tReq.GetString ();
+	CSphString sCommand = tReq.GetString ();
+	
+	ESphHttpEndpoint eEndpoint = sphStrToHttpEndpoint ( sEndpoint );
+	assert ( eEndpoint!=SPH_HTTP_ENDPOINT_TOTAL );
+
+	CSphVector<BYTE> dResult;
+	SmallStringHash_T<CSphString> tOptions;
+	sphProcessHttpQuery ( eEndpoint, sCommand, tOptions, pThd->m_iConnID, dResult );
+
+	tOut.Flush();
+	tOut.SendWord ( SEARCHD_OK );
+	tOut.SendWord ( VER_COMMAND_JSON );
+	tOut.SendDword( dResult.GetLength()+sEndpoint.Length()+8 );
+
+	tOut.SendString ( sEndpoint.cstr() );
+	tOut.SendDword( dResult.GetLength() );
+	tOut.SendBytes ( dResult.Begin(), dResult.GetLength() );
+
 	tOut.Flush();
 }
 
@@ -23068,7 +23115,11 @@ void ThdJobHttp_t::Call ()
 		sphHttpErrorReply ( m_tState->m_dBuf, SPH_HTTP_STATUS_503, "server is in maintenance mode" );
 		m_tState->m_bKeepSocket = false;
 	} else
-		m_tState->m_bKeepSocket = sphLoopClientHttp ( m_tState->m_dBuf, m_tState->m_iConnID );
+	{
+		CSphVector<BYTE> dResult;
+		m_tState->m_bKeepSocket = sphLoopClientHttp ( m_tState->m_dBuf.Begin(), m_tState->m_dBuf.GetLength(), dResult, m_tState->m_iConnID );
+		m_tState->m_dBuf = std::move(dResult);
+	}
 
 	ThreadRemove ( &tThdDesc );
 

@@ -687,6 +687,9 @@ public:
 		, m_bNeedHttpResponse ( bNeedHttpResponse )
 	{}
 
+	virtual ~HttpHandler_c()
+	{}
+
 	virtual bool Process () = 0;
 	
 	CSphVector<BYTE> & GetResult()

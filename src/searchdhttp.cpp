@@ -683,7 +683,8 @@ class HttpHandler_c
 {
 public:
 	HttpHandler_c ( const CSphString & sQuery, int iCID, bool bNeedHttpResponse )
-		: m_sQuery ( sQuery )
+		: m_sQuery { sQuery }
+		, m_iCID ( iCID )
 		, m_bNeedHttpResponse ( bNeedHttpResponse )
 	{}
 

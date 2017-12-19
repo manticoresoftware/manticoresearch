@@ -40,6 +40,7 @@ if ( !is_array($args) || empty($args) )
 	print ( "-i, --indexer <PATH>\tpath to indexer\n" );
 	print ( "-s, --searchd <PATH>\tpath to searchd\n" );
 	print ( "-b, --bindir <PATH>\tpath to all binaries\n" );
+	print ( "-r, --rlproot <PATH>\tpath to RLP root (if rlp tested)\n" );
 	print ( "-t, --testdir <PATH>\tpath where to work and create artefacts\n" );
 	print ( "--ctest\t\tPrint test report to console (for automatic grabbing)\n" );
 	print ( "--strict\t\tterminate on the first failure (for automatic runs)\n" );
@@ -70,6 +71,7 @@ $locals = array();
 $locals['rt_mode'] = false;
 $locals['testdir'] = '';
 $locals['ctest'] = false;
+$locals['rlproot'] = '..';
 
 if ( array_key_exists ( "DBUSER", $_ENV ) && $_ENV["DBUSER"] )
 	$locals['db-user'] = $_ENV["DBUSER"];
@@ -99,6 +101,7 @@ for ( $i=0; $i<count($args); $i++ )
 	else if ( $arg=="-s" || $arg=="--searchd" )		$locals['searchd'] = $args[++$i];
 	else if ( $arg=="-b" || $arg=="--bindir" )		$locals['bin'] = $args[++$i];
 	else if ( $arg=="-t" || $arg=="--testdir" )		$locals['testdir'] = $args[++$i];
+	else if ( $arg=="-r" || $arg=="--rlproot" )		$locals['rlproot'] = $args[++$i];
 	else if ( $arg=="--ctest" )						{ $locals['ctest'] = true; $force_guess = false; }
 	else if ( $arg=="--rt" )						$locals['rt_mode'] = true;
 	else if ( $arg=="--test-thd-pool" )				$locals['use_pool'] = true;

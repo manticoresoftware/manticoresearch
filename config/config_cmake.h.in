@@ -132,6 +132,7 @@
 
 /* RLP library support */
 #cmakedefine USE_RLP ${USE_RLP}
+#cmakedefine RLP_ROOT "${RLP_ROOT}"
 
 /* define to use POSIX Syslog for logging */
 #cmakedefine USE_SYSLOG ${USE_SYSLOG}

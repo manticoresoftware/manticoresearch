@@ -35,13 +35,20 @@
 #define SHAREDIR "."
 #endif
 
+#ifndef RLP_ROOT
+#define RLP_ROOT SHAREDIR
+#define RLP_ENV SHAREDIR"/rlp-environment.xml"
+#else
+#define RLP_ENV RLP_ROOT"/rlp/etc/rlp-environment.xml"
+#endif
 
-CSphString				g_sRLPRoot				= SHAREDIR;
-CSphString				g_sRLPEnv				= SHAREDIR"/rlp-environment.xml";
+
+CSphString				g_sRLPRoot				{ RLP_ROOT };
+CSphString				g_sRLPEnv				{ RLP_ENV };
 int						g_iRLPMaxBatchSize		= 51200;
 int						g_iRLPMaxBatchDocs		= 50;
 
-BT_RLP_EnvironmentC *	g_pRLPEnv = NULL;
+BT_RLP_EnvironmentC *	g_pRLPEnv = nullptr;
 
 
 static void RLPLog ( void *, int iChannel, const char * szMessage )
@@ -74,7 +81,7 @@ static bool sphRLPInit ( const char * szRootPath, const char * szEnvPath, CSphSt
 		}
 
 		BT_RLP_Environment_SetBTRootDirectory ( szRootPath );
-		BT_RLP_Environment_SetLogCallbackFunction ( NULL, RLPLog );
+		BT_RLP_Environment_SetLogCallbackFunction ( nullptr, RLPLog );
 		BT_RLP_Environment_SetLogLevel ( "error" );
 
 		g_pRLPEnv = BT_RLP_Environment_Create();
@@ -89,7 +96,7 @@ static bool sphRLPInit ( const char * szRootPath, const char * szEnvPath, CSphSt
 		{
 			sError = "Unable to initialize the RLP environment";
 			BT_RLP_Environment_Destroy ( g_pRLPEnv );
-			g_pRLPEnv = NULL;
+			g_pRLPEnv = nullptr;
 			return false;
 		}
 	}
@@ -100,9 +107,9 @@ static bool sphRLPInit ( const char * szRootPath, const char * szEnvPath, CSphSt
 
 void sphRLPDone ()
 {
-	assert ( g_pRLPEnv );
-	BT_RLP_Environment_Destroy ( g_pRLPEnv );
-	g_pRLPEnv = NULL;
+	if ( g_pRLPEnv )
+		BT_RLP_Environment_Destroy ( g_pRLPEnv );
+	g_pRLPEnv = nullptr;
 }
 
 
@@ -113,11 +120,6 @@ public:
 		: m_sRootPath ( szRootPath )
 		, m_sEnvPath ( szEnvPath )
 		, m_sCtxPath ( szCtxPath )
-		, m_pContext ( NULL )
-		, m_pFactory ( NULL )
-		, m_pTokenIterator ( NULL )
-		, m_iNextCompoundComponent ( -1 )
-		, m_bInitialized ( false )
 	{
 		sphUTF8Encode ( m_pMarkerChunkSeparator, PROXY_CHUNK_SEPARATOR );
 	}
@@ -218,11 +220,11 @@ private:
 	static const int		MAX_TOKEN_LEN = 1024;
 	static const int		MAX_CHUNK_SIZE = 10485760;
 
-	BT_RLP_ContextC *		m_pContext;
-	BT_RLP_TokenIteratorFactoryC * m_pFactory;
-	BT_RLP_TokenIteratorC *	m_pTokenIterator;
-	int						m_iNextCompoundComponent;
-	bool					m_bInitialized;
+	BT_RLP_ContextC *		m_pContext = nullptr;
+	BT_RLP_TokenIteratorFactoryC * m_pFactory = nullptr;
+	BT_RLP_TokenIteratorC *	m_pTokenIterator = nullptr;
+	int						m_iNextCompoundComponent = -1;
+	bool					m_bInitialized = false;
 	CSphTightVector<BYTE>	m_dCJKBuffer;
 	CSphTightVector<BYTE>	m_dNonCJKBuffer;
 	CSphTightVector<TextChunk_t> m_dNonCJKChunks;

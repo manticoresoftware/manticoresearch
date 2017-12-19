@@ -36,7 +36,7 @@ index test
 			U+F900..U+FAD9, U+20000..U+2FA1D
 			
 	morphology 		= rlp_chinese_batched, stem_enru
-	rlp_context		= ../rlp/samples/etc/rlp-chinese-context.xml
+	rlp_context		= <rlp_root/>/rlp/samples/etc/rlp-chinese-context.xml
 	index_field_lengths = 1
 }
 
@@ -50,7 +50,7 @@ index rt
 			U+F900..U+FAD9, U+20000..U+2FA1D
 			
 	morphology 		= rlp_chinese_batched, stem_enru
-	rlp_context		= ../rlp/samples/etc/rlp-chinese-context.xml
+	rlp_context		= <rlp_root/>/rlp/samples/etc/rlp-chinese-context.xml
 	
 	rt_field = content
 	rt_field = text
@@ -59,8 +59,8 @@ index rt
 
 common
 {
-	rlp_root = ..
-	rlp_environment = ../rlp/etc/rlp-environment.xml
+	rlp_root = <rlp_root/>
+	rlp_environment = <rlp_root/>/rlp/etc/rlp-environment.xml
 }
 </config>
 

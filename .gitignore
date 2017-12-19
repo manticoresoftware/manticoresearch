@@ -58,6 +58,7 @@
 /test/test_*/report.txt
 /test/test_*/Conf
 /test/data
+/test/localsettings.inc
 
 # /test/ql/
 /test/ql/data/*.log

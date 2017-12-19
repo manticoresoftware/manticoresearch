@@ -6,6 +6,7 @@
 $bindir = "@MANTICORE_BINARY_DIR@/src/";
 $testdir = "@MANTICORE_BINARY_DIR@/test/";
 $testsrc = "@CMAKE_CURRENT_SOURCE_DIR@";
+$rlproot = "@RLP_ROOT@";
 
 chdir ("$testsrc");
 $shellcmd = PHP_BINARY . " ubertest.php";
@@ -14,7 +15,7 @@ $args = $_SERVER["argv"];
 array_shift ( $args );
 if ( is_array($args) && !empty($args) )
 {
-	$shellcmd .= " -b \"$bindir\" -t \"$testdir\" ";
+	$shellcmd .= " -b \"$bindir\" -t \"$testdir\" -r \"$rlproot\" ";
 	$shellcmd .= join(" ", $args);
 }
 

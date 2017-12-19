@@ -495,7 +495,7 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 function StopSearchd ( $config, $pidfile )
 {
 	global $g_locals, $action_retries, $action_wait_timeout;
-
+	$ret = 0;
 	$abs_config = testdir($config);
 	$abs_pidfile = testdir($pidfile);
 
@@ -512,10 +512,12 @@ function StopSearchd ( $config, $pidfile )
 			$i++;
 		}
 	}
+	return $ret;
 }
 
 function StopWaitSearchd ( $config, $pidfile )
 {
+	return StopSearchd ( $config, $pidfile );
 	global $g_locals;
 	$ret = 0;
 
@@ -3113,6 +3115,7 @@ class SphinxConfig
 
 			case "local":				fwrite ( $fp, $this->GetLocal ( $node->nodeValue ) ); return;
 			case "test_root":			fwrite ( $fp, dirname(__FILE__) ); return;
+			case "rlp_root":			fwrite ( $fp, $g_locals['rlproot'] ); return;
 			case "this_test":			fwrite ( $fp, $this->_testdir ); return;
 			case "testdir":	{
 				if ( $g_locals['testdir'] == '' ) {

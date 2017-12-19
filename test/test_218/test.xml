@@ -16,7 +16,6 @@ indexer
 searchd
 {
 	<searchd_settings/>
-	workers = threads
 }
 
 source test
@@ -49,7 +48,7 @@ index base
 	</dynamic>
 	
 	blend_chars		= -, U+23
-	rlp_context		= ../rlp/samples/etc/rlp-chinese-context.xml
+	rlp_context		= <rlp_root/>/rlp/samples/etc/rlp-chinese-context.xml
 }
 
 index test : base
@@ -102,13 +101,13 @@ index test_spec
 			U+F900..U+FAD9, U+20000..U+2FA1D
 			
 	morphology 		= rlp_chinese_batched
-	rlp_context		= ../rlp/samples/etc/rlp-chinese-context.xml
+	rlp_context		= <rlp_root/>/rlp/samples/etc/rlp-chinese-context.xml
 }
 
 common
 {
-	rlp_root = ..
-	rlp_environment = ../rlp/etc/rlp-environment.xml
+	rlp_root = <rlp_root/>
+	rlp_environment = <rlp_root/>/rlp/etc/rlp-environment.xml
 }
 </config>
 

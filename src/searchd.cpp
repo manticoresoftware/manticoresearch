@@ -3809,7 +3809,7 @@ bool MinimizeSchema ( CSphSchema & tDst, const ISphSchema & tSrc )
 
 	if ( !bEqual )
 	{
-		CSphVector<CSphColumnInfo> dFields ( tDst.GetFieldsCount() );
+		CSphVector<CSphColumnInfo> dFields { tDst.GetFieldsCount() };
 		for ( int i = 0; i < tDst.GetFieldsCount(); i++ )
 			dFields[i] = tDst.GetField(i);
 
@@ -22805,7 +22805,8 @@ NetEvent_e NetReceiveDataHttp_t::Setup ( int64_t tmNow )
 	return NE_IN;
 }
 
-static const char g_sContentLength[] = "\r\r\n\nCcOoNnTtEeNnTt--LlEeNnGgTtHh";
+static const char g_sContentLength[] = "\r\r\n\nCcOoNnTtEeNnTt--LlEeNnGgTtHh\0";
+static const size_t g_sContentLengthSize = sizeof ( g_sContentLength ) - 1;
 static const char g_sHeadEnd[] = "\r\n\r\n";
 
 HttpHeaderStreamParser_t::HttpHeaderStreamParser_t ()
@@ -22824,7 +22825,7 @@ bool HttpHeaderStreamParser_t::HeaderFound ( const BYTE * pBuf, int iLen )
 	if ( m_iHeaderEnd || m_iCur>=iLen )
 		return true;
 
-	const int iCNwoLFSize = ( sizeof(g_sContentLength)-5 )/2; // size of just Content-Length field name
+	const int iCNwoLFSize = ( g_sContentLengthSize-5 )/2; // size of just Content-Length field name
 	for ( ; m_iCur<iLen; m_iCur++ )
 	{
 		m_iCRLF = ( pBuf[m_iCur]==g_sHeadEnd[m_iCRLF] ? m_iCRLF+1 : 0 );
@@ -22837,7 +22838,7 @@ bool HttpHeaderStreamParser_t::HeaderFound ( const BYTE * pBuf, int iLen )
 			break;
 		}
 		// Content-Length field found
-		if ( !m_iFieldContentLenStart && m_iName==sizeof(g_sContentLength)-1 )
+		if ( !m_iFieldContentLenStart && m_iName==g_sContentLengthSize-1 )
 			m_iFieldContentLenStart = m_iCur - iCNwoLFSize + 1;
 	}
 

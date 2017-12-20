@@ -16954,6 +16954,7 @@ void ISphQueryFilter::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 				strncpy ( (char *)sTmp, dChildren[iChild]->m_dWords[iAotKeyword].m_sWord.scstr(), sizeof(sTmp) );
 				// prevent use-after-free-bug due to vector grow: AddKeywordsStats() calls dKeywords.Add()
 				strncpy ( (char *)sTmp2, dKeywords[iTokenized].m_sTokenized.scstr (), sizeof ( sTmp2 ) );
+				sTmp[sizeof ( sTmp ) - 1] = sTmp2[sizeof ( sTmp2 ) - 1] = '\0';
 				AddKeywordStats ( sTmp, sTmp2, iKeywordQpos, dKeywords );
 			}
 
@@ -24929,7 +24930,7 @@ const BYTE * CSphHTMLStripper::FindTag ( const BYTE * sSrc, const StripperTag_t 
 	int iIdx = GetCharIndex ( sTagName[0] );
 	assert ( iIdx>=0 && iIdx<MAX_CHAR_INDEX );
 
-	if ( m_dEnd[iIdx]>=0 )
+	if ( iIdx>=0 && m_dEnd[iIdx]>=0 )
 	{
 		int iStart = m_dStart[iIdx];
 		int iEnd = m_dEnd[iIdx];

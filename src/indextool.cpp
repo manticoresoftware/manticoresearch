@@ -274,14 +274,14 @@ bool DoKlistsOptimization ( int iRowSize, const char * sPath, int iChunkCount, C
 				return false;
 			}
 
-			dKlist.Resize ( (int)( rdKList.GetFilesize()/sizeof(SphAttr_t) ) );
-			rdKList.GetBytes ( dKlist.Begin(), (int)rdKList.GetFilesize() );
+			dKlist.Resize ( (int)(uFsize/sizeof(SphAttr_t) ) );
+			rdKList.GetBytes ( dKlist.Begin(), (int)uFsize );
 
 			// 1nd step kill all k-list ids not in live ids
 
 			ARRAY_FOREACH ( i, dKlist )
 			{
-				SphDocID_t uid = (SphDocID_t)dKlist[i];
+				auto uid = (SphDocID_t)dKlist[i];
 				SphDocID_t * pInLive = sphBinarySearch ( dLiveID.Begin(), &dLiveID.Last(), uid );
 				if ( !pInLive )
 					dKlist.RemoveFast ( i-- );
@@ -295,7 +295,7 @@ bool DoKlistsOptimization ( int iRowSize, const char * sPath, int iChunkCount, C
 
 			ARRAY_FOREACH ( i, dKlist )
 			{
-				SphDocID_t uID = (SphDocID_t)dKlist[i];
+				auto uID = (SphDocID_t)dKlist[i];
 				SphDocID_t * pKilled = sphBinarySearch ( pFirstLive, pLastLive, uID );
 
 				assert ( pKilled );
@@ -970,7 +970,7 @@ int main ( int argc, char ** argv )
 			break;
 
 		if ( eCommand==CMD_DUMPDICT && !sDumpDict.Ends ( ".spi" ) )
-				sIndex = sDumpDict;
+			sIndex = sDumpDict;
 
 		sphLoadConfig ( sOptConfig, bQuiet, cp );
 		break;

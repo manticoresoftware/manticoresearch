@@ -2326,7 +2326,7 @@ char * StringBuilder_c::Leak ()
 	return tRes;
 }
 
-const StringBuilder_c& StringBuilder_c::operator+= ( const char * sText )
+StringBuilder_c& StringBuilder_c::operator+= ( const char * sText )
 {
 	if ( !sText || *sText=='\0' )
 		return *this;
@@ -2341,7 +2341,7 @@ const StringBuilder_c& StringBuilder_c::operator+= ( const char * sText )
 	return *this;
 }
 
-const StringBuilder_c& StringBuilder_c::operator= ( const StringBuilder_c &rhs )
+StringBuilder_c& StringBuilder_c::operator= ( const StringBuilder_c &rhs )
 {
 	if ( this!=&rhs )
 	{

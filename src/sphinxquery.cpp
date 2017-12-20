@@ -44,6 +44,9 @@ void XQParseHelper_c::SetString ( const char * szString )
 /// lookup field and add it into mask
 bool XQParseHelper_c::AddField ( FieldMask_t & dFields, const char * szField, int iLen )
 {
+	if ( !szField || !iLen )
+		return Error ( "empty field passed to AddField()" );
+
 	CSphString sField;
 	sField.SetBinary ( szField, iLen );
 
@@ -86,8 +89,8 @@ bool XQParseHelper_c::ParseFields ( FieldMask_t & dFields, int & iMaxFieldPos, b
 	if ( *pPtr=='!' )
 	{
 		// handle @! and @!(
-		bNegate = true; pPtr++;
-		if ( *pPtr=='(' ) { bBlock = true; pPtr++; }
+		bNegate = true; ++pPtr;
+		if ( *pPtr=='(' ) { bBlock = true; ++pPtr; }
 
 	} else if ( *pPtr=='*' )
 	{
@@ -115,7 +118,7 @@ bool XQParseHelper_c::ParseFields ( FieldMask_t & dFields, int & iMaxFieldPos, b
 		// handle standalone field specification
 		const char * pFieldStart = pPtr;
 		while ( sphIsAlpha(*pPtr) && pPtr<pLastPtr )
-			pPtr++;
+			++pPtr;
 
 		assert ( pPtr-pFieldStart>0 );
 		if ( !AddField ( dFields, pFieldStart, pPtr-pFieldStart ) )
@@ -139,7 +142,7 @@ bool XQParseHelper_c::ParseFields ( FieldMask_t & dFields, int & iMaxFieldPos, b
 			{
 				if ( !pFieldStart )
 					pFieldStart = pPtr;
-				pPtr++;
+				++pPtr;
 				continue;
 			}
 
@@ -148,7 +151,7 @@ bool XQParseHelper_c::ParseFields ( FieldMask_t & dFields, int & iMaxFieldPos, b
 			{
 				CSphString sContext;
 				sContext.SetBinary ( pPtr, (int)( pLastPtr-pPtr ) );
-				return Error ( "error parsing field list: invalid field block operator syntax near '%s'", sContext.cstr() ? sContext.cstr() : "" );
+				return Error ( "error parsing field list: invalid field block operator syntax near '%s'", sContext.cstr() );
 
 			} else if ( *pPtr==',' )
 			{

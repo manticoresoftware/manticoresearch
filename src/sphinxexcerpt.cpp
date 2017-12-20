@@ -3824,8 +3824,8 @@ void sphBuildExcerpt ( ExcerptQuery_t & tOptions, const CSphIndex * pIndex, cons
 		return;
 	}
 
-	char * pData = const_cast<char*> ( tOptions.m_sSource.cstr() );
-	CSphFixedVector<char> pBuffer ( 0 );
+	auto * pData = const_cast<char*> ( tOptions.m_sSource.cstr() );
+	CSphFixedVector<char> pBuffer { 0 };
 
 	if ( tOptions.m_iLoadFiles )
 	{
@@ -3850,7 +3850,7 @@ void sphBuildExcerpt ( ExcerptQuery_t & tOptions, const CSphIndex * pIndex, cons
 			return;
 		}
 
-		int iFileSize = (int)tFile.GetSize();
+		auto iFileSize = (int)tFile.GetSize();
 		if ( iFileSize<0 )
 			return;
 
@@ -3858,8 +3858,8 @@ void sphBuildExcerpt ( ExcerptQuery_t & tOptions, const CSphIndex * pIndex, cons
 		if ( !tFile.Read ( pBuffer.Begin(), iFileSize, sError ) )
 			return;
 
-		pBuffer[iFileSize] = 0;
 		pData = pBuffer.Begin();
+		pData[iFileSize] = '\0';
 	}
 
 	// strip if we have to

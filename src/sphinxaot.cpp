@@ -413,7 +413,7 @@ bool CLemmatizer::PredictFind ( const BYTE * pWord, int iLen, CSphVector<CPredic
 		return false;
 
 	assert ( r!=-1 );
-	BYTE sPath[128];
+	BYTE sPath[128] = {0};
 	PredictFindRecursive ( r, sPath, 0, res );
 	return true;
 }
@@ -1573,6 +1573,7 @@ public:
 			m_FindResults[i] = AOT_ORIGFORM;
 			m_FindResults[i+1] = AOT_NOFORM;
 			strncpy ( (char*)m_sOrigToken, (char*)pToken, sizeof(m_sOrigToken) );
+			m_sOrigToken[sizeof(m_sOrigToken)-1] = '\0';
 		}
 
 		// in any event, prepare the first lemma for return
@@ -1718,6 +1719,7 @@ public:
 			m_FindResults[i] = AOT_ORIGFORM;
 			m_FindResults[i+1] = AOT_NOFORM;
 			strncpy ( (char*)m_sOrigToken, (char*)pToken, sizeof(m_sOrigToken) );
+			m_sOrigToken[sizeof ( m_sOrigToken ) - 1] = '\0';
 		}
 
 		// in any event, prepare the first lemma for return

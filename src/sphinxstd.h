@@ -1795,6 +1795,9 @@ private:
 	/// and does NOT affect strlen() as well.
 	static const int	SAFETY_GAP = 4;
 
+	inline void SafeFree ()
+	{ if ( m_sValue!=EMPTY ) SafeDeleteArray ( m_sValue ); }
+
 public:
 	CSphString () = default;
 
@@ -1817,8 +1820,7 @@ public:
 
 	~CSphString ()
 	{
-		if ( m_sValue!=EMPTY )
-			SafeDeleteArray ( m_sValue );
+		SafeFree();
 	}
 
 	const char * cstr () const
@@ -1880,8 +1882,7 @@ public:
 	{
 		if ( m_sValue==rhs.m_sValue )
 			return *this;
-		if ( m_sValue!=EMPTY )
-			SafeDeleteArray ( m_sValue );
+		SafeFree ();
 		if ( rhs.m_sValue )
 		{
 			if ( rhs.m_sValue[0]=='\0' )
@@ -1903,8 +1904,7 @@ public:
 	{
 		if ( m_sValue==rhs.m_sValue )
 			return *this;
-		if ( m_sValue!=EMPTY )
-			SafeDeleteArray ( m_sValue );
+		SafeFree ();
 
 		if ( rhs.m_sValue )
 		{
@@ -1940,30 +1940,34 @@ public:
 	// hope this won't kill performance on a huge strings
 	void SetBinary ( const char * sValue, int iLen )
 	{
-		if ( Length()<iLen )
+		if ( Length ()<iLen )
 		{
-			if ( m_sValue!=EMPTY )
-				SafeDeleteArray ( m_sValue );
-			m_sValue = new char [ 1+SAFETY_GAP+iLen ];
-			memcpy ( m_sValue, sValue, iLen );
-			memset ( m_sValue+iLen, 0, 1+SAFETY_GAP );
+			SafeFree ();
+			if ( !sValue )
+				m_sValue = EMPTY;
+			else
+			{
+				m_sValue = new char [ 1+SAFETY_GAP+iLen ];
+				memcpy ( m_sValue, sValue, iLen );
+				memset ( m_sValue+iLen, 0, 1+SAFETY_GAP );
+			}
 			return;
 		}
 
-		if ( iLen==0 || ( !sValue ) || ( sValue && sValue[0]=='\0' ) )
-			m_sValue = EMPTY;
-		else
+		if ( sValue && iLen )
 		{
-			if ( sValue )
-				memcpy ( m_sValue, sValue, iLen );
-			m_sValue [ iLen ] = '\0';
+			memcpy ( m_sValue, sValue, iLen );
+			memset ( m_sValue + iLen, 0, 1 + SAFETY_GAP );
+		} else
+		{
+			SafeFree ();
+			m_sValue = EMPTY;
 		}
 	}
 
 	void Reserve ( int iLen )
 	{
-		if ( m_sValue!=EMPTY )
-			SafeDeleteArray ( m_sValue );
+		SafeFree ();
 		m_sValue = new char [ 1+SAFETY_GAP+iLen ];
 		memset ( m_sValue, 0, 1+SAFETY_GAP+iLen );
 	}
@@ -2072,16 +2076,14 @@ public:
 	// opposite to Leak()
 	void Adopt ( char ** sValue )
 	{
-		if ( m_sValue!=EMPTY )
-			SafeDeleteArray ( m_sValue );
+		SafeFree ();
 		m_sValue = *sValue;
 		*sValue = nullptr;
 	}
 
 	void Adopt ( char * && sValue )
 	{
-		if ( m_sValue!=EMPTY )
-		SafeDeleteArray ( m_sValue );
+		SafeFree ();
 		m_sValue = sValue;
 		sValue = nullptr;
 	}
@@ -2143,8 +2145,8 @@ public:
 		return m_iUsed;
 	}
 
-	const StringBuilder_c& operator += ( const char * sText );
-	const StringBuilder_c& operator = ( const StringBuilder_c& rhs );
+	StringBuilder_c& operator += ( const char * sText );
+	StringBuilder_c& operator = ( const StringBuilder_c& rhs );
 
 protected:
 	void Grow ( int iLen );

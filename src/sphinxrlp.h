@@ -312,13 +312,11 @@ private:
 		{
 			int iDynamic = T::m_tSchema.GetRowSize();
 
-			if ( iDynamic )
-			{
-				if ( !tTo.m_pDynamic )
-					tTo.Reset ( iDynamic );
+			if ( !tTo.m_pDynamic )
+				tTo.Reset ( iDynamic );
 
+			if ( tTo.m_pDynamic )
 				memcpy ( tTo.m_pDynamic, tFrom.m_pDynamic, iDynamic * sizeof ( CSphRowitem ) );
-			}
 		}
 
 		tTo.m_pStatic = nullptr;

@@ -339,7 +339,7 @@ bool CISpellAffixRule::StripAppendSuffix ( CSphString & sWord ) const
 	szTmp [m_iWordLen - m_iStripLen] = '\0';
 
 	if ( !m_sAppend.IsEmpty () )
-		strcat ( szTmp, m_sAppend.cstr () ); // NOLINT
+		strncat ( szTmp, m_sAppend.cstr (), m_iAppendLen );
 
 	sWord = szTmp;
 
@@ -393,7 +393,7 @@ bool CISpellAffixRule::StripAppendPrefix ( CSphString & sWord ) const
 	}
 
 	if ( !m_sAppend.IsEmpty () )
-		strcpy ( szTmp, m_sAppend.cstr() ); // NOLINT
+		strncpy ( szTmp, m_sAppend.cstr(), m_iAppendLen );
 
 	strncpy ( szTmp + m_iAppendLen, sWord.cstr () + m_iStripLen, m_iWordLen - m_iStripLen );
 	szTmp [m_iWordLen - m_iStripLen + m_iAppendLen] = '\0';

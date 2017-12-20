@@ -1500,7 +1500,7 @@ public:
 			if ( m_FindResults[m_iCurrent]==AOT_ORIGFORM )
 			{
 				assert ( m_FindResults[m_iCurrent+1]==AOT_NOFORM );
-				strncpy ( (char*)m_sToken, (char*)m_sOrigToken, sizeof(m_sToken) );
+				strncpy ( (char*)m_sToken, (char*)m_sOrigToken, sizeof(m_sToken)-1 );
 				m_iCurrent = -1;
 				m_eTokenMorph = SPH_TOKEN_MORPH_ORIGINAL;
 				return m_sToken;
@@ -1629,6 +1629,7 @@ public:
 			{
 				assert ( m_FindResults[m_iCurrent+1]==AOT_NOFORM );
 				strncpy ( (char*)m_sToken, (char*)m_sOrigToken, sizeof(m_sToken) );
+				m_sToken[sizeof ( m_sToken ) - 1] = '\0';
 				m_iCurrent = -1;
 				m_eTokenMorph = SPH_TOKEN_MORPH_ORIGINAL;
 				return m_sToken;

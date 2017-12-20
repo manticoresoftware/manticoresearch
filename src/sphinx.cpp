@@ -16846,7 +16846,7 @@ void ISphQueryFilter::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 	while ( ( sWord = m_pTokenizer->GetToken() )!=NULL )
 	{
 		const BYTE * sMultiform = m_pTokenizer->GetTokenizedMultiform();
-		strncpy ( (char *)sTokenized, sMultiform ? (const char*)sMultiform : (const char*)sWord, sizeof(sTokenized) );
+		strncpy ( (char *)sTokenized, sMultiform ? (const char*)sMultiform : (const char*)sWord, sizeof(sTokenized)-1 );
 
 		if ( ( !m_tFoldSettings.m_bFoldWildcards || m_tFoldSettings.m_bStats ) && sphHasExpandableWildcards ( (const char *)sWord ) )
 		{
@@ -16933,7 +16933,7 @@ void ISphQueryFilter::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 			continue;
 
 		// MUST copy as Dict::GetWordID changes word and might add symbols
-		strncpy ( (char *)sTokenized, dKeywords[iTokenized].m_sNormalized.scstr(), sizeof(sTokenized) );
+		strncpy ( (char *)sTokenized, dKeywords[iTokenized].m_sNormalized.scstr(), sizeof(sTokenized)-1 );
 		int iPreAotCount = dKeywords.GetLength();
 
 		XQNode_t tAotNode ( tSpec );
@@ -16951,10 +16951,9 @@ void ISphQueryFilter::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 			ARRAY_FOREACH ( iAotKeyword, dChildren[iChild]->m_dWords )
 			{
 				// MUST copy as Dict::GetWordID changes word and might add symbols
-				strncpy ( (char *)sTmp, dChildren[iChild]->m_dWords[iAotKeyword].m_sWord.scstr(), sizeof(sTmp) );
+				strncpy ( (char *)sTmp, dChildren[iChild]->m_dWords[iAotKeyword].m_sWord.scstr(), sizeof(sTmp)-1 );
 				// prevent use-after-free-bug due to vector grow: AddKeywordsStats() calls dKeywords.Add()
-				strncpy ( (char *)sTmp2, dKeywords[iTokenized].m_sTokenized.scstr (), sizeof ( sTmp2 ) );
-				sTmp[sizeof ( sTmp ) - 1] = sTmp2[sizeof ( sTmp2 ) - 1] = '\0';
+				strncpy ( (char *)sTmp2, dKeywords[iTokenized].m_sTokenized.scstr (), sizeof ( sTmp2 )-1 );
 				AddKeywordStats ( sTmp, sTmp2, iKeywordQpos, dKeywords );
 			}
 

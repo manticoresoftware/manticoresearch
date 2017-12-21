@@ -65,8 +65,17 @@ Templates indexes
 
 Template indexes are indexes with no storage backend. They can be used operations that involve only data from input, like keywords and snippets generation.
 
+Percolate indexes
+~~~~~~~~~~~~~~~~~
+
+Percolate indexes are special Real-Time indexes that store queries instead of documents. They are used for prospective searches ( or "search in reverse"). 
+Refer to :ref:`percolate_query` for more details.
+
+
 There can be as many indexes per configuration file as necessary.
 ``indexer`` utility can reindex either all of them (if ``--all`` option
 is specified), or a certain explicitly specified subset. ``searchd``
 utility will serve all the specified indexes, and the clients can
 specify what indexes to search in run time.
+
+

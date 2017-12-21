@@ -81,6 +81,8 @@ To expand a bit, Manticore:
 
 -  provides distributed searching capabilities;
 
+- provides prospective searches (percolate queries)
+
 -  provides document excerpts (snippets) generation;
 
 -  provides searching from within application with SphinxQL or SphinxAPI

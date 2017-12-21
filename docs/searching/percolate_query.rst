@@ -76,8 +76,8 @@ To issue documents matching ``CALL PQ`` statement looks like
 .. code-block:: sql
 
 
-    CALL PQ ('index_name', 'single document', 0 as docs, 1 as docs_json, 0 as verbose);
-    CALL PQ ('index_name', ('multiple documents', 'go this way') );
+    CALL PQ ('index_name', 'single document', 0 as docs, 0 as docs_json, 0 as verbose);
+    CALL PQ ('index_name', ('multiple documents', 'go this way'), 0 as docs_json );
 
     
 Document at ``CALL PQ`` might be ``JSON`` encoded string or raw string. Fields and attributes mapping allowed at ``JSON`` document only.

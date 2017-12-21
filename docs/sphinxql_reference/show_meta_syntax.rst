@@ -81,3 +81,7 @@ means a single character:
     +-----------------------+-------+
     2 rows in set (0.00 sec)
 
+	
+SHOW META can be used after executing a :ref:`CALL PQ <call_pq_syntax>`  statement.
+In this case, it provides a different :ref:`output <percolate_query_show_meta>`.
+	

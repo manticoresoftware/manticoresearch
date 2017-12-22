@@ -8188,7 +8188,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				tDistCtrl->WaitAgentsEvent();
 			bDistDone = tDistCtrl->IsDone();
 			// wait for remote queries to complete
-			if ( tDistCtrl->FetchReadyAgents() )
+			if ( tDistCtrl->FetchReadyAgents()>0 )
 			{
 				SearchReplyParser_c tParser ( iStart, iEnd );
 				int iMsecLeft = iAgentQueryTimeout - (int)( tmLocal/1000 );
@@ -14859,6 +14859,8 @@ static void BlackholeTick()
 	}
 	assert ( dAgents.GetLength() && tBlackholes.m_dPtrs.GetLength() );
 
+	sphLogDebugv ( "blackhole agents %d", dAgents.GetLength() );
+
 	BlackholeRequestBuilder_t tReq ( tBlackholes.m_dPtrs );
 	CSphScopedPtr<ISphRemoteAgentsController> tDistCtrl ( GetAgentsController ( 1, dAgents, tReq, g_iBlackholeTimeout, g_iBlackholeRetries ) );
 	if ( g_bShutdown )
@@ -14867,7 +14869,7 @@ static void BlackholeTick()
 	bool bDistDone = false;
 	while ( !bDistDone )
 	{
-		if ( !tDistCtrl->HasReadyAgents () )
+		if ( !tDistCtrl->HasReadyAgents () && !tDistCtrl->IsDone() )
 			tDistCtrl->WaitAgentsEvent();
 		bDistDone = tDistCtrl->IsDone();
 
@@ -14875,12 +14877,18 @@ static void BlackholeTick()
 			return;
 
 		// need to fetch data to prevent network error reports at agent(blackhole)
-		if ( tDistCtrl->FetchReadyAgents() )
+		int iGot = tDistCtrl->FetchReadyAgents();
+		sphLogDebugv ( "blackhole got %d, done %d", iGot, (int)bDistDone );
+
+		if ( iGot>0 )
 		{
 			BlackholeReplyParser_t tParser;
 			RemoteWaitForAgents ( dAgents, g_iBlackholeTimeout, tParser );
-			if ( tDistCtrl->RetryFailed()>0 )
+			int iRetries = tDistCtrl->RetryFailed()>0;
+			if ( iRetries>0 )
 				bDistDone = false;
+
+			sphLogDebugv ( "blackhole %d retries", iRetries );
 		}
 	}
 }

@@ -535,7 +535,7 @@ public:
 	virtual bool HasReadyAgents () const = 0;
 
 	// check that some agents are done, and reset counter of them
-	virtual bool FetchReadyAgents () = 0;
+	virtual int FetchReadyAgents () = 0;
 
 	// block execution while some works finished
 	virtual void WaitAgentsEvent () = 0;

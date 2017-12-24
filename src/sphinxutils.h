@@ -52,6 +52,9 @@ inline bool sphIsWild ( T c )
 	return c=='*' || c=='?' || c=='%';
 }
 
+/// my own converter unsigned to sctring. Instanciated for DWORD and uint64_t
+void sphUItoA ( char ** ppOutput, DWORD uVal, int iBase = 10, int iWidth = 0, int iPrec = 0, char cFill = ' ' );
+
 
 /// string splitter, extracts sequences of alphas (as in sphIsAlpha)
 void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn );

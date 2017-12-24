@@ -44,48 +44,57 @@ const int PROXY_CHUNK_SEPARATOR = 0xFFFC;
 
 const int PROXY_MARKER_LEN = 3;
 
-
-#define COPY_MARKER(_ptr,_marker) \
-{\
-	*_ptr++ = ' '; \
-	*_ptr++ = _marker[0]; \
-	*_ptr++ = _marker[1]; \
-	*_ptr++ = _marker[2]; \
-	*_ptr++ = ' '; \
+inline static void COPY_MARKER (BYTE * _ptr, const BYTE * _marker)
+{
+	(_ptr)[0] = ' ';
+    (_ptr)[1] = (_marker)[0];
+    (_ptr)[2] = (_marker)[1];
+    (_ptr)[3] = (_marker)[2];
+    (_ptr)[4] = ' ';
 }
 
-#define CMP_MARKER(_ptr, _marker) \
-	( _ptr[0]==_marker[0] && _ptr[1]==_marker[1] && _ptr[2]==_marker[2] )
+inline static void APPEND_MARKER( BYTE * &_ptr, const BYTE * _marker )
+{
+    *(_ptr)++ = ' ';
+    *(_ptr)++ = (_marker)[0];
+    *(_ptr)++ = (_marker)[1];
+    *(_ptr)++ = (_marker)[2];
+    *(_ptr)++ = ' ';
+}
 
+inline static bool CMP_MARKER( const BYTE * _ptr, const BYTE * _marker)
+{
+	return (_ptr)[0]==(_marker)[0]
+		&& (_ptr)[1]==(_marker)[1]
+		&& (_ptr)[2]==(_marker)[2];
+}
 
+const int INITIAL_BUFFER_SIZE = 1024 * 1024; // typical default top is 50K, but we reserve 1M.
 
 // proxy source
 template <class T>
 class CSphSource_Proxy : public T
 {
+	const int MAX_INDEX_LEN = 8;
 public:
 	explicit CSphSource_Proxy ( const char * sSourceName )
 		: T ( sSourceName )
 		, m_dBatchedDocs ( g_iRLPMaxBatchDocs )
 	{
-		assert ( sphUTF8Encode ( m_pMarkerDocStart, PROXY_DOCUMENT_START )==PROXY_MARKER_LEN );
-
-		sphUTF8Encode ( m_pMarkerDocStart, PROXY_DOCUMENT_START );
-		sphUTF8Encode ( m_pMarkerFieldStart, PROXY_FIELD_START );
-
-		const int INITIAL_BUFFER_SIZE = 1048576;
+		Verify ( sphUTF8Encode ( m_pMarkerDocStart, PROXY_DOCUMENT_START )==PROXY_MARKER_LEN );
+		Verify ( sphUTF8Encode ( m_pMarkerFieldStart, PROXY_FIELD_START )==PROXY_MARKER_LEN );
 		m_dDocBuffer.Reserve ( INITIAL_BUFFER_SIZE );
 	}
 
 	// we run field filters on batches of documents, therefore we don't want
 	// CSphSource_Document to run them again in IterateDocument 
-	virtual void SetFieldFilter ( ISphFieldFilter * pFilter )
+	void SetFieldFilter ( ISphFieldFilter * pFilter ) final
 	{
 		m_pBatchFieldFilter = pFilter;
 	}
 
 
-	virtual BYTE ** NextDocument ( CSphString & sError )
+	BYTE ** NextDocument ( CSphString & sError ) final
 	{
 		if ( !IsDocCacheEmpty() )
 			return CopyDoc();
@@ -98,11 +107,9 @@ public:
 		}
 
 		m_iDocStart = 0;
-		const int MAX_INDEX_LEN = 8;
-
 		m_dDocBuffer.Resize(0);
 
-		while ( !IsDocCacheFull() && m_dDocBuffer.GetLength() < g_iRLPMaxBatchSize )
+		while ( !IsDocCacheFull() && m_dDocBuffer.GetLength()<g_iRLPMaxBatchSize )
 		{
 			BYTE ** pFields = T::NextDocument ( sError );
 			if ( !pFields )
@@ -110,16 +117,17 @@ public:
 
 			const int * pFieldLengths = T::GetFieldLengths();
 
-			int iTotalFieldLen = 0;
+			int iTotalToDecode = 0;
 			bool bDocHasChinese = false;
-			for ( int i = 0; i < T::m_tSchema.GetFieldsCount(); i++ )
+			for ( int i = 0; i < T::m_tSchema.GetFieldsCount(); ++i )
 			{
 				m_dFieldLengths[i] = pFieldLengths[i];
 				m_dFieldHasChinese[i] = sphDetectChinese ( pFields[i], m_dFieldLengths[i] );
 				if ( m_dFieldHasChinese[i] )
-					iTotalFieldLen += PROXY_MARKER_LEN+MAX_INDEX_LEN+m_dFieldLengths[i]+3;	// _[marker]_[field_id]_[field text]
-
-				bDocHasChinese |= m_dFieldHasChinese[i];
+				{
+					bDocHasChinese = true;
+					iTotalToDecode += PROXY_MARKER_LEN+MAX_INDEX_LEN+m_dFieldLengths[i]+3;	// _[marker]_[field_id]_[field text]
+				}
 			}
 
 			// no point in caching the document if its the first document and there's nothing CJK in it
@@ -133,7 +141,7 @@ public:
 			}
 
 			int iCurDoc;
-			StoredDoc_t * pDoc = PushDoc ( iCurDoc );
+			StoredDoc_t * pDoc = Push_back ( &iCurDoc );
 			int nFields = T::m_tSchema.GetFieldsCount();
 			CopyDocInfo ( pDoc->m_tDocInfo, T::m_tDocInfo );
 			pDoc->m_dMva = T::m_dMva;
@@ -144,7 +152,7 @@ public:
 
 			// fields that don't have chinese text will be stored in those docs
 			// fields that have chinese text will be added later, after a RLP field filter pass
-			for ( int i = 0; i < T::m_tSchema.GetFieldsCount(); i++ )
+			for ( int i = 0; i < T::m_tSchema.GetFieldsCount(); ++i )
 				if ( !m_dFieldHasChinese[i] )
 				{
 					int iFieldLength = m_dFieldLengths[i];
@@ -162,12 +170,10 @@ public:
 			if ( !bDocHasChinese )
 				continue;
 
-			int iOldBufferLen = m_dDocBuffer.GetLength();
-			m_dDocBuffer.Resize ( iOldBufferLen+PROXY_MARKER_LEN+MAX_INDEX_LEN+2+iTotalFieldLen );
-			BYTE * pCurDocPtr = &(m_dDocBuffer[iOldBufferLen]);
+			BYTE * pCurDocPtr = m_dDocBuffer.AddN ( PROXY_MARKER_LEN + MAX_INDEX_LEN + 2 + iTotalToDecode);
 
 			// document start tag
-			COPY_MARKER ( pCurDocPtr, m_pMarkerDocStart );
+			APPEND_MARKER ( pCurDocPtr, m_pMarkerDocStart );
 
 			// document id
 			AddNumber ( pCurDocPtr, iCurDoc );
@@ -176,7 +182,7 @@ public:
 			for ( int i = 0; i < T::m_tSchema.GetFieldsCount(); i++ )
 				if ( m_dFieldHasChinese[i] )
 				{
-					COPY_MARKER ( pCurDocPtr, m_pMarkerFieldStart );
+					APPEND_MARKER ( pCurDocPtr, m_pMarkerFieldStart );
 
 					// field id
 					AddNumber ( pCurDocPtr, i );
@@ -214,7 +220,7 @@ public:
 			// we have a segmented field that we need to place into the appropriate cached document
 			if ( pFieldStart && pCurDoc )
 			{
-				assert ( pCurDoc && iFieldId!=-1 );
+				assert ( iFieldId!=-1 );
 
 				pCurDoc->m_dFields[iFieldId] = pFieldStart;
 				pCurDoc->m_dFieldLengths[iFieldId] = pTmp-pFieldStart;
@@ -252,7 +258,7 @@ public:
 	}
 
 
-	virtual const int *	GetFieldLengths () const
+	const int *	GetFieldLengths () const final
 	{
 		return T::m_tState.m_dFieldLengths.Begin();
 	}
@@ -271,32 +277,36 @@ private:
 	BYTE					m_pMarkerFieldStart[PROXY_MARKER_LEN];
 
 	bool					IsDocCacheEmpty() const	{ return !m_iDocCount; }
-	bool					IsDocCacheFull() const { return m_iDocCount==m_dBatchedDocs.GetLength(); }
+	bool					IsDocCacheFull() const { return m_iDocCount==g_iRLPMaxBatchDocs; }
 
-	StoredDoc_t * PushDoc ( int & iId )
+	StoredDoc_t * Push_back ( int * pId )
 	{
+		assert ( pId );
 		assert ( !IsDocCacheFull() );
 
-		iId = (m_iDocStart+m_iDocCount) % m_dBatchedDocs.GetLength();
-		m_iDocCount++;
+		*pId = (m_iDocStart+m_iDocCount) % g_iRLPMaxBatchDocs;
+		++m_iDocCount;
 
-		return &(m_dBatchedDocs[iId]);
+		return &(m_dBatchedDocs[*pId]);
 	}
 
-	StoredDoc_t * PopDoc()
+	StoredDoc_t * Pop_front ()
 	{
-		assert ( !IsDocCacheEmpty() );
+		if ( IsDocCacheEmpty() )
+			return nullptr;
 
-		StoredDoc_t * pDoc = &(m_dBatchedDocs[m_iDocStart]);
-		m_iDocStart = (m_iDocStart+1) % m_dBatchedDocs.GetLength();
-		m_iDocCount--;
+		auto * pDoc = &(m_dBatchedDocs[m_iDocStart]);
+		m_iDocStart = (m_iDocStart+1) % g_iRLPMaxBatchDocs;
+		--m_iDocCount;
 		return pDoc;
 	}
 
 	BYTE ** CopyDoc ()
 	{
-		StoredDoc_t * pDoc = PopDoc();
-		assert ( pDoc );
+		StoredDoc_t * pDoc = Pop_front ();
+		if (!pDoc )
+			return nullptr;
+
 		CopyDocInfo ( T::m_tDocInfo, pDoc->m_tDocInfo );
 		T::m_tState.m_dFields = pDoc->m_dFields.Begin();
 		T::m_tState.m_dFieldLengths.SwapData ( pDoc->m_dFieldLengths );
@@ -327,41 +337,29 @@ private:
 
 	void AddNumber ( BYTE * & pPtr, int iNumber )
 	{
-		char szTmp [256];
-		int iLen = snprintf ( szTmp, sizeof(szTmp), "%d", iNumber );
-		iLen = iLen>=0 ? iLen : sizeof(szTmp);
-		memcpy ( pPtr, szTmp, iLen );
-		pPtr += iLen;
+		sphUItoA ( ( char ** ) &pPtr, iNumber );
 	}
 
-	int ReadNumber ( BYTE * & pPtr, BYTE * pEndPtr )
+	int ReadNumber ( BYTE * & pPtr, BYTE * const pEndPtr ) // expect to read ' ', uint num, ' ' from utf8 buffer
 	{
-		int iCode = sphUTF8Decode ( (const BYTE * &)pPtr );
+		auto & pPtrc = (const BYTE *&) pPtr;
+		int iCode = sphUTF8Decode ( pPtrc );
 		assert ( iCode==' ' );
-		const BYTE * pNumber = pPtr;
-		do 
-		{
-			iCode = sphUTF8Decode ( (const BYTE * &)pPtr );
-		} while ( pPtr < pEndPtr && iCode!=' ');
-
+		int iDoc = 0;
+		for ( iCode = sphUTF8Decode ( pPtrc ); pPtrc<pEndPtr && iCode!=' '; iCode = sphUTF8Decode ( pPtrc ) )
+			iDoc = iDoc * 10 + ( iCode - '0' );
 		assert ( iCode==' ' );
-		BYTE uTmp = *pPtr;
-		*pPtr = '\0';
-		int iDoc = atoi ( (char *)pNumber );
-		*pPtr = uTmp;
-
 		return iDoc;
 	}
 };
-
 
 template<typename T>
 T * CreateSourceWithProxy ( const char * sSourceName, bool bProxy )
 {
 	if ( bProxy )
 		return new CSphSource_Proxy<T> ( sSourceName );
-	else
-		return new T ( sSourceName );
+
+	return new T ( sSourceName );
 }
 
 #else // USE_RLP

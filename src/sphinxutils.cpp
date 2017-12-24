@@ -1882,7 +1882,7 @@ void sphSetLogger ( SphLogger_fn fnLog )
 //////////////////////////////////////////////////////////////////////////
 
 template <typename Uint>
-static void UItoA ( char** ppOutput, Uint uVal, int iBase=10, int iWidth=0, int iPrec=0, const char cFill=' ' )
+static void UItoA ( char** ppOutput, Uint uVal, int iBase=10, int iWidth=0, int iPrec=0, char cFill=' ' )
 {
 	assert ( ppOutput );
 	assert ( *ppOutput );
@@ -1924,7 +1924,7 @@ static void UItoA ( char** ppOutput, Uint uVal, int iBase=10, int iWidth=0, int 
 		uVal /= iBase;
 	}
 
-	BYTE uLen = (BYTE)( uMaxIndex - (pRes-CBuf) );
+	auto uLen = (BYTE)( uMaxIndex - (pRes-CBuf) );
 
 	if ( iWidth )
 		while ( uLen < iWidth )
@@ -1947,6 +1947,10 @@ static void UItoA ( char** ppOutput, Uint uVal, int iBase=10, int iWidth=0, int 
 		*pOutput++ = *++pRes;
 }
 
+void sphUItoA ( char ** ppOutput, DWORD uVal, int iBase, int iWidth, int iPrec, char cFill )
+{
+	return UItoA ( ppOutput, uVal, iBase, iWidth, iPrec, cFill );
+}
 
 static int sphVSprintf ( char * pOutput, const char * sFmt, va_list ap )
 {

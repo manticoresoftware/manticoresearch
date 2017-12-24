@@ -115,7 +115,7 @@ common
 CREATE TABLE test_table
 (
 	id INTEGER PRIMARY KEY NOT NULL,
-	content VARCHAR(255) NOT NULL
+	content VARCHAR(255) CHARACTER SET 'utf8' NOT NULL
 )
 </db_create>
 <db_drop>DROP TABLE IF EXISTS test_table</db_drop>

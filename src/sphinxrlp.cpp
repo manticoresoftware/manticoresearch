@@ -282,19 +282,17 @@ private:
 				bAddSpace &= !sphIsSpace( *pChunkStart )
 					&& ( !bQuery || !IsSpecialQueryCode ( *pChunkStart ) )
 					&& !IsBlendChar( *pChunkStart );
-				dOut.Resize ( iResLen + tChunk.m_iLength + ( bAddSpace ? 1 : 0 ) );
-				BYTE * pOut = dOut.Begin()+iResLen;
+				BYTE * pOut = dOut.AddN ( tChunk.m_iLength + ( bAddSpace ? 1 : 0 ) );
 				if ( bAddSpace )
 					*pOut++ = ' ';
 				memcpy ( pOut, pChunkStart, tChunk.m_iLength );
 			} else
 			{
-				dOut.Resize ( iResLen + iTokenLen + ( bAddSpace ? 1 : 0 ) );
-				BYTE * pOut = dOut.Begin()+iResLen;
 				if ( iResLen )
-					bAddSpace &= ( !bQuery || !IsSpecialQueryCode ( pOut[-1] ) )
-						&& !IsBlendChar( pOut[-1] );
+					bAddSpace &= ( !bQuery || !IsSpecialQueryCode ( dOut[iResLen - 1] ) )
+						&& !IsBlendChar( dOut[iResLen - 1] );
 
+				BYTE * pOut = dOut.AddN ( iTokenLen + ( bAddSpace ? 1 : 0 ) );
 				if ( bAddSpace )
 					*pOut++ = ' ';
 
@@ -308,26 +306,17 @@ private:
 		if ( bChinese )
 		{
 			// fixme! maybe surround these chinese text chunks by spaces?
-			int iOldBufferLen = m_dCJKBuffer.GetLength();
-			m_dCJKBuffer.Resize ( iOldBufferLen+iLen );
-			BYTE * pCurDocPtr = &(m_dCJKBuffer[iOldBufferLen]);
-			memcpy ( pCurDocPtr, pStart, iLen );
+			memcpy ( m_dCJKBuffer.AddN ( iLen ), pStart, iLen );
 		} else
 		{
 			// store non-chinese content
-			int iOldBufferLen = m_dNonCJKBuffer.GetLength();
 			TextChunk_t & tChunk = m_dNonCJKChunks.Add();
-			tChunk.m_iStart = iOldBufferLen;
+			tChunk.m_iStart = m_dNonCJKBuffer.GetLength ();
 			tChunk.m_iLength = iLen;
-			m_dNonCJKBuffer.Resize ( iOldBufferLen+iLen );
-			BYTE * pNonChinesePtr = &(m_dNonCJKBuffer[iOldBufferLen]);
-			memcpy ( pNonChinesePtr, pStart, iLen );
+			memcpy ( m_dNonCJKBuffer.AddN(iLen), pStart, iLen );
 
 			// copy marker to chinese buffer
-			iOldBufferLen = m_dCJKBuffer.GetLength();
-			m_dCJKBuffer.Resize ( iOldBufferLen+PROXY_MARKER_LEN+2 ); // marker+2 spaces around it
-			BYTE * pCurDocPtr = &(m_dCJKBuffer[iOldBufferLen]);
-			COPY_MARKER ( pCurDocPtr, m_pMarkerChunkSeparator );
+			COPY_MARKER ( m_dCJKBuffer.AddN ( PROXY_MARKER_LEN + 2 ), m_pMarkerChunkSeparator );
 		}
 	}
 
@@ -366,7 +355,7 @@ private:
 
 	BYTE * GetNextTokenRLP()
 	{
-		static const char * RPL_SPECIAL_STOPWORD = "rlpspecialstopword";
+		static const char RPL_SPECIAL_STOPWORD[] = "rlpspecialstopword";
 
 		if ( !m_pTokenIterator )
 			return nullptr;
@@ -379,7 +368,7 @@ private:
 			{
 				const BT_Char16 * pToken = BT_RLP_TokenIterator_GetCompoundComponent ( m_pTokenIterator, m_iNextCompoundComponent++ );
 				if ( BT_RLP_TokenIterator_IsStopword ( m_pTokenIterator ) )
-					strncpy ( (char*)m_dUTF8Buffer, RPL_SPECIAL_STOPWORD, MAX_TOKEN_LEN );
+					strncpy ( ( char * ) m_dUTF8Buffer, RPL_SPECIAL_STOPWORD, sizeof ( RPL_SPECIAL_STOPWORD ) + 1 );
 				else
 				{
 					assert ( pToken );
@@ -407,7 +396,7 @@ private:
 				pToken = BT_RLP_TokenIterator_GetToken ( m_pTokenIterator );
 
 			if ( BT_RLP_TokenIterator_IsStopword ( m_pTokenIterator ) )
-				strncpy ( (char*)m_dUTF8Buffer, RPL_SPECIAL_STOPWORD, MAX_TOKEN_LEN );
+				strncpy ( ( char * ) m_dUTF8Buffer, RPL_SPECIAL_STOPWORD, sizeof ( RPL_SPECIAL_STOPWORD ) + 1 );
 			else
 			{
 				assert ( pToken );
@@ -513,8 +502,7 @@ int CSphFieldFilterRLP::Apply ( const BYTE * sField, int iLength, CSphVector<BYT
 		return 0;
 
 	int iStorageLength = dStorage.GetLength();
-	dStorage.Resize ( iStorageLength+4 );
-	dStorage[iStorageLength]='\0';
+	*dStorage.AddN(4) = '\0';
 
 	return iStorageLength;
 }
@@ -543,22 +531,16 @@ ISphFieldFilter * CSphFieldFilterRLP::Clone()
 
 ISphFieldFilter * sphCreateRLPFilter ( ISphFieldFilter * pParent, const char * szRLPRoot, const char * szRLPEnv, const char * szRLPCtx, const char * szBlendChars, CSphString & sError )
 {
-	auto * pFilter = new CSphFieldFilterRLP ( szRLPRoot, szRLPEnv, szRLPCtx );
+	CSphScopedPtr<CSphFieldFilterRLP> pFilter { new CSphFieldFilterRLP ( szRLPRoot, szRLPEnv, szRLPCtx ) };
 	if ( !pFilter->Init ( sError ) )
-	{
-		SafeDelete ( pFilter );
 		return pParent;
-	}
 
 	if ( szBlendChars && *szBlendChars && !pFilter->SetBlendChars ( szBlendChars, sError ) )
-	{
-		SafeDelete ( pFilter );
 		return pParent;
-	}
 
 	pFilter->SetParent ( pParent );
 
-	return pFilter;
+	return pFilter.LeakPtr ();
 }
 
 

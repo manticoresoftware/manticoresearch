@@ -3,21 +3,21 @@
 Percolate query
 ---------------
 .. note::
-   This is a newly added feature. Possible changes may occur in future updates.
+   This is a new feature, not production ready yet, just for testing purposes mostly for now. Changes will occur in future updates.
    
-The percolate query is used to match documents against queries stored in a index. It is also called "search in reverse" as it works opposite than a regular search where  documents are stored and queries are issues against the index.
+The percolate query is used to match documents against queries stored in a index. It is also called "search in reverse" as it works opposite to a regular search where documents are stored in an index and queries are issued against the index.
 
-The queries are stored in a special RealTime index and they can be added,deleted and listed using INSERT/DELETE/SELECT statements in a similar way as documents in a regular index.
+Queries are stored in a special RealTime index and they can be added, deleted and listed using INSERT/DELETE/SELECT statements similar way as it's done for a regular index.
 
-Checking  if a document  matches any of the predefined criteria is made with the ``CALL PQ`` function , which returns a list of the matched queries.
-Note that it does not add the documents in the percolate index. You still need to use another index on which you will insert the documents for performing regular searches.
+Checking if a document matches any of the predefined criterias (queries) can be done with the ``CALL PQ`` function, which returns a list of the matched queries.
+Note that it does not add documents to the percolate index. You need to use another index (regular or RealTime) in which you will insert documents to perform regular searches.
 
 .. _percolate_query_tags:
 
 Tags
 ~~~~
 
-Query might have ``tags``. ``tags`` set for query with ``INSERT`` statement. Later user might list query with specific ``tags`` with ``SELECT`` statement
+A percolate query can have ``tags``. ``tags`` can be set for the query with ``INSERT`` statement. Later on a user might list queries with specific ``tags`` with ``SELECT`` statement
 or delete query(es) with ``DELETE`` statement.
 
 .. _percolate_query_filters:
@@ -25,15 +25,15 @@ or delete query(es) with ``DELETE`` statement.
 Filters
 ~~~~~~~
 
-Query might have ``filters``. ``filters`` set for query with ``INSERT`` statement. Documents might be filtered with ``filters`` with ``CALL PQ`` statement.
+A percolate query can have ``filters``. ``filters`` are set for the query with ``INSERT`` statement. Documents can be then filtered according to the ``filters`` with ``CALL PQ`` statement.
 
 .. _percolate_query_index:
 
 Index
 ~~~~~
 
-Percolate query work only for ``percolate`` index :ref:`type <type>`. Its configuration is similar to :ref:`Real-time index <real-time_indexes>`
-however declaration of fields and attributes might been omitted, in that case index created with default field ``text`` and attribute ``gid``.
+A percolate query works only for ``percolate`` index :ref:`type <type>`. Its configuration is similar to :ref:`Real-time index <real-time_indexes>`, 
+however the declaration of fields and attributes can be omitted, in this case the index is created with default field ``text`` and attribute ``gid``.
 
 .. code-block:: ini
 
@@ -51,7 +51,7 @@ however declaration of fields and attributes might been omitted, in that case in
 INSERT
 ~~~~~~
 
-To store query ``INSERT`` statement looks like
+To store a query the ``INSERT`` statement looks like
 
 .. code-block:: sql
 
@@ -62,16 +62,16 @@ To store query ``INSERT`` statement looks like
     INSERT INTO index_name VALUES ( 'full text query terms');
 
     
-where ``tags`` and ``filters`` are optional fields. In case no schema declared for ``INSERT`` statement 1st field will be full-text ``query``
-and optional 2nd field will be ``tags``.
-``filters`` is a string and has same format as ``SphinxQL`` :ref:`WHERE <select_where>` clause.
+where ``tags`` and ``filters`` are optional fields. In case no schema declared for the ``INSERT`` statement te first field will be full-text ``query``
+and the optional second field will be ``tags``.
+``filters`` is a string and has the same format as ``SphinxQL`` :ref:`WHERE <select_where>` clause.
 
 .. _percolate_query_call:
 
 CALL PQ
 ~~~~~~~
 
-To issue documents matching ``CALL PQ`` statement looks like
+To search for queries matching a document(s) the ``CALL PQ`` statement is used which looks like
 
 .. code-block:: sql
 
@@ -80,7 +80,7 @@ To issue documents matching ``CALL PQ`` statement looks like
     CALL PQ ('index_name', ('multiple documents', 'go this way'), 0 as docs_json );
 
     
-Document at ``CALL PQ`` might be ``JSON`` encoded string or raw string. Fields and attributes mapping allowed at ``JSON`` document only.
+The document in ``CALL PQ`` can be ``JSON`` encoded string or raw string. Fields and attributes mapping are allowed for ``JSON`` documents only.
 
 .. code-block:: sql
 
@@ -91,9 +91,9 @@ Document at ``CALL PQ`` might be ``JSON`` encoded string or raw string. Fields a
     ) );
 
     
-``CALL PQ`` might have multiple options set value as ``option_name``.
+``CALL PQ`` can have multiple options set as ``option_name``.
 
-There is default values for options:
+Here are default values for the options:
 
 -  docs_json - 1 (enabled), to treat document(s) as ``JSON`` encoded string or raw string otherwise
 -  docs - 0 (disabled), to provide per query documents matched at result set
@@ -107,7 +107,7 @@ There is default values for options:
 List stored queries
 ~~~~~~~~~~~~~~~~~~~
 
-To list stored queries at index ``SELECT`` statement looks like
+To list stored queries in index the ``SELECT`` statement looks like
 
 .. code-block:: sql
 
@@ -117,11 +117,11 @@ To list stored queries at index ``SELECT`` statement looks like
     SELECT * FROM index_name WHERE uid IN (11,35,101);
 
     
-In case ``tags`` provided query will be shown if any ``tags`` from ``SELECT`` statement found at stored query. In case ``uid`` provided range or
+In case ``tags`` provided matching queries will be shown if any ``tags`` from the ``SELECT`` statement match tags in the stored query. In case ``uid`` provided range or
 value list filter will be used to filter out stored queries.
 
-``SELECT`` supports of ``count(*)`` and ``count(*) alias`` to select list of percolate query. Any values just got ignored there however ``count(*)``
-should provide total amount of queries stored.
+The ``SELECT`` supports ``count(*)`` and ``count(*) alias`` to get number of of percolate queries. Any values are just ignored there however ``count(*)``
+should provide the total amount of queries stored.
 
 .. code-block:: sql
 
@@ -139,7 +139,7 @@ should provide total amount of queries stored.
 Delete query
 ~~~~~~~~~~~~
 
-To delete stored query(es) at index ``DELETE`` statement looks like
+To delete a stored percolate query(es) in index the ``DELETE`` statement looks like
 
 .. code-block:: sql
 
@@ -148,14 +148,14 @@ To delete stored query(es) at index ``DELETE`` statement looks like
     DELETE FROM index_name WHERE tags='tags list';
 
     
-In case ``tags`` provided query will be deleted if any ``tags`` from ``DELETE`` statement found at stored query.
+In case ``tags`` provided the query will be deleted if any ``tags`` from the ``DELETE`` statement match any of its tags.
 
 .. _percolate_query_show_meta:
 
 Meta
 ~~~~
 
-Meta information keep for documents on matching call and might be retrieved with ``SHOW META`` call.
+Meta information is kept for documents on "CALL PQ" and can be retrieved with ``SHOW META`` call.
 
 ``SHOW META`` output after ``CALL PQ`` looks like
 
@@ -175,19 +175,19 @@ Meta information keep for documents on matching call and might be retrieved with
     
 With entries: 
  
--  Total - document(s) matching total time seconds 
--  Queries matched - how many stored queries matches document(s)
--  Document matches - how many times documents matches stored queries
--  Total queries stored - how many queries stored at index
--  Term only queries - how many queries are with terms. The rest of queries are with extended query syntax
+-  Total - total time spent for matching the document(s)
+-  Queries matched - how many stored queries match the document(s)
+-  Document matches - how many times the documents match the queries stored in the index
+-  Total queries stored - how many queries are stored in the index at all
+-  Term only queries - how many queries in the index have terms. The rest of the queries have extended query syntax
 
 .. _percolate_query_reconfigure:
 
 Reconfigure
 ~~~~~~~~~~~
 
-``ALTER RECONFIGURE`` command is also supported for percolate query index. It allows to reconfigure ``percolate`` index on the fly without delete
-and repopulate index with queries back.
+As well as for RealTime indexes ``ALTER RECONFIGURE`` command is also supported for percolate query index. It allows to reconfigure ``percolate`` index on the fly without deleting
+and repopulating the index with queries back.
 
 .. code-block:: sql
 
@@ -212,7 +212,7 @@ and repopulate index with queries back.
     +------+-------+------+-------------+
 
     
-Add `JSON` attribute to index config ``rt_attr_json = json_data`` then issue ``ALTER RECONFIGURE``
+Add `JSON` attribute to the index config ``rt_attr_json = json_data``, then issue ``ALTER RECONFIGURE``
 
 .. code-block:: sql
 

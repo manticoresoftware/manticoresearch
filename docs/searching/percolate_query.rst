@@ -150,6 +150,13 @@ To delete a stored percolate query(es) in index the ``DELETE`` statement looks l
     
 In case ``tags`` provided the query will be deleted if any ``tags`` from the ``DELETE`` statement match any of its tags.
 
+To delete all stored query(es) in index there is ``TRUNCATE`` statement looks like
+
+.. code-block:: sql
+
+   TRUNCATE RTINDEX index_name;
+   
+
 .. _percolate_query_show_meta:
 
 Meta
@@ -159,7 +166,7 @@ Meta information is kept for documents on "CALL PQ" and can be retrieved with ``
 
 ``SHOW META`` output after ``CALL PQ`` looks like
 
-.. code-block:: sql
+.. code-block:: none
 
 
     +-------------------------+-----------+

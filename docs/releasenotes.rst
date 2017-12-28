@@ -7,8 +7,8 @@ Version 2.6.0, 29 December 2017
 Features and improvements
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-* :ref:`HTTP JSON <httpapi_reference#json-api>`: JSON queries can now do equality on attributes, MVA and JSON attributes can be used in inserts and updates, updates and deletes via JSON API can be performed on distributed indexes
-* :ref:`Percolate Queries <searching/percolate_query>`
+* :ref:`HTTP JSON <httpapi_reference>`: JSON queries can now do equality on attributes, MVA and JSON attributes can be used in inserts and updates, updates and deletes via JSON API can be performed on distributed indexes
+* :ref:`Percolate Queries <percolate_query>`
 * Removed support for 32-bit docids from the code. Also removed all the code that converts/loads legacy indexes with 32-bit docids.
 * `Morphology only for certain fields <https://github.com/manticoresoftware/manticore/issues/7>`__ . A new index directive morphology_skip_fields allows defining a list of fields for which morphology does not apply.
 * `expand_keywords can now be a query runtime directive set using the OPTION statement <https://github.com/manticoresoftware/manticore/issues/8>`__

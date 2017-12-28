@@ -1,6 +1,28 @@
 Release notes
 =============
 
+Version 2.6.0, 29 December 2017
+-------------------------------
+
+Features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* :ref:`HTTP JSON <httpapi_reference#json-api>`: JSON queries can now do equality on attributes, MVA and JSON attributes can be used in inserts and updates, updates and deletes via JSON API can be performed on distributed indexes
+* :ref:`Percolate Queries <searching/percolate_query>`
+* Removed support for 32-bit docids from the code. Also removed all the code that converts/loads legacy indexes with 32-bit docids.
+* `Morphology only for certain fields <https://github.com/manticoresoftware/manticore/issues/7>`__ . A new index directive morphology_skip_fields allows defining a list of fields for which morphology does not apply.
+* `expand_keywords can now be a query runtime directive set using the OPTION statement <https://github.com/manticoresoftware/manticore/issues/8>`__
+
+Bugfixes
+~~~~~~~~
+
+* `0cfae4c <https://github.com/manticoresoftware/manticore/commit/0cfae4c>`__ fixed crash on debug build of daemon (and m.b. UB on release) when built with rlp
+* `324291e <https://github.com/manticoresoftware/manticore/commit/324291e>`__ fixed RT index optimize with progressive option enabled that merges kill-lists with wrong order
+* `ac0efee <https://github.com/manticoresoftware/manticore/commit/ac0efee>`__ minor crash on mac
+* lots of minor fixes after thorough static code analysis
+* other minor bugfixes
+
+
 Version 2.5.1, 23 November 2017
 -------------------------------
 

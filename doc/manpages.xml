@@ -926,7 +926,7 @@ $ searchd --config /home/myuser/sphinx.conf --status</programlisting>
 
       <refmiscinfo class="manual">Manticore Search</refmiscinfo>
 
-      <refmiscinfo class="version">2.5.1</refmiscinfo>
+      <refmiscinfo class="version">2.6.0</refmiscinfo>
     </refmeta>
 
     <refnamediv>
@@ -1046,7 +1046,7 @@ zoning &gt; zoning </programlisting></para>
 
       <refmiscinfo class="manual">Manticore Search</refmiscinfo>
 
-      <refmiscinfo class="version">2.5.1</refmiscinfo>
+      <refmiscinfo class="version">2.6.0</refmiscinfo>
     </refmeta>
 
     <refnamediv>

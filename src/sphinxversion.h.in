@@ -1,5 +1,5 @@
 // this is the main place where version number is defined
-#define VERNUMBERS "2.6.0"
+#define VERNUMBERS "2.6.1"
 
 #define SPH_GIT_COMMIT_ID "@SPH_GIT_COMMIT_ID@"
 #define GIT_TIMESTAMP_ID "@GIT_TIMESTAMP_ID@"

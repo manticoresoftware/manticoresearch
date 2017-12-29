@@ -22,6 +22,10 @@ Bugfixes
 * lots of minor fixes after thorough static code analysis
 * other minor bugfixes
 
+Upgrade
+~~~~~~~~
+
+In this release we've changed internal protocol used by masters and agents to speak with each other. In case you run Manticoresearch in a distributed environment with multiple instances make sure your first upgrade agents, then the masters.
 
 Version 2.5.1, 23 November 2017
 -------------------------------

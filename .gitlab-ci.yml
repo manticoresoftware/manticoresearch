@@ -1,9 +1,10 @@
 stages:
+  - mirroring
   - routines
   - publish
 
 pages:
-  stage: routines
+  stage: mirroring
   tags:
     - docs
     - docker
@@ -22,12 +23,13 @@ pages:
   - master
 
 job_mirror:
-  stage: routines
+  stage: mirroring
   only:
     - master
   script:
     - ~/gitsync.sh
   allow_failure: true
+
 
 simple_tests:
   stage: routines
@@ -45,6 +47,23 @@ simple_tests:
     when: always
   retry: 1
 
+
+release_tests:
+  stage: routines
+  tags:
+    - ubuntu
+    - specdocker
+  dependencies: []
+  image: registry.gitlab.com/manticoresearch/dev/ubertests:latest
+  script:
+    - ctest -V -DCTEST_BUILD_CONFIGURATION=RelWithDebInfo -S /work/gltest.cmake
+  artifacts:
+    paths:
+    - build/here
+    expire_in: 2 hrs
+    when: always
+  retry: 1
+
 push_results:
   stage: publish
   tags:
@@ -53,6 +72,7 @@ push_results:
   image: registry.gitlab.com/manticoresearch/dev/ubertests:latest
   dependencies:
     - simple_tests
+    - release_tests
   variables:
     GIT_STRATEGY: none
   script:

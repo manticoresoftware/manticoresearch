@@ -8943,6 +8943,7 @@ public:
 	CSphVector<FilterTreeItem_t> m_dFilterTree;
 	CSphVector<int>				m_dFiltersPerStmt;
 	bool						m_bGotFilterOr = false;
+	CSphString		m_sErrorHeader;
 
 public:
 	explicit		SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollation );
@@ -9095,7 +9096,7 @@ void yyerror ( SqlParser_c * pParser, const char * sMessage )
 	yylex_unhold ( pParser->m_pScanner );
 
 	// create our error message
-	pParser->m_pParseError->SetSprintf ( "sphinxql: %s near '%s'", sMessage,
+	pParser->m_pParseError->SetSprintf ( "%s %s near '%s'", pParser->m_sErrorHeader.cstr(), sMessage,
 		pParser->m_pLastTokenStart ? pParser->m_pLastTokenStart : "(null)" );
 
 	// fixup TOK_xxx thingies
@@ -9243,6 +9244,7 @@ public:
 SqlParser_c::SqlParser_c ( CSphVector<SqlStmt_t> & dStmt, ESphCollation eCollation )
 	: m_dStmt ( dStmt )
 	, m_eCollation ( eCollation )
+	, m_sErrorHeader ( "sphinxql:" )
 {
 	assert ( !m_dStmt.GetLength() );
 	PushQuery ();
@@ -12677,6 +12679,7 @@ static bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollat
 	tParser.m_pLastTokenStart = NULL;
 	tParser.m_pParseError = &sError;
 	tParser.m_eCollation = eCollation;
+	tParser.m_sErrorHeader = "percolate filters:";
 
 	char * sEnd = const_cast<char *>( sBuf.cstr() ) + iLen;
 	sEnd[0] = 0; // prepare for yy_scan_buffer
@@ -12722,7 +12725,7 @@ static bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollat
 	return ( iRes==0 );
 }
 
-static void PercolateQuery ( const SqlStmt_t & tStmt, bool bReplace, ESphCollation eCollation, SqlRowBuffer_c & tOut )
+static void PercolateQuery ( const SqlStmt_t & tStmt, bool bReplace, ESphCollation eCollation, SqlRowBuffer_c & tOut, CSphString & sWarning )
 {
 	CSphString sError;
 	int iExp = tStmt.m_iSchemaSz;
@@ -12747,6 +12750,7 @@ static void PercolateQuery ( const SqlStmt_t & tStmt, bool bReplace, ESphCollati
 	const char * sTags = NULL;
 	const char * sFilters = NULL;
 	uint64_t uID = 0;
+	StringBuilder_c sSkipColumns;
 
 	// got schema, get values
 	ARRAY_FOREACH ( i, tStmt.m_dInsertSchema )
@@ -12773,6 +12777,9 @@ static void PercolateQuery ( const SqlStmt_t & tStmt, bool bReplace, ESphCollati
 			uID = tStmt.m_dInsertValues[i].m_iVal;
 			bNoSchema = false;
 			iExpected = TOK_CONST_INT;
+		} else
+		{
+			sSkipColumns.Appendf ( "%s%s", sSkipColumns.Length() ? ", "  : "", sCol.cstr() );
 		}
 
 		if ( iExpected>=0 && iExpected!=tStmt.m_dInsertValues[i].m_iType )
@@ -12835,10 +12842,18 @@ static void PercolateQuery ( const SqlStmt_t & tStmt, bool bReplace, ESphCollati
 	bool bOk = pIndex->Query ( sQuery, sTags, &dFilters, &dFilterTree, bReplace, uID, sError );
 	pServed->Unlock();
 
+	int iWarnings = 0;
+	if ( sSkipColumns.Length() )
+	{
+		iWarnings = 1;
+		sWarning.SetSprintf ( "out of schema column(s): %s", sSkipColumns.cstr() );
+	}
+
+
 	if ( !bOk )
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 	else
-		tOut.Ok ( 1 );
+		tOut.Ok ( 1, iWarnings );
 }
 
 static void SendPercolateReply ( const PercolateMatchResult_t & tRes, const CSphString & sWarning, const CSphString & sError, SqlRowBuffer_c & tOut )
@@ -13377,7 +13392,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	if ( pServed->m_bPercolate && tOut.GetBuffer() )
 	{
 		pServed->Unlock();
-		PercolateQuery ( tStmt, bReplace, eCollation, *tOut.GetBuffer() );
+		PercolateQuery ( tStmt, bReplace, eCollation, *tOut.GetBuffer(), sWarning );
 		return;
 	}
 

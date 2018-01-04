@@ -212,6 +212,30 @@ static int				g_iAgentRetryCount = 0;
 static int				g_iAgentRetryDelay = MAX_RETRY_DELAY/2;	// global (default) values. May be override by the query options 'retry_count' and 'retry_timeout'
 bool					g_bHostnameLookup = false;
 
+struct ServiceThread_t
+{
+	SphThread_t m_tThread;
+	bool m_bCreated = false;
+	
+	~ServiceThread_t()
+	{
+		Join();
+	}
+
+	bool Create ( void (*fnThread)(void*), void * pArg )
+	{
+		m_bCreated = sphThreadCreate ( &m_tThread, fnThread, pArg, false );
+		return m_bCreated;
+	}
+
+	void Join ()
+	{
+		if ( m_bCreated )
+			sphThreadJoin ( &m_tThread );
+		m_bCreated = false;
+	}
+};
+
 enum ThdState_e
 {
 	THD_HANDSHAKE = 0,
@@ -374,24 +398,24 @@ IndexHash_c *								g_pTemplateIndexes = new IndexHash_c(); // template (tokeni
 static CSphMutex							g_tRotateQueueMutex;
 static CSphVector<CSphString>				g_dRotateQueue;
 static CSphMutex							g_tRotateConfigMutex;
-static SphThread_t							g_tRotateThread;
-static SphThread_t							g_tRotationServiceThread;
+static ServiceThread_t						g_tRotateThread;
+static ServiceThread_t						g_tRotationServiceThread;
 static volatile bool						g_bInvokeRotationService = false;
 static volatile bool						g_bNeedRotate = false;		// true if there were pending HUPs to handle (they could fly in during previous rotate)
 static volatile bool						g_bInRotate = false;		// true while we are rotating
 static CSphMutex							g_tRotateThreadMutex;
 
-static SphThread_t							g_tPingThread;
+static ServiceThread_t						g_tPingThread;
 
 static CSphVector<SphThread_t>				g_dTickPoolThread;
 
 /// flush parameters of rt indexes
-static SphThread_t							g_tRtFlushThread;
-static SphThread_t							g_tBinlogFlushThread;
+static ServiceThread_t						g_tRtFlushThread;
+static ServiceThread_t						g_tBinlogFlushThread;
 static BinlogFlushInfo_t					g_tBinlogAutoflush;
 
 // optimize thread
-static SphThread_t							g_tOptimizeThread;
+static ServiceThread_t						g_tOptimizeThread;
 static CSphMutex							g_tOptimizeQueueMutex;
 static CSphVector<CSphString>				g_dOptimizeQueue;
 static ThrottleState_t						g_tRtThrottle;
@@ -401,7 +425,7 @@ static CSphMutex							g_tPersLock;
 
 static CSphAtomic							g_iPersistentInUse;
 
-static SphThread_t							g_tBlackholeThread;
+static ServiceThread_t						g_tBlackholeThread;
 static void BlackholeAddAgents ( AgentsVector & dAgents, const IRequestBuilder_t & tReq );
 static bool HasBlackhole ( AgentsVector & dAgents );
 
@@ -466,7 +490,7 @@ static CSphMutex					g_tUservarsMutex;
 static SmallStringHash_T<Uservar_t>	g_hUservars;
 
 static volatile int64_t				g_tmSphinxqlState; // last state (uservars+udfs+...) update timestamp
-static SphThread_t					g_tSphinxqlStateFlushThread;
+static ServiceThread_t				g_tSphinxqlStateFlushThread;
 static CSphString					g_sSphinxqlState;
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1484,28 +1508,28 @@ void Shutdown ()
 		iDummy++; // to avoid gcc set but not used variable warning
 	}
 #endif
-	sphThreadJoin ( &g_tRotationServiceThread );
-	sphThreadJoin ( &g_tPingThread );
+	g_tRotationServiceThread.Join();
+	g_tPingThread.Join();
 
 	// force even long time searches to shut
 	sphInterruptNow();
 
 	// tell flush-rt thread to shutdown, and wait until it does
-	sphThreadJoin ( &g_tRtFlushThread );
+	g_tRtFlushThread.Join();
 	if ( g_tBinlogAutoflush.m_fnWork )
-		sphThreadJoin ( &g_tBinlogFlushThread );
+		g_tBinlogFlushThread.Join();
 
 	// tell rotation thread to shutdown, and wait until it does
 	if ( g_bSeamlessRotate )
 	{
-		sphThreadJoin ( &g_tRotateThread );
+		g_tRotateThread.Join();
 	}
 
 	// tell uservars flush thread to shutdown, and wait until it does
 	if ( !g_sSphinxqlState.IsEmpty() )
-		sphThreadJoin ( &g_tSphinxqlStateFlushThread );
+		g_tSphinxqlStateFlushThread.Join();
 
-	sphThreadJoin ( &g_tOptimizeThread );
+	g_tOptimizeThread.Join();
 
 	int64_t tmShutStarted = sphMicroTimer();
 	// stop search threads; up to shutdown_timeout seconds
@@ -24246,7 +24270,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	sphSetReadBuffers ( hSearchd.GetSize ( "read_buffer", 0 ), hSearchd.GetSize ( "read_unhinted", 0 ) );
 
 	// in threaded mode, create a dedicated rotation thread
-	if ( g_bSeamlessRotate && !sphThreadCreate ( &g_tRotateThread, RotationThreadFunc, 0 ) )
+	if ( g_bSeamlessRotate && !g_tRotateThread.Create ( RotationThreadFunc, 0 ) )
 		sphDie ( "failed to create rotation thread" );
 
 	// replay last binlog
@@ -24257,7 +24281,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	sphReplayBinlog ( hIndexes, uReplayFlags, DumpMemStat, g_tBinlogAutoflush );
 	hIndexes.Reset();
-	if ( g_tBinlogAutoflush.m_fnWork && !sphThreadCreate ( &g_tBinlogFlushThread, RtBinlogAutoflushThreadFunc, 0 ) )
+	if ( g_tBinlogAutoflush.m_fnWork && !g_tBinlogFlushThread.Create ( RtBinlogAutoflushThreadFunc, 0 ) )
 		sphDie ( "failed to create binlog flush thread" );
 
 	if ( g_bIOStats && !sphInitIOStats () )
@@ -24267,10 +24291,10 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	// threads mode
 	// create optimize and flush threads, and load saved sphinxql state
-	if ( !sphThreadCreate ( &g_tRtFlushThread, RtFlushThreadFunc, 0 ) )
+	if ( !g_tRtFlushThread.Create ( RtFlushThreadFunc, 0 ) )
 		sphDie ( "failed to create rt-flush thread" );
 
-	if ( !sphThreadCreate ( &g_tOptimizeThread, OptimizeThreadFunc, 0 ) )
+	if ( !g_tOptimizeThread.Create ( OptimizeThreadFunc, 0 ) )
 		sphDie ( "failed to create optimize thread" );
 
 	g_sSphinxqlState = hSearchd.GetStr ( "sphinxql_state" );
@@ -24292,17 +24316,17 @@ int WINAPI ServiceMain ( int argc, char **argv )
 			sphWarning ( "sphinxql_state flush disabled: %s", sError.cstr() );
 			g_sSphinxqlState = ""; // need to disable thread join on shutdown 
 		}
-		else if ( !sphThreadCreate ( &g_tSphinxqlStateFlushThread, SphinxqlStateThreadFunc, NULL ) )
+		else if ( !g_tSphinxqlStateFlushThread.Create ( SphinxqlStateThreadFunc, NULL ) )
 			sphDie ( "failed to create sphinxql_state writer thread" );
 	}
 
-	if ( !sphThreadCreate ( &g_tRotationServiceThread, RotationServiceThreadFunc, 0 ) )
+	if ( !g_tRotationServiceThread.Create ( RotationServiceThreadFunc, 0 ) )
 		sphDie ( "failed to create rotation service thread" );
 
-	if ( !sphThreadCreate ( &g_tPingThread, PingThreadFunc, 0 ) )
+	if ( !g_tPingThread.Create ( PingThreadFunc, 0 ) )
 		sphDie ( "failed to create ping service thread" );
 
-	if ( !sphThreadCreate ( &g_tBlackholeThread, BlackholeThreadFunc, 0 ) )
+	if ( !g_tBlackholeThread.Create ( BlackholeThreadFunc, 0 ) )
 		sphDie ( "failed to create blackhole service thread" );
 
 	if ( bForcedPreread )

@@ -10607,6 +10607,29 @@ static bool NotImplementedError ( CSphString * pError )
 	return false;
 }
 
+struct StoredQueryKey_t
+{
+	uint64_t m_uUID;
+	StoredQuery_t * m_pQuery;
+};
+
+// FindSpan vector operators
+static bool operator < ( const StoredQueryKey_t & tKey, uint64_t uUID )
+{
+	return tKey.m_uUID<uUID;
+}
+
+static bool operator == ( const StoredQueryKey_t & tKey, uint64_t uUID )
+{
+	return tKey.m_uUID==uUID;
+}
+
+static bool operator < ( uint64_t uUID, const StoredQueryKey_t & tKey )
+{
+	return uUID<tKey.m_uUID;
+}
+
+
 class PercolateIndex_c : public PercolateIndex_i
 {
 public:
@@ -10616,7 +10639,7 @@ public:
 	virtual bool AddDocument ( ISphTokenizer * pTokenizer, int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt );
 	virtual bool MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchResult_t & tResult );
 	virtual void RollBack ( ISphRtAccum * pAccExt );
-	virtual bool AddQuery ( const char * sQuery, const char * sTags, const CSphVector<CSphFilterSettings> * pFilters, const CSphVector<FilterTreeItem_t> * pFilterTree, uint64_t uId, const ISphTokenizer * pTokenizer, CSphDict * pDict, CSphString & sError );
+	virtual bool AddQuery ( const char * sQuery, const char * sTags, const CSphVector<CSphFilterSettings> * pFilters, const CSphVector<FilterTreeItem_t> * pFilterTree, bool bReplace, uint64_t uId, const ISphTokenizer * pTokenizer, CSphDict * pDict, CSphString & sError );
 	virtual int DeleteQueries ( const uint64_t * pQueries, int iCount );
 	virtual int DeleteQueries ( const char * sTags );
 	virtual bool Query ( const char * sQuery, const char * sTags, const CSphVector<CSphFilterSettings> * pFilters, const CSphVector<FilterTreeItem_t> * pFilterTree, bool bReplace, uint64_t uId, CSphString & sError );
@@ -10676,16 +10699,14 @@ public:
 
 private:
 	static const DWORD				META_HEADER_MAGIC = 0x50535451;	///< magic 'PSTQ' header
-	static const DWORD				META_VERSION = 2;				///< current version
+	static const DWORD				META_VERSION = 3;				///< current version
 
 	int								m_iLockFD;
 	CSphSourceStats					m_tStat;
 	ISphTokenizer *					m_pTokenizerIndexing;
 	int								m_iMaxCodepointLength;
 
-	uint64_t						m_uQueryID;
-
-	CSphVector<StoredQuery_t *>		m_dStored;
+	CSphVector<StoredQueryKey_t>	m_dStored;
 	CSphRwlock						m_tLock;
 
 	CSphFixedVector<StoredQuery_t>	m_dLoadedQueries;
@@ -11042,7 +11063,6 @@ PercolateIndex_c::PercolateIndex_c ( const CSphSchema & tSchema, const char * sI
 	, m_dLoadedQueries ( 0 )
 {
 	m_iLockFD = -1;
-	m_uQueryID = 1;
 
 	m_pTokenizerIndexing = NULL;
 	m_iMaxCodepointLength = 0;
@@ -11058,7 +11078,7 @@ PercolateIndex_c::~PercolateIndex_c ()
 	Verify ( m_tLock.Done () );
 	SafeDelete ( m_pTokenizerIndexing );
 	ARRAY_FOREACH ( i, m_dStored )
-		SafeDelete ( m_dStored[i] );
+		SafeDelete ( m_dStored[i].m_pQuery );
 
 	SafeClose ( m_iLockFD );
 }
@@ -11456,7 +11476,7 @@ bool PercolateIndex_c::MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchRes
 	ARRAY_FOREACH ( iQuery, m_dStored )
 	{
 		uint64_t tmQueryStart = sphMicroTimer();
-		const StoredQuery_t * pStored = m_dStored[iQuery];
+		const StoredQuery_t * pStored = m_dStored[iQuery].m_pQuery;
 		iOnlyTerms += ( pStored->m_bOnlyTerms ? 1 : 0 );
 		if ( tRes.m_bVerbose )
 		{
@@ -11610,13 +11630,6 @@ bool PercolateIndex_c::EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch
 
 bool PercolateIndex_c::Query ( const char * sQuery, const char * sTags, const CSphVector<CSphFilterSettings> * pFilters, const CSphVector<FilterTreeItem_t> * pFilterTree, bool bReplace, uint64_t uId, CSphString & sError )
 {
-	if ( bReplace && uId>0 )
-	{
-		int iDeleted = DeleteQueries ( &uId, 1 );
-		if ( !iDeleted )
-			uId = 0;
-	}
-
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( SPH_CLONE_QUERY ) );
 	sphSetupQueryTokenizer ( pTokenizer.Ptr(), IsStarDict(), m_tSettings.m_bIndexExactWords, false );
 
@@ -11633,19 +11646,11 @@ bool PercolateIndex_c::Query ( const char * sQuery, const char * sTags, const CS
 	CSphScopedPtr<CSphDict> tDictExact ( NULL );
 	pDict = SetupExactDict ( tDictExact, pDict, pTokenizer.Ptr(), true, m_tSettings.m_bIndexExactWords );
 
-	return AddQuery ( sQuery, sTags, pFilters, pFilterTree, uId, pTokenizer.Ptr(), pDict, sError );
+	return AddQuery ( sQuery, sTags, pFilters, pFilterTree, bReplace, uId, pTokenizer.Ptr(), pDict, sError );
 }
 
-// sort UID
-struct CmpStoredQuery_fn
-{
-	inline bool IsLess ( const StoredQuery_t * pA, const StoredQuery_t * pB ) const
-	{
-		return pA->m_uUID<pB->m_uUID;
-	}
-};
 
-bool PercolateIndex_c::AddQuery ( const char * sQuery, const char * sTags, const CSphVector<CSphFilterSettings> * pFilters, const CSphVector<FilterTreeItem_t> * pFilterTree, uint64_t uId, const ISphTokenizer * pTokenizer, CSphDict * pDict, CSphString & sError )
+bool PercolateIndex_c::AddQuery ( const char * sQuery, const char * sTags, const CSphVector<CSphFilterSettings> * pFilters, const CSphVector<FilterTreeItem_t> * pFilterTree, bool bReplace, uint64_t uId, const ISphTokenizer * pTokenizer, CSphDict * pDict, CSphString & sError )
 {
 	CSphVector<BYTE> dFiltered;
 	if ( m_pFieldFilter )
@@ -11692,29 +11697,45 @@ bool PercolateIndex_c::AddQuery ( const char * sQuery, const char * sTags, const
 
 	m_tLock.WriteLock();
 
-	if ( uId==0 )
-		pStored->m_uUID = m_uQueryID++;
-	m_dStored.Add ( pStored );
-	// in case id overflows at index reassign ids
-	if ( m_uQueryID==0 )
+	bool bAutoID = ( uId==0 );
+	if ( bAutoID )
+		pStored->m_uUID = m_dStored.GetLength() ? m_dStored.Last().m_uUID + 1 : 1;
+
+	StoredQueryKey_t tItem;
+	tItem.m_uUID = pStored->m_uUID;
+	tItem.m_pQuery = pStored;
+
+	bool bAdded = true;
+	if ( bAutoID )
 	{
-		m_uQueryID = 1;
-		ARRAY_FOREACH ( i, m_dStored )
-			m_dStored[i]->m_uUID = m_uQueryID++;
+		m_dStored.Add ( tItem );
+	} else
+	{
+		int iPos = FindSpan ( m_dStored, tItem.m_uUID );
+		if ( iPos==-1 )
+		{
+			m_dStored.Add ( tItem );
+
+		} else if ( m_dStored[iPos].m_uUID==tItem.m_uUID && !bReplace )
+		{
+			bAdded = false;
+			sError.SetSprintf ( "duplicate id '" UINT64_FMT "'", tItem.m_uUID );
+
+		} else if ( m_dStored[iPos].m_uUID==tItem.m_uUID && bReplace )
+		{
+			SafeDelete ( m_dStored[iPos].m_pQuery );
+			m_dStored[iPos].m_pQuery = tItem.m_pQuery;
+
+		} else
+		{
+			m_dStored.Insert ( iPos+1, tItem );
+		}
 	}
-	// put query back at id order in case of replace
-	if ( uId>0 )
-		m_dStored.Sort ( CmpStoredQuery_fn() );
 
 	m_tLock.Unlock();
 
-	return true;
+	return bAdded;
 }
-
-struct StoredQueryPred_t
-{
-	uint64_t operator () ( const StoredQuery_t * pQuery ) const { return pQuery->m_uUID; }
-};
 
 int PercolateIndex_c::DeleteQueries ( const uint64_t * pQueries, int iCount )
 {
@@ -11725,18 +11746,15 @@ int PercolateIndex_c::DeleteQueries ( const uint64_t * pQueries, int iCount )
 
 	for ( int i=0; i<iCount; i++ )
 	{
-		StoredQuery_t * const * ppElem = m_dStored.BinarySearch ( StoredQueryPred_t(), pQueries[i] );
+		const StoredQueryKey_t * ppElem = m_dStored.BinarySearch ( bind ( &StoredQueryKey_t::m_uUID ), pQueries[i] );
 		if ( ppElem )
 		{
 			int iElem = ppElem - m_dStored.Begin();
-			SafeDelete ( m_dStored[iElem] );
+			SafeDelete ( m_dStored[iElem].m_pQuery );
 			m_dStored.Remove ( iElem );
 			iDeleted++;
 		}
 	}
-
-	if ( !m_dStored.GetLength() )
-		m_uQueryID = 1;
 
 	m_tLock.Unlock();
 
@@ -11756,21 +11774,18 @@ int PercolateIndex_c::DeleteQueries ( const char * sTags )
 
 	ARRAY_FOREACH ( i, m_dStored )
 	{
-		const StoredQuery_t * pQuery = m_dStored[i];
+		const StoredQuery_t * pQuery = m_dStored[i].m_pQuery;
 		if ( !pQuery->m_dTags.GetLength() )
 			continue;
 
 		if ( TagsMatched ( dTags.Begin(), dTags.GetLength(), pQuery->m_dTags.Begin(), pQuery->m_dTags.GetLength() ) )
 		{
-			SafeDelete ( m_dStored[i] );
-			m_dStored.RemoveFast ( i );
+			SafeDelete ( m_dStored[i].m_pQuery );
+			m_dStored.Remove ( i );
 			i--;
 			iDeleted++;
 		}
 	}
-
-	if ( !m_dStored.GetLength() )
-		m_uQueryID = 1;
 
 	m_tLock.Unlock();
 
@@ -11828,7 +11843,9 @@ void PercolateIndex_c::PostSetup()
 	ARRAY_FOREACH ( i, m_dLoadedQueries )
 	{
 		const StoredQuery_t & tQuery = m_dLoadedQueries[i];
-		Verify ( AddQuery ( tQuery.m_sQuery.cstr(), tQuery.m_sTags.cstr(), &tQuery.m_dFilters, &tQuery.m_dFilterTree, 0, pTokenizer.Ptr(), pDict, sTmp ) );
+		bool bLoaded = AddQuery ( tQuery.m_sQuery.cstr(), tQuery.m_sTags.cstr(), &tQuery.m_dFilters, &tQuery.m_dFilterTree, false, tQuery.m_uUID, pTokenizer.Ptr(), pDict, sTmp );
+		if ( !bLoaded )
+			sphWarning ( "index '%s': %d (id=" UINT64_FMT ") query failed to load, ignoring", m_sIndexName.cstr(), i, tQuery.m_uUID );
 	}
 
 	m_dLoadedQueries.Reset ( 0 );
@@ -11929,6 +11946,8 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath )
 	{
 		StoredQuery_t & tQuery = m_dLoadedQueries[i];
 
+		if ( uVersion>=3 )
+			tQuery.m_uUID = rdMeta.GetOffset();
 		tQuery.m_sQuery = rdMeta.GetString();
 		if ( uVersion==1 )
 			continue;
@@ -12000,7 +12019,8 @@ void PercolateIndex_c::SaveMeta()
 
 	ARRAY_FOREACH ( i, m_dStored )
 	{
-		const StoredQuery_t * pQuery = m_dStored[i];
+		const StoredQuery_t * pQuery = m_dStored[i].m_pQuery;
+		wrMeta.PutOffset ( pQuery->m_uUID );
 		wrMeta.PutString ( pQuery->m_sQuery );
 		wrMeta.PutString ( pQuery->m_sTags );
 		wrMeta.PutDword ( pQuery->m_dFilters.GetLength() );
@@ -12060,7 +12080,7 @@ void PercolateIndex_c::GetQueries ( const char * sFilterTags, const CSphFilterSe
 
 	ARRAY_FOREACH ( i, m_dStored )
 	{
-		const StoredQuery_t * pQuery = m_dStored[i];
+		const StoredQuery_t * pQuery = m_dStored[i].m_pQuery;
 		if ( dTags.GetLength() )
 		{
 			if ( !pQuery->m_dTags.GetLength() )
@@ -12093,9 +12113,8 @@ bool PercolateIndex_c::Truncate ( CSphString & )
 {
 	m_tLock.WriteLock();
 	ARRAY_FOREACH ( i, m_dStored )
-		SafeDelete ( m_dStored[i] );
+		SafeDelete ( m_dStored[i].m_pQuery );
 	m_dStored.Reset();
-	m_uQueryID = 1;
 	m_tLock.Unlock();
 
 	SaveMeta();
@@ -12184,8 +12203,9 @@ void PercolateIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 	ARRAY_FOREACH ( i, m_dLoadedQueries )
 	{
 		StoredQuery_t & tQuery = m_dLoadedQueries[i];
-		const StoredQuery_t * pStored = m_dStored[i];
+		const StoredQuery_t * pStored = m_dStored[i].m_pQuery;
 
+		tQuery.m_uUID = pStored->m_uUID;
 		tQuery.m_sQuery = pStored->m_sQuery;
 		tQuery.m_sTags = pStored->m_sTags;
 		tQuery.m_dFilters = pStored->m_dFilters;

@@ -104,6 +104,27 @@ CREATE TABLE `test_table` (
 <sphinxql>CALL PQ ('pq_filter', ('{"title":"filter test doc1", "gid":2 }', '{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as docs_json, 1 as query )</sphinxql>
 <sphinxql>CALL PQ ('pq', ('{"title":"testik goes on"}', '{"title":"cat but not dog"}'), 1 as docs, 1 as docs_json, 1 as query )</sphinxql>
 
+<!-- query uid -->
+<sphinxql>SELECT * FROM pq</sphinxql>
+<sphinxql>INSERT INTO pq (query, tags) VALUES ( 'test 1', 'id_x1 id' )</sphinxql>
+<sphinxql>INSERT INTO pq (query, tags) VALUES ( 'test 2', 'id_x2 id' )</sphinxql>
+<sphinxql>SELECT * FROM pq</sphinxql>
+<sphinxql>DELETE FROM pq where tags='postid'</sphinxql>
+<sphinxql>SELECT * FROM pq</sphinxql>
+<sphinxql>INSERT INTO pq (query, tags) VALUES ( 'test 3', 'id_x3 id' )</sphinxql>
+<sphinxql>SELECT * FROM pq</sphinxql>
+<sphinxql>INSERT INTO pq (query, tags, id) VALUES ( 'test 4', 'id_x4 id', 8 )</sphinxql>
+<sphinxql>SELECT * FROM pq</sphinxql>
+<sphinxql>REPLACE INTO pq (query, tags, id) VALUES ( 'test 4', 'id_x4 id', 8 )</sphinxql>
+<sphinxql>SELECT * FROM pq</sphinxql>
+<sphinxql>DELETE FROM pq where id=11</sphinxql>
+<sphinxql>DELETE FROM pq where id=9</sphinxql>
+<sphinxql>SELECT * FROM pq</sphinxql>
+<sphinxql>INSERT INTO pq (query, tags, id) VALUES ( 'test 11', 'id_x11 id', 11 )</sphinxql>
+<sphinxql>SELECT * FROM pq</sphinxql>
+<sphinxql>DELETE FROM pq where tags='id'</sphinxql>
+<sphinxql>SELECT * FROM pq</sphinxql>
+
 </sphqueries>
 
 </test>

@@ -55,16 +55,19 @@ To store a query the ``INSERT`` statement looks like
 
 .. code-block:: sql
 
-
+    INSERT INTO index_name (query[, tags, filters, id]) VALUES ( query_terms, tags_list, filters, query_id );
     INSERT INTO index_name (query, tags, filters) VALUES ( 'full text query terms', 'tags', 'filters' );
     INSERT INTO index_name (query) VALUES ( 'full text query terms');
     INSERT INTO index_name VALUES ( 'full text query terms', 'tags');
     INSERT INTO index_name VALUES ( 'full text query terms');
 
     
-where ``tags`` and ``filters`` are optional fields. In case no schema declared for the ``INSERT`` statement te first field will be full-text ``query``
+where ``tags`` and ``filters`` and ``id`` are optional fields. In case no schema declared for the ``INSERT`` statement te first field will be full-text ``query``
 and the optional second field will be ``tags``.
+
 ``filters`` is a string and has the same format as ``SphinxQL`` :ref:`WHERE <select_where>` clause.
+
+To replace existed query, ``REPLACE`` statement with query ``id`` field should be used.
 
 .. _percolate_query_call:
 

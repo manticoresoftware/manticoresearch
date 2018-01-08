@@ -585,7 +585,7 @@ Query result is sent as a JSON document. Example:
       }
     }
 
--  ``took``: time in milliseconds for Elasticsearch to execute the search
+-  ``took``: time in milliseconds it took to execute the search
 -  ``timed_out``: if the query timed out or not
 -  ``hits``: search results. has the following properties:
 

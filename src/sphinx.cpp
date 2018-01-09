@@ -3388,6 +3388,8 @@ void LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tSettings
 		return;
 
 	tSettings.m_sMorphology = tReader.GetString ();
+	if ( uVersion>=43 )
+		tSettings.m_sMorphFields = tReader.GetString();
 
 	tEmbeddedFiles.m_bEmbeddedStopwords = false;
 	if ( uVersion>=30 )
@@ -3466,6 +3468,8 @@ void SaveDictionarySettings ( CSphWriter & tWriter, const CSphDict * pDict, bool
 	const CSphDictSettings & tSettings = pDict->GetSettings ();
 
 	tWriter.PutString ( tSettings.m_sMorphology.cstr () );
+	tWriter.PutString ( tSettings.m_sMorphFields.cstr() );
+
 	const CSphVector <CSphSavedFile> & dSWFileInfos = pDict->GetStopwordsFileInfos ();
 	SphOffset_t uTotalSize = 0;
 	ARRAY_FOREACH ( i, dSWFileInfos )

@@ -1195,6 +1195,7 @@ private:
 	CSphFixedVector<int64_t>	m_dFieldLens;						///< total field lengths over entire index
 	CSphFixedVector<int64_t>	m_dFieldLensRam;					///< field lengths summed over current RAM chunk
 	CSphFixedVector<int64_t>	m_dFieldLensDisk;					///< field lengths summed over all disk chunks
+	CSphBitvec					m_tMorphFields;
 
 public:
 	explicit					RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict );
@@ -1504,6 +1505,7 @@ public:
 
 	BYTE **		NextDocument ( CSphString & ) override { return m_dFields.Begin(); }
 	const int *	GetFieldLengths () const override { return m_dFieldLengths.Begin(); }
+	void		SetMorphFields ( const CSphBitvec & tMorphFields ) { m_tMorphFields = tMorphFields; }
 
 protected:
 	CSphVector<BYTE *>			m_dFields;
@@ -1609,6 +1611,7 @@ bool RtIndex_t::AddDocument ( ISphTokenizer * pTokenizer, int iFields, const cha
 	tSrc.SetTokenizer ( tTokenizer.Ptr() );
 	tSrc.SetDict ( pAcc->m_pDict );
 	tSrc.SetFieldFilter ( pFieldFilter.Ptr() );
+	tSrc.SetMorphFields ( m_tMorphFields );
 	if ( !tSrc.Connect ( m_sLastError ) )
 		return false;
 
@@ -3889,7 +3892,7 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, SphDocID_t iMinDocID, i
 	SphOffset_t iCheckpointsPosition, DWORD iInfixBlocksOffset, int iInfixCheckpointWordsSize, DWORD uKillListSize, uint64_t uMinMaxSize,
 	const ChunkStats_t & tStats ) const
 {
-	static const DWORD RT_INDEX_FORMAT_VERSION	= 42;			///< my format version
+	static const DWORD RT_INDEX_FORMAT_VERSION	= 43;			///< my format version
 
 	CSphWriter tWriter;
 	CSphString sName, sError;
@@ -4701,6 +4704,10 @@ void RtIndex_t::PostSetup()
 	ISphTokenizer * pIndexing = ISphTokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError );
 	if ( pIndexing )
 		m_pTokenizerIndexing = pIndexing;
+
+	const CSphDictSettings & tDictSettings = m_pDict->GetSettings();
+	if ( !ParseMorphFields ( tDictSettings.m_sMorphology, tDictSettings.m_sMorphFields, m_tSchema.GetFields(), m_tMorphFields, m_sLastError ) )
+		sphWarning ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );
 }
 
 

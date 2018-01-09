@@ -754,49 +754,58 @@ void OptimizeRtKlists ( const CSphString & sIndex, const CSphConfig & hConf )
 extern void sphDictBuildInfixes ( const char * sPath );
 extern void sphDictBuildSkiplists ( const char * sPath );
 
+static void ShowVersion ()
+{
+	fprintf ( stdout, SPHINX_BANNER );
+}
+
+static void ShowHelp ()
+{
+	fprintf ( stdout,
+		"Usage: indextool <COMMAND> [OPTIONS]\n"
+		"\n"
+		"Commands are:\n"
+		"--build-infixes <INDEX>\tbuild infixes for an existing dict=keywords index\n"
+		"\t\t\t(upgrades .sph, .spi in place)\n"
+		"--build-skips <INDEX>\tbuild skiplists for an existing index (builds .spe and\n"
+		"\t\t\tupgrades .sph, .spi in place)\n"
+		"--check <INDEX>\t\tperform index consistency check\n"
+		"--checkconfig\t\tperform config consistency check\n"
+		"--dumpconfig <SPH-FILE>\tdump index header in config format by file name\n"
+		"--dumpdocids <INDEX>\tdump docids by index name\n"
+		"--dumpdict <SPI-FILE>\tdump dictionary by file name\n"
+		"--dumpdict <INDEX>\tdump dictionary\n"
+		"--dumpheader <SPH-FILE>\tdump index header by file name\n"
+		"--dumpheader <INDEX>\tdump index header by index name\n"
+		"--dumphitlist <INDEX> <KEYWORD>\n"
+		"--dumphitlist <INDEX> --wordid <ID>\n"
+		"\t\t\tdump hits for a given keyword\n"
+		"--fold <INDEX> [FILE]\tfold FILE or stdin using INDEX charset_table\n"
+		"--htmlstrip <INDEX>\tfilter stdin using index HTML stripper settings\n"
+		"--optimize-rt-klists <INDEX>\n"
+		"\t\t\toptimize kill list memory use in RT index disk chunks;\n"
+		"\t\t\teither for a given index or --all\n"
+		"--buildidf <INDEX1.dict> [INDEX2.dict ...] [--skip-uniq] --out <GLOBAL.idf>\n"
+		"\t\t\tjoin --stats dictionary dumps into global.idf file\n"
+		"--mergeidf <NODE1.idf> [NODE2.idf ...] [--skip-uniq] --out <GLOBAL.idf>\n"
+		"\t\t\tmerge several .idf files into one file\n"
+		"\n"
+		"Options are:\n"
+		"-c, --config <file>\tuse given config file instead of defaults\n"
+		"-q, --quiet\t\tbe quiet, skip banner etc (useful with --fold etc)\n"
+		"--strip-path\t\tstrip path from filenames referenced by index\n"
+		"\t\t\t(eg. stopwords, exceptions, etc)\n"
+		"--stats\t\t\tshow total statistics in the dictionary dump\n"
+		"--skip-uniq\t\tskip unique (df=1) words in the .idf files\n"
+	);
+}
 
 int main ( int argc, char ** argv )
 {
 	if ( argc<=1 )
 	{
-		fprintf ( stdout, SPHINX_BANNER );
-		fprintf ( stdout,
-			"Usage: indextool <COMMAND> [OPTIONS]\n"
-			"\n"
-			"Commands are:\n"
-			"--build-infixes <INDEX>\tbuild infixes for an existing dict=keywords index\n"
-			"\t\t\t(upgrades .sph, .spi in place)\n"
-			"--build-skips <INDEX>\tbuild skiplists for an existing index (builds .spe and\n"
-			"\t\t\tupgrades .sph, .spi in place)\n"
-			"--check <INDEX>\t\tperform index consistency check\n"
-			"--checkconfig\t\tperform config consistency check\n"
-			"--dumpconfig <SPH-FILE>\tdump index header in config format by file name\n"
-			"--dumpdocids <INDEX>\tdump docids by index name\n"
-			"--dumpdict <SPI-FILE>\tdump dictionary by file name\n"
-			"--dumpdict <INDEX>\tdump dictionary\n"
-			"--dumpheader <SPH-FILE>\tdump index header by file name\n"
-			"--dumpheader <INDEX>\tdump index header by index name\n"
-			"--dumphitlist <INDEX> <KEYWORD>\n"
-			"--dumphitlist <INDEX> --wordid <ID>\n"
-			"\t\t\tdump hits for a given keyword\n"
-			"--fold <INDEX> [FILE]\tfold FILE or stdin using INDEX charset_table\n"
-			"--htmlstrip <INDEX>\tfilter stdin using index HTML stripper settings\n"
-			"--optimize-rt-klists <INDEX>\n"
-			"\t\t\toptimize kill list memory use in RT index disk chunks;\n"
-			"\t\t\teither for a given index or --all\n"
-			"--buildidf <INDEX1.dict> [INDEX2.dict ...] [--skip-uniq] --out <GLOBAL.idf>\n"
-			"\t\t\tjoin --stats dictionary dumps into global.idf file\n"
-			"--mergeidf <NODE1.idf> [NODE2.idf ...] [--skip-uniq] --out <GLOBAL.idf>\n"
-			"\t\t\tmerge several .idf files into one file\n"
-			"\n"
-			"Options are:\n"
-			"-c, --config <file>\tuse given config file instead of defaults\n"
-			"-q, --quiet\t\tbe quiet, skip banner etc (useful with --fold etc)\n"
-			"--strip-path\t\tstrip path from filenames referenced by index\n"
-			"\t\t\t(eg. stopwords, exceptions, etc)\n"
-			"--stats\t\t\tshow total statistics in the dictionary dump\n"
-			"--skip-uniq\t\tskip unique (df=1) words in the .idf files\n"
-		);
+		ShowVersion();
+		ShowHelp();
 		exit ( 0 );
 	}
 
@@ -846,6 +855,8 @@ int main ( int argc, char ** argv )
 		if ( argv[i][0]!='-' ) break;
 		OPT ( "-q", "--quiet" )		{ bQuiet = true; continue; }
 		OPT1 ( "--strip-path" )		{ bStripPath = true; continue; }
+		OPT1 ( "-v" )				{ ShowVersion(); exit(0); }
+		OPT ( "-h", "--help" )		{ ShowVersion(); ShowHelp(); exit(0); }
 
 		// handle options/commands with 1+ args
 		if ( (i+1)>=argc )			break;

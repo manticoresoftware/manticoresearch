@@ -23662,6 +23662,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		// handle no-arg options
 		OPT ( "-h", "--help" )		{ ShowHelp(); return 0; }
 		OPT ( "-?", "--?" )			{ ShowHelp(); return 0; }
+		OPT1 ( "-v" )				{ return 0; }
 		OPT1 ( "--console" )		{ g_bOptNoLock = true; g_bOptNoDetach = true; bTestMode = true; }
 		OPT1 ( "--stop" )			bOptStop = true;
 		OPT1 ( "--stopwait" )		{ bOptStop = true; bOptStopWait = true; }

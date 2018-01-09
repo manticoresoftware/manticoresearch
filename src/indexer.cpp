@@ -1564,6 +1564,60 @@ bool SendRotate ( const CSphConfig & hConf, bool bForce )
 	return true;
 }
 
+static void ShowVersion ()
+{
+	fprintf ( stdout, SPHINX_BANNER );
+}
+
+static void ShowHelp ()
+{
+	fprintf ( stdout,
+#ifdef COMPILER
+		"Built by gcc/clang v " COMPILER ",\n\n"
+#endif
+#ifdef OS_UNAME
+		"Built on " OS_UNAME "\n\n"
+#endif
+#ifdef CONFIGURE_FLAGS
+		CONFIGURE_FLAGS "\n\n"
+#endif
+		"Usage: indexer [OPTIONS] [indexname1 [indexname2 [...]]]\n"
+		"\n"
+		"Options are:\n"
+		"--config <file>\t\tread configuration from specified file\n"
+		"\t\t\t(default is sphinx.conf)\n"
+		"--all\t\t\treindex all configured indexes\n"
+		"--quiet\t\t\tbe quiet, only print errors\n"
+		"--verbose\t\tverbose indexing issues report\n"
+		"--noprogress\t\tdo not display progress\n"
+		"\t\t\t(automatically on if output is not to a tty)\n"
+		"--rotate\t\tsend SIGHUP to searchd when indexing is over\n"
+		"\t\t\tto rotate updated indexes automatically\n"
+		"--sighup-each\t\tsend SIGHUP to searchd after each index\n"
+		"\t\t\t(used with --rotate only)\n"
+		"--buildstops <output.txt> <N>\n"
+		"\t\t\tbuild top N stopwords and write them to given file\n"
+		"--buildfreqs\t\tstore words frequencies to output.txt\n"
+		"\t\t\t(used with --buildstops only)\n"
+		"--merge <dst-index> <src-index>\n"
+		"\t\t\tmerge 'src-index' into 'dst-index'\n"
+		"\t\t\t'dst-index' will receive merge result\n"
+		"\t\t\t'src-index' will not be modified\n"
+		"--merge-dst-range <attr> <min> <max>\n"
+		"\t\t\tfilter 'dst-index' on merge, keep only those documents\n"
+		"\t\t\twhere 'attr' is between 'min' and 'max' (inclusive)\n"
+		"--merge-klists\n"
+		"--merge-killlists\tmerge src and dst k-lists (default is to discard them\n"
+		"\t\t\tafter merge; note that src k-list applies anyway)\n"
+		"--dump-rows <FILE>\tdump indexed rows into FILE\n"
+		"--print-queries\t\tprint SQL queries (for debugging)\n"
+		"--keep-attrs\t\tretain attributes from the old index"
+		"\n"
+		"Examples:\n"
+		"indexer --quiet myidx1\treindex 'myidx1' defined in 'sphinx.conf'\n"
+		"indexer --all\t\treindex all indexes defined in 'sphinx.conf'\n" );
+}
+
 
 int main ( int argc, char ** argv )
 {
@@ -1674,22 +1728,30 @@ int main ( int argc, char ** argv )
 		{
 			g_bPrintQueries = true;
 
-		} else if ( strcasecmp ( argv[i], "--keep-attrs" )>=0 )
+		} else if ( strncmp ( argv[i], "--keep-attrs", sizeof ( "--keep-attrs" )-1 )==0 )
 		{
-			CSphString sArg ( argv[i] );
-			if ( sArg.Begins ( "--keep-attrs=" ) )
+			if ( strncmp ( argv[i], "--keep-attrs=", sizeof ( "--keep-attrs=" )-1 )==0 )
 			{
 				int iKeyLen = sizeof ( "--keep-attrs=" )-1;
-				g_sKeepAttrsPath = sArg.cstr() + iKeyLen;
+				g_sKeepAttrsPath = argv[i] + iKeyLen;
 			}
-			if ( sArg.Begins ( "--keep-attrs-names=" ) )
+			if ( strncmp ( argv[i], "--keep-attrs-names=", sizeof ( "--keep-attrs-names=" )-1 )==0 )
 			{
 				int iKeyLen = sizeof ( "--keep-attrs-names=" )-1;
-				sphSplit ( g_dKeepAttrs, sArg.cstr() + iKeyLen, "," );
+				sphSplit ( g_dKeepAttrs, argv[i] + iKeyLen, "," );
 			}
 
 			g_bKeepAttrs = true;
 
+		} else if ( strcasecmp ( argv[i], "-h" )==0 || strcasecmp ( argv[i], "--help" )==0 )
+		{
+			ShowVersion();
+			ShowHelp();
+			return 0;
+		} else if ( strcasecmp ( argv[i], "-v" )==0 )
+		{
+			ShowVersion();
+			return 0;
 		} else
 		{
 			break;
@@ -1697,7 +1759,7 @@ int main ( int argc, char ** argv )
 	}
 
 	if ( !g_bQuiet )
-		fprintf ( stdout, SPHINX_BANNER );
+		ShowVersion();
 
 	const char* sEndian = sphCheckEndian();
 	if ( sEndian )
@@ -1717,51 +1779,7 @@ int main ( int argc, char ** argv )
 
 		} else
 		{
-			fprintf ( stdout,
-#ifdef COMPILER
-				"Built by gcc/clang v " COMPILER ",\n\n"
-#endif
-#ifdef OS_UNAME
-				"Built on " OS_UNAME "\n\n"
-#endif
-#ifdef CONFIGURE_FLAGS
-				CONFIGURE_FLAGS "\n\n"
-#endif
-				"Usage: indexer [OPTIONS] [indexname1 [indexname2 [...]]]\n"
-				"\n"
-				"Options are:\n"
-				"--config <file>\t\tread configuration from specified file\n"
-				"\t\t\t(default is sphinx.conf)\n"
-				"--all\t\t\treindex all configured indexes\n"
-				"--quiet\t\t\tbe quiet, only print errors\n"
-				"--verbose\t\tverbose indexing issues report\n"
-				"--noprogress\t\tdo not display progress\n"
-				"\t\t\t(automatically on if output is not to a tty)\n"
-				"--rotate\t\tsend SIGHUP to searchd when indexing is over\n"
-				"\t\t\tto rotate updated indexes automatically\n"
-				"--sighup-each\t\tsend SIGHUP to searchd after each index\n"
-				"\t\t\t(used with --rotate only)\n"
-				"--buildstops <output.txt> <N>\n"
-				"\t\t\tbuild top N stopwords and write them to given file\n"
-				"--buildfreqs\t\tstore words frequencies to output.txt\n"
-				"\t\t\t(used with --buildstops only)\n"
-				"--merge <dst-index> <src-index>\n"
-				"\t\t\tmerge 'src-index' into 'dst-index'\n"
-				"\t\t\t'dst-index' will receive merge result\n"
-				"\t\t\t'src-index' will not be modified\n"
-				"--merge-dst-range <attr> <min> <max>\n"
-				"\t\t\tfilter 'dst-index' on merge, keep only those documents\n"
-				"\t\t\twhere 'attr' is between 'min' and 'max' (inclusive)\n"
-				"--merge-klists\n"
-				"--merge-killlists\tmerge src and dst k-lists (default is to discard them\n"
-				"\t\t\tafter merge; note that src k-list applies anyway)\n"
-				"--dump-rows <FILE>\tdump indexed rows into FILE\n"
-				"--print-queries\t\tprint SQL queries (for debugging)\n"
-				"--keep-attrs\t\tretain attributes from the old index"
-				"\n"
-				"Examples:\n"
-				"indexer --quiet myidx1\treindex 'myidx1' defined in 'sphinx.conf'\n"
-				"indexer --all\t\treindex all indexes defined in 'sphinx.conf'\n" );
+			ShowHelp();
 		}
 
 		return 1;

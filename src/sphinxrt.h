@@ -118,12 +118,14 @@ struct PercolateQueryDesc
 	CSphString m_sQuery;
 	CSphString m_sTags;
 	CSphString m_sFilters;
+	bool m_bQL;
 };
 
 struct PercolateMatchResult_t
 {
 	bool m_bGetDocs;
 	bool m_bGetQuery;
+	bool m_bGetFilters;
 
 	CSphVector<uint64_t> m_dQueries;
 	CSphVector<PercolateQueryDesc> m_dQueryDesc;
@@ -151,7 +153,7 @@ public:
 	virtual bool	MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchResult_t & tResult ) = 0;
 	virtual int		DeleteQueries ( const uint64_t * pQueries, int iCount ) = 0;
 	virtual int		DeleteQueries ( const char * sTags ) = 0;
-	virtual bool	Query ( const char * sQuery, const char * sTags, const CSphVector<CSphFilterSettings> * pFilters, const CSphVector<FilterTreeItem_t> * pFilterTree, bool bReplace, uint64_t uId, CSphString & sError ) = 0;
+	virtual bool	Query ( const char * sQuery, const char * sTags, const CSphVector<CSphFilterSettings> * pFilters, const CSphVector<FilterTreeItem_t> * pFilterTree, bool bReplace, bool bQL, uint64_t & uId, CSphString & sError ) = 0;
 
 	virtual void	GetQueries ( const char * sFilterTags, const CSphFilterSettings * pUID, CSphVector<PercolateQueryDesc> & dQueries ) = 0;
 
@@ -162,6 +164,9 @@ public:
 /// percolate query index factory
 PercolateIndex_i * CreateIndexPercolate ( const CSphSchema & tSchema, const char * sIndexName, const char * sPath );
 void FixPercolateSchema ( CSphSchema & tSchema );
+
+typedef const QueryParser_i * CreateQueryParser ( bool bJson );
+void SetPercolateQueryParserFactory ( CreateQueryParser * pCall );
 
 //////////////////////////////////////////////////////////////////////////
 

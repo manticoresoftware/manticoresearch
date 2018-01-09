@@ -932,6 +932,7 @@ enum ESphHttpEndpoint
 	SPH_HTTP_ENDPOINT_JSON_UPDATE,
 	SPH_HTTP_ENDPOINT_JSON_DELETE,
 	SPH_HTTP_ENDPOINT_JSON_BULK,
+	SPH_HTTP_ENDPOINT_PQ,
 
 	SPH_HTTP_ENDPOINT_TOTAL
 };
@@ -945,7 +946,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const QueryParserFactory
 void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const QueryParserFactory_i & tQueryParserFactory, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit, CSphSessionAccum & tAcc, int iCID );
 
 bool				sphLoopClientHttp ( const BYTE * pRequest, int iRequestLen, CSphVector<BYTE> & dResult, int iCID );
-bool				sphProcessHttpQuery ( ESphHttpEndpoint eEndpoint, const CSphString & sQuery, const SmallStringHash_T<CSphString> & tOptions, int iCID, CSphVector<BYTE> & dResult, bool bNeedHttpResponse=false );
+bool				sphProcessHttpQueryNoResponce ( ESphHttpEndpoint eEndpoint, const CSphString & sQuery, const SmallStringHash_T<CSphString> & tOptions, int iCID, CSphVector<BYTE> & dResult );
 void				sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError );
 ESphHttpEndpoint	sphStrToHttpEndpoint ( const CSphString & sEndpoint );
 CSphString			sphHttpEndpointToStr ( ESphHttpEndpoint eEndpoint );
@@ -955,6 +956,8 @@ int sphGetTokTypeInt();
 int sphGetTokTypeFloat();
 int sphGetTokTypeStr();
 int sphGetTokTypeConstMVA();
+
+bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, CSphVector<CSphFilterSettings> & dFilters, CSphVector<FilterTreeItem_t> & dFilterTree, CSphString & sError );
 
 
 #endif // _searchdaemon_

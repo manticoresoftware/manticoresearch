@@ -716,6 +716,11 @@ XQNode_t * QueryParserJson_c::ConstructNode ( XQNode_t * pParent, const cJSON * 
 	return nullptr;
 }
 
+bool NonEmptyQuery ( const cJSON * pQuery )
+{
+	return ( cJSON_HasObjectItem ( pQuery, "match" ) || cJSON_HasObjectItem ( pQuery, "match_phrase" ) || cJSON_HasObjectItem ( pQuery, "bool" ) );
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 struct LocationField_t
@@ -1274,7 +1279,7 @@ QueryParser_i * sphCreateJsonQueryParser()
 }
 
 
-static bool ParseJsonQueryFilters ( cJSON * pQuery, CSphQuery & tQuery, CSphString & sError, CSphString & sWarning )
+bool ParseJsonQueryFilters ( const cJSON * pQuery, CSphQuery & tQuery, CSphString & sError, CSphString & sWarning )
 {
 	if ( pQuery && !cJSON_IsObject ( pQuery ) )
 	{	

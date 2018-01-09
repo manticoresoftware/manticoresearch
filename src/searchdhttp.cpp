@@ -287,6 +287,7 @@ public:
 	const CSphString &		GetInvalidEndpoint() const { return m_sInvalidEndpoint; }
 	const char *			GetError() const { return m_szError; }
 	bool					GetKeepAlive() const { return m_bKeepAlive; }
+	http_method				GetRequestType() const { return m_eType; }
 
 	static int				ParserUrl ( http_parser * pParser, const char * sAt, size_t iLen );
 	static int				ParserHeaderField ( http_parser * pParser, const char * sAt, size_t iLen );
@@ -301,6 +302,8 @@ private:
 	CSphString				m_sRawBody;
 	CSphString				m_sCurField;
 	OptionsHash_t			m_hOptions;
+	CSphString				m_sEndpoint;
+	http_method				m_eType = HTTP_GET;
 };
 
 
@@ -325,6 +328,9 @@ bool HttpRequestParser_c::Parse ( const BYTE * pData, int iDataLen )
 
 	// connection wide http options
 	m_bKeepAlive = ( http_should_keep_alive ( &tParser )!=0 );
+	// transfer endpoint for further parse
+	m_hOptions.Add ( m_sEndpoint, "endpoint" );
+	m_eType = (http_method)tParser.method;
 
 	return true;
 }
@@ -422,7 +428,9 @@ int HttpRequestParser_c::ParserUrl ( http_parser * pParser, const char * sAt, si
 			iPathLen--;
 		}
 
-		CSphString sEndpoint ( sPath, iPathLen );
+		// URL should be split fully to point to proper endpoint 
+		CSphString & sEndpoint = ( (HttpRequestParser_c *)pParser->data )->m_sEndpoint;
+		sEndpoint.SetBinary ( sPath, iPathLen );
 		ESphHttpEndpoint eEndpoint = sphStrToHttpEndpoint ( sEndpoint );
 		( (HttpRequestParser_c *)pParser->data )->m_eEndpoint = eEndpoint;
 		if ( eEndpoint==SPH_HTTP_ENDPOINT_TOTAL )
@@ -715,14 +723,46 @@ protected:
 		}
 	}
 
-	void BuildReply ( const CSphString & sResult, ESphHttpStatus eStatus )
+	void FormatError ( ESphHttpStatus eStatus, const char * sError, ... )
 	{
+		char sBuf[1024] = {0};
+		va_list ap;
+
+		va_start ( ap, sError );
+		int iPrinted = vsnprintf ( sBuf, sizeof(sBuf), sError, ap );
+		va_end ( ap );
+
+		iPrinted = Max ( 0, iPrinted );
+		iPrinted = Min ( iPrinted, (int)sizeof(sBuf)-1 );
+		sBuf[iPrinted] = '\0';
+
 		if ( m_bNeedHttpResponse )
-			HttpBuildReply ( m_dData, eStatus, sResult.cstr(), sResult.Length(), false );
+			HttpErrorReply ( m_dData, eStatus, sBuf );
 		else
 		{
-			m_dData.Resize ( sResult.Length()+1 );
-			memcpy ( m_dData.Begin(), sResult.cstr(), m_dData.GetLength() );
+			m_dData.Resize ( iPrinted+1 );
+			memcpy ( m_dData.Begin(), sBuf, iPrinted );
+		}
+	}
+
+	void BuildReply ( const CSphString & sResult, ESphHttpStatus eStatus )
+	{
+		BuildReply ( sResult.cstr(), sResult.Length(), eStatus );
+	}
+
+	void BuildReply ( const StringBuilder_c & sResult, ESphHttpStatus eStatus )
+	{
+		BuildReply ( sResult.cstr(), sResult.Length(), eStatus );
+	}
+
+	void BuildReply ( const char * sResult, int iLen, ESphHttpStatus eStatus )
+	{
+		if ( m_bNeedHttpResponse )
+			HttpBuildReply ( m_dData, eStatus, sResult, iLen, false );
+		else
+		{
+			m_dData.Resize ( iLen+1 );
+			memcpy ( m_dData.Begin(), sResult, m_dData.GetLength() );
 		}
 	}
 };
@@ -1180,8 +1220,27 @@ private:
 	}
 };
 
+class HttpHandlerPQ_c : public HttpHandler_c
+{
+public:	
+	HttpHandlerPQ_c (  const CSphString & sQuery, int iCID, bool bNeedHttpResponse, const OptionsHash_t & tOptions )
+		: HttpHandler_c ( sQuery, iCID, bNeedHttpResponse )
+		, m_tOptions ( tOptions )
+	{}
 
-static HttpHandler_c * CreateHttpHandler ( ESphHttpEndpoint eEndpoint, const CSphString & sQuery, const OptionsHash_t & tOptions, int iCID, bool bNeedHttpResonse )
+	virtual bool Process () override;
+
+private:
+	const OptionsHash_t & m_tOptions;
+
+	bool GotDocuments ( PercolateIndex_i * pIndex, const CSphString & sIndex, const cJSON * pPercolate );
+	bool GotQuery ( PercolateIndex_i * pIndex, const CSphString & sIndex, const cJSON * pQuery, const cJSON * pRoot, CSphString * pUID, bool bReplace );
+	bool ListQueries ( PercolateIndex_i * pIndex, const CSphString & sIndex );
+	bool Delete ( PercolateIndex_i * pIndex, const CSphString & sIndex, const cJSON * pRoot );
+};
+
+
+static HttpHandler_c * CreateHttpHandler ( ESphHttpEndpoint eEndpoint, const CSphString & sQuery, const OptionsHash_t & tOptions, int iCID, bool bNeedHttpResonse, http_method eRequestType )
 {
 	switch ( eEndpoint )
 	{
@@ -1209,6 +1268,9 @@ static HttpHandler_c * CreateHttpHandler ( ESphHttpEndpoint eEndpoint, const CSp
 	case SPH_HTTP_ENDPOINT_JSON_BULK:
 		return new HttpHandler_JsonBulk_c ( sQuery, tOptions, iCID, bNeedHttpResonse );
 
+	case SPH_HTTP_ENDPOINT_PQ:
+		return new HttpHandlerPQ_c ( sQuery, iCID, bNeedHttpResonse, tOptions );
+
 	default:
 		break;
 	}
@@ -1217,15 +1279,21 @@ static HttpHandler_c * CreateHttpHandler ( ESphHttpEndpoint eEndpoint, const CSp
 }
 
 
-bool sphProcessHttpQuery ( ESphHttpEndpoint eEndpoint, const CSphString & sQuery, const SmallStringHash_T<CSphString> & tOptions, int iCID, CSphVector<BYTE> & dResult, bool bNeedHttpResponse )
+static bool sphProcessHttpQuery ( ESphHttpEndpoint eEndpoint, const CSphString & sQuery, const SmallStringHash_T<CSphString> & tOptions, int iCID, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType )
 {
-	CSphScopedPtr<HttpHandler_c> pHandler ( CreateHttpHandler ( eEndpoint, sQuery, tOptions, iCID, bNeedHttpResponse ) );
+	CSphScopedPtr<HttpHandler_c> pHandler ( CreateHttpHandler ( eEndpoint, sQuery, tOptions, iCID, bNeedHttpResponse, eRequestType ) );
 	if ( !pHandler.Ptr() )
 		return false;
 
 	pHandler->Process();
 	dResult = std::move ( pHandler->GetResult() );
 	return true;
+}
+
+
+bool sphProcessHttpQueryNoResponce ( ESphHttpEndpoint eEndpoint, const CSphString & sQuery, const SmallStringHash_T<CSphString> & tOptions, int iCID, CSphVector<BYTE> & dResult )
+{
+	return sphProcessHttpQuery ( eEndpoint, sQuery, tOptions, iCID, dResult, false, HTTP_GET );
 }
 
 
@@ -1239,7 +1307,7 @@ bool sphLoopClientHttp ( const BYTE * pRequest, int iRequestLen, CSphVector<BYTE
 	}
 
 	ESphHttpEndpoint eEndpoint = tParser.GetEndpoint();
-	if ( !sphProcessHttpQuery ( eEndpoint, tParser.GetBody(), tParser.GetOptions(), iCID, dResult, true ) )
+	if ( !sphProcessHttpQuery ( eEndpoint, tParser.GetBody(), tParser.GetOptions(), iCID, dResult, true, tParser.GetRequestType() ) )
 	{
 		if ( eEndpoint==SPH_HTTP_ENDPOINT_INDEX )
 			HttpHandlerIndexPage ( dResult );
@@ -1261,11 +1329,14 @@ void sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const c
 }
 
 
-const char * g_dEndpoints[] = { "index.html", "search", "sql", "json/search", "json/index", "json/create", "json/insert", "json/replace", "json/update", "json/delete", "json/bulk" };
+const char * g_dEndpoints[] = { "index.html", "search", "sql", "json/search", "json/index", "json/create", "json/insert", "json/replace", "json/update", "json/delete", "json/bulk", "json/pq" };
 STATIC_ASSERT ( sizeof(g_dEndpoints)/sizeof(g_dEndpoints[0])==SPH_HTTP_ENDPOINT_TOTAL, SPH_HTTP_ENDPOINT_SHOULD_BE_SAME_AS_SPH_HTTP_ENDPOINT_TOTAL );
 
 ESphHttpEndpoint sphStrToHttpEndpoint ( const CSphString & sEndpoint )
 {
+	if ( sEndpoint.Begins ( g_dEndpoints[SPH_HTTP_ENDPOINT_PQ] ) )
+		return SPH_HTTP_ENDPOINT_PQ;
+
 	for ( int i = 0; i < SPH_HTTP_ENDPOINT_TOTAL; i++ )
 		if ( sEndpoint==g_dEndpoints[i] )
 			return ESphHttpEndpoint(i);
@@ -1279,3 +1350,636 @@ CSphString sphHttpEndpointToStr ( ESphHttpEndpoint eEndpoint )
 	assert ( eEndpoint>=SPH_HTTP_ENDPOINT_INDEX && eEndpoint<SPH_HTTP_ENDPOINT_TOTAL );
 	return g_dEndpoints[eEndpoint];
 }
+
+class ScopedJson_c
+{
+	cJSON * m_pPtr = nullptr;
+public:
+	explicit ScopedJson_c ( cJSON * pPtr  )
+		: m_pPtr ( pPtr )
+	{}
+
+	cJSON * Ptr() const { return m_pPtr; }
+	cJSON * operator -> () const { return m_pPtr; }
+
+	~ScopedJson_c()
+	{
+		if ( m_pPtr )
+			cJSON_Delete ( m_pPtr );
+		m_pPtr = nullptr;
+	}
+};
+
+class ScopedIndex_c
+{
+	ServedIndex_c * m_pPtr = nullptr;
+
+public:
+	explicit ScopedIndex_c ( ServedIndex_c * pIndex  )
+		: m_pPtr ( pIndex )
+	{}
+
+	ServedIndex_c * Ptr() const { return m_pPtr; }
+	ServedIndex_c * operator -> () const { return m_pPtr; }
+
+	~ScopedIndex_c()
+	{
+		if ( m_pPtr )
+			m_pPtr->Unlock();
+		m_pPtr = nullptr;
+	}
+};
+
+struct SourceMatch_c : public CSphMatch
+{
+	static SphAttr_t ToInt ( const cJSON * pVal )
+	{
+		if ( cJSON_IsNumber ( pVal ) )
+			return int ( pVal->valuedouble );
+		else if ( cJSON_IsInteger ( pVal ) )
+			return int ( pVal->valueint );
+		else
+			return strtoul ( pVal->valuestring, NULL, 10 );
+	}
+
+	inline static SphAttr_t ToBigInt ( const cJSON * pVal )
+	{
+		if ( cJSON_IsNumber ( pVal ) )
+			return int ( pVal->valuedouble );
+		else if ( cJSON_IsInteger ( pVal ) )
+			return int ( pVal->valueint );
+		else
+			return strtoll ( pVal->valuestring, NULL, 10 );
+	}
+
+	bool SetAttr ( const CSphAttrLocator & tLoc, const cJSON * pVal, ESphAttr eTargetType )
+	{
+		switch ( eTargetType )
+		{
+			case SPH_ATTR_INTEGER:
+			case SPH_ATTR_TIMESTAMP:
+			case SPH_ATTR_BOOL:
+			case SPH_ATTR_TOKENCOUNT:
+				CSphMatch::SetAttr ( tLoc, ToInt ( pVal ) );
+				break;
+			case SPH_ATTR_BIGINT:
+				CSphMatch::SetAttr ( tLoc, ToBigInt ( pVal ) );
+				break;
+			case SPH_ATTR_FLOAT:
+				if ( cJSON_IsNumber ( pVal ) )
+					SetAttrFloat ( tLoc, (float)pVal->valuedouble );
+				else if ( cJSON_IsInteger ( pVal ) )
+					SetAttrFloat ( tLoc, (float)pVal->valueint );
+				else
+					SetAttrFloat ( tLoc, (float)strtod ( pVal->valuestring, NULL ) ); // FIXME? report conversion error?
+				break;
+			case SPH_ATTR_STRING:
+			case SPH_ATTR_UINT32SET:
+			case SPH_ATTR_INT64SET:
+			case SPH_ATTR_JSON:
+				CSphMatch::SetAttr ( tLoc, 0 );
+				break;
+			default:
+				return false;
+		};
+		return true;
+	}
+
+	inline bool SetDefaultAttr ( const CSphAttrLocator & tLoc, ESphAttr eTargetType )
+	{
+		cJSON tDefault;
+		tDefault.type = cJSON_Integer;
+		tDefault.valueint = 0;
+		return SetAttr ( tLoc, &tDefault, eTargetType );
+	}
+};
+
+static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, const CSphString & sIndex, JsonEscapedBuilder & tOut )
+{
+	tOut += "{";
+
+	// column names
+	AppendJsonKey ( "took", tOut );
+	tOut.Appendf ( "%d,", (int)( tRes.m_tmTotal/1000 ) );
+	AppendJsonKey ( "timed_out", tOut );
+	tOut += "false,";
+
+	AppendJsonKey ( "hits", tOut );
+	tOut += "{";
+	AppendJsonKey ( "total", tOut );
+	tOut.Appendf ( "%d,", tRes.m_dQueryDesc.GetLength() );
+	AppendJsonKey ( "max_score", tOut );
+	tOut += "1,"; // FIXME!!! track and provide weight
+
+	// documents
+	AppendJsonKey ( "hits", tOut );
+	tOut += "[";
+
+	int iDocOff = 0;
+	ARRAY_FOREACH ( i, tRes.m_dQueryDesc )
+	{
+		const PercolateQueryDesc & tDesc = tRes.m_dQueryDesc[i];
+		if ( i )
+			tOut += ",";
+		tOut += "{";
+		AppendJsonKey ( "_index", tOut );
+		tOut.Appendf ( "\"%s\",", sIndex.cstr() );
+		AppendJsonKey ( "_type", tOut );
+		tOut += "\"doc\",";
+		AppendJsonKey ( "_id", tOut );
+		tOut.Appendf ( "\"" UINT64_FMT "\",", tDesc.m_uID );
+		AppendJsonKey ( "_score", tOut );
+		tOut += "\"1\","; // FIXME!!! track and provide weight
+
+		AppendJsonKey ( "_source", tOut );
+		if ( tDesc.m_bQL )
+		{
+			tOut += "{ \"query\": { \"ql\":\"";
+			tOut.AppendEscaped ( tDesc.m_sQuery.cstr(), true, false );
+			tOut += "\" } }";
+		} else
+		{
+			tOut += "{";
+			AppendJsonKey ( "query", tOut );
+			tOut += tDesc.m_sQuery.cstr();
+			tOut += "}";
+		}
+
+		// document count + document id(s)
+		int iCount = (int)( tRes.m_dDocs[iDocOff] );
+
+		if ( iCount )
+		{
+			tOut += ",";
+			AppendJsonKey ( "fields", tOut );
+			tOut += "{\"_percolator_document_slot\": [";
+
+			const char * sSep = "";
+			for ( int iDoc = 0; iDoc<iCount; iDoc++ )
+			{
+				tOut.Appendf ( "%s" DOCID_FMT, sSep, tRes.m_dDocs[iDocOff + 1 + iDoc] );
+				sSep = ",";
+			}
+			iDocOff += iCount + 1;
+			tOut += "] }";
+		}
+		tOut += " }";
+	}
+
+
+	tOut += "]";
+
+	tOut += "}";
+
+	tOut += "}";
+}
+
+
+bool HttpHandlerPQ_c::GotDocuments ( PercolateIndex_i * pIndex, const CSphString & sIndex, const cJSON * pPercolate )
+{
+	CSphString sWarning, sError, sTmp;
+	CSphVector<const cJSON *> dDocs;
+
+	// single document
+	const cJSON * pDoc = GetJSONPropertyObject ( pPercolate, "document", sTmp );
+	if ( pDoc )
+	{
+		dDocs.Add ( pDoc );
+	}
+
+	// multiple documents
+	const cJSON * pDocs = cJSON_GetObjectItem ( pPercolate, "documents" );
+	if ( pDocs && !cJSON_IsArray ( pDocs ) )
+	{
+		ReportError ( "bad documents array", SPH_HTTP_STATUS_400 );
+		return false;
+	}
+
+	const cJSON * pElem = nullptr;
+	cJSON_ArrayForEach ( pElem, pDocs )
+	{
+		dDocs.Add ( pElem );
+	}
+
+	if ( !dDocs.GetLength() )
+	{
+		ReportError ( "no documents found", SPH_HTTP_STATUS_400 );
+		return false;
+	}
+
+	const CSphSchema & tSchema = pIndex->GetInternalSchema();
+	int iFieldsCount = tSchema.GetFieldsCount();
+	CSphFixedVector<const char*> dFields ( iFieldsCount );
+	sTmp = "";
+	dFields.Fill ( sTmp.scstr() );
+
+	// set defaults
+	SourceMatch_c tDoc;
+	tDoc.Reset ( tSchema.GetRowSize() );
+	int iAttrsCount = tSchema.GetAttrsCount();
+	for ( int i=0; i<iAttrsCount; i++ )
+	{
+		const CSphColumnInfo & tCol = tSchema.GetAttr ( i );
+		CSphAttrLocator tLoc = tCol.m_tLocator;
+		tLoc.m_bDynamic = true;
+		tDoc.SetDefaultAttr ( tLoc, tCol.m_eAttrType );
+	}
+
+	CSphHash<SchemaItemVariant_t> hSchemaLocators;
+	for ( int i=0; i<iAttrsCount; i++ )
+	{
+		const CSphColumnInfo & tCol = tSchema.GetAttr(i);
+		SchemaItemVariant_t tAttr;
+		tAttr.m_tLoc = tCol.m_tLocator;
+		tAttr.m_tLoc.m_bDynamic = true;
+		tAttr.m_eType = tCol.m_eAttrType;
+		hSchemaLocators.Add ( sphFNV64 ( tCol.m_sName.cstr() ), tAttr );
+	}
+	for ( int i=0; i<iFieldsCount; i++ )
+	{
+		const CSphColumnInfo & tField = tSchema.GetField ( i );
+		SchemaItemVariant_t tAttr;
+		tAttr.m_iField = i;
+		hSchemaLocators.Add ( sphFNV64 ( tField.m_sName.cstr() ), tAttr );
+	}
+
+	CSphSessionAccum tAcc ( true );
+	ISphRtAccum * pAccum = tAcc.GetAcc ( pIndex, sError );
+
+	CSphString sTokenFilterOpts;
+	SphDocID_t uDocID = 1;
+	ARRAY_FOREACH ( iDoc, dDocs )
+	{
+		// reset all back to defaults
+		dFields.Fill ( sTmp.scstr() );
+		for ( int i=0; i<iAttrsCount; i++ )
+		{
+			const CSphColumnInfo & tCol = tSchema.GetAttr ( i );
+			CSphAttrLocator tLoc = tCol.m_tLocator;
+			tLoc.m_bDynamic = true;
+			tDoc.SetDefaultAttr ( tLoc, tCol.m_eAttrType );
+		}
+		const cJSON * pDoc = dDocs[iDoc];
+		const cJSON * pChild = nullptr;
+		cJSON_ArrayForEach ( pChild, pDoc )
+		{
+			const char * sName = pChild->string;
+			const SchemaItemVariant_t * pItem = hSchemaLocators.Find ( sphFNV64 ( sName ) );
+
+			// FIXME!!! warn on out of schema JSON fields
+			if ( !pItem )
+			{
+				if ( sName && ( strncmp ( sName, "id", 2 )==0 || strncmp ( sName, "uid", 3 )==0 ) )
+					uDocID = pChild->valueint;
+
+				continue;
+			}
+			if ( pItem->m_iField!=-1 && pChild->valuestring )
+			{
+				dFields[pItem->m_iField] = pChild->valuestring;
+			} else
+			{
+				tDoc.SetAttr ( pItem->m_tLoc, pChild, pItem->m_eType );
+			}
+		}
+
+		tDoc.m_uDocID = uDocID;
+		uDocID++;
+
+		// add document
+		pIndex->AddDocument ( pIndex->CloneIndexingTokenizer (), iFieldsCount, dFields.Begin(), tDoc, true, sTokenFilterOpts, NULL, CSphVector<DWORD>(), sError, sWarning, pAccum );
+
+		if ( !sError.IsEmpty() )
+			break;
+	}
+
+	// fire exit
+	if ( !sError.IsEmpty() )
+	{
+		pIndex->RollBack ( pAccum ); // clean up collected data
+		ReportError ( sError.cstr(), SPH_HTTP_STATUS_500 );
+		return false;
+	}
+
+	PercolateMatchResult_t tRes;
+	tRes.m_bGetDocs = true;
+	tRes.m_bVerbose = false;
+	tRes.m_bGetQuery = true;
+	tRes.m_bGetFilters = false;
+
+	bool bRes = pIndex->MatchDocuments ( pAccum, tRes );
+	JsonEscapedBuilder sRes;
+	EncodePercolateMatchResult ( tRes, sIndex, sRes );
+	BuildReply ( sRes, SPH_HTTP_STATUS_200 );
+
+	return bRes;
+}
+
+
+static void EncodePercolateQueryResult ( bool bReplace, const CSphString & sIndex, uint64_t uID, JsonEscapedBuilder & tOut )
+{
+	tOut += "{";
+
+	AppendJsonKey ( "index", tOut );
+	tOut.Appendf ( "\"%s\",", sIndex.cstr() );
+	AppendJsonKey ( "type", tOut );
+	tOut += "\"doc\",";
+	AppendJsonKey ( "_id", tOut );
+	tOut.Appendf ( "\"" UINT64_FMT "\",", uID );
+	AppendJsonKey ( "result", tOut );
+	tOut += bReplace ? "\"updated\"" : "\"created\"";
+	if ( bReplace )
+	{
+		tOut += ",";
+		AppendJsonKey ( "forced_refresh", tOut );
+		tOut += "true";
+	}
+
+	tOut += "}";
+}
+
+
+bool HttpHandlerPQ_c::GotQuery ( PercolateIndex_i * pIndex, const CSphString & sIndex, const cJSON * pQuery, const cJSON * pRoot, CSphString * pUID, bool bReplace )
+{
+	CSphString sTmp, sError, sWarning;
+
+	bool bQueryQL = true;
+	CSphQuery tQuery;
+	const char * sQuery = nullptr;
+	const cJSON * pQueryQL = GetJSONPropertyString ( pQuery, "ql", sTmp );
+	if ( pQueryQL )
+	{
+		sQuery = pQueryQL->valuestring;
+	} else
+	{
+		bQueryQL = false;
+		if ( !ParseJsonQueryFilters ( pQuery, tQuery, sError, sWarning ) )
+		{
+			ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
+			return false;
+		}
+
+		if ( NonEmptyQuery ( pQuery ) )
+			sQuery = tQuery.m_sQuery.cstr();
+	}
+
+	if ( !sQuery || *sQuery=='\0' )
+	{
+		ReportError ( "no query found", SPH_HTTP_STATUS_400 );
+		return false;
+	}
+
+	uint64_t uID = 0;
+	if ( pUID && !pUID->IsEmpty() )
+		uID = strtoull ( pUID->cstr(), NULL, 10 );
+
+	StringBuilder_c sTags;
+	const cJSON * pTagsArray = cJSON_GetObjectItem ( pRoot, "tags" );
+	if ( pTagsArray && !cJSON_IsArray ( pTagsArray ) )
+	{
+		ReportError ( "invalid tags array", SPH_HTTP_STATUS_400 );
+		return false;
+	}
+	const cJSON * pTag = nullptr;
+	cJSON_ArrayForEach ( pTag, pTagsArray )
+	{
+		sTags.Appendf ( "%s%s", sTags.Length() ? ", " : "", pTag->valuestring );
+	}
+
+	const cJSON * pFilters = cJSON_GetObjectItem ( pRoot, "filters" );
+	if ( pFilters && !cJSON_IsString ( pFilters ) )
+	{
+		ReportError ( "\"filters\" property value should be a string", SPH_HTTP_STATUS_400 );
+		return false;
+	}
+
+	if ( pFilters && !bQueryQL && tQuery.m_dFilters.GetLength() )
+	{
+		ReportError ( "invalid combination SphinxQL along with query filter provided", SPH_HTTP_STATUS_501 );
+		return false;
+	}
+
+	CSphVector<CSphFilterSettings> dFilters;
+	CSphVector<FilterTreeItem_t> dFilterTree;
+	if ( pFilters )
+	{
+		if ( !PercolateParseFilters ( pFilters->valuestring, SPH_COLLATION_UTF8_GENERAL_CI, dFilters, dFilterTree, sError ) )
+		{
+			ReportError ( sError.scstr(), SPH_HTTP_STATUS_400 );
+			return false;
+		}
+	} else
+	{
+		dFilters.SwapData ( tQuery.m_dFilters );
+		dFilterTree.SwapData ( tQuery.m_dFilterTree );
+	}
+
+	assert ( pIndex );
+
+	// add query
+	bool bOk = pIndex->Query ( sQuery, sTags.cstr(), &dFilters, &dFilterTree, bReplace, bQueryQL, uID, sError );
+
+	if ( !bOk )
+	{
+		ReportError ( sError.scstr(), SPH_HTTP_STATUS_500 );
+	} else
+	{
+		JsonEscapedBuilder sRes;
+		EncodePercolateQueryResult ( bReplace, sIndex, uID, sRes );
+		BuildReply ( sRes, SPH_HTTP_STATUS_200 );
+	}
+
+	return bOk;
+}
+
+bool HttpHandlerPQ_c::ListQueries ( PercolateIndex_i * pIndex, const CSphString & sIndex )
+{
+	// FIXME!!! provide filters
+	const char * sFilterTags = nullptr;
+	const CSphFilterSettings * pUID = nullptr;
+
+	uint64_t tmStart = sphMicroTimer();
+
+	CSphVector<PercolateQueryDesc> dQueries;
+	pIndex->GetQueries ( sFilterTags, pUID, dQueries );
+
+	PercolateMatchResult_t tRes;
+	tRes.m_dQueryDesc.SwapData ( dQueries );
+	tRes.m_dDocs.Reset ( tRes.m_dQueryDesc.GetLength() );
+	tRes.m_dDocs.Fill ( 0 );
+
+	tRes.m_tmTotal = sphMicroTimer() - tmStart;
+
+
+	JsonEscapedBuilder sRes;
+	EncodePercolateMatchResult ( tRes, sIndex, sRes );
+	BuildReply ( sRes, SPH_HTTP_STATUS_200 );
+
+	return true;
+}
+
+bool HttpHandlerPQ_c::Delete ( PercolateIndex_i * pIndex, const CSphString & sIndex, const cJSON * pRoot )
+{
+	CSphString sTmp;
+
+	StringBuilder_c sTags;
+	const cJSON * pTagsArray = cJSON_GetObjectItem ( pRoot, "tags" );
+	if ( pTagsArray && !cJSON_IsArray ( pTagsArray ) )
+	{
+		ReportError ( "invalid tags array", SPH_HTTP_STATUS_400 );
+		return false;
+	}
+	const cJSON * pTag = nullptr;
+	cJSON_ArrayForEach ( pTag, pTagsArray )
+	{
+		sTags.Appendf ( "%s%s", sTags.Length() ? ", " : "", pTag->valuestring );
+	}
+
+	CSphVector<uint64_t> dUID;
+	const cJSON * pUidsArray = cJSON_GetObjectItem ( pRoot, "id" );
+	if ( pUidsArray && !cJSON_IsArray ( pUidsArray ) )
+	{
+		ReportError ( "invalid id array", SPH_HTTP_STATUS_400 );
+		return false;
+	}
+	const cJSON * pUID = nullptr;
+	cJSON_ArrayForEach ( pUID, pUidsArray )
+	{
+		dUID.Add ( pUID->valueint );
+	}
+
+	if ( !sTags.Length() && !dUID.GetLength() )
+	{
+		ReportError ( "no tags or id field arrays found", SPH_HTTP_STATUS_400 );
+		return false;
+	}
+
+
+	uint64_t tmStart = sphMicroTimer();
+
+	int iDeleted = 0;
+	if ( dUID.GetLength() )
+		iDeleted = pIndex->DeleteQueries ( dUID.Begin(), dUID.GetLength() );
+	else
+		iDeleted = pIndex->DeleteQueries ( sTags.cstr() );
+
+	uint64_t tmTotal = sphMicroTimer() - tmStart;
+
+	JsonEscapedBuilder tOut;
+	tOut += "{";
+
+	AppendJsonKey ( "took", tOut );
+	tOut.Appendf ( "%d,", (int)( tmTotal/1000 ) );
+	AppendJsonKey ( "timed_out", tOut );
+	tOut += "false,";
+	AppendJsonKey ( "deleted", tOut );
+	tOut.Appendf ( "%d,", iDeleted );
+	AppendJsonKey ( "total", tOut );
+	tOut.Appendf ( "%d,", iDeleted );
+	AppendJsonKey ( "failures", tOut );
+	tOut += "[]";
+
+	tOut += "}";
+
+	BuildReply ( tOut, SPH_HTTP_STATUS_200 );
+
+	return true;
+}
+
+bool HttpHandlerPQ_c::Process()
+{
+	CSphString * sEndpoint = m_tOptions ( "endpoint" );
+	if ( !sEndpoint || sEndpoint->IsEmpty() )
+	{
+		FormatError ( SPH_HTTP_STATUS_400, "invalid endpoint '%s', should be /json/pq/index_name/operation", sEndpoint->scstr() );
+		return false;
+	}
+
+	assert ( sEndpoint->Begins ( "json/pq/" ) );
+	CSphVector<CSphString> dPoints;
+	sphSplit ( dPoints, sEndpoint->cstr() + sizeof("json/pq/") - 1, "/" );
+	if ( dPoints.GetLength()<2 )
+	{
+		FormatError ( SPH_HTTP_STATUS_400, "invalid endpoint '%s', should be /json/pq/index_name/operation", sEndpoint->scstr() );
+		return false;
+	}
+
+	const CSphString & sIndex = dPoints[0];
+	const CSphString & sOp = dPoints[1];
+	CSphString * pUID = nullptr;
+	if ( dPoints.GetLength()>2 )
+		pUID = dPoints.Begin() + 2;
+
+	bool bMatch = false;
+	bool bDelete = false;
+	if ( sOp=="_delete_by_query" )
+		bDelete = true;
+	else if ( sOp!="doc" )
+		bMatch = true;
+
+	// get index
+	const ScopedIndex_c tServed ( g_pLocalIndexes->GetRlockedEntry ( sIndex ) );
+	if ( !tServed.Ptr() )
+	{
+		FormatError ( SPH_HTTP_STATUS_500, "no such index '%s'", sIndex.cstr() );
+		return false;
+	}
+
+	if ( !tServed->m_bPercolate || !tServed->m_bEnabled || !tServed->m_pIndex )
+	{
+		FormatError ( SPH_HTTP_STATUS_500, "index '%s' is not percolate (enabled=%d)", sIndex.cstr(), tServed->m_bEnabled );
+		return false;
+	}
+
+	PercolateIndex_i * pIndex = (PercolateIndex_i *)tServed->m_pIndex;
+
+	if ( m_sQuery.IsEmpty() )
+		return ListQueries ( pIndex, sIndex );
+
+	const ScopedJson_c tRoot ( cJSON_Parse ( m_sQuery.cstr() ) );
+	if ( !tRoot.Ptr() )
+	{
+		ReportError ( "bad JSON object", SPH_HTTP_STATUS_400 );
+		return false;
+	}
+
+	if ( cJSON_GetArraySize ( tRoot.Ptr() )==0 )
+		return ListQueries ( pIndex, sIndex );
+
+	CSphString sError;
+	const cJSON * pQuery = GetJSONPropertyObject ( tRoot.Ptr(), "query", sError );
+	if ( !pQuery && !bDelete )
+	{
+		ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
+		return false;
+	}
+
+	const cJSON * pPerc = bMatch ? GetJSONPropertyObject ( pQuery, "percolate", sError ) : nullptr;
+	if ( bMatch && !pPerc )
+	{
+		ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
+		return false;
+	}
+
+	if ( bMatch )
+	{
+		return GotDocuments ( pIndex, sIndex, pPerc );
+	} else if ( bDelete )
+	{
+		return Delete ( pIndex, sIndex, tRoot.Ptr() );
+	} else
+	{
+		bool bRefresh = false;
+		CSphString * pRefresh = m_tOptions ( "refresh" );
+		if ( pRefresh && !pRefresh->IsEmpty() )
+		{
+			if ( *pRefresh=="0" )
+				bRefresh = false;
+			else if ( *pRefresh=="1" )
+				bRefresh = true;
+		}
+
+		return GotQuery ( pIndex, sIndex, pQuery, tRoot.Ptr(), pUID, bRefresh );
+	}
+}
+

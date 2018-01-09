@@ -47,6 +47,12 @@
 
 #define DEFAULT_MAX_MATCHES 1000
 
+#ifdef __GNUC__
+#define VARIABLE_IS_NOT_USED __attribute__ ((unused))
+#else
+#define VARIABLE_IS_NOT_USED
+#endif
+
 //////////////////////////////////////////////////////////////////////////
 
 const DWORD		INDEX_MAGIC_HEADER			= 0x58485053;		///< my magic 'SPHX' header
@@ -2604,11 +2610,16 @@ private:
 	BYTE m_dHashValue[HASH20_SIZE] = { 0 };
 };
 
-#ifdef __GNUC__
-#define VARIABLE_IS_NOT_USED __attribute__ ((unused))
-#else
-#define VARIABLE_IS_NOT_USED
-#endif
+struct SchemaItemVariant_t
+{
+	int m_iField;
+	ESphAttr m_eType;
+	CSphAttrLocator m_tLoc;
+	SchemaItemVariant_t ()
+		: m_iField ( -1 )
+		, m_eType ( SPH_ATTR_NONE )
+	{}
+};
 
 #endif // _sphinxint_
 

@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>percolate queries via http</name>
+
+<requires>
+<http/>
+</requires>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+	binlog_path =
+}
+
+
+source dummy
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+	sql_attr_uint	= gid
+}
+
+index dummy
+{
+	source			= dummy
+	path			= <data_path/>/dummy
+}
+
+index idx1
+{
+	type = percolate
+	path			= <data_path/>/pq1
+	rt_field = title
+	rt_attr_uint = gid
+}
+
+index idx2
+{
+	type = percolate
+	path			= <data_path/>/pq2
+	rt_field = title
+	rt_attr_uint = gid
+}
+
+</config>
+
+<db_create>
+CREATE TABLE `test_table` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `gid` int(11) NOT NULL,
+  `title` varchar(255) NOT NULL,
+  PRIMARY KEY (`id`)
+)
+</db_create>
+<db_drop>DROP TABLE IF EXISTS `test_table`;</db_drop>
+<db_insert>INSERT INTO `test_table` VALUES ( 1, 1, 'test 1' )</db_insert>
+
+<httpqueries>
+<!-- store queries -->
+<query endpoint="json/pq/idx1/doc">{ "query": { "match": { "title": "test" } }, "tags":["id", "id_x1"] }</query>
+<query endpoint="json/pq/idx1/doc">{ "query": { "match": { "title": { "query": "cat test", "operator": "and" } } }, "tags":["id", "id_x2"] }</query>
+<query endpoint="json/pq/idx1/doc/10">{ "query": { "match": { "title": { "query": "dog test", "operator": "and" } } }, "tags":["id", "id_x10"] }</query>
+<query endpoint="json/pq/idx1/search"></query>
+
+
+<!-- issue matching -->
+<query endpoint="json/pq/idx1/search">{ "query": { "percolate": { "document" : { "title" : "A new tree test in the office office" } } } }</query>
+<query endpoint="json/pq/idx1/search">{ "query": { "percolate": { "documents" : [{ "title" : "A new tree test in the office" }, { "title" : "A cat test in the office" }, { "title" : "A dog test in the office" }] } } }</query>
+
+<!-- replace query -->
+<query endpoint="json/pq/idx1/doc/1">{ "query": { "match": { "title": "nop" } } }</query>
+<query endpoint="json/pq/idx1/doc/1?refresh=1">{ "query": { "match": { "title": { "query": "cat dog test", "operator": "or" } } }, "tags":["id", "id_x101"] }</query>
+<!-- list stored queries -->
+<query endpoint="json/pq/idx1/search"></query>
+
+<!-- delete by id -->
+<query endpoint="json/pq/idx1/_delete_by_query">{ "id": [2, 10] }</query>
+<query endpoint="json/pq/idx1/search"></query>
+<!-- delete by tags -->
+<query endpoint="json/pq/idx1/_delete_by_query">{ "tags": ["id_x1", "id_x2"] }</query>
+<query endpoint="json/pq/idx1/search"></query>
+<query endpoint="json/pq/idx1/_delete_by_query">{ "tags": ["id"] }</query>
+<query endpoint="json/pq/idx1/search"></query>
+
+<!-- bool query -->
+<query endpoint="json/pq/idx1/doc/">{ "query": { "bool": { "must": [ { "match": { "title": "tree" } }, { "match": { "title": "test" } } ] } }, "tags":["id", "id_x1"]  }</query>
+<query endpoint="json/pq/idx1/search">{ "query": { "percolate": { "documents" : [{ "title" : "A new tree test in the office" }, { "title" : "A cat test in the office" }, { "title" : "A dog test in the office" }] } } }</query>
+
+<!-- query native filter -->
+<query endpoint="json/pq/idx1/doc/">{ "query": { "match": { "title": "tree" }, "range": { "gid": { "lt": 3 } } }, "tags":["id", "id_x2"] }</query>
+<query endpoint="json/pq/idx1/search">{ "query": { "percolate": { "documents": [{ "title" : "new tree test", "gid":1 }, { "title": "old tree test", "gid":2 }, { "title": "custom tree test", "gid":3 }] } } }</query>
+
+<!-- query QL filter -->
+<query endpoint="json/pq/idx1/doc/">{ "query": { "match": { "title": "tree" } }, "filters":"gid &lt; 3", "tags":["id", "id_x3"] }</query>
+<query endpoint="json/pq/idx1/search">{ "query": { "percolate": { "documents": [{ "title" : "new tree test", "gid":1 }, { "title": "old tree test", "gid":2 }, { "title": "custom tree test", "gid":3 }] } } }</query>
+
+<!-- QL query -->
+<query endpoint="json/pq/idx1/doc/">{ "query": { "ql": "tree !new" }, "filters":"gid &lt; 3", "tags":["id", "id_x4"] }</query>
+<query endpoint="json/pq/idx1/search">{ "query": { "percolate": { "documents": [{ "title" : "new tree test", "gid":1 }, { "title": "old tree test", "gid":2 }, { "title": "custom tree test", "gid":3 }] } } }</query>
+
+<query endpoint="json/pq/idx1/doc/">{ "query": { "ql": "new | old" }, "tags":["id", "id_x5"] }</query>
+<query endpoint="json/pq/idx1/search">{ "query": { "percolate": { "documents": [{ "title" : "new tree test", "gid":1 }, { "title": "old tree test", "gid":2 }, { "title": "custom tree test", "gid":3 }] } } }</query>
+
+<query endpoint="json/pq/idx1/search"></query>
+
+</httpqueries>
+
+</test>

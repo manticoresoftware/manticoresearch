@@ -12663,7 +12663,7 @@ private:
 	SqlRowBuffer_c & m_tRowBuffer;
 };
 
-static bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, CSphVector<CSphFilterSettings> & dFilters, CSphVector<FilterTreeItem_t> & dFilterTree, CSphString & sError )
+bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, CSphVector<CSphFilterSettings> & dFilters, CSphVector<FilterTreeItem_t> & dFilterTree, CSphString & sError )
 {
 	if ( !sFilters || !*sFilters )
 		return true;
@@ -12839,7 +12839,7 @@ static void PercolateQuery ( const SqlStmt_t & tStmt, bool bReplace, ESphCollati
 	assert ( pIndex );
 
 	// add query
-	bool bOk = pIndex->Query ( sQuery, sTags, &dFilters, &dFilterTree, bReplace, uID, sError );
+	bool bOk = pIndex->Query ( sQuery, sTags, &dFilters, &dFilterTree, bReplace, true, uID, sError );
 	pServed->Unlock();
 
 	int iWarnings = 0;
@@ -13042,18 +13042,7 @@ struct PercolateOptions_t
 	{}
 };
 
-struct SchemaItem_t
-{
-	int m_iField;
-	ESphAttr m_eType;
-	CSphAttrLocator m_tLoc;
-	SchemaItem_t ()
-		: m_iField ( -1 )
-		, m_eType ( SPH_ATTR_NONE )
-	{}
-};
-
-static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItem_t> & tLoc, int iRow, SphDocID_t & uDocID, CSphFixedVector<const char*> & dFields, CSphMatchVariant & tDoc, cJSON ** ppStorage, CSphString & sError )
+static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVariant_t> & tLoc, int iRow, SphDocID_t & uDocID, CSphFixedVector<const char*> & dFields, CSphMatchVariant & tDoc, cJSON ** ppStorage, CSphString & sError )
 {
 	const cJSON * pRoot = cJSON_Parse ( sDoc );
 	if ( !pRoot )
@@ -13070,7 +13059,7 @@ static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItem_t> 
 	while ( pChild && iChildrenCount )
 	{
 		const char * sName = pChild->string;
-		const SchemaItem_t * pItem = tLoc.Find ( sphFNV64 ( sName ) );
+		const SchemaItemVariant_t * pItem = tLoc.Find ( sphFNV64 ( sName ) );
 
 		// FIXME!!! warn on unknown JSON fields
 		if ( pItem )
@@ -13132,13 +13121,13 @@ static void PercolateMatchDocuments ( const CSphVector<CSphString> & dDocs, cons
 		tDoc.SetDefaultAttr ( tLoc, tCol.m_eAttrType );
 	}
 
-	CSphHash<SchemaItem_t> hSchemaLocators;
+	CSphHash<SchemaItemVariant_t> hSchemaLocators;
 	if ( tOpts.m_bJsonDocs )
 	{
 		for ( int i=0; i<iAttrsCount; i++ )
 		{
 			const CSphColumnInfo & tCol = tSchema.GetAttr(i);
-			SchemaItem_t tAttr;
+			SchemaItemVariant_t tAttr;
 			tAttr.m_tLoc = tCol.m_tLocator;
 			tAttr.m_tLoc.m_bDynamic = true;
 			tAttr.m_eType = tCol.m_eAttrType;
@@ -13147,7 +13136,7 @@ static void PercolateMatchDocuments ( const CSphVector<CSphString> & dDocs, cons
 		for ( int i=0; i<iFieldsCount; i++ )
 		{
 			const CSphColumnInfo & tField = tSchema.GetField ( i );
-			SchemaItem_t tAttr;
+			SchemaItemVariant_t tAttr;
 			tAttr.m_iField = i;
 			hSchemaLocators.Add ( sphFNV64 ( tField.m_sName.cstr() ), tAttr );
 		}
@@ -18005,7 +17994,7 @@ void HandleCommandJson ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tRe
 
 	CSphVector<BYTE> dResult;
 	SmallStringHash_T<CSphString> tOptions;
-	sphProcessHttpQuery ( eEndpoint, sCommand, tOptions, pThd->m_iConnID, dResult );
+	sphProcessHttpQueryNoResponce ( eEndpoint, sCommand, tOptions, pThd->m_iConnID, dResult );
 
 	tOut.Flush();
 	tOut.SendWord ( SEARCHD_OK );
@@ -23209,6 +23198,14 @@ void JobDoSendNB ( NetSendData_t * pSend, CSphNetLoop * pLoop )
 // DAEMON OPTIONS
 /////////////////////////////////////////////////////////////////////////////
 
+static const QueryParser_i * PercolateQueryParserFactory ( bool bJson )
+{
+	if ( bJson )
+		return sphCreateJsonQueryParser();
+	else
+		return sphCreatePlainQueryParser();
+}
+
 
 static void ParsePredictedTimeCosts ( const char * p )
 {
@@ -24193,6 +24190,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		sphLockUn ( g_iPidFD );
 
 	sphRTConfigure ( hSearchd, bTestMode );
+	SetPercolateQueryParserFactory ( PercolateQueryParserFactory );
 
 	if ( bOptPIDFile )
 	{

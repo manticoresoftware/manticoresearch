@@ -2140,7 +2140,7 @@ public:
 
 	char* Leak();
 
-	int Length ()
+	int Length () const
 	{
 		return m_iUsed;
 	}

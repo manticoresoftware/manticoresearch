@@ -3889,7 +3889,7 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, SphDocID_t iMinDocID, i
 	SphOffset_t iCheckpointsPosition, DWORD iInfixBlocksOffset, int iInfixCheckpointWordsSize, DWORD uKillListSize, uint64_t uMinMaxSize,
 	const ChunkStats_t & tStats ) const
 {
-	static const DWORD RT_INDEX_FORMAT_VERSION	= 39;			///< my format version
+	static const DWORD RT_INDEX_FORMAT_VERSION	= 42;			///< my format version
 
 	CSphWriter tWriter;
 	CSphString sName, sError;
@@ -3921,6 +3921,8 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, SphDocID_t iMinDocID, i
 	// stats
 	tWriter.PutDword ( (DWORD)tStats.m_Stats.m_iTotalDocuments ); // FIXME? we don't expect over 4G docs per just 1 local index
 	tWriter.PutOffset ( tStats.m_Stats.m_iTotalBytes );
+	// FIXME!!! calc duplicates here to
+	tWriter.PutDword ( 0 ); // v.40+
 
 	// index settings
 	tWriter.PutDword ( m_tSettings.m_iMinPrefixLen );
@@ -3943,6 +3945,7 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, SphDocID_t iMinDocID, i
 	tWriter.PutByte ( m_tSettings.m_bIndexFieldLens ); // v. 35+
 	tWriter.PutByte ( m_tSettings.m_eChineseRLP ); // v. 39+
 	tWriter.PutString ( m_tSettings.m_sRLPContext ); // v. 39+
+	tWriter.PutString ( m_tSettings.m_sIndexTokenFilter ); // v.41+
 
 	// tokenizer
 	SaveTokenizerSettings ( tWriter, m_pTokenizer, m_tSettings.m_iEmbeddedLimit );

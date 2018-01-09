@@ -28,10 +28,10 @@ with ``refresh=1`` argument, such as ``json/pq/index_pq_1/doc/2?refresh=1``
 
 There is 2 formats of full-text queries that might be stored into index:
 
--   query in ``json\search`` compartible format, described at  :ref:`json/search <_http_json_search>`
--   query in ``SpinxQL`` compartible format, described at :ref:`extended query syntax <_extended_query_syntax>`
+-   query in ``json\search`` compartible format, described at  :ref:`json/search <http_json_search>`
+-   query in ``SpinxQL`` compartible format, described at :ref:`extended query syntax <extended_query_syntax>`
 
-``tags`` and ``filters`` also might be stored along with query, for details refer to :ref:`Tags <_percolate_query_tags>`
+``tags`` and ``filters`` also might be stored along with query, for details refer to :ref:`Tags <percolate_query_tags>`
 However there is no way to mix ``json\search`` native filters with ``filters`` field, only one type of filter might be
 used per query.
 
@@ -251,7 +251,7 @@ is located at ``fields`` object ``_percolator_document_slot`` array.
 List stored queries
 ~~~~~~~~~~~~~~~~~~~
 
-`_search` endpoint without body shows all stored queries in index, similar to SphinxQL's :ref:`List stored queries <_percolate_query_list>`.
+`_search` endpoint without body shows all stored queries in index, similar to SphinxQL's :ref:`List stored queries <percolate_query_list>`.
 
 Example:
 
@@ -342,15 +342,15 @@ The responce:
 
 
 There ``hits`` contains queries stored at percolate index with query ``ID`` at ``_id`` field and ``_source`` field
-is full text query in ``SpinxQL`` compartible format, described at :ref:`extended query syntax <_extended_query_syntax>`
-or ``json\search`` compartible format, described at  :ref:`json\search <_http_json_search>`
+is full text query in ``SpinxQL`` compartible format, described at :ref:`extended query syntax <extended_query_syntax>`
+or ``json\search`` compartible format, described at  :ref:`json\search <http_json_search>`
 	
 .. _http_percolate_query_delete:
 
 Delete stored queries
 ~~~~~~~~~~~~~~~~~~~~~
 
-This endpoint allows to delete queries from index, similar to SphinxQL's :ref:`Delete query <_percolate_query_delete>`.
+This endpoint allows to delete queries from index, similar to SphinxQL's :ref:`Delete query <percolate_query_delete>`.
 Either id or tags lists supported
 
 

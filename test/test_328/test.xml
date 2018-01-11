@@ -42,6 +42,30 @@ index test2
 	path			= <data_path/>/test2
 }
 
+
+source src11 : src1
+{
+	sql_query_range = select 1, 4
+	sql_range_step = 2
+}
+
+index test11
+{
+	source			= src11
+	path			= <data_path/>/test11
+}
+
+source src21 : src1
+{
+	sql_query_range = select 5, 8
+	sql_range_step = 2
+}
+
+index test21
+{
+	source			= src21
+	path			= <data_path/>/test21
+}
 </config>
 
 <db_create>
@@ -83,6 +107,8 @@ create table mva
 <sphqueries>
 <sphinxql>select * from test1</sphinxql>
 <sphinxql>select * from test2</sphinxql>
+<sphinxql>select * from test11</sphinxql>
+<sphinxql>select * from test21</sphinxql>
 </sphqueries>
 
 </test>

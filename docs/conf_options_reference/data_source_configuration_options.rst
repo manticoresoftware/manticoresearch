@@ -240,21 +240,20 @@ everything can be declared in a single line as well):
 
     sql_attr_multi = ATTR-TYPE ATTR-NAME 'from' SOURCE-TYPE \
         [;QUERY] \
-        [;RANGED-QUERY] \
-        [;RANGED-MAIN-QUERY]
+        [;RANGED-QUERY]
 
 where
 
 -  ATTR-TYPE is ‘uint’, ‘bigint’ or ‘timestamp’
 
--  SOURCE-TYPE is ‘field’, ‘query’, or ‘ranged-query’
+-  SOURCE-TYPE is ‘field’, ‘query’, ‘ranged-query’, or ‘ranged-main-query’
 
 -  QUERY is SQL query used to fetch all ( docid, attrvalue ) pairs
 
 -  RANGED-QUERY is SQL query used to fetch min and max ID values, similar
-   to ‘sql_query_range’
-   
--  RANGED-MAIN-QUERY is option to use SQL query from ‘sql_query_range’   
+   to ‘sql_query_range’ (used with ‘ranged-query’ SOURCE-TYPE)
+
+if using ‘ranged-main-query’ SOURCE-TYPE then omit the RANGED-QUERY and it will automatically use the same query from ‘sql_query_range’ (useful option in complex inheritance setups to save having to manually duplicate the same query many times)
 
 Example:
 

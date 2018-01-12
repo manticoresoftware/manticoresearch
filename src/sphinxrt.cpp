@@ -10645,68 +10645,68 @@ class PercolateIndex_c : public PercolateIndex_i
 {
 public:
 	explicit PercolateIndex_c ( const CSphSchema & tSchema, const char * sIndexName, const char * sPath );
-	virtual ~PercolateIndex_c ();
+	~PercolateIndex_c () override;
 
-	virtual bool AddDocument ( ISphTokenizer * pTokenizer, int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt );
-	virtual bool MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchResult_t & tResult );
-	virtual void RollBack ( ISphRtAccum * pAccExt );
+	bool AddDocument ( ISphTokenizer * pTokenizer, int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt ) override;
+	bool MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchResult_t &tRes ) override;
+	void RollBack ( ISphRtAccum * pAccExt ) override;
 	bool AddQuery ( const char * sQuery, const char * sTags, const CSphVector<CSphFilterSettings> * pFilters, const CSphVector<FilterTreeItem_t> * pFilterTree, bool bReplace, bool bQL, uint64_t & uId, const ISphTokenizer * pTokenizer, CSphDict * pDict, CSphString & sError );
-	virtual int DeleteQueries ( const uint64_t * pQueries, int iCount );
-	virtual int DeleteQueries ( const char * sTags );
-	virtual bool Query ( const char * sQuery, const char * sTags, const CSphVector<CSphFilterSettings> * pFilters, const CSphVector<FilterTreeItem_t> * pFilterTree, bool bReplace, bool bQL, uint64_t & uId, CSphString & sError ) override;
-	virtual bool Prealloc ( bool bStripPath );
-	virtual void Dealloc () {}
-	virtual void Preread () {}
-	virtual void PostSetup();
-	virtual ISphRtAccum * CreateAccum ( CSphString & sError );
-	virtual ISphTokenizer * CloneIndexingTokenizer() const { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
+	int DeleteQueries ( const uint64_t * pQueries, int iCount ) override;
+	int DeleteQueries ( const char * sTags ) override;
+	bool Query ( const char * sQuery, const char * sTags, const CSphVector<CSphFilterSettings> * pFilters, const CSphVector<FilterTreeItem_t> * pFilterTree, bool bReplace, bool bQL, uint64_t & uId, CSphString & sError ) override;
+	bool Prealloc ( bool bStripPath ) override;
+	void Dealloc () override {}
+	void Preread () override {}
+	void PostSetup() override;
+	ISphRtAccum * CreateAccum ( CSphString & sError ) override;
+	ISphTokenizer * CloneIndexingTokenizer() const override { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
 	void SaveMeta ();
-	virtual void GetQueries ( const char * sFilterTags, const CSphFilterSettings * pUID, CSphVector<PercolateQueryDesc> & dQueries );
-	virtual bool Truncate ( CSphString & );
+	void GetQueries ( const char * sFilterTags, const CSphFilterSettings * pUID, CSphVector<PercolateQueryDesc> & dQueries ) override;
+	bool Truncate ( CSphString & ) override;
 
 	// RT index stub
-	virtual bool MultiQuery ( const CSphQuery *, CSphQueryResult *, int, ISphMatchSorter **, const CSphMultiQueryArgs & ) const;
-	virtual bool MultiQueryEx ( int, const CSphQuery *, CSphQueryResult **, ISphMatchSorter **, const CSphMultiQueryArgs & ) const;
+	bool MultiQuery ( const CSphQuery *, CSphQueryResult *, int, ISphMatchSorter **, const CSphMultiQueryArgs & ) const override;
+	bool MultiQueryEx ( int, const CSphQuery *, CSphQueryResult **, ISphMatchSorter **, const CSphMultiQueryArgs & ) const override;
 	virtual bool AddDocument ( ISphHits * , const CSphMatch & , const char ** , const CSphVector<DWORD> & , CSphString & , CSphString & ) { return true; }
-	virtual void Commit ( int * , ISphRtAccum * pAccExt ) { RollBack ( pAccExt ); }
-	virtual bool DeleteDocument ( const SphDocID_t * , int , CSphString & , ISphRtAccum * pAccExt ) { RollBack ( pAccExt ); return true; }
-	virtual void CheckRamFlush () {}
-	virtual void ForceRamFlush ( bool ) {}
-	virtual void ForceDiskChunk () {}
-	virtual bool AttachDiskIndex ( CSphIndex * , CSphString & ) { return true; }
-	virtual void Optimize ( volatile bool * , ThrottleState_t * ) {}
-	virtual bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError ) const;
-	virtual void Reconfigure ( CSphReconfigureSetup & tSetup );
-	virtual CSphIndex * GetDiskChunk ( int ) { return NULL; } // NOLINT
+	void Commit ( int * , ISphRtAccum * pAccExt ) override { RollBack ( pAccExt ); }
+	bool DeleteDocument ( const SphDocID_t * , int , CSphString & , ISphRtAccum * pAccExt ) override { RollBack ( pAccExt ); return true; }
+	void CheckRamFlush () override {}
+	void ForceRamFlush ( bool ) override {}
+	void ForceDiskChunk () override {}
+	bool AttachDiskIndex ( CSphIndex * , CSphString & ) override { return true; }
+	void Optimize ( volatile bool * , ThrottleState_t * ) override {}
+	bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError ) const override;
+	void Reconfigure ( CSphReconfigureSetup & tSetup ) override;
+	CSphIndex * GetDiskChunk ( int ) override { return NULL; } // NOLINT
 
 	// plain index stub
-	virtual SphDocID_t *		GetKillList () const { return NULL; }
-	virtual int					GetKillListSize () const { return 0 ; }
-	virtual bool				HasDocid ( SphDocID_t ) const { return false; }
-	virtual int					Build ( const CSphVector<CSphSource*> & , int , int ) { return 0; }
-	virtual bool				Merge ( CSphIndex * , const CSphVector<CSphFilterSettings> & , bool ) {return false; }
-	virtual void				SetBase ( const char * ) {}
-	virtual bool				Rename ( const char * ) { return false; }
-	virtual bool				Lock () { return true; }
-	virtual void				Unlock () {}
-	virtual bool				Mlock () { return false; }
-	virtual bool				EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const;
-	virtual const CSphSourceStats &	GetStats () const { return m_tStat; }
-	virtual void				GetStatus ( CSphIndexStatus* pRes ) const { assert (pRes); if ( pRes ) { pRes->m_iDiskUse = 0; pRes->m_iRamUse = 0;}}
-	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & , CSphString * pError ) const { return NotImplementedError(pError); }
-	virtual bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const { return false; }
-	virtual int					UpdateAttributes ( const CSphAttrUpdate & , int , CSphString & sError, CSphString & ) { NotImplementedError ( &sError ); return -1; }
-	virtual bool				SaveAttributes ( CSphString & ) const { return true; }
-	virtual DWORD				GetAttributeStatus () const { return 0; }
+	SphDocID_t *		GetKillList () const override { return NULL; }
+	int					GetKillListSize () const override { return 0 ; }
+	bool				HasDocid ( SphDocID_t ) const override { return false; }
+	int					Build ( const CSphVector<CSphSource*> & , int , int ) override { return 0; }
+	bool				Merge ( CSphIndex * , const CSphVector<CSphFilterSettings> & , bool ) override {return false; }
+	void				SetBase ( const char * ) override {}
+	bool				Rename ( const char * ) override { return false; }
+	bool				Lock () override { return true; }
+	void				Unlock () override {}
+//	virtual bool				Mlock () { return false; }
+	bool				EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const override;
+	const CSphSourceStats &	GetStats () const override { return m_tStat; }
+	void				GetStatus ( CSphIndexStatus* pRes ) const override { assert (pRes); if ( pRes ) { pRes->m_iDiskUse = 0; pRes->m_iRamUse = 0;}}
+	bool				GetKeywords ( CSphVector <CSphKeywordInfo> & , const char * , const GetKeywordsSettings_t & , CSphString * pError ) const override { return NotImplementedError(pError); }
+	bool				FillKeywords ( CSphVector <CSphKeywordInfo> & ) const override { return false; }
+	int					UpdateAttributes ( const CSphAttrUpdate & , int , CSphString & sError, CSphString & ) override { NotImplementedError ( &sError ); return -1; }
+	bool				SaveAttributes ( CSphString & ) const override { return true; }
+	DWORD				GetAttributeStatus () const override { return 0; }
 	virtual bool				CreateModifiedFiles ( bool , const CSphString & , ESphAttr , int , CSphString & ) { return true; }
-	virtual bool				AddRemoveAttribute ( bool , const CSphString & , ESphAttr , CSphString & sError ) { return NotImplementedError ( &sError ); }
-	virtual void				DebugDumpHeader ( FILE *, const char *, bool ) {}
-	virtual void				DebugDumpDocids ( FILE * ) {}
-	virtual void				DebugDumpHitlist ( FILE * , const char * , bool ) {}
-	virtual int					DebugCheck ( FILE * ) { return 0; } // NOLINT
-	virtual void				DebugDumpDict ( FILE * ) {}
-	virtual	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn ) {}
-	virtual void				SetMemorySettings ( bool , bool , bool ) {}
+	bool				AddRemoveAttribute ( bool , const CSphString & , ESphAttr , CSphString & sError ) override { return NotImplementedError ( &sError ); }
+	void				DebugDumpHeader ( FILE *, const char *, bool ) override {}
+	void				DebugDumpDocids ( FILE * ) override {}
+	void				DebugDumpHitlist ( FILE * , const char * , bool ) override {}
+	int					DebugCheck ( FILE * ) override { return 0; } // NOLINT
+	void				DebugDumpDict ( FILE * ) override {}
+	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn ) override {}
+	void				SetMemorySettings ( bool , bool , bool ) override {}
 
 private:
 	static const DWORD				META_HEADER_MAGIC = 0x50535451;	///< magic 'PSTQ' header

@@ -49,7 +49,6 @@ if ( NEED_STEMMER_FROMSOURCES )
 				WORKING_DIRECTORY "${MANTICORE_BINARY_DIR}" )
 		# download from github as zip archive
 	else ( EXISTS "${LIBS_BUNDLE}/libstemmer_c.tgz" )
-		set ( STEMMER_URL "http://snowball.tartarus.org/dist/libstemmer_c.tgz" )
 		if ( NOT EXISTS "${MANTICORE_BINARY_DIR}/libstemmer_c.tgz" )
 			message ( STATUS "Downloading Stemmer" )
 			file ( DOWNLOAD ${STEMMER_URL} ${MANTICORE_BINARY_DIR}/libstemmer_c.tgz SHOW_PROGRESS )
@@ -73,7 +72,7 @@ if ( NEED_STEMMER_FROMSOURCES )
 		message ( SEND_ERROR "missing libstemmer sources from libstemmer_c.
 Please download the C version of libstemmer library from
 http://snowball.tartarus.org/ and extract its sources over libstemmer_c/
-subdirectory in order to build Sphinx with libstemmer support. Or
+subdirectory in order to build Manticore with libstemmer support. Or
 install the package named like 'libstemmer-dev' using your favorite
 package manager." )
 		unset ( WITH_STEMMER CACHE )

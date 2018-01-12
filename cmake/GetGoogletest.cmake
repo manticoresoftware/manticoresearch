@@ -10,7 +10,7 @@ if ( LIBS_BUNDLE AND EXISTS "${LIBS_BUNDLE}/googletestmaster.zip" )
 else()
 	set ( GTEST_URL "https://github.com/google/googletest/archive/master.zip" )
 	message ( STATUS "Use google-tests from github https://github.com/google/googletest/archive/master.zip" )
-	message ( STATUS "(you may download the file and place it as 'googletestmaster.zip' into ${LIBS_BUNDLE}/ " )
+	message ( STATUS "(you can download the file and save it as 'googletestmaster.zip' into ${LIBS_BUNDLE}/) " )
 endif()
 
 configure_file ( ${CMAKE_MODULE_PATH}/googletest-download.cmake.in

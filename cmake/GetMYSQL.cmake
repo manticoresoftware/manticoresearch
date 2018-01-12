@@ -56,7 +56,7 @@ else ( MYSQL_FOUND )
 ERROR: cannot find MySQL libraries. If you want to compile with MySQL support,
 you must either specify file locations explicitly using
 -D WITH_MYSQL_INCLUDES=... and -D WITH_MYSQL_LIBS=... options, or make sure path to
-mysql_config is listed in your PATH environment variable. Or specify the path usint
+mysql_config is listed in your PATH environment variable. Or specify the path using
 -D MYSQL_CONFIG_EXECUTABLE=/path/to/mysql_config. If you want to
 disable MySQL support, use -D WITH_MYSQL=OFF option.
 ********************************************************************************" )

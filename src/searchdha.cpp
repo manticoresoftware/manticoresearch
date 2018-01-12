@@ -240,6 +240,7 @@ void ClosePersistentSockets()
 void MultiAgentDesc_t::SetOptions ( const AgentOptions_t& tOpt )
 {
 	m_eStrategy = tOpt.m_eStrategy;
+	m_iMultiRetryCount = tOpt.m_iRetryCount;
 	for ( auto& dHost : m_dHosts )
 	{
 		dHost.m_bPersistent = tOpt.m_bPersistent;
@@ -278,10 +279,9 @@ bool MultiAgentDesc_t::SetHosts ( const CSphVector<AgentDesc_c *> & dHosts, Warn
 	ARRAY_FOREACH ( i, dHosts )
 	{
 		dHosts[i]->CloneTo ( m_dHosts[i] );
-		if ( !ValidateAndAddDashboard ( m_dHosts.Begin() + i, tWarning ) )
+		if ( !ValidateAndAddDashboard ( &m_dHosts[i], tWarning ) )
 			return false;
 	}
-
 	return true;
 }
 
@@ -575,30 +575,6 @@ void MultiAgentDesc_t::QueuePings()
 }
 
 //////////////////////////////////////////////////////////////////////////
-AgentConn_t::AgentConn_t ()
-	: m_iSock ( -1 )
-	, m_bFresh ( true )
-	, m_bSuccess ( false )
-	, m_bDone ( false )
-	, m_eReplyStatus ( SEARCHD_ERROR )
-	, m_iReplySize ( 0 )
-	, m_iReplyRead ( 0 )
-	, m_iRetries ( 0 )
-	, m_iRetryLimit ( 0 )
-	, m_dReplyBuf ( 0 )
-	, m_iWall ( 0 )
-	, m_iWaited ( 0 )
-	, m_iStartQuery ( 0 )
-	, m_iEndQuery ( 0 )
-	, m_iWorkerTag ( -1 )
-	, m_iStoreTag ( 0 )
-	, m_iWeight ( -1 )
-	, m_bPing ( false )
-	, m_iMirror ( 0 )
-	, m_iMirrorsCount ( 1 )
-	, m_eConnState ( AGENT_UNUSED )
-{}
-
 AgentConn_t::~AgentConn_t ()
 {
 	Close ( false );
@@ -937,6 +913,7 @@ bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const char * szAgent, const cha
 	if ( *p=='[' )
 	{
 		eState = AP_OPTIONS;
+		tDesc.m_iRetryCount *= dHosts.GetLength ();
 		++p;
 	} else if ( *p )
 		eState = AP_WANT_ADDRESS;
@@ -959,7 +936,12 @@ bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const char * szAgent, const cha
 
 			if ( IsAgentDelimiter ( *p ) )
 			{
-				eState = ( *p=='|' ? AP_WANT_ADDRESS : AP_OPTIONS );
+				if ( *p == '|' )
+					eState = AP_WANT_ADDRESS;
+				else {
+					eState = AP_OPTIONS;
+					tDesc.m_iRetryCount *= dHosts.GetLength ();
+				}
 				pNewAgent = new AgentDesc_c();
 				dHosts.Add ( pNewAgent );
 				++p;
@@ -999,7 +981,10 @@ bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const char * szAgent, const cha
 					pNewAgent = new AgentDesc_c();
 					dHosts.Add ( pNewAgent );
 				} else
+				{
 					eState = AP_OPTIONS;
+					tDesc.m_iRetryCount *= dHosts.GetLength ();
+				}
 				break;
 			} else
 				eState = AP_DONE;
@@ -1008,8 +993,8 @@ bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const char * szAgent, const cha
 
 		case AP_OPTIONS:
 			{
-				const char * sOptName = NULL;
-				const char * sOptValue = NULL;
+				const char * sOptName = nullptr;
+				const char * sOptValue = nullptr;
 				bool bGotEq = false;
 				while ( *p )
 				{
@@ -1036,6 +1021,10 @@ bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const char * szAgent, const cha
 							{
 								tDesc.m_bBlackhole = ( atoi ( sOptValue )!=0 );
 								bParsed = true;
+							} else if ( sphStrMatchStatic ( "retry_count", sOptName ) )
+							{
+								tDesc.m_iRetryCount = atoi ( sOptValue );
+								bParsed = true;
 							}
 
 							if ( !bParsed )
@@ -1046,7 +1035,7 @@ bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const char * szAgent, const cha
 							}
 						}
 
-						sOptName = sOptValue = NULL;
+						sOptName = sOptValue = nullptr;
 						bGotEq = false;
 						if ( bNextAgent )
 							break;
@@ -2120,10 +2109,13 @@ CSphRemoteAgentsController::CSphRemoteAgentsController ( int iThreads, AgentsVec
 
 	if ( iThreads>1 )
 	{
-		ARRAY_FOREACH ( i, dAgents )
+		for ( AgentConn_t * & pAgent : dAgents )
 		{
-			tCtx.m_ppAgents = dAgents.Begin()+i;
-			tCtx.m_ppAgents[0]->m_iRetryLimit = iRetryMax * tCtx.m_ppAgents[0]->GetMirrorsCount();
+			tCtx.m_ppAgents = &pAgent;
+			if ( iRetryMax<0 )
+				pAgent->m_iRetryLimit = (-iRetryMax) * pAgent->GetMirrorsCount ();
+			else if ( !pAgent->m_iRetryLimit )
+				pAgent->m_iRetryLimit = iRetryMax * pAgent->GetMirrorsCount();
 			m_pWorkerPool->RawPush ( tCtx );
 		}
 	} else
@@ -2131,7 +2123,10 @@ CSphRemoteAgentsController::CSphRemoteAgentsController ( int iThreads, AgentsVec
 		tCtx.m_ppAgents = dAgents.Begin();
 		tCtx.m_iAgentCount = dAgents.GetLength();
 		for ( AgentConn_t * pAgent : dAgents )
-			pAgent->m_iRetryLimit = iRetryMax * pAgent->GetMirrorsCount();
+			if ( iRetryMax<0 )
+				pAgent->m_iRetryLimit = (-iRetryMax) * pAgent->GetMirrorsCount ();
+			else if ( !pAgent->m_iRetryLimit )
+				pAgent->m_iRetryLimit = iRetryMax * pAgent->GetMirrorsCount();
 		tCtx.m_pfn = ThdWorkSequental;
 		m_pWorkerPool->RawPush ( tCtx );
 	}

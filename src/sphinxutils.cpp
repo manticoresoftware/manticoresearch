@@ -552,6 +552,8 @@ static KeyDesc_t g_dKeysIndex[] =
 	{ "agent",					KEY_LIST, NULL },
 	{ "agent_blackhole",		KEY_LIST, NULL },
 	{ "agent_persistent",		KEY_LIST, NULL },
+	{ "agent_retry_count",		0, NULL },
+	{ "mirror_retry_count",		0, NULL },
 	{ "agent_connect_timeout",	0, NULL },
 	{ "ha_strategy",			0, NULL	},
 	{ "agent_query_timeout",	0, NULL },

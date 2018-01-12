@@ -3049,8 +3049,8 @@ void SendErrorReply ( ISphOutputBuffer & tOut, const char * sTemplate, ... )
 
 struct AgentProcessor_t
 {
-	AgentProcessor_t() {}
-	virtual ~AgentProcessor_t() {}
+	AgentProcessor_t() = default;
+	virtual ~AgentProcessor_t() {};
 	virtual void Process ( AgentDesc_c & tDesc ) = 0;
 };
 
@@ -3062,23 +3062,21 @@ struct DistributedIndex_t : public ServedStats_c, public ISphNoncopyable
 	CSphBitvec					m_dKillBreak;
 	int							m_iAgentConnectTimeout;		///< in msec
 	int							m_iAgentQueryTimeout;		///< in msec
-	bool						m_bToDelete;				///< should be deleted
-	bool						m_bDivideRemoteRanges;			///< whether we divide big range onto agents or not
-	HAStrategies_e				m_eHaStrategy;				///< how to select the best of my agents
+	int							m_iAgentRetryCount = 0;		///< overrides global one
+	bool						m_bToDelete = false;		///< should be deleted
+	bool						m_bDivideRemoteRanges = false;	///< whether we divide big range onto agents or not
+	HAStrategies_e				m_eHaStrategy = HA_DEFAULT;		///< how to select the best of my agents
 	mutable CSphRwlock			m_tStatsLock;
 
 public:
 	DistributedIndex_t ()
 		: m_iAgentConnectTimeout ( g_iAgentConnectTimeout )
 		, m_iAgentQueryTimeout ( g_iAgentQueryTimeout )
-		, m_bToDelete ( false )
-		, m_bDivideRemoteRanges ( false )
-		, m_eHaStrategy ( HA_DEFAULT )
 	{
 		m_tStatsLock.Init ( true );
 	}
 
-	virtual ~DistributedIndex_t()
+	~DistributedIndex_t() override
 	{
 		// m_pHAStorage has to be freed separately.
 		ARRAY_FOREACH ( i, m_dAgents )
@@ -3092,7 +3090,7 @@ public:
 	void GetAllAgents ( AgentsVector & dTarget ) const;
 	void ForAgents ( AgentProcessor_t & tProcessor );
 
-	virtual void LockStats ( bool bReader ) const
+	void LockStats ( bool bReader ) const override
 	{
 		if ( bReader )
 			m_tStatsLock.ReadLock();
@@ -3100,7 +3098,7 @@ public:
 			m_tStatsLock.WriteLock();
 	}
 
-	virtual void UnlockStats() const
+	void UnlockStats() const override
 	{
 		m_tStatsLock.Unlock();
 	}
@@ -3108,12 +3106,12 @@ public:
 
 void DistributedIndex_t::GetAllAgents ( AgentsVector & dTarget ) const
 {
-	ARRAY_FOREACH ( i, m_dAgents )
+	for ( const auto * dAgent : m_dAgents )
 	{
-		ARRAY_FOREACH ( j, m_dAgents[i]->GetAgents() )
+		for ( const auto & dHost : dAgent->GetAgents() )
 		{
-			AgentConn_t * pAgent = new AgentConn_t();
-			m_dAgents[i]->GetAgents()[j].CloneTo ( pAgent->m_tDesc );
+			auto * pAgent = new AgentConn_t;
+			dHost.CloneTo ( pAgent->m_tDesc );
 			dTarget.Add ( pAgent );
 		}
 	}
@@ -3121,13 +3119,9 @@ void DistributedIndex_t::GetAllAgents ( AgentsVector & dTarget ) const
 
 void DistributedIndex_t::ForAgents ( AgentProcessor_t & tProcessor )
 {
-	ARRAY_FOREACH ( i, m_dAgents )
-	{
-		ARRAY_FOREACH ( j, m_dAgents[i]->GetAgents() )
-		{
-			tProcessor.Process ( m_dAgents[i]->GetAgents()[j] );
-		}
-	}
+	for ( auto * pAgent : m_dAgents )
+		for ( auto & dHost : pAgent->GetAgents() )
+			tProcessor.Process ( const_cast<AgentDesc_c&>(dHost) );
 }
 
 /// global distributed index definitions hash
@@ -3909,7 +3903,7 @@ static void CheckQuery ( const CSphQuery & tQuery, CSphString & sError )
 		LOC_ERROR1 ( "cutoff out of bounds (cutoff=%d)", tQuery.m_iCutoff );
 
 	if ( ( tQuery.m_iRetryCount!=g_iAgentRetryCount )
-		&& ( tQuery.m_iRetryCount<0 || tQuery.m_iRetryCount>MAX_RETRY_COUNT ) )
+		&& ( tQuery.m_iRetryCount<0 ) )
 			LOC_ERROR1 ( "retry count out of bounds (count=%d)", tQuery.m_iRetryCount );
 
 	if ( ( tQuery.m_iRetryDelay!=g_iAgentRetryDelay )
@@ -8052,10 +8046,11 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				{
 					MultiAgentDesc_t * pMirror = pDist->m_dAgents[j];
 					tDistr.m_dAgentIds.Add ( dAgents.GetLength() );
-					AgentConn_t * pAgent = new AgentConn_t();
+					auto * pAgent = new AgentConn_t;
 					pAgent->SetMirror ( sIndex, j, pMirror->ChooseAgent(), pMirror->GetLength() );
 					pAgent->m_iStoreTag = iTagsCount;
 					pAgent->m_iWeight = iWeight;
+					pAgent->m_iRetryLimit = pMirror->GetRetryLimit();
 					dAgents.Add ( pAgent );
 					iTagsCount += iTagStep;
 				}
@@ -8164,14 +8159,16 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	}
 
 	// connect to remote agents and query them, if required
-	CSphScopedPtr<SearchRequestBuilder_t> tReqBuilder ( NULL );
-	CSphScopedPtr<ISphRemoteAgentsController> tDistCtrl ( NULL );
+	CSphScopedPtr<SearchRequestBuilder_t> tReqBuilder { nullptr };
+	CSphScopedPtr<ISphRemoteAgentsController> tDistCtrl { nullptr };
 	if ( dAgents.GetLength() )
 	{
 		if ( m_pProfile )
 			m_pProfile->Switch ( SPH_QSTATE_DIST_CONNECT );
 
 		int iRetryCount = Min ( Max ( tFirst.m_iRetryCount, 0 ), MAX_RETRY_COUNT ); // paranoid clamp
+		if ( iRetryCount!=g_iAgentRetryCount )
+			iRetryCount = -iRetryCount; // negative value 'forces' over defaults provided from index
 
 		tReqBuilder = new SearchRequestBuilder_t ( m_dQueries, iStart, iEnd, iDivideLimits );
 		tDistCtrl = GetAgentsController ( g_iDistThreads, dAgents, *tReqBuilder.Ptr(), iAgentConnectTimeout, iRetryCount, tFirst.m_iRetryDelay );
@@ -10492,7 +10489,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 		dRemoteSnippets.m_dAgents.Resize ( pDist->m_dAgents.GetLength() );
 		ARRAY_FOREACH ( i, pDist->m_dAgents )
 		{
-			AgentConn_t * pAgent = new AgentConn_t();
+			auto * pAgent = new AgentConn_t;
 			dRemoteSnippets.m_dAgents[i] = pAgent;
 
 			MultiAgentDesc_t * pMirror = pDist->m_dAgents[i];
@@ -14623,8 +14620,7 @@ struct HostsCollector_t : public AgentProcessor_t
 	explicit HostsCollector_t ( SmallStringHash_T<DWORD> & hHosts )
 		: m_hHosts ( hHosts )
 	{}
-	virtual ~HostsCollector_t() {}
-	virtual void Process ( AgentDesc_c & tDesc )
+	void Process ( AgentDesc_c & tDesc ) final
 	{
 		if ( tDesc.m_iFamily==AF_INET && !tDesc.m_sHost.IsEmpty() )
 			m_hHosts.Add ( tDesc.m_uAddr, tDesc.m_sHost );
@@ -14637,8 +14633,7 @@ struct HostsUpdater_t : public AgentProcessor_t
 	explicit HostsUpdater_t ( SmallStringHash_T<DWORD> & hHosts )
 		: m_hHosts ( hHosts )
 	{}
-	virtual ~HostsUpdater_t() {}
-	virtual void Process ( AgentDesc_c & tDesc )
+	void Process ( AgentDesc_c & tDesc ) final
 	{
 		if ( tDesc.m_iFamily==AF_INET && !tDesc.m_sHost.IsEmpty() )
 		{
@@ -14751,7 +14746,7 @@ static void CheckPing ( int64_t iNow )
 			if ( pDash->IsOlder ( iNow ) )
 			{
 				pDash->AddRef ();
-				AgentConn_t * pAgent = new AgentConn_t;
+				auto * pAgent = new AgentConn_t;
 				pDash->m_tDescriptor.CloneTo ( pAgent->m_tDesc );
 				pAgent->m_tDesc.m_pDash = pDash;
 				pAgent->m_bPing = true;
@@ -19297,7 +19292,33 @@ static void ConfigureDistributedIndex ( DistributedIndex_t & tIdx, const char * 
 			tIdx.m_dKillBreak.BitSet ( dKillBreak[i] );
 	}
 
-	AgentOptions_t tAgentOptions { false, false, tIdx.m_eHaStrategy };
+	// index-level agent_retry_count
+	if ( hIndex ( "agent_retry_count" ) )
+	{
+		if ( hIndex["agent_retry_count"].intval ()<=0 )
+			sphWarning ( "index '%s': agent_retry_count must be positive, ignored", szIndexName );
+		else
+			tIdx.m_iAgentRetryCount = hIndex["agent_retry_count"].intval ();
+	}
+
+	if ( hIndex ( "mirror_retry_count" ) )
+	{
+		if ( hIndex["mirror_retry_count"].intval ()<=0 )
+			sphWarning ( "index '%s': mirror_retry_count must be positive, ignored", szIndexName );
+		else
+		{
+			if ( tIdx.m_iAgentRetryCount>0 )
+				sphWarning ("index '%s': `agent_retry_count` and `mirror_retry_count` both specified (they are aliases)."
+					"Value of `mirror_retry_count` will be used", szIndexName );
+			tIdx.m_iAgentRetryCount = hIndex["mirror_retry_count"].intval ();
+		}
+	}
+
+	if ( !tIdx.m_iAgentRetryCount )
+		tIdx.m_iAgentRetryCount = g_iAgentRetryCount;
+
+	AgentOptions_t tAgentOptions { false, false, tIdx.m_eHaStrategy, tIdx.m_iAgentRetryCount };
+
 	// add remote agents
 	for ( CSphVariant * pAgent = hIndex("agent"); pAgent; pAgent = pAgent->m_pNext )
 	{

@@ -169,28 +169,19 @@ class AgentDesc_c : public ISphNoncopyable
 {
 public:
 	CSphString		m_sIndexes;		///< remote index names to query
-	bool			m_bBlackhole;	///< blackhole agent flag
-	DWORD			m_uAddr;		///< IP address
-	mutable AgentDash_t *		m_pStats;		/// global agent stats
-	mutable HostDashboard_t *	m_pDash;		/// ha dashboard of the host
-	bool			m_bPersistent;	///< whether to keep the persistent connection to the agent.
+	bool			m_bBlackhole = false;	///< blackhole agent flag
+	DWORD			m_uAddr = 0;		///< IP address
+	mutable AgentDash_t *		m_pStats = nullptr;		/// global agent stats
+	mutable HostDashboard_t *	m_pDash = nullptr;		/// ha dashboard of the host
+	bool			m_bPersistent = false;	///< whether to keep the persistent connection to the agent.
 
-	int				m_iFamily;		///< TCP or UNIX socket
+	int				m_iFamily = AF_INET;		///< TCP or UNIX socket
 	CSphString		m_sPath;		///< local searchd UNIX socket path
 	CSphString		m_sHost;		///< remote searchd host
-	int				m_iPort;		///< remote searchd port, 0 if local
+	int				m_iPort = -1;		///< remote searchd port, 0 if local
 
 public:
-	AgentDesc_c ()
-		: m_bBlackhole ( false )
-		, m_uAddr ( 0 )
-		, m_pStats ( nullptr )
-		, m_pDash ( nullptr )
-		, m_bPersistent ( false )
-		, m_iFamily ( AF_INET )
-		, m_iPort ( -1 )
-	{
-	}
+	AgentDesc_c () = default;
 	~AgentDesc_c ();
 
 	void CloneTo ( AgentDesc_c & tOther ) const;
@@ -201,41 +192,41 @@ public:
 /// remote agent connection (local per-query state)
 struct AgentConn_t : public ISphNoncopyable
 {
-	int				m_iSock;		///< socket number, -1 if not connected
-	bool			m_bFresh;		///< just created persistent connection, need SEARCHD_COMMAND_PERSIST
+	int				m_iSock = -1;		///< socket number, -1 if not connected
+	bool			m_bFresh = true;		///< just created persistent connection, need SEARCHD_COMMAND_PERSIST
 
-	bool			m_bSuccess;		///< whether last request was successful (ie. there are available results)
+	bool			m_bSuccess = false;		///< whether last request was successful (ie. there are available results)
 	CSphString		m_sFailure;		///< failure message
-	bool			m_bDone;		///< agent got processed, no need to retry
+	bool			m_bDone = false;		///< agent got processed, no need to retry
 
-	SearchdStatus_e	m_eReplyStatus;	///< reply status code
-	int				m_iReplySize;	///< how many reply bytes are there
-	int				m_iReplyRead;	///< how many reply bytes are already received
-	int 			m_iRetries;		///< count from 0 to m_iRetryLimit
-	int 			m_iRetryLimit;	///< how many times retry (m.b. with another mirror)
+	SearchdStatus_e	m_eReplyStatus { SEARCHD_ERROR };	///< reply status code
+	int				m_iReplySize = 0;	///< how many reply bytes are there
+	int				m_iReplyRead = 0;	///< how many reply bytes are already received
+	int 			m_iRetries = 0;		///< count from 0 to m_iRetryLimit
+	int 			m_iRetryLimit = 0;	///< how many times retry (m.b. with another mirror)
 
-	CSphFixedVector<BYTE>			m_dReplyBuf;
+	CSphFixedVector<BYTE>			m_dReplyBuf { 0 };
 	CSphVector<CSphQueryResult>		m_dResults;		///< multi-query results
 
-	int64_t			m_iWall;		///< wall time spent vs this agent
-	int64_t			m_iWaited;		///< statistics of waited
-	int64_t			m_iStartQuery;	///< the timestamp of the latest request
-	int64_t			m_iEndQuery;	///< the timestamp of the end of the latest operation
-	int				m_iWorkerTag;	///< worker tag
-	int				m_iStoreTag;
-	int				m_iWeight;
-	bool			m_bPing;
+	int64_t			m_iWall = 0;		///< wall time spent vs this agent
+	int64_t			m_iWaited = 0;		///< statistics of waited
+	int64_t			m_iStartQuery = 0;	///< the timestamp of the latest request
+	int64_t			m_iEndQuery = 0;	///< the timestamp of the end of the latest operation
+	int				m_iWorkerTag = -1;	///< worker tag
+	int				m_iStoreTag = 0;
+	int				m_iWeight = -1;
+	bool			m_bPing = false;
 
 	AgentDesc_c		m_tDesc;
 
 private:
 	CSphString      m_sDistIndex;
-	int				m_iMirror;			// FIXME!!! got broken on agent removal
-	int				m_iMirrorsCount;
-	AgentState_e	m_eConnState;		///< current state
+	int				m_iMirror = 0;			// FIXME!!! got broken on agent removal
+	int				m_iMirrorsCount = 1;
+	AgentState_e	m_eConnState = AGENT_UNUSED;	///< current state
 
 public:
-	AgentConn_t ();
+	AgentConn_t () = default;
 	~AgentConn_t ();
 
 	void Close ( bool bClosePersist=true );
@@ -327,6 +318,7 @@ struct AgentOptions_t
 	bool m_bBlackhole;
 	bool m_bPersistent;
 	HAStrategies_e m_eStrategy;
+	int m_iRetryCount;
 };
 
 struct WarnInfo_t;
@@ -335,20 +327,17 @@ struct WarnInfo_t;
 struct MultiAgentDesc_t : public ISphNoncopyable
 {
 private:
-	CSphFixedVector<AgentDesc_c> m_dHosts;
+	CSphFixedVector<AgentDesc_c> m_dHosts { 0 };
 	CSphAtomic				m_iRRCounter;	/// round-robin counter
 	mutable CSphRwlock		m_dWeightLock;	/// manages access to m_pWeights
 	CSphFixedVector<WORD>	m_dWeights		/// the weights of the hosts
-			GUARDED_BY (m_dWeightLock);
-	DWORD					m_uTimestamp;	/// timestamp of last weight's actualization
-	HAStrategies_e			m_eStrategy;
+			GUARDED_BY (m_dWeightLock) { 0 };
+	DWORD					m_uTimestamp { HostDashboard_t::GetCurSeconds() };	/// timestamp of last weight's actualization
+	HAStrategies_e			m_eStrategy { HA_DEFAULT };
+	int 					m_iMultiRetryCount = 0;
 
 public:
-	MultiAgentDesc_t ()
-		: m_dHosts ( 0 )
-		, m_dWeights ( 0 )
-		, m_uTimestamp ( HostDashboard_t::GetCurSeconds () )
-		, m_eStrategy ( HA_DEFAULT )
+	MultiAgentDesc_t()
 	{
 		m_dWeightLock.Init();
 	}
@@ -375,6 +364,11 @@ public:
 	inline int GetLength() const
 	{
 		return m_dHosts.GetLength();
+	}
+
+	inline int GetRetryLimit() const
+	{
+		return m_iMultiRetryCount;
 	}
 
 	const CSphFixedVector<AgentDesc_c> & GetAgents() const

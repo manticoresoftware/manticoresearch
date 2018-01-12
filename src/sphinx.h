@@ -2733,7 +2733,7 @@ public:
 
 	int				m_iCutoff;			///< matches count threshold to stop searching at (default is 0; means to search until all matches are found)
 
-	int				m_iRetryCount;		///< retry count, for distributed queries
+	int				m_iRetryCount;		///< retry count, for distributed queries.
 	int				m_iRetryDelay;		///< retry delay, for distributed queries
 	int				m_iAgentQueryTimeout;	///< agent query timeout override, for distributed queries
 

@@ -1173,6 +1173,203 @@ void cDashStorage::GetActiveDashes ( CSphVector<HostDashboard_t *> & dAgents ) c
 	}
 }
 
+// let's move some stuff into small functions.
+// every of them performs small task and returns false on any critical fail.
+
+// send sphinx_version to remote host. Move to AGENT_HANDSHAKE state
+inline static bool SendHandshake ( AgentConn_t &tAgent, ISphNetEvents * pEvents=nullptr )
+{
+	// send the client's proto version right now to avoid w-w-r pattern.
+	NetOutputBuffer_c tOut ( tAgent.m_iSock );
+	tOut.SendDword ( SPHINX_CLIENT_VERSION );
+	tOut.Flush ();
+	if ( tOut.GetError () )
+	{
+		if ( pEvents ) pEvents->IterateRemove ( tAgent.m_iSock );
+		tAgent.Fail ( eNetworkErrors, "sending client_version: %s", tOut.GetErrorMsg () );
+		return false;
+	}
+	if ( pEvents ) pEvents->IterateChangeEvent ( tAgent.m_iSock, ISphNetEvents::SPH_POLL_RD );
+	return true;
+}
+
+// send 'command-persist' to remote host, if necessary
+inline static bool SetRemotePersistent ( AgentConn_t &tAgent, ISphNetEvents * pEvents )
+{
+	NetOutputBuffer_c tOut ( tAgent.m_iSock );
+	// check if we need to reset the persistent connection
+	if ( tAgent.m_bFresh && tAgent.m_tDesc.m_bPersistent )
+	{
+		tOut.SendWord ( SEARCHD_COMMAND_PERSIST );
+		tOut.SendWord ( 0 ); // dummy version
+		tOut.SendInt ( 4 ); // request body length
+		tOut.SendInt ( 1 ); // set persistent to 1.
+		tOut.Flush ();
+		if ( tOut.GetError () )
+		{
+			pEvents->IterateRemove ( tAgent.m_iSock );
+			tAgent.Fail ( eNetworkErrors, "sending command_persist: %s", tOut.GetErrorMsg () );
+			return false;
+		}
+		tAgent.m_bFresh = false;
+	}
+	pEvents->IterateChangeEvent ( tAgent.m_iSock, ISphNetEvents::SPH_POLL_WR );
+	return true;
+}
+
+// receive and check answer to previously issued sphinx_client_version. Move to AGENT_ESTABLISHED state
+inline static bool CheckRemoteVer ( AgentConn_t &tAgent, ISphNetEvents * pEvents )
+{
+	assert ( pEvents );
+	// read reply
+	int iRemoteVer;
+	int iRes = sphSockRecv ( tAgent.m_iSock, ( char * ) &iRemoteVer, sizeof ( iRemoteVer ) );
+	if ( iRes!=sizeof ( iRemoteVer ) )
+	{
+		pEvents->IterateRemove ( tAgent.m_iSock );
+		if ( iRes<0 )
+		{
+			// network error
+			int iErr = sphSockGetErrno ();
+			tAgent.Fail ( eNetworkErrors, "handshake failure (errno=%d, msg=%s)", iErr, sphSockError ( iErr ) );
+		} else if ( iRes>0 )
+		{
+			// incomplete reply
+			tAgent.Fail ( eWrongReplies, "handshake failure (exp=%d, recv=%d)", ( int ) sizeof ( iRemoteVer ), iRes );
+		} else
+		{
+			// agent closed the connection
+			// this might happen in out-of-sync connect-accept case; so let's retry
+			tAgent.Fail ( eUnexpectedClose, "handshake failure (received %d from 4 bytes, then connection was closed)"
+						  , iRes );
+			// tAgent.m_eState = AGENT_RETRY; // commented out since it is done in Fail()
+		}
+		return false;
+	}
+
+	iRemoteVer = ntohl ( iRemoteVer );
+	if ( !( iRemoteVer==SPHINX_SEARCHD_PROTO
+		|| iRemoteVer==0x01000000UL ) ) // workaround for all the revisions that sent it in host order...
+	{
+		pEvents->IterateRemove ( tAgent.m_iSock );
+		tAgent.Fail ( eWrongReplies, "handshake failure (unexpected protocol version=%d)", iRemoteVer );
+		return false;
+	}
+	return SetRemotePersistent ( tAgent, pEvents );
+}
+
+// actually build and send request. Move to AGENT_QUERYED state
+inline static bool SendRequest ( AgentConn_t &tAgent, const IRequestBuilder_t* pBuilder, ISphNetEvents * pEvents )
+{
+	assert ( pBuilder );
+	// send request
+	NetOutputBuffer_c tOut ( tAgent.m_iSock );
+	pBuilder->BuildRequest ( tAgent, tOut );
+	tOut.Flush ();
+	if ( tOut.GetError () )
+	{
+		pEvents->IterateRemove (tAgent.m_iSock);
+		tAgent.Fail ( eNetworkErrors, "sending request %s", tOut.GetErrorMsg () );
+		return false;
+	}
+	pEvents->IterateChangeEvent (tAgent.m_iSock, ISphNetEvents::SPH_POLL_RD);
+	return true;
+}
+
+// Try to read header and allocate reply buffer. Move to AGENT_REPLY state
+inline static bool CheckReplyHeader ( AgentConn_t & tAgent, ISphNetEvents * pEvents )
+{
+	// try to read
+	struct
+	{
+		WORD m_uStatus;
+		WORD m_uVer;
+		int m_iLength;
+	} tReplyHeader ;
+
+	STATIC_SIZE_ASSERT ( tReplyHeader, 8 );
+
+	if ( sphSockRecv ( tAgent.m_iSock, ( char * ) &tReplyHeader, sizeof ( tReplyHeader ) )!=sizeof ( tReplyHeader ) )
+	{
+		// bail out if failed
+		pEvents->IterateRemove ( tAgent.m_iSock );
+		tAgent.Fail ( eNetworkErrors, "failed to receive reply header" );
+		return false;
+	}
+
+	tReplyHeader.m_uStatus = ntohs ( tReplyHeader.m_uStatus );
+	tReplyHeader.m_uVer = ntohs ( tReplyHeader.m_uVer );
+	tReplyHeader.m_iLength = ntohl ( tReplyHeader.m_iLength );
+
+	// check the packet
+	if ( tReplyHeader.m_iLength<0
+		|| tReplyHeader.m_iLength>g_iMaxPacketSize ) // FIXME! add reasonable max packet len too
+	{
+		pEvents->IterateRemove ( tAgent.m_iSock );
+		tAgent.Fail ( eWrongReplies, "invalid packet size (status=%d, len=%d, max_packet_size=%d)"
+									   , tReplyHeader.m_uStatus, tReplyHeader.m_iLength, g_iMaxPacketSize );
+		return false;
+	}
+
+	// header received, switch the status
+	assert ( !tAgent.m_dReplyBuf.Begin () );
+	tAgent.m_dReplyBuf.Reset ( tReplyHeader.m_iLength );
+	if ( !tAgent.m_dReplyBuf.Begin () )
+	{
+		// bail out if failed
+		pEvents->IterateRemove ( tAgent.m_iSock );
+		tAgent.Fail ( eWrongReplies, "failed to alloc %d bytes for reply buffer", tAgent.m_iReplySize );
+		return false;
+	}
+
+	tAgent.m_iReplySize = tReplyHeader.m_iLength;
+	tAgent.m_iReplyRead = 0;
+	tAgent.m_eReplyStatus = ( SearchdStatus_e ) tReplyHeader.m_uStatus;
+	return true;
+}
+
+// receive sequence BLOB of iReplySize. Move tAgent.m_iReplyRead.
+inline static bool GetReplyChunk ( AgentConn_t &tAgent, ISphNetEvents * pEvents )
+{
+	assert ( tAgent.m_iReplyRead<tAgent.m_iReplySize );
+	int iRes =sphSockRecv ( tAgent.m_iSock, ( char * ) tAgent.m_dReplyBuf.Begin () + tAgent.m_iReplyRead,
+		tAgent.m_iReplySize - tAgent.m_iReplyRead );
+
+	// bail out if read failed
+	if ( iRes<=0 )
+	{
+		pEvents->IterateRemove ( tAgent.m_iSock );
+		tAgent.Fail ( eNetworkErrors, "failed to receive reply body: %s", sphSockError () );
+		return false;
+	}
+
+	assert ( iRes>0 );
+	assert ( tAgent.m_iReplyRead + iRes<=tAgent.m_iReplySize );
+	tAgent.m_iReplyRead += iRes;
+	return true;
+};
+
+
+inline static void AgentFailure ( AgentConn_t & tAgent )
+{
+	tAgent.Close ();
+	tAgent.m_dResults.Reset ();
+}
+
+inline static bool NonQueryCond ( AgentState_e eCondition )
+{
+	return eCondition<AGENT_CONNECTING || eCondition>AGENT_QUERYED;
+}
+
+inline static bool InWaitCond ( AgentState_e eCondition )
+{
+	return eCondition==AGENT_QUERYED || eCondition==AGENT_PREREPLY || eCondition==AGENT_REPLY;
+}
+
+
+// change state of new agents to AGENT_CONNECTING or AGENT_HANDSHAKE.
+// change state of already connected to AGENT_ESTABLISHED
+// change state of fails to AGENT_RETRY
 void RemoteConnectToAgent ( AgentConn_t & tAgent )
 {
 	bool bAgentRetry = ( tAgent.State()==AGENT_RETRY );
@@ -1196,9 +1393,6 @@ void RemoteConnectToAgent ( AgentConn_t & tAgent )
 	struct sockaddr_storage ss;
 	memset ( &ss, 0, sizeof(ss) );
 	ss.ss_family = (short)tAgent.m_tDesc.m_iFamily;
-#ifdef TCP_NODELAY
-	bool bUnixSocket = false;
-#endif
 
 	if ( ss.ss_family==AF_INET )
 	{
@@ -1221,9 +1415,6 @@ void RemoteConnectToAgent ( AgentConn_t & tAgent )
 		struct sockaddr_un *un = (struct sockaddr_un *)&ss;
 		snprintf ( un->sun_path, sizeof(un->sun_path), "%s", tAgent.m_tDesc.m_sPath.cstr() );
 		len = sizeof(*un);
-#ifdef TCP_NODELAY
-		bUnixSocket = true;
-#endif
 	}
 #endif
 
@@ -1242,7 +1433,7 @@ void RemoteConnectToAgent ( AgentConn_t & tAgent )
 
 #ifdef TCP_NODELAY
 	int iOn = 1;
-	if ( !bUnixSocket && setsockopt ( tAgent.m_iSock, IPPROTO_TCP, TCP_NODELAY, (char*)&iOn, sizeof(iOn) ) )
+	if ( ss.ss_family==AF_INET && setsockopt ( tAgent.m_iSock, IPPROTO_TCP, TCP_NODELAY, (char*)&iOn, sizeof(iOn) ) )
 	{
 		tAgent.m_sFailure.SetSprintf ( "setsockopt() failed: %s", sphSockError() );
 		return;
@@ -1258,81 +1449,78 @@ void RemoteConnectToAgent ( AgentConn_t & tAgent )
 	if ( connect ( tAgent.m_iSock, (struct sockaddr*)&ss, len )<0 )
 	{
 		int iErr = sphSockGetErrno();
-		if ( iErr!=EINPROGRESS && iErr!=EINTR && iErr!=EWOULDBLOCK ) // check for EWOULDBLOCK is for winsock only
+		if ( !(iErr==EINPROGRESS || iErr==EINTR || iErr==EWOULDBLOCK) ) // check for EWOULDBLOCK is for winsock only
 		{
 			tAgent.Fail ( eConnectFailures, "connect() failed: errno=%d, %s", iErr, sphSockError(iErr) );
 			tAgent.State ( AGENT_RETRY ); // do retry on connect() failures
 			return;
-
-		} else
-		{
-			// connection in progress
-			tAgent.State ( AGENT_CONNECTING );
 		}
+		// connection in progress
+		tAgent.State ( AGENT_CONNECTING );
 	} else
 	{
 		// connect() success
 		track_processing_time ( tAgent );
 		// send the client's proto version right now to avoid w-w-r pattern.
-		NetOutputBuffer_c tOut ( tAgent.m_iSock );
-		tOut.SendDword ( SPHINX_CLIENT_VERSION );
-		tOut.Flush (); // FIXME! handle flush failure?
-
-		// socket connected, ready to read hello message
-		tAgent.State ( AGENT_HANDSHAKE );
+		if ( SendHandshake ( tAgent ) )
+			tAgent.State ( AGENT_HANDSHAKE );
 	}
 }
 
 // process states AGENT_CONNECTING, AGENT_HANDSHAKE, AGENT_ESTABLISHED and notes AGENT_QUERYED
-// called in serial order with RemoteConnectToAgents (so, the context is NOT changed during the call).
+// called in serial order after RemoteConnectToAgents (so, the context is NOT changed during the call).
 int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 {
 	assert ( pCtx->m_iTimeout>=0 );
 	assert ( pCtx->m_ppAgents );
 	assert ( pCtx->m_iAgentCount );
 
+	sphLogDebugv ( "RemoteQueryAgents for %d agents, timeout %d", pCtx->m_iAgentCount, pCtx->m_iTimeout );
+
 	int iAgents = 0;
 	int64_t tmMaxTimer = sphMicroTimer() + pCtx->m_iTimeout*1000; // in microseconds
 
 	ISphNetEvents* pEvents = sphCreatePoll ( pCtx->m_iAgentCount, true );
-	int iEvents = 0;
 	bool bTimeout = false;
 
+	// charge poller with appropriate agents
+	for ( int i = 0; i<pCtx->m_iAgentCount; i++ )
+	{
+		AgentConn_t * pAgent = pCtx->m_ppAgents[i];
+		// select only 'initial' agents - which are not send query response.
+		if ( NonQueryCond ( pAgent->State () ) )
+			continue;
+
+		assert ( !pAgent->m_tDesc.m_sPath.IsEmpty () || pAgent->m_tDesc.m_iPort>0 );
+		assert ( pAgent->m_iSock>0 );
+		if ( pAgent->m_iSock<=0 || ( pAgent->m_tDesc.m_sPath.IsEmpty () && pAgent->m_tDesc.m_iPort<=0 ) )
+		{
+			pAgent->Fail ( eConnectFailures, "invalid agent in querying. Socket %d, Path %s, Port %d", pAgent->m_iSock
+						   , pAgent->m_tDesc.m_sPath.cstr (), pAgent->m_tDesc.m_iPort );
+			continue;
+		}
+		pEvents->SetupEvent ( pAgent->m_iSock,
+			( pAgent->State ()==AGENT_CONNECTING || pAgent->State ()==AGENT_ESTABLISHED )
+				? ISphNetEvents::SPH_POLL_WR
+				: ISphNetEvents::SPH_POLL_RD
+			, pAgent );
+	}
+
+	// main loop of querying
 	while (true)
 	{
-		if ( !iEvents )
-		{
-			for ( int i=0; i<pCtx->m_iAgentCount; i++ )
-			{
-				AgentConn_t * pAgent = pCtx->m_ppAgents[i];
-				// select only 'initial' agents - which are not send query response.
-				if ( pAgent->State()<AGENT_CONNECTING || pAgent->State()>AGENT_QUERYED )
-					continue;
-
-				assert ( !pAgent->m_tDesc.m_sPath.IsEmpty() || pAgent->m_tDesc.m_iPort>0 );
-				assert ( pAgent->m_iSock>0 );
-				if ( pAgent->m_iSock<=0 || ( pAgent->m_tDesc.m_sPath.IsEmpty() && pAgent->m_tDesc.m_iPort<=0 ) )
-				{
-					pAgent->Fail ( eConnectFailures, "invalid agent in querying. Socket %d, Path %s, Port %d", pAgent->m_iSock, pAgent->m_tDesc.m_sPath.cstr(), pAgent->m_tDesc.m_iPort );
-					// tAgent.m_eState = AGENT_RETRY; // do retry on connect() failures // commented out since already set by Fail
-					continue;
-				}
-				pEvents->SetupEvent( pAgent->m_iSock, ( pAgent->State()==AGENT_CONNECTING
-						  || pAgent->State()==AGENT_ESTABLISHED)
-						 ? ISphNetEvents::SPH_POLL_WR : ISphNetEvents::SPH_POLL_RD, pAgent );
-				++iEvents;
-			}
-		}
-
 		bool bDone = true;
 		for ( int i=0; i<pCtx->m_iAgentCount; i++ )
 		{
 			AgentConn_t * pAgent = pCtx->m_ppAgents[i];
 			// select only 'initial' agents - which are not send query response.
-			if ( pAgent->State()<AGENT_CONNECTING || pAgent->State()>AGENT_QUERYED )
+			if ( NonQueryCond ( pAgent->State () ) )
 				continue;
 			if ( pAgent->State()!=AGENT_QUERYED )
+			{
 				bDone = false;
+				break;
+			}
 		}
 		if ( bDone )
 			break;
@@ -1345,7 +1533,6 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 			bTimeout = true;
 			break; // FIXME? what about iTimeout==0 case?
 		}
-
 
 		// do poll
 		bool bHaveSelected = pEvents->Wait( int( tmMicroLeft/1000 ) );
@@ -1363,132 +1550,69 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 		{
 			NetEventsIterator_t & tEvent = pEvents->IterateGet ();
 			AgentConn_t & tAgent = *(AgentConn_t*)tEvent.m_pData;
-			bool bErr = ( (tEvent.m_uEvents & (ISphNetEvents::SPH_POLL_ERR | ISphNetEvents::SPH_POLL_HUP ) )!=0 );
+			bool bErr = ( (tEvent.m_uEvents & ( ISphNetEvents::SPH_POLL_ERR | ISphNetEvents::SPH_POLL_HUP ) )!=0 );
 
-			if ( tAgent.State()==AGENT_CONNECTING && ( tEvent.m_bWritable || bErr ) )
+			if ( tAgent.State ()==AGENT_CONNECTING && bErr )
 			{
-				if ( bErr )
-				{
-					pEvents->IterateRemove (tAgent.m_iSock);
-					--iEvents;
+				pEvents->IterateRemove ( tAgent.m_iSock );
+				int iErr = 0;
+				socklen_t iErrLen = sizeof ( iErr );
+				if ( getsockopt ( tAgent.m_iSock, SOL_SOCKET, SO_ERROR, ( char * ) &iErr, &iErrLen )<0 )
+					sphWarning ( "failed to get error: %d '%s'", errno, strerror ( errno ) );
+				// connect() failure
+				tAgent.Fail ( eConnectFailures, "connect() failed: errno=%d, %s", iErr, sphSockError ( iErr ) );
+				continue;
+			}
 
-					int iErr = 0;
-					socklen_t iErrLen = sizeof(iErr);
-					if ( getsockopt ( tAgent.m_iSock, SOL_SOCKET, SO_ERROR, ( char * ) &iErr, &iErrLen )<0 )
-						sphWarning ( "failed to get error: %d '%s'", errno, strerror ( errno ) );
-					// connect() failure
-					tAgent.Fail ( eConnectFailures, "connect() failed: errno=%d, %s", iErr, sphSockError(iErr) );
-					continue;
-				}
-
-				// connect() success
+			// connect() success
+			if ( tAgent.State()==AGENT_CONNECTING && tEvent.IsWritable ()  )
+			{
 				track_processing_time ( tAgent );
 
 				// send the client's proto version right now to avoid w-w-r pattern.
-				NetOutputBuffer_c tOut ( tAgent.m_iSock );
-				tOut.SendDword ( SPHINX_CLIENT_VERSION );
-				tOut.Flush (); // FIXME! handle flush failure?
-				pEvents->IterateChangeEvent ( tAgent.m_iSock, ISphNetEvents::SPH_POLL_RD );
-				tAgent.State ( AGENT_HANDSHAKE );
-
+				if ( SendHandshake ( tAgent, pEvents ) )
+					tAgent.State ( AGENT_HANDSHAKE );
 				continue;
 			}
 
 			// check if hello was received
-			if ( tAgent.State()==AGENT_HANDSHAKE && tEvent.m_bReadable )
+			if ( tAgent.State()==AGENT_HANDSHAKE && tEvent.IsReadable () )
 			{
-				// read reply
-				int iRemoteVer;
-				int iRes = sphSockRecv ( tAgent.m_iSock, (char*)&iRemoteVer, sizeof(iRemoteVer) );
-				if ( iRes!=sizeof(iRemoteVer) )
-				{
-					pEvents->IterateRemove (tAgent.m_iSock);
-					--iEvents;
-					if ( iRes<0 )
-					{
-						// network error
-						int iErr = sphSockGetErrno();
-						tAgent.Fail ( eNetworkErrors, "handshake failure (errno=%d, msg=%s)", iErr, sphSockError(iErr) );
-					} else if ( iRes>0 )
-					{
-						// incomplete reply
-						tAgent.Fail ( eWrongReplies, "handshake failure (exp=%d, recv=%d)", (int)sizeof(iRemoteVer), iRes );
-					} else
-					{
-						// agent closed the connection
-						// this might happen in out-of-sync connect-accept case; so let's retry
-						tAgent.Fail ( eUnexpectedClose, "handshake failure (connection was closed)" );
-						// tAgent.m_eState = AGENT_RETRY; // commented out since it is done in Fail()
-					}
-					continue;
-				}
-
-				iRemoteVer = ntohl ( iRemoteVer );
-				if (!( iRemoteVer==SPHINX_SEARCHD_PROTO || iRemoteVer==0x01000000UL ) ) // workaround for all the revisions that sent it in host order...
-				{
-					tAgent.Fail ( eWrongReplies, "handshake failure (unexpected protocol version=%d)", iRemoteVer );
-					continue;
-				}
-
-				NetOutputBuffer_c tOut ( tAgent.m_iSock );
-				// check if we need to reset the persistent connection
-				if ( tAgent.m_bFresh && tAgent.m_tDesc.m_bPersistent )
-				{
-					tOut.SendWord ( SEARCHD_COMMAND_PERSIST );
-					tOut.SendWord ( 0 ); // dummy version
-					tOut.SendInt ( 4 ); // request body length
-					tOut.SendInt ( 1 ); // set persistent to 1.
-					tOut.Flush ();
-					if ( tOut.GetError () )
-					{
-						tAgent.Fail ( eNetworkErrors, "%s", tOut.GetErrorMsg() );
-						continue;
-					}
-					tAgent.m_bFresh = false;
-				}
-
-				tAgent.State ( AGENT_ESTABLISHED );
-				pEvents->IterateChangeEvent ( tAgent.m_iSock, ISphNetEvents::SPH_POLL_WR );
+				if ( CheckRemoteVer (tAgent, pEvents))
+					tAgent.State ( AGENT_ESTABLISHED );
 				continue;
 			}
 
-			if ( tAgent.State()==AGENT_ESTABLISHED && tEvent.m_bWritable )
+			if ( tAgent.State()==AGENT_ESTABLISHED && tEvent.IsWritable () )
 			{
-				// send request
-				NetOutputBuffer_c tOut ( tAgent.m_iSock );
-				pCtx->m_pBuilder->BuildRequest ( tAgent, tOut );
-				tOut.Flush ();
-				if ( tOut.GetError () )
+				if ( SendRequest ( tAgent, pCtx->m_pBuilder, pEvents ))
 				{
-					tAgent.Fail ( eNetworkErrors, "%s", tOut.GetErrorMsg () );
-					continue;
+					tAgent.State ( AGENT_QUERYED );
+					++iAgents;
 				}
-				tAgent.State ( AGENT_QUERYED );
-				++iAgents;
-				pEvents->IterateChangeEvent ( tAgent.m_iSock, ISphNetEvents::SPH_POLL_RD );
+
 				continue;
 			}
 
 			// check if queried agent replied while we were querying others
-			if ( tAgent.State()==AGENT_QUERYED && tEvent.m_bReadable )
+			if ( tAgent.State()==AGENT_QUERYED && tEvent.IsReadable () )
 			{
 				// do not account agent wall time from here; agent is probably ready
 				tAgent.m_iWall += sphMicroTimer();
 				tAgent.State ( AGENT_PREREPLY );
 				pEvents->IterateRemove(tAgent.m_iSock);
-				--iEvents;
 				continue;
 			}
 		}
 	}
 	SafeDelete (pEvents);
 
+
 	// check if connection timed out
 	for ( int i=0; i<pCtx->m_iAgentCount; i++ )
 	{
 		AgentConn_t * pAgent = pCtx->m_ppAgents[i];
-		if ( bTimeout && ( pAgent->State()!=AGENT_QUERYED && pAgent->State()!=AGENT_UNUSED && pAgent->State()!=AGENT_RETRY && pAgent->State()!=AGENT_PREREPLY
-			&& pAgent->State()!=AGENT_REPLY ) )
+		if ( bTimeout && !( NonQueryCond ( pAgent->State () ) ))
 		{
 			// technically, we can end up here via two different routes
 			// a) connect() never finishes in given time frame
@@ -1496,47 +1620,46 @@ int RemoteQueryAgents ( AgentConnectionContext_t * pCtx )
 			// however, there's no way to tell the two from each other
 			// so we just account both cases as connect() failure
 			pAgent->Fail ( eTimeoutsConnect, "connect() timed out" );
-			// tAgent.m_eState = AGENT_RETRY; // do retry on connect() failures // commented out since done by Fail() call
 		}
 	}
 
 	return iAgents;
 }
 
-// processing states AGENT_QUERY, AGENT_PREREPLY and AGENT_REPLY
+// processing states AGENT_QUERYED/AGENT_PREREPLY, and AGENT_REPLY
 // may work in parallel with RemoteQueryAgents, so the state MAY change during a call.
 int RemoteWaitForAgents ( AgentsVector & dAgents, int iTimeout, IReplyParser_t & tParser )
 {
 	assert ( iTimeout>=0 );
+	sphLogDebugv ( "RemoteWaitForAgents for %d agents, timeout %d", dAgents.GetLength (), iTimeout);
+
 
 	int iAgents = 0;
-	int64_t tmMaxTimer = sphMicroTimer() + iTimeout*1000; // in microseconds
-
-	ISphNetEvents * pEvents = sphCreatePoll ( dAgents.GetLength(), true );
 	int iEvents = 0;
 	bool bTimeout = false;
+
+	int64_t tmMaxTimer = sphMicroTimer() + iTimeout*1000; // in microseconds
+	ISphNetEvents * pEvents = nullptr;
 
 	while (true)
 	{
 		if ( !iEvents )
-		{
-			bool bDone = true;
-			ARRAY_FOREACH ( iAgent, dAgents )
+			for ( const auto * pAgent : dAgents )
 			{
-				AgentConn_t * pAgent = dAgents[iAgent];
-				if ( pAgent->State()==AGENT_QUERYED || pAgent->State()==AGENT_REPLY || pAgent->State()==AGENT_PREREPLY )
+				if ( InWaitCond ( pAgent->State() ) )
 				{
 					assert ( !pAgent->m_tDesc.m_sPath.IsEmpty() || pAgent->m_tDesc.m_iPort>0 );
 					assert ( pAgent->m_iSock>0 );
+					if (!pEvents)
+						pEvents = sphCreatePoll ( dAgents.GetLength (), true );
 					pEvents->SetupEvent ( pAgent->m_iSock, ISphNetEvents::SPH_POLL_RD, pAgent );
 					++iEvents;
-					bDone = false;
+					// don't break since iEvents also counted
 				}
 			}
 
-			if ( bDone )
-				break;
-		}
+		if ( !iEvents )
+			break;
 
 		int64_t tmSelect = sphMicroTimer();
 		int64_t tmMicroLeft = tmMaxTimer - tmSelect;
@@ -1550,167 +1673,104 @@ int RemoteWaitForAgents ( AgentsVector & dAgents, int iTimeout, IReplyParser_t &
 		dAgents[0]->m_iWaited += sphMicroTimer() - tmSelect;
 
 		if ( !bHaveAnswered )
-			continue;
+			continue; // check for double-add above
 
 		pEvents->IterateStart();
 		while ( pEvents->IterateNextReady() )
 		{
 			NetEventsIterator_t & tEvent = pEvents->IterateGet();
 			AgentConn_t & tAgent = *(AgentConn_t *)tEvent.m_pData;
-			if (!( tAgent.State()==AGENT_QUERYED || tAgent.State()==AGENT_REPLY || tAgent.State()==AGENT_PREREPLY ))
+			if ( !( InWaitCond ( tAgent.State () ) ) )
 				continue;
 
-			if (!(tEvent.m_bReadable ))
+			if ( !( tEvent.IsReadable () ) )
 				continue;
 
 			// if there was no reply yet, read reply header
-			bool bFailure = true;
 			bool bWarnings = false;
 			// need real socket for poller, however might be lost on agent failure
 			int iSock = tAgent.m_iSock;
 
-			while (true)
+			if ( tAgent.State ()==AGENT_PREREPLY )
 			{
-				if ( tAgent.State()==AGENT_QUERYED || tAgent.State()==AGENT_PREREPLY )
-				{
-					if ( tAgent.State()==AGENT_PREREPLY )
-					{
-						tAgent.m_iWall -= sphMicroTimer();
-						tAgent.State ( AGENT_QUERYED );
-					}
-
-					// try to read
-					struct
-					{
-						WORD	m_uStatus;
-						WORD	m_uVer;
-						int		m_iLength;
-					} tReplyHeader;
-					STATIC_SIZE_ASSERT ( tReplyHeader, 8 );
-
-					if ( sphSockRecv ( tAgent.m_iSock, (char*)&tReplyHeader, sizeof(tReplyHeader) )!=sizeof(tReplyHeader) )
-					{
-						// bail out if failed						
-						tAgent.Fail ( eNetworkErrors, "failed to receive reply header" );
-						break;
-					}
-
-					tReplyHeader.m_uStatus = ntohs ( tReplyHeader.m_uStatus );
-					tReplyHeader.m_uVer = ntohs ( tReplyHeader.m_uVer );
-					tReplyHeader.m_iLength = ntohl ( tReplyHeader.m_iLength );
-
-					// check the packet
-					if ( tReplyHeader.m_iLength<0 || tReplyHeader.m_iLength>g_iMaxPacketSize ) // FIXME! add reasonable max packet len too
-					{
-						agent_stats_inc ( tAgent, eWrongReplies );
-						tAgent.m_sFailure.SetSprintf ( "invalid packet size (status=%d, len=%d, max_packet_size=%d)",
-							tReplyHeader.m_uStatus, tReplyHeader.m_iLength, g_iMaxPacketSize );
-						break;
-					}
-
-					// header received, switch the status
-					assert ( tAgent.m_dReplyBuf.Begin()==NULL );
-					tAgent.State ( AGENT_REPLY );
-					tAgent.m_dReplyBuf.Reset ( tReplyHeader.m_iLength );
-					tAgent.m_iReplySize = tReplyHeader.m_iLength;
-					tAgent.m_iReplyRead = 0;
-					tAgent.m_eReplyStatus = ( SearchdStatus_e ) tReplyHeader.m_uStatus;
-
-					if ( !tAgent.m_dReplyBuf.Begin() )
-					{
-						// bail out if failed
-						tAgent.m_sFailure.SetSprintf ( "failed to alloc %d bytes for reply buffer", tAgent.m_iReplySize );
-						break;
-					}
-				}
-
-				// if we are reading reply, read another chunk
-				if ( tAgent.State()==AGENT_REPLY )
-				{
-					// do read
-					assert ( tAgent.m_iReplyRead<tAgent.m_iReplySize );
-					int iRes = sphSockRecv ( tAgent.m_iSock, (char*)tAgent.m_dReplyBuf.Begin() + tAgent.m_iReplyRead,
-						tAgent.m_iReplySize-tAgent.m_iReplyRead );
-
-					// bail out if read failed
-					if ( iRes<=0 )
-					{
-						tAgent.Fail ( eNetworkErrors, "failed to receive reply body: %s", sphSockError() );
-						break;
-					}
-
-					assert ( iRes>0 );
-					assert ( tAgent.m_iReplyRead+iRes<=tAgent.m_iReplySize );
-					tAgent.m_iReplyRead += iRes;
-				}
-
-				// if reply was fully received, parse it
-				if ( tAgent.State()==AGENT_REPLY && tAgent.m_iReplyRead==tAgent.m_iReplySize )
-				{
-					MemInputBuffer_c tReq ( tAgent.m_dReplyBuf.Begin(), tAgent.m_iReplySize );
-
-					// absolve thy former sins
-					tAgent.m_sFailure = "";
-
-					// check for general errors/warnings first
-					auto bEscapeLoop = true;
-					switch ( tAgent.m_eReplyStatus )
-					{
-					case SEARCHD_RETRY:
-						tAgent.State ( AGENT_RETRY );
-						tAgent.m_sFailure.SetSprintf ( "remote warning: %s", tReq.GetString ().cstr () );
-						break;
-
-					case SEARCHD_ERROR:
-						tAgent.m_sFailure.SetSprintf ( "remote error: %s", tReq.GetString ().cstr () );
-						break;
-
-					case SEARCHD_WARNING:
-						tAgent.m_sFailure.SetSprintf ( "remote warning: %s", tReq.GetString ().cstr () );
-						bWarnings = true;
-						// no break;
-
-					case SEARCHD_OK:
-					default: bEscapeLoop = false;
-					}
-					if ( bEscapeLoop )
-						break;
-
-					// call parser
-					if ( !tParser.ParseReply ( tReq, tAgent ) )
-						break;
-
-					// check if there was enough data
-					if ( tReq.GetError() )
-					{
-						tAgent.Fail ( eWrongReplies, "incomplete reply" );
-						break;
-					}
-
-					pEvents->IterateRemove ( iSock );
-					--iEvents;
-					// all is well
-					iAgents++;
-					tAgent.Close ( false );
-					tAgent.m_bSuccess = true;
-					tAgent.m_bDone = true;
-				}
-
-				bFailure = false;
-				break;
+				tAgent.m_iWall -= sphMicroTimer ();
+				tAgent.State ( AGENT_QUERYED );
 			}
 
-			if ( bFailure )
+			if ( tAgent.State()==AGENT_QUERYED )
 			{
-				// agent.m_iSock is invalid after agent.Fail call
-				pEvents->IterateRemove ( iSock );
-				--iEvents;
-				tAgent.Close ();
-				tAgent.m_dResults.Reset ();
-			} else if ( tAgent.m_bSuccess )
+				if ( !CheckReplyHeader ( tAgent, pEvents ) )
+					continue;
+				tAgent.State ( AGENT_REPLY );
+			}
+
+			assert ( tAgent.State() == AGENT_REPLY );
+
+			// if we are reading reply, read another chunk
+			// do read
+			if ( !GetReplyChunk ( tAgent, pEvents ) )
+				continue; // check for double-add above! No deletion here!
+
+			pEvents->IterateRemove ( iSock );
+			--iEvents;
+
+			// if reply was fully received, parse it
+			if ( tAgent.m_iReplyRead==tAgent.m_iReplySize )
 			{
+				MemInputBuffer_c tReq ( tAgent.m_dReplyBuf.Begin(), tAgent.m_iReplySize );
+
+				// absolve thy former sins
+				tAgent.m_sFailure = "";
+
+				// check for general errors/warnings first
+				auto bEscapeLoop = true;
+				switch ( tAgent.m_eReplyStatus )
+				{
+				case SEARCHD_RETRY:
+					tAgent.State ( AGENT_RETRY );
+					tAgent.m_sFailure.SetSprintf ( "remote warning: %s", tReq.GetString ().cstr () );
+					break;
+
+				case SEARCHD_ERROR:
+					tAgent.m_sFailure.SetSprintf ( "remote error: %s", tReq.GetString ().cstr () );
+					break;
+
+				case SEARCHD_WARNING:
+					tAgent.m_sFailure.SetSprintf ( "remote warning: %s", tReq.GetString ().cstr () );
+					bWarnings = true;
+					// no break;
+
+				case SEARCHD_OK:
+				default: bEscapeLoop = false;
+				}
+
+				if ( bEscapeLoop )
+				{
+					AgentFailure (tAgent);
+					continue;
+				}
+
+				if ( !tParser.ParseReply ( tReq, tAgent ) )
+				{
+					AgentFailure (tAgent);
+					continue;
+				}
+
+				// check if there was enough data
+				if ( tReq.GetError() )
+				{
+					AgentFailure ( tAgent );
+					tAgent.Fail ( eWrongReplies, "incomplete reply" );
+					continue;
+				}
+
+				// all is well
+				++iAgents;
+				tAgent.Close ( false );
+				tAgent.m_bSuccess = true;
+				tAgent.m_bDone = true;
 				ARRAY_FOREACH_COND ( i, tAgent.m_dResults, !bWarnings )
-					bWarnings = !tAgent.m_dResults[i].m_sWarning.IsEmpty();
+					bWarnings = !tAgent.m_dResults[i].m_sWarning.IsEmpty ();
 				agent_stats_inc ( tAgent, bWarnings ? eNetworkCritical : eNetworkNonCritical );
 			}
 		}
@@ -1719,11 +1779,9 @@ int RemoteWaitForAgents ( AgentsVector & dAgents, int iTimeout, IReplyParser_t &
 	SafeDelete ( pEvents );
 
 	// close timed-out agents
-	ARRAY_FOREACH ( iAgent, dAgents )
+	for ( auto * pAgent : dAgents )
 	{
-		AgentConn_t * pAgent = dAgents[iAgent];
-		if ( bTimeout && ( pAgent->State()==AGENT_QUERYED || pAgent->State()==AGENT_PREREPLY ||
-			( pAgent->State()==AGENT_REPLY && pAgent->m_iReplyRead!=pAgent->m_iReplySize ) ) )
+		if ( bTimeout && InWaitCond ( pAgent->State () ) && pAgent->m_iReplyRead!=pAgent->m_iReplySize )
 		{
 			assert ( !pAgent->m_dResults.GetLength() );
 			assert ( !pAgent->m_bSuccess );
@@ -1739,15 +1797,9 @@ typedef void ( *ThdWorker_fn ) ( AgentWorkContext_t * );
 
 struct AgentWorkContext_t : public AgentConnectionContext_t
 {
-	ThdWorker_fn	m_pfn;			///< work functor & flag of dummy element
-	int64_t			m_tmWait;
-	int				m_iAgentsDone;
-
-	AgentWorkContext_t ()
-		: m_pfn ( NULL )
-		, m_tmWait ( 0 )
-		, m_iAgentsDone ( 0 )
-	{}
+	ThdWorker_fn	m_pfn = nullptr;			///< work functor & flag of dummy element
+	int64_t			m_tmWait = 0;
+	int				m_iAgentsDone = 0;
 };
 
 
@@ -2184,7 +2236,7 @@ class IterableEvents_c : public ISphNetEvents
 protected:
 	List_t m_tWork;
 	NetEventsIterator_t m_tIter;
-	ListedData_t * m_pIter;
+	ListedData_t * m_pIter = nullptr;
 
 protected:
 	ListedData_t * AddNewEventData ( const void * pData )
@@ -2198,7 +2250,7 @@ protected:
 	void ResetIterator ()
 	{
 		m_tIter.Reset();
-		m_pIter = NULL;
+		m_pIter = nullptr;
 	}
 
 	void RemoveCurrentItem ()
@@ -2215,10 +2267,7 @@ protected:
 	}
 
 public:
-	IterableEvents_c ()
-	{
-		ResetIterator();
-	}
+	IterableEvents_c () = default;
 
 	virtual ~IterableEvents_c ()
 	{
@@ -2248,8 +2297,7 @@ public:
 			if ( m_pIter!=m_tWork.End() )
 				return true;
 
-			m_tIter.m_pData = NULL;
-			m_pIter = NULL;
+			ResetIterator();
 			return false;
 		}
 	}
@@ -2315,6 +2363,8 @@ public:
 		// need positive timeout for communicate threads back and shutdown
 		m_iReady = epoll_wait ( m_iEFD, m_dReady.Begin (), m_dReady.GetLength (), timeoutMs );
 
+		sphLogDebugv ( "%d epoll wait returned %d events (timeout %d)", m_iEFD, m_iReady, timeoutMs );
+
 		if ( m_iReady<0 )
 		{
 			int iErrno = sphSockGetErrno ();
@@ -2353,15 +2403,9 @@ public:
 		m_tIter.m_pData = m_pIter->m_pData;
 
 		if ( tEv.events & EPOLLIN )
-		{
 			m_tIter.m_uEvents |= SPH_POLL_RD;
-			m_tIter.m_bReadable = true;
-		}
 		if ( tEv.events & EPOLLOUT )
-		{
 			m_tIter.m_uEvents |= SPH_POLL_WR;
-			m_tIter.m_bWritable = true;
-		}
 		if ( tEv.events & EPOLLHUP )
 			m_tIter.m_uEvents |= SPH_POLL_HUP;
 		if ( tEv.events & EPOLLERR )
@@ -2426,16 +2470,18 @@ public:
 		: m_iLastReportedErrno ( -1 )
 		, m_iReady ( 0 )
 	{
-		m_iKQ = kqueue (); // 1000 is dummy, see man
+		m_iKQ = kqueue ();
 		if ( m_iKQ==-1 )
 			sphDie ( "failed to create kqueue main FD, errno=%d, %s", errno, strerror ( errno ) );
 
+		sphLogDebugv ( "kqueue %d created", m_iKQ );
 		m_dReady.Reserve ( iSizeHint );
 		m_iIterEv = -1;
 	}
 
 	~KqueueEvents_c ()
 	{
+		sphLogDebugv ( "kqueue %d closed", m_iKQ );
 		SafeClose ( m_iKQ );
 	}
 
@@ -2449,9 +2495,9 @@ public:
 		struct kevent tEv;
 		EV_SET ( &tEv, iSocket, (eFlags==SPH_POLL_RD ? EVFILT_READ : EVFILT_WRITE), EV_ADD, 0, 0, pIntData );
 
-		sphLogDebugv ( "%p kqueue setup, ev=0x%u, sock=%d", pData, tEv.flags, iSocket );
+		sphLogDebugv ( "%p kqueue %d setup, ev=%d, sock=%d", pData, m_iKQ, tEv.filter, iSocket );
 
-		int iRes = kevent (m_iKQ, &tEv, 1, NULL, 0, NULL);
+		int iRes = kevent (m_iKQ, &tEv, 1, nullptr, 0, nullptr);
 		if ( iRes==-1 )
 			sphWarning ( "failed to setup kqueue event for sock %d, errno=%d, %s", iSocket, errno, strerror ( errno ) );
 	}
@@ -2465,11 +2511,13 @@ public:
 		if ( timeoutMs )
 		{
 			ts.tv_sec = timeoutMs/1000;
-			ts.tv_nsec = timeoutMs*1000000;
+			ts.tv_nsec = (long)(timeoutMs-ts.tv_sec*1000)*1000000;
 			pts = &ts;
 		}
 		// need positive timeout for communicate threads back and shutdown
-		m_iReady = kevent (m_iKQ, NULL, 0, m_dReady.begin(), m_dReady.GetLength(), pts);
+		m_iReady = kevent (m_iKQ, nullptr, 0, m_dReady.begin(), m_dReady.GetLength(), pts);
+
+		sphLogDebugv ( "%d kqueue wait returned %d events (timeout %d)", m_iKQ, m_iReady, timeoutMs );
 
 		if ( m_iReady<0 )
 		{
@@ -2508,16 +2556,14 @@ public:
 		m_pIter = (ListedData_t *) tEv.udata;
 		m_tIter.m_pData = m_pIter->m_pData;
 
-		if ( tEv.flags & EVFILT_READ )
-		{
-			m_tIter.m_uEvents |= SPH_POLL_RD;
-			m_tIter.m_bReadable = true;
-		}
-		if ( tEv.flags & EVFILT_WRITE )
-		{
-			m_tIter.m_uEvents |= SPH_POLL_WR;
-			m_tIter.m_bWritable = true;
-		}
+		if ( tEv.filter == EVFILT_READ )
+			m_tIter.m_uEvents = SPH_POLL_RD;
+
+		if ( tEv.filter == EVFILT_WRITE )
+			m_tIter.m_uEvents = SPH_POLL_WR;
+
+		sphLogDebugv ( "%p kqueue iterate ready, ev=%d", m_tIter.m_pData, tEv.filter );
+
 		return true;
 	}
 
@@ -2525,10 +2571,19 @@ public:
 	{
 		assert ( eFlags==SPH_POLL_WR || eFlags==SPH_POLL_RD );
 
+
+
 		struct kevent tEv;
 		EV_SET(&tEv, iSocket, (eFlags==SPH_POLL_RD ? EVFILT_READ : EVFILT_WRITE), EV_ADD, 0, 0, (void*) m_pIter);
 
-		int iRes = kevent (m_iKQ, &tEv, 1, NULL, 0, NULL);
+		sphLogDebugv ( "%p kqueue change, ev=%d, sock=%d", m_tIter.m_pData, tEv.filter, iSocket );
+
+
+		int iRes = kevent (m_iKQ, &tEv, 1, nullptr, 0, nullptr);
+
+		EV_SET( &tEv, iSocket, ( eFlags==SPH_POLL_RD ? EVFILT_WRITE : EVFILT_READ ), EV_DELETE | EV_CLEAR, 0, 0, ( void * ) m_pIter );
+		kevent ( m_iKQ, &tEv, 1, nullptr, 0, nullptr );
+
 		if ( iRes==-1 )
 			sphWarning ( "failed to setup kqueue event for sock %d, errno=%d, %s", iSocket, errno, strerror ( errno ) );
 	}
@@ -2537,12 +2592,14 @@ public:
 	{
 		assert ( m_pIter->m_pData==m_tIter.m_pData );
 
-		sphLogDebugv ( "%p kqueue remove, ev=0x%u, sock=%d", m_tIter.m_pData, m_tIter.m_uEvents, iSocket );
+		sphLogDebugv ( "%p kqueue remove, uEv=0x%u, sock=%d", m_tIter.m_pData, m_tIter.m_uEvents, iSocket );
 		assert ( m_tIter.m_pData );
 
 		struct kevent tEv;
-		EV_SET(&tEv, iSocket, EVFILT_READ | EVFILT_WRITE, EV_DELETE, 0, 0, (void*)m_pIter);
-		int iRes = kevent (m_iKQ, &tEv, 1, NULL, 0, NULL);
+		EV_SET(&tEv, iSocket, EVFILT_WRITE, EV_DELETE, 0, 0, nullptr);
+		kevent (m_iKQ, &tEv, 1, nullptr, 0, nullptr);
+		EV_SET( &tEv, iSocket, EVFILT_READ, EV_DELETE, 0, 0, nullptr );
+		int iRes = kevent ( m_iKQ, &tEv, 1, nullptr, 0, nullptr );
 
 		// might be already closed by worker from thread pool
 		if ( iRes==-1 )
@@ -2649,17 +2706,14 @@ public:
 			m_tIter.m_pData = m_dWork[m_iIter];
 			pollfd & tEv = m_dEvents[m_iIter];
 			if ( tEv.revents & POLLIN )
-			{
 				m_tIter.m_uEvents |= SPH_POLL_RD;
-				m_tIter.m_bReadable = true;
-			}
+
 			if ( tEv.revents & POLLOUT )
-			{
 				m_tIter.m_uEvents |= SPH_POLL_WR;
-				m_tIter.m_bWritable = true;
-			}
+
 			if ( tEv.revents & POLLHUP )
 				m_tIter.m_uEvents |= SPH_POLL_HUP;
+
 			if ( tEv.revents & POLLERR )
 				m_tIter.m_uEvents |= SPH_POLL_ERR;
 
@@ -2822,8 +2876,6 @@ public:
 				m_tIter.m_uEvents |= SPH_POLL_RD;
 			if ( bWritable )
 				m_tIter.m_uEvents |= SPH_POLL_WR;
-			m_tIter.m_bReadable = bReadable;
-			m_tIter.m_bWritable = bWritable;
 
 			return true;
 		}

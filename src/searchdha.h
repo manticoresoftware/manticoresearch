@@ -251,13 +251,13 @@ private:
 	void SetupPersist();
 };
 
-typedef CSphVector<AgentConn_t *> AgentsVector;
+using AgentsVector = CSphVector<AgentConn_t *>;
 
 template <typename T>
 struct VectorPtrsGuard_T : public ISphNoncopyable
 {
 	CSphVector < T * > m_dPtrs;
-	VectorPtrsGuard_T() {}
+	VectorPtrsGuard_T() = default;
 	~VectorPtrsGuard_T()
 	{
 		ARRAY_FOREACH ( i, m_dPtrs )
@@ -496,19 +496,11 @@ struct IReplyParser_t
 
 struct AgentConnectionContext_t
 {
-	const IRequestBuilder_t * m_pBuilder;
-	AgentConn_t	** m_ppAgents;
-	int m_iAgentCount;
-	int m_iTimeout;
-	int m_iDelay;
-
-	AgentConnectionContext_t ()
-		: m_pBuilder ( NULL )
-		, m_ppAgents ( NULL )
-		, m_iAgentCount ( 0 )
-		, m_iTimeout ( 0 )
-		, m_iDelay ( 0 )
-	{}
+	const IRequestBuilder_t * m_pBuilder = nullptr;
+	AgentConn_t	** m_ppAgents = nullptr;
+	int m_iAgentCount = 0;
+	int m_iTimeout = 0;
+	int m_iDelay = 0;
 };
 
 void RemoteConnectToAgent ( AgentConn_t & tAgent );
@@ -556,20 +548,21 @@ ISphRemoteAgentsController* GetAgentsController ( int iThreads, AgentsVector & d
 /// check if a non-blocked socket is still connected
 bool sphNBSockEof ( int iSock );
 
+
 // wrapper around epoll/kqueue/poll
 struct NetEventsIterator_t
 {
-	const void * 		m_pData;
-	bool 				m_bReadable;
-	bool 				m_bWritable;
-	DWORD				m_uEvents;
-	void Reset()
+	const void * 		m_pData = nullptr;
+	DWORD				m_uEvents = 0;
+
+	void Reset ()
 	{
 		m_pData = nullptr;
 		m_uEvents = 0;
-		m_bReadable = false;
-		m_bWritable = false;
 	}
+
+	bool IsReadable () const;
+	bool IsWritable () const;
 };
 
 class ISphNetEvents : public ISphNoncopyable
@@ -594,6 +587,17 @@ public:
 	virtual void IterateRemove ( int iSocket ) = 0;
 	virtual NetEventsIterator_t & IterateGet () = 0;
 };
+
+
+inline bool NetEventsIterator_t::IsReadable () const
+{
+	return bool ( m_uEvents & ISphNetEvents::SPH_POLL_RD );
+}
+
+inline bool NetEventsIterator_t::IsWritable () const
+{
+	return bool ( m_uEvents & ISphNetEvents::SPH_POLL_WR );
+}
 
 // all fresh codeflows use version with poll/epoll/kqueue.
 // legacy also set bFallbackSelect and it invokes 'select' for the case

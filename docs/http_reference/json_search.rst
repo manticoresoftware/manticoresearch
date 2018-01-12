@@ -3,11 +3,11 @@
 json/search 
 -----------
 
-Searches are accepted at ``/json/search/`` endpoint. Here’s an example of a simple query:
+Searches are accepted at ``/json/search`` endpoint. Here’s an example of a simple query:
 
 ::
 
-    curl -X POST 'http://manticoresearch:9308/json/search/' 
+    curl -X POST 'http://manticoresearch:9308/json/search' 
 	-d '{"index":"test","query":{"match":{"title":"keyword"}}'
 
 ``"index"`` clause sets the list of indexes to search through. 

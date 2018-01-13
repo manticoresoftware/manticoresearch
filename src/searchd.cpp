@@ -21083,12 +21083,12 @@ struct NetActionAccept_t : public ISphNetAction
 
 	explicit NetActionAccept_t ( const Listener_t & tListener );
 
-	virtual NetEvent_e		Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop );
-	virtual NetEvent_e		Setup ( int64_t tmNow );
-	virtual bool			GetStats ( int & iConnections );
-	virtual void			CloseSocket () {}
+	NetEvent_e		Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> & dNextTick, CSphNetLoop * pLoop ) final;
+	NetEvent_e		Setup ( int64_t tmNow ) final;
+	bool			GetStats ( int & iConnections ) final;
+	void			CloseSocket () final {}
 
-	void					FillNetState ( NetStateCommon_t * pState, int iClientSock, int iConnID, bool bVIP, const sockaddr_storage & saStorage ) const;
+	void			FillNetState ( NetStateCommon_t * pState, int iClientSock, int iConnID, bool bVIP, const sockaddr_storage & saStorage ) const;
 };
 
 // just new typedef for API state
@@ -22010,10 +22010,8 @@ static bool CheckSocketError ( DWORD uGotEvents, const char * sMsg, const NetSta
 	{
 		LogSocketError ( sMsg, pConn, bDebug );
 		return true;
-	} else
-	{
-		return false;
 	}
+	return false;
 }
 
 static int NetManageSocket ( int iSock, char * pBuf, int iSize, bool bWrite, bool bAfterWrite )

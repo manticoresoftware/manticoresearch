@@ -2503,7 +2503,7 @@ public:
 
 		timespec ts;
 		timespec *pts = nullptr;
-		if ( timeoutMs )
+		if ( timeoutMs>=0 )
 		{
 			ts.tv_sec = timeoutMs/1000;
 			ts.tv_nsec = (long)(timeoutMs-ts.tv_sec*1000)*1000000;
@@ -2512,7 +2512,8 @@ public:
 		// need positive timeout for communicate threads back and shutdown
 		m_iReady = kevent (m_iKQ, nullptr, 0, m_dReady.begin(), m_dReady.GetLength(), pts);
 
-		sphLogDebugv ( "%d kqueue wait returned %d events (timeout %d)", m_iKQ, m_iReady, timeoutMs );
+		if ( timeoutMs>1 ) // avoid flood of log on very short waits
+			sphLogDebugv ( "%d kqueue wait returned %d events (timeout %d)", m_iKQ, m_iReady, timeoutMs );
 
 		if ( m_iReady<0 )
 		{

@@ -3414,7 +3414,7 @@ public:
 	virtual void				SetDebugCheck () {}
 
 	/// getter for name
-	const char *				GetName () { return m_sIndexName.cstr(); }
+	const char *				GetName () const { return m_sIndexName.cstr(); }
 
 	void						SetName ( const char * sName ) { m_sIndexName = sName; }
 

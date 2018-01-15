@@ -200,6 +200,16 @@ else ( WIN32 )
 			set ( CFLAGS "${CFLAGS} -O3" )
 			add_definitions ( "-DNDEBUG" )
 		endif ()
+
+		option ( STATIC_BINARY "Produce statically linked ELF" OFF)
+		if ( STATIC_BINARY )
+			set ( CFLAGS "${CFLAGS} -static")
+			set ( HAVE_DLOPEN 0 )
+			set ( WITH_ODBC 0 )
+			set ( WITH_MYSQL 0 )
+			set ( WITH_PGSQL 0 )
+		endif()
+
 		set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CFLAGS}" )
 		set ( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CFLAGS} -fno-rtti -std=c++11" )
 

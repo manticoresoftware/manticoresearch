@@ -1876,7 +1876,7 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 	// tail
 	sphWrite ( g_iLogFile, g_sCrashedBannerTail, sizeof(g_sCrashedBannerTail)-1 );
 
-	sphSafeInfo ( g_iLogFile, "Sphinx " SPHINX_VERSION );
+	sphSafeInfo ( g_iLogFile, "Manticore " SPHINX_VERSION );
 
 #if USE_WINDOWS
 	// mini-dump reference

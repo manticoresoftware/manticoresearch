@@ -114,6 +114,19 @@ Example:
 
     agent_query_timeout = 10000 # our query can be long, allow up to 10 sec
 
+
+.. _index_agent_retry_count:
+
+agent_retry_count
+~~~~~~~~~~~~~~~~~
+
+Integer, specifies how many times manticore will try to connect and query
+remote agents in distributed index before reporting fatal query error.
+It works the same as
+:ref:`agent_retry_count <agent_retry_count>` in searchd section, but define
+the value for concrete index.
+See also :ref:`mirror_retry_count <mirror_retry_count>` option.
+
 .. _agent:
 
 agent
@@ -196,6 +209,12 @@ The value can additionally enumerate per agent options such as:
    :ref:`agent_blackhole <agent_blackhole>`
    agent declaration)
 
+-  :ref:`retry_count <agent_retry_count>` -
+   integer (same as
+   :ref:`agent_retry_count <agent_retry_count>`,
+   but provided num will not be multiplied to number
+   of mirrors)
+
 .. code-block:: ini
 
 
@@ -226,6 +245,7 @@ Example:
     agent = box1:9312:chunk1[ha_strategy=nodeads]
     agent = box2:9312:chunk2[conn=pconn]
     agent = test:9312:any[blackhole=1]
+    agent = test:9312|box2:9312|box3:9312:any2[retry_count=2]
 
 .. _agent_mirrors:
 	
@@ -1651,6 +1671,15 @@ Example:
 
 
     min_word_len = 4
+
+.. _mirror_retry_count:
+
+mirror_retry_count
+~~~~~~~~~~~~~~~~~~
+
+Same as :ref:`index_agent_retry_count <agent_retry_count>`.
+If both values provided, ``mirror_retry_count`` will be taken, and the warning
+about it will be fired.
 
 .. _mlock:
 

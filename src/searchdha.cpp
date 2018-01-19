@@ -1325,16 +1325,23 @@ inline static bool GetReplyChunk ( AgentConn_t &tAgent, ISphNetEvents * pEvents 
 		tAgent.m_iReplySize - tAgent.m_iReplyRead );
 
 	// bail out if read failed
-	if ( iRes<=0 )
+	if ( iRes<0 )
 	{
 		pEvents->IterateRemove ( tAgent.m_iSock );
 		tAgent.Fail ( eNetworkErrors, "failed to receive reply body: %s", sphSockError () );
 		return false;
 	}
 
-	assert ( iRes>0 );
+	assert ( iRes>=0 );
 	assert ( tAgent.m_iReplyRead + iRes<=tAgent.m_iReplySize );
 	tAgent.m_iReplyRead += iRes;
+	if ( !iRes && tAgent.m_iReplyRead!=tAgent.m_iReplySize )
+	{
+		pEvents->IterateRemove ( tAgent.m_iSock );
+		tAgent.Fail ( eWrongReplies, "eof on %d arrived, but data still not fully received (read %d, expected %d)", tAgent.m_iSock, tAgent.m_iReplyRead, tAgent.m_iReplySize );
+		return false;
+	}
+
 	return true;
 };
 
@@ -1689,19 +1696,23 @@ int RemoteWaitForAgents ( AgentsVector & dAgents, int iTimeout, IReplyParser_t &
 			if ( tAgent.State()==AGENT_QUERYED )
 			{
 				if ( !CheckReplyHeader ( tAgent, pEvents ) )
+				{
+					--iEvents;
 					continue;
+				}
+
 				tAgent.State ( AGENT_REPLY );
 			}
 
-			assert ( tAgent.State() == AGENT_REPLY );
+			assert ( tAgent.State ()==AGENT_REPLY );
 
+			--iEvents;
 			// if we are reading reply, read another chunk
 			// do read
 			if ( !GetReplyChunk ( tAgent, pEvents ) )
 				continue; // check for double-add above! No deletion here!
 
 			pEvents->IterateRemove ( iSock );
-			--iEvents;
 
 			// if reply was fully received, parse it
 			if ( tAgent.m_iReplyRead==tAgent.m_iReplySize )
@@ -2369,7 +2380,7 @@ public:
 
 			if ( m_iLastReportedErrno!=iErrno )
 			{
-				sphWarning ( "poll tick failed: %s", sphSockError ( iErrno ) );
+				sphWarning ( "epoll tick failed: %s", sphSockError ( iErrno ) );
 				m_iLastReportedErrno = iErrno;
 			}
 			return false;

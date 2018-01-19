@@ -2609,6 +2609,7 @@ void ISphOutputBuffer::SendString ( const char * sStr )
 	SendBytes ( sStr, iLen );
 }
 
+/////////////////////////////////////////////////////////////////////////////
 
 int MysqlPackedLen ( int iLen )
 {
@@ -2704,6 +2705,7 @@ int MysqlUnpack ( InputBuffer_c & tReq, DWORD * pSize )
 	return iRes;
 }
 
+/////////////////////////////////////////////////////////////////////////////
 
 void ISphOutputBuffer::SendMysqlInt ( int iVal )
 {
@@ -2740,16 +2742,37 @@ void ISphOutputBuffer::SendOutput ( const ISphOutputBuffer & tOut )
 		SendBytes ( tOut.m_dBuf.Begin(), iLen );
 }
 
+/////////////////////////////////////////////////////////////////////////////
+
+void CachedOutputBuffer_c::Flush()
+{
+	assert ( !m_dBlobs.GetLength () && "Try to flush with non-commited blobs" );
+	ISphOutputBuffer::Flush();
+}
+
+void CachedOutputBuffer_c::StartBlob ()
+{
+	m_dBlobs.Add ( ( intptr_t ) m_dBuf.GetLength () );
+	SendInt(0);
+}
+
+void CachedOutputBuffer_c::CommitBlob ()
+{
+	assert ( m_dBlobs.GetLength () && "Can't commit with empty blob stack" );
+	auto uPos = m_dBlobs.Pop();
+	int iBlobLen = m_dBuf.GetLength () - uPos - sizeof ( int );
+	WriteInt ( uPos, iBlobLen );
+}
+
+/////////////////////////////////////////////////////////////////////////////
+
 NetOutputBuffer_c::NetOutputBuffer_c ( int iSock )
-	: m_pProfile ( NULL )
-	, m_iSock ( iSock )
-	, m_iSent ( 0 )
-	, m_bError ( false )
+	: m_iSock ( iSock )
 {
 	assert ( m_iSock>0 );
 }
 
-const char* NetOutputBuffer_c::GetErrorMsg () const
+const char * NetOutputBuffer_c::GetErrorMsg () const
 {
 	return m_sError.cstr ();
 }
@@ -2766,15 +2789,15 @@ void NetOutputBuffer_c::Flush ()
 	if ( g_bGotSigterm )
 		sphLogDebug ( "SIGTERM in NetOutputBuffer::Flush" );
 
-	const char * pBuffer = (const char *)m_dBuf.Begin();
+	auto * pBuffer = (const char *)m_dBuf.Begin();
 
 	CSphScopedProfile tProf ( m_pProfile, SPH_QSTATE_NET_WRITE );
 
 	const int64_t tmMaxTimer = sphMicroTimer() + MS2SEC * g_iWriteTimeout; // in microseconds
 	while ( !m_bError )
 	{
-		int iRes = sphSockSend ( m_iSock, pBuffer, iLen );
-		if ( iRes < 0 )
+		auto iRes = sphSockSend ( m_iSock, pBuffer, iLen );
+		if ( iRes<0 )
 		{
 			int iErrno = sphSockGetErrno();
 			if ( iErrno==EINTR ) // interrupted before any data was sent; just loop
@@ -2797,35 +2820,29 @@ void NetOutputBuffer_c::Flush ()
 
 		// wait until we can write
 		int64_t tmMicroLeft = tmMaxTimer - sphMicroTimer();
+		iRes = 0;
 		if ( tmMicroLeft>0 )
 			iRes = sphPoll ( m_iSock, tmMicroLeft, true );
-		else
-			iRes = 0; // time out
 
-		switch ( iRes )
+		if ( !iRes ) // timeout
 		{
-			case 1: // ready for writing
-				break;
-
-			case 0: // timed out
-			{
-				m_sError.SetSprintf ( "timed out while trying to flush network buffers" );
-				sphWarning ( "%s", m_sError.cstr () );
-				m_bError = true;
-				break;
-			}
-
-			case -1: // error
-			{
-				int iErrno = sphSockGetErrno();
-				if ( iErrno==EINTR )
-					break;
-				m_sError.SetSprintf ( "select() failed: %d: %s", iErrno, sphSockError(iErrno) );
-				sphWarning ( "%s", m_sError.cstr () );
-				m_bError = true;
-				break;
-			}
+			m_sError.SetSprintf ( "timed out while trying to flush network buffers" );
+			sphWarning ( "%s", m_sError.cstr () );
+			m_bError = true;
+			break;
 		}
+
+		if ( iRes<0 )
+		{
+			int iErrno = sphSockGetErrno ();
+			if ( iErrno==EINTR )
+				break;
+			m_sError.SetSprintf ( "select() failed: %d: %s", iErrno, sphSockError ( iErrno ) );
+			sphWarning ( "%s", m_sError.cstr () );
+			m_bError = true;
+			break;
+		}
+		assert (iRes>0);
 	}
 
 	m_dBuf.Resize ( 0 );
@@ -3170,10 +3187,9 @@ struct SearchRequestBuilder_t : public IRequestBuilder_t
 		: m_dQueries ( dQueries ), m_iStart ( iStart ), m_iEnd ( iEnd ), m_iDivideLimits ( iDivideLimits )
 	{}
 
-	virtual void		BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const;
+	void		BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const override;
 
 protected:
-	int					CalcQueryLen ( const char * sIndexes, const CSphQuery & q, bool bAgentWeight ) const;
 	void				SendQuery ( const char * sIndexes, ISphOutputBuffer & tOut, const CSphQuery & q, bool bAgentWeight, int iWeight ) const;
 
 protected:
@@ -3203,90 +3219,6 @@ private:
 };
 
 /////////////////////////////////////////////////////////////////////////////
-
-int SearchRequestBuilder_t::CalcQueryLen ( const char * sIndexes, const CSphQuery & q, bool bAgentWeight ) const
-{
-	int iReqSize = 160 + 2*sizeof(SphDocID_t) + 4*q.m_dWeights.GetLength()
-		+ q.m_sSortBy.Length()
-		+ strlen ( sIndexes )
-		+ q.m_sGroupBy.Length()
-		+ q.m_sGroupSortBy.Length()
-		+ q.m_sGroupDistinct.Length()
-		+ q.m_sComment.Length()
-		+ q.m_sSelect.Length()
-		+ q.m_sOuterOrderBy.Length()
-		+ q.m_sUDRanker.Length()
-		+ q.m_sUDRankerOpts.Length()
-		+ q.m_sQueryTokenFilterLib.Length()
-		+ q.m_sQueryTokenFilterName.Length()
-		+ q.m_sQueryTokenFilterOpts.Length();
-
-	if ( q.m_eQueryType==QUERY_JSON )
-		iReqSize += q.m_sQuery.Length();
-	else
-	{
-		iReqSize += q.m_sRawQuery.IsEmpty()
-			? q.m_sQuery.Length()
-			: q.m_sRawQuery.Length();
-	}
-
-	if ( q.m_eRanker==SPH_RANK_EXPR || q.m_eRanker==SPH_RANK_EXPORT )
-		iReqSize += q.m_sRankerExpr.Length() + 4;
-	iReqSize += q.m_dFilterTree.GetLength() * 4 * 4 + 4; // 4 int fields; int array length
-	ARRAY_FOREACH ( j, q.m_dFilters )
-	{
-		const CSphFilterSettings & tFilter = q.m_dFilters[j];
-		iReqSize += 32 + tFilter.m_sAttrName.Length(); // string attr-name; int type; int exclude-flag; 2x int equal-flag; 2x int open-flag; int mva-func
-		switch ( tFilter.m_eType )
-		{
-			case SPH_FILTER_VALUES:		iReqSize += 4 + 8*tFilter.GetNumValues (); break; // int values-count; uint64[] values
-			case SPH_FILTER_RANGE:		iReqSize += 16; break; // uint64 min-val, max-val
-			case SPH_FILTER_FLOATRANGE:	iReqSize += 8; break; // int/float min-val,max-val
-			case SPH_FILTER_USERVAR:
-			case SPH_FILTER_STRING:		iReqSize += 4 + ( tFilter.m_dStrings.GetLength()==1 ? tFilter.m_dStrings[0].Length() : 0 ); break;
-			case SPH_FILTER_NULL:		iReqSize += 1; break; // boolean value
-			case SPH_FILTER_STRING_LIST:	// int values-count; string[] values
-				iReqSize += 4;
-				ARRAY_FOREACH ( iString, tFilter.m_dStrings )
-					iReqSize += 4 + tFilter.m_dStrings[iString].Length();
-				break;
-		}
-	}
-	if ( q.m_bGeoAnchor )
-		iReqSize += 16 + q.m_sGeoLatAttr.Length() + q.m_sGeoLongAttr.Length(); // string lat-attr, long-attr; float lat, long
-	if ( bAgentWeight )
-	{
-		iReqSize += 9; // "*" (length=1) + length itself + weight
-	} else
-	{
-		ARRAY_FOREACH ( i, q.m_dIndexWeights )
-			iReqSize += 8 + q.m_dIndexWeights[i].m_sName.Length(); // string index-name; int index-weight
-	}
-	ARRAY_FOREACH ( i, q.m_dFieldWeights )
-		iReqSize += 8 + q.m_dFieldWeights[i].m_sName.Length(); // string field-name; int field-weight
-	ARRAY_FOREACH ( i, q.m_dOverrides )
-		iReqSize += 12 + q.m_dOverrides[i].m_sAttr.Length() + // string attr-name; int type; int values-count
-			( q.m_dOverrides[i].m_eAttrType==SPH_ATTR_BIGINT ? 16 : 12 )*q.m_dOverrides[i].m_dValues.GetLength(); // ( bigint id; int/float/bigint value )[] values
-	if ( q.m_bHasOuter )
-		iReqSize += 4; // outer limit
-	if ( q.m_iMaxPredictedMsec>0 )
-		iReqSize += 4;
-
-	iReqSize += 8 + 4 * ( q.m_dItems.GetLength() + q.m_dRefItems.GetLength() );
-	ARRAY_FOREACH ( i, q.m_dItems )
-	{
-		iReqSize += 4 + q.m_dItems[i].m_sAlias.Length();
-		iReqSize += 4 + q.m_dItems[i].m_sExpr.Length();
-	}
-	ARRAY_FOREACH ( i, q.m_dRefItems )
-	{
-		iReqSize += 4 + q.m_dRefItems[i].m_sAlias.Length();
-		iReqSize += 4 + q.m_dRefItems[i].m_sExpr.Length();
-	}
-
-	return iReqSize;
-}
-
 
 /// qflag means Query Flag
 /// names are internal to searchd and may be changed for clarity
@@ -3520,17 +3452,14 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, ISphOutputBuffer
 }
 
 
-void SearchRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const
+void SearchRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const
 {
 	const char * sIndexes = tAgent.m_tDesc.m_sIndexes.cstr();
 	bool bAgentWeigth = ( tAgent.m_iWeight!=-1 );
-	int iReqLen = 8; // int num-queries
-	for ( int i=m_iStart; i<=m_iEnd; i++ )
-		iReqLen += CalcQueryLen ( sIndexes, m_dQueries[i], bAgentWeigth );
 
 	tOut.SendWord ( SEARCHD_COMMAND_SEARCH ); // command id
 	tOut.SendWord ( VER_COMMAND_SEARCH ); // command version
-	tOut.SendInt ( iReqLen ); // request body length
+	autoReqLen _dLen { tOut }; // request body length
 
 	tOut.SendInt ( VER_MASTER );
 	tOut.SendInt ( m_iEnd-m_iStart+1 );
@@ -10270,20 +10199,15 @@ struct SnippetRequestBuilder_t : public IRequestBuilder_t
 {
 	explicit SnippetRequestBuilder_t ( const SnippetsRemote_t * pWorker )
 		: m_pWorker ( pWorker )
-		, m_iNumDocs ( -1 )
-		, m_iReqLen ( -1 )
-		, m_bScattered ( false )
-		, m_iWorker ( 0 )
 	{
 	}
-	virtual void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const;
+	void BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const override;
 
 private:
 	const SnippetsRemote_t * m_pWorker;
-	mutable int m_iNumDocs;		///< optimize numdocs/length calculation in scattered case
-	mutable int m_iReqLen;
-	mutable bool m_bScattered;
-	mutable int m_iWorker;
+	mutable int m_iNumDocs = -1;		///< optimize numdocs/length calculation in scattered case
+	mutable bool m_bScattered = false;
+	mutable int m_iWorker = 0;
 	mutable CSphMutex m_tWorkerMutex;
 };
 
@@ -10301,7 +10225,7 @@ private:
 };
 
 
-void SnippetRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const
+void SnippetRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const
 {
 	// it sends either all queries to each agent or sequence of queries to current agent
 	m_tWorkerMutex.Lock();
@@ -10320,27 +10244,15 @@ void SnippetRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, ISphOut
 
 	if ( !m_bScattered || ( m_bScattered && m_iNumDocs<0 ) )
 	{
-		m_iReqLen = 60 // 15 ints/dwords - params, strlens, etc.
-		+ strlen ( sIndex )
-		+ q.m_sWords.Length()
-		+ q.m_sBeforeMatch.Length()
-		+ q.m_sAfterMatch.Length()
-		+ q.m_sChunkSeparator.Length()
-		+ q.m_sStripMode.Length()
-		+ q.m_sRawPassageBoundary.Length();
-
 		m_iNumDocs = 0;
 		for ( int iDoc = tWorker.m_iHead; iDoc!=EOF_ITEM; iDoc=dQueries[iDoc].m_iNext )
-		{
 			++m_iNumDocs;
-			m_iReqLen += 4 + dQueries[iDoc].m_sSource.Length();
-		}
 	}
 
 	tOut.SendWord ( SEARCHD_COMMAND_EXCERPT );
 	tOut.SendWord ( VER_COMMAND_EXCERPT );
 
-	tOut.SendInt ( m_iReqLen );
+	autoReqLen _dLen { tOut };
 
 	tOut.SendInt ( 0 );
 
@@ -10950,7 +10862,7 @@ void HandleCommandKeywords ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c &
 struct UpdateRequestBuilder_t : public IRequestBuilder_t
 {
 	explicit UpdateRequestBuilder_t ( const CSphAttrUpdate & pUpd ) : m_tUpd ( pUpd ) {}
-	virtual void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const;
+	void BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c& tOut ) const override;
 
 protected:
 	const CSphAttrUpdate & m_tUpd;
@@ -10974,16 +10886,9 @@ protected:
 };
 
 
-void UpdateRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const
+void UpdateRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const
 {
 	const char * sIndexes = tAgent.m_tDesc.m_sIndexes.cstr();
-	int iReqSize = 4+strlen(sIndexes); // indexes string
-	iReqSize += 8; // attrs array len, data, non-existent flags
-	ARRAY_FOREACH ( i, m_tUpd.m_dAttrs )
-		iReqSize += 8 + strlen ( m_tUpd.m_dAttrs[i] );
-	iReqSize += 4; // number of updates
-	iReqSize += 8 * m_tUpd.m_dDocids.GetLength() + 4 * m_tUpd.m_dPool.GetLength(); // 64bit ids, 32bit values
-
 	bool bMva = false;
 	ARRAY_FOREACH ( i, m_tUpd.m_dTypes )
 	{
@@ -10991,33 +10896,10 @@ void UpdateRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, ISphOutp
 		bMva |= ( m_tUpd.m_dTypes[i]==SPH_ATTR_UINT32SET );
 	}
 
-	if ( bMva )
-	{
-		int iMvaCount = 0;
-		ARRAY_FOREACH ( iDoc, m_tUpd.m_dDocids )
-		{
-			const DWORD * pPool = m_tUpd.m_dPool.Begin() + m_tUpd.m_dRowOffset[iDoc];
-			ARRAY_FOREACH ( iAttr, m_tUpd.m_dTypes )
-			{
-				if ( m_tUpd.m_dTypes[iAttr]==SPH_ATTR_UINT32SET )
-				{
-					DWORD uVal = *pPool++;
-					iMvaCount += uVal;
-					pPool += uVal;
-				} else
-				{
-					pPool++;
-				}
-			}
-		}
-
-		iReqSize -= ( iMvaCount * 4 / 2 ); // mva64 only via SphinxQL
-	}
-
 	// header
 	tOut.SendWord ( SEARCHD_COMMAND_UPDATE );
 	tOut.SendWord ( VER_COMMAND_UPDATE );
-	tOut.SendInt ( iReqSize );
+	autoReqLen _dLen { tOut };
 
 	tOut.SendString ( sIndexes );
 	tOut.SendInt ( m_tUpd.m_dAttrs.GetLength() );
@@ -13344,7 +13226,7 @@ class SphinxqlRequestBuilder_c : public IRequestBuilder_t
 {
 public:
 			SphinxqlRequestBuilder_c ( const CSphString & sQuery, const SqlStmt_t & tStmt );
-	void	BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const override;
+	void	BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const override;
 
 protected:
 	const CSphString m_sBegin;
@@ -13875,7 +13757,7 @@ void HandleMysqlCallSnippets ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, ThdDesc
 struct KeywordsRequestBuilder_t : public IRequestBuilder_t
 {
 	KeywordsRequestBuilder_t ( const GetKeywordsSettings_t & tSettings, const CSphString & sTerm );
-	virtual void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const;
+	void BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const override;
 
 protected:
 	const GetKeywordsSettings_t & m_tSettings;
@@ -14114,14 +13996,13 @@ KeywordsRequestBuilder_t::KeywordsRequestBuilder_t ( const GetKeywordsSettings_t
 {
 }
 
-void KeywordsRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const
+void KeywordsRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const
 {
 	const CSphString & sIndexes = tAgent.m_tDesc.m_sIndexes;
-	int iReqLen = 28 + sIndexes.Length() + m_sTerm.Length();
 
 	tOut.SendWord ( SEARCHD_COMMAND_KEYWORDS ); // command id
 	tOut.SendWord ( VER_COMMAND_KEYWORDS ); // command version
-	tOut.SendInt ( iReqLen ); // request body length
+	autoReqLen _dLen { tOut }; // request body length
 
 	tOut.SendString ( m_sTerm.cstr() );
 	tOut.SendString ( sIndexes.cstr() );
@@ -14698,12 +14579,12 @@ struct PingRequestBuilder_t : public IRequestBuilder_t
 	explicit PingRequestBuilder_t ( int iCookie = 0 )
 		: m_iCookie ( iCookie )
 	{}
-	virtual void BuildRequest ( const AgentConn_t &, ISphOutputBuffer & tOut ) const
+	void BuildRequest ( const AgentConn_t &, CachedOutputBuffer_c & tOut ) const override
 	{
 		// header
 		tOut.SendWord ( SEARCHD_COMMAND_PING );
 		tOut.SendWord ( VER_COMMAND_PING );
-		tOut.SendInt ( 4 );
+		autoReqLen _dLen { tOut };
 		tOut.SendInt ( m_iCookie );
 	}
 
@@ -14816,12 +14697,8 @@ static void PingThreadFunc ( void * )
 
 struct AgentSendData_t
 {
-	AgentConn_t * m_pAgent;
+	AgentConn_t * m_pAgent = nullptr;
 	CSphVector<BYTE> m_dOut;
-
-	AgentSendData_t ()
-		: m_pAgent ( NULL )
-	{}
 
 	~AgentSendData_t()
 	{
@@ -14835,7 +14712,7 @@ struct BlackholeRequestBuilder_t : public IRequestBuilder_t
 		: m_dBlackholes ( dBlackholes )
 	{}
 
-	virtual void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const;
+	void BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const override;
 
 	const CSphVector<AgentSendData_t *> & m_dBlackholes;
 };
@@ -14961,7 +14838,7 @@ void BlackholeAddAgents ( AgentsVector & dAgents, const IRequestBuilder_t & tReq
 		pSend->m_pAgent = pAgent;
 
 		// extract raw info for send to get rid of dependent data above
-		ISphOutputBuffer tTmp;
+		CachedOutputBuffer_c tTmp;
 		tReq.BuildRequest ( *pAgent, tTmp );
 		tTmp.SwapData ( pSend->m_dOut );
 
@@ -14984,7 +14861,7 @@ static bool HasBlackhole ( AgentsVector & dAgents )
 	return bHas;
 }
 
-void BlackholeRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const
+void BlackholeRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const
 {
 	CSphVector<BYTE> dCopy;
 	dCopy = m_dBlackholes[tAgent.m_iWorkerTag]->m_dOut;
@@ -15005,12 +14882,12 @@ struct UVarRequestBuilder_t : public IRequestBuilder_t
 		, m_iLength ( iLength )
 	{}
 
-	virtual void BuildRequest ( const AgentConn_t &, ISphOutputBuffer & tOut ) const
+	void BuildRequest ( const AgentConn_t &, CachedOutputBuffer_c & tOut ) const override
 	{
 		// header
 		tOut.SendWord ( SEARCHD_COMMAND_UVAR );
 		tOut.SendWord ( VER_COMMAND_UVAR );
-		tOut.SendInt ( strlen ( m_sName ) + 12 + m_iLength );
+		autoReqLen _dLen { tOut };
 
 		tOut.SendString ( m_sName );
 		tOut.SendInt ( m_iUserVars );
@@ -15214,17 +15091,15 @@ SphinxqlRequestBuilder_c::SphinxqlRequestBuilder_c ( const CSphString& sQuery, c
 }
 
 
-void SphinxqlRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const
+void SphinxqlRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const
 {
 	const char* sIndexes = tAgent.m_tDesc.m_sIndexes.cstr();
-	int iReqSize = strlen(sIndexes) + m_sBegin.Length() + m_sEnd.Length(); // indexes string
 
 	// header
 	tOut.SendWord ( SEARCHD_COMMAND_SPHINXQL );
 	tOut.SendWord ( VER_COMMAND_SPHINXQL );
-	tOut.SendInt ( iReqSize + 4 );
-
-	tOut.SendInt ( iReqSize );
+	autoReqLen _dLen { tOut };
+	autoReqLen _dLen2 { tOut };
 	tOut.SendBytes ( m_sBegin.cstr(), m_sBegin.Length() );
 	tOut.SendBytes ( sIndexes, strlen(sIndexes) );
 	tOut.SendBytes ( m_sEnd.cstr(), m_sEnd.Length() );

@@ -201,6 +201,8 @@ public:
 	virtual ~ISphOutputBuffer() {}
 
 	void		SendInt ( int iValue )			{ SendT<int> ( htonl ( iValue ) ); }
+	void		WriteInt ( intptr_t iOff, int iValue ) { WriteT<int> ( iOff, htonl ( iValue ) ); }
+
 	void		SendAsDword ( int64_t iValue ) ///< sends the 32bit MAX_UINT if the value is greater than it.
 	{
 		iValue = Min ( Max ( iValue, 0 ), UINT_MAX );
@@ -242,31 +244,64 @@ public:
 protected:
 	CSphVector<BYTE>	m_dBuf;
 
+	template < typename T > void WriteT ( intptr_t iOff, const T& tValue )
+	{
+		sphUnalignedWrite ( m_dBuf.Begin () + iOff, tValue );
+	}
+
 private:
 	template < typename T > void	SendT ( T tValue )							///< (was) protected to avoid network-vs-host order bugs
 	{
-		int iOff = m_dBuf.GetLength();
+		intptr_t iOff = m_dBuf.GetLength();
 		m_dBuf.Resize ( iOff + sizeof(T) );
-		sphUnalignedWrite ( m_dBuf.Begin() + iOff, tValue );
+		WriteT ( iOff, tValue );
 	}
 };
 
-class NetOutputBuffer_c : public ISphOutputBuffer
+// assume buffer never flushed between different Send()
+// bye-bye all 'calculate query len'
+class CachedOutputBuffer_c : public ISphOutputBuffer
+{
+	CSphVector<intptr_t> m_dBlobs;
+public:
+	void Flush() override;
+	void StartBlob(); // reserve int in the buf, push it's position
+	void CommitBlob(); // get last pushed int, write delta count there.
+};
+
+// start blob on create, commit on dtr.
+class autoReqLen : public ISphNoncopyable
+{
+	CachedOutputBuffer_c & m_dBuff;
+public:
+	explicit autoReqLen ( CachedOutputBuffer_c& dBuff )
+		: m_dBuff ( dBuff )
+	{
+		dBuff.StartBlob();
+	}
+	~autoReqLen()
+	{
+		m_dBuff.CommitBlob();
+	}
+};
+
+class NetOutputBuffer_c : public CachedOutputBuffer_c
 {
 public:
 	explicit	NetOutputBuffer_c ( int iSock );
 
-	virtual void	Flush () override;
-	virtual bool	GetError () const override { return m_bError; }
-	virtual int		GetSentCount () const override { return m_iSent; }
-	virtual void	SetProfiler ( CSphQueryProfile * pProfiler ) override { m_pProfile = pProfiler; }
-	const char*		GetErrorMsg () const;
+	void	Flush () override;
+	bool	GetError () const override { return m_bError; }
+	int		GetSentCount () const override { return m_iSent; }
+	void	SetProfiler ( CSphQueryProfile * pProfiler ) override { m_pProfile = pProfiler; }
+	const char * GetErrorMsg () const;
+
 
 private:
-	CSphQueryProfile *	m_pProfile;
+	CSphQueryProfile *	m_pProfile = nullptr;
 	int			m_iSock;			///< my socket
-	int			m_iSent;
-	bool		m_bError;
+	int			m_iSent = 0;
+	bool		m_bError = false;
 	CSphString	m_sError;
 
 };

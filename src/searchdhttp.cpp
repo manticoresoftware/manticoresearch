@@ -577,12 +577,12 @@ public:
 		assert ( m_pQuery );
 	}
 
-	~JsonRequestBuilder_c()
+	~JsonRequestBuilder_c() override
 	{
 		cJSON_Delete ( m_pQuery );
 	}
 
-	void BuildRequest ( const AgentConn_t & tAgent, ISphOutputBuffer & tOut ) const override
+	void BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const override
 	{
 		// replace "index" value in the json query
 		cJSON_DeleteItemFromObject ( m_pQuery, "index" );
@@ -592,8 +592,7 @@ public:
 
 		tOut.SendWord ( SEARCHD_COMMAND_JSON );
 		tOut.SendWord ( VER_COMMAND_JSON );
-		tOut.SendInt ( sEndpoint.Length() + sRequest.Length() + 8 );
-
+		autoReqLen _dLen { tOut };
 		tOut.SendString ( sEndpoint.cstr() );
 		tOut.SendString ( sRequest.cstr() );
 	}

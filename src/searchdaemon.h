@@ -263,27 +263,34 @@ private:
 class CachedOutputBuffer_c : public ISphOutputBuffer
 {
 	CSphVector<intptr_t> m_dBlobs;
+
 public:
-	void Flush() override;
-	void StartBlob(); // reserve int in the buf, push it's position
-	void CommitBlob(); // get last pushed int, write delta count there.
+	// start blob on create, commit on dtr.
+	class ReqLenCalc : public ISphNoncopyable
+	{
+		CachedOutputBuffer_c &m_dBuff;
+	public:
+		explicit ReqLenCalc ( CachedOutputBuffer_c &dBuff )
+			: m_dBuff ( dBuff )
+		{
+			dBuff.StartChunk ();
+		}
+
+		~ReqLenCalc ()
+		{
+			m_dBuff.CommitChunk ();
+		}
+	};
+
+public:
+	void Flush() override; // just check integrity before flush
+
+protected:
+	void StartChunk(); // reserve int in the buf, push it's position
+	void CommitChunk(); // get last pushed int, write delta count there.
 };
 
-// start blob on create, commit on dtr.
-class autoReqLen : public ISphNoncopyable
-{
-	CachedOutputBuffer_c & m_dBuff;
-public:
-	explicit autoReqLen ( CachedOutputBuffer_c& dBuff )
-		: m_dBuff ( dBuff )
-	{
-		dBuff.StartBlob();
-	}
-	~autoReqLen()
-	{
-		m_dBuff.CommitBlob();
-	}
-};
+using cWriteLenHere = CachedOutputBuffer_c::ReqLenCalc;
 
 class NetOutputBuffer_c : public CachedOutputBuffer_c
 {

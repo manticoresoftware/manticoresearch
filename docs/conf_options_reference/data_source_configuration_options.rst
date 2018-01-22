@@ -494,8 +494,8 @@ and payloads (payload fields). It's syntax is as follows:
 .. code-block:: ini
 
 
-    sql_joined_field = FIELD-NAME 'from'  ( 'query' | 'payload-query' \
-        | 'ranged-query' ); QUERY [ ; RANGE-QUERY ]
+    sql_joined_field = FIELD-NAME 'from'  ( 'query' | 'payload-query' | 'ranged-query' | 'ranged-main-query' ); \
+		QUERY [ ; RANGE-QUERY ]
 
 where
 
@@ -542,7 +542,10 @@ the database driver limitations, **ranged queries** can be used. It
 works similar to the ranged queries in the main indexing loop, see :ref:`ranged_queries`.
 The range will be queried for and fetched upfront once, then multiple
 queries with different ``$start`` and ``$end`` substitutions will be run
-to fetch the actual data.
+to fetch the actual data. When using ``ranged-main-query`` query then omit
+the ``ranged-query`` and it will automatically use the same query
+from :ref:``sql_query_range`` (useful option in complex inheritance setups to
+save having to manually duplicate the same query many times).
 
 **Payloads** let you create a special field in which, instead of
 keyword positions, so-called user payloads are stored. Payloads are

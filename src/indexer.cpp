@@ -515,6 +515,7 @@ bool ParseJoinedField ( const char * sBuf, CSphJoinedField * pField, const char 
 
 	bool bGotRanged = false;
 	pField->m_bPayload = false;
+	pField->m_bRangedMain = false;
 
 	// parse 'query'
 	if ( strncasecmp ( sBuf, "payload-query", 13 )==0 )
@@ -530,6 +531,11 @@ bool ParseJoinedField ( const char * sBuf, CSphJoinedField * pField, const char 
 	{
 		bGotRanged = true;
 		sBuf += 12;
+
+	} else if ( strncasecmp ( sBuf, "ranged-main-query", 17 )==0 )
+	{
+		pField->m_bRangedMain = true;
+		sBuf += 17;
 
 	} else
 		LOC_ERR ( "'query'" );

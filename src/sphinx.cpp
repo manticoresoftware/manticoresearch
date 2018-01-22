@@ -26684,9 +26684,13 @@ bool CSphSource_SQL::IterateStart ( CSphString & sError )
 		tCol.m_sName = m_tParams.m_dJoinedFields[i].m_sName;
 		tCol.m_sQuery = m_tParams.m_dJoinedFields[i].m_sQuery;
 		tCol.m_bPayload = m_tParams.m_dJoinedFields[i].m_bPayload;
-		tCol.m_eSrc = m_tParams.m_dJoinedFields[i].m_sRanged.IsEmpty() ? SPH_ATTRSRC_QUERY : SPH_ATTRSRC_RANGEDQUERY;
 		tCol.m_sQueryRange = m_tParams.m_dJoinedFields[i].m_sRanged;
 		tCol.m_eWordpart = GetWordpart ( tCol.m_sName.cstr(), bWordDict );
+
+		tCol.m_eSrc = ( !m_tParams.m_dJoinedFields[i].m_bRangedMain ? SPH_ATTRSRC_QUERY : SPH_ATTRSRC_RANGEDMAINQUERY );
+		if ( !m_tParams.m_dJoinedFields[i].m_sRanged.IsEmpty() )
+			tCol.m_eSrc = SPH_ATTRSRC_RANGEDQUERY;
+
 		m_tSchema.AddField ( tCol );
 	}
 
@@ -27325,7 +27329,7 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 		{
 			int iLastField = m_iJoinedHitField;
 			bool bRanged = ( m_iJoinedHitField>=m_iPlainFieldsLength && m_iJoinedHitField<m_tSchema.GetFieldsCount()
-				&& m_tSchema.GetField(m_iJoinedHitField).m_eSrc==SPH_ATTRSRC_RANGEDQUERY );
+				&& ( m_tSchema.GetField(m_iJoinedHitField).m_eSrc==SPH_ATTRSRC_RANGEDQUERY || m_tSchema.GetField(m_iJoinedHitField).m_eSrc==SPH_ATTRSRC_RANGEDMAINQUERY ) );
 
 			// current field is over, continue to next field
 			if ( m_iJoinedHitField<0 )
@@ -27347,8 +27351,9 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 			bool bCheckNumFields = true;
 			const CSphColumnInfo & tJoined = m_tSchema.GetField(m_iJoinedHitField);
 
+			bool bJoinedRanged = ( tJoined.m_eSrc==SPH_ATTRSRC_RANGEDQUERY || tJoined.m_eSrc==SPH_ATTRSRC_RANGEDMAINQUERY );
 			// start fetching next field
-			if ( tJoined.m_eSrc!=SPH_ATTRSRC_RANGEDQUERY )
+			if ( !bJoinedRanged )
 			{
 				if ( !SqlQuery ( tJoined.m_sQuery.cstr() ) )
 				{
@@ -27362,9 +27367,11 @@ ISphHits * CSphSource_SQL::IterateJoinedHits ( CSphString & sError )
 				// setup ranges for next field
 				if ( iLastField!=m_iJoinedHitField )
 				{
+					const CSphString & sRange = ( tJoined.m_eSrc==SPH_ATTRSRC_RANGEDQUERY ? tJoined.m_sQueryRange : m_tParams.m_sQueryRange );
+
 					CSphString sPrefix;
 					sPrefix.SetSprintf ( "joined field '%s' ranged query: ", tJoined.m_sName.cstr() );
-					if ( !SetupRanges ( tJoined.m_sQueryRange.cstr(), tJoined.m_sQuery.cstr(), sPrefix.cstr(), sError, SRE_JOINEDHITS ) )
+					if ( !SetupRanges ( sRange.cstr(), tJoined.m_sQuery.cstr(), sPrefix.cstr(), sError, SRE_JOINEDHITS ) )
 						return NULL;
 
 					m_uCurrentID = m_uMinID;

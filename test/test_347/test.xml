@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>ranged-main-query joined fields</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query			= SELECT id, gid, title FROM test where id between $start and $end
+	sql_query_range = select 1, 4
+
+	sql_joined_field = text from ranged-main-query; select id, text from more_text where id between $start and $end
+	sql_attr_uint		= gid
+}
+
+index test1
+{
+	source			= src1
+	path			= <data_path/>/test1
+}
+
+source src2 : src1
+{
+	sql_query_range = select 5, 8
+}
+
+index test2
+{
+	source			= src2
+	path			= <data_path/>/test2
+}
+
+
+source src11 : src1
+{
+	sql_query_range = select 1, 4
+	sql_range_step = 2
+}
+
+index test11
+{
+	source			= src11
+	path			= <data_path/>/test11
+}
+
+source src21 : src1
+{
+	sql_query_range = select 5, 8
+	sql_range_step = 2
+}
+
+index test21
+{
+	source			= src21
+	path			= <data_path/>/test21
+}
+</config>
+
+<db_create>
+create table test
+(
+	id int not null,
+	gid int not null,
+	title varchar(255) not null,
+	context varchar(255) not null
+);
+</db_create>
+<db_create>
+create table more_text
+(
+	id int not null,
+	text varchar(255) not null
+);
+</db_create>
+
+<db_drop>drop table if exists test;</db_drop>
+<db_drop>drop table if exists more_text;</db_drop>
+<db_insert>insert into test values ( 1, 101, 'not found',	'notice found' );</db_insert>
+<db_insert>insert into test values ( 2, 102, 'not anyone',	'notice goods' );</db_insert>
+<db_insert>insert into test values ( 3, 103, 'not grant',	'notice goods' );</db_insert>
+<db_insert>insert into test values ( 4, 104, 'not grant',	'everyone' );</db_insert>
+<db_insert>insert into test values ( 5, 105, 'not anyone',	'grant' );</db_insert>
+<db_insert>insert into test values ( 6, 106, 'not fun',		'natural6' );</db_insert>
+<db_insert>insert into test values ( 7, 107, 'not fun',		'natural7' );</db_insert>
+<db_insert>insert into test values ( 8, 108, 'not fun',		'natural8' );</db_insert>
+<db_insert>insert into more_text values (1, 'test1001 tag1'), (1, 'test2001 tag2');</db_insert>
+<db_insert>insert into more_text values (2, 'test1002 tag1'), (2, 'test2002 tag2');</db_insert>
+<db_insert>insert into more_text values (3, 'test1003 tag1'), (3, 'test2003 tag2');</db_insert>
+<db_insert>insert into more_text values (4, 'test1004 tag1'), (4, 'test2004 tag2');</db_insert>
+<db_insert>insert into more_text values (5, 'test1005 tag1'), (5, 'test2005 tag2');</db_insert>
+<db_insert>insert into more_text values (6, 'test1006 tag1'), (6, 'test2006 tag2');</db_insert>
+<db_insert>insert into more_text values (7, 'test1007 tag1'), (7, 'test2007 tag2');</db_insert>
+<db_insert>insert into more_text values (8, 'test1008 tag1'), (8, 'test2008 tag2');</db_insert>
+
+<sphqueries>
+<sphinxql>select * from test1 where match ('test1001 | test2004') order by id asc</sphinxql>
+<sphinxql>select * from test2 where match ('test2007 | test1008') order by id asc</sphinxql>
+<sphinxql>select * from test11 where match ('test1001 | test1003') order by id asc</sphinxql>
+<sphinxql>select * from test21 where match ('test1005 | test2008') order by id asc</sphinxql>
+<sphinxql>select * from test1, test2 where match ('tag1') order by id asc</sphinxql>
+<sphinxql>select * from test11, test21 where match ('tag2') order by id asc</sphinxql>
+</sphqueries>
+
+</test>

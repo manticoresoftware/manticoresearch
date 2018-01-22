@@ -2145,6 +2145,7 @@ struct CSphJoinedField
 	CSphString			m_sQuery;
 	CSphString			m_sRanged;
 	bool				m_bPayload;
+	bool				m_bRangedMain;
 };
 
 

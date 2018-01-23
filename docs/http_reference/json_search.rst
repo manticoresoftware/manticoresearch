@@ -8,7 +8,7 @@ Searches are accepted at ``/json/search`` endpoint. Here’s an example of a sim
 ::
 
     curl -X POST 'http://manticoresearch:9308/json/search' 
-	-d '{"index":"test","query":{"match":{"title":"keyword"}}'
+	-d '{"index":"test","query":{"match":{"title":"keyword"}}}'
 
 ``"index"`` clause sets the list of indexes to search through. 
 You can specify a single index: ``"index": "test"``, 

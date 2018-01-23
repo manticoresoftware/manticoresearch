@@ -569,7 +569,7 @@ struct ServedDesc_t
 	bool				m_bEnabled;		///< to disable index in cases when rotation fails
 	bool				m_bMlock;
 	bool				m_bPreopen;
-	bool				m_bExpand;
+	int					m_iExpandKeywords;
 	bool				m_bToDelete;
 	bool				m_bOnlyNew;
 	bool				m_bRT;

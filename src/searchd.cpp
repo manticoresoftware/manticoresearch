@@ -634,7 +634,7 @@ ServedDesc_t::ServedDesc_t ()
 	, m_bEnabled ( true )
 	, m_bMlock ( false )
 	, m_bPreopen ( false )
-	, m_bExpand ( false )
+	, m_iExpandKeywords ( KWE_DISABLED )
 	, m_bToDelete ( false )
 	, m_bOnlyNew ( false )
 	, m_bRT ( false )
@@ -18529,7 +18529,7 @@ static bool RotateIndexMT ( const CSphString & sIndex, CSphString & sError )
 	tNewIndex.m_bOnlyNew = pRotating->m_bOnlyNew;
 
 	tNewIndex.m_pIndex = sphCreateIndexPhrase ( sIndex.cstr(), NULL );
-	tNewIndex.m_pIndex->m_bExpandKeywords = pRotating->m_bExpand;
+	tNewIndex.m_pIndex->m_iExpandKeywords = pRotating->m_iExpandKeywords;
 	tNewIndex.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 	tNewIndex.m_pIndex->SetPreopen ( pRotating->m_bPreopen || g_bPreopenIndexes );
 	tNewIndex.m_pIndex->SetGlobalIDFPath ( pRotating->m_sGlobalIDFPath );
@@ -19062,16 +19062,55 @@ void OptimizeThreadFunc ( void * )
 	}
 }
 
+static int ParseKeywordExpansion ( const char * sValue )
+{
+	if ( !sValue || *sValue=='\0' )
+		return KWE_DISABLED;
+
+	int iOpt = KWE_DISABLED;
+	while ( sValue && *sValue )
+	{
+		if ( !sphIsAlpha ( *sValue ) )
+		{
+			sValue++;
+			continue;
+		}
+
+		if ( *sValue>='0' && *sValue<='9' )
+		{
+			int iVal = atoi ( sValue );
+			if ( iVal!=0 )
+				iOpt = KWE_ENABLED;
+			break;
+		}
+
+		if ( sphStrMatchStatic ( "exact", sValue ) )
+		{
+			iOpt |= KWE_EXACT;
+			sValue += 5;
+		} else if ( sphStrMatchStatic ( "star", sValue ) )
+		{
+			iOpt |= KWE_STAR;
+			sValue += 4;
+		} else
+		{
+			sValue++;
+		}
+	}
+
+	return iOpt;
+}
+
 
 void ConfigureTemplateIndex ( ServedDesc_t & tIdx, const CSphConfigSection & hIndex )
 {
-	tIdx.m_bExpand = ( hIndex.GetInt ( "expand_keywords", 0 )!=0 );
+	tIdx.m_iExpandKeywords = ParseKeywordExpansion ( hIndex.GetStr( "expand_keywords", "" ) );
 }
 
 void ConfigureLocalIndex ( ServedDesc_t & tIdx, const CSphConfigSection & hIndex )
 {
 	tIdx.m_bMlock = ( hIndex.GetInt ( "mlock", 0 )!=0 ) && !g_bOptNoLock;
-	tIdx.m_bExpand = ( hIndex.GetInt ( "expand_keywords", 0 )!=0 );
+	tIdx.m_iExpandKeywords = ParseKeywordExpansion ( hIndex.GetStr ( "expand_keywords", "" ) );
 	tIdx.m_bPreopen = ( hIndex.GetInt ( "preopen", 0 )!=0 );
 	tIdx.m_sGlobalIDFPath = hIndex.GetStr ( "global_idf" );
 	tIdx.m_bOnDiskAttrs = ( hIndex.GetInt ( "ondisk_attrs", 0 )==1 );
@@ -19251,7 +19290,7 @@ static void ConfigureDistributedIndex ( DistributedIndex_t & tIdx, const char * 
 void PreCreateTemplateIndex ( ServedDesc_t & tServed, const CSphConfigSection & )
 {
 	tServed.m_pIndex = sphCreateIndexTemplate ( );
-	tServed.m_pIndex->m_bExpandKeywords = tServed.m_bExpand;
+	tServed.m_pIndex->m_iExpandKeywords = tServed.m_iExpandKeywords;
 	tServed.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 	tServed.m_bEnabled = false;
 }
@@ -19259,7 +19298,7 @@ void PreCreateTemplateIndex ( ServedDesc_t & tServed, const CSphConfigSection & 
 void PreCreatePlainIndex ( ServedDesc_t & tServed, const char * sName )
 {
 	tServed.m_pIndex = sphCreateIndexPhrase ( sName, tServed.m_sIndexPath.cstr() );
-	tServed.m_pIndex->m_bExpandKeywords = tServed.m_bExpand;
+	tServed.m_pIndex->m_iExpandKeywords = tServed.m_iExpandKeywords;
 	tServed.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 	tServed.m_pIndex->SetPreopen ( tServed.m_bPreopen || g_bPreopenIndexes );
 	tServed.m_pIndex->SetGlobalIDFPath ( tServed.m_sGlobalIDFPath );
@@ -19395,7 +19434,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		tIdx.m_bPercolate = bPercolate;
 
 		ConfigureLocalIndex ( tIdx, hIndex );
-		tIdx.m_pIndex->m_bExpandKeywords = tIdx.m_bExpand;
+		tIdx.m_pIndex->m_iExpandKeywords = tIdx.m_iExpandKeywords;
 		tIdx.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 		tIdx.m_pIndex->SetPreopen ( tIdx.m_bPreopen || g_bPreopenIndexes );
 		tIdx.m_pIndex->SetGlobalIDFPath ( tIdx.m_sGlobalIDFPath );

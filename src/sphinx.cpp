@@ -5835,12 +5835,24 @@ bool CSphQuery::ParseSelectList ( CSphString & sError )
 	return sError.IsEmpty ();
 }
 
-bool ExpandKeywords ( bool bIndexOpt, QueryOption_e eQueryOpt )
+int ExpandKeywords ( int iIndexOpt, QueryOption_e eQueryOpt, const CSphIndexSettings & tSettings )
 {
+	if ( tSettings.m_iMinInfixLen<=0 && tSettings.m_iMinPrefixLen<=0 && !tSettings.m_bIndexExactWords )
+		return KWE_DISABLED;
+
+	int iOpt = KWE_DISABLED;
 	if ( eQueryOpt==QUERY_OPT_DEFAULT )
-		return bIndexOpt;
+		iOpt = iIndexOpt;
 	else
-		return ( eQueryOpt==QUERY_OPT_ENABLED );
+		iOpt = ( eQueryOpt==QUERY_OPT_ENABLED ? KWE_ENABLED : KWE_DISABLED );
+
+	if ( ( iOpt & KWE_STAR )==KWE_STAR && tSettings.m_iMinInfixLen<=0 && tSettings.m_iMinPrefixLen<=0 )
+		iOpt ^= KWE_STAR;
+
+	if ( ( iOpt & KWE_EXACT )==KWE_EXACT && !tSettings.m_bIndexExactWords )
+		iOpt ^= KWE_EXACT;
+
+	return iOpt;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -8514,7 +8526,7 @@ CSphAtomic CSphIndex::m_tIdGenerator;
 
 CSphIndex::CSphIndex ( const char * sIndexName, const char * sFilename )
 	: m_iTID ( 0 )
-	, m_bExpandKeywords ( false )
+	, m_iExpandKeywords ( KWE_DISABLED )
 	, m_iExpansionLimit ( 0 )
 	, m_tSchema ( sFilename )
 	, m_bInplaceSettings ( false )
@@ -17324,14 +17336,14 @@ static XQNode_t * CloneKeyword ( const XQNode_t * pNode )
 }
 
 
-static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tSettings )
+static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tSettings, int iExpandKeywords )
 {
 	assert ( pNode );
 
 	XQNode_t * pExpand = new XQNode_t ( pNode->m_dSpec );
 	pExpand->SetOp ( SPH_QUERY_OR, pNode );
 
-	if ( tSettings.m_iMinInfixLen>0 )
+	if ( tSettings.m_iMinInfixLen>0 && ( iExpandKeywords & KWE_STAR )==KWE_STAR )
 	{
 		assert ( pNode->m_dChildren.GetLength()==0 );
 		assert ( pNode->m_dWords.GetLength()==1 );
@@ -17339,7 +17351,7 @@ static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tS
 		pInfix->m_dWords[0].m_sWord.SetSprintf ( "*%s*", pNode->m_dWords[0].m_sWord.cstr() );
 		pInfix->m_pParent = pExpand;
 		pExpand->m_dChildren.Add ( pInfix );
-	} else if ( tSettings.m_iMinPrefixLen>0 )
+	} else if ( tSettings.m_iMinPrefixLen>0 && ( iExpandKeywords & KWE_STAR )==KWE_STAR )
 	{
 		assert ( pNode->m_dChildren.GetLength()==0 );
 		assert ( pNode->m_dWords.GetLength()==1 );
@@ -17349,7 +17361,7 @@ static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tS
 		pExpand->m_dChildren.Add ( pPrefix );
 	}
 
-	if ( tSettings.m_bIndexExactWords )
+	if ( tSettings.m_bIndexExactWords && ( iExpandKeywords & KWE_EXACT )==KWE_EXACT )
 	{
 		assert ( pNode->m_dChildren.GetLength()==0 );
 		assert ( pNode->m_dWords.GetLength()==1 );
@@ -17362,18 +17374,18 @@ static XQNode_t * ExpandKeyword ( XQNode_t * pNode, const CSphIndexSettings & tS
 	return pExpand;
 }
 
-XQNode_t * sphQueryExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & tSettings )
+XQNode_t * sphQueryExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & tSettings, int iExpandKeywords )
 {
 	// only if expansion makes sense at all
-	if ( tSettings.m_iMinInfixLen<=0 && tSettings.m_iMinPrefixLen<=0 && !tSettings.m_bIndexExactWords )
-		return pNode;
+	assert ( tSettings.m_iMinInfixLen>0 || tSettings.m_iMinPrefixLen>0 || tSettings.m_bIndexExactWords );
+	assert ( iExpandKeywords!=KWE_DISABLED );
 
 	// process children for composite nodes
 	if ( pNode->m_dChildren.GetLength() )
 	{
 		ARRAY_FOREACH ( i, pNode->m_dChildren )
 		{
-			pNode->m_dChildren[i] = sphQueryExpandKeywords ( pNode->m_dChildren[i], tSettings );
+			pNode->m_dChildren[i] = sphQueryExpandKeywords ( pNode->m_dChildren[i], tSettings, iExpandKeywords );
 			pNode->m_dChildren[i]->m_pParent = pNode;
 		}
 		return pNode;
@@ -17387,7 +17399,7 @@ XQNode_t * sphQueryExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & 
 		{
 			XQNode_t * pWord = new XQNode_t ( pNode->m_dSpec );
 			pWord->m_dWords.Add ( pNode->m_dWords[i] );
-			pNode->m_dChildren.Add ( ExpandKeyword ( pWord, tSettings ) );
+			pNode->m_dChildren.Add ( ExpandKeyword ( pWord, tSettings, iExpandKeywords ) );
 			pNode->m_dChildren.Last()->m_iAtomPos = pNode->m_dWords[i].m_iAtomPos;
 			pNode->m_dChildren.Last()->m_pParent = pNode;
 		}
@@ -17412,7 +17424,7 @@ XQNode_t * sphQueryExpandKeywords ( XQNode_t * pNode, const CSphIndexSettings & 
 	}
 
 	// do the expansion
-	return ExpandKeyword ( pNode, tSettings );
+	return ExpandKeyword ( pNode, tSettings, iExpandKeywords );
 }
 
 
@@ -18152,9 +18164,10 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 		pProfile->Switch ( SPH_QSTATE_TRANSFORMS );
 	sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings, pQuery->m_bSimplify, this );
 
-	if ( ExpandKeywords ( m_bExpandKeywords, pQuery->m_eExpandKeywords ) )
+	int iExpandKeywords = ExpandKeywords ( m_iExpandKeywords, pQuery->m_eExpandKeywords, m_tSettings );
+	if ( iExpandKeywords!=KWE_DISABLED )
 	{
-		tParsed.m_pRoot = sphQueryExpandKeywords ( tParsed.m_pRoot, m_tSettings );
+		tParsed.m_pRoot = sphQueryExpandKeywords ( tParsed.m_pRoot, m_tSettings, iExpandKeywords );
 		tParsed.m_pRoot->Check ( true );
 	}
 
@@ -18253,9 +18266,10 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 			// transform query if needed (quorum transform, keyword expansion, etc.)
 			sphTransformExtendedQuery ( &dXQ[i].m_pRoot, m_tSettings, pQueries[i].m_bSimplify, this );
 
-			if ( ExpandKeywords ( m_bExpandKeywords, pQueries[i].m_eExpandKeywords ) )
+			int iExpandKeywords = ExpandKeywords ( m_iExpandKeywords, pQueries[i].m_eExpandKeywords, m_tSettings );
+			if ( iExpandKeywords!=KWE_DISABLED )
 			{
-				dXQ[i].m_pRoot = sphQueryExpandKeywords ( dXQ[i].m_pRoot, m_tSettings );
+				dXQ[i].m_pRoot = sphQueryExpandKeywords ( dXQ[i].m_pRoot, m_tSettings, iExpandKeywords );
 				dXQ[i].m_pRoot->Check ( true );
 			}
 

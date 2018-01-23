@@ -811,8 +811,6 @@ void AgentConn_t::Fail ( AgentStats_e eStat, const char* sMessage, ... )
 	agent_stats_inc ( *this, eStat );
 }
 
-#define sphStrMatchStatic(_str, _cstr) ( strncmp ( _str, _cstr, sizeof(_str)-1 )==0 )
-
 bool ParseStrategyHA ( const char * sName, HAStrategies_e & eStrategy )
 {
 	if ( sphStrMatchStatic ( "random", sName ) )

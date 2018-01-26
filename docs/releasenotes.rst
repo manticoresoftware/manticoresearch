@@ -1,6 +1,29 @@
 Release notes
 =============
 
+Version 2.6.1 GA, 26 January  2018
+----------------------------------
+
+Improvements
+~~~~~~~~~~~~
+* :ref:`agent_retry_count` in case of agents with mirrors gives the value of retries per mirror instead of per agent, the total retries per agent being agent_retry_count*mirrors.
+* :ref:`agent_retry_count  <index_agent_retry_count>` can now be specified per index, overriding global value. An alias :ref:`mirror_retry_count` is added.
+* a retry_count can be specified in agent definition and the value represents retries per agent
+* Percolate Queries are now in HTTP JSON API at :ref:`/json/pq <http_json_pq>`.
+* Added  -h and -v options (help and version) to executables
+* :ref:`morphology_skip_fields`   support for  Real-Time indexes
+
+Bugfixes
+~~~~~~~~
+
+* `a40b079 <https://github.com/manticoresoftware/manticore/commit/a40b0793feff65e40d10062568d9847c08d10f57>`__ fixed ranged-main-query to correctly work with sql_range_step when used at MVA field
+* `f2f5375 <https://github.com/manticoresoftware/manticore/commit/f2f53757db45bcfb1544263ce0817e856656a621>`__ fixed issue with blackhole system loop hung and blackhole agents seems disconnected
+* `84e1f54 <https://github.com/manticoresoftware/manticore/commit/84e1f54aef25e0fce98870ad2dd784db5116f1d6>`__  fixed query id to be consistent, fixed duplicated id for stored queries
+* `1948423 <https://github.com/manticoresoftware/manticore/commit/19484231814fcb82b21763a3a4a9f45adc6b2d40>`__  fixed daemon crash on shutdown from various states
+* `9a706b <https://github.com/manticoresoftware/manticore/commit/9a706b499a1d61a90076065a1a703029d49db958>`__ `3495fd7 <https://github.com/manticoresoftware/manticore/commit/3495fd70cba8846b1a50d55d6679b039414c3d2a>`__ timeouts on long queries
+* `3359bcd8 <https://github.com/manticoresoftware/manticore/commit/3359bcd89b4f79a645fe84b8cf8616ce0addff02>`__ refactored master-agent network polling on kqueue-based systems (Mac OS X, BSD).
+
+
 Version 2.6.0, 29 December 2017
 -------------------------------
 

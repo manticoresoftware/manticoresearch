@@ -151,13 +151,61 @@ Install the ``searchd`` system as a Windows service:
 	C:\Manticore\bin> C:\Manticore\bin\searchd --install --config C:\Manticore\sphinx.conf.in --servicename Manticore
 
 
-4. The ``searchd`` service will now be listed in the Services panel
+The ``searchd`` service will now be listed in the Services panel
    within the Management Console, available from Administrative Tools.
    It will not have been started, as you will need to configure it and
    build your indexes with ``indexer`` before starting the service. A
    guide to do this can be found under :ref:`Quick tour <quick_usage_tour>`.
 
 
+.. _running_from_docker:
+
+Running Manticore Search in a Docker Container
+----------------------------------------------
+
+Docker images of Manticore Search are hosted publicly on Docker Hub at https://hub.docker.com/r/manticoresearch/manticore/.
+
+For more information about using Docker, see the `Docker Docs <https://docs.docker.com/>`.
+
+The searchd daemon runs in nodetach mode inside the container. Default configuration includes includes a simple Real-Time index and listen on the default ports ( 9306 for SphinxQL and 9312 for SphinxAPI).
+
+The image comes with MySQL and PostgreSQL client libraries for indexing data from these databases.
+
+Starting a Manticore Search instance in a container
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To start a container running the latest release of Manticore Search run:
+
+.. code-block:: bash
+   
+   docker run --name manticore -p 9306:9306 -d manticoresearch/manticore
+   
+Operations with utility tools can be made with `docker exec` command:
+   
+.. code-block:: bash
+   
+   docker exec -it manticore indexer --all --rotate
+   
+To stop the Manticore Search container you can simply do:
+
+.. code-block:: bash
+   
+   docker stop manticore
+	
+Please note that any indexed data or configuration change made is lost if the container is stopped. For persistence, you need to mount the configuration and data folders.
+
+Mounting points 
+~~~~~~~~~~~~~~~
+
+The configuration folder inside the image is the usual `/etc/sphinxseach`. 
+Index files are located at `/var/lib/manticore/data` and logs at `/var/lib/manticore/log`. For persistence, mount these points to your local folders.
+
+.. code-block:: bash
+   
+   docker run --name manticore -v /path/to/config/:/etc/sphinxsearch/ -v /path/to/data/:/var/lib/manticore/data -v /path/to/logs/:/var/lib/manticore/log -p 9306:9306 -d manticoresearch/manticore
+   
+
+   
 .. _compiling_from_source:
 
 Compiling Manticore from source

@@ -36,7 +36,7 @@ option exists, it will override the one specified in config.
 Note, that if you use :ref:`agent mirrors <agent_mirrors>` in definition of
 your distributed index, then before every attempt of connect daemon will
 select different mirror, according to specified
-:ref:`ha_strategy <ha_strategy>`\ specified. In the case ``agent_retry_count``
+:ref:`ha_strategy <ha_strategy>`\ specified. In this case ``agent_retry_count``
 will be aggregated for all mirrors in a set.
 
 For example, if you have 10 mirrors, and set ``agent_retry_count=5``, then
@@ -346,7 +346,7 @@ ha_period_karma
 Agent mirror statistics window size, in seconds. Optional, default is
 60.
 
-For a distributed index with agent mirrors in it (see more in `remote
+For a distributed index with agent mirrors in it (see more in :ref:`remote
 agents <agent>`), master tracks
 several different per-mirror counters. These counters are then used for
 failover and balancing. (Master picks the best mirror to use based on
@@ -881,7 +881,7 @@ qcache_max_bytes
 ~~~~~~~~~~~~~~~~
 
 Integer, in bytes. The maximum RAM allocated for cached result sets.
-Default is 0, meaning disabled. Refer to `query
+Default is 0, meaning disabled. Refer to :ref:`query
 cache <query_cache>` for details.
 
 .. code-block:: ini

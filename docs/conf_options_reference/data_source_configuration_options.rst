@@ -706,7 +706,7 @@ point when this query gets executed, and further indexing still may
 fail. Therefore, any permanent updates should not be done from here. For
 instance, updates on helper table that permanently change the last
 successfully indexed ID should not be run from post-fetch query; they
-should be run from `post-index
+should be run from :ref:`post-index
 query <sql_query_post_index>`
 instead.
 
@@ -727,8 +727,8 @@ list of queries. Applies to SQL source types (``mysql``, ``pgsql``,
 ``mssql``) only.
 
 Multi-value means that you can specify several pre-queries. They are
-executed before `the main fetch
-query <sqlquery>`, and they
+executed before :ref:`the main fetch
+query <sql_query>`, and they
 will be executed exactly in order of appearance in the configuration
 file. Pre-query results are ignored.
 

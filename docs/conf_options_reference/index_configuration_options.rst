@@ -8,7 +8,7 @@ Index configuration options
 agent_blackhole
 ~~~~~~~~~~~~~~~
 
-Remote blackhole agent declaration in the `distributed
+Remote blackhole agent declaration in the :ref:`distributed
 index <distributed_searching>`. Multi-value, optional,
 default is empty.
 
@@ -132,7 +132,7 @@ See also :ref:`mirror_retry_count <mirror_retry_count>` option.
 agent
 ~~~~~
 
-Remote agent declaration in the `distributed
+Remote agent declaration in the :ref:`distributed
 index <distributed_searching>`. Multi-value, optional,
 default is empty.
 
@@ -1247,7 +1247,7 @@ This directive enables sentence and paragraph boundary indexing. It's
 required for the SENTENCE and PARAGRAPH operators to work. Sentence
 boundary detection is based on plain text analysis, so you only need to
 set ``index_sp = 1`` to enable it. Paragraph detection is however based
-on HTML markup, and happens in the `HTML
+on HTML markup, and happens in the :ref:`HTML
 stripper <html_strip>`. So to
 index paragraph locations you also need to enable the stripper by
 specifying ``html_strip = 1``. Both types of boundaries are detected
@@ -1351,8 +1351,8 @@ Example:
 inplace_docinfo_gap
 ~~~~~~~~~~~~~~~~~~~
 
-`In-place
-inversion <inplaceenable>`
+:ref:`In-place
+inversion <inplace_enable>`
 fine-tuning option. Controls preallocated docinfo gap size. Optional,
 default is 0.
 
@@ -1410,8 +1410,8 @@ Example:
 inplace_hit_gap
 ~~~~~~~~~~~~~~~
 
-`In-place
-inversion <inplaceenable>`
+:ref:`In-place
+inversion <inplace_enable>`
 fine-tuning option. Controls preallocated hitlist gap size. Optional,
 default is 0.
 
@@ -1471,7 +1471,7 @@ Example:
 local
 ~~~~~
 
-Local index declaration in the `distributed
+Local index declaration in the :ref:`distributed
 index <distributed_searching>`. Multi-value, optional,
 default is empty.
 
@@ -1509,7 +1509,7 @@ Maximum substring (either prefix or infix) length to index. Optional,
 default is 0 (do not limit indexed substrings). Applies to dict=crc
 only.
 
-By default, substring (either prefix or infix) indexing in the `dict=crc
+By default, substring (either prefix or infix) indexing in the :ref:`dict=crc
 mode <dict>` will index
 **all** the possible substrings as separate keywords. That might
 result in an overly large index. So the ``max_substring_len`` directive
@@ -2045,7 +2045,7 @@ remove ``.tmp*`` files is if indexer fails to remove them automatically.
 
 For reference, different index files store the following data:
 
--  ``.spa`` stores document attributes (used in `extern
+-  ``.spa`` stores document attributes (used in :ref:`extern
    docinfo <docinfo>` storage
    mode only);
 

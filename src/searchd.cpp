@@ -12757,7 +12757,6 @@ static void SendPercolateReply ( const PercolateMatchResult_t & tRes, const CSph
 		tOut.HeadColumn ( "Documents", MYSQL_COL_STRING );
 	if ( bQuery )
 	{
-		assert ( tRes.m_dQueries.GetLength()==tRes.m_dQueryDesc.GetLength() );
 		tOut.HeadColumn ( "Query" );
 		tOut.HeadColumn ( "Tags" );
 		tOut.HeadColumn ( "Filters" );
@@ -12769,9 +12768,9 @@ static void SendPercolateReply ( const PercolateMatchResult_t & tRes, const CSph
 
 	int iDocOff = 0;
 	StringBuilder_c sDocs;
-	ARRAY_FOREACH ( i, tRes.m_dQueries )
+	ARRAY_FOREACH ( i, tRes.m_dQueryDesc )
 	{
-		tOut.PutNumeric<uint64_t> ( UINT64_FMT, tRes.m_dQueries[i] );
+		tOut.PutNumeric<uint64_t> ( UINT64_FMT, tRes.m_dQueryDesc[i].m_uID );
 		if ( bDumpDocs )
 		{
 			sDocs.Clear();
@@ -12921,7 +12920,7 @@ struct PercolateOptions_t
 	{}
 };
 
-static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVariant_t> & tLoc, int iRow, SphDocID_t & uDocID, CSphFixedVector<const char*> & dFields, CSphMatchVariant & tDoc, cJSON ** ppStorage, CSphString & sError )
+static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVariant_t> & tLoc, int iRow, CSphFixedVector<const char*> & dFields, CSphMatchVariant & tDoc, cJSON ** ppStorage, CSphString & sError )
 {
 	const cJSON * pRoot = cJSON_Parse ( sDoc );
 	if ( !pRoot )
@@ -12931,7 +12930,6 @@ static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVari
 	}
 
 	*ppStorage = const_cast<cJSON *>( pRoot );
-	bool bDocSet = false;
 
 	int iChildrenCount = cJSON_GetArraySize ( pRoot );
 	const cJSON * pChild = pRoot->child;
@@ -12960,12 +12958,6 @@ static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVari
 
 		pChild = pChild->next;
 		iChildrenCount--;
-	}
-
-	if ( !bDocSet )
-	{
-		tDoc.m_uDocID = uDocID;
-		uDocID++;
 	}
 
 	return true;
@@ -13025,15 +13017,14 @@ static void PercolateMatchDocuments ( const CSphVector<CSphString> & dDocs, cons
 	SphDocID_t uDocID = 1;
 	ARRAY_FOREACH ( iRow, dDocs )
 	{
-		cJSON * pJsonStorage = NULL;
-		if ( !tOpts.m_bJsonDocs )
-		{
-			// doc-id
-			tDoc.m_uDocID = uDocID;
-			uDocID++;
+		// doc-id
+		tDoc.m_uDocID = uDocID;
+		uDocID++;
 
-			dFields[0] = dDocs[iRow].cstr();
-		} else
+		dFields[0] = dDocs[iRow].cstr();
+
+		cJSON * pJsonStorage = NULL;
+		if ( tOpts.m_bJsonDocs )
 		{
 			// reset all back to defaults
 			dFields.Fill ( sTmp.scstr() );
@@ -13044,7 +13035,7 @@ static void PercolateMatchDocuments ( const CSphVector<CSphString> & dDocs, cons
 				tLoc.m_bDynamic = true;
 				tDoc.SetDefaultAttr ( tLoc, tCol.m_eAttrType );
 			}
-			if ( !ParseJsonDocument ( dDocs[iRow].cstr(), hSchemaLocators, iRow, uDocID, dFields, tDoc, &pJsonStorage, sError ) )
+			if ( !ParseJsonDocument ( dDocs[iRow].cstr(), hSchemaLocators, iRow, dFields, tDoc, &pJsonStorage, sError ) )
 				break;
 		}
 
@@ -13194,23 +13185,18 @@ void HandleMysqlPercolateMeta ( const PercolateMatchResult_t & tMeta, SqlRowBuff
 	tOut.DataTuplet ( "Term only queries", tMeta.m_iOnlyTerms );
 	tOut.DataTuplet ( "Fast rejected queries", tMeta.m_iEarlyOutQueries );
 
-	if ( tMeta.m_dQueryTm.GetLength() )
+	if ( tMeta.m_dQueryDT.GetLength() )
 	{
 		uint64_t tmMatched = 0;
 		const char * sDelimiter = "";
 		sTmp.Clear();
-		const PercolateQueryProfiling_t * pStart = tMeta.m_dQueryTm.Begin();
-		const PercolateQueryProfiling_t * pEnd = &tMeta.m_dQueryTm.Last();
-		ARRAY_FOREACH ( i, tMeta.m_dQueries )
+		assert ( tMeta.m_dQueryDesc.GetLength()==tMeta.m_dQueryDT.GetLength() );
+		ARRAY_FOREACH ( i, tMeta.m_dQueryDT )
 		{
-			uint64_t uID = tMeta.m_dQueries[i];
-			const PercolateQueryProfiling_t * pPrf = sphBinarySearch ( pStart, pEnd, bind ( &PercolateQueryProfiling_t::m_uUid ), uID );
-			if ( pPrf )
-			{
-				sTmp.Appendf ( "%s" UINT64_FMT, sDelimiter, pPrf->m_uTm );
-				sDelimiter = ", ";
-				tmMatched += pPrf->m_uTm;
-			}
+			int tmQuery = tMeta.m_dQueryDT[i];
+			sTmp.Appendf ( "%s%d", sDelimiter, tmQuery );
+			sDelimiter = ", ";
+			tmMatched += tmQuery;
 		}
 		tOut.DataTuplet ( "Time per query", sTmp.cstr() );
 		sTmp.Clear();
@@ -24125,6 +24111,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	sphRTConfigure ( hSearchd, bTestMode );
 	SetPercolateQueryParserFactory ( PercolateQueryParserFactory );
+	SetPercolateThreads ( g_iDistThreads );
 
 	if ( bOptPIDFile )
 	{
@@ -24201,13 +24188,9 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		g_iThdPoolCount = Max ( 3*sphCpuThreadsCount()/2, 2 ); // default to 1.5*detected_cores but not less than 2 worker threads
 		if ( hSearchd.Exists ( "max_children" ) && hSearchd["max_children"].intval()>=0 )
 			g_iThdPoolCount = hSearchd["max_children"].intval();
-#if USE_WINDOWS
-		g_pThdPool = sphThreadPoolCreate ( g_iThdPoolCount );
-#else
-		char sSemName[16];
-		snprintf ( sSemName, sizeof ( sSemName ), "/thdpool%d", (int) getpid () );
-		g_pThdPool = sphThreadPoolCreate ( g_iThdPoolCount, sSemName );
-#endif
+		g_pThdPool = sphThreadPoolCreate ( g_iThdPoolCount, "netloop", sError );
+		if ( !g_pThdPool )
+			sphDie ( "failed to create thread_pool: %s", sError.cstr() );
 	}
 #if USE_WINDOWS
 	if ( g_bService )

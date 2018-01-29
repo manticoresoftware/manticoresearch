@@ -1505,7 +1505,9 @@ static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, co
 		}
 
 		// document count + document id(s)
-		int iCount = (int)( tRes.m_dDocs[iDocOff] );
+		int iCount = 0;
+		if ( tRes.m_bGetDocs )
+			iCount = (int)( tRes.m_dDocs[iDocOff] );
 
 		if ( iCount )
 		{
@@ -1519,9 +1521,11 @@ static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, co
 				tOut.Appendf ( "%s" DOCID_FMT, sSep, tRes.m_dDocs[iDocOff + 1 + iDoc] );
 				sSep = ",";
 			}
-			iDocOff += iCount + 1;
 			tOut += "] }";
 		}
+		if ( tRes.m_bGetDocs )
+			iDocOff += iCount + 1;
+
 		tOut += " }";
 	}
 
@@ -1803,7 +1807,9 @@ bool HttpHandlerPQ_c::ListQueries ( PercolateIndex_i * pIndex, const CSphString 
 	pIndex->GetQueries ( sFilterTags, pUID, dQueries );
 
 	PercolateMatchResult_t tRes;
-	tRes.m_dQueryDesc.SwapData ( dQueries );
+	tRes.m_bGetDocs = false;
+	tRes.m_dQueryDesc.Set ( dQueries.Begin(), dQueries.GetLength() );
+	dQueries.LeakData();
 	tRes.m_dDocs.Reset ( tRes.m_dQueryDesc.GetLength() );
 	tRes.m_dDocs.Fill ( 0 );
 

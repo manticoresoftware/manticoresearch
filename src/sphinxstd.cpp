@@ -1150,9 +1150,8 @@ bool CSphMutex::Unlock ()
 	return ReleaseMutex ( m_hMutex )==TRUE;
 }
 
-bool CSphAutoEvent::Init ( CSphMutex * )
+bool CSphAutoEvent::Init ()
 {
-	m_bSent = false;
 	m_hEvent = CreateEvent ( NULL, FALSE, FALSE, NULL );
 	m_bInitialized = ( m_hEvent!=0 );
 		return m_bInitialized;
@@ -1169,19 +1168,19 @@ bool CSphAutoEvent::Done()
 
 void CSphAutoEvent::SetEvent()
 {
+	m_iSent = 1;
 	::SetEvent ( m_hEvent );
-	m_bSent = true;
 }
 
-bool CSphAutoEvent::WaitEvent()
+void CSphAutoEvent::WaitEvent()
 {
-	if ( m_bSent )
+	if ( m_iSent )
 	{
-		m_bSent = false;
-		return true;
+		m_iSent = 0;
+		return;
 	}
-	DWORD uWait = WaitForSingleObject ( m_hEvent, INFINITE );
-	return !( uWait==WAIT_FAILED || uWait==WAIT_TIMEOUT );
+
+	WaitForSingleObject ( m_hEvent, INFINITE );
 }
 
 CSphSemaphore::CSphSemaphore ()
@@ -1291,14 +1290,10 @@ bool CSphMutex::Unlock ()
 	return ( pthread_mutex_unlock ( &m_tMutex )==0 );
 }
 
-bool CSphAutoEvent::Init ( CSphMutex * pMutex )
+bool CSphAutoEvent::Init ()
 {
-	m_bSent = false;
-	assert ( pMutex );
-	if ( !pMutex )
-		return false;
-	m_pMutex = pMutex->GetInternalMutex();
-	m_bInitialized = ( pthread_cond_init ( &m_tCond, NULL )==0 );
+	m_bInitialized = ( pthread_mutex_init ( &m_tMutex, NULL )==0 );
+	m_bInitialized &= ( pthread_cond_init ( &m_tCond, NULL )==0 );
 	return m_bInitialized;
 }
 
@@ -1308,7 +1303,9 @@ bool CSphAutoEvent::Done ()
 		return true;
 
 	m_bInitialized = false;
-	return ( pthread_cond_destroy ( &m_tCond ) )==0;
+	bool bDone = ( pthread_cond_destroy ( &m_tCond )==0 );
+	bDone &= ( pthread_mutex_destroy ( &m_tMutex )==0 );
+	return bDone;
 }
 
 void CSphAutoEvent::SetEvent ()
@@ -1316,20 +1313,25 @@ void CSphAutoEvent::SetEvent ()
 	if ( !m_bInitialized )
 		return;
 
-	pthread_cond_signal ( &m_tCond ); // locking is done from outside
-	m_bSent = true;
+	pthread_mutex_lock ( &m_tMutex );
+	m_iSent++;
+	pthread_cond_signal ( &m_tCond );
+	pthread_mutex_unlock ( &m_tMutex );
 }
 
-bool CSphAutoEvent::WaitEvent ()
+void CSphAutoEvent::WaitEvent()
 {
 	if ( !m_bInitialized )
-		return true;
-	pthread_mutex_lock ( m_pMutex );
-	if ( !m_bSent )
-		pthread_cond_wait ( &m_tCond, m_pMutex );
-	m_bSent = false;
-	pthread_mutex_unlock ( m_pMutex );
-	return true;
+		return;
+
+	pthread_mutex_lock ( &m_tMutex );
+	while (  !m_iSent )
+	{
+		pthread_cond_wait ( &m_tCond, &m_tMutex );
+	}
+
+	m_iSent--;
+	pthread_mutex_unlock ( &m_tMutex );
 }
 
 
@@ -1350,7 +1352,7 @@ CSphSemaphore::~CSphSemaphore ()
 bool CSphSemaphore::Init ( const char * sName )
 {
 	assert ( !m_bInitialized );
-	m_pSem = sem_open ( sName, O_CREAT, 0, 0 );
+	m_pSem = sem_open ( sName, O_CREAT | O_EXCL, 0, 0 );
 	m_sName = sName;
 	m_bInitialized = ( m_pSem!=SEM_FAILED );
 	return m_bInitialized;
@@ -1886,7 +1888,7 @@ static void SetThdName ( const char * ) {}
 
 class CSphThdPool : public ISphThdPool
 {
-	CSphSemaphore					m_tWorkSem;
+	CSphAutoEvent					m_tWakeup;
 	CSphMutex						m_tJobLock;
 
 	CSphFixedVector<SphThread_t>	m_dWorkers;
@@ -1898,15 +1900,23 @@ class CSphThdPool : public ISphThdPool
 	CSphAtomic						m_tStatActiveWorkers;
 	int								m_iStatQueuedJobs;
 
+	CSphString						m_sName;
+
 public:
-	explicit CSphThdPool ( int iThreads, const char* sName )
+	explicit CSphThdPool ( int iThreads, const char * sName, CSphString & sError )
 		: m_dWorkers ( 0 )
 		, m_pHead ( nullptr )
 		, m_pTail ( nullptr )
 		, m_bShutdown ( false )
 		, m_iStatQueuedJobs ( 0 )
+		, m_sName ( sName )
 	{
-		Verify ( m_tWorkSem.Init ( sName ) );
+		if ( !m_tWakeup.Init () )
+		{
+			m_bShutdown = true;
+			sError.SetSprintf ( "thread-pool create failed %s", strerror ( errno ) );
+			return;
+		}
 
 		iThreads = Max ( iThreads, 1 );
 		m_dWorkers.Reset ( iThreads );
@@ -1923,7 +1933,7 @@ public:
 	{
 		Shutdown();
 
-		Verify ( m_tWorkSem.Done() );
+		Verify ( m_tWakeup.Done() );
 	}
 
 	void Shutdown () final
@@ -1934,7 +1944,7 @@ public:
 		m_bShutdown = true;
 
 		ARRAY_FOREACH ( i, m_dWorkers )
-			m_tWorkSem.Post();
+			m_tWakeup.SetEvent();
 
 		ARRAY_FOREACH ( i, m_dWorkers )
 			sphThreadJoin ( m_dWorkers.Begin()+i );
@@ -1969,9 +1979,9 @@ public:
 		}
 
 		m_iStatQueuedJobs++;
-
-		m_tWorkSem.Post();
 		m_tJobLock.Unlock();
+
+		m_tWakeup.SetEvent();
 	}
 
 	bool StartJob ( ISphJob * pItem ) final
@@ -1990,7 +2000,7 @@ private:
 
 		while ( !pPool->m_bShutdown )
 		{
-			pPool->m_tWorkSem.Wait();
+			pPool->m_tWakeup.WaitEvent();
 
 			if ( pPool->m_bShutdown )
 				break;
@@ -2051,9 +2061,13 @@ private:
 };
 
 
-ISphThdPool * sphThreadPoolCreate ( int iThreads, const char * sName )
+ISphThdPool * sphThreadPoolCreate ( int iThreads, const char * sName, CSphString & sError )
 {
-	return new CSphThdPool ( iThreads, sName );
+	CSphThdPool * pPool = new CSphThdPool ( iThreads, sName, sError );
+	if ( !sError.IsEmpty() )
+		SafeDelete ( pPool );
+
+	return pPool;
 }
 
 int sphCpuThreadsCount ()

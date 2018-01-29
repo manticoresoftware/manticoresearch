@@ -1805,7 +1805,6 @@ class ThdWorkPool_c : ISphNoncopyable
 {
 private:
 	CSphMutex m_tDataLock;
-	CSphMutex m_tStatLock;
 public:
 	CSphAutoEvent m_tChanged;
 	CSphAtomic m_iActiveThreads;
@@ -1814,7 +1813,7 @@ private:
 	CircularBuffer_T<AgentWorkContext_t> m_dWork;	// works array
 
 	CSphAtomic m_iWorksCount;				// count of works to be done
-	volatile int m_iAgentsDone;				// count of agents that finished their works
+	CSphAtomic m_iAgentsDone;				// count of agents that finished their works
 	volatile int m_iAgentsReported;			// count of agents that reported of their work done
 	volatile bool m_bIsDestroying;		// help to keep at least 1 worker thread active
 
@@ -1834,7 +1833,7 @@ public:
 
 	int GetReadyTotal () const
 	{
-		return m_iAgentsDone;
+		return m_iAgentsDone.GetValue();
 	}
 
 	bool HasIncompleteWorks () const
@@ -1853,7 +1852,7 @@ ThdWorkPool_c::ThdWorkPool_c ( int iLen )
 	m_iAgentsDone = m_iAgentsReported = 0;
 	m_bIsDestroying = false;
 
-	m_tChanged.Init ( &m_tStatLock );
+	m_tChanged.Init();
 }
 
 ThdWorkPool_c::~ThdWorkPool_c ()
@@ -1908,7 +1907,7 @@ int ThdWorkPool_c::GetReadyCount () const
 {
 	// it could be better to lock here to get accurate value of m_iAgentsDone
 	// however that make lock contention of 1 sec on 1000 query ~ total 3.2sec vs 2.2 sec ( trunk )
-	return m_iAgentsDone - m_iAgentsReported;
+	return m_iAgentsDone.GetValue() - m_iAgentsReported;
 }
 
 void ThdWorkPool_c::PoolThreadFunc ( void * pArg )
@@ -1944,8 +1943,13 @@ void ThdWorkPool_c::PoolThreadFunc ( void * pArg )
 		pPool->m_iWorksCount.Dec();
 		if ( tNext.m_iAgentsDone || !tNext.m_pfn )
 		{
-			CSphScopedLock<CSphMutex> tStat ( pPool->m_tStatLock );
-			pPool->m_iAgentsDone += tNext.m_iAgentsDone;
+			volatile int iVal = 0;
+			volatile int iSum = 0;
+			do
+			{
+				iVal = pPool->m_iAgentsDone.GetValue();
+				iSum = iVal + tNext.m_iAgentsDone;
+			} while ( pPool->m_iAgentsDone.CAS ( iVal, iSum )!=iVal );
 			pPool->m_tChanged.SetEvent();
 		}
 

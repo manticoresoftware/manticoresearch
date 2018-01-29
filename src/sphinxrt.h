@@ -106,12 +106,6 @@ public:
 	ISphRtIndex * GetIndex() const { return m_pIndex; }
 };
 
-struct PercolateQueryProfiling_t
-{
-	uint64_t m_uUid;
-	uint64_t m_uTm;
-};
-
 struct PercolateQueryDesc
 {
 	uint64_t m_uID;
@@ -119,6 +113,8 @@ struct PercolateQueryDesc
 	CSphString m_sTags;
 	CSphString m_sFilters;
 	bool m_bQL;
+
+	void Swap ( PercolateQueryDesc & tOther );
 };
 
 struct PercolateMatchResult_t
@@ -127,8 +123,7 @@ struct PercolateMatchResult_t
 	bool m_bGetQuery;
 	bool m_bGetFilters;
 
-	CSphVector<uint64_t> m_dQueries;
-	CSphVector<PercolateQueryDesc> m_dQueryDesc;
+	CSphFixedVector<PercolateQueryDesc> m_dQueryDesc;
 	CSphFixedVector<SphDocID_t> m_dDocs;
 	int m_iQueriesMatched;
 	int m_iDocsMatched;
@@ -136,7 +131,7 @@ struct PercolateMatchResult_t
 
 	// verbose data
 	bool m_bVerbose;
-	CSphFixedVector<PercolateQueryProfiling_t> m_dQueryTm;
+	CSphFixedVector<int> m_dQueryDT; // microsecond time per query
 	int	m_iEarlyOutQueries;
 	int	m_iTotalQueries;
 	int m_iOnlyTerms;
@@ -167,6 +162,7 @@ void FixPercolateSchema ( CSphSchema & tSchema );
 
 typedef const QueryParser_i * CreateQueryParser ( bool bJson );
 void SetPercolateQueryParserFactory ( CreateQueryParser * pCall );
+void SetPercolateThreads ( int iThreads );
 
 //////////////////////////////////////////////////////////////////////////
 

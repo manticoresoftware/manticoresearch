@@ -2924,12 +2924,6 @@ protected:
 	HANDLE m_hMutex;
 #else
 	pthread_mutex_t m_tMutex;
-
-public:
-	inline pthread_mutex_t* GetInternalMutex()
-	{
-		return &m_tMutex;
-	}
 #endif
 };
 
@@ -2939,19 +2933,20 @@ class CSphAutoEvent : public ISphNoncopyable
 public:
 	~CSphAutoEvent() {}
 
-	bool Init ( CSphMutex * pMutex );
+	bool Init ();
 	bool Done();
 	void SetEvent();
-	bool WaitEvent();
+	void WaitEvent();
 
 protected:
 	bool m_bInitialized = false;
-	bool m_bSent = false;
+	volatile int  m_iSent = 0;
+
 #if USE_WINDOWS
 	HANDLE m_hEvent = 0;
 #else
 	pthread_cond_t m_tCond;
-	pthread_mutex_t* m_pMutex = nullptr;
+	pthread_mutex_t m_tMutex;
 #endif
 };
 
@@ -2962,7 +2957,7 @@ public:
 	CSphSemaphore ();
 	~CSphSemaphore();
 
-	bool Init (const char* sName=nullptr);
+	bool Init ( const char* sName );
 	bool Done();
 	void Post();
 	bool Wait();
@@ -3409,7 +3404,7 @@ public:
 	}
 
 #endif
-	};
+};
 
 typedef CSphAtomic_T<long> CSphAtomic;
 typedef CSphAtomic_T<int64_t> CSphAtomicL;
@@ -3463,7 +3458,7 @@ struct ISphThdPool
 	virtual int GetQueueLength () const = 0;
 };
 
-ISphThdPool * sphThreadPoolCreate ( int iThreads, const char* sName=NULL );
+ISphThdPool * sphThreadPoolCreate ( int iThreads, const char * sName, CSphString & sError );
 
 int sphCpuThreadsCount ();
 

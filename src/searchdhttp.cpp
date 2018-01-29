@@ -592,7 +592,7 @@ public:
 
 		tOut.SendWord ( SEARCHD_COMMAND_JSON );
 		tOut.SendWord ( VER_COMMAND_JSON );
-		cWriteLenHere tWr { tOut };
+		WriteLenHere_c tWr { tOut };
 		tOut.SendString ( sEndpoint.cstr() );
 		tOut.SendString ( sRequest.cstr() );
 	}

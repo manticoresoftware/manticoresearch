@@ -3459,7 +3459,7 @@ void SearchRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, CachedOu
 
 	tOut.SendWord ( SEARCHD_COMMAND_SEARCH ); // command id
 	tOut.SendWord ( VER_COMMAND_SEARCH ); // command version
-	cWriteLenHere tWr { tOut }; // request body length
+	WriteLenHere_c tWr { tOut }; // request body length
 
 	tOut.SendInt ( VER_MASTER );
 	tOut.SendInt ( m_iEnd-m_iStart+1 );
@@ -10252,7 +10252,7 @@ void SnippetRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, CachedO
 	tOut.SendWord ( SEARCHD_COMMAND_EXCERPT );
 	tOut.SendWord ( VER_COMMAND_EXCERPT );
 
-	cWriteLenHere tWr { tOut };
+	WriteLenHere_c tWr { tOut };
 
 	tOut.SendInt ( 0 );
 
@@ -10899,7 +10899,7 @@ void UpdateRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, CachedOu
 	// header
 	tOut.SendWord ( SEARCHD_COMMAND_UPDATE );
 	tOut.SendWord ( VER_COMMAND_UPDATE );
-	cWriteLenHere tWr { tOut };
+	WriteLenHere_c tWr { tOut };
 
 	tOut.SendString ( sIndexes );
 	tOut.SendInt ( m_tUpd.m_dAttrs.GetLength() );
@@ -14002,7 +14002,7 @@ void KeywordsRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, Cached
 
 	tOut.SendWord ( SEARCHD_COMMAND_KEYWORDS ); // command id
 	tOut.SendWord ( VER_COMMAND_KEYWORDS ); // command version
-	cWriteLenHere tWr { tOut }; // request body length
+	WriteLenHere_c tWr { tOut }; // request body length
 
 	tOut.SendString ( m_sTerm.cstr() );
 	tOut.SendString ( sIndexes.cstr() );
@@ -14584,7 +14584,7 @@ struct PingRequestBuilder_t : public IRequestBuilder_t
 		// header
 		tOut.SendWord ( SEARCHD_COMMAND_PING );
 		tOut.SendWord ( VER_COMMAND_PING );
-		cWriteLenHere tWr { tOut };
+		WriteLenHere_c tWr { tOut };
 		tOut.SendInt ( m_iCookie );
 	}
 
@@ -14887,7 +14887,7 @@ struct UVarRequestBuilder_t : public IRequestBuilder_t
 		// header
 		tOut.SendWord ( SEARCHD_COMMAND_UVAR );
 		tOut.SendWord ( VER_COMMAND_UVAR );
-		cWriteLenHere tWr { tOut };
+		WriteLenHere_c tWr { tOut };
 
 		tOut.SendString ( m_sName );
 		tOut.SendInt ( m_iUserVars );
@@ -15098,8 +15098,8 @@ void SphinxqlRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, Cached
 	// header
 	tOut.SendWord ( SEARCHD_COMMAND_SPHINXQL );
 	tOut.SendWord ( VER_COMMAND_SPHINXQL );
-	cWriteLenHere tWrLayer1 { tOut };
-	cWriteLenHere tWrLayer2 { tOut }; // sphinxql wrapped twice, so one more length need to be written.
+	WriteLenHere_c tWrLayer1 { tOut };
+	WriteLenHere_c tWrLayer2 { tOut }; // sphinxql wrapped twice, so one more length need to be written.
 	tOut.SendBytes ( m_sBegin.cstr(), m_sBegin.Length() );
 	tOut.SendBytes ( sIndexes, strlen(sIndexes) );
 	tOut.SendBytes ( m_sEnd.cstr(), m_sEnd.Length() );

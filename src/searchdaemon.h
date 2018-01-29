@@ -290,7 +290,7 @@ protected:
 	void CommitChunk(); // get last pushed int, write delta count there.
 };
 
-using cWriteLenHere = CachedOutputBuffer_c::ReqLenCalc;
+using WriteLenHere_c = CachedOutputBuffer_c::ReqLenCalc;
 
 class NetOutputBuffer_c : public CachedOutputBuffer_c
 {

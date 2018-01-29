@@ -3278,6 +3278,15 @@ struct CSphMultiQueryArgs : public ISphNoncopyable
 	CSphMultiQueryArgs ( const KillListVector & dKillList, int iIndexWeight );
 };
 
+enum KeywordExpansion_e
+{
+	KWE_DISABLED	=	0,
+	KWE_EXACT	=		( 1UL << 0 ),
+	KWE_STAR	=		( 1UL << 1 ),
+
+	KWE_ENABLED = ( KWE_EXACT | KWE_STAR ),
+};
+
 
 /// generic fulltext index interface
 class CSphIndex : public ISphKeywordsStat
@@ -3425,7 +3434,7 @@ public:
 public:
 	int64_t						m_iTID;					///< last committed transaction id
 
-	bool						m_bExpandKeywords;		///< enable automatic query-time keyword expansion (to "( word | =word | *word* )")
+	int							m_iExpandKeywords;		///< enable automatic query-time keyword expansion (to "( word | =word | *word* )")
 	int							m_iExpansionLimit;
 
 protected:

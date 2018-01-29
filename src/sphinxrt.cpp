@@ -4126,7 +4126,7 @@ CSphIndex * RtIndex_t::LoadDiskChunk ( const char * sChunk, CSphString & sError 
 	}
 
 	pDiskChunk->m_iExpansionLimit = m_iExpansionLimit;
-	pDiskChunk->m_bExpandKeywords = m_bExpandKeywords;
+	pDiskChunk->m_iExpandKeywords = m_iExpandKeywords;
 	pDiskChunk->SetBinlog ( false );
 	pDiskChunk->SetMemorySettings ( m_bMlock, m_bOndiskAllAttr, m_bOndiskPoolAttr );
 
@@ -7221,9 +7221,10 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		// FIXME!!! provide segments list instead index
 		sphTransformExtendedQuery ( &tParsed.m_pRoot, m_tSettings, pQuery->m_bSimplify, this );
 
-		if ( ExpandKeywords ( m_bExpandKeywords, pQuery->m_eExpandKeywords ) )
+		int iExpandKeywords = ExpandKeywords ( m_iExpandKeywords, pQuery->m_eExpandKeywords, m_tSettings );
+		if ( iExpandKeywords!=KWE_DISABLED )
 		{
-			tParsed.m_pRoot = sphQueryExpandKeywords ( tParsed.m_pRoot, m_tSettings );
+			tParsed.m_pRoot = sphQueryExpandKeywords ( tParsed.m_pRoot, m_tSettings, iExpandKeywords );
 			tParsed.m_pRoot->Check ( true );
 		}
 
@@ -11717,9 +11718,9 @@ bool PercolateIndex_c::AddQuery ( const char * sQuery, const char * sTags, const
 	// FIXME!!! provide segments list instead index
 	sphTransformExtendedQuery ( &tParsed->m_pRoot, m_tSettings, false, NULL );
 
-	if ( m_bExpandKeywords )
+	if ( m_iExpandKeywords!=KWE_DISABLED )
 	{
-		tParsed->m_pRoot = sphQueryExpandKeywords ( tParsed->m_pRoot, m_tSettings );
+		tParsed->m_pRoot = sphQueryExpandKeywords ( tParsed->m_pRoot, m_tSettings, m_iExpandKeywords );
 		tParsed->m_pRoot->Check ( true );
 	}
 

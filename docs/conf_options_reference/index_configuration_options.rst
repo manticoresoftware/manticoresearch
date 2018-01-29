@@ -832,8 +832,9 @@ Example:
 expand_keywords
 ~~~~~~~~~~~~~~~
 
-Expand keywords with exact forms and/or stars when possible. Optional,
-default is 0 (do not expand keywords).
+Expand keywords with exact forms and/or stars when possible. The value
+can additionally enumerate options such us exact and star.
+Optional, default is 0 (do not expand keywords).
 
 Queries against indexes with ``expand_keywords`` feature enabled are
 internally expanded as follows. If the index was built with prefix or
@@ -849,6 +850,14 @@ exact words) are combined:
 
 
     running -> ( running | *running* | =running )
+	
+or expansion limited by exact option even infixes enabled for index
+
+.. code-block:: ini
+
+
+    running -> ( running | =running )
+
 
 Expanded queries take naturally longer to complete, but can possibly
 improve the search quality, as the documents with exact form matches

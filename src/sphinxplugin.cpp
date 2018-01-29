@@ -214,13 +214,11 @@ struct SymbolDesc_t
 	bool			m_bRequired;	///< whether this symbol must be present
 };
 
-
+#if HAVE_DLOPEN
 static bool PluginLoadSymbols ( void * pDesc, const SymbolDesc_t * pSymbol, void * pHandle, const char * sName, CSphString & sError )
 {
-#if !HAVE_DLOPEN
-	sError = "no dlopen(), no plugins";
-	return false;
-#else
+//	sError = "no dlopen(), no plugins";
+//	return false;
 	CSphString s;
 	while ( pSymbol->m_iOffsetOf>=0 )
 	{
@@ -235,8 +233,8 @@ static bool PluginLoadSymbols ( void * pDesc, const SymbolDesc_t * pSymbol, void
 		pSymbol++;
 	}
 	return true;
-#endif // HAVE_DLOPEN
 }
+#endif // HAVE_DLOPEN
 
 #if !USE_WINDOWS
 #ifndef offsetof
@@ -247,6 +245,7 @@ static bool PluginLoadSymbols ( void * pDesc, const SymbolDesc_t * pSymbol, void
 #endif
 #endif
 
+#if HAVE_DLOPEN
 static SymbolDesc_t g_dSymbolsUDF[] =
 {
 	{ static_cast<int>( offsetof(PluginUDF_c, m_fnInit)),		"init",		false },
@@ -289,14 +288,8 @@ static SymbolDesc_t g_dSymbolsQueryTokenFilter[] =
 	{ -1, nullptr, false }
 };
 
-
 static PluginLib_c * LoadPluginLibrary ( const char * sLibName, CSphString & sError, bool bLinuxReload=false )
 {
-
-#if !HAVE_DLOPEN
-	sError = "no dlopen(), no plugins";
-	return nullptr;
-#else
 
 	CSphString sTmpfile;
 	CSphString sLibfile;
@@ -355,9 +348,8 @@ static PluginLib_c * LoadPluginLibrary ( const char * sLibName, CSphString & sEr
 		return nullptr;
 	}
 	return new PluginLib_c ( pHandle, sLibName );
-#endif
 }
-
+#endif
 
 bool sphPluginCreate ( const char * szLib, PluginType_e eType, const char * sName, ESphAttr eUDFRetType, CSphString & sError )
 {

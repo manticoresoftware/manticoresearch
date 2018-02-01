@@ -5674,7 +5674,7 @@ const ExtHit_t * ExtNotNear_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 
 	while ( iDstHit<MAX_HITS-1 && pHit!=pEnd )
 	{
-		while ( pHit->m_uDocid<pDocs->m_uDocid && pHit!=pEnd )
+		while ( pHit!=pEnd && pHit->m_uDocid<pDocs->m_uDocid )
 			pHit++;
 		if ( pHit==pEnd )
 			break;
@@ -5687,7 +5687,7 @@ const ExtHit_t * ExtNotNear_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 		if ( pHit->m_uDocid!=pDocs->m_uDocid )
 			continue;
 
-		while ( pHit->m_uDocid==pDocs->m_uDocid && iDstHit<MAX_HITS-1 )
+		while ( pHit!=pEnd && pHit->m_uDocid==pDocs->m_uDocid && iDstHit<MAX_HITS-1 )
 		{
 			m_dHits[iDstHit] = *pHit;
 			pHit++;

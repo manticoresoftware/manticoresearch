@@ -50,7 +50,7 @@
 %type <pNode>			beforelist
 %type <pNode>			expr
 
-%left TOK_BEFORE TOK_NEAR
+%left TOK_BEFORE TOK_NEAR TOK_NOTNEAR
 
 %%
 

@@ -349,7 +349,7 @@ documents which match only right subtree expression.
 It matches the document when left argument exists and either there is no
 right argument in document or right argument is distance away from
 left matched argument's end. The distance is specified in words.
-The syntax is ``NONEAR/N``, it is case-sensitive, and no spaces are
+The syntax is ``NOTNEAR/N``, it is case-sensitive, and no spaces are
 allowed between the NOTNEAR keyword, the slash sign, and the distance value.
 Both arguments of this operator might be terms or any operators or group
 of operators.

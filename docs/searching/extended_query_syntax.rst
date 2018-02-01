@@ -346,7 +346,11 @@ since “hello” and “world” do not occur within the same span.
 documents which match only right subtree expression.
 
 **NOTNEAR operator** is a negative assertion.
+It matches the document when left argument exists and either there is no
+right argument in document or right argument is distance away from
+left matched argument's end. The distance is specified in words.
 The syntax is ``NONEAR/N``, it is case-sensitive, and no spaces are
-allowed between the NOTNEAR keyword, the slash sign, and the distance
-value. 
+allowed between the NOTNEAR keyword, the slash sign, and the distance value.
+Both arguments of this operator might be terms or any operators or group
+of operators.
 

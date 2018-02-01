@@ -1804,7 +1804,7 @@ bool HttpHandlerPQ_c::ListQueries ( PercolateIndex_i * pIndex, const CSphString 
 	uint64_t tmStart = sphMicroTimer();
 
 	CSphVector<PercolateQueryDesc> dQueries;
-	pIndex->GetQueries ( sFilterTags, pUID, dQueries );
+	pIndex->GetQueries ( sFilterTags, pUID, 0, 0, dQueries );
 
 	PercolateMatchResult_t tRes;
 	tRes.m_bGetDocs = false;

@@ -822,13 +822,11 @@ opt_limit_clause:
 limit_clause:
 	TOK_LIMIT TOK_CONST_INT
 		{
-			pParser->m_pQuery->m_iOffset = 0;
-			pParser->m_pQuery->m_iLimit = $2.m_iValue;
+			pParser->SetLimit ( 0, $2.m_iValue );
 		}
 	| TOK_LIMIT TOK_CONST_INT ',' TOK_CONST_INT
 		{
-			pParser->m_pQuery->m_iOffset = $2.m_iValue;
-			pParser->m_pQuery->m_iLimit = $4.m_iValue;
+			pParser->SetLimit ( $2.m_iValue, $4.m_iValue );
 		}
 	;
 

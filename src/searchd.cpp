@@ -8978,6 +8978,7 @@ public:
 	void						AddUpdatedAttr ( const SqlNode_t & tName, ESphAttr eType ) const;
 	void						UpdateMVAAttr ( const SqlNode_t & tName, const SqlNode_t& dValues );
 	void						SetGroupbyLimit ( int iLimit );
+	void						SetLimit ( int iOffset, int iLimit );
 
 private:
 	void						AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode_t * pEnd );
@@ -9782,6 +9783,13 @@ int SqlParser_c::AllocNamedVec ()
 	m_bNamedVecBusy = true;
 	m_dNamedVec.Resize ( 0 );
 	return 0;
+}
+
+void SqlParser_c::SetLimit ( int iOffset, int iLimit )
+{
+	m_pQuery->m_iOffset = iOffset;
+	m_pQuery->m_iLimit = iLimit;
+	m_pStmt->m_bLimitSet = true;
 }
 
 #ifndef NDEBUG
@@ -12809,8 +12817,20 @@ static void SendPercolateReply ( const PercolateMatchResult_t & tRes, const CSph
 	tOut.Eof ( false, iWarns );
 }
 
-static bool PercolateShowStatus ( const CSphString & sIndex, const CSphString & sStmt, const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<CSphQueryItem> & dSelect, SqlRowBuffer_c & tOut, CSphQueryResultMeta & tMeta )
+static bool PercolateShowStatus ( const SqlStmt_t & tStmt, SqlRowBuffer_c & tOut, CSphQueryResultMeta & tMeta )
 {
+	const CSphString & sIndex = tStmt.m_tQuery.m_sIndexes;
+	const CSphString & sStmt = tStmt.m_sStmt;
+	const CSphVector<CSphFilterSettings> & dFilters = tStmt.m_tQuery.m_dFilters;
+	const CSphVector<CSphQueryItem> & dSelect = tStmt.m_tQuery.m_dItems;
+	int iOffset = 0;
+	int iLimit = 0;
+	if ( tStmt.m_bLimitSet )
+	{
+		iOffset = tStmt.m_tQuery.m_iOffset;
+		iLimit = tStmt.m_tQuery.m_iLimit;
+	}
+	
 	tMeta = CSphQueryResultMeta();
 
 	CSphString sError;
@@ -12862,7 +12882,7 @@ static bool PercolateShowStatus ( const CSphString & sIndex, const CSphString & 
 	}
 
 	CSphVector<PercolateQueryDesc> dQueries;
-	pIndex->GetQueries ( sFilterTags, pUID, dQueries );
+	pIndex->GetQueries ( sFilterTags, pUID, iOffset, iLimit, dQueries );
 	pServed->Unlock();
 
 	if ( !sCountAlias )
@@ -17483,7 +17503,7 @@ public:
 				if ( bLocal && tDesc.m_bPercolate )
 				{
 					const SqlStmt_t & tStmt = dStmt[0];
-					return PercolateShowStatus ( tStmt.m_tQuery.m_sIndexes, tStmt.m_sStmt, tStmt.m_tQuery.m_dFilters, tStmt.m_tQuery.m_dItems, tOut, m_tLastMeta );
+					return PercolateShowStatus ( tStmt, tOut, m_tLastMeta );
 				}
 
 				StatCountCommand ( SEARCHD_COMMAND_SEARCH );

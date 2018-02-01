@@ -865,6 +865,8 @@ struct SqlStmt_t
 	// generic integer parameter, used in SHOW SETTINGS, default value -1
 	int						m_iIntParam = -1;
 
+	bool					m_bLimitSet = false; // true for query with not default values
+
 	SqlStmt_t ();
 	bool AddSchemaItem ( const char * psName );
 	// check if the number of fields which would be inserted is in accordance to the given schema

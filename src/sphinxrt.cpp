@@ -10708,7 +10708,7 @@ public:
 	ISphRtAccum * CreateAccum ( CSphString & sError ) override;
 	ISphTokenizer * CloneIndexingTokenizer() const override { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
 	void SaveMeta ();
-	void GetQueries ( const char * sFilterTags, const CSphFilterSettings * pUID, CSphVector<PercolateQueryDesc> & dQueries ) override;
+	void GetQueries ( const char * sFilterTags, const CSphFilterSettings * pUID, int iOffset, int iLimit, CSphVector<PercolateQueryDesc> & dQueries ) override;
 	bool Truncate ( CSphString & ) override;
 
 	// RT index stub
@@ -10833,7 +10833,7 @@ static void SegmentGetRejects ( const RtSegment_t * pSeg, SegmentReject_t & tRej
 					if ( !pDoc )
 						break;
 
-					assert ( pDoc->m_uDocID>=1 && pDoc->m_uDocID<pSeg->m_iRows+1 );
+					assert ( pDoc->m_uDocID>=1 && (int)pDoc->m_uDocID<pSeg->m_iRows+1 );
 					int iDoc = (int)pDoc->m_uDocID - 1;
 					tReject.m_dPerDocTerms[iDoc].Add ( uHash );
 				}
@@ -12532,7 +12532,7 @@ void PercolateIndex_c::SaveMeta()
 		sphWarning ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)", sMetaNew.cstr(), sMeta.cstr(), errno, strerror( errno ) );
 }
 
-void PercolateIndex_c::GetQueries ( const char * sFilterTags, const CSphFilterSettings * pUID, CSphVector<PercolateQueryDesc> & dQueries )
+void PercolateIndex_c::GetQueries ( const char * sFilterTags, const CSphFilterSettings * pUID, int iOffset, int iLimit, CSphVector<PercolateQueryDesc> & dQueries )
 {
 	// FIXME!!! move to filter, add them via join
 	CSphVector<uint64_t> dTags;
@@ -12548,7 +12548,11 @@ void PercolateIndex_c::GetQueries ( const char * sFilterTags, const CSphFilterSe
 	StringBuilder_c tBuf;
 	m_tLock.ReadLock();
 
-	ARRAY_FOREACH ( i, m_dStored )
+	int iFrom = 0;
+	if ( iLimit>0 && iOffset>0 )
+		iFrom = Min ( iOffset, m_dStored.GetLength() );
+
+	for ( int i=iFrom; i<m_dStored.GetLength(); i++ )
 	{
 		const StoredQuery_t * pQuery = m_dStored[i].m_pQuery;
 		if ( dTags.GetLength() )
@@ -12575,6 +12579,9 @@ void PercolateIndex_c::GetQueries ( const char * sFilterTags, const CSphFilterSe
 			FormatFiltersQL ( pQuery->m_dFilters, pQuery->m_dFilterTree, 5, false, tBuf );
 			tItem.m_sFilters = tBuf.cstr();
 		}
+
+		if ( iLimit>0 && dQueries.GetLength()==iLimit )
+			break;
 	}
 
 	m_tLock.Unlock();

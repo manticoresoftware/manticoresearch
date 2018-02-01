@@ -1173,6 +1173,25 @@ bool XQParser_t::GetNumber ( const char * p, const char * sRestart )
 	return false;
 }
 
+static bool GetNearToken ( const char * sTok, int iTokLen, int iTokType, const char * sBuf, ISphTokenizer * pTokenizer, int & iPendingType, YYSTYPE & tPendingToken )
+{
+	if ( strncmp ( sBuf, sTok, iTokLen )==0 && isdigit(sBuf[iTokLen]) )
+	{
+		// extract that int
+		int iVal = 0;
+		for ( sBuf=sBuf+iTokLen; isdigit ( *sBuf ); sBuf++ )
+			iVal = iVal*10 + ( *sBuf ) - '0'; // FIXME! check for overflow?
+		pTokenizer->SetBufferPtr ( sBuf );
+
+		// we just lexed our next token
+		iPendingType = iTokType;
+		tPendingToken.tInt.iValue = iVal;
+		tPendingToken.tInt.iStrIndex = -1;
+		return true;
+	}
+
+	return false;
+}
 
 /// a lexer of my own
 int XQParser_t::GetToken ( YYSTYPE * lvalp )
@@ -1251,19 +1270,11 @@ int XQParser_t::GetToken ( YYSTYPE * lvalp )
 			bMultiDest = m_pTokenizer->WasTokenMultiformDestination ( bMultiDestHead, iDestCount );
 
 		// handle NEAR (must be case-sensitive, and immediately followed by slash and int)
-		if ( !bMultiDest && p && !m_pTokenizer->m_bPhrase && strncmp ( p, "NEAR/", 5 )==0 && isdigit(p[5]) )
+		if ( !bMultiDest && p && !m_pTokenizer->m_bPhrase && 
+			( GetNearToken ( "NEAR/", 5, TOK_NEAR, p, m_pTokenizer, m_iPendingType, m_tPendingToken )
+				|| GetNearToken ( "NOTNEAR/", 8, TOK_NOTNEAR, p, m_pTokenizer, m_iPendingType, m_tPendingToken ) ) )
 		{
-			// extract that int
-			int iVal = 0;
-			for ( p=p+5; isdigit(*p); p++ )
-				iVal = iVal*10 + (*p) - '0'; // FIXME! check for overflow?
-			m_pTokenizer->SetBufferPtr ( p );
-
-			// we just lexed our next token
-			m_iPendingType = TOK_NEAR;
-			m_tPendingToken.tInt.iValue = iVal;
-			m_tPendingToken.tInt.iStrIndex = -1;
-			m_iAtomPos -= 1; // skip NEAR
+			m_iAtomPos -= 1; // skip token
 			break;
 		}
 

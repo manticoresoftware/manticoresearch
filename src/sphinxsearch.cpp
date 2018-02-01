@@ -1059,6 +1059,35 @@ private:
 	const ExtHit_t *	m_pDotHit;		///< current in-chunk ptr
 };
 
+
+class ExtNotNear_c : public ExtTwofer_c
+{
+public:
+	ExtNotNear_c ( ExtNode_i * pMust, ExtNode_i * pNot, const ISphQwordSetup & tSetup, int iDist );
+	~ExtNotNear_c ();
+
+	virtual const ExtDoc_t *	GetDocsChunk() override;
+	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs ) override;
+	void Reset ( const ISphQwordSetup & tSetup ) override;
+
+	virtual void DebugDump ( int iLevel )
+	{
+		DebugDumpT ( "ExtNotNear_c", iLevel );
+	}
+
+private:
+	bool FilterHits ( SphDocID_t uMachedDoc, const ExtHit_t ** ppMust, const ExtHit_t ** ppNot ); // return true in case doc has matched hits
+
+	const int m_iDist = 1;
+	CSphString m_sNodeName;
+
+	CSphVector<ExtHit_t> m_dCheckedHits;
+	int m_iHits = 0;
+	SphDocID_t m_uTailDoc = 0;
+};
+
+
+
 //////////////////////////////////////////////////////////////////////////
 // RANKER
 //////////////////////////////////////////////////////////////////////////
@@ -1952,6 +1981,7 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 				case SPH_QUERY_ANDNOT:		pCur = new ExtAndNot_c ( pCur, pNext, tSetup ); break;
 				case SPH_QUERY_SENTENCE:	pCur = new ExtUnit_c ( pCur, pNext, pNode->m_dSpec.m_dFieldMask, tSetup, MAGIC_WORD_SENTENCE ); break;
 				case SPH_QUERY_PARAGRAPH:	pCur = new ExtUnit_c ( pCur, pNext, pNode->m_dSpec.m_dFieldMask, tSetup, MAGIC_WORD_PARAGRAPH ); break;
+				case SPH_QUERY_NOTNEAR:		pCur = new ExtNotNear_c ( pCur, pNext, tSetup, pNode->m_iOpArg ); break;
 				default:					assert ( 0 && "internal error: unhandled op in ExtNode_i::Create()" ); break;
 			}
 		}
@@ -5411,6 +5441,265 @@ const ExtHit_t * ExtUnit_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 	assert ( iHit>=0 && iHit<MAX_HITS );
 	m_dHits[iHit].m_uDocid = DOCID_MAX;
 	return ( iHit!=0 ) ? m_dHits : NULL;
+}
+
+
+//////////////////////////////////////////////////////////////////////////
+
+ExtNotNear_c::ExtNotNear_c ( ExtNode_i * pMust, ExtNode_i * pNot, const ISphQwordSetup & tSetup, int iDist )
+	: ExtTwofer_c ( pMust, pNot, tSetup )
+	, m_iDist ( iDist )
+{
+	m_sNodeName.SetSprintf ( "NOTNEAR/%d", m_iDist );
+	m_dCheckedHits.Reserve ( MAX_HITS * 2 );
+}
+
+
+ExtNotNear_c::~ExtNotNear_c ()
+{
+}
+
+void ExtNotNear_c::Reset ( const ISphQwordSetup & tSetup )
+{
+	m_iHits = 0;
+	m_uTailDoc = 0;
+	m_dCheckedHits.Resize ( 0 );
+	ExtTwofer_c::Reset ( tSetup );
+}
+
+bool ExtNotNear_c::FilterHits ( SphDocID_t uMachedDoc, const ExtHit_t ** ppMust, const ExtHit_t ** ppNot )
+{
+	assert ( ppMust!=nullptr && ppNot!=nullptr );
+	const ExtHit_t * pMust = *ppMust;
+	const ExtHit_t * pNot = *ppNot;
+	assert ( pMust!=nullptr && pNot!=nullptr );
+	assert ( pMust->m_uDocid!=DOCID_MAX && pNot->m_uDocid!=DOCID_MAX );
+
+	const int iWasHits = m_dCheckedHits.GetLength();
+	bool bRightEmpty = false;
+
+	// any hits stream over might have tail hits
+	while ( pMust->m_uDocid==uMachedDoc )
+	{
+		// get NOT next after current MUST
+		while ( pNot->m_uDocid==uMachedDoc && HITMAN::GetPosWithField ( pNot->m_uHitpos ) < HITMAN::GetPosWithField ( pMust->m_uHitpos ) )
+			pNot++;
+
+		// in case of NOT ended there might be tail hits that should be fetched first
+		if ( pNot->m_uDocid==DOCID_MAX )
+			break;
+
+		bRightEmpty = ( pNot->m_uDocid!=uMachedDoc );
+		DWORD uPosMust = HITMAN::GetPosWithField ( pMust->m_uHitpos );
+
+		// field is top 8 bytes that is why it safe to add distance straight to GetPosWithField and compare these without checking both fields are eq
+		if ( bRightEmpty || uPosMust + pMust->m_uMatchlen - 1 + m_iDist<HITMAN::GetPosWithField ( pNot->m_uHitpos ) )
+			m_dCheckedHits.Add ( *pMust );
+
+		pMust++;
+	}
+
+	*ppMust = pMust;
+	*ppNot = pNot;
+
+	return ( iWasHits<m_dCheckedHits.GetLength() );
+}
+
+const ExtDoc_t * ExtNotNear_c::GetDocsChunk()
+{
+	const ExtDoc_t * pDocL = m_pCurDocL;
+	const ExtDoc_t * pDocR = m_pCurDocR;
+	const ExtHit_t * pHitL = m_pCurHitL;
+	const ExtHit_t * pHitR = m_pCurHitR;
+	CSphRowitem * pDocinfo = m_pDocinfo;
+
+	int iDoc = 0;
+	bool bRightEmpty = false;
+	m_dCheckedHits.Resize ( 0 );
+
+	while ( iDoc<MAX_DOCS-1 )
+	{
+		// if any of the pointers is empty, and not touched yet, advance
+		if ( !pHitL || pHitL->m_uDocid==DOCID_MAX )
+		{
+			if ( pDocL && pDocL->m_uDocid!=DOCID_MAX )
+			{
+				pHitL = m_pLeft->GetHitsChunk ( pDocL );
+				if ( pHitL ) continue;
+			}
+
+			pDocL = m_pLeft->GetDocsChunk();
+			if ( !pDocL ) break;
+			pHitL = m_pLeft->GetHitsChunk ( pDocL );
+			assert ( pHitL );
+		}
+
+		if ( !bRightEmpty && ( !pHitR || pHitR->m_uDocid==DOCID_MAX ) )
+		{
+			if ( pDocR && pDocR->m_uDocid!=DOCID_MAX )
+			{
+				pHitR = m_pRight->GetHitsChunk ( pDocR );
+				if ( pHitR ) continue;
+			}
+
+			if ( pDocL && pDocL->m_uDocid!=DOCID_MAX )
+				m_pRight->HintDocid ( pDocL->m_uDocid );
+			pDocR = m_pRight->GetDocsChunk();
+			if ( pDocR ) // empty NOT terms set is valid
+				pHitR = m_pRight->GetHitsChunk ( pDocR );
+			assert ( !pDocR || pHitR );
+			bRightEmpty = ( !pHitR || pHitR->m_uDocid==DOCID_MAX );
+		}
+
+		if ( !pHitL )
+			break;
+
+		SphDocID_t uNotDoc = ( bRightEmpty ? DOCID_MAX : pDocR->m_uDocid );
+		// copy none matched from MUST
+		while ( pDocL->m_uDocid < uNotDoc && iDoc<MAX_DOCS-1 )
+		{
+			CopyExtDoc ( m_dDocs[iDoc++], *pDocL, &pDocinfo, m_iStride );
+
+			while ( pHitL->m_uDocid<pDocL->m_uDocid ) pHitL++;
+			while ( pHitL->m_uDocid==pDocL->m_uDocid )
+			{
+				m_dCheckedHits.Add ( *pHitL );
+				pHitL++;
+			}
+			pDocL++;
+		}
+		if ( pDocL->m_uDocid==DOCID_MAX || iDoc==MAX_DOCS-1 )
+			continue;
+
+		if ( bRightEmpty )
+			continue;
+
+		// skip NOT until min accepted id
+		while ( pDocR->m_uDocid<pDocL->m_uDocid ) pDocR++;
+		while ( pHitR->m_uDocid<pDocR->m_uDocid ) pHitR++;
+		if ( pHitR->m_uDocid==DOCID_MAX )
+			continue;
+
+		// filter must with not
+		assert ( pDocL->m_uDocid && pDocL->m_uDocid!=DOCID_MAX );
+		assert ( pDocL->m_uDocid==pDocR->m_uDocid );
+		assert ( pDocL->m_uDocid==pHitL->m_uDocid && pDocL->m_uDocid==pHitR->m_uDocid );
+
+		bool bMatched = false;
+		// filter hits inside same document
+		while ( true )
+		{
+			bMatched |= FilterHits ( pDocL->m_uDocid, &pHitL, &pHitR );
+
+			if ( pHitL->m_uDocid!=DOCID_MAX && pHitR->m_uDocid!=DOCID_MAX ) // no tail hits needed
+				break;
+
+			if ( pHitL->m_uDocid==DOCID_MAX )
+				pHitL = m_pLeft->GetHitsChunk ( pDocL );
+			if ( pHitR->m_uDocid==DOCID_MAX )
+				pHitR = m_pRight->GetHitsChunk ( pDocR );
+
+			if ( pHitL && pHitL->m_uDocid!=DOCID_MAX && pHitR && pHitR->m_uDocid!=DOCID_MAX )
+				continue;
+
+			if ( !pHitL || pHitL->m_uDocid==DOCID_MAX )
+				break;
+
+			// copy MUST tail hits
+			while ( pHitL->m_uDocid==pDocL->m_uDocid )
+			{
+				m_dCheckedHits.Add ( *pHitL );
+				pHitL++;
+			}
+			bMatched = true;
+			break;
+		}
+
+		if ( bMatched )
+		{
+			CopyExtDoc ( m_dDocs[iDoc], *pDocL, &pDocinfo, m_iStride );
+			iDoc++;
+		}
+
+		// only here ask next documents for both child
+		pDocL++;
+		pDocR++;
+
+		if ( pHitL && pHitL->m_uDocid!=DOCID_MAX && pDocL->m_uDocid!=DOCID_MAX )
+		{
+			while ( pHitL->m_uDocid<pDocL->m_uDocid ) pHitL++;
+		}
+		if ( pHitR && pHitR->m_uDocid!=DOCID_MAX && pDocR->m_uDocid!=DOCID_MAX )
+		{
+			while ( pHitR->m_uDocid<pDocR->m_uDocid ) pHitR++;
+		}
+	}
+
+	m_pCurDocL = pDocL;
+	m_pCurDocR = pDocR;
+	m_pCurHitL = pHitL;
+	m_pCurHitR = pHitR;
+	m_iHits = 0;
+	m_uTailDoc = 0;
+
+	return ReturnDocsChunk ( iDoc, m_sNodeName.cstr() );
+}
+
+
+const ExtHit_t * ExtNotNear_c::GetHitsChunk ( const ExtDoc_t * pDocs )
+{
+	int iDstHit = 0;
+	ExtHit_t * pHit = m_dCheckedHits.Begin();
+	const ExtHit_t * pEnd = m_dCheckedHits.Begin() + m_dCheckedHits.GetLength();
+
+	// emit tail then roll docs to previous matched id
+	if ( m_iHits )
+	{
+		// emit tail
+		pHit += m_iHits;
+		while ( pHit!=pEnd && pHit->m_uDocid==m_uTailDoc && iDstHit<MAX_HITS-1 )
+		{
+			m_dHits[iDstHit] = *pHit;
+			pHit++;
+			iDstHit++;
+		}
+
+		// roll to next after tail end doc
+		if ( pHit!=pEnd && iDstHit<MAX_HITS-1 )
+		{
+			while ( pDocs->m_uDocid<=m_uTailDoc && pDocs->m_uDocid!=DOCID_MAX )
+				pDocs++;
+		}
+	}
+
+	while ( iDstHit<MAX_HITS-1 && pHit!=pEnd )
+	{
+		while ( pHit->m_uDocid<pDocs->m_uDocid && pHit!=pEnd )
+			pHit++;
+		if ( pHit==pEnd )
+			break;
+
+		while ( pDocs->m_uDocid<pHit->m_uDocid && pDocs->m_uDocid!=DOCID_MAX )
+			pDocs++;
+		if ( pDocs->m_uDocid==DOCID_MAX )
+			break;
+
+		if ( pHit->m_uDocid!=pDocs->m_uDocid )
+			continue;
+
+		while ( pHit->m_uDocid==pDocs->m_uDocid && iDstHit<MAX_HITS-1 )
+		{
+			m_dHits[iDstHit] = *pHit;
+			pHit++;
+			iDstHit++;
+		}
+	}
+
+	// store tail hit index and doc
+	m_iHits = pHit - m_dCheckedHits.Begin();
+	m_uTailDoc = ( m_iHits<m_dCheckedHits.GetLength() ? m_dHits[iDstHit-1].m_uDocid : 0 );
+
+	return ReturnHitsChunk ( iDstHit, m_sNodeName.cstr(), false );
 }
 
 //////////////////////////////////////////////////////////////////////////

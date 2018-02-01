@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>NOTNEAR syntax</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT *, 11 as gid FROM test_table
+
+	sql_attr_uint	= gid
+	sql_field_string = title
+}
+
+index idx
+{
+	source			= src
+	path			= <data_path/>/idx
+}
+</config>
+
+<sphqueries>
+<sphinxql>select * from idx where match ( 'a NOTNEAR/1 c') order by id asc</sphinxql>
+<sphinxql>select * from idx where match ( 'a NOTNEAR/2 c') order by id asc</sphinxql>
+<sphinxql>select * from idx where match ( 'a NOTNEAR/3 c') order by id asc</sphinxql>
+<sphinxql>select * from idx where match ( 'a NOTNEAR/5 c') order by id asc</sphinxql>
+<sphinxql>select * from idx where match ( 'a NOTNEAR/6 c') order by id asc</sphinxql>
+<sphinxql>select * from idx where match ( 'a NOTNEAR/7 c') order by id asc</sphinxql>
+<sphinxql>select * from idx where match ( 'a NOTNEAR/15 c') order by id asc</sphinxql>
+
+<sphinxql>select * from idx where match ( 'b NOTNEAR/1 c') order by id asc</sphinxql>
+<sphinxql>select * from idx where match ( 'b NOTNEAR/2 c') order by id asc</sphinxql>
+
+<sphinxql>select * from idx where match ( '"a b" NOTNEAR/2 c') order by id asc</sphinxql>
+<sphinxql>select * from idx where match ( '"a b" NOTNEAR/3 c') order by id asc</sphinxql>
+
+<sphinxql>select * from idx where match ( 'a NOTNEAR/3 (c | d)') order by id asc</sphinxql>
+<sphinxql>select * from idx where match ( 'a NOTNEAR/3 "c * d"') order by id asc</sphinxql>
+<sphinxql>select * from idx where match ( 'a NOTNEAR/3 "c x d"') order by id asc</sphinxql>
+<sphinxql>select * from idx where match ( 'a NOTNEAR/9 "c x d"') order by id asc</sphinxql>
+<sphinxql>select * from idx where match ( 'a NOTNEAR/11 "c x x d"') order by id asc</sphinxql>
+
+<sphinxql>select * from idx where match ( 'oy NOTNEAR/1 ho') order by id asc</sphinxql>
+<sphinxql>select * from idx where match ( 'oy NOTNEAR/2 ho') order by id asc</sphinxql>
+<sphinxql>select * from idx where match ( 'zwei NOTNEAR/2 ho') order by id asc</sphinxql>
+<sphinxql>select * from idx where match ( 'zwei NOTNEAR/4 ho') order by id asc</sphinxql>
+<sphinxql>select * from idx where match ( 'zwei NOTNEAR/1 vey') order by id asc</sphinxql>
+<sphinxql>select * from idx where match ( 'zwei NOTNEAR/2 vey') order by id asc</sphinxql>
+<sphinxql>select * from idx where match ( 'vey NOTNEAR/1 ho') order by id asc</sphinxql>
+<sphinxql>select * from idx where match ( 'vey NOTNEAR/1 oy') order by id asc</sphinxql>
+
+<sphinxql>select * from idx where match ( 'd NOTNEAR/1 a') order by id asc</sphinxql>
+<sphinxql>select * from idx where match ( 'd NOTNEAR/3 a') order by id asc</sphinxql>
+
+<sphinxql>select * from idx where match ( 'c NOTNEAR/1 x') order by id asc</sphinxql>
+<sphinxql>select * from idx where match ( 'c NOTNEAR/2 x') order by id asc</sphinxql>
+<sphinxql>select * from idx where match ( 'c NOTNEAR/3 x') order by id asc</sphinxql>
+<sphinxql>select * from idx where match ( 'x NOTNEAR/2 c') order by id asc</sphinxql>
+
+<sphinxql>select * from idx where match (' ("a b" NOTNEAR/3 (d |e)) NOTNEAR/2 c') order by id asc</sphinxql>
+<sphinxql>select * from idx where match ('"a b"~4 NOTNEAR/1 c') order by id asc</sphinxql>
+<sphinxql>select * from idx where match ('( "a b" | "a x b" ) NOTNEAR/1 c') order by id asc</sphinxql>
+</sphqueries>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
+	title VARCHAR(16384) NOT NULL
+);
+</db_create>
+<db_insert>
+INSERT INTO `test_table` VALUES
+( 1, 'a b c d' ),
+( 2, 'a x b c d' ),
+( 3, 'a x x b c d' ),
+( 4, 'a b x c d'), 
+( 5, 'a b x x c d' ),
+( 6, 'a b x x x c d' ),
+( 7, 'a b x x x x c d' ),
+( 8, 'a x b x x x x c x d' ),
+( 9, 'a x x b x x x c x x d' ),
+
+( 10, 'c d x x x x a b' ),
+( 11, 'c d x x x a b' ),
+( 12, 'c d x x a b' ),
+( 13, 'c d x a b' ),
+( 14, 'c d a b' ),
+
+( 15, '... is the clearinghouse associated with such exchange. In general, clearinghouses are backed by the corporate members of the clearinghouse who are required to share any financial burden resulting from the non-performance by one of their members and, as such, should significantly reduce this credit risk. In cases where the clearinghouse... is the clearinghouse associated with such exchange. In general, clearinghouses are backed by the corporate members of the clearinghouse who are required to share any financial burden resulting from the non-performance by one of their members and, as such, should significantly reduce this credit risk. In cases where the clearinghouse... be able to meet its obligations to a Trading Company. The counterparty for futures contracts traded in the United States and on most foreign exchanges is the clearinghouse associated with such exchange. In general, clearinghouses are backed by the corporate members of the clearinghouse who are required to share any financial...' ),
+( 16, 'one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteena' ),
+( 17, 'aleph-bet-gimel dalet he wav zajin het' ),
+
+( 20, 'ein oy vey' ),
+( 21, CONCAT('zwei ',REPEAT('oy vey ho ho ho ',1024)) ),
+( 22, 'oy vey drei' )
+</db_insert>
+
+<db_drop>DROP TABLE IF EXISTS `test_table`</db_drop>
+
+</test>

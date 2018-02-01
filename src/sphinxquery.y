@@ -37,6 +37,7 @@
 %token					TOK_SENTENCE
 %token					TOK_PARAGRAPH
 %token					TOK_MAYBE
+%token <tInt>			TOK_NOTNEAR
 %type <pNode>			keyword
 %type <pNode>			phrasetoken
 %type <pNode>			phrase
@@ -101,6 +102,7 @@ atom:
 	| '"' phrase '"' '/' TOK_FLOAT		{ $$ = $2; if ( $$ ) { assert ( $$->m_dWords.GetLength() ); $$->SetOp ( SPH_QUERY_QUORUM ); $$->m_iOpArg = $5.fValue * 100; $$->m_bPercentOp = true; } }
 	| '(' expr ')'						{ $$ = $2; }
 	| '=' '"' phrase '"'				{ $$ = $3; pParser->SetPhrase ( $$, true ); }
+	| atom TOK_NOTNEAR atom				{ $$ = pParser->AddOp ( SPH_QUERY_NOTNEAR, $1, $3, $2.iValue ); }
 	;
 
 keyword:

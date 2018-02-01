@@ -140,6 +140,12 @@ extended matching mode:
 
    only in a (single) title
 
+-  NOTNEAR, negative assertion operator:
+
+.. code-block:: none
+
+       Church NOTNEAR/3 street
+   
 Here's an example query that uses some of these operators:
 
 Example 5.2. Extended matching mode: query example
@@ -338,3 +344,9 @@ since “hello” and “world” do not occur within the same span.
 
 **MAYBE** operator works much like \| operator but doesn't return
 documents which match only right subtree expression.
+
+**NOTNEAR operator** is a negative assertion.
+The syntax is ``NONEAR/N``, it is case-sensitive, and no spaces are
+allowed between the NOTNEAR keyword, the slash sign, and the distance
+value. 
+

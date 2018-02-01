@@ -136,7 +136,16 @@ should provide the total amount of queries stored.
     |    3 |
     +------+
 
-    
+
+The ``SELECT`` supports ``LIMIT`` clause to narrow down the number of percolate queries.
+
+.. code-block:: sql
+
+
+    SELECT * FROM index_name LIMIT 5;
+    SELECT * FROM index_name LIMIT 1300, 45;
+
+
 .. _percolate_query_delete:
 
 Delete query

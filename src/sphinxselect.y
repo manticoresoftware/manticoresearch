@@ -35,6 +35,12 @@
 %token TOK_NE
 %token TOK_CONST_STRING
 
+%token TOK_IS
+%token TOK_NULL
+%token TOK_FOR
+%token TOK_FUNC_IN
+%token TOK_FUNC_RAND
+
 %left TOK_OR
 %left TOK_AND
 %left '|'
@@ -43,14 +49,9 @@
 %left '<' '>' TOK_LTE TOK_GTE
 %left '+' '-'
 %left '*' '/' TOK_DIV '%' TOK_MOD
-%nonassoc TOK_NEG
-%nonassoc TOK_NOT
 
-%token	TOK_IS
-%token	TOK_NULL
-%token	TOK_FOR
-%token	TOK_FUNC_IN
-%token	TOK_FUNC_RAND
+%precedence TOK_NEG
+%precedence TOK_NOT
 
 %%
 
@@ -70,7 +71,7 @@ select_item:
 	| select_expr opt_alias
 
 opt_alias:
-	// empty				
+	%empty
 	| SEL_TOKEN			{ pParser->AliasLastItem ( &$1 ); }
 	| SEL_AS SEL_TOKEN		{ pParser->AliasLastItem ( &$2 ); }
 	;

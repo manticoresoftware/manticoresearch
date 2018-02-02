@@ -50,7 +50,7 @@
 %type <pNode>			beforelist
 %type <pNode>			expr
 
-%left TOK_BEFORE TOK_NEAR TOK_NOTNEAR
+%left TOK_NOTNEAR
 
 %%
 
@@ -64,7 +64,7 @@ expr:
 	;
 
 tok_limiter:
-	// empty
+	%empty
 	| TOK_FIELDLIMIT			{ pParser->SetFieldSpec ( $1.dMask, $1.iMaxPos ); }
 	| TOK_ZONE				{ pParser->SetZoneVec ( $1 ); }
 	| TOK_ZONESPAN				{ pParser->SetZoneVec ( $1, true ); }

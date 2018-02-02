@@ -62,7 +62,11 @@ add_definitions ( "-DBUILD_WITH_CMAKE" )
 if ( USE_BISON )
 
 	set ( BISON_DIR "${MANTICORE_BINARY_DIR}/config" )
-	set ( BFLAGS "-l -d -W")
+
+	set ( BFLAGS "-l" )
+	if ( BISON_VERSION VERSION_GREATER 3 )
+		set ( BFLAGS "${BFLAGS} -W")
+	endif()
 
 	BISON_TARGET ( ExprParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxexpr.y" ${BISON_DIR}/bissphinxexpr.c COMPILE_FLAGS "${BFLAGS}")
 	BISON_TARGET ( SelectParser "${CMAKE_CURRENT_SOURCE_DIR}/sphinxselect.y" ${BISON_DIR}/bissphinxselect.c COMPILE_FLAGS "${BFLAGS}")

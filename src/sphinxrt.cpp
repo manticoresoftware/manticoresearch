@@ -11597,38 +11597,38 @@ public:
 	}
 
 	// these only got called actually
-	virtual SphWordID_t	GetWordID ( BYTE * pWord ) override
+	SphWordID_t	GetWordID ( BYTE * pWord ) override
 	{
 		assert ( m_pDict );
 		return const_cast<DictMap_t *>(m_pDict)->GetTerm ( pWord );
 	}
 
-	virtual SphWordID_t	GetWordIDNonStemmed ( BYTE * pWord ) override
+	SphWordID_t	GetWordIDNonStemmed ( BYTE * pWord ) override
 	{
 		assert ( m_pDict );
 		return const_cast<DictMap_t *>(m_pDict)->GetTerm ( pWord );
 	}
 
-	virtual bool		HasMorphology () const { return m_bHasMorph; }
+	bool		HasMorphology () const override { return m_bHasMorph; }
 
 	// not implemented
 	CSphDictSettings m_tDummySettings;
 	CSphVector <CSphSavedFile> m_tDummySF;
 
-	virtual SphWordID_t GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops ) override { return 0; }
-	virtual void LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) override {}
-	virtual void LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer ) override {}
-	virtual void WriteStopwords ( CSphWriter & tWriter ) const override {}
-	virtual bool LoadWordforms ( const CSphVector<CSphString> &, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) override { return false; }
-	virtual void WriteWordforms ( CSphWriter & tWriter ) const override {}
-	virtual int SetMorphology ( const char * szMorph, CSphString & sMessage ) override { return 0; }
-	virtual void Setup ( const CSphDictSettings & tSettings )  override {}
-	virtual const CSphDictSettings & GetSettings () const  override { return m_tDummySettings; }
-	virtual const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () const override { return m_tDummySF; }
-	virtual const CSphVector <CSphSavedFile> & GetWordformsFileInfos () const override { return m_tDummySF; }
-	virtual const CSphMultiformContainer * GetMultiWordforms () const override { return nullptr; }
-	virtual bool IsStopWord ( const BYTE * pWord ) const  override { return false; }
-	virtual uint64_t GetSettingsFNV () const override { return 0; }
+	SphWordID_t GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops ) override { return 0; }
+	void LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) override {}
+	void LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer ) override {}
+	void WriteStopwords ( CSphWriter & tWriter ) const override {}
+	bool LoadWordforms ( const CSphVector<CSphString> &, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) override { return false; }
+	void WriteWordforms ( CSphWriter & tWriter ) const override {}
+	int SetMorphology ( const char * szMorph, CSphString & sMessage ) override { return 0; }
+	void Setup ( const CSphDictSettings & tSettings )  override {}
+	const CSphDictSettings & GetSettings () const  override { return m_tDummySettings; }
+	const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () const override { return m_tDummySF; }
+	const CSphVector <CSphSavedFile> & GetWordformsFileInfos () const override { return m_tDummySF; }
+	const CSphMultiformContainer * GetMultiWordforms () const override { return nullptr; }
+	bool IsStopWord ( const BYTE * pWord ) const  override { return false; }
+	uint64_t GetSettingsFNV () const override { return 0; }
 };
 
 struct PercolateMatchContext_t

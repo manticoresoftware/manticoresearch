@@ -1066,11 +1066,11 @@ public:
 	ExtNotNear_c ( ExtNode_i * pMust, ExtNode_i * pNot, const ISphQwordSetup & tSetup, int iDist );
 	~ExtNotNear_c ();
 
-	virtual const ExtDoc_t *	GetDocsChunk() override;
-	virtual const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs ) override;
+	const ExtDoc_t *	GetDocsChunk() override;
+	const ExtHit_t *	GetHitsChunk ( const ExtDoc_t * pDocs ) override;
 	void Reset ( const ISphQwordSetup & tSetup ) override;
 
-	virtual void DebugDump ( int iLevel )
+	void DebugDump ( int iLevel ) override
 	{
 		DebugDumpT ( "ExtNotNear_c", iLevel );
 	}

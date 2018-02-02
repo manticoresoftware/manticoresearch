@@ -81,8 +81,8 @@ public:
 		: T ( sSourceName )
 		, m_dBatchedDocs ( g_iRLPMaxBatchDocs )
 	{
-		Verify ( sphUTF8Encode ( m_pMarkerDocStart, PROXY_DOCUMENT_START )==PROXY_MARKER_LEN );
-		Verify ( sphUTF8Encode ( m_pMarkerFieldStart, PROXY_FIELD_START )==PROXY_MARKER_LEN );
+		sphUTF8Encode ( m_pMarkerDocStart, PROXY_DOCUMENT_START );
+		sphUTF8Encode ( m_pMarkerFieldStart, PROXY_FIELD_START );
 		m_dDocBuffer.Reserve ( INITIAL_BUFFER_SIZE );
 	}
 

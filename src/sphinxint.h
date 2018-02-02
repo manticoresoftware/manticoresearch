@@ -2623,6 +2623,26 @@ struct SchemaItemVariant_t
 	{}
 };
 
+
+// crash related code
+struct CrashQuery_t
+{
+	const BYTE *	m_pQuery = nullptr;	// last query
+	int				m_iSize = 0;		// last query size
+	WORD			m_uCMD = 0;			// last command (header)
+	WORD			m_uVer = 0;			// last command's version (header)
+	bool			m_bMySQL = false;	// is query from MySQL or API
+};
+
+void CrashQuerySetTop ( CrashQuery_t * pQuery );
+CrashQuery_t CrashQueryGet();
+void CrashQuerySet ( const CrashQuery_t & tCrash );
+
+typedef void CrashQuerySetTop_fn ( CrashQuery_t * pQuery );
+typedef CrashQuery_t CrashQueryGet_fn();
+typedef void CrashQuerySet_fn ( const CrashQuery_t & tCrash );
+void CrashQuerySetupHandlers ( CrashQuerySetTop_fn * pSetTop, CrashQueryGet_fn * pGet, CrashQuerySet_fn * pSet );
+
 #endif // _sphinxint_
 
 //

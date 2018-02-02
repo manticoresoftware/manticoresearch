@@ -11763,11 +11763,14 @@ struct PercolateMatchJob_t : public ISphJob
 	const CSphVector<StoredQueryKey_t> & m_dStored;
 	CSphAtomic & m_tQueryCounter;
 	PercolateMatchContext_t & m_tMatchCtx;
+	
+	const CrashQuery_t * m_pCrashQuery = nullptr;
 
-	PercolateMatchJob_t ( const CSphVector<StoredQueryKey_t> & dStored, CSphAtomic & tQueryCounter, PercolateMatchContext_t & tMatchCtx )
+	PercolateMatchJob_t ( const CSphVector<StoredQueryKey_t> & dStored, CSphAtomic & tQueryCounter, PercolateMatchContext_t & tMatchCtx, const CrashQuery_t * pCrashQuery )
 		: m_dStored ( dStored )
 		, m_tQueryCounter ( tQueryCounter )
 		, m_tMatchCtx ( tMatchCtx )
+		, m_pCrashQuery ( pCrashQuery )
 	{}
 
 	virtual ~PercolateMatchJob_t () override
@@ -11775,6 +11778,13 @@ struct PercolateMatchJob_t : public ISphJob
 
 	virtual void Call () override
 	{
+		CrashQuery_t tQueryTLS;
+		if ( m_pCrashQuery )
+		{
+			CrashQuerySetTop ( &tQueryTLS ); // set crash info container
+			CrashQuerySet ( *m_pCrashQuery ); // transfer crash info into container
+		}
+
 		while ( true )
 		{
 			int iQuery = m_tQueryCounter.Inc();
@@ -11910,6 +11920,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 	CSphAtomic tQueryCounter ( 0 );
 	CSphFixedVector<PercolateMatchContext_t *> dMatches ( 1 );
 	ISphThdPool * pPool = nullptr;
+	CrashQuery_t tCrashQuery;
 
 	// pool jobs only for decent amount of queries
 	if ( g_iPercolateThreads>1 && m_dStored.GetLength()>4 )
@@ -11940,14 +11951,15 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 	m_tLock.ReadLock();
 
 	int iTotalQueries = m_dStored.GetLength();
-	PercolateMatchJob_t tJobMain ( m_dStored, tQueryCounter, *dMatches[0] );
+	PercolateMatchJob_t tJobMain ( m_dStored, tQueryCounter, *dMatches[0], nullptr ); // still got crash info no need to set it again
 
 	// work loop
 	if ( pPool )
 	{
+		tCrashQuery = CrashQueryGet();
 		for ( int i=1; i<dMatches.GetLength(); i++ )
 		{
-			PercolateMatchJob_t * pJob = new PercolateMatchJob_t ( m_dStored, tQueryCounter, *dMatches[i] );
+			PercolateMatchJob_t * pJob = new PercolateMatchJob_t ( m_dStored, tQueryCounter, *dMatches[i], &tCrashQuery );
 			pPool->AddJob ( pJob );
 		}
 	}

@@ -1934,9 +1934,9 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 
 void SphCrashLogger_c::SetLastQuery ( const CrashQuery_t & tQuery )
 {
-	SphCrashLogger_c * pCrashLogger = (SphCrashLogger_c *)sphThreadGet ( m_tTLS );
-	assert ( pCrashLogger );
-	pCrashLogger->m_tQuery = tQuery;
+	CrashQuery_t * pQuery = (CrashQuery_t *)sphThreadGet ( m_tTLS );
+	assert ( pQuery );
+	*pQuery = tQuery;
 }
 
 void SphCrashLogger_c::SetupTimePID ()
@@ -1948,21 +1948,21 @@ void SphCrashLogger_c::SetupTimePID ()
 		"------- FATAL: CRASH DUMP -------\n[%s] [%5d]\n", sTimeBuf, (int)getpid() );
 }
 
-void SphCrashLogger_c::SetupTLS ()
+void SphCrashLogger_c::SetTopQueryTLS ( CrashQuery_t * pQuery )
 {
-	Verify ( sphThreadSet ( m_tTLS, this ) );
+	Verify ( sphThreadSet ( m_tTLS, pQuery ) );
 }
 
 CrashQuery_t SphCrashLogger_c::GetQuery()
 {
-	SphCrashLogger_c * pCrashLogger = (SphCrashLogger_c *)sphThreadGet ( m_tTLS );
+	const CrashQuery_t * pQuery = (CrashQuery_t *)sphThreadGet ( m_tTLS );
 
 	// in case TLS not set \ found handler still should process crash
 	// FIXME!!! some service threads use raw threads instead ThreadCreate
-	if ( !pCrashLogger )
+	if ( !pQuery )
 		return g_tUnhandled;
 	else
-		return pCrashLogger->m_tQuery;
+		return *pQuery;
 }
 
 bool SphCrashLogger_c::ThreadCreate ( SphThread_t * pThread, void (*pCall)(void*), void * pArg, bool bDetached )
@@ -1977,8 +1977,8 @@ bool SphCrashLogger_c::ThreadCreate ( SphThread_t * pThread, void (*pCall)(void*
 void SphCrashLogger_c::ThreadWrapper ( void * pArg )
 {
 	CallArgPair_t * pPair = static_cast<CallArgPair_t *> ( pArg );
-	SphCrashLogger_c tQueryTLS;
-	tQueryTLS.SetupTLS();
+	CrashQuery_t tQueryTLS;
+	SphCrashLogger_c::SetTopQueryTLS ( &tQueryTLS );
 	pPair->m_pCall ( pPair->m_pArg );
 	delete pPair;
 }
@@ -14675,8 +14675,8 @@ static void PingThreadFunc ( void * )
 		return;
 
 	// crash logging for the thread
-	SphCrashLogger_c tQueryTLS;
-	tQueryTLS.SetupTLS ();
+	CrashQuery_t tQueryTLS;
+	SphCrashLogger_c::SetTopQueryTLS ( &tQueryTLS );
 
 	int64_t iLastCheck = 0;
 
@@ -14802,8 +14802,8 @@ static void BlackholeTick()
 static void BlackholeThreadFunc ( void * )
 {
 	// crash logging for the thread
-	SphCrashLogger_c tQueryTLS;
-	tQueryTLS.SetupTLS ();
+	CrashQuery_t tQueryTLS;
+	SphCrashLogger_c::SetTopQueryTLS ( &tQueryTLS );
 
 	while ( !g_bShutdown )
 	{
@@ -21857,8 +21857,8 @@ public:
 	// main thread wrapper
 	static void ThdTick ( void * )
 	{
-		SphCrashLogger_c tQueryTLS;
-		tQueryTLS.SetupTLS ();
+		CrashQuery_t tQueryTLS;
+		SphCrashLogger_c::SetTopQueryTLS ( &tQueryTLS );
 
 		CSphNetLoop tLoop ( g_dListeners );
 		tLoop.Tick();
@@ -22907,8 +22907,8 @@ ThdJobAPI_t::ThdJobAPI_t ( CSphNetLoop * pLoop, NetStateAPI_t * pState )
 
 void ThdJobAPI_t::Call ()
 {
-	SphCrashLogger_c tQueryTLS;
-	tQueryTLS.SetupTLS ();
+	CrashQuery_t tQueryTLS;
+	SphCrashLogger_c::SetTopQueryTLS ( &tQueryTLS );
 
 	sphLogDebugv ( "%p API job started, command=%d, tick=%u", this, m_eCommand, m_pLoop->m_uTick );
 
@@ -22971,8 +22971,8 @@ ThdJobQL_t::ThdJobQL_t ( CSphNetLoop * pLoop, NetStateQL_t * pState )
 
 void ThdJobQL_t::Call ()
 {
-	SphCrashLogger_c tQueryTLS;
-	tQueryTLS.SetupTLS();
+	CrashQuery_t tQueryTLS;
+	SphCrashLogger_c::SetTopQueryTLS ( &tQueryTLS );
 
 	sphLogDebugv ( "%p QL job started, tick=%u", this, m_pLoop->m_uTick );
 
@@ -23067,8 +23067,8 @@ ThdJobHttp_t::ThdJobHttp_t ( CSphNetLoop * pLoop, NetStateQL_t * pState )
 
 void ThdJobHttp_t::Call ()
 {
-	SphCrashLogger_c tQueryTLS;
-	tQueryTLS.SetupTLS ();
+	CrashQuery_t tQueryTLS;
+	SphCrashLogger_c::SetTopQueryTLS ( &tQueryTLS );
 
 	sphLogDebugv ( "%p http job started, buffer len=%d, tick=%u", this, m_tState->m_dBuf.GetLength(), m_pLoop->m_uTick );
 
@@ -23974,6 +23974,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	// handle my signals
 	SetSignalHandlers ( g_bOptNoDetach );
+	CrashQuerySetupHandlers ( SphCrashLogger_c::SetTopQueryTLS, SphCrashLogger_c::GetQuery, SphCrashLogger_c::SetLastQuery );
 
 	// create logs
 	if ( !g_bOptNoLock )
@@ -24316,8 +24317,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	}
 
 	// crash logging for the main thread (for --console case)
-	SphCrashLogger_c tQueryTLS;
-	tQueryTLS.SetupTLS ();
+	CrashQuery_t tQueryTLS;
+	SphCrashLogger_c::SetTopQueryTLS ( &tQueryTLS );
 
 	// ready, steady, go
 	sphInfo ( "accepting connections" );

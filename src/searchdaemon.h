@@ -397,24 +397,6 @@ protected:
 bool IsPortInRange ( int iPort );
 int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr );
 
-struct CrashQuery_t
-{
-	const BYTE *			m_pQuery;	// last query
-	int						m_iSize;	// last query size
-	WORD					m_uCMD;		// last command (header)
-	WORD					m_uVer;		// last command's version (header)
-	bool					m_bMySQL;	// is query from MySQL or API
-
-	CrashQuery_t ()
-		: m_pQuery ( NULL )
-		, m_iSize ( 0 )
-		, m_uCMD ( 0 )
-		, m_uVer ( 0 )
-		, m_bMySQL ( false )
-	{
-	}
-};
-
 // This class is basically a pointer to query string and some more additional info.
 // Each thread which executes query must have exactly one instance of this class on
 // its stack and m_tLastQueryTLS will contain a pointer to that instance.
@@ -437,7 +419,7 @@ public:
 	static void SetLastQuery ( const CrashQuery_t & tQuery );
 	static void SetupTimePID ();
 	static CrashQuery_t GetQuery ();
-	void SetupTLS ();
+	static void SetTopQueryTLS ( CrashQuery_t * pQuery );
 
 	// create thread with crash logging
 	static bool ThreadCreate ( SphThread_t * pThread, void ( *pCall )(void*), void * pArg, bool bDetached=false );
@@ -456,7 +438,6 @@ private:
 	// sets up a TLS for a given thread
 	static void ThreadWrapper ( void * pArg );
 
-	CrashQuery_t			m_tQuery;		// per thread copy of last query for thread mode
 	static SphThreadKey_t	m_tTLS;	// pointer to on-stack instance of this class
 };
 

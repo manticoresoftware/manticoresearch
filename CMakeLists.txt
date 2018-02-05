@@ -18,6 +18,11 @@ IF ( NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES )
 			"MinSizeRel" "RelWithDebInfo" )
 ENDIF ()
 
+set ( CMAKE_DISABLE_FIND_PACKAGE_PkgConfig ON )
+# runaround to configure error caused by absence of pkg_check_modules
+macro( pkg_check_modules )
+endmacro()
+
 PROJECT ( MANTICORE )
 SET ( MANTICORE_CMAKE_DIR "${MANTICORE_SOURCE_DIR}/cmake" )
 SET ( CMAKE_MODULE_PATH "${MANTICORE_SOURCE_DIR}/cmake" )
@@ -295,6 +300,10 @@ else ( WIN32 )
 		unset ( USE_SYSLOG )
 	ENDIF ( USE_SYSLOG )
 
+	message ( STATUS "Option WITH_ZLIB ${WITH_ZLIB}" )
+	option_menu ( ZLIB "compile with zlib support" USE_ZLIB EXTRA_LIBRARIES )
+	mark_as_advanced ( WITH_ZLIB )
+
 	message ( STATUS "Option WITH_ODBC ${WITH_ODBC}" )
 	unset ( _DUMMY_LIB )
 	option_menu ( ODBC "compile with UnixODBC support" USE_ODBC _DUMMY_LIB )
@@ -311,10 +320,6 @@ else ( WIN32 )
 		list ( APPEND EXTRA_LIBRARIES ${_DUMMY_LIB} )
 		message ( STATUS "ODBC will be linked as ${_DUMMY_LIB}" )
 	endif ( DL_UNIXODBC )
-
-	message ( STATUS "Option WITH_ZLIB ${WITH_ZLIB}" )
-	option_menu ( ZLIB "compile with zlib support" USE_ZLIB EXTRA_LIBRARIES )
-	mark_as_advanced ( WITH_ZLIB )
 
 	message ( STATUS "Option WITH_RLP ${WITH_RLP}" )
 	option ( WITH_RLP "compile with RLP library support" OFF )

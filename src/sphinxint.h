@@ -2632,6 +2632,7 @@ struct CrashQuery_t
 	WORD			m_uCMD = 0;			// last command (header)
 	WORD			m_uVer = 0;			// last command's version (header)
 	bool			m_bMySQL = false;	// is query from MySQL or API
+	bool			m_bHttp = false;	// is query from HTTP
 };
 
 void CrashQuerySetTop ( CrashQuery_t * pQuery );

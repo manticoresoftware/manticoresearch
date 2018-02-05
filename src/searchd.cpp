@@ -1719,11 +1719,29 @@ static bool sphCopySphinxQL ( QueryCopyState_t & tState )
 	return ( tState.m_pSrc<tState.m_pSrcEnd );
 }
 
+static bool sphCopySphinxHttp ( QueryCopyState_t & tState )
+{
+	BYTE * pDst = tState.m_pDst;
+	const BYTE * pSrc = tState.m_pSrc;
+
+	while ( pDst<tState.m_pDstEnd && pSrc<tState.m_pSrcEnd )
+	{
+		*pDst++ = *pSrc++;
+	}
+
+	tState.m_pDst = pDst;
+	tState.m_pSrc = pSrc;
+
+	return ( tState.m_pSrc<tState.m_pSrcEnd );
+}
+
+
 typedef bool CopyQuery_fn ( QueryCopyState_t & tState );
 
 #define SPH_TIME_PID_MAX_SIZE 256
 const char		g_sCrashedBannerAPI[] = "\n--- crashed SphinxAPI request dump ---\n";
 const char		g_sCrashedBannerMySQL[] = "\n--- crashed SphinxQL request dump ---\n";
+const char		g_sCrashedBannerHTTP[] = "\n--- crashed HTTP request dump ---\n";
 const char		g_sCrashedBannerBad[] = "\n--- crashed invalid query ---\n";
 const char		g_sCrashedBannerTail[] = "\n--- request dump end ---\n";
 #if USE_WINDOWS
@@ -1809,8 +1827,18 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 #endif
 
 	// request dump banner
-	int iBannerLen = ( tQuery.m_bMySQL ? sizeof(g_sCrashedBannerMySQL) : sizeof(g_sCrashedBannerAPI) ) - 1;
-	const char * pBanner = tQuery.m_bMySQL ? g_sCrashedBannerMySQL : g_sCrashedBannerAPI;
+	const char * pBanner = g_sCrashedBannerAPI;
+	int iBannerLen = sizeof(g_sCrashedBannerAPI) - 1;
+	if ( tQuery.m_bMySQL )
+	{
+		pBanner = g_sCrashedBannerMySQL;
+		iBannerLen = sizeof(g_sCrashedBannerMySQL) - 1;
+	}
+	if ( tQuery.m_bHttp )
+	{
+		pBanner = g_sCrashedBannerHTTP;
+		iBannerLen = sizeof(g_sCrashedBannerHTTP) - 1;
+	}
 	if ( !bValidQuery )
 	{
 		iBannerLen = sizeof(g_sCrashedBannerBad) - 1;
@@ -1828,7 +1856,7 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 		tCopyState.m_pSrcEnd = tQuery.m_pQuery + tQuery.m_iSize;
 
 		CopyQuery_fn * pfnCopy = NULL;
-		if ( !tQuery.m_bMySQL )
+		if ( !tQuery.m_bMySQL && !tQuery.m_bHttp )
 		{
 			pfnCopy = &sphCopyEncodedBase64;
 
@@ -1854,6 +1882,9 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 			assert ( tHeaderState.m_pSrc==tHeaderState.m_pSrcEnd );
 			tCopyState.m_pDst = tHeaderState.m_pDst;
 			tCopyState.m_pSrc++;
+		} else if ( tQuery.m_bHttp )
+		{
+			pfnCopy = &sphCopySphinxHttp;
 		} else
 		{
 			pfnCopy = &sphCopySphinxQL;
@@ -23086,6 +23117,13 @@ void ThdJobHttp_t::Call ()
 
 	assert ( m_tState.Ptr() );
 
+	CrashQuery_t tCrashQuery;
+	tCrashQuery.m_pQuery = m_tState->m_dBuf.Begin();
+	tCrashQuery.m_iSize = m_tState->m_dBuf.GetLength();
+	tCrashQuery.m_bHttp = true;
+	SphCrashLogger_c::SetLastQuery ( tCrashQuery );
+
+
 	if ( g_bMaintenance && !m_tState->m_bVIP )
 	{
 		sphHttpErrorReply ( m_tState->m_dBuf, SPH_HTTP_STATUS_503, "server is in maintenance mode" );
@@ -23097,6 +23135,7 @@ void ThdJobHttp_t::Call ()
 		m_tState->m_dBuf = std::move(dResult);
 	}
 
+	SphCrashLogger_c::SetLastQuery ( CrashQuery_t() );
 	ThreadRemove ( &tThdDesc );
 
 	sphLogDebugv ( "%p http job done, tick=%u", this, m_pLoop->m_uTick );

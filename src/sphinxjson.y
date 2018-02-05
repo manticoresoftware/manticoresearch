@@ -21,7 +21,7 @@
 %%
 
 json:
-	%empty
+	// empty
 	| '{' key_value_list '}'	{ if ( !pParser->WriteNode ( $2 ) ) YYERROR; }
 	| '[' value_list ']' 		{ if ( !pParser->WriteNode ( $2 ) ) YYERROR; }
 	;
@@ -43,7 +43,7 @@ value:
 	;
 
 key_value_list:
-		%empty
+	// empty
 		{
 			$$.m_eType = JSON_OBJECT;
 			$$.m_iHandle = -1;
@@ -71,7 +71,7 @@ key_value_list:
 	;
 
 value_list:
-	%empty
+	// empty
 		{
 			$$.m_eType = JSON_MIXED_VECTOR;
 			$$.m_iHandle = -1;

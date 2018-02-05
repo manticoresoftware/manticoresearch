@@ -85,8 +85,8 @@
 %left '<' '>' TOK_LTE TOK_GTE
 %left '+' '-'
 %left '*' '/' '%' TOK_DIV TOK_MOD
-%precedence TOK_NOT
-%precedence TOK_NEG
+%nonassoc TOK_NOT
+%nonassoc TOK_NEG
 
 
 %%

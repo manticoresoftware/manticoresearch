@@ -149,8 +149,8 @@
 %left '<' '>' TOK_LTE TOK_GTE
 %left '+' '-'
 %left '*' '/' '%' TOK_DIV TOK_MOD
-%precedence TOK_NOT
-%precedence TOK_NEG
+%nonassoc TOK_NOT
+%nonassoc TOK_NEG
 
 %{
 
@@ -298,7 +298,7 @@ select1:
 	;
 
 opt_tablefunc_args:
-	%empty
+	// nothing
 	| ',' tablefunc_args_list
 	;
 
@@ -320,17 +320,16 @@ tablefunc_arg:
 	;
 
 subselect_start:
-	%empty
+	{
+		CSphVector<CSphQueryItem> & dItems = pParser->m_pQuery->m_dItems;
+		if ( dItems.GetLength()!=1 || dItems[0].m_sExpr!="*" )
 		{
-			CSphVector<CSphQueryItem> & dItems = pParser->m_pQuery->m_dItems;
-			if ( dItems.GetLength()!=1 || dItems[0].m_sExpr!="*" )
-			{
-				yyerror ( pParser, "outer select list must be a single star" );
-				YYERROR;
-			}
-			dItems.Reset();
-			pParser->ResetSelect();
-		};
+			yyerror ( pParser, "outer select list must be a single star" );
+			YYERROR;
+		}
+		dItems.Reset();
+		pParser->ResetSelect();
+	};
 
 
 opt_outer_order:
@@ -342,7 +341,7 @@ opt_outer_order:
 	;
 
 opt_outer_limit:
-	%empty
+	// nothing
 	| TOK_LIMIT TOK_CONST_INT
 		{
 			pParser->m_pQuery->m_iOuterLimit = $2.m_iValue;
@@ -383,7 +382,7 @@ select_item:
 	;
 
 opt_alias:
-	%empty
+	// empty
 	| ident								{ pParser->AliasLastItem ( &$1 ); }
 	| TOK_AS ident						{ pParser->AliasLastItem ( &$2 ); }
 	;
@@ -406,7 +405,7 @@ ident_list:
 	;
 
 opt_where_clause:
-	%empty
+	// empty
 	| where_clause
 	;
 
@@ -740,12 +739,12 @@ string_list:
 	;
 
 opt_group_clause:
-	%empty
+	// empty
 	| TOK_GROUP opt_int TOK_BY group_items_list
 	;
 
 opt_int:
-	%empty
+	// empty
 	| TOK_CONST_INT
 		{
 			pParser->SetGroupbyLimit ( $1.m_iValue );
@@ -764,7 +763,7 @@ group_items_list:
 	;
 
 opt_having_clause:
-	%empty
+	// empty
 	| TOK_HAVING filter_item
 		{
 			pParser->AddHaving();
@@ -772,7 +771,7 @@ opt_having_clause:
 	;
 	
 opt_group_order_clause:
-	%empty
+	// empty
 	| group_order_clause
 	;
 
@@ -789,7 +788,7 @@ group_order_clause:
 	;
 
 opt_order_clause:
-	%empty
+	// empty
 	| order_clause
 	;
 
@@ -816,7 +815,7 @@ order_item:
 	;
 
 opt_limit_clause:
-	%empty
+	// empty
 	| limit_clause
 	;
 
@@ -832,7 +831,7 @@ limit_clause:
 	;
 
 opt_option_clause:
-	%empty
+	// empty
 	| option_clause
 	;
 
@@ -993,7 +992,7 @@ show_stmt:
 	;
 
 like_filter:
-	%empty
+	// empty
 	| TOK_LIKE TOK_QUOTED_STRING		{ pParser->ToStringUnescape ( pParser->m_pStmt->m_sStringParam, $2 ); }
 	;
 
@@ -1040,7 +1039,7 @@ index_or_table:
 	;
 
 opt_chunk:
-	%empty
+	// empty
 	| TOK_CHUNK TOK_CONST_INT
 		{
 			pParser->m_pStmt->m_iIntParam = $2.m_iValue;
@@ -1155,7 +1154,7 @@ insert_or_replace:
 	;
 
 opt_column_list:
-	%empty
+	// empty
 	| '(' column_list ')'
 	;
 
@@ -1192,7 +1191,6 @@ insert_val:
 	;
 
 opt_insert_options:
-	%empty
 	| TOK_OPTION insert_options_list
 	;
 
@@ -1262,7 +1260,7 @@ const_string_list:
 	;
 
 opt_call_opts_list:
-	%empty
+	// empty
 	| ',' call_opts_list
 	;
 
@@ -1284,7 +1282,7 @@ call_opt:
 	;
 
 opt_as:
-	%empty
+	// empty
 	| TOK_AS
 	;
 
@@ -1438,7 +1436,6 @@ show_variables:
 	;
 
 opt_show_variables_where:
-	%empty
 	| show_variables_where
 	;
 
@@ -1477,7 +1474,6 @@ set_transaction:
 	;
 
 opt_scope:
-	%empty
 	| TOK_GLOBAL
 	| TOK_SESSION
 	;
@@ -1533,7 +1529,7 @@ attach_index:
 	;
 	
 opt_with_truncate:
-	%empty
+	// empty
 	| TOK_WITH TOK_TRUNCATE
 		{
 			pParser->m_pStmt->m_iIntParam = 1;
@@ -1703,7 +1699,7 @@ strval:
 //////////////////////////////////////////////////////////////////////////
 
 opt_facet_by_items_list:
-	%empty
+	// empty
 	| facet_by facet_items_list
 	;
 
@@ -1746,7 +1742,7 @@ facet_stmt:
 	;
 
 opt_reload_index_from:
-	%empty
+	// empty
 	| TOK_FROM TOK_QUOTED_STRING
 		{
 			pParser->ToStringUnescape ( pParser->m_pStmt->m_sStringParam, $2 );

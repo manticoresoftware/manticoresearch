@@ -5506,7 +5506,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 			eGroupByResult = SPH_ATTR_BIGINT;
 
 		CSphColumnInfo tGroupby ( "@groupby", eGroupByResult );
-		CSphColumnInfo tCount ( "@count", SPH_ATTR_INTEGER );
+		CSphColumnInfo tCount ( "@count", SPH_ATTR_BIGINT );
 		CSphColumnInfo tDistinct ( "@distinct", SPH_ATTR_INTEGER );
 
 		tGroupby.m_eStage = SPH_EVAL_SORTER;

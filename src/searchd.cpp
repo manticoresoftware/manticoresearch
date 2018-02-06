@@ -6031,18 +6031,14 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 			// second, apply inner limit now, before (!) reordering
 			int iOut = 0;
 			int iSetStart = 0;
-			ARRAY_FOREACH ( iSet, tRes.m_dMatchCounts )
+			for ( int & iCurMatches : tRes.m_dMatchCounts )
 			{
 				assert ( tQuery.m_iLimit>=0 );
-				int iOldOut = iOut;
-				int iStart = iSetStart;
-				int iSetEnd = iSetStart + tRes.m_dMatchCounts[iSet];
-				int iEnd = Min ( iStart + tQuery.m_iLimit, iSetEnd );
-				iStart = Min ( iStart, iEnd );
-				for ( int i=iStart; i<iEnd; i++ )
-					Swap ( tRes.m_dMatches[iOut++], tRes.m_dMatches[i] );
-				iSetStart = iSetEnd;
-				tRes.m_dMatchCounts[iSet] = iOut - iOldOut;
+				int iLimitedMatches = Min ( tQuery.m_iLimit, iCurMatches );
+				for ( int i=0; i<iLimitedMatches; ++i )
+					Swap ( tRes.m_dMatches[iOut++], tRes.m_dMatches[iSetStart+i] );
+				iSetStart += iCurMatches;
+				iCurMatches = iLimitedMatches;
 			}
 			tRes.ClampMatches ( iOut, bAllEqual ); // false means no common schema; true == use common schema
 		}
@@ -6052,7 +6048,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 		//
 		// create queue
 		// at this point, we do not need to compute anything; it all must be here
-		SphQueueSettings_t tQueueSettings ( tQuery, tRes.m_tSchema, tRes.m_sError, NULL );
+		SphQueueSettings_t tQueueSettings ( tQuery, tRes.m_tSchema, tRes.m_sError );
 		tQueueSettings.m_bComputeItems = false;
 		tQueueSettings.m_pAggrFilter = pAggrFilter;
 		ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings );

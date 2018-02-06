@@ -3213,22 +3213,20 @@ class CSphImplicitGroupSorter : public ISphMatchSorter, ISphNoncopyable, protect
 {
 protected:
 	CSphMatch		m_tData;
-	bool			m_bDataInitialized;
+	bool			m_bDataInitialized = false;
 
 	CSphVector<SphUngroupedValue_t>	m_dUniq;
 
 	CSphVector<IAggrFunc *>		m_dAggregates;
 	const ISphFilter *			m_pAggrFilter;				///< aggregate filter for matches on flatten
 	MatchCloner_t				m_tPregroup;
-	const BYTE *				m_pStringBase;
+	const BYTE *				m_pStringBase = nullptr;
 
 public:
 	/// ctor
 	CSphImplicitGroupSorter ( const ISphMatchComparator * DEBUGARG(pComp), const CSphQuery *, const CSphGroupSorterSettings & tSettings )
 		: CSphGroupSorterSettings ( tSettings )
-		, m_bDataInitialized ( false )
 		, m_pAggrFilter ( tSettings.m_pAggrFilterTrait )
-		, m_pStringBase ( nullptr )
 	{
 		assert ( DISTINCT==false || tSettings.m_tDistinctLoc.m_iBitOffset>=0 );
 		assert ( !pComp );
@@ -5178,9 +5176,9 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 	bool bHasGroupByExpr = false;
 
 	// setup overrides, detach them into dynamic part
-	ARRAY_FOREACH ( i, pQuery->m_dOverrides )
+	for ( const auto& dOverride : pQuery->m_dOverrides )
 	{
-		const char * sAttr = pQuery->m_dOverrides[i].m_sAttr.cstr();
+		const char * sAttr = dOverride.m_sAttr.cstr();
 
 		int iIndex = tSorterSchema.GetAttrIndex ( sAttr );
 		if ( iIndex<0 )

@@ -1716,6 +1716,9 @@ protected:
 	CSphVector<int>				m_dDynamicUsed;		///< dynamic row part map
 	CSphVector<int>				m_dRemoved;			///< original indexes that are suppressed from the index schema by RemoveStaticAttr()
 
+private:
+	int							ActualLen() const;	///< len of m_pIndexSchema accounting removed stuff
+
 public:
 								CSphRsetSchema();
 	CSphRsetSchema &			operator = ( const ISphSchema & rhs );
@@ -3502,28 +3505,20 @@ struct SphQueueSettings_t : public ISphNoncopyable
 	const ISphSchema &			m_tSchema;
 	CSphString &				m_sError;
 	CSphQueryProfile *			m_pProfiler;
-	bool						m_bComputeItems;
-	CSphSchema *				m_pExtra;
-	CSphAttrUpdateEx *			m_pUpdate;
-	CSphVector<SphDocID_t> *	m_pDeletes;
-	bool						m_bZonespanlist;
-	DWORD						m_uPackedFactorFlags;
-	ISphExprHook *				m_pHook;
-	const CSphFilterSettings *	m_pAggrFilter;
+	bool						m_bComputeItems = true;
+	CSphSchema *				m_pExtra = nullptr;
+	CSphAttrUpdateEx *			m_pUpdate = nullptr;
+	CSphVector<SphDocID_t> *	m_pDeletes = nullptr;
+	bool						m_bZonespanlist = false;
+	DWORD						m_uPackedFactorFlags { SPH_FACTOR_DISABLE };
+	ISphExprHook *				m_pHook = nullptr;
+	const CSphFilterSettings *	m_pAggrFilter = nullptr;
 
-	SphQueueSettings_t ( const CSphQuery & tQuery, const ISphSchema & tSchema, CSphString & sError, CSphQueryProfile * pProfiler )
+	SphQueueSettings_t ( const CSphQuery & tQuery, const ISphSchema & tSchema, CSphString & sError, CSphQueryProfile * pProfiler = nullptr )
 		: m_tQuery ( tQuery )
 		, m_tSchema ( tSchema )
 		, m_sError ( sError )
 		, m_pProfiler ( pProfiler )
-		, m_bComputeItems ( true )
-		, m_pExtra ( NULL )
-		, m_pUpdate ( NULL )
-		, m_pDeletes ( NULL )
-		, m_bZonespanlist ( false )
-		, m_uPackedFactorFlags ( SPH_FACTOR_DISABLE )
-		, m_pHook ( NULL )
-		, m_pAggrFilter ( NULL )
 	{ }
 };
 

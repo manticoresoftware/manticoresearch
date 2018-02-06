@@ -6510,9 +6510,7 @@ int CSphRsetSchema::GetDynamicSize() const
 
 int CSphRsetSchema::GetAttrsCount() const
 {
-	return m_pIndexSchema
-		? m_dExtraAttrs.GetLength() + m_pIndexSchema->GetAttrsCount() - m_dRemoved.GetLength()
-		: m_dExtraAttrs.GetLength();
+	return m_dExtraAttrs.GetLength () + ActualLen();
 }
 
 
@@ -6526,7 +6524,7 @@ int CSphRsetSchema::GetAttrIndex ( const char * sName ) const
 {
 	ARRAY_FOREACH ( i, m_dExtraAttrs )
 		if ( m_dExtraAttrs[i].m_sName==sName )
-			return i + ( m_pIndexSchema ? m_pIndexSchema->GetAttrsCount() - m_dRemoved.GetLength() : 0 );
+			return i + ActualLen();
 
 	if ( !m_pIndexSchema )
 		return -1;
@@ -6558,31 +6556,38 @@ const CSphVector<CSphColumnInfo> & CSphRsetSchema::GetFields() const
 	return m_pIndexSchema->GetFields();
 }
 
+inline int CSphRsetSchema::ActualLen() const
+{
+	if ( m_pIndexSchema )
+		return m_pIndexSchema->GetAttrsCount () - m_dRemoved.GetLength ();
+	return 0;
+}
 
 const CSphColumnInfo & CSphRsetSchema::GetAttr ( int iIndex ) const
 {
 	if ( !m_pIndexSchema )
 		return m_dExtraAttrs[iIndex];
 
-	if ( iIndex < m_pIndexSchema->GetAttrsCount() - m_dRemoved.GetLength() )
+	if ( iIndex<ActualLen () )
 	{
 		ARRAY_FOREACH_COND ( i, m_dRemoved, iIndex>=m_dRemoved[i] )
-			iIndex++;
+			++iIndex;
+
 		return m_pIndexSchema->GetAttr(iIndex);
 	}
 
-	return m_dExtraAttrs [ iIndex - m_pIndexSchema->GetAttrsCount() + m_dRemoved.GetLength() ];
+	return m_dExtraAttrs [ iIndex - ActualLen() ];
 }
 
 
 const CSphColumnInfo * CSphRsetSchema::GetAttr ( const char * sName ) const
 {
-	ARRAY_FOREACH ( i, m_dExtraAttrs )
-		if ( m_dExtraAttrs[i].m_sName==sName )
-			return &m_dExtraAttrs[i];
+	for ( auto& dExtraAttr : m_dExtraAttrs )
+		if ( dExtraAttr.m_sName==sName )
+			return &dExtraAttr;
 	if ( m_pIndexSchema )
 		return m_pIndexSchema->GetAttr ( sName );
-	return NULL;
+	return nullptr;
 }
 
 
@@ -6627,7 +6632,7 @@ void CSphRsetSchema::RemoveStaticAttr ( int iAttr )
 {
 	assert ( m_pIndexSchema );
 	assert ( iAttr>=0 );
-	assert ( iAttr<( m_pIndexSchema->GetAttrsCount() - m_dRemoved.GetLength() ) );
+	assert ( iAttr<ActualLen() );
 
 	// map from rset indexes (adjusted for removal) to index schema indexes (the original ones)
 	ARRAY_FOREACH_COND ( i, m_dRemoved, iAttr>=m_dRemoved[i] )

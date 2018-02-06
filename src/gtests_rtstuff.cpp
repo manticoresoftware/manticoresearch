@@ -277,7 +277,7 @@ TEST_P ( RTN, WeightBoundary )
 	tQuery.m_sQuery = "@title cat";
 	tQuery.m_pQueryParser = sphCreatePlainQueryParser();
 
-	SphQueueSettings_t tQueueSettings ( tQuery, pIndex->GetMatchSchema (), tResult.m_sError, NULL );
+	SphQueueSettings_t tQueueSettings ( tQuery, pIndex->GetMatchSchema (), tResult.m_sError );
 	tQueueSettings.m_bComputeItems = false;
 	ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings );
 	ASSERT_TRUE ( pSorter );
@@ -377,7 +377,7 @@ TEST_F ( RT, RankerFactors )
 	CSphQueryResult tResult;
 	KillListVector tKill;
 	CSphMultiQueryArgs tArgs ( tKill, 1 );
-	SphQueueSettings_t tQueueSettings ( tQuery, pIndex->GetMatchSchema (), tResult.m_sError, NULL );
+	SphQueueSettings_t tQueueSettings ( tQuery, pIndex->GetMatchSchema (), tResult.m_sError );
 	tQueueSettings.m_bComputeItems = true;
 	tArgs.m_uPackedFactorFlags = SPH_FACTOR_ENABLE | SPH_FACTOR_CALC_ATC;
 
@@ -529,7 +529,7 @@ TEST_F ( RT, SendVsMerge )
 	tQuery.m_sQuery = "@title cat";
 	tQuery.m_pQueryParser = sphCreatePlainQueryParser();
 
-	SphQueueSettings_t tQueueSettings ( tQuery, pIndex->GetMatchSchema (), tResult.m_sError, NULL );
+	SphQueueSettings_t tQueueSettings ( tQuery, pIndex->GetMatchSchema (), tResult.m_sError );
 	tQueueSettings.m_bComputeItems = false;
 	auto pSorter = sphCreateQueue ( tQueueSettings );
 	ASSERT_TRUE ( pSorter );

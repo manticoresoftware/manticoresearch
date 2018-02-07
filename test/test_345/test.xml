@@ -6,27 +6,13 @@
 <requires>
 <http/>
 </requires>
+<skip_indexer/>
 
 <config>
 searchd
 {
 	<searchd_settings/>
 	binlog_path =
-}
-
-
-source dummy
-{
-	type			= mysql
-	<sql_settings/>
-	sql_query		= select * from test_table
-	sql_attr_uint	= gid
-}
-
-index dummy
-{
-	source			= dummy
-	path			= <data_path/>/dummy
 }
 
 index idx1

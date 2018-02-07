@@ -1397,8 +1397,9 @@ struct SourceMatch_c : public CSphMatch
 			return int ( pVal->valuedouble );
 		else if ( cJSON_IsInteger ( pVal ) )
 			return int ( pVal->valueint );
-		else
+		else if ( pVal->valuestring )
 			return strtoul ( pVal->valuestring, NULL, 10 );
+		else return 0;
 	}
 
 	inline static SphAttr_t ToBigInt ( const cJSON * pVal )
@@ -1407,8 +1408,9 @@ struct SourceMatch_c : public CSphMatch
 			return int ( pVal->valuedouble );
 		else if ( cJSON_IsInteger ( pVal ) )
 			return int ( pVal->valueint );
-		else
+		else if ( pVal->valuestring )
 			return strtoll ( pVal->valuestring, NULL, 10 );
+		else return 0;
 	}
 
 	bool SetAttr ( const CSphAttrLocator & tLoc, const cJSON * pVal, ESphAttr eTargetType )
@@ -1429,8 +1431,13 @@ struct SourceMatch_c : public CSphMatch
 					SetAttrFloat ( tLoc, (float)pVal->valuedouble );
 				else if ( cJSON_IsInteger ( pVal ) )
 					SetAttrFloat ( tLoc, (float)pVal->valueint );
-				else
+				else if ( pVal->valuestring )
 					SetAttrFloat ( tLoc, (float)strtod ( pVal->valuestring, NULL ) ); // FIXME? report conversion error?
+				else
+				{
+					SetAttrFloat ( tLoc, 0.0);
+					assert ( false && "empty string passed to float conversion");
+				}
 				break;
 			case SPH_ATTR_STRING:
 			case SPH_ATTR_UINT32SET:
@@ -1637,12 +1644,12 @@ bool HttpHandlerPQ_c::GotDocuments ( PercolateIndex_i * pIndex, const CSphString
 
 				continue;
 			}
-			if ( pChild->valuestring )
+			if ( pItem->m_iField!=-1 && pChild->valuestring )
 			{
-				if ( pItem->m_iField!=-1 )
-					dFields[pItem->m_iField] = pChild->valuestring;
-				else
-					tDoc.SetAttr ( pItem->m_tLoc, pChild, pItem->m_eType );
+				dFields[pItem->m_iField] = pChild->valuestring;
+			} else
+			{
+				tDoc.SetAttr ( pItem->m_tLoc, pChild, pItem->m_eType );
 			}
 		}
 

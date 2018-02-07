@@ -10622,9 +10622,9 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema * pSche
 
 struct DictTerm_t
 {
-	SphWordID_t m_uWordID;
-	int m_iWordOff;
-	int m_iWordLen;
+	SphWordID_t m_uWordID = 0;
+	int m_iWordOff = 0;
+	int m_iWordLen = 0;
 };
 
 struct DictMap_t
@@ -10759,10 +10759,10 @@ private:
 	static const DWORD				META_HEADER_MAGIC = 0x50535451;	///< magic 'PSTQ' header
 	static const DWORD				META_VERSION = 4;				///< current version
 
-	int								m_iLockFD;
+	int								m_iLockFD = -1;
 	CSphSourceStats					m_tStat;
-	ISphTokenizer *					m_pTokenizerIndexing;
-	int								m_iMaxCodepointLength;
+	ISphTokenizer *					m_pTokenizerIndexing = nullptr;
+	int								m_iMaxCodepointLength = 0;
 
 	CSphVector<StoredQueryKey_t>	m_dStored;
 	CSphRwlock						m_tLock;
@@ -11243,25 +11243,23 @@ PercolateIndex_c::PercolateIndex_c ( const CSphSchema & tSchema, const char * sI
 	: PercolateIndex_i ( sIndexName, sPath )
 	, m_dLoadedQueries ( 0 )
 {
-	m_iLockFD = -1;
-
-	m_pTokenizerIndexing = NULL;
-	m_iMaxCodepointLength = 0;
+	Verify ( m_tLock.Init () );
 	m_tSchema = tSchema;
-
-	Verify ( m_tLock.Init() );
 }
 
 PercolateIndex_c::~PercolateIndex_c ()
 {
 	SaveMeta();
-
-	Verify ( m_tLock.Done () );
 	SafeDelete ( m_pTokenizerIndexing );
-	ARRAY_FOREACH ( i, m_dStored )
-		SafeDelete ( m_dStored[i].m_pQuery );
 
+	{ // coverity complains about accessing m_dStored without locking tLock
+		CSphScopedWLock tLock { m_tLock };
+		for ( auto& dStored : m_dStored )
+			SafeDelete ( dStored.m_pQuery );
+	}
 	SafeClose ( m_iLockFD );
+	Verify ( m_tLock.Done () );
+
 }
 
 ISphRtAccum * PercolateIndex_c::CreateAccum ( CSphString & sError )

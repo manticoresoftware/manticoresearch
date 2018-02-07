@@ -8185,16 +8185,14 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 						sphLogDebugv ( "agent %d, state %d, order %d, sock %d", iAgent, pAgent->State(), pAgent->m_iStoreTag, pAgent->m_iSock );
 
-						DistrServedByAgent_t * pDistr = NULL;
-						ARRAY_FOREACH ( iDistr, dDistrServedByAgent )
-						{
-							DistrServedByAgent_t & tDistr = dDistrServedByAgent[iDistr];
+						DistrServedByAgent_t * pDistr = nullptr;
+						for ( DistrServedByAgent_t &tDistr : dDistrServedByAgent )
 							if ( tDistr.m_dAgentIds.Contains ( iAgent ) )
 							{
 								pDistr = &tDistr;
 								break;
 							}
-						}
+						assert ( pDistr );
 
 						int iOrderTag = pAgent->m_iStoreTag;
 						// merge this agent's results
@@ -8248,10 +8246,12 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 							tRes.m_iAgentFetchedSkips += tRemoteResult.m_iAgentFetchedSkips;
 							tRes.m_bHasPrediction |= ( m_dQueries[iRes].m_iMaxPredictedMsec>0 );
 
-							assert ( pDistr );
-							pDistr->m_dStats[iRes-iStart].m_uQueryTime += tRemoteResult.m_iQueryTime;
-							pDistr->m_dStats[iRes-iStart].m_uFoundRows += tRemoteResult.m_iTotalMatches;
-							pDistr->m_dStats[iRes-iStart].m_iSuccesses++;
+							if ( pDistr )
+							{
+								pDistr->m_dStats[iRes-iStart].m_uQueryTime += tRemoteResult.m_iQueryTime;
+								pDistr->m_dStats[iRes-iStart].m_uFoundRows += tRemoteResult.m_iTotalMatches;
+								pDistr->m_dStats[iRes-iStart].m_iSuccesses++;
+							}
 
 							// merge this agent's words
 							MergeWordStats ( tRes, tRemoteResult.m_hWordStats, &m_dFailuresSet[iRes], tFirst.m_sIndexes.cstr(), NULL );

@@ -10119,6 +10119,7 @@ CSphString sphXQNodeToStr ( const XQNode_t * pNode )
 		"PROXIMITY",
 		"QUORUM",
 		"NEAR",
+		"NOTNEAR",
 		"SENTENCE",
 		"PARAGRAPH"
 	};

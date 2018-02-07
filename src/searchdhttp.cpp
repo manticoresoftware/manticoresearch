@@ -1637,12 +1637,12 @@ bool HttpHandlerPQ_c::GotDocuments ( PercolateIndex_i * pIndex, const CSphString
 
 				continue;
 			}
-			if ( pItem->m_iField!=-1 && pChild->valuestring )
+			if ( pChild->valuestring )
 			{
-				dFields[pItem->m_iField] = pChild->valuestring;
-			} else
-			{
-				tDoc.SetAttr ( pItem->m_tLoc, pChild, pItem->m_eType );
+				if ( pItem->m_iField!=-1 )
+					dFields[pItem->m_iField] = pChild->valuestring;
+				else
+					tDoc.SetAttr ( pItem->m_tLoc, pChild, pItem->m_eType );
 			}
 		}
 
@@ -1896,7 +1896,7 @@ bool HttpHandlerPQ_c::Process()
 	CSphString * sEndpoint = m_tOptions ( "endpoint" );
 	if ( !sEndpoint || sEndpoint->IsEmpty() )
 	{
-		FormatError ( SPH_HTTP_STATUS_400, "invalid endpoint '%s', should be /json/pq/index_name/operation", sEndpoint->scstr() );
+		FormatError ( SPH_HTTP_STATUS_400, "invalid empty endpoint, should be /json/pq/index_name/operation");
 		return false;
 	}
 

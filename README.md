@@ -1,4 +1,13 @@
-# Manticore Search
+![manticoresearch](https://manticoresearch.com/wp-content/uploads/2018/02/manticoresearch.png) 
+
+-----------------
+
+[![Docker Automated build](https://img.shields.io/docker/automated/manticoresearch/manticore.svg)](https://hub.docker.com/r/manticoresearch/manticore/)
+[![Docs](https://img.shields.io/badge/docs-latest-brightgreen.svg)](http://docs.manticoresearch.com/latest/html/)
+[![Release](https://img.shields.io/github/release/manticoresoftware/manticore.svg)](https://github.com/manticoresoftware/manticore/releases)
+[![GitHub last commit](https://img.shields.io/github/last-commit/manticoresoftware/manticore.svg)](https://github.com/manticoresoftware/manticore/commits/master)
+[![icense](https://img.shields.io/github/license/manticoresoftware/manticore.svg?maxAge=2592000)](https://github.com/adriannuta/manticore/blob/master/COPYING)
+[![Twitter](https://img.shields.io/twitter/follow/manticoresearch.svg?style=social&label=Follow)](https://twitter.com/manticoresearch)
 
 ## Introduction
 
@@ -18,7 +27,16 @@ Manticore Search is an open source search server designed to be fast, scalable a
 * Connectivity: MySQL-based protocol, HTTP, native libraries
 
 
-## Download and installation
+## Installation
+
+### Docker images
+Docker images are available on [Docker Hub](https://hub.docker.com/r/manticoresearch/manticore/).
+
+To launch a Manticore Search container run
+
+    docker run --name manticore -p 9306:9306 -d manticoresearch/manticore
+
+### Precompiled binaries
 Packages of latest GA release can be downloaded from http://www.manticoresearch.com/downloads
 
     $ wget https://github.com/manticoresoftware/manticore/releases/download/x.y.z/manticore_z.y.z.deb
@@ -65,6 +83,9 @@ For more details check [compiling] (http://docs.manticoresearch.com/latest/html/
 [Bug tracker](https://github.com/manticoresoftware/manticore/issues)
 
 [Professional Support](http://www.manticoresearch.com/support)
+
+## Contributing
+Refer to  [CONTRIBUTING.md](https://github.com/manticoresoftware/manticore/blob/master/CONTRIBUTING.md)
 
 ## License
 Manticore Search is release under GPLv2, for more information check [COPYING](https://github.com/manticoresoftware/manticore/blob/master/COPYING)

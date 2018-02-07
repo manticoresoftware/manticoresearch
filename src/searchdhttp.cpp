@@ -1618,7 +1618,7 @@ bool HttpHandlerPQ_c::GotDocuments ( PercolateIndex_i * pIndex, const CSphString
 
 	CSphString sTokenFilterOpts;
 	SphDocID_t uDocID = 1;
-	ARRAY_FOREACH ( iDoc, dDocs )
+	for ( const cJSON * pDoc : dDocs )
 	{
 		// reset all back to defaults
 		dFields.Fill ( sTmp.scstr() );
@@ -1629,7 +1629,6 @@ bool HttpHandlerPQ_c::GotDocuments ( PercolateIndex_i * pIndex, const CSphString
 			tLoc.m_bDynamic = true;
 			tDoc.SetDefaultAttr ( tLoc, tCol.m_eAttrType );
 		}
-		const cJSON * pDoc = dDocs[iDoc];
 		const cJSON * pChild = nullptr;
 		cJSON_ArrayForEach ( pChild, pDoc )
 		{

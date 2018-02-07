@@ -1483,6 +1483,7 @@ static bool SaveIndexes ()
 }
 
 static void ClearDistributedHash();
+CSphAutoEvent g_dBlackholeEvent;
 
 void Shutdown ()
 {
@@ -1495,6 +1496,8 @@ void Shutdown ()
 	{
 		*g_bDaemonAtShutdown.GetWritePtr() = 1;
 	}
+
+	g_dBlackholeEvent.SetEvent();
 
 #if !USE_WINDOWS
 	// stopwait handshake
@@ -14752,10 +14755,7 @@ struct BlackholeRequestBuilder_t : public IRequestBuilder_t
 
 struct BlackholeReplyParser_t : public IReplyParser_t
 {
-	BlackholeReplyParser_t ()
-	{}
-
-	virtual bool ParseReply ( MemInputBuffer_c & , AgentConn_t & ) const
+	bool ParseReply ( MemInputBuffer_c & , AgentConn_t & ) const override
 	{
 		return true;
 	}
@@ -14763,23 +14763,32 @@ struct BlackholeReplyParser_t : public IReplyParser_t
 
 
 CSphMutex g_tBlackholeLock;
-static CSphVector<AgentSendData_t *> g_dBlackholeAgents;
+
+static CSphVector<AgentSendData_t *> g_dBlackholeAgents GUARDED_BY ( g_tBlackholeLock );
 
 static const int g_iBlackholeTimeout = 5;
 static const int g_iBlackholeRetries = 3;
 
 static void BlackholeTick()
 {
-	if ( !g_dBlackholeAgents.GetLength() )
+	g_dBlackholeEvent.WaitEvent ();
+
+	if ( g_bShutdown )
 		return;
 
 	ThreadSystem_t tThdSystemDesc ( "BLACKHOLE" );
 
 	VectorPtrsGuard_T<AgentSendData_t> tBlackholes;
-	// grab blackholes under lock
-	g_tBlackholeLock.Lock();
-	tBlackholes.m_dPtrs.SwapData ( g_dBlackholeAgents );
-	g_tBlackholeLock.Unlock();
+
+	{
+		CSphScopedLock<CSphMutex> BlackHoleGuard { g_tBlackholeLock };
+
+		if ( !g_dBlackholeAgents.GetLength () )
+			return;
+
+		// grab blackholes under lock
+		tBlackholes.m_dPtrs.SwapData ( g_dBlackholeAgents );
+	}
 
 	// agent vector for remote controller
 	AgentsVector dAgents;
@@ -14833,22 +14842,17 @@ static void BlackholeThreadFunc ( void * )
 	SphCrashLogger_c::SetTopQueryTLS ( &tQueryTLS );
 
 	while ( !g_bShutdown )
-	{
-		if ( !g_dBlackholeAgents.GetLength() )
-		{
-			sphSleepMsec ( 1 );
-			continue;
-		}
-
 		BlackholeTick();
-	}
 
 	// clean up
-	g_tBlackholeLock.Lock();
-	ARRAY_FOREACH ( i, g_dBlackholeAgents )
-		SafeDelete ( g_dBlackholeAgents[i] );
-	g_dBlackholeAgents.Reset();
-	g_tBlackholeLock.Unlock();
+	{
+		CSphScopedLock<CSphMutex> BlackHoleGuard { g_tBlackholeLock };
+		for ( auto * dBlackHoleAgent : g_dBlackholeAgents )
+			SafeDelete ( dBlackHoleAgent );
+		g_dBlackholeAgents.Reset ();
+	}
+
+	g_dBlackholeEvent.Done();
 }
 
 void BlackholeAddAgents ( AgentsVector & dAgents, const IRequestBuilder_t & tReq )
@@ -14879,13 +14883,13 @@ void BlackholeAddAgents ( AgentsVector & dAgents, const IRequestBuilder_t & tReq
 	}
 
 	// move blackholes to pool for process
-	g_tBlackholeLock.Lock();
-
-	AgentSendData_t ** ppNew = g_dBlackholeAgents.AddN ( dBlackholes.GetLength() );
-	ARRAY_FOREACH ( i, dBlackholes )
-		ppNew[i] = dBlackholes[i];
-
-	g_tBlackholeLock.Unlock();
+	{
+		CSphScopedLock<CSphMutex> tLock { g_tBlackholeLock };
+		AgentSendData_t ** ppNew = g_dBlackholeAgents.AddN ( dBlackholes.GetLength() );
+		ARRAY_FOREACH ( i, dBlackholes )
+			ppNew[i] = dBlackholes[i];
+	}
+	g_dBlackholeEvent.SetEvent ();
 }
 
 static bool HasBlackhole ( AgentsVector & dAgents )
@@ -24312,6 +24316,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( !g_tPingThread.Create ( PingThreadFunc, 0 ) )
 		sphDie ( "failed to create ping service thread" );
 
+	if ( !g_dBlackholeEvent.Init() )
+		sphDie ( "failed to create blackhole service event" );
 	if ( !g_tBlackholeThread.Create ( BlackholeThreadFunc, 0 ) )
 		sphDie ( "failed to create blackhole service thread" );
 

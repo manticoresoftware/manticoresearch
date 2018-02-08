@@ -1507,9 +1507,7 @@ void Shutdown ()
 	if ( fdStopwait>=0 )
 	{
 		DWORD uHandshakeOk = 0;
-		int iDummy; // to avoid gcc unused result warning
-		iDummy = ::write ( fdStopwait, &uHandshakeOk, sizeof(DWORD) );
-		iDummy++; // to avoid gcc set but not used variable warning
+		int VARIABLE_IS_NOT_USED iDummy = ::write ( fdStopwait, &uHandshakeOk, sizeof(DWORD) );
 	}
 #endif
 	g_tRotationServiceThread.Join();
@@ -1606,9 +1604,7 @@ void Shutdown ()
 	if ( fdStopwait>=0 )
 	{
 		DWORD uStatus = bAttrsSaveOk;
-		int iDummy; // to avoid gcc unused result warning
-		iDummy = ::write ( fdStopwait, &uStatus, sizeof(DWORD) );
-		iDummy++; // to avoid gcc set but not used variable warning
+		int VARIABLE_IS_NOT_USED iDummy = ::write ( fdStopwait, &uStatus, sizeof(DWORD) );
 		::close ( fdStopwait );
 	}
 #endif
@@ -23856,6 +23852,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		if ( bOptStopWait )
 		{
 			sPipeName = GetNamedPipeName ( iPid );
+			::unlink ( sPipeName.cstr () ); // avoid garbage to pollute us
 			iPipeCreated = mkfifo ( sPipeName.cstr(), 0666 );
 			if ( iPipeCreated!=-1 )
 				fdPipe = ::open ( sPipeName.cstr(), O_RDONLY | O_NONBLOCK );
@@ -23873,50 +23870,51 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 		int iExitCode = ( bOptStopWait && ( iPipeCreated==-1 || fdPipe<0 ) ) ? 1 : 0;
 		bool bHandshake = true;
-		while ( bOptStopWait && fdPipe>=0 )
-		{
-			int iReady = sphPoll ( fdPipe, iWaitTimeout );
-
-			// error on wait
-			if ( iReady<0 )
+		if ( bOptStopWait && fdPipe>=0 )
+			while ( true )
 			{
-				iExitCode = 3;
-				sphWarning ( "stopwait%s error '%s'", ( bHandshake ? " handshake" : " " ), strerror(errno) );
-				break;
-			}
+				int iReady = sphPoll ( fdPipe, iWaitTimeout );
 
-			// timeout
-			if ( iReady==0 )
-			{
+				// error on wait
+				if ( iReady<0 )
+				{
+					iExitCode = 3;
+					sphWarning ( "stopwait%s error '%s'", ( bHandshake ? " handshake" : " " ), strerror(errno) );
+					break;
+				}
+
+				// timeout
+				if ( iReady==0 )
+				{
+					if ( !bHandshake )
+						continue;
+
+					iExitCode = 1;
+					break;
+				}
+
+				// reading data
+				DWORD uStatus = 0;
+				int iRead = ::read ( fdPipe, &uStatus, sizeof(DWORD) );
+				if ( iRead!=sizeof(DWORD) )
+				{
+					sphWarning ( "stopwait read fifo error '%s'", strerror(errno) );
+					iExitCode = 3; // stopped demon crashed during stop
+					break;
+				} else
+				{
+					iExitCode = ( uStatus==1 ? 0 : 2 ); // uStatus == 1 - AttributeSave - ok, other values - error
+				}
+
 				if ( !bHandshake )
-					continue;
+					break;
 
-				iExitCode = 1;
-				break;
+				bHandshake = false;
 			}
+		::unlink ( sPipeName.cstr () ); // is ok on linux after it is opened.
 
-			// reading data
-			DWORD uStatus = 0;
-			int iRead = ::read ( fdPipe, &uStatus, sizeof(DWORD) );
-			if ( iRead!=sizeof(DWORD) )
-			{
-				sphWarning ( "stopwait read fifo error '%s'", strerror(errno) );
-				iExitCode = 3; // stopped demon crashed during stop
-				break;
-			} else
-			{
-				iExitCode = ( uStatus==1 ? 0 : 2 ); // uStatus == 1 - AttributeSave - ok, other values - error
-			}
-
-			if ( !bHandshake )
-				break;
-
-			bHandshake = false;
-		}
 		if ( fdPipe>=0 )
 			::close ( fdPipe );
-		if ( iPipeCreated!=-1 )
-			::unlink ( sPipeName.cstr() );
 
 		exit ( iExitCode );
 #endif

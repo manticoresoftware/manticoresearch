@@ -27967,6 +27967,12 @@ struct CSphSchemaConfigurator
 				tCol.m_eSrc = SPH_ATTRSRC_FIELD;
 			}
 
+			if ( tCol.m_sName.IsEmpty() )
+			{
+				sError.SetSprintf ( "column number %d has no name", tCol.m_iIndex );
+				return false;
+			}
+
 			if ( CSphSchema::IsReserved ( tCol.m_sName.cstr() ) )
 			{
 				sError.SetSprintf ( "%s is not a valid attribute name", tCol.m_sName.cstr() );
@@ -28552,10 +28558,16 @@ bool CSphSource_XMLPipe2::ParseNextChunk ( int iBufferLen, CSphString & sError )
 		if ( m_dParsedDocuments.GetLength() )
 			uFailedID = m_dParsedDocuments.Last()->m_uDocID;
 
-		sError.SetSprintf ( "source '%s': XML parse error: %s (line=%d, pos=%d, docid=" DOCID_FMT ")",
-			m_tSchema.GetName(), sph_XML_ErrorString ( sph_XML_GetErrorCode ( m_pParser ) ),
-			(int)sph_XML_GetCurrentLineNumber ( m_pParser ), (int)sph_XML_GetCurrentColumnNumber ( m_pParser ),
-			uFailedID );
+		if ( !m_sError.IsEmpty () )
+		{
+			sError = m_sError;
+		} else
+		{
+			sError.SetSprintf ( "source '%s': XML parse error: %s (line=%d, pos=%d, docid=" DOCID_FMT ")",
+				m_tSchema.GetName(), sph_XML_ErrorString ( sph_XML_GetErrorCode ( m_pParser ) ),
+				(int)sph_XML_GetCurrentLineNumber ( m_pParser ), (int)sph_XML_GetCurrentColumnNumber ( m_pParser ),
+				uFailedID );
+		}
 		m_tDocInfo.m_uDocID = 1;
 		return false;
 	}
@@ -28814,7 +28826,7 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 
 		if ( bIsAttr )
 		{
-			if ( CSphSchema::IsReserved ( Info.m_sName.cstr() ) )
+			if ( Info.m_sName.IsEmpty() || CSphSchema::IsReserved ( Info.m_sName.cstr() ) )
 			{
 				Error ( "%s is not a valid attribute name", Info.m_sName.cstr() );
 				return;
@@ -28881,7 +28893,7 @@ void CSphSource_XMLPipe2::StartElement ( const char * szName, const char ** pAtt
 
 		if ( !bError )
 		{
-			if ( CSphSchema::IsReserved ( Info.m_sName.cstr() ) )
+			if ( Info.m_sName.IsEmpty() || CSphSchema::IsReserved ( Info.m_sName.cstr() ) )
 			{
 				Error ( "%s is not a valid attribute name", Info.m_sName.cstr() );
 				return;

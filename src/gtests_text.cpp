@@ -590,3 +590,47 @@ TEST ( Text, cvs_source )
 }
 
 
+//////////////////////////////////////////////////////////////////////////
+
+TEST ( Text, xml_source_attr_error )
+{
+	const char * sTest = 
+R"raw(<?xml version="1.0" encoding="utf-8"?>
+<sphinx:docset xmlns:sphinx="http://sphinxsearch.com/">
+<sphinx:schema>
+    <sphinx:attr name="" type="int" />
+    <sphinx:field name="f" />
+</sphinx:schema>
+<sphinx:document id="1">
+    <>9</>
+    <f>hey</f>
+</sphinx:document>
+</sphinx:docset>
+)raw";
+
+	const char * sRes = "source 'xml': (null) is not a valid attribute name (line=4, pos=4, docid=0)";
+
+	CSphString sTmpFile = "__libsphinxtestxml.xml";
+	// write xml file
+	FILE * fp = fopen ( sTmpFile.cstr(), "wb" );
+	fwrite ( sTest, 1, strlen ( sTest ), fp );
+	fclose ( fp );
+
+	// open csv pipe
+	fp = fopen ( sTmpFile.cstr(), "rb" );
+
+	CSphString sError;
+	// make config
+	CSphConfigSection tConf;
+
+	// setup source
+	CSphSource_Document * pSource = ( CSphSource_Document * ) sphCreateSourceXmlpipe2 ( &tConf, fp, "xml", 2*1024*1024, false, sError );
+	ASSERT_FALSE ( pSource->Connect ( sError ) );
+	ASSERT_STREQ ( sError.cstr(), sRes );
+
+	// clean up, fp will be closed automatically in CSphSource_BaseSV::Disconnect()
+	SafeDelete ( pSource );
+	unlink ( sTmpFile.cstr() );
+}
+
+

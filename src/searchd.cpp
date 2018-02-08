@@ -186,6 +186,7 @@ static CSphVector<Listener_t>	g_dListeners;
 static int				g_iQueryLogFile	= -1;
 static CSphString		g_sQueryLogFile;
 static CSphString		g_sPidFile;
+static bool				g_bPidIsMine = false;		// if PID is not mine, don't unlink it on fail
 static int				g_iPidFD		= -1;
 
 static int				g_iMaxCachedDocs	= 0;	// in bytes
@@ -1585,12 +1586,14 @@ void Shutdown ()
 
 	ClosePersistentSockets();
 
-	// remove pid
-	if ( !g_sPidFile.IsEmpty() )
-	{
+	// close pid
+	if ( g_iPidFD!=-1 )
 		::close ( g_iPidFD );
+	g_iPidFD = -1;
+
+	// remove pid file, if we owned it
+	if ( g_bPidIsMine && !g_sPidFile.IsEmpty() )
 		::unlink ( g_sPidFile.cstr() );
-	}
 
 	sphInfo ( "shutdown complete" );
 
@@ -23995,6 +23998,8 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	}
 	if ( bOptPIDFile && !sphLockEx ( g_iPidFD, false ) )
 		sphFatal ( "failed to lock pid file '%s': %s (searchd already running?)", g_sPidFile.scstr(), strerror(errno) );
+
+	g_bPidIsMine = true;
 
 	// Actions on resurrection
 	if ( bWatched && !bVisualLoad && CheckConfigChanges() )

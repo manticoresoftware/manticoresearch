@@ -8327,16 +8327,18 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		if ( m_bMaster && !tQuery.m_tHaving.m_sAttrName.IsEmpty() )
 			pAggrFilter = &tQuery.m_tHaving;
 
-		if ( tRes.m_iSuccesses>1 || tQuery.m_dItems.GetLength() || pAggrFilter )
+		const CSphVector<CSphQueryItem> & dItems = ( tQuery.m_dRefItems.GetLength() ? tQuery.m_dRefItems : tQuery.m_dItems );
+
+		if ( tRes.m_iSuccesses>1 || dItems.GetLength() || pAggrFilter )
 		{
 			if ( pExtraSchema )
 				pExtraSchema->RLock();
-			if ( m_bMaster && tRes.m_iSuccesses && tQuery.m_dItems.GetLength() && tQuery.m_sGroupBy.IsEmpty() && tRes.m_dMatches.GetLength()==0 )
+			if ( m_bMaster && tRes.m_iSuccesses && dItems.GetLength() && tQuery.m_sGroupBy.IsEmpty() && tRes.m_dMatches.GetLength()==0 )
 			{
-				ARRAY_FOREACH ( i, tQuery.m_dItems )
+				ARRAY_FOREACH ( i, dItems )
 				{
-					if ( tQuery.m_dItems[i].m_sExpr=="count(*)" || ( tQuery.m_dItems[i].m_sExpr=="@distinct" ) )
-						tRes.m_dZeroCount.Add ( tQuery.m_dItems[i].m_sAlias );
+					if ( dItems[i].m_sExpr=="count(*)" || ( dItems[i].m_sExpr=="@distinct" ) )
+						tRes.m_dZeroCount.Add ( dItems[i].m_sAlias );
 				}
 			}
 

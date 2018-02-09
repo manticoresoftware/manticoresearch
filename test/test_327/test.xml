@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <test>
 <name>facet at distributed index</name>
+
+<requires><sphinxql_keep_null/></requires>
+
 <config>
 searchd
 {
@@ -128,6 +131,9 @@ insert into facetdemo2 (id,price,brand_id,title,brand_name,property,categories,j
 <sphinxql>select * from facetdemo11 facet brand_id;</sphinxql>
 <sphinxql>select * from facetdemo12 facet brand_id;</sphinxql>
 <sphinxql>select * from facetdemo13 facet brand_id;</sphinxql>
+
+<!-- empty result set with FACET -->
+<sphinxql>select * from facetdemo1 where price=1 facet brand_id;</sphinxql>
 
 </sphqueries>
 

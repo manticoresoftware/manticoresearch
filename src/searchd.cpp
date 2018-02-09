@@ -7972,7 +7972,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		ParseIndexList ( tFirst.m_sIndexes, dLocal );
 
 		int iDistCount = 0;
-		bool bDevideRemote = false;
+		bool bDivideRemote = false;
 
 		g_tDistLock.ReadLock();
 		ARRAY_FOREACH ( i, dLocal )
@@ -8028,13 +8028,13 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 						m_dLocal.Last().m_bKillBreak = true;
 				}
 
-				bDevideRemote |= pDist->m_bDivideRemoteRanges;
+				bDivideRemote |= pDist->m_bDivideRemoteRanges;
 			}
 		}
 		g_tDistLock.Unlock();
 
-		// set remote devider
-		if ( bDevideRemote )
+		// set remote divider
+		if ( bDivideRemote )
 		{
 			if ( iDistCount==1 )
 				iDivideLimits = dAgents.GetLength();

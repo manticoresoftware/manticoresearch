@@ -592,6 +592,7 @@ TEST ( Text, cvs_source )
 
 //////////////////////////////////////////////////////////////////////////
 
+#if USE_LIBEXPAT
 TEST ( Text, xml_source_attr_error )
 {
 	const char * sTest = 
@@ -610,27 +611,21 @@ R"raw(<?xml version="1.0" encoding="utf-8"?>
 
 	const char * sRes = "source 'xml': (null) is not a valid attribute name (line=4, pos=4, docid=0)";
 
-	CSphString sTmpFile = "__libsphinxtestxml.xml";
-	// write xml file
-	FILE * fp = fopen ( sTmpFile.cstr(), "wb" );
+	// prepare xml pipe
+	FILE * fp = tmpfile ();
 	fwrite ( sTest, 1, strlen ( sTest ), fp );
-	fclose ( fp );
-
-	// open csv pipe
-	fp = fopen ( sTmpFile.cstr(), "rb" );
+	rewind ( fp );
 
 	CSphString sError;
 	// make config
 	CSphConfigSection tConf;
 
 	// setup source
-	CSphSource_Document * pSource = ( CSphSource_Document * ) sphCreateSourceXmlpipe2 ( &tConf, fp, "xml", 2*1024*1024, false, sError );
+	auto * pSource = ( CSphSource_Document * ) sphCreateSourceXmlpipe2 ( &tConf, fp, "xml", 2*1024*1024, false, sError );
 	ASSERT_FALSE ( pSource->Connect ( sError ) );
 	ASSERT_STREQ ( sError.cstr(), sRes );
 
 	// clean up, fp will be closed automatically in CSphSource_BaseSV::Disconnect()
 	SafeDelete ( pSource );
-	unlink ( sTmpFile.cstr() );
 }
-
-
+#endif

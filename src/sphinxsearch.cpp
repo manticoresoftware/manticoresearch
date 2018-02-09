@@ -5577,7 +5577,7 @@ const ExtDoc_t * ExtNotNear_c::GetDocsChunk()
 		// skip NOT until min accepted id
 		while ( pDocR->m_uDocid<pDocL->m_uDocid ) pDocR++;
 		while ( pHitR->m_uDocid<pDocR->m_uDocid ) pHitR++;
-		if ( pHitR->m_uDocid==DOCID_MAX )
+		if ( pHitR->m_uDocid==DOCID_MAX || pDocL->m_uDocid!=pDocR->m_uDocid )
 			continue;
 
 		// filter must with not

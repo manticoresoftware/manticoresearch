@@ -29,6 +29,17 @@ index idx
 	source			= src
 	path			= <data_path/>/idx
 }
+
+source src2 : src
+{
+	sql_query		= SELECT *, 11 as gid FROM test_table2
+}
+
+index idx2 
+{
+	source			= src2
+	path			= <data_path/>/idx2
+}
 </config>
 
 <sphqueries>
@@ -72,6 +83,8 @@ index idx
 <sphinxql>select * from idx where match (' ("a b" NOTNEAR/3 (d |e)) NOTNEAR/2 c') order by id asc</sphinxql>
 <sphinxql>select * from idx where match ('"a b"~4 NOTNEAR/1 c') order by id asc</sphinxql>
 <sphinxql>select * from idx where match ('( "a b" | "a x b" ) NOTNEAR/1 c') order by id asc</sphinxql>
+
+<sphinxql>select * from idx2 where match ('a NOTNEAR/1 e') order by id asc</sphinxql>
 </sphqueries>
 
 <db_create>
@@ -110,4 +123,23 @@ INSERT INTO `test_table` VALUES
 
 <db_drop>DROP TABLE IF EXISTS `test_table`</db_drop>
 
+<db_create>
+CREATE TABLE test_table2
+(
+	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
+	title VARCHAR(16384) NOT NULL
+);
+</db_create>
+<db_insert>
+INSERT INTO `test_table2` VALUES
+( 10, 'a b c d' ),
+( 20, 'b c d e' ),
+( 30, 'b c d e' ),
+( 31, 'a b c d' ),
+( 40, 'b c d e' ),
+( 50, 'b c d e' ),
+( 60, 'a e c d' ),
+( 70, 'a b c d' )
+</db_insert>
+<db_drop>DROP TABLE IF EXISTS `test_table2`</db_drop>
 </test>

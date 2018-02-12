@@ -765,6 +765,8 @@ static void ShowHelp ()
 		"Usage: indextool <COMMAND> [OPTIONS]\n"
 		"\n"
 		"Commands are:\n"
+		"-h, --help\t\tdisplay this help message\n"
+		"-v\t\t\tdisplay version information\n"
 		"--build-infixes <INDEX>\tbuild infixes for an existing dict=keywords index\n"
 		"\t\t\t(upgrades .sph, .spi in place)\n"
 		"--build-skips <INDEX>\tbuild skiplists for an existing index (builds .spe and\n"

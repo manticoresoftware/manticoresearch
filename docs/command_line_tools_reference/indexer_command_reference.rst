@@ -259,3 +259,9 @@ operation is performed. These options are:
 -  ``--print-queries`` prints out SQL queries that ``indexer`` sends to
    the database, along with SQL connection and disconnection events.
    That is useful to diagnose and fix problems with SQL sources.
+
+-  ``--help`` (``-h`` for short) lists all of the parameters that can be
+   called in your particular build of ``indexer``.
+
+-  ``-v`` show version information of your particular build of ``indexer``.
+   

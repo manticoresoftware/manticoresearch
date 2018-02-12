@@ -412,6 +412,24 @@ $ indexer mysmallindex mybigindex</programlisting>
           </listitem>
         </varlistentry>
       </variablelist>
+      
+    <varlistentry>
+      <term><option>--help</option>, <option>-h</option></term>
+
+      <listitem>
+        <para>List all of the parameters that can be called in your
+        particular build of <command>indexer</command>.</para>
+      </listitem>
+    </varlistentry>
+
+    <varlistentry>
+      <term><option>-v</option></term>
+
+      <listitem>
+        <para>show version information of your particular build
+        of <command>indexer</command>.</para>
+      </listitem>
+    </varlistentry>
     </refsect1>
 
     <refsect1>
@@ -595,6 +613,15 @@ $ indexer mysmallindex mybigindex</programlisting>
           </listitem>
         </varlistentry>
 
+        <varlistentry>
+          <term><option>-v</option></term>
+
+          <listitem>
+            <para>show version information of your particular build
+            of <command>searchd</command>.</para>
+          </listitem>
+        </varlistentry>
+        
         <varlistentry>
           <term><option>--index</option> <replaceable>INDEX</replaceable>,
           <option>-i</option> <replaceable>INDEX</replaceable></term>
@@ -1198,6 +1225,24 @@ zoning &gt; zoning </programlisting></para>
           </listitem>
         </varlistentry>
       </variablelist>
+
+     <varlistentry>
+       <term><option>--help</option>, <option>-h</option></term>
+  
+       <listitem>
+         <para>List all of the parameters that can be called in your
+         particular build of <command>indextool</command>.</para>
+       </listitem>
+     </varlistentry>
+  
+     <varlistentry>
+       <term><option>-v</option></term>
+  
+       <listitem>
+         <para>show version information of your particular build
+         of <command>indextool</command>.</para>
+       </listitem>
+     </varlistentry>
     </refsect1>
 
     <refsect1>

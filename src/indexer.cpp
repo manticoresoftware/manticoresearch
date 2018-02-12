@@ -1590,6 +1590,8 @@ static void ShowHelp ()
 		"Usage: indexer [OPTIONS] [indexname1 [indexname2 [...]]]\n"
 		"\n"
 		"Options are:\n"
+		"-h, --help\t\tdisplay this help message\n"
+		"-v\t\t\tdisplay version information\n"
 		"--config <file>\t\tread configuration from specified file\n"
 		"\t\t\t(default is sphinx.conf)\n"
 		"--all\t\t\treindex all configured indexes\n"

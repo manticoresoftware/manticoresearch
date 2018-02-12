@@ -25,6 +25,8 @@ The options available to ``searchd`` on all builds are:
 -  ``--help`` (``-h`` for short) lists all of the parameters that can be
    called in your particular build of ``searchd``.
 
+-  ``-v`` show version information of your particular build of ``searchd``.
+   
 -  ``--config <file>`` (``-c <file>`` for short) tells
    ``searchd`` to use the given file as its configuration, just as with
    ``indexer`` above.

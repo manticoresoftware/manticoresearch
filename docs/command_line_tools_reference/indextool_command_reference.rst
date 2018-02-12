@@ -22,6 +22,11 @@ Options apply to all commands:
 -  ``--quiet`` (``-q`` for short) keep indextool quiet - it will not
    output banner, etc.
 
+-  ``--help`` (``-h`` for short) lists all of the parameters that can be
+   called in your particular build of ``indextool``.
+
+-  ``-v`` show version information of your particular build of ``indextool``.
+
 The commands are as follows:
 
 -  ``--checkconfig`` just loads and verifies the config file to check if

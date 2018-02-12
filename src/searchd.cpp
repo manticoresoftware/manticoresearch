@@ -20359,6 +20359,7 @@ void ShowHelp ()
 		"\t\t\t(with different verboseness)\n"
 		"--pidfile\t\tforce using the PID file (useful with --console)\n"
 		"--safetrace\t\tonly use system backtrace() call in crash reports\n"
+		"--coredump\t\tsave core dump file on crash\n"
 		"\n"
 		"Examples:\n"
 		"searchd --config /usr/local/sphinx/etc/sphinx.conf\n"

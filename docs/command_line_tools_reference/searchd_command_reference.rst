@@ -193,6 +193,15 @@ The options available to ``searchd`` on all builds are:
 
 
        $ searchd --replay-flags=accept-desc-timestamp
+       
+-  ``--coredump`` is used to enable save of core file or minidump
+   of daemon on crash. Disabled by default to speed up of daemon restart
+   on crash. This is useful for debugging purposes.
+
+   .. code-block:: bash
+
+
+       $ searchd --config /home/myuser/sphinx.conf --coredump
 
 There are some options for ``searchd`` that are specific to Windows
 platforms, concerning handling as a service, are only be available on

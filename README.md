@@ -3,10 +3,11 @@
 -----------------
 
 [![Docker Automated build](https://img.shields.io/docker/automated/manticoresearch/manticore.svg)](https://hub.docker.com/r/manticoresearch/manticore/)
-[![Docs](https://img.shields.io/badge/docs-latest-brightgreen.svg)](http://docs.manticoresearch.com/latest/html/)
+[![Docs](https://img.shields.io/badge/docs-latest-brightgreen.svg)](https://docs.manticoresearch.com/latest/html/)
 [![Release](https://img.shields.io/github/release/manticoresoftware/manticore.svg)](https://github.com/manticoresoftware/manticore/releases)
 [![GitHub last commit](https://img.shields.io/github/last-commit/manticoresoftware/manticore.svg)](https://github.com/manticoresoftware/manticore/commits/master)
-[![icense](https://img.shields.io/github/license/manticoresoftware/manticore.svg?maxAge=2592000)](https://github.com/adriannuta/manticore/blob/master/COPYING)
+[![License](https://img.shields.io/github/license/manticoresoftware/manticore.svg?maxAge=2592000)](https://github.com/adriannuta/manticore/blob/master/COPYING)
+[![Slack][slack-badge]][slack-url]
 [![Twitter](https://img.shields.io/twitter/follow/manticoresearch.svg?style=social&label=Follow)](https://twitter.com/manticoresearch)
 
 ## Introduction
@@ -43,7 +44,7 @@ Packages of latest GA release can be downloaded from http://www.manticoresearch.
     $ sudo dpkg -i manticore_x.y.z.deb
     $ systemctl manticore start
 
-For more details see [installation](http://docs.manticoresearch.com/latest/html/installation.html#installation).
+For more details see [installation](https://docs.manticoresearch.com/latest/html/installation.html#installation).
 
 ### Compiling from sources
 If you like to use the latest code, you can build Manticore easy from sources:
@@ -53,7 +54,7 @@ If you like to use the latest code, you can build Manticore easy from sources:
      mkdir build && cd build
      cmake .. &&  make install
 
-For more details check [compiling] (http://docs.manticoresearch.com/latest/html/installation.html#compiling-manticore-from-source). 
+For more details check [compiling] (https://docs.manticoresearch.com/latest/html/installation.html#compiling-manticore-from-source). 
 ## Getting started
  The quick way to see Manticore in action is to use the sample RT index preconfigured in sphinx.conf.
  Inserting data in a RT index is done using SphinxQL and in the same way as for a MySQL table
@@ -76,13 +77,13 @@ For more details check [compiling] (http://docs.manticoresearch.com/latest/html/
     
 ## Documentation and support
 
-[Documentation](http://docs.manticoresearch.com)
+[Documentation](https://docs.manticoresearch.com)
 
 [Manticore Community Forum](http://forum.manticoresearch.com/)
 
 [Bug tracker](https://github.com/manticoresoftware/manticore/issues)
 
-[Professional Support](http://www.manticoresearch.com/support)
+[Professional Support](https://manticoresearch.com/professional-support/)
 
 ## Contributing
 Refer to  [CONTRIBUTING.md](https://github.com/manticoresoftware/manticore/blob/master/CONTRIBUTING.md)
@@ -90,3 +91,5 @@ Refer to  [CONTRIBUTING.md](https://github.com/manticoresoftware/manticore/blob/
 ## License
 Manticore Search is release under GPLv2, for more information check [COPYING](https://github.com/manticoresoftware/manticore/blob/master/COPYING)
 
+[slack-url]: https://slack.manticoresearch.com/
+[slack-badge]:  https://img.shields.io/badge/Slack-join%20chat-green.svg

@@ -17679,7 +17679,8 @@ bool sphExpandGetWords ( const char * sWord, const ExpansionContext_t & tCtx, IS
 
 		// compute non-wildcard prefix length
 		int iPrefix = 0;
-		for ( const char * s = sPrefix; *s && !sphIsWild ( *s ); s++ )
+		const char * sCodes = sPrefix;
+		for ( ; *sCodes && !sphIsWild ( *sCodes ); sCodes+=sphUtf8CharBytes ( *sCodes ) )
 			iPrefix++;
 
 		// do not expand prefixes under min length
@@ -17687,17 +17688,18 @@ bool sphExpandGetWords ( const char * sWord, const ExpansionContext_t & tCtx, IS
 		if ( iPrefix<iMinLen )
 			return false;
 
+		int iBytes = sCodes - sPrefix;
 		// prefix expansion should work on nonstemmed words only
 		char sFixed[MAX_KEYWORD_BYTES];
 		if ( tCtx.m_bHasMorphology )
 		{
 			sFixed[0] = MAGIC_WORD_HEAD_NONSTEMMED;
-			memcpy ( sFixed+1, sPrefix, iPrefix );
+			memcpy ( sFixed+1, sPrefix, iBytes );
 			sPrefix = sFixed;
-			iPrefix++;
+			iBytes++;
 		}
 
-		tCtx.m_pWordlist->GetPrefixedWords ( sPrefix, iPrefix, sWildcard, tWordlist );
+		tCtx.m_pWordlist->GetPrefixedWords ( sPrefix, iBytes, sWildcard, tWordlist );
 
 	} else
 	{
@@ -17706,28 +17708,40 @@ bool sphExpandGetWords ( const char * sWord, const ExpansionContext_t & tCtx, IS
 		assert ( tCtx.m_iMinInfixLen>0 );
 
 		// find the longest substring of non-wildcards
+		int iCodepoints = 0;
+		int iInfixCodepoints = 0;
+		int iInfixBytes = 0;
 		const char * sMaxInfix = NULL;
-		int iMaxInfix = 0;
-		int iCur = 0;
+		const char * sInfix = sWord;
 
-		for ( const char * s = sWord; *s; s++ )
+		for ( const char * s = sWord; *s; )
 		{
+			int iCodeLen = sphUtf8CharBytes ( *s );
+
 			if ( sphIsWild ( *s ) )
 			{
-				iCur = 0;
-			} else if ( ++iCur > iMaxInfix )
+				sInfix = s + 1;
+				iCodepoints = 0;
+			} else
 			{
-				sMaxInfix = s-iCur+1;
-				iMaxInfix = iCur;
+				iCodepoints++;
+				if ( s - sInfix + iCodeLen > iInfixBytes )
+				{
+					sMaxInfix = sInfix;
+					iInfixBytes = s - sInfix + iCodeLen;
+					iInfixCodepoints = iCodepoints;
+				}
 			}
+
+			s += iCodeLen;
 		}
 
 		// do not expand infixes under min_infix_len
-		if ( iMaxInfix < tCtx.m_iMinInfixLen )
+		if ( iInfixCodepoints < tCtx.m_iMinInfixLen )
 			return false;
 
 		// ignore heading star
-		tCtx.m_pWordlist->GetInfixedWords ( sMaxInfix, iMaxInfix, sWord, tWordlist );
+		tCtx.m_pWordlist->GetInfixedWords ( sMaxInfix, iInfixBytes, sWord, tWordlist );
 	}
 
 	return true;

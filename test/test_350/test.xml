@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>warnings from short utf8 prefix and infix</name>
+
+<config>
+
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query_pre 		= SET NAMES utf8
+	sql_query 			= SELECT * FROM test_table
+	sql_attr_uint		= idd
+    sql_field_string    = body
+}
+
+index test
+{
+	source			= test
+	path = <data_path/>/plain1
+	docinfo			= extern
+	dict = keywords
+    charset_table = a..z, _, A..Z->a..z, russian
+	min_infix_len = 4
+}
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	idd INTEGER NOT NULL,
+	body VARCHAR(255) NOT NULL
+) CHARACTER SET utf8;
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table</db_drop>
+<db_insert>SET NAMES utf8</db_insert>
+<db_insert>INSERT INTO test_table VALUES
+( 1, 1, 'test' ), (11, 11, 'както неочень') , (12, 12, 'кактотак очень')
+</db_insert>
+
+
+<sphqueries>
+
+<!-- regression: warning from utf8 term -->
+<sphinxql>select * from test where match ('как*')</sphinxql>
+<sphinxql>show warnings</sphinxql>
+<sphinxql>select * from test where match ('какт*')</sphinxql>
+<sphinxql>show warnings</sphinxql>
+<sphinxql>select * from test where match ('*акт*')</sphinxql>
+<sphinxql>show warnings</sphinxql>
+<sphinxql>select * from test where match ('*акто*')</sphinxql>
+<sphinxql>show warnings</sphinxql>
+
+</sphqueries>
+
+</test>

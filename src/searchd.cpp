@@ -24207,7 +24207,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	SetConsoleCtrlHandler ( CtrlHandler, TRUE );
 #endif
 
-	if ( !g_bOptNoDetach && !bWatched )
+	if ( !g_bOptNoDetach && !bWatched && !g_bService )
 	{
 		// re-lock indexes
 		for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )

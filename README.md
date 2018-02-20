@@ -91,5 +91,7 @@ Refer to  [CONTRIBUTING.md](https://github.com/manticoresoftware/manticore/blob/
 ## License
 Manticore Search is release under GPLv2, for more information check [COPYING](https://github.com/manticoresoftware/manticore/blob/master/COPYING)
 
+[![Analytics](https://ga-beacon.appspot.com/UA-114439919-1/manticoresoftware/manticore/README.md?pixel&useReferer)](https://github.com/manticoresoftware/manticore)
+
 [slack-url]: https://slack.manticoresearch.com/
 [slack-badge]:  https://img.shields.io/badge/Slack-join%20chat-green.svg

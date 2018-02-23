@@ -1089,3 +1089,41 @@ TEST ( functions, DISABLED_geodist )
 	}
 	printf ( "\n" );
 }
+
+// parsing size - number with possible suffixes k, m, g, t.
+TEST (functions, size_parser)
+{
+	// upper case suffixes
+	ASSERT_EQ ( 1024, sphGetSize64 ( "1K" ) );
+	ASSERT_EQ ( 1024 * 1024, sphGetSize64 ( "1M" ) );
+	ASSERT_EQ ( 1024 * 1024 * 1024, sphGetSize64 ( "1G" ) );
+	ASSERT_EQ ( 1024ULL * 1024 * 1024 * 1024, sphGetSize64 ( "1T" ) );
+
+	// lower case suffixes;
+	// Untouched sError on success;
+	char * sError = nullptr;
+	ASSERT_EQ ( 1, sphGetSize64 ( "1", &sError ) );
+	ASSERT_EQ ( sError, nullptr );
+	ASSERT_EQ ( 1024, sphGetSize64 ( "1k", &sError ) );
+	ASSERT_EQ ( sError, nullptr );
+	ASSERT_EQ ( 1024 * 1024, sphGetSize64 ( "1m", &sError ) );
+	ASSERT_EQ ( sError, nullptr );
+	ASSERT_EQ ( 1024 * 1024 * 1024, sphGetSize64 ( "1g", &sError ) );
+	ASSERT_EQ ( sError, nullptr );
+	ASSERT_EQ ( 1024ULL * 1024 * 1024 * 1024, sphGetSize64 ( "1t", &sError ) );
+	ASSERT_EQ ( sError, nullptr );
+
+	// empty and null input strings
+	ASSERT_EQ ( 11, sphGetSize64 ( "", &sError, 11 ) );
+	ASSERT_EQ ( sError, nullptr );
+	ASSERT_EQ ( 12, sphGetSize64 ( nullptr, &sError, 12 ) );
+	ASSERT_EQ ( sError, nullptr );
+
+	// error handle for non-numeric
+	ASSERT_EQ ( -1, sphGetSize64 ( "abc", &sError ) );
+	ASSERT_STREQ (sError,"abc");
+
+	// error handle for numeric, but unknown suffix (=non-numeric)
+	ASSERT_EQ ( -1, sphGetSize64 ( "10z", &sError ) );
+	ASSERT_STREQ ( sError, "z" );
+}

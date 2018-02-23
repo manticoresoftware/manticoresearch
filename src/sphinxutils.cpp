@@ -349,6 +349,39 @@ bool sphWildcardMatch ( const char * sString, const char * sPattern, const int *
 }
 
 //////////////////////////////////////////////////////////////////////////
+// cases are covered by (functions, size_parser) gtest_functions.cpp
+int64_t sphGetSize64 ( const char * sValue, char ** ppErr, int64_t iDefault )
+{
+	if ( !sValue )
+		return iDefault;
+
+	if ( !strlen(sValue) )
+		return iDefault;
+
+	char * sEnd;
+	int64_t iRes = strtoll ( sValue, &sEnd, 10 );
+
+	switch ( *sEnd )
+	{
+	case 't': case 'T':
+		iRes *= 1024;
+	case 'g': case 'G':
+		iRes *= 1024;
+	case 'm': case 'M':
+		iRes *= 1024;
+	case 'k': case 'K':
+		iRes *= 1024;
+		++sEnd;
+	case '\0':
+		break;
+	default:
+		// an error happened; write address to ppErr
+		if ( ppErr )
+			*ppErr = sEnd;
+		iRes = iDefault;
+	}
+	return iRes;
+}
 
 int64_t CSphConfigSection::GetSize64 ( const char * sKey, int64_t iDefault ) const
 {
@@ -356,39 +389,14 @@ int64_t CSphConfigSection::GetSize64 ( const char * sKey, int64_t iDefault ) con
 	if ( !pEntry )
 		return iDefault;
 
-	char sMemLimit[256];
-	strncpy ( sMemLimit, pEntry->cstr(), sizeof(sMemLimit) );
-	sMemLimit [ sizeof(sMemLimit)-1 ] = '\0';
+	char * sErr = nullptr;
+	auto iRes = sphGetSize64 ( pEntry->cstr(), &sErr, iDefault );
 
-	size_t iLen = strlen ( sMemLimit );
-	if ( !iLen )
-		return iDefault;
-
-	iLen--;
-	int iScale = 1;
-	if ( toupper ( sMemLimit[iLen] )=='K' )
-	{
-		iScale = 1024;
-		sMemLimit[iLen] = '\0';
-
-	} else if ( toupper ( sMemLimit[iLen] )=='M' )
-	{
-		iScale = 1048576;
-		sMemLimit[iLen] = '\0';
-	}
-
-	char * sErr;
-	int64_t iRes = strtoll ( sMemLimit, &sErr, 10 );
-
-	if ( !*sErr )
-	{
-		iRes *= iScale;
-	} else
+	if ( sErr && *sErr )
 	{
 		sphWarning ( "'%s = %s' parse error '%s'", sKey, pEntry->cstr(), sErr );
 		iRes = iDefault;
 	}
-
 	return iRes;
 }
 

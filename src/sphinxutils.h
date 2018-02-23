@@ -52,7 +52,7 @@ inline bool sphIsWild ( T c )
 	return c=='*' || c=='?' || c=='%';
 }
 
-/// my own converter unsigned to sctring. Instanciated for DWORD and uint64_t
+/// my own converter unsigned to string. Instanciated for DWORD and uint64_t
 void sphUItoA ( char ** ppOutput, DWORD uVal, int iBase = 10, int iWidth = 0, int iPrec = 0, char cFill = ' ' );
 
 
@@ -65,6 +65,9 @@ void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn, const char * sB
 /// string wildcard matching (case-sensitive, supports * and ? patterns)
 bool sphWildcardMatch ( const char * sSstring, const char * sPattern, const int * pPattern = NULL );
 
+/// parse size from text (int, or K/M/G/T suffix), or return provided default value.
+/// *ppErr, if provided, will point to parsing error, if any
+int64_t sphGetSize64 ( const char * sValue, char ** ppErr = nullptr, int64_t iDefault=-1 );
 //////////////////////////////////////////////////////////////////////////
 
 /// config section (hash of variant values)

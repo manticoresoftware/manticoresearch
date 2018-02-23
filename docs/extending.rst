@@ -303,11 +303,8 @@ FUNCTION <create_function_syntax>` statement. It lets you
 specify the return type neatly so there was especially little reason to
 ruin backwards compatibility *and* change the syntax.
 
-Dynamic plugins are supported in `workers =
-threads <workers>` and
-`workers =
-thread_pool <workers>`
-mode only. Multiple plugins (and/or UDFs) may reside in a single library
+Dynamic plugins are supported in threads and thread_pool workers. 
+Multiple plugins (and/or UDFs) may reside in a single library
 file. So you might choose to either put all your project-specific
 plugins in a single common uber-library; or you might choose to have a
 separate library for every UDF and plugin; that is up to you.

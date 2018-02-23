@@ -532,7 +532,8 @@ following rows:
 
 then the indexing results would be equivalent to that of adding a new
 text field with a value of ‘red right hand’ to document 1 and ‘mysql
-sphinx’ to document 2.
+sphinx’ to document 2, including the keyword positions inside the field in the order they come from the query.
+If the rows  needs to be in a specific order, that needs to be explicitly defined in the query.
 
 Joined fields are only indexed differently. There are no other
 differences between joined fields and regular text fields.
@@ -542,7 +543,9 @@ the database driver limitations, **ranged queries** can be used. It
 works similar to the ranged queries in the main indexing loop, see :ref:`ranged_queries`.
 The range will be queried for and fetched upfront once, then multiple
 queries with different ``$start`` and ``$end`` substitutions will be run
-to fetch the actual data. When using ``ranged-main-query`` query then omit
+to fetch the actual data. 
+
+When using ``ranged-main-query`` query then omit
 the ``ranged-query`` and it will automatically use the same query
 from :ref:``sql_query_range`` (useful option in complex inheritance setups to
 save having to manually duplicate the same query many times).
@@ -574,7 +577,7 @@ Example:
         tagstext from query; \
         SELECT docid, CONCAT('tag',tagid) FROM tags ORDER BY docid ASC
 
-    sql_joined_field = bigint tag from ranged-query; \
+    sql_joined_field = tag from ranged-query; \
         SELECT id, tag FROM tags WHERE id>=$start AND id<=$end ORDER BY id ASC; \
         SELECT MIN(id), MAX(id) FROM tags
 

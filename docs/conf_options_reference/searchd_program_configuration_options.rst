@@ -269,6 +269,8 @@ process those files. That speeds up snippet extraction when the total
 amount of document data to process is significant (hundreds of
 megabytes).
 
+Up to ``dist_threads`` threads can be created to handle :ref:`CALL PQ <percolate_query_call>` calls.
+
 Example:
 
 

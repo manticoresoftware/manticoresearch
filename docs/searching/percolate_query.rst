@@ -103,7 +103,7 @@ Here are default values for the options:
 -  verbose - 0 (disabled), to provide extended info on matching at :ref:`SHOW META <percolate_query_show_meta>`
 -  query - 0 (disabled), to provide all query fields stored, such as query, tags, filters
 
-
+``CALL PQ`` performance is affected by :ref:`dist_threads`.
 
 .. _percolate_query_list:
 

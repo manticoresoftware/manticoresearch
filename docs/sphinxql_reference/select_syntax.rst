@@ -250,7 +250,7 @@ supports only one filtering condition.
 
 Because of HAVING is implemented as a whole result set
 post-processing, result set for query with HAVING could be less than
-`max_matches`` allows.
+`max_matches` allows.
 
 .. _select_order_by:
    
@@ -346,7 +346,7 @@ Supported options and respectively allowed values are:
 
       The historically default IDF (Inverse Document Frequency) in
       Manticore is equivalent to
-      ``OPTION idf=&#039;normalized,tfidf_normalized&#039;``, and those
+      ``OPTION idf='normalized,tfidf_normalized'``, and those
       normalizations may cause several undesired effects.
 
       First, idf=normalized causes keyword penalization. For instance,
@@ -365,7 +365,7 @@ Supported options and respectively allowed values are:
       [word1 \| nonmatchingword2] would assign different weights to the
       exactly same result set, because the IDFs for both “word1” and
       “nonmatchingword2” would be divided by 2.
-      ``OPTION idf=tfidf_unnormalized`` fixes that. Note that BM25,
+      ``OPTION idf='tfidf_unnormalized'`` fixes that. Note that BM25,
       BM25A, BM25F() ranking factors will be scale accordingly once you
       disable this normalization.
 
@@ -374,7 +374,7 @@ Supported options and respectively allowed values are:
       mutually exclusive; and unspecified flags in such a mutually
       exclusive group take their defaults. That means that
       ``OPTION idf=plain`` is equivalent to a complete
-      ``OPTION idf=&#039;plain,tfidf_normalized&#039;`` specification.
+      ``OPTION idf='plain,tfidf_normalized'`` specification.
 
    -  ``local_df`` - 0 or 1,automatically sum DFs over all the local
       parts of a distributed index, so that the IDF is consistent (and

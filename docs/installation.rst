@@ -165,7 +165,7 @@ Running Manticore Search in a Docker Container
 
 Docker images of Manticore Search are hosted publicly on Docker Hub at https://hub.docker.com/r/manticoresearch/manticore/.
 
-For more information about using Docker, see the `Docker Docs <https://docs.docker.com/>`.
+For more information about using Docker, see the `Docker Docs <https://docs.docker.com/>`__.
 
 The searchd daemon runs in nodetach mode inside the container. Default configuration includes a simple Real-Time index and listen on the default ports ( 9306 for SphinxQL and 9312 for SphinxAPI).
 

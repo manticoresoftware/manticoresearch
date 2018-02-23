@@ -1,4 +1,4 @@
-![manticoresearch](https://manticoresearch.com/wp-content/uploads/2018/02/manticoresearch.png) 
+[![manticoresearch](https://manticoresearch.com/wp-content/uploads/2018/02/manticoresearch.png)](https://manticoresearch.com)
 
 -----------------
 

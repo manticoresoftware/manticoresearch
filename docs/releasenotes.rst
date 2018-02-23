@@ -1,6 +1,31 @@
 Release notes
 =============
 
+Version 2.6.2 GA, 23 February  2018
+-----------------------------------
+
+Improvements
+~~~~~~~~~~~~
+
+* improved :ref:`Percolate Queries <percolate_query>` performance in case of using NOT operator and for batched documents. 
+* :ref:`percolate_query_call` can use multiple threads depending on :ref:`dist_threads`
+* new full-text matching operator NOTNEAR/N
+* LIMIT for SELECT on percolate indexes
+* :ref:`expand_keywords` can accept 'start','exact' (where 'star,exact' has same effect as '1')
+* ranged-main-query for :ref:`joined fields <sql_joined_field>` which  uses the ranged query defined by  sql_query_range
+
+Bugfixes
+~~~~~~~~
+
+* `72dcf66 <https://github.com/manticoresoftware/manticoresearch/commit/72dcf669744e9b7d636dfc213d24df85ab301f6b>`__ fixed crash on searching ram segments; deadlock on save disk chunk with double buffer; deadlock on save disk chunk during optimize
+* `3613714 <https://github.com/manticoresoftware/manticoresearch/commit/36137149a1c3c0893bdda5a28fc7e8244bf2d4ae>`__ fixed indexer crash on xml embeded schema with empty attribute name
+* `48d7e80 <https://github.com/manticoresoftware/manticoresearch/commit/48d7e8001d2a66466ca64577f27ddc5421a67251>`__ fixed erroneous unlinking of not-owned pid-file
+* `a5563a4 <https://github.com/manticoresoftware/manticoresearch/commit/a5563a465ddc59ef71e65f17b68bc33f9700e838>`__ fixed orphaned fifos sometimes left in temp folder
+* `2376e8f <https://github.com/manticoresoftware/manticoresearch/commit/2376e8fc4508944b96959bd10686c6d51f5145e8>`__ fixed empty FACET result set with wrong NULL row
+* `4842b67 <https://github.com/manticoresoftware/manticoresearch/commit/4842b67acdd5da75672db6c08ac563b48577ddd7>`__ fixed broken index lock when running daemon as windows service
+* `be35fee <https://github.com/manticoresoftware/manticoresearch/commit/be35feef54ded59125750916cd211e56108eddae>`__ fixed wrong iconv libs on mac os
+* `83744a9 <https://github.com/manticoresoftware/manticoresearch/commit/83744a977d7837d1d87cd506b88b0e7eb199efe6>`__ fixed wrong count(*)
+
 Version 2.6.1 GA, 26 January  2018
 ----------------------------------
 

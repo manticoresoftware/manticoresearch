@@ -9,7 +9,7 @@ in one go (more formally, one network request).
 Two API methods that implement multi-query mechanism are
 :ref:`AddQuery() <add_query>` and
 :ref:`RunQueries() <run_queries>`. You can also run multiple
-queries with SphinxQL, see `the section called :ref:`multi-statement_queries`. (In fact, regular
+queries with SphinxQL, see  :ref:`multi-statement_queries`. (In fact, regular
 :ref:`Query() <add_query>` call is internally implemented as
 a single AddQuery() call immediately followed by RunQueries() call.)
 AddQuery() captures the current state of all the query settings set by

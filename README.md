@@ -89,7 +89,7 @@ For more details check [compiling] (https://docs.manticoresearch.com/latest/html
 Refer to  [CONTRIBUTING.md](https://github.com/manticoresoftware/manticore/blob/master/CONTRIBUTING.md)
 
 ## License
-Manticore Search is release under GPLv2, for more information check [COPYING](https://github.com/manticoresoftware/manticore/blob/master/COPYING)
+Manticore Search is released under GPLv2, for more information check [COPYING](https://github.com/manticoresoftware/manticore/blob/master/COPYING)
 
 [![Analytics](https://ga-beacon.appspot.com/UA-114439919-1/manticoresoftware/manticore/README.md?pixel&useReferer)](https://github.com/manticoresoftware/manticore)
 

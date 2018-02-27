@@ -132,7 +132,7 @@ The options available to ``searchd`` on all builds are:
 -  ``--cpustats`` is used to provide actual CPU time report (in addition
    to wall time) in both query log file (for every given query) and
    status report (aggregated). It depends on clock_gettime() system
-   call and might therefore be unavailable on certain systems. You might
+   call or fall back to less precise call on certain systems. You might
    start ``searchd`` thus:
 
    .. code-block:: bash

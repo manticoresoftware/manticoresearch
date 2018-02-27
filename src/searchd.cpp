@@ -6979,7 +6979,7 @@ int64_t sphCpuTimer ()
 
 	return tp.tv_sec*1000000 + tp.tv_nsec/1000;
 #else
-	return 0;
+	return sphMicroTimer();
 #endif
 }
 
@@ -20331,9 +20331,7 @@ void ShowHelp ()
 		"--status\t\tget ant print status variables\n"
 		"\t\t\t(PID is taken from pid_file specified in config file)\n"
 		"--iostats\t\tlog per-query io stats\n"
-#ifdef HAVE_CLOCK_GETTIME
 		"--cpustats\t\tlog per-query cpu stats\n"
-#endif
 #if USE_WINDOWS
 		"--install\t\tinstall as Windows service\n"
 		"--delete\t\tdelete Windows service\n"
@@ -23650,9 +23648,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		OPT1 ( "--status" )			bOptStatus = true;
 		OPT1 ( "--pidfile" )		bOptPIDFile = true;
 		OPT1 ( "--iostats" )		g_bIOStats = true;
-#if !USE_WINDOWS
 		OPT1 ( "--cpustats" )		g_bCpuStats = true;
-#endif
 #if USE_WINDOWS
 		OPT1 ( "--install" )		{ if ( !g_bService ) { ServiceInstall ( argc, argv ); return 0; } }
 		OPT1 ( "--delete" )			{ if ( !g_bService ) { ServiceDelete (); return 0; } }

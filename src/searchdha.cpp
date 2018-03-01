@@ -246,8 +246,8 @@ void ClosePersistentSockets()
 /////////////////////////////////////////////////////////////////////////////
 bool ValidateAndAddDashboard ( AgentDesc_c * pAgent, const WarnInfo_t &tInfo );
 
-bool MultiAgentDesc_t::Initialize ( const AgentOptions_t &tOpt,
-	const CSphVector<AgentDesc_c*> &dHosts, WarnInfo_t &tWarning ) NO_THREAD_SAFETY_ANALYSIS
+bool MultiAgentDesc_t::Init ( const AgentOptions_t &tOpt, const CSphVector<AgentDesc_c *> &dHosts
+							  , const WarnInfo_t &tWarn ) NO_THREAD_SAFETY_ANALYSIS
 {
 	// initialize options
 	m_eStrategy = tOpt.m_eStrategy;
@@ -258,15 +258,15 @@ bool MultiAgentDesc_t::Initialize ( const AgentOptions_t &tOpt,
 	Reset ( iLen );
 	m_dWeights.Reset ( iLen );
 	if (!iLen)
-		return tWarning.ErrSkip ("Unable to initialize empty agent");
+		return tWarn.ErrSkip ("Unable to initialize empty agent");
 
-	auto uFrac = WORD ( 0xFFFF / iLen );
+	auto fFrac = 100.0f / iLen;
 	ARRAY_FOREACH ( i, dHosts )
 	{
 		dHosts[i]->CloneTo ( m_pData[i] );
-		if ( !ValidateAndAddDashboard ( &m_pData[i], tWarning ) )
+		if ( !ValidateAndAddDashboard ( &m_pData[i], tWarn ) )
 			return false;
-		m_dWeights[i] = uFrac;
+		m_dWeights[i] = fFrac;
 	}
 
 	if ( !IsHA () )
@@ -305,28 +305,29 @@ void MultiAgentDesc_t::ChooseWeightedRandAgent ( int * pBestAgent, CSphVector<in
 {
 	assert ( pBestAgent );
 	CSphScopedRLock tLock ( m_dWeightLock );
-	DWORD uBound = m_dWeights[*pBestAgent];
-	DWORD uLimit = uBound;
+	auto fBound = m_dWeights[*pBestAgent];
+	auto fLimit = fBound;
 	for ( auto j : dCandidates )
-		uLimit += m_dWeights[j];
-	DWORD uChance = sphRand() % uLimit;
+		fLimit += m_dWeights[j];
+	auto fChance = sphRand () * fLimit / UINT_MAX;
 
-	if ( uChance<=uBound )
+	if ( fChance<=fBound )
 		return;
 
 	for ( auto j : dCandidates )
 	{
-		uBound += m_dWeights[j];
+		fBound += m_dWeights[j];
 		*pBestAgent = j;
-		if ( uChance<=uBound )
+		if ( fChance<=fBound )
 			break;
 	}
 }
 
-static void LogAgentWeights ( const WORD * pOldWeights, const WORD * pCurWeights, const int64_t * pTimers, const CSphFixedVector<AgentDesc_c> & dAgents )
+static void LogAgentWeights ( const float * pOldWeights, const float * pCurWeights, const int64_t * pTimers, const CSphFixedVector<AgentDesc_c> & dAgents )
 {
 	ARRAY_FOREACH ( i, dAgents )
-		sphLogDebug ( "client=%s, mirror=%d, weight=%d, %d, timer=" INT64_FMT, dAgents[i].GetMyUrl ().cstr (), i, pCurWeights[i], pOldWeights[i], pTimers[i] );
+		sphLogDebug ( "client=%s, mirror=%d, weight=%0.2f%%, %0.2f%%, timer=" INT64_FMT
+					  , dAgents[i].GetMyUrl ().cstr (), i, pCurWeights[i], pOldWeights[i], pTimers[i] );
 }
 
 const AgentDesc_c & MultiAgentDesc_t::StDiscardDead ()
@@ -419,12 +420,12 @@ void MultiAgentDesc_t::CheckRecalculateWeights ( const CSphFixedVector<int64_t> 
 	if ( !dTimers.GetLength () || !HostDashboard_t::IsHalfPeriodChanged ( &m_uTimestamp ) )
 		return;
 
-	CSphFixedVector<WORD> dWeights {0};
+	CSphFixedVector<float> dWeights {0};
 
 	// since we'll update values anyway, acquire w-lock.
 	CSphScopedWLock tWguard ( m_dWeightLock );
 	dWeights.CopyFrom ( m_dWeights );
-	RebalanceWeights ( dTimers, dWeights.Begin () );
+	RebalanceWeights ( dTimers, dWeights );
 	if ( g_eLogLevel>=SPH_LOG_DEBUG )
 		LogAgentWeights ( m_dWeights.Begin(), dWeights.Begin (), dTimers.Begin (), *this );
 	m_dWeights.SwapData (dWeights);
@@ -1022,7 +1023,7 @@ bool ConfigureMultiAgent ( MultiAgentDesc_t &tAgent, const char * szAgent, const
 	if ( !ConfigureMirrorSet ( tMirrors, &tOptions, dWI ) )
 		return false;
 
-	return tAgent.Initialize ( tOptions, tMirrors, dWI);
+	return tAgent.Init ( tOptions, tMirrors, dWI );
 }
 
 void AgentConn_t::Fail ( AgentStats_e eStat, const char * sMessage, ... )

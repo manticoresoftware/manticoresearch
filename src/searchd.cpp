@@ -11562,7 +11562,7 @@ void BuildDistIndexStatus ( VectorLike & dStatus, const CSphString& sIndex )
 				dStatus.Add().SetSprintf ( "%s:%s", dDesc.GetMyUrl().cstr(), dDesc.m_sIndexes.cstr() );
 
 			if ( tAgents.IsHA() && dStatus.MatchAddVa ( "%s_probability_weight", sKey.cstr() ) )
-				dStatus.Add().SetSprintf ( "%d", (DWORD)( dWeights[j]) );
+				dStatus.Add ().SetSprintf ( "%0.2f%%", dWeights[j] );
 
 			if ( dStatus.MatchAddVa ( "%s_is_blackhole", sKey.cstr() ) )
 				dStatus.Add ( dDesc.m_bBlackhole ? "1" : "0" );
@@ -23794,7 +23794,7 @@ void ConfigureAndPreload ( const CSphConfig & hConf, const CSphVector<const char
 				continue;
 		}
 
-		ESphAddIndex eAdd = AddIndex ( sIndexName, hIndex, false );
+		auto eAdd = AddIndex ( sIndexName, hIndex, false );
 		if ( eAdd==ADD_LOCAL || eAdd==ADD_RT )
 		{
 			ServedIndex_c & tIndex = *g_pLocalIndexes->GetRlockedEntry ( sIndexName );
@@ -23838,7 +23838,7 @@ void ConfigureAndPreload ( const CSphConfig & hConf, const CSphVector<const char
 		}
 
 		if ( eAdd!=ADD_ERROR )
-			iValidIndexes++;
+			++iValidIndexes;
 	}
 
 	InitPersistentPool();

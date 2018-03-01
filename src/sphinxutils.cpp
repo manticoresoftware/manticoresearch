@@ -2651,54 +2651,57 @@ bool CSphDynamicLibrary::LoadSymbols ( const char **, void ***, int ) { return f
 
 #endif
 
-
-void RebalanceWeights ( const CSphFixedVector<int64_t> & dTimers, WORD * pWeights )
+// calculate new weights as inverse freqs of timers, giving also small probability to bad timers.
+void RebalanceWeights ( const CSphFixedVector<int64_t> & dTimers, CSphFixedVector<float>& dWeights )
 {
+	// in case of mirror without response still set small probability to it
+	const float fEmptiesPercent = 10.0f;
+
 	assert ( dTimers.GetLength () );
 	float fSum = 0.0;
-	int iCounters = 0;
+	int iAlive = 0;
 
 	// weights are proportional to frequencies (inverse to timers)
-	CSphFixedVector<float> dFrequencies ( dTimers.GetLength() );
+	CSphFixedVector<float> dFrequencies { dTimers.GetLength () };
+
 	ARRAY_FOREACH ( i, dTimers )
 	if ( dTimers[i]>0 )
 	{
-		dFrequencies[i] = (float)1000/dTimers[i];
+		dFrequencies[i] = ( 1.0f / dTimers[i] );
 		fSum += dFrequencies[i];
-		++iCounters;
+		++iAlive;
 	}
 
 	// no statistics, all timers bad, keep previous weights
-	if ( fSum<=0 )
+	if ( !iAlive )
 		return;
 
-	// in case of mirror without response still set small probability to it
-	const float fEmptiesPercent = 0.1f;
-	int iEmpties = dTimers.GetLength() - iCounters;
+	// if one or more bad (empty) timers provided, give fEmptiesPercent frac to all of them,
+	// and also assume fEmptiesPercent/num_of_deads fraq per each of them.
+	int iEmpties = dTimers.GetLength () - iAlive;
+	float fEmptyPercent = 0.0f;
+	if ( iEmpties )
+	{
+		fSum /= (1.0f-fEmptiesPercent*0.01);
+		fEmptyPercent = fEmptiesPercent/iEmpties;
+	}
 
 	// balance weights
-	int64_t iCheck = 0;
+	float fCheck = 0;
 	ARRAY_FOREACH ( i, dFrequencies )
 	{
 		// mirror weight is inverse of timer \ query time
-		float fWeight = dFrequencies[i] / fSum;
-
-		// subtract coef-empty percent to get sum eq to 1.0
-		if ( iEmpties )
-			fWeight = fWeight - fWeight * fEmptiesPercent;
+		float fWeight = 100.0f * dFrequencies[i] / fSum;
 
 		// mirror without response
-		if ( !dTimers[i] )
-			fWeight = fEmptiesPercent / iEmpties;
-		else if ( iCounters==1 ) // case when only one mirror has valid counter
-			fWeight = 1.0f - fEmptiesPercent;
+		if ( dTimers[i]<=0 )
+			fWeight = fEmptyPercent;
 
-		int iWeight = int ( fWeight * 65535.0f );
-		assert ( iWeight>=0 && iWeight<=65535 );
-		pWeights[i] = (WORD)iWeight;
-		iCheck += pWeights[i];
+		assert ( fWeight>=0.0 && fWeight<=100.0 );
+		dWeights[i] = fWeight;
+		fCheck += fWeight;
 	}
-	assert ( iCheck<=65535 );
+	assert ( fCheck<=100.000001 && fCheck>=99.99999);
 }
 
 

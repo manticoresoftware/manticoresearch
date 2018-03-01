@@ -1793,7 +1793,7 @@ bool			AddFieldLens ( CSphSchema & tSchema, bool bDynamic, CSphString & sError )
 /// Get current thread local index - internal do not use
 ISphRtIndex * sphGetCurrentIndexRT();
 
-void			RebalanceWeights ( const CSphFixedVector<int64_t> & dTimers, WORD * pWeights );
+void			RebalanceWeights ( const CSphFixedVector<int64_t> & dTimers, CSphFixedVector<float>& pWeights );
 
 // all indexes should produce same terms for same query
 struct SphWordStatChecker_t

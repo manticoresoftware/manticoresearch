@@ -316,7 +316,6 @@ struct WarnInfo_t
 	const char * m_szIndexName;
 	const char * m_szAgent;
 
-
 	void Warn ( const char * sFmt, ... ) const
 	{
 		va_list ap;
@@ -356,7 +355,7 @@ private:
 	using BASE::m_pData;
 	CSphAtomic				m_iRRCounter;	/// round-robin counter
 	mutable CSphRwlock		m_dWeightLock;	/// manages access to m_pWeights
-	CSphFixedVector<WORD>	m_dWeights		/// the weights of the hosts
+	CSphFixedVector<float>	m_dWeights		/// the weights of the hosts
 			GUARDED_BY (m_dWeightLock) { 0 };
 	DWORD					m_uTimestamp { HostDashboard_t::GetCurSeconds() };	/// timestamp of last weight's actualization
 	HAStrategies_e			m_eStrategy { HA_DEFAULT };
@@ -374,7 +373,7 @@ public:
 		m_dWeightLock.Done();
 	}
 
-	bool Initialize ( const AgentOptions_t &tOpt, const CSphVector<AgentDesc_c*> &dHosts, WarnInfo_t &tWarning );
+	bool Init ( const AgentOptions_t &tOpt, const CSphVector<AgentDesc_c *> &dHosts, const WarnInfo_t &tWarn );
 
 	const AgentDesc_c & ChooseAgent () REQUIRES ( !m_dWeightLock );
 
@@ -388,10 +387,10 @@ public:
 		return m_iMultiRetryCount;
 	}
 
-	CSphFixedVector<WORD> GetWeights () const REQUIRES (!m_dWeightLock)
+	CSphFixedVector<float> GetWeights () const REQUIRES (!m_dWeightLock)
 	{
 		CSphScopedRLock tRguard ( m_dWeightLock );
-		CSphFixedVector<WORD> dResult {0};
+		CSphFixedVector<float> dResult {0};
 		dResult.CopyFrom ( m_dWeights );
 		return dResult;
 	}

@@ -790,78 +790,60 @@ TEST ( functions, Writer )
 }
 
 //////////////////////////////////////////////////////////////////////////
+struct tstcase { float wold; DWORD utimer; float wnew; };
 
-static void TestRebalance_fn ( DWORD * pData, int iLen, int iStride, int iWeights )
+static void TestRebalance_fn ( tstcase * pData, int iLen, int iStride )
 {
 	ASSERT_FALSE ( iLen % iStride );
 	iLen /= iStride;
-	CSphFixedVector<int64_t> dTimers ( iWeights );
-	CSphFixedVector<WORD> dWeights ( iWeights );
-	for ( int i = 0; i<iLen; i++ )
+	CSphFixedVector<int64_t> dTimers ( iStride );
+	CSphFixedVector<float> dWeights ( iStride );
+	for ( int i = 0; i<iLen; ++i )
 	{
-		for ( int j = 0; j<iWeights; j++ )
+		for ( int j = 0; j<iStride; ++j )
 		{
-			dWeights[j] = ( WORD ) pData[i * iStride + j];
-			dTimers[j] = pData[i * iStride + iWeights + j];
+			dWeights[j] = pData[i * iStride + j].wold;
+			dTimers[j] = pData[i * iStride + j].utimer;
 		}
 
-		RebalanceWeights ( dTimers, dWeights.Begin () );
+		RebalanceWeights ( dTimers, dWeights );
 
-		for ( int j = 0; j<iWeights; j++ )
+		for ( int j = 0; j<iStride; ++j )
 		{
-			//printf ( "%s%d%s", j>0 ? ", " : "", dWeights[j], j+1==iWeights ? "\n" : "" );
-			ASSERT_EQ ( dWeights[j], pData[i * iStride + iWeights * 2 + j] );
+			ASSERT_NEAR ( dWeights[j], pData[i * iStride + j].wnew, 0.01);
 		}
 	}
 }
 
 TEST ( functions, Rebalance )
 {
-	/* reference captured on live box, ie how it was
-	//					old weights,	timers,				new weights
-	DWORD dData[] = {	32395, 33139,	228828, 186751,		29082, 36452,
-						29082, 36452,	218537, 207608,		28255, 37279,
-						28255, 37279,	194305, 214800,		29877, 35657,
-						29877, 35657,	190062, 207614,		31318, 34216,
-						31318, 34216,	201162, 221708,		32910, 32624,
-						32910, 32624,	193441, 247379,		36917, 28617,
-						36917, 28617,	194910, 223202,		39080, 26454,
-						39080, 26454,	228274, 361018,		45892, 19642,
-						45892, 19642,	223009, 275050,		48651, 16883,
-						48651, 16883,	205340, 279008,		52202, 13332,
-						52202, 13332,	213189, 201466,		51592, 13942,
-						51592, 13942,	210235, 197584,		50899, 14635,
-						48921, 16613,	207860, 318349,		53641, 11893,
-						53641, 11893,	204124, 487120,		59963, 5571,
-						59963, 5571,	202851, 412733,		62140, 3394,
-	}; */
-	//					old weights,	timers,				new weights
-	DWORD dData1[] = {	32395, 33139,	228828, 186751,		29449, 36085,
-						29082, 36452,	218537, 207608,		31927, 33607,
-						28255, 37279,	194305, 214800,		34409, 31125,
-						29877, 35657,	190062, 207614,		34213, 31321,
-						31318, 34216,	201162, 221708,		34359, 31175,
-						32910, 32624,	193441, 247379,		36776, 28758,
-						36917, 28617,	194910, 223202,		34984, 30550,
-						39080, 26454,	228274, 361018,		40148, 25386,
-						45892, 19642,	223009, 275050,		36191, 29343,
-						48651, 16883,	205340, 279008,		37751, 27783,
-						52202, 13332,	213189, 201466,		31841, 33693,
-						51592, 13942,	210235, 197584,		31751, 33783,
-						48921, 16613,	207860, 318349,		39647, 25887,
-						53641, 11893,	204124, 487120,		46182, 19352,
-						59963, 5571,	202851, 412733,		43939, 21595,
-	};
-	TestRebalance_fn ( dData1, sizeof(dData1) / sizeof(dData1[0]), 6, 2 );
+	//				  old weights, timers,	new weights
+	tstcase dData1[] = { {50.5669, 186751,	55.0625}, {49.4316, 228828, 44.9375},
+						 {55.6222, 207608,	51.2823}, {44.3763, 218537, 48.7177},
+						 {56.8841, 214800,	47.4951}, {43.1144, 194305, 52.5049},
+						 {54.4091, 207614,	47.7932}, {45.5894, 190062, 52.2068},
+						 {52.2103, 221708,	47.5706}, {47.7882, 201162, 52.4294},
+						 {49.7810, 247379,	43.8821}, {50.2174, 193441, 56.1179},
+						 {43.6667, 223202,	46.6167}, {56.3317, 194910, 53.3833},
+						 {40.3662, 361018,	38.7370}, {59.6323, 228274, 61.2630},
+						 {29.9718, 275050,	44.7756}, {70.0267, 223009, 55.2244},
+						 {25.7618, 279008,	42.3951}, {74.2367, 205340, 57.6049},
+						 {20.3433, 201466,	51.4136}, {79.6551, 213189, 48.5864},
+						 {21.2741, 197584,	51.5511}, {78.7243, 210235, 48.4489},
+						 {25.3498, 318349,	39.5014}, {74.6487, 207860, 60.4986},
+						 {18.1476, 487120,	29.5299}, {81.8509, 204124, 70.4701},
+						 {08.5008, 412733,	32.9526}, {91.4977, 202851, 67.0474} };
+	TestRebalance_fn ( dData1, sizeof(dData1) / sizeof( tstcase), 2 );
 
-	DWORD dData2[] ={ 0, 1,				0, 18469,			6553, 58981 };
-	TestRebalance_fn ( dData2, sizeof(dData2) / sizeof(dData2[0]), 6, 2 );
+	tstcase dData2[] = { { 0.000000, 0, 10.00000 }, { 00.0015, 18469, 90.0000 } };
+	TestRebalance_fn ( dData2, sizeof(dData2) / sizeof( tstcase), 2 );
 
-	DWORD dData3[] ={ 0, 1, 2, 3,		0, 0, 0, 18469,		2184, 2184, 2184, 58981 };
-	TestRebalance_fn ( dData3, sizeof ( dData3 ) / sizeof ( dData3[0] ), 12, 4 );
+	tstcase dData3[] = { { 0.000000, 0, 3.3333 }, { 0.0015, 0, 3.3333 }
+						 , { 0.0031, 0, 3.3333 }, { 0.0046, 18469, 90.0000 } };
+	TestRebalance_fn ( dData3, sizeof ( dData3 ) / sizeof ( tstcase ), 4 );
 
-	DWORD dData4[] ={ 0, 1, 2,			7100, 0, 18469,		42603, 6553, 16377 };
-	TestRebalance_fn ( dData4, sizeof ( dData4 ) / sizeof ( dData4[0] ), 9, 3 );
+	tstcase dData4[] = { { 0.000000, 7100, 65.0088 }, { 0.0015, 0, 10.0 }, { .0031, 18469, 24.9912 } };
+	TestRebalance_fn ( dData4, sizeof ( dData4 ) / sizeof ( tstcase ), 3 );
 }
 
 //////////////////////////////////////////////////////////////////////////

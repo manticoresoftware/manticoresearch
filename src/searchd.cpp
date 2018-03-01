@@ -22888,7 +22888,7 @@ NetEvent_e NetReceiveDataHttp_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActi
 		m_tState->m_iPos += iRes;
 
 		// socket would block - going back to polling
-		if ( iRes==0 )
+		if ( iRes==0 && m_tState->m_iLeft )
 			return NE_KEEP;
 
 		// keep fetching data till the end of a header
@@ -22911,6 +22911,10 @@ NetEvent_e NetReceiveDataHttp_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActi
 			m_tState->m_dBuf[m_tState->m_iPos] = '\0';
 			m_tState->m_dBuf.Resize ( iReqSize );
 		}
+
+		// keep reading till end of buffer or data at socket
+		if ( iRes>0 )
+			continue;
 
 		pLoop->RemoveIterEvent();
 

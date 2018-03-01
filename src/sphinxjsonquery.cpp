@@ -1970,6 +1970,7 @@ cJSON * sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, SphDocI
 	cJSON_AddNumberToObject ( pRoot, "_id", tDocId );
 	cJSON_AddBoolToObject ( pRoot, "created", !bReplace );
 	cJSON_AddStringToObject ( pRoot, "result", bReplace ? "updated" : "created" );
+	cJSON_AddNumberToObject ( pRoot, "status", bReplace ? 200 : 201 );
 
 	return pRoot;
 }

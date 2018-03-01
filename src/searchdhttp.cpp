@@ -1137,7 +1137,7 @@ public:
 		char * p = const_cast<char*>(m_sQuery.cstr());
 
 		bool bResult = false;
-		while ( *p )
+		while ( p && *p )
 		{
 			while ( sphIsSpace(*p) )
 				p++;

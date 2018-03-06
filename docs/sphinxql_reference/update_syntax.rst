@@ -11,8 +11,8 @@ UPDATE syntax
 Multiple attributes and values can be specified in a single statement.
 Both RT and disk indexes are supported.
 
-All attributes types (int, bigint, float, MVA), except for strings and
-JSON attributes, can be dynamically updated.
+All attributes types (int, bigint, float, MVA, JSON(see below)), except for strings 
+attributes, can be dynamically updated.
 
 ``where_condition`` has the same syntax as in the SELECT statement (see
 :ref:`select_syntax` for

@@ -4652,6 +4652,12 @@ static void FormatOption ( const CSphQuery & tQuery, StringBuilder_c & tBuf )
 		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
 		tBuf.Appendf ( "strict=1" );
 	}
+
+	if ( tQuery.m_eExpandKeywords!=QUERY_OPT_DEFAULT )
+	{
+		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
+		tBuf.Appendf ( "expand_keywords=%d", ( tQuery.m_eExpandKeywords==QUERY_OPT_ENABLED ? 1 : 0 ) );
+	}
 }
 
 static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const CSphVector<int64_t> & dAgentTimes, int iCid )

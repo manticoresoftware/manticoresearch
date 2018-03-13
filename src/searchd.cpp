@@ -61,7 +61,8 @@ extern "C"
 // 1 - SIGKILL will shut down the whole daemon; 0 - watchdog will reincarnate the daemon
 #define WATCHDOG_SIGKILL		1
 
-#define SPH_MYSQL_FLAG_MORE_RESULTS 8 // mysql.h: SERVER_MORE_RESULTS_EXISTS
+#define SPH_MYSQL_FLAG_STATUS_AUTOCOMMIT 2	// mysql.h: SERVER_STATUS_AUTOCOMMIT
+#define SPH_MYSQL_FLAG_MORE_RESULTS 8		// mysql.h: SERVER_MORE_RESULTS_EXISTS
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -12248,12 +12249,14 @@ void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, const char 
 	tOut.SendBytes ( sError, iErrorLen );
 }
 
-void SendMysqlEofPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iWarns, bool bMoreResults=false )
+void SendMysqlEofPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iWarns, bool bMoreResults, bool bAutoCommit )
 {
 	if ( iWarns<0 ) iWarns = 0;
 	if ( iWarns>65535 ) iWarns = 65535;
 	if ( bMoreResults )
 		iWarns |= ( SPH_MYSQL_FLAG_MORE_RESULTS<<16 );
+	if ( bAutoCommit )
+		iWarns |= ( SPH_MYSQL_FLAG_STATUS_AUTOCOMMIT<<16 );
 
 	tOut.SendLSBDword ( (uPacketID<<24) + 5 );
 	tOut.SendByte ( 0xfe );
@@ -12261,7 +12264,8 @@ void SendMysqlEofPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iWarns, b
 }
 
 
-void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iAffectedRows=0, int iWarns=0, const char * sMessage=nullptr, bool bMoreResults=false )
+// was defaults ( ISphOutputBuffer & tOut, BYTE uPacketID, int iAffectedRows=0, int iWarns=0, const char * sMessage=nullptr, bool bMoreResults=false, bool bAutoCommit )
+void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iAffectedRows, int iWarns, const char * sMessage, bool bMoreResults, bool bAutoCommit )
 {
 	DWORD iInsert_id = 0;
 	char sVarLen[20] = {0}; // max 18 for packed number, +1 more just for fun
@@ -12279,12 +12283,22 @@ void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, int iAffectedR
 	tOut.SendBytes ( sVarLen, iLen );	// packed affected rows & insert_id
 	if ( iWarns<0 ) iWarns = 0;
 	if ( iWarns>65535 ) iWarns = 65535;
-	DWORD uWarnStatus = iWarns<<16;
-	if ( bMoreResults ) // order of WORDs is opposite to EOF packet
-		uWarnStatus |= ( SPH_MYSQL_FLAG_MORE_RESULTS );
+	DWORD uWarnStatus = ( iWarns<<16 );
+	// order of WORDs is opposite to EOF packet above
+	if ( bMoreResults )
+		uWarnStatus |= SPH_MYSQL_FLAG_MORE_RESULTS;
+	if ( bAutoCommit )
+		uWarnStatus |= SPH_MYSQL_FLAG_STATUS_AUTOCOMMIT;
+
 	tOut.SendLSBDword ( uWarnStatus );		// 0 status, N warnings
 	if ( sMessage )
 		tOut.SendBytes ( sMessage, iMsgLen );
+}
+
+
+void SendMysqlOkPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, bool bAutoCommit )
+{
+	SendMysqlOkPacket ( tOut, uPacketID, 0, 0, nullptr, false, bAutoCommit );
 }
 
 
@@ -12307,7 +12321,7 @@ class SqlRowBuffer_c : public ISphNoncopyable, public IDataTupleter
 {
 public:
 
-	SqlRowBuffer_c ( BYTE * pPacketID, ISphOutputBuffer * pOut, int iCID )
+	SqlRowBuffer_c ( BYTE * pPacketID, ISphOutputBuffer * pOut, int iCID, bool bAutoCommit )
 		: m_pBuf ( NULL )
 		, m_iLen ( 0 )
 		, m_iLimit ( sizeof ( m_dBuf ) )
@@ -12315,6 +12329,7 @@ public:
 		, m_tOut ( *pOut )
 		, m_iSize ( 0 )
 		, m_iCID ( iCID )
+		, m_bAutoCommit ( bAutoCommit )
 	{}
 
 	~SqlRowBuffer_c ()
@@ -12419,7 +12434,7 @@ public:
 	// wrappers for popular packets
 	inline void Eof ( bool bMoreResults=false, int iWarns=0 )
 	{
-		SendMysqlEofPacket ( m_tOut, m_uPacketID++, iWarns, bMoreResults );
+		SendMysqlEofPacket ( m_tOut, m_uPacketID++, iWarns, bMoreResults, m_bAutoCommit );
 	}
 
 	inline void Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr = MYSQL_ERR_PARSE_ERROR )
@@ -12441,7 +12456,7 @@ public:
 
 	inline void Ok ( int iAffectedRows=0, int iWarns=0, const char * sMessage=NULL, bool bMoreResults=false )
 	{
-		SendMysqlOkPacket ( m_tOut, m_uPacketID, iAffectedRows, iWarns, sMessage, bMoreResults );
+		SendMysqlOkPacket ( m_tOut, m_uPacketID, iAffectedRows, iWarns, sMessage, bMoreResults, m_bAutoCommit );
 		if ( bMoreResults )
 			m_uPacketID++;
 	}
@@ -12512,6 +12527,7 @@ private:
 	ISphOutputBuffer & m_tOut;
 	size_t				m_iSize;
 	int					m_iCID; // connection ID for error report
+	bool				m_bAutoCommit = false;
 };
 
 class TableLike : public CheckLike
@@ -17574,7 +17590,7 @@ public:
 		pThd->m_sCommand = g_dSqlStmts[eStmt];
 		THD_STATE ( THD_QUERY );
 
-		SqlRowBuffer_c tOut ( &uPacketID, &tOutput, pThd->m_iConnID );
+		SqlRowBuffer_c tOut ( &uPacketID, &tOutput, pThd->m_iConnID, m_tVars.m_bAutoCommit );
 
 		if ( bParsedOK && m_bFederatedUser )
 		{
@@ -18215,7 +18231,7 @@ static void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * p
 			bAuthed = true;
 			if ( IsFederatedUser ( tIn.GetBufferPtr(), tIn.GetLength() ) )
 				tSession.SetFederatedUser();
-			SendMysqlOkPacket ( tOut, uPacketID );
+			SendMysqlOkPacket ( tOut, uPacketID, tSession.m_tVars.m_bAutoCommit );
 			tOut.Flush();
 			if ( tOut.GetError() )
 				break;
@@ -18247,13 +18263,13 @@ bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString
 		case MYSQL_COM_PING:
 		case MYSQL_COM_INIT_DB:
 			// client wants a pong
-			SendMysqlOkPacket ( tOut, uPacketID );
+			SendMysqlOkPacket ( tOut, uPacketID, tSession.m_tVars.m_bAutoCommit );
 			break;
 
 		case MYSQL_COM_SET_OPTION:
 			// bMulti = ( tIn.GetWord()==MYSQL_OPTION_MULTI_STATEMENTS_ON ); // that's how we could double check and validate multi query
 			// server reporting success in response to COM_SET_OPTION and COM_DEBUG
-			SendMysqlEofPacket ( tOut, uPacketID, 0 );
+			SendMysqlEofPacket ( tOut, uPacketID, 0, false, tSession.m_tVars.m_bAutoCommit );
 			break;
 
 		case MYSQL_COM_QUERY:
@@ -22759,7 +22775,7 @@ NetEvent_e NetReceiveDataQL_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction
 					m_tState->m_tSession.SetFederatedUser();
 				m_tState->m_dBuf.Resize ( 0 );
 				ISphOutputBuffer tOut ( m_tState->m_dBuf );
-				SendMysqlOkPacket ( tOut, m_tState->m_uPacketID );
+				SendMysqlOkPacket ( tOut, m_tState->m_uPacketID, m_tState->m_tSession.m_tVars.m_bAutoCommit );
 				tOut.SwapData ( m_tState->m_dBuf );
 
 				m_tState->m_iLeft = m_tState->m_dBuf.GetLength();
@@ -22830,13 +22846,13 @@ NetEvent_e NetReceiveDataQL_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction
 						case MYSQL_COM_PING:
 						case MYSQL_COM_INIT_DB:
 							// client wants a pong
-							SendMysqlOkPacket ( tOut, m_tState->m_uPacketID );
+							SendMysqlOkPacket ( tOut, m_tState->m_uPacketID, m_tState->m_tSession.m_tVars.m_bAutoCommit );
 							break;
 
 						case MYSQL_COM_SET_OPTION:
 							// bMulti = ( tIn.GetWord()==MYSQL_OPTION_MULTI_STATEMENTS_ON ); // that's how we could double check and validate multi query
 							// server reporting success in response to COM_SET_OPTION and COM_DEBUG
-							SendMysqlEofPacket ( tOut, m_tState->m_uPacketID, 0 );
+							SendMysqlEofPacket ( tOut, m_tState->m_uPacketID, 0, false, m_tState->m_tSession.m_tVars.m_bAutoCommit );
 							break;
 
 						default:

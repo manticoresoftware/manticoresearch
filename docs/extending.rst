@@ -436,12 +436,13 @@ Plugins declared as
 
 ``library name:plugin name:optional string of settings``
 
-.. code-block:: bash
+.. code-block:: ini
 
 
-index_token_filter = my_lib.so:email_process:field=email;split=.io
+    index_token_filter = my_lib.so:email_process:field=email;split=.io
 
-there symbol ":" is parts separator and string of settings if any got passed to init function of plugin.
+
+there colon is a separator and string of settings if any got passed to init function of plugin.
 
 The call workflow for index-time token filter is as follows:
 
@@ -456,7 +457,7 @@ The call workflow for index-time token filter is as follows:
 .. code-block:: mysql
 
 
-INSERT INTO rt (id, title) VALUES (1, 'some text corp@space.io') OPTION token_filter_options='.io'
+    INSERT INTO rt (id, title) VALUES (1, 'some text corp@space.io') OPTION token_filter_options='.io'
    
    
 3. ``XXX_begin_field`` gets called once for each field prior to processing
@@ -485,7 +486,7 @@ The call workflow for query-time token filter is as follows:
 .. code-block:: mysql
 
 
-SELECT * FROM index WHERE MATCH ('test') OPTION token_filter='my_lib.so:query_email_process:io'
+    SELECT * FROM index WHERE MATCH ('test') OPTION token_filter='my_lib.so:query_email_process:io'
    
    It must return zero for successful initialization or error description otherwise.
    

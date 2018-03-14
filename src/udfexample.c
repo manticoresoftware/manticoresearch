@@ -195,6 +195,80 @@ DLLEXPORT double avgmva ( SPH_UDF_INIT * init, SPH_UDF_ARGS * args, char * error
 	return res/n;
 }
 
+//////////////////////////////////////////////////////////////////////////
+
+// very simple email hider with exception
+// symbols @ and . should be in charset_table
+// it works on indexing by processing tokens as:
+// - keep emails to domain 'space.io' and transform them to 'mailto:any@space.io' then searching for query with 'mailto:*' should return all documents with emails
+// - deletes all other emails, ie returns NULL for 'test@gmail.com'
+
+DLLEXPORT int hideemail_init ( void ** userdata, int num_fields, const char ** field_names, const char * options, char * error_message )
+{
+	*userdata = (void*) malloc ( sizeof(char) * SPH_UDF_ERROR_LEN );
+	return 0;
+}
+
+
+DLLEXPORT char * hideemail_push_token ( void * userdata, char * token, int * extra, int * delta )
+{
+	const char * s;
+	char * dst = (char *)userdata;
+	char domain[] = "space.io";
+	char prefix[] = "mailto:";
+	char * pos0;
+	char * pos1;
+	int len0, len1 = ( sizeof(domain)-1 ), cmp, lenprefix = ( sizeof(prefix)-1 );
+
+	*delta = 1;
+
+	if ( !token || !*token )
+		return token;
+
+	pos0 = strchr ( token, '@' );
+	pos1 = ( pos0!=0 ? strchr ( pos0, '.' ) : 0 );
+
+	// not email case
+	if ( pos0==0 || pos1==0 )
+		return token;
+
+	len0 = strlen ( token );
+
+	// domain size not same as expected - hide email
+	if ( len0-(pos0+1-token)!=len1 )
+		return 0;
+
+	// domain name does not match - hide email
+	if ( strncmp ( pos0 + 1, domain, len1 )!=0 )
+		return 0;
+
+	strcpy ( dst, prefix );
+	strcpy ( dst + lenprefix, token );
+	dst[lenprefix+len0] = '\0';
+
+	return dst;
+}
+
+DLLEXPORT char * hideemail_get_extra_token ( void * userdata, int * delta )
+{
+	*delta = 0;
+	return 0;
+}
+
+DLLEXPORT char * hideemail_begin_document ( void * userdata, const char * options, char * error_message )
+{
+	return 0;
+}
+
+DLLEXPORT void hideemail_deinit ( void * userdata )
+{
+	if ( userdata )
+	{
+		free ( userdata );
+	}
+}
+
+
 // FIXME! add a string function example?
 // FIXME! add a ranker plugin example?
 

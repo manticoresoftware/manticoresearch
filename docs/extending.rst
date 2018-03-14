@@ -412,3 +412,95 @@ The call workflow is as follows:
    are no more keyword occurrences. It must return the WEIGHT() value.
    This is the only mandatory function.
 4. ``XXX_deinit()`` gets called once per query, in the very end.
+
+
+.. _token_filter_plugins:
+
+Token filter plugins
+--------------------
+
+Token filter plugins let you implement a custom tokenizer that makes tokens
+according to custom rules. Index-time tokenizer defined with
+ref:`index_token_filter <index_token_filter>` and query-time tokenizer defined
+with ref:`query_token_filter <query_token_filter >` at index definition. Token
+filters processing tokens after base tokenizer processed text at field or query
+and made tokens from it.
+
+Index-time tokenizer gets created by indexer on indexing source data into index
+or by RT index on processing ``INSERT`` or ``REPLACE`` statements.
+
+Query-time tokenizer gets created on search each time full-text invoked by
+every index involved.
+
+Plugins declared as
+
+``library name:plugin name:optional string of settings``
+
+.. code-block:: bash
+
+
+index_token_filter = my_lib.so:email_process:field=email;split=.io
+
+there symbol ":" is parts separator and string of settings if any got passed to init function of plugin.
+
+The call workflow for index-time token filter is as follows:
+
+1. ``XXX_init()`` gets called right after indexer creates token filter with
+   empty fields list then after indexer got index schema with actual fields list.
+   It must return zero for successful initialization or error description otherwise.
+   
+2. ``XXX_begin_document`` gets called only for RT index for every document with
+   string set by ``token_filter_options`` option. It must return zero for
+   successful call or error description otherwise.
+
+.. code-block:: mysql
+
+
+INSERT INTO rt (id, title) VALUES (1, 'some text corp@space.io') OPTION token_filter_options='.io'
+   
+   
+3. ``XXX_begin_field`` gets called once for each field prior to processing
+   field with base tokenizer with field number as its parameter.
+
+4. ``XXX_push_token`` gets called once for each new token produced by base tokenizer
+   with source token as its parameter. It must return token, count of extra tokens
+   made by token filter and delta position for token.
+
+5. ``XXX_get_extra_token`` gets called multiple times in case ``XXX_push_token``
+   reports extra tokens. It must return token and delta position for that extra token.
+
+6. ``XXX_end_field`` gets called once right after source tokens from current field get over.
+
+7. ``XXX_deinit`` gets called in the very end of indexing.
+
+These functions must be defined ``XXX_begin_document`` and ``XXX_push_token``
+and ``XXX_get_extra_token``.
+
+
+The call workflow for query-time token filter is as follows:
+
+1. ``XXX_init()`` gets called once per index prior to parsing query with 
+   parameters - max token length and string set by ``token_filter`` option
+
+.. code-block:: mysql
+
+
+SELECT * FROM index WHERE MATCH ('test') OPTION token_filter='my_lib.so:query_email_process:io'
+   
+   It must return zero for successful initialization or error description otherwise.
+   
+2. ``XXX_push_token()`` gets called once for each new token produced by base tokenizer
+   with parameters: token produced by base tokenizer, pointer to raw token at
+   source query string and raw token length. It must return token and delta 
+   position for token.
+
+3. ``XXX_pre_morph()`` gets called once for token right before it got passed to 
+   morphology processor with reference to token and stopword flag. It might
+   set stopword flag to mark token as stopword.
+
+4. ``XXX_post_morph()`` gets called once for token after it processed by 
+   morphology processor with reference to token and stopword flag. It might
+   set stopword flag to mark token as stopword. It must return flag non-zero
+   value of which means to use token prior to morphology processing.
+
+5. ``XXX_deinit()`` gets called in the very end of query processing.

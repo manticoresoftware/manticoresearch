@@ -421,8 +421,8 @@ Token filter plugins
 
 Token filter plugins let you implement a custom tokenizer that makes tokens
 according to custom rules. Index-time tokenizer defined with
-ref:`index_token_filter <index_token_filter>` and query-time tokenizer defined
-with ref:`query_token_filter <query_token_filter >` at index definition. Token
+:ref:`index_token_filter <index_token_filter>` and query-time tokenizer defined
+with :ref:`query_token_filter <query_token_filter >` at index definition. Token
 filters processing tokens after base tokenizer processed text at field or query
 and made tokens from it.
 
@@ -432,9 +432,7 @@ or by RT index on processing ``INSERT`` or ``REPLACE`` statements.
 Query-time tokenizer gets created on search each time full-text invoked by
 every index involved.
 
-Plugins declared as
-
-``library name:plugin name:optional string of settings``
+Plugins declared as ``library name:plugin name:optional string of settings``
 
 .. code-block:: ini
 

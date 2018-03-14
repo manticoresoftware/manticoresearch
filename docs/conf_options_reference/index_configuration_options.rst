@@ -1309,8 +1309,8 @@ Index-time token filter for index. Optional, default is empty.
 Index-time token filter gets created by indexer on indexing source data
 into index or by RT index on processing ``INSERT`` or ``REPLACE`` statements
 and let you implement a custom tokenizer that makes tokens according
-to custom rules. Plugins declared as
-``library name:plugin name:optional string of settings``.
+to custom rules.
+Plugins defined as ``library name:plugin name:optional string of settings``.
 
 Example:
 

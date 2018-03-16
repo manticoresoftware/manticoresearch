@@ -134,7 +134,9 @@ After preparing configuration file (see :ref:`Quick tour <quick_usage_tour>`), y
 Installing Manticore on Windows
 -------------------------------
 
-To install on Windows, you need to download the zip package and unpack it first.
+To install on Windows, you need to download the zip package and unpack it first in a  folder.
+
+In the following example we'll consider folder ``C:\Manticore`` where we unpack the zip content.
 
 .. code-block:: bash
 	
@@ -142,7 +144,10 @@ To install on Windows, you need to download the zip package and unpack it first.
 	unzip manticore-2.4.1-171017-3b31a97-release-pgsql-stemmer-x64-bin.zip
 
 
-Edit the contents of sphinx.conf.in - specifically entries relating to @CONFDIR@ - to paths suitable for your system.
+The zip comes with 2 sample configurations: ``sphinx.conf.in`` and ``sphinx-min.conf.in``. The latter is a stripped-down of comments version of the first.  	
+
+The configuration contains a @CONFIGDIR@ string which needs to be replaced. The @CONFIGDIR@ is the root directory of ``data`` and ``log`` folders (first is used as location for indexes, second for logs).
+The zip package comes with these folders, so they will be available at the location where you unzipped the package. If you want to use a different location, the two folders must be created there.
 
 Install the ``searchd`` system as a Windows service:
 
@@ -151,13 +156,18 @@ Install the ``searchd`` system as a Windows service:
 	C:\Manticore\bin> C:\Manticore\bin\searchd --install --config C:\Manticore\sphinx.conf.in --servicename Manticore
 
 
-The ``searchd`` service will now be listed in the Services panel
-   within the Management Console, available from Administrative Tools.
-   It will not have been started, as you will need to configure it and
-   build your indexes with ``indexer`` before starting the service. A
-   guide to do this can be found under :ref:`Quick tour <quick_usage_tour>`.
+Make sure to use the full path of the configuration file, otherwise searchd.exe will not be able to know the location of it when it's started as service.
 
+After installation, the service can be started from the Services snap-in of the Microsoft Management Console.
 
+Once started you can access Manticore using the mysql cli:
+
+.. code-block:: bat
+
+	C:\path\to\mysql> mysql -P9306 -h127.0.0.1
+
+(note that in most example, we use ``-h0``, on Windows you need to use ``localhost`` or ``127.0.0.1`` for the local host.)
+	
 .. _running_from_docker:
 
 Running Manticore Search in a Docker Container

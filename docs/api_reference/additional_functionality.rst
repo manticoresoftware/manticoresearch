@@ -23,17 +23,17 @@ similarly to star-syntax available in queries. ``$opts`` is a hash which
 contains additional optional highlighting parameters:
 
 -  ``before_match``:
-   A string to insert before a keyword match. A %PASSAGE_ID% macro can
+   A string to insert before a keyword match. A ``%PASSAGE_ID%`` macro can
    be used in this string. The first match of the macro is replaced with
    an incrementing passage number within a current snippet. Numbering
    starts at 1 by default but can be overridden with
    ``start_passage_id`` option. In a multi-document call, %PASSAGE_ID%
-   would restart at every given document. Default is ``**``.
+   would restart at every given document. Default is ``<b>``.
 
 -  ``after_match``:
    A string to insert after a keyword match. Starting with version
    1.10-beta, a %PASSAGE_ID% macro can be used in this string. Default
-   is ``**``.
+   is ``</b>``.
 
 -  ``chunk_separator``:
    A string to insert between snippet chunks (passages). Default is ``…``.
@@ -87,7 +87,7 @@ contains additional optional highlighting parameters:
    (no limit).
 
 -  ``start_passage_id``:
-   Specifies the starting value of %PASSAGE_ID% macro (that gets
+   Specifies the starting value of ``%PASSAGE_ID%`` macro (that gets
    detected and expanded in ``before_match``, ``after_match`` strings).
    Integer, default is 1.
 

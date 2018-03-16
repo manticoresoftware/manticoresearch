@@ -563,7 +563,7 @@ Options must be specified like this:
 refer to
 :ref:`BuildExcerprts() <build_excerpts>` API
 call. The only UDF-specific additional option is named
-``&#039;sphinx&#039;`` and lets you specify searchd location (host and
+``sphinx`` and lets you specify searchd location (host and
 port).
 
 Usage examples:

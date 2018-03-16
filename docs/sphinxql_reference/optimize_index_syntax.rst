@@ -11,6 +11,9 @@ OPTIMIZE INDEX syntax
 OPTIMIZE statement enqueues a RT index for optimization in a background
 thread.
 
+If ``OPTION sync=1`` is used, the command will wait until the optimization process is done
+(or if the connection timeout - but the optimization will continue to run). 
+
 Over time, RT indexes can grow fragmented into many disk chunks and/or
 tainted with deleted, but unpurged data, impacting search performance.
 When that happens, they can be optimized. Basically, the optimization

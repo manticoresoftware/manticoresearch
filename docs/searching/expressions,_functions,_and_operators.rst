@@ -140,7 +140,7 @@ Operators
    integers but one of them is 64-bit; or in floats otherwise. However,
    ``a/**`` or ``sqrt(a)`` will always be computed in floats, because
    these operations return a result of non-integer type. To avoid the
-   first, you can either use ``IDIV(a,**)`` or ``a DIV b`` form. Also,
+   first, you can either use ``IDIV(a,b)`` or ``a DIV b`` form. Also,
    ``a*b`` will not be automatically promoted to 64-bit when the
    arguments are 32-bit. To enforce 64-bit results, you can use
    BIGINT(). (But note that if there are non-integer operations,
@@ -455,9 +455,9 @@ Comparison functions
 
 .. code-block:: none
 
-
        IF ( sqrt(3)*sqrt(3)-3<>0, a, b )
        IF ( sqrt(3)*sqrt(3)-3, a, b )
+   
 
    In the first case, the comparison operator <> will return 0.0 (false)
    because of a threshold, and ``IF()`` will always return ‘**’ as a

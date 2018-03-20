@@ -20,5 +20,5 @@ associated binary logs.
 
 You may want to use this if you are using RT indices as “delta index”
 files; when you build the main index, you need to wipe the delta index,
-and thus TRUNCATE RTINDEX. You also need to use this command before
+and thus TRUNCATE RTINDEX. You also might use this command before
 attaching an index; see :ref:`attach_index_syntax`.

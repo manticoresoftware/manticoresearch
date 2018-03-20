@@ -6,7 +6,7 @@ ATTACH INDEX syntax
 .. code-block:: mysql
 
 
-    ATTACH INDEX diskindex TO RTINDEX rtindex
+    ATTACH INDEX diskindex TO RTINDEX rtindex [WITH TRUNCATE]
 
 ATTACH INDEX statement lets you move data from a regular disk index to a
 RT index.
@@ -25,18 +25,22 @@ from the *source* index are copied over and take effect. The respective
 parts of the RT index definition from the configuration file will be
 ignored.
 
+When TRUNCATE option is used RT index got truncated prior to attaching
+source disk index. This allows to make operation atomic or make sure that
+attached source disk index will be only data at target RT index.
+
 ATTACH INDEX comes with a number of restrictions. Most notably, the
-target RT index is currently required to be empty, making ATTACH INDEX a
-one-time conversion operation only. Those restrictions may be lifted in
-future releases, as we add the needed functionality to the RT indexes.
+target RT index is currently required to be either empty or have same
+setting as source disk index. In case source disk index got attached
+to non empty RT index, RT index data collected so far got stored
+as regular disk chunk then source disk index become newest disk
+chunk and documents with same ID from previous disk chunks got killed.
 The complete list is as follows.
 
--  Target RT index needs to be empty. (See :ref:`truncate_rtindex_syntax`)
+-  Target RT index needs to be either empty or have same settings
+   (See :ref:`truncate_rtindex_syntax`)
 
--  Source disk index needs to have index_sp=0, boundary_step=0,
-   stopword_step=1.
-
--  Source disk index needs to have an empty index_zones setting.
+-  Source disk index needs to have boundary_step=0, stopword_step=1.
 
 .. code-block:: mysql
 

@@ -10590,7 +10590,11 @@ bool CSphHitBuilder::cidxDone ( int iMemLimit, int iMinInfixLen, int iMaxCodepoi
 	// in dict=keyword mode, also creates infix index, if needed
 
 	if ( iMinInfixLen>0 && m_pDict->GetSettings().m_bWordDict )
+	{
 		pDictHeader->m_iInfixCodepointBytes = iMaxCodepointLen;
+		if ( iMinInfixLen==1 )
+			sphWarn ( "min_infix_len must be greater 1, clamped" );
+	}
 
 	if ( !m_pDict->DictEnd ( pDictHeader, iMemLimit, *m_pLastError, m_pThrottle ) )
 		return false;

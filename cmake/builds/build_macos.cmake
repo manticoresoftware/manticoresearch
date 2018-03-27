@@ -14,7 +14,7 @@ configure_file ( "sphinx-min.conf.in" "${MANTICORE_BINARY_DIR}/sphinx-min.conf" 
 configure_file ( "sphinx.conf.in" "${MANTICORE_BINARY_DIR}/sphinx.conf" @ONLY )
 
 # install specific stuff
-install ( DIRECTORY api doc contrib DESTINATION . COMPONENT doc )
+install ( DIRECTORY api doc docs contrib DESTINATION . COMPONENT doc )
 
 install ( FILES COPYING INSTALL example.sql
 			"${MANTICORE_BINARY_DIR}/sphinx-min.conf"

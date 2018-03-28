@@ -134,7 +134,7 @@ The second argument, a pointer to SPH_UDF_ARGS, is the most important
 one. All the actual call arguments are passed to your UDF via this
 structure; it contians the call argument count, names, types, etc. So
 whether your function gets called like ``SELECT id, testfunc(1)`` or
-like ``SELECT id, testfunc(&#039;abc&#039;, 1000*id+gid, WEIGHT())`` or
+like ``SELECT id, testfunc('abc', 1000*id+gid, WEIGHT())`` or
 anyhow else, it will receive the very same SPH_UDF_ARGS structure in
 all of these cases. However, the data passed in the ``args`` structure
 will be different. In the first example ``args->arg_count`` will be
@@ -420,19 +420,28 @@ Token filter plugins
 --------------------
 
 Token filter plugins let you implement a custom tokenizer that makes tokens
-according to custom rules. Index-time tokenizer defined with
-:ref:`index_token_filter <index_token_filter>` and query-time tokenizer defined
-with :ref:`query_token_filter <query_token_filter >` at index definition. Token
-filters processing tokens after base tokenizer processed text at field or query
+according to custom rules. There are two type:
+
+- Index-time tokenizer declared by :ref:`index_token_filter <index_token_filter>` in index settings
+- query-time tokenizer declared by :ref:`token_filter <select_syntax>` OPTION directive
+
+Token filters processing tokens after base tokenizer processed text at field or query
 and made tokens from it.
+In the text processing pipeline, the token filters will run after the base tokenizer processing occurs
+(which process the text from field or query and create tokens out of them).
+
+
+Index-time tokeniker
+~~~~~~~~~~~~~~~~~~~~
 
 Index-time tokenizer gets created by indexer on indexing source data into index
 or by RT index on processing ``INSERT`` or ``REPLACE`` statements.
 
-Query-time tokenizer gets created on search each time full-text invoked by
-every index involved.
+Plugin is declared as ``library name:plugin name:optional string of settings``.
+The init functions of the plugin can accept arbitrary settings that can be passed as a string in format
+``option1=value1;option2=value2;..``.
 
-Plugins declared as ``library name:plugin name:optional string of settings``
+Example:
 
 .. code-block:: ini
 
@@ -440,7 +449,7 @@ Plugins declared as ``library name:plugin name:optional string of settings``
     index_token_filter = my_lib.so:email_process:field=email;split=.io
 
 
-there colon is a separator and string of settings if any got passed to init function of plugin.
+
 
 The call workflow for index-time token filter is as follows:
 
@@ -448,14 +457,13 @@ The call workflow for index-time token filter is as follows:
    empty fields list then after indexer got index schema with actual fields list.
    It must return zero for successful initialization or error description otherwise.
    
-2. ``XXX_begin_document`` gets called only for RT index for every document with
-   string set by ``token_filter_options`` option. It must return zero for
-   successful call or error description otherwise.
+2. ``XXX_begin_document`` gets called only for RT index INSERT/REPLACE for every document. It must return zero for
+   successful call or error description otherwise. Using OPTION ``token_filter_options`` additional parameters/settings can be passed to the function.
 
-.. code-block:: mysql
+   .. code-block:: mysql
 
 
-    INSERT INTO rt (id, title) VALUES (1, 'some text corp@space.io') OPTION token_filter_options='.io'
+       INSERT INTO rt (id, title) VALUES (1, 'some text corp@space.io') OPTION token_filter_options='.io'
    
    
 3. ``XXX_begin_field`` gets called once for each field prior to processing
@@ -472,19 +480,25 @@ The call workflow for index-time token filter is as follows:
 
 7. ``XXX_deinit`` gets called in the very end of indexing.
 
-These functions must be defined ``XXX_begin_document`` and ``XXX_push_token``
+The following functions are mandatory to be defined: ``XXX_begin_document`` and ``XXX_push_token``
 and ``XXX_get_extra_token``.
 
+
+query-time token filter
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Query-time tokenizer gets created on search each time full-text invoked by
+every index involved.
 
 The call workflow for query-time token filter is as follows:
 
 1. ``XXX_init()`` gets called once per index prior to parsing query with 
    parameters - max token length and string set by ``token_filter`` option
 
-.. code-block:: mysql
+   .. code-block:: mysql
 
 
-    SELECT * FROM index WHERE MATCH ('test') OPTION token_filter='my_lib.so:query_email_process:io'
+     SELECT * FROM index WHERE MATCH ('test') OPTION token_filter='my_lib.so:query_email_process:io'
    
    It must return zero for successful initialization or error description otherwise.
    
@@ -503,3 +517,6 @@ The call workflow for query-time token filter is as follows:
    value of which means to use token prior to morphology processing.
 
 5. ``XXX_deinit()`` gets called in the very end of query processing.
+
+
+Absence of any of the functions is tolerated. 

@@ -445,15 +445,12 @@ Supported options and respectively allowed values are:
    -  ``expand_keywords`` - 0 or 1, expand keywords with exact forms and/or stars 
       when possible (refer to :ref:`expand_keywords` for more details).
 
-.. _query_token_filter:
-	  
-   -  ``token_filter`` - a quoted, colon-separated of
-      ``library name:plugin name:optional string of settings``. Query-time
-	  token filter gets created on search each time full-text invoked by every index
-	  involved and let you implement a custom tokenizer that makes tokens
-	  according to custom rules. 
-	  ``SELECT * FROM index WHERE MATCH ('yes@no') OPTION token_filter='mylib.so:blend:@'``
-	  
+   -  ``token_filter`` - a quoted, colon-separated of ``library name:plugin name:optional string of settings``. 
+      Query-time  token filter gets created on search each time full-text invoked by every index
+      involved and let you implement a custom tokenizer that makes tokens
+      according to custom rules. 
+      ``SELECT * FROM index WHERE MATCH ('yes@no') OPTION token_filter='mylib.so:blend:@'``
+
 Example:
 
 .. code-block:: mysql

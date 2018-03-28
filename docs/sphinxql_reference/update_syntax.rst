@@ -62,7 +62,7 @@ statement you can use these options:
    ignore any warnings about trying to update a column which is not
    exists in current index schema.
 
-   ‘strict’ - this option is used while updating JSON attributes. It's
+-  ‘strict’ - this option is used while updating JSON attributes. It's
    possible to update just some types in JSON. And if you try to update,
    for example, array type you'll get error with ‘strict’ option on and
    warning otherwise.

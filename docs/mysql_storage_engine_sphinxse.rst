@@ -559,7 +559,7 @@ name. Function arguments are as follows:
 
 Document and words arguments can be either strings or table columns.
 Options must be specified like this:
-``&#039;value&#039; AS option_name``. For a list of supported options,
+``'value' AS option_name``. For a list of supported options,
 refer to
 :ref:`BuildExcerprts() <build_excerpts>` API
 call. The only UDF-specific additional option is named

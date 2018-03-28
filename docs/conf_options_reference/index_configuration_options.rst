@@ -1939,7 +1939,8 @@ To be used in conjunction with in
 list defines characters, sequences of which are subject to N-gram
 extraction. Words comprised of other characters will not be affected by
 N-gram indexing feature. The value format is identical to
-:ref:`charset_table <charset_table>`.
+:ref:`charset_table <charset_table>`. 
+N-gram characters cannot appear in the :ref:`charset_table <charset_table>`.
 
 Example:
 
@@ -2254,8 +2255,8 @@ Example:
 .. code-block:: ini
 
 
-    # index '13-inch' as '13inch'
-    regexp_filter = \**(\d+)\" => \1inch
+    # index '13"' as '13inch'
+    regexp_filter = \b(\d+)\" => \1inch
 
     # index 'blue' or 'red' as 'color'
     regexp_filter = (blue|red) => color

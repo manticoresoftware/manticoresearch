@@ -111,7 +111,7 @@ empty (no location).
 
 Specifies the trusted directory from which the :ref:`UDF
 libraries <udfs_user_defined_functions>` can be
-loaded. Requires `workers =
+loaded. Requires :ref:`workers =
 thread <workers>` to
 take effect.
 

@@ -1,6 +1,23 @@
 Release notes
 =============
 
+Version 2.6.3 GA, 28 March  2018
+--------------------------------
+
+Improvements
+~~~~~~~~~~~~
+
+* jemalloc at compilation. If jemalloc is present on system, it can be enabled with cmake flag ``-DUSE_JEMALLOC=1``
+
+Bugfixes
+~~~~~~~~
+* `85a6d7e <https://github.com/manticoresoftware/manticoresearch/commit/85a6d7e3db75f28c491042409bb677ed39eba07b>`__ fixed log expand_keywords option into sphinxql query log
+* `caaa384 <https://github.com/manticoresoftware/manticoresearch/commit/caaa3842f4dbd8507fd9e20bf3371a0c8ec0c087>`__ fixed HTTP interface to correctly process query with large size
+* `e386d84 <https://github.com/manticoresoftware/manticoresearch/commit/e386d842b36195719e459b2db1fb20e402f9a51f>`__ fixed crash of daemon on DELETE to RT index with index_field_lengths enable
+* `cd538f3 <https://github.com/manticoresoftware/manticoresearch/commit/ce528f37eb5d8284661928f6f3b340a4a1985253>`__ fixed cpustats searchd cli option to work with unsupported systems
+* `8740fd6 <https://github.com/manticoresoftware/manticoresearch/commit/8740fd63ae842c2ab0e51a8fcd6180d787ed57ec>`__ fixed utf8 substring matching with min lengths defined
+
+
 Version 2.6.2 GA, 23 February  2018
 -----------------------------------
 

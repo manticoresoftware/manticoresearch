@@ -11,6 +11,7 @@ Welcome to Manticore Search's  Documentation
    :name: mastertoc
    
    introduction
+   getting-started
    installation
    indexing
    real-time_indexes

@@ -813,6 +813,14 @@ searchd
 	listen			= 9312
 	listen			= 9306:mysql41
 
+	# whether listener will set flag TCP_FASTOPEN which allows TCP RFC7413
+	# fast open connection. Note, that apart this setting you need also
+	# this capability enabled in the system (on linux see the /proc/sys/net/ipv4/tcp_fastopen,
+	# for server-side bit 1 must be set, i.e. value must be 2 or 3).
+	# If all it set, TFO connections initiated by clients will be supported.
+	# Default value of listen_tfo is 0.
+	#listen_tfo		= 1
+
 	# log file, searchd run info is logged here
 	# optional, default is 'searchd.log'
 	log			= @CONFDIR@/log/searchd.log

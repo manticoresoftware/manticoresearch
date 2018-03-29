@@ -173,6 +173,7 @@ static int				g_iThdPoolCount		= 2;
 static int				g_iThdQueueMax		= 0;
 static int				g_tmWait = 1;
 bool					g_bGroupingInUtc	= false;
+static bool				g_bTcpFastOpen		= false; ///< whether to use TFO on listeners
 
 struct Listener_t
 {
@@ -2281,6 +2282,17 @@ int sphCreateInetSocket ( DWORD uAddr, int iPort )
 	if ( setsockopt ( iSock, IPPROTO_TCP, TCP_NODELAY, (char*)&iOn, sizeof(iOn) ) )
 		sphWarning ( "setsockopt() failed: %s", sphSockError() );
 #endif
+
+	// TFO
+	if ( g_bTcpFastOpen )
+	{
+#ifdef TCP_FASTOPEN
+		if ( setsockopt ( iSock, IPPROTO_TCP, TCP_FASTOPEN, ( char * ) &iOn, sizeof ( iOn ) ) )
+			sphWarning ( "can't set TCP_FASTOPEN option for listener: %s", sphSockError () );
+#else
+		sphWarning ( "daemon wasn't build with TCP Fast Open support, option 'listen_tfo' ignored");
+#endif
+	}
 
 	int iTries = 12;
 	int iRes;
@@ -23336,6 +23348,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_iThrottleAccept = hSearchd.GetInt ( "net_throttle_accept", g_iThrottleAccept );
 	g_iNetWorkers = hSearchd.GetInt ( "net_workers", g_iNetWorkers );
 	g_iNetWorkers = Max ( g_iNetWorkers, 1 );
+	g_bTcpFastOpen = ( hSearchd.GetInt ( "listen_tfo", 0 )==1 );
 
 	if ( hSearchd ( "collation_libc_locale" ) )
 	{

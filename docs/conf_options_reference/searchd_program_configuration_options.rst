@@ -464,7 +464,7 @@ for managing in case of a severe overload when the daemon would either
 stall or not let you connect via a regular port.
 
 Examples:
-^
+
 
 .. code-block:: ini
 
@@ -485,6 +485,31 @@ http://www.iana.org/assignments/port-numbers for details) and should
 therefore be available.
 
 Unix-domain sockets are not supported on Windows.
+
+.. _listen_tfo:
+
+listen_tfo
+~~~~~~~~~~
+
+This setting allows TCP_FASTOPEN flag for all listeners. By default it is 0,
+but it is safe to have it set '1' always.
+
+For general knowledge about TCP Fast Open extension you can visit Wikipedia.
+Shortly speaking, it allows to eliminate one TCP packages round-trip when establishing
+connection.
+
+In practice using TFO in many situation may optimize client-agent network efficiency
+as if :ref:`persistent agents <agent_persistent>` are in play, but without holding active
+connections, and also without limitation for the maximum num of connections.
+
+On modern OS TFO support usually switched 'on' on the system level, but this is just 'capability',
+not the rule. Linux (as most progressive) supports it since 2011, on kernels starting from 3.7
+(for server side). Windows supports it from some build of Windows 10. Anothers (FreeBSD, MacOS)
+also in game.
+
+For Linux system check variable ``/proc/sys/net/ipv4/tcp_fastopen`` and ensure that bit 1 (which
+manages server side of TFO) is set (i.e. value is 2 or 3). Remote clients, in turn, must have bit 0
+to be set on their side, but this is common default.
 
 .. _log:
 

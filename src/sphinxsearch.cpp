@@ -8365,7 +8365,7 @@ public:
 			case XRANK_LCCS:
 			case XRANK_WLCCS:
 				if ( !m_bCheckInFieldAggr )
-					m_sCheckError = "field factors must only occur withing field aggregates in ranking expression";
+					m_sCheckError = "field factors must only occur within field aggregation functions in ranking expression";
 				break;
 
 			case XRANK_SUM:

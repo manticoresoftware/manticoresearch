@@ -2275,14 +2275,14 @@ int sphCreateInetSocket ( DWORD uAddr, int iPort )
 
 	int iOn = 1;
 	if ( setsockopt ( iSock, SOL_SOCKET, SO_REUSEADDR, (char*)&iOn, sizeof(iOn) ) )
-		sphWarning ( "setsockopt() failed: %s", sphSockError() );
+		sphWarning ( "setsockopt(SO_REUSEADDR) failed: %s", sphSockError() );
 #if HAVE_SO_REUSEPORT
 	if ( setsockopt ( iSock, SOL_SOCKET, SO_REUSEPORT, (char*)&iOn, sizeof(iOn) ) )
-		sphWarning ( "setsockopt() failed: %s", sphSockError() );
+		sphWarning ( "setsockopt(SO_REUSEPORT) failed: %s", sphSockError() );
 #endif
 #ifdef TCP_NODELAY
 	if ( setsockopt ( iSock, IPPROTO_TCP, TCP_NODELAY, (char*)&iOn, sizeof(iOn) ) )
-		sphWarning ( "setsockopt() failed: %s", sphSockError() );
+		sphWarning ( "setsockopt(TCP_NODELAY) failed: %s", sphSockError() );
 #endif
 
 	// TFO
@@ -24825,7 +24825,12 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	g_iBacklog = hSearchd.GetInt ( "listen_backlog", g_iBacklog );
 	ARRAY_FOREACH ( j, g_dListeners )
 		if ( listen ( g_dListeners[j].m_iSock, g_iBacklog )==-1 )
-			sphFatal ( "listen() failed: %s", sphSockError() );
+		{
+			if ( sphSockGetErrno()==EADDRINUSE )
+				sphFatal ( "listen() failed with EADDRINUSE. A listener with other UID on same address:port?");
+			else
+				sphFatal ( "listen() failed: %s", sphSockError () );
+		}
 
 	if ( g_pThdPool )
 	{

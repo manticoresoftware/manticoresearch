@@ -110,7 +110,7 @@ Now let's add some filtering and more ordering:
 
 .. code-block:: mysql
   
-   mysql> SELECT *,WEIGHT() FROM testrt WHERE MATCG('list of laptops') AND gid>10  ORDER BY WEIGHT() DESC,gid DESC;
+   mysql> SELECT *,WEIGHT() FROM testrt WHERE MATCH('list of laptops') AND gid>10  ORDER BY WEIGHT() DESC,gid DESC;
    +------+------+----------+
    | id   | gid  | weight() |
    +------+------+----------+

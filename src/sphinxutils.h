@@ -185,7 +185,8 @@ enum ESphLogLevel
 	SPH_LOG_INFO	= 2,
 	SPH_LOG_DEBUG	= 3,
 	SPH_LOG_VERBOSE_DEBUG = 4,
-	SPH_LOG_VERY_VERBOSE_DEBUG = 5
+	SPH_LOG_VERY_VERBOSE_DEBUG = 5,
+	SPH_LOG_MAX = SPH_LOG_VERY_VERBOSE_DEBUG
 };
 
 typedef void ( *SphLogger_fn )( ESphLogLevel, const char *, va_list );
@@ -197,6 +198,10 @@ void sphLogDebug ( const char * sFmt, ... ) __attribute__((format(printf,1,2)));
 void sphLogDebugv ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
 void sphLogDebugvv ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
 void sphSetLogger ( SphLogger_fn fnLog );
+
+// set the prefix to supress the log
+void sphLogSupress ( const char * sPrefix, ESphLogLevel eLevel = SPH_LOG_WARNING );
+void sphLogSupressRemove ( const char * sPrefix, ESphLogLevel eLevel = SPH_LOG_WARNING );
 
 //////////////////////////////////////////////////////////////////////////
 

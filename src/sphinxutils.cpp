@@ -1826,12 +1826,51 @@ static void StdoutLogger ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	fprintf ( stdout, "\n" );
 }
 
+static const int MAX_PREFIXES = 10;
+const char * dDisabledLevelLogs[SPH_LOG_MAX+1][MAX_PREFIXES] = {0};
+
+void sphLogSupress ( const char * sNewPrefix, ESphLogLevel eLevel )
+{
+	for ( const char * &sPrefix : dDisabledLevelLogs[eLevel] )
+		if ( !sPrefix )
+		{
+			sPrefix = sNewPrefix;
+			return;
+		} else if ( !strcmp ( sPrefix, sNewPrefix ) )
+			return;
+	// no space, just overwrite the last one
+	dDisabledLevelLogs[eLevel][MAX_PREFIXES-1] = sNewPrefix;
+}
+
+void sphLogSupressRemove ( const char * sDelPrefix, ESphLogLevel eLevel )
+{
+	const char ** ppSource = dDisabledLevelLogs[eLevel];
+	int i = 0;
+	for ( const char *&sPrefix : dDisabledLevelLogs[eLevel] )
+		if ( sPrefix && !strcmp (sDelPrefix, sPrefix) )
+			ppSource[i++] = sPrefix;
+	for (;i<MAX_PREFIXES;++i)
+		dDisabledLevelLogs[eLevel][i] = nullptr;
+}
+
+
 static SphLogger_fn g_pLogger = &StdoutLogger;
 
 inline void Log ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 {
 	if ( !g_pLogger ) return;
+	for ( const char * sPrefix : dDisabledLevelLogs[eLevel] )
+		if ( sPrefix && !strncmp ( sPrefix, sFmt, strlen ( sPrefix ) ) )
+			return;
+		else if ( !sPrefix )
+			break;
+
 	( *g_pLogger ) ( eLevel, sFmt, ap );
+}
+
+void sphLogVa ( const char * sFmt, va_list ap, ESphLogLevel eLevel )
+{
+	Log ( eLevel, sFmt, ap );
 }
 
 void sphWarning ( const char * sFmt, ... )

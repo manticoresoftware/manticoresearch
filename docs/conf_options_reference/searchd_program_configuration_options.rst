@@ -908,7 +908,7 @@ qcache_max_bytes
 ~~~~~~~~~~~~~~~~
 
 Integer, in bytes. The maximum RAM allocated for cached result sets.
-Default is 0, meaning disabled. Refer to :ref:`query
+Default is 16777216, or 16Mb. 0 means disabled. Refer to :ref:`query
 cache <query_cache>` for details.
 
 .. code-block:: ini

@@ -19484,6 +19484,11 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 			sphWarning ( "dict=crc deprecated, use dict=keywords instead" );
 		if ( bWordDict && ( tSettings.m_dPrefixFields.GetLength() || tSettings.m_dInfixFields.GetLength() ) )
 			sphWarning ( "WARNING: index '%s': prefix_fields and infix_fields has no effect with dict=keywords, ignoring\n", szIndexName );
+		if ( bWordDict && tSettings.m_iMinInfixLen==1 )
+		{
+			sphWarn ( "min_infix_len must be greater than 1, changed to 2" );
+			tSettings.m_iMinInfixLen = 2;
+		}
 
 		if ( !bPercolate )
 			tIdx.m_pIndex = sphCreateIndexRT ( tSchema, szIndexName, iRamSize, hIndex["path"].cstr(), bWordDict );

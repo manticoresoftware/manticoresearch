@@ -9366,36 +9366,6 @@ public:
 // RANKER FACTORY
 //////////////////////////////////////////////////////////////////////////
 
-static void CheckQueryWord ( const char * szWord, CSphQueryResult * pResult, const CSphIndexSettings & tSettings )
-{
-	if ( ( !tSettings.m_iMinPrefixLen && !tSettings.m_iMinInfixLen ) || !szWord )
-		return;
-
-	int iLen = strlen ( szWord );
-	bool bHeadStar = szWord[0]=='*';
-	bool bTailStar = szWord[iLen-1]=='*';
-	int iLenWOStars = iLen - ( bHeadStar ? 1 : 0 ) - ( bTailStar ? 1 : 0 );
-	if ( bHeadStar || bTailStar )
-	{
-		if ( tSettings.m_iMinInfixLen > 0 && iLenWOStars < tSettings.m_iMinInfixLen )
-			pResult->m_sWarning.SetSprintf ( "Query word length is less than min infix length. word: '%s' ", szWord );
-		else
-			if ( tSettings.m_iMinPrefixLen > 0 && iLenWOStars < tSettings.m_iMinPrefixLen )
-				pResult->m_sWarning.SetSprintf ( "Query word length is less than min prefix length. word: '%s' ", szWord );
-	}
-}
-
-
-static void CheckExtendedQuery ( const XQNode_t * pNode, CSphQueryResult * pResult, const CSphIndexSettings & tSettings )
-{
-	ARRAY_FOREACH ( i, pNode->m_dWords )
-		CheckQueryWord ( pNode->m_dWords[i].m_sWord.cstr(), pResult, tSettings );
-
-	ARRAY_FOREACH ( i, pNode->m_dChildren )
-		CheckExtendedQuery ( pNode->m_dChildren[i], pResult, tSettings );
-}
-
-
 struct ExtQwordOrderbyQueryPos_t
 {
 	bool IsLess ( const ExtQword_t * pA, const ExtQword_t * pB ) const
@@ -9429,9 +9399,6 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 {
 	// shortcut
 	const CSphIndex * pIndex = tTermSetup.m_pIndex;
-
-	// check the keywords
-	CheckExtendedQuery ( tXQ.m_pRoot, pResult, pIndex->GetSettings() );
 
 	// fill payload mask
 	DWORD uPayloadMask = 0;

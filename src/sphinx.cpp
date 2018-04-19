@@ -1251,7 +1251,6 @@ public:
 	virtual bool				Rename ( const char * ) { return false; }
 	virtual bool				Lock () { return false; }
 	virtual void				Unlock () {}
-	virtual void				PostSetup() {}
 	virtual bool				EarlyReject ( CSphQueryContext * , CSphMatch & ) const { return false; }
 	virtual const CSphSourceStats &	GetStats () const { return g_tTmpDummyStat; }
 	virtual void			GetStatus ( CSphIndexStatus* pRes ) const { assert (pRes); if ( pRes ) { pRes->m_iDiskUse = 0; pRes->m_iRamUse = 0;}}
@@ -1393,7 +1392,6 @@ public:
 
 	virtual bool				Lock ();
 	virtual void				Unlock ();
-	virtual void				PostSetup() {}
 
 	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const;
 	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const;
@@ -8637,6 +8635,12 @@ void CSphIndex::Setup ( const CSphIndexSettings & tSettings )
 	m_tSettings = tSettings;
 }
 
+void CSphIndex::PostSetup ()
+{
+	// in case infixes got enabled and no prefix set let's enable prefix of any length 
+	if ( m_pDict && m_pDict->GetSettings().m_bWordDict && m_tSettings.m_iMinPrefixLen==0 && m_tSettings.m_iMinInfixLen>0 )
+		m_tSettings.m_iMinPrefixLen = 1;
+}
 
 void CSphIndex::SetCacheSize ( int iMaxCachedDocs, int iMaxCachedHits )
 {
@@ -9968,7 +9972,7 @@ public:
 	bool	CreateIndexFiles ( const char * sDocName, const char * sHitName, const char * sSkipName, bool bInplace, int iWriteBuffer, CSphAutofile & tHit, SphOffset_t * pSharedOffset );
 	void	HitReset ();
 	void	cidxHit ( CSphAggregateHit * pHit, const CSphRowitem * pAttrs );
-	bool	cidxDone ( int iMemLimit, int iMinInfixLen, int iMaxCodepointLen, DictHeader_t * pDictHeader );
+	bool	cidxDone ( int iMemLimit, int & iMinInfixLen, int iMaxCodepointLen, DictHeader_t * pDictHeader );
 	int		cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWORD * pDocinfo, int iDocinfos, int iStride );
 
 	SphOffset_t		GetHitfilePos () const { return m_wrHitlist.GetPos (); }
@@ -10574,7 +10578,7 @@ bool IndexBuildDone ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & 
 }
 
 
-bool CSphHitBuilder::cidxDone ( int iMemLimit, int iMinInfixLen, int iMaxCodepointLen, DictHeader_t * pDictHeader )
+bool CSphHitBuilder::cidxDone ( int iMemLimit, int & iMinInfixLen, int iMaxCodepointLen, DictHeader_t * pDictHeader )
 {
 	assert ( pDictHeader );
 
@@ -10593,7 +10597,10 @@ bool CSphHitBuilder::cidxDone ( int iMemLimit, int iMinInfixLen, int iMaxCodepoi
 	{
 		pDictHeader->m_iInfixCodepointBytes = iMaxCodepointLen;
 		if ( iMinInfixLen==1 )
-			sphWarn ( "min_infix_len must be greater 1, clamped" );
+		{
+			sphWarn ( "min_infix_len must be greater than 1, changed to 2" );
+			iMinInfixLen = 2;
+		}
 	}
 
 	if ( !m_pDict->DictEnd ( pDictHeader, iMemLimit, *m_pLastError, m_pThrottle ) )
@@ -14234,7 +14241,8 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	tFlush.m_dFieldMask.UnsetAll();
 	tHitBuilder.cidxHit ( &tFlush, NULL );
 
-	if ( !tHitBuilder.cidxDone ( iHitBufferSize, pSettings->m_tSettings.m_iMinInfixLen,
+	int iMinInfixLen = pSettings->m_tSettings.m_iMinInfixLen;
+	if ( !tHitBuilder.cidxDone ( iHitBufferSize, iMinInfixLen,
 								pSettings->m_pTokenizer->GetMaxCodepointLength(), &tBuildHeader ) )
 		return false;
 
@@ -17688,8 +17696,7 @@ bool sphExpandGetWords ( const char * sWord, const ExpansionContext_t & tCtx, IS
 			iPrefix++;
 
 		// do not expand prefixes under min length
-		int iMinLen = Max ( tCtx.m_iMinPrefixLen, tCtx.m_iMinInfixLen );
-		if ( iPrefix<iMinLen )
+		if ( iPrefix<tCtx.m_iMinPrefixLen )
 			return false;
 
 		int iBytes = sCodes - sPrefix;

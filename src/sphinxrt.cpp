@@ -1264,8 +1264,6 @@ public:
 	virtual void				PostSetup();
 	virtual bool				IsRT() const { return true; }
 
-	virtual void				Setup ( const CSphIndexSettings & tSettings );
-
 	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError, CSphString & sWarning );
 	virtual bool				SaveAttributes ( CSphString & sError ) const;
 	virtual DWORD				GetAttributeStatus () const { return m_uDiskAttrStatus; }
@@ -4690,15 +4688,10 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 }
 
 
-void RtIndex_t::Setup ( const CSphIndexSettings & tSettings )
-{
-	m_bStripperInited = true;
-	m_tSettings = tSettings;
-}
-
-
 void RtIndex_t::PostSetup()
 {
+	ISphRtIndex::PostSetup();
+
 	m_iMaxCodepointLength = m_pTokenizer->GetMaxCodepointLength();
 
 	// bigram filter
@@ -12279,6 +12272,7 @@ bool PercolateIndex_c::MultiQueryEx ( int , const CSphQuery * , CSphQueryResult 
 
 void PercolateIndex_c::PostSetup()
 {
+	PercolateIndex_i::PostSetup();
 	m_iMaxCodepointLength = m_pTokenizer->GetMaxCodepointLength();
 
 	// bigram filter

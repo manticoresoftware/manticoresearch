@@ -7216,6 +7216,11 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	CSphScopedPtr<ISphRanker> pRanker ( nullptr );
 	CSphScopedPayload tPayloads;
 
+	// FIXME!!! add proper
+	// - qcache invalidation after INSERT \ DELETE \ UPDATE and for plain index afte UPDATE #256
+	// - qcache duplicates removal from killed document at segment #263
+	tCtx.m_bSkipQCache = true;
+
 	// no need to create ranker, etc if there's no query
 	if ( !pQueryParser->IsFullscan(*pQuery) )
 	{

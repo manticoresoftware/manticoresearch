@@ -15,8 +15,9 @@ Supported releases:
 *  Ubuntu
 
 	* 14.04 LTS (trusty)
-	* 16.05 LTS (xenial)
-
+	* 16.04 LTS (xenial)
+	* 18.04 LTS (bionic)
+	
 Supported platforms:
 
 * x86
@@ -58,6 +59,8 @@ Below is the reference table with list of all client libraries for different deb
 | trusty  | libmysqlclient.so.18   | libpq.so.5 | libexpat.so.1 | libodbc.so.1 |
 +---------+------------------------+------------+---------------+--------------+
 | xenial  | libmysqlclient.so.20   | libpq.so.5 | libexpat.so.1 | libodbc.so.2 |
++---------+------------------------+------------+---------------+--------------+
+| bionic  | libmysqlclient.so.20   | libpq.so.5 | libexpat.so.1 | libodbc.so.2 |
 +---------+------------------------+------------+---------------+--------------+
 | wheezy  | libmysqlclient.so.18   | libpq.so.5 | libexpat.so.1 | libodbc.so.1 |
 +---------+------------------------+------------+---------------+--------------+
@@ -296,7 +299,7 @@ Next step is to configure the building with cmake. Available list of configurati
 * ``WITH_MYSQL`` (bool)	 enabled compiling with MySQL client library, used by MySQL source driver. Additional parameters ``WITH_MYSQL_ROOT``, ``WITH_MYSQL_LIBS`` and ``WITH_MYSQL_INCLUDES`` can be used for custom MySQL files
 * ``WITH_ODBC`` (bool)	 enabled compiling with ODBC client library, used by ODBC source driver
 * ``WITH_PGSQL`` (bool)	 enabled compiling with PostgreSQL client library, used by PostgreSQL source driver
-* ``DISTR_BUILD``  -  in case the target is packaging, it specifies the target operating system. Supported values are: `centos6`, `centos7`, `wheezy`, `jessie`, `stretch`, `trusty`, `xenial`, `macos`, `default`.
+* ``DISTR_BUILD``  -  in case the target is packaging, it specifies the target operating system. Supported values are: `centos6`, `centos7`, `wheezy`, `jessie`, `stretch`, `trusty`, `xenial`, `bionic`, `macos`, `default`.
 
 Compiling on UNIX systems
 ~~~~~~~~~~~~~~~~~~~~~~~~~

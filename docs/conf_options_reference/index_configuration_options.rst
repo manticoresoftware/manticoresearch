@@ -1612,6 +1612,9 @@ character, expand ‘*a*’ to an OR operator over 100,000+ keywords, and
 evaluate that expanded query, in practice this will very definitely kill
 your server.)
 
+When mininum infix length is set to a positive number,
+mininum prefix length is considered 1.
+
 Example:
 
 
@@ -1650,6 +1653,9 @@ either with the legacy dict=crc mode (which you should ditch anyway!),
 or with any of the above options disable, there is no data to
 differentiate between the prefixes and full words, and thus perfect word
 matches can't be ranked higher.
+
+When mininum infix length is set to a positive number,
+mininum prefix length is considered 1.
 
 Example:
 

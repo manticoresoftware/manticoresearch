@@ -18584,14 +18584,20 @@ static bool RotateIndexMT ( const CSphString & sIndex, CSphString & sError )
 	ServedDesc_t tNewIndex;
 	tNewIndex.m_bOnlyNew = pRotating->m_bOnlyNew;
 
+	// keep settings from current index description
+	tNewIndex.m_bMlock = pRotating->m_bMlock;
+	tNewIndex.m_iExpandKeywords = pRotating->m_iExpandKeywords;
+	tNewIndex.m_bPreopen = pRotating->m_bPreopen;
+	tNewIndex.m_sGlobalIDFPath = pRotating->m_sGlobalIDFPath;
+	tNewIndex.m_bOnDiskAttrs = pRotating->m_bOnDiskAttrs;
+	tNewIndex.m_bOnDiskPools = pRotating->m_bOnDiskPools;
+
+	// set settings into index
 	tNewIndex.m_pIndex = sphCreateIndexPhrase ( sIndex.cstr(), NULL );
 	tNewIndex.m_pIndex->m_iExpandKeywords = pRotating->m_iExpandKeywords;
 	tNewIndex.m_pIndex->m_iExpansionLimit = g_iExpansionLimit;
 	tNewIndex.m_pIndex->SetPreopen ( pRotating->m_bPreopen || g_bPreopenIndexes );
 	tNewIndex.m_pIndex->SetGlobalIDFPath ( pRotating->m_sGlobalIDFPath );
-	tNewIndex.m_bMlock = pRotating->m_bMlock;
-	tNewIndex.m_bOnDiskAttrs = pRotating->m_bOnDiskAttrs;
-	tNewIndex.m_bOnDiskPools = pRotating->m_bOnDiskPools;
 	tNewIndex.m_pIndex->SetMemorySettings ( tNewIndex.m_bMlock, tNewIndex.m_bOnDiskAttrs, tNewIndex.m_bOnDiskPools );
 
 	CSphString sIndexPath = pRotating->m_sIndexPath;

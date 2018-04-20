@@ -18501,6 +18501,14 @@ static bool CheckServedEntry ( const ServedIndex_c * pEntry, const char * sIndex
 	return true;
 }
 
+// RT index that got flushed for long time ago floats to start
+struct RtFlushAge_fn
+{
+	bool IsLess ( const CSphNamedInt & a, const CSphNamedInt & b ) const
+	{
+		return ( b.m_iValue<a.m_iValue );
+	}
+};
 
 #define SPH_RT_AUTO_FLUSH_CHECK_PERIOD ( 5000000 )
 
@@ -18518,16 +18526,33 @@ static void RtFlushThreadFunc ( void * )
 
 		ThreadSystem_t tThdSystemDesc ( "FLUSH RT" );
 
+		int64_t tmNow = sphMicroTimer();
 		// collecting available rt indexes at save time
-		CSphVector<CSphString> dRtIndexes;
-		for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
-			if ( it.Get().m_bRT )
-				dRtIndexes.Add ( it.GetKey() );
+		CSphVector<CSphNamedInt> dRtIndexes;
+		for ( IndexHashIterator_c tIt ( g_pLocalIndexes ); tIt.Next(); )
+		{
+			const ServedIndex_c & tServed = tIt.Get();
+			if ( !tServed.m_bRT )
+				continue;
+
+			dRtIndexes.Add().m_sName = tIt.GetKey();
+			if ( tIt.Get().m_bEnabled )
+			{
+				ISphRtIndex * pRT = (ISphRtIndex *)tServed.m_pIndex;
+				int64_t tmFlushed = pRT->GetFlushAge();
+				if ( tmFlushed==0 )
+					dRtIndexes.Last().m_iValue = 0;
+				else
+					dRtIndexes.Last().m_iValue = int( tmNow - tmFlushed>INT_MAX ? INT_MAX : tmNow - tmFlushed );
+			}
+		}
+
+		sphSort ( dRtIndexes.Begin(), dRtIndexes.GetLength(), RtFlushAge_fn() );
 
 		// do check+save
 		ARRAY_FOREACH_COND ( i, dRtIndexes, !g_bShutdown )
 		{
-			const ServedIndex_c * pServed = g_pLocalIndexes->GetRlockedEntry ( dRtIndexes[i] );
+			const ServedIndex_c * pServed = g_pLocalIndexes->GetRlockedEntry ( dRtIndexes[i].m_sName );
 			if ( !pServed )
 				continue;
 

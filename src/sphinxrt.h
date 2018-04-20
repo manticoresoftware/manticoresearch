@@ -54,6 +54,9 @@ public:
 	/// forcibly flush RAM chunk to disk
 	virtual void ForceRamFlush ( bool bPeriodic=false ) = 0;
 
+	/// get time of last flush, 0 means no flush required 
+	virtual int64_t GetFlushAge() const = 0;
+
 	/// forcibly save RAM chunk as a new disk chunk
 	virtual void ForceDiskChunk () = 0;
 

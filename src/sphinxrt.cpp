@@ -1309,6 +1309,7 @@ public:
 
 	virtual bool				IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError ) const;
 	virtual void				Reconfigure ( CSphReconfigureSetup & tSetup );
+	virtual int64_t				GetFlushAge() const override;
 
 protected:
 	CSphSourceStats				m_tStats;
@@ -1465,6 +1466,15 @@ void RtIndex_t::ForceRamFlush ( bool bPeriodic )
 		, m_sIndexName.cstr(), bPeriodic ? "periodic" : "forced"
 		, iWasTID, m_iTID, (int)(iUsedRam/1024/1024), (int)((iUsedRam/1024)%1000)
 		, (int) (tmDelta/1000000), (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
+}
+
+
+int64_t RtIndex_t::GetFlushAge() const
+{
+	if ( m_iSavedTID==0 || m_iSavedTID==m_iTID )
+		return 0;
+
+	return m_tmSaved;
 }
 
 
@@ -9347,7 +9357,7 @@ RtBinlog_c::RtBinlog_c ()
 	, m_iLockFD ( -1 )
 	, m_bReplayMode ( false )
 	, m_bDisabled ( true )
-	, m_iRestartSize ( 0 )
+	, m_iRestartSize ( 268435456 )
 {
 	MEMORY ( MEM_BINLOG );
 
@@ -10723,6 +10733,7 @@ public:
 	bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError ) const override;
 	void Reconfigure ( CSphReconfigureSetup & tSetup ) override;
 	CSphIndex * GetDiskChunk ( int ) override { return NULL; } // NOLINT
+	int64_t GetFlushAge() const override { return 0; }
 
 	// plain index stub
 	SphDocID_t *		GetKillList () const override { return NULL; }

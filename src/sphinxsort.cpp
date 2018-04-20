@@ -5245,6 +5245,8 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 
 		if ( bPlainAttr || IsGroupby ( sExpr ) || bIsCount )
 		{
+			if ( sExpr!="*" && !tItem.m_sAlias.IsEmpty() )
+				dQueryAttrs.Add ( sphFNV64 ( tItem.m_sAlias.cstr() ) );
 			bHasGroupByExpr = IsGroupby ( sExpr );
 			continue;
 		}

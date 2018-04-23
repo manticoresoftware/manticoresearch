@@ -1595,11 +1595,11 @@ class CSphSchema : public CSphSchemaHelper
 public:
 	/// ctor
 	explicit				CSphSchema ( const char * sName="(nameless)" );
-							CSphSchema ( const CSphSchema & ) = default;
+							CSphSchema ( const CSphSchema & rhs );
 							~CSphSchema(){}
 
 	CSphSchema &			operator = ( const ISphSchema & rhs );
-	CSphSchema &			operator = ( const CSphSchema & rhs ) = default;
+	CSphSchema &			operator = ( const CSphSchema & rhs );
 	CSphSchema &			operator = ( CSphSchema && rhs );
 
 	/// visitor-style uber-virtual assignment implementation

@@ -6156,10 +6156,35 @@ CSphSchema & CSphSchema::operator = ( CSphSchema && rhs )
 		m_dAttrs				= std::move ( rhs.m_dAttrs );
 		m_dStaticUsed			= std::move ( rhs.m_dStaticUsed );
 		m_dDynamicUsed			= std::move ( rhs.m_dDynamicUsed );
+		RebuildHash();
 	}
 
 	return *this;
 }
+
+CSphSchema & CSphSchema::operator = ( const CSphSchema & rhs )
+{
+	if ( this!=&rhs )
+	{
+		m_dDataPtrAttrs			= rhs.m_dDataPtrAttrs;
+		m_iFirstFieldLenAttr	= rhs.m_iFirstFieldLenAttr;
+		m_iLastFieldLenAttr		= rhs.m_iLastFieldLenAttr;
+		m_sName					= rhs.m_sName;
+		m_dFields				= rhs.m_dFields;
+		m_dAttrs				= rhs.m_dAttrs;
+		m_dStaticUsed			= rhs.m_dStaticUsed;
+		m_dDynamicUsed			= rhs.m_dDynamicUsed;
+		RebuildHash();
+	}
+
+	return *this;
+}
+
+CSphSchema::CSphSchema ( const CSphSchema & rhs )
+{
+	*this = rhs;
+}
+
 
 
 const char * CSphSchema::GetName() const

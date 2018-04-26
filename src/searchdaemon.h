@@ -334,6 +334,7 @@ public:
 	bool			GetError () { return m_bError; }
 	bool			GetBytes ( void * pBuf, int iLen );
 	const BYTE *	GetBufferPtr () const { return m_pBuf; }
+	int				GetLength() const { return m_iLen; }
 
 	template < typename T > bool	GetDwords ( CSphVector<T> & dBuffer, int & iGot, int iMax );
 	template < typename T > bool	GetQwords ( CSphVector<T> & dBuffer, int & iGot, int iMax );

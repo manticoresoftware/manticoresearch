@@ -5815,7 +5815,7 @@ static void ProcessLocalPostlimit ( const CSphQuery & tQuery, AggrResult_t & tRe
 
 /// merges multiple result sets, remaps columns, does reorder for outer selects
 /// query is only (!) non-const to tweak order vs reorder clauses
-bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, CSphSchema * pExtraSchema, CSphQueryProfile * pProfiler, const CSphFilterSettings * pAggrFilter )
+bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, CSphSchema * pExtraSchema, CSphQueryProfile * pProfiler, const CSphFilterSettings * pAggrFilter, bool bForceRefItems )
 {
 	// sanity check
 	// verify that the match counts are consistent
@@ -5855,7 +5855,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 		if ( !MinimizeSchema ( tRes.m_tSchema, tRes.m_dSchemas[i] ) )
 			bAllEqual = false;
 
-	const CSphVector<CSphQueryItem> & dQueryItems = ( tQuery.m_bFacet || tQuery.m_bFacetHead ) ? tQuery.m_dRefItems : tQuery.m_dItems;
+	const CSphVector<CSphQueryItem> & dQueryItems = ( tQuery.m_bFacet || tQuery.m_bFacetHead || bForceRefItems ) ? tQuery.m_dRefItems : tQuery.m_dItems;
 
 	// build a list of select items that the query asked for
 	bool bHaveExprs = false;
@@ -6654,6 +6654,7 @@ public:
 	void							SetProfile ( CSphQueryProfile * pProfile ) override;
 	virtual CSphQuery &				GetQuery ( int iQuery ) { return m_dQueries[iQuery]; }
 	AggrResult_t *					GetResult ( int iResult ) override { return m_dResults.Begin() + iResult; }
+	void							SetFederatedUser () { m_bFederatedUser = true; }
 
 public:
 	CSphVector<CSphQuery>			m_dQueries;						///< queries which i need to search
@@ -6690,6 +6691,7 @@ protected:
 	int64_t							m_iTotalDocs;
 	bool							m_bGotLocalDF;
 	bool							m_bMaster;
+	bool							m_bFederatedUser;
 
 	void							OnRunFinished ();
 
@@ -6727,6 +6729,7 @@ SearchHandler_c::SearchHandler_c ( int iQueries, const QueryParser_i * pQueryPar
 	m_bGotLocalDF = false;
 	m_bMaster = bMaster;
 	m_iCid = iCid;
+	m_bFederatedUser = false;
 
 	SetQueryParser ( pQueryParser );
 	SetQueryType ( eQueryType );
@@ -8360,7 +8363,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				}
 			}
 
-			bool bOk = MinimizeAggrResult ( tRes, tQuery, m_dLocal.GetLength(), pExtraSchema, m_pProfile, pAggrFilter );
+			bool bOk = MinimizeAggrResult ( tRes, tQuery, m_dLocal.GetLength(), pExtraSchema, m_pProfile, pAggrFilter, m_bFederatedUser );
 
 			if ( pExtraSchema )
 				pExtraSchema->Release();
@@ -15552,7 +15555,7 @@ void sphPackedMVA2Str ( const BYTE * pMVA, bool b64bit, CSphVector<char> & dStr 
 }
 
 
-void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, bool bMoreResultsFollow )
+void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, bool bMoreResultsFollow, bool bAddQueryColumn, const CSphString * pQueryColumn )
 {
 	if ( !tRes.m_iSuccesses )
 	{
@@ -15571,6 +15574,8 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 		iSchemaAttrsCount = sphSendGetAttrCount ( tRes.m_tSchema );
 		iAttrsCount = iSchemaAttrsCount;
 	}
+	if ( bAddQueryColumn )
+		iAttrsCount++;
 
 	// result set header packet. We will attach EOF manually at the end.
 	dRows.HeadBegin ( iAttrsCount );
@@ -15597,6 +15602,9 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 			dRows.HeadColumn ( tCol.m_sName.cstr(), eType, tCol.m_sName=="id" ? MYSQL_COL_UNSIGNED_FLAG : 0 );
 		}
 	}
+
+	if ( bAddQueryColumn )
+		dRows.HeadColumn ( "query", MYSQL_COL_STRING );
 
 	// EOF packet is sent explicitly due to non-default params.
 	BYTE iWarns = ( !tRes.m_sWarning.IsEmpty() ) ? 1 : 0;
@@ -15777,6 +15785,13 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 				break;
 			}
 		}
+
+		if ( bAddQueryColumn )
+		{
+			assert ( pQueryColumn );
+			dRows.PutString ( pQueryColumn->cstr() );
+		}
+
 		dRows.Commit();
 	}
 
@@ -16206,7 +16221,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 			AggrResult_t & tRes = tHandler.m_dResults[iSelect++];
 			if ( !sWarning.IsEmpty() )
 				tRes.m_sWarning = sWarning;
-			SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow );
+			SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr );
 			// mysql server breaks send on error
 			if ( !tRes.m_iSuccesses )
 				break;
@@ -16902,45 +16917,77 @@ static void AddIndexQueryStats ( SqlRowBuffer_c & tOut, const ServedStats_c * pI
 	AddFoundRowsStatsToOutput ( tOut, "found_rows", tRowsFoundStats );
 }
 
-static void AddPlainIndexStatus ( SqlRowBuffer_c & tOut, const ServedIndex_c * pServed )
+static void AddPlainIndexStatus ( SqlRowBuffer_c & tOut, const ServedIndex_c * pServed, bool bModeFederated, const CSphString & sName )
 {
 	assert ( pServed );
 	CSphIndex * pIndex = pServed->m_pIndex;
 	assert ( pIndex );
 
-	tOut.HeadTuplet ( "Variable_name", "Value" );
-
-	const char * sType = ( !pServed->m_bRT ? "disk" : ( pServed->m_bPercolate ? "percolate" : "rt" ));
-	tOut.DataTuplet ( "index_type", sType );
-	tOut.DataTuplet ( "indexed_documents", pIndex->GetStats().m_iTotalDocuments );
-	tOut.DataTuplet ( "indexed_bytes", pIndex->GetStats().m_iTotalBytes );
-
-	const int64_t * pFieldLens = pIndex->GetFieldLens();
-	if ( pFieldLens )
+	if ( !bModeFederated )
 	{
-		int64_t iTotalTokens = 0;
-		for ( int i=0; i < pIndex->GetMatchSchema().GetFieldsCount(); i++ )
+		tOut.HeadTuplet ( "Variable_name", "Value" );
+
+		const char * sType = ( !pServed->m_bRT ? "disk" : ( pServed->m_bPercolate ? "percolate" : "rt" ));
+		tOut.DataTuplet ( "index_type", sType );
+		tOut.DataTuplet ( "indexed_documents", pIndex->GetStats().m_iTotalDocuments );
+		tOut.DataTuplet ( "indexed_bytes", pIndex->GetStats().m_iTotalBytes );
+
+		const int64_t * pFieldLens = pIndex->GetFieldLens();
+		if ( pFieldLens )
 		{
-			CSphString sKey;
-			sKey.SetSprintf ( "field_tokens_%s", pIndex->GetMatchSchema().GetFieldName(i) );
-			tOut.DataTuplet ( sKey.cstr(), pFieldLens[i] );
-			iTotalTokens += pFieldLens[i];
+			int64_t iTotalTokens = 0;
+			for ( int i=0; i < pIndex->GetMatchSchema().GetFieldsCount(); i++ )
+			{
+				CSphString sKey;
+				sKey.SetSprintf ( "field_tokens_%s", pIndex->GetMatchSchema().GetFieldName(i) );
+				tOut.DataTuplet ( sKey.cstr(), pFieldLens[i] );
+				iTotalTokens += pFieldLens[i];
+			}
+			tOut.DataTuplet ( "total_tokens", iTotalTokens );
 		}
-		tOut.DataTuplet ( "total_tokens", iTotalTokens );
-	}
 
-	CSphIndexStatus tStatus;
-	pIndex->GetStatus ( &tStatus );
-	tOut.DataTuplet ( "ram_bytes", tStatus.m_iRamUse );
-	tOut.DataTuplet ( "disk_bytes", tStatus.m_iDiskUse );
-	if ( pIndex->IsRT() )
+		CSphIndexStatus tStatus;
+		pIndex->GetStatus ( &tStatus );
+		tOut.DataTuplet ( "ram_bytes", tStatus.m_iRamUse );
+		tOut.DataTuplet ( "disk_bytes", tStatus.m_iDiskUse );
+		if ( pIndex->IsRT() )
+		{
+			tOut.DataTuplet ( "ram_chunk", tStatus.m_iRamChunkSize );
+			tOut.DataTuplet ( "disk_chunks", tStatus.m_iNumChunks );
+			tOut.DataTuplet ( "mem_limit", tStatus.m_iMemLimit );
+		}
+
+		AddIndexQueryStats ( tOut, pServed );
+	} else
 	{
-		tOut.DataTuplet ( "ram_chunk", tStatus.m_iRamChunkSize );
-		tOut.DataTuplet ( "disk_chunks", tStatus.m_iNumChunks );
-		tOut.DataTuplet ( "mem_limit", tStatus.m_iMemLimit );
-	}
+		CSphIndexStatus tStatus;
+		pIndex->GetStatus ( &tStatus );
 
-	AddIndexQueryStats ( tOut, pServed );
+		const char * dHeader[] = { "Name", "Engine", "Version", "Row_format", "Rows", "Avg_row_length", "Data_length", "Max_data_length", "Index_length", "Data_free",
+			"Auto_increment", "Create_time", "Update_time", "Check_time", "Collation", "Checksum", "Create_options", "Comment" };
+		tOut.HeadOfStrings ( &dHeader[0], sizeof(dHeader)/sizeof(dHeader[0]) );
+		
+		tOut.PutString ( sName.cstr() );	// Name
+		tOut.PutString ( "InnoDB" );		// Engine
+		tOut.PutString ( "10" );			// Version
+		tOut.PutString ( "Dynamic" );		// Row_format
+		tOut.PutNumeric ( INT64_FMT, pIndex->GetStats().m_iTotalDocuments );	// Rows
+		tOut.PutString ( "4096" );			// Avg_row_length
+		tOut.PutString ( "0" );				// Data_length
+		tOut.PutString ( "0" );				// Max_data_length
+		tOut.PutString ( "0" );				// Index_length
+		tOut.PutString ( "0" );				// Data_free
+		tOut.PutString ( "5" );				// Auto_increment
+		tOut.PutNULL();						// Create_time
+		tOut.PutNULL();						// Update_time
+		tOut.PutNULL();						// Check_time
+		tOut.PutString ( "utf8" );			// Collation
+		tOut.PutNULL();						// Checksum
+		tOut.PutString ( "" );				// Create_options
+		tOut.PutString ( "" );				// Comment
+
+		tOut.Commit();
+	}
 
 	tOut.Eof();
 }
@@ -16959,7 +17006,7 @@ static void AddDistibutedIndexStatus ( SqlRowBuffer_c & tOut, DistributedIndex_t
 }
 
 
-void HandleMysqlShowIndexStatus ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+void HandleMysqlShowIndexStatus ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, bool bFederatedUser )
 {
 	CSphString sError;
 	const ServedIndex_c * pServed = g_pLocalIndexes->GetRlockedEntry ( tStmt.m_sIndex );
@@ -16980,7 +17027,7 @@ void HandleMysqlShowIndexStatus ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt
 		g_tDistLock.Unlock();
 	} else
 	{
-		AddPlainIndexStatus ( tOut, pServed );
+		AddPlainIndexStatus ( tOut, pServed, bFederatedUser, tStmt.m_sIndex );
 		pServed->Unlock();
 	}
 }
@@ -17460,6 +17507,7 @@ ISphRtIndex * CSphSessionAccum::GetIndex ()
 	return ( m_pAcc ? m_pAcc->GetIndex() : NULL );
 }
 
+bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, CSphString & sFederatedQuery );
 
 class CSphinxqlSession : public ISphNoncopyable
 {
@@ -17469,6 +17517,8 @@ private:
 	CSphSessionAccum	m_tAcc;
 	PercolateMatchResult_t m_tPercolateMeta;
 	SqlStmt_e			m_eLastStmt;
+	bool				m_bFederatedUser;
+	CSphString			m_sFederatedQuery;
 
 public:
 	SessionVars_t			m_tVars;
@@ -17479,6 +17529,7 @@ public:
 	explicit CSphinxqlSession ( bool bManage )
 		: m_tAcc ( bManage )
 		, m_eLastStmt ( STMT_DUMMY )
+		, m_bFederatedUser ( false )
 	{}
 
 	// just execute one sphinxql statement
@@ -17525,6 +17576,18 @@ public:
 
 		SqlRowBuffer_c tOut ( &uPacketID, &tOutput, pThd->m_iConnID );
 
+		if ( bParsedOK && m_bFederatedUser )
+		{
+			if ( !FixupFederatedQuery ( m_tVars.m_eCollation, dStmt,  m_sError, m_sFederatedQuery ) )
+			{
+				m_tLastMeta = CSphQueryResultMeta();
+				m_tLastMeta.m_sError = m_sError;
+				m_tLastMeta.m_sWarning = "";
+				tOut.Error ( sQuery.cstr(), m_sError.cstr() );
+				return true;
+			}
+		}
+
 		// handle multi SQL query
 		if ( bParsedOK && dStmt.GetLength()>1 )
 		{
@@ -17562,13 +17625,15 @@ public:
 
 				if ( m_tVars.m_bProfile )
 					tHandler.SetProfile ( &m_tProfile );
+				if ( m_bFederatedUser )
+					tHandler.SetFederatedUser();
 
 				if ( HandleMysqlSelect ( tOut, tHandler ) )
 				{
 					// query just completed ok; reset out error message
 					m_sError = "";
 					AggrResult_t & tLast = tHandler.m_dResults.Last();
-					SendMysqlSelectResult ( tOut, tLast, false );
+					SendMysqlSelectResult ( tOut, tLast, false, m_bFederatedUser, &m_sFederatedQuery );
 				}
 
 				// save meta for SHOW META (profile is saved elsewhere)
@@ -17809,7 +17874,7 @@ public:
 			return true;
 
 		case STMT_SHOW_INDEX_STATUS:
-			HandleMysqlShowIndexStatus ( tOut, *pStmt );
+			HandleMysqlShowIndexStatus ( tOut, *pStmt, m_bFederatedUser );
 			return true;
 
 		case STMT_SHOW_INDEX_SETTINGS:
@@ -17877,6 +17942,11 @@ public:
 		} // switch
 		return true; // for cases that break early
 	}
+
+	void SetFederatedUser ()
+	{
+		m_bFederatedUser = true;
+	}
 };
 
 
@@ -17939,6 +18009,105 @@ void StatCountCommand ( SearchdCommand_e eCmd )
 {
 	if ( eCmd<SEARCHD_COMMAND_TOTAL )
 		++g_tStats.m_iCommandCount[eCmd];
+}
+
+bool IsFederatedUser ( const BYTE * pPacket, int iLen )
+{
+	// handshake packet structure
+	// 4              capability flags, CLIENT_PROTOCOL_41 always set
+	// 4              max-packet size
+	// 1              character set
+	// string[23]     reserved (all [0])
+	// string[NUL]    username
+
+	if ( !pPacket || iLen<(4+4+1+23+1) )
+		return false;
+
+	const char * sFederated = "FEDERATED";
+	const char * sSrc = (const char *)pPacket + 32;
+
+	return ( strncmp ( sFederated, sSrc, iLen-32 )==0 );
+}
+
+bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, CSphString & sFederatedQuery )
+{
+	if ( !dStmt.GetLength() )
+		return true;
+
+	if ( dStmt.GetLength()>1 )
+	{
+		sError.SetSprintf ( "multi query not supported" );
+		return false;
+	}
+
+
+	SqlStmt_t & tStmt = dStmt[0];
+	if ( tStmt.m_eStmt!=STMT_SELECT && tStmt.m_eStmt!=STMT_SHOW_INDEX_STATUS )
+	{
+		sError.SetSprintf ( "unhandled statement type (value=%d)", tStmt.m_eStmt );
+		return false;
+	}
+	if ( tStmt.m_eStmt==STMT_SHOW_INDEX_STATUS )
+		return true;
+
+	CSphQuery & tSrcQuery = tStmt.m_tQuery;
+
+	// remove query column as it got generated
+	ARRAY_FOREACH ( i, tSrcQuery.m_dItems )
+	{
+		if ( tSrcQuery.m_dItems[i].m_sAlias=="query" )
+		{
+			tSrcQuery.m_dItems.Remove ( i );
+			break;
+		}
+	}
+
+	// move actual query from filter to query itself
+	if ( tSrcQuery.m_dFilters.GetLength()!=1 ||
+		tSrcQuery.m_dFilters[0].m_sAttrName!="query" || tSrcQuery.m_dFilters[0].m_eType!=SPH_FILTER_STRING || tSrcQuery.m_dFilters[0].m_dStrings.GetLength()!=1 )
+		return true;
+
+	const CSphString & sRealQuery = tSrcQuery.m_dFilters[0].m_dStrings[0];
+
+	// parse real query
+	CSphVector<SqlStmt_t> dRealStmt;
+	bool bParsedOK = sphParseSqlQuery ( sRealQuery.cstr(), sRealQuery.Length(), dRealStmt, sError, eCollation );
+	if ( !bParsedOK )
+		return false;
+
+	if ( dRealStmt.GetLength()!=1 )
+	{
+		sError.SetSprintf ( "multi query not supported, got queries=%d", dRealStmt.GetLength() );
+		return false;
+	}
+
+	SqlStmt_t & tRealStmt = dRealStmt[0];
+	if ( tRealStmt.m_eStmt!=STMT_SELECT )
+	{
+		sError.SetSprintf ( "unhandled statement type (value=%d)", tRealStmt.m_eStmt );
+		return false;
+	}
+
+	// keep originals
+	CSphQuery & tRealQuery = tRealStmt.m_tQuery;
+	tRealQuery.m_dRefItems = tSrcQuery.m_dItems; //select list items
+	tRealQuery.m_sIndexes = tSrcQuery.m_sIndexes; // index name 
+	sFederatedQuery = sRealQuery;
+
+	// merge select list items
+	SmallStringHash_T<int> hItems;
+	ARRAY_FOREACH ( i, tRealQuery.m_dItems )
+		hItems.Add ( i, tRealQuery.m_dItems[i].m_sAlias );
+	ARRAY_FOREACH ( i, tSrcQuery.m_dItems )
+	{
+		const CSphQueryItem & tItem = tSrcQuery.m_dItems[i];
+		if ( !hItems.Exists ( tItem.m_sAlias ) )
+			tRealQuery.m_dItems.Add ( tItem );
+	}
+
+	// query setup
+	tSrcQuery = tRealQuery;
+	return true;
 }
 
 static bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString & sQuery, int iPacketLen, bool bProfile, ThdDesc_t * pThd, InputBuffer_c & tIn, ISphOutputBuffer & tOut );
@@ -18044,6 +18213,8 @@ static void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * p
 		{
 			THD_STATE ( THD_NET_WRITE );
 			bAuthed = true;
+			if ( IsFederatedUser ( tIn.GetBufferPtr(), tIn.GetLength() ) )
+				tSession.SetFederatedUser();
 			SendMysqlOkPacket ( tOut, uPacketID );
 			tOut.Flush();
 			if ( tOut.GetError() )
@@ -22584,6 +22755,8 @@ NetEvent_e NetReceiveDataQL_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction
 			} else if ( !m_tState->m_bAuthed )
 			{
 				m_tState->m_bAuthed = true;
+				if ( IsFederatedUser ( m_tState->m_dBuf.Begin(), m_tState->m_dBuf.GetLength() ) )
+					m_tState->m_tSession.SetFederatedUser();
 				m_tState->m_dBuf.Resize ( 0 );
 				ISphOutputBuffer tOut ( m_tState->m_dBuf );
 				SendMysqlOkPacket ( tOut, m_tState->m_uPacketID );

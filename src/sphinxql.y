@@ -585,6 +585,21 @@ filter_item:
 			if ( !pParser->AddNullFilter ( $1, false ) )
 				YYERROR;
 		}
+	| const_int '=' const_int
+		{
+			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
+			if ( !pFilter )
+				YYERROR;
+			pFilter->m_dValues.Add ( $3.m_iValue );
+		}
+	| const_int TOK_NE const_int
+		{
+			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
+			if ( !pFilter )
+				YYERROR;
+			pFilter->m_dValues.Add ( $3.m_iValue );
+			pFilter->m_bExclude = true;
+		}
 
 	// filters on ANY(mva) or ALL(mva)
 	| mva_aggr '=' const_int
@@ -1030,6 +1045,11 @@ show_what:
 			pParser->m_pStmt->m_eStmt = STMT_SHOW_INDEX_SETTINGS;
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $2 );
 			pParser->m_pStmt->m_iIntParam = int($3.m_fValue*10);
+		}
+	| index_or_table TOK_STATUS like_filter
+		{
+			pParser->m_pStmt->m_eStmt = STMT_SHOW_INDEX_STATUS;
+			pParser->m_pStmt->m_sIndex = pParser->m_pStmt->m_sStringParam;
 		}
 	;
 

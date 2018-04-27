@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>duplicate supress hits at another documents</name>
+
+<skip_indexer/>
+<requires>
+<lemmatizer_base/>
+</requires>
+
+<config>
+common
+{
+	lemmatizer_base	= <local>lemmatizer_base</local>
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+index rt
+{
+	type			= rt
+	docinfo			= extern
+	path			= <data_path/>/rt
+    dict 			= keywords
+    morphology 		= lemmatize_ru_all, lemmatize_en_all
+	charset_table	= english, _, 0..9, russian
+	
+	rt_attr_uint	= gid
+	rt_field		= body1
+	rt_field		= body2
+	rt_field		= body3
+	
+	rt_mem_limit	= 8M 
+}
+</config>
+
+<sphqueries>
+<sphinxql>replace into rt (id, gid, body1, body2, body3) values (1, 10, 'the test', 'and the best', 'some share'), (2, 10, 'which he leaned', 'against the tree', 'and share'), (3, 10, 'appeared to think', ' deeply for a moment', 'but share'), (4, 10, 'to put the oil-can', 'in the basket', 'share'), (5, 10, 'various ancient traditions refer', 'to a lost antediluvian world', 'share'), (61, 10, 'many means of transportation all', 'over India and Nepal', 'share'), (61, 10, 'many means of transportation all', 'but India and Nepal', 'share'), (61, 10, 'many means of transportation all', 'either India or Nepal', 'share'), (61, 10, 'many means of transportation all', 'throu India and Nepal', 'share'), (71, 10, 'which can be called', 'due to', 'share'), (72, 10, 'was bothered by my hard', 'look and feel', 'share'), (73, 10, 'wife and man', 'and people', 'share'), (74, 10, 'child and woman', 'with family', 'share')</sphinxql>
+<sphinxql>select * from rt where match ('share') and id=71</sphinxql>
+<sphinxql>select * from rt where match ('share') and id=72</sphinxql>
+<sphinxql>select * from rt where match ('share') and id=73</sphinxql>
+<sphinxql>select * from rt where match ('share') and id=74</sphinxql>
+</sphqueries>
+
+</test>

@@ -1927,6 +1927,7 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bRe
 
 		iHits = pHits->Length();
 		m_dAccum.Reserve ( m_dAccum.GetLength()+iHits );
+		iHits = 0;
 		for ( const CSphWordHit * pHit = pHits->First(); pHit<=pHits->Last(); pHit++ )
 		{
 			// ignore duplicate hits
@@ -1940,10 +1941,12 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bRe
 			// accumulate
 			m_dAccum.Add ( *pHit );
 			tLastHit = *pHit;
+			iHits++;
 		}
 		if ( pFieldLens )
 			pFieldLens [ HITMAN::GetField ( tLastHit.m_uWordPos ) ] = HITMAN::GetPos ( tLastHit.m_uWordPos );
 	}
+	// make sure to get real count without duplicated hits
 	m_dPerDocHitsCount.Add ( iHits );
 
 	m_iAccumDocs++;

@@ -18,4 +18,5 @@ Searching
    searching/collations
    searching/query_cache
    mysql_storage_engine_sphinxse
+   federated_storage_engine
    searching/percolate_query

@@ -29,5 +29,6 @@ Indexes are similar to a data table, with rows called and viewed as documents an
 * an HTTP API , which can accept search queries in SQL, native or JSON format
 * a native API, with official and 3rd party clients available for many languages
 * a proxy storage engine for MySQL called SphinxSE
+* an interface for MySQL FEDERATED storage engine
 
 In addition to regular text searching, Manticore can also perform inverse search (percolate queries), hit highlighting, word corrections, attribute faceting, geospatial searches. Manticore is designed to scale by supporting distributing a data collection across multiple servers and offer an internal load-balancer for High Availability.

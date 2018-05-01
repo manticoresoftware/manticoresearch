@@ -14007,7 +14007,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		if ( !wrRows.OpenFile ( pDstIndex->GetIndexFileName("tmp.spa"), sError ) )
 			return false;
 
-		int64_t iExpectedDocs = pDstIndex->m_tStats.m_iTotalDocuments + pSrcIndex->GetStats().m_iTotalDocuments;
+		int64_t iExpectedDocs = pDstIndex->m_iDocinfo + pSrcIndex->m_iDocinfo;
 		AttrIndexBuilder_c tMinMax ( pDstIndex->m_tSchema );
 		int64_t iMinMaxSize = tMinMax.GetExpectedSize ( iExpectedDocs );
 		if ( iMinMaxSize>INT_MAX || iExpectedDocs>INT_MAX )

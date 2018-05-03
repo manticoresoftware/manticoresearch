@@ -41,6 +41,8 @@ case, you will have to use separate queries (or separate batches).
 There are two major optimizations to be aware of: common query
 optimization and common subtree optimization.
 
+.. _common_query_optimization:
+
 **Common query optimization** means that ``searchd`` will identify
 all those queries in a batch where only the sorting and group-by
 settings differ, and *only perform searching once*. For instance, if a
@@ -59,6 +61,7 @@ different group-by settings to retrieve all the required groups of
 results (top-3 authors, top-5 vendors, etc). And as long as full-text
 query and filtering settings stay the same, common query optimization
 will trigger, and greatly improve performance.
+
 
 **Common subtree optimization** is even more interesting. It lets
 ``searchd`` exploit similarities between batched full-text queries. It

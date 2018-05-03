@@ -1,5 +1,7 @@
-Interface for MySQL FEDERATED storage engine
---------------------------------------------
+.. _federated_storage_engine:
+
+MySQL FEDERATED storage engine support
+--------------------------------------
 
 MySQL FEDERATED overview
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -9,21 +11,17 @@ database without using replication or cluster technology. Querying a
 local FEDERATED table automatically pulls the data from the remote
 Manticore index. No data is stored on the local tables.
 
-FEDERATED is actually allows MySQL server to talk to ``searchd``,
-run search queries, and obtain search results. All indexing and searching
-happen outside MySQL.
-
-FEDERATED is available for MySQL since 5.x series. Manticore daemon since 2.6.4
-has interface compatible with queries from FEDERATED storage engine.
-
+With FEDERATED engine a MySQL server can connect to a local or remote Manticore daemon and perform search queries.
+Performing queries via FEDERATED is similar to SphinxSE plugin. Unlike SphinxSE, the FEDERATED engine is bundled in all MySQL installs and can be used with Manticore out of the box, without any additional plugin compiling or changes to the MySQL server. 
 
 Using FEDERATED
 ^^^^^^^^^^^^^^^
 
-To search via FEDERATED, you would need to create special table
-“search table”, and then ``SELECT`` from it with full SphinxQL query put into
-WHERE clause for ``query`` column. 
+An actual Manticore query cannot be used directly with FEDERATED engine and must be "proxied" (send as a string in a column) due to limitations of FEDERATED engine and the fact that Manticore implements custom syntax like the MATCH clause.
 
+To search via FEDERATED, you would need to create first a  FEDERATED engine table.
+The Manticore query will be included in a ``query`` column in the ``SELECT`` performed over the FEDERATED table.
+ 
 Let's begin with an example create statement and search query:
 
 .. code-block:: mysql
@@ -42,30 +40,31 @@ Let's begin with an example create statement and search query:
 
     SELECT * FROM t1 WHERE query='SELECT * FROM test_index WHERE MATCH (\'pile box\') AND channel_id<1000 GROUP BY group_id';
 
-The only fixed mapping is ``query`` column. It is mandatory and
-should have the only index in the table.
+The only fixed mapping is ``query`` column. It is mandatory and must be the only column with an index attached.
 	
 FEDERATED table should have columns with same names as remote
 Manticore index attributes as will be bound to attributes
 provided in Manticore result set by name, however might map
 not all attributes but only some of them. Arbitrary expression
-from query select list wich name “hides” index attribute will
+from query select list which name “hides” index attribute will
 be used at result set.
 
 Manticore daemon identifies query from FEDERATED client by user
 name “FEDERATED”.
-``CONNECTION`` string parameter should be used to specify default searchd
-host, port and indexes for queries issued using this table. Connection string
+``CONNECTION`` string parameter should be used to specify searchd
+host, SphinxQL port and indexes for queries issued using this table. Connection string
 syntax is as follows:
 
 .. code-block:: none
 
 
-    CONNECTION="mysql://FEDERATED@HOST:PORT/INDEXNAME"
+    CONNECTION="mysql://FEDERATED@HOST:PORT/DB/INDEXNAME"
 
 	
+Since Manticore doesn't have the concept of database, the ``DB`` string can be random as it will be ignored by Manticore, but MySQL requires a value in the CONNECTION string definition.
 As seen in example, full ``SELECT`` SphinxQL query should be put
 into WHERE clause on search query column :ref:`select_syntax`.
+
 
 Only ``SELECT`` statement is supported but not ``INSERT``, ``REPLACE``,
 ``UPDATE``, ``DELETE``.
@@ -76,4 +75,4 @@ raise max matches count and use WHERE, ORDER BY and LIMIT clauses on
 MySQL side. This is for two reasons. First, Manticore does a number of
 optimizations and performs better than MySQL on these tasks. Second,
 less data would need to be packed by searchd, transferred and unpacked
-by FEDERATED.
+between Manticore and MySQL.

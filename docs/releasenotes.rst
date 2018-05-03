@@ -1,6 +1,28 @@
 Release notes
 =============
 
+Version 2.6.4 GA, 3 May 2018
+--------------------------------
+
+Features and improvements
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* MySQL FEDERATED engine :ref:`support <federated_storage_engine>`
+* MySQL packets return now SERVER_STATUS_AUTOCOMMIT flag, adds compatibility with ProxySQL
+* :ref:`listen_tfo` - enable TCP Fast Open connections for all listeners
+* indexer --dumpheader can dump also RT header from .meta file
+* cmake build script for Ubuntu Bionic
+
+Bugfixes
+~~~~~~~~
+* `355b116 <https://github.com/manticoresoftware/manticoresearch/commit/355b11629174813abd9cd5bf2233be0783f77745>`__ fixed invalid query cache entries for RT index;
+* `546e229 <https://github.com/manticoresoftware/manticoresearch/commit/546e2297a01cc2913bc0d33052d5bcefae8737eb>`__ fixed index settings got lost next after seamless rotation
+* `0c45098 <https://github.com/manticoresoftware/manticoresearch/commit/0c4509898393993bc87194d2aca2070395ff7f83>`__ fixed fixed infix vs prefix length set; added warning on unsupported infix length
+* `80542fa <https://github.com/manticoresoftware/manticoresearch/commit/80542fa54d727c781635918e8d4d65a20c2fbd1e>`__ fixed RT indexes auto-flush order
+* `705d8c5 <https://github.com/manticoresoftware/manticoresearch/commit/705d8c5f407726ed1c6f9745ecffa375682c8969>`__ fixed result set schema issues for index with multiple attributes and queries to multiple indexes
+* `b0ba932 <https://github.com/manticoresoftware/manticoresearch/commit/b0ba932fff4a082f642cb737381c8a70215d4cc9>`__ fixed some hits got lost at batch insert with document duplicates
+* `4510fa4 <https://github.com/manticoresoftware/manticoresearch/commit/4510fa44ad54b5bbac53c591144501565130fcae>`__ fixed optimize failed to merge disk chunks of RT index with large documents count
+
 Version 2.6.3 GA, 28 March  2018
 --------------------------------
 

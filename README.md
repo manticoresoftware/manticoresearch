@@ -2,13 +2,18 @@
 
 -----------------
 
-[![Docker Automated build](https://img.shields.io/docker/automated/manticoresearch/manticore.svg)](https://hub.docker.com/r/manticoresearch/manticore/)
 [![Docs](https://img.shields.io/badge/docs-latest-brightgreen.svg)](https://docs.manticoresearch.com/latest/html/)
 [![Release](https://img.shields.io/github/release/manticoresoftware/manticore.svg)](https://github.com/manticoresoftware/manticore/releases)
 [![GitHub last commit](https://img.shields.io/github/last-commit/manticoresoftware/manticore.svg)](https://github.com/manticoresoftware/manticore/commits/master)
 [![License](https://img.shields.io/github/license/manticoresoftware/manticore.svg?maxAge=2592000)](https://github.com/adriannuta/manticore/blob/master/COPYING)
 [![Slack][slack-badge]][slack-url]
 [![Twitter](https://img.shields.io/twitter/follow/manticoresearch.svg?style=social&label=Follow)](https://twitter.com/manticoresearch)
+
+### Docker image
+
+[![Docker Automated build](https://img.shields.io/docker/automated/manticoresearch/manticore.svg)](https://hub.docker.com/r/manticoresearch/manticore/)
+[![MicroBadger](https://images.microbadger.com/badges/image/manticoresearch/manticore.svg)](https://microbadger.com/images/manticoresearch/manticore)
+[![Docker Stars](https://img.shields.io/docker/stars/manticoresearch/manticore.svg)](https://hub.docker.com/r/manticoresearch/manticore/)
 
 ## Introduction
 

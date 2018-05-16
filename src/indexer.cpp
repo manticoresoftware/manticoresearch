@@ -1352,6 +1352,7 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	// need to close attribute files that was mapped with RW access to unlink and rename them on windows
 	pSrc->Dealloc();
 	pDst->Dealloc();
+	pDst->Unlock ();
 
 	// pick up merge result
 	const char * sPath = hDst["path"].cstr();

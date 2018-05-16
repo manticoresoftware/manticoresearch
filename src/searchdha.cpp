@@ -269,7 +269,7 @@ void PersistentConnectionsPool_c::Shutdown ()
 
 void ClosePersistentSockets()
 {
-	VectorPtrsRefs_T<HostDashboard_t *> dHosts;
+	VecRefPtrs_t<HostDashboard_t *> dHosts;
 	g_tDashes.GetActiveDashes ( dHosts );
 	dHosts.Apply ( [] ( HostDashboard_t * &pHost ) { SafeDelete ( pHost->m_pPersPool ); } );
 }
@@ -1210,7 +1210,7 @@ HostDashboardPtr_t cDashStorage::FindAgent ( const CSphString & sAgent ) const
 	return HostDashboardPtr_t(); // not found
 }
 
-void cDashStorage::GetActiveDashes ( VectorPtrsRefs_T<HostDashboard_t *> & dAgents ) const
+void cDashStorage::GetActiveDashes ( VecRefPtrs_t<HostDashboard_t *> & dAgents ) const
 {
 	assert ( dAgents.IsEmpty ());
 	CSphScopedRLock tRguard ( m_tDashLock );
@@ -1643,8 +1643,8 @@ void AgentConn_t::Finish ( bool bFail )
 
 	if ( m_pPollerTask )
 	{
-		TimeoutTask (); // remove timer and all callbacks, if any
 		sphLogDebugA ( "%d Abort all callbacks ref=%d", m_iStoreTag, ( int ) GetRefcount () );
+		TimeoutTask (); // remove timer and all callbacks, if any
 		m_pPollerTask = nullptr;
 	}
 
@@ -1770,6 +1770,8 @@ void AgentConn_t::ErrorCallback ( int64_t iWaited )
 
 void AgentConn_t::SendCallback ( int64_t iWaited, DWORD uSent )
 {
+	if ( !m_pPollerTask )
+		return;
 	m_bInNetLoop = true;
 	if ( m_dIOVec.HasUnsent () )
 	{
@@ -1782,6 +1784,8 @@ void AgentConn_t::SendCallback ( int64_t iWaited, DWORD uSent )
 
 void AgentConn_t::RecvCallback ( int64_t iWaited, DWORD uReceived )
 {
+	if ( !m_pPollerTask )
+		return;
 	m_bInNetLoop = true;
 	m_iWaited += iWaited;
 	if ( !ReceiveAnswer ( uReceived ) )
@@ -1872,6 +1876,8 @@ inline SSIZE_T AgentConn_t::RecvChunk ()
 //!
 int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 {
+	if ( pSs->sa_family==AF_UNIX )
+		return 0;
 	m_iStartQuery = sphMicroTimer (); // copied old behaviour
 #if USE_WINDOWS
 	if ( !ConnectEx )
@@ -2065,11 +2071,12 @@ void AgentConn_t::StartRemoteLoopTry ( bool bSkipFirstRetry )
 		{
 			// can't start right now; need to postpone until timeout
 			sphLogDebugA ( "%d postpone DoQuery() for %d msecs", m_iStoreTag, m_iDelay );
-			TimeoutTask ( m_iDelay, [this] {
+			TimeoutTask ( sphMicroTimer () + 1000 * m_iDelay, [this] {
 				m_bInNetLoop = true;
 				State ( Agent_e::HEALTHY );
 				if ( !DoQuery () )
 					StartRemoteLoopTry ();
+				FirePoller ();
 				sphLogDebugA ( "%d finished lambda timeout from postponer ref=%d", m_iStoreTag, ( int ) GetRefcount () );
 			} );
 			return;
@@ -2283,7 +2290,8 @@ bool AgentConn_t::ReceiveAnswer ( DWORD uRecv )
 
 				sphLogDebugA ( "%d Header (Status=%d, Version=%d, answer need %d bytes)", m_iStoreTag, uStat, uVer, iReplySize );
 
-				if ( iReplySize<0 )
+				if ( iReplySize<0
+					|| iReplySize>g_iMaxPacketSize ) // FIXME! add reasonable max packet len too
 					return Fatal ( eWrongReplies, "invalid packet size (status=%d, len=%d, max_packet_size=%d)"
 								   , uStat, iReplySize, g_iMaxPacketSize );
 
@@ -2581,7 +2589,10 @@ public:
 		for ( auto * cTask : m_dQueue )
 			tBuild.Appendf ( tBuild.IsEmpty ()?"%p(" INT64_FMT ")":", %p(" INT64_FMT ")", cTask, cTask->m_iTimeoutTime);
 		CSphString sRes;
-		sRes.SetSprintf ("%s%d:%s", sPrefix, m_dQueue.GetLength (),tBuild.cstr());
+		if ( !m_dQueue.IsEmpty () )
+			sRes.SetSprintf ("%s%d:%s", sPrefix, m_dQueue.GetLength (),tBuild.cstr());
+		else
+			sRes.SetSprintf ( "%sHeap empty.", sPrefix );
 		return sRes;
 	}
 };
@@ -2898,7 +2909,7 @@ protected:
 	inline int poller_wait ( int64_t iTimeoutUS )
 	{
 		m_dReady.Resize ( m_iEvents );
-		int iTimeoutMS = iTimeoutUS<0 ? -1 : ( iTimeoutUS / 1000 );
+		int iTimeoutMS = iTimeoutUS<0 ? -1 : ( ( iTimeoutUS + 500 ) / 1000 );
 		return epoll_wait ( m_iEFD, m_dReady.Begin (), m_dReady.GetLength (), iTimeoutMS );
 	};
 
@@ -2919,13 +2930,13 @@ protected:
 	inline bool ready_error ()
 	{
 		assert ( m_pEntry );
-		return ( m_pEntry->events & ( EPOLLHUP | EPOLLERR ) )!=0;
+		return ( m_pEntry->events & EPOLLERR )!=0;
 	}
 
 	inline bool ready_eof ()
 	{
 		assert ( m_pEntry );
-		return ( m_pEntry->events & ( EPOLLHUP | EPOLLERR ) )==( EPOLLHUP | EPOLLERR );
+		return ( m_pEntry->events & EPOLLHUP )!=0;
 	}
 
 	inline bool ready_read ()
@@ -3095,7 +3106,6 @@ class LazyNetEvents_c : ISphNoncopyable, protected NetEventsFlavour_c
 	using VectorTask_c = CSphVector<Task_t*>;
 
 	// stuff to transfer (enqueue) tasks
-//	CSphAtomic_T<uintptr_t> m_pInternalQueue { 0 }; // internal queue used as single-thread.
 	VectorTask_c *	m_pEnqueuedTasks GUARDED_BY (m_dActiveLock) = nullptr; // ext. mt queue where we add tasks
 	VectorTask_c	m_dInternalTasks; // internal queue where we add our tasks without mutex
 	CSphMutex	m_dActiveLock;
@@ -3117,7 +3127,7 @@ private:
 			pConnection->AddRef ();
 			sphLogDebugv ( "- TaskFor(%p)->%p, new, ref=%d", pConnection, pTask, (int) pConnection->GetRefcount () );
 		} else
-			sphLogDebugv ( "- TaskFor(%p)->%p, ex, ref=%d", pConnection, pTask, ( int ) pConnection->GetRefcount () );
+			sphLogDebugv ( "- TaskFor(%p)->%p, exst, ref=%d", pConnection, pTask, ( int ) pConnection->GetRefcount () );
 		return pTask;
 	}
 
@@ -3134,6 +3144,7 @@ private:
 		assert ( pTask );
 		auto pConnection = pTask->m_pPayload;
 
+		sphLogDebugL ( "L DeleteTask for %p, (conn %p), release=%d", pTask, pTask->m_pPayload, bReleasePayload );
 		// if payload already invoked in another task (remember, we process deffered action!)
 		// we won't nullify it.
 		if ( pConnection && pConnection->m_pPollerTask==pTask )
@@ -3200,20 +3211,42 @@ private:
 	/// take current internal and external queues, parse it and enqueue changes.
 	void ProcessEnqueuedTasks () REQUIRES ( LazyThread )
 	{
-		sphLogDebugL ( "L starting processing %d internal events", m_dInternalTasks.GetLength () );
-		for ( auto * pTask : m_dInternalTasks )
-			ProcessChanges ( pTask );
-		m_dInternalTasks.Reset();
-
-		auto pExternalQueue = PopQueue ();
 		sphLogDebugL ( "L ProcessEnqueuedTasks" );
 
+		if ( !m_dInternalTasks.IsEmpty () )
+		{
+			sphLogDebugL ( "L starting processing %d internal events", m_dInternalTasks.GetLength () );
+			Task_t * pLastTask = nullptr;
+			for ( auto * pTask : m_dInternalTasks )
+			{
+				if ( pTask==pLastTask )
+					continue;
+				sphLogDebugL ( "L Internal event" );
+				ProcessChanges ( pTask );
+				pLastTask = pTask;
+			}
+			sphLogDebugL ( "L Internal events processed" );
+			m_dInternalTasks.Reset();
+		}
+
+		auto pExternalQueue = PopQueue ();
 		if ( !pExternalQueue )
 			return;
 
-		sphLogDebugL ( "L starting adding %d events", pExternalQueue->GetLength () );
-		for ( auto * pTask : *pExternalQueue )
-			ProcessChanges ( pTask );
+		if ( !pExternalQueue->IsEmpty () )
+		{
+			sphLogDebugL ( "L starting adding %d events", pExternalQueue->GetLength () );
+			Task_t * pLastTask = nullptr;
+			for ( auto * pTask : *pExternalQueue )
+			{
+				if ( pTask==pLastTask )
+					continue;
+				sphLogDebugL ( "L Event" );
+				ProcessChanges ( pTask );
+				pLastTask = pTask;
+			}
+			sphLogDebugL ( "L Events processed" );
+		}
 
 		delete pExternalQueue;
 	}
@@ -3226,26 +3259,18 @@ private:
 				break;
 	}
 
-	/// one event cycle.
-	/// \return false to stop event loop and exit.
-	bool EventTick () REQUIRES ( LazyThread )
+	/// abandon and release all tiemouted events.
+	/// \return next active timeout (in uS), or -1 for infinite.
+	int64_t GetNextTimeout()
 	{
-		sphLogDebugL ( "L EventTick()" );
-		ProcessEnqueuedTasks ();
-
-		// first abandon all timeouted events and release them.
-		// also take min timeout to the next event.
-		auto iNow = sphMicroTimer (); /// to avoid multiple calls to MicroTimer().
-		int64_t iTimeToWaitUS = -1;
-
 		while ( !m_dTimeouts.IsEmpty () )
 		{
 			auto pTask = m_dTimeouts.Root ();
 			assert ( pTask->m_iTimeoutTime>0 );
-			iTimeToWaitUS = pTask->m_iTimeoutTime - iNow;
 
-			if ( iTimeToWaitUS>0 )
-				break;
+			int64_t iNextTimeout = pTask->m_iTimeoutTime - sphMicroTimer ();
+			if ( iNextTimeout>0 )
+				return iNextTimeout;
 
 			sphLogDebugL ( "L timeout happens for %p task", pTask );
 			m_dTimeouts.Pop ();
@@ -3264,21 +3289,33 @@ private:
 				sphLogDebugL ( "L timeout action finished" );
 			}
 			poll_correct_events ( uSubscribes );
-			iNow = sphMicroTimer ();
-			iTimeToWaitUS = -1;
 		}
+		return -1; /// means 'infinite'
+	}
 
-		sphLogDebugL ( "L calculated timeout is " INT64_FMT " useconds", iTimeToWaitUS );
+	/// one event cycle.
+	/// \return false to stop event loop and exit.
+	bool EventTick () REQUIRES ( LazyThread )
+	{
+		sphLogDebugL ( "L EventTick()" );
+		ProcessEnqueuedTasks ();
 
-		auto iEvents = poller_wait ( iTimeToWaitUS );
-		auto iWaited = sphMicroTimer() - iNow;
+		auto iTimeToWailtUS = GetNextTimeout ();
+		sphLogDebugL ( "L calculated timeout is " INT64_FMT " useconds", iTimeToWailtUS );
+
+		auto iStarted = sphMicroTimer ();
+		auto iEvents = poller_wait ( iTimeToWailtUS );
+		auto iWaited = sphMicroTimer() - iStarted;
+
+		if ( g_bShutdown )
+		{
+			sphInfo ( "EventTick() exit because of shutdown=%d", g_bShutdown );
+			return false;
+		}
 
 		if ( iEvents<0 )
 		{
 			int iErrno = sphSockGetErrno ();
-			if ( iErrno==EINTR && g_bShutdown )
-				return false;
-
 			if ( m_iLastReportedErrno!=iErrno )
 			{
 				sphLogDebugL ( "L poller tick failed: %s", sphSockError ( iErrno ) );
@@ -3287,9 +3324,7 @@ private:
 			sphLogDebugL ( "L poller tick failed: %s", sphSockError ( iErrno ) );
 			return true;
 		}
-		sphLogDebugL ( "L poller wait returned %d events from %d (timeout " INT64_FMT "us)", iEvents, m_iEvents, iTimeToWaitUS );
-
-
+		sphLogDebugL ( "L poller wait returned %d events from %d", iEvents, m_iEvents );
 
 		/// we have some events to speak about...
 		for ( int i = 0; i<iEvents; ++i )
@@ -3301,14 +3336,22 @@ private:
 				continue;
 			}
 
-			if ( pTask )
-				sphLogDebugL ( "L event action for %p(%d), %d", pTask, pTask->m_ifd, ready_events () );
-			else
+			if ( !pTask )
 				continue;
+			else
+				sphLogDebugL ( "L event action for %p(%d), %d", pTask, pTask->m_ifd, ready_events () );
 
 			bool bError = ready_error ();
+			bool bEof = ready_eof ();
 			if ( bError )
+			{
 				sphLogDebugL ( "L error happened" );
+				if ( bEof )
+				{
+					sphLogDebugL ( "L assume that is eof, discard the error" );
+					bError = false;
+				}
+			}
 
 			if ( pTask->m_uIOActive )
 			{
@@ -3321,9 +3364,13 @@ private:
 				{
 					if ( ready_write () )
 					{
-						sphLogDebugL ( "L write action %p, waited " INT64_FMT ", transferred %d", pTask, iWaited, ready_transferred() );
-						pTask->m_pPayload->SendCallback ( iWaited, ready_transferred () );
-						sphLogDebugL ( "L write action %p completed", pTask );
+						if ( !bEof )
+						{
+							sphLogDebugL ( "L write action %p, waited " INT64_FMT ", transferred %d", pTask, iWaited, ready_transferred() );
+							pTask->m_pPayload->SendCallback ( iWaited, ready_transferred () );
+							sphLogDebugL ( "L write action %p completed", pTask );
+						} else
+							sphLogDebugL ( "L write action avoid because of eof", pTask );
 					}
 
 					if ( ready_read() )
@@ -3348,28 +3395,22 @@ public:
 
 	~LazyNetEvents_c ()
 	{
+		assert ( g_bShutdown );
+		sphLogDebug ( "~LazyNetEvents_c. Shutdown=%d", g_bShutdown );
+		Fire();
 		sphThreadJoin ( &m_dWorkingThread );
 		poll_destroy();
 	}
 
-	inline const char* telltype ( BYTE uType ) // helper just for logging
-	{
-		switch ( uType )
-		{
-		case 0: return "REMOVE";
-		case 1: return "EV_TIMEOUT";
-		case 3: return "EV_TIMEOUT | EV_READ";
-		case 7: return "EV_TIMEOUT | EV_READ | EV_WRITE";
-		}
-		return "NOT_USED_TYPE";
-	}
-
 	void AddToQueue ( Task_t * pTask, bool bInternal )
 	{
-		if ( bInternal)
-			m_dInternalTasks.Add ( pTask );
-		else
+		if ( bInternal )
 		{
+			sphLogDebugL ( "L AddToQueue, int=%d", m_dInternalTasks.GetLength () );
+			m_dInternalTasks.Add ( pTask );
+		} else
+		{
+			sphLogDebugL ( "- AddToQueue, ext=%d", m_pEnqueuedTasks ? m_pEnqueuedTasks->GetLength () : 0 );
 			ScopedMutex_t tLock ( m_dActiveLock );
 			if ( !m_pEnqueuedTasks )
 				m_pEnqueuedTasks = new VectorTask_c;
@@ -3388,7 +3429,7 @@ public:
 		if ( pTask->m_iTimeoutTime==iTimeoutMS )
 			return;
 
-		sphLogDebugv ( "- %d LazyNetEvents_c::EnqueueTask pconn=%p, ts=" INT64_FMT ", ActivateIO=%d"
+		sphLogDebugv ( "- %d EnqueueTask invoked with pconn=%p, ts=" INT64_FMT ", ActivateIO=%d"
 					   , pConnection->m_iStoreTag, pConnection, iTimeoutMS, uActivateIO );
 
 		pTask->m_iTimeoutTime = iTimeoutMS;
@@ -3410,7 +3451,7 @@ public:
 #endif
 		}
 
-		sphLogDebugv ( "- %d enqueueing (task %p) " INT64_FMT "Us, ChangeIO=%d", pConnection->m_iStoreTag, pTask, pTask->m_iTimeoutTime, pTask->m_uIOChanged );
+		sphLogDebugv ( "- %d EnqueueTask enqueueing (task %p) " INT64_FMT "Us, ChangeIO=%d", pConnection->m_iStoreTag, pTask, pTask->m_iTimeoutTime, pTask->m_uIOChanged );
 		AddToQueue ( pTask, pConnection->InNetLoop () );
 	}
 
@@ -3460,7 +3501,6 @@ void AgentConn_t::TimeoutTask ( int64_t iTimeoutMS, Clbck_f &&fTimeout, BYTE uAc
 
 	if ( fTimeout )
 		m_bNeedKick = !m_bInNetLoop;
-
 	LazyPoller ().EnqueueTask ( this, iTimeoutMS, std::forward<Clbck_f> ( fTimeout ), uActivateIO );
 }
 

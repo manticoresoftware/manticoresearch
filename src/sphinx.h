@@ -246,6 +246,8 @@ void			sphSleepMsec ( int iMsec );
 
 /// check if file exists and is a readable file
 bool			sphIsReadable ( const char * sFilename, CSphString * pError=NULL );
+bool			sphIsReadable ( const CSphString& sFilename, CSphString * pError = NULL );
+
 
 /// set throttling options
 void			sphSetThrottling ( int iMaxIOps, int iMaxIOSize );
@@ -1472,27 +1474,27 @@ struct CSphColumnInfo
 {
 	CSphString		m_sName;		///< column name
 	ESphAttr		m_eAttrType;	///< attribute type
-	ESphWordpart	m_eWordpart;	///< wordpart processing type
-	bool			m_bIndexed;		///< whether to index this column as fulltext field too
+	ESphWordpart	m_eWordpart { SPH_WORDPART_WHOLE };	///< wordpart processing type
+	bool			m_bIndexed = false;		///< whether to index this column as fulltext field too
 
-	int				m_iIndex;		///< index into source result set (-1 for joined fields)
+	int				m_iIndex = -1;	///< index into source result set (-1 for joined fields)
 	CSphAttrLocator	m_tLocator;		///< attribute locator in the row
 
-	ESphAttrSrc		m_eSrc;			///< attr source (for multi-valued attrs only)
+	ESphAttrSrc		m_eSrc { SPH_ATTRSRC_NONE };	///< attr source (for multi-valued attrs only)
 	CSphString		m_sQuery;		///< query to retrieve values (for multi-valued attrs only)
 	CSphString		m_sQueryRange;	///< query to retrieve range (for multi-valued attrs only)
 
-	CSphRefcountedPtr<ISphExpr>		m_pExpr;		///< evaluator for expression items
-	ESphAggrFunc					m_eAggrFunc;	///< aggregate function on top of expression (for GROUP BY)
-	ESphEvalStage					m_eStage;		///< column evaluation stage (who and how computes this column)
-	bool							m_bPayload;
-	bool							m_bFilename;	///< column is a file name
-	bool							m_bWeight;		///< is a weight column
+	CSphRefcountedPtr<ISphExpr>		m_pExpr { nullptr };///< evaluator for expression items
+	ESphAggrFunc	m_eAggrFunc { SPH_AGGR_NONE };	///< aggregate function on top of expression (for GROUP BY)
+	ESphEvalStage	m_eStage { SPH_EVAL_STATIC };///< column evaluation stage (who and how computes this column)
+	bool			m_bPayload = false;
+	bool			m_bFilename = false;		///< column is a file name
+	bool			m_bWeight = false;			///< is a weight column
 
-	WORD							m_uNext;		///< next in linked list for hash in CSphSchema
+	WORD			m_uNext = 0xFFFF;			///< next in linked list for hash in CSphSchema
 
 	/// handy ctor
-	CSphColumnInfo ( const char * sName=NULL, ESphAttr eType=SPH_ATTR_NONE );
+	explicit CSphColumnInfo ( const char * sName=nullptr, ESphAttr eType=SPH_ATTR_NONE );
 
 	/// equality comparison checks name, type, and locator
 	bool operator == ( const CSphColumnInfo & rhs ) const
@@ -3449,7 +3451,7 @@ protected:
 
 	int							m_iMaxCachedDocs;
 	int							m_iMaxCachedHits;
-	CSphString					m_sIndexName;
+	CSphString					m_sIndexName;			///< index ID in binlogging; otherwise used only in messages.
 	CSphString					m_sFilename;
 
 public:

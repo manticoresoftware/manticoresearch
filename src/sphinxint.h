@@ -265,28 +265,25 @@ protected:
 	virtual void	Flush ();
 };
 
-
 /// file which closes automatically when going out of scope
 class CSphAutofile : ISphNoncopyable
 {
 protected:
-	int			m_iFD;			///< my file descriptor
-	CSphString	m_sFilename;	///< my file name
-	bool		m_bTemporary;	///< whether to unlink this file on Close()
-	bool		m_bWouldTemporary; ///< backup of the m_bTemporary
+	int			m_iFD = -1;					///< my file descriptor
+	CSphString	m_sFilename;				///< my file name
+	bool		m_bTemporary = false;		///< whether to unlink this file on Close()
+	bool		m_bWouldTemporary = false;	///< backup of the m_bTemporary
 
-	CSphIndexProgress *					m_pStat;
+	CSphIndexProgress *	m_pStat = nullptr;
 
 public:
-					CSphAutofile ();
+					CSphAutofile () = default;
 					CSphAutofile ( const CSphString & sName, int iMode, CSphString & sError, bool bTemp=false );
 					~CSphAutofile ();
 
 	int				Open ( const CSphString & sName, int iMode, CSphString & sError, bool bTemp=false );
 	void			Close ();
 	void			SetTemporary(); ///< would be set if a shit happened and the file is not actual.
-
-public:
 	int				GetFD () const { return m_iFD; }
 	const char *	GetFilename () const;
 	SphOffset_t		GetSize ( SphOffset_t iMinSize, bool bCheckSizeT, CSphString & sError );
@@ -1769,6 +1766,7 @@ int				ExpandKeywords ( int iIndexOpt, QueryOption_e eQueryOpt, const CSphIndexS
 bool			ParseMorphFields ( const CSphString & sMorphology, const CSphString & sMorphFields, const CSphVector<CSphColumnInfo> & dFields, CSphBitvec & tMorphFields, CSphString & sError );
 
 void			sphSetUnlinkOld ( bool bUnlink );
+bool			sphGetUnlinkOld ();
 void			sphUnlinkIndex ( const char * sName, bool bForce );
 
 void			WriteSchema ( CSphWriter & fdInfo, const CSphSchema & tSchema );
@@ -1782,7 +1780,6 @@ void			LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tSettin
 void			LoadFieldFilterSettings ( CSphReader & tReader, CSphFieldFilterSettings & tFieldFilterSettings );
 void			SaveFieldFilterSettings ( CSphWriter & tWriter, const ISphFieldFilter * pFieldFilter );
 
-DWORD			ReadVersion ( const char * sPath, CSphString & sError );
 bool			AddFieldLens ( CSphSchema & tSchema, bool bDynamic, CSphString & sError );
 
 /// Get current thread local index - internal do not use
@@ -1816,9 +1813,62 @@ enum ESphExt
 	SPH_EXT_MVP = 9
 };
 
-const char ** sphGetExts ( ESphExtType eType, DWORD uVersion=INDEX_FORMAT_VERSION );
+const char ** sphGetExts ( ESphExtType eType = SPH_EXT_TYPE_CUR, DWORD uVersion=INDEX_FORMAT_VERSION );
 int sphGetExtCount ( DWORD uVersion=INDEX_FORMAT_VERSION );
 const char * sphGetExt ( ESphExtType eType, ESphExt eExt );
+
+/// encapsulates all common actions over index files in general (copy/rename/delete etc.)
+class IndexFiles_c : public ISphNoncopyable
+{
+	DWORD		m_uVersion = INDEX_FORMAT_VERSION;
+	CSphString	m_sIndexName;	// used for information purposes (logs)
+	CSphString	m_sFilename;	// prefix (i.e. folder + index name, excluding extensions)
+	CSphString	m_sLastError;
+	bool		m_bFatal = false; // if fatal fail happened (unable to rename during rollback)
+	CSphString FullPath ( const char * sExt, const char * sSuffix = "", const char * sBase = nullptr );
+
+public:
+	IndexFiles_c() = default;
+	explicit IndexFiles_c ( const CSphString & sBase, DWORD uVersion = INDEX_FORMAT_VERSION )
+		: m_uVersion ( uVersion )
+		, m_sFilename ( sBase )
+	{}
+
+	void InitFrom ( const CSphIndex * pIndex );
+
+	inline void SetName ( const char * sIndex )
+	{
+		m_sIndexName = sIndex;
+	}
+
+	inline void SetBase ( const CSphString & sNewBase )
+	{
+		m_sFilename = sNewBase;
+	}
+
+	inline const CSphString& GetBase() const { return m_sFilename; }
+
+	inline const char * ErrorMsg () const { return m_sLastError.cstr(); }
+	inline bool IsFatal() const { return m_bFatal; }
+
+	// read .sph and adopt index version from there.
+	bool ReadVersion ( const char * sType="" );
+
+	CSphString MakePath ( const char * sSuffix = "", const char * sBase = nullptr );
+
+	bool Rename ( const char * sFrom, const char * sTo );  // move files between different bases
+	bool Rollback ( const char * sBackup, const char * sPath ); // move from backup to path; fail is fatal
+	bool RenameSuffix ( const char * sFromSuffix, const char * sToSuffix="" );  // move files in base between two suffixes
+	bool RenameBase ( const char * sToBase );  // move files to different base
+	bool RenameLock ( const char * sTo, int & iLockFD ); // safely move lock file
+	bool RelocateToNew ( const char * sNewBase ); // relocate to new base and append '.new' suffix
+	bool RollbackSuff ( const char * sBackupSuffix, const char * sActiveSuffix="" ); // move from backup to active; fail is fatal
+	bool HasAllFiles ( const char * sType = "" ); // check that all necessary files are readable
+	void Unlink ( const char * sType = "" );
+
+	// if prev op fails with fatal error - log the message and terminate
+	CSphString FatalMsg(const char * sMsg=nullptr);
+};
 
 int sphDictCmp ( const char * pStr1, int iLen1, const char * pStr2, int iLen2 );
 int sphDictCmpStrictly ( const char * pStr1, int iLen1, const char * pStr2, int iLen2 );
@@ -1988,18 +2038,18 @@ struct SuggestResult_t
 	// state
 	CSphVector<char>			m_dTrigrams;
 	// payload
-	void *						m_pWordReader;
-	void *						m_pSegments;
-	bool						m_bMergeWords;
+	void *						m_pWordReader = nullptr;
+	void *						m_pSegments = nullptr;
+	bool						m_bMergeWords = false;
 	// word
 	CSphString		m_sWord;
-	int				m_iLen;
+	int				m_iLen = 0;
 	int				m_dCodepoints[SPH_MAX_WORD_LEN];
-	int				m_iCodepoints;
-	bool			m_bUtf8;
-	bool			m_bHasExactDict;
+	int				m_iCodepoints = 0;
+	bool			m_bUtf8 = false;
+	bool			m_bHasExactDict = false;
 
-	SuggestResult_t () : m_pWordReader ( NULL ), m_pSegments ( NULL ), m_bMergeWords ( false ), m_iLen ( 0 ), m_iCodepoints ( 0 ), m_bUtf8 ( false ), m_bHasExactDict ( false )
+	SuggestResult_t ()
 	{
 		m_dBuf.Reserve ( 8096 );
 		m_dMatched.Reserve ( 512 );

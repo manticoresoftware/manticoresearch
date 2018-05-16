@@ -1932,13 +1932,13 @@ bool HttpHandlerPQ_c::Process()
 		bMatch = true;
 
 	// get index
-	ServedIndexScPtr_c pServed ( GetServed ( sIndex ) );
+	ServedDescRPtr_c pServed ( GetServed ( sIndex ) );
 	if ( !pServed )
 	{
 		FormatError ( SPH_HTTP_STATUS_500, "no such index '%s'", sIndex.cstr () );
 		return false;
 	}
-	if ( !pServed->m_bPercolate || !pServed->m_pIndex )
+	if ( pServed->m_eType!=eITYPE::PERCOLATE || !pServed->m_pIndex )
 	{
 		FormatError ( SPH_HTTP_STATUS_500, "index '%s' is not percolate (enabled=%d)", sIndex.cstr() );
 		return false;

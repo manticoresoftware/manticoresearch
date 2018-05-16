@@ -1172,5 +1172,28 @@ TEST ( functions, vector )
 	ASSERT_EQ (dVec.GetLength (),8);
 }
 
+TEST ( functions, sphSplit )
+{
+	StrVec_t dParts;
+	sphSplit ( dParts, "a:b,c_", ":,_");
+	ASSERT_EQ ( dParts.GetLength (), 3 );
+	ASSERT_STREQ ( dParts[0].cstr (), "a" );
+	ASSERT_STREQ ( dParts[1].cstr (), "b" );
+	ASSERT_STREQ ( dParts[2].cstr (), "c" );
+
+	dParts.Reset();
+	sphSplit ( dParts, "a:", ":" );
+	
+	ASSERT_EQ ( dParts.GetLength (), 1 );
+	ASSERT_STREQ ( dParts[0].cstr (), "a" );
+
+	dParts.Reset ();
+	sphSplit ( dParts, ":a", ":" );
+
+	ASSERT_EQ ( dParts.GetLength (), 2 );
+	ASSERT_STREQ ( dParts[0].cstr (), "" );
+	ASSERT_STREQ ( dParts[1].cstr (), "a" );
+}
+
 
 

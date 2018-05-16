@@ -606,8 +606,8 @@ using MultiAgentDescPtr_c = CSphRefcountedPtr<MultiAgentDesc_c>;
 /// distributed index
 struct DistributedIndex_t : public ServedStats_c, public ISphRefcountedMT
 {
-	VectorPtrsRefs_T<MultiAgentDesc_c *> m_dAgents;	///< remote agents
-	StrVec_t m_dLocal;							///< local indexes
+	VecRefPtrs_t<MultiAgentDesc_c *> m_dAgents;	///< remote agents
+	StrVec_t m_dLocal;								///< local indexes
 	CSphBitvec m_dKillBreak;
 	int m_iAgentConnectTimeout		{ g_iAgentConnectTimeout };	///< in msec
 	int m_iAgentQueryTimeout		{ g_iAgentQueryTimeout };	///< in msec
@@ -633,7 +633,7 @@ private:
 	};
 };
 
-using DistributedIndexPtr_t = CSphRefcountedPtr<DistributedIndex_t>;
+using DistributedIndexRefPtr_t = CSphRefcountedPtr<DistributedIndex_t>;
 
 class SCOPED_CAPABILITY RLockedDistrIt_c : public RLockedHashIt_c
 {
@@ -645,19 +645,19 @@ public:
 
 	~RLockedDistrIt_c () UNLOCK_FUNCTION() {};
 
-	DistributedIndexPtr_t Get () REQUIRES_SHARED ( m_pHash->IndexesRWLock () )
+	DistributedIndexRefPtr_t Get () REQUIRES_SHARED ( m_pHash->IndexesRWLock () )
 	{
 		auto pDistr = ( DistributedIndex_t * ) RLockedHashIt_c::Get ();
-		DistributedIndexPtr_t pRes ( pDistr );
+		DistributedIndexRefPtr_t pRes ( pDistr );
 		return pRes;
 	}
 };
 
 extern GuardedHash_c * g_pDistIndexes;    // distributed indexes hash
 
-inline DistributedIndexPtr_t GetDistr ( const CSphString &sName )
+inline DistributedIndexRefPtr_t GetDistr ( const CSphString &sName )
 {
-	return DistributedIndexPtr_t ( ( DistributedIndex_t * ) g_pDistIndexes->Get ( sName ) );
+	return DistributedIndexRefPtr_t ( ( DistributedIndex_t * ) g_pDistIndexes->Get ( sName ) );
 }
 
 struct SearchdStats_t
@@ -688,13 +688,13 @@ struct SearchdStats_t
 
 class cDashStorage : public ISphNoncopyable
 {
-	VectorPtrsRefs_T<HostDashboard_t *>	m_dDashes GUARDED_BY(m_tDashLock);
+	VecRefPtrs_t<HostDashboard_t *>	m_dDashes GUARDED_BY(m_tDashLock);
 	mutable RwLock_t				m_tDashLock;
 
 public:
 	void				LinkHost ( HostDesc_t &dHost );
 	HostDashboardPtr_t	FindAgent ( const CSphString& sAgent ) const;
-	void				GetActiveDashes ( VectorPtrsRefs_T<HostDashboard_t *> & dAgents ) const;
+	void				GetActiveDashes ( VecRefPtrs_t<HostDashboard_t *> & dAgents ) const;
 };
 
 extern SearchdStats_t			g_tStats;

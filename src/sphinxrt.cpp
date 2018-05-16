@@ -10416,7 +10416,6 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema * pSche
 {
 	assert ( pSchema && pError );
 
-	CSphColumnInfo tCol;
 
 	// fields
 	SmallStringHash_T<BYTE> hFields;
@@ -10445,38 +10444,29 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema * pSche
 	const char * sTypes[iNumTypes] = { "rt_attr_uint", "rt_attr_bigint", "rt_attr_timestamp", "rt_attr_bool", "rt_attr_float", "rt_attr_string", "rt_attr_json", "rt_attr_multi", "rt_attr_multi_64" };
 	const ESphAttr iTypes[iNumTypes] = { SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_TIMESTAMP, SPH_ATTR_BOOL, SPH_ATTR_FLOAT, SPH_ATTR_STRING, SPH_ATTR_JSON, SPH_ATTR_UINT32SET, SPH_ATTR_INT64SET };
 
-	for ( int iType=0; iType<iNumTypes; iType++ )
+	for ( int iType=0; iType<iNumTypes; ++iType )
 	{
 		for ( CSphVariant * v = hIndex ( sTypes[iType] ); v; v = v->m_pNext )
 		{
-			tCol.m_sName = v->cstr();
+			StrVec_t dNameParts;
+			sphSplit ( dNameParts, v->cstr(), ":");
+			CSphColumnInfo tCol ( dNameParts[0].cstr(), iTypes[iType]);
 			tCol.m_sName.ToLower();
-			tCol.m_eAttrType = iTypes[iType];
 
 			// bitcount
 			tCol.m_tLocator = CSphAttrLocator();
-			const char * pColon = strchr ( const_cast<char*> ( tCol.m_sName.cstr() ), ':' );
-			if ( pColon )
+			if ( dNameParts.GetLength ()>1 )
 			{
 				if ( tCol.m_eAttrType==SPH_ATTR_INTEGER )
 				{
-					int iBits = strtol ( pColon+1, NULL, 10 );
-					if ( iBits<=0 || iBits>ROWITEM_BITS )
-					{
-						pError->SetSprintf ( "attribute '%s': invalid bitcount=%d (bitcount ignored)", tCol.m_sName.cstr(), iBits );
-					} else
-					{
-						tCol.m_tLocator.m_iBitCount = iBits;
-					}
+					auto iBits = strtol ( dNameParts[1].cstr(), NULL, 10 );
+					if ( iBits>0 && iBits<=ROWITEM_BITS )
+						tCol.m_tLocator.m_iBitCount = (int)iBits;
+					else
+						pError->SetSprintf ( "attribute '%s': invalid bitcount=%d (bitcount ignored)", tCol.m_sName.cstr(), (int)iBits );
 
 				} else
-				{
 					pError->SetSprintf ( "attribute '%s': bitcount is only supported for integer types (bitcount ignored)", tCol.m_sName.cstr() );
-				}
-
-				// trim bitcount from name
-				CSphString sName ( tCol.m_sName.cstr(), pColon-tCol.m_sName.cstr() );
-				tCol.m_sName.Swap ( sName );
 			}
 
 			pSchema->AddAttr ( tCol, false );
@@ -10494,7 +10484,6 @@ bool sphRTSchemaConfigure ( const CSphConfigSection & hIndex, CSphSchema * pSche
 		pError->SetSprintf ( "no attribute configured (use rt_attr directive)" );
 		return false;
 	}
-
 
 	return true;
 }
@@ -12547,17 +12536,11 @@ void PercolateMatchResult_t::Swap ( PercolateMatchResult_t & tOther )
 void FixPercolateSchema ( CSphSchema & tSchema )
 {
 	if ( !tSchema.GetFieldsCount() )
-	{
-		CSphColumnInfo tCol;
-		tCol.m_sName = "text";
-		tSchema.AddField ( tCol );
-	}
+		tSchema.AddField ( CSphColumnInfo ( "text" ) );
 
 	if ( !tSchema.GetAttrsCount() )
 	{
-		CSphColumnInfo tCol;
-		tCol.m_sName = "gid";
-		tCol.m_eAttrType = SPH_ATTR_INTEGER;
+		CSphColumnInfo tCol ( "gid", SPH_ATTR_INTEGER );
 		tCol.m_tLocator = CSphAttrLocator();
 		tSchema.AddAttr ( tCol, false );
 	}

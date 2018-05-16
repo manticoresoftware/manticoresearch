@@ -1481,11 +1481,16 @@ protected:
 	int				m_iLength = 0;				///< entries count
 
 protected:
+
+	inline unsigned int HashPos ( const KEY & tKey ) const
+	{
+		return ( ( unsigned int ) HASHFUNC::Hash ( tKey ) ) % LENGTH;
+	}
+
 	/// find entry by key
 	HashEntry_t * FindByKey ( const KEY & tKey ) const
 	{
-		unsigned int uHash = ( (unsigned int) HASHFUNC::Hash ( tKey ) ) % LENGTH;
-		HashEntry_t * pEntry = m_dHash [ uHash ];
+		HashEntry_t * pEntry = m_dHash[HashPos ( tKey )];
 
 		while ( pEntry )
 		{
@@ -1493,16 +1498,14 @@ protected:
 				return pEntry;
 			pEntry = pEntry->m_pNextByHash;
 		}
-		return NULL;
+		return nullptr;
 	}
 
 	HashEntry_t * AddImpl ( const KEY &tKey )
 	{
-		unsigned int uHash = ( (unsigned int) HASHFUNC::Hash ( tKey ) ) % LENGTH;
-
 		// check if this key is already hashed
-		HashEntry_t * pEntry = m_dHash[uHash];
-		HashEntry_t ** ppEntry = &m_dHash[uHash];
+		HashEntry_t ** ppEntry = &m_dHash[HashPos ( tKey )];
+		HashEntry_t * pEntry = *ppEntry;
 		while ( pEntry )
 		{
 			if ( pEntry->m_tKey==tKey )
@@ -1533,7 +1536,7 @@ protected:
 		}
 		m_pLastByOrder = pEntry;
 
-		m_iLength++;
+		++m_iLength;
 		return pEntry;
 	}
 
@@ -1541,8 +1544,8 @@ public:
 	/// ctor
 	CSphOrderedHash ()
 	{
-		for ( int i=0; i<LENGTH; i++ )
-			m_dHash[i] = nullptr;
+		for ( auto &pHash : m_dHash )
+			pHash = nullptr;
 	}
 
 	/// dtor
@@ -1563,12 +1566,12 @@ public:
 			pKill = pNext;
 		}
 
-		for ( int i=0; i<LENGTH; i++ )
-			m_dHash[i] = 0;
+		for ( auto &pHash : m_dHash )
+			pHash = nullptr;
 
-		m_pFirstByOrder = NULL;
-		m_pLastByOrder = NULL;
-		m_pIterator = NULL;
+		m_pFirstByOrder = nullptr;
+		m_pLastByOrder = nullptr;
+		m_pIterator = nullptr;
 		m_iLength = 0;
 	}
 
@@ -1599,11 +1602,10 @@ public:
 	/// returns ref to just intersed or previously existed value
 	T & AddUnique ( const KEY & tKey )
 	{
-		unsigned int uHash = ( (unsigned int) HASHFUNC::Hash ( tKey ) ) % LENGTH;
-
 		// check if this key is already hashed
-		HashEntry_t * pEntry = m_dHash [ uHash ];
-		HashEntry_t ** ppEntry = &m_dHash [ uHash ];
+		HashEntry_t ** ppEntry = &m_dHash[HashPos ( tKey )];
+		HashEntry_t * pEntry = *ppEntry;
+
 		while ( pEntry )
 		{
 			if ( pEntry->m_tKey==tKey )
@@ -1633,14 +1635,14 @@ public:
 		}
 		m_pLastByOrder = pEntry;
 
-		m_iLength++;
+		++m_iLength;
 		return pEntry->m_tValue;
 	}
 
 	/// delete an entry
 	bool Delete ( const KEY & tKey )
 	{
-		unsigned int uHash = ( (unsigned int) HASHFUNC::Hash ( tKey ) ) % LENGTH;
+		auto uHash = HashPos ( tKey );
 		HashEntry_t * pEntry = m_dHash [ uHash ];
 
 		HashEntry_t * pPrevEntry = nullptr;
@@ -1707,22 +1709,13 @@ public:
 		return pEntry->m_tValue;
 	}
 
-	/// get pointer to key storage
-	const KEY * GetKeyPtr ( const KEY & tKey ) const
-	{
-		HashEntry_t * pEntry = FindByKey ( tKey );
-		return pEntry ? &pEntry->m_tKey : nullptr;
-	}
-
 	/// copying
-	const CSphOrderedHash<T,KEY,HASHFUNC,LENGTH> & operator = ( const CSphOrderedHash<T,KEY,HASHFUNC,LENGTH> & rhs )
+	CSphOrderedHash<T,KEY,HASHFUNC,LENGTH> & operator = ( const CSphOrderedHash<T,KEY,HASHFUNC,LENGTH> & rhs )
 	{
 		if ( this!=&rhs )
 		{
 			Reset ();
-
-			rhs.IterateStart ();
-			while ( rhs.IterateNext() )
+			for ( rhs.IterateStart (); rhs.IterateNext(); )
 				Add ( rhs.IterateGet(), rhs.IterateGetKey() );
 		}
 		return *this;
@@ -1731,8 +1724,6 @@ public:
 	/// copying ctor
 	CSphOrderedHash<T,KEY,HASHFUNC,LENGTH> ( const CSphOrderedHash<T,KEY,HASHFUNC,LENGTH> & rhs )
 	{
-		for ( int i=0; i<LENGTH; ++i )
-			m_dHash[i] = nullptr;
 		*this = rhs;
 	}
 
@@ -1749,24 +1740,11 @@ public:
 		m_pIterator = nullptr;
 	}
 
-	/// start iterating from key element
-	bool IterateStart ( const KEY & tKey ) const
-	{
-		m_pIterator = FindByKey ( tKey );
-		return m_pIterator!=nullptr;
-	}
-
 	/// go to next existing entry
 	bool IterateNext () const
 	{
 		m_pIterator = m_pIterator ? m_pIterator->m_pNextByOrder : m_pFirstByOrder;
 		return m_pIterator!=nullptr;
-	}
-
-	/// delete current entry; move step back so the next IterateNext() will step to the next one.
-	void IterateDelete()
-	{
-
 	}
 
 	/// get entry value
@@ -2190,7 +2168,7 @@ class StringBuilder_c
 {
 protected:
 	char *	m_sBuffer = nullptr;
-	int		m_iSize = 0;
+	int		m_iSize = 256;
 	int		m_iUsed = 0;
 
 public:
@@ -2373,7 +2351,7 @@ struct CSphStrHashFunc
 
 /// small hash with string keys
 template < typename T >
-class SmallStringHash_T : public CSphOrderedHash < T, CSphString, CSphStrHashFunc, 256 > {};
+using SmallStringHash_T = CSphOrderedHash < T, CSphString, CSphStrHashFunc, 256 >;
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -2494,7 +2472,7 @@ int				sphOpenFile ( const char * sFile, CSphString & sError, bool bWrite );
 
 /// return size of file descriptor
 int64_t			sphGetFileSize ( int iFD, CSphString & sError );
-
+int64_t			sphGetFileSize ( const char sFile, CSphString &sError );
 
 /// buffer trait that neither own buffer nor clean-up it on destroy
 template < typename T >
@@ -3570,9 +3548,9 @@ protected:
 };
 
 template <class T>
-struct VectorPtrsRefs_T : public ISphNoncopyable, public CSphVector<T>
+struct VecRefPtrs_t : public ISphNoncopyable, public CSphVector<T>
 {
-	~VectorPtrsRefs_T ()
+	~VecRefPtrs_t ()
 	{
 		CSphVector<T>::Apply ( [] ( T &ptr ) { SafeRelease ( ptr ); } );
 	}

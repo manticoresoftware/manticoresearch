@@ -523,7 +523,7 @@ TEST ( T_IndexHash, served_hash_and_getter )
 	{
 		auto pHello = GetServed ( "hello", pHash );
 		auto pWorld = GetServed ( "hello", pHash );
-		ServedIndexScPtr_c pIdx ( pHello );
+		ServedDescRPtr_c pIdx ( pHello );
 //		auto pIdx2 = ServedIndexScPtr_c ( pWorld );
 //		pIdx  = std::move (pIdx2); // must release prev. mutex and acquire new one
 //		ServedIndexScPtr_c pIdxConcurrent ( pHello ); //warning: acquiring mutex 'pHello.().m_tLock' that is already held
@@ -559,7 +559,7 @@ TEST ( T_IndexHash, ensure_right_refcounting )
 
 
 	{
-		ServedIndexScPtr_c pIdx ( GetServed ( "hello", pHash ) );
+		ServedDescRPtr_c pIdx ( GetServed ( "hello", pHash ) );
 //		pIdx = ServedIndexScPtr_c ( GetServed ( "world", pHash ) );
 	}
 
@@ -592,7 +592,7 @@ TEST ( T_IndexHash, served_pointer_manipulations )
 	ServedDesc_t tDesc;
 	pHash->AddUniq ( new ServedIndex_c ( tDesc ), "hello" );
 
-	using DistrPtrs_t = VectorPtrsRefs_T<const ServedIndex_c *>;
+	using DistrPtrs_t = VecRefPtrs_t<const ServedIndex_c *>;
 
 	{
 		DistrPtrs_t dVec;

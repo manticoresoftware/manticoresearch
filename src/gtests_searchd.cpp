@@ -20,10 +20,10 @@ static CSphString g_sNewPath;
 static DWORD g_uIter = 0;
 static const auto ITERATIONS = 10000;
 
-static ServedIndexPtr_c GetTestLocal ( const CSphString &sName )
+static ServedIndexRefPtr_c GetTestLocal ( const CSphString &sName )
 {
 	auto pObj = (ServedIndex_c *) g_pLocals->Get ( sName );
-	ServedIndexPtr_c pRes ( pObj );
+	ServedIndexRefPtr_c pRes ( pObj );
 	return pRes;
 }
 
@@ -35,14 +35,12 @@ void ThdSearch ( void * )
 		{
 			auto pDesc = GetTestLocal ( g_dLocals[i] );
 			bool bGot = pDesc;
-			bool bEnabled = ( bGot && pDesc->m_bEnabled );
 
 			// check that it exists
 			if ( !bGot )
 				continue;
 
-			if ( pDesc->m_bEnabled )
-				g_bHas = g_bHas ^ bEnabled;
+			g_bHas = g_bHas ^ bGot;
 		}
 	}
 }
@@ -55,7 +53,7 @@ void ThdRotate ( void * )
 		++g_uIter;
 
 		auto pServed = GetTestLocal ( g_sIndex );
-		ServedIndexScPtr_c dWriteLock ( pServed, true );
+		ServedDescWPtr_c dWriteLock ( pServed );
 
 		dWriteLock->m_sNewPath = "";
 		dWriteLock->m_sIndexPath = g_sNewPath;

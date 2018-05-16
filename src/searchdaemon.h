@@ -173,12 +173,21 @@ enum SearchdCommandV_e : WORD
 
 enum ESphAddIndex
 {
-	ADD_ERROR	= 0,
-	ADD_LOCAL	= 1,
-	ADD_DISTR	= 2,
-	ADD_RT		= 3,
-	ADD_TMPL	= 4,
-	ADD_CLUSTER	= 5,
+	ADD_ERROR	= 0, // wasn't added because of config or other error
+	ADD_DSBLED	= 1, // added into disabled hash (need to prealloc/preload, etc)
+	ADD_DISTR	= 2, // distributed
+	ADD_SERVED	= 3, // added and active (can be used in queries)
+//	ADD_CLUSTER	= 4,
+};
+
+enum class eITYPE
+{
+	PLAIN,
+	TEMPLATE,
+	RT,
+	PERCOLATE,
+	DISTR,
+	ERROR_, // simple "ERROR" doesn't work on win due to '#define ERROR 0' somewhere.
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -620,34 +629,32 @@ private:
 
 struct ServedDesc_t
 {
-	CSphIndex * m_pIndex = nullptr; ///< owned index; will be deleted in d-tr
-	CSphString m_sIndexPath;
-	CSphString m_sNewPath;
-	bool m_bMlock = false;
-	bool m_bPreopen = false;
-	int m_iExpandKeywords { KWE_DISABLED };
-	bool m_bOnlyNew = false;
-	bool m_bRT = false;
-	CSphString m_sGlobalIDFPath;
-	bool m_bOnDiskAttrs = false;
-	bool m_bOnDiskPools = false;
-	int64_t m_iMass = 0; /// relative weight (by access speed) of the index
-	bool m_bPercolate = false;
-	CSphString m_sUnlink;
-//	bool m_bEnabled = true;        ///< to disable index in cases when rotation fails
-//	bool m_bToDelete = false;       ///< used in rotation; fixme! delete.
-
+	CSphIndex *	m_pIndex		= nullptr; ///< owned index; will be deleted in d-tr
+	CSphString	m_sIndexPath;	///< current index path; independent but related to one in m_pIndex
+	CSphString	m_sNewPath;		///< when reloading because of config changed, it contains path to new index.
+	bool		m_bMlock		= false;
+	bool		m_bPreopen		= false;
+	int			m_iExpandKeywords { KWE_DISABLED };
+	bool		m_bOnlyNew		= false; ///< load new (previously not loaded) index - need fixup, prealloc, etc.
+	CSphString	m_sGlobalIDFPath;
+	bool		m_bOnDiskAttrs	= false;
+	bool		m_bOnDiskPools	= false;
+	int64_t		m_iMass			= 0; // relative weight (by access speed) of the index
+	mutable CSphString	m_sUnlink;
+	eITYPE		m_eType			= eITYPE::PLAIN;
+	inline bool IsMutable () const { return m_eType==eITYPE::RT || m_eType==eITYPE::PERCOLATE; }
 	virtual                ~ServedDesc_t ();
 };
 
 // wrapped ServedDesc_t - to be served as pointers in containers
 // (fully block any access to internals)
-// create ServedIndexScPtr_c instance to have actual access to the members.
+// create ServedDesc[R|W]Ptr_c instance to have actual access to the members.
 class ServedIndex_c : public ISphRefcountedMT, private ServedDesc_t, public ServedStats_c
 {
 	mutable RwLock_t m_tLock;
 private:
-	friend class ServedIndexScPtr_c;
+	friend class ServedDescRPtr_c;
+	friend class ServedDescWPtr_c;
 
 	ServedDesc_t * ReadLock () const ACQUIRE_SHARED( m_tLock );
 	ServedDesc_t * WriteLock () const ACQUIRE( m_tLock );
@@ -666,43 +673,60 @@ public:
 	CSphRwlock * rwlock () const RETURN_CAPABILITY ( m_tLock )
 	{ return nullptr; }
 
-	CSphAtomic	m_bEnabled {1};
-	CSphAtomic	m_bToDelete {0};
 };
 
 
-/// RAII shared read and write lock
-class SCOPED_CAPABILITY ServedIndexScPtr_c : ISphNoncopyable
+/// RAII shared reader for ServedDesc_t hidden in ServedIndex_c
+class SCOPED_CAPABILITY ServedDescRPtr_c : ISphNoncopyable
 {
 public:
-	ServedIndexScPtr_c() = default;
+	ServedDescRPtr_c() = default;
 	// by default acquire read (shared) lock
-	ServedIndexScPtr_c ( const ServedIndex_c * pLock ) ACQUIRE_SHARED( pLock->m_tLock )
+	ServedDescRPtr_c ( const ServedIndex_c * pLock ) ACQUIRE_SHARED( pLock->m_tLock )
 		: m_pLock { pLock }
 	{
 		if ( m_pLock )
 			m_pCore = m_pLock->ReadLock();
 	}
 
+	/// unlock on going out of scope
+	~ServedDescRPtr_c () RELEASE ()
+	{
+		if ( m_pLock )
+			m_pLock->Unlock ();
+	}
+
+public:
+	const ServedDesc_t * operator-> () const
+	{ return m_pCore; }
+
+	explicit operator bool () const
+	{ return m_pCore!=nullptr; }
+
+	operator const ServedDesc_t * () const
+	{ return m_pCore; }
+private:
+	ServedDesc_t * m_pCore = nullptr;
+	const ServedIndex_c * m_pLock = nullptr;
+};
+
+
+/// RAII exclusive writer for ServedDesc_t hidden in ServedIndex_c
+class SCOPED_CAPABILITY ServedDescWPtr_c : ISphNoncopyable
+{
+public:
+	ServedDescWPtr_c () = default;
+
 	// acquire write (exclusive) lock
-	ServedIndexScPtr_c ( const ServedIndex_c * pLock, bool ) ACQUIRE ( pLock->m_tLock )
+	ServedDescWPtr_c ( const ServedIndex_c * pLock ) ACQUIRE ( pLock->m_tLock )
 		: m_pLock { pLock }
 	{
 		if ( m_pLock )
 			m_pCore = m_pLock->WriteLock ();
 	}
 
-	// there is no access to internals after release
-	void Unlock () RELEASE ()
-	{
-		if ( m_pLock )
-			m_pLock->Unlock ();
-		m_pLock = nullptr;
-		m_pCore = nullptr;
-	}
-
 	/// unlock on going out of scope
-	~ServedIndexScPtr_c () RELEASE ()
+	~ServedDescWPtr_c () RELEASE ()
 	{
 		if ( m_pLock )
 			m_pLock->Unlock ();
@@ -724,7 +748,7 @@ private:
 };
 
 
-using ServedIndexPtr_c = CSphRefcountedPtr<ServedIndex_c>;
+using ServedIndexRefPtr_c = CSphRefcountedPtr<ServedIndex_c>;
 
 /// hash of ref-counted pointers, guarded by RW-lock
 class GuardedHash_c : public ISphNoncopyable
@@ -736,19 +760,25 @@ public:
 	GuardedHash_c ();
 	~GuardedHash_c ();
 
-	// atomically try add an entry and then addref it
+	// atomically try add an entry and adopt it (NO addref!)
 	bool AddUniq ( ISphRefcountedMT * pEntry, const CSphString &tKey ) EXCLUDES ( m_tIndexesRWLock );
 
-	// atomically set new entry, then release previous, if non-zero
+	// atomically set new entry, then release previous, if not the same and is non-zero
 	void AddOrReplace ( ISphRefcountedMT * pEntry, const CSphString &tKey ) EXCLUDES ( m_tIndexesRWLock );
 
 	// release and delete from hash by key
 	bool Delete ( const CSphString &tKey ) EXCLUDES ( m_tIndexesRWLock );
 
+	// delete by key if item exists, but null
+	bool DeleteIfNull ( const CSphString &tKey ) EXCLUDES ( m_tIndexesRWLock );
+
 	int GetLength () const EXCLUDES ( m_tIndexesRWLock );
 
 	// check if value exists and if it is non-null
 	bool Contains ( const CSphString &tKey ) const EXCLUDES ( m_tIndexesRWLock );
+
+	// reset the hash
+	void ReleaseAndClear () EXCLUDES ( m_tIndexesRWLock );
 
 	// returns addreffed value
 	ISphRefcountedMT * Get ( const CSphString &tKey ) const EXCLUDES ( m_tIndexesRWLock );
@@ -761,7 +791,6 @@ private:
 	int GetLengthUnl () const REQUIRES_SHARED ( m_tIndexesRWLock );
 	void Rlock () const ACQUIRE_SHARED( m_tIndexesRWLock );
 	void Unlock () const UNLOCK_FUNCTION ( m_tIndexesRWLock );
-	void ReleaseAndClear () REQUIRES ( m_tIndexesRWLock );
 
 private:
 	mutable CSphRwlock m_tIndexesRWLock; // distinguishable name for catch possible warnings
@@ -808,13 +837,6 @@ protected:
 	void * m_pIterator = nullptr;
 };
 
-inline ServedIndexPtr_c Wrap ( ServedIndex_c * pServed )
-{
-	if ( pServed && !pServed->m_bEnabled )
-		pServed = nullptr;
-	return ServedIndexPtr_c ( pServed );
-}
-
 class SCOPED_CAPABILITY RLockedServedIt_c : public RLockedHashIt_c
 {
 public:
@@ -823,18 +845,22 @@ public:
 	{}
 	~RLockedServedIt_c() UNLOCK_FUNCTION() {}; // d-tr explicitly written because attr UNLOCK_FUNCTION().
 
-	ServedIndexPtr_c Get () REQUIRES_SHARED ( m_pHash->IndexesRWLock() )
+	ServedIndexRefPtr_c Get () REQUIRES_SHARED ( m_pHash->IndexesRWLock() )
 	{
-		return Wrap ( ( ServedIndex_c * ) RLockedHashIt_c::Get () );
+		return ServedIndexRefPtr_c ( ( ServedIndex_c * ) RLockedHashIt_c::Get () );
 	}
 };
 
 extern GuardedHash_c * g_pLocalIndexes;    // served (local) indexes hash
-extern GuardedHash_c * g_pTemplateIndexes;    // template (tokenizer) indexes hash
-
-inline ServedIndexPtr_c GetServed ( const CSphString &sName, GuardedHash_c * pHash = g_pLocalIndexes )
+extern GuardedHash_c * g_pDisabledIndexes; // not-served local indexes hash
+inline ServedIndexRefPtr_c GetServed ( const CSphString &sName, GuardedHash_c * pHash = g_pLocalIndexes )
 {
-	return Wrap ( ( ServedIndex_c * ) pHash->Get ( sName ) );
+	return ServedIndexRefPtr_c ( ( ServedIndex_c * ) pHash->Get ( sName ) );
+}
+
+inline ServedIndexRefPtr_c GetDisabled ( const CSphString &sName, GuardedHash_c * pHash = g_pDisabledIndexes )
+{
+	return GetServed ( sName, g_pDisabledIndexes );
 }
 
 enum SqlStmt_e

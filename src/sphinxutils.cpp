@@ -117,14 +117,12 @@ void sphSplit ( StrVec_t & dOut, const char * sIn, const char * sBounds )
 		// skip until the first non-boundary character
 		const char * sNext = p;
 		while ( *p && !strchr ( sBounds, *p ) )
-			p++;
+			++p;
 
 		// add the token, skip the char
 		dOut.Add().SetBinary ( sNext, int (p-sNext) );
-		if ( *p=='\0' )
-			break;
-
-		p++;
+		if ( *p )
+			++p;
 	}
 }
 
@@ -1285,7 +1283,7 @@ bool sphFileGetContents ( const char * szFileName, CSphVector<BYTE> & dContents 
 	if ( !pFile )
 		return false;
 
-	struct stat st = { 0 };
+	struct stat st = { 0 }; // fixme! we have struct_stat in defines; investigate and use it!
 	if ( fstat ( fileno ( pFile ), &st )<0 )
 	{
 		fclose ( pFile );
@@ -1670,7 +1668,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		CSphTokenizerSettings tSettings;
 		sphConfTokenizer ( hIndex, tSettings );
 
-		ISphTokenizer * pTokenizer = ISphTokenizer::Create ( tSettings, NULL, sError );
+		ISphTokenizer * pTokenizer = ISphTokenizer::Create ( tSettings, nullptr, sError );
 		if ( !pTokenizer )
 			return false;
 
@@ -1680,19 +1678,19 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 
 	if ( !pIndex->GetDictionary () )
 	{
-		CSphDict * pDict = NULL;
+		CSphDict * pDict = nullptr;
 		CSphDictSettings tSettings;
 		if ( bTemplateDict )
 		{
 			sphConfDictionary ( hIndex, tSettings );
-			pDict = sphCreateDictionaryTemplate ( tSettings, NULL, pIndex->GetTokenizer (), pIndex->GetName(), sError );
+			pDict = sphCreateDictionaryTemplate ( tSettings, nullptr, pIndex->GetTokenizer (), pIndex->GetName(), sError );
 			CSphIndexSettings tIndexSettings = pIndex->GetSettings();
 			tIndexSettings.m_uAotFilterMask = sphParseMorphAot ( tSettings.m_sMorphology.cstr() );
 			pIndex->Setup ( tIndexSettings );
 		} else
 		{
 			sphConfDictionary ( hIndex, tSettings );
-			pDict = sphCreateDictionaryCRC ( tSettings, NULL, pIndex->GetTokenizer (), pIndex->GetName(), sError );
+			pDict = sphCreateDictionaryCRC ( tSettings, nullptr, pIndex->GetTokenizer (), pIndex->GetName(), sError );
 		}
 		if ( !pDict )
 		{
@@ -2465,22 +2463,16 @@ void sphSetUnlinkOld ( bool bUnlink )
 	g_bUnlinkOld = bUnlink;
 }
 
+bool sphGetUnlinkOld ()
+{
+	return g_bUnlinkOld;
+}
 
 void sphUnlinkIndex ( const char * sName, bool bForce )
 {
 	if ( !( g_bUnlinkOld || bForce ) )
 		return;
-
-	char sFileName[SPH_MAX_FILENAME_LEN];
-
-	// +1 is for .mvp
-	for ( int i=0; i<sphGetExtCount()+1; i++ )
-	{
-		snprintf ( sFileName, sizeof(sFileName), "%s%s", sName, sphGetExts ( SPH_EXT_TYPE_CUR )[i] );
-		// 'mvp' is optional file
-		if ( ::unlink ( sFileName ) && errno!=ENOENT )
-			sphWarning ( "unlink failed (file '%s', error '%s'", sFileName, strerror(errno) );
-	}
+	IndexFiles_c ( sName ).Unlink ();
 }
 
 

@@ -72,6 +72,7 @@ index dist
 </config>
 
 <sphqueries>
+<!-- <sphinxql>set global log_level=debugv</sphinxql> -->
 <sphinxql>select * from dist</sphinxql>
 <sphinxql>show meta</sphinxql>
 </sphqueries>

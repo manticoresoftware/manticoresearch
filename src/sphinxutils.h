@@ -107,10 +107,10 @@ public:
 };
 
 /// config section type (hash of sections)
-typedef SmallStringHash_T < CSphConfigSection >	CSphConfigType;
+using CSphConfigType = SmallStringHash_T < CSphConfigSection >;
 
 /// config (hash of section types)
-typedef SmallStringHash_T < CSphConfigType >	CSphConfig;
+using CSphConfig = SmallStringHash_T < CSphConfigType >;
 
 /// simple config file
 class CSphConfigParser

@@ -10719,7 +10719,7 @@ public:
 	ISphRtAccum * CreateAccum ( CSphString & sError ) override;
 	ISphTokenizer * CloneIndexingTokenizer() const override { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
 	void SaveMeta ();
-	void GetQueries ( const char * sFilterTags, const CSphFilterSettings * pUID, int iOffset, int iLimit, CSphVector<PercolateQueryDesc> & dQueries ) override;
+	void GetQueries ( const char * sFilterTags, bool bTagsEq, const CSphFilterSettings * pUID, int iOffset, int iLimit, CSphVector<PercolateQueryDesc> & dQueries ) override;
 	bool Truncate ( CSphString & ) override;
 
 	// RT index stub
@@ -11230,7 +11230,7 @@ static void PercolateTags ( const char * sTags, CSphVector<uint64_t> & dTags )
 	dTags.Uniq();
 }
 
-static bool TagsMatched ( const uint64_t * pFilter, int iCount, const uint64_t * pQueryTags, int iQueryTagsCount )
+static bool TagsMatched ( const uint64_t * pFilter, int iCount, const uint64_t * pQueryTags, int iQueryTagsCount, bool bTagsEq )
 {
 	const uint64_t * pFilterEnd = pFilter + iCount;
 	const uint64_t * pTagsEnd = pQueryTags + iQueryTagsCount;
@@ -11242,10 +11242,10 @@ static bool TagsMatched ( const uint64_t * pFilter, int iCount, const uint64_t *
 		else if ( *pFilter<*pQueryTags )
 			pFilter++;
 		else if ( *pQueryTags==*pFilter )
-			return true;
+			return bTagsEq;
 	}
 
-	return false;
+	return !bTagsEq;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -12260,7 +12260,7 @@ int PercolateIndex_c::DeleteQueries ( const char * sTags )
 		if ( !pQuery->m_dTags.GetLength() )
 			continue;
 
-		if ( TagsMatched ( dTags.Begin(), dTags.GetLength(), pQuery->m_dTags.Begin(), pQuery->m_dTags.GetLength() ) )
+		if ( TagsMatched ( dTags.Begin(), dTags.GetLength(), pQuery->m_dTags.Begin(), pQuery->m_dTags.GetLength(), true ) )
 		{
 			SafeDelete ( m_dStored[i].m_pQuery );
 			m_dStored.Remove ( i );
@@ -12555,7 +12555,7 @@ void PercolateIndex_c::SaveMeta()
 		sphWarning ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)", sMetaNew.cstr(), sMeta.cstr(), errno, strerror( errno ) );
 }
 
-void PercolateIndex_c::GetQueries ( const char * sFilterTags, const CSphFilterSettings * pUID, int iOffset, int iLimit, CSphVector<PercolateQueryDesc> & dQueries )
+void PercolateIndex_c::GetQueries ( const char * sFilterTags, bool bTagsEq, const CSphFilterSettings * pUID, int iOffset, int iLimit, CSphVector<PercolateQueryDesc> & dQueries )
 {
 	// FIXME!!! move to filter, add them via join
 	CSphVector<uint64_t> dTags;
@@ -12583,7 +12583,7 @@ void PercolateIndex_c::GetQueries ( const char * sFilterTags, const CSphFilterSe
 			if ( !pQuery->m_dTags.GetLength() )
 				continue;
 
-			if ( !TagsMatched ( dTags.Begin(), dTags.GetLength(), pQuery->m_dTags.Begin(), pQuery->m_dTags.GetLength() ) )
+			if ( !TagsMatched ( dTags.Begin(), dTags.GetLength(), pQuery->m_dTags.Begin(), pQuery->m_dTags.GetLength(), bTagsEq ) )
 				continue;
 		}
 

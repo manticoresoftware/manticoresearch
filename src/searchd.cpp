@@ -12924,12 +12924,14 @@ static bool PercolateShowStatus ( const SqlStmt_t & tStmt, SqlRowBuffer_c & tOut
 	StringBuilder_c tMissedFilter;
 	const char * sFilterTags = nullptr;
 	const CSphFilterSettings * pUID = nullptr;
+	bool bTagsEq = true;
 	ARRAY_FOREACH ( i, dFilters )
 	{
 		const CSphFilterSettings & tFilter = dFilters[i];
 		if ( tFilter.m_sAttrName=="tags" && tFilter.m_eType==SPH_FILTER_STRING && tFilter.m_dStrings.GetLength() )
 		{
 			sFilterTags = tFilter.m_dStrings[0].cstr();
+			bTagsEq = !tFilter.m_bExclude;
 		} else if ( tFilter.m_sAttrName=="uid" && ( tFilter.m_eType==SPH_FILTER_VALUES || tFilter.m_eType==SPH_FILTER_RANGE ) )
 		{
 			pUID = &tFilter;
@@ -12950,7 +12952,7 @@ static bool PercolateShowStatus ( const SqlStmt_t & tStmt, SqlRowBuffer_c & tOut
 	}
 
 	CSphVector<PercolateQueryDesc> dQueries;
-	pIndex->GetQueries ( sFilterTags, pUID, iOffset, iLimit, dQueries );
+	pIndex->GetQueries ( sFilterTags, bTagsEq, pUID, iOffset, iLimit, dQueries );
 	pServed->Unlock();
 
 	if ( !sCountAlias )

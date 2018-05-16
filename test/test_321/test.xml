@@ -125,6 +125,17 @@ CREATE TABLE `test_table` (
 <sphinxql>DELETE FROM pq where tags='id'</sphinxql>
 <sphinxql>SELECT * FROM pq</sphinxql>
 
+<!-- list tags -->
+<sphinxql>INSERT INTO pq (query, tags) VALUES ( 'test 1', 'base3 postid postid_11' )</sphinxql>
+<sphinxql>INSERT INTO pq (query, tags) VALUES ( 'test 2', 'base3 postid postid_12' )</sphinxql>
+<sphinxql>INSERT INTO pq (query, tags) VALUES ( 'test 3', 'base3 city' )</sphinxql>
+<sphinxql>SELECT * FROM pq WHERE uid &gt;= 4 and tags='postid'</sphinxql>
+<sphinxql>SELECT * FROM pq WHERE uid &gt;= 4 and tags!='postid'</sphinxql>
+<sphinxql>SELECT * FROM pq WHERE tags='postid'</sphinxql>
+<sphinxql>SELECT * FROM pq WHERE tags!='postid'</sphinxql>
+<sphinxql>SELECT * FROM pq WHERE tags='city'</sphinxql>
+<sphinxql>SELECT * FROM pq WHERE tags!='city'</sphinxql>
+
 </sphqueries>
 
 </test>

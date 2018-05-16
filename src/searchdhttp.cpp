@@ -1460,7 +1460,7 @@ struct SourceMatch_c : public CSphMatch
 	}
 };
 
-static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, const CSphString & sIndex, JsonEscapedBuilder & tOut )
+static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, const CSphFixedVector<SphDocID_t> & dDocids, const CSphString & sIndex, JsonEscapedBuilder & tOut )
 {
 	tOut += "{";
 
@@ -1525,7 +1525,9 @@ static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, co
 			const char * sSep = "";
 			for ( int iDoc = 0; iDoc<iCount; iDoc++ )
 			{
-				tOut.Appendf ( "%s" DOCID_FMT, sSep, tRes.m_dDocs[iDocOff + 1 + iDoc] );
+				int iRow = tRes.m_dDocs[iDocOff + 1 + iDoc];
+				SphDocID_t uDocid = ( dDocids.GetLength() ? dDocids[iRow] : iRow );
+				tOut.Appendf ( "%s" DOCID_FMT, sSep, uDocid );
 				sSep = ",";
 			}
 			tOut += "] }";
@@ -1617,10 +1619,13 @@ bool HttpHandlerPQ_c::GotDocuments ( PercolateIndex_i * pIndex, const CSphString
 	ISphRtAccum * pAccum = tAcc.GetAcc ( pIndex, sError );
 
 	CSphString sTokenFilterOpts;
-	SphDocID_t uDocID = 1;
+	CSphFixedVector<SphDocID_t> dDocids ( 0 );
+	SphDocID_t uSeqDocid = 1;
+	int iDoc = 0;
 	for ( const cJSON * pDoc : dDocs )
 	{
 		// reset all back to defaults
+		tDoc.m_uDocID = 0;
 		dFields.Fill ( sTmp.scstr() );
 		for ( int i=0; i<iAttrsCount; i++ )
 		{
@@ -1639,7 +1644,7 @@ bool HttpHandlerPQ_c::GotDocuments ( PercolateIndex_i * pIndex, const CSphString
 			if ( !pItem )
 			{
 				if ( sName && ( strncmp ( sName, "id", 2 )==0 || strncmp ( sName, "uid", 3 )==0 ) )
-					uDocID = pChild->valueint;
+					tDoc.m_uDocID = pChild->valueint;
 
 				continue;
 			}
@@ -1652,8 +1657,26 @@ bool HttpHandlerPQ_c::GotDocuments ( PercolateIndex_i * pIndex, const CSphString
 			}
 		}
 
-		tDoc.m_uDocID = uDocID;
-		uDocID++;
+		// assign proper docids
+		bool bGotDocid = ( tDoc.m_uDocID!=0 );
+		if ( bGotDocid && !dDocids.GetLength() )
+		{
+			dDocids.Reset ( dDocs.GetLength()+1 );
+			dDocids[0] = 0; // 0 element unused
+			for ( int iInit=0; iInit<=iDoc; iInit++ )
+				dDocids[iInit] = iInit;
+		}
+		if ( bGotDocid )
+		{
+			dDocids[iDoc+1] = tDoc.m_uDocID;
+			uSeqDocid = Max ( uSeqDocid, tDoc.m_uDocID );
+		} else if ( dDocids.GetLength() )
+		{
+			dDocids[iDoc+1] = uSeqDocid;
+		}
+		tDoc.m_uDocID = iDoc+1;	// PQ work with sequential document numbers, 0 element unused
+		uSeqDocid++;
+		iDoc++;
 
 		// add document
 		pIndex->AddDocument ( pIndex->CloneIndexingTokenizer (), iFieldsCount, dFields.Begin(), tDoc, true, sTokenFilterOpts, NULL, CSphVector<DWORD>(), sError, sWarning, pAccum );
@@ -1678,7 +1701,7 @@ bool HttpHandlerPQ_c::GotDocuments ( PercolateIndex_i * pIndex, const CSphString
 
 	bool bRes = pIndex->MatchDocuments ( pAccum, tRes );
 	JsonEscapedBuilder sRes;
-	EncodePercolateMatchResult ( tRes, sIndex, sRes );
+	EncodePercolateMatchResult ( tRes, dDocids, sIndex, sRes );
 	BuildReply ( sRes, SPH_HTTP_STATUS_200 );
 
 	return bRes;
@@ -1821,9 +1844,9 @@ bool HttpHandlerPQ_c::ListQueries ( PercolateIndex_i * pIndex, const CSphString 
 
 	tRes.m_tmTotal = sphMicroTimer() - tmStart;
 
-
+	CSphFixedVector<SphDocID_t> dTmpids ( 0 );
 	JsonEscapedBuilder sRes;
-	EncodePercolateMatchResult ( tRes, sIndex, sRes );
+	EncodePercolateMatchResult ( tRes, dTmpids, sIndex, sRes );
 	BuildReply ( sRes, SPH_HTTP_STATUS_200 );
 
 	return true;

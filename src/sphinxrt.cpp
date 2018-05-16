@@ -10845,6 +10845,7 @@ static void SegmentGetRejects ( const RtSegment_t * pSeg, SegmentReject_t & tRej
 					if ( !pDoc )
 						break;
 
+					// Docid - should be row-based started from 1
 					assert ( pDoc->m_uDocID>=1 && (int)pDoc->m_uDocID<pSeg->m_iRows+1 );
 					int iDoc = (int)pDoc->m_uDocID - 1;
 					tReject.m_dPerDocTerms[iDoc].Add ( uHash );
@@ -11644,7 +11645,7 @@ public:
 struct PercolateMatchContext_t
 {
 	CSphVector<PercolateQueryDesc> m_dQueryMatched;	
-	CSphVector<SphDocID_t> m_dDocsMatched;
+	CSphVector<int> m_dDocsMatched;
 	CSphVector<int> m_dDt;
 	int m_iQueriesMatched = 0;
 	int m_iDocsMatched = 0;

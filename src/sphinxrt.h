@@ -127,7 +127,7 @@ struct PercolateMatchResult_t
 	bool m_bGetFilters;
 
 	CSphFixedVector<PercolateQueryDesc> m_dQueryDesc;
-	CSphFixedVector<SphDocID_t> m_dDocs;
+	CSphFixedVector<int> m_dDocs;
 	int m_iQueriesMatched;
 	int m_iDocsMatched;
 	int64_t m_tmTotal;

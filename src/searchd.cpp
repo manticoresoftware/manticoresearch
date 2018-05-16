@@ -12816,7 +12816,7 @@ static void PercolateQuery ( const SqlStmt_t & tStmt, bool bReplace, ESphCollati
 		tOut.Ok ( 1, iWarnings );
 }
 
-static void SendPercolateReply ( const PercolateMatchResult_t & tRes, const CSphString & sWarning, const CSphString & sError, SqlRowBuffer_c & tOut )
+static void SendPercolateReply ( const PercolateMatchResult_t & tRes, const CSphString & sWarning, const CSphString & sError, const CSphFixedVector<SphDocID_t> & dDocids, SqlRowBuffer_c & tOut )
 {
 	if ( !sError.IsEmpty() )
 	{
@@ -12860,7 +12860,9 @@ static void SendPercolateReply ( const PercolateMatchResult_t & tRes, const CSph
 			const char * sSep = "";
 			for ( int iDoc = 0; iDoc<iCount; iDoc++ )
 			{
-				sDocs.Appendf ( "%s" DOCID_FMT, sSep, tRes.m_dDocs[iDocOff + 1 + iDoc] );
+				int iRow = tRes.m_dDocs[iDocOff + 1 + iDoc];
+				SphDocID_t uDocid = ( dDocids.GetLength() ? dDocids[iRow] : iRow );
+				sDocs.Appendf ( "%s" DOCID_FMT, sSep, uDocid );
 				sSep = ",";
 			}
 			iDocOff += iCount + 1;
@@ -13049,6 +13051,9 @@ static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVari
 				tAttr.m_sVal = pChild->valuestring;
 				tDoc.SetAttr ( pItem->m_tLoc, tAttr, pItem->m_eType );
 			}
+		} else if ( sName && strlen ( sName )==2 && strncmp ( sName, "id", 2 )==0 )
+		{
+			tDoc.m_uDocID = pChild->valueint;
 		}
 
 		pChild = pChild->next;
@@ -13109,14 +13114,13 @@ static void PercolateMatchDocuments ( const CSphVector<CSphString> & dDocs, cons
 	}
 
 	CSphString sTokenFilterOpts;
-	SphDocID_t uDocID = 1;
-	ARRAY_FOREACH ( iRow, dDocs )
+	CSphFixedVector<SphDocID_t> dDocids ( 0 );
+	SphDocID_t uSeqDocid = 1;
+	ARRAY_FOREACH ( iDoc, dDocs )
 	{
 		// doc-id
-		tDoc.m_uDocID = uDocID;
-		uDocID++;
-
-		dFields[0] = dDocs[iRow].cstr();
+		tDoc.m_uDocID = 0;
+		dFields[0] = dDocs[iDoc].cstr();
 
 		cJSON * pJsonStorage = NULL;
 		if ( tOpts.m_bJsonDocs )
@@ -13130,7 +13134,7 @@ static void PercolateMatchDocuments ( const CSphVector<CSphString> & dDocs, cons
 				tLoc.m_bDynamic = true;
 				tDoc.SetDefaultAttr ( tLoc, tCol.m_eAttrType );
 			}
-			if ( !ParseJsonDocument ( dDocs[iRow].cstr(), hSchemaLocators, iRow, dFields, tDoc, &pJsonStorage, sError ) )
+			if ( !ParseJsonDocument ( dDocs[iDoc].cstr(), hSchemaLocators, iDoc, dFields, tDoc, &pJsonStorage, sError ) )
 				break;
 		}
 
@@ -13140,6 +13144,26 @@ static void PercolateMatchDocuments ( const CSphVector<CSphString> & dDocs, cons
 				cJSON_Delete ( pJsonStorage );
 			break;
 		}
+
+		// assign proper docids
+		bool bGotDocid = ( tDoc.m_uDocID!=0 );
+		if ( bGotDocid && !dDocids.GetLength() )
+		{
+			dDocids.Reset ( dDocs.GetLength()+1 );
+			dDocids[0] = 0; // 0 element unused
+			for ( int iInit=0; iInit<=iDoc; iInit++ )
+				dDocids[iInit] = iInit;
+		}
+		if ( bGotDocid )
+		{
+			dDocids[iDoc+1] = tDoc.m_uDocID;
+			uSeqDocid = Max ( uSeqDocid, tDoc.m_uDocID );
+		} else if ( dDocids.GetLength() )
+		{
+			dDocids[iDoc+1] = uSeqDocid;
+		}
+		tDoc.m_uDocID = iDoc+1;	// PQ work with sequential document numbers, 0 element unused
+		uSeqDocid++;
 
 		// add document
 		pIndex->AddDocument ( pIndex->CloneIndexingTokenizer (), iFieldsCount, dFields.Begin(), tDoc, true, sTokenFilterOpts, NULL, CSphVector<DWORD>(), sError, sWarning, pAccum );
@@ -13166,7 +13190,7 @@ static void PercolateMatchDocuments ( const CSphVector<CSphString> & dDocs, cons
 
 	pIndex->MatchDocuments ( pAccum, tRes );
 
-	SendPercolateReply ( tRes, sWarning, sError, tOut );
+	SendPercolateReply ( tRes, sWarning, sError, dDocids, tOut );
 	tMeta.Swap ( tRes );
 }
 

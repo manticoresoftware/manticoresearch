@@ -214,6 +214,7 @@ const int	MAX_RETRY_DELAY		= 1000;
 static int				g_iAgentRetryCount = 0;
 static int				g_iAgentRetryDelay = MAX_RETRY_DELAY/2;	// global (default) values. May be override by the query options 'retry_count' and 'retry_timeout'
 bool					g_bHostnameLookup = false;
+CSphString				g_sMySQLVersion = SPHINX_VERSION;
 
 struct ServiceThread_t
 {
@@ -11379,6 +11380,10 @@ void BuildStatus ( VectorLike & dStatus )
 		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iConnections );
 	if ( dStatus.MatchAdd ( "maxed_out" ) )
 		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iMaxedOut );
+	if ( dStatus.MatchAdd ( "version" ) )
+		dStatus.Add().SetSprintf ( "%s", SPHINX_VERSION );
+	if ( dStatus.MatchAdd ( "mysql_version" ) )
+		dStatus.Add().SetSprintf ( "%s", g_sMySQLVersion.cstr() );
 	if ( dStatus.MatchAdd ( "command_search" ) )
 		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_SEARCH] );
 	if ( dStatus.MatchAdd ( "command_excerpt" ) )
@@ -23660,10 +23665,10 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 		"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00" // filler
 		"\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d"; // scramble buffer2 (for auth, 4.1+)
 
-	const char * sVersion = hSearchd.GetStr ( "mysql_version_string", SPHINX_VERSION );
-	int iLen = strlen ( sVersion );
+	g_sMySQLVersion = hSearchd.GetStr ( "mysql_version_string", SPHINX_VERSION );
+	int iLen = g_sMySQLVersion.Length();
 
-	g_iMysqlHandshake = sizeof(sHandshake1) + strlen(sVersion) + sizeof(sHandshake2) - 1;
+	g_iMysqlHandshake = sizeof(sHandshake1) + iLen + sizeof(sHandshake2) - 1;
 	if ( g_iMysqlHandshake>=(int)sizeof(g_sMysqlHandshake) )
 	{
 		sphWarning ( "mysql_version_string too long; using default (version=%s)", SPHINX_VERSION );
@@ -23673,7 +23678,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 
 	char * p = g_sMysqlHandshake;
 	memcpy ( p, sHandshake1, sizeof(sHandshake1)-1 );
-	memcpy ( p+sizeof(sHandshake1)-1, sVersion, iLen+1 );
+	memcpy ( p+sizeof(sHandshake1)-1, g_sMySQLVersion.cstr(), iLen+1 );
 	memcpy ( p+sizeof(sHandshake1)+iLen, sHandshake2, sizeof(sHandshake2)-1 );
 	g_sMysqlHandshake[0] = (char)(g_iMysqlHandshake-4); // safe, as long as buffer size is 128
 }

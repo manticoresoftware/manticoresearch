@@ -10729,8 +10729,8 @@ public:
 	void Commit ( int * , ISphRtAccum * pAccExt ) override { RollBack ( pAccExt ); }
 	bool DeleteDocument ( const SphDocID_t * , int , CSphString & , ISphRtAccum * pAccExt ) override { RollBack ( pAccExt ); return true; }
 	void CheckRamFlush () override {}
-	void ForceRamFlush ( bool ) override {}
-	void ForceDiskChunk () override {}
+	void ForceRamFlush ( bool bPeriodic ) override;
+	void ForceDiskChunk () override;
 	bool AttachDiskIndex ( CSphIndex * , CSphString & ) override { return true; }
 	void Optimize ( volatile bool * , ThrottleState_t * ) override {}
 	bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError ) const override;
@@ -10775,6 +10775,8 @@ private:
 	CSphSourceStats					m_tStat;
 	ISphTokenizer *					m_pTokenizerIndexing = nullptr;
 	int								m_iMaxCodepointLength = 0;
+	int64_t							m_iSavedTID = 1;
+	int64_t							m_tmSaved = 0;
 
 	CSphVector<StoredQueryKey_t>	m_dStored;
 	CSphRwlock						m_tLock;
@@ -12214,6 +12216,8 @@ bool PercolateIndex_c::AddQuery ( const char * sQuery, const char * sTags, const
 			m_dStored.Insert ( iPos+1, tItem );
 		}
 	}
+	if ( bAdded )
+		m_iTID++;
 
 	m_tLock.Unlock();
 
@@ -12238,6 +12242,8 @@ int PercolateIndex_c::DeleteQueries ( const uint64_t * pQueries, int iCount )
 			iDeleted++;
 		}
 	}
+	if ( iDeleted )
+		m_iTID++;
 
 	m_tLock.Unlock();
 
@@ -12269,6 +12275,8 @@ int PercolateIndex_c::DeleteQueries ( const char * sTags )
 			iDeleted++;
 		}
 	}
+	if ( iDeleted )
+		m_iTID++;
 
 	m_tLock.Unlock();
 
@@ -12338,6 +12346,8 @@ void PercolateIndex_c::PostSetup()
 	}
 
 	m_dLoadedQueries.Reset ( 0 );
+	m_tmSaved = sphMicroTimer();
+	m_iSavedTID = m_iTID;
 }
 
 bool PercolateIndex_c::Prealloc ( bool bStripPath )
@@ -12475,6 +12485,8 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath )
 			tItem.m_bOr = ( rdMeta.GetDword()!=0 );
 		}
 	}
+	m_tmSaved = sphMicroTimer();
+	m_iTID = m_iSavedTID = 1;
 
 	return true;
 }
@@ -12547,6 +12559,9 @@ void PercolateIndex_c::SaveMeta()
 		}
 	}
 
+	m_iSavedTID = m_iTID;
+	m_tmSaved = sphMicroTimer();
+
 	m_tLock.Unlock();
 
 	wrMeta.CloseFile();
@@ -12617,6 +12632,7 @@ bool PercolateIndex_c::Truncate ( CSphString & )
 	ARRAY_FOREACH ( i, m_dStored )
 		SafeDelete ( m_dStored[i].m_pQuery );
 	m_dStored.Reset();
+	m_iTID++;
 	m_tLock.Unlock();
 
 	SaveMeta();
@@ -12717,6 +12733,7 @@ void PercolateIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 		SafeDelete ( pStored );
 	}
 	m_dStored.Resize ( 0 );
+	m_iTID++;
 
 	PostSetup();
 
@@ -12730,6 +12747,32 @@ void PercolateIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 void SetPercolateThreads ( int iThreads )
 {
 	g_iPercolateThreads = Max ( 1, iThreads );
+}
+
+void PercolateIndex_c::ForceRamFlush ( bool bPeriodic )
+{
+	if ( m_iTID<=m_iSavedTID )
+		return;
+
+	int64_t tmStart = sphMicroTimer();
+	int64_t iWasTID = m_iSavedTID;
+	int64_t tmWas = m_tmSaved;
+	SaveMeta ();
+
+	int64_t tmNow = sphMicroTimer();
+	int64_t tmAge = tmNow - tmWas;
+	int64_t tmSave = tmNow - tmStart;
+
+	sphInfo ( "percolate: index %s: saved ok (mode=%s, last TID=" INT64_FMT ", current TID=" INT64_FMT ", "
+		"time delta=%d sec, took=%d.%03d sec)"
+		, m_sIndexName.cstr(), bPeriodic ? "periodic" : "forced"
+		, iWasTID, m_iTID
+		, (int) (tmAge/1000000), (int)(tmSave/1000000), (int)((tmSave/1000)%1000) );
+}
+
+void PercolateIndex_c::ForceDiskChunk ()
+{
+	ForceRamFlush ( false );
 }
 
 

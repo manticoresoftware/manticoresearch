@@ -79,3 +79,54 @@ utility will serve all the specified indexes, and the clients can
 specify what indexes to search in run time.
 
 
+Index files
+~~~~~~~~~~~
+
+Each index consists of a number of files. 
+
+Plain indexes and RealTime indexes chunks:
+
++-----------+------------------------------+-----------------------------------------+
+| Extension |  Stores                      | Memory management                       |
++===========+==============================+=========================================+
+| spa       | scalar attrs                 | see :ref:`ondisk_attrs`                 |
++-----------+------------------------------+-----------------------------------------+
+| spd       | document lists               | on disk, gets cached by OS              |
++-----------+------------------------------+-----------------------------------------+
+| spi       | dictionary                   | always loaded in memory                 |
++-----------+------------------------------+-----------------------------------------+
+| sph       | index/chunk header           | always loaded in memory                 |
++-----------+------------------------------+-----------------------------------------+
+| spk       | Kill list                    | always loaded in memory                 |
++-----------+------------------------------+-----------------------------------------+
+| spl       | index lock file              | on disk only                            |
++-----------+------------------------------+-----------------------------------------+
+| spm       | MVA attrs                    | see :ref:`ondisk_attrs`                 |
++-----------+------------------------------+-----------------------------------------+
+| spp       | keyword positions            | on disk, gets cached by OS              |
++-----------+------------------------------+-----------------------------------------+
+| sps       | string/json attrs            | see :ref:`ondisk_attrs`                 |
++-----------+------------------------------+-----------------------------------------+
+| mvp       | MVA attrs updates :sup:`[1]` | always loaded in memory                 |
++-----------+------------------------------+-----------------------------------------+
+
+:sup:`[1]` - created only in case MVA persistent updates
+
+RealTime indexes also have:
+
++-----------+---------------------------+-----------------------------------------+
+| Extension |  Stores                   | Memory management                       |
++===========+===========================+=========================================+
++ kill      | RT kill :sup:`[1]`        |  on disk only                           |
++-----------+---------------------------+-----------------------------------------+
+| meta      | RT header                 | always loaded in memory                 |
++-----------+---------------------------+-----------------------------------------+
+| lock      | RT lock file              | on disk only                            |
++-----------+---------------------------+-----------------------------------------+
+| ram       | RAM chunk copy :sup:`[2]` | on disk only                            |
++-----------+---------------------------+-----------------------------------------+
+
+
+:sup:`[1]` RT kill -  documents that gets REPLACEd. Gets cleared when RAM chunk is dumped as disk chunk.
+
+:sup:`[2]` RAM chunk copy - created when RAM chunk is flushed to disk. Cleared when RAM chunk is dumped as disk chunk.

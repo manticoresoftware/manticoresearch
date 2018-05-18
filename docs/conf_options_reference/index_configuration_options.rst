@@ -599,7 +599,7 @@ dict
 ~~~~
 
 The keywords dictionary type. Known values are ‘crc’ and ‘keywords’.
-‘crc’ is DEPRECATED. Use ‘keywords’ instead. Optional, default is
+. Optional, default is
 ‘keywords’.
 
 Keywords dictionary mode (dict=keywords), (greatly) reduces indexing

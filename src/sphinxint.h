@@ -2614,13 +2614,10 @@ private:
 
 struct SchemaItemVariant_t
 {
-	int m_iField;
-	ESphAttr m_eType;
+	int m_iField = -1;
+	int m_iStr = -1;
+	ESphAttr m_eType = SPH_ATTR_NONE;
 	CSphAttrLocator m_tLoc;
-	SchemaItemVariant_t ()
-		: m_iField ( -1 )
-		, m_eType ( SPH_ATTR_NONE )
-	{}
 };
 
 

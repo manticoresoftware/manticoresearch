@@ -2106,6 +2106,8 @@ public:
 			m_sValue[l-2] = '\0';
 		}
 	}
+
+	static int GetGap () { return SAFETY_GAP; }
 };
 
 /// string swapper

@@ -854,12 +854,6 @@ struct RtHitReader2_t : public RtHitReader_t
 /// forward ref
 struct RtIndex_t;
 
-struct JSONAttr_t
-{
-	BYTE *	m_pData;
-	int		m_iLen;
-};
-
 /// indexing accumulator
 class RtAccum_t : public ISphRtAccum
 {
@@ -889,7 +883,7 @@ public:
 	void			ResetDict ();
 	void			Sort ();
 
-	void			AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bReplace, int iRowSize, const char ** ppStr, const CSphVector<DWORD> & dMvas, const CSphVector<JSONAttr_t> & dJson );
+	void			AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bReplace, int iRowSize, const char ** ppStr, const CSphVector<DWORD> & dMvas );
 	RtSegment_t *	CreateSegment ( int iRowSize, int iWordsCheckpoint );
 	void			CleanupDuplicates ( int iRowSize );
 	void			GrabLastWarning ( CSphString & sWarning );
@@ -1695,58 +1689,7 @@ bool RtIndex_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bRe
 	RtAccum_t * pAcc = (RtAccum_t *)pAccExt;
 
 	if ( pAcc )
-	{
-		CSphVector<JSONAttr_t> dJsonData;
-
-		const CSphSchema & tSchema = GetInternalSchema();
-		int iAttr = 0;
-
-		for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
-		{
-			const CSphColumnInfo & tColumn = tSchema.GetAttr(i);
-			if ( tColumn.m_eAttrType==SPH_ATTR_JSON )
-			{
-				const char * pStr = ppStr ? ppStr[iAttr] : NULL;
-				int iLen = pStr ? strlen ( pStr ) : 0;
-
-				if ( pStr && iLen )
-				{
-					// pStr originates as CSphString, so we DO have space for an extra '\0'
-					char * pData = const_cast<char*>(pStr);
-					pData[iLen+1] = '\0';
-
-					CSphVector<BYTE> dBuf;
-					if ( !sphJsonParse ( dBuf, pData, g_bJsonAutoconvNumbers, g_bJsonKeynamesToLowercase, sError ) )
-					{
-						sError.SetSprintf ( "column %s: JSON error: %s", tColumn.m_sName.cstr(), sError.cstr() );
-
-						if ( g_bJsonStrict )
-						{
-							ARRAY_FOREACH ( j, dJsonData )
-								SafeDeleteArray ( dJsonData[j].m_pData );
-
-							return false;
-						}
-
-						if ( sWarning.IsEmpty() )
-							sWarning = sError;
-						else
-							sWarning.SetSprintf ( "%s; %s", sWarning.cstr(), sError.cstr() );
-
-						sError = "";
-					}
-
-					JSONAttr_t & tAttr = dJsonData.Add();
-					tAttr.m_iLen = dBuf.GetLength();
-					tAttr.m_pData = dBuf.LeakData();
-				}
-			}
-
-			iAttr += ( tColumn.m_eAttrType==SPH_ATTR_STRING || tColumn.m_eAttrType==SPH_ATTR_JSON ) ? 1 : 0;
-		}
-
-		pAcc->AddDocument ( pHits, tDoc, bReplace, m_tSchema.GetRowSize(), ppStr, dMvas, dJsonData );
-	}
+		pAcc->AddDocument ( pHits, tDoc, bReplace, m_tSchema.GetRowSize(), ppStr, dMvas );
 
 	return ( pAcc!=NULL );
 }
@@ -1820,7 +1763,7 @@ void RtAccum_t::Sort ()
 	}
 }
 
-void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bReplace, int iRowSize, const char ** ppStr, const CSphVector<DWORD> & dMvas, const CSphVector<JSONAttr_t> & dJson )
+void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bReplace, int iRowSize, const char ** ppStr, const CSphVector<DWORD> & dMvas )
 {
 	MEMORY ( MEM_RT_ACCUM );
 
@@ -1851,22 +1794,20 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bRe
 
 	const CSphSchema & tSchema = m_pIndex->GetInternalSchema();
 	int iAttr = 0;
-	int iJsonAttr = 0;
 	for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
 	{
-		bool bJsonCleanup = false;
 		const CSphColumnInfo & tColumn = tSchema.GetAttr(i);
 		if ( tColumn.m_eAttrType==SPH_ATTR_STRING || tColumn.m_eAttrType==SPH_ATTR_JSON )
 		{
-			const char * pStr = ppStr ? ppStr[iAttr++] : NULL;
-			int iLen = pStr ? strlen ( pStr ) : 0;
-
-			CSphVector<BYTE> dBuf;
-			if ( pStr && iLen && tColumn.m_eAttrType==SPH_ATTR_JSON )
+			const char * pStr = ppStr ? ppStr[iAttr++] : nullptr;
+			int iLen = 0;
+			if ( tColumn.m_eAttrType==SPH_ATTR_STRING )
 			{
-				pStr = (const char*)dJson[iJsonAttr].m_pData;
-				iLen = dJson[iJsonAttr].m_iLen;
-				bJsonCleanup = true;
+				iLen = ( pStr ? strlen ( pStr ) : 0 );
+			} else if ( pStr ) // SPH_ATTR_JSON - len: 4bytes + data
+			{
+				iLen = sphUnpackStr ( (const BYTE *)pStr, nullptr );
+				pStr += 4;
 			}
 
 			if ( pStr && iLen )
@@ -1883,9 +1824,6 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bRe
 			{
 				sphSetRowAttr ( pAttrs, tColumn.m_tLocator, 0 );
 			}
-
-			if ( bJsonCleanup )
-				delete [] dJson[iJsonAttr++].m_pData;
 		} else if ( tColumn.m_eAttrType==SPH_ATTR_UINT32SET || tColumn.m_eAttrType==SPH_ATTR_INT64SET )
 		{
 			assert ( m_dMvas.GetLength() );
@@ -11327,7 +11265,7 @@ bool PercolateIndex_c::AddDocument ( ISphTokenizer * pTokenizer, int iFields, co
 	ISphHits * pHits = tSrc.IterateHits ( sError );
 	pAcc->GrabLastWarning ( sWarning );
 
-	pAcc->AddDocument ( pHits, tDoc, true, m_tSchema.GetRowSize(), ppStr, dMvas, CSphVector<JSONAttr_t>() );
+	pAcc->AddDocument ( pHits, tDoc, true, m_tSchema.GetRowSize(), ppStr, dMvas );
 
 	return true;
 }
@@ -11706,9 +11644,12 @@ static void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_
 	if ( tMatchCtx.m_tReject.Filter ( pStored ) )
 		return;
 
+	const RtSegment_t * pSeg = (RtSegment_t *)tMatchCtx.m_pCtx->m_pIndexData;
+	const BYTE * pStrings = pSeg->m_dStrings.Begin();
+
 	tMatchCtx.m_iEarlyPassed++;
 	tMatchCtx.m_pCtx->ResetFilters();
-	tMatchCtx.m_pCtx->CreateFilters ( false, &pStored->m_dFilters, tMatchCtx.m_tSchema, NULL, NULL, tMatchCtx.m_sWarning, tMatchCtx.m_sWarning, SPH_COLLATION_DEFAULT, true, tMatchCtx.m_dKillist, &pStored->m_dFilterTree );
+	tMatchCtx.m_pCtx->CreateFilters ( false, &pStored->m_dFilters, tMatchCtx.m_tSchema, NULL, pStrings, tMatchCtx.m_sWarning, tMatchCtx.m_sWarning, SPH_COLLATION_DEFAULT, true, tMatchCtx.m_dKillist, &pStored->m_dFilterTree );
 
 	// set terms dictionary
 	tMatchCtx.m_tDictMap.SetMap ( pStored->m_hDict );

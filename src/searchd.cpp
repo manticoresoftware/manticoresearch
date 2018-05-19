@@ -13017,7 +13017,56 @@ struct PercolateOptions_t
 	{}
 };
 
-static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVariant_t> & tLoc, int iRow, CSphFixedVector<const char*> & dFields, CSphMatchVariant & tDoc, cJSON ** ppStorage, CSphString & sError )
+
+static bool String2JsonPack ( char * pStr, CSphVector<BYTE> & dBuf, CSphString & sError, CSphString & sWarning )
+{
+	dBuf.Resize ( 0 ); // buffer for JSON parser must be empty to properly set JSON_ROOT data
+	if ( !pStr )
+		return true;
+
+	if ( !sphJsonParse ( dBuf, pStr, g_bJsonAutoconvNumbers, g_bJsonKeynamesToLowercase, sError ) )
+	{
+		if ( g_bJsonStrict )
+			return false;
+
+		if ( sWarning.IsEmpty() )
+			sWarning = sError;
+		else
+			sWarning.SetSprintf ( "%s; %s", sWarning.cstr(), sError.cstr() );
+
+		sError = "";
+	}
+
+	return true;
+}
+
+struct StringPtrTraits_t
+{
+	CSphVector<BYTE> m_dPackedData;
+	CSphFixedVector<int> m_dOff { 0 };
+	CSphVector<BYTE> m_dParserBuf;
+
+	// remap offsets to string pointers
+	void GetPointers ( CSphFixedVector<const char *> & dStrings ) const
+	{
+		ARRAY_FOREACH ( i, m_dOff )
+		{
+			int iOff = m_dOff[i];
+			dStrings[i] = ( iOff>=0 ? (const char *)m_dPackedData.Begin() + iOff : nullptr );
+		}
+	}
+
+	void Reset ()
+	{
+		m_dPackedData.Resize ( 0 );
+		m_dParserBuf.Resize ( 0 );
+		m_dOff.Fill ( -1 );
+	}
+};
+
+
+static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVariant_t> & tLoc, int iRow, CSphFixedVector<const char*> & dFields, CSphMatchVariant & tDoc,
+	cJSON ** ppStorage, StringPtrTraits_t & tStrings,  CSphString & sError, CSphString & sWarning )
 {
 	const cJSON * pRoot = cJSON_Parse ( sDoc );
 	if ( !pRoot )
@@ -13027,6 +13076,9 @@ static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVari
 	}
 
 	*ppStorage = const_cast<cJSON *>( pRoot );
+
+	SqlInsert_t tAttr;
+	CSphString sTmp;
 
 	int iChildrenCount = cJSON_GetArraySize ( pRoot );
 	const cJSON * pChild = pRoot->child;
@@ -13043,13 +13095,49 @@ static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVari
 				dFields[pItem->m_iField] = pChild->valuestring;
 			} else
 			{
-				// FIXME!!! add JSON string to attr values conversions
-				SqlInsert_t tAttr;
 				tAttr.m_iType = TOK_CONST_FLOAT;
 				tAttr.m_iVal = pChild->valueint;
 				tAttr.m_fVal = (float)pChild->valuedouble;
-				tAttr.m_sVal = pChild->valuestring;
 				tDoc.SetAttr ( pItem->m_tLoc, tAttr, pItem->m_eType );
+
+				if ( pItem->m_eType==SPH_ATTR_JSON || pItem->m_eType==SPH_ATTR_STRING )
+				{
+					assert ( pItem->m_iStr!=-1 );
+					if ( pItem->m_eType==SPH_ATTR_JSON )
+					{
+						// cJSON -> string
+						if ( pChild->child ) 
+							sTmp = sphJsonToString ( pChild );
+
+						// string -> binary packed JSON
+						if ( pChild->child && !sTmp.IsEmpty() )
+						{
+							// sphJsonParse must be terminated with a double zero however usual CSphString have SAFETY_GAP of 4 zeros
+							if ( !String2JsonPack ( (char *)sTmp.cstr(), tStrings.m_dParserBuf, sError, sWarning ) )
+								return false;
+
+							if ( tStrings.m_dParserBuf.GetLength() )
+							{
+								tStrings.m_dOff[pItem->m_iStr] = tStrings.m_dPackedData.GetLength();
+
+								const int iLenBytes = 4;
+								BYTE * pPacked = tStrings.m_dPackedData.AddN ( iLenBytes + tStrings.m_dParserBuf.GetLength() );
+								sphPackStrlen ( pPacked, tStrings.m_dParserBuf.GetLength() );
+								memcpy ( pPacked + iLenBytes, tStrings.m_dParserBuf.Begin(), tStrings.m_dParserBuf.GetLength() );
+							}
+						}
+					} else // SPH_ATTR_STRING
+					{
+						int iLen = ( pChild->valuestring ? strlen ( pChild->valuestring ) : 0 );
+						if ( iLen )
+						{
+							tStrings.m_dOff[pItem->m_iStr] = tStrings.m_dPackedData.GetLength();
+							BYTE * sDst = tStrings.m_dPackedData.AddN ( 1 + iLen + CSphString::GetGap() );
+							memcpy ( sDst, pChild->valuestring, iLen );
+							memset ( sDst+iLen, 0, 1 + CSphString::GetGap() );
+						}
+					}
+				}
 			}
 		} else if ( sName && strlen ( sName )==2 && strncmp ( sName, "id", 2 )==0 )
 		{
@@ -13092,6 +13180,7 @@ static void PercolateMatchDocuments ( const CSphVector<CSphString> & dDocs, cons
 		tDoc.SetDefaultAttr ( tLoc, tCol.m_eAttrType );
 	}
 
+	int iStrCounter = 0;
 	CSphHash<SchemaItemVariant_t> hSchemaLocators;
 	if ( tOpts.m_bJsonDocs )
 	{
@@ -13102,6 +13191,9 @@ static void PercolateMatchDocuments ( const CSphVector<CSphString> & dDocs, cons
 			tAttr.m_tLoc = tCol.m_tLocator;
 			tAttr.m_tLoc.m_bDynamic = true;
 			tAttr.m_eType = tCol.m_eAttrType;
+			if ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_JSON )
+				tAttr.m_iStr = iStrCounter++;
+
 			hSchemaLocators.Add ( sphFNV64 ( tCol.m_sName.cstr() ), tAttr );
 		}
 		for ( int i=0; i<iFieldsCount; i++ )
@@ -13112,6 +13204,10 @@ static void PercolateMatchDocuments ( const CSphVector<CSphString> & dDocs, cons
 			hSchemaLocators.Add ( sphFNV64 ( tField.m_sName.cstr() ), tAttr );
 		}
 	}
+
+	CSphFixedVector<const char *> dStrings ( iStrCounter );
+	StringPtrTraits_t tStrings;
+	tStrings.m_dOff.Reset ( iStrCounter );
 
 	CSphString sTokenFilterOpts;
 	CSphFixedVector<SphDocID_t> dDocids ( 0 );
@@ -13134,8 +13230,12 @@ static void PercolateMatchDocuments ( const CSphVector<CSphString> & dDocs, cons
 				tLoc.m_bDynamic = true;
 				tDoc.SetDefaultAttr ( tLoc, tCol.m_eAttrType );
 			}
-			if ( !ParseJsonDocument ( dDocs[iDoc].cstr(), hSchemaLocators, iDoc, dFields, tDoc, &pJsonStorage, sError ) )
+			tStrings.Reset();
+
+			if ( !ParseJsonDocument ( dDocs[iDoc].cstr(), hSchemaLocators, iDoc, dFields, tDoc, &pJsonStorage, tStrings, sError, sWarning ) )
 				break;
+
+			tStrings.GetPointers ( dStrings );
 		}
 
 		if ( !sError.IsEmpty() )
@@ -13166,7 +13266,7 @@ static void PercolateMatchDocuments ( const CSphVector<CSphString> & dDocs, cons
 		uSeqDocid++;
 
 		// add document
-		pIndex->AddDocument ( pIndex->CloneIndexingTokenizer (), iFieldsCount, dFields.Begin(), tDoc, true, sTokenFilterOpts, NULL, CSphVector<DWORD>(), sError, sWarning, pAccum );
+		pIndex->AddDocument ( pIndex->CloneIndexingTokenizer (), iFieldsCount, dFields.Begin(), tDoc, true, sTokenFilterOpts, dStrings.Begin(), CSphVector<DWORD>(), sError, sWarning, pAccum );
 
 		if ( pJsonStorage )
 			cJSON_Delete ( pJsonStorage );
@@ -13507,8 +13607,10 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		}
 	}
 
-	CSphVector<const char *> dStrings;
 	CSphVector<DWORD> dMvas;
+	CSphVector<const char *> dStrings;
+	StringPtrTraits_t tStrings;
+	tStrings.m_dOff.Reset ( tSchema.GetAttrsCount() );
 
 	// convert attrs
 	for ( int c=0; c<tStmt.m_iRowsAffected; c++ )
@@ -13519,6 +13621,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		tDoc.Reset ( tSchema.GetRowSize() );
 		tDoc.m_uDocID = CSphMatchVariant::ToDocid ( tStmt.m_dInsertValues[iIdIndex + c * iExp] );
 		dStrings.Resize ( 0 );
+		tStrings.Reset();
 		dMvas.Resize ( 0 );
 
 		int iSchemaAttrCount = tSchema.GetAttrsCount();
@@ -13594,8 +13697,28 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 
 				// FIXME? index schema is lawfully static, but our temp match obviously needs to be dynamic
 				bResult = tDoc.SetAttr ( tLoc, tVal, tCol.m_eAttrType );
-				if ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_JSON )
+				if ( tCol.m_eAttrType==SPH_ATTR_STRING )
+				{
 					dStrings.Add ( tVal.m_sVal.cstr() );
+				} else if ( tCol.m_eAttrType==SPH_ATTR_JSON )
+				{
+					int iStrCount = dStrings.GetLength();
+					dStrings.Add ( nullptr );
+
+					// sphJsonParse must be terminated with a double zero however usual CSphString have SAFETY_GAP of 4 zeros
+					if ( !String2JsonPack ( (char *)tVal.m_sVal.cstr(), tStrings.m_dParserBuf, sError, sWarning ) )
+						break;
+
+					if ( tStrings.m_dParserBuf.GetLength() )
+					{
+						tStrings.m_dOff[iStrCount] = tStrings.m_dPackedData.GetLength();
+
+						const int iLenBytes = 4;
+						BYTE * pPacked = tStrings.m_dPackedData.AddN ( iLenBytes + tStrings.m_dParserBuf.GetLength() );
+						sphPackStrlen ( pPacked, tStrings.m_dParserBuf.GetLength() );
+						memcpy ( pPacked + iLenBytes, tStrings.m_dParserBuf.Begin(), tStrings.m_dParserBuf.GetLength() );
+					}
+				}
 			}
 
 			if ( !bResult )
@@ -13606,6 +13729,17 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		}
 		if ( !sError.IsEmpty() )
 			break;
+
+		// remap JSON to string pointers
+		ARRAY_FOREACH ( i, dStrings )
+		{
+			int iOff = tStrings.m_dOff[i];
+			if ( iOff==-1 )
+				continue;
+
+			assert ( !dStrings[i] );
+			dStrings[i] = (const char *)tStrings.m_dPackedData.Begin() + iOff;
+		}
 
 		// convert fields
 		CSphVector<const char*> dFields;

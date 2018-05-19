@@ -1802,8 +1802,6 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 
 void FormatFilterQL ( const CSphFilterSettings & f, int iCompactIN, StringBuilder_c & tBuf )
 {
-	bool bEqual = f.m_bHasEqualMin || f.m_bHasEqualMax;
-
 	switch ( f.m_eType )
 	{
 		case SPH_FILTER_VALUES:
@@ -1905,7 +1903,7 @@ void FormatFilterQL ( const CSphFilterSettings & f, int iCompactIN, StringBuilde
 
 		case SPH_FILTER_USERVAR:
 		case SPH_FILTER_STRING:
-			tBuf.Appendf ( " %s%s'%s'", f.m_sAttrName.cstr(), ( bEqual ? "=" : "!=" ), ( f.m_dStrings.GetLength()==1 ? f.m_dStrings[0].cstr() : "" ) );
+			tBuf.Appendf ( " %s%s'%s'", f.m_sAttrName.cstr(), ( f.m_bExclude ? "!=" : "=" ), ( f.m_dStrings.GetLength()==1 ? f.m_dStrings[0].cstr() : "" ) );
 			break;
 
 		case SPH_FILTER_NULL:

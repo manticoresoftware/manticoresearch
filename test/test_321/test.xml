@@ -45,6 +45,16 @@ index pq_filter
 	rt_attr_uint = gid
 }
 
+index pq_filter1
+{
+	type = percolate
+	path = <data_path/>/pq_filter1
+	rt_field = title
+	rt_attr_json = j
+	rt_attr_string = s
+}
+
+
 </config>
 
 <db_create>
@@ -136,11 +146,20 @@ CREATE TABLE `test_table` (
 <sphinxql>SELECT * FROM pq WHERE tags='city'</sphinxql>
 <sphinxql>SELECT * FROM pq WHERE tags!='city'</sphinxql>
 
+<!-- JSON field id to document uid -->
 <sphinxql>INSERT INTO pq VALUES ( 'butter is' )</sphinxql>
 <sphinxql>INSERT INTO pq VALUES ( 'butter was' )</sphinxql>
 <sphinxql>INSERT INTO pq VALUES ( 'filter test' )</sphinxql>
 <sphinxql>CALL PQ ('pq', ('{"title":"butter is good as", "id":3}', '{"title":"was butter"}', '{"title":"sas was butter"}', '{"title":"bas was butter", "id":10}', '{"title":"butter is good as"}'), 1 as docs, 1 as docs_json, 1 as query )</sphinxql>
 <sphinxql>CALL PQ ('pq', ('{"title":"filter test | is", "gid":2, "id":3 }', '{"title":"filter test | was", "gid":13, "id":10}'), 1 as docs, 1 as docs_json, 1 as query )</sphinxql>
+
+<!-- query filter on JSON and strings -->
+<sphinxql>INSERT INTO pq_filter1 (query, filters) VALUES ( 'filter test', 'j.gid &gt;= 3' )</sphinxql>
+<sphinxql>INSERT INTO pq_filter1 (query, filters) VALUES ( 'filter test', 'j.gid &lt; 13' )</sphinxql>
+<sphinxql>INSERT INTO pq_filter1 (query, filters) VALUES ( 'filter test', 's = \'more\'' )</sphinxql>
+<sphinxql>INSERT INTO pq_filter1 (query, filters) VALUES ( 'filter test', 's != \'more\'' )</sphinxql>
+<sphinxql>INSERT INTO pq_filter1 (query, filters) VALUES ( 'filter test', 's = \'more\' OR j.gid &gt; 10' )</sphinxql>
+<sphinxql>CALL PQ ('pq_filter1', ('{"title":"filter test coming", "j":{"gid":3, "viw":3}, "s":"more", "x":"less", "id":1}', '{"title":"filter test passed", "j":{"gid":1, "viw":1}, "s":"no more", "x":"less too", "id":2}', '{"title":"filter test was", "j":{"gid":12, "viw":12}, "s":"more", "x":"less", "id":3}', '{"title":"filter test coming", "j":{"gid":13, "viw":13}, "s":"more or less", "x":"less too", "id":4}', '{"title":"filter test coming", "j":{"gid":11, "viw":11}, "s":"more", "x":"less", "id":5}'), 1 as docs, 1 as docs_json, 1 as query )</sphinxql>
 
 </sphqueries>
 

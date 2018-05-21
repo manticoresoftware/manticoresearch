@@ -467,7 +467,7 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 		
 		$ok = false;
 		$start = MyMicrotime();		
-		for ( $i=0; $i<300; $i++ )
+		for ( $i=0; $i<1000; $i++ )
 		{
 			if ( $cl->Open() )
 			{

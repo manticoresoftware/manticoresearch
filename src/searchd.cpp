@@ -13705,18 +13705,22 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 					int iStrCount = dStrings.GetLength();
 					dStrings.Add ( nullptr );
 
-					// sphJsonParse must be terminated with a double zero however usual CSphString have SAFETY_GAP of 4 zeros
-					if ( !String2JsonPack ( (char *)tVal.m_sVal.cstr(), tStrings.m_dParserBuf, sError, sWarning ) )
-						break;
-
-					if ( tStrings.m_dParserBuf.GetLength() )
+					// empty source string means NULL attribute
+					if ( !tVal.m_sVal.IsEmpty() )
 					{
-						tStrings.m_dOff[iStrCount] = tStrings.m_dPackedData.GetLength();
+						// sphJsonParse must be terminated with a double zero however usual CSphString have SAFETY_GAP of 4 zeros
+						if ( !String2JsonPack ( (char *)tVal.m_sVal.cstr(), tStrings.m_dParserBuf, sError, sWarning ) )
+							break;
 
-						const int iLenBytes = 4;
-						BYTE * pPacked = tStrings.m_dPackedData.AddN ( iLenBytes + tStrings.m_dParserBuf.GetLength() );
-						sphPackStrlen ( pPacked, tStrings.m_dParserBuf.GetLength() );
-						memcpy ( pPacked + iLenBytes, tStrings.m_dParserBuf.Begin(), tStrings.m_dParserBuf.GetLength() );
+						if ( tStrings.m_dParserBuf.GetLength() )
+						{
+							tStrings.m_dOff[iStrCount] = tStrings.m_dPackedData.GetLength();
+
+							const int iLenBytes = 4;
+							BYTE * pPacked = tStrings.m_dPackedData.AddN ( iLenBytes + tStrings.m_dParserBuf.GetLength() );
+							sphPackStrlen ( pPacked, tStrings.m_dParserBuf.GetLength() );
+							memcpy ( pPacked + iLenBytes, tStrings.m_dParserBuf.Begin(), tStrings.m_dParserBuf.GetLength() );
+						}
 					}
 				}
 			}

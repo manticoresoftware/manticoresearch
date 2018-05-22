@@ -17102,6 +17102,34 @@ static void AddIndexQueryStats ( SqlRowBuffer_c & tOut, const ServedStats_c * pI
 	AddFoundRowsStatsToOutput ( tOut, "found_rows", tRowsFoundStats );
 }
 
+static void AddFederatedIndexStatus ( const CSphSourceStats & tStats, const CSphString & sName, SqlRowBuffer_c & tOut )
+{
+	const char * dHeader[] = { "Name", "Engine", "Version", "Row_format", "Rows", "Avg_row_length", "Data_length", "Max_data_length", "Index_length", "Data_free",
+		"Auto_increment", "Create_time", "Update_time", "Check_time", "Collation", "Checksum", "Create_options", "Comment" };
+	tOut.HeadOfStrings ( &dHeader[0], sizeof(dHeader)/sizeof(dHeader[0]) );
+		
+	tOut.PutString ( sName.cstr() );	// Name
+	tOut.PutString ( "InnoDB" );		// Engine
+	tOut.PutString ( "10" );			// Version
+	tOut.PutString ( "Dynamic" );		// Row_format
+	tOut.PutNumeric ( INT64_FMT, tStats.m_iTotalDocuments );	// Rows
+	tOut.PutString ( "4096" );			// Avg_row_length
+	tOut.PutString ( "0" );				// Data_length
+	tOut.PutString ( "0" );				// Max_data_length
+	tOut.PutString ( "0" );				// Index_length
+	tOut.PutString ( "0" );				// Data_free
+	tOut.PutString ( "5" );				// Auto_increment
+	tOut.PutNULL();						// Create_time
+	tOut.PutNULL();						// Update_time
+	tOut.PutNULL();						// Check_time
+	tOut.PutString ( "utf8" );			// Collation
+	tOut.PutNULL();						// Checksum
+	tOut.PutString ( "" );				// Create_options
+	tOut.PutString ( "" );				// Comment
+
+	tOut.Commit();
+}
+
 static void AddPlainIndexStatus ( SqlRowBuffer_c & tOut, const ServedIndex_c * pServed, bool bModeFederated, const CSphString & sName )
 {
 	assert ( pServed );
@@ -17145,47 +17173,30 @@ static void AddPlainIndexStatus ( SqlRowBuffer_c & tOut, const ServedIndex_c * p
 		AddIndexQueryStats ( tOut, pServed );
 	} else
 	{
-		CSphIndexStatus tStatus;
-		pIndex->GetStatus ( &tStatus );
-
-		const char * dHeader[] = { "Name", "Engine", "Version", "Row_format", "Rows", "Avg_row_length", "Data_length", "Max_data_length", "Index_length", "Data_free",
-			"Auto_increment", "Create_time", "Update_time", "Check_time", "Collation", "Checksum", "Create_options", "Comment" };
-		tOut.HeadOfStrings ( &dHeader[0], sizeof(dHeader)/sizeof(dHeader[0]) );
-		
-		tOut.PutString ( sName.cstr() );	// Name
-		tOut.PutString ( "InnoDB" );		// Engine
-		tOut.PutString ( "10" );			// Version
-		tOut.PutString ( "Dynamic" );		// Row_format
-		tOut.PutNumeric ( INT64_FMT, pIndex->GetStats().m_iTotalDocuments );	// Rows
-		tOut.PutString ( "4096" );			// Avg_row_length
-		tOut.PutString ( "0" );				// Data_length
-		tOut.PutString ( "0" );				// Max_data_length
-		tOut.PutString ( "0" );				// Index_length
-		tOut.PutString ( "0" );				// Data_free
-		tOut.PutString ( "5" );				// Auto_increment
-		tOut.PutNULL();						// Create_time
-		tOut.PutNULL();						// Update_time
-		tOut.PutNULL();						// Check_time
-		tOut.PutString ( "utf8" );			// Collation
-		tOut.PutNULL();						// Checksum
-		tOut.PutString ( "" );				// Create_options
-		tOut.PutString ( "" );				// Comment
-
-		tOut.Commit();
+		const CSphSourceStats & tStats = pIndex->GetStats();
+		AddFederatedIndexStatus ( tStats, sName, tOut );
 	}
 
 	tOut.Eof();
 }
 
 
-static void AddDistibutedIndexStatus ( SqlRowBuffer_c & tOut, DistributedIndex_t * pIndex )
+static void AddDistibutedIndexStatus ( SqlRowBuffer_c & tOut, DistributedIndex_t * pIndex, bool bFederatedUser, const CSphString & sName )
 {
 	assert ( pIndex );
 
-	tOut.HeadTuplet ( "Variable_name", "Value" );
-	tOut.DataTuplet ( "index_type", "distributed" );
+	if ( !bFederatedUser )
+	{
+		tOut.HeadTuplet ( "Variable_name", "Value" );
+		tOut.DataTuplet ( "index_type", "distributed" );
 
-	AddIndexQueryStats ( tOut, pIndex );
+		AddIndexQueryStats ( tOut, pIndex );
+	} else
+	{
+		CSphSourceStats tStats;
+		tStats.m_iTotalDocuments = 1000; // TODO: check is it worth to query that number from agents
+		AddFederatedIndexStatus ( tStats, sName, tOut );
+	}
 
 	tOut.Eof();
 }
@@ -17205,7 +17216,7 @@ void HandleMysqlShowIndexStatus ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt
 
 		DistributedIndex_t * pIndex = GetDistIndex ( tStmt.m_sIndex );
 		if ( pIndex )
-			AddDistibutedIndexStatus ( tOut, pIndex );
+			AddDistibutedIndexStatus ( tOut, pIndex, bFederatedUser, tStmt.m_sIndex );
 		else
 			tOut.Error ( tStmt.m_sStmt, "SHOW INDEX STATUS requires an existing index" );
 

@@ -12847,6 +12847,7 @@ static void SendPercolateReply ( const PercolateMatchResult_t & tRes, const CSph
 	BYTE iWarns = ( !sWarning.IsEmpty() ? 1 : 0 );
 	tOut.HeadEnd ( false, iWarns );
 
+	CSphVector<SphDocID_t> dTmpDocs;
 	int iDocOff = 0;
 	StringBuilder_c sDocs;
 	ARRAY_FOREACH ( i, tRes.m_dQueryDesc )
@@ -12858,12 +12859,28 @@ static void SendPercolateReply ( const PercolateMatchResult_t & tRes, const CSph
 			// document count + document id(s)
 			int iCount = (int)( tRes.m_dDocs[iDocOff] );
 			const char * sSep = "";
-			for ( int iDoc = 0; iDoc<iCount; iDoc++ )
+			if ( dDocids.GetLength() ) // need de-duplicate docs
 			{
-				int iRow = tRes.m_dDocs[iDocOff + 1 + iDoc];
-				SphDocID_t uDocid = ( dDocids.GetLength() ? dDocids[iRow] : iRow );
-				sDocs.Appendf ( "%s" DOCID_FMT, sSep, uDocid );
-				sSep = ",";
+				dTmpDocs.Resize ( iCount );
+				for ( int iDoc = 0; iDoc<iCount; iDoc++ )
+				{
+					int iRow = tRes.m_dDocs[iDocOff + 1 + iDoc];
+					dTmpDocs[iDoc] = dDocids[iRow];
+				}
+				dTmpDocs.Uniq();
+				ARRAY_FOREACH ( i, dTmpDocs )
+				{
+					sDocs.Appendf ( "%s" DOCID_FMT, sSep, dTmpDocs[i] );
+					sSep = ",";
+				}
+			} else
+			{
+				for ( int iDoc = 0; iDoc<iCount; iDoc++ )
+				{
+					int iRow = tRes.m_dDocs[iDocOff + 1 + iDoc];
+					sDocs.Appendf ( "%s%d", sSep, iRow );
+					sSep = ",";
+				}
 			}
 			iDocOff += iCount + 1;
 
@@ -13045,6 +13062,7 @@ struct StringPtrTraits_t
 	CSphVector<BYTE> m_dPackedData;
 	CSphFixedVector<int> m_dOff { 0 };
 	CSphVector<BYTE> m_dParserBuf;
+	cJSON * m_pJsonStorage = nullptr;
 
 	// remap offsets to string pointers
 	void GetPointers ( CSphFixedVector<const char *> & dStrings ) const
@@ -13061,12 +13079,25 @@ struct StringPtrTraits_t
 		m_dPackedData.Resize ( 0 );
 		m_dParserBuf.Resize ( 0 );
 		m_dOff.Fill ( -1 );
+		
+		if ( m_pJsonStorage )
+		{
+			cJSON_Delete ( m_pJsonStorage );
+			m_pJsonStorage = nullptr;
+		}
+	}
+
+	~StringPtrTraits_t()
+	{
+		if ( m_pJsonStorage )
+			cJSON_Delete ( m_pJsonStorage );
 	}
 };
 
 
-static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVariant_t> & tLoc, int iRow, CSphFixedVector<const char*> & dFields, CSphMatchVariant & tDoc,
-	cJSON ** ppStorage, StringPtrTraits_t & tStrings,  CSphString & sError, CSphString & sWarning )
+static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVariant_t> & tLoc, const CSphString & sIdAlias,
+	int iRow, CSphFixedVector<const char*> & dFields, CSphMatchVariant & tDoc,
+	StringPtrTraits_t & tStrings,  CSphString & sError, CSphString & sWarning )
 {
 	const cJSON * pRoot = cJSON_Parse ( sDoc );
 	if ( !pRoot )
@@ -13075,7 +13106,8 @@ static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVari
 		return false;
 	}
 
-	*ppStorage = const_cast<cJSON *>( pRoot );
+	assert ( !tStrings.m_pJsonStorage );
+	tStrings.m_pJsonStorage = const_cast<cJSON *>( pRoot );
 
 	SqlInsert_t tAttr;
 	CSphString sTmp;
@@ -13139,7 +13171,7 @@ static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVari
 					}
 				}
 			}
-		} else if ( sName && strlen ( sName )==2 && strncmp ( sName, "id", 2 )==0 )
+		} else if ( !sIdAlias.IsEmpty() && sIdAlias==sName )
 		{
 			tDoc.m_uDocID = pChild->valueint;
 		}
@@ -13151,9 +13183,9 @@ static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVari
 	return true;
 }
 
-static void PercolateMatchDocuments ( const CSphVector<CSphString> & dDocs, const PercolateOptions_t & tOpts, const char * sStmt, SqlRowBuffer_c & tOut, CSphSessionAccum & tAcc, PercolateIndex_i * pIndex, PercolateMatchResult_t & tMeta )
+static void PercolateMatchDocuments ( const CSphVector<CSphString> & dDocs, const PercolateOptions_t & tOpts, const CSphString & sIdAlias, const char * sStmt,
+	SqlRowBuffer_c & tOut, CSphSessionAccum & tAcc, PercolateIndex_i * pIndex, PercolateMatchResult_t & tMeta, CSphString & sWarning )
 {
-	CSphString sWarning;
 	CSphString sError;
 
 	ISphRtAccum * pAccum = tAcc.GetAcc ( pIndex, sError );
@@ -13205,20 +13237,22 @@ static void PercolateMatchDocuments ( const CSphVector<CSphString> & dDocs, cons
 		}
 	}
 
+	int iDocsNoIdCount = 0;
+	bool bAutoId = ( sIdAlias.IsEmpty() );
+	CSphFixedVector<SphDocID_t> dDocids ( bAutoId ? 0 : dDocs.GetLength()+1 );
+	SphDocID_t uSeqDocid = 1;
+
 	CSphFixedVector<const char *> dStrings ( iStrCounter );
 	StringPtrTraits_t tStrings;
 	tStrings.m_dOff.Reset ( iStrCounter );
 
 	CSphString sTokenFilterOpts;
-	CSphFixedVector<SphDocID_t> dDocids ( 0 );
-	SphDocID_t uSeqDocid = 1;
 	ARRAY_FOREACH ( iDoc, dDocs )
 	{
 		// doc-id
 		tDoc.m_uDocID = 0;
 		dFields[0] = dDocs[iDoc].cstr();
 
-		cJSON * pJsonStorage = NULL;
 		if ( tOpts.m_bJsonDocs )
 		{
 			// reset all back to defaults
@@ -13232,44 +13266,31 @@ static void PercolateMatchDocuments ( const CSphVector<CSphString> & dDocs, cons
 			}
 			tStrings.Reset();
 
-			if ( !ParseJsonDocument ( dDocs[iDoc].cstr(), hSchemaLocators, iDoc, dFields, tDoc, &pJsonStorage, tStrings, sError, sWarning ) )
+			if ( !ParseJsonDocument ( dDocs[iDoc].cstr(), hSchemaLocators, sIdAlias, iDoc, dFields, tDoc, tStrings, sError, sWarning ) )
 				break;
 
 			tStrings.GetPointers ( dStrings );
 		}
 
 		if ( !sError.IsEmpty() )
-		{
-			if ( pJsonStorage )
-				cJSON_Delete ( pJsonStorage );
 			break;
+
+		// in user-provides-id mode let's skip all docs without id
+		if ( !bAutoId && tDoc.m_uDocID==0 )
+		{
+			iDocsNoIdCount++;
+			continue;
 		}
 
-		// assign proper docids
-		bool bGotDocid = ( tDoc.m_uDocID!=0 );
-		if ( bGotDocid && !dDocids.GetLength() )
-		{
-			dDocids.Reset ( dDocs.GetLength()+1 );
-			dDocids[0] = 0; // 0 element unused
-			for ( int iInit=0; iInit<=iDoc; iInit++ )
-				dDocids[iInit] = iInit;
-		}
-		if ( bGotDocid )
-		{
-			dDocids[iDoc+1] = tDoc.m_uDocID;
-			uSeqDocid = Max ( uSeqDocid, tDoc.m_uDocID );
-		} else if ( dDocids.GetLength() )
-		{
-			dDocids[iDoc+1] = uSeqDocid;
-		}
-		tDoc.m_uDocID = iDoc+1;	// PQ work with sequential document numbers, 0 element unused
-		uSeqDocid++;
+		// store provided doc-id for result set sending
+		if ( !bAutoId )
+			dDocids[uSeqDocid] = tDoc.m_uDocID;
+
+		// PQ work with sequential document numbers, 0 element unused
+		tDoc.m_uDocID = uSeqDocid++;
 
 		// add document
 		pIndex->AddDocument ( pIndex->CloneIndexingTokenizer (), iFieldsCount, dFields.Begin(), tDoc, true, sTokenFilterOpts, dStrings.Begin(), CSphVector<DWORD>(), sError, sWarning, pAccum );
-
-		if ( pJsonStorage )
-			cJSON_Delete ( pJsonStorage );
 
 		if ( !sError.IsEmpty() )
 			break;
@@ -13290,12 +13311,15 @@ static void PercolateMatchDocuments ( const CSphVector<CSphString> & dDocs, cons
 
 	pIndex->MatchDocuments ( pAccum, tRes );
 
+	if ( iDocsNoIdCount )
+		sWarning.SetSprintf ( "skipped %d documents without id field '%s'", iDocsNoIdCount, sIdAlias.cstr() );
+
 	SendPercolateReply ( tRes, sWarning, sError, dDocids, tOut );
 	tMeta.Swap ( tRes );
 }
 
 
-static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSessionAccum & tAcc, PercolateMatchResult_t & tMeta )
+static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSessionAccum & tAcc, PercolateMatchResult_t & tMeta, CSphString & sWarning )
 {
 	CSphString sError;
 
@@ -13331,6 +13355,7 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 	}
 
 	// options last
+	CSphString sIdAlias;
 	PercolateOptions_t tOpts;
 	ARRAY_FOREACH ( i, tStmt.m_dCallOptNames )
 	{
@@ -13344,6 +13369,7 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 		else if ( sOpt=="verbose" )		{ tOpts.m_bVerbose = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
 		else if ( sOpt=="docs_json" )	{ tOpts.m_bJsonDocs = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
 		else if ( sOpt=="query" )		{ tOpts.m_bGetQuery = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
+		else if ( sOpt=="docs_id" )		{ sIdAlias = v.m_sVal; ; iExpType = TOK_QUOTED_STRING; }
 		else
 		{
 			sError.SetSprintf ( "unknown option %s", sOpt.cstr() );
@@ -13381,11 +13407,11 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 		return;
 	}
 
-	PercolateMatchDocuments ( dDocs, tOpts, tStmt.m_sStmt, tOut, tAcc, (PercolateIndex_i *)pServed->m_pIndex, tMeta );
+	PercolateMatchDocuments ( dDocs, tOpts, sIdAlias, tStmt.m_sStmt, tOut, tAcc, (PercolateIndex_i *)pServed->m_pIndex, tMeta, sWarning );
 	pServed->Unlock();
 }
 
-void HandleMysqlPercolateMeta ( const PercolateMatchResult_t & tMeta, SqlRowBuffer_c & tOut )
+void HandleMysqlPercolateMeta ( const PercolateMatchResult_t & tMeta, const CSphString & sWarning, SqlRowBuffer_c & tOut )
 {
 	tOut.HeadTuplet ( "Name", "Value" );
 
@@ -13422,6 +13448,8 @@ void HandleMysqlPercolateMeta ( const PercolateMatchResult_t & tMeta, SqlRowBuff
 		sTmp.Appendf ( UINT64_FMT, tmMatched );
 		tOut.DataTuplet ( "Time of matched queries", sTmp.cstr() );
 	}
+	if ( !sWarning.IsEmpty() )
+		tOut.DataTuplet ( "Warning", sWarning.cstr() );
 
 	tOut.Eof();
 }
@@ -17850,7 +17878,7 @@ public:
 			if ( ePrevStmt!=STMT_CALL )
 				HandleMysqlMeta ( tOut, *pStmt, m_tLastMeta, false );
 			else
-				HandleMysqlPercolateMeta ( m_tPercolateMeta, tOut );
+				HandleMysqlPercolateMeta ( m_tPercolateMeta, m_tLastMeta.m_sWarning, tOut );
 			return true;
 
 		case STMT_INSERT:
@@ -17951,7 +17979,8 @@ public:
 				HandleMysqlCallSuggest ( tOut, *pStmt, true );
 			} else if ( pStmt->m_sCallProc=="PQ" )
 			{
-				HandleMysqlCallPQ ( tOut, *pStmt, m_tAcc, m_tPercolateMeta );
+				m_tLastMeta.m_sWarning = "";
+				HandleMysqlCallPQ ( tOut, *pStmt, m_tAcc, m_tPercolateMeta, m_tLastMeta.m_sWarning );
 			} else
 			{
 				m_sError.SetSprintf ( "no such builtin procedure %s", pStmt->m_sCallProc.cstr() );

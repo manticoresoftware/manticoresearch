@@ -41,6 +41,7 @@
 %token	TOK_CALL
 %token	TOK_CHARACTER
 %token	TOK_CHUNK
+%token  TOK_COLLATE
 %token	TOK_COLLATION
 %token	TOK_COLUMN
 %token	TOK_COMMIT
@@ -135,6 +136,7 @@
 %token	TOK_UPDATE
 %token	TOK_VALUES
 %token	TOK_VARIABLES
+%token  TOK_WAITTIMEOUT
 %token	TOK_WARNINGS
 %token	TOK_WEIGHT
 %token	TOK_WHERE
@@ -262,7 +264,7 @@ ident_set:
 	;
 
 ident:
-	ident_set | TOK_NAMES | TOK_TRANSACTION
+	ident_set | TOK_NAMES | TOK_TRANSACTION | TOK_COLLATE
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -1084,7 +1086,9 @@ set_stmt:
 			pParser->m_pStmt->m_bSetNull = true;
 		}
 	| TOK_SET TOK_NAMES set_value		{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
+	| TOK_SET TOK_NAMES set_value TOK_COLLATE set_value { pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
 	| TOK_SET TOK_SYSVAR '=' set_value	{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
+	| TOK_SET TOK_WAITTIMEOUT '=' set_value      { pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
 	| TOK_SET TOK_CHARACTER TOK_SET set_value { pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
 	;
 

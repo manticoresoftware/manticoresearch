@@ -8,7 +8,7 @@ SET syntax
 
     SET [GLOBAL] server_variable_name = value
     SET [INDEX index_name] GLOBAL @user_variable_name = (int_val1 [, int_val2, ...])
-    SET NAMES value
+    SET NAMES value [COLLATE value]
     SET @@dummy_variable = ignored_value
 
 SET statement modifies a variable value. The variable names are
@@ -59,61 +59,64 @@ Per-session and global server variables affect certain server settings
 in the respective scope. Known per-session server variables are:
 
 -  ``AUTOCOMMIT = {0 | 1}``
--  Whether any data modification statement should be implicitly wrapped
+   Whether any data modification statement should be implicitly wrapped
    by BEGIN and COMMIT.
 
 -  ``COLLATION_CONNECTION = collation_name``
--  Selects the collation to be used for ORDER BY or GROUP BY on string
+   Selects the collation to be used for ORDER BY or GROUP BY on string
    values in the subsequent queries. Refer to `the section called
    “Collations” <collations>` for a list of known collation
    names.
 
 -  ``CHARACTER_SET_RESULTS = charset_name``
--  Does nothing; a placeholder to support frameworks, clients, and
+   Does nothing; a placeholder to support frameworks, clients, and
    connectors that attempt to automatically enforce a charset when
    connecting to a Manticore server.
 
 -  ``SQL_AUTO_IS_NULL = value``
--  Does nothing; a placeholder to support frameworks, clients, and
+   Does nothing; a placeholder to support frameworks, clients, and
    connectors that attempt to automatically enforce a charset when
    connecting to a Manticore server.
 
 -  ``SQL_MODE = value``
--  Does nothing; a placeholder to support frameworks, clients, and
+   Does nothing; a placeholder to support frameworks, clients, and
    connectors that attempt to automatically enforce a charset when
    connecting to a Manticore server.
 
+-  ``WAIT_TIMEOUT = value``
+   Does nothing; added for improved compatibility with 3rd party MySQL clients
+
 -  ``PROFILING = {0 | 1}``
--  Enables query profiling in the current session. Defaults to 0. See
+   Enables query profiling in the current session. Defaults to 0. See
    also :ref:`show_profile_syntax`.
 
 Known global server variables are:
 
 -  ``QUERY_LOG_FORMAT = {plain | sphinxql}``
--  Changes the current log format.
+   Changes the current log format.
 
 -  ``LOG_LEVEL = {info | debug | debugv | debugvv}``
--  Changes the current log verboseness level.
+   Changes the current log verboseness level.
 
 -  ``QCACHE_MAX_BYTES = <value>``
--  Changes the :ref:`query cache <query_cache>` RAM use limit to a
+   Changes the :ref:`query cache <query_cache>` RAM use limit to a
    given value.
 
 -  ``QCACHE_THRESH_MSEC = <value>``
--  Changes the :ref:`query cache <query_cache>` minimum wall time
+   Changes the :ref:`query cache <query_cache>` minimum wall time
    threshold to a given value.
 
 -  ``QCACHE_TTL_SEC = <value>``
--  Changes the :ref:`query cache <query_cache>` TTL for a cached
+   Changes the :ref:`query cache <query_cache>` TTL for a cached
    result to a given value.
 
 -  ``MAINTENANCE = {0 | 1}``
--  When set to 1, puts the server in maintenance mode. Only clients with
+   When set to 1, puts the server in maintenance mode. Only clients with
    vip connections can execute queries in this mode. All new non-vip
    incoming connections are refused.
 
 -  ``GROUPING_IN_UTC = {0 | 1}``
--  When set to 1, cause timed grouping functions (day(), month(),
+   When set to 1, cause timed grouping functions (day(), month(),
    year(), yearmonth(), yearmonthday()) to be calculated in utc. Read
    the doc for
    :ref:`grouping_in_utc <grouping_in_utc>`

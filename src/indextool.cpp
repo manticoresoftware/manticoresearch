@@ -779,6 +779,8 @@ const char* sAttr (ESphAttr param)
 	case SPH_ATTR_JSON_PTR: return "SPH_ATTR_JSON_PTR";
 	case SPH_ATTR_JSON_FIELD_PTR: return "SPH_ATTR_JSON_FIELD_PTR";
 	}
+
+	return "SPH_ATTR_NONE";
 }
 
 static void InfoMetaSchemaColumn ( CSphReader &rdInfo,  DWORD uVersion )
@@ -893,9 +895,9 @@ void InfoMetaIndexSettings ( CSphReader &tReader, DWORD uVersion )
 static void InfoMetaFileInfo ( CSphReader &tReader )
 {
 	fprintf ( stdout, "\n  ======== FILE INFO ========" );
-	fprintf ( stdout, "\nuSize: %zu", tReader.GetOffset () );
-	fprintf ( stdout, "\nuCTime: %zu", tReader.GetOffset () );
-	fprintf ( stdout, "\nuMTime: %zu", tReader.GetOffset () );
+	fprintf ( stdout, "\nuSize: " INT64_FMT, (int64_t)tReader.GetOffset() );
+	fprintf ( stdout, "\nuCTime: " INT64_FMT, (int64_t)tReader.GetOffset() );
+	fprintf ( stdout, "\nuMTime: " INT64_FMT, (int64_t)tReader.GetOffset() );
 	fprintf ( stdout, "\nuCRC32: %d", tReader.GetDword () );
 }
 
@@ -965,7 +967,7 @@ void InfoMetaDictionarySettings ( CSphReader &tReader, DWORD uVersion )
 			int nStopwords = ( int ) tReader.GetDword ();
 			fprintf ( stdout, "\nnStopwords : %d", nStopwords );
 			for ( int i = 0; i<nStopwords; ++i )
-				fprintf ( stdout, "\nEmbedded Stp(%d): %zu", i, tReader.UnzipOffset () );
+				fprintf ( stdout, "\nEmbedded Stp(%d): " INT64_FMT, i, (int64_t)tReader.UnzipOffset() );
 		}
 	}
 
@@ -1071,9 +1073,9 @@ void InfoMeta ( const CSphString &sMeta )
 	} else
 		fprintf ( stdout, "\ndisk base assumed 0 (not written in this ver of meta)" );
 	fprintf ( stdout, "\nTotal documents: %d", rdMeta.GetDword());
-	fprintf ( stdout, "\nTotal bytes: %zu", rdMeta.GetOffset () );
+	fprintf ( stdout, "\nTotal bytes: " INT64_FMT, (int64_t)rdMeta.GetOffset() );
 	if ( uVersion>=2 )
-		fprintf ( stdout, "\nTID: %zu", rdMeta.GetOffset () );
+		fprintf ( stdout, "\nTID: " INT64_FMT, (int64_t)rdMeta.GetOffset() );
 
 	if ( uVersion>=4 )
 	{
@@ -1335,17 +1337,11 @@ int main ( int argc, char ** argv )
 
 	CSphConfigParser cp;
 	CSphConfig & hConf = cp.m_tConf;
+	if ( sOptConfig )
+		sphLoadConfig ( sOptConfig, bQuiet, cp );
+
 	while (true)
 	{
-		if ( eCommand==CMD_BUILDIDF || eCommand==CMD_MERGEIDF )
-			break;
-
-		if ( eCommand==CMD_DUMPCONFIG && sDumpHeader.Ends ( ".sph" ) )
-			break;
-
-		if ( eCommand==CMD_DUMPHEADER && sDumpHeader.Ends ( ".sph" ) )
-			break;
-
 		if ( eCommand==CMD_DUMPHEADER && sDumpHeader.Ends ( ".meta" ) )
 		{
 			InfoMeta ( sDumpHeader );
@@ -1355,7 +1351,6 @@ int main ( int argc, char ** argv )
 		if ( eCommand==CMD_DUMPDICT && !sDumpDict.Ends ( ".spi" ) )
 			sIndex = sDumpDict;
 
-		sphLoadConfig ( sOptConfig, bQuiet, cp );
 		break;
 	}
 

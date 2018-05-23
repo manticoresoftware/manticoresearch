@@ -1088,7 +1088,6 @@ set_stmt:
 	| TOK_SET TOK_NAMES set_value		{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
 	| TOK_SET TOK_NAMES set_value TOK_COLLATE set_value { pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
 	| TOK_SET TOK_SYSVAR '=' set_value	{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
-	| TOK_SET TOK_WAITTIMEOUT '=' set_value      { pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
 	| TOK_SET TOK_CHARACTER TOK_SET set_value { pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
 	;
 

@@ -34,6 +34,7 @@ if not r:
 handled = [k[4:] for k in re.findall('\w+', r.group(1)) if k!='TOK_IDENT' and k[0:4]=='TOK_']
 handled.append('NAMES') # manually append a couple tweaks
 handled.append('TRANSACTION')
+handled.append('COLLATE')
 res = sorted(diff(res, handled))
 
 # load reserved keywords list from docs

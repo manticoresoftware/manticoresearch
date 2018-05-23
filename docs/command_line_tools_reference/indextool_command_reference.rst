@@ -32,6 +32,9 @@ The commands are as follows:
 -  ``--checkconfig`` just loads and verifies the config file to check if
    it's valid, without syntax errors.
 
+-  ``--buildidf DICTFILE1 [DICTFILE2 ...] --out IDFILE`` build IDF file from one or several dictionary dumps.
+   Additional parameter ``-skip-uniq`` will skip unique (df=1) words.
+
 -  ``--build-infixes INDEXNAME`` build infixes for an existing
    dict=keywords index (upgrades .sph, .spi in place). You can use this
    option for legacy index files that already use dict=keywords, but now
@@ -51,7 +54,8 @@ The commands are as follows:
 -  ``--dumpheader INDEXNAME`` dumps index header by index name with
    looking up the header path in the configuration file.
 
--  ``--dumpdict INDEXNAME`` dumps dictionary.
+-  ``--dumpdict INDEXNAME`` dumps dictionary. 
+   Additional ``-stats`` switch will dump to dictionary the total number of documents. It is required for dictionary files that are used  for creation of IDF files.
 
 -  ``--dumpdocids INDEXNAME`` dumps document IDs by index name. It takes
    the data from attribute (.spa) file and therefore requires
@@ -74,6 +78,10 @@ The commands are as follows:
    for a given index, and prints the filtering results to stdout. Note
    that the settings will be taken from sphinx.conf, and not the index
    header.
+
+-  ``--mergeidf NODE1.idf [NODE2.idf ...] --out GLOBAL.idf`` merge several .idf files into a single one.
+   Additional parameter ``-skip-uniq`` will skip unique (df=1) words.
+   
 
 -  ``--morph INDEXNAME`` applies morphology to the given stdin and
    prints the result to stdout.

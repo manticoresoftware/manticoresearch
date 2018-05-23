@@ -71,6 +71,21 @@ index dist
 	agent = 127.0.0.1:<my_port />:rt
 }
 
+source facet1
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select id, price, brand_id, title from facet_table
+	sql_attr_uint	= price
+	sql_attr_uint	= brand_id
+}
+
+index facet1
+{
+	source			= facet1
+    path            = <data_path/>/facet1
+}
+
 </config>
 
 <db_create>
@@ -94,6 +109,27 @@ insert into test_table values
 ( 13, 23, 1013, 'test' )
 </db_insert>
 
+<db_create>
+create table facet_table
+(
+	id int not null,
+	price int not null,
+	brand_id int not null,
+	title varchar(255) not null
+);
+</db_create>
+<db_drop>drop table if exists facet_table</db_drop>
+
+<db_insert>
+insert into facet_table values
+( 1, 5, 1, 'test' ),
+( 2, 12, 2, 'test' ),
+( 3, 103, 13, 'test' ),
+( 11, 109, 101, 'test' ),
+( 12, 122, 109, 'test' ),
+( 13, 123, 113, 'test' )
+</db_insert>
+
 <sphqueries>
 <sphinxql>INSERT into rt VALUES (60, 'test', 70, 1100), (61, 'test', 71, 1101), (62, 'test', 72, 1102), (63, 'test', 73, 1103)</sphinxql>
 <sphinxql>select * from rt where match('test')</sphinxql>
@@ -110,6 +146,9 @@ insert into test_table values
 <sphinxql>select * from dist where MATCH('test') AND gid &lt; 12</sphinxql>
 <sphinxql>select * from dist where gid &lt; 12 AND MATCH('test')</sphinxql>
 <sphinxql>select * from dist where gid &gt; 10 AND MATCH('test') AND gid &lt; 12</sphinxql>
+
+<!-- crash at multi query with OR -->
+<sphinxql>SELECT * FROM facet1 WHERE (price &gt;= 0 AND price &lt; 10) OR (price &gt;= 100  AND price &lt; 110); SELECT * FROM facet1 WHERE (brand_id &gt;= 0 AND brand_id &lt; 10) OR (brand_id &gt;= 100 AND brand_id &lt; 110)</sphinxql>
 </sphqueries>
 
 </test>

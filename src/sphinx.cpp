@@ -5490,14 +5490,6 @@ uint64_t CSphFilterSettings::GetHash() const
 	return h;
 }
 
-FilterTreeItem_t::FilterTreeItem_t ()
-	: m_iLeft ( -1 )
-	, m_iRight ( -1 )
-	, m_iFilterItem ( -1 )
-	, m_bOr ( false )
-{
-}
-
 bool FilterTreeItem_t::operator == ( const FilterTreeItem_t & rhs ) const
 {
 	return ( m_iLeft==rhs.m_iLeft && m_iRight==rhs.m_iRight && m_iFilterItem==rhs.m_iFilterItem && m_bOr==rhs.m_bOr );

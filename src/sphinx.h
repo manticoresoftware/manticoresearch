@@ -2655,12 +2655,11 @@ struct CSphQueryItem
 /// search query complex filter tree
 struct FilterTreeItem_t
 {
-	int m_iLeft;
-	int m_iRight;
-	int m_iFilterItem;
-	bool m_bOr;
+	int m_iLeft = -1;		// left node at parser filter operations
+	int m_iRight = -1;		// right node at parser filter operations
+	int m_iFilterItem = -1;	// index into query filters 
+	bool m_bOr = false;
 
-	FilterTreeItem_t ();
 	bool operator == ( const FilterTreeItem_t & rhs ) const;
 	bool operator != ( const FilterTreeItem_t & rhs ) const { return !( (*this)==rhs ); }
 	uint64_t GetHash() const;

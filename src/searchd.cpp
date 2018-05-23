@@ -9926,10 +9926,13 @@ struct QueryItemProxy_t
 static void CreateFilterTree ( const CSphVector<FilterTreeItem_t> & dOps, int iStart, int iCount, CSphQuery & tQuery )
 {
 	bool bHasOr = false;
-	CSphVector<FilterTreeItem_t> dTree ( iCount );
-	for ( int i = 0; i<iCount; i++ )
+	int iTreeCount = iCount - iStart;
+	CSphVector<FilterTreeItem_t> dTree ( iTreeCount );
+	for ( int i = 0; i<iTreeCount; i++ )
 	{
-		const FilterTreeItem_t & tItem = dOps[iStart + i];
+		FilterTreeItem_t tItem = dOps[iStart + i];
+		tItem.m_iLeft = ( tItem.m_iLeft==-1 ? -1 : tItem.m_iLeft - iStart );
+		tItem.m_iRight = ( tItem.m_iRight==-1 ? -1 : tItem.m_iRight - iStart );
 		dTree[i] = tItem;
 		bHasOr |= ( tItem.m_iFilterItem==-1 && tItem.m_bOr );
 	}

@@ -43,7 +43,10 @@ simple_tests:
   artifacts:
     paths:
     - build/here
-    expire_in: 2 hrs
+    - build/test/test_*/report.txt
+    - build/test/error*.txt
+    - build/test/searchd.log    
+    expire_in: 12 hrs
     when: always
   retry: 1
 
@@ -60,7 +63,10 @@ release_tests:
   artifacts:
     paths:
     - build/here
-    expire_in: 2 hrs
+    - build/test/test_*/report.txt
+    - build/test/error*.txt
+    - build/test/searchd.log    
+    expire_in: 12 hrs
     when: always
   retry: 1
 

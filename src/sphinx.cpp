@@ -22812,7 +22812,7 @@ CSphDictKeywords::HitblockKeyword_t * CSphDictKeywords::HitblockAddKeyword ( DWO
 
 SphWordID_t CSphDictKeywords::HitblockGetID ( const char * sWord, int iLen, SphWordID_t uCRC )
 {
-	if ( iLen>=MAX_KEYWORD_BYTES-4 ) // fix of very long word (zones)
+	if ( iLen>MAX_KEYWORD_BYTES-4 ) // fix of very long word (zones)
 	{
 		memcpy ( m_sClippedWord, sWord, MAX_KEYWORD_BYTES-4 );
 		memset ( m_sClippedWord+MAX_KEYWORD_BYTES-4, 0, 4 );
@@ -23657,7 +23657,7 @@ public:
 			return 0;
 
 		// fix of very long word (zones)
-		if ( iLen>=( SPH_MAX_WORD_LEN*3 ) )
+		if ( iLen>( SPH_MAX_WORD_LEN*3 ) )
 		{
 			int iClippedLen = SPH_MAX_WORD_LEN*3;
 			m_sWord.SetBinary ( (const char *)pWord, iClippedLen );

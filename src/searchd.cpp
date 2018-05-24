@@ -12819,7 +12819,7 @@ static void PercolateQuery ( const SqlStmt_t & tStmt, bool bReplace, ESphCollati
 		tOut.Ok ( 1, iWarnings );
 }
 
-static void SendPercolateReply ( const PercolateMatchResult_t & tRes, const CSphString & sWarning, const CSphString & sError, const CSphFixedVector<SphDocID_t> & dDocids, SqlRowBuffer_c & tOut )
+static void SendPercolateReply ( const PercolateMatchResult_t & tRes, const CSphString & sWarning, const CSphString & sError, const CSphFixedVector<int64_t> & dDocids, SqlRowBuffer_c & tOut )
 {
 	if ( !sError.IsEmpty() )
 	{
@@ -12850,7 +12850,7 @@ static void SendPercolateReply ( const PercolateMatchResult_t & tRes, const CSph
 	BYTE iWarns = ( !sWarning.IsEmpty() ? 1 : 0 );
 	tOut.HeadEnd ( false, iWarns );
 
-	CSphVector<SphDocID_t> dTmpDocs;
+	CSphVector<int64_t> dTmpDocs;
 	int iDocOff = 0;
 	StringBuilder_c sDocs;
 	ARRAY_FOREACH ( i, tRes.m_dQueryDesc )
@@ -12873,7 +12873,7 @@ static void SendPercolateReply ( const PercolateMatchResult_t & tRes, const CSph
 				dTmpDocs.Uniq();
 				ARRAY_FOREACH ( i, dTmpDocs )
 				{
-					sDocs.Appendf ( "%s" DOCID_FMT, sSep, dTmpDocs[i] );
+					sDocs.Appendf ( "%s" INT64_FMT, sSep, dTmpDocs[i] );
 					sSep = ",";
 				}
 			} else
@@ -13242,8 +13242,8 @@ static void PercolateMatchDocuments ( const CSphVector<CSphString> & dDocs, cons
 
 	int iDocsNoIdCount = 0;
 	bool bAutoId = ( sIdAlias.IsEmpty() );
-	CSphFixedVector<SphDocID_t> dDocids ( bAutoId ? 0 : dDocs.GetLength()+1 );
-	SphDocID_t uSeqDocid = 1;
+	CSphFixedVector<int64_t> dDocids ( bAutoId ? 0 : dDocs.GetLength()+1 );
+	int64_t uSeqDocid = 1;
 
 	CSphFixedVector<const char *> dStrings ( iStrCounter );
 	StringPtrTraits_t tStrings;
@@ -13287,7 +13287,7 @@ static void PercolateMatchDocuments ( const CSphVector<CSphString> & dDocs, cons
 
 		// store provided doc-id for result set sending
 		if ( !bAutoId )
-			dDocids[uSeqDocid] = tDoc.m_uDocID;
+			dDocids[uSeqDocid] = (int64_t)tDoc.m_uDocID;
 
 		// PQ work with sequential document numbers, 0 element unused
 		tDoc.m_uDocID = uSeqDocid++;

@@ -165,6 +165,9 @@ CREATE TABLE `test_table` (
 <sphinxql>INSERT INTO pq VALUES ( 'butter' )</sphinxql>
 <sphinxql>CALL PQ ('pq', ('{"title":"butter is good as", "group_id":3}', '{"title":"was butter", "group_id":4}', '{"title":"sas was butter", "group_id":3}', '{"title":"bas was butter", "group_id":3}', '{"title":"butter is good as", "group_id":5}'), 1 as docs, 1 as docs_json, 1 as query, 'group_id' as docs_id )</sphinxql>
 
+<!-- negative id field-->
+<sphinxql>CALL PQ ('pq', ('{"title":"butter is good as", "group_id":3}', '{"title":"was butter", "group_id":11}', '{"title":"sas was butter", "group_id":-2}', '{"title":"bas was butter", "group_id":-13}', '{"title":"butter is good as", "group_id":5}'), 1 as docs, 1 as docs_json, 1 as query, 'group_id' as docs_id )</sphinxql>
+
 </sphqueries>
 
 </test>

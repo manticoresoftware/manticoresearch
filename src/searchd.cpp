@@ -15898,8 +15898,13 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 						iLen = sphUnpackPtrAttr ( pString, &pString );
 					else
 					{
-						// stringptr is NULL - send NULL value
-						dRows.PutNULL();
+						// JSON is NULL - send NULL value
+						// string - empty string have no support for NULL of value types
+						if ( eAttrType==SPH_ATTR_JSON_PTR )
+							dRows.PutNULL();
+						else
+							dRows.PutString ( "" );
+
 						break;
 					}
 

@@ -12626,7 +12626,7 @@ private:
 	SqlRowBuffer_c & m_tRowBuffer;
 };
 
-bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, CSphVector<CSphFilterSettings> & dFilters, CSphVector<FilterTreeItem_t> & dFilterTree, CSphString & sError )
+bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, const CSphSchema & tSchema, CSphVector<CSphFilterSettings> & dFilters, CSphVector<FilterTreeItem_t> & dFilterTree, CSphString & sError )
 {
 	if ( !sFilters || !*sFilters )
 		return true;
@@ -12683,6 +12683,25 @@ bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, CS
 		
 		dFilters.SwapData ( tQuery.m_dFilters );
 		dFilterTree.SwapData ( tQuery.m_dFilterTree );
+	}
+
+	// TODO: change way of filter -> expression create: produce single error, share parser code
+	// try expression
+	if ( iRes!=0 && !dFilters.GetLength() && sError.Begins ( "percolate filters: syntax error" ) )
+	{
+		ESphAttr eAttrType = SPH_ATTR_NONE;
+		CSphScopedPtr<ISphExpr> pExpr ( sphExprParse ( sFilters, tSchema, &eAttrType, NULL, sError, NULL, eCollation ) );
+		if ( pExpr.Ptr() )
+		{
+			sError = "";
+			iRes = 0;
+			CSphFilterSettings & tExpr = dFilters.Add();
+			tExpr.m_eType = SPH_FILTER_EXPRESSION;
+			tExpr.m_sAttrName = sFilters;
+		} else 
+		{
+			iRes = 1;
+		}
 	}
 
 	return ( iRes==0 );
@@ -12774,14 +12793,6 @@ static void PercolateQuery ( const SqlStmt_t & tStmt, bool bReplace, ESphCollati
 		}
 	}
 
-	CSphVector<CSphFilterSettings> dFilters;
-	CSphVector<FilterTreeItem_t> dFilterTree;
-	if ( !PercolateParseFilters ( sFilters, eCollation, dFilters, dFilterTree, sError ) )
-	{
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
-		return;
-	}
-
 	const CSphString & sIndex = tStmt.m_sIndex;
 	const ServedIndex_c * pServed = g_pLocalIndexes->GetRlockedEntry ( sIndex );
 	if ( !pServed )
@@ -12800,6 +12811,17 @@ static void PercolateQuery ( const SqlStmt_t & tStmt, bool bReplace, ESphCollati
 	}
 	PercolateIndex_i * pIndex = (PercolateIndex_i *)pServed->m_pIndex;
 	assert ( pIndex );
+	const CSphSchema & tSchema = pIndex->GetMatchSchema();
+
+	CSphVector<CSphFilterSettings> dFilters;
+	CSphVector<FilterTreeItem_t> dFilterTree;
+	if ( !PercolateParseFilters ( sFilters, eCollation, tSchema, dFilters, dFilterTree, sError ) )
+	{
+		pServed->Unlock();
+		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		return;
+	}
+
 
 	// add query
 	bool bOk = pIndex->Query ( sQuery, sTags, &dFilters, &dFilterTree, bReplace, true, uID, sError );

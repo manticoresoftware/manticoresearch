@@ -983,7 +983,7 @@ int sphGetTokTypeFloat();
 int sphGetTokTypeStr();
 int sphGetTokTypeConstMVA();
 
-bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, CSphVector<CSphFilterSettings> & dFilters, CSphVector<FilterTreeItem_t> & dFilterTree, CSphString & sError );
+bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, const CSphSchema & tSchema, CSphVector<CSphFilterSettings> & dFilters, CSphVector<FilterTreeItem_t> & dFilterTree, CSphString & sError );
 
 
 #endif // _searchdaemon_

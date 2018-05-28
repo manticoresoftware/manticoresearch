@@ -10707,7 +10707,7 @@ public:
 
 private:
 	static const DWORD				META_HEADER_MAGIC = 0x50535451;	///< magic 'PSTQ' header
-	static const DWORD				META_VERSION = 4;				///< current version
+	static const DWORD				META_VERSION = 5;				///< current version, added expression filter
 
 	int								m_iLockFD = -1;
 	CSphSourceStats					m_tStat;

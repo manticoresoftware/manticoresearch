@@ -1795,7 +1795,7 @@ bool HttpHandlerPQ_c::GotQuery ( PercolateIndex_i * pIndex, const CSphString & s
 	CSphVector<FilterTreeItem_t> dFilterTree;
 	if ( pFilters )
 	{
-		if ( !PercolateParseFilters ( pFilters->valuestring, SPH_COLLATION_UTF8_GENERAL_CI, dFilters, dFilterTree, sError ) )
+		if ( !PercolateParseFilters ( pFilters->valuestring, SPH_COLLATION_UTF8_GENERAL_CI, pIndex->GetMatchSchema(), dFilters, dFilterTree, sError ) )
 		{
 			ReportError ( sError.scstr(), SPH_HTTP_STATUS_400 );
 			return false;

@@ -1392,6 +1392,8 @@ public:
 	}
 };
 
+// TODO: implement expression -> filter tree optimization to extract filters from general expression and got rid of all filters wo block-level optimizer
+// wrapper for whole expression that evaluates to 0 and 1 on filtering
 class ExprFilterProxy_c : public ExprFilter_c<ISphFilter>
 {
 protected:

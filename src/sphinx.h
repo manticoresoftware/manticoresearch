@@ -2528,7 +2528,8 @@ enum ESphFilter
 	SPH_FILTER_STRING		= 3,	///< filter by string value
 	SPH_FILTER_NULL			= 4,	///< filter by NULL
 	SPH_FILTER_USERVAR		= 5,	///< filter by @uservar
-	SPH_FILTER_STRING_LIST	= 6		///< filter by string list
+	SPH_FILTER_STRING_LIST	= 6,	///< filter by string list
+	SPH_FILTER_EXPRESSION	= 7		///< filter by expression
 };
 
 

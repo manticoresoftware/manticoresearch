@@ -1392,6 +1392,41 @@ public:
 	}
 };
 
+// TODO: implement expression -> filter tree optimization to extract filters from general expression and got rid of all filters wo block-level optimizer
+// wrapper for whole expression that evaluates to 0 and 1 on filtering
+class ExprFilterProxy_c : public ExprFilter_c<ISphFilter>
+{
+protected:
+	ESphAttr m_eAttrType = SPH_ATTR_NONE;
+
+public:
+	ExprFilterProxy_c ( ISphExpr * pExpr, ESphAttr eAttrType )
+		: ExprFilter_c<ISphFilter> ( pExpr )
+		, m_eAttrType ( eAttrType )
+	{}
+
+	virtual bool Eval ( const CSphMatch & tMatch ) const
+	{
+		switch ( m_eAttrType )
+		{
+			case SPH_ATTR_INTEGER:
+				return ( m_pExpr->IntEval ( tMatch )>0 );
+
+			case SPH_ATTR_BIGINT:
+			case SPH_ATTR_JSON_FIELD:
+				return ( m_pExpr->Int64Eval ( tMatch )>0 );
+
+			case SPH_ATTR_INT64SET:
+			case SPH_ATTR_UINT32SET:
+				return ( m_pExpr->IntEval ( tMatch )>0 );
+
+			default:
+				return ( m_pExpr->Eval ( tMatch )>0.0f );
+		}
+	}
+};
+
+
 
 static ISphFilter * CreateFilterExpr ( ISphExpr * pExpr, const CSphFilterSettings & tSettings, CSphString & sError, ESphCollation eCollation, ESphAttr eAttrType )
 {
@@ -1408,6 +1443,19 @@ static ISphFilter * CreateFilterExpr ( ISphExpr * pExpr, const CSphFilterSetting
 		case SPH_FILTER_RANGE:			CREATE_EXPR_RANGE_FILTER ( ExprFilterRange_c, pExpr, tSettings.m_bHasEqualMin, tSettings.m_bHasEqualMax );
 		case SPH_FILTER_STRING:			return new ExprFilterString_c ( pExpr, eCollation, tSettings.m_bHasEqualMin || tSettings.m_bHasEqualMax );
 		case SPH_FILTER_NULL:			return new ExprFilterNull_c ( pExpr, tSettings.m_bIsNull, false );
+		case SPH_FILTER_EXPRESSION:
+		{
+			if ( eAttrType!=SPH_ATTR_INTEGER && eAttrType!=SPH_ATTR_BIGINT && eAttrType!=SPH_ATTR_JSON_FIELD && eAttrType!=SPH_ATTR_FLOAT
+				&& eAttrType!=SPH_ATTR_INT64SET && eAttrType!=SPH_ATTR_UINT32SET )
+			{
+				sError = "filter expression must evaluate to integer or float";
+				SafeDelete ( pExpr );
+				return nullptr;
+			} else
+			{
+				return new ExprFilterProxy_c ( pExpr, eAttrType );
+			}
+		}
 		default:
 			sError = "this filter type on expressions is not implemented yet";
 			if ( bAutoConvert )
@@ -1511,8 +1559,8 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 
 	if ( !pFilter )
 	{
-		const int iAttr = tSchema.GetAttrIndex ( sAttrName.cstr() );
-		if ( iAttr<0 )
+		const int iAttr = ( tSettings.m_eType!=SPH_FILTER_EXPRESSION ? tSchema.GetAttrIndex ( sAttrName.cstr() ) : -1 );
+		if ( iAttr<0 || tSettings.m_eType==SPH_FILTER_EXPRESSION )
 		{
 			// try expression
 			pExpr = sphExprParse ( sAttrName.cstr(), tSchema, &eAttrType, NULL, sError, NULL, eCollation );
@@ -1915,6 +1963,11 @@ void FormatFilterQL ( const CSphFilterSettings & f, int iCompactIN, StringBuilde
 			ARRAY_FOREACH ( iString, f.m_dStrings )
 				tBuf.Appendf ( "%s'%s'", ( iString>0 ? "," : "" ), f.m_dStrings[iString].cstr() );
 			tBuf.Appendf ( ")" );
+			break;
+
+		case SPH_FILTER_EXPRESSION:
+			tBuf += " ";
+			tBuf += f.m_sAttrName.cstr();
 			break;
 
 		default:

@@ -137,7 +137,7 @@ static void PrintDocsChunk ( int QDEBUGARG(iCount), int QDEBUGARG(iAtomPos), con
 	for ( int i=0; i<iCount; i++ )
 		tRes.Appendf ( i ? ", 0x%x" : "0x%x", DWORD ( pDocs[i].m_uDocid ) );
 	tRes.Appendf ( "]" );
-	printf ( "%s", tRes.cstr() );
+	printf ( "%s\n", tRes.cstr() );
 #endif
 }
 
@@ -149,7 +149,7 @@ static void PrintHitsChunk ( int QDEBUGARG(iCount), int QDEBUGARG(iAtomPos), con
 	for ( int i=0; i<iCount; i++ )
 		tRes.Appendf ( i ? ", 0x%x:0x%x" : "0x%x:0x%x", DWORD ( pHits[i].m_uDocid ), DWORD ( pHits[i].m_uHitpos ) );
 	tRes.Appendf ( "]" );
-	printf ( "%s", tRes.cstr() );
+	printf ( "%s\n", tRes.cstr() );
 #endif
 }
 
@@ -5566,8 +5566,12 @@ const ExtDoc_t * ExtNotNear_c::GetDocsChunk()
 				m_dCheckedHits.Add ( *pHitL );
 				pHitL++;
 			}
+			if ( pHitL->m_uDocid==DOCID_MAX ) // fetch more hits for current docs
+				break;
 			pDocL++;
 		}
+		if ( pHitL->m_uDocid==DOCID_MAX ) // fetch more hits for current docs
+			continue;
 		if ( pDocL->m_uDocid==DOCID_MAX || iDoc==MAX_DOCS-1 )
 			continue;
 
@@ -5956,7 +5960,7 @@ void ExtRanker_c::FinalizeCache ( const ISphSchema & tSorterSchema )
 const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 {
 	#if QDEBUG
-	printf ( "ranker getfiltereddocs" );
+	printf ( "ranker getfiltereddocs\n" );
 	#endif
 
 	CSphScopedProfile ( m_pCtx->m_pProfile, SPH_QSTATE_GET_DOCS );
@@ -6011,7 +6015,7 @@ const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 			for ( int i=0; i<iDocs; i++ )
 				tRes.Appendf ( i ? ", 0x%x" : "0x%x", DWORD ( m_dMyDocs[i].m_uDocid ) );
 			tRes.Appendf ( "]" );
-			printf ( "%s", tRes.cstr() );
+			printf ( "%s\n", tRes.cstr() );
 			#endif
 
 			return m_dMyDocs;

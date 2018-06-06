@@ -11345,13 +11345,8 @@ bool PercolateQwordSetup_c::QwordSetup ( ISphQword * pQword ) const
 
 	SubstringInfo_t tSubInfo;
 	CSphVector<Slice_t> dDictLoc;
-	int iWildCount = 0;
-	for ( const char * s = sWord; *s; s++ )
-	{
-		iWildCount += ( sphIsWild ( *s ) );
-	}
 	PercolateTermMatched_e eCmp = PERCOLATE_EXACT;
-	if ( !iWildCount || iWildCount==iWordLen )
+	if ( !sphHasExpandableWildcards ( sWord ) )
 	{
 		// no wild-cards, or just wild-cards? do not expand
 		Slice_t tChPoint = GetTermLocator ( sWord, iWordLen, m_pSeg );
@@ -11982,6 +11977,26 @@ void SetPercolateQueryParserFactory ( CreateQueryParser * pCall )
 	g_pCreateQueryParser = pCall;
 }
 
+static void FixExpanded ( XQNode_t * pNode )
+{
+	assert ( pNode );
+
+	ARRAY_FOREACH ( i, pNode->m_dWords )
+	{
+		XQKeyword_t & tKw = pNode->m_dWords[i];
+		if ( sphHasExpandableWildcards ( tKw.m_sWord.cstr() ) )
+		{
+			tKw.m_bExpanded = true;
+			// that pointer has not owned by XQKeyword_t and will NOT be deleted
+			// however it should be !=nullptr to create ExtPayload_c at ranker
+			tKw.m_pPayload = (void *)1;
+		}
+	}
+
+	ARRAY_FOREACH ( i, pNode->m_dChildren )
+		FixExpanded ( pNode->m_dChildren[i] );
+}
+
 bool PercolateIndex_c::AddQuery ( const char * sQuery, const char * sTags, const CSphVector<CSphFilterSettings> * pFilters, const CSphVector<FilterTreeItem_t> * pFilterTree, bool bReplace, bool bQL, uint64_t & uId, const ISphTokenizer * pTokenizer, CSphDict * pDict, CSphString & sError )
 {
 	if ( !sQuery || *sQuery=='\0' )
@@ -12021,6 +12036,9 @@ bool PercolateIndex_c::AddQuery ( const char * sQuery, const char * sTags, const
 	// this should be after keyword expansion
 	if ( m_tSettings.m_uAotFilterMask )
 		TransformAotFilter ( tParsed->m_pRoot, pDict->GetWordforms(), m_tSettings );
+
+	if ( m_tSettings.m_iMinPrefixLen>0 || m_tSettings.m_iMinInfixLen>0 )
+		FixExpanded ( tParsed->m_pRoot );
 
 	StoredQuery_t * pStored = new StoredQuery_t();
 	pStored->m_pXQ = tParsed.LeakPtr();

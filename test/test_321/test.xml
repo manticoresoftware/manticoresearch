@@ -54,6 +54,13 @@ index pq_filter1
 	rt_attr_string = s
 }
 
+index pq_wild1
+{
+	type = percolate
+	path			= <data_path/>/pq_wild1
+	min_prefix_len	= 1
+	rt_field = title
+}
 
 </config>
 
@@ -174,6 +181,9 @@ CREATE TABLE `test_table` (
 <sphinxql>insert into pq_filter1 (query,filters) values('orange', 'j.price - 1 > 3 OR any (x=\'test\' for x in j.tag)')</sphinxql>
 <sphinxql>CALL PQ ('pq_filter1', ('{"title":"orange", "j":{ "price":5 } }', '{"title":"orange", "j":{ "price":3 } }', '{"title":"orange", "j":{ "tag":5 } }', '{"title":"orange", "j":{ "tag":["test"] } }' ), 1 as docs, 1 as docs_json, 1 as query )</sphinxql>
 
+<!-- wildcard vs batch of docs -->
+<sphinxql>INSERT INTO pq_wild1 VALUES ( 'a* b*' )</sphinxql>
+<sphinxql>CALL PQ ('pq_wild1', ('{"title":"abc"}','{"title":"acc"}','{"title":"be ce acc"}','{"title":"abc"}'), 1 as docs, 1 as docs_json, 1 as query )</sphinxql>
 </sphqueries>
 
 </test>

@@ -33,7 +33,7 @@ inline int IsAlpha ( int c )
 }
 
 // copied over from sphinxutils; remove at some point
-void StrSplit ( CSphVector<CSphString> & dOut, const char * sIn )
+void StrSplit ( StrVec_t & dOut, const char * sIn )
 {
 	if ( !sIn )
 		return;
@@ -398,7 +398,7 @@ char * Strip ( char * sBuf )
 void UrlBreakTest ( const char * sTestFile )
 {
 	// load the test data
-	CSphVector < CSphVector<CSphString> > dTests;
+	CSphVector <StrVec_t> dTests;
 
 	FILE * fp = fopen ( sTestFile, "rb" );
 	if ( !fp )
@@ -419,7 +419,7 @@ void UrlBreakTest ( const char * sTestFile )
 			continue;
 
 		// parse!
-		CSphVector<CSphString> & dTest = dTests.Add();
+		StrVec_t & dTest = dTests.Add();
 		StrSplit ( dTest, p );
 		if ( dTest.GetLength()<2 )
 		{
@@ -465,7 +465,7 @@ void UrlBreakTest ( const char * sTestFile )
 
 		// generate actual strings
 		int iCur = 0;
-		CSphVector<CSphString> dWords;
+		StrVec_t dWords;
 		ARRAY_FOREACH ( i, tBest.m_Pos )
 		{
 			dWords.Add().SetBinary ( sWord+iCur, tBest.m_Pos[i]-iCur );
@@ -597,7 +597,7 @@ void UrlBreakSplit ()
 
 			// generate actual strings
 			int iCur = 0;
-			CSphVector<CSphString> dWords;
+			StrVec_t dWords;
 			ARRAY_FOREACH ( i, tBest.m_Pos )
 			{
 				fwrite ( sWord+iCur, 1, tBest.m_Pos[i]-iCur, stdout );

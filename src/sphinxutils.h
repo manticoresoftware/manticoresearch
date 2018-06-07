@@ -57,10 +57,10 @@ void sphUItoA ( char ** ppOutput, DWORD uVal, int iBase = 10, int iWidth = 0, in
 
 
 /// string splitter, extracts sequences of alphas (as in sphIsAlpha)
-void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn );
+void sphSplit ( StrVec_t & dOut, const char * sIn );
 
 /// string splitter, splits by the given boundaries
-void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn, const char * sBounds );
+void sphSplit ( StrVec_t & dOut, const char * sIn, const char * sBounds );
 
 /// string wildcard matching (case-sensitive, supports * and ? patterns)
 bool sphWildcardMatch ( const char * sSstring, const char * sPattern, const int * pPattern = NULL );

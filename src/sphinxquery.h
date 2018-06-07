@@ -281,7 +281,7 @@ struct XQQuery_t : public ISphNoncopyable
 	CSphString				m_sParseError;
 	CSphString				m_sParseWarning;
 
-	CSphVector<CSphString>	m_dZones;
+	StrVec_t				m_dZones;
 	XQNode_t *				m_pRoot;
 	bool					m_bNeedSZlist;
 	bool					m_bSingleWord;
@@ -357,7 +357,7 @@ protected:
 	bool					m_bWasBlended {false};
 
 	CSphVector<XQNode_t*>		m_dSpawned;
-	CSphVector<CSphString>		m_dDestForms;
+	StrVec_t					m_dDestForms;
 	CSphVector<MultiformNode_t>	m_dMultiforms;
 
 	virtual bool	HandleFieldBlockStart ( const char * & pPtr ) = 0;

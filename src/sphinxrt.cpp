@@ -8431,7 +8431,7 @@ bool RtIndex_t::Truncate ( CSphString & )
 	// kill all disk chunks files
 	ARRAY_FOREACH ( i, m_dDiskChunks )
 	{
-		CSphVector<CSphString> v;
+		StrVec_t v;
 		const char * sChunkFilename = m_dDiskChunks[i]->GetFilename();
 		sphSplit ( v, sChunkFilename, "." ); // split something like "rt.1"
 		const char * sChunkNumber = v.Last().cstr();
@@ -11160,7 +11160,7 @@ static void PercolateTags ( const char * sTags, CSphVector<uint64_t> & dTags )
 	if ( !sTags || !*sTags )
 		return;
 
-	CSphVector<CSphString> dTagStrings;
+	StrVec_t dTagStrings;
 	sphSplit ( dTagStrings, sTags );
 	if ( !dTagStrings.GetLength() )
 		return;
@@ -11570,7 +11570,7 @@ public:
 	void LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) override {}
 	void LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer ) override {}
 	void WriteStopwords ( CSphWriter & tWriter ) const override {}
-	bool LoadWordforms ( const CSphVector<CSphString> &, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) override { return false; }
+	bool LoadWordforms ( const StrVec_t &, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) override { return false; }
 	void WriteWordforms ( CSphWriter & tWriter ) const override {}
 	int SetMorphology ( const char * szMorph, CSphString & sMessage ) override { return 0; }
 	void Setup ( const CSphDictSettings & tSettings )  override {}

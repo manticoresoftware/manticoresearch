@@ -455,10 +455,10 @@ struct CSphEmbeddedFiles
 	bool						m_bEmbeddedStopwords;
 	bool						m_bEmbeddedWordforms;
 	CSphSavedFile				m_tSynonymFile;
-	CSphVector<CSphString>		m_dSynonyms;
+	StrVec_t					m_dSynonyms;
 	CSphVector<CSphSavedFile>	m_dStopwordFiles;
 	CSphVector<SphWordID_t>		m_dStopwords;
-	CSphVector<CSphString>		m_dWordforms;
+	StrVec_t					m_dWordforms;
 	CSphVector<CSphSavedFile>	m_dWordformFiles;
 
 								CSphEmbeddedFiles ();
@@ -725,7 +725,7 @@ struct CSphDictSettings
 	CSphString		m_sMorphology;
 	CSphString		m_sMorphFields;
 	CSphString		m_sStopwords;
-	CSphVector<CSphString> m_dWordforms;
+	StrVec_t		m_dWordforms;
 	int				m_iMinStemmingLen;
 	bool			m_bWordDict;
 	bool			m_bStopwordsUnstemmed;
@@ -837,7 +837,7 @@ public:
 	virtual void		WriteStopwords ( CSphWriter & tWriter ) const = 0;
 
 	/// load wordforms from a given list of files
-	virtual bool		LoadWordforms ( const CSphVector<CSphString> &, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) = 0;
+	virtual bool		LoadWordforms ( const StrVec_t &, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) = 0;
 
 	/// write wordforms to a file
 	virtual void		WriteWordforms ( CSphWriter & tWriter ) const = 0;
@@ -937,7 +937,7 @@ void sphShutdownWordforms ();
 
 /// update/clear global IDF cache
 bool sphPrereadGlobalIDF ( const CSphString & sPath, CSphString & sError );
-void sphUpdateGlobalIDFs ( const CSphVector<CSphString> & dFiles );
+void sphUpdateGlobalIDFs ( const StrVec_t & dFiles );
 void sphInitGlobalIDFs ();
 void sphShutdownGlobalIDFs ();
 
@@ -1779,7 +1779,7 @@ public:
 		bool					m_bPara;		///< whether to mark a paragraph boundary
 		bool					m_bZone;		///< whether to mark a zone boundary
 		bool					m_bZonePrefix;	///< whether the zone name is a full name or a prefix
-		CSphVector<CSphString>	m_dAttrs;		///< attr names to index
+		StrVec_t				m_dAttrs;		///< attr names to index
 
 		StripperTag_t ()
 			: m_iTagLen ( 0 )
@@ -1829,8 +1829,8 @@ struct CSphSourceSettings
 	bool	m_bIndexSP;			///< whether to index sentence and paragraph delimiters
 	bool	m_bIndexFieldLens;	///< whether to index field lengths
 
-	CSphVector<CSphString>	m_dPrefixFields;	///< list of prefix fields
-	CSphVector<CSphString>	m_dInfixFields;		///< list of infix fields
+	StrVec_t m_dPrefixFields;	///< list of prefix fields
+	StrVec_t m_dInfixFields;	///< list of infix fields
 
 	explicit				CSphSourceSettings ();
 	ESphWordpart			GetWordpart ( const char * sField, bool bWordDict );
@@ -1882,7 +1882,7 @@ struct SphRange_t
 
 struct CSphFieldFilterSettings
 {
-	CSphVector<CSphString>	m_dRegexps;
+	StrVec_t m_dRegexps;
 };
 
 /// field filter
@@ -1914,7 +1914,7 @@ class CSphSource : public CSphSourceSettings
 {
 public:
 	CSphMatch							m_tDocInfo;		///< current document info
-	CSphVector<CSphString>				m_dStrAttrs;	///< current document string attrs
+	StrVec_t							m_dStrAttrs;	///< current document string attrs
 	CSphVector<DWORD>					m_dMva;			///< MVA storage for mva64
 
 public:
@@ -2163,11 +2163,11 @@ struct CSphSourceParams_SQL
 	int64_t							m_iRefRangeStep = 1024;
 	bool							m_bPrintQueries = false;
 
-	CSphVector<CSphString>			m_dQueryPre;
-	CSphVector<CSphString>			m_dQueryPost;
-	CSphVector<CSphString>			m_dQueryPostIndex;
+	StrVec_t						m_dQueryPre;
+	StrVec_t						m_dQueryPost;
+	StrVec_t						m_dQueryPostIndex;
 	CSphVector<CSphColumnInfo>		m_dAttrs;
-	CSphVector<CSphString>			m_dFileFields;
+	StrVec_t						m_dFileFields;
 
 	int								m_iRangedThrottle = 0;
 	int								m_iMaxFileBufferSize = 0;
@@ -2568,7 +2568,7 @@ public:
 		float			m_fMaxValue;	///< range max
 	};
 	CSphVector<SphAttr_t>	m_dValues;	///< integer values set
-	CSphVector<CSphString>	m_dStrings;	///< string values
+	StrVec_t				m_dStrings;	///< string values
 
 public:
 						CSphFilterSettings () = default;
@@ -2667,7 +2667,7 @@ class ISphTableFunc
 {
 public:
 	virtual			~ISphTableFunc() {}
-	virtual bool	ValidateArgs ( const CSphVector<CSphString> & dArgs, const CSphQuery & tQuery, CSphString & sError ) = 0;
+	virtual bool	ValidateArgs ( const StrVec_t & dArgs, const CSphQuery & tQuery, CSphString & sError ) = 0;
 	virtual bool	Process ( AggrResult_t * pResult, CSphString & sError ) = 0;
 	virtual bool	LimitPushdown ( int, int ) { return false; } // FIXME! implement this
 };
@@ -2795,8 +2795,8 @@ public:
 	QueryType_e		m_eQueryType {QUERY_API};		///< queries from sphinxql require special handling
 	const QueryParser_i * m_pQueryParser {nullptr};	///< queries do not own this parser
 
-	CSphVector<CSphString> m_dIncludeItems;
-	CSphVector<CSphString> m_dExcludeItems;
+	StrVec_t m_dIncludeItems;
+	StrVec_t m_dExcludeItems;
 };
 
 
@@ -3207,7 +3207,7 @@ struct CSphIndexSettings : public CSphSourceSettings
 
 	ESphBigram				m_eBigramIndex;
 	CSphString				m_sBigramWords;
-	CSphVector<CSphString>	m_dBigramWords;
+	StrVec_t				m_dBigramWords;
 
 	DWORD			m_uAotFilterMask;		///< lemmatize_XX_all forces us to transform queries on the index level too
 	ESphRLPFilter	m_eChineseRLP;			///< chinese RLP filter
@@ -3318,7 +3318,7 @@ public:
 	void						SetDictionary ( CSphDict * pDict );
 	CSphDict *					GetDictionary () const { return m_pDict; }
 	CSphDict *					LeakDictionary ();
-	virtual void				SetKeepAttrs ( const CSphString & , const CSphVector<CSphString> & ) {}
+	virtual void				SetKeepAttrs ( const CSphString & , const StrVec_t & ) {}
 	virtual void				Setup ( const CSphIndexSettings & tSettings );
 	const CSphIndexSettings &	GetSettings () const { return m_tSettings; }
 	bool						IsStripperInited () const { return m_bStripperInited; }

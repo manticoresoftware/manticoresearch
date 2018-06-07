@@ -80,7 +80,7 @@ static char * trim ( char * sLine )
 
 // split alnums by non-alnums symbols
 // (alnums are  [0..9a..zA..Z-_])
-void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn )
+void sphSplit ( StrVec_t & dOut, const char * sIn )
 {
 	if ( !sIn )
 		return;
@@ -106,7 +106,7 @@ void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn )
 
 // split by any char from sBounds.
 // if line starts from a bound char, first splitted str will be an empty string
-void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn, const char * sBounds )
+void sphSplit ( StrVec_t & dOut, const char * sIn, const char * sBounds )
 {
 	if ( !sIn )
 		return;
@@ -1342,7 +1342,7 @@ void sphConfDictionary ( const CSphConfigSection & hIndex, CSphDictSettings & tS
 		if ( !pWordforms->cstr() || !*pWordforms->cstr() )
 			continue;
 
-		CSphVector<CSphString> dFilesFound;
+		StrVec_t dFilesFound;
 
 #if USE_WINDOWS
 		WIN32_FIND_DATA tFFData;
@@ -1625,7 +1625,7 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 	}
 
 	// aot
-	CSphVector<CSphString> dMorphs;
+	StrVec_t dMorphs;
 	sphSplit ( dMorphs, hIndex.GetStr ( "morphology" ) );
 
 	tSettings.m_uAotFilterMask = 0;

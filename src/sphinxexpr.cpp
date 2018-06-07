@@ -2848,7 +2848,7 @@ private:
 	const char *			m_pLastTokenStart = nullptr;
 	const ISphSchema *		m_pSchema = nullptr;
 	CSphVector<ExprNode_t>	m_dNodes;
-	CSphVector<CSphString>	m_dUservars;
+	StrVec_t				m_dUservars;
 	CSphVector<char*>		m_dIdents;
 	int						m_iConstNow = 0;
 	CSphVector<StackNode_t>	m_dGatherStack;
@@ -5716,7 +5716,7 @@ class Expr_StrIn_c : public Expr_ArgVsConstSet_c<int64_t>, public ExprLocatorTra
 protected:
 	const BYTE *			m_pStrings = nullptr;
 	UservarIntSet_c *		m_pUservar;
-	CSphVector<CSphString>  m_dStringValues;
+	StrVec_t					m_dStringValues;
 	SphStringCmp_fn			m_fnStrCmp;
 
 public:

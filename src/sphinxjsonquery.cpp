@@ -2834,7 +2834,7 @@ bool ParseLocation ( const char * sName, cJSON * pLoc, LocationField_t * pField,
 
 	if ( bString )
 	{
-		CSphVector<CSphString> dVals;
+		StrVec_t dVals;
 		sphSplit ( dVals, pLoc->valuestring );
 
 		if ( dVals.GetLength()!=2 )
@@ -2917,7 +2917,7 @@ bool ParseLocation ( const char * sName, cJSON * pLoc, LocationField_t * pField,
 //////////////////////////////////////////////////////////////////////////
 // _source / select list
 
-static bool ParseStringArray ( const cJSON * pArray, const char * sProp, CSphVector<CSphString> & dItems, CSphString & sError )
+static bool ParseStringArray ( const cJSON * pArray, const char * sProp, StrVec_t & dItems, CSphString & sError )
 {
 	int iCount = cJSON_GetArraySize ( pArray );
 	for ( int iItem=0; iItem<iCount; iItem++ )

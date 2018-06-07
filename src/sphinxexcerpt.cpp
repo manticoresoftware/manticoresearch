@@ -111,7 +111,7 @@ private:
 
 public:
 	SnippetZoneChecker_c ( const CSphVector<ZonePacked_t> & dDocZones,
-		const SmallStringHash_T<int> & hDocNames, const CSphVector<CSphString> & dQueryZones )
+		const SmallStringHash_T<int> & hDocNames, const StrVec_t & dQueryZones )
 	{
 		if ( !dQueryZones.GetLength() )
 			return;

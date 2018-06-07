@@ -184,7 +184,7 @@ public:
 		Switch ( SPH_QSTATE_TOTAL );
 	}
 
-	virtual void			BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const CSphVector<CSphString> & dZones ) = 0;
+	virtual void			BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t & dZones ) = 0;
 	virtual cJSON *			LeakResultAsJson() = 0;
 	virtual const char *	GetResultAsStr() const = 0;
 };
@@ -1587,7 +1587,7 @@ public:
 	virtual void		LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer ) { m_pDict->LoadStopwords ( sFiles, pTokenizer ); }
 	virtual void		LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) { m_pDict->LoadStopwords ( dStopwords ); }
 	virtual void		WriteStopwords ( CSphWriter & tWriter ) const { m_pDict->WriteStopwords ( tWriter ); }
-	virtual bool		LoadWordforms ( const CSphVector<CSphString> & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) { return m_pDict->LoadWordforms ( dFiles, pEmbedded, pTokenizer, sIndex ); }
+	virtual bool		LoadWordforms ( const StrVec_t & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) { return m_pDict->LoadWordforms ( dFiles, pEmbedded, pTokenizer, sIndex ); }
 	virtual void		WriteWordforms ( CSphWriter & tWriter ) const { m_pDict->WriteWordforms ( tWriter ); }
 	virtual int			SetMorphology ( const char * szMorph, CSphString & sMessage ) { return m_pDict->SetMorphology ( szMorph, sMessage ); }
 

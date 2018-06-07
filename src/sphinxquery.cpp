@@ -716,7 +716,7 @@ public:
 	int						m_iQuorumFSlash = -1;
 	bool					m_bCheckNumber = false;
 
-	CSphVector<CSphString>	m_dIntTokens;
+	StrVec_t				m_dIntTokens;
 
 	CSphVector < CSphVector<int> >	m_dZoneVecs;
 	CSphVector<XQLimitSpec_t *>		m_dStateSpec;

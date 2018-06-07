@@ -170,7 +170,7 @@ void sphPluginSaveState ( CSphWriter & tWriter );
 PluginType_e sphPluginGetType ( const CSphString & s );
 
 /// splits and checks plugin spec string in "mylib.dll:plugname[:options]" format
-bool sphPluginParseSpec ( const CSphString & sParams, CSphVector<CSphString> & dParams, CSphString & sError );
+bool sphPluginParseSpec ( const CSphString & sParams, StrVec_t & dParams, CSphString & sError );
 
 /// check if plugin exists (but do not acquire an instance)
 bool sphPluginExists ( PluginType_e eType, const char * sName );

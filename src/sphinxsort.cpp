@@ -4226,7 +4226,7 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const ISphSchema & 
 		CSphVector<ESphAttr> dAttrTypes;
 		CSphVector<ISphExpr *> dJsonKeys;
 
-		CSphVector<CSphString> dGroupBy;
+		StrVec_t dGroupBy;
 		const char * a = pQuery->m_sGroupBy.cstr();
 		const char * b = a;
 		while ( *a )

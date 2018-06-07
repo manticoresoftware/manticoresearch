@@ -529,7 +529,7 @@ class CSphQueryProfileJson : public CSphQueryProfile
 public:
 	virtual					~CSphQueryProfileJson();
 
-	virtual void			BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const CSphVector<CSphString> & dZones );
+	virtual void			BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t & dZones );
 	virtual cJSON *			LeakResultAsJson();
 	virtual const char *	GetResultAsStr() const;
 
@@ -544,7 +544,7 @@ CSphQueryProfileJson::~CSphQueryProfileJson()
 }
 
 
-void CSphQueryProfileJson::BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const CSphVector<CSphString> & /*dZones*/ )
+void CSphQueryProfileJson::BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t & /*dZones*/ )
 {
 	assert ( !m_pResult );
 	m_pResult = sphBuildProfileJson ( pRoot, tSchema );
@@ -1930,7 +1930,7 @@ bool HttpHandlerPQ_c::Process()
 	}
 
 	assert ( sEndpoint->Begins ( "json/pq/" ) );
-	CSphVector<CSphString> dPoints;
+	StrVec_t dPoints;
 	sphSplit ( dPoints, sEndpoint->cstr() + sizeof("json/pq/") - 1, "/" );
 	if ( dPoints.GetLength()<2 )
 	{

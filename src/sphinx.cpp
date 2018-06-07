@@ -1414,7 +1414,7 @@ public:
 
 	bool						EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const;
 
-	virtual void				SetKeepAttrs ( const CSphString & sKeepAttrs, const CSphVector<CSphString> & dAttrs ) { m_sKeepAttrs = sKeepAttrs; m_dKeepAttrs = dAttrs; }
+	virtual void				SetKeepAttrs ( const CSphString & sKeepAttrs, const StrVec_t & dAttrs ) { m_sKeepAttrs = sKeepAttrs; m_dKeepAttrs = dAttrs; }
 
 	virtual SphDocID_t *		GetKillList () const;
 	virtual int					GetKillListSize () const;
@@ -1440,7 +1440,7 @@ private:
 	SphDocID_t						m_uMinDocid;
 	CSphFixedVector<int64_t>		m_dFieldLens;	///< total per-field lengths summed over entire indexed data, in tokens
 	CSphString						m_sKeepAttrs;			///< retain attributes of that index reindexing
-	CSphVector<CSphString>			m_dKeepAttrs;
+	StrVec_t						m_dKeepAttrs;
 
 private:
 
@@ -2533,7 +2533,7 @@ protected:
 	CSphVector<BYTE>	m_dWords;			///< case-folded, sorted bigram_freq_words
 
 public:
-	CSphBigramTokenizer ( ISphTokenizer * pTok, ESphBigram eMode, CSphVector<CSphString> & dWords )
+	CSphBigramTokenizer ( ISphTokenizer * pTok, ESphBigram eMode, StrVec_t & dWords )
 		: CSphTokenFilter ( pTok )
 	{
 		assert ( pTok );
@@ -3702,7 +3702,7 @@ ISphTokenizer * ISphTokenizer::CreateBigramFilter ( ISphTokenizer * pTokenizer, 
 	if ( eBigramIndex==SPH_BIGRAM_NONE )
 		return pTokenizer;
 
-	CSphVector<CSphString> dFreq;
+	StrVec_t dFreq;
 	if ( eBigramIndex!=SPH_BIGRAM_ALL )
 	{
 		const BYTE * pTok = NULL;
@@ -3868,7 +3868,7 @@ public:
 
 ISphTokenizer * ISphTokenizer::CreatePluginFilter ( ISphTokenizer * pTokenizer, const CSphString & sSpec, CSphString & sError )
 {
-	CSphVector<CSphString> dPlugin; // dll, filtername, options
+	StrVec_t dPlugin; // dll, filtername, options
 	if ( !sphPluginParseSpec ( sSpec, dPlugin, sError ) )
 		return NULL;
 
@@ -16838,7 +16838,7 @@ DWORD sphParseMorphAot ( const char * sMorphology )
 	if ( !sMorphology || !*sMorphology )
 		return 0;
 
-	CSphVector<CSphString> dMorphs;
+	StrVec_t dMorphs;
 	sphSplit ( dMorphs, sMorphology );
 
 	DWORD uAotFilterMask = 0;
@@ -17991,7 +17991,7 @@ static void TransformAotFilterKeyword ( XQNode_t * pNode, const XQKeyword_t & tK
 		}
 	}
 
-	CSphVector<CSphString> dLemmas;
+	StrVec_t dLemmas;
 	DWORD uLangMask = tSettings.m_uAotFilterMask;
 	for ( int i=AOT_BEGIN; i<AOT_LENGTH; ++i )
 	{
@@ -20358,7 +20358,7 @@ struct CSphTemplateDictTraits : CSphDict
 	virtual void		LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer );
 	virtual void		LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords );
 	virtual void		WriteStopwords ( CSphWriter & tWriter ) const;
-	virtual bool		LoadWordforms ( const CSphVector<CSphString> & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex );
+	virtual bool		LoadWordforms ( const StrVec_t & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex );
 	virtual void		WriteWordforms ( CSphWriter & tWriter ) const;
 	virtual const CSphWordforms *	GetWordforms() { return m_pWordforms; }
 	virtual void		DisableWordforms() { m_bDisableWordforms = true; }
@@ -20378,7 +20378,7 @@ protected:
 	CSphVector < int >	m_dMorph;
 #if USE_LIBSTEMMER
 	CSphVector < sb_stemmer * >	m_dStemmers;
-	CSphVector<CSphString> m_dDescStemmers;
+	StrVec_t			m_dDescStemmers;
 #endif
 
 	int					m_iStopwords;	///< stopwords count
@@ -20401,8 +20401,8 @@ private:
 
 	static CSphVector<CSphWordforms*>		m_dWordformContainers;
 
-	CSphWordforms *		GetWordformContainer ( const CSphVector<CSphSavedFile> & dFileInfos, const CSphVector<CSphString> * pEmbeddedWordforms, const ISphTokenizer * pTokenizer, const char * sIndex );
-	CSphWordforms *		LoadWordformContainer ( const CSphVector<CSphSavedFile> & dFileInfos, const CSphVector<CSphString> * pEmbeddedWordforms, const ISphTokenizer * pTokenizer, const char * sIndex );
+	CSphWordforms *		GetWordformContainer ( const CSphVector<CSphSavedFile> & dFileInfos, const StrVec_t * pEmbeddedWordforms, const ISphTokenizer * pTokenizer, const char * sIndex );
+	CSphWordforms *		LoadWordformContainer ( const CSphVector<CSphSavedFile> & dFileInfos, const StrVec_t * pEmbeddedWordforms, const ISphTokenizer * pTokenizer, const char * sIndex );
 
 	int					InitMorph ( const char * szMorph, int iLength, CSphString & sError );
 	int					AddMorph ( int iMorph ); ///< helper that always returns ST_OK
@@ -21331,7 +21331,7 @@ void ConcatReportStrings ( const CSphTightVector<CSphNormalForm> & dStrings, CSp
 
 
 CSphWordforms * CSphTemplateDictTraits::GetWordformContainer ( const CSphVector<CSphSavedFile> & dFileInfos,
-	const CSphVector<CSphString> * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex )
+	const StrVec_t * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex )
 {
 	uint64_t uTokenizerFNV = pTokenizer->GetSettingsFNV();
 	ARRAY_FOREACH ( i, m_dWordformContainers )
@@ -21376,7 +21376,7 @@ struct CmpMultiforms_fn
 void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sBuffer, int iLen,
 	ISphTokenizer * pTokenizer, const char * szFile, const CSphVector<int> & dBlended, int iFileId )
 {
-	CSphVector<CSphString> dTokens;
+	StrVec_t dTokens;
 
 	bool bSeparatorFound = false;
 	bool bAfterMorphology = false;
@@ -21635,7 +21635,7 @@ void CSphTemplateDictTraits::AddWordform ( CSphWordforms * pContainer, char * sB
 
 
 CSphWordforms * CSphTemplateDictTraits::LoadWordformContainer ( const CSphVector<CSphSavedFile> & dFileInfos,
-	const CSphVector<CSphString> * pEmbeddedWordforms, const ISphTokenizer * pTokenizer, const char * sIndex )
+	const StrVec_t * pEmbeddedWordforms, const ISphTokenizer * pTokenizer, const char * sIndex )
 {
 	// allocate it
 	CSphWordforms * pContainer = new CSphWordforms();
@@ -21720,7 +21720,7 @@ CSphWordforms * CSphTemplateDictTraits::LoadWordformContainer ( const CSphVector
 }
 
 
-bool CSphTemplateDictTraits::LoadWordforms ( const CSphVector<CSphString> & dFiles,
+bool CSphTemplateDictTraits::LoadWordforms ( const StrVec_t & dFiles,
 	const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex )
 {
 	if ( pEmbedded )
@@ -23694,7 +23694,7 @@ public:
 	virtual void LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer ) { m_pBase->LoadStopwords ( sFiles, pTokenizer ); }
 	virtual void LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) { m_pBase->LoadStopwords ( dStopwords ); }
 	virtual void WriteStopwords ( CSphWriter & tWriter ) const { m_pBase->WriteStopwords ( tWriter ); }
-	virtual bool LoadWordforms ( const CSphVector<CSphString> & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) { return m_pBase->LoadWordforms ( dFiles, pEmbedded, pTokenizer, sIndex ); }
+	virtual bool LoadWordforms ( const StrVec_t & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) { return m_pBase->LoadWordforms ( dFiles, pEmbedded, pTokenizer, sIndex ); }
 	virtual void WriteWordforms ( CSphWriter & tWriter ) const { m_pBase->WriteWordforms ( tWriter ); }
 	virtual int SetMorphology ( const char * szMorph, CSphString & sMessage ) { return m_pBase->SetMorphology ( szMorph, sMessage ); }
 	virtual void Setup ( const CSphDictSettings & tSettings ) { m_pBase->Setup ( tSettings ); }
@@ -23897,7 +23897,7 @@ bool CSphHTMLStripper::SetIndexedAttrs ( const char * sConfig, CSphString & sErr
 		}
 
 		m_dTags[iIndexTag].m_bIndexAttrs = true;
-		CSphVector<CSphString> & dAttrs = m_dTags[iIndexTag].m_dAttrs;
+		StrVec_t & dAttrs = m_dTags[iIndexTag].m_dAttrs;
 
 		// scan attributes
 		while ( *p )
@@ -28149,7 +28149,7 @@ private:
 	{
 		SphDocID_t					m_uDocID;
 		CSphVector < CSphVector<BYTE> >	m_dFields;
-		CSphVector<CSphString>		m_dAttrs;
+		StrVec_t					m_dAttrs;
 	};
 
 	Document_t *				m_pCurDocument;
@@ -28157,9 +28157,9 @@ private:
 
 	FILE *			m_pPipe;			///< incoming stream
 	CSphString		m_sError;
-	CSphVector<CSphString> m_dDefaultAttrs;
-	CSphVector<CSphString> m_dInvalid;
-	CSphVector<CSphString> m_dWarned;
+	StrVec_t		m_dDefaultAttrs;
+	StrVec_t		m_dInvalid;
+	StrVec_t		m_dWarned;
 	int				m_iElementDepth;
 
 	BYTE *			m_pBuffer;
@@ -32952,7 +32952,7 @@ bool sphPrereadGlobalIDF ( const CSphString & sPath, CSphString & sError )
 }
 
 
-void sphUpdateGlobalIDFs ( const CSphVector<CSphString> & dFiles )
+void sphUpdateGlobalIDFs ( const StrVec_t & dFiles )
 {
 	// delete unlisted entries
 	g_tGlobalIDFLock.Lock ();
@@ -32982,7 +32982,7 @@ void sphUpdateGlobalIDFs ( const CSphVector<CSphString> & dFiles )
 
 void sphShutdownGlobalIDFs ()
 {
-	CSphVector<CSphString> dEmptyFiles;
+	StrVec_t dEmptyFiles;
 	sphUpdateGlobalIDFs ( dEmptyFiles );
 }
 

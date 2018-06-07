@@ -177,7 +177,7 @@ void CharsetFold ( CSphIndex * pIndex, FILE * fp )
 
 //////////////////////////////////////////////////////////////////////////
 
-bool FixupFiles ( const CSphVector<CSphString> & dFiles, CSphString & sError )
+bool FixupFiles ( const StrVec_t & dFiles, CSphString & sError )
 {
 	ARRAY_FOREACH ( i, dFiles )
 	{
@@ -237,7 +237,7 @@ bool FixupFiles ( const CSphVector<CSphString> & dFiles, CSphString & sError )
 }
 
 
-bool DoKlistsOptimization ( int iRowSize, const char * sPath, int iChunkCount, CSphVector<CSphString> & dFiles )
+bool DoKlistsOptimization ( int iRowSize, const char * sPath, int iChunkCount, StrVec_t & dFiles )
 {
 	CSphTightVector<SphDocID_t> dLiveID;
 
@@ -365,7 +365,7 @@ struct IDFWord_t
 STATIC_SIZE_ASSERT	( IDFWord_t, 12 );
 
 
-bool BuildIDF ( const CSphString & sFilename, const CSphVector<CSphString> & dFiles, CSphString & sError, bool bSkipUnique )
+bool BuildIDF ( const CSphString & sFilename, const StrVec_t & dFiles, CSphString & sError, bool bSkipUnique )
 {
 	// text dictionaries are ordered alphabetically - we can use that fact while reading
 	// to merge duplicates, calculate total number of occurrences and process bSkipUnique
@@ -521,7 +521,7 @@ bool BuildIDF ( const CSphString & sFilename, const CSphVector<CSphString> & dFi
 }
 
 
-bool MergeIDF ( const CSphString & sFilename, const CSphVector<CSphString> & dFiles, CSphString & sError, bool bSkipUnique )
+bool MergeIDF ( const CSphString & sFilename, const StrVec_t & dFiles, CSphString & sError, bool bSkipUnique )
 {
 	// binary dictionaries are ordered by 64-bit word id, we can use that for merging.
 	// read every file, check repeating word ids, merge if found, write to disk if not
@@ -664,7 +664,7 @@ void OptimizeRtKlists ( const CSphString & sIndex, const CSphConfig & hConf )
 	const int64_t tmStart = sphMicroTimer();
 
 	int iDone = 0;
-	CSphVector<CSphString> dFiles;
+	StrVec_t dFiles;
 
 	hConf["index"].IterateStart ();
 	while ( hConf["index"].IterateNext () )
@@ -1188,7 +1188,7 @@ int main ( int argc, char ** argv )
 	CSphString sDumpHeader, sIndex, sKeyword, sFoldFile;
 	bool bWordid = false;
 	bool bStripPath = false;
-	CSphVector<CSphString> dFiles;
+	StrVec_t dFiles;
 	CSphString sOut;
 	bool bStats = false;
 	bool bSkipUnique = false;

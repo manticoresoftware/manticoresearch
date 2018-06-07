@@ -2116,6 +2116,9 @@ inline void Swap ( CSphString & v1, CSphString & v2 )
 }
 
 
+// commonly used vector of strings
+using StrVec_t = CSphVector<CSphString>;
+
 /// string builder
 /// somewhat quicker than a series of SetSprintf()s
 /// lets you build strings bigger than 1024 bytes, too

@@ -1139,7 +1139,7 @@ protected:
 	QcacheEntry_c *				m_pQcacheEntry = nullptr;			///< data to cache if we decide that the current query is worth caching
 
 protected:
-	CSphVector<CSphString>		m_dZones;
+	StrVec_t					m_dZones;
 	CSphVector<ExtTerm_c*>		m_dZoneStartTerm;
 	CSphVector<ExtTerm_c*>		m_dZoneEndTerm;
 	CSphVector<const ExtDoc_t*>	m_dZoneStart;
@@ -5704,7 +5704,7 @@ const ExtHit_t * ExtNotNear_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 
 //////////////////////////////////////////////////////////////////////////
 
-static void Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const CSphVector<CSphString> * pZones, StringBuilder_c & tRes, int iIndent, const char * szIndent, const char * szLinebreak )
+static void Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t * pZones, StringBuilder_c & tRes, int iIndent, const char * szIndent, const char * szLinebreak )
 {
 	if ( iIndent )
 		tRes.Appendf ( "%s", szLinebreak );
@@ -5793,7 +5793,7 @@ static void Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const 
 }
 
 
-CSphString sphExplainQuery ( const XQNode_t * pNode, const CSphSchema & tSchema, const CSphVector<CSphString> & dZones )
+CSphString sphExplainQuery ( const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t & dZones )
 {
 	StringBuilder_c tRes;
 	Explain ( pNode, tSchema, &dZones, tRes, 0, "  ", "\n" );

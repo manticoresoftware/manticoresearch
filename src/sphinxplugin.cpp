@@ -181,7 +181,7 @@ void sphPluginInit ( const char * sDir )
 }
 
 
-bool sphPluginParseSpec ( const CSphString & sParams, CSphVector<CSphString> & dParams, CSphString & sError )
+bool sphPluginParseSpec ( const CSphString & sParams, StrVec_t & dParams, CSphString & sError )
 {
 	dParams.Resize ( 0 );
 	sphSplit ( dParams, sParams.cstr(), ":" );

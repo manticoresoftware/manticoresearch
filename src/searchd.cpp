@@ -128,7 +128,7 @@ static const char *		g_sServiceName	= "searchd";
 HANDLE					g_hPipe			= INVALID_HANDLE_VALUE;
 #endif
 
-static CSphVector<CSphString>	g_dArgs;
+static StrVec_t	g_dArgs;
 
 
 enum LogFormat_e
@@ -400,7 +400,7 @@ IndexHash_c *								g_pLocalIndexes = new IndexHash_c();	// served (local) inde
 IndexHash_c *								g_pTemplateIndexes = new IndexHash_c(); // template (tokenizer) indexes hash
 
 static CSphMutex							g_tRotateQueueMutex;
-static CSphVector<CSphString>				g_dRotateQueue;
+static StrVec_t								g_dRotateQueue;
 static CSphMutex							g_tRotateConfigMutex;
 static ServiceThread_t						g_tRotateThread;
 static ServiceThread_t						g_tRotationServiceThread;
@@ -421,7 +421,7 @@ static BinlogFlushInfo_t					g_tBinlogAutoflush;
 // optimize thread
 static ServiceThread_t						g_tOptimizeThread;
 static CSphMutex							g_tOptimizeQueueMutex;
-static CSphVector<CSphString>				g_dOptimizeQueue;
+static StrVec_t								g_dOptimizeQueue;
 static ThrottleState_t						g_tRtThrottle;
 
 static CSphRwlock							g_tDistLock;
@@ -3082,7 +3082,7 @@ struct AgentProcessor_t
 struct DistributedIndex_t : public ServedStats_c, public ISphNoncopyable
 {
 	CSphVector<MultiAgentDesc_t *>	m_dAgents;					///< remote agents
-	CSphVector<CSphString>		m_dLocal;					///< local indexes
+	StrVec_t					m_dLocal;					///< local indexes
 	CSphBitvec					m_dKillBreak;
 	int							m_iAgentConnectTimeout;		///< in msec
 	int							m_iAgentQueryTimeout;		///< in msec
@@ -3780,7 +3780,7 @@ bool MinimizeSchema ( CSphSchema & tDst, const ISphSchema & tSrc )
 	return bEqual;
 }
 
-static void ParseIndexList ( const CSphString & sIndexes, CSphVector<CSphString> & dOut )
+static void ParseIndexList ( const CSphString & sIndexes, StrVec_t & dOut )
 {
 	CSphString sSplit = sIndexes;
 	if ( sIndexes.IsEmpty() )
@@ -6592,7 +6592,7 @@ struct DistrServedByAgent_t
 {
 	CSphString						m_sIndex;
 	CSphVector<int>					m_dAgentIds;
-	CSphVector<CSphString>			m_dLocalNames;
+	StrVec_t						m_dLocalNames;
 	CSphVector<QueryStatPerIndex_t>	m_dStats;
 };
 
@@ -7949,7 +7949,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			LockIndex ( m_dLocal[i].m_sName, NULL );
 	} else
 	{
-		CSphVector<CSphString> dLocal;
+		StrVec_t dLocal;
 		// search through specified local indexes
 		ParseIndexList ( tFirst.m_sIndexes, dLocal );
 
@@ -8678,7 +8678,7 @@ protected:
 	int			m_iLimit;
 
 public:
-	virtual bool ValidateArgs ( const CSphVector<CSphString> & dArgs, const CSphQuery &, CSphString & sError )
+	virtual bool ValidateArgs ( const StrVec_t & dArgs, const CSphQuery &, CSphString & sError )
 	{
 		if ( dArgs.GetLength()!=3 )
 			LOC_ERROR ( "REMOVE_REPEATS() requires 4 arguments (result_set, column, offset, limit)" );
@@ -9269,7 +9269,7 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 		}
 	} else if ( sOpt=="token_filter" )	// tokfilter = hello.dll:hello:some_opts
 	{
-		CSphVector<CSphString> dParams;
+		StrVec_t dParams;
 		if ( !sphPluginParseSpec ( sVal, dParams, *m_pParseError ) )
 			return false;
 
@@ -9338,7 +9338,7 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 
 	} else if ( sOpt=="idf" )
 	{
-		CSphVector<CSphString> dOpts;
+		StrVec_t dOpts;
 		sphSplit ( dOpts, sVal.cstr() );
 
 		ARRAY_FOREACH ( i, dOpts )
@@ -10405,7 +10405,7 @@ bool SnippetFormatErrorMessage ( CSphString * pError, const CSphString & sQueryE
 bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CSphString & sError, ThdDesc_t * pThd )
 {
 	SnippetsRemote_t dRemoteSnippets ( dQueries );
-	CSphVector<CSphString> dDistLocal;
+	StrVec_t dDistLocal;
 	ExcerptQuery_t & q = dQueries[0];
 
 	g_tDistLock.ReadLock();
@@ -11017,7 +11017,7 @@ static ServedIndex_c * UpdateGetLockedIndex ( const CSphString & sName, bool bMv
 }
 
 // FIXME!!! extract dLocal and clone dAgents not to depend on distributed index that might be deleted or rotated
-static void ExtractDistributedIndexes ( const CSphVector<CSphString> & dNames, CSphFixedVector<const DistributedIndex_t *> & dDistributed, CSphString & sMissed )
+static void ExtractDistributedIndexes ( const StrVec_t & dNames, CSphFixedVector<const DistributedIndex_t *> & dDistributed, CSphString & sMissed )
 {
 	assert ( dNames.GetLength ()==dDistributed.GetLength () );
 	ARRAY_FOREACH ( i, dDistributed )
@@ -11128,7 +11128,7 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 	}
 
 	// check index names
-	CSphVector<CSphString> dIndexNames;
+	StrVec_t dIndexNames;
 	ParseIndexList ( sIndexes, dIndexNames );
 
 	if ( !dIndexNames.GetLength() )
@@ -11166,7 +11166,7 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 		} else if ( dDistributed[iIdx] )
 		{
 			assert ( dDistributed[iIdx]->m_dLocal.GetLength() || dDistributed[iIdx]->m_dAgents.GetLength() );
-			const CSphVector<CSphString> & dLocal = dDistributed[iIdx]->m_dLocal;
+			const StrVec_t & dLocal = dDistributed[iIdx]->m_dLocal;
 
 			ARRAY_FOREACH ( i, dLocal )
 			{
@@ -11264,7 +11264,7 @@ public:
 };
 
 // string vector with 'like' matcher
-class VectorLike : public CSphVector<CSphString>, public CheckLike
+class VectorLike : public StrVec_t, public CheckLike
 {
 public:
 	CSphString m_sColKey;
@@ -13167,7 +13167,7 @@ static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVari
 	return true;
 }
 
-static void PercolateMatchDocuments ( const CSphVector<CSphString> & dDocs, const PercolateOptions_t & tOpts, const CSphString & sIdAlias, const char * sStmt,
+static void PercolateMatchDocuments ( const StrVec_t & dDocs, const PercolateOptions_t & tOpts, const CSphString & sIdAlias, const char * sStmt,
 	SqlRowBuffer_c & tOut, CSphSessionAccum & tAcc, PercolateIndex_i * pIndex, PercolateMatchResult_t & tMeta, CSphString & sWarning )
 {
 	CSphString sError;
@@ -13329,7 +13329,7 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 	CSphString sIndex = tStmt.m_dInsertValues[0].m_sVal;
 
 	// document(s) 2nd
-	CSphVector<CSphString> dDocs;
+	StrVec_t dDocs;
 	if ( tStmt.m_dInsertValues[1].m_iType==TOK_QUOTED_STRING )
 	{
 		dDocs.Add ( tStmt.m_dInsertValues[1].m_sVal );
@@ -13532,7 +13532,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	} else
 	{
 		// got a list of columns, check for 1) existance, 2) dupes
-		CSphVector<CSphString> dCheck = tStmt.m_dInsertSchema;
+		StrVec_t dCheck = tStmt.m_dInsertSchema;
 		ARRAY_FOREACH ( i, dCheck )
 			// OPTIMIZE! GetAttrIndex and GetFieldIndex use the linear searching. M.b. hash instead?
 			if ( dCheck[i]!="id" && tSchema.GetAttrIndex ( dCheck[i].cstr() )==-1 && tSchema.GetFieldIndex ( dCheck[i].cstr() )==-1 )
@@ -13762,7 +13762,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 
 		// if strings and fields share one value, it might be modified by html stripper etc
 		// we need to use separate storage for such string attributes and fields
-		CSphVector<CSphString> dTmpFieldStorage;
+		StrVec_t dTmpFieldStorage;
 		dTmpFieldStorage.Resize(tSchema.GetFieldsCount());
 
 		for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
@@ -14137,7 +14137,7 @@ void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphStr
 	{
 		// FIXME!!! g_iDistThreads thread pool for locals.
 		// locals
-		const CSphVector<CSphString> & dLocals = pDistributed->m_dLocal;
+		const StrVec_t & dLocals = pDistributed->m_dLocal;
 		CSphVector<CSphKeywordInfo> dKeywordsLocal;
 		ARRAY_FOREACH ( iLocal, dLocals )
 		{
@@ -15419,7 +15419,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const QueryParserFactory
 	CSphString sError;
 
 	// extract index names
-	CSphVector<CSphString> dIndexNames;
+	StrVec_t dIndexNames;
 	ParseIndexList ( tStmt.m_sIndex, dIndexNames );
 	if ( !dIndexNames.GetLength() )
 	{
@@ -15463,7 +15463,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const QueryParserFactory
 		} else if ( dDistributed[iIdx] )
 		{
 			assert ( dDistributed[iIdx]->m_dLocal.GetLength() || dDistributed[iIdx]->m_dAgents.GetLength() );
-			const CSphVector<CSphString> & dLocal = dDistributed[iIdx]->m_dLocal;
+			const StrVec_t & dLocal = dDistributed[iIdx]->m_dLocal;
 
 			ARRAY_FOREACH ( i, dLocal )
 			{
@@ -15672,7 +15672,7 @@ void sphFormatFactors ( CSphVector<BYTE> & dOut, const unsigned int * pFactors, 
 }
 
 
-static void ReturnZeroCount ( const CSphSchema & tSchema, int iAttrsCount, const CSphVector<CSphString> & dCounts, SqlRowBuffer_c & dRows )
+static void ReturnZeroCount ( const CSphSchema & tSchema, int iAttrsCount, const StrVec_t & dCounts, SqlRowBuffer_c & dRows )
 {
 	for ( int i=0; i<iAttrsCount; i++ )
 	{
@@ -16166,7 +16166,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const QueryParserFactory
 
 	CSphString sError;
 
-	CSphVector<CSphString> dNames;
+	StrVec_t dNames;
 	ParseIndexList ( tStmt.m_sIndex, dNames );
 	if ( !dNames.GetLength() )
 	{
@@ -16243,7 +16243,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const QueryParserFactory
 		} else if ( dDistributed[iIdx] )
 		{
 			assert ( dDistributed[iIdx]->m_dLocal.GetLength() || dDistributed[iIdx]->m_dAgents.GetLength() );
-			const CSphVector<CSphString> & dDistLocal = dDistributed[iIdx]->m_dLocal;
+			const StrVec_t & dDistLocal = dDistributed[iIdx]->m_dLocal;
 
 			ARRAY_FOREACH ( i, dDistLocal )
 			{
@@ -16314,18 +16314,18 @@ static void HandleMysqlShowPlan ( SqlRowBuffer_c & tOut, const CSphQueryProfile 
 class CSphQueryProfileMysql : public CSphQueryProfile
 {
 public:
-	virtual void			BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const CSphVector<CSphString> & dZones );
+	virtual void			BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t& dZones );
 	virtual cJSON *			LeakResultAsJson();
 	virtual const char *	GetResultAsStr() const;
 
 private:
 	CSphString				m_sResult;
 
-	void					Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const CSphVector<CSphString> & dZones, int iIdent );
+	void					Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t& dZones, int iIdent );
 };
 
 
-void CSphQueryProfileMysql::BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const CSphVector<CSphString> & dZones )
+void CSphQueryProfileMysql::BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t& dZones )
 {
 	m_sResult = sphExplainQuery ( pRoot, tSchema, dZones );
 }
@@ -17452,7 +17452,7 @@ static void HandleMysqlAlter ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, b
 		return;
 	}
 
-	CSphVector<CSphString> dNames;
+	StrVec_t dNames;
 	ParseIndexList ( tStmt.m_sIndex, dNames );
 	if ( !dNames.GetLength() )
 	{
@@ -19205,7 +19205,7 @@ static void PrereadFunc ( void * )
 
 	int64_t tmStart = sphMicroTimer();
 
-	CSphVector<CSphString> dIndexes;
+	StrVec_t dIndexes;
 	for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
 	{
 		ServedIndex_c & tIndex = it.Get();
@@ -19646,7 +19646,7 @@ static void ConfigureDistributedIndex ( DistributedIndex_t & tIdx, const char * 
 	}
 
 	// add local agents
-	CSphVector<CSphString> dLocs;
+	StrVec_t dLocs;
 	CSphVector<int> dKillBreak;
 	for ( CSphVariant * pLocal = hIndex("local"); pLocal; pLocal = pLocal->m_pNext )
 	{
@@ -20231,7 +20231,7 @@ void CheckDelete ()
 
 	CSphVector<const CSphString *> dToDelete;
 	CSphVector<const CSphString *> dTmplToDelete;
-	CSphVector<CSphString> dDistToDelete;
+	StrVec_t dDistToDelete;
 	dToDelete.Reserve ( 8 );
 	dTmplToDelete.Reserve ( 8 );
 	dDistToDelete.Reserve ( 8 );
@@ -20387,7 +20387,7 @@ void CheckRotate ()
 	g_tRotateConfigMutex.Unlock();
 
 	// check what indexes need to be rotated
-	CSphVector<CSphString> dQueue;
+	StrVec_t dQueue;
 	for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
 	{
 		const ServedIndex_c & tIndex = it.Get();
@@ -24577,7 +24577,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 		g_eLogFormat = LOG_FORMAT_SPHINXQL;
 	else if ( strcmp ( sLogFormat, "plain" ) )
 	{
-		CSphVector<CSphString> dParams;
+		StrVec_t dParams;
 		sphSplit ( dParams, sLogFormat );
 		ARRAY_FOREACH ( j, dParams )
 		{

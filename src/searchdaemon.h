@@ -800,14 +800,14 @@ struct SqlStmt_t
 	CSphQuery				m_tQuery;
 
 	CSphString				m_sTableFunc;
-	CSphVector<CSphString>	m_dTableFuncArgs;
+	StrVec_t				m_dTableFuncArgs;
 
 	// used by INSERT, DELETE, CALL, DESC, ATTACH, ALTER, RELOAD INDEX
 	CSphString				m_sIndex;
 
 	// INSERT (and CALL) specific
 	CSphVector<SqlInsert_t>	m_dInsertValues; // reused by CALL
-	CSphVector<CSphString>	m_dInsertSchema;
+	StrVec_t				m_dInsertSchema;
 	int						m_iSchemaSz = 0;
 
 	// SET specific
@@ -820,9 +820,9 @@ struct SqlStmt_t
 
 	// CALL specific
 	CSphString				m_sCallProc;
-	CSphVector<CSphString>	m_dCallOptNames;
+	StrVec_t				m_dCallOptNames;
 	CSphVector<SqlInsert_t>	m_dCallOptValues;
-	CSphVector<CSphString>	m_dCallStrings;
+	StrVec_t				m_dCallStrings;
 
 	// UPDATE specific
 	CSphAttrUpdate			m_tUpdate;
@@ -867,7 +867,7 @@ struct AggrResult_t : CSphQueryResult
 	CSphVector<int>					m_dMatchCounts;		///< aggregated result sets lengths (for schema minimization)
 	CSphVector<const CSphIndex*>	m_dLockedAttrs;		///< indexes which are hold in the memory until sending result
 	CSphTaggedVector				m_dTag2Pools;		///< tag to MVA and strings storage pools mapping
-	CSphVector<CSphString>			m_dZeroCount;
+	StrVec_t						m_dZeroCount;
 
 	AggrResult_t () {}
 	virtual ~AggrResult_t () {}

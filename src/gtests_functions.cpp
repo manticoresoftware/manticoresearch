@@ -541,7 +541,7 @@ TEST ( functions, str_attr_packer_unpacker )
 
 TEST ( functions, string_split )
 {
-	CSphVector<CSphString> dStr;
+	StrVec_t dStr;
 	sphSplit ( dStr, "test:me\0off\0", ":" );
 	ASSERT_EQ ( dStr.GetLength (), 2 );
 	ASSERT_STREQ ( dStr[0].cstr(),"test" );

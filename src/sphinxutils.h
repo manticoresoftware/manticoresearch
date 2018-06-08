@@ -174,8 +174,6 @@ bool			sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIn
 
 bool			sphInitCharsetAliasTable ( CSphString & sError );
 
-bool sphFileGetContents ( const char * szFileName, CSphVector<BYTE> & dContents );
-
 const char * sphBigramName ( ESphBigram eType );
 
 enum ESphLogLevel

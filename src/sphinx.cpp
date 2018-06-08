@@ -1837,18 +1837,20 @@ int sphOpenFile ( const char * sFile, CSphString & sError, bool bWrite )
 }
 
 
-int64_t sphGetFileSize ( int iFD, CSphString & sError )
+int64_t sphGetFileSize ( int iFD, CSphString * sError )
 {
 	if ( iFD<0 )
 	{
-		sError.SetSprintf ( "invalid descriptor to fstat '%d'", iFD );
+		if ( sError )
+			sError->SetSprintf ( "invalid descriptor to fstat '%d'", iFD );
 		return -1;
 	}
 
 	struct_stat st;
 	if ( fstat ( iFD, &st )<0 )
 	{
-		sError.SetSprintf ( "failed to fstat file '%d': '%s'", iFD, strerror(errno) );
+		if ( sError )
+			sError->SetSprintf ( "failed to fstat file '%d': '%s'", iFD, strerror(errno) );
 		return -1;
 	}
 
@@ -1856,12 +1858,13 @@ int64_t sphGetFileSize ( int iFD, CSphString & sError )
 }
 
 
-int64_t sphGetFileSize ( const char * sFile, CSphString &sError )
+int64_t sphGetFileSize ( const CSphString& sFile, CSphString * sError )
 {
 	struct_stat st = {0};
-	if ( stat ( sFile, &st )<0 )
+	if ( stat ( sFile.cstr(), &st )<0 )
 	{
-		sError.SetSprintf ( "failed to stat file '%s': '%s'", sFile, strerror ( errno ) );
+		if ( sError )
+			sError->SetSprintf ( "failed to stat file '%s': '%s'", sFile.cstr(), strerror ( errno ) );
 		return -1;
 	}
 

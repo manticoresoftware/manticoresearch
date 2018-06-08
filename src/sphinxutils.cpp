@@ -1276,28 +1276,6 @@ bool CSphConfigParser::Parse ( const char * sFileName, const char * pBuffer )
 	return true;
 }
 
-
-bool sphFileGetContents ( const char * szFileName, CSphVector<BYTE> & dContents )
-{
-	FILE * pFile = fopen ( szFileName, "rb" );
-	if ( !pFile )
-		return false;
-
-	struct stat st = { 0 }; // fixme! we have struct_stat in defines; investigate and use it!
-	if ( fstat ( fileno ( pFile ), &st )<0 )
-	{
-		fclose ( pFile );
-		return false;
-	}
-
-	dContents.Resize ( (int)st.st_size );
-	auto iRead = fread ( dContents.Begin(), (int)st.st_size, 1, pFile );
-	fclose ( pFile );
-
-	return iRead==1;
-}
-
-
 /////////////////////////////////////////////////////////////////////////////
 
 void sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings & tSettings )

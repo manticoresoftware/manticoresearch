@@ -3526,12 +3526,15 @@ static void FixupQueryLimits ( const SnippetsDocIndex_c & tContainer, const Exce
 }
 
 
-static void DoHighlighting ( const ExcerptQuery_t & tQuerySettings,
+static void DoHighlighting ( ExcerptQuery_t & tQuerySettings,
 	const CSphIndexSettings & tIndexSettings, const XQQuery_t & tExtQuery, DWORD eExtQuerySPZ,
 	const char * sDoc, int iDocLen,
 	CSphDict * pDict, ISphTokenizer * pTokenizer, const CSphHTMLStripper * pStripper,
-	CSphString & sWarning, CSphString & sError, ISphTokenizer * pQueryTokenizer, CSphVector<BYTE> & dRes, CSphVector<int> & dSeparators )
+	ISphTokenizer * pQueryTokenizer, CSphVector<BYTE> & dRes, CSphVector<int> & dSeparators )
 {
+	CSphString &sWarning = tQuerySettings.m_sWarning;
+	CSphString &sError = tQuerySettings.m_sError;
+
 	assert ( !tIndexSettings.m_uAotFilterMask || ( !tQuerySettings.m_bExactPhrase && tQuerySettings.m_bHighlightQuery ) );
 	ExcerptQuery_t tFixedSettings ( tQuerySettings );
 
@@ -3763,44 +3766,14 @@ static void DoHighlighting ( const ExcerptQuery_t & tQuerySettings,
 }
 
 /////////////////////////////////////////////////////////////////////////////
-
-ExcerptQuery_t::ExcerptQuery_t ()
-	: m_sBeforeMatch ( "<b>" )
-	, m_sAfterMatch ( "</b>" )
-	, m_sChunkSeparator ( " ... " )
-	, m_sStripMode ( "index" )
-	, m_iLimit ( 256 )
-	, m_iLimitWords ( 0 )
-	, m_iLimitPassages ( 0 )
-	, m_iAround ( 5 )
-	, m_iPassageId ( 1 )
-	, m_bRemoveSpaces ( false )
-	, m_bExactPhrase ( false )
-	, m_bUseBoundaries ( false )
-	, m_bWeightOrder ( false )
-	, m_bHighlightQuery ( false )
-	, m_bForceAllWords ( false )
-	, m_iLoadFiles ( 0 )
-	, m_bAllowEmpty ( false )
-	, m_bEmitZones ( false )
-	, m_iRawFlags ( -1 )
-	, m_sFilePrefix ( "" )
-	, m_iSize ( 0 )
-	, m_iSeq ( 0 )
-	, m_iNext ( -2 )
-	, m_bHasBeforePassageMacro ( false )
-	, m_bHasAfterPassageMacro ( false )
-	, m_ePassageSPZ ( SPH_SPZ_NONE )
-	, m_bJsonQuery ( false )
+CSphString g_sSnippetsFilePrefix { "" };
+void SnippetContext_t::BuildExcerpt ( ExcerptQuery_t & tOptions, const CSphIndex * pIndex ) const
 {
-}
+	auto pStripper = m_tStripper.Ptr ();
+	auto pDocTokenizer = m_tTokenizer.Ptr ();
+	auto pQueryTokenizer = m_pQueryTokenizer.Ptr ();
+	CSphString &sError = tOptions.m_sError;
 
-/////////////////////////////////////////////////////////////////////////////
-
-
-void sphBuildExcerpt ( ExcerptQuery_t & tOptions, const CSphIndex * pIndex, const CSphHTMLStripper * pStripper, const XQQuery_t & tExtQuery,
-						DWORD eExtQuerySPZ, CSphString & sWarning, CSphString & sError, CSphDict * pDict, ISphTokenizer * pDocTokenizer, ISphTokenizer * pQueryTokenizer )
-{
 	tOptions.m_dSeparators.Resize ( 0 );
 
 	if ( tOptions.m_sStripMode=="retain"
@@ -3813,21 +3786,18 @@ void sphBuildExcerpt ( ExcerptQuery_t & tOptions, const CSphIndex * pIndex, cons
 	auto * pData = const_cast<char*> ( tOptions.m_sSource.cstr() );
 	CSphFixedVector<char> pBuffer { 0 };
 
-	if ( tOptions.m_iLoadFiles )
+	if ( tOptions.m_uFilesMode )
 	{
 		CSphAutofile tFile;
-		if ( tOptions.m_sFilePrefix!="" )
-		{
-			CSphString sFilename;
-			sFilename.SetSprintf ( "%s%s", tOptions.m_sFilePrefix.cstr(), tOptions.m_sSource.cstr() );
-			if ( tFile.Open ( sFilename.cstr(), SPH_O_READ, sError )<0 )
-				return;
-		} else if ( tOptions.m_sSource.IsEmpty() )
+		CSphString sFilename;
+		sFilename.SetSprintf ( "%s%s", g_sSnippetsFilePrefix.cstr(), tOptions.m_sSource.scstr() );
+		if ( !sFilename.IsEmpty () && tFile.Open ( sFilename.cstr(), SPH_O_READ, sError )<0 )
+			return;
+		else if ( tOptions.m_sSource.IsEmpty() )
 		{
 			sError.SetSprintf ( "snippet file name is empty" );
 			return;
-		} else if ( tFile.Open ( tOptions.m_sSource.cstr(), SPH_O_READ, sError )<0 )
-			return;
+		}
 
 		// will this ever trigger? time will tell; email me if it does!
 		if ( tFile.GetSize()+1>=(SphOffset_t)INT_MAX )
@@ -3858,8 +3828,162 @@ void sphBuildExcerpt ( ExcerptQuery_t & tOptions, const CSphIndex * pIndex, cons
 	// FIXME!!! check on real data (~100 Mb) as stripper changes len
 	int iDataLen = pData ? strlen ( pData ) : 0;
 
-	DoHighlighting ( tOptions, pIndex->GetSettings(), tExtQuery, eExtQuerySPZ, pData, iDataLen, pDict, pDocTokenizer, pStripper,
-		sWarning, sError, pQueryTokenizer, tOptions.m_dRes, tOptions.m_dSeparators );
+	DoHighlighting ( tOptions, pIndex->GetSettings(), m_tExtQuery, m_eExtQuerySPZ, pData, iDataLen, m_pDict, pDocTokenizer, pStripper,
+		pQueryTokenizer, tOptions.m_dRes, tOptions.m_dSeparators );
+}
+
+
+static DWORD CollectQuerySPZ ( const XQNode_t * pNode )
+{
+	if ( !pNode )
+		return SPH_SPZ_NONE;
+
+	DWORD eSPZ = SPH_SPZ_NONE;
+	if ( pNode->GetOp ()==SPH_QUERY_SENTENCE )
+		eSPZ |= SPH_SPZ_SENTENCE;
+	else if ( pNode->GetOp ()==SPH_QUERY_PARAGRAPH )
+		eSPZ |= SPH_SPZ_PARAGRAPH;
+
+	ARRAY_FOREACH ( i, pNode->m_dChildren )
+		eSPZ |= CollectQuerySPZ ( pNode->m_dChildren[i] );
+
+	return eSPZ;
+}
+
+static bool SetupStripperSPZ ( const CSphIndexSettings &tSettings, const ExcerptQuery_t &q, bool bSetupSPZ
+							   , CSphScopedPtr<CSphHTMLStripper> &tStripper, ISphTokenizer * pTokenizer
+							   , CSphString &sError )
+{
+	if ( bSetupSPZ &&
+		( !pTokenizer->EnableSentenceIndexing ( sError ) || !pTokenizer->EnableZoneIndexing ( sError ) ) )
+	{
+		return false;
+	}
+
+
+	if ( q.m_sStripMode=="strip" || q.m_sStripMode=="retain"
+		|| ( q.m_sStripMode=="index" && tSettings.m_bHtmlStrip ) )
+	{
+		// don't strip HTML markup in 'retain' mode - proceed zones only
+		tStripper = new CSphHTMLStripper ( q.m_sStripMode!="retain" );
+
+		if ( q.m_sStripMode=="index" )
+		{
+			if (
+				!tStripper->SetIndexedAttrs ( tSettings.m_sHtmlIndexAttrs.cstr (), sError ) ||
+					!tStripper->SetRemovedElements ( tSettings.m_sHtmlRemoveElements.cstr (), sError ) )
+			{
+				sError.SetSprintf ( "HTML stripper config error: %s", sError.cstr () );
+				return false;
+			}
+		}
+
+		if ( bSetupSPZ )
+		{
+			tStripper->EnableParagraphs ();
+		}
+
+		// handle zone(s) in special mode only when passage_boundary enabled
+		if ( bSetupSPZ && !tStripper->SetZones ( tSettings.m_sZones.cstr (), sError ) )
+		{
+			sError.SetSprintf ( "HTML stripper config error: %s", sError.cstr () );
+			return false;
+		}
+	}
+
+	return true;
+}
+
+bool SnippetContext_t::Setup ( const CSphIndex * pIndex, const ExcerptQuery_t &tSettings, CSphString &sError )
+{
+	assert ( pIndex );
+	CSphScopedPtr<CSphDict> tDictCloned ( nullptr );
+	m_pDict = pIndex->GetDictionary ();
+	if ( m_pDict->HasState () )
+		m_tDictKeeper = m_pDict = m_pDict->Clone ();
+
+	// AOT tokenizer works only with query mode
+	if ( pIndex->GetSettings ().m_uAotFilterMask &&
+		( !tSettings.m_bHighlightQuery || tSettings.m_bExactPhrase ) )
+	{
+		if ( !tSettings.m_bHighlightQuery )
+			sError.SetSprintf ( "failed to setup AOT with query_mode=0, use query_mode=1" );
+		else
+			sError.SetSprintf ( "failed to setup AOT with exact_phrase, use phrase search operator with query_mode=1" );
+		return false;
+	}
+
+	// OPTIMIZE! do a lightweight indexing clone here
+	if ( tSettings.m_bHighlightQuery && pIndex->GetSettings ().m_uAotFilterMask )
+		m_tTokenizer = sphAotCreateFilter ( pIndex->GetTokenizer ()->Clone ( SPH_CLONE_INDEX ), m_pDict
+											, pIndex->GetSettings ().m_bIndexExactWords
+											, pIndex->GetSettings ().m_uAotFilterMask );
+	else
+		m_tTokenizer = pIndex->GetTokenizer ()->Clone ( SPH_CLONE_INDEX );
+
+	m_pQueryTokenizer = nullptr;
+	if ( tSettings.m_bHighlightQuery || tSettings.m_bExactPhrase )
+	{
+		m_pQueryTokenizer = pIndex->GetQueryTokenizer ()->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT );
+	} else
+	{
+		// legacy query mode should handle exact form modifier and star wildcard
+		m_pQueryTokenizer = pIndex->GetTokenizer ()->Clone ( SPH_CLONE_INDEX );
+		if ( pIndex->IsStarDict () )
+		{
+			m_pQueryTokenizer->AddPlainChar ( '*' );
+			m_pQueryTokenizer->AddPlainChar ( '?' );
+			m_pQueryTokenizer->AddPlainChar ( '%' );
+		}
+		if ( pIndex->GetSettings ().m_bIndexExactWords )
+			m_pQueryTokenizer->AddPlainChar ( '=' );
+	}
+
+	// setup exact dictionary if needed
+	if ( pIndex->GetSettings ().m_bIndexExactWords )
+	{
+		m_tExactDictKeeper = new CSphDictExact ( m_pDict );
+		m_pDict = m_tExactDictKeeper.Ptr();
+	}
+
+	if ( tSettings.m_bHighlightQuery )
+	{
+		CSphScopedPtr<ISphTokenizer> tTokenizerJson ( nullptr );
+		CSphScopedPtr<QueryParser_i> tParser ( nullptr );
+		if ( !tSettings.m_bJsonQuery )
+		{
+			tParser = sphCreatePlainQueryParser ();
+		} else
+		{
+			tTokenizerJson = pIndex->GetQueryTokenizer ()->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT );
+			sphSetupQueryTokenizer ( tTokenizerJson.Ptr (), pIndex->IsStarDict ()
+									 , pIndex->GetSettings ().m_bIndexExactWords, true );
+			tParser = sphCreateJsonQueryParser ();
+		}
+		// OPTIMIZE? double lightweight clone here? but then again it's lightweight
+		if ( !tParser->ParseQuery ( m_tExtQuery, tSettings.m_sWords.cstr (), nullptr, m_pQueryTokenizer.Ptr ()
+									, tTokenizerJson.Ptr (), &pIndex->GetMatchSchema (), m_pDict
+									, pIndex->GetSettings () ) )
+		{
+			sError = m_tExtQuery.m_sParseError;
+			return false;
+		}
+		if ( m_tExtQuery.m_pRoot )
+			m_tExtQuery.m_pRoot->ClearFieldMask ();
+
+		m_eExtQuerySPZ = SPH_SPZ_NONE;
+		m_eExtQuerySPZ |= CollectQuerySPZ ( m_tExtQuery.m_pRoot );
+		if ( m_tExtQuery.m_dZones.GetLength () )
+			m_eExtQuerySPZ |= SPH_SPZ_ZONE;
+
+		if ( pIndex->GetSettings ().m_uAotFilterMask )
+			TransformAotFilter ( m_tExtQuery.m_pRoot, m_pDict->GetWordforms (), pIndex->GetSettings () );
+	}
+
+	bool bSetupSPZ = ( tSettings.m_ePassageSPZ!=SPH_SPZ_NONE || m_eExtQuerySPZ!=SPH_SPZ_NONE ||
+		( tSettings.m_sStripMode=="retain" && tSettings.m_bHighlightQuery ) );
+
+	return SetupStripperSPZ ( pIndex->GetSettings (), tSettings, bSetupSPZ, m_tStripper, m_tTokenizer.Ptr (), sError );
 }
 
 //

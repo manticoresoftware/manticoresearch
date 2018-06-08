@@ -2471,8 +2471,8 @@ void SafeClose ( int & iFD );
 int				sphOpenFile ( const char * sFile, CSphString & sError, bool bWrite );
 
 /// return size of file descriptor
-int64_t			sphGetFileSize ( int iFD, CSphString & sError );
-int64_t			sphGetFileSize ( const char sFile, CSphString &sError );
+int64_t			sphGetFileSize ( int iFD, CSphString * sError = nullptr );
+int64_t			sphGetFileSize ( const CSphString & sFile, CSphString * sError = nullptr );
 
 /// buffer trait that neither own buffer nor clean-up it on destroy
 template < typename T >
@@ -2739,7 +2739,7 @@ public:
 			return false;
 		m_iFD = iFD;
 
-		int64_t iFileSize = sphGetFileSize ( iFD, sError );
+		int64_t iFileSize = sphGetFileSize ( iFD, &sError );
 		if ( iFileSize<0 )
 			return false;
 

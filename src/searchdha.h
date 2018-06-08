@@ -325,7 +325,7 @@ struct AgentConn_t : public ISphRefcountedMT
 	// some external stuff
 	CSphVector<CSphQueryResult> m_dResults;	///< multi-query results
 	CSphString		m_sFailure;				///< failure message (both network and logical)
-	mutable int		m_iStoreTag = 0;	///< cookie, m.b. used to 'glue' to concrete connection
+	mutable int		m_iStoreTag = -1;	///< cookie, m.b. used to 'glue' to concrete connection
 	int				m_iWeight = -1;		///< weight of the index, will be send with query to remote host
 
 	IReporter_t *	m_pReporter = nullptr;	///< used to report back when we're finished
@@ -434,7 +434,7 @@ private:
 };
 
 using VectorAgentConn_t = CSphVector<AgentConn_t *>;
-
+using VecRefPtrsAgentConn_t = VecRefPtrs_t<AgentConn_t *>;
 class IRemoteAgentsObserver : public IReporter_t
 {
 public:

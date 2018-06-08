@@ -508,14 +508,6 @@ void ReleaseTTYFlag()
 }
 
 //////////////////////////////////////////////////////////////////////////
-QueryStatElement_t::QueryStatElement_t()
-	: m_uTotalQueries ( 0 )
-{
-	memset ( m_dData, 0, sizeof ( m_dData ) );
-	m_dData[QUERY_STATS_TYPE_MIN] = UINT64_MAX;
-}
-
-//////////////////////////////////////////////////////////////////////////
 void QueryStatContainer_c::Add ( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp )
 {
 	if ( !m_dRecords.IsEmpty() )
@@ -568,11 +560,10 @@ int QueryStatContainer_c::GetNumRecords() const
 
 QueryStatContainer_c::QueryStatContainer_c() = default;
 
-QueryStatContainer_c::QueryStatContainer_c ( QueryStatContainer_c && tOther ) : m_dRecords { std::move ( tOther.m_dRecords ) }
-{
-}
+QueryStatContainer_c::QueryStatContainer_c ( QueryStatContainer_c && tOther ) noexcept
+	: m_dRecords { std::move ( tOther.m_dRecords ) } {}
 
-QueryStatContainer_c & QueryStatContainer_c::operator = ( QueryStatContainer_c && tOther )
+QueryStatContainer_c & QueryStatContainer_c::operator = ( QueryStatContainer_c && tOther ) noexcept
 {
 	if ( &tOther!=this )
 		m_dRecords = std::move ( tOther.m_dRecords );
@@ -618,11 +609,12 @@ void QueryStatContainerExact_c::GetRecord ( int iRecord, QueryStatRecord_t & tRe
 
 QueryStatContainerExact_c::QueryStatContainerExact_c() = default;
 
-QueryStatContainerExact_c::QueryStatContainerExact_c ( QueryStatContainerExact_c && tOther ) : m_dRecords { std::move ( tOther.m_dRecords ) }
+QueryStatContainerExact_c::QueryStatContainerExact_c ( QueryStatContainerExact_c && tOther ) noexcept
+	: m_dRecords { std::move ( tOther.m_dRecords ) }
 {
 }
 
-QueryStatContainerExact_c & QueryStatContainerExact_c::operator = ( QueryStatContainerExact_c && tOther )
+QueryStatContainerExact_c & QueryStatContainerExact_c::operator = ( QueryStatContainerExact_c && tOther ) noexcept
 {
 	if ( &tOther!=this )
 		m_dRecords = std::move ( tOther.m_dRecords );
@@ -640,6 +632,7 @@ ServedDesc_t::~ServedDesc_t ()
 //////////////////////////////////////////////////////////////////////////
 ServedStats_c::ServedStats_c()
 {
+	Verify (m_tStatsLock.Init ( true ));
 	m_pQueryTimeDigest = sphCreateTDigest();
 	m_pRowsFoundDigest = sphCreateTDigest();
 	assert ( m_pQueryTimeDigest && m_pRowsFoundDigest );
@@ -648,8 +641,24 @@ ServedStats_c::ServedStats_c()
 
 ServedStats_c::~ServedStats_c()
 {
-	SafeDelete ( m_pQueryTimeDigest );
 	SafeDelete ( m_pRowsFoundDigest );
+	SafeDelete ( m_pQueryTimeDigest );
+	m_tStatsLock.Done ();
+}
+
+void ServedStats_c::WLockStats () const
+{
+	m_tStatsLock.WriteLock ();
+}
+
+void ServedStats_c::RLockStats () const
+{
+	m_tStatsLock.ReadLock ();
+}
+
+void ServedStats_c::UnlockStats () const
+{
+	m_tStatsLock.Unlock ();
 }
 
 
@@ -675,7 +684,7 @@ void ServedStats_c::AddQueryStat ( uint64_t uFoundRows, uint64_t uQueryTime )
 	m_uTotalQueryTimeMax = Max ( uQueryTime, m_uTotalQueryTimeMax );
 	m_uTotalQueryTimeSum+= uQueryTime;
 	
-	m_uTotalQueries++;
+	++m_uTotalQueries;
 
 	UnlockStats();
 }
@@ -689,31 +698,34 @@ static const uint64_t g_dStatsIntervals[]=
 };
 
 
-void ServedStats_c::DoStatCalcStats ( const QueryStatContainer_i * pContainer, QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const
+void ServedStats_c::DoStatCalcStats ( const QueryStatContainer_i * pContainer,
+	QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const
 {
 	assert ( pContainer );
 
-	uint64_t uTimestamp = sphMicroTimer();
+	auto uTimestamp = sphMicroTimer();
 
 	RLockStats();
 
 	int iRecords = m_tQueryStatRecords.GetNumRecords();
-	for ( int i = QUERY_STATS_INTERVAL_1MIN; i<=QUERY_STATS_INTERVAL_15MIN; i++ )
+	for ( int i = QUERY_STATS_INTERVAL_1MIN; i<=QUERY_STATS_INTERVAL_15MIN; ++i )
 		CalcStatsForInterval ( pContainer, tRowsFoundStats.m_dStats[i], tQueryTimeStats.m_dStats[i], uTimestamp, g_dStatsIntervals[i], iRecords );
 
-	tRowsFoundStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME].m_dData[QUERY_STATS_TYPE_AVG] = m_uTotalQueries ? m_uTotalFoundRowsSum/m_uTotalQueries : 0;
-	tRowsFoundStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME].m_dData[QUERY_STATS_TYPE_MIN] = m_uTotalFoundRowsMin;
-	tRowsFoundStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME].m_dData[QUERY_STATS_TYPE_MAX] = m_uTotalFoundRowsMax;
-	tRowsFoundStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME].m_dData[QUERY_STATS_TYPE_95] = (uint64_t)m_pRowsFoundDigest->Percentile(95);
-	tRowsFoundStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME].m_dData[QUERY_STATS_TYPE_99] = (uint64_t)m_pRowsFoundDigest->Percentile(99);
-	tRowsFoundStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME].m_uTotalQueries = m_uTotalQueries;
-	
-	tQueryTimeStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME].m_dData[QUERY_STATS_TYPE_AVG] = m_uTotalQueries ? m_uTotalQueryTimeSum/m_uTotalQueries : 0;
-	tQueryTimeStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME].m_dData[QUERY_STATS_TYPE_MIN] = m_uTotalQueryTimeMin;
-	tQueryTimeStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME].m_dData[QUERY_STATS_TYPE_MAX] = m_uTotalQueryTimeMax;
-	tQueryTimeStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME].m_dData[QUERY_STATS_TYPE_95] = (uint64_t)m_pQueryTimeDigest->Percentile(95);
-	tQueryTimeStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME].m_dData[QUERY_STATS_TYPE_99] = (uint64_t)m_pQueryTimeDigest->Percentile(99);
-	tQueryTimeStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME].m_uTotalQueries = m_uTotalQueries;
+	auto & tRowsAllStats = tRowsFoundStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME];
+	tRowsAllStats.m_dData[QUERY_STATS_TYPE_AVG] = m_uTotalQueries ? m_uTotalFoundRowsSum/m_uTotalQueries : 0;
+	tRowsAllStats.m_dData[QUERY_STATS_TYPE_MIN] = m_uTotalFoundRowsMin;
+	tRowsAllStats.m_dData[QUERY_STATS_TYPE_MAX] = m_uTotalFoundRowsMax;
+	tRowsAllStats.m_dData[QUERY_STATS_TYPE_95] = (uint64_t)m_pRowsFoundDigest->Percentile(95);
+	tRowsAllStats.m_dData[QUERY_STATS_TYPE_99] = (uint64_t)m_pRowsFoundDigest->Percentile(99);
+	tRowsAllStats.m_uTotalQueries = m_uTotalQueries;
+
+	auto & tQueryAllStats = tQueryTimeStats.m_dStats[QUERY_STATS_INTERVAL_ALLTIME];
+	tQueryAllStats.m_dData[QUERY_STATS_TYPE_AVG] = m_uTotalQueries ? m_uTotalQueryTimeSum/m_uTotalQueries : 0;
+	tQueryAllStats.m_dData[QUERY_STATS_TYPE_MIN] = m_uTotalQueryTimeMin;
+	tQueryAllStats.m_dData[QUERY_STATS_TYPE_MAX] = m_uTotalQueryTimeMax;
+	tQueryAllStats.m_dData[QUERY_STATS_TYPE_95] = (uint64_t)m_pQueryTimeDigest->Percentile(95);
+	tQueryAllStats.m_dData[QUERY_STATS_TYPE_99] = (uint64_t)m_pQueryTimeDigest->Percentile(99);
+	tQueryAllStats.m_uTotalQueries = m_uTotalQueries;
 
 	UnlockStats();
 }
@@ -752,7 +764,7 @@ void ServedStats_c::CalcStatsForInterval ( const QueryStatContainer_i * pContain
 	DWORD uTotalQueries = 0;
 	QueryStatRecord_t tRecord;
 
-	for ( int i = 0; i < pContainer->GetNumRecords(); i++ )
+	for ( int i = 0; i < pContainer->GetNumRecords(); ++i )
 	{
 		pContainer->GetRecord ( i, tRecord );
 
@@ -796,11 +808,21 @@ void ServedStats_c::CalcStatsForInterval ( const QueryStatContainer_i * pContain
 }
 
 //////////////////////////////////////////////////////////////////////////
-
+ServedIndex_c::ServedIndex_c()
+{
+	Verify ( m_tLock.Init() );
+}
 ServedIndex_c::~ServedIndex_c ()
 {
+	if ( m_pIndex )
+		m_pIndex->Dealloc ();
+	// unlink .old
+	if ( !m_sUnlink.IsEmpty () )
+	{
+		sphLogDebug ( "unlink .old" );
+		sphUnlinkIndex ( m_sUnlink.cstr (), false );
+	}
 	Verify ( m_tLock.Done() );
-	Verify ( m_tStatsLock.Done() );
 }
 
 void ServedIndex_c::ReadLock () const
@@ -828,11 +850,6 @@ void ServedIndex_c::WriteLock () const
 	}
 }
 
-bool ServedIndex_c::InitLock() const
-{
-	return m_tLock.Init ( true ) && m_tStatsLock.Init ( true );
-}
-
 void ServedIndex_c::Unlock () const
 {
 	if ( m_tLock.Unlock() )
@@ -842,41 +859,9 @@ void ServedIndex_c::Unlock () const
 		sphLogDebug ( "Unlock %p failed", this );
 		assert ( false );
 	}
-
 	Release();
 }
 
-void ServedIndex_c::WLockStats () const
-{
-	m_tStatsLock.WriteLock();
-}
-
-void ServedIndex_c::RLockStats () const
-{
-	m_tStatsLock.ReadLock ();
-}
-
-void ServedIndex_c::UnlockStats() const
-{
-	m_tStatsLock.Unlock();
-}
-
-void ServedIndex_c::Release () const
-{
-	long iCount = m_iRefCount.Dec ();
-	assert ( iCount>=1 );
-	if ( iCount==1 )
-	{
-		m_pIndex->Dealloc();
-		// unlink .old
-		if ( !m_sUnlink.IsEmpty() )
-		{
-			sphLogDebug ( "unlink .old" );
-			sphUnlinkIndex ( m_sUnlink.cstr(), false );
-		}
-		delete this;
-	}
-}
 
 void ServedIndex_c::SetUnlink ( const char * sUnlnk )
 {
@@ -886,33 +871,29 @@ void ServedIndex_c::SetUnlink ( const char * sUnlnk )
 
 //////////////////////////////////////////////////////////////////////////
 
-IndexHashIterator_c::IndexHashIterator_c ( const IndexHash_c * pHash, bool bWrite )
+RLockedIndexIt_c::RLockedIndexIt_c ( const IndexHash_c * pHash )
 	: m_pHash ( pHash )
-	, m_pIterator ( NULL )
 {
-	if ( !bWrite )
-		m_pHash->Rlock();
-	else
-		m_pHash->Wlock();
+	m_pHash->Rlock();
 }
 
-IndexHashIterator_c::~IndexHashIterator_c ()
+RLockedIndexIt_c::~RLockedIndexIt_c ()
 {
 	m_pHash->Unlock();
 }
 
-bool IndexHashIterator_c::Next ()
+bool RLockedIndexIt_c::Next ()
 {
 	return m_pHash->m_hIndexes.IterateNext ( &m_pIterator );
 }
 
-ServedIndex_c & IndexHashIterator_c::Get ()
+ServedIndex_c & RLockedIndexIt_c::Get ()
 {
 	assert ( m_pIterator );
 	return *IndexHash_t::IterateGet ( &m_pIterator );
 }
 
-const CSphString & IndexHashIterator_c::GetKey ()
+const CSphString & RLockedIndexIt_c::GetKey ()
 {
 	assert ( m_pIterator );
 	return IndexHash_t::IterateGetKey ( &m_pIterator );
@@ -922,7 +903,7 @@ const CSphString & IndexHashIterator_c::GetKey ()
 
 IndexHash_c::IndexHash_c ()
 {
-	if ( !m_tLock.Init() )
+	if ( !m_tIndexesRWLock.Init() )
 		sphDie ( "failed to init hash indexes rwlock" );
 }
 
@@ -930,7 +911,18 @@ IndexHash_c::IndexHash_c ()
 IndexHash_c::~IndexHash_c()
 {
 	Reset();
-	Verify ( m_tLock.Done() );
+	Verify ( m_tIndexesRWLock.Done() );
+}
+
+int IndexHash_c::GetLength () const
+{
+	CSphScopedRLock dRL { m_tIndexesRWLock };
+	return GetLengthUnl();
+}
+
+int IndexHash_c::GetLengthUnl () const
+{
+	return m_hIndexes.GetLength ();
 }
 
 void IndexHash_c::Reset()
@@ -939,40 +931,39 @@ void IndexHash_c::Reset()
 	while ( m_hIndexes.IterateNext() )
 	{
 		ServedIndex_c * pIndex = m_hIndexes.IterateGet();
-		SafeDelete ( pIndex );
+		SafeRelease ( pIndex );
 	}
 	m_hIndexes.Reset();
 }
 
 void IndexHash_c::Rlock () const
 {
-	Verify ( m_tLock.ReadLock() );
+	Verify ( m_tIndexesRWLock.ReadLock() );
 }
 
 
 void IndexHash_c::Wlock () const
 {
-	Verify ( m_tLock.WriteLock() );
+	Verify ( m_tIndexesRWLock.WriteLock() );
 }
 
 
 void IndexHash_c::Unlock () const
 {
-	Verify ( m_tLock.Unlock() );
+	Verify ( m_tIndexesRWLock.Unlock() );
 }
 
 
 bool IndexHash_c::Add ( const ServedDesc_t & tDesc, const CSphString & tKey )
 {
 	Wlock();
-	int iPrevSize = GetLength ();
+	int iPrevSize = GetLengthUnl ();
 	ServedIndex_c ** ppVal = &m_hIndexes.AddUnique ( tKey );
-	bool bAdded = ( iPrevSize<GetLength() );
+	bool bAdded = ( iPrevSize<GetLengthUnl () );
 	if ( bAdded )
 	{
 		*ppVal = new ServedIndex_c();
 		*( (ServedDesc_t *)*ppVal ) = tDesc;
-		Verify ( (*ppVal)->InitLock() );
 	}
 	Unlock();
 	return bAdded;
@@ -992,8 +983,7 @@ void IndexHash_c::Set ( ServedDesc_t & tDesc, const CSphString & tKey )
 	// previous served got leaked and will be fried on Release
 	*ppVal = new ServedIndex_c();
 	*( (ServedDesc_t *)*ppVal ) = tDesc;
-	Verify ( (*ppVal)->InitLock() );
-	tDesc.m_pIndex = NULL; // leak index ptr to prevent index delete
+	tDesc.m_pIndex = nullptr; // leak index ptr to prevent index delete
 
 	Unlock();
 }
@@ -1023,7 +1013,7 @@ ServedIndex_c * IndexHash_c::GetRlockedEntry ( const CSphString & tKey ) const
 	if ( ppEntry )
 		(*ppEntry)->ReadLock();
 	Unlock();
-	return ( ppEntry ? *ppEntry : NULL );
+	return ( ppEntry ? *ppEntry : nullptr );
 }
 
 
@@ -1034,13 +1024,13 @@ ServedIndex_c * IndexHash_c::GetWlockedEntry ( const CSphString & tKey ) const
 	if ( ppEntry )
 		(*ppEntry)->WriteLock();
 	Unlock();
-	return ( ppEntry ? *ppEntry : NULL );
+	return ( ppEntry ? *ppEntry : nullptr );
 }
 
 
 bool IndexHash_c::Exists ( const CSphString & tKey, ServedDesc_t * pDesc ) const
 {
-	Rlock();
+	CSphScopedRLock hIndexesRLock { m_tIndexesRWLock };
 	ServedIndex_c ** ppEntry = m_hIndexes ( tKey );
 	if ( pDesc && ppEntry )
 	{
@@ -1049,7 +1039,6 @@ bool IndexHash_c::Exists ( const CSphString & tKey, ServedDesc_t * pDesc ) const
 		(*ppEntry)->Unlock();
 		pDesc->m_pIndex = nullptr;
 	}
-	Unlock();
 	return ( ppEntry!=NULL );
 }
 
@@ -1429,7 +1418,7 @@ static bool SaveIndexes ()
 {
 	CSphString sError;
 	bool bAllSaved = true;
-	for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
+	for ( RLockedIndexIt_c it ( g_pLocalIndexes ); it.Next(); )
 	{
 		const ServedIndex_c & tServed = it.Get();
 		if ( !tServed.m_bEnabled )
@@ -1449,7 +1438,7 @@ static bool SaveIndexes ()
 static void ClearDistributedHash();
 CSphAutoEvent g_dBlackholeEvent;
 
-void Shutdown ()
+void Shutdown () NO_THREAD_SAFETY_ANALYSIS
 {
 #if !USE_WINDOWS
 	int fdStopwait = -1;
@@ -1514,7 +1503,7 @@ void Shutdown ()
 	bAttrsSaveOk = SaveIndexes();
 
 	// unlock indexes and release locks if needed
-	for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
+	for ( RLockedIndexIt_c it ( g_pLocalIndexes ); it.Next(); )
 	{
 		if ( it.Get().m_pIndex )
 			it.Get().m_pIndex->Unlock();
@@ -1522,7 +1511,7 @@ void Shutdown ()
 	g_pLocalIndexes->Reset();
 
 	// unlock indexes and release locks if needed
-	for ( IndexHashIterator_c it ( g_pTemplateIndexes ); it.Next(); )
+	for ( RLockedIndexIt_c it ( g_pTemplateIndexes ); it.Next(); )
 		if ( it.Get().m_pIndex )
 			it.Get().m_pIndex->Unlock();
 
@@ -3081,60 +3070,36 @@ struct AgentProcessor_t
 /// distributed index
 struct DistributedIndex_t : public ServedStats_c, public ISphNoncopyable
 {
-	CSphVector<MultiAgentDesc_t *>	m_dAgents;					///< remote agents
+	CSphVector<MultiAgentDesc_t *>	m_dAgents;				///< remote agents
 	StrVec_t					m_dLocal;					///< local indexes
 	CSphBitvec					m_dKillBreak;
-	int							m_iAgentConnectTimeout;		///< in msec
-	int							m_iAgentQueryTimeout;		///< in msec
+	int							m_iAgentConnectTimeout { g_iAgentConnectTimeout };	///< in msec
+	int							m_iAgentQueryTimeout { g_iAgentQueryTimeout };		///< in msec
 	int							m_iAgentRetryCount = 0;		///< overrides global one
 	bool						m_bToDelete = false;		///< should be deleted
 	bool						m_bDivideRemoteRanges = false;	///< whether we divide big range onto agents or not
 	HAStrategies_e				m_eHaStrategy = HA_DEFAULT;		///< how to select the best of my agents
-	mutable CSphRwlock			m_tStatsLock;
-
-public:
-	DistributedIndex_t ()
-		: m_iAgentConnectTimeout ( g_iAgentConnectTimeout )
-		, m_iAgentQueryTimeout ( g_iAgentQueryTimeout )
-	{
-		m_tStatsLock.Init ( true );
-	}
 
 	~DistributedIndex_t() override
 	{
 		// m_pHAStorage has to be freed separately.
-		ARRAY_FOREACH ( i, m_dAgents )
-		{
-			SafeDelete ( m_dAgents[i] );
-		}
-
-		m_tStatsLock.Done();
+		for ( auto * &pAgent : m_dAgents )
+			SafeDelete ( pAgent );
 	}
 
+	// get hive of all index'es hosts
 	void GetAllAgents ( AgentsVector & dTarget ) const;
+
+	// call tProcessor::Process over every single host in the hive
 	void ForAgents ( AgentProcessor_t & tProcessor );
 
-	void WLockStats () const override ACQUIRE ( m_tStatsLock )
-	{
-		m_tStatsLock.WriteLock();
-	}
-
-	void RLockStats () const override ACQUIRE_SHARED ( m_tStatsLock )
-	{
-		m_tStatsLock.ReadLock ();
-	}
-
-	void UnlockStats() const override UNLOCK_FUNCTION ( m_tStatsLock )
-	{
-		m_tStatsLock.Unlock();
-	}
 };
 
 void DistributedIndex_t::GetAllAgents ( AgentsVector & dTarget ) const
 {
 	for ( const auto * dAgent : m_dAgents )
 	{
-		for ( const auto & dHost : dAgent->GetAgents() )
+		for ( const auto & dHost : *dAgent )
 		{
 			auto * pAgent = new AgentConn_t;
 			dHost.CloneTo ( pAgent->m_tDesc );
@@ -3146,7 +3111,7 @@ void DistributedIndex_t::GetAllAgents ( AgentsVector & dTarget ) const
 void DistributedIndex_t::ForAgents ( AgentProcessor_t & tProcessor )
 {
 	for ( auto * pAgent : m_dAgents )
-		for ( auto & dHost : pAgent->GetAgents() )
+		for ( auto & dHost : *pAgent )
 			tProcessor.Process ( const_cast<AgentDesc_c&>(dHost) );
 }
 
@@ -3154,15 +3119,15 @@ void DistributedIndex_t::ForAgents ( AgentProcessor_t & tProcessor )
 typedef SmallStringHash_T < DistributedIndex_t * > DistributedHash_t;
 static DistributedHash_t g_hDistIndexes GUARDED_BY ( g_tDistLock );
 
-static DistributedIndex_t * GetDistIndex ( const CSphString & sName )
+static DistributedIndex_t * GetDistIndex ( const CSphString & sName ) REQUIRES_SHARED ( g_tDistLock )
 {
 	DistributedIndex_t ** ppIndex = g_hDistIndexes ( sName );
-	return ( ppIndex ? *ppIndex : NULL );
+	return ( ppIndex ? *ppIndex : nullptr );
 }
 
-void ClearDistributedHash()
+void ClearDistributedHash() REQUIRES ( g_tDistLock )
 {
-	void * pIt = NULL;
+	void * pIt = nullptr;
 	while ( g_hDistIndexes.IterateNext ( &pIt ) )
 	{
 		SafeDelete ( DistributedHash_t::IterateGet ( &pIt ) );
@@ -3170,17 +3135,26 @@ void ClearDistributedHash()
 	g_hDistIndexes.Reset();
 }
 
-void AgentConn_t::NextMirror()
+void AgentConn_t::SetMultiAgent ( const CSphString &sIndex, int iAgent )
 {
-	if ( m_iMirrorsCount==1 )
-		return;
-
+	m_sDistIndex = sIndex;
+	m_iAgent = iAgent;
 	CSphScopedRLock tDistRLock { g_tDistLock };
 	DistributedIndex_t * pDist = GetDistIndex ( m_sDistIndex );
-	if ( pDist && m_iMirror<pDist->m_dAgents.GetLength() )
+	MultiAgentDesc_t * pMirror = pDist->m_dAgents[iAgent];
+	m_iMirrorsCount = pMirror->GetLength ();
+	m_iRetryLimit = pMirror->GetRetryLimit ();
+	pMirror->ChooseAgent ().CloneTo ( m_tDesc );
+}
+
+void AgentConn_t::NextMirror()
+{
+	CSphScopedRLock tDistRLock { g_tDistLock };
+	DistributedIndex_t * pDist = GetDistIndex ( m_sDistIndex );
+	if ( pDist && m_iAgent<pDist->m_dAgents.GetLength() )
 	{
 		// FIXME!!! got broken on agent removal or agent order change
-		pDist->m_dAgents[m_iMirror]->ChooseAgent().CloneTo ( m_tDesc );
+		pDist->m_dAgents[m_iAgent]->ChooseAgent().CloneTo ( m_tDesc );
 		SetupPersist();
 	}
 }
@@ -3195,7 +3169,7 @@ struct SearchRequestBuilder_t : public IRequestBuilder_t
 		: m_dQueries ( dQueries ), m_iStart ( iStart ), m_iEnd ( iEnd ), m_iDivideLimits ( iDivideLimits )
 	{}
 
-	void		BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const override;
+	void		BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final;
 
 protected:
 	void		SendQuery ( const char * sIndexes, ISphOutputBuffer & tOut, const CSphQuery & q, int iWeight ) const;
@@ -3216,7 +3190,7 @@ public:
 		, m_iEnd ( iEnd )
 	{}
 
-	virtual bool		ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const;
+	bool		ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const final;
 
 private:
 	int					m_iStart;
@@ -3628,8 +3602,8 @@ bool SearchReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 		if ( iMatches )
 		{
 			tRes.m_dMatches.Resize ( iMatches );
-			for ( auto & i : tRes.m_dMatches )
-				ParseMatch ( i, tReq, tRes.m_tSchema, bAgent64 );
+			for ( auto & tMatch : tRes.m_dMatches )
+				ParseMatch ( tMatch, tReq, tRes.m_tSchema, bAgent64 );
 		}
 
 		// read totals (retrieved count, total count, query time, word count)
@@ -6494,28 +6468,22 @@ struct Expr_Snippet_c : public ISphStringExpr
 struct ExprHook_t : public ISphExprHook
 {
 	static const int HOOK_SNIPPET = 1;
-	CSphIndex * m_pIndex; /// BLOODY HACK
-	CSphQueryProfile * m_pProfiler;
+	CSphIndex * m_pIndex = nullptr; /// BLOODY HACK
+	CSphQueryProfile * m_pProfiler = nullptr;
 
-	ExprHook_t ()
-		: m_pIndex ( NULL )
-		, m_pProfiler ( NULL )
-	{}
-
-	virtual int IsKnownIdent ( const char * )
+	int IsKnownIdent ( const char * ) final
 	{
 		return -1;
 	}
 
-	virtual int IsKnownFunc ( const char * sFunc )
+	int IsKnownFunc ( const char * sFunc ) final
 	{
 		if ( !strcasecmp ( sFunc, "SNIPPET" ) )
 			return HOOK_SNIPPET;
-		else
-			return -1;
+		return -1;
 	}
 
-	virtual ISphExpr * CreateNode ( int DEBUGARG(iID), ISphExpr * pLeft, ESphEvalStage * pEvalStage, CSphString & sError )
+	ISphExpr * CreateNode ( int DEBUGARG(iID), ISphExpr * pLeft, ESphEvalStage * pEvalStage, CSphString & sError ) final
 	{
 		assert ( iID==HOOK_SNIPPET );
 		if ( pEvalStage )
@@ -6528,13 +6496,13 @@ struct ExprHook_t : public ISphExprHook
 		return pRes;
 	}
 
-	virtual ESphAttr GetIdentType ( int )
+	ESphAttr GetIdentType ( int ) final
 	{
 		assert ( 0 );
 		return SPH_ATTR_NONE;
 	}
 
-	virtual ESphAttr GetReturnType ( int DEBUGARG(iID), const CSphVector<ESphAttr> & dArgs, bool, CSphString & sError )
+	ESphAttr GetReturnType ( int DEBUGARG(iID), const CSphVector<ESphAttr> & dArgs, bool, CSphString & sError ) final
 	{
 		assert ( iID==HOOK_SNIPPET );
 		if ( dArgs.GetLength()<2 )
@@ -6558,8 +6526,8 @@ struct ExprHook_t : public ISphExprHook
 		return SPH_ATTR_STRINGPTR;
 	}
 
-	virtual void CheckEnter ( int ) {}
-	virtual void CheckExit ( int ) {}
+	void CheckEnter ( int ) final {}
+	void CheckExit ( int ) final {}
 };
 
 
@@ -6574,7 +6542,7 @@ struct LocalIndex_t
 };
 
 
-struct QueryStatPerIndex_t
+struct QueryStat_t
 {
 	uint64_t	m_uQueryTime = 0;
 	uint64_t	m_uFoundRows = 0;
@@ -6584,7 +6552,7 @@ struct QueryStatPerIndex_t
 
 struct StatsPerQuery_t
 {
-	CSphVector<QueryStatPerIndex_t> m_dStats;
+	CSphVector<QueryStat_t> m_dStats;
 };
 
 
@@ -6593,7 +6561,7 @@ struct DistrServedByAgent_t
 	CSphString						m_sIndex;
 	CSphVector<int>					m_dAgentIds;
 	StrVec_t						m_dLocalNames;
-	CSphVector<QueryStatPerIndex_t>	m_dStats;
+	CSphVector<QueryStat_t>			m_dStats;
 };
 
 
@@ -6633,24 +6601,24 @@ protected:
 	bool							AllowsMulti ( int iStart, int iEnd ) const;
 	void							SetupLocalDF ( int iStart, int iEnd );
 
-	int								m_iStart;		///< subset start
-	int								m_iEnd;			///< subset end
-	bool							m_bMultiQueue;	///< whether current subset is subject to multi-queue optimization
-	bool							m_bFacetQueue;	///< whether current subset is subject to facet-queue optimization
-	CSphVector<LocalIndex_t>		m_dLocal;		///< local indexes for the current subset
-	mutable CSphVector<CSphSchemaMT> m_dExtraSchemas; ///< the extra fields for agents
-	CSphAttrUpdateEx *				m_pUpdates;		///< holder for updates
-	CSphVector<SphDocID_t> *		m_pDelete;		///< this query is for deleting
+	int								m_iStart = 0;			///< subset start
+	int								m_iEnd = 0;				///< subset end
+	bool							m_bMultiQueue = false;	///< whether current subset is subject to multi-queue optimization
+	bool							m_bFacetQueue = false;	///< whether current subset is subject to facet-queue optimization
+	CSphVector<LocalIndex_t>		m_dLocal;				///< local indexes for the current subset
+	mutable CSphVector<CSphSchemaMT> m_dExtraSchemas; 		///< the extra fields for agents
+	CSphAttrUpdateEx *				m_pUpdates = nullptr;	///< holder for updates
+	CSphVector<SphDocID_t> *		m_pDelete = nullptr;	///< this query is for deleting
 
-	CSphQueryProfile *				m_pProfile;
+	CSphQueryProfile *				m_pProfile = nullptr;
 	QueryType_e						m_eQueryType {QUERY_API}; ///< queries from sphinxql require special handling
 	const QueryParser_i *			m_pQueryParser;	///< parser used for queries in this handler. e.g. plain or json-style
 
 	mutable ExprHook_t				m_tHook;
 
 	SmallStringHash_T < int64_t >	m_hLocalDocs;
-	int64_t							m_iTotalDocs;
-	bool							m_bGotLocalDF;
+	int64_t							m_iTotalDocs = 0;
+	bool							m_bGotLocalDF = false;
 	bool							m_bMaster;
 	bool							m_bFederatedUser;
 
@@ -6660,6 +6628,8 @@ protected:
 	SmallStringHash_T<ServedIndex_c *>	m_hUsed;
 	bool							LockIndex ( const CSphString & sName, ServedDesc_t * pServed );
 	const ServedIndex_c *			GetIndex ( const CSphString & sName ) const;
+private:
+	bool							CheckMultiQuery ( int iStart, int iEnd ) const;
 };
 
 
@@ -6671,23 +6641,11 @@ ISphSearchHandler * sphCreateSearchHandler ( int iQueries, const QueryParser_i *
 
 SearchHandler_c::SearchHandler_c ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster, int iCid )
 {
-	m_iStart = 0;
-	m_iEnd = 0;
-	m_bMultiQueue = false;
-	m_bFacetQueue = false;
-
 	m_dQueries.Resize ( iQueries );
 	m_dResults.Resize ( iQueries );
 	m_dFailuresSet.Resize ( iQueries );
 	m_dExtraSchemas.Resize ( iQueries );
 	m_dAgentTimes.Resize ( iQueries );
-	m_pUpdates = NULL;
-	m_pDelete = NULL;
-
-	m_pProfile = NULL;
-	m_tHook.m_pProfiler = NULL;
-	m_iTotalDocs = 0;
-	m_bGotLocalDF = false;
 	m_bMaster = bMaster;
 	m_iCid = iCid;
 	m_bFederatedUser = false;
@@ -6714,16 +6672,16 @@ SearchHandler_c::~SearchHandler_c ()
 void SearchHandler_c::SetQueryParser ( const QueryParser_i * pParser )
 {
 	m_pQueryParser = pParser;
-	for ( auto & i : m_dQueries )
-		i.m_pQueryParser = pParser;
+	for ( auto & dQuery : m_dQueries )
+		dQuery.m_pQueryParser = pParser;
 }
 
 
 void SearchHandler_c::SetQueryType ( QueryType_e eQueryType )
 {
 	m_eQueryType = eQueryType;
-	for ( auto & i : m_dQueries )
-		i.m_eQueryType = eQueryType;
+	for ( auto & dQuery : m_dQueries )
+		dQuery.m_eQueryType = eQueryType;
 }
 
 
@@ -6733,7 +6691,7 @@ static void SetDesc ( ServedDesc_t * pDst, const ServedIndex_c * pSrc )
 		return;
 
 	*pDst = *pSrc;
-	pDst->m_pIndex = NULL; // do not want to free index at desc destructor
+	pDst->m_pIndex = nullptr; // do not want to free index at desc destructor
 }
 
 
@@ -6752,7 +6710,7 @@ bool SearchHandler_c::LockIndex ( const CSphString & sName, ServedDesc_t * pDesc
 		SetDesc ( pDesc, pServed );
 		if ( pServed )
 			pServed->Unlock();
-		return ( pServed!=NULL );
+		return ( pServed!=nullptr );
 	}
 
 	m_hUsed.Add ( pServed, sName );
@@ -6764,7 +6722,7 @@ bool SearchHandler_c::LockIndex ( const CSphString & sName, ServedDesc_t * pDesc
 const ServedIndex_c * SearchHandler_c::GetIndex ( const CSphString & sName ) const
 {
 	ServedIndex_c ** ppIndex = m_hUsed ( sName );
-	return ( ppIndex ? *ppIndex : NULL );
+	return ( ppIndex ? *ppIndex : nullptr );
 }
 
 
@@ -7265,7 +7223,7 @@ void SearchHandler_c::RunLocalSearchesMT ()
 	ARRAY_FOREACH ( iLocal, dWorks )
 		for ( int iQuery=m_iStart; iQuery<=m_iEnd; iQuery++ )
 		{
-			QueryStatPerIndex_t & tStat = m_dQueryIndexStats[iLocal].m_dStats[iQuery-m_iStart];
+			QueryStat_t & tStat = m_dQueryIndexStats[iLocal].m_dStats[iQuery-m_iStart];
 			if ( tStat.m_iSuccesses )
 				tStat.m_uQueryTime = (int)( tmLocal/1000/iTotalSuccesses );
 		}
@@ -7801,13 +7759,13 @@ void SearchHandler_c::SetupLocalDF ( int iStart, int iEnd )
 
 static int GetIndexWeight ( const char * sName, const CSphVector<CSphNamedInt> & dIndexWeights, int iDefaultWeight )
 {
-	ARRAY_FOREACH ( i, dIndexWeights )
-		if ( dIndexWeights[i].m_sName==sName )
-			return dIndexWeights[i].m_iValue;
+	for ( auto& dWeight : dIndexWeights )
+		if ( dWeight.m_sName==sName )
+			return dWeight.m_iValue;
 
 	// distributed index adds {'*', weight} to all agents in case it got custom weight
 	if ( dIndexWeights.GetLength() && dIndexWeights.Last().m_sName=="*" )
-		return dIndexWeights.Begin()->m_iValue;
+		return dIndexWeights[0].m_iValue;
 
 	return iDefaultWeight;
 }
@@ -7833,6 +7791,55 @@ struct TaggedLocalSorter_fn
 	}
 };
 
+////////////////////////////////////////////////////////////////
+// check for single-query, multi-queue optimization possibility
+////////////////////////////////////////////////////////////////
+bool SearchHandler_c::CheckMultiQuery ( int iStart, int iEnd ) const
+{
+	if (iStart>=iEnd)
+		return false;
+
+	for ( int iCheck = iStart + 1; iCheck<=iEnd; ++iCheck )
+	{
+		const CSphQuery &qFirst = m_dQueries[iStart];
+		const CSphQuery &qCheck = m_dQueries[iCheck];
+
+		// these parameters must be the same
+		if (
+			( qCheck.m_sRawQuery!=qFirst.m_sRawQuery ) || // query string
+				( qCheck.m_dWeights.GetLength ()!=qFirst.m_dWeights.GetLength () ) || // weights count
+				( qCheck.m_dWeights.GetLength () && memcmp ( qCheck.m_dWeights.Begin (), qFirst.m_dWeights.Begin (),
+					sizeof ( qCheck.m_dWeights[0] ) * qCheck.m_dWeights.GetLength () ) ) || // weights
+				( qCheck.m_eMode!=qFirst.m_eMode ) || // search mode
+				( qCheck.m_eRanker!=qFirst.m_eRanker ) || // ranking mode
+				( qCheck.m_dFilters.GetLength ()!=qFirst.m_dFilters.GetLength () ) || // attr filters count
+				( qCheck.m_dFilterTree.GetLength ()!=qFirst.m_dFilterTree.GetLength () ) ||
+				( qCheck.m_iCutoff!=qFirst.m_iCutoff ) || // cutoff
+				( qCheck.m_eSort==SPH_SORT_EXPR && qFirst.m_eSort==SPH_SORT_EXPR && qCheck.m_sSortBy!=qFirst.m_sSortBy )
+				|| // sort expressions
+					( qCheck.m_bGeoAnchor!=qFirst.m_bGeoAnchor ) || // geodist expression
+				( qCheck.m_bGeoAnchor && qFirst.m_bGeoAnchor
+					&& ( qCheck.m_fGeoLatitude!=qFirst.m_fGeoLatitude
+						|| qCheck.m_fGeoLongitude!=qFirst.m_fGeoLongitude ) ) ) // some geodist cases
+
+			return false;
+
+		// filters must be the same too
+		assert ( qCheck.m_dFilters.GetLength ()==qFirst.m_dFilters.GetLength () );
+		assert ( qCheck.m_dFilterTree.GetLength ()==qFirst.m_dFilterTree.GetLength () );
+		ARRAY_FOREACH ( i, qCheck.m_dFilters )
+		{
+			if ( qCheck.m_dFilters[i]!=qFirst.m_dFilters[i] )
+				return false;
+		}
+		ARRAY_FOREACH ( i, qCheck.m_dFilterTree )
+		{
+			if ( qCheck.m_dFilterTree[i]!=qFirst.m_dFilterTree[i] )
+				return false;
+		}
+	}
+	return true;
+}
 
 void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 {
@@ -7857,137 +7864,85 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		m_tHook.m_pProfiler = m_pProfile;
 	}
 
-	////////////////////////////////////////////////////////////////
-	// check for single-query, multi-queue optimization possibility
-	////////////////////////////////////////////////////////////////
-
-	m_bMultiQueue = ( iStart<iEnd );
-	for ( int iCheck=iStart+1; iCheck<=iEnd && m_bMultiQueue; iCheck++ )
-	{
-		const CSphQuery & qFirst = m_dQueries[iStart];
-		const CSphQuery & qCheck = m_dQueries[iCheck];
-
-		// these parameters must be the same
-		if (
-			( qCheck.m_sRawQuery!=qFirst.m_sRawQuery ) || // query string
-			( qCheck.m_dWeights.GetLength()!=qFirst.m_dWeights.GetLength() ) || // weights count
-			( qCheck.m_dWeights.GetLength() && memcmp ( qCheck.m_dWeights.Begin(), qFirst.m_dWeights.Begin(), sizeof(qCheck.m_dWeights[0])*qCheck.m_dWeights.GetLength() ) ) || // weights
-			( qCheck.m_eMode!=qFirst.m_eMode ) || // search mode
-			( qCheck.m_eRanker!=qFirst.m_eRanker ) || // ranking mode
-			( qCheck.m_dFilters.GetLength()!=qFirst.m_dFilters.GetLength() ) || // attr filters count
-			( qCheck.m_dFilterTree.GetLength()!=qFirst.m_dFilterTree.GetLength() ) ||
-			( qCheck.m_iCutoff!=qFirst.m_iCutoff ) || // cutoff
-			( qCheck.m_eSort==SPH_SORT_EXPR && qFirst.m_eSort==SPH_SORT_EXPR && qCheck.m_sSortBy!=qFirst.m_sSortBy ) || // sort expressions
-			( qCheck.m_bGeoAnchor!=qFirst.m_bGeoAnchor ) || // geodist expression
-			( qCheck.m_bGeoAnchor && qFirst.m_bGeoAnchor
-				&& ( qCheck.m_fGeoLatitude!=qFirst.m_fGeoLatitude || qCheck.m_fGeoLongitude!=qFirst.m_fGeoLongitude ) ) ) // some geodist cases
-		{
-			m_bMultiQueue = false;
-			break;
-		}
-
-		// filters must be the same too
-		assert ( qCheck.m_dFilters.GetLength()==qFirst.m_dFilters.GetLength() );
-		assert ( qCheck.m_dFilterTree.GetLength()==qFirst.m_dFilterTree.GetLength() );
-		ARRAY_FOREACH ( i, qCheck.m_dFilters )
-		{
-			if ( qCheck.m_dFilters[i]!=qFirst.m_dFilters[i] )
-			{
-				m_bMultiQueue = false;
-				break;
-			}
-		}
-		ARRAY_FOREACH ( i, qCheck.m_dFilterTree )
-		{
-			if ( qCheck.m_dFilterTree[i]!=qFirst.m_dFilterTree[i] )
-			{
-				m_bMultiQueue = false;
-				break;
-			}
-		}
-	}
-
 	// check for facets
 	m_bFacetQueue = iEnd>iStart;
-	for ( int iCheck=iStart+1; iCheck<=iEnd && m_bFacetQueue; iCheck++ )
+	for ( int iCheck=iStart+1; iCheck<=iEnd && m_bFacetQueue; ++iCheck )
 		if ( !m_dQueries[iCheck].m_bFacet )
 			m_bFacetQueue = false;
 
-	if ( m_bFacetQueue )
-		m_bMultiQueue = true;
+	m_bMultiQueue = m_bFacetQueue || CheckMultiQuery ( iStart, iEnd );
 
 	////////////////////////////
 	// build local indexes list
 	////////////////////////////
 
-	VectorPtrsGuard_T<AgentConn_t *> dAgents;
+	VectorPtrsGuard_T<AgentConn_t*>  dAgents ;
 	CSphVector<DistrServedByAgent_t> dDistrServedByAgent;
 	int iDivideLimits = 1;
-	int iAgentConnectTimeout = 0, iAgentQueryTimeout = 0;
-	int iTagsCount = 0;
-	int iTagStep = iEnd - iStart + 1;
+	int iAgentConnectTimeout = INT_MAX, iAgentQueryTimeout = INT_MAX;
+	int iTagsCount = 0, iTagStep = iEnd - iStart + 1;
 
 	// they're all local, build the list
 	if ( tFirst.m_sIndexes=="*" )
 	{
 		// search through all local indexes
-		for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
+		for ( RLockedIndexIt_c it ( g_pLocalIndexes ); it.Next(); )
 		{
 			if ( it.Get().m_bEnabled )
 			{
-				m_dLocal.Add().m_sName = it.GetKey();
-				m_dLocal.Last().m_iOrderTag = iTagsCount;
-				m_dLocal.Last().m_iWeight = GetIndexWeight ( it.GetKey().cstr(), tFirst.m_dIndexWeights, 1 );
-				m_dLocal.Last().m_iMass = it.Get().m_iMass;
+				auto & dLocal = m_dLocal.Add();
+				dLocal.m_sName = it.GetKey();
+				dLocal.m_iOrderTag = iTagsCount;
+				dLocal.m_iWeight = GetIndexWeight ( it.GetKey().cstr(), tFirst.m_dIndexWeights, 1 );
+				dLocal.m_iMass = it.Get().m_iMass;
 				iTagsCount += iTagStep;
 			}
 		}
 
-		ARRAY_FOREACH ( i, m_dLocal )
-			LockIndex ( m_dLocal[i].m_sName, NULL );
+		for ( auto & dLocal :  m_dLocal )
+			LockIndex ( dLocal.m_sName, nullptr );
 	} else
 	{
-		StrVec_t dLocal;
+		StrVec_t dIdxNames;
 		// search through specified local indexes
-		ParseIndexList ( tFirst.m_sIndexes, dLocal );
+		ParseIndexList ( tFirst.m_sIndexes, dIdxNames );
 
 		int iDistCount = 0;
 		bool bDivideRemote = false;
 
 		g_tDistLock.ReadLock();
-		ARRAY_FOREACH ( i, dLocal )
+		ARRAY_FOREACH ( i, dIdxNames )
 		{
-			const CSphString & sIndex = dLocal[i];
+			const CSphString & sIndex = dIdxNames[i];
 			DistributedIndex_t * pDist = GetDistIndex ( sIndex );
 			if ( !pDist )
 			{
-				m_dLocal.Add().m_sName = dLocal[i];
-				m_dLocal.Last().m_iOrderTag = iTagsCount;
-				m_dLocal.Last().m_iWeight = GetIndexWeight ( sIndex.cstr(), tFirst.m_dIndexWeights, 1 );
-				m_dLocal.Last().m_iMass = GetIndexMass ( sIndex.cstr() );
+				auto &dLocal = m_dLocal.Add ();
+				dLocal.m_sName = dIdxNames[i];
+				dLocal.m_iOrderTag = iTagsCount;
+				dLocal.m_iWeight = GetIndexWeight ( sIndex.cstr(), tFirst.m_dIndexWeights, 1 );
+				dLocal.m_iMass = GetIndexMass ( sIndex.cstr() );
 				iTagsCount += iTagStep;
 
 			} else
 			{
-				iDistCount++;
-				iAgentConnectTimeout = iAgentConnectTimeout ? Min ( pDist->m_iAgentConnectTimeout, iAgentConnectTimeout ) : pDist->m_iAgentConnectTimeout;
-				iAgentQueryTimeout = iAgentQueryTimeout ? Min ( pDist->m_iAgentQueryTimeout, iAgentQueryTimeout ) : pDist->m_iAgentQueryTimeout;
+				++iDistCount;
+				iAgentConnectTimeout = Min ( pDist->m_iAgentConnectTimeout, iAgentConnectTimeout );
+				iAgentQueryTimeout = Min ( pDist->m_iAgentQueryTimeout, iAgentQueryTimeout );
 				int iWeight = GetIndexWeight ( sIndex.cstr(), tFirst.m_dIndexWeights, -1 );
 
-				DistrServedByAgent_t & tDistr = dDistrServedByAgent.Add();
+				auto & tDistr = dDistrServedByAgent.Add();
 				tDistr.m_sIndex = sIndex;
 				tDistr.m_dStats.Resize ( iEnd-iStart+1 );
 				tDistr.m_dStats.ZeroMem();
 				dAgents.Reserve ( dAgents.GetLength() + pDist->m_dAgents.GetLength() );
 				ARRAY_FOREACH ( j, pDist->m_dAgents )
 				{
-					MultiAgentDesc_t * pMirror = pDist->m_dAgents[j];
 					tDistr.m_dAgentIds.Add ( dAgents.GetLength() );
 					auto * pAgent = new AgentConn_t;
-					pAgent->SetMirror ( sIndex, j, pMirror->ChooseAgent(), pMirror->GetLength() );
+					pAgent->SetMultiAgent ( sIndex, j );
 					pAgent->m_iStoreTag = iTagsCount;
 					pAgent->m_iWeight = iWeight;
-					pAgent->m_iRetryLimit = pMirror->GetRetryLimit();
 					dAgents.Add ( pAgent );
 					iTagsCount += iTagStep;
 				}
@@ -8167,7 +8122,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 						sphLogDebugv ( "agent %d, state %d, order %d, sock %d", iAgent, pAgent->State(), pAgent->m_iStoreTag, pAgent->m_iSock );
 
 						DistrServedByAgent_t * pDistr = nullptr;
-						for ( DistrServedByAgent_t &tDistr : dDistrServedByAgent )
+						for ( auto &tDistr : dDistrServedByAgent )
 							if ( tDistr.m_dAgentIds.Contains ( iAgent ) )
 							{
 								pDistr = &tDistr;
@@ -8431,7 +8386,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		ARRAY_FOREACH_COND ( iDistr, dDistrServedByAgent, iTotalSuccesses && nValidDistrIndexes )
 			for ( int iQuery=iStart; iQuery<=iEnd; iQuery++ )
 			{
-				QueryStatPerIndex_t & tStat = dDistrServedByAgent[iDistr].m_dStats[iQuery-iStart];
+				QueryStat_t & tStat = dDistrServedByAgent[iDistr].m_dStats[iQuery-iStart];
 				int64_t tmDeltaWallAgent = ( tmSubset - tmAccountedWall ) * tStat.m_iSuccesses / ( iTotalSuccesses*nValidDistrIndexes );
 				tStat.m_uQueryTime += (int)(tmDeltaWallAgent/1000);
 			}
@@ -8448,7 +8403,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		ARRAY_FOREACH_COND ( iLocal, m_dLocal, iTotalSuccesses && nValidLocalIndexes )
 			for ( int iQuery=iStart; iQuery<=iEnd; iQuery++ )
 			{
-				QueryStatPerIndex_t & tStat = m_dQueryIndexStats[iLocal].m_dStats[iQuery-iStart];
+				QueryStat_t & tStat = m_dQueryIndexStats[iLocal].m_dStats[iQuery-iStart];
 				int64_t tmDeltaWallLocal = ( tmSubset - tmAccountedWall ) * tStat.m_iSuccesses / ( iTotalSuccesses*nValidLocalIndexes );
 				tStat.m_uQueryTime += (int)(tmDeltaWallLocal/1000);
 			}
@@ -8466,15 +8421,14 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		{
 			for ( int iQuery=iStart; iQuery<=iEnd; iQuery++ )
 			{
-				QueryStatPerIndex_t & tStat = m_dQueryIndexStats[iLocal].m_dStats[iQuery-iStart];
+				QueryStat_t & tStat = m_dQueryIndexStats[iLocal].m_dStats[iQuery-iStart];
 				if ( !tStat.m_iSuccesses )
 					continue;
 
 				const_cast<ServedIndex_c *>( pServed )->AddQueryStat ( tStat.m_uFoundRows, tStat.m_uQueryTime );
 
-				ARRAY_FOREACH ( iDistr, dDistrServedByAgent )
+				for ( auto &tDistr : dDistrServedByAgent )
 				{
-					DistrServedByAgent_t & tDistr = dDistrServedByAgent[iDistr];
 					if ( tDistr.m_dLocalNames.Contains ( m_dLocal[iLocal].m_sName ) )
 					{
 						tDistr.m_dStats[iQuery-iStart].m_iSuccesses++;
@@ -8487,14 +8441,13 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	}
 
 	g_tDistLock.ReadLock();
-	ARRAY_FOREACH ( iDistr, dDistrServedByAgent )
+	for ( auto &tDistr : dDistrServedByAgent )
 	{
-		DistrServedByAgent_t & tDistr = dDistrServedByAgent[iDistr];
 		DistributedIndex_t * pServedDistIndex = GetDistIndex ( tDistr.m_sIndex );
 		if ( pServedDistIndex )
-			for ( int iQuery=iStart; iQuery<=iEnd; iQuery++ )
+			for ( int iQuery=iStart; iQuery<=iEnd; ++iQuery )
 			{
-				QueryStatPerIndex_t & tStat = tDistr.m_dStats[iQuery-iStart];
+				auto & tStat = tDistr.m_dStats[iQuery-iStart];
 				if ( !tStat.m_iSuccesses )
 					continue;
 
@@ -10222,14 +10175,13 @@ struct SnippetRequestBuilder_t : public IRequestBuilder_t
 		: m_pWorker ( pWorker )
 	{
 	}
-	void BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const override;
+	void BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final;
 
 private:
 	const SnippetsRemote_t * m_pWorker;
 	mutable int m_iNumDocs = -1;		///< optimize numdocs/length calculation in scattered case
 	mutable bool m_bScattered = false;
-	mutable int m_iWorker = 0;
-	mutable CSphMutex m_tWorkerMutex;
+	mutable CSphAtomic m_iWorker;
 };
 
 
@@ -10239,7 +10191,7 @@ struct SnippetReplyParser_t : public IReplyParser_t
 		: m_pWorker ( pWorker )
 	{}
 
-	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const;
+	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const final;
 
 private:
 	const SnippetsRemote_t * m_pWorker;
@@ -10249,14 +10201,12 @@ private:
 void SnippetRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const
 {
 	// it sends either all queries to each agent or sequence of queries to current agent
-	m_tWorkerMutex.Lock();
-	int iWorker = m_iWorker++;
-	m_tWorkerMutex.Unlock();
+	auto iWorker = (int)m_iWorker.Inc();
 
 	const CSphVector<ExcerptQuery_t> & dQueries = m_pWorker->m_dQueries;
 	const ExcerptQuery_t & q = dQueries[0];
 	const SnippetWorker_t & tWorker = m_pWorker->m_dWorkers[iWorker];
-	const_cast< AgentConn_t & >( tAgent ).m_iWorkerTag = iWorker;
+	tAgent.m_iStoreTag = iWorker;
 
 	const char * sIndex = tAgent.m_tDesc.m_sIndexes.cstr();
 
@@ -10303,9 +10253,8 @@ void SnippetRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, CachedO
 
 bool SnippetReplyParser_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const
 {
-	int iWorker = tAgent.m_iWorkerTag;
 	CSphVector<ExcerptQuery_t> & dQueries = m_pWorker->m_dQueries;
-	const SnippetWorker_t & tWorker = m_pWorker->m_dWorkers[iWorker];
+	const SnippetWorker_t & tWorker = m_pWorker->m_dWorkers[tAgent.m_iStoreTag];
 
 	int iDoc = tWorker.m_iHead;
 	bool bOk = true;
@@ -10424,9 +10373,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 		{
 			auto * pAgent = new AgentConn_t;
 			dRemoteSnippets.m_dAgents[i] = pAgent;
-
-			MultiAgentDesc_t * pMirror = pDist->m_dAgents[i];
-			pAgent->SetMirror ( sIndex, i, pMirror->ChooseAgent(), pMirror->GetLength() );
+			pAgent->SetMultiAgent ( sIndex, i );
 		}
 	}
 	g_tDistLock.Unlock();
@@ -10473,13 +10420,13 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 		}
 	}
 
+	ServedUnl_c pServedLockGuard { pServed };
 	CSphIndex * pIndex = pServed->m_pIndex;
 
 	SnippetContext_t tCtx;
 	if ( !tCtx.Setup ( pIndex, q, sError ) ) // same path for single - threaded snippets, bail out here on error
 	{
 		sError.SetSprintf ( "%s", sError.cstr() );
-		pServed->Unlock();
 		return false;
 	}
 
@@ -10661,7 +10608,6 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQuery_t> & dQueries, CS
 		}
 	}
 
-	pServed->Unlock();
 	return bOk;
 }
 
@@ -10883,7 +10829,7 @@ void HandleCommandKeywords ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c &
 struct UpdateRequestBuilder_t : public IRequestBuilder_t
 {
 	explicit UpdateRequestBuilder_t ( const CSphAttrUpdate & pUpd ) : m_tUpd ( pUpd ) {}
-	void BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c& tOut ) const override;
+	void BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c& tOut ) const final;
 
 protected:
 	const CSphAttrUpdate & m_tUpd;
@@ -10896,7 +10842,7 @@ struct UpdateReplyParser_t : public IReplyParser_t
 		: m_pUpdated ( pUpd )
 	{}
 
-	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const
+	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const final
 	{
 		*m_pUpdated += tReq.GetDword ();
 		return true;
@@ -11397,9 +11343,9 @@ void BuildStatus ( VectorLike & dStatus )
 		const char * sIdx = DistributedHash_t::IterateGetKey ( &pIt ).cstr();
 		const CSphVector<MultiAgentDesc_t *> & dAgents = DistributedHash_t::IterateGet ( &pIt )->m_dAgents;
 		ARRAY_FOREACH ( i, dAgents )
-			ARRAY_FOREACH ( j, dAgents[i]->GetAgents() )
+			ARRAY_FOREACH ( j, (*dAgents[i]) )
 		{
-			const AgentDash_t * pStats = dAgents[i]->GetAgents ()[j].m_pStats;
+			const AgentDash_t * pStats = (*dAgents[i])[j].m_pStats;
 			if ( !pStats )
 				continue;
 
@@ -11597,25 +11543,25 @@ void BuildDistIndexStatus ( VectorLike & dStatus, const CSphString& sIndex )
 	CSphString sKey;
 	ARRAY_FOREACH ( i, pDistr->m_dAgents )
 	{
-		MultiAgentDesc_t * tAgents = pDistr->m_dAgents[i];
+		MultiAgentDesc_t & tAgents = *pDistr->m_dAgents[i];
 		if ( dStatus.MatchAddVa ( "dstindex_%d_is_ha", i+1 ) )
-			dStatus.Add ( tAgents->IsHA()? "1": "0" );
+			dStatus.Add ( tAgents.IsHA()? "1": "0" );
 
-		auto dWeights = tAgents->GetWeights ();
+		auto dWeights = tAgents.GetWeights ();
 
-		ARRAY_FOREACH ( j, tAgents->GetAgents() )
+		ARRAY_FOREACH ( j, tAgents )
 		{
-			if ( tAgents->IsHA() )
+			if ( tAgents.IsHA() )
 				sKey.SetSprintf ( "dstindex_%dmirror%d", i+1, j+1 );
 			else
 				sKey.SetSprintf ( "dstindex_%dagent", i+1 );
 
-			const AgentDesc_c & dDesc = tAgents->GetAgents()[j];
+			const AgentDesc_c & dDesc = tAgents[j];
 
 			if ( dStatus.MatchAddVa ( "%s_id", sKey.cstr() ) )
 				dStatus.Add().SetSprintf ( "%s:%s", dDesc.GetMyUrl().cstr(), dDesc.m_sIndexes.cstr() );
 
-			if ( tAgents->IsHA() && dStatus.MatchAddVa ( "%s_probability_weight", sKey.cstr() ) )
+			if ( tAgents.IsHA() && dStatus.MatchAddVa ( "%s_probability_weight", sKey.cstr() ) )
 				dStatus.Add().SetSprintf ( "%d", (DWORD)( dWeights[j]) );
 
 			if ( dStatus.MatchAddVa ( "%s_is_blackhole", sKey.cstr() ) )
@@ -11631,6 +11577,7 @@ void BuildAgentStatus ( VectorLike & dStatus, const CSphString& sAgent )
 {
 	if ( !sAgent.IsEmpty() )
 	{
+		CSphScopedRLock tLock ( g_tDistLock );
 		if ( g_hDistIndexes.Exists ( sAgent ) )
 			BuildDistIndexStatus ( dStatus, sAgent );
 		else
@@ -11643,6 +11590,7 @@ void BuildAgentStatus ( VectorLike & dStatus, const CSphString& sAgent )
 				return;
 			}
 			BuildOneAgentStatus ( dStatus, pAgent );
+			pAgent->Release();
 		}
 		return;
 	}
@@ -11654,17 +11602,15 @@ void BuildAgentStatus ( VectorLike & dStatus, const CSphString& sAgent )
 	if ( dStatus.MatchAdd ( "status_stored_periods" ) )
 		dStatus.Add().SetSprintf ( "%d", STATS_DASH_TIME );
 
-	g_tDashes.Lock();
-	CSphVector<HostDashboard_t *> dAgents;
-	g_tDashes.GetActiveDashes ( dAgents );
+	VectorPtrsRefs_T<HostDashboard_t *> dAgents;
+	g_tDashes.GetActiveDashes ( dAgents.m_dPtrs );
 
 	CSphString sPrefix;
-	ARRAY_FOREACH ( i, dAgents )
+	ARRAY_FOREACH ( i, dAgents.m_dPtrs )
 	{
 		sPrefix.SetSprintf ( "ag_%d", i );
-		BuildOneAgentStatus ( dStatus, dAgents[i], sPrefix.cstr() );
+		BuildOneAgentStatus ( dStatus, dAgents.m_dPtrs[i], sPrefix.cstr() );
 	}
-	g_tDashes.Unlock();
 }
 
 
@@ -12653,7 +12599,7 @@ bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, co
 			CSphFilterSettings & tExpr = dFilters.Add();
 			tExpr.m_eType = SPH_FILTER_EXPRESSION;
 			tExpr.m_sAttrName = sFilters;
-		} else 
+		} else
 		{
 			iRes = 1;
 		}
@@ -13059,7 +13005,7 @@ struct StringPtrTraits_t
 		m_dPackedData.Resize ( 0 );
 		m_dParserBuf.Resize ( 0 );
 		m_dOff.Fill ( -1 );
-		
+
 		if ( m_pJsonStorage )
 		{
 			cJSON_Delete ( m_pJsonStorage );
@@ -13118,7 +13064,7 @@ static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVari
 					if ( pItem->m_eType==SPH_ATTR_JSON )
 					{
 						// cJSON -> string
-						if ( pChild->child ) 
+						if ( pChild->child )
 							sTmp = sphJsonToString ( pChild );
 
 						// string -> binary packed JSON
@@ -13439,7 +13385,7 @@ class SphinxqlRequestBuilder_c : public IRequestBuilder_t
 {
 public:
 			SphinxqlRequestBuilder_c ( const CSphString & sQuery, const SqlStmt_t & tStmt );
-	void	BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const override;
+	void	BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final;
 
 protected:
 	const CSphString m_sBegin;
@@ -13455,6 +13401,8 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 
 	// get that index
 	const ServedIndex_c * pServed = g_pLocalIndexes->GetRlockedEntry ( tStmt.m_sIndex );
+	ServedUnl_c dGuardUnlock { pServed };
+
 	if ( !pServed )
 	{
 		sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
@@ -13464,7 +13412,6 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 
 	if ( !pServed->m_bRT || !pServed->m_bEnabled )
 	{
-		pServed->Unlock();
 		sError.SetSprintf ( "index '%s' does not support INSERT (enabled=%d)", tStmt.m_sIndex.cstr(), pServed->m_bEnabled );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
@@ -13472,12 +13419,11 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 
 	if ( pServed->m_bPercolate && tOut.GetBuffer() )
 	{
-		pServed->Unlock();
 		PercolateQuery ( tStmt, bReplace, eCollation, *tOut.GetBuffer(), sWarning );
 		return;
 	}
 
-	ISphRtIndex * pIndex = (ISphRtIndex *)pServed->m_pIndex;
+	auto * pIndex = (ISphRtIndex *)pServed->m_pIndex;
 
 	// get schema, check values count
 	const CSphSchema & tSchema = pIndex->GetInternalSchema();
@@ -13488,7 +13434,6 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	int iGot = tStmt.m_dInsertValues.GetLength();
 	if ( !tStmt.m_dInsertSchema.GetLength() && ( iSchemaSz!=tStmt.m_iSchemaSz ) )
 	{
-		pServed->Unlock();
 		sError.SetSprintf ( "column count does not match schema (expected %d, got %d)", iSchemaSz, iGot );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
@@ -13496,7 +13441,6 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 
 	if ( ( iGot % iExp )!=0 )
 	{
-		pServed->Unlock();
 		sError.SetSprintf ( "column count does not match value count (expected %d, got %d)", iExp, iGot );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
@@ -13505,7 +13449,6 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	ISphRtAccum * pAccum = tAcc.GetAcc ( pIndex, sError );
 	if ( !sError.IsEmpty() )
 	{
-		pServed->Unlock();
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
@@ -13533,7 +13476,6 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			// OPTIMIZE! GetAttrIndex and GetFieldIndex use the linear searching. M.b. hash instead?
 			if ( dCheck[i]!="id" && tSchema.GetAttrIndex ( dCheck[i].cstr() )==-1 && tSchema.GetFieldIndex ( dCheck[i].cstr() )==-1 )
 			{
-				pServed->Unlock();
 				sError.SetSprintf ( "unknown column: '%s'", dCheck[i].cstr() );
 				tOut.Error ( tStmt.m_sStmt, sError.cstr(), MYSQL_ERR_PARSE_ERROR );
 				return;
@@ -13543,7 +13485,6 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		for ( int i=1; i<dCheck.GetLength(); i++ )
 			if ( dCheck[i-1]==dCheck[i] )
 			{
-				pServed->Unlock();
 				sError.SetSprintf ( "column '%s' specified twice", dCheck[i].cstr() );
 				tOut.Error ( tStmt.m_sStmt, sError.cstr(), MYSQL_ERR_FIELD_SPECIFIED_TWICE );
 				return;
@@ -13558,7 +13499,6 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		// get id index
 		if ( !dInsertSchema.Exists("id") )
 		{
-			pServed->Unlock();
 			tOut.Error ( tStmt.m_sStmt, "column list must contain an 'id' column" );
 			return;
 		}
@@ -13586,7 +13526,6 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		}
 		if ( bIdDupe )
 		{
-			pServed->Unlock();
 			tOut.Error ( tStmt.m_sStmt, "fields must never be named 'id' (fix your config)" );
 			return;
 		}
@@ -13608,7 +13547,6 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 		}
 		if ( bIdDupe )
 		{
-			pServed->Unlock();
 			sError.SetSprintf ( "attributes must never be named 'id' (fix your config)" );
 			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 			return;
@@ -13799,7 +13737,6 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	if ( !sError.IsEmpty() )
 	{
 		pIndex->RollBack ( pAccum ); // clean up collected data
-		pServed->Unlock();
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
@@ -13807,8 +13744,6 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 	// no errors so far
 	if ( bCommit )
 		pIndex->Commit ( NULL, pAccum );
-
-	pServed->Unlock();
 
 	// my OK packet
 	tOut.Ok ( tStmt.m_iRowsAffected, sWarning );
@@ -14008,7 +13943,7 @@ void HandleMysqlCallSnippets ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, ThdDesc
 struct KeywordsRequestBuilder_t : public IRequestBuilder_t
 {
 	KeywordsRequestBuilder_t ( const GetKeywordsSettings_t & tSettings, const CSphString & sTerm );
-	void BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const override;
+	void BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final;
 
 protected:
 	const GetKeywordsSettings_t & m_tSettings;
@@ -14019,7 +13954,7 @@ protected:
 struct KeywordsReplyParser_t : public IReplyParser_t
 {
 	KeywordsReplyParser_t ( bool bGetStats, CSphVector<CSphKeywordInfo> & dKeywords );
-	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const;
+	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const final;
 
 	bool m_bStats;
 	CSphVector<CSphKeywordInfo> & m_dKeywords;
@@ -14548,14 +14483,14 @@ void HandleMysqlDescribe ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 
 		ARRAY_FOREACH ( i, pDistr->m_dAgents )
 		{
-			const MultiAgentDesc_t * pAgents = pDistr->m_dAgents[i];
-			if ( pAgents->IsHA() )
+			const MultiAgentDesc_t & tAgents = *pDistr->m_dAgents[i];
+			if ( tAgents.IsHA() )
 			{
-				ARRAY_FOREACH ( j, pAgents->GetAgents() )
+				ARRAY_FOREACH ( j, tAgents )
 				{
 					CSphString sKey;
 					sKey.SetSprintf ( "remote_%d_mirror_%d", i+1, j+1 );
-					const AgentDesc_c & tDesc = pAgents->GetAgent(j);
+					const AgentDesc_c & tDesc = tAgents[j];
 					CSphString sValue;
 					sValue.SetSprintf ( "%s:%s", tDesc.GetMyUrl().cstr(), tDesc.m_sIndexes.cstr() );
 					dCondOut.MatchDataTuplet ( sValue.cstr(), sKey.cstr() );
@@ -14565,7 +14500,7 @@ void HandleMysqlDescribe ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 				CSphString sKey;
 				sKey.SetSprintf ( "remote_%d", i+1 );
 				CSphString sValue;
-				sValue.SetSprintf ( "%s:%s", pAgents->GetAgent(0).GetMyUrl().cstr(), pAgents->GetAgent(0).m_sIndexes.cstr() );
+				sValue.SetSprintf ( "%s:%s", tAgents[0].GetMyUrl().cstr(), tAgents[0].m_sIndexes.cstr() );
 				dCondOut.MatchDataTuplet ( sValue.cstr(), sKey.cstr() );
 			}
 		}
@@ -14621,7 +14556,7 @@ void HandleMysqlShowTables ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 	// 0 local, 1 distributed, 2 rt, 3 template, 4 percolate
 	CSphVector<CSphNamedInt> dIndexes;
 
-	for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
+	for ( RLockedIndexIt_c it ( g_pLocalIndexes ); it.Next(); )
 		if ( it.Get().m_bEnabled )
 	{
 		CSphNamedInt & tIdx = dIndexes.Add();
@@ -14631,8 +14566,8 @@ void HandleMysqlShowTables ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 			tIdx.m_iValue = 4;
 	}
 
-	for ( IndexHashIterator_c it ( g_pTemplateIndexes ); it.Next(); )
-	if ( it.Get().m_bEnabled )
+	for ( RLockedIndexIt_c it ( g_pTemplateIndexes ); it.Next(); )
+		if ( it.Get().m_bEnabled )
 	{
 		CSphNamedInt & tIdx = dIndexes.Add();
 		tIdx.m_sName = it.GetKey();
@@ -14640,7 +14575,7 @@ void HandleMysqlShowTables ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 	}
 
 	g_tDistLock.ReadLock();
-	void * pIt = NULL;
+	void * pIt = nullptr;
 	while ( g_hDistIndexes.IterateNext ( &pIt ) )
 	{
 		CSphNamedInt & tIdx = dIndexes.Add();
@@ -14753,8 +14688,8 @@ struct HostsCollector_t : public AgentProcessor_t
 	{}
 	void Process ( AgentDesc_c & tDesc ) final
 	{
-		if ( tDesc.m_iFamily==AF_INET && !tDesc.m_sHost.IsEmpty() )
-			m_hHosts.Add ( tDesc.m_uAddr, tDesc.m_sHost );
+		if ( tDesc.m_iFamily==AF_INET && tDesc.m_bNeedResolve && !tDesc.m_sAddr.IsEmpty() )
+			m_hHosts.Add ( tDesc.m_uAddr, tDesc.m_sAddr );
 	}
 };
 
@@ -14766,9 +14701,9 @@ struct HostsUpdater_t : public AgentProcessor_t
 	{}
 	void Process ( AgentDesc_c & tDesc ) final
 	{
-		if ( tDesc.m_iFamily==AF_INET && !tDesc.m_sHost.IsEmpty() )
+		if ( tDesc.m_iFamily==AF_INET && tDesc.m_bNeedResolve && !tDesc.m_sAddr.IsEmpty() )
 		{
-			DWORD * pRenew = m_hHosts ( tDesc.m_sHost );
+			DWORD * pRenew = m_hHosts ( tDesc.m_sAddr );
 			if ( pRenew && *pRenew )
 				tDesc.m_uAddr = *pRenew;
 		}
@@ -14782,7 +14717,7 @@ void HandleMysqlFlushHostnames ( SqlRowBuffer_c & tOut )
 
 	// copy distributed agents for further processing
 	g_tDistLock.ReadLock();
-	void * pIt = NULL;
+	void * pIt = nullptr;
 	while ( g_hDistIndexes.IterateNext ( &pIt ) )
 	{
 		DistributedHash_t::IterateGet ( &pIt )->ForAgents ( tHostsCollector );
@@ -14801,7 +14736,7 @@ void HandleMysqlFlushHostnames ( SqlRowBuffer_c & tOut )
 
 	// copy back renew hosts to distributed agents
 	g_tDistLock.WriteLock();
-	pIt = NULL;
+	pIt = nullptr;
 	while ( g_hDistIndexes.IterateNext ( &pIt ) )
 	{
 		DistributedHash_t::IterateGet ( &pIt )->ForAgents ( tHostsUpdater );
@@ -14829,7 +14764,7 @@ struct PingRequestBuilder_t : public IRequestBuilder_t
 	explicit PingRequestBuilder_t ( int iCookie = 0 )
 		: m_iCookie ( iCookie )
 	{}
-	void BuildRequest ( const AgentConn_t &, CachedOutputBuffer_c & tOut ) const override
+	void BuildRequest ( const AgentConn_t &, CachedOutputBuffer_c & tOut ) const final
 	{
 		// header
 		tOut.SendWord ( SEARCHD_COMMAND_PING );
@@ -14848,7 +14783,7 @@ struct PingReplyParser_t : public IReplyParser_t
 		: m_pCookie ( pCookie )
 	{}
 
-	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const
+	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const final
 	{
 		*m_pCookie += tReq.GetDword ();
 		return true;
@@ -14862,39 +14797,35 @@ protected:
 static void CheckPing ( int64_t iNow )
 {
 	VectorPtrsGuard_T<AgentConn_t *> dAgents;
+	auto iCookie = (int)iNow;
 
-	int iCookie = (int)iNow;
-
-	g_tDashes.Lock();
-	CSphVector<HostDashboard_t *> dDashes;
-	g_tDashes.GetActiveDashes ( dDashes );
-	for ( auto& pDash : dDashes )
+	VectorPtrsRefs_T<HostDashboard_t *> dDashes;
+	g_tDashes.GetActiveDashes ( dDashes.m_dPtrs );
+	for ( auto& pDash : dDashes.m_dPtrs )
 	{
 		if ( pDash->m_bNeedPing )
 		{
 			CSphScopedRLock tRguard ( pDash->m_dDataLock );
 			if ( pDash->IsOlder ( iNow ) )
 			{
-				pDash->AddRef ();
 				auto * pAgent = new AgentConn_t;
 				pDash->m_tDescriptor.CloneTo ( pAgent->m_tDesc );
 				pAgent->m_tDesc.m_pDash = pDash;
+				pDash->AddRef (); // m_tDesc above will release on destroy
 				pAgent->m_bPing = true;
 				dAgents.Add ( pAgent );
 			}
 		}
 	}
-	g_tDashes.Unlock();
 
 	if ( !dAgents.GetLength() )
 		return;
 
-	CSphScopedPtr<PingRequestBuilder_t> tReqBuilder ( NULL );
-	CSphScopedPtr<ISphRemoteAgentsController> tDistCtrl ( NULL );
-	// connect to remote agents and query them
-	tReqBuilder = new PingRequestBuilder_t ( iCookie );
-	tDistCtrl = GetAgentsController ( g_iDistThreads, dAgents, *tReqBuilder.Ptr(), g_iPingInterval );
+	CSphScopedPtr<PingRequestBuilder_t> tReqBuilder { new PingRequestBuilder_t ( iCookie ) };
+	CSphScopedPtr<ISphRemoteAgentsController> tDistCtrl {
+		GetAgentsController ( g_iDistThreads, dAgents, *tReqBuilder.Ptr (), g_iPingInterval ) };
 
+	// connect to remote agents and query them
 	if ( g_bShutdown )
 		return;
 
@@ -14961,14 +14892,14 @@ struct BlackholeRequestBuilder_t : public IRequestBuilder_t
 		: m_dBlackholes ( dBlackholes )
 	{}
 
-	void BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const override;
+	void BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final;
 
 	const CSphVector<AgentSendData_t *> & m_dBlackholes;
 };
 
 struct BlackholeReplyParser_t : public IReplyParser_t
 {
-	bool ParseReply ( MemInputBuffer_c & , AgentConn_t & ) const override
+	bool ParseReply ( MemInputBuffer_c & , AgentConn_t & ) const final
 	{
 		return true;
 	}
@@ -14977,7 +14908,7 @@ struct BlackholeReplyParser_t : public IReplyParser_t
 
 CSphMutex g_tBlackholeLock;
 
-static CSphVector<AgentSendData_t *> g_dBlackholeAgents GUARDED_BY ( g_tBlackholeLock );
+static VectorPtrsGuard_T<AgentSendData_t *> g_dBlackholeAgents GUARDED_BY ( g_tBlackholeLock );
 
 static const int g_iBlackholeTimeout = 5;
 static const int g_iBlackholeRetries = 3;
@@ -14990,7 +14921,6 @@ static void BlackholeTick()
 		return;
 
 	ThreadSystem_t tThdSystemDesc ( "BLACKHOLE" );
-
 	VectorPtrsGuard_T<AgentSendData_t *> tBlackholes;
 
 	{
@@ -15009,7 +14939,7 @@ static void BlackholeTick()
 	ARRAY_FOREACH ( i, tBlackholes )
 	{
 		AgentConn_t * pAgent = tBlackholes[i]->m_pAgent;
-		pAgent->m_iWorkerTag = i;
+		pAgent->m_iStoreTag = i;
 		ppAgents[i] = pAgent;
 	}
 	assert ( dAgents.GetLength() && tBlackholes.GetLength() );
@@ -15112,7 +15042,7 @@ static bool HasBlackhole ( AgentsVector & dAgents )
 void BlackholeRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const
 {
 	CSphVector<BYTE> dCopy;
-	dCopy = m_dBlackholes[tAgent.m_iWorkerTag]->m_dOut;
+	dCopy = m_dBlackholes[tAgent.m_iStoreTag]->m_dOut;
 	tOut.SwapData ( dCopy );
 }
 
@@ -15130,7 +15060,7 @@ struct UVarRequestBuilder_t : public IRequestBuilder_t
 		, m_iLength ( iLength )
 	{}
 
-	void BuildRequest ( const AgentConn_t &, CachedOutputBuffer_c & tOut ) const override
+	void BuildRequest ( const AgentConn_t &, CachedOutputBuffer_c & tOut ) const final
 	{
 		// header
 		tOut.SendWord ( SEARCHD_COMMAND_UVAR );
@@ -15154,7 +15084,7 @@ struct UVarReplyParser_t : public IReplyParser_t
 	explicit UVarReplyParser_t ()
 	{}
 
-	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const
+	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const final
 	{
 		// error got handled at call site
 		bool bOk = ( tReq.GetByte()==1 );
@@ -15298,7 +15228,7 @@ struct SphinxqlReplyParser_t : public IReplyParser_t
 		, m_pWarns ( pWarns )
 	{}
 
-	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const
+	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const final
 	{
 		DWORD uSize = ( tReq.GetLSBDword() & 0x00ffffff ) - 1;
 		BYTE uCommand = tReq.GetByte();
@@ -17113,7 +17043,7 @@ static void AddFederatedIndexStatus ( const CSphSourceStats & tStats, const CSph
 	const char * dHeader[] = { "Name", "Engine", "Version", "Row_format", "Rows", "Avg_row_length", "Data_length", "Max_data_length", "Index_length", "Data_free",
 		"Auto_increment", "Create_time", "Update_time", "Check_time", "Collation", "Checksum", "Create_options", "Comment" };
 	tOut.HeadOfStrings ( &dHeader[0], sizeof(dHeader)/sizeof(dHeader[0]) );
-		
+
 	tOut.PutString ( sName.cstr() );	// Name
 	tOut.PutString ( "InnoDB" );		// Engine
 	tOut.PutString ( "10" );			// Version
@@ -18294,7 +18224,7 @@ bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dSt
 	// keep originals
 	CSphQuery & tRealQuery = tRealStmt.m_tQuery;
 	tRealQuery.m_dRefItems = tSrcQuery.m_dItems; //select list items
-	tRealQuery.m_sIndexes = tSrcQuery.m_sIndexes; // index name 
+	tRealQuery.m_sIndexes = tSrcQuery.m_sIndexes; // index name
 	sFederatedQuery = sRealQuery;
 
 	// merge select list items
@@ -18903,7 +18833,7 @@ static void RtFlushThreadFunc ( void * )
 		int64_t tmNow = sphMicroTimer();
 		// collecting available rt indexes at save time
 		CSphVector<CSphNamedInt> dRtIndexes;
-		for ( IndexHashIterator_c tIt ( g_pLocalIndexes ); tIt.Next(); )
+		for ( RLockedIndexIt_c tIt ( g_pLocalIndexes ); tIt.Next(); )
 		{
 			const ServedIndex_c & tServed = tIt.Get();
 			if ( !tServed.m_bRT )
@@ -18927,19 +18857,15 @@ static void RtFlushThreadFunc ( void * )
 		ARRAY_FOREACH_COND ( i, dRtIndexes, !g_bShutdown )
 		{
 			const ServedIndex_c * pServed = g_pLocalIndexes->GetRlockedEntry ( dRtIndexes[i].m_sName );
+			ServedUnl_c pServedGuard { pServed };
 			if ( !pServed )
 				continue;
 
 			if ( !pServed->m_bEnabled )
-			{
-				pServed->Unlock();
 				continue;
-			}
 
-			ISphRtIndex * pRT = (ISphRtIndex *)pServed->m_pIndex;
+			auto * pRT = (ISphRtIndex *)pServed->m_pIndex;
 			pRT->CheckRamFlush();
-
-			pServed->Unlock();
 		}
 
 		tmNextCheck = sphMicroTimer() + SPH_RT_AUTO_FLUSH_CHECK_PERIOD;
@@ -19197,7 +19123,7 @@ static void PrereadFunc ( void * )
 	int64_t tmStart = sphMicroTimer();
 
 	StrVec_t dIndexes;
-	for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
+	for ( RLockedIndexIt_c it ( g_pLocalIndexes ); it.Next(); )
 	{
 		ServedIndex_c & tIndex = it.Get();
 		if ( tIndex.m_bEnabled )
@@ -19212,14 +19138,12 @@ static void PrereadFunc ( void * )
 	{
 		const CSphString & sName = dIndexes[i];
 		const ServedIndex_c * pServed = g_pLocalIndexes->GetRlockedEntry ( sName );
+		ServedUnl_c pServedGuard { pServed };
 		if ( !pServed )
 			continue;
 
 		if ( !pServed->m_bEnabled )
-		{
-			pServed->Unlock();
 			continue;
-		}
 
 		int64_t tmReading = sphMicroTimer();
 		sphLogDebug ( "prereading index '%s'", pServed->m_pIndex->GetName() );
@@ -19230,8 +19154,6 @@ static void PrereadFunc ( void * )
 
 		int64_t tmReaded = sphMicroTimer() - tmReading;
 		sphLogDebug ( "prereaded index '%s' in %0.3f sec", pServed->m_pIndex->GetName(), float(tmReaded)/1000000.0f );
-
-		pServed->Unlock();
 
 		iReaded++;
 	}
@@ -19502,15 +19424,11 @@ void OptimizeThreadFunc ( void * )
 		g_tOptimizeQueueMutex.Unlock();
 
 		const ServedIndex_c * pServed = g_pLocalIndexes->GetRlockedEntry ( sIndex );
+		ServedUnl_c pServedGuard { pServed };
 		if ( !pServed )
-		{
 			continue;
-		}
 		if ( !pServed->m_pIndex || !pServed->m_bEnabled )
-		{
-			pServed->Unlock();
 			continue;
-		}
 
 		// want to track optimize only at work
 		ThreadSystem_t tThdSystemDesc ( "OPTIMIZE" );
@@ -19518,8 +19436,6 @@ void OptimizeThreadFunc ( void * )
 		// FIXME: MVA update would wait w-lock here for a very long time
 		assert ( pServed->m_bRT );
 		static_cast<ISphRtIndex *>( pServed->m_pIndex )->Optimize ( &g_bShutdown, &g_tRtThrottle );
-
-		pServed->Unlock();
 	}
 }
 
@@ -19624,7 +19540,7 @@ static void ConfigureDistributedIndex ( DistributedIndex_t & tIdx, const char * 
 	// configure ha_strategy
 	if ( hIndex("ha_strategy") )
 	{
-		bSetHA = ParseStrategyHA ( hIndex["ha_strategy"].cstr(), tIdx.m_eHaStrategy );
+		bSetHA = ParseStrategyHA ( hIndex["ha_strategy"].cstr(), &tIdx.m_eHaStrategy );
 		if ( !bSetHA )
 			sphWarning ( "index '%s': ha_strategy (%s) is unknown for me, will use random", szIndexName, hIndex["ha_strategy"].cstr() );
 	}
@@ -19692,34 +19608,23 @@ static void ConfigureDistributedIndex ( DistributedIndex_t & tIdx, const char * 
 	if ( !tIdx.m_iAgentRetryCount )
 		tIdx.m_iAgentRetryCount = g_iAgentRetryCount;
 
-	AgentOptions_t tAgentOptions { false, false, tIdx.m_eHaStrategy, tIdx.m_iAgentRetryCount };
 
 	// add remote agents
-	for ( CSphVariant * pAgent = hIndex("agent"); pAgent; pAgent = pAgent->m_pNext )
-	{
-		CSphScopedPtr<MultiAgentDesc_t> tAgent ( new MultiAgentDesc_t );
-		if ( ConfigureAgent ( *tAgent.Ptr(), pAgent->cstr(), szIndexName, tAgentOptions ) )
-			tIdx.m_dAgents.Add ( tAgent.LeakPtr() );
-	}
+	struct { const char* sSect; bool bBlh; bool bPrs; } tAgentVariants[] = {
+		{ "agent", 				false,	false},
+		{ "agent_persistent", 	false,	bEnablePersistentConns },
+		{ "agent_blackhole", 	true,	false }
+	};
 
-	// for now work with client persistent connections only on per-thread basis,
-	// to avoid locks, etc.
-	tAgentOptions.m_bBlackhole = false;
-	tAgentOptions.m_bPersistent = bEnablePersistentConns;
-	for ( CSphVariant * pAgent = hIndex("agent_persistent"); pAgent; pAgent = pAgent->m_pNext )
+	for ( auto &tAg : tAgentVariants )
 	{
-		CSphScopedPtr<MultiAgentDesc_t> tAgent ( new MultiAgentDesc_t );
-		if ( ConfigureAgent ( *tAgent.Ptr(), pAgent->cstr(), szIndexName, tAgentOptions ) )
-			tIdx.m_dAgents.Add ( tAgent.LeakPtr() );
-	}
-
-	tAgentOptions.m_bBlackhole = true;
-	tAgentOptions.m_bPersistent = false;
-	for ( CSphVariant * pAgent = hIndex("agent_blackhole"); pAgent; pAgent = pAgent->m_pNext )
-	{
-		CSphScopedPtr<MultiAgentDesc_t> tAgent ( new MultiAgentDesc_t );
-		if ( ConfigureAgent ( *tAgent.Ptr(), pAgent->cstr(), szIndexName, tAgentOptions ) )
-			tIdx.m_dAgents.Add ( tAgent.LeakPtr() );
+		for ( CSphVariant * pAgent = hIndex ( tAg.sSect ); pAgent; pAgent = pAgent->m_pNext )
+		{
+			AgentOptions_t tAgentOptions { tAg.bBlh, tAg.bPrs, tIdx.m_eHaStrategy, tIdx.m_iAgentRetryCount, 0 };
+			CSphScopedPtr<MultiAgentDesc_t> tAgent ( new MultiAgentDesc_t );
+			if ( ConfigureMultiAgent ( *tAgent.Ptr (), pAgent->cstr (), szIndexName, tAgentOptions ) )
+				tIdx.m_dAgents.Add ( tAgent.LeakPtr () );
+		}
 	}
 
 	// configure options
@@ -19767,6 +19672,7 @@ void PreCreatePlainIndex ( ServedDesc_t & tServed, const char * sName )
 	tServed.m_bEnabled = false;
 }
 
+//bool AddDistrIndex ();
 
 ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bNew )
 {
@@ -19921,7 +19827,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		}
 
 		// leak pointer, so it's destructor won't delete it
-		tIdx.m_pIndex = NULL;
+		tIdx.m_pIndex = nullptr;
 
 		return ADD_RT;
 
@@ -19967,7 +19873,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		}
 
 		// leak pointer, so it's destructor won't delete it
-		tIdx.m_pIndex = NULL;
+		tIdx.m_pIndex = nullptr;
 
 		return ADD_LOCAL;
 
@@ -20020,7 +19926,7 @@ ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hInd
 		}
 
 		// leak pointer, so it's destructor won't delete it
-		tIdx.m_pIndex = NULL;
+		tIdx.m_pIndex = nullptr;
 
 		return ADD_TMPL;
 
@@ -20086,16 +19992,14 @@ void InitPersistentPool()
 {
 	if ( g_iPersistentPoolSize )
 	{
-		g_tDashes.Lock();
-		CSphVector<HostDashboard_t *> tHosts;
-		g_tDashes.GetActiveDashes (tHosts);
-		for ( auto& pHost : tHosts )
+		VectorPtrsRefs_T<HostDashboard_t *> tHosts;
+		g_tDashes.GetActiveDashes (tHosts.m_dPtrs);
+		for ( auto * pHost : tHosts.m_dPtrs )
 		{
 			if ( !pHost->m_pPersPool )
 				pHost->m_pPersPool = new PersistentConnectionsPool_t;
 			pHost->m_pPersPool->Init ( g_iPersistentPoolSize );
 		}
-		g_tDashes.Unlock();
 	}
 }
 
@@ -20109,35 +20013,35 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP )
 
 	g_bDoDelete = false;
 
-	for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
+	for ( RLockedIndexIt_c it ( g_pLocalIndexes ); it.Next(); )
 		it.Get().m_bToDelete = true; ///< FIXME! What about write lock before doing this?
 
 	int iDistCount = 0;
-	g_tDistLock.WriteLock();
+	g_tDistLock.ReadLock();
 	iDistCount = g_hDistIndexes.GetLength();
-	void * pIt = NULL;
-	while ( g_hDistIndexes.IterateNext ( &pIt ) )
+	for ( void * pIt = nullptr; g_hDistIndexes.IterateNext ( &pIt ); )
 		DistributedHash_t::IterateGet ( &pIt )->m_bToDelete = true;
 	g_tDistLock.Unlock();
 
-	for ( IndexHashIterator_c it ( g_pTemplateIndexes ); it.Next(); )
+	for ( RLockedIndexIt_c it ( g_pTemplateIndexes ); it.Next(); )
 		it.Get().m_bToDelete = true;
 
 	int nTotalIndexes = g_pLocalIndexes->GetLength () + iDistCount + g_pTemplateIndexes->GetLength ();
 	int nChecked = 0;
 
-	if ( !tCP.m_tConf.Exists ( "index" ) )
+	const CSphConfig &hConf = tCP.m_tConf;
+
+	if ( !hConf.Exists ( "index" ) )
 	{
 		g_bDoDelete |= ( nTotalIndexes>0 );
 		return;
 	}
 
-	const CSphConfig & hConf = tCP.m_tConf;
 	hConf["index"].IterateStart ();
 	while ( hConf["index"].IterateNext() )
 	{
 		const CSphConfigSection & hIndex = hConf["index"].IterateGet();
-		const char * sIndexName = hConf["index"].IterateGetKey().cstr();
+		const auto & sIndexName = hConf["index"].IterateGetKey();
 
 		if ( ServedIndex_c * pServedIndex = g_pLocalIndexes->GetWlockedEntry ( sIndexName ) )
 		{
@@ -20145,27 +20049,27 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP )
 			if ( hIndex.Exists ( "path" ) && hIndex["path"].strval()!=pServedIndex->m_sIndexPath )
 				pServedIndex->m_sNewPath = hIndex["path"].strval();
 			pServedIndex->m_bToDelete = false;
-			nChecked++;
-			pServedIndex->Unlock();
+			pServedIndex->Unlock ();
+			++nChecked;
 			continue;
 		}
 		
 		if ( hIndex.Exists("type") && hIndex["type"]=="distributed" )
 		{
 			g_tDistLock.ReadLock();
-			bool bGot = g_hDistIndexes.Exists ( sIndexName );
+			DistributedIndex_t * pDist = GetDistIndex ( sIndexName );
 			g_tDistLock.Unlock();
 
-			if ( bGot )
+			if ( pDist )
 			{
 				CSphScopedPtr<DistributedIndex_t> tIdx ( new DistributedIndex_t );
-				ConfigureDistributedIndex ( *tIdx.Ptr(), sIndexName, hIndex );
+				ConfigureDistributedIndex ( *tIdx.Ptr(), sIndexName.cstr(), hIndex );
 
 				// finally, check and add distributed index to global table
 				if ( tIdx->m_dAgents.GetLength()==0 && tIdx->m_dLocal.GetLength()==0 )
 				{
-					sphWarning ( "index '%s': no valid local/remote indexes in distributed index; using last valid definition", sIndexName );
-					g_tDistLock.WriteLock();
+					sphWarning ( "index '%s': no valid local/remote indexes in distributed index; using last valid definition", sIndexName.cstr() );
+					g_tDistLock.ReadLock();
 					DistributedIndex_t * pDist = GetDistIndex ( sIndexName );
 					if ( pDist )
 						pDist->m_bToDelete = false;
@@ -20195,13 +20099,13 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP )
 		}
 		
 		// add new index
-		ESphAddIndex eType = AddIndex ( sIndexName, hIndex, true );
+		ESphAddIndex eType = AddIndex ( sIndexName.cstr(), hIndex, true );
 		if ( eType==ADD_RT )
 		{
 			ServedIndex_c & tIndex = *g_pLocalIndexes->GetRlockedEntry ( sIndexName );
 
 			tIndex.m_bOnlyNew = false;
-			if ( PrereadNewIndex ( tIndex, hIndex, sIndexName ) )
+			if ( PrereadNewIndex ( tIndex, hIndex, sIndexName.cstr() ) )
 				tIndex.m_bEnabled = true;
 
 			tIndex.Unlock();
@@ -20227,14 +20131,14 @@ void CheckDelete ()
 	dTmplToDelete.Reserve ( 8 );
 	dDistToDelete.Reserve ( 8 );
 
-	for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
+	for ( RLockedIndexIt_c it ( g_pLocalIndexes ); it.Next(); )
 	{
 		ServedIndex_c & tIndex = it.Get();
 		if ( tIndex.m_bToDelete )
 			dToDelete.Add ( &it.GetKey() );
 	}
 
-	for ( IndexHashIterator_c it ( g_pTemplateIndexes ); it.Next(); )
+	for ( RLockedIndexIt_c it ( g_pTemplateIndexes ); it.Next(); )
 	{
 		ServedIndex_c & tIndex = it.Get();
 		if ( tIndex.m_bToDelete )
@@ -20275,7 +20179,7 @@ void CheckDelete ()
 void CheckRotateGlobalIDFs ()
 {
 	CSphVector <CSphString> dFiles;
-	for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
+	for ( RLockedIndexIt_c it ( g_pLocalIndexes ); it.Next(); )
 	{
 		ServedIndex_c & tIndex = it.Get();
 		if ( tIndex.m_bEnabled && !tIndex.m_sGlobalIDFPath.IsEmpty() )
@@ -20323,7 +20227,7 @@ void CheckRotate ()
 			ReloadIndexSettings ( g_pCfg );
 		}
 
-		for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
+		for ( RLockedIndexIt_c it ( g_pLocalIndexes ); it.Next(); )
 		{
 			ServedIndex_c & tIndex = it.Get();
 			tIndex.WriteLock();
@@ -20379,7 +20283,7 @@ void CheckRotate ()
 
 	// check what indexes need to be rotated
 	StrVec_t dQueue;
-	for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
+	for ( RLockedIndexIt_c it ( g_pLocalIndexes ); it.Next(); )
 	{
 		const ServedIndex_c & tIndex = it.Get();
 		const CSphString & sIndex = it.GetKey();
@@ -20489,7 +20393,7 @@ void CheckFlush ()
 
 	// check if there are dirty indexes
 	bool bDirty = false;
-	for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
+	for ( RLockedIndexIt_c it ( g_pLocalIndexes ); it.Next(); )
 	{
 		const ServedIndex_c & tServed = it.Get();
 		if ( tServed.m_bEnabled && tServed.m_pIndex->GetAttributeStatus() )
@@ -24641,7 +24545,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( !g_bOptNoDetach && !bWatched && !g_bService )
 	{
 		// re-lock indexes
-		for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
+		for ( RLockedIndexIt_c it ( g_pLocalIndexes ); it.Next(); )
 		{
 			ServedIndex_c & tServed = it.Get();
 			if ( !tServed.m_bEnabled )
@@ -24703,7 +24607,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 
 	// replay last binlog
 	SmallStringHash_T<CSphIndex*> hIndexes;
-	for ( IndexHashIterator_c it ( g_pLocalIndexes ); it.Next(); )
+	for ( RLockedIndexIt_c it ( g_pLocalIndexes ); it.Next(); )
 		if ( it.Get().m_bEnabled )
 			hIndexes.Add ( it.Get().m_pIndex, it.GetKey() );
 

@@ -242,7 +242,7 @@ public:
 		}
 
 		CSphScopedWLock tWguard ( m_tLock );
-		NakedFlush ( NULL, 0 );
+		NakedFlush ( nullptr, 0 );
 		NakedCopy ( dKlist );
 	}
 
@@ -340,7 +340,7 @@ void CSphKilllist::SaveToFile ( const char * sFilename )
 {
 	// FIXME!!! got rid of locks here
 	m_tLock.WriteLock();
-	NakedFlush ( NULL, 0 );
+	NakedFlush ( nullptr, 0 );
 
 	CSphWriter tKlistWriter;
 	CSphString sName, sError;
@@ -359,14 +359,9 @@ void CSphKilllist::SaveToFile ( const char * sFilename )
 }
 
 
-struct KlistRefcounted_t
+struct KlistRefcounted_t : ISphRefcountedMT
 {
-	KlistRefcounted_t ()
-		: m_dKilled ( 0 )
-		, m_tRefCount ( 1 )
-	{}
-	CSphFixedVector<SphDocID_t>		m_dKilled;
-	CSphAtomic						m_tRefCount;
+	CSphFixedVector<SphDocID_t>		m_dKilled { 0 };
 };
 
 
@@ -1059,19 +1054,12 @@ private:
 };
 
 
-struct SCOPED_CAPABILITY SphChunkGuard_t
+struct SphChunkGuard_t
 {
-	CSphFixedVector<const RtSegment_t *>	m_dRamChunks;
-	CSphFixedVector<const CSphIndex *>		m_dDiskChunks;
-	CSphFixedVector<const KlistRefcounted_t *>		m_dKill;
-	CSphRwlock *							m_pReading;
-	SphChunkGuard_t ()
-		: m_dRamChunks ( 0 )
-		, m_dDiskChunks ( 0 )
-		, m_dKill ( 0 )
-		, m_pReading ( NULL )
-	{
-	}
+	CSphFixedVector<const RtSegment_t *>	m_dRamChunks { 0 };
+	CSphFixedVector<const CSphIndex *>		m_dDiskChunks { 0 };
+	CSphFixedVector<const KlistRefcounted_t *>		m_dKill { 0 };
+	CSphRwlock *							m_pReading = nullptr;
 	~SphChunkGuard_t();
 };
 
@@ -3139,15 +3127,12 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 				// swap data, update counters
 				m_tChunkLock.WriteLock();
 
-				uint64_t uRefs = pSeg->m_pKlist->m_tRefCount.Dec();
 				Swap ( pSeg->m_pKlist, pKlist ); // hold swapped kill-list for postponed delete
 				pSeg->m_iAliveRows -= iAdded;
 				assert ( pSeg->m_iAliveRows>=0 );
 
 				m_tChunkLock.Unlock();
-
-				if ( uRefs==1 ) // 1 means we only owner when decrement event occurred
-					SafeDelete ( pKlist );
+				SafeRelease ( pKlist );
 			}
 
 			// mark as good
@@ -6789,7 +6774,7 @@ void RtIndex_t::GetReaderChunks ( SphChunkGuard_t & tGuard ) const NO_THREAD_SAF
 	ARRAY_FOREACH ( i, tGuard.m_dRamChunks )
 	{
 		KlistRefcounted_t * pKlist = tGuard.m_dRamChunks[i]->m_pKlist;
-		pKlist->m_tRefCount.Inc();
+		pKlist->AddRef();
 		tGuard.m_dKill[i] = pKlist;
 
 		assert ( tGuard.m_dRamChunks[i]->m_tRefCount.GetValue()>=0 );
@@ -6813,9 +6798,7 @@ SphChunkGuard_t::~SphChunkGuard_t()
 		assert ( m_dRamChunks[i]->m_tRefCount.GetValue()>=1 );
 
 		KlistRefcounted_t * pKlist = const_cast<KlistRefcounted_t *> ( m_dKill[i] );
-		uint64_t uRefs = pKlist->m_tRefCount.Dec();
-		if ( uRefs==1 ) // 1 means we only owner when decrement event occurred
-			SafeDelete ( pKlist );
+		SafeRelease ( pKlist );
 
 		m_dRamChunks[i]->m_tRefCount.Dec();
 	}

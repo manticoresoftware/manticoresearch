@@ -582,7 +582,7 @@ public:
 		cJSON_Delete ( m_pQuery );
 	}
 
-	void BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const override
+	void BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final
 	{
 		// replace "index" value in the json query
 		cJSON_DeleteItemFromObject ( m_pQuery, "index" );
@@ -611,7 +611,7 @@ public:
 		, m_iWarnings ( iWarnings )
 	{}
 
-	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const
+	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const final
 	{
 		CSphString sEndpoint = tReq.GetString();
 		ESphHttpEndpoint eEndpoint = sphStrToHttpEndpoint ( sEndpoint );

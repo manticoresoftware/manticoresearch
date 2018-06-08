@@ -8062,17 +8062,15 @@ class ExprRankerHook_T : public ISphExprHook
 {
 public:
 	RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES> * m_pState;
-	const char *			m_sCheckError;
-	bool					m_bCheckInFieldAggr;
+	const char *			m_sCheckError = nullptr;
+	bool					m_bCheckInFieldAggr = false;
 
 public:
 	explicit ExprRankerHook_T ( RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES> * pState )
 		: m_pState ( pState )
-		, m_sCheckError ( NULL )
-		, m_bCheckInFieldAggr ( false )
 	{}
 
-	int IsKnownIdent ( const char * sIdent )
+	int IsKnownIdent ( const char * sIdent ) final
 	{
 		// OPTIMIZE? hash this some nice long winter night?
 		if ( !strcasecmp ( sIdent, "lcs" ) )
@@ -8124,7 +8122,7 @@ public:
 		return -1;
 	}
 
-	int IsKnownFunc ( const char * sFunc )
+	int IsKnownFunc ( const char * sFunc ) final
 	{
 		if ( !strcasecmp ( sFunc, "sum" ) )
 			return XRANK_SUM;
@@ -8139,7 +8137,7 @@ public:
 		return -1;
 	}
 
-	ISphExpr * CreateNode ( int iID, ISphExpr * pLeft, ESphEvalStage *, CSphString & )
+	ISphExpr * CreateNode ( int iID, ISphExpr * pLeft, ESphEvalStage *, CSphString & ) final
 	{
 		int * pCF = &m_pState->m_iCurrentField; // just a shortcut
 		switch ( iID )
@@ -8207,7 +8205,7 @@ public:
 		}
 	}
 
-	ESphAttr GetIdentType ( int iID )
+	ESphAttr GetIdentType ( int iID ) final
 	{
 		switch ( iID )
 		{
@@ -8309,7 +8307,7 @@ public:
 		return true;
 	}
 
-	ESphAttr GetReturnType ( int iID, const CSphVector<ESphAttr> & dArgs, bool bAllConst, CSphString & sError )
+	ESphAttr GetReturnType ( int iID, const CSphVector<ESphAttr> & dArgs, bool bAllConst, CSphString & sError ) final
 	{
 		switch ( iID )
 		{
@@ -8345,7 +8343,7 @@ public:
 		return SPH_ATTR_NONE;
 	}
 
-	void CheckEnter ( int iID )
+	void CheckEnter ( int iID ) final
 	{
 		if ( !m_sCheckError )
 			switch ( iID )
@@ -8382,7 +8380,7 @@ public:
 		}
 	}
 
-	void CheckExit ( int iID )
+	void CheckExit ( int iID ) final
 	{
 		if ( !m_sCheckError && ( iID==XRANK_SUM || iID==XRANK_TOP ) )
 		{

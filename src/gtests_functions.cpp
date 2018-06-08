@@ -546,6 +546,21 @@ TEST ( functions, string_split )
 	ASSERT_EQ ( dStr.GetLength (), 2 );
 	ASSERT_STREQ ( dStr[0].cstr(),"test" );
 	ASSERT_STREQ ( dStr[1].cstr(), "me" );
+
+	dStr.Reset();
+	sphSplit ( dStr, "  white\tspace\rsplit\ntrying ");
+	ASSERT_EQ ( dStr.GetLength (), 4 );
+	ASSERT_STREQ ( dStr[0].cstr (), "white" );
+	ASSERT_STREQ ( dStr[1].cstr (), "space" );
+	ASSERT_STREQ ( dStr[2].cstr (), "split" );
+	ASSERT_STREQ ( dStr[3].cstr (), "trying" );
+
+	dStr.Reset();
+	sphSplit ( dStr, ":start:finish:", ":" );
+	ASSERT_EQ ( dStr.GetLength (), 3 );
+	ASSERT_STREQ ( dStr[0].cstr (), "" );
+	ASSERT_STREQ ( dStr[1].cstr (), "start" );
+	ASSERT_STREQ ( dStr[2].cstr (), "finish" );
 }
 
 //////////////////////////////////////////////////////////////////////////

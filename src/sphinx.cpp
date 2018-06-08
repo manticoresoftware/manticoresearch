@@ -7873,11 +7873,11 @@ public:
 	DWORD *					ReInit ( int uMaxBytes );
 	const char *			GetError () const { return m_sError.cstr(); }
 
-	int						TaggedAlloc ( int iTag, int iBytes );
-	void					TaggedFreeIndex ( int iTag, int iIndex );
-	void					TaggedFreeTag ( int iTag );
+	int						TaggedAlloc ( int iTag, int iBytes ) REQUIRES ( !m_tThdMutex );
+	void					TaggedFreeIndex ( int iTag, int iIndex ) REQUIRES ( !m_tThdMutex );
+	void					TaggedFreeTag ( int iTag ) REQUIRES ( !m_tThdMutex );
 
-	void					ExamineTag ( tTester* pTest, int iTag );
+	void					ExamineTag ( tTester* pTest, int iTag ) REQUIRES ( !m_tThdMutex );
 
 protected:
 	static const int		MIN_BITS	= 4;

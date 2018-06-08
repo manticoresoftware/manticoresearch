@@ -15070,8 +15070,6 @@ static void BlackholeThreadFunc ( void * )
 			SafeDelete ( dBlackHoleAgent );
 		g_dBlackholeAgents.Reset ();
 	}
-
-	g_dBlackholeEvent.Done();
 }
 
 void BlackholeAddAgents ( AgentsVector & dAgents, const IRequestBuilder_t & tReq )
@@ -24765,7 +24763,7 @@ int WINAPI ServiceMain ( int argc, char **argv )
 	if ( !g_tPingThread.Create ( PingThreadFunc, 0 ) )
 		sphDie ( "failed to create ping service thread" );
 
-	if ( !g_dBlackholeEvent.Init() )
+	if ( !g_dBlackholeEvent.Initialized() )
 		sphDie ( "failed to create blackhole service event" );
 	if ( !g_tBlackholeThread.Create ( BlackholeThreadFunc, 0 ) )
 		sphDie ( "failed to create blackhole service thread" );

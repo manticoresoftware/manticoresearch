@@ -2924,14 +2924,29 @@ protected:
 class CSphAutoEvent : public ISphNoncopyable
 {
 public:
-	~CSphAutoEvent() {}
+	CSphAutoEvent ()
+	{
+		Init();
+	}
+	~CSphAutoEvent()
+	{
+		Done();
+	}
 
-	bool Init ();
-	bool Done();
+	// increase event's count and issue an event.
 	void SetEvent();
+
+	// decrease event's count. If count empty, go to sleep until new events
 	void WaitEvent();
 
-protected:
+	inline bool Initialized() const
+	{
+		return m_bInitialized;
+	}
+
+private:
+	bool Init ();
+	bool Done ();
 	bool m_bInitialized = false;
 	volatile int  m_iSent = 0;
 
@@ -2942,29 +2957,6 @@ protected:
 	pthread_mutex_t m_tMutex;
 #endif
 };
-
-// semaphore implementation
-class CSphSemaphore : public ISphNoncopyable
-{
-public:
-	CSphSemaphore ();
-	~CSphSemaphore();
-
-	bool Init ( const char* sName );
-	bool Done();
-	void Post();
-	bool Wait();
-
-protected:
-	bool m_bInitialized = false;
-#if USE_WINDOWS
-	HANDLE	m_hSem = 0;
-#else
-	sem_t *	m_pSem = nullptr;
-	CSphString m_sName;	// unnamed semaphores are deprecated and removed in some OS
-#endif
-};
-
 
 /// scoped mutex lock
 template < typename T >

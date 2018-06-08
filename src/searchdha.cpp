@@ -1866,8 +1866,6 @@ ThdWorkPool_c::ThdWorkPool_c ( int iLen )
 
 	m_iAgentsDone = m_iAgentsReported = 0;
 	m_bIsDestroying = false;
-
-	m_tChanged.Init();
 }
 
 ThdWorkPool_c::~ThdWorkPool_c ()
@@ -1875,7 +1873,6 @@ ThdWorkPool_c::~ThdWorkPool_c ()
 	m_bIsDestroying = true;
 	while ( m_iActiveThreads>0 )
 		sphSleepMsec ( 1 );
-	m_tChanged.Done();
 }
 
 void ThdWorkPool_c::Pop ( AgentWorkContext_t & tNext )

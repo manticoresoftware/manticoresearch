@@ -1183,46 +1183,6 @@ void CSphAutoEvent::WaitEvent()
 	WaitForSingleObject ( m_hEvent, INFINITE );
 }
 
-CSphSemaphore::CSphSemaphore ()
-	: m_bInitialized ( false )
-{
-}
-
-CSphSemaphore::~CSphSemaphore ()
-{
-	assert ( !m_bInitialized );
-}
-
-bool CSphSemaphore::Init ( const char * )
-{
-	assert ( !m_bInitialized );
-	m_hSem = CreateSemaphore ( NULL, 0, INT_MAX, NULL );
-	m_bInitialized = ( m_hSem!=NULL );
-	return m_bInitialized;
-}
-
-bool CSphSemaphore::Done()
-{
-	if ( !m_bInitialized )
-		return true;
-
-	m_bInitialized = false;
-	return ( CloseHandle ( m_hSem )==TRUE );
-}
-
-void CSphSemaphore::Post()
-{
-	assert ( m_bInitialized );
-	ReleaseSemaphore ( m_hSem, 1, NULL );
-}
-
-bool CSphSemaphore::Wait()
-{
-	assert ( m_bInitialized );
-	DWORD uWait = WaitForSingleObject ( m_hSem, INFINITE );
-	return !( uWait==WAIT_FAILED || uWait==WAIT_TIMEOUT );
-}
-
 #else
 
 // UNIX mutex implementation
@@ -1292,8 +1252,10 @@ bool CSphMutex::Unlock ()
 
 bool CSphAutoEvent::Init ()
 {
-	m_bInitialized = ( pthread_mutex_init ( &m_tMutex, NULL )==0 );
-	m_bInitialized &= ( pthread_cond_init ( &m_tCond, NULL )==0 );
+	if ( m_bInitialized )
+		return true;
+	m_bInitialized = ( pthread_mutex_init ( &m_tMutex, nullptr )==0 );
+	m_bInitialized &= ( pthread_cond_init ( &m_tCond, nullptr )==0 );
 	return m_bInitialized;
 }
 
@@ -1314,7 +1276,7 @@ void CSphAutoEvent::SetEvent ()
 		return;
 
 	pthread_mutex_lock ( &m_tMutex );
-	m_iSent++;
+	++m_iSent;
 	pthread_cond_signal ( &m_tCond );
 	pthread_mutex_unlock ( &m_tMutex );
 }
@@ -1326,60 +1288,10 @@ void CSphAutoEvent::WaitEvent()
 
 	pthread_mutex_lock ( &m_tMutex );
 	while (  !m_iSent )
-	{
 		pthread_cond_wait ( &m_tCond, &m_tMutex );
-	}
 
-	m_iSent--;
+	--m_iSent;
 	pthread_mutex_unlock ( &m_tMutex );
-}
-
-
-CSphSemaphore::CSphSemaphore ()
-	: m_bInitialized ( false )
-	, m_pSem ( NULL )
-{
-}
-
-
-CSphSemaphore::~CSphSemaphore ()
-{
-	assert ( !m_bInitialized );
-	sem_close ( m_pSem );
-}
-
-
-bool CSphSemaphore::Init ( const char * sName )
-{
-	assert ( !m_bInitialized );
-	m_pSem = sem_open ( sName, O_CREAT | O_EXCL, 0, 0 );
-	m_sName = sName;
-	m_bInitialized = ( m_pSem!=SEM_FAILED );
-	return m_bInitialized;
-}
-
-bool CSphSemaphore::Done ()
-{
-	if ( !m_bInitialized )
-		return true;
-
-	m_bInitialized = false;
-	int iRes = sem_close ( m_pSem );
-	sem_unlink ( m_sName.cstr() );
-	return ( iRes==0 );
-}
-
-void CSphSemaphore::Post()
-{
-	assert ( m_bInitialized );
-	sem_post ( m_pSem );
-}
-
-bool CSphSemaphore::Wait ()
-{
-	assert ( m_bInitialized );
-	int iRes = sem_wait ( m_pSem );
-	return ( iRes==0 );
 }
 
 #endif
@@ -1893,7 +1805,7 @@ class CSphThdPool : public ISphThdPool
 public:
 	CSphThdPool ( int iThreads, const char * sName, CSphString & sError )
 	{
-		if ( !m_tWakeup.Init () )
+		if ( !m_tWakeup.Initialized () )
 		{
 			m_bShutdown = true;
 			sError.SetSprintf ( "thread-pool create failed %s", strerror ( errno ) );
@@ -1914,8 +1826,6 @@ public:
 	~CSphThdPool () final
 	{
 		Shutdown();
-
-		Verify ( m_tWakeup.Done() );
 	}
 
 	void Shutdown () NO_THREAD_SAFETY_ANALYSIS final

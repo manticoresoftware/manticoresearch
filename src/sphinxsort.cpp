@@ -114,7 +114,7 @@ class CSphMatchQueueTraits : public ISphMatchSorter, ISphNoncopyable
 {
 protected:
 	CSphMatch *					m_pData;
-	int							m_iUsed;
+	int							m_iUsed = 0;
 	int							m_iSize;
 	const bool					m_bUsesAttrs;
 
@@ -124,8 +124,7 @@ private:
 public:
 	/// ctor
 	CSphMatchQueueTraits ( int iSize, bool bUsesAttrs )
-		: m_iUsed ( 0 )
-		, m_iSize ( iSize )
+		: m_iSize ( iSize )
 		, m_bUsesAttrs ( bUsesAttrs )
 		, m_iDataLength ( iSize )
 	{
@@ -592,16 +591,16 @@ public:
 		m_pAffected = &pUpdate->m_iAffected;
 	}
 
-	/// check if this sorter does groupby
-	bool IsGroupby () const override
+	/// stub
+	bool IsGroupby () const final
 	{
 		return false;
 	}
 
 	/// add entry to the queue
-	bool Push ( const CSphMatch & tEntry ) override
+	bool Push ( const CSphMatch & tEntry ) final
 	{
-		m_iTotal++;
+		++m_iTotal;
 
 		if ( m_iUsed==m_iSize )
 			DoUpdate();
@@ -611,15 +610,15 @@ public:
 		return true;
 	}
 
-	/// add grouped entry (must not happen)
-	bool PushGrouped ( const CSphMatch &, bool ) override
+	/// stub
+	bool PushGrouped ( const CSphMatch &, bool ) final
 	{
 		assert ( 0 );
 		return false;
 	}
 
-	/// store all entries into specified location in sorted order, and remove them from queue
-	int Flatten ( CSphMatch *, int ) override
+	/// final update pass
+	int Flatten ( CSphMatch *, int ) final
 	{
 		assert ( m_iUsed>=0 );
 		DoUpdate();
@@ -627,7 +626,7 @@ public:
 		return 0;
 	}
 
-	void Finalize ( ISphMatchProcessor & tProcessor, bool ) override
+	void Finalize ( ISphMatchProcessor & tProcessor, bool ) final
 	{
 		if ( !GetLength() )
 			return;
@@ -644,48 +643,50 @@ public:
 
 //////////////////////////////////////////////////////////////////////////
 
-/// collector for DELETE statement
-class CSphDeleteQueue : public CSphMatchQueueTraits
+/// collect list of matched DOCIDs
+/// (mainly used to collect docs in `DELETE... WHERE` statement)
+class CSphCollectQueue : public CSphMatchQueueTraits
 {
 	CSphVector<SphDocID_t>* m_pValues;
 public:
 	/// ctor
-	CSphDeleteQueue ( int iSize, CSphVector<SphDocID_t> * pDeletes )
+	CSphCollectQueue ( int iSize, CSphVector<SphDocID_t> * pValues )
 		: CSphMatchQueueTraits ( 1, false )
-		, m_pValues ( pDeletes )
+		, m_pValues ( pValues )
 	{
 		m_pValues->Reserve ( iSize );
 	}
 
-	/// check if this sorter does groupby
-	bool IsGroupby () const override
+	/// stub
+	bool IsGroupby () const final
 	{
 		return false;
 	}
 
 	/// add entry to the queue
-	bool Push ( const CSphMatch & tEntry ) override
+	bool Push ( const CSphMatch & tEntry ) final
 	{
-		m_iTotal++;
+		++m_iTotal;
 		m_pValues->Add ( tEntry.m_uDocID );
 		return true;
 	}
 
-	/// add grouped entry (must not happen)
-	bool PushGrouped ( const CSphMatch &, bool ) override
+	/// stub
+	bool PushGrouped ( const CSphMatch &, bool ) final
 	{
 		assert ( 0 );
 		return false;
 	}
 
-	/// store all entries into specified location in sorted order, and remove them from queue
-	int Flatten ( CSphMatch *, int ) override
+	/// stub
+	int Flatten ( CSphMatch *, int ) final
 	{
 		m_iTotal = 0;
 		return 0;
 	}
 
-	void Finalize ( ISphMatchProcessor &, bool ) override
+	// stub
+	void Finalize ( ISphMatchProcessor &, bool ) final
 	{}
 };
 
@@ -4403,7 +4404,7 @@ static bool FixupDependency ( ISphSchema & tSchema, const int * pAttrs, int iAtt
 	for ( int i=0; i<dCur.GetLength(); i++ )
 	{
 		const CSphColumnInfo & tCol = tSchema.GetAttr ( dCur[i] );
-		if ( tCol.m_eStage>SPH_EVAL_PRESORT && tCol.m_pExpr!=nullptr )
+		if ( tCol.m_eStage>SPH_EVAL_PRESORT && tCol.m_pExpr )
 			tCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
 	}
 
@@ -5105,7 +5106,7 @@ static ISphMatchSorter * CreatePlainSorter ( ESphSortFunc eMatchFunc, bool bKbuf
 static void ExtraAddSortkeys ( CSphSchema * pExtra, const ISphSchema & tSorterSchema, const int * dAttrs )
 {
 	if ( pExtra )
-		for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
+		for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; ++i )
 			if ( dAttrs[i]>=0 )
 				pExtra->AddAttr ( tSorterSchema.GetAttr ( dAttrs[i] ), true );
 }
@@ -5361,9 +5362,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 					}
 					// handle chains of dependencies (e.g. SELECT 1+attr f1, f1-1 f2 ... WHERE f2>5)
 					if ( tCol.m_pExpr )
-					{
 						tCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
-					}
 				}
 				dCur.Uniq();
 
@@ -5637,8 +5636,8 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		assert ( dGroupColumns.GetLength() || tSettings.m_bImplicit );
 		if ( pExtra && !tSettings.m_bImplicit )
 		{
-			ARRAY_FOREACH ( i, dGroupColumns )
-				pExtra->AddAttr ( tSorterSchema.GetAttr ( dGroupColumns[i] ), true );
+			for ( const auto& dGroupColumn : dGroupColumns )
+				pExtra->AddAttr ( tSorterSchema.GetAttr ( dGroupColumn ), true );
 		}
 
 		if ( bGotDistinct )
@@ -5705,8 +5704,8 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 	{
 		if ( tQueue.m_pUpdate )
 			pTop = new CSphUpdateQueue ( pQuery->m_iMaxMatches, tQueue.m_pUpdate, pQuery->m_bIgnoreNonexistent, pQuery->m_bStrict );
-		else if ( tQueue.m_pDeletes )
-			pTop = new CSphDeleteQueue ( pQuery->m_iMaxMatches, tQueue.m_pDeletes );
+		else if ( tQueue.m_pCollection )
+			pTop = new CSphCollectQueue ( pQuery->m_iMaxMatches, tQueue.m_pCollection );
 		else
 			pTop = CreatePlainSorter ( eMatchFunc, pQuery->m_bSortKbuffer, pQuery->m_iMaxMatches, bUsesAttrs, uPackedFactorFlags & SPH_FACTOR_ENABLE );
 	} else
@@ -5777,9 +5776,8 @@ int sphFlattenQueue ( ISphMatchSorter * pQueue, CSphQueryResult * pResult, int i
 
 bool sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema )
 {
-	ARRAY_FOREACH ( i, tQuery.m_dItems )
+	for ( const CSphQueryItem &tItem : tQuery.m_dItems )
 	{
-		const CSphQueryItem & tItem = tQuery.m_dItems[i];
 		const CSphString & sExpr = tItem.m_sExpr;
 
 		// all expressions that come from parser are automatically aliased
@@ -5790,7 +5788,6 @@ bool sphHasExpressions ( const CSphQuery & tQuery, const CSphSchema & tSchema )
 			|| IsGroupbyMagic ( sExpr ) ) )
 			return true;
 	}
-
 	return false;
 }
 

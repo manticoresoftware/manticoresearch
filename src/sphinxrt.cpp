@@ -229,7 +229,7 @@ public:
 		m_tLock.Done();
 	}
 
-	void Flush ( CSphVector<SphDocID_t> & dKlist )
+	void Flush ( CSphVector<SphDocID_t> & dKlist ) REQUIRES (!m_tLock)
 	{
 		{
 			CSphScopedRLock tRguard ( m_tLock );
@@ -246,7 +246,7 @@ public:
 		NakedCopy ( dKlist );
 	}
 
-	inline void Add ( SphDocID_t * pDocs, int iCount )
+	inline void Add ( SphDocID_t * pDocs, int iCount ) REQUIRES (!m_tLock)
 	{
 		if ( !iCount )
 			return;
@@ -262,14 +262,14 @@ public:
 		}
 	}
 
-	bool Exists ( SphDocID_t uDoc )
+	bool Exists ( SphDocID_t uDoc ) REQUIRES (!m_tLock)
 	{
 		CSphScopedRLock tRguard ( m_tLock );
 		bool bGot = ( m_hSmallKlist.Exists ( uDoc ) || m_dLargeKlist.BinarySearch ( uDoc )!=NULL );
 		return bGot;
 	}
 
-	void Reset ( SphDocID_t * pDocs, int iCount )
+	void Reset ( SphDocID_t * pDocs, int iCount ) REQUIRES ( !m_tLock )
 	{
 		m_tLock.WriteLock();
 		m_dLargeKlist.Reset();
@@ -280,8 +280,8 @@ public:
 		m_tLock.Unlock();
 	}
 
-	void LoadFromFile ( const char * sFilename );
-	void SaveToFile ( const char * sFilename );
+	void LoadFromFile ( const char * sFilename ) REQUIRES ( !m_tLock );
+	void SaveToFile ( const char * sFilename ) REQUIRES ( !m_tLock );
 
 private:
 
@@ -5720,13 +5720,9 @@ struct RtSubstringPayload_t : public ISphSubstringPayload
 	RtSubstringPayload_t ( int iSegmentCount, int iDoclists )
 		: m_dSegment2Doclists ( iSegmentCount )
 		, m_dDoclist ( iDoclists )
-		, m_iDocsTotal ( 0 )
-		, m_iHitsTotal ( 0 )
 	{}
 	CSphFixedVector<Slice_t>	m_dSegment2Doclists;
 	CSphFixedVector<Slice_t>	m_dDoclist;
-	int							m_iDocsTotal;
-	int							m_iHitsTotal;
 };
 
 
@@ -5737,8 +5733,8 @@ public:
 		: m_pPayload ( pPayload )
 	{
 		m_tMatch.Reset ( 0 );
-		m_iDocs = m_pPayload->m_iDocsTotal;
-		m_iHits = m_pPayload->m_iHitsTotal;
+		m_iDocs = m_pPayload->m_iTotalDocs;
+		m_iHits = m_pPayload->m_iTotalHits;
 
 		m_uDoclist = 0;
 		m_uDoclistLeft = 0;
@@ -6233,7 +6229,7 @@ struct DictEntryRtPayload_t
 				sphSort ( m_dWordPayload.Begin()+tSeg.m_uOff, tSeg.m_uLen, bind ( &RtExpandedPayload_t::m_uDoclistOff ) );
 			}
 
-			RtSubstringPayload_t * pPayload = new RtSubstringPayload_t ( m_dSeg.GetLength(), iPayloads );
+			auto * pPayload = new RtSubstringPayload_t ( m_dSeg.GetLength(), iPayloads );
 
 			Slice_t * pDst = pPayload->m_dDoclist.Begin();
 			ARRAY_FOREACH ( i, m_dSeg )
@@ -6253,8 +6249,8 @@ struct DictEntryRtPayload_t
 					pSrc++;
 				}
 			}
-			pPayload->m_iDocsTotal = iTotalDocs;
-			pPayload->m_iHitsTotal = iTotalHits;
+			pPayload->m_iTotalDocs = iTotalDocs;
+			pPayload->m_iTotalHits = iTotalHits;
 			tArgs.m_pPayload = pPayload;
 		}
 
@@ -10588,7 +10584,8 @@ public:
 	bool AddDocument ( ISphTokenizer * pTokenizer, int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt ) override;
 	bool MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchResult_t &tRes ) override;
 	void RollBack ( ISphRtAccum * pAccExt ) override;
-	bool AddQuery ( const char * sQuery, const char * sTags, const CSphVector<CSphFilterSettings> * pFilters, const CSphVector<FilterTreeItem_t> * pFilterTree, bool bReplace, bool bQL, uint64_t & uId, const ISphTokenizer * pTokenizer, CSphDict * pDict, CSphString & sError );
+	bool AddQuery ( const char * sQuery, const char * sTags, const CSphVector<CSphFilterSettings> * pFilters, const CSphVector<FilterTreeItem_t> * pFilterTree, bool bReplace, bool bQL, uint64_t & uId, const ISphTokenizer * pTokenizer, CSphDict * pDict, CSphString & sError )
+		REQUIRES (!m_tLock);
 	int DeleteQueries ( const uint64_t * pQueries, int iCount ) override;
 	int DeleteQueries ( const char * sTags ) override;
 	bool Query ( const char * sQuery, const char * sTags, const CSphVector<CSphFilterSettings> * pFilters, const CSphVector<FilterTreeItem_t> * pFilterTree, bool bReplace, bool bQL, uint64_t & uId, CSphString & sError ) override;
@@ -10599,7 +10596,8 @@ public:
 	ISphRtAccum * CreateAccum ( CSphString & sError ) override;
 	ISphTokenizer * CloneIndexingTokenizer() const override { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
 	void SaveMeta ();
-	void GetQueries ( const char * sFilterTags, bool bTagsEq, const CSphFilterSettings * pUID, int iOffset, int iLimit, CSphVector<PercolateQueryDesc> & dQueries ) override;
+	void GetQueries ( const char * sFilterTags, bool bTagsEq, const CSphFilterSettings * pUID, int iOffset, int iLimit, CSphVector<PercolateQueryDesc> & dQueries ) override
+		REQUIRES (!m_tLock);
 	bool Truncate ( CSphString & ) override;
 
 	// RT index stub
@@ -10614,7 +10612,7 @@ public:
 	bool AttachDiskIndex ( CSphIndex * , CSphString & ) override { return true; }
 	void Optimize ( volatile bool * , ThrottleState_t * ) override {}
 	bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError ) const override;
-	void Reconfigure ( CSphReconfigureSetup & tSetup ) override;
+	void Reconfigure ( CSphReconfigureSetup & tSetup ) override REQUIRES ( !m_tLock );
 	CSphIndex * GetDiskChunk ( int ) override { return NULL; } // NOLINT
 	int64_t GetFlushAge() const override { return 0; }
 

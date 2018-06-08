@@ -966,15 +966,9 @@ void AttrIndexBuilder_t<DOCID>::FinishCollect ()
 
 struct PoolPtrs_t
 {
-	const DWORD *	m_pMva;
-	const BYTE *	m_pStrings;
-	bool			m_bArenaProhibit;
-
-	PoolPtrs_t ()
-		: m_pMva ( NULL )
-		, m_pStrings ( NULL )
-		, m_bArenaProhibit ( false )
-	{}
+	const DWORD *	m_pMva = nullptr;
+	const BYTE *	m_pStrings = nullptr;
+	bool			m_bArenaProhibit = false;
 };
 
 class CSphTaggedVector
@@ -1936,8 +1930,11 @@ struct SphExpanded_t
 
 struct ISphSubstringPayload
 {
-	ISphSubstringPayload () {}
-	virtual ~ISphSubstringPayload() {}
+	// neither of derivatives uses dynamic data and d-trs.
+//	virtual ~ISphSubstringPayload() {}
+
+	int m_iTotalDocs = 0;
+	int m_iTotalHits = 0;
 };
 
 
@@ -2089,21 +2086,18 @@ private:
 
 struct ExpansionContext_t
 {
-	const ISphWordlist * m_pWordlist;
-	BYTE * m_pBuf;
-	CSphQueryResultMeta * m_pResult;
-	int m_iMinPrefixLen;
-	int m_iMinInfixLen;
-	int m_iExpansionLimit;
-	bool m_bHasMorphology;
-	bool m_bMergeSingles;
-	CSphScopedPayload * m_pPayloads;
-	ESphHitless m_eHitless;
-	const void * m_pIndexData;
-
-	ExpansionContext_t ();
+	const ISphWordlist * m_pWordlist	= nullptr;
+	BYTE * m_pBuf						= nullptr;
+	CSphQueryResultMeta * m_pResult		= nullptr;
+	int m_iMinPrefixLen					= 0;
+	int m_iMinInfixLen					= 0;
+	int m_iExpansionLimit				= 0;
+	bool m_bHasMorphology				= false;
+	bool m_bMergeSingles				= false;
+	CSphScopedPayload * m_pPayloads		= nullptr;
+	ESphHitless m_eHitless				{SPH_HITLESS_NONE};
+	const void * m_pIndexData			= nullptr;
 };
-
 
 struct GetKeywordsSettings_t
 {
@@ -2273,32 +2267,16 @@ inline int sphUtf8CharBytes ( BYTE uFirst )
 class SnippetContext_t : ISphNoncopyable
 {
 private:
-	CSphScopedPtr<CSphDict> m_tDictCloned;
-	CSphScopedPtr<CSphDict> m_tExactDict;
+	CSphScopedPtr<CSphDict> m_tDictCloned { nullptr };
+	CSphScopedPtr<CSphDict> m_tExactDict { nullptr };
 
 public:
-	CSphDict * m_pDict;
-	CSphScopedPtr<ISphTokenizer> m_tTokenizer;
-	CSphScopedPtr<CSphHTMLStripper> m_tStripper;
-	ISphTokenizer * m_pQueryTokenizer;
+	CSphDict * m_pDict = nullptr;
+	CSphScopedPtr<ISphTokenizer> m_tTokenizer { nullptr };
+	CSphScopedPtr<CSphHTMLStripper> m_tStripper { nullptr };
+	CSphScopedPtr<ISphTokenizer> m_pQueryTokenizer { nullptr };
 	XQQuery_t m_tExtQuery;
-	DWORD m_eExtQuerySPZ;
-
-	SnippetContext_t()
-		: m_tDictCloned ( NULL )
-		, m_tExactDict ( NULL )
-		, m_pDict ( NULL )
-		, m_tTokenizer ( NULL )
-		, m_tStripper ( NULL )
-		, m_pQueryTokenizer ( NULL )
-		, m_eExtQuerySPZ ( SPH_SPZ_NONE )
-	{
-	}
-
-	~SnippetContext_t()
-	{
-		SafeDelete ( m_pQueryTokenizer );
-	}
+	DWORD m_eExtQuerySPZ { SPH_SPZ_NONE };
 
 	static CSphDict * SetupExactDict ( const CSphIndexSettings & tSettings, CSphScopedPtr<CSphDict> & tExact, CSphDict * pDict )
 	{
@@ -2431,7 +2409,7 @@ public:
 				tParser = sphCreateJsonQueryParser();
 			}
 			// OPTIMIZE? double lightweight clone here? but then again it's lightweight
-			if ( !tParser->ParseQuery ( m_tExtQuery, tSettings.m_sWords.cstr(), nullptr, m_pQueryTokenizer, tTokenizerJson.Ptr(), &pIndex->GetMatchSchema(), m_pDict, pIndex->GetSettings() ) )
+			if ( !tParser->ParseQuery ( m_tExtQuery, tSettings.m_sWords.cstr(), nullptr, m_pQueryTokenizer.Ptr(), tTokenizerJson.Ptr(), &pIndex->GetMatchSchema(), m_pDict, pIndex->GetSettings() ) )
 			{
 				sError = m_tExtQuery.m_sParseError;
 				return false;

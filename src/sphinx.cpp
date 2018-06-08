@@ -888,12 +888,8 @@ struct DiskSubstringPayload_t : public ISphSubstringPayload
 {
 	explicit DiskSubstringPayload_t ( int iDoclists )
 		: m_dDoclist ( iDoclists )
-		, m_iTotalDocs ( 0 )
-		, m_iTotalHits ( 0 )
 	{}
 	CSphFixedVector<Slice64_t>	m_dDoclist;
-	int							m_iTotalDocs;
-	int							m_iTotalHits;
 };
 
 
@@ -14968,7 +14964,7 @@ struct SphFinalMatchCalc_t : ISphMatchProcessor, ISphNoncopyable
 		, m_iTag ( iTag )
 	{ }
 
-	virtual void Process ( CSphMatch * pMatch )
+	void Process ( CSphMatch * pMatch ) final
 	{
 		if ( pMatch->m_iTag>=0 )
 			return;
@@ -14978,7 +14974,7 @@ struct SphFinalMatchCalc_t : ISphMatchProcessor, ISphNoncopyable
 			const CSphRowitem * pRow = m_pDocinfoSrc->FindDocinfo ( pMatch->m_uDocID );
 			if ( !pRow && m_pDocinfoSrc->m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN )
 			{
-				m_iBadRows++;
+				++m_iBadRows;
 				pMatch->m_iTag = m_iTag;
 				return;
 			}
@@ -17761,21 +17757,6 @@ bool sphExpandGetWords ( const char * sWord, const ExpansionContext_t & tCtx, IS
 
 	return true;
 }
-
-ExpansionContext_t::ExpansionContext_t()
-	: m_pWordlist ( NULL )
-	, m_pBuf ( NULL )
-	, m_pResult ( NULL )
-	, m_iMinPrefixLen ( 0 )
-	, m_iMinInfixLen ( 0 )
-	, m_iExpansionLimit ( 0 )
-	, m_bHasMorphology ( false )
-	, m_bMergeSingles ( false )
-	, m_pPayloads ( NULL )
-	, m_eHitless ( SPH_HITLESS_NONE )
-	, m_pIndexData ( NULL )
-{}
-
 
 XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta * pResult, CSphScopedPayload * pPayloads, DWORD uQueryDebugFlags ) const
 {

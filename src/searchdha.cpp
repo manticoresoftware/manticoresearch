@@ -88,7 +88,7 @@ bool HostDashboard_t::IsHalfPeriodChanged ( DWORD * pLast )
 	return false;
 }
 
-AgentDash_t*	HostDashboard_t::GetCurrentStat()
+AgentDash_t * HostDashboard_t::GetCurrentStat ()
 {
 	DWORD uTime = GetCurSeconds()/g_uHAPeriodKarma;
 	int iIdx = uTime % STATS_DASH_TIME;
@@ -126,7 +126,7 @@ void HostDashboard_t::GetCollectedStat ( HostStatSnapshot_t& dResult, int iPerio
 			iIdx = STATS_DASH_TIME-1;
 	}
 	for ( int i = 0; i<eMaxAgentStat; ++i )
-		dResult[i] = tAccum.m_dStats[i].GetValue ();
+		dResult[i] = tAccum.m_dStats[i];
 	for ( int i = 0; i<ehMaxStat; ++i )
 		dResult[i+eMaxAgentStat] = tAccum.m_dHostStats[i];
 }
@@ -239,14 +239,14 @@ void ClosePersistentSockets()
 }
 
 /////////////////////////////////////////////////////////////////////////////
-// MultiAgentDesc_t
+// MultiAgentDesc_c
 //
 // That is set of hosts serving one and same agent (i.e., 'mirrors').
 // class also provides mirror choosing using different strategies
 /////////////////////////////////////////////////////////////////////////////
 bool ValidateAndAddDashboard ( AgentDesc_c * pAgent, const WarnInfo_t &tInfo );
 
-bool MultiAgentDesc_t::Init ( const AgentOptions_t &tOpt, const CSphVector<AgentDesc_c *> &dHosts
+bool MultiAgentDesc_c::Init ( const AgentOptions_t &tOpt, const CSphVector<AgentDesc_c *> &dHosts
 							  , const WarnInfo_t &tWarn ) NO_THREAD_SAFETY_ANALYSIS
 {
 	// initialize options
@@ -279,7 +279,7 @@ bool MultiAgentDesc_t::Init ( const AgentOptions_t &tOpt, const CSphVector<Agent
 	return true;
 }
 
-const AgentDesc_c & MultiAgentDesc_t::RRAgent ()
+const AgentDesc_c &MultiAgentDesc_c::RRAgent ()
 {
 	if ( !IsHA() )
 		return *m_pData;
@@ -296,12 +296,12 @@ const AgentDesc_c & MultiAgentDesc_t::RRAgent ()
 	return m_pData[iRRCounter];
 }
 
-const AgentDesc_c & MultiAgentDesc_t::RandAgent ()
+const AgentDesc_c &MultiAgentDesc_c::RandAgent ()
 {
 	return m_pData[sphRand () % GetLength ()];
 }
 
-void MultiAgentDesc_t::ChooseWeightedRandAgent ( int * pBestAgent, CSphVector<int> & dCandidates )
+void MultiAgentDesc_c::ChooseWeightedRandAgent ( int * pBestAgent, CSphVector<int> & dCandidates )
 {
 	assert ( pBestAgent );
 	CSphScopedRLock tLock ( m_dWeightLock );
@@ -330,7 +330,7 @@ static void LogAgentWeights ( const float * pOldWeights, const float * pCurWeigh
 					  , dAgents[i].GetMyUrl ().cstr (), i, pCurWeights[i], pOldWeights[i], pTimers[i] );
 }
 
-const AgentDesc_c & MultiAgentDesc_t::StDiscardDead ()
+const AgentDesc_c &MultiAgentDesc_c::StDiscardDead ()
 {
 	if ( !IsHA() )
 		return m_pData[0];
@@ -415,7 +415,7 @@ const AgentDesc_c & MultiAgentDesc_t::StDiscardDead ()
 }
 
 // Check the time and recalculate mirror weights, if necessary.
-void MultiAgentDesc_t::CheckRecalculateWeights ( const CSphFixedVector<int64_t> & dTimers )
+void MultiAgentDesc_c::CheckRecalculateWeights ( const CSphFixedVector<int64_t> & dTimers )
 {
 	if ( !dTimers.GetLength () || !HostDashboard_t::IsHalfPeriodChanged ( &m_uTimestamp ) )
 		return;
@@ -431,7 +431,7 @@ void MultiAgentDesc_t::CheckRecalculateWeights ( const CSphFixedVector<int64_t> 
 	m_dWeights.SwapData (dWeights);
 }
 
-const AgentDesc_c & MultiAgentDesc_t::StLowErrors ()
+const AgentDesc_c &MultiAgentDesc_c::StLowErrors ()
 {
 	if ( !IsHA() )
 		return *m_pData;
@@ -546,7 +546,7 @@ const AgentDesc_c & MultiAgentDesc_t::StLowErrors ()
 }
 
 
-const AgentDesc_c & MultiAgentDesc_t::ChooseAgent ()
+const AgentDesc_c &MultiAgentDesc_c::ChooseAgent ()
 {
 	if ( !IsHA() )
 		return *m_pData;
@@ -609,7 +609,7 @@ void AgentConn_t::SetupPersist()
 		if ( m_iSock==-2 ) // no free persistent connections. This connection will be not persistent
 			m_tDesc.m_bPersistent = false;
 	}
-	m_bFresh = m_iSock==-1;
+	m_bFresh = ( m_iSock==-1 );
 }
 
 
@@ -624,12 +624,12 @@ void agent_stats_inc ( AgentConn_t & tAgent, AgentStats_e iCounter )
 	assert ( tAgent.m_tDesc.m_pDash );
 
 	if ( tAgent.m_tDesc.m_pStats )
-		++tAgent.m_tDesc.m_pStats->m_dStats[iCounter];
+		tAgent.m_tDesc.m_pStats->m_dStats[iCounter]++;
 
 	HostDashboard_t & tIndexDash = *tAgent.m_tDesc.m_pDash;
 	CSphScopedWLock tWguard ( tIndexDash.m_dDataLock );
 	AgentDash_t & tAgentDash = *tIndexDash.GetCurrentStat ();
-	++tAgentDash.m_dStats[iCounter];
+	tAgentDash.m_dStats[iCounter]++;
 	if ( iCounter>=eNetworkNonCritical && iCounter<eMaxAgentStat )
 		tIndexDash.m_iErrorsARow = 0;
 	else
@@ -859,14 +859,11 @@ bool ValidateAndAddDashboard ( AgentDesc_c * pAgent, const WarnInfo_t & tInfo )
 {
 	assert ( pAgent );
 
-	// lookup address (if needed)
 	if ( !ResolveAddress ( *pAgent, tInfo ) )
 		return false;
 
 	pAgent->m_pStats = new AgentDash_t;
 	g_tDashes.AddAgent ( pAgent );
-
-	assert ( pAgent->m_pStats );
 	assert ( pAgent->m_pDash );
 	return true;
 }
@@ -947,6 +944,9 @@ bool ConfigureMirrorSet ( CSphVector<AgentDesc_c*> &tMirrors, AgentOptions_t * p
 	assert ( tMirrors.IsEmpty () );
 
 	sphSplit ( dSplitParts, dWI.m_szAgent, "[]" );
+	if ( dSplitParts.IsEmpty () )
+		return dWI.ErrSkip ( "empty agent definition" );
+
 	if ( dSplitParts[0].IsEmpty () )
 		return dWI.ErrSkip ( "one or more hosts/sockets expected before [" );
 
@@ -1014,7 +1014,7 @@ bool ConfigureMirrorSet ( CSphVector<AgentDesc_c*> &tMirrors, AgentOptions_t * p
 }
 
 // different cases are tested in T_ConfigureMultiAgent, see gtests_searchdaemon.cpp
-bool ConfigureMultiAgent ( MultiAgentDesc_t &tAgent, const char * szAgent, const char * szIndexName
+bool ConfigureMultiAgent ( MultiAgentDesc_c &tAgent, const char * szAgent, const char * szIndexName
 						   , AgentOptions_t tOptions )
 {
 	VectorPtrsGuard_T<AgentDesc_c *> tMirrors;
@@ -1064,8 +1064,9 @@ void AgentDesc_c::CloneTo ( AgentDesc_c & tOther ) const
 
 void cDashStorage::AddAgent ( AgentDesc_c * pAgent )
 {
+	assert ( pAgent );
+	assert ( !pAgent->m_pDash );
 	CSphScopedWLock tWguard ( m_tDashLock );
-	bool bFound = false;
 
 	// a little trick: simultaneously add new and free deleted entries
 	// (with refcount==1, i.e. owned only here)
@@ -1076,20 +1077,17 @@ void cDashStorage::AddAgent ( AgentDesc_c * pAgent )
 		{
 			SafeRelease ( m_dDashes[i] );
 			m_dDashes.RemoveFast ( i-- ); // remove, and then step back
-		} else if ( !bFound && pAgent->GetMyUrl ()==m_dDashes[i]->m_tDescriptor.GetMyUrl () )
-		{
-			m_dDashes[i]->AddRef();
+		} else if ( !pAgent->m_pDash && pAgent->GetMyUrl ()==m_dDashes[i]->m_tDescriptor.GetMyUrl () )
 			pAgent->m_pDash = m_dDashes[i];
-			bFound = true;
-		}
 	}
-	if ( !bFound )
+
+	if ( !pAgent->m_pDash )
 	{
 		pAgent->m_pDash = new HostDashboard_t ( *pAgent );
-		pAgent->m_pDash->AddRef();
-		assert (pAgent->m_pDash->GetRefcount ()==2);
 		m_dDashes.Add ( pAgent->m_pDash );
 	}
+
+	pAgent->m_pDash->AddRef();
 }
 
 // Due to very rare template of usage, linear search is quite enough here
@@ -2237,7 +2235,7 @@ protected:
 public:
 	IterableEvents_c () = default;
 
-	virtual ~IterableEvents_c ()
+	~IterableEvents_c () override
 	{
 		while ( m_tWork.GetLength() )
 		{

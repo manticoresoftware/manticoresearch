@@ -3143,6 +3143,49 @@ protected:
 	CSphRwlock & m_tLock;
 };
 
+/// scoped lock owner - unlock in dtr
+template <class LOCKED=CSphRwlock>
+class SCOPED_CAPABILITY ScopedUnlock_T : ISphNoncopyable
+{
+public:
+	/// lock on creation
+	ScopedUnlock_T ( LOCKED &tLock ) ACQUIRE ( tLock )
+		: m_pLock ( &tLock )
+	{}
+
+	ScopedUnlock_T ( ScopedUnlock_T && tLock ) noexcept
+		: m_pLock ( tLock.m_pLock )
+	{
+		tLock.m_pLock = nullptr;
+	}
+
+	ScopedUnlock_T &operator= ( ScopedUnlock_T &&rhs ) noexcept
+		RELEASE()
+	{
+		if ( this==&rhs )
+			return *this;
+		if ( m_pLock )
+			m_pLock->Unlock();
+		m_pLock = rhs.m_pLock;
+		rhs.m_pLock = nullptr;
+		return *this;
+	}
+
+	/// unlock on going out of scope
+	~ScopedUnlock_T () RELEASE ()
+	{
+		if ( m_pLock )
+			m_pLock->Unlock ();
+	}
+
+protected:
+	LOCKED * m_pLock;
+};
+
+// shortcuts (original names sometimes looks too long)
+using ScRL_t = CSphScopedRLock;
+using ScWL_t = CSphScopedWLock;
+
 // perform any (function-defined) action on exit from a scope.
 template < typename ACTION >
 class AtScopeExit_T

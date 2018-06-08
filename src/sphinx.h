@@ -2850,7 +2850,6 @@ public:
 	CSphString				m_sWarning;				///< warning message
 	int64_t					m_iBadRows = 0;
 
-							CSphQueryResultMeta () = default;			///< ctor
 	virtual					~CSphQueryResultMeta () {}					///< dtor
 	void					AddStat ( const CSphString & sWord, int64_t iDocs, int64_t iHits );
 };
@@ -2871,8 +2870,6 @@ public:
 	int						m_iSuccesses = 0;
 	CSphQueryProfile *		m_pProfile = nullptr;	///< filled when query profiling is enabled; NULL otherwise
 
-public:
-							CSphQueryResult () = default;	///< ctor
 							~CSphQueryResult () override; 	///< dtor, which releases all owned stuff
 };
 
@@ -3479,18 +3476,11 @@ protected:
 // update attributes with index pointer attached
 struct CSphAttrUpdateEx
 {
-	const CSphAttrUpdate *	m_pUpdate;		///< the unchangeable update pool
-	CSphIndex *				m_pIndex;		///< the index on which the update should happen
-	CSphString *			m_pError;		///< the error, if any
-	CSphString *			m_pWarning;		///< the warning, if any
-	int						m_iAffected;	///< num of updated rows.
-	CSphAttrUpdateEx()
-		: m_pUpdate ( NULL )
-		, m_pIndex ( NULL )
-		, m_pError ( NULL )
-		, m_pWarning ( NULL )
-		, m_iAffected ( 0 )
-	{}
+	const CSphAttrUpdate *	m_pUpdate = nullptr;	///< the unchangeable update pool
+	CSphIndex *				m_pIndex = nullptr;		///< the index on which the update should happen
+	CSphString *			m_pError = nullptr;		///< the error, if any
+	CSphString *			m_pWarning = nullptr;	///< the warning, if any
+	int						m_iAffected = 0;		///< num of updated rows.
 };
 
 struct SphQueueSettings_t : public ISphNoncopyable
@@ -3502,7 +3492,7 @@ struct SphQueueSettings_t : public ISphNoncopyable
 	bool						m_bComputeItems = true;
 	CSphSchema *				m_pExtra = nullptr;
 	CSphAttrUpdateEx *			m_pUpdate = nullptr;
-	CSphVector<SphDocID_t> *	m_pDeletes = nullptr;
+	CSphVector<SphDocID_t> *	m_pCollection = nullptr;
 	bool						m_bZonespanlist = false;
 	DWORD						m_uPackedFactorFlags { SPH_FACTOR_DISABLE };
 	ISphExprHook *				m_pHook = nullptr;

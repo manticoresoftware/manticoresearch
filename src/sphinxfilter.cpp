@@ -1297,7 +1297,7 @@ public:
 
 	virtual bool Eval ( const CSphMatch & tMatch ) const
 	{
-		assert ( this->m_pExpr!=NULL );
+		assert ( this->m_pExpr );
 		return EvalValues ( m_pExpr->Int64Eval ( tMatch ) );
 	}
 };
@@ -1588,7 +1588,7 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 
 				pExpr = pAttr->m_pExpr;
 				eAttrType = pAttr->m_eAttrType;
-				pFilter = CreateFilterExpr ( pAttr->m_pExpr, tSettings, sError, eCollation, pAttr->m_eAttrType );
+				pFilter = CreateFilterExpr ( pExpr, tSettings, sError, eCollation, pAttr->m_eAttrType );
 
 			} else
 			{

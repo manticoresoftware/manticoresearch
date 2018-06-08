@@ -1369,26 +1369,6 @@ public:
 	}
 };
 
-class ScopedIndex_c
-{
-	ServedIndex_c * m_pPtr = nullptr;
-
-public:
-	explicit ScopedIndex_c ( ServedIndex_c * pIndex  )
-		: m_pPtr ( pIndex )
-	{}
-
-	ServedIndex_c * Ptr() const { return m_pPtr; }
-	ServedIndex_c * operator -> () const { return m_pPtr; }
-
-	~ScopedIndex_c()
-	{
-		if ( m_pPtr )
-			m_pPtr->Unlock();
-		m_pPtr = nullptr;
-	}
-};
-
 struct SourceMatch_c : public CSphMatch
 {
 	static SphAttr_t ToInt ( const cJSON * pVal )
@@ -1952,20 +1932,19 @@ bool HttpHandlerPQ_c::Process()
 		bMatch = true;
 
 	// get index
-	const ScopedIndex_c tServed ( g_pLocalIndexes->GetRlockedEntry ( sIndex ) );
-	if ( !tServed.Ptr() )
+	ServedIndexScPtr_c pServed ( GetServed ( sIndex ) );
+	if ( !pServed )
 	{
-		FormatError ( SPH_HTTP_STATUS_500, "no such index '%s'", sIndex.cstr() );
+		FormatError ( SPH_HTTP_STATUS_500, "no such index '%s'", sIndex.cstr () );
+		return false;
+	}
+	if ( !pServed->m_bPercolate || !pServed->m_pIndex )
+	{
+		FormatError ( SPH_HTTP_STATUS_500, "index '%s' is not percolate (enabled=%d)", sIndex.cstr() );
 		return false;
 	}
 
-	if ( !tServed->m_bPercolate || !tServed->m_bEnabled || !tServed->m_pIndex )
-	{
-		FormatError ( SPH_HTTP_STATUS_500, "index '%s' is not percolate (enabled=%d)", sIndex.cstr(), tServed->m_bEnabled );
-		return false;
-	}
-
-	PercolateIndex_i * pIndex = (PercolateIndex_i *)tServed->m_pIndex;
+	auto * pIndex = (PercolateIndex_i *) pServed->m_pIndex;
 
 	if ( m_sQuery.IsEmpty() )
 		return ListQueries ( pIndex, sIndex );

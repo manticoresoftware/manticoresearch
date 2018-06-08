@@ -282,17 +282,9 @@ struct XQQuery_t : public ISphNoncopyable
 	CSphString				m_sParseWarning;
 
 	StrVec_t				m_dZones;
-	XQNode_t *				m_pRoot;
-	bool					m_bNeedSZlist;
-	bool					m_bSingleWord;
-
-	/// ctor
-	XQQuery_t ()
-	{
-		m_pRoot = NULL;
-		m_bNeedSZlist = false;
-		m_bSingleWord = false;
-	}
+	XQNode_t *				m_pRoot = nullptr;
+	bool					m_bNeedSZlist = false;
+	bool					m_bSingleWord = false;
 
 	/// dtor
 	~XQQuery_t ()

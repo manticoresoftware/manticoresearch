@@ -93,7 +93,7 @@ enum AgentStats_e
 	eMaxAgentStat
 };
 
-// per-host query stats (calculated, 
+/// per-host query stats (calculated)
 enum HostStats_e
 {
 	ehTotalMsecs=0,		///< number of microseconds in queries, total
@@ -143,23 +143,6 @@ public:
 
 void ClosePersistentSockets();
 
-struct AgentStats_t : public ISphRefcountedMT
-{
-	// was uint64_t, but for atomic it creates extra tmpl instantiation without practical difference
-	CSphAtomic_T<int64_t>		m_dStats[eMaxAgentStat];
-
-	void Reset ()
-	{
-		for ( int i = 0; i<eMaxAgentStat; ++i )
-			m_dStats[i] = 0;
-	}
-	void Add ( const AgentStats_t& rhs )
-	{
-		for ( int i = 0; i<eMaxAgentStat; ++i )
-			m_dStats[i] += rhs.m_dStats[i];
-	}
-};
-
 struct HostDashboard_t;
 struct AgentDash_t;
 
@@ -167,17 +150,19 @@ struct AgentDash_t;
 class AgentDesc_c : public ISphNoncopyable
 {
 public:
-	CSphString	m_sIndexes;				///< remote index names to query
-	bool		m_bBlackhole = false;	///< blackhole agent flag
-	DWORD		m_uAddr = 0;			///< IP address
-	bool		m_bNeedResolve = false;	///< whether we keep m_uAddr, or call GetAddrInfo each time.
-	mutable AgentDash_t *		m_pStats = nullptr;		/// global agent stats
-	mutable HostDashboard_t *	m_pDash = nullptr;		/// ha dashboard of the host
-	bool		m_bPersistent = false;	///< whether to keep the persistent connection to the agent.
+	CSphString			m_sIndexes;				///< remote index names to query
 
-	int			m_iFamily = AF_INET;	///< TCP or UNIX socket
-	CSphString	m_sAddr;				///< remote searchd host (used to update m_uAddr with resolver)
-	int			m_iPort = -1;			///< remote searchd port, 0 if local
+	int					m_iFamily = AF_INET;	///< TCP or UNIX socket
+	CSphString			m_sAddr;				///< remote searchd host (used to update m_uAddr with resolver)
+	int					m_iPort = -1;		///< remote searchd port, 0 if local
+	DWORD				m_uAddr = 0;		///< IP address
+	bool				m_bNeedResolve = false;	///< whether we keep m_uAddr, or call GetAddrInfo each time.
+
+	bool		m_bBlackhole	= false;		///< blackhole agent flag
+	bool		m_bPersistent	= false;		///< whether to keep the persistent connection to the agent.
+
+	mutable AgentDash_t *		m_pStats = nullptr;	/// global agent stats (one copy shared over all clones, refcounted)
+	mutable HostDashboard_t *	m_pDash = nullptr;	/// ha dashboard of the host
 
 public:
 	AgentDesc_c () = default;
@@ -188,6 +173,7 @@ public:
 	CSphString GetMyUrl () const;
 };
 
+class MultiAgentDesc_c;
 /// remote agent connection (local per-query state)
 struct AgentConn_t : public ISphNoncopyable
 {
@@ -214,14 +200,13 @@ struct AgentConn_t : public ISphNoncopyable
 	CSphVector<CSphQueryResult> m_dResults;	///< multi-query results
 	CSphString		m_sFailure;				///< failure message (both network and logical)
 	mutable int		m_iStoreTag = 0;	///< cookie, m.b. used to 'glue' to concrete connection
-	int				m_iWeight = -1;
+	int				m_iWeight = -1;		///< weight of the index, will be send with query to remote host
 	bool			m_bPing = false;	///< to avoid polluting stats by ping query time
 
 private:
-	CSphString      m_sDistIndex;
-	int				m_iAgent = 0;			// FIXME!!! got broken on agent removal
 	int				m_iMirrorsCount = 1;
 	AgentState_e	m_eConnState { AGENT_UNUSED };	///< current state
+	MultiAgentDesc_c * m_pMultiAgent = nullptr;
 
 public:
 	AgentConn_t () = default;
@@ -230,8 +215,8 @@ public:
 	void Close ( bool bClosePersist=true );
 	void Fail ( AgentStats_e eStat, const char* sMessage, ... ) __attribute__ ( ( format ( printf, 3, 4 ) ) );
 
-	void SetMultiAgent ( const CSphString &sIndex, int iAgent );
-	void NextMirror(); // FIXME!! Located at searchd.cpp since depends from distr index
+	void SetMultiAgent ( const CSphString &sIndex, MultiAgentDesc_c * pMirror );
+	void NextMirror();
 	int GetMirrorsCount() const { return m_iMirrorsCount; }
 	AgentState_e State() const { return m_eConnState; } 
 	void State ( AgentState_e eState ); 
@@ -245,19 +230,26 @@ using AgentsVector = CSphVector<AgentConn_t *>;
 
 extern const char * sAgentStatsNames[eMaxAgentStat + ehMaxStat];
 
-struct AgentDash_t : AgentStats_t
+struct AgentDash_t : ISphRefcountedMT
 {
-	uint64_t		m_dHostStats[ehMaxStat];
-	DWORD			m_uTimestamp;	///< adds the minutes timestamp to AgentStats_t
+	// was uint64_t, but for atomic it creates extra tmpl instantiation without practical difference
+	CSphAtomic_T<int64_t>	m_dStats[eMaxAgentStat]; // atomic counters
+	uint64_t				m_dHostStats[ehMaxStat];
+	DWORD					m_uTimestamp;
+
 	void Reset ()
 	{
-		AgentStats_t::Reset ();
-		for ( int i = 0; i<ehMaxStat; ++i )
-			m_dHostStats[i] = 0;
+		for ( auto& dStat : m_dStats )
+			dStat = 0;
+
+		for ( auto& dHostStat: m_dHostStats )
+			dHostStat = 0;
 	}
+
 	void Add ( const AgentDash_t& rhs )
 	{
-		AgentStats_t::Add ( rhs );
+		for ( int i = 0; i<eMaxAgentStat; ++i )
+			m_dStats[i] += rhs.m_dStats[i];
 
 		if ( m_dHostStats[ehConnTries] )
 			m_dHostStats[ehAverageMsecs] =
@@ -271,6 +263,8 @@ struct AgentDash_t : AgentStats_t
 	}
 };
 
+using AgentDashPtr_t = CSphRefcountedPtr<AgentDash_t>;
+
 using HostStatSnapshot_t = uint64_t[eMaxAgentStat+ehMaxStat];
 
 /// per-host dashboard
@@ -279,7 +273,7 @@ struct HostDashboard_t : public ISphRefcountedMT
 	AgentDesc_c		m_tDescriptor;			// only host info, no indices. Used for ping.
 	bool			m_bNeedPing = false;	// we'll ping only HA agents, not everyone
 
-	mutable CSphRwlock	 m_dDataLock;	
+	mutable CSphRwlock	 m_dDataLock;	// fixme! delete. (make guarded vars as atomics and eliminate the lock).
 	int64_t		m_iLastAnswerTime GUARDED_BY ( m_dDataLock );		// updated when we get an answer from the host
 	int64_t		m_iLastQueryTime GUARDED_BY ( m_dDataLock );		// updated when we send a query to a host
 	int64_t		m_iErrorsARow GUARDED_BY ( m_dDataLock ) = 0;		// num of errors a row, updated when we update the general statistic.
@@ -298,6 +292,9 @@ public:
 	AgentDash_t*	GetCurrentStat() REQUIRES ( m_dDataLock );
 	void GetCollectedStat ( HostStatSnapshot_t& dResult, int iPeriods=1 ) const REQUIRES ( !m_dDataLock );
 };
+
+using HostDashboardPtr_t = CSphRefcountedPtr<HostDashboard_t>;
+
 
 // set of options which are applied to every agent line
 // and come partially from global config, partially m.b. set immediately in agent line as an option.
@@ -348,30 +345,22 @@ struct WarnInfo_t
 };
 
 /// descriptor for set of agents (mirrors) (stored in a global hash)
-struct MultiAgentDesc_t : public CSphFixedVector<AgentDesc_c>
+class MultiAgentDesc_c : public ISphRefcountedMT, public CSphFixedVector<AgentDesc_c>
 {
-private:
-	using BASE =  CSphFixedVector<AgentDesc_c>;
-	using BASE::m_pData;
 	CSphAtomic				m_iRRCounter;	/// round-robin counter
-	mutable CSphRwlock		m_dWeightLock;	/// manages access to m_pWeights
+	mutable RwLock_t		m_dWeightLock;	/// manages access to m_pWeights
 	CSphFixedVector<float>	m_dWeights		/// the weights of the hosts
 			GUARDED_BY (m_dWeightLock) { 0 };
 	DWORD					m_uTimestamp { HostDashboard_t::GetCurSeconds() };	/// timestamp of last weight's actualization
 	HAStrategies_e			m_eStrategy { HA_DEFAULT };
 	int 					m_iMultiRetryCount = 0;
 
-public:
-	MultiAgentDesc_t()
-		: BASE {0}
-	{
-		m_dWeightLock.Init();
-	}
+	~MultiAgentDesc_c () final = default;
 
-	~MultiAgentDesc_t()
-	{
-		m_dWeightLock.Done();
-	}
+public:
+	MultiAgentDesc_c()
+		: CSphFixedVector<AgentDesc_c> {0}
+	{}
 
 	bool Init ( const AgentOptions_t &tOpt, const CSphVector<AgentDesc_c *> &dHosts, const WarnInfo_t &tWarn );
 
@@ -405,6 +394,80 @@ private:
 	void ChooseWeightedRandAgent ( int * pBestAgent, CSphVector<int> & dCandidates ) REQUIRES ( !m_dWeightLock );
 	void CheckRecalculateWeights ( const CSphFixedVector<int64_t> &dTimers ) REQUIRES ( !m_dWeightLock );
 };
+
+using MultiAgentDescPtr_c = CSphRefcountedPtr<MultiAgentDesc_c>;
+
+/////////////////////////////////////////////////////////////////////////////
+// DISTRIBUTED QUERIES
+/////////////////////////////////////////////////////////////////////////////
+
+struct AgentProcessor_t
+{
+	AgentProcessor_t () = default;
+	virtual ~AgentProcessor_t ()
+	{};
+	virtual void Process ( AgentDesc_c &tDesc ) = 0;
+};
+
+/// distributed index
+struct DistributedIndex_t : public ServedStats_c, public ISphRefcountedMT
+{
+protected:
+	~DistributedIndex_t () override
+	{
+		// m_pHAStorage has to be freed separately.
+		for ( auto *&pAgent : m_dAgents ) SafeRelease ( pAgent );
+	}
+
+public:
+	CSphVector<MultiAgentDesc_c *> m_dAgents;	///< remote agents
+	StrVec_t m_dLocal;							///< local indexes
+	CSphBitvec m_dKillBreak;
+	int m_iAgentConnectTimeout		{ g_iAgentConnectTimeout };	///< in msec
+	int m_iAgentQueryTimeout		{ g_iAgentQueryTimeout };	///< in msec
+	int m_iAgentRetryCount			= 0;			///< overrides global one
+	bool m_bDivideRemoteRanges		= false;		///< whether we divide big range onto agents or not
+	HAStrategies_e m_eHaStrategy	= HA_DEFAULT;	///< how to select the best of my agents
+
+	// fixme! remove this.
+	bool m_bToDelete = false;        ///< should be deleted
+
+	// get hive of all index'es hosts (not agents, but hosts, i.e. all mirrors as simple vector)
+	void GetAllHosts ( AgentsVector &dTarget ) const;
+
+	// call tProcessor::Process over every single host in the hive
+	void ForEveryHost ( AgentProcessor_t &tProcessor );
+};
+
+using DistributedIndexPtr = CSphRefcountedPtr<DistributedIndex_t>;
+
+class SCOPED_CAPABILITY RLockedDistrIt_c : public RLockedHashIt_c
+{
+public:
+	explicit RLockedDistrIt_c ( const GuardedHash_c * pHash ) ACQUIRE_SHARED ( pHash->IndexesRWLock ()
+																				, m_pHash->IndexesRWLock () )
+		: RLockedHashIt_c ( pHash )
+	{}
+
+	~RLockedDistrIt_c () UNLOCK_FUNCTION() {};
+
+	DistributedIndexPtr Get () REQUIRES_SHARED ( m_pHash->IndexesRWLock () )
+	{
+		auto pDistr = ( DistributedIndex_t * ) RLockedHashIt_c::Get ();
+		DistributedIndexPtr pRes ( pDistr );
+		return pRes;
+	}
+};
+
+extern GuardedHash_c * g_pDistIndexes;    // distributed indexes hash
+
+inline DistributedIndexPtr GetDistr ( const CSphString &sName )
+{
+	auto pDistr = ( DistributedIndex_t * ) g_pDistIndexes->Get ( sName );
+	DistributedIndexPtr pRes ( pDistr );
+	return pRes;
+}
+
 
 struct SearchdStats_t
 {
@@ -464,13 +527,16 @@ extern cDashStorage				g_tDashes;
 // parse strategy name into enum value
 bool ParseStrategyHA ( const char * sName, HAStrategies_e * pStrategy );
 
+// parse ','-delimited list of indexes
+void ParseIndexList ( const CSphString &sIndexes, StrVec_t &dOut );
+
 // try to parse hostname/ip/port or unixsocket on current pConfigLine.
 // fill pAgent fields on success and move ppLine pointer next after parsed instance
 // if :port is skipped in the line, IANA 9312 will be used in the case
 bool ParseAddressPort ( AgentDesc_c * pAgent, const char ** ppLine, const WarnInfo_t& dInfo );
 
-//bool ParseAgentLine ( MultiAgentDesc_t &tAgent, const char * szAgent, const char * szIndexName, AgentOptions_t tDesc );
-bool ConfigureMultiAgent ( MultiAgentDesc_t &tAgent, const char * szAgent, const char * szIndexName
+//bool ParseAgentLine ( MultiAgentDesc_c &tAgent, const char * szAgent, const char * szIndexName, AgentOptions_t tDesc );
+bool ConfigureMultiAgent ( MultiAgentDesc_c &tAgent, const char * szAgent, const char * szIndexName
 						   , AgentOptions_t tOptions );
 
 struct IRequestBuilder_t : public ISphNoncopyable

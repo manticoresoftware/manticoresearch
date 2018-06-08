@@ -83,8 +83,8 @@ protected:
 		 )
 	{
 		const char * pTest = sInExpr;
-		AgentDesc_c tFoo;
-		bool bResult = ParseAddressPort ( &tFoo, &pTest, tInfo );
+		AgentDesc_t tFoo;
+		bool bResult = ParseAddressPort ( tFoo, &pTest, tInfo );
 		EXPECT_EQ ( bResult, bExpectedResult ) << sInExpr;
 		EXPECT_STREQ ( sExpectedTail, pTest );
 		EXPECT_STREQ ( sWarningMessage, sLogBuff );
@@ -365,6 +365,7 @@ TEST_F ( T_ConfigureMultiAgent, simple_3_hosts )
 }
 
 // staging...
+// this classes are here only for tests (to avoid recompiling of a big piece in case of experiments)
 // the most base class we protect.
 class Core_c
 {
@@ -377,7 +378,7 @@ public:
 class Handler_t : public ISphRefcountedMT, Core_c
 {
 private:
-	friend class CServedLock;
+	friend class HandlerL_t;
 	Core_c * ReadLock () const ACQUIRE_SHARED( m_tLock )
 	{
 		AddRef();
@@ -417,16 +418,16 @@ public:
 
 
 /// RAII shared read and write lock
-class SCOPED_CAPABILITY CServedLock : ISphNoncopyable
+class SCOPED_CAPABILITY HandlerL_t : ISphNoncopyable
 {
 public:
 	// by default acquire read (shared) lock
-	CServedLock ( Handler_t * pLock ) ACQUIRE_SHARED( pLock->m_tLock )
+	HandlerL_t ( Handler_t * pLock ) ACQUIRE_SHARED( pLock->m_tLock )
 		: m_pCore { pLock->ReadLock () }, m_pLock { pLock }
 	{}
 
 	// acquire write (exclusive) lock
-	CServedLock ( Handler_t * pLock, bool ) ACQUIRE ( pLock->m_tLock )
+	HandlerL_t ( Handler_t * pLock, bool ) ACQUIRE ( pLock->m_tLock )
 		: m_pCore { pLock->WriteLock () }, m_pLock { pLock }
 	{}
 
@@ -439,10 +440,28 @@ public:
 	}
 
 	/// unlock on going out of scope
-	~CServedLock () RELEASE ()
+	~HandlerL_t () RELEASE ()
 	{
 		if ( m_pLock )
 			m_pLock->Unlock();
+	}
+
+	HandlerL_t ( HandlerL_t	&& rhs ) noexcept ACQUIRE ( rhs.m_pLock->m_tLock )
+	: m_pCore { rhs.m_pCore }, m_pLock {rhs.m_pLock}
+	{}
+
+
+	HandlerL_t &operator= ( HandlerL_t &&rhs ) RELEASE () ACQUIRE ( rhs.m_pLock->m_tLock )
+	{
+		if ( &rhs==this )
+			return *this;
+		if ( m_pLock )
+			m_pLock->Unlock ();
+		m_pCore = rhs.m_pCore;
+		m_pLock = rhs.m_pLock;
+		rhs.m_pCore = nullptr;
+		rhs.m_pLock = nullptr;
+		return *this;
 	}
 
 public:
@@ -461,29 +480,37 @@ private:
 	Handler_t * m_pLock = nullptr;
 };
 
+HandlerL_t GetHandler ( Handler_t * pLock )
+{
+	return HandlerL_t (pLock);
+}
 
 TEST ( new_addref_flavour, create_served_index_concept )
 {
 	int payload = 10;
+	int payloadb = 13;
 
 	auto pFoo = new Handler_t ( payload );
+	auto pFee = new Handler_t ( payloadb );
 
 	ASSERT_EQ ( pFoo->GetRefcount (), 1);
 
 //	a->ReadLock();
 
 	{
-		CServedLock a ( pFoo );
+		HandlerL_t a = ( pFoo );
 		ASSERT_EQ ( a->m_iPayload, 10 );
+//		a = HandlerL_t ( pFee );
+
 //		a.Unlock();
-		a.Unlock();
-		CServedLock b ( pFoo, true );
+		HandlerL_t b ( pFee, true );
 //		dUser->Unlock();
 //		ASSERT_STREQ ( dUser->m_sIndexPath.cstr (), "blabla" );
 		ASSERT_EQ ( pFoo->GetRefcount (), 2 ) << "one from creation, second from RLocked";
 	}
-	CServedLock b ( pFoo );
-		pFoo->Release();
+	HandlerL_t b ( pFoo );
+	pFoo->Release();
+	pFee->Release();
 }
 
 TEST ( T_IndexHash, served_hash_and_getter )
@@ -493,10 +520,13 @@ TEST ( T_IndexHash, served_hash_and_getter )
 	pHash->AddUniq ( new ServedIndex_c ( tDesc ), "hello" );
 	pHash->AddUniq ( new ServedIndex_c ( tDesc ), "world" );
 
-
 	{
-		ServedIndexScPtr_c pIdx ( GetServed ( "hello", pHash ) );
-		pIdx = ServedIndexScPtr_c ( GetServed ("world", pHash ));
+		auto pHello = GetServed ( "hello", pHash );
+		auto pWorld = GetServed ( "hello", pHash );
+		ServedIndexScPtr_c pIdx ( pHello );
+//		auto pIdx2 = ServedIndexScPtr_c ( pWorld );
+//		pIdx  = std::move (pIdx2); // must release prev. mutex and acquire new one
+//		ServedIndexScPtr_c pIdxConcurrent ( pHello ); //warning: acquiring mutex 'pHello.().m_tLock' that is already held
 	}
 
 	auto pFoo = GetServed ( "world", pHash );
@@ -514,12 +544,47 @@ TEST ( T_IndexHash, served_hash_and_getter )
 	ASSERT_FALSE ( pHash->AddUniq ( pFee, "hello" ) ) << "dupes not alowed";
 
 	// try to replace existing one
-	pHash->Replace ( pFee, "hello" );
+	pHash->AddOrReplace ( pFee, "hello" );
 	ASSERT_EQ ( pFoo->GetRefcount (), 1 ) << "we're the only owner now";
 	ASSERT_EQ ( pFee->GetRefcount (), 1 ) << "hash owns the var, we just have a weak ptr";
 	delete pHash;
 	ASSERT_EQ ( pFoo->GetRefcount (), 1 ) << "we're the only owner now";
 }
+
+TEST ( T_IndexHash, ensure_right_refcounting )
+{
+	auto pHash = new GuardedHash_c;
+	ServedDesc_t tDesc;
+	pHash->AddUniq ( new ServedIndex_c ( tDesc ), "hello" );
+
+
+	{
+		ServedIndexScPtr_c pIdx ( GetServed ( "hello", pHash ) );
+//		pIdx = ServedIndexScPtr_c ( GetServed ( "world", pHash ) );
+	}
+
+	auto pFoo = GetServed ( "world", pHash );
+	pFoo = GetServed ( "hello", pHash );
+
+	ASSERT_EQ ( pFoo->GetRefcount (), 2 ) << "1 from creation, +1 from GetServed";
+	{
+		auto pFee = GetServed ( "hello", pHash );
+		ASSERT_EQ ( pFoo->GetRefcount (), 3 ) << "+1 from GetServed";
+	}
+	ASSERT_EQ ( pFoo->GetRefcount (), 2 ) << "temporary destroyed";
+
+	// try to add with the same key
+	auto pFee = new ServedIndex_c ( tDesc );
+	ASSERT_FALSE ( pHash->AddUniq ( pFee, "hello" ) ) << "dupes not alowed";
+
+	// try to replace existing one
+	pHash->AddOrReplace ( pFee, "hello" );
+	ASSERT_EQ ( pFoo->GetRefcount (), 1 ) << "we're the only owner now";
+	ASSERT_EQ ( pFee->GetRefcount (), 1 ) << "hash owns the var, we just have a weak ptr";
+	delete pHash;
+	ASSERT_EQ ( pFoo->GetRefcount (), 1 ) << "we're the only owner now";
+}
+
 
 TEST ( T_IndexHash, served_pointer_manipulations )
 {
@@ -527,26 +592,20 @@ TEST ( T_IndexHash, served_pointer_manipulations )
 	ServedDesc_t tDesc;
 	pHash->AddUniq ( new ServedIndex_c ( tDesc ), "hello" );
 
-	QueryStats_t tRows1, tTimes1, tRows2, tTimes2;
+	using DistrPtrs_t = VectorPtrsRefs_T<const ServedIndex_c *>;
+
 	{
-		auto pIdx = GetServed ( "hello", pHash );
-		auto pIdx1 = ServedIndexScPtr_c ( pIdx );
+		DistrPtrs_t dVec;
 
-		ServedDesc_t * pNaked = pIdx1;
-
-		// now try to return back from ServedDesc_t* and go up to sibling ServedStats_c.
 		{
-			ServedIndex_c* pRestored = ( ServedIndex_c * ) pNaked;
-			pRestored->AddQueryStat (1000,1000);
-			pRestored->CalculateQueryStats (tRows1, tTimes1);
+			dVec.Reset ();
+			dVec.Resize ( 1 );
+			dVec.ZeroMem ();
+			ASSERT_TRUE ( pHash->Contains ( "hello" ) );
+			dVec[0] = GetServed ("hello", pHash);
+			dVec[0]->AddRef ();
 		}
+		delete pHash;
+//		auto & x = dVec[0];
 	}
-
-	auto pIdx = GetServed ( "hello", pHash );
-	pIdx->CalculateQueryStats (tRows2, tTimes2);
-	ASSERT_EQ ( tRows2.m_dStats[0].m_uTotalQueries, 1 );
-	ASSERT_EQ ( tRows2.m_dStats[0].m_dData[0], 1000 );
-	ASSERT_EQ ( tRows1.m_dStats[0].m_uTotalQueries, tRows2.m_dStats[0].m_uTotalQueries);
-	ASSERT_EQ ( tRows1.m_dStats[0].m_dData[0], tRows2.m_dStats[0].m_dData[0] );
-
 }

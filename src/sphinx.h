@@ -1819,23 +1819,21 @@ protected:
 /// NOTE, newly added fields should be synced with CSphSource::Setup()
 struct CSphSourceSettings
 {
-	int		m_iMinPrefixLen;	///< min indexable prefix (0 means don't index prefixes)
-	int		m_iMinInfixLen;		///< min indexable infix length (0 means don't index infixes)
-	int		m_iMaxSubstringLen;	///< max indexable infix and prefix (0 means don't limit infixes and prefixes)
-	int		m_iBoundaryStep;	///< additional boundary word position increment
-	bool	m_bIndexExactWords;	///< exact (non-stemmed) word indexing flag
-	int		m_iOvershortStep;	///< position step on overshort token (default is 1)
-	int		m_iStopwordStep;	///< position step on stopword token (default is 1)
-	bool	m_bIndexSP;			///< whether to index sentence and paragraph delimiters
-	bool	m_bIndexFieldLens;	///< whether to index field lengths
+	int		m_iMinPrefixLen = 0;		///< min indexable prefix (0 means don't index prefixes)
+	int		m_iMinInfixLen = 0;			///< min indexable infix length (0 means don't index infixes)
+	int		m_iMaxSubstringLen = 0;		///< max indexable infix and prefix (0 means don't limit infixes and prefixes)
+	int		m_iBoundaryStep = 0;		///< additional boundary word position increment
+	bool	m_bIndexExactWords = false;	///< exact (non-stemmed) word indexing flag
+	int		m_iOvershortStep = 1;		///< position step on overshort token (default is 1)
+	int		m_iStopwordStep = 1;		///< position step on stopword token (default is 1)
+	bool	m_bIndexSP = false;			///< whether to index sentence and paragraph delimiters
+	bool	m_bIndexFieldLens = false;	///< whether to index field lengths
 
 	StrVec_t m_dPrefixFields;	///< list of prefix fields
 	StrVec_t m_dInfixFields;	///< list of infix fields
 
-	explicit				CSphSourceSettings ();
 	ESphWordpart			GetWordpart ( const char * sField, bool bWordDict );
 };
-
 
 /// hit vector interface
 /// because specific position type might vary (dword, qword, etc)
@@ -2731,8 +2729,8 @@ public:
 
 	int				m_iCutoff;			///< matches count threshold to stop searching at (default is 0; means to search until all matches are found)
 
-	int				m_iRetryCount;		///< retry count, for distributed queries.
-	int				m_iRetryDelay;		///< retry delay, for distributed queries
+	int				m_iRetryCount = -1;		///< retry count, for distributed queries. (-1 means 'use default')
+	int				m_iRetryDelay = -1;		///< retry delay, for distributed queries. (-1 means 'use default')
 	int				m_iAgentQueryTimeout;	///< agent query timeout override, for distributed queries
 
 	bool			m_bGeoAnchor;		///< do we have an anchor
@@ -3189,30 +3187,28 @@ enum ESphRLPFilter
 };
 
 
-struct CSphIndexSettings : public CSphSourceSettings
+struct CSphIndexSettings : CSphSourceSettings
 {
-	ESphDocinfo		m_eDocinfo;
-	ESphHitFormat	m_eHitFormat;
-	bool			m_bHtmlStrip;
+	ESphDocinfo		m_eDocinfo = SPH_DOCINFO_NONE;
+	ESphHitFormat	m_eHitFormat = SPH_HIT_FORMAT_PLAIN;
+	bool			m_bHtmlStrip = false;
 	CSphString		m_sHtmlIndexAttrs;
 	CSphString		m_sHtmlRemoveElements;
 	CSphString		m_sZones;
-	ESphHitless		m_eHitless;
+	ESphHitless		m_eHitless = SPH_HITLESS_NONE;
 	CSphString		m_sHitlessFiles;
-	bool			m_bVerbose;
-	int				m_iEmbeddedLimit;
+	bool			m_bVerbose = false;
+	int				m_iEmbeddedLimit = 0;
 
-	ESphBigram				m_eBigramIndex;
-	CSphString				m_sBigramWords;
-	StrVec_t				m_dBigramWords;
+	ESphBigram		m_eBigramIndex = SPH_BIGRAM_NONE;
+	CSphString		m_sBigramWords;
+	StrVec_t		m_dBigramWords;
 
-	DWORD			m_uAotFilterMask;		///< lemmatize_XX_all forces us to transform queries on the index level too
-	ESphRLPFilter	m_eChineseRLP;			///< chinese RLP filter
-	CSphString		m_sRLPContext;			///< path to RLP context file
+	DWORD			m_uAotFilterMask = 0;			///< lemmatize_XX_all forces us to transform queries on the index level too
+	ESphRLPFilter	m_eChineseRLP = SPH_RLP_NONE;	///< chinese RLP filter
+	CSphString		m_sRLPContext;					///< path to RLP context file
 
 	CSphString		m_sIndexTokenFilter;	///< indexing time token filter spec string (pretty useless for disk, vital for RT)
-
-					CSphIndexSettings ();
 };
 
 
@@ -3235,19 +3231,11 @@ struct ISphKeywordsStat
 
 struct CSphIndexStatus
 {
-	int64_t			m_iRamUse;
-	int64_t			m_iDiskUse;
-	int64_t			m_iRamChunkSize; // not used for plain
-	int				m_iNumChunks; // not used for plain
-	int64_t			m_iMemLimit; // not used for plain
-
-	CSphIndexStatus()
-		: m_iRamUse ( 0 )
-		, m_iDiskUse ( 0 )
-		, m_iRamChunkSize ( 0 )
-		, m_iNumChunks ( 0 )
-		, m_iMemLimit ( 0 )
-	{}
+	int64_t			m_iRamUse = 0;
+	int64_t			m_iDiskUse = 0;
+	int64_t			m_iRamChunkSize = 0; // not used for plain
+	int				m_iNumChunks = 0; // not used for plain
+	int64_t			m_iMemLimit = 0; // not used for plain
 };
 
 struct KillListTrait_t
@@ -3255,7 +3243,6 @@ struct KillListTrait_t
 	const SphDocID_t *	m_pBegin;
 	int					m_iLen;
 };
-
 typedef CSphVector<KillListTrait_t> KillListVector;
 
 struct CSphMultiQueryArgs : public ISphNoncopyable

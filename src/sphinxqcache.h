@@ -31,31 +31,31 @@ struct QcacheMatch_t
 class QcacheEntry_c : public ISphRefcountedMT
 {
 	friend class QcacheRanker_c;
+	~QcacheEntry_c() = default;
 
 public:
-	int64_t						m_iIndexId;
-	int64_t						m_tmStarted;
-	int							m_iElapsedMsec;
+	int64_t						m_iIndexId = -1;
+	int64_t						m_tmStarted { sphMicroTimer() };
+	int							m_iElapsedMsec = 0;
 	CSphVector<uint64_t>		m_dFilters;			///< hashes of the filters that were applied to cached query
-	uint64_t					m_Key;
-	int							m_iMruPrev;
-	int							m_iMruNext;
+	uint64_t					m_Key = 0;
+	int							m_iMruPrev = -1;
+	int							m_iMruNext = -1;
 
 private:
 	static const int			MAX_FRAME_SIZE = 32;
 
 	// commonly used members
-	int							m_iTotalMatches;	///< total matches
+	int							m_iTotalMatches = 0;///< total matches
 	CSphTightVector<BYTE>		m_dData;			///< compressed frames
 	CSphTightVector<int>		m_dWeights;			///< weights table
 
 	// entry build-time only members
 	CSphVector<QcacheMatch_t>	m_dFrame;			///< current compression frame
 	CSphHash<int>				m_hWeights;			///< hashed weights
-	SphDocID_t					m_uLastDocid;		///< last encoded docid
+	SphDocID_t					m_uLastDocid = 0;	///< last encoded docid
 
 public:
-	QcacheEntry_c();
 
 	void						Append ( SphDocID_t uDocid, DWORD uWeight );
 	void						Finish();

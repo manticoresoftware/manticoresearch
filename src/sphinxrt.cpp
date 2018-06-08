@@ -362,6 +362,8 @@ void CSphKilllist::SaveToFile ( const char * sFilename )
 struct KlistRefcounted_t : ISphRefcountedMT
 {
 	CSphFixedVector<SphDocID_t>		m_dKilled { 0 };
+private:
+	~KlistRefcounted_t() = default;
 };
 
 
@@ -373,8 +375,7 @@ protected:
 	static const int			KLIST_ACCUM_THRESH	= 32;
 
 public:
-	static CSphMutex			m_tSegmentSeq;
-	static int					m_iSegments;	///< age tag sequence generator (guarded by m_tSegmentSeq)
+	static CSphAtomic			m_iSegments;	///< age tag sequence generator
 	int							m_iTag;			///< segment age tag
 
 	CSphTightVector<BYTE>			m_dWords;
@@ -395,9 +396,7 @@ public:
 
 	RtSegment_t ()
 	{
-		m_tSegmentSeq.Lock ();
-		m_iTag = m_iSegments++;
-		m_tSegmentSeq.Unlock ();
+		m_iTag = m_iSegments.Inc();
 		m_iRows = 0;
 		m_iAliveRows = 0;
 		m_bTlsKlist = false;
@@ -408,7 +407,7 @@ public:
 
 	~RtSegment_t ()
 	{
-		SafeDelete ( m_pKlist );
+		SafeRelease ( m_pKlist );
 	}
 
 
@@ -442,10 +441,7 @@ public:
 	const CSphRowitem *		FindAliveRow ( SphDocID_t uDocid ) const;
 };
 
-int RtSegment_t::m_iSegments = 0;
-CSphMutex RtSegment_t::m_tSegmentSeq;
-
-
+CSphAtomic RtSegment_t::m_iSegments { 0 };
 const CSphRowitem * RtSegment_t::FindRow ( SphDocID_t uDocid ) const
 {
 	// binary search through the rows
@@ -4389,9 +4385,7 @@ bool RtIndex_t::SaveRamChunk ()
 		return false;
 
 	wrChunk.PutDword ( 1 ); // was USE_64BIT
-	RtSegment_t::m_tSegmentSeq.Lock();
 	wrChunk.PutDword ( RtSegment_t::m_iSegments );
-	RtSegment_t::m_tSegmentSeq.Unlock();
 	wrChunk.PutDword ( m_dRamChunks.GetLength() );
 
 	// no locks here, because it's only intended to be called from dtor
@@ -4596,9 +4590,7 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 	}
 
 	// all done
-	RtSegment_t::m_tSegmentSeq.Lock();
 	RtSegment_t::m_iSegments = iSegmentSeq;
-	RtSegment_t::m_tSegmentSeq.Unlock();
 	if ( rdChunk.GetErrorFlag() )
 		return false;
 	m_bLoadRamPassedOk = true;

@@ -86,6 +86,11 @@
 	#define sphSockRecv(_sock,_buf,_len)	::recv(_sock,_buf,_len,0)
 	#define sphSockSend(_sock,_buf,_len)	::send(_sock,_buf,_len,0)
 	#define sphSockClose(_sock)				::closesocket(_sock)
+	#define SSIZE_T long
+	using sphIovec = WSABUF;
+	#define IOBUFTYPE (CHAR FAR *)
+	#define IOPTR(tX) (tX.buf)
+	#define IOLEN(tX) (tX.len)
 #else
 	// there's no MSG_NOSIGNAL on OS X
 	#ifndef MSG_NOSIGNAL
@@ -95,6 +100,11 @@
 	#define sphSockRecv(_sock,_buf,_len)	::recv(_sock,_buf,_len,MSG_NOSIGNAL)
 	#define sphSockSend(_sock,_buf,_len)	::send(_sock,_buf,_len,MSG_NOSIGNAL)
 	#define sphSockClose(_sock)				::close(_sock)
+	#define SSIZE_T ssize_t
+	using sphIovec = iovec;
+	#define IOBUFTYPE
+	#define IOPTR(tX) (tX.iov_base)
+	#define IOLEN(tX) (tX.iov_len)
 #endif
 
 const char * sphSockError ( int =0 );
@@ -104,7 +114,15 @@ int sphSockPeekErrno ();
 int sphSetSockNB ( int );
 void sphFDSet ( int fd, fd_set * fdset );
 void sphFDClr ( int fd, fd_set * fdset );
-DWORD sphGetAddress ( const char * sHost, bool bFatal=false );
+
+/** \brief wrapper over getaddrinfo
+Invokes getaddrinfo for given host which perform name resolving (dns).
+ \param[in] sHost the host name
+ \param[in] bFatal whether failed resolving is fatal (false by default)
+ \param[in] bIP set true if sHost contains IP address (false by default)
+ so no potentially lengthy network host address lockup necessary
+ \return ipv4 address as DWORD, to be directly used as s_addr in connect(). */
+DWORD sphGetAddress ( const char * sHost, bool bFatal=false, bool bIP=false );
 
 /////////////////////////////////////////////////////////////////////////////
 // MISC GLOBALS
@@ -178,21 +196,21 @@ extern ESphLogLevel		g_eLogLevel;
 // NETWORK BUFFERS
 /////////////////////////////////////////////////////////////////////////////
 
-/// dynamic response buffer
+/// dynamic send buffer
 /// to remove ISphNoncopyable just add copy c-tor and operator=
-/// splitting application network packets in several sphSocketSend()s causes
-/// Nagle's algorithm to wait delayead ACKs (google for it if you want)
-/// That's why we use relocation here instead of static-sized buffer.
-/// To be twice sure we're switching off Nagle's algorithm in all sockets.
-class ISphOutputBuffer : public ISphNoncopyable
+/// we just cache all streamed data into internal blob;
+/// NO data sending itself lives in this class.
+
+#define NETOUTBUF                8192
+
+class ISphOutputBuffer : public ISphRefcountedMT
 {
 public:
 	ISphOutputBuffer ();
-	explicit ISphOutputBuffer ( CSphVector<BYTE> & dBuf );
+	ISphOutputBuffer ( CSphVector<BYTE>& dChunk );
 	virtual ~ISphOutputBuffer() {}
 
 	void		SendInt ( int iValue )			{ SendT<int> ( htonl ( iValue ) ); }
-	void		WriteInt ( intptr_t iOff, int iValue ) { WriteT<int> ( iOff, htonl ( iValue ) ); }
 
 	void		SendAsDword ( int64_t iValue ) ///< sends the 32bit MAX_UINT if the value is greater than it.
 	{
@@ -236,8 +254,12 @@ public:
 	virtual bool	GetError () const { return false; }
 	virtual int		GetSentCount () const { return m_dBuf.GetLength(); }
 	virtual void	SetProfiler ( CSphQueryProfile * ) {}
+	virtual void *	GetBufPtr () const { return (char*) m_dBuf.begin();}
 
 protected:
+	void WriteInt ( intptr_t iOff, int iValue )
+	{ WriteT<int> ( iOff, htonl ( iValue ) ); }
+
 	CSphVector<BYTE>	m_dBuf;
 
 	template < typename T > void WriteT ( intptr_t iOff, const T& tValue )
@@ -253,6 +275,7 @@ private:
 		WriteT ( iOff, tValue );
 	}
 };
+
 
 // assume buffer never flushed between different Send()
 // bye-bye all 'calculate query len'
@@ -288,6 +311,22 @@ protected:
 
 using WriteLenHere_c = CachedOutputBuffer_c::ReqLenCalc;
 
+// buffer that knows if it has requested data or not
+class SmartOutputBuffer_t : public CachedOutputBuffer_c
+{
+	CSphVector<ISphOutputBuffer *> m_dChunks;
+public:
+	SmartOutputBuffer_t () = default;
+	~SmartOutputBuffer_t () override;
+	int GetSentCount () const override;
+
+	void StartNewChunk ();
+//	void AppendBuf ( SmartOutputBuffer_t &dBuf );
+//	void PrependBuf ( SmartOutputBuffer_t &dBuf );
+	size_t GetIOVec ( CSphVector<sphIovec> &dOut );
+	void Reset();
+};
+
 class NetOutputBuffer_c : public CachedOutputBuffer_c
 {
 public:
@@ -298,7 +337,6 @@ public:
 	int		GetSentCount () const override { return m_iSent; }
 	void	SetProfiler ( CSphQueryProfile * pProfiler ) override { m_pProfile = pProfiler; }
 	const char * GetErrorMsg () const;
-
 
 private:
 	CSphQueryProfile *	m_pProfile = nullptr;
@@ -335,6 +373,11 @@ public:
 	template < typename T > bool	GetDwords ( CSphVector<T> & dBuffer, int & iGot, int iMax );
 	template < typename T > bool	GetQwords ( CSphVector<T> & dBuffer, int & iGot, int iMax );
 
+	inline int		HasBytes() const
+	{
+		return ( m_pBuf + m_iLen - m_pCur );
+	}
+
 protected:
 	const BYTE *	m_pBuf;
 	const BYTE *	m_pCur;
@@ -361,12 +404,7 @@ template < typename T > T InputBuffer_c::GetT ()
 
 
 /// simple memory request buffer
-class MemInputBuffer_c : public InputBuffer_c
-{
-public:
-	MemInputBuffer_c ( const BYTE * pBuf, int iLen ) : InputBuffer_c ( pBuf, iLen ) {}
-};
-
+using MemInputBuffer_c = InputBuffer_c;
 
 /// simple network request buffer
 class NetInputBuffer_c : public InputBuffer_c
@@ -394,19 +432,21 @@ protected:
 bool IsPortInRange ( int iPort );
 int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr );
 
-// This class is basically a pointer to query string and some more additional info.
-// Each thread which executes query must have exactly one instance of this class on
-// its stack and m_tLastQueryTLS will contain a pointer to that instance.
-// Main thread has explicitly created SphCrashLogger_c on its stack, other query
-// threads should be created with SphCrashLogger_c::ThreadCreate()
+
+extern ThreadRole MainThread;
+/// This class is basically a pointer to query string and some more additional info.
+/// Each thread which executes query must have exactly one instance of this class on
+/// its stack and m_tLastQueryTLS will contain a pointer to that instance.
+/// Main thread has explicitly created SphCrashLogger_c on its stack, other query
+/// threads should be created with SphCrashLogger_c::ThreadCreate()
 class SphCrashLogger_c
 {
 public:
 	SphCrashLogger_c () {}
 	~SphCrashLogger_c ();
 
-	static void Init ();
-	static void Done ();
+	static void Init () REQUIRES ( MainThread );
+	static void Done () REQUIRES ( MainThread );
 
 #if !USE_WINDOWS
 	static void HandleCrash ( int );
@@ -542,17 +582,14 @@ class ServedStats_c
 public:
 						ServedStats_c();
 	virtual				~ServedStats_c();
-	
-	void				AddQueryStat ( uint64_t uFoundRows, uint64_t uQueryTime ) REQUIRES ( !m_tStatsLock );
-	void				CalculateQueryStats ( QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const REQUIRES (	!m_tStatsLock );
+
+	void				AddQueryStat ( uint64_t uFoundRows, uint64_t uQueryTime ); //  REQUIRES ( !m_tStatsLock );
+						/// since mutex is internal,
+	void				CalculateQueryStats ( QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const; // REQUIRES (	!m_tStatsLock );
 #ifndef NDEBUG
-	void				CalculateQueryStatsExact ( QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const REQUIRES ( !m_tStatsLock );
+	void				CalculateQueryStatsExact ( QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const; // REQUIRES ( !m_tStatsLock );
 #endif
 private:
-	void WLockStats () const ACQUIRE ( m_tStatsLock );
-	void RLockStats () const ACQUIRE_SHARED ( m_tStatsLock );
-	void UnlockStats () const UNLOCK_FUNCTION ( m_tStatsLock );
-
 	mutable CSphRwlock m_tStatsLock;
 	QueryStatContainer_c m_tQueryStatRecords GUARDED_BY ( m_tStatsLock );
 
@@ -573,9 +610,13 @@ private:
 
 	uint64_t			m_uTotalQueries GUARDED_BY ( m_tStatsLock ) = 0;
 
-	static void			CalcStatsForInterval ( const QueryStatContainer_i * pContainer, QueryStatElement_t & tRowResult, QueryStatElement_t & tTimeResult, uint64_t uTimestamp, uint64_t uInterval, int iRecords );
-	void				DoStatCalcStats ( const QueryStatContainer_i * pContainer, QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const REQUIRES ( !m_tStatsLock );
+	static void			CalcStatsForInterval ( const QueryStatContainer_i * pContainer, QueryStatElement_t & tRowResult,
+							QueryStatElement_t & tTimeResult, uint64_t uTimestamp, uint64_t uInterval, int iRecords );
+
+	void				DoStatCalcStats ( const QueryStatContainer_i * pContainer, QueryStats_t & tRowsFoundStats,
+							QueryStats_t & tQueryTimeStats ) const EXCLUDES ( m_tStatsLock );
 };
+
 
 struct ServedDesc_t
 {
@@ -604,7 +645,7 @@ struct ServedDesc_t
 // create ServedIndexScPtr_c instance to have actual access to the members.
 class ServedIndex_c : public ISphRefcountedMT, private ServedDesc_t, public ServedStats_c
 {
-	mutable CSphRwlock m_tLock;
+	mutable RwLock_t m_tLock;
 private:
 	friend class ServedIndexScPtr_c;
 
@@ -614,7 +655,7 @@ private:
 
 protected:
 	// no manual deletion; lifetime managed by AddRef/Release()
-	~ServedIndex_c () override;
+	~ServedIndex_c () override = default;
 
 public:
 
@@ -667,27 +708,6 @@ public:
 			m_pLock->Unlock ();
 	}
 
-	ServedIndexScPtr_c ( ServedIndexScPtr_c && rhs ) noexcept ACQUIRE ( rhs.m_pLock->m_tLock )
-		: m_pCore { rhs.m_pCore }
-		, m_pLock { rhs.m_pLock }
-	{
-		rhs.m_pLock = nullptr;
-		rhs.m_pCore = nullptr;
-	}
-
-	ServedIndexScPtr_c& operator= ( ServedIndexScPtr_c && rhs ) RELEASE () ACQUIRE ( rhs.m_pLock->m_tLock )
-	{
-		if (&rhs==this)
-			return *this;
-		if ( m_pLock )
-			m_pLock->Unlock ();
-		m_pCore = rhs.m_pCore;
-		m_pLock = rhs.m_pLock;
-		rhs.m_pCore = nullptr;
-		rhs.m_pLock = nullptr;
-		return *this;
-	}
-
 public:
 	ServedDesc_t * operator-> () const
 	{ return m_pCore; }
@@ -719,16 +739,16 @@ public:
 	// atomically try add an entry and then addref it
 	bool AddUniq ( ISphRefcountedMT * pEntry, const CSphString &tKey ) EXCLUDES ( m_tIndexesRWLock );
 
-	// atomically release prev entry, then write new one addrefing it
-	void Replace ( ISphRefcountedMT * pEntry, const CSphString &tKey ) EXCLUDES ( m_tIndexesRWLock );
+	// atomically set new entry, then release previous, if non-zero
+	void AddOrReplace ( ISphRefcountedMT * pEntry, const CSphString &tKey ) EXCLUDES ( m_tIndexesRWLock );
 
 	// release and delete from hash by key
 	bool Delete ( const CSphString &tKey ) EXCLUDES ( m_tIndexesRWLock );
 
 	int GetLength () const EXCLUDES ( m_tIndexesRWLock );
 
-	// get value without touching refcount (m.b. used as 'exists' test)
-	ISphRefcountedMT * GetWeak ( const CSphString &tKey ) const EXCLUDES ( m_tIndexesRWLock );
+	// check if value exists and if it is non-null
+	bool Contains ( const CSphString &tKey ) const EXCLUDES ( m_tIndexesRWLock );
 
 	// returns addreffed value
 	ISphRefcountedMT * Get ( const CSphString &tKey ) const EXCLUDES ( m_tIndexesRWLock );
@@ -771,7 +791,10 @@ public:
 	ISphRefcountedMT * Get () REQUIRES_SHARED ( m_pHash->m_tIndexesRWLock )
 	{
 		assert ( m_pIterator );
-		return GuardedHash_c::RefCntHash_t::IterateGet ( &m_pIterator );
+		auto pRes = GuardedHash_c::RefCntHash_t::IterateGet ( &m_pIterator );
+		if ( pRes )
+			pRes->AddRef ();
+		return pRes;
 	}
 
 	const CSphString &GetName () REQUIRES_SHARED ( m_pHash->m_tIndexesRWLock )
@@ -789,8 +812,7 @@ inline ServedIndexPtr_c Wrap ( ServedIndex_c * pServed )
 {
 	if ( pServed && !pServed->m_bEnabled )
 		pServed = nullptr;
-	ServedIndexPtr_c pRes ( pServed );
-	return pRes;
+	return ServedIndexPtr_c ( pServed );
 }
 
 class SCOPED_CAPABILITY RLockedServedIt_c : public RLockedHashIt_c
@@ -799,7 +821,7 @@ public:
 	explicit RLockedServedIt_c ( const GuardedHash_c * pHash ) ACQUIRE_SHARED ( pHash->IndexesRWLock(), m_pHash->IndexesRWLock() )
 		: RLockedHashIt_c ( pHash )
 	{}
-	~RLockedServedIt_c() UNLOCK_FUNCTION() {};
+	~RLockedServedIt_c() UNLOCK_FUNCTION() {}; // d-tr explicitly written because attr UNLOCK_FUNCTION().
 
 	ServedIndexPtr_c Get () REQUIRES_SHARED ( m_pHash->IndexesRWLock() )
 	{

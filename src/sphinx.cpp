@@ -5419,7 +5419,6 @@ bool CSphFilterSettings::operator == ( const CSphFilterSettings & rhs ) const
 	if ( m_sAttrName!=rhs.m_sAttrName || m_bExclude!=rhs.m_bExclude || m_eType!=rhs.m_eType )
 		return false;
 
-	bool bSameStrings = false;
 	switch ( m_eType )
 	{
 		case SPH_FILTER_RANGE:
@@ -5441,7 +5440,7 @@ bool CSphFilterSettings::operator == ( const CSphFilterSettings & rhs ) const
 		case SPH_FILTER_STRING:
 		case SPH_FILTER_USERVAR:
 		case SPH_FILTER_STRING_LIST:
-			if ( m_dStrings.GetLength()!=rhs.m_dStrings.GetLength() )
+			if ( m_dStrings.GetLength ()!=rhs.m_dStrings.GetLength () )
 				return false;
 			ARRAY_FOREACH ( i, m_dStrings )
 				if ( m_dStrings[i]!=rhs.m_dStrings[i] )
@@ -5531,8 +5530,6 @@ CSphQuery::CSphQuery ()
 	, m_sGroupSortBy	( "@groupby desc" )
 	, m_sGroupDistinct	( "" )
 	, m_iCutoff			( 0 )
-	, m_iRetryCount		( 0 )
-	, m_iRetryDelay		( 0 )
 	, m_iAgentQueryTimeout	( 0 )
 	, m_bGeoAnchor		( false )
 	, m_fGeoLatitude	( 0.0f )
@@ -6678,7 +6675,7 @@ void CSphRsetSchema::SwapAttrs ( CSphVector<CSphColumnInfo> & dAttrs )
 	}
 #endif
 	m_dExtraAttrs.SwapData ( dAttrs );
-	m_pIndexSchema = NULL;
+	m_pIndexSchema = nullptr;
 }
 
 
@@ -7829,23 +7826,6 @@ ESphBinRead CSphBin::Precache ()
 	return BIN_PRECACHE_OK;
 }
 
-
-//////////////////////////////////////////////////////////////////////////
-// INDEX SETTINGS
-//////////////////////////////////////////////////////////////////////////
-
-CSphIndexSettings::CSphIndexSettings ()
-	: m_eDocinfo			( SPH_DOCINFO_NONE )
-	, m_eHitFormat			( SPH_HIT_FORMAT_PLAIN )
-	, m_bHtmlStrip			( false )
-	, m_eHitless			( SPH_HITLESS_NONE )
-	, m_bVerbose			( false )
-	, m_iEmbeddedLimit		( 0 )
-	, m_eBigramIndex		( SPH_BIGRAM_NONE )
-	, m_uAotFilterMask		( 0 )
-	, m_eChineseRLP			( SPH_RLP_NONE )
-{
-}
 
 //////////////////////////////////////////////////////////////////////////
 // GLOBAL MVA STORAGE ARENA
@@ -25178,26 +25158,13 @@ ISphFieldFilter * sphCreateRegexpFilter ( const CSphFieldFilterSettings &, CSphS
 // GENERIC SOURCE
 /////////////////////////////////////////////////////////////////////////////
 
-CSphSourceSettings::CSphSourceSettings ()
-	: m_iMinPrefixLen ( 0 )
-	, m_iMinInfixLen ( 0 )
-	, m_iMaxSubstringLen ( 0 )
-	, m_iBoundaryStep ( 0 )
-	, m_bIndexExactWords ( false )
-	, m_iOvershortStep ( 1 )
-	, m_iStopwordStep ( 1 )
-	, m_bIndexSP ( false )
-	, m_bIndexFieldLens ( false )
-{}
-
-
 ESphWordpart CSphSourceSettings::GetWordpart ( const char * sField, bool bWordDict )
 {
 	if ( bWordDict )
 		return SPH_WORDPART_WHOLE;
 
-	bool bPrefix = ( m_iMinPrefixLen>0 ) && ( m_dPrefixFields.GetLength()==0 || m_dPrefixFields.Contains ( sField ) );
-	bool bInfix = ( m_iMinInfixLen>0 ) && ( m_dInfixFields.GetLength()==0 || m_dInfixFields.Contains ( sField ) );
+	bool bPrefix = ( m_iMinPrefixLen>0 ) && ( m_dPrefixFields.IsEmpty () || m_dPrefixFields.Contains ( sField ) );
+	bool bInfix = ( m_iMinInfixLen>0 ) && ( m_dInfixFields.IsEmpty() || m_dInfixFields.Contains ( sField ) );
 
 	assert ( !( bPrefix && bInfix ) ); // no field must be marked both prefix and infix
 	if ( bPrefix )

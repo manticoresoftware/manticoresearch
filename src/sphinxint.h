@@ -1711,6 +1711,7 @@ uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings );
 /// value container for the intset uservar type
 class UservarIntSet_c : public CSphVector<SphAttr_t>, public ISphRefcountedMT
 {
+	~UservarIntSet_c() = default;
 };
 
 extern UservarIntSet_c * ( *g_pUservarsHook )( const CSphString & sUservar );

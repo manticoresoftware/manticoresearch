@@ -1171,3 +1171,6 @@ TEST ( functions, vector )
 	dVec.RemoveValue ( 10 );
 	ASSERT_EQ (dVec.GetLength (),8);
 }
+
+
+

@@ -81,20 +81,6 @@ public:
 Qcache_c						g_Qcache;
 
 //////////////////////////////////////////////////////////////////////////
-
-QcacheEntry_c::QcacheEntry_c()
-	: m_iIndexId ( -1 )
-	, m_tmStarted ( sphMicroTimer() )
-	, m_iElapsedMsec ( 0 )
-	, m_Key ( 0 )
-	, m_iMruPrev ( -1 )
-	, m_iMruNext ( -1 )
-	, m_iTotalMatches ( 0 )
-	, m_uLastDocid ( 0 )
-{
-}
-
-
 void QcacheEntry_c::Append ( SphDocID_t uDocid, DWORD uWeight )
 {
 	m_iTotalMatches++;

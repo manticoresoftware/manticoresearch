@@ -1372,15 +1372,6 @@ using CSphSwapVector = CSphVector < T, CSphSwapVectorPolicy<T> >;
 template < typename T >
 using CSphTightVector =  CSphVector < T, CSphTightVectorPolicy<T> >;
 
-/// RAII guarded vector of pointers = perform SafeDelete for each element on destroy.
-template < class T >
-struct VectorPtrsGuard_T : public ISphNoncopyable, public CSphVector<T>
-{
-	~VectorPtrsGuard_T ()
-	{
-		CSphVector<T>::Apply ( [] ( T &ptr ) { SafeDelete ( ptr ); } );
-	}
-};
 //////////////////////////////////////////////////////////////////////////
 
 /// dynamically allocated fixed-size vector
@@ -1770,6 +1761,12 @@ public:
 	{
 		m_pIterator = m_pIterator ? m_pIterator->m_pNextByOrder : m_pFirstByOrder;
 		return m_pIterator!=nullptr;
+	}
+
+	/// delete current entry; move step back so the next IterateNext() will step to the next one.
+	void IterateDelete()
+	{
+
 	}
 
 	/// get entry value
@@ -2968,6 +2965,33 @@ bool sphIsLtLib();
 #define UNLOCK_FUNCTION( ... ) \
 	THREAD_ANNOTATION_ATTRIBUTE__(unlock_function(__VA_ARGS__))
 
+/// capability for tracing threads
+typedef int CAPABILITY ( "role" ) ThreadRole;
+
+inline void AcquireRole ( ThreadRole R ) ACQUIRE(R) NO_THREAD_SAFETY_ANALYSIS
+{}
+
+inline void ReleaseRole ( ThreadRole R ) RELEASE( R ) NO_THREAD_SAFETY_ANALYSIS
+{}
+
+class SCOPED_CAPABILITY ScopedRole_c
+{
+	ThreadRole &m_tRoleRef;
+public:
+	/// acquire on creation
+	inline explicit ScopedRole_c ( ThreadRole &tRole ) ACQUIRE( tRole )
+		: m_tRoleRef ( tRole )
+	{
+		AcquireRole ( tRole );
+	}
+
+	/// release on going out of scope
+	~ScopedRole_c () RELEASE()
+	{
+		ReleaseRole ( m_tRoleRef );
+	}
+};
+
 /// mutex implementation
 class CAPABILITY ( "mutex" ) CSphMutex : public ISphNoncopyable
 {
@@ -3801,23 +3825,24 @@ template<> inline CSphHash<uint64_t>::Entry::Entry() : m_Key ( NO_ENTRY ), m_Val
 /////////////////////////////////////////////////////////////////////////////
 
 /// generic stateless priority queue
-template < typename T, typename COMP > class CSphQueue
+template < typename T, typename COMP >
+class CSphQueue
 {
 protected:
-	T *		m_pData = nullptr;
-	int		m_iUsed = 0;
-	int		m_iSize;
+	T * m_pData = nullptr;
+	int m_iUsed = 0;
+	int m_iSize;
 
 public:
 	/// ctor
 	explicit CSphQueue ( int iSize )
-		:m_iSize ( iSize )
+		: m_iSize ( iSize )
 	{
 		Reset ( iSize );
 	}
 
 	/// dtor
-	~CSphQueue()
+	~CSphQueue ()
 	{
 		SafeDeleteArray ( m_pData );
 	}
@@ -3833,7 +3858,7 @@ public:
 	}
 
 	/// add entry to the queue
-	bool Push ( const T & tEntry )
+	bool Push ( const T &tEntry )
 	{
 		assert ( m_pData );
 		if ( m_iUsed==m_iSize )
@@ -3842,17 +3867,17 @@ public:
 			if ( COMP::IsLess ( tEntry, m_pData[0] ) )
 				return false;
 			else
-				Pop();
+				Pop ();
 		}
 
 		// do add
 		m_pData[m_iUsed] = tEntry;
 		int iEntry = m_iUsed++;
 
-		// sift up if needed, so that worst (lesser) ones float to the top
+		// shift up if needed, so that worst (lesser) ones float to the top
 		while ( iEntry )
 		{
-			int iParent = ( iEntry-1 ) >> 1;
+			int iParent = ( iEntry - 1 ) >> 1;
 			if ( !COMP::IsLess ( m_pData[iEntry], m_pData[iParent] ) )
 				break;
 
@@ -3865,7 +3890,7 @@ public:
 	}
 
 	/// remove root (ie. top priority) entry
-	void Pop()
+	void Pop ()
 	{
 		assert ( m_iUsed && m_pData );
 		if ( !( --m_iUsed ) ) // empty queue? just return
@@ -3874,19 +3899,19 @@ public:
 		// make the last entry my new root
 		m_pData[0] = m_pData[m_iUsed];
 
-		// sift down if needed
+		// shift down if needed
 		int iEntry = 0;
-		while (true)
+		while ( true )
 		{
 			// select child
-			int iChild = ( iEntry<<1 ) + 1;
+			int iChild = ( iEntry << 1 ) + 1;
 			if ( iChild>=m_iUsed )
 				break;
 
 			// select smallest child
-			if ( iChild+1<m_iUsed )
-				if ( COMP::IsLess ( m_pData[iChild+1], m_pData[iChild] ) )
-					iChild++;
+			if ( iChild + 1<m_iUsed )
+				if ( COMP::IsLess ( m_pData[iChild + 1], m_pData[iChild] ) )
+					++iChild;
 
 			// if smallest child is less than entry, do float it to the top
 			if ( COMP::IsLess ( m_pData[iChild], m_pData[iEntry] ) )
@@ -3907,7 +3932,7 @@ public:
 	}
 
 	/// get current root
-	inline const T & Root () const
+	inline const T &Root () const
 	{
 		assert ( m_iUsed && m_pData );
 		return m_pData[0];

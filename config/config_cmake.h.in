@@ -40,6 +40,9 @@
 /* Define to 1 if you have the `dlopen' function. */
 #cmakedefine01 HAVE_DLOPEN
 
+/* Define if  you have async 'getaddrinfo_a' */
+#cmakedefine HAVE_GETADDRINFO_A ${HAVE_GETADDRINFO_A}
+
 /* Define if your system supports the epoll system calls */
 #cmakedefine HAVE_EPOLL ${HAVE_EPOLL}
 

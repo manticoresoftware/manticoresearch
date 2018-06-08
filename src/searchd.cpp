@@ -632,45 +632,14 @@ QueryStatContainerExact_c & QueryStatContainerExact_c::operator = ( QueryStatCon
 
 
 //////////////////////////////////////////////////////////////////////////
-
-ServedDesc_t::ServedDesc_t ()
-	: m_pIndex ( NULL )
-	, m_bEnabled ( true )
-	, m_bMlock ( false )
-	, m_bPreopen ( false )
-	, m_iExpandKeywords ( KWE_DISABLED )
-	, m_bToDelete ( false )
-	, m_bOnlyNew ( false )
-	, m_bRT ( false )
-	, m_bOnDiskAttrs ( false )
-	, m_bOnDiskPools ( false )
-	, m_iMass ( 0 )
-	, m_bPercolate ( false )
-{}
-
 ServedDesc_t::~ServedDesc_t ()
 {
 	SafeDelete ( m_pIndex );
 }
 
-
-
 //////////////////////////////////////////////////////////////////////////
 ServedStats_c::ServedStats_c()
-	: m_pQueryTimeDigest ( NULL )
-	, m_pRowsFoundDigest ( NULL )
 {
-	m_uTotalFoundRowsMin = UINT64_MAX;
-	m_uTotalFoundRowsMax = 0;
-	m_uTotalFoundRowsSum = 0;
-	m_uTotalQueryTimeMin = UINT64_MAX;
-	m_uTotalQueryTimeMax = 0;
-	m_uTotalQueryTimeSum = 0;
-	m_uTotalQueries = 0;
-	
-	SafeDelete ( m_pQueryTimeDigest );
-	SafeDelete ( m_pRowsFoundDigest );
-
 	m_pQueryTimeDigest = sphCreateTDigest();
 	m_pRowsFoundDigest = sphCreateTDigest();
 	assert ( m_pQueryTimeDigest && m_pRowsFoundDigest );
@@ -686,7 +655,7 @@ ServedStats_c::~ServedStats_c()
 
 void ServedStats_c::AddQueryStat ( uint64_t uFoundRows, uint64_t uQueryTime )
 {
-	LockStats(false);
+	WLockStats();
 
 	m_pRowsFoundDigest->Add ( (double)uFoundRows );
 	m_pQueryTimeDigest->Add ( (double)uQueryTime );
@@ -726,7 +695,7 @@ void ServedStats_c::DoStatCalcStats ( const QueryStatContainer_i * pContainer, Q
 
 	uint64_t uTimestamp = sphMicroTimer();
 
-	LockStats(true);
+	RLockStats();
 
 	int iRecords = m_tQueryStatRecords.GetNumRecords();
 	for ( int i = QUERY_STATS_INTERVAL_1MIN; i<=QUERY_STATS_INTERVAL_15MIN; i++ )
@@ -828,11 +797,6 @@ void ServedStats_c::CalcStatsForInterval ( const QueryStatContainer_i * pContain
 
 //////////////////////////////////////////////////////////////////////////
 
-ServedIndex_c::ServedIndex_c ()
-{
-	m_tRefCount = 1;
-}
-
 ServedIndex_c::~ServedIndex_c ()
 {
 	Verify ( m_tLock.Done() );
@@ -882,12 +846,14 @@ void ServedIndex_c::Unlock () const
 	Release();
 }
 
-void ServedIndex_c::LockStats ( bool bReader ) const
+void ServedIndex_c::WLockStats () const
 {
-	if ( bReader )
-		m_tStatsLock.ReadLock();
-	else
-		m_tStatsLock.WriteLock();
+	m_tStatsLock.WriteLock();
+}
+
+void ServedIndex_c::RLockStats () const
+{
+	m_tStatsLock.ReadLock ();
 }
 
 void ServedIndex_c::UnlockStats() const
@@ -895,14 +861,9 @@ void ServedIndex_c::UnlockStats() const
 	m_tStatsLock.Unlock();
 }
 
-void ServedIndex_c::AddRef () const
-{
-	m_tRefCount.Inc();
-}
-
 void ServedIndex_c::Release () const
 {
-	long iCount = m_tRefCount.Dec();
+	long iCount = m_iRefCount.Dec ();
 	assert ( iCount>=1 );
 	if ( iCount==1 )
 	{
@@ -913,7 +874,6 @@ void ServedIndex_c::Release () const
 			sphLogDebug ( "unlink .old" );
 			sphUnlinkIndex ( m_sUnlink.cstr(), false );
 		}
-
 		delete this;
 	}
 }
@@ -3154,15 +3114,17 @@ public:
 	void GetAllAgents ( AgentsVector & dTarget ) const;
 	void ForAgents ( AgentProcessor_t & tProcessor );
 
-	void LockStats ( bool bReader ) const override
+	void WLockStats () const override ACQUIRE ( m_tStatsLock )
 	{
-		if ( bReader )
-			m_tStatsLock.ReadLock();
-		else
-			m_tStatsLock.WriteLock();
+		m_tStatsLock.WriteLock();
 	}
 
-	void UnlockStats() const override
+	void RLockStats () const override ACQUIRE_SHARED ( m_tStatsLock )
+	{
+		m_tStatsLock.ReadLock ();
+	}
+
+	void UnlockStats() const override UNLOCK_FUNCTION ( m_tStatsLock )
 	{
 		m_tStatsLock.Unlock();
 	}
@@ -3190,7 +3152,7 @@ void DistributedIndex_t::ForAgents ( AgentProcessor_t & tProcessor )
 
 /// global distributed index definitions hash
 typedef SmallStringHash_T < DistributedIndex_t * > DistributedHash_t;
-static DistributedHash_t g_hDistIndexes;
+static DistributedHash_t g_hDistIndexes GUARDED_BY ( g_tDistLock );
 
 static DistributedIndex_t * GetDistIndex ( const CSphString & sName )
 {
@@ -3213,7 +3175,7 @@ void AgentConn_t::NextMirror()
 	if ( m_iMirrorsCount==1 )
 		return;
 
-	g_tDistLock.ReadLock();
+	CSphScopedRLock tDistRLock { g_tDistLock };
 	DistributedIndex_t * pDist = GetDistIndex ( m_sDistIndex );
 	if ( pDist && m_iMirror<pDist->m_dAgents.GetLength() )
 	{
@@ -3221,7 +3183,6 @@ void AgentConn_t::NextMirror()
 		pDist->m_dAgents[m_iMirror]->ChooseAgent().CloneTo ( m_tDesc );
 		SetupPersist();
 	}
-	g_tDistLock.Unlock();
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -3237,7 +3198,7 @@ struct SearchRequestBuilder_t : public IRequestBuilder_t
 	void		BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const override;
 
 protected:
-	void				SendQuery ( const char * sIndexes, ISphOutputBuffer & tOut, const CSphQuery & q, bool bAgentWeight, int iWeight ) const;
+	void		SendQuery ( const char * sIndexes, ISphOutputBuffer & tOut, const CSphQuery & q, int iWeight ) const;
 
 protected:
 	const CSphVector<CSphQuery> &		m_dQueries;
@@ -3286,8 +3247,9 @@ enum
 	QFLAG_JSON_QUERY			= 1UL << 11
 };
 
-void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, ISphOutputBuffer & tOut, const CSphQuery & q, bool bAgentWeight, int iWeight ) const
+void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, ISphOutputBuffer & tOut, const CSphQuery & q, int iWeight ) const
 {
+	bool bAgentWeight = ( iWeight!=-1 );
 	// starting with command version 1.27, flags go first
 	// reason being, i might add flags that affect *any* of the subsequent data (eg. qflag_pack_ints)
 	DWORD uFlags = 0;
@@ -3371,7 +3333,7 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, ISphOutputBuffer
 
 			case SPH_FILTER_USERVAR:
 			case SPH_FILTER_STRING:
-				tOut.SendString ( tFilter.m_dStrings.GetLength()==1 ? tFilter.m_dStrings[0].cstr() : NULL );
+				tOut.SendString ( tFilter.m_dStrings.GetLength()==1 ? tFilter.m_dStrings[0].cstr() : nullptr );
 				break;
 
 			case SPH_FILTER_NULL:
@@ -3501,9 +3463,6 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, ISphOutputBuffer
 
 void SearchRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const
 {
-	const char * sIndexes = tAgent.m_tDesc.m_sIndexes.cstr();
-	bool bAgentWeigth = ( tAgent.m_iWeight!=-1 );
-
 	tOut.SendWord ( SEARCHD_COMMAND_SEARCH ); // command id
 	tOut.SendWord ( VER_COMMAND_SEARCH ); // command version
 	WriteLenHere_c tWr { tOut }; // request body length
@@ -3511,7 +3470,7 @@ void SearchRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, CachedOu
 	tOut.SendInt ( VER_MASTER );
 	tOut.SendInt ( m_iEnd-m_iStart+1 );
 	for ( int i=m_iStart; i<=m_iEnd; i++ )
-		SendQuery ( sIndexes, tOut, m_dQueries[i], bAgentWeigth, tAgent.m_iWeight );
+		SendQuery ( tAgent.m_tDesc.m_sIndexes.cstr (), tOut, m_dQueries[i], tAgent.m_iWeight );
 }
 
 /////////////////////////////////////////////////////////////////////////////

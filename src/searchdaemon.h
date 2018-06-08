@@ -221,10 +221,15 @@ public:
 		SendByte ( (BYTE)( (v>>24) & 0xff) );
 	}
 
-	void SendUint64 ( uint64_t iValue )
+	void SendUint64 ( uint64_t uValue )
 	{
-		SendT<DWORD> ( htonl ( (DWORD)(iValue>>32) ) );
-		SendT<DWORD> ( htonl ( (DWORD)(iValue & 0xffffffffUL) ) );
+		SendT<DWORD> ( htonl ( (DWORD)( uValue>>32) ) );
+		SendT<DWORD> ( htonl ( (DWORD)( uValue & 0xffffffffUL) ) );
+	}
+
+	void SendUint64 ( int64_t iValue )
+	{
+		SendUint64 ( (uint64_t) iValue );
 	}
 
 	void		SendDocid ( SphDocID_t iValue )	{ SendUint64 ( iValue ); }
@@ -545,26 +550,25 @@ private:
 
 struct ServedDesc_t
 {
-	CSphIndex *			m_pIndex;
+	CSphIndex *			m_pIndex = nullptr;
 	CSphString			m_sIndexPath;
 	CSphString			m_sNewPath;
-	bool				m_bEnabled;		///< to disable index in cases when rotation fails
-	bool				m_bMlock;
-	bool				m_bPreopen;
-	int					m_iExpandKeywords;
-	bool				m_bToDelete;
-	bool				m_bOnlyNew;
-	bool				m_bRT;
+	bool				m_bEnabled = true;		///< to disable index in cases when rotation fails
+	bool				m_bMlock = false;
+	bool				m_bPreopen = false;
+	int					m_iExpandKeywords { KWE_DISABLED };
+	bool				m_bToDelete = false;
+	bool				m_bOnlyNew = false;
+	bool				m_bRT = false;
 	CSphString			m_sGlobalIDFPath;
-	bool				m_bOnDiskAttrs;
-	bool				m_bOnDiskPools;
-	int64_t				m_iMass; // relative weight (by access speed) of the index
-	bool				m_bPercolate;
+	bool				m_bOnDiskAttrs = false;
+	bool				m_bOnDiskPools = false;
+	int64_t				m_iMass = 0; // relative weight (by access speed) of the index
+	bool				m_bPercolate = false;
 
-						ServedDesc_t ();
+						ServedDesc_t () = default;
 	virtual				~ServedDesc_t ();
 };
-
 
 class ServedStats_c
 {
@@ -578,7 +582,8 @@ public:
 	void				CalculateQueryStatsExact ( QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const;
 #endif
 protected:
-	virtual void		LockStats ( bool bReader ) const = 0;
+	virtual void		WLockStats () const = 0;
+	virtual void 		RLockStats () const = 0;
 	virtual void		UnlockStats() const = 0;
 
 private:
@@ -588,16 +593,16 @@ private:
 	QueryStatContainerExact_c m_tQueryStatRecordsExact;
 #endif
 
-	TDigest_i *			m_pQueryTimeDigest;
-	TDigest_i *			m_pRowsFoundDigest;
+	TDigest_i *			m_pQueryTimeDigest = nullptr;
+	TDigest_i *			m_pRowsFoundDigest = nullptr;
 
-	uint64_t			m_uTotalFoundRowsMin;
-	uint64_t			m_uTotalFoundRowsMax;
-	uint64_t			m_uTotalFoundRowsSum;
+	uint64_t			m_uTotalFoundRowsMin = UINT64_MAX;
+	uint64_t			m_uTotalFoundRowsMax = 0;
+	uint64_t			m_uTotalFoundRowsSum = 0;
 
-	uint64_t			m_uTotalQueryTimeMin;
-	uint64_t			m_uTotalQueryTimeMax;
-	uint64_t			m_uTotalQueryTimeSum;
+	uint64_t			m_uTotalQueryTimeMin = UINT64_MAX;
+	uint64_t			m_uTotalQueryTimeMax = 0;
+	uint64_t			m_uTotalQueryTimeSum = 0;
 
 	uint64_t			m_uTotalQueries;
 
@@ -606,10 +611,10 @@ private:
 };
 
 
-class ServedIndex_c : public ISphNoncopyable, public ServedDesc_t, public ServedStats_c
+class ServedIndex_c : public ISphRefcountedMT, public ServedDesc_t, public ServedStats_c
 {
 public:
-	ServedIndex_c ();
+	ServedIndex_c () = default;
 	virtual ~ServedIndex_c ();
 
 	void				ReadLock () const ACQUIRE_SHARED( m_tLock );
@@ -621,16 +626,16 @@ public:
 	void				Release () const;
 	void				SetUnlink ( const char * sUnlnk );
 
-protected:
-	virtual void		LockStats ( bool bReader ) const;
-	virtual void		UnlockStats() const;
+	CSphRwlock* lck() const RETURN_CAPABILITY (m_tLock) {return nullptr;}
 
-	void				AddRef () const;
+protected:
+	void				WLockStats () const override ACQUIRE ( m_tStatsLock );
+	void				RLockStats () const override ACQUIRE_SHARED ( m_tStatsLock );
+	void				UnlockStats() const override UNLOCK_FUNCTION ( m_tStatsLock );
 
 private:
 	mutable CSphRwlock	m_tLock;
 	mutable CSphRwlock	m_tStatsLock;
-	mutable CSphAtomic	m_tRefCount;
 	CSphString			m_sUnlink;
 };
 

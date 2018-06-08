@@ -78,7 +78,8 @@ static char * trim ( char * sLine )
 	return ltrim ( rtrim ( sLine ) );
 }
 
-
+// split alnums by non-alnums symbols
+// (alnums are  [0..9a..zA..Z-_])
 void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn )
 {
 	if ( !sIn )
@@ -103,7 +104,8 @@ void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn )
 	}
 }
 
-
+// split by any char from sBounds.
+// if line starts from a bound char, first splitted str will be an empty string
 void sphSplit ( CSphVector<CSphString> & dOut, const char * sIn, const char * sBounds )
 {
 	if ( !sIn )
@@ -1877,16 +1879,15 @@ void sphWarning ( const char * sFmt, ... )
 {
 	va_list ap;
 	va_start ( ap, sFmt );
-	Log ( SPH_LOG_WARNING, sFmt, ap );
+	sphLogVa ( sFmt, ap );
 	va_end ( ap );
 }
-
 
 void sphInfo ( const char * sFmt, ... )
 {
 	va_list ap;
 	va_start ( ap, sFmt );
-	Log ( SPH_LOG_INFO, sFmt, ap );
+	sphLogVa ( sFmt, ap, SPH_LOG_INFO );
 	va_end ( ap );
 }
 
@@ -1894,7 +1895,7 @@ void sphLogFatal ( const char * sFmt, ... )
 {
 	va_list ap;
 	va_start ( ap, sFmt );
-	Log ( SPH_LOG_FATAL, sFmt, ap );
+	sphLogVa ( sFmt, ap, SPH_LOG_FATAL );
 	va_end ( ap );
 }
 
@@ -1902,7 +1903,7 @@ void sphLogDebug ( const char * sFmt, ... )
 {
 	va_list ap;
 	va_start ( ap, sFmt );
-	Log ( SPH_LOG_DEBUG, sFmt, ap );
+	sphLogVa ( sFmt, ap, SPH_LOG_DEBUG );
 	va_end ( ap );
 }
 
@@ -1910,7 +1911,7 @@ void sphLogDebugv ( const char * sFmt, ... )
 {
 	va_list ap;
 	va_start ( ap, sFmt );
-	Log ( SPH_LOG_VERBOSE_DEBUG, sFmt, ap );
+	sphLogVa ( sFmt, ap, SPH_LOG_VERBOSE_DEBUG );
 	va_end ( ap );
 }
 
@@ -1918,7 +1919,7 @@ void sphLogDebugvv ( const char * sFmt, ... )
 {
 	va_list ap;
 	va_start ( ap, sFmt );
-	Log ( SPH_LOG_VERY_VERBOSE_DEBUG, sFmt, ap );
+	sphLogVa ( sFmt, ap, SPH_LOG_VERY_VERBOSE_DEBUG );
 	va_end ( ap );
 }
 

@@ -45,13 +45,16 @@ CSphString AgentDesc_c::GetMyUrl() const
 	return sName;
 }
 
+/////////////////////////////////////////////////////////////////////////////
+// HostDashboard_t
+//
+// Dashboard contains generic statistic for a host like query time, answer time,
+// num of errors a row, and all this data in retrospective on time
+/////////////////////////////////////////////////////////////////////////////
+
 HostDashboard_t::HostDashboard_t ( const AgentDesc_c & tAgent )
-	: m_bNeedPing ( false )
-	, m_iErrorsARow ( 0 )
-	, m_pPersPool (nullptr)
 {
 	tAgent.CloneTo ( m_tDescriptor );
-	m_iRefCount = 1;
 	m_iLastQueryTime = m_iLastAnswerTime = sphMicroTimer () - g_iPingInterval*1000;
 	m_dDataLock.Init();
 }
@@ -128,12 +131,13 @@ void HostDashboard_t::GetCollectedStat ( HostStatSnapshot_t& dResult, int iPerio
 		dResult[i+eMaxAgentStat] = tAccum.m_dHostStats[i];
 }
 
-PersistentConnectionsPool_t::PersistentConnectionsPool_t ()
-	: m_bShutdown (false)
-	, m_iRit (0)
-	, m_iWit (0)
-	, m_iFreeWindow (0)
-{}
+/////////////////////////////////////////////////////////////////////////////
+// PersistentConnectionsPool_t
+//
+// This is pool of sockets which can be rented/returned by workers.
+// returned socket may be in connected state, so later usage will not require
+// connection, but can work immediately (in persistent mode).
+/////////////////////////////////////////////////////////////////////////////
 
 void PersistentConnectionsPool_t::Init ( int iPoolSize )
 {
@@ -236,7 +240,13 @@ void ClosePersistentSockets()
 	g_tDashes.Unlock();
 }
 
-//////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////
+// MultiAgentDesc_t
+//
+// That is set of hosts serving one and same agent (i.e., 'mirrors').
+// class also provides mirror choosing using different strategies
+/////////////////////////////////////////////////////////////////////////////
+
 void MultiAgentDesc_t::SetOptions ( const AgentOptions_t& tOpt )
 {
 	m_eStrategy = tOpt.m_eStrategy;
@@ -290,7 +300,7 @@ const AgentDesc_c & MultiAgentDesc_t::RRAgent ()
 	if ( !IsHA() )
 		return GetAgent(0);
 
-	int iRRCounter = (int) m_iRRCounter++;
+	auto iRRCounter = (int) m_iRRCounter++;
 	while ( iRRCounter<0 || iRRCounter> ( GetLength ()-1 ) )
 	{
 		if ( iRRCounter+1 == (int) m_iRRCounter.CAS ( iRRCounter+1, 1 ) )
@@ -410,7 +420,7 @@ const AgentDesc_c & MultiAgentDesc_t::StDiscardDead ()
 	if ( g_eLogLevel>=SPH_LOG_VERBOSE_DEBUG )
 	{
 		float fAge = 0.0;
-		const char * sLogStr = NULL;
+		const char * sLogStr = nullptr;
 		const HostDashboard_t & dDash = GetDashForAgent ( iBestAgent );
 		CSphScopedRLock tRguard ( dDash.m_dDataLock );
 		fAge = ( dDash.m_iLastAnswerTime-dDash.m_iLastQueryTime ) / 1000.0f;
@@ -574,7 +584,12 @@ void MultiAgentDesc_t::QueuePings()
 		m_dHosts[i].m_pDash->m_bNeedPing = true;
 }
 
-//////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////
+// AgentConn_t
+//
+// That is concrete (physical) connection
+// uses socket to communicate with remote host
+/////////////////////////////////////////////////////////////////////////////
 AgentConn_t::~AgentConn_t ()
 {
 	Close ( false );
@@ -1113,7 +1128,7 @@ void cDashStorage::AddAgent ( AgentDesc_c * pNewAgent )
 	bool bFound = false;
 	ARRAY_FOREACH ( i, m_dDashes )
 	{
-		if ( m_dDashes[i]->GetRefcount ()==1 )
+		if ( m_dDashes[i]->IsLast () )
 		{
 			SafeRelease ( m_dDashes[i] );
 			m_dDashes.RemoveFast ( i );
@@ -1139,7 +1154,7 @@ HostDashboard_t * cDashStorage::FindAgent ( const char* sAgent ) const
 	CSphScopedRLock tRguard ( m_tLock );
 	ARRAY_FOREACH ( i, m_dDashes )
 	{
-		if ( m_dDashes[i]->GetRefcount()==1 )
+		if ( m_dDashes[i]->IsLast() )
 			continue;
 		
 		if ( m_dDashes[i]->m_tDescriptor.GetMyUrl () == sAgent )
@@ -1154,7 +1169,7 @@ void cDashStorage::GetActiveDashes ( CSphVector<HostDashboard_t *> & dAgents ) c
 	CSphScopedRLock tRguard ( m_tLock );
 	for ( auto pDash : m_dDashes )
 	{
-		if ( pDash->GetRefcount()==1 )
+		if ( pDash->IsLast() )
 			continue;
 		dAgents.Add ( pDash );
 	}
@@ -2250,7 +2265,7 @@ protected:
 	ListedData_t * AddNewEventData ( const void * pData )
 	{
 		assert ( pData );
-		ListedData_t * pIntData = new ListedData_t ( pData );
+		auto * pIntData = new ListedData_t ( pData );
 		m_tWork.Add ( pIntData );
 		return pIntData;
 	}
@@ -2267,7 +2282,7 @@ protected:
 		assert ( m_pIter->m_pData==m_tIter.m_pData );
 		assert ( m_tIter.m_pData );
 
-		ListedData_t * pPrev = (ListedData_t *)m_pIter->m_pPrev;
+		auto * pPrev = (ListedData_t *)m_pIter->m_pPrev;
 		m_tWork.Remove ( m_pIter );
 		SafeDelete( m_pIter );
 		m_pIter = pPrev;
@@ -2281,7 +2296,7 @@ public:
 	{
 		while ( m_tWork.GetLength() )
 		{
-			ListedData_t * pIter = (ListedData_t *)m_tWork.Begin();
+			auto * pIter = (ListedData_t *)m_tWork.Begin();
 			m_tWork.Remove ( pIter );
 			SafeDelete( pIter );
 		}

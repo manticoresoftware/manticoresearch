@@ -10716,7 +10716,7 @@ private:
 	int64_t							m_iSavedTID = 1;
 	int64_t							m_tmSaved = 0;
 
-	CSphVector<StoredQueryKey_t>	m_dStored;
+	CSphVector<StoredQueryKey_t>	m_dStored GUARDED_BY ( m_tLock );
 	CSphRwlock						m_tLock;
 
 	CSphFixedVector<StoredQuery_t>	m_dLoadedQueries;

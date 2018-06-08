@@ -1746,87 +1746,81 @@ DWORD sphCRC32 ( const void * s, int iLen, DWORD uPrevCRC )
 }
 
 #if USE_WINDOWS
-template<> long CSphAtomic_T<long>::GetValue () const
-{
-	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
-	return InterlockedExchangeAdd ( &m_iValue, 0 );
-}
-
-template<> int64_t CSphAtomic_T<int64_t>::GetValue () const
-{
-	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
-	return InterlockedExchangeAdd64 ( &m_iValue, 0 );
-}
-
 template<> long CSphAtomic_T<long>::Inc ()
 {
-	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( m_iValue ) ) )==0 && "unaligned atomic!" );
 	return InterlockedIncrement ( &m_iValue )-1;
 }
 
 template<> int64_t CSphAtomic_T<int64_t>::Inc ()
 {
-	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( m_iValue ) ) )==0 && "unaligned atomic!" );
 	return InterlockedIncrement64 ( &m_iValue )-1;
 }
 
 template<> long CSphAtomic_T<long>::Dec ()
 {
-	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( m_iValue ) ) )==0 && "unaligned atomic!" );
 	return InterlockedDecrement ( &m_iValue )+1;
 }
 
 template<> int64_t CSphAtomic_T<int64_t>::Dec ()
 {
-	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( m_iValue ) ) )==0 && "unaligned atomic!" );
 	return InterlockedDecrement64 ( &m_iValue )+1;
 }
 
 template<> long CSphAtomic_T<long>::Add ( long iValue )
 {
-	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( m_iValue ) ) )==0 && "unaligned atomic!" );
 	return InterlockedExchangeAdd ( &m_iValue, iValue );
 }
 
 template<> int64_t CSphAtomic_T<int64_t>::Add ( int64_t iValue )
 {
-	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( m_iValue ) ) )==0 && "unaligned atomic!" );
 	return InterlockedExchangeAdd64 ( &m_iValue, iValue );
 }
 
 template<> long CSphAtomic_T<long>::Sub ( long iValue )
 {
-	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( m_iValue ) ) )==0 && "unaligned atomic!" );
 	return InterlockedExchangeAdd ( &m_iValue, -iValue );
 }
 
 template<> int64_t CSphAtomic_T<int64_t>::Sub ( int64_t iValue )
 {
-	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( m_iValue ) ) )==0 && "unaligned atomic!" );
 	return InterlockedExchangeAdd64 ( &m_iValue, -iValue );
 }
 
 template<> void CSphAtomic_T<long>::SetValue ( long iValue )
 {
-	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( m_iValue ) ) )==0 && "unaligned atomic!" );
 	InterlockedExchange ( &m_iValue, iValue );
 }
 
 template<> void CSphAtomic_T<int64_t>::SetValue ( int64_t iValue )
 {
-	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( m_iValue ) ) )==0 && "unaligned atomic!" );
 	InterlockedExchange64 ( &m_iValue, iValue );
+}
+
+template<> unsigned int CSphAtomic_T<unsigned int>::CAS ( unsigned int uOldVal, unsigned int uNewVal )
+{
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( m_iValue ) ) )==0 && "unaligned atomic!" );
+	return InterlockedCompareExchange ( &m_iValue, uNewVal, uOldVal );
 }
 
 template<> long CSphAtomic_T<long>::CAS ( long iOldVal, long iNewVal )
 {
-	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( m_iValue ) ) )==0 && "unaligned atomic!" );
 	return InterlockedCompareExchange ( &m_iValue, iNewVal, iOldVal );
 }
 
 template<> int64_t CSphAtomic_T<int64_t>::CAS ( int64_t iOldVal, int64_t iNewVal )
 {
-	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( m_iValue ) ) )==0 && "unaligned atomic!" );
 	return InterlockedCompareExchange64 ( &m_iValue, iNewVal, iOldVal );
 }
 
@@ -1860,15 +1854,9 @@ const char*		sphCheckEndian()
 
 struct ThdJob_t
 {
-	ISphJob *	m_pItem;
-	ThdJob_t *	m_pNext;
-	ThdJob_t *	m_pPrev;
-
-	ThdJob_t ()
-		: m_pItem ( NULL )
-		, m_pNext ( NULL )
-		, m_pPrev ( NULL )
-	{}
+	ISphJob *	m_pItem = nullptr;
+	ThdJob_t *	m_pNext = nullptr;
+	ThdJob_t *	m_pPrev = nullptr;
 
 	~ThdJob_t ()
 	{
@@ -1891,25 +1879,19 @@ class CSphThdPool : public ISphThdPool
 	CSphAutoEvent					m_tWakeup;
 	CSphMutex						m_tJobLock;
 
-	CSphFixedVector<SphThread_t>	m_dWorkers;
-	ThdJob_t *						m_pHead;
-	ThdJob_t *						m_pTail;
+	CSphFixedVector<SphThread_t>	m_dWorkers { 0 };
+	ThdJob_t *						m_pHead GUARDED_BY ( m_tJobLock ) = nullptr;
+	ThdJob_t *						m_pTail GUARDED_BY ( m_tJobLock ) = nullptr;
 
-	volatile bool					m_bShutdown;
+	volatile bool					m_bShutdown = false;
 
 	CSphAtomic						m_tStatActiveWorkers;
-	int								m_iStatQueuedJobs;
+	int								m_iStatQueuedJobs = 0;
 
 	CSphString						m_sName;
 
 public:
-	explicit CSphThdPool ( int iThreads, const char * sName, CSphString & sError )
-		: m_dWorkers ( 0 )
-		, m_pHead ( nullptr )
-		, m_pTail ( nullptr )
-		, m_bShutdown ( false )
-		, m_iStatQueuedJobs ( 0 )
-		, m_sName ( sName )
+	CSphThdPool ( int iThreads, const char * sName, CSphString & sError )
 	{
 		if ( !m_tWakeup.Init () )
 		{
@@ -1936,7 +1918,7 @@ public:
 		Verify ( m_tWakeup.Done() );
 	}
 
-	void Shutdown () final
+	void Shutdown () NO_THREAD_SAFETY_ANALYSIS final
 	{
 		if ( m_bShutdown )
 			return;
@@ -1978,7 +1960,7 @@ public:
 			m_pHead = pJob;
 		}
 
-		m_iStatQueuedJobs++;
+		++m_iStatQueuedJobs;
 		m_tJobLock.Unlock();
 
 		m_tWakeup.SetEvent();
@@ -2010,15 +1992,15 @@ private:
 			ThdJob_t * pJob = pPool->m_pTail;
 			if ( pPool->m_pHead==pPool->m_pTail ) // either 0 or 1 job case
 			{
-				pPool->m_pHead = pPool->m_pTail = NULL;
+				pPool->m_pHead = pPool->m_pTail = nullptr;
 			} else
 			{
-				pJob->m_pPrev->m_pNext = NULL;
+				pJob->m_pPrev->m_pNext = nullptr;
 				pPool->m_pTail = pJob->m_pPrev;
 			}
 
 			if ( pJob )
-				pPool->m_iStatQueuedJobs--;
+				--pPool->m_iStatQueuedJobs;
 
 			pPool->m_tJobLock.Unlock();
 
@@ -2063,7 +2045,7 @@ private:
 
 ISphThdPool * sphThreadPoolCreate ( int iThreads, const char * sName, CSphString & sError )
 {
-	CSphThdPool * pPool = new CSphThdPool ( iThreads, sName, sError );
+	auto * pPool = new CSphThdPool ( iThreads, sName, sError );
 	if ( !sError.IsEmpty() )
 		SafeDelete ( pPool );
 
@@ -2111,7 +2093,7 @@ public:
 		Reset();
 	}
 
-	virtual void Add ( double fValue, int64_t iWeight = 1 )
+	void Add ( double fValue, int64_t iWeight ) final
 	{
 		if ( m_dMap.empty() )
 		{
@@ -2186,7 +2168,7 @@ public:
 	}
 
 
-	virtual double Percentile ( int iPercent ) const
+	double Percentile ( int iPercent ) const final
 	{
 		assert ( iPercent>=0 && iPercent<=100 );
 

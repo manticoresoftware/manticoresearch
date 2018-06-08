@@ -124,23 +124,22 @@ struct PersistentConnectionsPool_t
 {
 	mutable CSphMutex	 m_dDataLock;
 private:
-	bool			m_bShutdown;			// will cause ReturnConnection to close the socket instead of returning it
+	bool			m_bShutdown = false;			// will cause ReturnConnection to close the socket instead of returning it
 	CSphVector<int>	m_dSockets GUARDED_BY ( m_dDataLock );
-	int				m_iRit GUARDED_BY ( m_dDataLock ); // pos where we take the next socket to rent.
-	int				m_iWit GUARDED_BY ( m_dDataLock ); // pos where we will put returned socket.
-	int				m_iFreeWindow GUARDED_BY ( m_dDataLock ); // # of free sockets in the existing ring
+	int				m_iRit GUARDED_BY ( m_dDataLock ) = 0; // pos where we take the next socket to rent.
+	int				m_iWit GUARDED_BY ( m_dDataLock ) = 0; // pos where we will put returned socket.
+	int				m_iFreeWindow GUARDED_BY ( m_dDataLock ) = 0; // # of free sockets in the existing ring
 	using CGuard = CSphScopedLock<CSphMutex>;
 
 	int Step ( int* ) REQUIRES ( m_dDataLock ); // step helper over the ring
 
 public:
-	PersistentConnectionsPool_t ();
+	PersistentConnectionsPool_t () = default;
 	void Init ( int iPoolSize ) EXCLUDES ( m_dDataLock );
 	int RentConnection () EXCLUDES ( m_dDataLock );
 	void ReturnConnection ( int iSocket ) EXCLUDES ( m_dDataLock );
 	void Shutdown () EXCLUDES ( m_dDataLock );
 };
-
 
 void ClosePersistentSockets();
 
@@ -244,18 +243,6 @@ private:
 
 using AgentsVector = CSphVector<AgentConn_t *>;
 
-template <typename T>
-struct VectorPtrsGuard_T : public ISphNoncopyable
-{
-	CSphVector < T * > m_dPtrs;
-	VectorPtrsGuard_T() = default;
-	~VectorPtrsGuard_T()
-	{
-		ARRAY_FOREACH ( i, m_dPtrs )
-			SafeDelete ( m_dPtrs[i] );
-	}
-};
-
 
 extern const char * sAgentStatsNames[eMaxAgentStat + ehMaxStat];
 
@@ -291,14 +278,14 @@ using HostStatSnapshot_t = uint64_t[eMaxAgentStat+ehMaxStat];
 struct HostDashboard_t : public ISphRefcountedMT
 {
 	AgentDesc_c		m_tDescriptor;			// only host info, no indices. Used for ping.
-	bool			m_bNeedPing;			// we'll ping only HA agents, not everyone
+	bool			m_bNeedPing = false;	// we'll ping only HA agents, not everyone
 
 	mutable CSphRwlock	 m_dDataLock;	
 	int64_t		m_iLastAnswerTime GUARDED_BY ( m_dDataLock );		// updated when we get an answer from the host
 	int64_t		m_iLastQueryTime GUARDED_BY ( m_dDataLock );		// updated when we send a query to a host
-	int64_t		m_iErrorsARow GUARDED_BY ( m_dDataLock );			// num of errors a row, updated when we update the general statistic.
+	int64_t		m_iErrorsARow GUARDED_BY ( m_dDataLock ) = 0;		// num of errors a row, updated when we update the general statistic.
 
-	PersistentConnectionsPool_t*	m_pPersPool;					// persistence pool also lives here, one per dashboard
+	PersistentConnectionsPool_t*	m_pPersPool = nullptr;			// persistence pool also lives here, one per dashboard
 
 private:
 	AgentDash_t	m_dStats[STATS_DASH_TIME] GUARDED_BY ( m_dDataLock );
@@ -444,8 +431,8 @@ public:
 		m_tLock.Done();
 	}
 
-	void Lock () { m_tLock.ReadLock(); }
-	void Unlock () { m_tLock.Unlock(); }
+	void Lock () ACQUIRE_SHARED ( m_tLock ) { m_tLock.ReadLock(); }
+	void Unlock () UNLOCK_FUNCTION ( m_tLock ) { m_tLock.Unlock(); }
 };
 
 

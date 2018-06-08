@@ -190,14 +190,16 @@ enum ESphLogLevel
 };
 
 typedef void ( *SphLogger_fn )( ESphLogLevel, const char *, va_list );
+void sphSetLogger ( SphLogger_fn fnLog );
 
+void sphLogVa ( const char * sFmt, va_list ap, ESphLogLevel eLevel = SPH_LOG_WARNING );
 void sphWarning ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
 void sphInfo ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
 void sphLogFatal ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
 void sphLogDebug ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
 void sphLogDebugv ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
 void sphLogDebugvv ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
-void sphSetLogger ( SphLogger_fn fnLog );
+
 
 // set the prefix to supress the log
 void sphLogSupress ( const char * sPrefix, ESphLogLevel eLevel = SPH_LOG_WARNING );

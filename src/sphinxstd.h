@@ -1397,23 +1397,21 @@ template < typename T >
 using CSphTightVector =  CSphVector < T, CSphTightVectorPolicy<T> >;
 
 /// RAII guarded vector of pointers = perform SafeDelete for each element on destroy.
-template < typename T >
-struct VectorPtrsGuard_T : public ISphNoncopyable
+template < class T >
+struct VectorPtrsGuard_T : public ISphNoncopyable, public CSphVector<T>
 {
-	CSphVector<T*> m_dPtrs;
-	~VectorPtrsGuard_T()
+	~VectorPtrsGuard_T ()
 	{
-		ARRAY_FOREACH ( i, m_dPtrs )
-			SafeDelete ( m_dPtrs[i] );
+		CSphVector<T>::Apply ( [] ( T &ptr ) { SafeDelete ( ptr ); } );
 	}
 };
-
 //////////////////////////////////////////////////////////////////////////
 
 /// dynamically allocated fixed-size vector
 template < typename T >
 class CSphFixedVector : public ISphNoncopyable, public VecTraits_T<T>
 {
+protected:
 	using VecTraits_T<T>::m_pData;
 	using VecTraits_T<T>::m_iCount;
 

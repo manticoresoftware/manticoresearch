@@ -909,8 +909,7 @@ bool ConfigureAgent ( MultiAgentDesc_t & tAgent, const char * szAgent, const cha
 {
 	enum AgentParse_e { AP_WANT_ADDRESS, AP_OPTIONS, AP_DONE };
 	AgentParse_e eState = AP_DONE;
-	VectorPtrsGuard_T<AgentDesc_c> tDescGuard;
-	CSphVector<AgentDesc_c *> & dHosts = tDescGuard.m_dPtrs;
+	VectorPtrsGuard_T<AgentDesc_c *> dHosts;
 	AgentDesc_c * pNewAgent = new AgentDesc_c();
 	dHosts.Add ( pNewAgent );
 	WarnInfo_t dWI ( szIndexName, szAgent );

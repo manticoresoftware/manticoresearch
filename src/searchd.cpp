@@ -7920,8 +7920,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// build local indexes list
 	////////////////////////////
 
-	VectorPtrsGuard_T<AgentConn_t> dAgentsGuard;
-	AgentsVector & dAgents = dAgentsGuard.m_dPtrs;
+	VectorPtrsGuard_T<AgentConn_t *> dAgents;
 	CSphVector<DistrServedByAgent_t> dDistrServedByAgent;
 	int iDivideLimits = 1;
 	int iAgentConnectTimeout = 0, iAgentQueryTimeout = 0;
@@ -11181,8 +11180,7 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 		{
 			const DistributedIndex_t * pDist = dDistributed[iIdx];
 
-			VectorPtrsGuard_T<AgentConn_t> tAgentGuards;
-			AgentsVector & dAgents = tAgentGuards.m_dPtrs;
+			VectorPtrsGuard_T<AgentConn_t *> dAgents;
 			pDist->GetAllAgents ( dAgents );
 
 			// connect to remote agents and query them
@@ -14166,8 +14164,7 @@ void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphStr
 		}
 
 		// remote agents requests send off thread
-		VectorPtrsGuard_T<AgentConn_t> tAgentsGuard;
-		AgentsVector & dAgents = tAgentsGuard.m_dPtrs;
+		VectorPtrsGuard_T<AgentConn_t *> dAgents;
 		pDistributed->GetAllAgents ( dAgents );
 
 		int iAgentsReply = 0;
@@ -14864,8 +14861,7 @@ protected:
 
 static void CheckPing ( int64_t iNow )
 {
-	VectorPtrsGuard_T<AgentConn_t> tAgentsGuard;
-	AgentsVector & dAgents = tAgentsGuard.m_dPtrs;
+	VectorPtrsGuard_T<AgentConn_t *> dAgents;
 
 	int iCookie = (int)iNow;
 
@@ -14995,7 +14991,7 @@ static void BlackholeTick()
 
 	ThreadSystem_t tThdSystemDesc ( "BLACKHOLE" );
 
-	VectorPtrsGuard_T<AgentSendData_t> tBlackholes;
+	VectorPtrsGuard_T<AgentSendData_t *> tBlackholes;
 
 	{
 		CSphScopedLock<CSphMutex> BlackHoleGuard { g_tBlackholeLock };
@@ -15004,23 +15000,23 @@ static void BlackholeTick()
 			return;
 
 		// grab blackholes under lock
-		tBlackholes.m_dPtrs.SwapData ( g_dBlackholeAgents );
+		tBlackholes.SwapData ( g_dBlackholeAgents );
 	}
 
 	// agent vector for remote controller
 	AgentsVector dAgents;
-	AgentConn_t ** ppAgents = dAgents.AddN ( tBlackholes.m_dPtrs.GetLength() );
-	ARRAY_FOREACH ( i, tBlackholes.m_dPtrs )
+	AgentConn_t ** ppAgents = dAgents.AddN ( tBlackholes.GetLength() );
+	ARRAY_FOREACH ( i, tBlackholes )
 	{
-		AgentConn_t * pAgent = tBlackholes.m_dPtrs[i]->m_pAgent;
+		AgentConn_t * pAgent = tBlackholes[i]->m_pAgent;
 		pAgent->m_iWorkerTag = i;
 		ppAgents[i] = pAgent;
 	}
-	assert ( dAgents.GetLength() && tBlackholes.m_dPtrs.GetLength() );
+	assert ( dAgents.GetLength() && tBlackholes.GetLength() );
 
 	sphLogDebugv ( "blackhole agents %d", dAgents.GetLength() );
 
-	BlackholeRequestBuilder_t tReq ( tBlackholes.m_dPtrs );
+	BlackholeRequestBuilder_t tReq ( tBlackholes );
 	CSphScopedPtr<ISphRemoteAgentsController> tDistCtrl ( GetAgentsController ( 1, dAgents, tReq, g_iBlackholeTimeout, g_iBlackholeRetries ) );
 	if ( g_bShutdown )
 		return;
@@ -15181,8 +15177,7 @@ static void SetLocalUserVar ( const CSphString & sName, CSphVector<SphAttr_t> & 
 
 static bool SendUserVar ( const char * sIndex, const char * sUserVarName, CSphVector<SphAttr_t> & dSetValues, CSphString & sError )
 {
-	VectorPtrsGuard_T<AgentConn_t> tAgentsGuard;
-	AgentsVector & dAgents = tAgentsGuard.m_dPtrs;
+	VectorPtrsGuard_T<AgentConn_t *> dAgents;
 
 	bool bGotLocal = false;
 	g_tDistLock.ReadLock();
@@ -15476,8 +15471,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const QueryParserFactory
 		{
 			const DistributedIndex_t * pDist = dDistributed[iIdx];
 
-			VectorPtrsGuard_T<AgentConn_t> tAgentsGuard;
-			AgentsVector & dAgents = tAgentsGuard.m_dPtrs;
+			VectorPtrsGuard_T<AgentConn_t *> dAgents;
 			pDist->GetAllAgents ( dAgents );
 
 			// connect to remote agents and query them
@@ -16255,8 +16249,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const QueryParserFactory
 		if ( dDistributed[iIdx] && dDistributed[iIdx]->m_dAgents.GetLength() )
 		{
 			const DistributedIndex_t * pDist = dDistributed[iIdx];
-			VectorPtrsGuard_T<AgentConn_t> tAgentsGuard;
-			AgentsVector & dAgents = tAgentsGuard.m_dPtrs;
+			VectorPtrsGuard_T<AgentConn_t *> dAgents;
 			pDist->GetAllAgents ( dAgents );
 
 			// connect to remote agents and query them

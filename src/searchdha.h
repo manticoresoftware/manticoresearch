@@ -366,8 +366,8 @@ public:
 	CSphFixedVector<WORD> GetWeights () const EXCLUDES (m_dWeightLock)
 	{
 		CSphScopedRLock tRguard ( m_dWeightLock );
-		CSphFixedVector<WORD> dResult ( m_dWeights.GetLength () );
-		memcpy ( dResult.Begin (), m_dWeights.Begin (), m_dWeights.GetSizeBytes () );
+		CSphFixedVector<WORD> dResult {0};
+		dResult.CopyFrom ( m_dWeights );
 		return dResult;
 	}
 

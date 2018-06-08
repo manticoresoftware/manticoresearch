@@ -460,7 +460,7 @@ filter_item:
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )
 				YYERROR;
-			pFilter->m_dValues = *$4.m_pValues.Ptr();
+			pFilter->m_dValues = *$4.m_pValues;
 			pFilter->m_dValues.Uniq();
 		}
 	| expr_ident TOK_NOT TOK_IN '(' const_list ')'
@@ -468,7 +468,7 @@ filter_item:
 			CSphFilterSettings * pFilter = pParser->AddValuesFilter ( $1 );
 			if ( !pFilter )
 				YYERROR;
-			pFilter->m_dValues = *$5.m_pValues.Ptr();
+			pFilter->m_dValues = *$5.m_pValues;
 			pFilter->m_dValues.Uniq();
 			pFilter->m_bExclude = true;
 		}
@@ -625,7 +625,7 @@ filter_item:
 		{
 			CSphFilterSettings * f = pParser->AddFilter ( $1, SPH_FILTER_VALUES );
 			f->m_eMvaFunc = ( $1.m_iType==TOK_ALL ) ? SPH_MVAFUNC_ALL : SPH_MVAFUNC_ANY;
-			f->m_dValues = *$4.m_pValues.Ptr();
+			f->m_dValues = *$4.m_pValues;
 			f->m_dValues.Uniq();
 		}
 	| mva_aggr TOK_NOT TOK_IN '(' const_list ')'
@@ -634,7 +634,7 @@ filter_item:
 			CSphFilterSettings * f = pParser->AddFilter ( $1, SPH_FILTER_VALUES );
 			f->m_eMvaFunc = ( $1.m_iType==TOK_ALL ) ? SPH_MVAFUNC_ANY : SPH_MVAFUNC_ALL;
 			f->m_bExclude = true;
-			f->m_dValues = *$5.m_pValues.Ptr();
+			f->m_dValues = *$5.m_pValues;
 			f->m_dValues.Uniq();
 		}
 	| mva_aggr TOK_BETWEEN const_int TOK_AND const_int
@@ -732,7 +732,7 @@ const_float:
 const_list:
 	const_int
 		{
-			assert ( !$$.m_pValues.Ptr() );
+			assert ( !$$.m_pValues );
 			$$.m_pValues = new RefcountedVector_c<SphAttr_t> ();
 			$$.m_pValues->Add ( $1.m_iValue ); 
 		}
@@ -745,7 +745,7 @@ const_list:
 string_list:
 	TOK_QUOTED_STRING
 		{
-			assert ( !$$.m_pValues.Ptr() );
+			assert ( !$$.m_pValues );
 			$$.m_pValues = new RefcountedVector_c<SphAttr_t> ();
 			$$.m_pValues->Add ( $1.m_iValue );
 		}
@@ -1095,7 +1095,7 @@ set_global_stmt:
 	TOK_SET TOK_GLOBAL TOK_USERVAR '=' '(' const_list ')'
 		{
 			pParser->SetStatement ( $3, SET_GLOBAL_UVAR );
-			pParser->m_pStmt->m_dSetValues = *$6.m_pValues.Ptr();
+			pParser->m_pStmt->m_dSetValues = *$6.m_pValues;
 		}
 	| TOK_SET TOK_GLOBAL ident_set '=' set_string_value
 		{
@@ -1110,7 +1110,7 @@ set_global_stmt:
 	| TOK_SET TOK_INDEX ident TOK_GLOBAL TOK_USERVAR '=' '(' const_list ')'
 		{
 			pParser->SetStatement ( $5, SET_INDEX_UVAR );
-			pParser->m_pStmt->m_dSetValues = *$8.m_pValues.Ptr();
+			pParser->m_pStmt->m_dSetValues = *$8.m_pValues;
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $3 );
 		}
 	;

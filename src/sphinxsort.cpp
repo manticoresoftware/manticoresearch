@@ -1266,7 +1266,7 @@ int CSphUniqounter::CountStart ( SphGroupKey_t * pOutGroup )
 int CSphUniqounter::CountNext ( SphGroupKey_t * pOutGroup )
 {
 	assert ( m_bSorted );
-	if ( m_iCountPos>=m_iLength )
+	if ( m_iCountPos>=m_iCount )
 		return 0;
 
 	SphGroupKey_t uGroup = m_pData[m_iCountPos].m_uGroup;
@@ -1274,7 +1274,7 @@ int CSphUniqounter::CountNext ( SphGroupKey_t * pOutGroup )
 	int iCount = m_pData[m_iCountPos].m_iCount;
 	*pOutGroup = uGroup;
 
-	while ( m_iCountPos<m_iLength && m_pData[m_iCountPos].m_uGroup==uGroup )
+	while ( m_iCountPos<m_iCount && m_pData[m_iCountPos].m_uGroup==uGroup )
 	{
 		if ( m_pData[m_iCountPos].m_uValue!=uValue )
 			iCount += m_pData[m_iCountPos].m_iCount;
@@ -1288,14 +1288,14 @@ int CSphUniqounter::CountNext ( SphGroupKey_t * pOutGroup )
 void CSphUniqounter::Compact ( SphGroupKey_t * pRemoveGroups, int iRemoveGroups )
 {
 	assert ( m_bSorted );
-	if ( !m_iLength )
+	if ( !m_iCount )
 		return;
 
 	sphSort ( pRemoveGroups, iRemoveGroups );
 
 	SphGroupedValue_t * pSrc = m_pData;
 	SphGroupedValue_t * pDst = m_pData;
-	SphGroupedValue_t * pEnd = m_pData + m_iLength;
+	SphGroupedValue_t * pEnd = m_pData + m_iCount;
 
 	// skip remove-groups which are not in my list
 	while ( iRemoveGroups && (*pRemoveGroups)<pSrc->m_uGroup )
@@ -1322,8 +1322,8 @@ void CSphUniqounter::Compact ( SphGroupKey_t * pRemoveGroups, int iRemoveGroups 
 		*pDst++ = *pSrc;
 	}
 
-	assert ( pDst-m_pData<=m_iLength );
-	m_iLength = pDst-m_pData;
+	assert ( pDst-m_pData<=m_iCount );
+	m_iCount = pDst-m_pData;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1630,7 +1630,7 @@ struct MatchCloner_t
 			return;
 		}
 
-		memcpy ( m_dRowBuf.Begin(), pOld->m_pDynamic, sizeof(m_dRowBuf[0]) * m_dRowBuf.GetLength() );
+		memcpy ( m_dRowBuf.Begin(), pOld->m_pDynamic, m_dRowBuf.GetLengthBytes() );
 
 		// don't let cloning operation to free old string data
 		// as it will be copied back
@@ -3906,9 +3906,9 @@ ESortClauseParseResult sphParseSortClause ( const CSphQuery * pQuery, const char
 				{
 					// aliased SPH_ATTR_JSON_FIELD, reuse existing expression
 					const CSphColumnInfo * pAttr = &tSchema.GetAttr(iAttr);
-					if ( pAttr->m_pExpr.Ptr() )
+					if ( pAttr->m_pExpr )
 						pAttr->m_pExpr->AddRef(); // SetupSortRemap uses refcounted pointer, but does not AddRef() itself, so help it
-					tState.m_tSubExpr[iField] = pAttr->m_pExpr.Ptr();
+					tState.m_tSubExpr[iField] = pAttr->m_pExpr;
 					tState.m_tSubKeys[iField] = JsonKey_t ( pTok, strlen ( pTok ) );
 
 				} else
@@ -4403,7 +4403,7 @@ static bool FixupDependency ( ISphSchema & tSchema, const int * pAttrs, int iAtt
 	for ( int i=0; i<dCur.GetLength(); i++ )
 	{
 		const CSphColumnInfo & tCol = tSchema.GetAttr ( dCur[i] );
-		if ( tCol.m_eStage>SPH_EVAL_PRESORT && tCol.m_pExpr.Ptr()!=nullptr )
+		if ( tCol.m_eStage>SPH_EVAL_PRESORT && tCol.m_pExpr!=nullptr )
 			tCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
 	}
 
@@ -4559,7 +4559,7 @@ struct ExprSortJson2StringPtr_c : public ISphExpr
 	void FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override
 	{
 		sphFixupLocator ( m_tJsonCol, pOldSchema, pNewSchema );
-		if ( m_pExpr.Ptr() )
+		if ( m_pExpr )
 			m_pExpr->FixupLocator ( pOldSchema, pNewSchema );
 	}
 
@@ -4568,7 +4568,7 @@ struct ExprSortJson2StringPtr_c : public ISphExpr
 		if ( eCmd==SPH_EXPR_SET_STRING_POOL )
 		{
 			m_pStrings = (const BYTE*)pArg;
-			if ( m_pExpr.Ptr() )
+			if ( m_pExpr )
 				m_pExpr->Command ( eCmd, pArg );
 		}
 	}
@@ -5360,7 +5360,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 						tExprCol.m_bWeight = true;
 					}
 					// handle chains of dependencies (e.g. SELECT 1+attr f1, f1-1 f2 ... WHERE f2>5)
-					if ( tCol.m_pExpr.Ptr() )
+					if ( tCol.m_pExpr )
 					{
 						tCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
 					}
@@ -5394,7 +5394,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 			ARRAY_FOREACH ( j, dCur )
 			{
 				const CSphColumnInfo & tCol = tSorterSchema.GetAttr ( dCur[j] );
-				if ( tCol.m_pExpr.Ptr() )
+				if ( tCol.m_pExpr )
 					tCol.m_pExpr->Command ( SPH_EXPR_GET_DEPENDENT_COLS, &dCur );
 			}
 			dCur.Uniq();

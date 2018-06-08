@@ -43,9 +43,7 @@ void StripStdin ( const char * sIndexAttrs, const char * sRemoveElements )
 		if ( !iLen )
 			break;
 
-		int iPos = dBuffer.GetLength();
-		dBuffer.Resize ( iPos+iLen );
-		memcpy ( &dBuffer[iPos], sBuffer, iLen );
+		dBuffer.Append ((BYTE*)sBuffer, iLen);
 	}
 	dBuffer.Add ( 0 );
 
@@ -65,10 +63,7 @@ void ApplyMorphology ( CSphIndex * pIndex )
 		int iLen = fread ( sBuffer, 1, sizeof(sBuffer), stdin );
 		if ( !iLen )
 			break;
-
-		int iPos = dInBuffer.GetLength();
-		dInBuffer.Resize ( iPos+iLen );
-		memcpy ( &dInBuffer[iPos], sBuffer, iLen );
+		dInBuffer.Append ( sBuffer, iLen );
 	}
 	dInBuffer.Add(0);
 	dOutBuffer.Reserve ( dInBuffer.GetLength() );
@@ -84,11 +79,9 @@ void ApplyMorphology ( CSphIndex * pIndex )
 			if ( pDict )
 				pDict->ApplyStemmers ( sToken );
 
-			int iPos = dOutBuffer.GetLength();
 			int iLen = strlen ( (char *)sToken );
 			sToken[iLen] = ' ';
-			dOutBuffer.Resize ( iPos+iLen+1 );
-			memcpy ( &dOutBuffer[iPos], sToken, iLen+1 );
+			dOutBuffer.Append ( sToken, iLen+1 );
 		}
 
 		if ( dOutBuffer.GetLength() )
@@ -281,21 +274,18 @@ bool DoKlistsOptimization ( int iRowSize, const char * sPath, int iChunkCount, S
 
 			ARRAY_FOREACH ( i, dKlist )
 			{
-				auto uid = (SphDocID_t)dKlist[i];
-				SphDocID_t * pInLive = sphBinarySearch ( dLiveID.Begin(), &dLiveID.Last(), uid );
-				if ( !pInLive )
+				if ( !dLiveID.BinarySearch ( dKlist[i] ) )
 					dKlist.RemoveFast ( i-- );
 			}
 			dKlist.Sort();
 
 			// 2nd step kill all prev ids by this fresh k-list
 
-			SphDocID_t * pFirstLive = dLiveID.Begin();
-			SphDocID_t * pLastLive = &dLiveID.Last();
+			SphDocID_t * pFirstLive = dLiveID.begin();
+			SphDocID_t * pLastLive = dLiveID.end()-1;
 
-			ARRAY_FOREACH ( i, dKlist )
+			for ( SphDocID_t uID : dKlist )
 			{
-				auto uID = (SphDocID_t)dKlist[i];
 				SphDocID_t * pKilled = sphBinarySearch ( pFirstLive, pLastLive, uID );
 
 				assert ( pKilled );
@@ -320,7 +310,7 @@ bool DoKlistsOptimization ( int iRowSize, const char * sPath, int iChunkCount, S
 		// 3d step write new k-list
 
 		if ( dKlist.GetLength()>0 )
-			wrNew.PutBytes ( dKlist.Begin(), dKlist.GetLength()*sizeof(SphAttr_t) );
+			wrNew.PutBytes ( dKlist.Begin(), dKlist.GetLengthBytes() );
 
 		dKlist.Reset();
 		wrNew.CloseFile();
@@ -337,7 +327,7 @@ bool DoKlistsOptimization ( int iRowSize, const char * sPath, int iChunkCount, S
 				rdAttr.GetBytes ( &uID, DOCINFO_IDSIZE*4 );
 				rdAttr.SkipBytes ( iRowSize*4 );
 
-				if ( sphBinarySearch ( dLiveID.Begin(), dLiveID.Begin()+iWasLive, uID )==NULL )
+				if ( !sphBinarySearch ( dLiveID.Begin(), dLiveID.Begin()+iWasLive, uID ) )
 					dLiveID.Add ( uID );
 			}
 

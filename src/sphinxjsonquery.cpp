@@ -1706,7 +1706,7 @@ static void JsonObjAddAttr ( const AggrResult_t & tRes, ESphAttr eAttrType, cons
 
 	case SPH_ATTR_STRINGPTR:
 		{
-			const BYTE * pString = (const BYTE *)tMatch.GetAttr(tLoc);
+			const auto * pString = (const BYTE *)tMatch.GetAttr(tLoc);
 			int iLen = sphUnpackPtrAttr ( pString, &pString );
 			dTmp.Resize ( iLen+1 );
 			memcpy ( dTmp.Begin(), pString, iLen );
@@ -2460,12 +2460,10 @@ int PackSnippets ( const CSphVector<BYTE> & dRes, CSphVector<int> & dSeparators,
 		return 0;
 
 	int iLast = 0;
-	int iTextLen = 0;
 	CSphVector<PassageLocator_t> dPassages;
 	dPassages.Reserve ( dSeparators.GetLength() );
-	ARRAY_FOREACH ( iPassage, dSeparators )
+	for ( int iCur : dSeparators )
 	{
-		int iCur = dSeparators[iPassage];
 		int iFrom = iLast;
 		int iLen = iCur - iFrom;
 		iLast = iCur + iSepLen;
@@ -2474,7 +2472,6 @@ int PackSnippets ( const CSphVector<BYTE> & dRes, CSphVector<int> & dSeparators,
 		PassageLocator_t & tPass = dPassages.Add();
 		tPass.m_iOff = iFrom;
 		tPass.m_iSize = iLen;
-		iTextLen += iLen + 1;
 	}
 
 	if ( !dPassages.GetLength() )
@@ -2482,7 +2479,6 @@ int PackSnippets ( const CSphVector<BYTE> & dRes, CSphVector<int> & dSeparators,
 		PassageLocator_t & tPass = dPassages.Add();
 		tPass.m_iOff = 0;
 		tPass.m_iSize = dRes.GetLength();
-		iTextLen = dRes.GetLength() + 1;
 	}
 
 	int iPassageCount = dPassages.GetLength();
@@ -2502,13 +2498,10 @@ int PackSnippets ( const CSphVector<BYTE> & dRes, CSphVector<int> & dSeparators,
 	}
 
 	const BYTE * sText = dRes.Begin();
-	ARRAY_FOREACH ( iPassage, dPassages )
+	for ( const auto & dPassage : dPassages )
 	{
-		int iSize = dPassages[iPassage].m_iSize;
-
-		pData = dOut.AddN ( iSize+1 );
-		memcpy ( pData, sText + dPassages[iPassage].m_iOff, iSize );
-		pData[iSize] = '\0'; // make sz-string from binary
+		dOut.Append( sText + dPassage.m_iOff, dPassage.m_iSize );
+		dOut.Add('\0'); // make sz-string from binary
 	}
 
 	int iTotalSize = dOut.GetLength();

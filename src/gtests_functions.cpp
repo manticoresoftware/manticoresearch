@@ -1127,3 +1127,50 @@ TEST (functions, size_parser)
 	ASSERT_EQ ( -1, sphGetSize64 ( "10z", &sError ) );
 	ASSERT_STREQ ( sError, "z" );
 }
+
+
+TEST ( functions, hashmap_iterations )
+{
+	struct
+	{
+		int iVal;
+		const char * sKey;
+	} tstvalues[] =
+		{ {   1, "one" }
+		  , { 2, "two" }
+		  , { 3, "three" }
+		  , { 4, "four" } };
+
+	SmallStringHash_T<int> tHash;
+	for ( auto &test: tstvalues )
+		tHash.Add ( test.iVal, test.sKey );
+
+	auto i = 0;
+	for ( tHash.IterateStart (); tHash.IterateNext (); )
+	{
+		EXPECT_STREQ ( tHash.IterateGetKey ().cstr (), tstvalues[i].sKey );
+		EXPECT_EQ ( tHash.IterateGet (), tstvalues[i].iVal );
+		++i;
+	}
+}
+
+TEST ( functions, vector )
+{
+	CSphVector<int> dVec;
+	dVec.Add(1);
+	dVec.Add(2);
+	auto & dv = dVec.Add();
+	dv = 3;
+	dVec.Add(4);
+	dVec.Add ( 5 );
+	dVec.Add ( 6 );
+	dVec.Add ( 7 );
+	dVec.RemoveValue (2);
+	dVec.Add ( 8 );
+	dVec.Add ( 9 );
+	dVec.RemoveValue ( 9);
+	dVec.Add ( 9 );
+	dVec.Add ( 10);
+	dVec.RemoveValue ( 10 );
+	ASSERT_EQ (dVec.GetLength (),8);
+}

@@ -458,7 +458,7 @@ public:
 template < typename T >
 struct SphLess_T
 {
-	inline bool IsLess ( const T & a, const T & b ) const
+	static inline bool IsLess ( const T & a, const T & b )
 	{
 		return a < b;
 	}
@@ -469,7 +469,7 @@ struct SphLess_T
 template < typename T >
 struct SphGreater_T
 {
-	inline bool IsLess ( const T & a, const T & b ) const
+	static inline bool IsLess ( const T & a, const T & b )
 	{
 		return b < a;
 	}
@@ -782,20 +782,54 @@ T_COUNTER sphUniq ( T * pData, T_COUNTER iCount )
 
 
 //////////////////////////////////////////////////////////////////////////
+/// Copy/move vec of a data item-by-item
+template < typename T, bool = std::is_pod<T>::value >
+class DataMover_T
+{
+public:
+	static inline void Copy ( T * pNew, T * pData, int iLength )
+	{
+		for ( int i = 0; i<iLength; ++i )
+			pNew[i] = pData[i];
+	}
+
+	static inline void Move ( T * pNew, T * pData, int iLength )
+	{
+		for ( int i = 0; i<iLength; ++i )
+			pNew[i] = std::move ( pData[i] );
+	}
+};
+
+template < typename T> /// Copy/move vec of POD data using memmove
+class DataMover_T<T, true>
+{
+public:
+	static inline void Copy ( T * pNew, const T * pData, int iLength )
+	{
+		if ( iLength ) // m.b. work without this check, but sanitize for paranoids.
+			memmove ( ( void * ) pNew, ( const void * ) pData, iLength * sizeof ( T ) );
+	}
+
+	static inline void Move ( T * pNew, const T * pData, int iLength )
+	{ Copy ( pNew, pData, iLength); }
+
+	// append raw blob: defined ONLY in POD specialization.
+	static inline void CopyVoid ( T * pNew, const void * pData, int iLength )
+	{ Copy ( pNew, (T*)pData, iLength ); }
+};
 
 /// default vector policy
 /// grow 2x and copy using assignment operator on resize
 template < typename T >
-class CSphVectorPolicy
+class CSphVectorPolicy : public DataMover_T<T>
 {
 protected:
 	static const int MAGIC_INITIAL_LIMIT = 8;
 
 public:
-	static inline void Copy ( T * pNew, T * pData, int iLength )
+	static inline void CopyOrSwap ( T & pLeft, T & pRight )
 	{
-		for ( int i=0; i<iLength; i++ )
-			pNew[i] = std::move ( pData[i] );
+		pLeft = pRight;
 	}
 
 	static inline int Relimit ( int iLimit, int iNewLimit )
@@ -811,11 +845,185 @@ public:
 	}
 };
 
+/// buffer traits - provides generic ops over a typed blob (vector).
+/// just provide common operators; doesn't manage buffer anyway
+template < typename T > class VecTraits_T
+{
+public:
+
+	//! functional types to use as lambda type.
+	//! If we use simple function pointer here (say, as (*bool) (const T&) )
+	//! it will work, but only for pure lambdas.
+	//! Any other non-pure lambda which binds (acquires) anyting from
+	//! env will cause compile error and actually works well only with such
+	//! std::function typedefs
+	using fFilter=std::function<bool ( const T & )>;
+	using fAction=std::function<void ( T & )>;
+
+	VecTraits_T() = default;
+
+	/// accessor by forward index
+	T &operator[] ( int64_t iIndex ) const
+	{
+		assert ( iIndex>=0 && iIndex<m_iCount );
+		return m_pData[iIndex];
+	}
+
+	/// get first entry ptr
+	T * Begin () const
+	{
+		return m_iCount ? m_pData : nullptr;
+	}
+
+	/// make happy C++11 ranged for loops
+	T * begin () const
+	{
+		return Begin ();
+	}
+
+	T * end () const
+	{
+		return m_iCount ? m_pData + m_iCount : nullptr;
+	}
+
+	/// get last entry
+	T &Last () const
+	{
+		return ( *this )[m_iCount - 1];
+	}
+
+	/// check if i'm empty
+	bool IsEmpty () const
+	{
+		return ( m_pData==nullptr || m_iCount==0 );
+	}
+
+	/// query current length, in elements
+	int64_t GetLength64 () const
+	{
+		return m_iCount;
+	}
+
+	int GetLength () const
+	{
+		return (int)m_iCount;
+	}
+
+	/// get length in bytes
+	size_t GetLengthBytes () const
+	{
+		return sizeof ( T ) * ( size_t ) m_iCount;
+	}
+
+	/// default sort
+	void Sort ( int iStart = 0, int iEnd = -1 )
+	{
+		Sort ( SphLess_T<T> (), iStart, iEnd );
+	}
+
+	/// default reverse sort
+	void RSort ( int iStart = 0, int iEnd = -1 )
+	{
+		Sort ( SphGreater_T<T> (), iStart, iEnd );
+	}
+
+	/// generic sort
+	template < typename F >
+	void Sort ( F COMP, int iStart = 0, int iEnd = -1 )
+	{
+		if ( m_iCount<2 )
+			return;
+		if ( iStart<0 )
+			iStart += m_iCount;
+		if ( iEnd<0 )
+			iEnd += m_iCount;
+		assert ( iStart<=iEnd );
+
+		sphSort ( m_pData + iStart, iEnd - iStart + 1, COMP );
+	}
+
+	/// generic binary search
+	/// assumes that the array is sorted in ascending order
+	template < typename U, typename PRED >
+	T * BinarySearch ( const PRED &tPred, U tRef ) const
+	{
+		return sphBinarySearch ( m_pData, m_pData + m_iCount - 1, tPred, tRef );
+	}
+
+	/// generic binary search
+	/// assumes that the array is sorted in ascending order
+	T * BinarySearch ( T tRef ) const
+	{
+		return sphBinarySearch ( m_pData, m_pData + m_iCount - 1, tRef );
+	}
+
+	/// generic linear search
+	template < typename FILTER >
+	bool FindFirst ( FILTER COND ) const
+	{
+		for ( int i = 0; i<m_iCount; ++i )
+			if ( COND ( m_pData[i] ) )
+				return true;
+		return false;
+	}
+
+	/// generic 'ARRAY_ALL'
+	template < typename FILTER >
+	bool TestAll ( FILTER COND ) const
+	{
+		for ( int i = 0; i<m_iCount; ++i )
+			if ( !COND ( m_pData[i] ) )
+				return false;
+		return true;
+	}
+
+	/// Apply an action to every member
+	template < typename ACTION >
+	void Apply ( ACTION ApplyActionTo ) const
+	{
+		for ( int i = 0; i<m_iCount; ++i )
+			ApplyActionTo ( m_pData[i] );
+	}
+
+	/// generic linear search
+	bool Contains ( T tRef ) const
+	{
+		return FindFirst ( [&] ( const T &v ) { return tRef==v; } );
+	}
+
+	/// generic linear search
+	template < typename FUNCTOR, typename U >
+	bool Contains ( FUNCTOR COMP, U tValue )
+	{
+		return FindFirst ( [&] ( const T &v ) { return COMP.IsEq ( v, tValue ); } );
+	}
+
+	/// fill with given value
+	void Fill ( const T &rhs )
+	{
+		for ( int i = 0; i<m_iCount; i++ )
+			m_pData[i] = rhs;
+	}
+
+protected:
+	T * m_pData = nullptr;
+	int64_t m_iCount = 0;
+};
+
+
 /// generic vector
 /// (don't even ask why it's not std::vector)
 template < typename T, typename POLICY=CSphVectorPolicy<T> > class CSphVector
+	: public VecTraits_T<T>
 {
+protected:
+	using VecTraits_T<T>::m_pData;
+	using VecTraits_T<T>::m_iCount;
+
 public:
+	using VecTraits_T<T>::Begin;
+	using VecTraits_T<T>::Sort;
+
 	/// ctor
 	CSphVector () = default;
 
@@ -840,120 +1048,75 @@ public:
 	/// add entry
 	T & Add ()
 	{
-		if ( m_iLength>=m_iLimit )
-			Reserve ( 1+m_iLength );
-		return m_pData [ m_iLength++ ];
+		if ( m_iCount>=m_iLimit )
+			Reserve ( 1 + m_iCount );
+		return m_pData[m_iCount++];
 	}
 
 	/// add entry
 	void Add ( const T & tValue )
 	{
-		assert ( (&tValue<m_pData || &tValue>=(m_pData+m_iLength)) && "inserting own value (like last()) by ref!" );
-		if ( m_iLength>=m_iLimit )
-			Reserve ( 1+m_iLength );
-		m_pData [ m_iLength++ ] = tValue;
+		assert ( ( &tValue<m_pData || &tValue>=( m_pData + m_iCount ) ) && "inserting own value (like last()) by ref!" );
+		if ( m_iCount>=m_iLimit )
+			Reserve ( 1 + m_iCount );
+		m_pData[m_iCount++] = tValue;
 	}
 
 	void Add ( T&& tValue )
 	{
-		assert ( ( &tValue<m_pData || &tValue>=( m_pData+m_iLength ) ) && "inserting own value (like last()) by ref!" );
-		if ( m_iLength>=m_iLimit )
-			Reserve ( 1+m_iLength );
-		m_pData [ m_iLength++ ] = std::move ( tValue );
+		assert ( ( &tValue<m_pData || &tValue>=( m_pData + m_iCount ) ) && "inserting own value (like last()) by ref!" );
+		if ( m_iCount>=m_iLimit )
+			Reserve ( 1 + m_iCount );
+		m_pData[m_iCount++] = std::move ( tValue );
 	}
 
 	/// add N more entries, and return a pointer to that buffer
 	T * AddN ( int iCount )
 	{
-		if ( m_iLength + iCount > m_iLimit )
-			Reserve ( m_iLength + iCount );
-		m_iLength += iCount;
-		return m_pData + m_iLength - iCount;
+		if ( m_iCount + iCount>m_iLimit )
+			Reserve ( m_iCount + iCount );
+		m_iCount += iCount;
+		return m_pData + m_iCount - iCount;
 	}
+
 
 	/// add unique entry (ie. do not add if equal to last one)
 	void AddUnique ( const T & tValue )
 	{
-		assert ( (&tValue<m_pData || &tValue>=(m_pData+m_iLength)) && "inserting own value (like last()) by ref!" );
-		if ( m_iLength>=m_iLimit )
-			Reserve ( 1+m_iLength );
+		assert ( ( &tValue<m_pData || &tValue>=( m_pData + m_iCount ) ) && "inserting own value (like last()) by ref!" );
+		if ( m_iCount>=m_iLimit )
+			Reserve ( 1 + m_iCount );
 
-		if ( m_iLength==0 || m_pData[m_iLength-1]!=tValue )
-			m_pData [ m_iLength++ ] = tValue;
+		if ( m_iCount==0 || m_pData[m_iCount - 1]!=tValue )
+			m_pData[m_iCount++] = tValue;
 	}
 
-	/// get first entry ptr
-	T * Begin ()
-	{
-		return m_iLength ? m_pData : NULL;
-	}
-
-	/// get first entry ptr
-	const T * Begin () const
-	{
-		return m_iLength ? m_pData : NULL;
-	}
-
-	/// make happy C++11 ranged for loops
-	T * begin ()
-	{
-		return Begin ();
-	}
-
-	const T * begin () const
-	{
-		return Begin ();
-	}
-
-	T * end ()
-	{
-		return m_iLength ? m_pData + m_iLength : NULL;
-	}
-
-	const T * end () const
-	{
-		return m_iLength ? m_pData + m_iLength : NULL;
-	}
-
-	/// get last entry
-	T & Last ()
-	{
-		return (*this) [ m_iLength-1 ];
-	}
-
-	/// get last entry
-	const T & Last () const
-	{
-		return (*this) [ m_iLength-1 ];
-	}
 
 	/// remove element by index
 	void Remove ( int iIndex )
 	{
-		assert ( iIndex>=0 && iIndex<m_iLength );
-
-		m_iLength--;
-		for ( int i=iIndex; i<m_iLength; i++ )
-			m_pData[i] = m_pData[i+1];
+		assert ( iIndex>=0 && iIndex<m_iCount );
+		if ( --m_iCount>iIndex )
+			POLICY::Move ( m_pData + iIndex, m_pData + iIndex + 1, m_iCount - iIndex );
 	}
 
 	/// remove element by index, swapping it with the tail
 	void RemoveFast ( int iIndex )
 	{
-		assert ( iIndex>=0 && iIndex<m_iLength );
-		if ( iIndex!=--m_iLength )
-			Swap ( m_pData[iIndex], m_pData[m_iLength] );
+		assert ( iIndex>=0 && iIndex<m_iCount );
+		if ( iIndex!=--m_iCount )
+			Swap ( m_pData[iIndex], m_pData[m_iCount] );
 	}
 
 	/// remove element by value (warning, linear O(n) search)
 	bool RemoveValue ( T tValue )
 	{
-		for ( int i=0; i<m_iLength; i++ )
+		for ( int i = 0; i<m_iCount; ++i )
 			if ( m_pData[i]==tValue )
-		{
-			Remove ( i );
-			return true;
-		}
+			{
+				Remove ( i );
+				return true;
+			}
 		return false;
 	}
 
@@ -961,20 +1124,20 @@ public:
 	template < typename FUNCTOR, typename U >
 	bool RemoveValue ( FUNCTOR COMP, U tValue )
 	{
-		for ( int i=0; i<m_iLength; i++ )
+		for ( int i = 0; i<m_iCount; i++ )
 			if ( COMP.IsEq ( m_pData[i], tValue ) )
-		{
-			Remove ( i );
-			return true;
-		}
+			{
+				Remove ( i );
+				return true;
+			}
 		return false;
 	}
 
 	/// pop last value
 	const T & Pop ()
 	{
-		assert ( m_iLength>0 );
-		return m_pData[--m_iLength];
+		assert ( m_iCount>0 );
+		return m_pData[--m_iCount];
 	}
 
 public:
@@ -990,16 +1153,15 @@ public:
 		m_iLimit = POLICY::Relimit ( m_iLimit, iNewLimit );
 
 		// realloc
-		// FIXME! optimize for POD case
 		T * pNew = nullptr;
 		if ( m_iLimit )
 		{
-			pNew = new T [ m_iLimit ];
-			__analysis_assume ( m_iLength<=m_iLimit );
+			pNew = new T[m_iLimit];
+			__analysis_assume ( m_iCount<=m_iLimit );
 
-			POLICY::Copy ( pNew, m_pData, m_iLength );
+			POLICY::Move ( pNew, m_pData, m_iCount );
 		}
-		delete [] m_pData;
+		SafeDeleteArray( m_pData );
 
 		m_pData = pNew;
 	}
@@ -1008,23 +1170,23 @@ public:
 	void Resize ( int iNewLength )
 	{
 		assert ( iNewLength>=0 );
-		if ( (unsigned int)iNewLength>(unsigned int)m_iLength )
+		if ( ( unsigned int ) iNewLength>( unsigned int ) m_iCount )
 			Reserve ( iNewLength );
-		m_iLength = iNewLength;
+		m_iCount = iNewLength;
 	}
 
 	/// reset
 	void Reset ()
 	{
-		m_iLength = 0;
+		m_iCount = 0;
 		m_iLimit = 0;
 		SafeDeleteArray ( m_pData );
 	}
 
-	/// query current length, in elements
-	inline int GetLength () const
+	/// memset whole reserved vec
+	void ZeroMem ()
 	{
-		return m_iLength;
+		memset ( Begin (), 0, (size_t) AllocatedBytes () );
 	}
 
 	/// query current reserved size, in elements
@@ -1033,8 +1195,9 @@ public:
 		return m_iLimit;
 	}
 
-	/// query currently used RAM, in bytes
-	inline int GetSizeBytes() const
+	/// query currently allocated RAM, in bytes
+	/// (could be > GetLengthBytes() since uses limit, not size)
+	inline int AllocatedBytes () const
 	{
 		return m_iLimit*sizeof(T);
 	}
@@ -1043,87 +1206,72 @@ public:
 	/// filter unique
 	void Uniq ()
 	{
-		if ( !m_iLength )
+		if ( !m_iCount )
 			return;
 
 		Sort ();
-		int iLeft = sphUniq ( m_pData, m_iLength );
+		int iLeft = sphUniq ( m_pData, m_iCount );
 		Resize ( iLeft );
 	}
 
-	/// default sort
-	void Sort ( int iStart=0, int iEnd=-1 )
-	{
-		Sort ( SphLess_T<T>(), iStart, iEnd );
-	}
-
-	/// default reverse sort
-	void RSort ( int iStart=0, int iEnd=-1 )
-	{
-		Sort ( SphGreater_T<T>(), iStart, iEnd );
-	}
-
-	/// generic sort
-	template < typename F > void Sort ( F COMP, int iStart=0, int iEnd=-1 )
-	{
-		if ( m_iLength<2 ) return;
-		if ( iStart<0 ) iStart = m_iLength+iStart;
-		if ( iEnd<0 ) iEnd = m_iLength+iEnd;
-		assert ( iStart<=iEnd );
-
-		sphSort ( m_pData+iStart, iEnd-iStart+1, COMP );
-	}
-
-	/// accessor by forward index
-	const T & operator [] ( int iIndex ) const
-	{
-		assert ( iIndex>=0 && iIndex<m_iLength );
-		return m_pData [ iIndex ];
-	}
-
-	/// accessor by forward index
-	T & operator [] ( int iIndex )
-	{
-		assert ( iIndex>=0 && iIndex<m_iLength );
-		return m_pData [ iIndex ];
-	}
-
 	/// copy
-	const CSphVector<T> & operator = ( const CSphVector<T> & rhs )
+	CSphVector &operator= ( const CSphVector<T> &rhs )
 	{
 		Reset ();
 
-		m_iLength = rhs.m_iLength;
+		m_iCount = rhs.m_iCount;
 		m_iLimit = rhs.m_iLimit;
 		if ( m_iLimit )
 			m_pData = new T [ m_iLimit ];
-		__analysis_assume ( m_iLength<=m_iLimit );
-		for ( int i=0; i<rhs.m_iLength; i++ )
-			m_pData[i] = rhs.m_pData[i];
+		__analysis_assume ( m_iCount<=m_iLimit );
+		POLICY::Copy ( m_pData, rhs.m_pData, m_iCount );
 
 		return *this;
 	}
 
 	/// move
-	const CSphVector<T> & operator= ( CSphVector<T>&& rhs )
+	CSphVector &operator= ( CSphVector<T> &&rhs )
 	{
 		Reset ();
 
-		m_iLength = rhs.m_iLength;
+		m_iCount = rhs.m_iCount;
 		m_iLimit = rhs.m_iLimit;
 		m_pData = rhs.m_pData;
 
 		rhs.m_pData = nullptr;
-		rhs.m_iLength = 0;
+		rhs.m_iCount = 0;
 		rhs.m_iLimit = 0;
 
 		return *this;
 	}
 
+	/// memmove N elements from raw pointer to the end
+	/// works ONLY if T is POD type (i.e. may be simple memmoved)
+	/// otherwize compile error will appear (if so, use typed version below).
+	void Append ( const void * pData, int iN )
+	{
+		if ( iN<=0 )
+			return;
+
+		auto * pDst = AddN ( iN );
+		POLICY::CopyVoid ( pDst, pData, iN );
+	}
+
+	/// append another vec to the end
+	/// will use memmove (POD case), or one-by-one copying.
+	void Append ( const VecTraits_T<T> &rhs )
+	{
+		if ( rhs.IsEmpty () )
+			return;
+
+		auto * pDst = AddN ( rhs.GetLength() );
+		POLICY::Copy ( pDst, rhs.begin(), rhs.GetLength() );
+	}
+
 	/// swap
 	void SwapData ( CSphVector<T, POLICY> & rhs )
 	{
-		Swap ( m_iLength, rhs.m_iLength );
+		Swap ( m_iCount, rhs.m_iCount );
 		Swap ( m_iLimit, rhs.m_iLimit );
 		Swap ( m_pData, rhs.m_pData );
 	}
@@ -1137,84 +1285,55 @@ public:
 		return pData;
 	}
 
-	/// generic binary search
-	/// assumes that the array is sorted in ascending order
-	template < typename U, typename PRED >
-	const T * BinarySearch ( const PRED & tPred, U tRef ) const
-	{
-		return sphBinarySearch ( m_pData, m_pData+m_iLength-1, tPred, tRef );
-	}
-
-	/// generic binary search
-	/// assumes that the array is sorted in ascending order
-	const T * BinarySearch ( T tRef ) const
-	{
-		return sphBinarySearch ( m_pData, m_pData+m_iLength-1, tRef );
-	}
-
-	/// generic linear search
-	bool Contains ( T tRef ) const
-	{
-		for ( int i=0; i<m_iLength; i++ )
-			if ( m_pData[i]==tRef )
-				return true;
-		return false;
-	}
-
-	/// generic linear search
-	template < typename FUNCTOR, typename U >
-	bool Contains ( FUNCTOR COMP, U tValue )
-	{
-		for ( int i=0; i<m_iLength; i++ )
-			if ( COMP.IsEq ( m_pData[i], tValue ) )
-				return true;
-		return false;
-	}
-
-	/// fill with given value
-	void Fill ( const T & rhs )
-	{
-		for ( int i=0; i<m_iLength; i++ )
-			m_pData[i] = rhs;
-	}
-
 	/// insert into a middle
 	void Insert ( int iIndex, const T & tValue )
 	{
-		assert ( iIndex>=0 && iIndex<=m_iLength );
+		assert ( iIndex>=0 && iIndex<=m_iCount );
 
-		if ( m_iLength>=m_iLimit )
-			Reserve ( m_iLength+1 );
+		if ( this->m_iCount>=this->m_iLimit )
+			Reserve ( this->m_iCount+1 );
 
 		// FIXME! this will not work for SwapVector
-		for ( int i=m_iLength-1; i>=iIndex; i-- )
-			m_pData [ i+1 ] = m_pData[i];
-		m_pData[iIndex] = tValue;
-		m_iLength++;
+		for ( int i= this->m_iCount-1; i>=iIndex; --i )
+			this->m_pData [ i+1 ] = this->m_pData[i];
+		this->m_pData[iIndex] = tValue;
+		++this->m_iCount;
+	}
+
+	/// insert into a middle by policy-defined copier
+	void Insert ( int iIndex, T &tValue )
+	{
+		assert ( iIndex>=0 && iIndex<=m_iCount );
+
+		if ( this->m_iCount>=m_iLimit )
+			Reserve ( this->m_iCount + 1 );
+
+		for ( int i = this->m_iCount - 1; i>=iIndex; --i )
+			POLICY::CopyOrSwap ( this->m_pData[i + 1], this->m_pData[i] );
+		POLICY::CopyOrSwap ( this->m_pData[iIndex], tValue );
+		++this->m_iCount;
 	}
 
 protected:
-	int		m_iLength = 0;		///< entries actually used
-	int		m_iLimit = 0;		///< entries allocated
-	T *		m_pData = nullptr;	///< entries
+	int64_t		m_iLimit = 0;		///< entries allocated
 };
 
 
 #define ARRAY_FOREACH(_index,_array) \
-	for ( int _index=0; _index<_array.GetLength(); _index++ )
+	for ( int _index=0; _index<_array.GetLength(); ++_index )
 
 #define ARRAY_FOREACH_COND(_index,_array,_cond) \
-	for ( int _index=0; _index<_array.GetLength() && (_cond); _index++ )
+	for ( int _index=0; _index<_array.GetLength() && (_cond); ++_index )
 
 #define ARRAY_ANY(_res,_array,_cond) \
 	false; \
-	for ( int _any=0; _any<_array.GetLength() && !_res; _any++ ) \
-		_res |= ( _cond ); \
+	for ( int _any=0; _any<_array.GetLength() && !_res; ++_any ) \
+		(_res) |= ( _cond ); \
 
 #define ARRAY_ALL(_res,_array,_cond) \
 	true; \
-	for ( int _all=0; _all<_array.GetLength() && _res; _all++ ) \
-		_res &= ( _cond ); \
+	for ( int _all=0; _all<_array.GetLength() && _res; ++_all ) \
+		(_res) &= ( _cond ); \
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -1226,8 +1345,19 @@ class CSphSwapVectorPolicy : public CSphVectorPolicy<T>
 public:
 	static inline void Copy ( T * pNew, T * pData, int iLength )
 	{
-		for ( int i=0; i<iLength; i++ )
+		for ( int i=0; i<iLength; ++i )
 			Swap ( pNew[i], pData[i] );
+	}
+
+	static inline void Move ( T * pNew, T * pData, int iLength )
+	{
+		for ( int i = 0; i<iLength; ++i )
+			Swap ( pNew[i], pData[i] );
+	}
+
+	static inline void CopyOrSwap ( T& dLeft, T& dRight )
+	{
+		Swap ( dLeft, dRight );
 	}
 };
 
@@ -1282,16 +1412,15 @@ struct VectorPtrsGuard_T : public ISphNoncopyable
 
 /// dynamically allocated fixed-size vector
 template < typename T >
-class CSphFixedVector : public ISphNoncopyable
+class CSphFixedVector : public ISphNoncopyable, public VecTraits_T<T>
 {
-protected:
-	T *			m_pData = nullptr;
-	int			m_iSize = 0;
+	using VecTraits_T<T>::m_pData;
+	using VecTraits_T<T>::m_iCount;
 
 public:
 	explicit CSphFixedVector ( int iSize )
-		: m_iSize ( iSize )
 	{
+		m_iCount = iSize;
 		assert ( iSize>=0 );
 		m_pData = ( iSize>0 ) ? new T [ iSize ] : nullptr;
 	}
@@ -1302,11 +1431,11 @@ public:
 	}
 
 	CSphFixedVector ( CSphFixedVector&& rhs ) noexcept
-		: m_pData ( rhs.m_pData )
-		, m_iSize ( rhs.m_iSize )
 	{
+		m_pData = rhs.m_pData;
+		m_iCount = rhs.m_iCount;
 		rhs.m_pData = nullptr;
-		rhs.m_iSize = 0;
+		rhs.m_iCount = 0;
 	}
 
 	CSphFixedVector & operator= ( CSphFixedVector&& rhs ) noexcept
@@ -1315,49 +1444,12 @@ public:
 		{
 			SafeDeleteArray ( m_pData );
 			m_pData = rhs.m_pData;
-			m_iSize = rhs.m_iSize;
+			m_iCount = rhs.m_iCount;
 
 			rhs.m_pData = nullptr;
-			rhs.m_iSize = 0;
+			rhs.m_iCount = 0;
 		}
 		return *this;
-	}
-
-	T & operator [] ( int iIndex ) const
-	{
-		assert ( iIndex>=0 && iIndex<m_iSize );
-		return m_pData[iIndex];
-	}
-
-	T * Begin () const
-	{
-		return m_pData;
-	}
-
-	/// make happy C++11 ranged for loops
-	T * begin ()
-	{
-		return Begin ();
-	}
-	
-	const T * begin () const
-	{
-		return Begin ();
-	}
-	
-	T * end ()
-	{
-		return m_iSize ? m_pData + m_iSize : nullptr;
-	}
-	
-	const T * end () const
-	{
-		return m_iSize ? m_pData + m_iSize : nullptr;
-	}
-
-	T & Last () const
-	{
-		return (*this) [ m_iSize-1 ];
 	}
 
 	void Reset ( int iSize )
@@ -1365,23 +1457,19 @@ public:
 		SafeDeleteArray ( m_pData );
 		assert ( iSize>=0 );
 		m_pData = ( iSize>0 ) ? new T [ iSize ] : nullptr;
-		m_iSize = iSize;
+		m_iCount = iSize;
 	}
 
-	int GetLength() const
+	void CopyFrom ( const VecTraits_T<T>& dOrigin )
 	{
-		return m_iSize;
-	}
-
-	int GetSizeBytes() const
-	{
-		return m_iSize*sizeof(T);
+		Reset ( dOrigin.GetLength() );
+		memcpy ( m_pData, dOrigin.begin(), dOrigin.GetLengthBytes());
 	}
 
 	T * LeakData ()
 	{
 		T * pData = m_pData;
-		m_pData = NULL;
+		m_pData = nullptr;
 		Reset ( 0 );
 		return pData;
 	}
@@ -1390,26 +1478,14 @@ public:
 	void SwapData ( CSphFixedVector<T> & rhs )
 	{
 		Swap ( m_pData, rhs.m_pData );
-		Swap ( m_iSize, rhs.m_iSize );
+		Swap ( m_iCount, rhs.m_iCount );
 	}
 
 	void Set ( T * pData, int iSize )
 	{
 		SafeDeleteArray ( m_pData );
 		m_pData = pData;
-		m_iSize = iSize;
-	}
-
-	const T * BinarySearch ( T tRef ) const
-	{
-		return sphBinarySearch ( m_pData, m_pData+m_iSize-1, tRef );
-	}
-
-
-	void Fill ( const T & rhs )
-	{
-		for ( int i = 0; i<m_iSize; i++ )
-			m_pData[i] = rhs;
+		m_iCount = iSize;
 	}
 };
 
@@ -1854,6 +1930,19 @@ public:
 		return !operator==( t );
 	}
 
+	// compare ignoring case
+	inline bool EqN ( const char * t ) const
+	{
+		if ( !t || !m_sValue )
+			return ( ( !t && !m_sValue ) || ( !t && m_sValue && !*m_sValue ) || ( !m_sValue && t && !*t ) );
+		return strcasecmp ( m_sValue, t )==0;
+	}
+
+	inline bool EqN ( const CSphString &t ) const
+	{
+		return EqN ( t.cstr () );
+	}
+
 	CSphString ( const char * sString ) // NOLINT
 	{
 		if ( sString )
@@ -2115,7 +2204,6 @@ inline void Swap ( CSphString & v1, CSphString & v2 )
 	v1.Swap ( v2 );
 }
 
-
 // commonly used vector of strings
 using StrVec_t = CSphVector<CSphString>;
 
@@ -2125,9 +2213,9 @@ using StrVec_t = CSphVector<CSphString>;
 class StringBuilder_c
 {
 protected:
-	char *	m_sBuffer;
-	int		m_iSize;
-	int		m_iUsed;
+	char *	m_sBuffer = nullptr;
+	int		m_iSize = 0;
+	int		m_iUsed = 0;
 
 public:
 	StringBuilder_c ();
@@ -2140,6 +2228,11 @@ public:
 	const char * cstr() const
 	{
 		return m_sBuffer;
+	}
+
+	bool IsEmpty() const
+	{
+		return !m_sBuffer || m_sBuffer[0]=='\0';
 	}
 
 	char* Leak();
@@ -2362,11 +2455,12 @@ public:
 	{
 		rhs.m_pPtr = nullptr;
 	}
-					~CSphRefcountedPtr ()			{ SafeRelease ( m_pPtr ); }
 
-	T *				Ptr () const					{ return m_pPtr; }
-	T *				operator -> () const			{ return m_pPtr; }
-	bool			operator ! () const				{ return m_pPtr==nullptr; }
+	~CSphRefcountedPtr ()				{ SafeRelease ( m_pPtr ); }
+
+	T *	operator -> () const			{ return m_pPtr; }
+		explicit operator bool() const			{ return m_pPtr!=nullptr; }
+		operator T * () const			{ return m_pPtr; }
 
 public:
 	/// assignment of a raw pointer, takes over ownership!
@@ -2379,7 +2473,7 @@ public:
 	}
 
 	/// wrapper assignment, does automated reference tracking
-	CSphRefcountedPtr<T> & operator = ( const CSphRefcountedPtr<T> & rhs )
+	CSphRefcountedPtr & operator = ( const CSphRefcountedPtr & rhs )
 	{
 		if ( rhs.m_pPtr )
 			rhs.m_pPtr->AddRef();
@@ -2388,7 +2482,7 @@ public:
 		return *this;
 	}
 
-	CSphRefcountedPtr<T> & operator= ( CSphRefcountedPtr<T>&& rhs ) noexcept
+	CSphRefcountedPtr & operator= ( CSphRefcountedPtr && rhs ) noexcept
 	{
 		if (this==&rhs)
 			return *this;
@@ -2416,15 +2510,15 @@ int64_t			sphGetFileSize ( int iFD, CSphString & sError );
 
 /// buffer trait that neither own buffer nor clean-up it on destroy
 template < typename T >
-class CSphBufferTrait : public ISphNoncopyable
+class CSphBufferTrait : public ISphNoncopyable, public VecTraits_T<T>
 {
+protected:
+	using VecTraits_T<T>::m_pData;
+	using VecTraits_T<T>::m_iCount;
 public:
+	using VecTraits_T<T>::GetLengthBytes;
 	/// ctor
-	CSphBufferTrait ()
-		: m_pData ( NULL )
-		, m_iCount ( 0 )
-		, m_bMemLocked ( false )
-	{ }
+	CSphBufferTrait () = default;
 
 	/// dtor
 	virtual ~CSphBufferTrait ()
@@ -2434,35 +2528,11 @@ public:
 
 	virtual void Reset () = 0;
 
-	/// accessor
-	inline const T & operator [] ( int64_t iIndex ) const
-	{
-		assert ( iIndex>=0 && iIndex<m_iCount );
-		return m_pData[iIndex];
-	}
 
 	/// get write address
 	T * GetWritePtr () const
 	{
 		return m_pData;
-	}
-
-	/// check if i'm empty
-	bool IsEmpty () const
-	{
-		return ( m_pData==NULL );
-	}
-
-	/// get length in bytes
-	size_t GetLengthBytes () const
-	{
-		return sizeof(T) * (size_t)m_iCount;
-	}
-
-	/// get length in entries
-	int64_t GetNumEntries () const
-	{
-		return m_iCount;
 	}
 
 	void Set ( T * pData, int64_t iCount )
@@ -2489,9 +2559,7 @@ public:
 
 protected:
 
-	T *			m_pData;
-	int64_t		m_iCount;
-	bool		m_bMemLocked;
+	bool		m_bMemLocked = false;
 
 	void MemUnlock ()
 	{
@@ -2647,7 +2715,7 @@ public:
 #else
 		assert ( m_iFD==-1 );
 #endif
-		assert ( !this->GetWritePtr() && !this->GetNumEntries() );
+		assert ( !this->GetWritePtr() && !this->GetLength64() );
 
 		T * pData = NULL;
 		int64_t iCount = 0;
@@ -3441,6 +3509,9 @@ struct VectorPtrsRefs_T : public ISphNoncopyable
 		for ( auto &ptr : m_dPtrs ) SafeRelease ( ptr );
 	}
 };
+
+using RefCountedPtr_t = CSphRefcountedPtr<ISphRefcountedMT>;
+
 
 struct ISphJob
 {

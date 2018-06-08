@@ -306,14 +306,14 @@ private:
 		if ( bChinese )
 		{
 			// fixme! maybe surround these chinese text chunks by spaces?
-			memcpy ( m_dCJKBuffer.AddN ( iLen ), pStart, iLen );
+			m_dCJKBuffer.Append ( pStart, iLen );
 		} else
 		{
 			// store non-chinese content
 			TextChunk_t & tChunk = m_dNonCJKChunks.Add();
 			tChunk.m_iStart = m_dNonCJKBuffer.GetLength ();
 			tChunk.m_iLength = iLen;
-			memcpy ( m_dNonCJKBuffer.AddN(iLen), pStart, iLen );
+			m_dNonCJKBuffer.Append ( pStart, iLen );
 
 			// copy marker to chinese buffer
 			COPY_MARKER ( m_dCJKBuffer.AddN ( PROXY_MARKER_LEN + 2 ), m_pMarkerChunkSeparator );

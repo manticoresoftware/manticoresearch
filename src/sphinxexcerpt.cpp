@@ -536,19 +536,19 @@ void SnippetsDocIndex_c::ParseQuery ( const char * sQuery, ISphTokenizer * pToke
 			if ( !pChild )
 				continue;
 
-			ARRAY_FOREACH ( j, pChild->m_dChildren )
-				dChildren.Add ( pChild->m_dChildren[j] );
+			for ( const auto & dChild : pChild->m_dChildren )
+				dChildren.Add ( dChild );
 
-			ARRAY_FOREACH ( j, pChild->m_dWords )
+			for ( const auto& dWord : pChild->m_dWords )
 			{
-				if ( HasWildcards ( pChild->m_dWords[j].m_sWord.cstr() ) )
+				if ( HasWildcards ( dWord.m_sWord.cstr() ) )
 					continue;
 
-				const BYTE * sWord = (const BYTE *)pChild->m_dWords[j].m_sWord.cstr();
-				int iLen = pChild->m_dWords[j].m_sWord.Length();
-				ARRAY_FOREACH ( k, m_dStars )
+				const auto * sWord = (const BYTE *) dWord.m_sWord.cstr();
+				int iLen = dWord.m_sWord.Length();
+				for ( const auto& dStar : m_dStars )
 				{
-					if ( MatchStar ( m_dStars[k], sWord ) )
+					if ( MatchStar ( dStar, sWord ) )
 					{
 						memcpy ( m_sTmpWord, sWord, iLen );
 						m_dStarred.Add ( pDict->GetWordID ( m_sTmpWord ) );
@@ -590,9 +590,8 @@ void SnippetsDocIndex_c::AddWordStar ( const char * sWord, int iLengthCP, int iQ
 	int iLen = strlen ( sWord );
 	int iOff = m_dStarBuffer.GetLength();
 
-	m_dStarBuffer.Resize ( iOff+iLen+1 ); // reserve space for word + trailing zero
-	memcpy ( &m_dStarBuffer[iOff], sWord, iLen );
-	m_dStarBuffer[iOff+iLen] = 0;
+	m_dStarBuffer.Append ( sWord, iLen+1);
+	assert (m_dStarBuffer[iOff+iLen] == 0);
 
 	Keyword_t & tTok = m_dStars.Add();
 	tTok.m_iWord = iOff;
@@ -694,33 +693,24 @@ public:
 	}
 
 	void ResultEmit ( const char * pSrc, int iLen, bool bHasPassageMacro=false, int iPassageId=0,
-		const char * pPost=NULL, int iPostLen=0 ) const
+		const char * pPost=nullptr, int iPostLen=0 ) const
 	{
 		ResultEmit ( m_dResult, pSrc, iLen, bHasPassageMacro, iPassageId, pPost, iPostLen );
 	}
 
 	void ResultEmit ( CSphVector<BYTE> & dResult, const char * pSrc, int iLen, bool bHasPassageMacro=false, int iPassageId=0,
-		const char * pPost=NULL, int iPostLen=0 ) const
+		const char * pPost=nullptr, int iPostLen=0 ) const
 	{
-		if ( iLen>0 )
-		{
-			int iOutLen = dResult.GetLength();
-			dResult.Resize ( iOutLen+iLen );
-			memcpy ( &dResult[iOutLen], pSrc, iLen );
-		}
+		dResult.Append ( pSrc, iLen );
 
 		if ( !bHasPassageMacro )
 			return;
 
 		char sBuf[16];
 		int iPassLen = snprintf ( sBuf, sizeof(sBuf), "%d", iPassageId );
-		int iOutLen = dResult.GetLength();
-		dResult.Resize ( iOutLen + iPassLen + iPostLen );
 
-		if ( iPassLen )
-			memcpy ( dResult.Begin()+iOutLen, sBuf, iPassLen );
-		if ( iPostLen )
-			memcpy ( dResult.Begin()+iOutLen+iPassLen, pPost, iPostLen );
+		dResult.Append ( sBuf, iPassLen );
+		dResult.Append ( pPost, iPostLen );
 	}
 
 	void EmitPassageSeparator ( CSphVector<BYTE> & dBuf )
@@ -3422,8 +3412,7 @@ static void EmitPassagesOrdered ( CSphVector<BYTE> & dResult, CSphVector<int> & 
 	dResult.Resize(0);
 
 	int iOutLen = dResult.GetLength();
-	dResult.Resize ( iOutLen+iSeparatorLen );
-	memcpy ( &dResult[iOutLen], sChunkSeparator.cstr(), iSeparatorLen );
+	dResult.Append ( sChunkSeparator.cstr(), iSeparatorLen );
 	dSeparators.Add ( iOutLen );
 
 	ARRAY_FOREACH ( iPassage, dPassages )
@@ -3442,13 +3431,10 @@ static void EmitPassagesOrdered ( CSphVector<BYTE> & dResult, CSphVector<int> & 
 
 		int iLen = ( iBest==dPassageHeads.GetLength()-1 ? dPassageText.GetLength() : dPassageHeads[iBest+1] ) - dPassageHeads[iBest];
 
-		iOutLen = dResult.GetLength();
-		dResult.Resize ( iOutLen+iLen );
-		memcpy ( &dResult[iOutLen], &(dPassageText[dPassageHeads[iBest]]), iLen );
+		dResult.Append( &( dPassageText[dPassageHeads[iBest]] ), iLen );
 
 		iOutLen = dResult.GetLength();
-		dResult.Resize ( iOutLen+iSeparatorLen );
-		memcpy ( &dResult[iOutLen], sChunkSeparator.cstr(), iSeparatorLen );
+		dResult.Append( sChunkSeparator.cstr(), iSeparatorLen );
 		dSeparators.Add ( iOutLen );
 	}
 }

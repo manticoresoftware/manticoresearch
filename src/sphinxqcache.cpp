@@ -341,7 +341,7 @@ static bool CalcFilterHashes ( CSphVector<uint64_t> & dFilters, const CSphQuery 
 		CSphColumnInfo * pAttr = const_cast<CSphColumnInfo *>(tSorterSchema.GetAttr ( tFS.m_sAttrName.cstr() ));
 		if ( pAttr )
 		{
-			if ( pAttr->m_pExpr.Ptr() )
+			if ( pAttr->m_pExpr )
 			{
 				bool bDisableCaching = false;
 				uFilterHash = pAttr->m_pExpr->GetHash ( tSorterSchema, uFilterHash, bDisableCaching );

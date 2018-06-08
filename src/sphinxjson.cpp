@@ -593,7 +593,7 @@ bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool
 
 	tParser.Finalize();
 
-	if ( dData.GetSizeBytes() >= 0x400000 )
+	if ( dData.AllocatedBytes () >= 0x400000 )
 	{
 		sError = "data exceeds 0x400000 bytes";
 		iRes = -1;

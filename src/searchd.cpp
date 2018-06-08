@@ -5504,7 +5504,7 @@ const CSphVector<CSphQueryItem> & ExpandAsterisk ( const ISphSchema & tSchema,
 	{
 		const CSphColumnInfo & tAttr = tSchema.GetAttr(i);
 
-		if ( tAttr.m_pExpr.Ptr() )
+		if ( tAttr.m_pExpr )
 		{
 			bHaveExprs = true;
 
@@ -5716,7 +5716,7 @@ static void ProcessPostlimit ( const CSphVector<const CSphColumnInfo *> & dPostl
 		ARRAY_FOREACH ( j, dPostlimit )
 		{
 			const CSphColumnInfo * pCol = dPostlimit[j];
-			assert ( pCol->m_pExpr.Ptr() );
+			assert ( pCol->m_pExpr );
 
 			// OPTIMIZE? only if the tag did not change?
 			pCol->m_pExpr->Command ( SPH_EXPR_SET_MVA_POOL, &tRes.m_dTag2Pools [ tMatch.m_iTag ] );
@@ -5861,7 +5861,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 		assert ( !tCol.m_sName.IsEmpty() );
 		bool bMagic = ( *tCol.m_sName.cstr()=='@' );
 
-		if ( !bMagic && tCol.m_pExpr.Ptr() )
+		if ( !bMagic && tCol.m_pExpr )
 		{
 			ARRAY_FOREACH ( j, dUnmappedItems )
 				if ( tItems[ dUnmappedItems[j] ].m_sAlias==tCol.m_sName )
@@ -5882,7 +5882,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 				t.m_iIndex = iCol;
 				t.m_sName = tCol.m_sName;
 			}
-		} else if ( bMagic && ( tCol.m_pExpr.Ptr() || bUsualApi ) )
+		} else if ( bMagic && ( tCol.m_pExpr || bUsualApi ) )
 		{
 			ARRAY_FOREACH ( j, dUnmappedItems )
 				if ( tCol.m_sName==GetMagicSchemaName ( tItems[ dUnmappedItems[j] ].m_sExpr ) )
@@ -7711,10 +7711,9 @@ void SearchHandler_c::SetupLocalDF ( int iStart, int iEnd )
 			continue;
 
 		int iLen = tQuery.m_sQuery.Length();
-		int iOff = dQuery.GetLength();
-		dQuery.Resize ( iOff + iLen + 1 );
-		memcpy ( dQuery.Begin()+iOff, tQuery.m_sQuery.cstr(), iLen );
-		dQuery[iOff+iLen] = ' '; // queries delimiter
+		auto * pDst = dQuery.AddN ( iLen + 1 );
+		memcpy ( pDst, tQuery.m_sQuery.cstr(), iLen );
+		dQuery.Last() = ' '; // queries delimiter
 	}
 	// bail out on empty queries
 	if ( !dQuery.GetLength() )
@@ -7979,8 +7978,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				DistrServedByAgent_t & tDistr = dDistrServedByAgent.Add();
 				tDistr.m_sIndex = sIndex;
 				tDistr.m_dStats.Resize ( iEnd-iStart+1 );
-				memset ( tDistr.m_dStats.Begin(), 0, tDistr.m_dStats.GetSizeBytes() );
-
+				tDistr.m_dStats.ZeroMem();
 				dAgents.Reserve ( dAgents.GetLength() + pDist->m_dAgents.GetLength() );
 				ARRAY_FOREACH ( j, pDist->m_dAgents )
 				{
@@ -9625,12 +9623,12 @@ void SqlParser_c::UpdateMVAAttr ( const SqlNode_t & tName, const SqlNode_t & dVa
 	CSphAttrUpdate & tUpd = m_pStmt->m_tUpdate;
 	ESphAttr eType = SPH_ATTR_UINT32SET;
 
-	if ( dValues.m_pValues.Ptr() && dValues.m_pValues->GetLength()>0 )
+	if ( dValues.m_pValues && dValues.m_pValues->GetLength()>0 )
 	{
 		// got MVA values, let's process them
 		dValues.m_pValues->Uniq(); // don't need dupes within MVA
 		tUpd.m_dPool.Add ( dValues.m_pValues->GetLength()*2 );
-		SphAttr_t * pVal = dValues.m_pValues.Ptr()->Begin();
+		SphAttr_t * pVal = dValues.m_pValues->Begin();
 		SphAttr_t * pValMax = pVal + dValues.m_pValues->GetLength();
 		for ( ;pVal<pValMax; pVal++ )
 		{
@@ -9747,13 +9745,13 @@ bool SqlParser_c::AddStringFilter ( const SqlNode_t & tCol, const SqlNode_t & tV
 bool SqlParser_c::AddStringListFilter ( const SqlNode_t & tCol, SqlNode_t & tVal, bool bExclude )
 {
 	CSphFilterSettings * pFilter = AddFilter ( tCol, SPH_FILTER_STRING_LIST );
-	if ( !pFilter || !tVal.m_pValues.Ptr() )
+	if ( !pFilter || !tVal.m_pValues )
 		return false;
 
 	pFilter->m_dStrings.Resize ( tVal.m_pValues->GetLength() );
-	ARRAY_FOREACH ( i, ( *tVal.m_pValues.Ptr() ) )
+	ARRAY_FOREACH ( i, ( *tVal.m_pValues ) )
 	{
-		uint64_t uVal = ( *tVal.m_pValues.Ptr() )[i];
+		uint64_t uVal = ( *tVal.m_pValues )[i];
 		int iOff = ( uVal>>32 );
 		int iLen = ( uVal & 0xffffffff );
 		SqlUnescape ( pFilter->m_dStrings[i], m_pBuf + iOff, iLen );
@@ -13683,7 +13681,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 					// collect data from scattered insvals
 					// FIXME! maybe remove this mess, and just have a single m_dMvas pool in parser instead?
 					int iLen = 0;
-					if ( tVal.m_pVals.Ptr() )
+					if ( tVal.m_pVals )
 					{
 						tVal.m_pVals->Uniq();
 						iLen = tVal.m_pVals->GetLength();
@@ -13693,7 +13691,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 						dMvas.Add ( iLen*2 );
 						for ( int j=0; j<iLen; j++ )
 						{
-							uint64_t uVal = ( *tVal.m_pVals.Ptr() )[j];
+							uint64_t uVal = ( *tVal.m_pVals )[j];
 							DWORD uLow = (DWORD)uVal;
 							DWORD uHi = (DWORD)( uVal>>32 );
 							dMvas.Add ( uLow );
@@ -13703,7 +13701,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 					{
 						dMvas.Add ( iLen );
 						for ( int j=0; j<iLen; j++ )
-							dMvas.Add ( (DWORD)( *tVal.m_pVals.Ptr() )[j] );
+							dMvas.Add ( (DWORD)( *tVal.m_pVals )[j] );
 					}
 				}
 

@@ -439,10 +439,10 @@ void MultiAgentDesc_t::CheckRecalculateWeights ( const CSphFixedVector<int64_t> 
 	{
 		CSphFixedVector<WORD> dWeights ( GetLength () );
 		// since we'll update values anyway, acquire w-lock.
-		memcpy ( dWeights.Begin (), m_dWeights.Begin (), sizeof ( dWeights[0] ) * dWeights.GetLength () );
+		memcpy ( dWeights.Begin (), m_dWeights.Begin (), dWeights.GetLengthBytes () );
 		RebalanceWeights ( dTimers, dWeights.Begin () );
 		LogAgentWeights ( m_dWeights.Begin(), dWeights.Begin (), dTimers.Begin (), m_dHosts );
-		memcpy ( m_dWeights.Begin(), dWeights.Begin (), sizeof ( dWeights[0] ) * dWeights.GetLength () );
+		m_dWeights.SwapData (dWeights);
 	}
 }
 

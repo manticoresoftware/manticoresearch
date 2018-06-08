@@ -2263,7 +2263,7 @@ StringBuilder_c& StringBuilder_c::operator= ( const StringBuilder_c &rhs )
 void StringBuilder_c::Grow ( int iLen )
 {
 	m_iSize += iLen;
-	char * pNew = new char[m_iSize];
+	auto * pNew = new char[m_iSize];
 	memcpy ( pNew, m_sBuffer, m_iUsed + 1 );
 	Swap ( pNew, m_sBuffer );
 	SafeDeleteArray ( pNew );

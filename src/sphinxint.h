@@ -980,11 +980,7 @@ struct PoolPtrs_t
 class CSphTaggedVector
 {
 public:
-	const PoolPtrs_t & operator [] ( int iTag ) const
-	{
-		return m_dPool [ iTag & 0x7FFFFFF ];
-	}
-	PoolPtrs_t & operator [] ( int iTag )
+	PoolPtrs_t & operator [] ( int iTag ) const
 	{
 		return m_dPool [ iTag & 0x7FFFFFF ];
 	}

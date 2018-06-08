@@ -6068,7 +6068,7 @@ static SphZoneHit_e ZoneCacheFind ( const ZoneVVector_t & dZones, int iZone, con
 	if ( !dZones[iZone].GetLength() )
 		return SPH_ZONE_NO_DOCUMENT;
 
-	ZoneInfo_t * pZone = sphBinarySearch ( dZones[iZone].Begin(), &dZones[iZone].Last(), bind ( &ZoneInfo_t::m_uDocid ), pHit->m_uDocid );
+	ZoneInfo_t * pZone = dZones[iZone].BinarySearch ( bind ( &ZoneInfo_t::m_uDocid ), pHit->m_uDocid );
 
 	if ( pZone )
 	{
@@ -6228,7 +6228,7 @@ SphZoneHit_e ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit, int * pLa
 			CSphVector<ZoneInfo_t> & dZones = m_dZoneInfo[iZone];
 			if ( dZones.GetLength() )
 			{
-				ZoneInfo_t * pInfo = sphBinarySearch ( dZones.Begin(), &dZones.Last(), bind ( &ZoneInfo_t::m_uDocid ), uCur );
+				ZoneInfo_t * pInfo = dZones.BinarySearch ( bind ( &ZoneInfo_t::m_uDocid ), uCur );
 				if ( pInfo )
 					pZone = pInfo->m_pHits;
 			}
@@ -9942,7 +9942,7 @@ const ExtDoc_t * ExtNodeCached_t::GetDocsChunk()
 		return NULL;
 	}
 
-	int iDoc = Min ( m_iDocIndex+MAX_DOCS-1, m_pNode->m_Docs.GetLength()-1 ) - m_iDocIndex;
+	int iDoc = Min ( m_iDocIndex + MAX_DOCS - 1, m_pNode->m_Docs.GetLength () - 1 ) - m_iDocIndex;
 	memcpy ( &m_dDocs[0], &m_pNode->m_Docs[m_iDocIndex], sizeof(ExtDoc_t)*iDoc );
 	m_iDocIndex += iDoc;
 

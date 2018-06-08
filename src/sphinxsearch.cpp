@@ -1139,7 +1139,7 @@ protected:
 	QcacheEntry_c *				m_pQcacheEntry = nullptr;			///< data to cache if we decide that the current query is worth caching
 
 protected:
-	CSphVector<CSphString>		m_dZones;
+	StrVec_t					m_dZones;
 	CSphVector<ExtTerm_c*>		m_dZoneStartTerm;
 	CSphVector<ExtTerm_c*>		m_dZoneEndTerm;
 	CSphVector<const ExtDoc_t*>	m_dZoneStart;
@@ -1907,8 +1907,8 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 		if ( pNode->GetOp ()==SPH_QUERY_BEFORE )
 		{
 			// before operator can not handle ZONESPAN
-			bool bZoneSpan = ARRAY_ANY ( bZoneSpan, pNode->m_dChildren, pNode->m_dChildren[_any]->m_dSpec.m_bZoneSpan );
-			if ( bZoneSpan && tSetup.m_pWarning )
+			if ( tSetup.m_pWarning
+				&& pNode->m_dChildren.FindFirst ( [] ( XQNode_t * pChild ) { return pChild->m_dSpec.m_bZoneSpan; } ) )
 				tSetup.m_pWarning->SetSprintf ( "BEFORE operator is incompatible with ZONESPAN, ZONESPAN ignored" );
 			return CreateOrderNode ( pNode, tSetup );
 		}
@@ -5704,7 +5704,7 @@ const ExtHit_t * ExtNotNear_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 
 //////////////////////////////////////////////////////////////////////////
 
-static void Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const CSphVector<CSphString> * pZones, StringBuilder_c & tRes, int iIndent, const char * szIndent, const char * szLinebreak )
+static void Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t * pZones, StringBuilder_c & tRes, int iIndent, const char * szIndent, const char * szLinebreak )
 {
 	if ( iIndent )
 		tRes.Appendf ( "%s", szLinebreak );
@@ -5793,7 +5793,7 @@ static void Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const 
 }
 
 
-CSphString sphExplainQuery ( const XQNode_t * pNode, const CSphSchema & tSchema, const CSphVector<CSphString> & dZones )
+CSphString sphExplainQuery ( const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t & dZones )
 {
 	StringBuilder_c tRes;
 	Explain ( pNode, tSchema, &dZones, tRes, 0, "  ", "\n" );
@@ -6068,7 +6068,7 @@ static SphZoneHit_e ZoneCacheFind ( const ZoneVVector_t & dZones, int iZone, con
 	if ( !dZones[iZone].GetLength() )
 		return SPH_ZONE_NO_DOCUMENT;
 
-	ZoneInfo_t * pZone = sphBinarySearch ( dZones[iZone].Begin(), &dZones[iZone].Last(), bind ( &ZoneInfo_t::m_uDocid ), pHit->m_uDocid );
+	ZoneInfo_t * pZone = dZones[iZone].BinarySearch ( bind ( &ZoneInfo_t::m_uDocid ), pHit->m_uDocid );
 
 	if ( pZone )
 	{
@@ -6228,7 +6228,7 @@ SphZoneHit_e ExtRanker_c::IsInZone ( int iZone, const ExtHit_t * pHit, int * pLa
 			CSphVector<ZoneInfo_t> & dZones = m_dZoneInfo[iZone];
 			if ( dZones.GetLength() )
 			{
-				ZoneInfo_t * pInfo = sphBinarySearch ( dZones.Begin(), &dZones.Last(), bind ( &ZoneInfo_t::m_uDocid ), uCur );
+				ZoneInfo_t * pInfo = dZones.BinarySearch ( bind ( &ZoneInfo_t::m_uDocid ), uCur );
 				if ( pInfo )
 					pZone = pInfo->m_pHits;
 			}
@@ -8062,17 +8062,15 @@ class ExprRankerHook_T : public ISphExprHook
 {
 public:
 	RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES> * m_pState;
-	const char *			m_sCheckError;
-	bool					m_bCheckInFieldAggr;
+	const char *			m_sCheckError = nullptr;
+	bool					m_bCheckInFieldAggr = false;
 
 public:
 	explicit ExprRankerHook_T ( RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES> * pState )
 		: m_pState ( pState )
-		, m_sCheckError ( NULL )
-		, m_bCheckInFieldAggr ( false )
 	{}
 
-	int IsKnownIdent ( const char * sIdent )
+	int IsKnownIdent ( const char * sIdent ) final
 	{
 		// OPTIMIZE? hash this some nice long winter night?
 		if ( !strcasecmp ( sIdent, "lcs" ) )
@@ -8124,7 +8122,7 @@ public:
 		return -1;
 	}
 
-	int IsKnownFunc ( const char * sFunc )
+	int IsKnownFunc ( const char * sFunc ) final
 	{
 		if ( !strcasecmp ( sFunc, "sum" ) )
 			return XRANK_SUM;
@@ -8139,7 +8137,7 @@ public:
 		return -1;
 	}
 
-	ISphExpr * CreateNode ( int iID, ISphExpr * pLeft, ESphEvalStage *, CSphString & )
+	ISphExpr * CreateNode ( int iID, ISphExpr * pLeft, ESphEvalStage *, CSphString & ) final
 	{
 		int * pCF = &m_pState->m_iCurrentField; // just a shortcut
 		switch ( iID )
@@ -8207,7 +8205,7 @@ public:
 		}
 	}
 
-	ESphAttr GetIdentType ( int iID )
+	ESphAttr GetIdentType ( int iID ) final
 	{
 		switch ( iID )
 		{
@@ -8309,7 +8307,7 @@ public:
 		return true;
 	}
 
-	ESphAttr GetReturnType ( int iID, const CSphVector<ESphAttr> & dArgs, bool bAllConst, CSphString & sError )
+	ESphAttr GetReturnType ( int iID, const CSphVector<ESphAttr> & dArgs, bool bAllConst, CSphString & sError ) final
 	{
 		switch ( iID )
 		{
@@ -8345,7 +8343,7 @@ public:
 		return SPH_ATTR_NONE;
 	}
 
-	void CheckEnter ( int iID )
+	void CheckEnter ( int iID ) final
 	{
 		if ( !m_sCheckError )
 			switch ( iID )
@@ -8382,7 +8380,7 @@ public:
 		}
 	}
 
-	void CheckExit ( int iID )
+	void CheckExit ( int iID ) final
 	{
 		if ( !m_sCheckError && ( iID==XRANK_SUM || iID==XRANK_TOP ) )
 		{
@@ -9942,7 +9940,7 @@ const ExtDoc_t * ExtNodeCached_t::GetDocsChunk()
 		return NULL;
 	}
 
-	int iDoc = Min ( m_iDocIndex+MAX_DOCS-1, m_pNode->m_Docs.GetLength()-1 ) - m_iDocIndex;
+	int iDoc = Min ( m_iDocIndex + MAX_DOCS - 1, m_pNode->m_Docs.GetLength () - 1 ) - m_iDocIndex;
 	memcpy ( &m_dDocs[0], &m_pNode->m_Docs[m_iDocIndex], sizeof(ExtDoc_t)*iDoc );
 	m_iDocIndex += iDoc;
 

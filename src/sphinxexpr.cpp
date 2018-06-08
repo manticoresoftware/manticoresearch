@@ -2848,7 +2848,7 @@ private:
 	const char *			m_pLastTokenStart = nullptr;
 	const ISphSchema *		m_pSchema = nullptr;
 	CSphVector<ExprNode_t>	m_dNodes;
-	CSphVector<CSphString>	m_dUservars;
+	StrVec_t				m_dUservars;
 	CSphVector<char*>		m_dIdents;
 	int						m_iConstNow = 0;
 	CSphVector<StackNode_t>	m_dGatherStack;
@@ -4503,8 +4503,7 @@ ISphExpr * ExprParser_t::CreateContainsNode ( const ExprNode_t & tNode )
 	if ( dPolyArgs.GetLength()==1 && m_dNodes[dPolyArgs[0]].m_iToken==TOK_ATTR_STRING )
 		return new Expr_ContainsStrattr_c ( CreateTree(iLat), CreateTree(iLon), CreateTree ( dPolyArgs[0] ), bGeoTesselate );
 
-	bool bConst = ARRAY_ALL ( bConst, dPolyArgs, IsConst ( &m_dNodes [ dPolyArgs[_all] ] ) );
-	if ( bConst )
+	if ( dPolyArgs.TestAll ( [&] ( int iArg ) { return IsConst ( &m_dNodes[iArg] ); } ) )
 	{
 		// POLY2D(numeric-consts)
 		return new Expr_ContainsConstvec_c ( CreateTree(iLat), CreateTree(iLon), dPolyArgs, m_dNodes.Begin(), bGeoTesselate );
@@ -5716,7 +5715,7 @@ class Expr_StrIn_c : public Expr_ArgVsConstSet_c<int64_t>, public ExprLocatorTra
 protected:
 	const BYTE *			m_pStrings = nullptr;
 	UservarIntSet_c *		m_pUservar;
-	CSphVector<CSphString>  m_dStringValues;
+	StrVec_t					m_dStringValues;
 	SphStringCmp_fn			m_fnStrCmp;
 
 public:

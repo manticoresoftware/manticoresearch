@@ -79,9 +79,9 @@ void	sphAotLemmatize ( BYTE * pWord, int iLang );
 
 // functions below by design used in search time
 /// lemmatize (or guess a normal form) a Russian word, return all lemmas
-void	sphAotLemmatizeRu ( CSphVector<CSphString> & dLemmas, const BYTE * pWord );
-void	sphAotLemmatizeDe ( CSphVector<CSphString> & dLemmas, const BYTE * pWord );
-void	sphAotLemmatize ( CSphVector<CSphString> & dLemmas, const BYTE * pWord, int iLang );
+void	sphAotLemmatizeRu ( StrVec_t & dLemmas, const BYTE * pWord );
+void	sphAotLemmatizeDe ( StrVec_t & dLemmas, const BYTE * pWord );
+void	sphAotLemmatize ( StrVec_t & dLemmas, const BYTE * pWord, int iLang );
 
 /// get lemmatizer dictionary info (file name, crc)
 const CSphNamedInt &	sphAotDictinfo ( int iLang );

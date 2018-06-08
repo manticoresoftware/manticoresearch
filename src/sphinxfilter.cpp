@@ -1243,7 +1243,7 @@ public:
 	virtual void SetStringStorage ( const BYTE * pStrings )
 	{
 		m_pStrings = pStrings;
-		if ( m_pExpr.Ptr() )
+		if ( m_pExpr )
 			m_pExpr->Command ( SPH_EXPR_SET_STRING_POOL, (void*)pStrings );
 	}
 };
@@ -1297,7 +1297,7 @@ public:
 
 	virtual bool Eval ( const CSphMatch & tMatch ) const
 	{
-		assert ( this->m_pExpr.Ptr()!=NULL );
+		assert ( this->m_pExpr );
 		return EvalValues ( m_pExpr->Int64Eval ( tMatch ) );
 	}
 };
@@ -1495,9 +1495,7 @@ struct Filter_KillList : public ISphFilter
 					if ( m_dExt[i].m_iLen>g_iKillMerge )
 						continue;
 
-					int iOff = m_dMerged.GetLength();
-					m_dMerged.Resize ( iOff + m_dExt[i].m_iLen );
-					memcpy ( m_dMerged.Begin()+iOff, m_dExt[i].m_pBegin, sizeof ( m_dMerged[0] ) * m_dExt[i].m_iLen );
+					m_dMerged.Append(m_dExt[i].m_pBegin,m_dExt[i].m_iLen);
 					m_dExt.RemoveFast ( i );
 					i--;
 				}
@@ -1585,12 +1583,12 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 
 			if ( pAttr->m_eAttrType==SPH_ATTR_JSON || pAttr->m_eAttrType==SPH_ATTR_JSON_FIELD )
 			{
-				if ( pAttr->m_pExpr.Ptr() )
+				if ( pAttr->m_pExpr )
 					pAttr->m_pExpr->AddRef(); // CreateFilterExpr() uses a refcounted pointer, but does not AddRef() itself, so help it
 
-				pExpr = pAttr->m_pExpr.Ptr();
+				pExpr = pAttr->m_pExpr;
 				eAttrType = pAttr->m_eAttrType;
-				pFilter = CreateFilterExpr ( pAttr->m_pExpr.Ptr(), tSettings, sError, eCollation, pAttr->m_eAttrType );
+				pFilter = CreateFilterExpr ( pExpr, tSettings, sError, eCollation, pAttr->m_eAttrType );
 
 			} else
 			{

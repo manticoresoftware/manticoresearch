@@ -30,7 +30,7 @@ extern int g_iRLPMaxBatchDocs;
 struct StoredDoc_t
 {
 	CSphMatch							m_tDocInfo;
-	CSphVector<CSphString>				m_dStrAttrs;
+	StrVec_t							m_dStrAttrs;
 	CSphVector<DWORD>					m_dMva;
 	CSphTightVector<BYTE*>				m_dFields;
 	CSphVector<int>						m_dFieldLengths;

@@ -1183,46 +1183,6 @@ void CSphAutoEvent::WaitEvent()
 	WaitForSingleObject ( m_hEvent, INFINITE );
 }
 
-CSphSemaphore::CSphSemaphore ()
-	: m_bInitialized ( false )
-{
-}
-
-CSphSemaphore::~CSphSemaphore ()
-{
-	assert ( !m_bInitialized );
-}
-
-bool CSphSemaphore::Init ( const char * )
-{
-	assert ( !m_bInitialized );
-	m_hSem = CreateSemaphore ( NULL, 0, INT_MAX, NULL );
-	m_bInitialized = ( m_hSem!=NULL );
-	return m_bInitialized;
-}
-
-bool CSphSemaphore::Done()
-{
-	if ( !m_bInitialized )
-		return true;
-
-	m_bInitialized = false;
-	return ( CloseHandle ( m_hSem )==TRUE );
-}
-
-void CSphSemaphore::Post()
-{
-	assert ( m_bInitialized );
-	ReleaseSemaphore ( m_hSem, 1, NULL );
-}
-
-bool CSphSemaphore::Wait()
-{
-	assert ( m_bInitialized );
-	DWORD uWait = WaitForSingleObject ( m_hSem, INFINITE );
-	return !( uWait==WAIT_FAILED || uWait==WAIT_TIMEOUT );
-}
-
 #else
 
 // UNIX mutex implementation
@@ -1292,8 +1252,10 @@ bool CSphMutex::Unlock ()
 
 bool CSphAutoEvent::Init ()
 {
-	m_bInitialized = ( pthread_mutex_init ( &m_tMutex, NULL )==0 );
-	m_bInitialized &= ( pthread_cond_init ( &m_tCond, NULL )==0 );
+	if ( m_bInitialized )
+		return true;
+	m_bInitialized = ( pthread_mutex_init ( &m_tMutex, nullptr )==0 );
+	m_bInitialized &= ( pthread_cond_init ( &m_tCond, nullptr )==0 );
 	return m_bInitialized;
 }
 
@@ -1314,7 +1276,7 @@ void CSphAutoEvent::SetEvent ()
 		return;
 
 	pthread_mutex_lock ( &m_tMutex );
-	m_iSent++;
+	++m_iSent;
 	pthread_cond_signal ( &m_tCond );
 	pthread_mutex_unlock ( &m_tMutex );
 }
@@ -1326,60 +1288,10 @@ void CSphAutoEvent::WaitEvent()
 
 	pthread_mutex_lock ( &m_tMutex );
 	while (  !m_iSent )
-	{
 		pthread_cond_wait ( &m_tCond, &m_tMutex );
-	}
 
-	m_iSent--;
+	--m_iSent;
 	pthread_mutex_unlock ( &m_tMutex );
-}
-
-
-CSphSemaphore::CSphSemaphore ()
-	: m_bInitialized ( false )
-	, m_pSem ( NULL )
-{
-}
-
-
-CSphSemaphore::~CSphSemaphore ()
-{
-	assert ( !m_bInitialized );
-	sem_close ( m_pSem );
-}
-
-
-bool CSphSemaphore::Init ( const char * sName )
-{
-	assert ( !m_bInitialized );
-	m_pSem = sem_open ( sName, O_CREAT | O_EXCL, 0, 0 );
-	m_sName = sName;
-	m_bInitialized = ( m_pSem!=SEM_FAILED );
-	return m_bInitialized;
-}
-
-bool CSphSemaphore::Done ()
-{
-	if ( !m_bInitialized )
-		return true;
-
-	m_bInitialized = false;
-	int iRes = sem_close ( m_pSem );
-	sem_unlink ( m_sName.cstr() );
-	return ( iRes==0 );
-}
-
-void CSphSemaphore::Post()
-{
-	assert ( m_bInitialized );
-	sem_post ( m_pSem );
-}
-
-bool CSphSemaphore::Wait ()
-{
-	assert ( m_bInitialized );
-	int iRes = sem_wait ( m_pSem );
-	return ( iRes==0 );
 }
 
 #endif
@@ -1746,87 +1658,81 @@ DWORD sphCRC32 ( const void * s, int iLen, DWORD uPrevCRC )
 }
 
 #if USE_WINDOWS
-template<> long CSphAtomic_T<long>::GetValue () const
-{
-	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
-	return InterlockedExchangeAdd ( &m_iValue, 0 );
-}
-
-template<> int64_t CSphAtomic_T<int64_t>::GetValue () const
-{
-	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
-	return InterlockedExchangeAdd64 ( &m_iValue, 0 );
-}
-
 template<> long CSphAtomic_T<long>::Inc ()
 {
-	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( m_iValue ) ) )==0 && "unaligned atomic!" );
 	return InterlockedIncrement ( &m_iValue )-1;
 }
 
 template<> int64_t CSphAtomic_T<int64_t>::Inc ()
 {
-	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( m_iValue ) ) )==0 && "unaligned atomic!" );
 	return InterlockedIncrement64 ( &m_iValue )-1;
 }
 
 template<> long CSphAtomic_T<long>::Dec ()
 {
-	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( m_iValue ) ) )==0 && "unaligned atomic!" );
 	return InterlockedDecrement ( &m_iValue )+1;
 }
 
 template<> int64_t CSphAtomic_T<int64_t>::Dec ()
 {
-	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( m_iValue ) ) )==0 && "unaligned atomic!" );
 	return InterlockedDecrement64 ( &m_iValue )+1;
 }
 
 template<> long CSphAtomic_T<long>::Add ( long iValue )
 {
-	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( m_iValue ) ) )==0 && "unaligned atomic!" );
 	return InterlockedExchangeAdd ( &m_iValue, iValue );
 }
 
 template<> int64_t CSphAtomic_T<int64_t>::Add ( int64_t iValue )
 {
-	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( m_iValue ) ) )==0 && "unaligned atomic!" );
 	return InterlockedExchangeAdd64 ( &m_iValue, iValue );
 }
 
 template<> long CSphAtomic_T<long>::Sub ( long iValue )
 {
-	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( m_iValue ) ) )==0 && "unaligned atomic!" );
 	return InterlockedExchangeAdd ( &m_iValue, -iValue );
 }
 
 template<> int64_t CSphAtomic_T<int64_t>::Sub ( int64_t iValue )
 {
-	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( m_iValue ) ) )==0 && "unaligned atomic!" );
 	return InterlockedExchangeAdd64 ( &m_iValue, -iValue );
 }
 
 template<> void CSphAtomic_T<long>::SetValue ( long iValue )
 {
-	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( m_iValue ) ) )==0 && "unaligned atomic!" );
 	InterlockedExchange ( &m_iValue, iValue );
 }
 
 template<> void CSphAtomic_T<int64_t>::SetValue ( int64_t iValue )
 {
-	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( m_iValue ) ) )==0 && "unaligned atomic!" );
 	InterlockedExchange64 ( &m_iValue, iValue );
+}
+
+template<> unsigned int CSphAtomic_T<unsigned int>::CAS ( unsigned int uOldVal, unsigned int uNewVal )
+{
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( m_iValue ) ) )==0 && "unaligned atomic!" );
+	return InterlockedCompareExchange ( &m_iValue, uNewVal, uOldVal );
 }
 
 template<> long CSphAtomic_T<long>::CAS ( long iOldVal, long iNewVal )
 {
-	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( m_iValue ) ) )==0 && "unaligned atomic!" );
 	return InterlockedCompareExchange ( &m_iValue, iNewVal, iOldVal );
 }
 
 template<> int64_t CSphAtomic_T<int64_t>::CAS ( int64_t iOldVal, int64_t iNewVal )
 {
-	assert ( ( ( (size_t) &m_iValue )%( sizeof ( &m_iValue ) ) )==0 && "unaligned atomic!" );
+	assert ( ( ( (size_t) &m_iValue )%( sizeof ( m_iValue ) ) )==0 && "unaligned atomic!" );
 	return InterlockedCompareExchange64 ( &m_iValue, iNewVal, iOldVal );
 }
 
@@ -1860,15 +1766,9 @@ const char*		sphCheckEndian()
 
 struct ThdJob_t
 {
-	ISphJob *	m_pItem;
-	ThdJob_t *	m_pNext;
-	ThdJob_t *	m_pPrev;
-
-	ThdJob_t ()
-		: m_pItem ( NULL )
-		, m_pNext ( NULL )
-		, m_pPrev ( NULL )
-	{}
+	ISphJob *	m_pItem = nullptr;
+	ThdJob_t *	m_pNext = nullptr;
+	ThdJob_t *	m_pPrev = nullptr;
 
 	~ThdJob_t ()
 	{
@@ -1891,27 +1791,21 @@ class CSphThdPool : public ISphThdPool
 	CSphAutoEvent					m_tWakeup;
 	CSphMutex						m_tJobLock;
 
-	CSphFixedVector<SphThread_t>	m_dWorkers;
-	ThdJob_t *						m_pHead;
-	ThdJob_t *						m_pTail;
+	CSphFixedVector<SphThread_t>	m_dWorkers { 0 };
+	ThdJob_t *						m_pHead GUARDED_BY ( m_tJobLock ) = nullptr;
+	ThdJob_t *						m_pTail GUARDED_BY ( m_tJobLock ) = nullptr;
 
-	volatile bool					m_bShutdown;
+	volatile bool					m_bShutdown = false;
 
 	CSphAtomic						m_tStatActiveWorkers;
-	int								m_iStatQueuedJobs;
+	int								m_iStatQueuedJobs = 0;
 
 	CSphString						m_sName;
 
 public:
-	explicit CSphThdPool ( int iThreads, const char * sName, CSphString & sError )
-		: m_dWorkers ( 0 )
-		, m_pHead ( nullptr )
-		, m_pTail ( nullptr )
-		, m_bShutdown ( false )
-		, m_iStatQueuedJobs ( 0 )
-		, m_sName ( sName )
+	CSphThdPool ( int iThreads, const char * sName, CSphString & sError )
 	{
-		if ( !m_tWakeup.Init () )
+		if ( !m_tWakeup.Initialized () )
 		{
 			m_bShutdown = true;
 			sError.SetSprintf ( "thread-pool create failed %s", strerror ( errno ) );
@@ -1932,11 +1826,9 @@ public:
 	~CSphThdPool () final
 	{
 		Shutdown();
-
-		Verify ( m_tWakeup.Done() );
 	}
 
-	void Shutdown () final
+	void Shutdown () NO_THREAD_SAFETY_ANALYSIS final
 	{
 		if ( m_bShutdown )
 			return;
@@ -1978,7 +1870,7 @@ public:
 			m_pHead = pJob;
 		}
 
-		m_iStatQueuedJobs++;
+		++m_iStatQueuedJobs;
 		m_tJobLock.Unlock();
 
 		m_tWakeup.SetEvent();
@@ -2010,15 +1902,15 @@ private:
 			ThdJob_t * pJob = pPool->m_pTail;
 			if ( pPool->m_pHead==pPool->m_pTail ) // either 0 or 1 job case
 			{
-				pPool->m_pHead = pPool->m_pTail = NULL;
+				pPool->m_pHead = pPool->m_pTail = nullptr;
 			} else
 			{
-				pJob->m_pPrev->m_pNext = NULL;
+				pJob->m_pPrev->m_pNext = nullptr;
 				pPool->m_pTail = pJob->m_pPrev;
 			}
 
 			if ( pJob )
-				pPool->m_iStatQueuedJobs--;
+				--pPool->m_iStatQueuedJobs;
 
 			pPool->m_tJobLock.Unlock();
 
@@ -2063,7 +1955,7 @@ private:
 
 ISphThdPool * sphThreadPoolCreate ( int iThreads, const char * sName, CSphString & sError )
 {
-	CSphThdPool * pPool = new CSphThdPool ( iThreads, sName, sError );
+	auto * pPool = new CSphThdPool ( iThreads, sName, sError );
 	if ( !sError.IsEmpty() )
 		SafeDelete ( pPool );
 
@@ -2111,7 +2003,7 @@ public:
 		Reset();
 	}
 
-	virtual void Add ( double fValue, int64_t iWeight = 1 )
+	void Add ( double fValue, int64_t iWeight ) final
 	{
 		if ( m_dMap.empty() )
 		{
@@ -2186,7 +2078,7 @@ public:
 	}
 
 
-	virtual double Percentile ( int iPercent ) const
+	double Percentile ( int iPercent ) const final
 	{
 		assert ( iPercent>=0 && iPercent<=100 );
 
@@ -2371,7 +2263,7 @@ StringBuilder_c& StringBuilder_c::operator= ( const StringBuilder_c &rhs )
 void StringBuilder_c::Grow ( int iLen )
 {
 	m_iSize += iLen;
-	char * pNew = new char[m_iSize];
+	auto * pNew = new char[m_iSize];
 	memcpy ( pNew, m_sBuffer, m_iUsed + 1 );
 	Swap ( pNew, m_sBuffer );
 	SafeDeleteArray ( pNew );

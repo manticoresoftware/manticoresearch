@@ -529,7 +529,7 @@ class CSphQueryProfileJson : public CSphQueryProfile
 public:
 	virtual					~CSphQueryProfileJson();
 
-	virtual void			BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const CSphVector<CSphString> & dZones );
+	virtual void			BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t & dZones );
 	virtual cJSON *			LeakResultAsJson();
 	virtual const char *	GetResultAsStr() const;
 
@@ -544,7 +544,7 @@ CSphQueryProfileJson::~CSphQueryProfileJson()
 }
 
 
-void CSphQueryProfileJson::BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const CSphVector<CSphString> & /*dZones*/ )
+void CSphQueryProfileJson::BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t & /*dZones*/ )
 {
 	assert ( !m_pResult );
 	m_pResult = sphBuildProfileJson ( pRoot, tSchema );
@@ -582,7 +582,7 @@ public:
 		cJSON_Delete ( m_pQuery );
 	}
 
-	void BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const override
+	void BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final
 	{
 		// replace "index" value in the json query
 		cJSON_DeleteItemFromObject ( m_pQuery, "index" );
@@ -611,7 +611,7 @@ public:
 		, m_iWarnings ( iWarnings )
 	{}
 
-	virtual bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const
+	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const final
 	{
 		CSphString sEndpoint = tReq.GetString();
 		ESphHttpEndpoint eEndpoint = sphStrToHttpEndpoint ( sEndpoint );
@@ -1369,26 +1369,6 @@ public:
 	}
 };
 
-class ScopedIndex_c
-{
-	ServedIndex_c * m_pPtr = nullptr;
-
-public:
-	explicit ScopedIndex_c ( ServedIndex_c * pIndex  )
-		: m_pPtr ( pIndex )
-	{}
-
-	ServedIndex_c * Ptr() const { return m_pPtr; }
-	ServedIndex_c * operator -> () const { return m_pPtr; }
-
-	~ScopedIndex_c()
-	{
-		if ( m_pPtr )
-			m_pPtr->Unlock();
-		m_pPtr = nullptr;
-	}
-};
-
 struct SourceMatch_c : public CSphMatch
 {
 	static SphAttr_t ToInt ( const cJSON * pVal )
@@ -1930,7 +1910,7 @@ bool HttpHandlerPQ_c::Process()
 	}
 
 	assert ( sEndpoint->Begins ( "json/pq/" ) );
-	CSphVector<CSphString> dPoints;
+	StrVec_t dPoints;
 	sphSplit ( dPoints, sEndpoint->cstr() + sizeof("json/pq/") - 1, "/" );
 	if ( dPoints.GetLength()<2 )
 	{
@@ -1952,20 +1932,19 @@ bool HttpHandlerPQ_c::Process()
 		bMatch = true;
 
 	// get index
-	const ScopedIndex_c tServed ( g_pLocalIndexes->GetRlockedEntry ( sIndex ) );
-	if ( !tServed.Ptr() )
+	ServedDescRPtr_c pServed ( GetServed ( sIndex ) );
+	if ( !pServed )
 	{
-		FormatError ( SPH_HTTP_STATUS_500, "no such index '%s'", sIndex.cstr() );
+		FormatError ( SPH_HTTP_STATUS_500, "no such index '%s'", sIndex.cstr () );
+		return false;
+	}
+	if ( pServed->m_eType!=eITYPE::PERCOLATE || !pServed->m_pIndex )
+	{
+		FormatError ( SPH_HTTP_STATUS_500, "index '%s' is not percolate (enabled=%d)", sIndex.cstr() );
 		return false;
 	}
 
-	if ( !tServed->m_bPercolate || !tServed->m_bEnabled || !tServed->m_pIndex )
-	{
-		FormatError ( SPH_HTTP_STATUS_500, "index '%s' is not percolate (enabled=%d)", sIndex.cstr(), tServed->m_bEnabled );
-		return false;
-	}
-
-	PercolateIndex_i * pIndex = (PercolateIndex_i *)tServed->m_pIndex;
+	auto * pIndex = (PercolateIndex_i *) pServed->m_pIndex;
 
 	if ( m_sQuery.IsEmpty() )
 		return ListQueries ( pIndex, sIndex );

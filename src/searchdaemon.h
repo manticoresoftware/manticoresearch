@@ -86,6 +86,11 @@
 	#define sphSockRecv(_sock,_buf,_len)	::recv(_sock,_buf,_len,0)
 	#define sphSockSend(_sock,_buf,_len)	::send(_sock,_buf,_len,0)
 	#define sphSockClose(_sock)				::closesocket(_sock)
+	#define SSIZE_T long
+	using sphIovec = WSABUF;
+	#define IOBUFTYPE (CHAR FAR *)
+	#define IOPTR(tX) (tX.buf)
+	#define IOLEN(tX) (tX.len)
 #else
 	// there's no MSG_NOSIGNAL on OS X
 	#ifndef MSG_NOSIGNAL
@@ -95,6 +100,11 @@
 	#define sphSockRecv(_sock,_buf,_len)	::recv(_sock,_buf,_len,MSG_NOSIGNAL)
 	#define sphSockSend(_sock,_buf,_len)	::send(_sock,_buf,_len,MSG_NOSIGNAL)
 	#define sphSockClose(_sock)				::close(_sock)
+	#define SSIZE_T ssize_t
+	using sphIovec = iovec;
+	#define IOBUFTYPE
+	#define IOPTR(tX) (tX.iov_base)
+	#define IOLEN(tX) (tX.iov_len)
 #endif
 
 const char * sphSockError ( int =0 );
@@ -104,7 +114,15 @@ int sphSockPeekErrno ();
 int sphSetSockNB ( int );
 void sphFDSet ( int fd, fd_set * fdset );
 void sphFDClr ( int fd, fd_set * fdset );
-DWORD sphGetAddress ( const char * sHost, bool bFatal=false );
+
+/** \brief wrapper over getaddrinfo
+Invokes getaddrinfo for given host which perform name resolving (dns).
+ \param[in] sHost the host name
+ \param[in] bFatal whether failed resolving is fatal (false by default)
+ \param[in] bIP set true if sHost contains IP address (false by default)
+ so no potentially lengthy network host address lockup necessary
+ \return ipv4 address as DWORD, to be directly used as s_addr in connect(). */
+DWORD sphGetAddress ( const char * sHost, bool bFatal=false, bool bIP=false );
 
 /////////////////////////////////////////////////////////////////////////////
 // MISC GLOBALS
@@ -155,12 +173,21 @@ enum SearchdCommandV_e : WORD
 
 enum ESphAddIndex
 {
-	ADD_ERROR	= 0,
-	ADD_LOCAL	= 1,
-	ADD_DISTR	= 2,
-	ADD_RT		= 3,
-	ADD_TMPL	= 4,
-	ADD_CLUSTER	= 5,
+	ADD_ERROR	= 0, // wasn't added because of config or other error
+	ADD_DSBLED	= 1, // added into disabled hash (need to prealloc/preload, etc)
+	ADD_DISTR	= 2, // distributed
+	ADD_SERVED	= 3, // added and active (can be used in queries)
+//	ADD_CLUSTER	= 4,
+};
+
+enum class eITYPE
+{
+	PLAIN,
+	TEMPLATE,
+	RT,
+	PERCOLATE,
+	DISTR,
+	ERROR_, // simple "ERROR" doesn't work on win due to '#define ERROR 0' somewhere.
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -178,30 +205,21 @@ extern ESphLogLevel		g_eLogLevel;
 // NETWORK BUFFERS
 /////////////////////////////////////////////////////////////////////////////
 
-template < typename T >
-void sphBufferAddT ( CSphVector<BYTE> & dBuf, T tValue )
-{
-	int iOff = dBuf.GetLength();
-	dBuf.Resize ( iOff + sizeof(T) );
-	sphUnalignedWrite ( dBuf.Begin() + iOff, tValue );
-}
-
-
-/// dynamic response buffer
+/// dynamic send buffer
 /// to remove ISphNoncopyable just add copy c-tor and operator=
-/// splitting application network packets in several sphSocketSend()s causes
-/// Nagle's algorithm to wait delayead ACKs (google for it if you want)
-/// That's why we use relocation here instead of static-sized buffer.
-/// To be twice sure we're switching off Nagle's algorithm in all sockets.
-class ISphOutputBuffer : public ISphNoncopyable
+/// we just cache all streamed data into internal blob;
+/// NO data sending itself lives in this class.
+
+#define NETOUTBUF                8192
+
+class ISphOutputBuffer : public ISphRefcountedMT
 {
 public:
 	ISphOutputBuffer ();
-	explicit ISphOutputBuffer ( CSphVector<BYTE> & dBuf );
+	ISphOutputBuffer ( CSphVector<BYTE>& dChunk );
 	virtual ~ISphOutputBuffer() {}
 
 	void		SendInt ( int iValue )			{ SendT<int> ( htonl ( iValue ) ); }
-	void		WriteInt ( intptr_t iOff, int iValue ) { WriteT<int> ( iOff, htonl ( iValue ) ); }
 
 	void		SendAsDword ( int64_t iValue ) ///< sends the 32bit MAX_UINT if the value is greater than it.
 	{
@@ -221,10 +239,15 @@ public:
 		SendByte ( (BYTE)( (v>>24) & 0xff) );
 	}
 
-	void SendUint64 ( uint64_t iValue )
+	void SendUint64 ( uint64_t uValue )
 	{
-		SendT<DWORD> ( htonl ( (DWORD)(iValue>>32) ) );
-		SendT<DWORD> ( htonl ( (DWORD)(iValue & 0xffffffffUL) ) );
+		SendT<DWORD> ( htonl ( (DWORD)( uValue>>32) ) );
+		SendT<DWORD> ( htonl ( (DWORD)( uValue & 0xffffffffUL) ) );
+	}
+
+	void SendUint64 ( int64_t iValue )
+	{
+		SendUint64 ( (uint64_t) iValue );
 	}
 
 	void		SendDocid ( SphDocID_t iValue )	{ SendUint64 ( iValue ); }
@@ -240,8 +263,12 @@ public:
 	virtual bool	GetError () const { return false; }
 	virtual int		GetSentCount () const { return m_dBuf.GetLength(); }
 	virtual void	SetProfiler ( CSphQueryProfile * ) {}
+	virtual void *	GetBufPtr () const { return (char*) m_dBuf.begin();}
 
 protected:
+	void WriteInt ( intptr_t iOff, int iValue )
+	{ WriteT<int> ( iOff, htonl ( iValue ) ); }
+
 	CSphVector<BYTE>	m_dBuf;
 
 	template < typename T > void WriteT ( intptr_t iOff, const T& tValue )
@@ -257,6 +284,7 @@ private:
 		WriteT ( iOff, tValue );
 	}
 };
+
 
 // assume buffer never flushed between different Send()
 // bye-bye all 'calculate query len'
@@ -292,6 +320,22 @@ protected:
 
 using WriteLenHere_c = CachedOutputBuffer_c::ReqLenCalc;
 
+// buffer that knows if it has requested data or not
+class SmartOutputBuffer_t : public CachedOutputBuffer_c
+{
+	CSphVector<ISphOutputBuffer *> m_dChunks;
+public:
+	SmartOutputBuffer_t () = default;
+	~SmartOutputBuffer_t () override;
+	int GetSentCount () const override;
+
+	void StartNewChunk ();
+//	void AppendBuf ( SmartOutputBuffer_t &dBuf );
+//	void PrependBuf ( SmartOutputBuffer_t &dBuf );
+	size_t GetIOVec ( CSphVector<sphIovec> &dOut );
+	void Reset();
+};
+
 class NetOutputBuffer_c : public CachedOutputBuffer_c
 {
 public:
@@ -302,7 +346,6 @@ public:
 	int		GetSentCount () const override { return m_iSent; }
 	void	SetProfiler ( CSphQueryProfile * pProfiler ) override { m_pProfile = pProfiler; }
 	const char * GetErrorMsg () const;
-
 
 private:
 	CSphQueryProfile *	m_pProfile = nullptr;
@@ -339,6 +382,11 @@ public:
 	template < typename T > bool	GetDwords ( CSphVector<T> & dBuffer, int & iGot, int iMax );
 	template < typename T > bool	GetQwords ( CSphVector<T> & dBuffer, int & iGot, int iMax );
 
+	inline int		HasBytes() const
+	{
+		return ( m_pBuf + m_iLen - m_pCur );
+	}
+
 protected:
 	const BYTE *	m_pBuf;
 	const BYTE *	m_pCur;
@@ -365,12 +413,7 @@ template < typename T > T InputBuffer_c::GetT ()
 
 
 /// simple memory request buffer
-class MemInputBuffer_c : public InputBuffer_c
-{
-public:
-	MemInputBuffer_c ( const BYTE * pBuf, int iLen ) : InputBuffer_c ( pBuf, iLen ) {}
-};
-
+using MemInputBuffer_c = InputBuffer_c;
 
 /// simple network request buffer
 class NetInputBuffer_c : public InputBuffer_c
@@ -398,19 +441,21 @@ protected:
 bool IsPortInRange ( int iPort );
 int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr );
 
-// This class is basically a pointer to query string and some more additional info.
-// Each thread which executes query must have exactly one instance of this class on
-// its stack and m_tLastQueryTLS will contain a pointer to that instance.
-// Main thread has explicitly created SphCrashLogger_c on its stack, other query
-// threads should be created with SphCrashLogger_c::ThreadCreate()
+
+extern ThreadRole MainThread;
+/// This class is basically a pointer to query string and some more additional info.
+/// Each thread which executes query must have exactly one instance of this class on
+/// its stack and m_tLastQueryTLS will contain a pointer to that instance.
+/// Main thread has explicitly created SphCrashLogger_c on its stack, other query
+/// threads should be created with SphCrashLogger_c::ThreadCreate()
 class SphCrashLogger_c
 {
 public:
 	SphCrashLogger_c () {}
 	~SphCrashLogger_c ();
 
-	static void Init ();
-	static void Done ();
+	static void Init () REQUIRES ( MainThread );
+	static void Done () REQUIRES ( MainThread );
 
 #if !USE_WINDOWS
 	static void HandleCrash ( int );
@@ -467,10 +512,8 @@ enum
 
 struct QueryStatElement_t
 {
-	uint64_t	m_dData[QUERY_STATS_TYPE_TOTAL];
-	uint64_t	m_uTotalQueries;
-
-				QueryStatElement_t();
+	uint64_t	m_dData[QUERY_STATS_TYPE_TOTAL] = { 0, UINT64_MAX, 0, 0, 0, };
+	uint64_t	m_uTotalQueries = 0;
 };
 
 
@@ -506,13 +549,13 @@ public:
 class QueryStatContainer_c : public QueryStatContainer_i
 {
 public:
-	virtual void						Add ( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp ) override;
-	virtual void						GetRecord ( int iRecord, QueryStatRecord_t & tRecord ) const override;
-	virtual int							GetNumRecords() const override;
+	void						Add ( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp ) final;
+	void						GetRecord ( int iRecord, QueryStatRecord_t & tRecord ) const final;
+	int							GetNumRecords() const final;
 
 	QueryStatContainer_c();
-	QueryStatContainer_c ( QueryStatContainer_c && tOther );
-	QueryStatContainer_c & operator= ( QueryStatContainer_c && tOther );
+	QueryStatContainer_c ( QueryStatContainer_c && tOther ) noexcept;
+	QueryStatContainer_c & operator= ( QueryStatContainer_c && tOther ) noexcept;
 	
 private:
 	CircularBuffer_T<QueryStatRecord_t>	m_dRecords;
@@ -523,13 +566,13 @@ private:
 class QueryStatContainerExact_c : public QueryStatContainer_i
 {
 public:
-	virtual void						Add ( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp );
-	virtual void						GetRecord ( int iRecord, QueryStatRecord_t & tRecord ) const;
-	virtual int							GetNumRecords() const;
+	void						Add ( uint64_t uFoundRows, uint64_t uQueryTime, uint64_t uTimestamp ) final;
+	void						GetRecord ( int iRecord, QueryStatRecord_t & tRecord ) const final;
+	int							GetNumRecords() const final;
 
 	QueryStatContainerExact_c();
-	QueryStatContainerExact_c ( QueryStatContainerExact_c && tOther );
-	QueryStatContainerExact_c & operator= ( QueryStatContainerExact_c && tOther );
+	QueryStatContainerExact_c ( QueryStatContainerExact_c && tOther ) noexcept;
+	QueryStatContainerExact_c & operator= ( QueryStatContainerExact_c && tOther ) noexcept;
 
 private:
 	struct QueryStatRecordExact_t
@@ -543,157 +586,282 @@ private:
 };
 #endif
 
-struct ServedDesc_t
-{
-	CSphIndex *			m_pIndex;
-	CSphString			m_sIndexPath;
-	CSphString			m_sNewPath;
-	bool				m_bEnabled;		///< to disable index in cases when rotation fails
-	bool				m_bMlock;
-	bool				m_bPreopen;
-	int					m_iExpandKeywords;
-	bool				m_bToDelete;
-	bool				m_bOnlyNew;
-	bool				m_bRT;
-	CSphString			m_sGlobalIDFPath;
-	bool				m_bOnDiskAttrs;
-	bool				m_bOnDiskPools;
-	int64_t				m_iMass; // relative weight (by access speed) of the index
-	bool				m_bPercolate;
-
-						ServedDesc_t ();
-	virtual				~ServedDesc_t ();
-};
-
-
 class ServedStats_c
 {
 public:
 						ServedStats_c();
 	virtual				~ServedStats_c();
-	
-	void				AddQueryStat ( uint64_t uFoundRows, uint64_t uQueryTime );
-	void				CalculateQueryStats ( QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const;
-#ifndef NDEBUG
-	void				CalculateQueryStatsExact ( QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const;
-#endif
-protected:
-	virtual void		LockStats ( bool bReader ) const = 0;
-	virtual void		UnlockStats() const = 0;
 
+	void				AddQueryStat ( uint64_t uFoundRows, uint64_t uQueryTime ); //  REQUIRES ( !m_tStatsLock );
+						/// since mutex is internal,
+	void				CalculateQueryStats ( QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const; // REQUIRES (	!m_tStatsLock );
+#ifndef NDEBUG
+	void				CalculateQueryStatsExact ( QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const; // REQUIRES ( !m_tStatsLock );
+#endif
 private:
-	QueryStatContainer_c m_tQueryStatRecords;
+	mutable CSphRwlock m_tStatsLock;
+	QueryStatContainer_c m_tQueryStatRecords GUARDED_BY ( m_tStatsLock );
 
 #ifndef NDEBUG
-	QueryStatContainerExact_c m_tQueryStatRecordsExact;
+	QueryStatContainerExact_c m_tQueryStatRecordsExact GUARDED_BY ( m_tStatsLock );
 #endif
 
-	TDigest_i *			m_pQueryTimeDigest;
-	TDigest_i *			m_pRowsFoundDigest;
+	TDigest_i *			m_pQueryTimeDigest GUARDED_BY ( m_tStatsLock ) = nullptr;
+	TDigest_i *			m_pRowsFoundDigest GUARDED_BY ( m_tStatsLock ) = nullptr;
 
-	uint64_t			m_uTotalFoundRowsMin;
-	uint64_t			m_uTotalFoundRowsMax;
-	uint64_t			m_uTotalFoundRowsSum;
+	uint64_t			m_uTotalFoundRowsMin GUARDED_BY ( m_tStatsLock )= UINT64_MAX;
+	uint64_t			m_uTotalFoundRowsMax GUARDED_BY ( m_tStatsLock )= 0;
+	uint64_t			m_uTotalFoundRowsSum GUARDED_BY ( m_tStatsLock )= 0;
 
-	uint64_t			m_uTotalQueryTimeMin;
-	uint64_t			m_uTotalQueryTimeMax;
-	uint64_t			m_uTotalQueryTimeSum;
+	uint64_t			m_uTotalQueryTimeMin GUARDED_BY ( m_tStatsLock )= UINT64_MAX;
+	uint64_t			m_uTotalQueryTimeMax GUARDED_BY ( m_tStatsLock )= 0;
+	uint64_t			m_uTotalQueryTimeSum GUARDED_BY ( m_tStatsLock )= 0;
 
-	uint64_t			m_uTotalQueries;
+	uint64_t			m_uTotalQueries GUARDED_BY ( m_tStatsLock ) = 0;
 
-	static void			CalcStatsForInterval ( const QueryStatContainer_i * pContainer, QueryStatElement_t & tRowResult, QueryStatElement_t & tTimeResult, uint64_t uTimestamp, uint64_t uInterval, int iRecords );
-	void				DoStatCalcStats ( const QueryStatContainer_i * pContainer, QueryStats_t & tRowsFoundStats, QueryStats_t & tQueryTimeStats ) const;
+	static void			CalcStatsForInterval ( const QueryStatContainer_i * pContainer, QueryStatElement_t & tRowResult,
+							QueryStatElement_t & tTimeResult, uint64_t uTimestamp, uint64_t uInterval, int iRecords );
+
+	void				DoStatCalcStats ( const QueryStatContainer_i * pContainer, QueryStats_t & tRowsFoundStats,
+							QueryStats_t & tQueryTimeStats ) const EXCLUDES ( m_tStatsLock );
 };
 
 
-class ServedIndex_c : public ISphNoncopyable, public ServedDesc_t, public ServedStats_c
+struct ServedDesc_t
 {
-public:
-	ServedIndex_c ();
-	virtual ~ServedIndex_c ();
+	CSphIndex *	m_pIndex		= nullptr; ///< owned index; will be deleted in d-tr
+	CSphString	m_sIndexPath;	///< current index path; independent but related to one in m_pIndex
+	CSphString	m_sNewPath;		///< when reloading because of config changed, it contains path to new index.
+	bool		m_bMlock		= false;
+	bool		m_bPreopen		= false;
+	int			m_iExpandKeywords { KWE_DISABLED };
+	bool		m_bOnlyNew		= false; ///< load new (previously not loaded) index - need fixup, prealloc, etc.
+	CSphString	m_sGlobalIDFPath;
+	bool		m_bOnDiskAttrs	= false;
+	bool		m_bOnDiskPools	= false;
+	int64_t		m_iMass			= 0; // relative weight (by access speed) of the index
+	mutable CSphString	m_sUnlink;
+	eITYPE		m_eType			= eITYPE::PLAIN;
+	inline bool IsMutable () const { return m_eType==eITYPE::RT || m_eType==eITYPE::PERCOLATE; }
+	virtual                ~ServedDesc_t ();
+};
 
-	void				ReadLock () const ACQUIRE_SHARED( m_tLock );
-	void				WriteLock () const ACQUIRE( m_tLock );
-	void				Unlock () const UNLOCK_FUNCTION( m_tLock );
+// wrapped ServedDesc_t - to be served as pointers in containers
+// (fully block any access to internals)
+// create ServedDesc[R|W]Ptr_c instance to have actual access to the members.
+class ServedIndex_c : public ISphRefcountedMT, private ServedDesc_t, public ServedStats_c
+{
+	mutable RwLock_t m_tLock;
+private:
+	friend class ServedDescRPtr_c;
+	friend class ServedDescWPtr_c;
 
-	bool				InitLock () const;
-
-	void				Release () const;
-	void				SetUnlink ( const char * sUnlnk );
+	ServedDesc_t * ReadLock () const ACQUIRE_SHARED( m_tLock );
+	ServedDesc_t * WriteLock () const ACQUIRE( m_tLock );
+	void Unlock () const UNLOCK_FUNCTION( m_tLock );
 
 protected:
-	virtual void		LockStats ( bool bReader ) const;
-	virtual void		UnlockStats() const;
-
-	void				AddRef () const;
-
-private:
-	mutable CSphRwlock	m_tLock;
-	mutable CSphRwlock	m_tStatsLock;
-	mutable CSphAtomic	m_tRefCount;
-	CSphString			m_sUnlink;
-};
-
-typedef SmallStringHash_T<ServedIndex_c *> IndexHash_t;
-
-/// global index hash
-/// used in both non-threaded and multi-threaded modes
-///
-/// hash entry is a CSphIndex pointer, rwlock, and a few flags (see ServedIndex_t)
-/// rlock on entry guarantees it won't change, eg. that index pointer will stay alive
-/// wlock on entry allows to change (delete/replace) the index pointer
-///
-/// note that entry locks are held outside the hash
-/// and Delete() honours that by acquiring wlock on an entry first
-class IndexHash_c : public ISphNoncopyable 
-{
-	friend class IndexHashIterator_c;
+	// no manual deletion; lifetime managed by AddRef/Release()
+	~ServedIndex_c () override = default;
 
 public:
-	IndexHash_c ();
-	~IndexHash_c ();
 
-	int						GetLength() const { return m_hIndexes.GetLength(); }
-	void					Reset();
+	explicit ServedIndex_c ( const ServedDesc_t& tDesc );
+	//ServedIndex_c ();
 
-	bool					Add ( const ServedDesc_t & tDesc, const CSphString & tKey );
-	void					Set ( ServedDesc_t & tDesc, const CSphString & tKey );	
-	bool					Delete ( const CSphString & tKey );
+	// fake alias to private m_tLock to allow clang thread-safety analysis
+	CSphRwlock * rwlock () const RETURN_CAPABILITY ( m_tLock )
+	{ return nullptr; }
 
-	ServedIndex_c *			GetRlockedEntry ( const CSphString & tKey ) const EXCLUDES (m_tLock);
-	ServedIndex_c *			GetWlockedEntry ( const CSphString & tKey ) const EXCLUDES (m_tLock);
-	bool					Exists ( const CSphString & tKey, ServedDesc_t * pDesc = NULL ) const;
+};
+
+
+/// RAII shared reader for ServedDesc_t hidden in ServedIndex_c
+class SCOPED_CAPABILITY ServedDescRPtr_c : ISphNoncopyable
+{
+public:
+	ServedDescRPtr_c() = default;
+	// by default acquire read (shared) lock
+	ServedDescRPtr_c ( const ServedIndex_c * pLock ) ACQUIRE_SHARED( pLock->m_tLock )
+		: m_pLock { pLock }
+	{
+		if ( m_pLock )
+			m_pCore = m_pLock->ReadLock();
+	}
+
+	/// unlock on going out of scope
+	~ServedDescRPtr_c () RELEASE ()
+	{
+		if ( m_pLock )
+			m_pLock->Unlock ();
+	}
+
+public:
+	const ServedDesc_t * operator-> () const
+	{ return m_pCore; }
+
+	explicit operator bool () const
+	{ return m_pCore!=nullptr; }
+
+	operator const ServedDesc_t * () const
+	{ return m_pCore; }
+private:
+	ServedDesc_t * m_pCore = nullptr;
+	const ServedIndex_c * m_pLock = nullptr;
+};
+
+
+/// RAII exclusive writer for ServedDesc_t hidden in ServedIndex_c
+class SCOPED_CAPABILITY ServedDescWPtr_c : ISphNoncopyable
+{
+public:
+	ServedDescWPtr_c () = default;
+
+	// acquire write (exclusive) lock
+	ServedDescWPtr_c ( const ServedIndex_c * pLock ) ACQUIRE ( pLock->m_tLock )
+		: m_pLock { pLock }
+	{
+		if ( m_pLock )
+			m_pCore = m_pLock->WriteLock ();
+	}
+
+	/// unlock on going out of scope
+	~ServedDescWPtr_c () RELEASE ()
+	{
+		if ( m_pLock )
+			m_pLock->Unlock ();
+	}
+
+public:
+	ServedDesc_t * operator-> () const
+	{ return m_pCore; }
+
+	explicit operator bool () const
+	{ return m_pCore!=nullptr; }
+
+	operator ServedDesc_t * () const
+	{ return m_pCore; }
+
+private:
+	ServedDesc_t * m_pCore = nullptr;
+	const ServedIndex_c * m_pLock = nullptr;
+};
+
+
+using ServedIndexRefPtr_c = CSphRefcountedPtr<ServedIndex_c>;
+
+/// hash of ref-counted pointers, guarded by RW-lock
+class GuardedHash_c : public ISphNoncopyable
+{
+	friend class RLockedHashIt_c;
+	using RefCntHash_t = SmallStringHash_T<ISphRefcountedMT *>;
+
+public:
+	GuardedHash_c ();
+	~GuardedHash_c ();
+
+	// atomically try add an entry and adopt it (NO addref!)
+	bool AddUniq ( ISphRefcountedMT * pEntry, const CSphString &tKey ) EXCLUDES ( m_tIndexesRWLock );
+
+	// atomically set new entry, then release previous, if not the same and is non-zero
+	void AddOrReplace ( ISphRefcountedMT * pEntry, const CSphString &tKey ) EXCLUDES ( m_tIndexesRWLock );
+
+	// release and delete from hash by key
+	bool Delete ( const CSphString &tKey ) EXCLUDES ( m_tIndexesRWLock );
+
+	// delete by key if item exists, but null
+	bool DeleteIfNull ( const CSphString &tKey ) EXCLUDES ( m_tIndexesRWLock );
+
+	int GetLength () const EXCLUDES ( m_tIndexesRWLock );
+
+	// check if value exists and if it is non-null
+	bool Contains ( const CSphString &tKey ) const EXCLUDES ( m_tIndexesRWLock );
+
+	// reset the hash
+	void ReleaseAndClear () EXCLUDES ( m_tIndexesRWLock );
+
+	// returns addreffed value
+	ISphRefcountedMT * Get ( const CSphString &tKey ) const EXCLUDES ( m_tIndexesRWLock );
+
+	// fake alias to private m_tLock to allow clang thread-safety analysis
+	CSphRwlock * IndexesRWLock () const RETURN_CAPABILITY ( m_tIndexesRWLock )
+	{ return nullptr; }
+
+private:
+	int GetLengthUnl () const REQUIRES_SHARED ( m_tIndexesRWLock );
+	void Rlock () const ACQUIRE_SHARED( m_tIndexesRWLock );
+	void Unlock () const UNLOCK_FUNCTION ( m_tIndexesRWLock );
+
+private:
+	mutable CSphRwlock m_tIndexesRWLock; // distinguishable name for catch possible warnings
+	RefCntHash_t m_hIndexes GUARDED_BY ( m_tIndexesRWLock );
+};
+
+// multi-threaded hash iterator
+// iterates guarded hash, holding it's readlock
+// that is important, since accidental changing of the hash during iteration
+// may invalidate the iterator, and then cause crash.
+class SCOPED_CAPABILITY RLockedHashIt_c : public ISphNoncopyable
+{
+public:
+	explicit RLockedHashIt_c ( const GuardedHash_c * pHash ) ACQUIRE_SHARED ( pHash->m_tIndexesRWLock
+																		  , m_pHash->m_tIndexesRWLock )
+		: m_pHash ( pHash )
+	{ m_pHash->Rlock (); }
+
+	~RLockedHashIt_c () UNLOCK_FUNCTION ()
+	{
+		m_pHash->Unlock ();
+	}
+
+	bool Next () REQUIRES_SHARED ( m_pHash->m_tIndexesRWLock )
+	{ return m_pHash->m_hIndexes.IterateNext ( &m_pIterator ); }
+
+	ISphRefcountedMT * Get () REQUIRES_SHARED ( m_pHash->m_tIndexesRWLock )
+	{
+		assert ( m_pIterator );
+		auto pRes = GuardedHash_c::RefCntHash_t::IterateGet ( &m_pIterator );
+		if ( pRes )
+			pRes->AddRef ();
+		return pRes;
+	}
+
+	const CSphString &GetName () REQUIRES_SHARED ( m_pHash->m_tIndexesRWLock )
+	{
+		assert ( m_pIterator );
+		return GuardedHash_c::RefCntHash_t::IterateGetKey ( &m_pIterator );
+	}
 
 protected:
-	void					Rlock () const ACQUIRE_SHARED( m_tLock );
-	void					Wlock () const ACQUIRE( m_tLock );
-	void					Unlock () const UNLOCK_FUNCTION ( m_tLock );
-
-private:
-	mutable CSphRwlock m_tLock;
-	IndexHash_t m_hIndexes;
+	const GuardedHash_c * m_pHash;
+	void * m_pIterator = nullptr;
 };
 
-
-/// multi-threaded hash iterator
-class IndexHashIterator_c : public ISphNoncopyable
+class SCOPED_CAPABILITY RLockedServedIt_c : public RLockedHashIt_c
 {
 public:
-	explicit			IndexHashIterator_c ( const IndexHash_c * pHash, bool bWrite=false );
-	~IndexHashIterator_c ();
+	explicit RLockedServedIt_c ( const GuardedHash_c * pHash ) ACQUIRE_SHARED ( pHash->IndexesRWLock(), m_pHash->IndexesRWLock() )
+		: RLockedHashIt_c ( pHash )
+	{}
+	~RLockedServedIt_c() UNLOCK_FUNCTION() {}; // d-tr explicitly written because attr UNLOCK_FUNCTION().
 
-	bool				Next ();
-	ServedIndex_c &		Get ();
-	const CSphString &	GetKey ();
-
-private:
-	const IndexHash_c * m_pHash;
-	void *	m_pIterator;
+	ServedIndexRefPtr_c Get () REQUIRES_SHARED ( m_pHash->IndexesRWLock() )
+	{
+		return ServedIndexRefPtr_c ( ( ServedIndex_c * ) RLockedHashIt_c::Get () );
+	}
 };
 
-extern IndexHash_c *						g_pLocalIndexes;	// served (local) indexes hash
-extern IndexHash_c *						g_pTemplateIndexes;	// template (tokenizer) indexes hash
+extern GuardedHash_c * g_pLocalIndexes;    // served (local) indexes hash
+extern GuardedHash_c * g_pDisabledIndexes; // not-served local indexes hash
+inline ServedIndexRefPtr_c GetServed ( const CSphString &sName, GuardedHash_c * pHash = g_pLocalIndexes )
+{
+	return ServedIndexRefPtr_c ( ( ServedIndex_c * ) pHash->Get ( sName ) );
+}
 
+inline ServedIndexRefPtr_c GetDisabled ( const CSphString &sName, GuardedHash_c * pHash = g_pDisabledIndexes )
+{
+	return GetServed ( sName, g_pDisabledIndexes );
+}
 
 enum SqlStmt_e
 {
@@ -767,7 +935,7 @@ class RefcountedVector_c : public CSphVector<T>, public ISphRefcounted
 {
 };
 
-typedef CSphRefcountedPtr < RefcountedVector_c<SphAttr_t> > AttrValues_p;
+using AttrValues_p = CSphRefcountedPtr < RefcountedVector_c<SphAttr_t> >;
 
 /// insert value
 struct SqlInsert_t
@@ -795,14 +963,14 @@ struct SqlStmt_t
 	CSphQuery				m_tQuery;
 
 	CSphString				m_sTableFunc;
-	CSphVector<CSphString>	m_dTableFuncArgs;
+	StrVec_t				m_dTableFuncArgs;
 
 	// used by INSERT, DELETE, CALL, DESC, ATTACH, ALTER, RELOAD INDEX
 	CSphString				m_sIndex;
 
 	// INSERT (and CALL) specific
 	CSphVector<SqlInsert_t>	m_dInsertValues; // reused by CALL
-	CSphVector<CSphString>	m_dInsertSchema;
+	StrVec_t				m_dInsertSchema;
 	int						m_iSchemaSz = 0;
 
 	// SET specific
@@ -815,9 +983,9 @@ struct SqlStmt_t
 
 	// CALL specific
 	CSphString				m_sCallProc;
-	CSphVector<CSphString>	m_dCallOptNames;
+	StrVec_t				m_dCallOptNames;
 	CSphVector<SqlInsert_t>	m_dCallOptValues;
-	CSphVector<CSphString>	m_dCallStrings;
+	StrVec_t				m_dCallStrings;
 
 	// UPDATE specific
 	CSphAttrUpdate			m_tUpdate;
@@ -862,10 +1030,8 @@ struct AggrResult_t : CSphQueryResult
 	CSphVector<int>					m_dMatchCounts;		///< aggregated result sets lengths (for schema minimization)
 	CSphVector<const CSphIndex*>	m_dLockedAttrs;		///< indexes which are hold in the memory until sending result
 	CSphTaggedVector				m_dTag2Pools;		///< tag to MVA and strings storage pools mapping
-	CSphVector<CSphString>			m_dZeroCount;
+	StrVec_t						m_dZeroCount;
 
-	AggrResult_t () {}
-	virtual ~AggrResult_t () {}
 	void ClampMatches ( int iLimit, bool bCommonSchema );
 };
 

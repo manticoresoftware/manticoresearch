@@ -52,6 +52,17 @@ public:
 		MemorizeStack ( &cTopOfMainStack );
 		CreateSynonymsFile ();
 		CreateSynonymsFile ( g_sMagic );
+
+#if _WIN32
+			// init WSA on Windows
+	WSADATA wsa_data;
+	int wsa_startup_err;
+
+	wsa_startup_err = WSAStartup ( WINSOCK_VERSION, &wsa_data );
+	if ( wsa_startup_err )
+		printf ( "failed to initialize WinSock2: error %d", wsa_startup_err );
+#endif
+
 	}
 
 	// Override this to define how to tear down the environment.

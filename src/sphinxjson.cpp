@@ -276,9 +276,7 @@ public:
 				NumericFixup ( dNodes[i] );
 
 			ESphJsonType eBase = dNodes.GetLength()>0 ? dNodes[0].m_eType : JSON_EOF;
-			bool bGeneric = ARRAY_ALL ( bGeneric, dNodes, dNodes[_all].m_eType==eBase );
-
-			if ( bGeneric )
+			if ( dNodes.TestAll ( [=] ( const JsonNode_t &dNode ) { return eBase==dNode.m_eType; } ) )
 				switch ( eBase )
 			{
 				case JSON_INT32:	eType = JSON_INT32_VECTOR; break;
@@ -593,7 +591,7 @@ bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool
 
 	tParser.Finalize();
 
-	if ( dData.GetSizeBytes() >= 0x400000 )
+	if ( dData.AllocatedBytes () >= 0x400000 )
 	{
 		sError = "data exceeds 0x400000 bytes";
 		iRes = -1;

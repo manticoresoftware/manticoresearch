@@ -817,7 +817,7 @@ public:
 	void				SetMemorySettings ( bool , bool , bool ) override {}
 	void				SetBase ( const char * ) override {}
 	bool				Rename ( const char * ) override { return false; }
-	bool				Lock () override { return false; }
+	bool				Lock () override { return true; }
 	void				Unlock () override {}
 	void				PostSetup() override {}
 	bool				EarlyReject ( CSphQueryContext * , CSphMatch & ) const override { return false; }

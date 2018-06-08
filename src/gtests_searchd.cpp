@@ -11,7 +11,7 @@
 
 // Note that global definitions below may conflict with names from searchd.cpp included above.
 // rename your variables here then.
-static IndexHash_c * g_pLocals = nullptr;
+static GuardedHash_c * g_pLocals = nullptr;
 static CSphString g_sIndex;
 static CSphFixedVector<CSphString> g_dLocals ( 0 );
 
@@ -20,22 +20,27 @@ static CSphString g_sNewPath;
 static DWORD g_uIter = 0;
 static const auto ITERATIONS = 10000;
 
+static ServedIndexRefPtr_c GetTestLocal ( const CSphString &sName )
+{
+	auto pObj = (ServedIndex_c *) g_pLocals->Get ( sName );
+	ServedIndexRefPtr_c pRes ( pObj );
+	return pRes;
+}
+
 void ThdSearch ( void * )
 {
 	for ( auto i = 0; i<ITERATIONS; ++i )
 	{
 		ARRAY_FOREACH ( i, g_dLocals )
 		{
-			ServedDesc_t tDesc;
-			bool bGot = g_pLocals->Exists ( g_dLocals[i], &tDesc );
-			bool bEnabled = ( bGot && tDesc.m_bEnabled );
+			auto pDesc = GetTestLocal ( g_dLocals[i] );
+			bool bGot = pDesc;
 
 			// check that it exists
 			if ( !bGot )
 				continue;
 
-			if ( bEnabled )
-				g_bHas = g_bHas ^ bEnabled;
+			g_bHas = g_bHas ^ bGot;
 		}
 	}
 }
@@ -45,22 +50,21 @@ void ThdRotate ( void * )
 	for ( auto i = 0; i<ITERATIONS; ++i )
 	{
 		g_sNewPath.SetSprintf ( "/tmp/very-long-path/goes/here/new_%u", g_uIter );
-		g_uIter++;
+		++g_uIter;
 
-		ServedIndex_c * pServed = g_pLocals->GetWlockedEntry ( g_sIndex );
+		auto pServed = GetTestLocal ( g_sIndex );
+		ServedDescWPtr_c dWriteLock ( pServed );
 
-		pServed->m_sNewPath = "";
-		pServed->m_sIndexPath = g_sNewPath;
+		dWriteLock->m_sNewPath = "";
+		dWriteLock->m_sIndexPath = g_sNewPath;
 		for ( int i = 0; i<100; i++ )
 			g_bHas = g_bHas ^ (!!( i + g_uIter ));
-
-		pServed->Unlock ();
 	}
 }
 
 TEST ( searchd_stuff, crash_on_exists )
 {
-	g_pLocals = new IndexHash_c ();
+	g_pLocals = new GuardedHash_c ();
 	g_sIndex = "reader-test-17";
 	g_dLocals.Reset ( 30 );
 	ARRAY_FOREACH ( i, g_dLocals )
@@ -69,7 +73,7 @@ TEST ( searchd_stuff, crash_on_exists )
 
 		ServedDesc_t tDesc;
 		tDesc.m_sIndexPath.SetSprintf ( "/tmp/very-long-path/goes/here/%s", g_dLocals[i].cstr () );
-		g_pLocals->Add ( tDesc, g_dLocals[i] );
+		g_pLocals->AddUniq ( new ServedIndex_c (tDesc), g_dLocals[i] );
 	}
 
 	SphThread_t th1, th2, th3, th4, th5, thRot;

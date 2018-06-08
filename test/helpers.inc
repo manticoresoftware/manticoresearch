@@ -388,12 +388,15 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 		return 1;
 	}
 
-	$test_mode = '--test';
-	if ( $use_watchdog )
-		$test_mode = '';
+	$extra_params = '';
+	if ( !$use_watchdog )
+		$extra_params .= ' --test';
 
 	if ( isset ( $g_locals['use_pool'] ) && $g_locals['use_pool'] )
-		$test_mode .= ' --test-thd-pool';
+		$extra_params .= ' --test-thd-pool';
+
+	if ( isset ( $g_locals['extra_searchd_options'] ) )
+		$extra_params .= ' ' . $g_locals['extra_searchd_options'];
 
 	$testdir = $g_locals['testdir'];
 	$cd = ( $testdir!='' );
@@ -409,11 +412,11 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 		// using cmd /c for redirection to work
 		if ( file_exists ( $abs_pidfile ) )
 			unlink ( $abs_pidfile );
-		$process = popen ("start /min cmd /c \"$path --config $abs_config_file --pidfile --console $test_mode > $abs_error_file\"", "r" );
+		$process = popen ("start /min cmd /c \"$path --config $abs_config_file --pidfile --console $extra_params > $abs_error_file\"", "r" );
 		pclose ( $process );
 	}
 	else
-		system ( "$path --config $abs_config_file $test_mode > $abs_error_file", $retval );
+		system ( "$path --config $abs_config_file $extra_params > $abs_error_file", $retval );
 
 	if ($cd)
 		chdir($backdir);
@@ -3056,6 +3059,7 @@ class SphinxConfig
 		fwrite ( $fp, "\tmax_children	= $sd_max_children\n" );
 		fwrite ( $fp, "\tpid_file		= ".$this->_sd_pid_file."\n" );
 		fwrite ( $fp, "\tworkers		= $workers\n" );
+		fwrite ( $fp, "#\tbinlog_path		=\n" );
 	}
 
 	function WriteSqlSettings ( $fp, $attributes )

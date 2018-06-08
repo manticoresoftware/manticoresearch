@@ -54,7 +54,7 @@ public:
 	/// forcibly flush RAM chunk to disk
 	virtual void ForceRamFlush ( bool bPeriodic=false ) = 0;
 
-	/// get time of last flush, 0 means no flush required 
+	/// get time of last flush, 0 means no flush required
 	virtual int64_t GetFlushAge() const = 0;
 
 	/// forcibly save RAM chunk as a new disk chunk
@@ -154,9 +154,6 @@ public:
 	virtual bool	Query ( const char * sQuery, const char * sTags, const CSphVector<CSphFilterSettings> * pFilters, const CSphVector<FilterTreeItem_t> * pFilterTree, bool bReplace, bool bQL, uint64_t & uId, CSphString & sError ) = 0;
 
 	virtual void	GetQueries ( const char * sFilterTags, bool bTagsEq, const CSphFilterSettings * pUID, int iOffset, int iLimit, CSphVector<PercolateQueryDesc> & dQueries ) = 0;
-
-	virtual bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError ) const = 0;
-	virtual void Reconfigure ( CSphReconfigureSetup & tSetup ) = 0;
 };
 
 /// percolate query index factory

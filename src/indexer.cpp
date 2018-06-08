@@ -45,7 +45,7 @@ static bool			g_bProgress		= true;
 static bool			g_bPrintQueries	= false;
 static bool			g_bKeepAttrs	= false;
 static CSphString	g_sKeepAttrsPath;
-static CSphVector<CSphString> g_dKeepAttrs;
+static StrVec_t		g_dKeepAttrs;
 
 static const char *	g_sBuildStops	= NULL;
 static int				g_iTopStops		= 100;
@@ -206,7 +206,7 @@ public:
 	virtual void		LoadStopwords ( const char *, const ISphTokenizer * ) {}
 	virtual void		LoadStopwords ( const CSphVector<SphWordID_t> & ) {}
 	virtual void		WriteStopwords ( CSphWriter & ) const {}
-	virtual bool		LoadWordforms ( const CSphVector<CSphString> &, const CSphEmbeddedFiles *, const ISphTokenizer *, const char * ) { return true; }
+	virtual bool		LoadWordforms ( const StrVec_t &, const CSphEmbeddedFiles *, const ISphTokenizer *, const char * ) { return true; }
 	virtual void		WriteWordforms ( CSphWriter & ) const {}
 	virtual int			SetMorphology ( const char *, CSphString & ) { return ST_OK; }
 
@@ -1352,6 +1352,7 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	// need to close attribute files that was mapped with RW access to unlink and rename them on windows
 	pSrc->Dealloc();
 	pDst->Dealloc();
+	pDst->Unlock ();
 
 	// pick up merge result
 	const char * sPath = hDst["path"].cstr();

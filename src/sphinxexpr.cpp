@@ -4503,8 +4503,7 @@ ISphExpr * ExprParser_t::CreateContainsNode ( const ExprNode_t & tNode )
 	if ( dPolyArgs.GetLength()==1 && m_dNodes[dPolyArgs[0]].m_iToken==TOK_ATTR_STRING )
 		return new Expr_ContainsStrattr_c ( CreateTree(iLat), CreateTree(iLon), CreateTree ( dPolyArgs[0] ), bGeoTesselate );
 
-	bool bConst = ARRAY_ALL ( bConst, dPolyArgs, IsConst ( &m_dNodes [ dPolyArgs[_all] ] ) );
-	if ( bConst )
+	if ( dPolyArgs.TestAll ( [&] ( int iArg ) { return IsConst ( &m_dNodes[iArg] ); } ) )
 	{
 		// POLY2D(numeric-consts)
 		return new Expr_ContainsConstvec_c ( CreateTree(iLat), CreateTree(iLon), dPolyArgs, m_dNodes.Begin(), bGeoTesselate );

@@ -55,6 +55,7 @@ typedef int __declspec("SAL_nokernel") __declspec("SAL_nodriver") __prefast_flag
 #include <limits.h>
 #include <utility>
 #include <memory>
+#include <functional>
 
 // for 64-bit types
 #if HAVE_STDINT_H
@@ -827,7 +828,7 @@ protected:
 	static const int MAGIC_INITIAL_LIMIT = 8;
 
 public:
-	static inline void CopyOrSwap ( T & pLeft, T & pRight )
+	static inline void CopyOrSwap ( T & pLeft, const T & pRight )
 	{
 		pLeft = pRight;
 	}
@@ -957,9 +958,9 @@ public:
 		return sphBinarySearch ( m_pData, m_pData + m_iCount - 1, tRef );
 	}
 
-	/// generic linear search
-	template < typename FILTER >
-	bool FindFirst ( FILTER COND ) const
+	/// generic linear search - 'ARRAY_ANY' replace
+	/// see 'Contains()' below for examlpe of usage.
+	inline bool FindFirst ( fFilter COND ) const
 	{
 		for ( int i = 0; i<m_iCount; ++i )
 			if ( COND ( m_pData[i] ) )
@@ -968,8 +969,7 @@ public:
 	}
 
 	/// generic 'ARRAY_ALL'
-	template < typename FILTER >
-	bool TestAll ( FILTER COND ) const
+	inline bool TestAll ( fFilter COND ) const
 	{
 		for ( int i = 0; i<m_iCount; ++i )
 			if ( !COND ( m_pData[i] ) )
@@ -978,11 +978,11 @@ public:
 	}
 
 	/// Apply an action to every member
-	template < typename ACTION >
-	void Apply ( ACTION ApplyActionTo ) const
+	/// Apply ( [] (T& item) {...} );
+	void Apply ( fAction Verb ) const
 	{
 		for ( int i = 0; i<m_iCount; ++i )
-			ApplyActionTo ( m_pData[i] );
+			Verb ( m_pData[i] );
 	}
 
 	/// generic linear search
@@ -1001,7 +1001,7 @@ public:
 	/// fill with given value
 	void Fill ( const T &rhs )
 	{
-		for ( int i = 0; i<m_iCount; i++ )
+		for ( int i = 0; i<m_iCount; ++i )
 			m_pData[i] = rhs;
 	}
 
@@ -1113,19 +1113,6 @@ public:
 	{
 		for ( int i = 0; i<m_iCount; ++i )
 			if ( m_pData[i]==tValue )
-			{
-				Remove ( i );
-				return true;
-			}
-		return false;
-	}
-
-	/// remove element by value (warning, linear O(n) search)
-	template < typename FUNCTOR, typename U >
-	bool RemoveValue ( FUNCTOR COMP, U tValue )
-	{
-		for ( int i = 0; i<m_iCount; i++ )
-			if ( COMP.IsEq ( m_pData[i], tValue ) )
 			{
 				Remove ( i );
 				return true;
@@ -1285,18 +1272,17 @@ public:
 		return pData;
 	}
 
-	/// insert into a middle
+	/// insert into a middle (will fail to compile for swap vector)
 	void Insert ( int iIndex, const T & tValue )
 	{
-		assert ( iIndex>=0 && iIndex<=m_iCount );
+		assert ( iIndex>=0 && iIndex<=this->m_iCount );
 
 		if ( this->m_iCount>=this->m_iLimit )
 			Reserve ( this->m_iCount+1 );
 
-		// FIXME! this will not work for SwapVector
 		for ( int i= this->m_iCount-1; i>=iIndex; --i )
-			this->m_pData [ i+1 ] = this->m_pData[i];
-		this->m_pData[iIndex] = tValue;
+			POLICY::CopyOrSwap ( this->m_pData [ i+1 ], this->m_pData[i] );
+		POLICY::CopyOrSwap ( this->m_pData[iIndex], tValue );
 		++this->m_iCount;
 	}
 
@@ -1324,16 +1310,6 @@ protected:
 
 #define ARRAY_FOREACH_COND(_index,_array,_cond) \
 	for ( int _index=0; _index<_array.GetLength() && (_cond); ++_index )
-
-#define ARRAY_ANY(_res,_array,_cond) \
-	false; \
-	for ( int _any=0; _any<_array.GetLength() && !_res; ++_any ) \
-		(_res) |= ( _cond ); \
-
-#define ARRAY_ALL(_res,_array,_cond) \
-	true; \
-	for ( int _all=0; _all<_array.GetLength() && _res; ++_all ) \
-		(_res) &= ( _cond ); \
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -1629,7 +1605,7 @@ public:
 	}
 
 	/// add new entry
-	/// returns the pointer to just inserted or previously cached (if dupe) value
+	/// returns ref to just intersed or previously existed value
 	T & AddUnique ( const KEY & tKey )
 	{
 		unsigned int uHash = ( (unsigned int) HASHFUNC::Hash ( tKey ) ) % LENGTH;
@@ -1643,12 +1619,11 @@ public:
 				return pEntry->m_tValue;
 
 			ppEntry = &pEntry->m_pNextByHash;
-			pEntry = pEntry->m_pNextByHash;
+			pEntry = *ppEntry;
 		}
 
 		// it's not; let's add the entry
 		assert ( !pEntry );
-		assert ( !*ppEntry );
 
 		pEntry = new HashEntry_t;
 		pEntry->m_tKey = tKey;
@@ -2071,6 +2046,7 @@ public:
 		return (*this);
 	}
 
+	/// format value using provided va_list
 	const CSphString & SetSprintfVa ( const char * sTemplate, va_list ap )
 	{
 		char sBuf[1024];
@@ -2079,7 +2055,7 @@ public:
 		(*this) = sBuf;
 		return (*this);
 	}
-
+	/// \return true if internal char* ptr is null, of value is empty.
 	bool IsEmpty () const
 	{
 		if ( !m_sValue )
@@ -2108,6 +2084,7 @@ public:
 		::Swap ( m_sValue, rhs.m_sValue );
 	}
 
+	/// \return true if the string begins with sPrefix
 	bool Begins ( const char * sPrefix ) const
 	{
 		if ( !m_sValue || !sPrefix )
@@ -2115,6 +2092,7 @@ public:
 		return strncmp ( m_sValue, sPrefix, strlen(sPrefix) )==0;
 	}
 
+	/// \return true if the string ends with sSuffix
 	bool Ends ( const char * sSuffix ) const
 	{
 		if ( !m_sValue || !sSuffix )
@@ -2127,6 +2105,7 @@ public:
 		return strncmp ( m_sValue+iVal-iSuffix, sSuffix, iSuffix )==0;
 	}
 
+	/// trim leading and trailing spaces
 	void Trim ()
 	{
 		if ( m_sValue )
@@ -2145,6 +2124,7 @@ public:
 		return m_sValue ? (int)strlen(m_sValue) : 0;
 	}
 
+	/// \return internal string and releases it from bein destroyed in d-tr
 	char * Leak ()
 	{
 		if ( m_sValue==EMPTY )
@@ -2159,7 +2139,7 @@ public:
 		return pBuf;
 	}
 
-	// opposite to Leak()
+	/// take string from outside and 'adopt' it as own child.
 	void Adopt ( char ** sValue )
 	{
 		SafeFree ();
@@ -2174,6 +2154,7 @@ public:
 		sValue = nullptr;
 	}
 
+	/// compares using strcmp
 	bool operator < ( const CSphString & b ) const
 	{
 		if ( !m_sValue && !b.m_sValue )
@@ -2370,8 +2351,12 @@ public:
 /// name+int pair
 struct CSphNamedInt
 {
-	CSphString	m_sName;
-	int			m_iValue = 0;
+	CSphString m_sName;
+	int m_iValue = 0;
+
+	CSphNamedInt() = default;
+	CSphNamedInt ( const CSphString& sName, int iValue)
+		: m_sName ( sName ), m_iValue (iValue) {};
 };
 
 inline void Swap ( CSphNamedInt & a, CSphNamedInt & b )
@@ -2459,6 +2444,14 @@ public:
 	T *	operator -> () const			{ return m_pPtr; }
 		explicit operator bool() const			{ return m_pPtr!=nullptr; }
 		operator T * () const			{ return m_pPtr; }
+
+	// drop the ownership and reset pointer
+	inline T * Leak ()
+	{
+		T * pRes = m_pPtr;
+		m_pPtr = nullptr;
+		return pRes;
+	}
 
 public:
 	/// assignment of a raw pointer, takes over ownership!
@@ -2963,6 +2956,14 @@ bool sphIsLtLib();
 #define NO_THREAD_SAFETY_ANALYSIS \
     THREAD_ANNOTATION_ATTRIBUTE__(no_thread_safety_analysis)
 
+// Replaced by TRY_ACQUIRE
+#define EXCLUSIVE_TRYLOCK_FUNCTION( ... ) \
+  THREAD_ANNOTATION_ATTRIBUTE__(exclusive_trylock_function(__VA_ARGS__))
+
+// Replaced by TRY_ACQUIRE_SHARED
+#define SHARED_TRYLOCK_FUNCTION( ... ) \
+  THREAD_ANNOTATION_ATTRIBUTE__(shared_trylock_function(__VA_ARGS__))
+
 // Replaced by RELEASE and RELEASE_SHARED
 #define UNLOCK_FUNCTION( ... ) \
 	THREAD_ANNOTATION_ATTRIBUTE__(unlock_function(__VA_ARGS__))
@@ -2976,7 +2977,7 @@ public:
 
 	bool Lock () ACQUIRE();
 	bool Unlock () RELEASE();
-	bool TimedLock ( int iMsec ) TRY_ACQUIRE(true);
+	bool TimedLock ( int iMsec ) TRY_ACQUIRE (true);
 
 	// Just for clang negative capabilities.
 	const CSphMutex &operator! () const { return *this; }
@@ -3482,6 +3483,10 @@ public:
 		}
 	}
 
+	//! Atomic Compare-And-Swap
+	//! \param iOldVal - expected value to compare with
+	//! \param iNewVal - new value to write
+	//! \return old value was in atomic
 	inline TLONG CAS ( TLONG iOldVal, TLONG iNewVal )
 	{
 		assert ( ( ( (size_t) &m_iValue )%( sizeof ( m_iValue ) ) )==0 && "unaligned atomic!" );
@@ -3541,18 +3546,13 @@ protected:
 };
 
 template <class T>
-struct VectorPtrsRefs_T : public ISphNoncopyable
+struct VectorPtrsRefs_T : public ISphNoncopyable, public CSphVector<T>
 {
-	CSphVector<T> m_dPtrs;
-
 	~VectorPtrsRefs_T ()
 	{
-		for ( auto &ptr : m_dPtrs ) SafeRelease ( ptr );
+		CSphVector<T>::Apply ( [] ( T &ptr ) { SafeRelease ( ptr ); } );
 	}
 };
-
-using RefCountedPtr_t = CSphRefcountedPtr<ISphRefcountedMT>;
-
 
 struct ISphJob
 {
@@ -4060,6 +4060,7 @@ struct ListNode_t
 };
 
 
+/// Simple linked list.
 class List_t
 {
 public:
@@ -4070,6 +4071,7 @@ public:
 		m_iCount = 0;
 	}
 
+	/// Append the node to the tail
 	void Add ( ListNode_t * pNode )
 	{
 		assert ( !pNode->m_pNext && !pNode->m_pPrev );
@@ -4092,24 +4094,24 @@ public:
 		--m_iCount;
 	}
 
-	int GetLength () const
+	inline int GetLength () const
 	{
 		return m_iCount;
 	}
 
-	const ListNode_t * Begin () const
+	inline const ListNode_t * Begin () const
 	{
 		return m_tStub.m_pNext;
 	}
 
-	const ListNode_t * End () const
+	inline const ListNode_t * End () const
 	{
 		return &m_tStub;
 	}
 
 private:
-	ListNode_t m_tStub;	// stub node
-	int m_iCount;		// elements counter
+	ListNode_t m_tStub;	///< stub node
+	int m_iCount;
 };
 
 

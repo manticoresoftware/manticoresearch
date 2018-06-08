@@ -10717,23 +10717,23 @@ static void DoCommandUpdate ( const char * sIndex, const char * sDistributed, co
 using DistrPtrs_t = VectorPtrsRefs_T< const DistributedIndex_t *>;
 static bool ExtractDistributedIndexes ( const StrVec_t &dNames, DistrPtrs_t &dDistributed, CSphString& sMissed )
 {
-	dDistributed.m_dPtrs.Reset();
-	dDistributed.m_dPtrs.Resize( dNames.GetLength () );
-	dDistributed.m_dPtrs.ZeroMem ();
+	dDistributed.Reset();
+	dDistributed.Resize( dNames.GetLength () );
+	dDistributed.ZeroMem ();
 
 	ARRAY_FOREACH ( i, dNames )
 	{
 		if ( !g_pLocalIndexes->GetWeak ( dNames[i] ) )
 		{
 			// search amongst distributed and copy for further processing
-			dDistributed.m_dPtrs[i] = GetDistr ( dNames[i] );
+			dDistributed[i] = GetDistr ( dNames[i] );
 
-			if ( !dDistributed.m_dPtrs[i] )
+			if ( !dDistributed[i] )
 			{
 				sMissed = dNames[i];
 				return false;
 			}
-			dDistributed.m_dPtrs[i]->AddRef ();
+			dDistributed[i]->AddRef ();
 		}
 	}
 	return true;
@@ -10829,7 +10829,7 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 	}
 
 	DistrPtrs_t dDistributedStorage;
-	auto & dDistributed = dDistributedStorage.m_dPtrs;
+	auto & dDistributed = dDistributedStorage;
 
 	// copy distributed indexes description
 	CSphString sMissed;
@@ -11354,13 +11354,13 @@ void BuildAgentStatus ( VectorLike & dStatus, const CSphString& sAgent )
 		dStatus.Add().SetSprintf ( "%d", STATS_DASH_TIME );
 
 	VectorPtrsRefs_T<HostDashboard_t *> dAgents;
-	g_tDashes.GetActiveDashes ( dAgents.m_dPtrs );
+	g_tDashes.GetActiveDashes ( dAgents );
 
 	CSphString sPrefix;
-	ARRAY_FOREACH ( i, dAgents.m_dPtrs )
+	ARRAY_FOREACH ( i, dAgents )
 	{
 		sPrefix.SetSprintf ( "ag_%d", i );
-		BuildOneAgentStatus ( dStatus, dAgents.m_dPtrs[i], sPrefix.cstr() );
+		BuildOneAgentStatus ( dStatus, dAgents[i], sPrefix.cstr() );
 	}
 }
 
@@ -13664,8 +13664,7 @@ void HandleMysqlCallSnippets ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, ThdDesc
 	ARRAY_FOREACH ( i, dResults )
 		dResults[i] = (const char *)dQueries[i].m_dRes.Begin();
 
-	bool bGotData = ARRAY_ANY ( bGotData, dResults, dResults[_any]!=NULL );
-	if ( !bGotData )
+	if ( !dResults.FindFirst ( [] ( const char * sRes ) { return sRes!=nullptr; } ) )
 	{
 		// just one last error instead of all errors is hopefully ok
 		sError.SetSprintf ( "highlighting failed: %s", sError.cstr() );
@@ -14496,8 +14495,8 @@ static void CheckPing ( int64_t iNow )
 	auto iCookie = (int)iNow;
 
 	VectorPtrsRefs_T<HostDashboard_t *> dDashes;
-	g_tDashes.GetActiveDashes ( dDashes.m_dPtrs );
-	for ( auto& pDash : dDashes.m_dPtrs )
+	g_tDashes.GetActiveDashes ( dDashes );
+	for ( auto& pDash : dDashes )
 	{
 		if ( pDash->m_bNeedPing )
 		{
@@ -14731,8 +14730,7 @@ void BlackholeAddAgents ( AgentsVector & dAgents, const IRequestBuilder_t & tReq
 
 static bool HasBlackhole ( AgentsVector & dAgents )
 {
-	bool bHas = ARRAY_ANY ( bHas, dAgents, dAgents[_any]->m_tDesc.m_bBlackhole );
-	return bHas;
+	return dAgents.FindFirst ( [] ( AgentConn_t * pConn ) { return pConn->m_tDesc.m_bBlackhole; } );
 }
 
 void BlackholeRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const
@@ -15030,7 +15028,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const QueryParserFactory
 	}
 
 	DistrPtrs_t dDistributedStorage;
-	auto &dDistributed = dDistributedStorage.m_dPtrs;
+	auto &dDistributed = dDistributedStorage;
 	// copy distributed indexes description
 	CSphString sMissed;
 	if ( !ExtractDistributedIndexes ( dIndexNames, dDistributedStorage, sMissed ) )
@@ -15773,7 +15771,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const QueryParserFactory
 	}
 
 	DistrPtrs_t dDistributedStorage;
-	auto &dDistributed = dDistributedStorage.m_dPtrs;
+	auto &dDistributed = dDistributedStorage;
 	CSphString sMissed;
 	if ( !ExtractDistributedIndexes ( dNames, dDistributedStorage, sMissed ) )
 	{
@@ -19605,8 +19603,8 @@ void InitPersistentPool()
 	if ( g_iPersistentPoolSize )
 	{
 		VectorPtrsRefs_T<HostDashboard_t *> tHosts;
-		g_tDashes.GetActiveDashes (tHosts.m_dPtrs);
-		for ( auto * pHost : tHosts.m_dPtrs )
+		g_tDashes.GetActiveDashes (tHosts);
+		for ( auto * pHost : tHosts )
 		{
 			if ( !pHost->m_pPersPool )
 				pHost->m_pPersPool = new PersistentConnectionsPool_t;
@@ -23364,7 +23362,7 @@ void ConfigureAndPreload ( const CSphConfig & hConf, const StrVec_t & dOptIndexe
 		const char * sIndexName = hConf["index"].IterateGetKey().cstr();
 
 		if ( g_bOptNoDetach
-			&& dOptIndexes.FindFirst ( [&] ( CSphString &rhs ) { return !rhs.EqN ( sIndexName ); } ) )
+			&& dOptIndexes.FindFirst ( [&] ( const CSphString &rhs ) { return !rhs.EqN ( sIndexName ); } ) )
 				continue;
 
 		auto eAdd = AddIndex ( sIndexName, hIndex, false );

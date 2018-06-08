@@ -521,7 +521,7 @@ void SnippetsDocIndex_c::ParseQuery ( const char * sQuery, ISphTokenizer * pToke
 		m_dQposToWeight[m_dStars[i].m_iQueryPos] = m_dStars[i].m_iWeight;
 
 #ifndef NDEBUG
-	bool bFilled = ARRAY_ANY ( bFilled, m_dQposToWeight, ( m_dQposToWeight[_any]==-1 ) );
+	bool bFilled = m_dQposToWeight.FindFirst ( [] ( int iWeight ) { return -1==iWeight; } );
 	assert ( !bFilled );
 #endif
 

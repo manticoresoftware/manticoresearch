@@ -2065,8 +2065,12 @@ void RtAccum_t::CleanupDuplicates ( int iRowSize )
 
 	dDocHits.Sort ( CmpDocHitIndex_t() );
 
-	bool bHasDups = ARRAY_ANY ( bHasDups, dDocHits, ( _any>0 ) && ( dDocHits[_any-1].m_uDocid==dDocHits[_any].m_uDocid ) );
-	if ( !bHasDups )
+	SphDocID_t uPrev = 0;
+	if ( !dDocHits.FindFirst ( [&] ( const AccumDocHits_t &dDoc ) {
+		bool bRes = dDoc.m_uDocid==uPrev;
+		uPrev = dDoc.m_uDocid;
+		return bRes;
+	} ) )
 		return;
 
 	// identify duplicates to kill, and store them in dDocHits

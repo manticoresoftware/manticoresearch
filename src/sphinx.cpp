@@ -5443,8 +5443,10 @@ bool CSphFilterSettings::operator == ( const CSphFilterSettings & rhs ) const
 		case SPH_FILTER_STRING_LIST:
 			if ( m_dStrings.GetLength()!=rhs.m_dStrings.GetLength() )
 				return false;
-			bSameStrings = ARRAY_ALL ( bSameStrings, m_dStrings, m_dStrings[_all]==rhs.m_dStrings[_all] );
-			return bSameStrings;
+			ARRAY_FOREACH ( i, m_dStrings )
+				if ( m_dStrings[i]!=rhs.m_dStrings[i] )
+					return false;
+			return true;
 
 		default:
 			assert ( 0 && "internal error: unhandled filter type in comparison" );
@@ -6662,19 +6664,17 @@ void CSphRsetSchema::SwapAttrs ( CSphVector<CSphColumnInfo> & dAttrs )
 	// (example: SELECT col1 a, col2 b, count(*) c FROM test)
 	//
 	// FIXME? maybe also lockdown the schema from further swaps, adds etc from here?
-	ARRAY_FOREACH ( i, dAttrs )
+	for ( auto& dAttr : dAttrs )
 	{
-		if ( dAttrs[i].m_tLocator.IsID() )
+		if ( dAttr.m_tLocator.IsID() )
 			continue;
-		bool bFound1 = false;
-		if ( m_pIndexSchema )
-		{
-			const CSphVector<CSphColumnInfo> & dSrc = m_pIndexSchema->m_dAttrs;
-			bFound1 = ARRAY_ANY ( bFound1, dSrc, dSrc[_any].m_tLocator==dAttrs[i].m_tLocator && dSrc[_any].m_eAttrType==dAttrs[i].m_eAttrType )
-		}
-		bool bFound2 = ARRAY_ANY ( bFound2, m_dExtraAttrs,
-			m_dExtraAttrs[_any].m_tLocator==dAttrs[i].m_tLocator && m_dExtraAttrs[_any].m_eAttrType==dAttrs[i].m_eAttrType )
-			assert ( bFound1 || bFound2 );
+		auto fComparer = [&dAttr] ( const CSphColumnInfo &dInfo ) {
+			return dInfo.m_tLocator==dAttr.m_tLocator
+				&& dInfo.m_eAttrType==dAttr.m_eAttrType;
+		};
+		bool bFound1 = m_pIndexSchema ? m_pIndexSchema->m_dAttrs.FindFirst ( fComparer ) : false;
+		bool bFound2 = m_dExtraAttrs.FindFirst ( fComparer );
+		assert ( bFound1 || bFound2 );
 	}
 #endif
 	m_dExtraAttrs.SwapData ( dAttrs );

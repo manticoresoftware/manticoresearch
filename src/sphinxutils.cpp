@@ -1641,8 +1641,8 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 			}
 	}
 
-	bool bPlainRLP = ARRAY_ANY ( bPlainRLP, dMorphs, dMorphs[_any]=="rlp_chinese" );
-	bool bBatchedRLP = ARRAY_ANY ( bBatchedRLP, dMorphs, dMorphs[_any]=="rlp_chinese_batched" );
+	bool bPlainRLP = dMorphs.Contains ( "rlp_chinese" );
+	bool bBatchedRLP = dMorphs.Contains ( "rlp_chinese_batched" );
 
 	if ( bPlainRLP && bBatchedRLP )
 	{

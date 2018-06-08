@@ -1907,8 +1907,8 @@ ExtNode_i * ExtNode_i::Create ( const XQNode_t * pNode, const ISphQwordSetup & t
 		if ( pNode->GetOp ()==SPH_QUERY_BEFORE )
 		{
 			// before operator can not handle ZONESPAN
-			bool bZoneSpan = ARRAY_ANY ( bZoneSpan, pNode->m_dChildren, pNode->m_dChildren[_any]->m_dSpec.m_bZoneSpan );
-			if ( bZoneSpan && tSetup.m_pWarning )
+			if ( tSetup.m_pWarning
+				&& pNode->m_dChildren.FindFirst ( [] ( XQNode_t * pChild ) { return pChild->m_dSpec.m_bZoneSpan; } ) )
 				tSetup.m_pWarning->SetSprintf ( "BEFORE operator is incompatible with ZONESPAN, ZONESPAN ignored" );
 			return CreateOrderNode ( pNode, tSetup );
 		}

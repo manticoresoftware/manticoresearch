@@ -230,8 +230,8 @@ void PersistentConnectionsPool_t::Shutdown ()
 void ClosePersistentSockets()
 {
 	VectorPtrsRefs_T<HostDashboard_t *> dHosts;
-	g_tDashes.GetActiveDashes ( dHosts.m_dPtrs );
-	for ( auto * pHost : dHosts.m_dPtrs )
+	g_tDashes.GetActiveDashes ( dHosts );
+	for ( auto * pHost : dHosts )
 	{
 		if ( pHost->m_pPersPool )
 			pHost->m_pPersPool->Shutdown ();

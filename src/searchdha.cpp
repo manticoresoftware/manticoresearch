@@ -1345,6 +1345,13 @@ void IOVec_c::StepForward ( size_t uStep )
 /// PollableEvent_c : an event which could be watched by poll/epoll/kqueue
 /////////////////////////////////////////////////////////////////////////////
 
+void SafeCloseSocket ( int & iFD )
+{
+	if ( iFD>=0 )
+		sphSockClose ( iFD );
+	iFD = -1;
+}
+
 #if !HAVE_EVENTFD
 static bool CreateSocketPair ( int &iSock1, int &iSock2, CSphString &sError )
 {
@@ -1431,8 +1438,8 @@ static bool CreateSocketPair ( int &iSock1, int &iSock2, CSphString &sError )
 	if ( sphSetSockNB ( iSock1 )<0 || sphSetSockNB ( iSock2 )<0 )
 	{
 		sError.SetSprintf ( "failed to set socket non-block: %s", sphSockError () );
-		SafeClose ( iSock1 );
-		SafeClose ( iSock2 );
+		SafeCloseSocket ( iSock1 );
+		SafeCloseSocket ( iSock2 );
 		iSock1 = iSock2 = -1;
 		return false;
 	}
@@ -1471,9 +1478,9 @@ PollableEvent_t::~PollableEvent_t ()
 
 void PollableEvent_t::Close ()
 {
-	SafeClose ( m_iPollablefd );
+	SafeCloseSocket ( m_iPollablefd );
 #if !HAVE_EVENTFD
-	SafeClose ( m_iSignalEvent );
+	SafeCloseSocket ( m_iSignalEvent );
 #endif
 }
 

@@ -38,6 +38,10 @@
 	#include <sys/eventfd.h>
 #endif
 
+#if HAVE_GETADDRINFO_A
+	#include <signal.h>
+#endif
+
 int				g_iPingInterval		= 0;		// by default ping HA agents every 1 second
 DWORD			g_uHAPeriodKarma	= 60;		// by default use the last 1 minute statistic to determine the best HA agent
 

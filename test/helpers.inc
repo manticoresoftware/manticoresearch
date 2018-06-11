@@ -1672,6 +1672,7 @@ class SphinxConfig
 			$sleep_agent=0;
 			$use_agent=0;
 			$vip_connection=0;
+			$system_cmd = "";
 			if (is_array($query))
 			{
 				foreach ( $query[1] as $k => $v )
@@ -1682,6 +1683,8 @@ class SphinxConfig
 						$sleep_agent = $v;
 					elseif ($k=="vip")
 						$vip_connection = $v;
+					elseif ($k="system")
+						$system_cmd = $v;
 				}
 				$query = $query[0];
 			}
@@ -1724,6 +1727,35 @@ class SphinxConfig
 					return false;
 
 				$r = array("sphinxql"=>$query, "error"=>"reconnected ok!", "errno"=>0);
+				$this->_results[] = $r;
+				if ( IsModelGenMode () )
+					$this->_results_model[$this->SubtestNo ()][] = $r;
+				continue;
+			}
+			
+			if ( !empty($system_cmd) )
+			{
+				$status = '';
+				if ( $system_cmd=="restart-daemon" )
+				{
+					$stop = StopWaitSearchd ('config.conf', 'searchd.pid');
+					$status = 'stop=' . ( $stop==0 ? 'ok' : 'error' ) . ', return code=' . $stop;
+					
+					$start = StartSearchd ( 'config.conf', 'error.txt', 'searchd.pid', $error, false );
+					if ( $start == 0 || $start == 2 )
+					{
+						$status .= "; start=ok" . ', return code=' . $start;
+					} else
+					{
+						$status .=  "; start=failed, return code=" . $start . ", error=" . $error;
+					}
+					mysqli_close($connection);
+					$connection = ConnectSpecificQL($use_agent);
+				} else 
+				{
+					$status = "unsupported command " . $command;
+				}
+				$r = array("sphinxql"=>$system_cmd . " => " . $status);
 				$this->_results[] = $r;
 				if ( IsModelGenMode () )
 					$this->_results_model[$this->SubtestNo ()][] = $r;

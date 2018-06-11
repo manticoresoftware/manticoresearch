@@ -10632,7 +10632,7 @@ public:
 
 private:
 	static const DWORD				META_HEADER_MAGIC = 0x50535451;	///< magic 'PSTQ' header
-	static const DWORD				META_VERSION = 5;				///< current version, added expression filter
+	static const DWORD				META_VERSION = 6;				///< current version, added expression filter
 
 	int								m_iLockFD = -1;
 	CSphSourceStats					m_tStat;
@@ -12315,6 +12315,25 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath )
 
 	m_pTokenizer = ISphTokenizer::CreateMultiformFilter ( m_pTokenizer, m_pDict->GetMultiWordforms () );
 
+	// regexp and RLP
+	if ( uVersion>=6 )
+	{
+		ISphFieldFilter * pFieldFilter = NULL;
+		CSphFieldFilterSettings tFieldFilterSettings;
+		LoadFieldFilterSettings ( rdMeta, tFieldFilterSettings );
+		if ( tFieldFilterSettings.m_dRegexps.GetLength() )
+			pFieldFilter = sphCreateRegexpFilter ( tFieldFilterSettings, m_sLastError );
+
+		if ( !sphSpawnRLPFilter ( pFieldFilter, m_tSettings, tTokenizerSettings, sMeta.cstr(), m_sLastError ) )
+		{
+			SafeDelete ( pFieldFilter );
+			return false;
+		}
+
+		SetFieldFilter ( pFieldFilter );
+	}
+
+	// queries
 	DWORD uQueries = rdMeta.GetDword();
 	m_dLoadedQueries.Reset ( uQueries );
 	ARRAY_FOREACH ( i, m_dLoadedQueries )
@@ -12394,6 +12413,9 @@ void PercolateIndex_c::SaveMeta()
 	SaveIndexSettings ( wrMeta, m_tSettings );
 	SaveTokenizerSettings ( wrMeta, m_pTokenizer, m_tSettings.m_iEmbeddedLimit );
 	SaveDictionarySettings ( wrMeta, m_pDict, false, m_tSettings.m_iEmbeddedLimit );
+
+	// meta v.6
+	SaveFieldFilterSettings ( wrMeta, m_pFieldFilter );
 
 	Verify ( m_tLock.ReadLock() );
 	wrMeta.PutDword ( m_dStored.GetLength() );

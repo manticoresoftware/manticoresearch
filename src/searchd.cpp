@@ -15363,13 +15363,19 @@ void HandleMysqlMeta ( SqlRowBuffer_c & dRows, const SqlStmt_t & tStmt, const CS
 	dRows.Eof ( bMoreResultsFollow );
 }
 
-static int PercolateDeleteDocuments ( PercolateIndex_i * pIndex, const SqlStmt_t & tStmt )
+static int PercolateDeleteDocuments ( PercolateIndex_i * pIndex, const SqlStmt_t & tStmt, CSphString & sError )
 {
 	// prohibit double copy of filters
 	CSphVector<uint64_t> dQueries;
 	const char * sTags = NULL;
 	const CSphQuery & tQuery = tStmt.m_tQuery;
 	bool bByTags = true;
+
+	if ( tQuery.m_dFilters.GetLength()>1 )
+	{
+		sError.SetSprintf ( "only single filter supported, got %d", tQuery.m_dFilters.GetLength() );
+		return 0;
+	}
 
 	if ( tQuery.m_dFilters.GetLength() )
 	{
@@ -15384,6 +15390,11 @@ static int PercolateDeleteDocuments ( PercolateIndex_i * pIndex, const SqlStmt_t
 				dQueries.Add ( pA[i] );
 		} else if ( pFilter->m_eType==SPH_FILTER_STRING && pFilter->m_sAttrName=="tags" && pFilter->m_dStrings.GetLength() )
 			sTags = pFilter->m_dStrings[0].cstr();
+		else
+		{
+			sError.SetSprintf ( "unsupported filter type %d, attribute '%s'", pFilter->m_eType, pFilter->m_sAttrName.cstr() );
+			return 0;
+		}
 	}
 
 	int iDeleted = 0;
@@ -15422,7 +15433,7 @@ static int LocalIndexDoDeleteDocuments ( const char * sName, const QueryParserFa
 
 	if ( pLocked->m_eType==eITYPE::PERCOLATE )
 	{
-		int iAffected = PercolateDeleteDocuments ( (PercolateIndex_i *)pIndex, tStmt );
+		int iAffected = PercolateDeleteDocuments ( (PercolateIndex_i *)pIndex, tStmt, sError );
 		if ( !sError.IsEmpty() )
 			dErrors.Submit ( sName, sDistributed, sError.cstr() );
 

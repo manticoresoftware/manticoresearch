@@ -64,8 +64,7 @@ in the respective scope. Known per-session server variables are:
 
 -  ``COLLATION_CONNECTION = collation_name``
    Selects the collation to be used for ORDER BY or GROUP BY on string
-   values in the subsequent queries. Refer to `the section called
-   “Collations” <collations>` for a list of known collation
+   values in the subsequent queries. Refer to :ref:`Collations <collations>` for a list of known collation
    names.
 
 -  ``CHARACTER_SET_RESULTS = charset_name``

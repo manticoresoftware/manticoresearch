@@ -1438,7 +1438,7 @@ static bool CreateSocketPair ( int &iSock1, int &iSock2, CSphString &sError )
 	}
 
 #ifdef TCP_NODELAY
-	iOn = 1;
+	int iOn = 1;
 	if ( setsockopt ( iSock2, IPPROTO_TCP, TCP_NODELAY, (char*)&iOn, sizeof ( iOn ) )<0 )
 		sphWarning ( "failed to set nodelay option: %s", sphSockError() );
 #endif

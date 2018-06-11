@@ -1960,6 +1960,9 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 						   , nullptr, 0, nullptr, nullptr );
 	if ( !iRes )
 		State ( Agent_e::CONNECTING );
+#else
+	int iRes = 0;
+	return iRes;
 #endif
 	if ( iRes>=0 ) // lucky; we already sent something!
 	{

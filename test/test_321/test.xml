@@ -62,6 +62,18 @@ index pq_wild1
 	rt_field = title
 }
 
+index pq_mva
+{
+	type = percolate
+	path			= <data_path/>/pq_mva
+	rt_field = title
+	rt_attr_uint = gid
+	rt_attr_multi = mva1
+	rt_attr_multi = mva2
+	rt_attr_multi = mva3
+}
+
+
 </config>
 
 <db_create>
@@ -184,6 +196,17 @@ CREATE TABLE `test_table` (
 <!-- wildcard vs batch of docs -->
 <sphinxql>INSERT INTO pq_wild1 VALUES ( 'a* b*' )</sphinxql>
 <sphinxql>CALL PQ ('pq_wild1', ('{"title":"abc"}','{"title":"acc"}','{"title":"be ce acc"}','{"title":"abc"}'), 1 as docs, 1 as docs_json, 1 as query )</sphinxql>
+
+<!-- MVA filter -->
+<sphinxql>insert into pq_mva (query, tags) values('orange', 'q1')</sphinxql>
+<sphinxql>CALL PQ ('pq_mva', 'orange', 1 as docs, 0 as docs_json, 1 as query )</sphinxql>
+<sphinxql>insert into pq_mva (query, filters, tags) values('orange', 'mva1 in (1, 9, 13)', 'q2')</sphinxql>
+<sphinxql>CALL PQ ('pq_mva', ('{"title":"orange", "mva1":[1, 12]}', '{"title":"orange", "mva2":[13], "mva1":[8]}', '{"title":"orange", "mva1":[13]}' ), 1 as docs, 1 as docs_json, 1 as query )</sphinxql>
+<sphinxql>insert into pq_mva (query, filters, tags) values('orange', 'mva3 &lt; 13', 'q31')</sphinxql>
+<sphinxql>insert into pq_mva (query, filters, tags) values('orange', 'all(mva3) &lt; 13', 'q32')</sphinxql>
+<sphinxql>insert into pq_mva (query, filters, tags) values('orange', 'any(mva3) &lt; 13', 'q33')</sphinxql>
+<sphinxql>CALL PQ ('pq_mva', ('{"title":"orange", "mva3":[1, 12]}', '{"title":"orange", "mva2":[15], "mva3":[8,8,1]}', '{"title":"orange", "mva3":[13]}', '{"title":"orange", "mva2":[15], "mva3":[8,13,1]}'), 1 as docs, 1 as docs_json, 1 as query )</sphinxql>
+
 </sphqueries>
 
 </test>

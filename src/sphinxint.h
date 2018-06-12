@@ -2467,6 +2467,7 @@ struct SchemaItemVariant_t
 {
 	int m_iField = -1;
 	int m_iStr = -1;
+	int m_iMva = -1;
 	ESphAttr m_eType = SPH_ATTR_NONE;
 	CSphAttrLocator m_tLoc;
 };

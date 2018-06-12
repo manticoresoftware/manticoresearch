@@ -12707,7 +12707,7 @@ struct StringPtrTraits_t
 
 static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVariant_t> & tLoc, const CSphString & sIdAlias,
 	int iRow, CSphFixedVector<const char*> & dFields, CSphMatchVariant & tDoc,
-	StringPtrTraits_t & tStrings,  CSphString & sError, CSphString & sWarning )
+	StringPtrTraits_t & tStrings, CSphVector<DWORD> & dMva, CSphString & sError, CSphString & sWarning )
 {
 	const cJSON * pRoot = cJSON_Parse ( sDoc );
 	if ( !pRoot )
@@ -12779,6 +12779,58 @@ static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVari
 							memset ( sDst+iLen, 0, 1 + CSphString::GetGap() );
 						}
 					}
+				} else if ( pItem->m_eType==SPH_ATTR_UINT32SET || pItem->m_eType==SPH_ATTR_INT64SET )
+				{
+					bool bWide = ( pItem->m_eType==SPH_ATTR_INT64SET );
+					assert ( pItem->m_iMva!=-1 );
+					int iStored = 0;
+					int iOff = dMva.GetLength();
+
+					if ( cJSON_IsArray ( pChild ) )
+					{
+						int iCount = cJSON_GetArraySize ( pChild );
+						DWORD * pMva = dMva.AddN ( iCount + 1 ) + 1;
+						for ( int i=0; i<iCount; i++ )
+						{
+							cJSON * pElem = cJSON_GetArrayItem ( pChild, i );
+							assert ( pElem );
+							if ( !cJSON_IsInteger ( pElem ) )
+							{
+								sWarning = "MVA elements should be integers";
+								continue;
+							}
+
+							if ( bWide )
+							{
+								int64_t iVal = pElem->valueint;
+								DWORD uLow = (DWORD)iVal;
+								DWORD uHi = (DWORD)(iVal>>32);
+								*pMva++ = uLow;
+								*pMva++ = uHi;
+								iStored +=2;
+							} else
+							{
+								*pMva++ = (DWORD)pElem->valueint;
+								iStored++;
+							}
+						}
+
+					} else
+					{
+						sWarning = "MVA item should be array";
+					}
+
+					if ( !iStored )
+					{
+						dMva.Resize ( iOff );
+					} else
+					{
+						sphSort ( dMva.Begin() + iOff + 1, iStored );
+						iStored = sphUniq ( dMva.Begin() + iOff + 1, iStored );
+						dMva[iOff] = iStored;
+						dMva[pItem->m_iMva] = iOff;
+						dMva.Resize ( iOff+iStored+1 );
+					}
 				}
 			}
 		} else if ( !sIdAlias.IsEmpty() && sIdAlias==sName )
@@ -12791,6 +12843,32 @@ static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVari
 	}
 
 	return true;
+}
+
+static void FixParsedMva ( const CSphVector<DWORD> & dParsed, CSphVector<DWORD> & dMva, int iCount )
+{
+	if ( !iCount )
+		return;
+
+	// dParsed:
+	// 0 - iCount elements: offset to MVA values with leading MVA element count
+	// Could be not in right order
+
+	dMva.Resize ( 0 );
+	for ( int i=0; i<iCount; i++ )
+	{
+		int iOff = dParsed[i];
+		if ( !iOff )
+		{
+			dMva.Add ( 0 );
+			continue;
+		}
+
+		int iMvaCount = dParsed[iOff];
+		DWORD * pMva = dMva.AddN ( iMvaCount + 1 );
+		*pMva++ = iMvaCount;
+		memcpy ( pMva, dParsed.Begin() + iOff + 1, sizeof(dMva[0]) * iMvaCount );
+	}
 }
 
 static void PercolateMatchDocuments ( const StrVec_t & dDocs, const PercolateOptions_t & tOpts, const CSphString & sIdAlias, const char * sStmt,
@@ -12823,6 +12901,7 @@ static void PercolateMatchDocuments ( const StrVec_t & dDocs, const PercolateOpt
 	}
 
 	int iStrCounter = 0;
+	int iMvaCounter = 0;
 	CSphHash<SchemaItemVariant_t> hSchemaLocators;
 	if ( tOpts.m_bJsonDocs )
 	{
@@ -12835,6 +12914,8 @@ static void PercolateMatchDocuments ( const StrVec_t & dDocs, const PercolateOpt
 			tAttr.m_eType = tCol.m_eAttrType;
 			if ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_JSON )
 				tAttr.m_iStr = iStrCounter++;
+			if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET )
+				tAttr.m_iMva = iMvaCounter++;
 
 			hSchemaLocators.Add ( sphFNV64 ( tCol.m_sName.cstr() ), tAttr );
 		}
@@ -12844,6 +12925,15 @@ static void PercolateMatchDocuments ( const StrVec_t & dDocs, const PercolateOpt
 			SchemaItemVariant_t tAttr;
 			tAttr.m_iField = i;
 			hSchemaLocators.Add ( sphFNV64 ( tField.m_sName.cstr() ), tAttr );
+		}
+	} else
+	{
+		// even withoout JSON docs MVA should match to schema definition on inserting data into accumulator
+		for ( int i=0; i<iAttrsCount; i++ )
+		{
+			const CSphColumnInfo & tCol = tSchema.GetAttr(i);
+			if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET )
+				iMvaCounter++;
 		}
 	}
 
@@ -12855,6 +12945,8 @@ static void PercolateMatchDocuments ( const StrVec_t & dDocs, const PercolateOpt
 	CSphFixedVector<const char *> dStrings ( iStrCounter );
 	StringPtrTraits_t tStrings;
 	tStrings.m_dOff.Reset ( iStrCounter );
+	CSphVector<DWORD> dMvaParsed ( iMvaCounter );
+	CSphVector<DWORD> dMva;
 
 	CSphString sTokenFilterOpts;
 	ARRAY_FOREACH ( iDoc, dDocs )
@@ -12862,6 +12954,9 @@ static void PercolateMatchDocuments ( const StrVec_t & dDocs, const PercolateOpt
 		// doc-id
 		tDoc.m_uDocID = 0;
 		dFields[0] = dDocs[iDoc].cstr();
+
+		dMvaParsed.Resize ( iMvaCounter );
+		dMvaParsed.Fill ( 0 );
 
 		if ( tOpts.m_bJsonDocs )
 		{
@@ -12876,11 +12971,12 @@ static void PercolateMatchDocuments ( const StrVec_t & dDocs, const PercolateOpt
 			}
 			tStrings.Reset();
 
-			if ( !ParseJsonDocument ( dDocs[iDoc].cstr(), hSchemaLocators, sIdAlias, iDoc, dFields, tDoc, tStrings, sError, sWarning ) )
+			if ( !ParseJsonDocument ( dDocs[iDoc].cstr(), hSchemaLocators, sIdAlias, iDoc, dFields, tDoc, tStrings, dMvaParsed, sError, sWarning ) )
 				break;
 
 			tStrings.GetPointers ( dStrings );
 		}
+		FixParsedMva ( dMvaParsed, dMva, iMvaCounter );
 
 		if ( !sError.IsEmpty() )
 			break;
@@ -12900,7 +12996,7 @@ static void PercolateMatchDocuments ( const StrVec_t & dDocs, const PercolateOpt
 		tDoc.m_uDocID = uSeqDocid++;
 
 		// add document
-		pIndex->AddDocument ( pIndex->CloneIndexingTokenizer (), iFieldsCount, dFields.Begin(), tDoc, true, sTokenFilterOpts, dStrings.Begin(), CSphVector<DWORD>(), sError, sWarning, pAccum );
+		pIndex->AddDocument ( pIndex->CloneIndexingTokenizer (), iFieldsCount, dFields.Begin(), tDoc, true, sTokenFilterOpts, dStrings.Begin(), dMva, sError, sWarning, pAccum );
 
 		if ( !sError.IsEmpty() )
 			break;

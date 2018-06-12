@@ -11564,10 +11564,11 @@ static void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_
 
 	const RtSegment_t * pSeg = (RtSegment_t *)tMatchCtx.m_pCtx->m_pIndexData;
 	const BYTE * pStrings = pSeg->m_dStrings.Begin();
+	const DWORD * pMva = pSeg->m_dMvas.Begin();
 
 	tMatchCtx.m_iEarlyPassed++;
 	tMatchCtx.m_pCtx->ResetFilters();
-	tMatchCtx.m_pCtx->CreateFilters ( false, &pStored->m_dFilters, tMatchCtx.m_tSchema, NULL, pStrings, tMatchCtx.m_sWarning, tMatchCtx.m_sWarning, SPH_COLLATION_DEFAULT, true, tMatchCtx.m_dKillist, &pStored->m_dFilterTree );
+	tMatchCtx.m_pCtx->CreateFilters ( false, &pStored->m_dFilters, tMatchCtx.m_tSchema, pMva, pStrings, tMatchCtx.m_sWarning, tMatchCtx.m_sWarning, SPH_COLLATION_DEFAULT, true, tMatchCtx.m_dKillist, &pStored->m_dFilterTree );
 
 	// set terms dictionary
 	tMatchCtx.m_tDictMap.SetMap ( pStored->m_hDict );

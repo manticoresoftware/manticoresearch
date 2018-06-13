@@ -10524,6 +10524,7 @@ struct StoredQuery_t : ISphNoncopyable
 	CSphString						m_sQuery;
 	CSphString						m_sTags;
 	bool							m_bQL = true;
+	bool							IsFullscan() const { return m_pXQ->m_bEmpty; }
 
 	~StoredQuery_t() { SafeDelete ( m_pXQ ); }
 };
@@ -11559,7 +11560,7 @@ static void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_
 	uint64_t tmQueryStart = ( tMatchCtx.m_bVerbose ? sphMicroTimer() : 0 );
 	tMatchCtx.m_iOnlyTerms += ( pStored->m_bOnlyTerms ? 1 : 0 );
 
-	if ( tMatchCtx.m_tReject.Filter ( pStored ) )
+	if ( !pStored->IsFullscan() && tMatchCtx.m_tReject.Filter ( pStored ) )
 		return;
 
 	const RtSegment_t * pSeg = (RtSegment_t *)tMatchCtx.m_pCtx->m_pIndexData;
@@ -11570,36 +11571,61 @@ static void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_
 	tMatchCtx.m_pCtx->ResetFilters();
 	tMatchCtx.m_pCtx->CreateFilters ( false, &pStored->m_dFilters, tMatchCtx.m_tSchema, pMva, pStrings, tMatchCtx.m_sWarning, tMatchCtx.m_sWarning, SPH_COLLATION_DEFAULT, true, tMatchCtx.m_dKillist, &pStored->m_dFilterTree );
 
-	// set terms dictionary
-	tMatchCtx.m_tDictMap.SetMap ( pStored->m_hDict );
-	CSphQueryResult tTmpResult;
-	CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( *pStored->m_pXQ, &tMatchCtx.m_tDummyQuery, &tTmpResult, *tMatchCtx.m_pTermSetup, *tMatchCtx.m_pCtx, tMatchCtx.m_tSchema ) );
-
-	if ( !pRanker.Ptr() )
-		return;
 
 	const bool bCollectDocs = tMatchCtx.m_bGetDocs;
-	int iMatchCount = 0;
 	int iDocsOff = tMatchCtx.m_dDocsMatched.GetLength();
+	int iMatchCount = 0;
 
-	const CSphMatch * pMatch = pRanker->GetMatchesBuffer();
-	while ( true )
+	if ( !pStored->IsFullscan() ) // matching path
 	{
-		int iMatches = pRanker->GetMatches();
-		if ( !iMatches )
-			break;
+		// set terms dictionary
+		tMatchCtx.m_tDictMap.SetMap ( pStored->m_hDict );
+		CSphQueryResult tTmpResult;
+		CSphScopedPtr<ISphRanker> pRanker ( sphCreateRanker ( *pStored->m_pXQ, &tMatchCtx.m_tDummyQuery, &tTmpResult, *tMatchCtx.m_pTermSetup, *tMatchCtx.m_pCtx, tMatchCtx.m_tSchema ) );
 
-		if ( bCollectDocs )
+		if ( !pRanker.Ptr() )
+			return;
+
+		const CSphMatch * pMatch = pRanker->GetMatchesBuffer();
+		while ( true )
 		{
-			// docs encoding: docs-count; docs matched
-			if ( !iMatchCount )
-				tMatchCtx.m_dDocsMatched.Add ( 0 );									
-			tMatchCtx.m_dDocsMatched.Reserve ( tMatchCtx.m_dDocsMatched.GetLength() + iMatches );
-			for ( int iMatch=0; iMatch<iMatches; iMatch++ )
-				tMatchCtx.m_dDocsMatched.Add ( pMatch[iMatch].m_uDocID );
-		}
+			int iMatches = pRanker->GetMatches();
+			if ( !iMatches )
+				break;
 
-		iMatchCount += iMatches;
+			if ( bCollectDocs )
+			{
+				// docs encoding: docs-count; docs matched
+				if ( !iMatchCount )
+					tMatchCtx.m_dDocsMatched.Add ( 0 );									
+				tMatchCtx.m_dDocsMatched.Reserve ( tMatchCtx.m_dDocsMatched.GetLength() + iMatches );
+				for ( int iMatch=0; iMatch<iMatches; iMatch++ )
+					tMatchCtx.m_dDocsMatched.Add ( pMatch[iMatch].m_uDocID );
+			}
+
+			iMatchCount += iMatches;
+		}
+	} else // full-scan path
+	{
+		// reserve space for matched docs counter
+		if ( bCollectDocs )
+			tMatchCtx.m_dDocsMatched.Add ( 0 );
+
+		CSphMatch tDoc;
+		int iStride = DOCINFO_IDSIZE + tMatchCtx.m_tSchema.GetRowSize();
+		const CSphIndex * pIndex = tMatchCtx.m_pTermSetup->m_pIndex;
+		const CSphRowitem * pRow = pSeg->m_dRows.Begin();
+		for ( int i = 0; i<pSeg->m_iRows; i++ )
+		{
+			tDoc.m_uDocID = DOCINFO2ID ( pRow );
+			pRow += iStride;
+			if ( pIndex->EarlyReject ( tMatchCtx.m_pCtx, tDoc ) )
+				continue;
+
+			iMatchCount++;
+			if ( bCollectDocs ) // keep matched docs
+				tMatchCtx.m_dDocsMatched.Add ( tDoc.m_uDocID );
+		}
 	}
 
 	if ( iMatchCount )
@@ -11933,12 +11959,6 @@ bool PercolateIndex_c::EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch
 
 bool PercolateIndex_c::Query ( const char * sQuery, const char * sTags, const CSphVector<CSphFilterSettings> * pFilters, const CSphVector<FilterTreeItem_t> * pFilterTree, bool bReplace, bool bQL, uint64_t & uId, CSphString & sError )
 {
-	if ( !sQuery || *sQuery=='\0' )
-	{
-		sError.SetSprintf ( "empty query" );
-		return false;
-	}
-
 	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( SPH_CLONE_QUERY ) );
 	sphSetupQueryTokenizer ( pTokenizer.Ptr(), IsStarDict(), m_tSettings.m_bIndexExactWords, false );
 
@@ -12000,12 +12020,6 @@ static void FixExpanded ( XQNode_t * pNode )
 
 bool PercolateIndex_c::AddQuery ( const char * sQuery, const char * sTags, const CSphVector<CSphFilterSettings> * pFilters, const CSphVector<FilterTreeItem_t> * pFilterTree, bool bReplace, bool bQL, uint64_t & uId, const ISphTokenizer * pTokenizer, CSphDict * pDict, CSphString & sError )
 {
-	if ( !sQuery || *sQuery=='\0' )
-	{
-		sError.SetSprintf ( "empty query" );
-		return false;
-	}
-
 	CSphVector<BYTE> dFiltered;
 	if ( m_pFieldFilter )
 	{

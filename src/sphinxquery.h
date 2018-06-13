@@ -285,6 +285,7 @@ struct XQQuery_t : public ISphNoncopyable
 	XQNode_t *				m_pRoot = nullptr;
 	bool					m_bNeedSZlist = false;
 	bool					m_bSingleWord = false;
+	bool					m_bEmpty = false;
 
 	/// dtor
 	~XQQuery_t ()

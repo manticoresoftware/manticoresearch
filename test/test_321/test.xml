@@ -207,6 +207,13 @@ CREATE TABLE `test_table` (
 <sphinxql>insert into pq_mva (query, filters, tags) values('orange', 'any(mva3) &lt; 13', 'q33')</sphinxql>
 <sphinxql>CALL PQ ('pq_mva', ('{"title":"orange", "mva3":[1, 12]}', '{"title":"orange", "mva2":[15], "mva3":[8,8,1]}', '{"title":"orange", "mva3":[13]}', '{"title":"orange", "mva2":[15], "mva3":[8,13,1]}'), 1 as docs, 1 as docs_json, 1 as query )</sphinxql>
 
+<!-- full-scan queries -->
+<sphinxql>insert into pq_mva (query, filters, tags) values('', 'mva3 &lt; 13', 'q31')</sphinxql>
+<sphinxql>insert into pq_mva (query, filters, tags) values('', 'all(mva3) &lt; 13', 'q32')</sphinxql>
+<sphinxql>insert into pq_mva (query, filters, tags) values('', 'any(mva3) &lt; 13', 'q33')</sphinxql>
+<sphinxql>insert into pq_mva (query, tags) values('', 'q_all')</sphinxql>
+<sphinxql>CALL PQ ('pq_mva', ('{"title":"black", "mva3":[1, 12]}', '{"mva2":[15], "mva3":[8,8,1]}', '{"mva3":[13]}', '{"mva2":[15], "mva3":[8,13,1]}'), 1 as docs, 1 as docs_json, 1 as query )</sphinxql>
+
 </sphqueries>
 
 </test>

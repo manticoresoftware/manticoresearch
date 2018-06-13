@@ -976,6 +976,7 @@ XQQuery_t * XQQuery_t::Clone () const
 	pQuery->m_bNeedSZlist = m_bNeedSZlist;
 	pQuery->m_bSingleWord = m_bSingleWord;
 	pQuery->m_pRoot = m_pRoot->Clone();
+	pQuery->m_bEmpty = m_bEmpty;
 
 	return pQuery;
 }
@@ -2005,6 +2006,7 @@ bool sphParseExtendedQuery ( XQQuery_t & tParsed, const char * sQuery, const CSp
 	// moved here from ranker creation
 	// as at that point term expansion could produce many terms from expanded term and this condition got failed
 	tParsed.m_bSingleWord = ( tParsed.m_pRoot && tParsed.m_pRoot->m_dChildren.GetLength()==0 && tParsed.m_pRoot->m_dWords.GetLength()==1 );
+	tParsed.m_bEmpty = qp.m_bEmpty;
 
 	return bRes;
 }

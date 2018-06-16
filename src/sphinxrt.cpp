@@ -2593,8 +2593,42 @@ void CopyFixupStorageAttrs ( const CSphTightVector<SRC> & dSrc, STORAGE & tStora
 
 #define BLOOM_PER_ENTRY_VALS_COUNT 8
 #define BLOOM_HASHES_COUNT 2
+#define BLOOM_NGRAM_0 2
+#define BLOOM_NGRAM_1 4
 
-static bool BuildBloom ( const BYTE * sWord, int iLen, int iInfixCodepointCount, bool bUtf8, uint64_t * pBloom, int iKeyValCount )
+struct BloomGenTraits_t
+{
+	uint64_t * m_pBuf = nullptr;
+	explicit BloomGenTraits_t ( uint64_t * pBuf )
+		: m_pBuf ( pBuf )
+	{}
+
+	void Set ( int iPos, uint64_t uVal )
+	{
+		m_pBuf[iPos] |= uVal;
+	}
+
+	bool IterateNext() const { return true; }
+};
+
+struct BloomCheckTraits_t
+{
+	const uint64_t * m_pBuf = nullptr;
+	bool m_bSame = true;
+	explicit BloomCheckTraits_t ( const uint64_t * pBuf )
+		: m_pBuf ( pBuf )
+	{}
+
+	void Set ( int iPos, uint64_t uVal )
+	{
+		m_bSame = ( ( m_pBuf[iPos] & uVal )==uVal );
+	}
+
+	bool IterateNext() const { return m_bSame; }
+};
+
+template <typename BLOOM_TRAITS = BloomGenTraits_t>
+bool BuildBloom ( const BYTE * sWord, int iLen, int iInfixCodepointCount, bool bUtf8, int iKeyValCount, BLOOM_TRAITS & tBloom )
 {
 	if ( iLen<iInfixCodepointCount )
 		return false;
@@ -2622,7 +2656,7 @@ static bool BuildBloom ( const BYTE * sWord, int iLen, int iInfixCodepointCount,
 		return false;
 
 	int iKeyBytes = iKeyValCount * 64;
-	for ( int i=0; i<=iCodes-iInfixCodepointCount; i++ )
+	for ( int i=0; i<=iCodes-iInfixCodepointCount && tBloom.IterateNext(); i++ )
 	{
 		int iFrom = dOffsets[i];
 		int iTo = dOffsets[i+iInfixCodepointCount];
@@ -2633,13 +2667,13 @@ static bool BuildBloom ( const BYTE * sWord, int iLen, int iInfixCodepointCount,
 		int iPos = iByte/64;
 		uint64_t uVal = U64C(1) << ( iByte % 64 );
 
-		pBloom[iPos] |= uVal;
+		tBloom.Set ( iPos, uVal );
 	}
 	return true;
 }
 
 
-static void BuildSegmentInfixes ( RtSegment_t * pSeg, bool bHasMorphology, bool bKeywordDict, int iMinInfixLen, int iWordsCheckpoint, int iMaxCodepointLength )
+static void BuildSegmentInfixes ( RtSegment_t * pSeg, bool bHasMorphology, bool bKeywordDict, int iMinInfixLen, int iWordsCheckpoint, bool bUtf8 )
 {
 	if ( !pSeg || !bKeywordDict || !iMinInfixLen )
 		return;
@@ -2647,7 +2681,7 @@ static void BuildSegmentInfixes ( RtSegment_t * pSeg, bool bHasMorphology, bool 
 	int iBloomSize = ( pSeg->m_dWordCheckpoints.GetLength()+1 ) * BLOOM_PER_ENTRY_VALS_COUNT * BLOOM_HASHES_COUNT;
 	pSeg->m_dInfixFilterCP.Resize ( iBloomSize );
 	// reset filters
-	memset ( pSeg->m_dInfixFilterCP.Begin(), 0, pSeg->m_dInfixFilterCP.GetLength() * sizeof ( pSeg->m_dInfixFilterCP[0] ) );
+	pSeg->m_dInfixFilterCP.Fill ( 0 );
 
 	uint64_t * pRough = pSeg->m_dInfixFilterCP.Begin();
 	const RtWord_t * pWord = NULL;
@@ -2666,8 +2700,10 @@ static void BuildSegmentInfixes ( RtSegment_t * pSeg, bool bHasMorphology, bool 
 		}
 
 		uint64_t * pVal = pRough + rdDictRough.m_iCheckpoint * BLOOM_PER_ENTRY_VALS_COUNT * BLOOM_HASHES_COUNT;
-		BuildBloom ( pDictWord, iLen, 2, ( iMaxCodepointLength>1 ), pVal+BLOOM_PER_ENTRY_VALS_COUNT*0, BLOOM_PER_ENTRY_VALS_COUNT );
-		BuildBloom ( pDictWord, iLen, 4, ( iMaxCodepointLength>1 ), pVal+BLOOM_PER_ENTRY_VALS_COUNT*1, BLOOM_PER_ENTRY_VALS_COUNT );
+		BloomGenTraits_t tBloom0 ( pVal );
+		BloomGenTraits_t tBloom1 ( pVal+BLOOM_PER_ENTRY_VALS_COUNT );
+		BuildBloom ( pDictWord, iLen, BLOOM_NGRAM_0, bUtf8, BLOOM_PER_ENTRY_VALS_COUNT, tBloom0 );
+		BuildBloom ( pDictWord, iLen, BLOOM_NGRAM_1, bUtf8, BLOOM_PER_ENTRY_VALS_COUNT, tBloom1 );
 	}
 }
 
@@ -2808,7 +2844,7 @@ RtSegment_t * RtIndex_t::MergeSegments ( const RtSegment_t * pSeg1, const RtSegm
 	if ( m_bKeywordDict )
 		FixupSegmentCheckpoints ( pSeg );
 
-	BuildSegmentInfixes ( pSeg, bHasMorphology, m_bKeywordDict, m_tSettings.m_iMinInfixLen, m_iWordsCheckpoint, m_iMaxCodepointLength );
+	BuildSegmentInfixes ( pSeg, bHasMorphology, m_bKeywordDict, m_tSettings.m_iMinInfixLen, m_iWordsCheckpoint, ( m_iMaxCodepointLength>1 ) );
 
 	assert ( pSeg->m_dRows.GetLength() );
 	assert ( pSeg->m_iRows );
@@ -2858,7 +2894,7 @@ void RtIndex_t::Commit ( int * pDeleted, ISphRtAccum * pAccExt )
 	assert ( !pNewSeg || pNewSeg->m_iAliveRows>0 );
 	assert ( !pNewSeg || pNewSeg->m_bTlsKlist==false );
 
-	BuildSegmentInfixes ( pNewSeg, m_pDict->HasMorphology(), m_bKeywordDict, m_tSettings.m_iMinInfixLen, m_iWordsCheckpoint, m_iMaxCodepointLength );
+	BuildSegmentInfixes ( pNewSeg, m_pDict->HasMorphology(), m_bKeywordDict, m_tSettings.m_iMinInfixLen, m_iWordsCheckpoint, ( m_iMaxCodepointLength>1 ) );
 
 #if PARANOID
 	if ( pNewSeg )
@@ -4575,7 +4611,7 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 			if ( !LoadVector ( rdChunk, pSeg->m_dInfixFilterCP, iSaneTightVecSize, "ram-infixes", m_sLastError ) )
 				return false;
 			if ( bRebuildInfixes )
-				BuildSegmentInfixes ( pSeg, bHasMorphology, m_bKeywordDict, m_tSettings.m_iMinInfixLen, m_iWordsCheckpoint, m_iMaxCodepointLength );
+				BuildSegmentInfixes ( pSeg, bHasMorphology, m_bKeywordDict, m_tSettings.m_iMinInfixLen, m_iWordsCheckpoint, ( m_iMaxCodepointLength>1 ) );
 		}
 	}
 
@@ -6314,35 +6350,7 @@ void RtIndex_t::GetPrefixedWords ( const char * sSubstring, int iSubLen, const c
 }
 
 
-static bool MatchBloomCheckpoint ( const uint64_t * pBloom, const uint64_t * pVals, int iWordsStride, int iCP, int iHashes )
-{
-	int dMatches[ BLOOM_HASHES_COUNT ];
-	memset ( dMatches, 0, sizeof(dMatches) );
-	int iMatch = 0;
-
-	for ( int j=0; j<iWordsStride*iHashes*BLOOM_PER_ENTRY_VALS_COUNT; j++ )
-	{
-		int iVal = j % ( BLOOM_PER_ENTRY_VALS_COUNT * iHashes );
-		uint64_t uInfix = pVals[iVal];
-		uint64_t uFilter = pBloom[ j + iCP * iWordsStride * iHashes * BLOOM_PER_ENTRY_VALS_COUNT ];
-		iMatch += ( ( uInfix & uFilter )==uInfix );
-
-		if ( j%BLOOM_PER_ENTRY_VALS_COUNT==BLOOM_PER_ENTRY_VALS_COUNT-1 )
-		{
-			dMatches[ ( j/BLOOM_PER_ENTRY_VALS_COUNT ) % iHashes ] += ( iMatch==BLOOM_PER_ENTRY_VALS_COUNT );
-			iMatch = 0;
-		}
-	}
-
-	int iMatched = 0;
-	for ( int i=0; i<iHashes; i++ )
-		iMatched += ( dMatches[i]>0 );
-
-	return ( iMatched==iHashes );
-}
-
-
-static bool ExtractInfixCheckpoints ( const char * sInfix, int iBytes, int iMaxCodepointLength, int iCPs, const CSphTightVector<uint64_t> & dFilter, CSphVector<DWORD> & dCheckpoints )
+static bool ExtractInfixCheckpoints ( const char * sInfix, int iBytes, int iMaxCodepointLength, int iDictCpCount, const CSphTightVector<uint64_t> & dFilter, CSphVector<DWORD> & dCheckpoints )
 {
 	if ( !dFilter.GetLength() )
 		return false;
@@ -6352,15 +6360,31 @@ static bool ExtractInfixCheckpoints ( const char * sInfix, int iBytes, int iMaxC
 	uint64_t dVals[ BLOOM_PER_ENTRY_VALS_COUNT * BLOOM_HASHES_COUNT ];
 	memset ( dVals, 0, sizeof(dVals) );
 
-	if ( !BuildBloom ( (const BYTE *)sInfix, iBytes, 2, ( iMaxCodepointLength>1 ), dVals+BLOOM_PER_ENTRY_VALS_COUNT*0, BLOOM_PER_ENTRY_VALS_COUNT ) )
+	BloomGenTraits_t tBloom0 ( dVals );
+	BloomGenTraits_t tBloom1 ( dVals+BLOOM_PER_ENTRY_VALS_COUNT );
+	if ( !BuildBloom ( (const BYTE *)sInfix, iBytes, BLOOM_NGRAM_0, ( iMaxCodepointLength>1 ), BLOOM_PER_ENTRY_VALS_COUNT, tBloom0 ) )
 		return false;
-	BuildBloom ( (const BYTE *)sInfix, iBytes, 4, ( iMaxCodepointLength>1 ), dVals+BLOOM_PER_ENTRY_VALS_COUNT*1, BLOOM_PER_ENTRY_VALS_COUNT );
+	BuildBloom ( (const BYTE *)sInfix, iBytes, BLOOM_NGRAM_1, ( iMaxCodepointLength>1 ), BLOOM_PER_ENTRY_VALS_COUNT, tBloom1 );
 
-	const uint64_t * pRough = dFilter.Begin();
-	for ( int i=0; i<iCPs+1; i++ )
+	for ( int iDictCp=0; iDictCp<iDictCpCount+1; iDictCp++ )
 	{
-		if ( MatchBloomCheckpoint ( pRough, dVals, 1, i, BLOOM_HASHES_COUNT ) )
-			dCheckpoints.Add ( (DWORD)i );
+		const uint64_t * pCP = dFilter.Begin() + iDictCp * BLOOM_PER_ENTRY_VALS_COUNT * BLOOM_HASHES_COUNT;
+		const uint64_t * pSuffix = dVals;
+
+		bool bMatched = true;
+		for ( int iElem=0; iElem<BLOOM_PER_ENTRY_VALS_COUNT*BLOOM_HASHES_COUNT; iElem++ )
+		{
+			uint64_t uFilter = *pCP++;
+			uint64_t uSuffix = *pSuffix++;
+			if ( ( uFilter & uSuffix )!=uSuffix )
+			{
+				bMatched = false;
+				break;
+			}
+		}
+
+		if ( bMatched )
+			dCheckpoints.Add ( (DWORD)iDictCp );
 	}
 
 	return ( dCheckpoints.GetLength()!=iStart );
@@ -10062,7 +10086,7 @@ bool RtBinlog_c::ReplayCommit ( int iBinlog, DWORD uReplayFlags, BinlogReader_c 
 		{
 			FixupSegmentCheckpoints ( pSeg.Ptr() );
 			BuildSegmentInfixes ( pSeg.Ptr(), tIndex.m_pRT->GetDictionary()->HasMorphology(),
-				tIndex.m_pRT->IsWordDict(), tIndex.m_pRT->GetSettings().m_iMinInfixLen, tIndex.m_pRT->GetWordCheckoint(), tIndex.m_pRT->GetMaxCodepointLength() );
+				tIndex.m_pRT->IsWordDict(), tIndex.m_pRT->GetSettings().m_iMinInfixLen, tIndex.m_pRT->GetWordCheckoint(), ( tIndex.m_pRT->GetMaxCodepointLength()>1 ) );
 		}
 
 		// actually replay
@@ -10518,6 +10542,7 @@ struct StoredQuery_t : ISphNoncopyable
 	CSphVector<CSphFilterSettings>	m_dFilters;
 	CSphVector<FilterTreeItem_t>	m_dFilterTree;
 	DictMap_t						m_hDict;
+	CSphVector<CSphString>			m_dSuffixes;
 
 	uint64_t						m_uUID = 0;
 	// show status info
@@ -10656,8 +10681,6 @@ private:
 #define PERCOLATE_BLOOM_WILD_COUNT 32
 #define PERCOLATE_BLOOM_SIZE PERCOLATE_BLOOM_WILD_COUNT * 2
 #define PERCOLATE_WORDS_PER_CP 128
-#define PERCOLATE_BLOOM_SIZE_0 2
-#define PERCOLATE_BLOOM_SIZE_1 4
 
 /// percolate query index factory
 PercolateIndex_i * CreateIndexPercolate ( const CSphSchema & tSchema, const char * sIndexName, const char * sPath )
@@ -10669,27 +10692,42 @@ PercolateIndex_i * CreateIndexPercolate ( const CSphSchema & tSchema, const char
 struct SegmentReject_t
 {
 	CSphVector<uint64_t> m_dTerms;
-	CSphFixedVector<uint64_t> m_dWilds;
-	CSphFixedVector< CSphVector<uint64_t> > m_dPerDocTerms;
+	CSphFixedVector<uint64_t> m_dWilds { 0 };
+	CSphFixedVector< CSphVector<uint64_t> > m_dPerDocTerms { 0 };
+	CSphFixedVector<uint64_t> m_dPerDocWilds { 0 };
+	int m_iRows = 0;
 
 	SegmentReject_t ()
-		: m_dWilds ( PERCOLATE_BLOOM_SIZE )
-		, m_dPerDocTerms ( 0 )
 	{
 		m_dWilds.Fill ( 0 );
 	}
 
-	bool Filter ( const StoredQuery_t * pStored ) const;
+	bool Filter ( const StoredQuery_t * pStored, bool bUtf8 ) const;
 };
 
-static void SegmentGetRejects ( const RtSegment_t * pSeg, SegmentReject_t & tReject )
+static void SegmentGetRejects ( const RtSegment_t * pSeg, bool bBuildInfix, bool bUtf8, SegmentReject_t & tReject )
 {
-	const bool bGetDocs = ( pSeg->m_iRows>1 );
-	if ( bGetDocs )
+	tReject.m_iRows = pSeg->m_iRows;
+	const bool bMultiDocs = ( pSeg->m_iRows>1 );
+	if ( bMultiDocs )
+	{
 		tReject.m_dPerDocTerms.Reset ( pSeg->m_iRows );
+		if ( bBuildInfix )
+		{
+			tReject.m_dPerDocWilds.Reset ( pSeg->m_iRows * PERCOLATE_BLOOM_SIZE );
+			tReject.m_dPerDocWilds.Fill ( 0 );
+		}
+	}
+	if ( bBuildInfix )
+	{
+		tReject.m_dWilds.Reset ( PERCOLATE_BLOOM_SIZE );
+		tReject.m_dWilds.Fill ( 0 );
+	}
 
 	RtWordReader_t tDict ( pSeg, true, PERCOLATE_WORDS_PER_CP );
 	const RtWord_t * pWord = NULL;
+	BloomGenTraits_t tBloom0 ( tReject.m_dWilds.Begin() );
+	BloomGenTraits_t tBloom1 ( tReject.m_dWilds.Begin() + PERCOLATE_BLOOM_WILD_COUNT );
 
 	while ( ( pWord = tDict.UnzipWord() )!=NULL )
 	{
@@ -10699,10 +10737,13 @@ static void SegmentGetRejects ( const RtSegment_t * pSeg, SegmentReject_t & tRej
 		uint64_t uHash = sphFNV64 ( pDictWord, iLen );
 		tReject.m_dTerms.Add ( uHash );
 
-		BuildBloom ( pDictWord, iLen, PERCOLATE_BLOOM_SIZE_0, false, tReject.m_dWilds.Begin(), PERCOLATE_BLOOM_WILD_COUNT );
-		BuildBloom ( pDictWord, iLen, PERCOLATE_BLOOM_SIZE_1, false, tReject.m_dWilds.Begin() + PERCOLATE_BLOOM_WILD_COUNT, PERCOLATE_BLOOM_WILD_COUNT );
+		if ( bBuildInfix )
+		{
+			BuildBloom ( pDictWord, iLen, BLOOM_NGRAM_0, bUtf8, PERCOLATE_BLOOM_WILD_COUNT, tBloom0 );
+			BuildBloom ( pDictWord, iLen, BLOOM_NGRAM_1, bUtf8, PERCOLATE_BLOOM_WILD_COUNT, tBloom1 );
+		}
 
-		if ( bGetDocs )
+		if ( bMultiDocs )
 		{
 				RtDocReader_t tDoc ( pSeg, *pWord );
 				while ( true )
@@ -10715,12 +10756,21 @@ static void SegmentGetRejects ( const RtSegment_t * pSeg, SegmentReject_t & tRej
 					assert ( pDoc->m_uDocID>=1 && (int)pDoc->m_uDocID<pSeg->m_iRows+1 );
 					int iDoc = (int)pDoc->m_uDocID - 1;
 					tReject.m_dPerDocTerms[iDoc].Add ( uHash );
+
+					if ( bBuildInfix )
+					{
+						uint64_t * pBloom = tReject.m_dPerDocWilds.Begin() + iDoc * PERCOLATE_BLOOM_SIZE;
+						BloomGenTraits_t tBloom2Doc0 ( pBloom );
+						BloomGenTraits_t tBloom2Doc1 ( pBloom + PERCOLATE_BLOOM_WILD_COUNT );
+						BuildBloom ( pDictWord, iLen, BLOOM_NGRAM_0, bUtf8, PERCOLATE_BLOOM_WILD_COUNT, tBloom2Doc0 );
+						BuildBloom ( pDictWord, iLen, BLOOM_NGRAM_1, bUtf8, PERCOLATE_BLOOM_WILD_COUNT, tBloom2Doc1 );
+					}
 				}
 		}
 	}
 
 	tReject.m_dTerms.Uniq();
-	if ( bGetDocs )
+	if ( bMultiDocs )
 	{
 		ARRAY_FOREACH ( i, tReject.m_dPerDocTerms )
 		{
@@ -10729,7 +10779,7 @@ static void SegmentGetRejects ( const RtSegment_t * pSeg, SegmentReject_t & tRej
 	}
 }
 
-static void DoQueryGetRejects ( const XQNode_t * pNode, CSphDict * pDict, CSphVector<uint64_t> & dRejectTerms, CSphFixedVector<uint64_t> & dRejectBloom, bool & bOnlyTerms )
+static void DoQueryGetRejects ( const XQNode_t * pNode, CSphDict * pDict, CSphVector<uint64_t> & dRejectTerms, CSphFixedVector<uint64_t> & dRejectBloom, CSphVector<CSphString> & dSuffixes, bool & bOnlyTerms, bool bUtf8 )
 {
 	// FIXME!!! replace recursion to prevent stack overflow for large and complex queries
 	if ( pNode && !( pNode->GetOp()==SPH_QUERY_AND || pNode->GetOp()==SPH_QUERY_ANDNOT ) )
@@ -10750,7 +10800,7 @@ static void DoQueryGetRejects ( const XQNode_t * pNode, CSphDict * pDict, CSphVe
 
 		bool bStarTerm = false;
 		int iCur = 0;
-		int iInfixCodepointCount = 0;
+		int iInfixLen = 0;
 		const char * sInfix = NULL;
 		const char * s = tWord.m_sWord.cstr();
 		BYTE * sDst = sTmp;
@@ -10761,10 +10811,10 @@ static void DoQueryGetRejects ( const XQNode_t * pNode, CSphDict * pDict, CSphVe
 			{
 				iCur = 0;
 				bStarTerm = true;
-			} else if ( ++iCur>iInfixCodepointCount )
+			} else if ( ++iCur>iInfixLen )
 			{
 				sInfix = s - iCur + 1;
-				iInfixCodepointCount = iCur;
+				iInfixLen = iCur;
 			}
 			*sDst++ = *s++;
 		}
@@ -10780,8 +10830,11 @@ static void DoQueryGetRejects ( const XQNode_t * pNode, CSphDict * pDict, CSphVe
 				dRejectBloom.Fill ( 0 );
 			}
 
-			BuildBloom ( (const BYTE *)sInfix, iInfixCodepointCount, PERCOLATE_BLOOM_SIZE_0, false, dRejectBloom.Begin(), PERCOLATE_BLOOM_WILD_COUNT );
-			BuildBloom ( (const BYTE *)sInfix, iInfixCodepointCount, PERCOLATE_BLOOM_SIZE_1, false, dRejectBloom.Begin() + PERCOLATE_BLOOM_WILD_COUNT, PERCOLATE_BLOOM_WILD_COUNT );
+			BloomGenTraits_t tBloom0 ( dRejectBloom.Begin() );
+			BloomGenTraits_t tBloom1 ( dRejectBloom.Begin() + PERCOLATE_BLOOM_WILD_COUNT );
+			BuildBloom ( (const BYTE *)sInfix, iInfixLen, BLOOM_NGRAM_0, bUtf8, PERCOLATE_BLOOM_WILD_COUNT, tBloom0 );
+			BuildBloom ( (const BYTE *)sInfix, iInfixLen, BLOOM_NGRAM_1, bUtf8, PERCOLATE_BLOOM_WILD_COUNT, tBloom1 );
+			dSuffixes.Add().SetBinary ( sInfix, iInfixLen );
 
 			continue;
 		}
@@ -10806,12 +10859,12 @@ static void DoQueryGetRejects ( const XQNode_t * pNode, CSphDict * pDict, CSphVe
 	if ( pNode->GetOp()==SPH_QUERY_ANDNOT && iCount>1 )
 		iCount = 1;
 	for ( int i=0; i<iCount; i++ )
-		DoQueryGetRejects ( pNode->m_dChildren[i], pDict, dRejectTerms, dRejectBloom, bOnlyTerms );
+		DoQueryGetRejects ( pNode->m_dChildren[i], pDict, dRejectTerms, dRejectBloom, dSuffixes, bOnlyTerms, bUtf8 );
 }
 
-static void QueryGetRejects ( const XQNode_t * pNode, CSphDict * pDict, CSphVector<uint64_t> & dRejectTerms, CSphFixedVector<uint64_t> & dRejectBloom, bool & bOnlyTerms )
+static void QueryGetRejects ( const XQNode_t * pNode, CSphDict * pDict, CSphVector<uint64_t> & dRejectTerms, CSphFixedVector<uint64_t> & dRejectBloom, CSphVector<CSphString> & dSuffixes, bool & bOnlyTerms, bool bUtf8 )
 {
-	DoQueryGetRejects ( pNode, pDict, dRejectTerms, dRejectBloom, bOnlyTerms );
+	DoQueryGetRejects ( pNode, pDict, dRejectTerms, dRejectBloom, dSuffixes, bOnlyTerms, bUtf8 );
 	dRejectTerms.Uniq();
 }
 
@@ -10879,15 +10932,13 @@ static bool TermsReject ( const CSphVector<uint64_t> & dDocs, const CSphVector<u
 	return ( pQTerm==pQEnd );
 }
 
-static bool WildsReject ( const CSphFixedVector<uint64_t> & dFilter, const CSphFixedVector<uint64_t> & dQueries )
+static bool WildsReject ( const uint64_t * pFilter, const CSphFixedVector<uint64_t> & dQueries )
 {
-	assert ( dFilter.GetLength()==dQueries.GetLength() );
 	if ( !dQueries.GetLength() )
 		return false;
 
 	const uint64_t * pQTerm = dQueries.Begin();
 	const uint64_t * pQEnd = dQueries.Begin() + dQueries.GetLength();
-	const uint64_t * pFilter = dFilter.Begin();
 
 	for ( ; pQTerm<pQEnd; pQTerm++, pFilter++ )
 	{
@@ -10898,32 +10949,78 @@ static bool WildsReject ( const CSphFixedVector<uint64_t> & dFilter, const CSphF
 	return true;
 }
 
-bool SegmentReject_t::Filter ( const StoredQuery_t * pStored ) const
+bool SegmentReject_t::Filter ( const StoredQuery_t * pStored, bool bUtf8 ) const
 {
-	if ( pStored->m_bOnlyTerms && !pStored->m_dRejectTerms.GetLength() && !pStored->m_dRejectWilds.GetLength() )
+	// no early reject for complex queries
+	if ( !pStored->m_bOnlyTerms )
+		return false;
+
+	// empty query rejects
+	if ( !pStored->m_dRejectTerms.GetLength() && !pStored->m_dRejectWilds.GetLength() )
 		return true;
 
-	if ( pStored->m_bOnlyTerms && pStored->m_dRejectTerms.GetLength() && !TermsReject ( m_dTerms, pStored->m_dRejectTerms ) )
+	bool bTermsRejected = ( pStored->m_dRejectTerms.GetLength()==0 );
+	if ( pStored->m_dRejectTerms.GetLength() )
+		bTermsRejected = !TermsReject ( m_dTerms, pStored->m_dRejectTerms );
+
+	if ( bTermsRejected && ( !m_dWilds.GetLength() || !pStored->m_dRejectWilds.GetLength() ) )
 		return true;
 
-	if ( pStored->m_bOnlyTerms && pStored->m_dRejectWilds.GetLength() && !WildsReject ( m_dWilds, pStored->m_dRejectWilds ) )
+	bool bWildRejected = ( m_dWilds.GetLength()==0 || pStored->m_dRejectWilds.GetLength()==0 );
+	if ( m_dWilds.GetLength() && pStored->m_dRejectWilds.GetLength() )
+		bWildRejected = !WildsReject ( m_dWilds.Begin(), pStored->m_dRejectWilds );
+
+	if ( bTermsRejected && bWildRejected )
 		return true;
 
-	if ( pStored->m_bOnlyTerms && m_dPerDocTerms.GetLength() && !pStored->m_dRejectWilds.GetLength() )
+	if ( !bTermsRejected && pStored->m_dRejectTerms.GetLength() && m_dPerDocTerms.GetLength() )
 	{
 		// in case no document matched - early reject triggers
 		int iRejects = 0;
 		ARRAY_FOREACH ( i, m_dPerDocTerms )
 		{
-			if ( !TermsReject ( m_dPerDocTerms[i], pStored->m_dRejectTerms ) )
-				iRejects++;
+			if ( TermsReject ( m_dPerDocTerms[i], pStored->m_dRejectTerms ) )
+				break;
+			
+			iRejects++;
 		}
 
-		return ( iRejects==m_dPerDocTerms.GetLength() );
-	} else
-	{
-		return false;
+		bTermsRejected = ( iRejects==m_dPerDocTerms.GetLength() );
 	}
+
+	if ( bTermsRejected && !bWildRejected && pStored->m_dRejectWilds.GetLength() && m_dPerDocWilds.GetLength() )
+	{
+		// in case no document matched - early reject triggers
+		int iRowsPassed = 0;
+		for ( int i=0; i<m_iRows && iRowsPassed==0; i++ )
+		{
+			BloomCheckTraits_t tBloom0 ( m_dPerDocWilds.Begin() + i * PERCOLATE_BLOOM_SIZE );
+			BloomCheckTraits_t tBloom1 ( m_dPerDocWilds.Begin() + i * PERCOLATE_BLOOM_SIZE + PERCOLATE_BLOOM_WILD_COUNT );
+			int iWordsPassed = 0;
+			ARRAY_FOREACH ( iWord, pStored->m_dSuffixes )
+			{
+				const CSphString & sSuffix = pStored->m_dSuffixes[iWord];
+				int iLen = sSuffix.Length();
+
+				BuildBloom ( (const BYTE *)sSuffix.cstr(), iLen, BLOOM_NGRAM_0, bUtf8, PERCOLATE_BLOOM_WILD_COUNT, tBloom0 );
+				if ( !tBloom0.IterateNext() )
+					break;
+				BuildBloom ( (const BYTE *)sSuffix.cstr(), iLen, BLOOM_NGRAM_1, bUtf8, PERCOLATE_BLOOM_WILD_COUNT, tBloom1 );
+				if ( !tBloom1.IterateNext() )
+					break;
+
+				iWordsPassed++;
+			}
+			if ( iWordsPassed!=pStored->m_dSuffixes.GetLength() )
+				continue;
+			
+			iRowsPassed++;
+		}
+
+		bWildRejected = ( iRowsPassed==0 );
+	}
+
+	return ( bTermsRejected && bWildRejected );
 }
 
 // FIXME!!! move to common RT code instead copy-paste it
@@ -11126,7 +11223,10 @@ PercolateIndex_c::PercolateIndex_c ( const CSphSchema & tSchema, const char * sI
 
 PercolateIndex_c::~PercolateIndex_c ()
 {
-	SaveMeta();
+	bool bValid = m_pTokenizer && m_pDict;
+	if ( bValid )
+		SaveMeta();
+
 	SafeDelete ( m_pTokenizerIndexing );
 
 	{ // coverity complains about accessing m_dStored without locking tLock
@@ -11136,7 +11236,6 @@ PercolateIndex_c::~PercolateIndex_c ()
 	}
 	SafeClose ( m_iLockFD );
 	Verify ( m_tLock.Done () );
-
 }
 
 ISphRtAccum * PercolateIndex_c::CreateAccum ( CSphString & sError )
@@ -11527,12 +11626,14 @@ struct PercolateMatchContext_t
 	// const actually shared between all workers
 	const ISphSchema & m_tSchema;
 	const SegmentReject_t & m_tReject;
+	const bool m_bUtf8 = false;
 
 	PercolateMatchContext_t ( const RtSegment_t * pSeg, int iMaxCodepointLength, bool bHasMorph, const PercolateIndex_c * pIndex,
 		const ISphSchema & tSchema, const SegmentReject_t & tReject )
 		: m_tDictMap ( bHasMorph )
 		, m_tSchema ( tSchema )
 		, m_tReject ( tReject )
+		, m_bUtf8 ( iMaxCodepointLength>1 )
 	{
 		m_tDummyQuery.m_eRanker = SPH_RANK_NONE;
 		m_pCtx = new CSphQueryContext ( m_tDummyQuery );
@@ -11560,7 +11661,7 @@ static void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_
 	uint64_t tmQueryStart = ( tMatchCtx.m_bVerbose ? sphMicroTimer() : 0 );
 	tMatchCtx.m_iOnlyTerms += ( pStored->m_bOnlyTerms ? 1 : 0 );
 
-	if ( !pStored->IsFullscan() && tMatchCtx.m_tReject.Filter ( pStored ) )
+	if ( !pStored->IsFullscan() && tMatchCtx.m_tReject.Filter ( pStored, tMatchCtx.m_bUtf8 ) )
 		return;
 
 	const RtSegment_t * pSeg = (RtSegment_t *)tMatchCtx.m_pCtx->m_pIndexData;
@@ -11808,7 +11909,8 @@ static void PercolateGetResult ( int iTotalQueries, CSphFixedVector<PercolateMat
 void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMatchResult_t & tRes )
 {
 	SegmentReject_t tReject;
-	SegmentGetRejects ( pSeg, tReject );
+	// reject need bloom filter for either infix or prefix
+	SegmentGetRejects ( pSeg, ( m_tSettings.m_iMinInfixLen>0 || m_tSettings.m_iMinPrefixLen>0 ), ( m_iMaxCodepointLength>1 ), tReject );
 
 	CSphAtomic tQueryCounter ( 0 );
 	CSphFixedVector<PercolateMatchContext_t *> dMatches ( 1 );
@@ -11900,7 +12002,7 @@ bool PercolateIndex_c::MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchRes
 	assert ( !pSeg || pSeg->m_iRows>0 );
 	assert ( !pSeg || pSeg->m_iAliveRows>0 );
 	assert ( !pSeg || pSeg->m_bTlsKlist==false );
-	BuildSegmentInfixes ( pSeg, m_pDict->HasMorphology(), true, m_tSettings.m_iMinInfixLen, PERCOLATE_WORDS_PER_CP, m_iMaxCodepointLength );
+	BuildSegmentInfixes ( pSeg, m_pDict->HasMorphology(), true, m_tSettings.m_iMinInfixLen, PERCOLATE_WORDS_PER_CP, ( m_iMaxCodepointLength>1 ) );
 
 	DoMatchDocuments ( pSeg, tRes );
 
@@ -12059,7 +12161,7 @@ bool PercolateIndex_c::AddQuery ( const char * sQuery, const char * sTags, const
 	pStored->m_pXQ = tParsed.LeakPtr();
 	pStored->m_bOnlyTerms = true;
 	pStored->m_sQuery = sQuery;
-	QueryGetRejects ( pStored->m_pXQ->m_pRoot, pDict, pStored->m_dRejectTerms, pStored->m_dRejectWilds, pStored->m_bOnlyTerms );
+	QueryGetRejects ( pStored->m_pXQ->m_pRoot, pDict, pStored->m_dRejectTerms, pStored->m_dRejectWilds, pStored->m_dSuffixes, pStored->m_bOnlyTerms, ( m_iMaxCodepointLength>1 ) );
 	QueryGetTerms ( pStored->m_pXQ->m_pRoot, pDict, pStored->m_hDict );
 	pStored->m_sTags = sTags;
 	PercolateTags ( sTags, pStored->m_dTags );

@@ -1232,7 +1232,7 @@ public:
 private:
 	const OptionsHash_t & m_tOptions;
 
-	bool GotDocuments ( PercolateIndex_i * pIndex, const CSphString & sIndex, const cJSON * pPercolate );
+	bool GotDocuments ( PercolateIndex_i * pIndex, const CSphString & sIndex, const cJSON * pPercolate, bool bVerbose );
 	bool GotQuery ( PercolateIndex_i * pIndex, const CSphString & sIndex, const cJSON * pQuery, const cJSON * pRoot, CSphString * pUID, bool bReplace );
 	bool ListQueries ( PercolateIndex_i * pIndex, const CSphString & sIndex );
 	bool Delete ( PercolateIndex_i * pIndex, const CSphString & sIndex, const cJSON * pRoot );
@@ -1457,6 +1457,20 @@ static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, co
 	AppendJsonKey ( "max_score", tOut );
 	tOut += "1,"; // FIXME!!! track and provide weight
 
+	if ( tRes.m_bVerbose )
+	{
+		AppendJsonKey ( "early_out_queries", tOut );
+		tOut.Appendf ( "%d,", tRes.m_iEarlyOutQueries );
+		AppendJsonKey ( "matched_queries", tOut );
+		tOut.Appendf ( "%d,", tRes.m_iQueriesMatched );
+		AppendJsonKey ( "matched_docs", tOut );
+		tOut.Appendf ( "%d,", tRes.m_iDocsMatched );
+		AppendJsonKey ( "only_terms_queries", tOut );
+		tOut.Appendf ( "%d,", tRes.m_iOnlyTerms );
+		AppendJsonKey ( "total_queries", tOut );
+		tOut.Appendf ( "%d,", tRes.m_iTotalQueries );
+	}
+
 	// documents
 	AppendJsonKey ( "hits", tOut );
 	tOut += "[";
@@ -1527,7 +1541,7 @@ static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, co
 }
 
 
-bool HttpHandlerPQ_c::GotDocuments ( PercolateIndex_i * pIndex, const CSphString & sIndex, const cJSON * pPercolate )
+bool HttpHandlerPQ_c::GotDocuments ( PercolateIndex_i * pIndex, const CSphString & sIndex, const cJSON * pPercolate, bool bVerbose )
 {
 	CSphString sWarning, sError, sTmp;
 	CSphVector<const cJSON *> dDocs;
@@ -1675,7 +1689,7 @@ bool HttpHandlerPQ_c::GotDocuments ( PercolateIndex_i * pIndex, const CSphString
 
 	PercolateMatchResult_t tRes;
 	tRes.m_bGetDocs = true;
-	tRes.m_bVerbose = false;
+	tRes.m_bVerbose = bVerbose;
 	tRes.m_bGetQuery = true;
 	tRes.m_bGetFilters = false;
 
@@ -1974,9 +1988,21 @@ bool HttpHandlerPQ_c::Process()
 		return false;
 	}
 
+	bool bVerbose = false;
+	const cJSON * pVerbose = cJSON_GetObjectItem ( tRoot.Ptr(), "verbose" );
+	if ( pVerbose )
+	{
+		if ( cJSON_IsNumber ( pVerbose ) )
+			bVerbose = ( pVerbose->valuedouble!=0.0 );
+		else if ( cJSON_IsInteger ( pVerbose ) )
+			bVerbose = ( pVerbose->valueint!=0 );
+		else if ( cJSON_IsBool ( pVerbose ) )
+			bVerbose = ( cJSON_IsTrue ( pVerbose )!=0 );
+	}
+
 	if ( bMatch )
 	{
-		return GotDocuments ( pIndex, sIndex, pPerc );
+		return GotDocuments ( pIndex, sIndex, pPerc, bVerbose );
 	} else if ( bDelete )
 	{
 		return Delete ( pIndex, sIndex, tRoot.Ptr() );

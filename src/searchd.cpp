@@ -14356,10 +14356,11 @@ void HandleMysqlShowThreads ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	int64_t tmNow = sphMicroTimer();
 
 	g_tThdMutex.Lock();
-	tOut.HeadBegin ( 5 );
+	tOut.HeadBegin ( 6 );
 	tOut.HeadColumn ( "Tid" );
 	tOut.HeadColumn ( "Proto" );
 	tOut.HeadColumn ( "State" );
+	tOut.HeadColumn ( "Host" );
 	tOut.HeadColumn ( "Time" );
 	tOut.HeadColumn ( "Info" );
 	tOut.HeadEnd();
@@ -14378,8 +14379,12 @@ void HandleMysqlShowThreads ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 		tOut.PutNumeric ( "%d", pThd->m_iTid );
 		tOut.PutString ( pThd->m_bSystem ? "-" : g_dProtoNames [ pThd->m_eProto ] );
 		tOut.PutString ( pThd->m_bSystem ? "-" : g_dThdStates [ pThd->m_eThdState ] );
+		tOut.PutString ( pThd->m_sClientName.cstr() );
 		tOut.PutMicrosec ( tmNow - pThd->m_tmStart );
-		tOut.PutString ( pThd->m_dBuf.Begin() );
+		if ( pThd->m_dBuf[0]=='\0' && pThd->m_sCommand )
+			tOut.PutString ( pThd->m_sCommand );
+		else
+			tOut.PutString ( pThd->m_dBuf.Begin() );
 
 		tOut.Commit();
 		pIt = pIt->m_pNext;

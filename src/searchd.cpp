@@ -22974,9 +22974,8 @@ void ConfigureAndPreload ( const CSphConfig & hConf, const StrVec_t & dOptIndexe
 		const CSphConfigSection & hIndex = hConf["index"].IterateGet();
 		const char * sIndexName = hConf["index"].IterateGetKey().cstr();
 
-		if ( g_bOptNoDetach
-			&& dOptIndexes.FindFirst ( [&] ( const CSphString &rhs ) { return !rhs.EqN ( sIndexName ); } ) )
-				continue;
+		if ( !dOptIndexes.IsEmpty() && !dOptIndexes.FindFirst ( [&] ( const CSphString &rhs )	{ return rhs.EqN ( sIndexName ); } ) )
+			continue;
 
 		auto eAdd = AddIndex ( sIndexName, hIndex );
 
@@ -23653,7 +23652,11 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	if ( bTestMode ) // pass this flag here prior to index config
 		sphRTSetTestMode();
 
-	ConfigureAndPreload ( hConf, dOptIndexes );
+	StrVec_t dExactIndexes;
+	for ( const auto &dOptIndex : dOptIndexes )
+		sphSplit ( dExactIndexes, dOptIndex.cstr (), "," );
+
+	ConfigureAndPreload ( hConf, dExactIndexes );
 
 	///////////
 	// startup

@@ -32,6 +32,8 @@ for quick access.
 
 -  :ref:`BITDOT() <expr-func-bitdot>`
 
+-  :ref:`BM25F() <expr-func-bm25f>`
+
 -  :ref:`CEIL() <expr-func-ceil>`
 
 -  :ref:`CONTAINS() <expr-func-contains>`
@@ -110,6 +112,8 @@ for quick access.
 
 -  :ref:`SQRT() <expr-func-sqrt>`
 
+-  :ref:`TO_STRING() <expr-func-to-string>`
+
 -  :ref:`UINT() <expr-func-uint>`
 
 -  :ref:`YEAR() <expr-func-year>`
@@ -118,6 +122,7 @@ for quick access.
 
 -  :ref:`YEARMONTHDAY() <expr-func-yearmonthday>`
 
+-  :ref:`WEIGHT() <expr-func-weight>`
 
 .. _Operators:
 
@@ -195,6 +200,13 @@ Numeric functions
    BITDOT(mask, w0, w1, …) returns the sum of products of an each bit of
    a mask multiplied with its weight. ``bit0*w0 + bit1*w1 + ...``
 
+.. _expr-func-bm25f:
+
+-  BM25F()
+
+   BM25F(k1,b, {field=weight, …}) returns precise BM25F(). Requires ``expr`` ranker. ``k`` and ``b`` parameters must be float.
+   
+   
  .. _expr-func-ceil:
 
 -  CEIL()
@@ -433,6 +445,12 @@ Type conversion functions
    It's easily illustrated by the following example: 1-2 normally
    evaluates to 4294967295, but SINT(1-2) evaluates to -1.
 
+.. _expr-func-to-string:
+
+-  TO_STRING()
+
+   Forcibly promotes the argument to string type.
+
    
 .. _comparison functions:
 
@@ -640,6 +658,13 @@ Miscellaneous functions
 -  MIN_TOP_WEIGHT()
    Returns weight of the worst found element in the current top-N
    matches.
+   
+
+.. _expr-func-weight:
+
+-  WEIGHT()
+   Returns fulltext match score.
+   
 
 .. _expr-func-packedfactors:
 

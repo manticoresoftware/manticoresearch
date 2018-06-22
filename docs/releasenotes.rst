@@ -15,7 +15,7 @@ Improvements
 * Windows communication switched from wsapoll to IO completion ports
 * TFO can be used for communication between master and nodes
 * :ref:`SHOW STATUS <show_status_syntax>` now outputs to daemon version and mysql_version_string
-* added `id_alias` option for documents called in CALL PQ. 
+* added `docs_id` option for documents called in CALL PQ. 
 * percolate queries filter can now contain expressions
 * distributed indexes can work with FEDERATED
 * dummy SHOW NAMES COLLATE and :ref:`SET <set>` wait_timeout (for better ProxySQL compatibility)

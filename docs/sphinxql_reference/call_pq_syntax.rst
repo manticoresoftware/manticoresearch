@@ -34,7 +34,7 @@ A number of options can be set:
 -  docs - 0 (default disabled), provide per query documents matched at result set
 -  verbose - 0 (default disabled), provide extended info in :ref:`SHOW META <percolate_query_show_meta>`
 -  query - 0 (default disabled), if true returns all information of matched stored query, otherwise it returns just the stored query ID
-
+-  docs_id - none (disabled), id alias name, to treat ``JSON`` named field as document id
 
 Example:
 

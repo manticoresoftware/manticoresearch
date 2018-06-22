@@ -29,7 +29,7 @@ with ``refresh=1`` argument, such as ``json/pq/index_pq_1/doc/2?refresh=1``
 There is 2 formats of full-text queries that might be stored into index:
 
 -   query in ``json\search`` compartible format, described at  :ref:`json/search <http_json_search>`
--   query in ``SpinxQL`` compartible format, described at :ref:`extended query syntax <extended_query_syntax>`
+-   query in ``SphinxQL`` compartible format, described at :ref:`extended query syntax <extended_query_syntax>`
 
 ``tags`` and ``filters`` also might be stored along with query, for details refer to :ref:`Tags <percolate_query_tags>`
 However there is no way to mix ``json\search`` native filters with ``filters`` field, only one type of filter might be

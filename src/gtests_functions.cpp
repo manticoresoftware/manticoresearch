@@ -1195,5 +1195,14 @@ TEST ( functions, sphSplit )
 	ASSERT_STREQ ( dParts[1].cstr (), "a" );
 }
 
+// as we found g++ (GCC) 4.8.5 20150623 (Red Hat 4.8.5-28) works strange with curly initializer of refs
+TEST ( functions, curledref )
+{
+	CSphString sProof="abc";
+	const CSphString &sTest { sProof };
+	const CSphString &sTestc ( sProof );
+	ASSERT_TRUE ( &sProof==&sTestc ) << "curly brackets";
+	ASSERT_TRUE ( &sProof==&sTest ) << "figured brackets";
+}
 
 

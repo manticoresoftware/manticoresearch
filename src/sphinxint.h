@@ -53,6 +53,14 @@
 #define VARIABLE_IS_NOT_USED
 #endif
 
+// cover on strerror
+inline const char * strerrorm ( int errnum )
+{
+	if (errnum==EMFILE)
+		return "Too many open files (on linux see /etc/security/limits.conf, also 'ulimit -n')";
+	return strerror (errnum);
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 const DWORD		INDEX_MAGIC_HEADER			= 0x58485053;		///< my magic 'SPHX' header

@@ -43,6 +43,12 @@
 /* Define if  you have async 'getaddrinfo_a' */
 #cmakedefine HAVE_GETADDRINFO_A ${HAVE_GETADDRINFO_A}
 
+/* Define if  you have 'getrlimit' */
+#cmakedefine HAVE_GETRLIMIT ${HAVE_GETRLIMIT}
+
+/* Define if  you have 'setrlimit' */
+#cmakedefine HAVE_SETRLIMIT ${HAVE_SETRLIMIT}
+
 /* Define if your system supports the epoll system calls */
 #cmakedefine HAVE_EPOLL ${HAVE_EPOLL}
 

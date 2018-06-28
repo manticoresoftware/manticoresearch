@@ -112,7 +112,7 @@ void CharsetFold ( CSphIndex * pIndex, FILE * fp )
 	{
 		int iGot = fread ( sBuf1.Begin()+iBuf1, 1, sBuf1.GetLength()-iBuf1, fp );
 		if ( iGot<0 )
-			sphDie ( "read error: %s", strerror(errno) );
+			sphDie ( "read error: %s", strerrorm(errno) );
 
 		if ( iGot==0 )
 			if ( feof(fp) )
@@ -192,33 +192,33 @@ bool FixupFiles ( const StrVec_t & dFiles, CSphString & sError )
 
 		if ( ::unlink ( sKlistOld.cstr() )!=0 )
 		{
-			sError.SetSprintf ( "file: '%s', error: '%s'", sKlistOld.cstr(), strerror(errno) );
+			sError.SetSprintf ( "file: '%s', error: '%s'", sKlistOld.cstr(), strerrorm(errno) );
 			return false;
 		}
 
 		if ( ::rename ( sKlistNew.cstr(), sKlistOld.cstr() )!=0 )
 		{
-			sError.SetSprintf ( "files: '%s'->'%s', error: '%s'", sKlistNew.cstr(), sKlistOld.cstr(), strerror(errno) );
+			sError.SetSprintf ( "files: '%s'->'%s', error: '%s'", sKlistNew.cstr(), sKlistOld.cstr(), strerrorm(errno) );
 			return false;
 		}
 
 		int iFD = ::open ( sHeader.cstr(), SPH_O_BINARY | O_RDWR, 0644 );
 		if ( iFD<0 )
 		{
-			sError.SetSprintf ( "file: '%s', error: '%s'", sHeader.cstr(), strerror(errno) );
+			sError.SetSprintf ( "file: '%s', error: '%s'", sHeader.cstr(), strerrorm(errno) );
 			return false;
 		}
 
 		if ( sphSeek ( iFD, -4, SEEK_END )==-1L )
 		{
-			sError.SetSprintf ( "file: '%s', error: '%s'", sHeader.cstr(), strerror(errno) );
+			sError.SetSprintf ( "file: '%s', error: '%s'", sHeader.cstr(), strerrorm(errno) );
 			SafeClose ( iFD );
 			return false;
 		}
 
 		if ( ::write ( iFD, &iCount, 4 )==-1 )
 		{
-			sError.SetSprintf ( "file: '%s', error: '%s'", sHeader.cstr(), strerror(errno) );
+			sError.SetSprintf ( "file: '%s', error: '%s'", sHeader.cstr(), strerrorm(errno) );
 			SafeClose ( iFD );
 			return false;
 		}
@@ -263,7 +263,7 @@ bool DoKlistsOptimization ( int iRowSize, const char * sPath, int iChunkCount, S
 			assert ( uFsize<INT_MAX );
 			if ( uFsize<0 )
 			{
-				fprintf ( stdout, "\nfailed to stat kill-list file, error %s\n", strerror ( errno ) );
+				fprintf ( stdout, "\nfailed to stat kill-list file, error %s\n", strerrorm ( errno ) );
 				return false;
 			}
 

@@ -307,6 +307,8 @@ public:
 #else
 template<typename T> using managed_allocator = std::allocator<T>;
 #endif // SPH_DEBUG_LEAKS || SPH_ALLOCS_PROFILER
+
+extern const char * strerrorm ( int errnum ); // defined in sphinxint.h
 /////////////////////////////////////////////////////////////////////////////
 // HELPERS
 /////////////////////////////////////////////////////////////////////////////
@@ -2517,7 +2519,7 @@ public:
 #else
 		m_bMemLocked = ( mlock ( m_pData, GetLengthBytes() )==0 );
 		if ( !m_bMemLocked )
-			sWarning.SetSprintf ( "mlock() failed: %s", strerror(errno) );
+			sWarning.SetSprintf ( "mlock() failed: %s", strerrorm(errno) );
 #endif
 
 		return m_bMemLocked;
@@ -2541,7 +2543,7 @@ protected:
 #else
 		bool bOk = ( munlock ( m_pData, GetLengthBytes() )==0 );
 		if ( !bOk )
-			sphWarn ( "munlock() failed: %s", strerror(errno) );
+			sphWarn ( "munlock() failed: %s", strerrorm(errno) );
 #endif
 	}
 };
@@ -2601,9 +2603,9 @@ public:
 		{
 			if ( iLength>(int64_t)0x7fffffffUL )
 				sError.SetSprintf ( "mmap() failed: %s (length=" INT64_FMT " is over 2GB, impossible on some 32-bit systems)",
-					strerror(errno), iLength );
+					strerrorm(errno), iLength );
 			else
-				sError.SetSprintf ( "mmap() failed: %s (length=" INT64_FMT ")", strerror(errno), iLength );
+				sError.SetSprintf ( "mmap() failed: %s (length=" INT64_FMT ")", strerrorm(errno), iLength );
 			return false;
 		}
 
@@ -2638,7 +2640,7 @@ public:
 #else
 		int iRes = munmap ( this->GetWritePtr(), this->GetLengthBytes() );
 		if ( iRes )
-			sphWarn ( "munmap() failed: %s", strerror(errno) );
+			sphWarn ( "munmap() failed: %s", strerrorm(errno) );
 
 #if SPH_ALLOCS_PROFILER
 		sphMemStatMMapDel ( this->GetLengthBytes() );
@@ -2758,7 +2760,7 @@ public:
 			pData = (T *)mmap ( NULL, iFileSize, iProt, iFlags, iFD, 0 );
 			if ( pData==MAP_FAILED )
 			{
-				sError.SetSprintf ( "failed to mmap file '%s': %s (length=" INT64_FMT ")", sFile, strerror(errno), iFileSize );
+				sError.SetSprintf ( "failed to mmap file '%s': %s (length=" INT64_FMT ")", sFile, strerrorm(errno), iFileSize );
 				Reset();
 				return false;
 			}

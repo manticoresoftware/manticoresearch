@@ -1444,7 +1444,7 @@ void SetSignalHandlers ()
 	}
 	if ( !bSignalsSet )
 	{
-		fprintf ( stderr, "sigaction(): %s", strerror(errno) );
+		fprintf ( stderr, "sigaction(): %s", strerrorm(errno) );
 		exit ( 1 );
 	}
 }
@@ -1561,7 +1561,7 @@ bool SendRotate ( const CSphConfig & hConf, bool bForce )
 		{
 		case ESRCH:	fprintf ( stdout, "WARNING: no process found by PID %d.\n", iPID ); break;
 		case EPERM:	fprintf ( stdout, "WARNING: access denied to PID %d.\n", iPID ); break;
-		default:	fprintf ( stdout, "WARNING: kill() error: %s.\n", strerror(errno) ); break;
+		default:	fprintf ( stdout, "WARNING: kill() error: %s.\n", strerrorm(errno) ); break;
 		}
 		return false;
 	}
@@ -1884,7 +1884,7 @@ int main ( int argc, char ** argv )
 	{
 		fpDumpRows = fopen ( sDumpRows.cstr(), "wb+" );
 		if ( !fpDumpRows )
-			sphDie ( "failed to open %s: %s", sDumpRows.cstr(), strerror(errno) );
+			sphDie ( "failed to open %s: %s", sDumpRows.cstr(), strerrorm(errno) );
 	}
 
 	hConf["index"].IterateStart();

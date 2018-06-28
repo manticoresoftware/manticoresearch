@@ -103,6 +103,11 @@ extern "C"
 	#include <syslog.h>
 #endif
 
+#if HAVE_GETRLIMIT & HAVE_SETRLIMIT
+	#include <sys/time.h>
+	#include <sys/resource.h>
+#endif
+
 /////////////////////////////////////////////////////////////////////////////
 
 enum ProtocolType_e
@@ -1911,7 +1916,7 @@ void SetSignalHandlers ( bool bAllowCtrlC=false ) REQUIRES ( MainThread )
 		break;
 	}
 	if ( !bSignalsSet )
-		sphFatal ( "sigaction(): %s", strerror(errno) );
+		sphFatal ( "sigaction(): %s", strerrorm(errno) );
 }
 #endif
 
@@ -1979,7 +1984,7 @@ const char * sphSockError ( int iErr )
 #else
 const char * sphSockError ( int )
 {
-	return strerror ( errno );
+	return strerrorm ( errno );
 }
 #endif
 
@@ -10191,7 +10196,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 			dQueries[i].m_iNext = iAbsentHead;
 			iAbsentHead = i;
 			if ( bNeedAllFiles )
-				dQueries[i].m_sError.SetSprintf ( "absenthead: failed to stat %s: %s", dQueries[i].m_sSource.cstr(), strerror(errno) );
+				dQueries[i].m_sError.SetSprintf ( "absenthead: failed to stat %s: %s", dQueries[i].m_sSource.cstr(), strerrorm(errno) );
 		}
 
 	// check if all files are available locally.
@@ -17938,7 +17943,7 @@ bool RotateIndexGreedy ( const ServedIndex_c * pIndex, ServedDesc_t &tWlockedInd
 
 	if ( !dFiles.HasAllFiles ( sFromSuffix ) )
 	{
-		sphWarning ( "rotating index '%s': unreadable: %s; %s", sIndex, strerror ( errno ),
+		sphWarning ( "rotating index '%s': unreadable: %s; %s", sIndex, strerrorm ( errno ),
 			tWlockedIndex.m_bOnlyNew ? "NOT SERVING" : "using old index" );
 		return false;
 	}
@@ -18580,7 +18585,7 @@ static void SphinxqlStateThreadFunc ( void * )
 		} else
 		{
 			sphWarning ( "sphinxql_state flush: rename %s to %s failed: %s",
-				sNewState.cstr(), g_sSphinxqlState.cstr(), strerror(errno) );
+				sNewState.cstr(), g_sSphinxqlState.cstr(), strerrorm(errno) );
 		}
 	}
 }
@@ -19683,7 +19688,7 @@ void CheckReopenLogs () REQUIRES ( MainThread )
 		int iFD = ::open ( g_sLogFile.cstr(), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
 		if ( iFD<0 )
 		{
-			sphWarning ( "failed to reopen log file '%s': %s", g_sLogFile.cstr(), strerror(errno) );
+			sphWarning ( "failed to reopen log file '%s': %s", g_sLogFile.cstr(), strerrorm(errno) );
 		} else
 		{
 			::close ( g_iLogFile );
@@ -19700,7 +19705,7 @@ void CheckReopenLogs () REQUIRES ( MainThread )
 		int iFD = ::open ( g_sQueryLogFile.cstr(), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
 		if ( iFD<0 )
 		{
-			sphWarning ( "failed to reopen query log file '%s': %s", g_sQueryLogFile.cstr(), strerror(errno) );
+			sphWarning ( "failed to reopen query log file '%s': %s", g_sQueryLogFile.cstr(), strerrorm(errno) );
 		} else
 		{
 			::close ( g_iQueryLogFile );
@@ -19779,7 +19784,7 @@ void CheckFlush () REQUIRES ( MainThread )
 
 	ThdDesc_t tThd;
 	if ( !sphThreadCreate ( &tThd.m_tThd, ThdSaveIndexes, NULL, true ) )
-		sphWarning ( "failed to create attribute save thread, error[%d] %s", errno, strerror(errno) );
+		sphWarning ( "failed to create attribute save thread, error[%d] %s", errno, strerrorm(errno) );
 }
 
 
@@ -20091,7 +20096,7 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 	{
 		case -1:
 			// error
-			sphFatalLog ( "fork() failed (reason: %s)", strerror ( errno ) );
+			sphFatalLog ( "fork() failed (reason: %s)", strerrorm ( errno ) );
 			exit ( 1 );
 		case 0:
 			// daemonized child - or new and free watchdog :)
@@ -20108,7 +20113,7 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 	// became the session leader
 	if ( setsid()==-1 )
 	{
-		sphFatalLog ( "setsid() failed (reason: %s)", strerror ( errno ) );
+		sphFatalLog ( "setsid() failed (reason: %s)", strerrorm ( errno ) );
 		exit ( 1 );
 	}
 
@@ -20117,7 +20122,7 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 	{
 		case -1:
 			// error
-			sphFatalLog ( "fork() failed (reason: %s)", strerror ( errno ) );
+			sphFatalLog ( "fork() failed (reason: %s)", strerrorm ( errno ) );
 			exit ( 1 );
 		case 0:
 			// daemonized child - or new and free watchdog :)
@@ -20140,7 +20145,7 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 
 		if ( iRes==-1 )
 		{
-			sphFatalLog ( "fork() failed during watchdog setup (error=%s)", strerror(errno) );
+			sphFatalLog ( "fork() failed during watchdog setup (error=%s)", strerrorm(errno) );
 			exit ( 1 );
 		}
 
@@ -20659,7 +20664,7 @@ void TickHead () REQUIRES ( MainThread )
 		SafeDelete ( pThd );
 
 		FailClient ( iClientSock, SEARCHD_RETRY, "failed to create worker thread" );
-		sphWarning ( "failed to create worker thread, threads(%d), error[%d] %s", g_dThd.GetLength(), iErr, strerror(iErr) );
+		sphWarning ( "failed to create worker thread, threads(%d), error[%d] %s", g_dThd.GetLength(), iErr, strerrorm(iErr) );
 	}
 }
 
@@ -20982,7 +20987,7 @@ public:
 		if ( FireEvent () )
 			return;
 		int iErrno = PollableErrno ();
-		sphLogDebugv ( "failed to wakeup net thread ( error %d,'%s')", iErrno, strerror ( iErrno ) );
+		sphLogDebugv ( "failed to wakeup net thread ( error %d,'%s')", iErrno, strerrorm ( iErrno ) );
 	}
 
 	NetEvent_e Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> &, CSphNetLoop * ) final
@@ -21460,7 +21465,7 @@ static void LogSocketError ( const char * sMsg, const NetStateCommon_t * pConn, 
 		socklen_t iLen = sizeof(iErrno);
 		int iRes = getsockopt ( pConn->m_iClientSock, SOL_SOCKET, SO_ERROR, (char*)&iErrno, &iLen );
 		if ( iRes<0 )
-			sphWarning ( "%s (client=%s(%d)), failed to get error: %d '%s'", sMsg, pConn->m_sClientName, pConn->m_iConnID, errno, strerror ( errno ) );
+			sphWarning ( "%s (client=%s(%d)), failed to get error: %d '%s'", sMsg, pConn->m_sClientName, pConn->m_iConnID, errno, strerrorm ( errno ) );
 	}
 
 	if ( bDebug || iErrno==ESHUTDOWN )
@@ -22894,6 +22899,36 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 			g_iShutdownTimeout = iTimeout * 1000000;
 	}
 
+	if ( hSearchd.Exists ( "max_open_files" ) )
+	{
+#if HAVE_GETRLIMIT & HAVE_SETRLIMIT
+		auto uLimit = ( rlim_t ) hSearchd["max_open_files"].intval ();
+		bool bMax = hSearchd["max_open_files"].strval ()=="max";
+		if ( !uLimit && !bMax )
+			sphWarning ( "max_open_files is %lu, expected positive value; ignored", uLimit );
+		else
+		{
+			struct rlimit dRlimit;
+			if ( 0!=getrlimit ( RLIMIT_NOFILE, &dRlimit ) )
+				sphWarning ( "Failed to getrlimit (RLIMIT_NOFILE), error %d: %s", errno, strerrorm ( errno ) );
+			else
+			{
+				auto uPrevLimit = dRlimit.rlim_cur;
+				if ( bMax )
+					uLimit = dRlimit.rlim_max;
+				dRlimit.rlim_cur = Min ( dRlimit.rlim_max, uLimit );
+				if ( 0!=setrlimit ( RLIMIT_NOFILE, &dRlimit ) )
+					sphWarning ( "Failed to setrlimit on %lu, error %d: %s", uLimit, errno, strerrorm ( errno ) );
+				else
+					sphInfo ( "Set max_open_files to %lu (previous was %lu), hardlimit is %lu.",
+						uLimit, uPrevLimit, dRlimit.rlim_max );
+			}
+		}
+#else
+		sphWarning ("max_open_files defined, but this binary don't know about setrlimit() function");
+#endif
+	}
+
 	QcacheStatus_t s = QcacheGetStatus();
 	s.m_iMaxBytes = hSearchd.GetSize64 ( "qcache_max_bytes", s.m_iMaxBytes );
 	s.m_iThreshMsec = hSearchd.GetInt ( "qcache_thresh_msec", s.m_iThreshMsec );
@@ -22911,7 +22946,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 		int iErr = errno;
 		if ( iErr==ERANGE || iErr==EINVAL )
 		{
-			sphWarning ( "query_log_mode invalid value (value=%o, error=%s); skipped", iMode, strerror(iErr) );
+			sphWarning ( "query_log_mode invalid value (value=%o, error=%s); skipped", iMode, strerrorm(iErr) );
 		} else
 		{
 			g_iLogFileMode = iMode;
@@ -23077,7 +23112,7 @@ void OpenDaemonLog ( const CSphConfigSection & hSearchd, bool bCloseIfOpened=fal
 			if ( g_iLogFile<0 )
 			{
 				g_iLogFile = STDOUT_FILENO;
-				sphFatal ( "failed to open log file '%s': %s", sLog, strerror(errno) );
+				sphFatal ( "failed to open log file '%s': %s", sLog, strerrorm(errno) );
 			}
 			LogChangeMode ( g_iLogFile, g_iLogFileMode );
 		}
@@ -23396,13 +23431,13 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 				fdPipe = ::open ( sPipeName.cstr(), O_RDONLY | O_NONBLOCK );
 
 			if ( iPipeCreated==-1 )
-				sphWarning ( "mkfifo failed (path=%s, err=%d, msg=%s); will NOT wait", sPipeName.cstr(), errno, strerror(errno) );
+				sphWarning ( "mkfifo failed (path=%s, err=%d, msg=%s); will NOT wait", sPipeName.cstr(), errno, strerrorm(errno) );
 			else if ( fdPipe<0 )
-				sphWarning ( "open failed (path=%s, err=%d, msg=%s); will NOT wait", sPipeName.cstr(), errno, strerror(errno) );
+				sphWarning ( "open failed (path=%s, err=%d, msg=%s); will NOT wait", sPipeName.cstr(), errno, strerrorm(errno) );
 		}
 
 		if ( kill ( iPid, SIGTERM ) )
-			sphFatal ( "stop: kill() on pid %d failed: %s", iPid, strerror(errno) );
+			sphFatal ( "stop: kill() on pid %d failed: %s", iPid, strerrorm(errno) );
 		else
 			sphInfo ( "stop: successfully sent SIGTERM to pid %d", iPid );
 
@@ -23417,7 +23452,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 				if ( iReady<0 )
 				{
 					iExitCode = 3;
-					sphWarning ( "stopwait%s error '%s'", ( bHandshake ? " handshake" : " " ), strerror(errno) );
+					sphWarning ( "stopwait%s error '%s'", ( bHandshake ? " handshake" : " " ), strerrorm(errno) );
 					break;
 				}
 
@@ -23436,7 +23471,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 				int iRead = ::read ( fdPipe, &uStatus, sizeof(DWORD) );
 				if ( iRead!=sizeof(DWORD) )
 				{
-					sphWarning ( "stopwait read fifo error '%s'", strerror(errno) );
+					sphWarning ( "stopwait read fifo error '%s'", strerrorm(errno) );
 					iExitCode = 3; // stopped demon crashed during stop
 					break;
 				} else
@@ -23530,10 +23565,10 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 		g_iPidFD = ::open ( g_sPidFile.scstr(), O_CREAT | O_WRONLY, S_IREAD | S_IWRITE );
 		if ( g_iPidFD<0 )
-			sphFatal ( "failed to create pid file '%s': %s", g_sPidFile.scstr(), strerror(errno) );
+			sphFatal ( "failed to create pid file '%s': %s", g_sPidFile.scstr(), strerrorm(errno) );
 	}
 	if ( bOptPIDFile && !sphLockEx ( g_iPidFD, false ) )
-		sphFatal ( "failed to lock pid file '%s': %s (searchd already running?)", g_sPidFile.scstr(), strerror(errno) );
+		sphFatal ( "failed to lock pid file '%s': %s (searchd already running?)", g_sPidFile.scstr(), strerrorm(errno) );
 
 	g_bPidIsMine = true;
 
@@ -23572,7 +23607,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 			{
 				g_iQueryLogFile = open ( hSearchd["query_log"].cstr(), O_CREAT | O_RDWR | O_APPEND, S_IREAD | S_IWRITE );
 				if ( g_iQueryLogFile<0 )
-					sphFatal ( "failed to open query log file '%s': %s", hSearchd["query_log"].cstr(), strerror(errno) );
+					sphFatal ( "failed to open query log file '%s': %s", hSearchd["query_log"].cstr(), strerrorm(errno) );
 
 				LogChangeMode ( g_iQueryLogFile, g_iLogFileMode );
 			}
@@ -23587,7 +23622,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		{
 			case -1:
 			// error
-			sphFatalLog ( "fork() failed (reason: %s)", strerror ( errno ) );
+			sphFatalLog ( "fork() failed (reason: %s)", strerrorm ( errno ) );
 			exit ( 1 );
 
 			case 0:
@@ -23721,7 +23756,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		// re-lock pid
 		// FIXME! there's a potential race here
 		if ( !sphLockEx ( g_iPidFD, true ) )
-			sphFatal ( "failed to re-lock pid file '%s': %s", g_sPidFile.scstr(), strerror(errno) );
+			sphFatal ( "failed to re-lock pid file '%s': %s", g_sPidFile.scstr(), strerrorm(errno) );
 #endif
 
 		char sPid[16];
@@ -23731,11 +23766,11 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		sphSeek ( g_iPidFD, 0, SEEK_SET );
 		if ( !sphWrite ( g_iPidFD, sPid, iPidLen ) )
 			sphFatal ( "failed to write to pid file '%s' (errno=%d, msg=%s)", g_sPidFile.scstr(),
-				errno, strerror(errno) );
+				errno, strerrorm(errno) );
 
 		if ( ::ftruncate ( g_iPidFD, iPidLen ) )
 			sphFatal ( "failed to truncate pid file '%s' (errno=%d, msg=%s)", g_sPidFile.scstr(),
-				errno, strerror(errno) );
+				errno, strerrorm(errno) );
 	}
 
 #if USE_WINDOWS

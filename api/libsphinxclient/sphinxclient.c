@@ -1399,7 +1399,7 @@ static const char * sock_error ()
 	_snprintf ( sBuf, sizeof(sBuf), "WSA error %d", iErr );
 	return sBuf;
 #else
-	return strerror ( errno );
+	return strerrorm ( errno );
 #endif
 }
 

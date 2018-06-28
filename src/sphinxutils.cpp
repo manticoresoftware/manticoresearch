@@ -650,6 +650,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "mva_updates_pool",		0, NULL },
 	{ "max_filters",			0, NULL },
 	{ "max_filter_values",		0, NULL },
+	{ "max_open_files",			0, NULL },
 	{ "listen_backlog",			0, NULL },
 	{ "listen_tfo",				0, NULL },
 	{ "read_buffer",			0, NULL },
@@ -867,7 +868,7 @@ bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dRe
 
 	if ( pipe ( dPipe ) )
 	{
-		snprintf ( sError, iErrorLen, "pipe() failed (error=%s)", strerror(errno) );
+		snprintf ( sError, iErrorLen, "pipe() failed (error=%s)", strerrorm(errno) );
 		return false;
 	}
 
@@ -907,7 +908,7 @@ bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dRe
 
 	} else if ( iChild==-1 )
 	{
-		snprintf ( sError, iErrorLen, "fork failed: [%d] %s", errno, strerror(errno) );
+		snprintf ( sError, iErrorLen, "fork failed: [%d] %s", errno, strerrorm(errno) );
 		return false;
 	}
 
@@ -949,7 +950,7 @@ bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dRe
 
 		if ( iResult==-1 && errno!=EINTR )
 		{
-			snprintf ( sError, iErrorLen, "waitpid() failed: [%d] %s", errno, strerror(errno) );
+			snprintf ( sError, iErrorLen, "waitpid() failed: [%d] %s", errno, strerrorm(errno) );
 			return false;
 		}
 	}
@@ -970,7 +971,7 @@ bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dRe
 
 	if ( iBytesRead < 0 )
 	{
-		snprintf ( sError, iErrorLen, "pipe read error: [%d] %s", errno, strerror(errno) );
+		snprintf ( sError, iErrorLen, "pipe read error: [%d] %s", errno, strerrorm(errno) );
 		return false;
 	}
 
@@ -2337,7 +2338,7 @@ void sphBacktrace ( int iFD, bool bSafe )
 		// if we here - execvp failed, ask user to do conversion manually
 		sphSafeInfo ( iFD, "conversion failed (error '%s'):\n"
 			"  1. Run the command provided below over the crashed binary (for example, '%s'):\n"
-			"  2. Attach the source.txt to the bug report.", strerror ( errno ), g_pArgv[SPH_BT_BINARY_NAME] );
+			"  2. Attach the source.txt to the bug report.", strerrorm ( errno ), g_pArgv[SPH_BT_BINARY_NAME] );
 
 		int iColumn = 0;
 		for ( int i=0; g_pArgv[i]!=NULL; i++ )
@@ -2360,7 +2361,7 @@ void sphBacktrace ( int iFD, bool bSafe )
 	} else
 	if ( iChild==-1 )
 	{
-		sphSafeInfo ( iFD, "fork for running execvp failed: [%d] %s", errno, strerror(errno) );
+		sphSafeInfo ( iFD, "fork for running execvp failed: [%d] %s", errno, strerrorm(errno) );
 		return;
 	}
 
@@ -2380,7 +2381,7 @@ void sphBacktrace ( int iFD, bool bSafe )
 
 		if ( iResult==-1 && errno!=EINTR )
 		{
-			sphSafeInfo ( iFD, "waitpid() failed: [%d] %s", errno, strerror(errno) );
+			sphSafeInfo ( iFD, "waitpid() failed: [%d] %s", errno, strerrorm(errno) );
 			return;
 		}
 	} while ( iResult!=iChild );

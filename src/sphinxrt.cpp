@@ -4007,7 +4007,7 @@ void RtIndex_t::SaveMeta ( int64_t iTID, const CSphFixedVector<int> & dChunkName
 	// rename
 	if ( ::rename ( sMetaNew.cstr(), sMeta.cstr() ) )
 		sphDie ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)",
-			sMetaNew.cstr(), sMeta.cstr(), errno, strerror(errno) ); // !COMMIT handle this gracefully
+			sMetaNew.cstr(), sMeta.cstr(), errno, strerrorm(errno) ); // !COMMIT handle this gracefully
 }
 
 
@@ -4074,7 +4074,7 @@ void RtIndex_t::SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, co
 	CSphString sChunk;
 	sChunk.SetSprintf ( "%s.ram", m_sPath.cstr() );
 	if ( sphIsReadable ( sChunk.cstr() ) && ::unlink ( sChunk.cstr() ) )
-		sphWarning ( "failed to unlink ram chunk (file=%s, errno=%d, error=%s)", sChunk.cstr(), errno, strerror(errno) );
+		sphWarning ( "failed to unlink ram chunk (file=%s, errno=%d, error=%s)", sChunk.cstr(), errno, strerrorm(errno) );
 
 	FreeRetired();
 
@@ -4129,12 +4129,12 @@ bool RtIndex_t::Prealloc ( bool bStripPath )
 	m_iLockFD = ::open ( sLock.cstr(), SPH_O_NEW, 0644 );
 	if ( m_iLockFD<0 )
 	{
-		m_sLastError.SetSprintf ( "failed to open %s: %s", sLock.cstr(), strerror(errno) );
+		m_sLastError.SetSprintf ( "failed to open %s: %s", sLock.cstr(), strerrorm(errno) );
 		return false;
 	}
 	if ( !sphLockEx ( m_iLockFD, false ) )
 	{
-		m_sLastError.SetSprintf ( "failed to lock %s: %s", sLock.cstr(), strerror(errno) );
+		m_sLastError.SetSprintf ( "failed to lock %s: %s", sLock.cstr(), strerrorm(errno) );
 		::close ( m_iLockFD );
 		return false;
 	}
@@ -4477,7 +4477,7 @@ bool RtIndex_t::SaveRamChunk ()
 	// rename
 	if ( ::rename ( sNewChunk.cstr(), sChunk.cstr() ) )
 		sphDie ( "failed to rename ram chunk (src=%s, dst=%s, errno=%d, error=%s)",
-			sNewChunk.cstr(), sChunk.cstr(), errno, strerror(errno) ); // !COMMIT handle this gracefully
+			sNewChunk.cstr(), sChunk.cstr(), errno, strerrorm(errno) ); // !COMMIT handle this gracefully
 
 	return true;
 }
@@ -8395,7 +8395,7 @@ bool RtIndex_t::Truncate ( CSphString & )
 	sFile.SetSprintf ( "%s.ram", m_sPath.cstr() );
 	if ( ::unlink ( sFile.cstr() ) )
 		if ( errno!=ENOENT )
-			sphWarning ( "rt: truncate failed to unlink %s: %s", sFile.cstr(), strerror(errno) );
+			sphWarning ( "rt: truncate failed to unlink %s: %s", sFile.cstr(), strerrorm(errno) );
 
 	// kill all disk chunks files
 	ARRAY_FOREACH ( i, m_dDiskChunks )
@@ -9193,7 +9193,7 @@ void BinlogWriter_c::Fsync ()
 
 	m_bError = ( fsync ( m_iFD )!=0 );
 	if ( m_bError && m_pError )
-		m_pError->SetSprintf ( "failed to sync %s: %s" , m_sName.cstr(), strerror(errno) );
+		m_pError->SetSprintf ( "failed to sync %s: %s" , m_sName.cstr(), strerrorm(errno) );
 
 	m_iLastFsyncPos = GetPos();
 }
@@ -9487,7 +9487,7 @@ void RtBinlog_c::NotifyIndexFlush ( const char * sIndexName, int64_t iTID, bool 
 		// do unlink
 		CSphString sLog = MakeBinlogName ( m_sLogPath.cstr(), tLog.m_iExt );
 		if ( ::unlink ( sLog.cstr() ) )
-			sphWarning ( "binlog: failed to unlink %s: %s (remove it manually)", sLog.cstr(), strerror(errno) );
+			sphWarning ( "binlog: failed to unlink %s: %s (remove it manually)", sLog.cstr(), strerrorm(errno) );
 
 		// we need to reset it, otherwise there might be leftover data after last Remove()
 		m_dLogFiles[iLog] = BinlogFileDesc_t();
@@ -9729,7 +9729,7 @@ void RtBinlog_c::SaveMeta ()
 
 	if ( ::rename ( sMeta.cstr(), sMetaOld.cstr() ) )
 		sphDie ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)",
-			sMeta.cstr(), sMetaOld.cstr(), errno, strerror(errno) ); // !COMMIT handle this gracefully
+			sMeta.cstr(), sMetaOld.cstr(), errno, strerrorm(errno) ); // !COMMIT handle this gracefully
 	sphLogDebug ( "SaveMeta: Done." );
 }
 
@@ -9744,10 +9744,10 @@ void RtBinlog_c::LockFile ( bool bLock )
 		const int iLockFD = ::open ( sName.cstr(), SPH_O_NEW, 0644 );
 
 		if ( iLockFD<0 )
-			sphDie ( "failed to open '%s': %u '%s'", sName.cstr(), errno, strerror(errno) );
+			sphDie ( "failed to open '%s': %u '%s'", sName.cstr(), errno, strerrorm(errno) );
 
 		if ( !sphLockEx ( iLockFD, false ) )
-			sphDie ( "failed to lock '%s': %u '%s'", sName.cstr(), errno, strerror(errno) );
+			sphDie ( "failed to lock '%s': %u '%s'", sName.cstr(), errno, strerrorm(errno) );
 
 		m_iLockFD = iLockFD;
 	} else
@@ -9785,7 +9785,7 @@ void RtBinlog_c::OpenNewLog ( int iLastState )
 		::unlink ( sLog.cstr() );
 
 	if ( !m_tWriter.OpenFile ( sLog.cstr(), m_sWriterError ) )
-		sphDie ( "failed to create %s: errno=%d, error=%s", sLog.cstr(), errno, strerror(errno) );
+		sphDie ( "failed to create %s: errno=%d, error=%s", sLog.cstr(), errno, strerrorm(errno) );
 
 	// emit header
 	m_tWriter.PutDword ( BINLOG_HEADER_MAGIC );
@@ -12350,12 +12350,12 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath )
 	m_iLockFD = ::open ( sLock.cstr(), SPH_O_NEW, 0644 );
 	if ( m_iLockFD < 0 )
 	{
-		m_sLastError.SetSprintf ( "failed to open %s: %s", sLock.cstr(), strerror( errno ) );
+		m_sLastError.SetSprintf ( "failed to open %s: %s", sLock.cstr(), strerrorm( errno ) );
 		return false;
 	}
 	if ( !sphLockEx ( m_iLockFD, false ) )
 	{
-		m_sLastError.SetSprintf ( "failed to lock %s: %s", sLock.cstr(), strerror( errno ) );
+		m_sLastError.SetSprintf ( "failed to lock %s: %s", sLock.cstr(), strerrorm( errno ) );
 		::close ( m_iLockFD );
 		return false;
 	}
@@ -12583,7 +12583,7 @@ void PercolateIndex_c::SaveMeta()
 
 	// rename
 	if ( ::rename ( sMetaNew.cstr(), sMeta.cstr() ) )
-		sphWarning ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)", sMetaNew.cstr(), sMeta.cstr(), errno, strerror( errno ) );
+		sphWarning ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)", sMetaNew.cstr(), sMeta.cstr(), errno, strerrorm( errno ) );
 }
 
 void PercolateIndex_c::GetQueries ( const char * sFilterTags, bool bTagsEq, const CSphFilterSettings * pUID, int iOffset, int iLimit, CSphVector<PercolateQueryDesc> & dQueries )

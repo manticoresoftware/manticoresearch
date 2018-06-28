@@ -1190,13 +1190,13 @@ void CSphAutoEvent::WaitEvent()
 CSphMutex::CSphMutex()
 {
 	if ( pthread_mutex_init ( &m_tMutex, NULL ) )
-		sphDie ( "pthread_mutex_init() failed %s", strerror ( errno ) );
+		sphDie ( "pthread_mutex_init() failed %s", strerrorm ( errno ) );
 }
 
 CSphMutex::~CSphMutex()
 {
 	if ( pthread_mutex_destroy ( &m_tMutex ) )
-		sphDie ( "pthread_mutex_destroy() failed %s", strerror ( errno ) );
+		sphDie ( "pthread_mutex_destroy() failed %s", strerrorm ( errno ) );
 }
 
 bool CSphMutex::Lock ()
@@ -1808,7 +1808,7 @@ public:
 		if ( !m_tWakeup.Initialized () )
 		{
 			m_bShutdown = true;
-			sError.SetSprintf ( "thread-pool create failed %s", strerror ( errno ) );
+			sError.SetSprintf ( "thread-pool create failed %s", strerrorm ( errno ) );
 			return;
 		}
 

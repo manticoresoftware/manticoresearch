@@ -1463,7 +1463,7 @@ PollableEvent_t::PollableEvent_t ()
 #if HAVE_EVENTFD
 	int iFD = eventfd ( 0, EFD_NONBLOCK );
 	if ( iFD==-1 )
-		m_sError.SetSprintf ( "failed to create eventfd: %s", strerror ( errno ) );
+		m_sError.SetSprintf ( "failed to create eventfd: %s", strerrorm ( errno ) );
 	iRead = iWrite = iFD;
 #else
 	CreateSocketPair ( iRead, iWrite, m_sError );
@@ -2856,7 +2856,7 @@ protected:
 	{
 		m_iEFD = epoll_create ( iSizeHint ); // 1000 is dummy, see man
 		if ( m_iEFD==-1 )
-			sphDie ( "failed to create epoll main FD, errno=%d, %s", errno, strerror ( errno ) );
+			sphDie ( "failed to create epoll main FD, errno=%d, %s", errno, strerrorm ( errno ) );
 
 		sphLogDebugv ( "epoll %d created", m_iEFD );
 		m_dReady.Reserve ( iSizeHint );
@@ -2908,7 +2908,7 @@ protected:
 			auto iRes = epoll_ctl ( m_iEFD, iOp, pTask->m_ifd, &tEv );
 			if ( iRes==-1 )
 				sphLogDebugL ( "L failed to perform epollctl for sock %d(%p), errno=%d, %s"
-					  , pTask->m_ifd, pTask, errno, strerror ( errno ) );
+					  , pTask->m_ifd, pTask, errno, strerrorm ( errno ) );
 		} else
 			sphLogDebugL ( "L epoll_ctl not called since sock is closed" );
 		return iEvents;
@@ -2974,7 +2974,7 @@ protected:
 	{
 		m_iEFD = kqueue ();
 		if ( m_iEFD==-1 )
-			sphDie ( "failed to create kqueue main FD, errno=%d, %s", errno, strerror ( errno ) );
+			sphDie ( "failed to create kqueue main FD, errno=%d, %s", errno, strerrorm ( errno ) );
 
 		sphLogDebugv ( "kqueue %d created", m_iEFD );
 		m_dReady.Reserve ( iSizeHint );
@@ -3708,7 +3708,7 @@ public:
 	{
 		m_iEFD = epoll_create ( iSizeHint ); // 1000 is dummy, see man
 		if ( m_iEFD==-1 )
-			sphDie ( "failed to create epoll main FD, errno=%d, %s", errno, strerror ( errno ) );
+			sphDie ( "failed to create epoll main FD, errno=%d, %s", errno, strerrorm ( errno ) );
 
 		sphLogDebugv ( "epoll %d created", m_iEFD );
 		m_dReady.Reserve ( iSizeHint );
@@ -3736,7 +3736,7 @@ public:
 
 		int iRes = epoll_ctl ( m_iEFD, EPOLL_CTL_ADD, iSocket, &tEv );
 		if ( iRes==-1 )
-			sphWarning ( "failed to setup epoll event for sock %d, errno=%d, %s", iSocket, errno, strerror ( errno ) );
+			sphWarning ( "failed to setup epoll event for sock %d, errno=%d, %s", iSocket, errno, strerrorm ( errno ) );
 	}
 
 	bool Wait ( int timeoutMs ) override
@@ -3808,7 +3808,7 @@ public:
 
 		int iRes = epoll_ctl ( m_iEFD, EPOLL_CTL_MOD, iSocket, &tEv );
 		if ( iRes==-1 )
-			sphWarning ( "failed to modify epoll event for sock %d, errno=%d, %s", iSocket, errno, strerror ( errno ) );
+			sphWarning ( "failed to modify epoll event for sock %d, errno=%d, %s", iSocket, errno, strerrorm ( errno ) );
 	}
 
 	void IterateRemove ( int iSocket ) override
@@ -3823,7 +3823,7 @@ public:
 
 		// might be already closed by worker from thread pool
 		if ( iRes==-1 )
-			sphLogDebugv ( "failed to remove epoll event for sock %d(%p), errno=%d, %s", iSocket, m_tIter.m_pData, errno, strerror ( errno ) );
+			sphLogDebugv ( "failed to remove epoll event for sock %d(%p), errno=%d, %s", iSocket, m_tIter.m_pData, errno, strerrorm ( errno ) );
 
 		RemoveCurrentItem();
 	}
@@ -3855,7 +3855,7 @@ public:
 	{
 		m_iKQ = kqueue ();
 		if ( m_iKQ==-1 )
-			sphDie ( "failed to create kqueue main FD, errno=%d, %s", errno, strerror ( errno ) );
+			sphDie ( "failed to create kqueue main FD, errno=%d, %s", errno, strerrorm ( errno ) );
 
 		sphLogDebugv ( "kqueue %d created", m_iKQ );
 		m_dReady.Reserve ( iSizeHint );
@@ -3882,7 +3882,7 @@ public:
 
 		int iRes = kevent (m_iKQ, &tEv, 1, nullptr, 0, nullptr);
 		if ( iRes==-1 )
-			sphWarning ( "failed to setup kqueue event for sock %d, errno=%d, %s", iSocket, errno, strerror ( errno ) );
+			sphWarning ( "failed to setup kqueue event for sock %d, errno=%d, %s", iSocket, errno, strerrorm ( errno ) );
 	}
 
 	bool Wait ( int timeoutMs ) override
@@ -3969,7 +3969,7 @@ public:
 		kevent ( m_iKQ, &tEv, 1, nullptr, 0, nullptr );
 
 		if ( iRes==-1 )
-			sphWarning ( "failed to setup kqueue event for sock %d, errno=%d, %s", iSocket, errno, strerror ( errno ) );
+			sphWarning ( "failed to setup kqueue event for sock %d, errno=%d, %s", iSocket, errno, strerrorm ( errno ) );
 	}
 
 	void IterateRemove ( int iSocket ) override
@@ -3987,7 +3987,7 @@ public:
 
 		// might be already closed by worker from thread pool
 		if ( iRes==-1 )
-			sphLogDebugv ( "failed to remove kqueue event for sock %d(%p), errno=%d, %s", iSocket, m_tIter.m_pData, errno, strerror ( errno ) );
+			sphLogDebugv ( "failed to remove kqueue event for sock %d(%p), errno=%d, %s", iSocket, m_tIter.m_pData, errno, strerrorm ( errno ) );
 
 		RemoveCurrentItem ();
 	}

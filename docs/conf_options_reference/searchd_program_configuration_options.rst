@@ -633,6 +633,44 @@ Example:
 
     max_filter_values = 16384
 
+.. _max_open_files:
+
+max_open_files
+~~~~~~~~~~~~~~
+
+Maximum num of files which allowed to be opened by daemon.
+Note that serving big fragmented rt-indexes may require this limit to be high.
+Say, if every disk chunk occupy dozen of files, rt-index from 1000 chunks
+will suppose to have thousand dozens of files keep opened simultaneously.
+So, one time you may face the error 'Too many open files' somewhere in logs.
+In this case try to manipulate with this option, it may help to solve the problem.
+
+Apart this value (so called 'soft limit') there is also 'hard limit', which
+can't be exceed by the option.
+
+Hard limit is defined by the system and on Linux may be changed in file
+`/etc/security/limits.conf`. Another OSes may use different approaches here,
+consult your manuals for details.
+
+Example:
+
+
+.. code-block:: ini
+
+
+    max_open_files = 10000
+
+
+Apart direct numeric values, you can use magic word 'max', to set the limit
+equal to available current hard limit.
+Example:
+
+
+.. code-block:: ini
+
+
+    max_open_files = max
+
 .. _max_packet_size:
 
 max_packet_size

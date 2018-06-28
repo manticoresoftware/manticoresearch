@@ -111,7 +111,7 @@ static char * sphDup ( const char * sSrc, int iLen=-1 )
 static inline void sphShowErrno ( const char * sCall )
 {
 	char sError[256];
-	snprintf ( sError, sizeof(sError), "%s() failed: [%d] %s", sCall, errno, strerror(errno) );
+	snprintf ( sError, sizeof(sError), "%s() failed: [%d] %s", sCall, errno, strerrorm(errno) );
 	my_error ( ER_QUERY_ON_FOREIGN_DATA_SOURCE, MYF(0), sError );
 }
 
@@ -479,7 +479,7 @@ int CSphUrl::Connect()
 	if ( pError )
 	{
 		char sError[1024];
-		snprintf ( sError, sizeof(sError), "%s [%d] %s", Format(), errno, strerror(errno) );
+		snprintf ( sError, sizeof(sError), "%s [%d] %s", Format(), errno, strerrorm(errno) );
 		my_error ( ER_CONNECT_TO_FOREIGN_DATA_SOURCE, MYF(0), sError );
 
 		if ( iSocket!=-1 )

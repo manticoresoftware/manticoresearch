@@ -365,7 +365,7 @@ int CSphAutofile::Open ( const CSphString & sName, int iMode, CSphString & sErro
 	m_sFilename = sName; // not exactly sure why is this uncoditional. for error reporting later, i suppose
 
 	if ( m_iFD<0 )
-		sError.SetSprintf ( "failed to open %s: %s", sName.cstr(), strerror(errno) );
+		sError.SetSprintf ( "failed to open %s: %s", sName.cstr(), strerrorm(errno) );
 	else
 	{
 		m_bTemporary = bTemp; // only if we managed to actually open it
@@ -409,7 +409,7 @@ SphOffset_t CSphAutofile::GetSize ( SphOffset_t iMinSize, bool bCheckSizeT, CSph
 	struct_stat st;
 	if ( stat ( GetFilename(), &st )<0 )
 	{
-		sError.SetSprintf ( "failed to stat %s: %s", GetFilename(), strerror(errno) );
+		sError.SetSprintf ( "failed to stat %s: %s", GetFilename(), strerrorm(errno) );
 		return -1;
 	}
 	if ( st.st_size<iMinSize )
@@ -457,7 +457,7 @@ bool CSphAutofile::Read ( void * pBuf, int64_t iCount, CSphString & sError )
 				continue;
 
 			sError.SetSprintf ( "read error in %s (%s); " INT64_FMT " of " INT64_FMT " bytes read",
-							GetFilename(), strerror(errno), iCount-iToRead, iCount );
+							GetFilename(), strerrorm(errno), iCount-iToRead, iCount );
 			return false;
 		}
 
@@ -465,7 +465,7 @@ bool CSphAutofile::Read ( void * pBuf, int64_t iCount, CSphString & sError )
 		if ( iGot==0 )
 		{
 			sError.SetSprintf ( "unexpected EOF in %s (%s); " INT64_FMT " of " INT64_FMT " bytes read",
-							GetFilename(), strerror(errno), iCount-iToRead, iCount );
+							GetFilename(), strerrorm(errno), iCount-iToRead, iCount );
 			return false;
 		}
 
@@ -482,7 +482,7 @@ bool CSphAutofile::Read ( void * pBuf, int64_t iCount, CSphString & sError )
 	if ( iToRead!=0 )
 	{
 		sError.SetSprintf ( "read error in %s (%s); " INT64_FMT " of " INT64_FMT " bytes read",
-							GetFilename(), strerror(errno), iCount-iToRead, iCount );
+							GetFilename(), strerrorm(errno), iCount-iToRead, iCount );
 		return false;
 	}
 	return true;
@@ -972,7 +972,7 @@ static void ReadFileInfo ( CSphReader & tReader, const char * szFilename, CSphSa
 	{
 		struct_stat tFileInfo;
 		if ( stat ( szFilename, &tFileInfo ) < 0 )
-			sWarning->SetSprintf ( "failed to stat %s: %s", szFilename, strerror(errno) );
+			sWarning->SetSprintf ( "failed to stat %s: %s", szFilename, strerrorm(errno) );
 		else
 		{
 			DWORD uMyCRC32 = 0;
@@ -1578,7 +1578,7 @@ bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char 
 
 		// failure? report, bailout
 		if ( iWritten<0 )
-			sError.SetSprintf ( "%s: write error: %s", sName, strerror(errno) );
+			sError.SetSprintf ( "%s: write error: %s", sName, strerrorm(errno) );
 		else
 			sError.SetSprintf ( "%s: write error: %d of %d bytes written", sName, iWritten, iToWrite );
 		return false;
@@ -1779,7 +1779,7 @@ void sphLockUn ( int iFile )
 	tLock.l_len = 0;
 
 	if ( fcntl ( iFile, F_SETLK, &tLock )==-1 )
-		sphWarning ( "sphLockUn: failed fcntl. Error: %d '%s'", errno, strerror ( errno ) );
+		sphWarning ( "sphLockUn: failed fcntl. Error: %d '%s'", errno, strerrorm ( errno ) );
 
 }
 #endif
@@ -1810,7 +1810,7 @@ bool sphIsReadable ( const char * sPath, CSphString * pError )
 	if ( iFD<0 )
 	{
 		if ( pError )
-			pError->SetSprintf ( "%s unreadable: %s", sPath, strerror(errno) );
+			pError->SetSprintf ( "%s unreadable: %s", sPath, strerrorm(errno) );
 		return false;
 	}
 
@@ -1829,7 +1829,7 @@ int sphOpenFile ( const char * sFile, CSphString & sError, bool bWrite )
 	int iFD = ::open ( sFile, iFlags, 0644 );
 	if ( iFD<0 )
 	{
-		sError.SetSprintf ( "failed to open file '%s': '%s'", sFile, strerror(errno) );
+		sError.SetSprintf ( "failed to open file '%s': '%s'", sFile, strerrorm(errno) );
 		return -1;
 	}
 
@@ -1850,7 +1850,7 @@ int64_t sphGetFileSize ( int iFD, CSphString * sError )
 	if ( fstat ( iFD, &st )<0 )
 	{
 		if ( sError )
-			sError->SetSprintf ( "failed to fstat file '%d': '%s'", iFD, strerror(errno) );
+			sError->SetSprintf ( "failed to fstat file '%d': '%s'", iFD, strerrorm(errno) );
 		return -1;
 	}
 
@@ -1864,7 +1864,7 @@ int64_t sphGetFileSize ( const CSphString& sFile, CSphString * sError )
 	if ( stat ( sFile.cstr(), &st )<0 )
 	{
 		if ( sError )
-			sError->SetSprintf ( "failed to stat file '%s': '%s'", sFile.cstr(), strerror ( errno ) );
+			sError->SetSprintf ( "failed to stat file '%s': '%s'", sFile.cstr(), strerrorm ( errno ) );
 		return -1;
 	}
 
@@ -6718,7 +6718,7 @@ bool CSphWriter::OpenFile ( const CSphString & sName, CSphString & sErrorBuffer 
 	m_bError = ( m_iFD<0 );
 
 	if ( m_bError )
-		m_pError->SetSprintf ( "failed to create %s: %s" , sName.cstr(), strerror(errno) );
+		m_pError->SetSprintf ( "failed to create %s: %s" , sName.cstr(), strerrorm(errno) );
 
 	return !m_bError;
 }
@@ -6890,7 +6890,7 @@ void CSphWriter::SeekTo ( SphOffset_t iPos )
 		if ( uSeek!=iPos )
 		{
 			if ( uSeek<0 )
-				sphWarning ( "CSphWriter::SeekTo seek error. Error: %d '%s'", errno, strerror ( errno ) );
+				sphWarning ( "CSphWriter::SeekTo seek error. Error: %d '%s'", errno, strerrorm ( errno ) );
 			else
 				sphWarning ( "CSphWriter::SeekTo seek error. Expected: %zd, got %zd", iPos, uSeek );
 		}
@@ -7130,7 +7130,7 @@ void CSphReader::UpdateCache ()
 		m_iBuffUsed = m_iBuffPos = 0;
 		m_bError = true;
 		m_sError.SetSprintf ( "pread error in %s: pos=" INT64_FMT ", len=%d, code=%d, msg=%s",
-			m_sFilename.cstr(), (int64_t)iNewPos, iReadLen, errno, strerror(errno) );
+			m_sFilename.cstr(), (int64_t)iNewPos, iReadLen, errno, strerrorm(errno) );
 		return;
 	}
 
@@ -7392,7 +7392,7 @@ bool CSphAutoreader::Open ( const CSphString & sFilename, CSphString & sError )
 	m_sFilename = sFilename;
 
 	if ( m_iFD<0 )
-		sError.SetSprintf ( "failed to open %s: %s", sFilename.cstr(), strerror(errno) );
+		sError.SetSprintf ( "failed to open %s: %s", sFilename.cstr(), strerrorm(errno) );
 	return ( m_iFD>=0 );
 }
 
@@ -7507,7 +7507,7 @@ int CSphBin::ReadByte ()
 			if ( uSeek!=m_iFilePos )
 			{
 				if ( uSeek<0 )
-					sphWarning ( "CSphBin::ReadBytes : failed seek. Error: %d '%s'", errno, strerror ( errno ) );
+					sphWarning ( "CSphBin::ReadBytes : failed seek. Error: %d '%s'", errno, strerrorm ( errno ) );
 				else
 					sphWarning ( "CSphBin::ReadBytes : failed seek. Expected: %zd, got %zd", m_iFilePos, uSeek );
 				m_bError = true;
@@ -7569,7 +7569,7 @@ ESphBinRead CSphBin::ReadBytes ( void * pDest, int iBytes )
 			if ( uSeek!=m_iFilePos )
 			{
 				if ( uSeek<0 )
-					sphWarning ( "CSphBin::ReadBytes : failed seek. Error: %d '%s'", errno, strerror ( errno ) );
+					sphWarning ( "CSphBin::ReadBytes : failed seek. Error: %d '%s'", errno, strerrorm ( errno ) );
 				else
 					sphWarning ( "CSphBin::ReadBytes : failed seek. Expected: %zd, got %zd", m_iFilePos, uSeek );
 				m_bError = true;
@@ -7783,7 +7783,7 @@ ESphBinRead CSphBin::Precache ()
 		if ( uSeek!=m_iFilePos )
 		{
 			if ( uSeek<0 )
-				sphWarning ( "CSphBin::Precache : failed seek. Error: %d '%s'", errno, strerror ( errno ) );
+				sphWarning ( "CSphBin::Precache : failed seek. Error: %d '%s'", errno, strerrorm ( errno ) );
 			else
 				sphWarning ( "CSphBin::Precache : failed seek. Expected: %zd, got %zd", m_iFilePos, uSeek );
 			m_bError = true;
@@ -9538,7 +9538,7 @@ bool CSphIndex_VLN::JuggleFile ( const char* szExt, CSphString & sError, bool bN
 	{
 		if ( bNeedOrigin )
 		{
-			sError.SetSprintf ( "rename '%s' to '%s' failed: %s", sExt.cstr(), sExtOld.cstr(), strerror(errno) );
+			sError.SetSprintf ( "rename '%s' to '%s' failed: %s", sExt.cstr(), sExtOld.cstr(), strerrorm(errno) );
 			return false;
 		}
 	}
@@ -9548,11 +9548,11 @@ bool CSphIndex_VLN::JuggleFile ( const char* szExt, CSphString & sError, bool bN
 		if ( bNeedOrigin && !::rename ( sExtOld.cstr(), sExt.cstr() ) )
 		{
 			// rollback failed too!
-			sError.SetSprintf ( "rollback rename to '%s' failed: %s; INDEX UNUSABLE; FIX FILE NAMES MANUALLY", sExt.cstr(), strerror(errno) );
+			sError.SetSprintf ( "rollback rename to '%s' failed: %s; INDEX UNUSABLE; FIX FILE NAMES MANUALLY", sExt.cstr(), strerrorm(errno) );
 		} else
 		{
 			// rollback went ok
-			sError.SetSprintf ( "rename '%s' to '%s' failed: %s", sExtNew.cstr(), sExt.cstr(), strerror(errno) );
+			sError.SetSprintf ( "rename '%s' to '%s' failed: %s", sExtNew.cstr(), sExt.cstr(), strerrorm(errno) );
 		}
 		return false;
 	}
@@ -11381,7 +11381,7 @@ bool CSphIndex_VLN::RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSi
 		if ( uSeek !=iBlockStart + uTotalRead )
 		{
 			if ( uSeek<0 )
-				sphWarning ( "block relocation: failed seek. Error: %d '%s'", errno, strerror ( errno ) );
+				sphWarning ( "block relocation: failed seek. Error: %d '%s'", errno, strerrorm ( errno ) );
 			else
 				sphWarning ( "block relocation: failed seek. Expected: %zd, got %zd", iBlockStart + uTotalRead, uSeek );
 			return false;
@@ -11392,7 +11392,7 @@ bool CSphIndex_VLN::RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSi
 		size_t iRead = sphReadThrottled ( iFile, pBuffer, iToRead, &g_tThrottle );
 		if ( iRead!=size_t(iToRead) )
 		{
-			m_sLastError.SetSprintf ( "block relocation: read error (%d of %d bytes read): %s", (int)iRead, iToRead, strerror(errno) );
+			m_sLastError.SetSprintf ( "block relocation: read error (%d of %d bytes read): %s", (int)iRead, iToRead, strerrorm(errno) );
 			return false;
 		}
 
@@ -11400,7 +11400,7 @@ bool CSphIndex_VLN::RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSi
 		if ( uSeek!=*pFileSize )
 		{
 			if ( uSeek<0 )
-				sphWarning ( "block relocation: failed seek. Error: %d '%s'", errno, strerror ( errno ) );
+				sphWarning ( "block relocation: failed seek. Error: %d '%s'", errno, strerrorm ( errno ) );
 			else
 				sphWarning ( "block relocation: failed seek. Expected: %zd, got %zd", *pFileSize, uSeek );
 			return false;
@@ -11478,7 +11478,7 @@ static bool sphTruncate ( int iFD )
 	auto iPos = ::lseek ( iFD, 0, SEEK_CUR );
 	if ( iPos>0 )
 		return ::ftruncate ( iFD, iPos )==0;
-	sphWarning ( "sphTruncate: failed seek. Error: %d '%s'", errno, strerror ( errno ) );
+	sphWarning ( "sphTruncate: failed seek. Error: %d '%s'", errno, strerrorm ( errno ) );
 	return false;
 #endif
 }
@@ -11851,7 +11851,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		if ( uSeek!=iHitsGap )
 		{
 			if ( uSeek<0 )
-				m_sLastError.SetSprintf ( "CSphIndex_VLN::Build: failed seek. Error: %d '%s'", errno, strerror ( errno ) );
+				m_sLastError.SetSprintf ( "CSphIndex_VLN::Build: failed seek. Error: %d '%s'", errno, strerrorm ( errno ) );
 			else
 				m_sLastError.SetSprintf ( "CSphIndex_VLN::Build: failed seek. Expected: %zd, got %zd", iHitsGap, uSeek );
 			return 0;
@@ -11868,7 +11868,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		{
 			if ( uSeek<0 )
 				m_sLastError.SetSprintf ( "CSphIndex_VLN::Build: failed seek. Error: %d '%s'",
-					errno, strerror ( errno ) );
+					errno, strerrorm ( errno ) );
 			else
 				m_sLastError.SetSprintf ( "CSphIndex_VLN::Build: failed seek. Expected: %zd got %zd",
 					iDocinfosGap, uSeek );
@@ -15455,15 +15455,15 @@ bool RawFileLock ( const CSphString sFile, int &iLockFD, CSphString &sError )
 		iLockFD = ::open ( sFile.cstr (), SPH_O_NEW, 0644 );
 		if ( iLockFD<0 )
 		{
-			sError.SetSprintf ( "failed to open %s: %s", sFile.cstr (), strerror ( errno ) );
-			sphLogDebug ( "failed to open %s: %s", sFile.cstr (), strerror ( errno ) );
+			sError.SetSprintf ( "failed to open %s: %s", sFile.cstr (), strerrorm ( errno ) );
+			sphLogDebug ( "failed to open %s: %s", sFile.cstr (), strerrorm ( errno ) );
 			return false;
 		}
 	}
 
 	if ( !sphLockEx ( iLockFD, false ) )
 	{
-		sError.SetSprintf ( "failed to lock %s: %s", sFile.cstr (), strerror ( errno ) );
+		sError.SetSprintf ( "failed to lock %s: %s", sFile.cstr (), strerrorm ( errno ) );
 		::close ( iLockFD );
 		iLockFD = -1;
 		return false;
@@ -20431,7 +20431,7 @@ static bool GetFileStats ( const char * szFilename, CSphSavedFile & tInfo, CSphS
 	if ( stat ( szFilename, &tStat ) < 0 )
 	{
 		if ( pError )
-			*pError = strerror ( errno );
+			*pError = strerrorm ( errno );
 		return false;
 	}
 
@@ -26349,7 +26349,7 @@ bool CSphSource_SQL::Connect ( CSphString & sError )
 	m_bSqlConnected = true;
 	if ( !m_tParams.m_sHookConnect.IsEmpty() && !HookConnect ( m_tParams.m_sHookConnect.cstr() ) )
 	{
-		sError.SetSprintf ( "hook_connect: runtime error %s when running external hook", strerror(errno) );
+		sError.SetSprintf ( "hook_connect: runtime error %s when running external hook", strerrorm(errno) );
 		return false;
 	}
 	return true;
@@ -26421,7 +26421,7 @@ bool CSphSource_SQL::SetupRanges ( const char * sRangeQuery, const char * sQuery
 	if ( iReason==SRE_DOCS && ( !m_tParams.m_sHookQueryRange.IsEmpty() ) )
 	{
 		if ( !HookQueryRange ( m_tParams.m_sHookQueryRange.cstr(), &m_uMinID, &m_uMaxID ) )
-			LOC_ERROR ( "hook_query_range: runtime error %s when running external hook", strerror(errno) );
+			LOC_ERROR ( "hook_query_range: runtime error %s when running external hook", strerrorm(errno) );
 		if ( m_uMinID<=0 )
 			LOC_ERROR ( "hook_query_range: min_id=" DOCID_FMT ": must be positive 32/64-bit unsigned integer", m_uMinID );
 		if ( m_uMaxID<=0 )
@@ -26864,7 +26864,7 @@ void CSphSource_SQL::PostIndex ()
 	}
 	if ( !m_tParams.m_sHookPostIndex.IsEmpty() && !HookPostIndex ( m_tParams.m_sHookPostIndex.cstr(), m_uMaxFetchedID ) )
 	{
-		sphWarn ( "hook_post_index: runtime error %s when running external hook", strerror(errno) );
+		sphWarn ( "hook_post_index: runtime error %s when running external hook", strerrorm(errno) );
 	}
 }
 
@@ -29858,7 +29858,7 @@ bool CSphSource_BaseSV::IterateStart ( CSphString & sError )
 	m_iBufUsed = fread ( m_dBuf.Begin(), 1, m_dBuf.GetLength(), m_pFP );
 	if ( !m_iBufUsed )
 	{
-		sError.SetSprintf ( "source '%s': read error '%s'", m_tSchema.GetName(), strerror(errno) );
+		sError.SetSprintf ( "source '%s': read error '%s'", m_tSchema.GetName(), strerrorm(errno) );
 		return false;
 	}
 	m_iPlainFieldsLength = m_tSchema.GetFieldsCount();
@@ -30049,7 +30049,7 @@ CSphSource_BaseSV::ESphParseResult CSphSource_TSV::SplitColumns ( CSphString & s
 
 			// error in case no data left in middle of data stream
 			sError.SetSprintf ( "source '%s': read error '%s' (line=%d, docid=" DOCID_FMT ")",
-				m_tSchema.GetName(), strerror(errno), m_iLine, m_tDocInfo.m_uDocID );
+				m_tSchema.GetName(), strerrorm(errno), m_iLine, m_tDocInfo.m_uDocID );
 			return CSphSource_BaseSV::PARSING_FAILED;
 		}
 		m_iBufUsed += iGot;
@@ -30266,12 +30266,12 @@ CSphSource_BaseSV::ESphParseResult CSphSource_CSV::SplitColumns ( CSphString & s
 			if ( iCol!=iColumns )
 			{
 				sError.SetSprintf ( "source '%s': not all columns found (found=%d, total=%d, line=%d, docid=" DOCID_FMT ", error='%s')",
-					m_tSchema.GetName(), iCol, iColumns, m_iLine, m_tDocInfo.m_uDocID, strerror(errno) );
+					m_tSchema.GetName(), iCol, iColumns, m_iLine, m_tDocInfo.m_uDocID, strerrorm(errno) );
 			} else
 			{
 				// error in case no data left in middle of data stream
 				sError.SetSprintf ( "source '%s': read error '%s' (line=%d, docid=" DOCID_FMT ")",
-					m_tSchema.GetName(), strerror(errno), m_iLine, m_tDocInfo.m_uDocID );
+					m_tSchema.GetName(), strerrorm(errno), m_iLine, m_tDocInfo.m_uDocID );
 			}
 			return CSphSource_BaseSV::PARSING_FAILED;
 		}
@@ -31799,7 +31799,7 @@ static void FinalizeUpgrade ( const char ** sRenames, const char * sBanner, cons
 
 		if ( ::rename ( sFrom.cstr(), sTo.cstr() ) )
 			sphDie ( "%s: rename %s to %s failed: %s\n", sBanner,
-			sFrom.cstr(), sTo.cstr(), strerror(errno) );
+			sFrom.cstr(), sTo.cstr(), strerrorm(errno) );
 	}
 
 	// all done! yay
@@ -32907,7 +32907,7 @@ void IndexFiles_c::Unlink ( const char * sType )
 	{
 		auto sFile = FullPath ( dExt.m_sExt, sType );
 		if ( ::unlink ( sFile.cstr() ) && dExt.m_bNeed )
-			sphWarning ( "unlink failed (file '%s', error '%s'", sFile.cstr (), strerror ( errno ) );
+			sphWarning ( "unlink failed (file '%s', error '%s'", sFile.cstr (), strerrorm ( errno ) );
 	}
 }
 
@@ -32936,7 +32936,7 @@ bool IndexFiles_c::Rename ( const char * sFromSz, const char * sToSz )  // move 
 			if ( !dExt.m_bNeed )
 				continue;
 
-			m_sLastError.SetSprintf ( "rename %s to %s failed: %s", sFrom.cstr (), sTo.cstr (), strerror ( errno ) );
+			m_sLastError.SetSprintf ( "rename %s to %s failed: %s", sFrom.cstr (), sTo.cstr (), strerrorm ( errno ) );
 			bAllOk = false;
 			break;
 		}
@@ -32977,7 +32977,7 @@ bool IndexFiles_c::RenameLock ( const char * sToSz, int &iLockFD )
 		return true;
 
 	m_sLastError.SetSprintf ("failed to rename lock %s to %s, fd=%d, error %s (%d); ", sFrom.cstr(),
-				   sTo.cstr(), iLockFD, strerror ( errno ), errno );
+				   sTo.cstr(), iLockFD, strerrorm ( errno ), errno );
 
 	// that is renaming of only 1 file failed; no need to rollback.
 	m_bFatal = true;
@@ -33015,7 +33015,7 @@ bool IndexFiles_c::Rollback ( const char * sBackup, const char * sPath )
 #endif
 		if ( ::rename ( sFrom.cstr (), sTo.cstr () ) )
 		{
-			sphLogDebug ( "rollback rename %s to %s failed: %s", sFrom.cstr (), sTo.cstr (), strerror (	errno ) );
+			sphLogDebug ( "rollback rename %s to %s failed: %s", sFrom.cstr (), sTo.cstr (), strerrorm (	errno ) );
 			m_bFatal = true;
 			return false;
 		}

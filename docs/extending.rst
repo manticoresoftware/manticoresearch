@@ -306,7 +306,7 @@ ruin backwards compatibility *and* change the syntax.
 Dynamic plugins are supported in threads and thread_pool workers. 
 Multiple plugins (and/or UDFs) may reside in a single library
 file. So you might choose to either put all your project-specific
-plugins in a single common uber-library; or you might choose to have a
+plugins in a single common big library; or you might choose to have a
 separate library for every UDF and plugin; that is up to you.
 
 Just as with UDFs, you want to include ``src/sphinxudf.h`` header file.

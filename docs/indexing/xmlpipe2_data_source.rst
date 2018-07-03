@@ -33,7 +33,7 @@ Example 3.2. xmlpipe2 document stream
     must be handled properly by xml parser lib]]></content>
     <published>1012325463</published>
     <subject>note how field/attr tags can be
-    in <** class="red">randomized** order</subject>
+    in <b> class="red">randomized</b> order</subject>
     <misc>some undeclared element</misc>
     </sphinx:document>
 

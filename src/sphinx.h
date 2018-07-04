@@ -788,7 +788,6 @@ struct CSphWordforms
 struct CSphWordHit;
 class CSphAutofile;
 struct DictHeader_t;
-struct ThrottleState_t;
 class CSphDict
 {
 public:
@@ -896,7 +895,7 @@ public:
 
 public:
 	/// begin creating dictionary file, setup any needed internal structures
-	virtual void			DictBegin ( CSphAutofile & tTempDict, CSphAutofile & tDict, int iDictLimit, ThrottleState_t * pThrottle );
+	virtual void			DictBegin ( CSphAutofile & tTempDict, CSphAutofile & tDict, int iDictLimit );
 
 	/// add next keyword entry to final dict
 	virtual void			DictEntry ( const CSphDictEntry & tEntry );
@@ -905,7 +904,7 @@ public:
 	virtual void			DictEndEntries ( SphOffset_t iDoclistOffset );
 
 	/// end indexing, store dictionary and checkpoints
-	virtual bool			DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphString & sError, ThrottleState_t * pThrottle );
+	virtual bool			DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphString & sError );
 
 	/// check whether there were any errors during indexing
 	virtual bool			DictIsError () const;
@@ -3558,6 +3557,9 @@ bool				sphIsDataPtrAttr ( ESphAttr eAttrType );
 //////////////////////////////////////////////////////////////////////////
 
 extern CSphString g_sLemmatizerBase;
+
+// Get global shutdown flag
+volatile bool& sphGetShutdown();
 
 /////////////////////////////////////////////////////////////////////////////
 

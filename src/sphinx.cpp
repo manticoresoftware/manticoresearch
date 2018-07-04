@@ -159,6 +159,8 @@ void gmtime_r ( const time_t * clock, struct tm * res )
 void sphWarn ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 1, 2 ) ) );
 static bool sphTruncate ( int iFD );
 
+static auto& g_bShutdown = sphGetShutdown();
+
 /////////////////////////////////////////////////////////////////////////////
 // GLOBALS
 /////////////////////////////////////////////////////////////////////////////
@@ -300,12 +302,12 @@ void CSphIOStats::Add ( const CSphIOStats & b )
 static CSphIOStats * GetIOStats ()
 {
 	if ( !g_bCollectIOStats )
-		return NULL;
+		return nullptr;
 
 	CSphIOStats * pIOStats = (CSphIOStats *)sphThreadGet ( g_tIOStatsTls );
 
 	if ( !pIOStats || !pIOStats->IsEnabled() )
-		return NULL;
+		return nullptr;
 	return pIOStats;
 }
 
@@ -571,7 +573,6 @@ protected:
 
 	int					m_iFile = -1;	///< my file
 	SphOffset_t *		m_pFilePos = nullptr;	///< shared current offset in file
-	ThrottleState_t *	m_pThrottle;
 
 public:
 	SphOffset_t			m_iFilePos = 0;		///< my current offset in file
@@ -596,7 +597,6 @@ public:
 	bool				IsDone () const;
 	bool				IsError () const { return m_bError; }
 	ESphBinRead			Precache ();
-	void				SetThrottle ( ThrottleState_t * pState ) { m_pThrottle = pState; }
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1085,7 +1085,6 @@ struct BuildHeader_t : public CSphSourceStats, public DictHeader_t
 		m_iTotalBytes = tStat.m_iTotalBytes;
 	}
 
-	ThrottleState_t *	m_pThrottle = nullptr;
 	const CSphRowitem *	m_pMinRow = nullptr;
 	SphDocID_t			m_uMinDocid = 0;
 	DWORD				m_uKillListSize = 0;
@@ -1376,8 +1375,8 @@ public:
 	virtual bool				Merge ( CSphIndex * pSource, const CSphVector<CSphFilterSettings> & dFilters, bool bMergeKillLists );
 
 	template <class QWORDDST, class QWORDSRC>
-	static bool					MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, const CSphVector<SphDocID_t> & dKillList, SphDocID_t uMinID, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle, volatile bool * pGlobalStop, volatile bool * pLocalStop );
-	static bool					DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, bool bMergeKillLists, ISphFilter * pFilter, const CSphVector<SphDocID_t> & dKillList, CSphString & sError, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle, volatile bool * pGlobalStop, volatile bool * pLocalStop, bool bSrcSettings );
+	static bool					MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, const CSphVector<SphDocID_t> & dKillList, SphDocID_t uMinID, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, CSphIndexProgress & tProgress, volatile bool * pLocalStop );
+	static bool					DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, bool bMergeKillLists, ISphFilter * pFilter, const CSphVector<SphDocID_t> & dKillList, CSphString & sError, CSphIndexProgress & tProgress, volatile bool * pLocalStop, bool bSrcSettings );
 
 	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError, CSphString & sWarning );
 	virtual bool				SaveAttributes ( CSphString & sError ) const;
@@ -1507,31 +1506,32 @@ void sphWarn ( const char * sTemplate, ... )
 
 //////////////////////////////////////////////////////////////////////////
 
-static ThrottleState_t g_tThrottle;
+static int 		g_iIOpsDelay = 0;
+static int 		g_iMaxIOSize = 0;
+static CSphAtomicL g_tmNextIOTime;
 
 void sphSetThrottling ( int iMaxIOps, int iMaxIOSize )
 {
-	g_tThrottle.m_iMaxIOps = iMaxIOps;
-	g_tThrottle.m_iMaxIOSize = iMaxIOSize;
+	g_iIOpsDelay = iMaxIOps ? 1000000/iMaxIOps : iMaxIOps;
+	g_iMaxIOSize = iMaxIOSize;
 }
 
-
-static inline void sphThrottleSleep ( ThrottleState_t * pState )
+static inline void ThrottleSleep ()
 {
-	assert ( pState );
-	if ( pState->m_iMaxIOps>0 )
+	if ( !g_iIOpsDelay )
+		return;
+
+	auto tmTimer = sphMicroTimer ();
+	while ( tmTimer < g_tmNextIOTime ) // m.b. >1 sleeps if another thread more lucky
 	{
-		int64_t tmTimer = sphMicroTimer();
-		int64_t tmSleep = Max ( pState->m_tmLastIOTime + 1000000/pState->m_iMaxIOps - tmTimer, 0 );
-		sphSleepMsec ( (int)(tmSleep/1000) );
-		pState->m_tmLastIOTime = tmTimer + tmSleep;
+		sphSleepMsec ( ( int ) ( g_tmNextIOTime - tmTimer ) / 1000 );
+		tmTimer = sphMicroTimer();
 	}
+	g_tmNextIOTime = tmTimer + g_iIOpsDelay;
 }
 
-
-bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char * sName, CSphString & sError, ThrottleState_t * pThrottle )
+bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char * sName, CSphString & sError )
 {
-	assert ( pThrottle );
 	if ( iCount<=0 )
 		return true;
 
@@ -1539,33 +1539,31 @@ bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char 
 	int iChunkSize = ( 1UL<<30 );
 
 	// when there's a sane max_iosize (4K to 1GB), use it
-	if ( pThrottle->m_iMaxIOSize>=4096 )
-		iChunkSize = Min ( iChunkSize, pThrottle->m_iMaxIOSize );
+	if ( g_iMaxIOSize>=4096 )
+		iChunkSize = Min ( iChunkSize, g_iMaxIOSize );
 
 	CSphIOStats * pIOStats = GetIOStats();
 
 	// while there's data, write it chunk by chunk
-	const BYTE * p = (const BYTE*) pBuf;
-	while ( iCount>0 )
+	auto * p = (const BYTE*) pBuf;
+	while ( iCount )
 	{
 		// wait for a timely occasion
-		sphThrottleSleep ( pThrottle );
+		ThrottleSleep ();
 
 		// write (and maybe time)
 		int64_t tmTimer = 0;
 		if ( pIOStats )
 			tmTimer = sphMicroTimer();
 
-		int iToWrite = iChunkSize;
-		if ( iCount<iChunkSize )
-			iToWrite = (int)iCount;
+		auto iToWrite = (int) Min ( iCount, iChunkSize );
 		int iWritten = ::write ( iFD, p, iToWrite );
 
 		if ( pIOStats )
 		{
 			pIOStats->m_iWriteTime += sphMicroTimer() - tmTimer;
 			pIOStats->m_iWriteOps++;
-			pIOStats->m_iWriteBytes += iToWrite;
+			pIOStats->m_iWriteBytes += iWritten;
 		}
 
 		// success? rinse, repeat
@@ -1587,38 +1585,25 @@ bool sphWriteThrottled ( int iFD, const void * pBuf, int64_t iCount, const char 
 }
 
 
-static size_t sphReadThrottled ( int iFD, void * pBuf, size_t iCount, ThrottleState_t * pThrottle )
+static size_t sphReadThrottled ( int iFD, void * pBuf, size_t iCount )
 {
-	assert ( pThrottle );
-	if ( pThrottle->m_iMaxIOSize && int(iCount) > pThrottle->m_iMaxIOSize )
+	if ( iCount<=0 )
+		return iCount;
+
+	auto iStep = g_iMaxIOSize ? Min ( iCount, g_iMaxIOSize ) : iCount;
+	auto * p = ( BYTE * ) pBuf;
+	size_t nBytesToRead = iCount;
+	while ( iCount )
 	{
-		size_t nChunks = iCount / pThrottle->m_iMaxIOSize;
-		size_t nBytesLeft = iCount % pThrottle->m_iMaxIOSize;
-
-		size_t nBytesRead = 0;
-		size_t iRead = 0;
-
-		for ( size_t i=0; i<nChunks; i++ )
-		{
-			iRead = sphReadThrottled ( iFD, (char *)pBuf + i*pThrottle->m_iMaxIOSize, pThrottle->m_iMaxIOSize, pThrottle );
-			nBytesRead += iRead;
-			if ( iRead!=(size_t)pThrottle->m_iMaxIOSize )
-				return nBytesRead;
-		}
-
-		if ( nBytesLeft > 0 )
-		{
-			iRead = sphReadThrottled ( iFD, (char *)pBuf + nChunks*pThrottle->m_iMaxIOSize, nBytesLeft, pThrottle );
-			nBytesRead += iRead;
-			if ( iRead!=nBytesLeft )
-				return nBytesRead;
-		}
-
-		return nBytesRead;
+		ThrottleSleep();
+		auto iChunk = Min ( iCount, iStep );
+		auto iRead = sphRead ( iFD, p, iChunk );
+		p += iRead;
+		iCount -= iRead;
+		if ( iRead!=iChunk )
+			break;
 	}
-
-	sphThrottleSleep ( pThrottle );
-	return (size_t)sphRead ( iFD, pBuf, iCount ); // FIXME? we sure this is under 2gb?
+	return nBytesToRead-iCount; // FIXME? we sure this is under 2gb?
 }
 
 void SafeClose ( int & iFD )
@@ -6684,7 +6669,6 @@ CSphWriter::CSphWriter ()
 	, m_bError ( false )
 	, m_pError ( NULL )
 {
-	m_pThrottle = &g_tThrottle;
 }
 
 
@@ -6836,7 +6820,7 @@ void CSphWriter::Flush ()
 		}
 	}
 
-	if ( !sphWriteThrottled ( m_iFD, m_pBuffer, m_iPoolUsed, m_sName.cstr(), *m_pError, m_pThrottle ) )
+	if ( !sphWriteThrottled ( m_iFD, m_pBuffer, m_iPoolUsed, m_sName.cstr(), *m_pError ) )
 		m_bError = true;
 
 	m_iWritten += m_iPoolUsed;
@@ -6923,7 +6907,6 @@ CSphReader::CSphReader ( BYTE * pBuf, int iSize )
 	, m_bError ( false )
 {
 	assert ( pBuf==NULL || iSize>0 );
-	m_pThrottle = &g_tThrottle;
 }
 
 
@@ -7435,7 +7418,6 @@ CSphBin::CSphBin ( ESphHitless eMode, bool bWordDict )
 {
 	m_tHit.m_sKeyword = bWordDict ? m_sKeyword : nullptr;
 	m_sKeyword[0] = '\0';
-	m_pThrottle = &g_tThrottle;
 
 #ifndef NDEBUG
 	m_sLastKeyword[0] = '\0';
@@ -7527,7 +7509,7 @@ int CSphBin::ReadByte ()
 		{
 			assert ( m_dBuffer );
 
-			if ( sphReadThrottled ( m_iFile, m_dBuffer, n, m_pThrottle )!=(size_t)n )
+			if ( sphReadThrottled ( m_iFile, m_dBuffer, n )!=(size_t)n )
 			{
 				m_bError = true;
 				return -2;
@@ -7589,7 +7571,7 @@ ESphBinRead CSphBin::ReadBytes ( void * pDest, int iBytes )
 		assert ( m_dBuffer );
 		memmove ( m_dBuffer, m_pCurrent, m_iLeft );
 
-		if ( sphReadThrottled ( m_iFile, m_dBuffer + m_iLeft, n, m_pThrottle )!=(size_t)n )
+		if ( sphReadThrottled ( m_iFile, m_dBuffer + m_iLeft, n )!=(size_t)n )
 		{
 			m_bError = true;
 			return BIN_READ_ERROR;
@@ -7796,7 +7778,7 @@ ESphBinRead CSphBin::Precache ()
 	assert ( m_dBuffer );
 	memmove ( m_dBuffer, m_pCurrent, m_iLeft );
 
-	if ( sphReadThrottled ( m_iFile, m_dBuffer+m_iLeft, m_iFileLeft, m_pThrottle )!=(size_t)m_iFileLeft )
+	if ( sphReadThrottled ( m_iFile, m_dBuffer+m_iLeft, m_iFileLeft )!=(size_t)m_iFileLeft )
 	{
 		m_bError = true;
 		return BIN_READ_ERROR;
@@ -9654,7 +9636,7 @@ bool CSphIndex_VLN::SaveAttributes ( CSphString & sError ) const
 	if ( m_uVersion>=20 )
 		iSize += (m_iDocinfoIndex+1)*uStride*sizeof(CSphRowitem)*2;
 
-	if ( !sphWriteThrottled ( fdTmpnew.GetFD(), m_tAttr.GetWritePtr(), iSize, "docinfo", sError, &g_tThrottle ) )
+	if ( !sphWriteThrottled ( fdTmpnew.GetFD(), m_tAttr.GetWritePtr(), iSize, "docinfo", sError ) )
 		return false;
 
 	fdTmpnew.Close ();
@@ -9775,7 +9757,6 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttr
 	int64_t iNewMinMaxIndex = m_iDocinfo * iNewStride;
 
 	BuildHeader_t tBuildHeader ( m_tStats );
-	tBuildHeader.m_pThrottle = &g_tThrottle;
 	tBuildHeader.m_pMinRow = dMinRow.Begin();
 	tBuildHeader.m_uMinDocid = m_uMinDocid;
 	tBuildHeader.m_uKillListSize = m_tKillList.GetLength();
@@ -9959,7 +9940,6 @@ public:
 	void			SetMin ( const CSphRowitem * pDynamic, int iDynamic );
 	void			HitblockBegin () { m_pDict->HitblockBegin(); }
 	bool			IsWordDict () const { return m_pDict->GetSettings().m_bWordDict; }
-	void			SetThrottle ( ThrottleState_t * pState ) { m_pThrottle = pState; }
 
 private:
 	void	DoclistBeginEntry ( SphDocID_t uDocid, const DWORD * pAttrs );
@@ -9970,7 +9950,6 @@ private:
 	CSphWriter					m_wrHitlist;			///< hitlist writer
 	CSphWriter					m_wrSkiplist;			///< skiplist writer
 	CSphFixedVector<BYTE>		m_dWriteBuffer;			///< my write buffer (for temp files)
-	ThrottleState_t *			m_pThrottle;
 
 	CSphFixedVector<CSphRowitem>	m_dMinRow {0};
 
@@ -10018,8 +9997,6 @@ CSphHitBuilder::CSphHitBuilder ( const CSphIndexSettings & tSettings,
 	m_dLastDocFields.UnsetAll();
 	assert ( m_pDict );
 	assert ( m_pLastError );
-
-	m_pThrottle = &g_tThrottle;
 }
 
 
@@ -10045,8 +10022,6 @@ bool CSphHitBuilder::CreateIndexFiles ( const char * sDocName, const char * sHit
 
 	m_wrDoclist.SetBufferSize ( m_dWriteBuffer.GetLength() );
 	m_wrHitlist.SetBufferSize ( bInplace ? iWriteBuffer : m_dWriteBuffer.GetLength() );
-	m_wrDoclist.SetThrottle ( m_pThrottle );
-	m_wrHitlist.SetThrottle ( m_pThrottle );
 
 	if ( !m_wrDoclist.OpenFile ( sDocName, *m_pLastError ) )
 		return false;
@@ -10542,7 +10517,6 @@ bool IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t 
 bool IndexBuildDone ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, const CSphString & sFileName, CSphString & sError )
 {
 	CSphWriter fdInfo;
-	fdInfo.SetThrottle ( tBuildHeader.m_pThrottle );
 	fdInfo.OpenFile ( sFileName, sError );
 	if ( fdInfo.IsError() )
 		return false;
@@ -10581,7 +10555,7 @@ bool CSphHitBuilder::cidxDone ( int iMemLimit, int & iMinInfixLen, int iMaxCodep
 		}
 	}
 
-	if ( !m_pDict->DictEnd ( pDictHeader, iMemLimit, *m_pLastError, m_pThrottle ) )
+	if ( !m_pDict->DictEnd ( pDictHeader, iMemLimit, *m_pLastError ) )
 		return false;
 
 	// close all data files
@@ -10877,7 +10851,7 @@ int CSphHitBuilder::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWO
 		{
 			w = (int)(pBuf - m_dWriteBuffer.Begin());
 			assert ( w<m_dWriteBuffer.GetLength() );
-			if ( !sphWriteThrottled ( fd, m_dWriteBuffer.Begin(), w, "raw_hits", *m_pLastError, m_pThrottle ) )
+			if ( !sphWriteThrottled ( fd, m_dWriteBuffer.Begin(), w, "raw_hits", *m_pLastError ) )
 				return -1;
 			n += w;
 			pBuf = m_dWriteBuffer.Begin();
@@ -10904,7 +10878,7 @@ int CSphHitBuilder::cidxWriteRawVLB ( int fd, CSphWordHit * pHit, int iHits, DWO
 	assert ( pBuf<m_dWriteBuffer.Begin() + m_dWriteBuffer.GetLength() );
 	w = (int)(pBuf - m_dWriteBuffer.Begin());
 	assert ( w<m_dWriteBuffer.GetLength() );
-	if ( !sphWriteThrottled ( fd, m_dWriteBuffer.Begin(), w, "raw_hits", *m_pLastError, m_pThrottle ) )
+	if ( !sphWriteThrottled ( fd, m_dWriteBuffer.Begin(), w, "raw_hits", *m_pLastError ) )
 		return -1;
 	n += w;
 
@@ -11168,7 +11142,7 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphFix
 					if ( ++pMva>=pMvaMax )
 					{
 						sphSort ( pMvaPool, pMva-pMvaPool );
-						if ( !sphWriteThrottled ( fdTmpMva.GetFD(), pMvaPool, (pMva-pMvaPool)*sizeof(MvaEntry_t), "temp_mva", m_sLastError, &g_tThrottle ) )
+						if ( !sphWriteThrottled ( fdTmpMva.GetFD(), pMvaPool, (pMva-pMvaPool)*sizeof(MvaEntry_t), "temp_mva", m_sLastError ) )
 							return false;
 
 						dBlockLens.Add ( pMva-pMvaPool );
@@ -11186,7 +11160,7 @@ bool CSphIndex_VLN::BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphFix
 		if ( pMva>pMvaPool )
 		{
 			sphSort ( pMvaPool, pMva-pMvaPool );
-			if ( !sphWriteThrottled ( fdTmpMva.GetFD(), pMvaPool, (pMva-pMvaPool)*sizeof(MvaEntry_t), "temp_mva", m_sLastError, &g_tThrottle ) )
+			if ( !sphWriteThrottled ( fdTmpMva.GetFD(), pMvaPool, (pMva-pMvaPool)*sizeof(MvaEntry_t), "temp_mva", m_sLastError ) )
 				return false;
 
 			dBlockLens.Add ( pMva-pMvaPool );
@@ -11389,7 +11363,7 @@ bool CSphIndex_VLN::RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSi
 
 
 		int iToRead = i==nTransfers-1 ? (int)( iBlockLeft % iRelocationSize ) : iRelocationSize;
-		size_t iRead = sphReadThrottled ( iFile, pBuffer, iToRead, &g_tThrottle );
+		size_t iRead = sphReadThrottled ( iFile, pBuffer, iToRead );
 		if ( iRead!=size_t(iToRead) )
 		{
 			m_sLastError.SetSprintf ( "block relocation: read error (%d of %d bytes read): %s", (int)iRead, iToRead, strerrorm(errno) );
@@ -11407,7 +11381,7 @@ bool CSphIndex_VLN::RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSi
 		}
 		uTotalRead += iToRead;
 
-		if ( !sphWriteThrottled ( iFile, pBuffer, iToRead, "block relocation", m_sLastError, &g_tThrottle ) )
+		if ( !sphWriteThrottled ( iFile, pBuffer, iToRead, "block relocation", m_sLastError ) )
 			return false;
 
 		*pFileSize += iToRead;
@@ -12008,7 +11982,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 						{
 							dFieldMVAs.Sort();
 							if ( !sphWriteThrottled ( fdTmpFieldMVAs.GetFD (), &dFieldMVAs[0],
-								iLength*sizeof(MvaEntry_t), "temp_field_mva", m_sLastError, &g_tThrottle ) )
+								iLength*sizeof(MvaEntry_t), "temp_field_mva", m_sLastError ) )
 								return 0;
 
 							dFieldMVAs.Resize ( 0 );
@@ -12055,7 +12029,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 						{
 							dFieldMVAs.Sort();
 							if ( !sphWriteThrottled ( fdTmpFieldMVAs.GetFD (), &dFieldMVAs[0],
-								iLength*sizeof(MvaEntry_t), "temp_field_mva", m_sLastError, &g_tThrottle ) )
+								iLength*sizeof(MvaEntry_t), "temp_field_mva", m_sLastError ) )
 									return 0;
 
 							dFieldMVAs.Resize ( 0 );
@@ -12317,7 +12291,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					int iLen = iDocinfoMax*iDocinfoStride*sizeof(DWORD);
 
 					sphSortDocinfos ( dDocinfos.Begin(), iDocinfoMax, iDocinfoStride );
-					if ( !sphWriteThrottled ( fdDocinfos.GetFD(), dDocinfos.Begin(), iLen, "raw_docinfos", m_sLastError, &g_tThrottle ) )
+					if ( !sphWriteThrottled ( fdDocinfos.GetFD(), dDocinfos.Begin(), iLen, "raw_docinfos", m_sLastError ) )
 						return 0;
 
 					pDocinfo = dDocinfos.Begin();
@@ -12419,7 +12393,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 		int iLen = iDocinfoLastBlockSize*iDocinfoStride*sizeof(DWORD);
 		sphSortDocinfos ( dDocinfos.Begin(), iDocinfoLastBlockSize, iDocinfoStride );
-		if ( !sphWriteThrottled ( fdDocinfos.GetFD(), dDocinfos.Begin(), iLen, "raw_docinfos", m_sLastError, &g_tThrottle ) )
+		if ( !sphWriteThrottled ( fdDocinfos.GetFD(), dDocinfos.Begin(), iLen, "raw_docinfos", m_sLastError ) )
 			return 0;
 
 		iDocinfoBlocks++;
@@ -12459,7 +12433,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 		dFieldMVAs.Sort();
 		if ( !sphWriteThrottled ( fdTmpFieldMVAs.GetFD (), &dFieldMVAs[0],
-			iLength*sizeof(MvaEntry_t), "temp_field_mva", m_sLastError, &g_tThrottle ) )
+			iLength*sizeof(MvaEntry_t), "temp_field_mva", m_sLastError ) )
 				return 0;
 
 		dFieldMVAs.Reset ();
@@ -12707,7 +12681,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 						iSharedOffset = iDocinfoWritePos;
 					}
 
-					if ( !sphWriteThrottled ( iDocinfoFD, dDocinfos.Begin(), iLen, "sort_docinfo", m_sLastError, &g_tThrottle ) )
+					if ( !sphWriteThrottled ( iDocinfoFD, dDocinfos.Begin(), iLen, "sort_docinfo", m_sLastError ) )
 						return 0;
 
 					iDocinfoWritePos += iLen;
@@ -12735,7 +12709,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			if ( m_bInplaceSettings )
 				sphSeek ( iDocinfoFD, iDocinfoWritePos, SEEK_SET );
 
-			if ( !sphWriteThrottled ( iDocinfoFD, dDocinfos.Begin(), iLen, "sort_docinfo", m_sLastError, &g_tThrottle ) )
+			if ( !sphWriteThrottled ( iDocinfoFD, dDocinfos.Begin(), iLen, "sort_docinfo", m_sLastError ) )
 				return 0;
 
 			if ( m_bInplaceSettings )
@@ -12746,7 +12720,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		}
 		tMinMax.FinishCollect();
 		int64_t iMinMaxRealSize = tMinMax.GetActualSize() * sizeof(DWORD);
-		if ( !sphWriteThrottled ( iDocinfoFD, dMinMaxBuffer.Begin(), iMinMaxRealSize, "minmax_docinfo", m_sLastError, &g_tThrottle ) )
+		if ( !sphWriteThrottled ( iDocinfoFD, dMinMaxBuffer.Begin(), iMinMaxRealSize, "minmax_docinfo", m_sLastError ) )
 				return 0;
 
 		// clean up readers
@@ -12928,7 +12902,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 		uKillistSize = dKillList.GetLength ();
 
 		if ( !sphWriteThrottled ( tKillList.GetFD(), dKillList.Begin(),
-			sizeof(SphDocID_t)*uKillistSize, "kill list", m_sLastError, &g_tThrottle ) )
+			sizeof(SphDocID_t)*uKillistSize, "kill list", m_sLastError ) )
 				return 0;
 	}
 
@@ -12990,7 +12964,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 	CSphAutofile fdDict ( GetIndexFileName("spi"), SPH_O_NEW, m_sLastError, false );
 	if ( fdTmpDict.GetFD()<0 || fdDict.GetFD()<0 )
 		return 0;
-	m_pDict->DictBegin ( fdTmpDict, fdDict, iBinSize, &g_tThrottle );
+	m_pDict->DictBegin ( fdTmpDict, fdDict, iBinSize );
 
 	// adjust min IDs, and fill header
 	assert ( m_uMinDocid>0 );
@@ -13123,7 +13097,6 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 
 	tBuildHeader.m_pMinRow = m_dMinRow.Begin();
 	tBuildHeader.m_uMinDocid = m_uMinDocid;
-	tBuildHeader.m_pThrottle = &g_tThrottle;
 	tBuildHeader.m_uKillListSize = uKillistSize;
 	tBuildHeader.m_iMinMaxIndex = m_iMinMaxIndex;
 	tBuildHeader.m_iTotalDups = iDupes;
@@ -13155,7 +13128,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 /////////////////////////////////////////////////////////////////////////////
 
 
-static bool CopyFile ( const char * sSrc, const char * sDst, CSphString & sErrStr, ThrottleState_t * pThrottle, volatile bool * pGlobalStop, volatile bool * pLocalStop )
+static bool CopyFile ( const char * sSrc, const char * sDst, CSphString & sErrStr, volatile bool * pLocalStop )
 {
 	assert ( sSrc );
 	assert ( sDst );
@@ -13178,19 +13151,19 @@ static bool CopyFile ( const char * sSrc, const char * sDst, CSphString & sErrSt
 
 		while ( iFileSize > 0 )
 		{
-			if ( *pGlobalStop || *pLocalStop )
+			if ( g_bShutdown || *pLocalStop )
 				return false;
 
 			DWORD iSize = (DWORD) Min ( iFileSize, (SphOffset_t)iBufSize );
 
-			size_t iRead = sphReadThrottled ( tSrcFile.GetFD(), dData.Begin(), iSize, pThrottle );
+			size_t iRead = sphReadThrottled ( tSrcFile.GetFD(), dData.Begin(), iSize );
 			if ( iRead!=iSize )
 			{
 				sErrStr.SetSprintf ( "read error in %s; " INT64_FMT " of %d bytes read", sSrc, (int64_t)iRead, iSize );
 				break;
 			}
 
-			if ( !sphWriteThrottled ( tDstFile.GetFD(), dData.Begin(), iSize, "CopyFile", sErrStr, pThrottle ) )
+			if ( !sphWriteThrottled ( tDstFile.GetFD(), dData.Begin(), iSize, "CopyFile", sErrStr ) )
 				break;
 
 			iFileSize -= iSize;
@@ -13328,18 +13301,17 @@ public:
 	}
 
 	bool Setup ( const CSphString & sFilename, SphOffset_t iMaxPos, ESphHitless eHitless,
-		CSphString & sError, bool bWordDict, ThrottleState_t * pThrottle, bool bHasSkips )
+		CSphString & sError, bool bWordDict, bool bHasSkips )
 	{
 		if ( !m_tMyReader.Open ( sFilename, sError ) )
 			return false;
-		Setup ( &m_tMyReader, iMaxPos, eHitless, bWordDict, pThrottle, bHasSkips );
+		Setup ( &m_tMyReader, iMaxPos, eHitless, bWordDict, bHasSkips );
 		return true;
 	}
 
-	void Setup ( CSphReader * pReader, SphOffset_t iMaxPos, ESphHitless eHitless, bool bWordDict, ThrottleState_t * pThrottle, bool bHasSkips )
+	void Setup ( CSphReader * pReader, SphOffset_t iMaxPos, ESphHitless eHitless, bool bWordDict, bool bHasSkips )
 	{
 		m_pReader = pReader;
-		m_pReader->SetThrottle ( pThrottle );
 		m_pReader->SeekTo ( 1, READ_NO_SIZE_HINT );
 
 		m_iMaxPos = iMaxPos;
@@ -13546,14 +13518,14 @@ public:
 	template < typename QWORD >
 	inline void TransferData ( QWORD & tQword, SphWordID_t iWordID, const BYTE * sWord,
 							const CSphIndex_VLN * pSourceIndex, const ISphFilter * pFilter,
-							const CSphVector<SphDocID_t> & dKillList, volatile bool * pGlobalStop, volatile bool * pLocalStop )
+							const CSphVector<SphDocID_t> & dKillList, volatile bool * pLocalStop )
 	{
 		CSphAggregateHit tHit;
 		tHit.m_uWordID = iWordID;
 		tHit.m_sKeyword = sWord;
 		tHit.m_dFieldMask.UnsetAll();
 
-		while ( CSphMerger::NextDocument ( tQword, pSourceIndex, pFilter, dKillList ) && !*pGlobalStop && !*pLocalStop )
+		while ( CSphMerger::NextDocument ( tQword, pSourceIndex, pFilter, dKillList ) && !g_bShutdown && !*pLocalStop )
 		{
 			if ( tQword.m_bHasHitlist )
 				TransferHits ( tQword, tHit );
@@ -13582,16 +13554,14 @@ public:
 
 	template < typename QWORD >
 	static inline void ConfigureQword ( QWORD & tQword, const CSphAutofile & tHits, const CSphAutofile & tDocs,
-		int iDynamic, int iInline, const CSphRowitem * pMin, ThrottleState_t * pThrottle )
+		int iDynamic, int iInline, const CSphRowitem * pMin )
 	{
 		tQword.m_iInlineAttrs = iInline;
 		tQword.m_pInlineFixup = iInline ? pMin : NULL;
 
-		tQword.m_rdHitlist.SetThrottle ( pThrottle );
 		tQword.m_rdHitlist.SetFile ( tHits );
 		tQword.m_rdHitlist.GetByte();
 
-		tQword.m_rdDoclist.SetThrottle ( pThrottle );
 		tQword.m_rdDoclist.SetFile ( tDocs );
 		tQword.m_rdDoclist.GetByte();
 
@@ -13607,7 +13577,7 @@ template < typename QWORDDST, typename QWORDSRC >
 bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex,
 								const ISphFilter * pFilter, const CSphVector<SphDocID_t> & dKillList, SphDocID_t uMinID,
 								CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat,
-								CSphIndexProgress & tProgress, ThrottleState_t * pThrottle, volatile bool * pGlobalStop, volatile bool * pLocalStop )
+								CSphIndexProgress & tProgress, volatile bool * pLocalStop )
 {
 	CSphAutofile tDummy;
 	pHitBuilder->CreateIndexFiles ( pDstIndex->GetIndexFileName("tmp.spd").cstr(),
@@ -13621,10 +13591,10 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 	bool bWordDict = pHitBuilder->IsWordDict();
 
 	if ( !tDstReader.Setup ( pDstIndex->GetIndexFileName("spi"), pDstIndex->m_tWordlist.m_iWordsEnd,
-		pDstIndex->m_tSettings.m_eHitless, sError, bWordDict, pThrottle, pDstIndex->m_tWordlist.m_bHaveSkips ) )
+		pDstIndex->m_tSettings.m_eHitless, sError, bWordDict, pDstIndex->m_tWordlist.m_bHaveSkips ) )
 			return false;
 	if ( !tSrcReader.Setup ( pSrcIndex->GetIndexFileName("spi"), pSrcIndex->m_tWordlist.m_iWordsEnd,
-		pSrcIndex->m_tSettings.m_eHitless, sError, bWordDict, pThrottle, pSrcIndex->m_tWordlist.m_bHaveSkips ) )
+		pSrcIndex->m_tSettings.m_eHitless, sError, bWordDict, pSrcIndex->m_tWordlist.m_bHaveSkips ) )
 			return false;
 
 	const SphDocID_t uDstMinID = pDstIndex->m_uMinDocid;
@@ -13648,7 +13618,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 	tDstDocs.Open ( pDstIndex->GetIndexFileName("spd"), SPH_O_READ, sError );
 	tDstHits.Open ( pDstIndex->GetIndexFileName("spp"), SPH_O_READ, sError );
 
-	if ( !sError.IsEmpty() || *pGlobalStop || *pLocalStop )
+	if ( !sError.IsEmpty() || g_bShutdown || *pLocalStop )
 		return false;
 
 	int iDstInlineSize = pDstIndex->m_tSettings.m_eDocinfo==SPH_DOCINFO_INLINE ? pDstIndex->m_tSchema.GetRowSize() : 0;
@@ -13658,10 +13628,10 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 
 	CSphMerger::ConfigureQword<QWORDDST> ( tDstQword, tDstHits, tDstDocs,
 		pDstIndex->m_tSchema.GetDynamicSize(), iDstInlineSize,
-		pDstIndex->m_dMinRow.Begin(), pThrottle );
+		pDstIndex->m_dMinRow.Begin() );
 	CSphMerger::ConfigureQword<QWORDSRC> ( tSrcQword, tSrcHits, tSrcDocs,
 		pSrcIndex->m_tSchema.GetDynamicSize(), iSrcInlineSize,
-		pSrcIndex->m_dMinRow.Begin(), pThrottle );
+		pSrcIndex->m_dMinRow.Begin() );
 
 	/// merge
 
@@ -13682,7 +13652,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 			iWords = 0;
 		}
 
-		if ( *pGlobalStop || *pLocalStop )
+		if ( g_bShutdown || *pLocalStop )
 			return false;
 
 		const int iCmp = tDstReader.CmpWord ( tSrcReader );
@@ -13691,14 +13661,14 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 		{
 			// transfer documents and hits from destination
 			CSphMerger::PrepareQword<QWORDDST> ( tDstQword, tDstReader, uDstMinID, bWordDict );
-			tMerger.TransferData<QWORDDST> ( tDstQword, tDstReader.m_uWordID, tDstReader.GetWord(), pDstIndex, pFilter, dKillList, pGlobalStop, pLocalStop );
+			tMerger.TransferData<QWORDDST> ( tDstQword, tDstReader.m_uWordID, tDstReader.GetWord(), pDstIndex, pFilter, dKillList, pLocalStop );
 			bDstWord = tDstReader.Read();
 
 		} else if ( !bDstWord || ( bSrcWord && iCmp>0 ) )
 		{
 			// transfer documents and hits from source
 			CSphMerger::PrepareQword<QWORDSRC> ( tSrcQword, tSrcReader, uSrcMinID, bWordDict );
-			tMerger.TransferData<QWORDSRC> ( tSrcQword, tSrcReader.m_uWordID, tSrcReader.GetWord(), pSrcIndex, NULL, CSphVector<SphDocID_t>(), pGlobalStop, pLocalStop );
+			tMerger.TransferData<QWORDSRC> ( tSrcQword, tSrcReader.m_uWordID, tSrcReader.GetWord(), pSrcIndex, NULL, CSphVector<SphDocID_t>(), pLocalStop );
 			bSrcWord = tSrcReader.Read();
 
 		} else // merge documents and hits inside the word
@@ -13728,7 +13698,7 @@ bool CSphIndex_VLN::MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphInde
 
 			while ( bDstDocs || bSrcDocs )
 			{
-				if ( *pGlobalStop || *pLocalStop )
+				if ( g_bShutdown || *pLocalStop )
 					return false;
 
 				if ( !bSrcDocs || ( bDstDocs && tDstQword.m_tDoc.m_uDocID < tSrcQword.m_tDoc.m_uDocID ) )
@@ -13858,16 +13828,15 @@ bool CSphIndex_VLN::Merge ( CSphIndex * pSource, const CSphVector<CSphFilterSett
 	dKillList[0] = 0;
 	dKillList.Last() = DOCID_MAX;
 
-	bool bGlobalStop = false;
 	bool bLocalStop = false;
 	return CSphIndex_VLN::DoMerge ( this, (const CSphIndex_VLN *)pSource, bMergeKillLists, pFilter.Ptr(),
-									dKillList, m_sLastError, m_tProgress, &g_tThrottle, &bGlobalStop, &bLocalStop, false );
+									dKillList, m_sLastError, m_tProgress, &bLocalStop, false );
 }
 
 bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex,
 							bool bMergeKillLists, ISphFilter * pFilter, const CSphVector<SphDocID_t> & dKillList
-							, CSphString & sError, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle,
-							volatile bool * pGlobalStop, volatile bool * pLocalStop, bool bSrcSettings )
+							, CSphString & sError, CSphIndexProgress & tProgress,
+							volatile bool * pLocalStop, bool bSrcSettings )
 {
 	assert ( pDstIndex && pSrcIndex );
 
@@ -13906,8 +13875,6 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	/////////////////////////////////////////
 
 	CSphWriter tSPMWriter, tSPSWriter;
-	tSPMWriter.SetThrottle ( pThrottle );
-	tSPSWriter.SetThrottle ( pThrottle );
 	if ( !tSPMWriter.OpenFile ( pDstIndex->GetIndexFileName("tmp.spm"), sError )
 		|| !tSPSWriter.OpenFile ( pDstIndex->GetIndexFileName("tmp.sps"), sError ) )
 	{
@@ -13946,7 +13913,6 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		CSphFixedVector<CSphRowitem> dRow ( iStride );
 
 		CSphWriter wrRows;
-		wrRows.SetThrottle ( pThrottle );
 		if ( !wrRows.OpenFile ( pDstIndex->GetIndexFileName("tmp.spa"), sError ) )
 			return false;
 
@@ -13975,7 +13941,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		CSphMatch tMatch;
 		while ( iSrcCount < pSrcIndex->m_iDocinfo || iDstCount < pDstIndex->m_iDocinfo )
 		{
-			if ( *pGlobalStop || *pLocalStop )
+			if ( g_bShutdown || *pLocalStop )
 				return false;
 
 			SphDocID_t iDstDocID, iSrcDocID;
@@ -14089,7 +14055,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		CSphString sSrc = !pDstIndex->m_bIsEmpty ? pDstIndex->GetIndexFileName("spa") : pSrcIndex->GetIndexFileName("spa");
 		CSphString sDst = pDstIndex->GetIndexFileName("tmp.spa");
 
-		if ( !CopyFile ( sSrc.cstr(), sDst.cstr(), sError, pThrottle, pGlobalStop, pLocalStop ) )
+		if ( !CopyFile ( sSrc.cstr(), sDst.cstr(), sError, pLocalStop ) )
 			return false;
 
 	} else
@@ -14120,7 +14086,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	CSphAutofile tTmpDict ( pDstIndex->GetIndexFileName("tmp8.spi"), SPH_O_NEW, sError, true );
 	CSphAutofile tDict ( pDstIndex->GetIndexFileName("tmp.spi"), SPH_O_NEW, sError );
 
-	if ( !sError.IsEmpty() || tTmpDict.GetFD()<0 || tDict.GetFD()<0 || *pGlobalStop || *pLocalStop )
+	if ( !sError.IsEmpty() || tTmpDict.GetFD()<0 || tDict.GetFD()<0 || g_bShutdown || *pLocalStop )
 		return false;
 
 	CSphScopedPtr<CSphDict> pDict ( pSettings->m_pDict->Clone() );
@@ -14128,7 +14094,6 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	int iHitBufferSize = 8 * 1024 * 1024;
 	CSphVector<SphWordID_t> dDummy;
 	CSphHitBuilder tHitBuilder ( pSettings->m_tSettings, dDummy, true, iHitBufferSize, pDict.Ptr(), &sError );
-	tHitBuilder.SetThrottle ( pThrottle );
 
 	CSphFixedVector<CSphRowitem> dMinRow (0);
 	dMinRow.CopyFrom ( pDstIndex->m_dMinRow );
@@ -14138,7 +14103,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	tBuildHeader.m_pMinRow = dMinRow.Begin();
 
 	// FIXME? is this magic dict block constant any good?..
-	pDict->DictBegin ( tTmpDict, tDict, iHitBufferSize, pThrottle );
+	pDict->DictBegin ( tTmpDict, tDict, iHitBufferSize );
 
 	// merge dictionaries, doclists and hitlists
 	if ( pDict->GetSettings().m_bWordDict )
@@ -14148,7 +14113,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		{
 			if ( !CSphIndex_VLN::MergeWords < QwordDst, QwordSrc > ( pDstIndex, pSrcIndex, pFilter, dPhantomKiller,
 																	uMinDocid, &tHitBuilder, sError, tBuildHeader,
-																	tProgress, pThrottle, pGlobalStop, pLocalStop ) )
+																	tProgress, pLocalStop ) )
 				return false;
 		} ) );
 	} else
@@ -14158,7 +14123,7 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 		{
 			if ( !CSphIndex_VLN::MergeWords < QwordDst, QwordSrc > ( pDstIndex, pSrcIndex, pFilter, dPhantomKiller
 																	, uMinDocid, &tHitBuilder, sError, tBuildHeader,
-																	tProgress,	pThrottle, pGlobalStop, pLocalStop ) )
+																	tProgress,	pLocalStop ) )
 				return false;
 		} ) );
 	}
@@ -14182,19 +14147,19 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 
 		tBuildHeader.m_uKillListSize = dMergedKillList.GetLength ();
 
-		if ( *pGlobalStop || *pLocalStop )
+		if ( g_bShutdown || *pLocalStop )
 			return false;
 
 		if ( dMergedKillList.GetLength() )
 		{
-			if ( !sphWriteThrottled ( tKillList.GetFD(), &dMergedKillList[0], dMergedKillList.GetLength()*sizeof(SphDocID_t), "kill_list", sError, pThrottle ) )
+			if ( !sphWriteThrottled ( tKillList.GetFD(), &dMergedKillList[0], dMergedKillList.GetLength()*sizeof(SphDocID_t), "kill_list", sError ) )
 				return false;
 		}
 	}
 
 	tKillList.Close ();
 
-	if ( *pGlobalStop || *pLocalStop )
+	if ( g_bShutdown || *pLocalStop )
 		return false;
 
 	// finalize
@@ -14210,8 +14175,6 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	if ( !tHitBuilder.cidxDone ( iHitBufferSize, iMinInfixLen,
 								pSettings->m_pTokenizer->GetMaxCodepointLength(), &tBuildHeader ) )
 		return false;
-
-	tBuildHeader.m_pThrottle = pThrottle;
 
 	CSphString sHeaderName = pDstIndex->GetIndexFileName ( "tmp.sph" );
 	WriteHeader_t tWriteHeader;
@@ -14232,13 +14195,12 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 
 
 bool sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, const CSphVector<SphDocID_t> & dKillList,
-				CSphString & sError, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle,
-				volatile bool * pGlobalStop, volatile bool * pLocalStop, bool bSrcSettings )
+				CSphString & sError, CSphIndexProgress & tProgress, volatile bool * pLocalStop, bool bSrcSettings )
 {
-	const CSphIndex_VLN * pDstIndex = (const CSphIndex_VLN *)pDst;
-	const CSphIndex_VLN * pSrcIndex = (const CSphIndex_VLN *)pSrc;
+	auto pDstIndex = ( const CSphIndex_VLN * ) pDst;
+	auto pSrcIndex = ( const CSphIndex_VLN * ) pSrc;
 
-	return CSphIndex_VLN::DoMerge ( pDstIndex, pSrcIndex, false, NULL, dKillList, sError, tProgress, pThrottle, pGlobalStop, pLocalStop, bSrcSettings );
+	return CSphIndex_VLN::DoMerge ( pDstIndex, pSrcIndex, false, nullptr, dKillList, sError, tProgress, pLocalStop, bSrcSettings );
 }
 
 
@@ -14525,14 +14487,13 @@ bool CSphIndex_VLN::ReplaceKillList ( const SphDocID_t * pKillist, int iCount )
 	if ( tKillList.GetFD()<0 )
 		return false;
 
-	if ( !sphWriteThrottled ( tKillList.GetFD(), pKillist, sizeof(SphDocID_t)*iCount, "kill list", m_sLastError, &g_tThrottle ) )
+	if ( !sphWriteThrottled ( tKillList.GetFD(), pKillist, sizeof(SphDocID_t)*iCount, "kill list", m_sLastError ) )
 		return false;
 
 	tKillList.Close ();
 
 	BuildHeader_t tBuildHeader ( m_tStats );
 	(DictHeader_t &)tBuildHeader = (DictHeader_t)m_tWordlist;
-	tBuildHeader.m_pThrottle = &g_tThrottle;
 	tBuildHeader.m_uMinDocid = m_uMinDocid;
 	tBuildHeader.m_uKillListSize = iCount;
 	tBuildHeader.m_iMinMaxIndex = m_iMinMaxIndex;
@@ -20206,10 +20167,10 @@ enum
 // BASE DICTIONARY INTERFACE
 /////////////////////////////////////////////////////////////////////////////
 
-void CSphDict::DictBegin ( CSphAutofile &, CSphAutofile &, int, ThrottleState_t * )		{}
+void CSphDict::DictBegin ( CSphAutofile &, CSphAutofile &, int )						{}
 void CSphDict::DictEntry ( const CSphDictEntry & )										{}
 void CSphDict::DictEndEntries ( SphOffset_t )											{}
-bool CSphDict::DictEnd ( DictHeader_t *, int, CSphString &, ThrottleState_t * )			{ return true; }
+bool CSphDict::DictEnd ( DictHeader_t *, int, CSphString & )							{ return true; }
 bool CSphDict::DictIsError () const														{ return true; }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -20289,10 +20250,10 @@ struct CSphDiskDictTraits : CSphTemplateDictTraits
 						{}
 						virtual				~CSphDiskDictTraits () {}
 
-	virtual void DictBegin ( CSphAutofile & tTempDict, CSphAutofile & tDict, int iDictLimit, ThrottleState_t * pThrottle );
+	virtual void DictBegin ( CSphAutofile & tTempDict, CSphAutofile & tDict, int iDictLimit );
 	virtual void DictEntry ( const CSphDictEntry & tEntry );
 	virtual void DictEndEntries ( SphOffset_t iDoclistOffset );
-	virtual bool DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphString & sError, ThrottleState_t * );
+	virtual bool DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphString & sError );
 	virtual bool DictIsError () const { return m_wrDict.IsError(); }
 
 protected:
@@ -21809,15 +21770,14 @@ bool CSphTemplateDictTraits::StemById ( BYTE * pWord, int iStemmer ) const
 	return strcmp ( (char *)pWord, szBuf )!=0;
 }
 
-void CSphDiskDictTraits::DictBegin ( CSphAutofile & , CSphAutofile & tDict, int, ThrottleState_t * pThrottle )
+void CSphDiskDictTraits::DictBegin ( CSphAutofile & , CSphAutofile & tDict, int )
 {
 	m_wrDict.CloseFile ();
 	m_wrDict.SetFile ( tDict, NULL, m_sWriterError );
-	m_wrDict.SetThrottle ( pThrottle );
 	m_wrDict.PutByte ( 1 );
 }
 
-bool CSphDiskDictTraits::DictEnd ( DictHeader_t * pHeader, int, CSphString & sError, ThrottleState_t * )
+bool CSphDiskDictTraits::DictEnd ( DictHeader_t * pHeader, int, CSphString & sError )
 {
 	// flush wordlist checkpoints
 	pHeader->m_iDictCheckpointsOffset = m_wrDict.GetPos();
@@ -22577,10 +22537,10 @@ public:
 	virtual int				HitblockGetMemUse () { return m_iMemUse; }
 	virtual void			HitblockReset ();
 
-	virtual void			DictBegin ( CSphAutofile & tTempDict, CSphAutofile & tDict, int iDictLimit, ThrottleState_t * pThrottle );
+	virtual void			DictBegin ( CSphAutofile & tTempDict, CSphAutofile & tDict, int iDictLimit );
 	virtual void			DictEntry ( const CSphDictEntry & tEntry );
 	virtual void			DictEndEntries ( SphOffset_t ) {}
-	virtual bool			DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphString & sError, ThrottleState_t * pThrottle );
+	virtual bool			DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphString & sError );
 
 	virtual SphWordID_t		GetWordID ( BYTE * pWord );
 	virtual SphWordID_t		GetWordIDWithMarkers ( BYTE * pWord );
@@ -22879,23 +22839,21 @@ static void DictReadEntry ( CSphBin * pBin, DictKeywordTagged_t & tEntry, BYTE *
 		tEntry.m_iSkiplistPos = 0;
 }
 
-void CSphDictKeywords::DictBegin ( CSphAutofile & tTempDict, CSphAutofile & tDict, int iDictLimit, ThrottleState_t * pThrottle )
+void CSphDictKeywords::DictBegin ( CSphAutofile & tTempDict, CSphAutofile & tDict, int iDictLimit )
 {
 	m_iTmpFD = tTempDict.GetFD();
 	m_wrTmpDict.CloseFile ();
 	m_wrTmpDict.SetFile ( tTempDict, NULL, m_sWriterError );
-	m_wrTmpDict.SetThrottle ( pThrottle );
 
 	m_wrDict.CloseFile ();
 	m_wrDict.SetFile ( tDict, NULL, m_sWriterError );
-	m_wrDict.SetThrottle ( pThrottle );
 	m_wrDict.PutByte ( 1 );
 
 	m_iDictLimit = Max ( iDictLimit, KEYWORD_CHUNK + DICT_CHUNK*(int)sizeof(DictKeyword_t) ); // can't use less than 1 chunk
 }
 
 
-bool CSphDictKeywords::DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphString & sError, ThrottleState_t * pThrottle )
+bool CSphDictKeywords::DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphString & sError )
 {
 	DictFlush ();
 	m_wrTmpDict.CloseFile (); // tricky: file is not owned, so it won't get closed, and iTmpFD won't get invalidated
@@ -22941,7 +22899,6 @@ bool CSphDictKeywords::DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphStri
 		dBins[i]->m_iFileLeft = m_dDictBlocks[i].m_iLen;
 		dBins[i]->m_iFilePos = m_dDictBlocks[i].m_iPos;
 		dBins[i]->Init ( m_iTmpFD, &iSharedOffset, iBinSize );
-		dBins[i]->SetThrottle ( pThrottle );
 	}
 
 	// keywords storage
@@ -31896,7 +31853,7 @@ void sphDictBuildInfixes ( const char * sPath )
 	{
 		CSphDictReader tDictReader;
 		if ( !tDictReader.Setup ( sFilename.SetSprintf ( "%s.spi", sPath ),
-			tDictHeader.m_iDictCheckpointsOffset, tIndexSettings.m_eHitless, sError, true, &g_tThrottle, uVersion>=31 ) )
+			tDictHeader.m_iDictCheckpointsOffset, tIndexSettings.m_eHitless, sError, true, uVersion>=31 ) )
 				sphDie ( "infix upgrade: %s", sError.cstr() );
 		while ( tDictReader.Read() )
 		{
@@ -32140,7 +32097,7 @@ void sphDictBuildSkiplists ( const char * sPath )
 	}
 
 	CSphDictReader * pReader = new CSphDictReader();
-	pReader->Setup ( &rdDict, iWordsEnd, tIndexSettings.m_eHitless, bWordDict, &g_tThrottle, uVersion>=31 );
+	pReader->Setup ( &rdDict, iWordsEnd, tIndexSettings.m_eHitless, bWordDict, uVersion>=31 );
 
 	DWORD uEntry = 0;
 	while ( pReader->Read() )
@@ -32274,7 +32231,7 @@ void sphDictBuildSkiplists ( const char * sPath )
 
 	// handy entry iterator
 	// we will use this one to decode entries, and rdDict for other raw access
-	pReader->Setup ( &rdDict, iWordsEnd, tIndexSettings.m_eHitless, bWordDict, &g_tThrottle, uVersion>=31 );
+	pReader->Setup ( &rdDict, iWordsEnd, tIndexSettings.m_eHitless, bWordDict, uVersion>=31 );
 
 	// we have to adjust some of the entries
 	// thus we also have to recompute the offset in the checkpoints too
@@ -33080,6 +33037,13 @@ void IndexFiles_c::InitFrom ( const CSphIndex* pIndex )
 	m_sFilename = pIndex->GetFilename ();
 	ReadVersion ();
 }
+
+volatile bool& sphGetShutdown ()
+{
+	static bool bShutdown = false;
+	return bShutdown;
+}
+
 
 
 

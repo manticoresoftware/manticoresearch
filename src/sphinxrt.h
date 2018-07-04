@@ -66,7 +66,7 @@ public:
 	/// truncate index (that is, kill all data)
 	virtual bool Truncate ( CSphString & sError ) = 0;
 
-	virtual void Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pThrottle ) = 0;
+	virtual void Optimize ( ) = 0;
 
 	/// check settings vs current and return back tokenizer and dictionary in case of difference
 	virtual bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError ) const = 0;

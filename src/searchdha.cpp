@@ -47,6 +47,8 @@ DWORD			g_uHAPeriodKarma	= 60;		// by default use the last 1 minute statistic to
 
 int				g_iPersistentPoolSize	= 0;
 
+static auto& g_bShutdown = sphGetShutdown();
+
 CSphString HostDesc_t::GetMyUrl() const
 {
 	CSphString sName;

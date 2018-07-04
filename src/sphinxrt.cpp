@@ -69,6 +69,7 @@ static bool				g_bRTChangesAllowed		= false;
 
 // optimize mode for disk chunks merge
 static bool g_bProgressiveMerge = true;
+static auto& g_bShutdown = sphGetShutdown();
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -1184,8 +1185,8 @@ public:
 	virtual void				ForceDiskChunk ();
 	virtual bool				AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError );
 	virtual bool				Truncate ( CSphString & sError );
-	virtual void				Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pThrottle );
-	virtual void				ProgressiveMerge ( volatile bool * pForceTerminate, ThrottleState_t * pThrottle );
+	virtual void				Optimize ();
+	virtual void				ProgressiveMerge ();
 	CSphIndex *					GetDiskChunk ( int iChunk ) { return m_dDiskChunks.GetLength()>iChunk ? m_dDiskChunks[iChunk] : NULL; }
 	virtual ISphTokenizer *		CloneIndexingTokenizer() const { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
 
@@ -8430,15 +8431,14 @@ bool RtIndex_t::Truncate ( CSphString & )
 // OPTIMIZE
 //////////////////////////////////////////////////////////////////////////
 
-void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pThrottle )
+void RtIndex_t::Optimize ( )
 {
 	if ( g_bProgressiveMerge )
 	{
-		ProgressiveMerge ( pForceTerminate, pThrottle );
+		ProgressiveMerge ( );
 		return;
 	}
 
-	assert ( pForceTerminate && pThrottle );
 	int64_t tmStart = sphMicroTimer();
 
 	CSphScopedLock<CSphMutex> tOptimizing ( m_tOptimizingLock );
@@ -8448,7 +8448,7 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 	CSphSchema tSchema = m_tSchema;
 	CSphString sError;
 
-	while ( m_dDiskChunks.GetLength()>1 && !*pForceTerminate && !m_bOptimizeStop )
+	while ( m_dDiskChunks.GetLength()>1 && !g_bShutdown && !m_bOptimizeStop )
 	{
 		CSphVector<SphDocID_t> dKlist;
 
@@ -8470,7 +8470,7 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 			// add disk chunks kill-lists
 			for ( const CSphIndex * pIndex : m_dDiskChunks )
 			{
-				if ( *pForceTerminate || m_bOptimizeStop )
+				if ( g_bShutdown || m_bOptimizeStop )
 					break;
 				dKlist.Append ( pIndex->GetKillList (), pIndex->GetKillListSize ());
 			}
@@ -8487,12 +8487,12 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 		sMerged.SetSprintf ( "%s.tmp", pOldest->GetFilename() );
 
 		// check forced exit after long operation
-		if ( *pForceTerminate || m_bOptimizeStop )
+		if ( g_bShutdown || m_bOptimizeStop )
 			break;
 
 		// merge data to disk ( data is constant during that phase )
 		CSphIndexProgress tProgress;
-		bool bMerged = sphMerge ( pOldest, pOlder, dKlist, sError, tProgress, pThrottle, pForceTerminate, &m_bOptimizeStop, true );
+		bool bMerged = sphMerge ( pOldest, pOlder, dKlist, sError, tProgress, &m_bOptimizeStop, true );
 		if ( !bMerged )
 		{
 			sphWarning ( "rt optimize: index %s: failed to merge %s to %s (error %s)",
@@ -8500,7 +8500,7 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 			break;
 		}
 		// check forced exit after long operation
-		if ( *pForceTerminate || m_bOptimizeStop )
+		if ( g_bShutdown || m_bOptimizeStop )
 			break;
 
 		CSphScopedPtr<CSphIndex> pMerged ( LoadDiskChunk ( sMerged.cstr(), sError ) );
@@ -8511,7 +8511,7 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 			break;
 		}
 		// check forced exit after long operation
-		if ( *pForceTerminate || m_bOptimizeStop )
+		if ( g_bShutdown || m_bOptimizeStop )
 			break;
 
 		// lets rotate indexes
@@ -8536,7 +8536,7 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 			break;
 		}
 
-		if ( *pForceTerminate || m_bOptimizeStop ) // protection
+		if ( g_bShutdown || m_bOptimizeStop ) // protection
 			break;
 
 		Verify ( m_tWriting.Lock() );
@@ -8552,7 +8552,7 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 		SaveMeta ( m_iTID, dChunkNames );
 		Verify ( m_tWriting.Unlock() );
 
-		if ( *pForceTerminate || m_bOptimizeStop )
+		if ( g_bShutdown || m_bOptimizeStop )
 		{
 			sphWarning ( "rt optimize: index %s: forced to shutdown, remove old index files manually '%s', '%s'",
 				m_sIndexName.cstr(), sRename.cstr(), sOldest.cstr() );
@@ -8579,7 +8579,7 @@ void RtIndex_t::Optimize ( volatile bool * pForceTerminate, ThrottleState_t * pT
 	m_bOptimizing = false;
 	int64_t tmPass = sphMicroTimer() - tmStart;
 
-	if ( *pForceTerminate )
+	if ( g_bShutdown )
 	{
 		sphWarning ( "rt: index %s: optimization terminated chunk(s) %d ( of %d ) in %d.%03d sec",
 			m_sIndexName.cstr(), iChunks-m_dDiskChunks.GetLength(), iChunks, (int)(tmPass/1000000), (int)((tmPass/1000)%1000) );
@@ -8623,7 +8623,7 @@ static int GetNextSmallestChunk ( const CSphVector<CSphIndex*> & dDiskChunks, in
 }
 
 
-void RtIndex_t::ProgressiveMerge ( volatile bool * pForceTerminate, ThrottleState_t * pThrottle )
+void RtIndex_t::ProgressiveMerge ()
 {
 	// How does this work:
 	// In order to minimize IO operations we merge chunks in order from the smallest to the largest to build a progression
@@ -8635,7 +8635,6 @@ void RtIndex_t::ProgressiveMerge ( volatile bool * pForceTerminate, ThrottleStat
 	// the timeline is: [older chunks], ..., A, A+1, ..., B, ..., [younger chunks]
 	// this also needs meta v.12 (chunk list with possible skips, instead of a base chunk + length as in meta v.11)
 
-	assert ( pForceTerminate && pThrottle );
 	int64_t tmStart = sphMicroTimer();
 
 	CSphScopedLock<CSphMutex> tOptimizing ( m_tOptimizingLock );
@@ -8645,7 +8644,7 @@ void RtIndex_t::ProgressiveMerge ( volatile bool * pForceTerminate, ThrottleStat
 	CSphSchema tSchema = m_tSchema;
 	CSphString sError;
 
-	while ( m_dDiskChunks.GetLength()>1 && !*pForceTerminate && !m_bOptimizeStop )
+	while ( m_dDiskChunks.GetLength()>1 && !g_bShutdown && !m_bOptimizeStop )
 	{
 		CSphVector<SphDocID_t> dKlist;
 		CSphVector<SphDocID_t> dMergedKlist;
@@ -8691,7 +8690,7 @@ void RtIndex_t::ProgressiveMerge ( volatile bool * pForceTerminate, ThrottleStat
 			// collect all kill-lists from A to B (inclusive)
 			for ( int iChunk=iA+1; iChunk<=iB; iChunk++ )
 			{
-				if ( *pForceTerminate || m_bOptimizeStop )
+				if ( g_bShutdown || m_bOptimizeStop )
 					break;
 
 				const CSphIndex * pIndex = m_dDiskChunks[iChunk];
@@ -8722,12 +8721,12 @@ void RtIndex_t::ProgressiveMerge ( volatile bool * pForceTerminate, ThrottleStat
 		sMerged.SetSprintf ( "%s.tmp", pOldest->GetFilename() );
 
 		// check forced exit after long operation
-		if ( *pForceTerminate || m_bOptimizeStop )
+		if ( g_bShutdown || m_bOptimizeStop )
 			break;
 
 		// merge data to disk ( data is constant during that phase )
 		CSphIndexProgress tProgress;
-		bool bMerged = sphMerge ( pOldest, pOlder, dKlist, sError, tProgress, pThrottle, pForceTerminate, &m_bOptimizeStop, true );
+		bool bMerged = sphMerge ( pOldest, pOlder, dKlist, sError, tProgress, &m_bOptimizeStop, true );
 		if ( !bMerged )
 		{
 			sphWarning ( "rt optimize: index %s: failed to merge %s to %s (error %s)",
@@ -8735,7 +8734,7 @@ void RtIndex_t::ProgressiveMerge ( volatile bool * pForceTerminate, ThrottleStat
 			break;
 		}
 		// check forced exit after long operation
-		if ( *pForceTerminate || m_bOptimizeStop )
+		if ( g_bShutdown || m_bOptimizeStop )
 			break;
 
 		CSphScopedPtr<CSphIndex> pMerged ( LoadDiskChunk ( sMerged.cstr(), sError ) );
@@ -8746,7 +8745,7 @@ void RtIndex_t::ProgressiveMerge ( volatile bool * pForceTerminate, ThrottleStat
 			break;
 		}
 		// check forced exit after long operation
-		if ( *pForceTerminate || m_bOptimizeStop )
+		if ( g_bShutdown || m_bOptimizeStop )
 			break;
 
 		// lets rotate indexes
@@ -8771,7 +8770,7 @@ void RtIndex_t::ProgressiveMerge ( volatile bool * pForceTerminate, ThrottleStat
 			break;
 		}
 
-		if ( *pForceTerminate || m_bOptimizeStop ) // protection
+		if ( g_bShutdown || m_bOptimizeStop ) // protection
 			break;
 
 		// merged replaces recent chunk
@@ -8800,7 +8799,7 @@ void RtIndex_t::ProgressiveMerge ( volatile bool * pForceTerminate, ThrottleStat
 		SaveMeta ( m_iTID, dChunkNames );
 		Verify ( m_tWriting.Unlock() );
 
-		if ( *pForceTerminate || m_bOptimizeStop )
+		if ( g_bShutdown || m_bOptimizeStop )
 		{
 			sphWarning ( "rt optimize: index %s: forced to shutdown, remove old index files manually '%s', '%s'",
 				m_sIndexName.cstr(), sRename.cstr(), sOldest.cstr() );
@@ -8828,7 +8827,7 @@ void RtIndex_t::ProgressiveMerge ( volatile bool * pForceTerminate, ThrottleStat
 	m_bOptimizing = false;
 	int64_t tmPass = sphMicroTimer() - tmStart;
 
-	if ( *pForceTerminate )
+	if ( g_bShutdown )
 	{
 		sphWarning ( "rt: index %s: optimization terminated chunk(s) %d ( of %d ) in %d.%03d sec",
 			m_sIndexName.cstr(), iChunks-m_dDiskChunks.GetLength(), iChunks, (int)(tmPass/1000000), (int)((tmPass/1000)%1000) );
@@ -10621,7 +10620,7 @@ public:
 	void ForceRamFlush ( bool bPeriodic ) override;
 	void ForceDiskChunk () override;
 	bool AttachDiskIndex ( CSphIndex * , CSphString & ) override { return true; }
-	void Optimize ( volatile bool * , ThrottleState_t * ) override {}
+	void Optimize () override {}
 	bool IsSameSettings ( CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError ) const override;
 	void Reconfigure ( CSphReconfigureSetup & tSetup ) override REQUIRES ( !m_tLock );
 	CSphIndex * GetDiskChunk ( int ) override { return NULL; } // NOLINT

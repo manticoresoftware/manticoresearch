@@ -393,7 +393,7 @@ static volatile sig_atomic_t g_bGotSigusr1		= 0;	// we just received SIGUSR1; ne
 
 // pipe to watchdog to inform that daemon is going to close, so no need to restart it in case of crash
 static CSphLargeBuffer<DWORD, true>	g_bDaemonAtShutdown;
-volatile bool					g_bShutdown = false;
+static auto&					g_bShutdown = sphGetShutdown();
 volatile bool					g_bMaintenance = false;
 volatile bool					g_bPrereading = false;
 static CSphLargeBuffer<DWORD, true>	g_bHaveTTY;
@@ -424,7 +424,6 @@ static BinlogFlushInfo_t					g_tBinlogAutoflush;
 static ServiceThread_t						g_tOptimizeThread;
 static CSphMutex							g_tOptimizeQueueMutex;
 static StrVec_t								g_dOptimizeQueue;
-static ThrottleState_t						g_tRtThrottle;
 
 static CSphMutex							g_tPersLock;
 static CSphAtomic							g_iPersistentInUse;
@@ -16210,7 +16209,7 @@ void HandleMysqlOptimize ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	{
 		// get an exclusive lock
 		if ( pIndex->m_pIndex )
-			static_cast<ISphRtIndex *>( pIndex->m_pIndex )->Optimize ( &g_bShutdown, &g_tRtThrottle );
+			static_cast<ISphRtIndex *>( pIndex->m_pIndex )->Optimize ( );
 		return;
 	}
 
@@ -18743,7 +18742,7 @@ void OptimizeThreadFunc ( void * )
 
 		// FIXME: MVA update would wait w-lock here for a very long time
 		assert ( dReadLock->m_eType==eITYPE::RT );
-		static_cast<ISphRtIndex *>( dReadLock->m_pIndex )->Optimize ( &g_bShutdown, &g_tRtThrottle );
+		static_cast<ISphRtIndex *>( dReadLock->m_pIndex )->Optimize ();
 	}
 }
 
@@ -22840,8 +22839,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_iMaxFilterValues = hSearchd.GetInt ( "max_filter_values", g_iMaxFilterValues );
 	g_iMaxBatchQueries = hSearchd.GetInt ( "max_batch_queries", g_iMaxBatchQueries );
 	g_iDistThreads = hSearchd.GetInt ( "dist_threads", g_iDistThreads );
-	g_tRtThrottle.m_iMaxIOps = hSearchd.GetInt ( "rt_merge_iops", 0 );
-	g_tRtThrottle.m_iMaxIOSize = hSearchd.GetSize ( "rt_merge_maxiosize", 0 );
+	sphSetThrottling ( hSearchd.GetInt ( "rt_merge_iops", 0 ), hSearchd.GetSize ( "rt_merge_maxiosize", 0 ) );
 	g_iPingInterval = hSearchd.GetInt ( "ha_ping_interval", 1000 );
 	g_uHAPeriodKarma = hSearchd.GetInt ( "ha_period_karma", 60 );
 	g_iQueryLogMinMsec = hSearchd.GetInt ( "query_log_min_msec", g_iQueryLogMinMsec );

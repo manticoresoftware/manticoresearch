@@ -251,7 +251,6 @@ public:
 
 	bool			IsError () const	{ return m_bError; }
 	SphOffset_t		GetPos () const		{ return m_iPos; }
-	void			SetThrottle ( ThrottleState_t * pState ) { m_pThrottle = pState; }
 
 protected:
 	CSphString		m_sName;
@@ -268,7 +267,6 @@ protected:
 
 	bool			m_bError;
 	CSphString *	m_pError;
-	ThrottleState_t * m_pThrottle;
 
 	virtual void	Flush ();
 };
@@ -345,7 +343,6 @@ public:
 	SphWordID_t	UnzipWordid ()	{ return UnzipOffset(); }
 
 	const CSphReader &	operator = ( const CSphReader & rhs );
-	void		SetThrottle ( ThrottleState_t * pState ) { m_pThrottle = pState; }
 
 protected:
 
@@ -364,7 +361,6 @@ protected:
 	bool		m_bError;
 	CSphString	m_sError;
 	CSphString	m_sFilename;
-	ThrottleState_t * m_pThrottle;
 
 protected:
 	virtual void		UpdateCache ();
@@ -1745,19 +1741,6 @@ struct SphStringSorterRemap_t
 	CSphAttrLocator m_tDst;
 };
 
-struct ThrottleState_t
-{
-	int64_t	m_tmLastIOTime;
-	int		m_iMaxIOps;
-	int		m_iMaxIOSize;
-
-	ThrottleState_t ()
-		: m_tmLastIOTime ( 0 )
-		, m_iMaxIOps ( 0 )
-		, m_iMaxIOSize ( 0 )
-	{}
-};
-
 const BYTE *	SkipQuoted ( const BYTE * p );
 
 bool			sphSortGetStringRemap ( const ISphSchema & tSorterSchema, const ISphSchema & tIndexSchema, CSphVector<SphStringSorterRemap_t> & dAttrs );
@@ -1768,7 +1751,7 @@ void			sphColumnToLowercase ( char * sVal );
 bool			sphCheckQueryHeight ( const struct XQNode_t * pRoot, CSphString & sError );
 void			sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & tSettings, bool bHasBooleanOptimization, const ISphKeywordsStat * pKeywords );
 void			TransformAotFilter ( XQNode_t * pNode, const CSphWordforms * pWordforms, const CSphIndexSettings& tSettings );
-bool			sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, const CSphVector<SphDocID_t> & dKillList, CSphString & sError, CSphIndexProgress & tProgress, ThrottleState_t * pThrottle, volatile bool * pGlobalStop, volatile bool * pLocalStop, bool bSrcSettings );
+bool			sphMerge ( const CSphIndex * pDst, const CSphIndex * pSrc, const CSphVector<SphDocID_t> & dKillList, CSphString & sError, CSphIndexProgress & tProgress, volatile bool * pLocalStop, bool bSrcSettings );
 CSphString		sphReconstructNode ( const XQNode_t * pNode, const CSphSchema * pSchema );
 int				ExpandKeywords ( int iIndexOpt, QueryOption_e eQueryOpt, const CSphIndexSettings & tSettings );
 bool			ParseMorphFields ( const CSphString & sMorphology, const CSphString & sMorphFields, const CSphVector<CSphColumnInfo> & dFields, CSphBitvec & tMorphFields, CSphString & sError );

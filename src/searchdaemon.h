@@ -198,7 +198,6 @@ extern int				g_iReadTimeout;		// defined in searchd.cpp
 extern int				g_iMaxPacketSize;	// in bytes; for both query packets from clients and response packets from agents
 
 extern int				g_iDistThreads;
-extern volatile bool	g_bShutdown;
 extern ESphLogLevel		g_eLogLevel;
 
 /////////////////////////////////////////////////////////////////////////////

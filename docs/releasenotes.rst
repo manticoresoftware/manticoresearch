@@ -1,6 +1,23 @@
 Release notes
 =============
 
+Version 2.7.1 GA, 4 July 2018
+-----------------------------
+
+Improvements
+~~~~~~~~~~~~
+* improved wildcards performance on matching multiple documents at PQ
+* support for fullscan queries at PQ
+* support for MVA attributes at PQ
+* regexp and RLP support for percolate indexes
+
+Bugfixes
+~~~~~~~~
+* `688562 <https://github.com/manticoresoftware/manticoresearch/commit/68856261b41f6950666f9e5122726839fb3c71d0>`__ fixed loose of query string
+* `0f1770 <https://github.com/manticoresoftware/manticoresearch/commit/0f1770943cba53bfd2e0edfdf0b1495ff0dd0e89>`__ fixed empty info at SHOW THREADS statement
+* `53faa3 <https://github.com/manticoresoftware/manticoresearch/commit/53faa36a916bb87868e83aa79c1a1f972fb20ca0>`__ fixed crash on matching with NOTNEAR operator
+* `26029a <https://github.com/manticoresoftware/manticoresearch/commit/26029a7cd77b518fb3a27588d7db6c8bffc73b0f>`__ fixed error message on bad filter to PQ delete
+
 Version 2.7.0 GA, 11 June 2018
 ------------------------------
 

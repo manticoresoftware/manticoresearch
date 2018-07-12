@@ -16170,21 +16170,42 @@ void HandleMysqlFlush ( SqlRowBuffer_c & tOut, const SqlStmt_t & )
 	tOut.Eof();
 }
 
+// fwd
+static bool PrepareReconfigure ( const CSphString & sIndex, CSphReconfigureSettings & tSettings, CSphString & sError );
 
 void HandleMysqlTruncate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 {
+	bool bReconfigure = ( tStmt.m_iIntParam==1 );
+
+	CSphString sError;
+	CSphReconfigureSettings tSettings;
+	const CSphString & sIndex = tStmt.m_sIndex;
+
+	if ( bReconfigure && !PrepareReconfigure ( sIndex, tSettings, sError ) )
+	{
+		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
+		return;
+	}
+
 	// get an exclusive lock
-	ServedDescWPtr_c pIndex ( GetServed ( tStmt.m_sIndex ) );
+	ServedDescWPtr_c pIndex ( GetServed ( sIndex ) );
 
 	if ( !pIndex || !pIndex->IsMutable () )
 	{
 		tOut.Error ( tStmt.m_sStmt, "TRUNCATE RTINDEX requires an existing RT index" );
 		return;
 	}
-	CSphString sError;
 
 	auto * pRt = ( ISphRtIndex * ) pIndex->m_pIndex;
 	bool bRes = pRt->Truncate ( sError );
+
+	if ( bRes && bReconfigure )
+	{
+		CSphReconfigureSetup tSetup;
+		bool bSame = pRt->IsSameSettings ( tSettings, tSetup, sError );
+		if ( !bSame && sError.IsEmpty() )
+			pRt->Reconfigure ( tSetup );
+	}
 
 	if ( !bRes )
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
@@ -16890,53 +16911,59 @@ static void HandleMysqlAlter ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt, b
 }
 
 
-static void HandleMysqlReconfigure ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+bool PrepareReconfigure ( const CSphString & sIndex, CSphReconfigureSettings & tSettings, CSphString & sError )
 {
-	MEMORY ( MEM_SQL_ALTER );
-
-	const char * sName = tStmt.m_sIndex.cstr();
-	CSphString sError;
-	CSphReconfigureSettings tSettings;
-	CSphReconfigureSetup tSetup;
-
 	CSphConfigParser tCfg;
 	if ( !tCfg.ReParse ( g_sConfigFile.cstr () ) )
 	{
 		sError.SetSprintf ( "failed to parse config file '%s'; using previous settings", g_sConfigFile.cstr () );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
-		return;
+		return false;
 	}
 
 	if ( !tCfg.m_tConf.Exists ( "index" ) )
 	{
 		sError.SetSprintf ( "failed to find any index at config file '%s'; using previous settings", g_sConfigFile.cstr () );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
-		return;
+		return false;
 	}
 
 	const CSphConfig & hConf = tCfg.m_tConf;
-	if ( !hConf["index"].Exists ( sName ) )
+	if ( !hConf["index"].Exists ( sIndex ) )
 	{
-		sError.SetSprintf ( "failed to find index '%s' at config file '%s'; using previous settings", sName, g_sConfigFile.cstr () );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
-		return;
+		sError.SetSprintf ( "failed to find index '%s' at config file '%s'; using previous settings", sIndex.cstr(), g_sConfigFile.cstr () );
+		return false;
 	}
 
-	const CSphConfigSection & hIndex = hConf["index"][sName];
+	const CSphConfigSection & hIndex = hConf["index"][sIndex];
 	sphConfTokenizer ( hIndex, tSettings.m_tTokenizer );
-
 	sphConfDictionary ( hIndex, tSettings.m_tDict );
-
 	sphConfFieldFilter ( hIndex, tSettings.m_tFieldFilter, sError );
 
 	if ( !sphConfIndex ( hIndex, tSettings.m_tIndex, sError ) )
 	{
-		sError.SetSprintf ( "'%s' failed to parse index settings, error '%s'", sName, sError.cstr() );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
-		return;
+		sError.SetSprintf ( "'%s' failed to parse index settings, error '%s'", sIndex.cstr(), sError.cstr() );
+		return false;
 	}
 
 	sphRTSchemaConfigure ( hIndex, &tSettings.m_tSchema, &sError, true );
+	
+	return true;
+}
+
+
+static void HandleMysqlReconfigure ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
+{
+	MEMORY ( MEM_SQL_ALTER );
+
+	const CSphString & sIndex = tStmt.m_sIndex.cstr();
+	CSphString sError;
+	CSphReconfigureSettings tSettings;
+	CSphReconfigureSetup tSetup;
+
+	if ( !PrepareReconfigure ( sIndex, tSettings, sError ) )
+	{
+		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
+		return;
+	}
 
 	auto pServed = GetServed ( tStmt.m_sIndex );
 	if ( !pServed )
@@ -16949,7 +16976,7 @@ static void HandleMysqlReconfigure ( SqlRowBuffer_c & tOut, const SqlStmt_t & tS
 	ServedDescWPtr_c dWLocked ( pServed );
 	if ( !dWLocked->IsMutable() )
 	{
-		sError.SetSprintf ( "'%s' does not support ALTER (enabled, not mutable)", sName );
+		sError.SetSprintf ( "'%s' does not support ALTER (enabled, not mutable)", sIndex.cstr() );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
 		return;
 	}

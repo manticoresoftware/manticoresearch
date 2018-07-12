@@ -1637,11 +1637,19 @@ select_dual:
 //////////////////////////////////////////////////////////////////////////
 
 truncate:
-	TOK_TRUNCATE TOK_RTINDEX ident
+	TOK_TRUNCATE TOK_RTINDEX ident opt_with_reconfigure
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_TRUNCATE_RTINDEX;
 			pParser->ToString ( tStmt.m_sIndex, $3 );
+		}
+	;
+
+opt_with_reconfigure:
+	// empty
+	| TOK_WITH TOK_RECONFIGURE
+		{
+			pParser->m_pStmt->m_iIntParam = 1;
 		}
 	;
 

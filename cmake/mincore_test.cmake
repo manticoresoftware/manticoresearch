@@ -15,7 +15,7 @@
 # and so, this special testing is necessary to successfully compile.
 #
 #=============================================================================
-# Copyright 2017 Mainticore Software Ltd.
+# Copyright 2017-2018, Manticore Software LTD (http://manticoresearch.com)
 #
 # Distributed under the OSI-approved BSD License (the "License");
 # see accompanying file Copyright.txt for details.

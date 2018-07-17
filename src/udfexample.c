@@ -1,8 +1,4 @@
 //
-// $Id$
-//
-
-//
 // Sphinx UDF function example
 //
 // Linux

@@ -1,10 +1,7 @@
 //
-// $Id$
-//
-
-//
 // Copyright (c) 2011-2016, Andrew Aksyonoff
 // Copyright (c) 2011-2016, Sphinx Technologies Inc
+// Copyright (c) 2017-2018, Manticore Software LTD (http://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -1766,7 +1763,3 @@ void sphAotShutdown ()
 	for ( auto& pLemmantizer : g_pLemmatizers )
 		SafeDelete ( pLemmantizer );
 }
-
-//
-// $Id$
-//

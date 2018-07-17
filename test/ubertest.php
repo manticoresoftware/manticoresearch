@@ -1,9 +1,5 @@
 <?php
 
-//
-// $Id$
-//
-
 $sd_managed_searchd	= false;
 $sd_skip_indexer = false;
 $g_ignore_weights = false;

@@ -1,10 +1,7 @@
 //
-// $Id$
-//
-
-//
 // Copyright (c) 2011-2016, Andrew Aksyonoff
 // Copyright (c) 2011-2016, Sphinx Technologies Inc
+// Copyright (c) 2017-2018, Manticore Software LTD (http://manticoresearch.com)
 // All rights reserved
 //
 // This program is free software; you can redistribute it and/or modify
@@ -311,7 +308,3 @@ float sphinx_get_term_factor_float ( const unsigned int * in, enum sphinx_term_f
 	int r = sphinx_get_term_factor_int ( in, f );
 	return *(float*)&r;
 }
-
-//
-// $Id$
-//

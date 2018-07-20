@@ -384,7 +384,10 @@ int64_t CSphConfigSection::GetSize64 ( const char * sKey, int64_t iDefault ) con
 {
 	CSphVariant * pEntry = (*this)( sKey );
 	if ( !pEntry )
+	{
+		sphLogDebug ( "'%s' - nothing specified, using default value " INT64_FMT, sKey, iDefault );
 		return iDefault;
+	}
 
 	char * sErr = nullptr;
 	auto iRes = sphGetSize64 ( pEntry->cstr(), &sErr, iDefault );
@@ -1783,10 +1786,10 @@ const char * sphLoadConfig ( const char * sOptConfig, bool bQuiet, CSphConfigPar
 }
 
 //////////////////////////////////////////////////////////////////////////
-
+ESphLogLevel g_eLogLevel = SPH_LOG_INFO;        // current log level, can be changed on the fly
 static void StdoutLogger ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 {
-	if ( eLevel>=SPH_LOG_DEBUG )
+	if ( eLevel>g_eLogLevel )
 		return;
 
 	switch ( eLevel )
@@ -1794,7 +1797,7 @@ static void StdoutLogger ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	case SPH_LOG_FATAL: fprintf ( stdout, "FATAL: " ); break;
 	case SPH_LOG_WARNING: fprintf ( stdout, "WARNING: " ); break;
 	case SPH_LOG_INFO: fprintf ( stdout, "WARNING: " ); break;
-	case SPH_LOG_DEBUG: // yes, I know that this branch will never execute because of the condition above.
+	case SPH_LOG_DEBUG:
 	case SPH_LOG_VERBOSE_DEBUG:
 	case SPH_LOG_VERY_VERBOSE_DEBUG: fprintf ( stdout, "DEBUG: " ); break;
 	}

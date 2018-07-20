@@ -187,6 +187,8 @@ enum ESphLogLevel
 	SPH_LOG_MAX = SPH_LOG_VERY_VERBOSE_DEBUG
 };
 
+extern ESphLogLevel g_eLogLevel;		// current log level, can be changed on the fly
+
 typedef void ( *SphLogger_fn )( ESphLogLevel, const char *, va_list );
 void sphSetLogger ( SphLogger_fn fnLog );
 

@@ -240,10 +240,13 @@ operation is performed. These options are:
    the exact representation of data as received by ``indexer`` and help
    to repeat indexing-time issues.
 
--  ``--verbose`` guarantees that every row that caused problems indexing
+-  ``--verbose [debug|debugv|debugvv]`` guarantees that every row that caused problems indexing
    (duplicate, zero, or missing document ID; or file field IO issues;
    etc) will be reported. By default, this option is off, and problem
-   summaries may be reported instead.
+   summaries may be reported instead. Also you can use one of the optional parameters
+   (debug, debugv, or debugvv) and it will switch on debug output from different
+   parts of indexing process. Thay are similar to ``searchd``'s parameters
+   --logdebug, --logdebugv, --logdebugvv, but cause output to stdout instead of logging.
 
 -  ``--sighup-each`` is useful when you are rebuilding many big indexes,
    and want each one rotated into ``searchd`` as soon as possible. With

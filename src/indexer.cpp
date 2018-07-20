@@ -1594,7 +1594,8 @@ static void ShowHelp ()
 		"\t\t\t(default is sphinx.conf)\n"
 		"--all\t\t\treindex all configured indexes\n"
 		"--quiet\t\t\tbe quiet, only print errors\n"
-		"--verbose\t\tverbose indexing issues report\n"
+		"--verbose [debug|debugv|debugvv]\n"
+		"\t\t\tverbose indexing issues report\n"
 		"--noprogress\t\tdo not display progress\n"
 		"\t\t\t(automatically on if output is not to a tty)\n"
 		"--rotate\t\tsend SIGHUP to searchd when indexing is over\n"
@@ -1705,7 +1706,22 @@ int main ( int argc, char ** argv )
 		} else if ( strcasecmp ( argv[i], "--verbose" )==0 )
 		{
 			bVerbose = true;
-
+			if ( (i+2) < argc )
+			{
+				if ( strcmp (argv[i+1], "debug" )==0 )
+				{
+					g_eLogLevel = SPH_LOG_DEBUG;
+					++i;
+				} else if ( strcmp ( argv[i+1], "debugv" )==0 )
+				{
+					g_eLogLevel = SPH_LOG_VERBOSE_DEBUG;
+					++i;
+				} else if ( strcmp ( argv[i+1], "debugvv" )==0 )
+				{
+					g_eLogLevel = SPH_LOG_VERY_VERBOSE_DEBUG;
+					++i;
+				}
+			}
 		} else if ( isalnum ( argv[i][0] ) || argv[i][0]=='_' || sphIsWild ( argv[i][0] ) )
 		{
 			bool bHasWilds = false;

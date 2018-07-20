@@ -141,7 +141,6 @@ enum LogFormat_e
 
 #define					LOG_COMPACT_IN	128						// upto this many IN(..) values allowed in query_log
 
-ESphLogLevel		g_eLogLevel			= SPH_LOG_INFO;		// current log level, can be changed on the fly
 static int				g_iLogFile			= STDOUT_FILENO;	// log file descriptor
 static bool				g_bLogSyslog		= false;
 static bool				g_bQuerySyslog		= false;

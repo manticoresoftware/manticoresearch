@@ -29039,8 +29039,12 @@ void CSphSource_XMLPipe2::Characters ( const char * pCharacters, int iLen )
 	} else
 	{
 		const char * szName = nullptr;
-		if ( m_iCurAttr!=-1 )
-			szName = ( m_iCurField!=-1 ) ? m_tSchema.GetFieldName(m_iCurField) : m_tSchema.GetAttr(m_iCurAttr).m_sName.cstr();
+		if ( m_iCurField!=-1 )
+			szName = m_tSchema.GetFieldName ( m_iCurField );
+		else if ( m_iCurAttr!=-1 )
+			szName = m_tSchema.GetAttr(m_iCurAttr).m_sName.cstr();
+
+		assert ( szName );
 
 		bool bWarned = false;
 		for ( int i = 0; i < m_dWarned.GetLength () && !bWarned; i++ )

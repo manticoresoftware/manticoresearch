@@ -1324,8 +1324,7 @@ int main ( int argc, char ** argv )
 
 	CSphConfigParser cp;
 	CSphConfig & hConf = cp.m_tConf;
-	if ( sOptConfig )
-		sphLoadConfig ( sOptConfig, bQuiet, cp );
+	sphLoadConfig ( sOptConfig, bQuiet, cp );
 
 	while (true)
 	{

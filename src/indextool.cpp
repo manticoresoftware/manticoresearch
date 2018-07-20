@@ -1405,11 +1405,11 @@ int main ( int argc, char ** argv )
 	sphConfigureCommon ( hConf );
 
 	// common part for several commands, check and preload index
-	CSphIndex * pIndex = NULL;
+	CSphIndex * pIndex = nullptr;
 	while ( !sIndex.IsEmpty() && eCommand!=CMD_OPTIMIZEKLISTS )
 	{
 		// check config
-		if ( !hConf["index"](sIndex) )
+		if ( !hConf["index"].Exists(sIndex) )
 			sphDie ( "index '%s': no such index in config\n", sIndex.cstr() );
 
 		// only need config-level settings for --htmlstrip

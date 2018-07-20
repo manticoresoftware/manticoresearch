@@ -52,9 +52,9 @@ static bool			g_bBuildFreqs	= false;
 static bool			g_bSendHUP		= true;
 
 static int				g_iMemLimit				= 128*1024*1024;
-static int				g_iMaxXmlpipe2Field		= 0;
-static int				g_iWriteBuffer			= 0;
-static int				g_iMaxFileFieldBuffer	= 1024*1024;
+static int				g_iMaxXmlpipe2Field		= 2*1024*1024;
+static int				g_iWriteBuffer			= 1024*1024;
+static int				g_iMaxFileFieldBuffer	= 8*1024*1024;
 
 static ESphOnFileFieldError	g_eOnFileFieldError = FFE_IGNORE_FIELD;
 
@@ -1838,9 +1838,9 @@ int main ( int argc, char ** argv )
 		CSphConfigSection & hIndexer = hConf["indexer"]["indexer"];
 
 		g_iMemLimit = hIndexer.GetSize ( "mem_limit", g_iMemLimit );
-		g_iMaxXmlpipe2Field = hIndexer.GetSize ( "max_xmlpipe2_field", 2*1024*1024 );
-		g_iWriteBuffer = hIndexer.GetSize ( "write_buffer", 1024*1024 );
-		g_iMaxFileFieldBuffer = Max ( 1024*1024, hIndexer.GetSize ( "max_file_field_buffer", 8*1024*1024 ) );
+		g_iMaxXmlpipe2Field = hIndexer.GetSize ( "max_xmlpipe2_field", g_iMaxXmlpipe2Field );
+		g_iWriteBuffer = hIndexer.GetSize ( "write_buffer", g_iWriteBuffer );
+		g_iMaxFileFieldBuffer = Max ( 1024*1024, hIndexer.GetSize ( "max_file_field_buffer", g_iMaxFileFieldBuffer ) );
 
 		if ( hIndexer("on_file_field_error") )
 		{
@@ -1855,9 +1855,8 @@ int main ( int argc, char ** argv )
 				sphDie ( "unknown on_field_field_error value (must be one of ignore_field, skip_document, fail_index)" );
 		}
 
-		bool bJsonStrict = false;
-		bool bJsonAutoconvNumbers = false;
-		bool bJsonKeynamesToLowercase = false;
+		bool bJsonStrict = g_bJsonStrict;
+		bool bJsonKeynamesToLowercase = g_bJsonKeynamesToLowercase;
 		if ( hIndexer("on_json_attr_error") )
 		{
 			const CSphString & sVal = hIndexer["on_json_attr_error"].strval();
@@ -1878,7 +1877,7 @@ int main ( int argc, char ** argv )
 				sphDie ( "unknown json_autoconv_keynames value (must be 'lowercase')" );
 		}
 
-		bJsonAutoconvNumbers = ( hIndexer.GetInt ( "json_autoconv_numbers", 0 )!=0 );
+		bool bJsonAutoconvNumbers = ( hIndexer.GetInt ( "json_autoconv_numbers", 0 )!=0 );
 		sphSetJsonOptions ( bJsonStrict, bJsonAutoconvNumbers, bJsonKeynamesToLowercase );
 
 		sphSetThrottling ( hIndexer.GetInt ( "max_iops", 0 ), hIndexer.GetSize ( "max_iosize", 0 ) );

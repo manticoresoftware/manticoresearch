@@ -168,14 +168,13 @@ protected:
 	AgentOptions_t tAgentOptions { false, false, HA_RANDOM, 3, 0 };
 	const char * szIndexName = "tstidx";
 
-	void ParserTestSimple ( MultiAgentDesc_c &tAgent, const char * sInExpr
-							, bool bExpectedResult
-	)
+	MultiAgentDesc_c* ParserTestSimple ( const char * sInExpr, bool bExpectedResult )
 	{
 		g_bHostnameLookup = true;
 		const char * pTest = sInExpr;
-		bool bResult = ConfigureMultiAgent ( tAgent, pTest, "tstidx", tAgentOptions );
-		EXPECT_EQ ( bResult, bExpectedResult ) << sInExpr;
+		auto pResult = ConfigureMultiAgent ( pTest, "tstidx", tAgentOptions );
+		EXPECT_EQ ( (bool)pResult, bExpectedResult ) << sInExpr;
+		return pResult;
 	}
 
 	void ParserTest ( const char * sInExpr // incoming line
@@ -183,8 +182,7 @@ protected:
 		, const char * sWarningMessage = ""    // expected warning message, if any
 	)
 	{
-		MultiAgentDescPtr_c pAgent ( new MultiAgentDesc_c );
-		ParserTestSimple ( *pAgent, sInExpr, bExpectedResult );
+		MultiAgentDescRefPtr_c pAgent ( ParserTestSimple ( sInExpr, bExpectedResult ) );
 		EXPECT_STREQ ( sWarningMessage, sLogBuff );
 	}
 };
@@ -275,9 +273,11 @@ TEST_F ( T_ConfigureMultiAgent, agent_ok_options_space_sparsed )
 
 TEST_F ( T_ConfigureMultiAgent, fully_configured_3_mirrors )
 {
-	MultiAgentDescPtr_c pAgent ( new MultiAgentDesc_c );
-	auto & tAgent = *pAgent;
-	ParserTestSimple ( tAgent, "127.0.0.1|bla:6000:idx|/path[blackhole=1,retry_count=4,conn=pconn]", true );
+	MultiAgentDescRefPtr_c pAgent (
+		ParserTestSimple ( "127.0.0.1|bla:6000:idx|/path[blackhole=1,retry_count=4,conn=pconn]", true ) );
+
+	auto &tAgent = *pAgent;
+
 	ASSERT_EQ ( tAgent.GetLength (), 3);
 	ASSERT_EQ ( tAgent.GetRetryLimit(), 4);
 	ASSERT_TRUE ( tAgent.IsHA() );
@@ -311,9 +311,9 @@ TEST_F ( T_ConfigureMultiAgent, fully_configured_3_mirrors )
 
 TEST_F ( T_ConfigureMultiAgent, simple_host )
 {
-	MultiAgentDescPtr_c pAgent ( new MultiAgentDesc_c );
+	MultiAgentDescRefPtr_c pAgent ( ParserTestSimple ( "bla", true ));
 	auto &tAgent = *pAgent;
-	ParserTestSimple ( tAgent, "bla", true );
+
 	ASSERT_EQ ( tAgent.GetLength (), 1 );
 	ASSERT_EQ ( tAgent.GetRetryLimit (), 3 );
 	ASSERT_FALSE ( tAgent.IsHA () );
@@ -330,9 +330,9 @@ TEST_F ( T_ConfigureMultiAgent, simple_host )
 
 TEST_F ( T_ConfigureMultiAgent, simple_3_hosts )
 {
-	MultiAgentDescPtr_c pAgent ( new MultiAgentDesc_c );
+	MultiAgentDescRefPtr_c pAgent ( ParserTestSimple ( "127.0.0.1|bla|/path", true ) );
 	auto &tAgent = *pAgent;
-	ParserTestSimple ( tAgent, "127.0.0.1|bla|/path", true );
+
 	ASSERT_EQ ( tAgent.GetLength (), 3 );
 	ASSERT_EQ ( tAgent.GetRetryLimit (), 9 );
 	ASSERT_TRUE ( tAgent.IsHA () );

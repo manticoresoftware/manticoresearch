@@ -1803,7 +1803,7 @@ static void StdoutLogger ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 }
 
 static const int MAX_PREFIXES = 10;
-const char * dDisabledLevelLogs[SPH_LOG_MAX+1][MAX_PREFIXES] = {0};
+const char * dDisabledLevelLogs[SPH_LOG_MAX+1][MAX_PREFIXES] = {{0}};
 
 void sphLogSupress ( const char * sNewPrefix, ESphLogLevel eLevel )
 {
@@ -2650,7 +2650,7 @@ void RebalanceWeights ( const CSphFixedVector<int64_t> & dTimers, CSphFixedVecto
 	float fEmptyPercent = 0.0f;
 	if ( iEmpties )
 	{
-		fSum /= (1.0f-fEmptiesPercent*0.01);
+		fSum /= (1.0f-fEmptiesPercent*0.01f);
 		fEmptyPercent = fEmptiesPercent/iEmpties;
 	}
 

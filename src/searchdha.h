@@ -32,6 +32,9 @@ bool LoadExFunctions ();
 
 #endif
 
+#include "sphinxutils.h"
+#include "searchdaemon.h"
+
 /////////////////////////////////////////////////////////////////////////////
 // SOME SHARED GLOBAL VARIABLES
 /////////////////////////////////////////////////////////////////////////////
@@ -213,6 +216,154 @@ struct AgentDesc_t : HostDesc_t
 	AgentDesc_t &CloneFrom ( const AgentDesc_t &tOther );
 };
 
+// set of options which are applied to every agent line
+// and come partially from global config, partially m.b. set immediately in agent line as an option.
+struct AgentOptions_t
+{
+	bool m_bBlackhole;
+	bool m_bPersistent;
+	HAStrategies_e m_eStrategy;
+	int m_iRetryCount;
+	int m_iRetryCountMultiplier;
+};
+
+
+extern const char * sAgentStatsNames[eMaxAgentStat + ehMaxStat];
+using HostStatSnapshot_t = uint64_t[eMaxAgentStat + ehMaxStat];
+
+/// per-host dashboard
+struct HostDashboard_t : public ISphRefcountedMT
+{
+	HostDesc_t m_tHost;                // only host info, no indices. Used for ping.
+	bool m_bNeedPing = false;    // we'll ping only HA agents, not everyone
+	PersistentConnectionsPool_c * m_pPersPool = nullptr;    // persistence pool also lives here, one per dashboard
+
+	mutable RwLock_t m_dDataLock;        // guards everything essential (see thread annotations)
+	int64_t m_iLastAnswerTime GUARDED_BY ( m_dDataLock ) = 0;    // updated when we get an answer from the host
+	int64_t m_iLastQueryTime GUARDED_BY ( m_dDataLock ) = 0;    // updated when we send a query to a host
+	int64_t m_iErrorsARow GUARDED_BY (
+		m_dDataLock ) = 0;        // num of errors a row, updated when we update the general statistic.
+
+public:
+	explicit HostDashboard_t ( const HostDesc_t &tAgent );
+	bool IsOlder ( int64_t iTime ) const REQUIRES_SHARED ( m_dDataLock );
+	AgentDash_t &GetCurrentStat () REQUIRES ( m_dDataLock );
+	void GetCollectedStat ( HostStatSnapshot_t &dResult, int iPeriods = 1 ) const REQUIRES ( !m_dDataLock );
+
+	static DWORD GetCurSeconds ();
+	static bool IsHalfPeriodChanged ( DWORD * pLast );
+
+private:
+	struct
+	{
+		AgentDash_t m_dData;
+		DWORD m_uPeriod = 0xFFFFFFFF;
+	} m_dStats[STATS_DASH_PERIODS] GUARDED_BY ( m_dDataLock );
+
+	~HostDashboard_t ();
+};
+
+
+/// context which keeps name of the index and agent
+/// (mainly for error-reporting)
+struct WarnInfo_t
+{
+	const char * m_szIndexName;
+	const char * m_szAgent;
+
+	void Warn ( const char * sFmt, ... ) const
+	{
+		va_list ap;
+		va_start ( ap, sFmt );
+		if ( m_szIndexName )
+			sphLogVa ( CSphString ().SetSprintf ( "index '%s': agent '%s': %s", m_szIndexName, m_szAgent, sFmt ).cstr ()
+					   , ap, SPH_LOG_INFO );
+		else
+			sphLogVa ( CSphString ().SetSprintf ( "host '%s': %s", m_szAgent, sFmt ).cstr ()
+					   , ap, SPH_LOG_INFO );
+		va_end ( ap );
+	}
+
+	/// format an error message using idx and agent names from own context
+	/// \return always false, to simplify statements
+	bool ErrSkip ( const char * sFmt, ... ) const
+	{
+		va_list ap;
+		va_start ( ap, sFmt );
+		if ( m_szIndexName )
+			sphLogVa (
+				CSphString ().SetSprintf ( "index '%s': agent '%s': %s, - SKIPPING AGENT", m_szIndexName, m_szAgent
+										   , sFmt ).cstr ()
+				, ap );
+		else
+			sphLogVa (
+				CSphString ().SetSprintf ( "host '%s': %s, - SKIPPING AGENT", m_szAgent, sFmt ).cstr ()
+				, ap );
+		va_end ( ap );
+		return false;
+	}
+};
+
+/// descriptor for set of agents (mirrors) (stored in a global hash)
+class MultiAgentDesc_c : public ISphRefcountedMT, public CSphFixedVector<AgentDesc_t>
+{
+	CSphAtomic			m_iRRCounter;    /// round-robin counter
+	mutable RwLock_t	m_dWeightLock;   /// manages access to m_pWeights
+	CSphFixedVector<float> m_dWeights    /// the weights of the hosts
+		GUARDED_BY ( m_dWeightLock ) { 0 };
+	DWORD				m_uTimestamp { HostDashboard_t::GetCurSeconds () };    /// timestamp of last weight's actualization
+	HAStrategies_e		m_eStrategy { HA_DEFAULT };
+	int					m_iMultiRetryCount = 0;
+
+	~MultiAgentDesc_c () final = default;
+
+public:
+	MultiAgentDesc_c ()
+		: CSphFixedVector<AgentDesc_t> { 0 }
+	{}
+
+	// configure using dTemplateHosts as source of urls/indexes
+	static MultiAgentDesc_c* GetAgent ( const CSphVector<AgentDesc_t *> &dTemplateHosts,
+		const AgentOptions_t &tOpt, const WarnInfo_t &tWarn );
+
+	// housekeeping: walk throw global hash and finally release all 1-refs agents
+	static void CleanupOrphaned();
+
+	const AgentDesc_t &ChooseAgent () REQUIRES ( !m_dWeightLock );
+
+	inline bool IsHA () const
+	{
+		return GetLength ()>1;
+	}
+
+	inline int GetRetryLimit () const
+	{
+		return m_iMultiRetryCount;
+	}
+
+	CSphFixedVector<float> GetWeights () const REQUIRES ( !m_dWeightLock )
+	{
+		CSphScopedRLock tRguard ( m_dWeightLock );
+		CSphFixedVector<float> dResult { 0 };
+		dResult.CopyFrom ( m_dWeights );
+		return dResult;
+	}
+
+private:
+
+	const AgentDesc_t &RRAgent ();
+	const AgentDesc_t &RandAgent ();
+	const AgentDesc_t &StDiscardDead () REQUIRES ( !m_dWeightLock );
+	const AgentDesc_t &StLowErrors () REQUIRES ( !m_dWeightLock );
+
+	void ChooseWeightedRandAgent ( int * pBestAgent, CSphVector<int> &dCandidates ) REQUIRES ( !m_dWeightLock );
+	void CheckRecalculateWeights ( const CSphFixedVector<int64_t> &dTimers ) REQUIRES ( !m_dWeightLock );
+	static CSphString GetKey( const CSphVector<AgentDesc_t *> &dTemplateHosts, const AgentOptions_t &tOpt );
+	bool Init ( const CSphVector<AgentDesc_t *> &dTemplateHosts, const AgentOptions_t &tOpt, const WarnInfo_t &tWarn );
+};
+
+using MultiAgentDescRefPtr_c = CSphRefcountedPtr<MultiAgentDesc_c>;
+
 extern int g_iAgentRetryCount;
 extern int g_iAgentRetryDelay;
 
@@ -249,8 +400,6 @@ struct IReporter_t : ISphNoncopyable
 #else
 	using LPKEY = void *;
 #endif
-
-class MultiAgentDesc_c;
 
 class IOVec_c
 {
@@ -357,7 +506,7 @@ private:
 	IReplyParser_t *	m_pParser = nullptr;
 
 	// working with mirrors
-	MultiAgentDesc_c *	m_pMultiAgent = nullptr; ///< my manager, could turn me into another mirror
+	MultiAgentDescRefPtr_c m_pMultiAgent { nullptr }; ///< my manager, could turn me into another mirror
 	int			m_iRetries = 0;        ///< initialized to max num of tries. When zeroed, it is time to fail
 	int			m_iMirrorsCount = 1;
 	int			m_iDelay { g_iAgentRetryDelay };	///< delay between retries
@@ -392,8 +541,6 @@ private:
 	// switch/check internal state
 	inline bool StateIs ( Agent_e eState ) const { return eState==m_eConnState; }
 	void State ( Agent_e eState );
-
-
 
 	bool GetPersist ();
 	void ReturnPersist ();
@@ -456,154 +603,15 @@ IRemoteAgentsObserver * GetObserver ();
 void ScheduleDistrJobs ( VectorAgentConn_t &dRemotes, IRequestBuilder_t * pQuery,
 	IReplyParser_t * pParser, IRemoteAgentsObserver * pReporter=nullptr, int iQueryRetry = -1, int iQueryDelay = -1 );
 
-extern const char * sAgentStatsNames[eMaxAgentStat + ehMaxStat];
-using HostStatSnapshot_t = uint64_t[eMaxAgentStat + ehMaxStat];
-
-/// per-host dashboard
-struct HostDashboard_t : public ISphRefcountedMT
-{
-	HostDesc_t		m_tHost;				// only host info, no indices. Used for ping.
-	bool			m_bNeedPing = false;	// we'll ping only HA agents, not everyone
-	PersistentConnectionsPool_c * m_pPersPool = nullptr;	// persistence pool also lives here, one per dashboard
-
-	mutable RwLock_t	 m_dDataLock;		// guards everything essential (see thread annotations)
-	int64_t		m_iLastAnswerTime GUARDED_BY ( m_dDataLock ) = 0;	// updated when we get an answer from the host
-	int64_t		m_iLastQueryTime GUARDED_BY ( m_dDataLock ) = 0;	// updated when we send a query to a host
-	int64_t		m_iErrorsARow GUARDED_BY ( m_dDataLock ) = 0;		// num of errors a row, updated when we update the general statistic.
-
-public:
-	explicit HostDashboard_t ( const HostDesc_t & tAgent );
-	bool IsOlder ( int64_t iTime ) const REQUIRES_SHARED ( m_dDataLock );
-	AgentDash_t &GetCurrentStat () REQUIRES ( m_dDataLock );
-	void GetCollectedStat ( HostStatSnapshot_t &dResult, int iPeriods = 1 ) const REQUIRES ( !m_dDataLock );
-
-	static DWORD GetCurSeconds();
-	static bool IsHalfPeriodChanged ( DWORD * pLast );
-
-private:
-	struct
-	{
-		AgentDash_t m_dData;
-		DWORD m_uPeriod = 0xFFFFFFFF;
-	} m_dStats[STATS_DASH_PERIODS] GUARDED_BY ( m_dDataLock );
-
-	~HostDashboard_t ();
-};
-
-
-// set of options which are applied to every agent line
-// and come partially from global config, partially m.b. set immediately in agent line as an option.
-struct AgentOptions_t
-{
-	bool m_bBlackhole;
-	bool m_bPersistent;
-	HAStrategies_e m_eStrategy;
-	int m_iRetryCount;
-	int m_iRetryCountMultiplier;
-};
-
-/// context which keeps name of the index and agent
-/// (mainly for error-reporting)
-struct WarnInfo_t
-{
-	const char * m_szIndexName;
-	const char * m_szAgent;
-
-	void Warn ( const char * sFmt, ... ) const
-	{
-		va_list ap;
-		va_start ( ap, sFmt );
-		if ( m_szIndexName )
-			sphLogVa ( CSphString ().SetSprintf ( "index '%s': agent '%s': %s", m_szIndexName, m_szAgent, sFmt ).cstr ()
-					   , ap, SPH_LOG_INFO );
-		else
-			sphLogVa ( CSphString ().SetSprintf ( "host '%s': %s", m_szAgent, sFmt ).cstr ()
-					   , ap, SPH_LOG_INFO );
-		va_end ( ap );
-	}
-
-	/// format an error message using idx and agent names from own context
-	/// \return always false, to simplify statements
-	bool ErrSkip ( const char * sFmt, ... ) const
-	{
-		va_list ap;
-		va_start ( ap, sFmt );
-		if ( m_szIndexName )
-			sphLogVa (
-				CSphString ().SetSprintf ( "index '%s': agent '%s': %s, - SKIPPING AGENT", m_szIndexName, m_szAgent, sFmt ).cstr ()
-				   , ap );
-		else
-			sphLogVa (
-				CSphString ().SetSprintf ( "host '%s': %s, - SKIPPING AGENT", m_szAgent , sFmt ).cstr ()
-				, ap );
-		va_end ( ap );
-		return false;
-	}
-};
-
-/// descriptor for set of agents (mirrors) (stored in a global hash)
-class MultiAgentDesc_c : public ISphRefcountedMT, public CSphFixedVector<AgentDesc_t>
-{
-	CSphAtomic				m_iRRCounter;	/// round-robin counter
-	mutable RwLock_t		m_dWeightLock;	/// manages access to m_pWeights
-	CSphFixedVector<float>	m_dWeights		/// the weights of the hosts
-			GUARDED_BY (m_dWeightLock) { 0 };
-	DWORD					m_uTimestamp { HostDashboard_t::GetCurSeconds() };	/// timestamp of last weight's actualization
-	HAStrategies_e			m_eStrategy { HA_DEFAULT };
-	int 					m_iMultiRetryCount = 0;
-
-	~MultiAgentDesc_c () final = default;
-
-public:
-	MultiAgentDesc_c()
-		: CSphFixedVector<AgentDesc_t> {0}
-	{}
-
-	// configure using dTemplateHosts as source of urls/indexes
-	bool Init ( const CSphVector<AgentDesc_t*> &dTemplateHosts, const AgentOptions_t &tOpt, const WarnInfo_t &tWarn );
-
-	const AgentDesc_t & ChooseAgent () REQUIRES ( !m_dWeightLock );
-
-	inline bool IsHA() const
-	{
-		return GetLength() > 1;
-	}
-
-	inline int GetRetryLimit() const
-	{
-		return m_iMultiRetryCount;
-	}
-
-	CSphFixedVector<float> GetWeights () const REQUIRES (!m_dWeightLock)
-	{
-		CSphScopedRLock tRguard ( m_dWeightLock );
-		CSphFixedVector<float> dResult {0};
-		dResult.CopyFrom ( m_dWeights );
-		return dResult;
-	}
-
-private:
-
-	const AgentDesc_t & RRAgent ();
-	const AgentDesc_t & RandAgent ();
-	const AgentDesc_t & StDiscardDead () REQUIRES ( !m_dWeightLock );
-	const AgentDesc_t & StLowErrors () REQUIRES ( !m_dWeightLock );
-
-	void ChooseWeightedRandAgent ( int * pBestAgent, CSphVector<int> & dCandidates ) REQUIRES ( !m_dWeightLock );
-	void CheckRecalculateWeights ( const CSphFixedVector<int64_t> &dTimers ) REQUIRES ( !m_dWeightLock );
-};
-
-using MultiAgentDescPtr_c = CSphRefcountedPtr<MultiAgentDesc_c>;
 
 /////////////////////////////////////////////////////////////////////////////
 // DISTRIBUTED QUERIES
 /////////////////////////////////////////////////////////////////////////////
 
-
 /// distributed index
 struct DistributedIndex_t : public ServedStats_c, public ISphRefcountedMT
 {
-	VecRefPtrs_t<MultiAgentDesc_c *> m_dAgents;	///< remote agents
+	CSphVector<MultiAgentDesc_c *> m_dAgents;	///< remote agents
 	StrVec_t m_dLocal;								///< local indexes
 	CSphBitvec m_dKillBreak;
 	int m_iAgentConnectTimeout		{ g_iAgentConnectTimeout };	///< in msec
@@ -625,9 +633,7 @@ struct DistributedIndex_t : public ServedStats_c, public ISphRefcountedMT
 	void ForEveryHost ( ProcessFunctor );
 
 private:
-	~DistributedIndex_t () {
-		sphLogDebugv ( "DistributedIndex_t %p removed", this );
-	};
+	~DistributedIndex_t ();
 };
 
 using DistributedIndexRefPtr_t = CSphRefcountedPtr<DistributedIndex_t>;
@@ -650,7 +656,8 @@ public:
 	}
 };
 
-extern GuardedHash_c * g_pDistIndexes;    // distributed indexes hash
+extern GuardedHash_c * g_pDistIndexes;	// distributed indexes hash
+extern GuardedHash_c * g_pMultiAgents;	// global hash of all agents
 
 inline DistributedIndexRefPtr_t GetDistr ( const CSphString &sName )
 {
@@ -659,7 +666,7 @@ inline DistributedIndexRefPtr_t GetDistr ( const CSphString &sName )
 
 struct SearchdStats_t
 {
-	DWORD		m_uStarted = 0;
+	DWORD			m_uStarted = 0;
 	CSphAtomicL		m_iConnections;
 	CSphAtomicL		m_iMaxedOut;
 	CSphAtomicL		m_iCommandCount[SEARCHD_COMMAND_TOTAL];
@@ -689,7 +696,7 @@ class cDashStorage : public ISphNoncopyable
 	mutable RwLock_t				m_tDashLock;
 
 public:
-	void				LinkHost ( HostDesc_t &dHost );
+	void				LinkHost ( HostDesc_t &dHost ); ///< put host into dashboard and init link to it
 	HostDashboardPtr_t	FindAgent ( const CSphString& sAgent ) const;
 	void				GetActiveDashes ( VecRefPtrs_t<HostDashboard_t *> & dAgents ) const;
 };
@@ -708,9 +715,12 @@ void ParseIndexList ( const CSphString &sIndexes, StrVec_t &dOut );
 // if :port is skipped in the line, IANA 9312 will be used in the case
 bool ParseAddressPort ( HostDesc_t & pAgent, const char ** ppLine, const WarnInfo_t& dInfo );
 
-//bool ParseAgentLine ( MultiAgentDesc_c &tAgent, const char * szAgent, const char * szIndexName, AgentOptions_t tDesc );
-bool ConfigureMultiAgent ( MultiAgentDesc_c &tAgent, const char * szAgent, const char * szIndexName
-						   , AgentOptions_t tOptions );
+//! Parse line with agent definition and return addreffed pointer to multiagent (new or from global cache)
+//! \param szAgent - line with agent definition from config
+//! \param szIndexName - index we apply to
+//! \param tOptions - global options affecting agent
+//! \return configured multiagent, or null if failed
+MultiAgentDesc_c * ConfigureMultiAgent ( const char * szAgent, const char * szIndexName, AgentOptions_t tOptions );
 
 struct IRequestBuilder_t : public ISphNoncopyable
 {

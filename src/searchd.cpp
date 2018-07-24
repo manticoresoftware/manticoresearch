@@ -866,10 +866,10 @@ void GuardedHash_c::Rlock () const
 }
 
 
-/*void GuardedHash_c::Wlock () const
+void GuardedHash_c::Wlock () const
 {
 	Verify ( m_tIndexesRWLock.WriteLock() );
-}*/
+}
 
 
 void GuardedHash_c::Unlock () const
@@ -928,9 +928,6 @@ bool GuardedHash_c::Contains ( const CSphString &tKey ) const
 	ScRL_t hHashRLock { m_tIndexesRWLock };
 	ISphRefcountedMT ** ppEntry = m_hIndexes ( tKey );
 	return ppEntry!=nullptr;
-//	if ( ppEntry )
-//		return nullptr!=*ppEntry;
-//	return false;
 }
 
 ISphRefcountedMT * GuardedHash_c::Get ( const CSphString &tKey ) const
@@ -943,6 +940,24 @@ ISphRefcountedMT * GuardedHash_c::Get ( const CSphString &tKey ) const
 		return nullptr;
 	(*ppEntry)->AddRef();
 	return *ppEntry;
+}
+
+ISphRefcountedMT * GuardedHash_c::TryAddThenGet ( ISphRefcountedMT * pValue, const CSphString &tKey )
+{
+	ScWL_t hHashWLock { m_tIndexesRWLock };
+	int iPrevSize = GetLengthUnl ();
+	ISphRefcountedMT *&pVal = m_hIndexes.AddUnique ( tKey );
+	if ( iPrevSize<GetLengthUnl () ) // value just inserted
+	{
+		pVal = pValue;
+		if ( pVal )
+			pVal->AddRef ();
+	}
+
+	if ( pVal )
+		pVal->AddRef ();
+
+	return pVal;
 }
 
 
@@ -2998,6 +3013,16 @@ void DistributedIndex_t::ForEveryHost ( ProcessFunctor pFunc )
 		for ( auto &dHost : *pAgent )
 			pFunc ( dHost );
 }
+
+DistributedIndex_t::~DistributedIndex_t ()
+{
+	sphLogDebugv ( "DistributedIndex_t %p removed", this );
+	for ( auto * pAgent : m_dAgents )
+		SafeRelease ( pAgent );
+
+	// cleanup global
+	MultiAgentDesc_c::CleanupOrphaned ();
+};
 
 /////////////////////////////////////////////////////////////////////////////
 // SEARCH HANDLER
@@ -11037,7 +11062,7 @@ void BuildStatus ( VectorLike & dStatus )
 	for ( RLockedDistrIt_c it ( g_pDistIndexes ); it.Next (); )
 	{
 		const char * sIdx = it.GetName().cstr();
-		const CSphVector<MultiAgentDesc_c *> &dAgents = it.Get ()->m_dAgents;
+		const auto &dAgents = it.Get ()->m_dAgents;
 		ARRAY_FOREACH ( i, dAgents )
 		{
 			MultiAgentDesc_c &dMultiAgent = *dAgents[i];
@@ -18918,9 +18943,9 @@ static void ConfigureDistributedIndex ( DistributedIndex_t & tIdx, const char * 
 		for ( CSphVariant * pAgentCnf = hIndex ( tAg.sSect ); pAgentCnf; pAgentCnf = pAgentCnf->m_pNext )
 		{
 			AgentOptions_t tAgentOptions { tAg.bBlh, tAg.bPrs, tIdx.m_eHaStrategy, tIdx.m_iAgentRetryCount, 0 };
-			MultiAgentDescPtr_c pAgent ( new MultiAgentDesc_c );
-			if ( ConfigureMultiAgent ( *pAgent, pAgentCnf->cstr (), szIndexName, tAgentOptions ) )
-				tIdx.m_dAgents.Add ( pAgent.Leak() );
+			auto pAgent = ConfigureMultiAgent ( pAgentCnf->cstr(), szIndexName, tAgentOptions );
+			if ( pAgent )
+				tIdx.m_dAgents.Add ( pAgent );
 		}
 	}
 

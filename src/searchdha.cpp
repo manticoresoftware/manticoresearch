@@ -395,7 +395,7 @@ class DNSResolver_c
 		m_dReq.ar_request = &m_tHints;
 		m_pReq = &m_dReq;
 
-		sigevent_t dCallBack = { 0 };
+		sigevent_t dCallBack = {{ 0 }};
 		dCallBack.sigev_notify = SIGEV_THREAD;
 		dCallBack.sigev_value.sival_ptr = this;
 		dCallBack.sigev_notify_function = ResolvingWrapper;
@@ -470,8 +470,72 @@ static bool ValidateAndAddDashboard ( AgentDesc_t& dAgent, const WarnInfo_t &tIn
 // class also provides mirror choosing using different strategies
 /////////////////////////////////////////////////////////////////////////////
 
-bool MultiAgentDesc_c::Init ( const CSphVector<AgentDesc_t*> &dHosts, const AgentOptions_t &tOpt,
+GuardedHash_c & g_MultiAgents()
+{
+	static GuardedHash_c dGlobalHash;
+	return dGlobalHash;
+}
+
+void MultiAgentDesc_c::CleanupOrphaned()
+{
+	// cleanup global
+	auto &gAgents = g_MultiAgents ();
+	for ( WLockedHashIt_c it ( &gAgents ); it.Next (); )
+	{
+		auto pAgent = it.Get ();
+		if ( pAgent )
+		{
+			pAgent->Release (); // need release since it.Get() just made AddRef().
+			if ( pAgent->IsLast () )
+			{
+				it.Delete ();
+				SafeRelease ( pAgent );
+			}
+		}
+	}
+}
+
+// calculate uniq key for holding MultiAgent instance in global hash
+CSphString MultiAgentDesc_c::GetKey ( const CSphVector<AgentDesc_t *> &dTemplateHosts, const AgentOptions_t &tOpt )
+{
+	StringBuilder_c sKey;
+	for ( const auto* dHost : dTemplateHosts )
+	{
+		sKey+=dHost->GetMyUrl ().cstr();
+		sKey+=":";
+		sKey+=dHost->m_sIndexes.cstr();
+		sKey+="|";
+	}
+	sKey.Appendf ("[%d,%d,%d,%d,%d]",
+		tOpt.m_bBlackhole?1:0,
+		tOpt.m_bPersistent?1:0,
+		(int)tOpt.m_eStrategy,
+		tOpt.m_iRetryCount,
+		tOpt.m_iRetryCountMultiplier);
+	return sKey.cstr();
+}
+
+MultiAgentDesc_c* MultiAgentDesc_c::GetAgent ( const CSphVector<AgentDesc_t*> &dHosts, const AgentOptions_t &tOpt,
 								const WarnInfo_t &tWarn ) NO_THREAD_SAFETY_ANALYSIS
+{
+	auto sKey = GetKey ( dHosts, tOpt );
+	auto &gHash = g_MultiAgents ();
+
+	// if an elem exists, return it addreffed.
+	MultiAgentDescRefPtr_c pAgent ( ( MultiAgentDesc_c * ) gHash.Get ( sKey ) );
+	if ( pAgent )
+		return pAgent.Leak();
+
+	// create and init new agent
+	pAgent = new MultiAgentDesc_c;
+	if ( !pAgent->Init ( dHosts, tOpt, tWarn ) )
+		return nullptr;
+
+	return ( MultiAgentDesc_c * ) gHash.TryAddThenGet ( pAgent, sKey );
+}
+
+bool MultiAgentDesc_c::Init ( const CSphVector<AgentDesc_t *> &dHosts,
+			const AgentOptions_t &tOpt, const WarnInfo_t &tWarn ) NO_THREAD_SAFETY_ANALYSIS
 {
 	// initialize options
 	m_eStrategy = tOpt.m_eStrategy;
@@ -481,14 +545,15 @@ bool MultiAgentDesc_c::Init ( const CSphVector<AgentDesc_t*> &dHosts, const Agen
 	auto iLen = dHosts.GetLength ();
 	Reset ( iLen );
 	m_dWeights.Reset ( iLen );
-	if (!iLen)
-		return tWarn.ErrSkip ("Unable to initialize empty agent");
+	if ( !iLen )
+		return tWarn.ErrSkip ( "Unable to initialize empty agent" );
 
 	auto fFrac = 100.0f / iLen;
 	ARRAY_FOREACH ( i, dHosts )
 	{
-		assert ( !dHosts[i]->m_pDash && !dHosts[i]->m_pStats ); // we have templates parsed from config, NOT real working hosts!
-		if ( !ValidateAndAddDashboard ( (m_pData+i)->CloneFrom ( *dHosts[i] ), tWarn ) )
+		assert ( !dHosts[i]->m_pDash
+					 && !dHosts[i]->m_pStats ); // we have templates parsed from config, NOT real working hosts!
+		if ( !ValidateAndAddDashboard ( ( m_pData + i )->CloneFrom ( *dHosts[i] ), tWarn ) )
 			return false;
 		m_dWeights[i] = fFrac;
 	}
@@ -771,7 +836,14 @@ const AgentDesc_t &MultiAgentDesc_c::StLowErrors ()
 const AgentDesc_t &MultiAgentDesc_c::ChooseAgent ()
 {
 	if ( !IsHA() )
-		return *m_pData;
+	{
+		assert ( m_pData && "Not initialized MultiAgent detected!");
+		if ( m_pData )
+			return *m_pData;
+
+		static AgentDesc_t dFakeHost; // avoid crash in release if not initialized.
+		return dFakeHost;
+	}
 
 	switch ( m_eStrategy )
 	{
@@ -1130,16 +1202,15 @@ static bool ConfigureMirrorSet ( CSphVector<AgentDesc_t*> &tMirrors, AgentOption
 }
 
 // different cases are tested in T_ConfigureMultiAgent, see gtests_searchdaemon.cpp
-bool ConfigureMultiAgent ( MultiAgentDesc_c &tAgent, const char * szAgent, const char * szIndexName
-						   , AgentOptions_t tOptions )
+MultiAgentDesc_c * ConfigureMultiAgent ( const char * szAgent, const char * szIndexName, AgentOptions_t tOptions )
 {
 	CSphVector<AgentDesc_t *> tMirrors;
 	WarnInfo_t dWI { szIndexName, szAgent };
 
 	if ( !ConfigureMirrorSet ( tMirrors, &tOptions, dWI ) )
-		return false;
+		return nullptr;
 
-	return tAgent.Init ( tMirrors, tOptions, dWI );
+	return MultiAgentDesc_c::GetAgent ( tMirrors, tOptions, dWI );
 }
 
 HostDesc_t &HostDesc_t::CloneFromHost ( const HostDesc_t &rhs )
@@ -1178,12 +1249,13 @@ void cDashStorage::LinkHost ( HostDesc_t &dHost )
 	ARRAY_FOREACH ( i, m_dDashes )
 	{
 		auto pDash = m_dDashes[i];
-		if ( pDash->IsLast () )
+		if ( dHost.m_pDash && dHost.GetMyUrl ()==pDash->m_tHost.GetMyUrl () )
+			dHost.m_pDash = pDash;
+		else if ( pDash->IsLast () )
 		{
 			m_dDashes.RemoveFast ( i-- ); // remove, and then step back
 			SafeRelease ( pDash );
-		} else if ( !dHost.m_pDash && dHost.GetMyUrl()==pDash->m_tHost.GetMyUrl() )
-			dHost.m_pDash = pDash;
+		}
 	}
 
 	if ( !dHost.m_pDash )
@@ -2386,6 +2458,8 @@ bool AgentConn_t::CommitResult ()
 
 void AgentConn_t::SetMultiAgent ( const CSphString &sIndex, MultiAgentDesc_c * pAgent )
 {
+	assert ( pAgent );
+	pAgent->AddRef ();
 	m_pMultiAgent = pAgent;
 	m_iMirrorsCount = pAgent->GetLength ();
 	SetRetryLimit ( pAgent->GetRetryLimit (), false );

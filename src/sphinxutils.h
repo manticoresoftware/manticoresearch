@@ -19,6 +19,9 @@
 #include <ctype.h>
 #include <stdarg.h>
 
+#include "sphinxstd.h"
+#include "sphinx.h"
+
 //////////////////////////////////////////////////////////////////////////
 
 /// my own isalpha (let's build our own theme park!)

@@ -8,7 +8,6 @@ Supported releases:
 
 *  Debian
 
-	* 7.0 (wheezy)
 	* 8.0 (jessie)
 	* 9.0 (stretch)
 	
@@ -170,6 +169,24 @@ Once started you can access Manticore using the mysql cli:
 	C:\path\to\mysql> mysql -P9306 -h127.0.0.1
 
 (note that in most example, we use ``-h0``, on Windows you need to use ``localhost`` or ``127.0.0.1`` for the local host.)
+	
+.. _upgrade_from_sphinx:
+
+Upgrading from Sphinx Search
+----------------------------
+
+Manticore Search 2.x maintains  compatibility with  Sphinx Search 2.x  and can load existing indexes created with Sphinx Search.
+In most cases, upgrading is just a matter of replacing the binaries.
+
+In case of Linux distributions, Manticore Search continues to use the usual ``/etc/sphinxsearch/sphinx.conf``, but it runs under a different user and use different folders.
+
+Service name has changed from ``sphinx``/``sphinxsearch`` to ``manticore`` and will run under ``manticore`` user ( Spinx was using ``sphinx`` or ``sphinxsearch``).
+
+Default used folders are ``/var/lib/manticore``, ``/var/log/manticore``, ``/var/run/manticore``.
+You can still use existing ``sphinx.conf``, but you need to manually change the permissions on ``/var/lib/sphinxsearch``, ``/var/log/sphinxsearch``, ``/var/run/sphinxsearch`` folders.
+
+If you want to use the Manticore folder instead, the index files needs to be moved to the new data folder (``/var/lib/manticore``) and permissions to be changed to ``manticore`` user.
+
 	
 .. _running_from_docker:
 

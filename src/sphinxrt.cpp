@@ -8858,6 +8858,10 @@ void RtIndex_t::GetStatus ( CSphIndexStatus * pRes ) const
 		+ m_dDiskChunks.AllocatedBytes ()
 		+ pRes->m_iRamChunkSize;
 
+	pRes->m_iRamRetired = 0;
+	ARRAY_FOREACH ( i, m_dRetired )
+		pRes->m_iRamRetired += m_dRetired[i]->GetUsedRam();
+
 	pRes->m_iMemLimit = m_iSoftRamLimit;
 	pRes->m_iDiskUse = 0;
 

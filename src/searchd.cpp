@@ -16593,6 +16593,7 @@ static void AddPlainIndexStatus ( SqlRowBuffer_c & tOut, const ServedIndex_c * p
 			tOut.DataTuplet ( "ram_chunk", tStatus.m_iRamChunkSize );
 			tOut.DataTuplet ( "disk_chunks", tStatus.m_iNumChunks );
 			tOut.DataTuplet ( "mem_limit", tStatus.m_iMemLimit );
+			tOut.DataTuplet ( "ram_bytes_retired", tStatus.m_iRamRetired );
 		}
 
 		AddIndexQueryStats ( tOut, pServed );
@@ -17255,6 +17256,7 @@ public:
 				m_tLastMeta = CSphQueryResultMeta();
 				m_tLastMeta.m_sError = m_sError;
 				m_tLastMeta.m_sWarning = "";
+				StatCountCommand ( eStmt==STMT_INSERT ? SEARCHD_COMMAND_INSERT : SEARCHD_COMMAND_REPLACE );
 				StmtErrorReporter_c tErrorReporter ( tOut );
 				sphHandleMysqlInsert ( tErrorReporter, *pStmt, eStmt==STMT_REPLACE,
 					m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction, m_tLastMeta.m_sWarning, m_tAcc, m_tVars.m_eCollation );

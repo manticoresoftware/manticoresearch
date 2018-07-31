@@ -186,7 +186,7 @@ Manticore Search also supports faceting, which in essence is a set of group by a
 In return you get a multiple result set, where the first is the result set of the query and the rest are the facet results.
 
 Functions
-~~~~~~~~~~\
+~~~~~~~~~~
 
 GEODIST function can be used to calculate distance between 2 geo coordinates. The result can be used for sorting. 
 
@@ -253,8 +253,8 @@ CALL SUGGEST requires an index with full wildcarding (infixing) enabled. Suggest
    +---------+----------+------+
    4 rows in set (0.00 sec)
 
-:ref:`Percolate queries<percolate_query>`
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Percolate queries
+~~~~~~~~~~~~~~~~~
 
 The regular workflow is store index document and match against them a query. However, sometimes it's desired to check if new content matches an existing set of queries. Running the queries over the index each time a document is added can be inefficient. Instead, it would be faster if queries were stored in a index and the new documents are tested against the stored queries. Also called inverse search, this is used for for signaling in monitoring systems or news aggregation.
 

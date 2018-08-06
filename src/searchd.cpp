@@ -19450,26 +19450,46 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread
 		auto pServedIndex = GetServed ( sIndexName );
 		if ( pServedIndex )
 		{
-			ServedDescWPtr_c pServedWLocked ( pServedIndex );
-			if ( pServedWLocked )
+			bool bGotLocal = false;
+			bool bReconfigure = false;
+			// Rlock scope for settings compare
 			{
-				bReplaceLocal = ( eNewType!=pServedWLocked->m_eType );
-				if ( !bReplaceLocal )
+				ServedDescRPtr_c pServedRLocked ( pServedIndex );
+				if ( pServedRLocked )
 				{
-					if ( pServedWLocked->m_eType==eITYPE::TEMPLATE )
-						ConfigureTemplateIndex ( pServedWLocked, hIndex );
-					else
+					bGotLocal = true;
+					bReplaceLocal = ( eNewType!=pServedRLocked->m_eType );
+					if ( !bReplaceLocal )
 					{
-						ConfigureLocalIndex ( pServedWLocked, hIndex );
-						if ( hIndex.Exists ( "path" ) && hIndex["path"].strval ()!=pServedWLocked->m_sIndexPath )
-						{
-							pServedWLocked->m_sNewPath = hIndex["path"].strval ();
-							g_pDisabledIndexes->AddUniq ( nullptr, sIndexName );
-						}
+						ServedDesc_t tDesc;
+						ConfigureLocalIndex ( &tDesc, hIndex );
+						bReconfigure = ( tDesc.m_iExpandKeywords!=pServedRLocked->m_iExpandKeywords ||
+							tDesc.m_bMlock!=pServedRLocked->m_bMlock ||
+							tDesc.m_bPreopen!=pServedRLocked->m_bPreopen ||
+							tDesc.m_sGlobalIDFPath!=pServedRLocked->m_sGlobalIDFPath ||
+							tDesc.m_bOnDiskAttrs!=pServedRLocked->m_bOnDiskAttrs ||
+							tDesc.m_bOnDiskPools!=pServedRLocked->m_bOnDiskPools );
+						bReconfigure |= ( pServedRLocked->m_eType!=eITYPE::TEMPLATE && hIndex.Exists ( "path" ) && hIndex["path"].strval ()!=pServedRLocked->m_sIndexPath );
 					}
-					dLocalToDelete[sIndexName] = false;
-					continue;
 				}
+
+			}
+			// Wlock'ing only in case settings changed
+			if ( bReconfigure )
+			{
+				ServedDescWPtr_c pServedWLocked ( pServedIndex );
+				ConfigureLocalIndex ( pServedWLocked, hIndex );
+				if ( pServedWLocked->m_eType!=eITYPE::TEMPLATE && hIndex.Exists ( "path" ) && hIndex["path"].strval ()!=pServedWLocked->m_sIndexPath )
+				{
+					pServedWLocked->m_sNewPath = hIndex["path"].strval ();
+					g_pDisabledIndexes->AddUniq ( nullptr, sIndexName );
+				}
+			}
+
+			if ( bGotLocal && !bReplaceLocal )
+			{
+				dLocalToDelete[sIndexName] = false;
+				continue;
 			}
 		}
 

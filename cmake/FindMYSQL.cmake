@@ -74,6 +74,7 @@ IF ( NOT MYSQL_CONFIG_EXECUTABLE )
 				/opt/mysql/mysql/bin
 				/usr/local/mysql/bin
 				/usr/pkg/bin
+				/usr/local/opt/mysql-client/bin
 				${WITH_MYSQL_ROOT}/bin
 				)
 	ENDIF ( EXISTS "$ENV{MYSQL_DIR}/bin/mysql_config" )

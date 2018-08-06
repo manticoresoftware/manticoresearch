@@ -31,6 +31,9 @@
 /* Define to 1 if you have the `backtrace' function. */
 #cmakedefine HAVE_BACKTRACE ${HAVE_BACKTRACE}
 
+/* Define to 1 if you have the `backtrace_symbols' function. */
+#cmakedefine HAVE_BACKTRACE_SYMBOLS ${HAVE_BACKTRACE_SYMBOLS}
+
 /* Define to 1 if you have the `clock_gettime' function. */
 #cmakedefine HAVE_CLOCK_GETTIME ${HAVE_CLOCK_GETTIME}
 

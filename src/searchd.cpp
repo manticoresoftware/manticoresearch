@@ -16213,8 +16213,7 @@ void HandleMysqlTruncate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 
 void HandleMysqlOptimize ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 {
-	// get an exclusive lock
-	ServedDescWPtr_c pIndex ( GetServed ( tStmt.m_sIndex ) );
+	ServedDescRPtr_c pIndex ( GetServed ( tStmt.m_sIndex ) );
 	if ( !pIndex || !pIndex->IsMutable() )
 	{
 		tOut.Error ( tStmt.m_sStmt, "OPTIMIZE INDEX requires an existing RT index" );
@@ -16225,7 +16224,6 @@ void HandleMysqlOptimize ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 
 	if ( tStmt.m_tQuery.m_bSync )
 	{
-		// get an exclusive lock
 		if ( pIndex->m_pIndex )
 			static_cast<ISphRtIndex *>( pIndex->m_pIndex )->Optimize ( );
 		return;

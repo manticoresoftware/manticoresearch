@@ -1205,4 +1205,9 @@ TEST ( functions, curledref )
 	ASSERT_TRUE ( &sProof==&sTest ) << "figured brackets";
 }
 
+TEST ( functions, valgrind_use )
+{
+	BYTE* pLeak = new BYTE[100];
+	ASSERT_TRUE (true) << "intended leak";
+}
 

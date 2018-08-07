@@ -1235,16 +1235,7 @@ struct Expr_JsonFieldConv_c : public ISphExpr
 public:
 	explicit Expr_JsonFieldConv_c ( ISphExpr * pArg )
 		: m_pArg { pArg }
-	{
-		if ( pArg )
-			pArg->AddRef ();
-	}
-
-	~Expr_JsonFieldConv_c() override
-	{
-		SafeRelease ( m_pArg ); // once - sync with addref
-		SafeRelease ( m_pArg ); // secondary - release ownership
-	}
+	{}
 
 	int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const override
 	{
@@ -1279,8 +1270,7 @@ public:
 
 protected:
 	const BYTE *	m_pStrings = nullptr;
-	ISphExpr *		m_pArg;
-
+	CSphRefcountedPtr<ISphExpr> m_pArg;
 
 	ESphJsonType GetKey ( const BYTE ** ppKey, const CSphMatch & tMatch ) const
 	{

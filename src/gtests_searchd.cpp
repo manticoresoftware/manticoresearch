@@ -222,3 +222,25 @@ TEST ( searchd_stuff, epoll_behaviour )
 }
 
 #endif
+
+TEST ( searchd_stuff, iovec_behaviour )
+{
+	SmartOutputBuffer_t tSrc;
+	IOVec_c tIO;
+
+	tSrc.SendDword (0xAAAAAAAA);
+	tIO.BuildFrom (tSrc);
+	tSrc.StartNewChunk ();
+	tSrc.SendDword ( 0xBBBBBBBB);
+	tIO.BuildFrom ( tSrc );
+	ASSERT_EQ ( tIO.IOSize (), 2);
+	tSrc.StartNewChunk();
+	tIO.BuildFrom ( tSrc );
+	ASSERT_EQ ( tIO.IOSize (), 2 );
+	tIO.StepForward (2);
+	ASSERT_EQ ( tIO.IOSize (), 2 );
+	tIO.StepForward (2);
+	ASSERT_EQ ( tIO.IOSize (), 1 );
+	tIO.StepForward (4);
+	ASSERT_EQ ( tIO.IOSize (), 0 );
+}

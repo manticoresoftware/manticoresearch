@@ -1322,6 +1322,7 @@ int SmartOutputBuffer_t::GetSentCount () const
 
 void SmartOutputBuffer_t::StartNewChunk ()
 {
+	assert ( BlobsEmpty() );
 	m_dChunks.Add ( new ISphOutputBuffer ( m_dBuf ) );
 	m_dBuf.Reserve ( NETOUTBUF );
 }
@@ -1379,11 +1380,11 @@ void SmartOutputBuffer_t::LeakTo ( CSphVector<ISphOutputBuffer *> dOut )
 #define UIO_MAXIOV (1024)
 #endif
 
-size_t SmartOutputBuffer_t::GetIOVec ( CSphVector<sphIovec> &dOut )
+size_t SmartOutputBuffer_t::GetIOVec ( CSphVector<sphIovec> &dOut ) const
 {
 	size_t iOutSize = 0;
 	dOut.Reset();
-	m_dChunks.Apply ( [&dOut, &iOutSize] ( ISphOutputBuffer *&pChunk ) {
+	m_dChunks.Apply ( [&dOut, &iOutSize] ( const ISphOutputBuffer *pChunk ) {
 		auto& dIovec = dOut.Add();
 		IOPTR(dIovec) = IOBUFTYPE ( pChunk->GetBufPtr () );
 		IOLEN (dIovec) = pChunk->GetSentCount ();
@@ -1402,9 +1403,9 @@ size_t SmartOutputBuffer_t::GetIOVec ( CSphVector<sphIovec> &dOut )
 
 /// IOVec_c : wrapper over vector of system iovec/WSABuf
 /////////////////////////////////////////////////////////////////////////////
-void IOVec_c::Build ()
+void IOVec_c::BuildFrom ( const SmartOutputBuffer_t &tSource )
 {
-	m_dSource.GetIOVec ( m_dIOVec );
+	tSource.GetIOVec ( m_dIOVec );
 	if ( m_dIOVec.IsEmpty () )
 		return;
 	m_iIOChunks = ( size_t ) m_dIOVec.GetLength ();
@@ -1413,6 +1414,7 @@ void IOVec_c::Build ()
 void IOVec_c::Reset()
 {
 	m_dIOVec.Reset();
+	m_iIOChunks = 0;
 }
 
 void IOVec_c::StepForward ( size_t uStep )
@@ -1805,7 +1807,7 @@ void AgentConn_t::BuildData ()
 		sphLogDebugA ( "%d BuildData for this=%p, m_pBuilder=%p", m_iStoreTag, this, m_pBuilder );
 		// prepare our data to send.
 		m_pBuilder->BuildRequest ( *this, m_tOutput );
-		m_dIOVec.Build ();
+		m_dIOVec.BuildFrom ( m_tOutput );
 	} else
 		sphLogDebugA ( "%d BuildData, already done", m_iStoreTag );
 }

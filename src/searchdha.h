@@ -410,25 +410,12 @@ struct IReporter_t : ISphNoncopyable
 
 class IOVec_c
 {
-	SmartOutputBuffer_t &m_dSource; // source we associated with
-
 	CSphVector<sphIovec> m_dIOVec;
 	size_t m_iIOChunks = 0;
 
 public:
 
-	IOVec_c( SmartOutputBuffer_t & dSrc)
-		: m_dSource ( dSrc )
-	{
-		m_dSource.AddRef ();
-	};
-
-	~IOVec_c()
-	{
-		m_dSource.Release();
-	};
-
-	void Build (); /// take data from linked source
+	void BuildFrom ( const SmartOutputBuffer_t& tSource ); /// take data from linked source
 	void Reset ();
 
 	/// consume received chunk
@@ -448,6 +435,8 @@ public:
 	/// buf for sendmsg/WSAsend
 	inline sphIovec * IOPtr () const
 	{
+		if ( !m_iIOChunks )
+			return nullptr;
 		return m_dIOVec.end () - m_iIOChunks;
 	}
 
@@ -540,7 +529,7 @@ private:
 
 	// sending buffer stuff
 	SmartOutputBuffer_t m_tOutput;		///< chain of blobs we're sending to a host
-	IOVec_c 			m_dIOVec { m_tOutput };
+	IOVec_c 			m_dIOVec;
 
 	// states and flags
 	bool m_bConnectHandshake = false;	///< if we need to establish new connection, and so, wait back handshake version

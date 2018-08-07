@@ -312,6 +312,7 @@ public:
 
 public:
 	void Flush() override; // just check integrity before flush
+	bool BlobsEmpty() const { return m_dBlobs.IsEmpty (); }
 
 protected:
 	void StartChunk(); // reserve int in the buf, push it's position
@@ -332,7 +333,7 @@ public:
 	void StartNewChunk ();
 //	void AppendBuf ( SmartOutputBuffer_t &dBuf );
 //	void PrependBuf ( SmartOutputBuffer_t &dBuf );
-	size_t GetIOVec ( CSphVector<sphIovec> &dOut );
+	size_t GetIOVec ( CSphVector<sphIovec> &dOut ) const;
 	void Reset();
 #if USE_WINDOWS
 	void LeakTo ( CSphVector<ISphOutputBuffer *> dOut );

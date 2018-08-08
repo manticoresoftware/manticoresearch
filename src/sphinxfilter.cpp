@@ -1328,7 +1328,7 @@ public:
 
 	virtual bool Eval ( const CSphMatch & tMatch ) const
 	{
-		const BYTE * pVal;
+		const BYTE * pVal = nullptr;
 		int iLen = m_pExpr->StringEval ( tMatch, &pVal );
 		bool bEq = m_fnStrCmp ( pVal, (const BYTE*)m_sVal.cstr(), STRING_PLAIN, iLen, m_iValLength )==0;
 		return ( m_bEq==bEq );

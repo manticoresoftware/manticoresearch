@@ -5232,12 +5232,16 @@ void RemapResult ( const ISphSchema * pTarget, AggrResult_t * pRes )
 		CSphSchema & dSchema = pRes->m_dSchemas[iSchema];
 		for ( int i=0; i<pTarget->GetAttrsCount(); i++ )
 		{
-			dMapFrom.Add ( dSchema.GetAttrIndex ( pTarget->GetAttr(i).m_sName.cstr() ) );
+			auto iSrcCol = dSchema.GetAttrIndex ( pTarget->GetAttr ( i ).m_sName.cstr () );
+			const CSphColumnInfo &tSrcCol = dSchema.GetAttr ( iSrcCol );
+			dMapFrom.Add ( iSrcCol );
 			assert ( dMapFrom[i]>=0
 				|| pTarget->GetAttr(i).m_tLocator.IsID()
 				|| sphIsSortStringInternal ( pTarget->GetAttr(i).m_sName.cstr() )
 				|| pTarget->GetAttr(i).m_sName=="@groupbystr"
 				);
+			int iOffset = tSrcCol.m_tLocator.m_iBitOffset / ( 8 * sizeof ( CSphRowitem ) );
+			dSchema.DiscardPtr ( iOffset );
 		}
 		int iLimit = Min ( iCur + pRes->m_dMatchCounts[iSchema], pRes->m_dMatches.GetLength() );
 		for ( int i=iCur; i<iLimit; i++ )
@@ -5275,6 +5279,7 @@ void RemapResult ( const ISphSchema * pTarget, AggrResult_t * pRes )
 			}
 			// swap out old (most likely wrong sized) match
 			Swap ( tMatch, tRow );
+			dSchema.FreeDataPtrs ( &tRow );
 		}
 
 		iCur = iLimit;

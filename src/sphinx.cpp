@@ -6034,6 +6034,11 @@ void CSphSchemaHelper::FreeDataPtrs ( CSphMatch * pMatch ) const
 	}
 }
 
+void CSphSchemaHelper::DiscardPtr ( int iAttr )
+{
+	m_dDataPtrAttrs.RemoveValue ( iAttr );
+}
+
 
 void CSphSchemaHelper::CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const
 {

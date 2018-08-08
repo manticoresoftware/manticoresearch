@@ -1567,6 +1567,7 @@ class CSphSchemaHelper : public ISphSchema
 public:
 	virtual void	FreeDataPtrs ( CSphMatch * pMatch ) const;
 	virtual void	CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const;
+	void 			DiscardPtr ( int iAttr );
 
 protected:
 	CSphVector<int>	m_dDataPtrAttrs;				// rowitems of pointers to data that are stored inside matches

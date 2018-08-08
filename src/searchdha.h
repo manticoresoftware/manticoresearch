@@ -604,9 +604,11 @@ public:
 
 IRemoteAgentsObserver * GetObserver ();
 
-void ScheduleDistrJobs ( VectorAgentConn_t &dRemotes, IRequestBuilder_t * pQuery,
-	IReplyParser_t * pParser, IRemoteAgentsObserver * pReporter=nullptr, int iQueryRetry = -1, int iQueryDelay = -1 );
+void ScheduleDistrJobs ( VectorAgentConn_t &dRemotes, IRequestBuilder_t * pQuery, IReplyParser_t * pParser,
+	IRemoteAgentsObserver * pReporter=nullptr, int iQueryRetry = -1, int iQueryDelay = -1 );
 
+// simplified full task - schedule jobs, wait for complete, report num of succeeded
+int PerformRemoteTasks ( VectorAgentConn_t &dRemotes, IRequestBuilder_t * pQuery, IReplyParser_t * pParser );
 
 /////////////////////////////////////////////////////////////////////////////
 // DISTRIBUTED QUERIES

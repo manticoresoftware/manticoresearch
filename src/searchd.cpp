@@ -7841,19 +7841,20 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// connect to remote agents and query them, if required
 	CSphScopedPtr<SearchRequestBuilder_t> tReqBuilder { nullptr };
 	CSphScopedPtr<IRemoteAgentsObserver> tReporter { nullptr };
+	CSphScopedPtr<IReplyParser_t> tParser { nullptr };
 	if ( !dRemotes.IsEmpty() )
 	{
 		if ( m_pProfile )
 			m_pProfile->Switch ( SPH_QSTATE_DIST_CONNECT );
 
 		tReqBuilder = new SearchRequestBuilder_t ( m_dQueries, iStart, iEnd, iDivideLimits );
+		tParser = new SearchReplyParser_c ( iStart, iEnd );
 		tReporter = GetObserver();
 
 		// run remote queries. tReporter will tell us when they're finished.
 		// also blackholes will be removed from this flow of remotes.
-
 		ScheduleDistrJobs ( dRemotes, tReqBuilder.Ptr (),
-			new SearchReplyParser_c( iStart, iEnd ),
+			tParser.Ptr (),
 			tReporter.Ptr(), tFirst.m_iRetryCount, tFirst.m_iRetryDelay );
 	}
 
@@ -10865,11 +10866,7 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 				// connect to remote agents and query them
 				UpdateRequestBuilder_t tReqBuilder ( tUpd );
 				UpdateReplyParser_t tParser ( &iUpdated );
-				CSphScopedPtr<IRemoteAgentsObserver> tReporter { GetObserver () };
-
-				ScheduleDistrJobs ( dAgents, &tReqBuilder, &tParser, tReporter.Ptr ());
-				tReporter->Finish();
-				iSuccesses += tReporter->GetSucceeded ();
+				iSuccesses += PerformRemoteTasks ( dAgents, &tReqBuilder, &tParser );
 			}
 		}
 	}
@@ -13883,26 +13880,17 @@ void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphStr
 		pDistributed->GetAllHosts ( dAgents );
 
 		int iAgentsReply = 0;
-		if ( dAgents.GetLength() )
+		if ( !dAgents.IsEmpty() )
 		{
 			// connect to remote agents and query them
 			KeywordsRequestBuilder_t tReqBuilder ( tSettings, sTerm );
 			KeywordsReplyParser_t tParser ( tSettings.m_bStats, dKeywords );
-			CSphScopedPtr<IRemoteAgentsObserver> tReporter { GetObserver () };
+			iAgentsReply = PerformRemoteTasks ( dAgents, &tReqBuilder, &tParser );
 
-			ScheduleDistrJobs ( dAgents, &tReqBuilder, &tParser, tReporter.Ptr() );
-			tReporter->Finish();
-			iAgentsReply = ( int ) tReporter->GetSucceeded ();
-
-			ARRAY_FOREACH ( i, dAgents )
-			{
-				const AgentConn_t * pAgent = dAgents[i];
+			for ( const AgentConn_t * pAgent : dAgents )
 				if ( !pAgent->m_bSuccess && !pAgent->m_sFailure.IsEmpty() )
-				{
-					const char * sAgent = ( pAgent->m_tDesc.m_bBlackhole ? "blackhole" : "agent" );
-					tFailureLog.SubmitEx ( pAgent->m_tDesc.m_sIndexes.cstr(), sIndex.cstr(), "%s %s: %s", sAgent, pAgent->m_tDesc.GetMyUrl().cstr(), pAgent->m_sFailure.cstr() );
-				}
-			}
+					tFailureLog.SubmitEx ( pAgent->m_tDesc.m_sIndexes.cstr(), sIndex.cstr(),
+						"agent %s: %s", pAgent->m_tDesc.GetMyUrl().cstr(), pAgent->m_sFailure.cstr() );
 		}
 
 		// process result sets
@@ -14554,9 +14542,7 @@ static void CheckPing ( int64_t iNow )
 	// fixme! Let's rewrite ping proc another (async) way.
 	PingRequestBuilder_t tReqBuilder ( (int)iNow );
 	PingReplyParser_t tParser ( &iReplyCookie );
-	CSphScopedPtr<IRemoteAgentsObserver> tReporter { GetObserver () };
-	ScheduleDistrJobs ( dConnections, &tReqBuilder, &tParser, tReporter.Ptr() );
-	tReporter->Finish();
+	PerformRemoteTasks ( dConnections, &tReqBuilder, &tParser );
 
 	// connect to remote agents and query them
 	if ( g_bShutdown )
@@ -14685,9 +14671,7 @@ static bool SendUserVar ( const char * sIndex, const char * sUserVarName, CSphVe
 	{
 		UVarRequestBuilder_t tReqBuilder ( sUserVarName, dSetValues );
 		UVarReplyParser_t tParser;
-		CSphScopedPtr<IRemoteAgentsObserver> tReporter { GetObserver () };
-		ScheduleDistrJobs ( dAgents, &tReqBuilder, &tParser, tReporter.Ptr() );
-		tReporter->Finish ();
+		PerformRemoteTasks ( dAgents, &tReqBuilder, &tParser );
 	}
 
 	// should be at the end due to swap of dSetValues values
@@ -14932,10 +14916,7 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const QueryParserFactory
 			// connect to remote agents and query them
 			CSphScopedPtr<IRequestBuilder_t> pRequestBuilder ( tQueryParserFactory.CreateRequestBuilder ( sQuery, tStmt ) ) ;
 			CSphScopedPtr<IReplyParser_t> pReplyParser ( tQueryParserFactory.CreateReplyParser ( iUpdated, iWarns ) );
-			CSphScopedPtr<IRemoteAgentsObserver> tReporter { GetObserver () };
-			ScheduleDistrJobs ( dAgents, pRequestBuilder.Ptr (), pReplyParser.Ptr (), tReporter.Ptr() );
-			tReporter->Finish();
-			iSuccesses += tReporter->GetSucceeded ();
+			iSuccesses += PerformRemoteTasks ( dAgents, pRequestBuilder.Ptr (), pReplyParser.Ptr () );
 		}
 	}
 
@@ -15713,10 +15694,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const QueryParserFactory
 			// connect to remote agents and query them
 			CSphScopedPtr<IRequestBuilder_t> pRequestBuilder ( tQueryParserFactory.CreateRequestBuilder ( sQuery, tStmt ) ) ;
 			CSphScopedPtr<IReplyParser_t> pReplyParser ( tQueryParserFactory.CreateReplyParser ( iGot, iWarns ) );
-			CSphScopedPtr<IRemoteAgentsObserver> tReporter { GetObserver () };
-
-			ScheduleDistrJobs ( dAgents, pRequestBuilder.Ptr (), pReplyParser.Ptr(), tReporter.Ptr () );
-			tReporter->Finish();
+			PerformRemoteTasks ( dAgents, pRequestBuilder.Ptr (), pReplyParser.Ptr () );
 
 			// FIXME!!! report error & warnings from agents
 			// FIXME? profile update time too?

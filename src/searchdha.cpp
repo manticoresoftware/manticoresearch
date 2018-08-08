@@ -2016,6 +2016,16 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 #endif
 }
 
+//! Simplified wrapper for ScheduleDistrJobs, wait for finish and return succeeded
+int PerformRemoteTasks ( VectorAgentConn_t &dRemotes, IRequestBuilder_t * pQuery, IReplyParser_t * pParser )
+{
+	CSphScopedPtr<IRemoteAgentsObserver> tReporter { GetObserver () };
+	ScheduleDistrJobs ( dRemotes, pQuery, pParser, tReporter.Ptr () );
+	tReporter->Finish ();
+	return (int)tReporter->GetSucceeded ();
+}
+
+
 /// Add set of works (dRemotes) to the queue.
 /// jobs themselves are ref-counted and owned by nobody (they're just released on finish, so
 /// if nobody waits them (say, blackhole), they just dissapeared).

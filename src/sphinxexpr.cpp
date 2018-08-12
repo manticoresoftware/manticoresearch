@@ -4646,29 +4646,25 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		}
 	}
 
-	ISphExpr * pLeft = bSkipLeft ? nullptr : CreateTree ( tNode.m_iLeft );
-	ISphExpr * pRight = bSkipRight ? nullptr : CreateTree ( tNode.m_iRight );
+	CSphRefcountedPtr<ISphExpr> pLeft ( bSkipLeft ? nullptr : CreateTree ( tNode.m_iLeft ) );
+	CSphRefcountedPtr<ISphExpr> pRight ( bSkipRight ? nullptr : CreateTree ( tNode.m_iRight ) );
 
 	if ( GetError() )
-	{
-		SafeRelease ( pLeft );
-		SafeRelease ( pRight );
 		return nullptr;
-	}
 
 #define LOC_SPAWN_POLY(_classname) \
-	if ( tNode.m_eArgType==SPH_ATTR_INTEGER )		return new _classname##Int_c ( pLeft, pRight ); \
-	else if ( tNode.m_eArgType==SPH_ATTR_BIGINT )	return new _classname##Int64_c ( pLeft, pRight ); \
-	else											return new _classname##Float_c ( pLeft, pRight );
+	if ( tNode.m_eArgType==SPH_ATTR_INTEGER )		return new _classname##Int_c ( pLeft.Leak(), pRight.Leak() ); \
+	else if ( tNode.m_eArgType==SPH_ATTR_BIGINT )	return new _classname##Int64_c ( pLeft.Leak(), pRight.Leak() ); \
+	else											return new _classname##Float_c ( pLeft.Leak(), pRight.Leak() );
 
 	int iOp = tNode.m_iToken;
 	if ( iOp=='+' || iOp=='-' || iOp=='*' || iOp=='/' || iOp=='&' || iOp=='|' || iOp=='%' || iOp=='<' || iOp=='>'
 		|| iOp==TOK_LTE || iOp==TOK_GTE || iOp==TOK_EQ || iOp==TOK_NE || iOp==TOK_AND || iOp==TOK_OR || iOp==TOK_NOT )
 	{
 		if ( pLeft && m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_JSON_FIELD && m_dNodes[tNode.m_iLeft].m_iToken==TOK_ATTR_JSON )
-			pLeft = new Expr_JsonFieldConv_c ( pLeft );
+			pLeft = new Expr_JsonFieldConv_c ( pLeft.Leak () );
 		if ( pRight && m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_JSON_FIELD && m_dNodes[tNode.m_iRight].m_iToken==TOK_ATTR_JSON )
-			pRight = new Expr_JsonFieldConv_c ( pRight );
+			pRight = new Expr_JsonFieldConv_c ( pRight.Leak () );
 	}
 
 	switch ( tNode.m_iToken )
@@ -4699,13 +4695,13 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case TOK_ID:			return new Expr_GetId_c ();
 		case TOK_WEIGHT:		return new Expr_GetWeight_c ();
 
-		case '+':				return new Expr_Add_c ( pLeft, pRight ); break;
-		case '-':				return new Expr_Sub_c ( pLeft, pRight ); break;
-		case '*':				return new Expr_Mul_c ( pLeft, pRight ); break;
-		case '/':				return new Expr_Div_c ( pLeft, pRight ); break;
-		case '&':				return new Expr_BitAnd_c ( pLeft, pRight ); break;
-		case '|':				return new Expr_BitOr_c ( pLeft, pRight ); break;
-		case '%':				return new Expr_Mod_c ( pLeft, pRight ); break;
+		case '+':				return new Expr_Add_c ( pLeft.Leak (), pRight.Leak () ); break;
+		case '-':				return new Expr_Sub_c ( pLeft.Leak (), pRight.Leak () ); break;
+		case '*':				return new Expr_Mul_c ( pLeft.Leak (), pRight.Leak () ); break;
+		case '/':				return new Expr_Div_c ( pLeft.Leak (), pRight.Leak () ); break;
+		case '&':				return new Expr_BitAnd_c ( pLeft.Leak (), pRight.Leak () ); break;
+		case '|':				return new Expr_BitOr_c ( pLeft.Leak (), pRight.Leak () ); break;
+		case '%':				return new Expr_Mod_c ( pLeft.Leak (), pRight.Leak () ); break;
 
 		case '<':				LOC_SPAWN_POLY ( Expr_Lt ); break;
 		case '>':				LOC_SPAWN_POLY ( Expr_Gt ); break;
@@ -4715,27 +4711,26 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 									m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_STRINGPTR ) &&
 									( m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRING ||
 									m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRINGPTR ) )
-									return new Expr_StrEq_c ( pLeft, pRight, m_eCollation );
+									return new Expr_StrEq_c ( pLeft.Leak (), pRight.Leak (), m_eCollation );
 								else if ( ( m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_JSON_FIELD ) &&
 									( m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRING ||
 									m_dNodes[tNode.m_iRight].m_eRetType==SPH_ATTR_STRINGPTR ) )
-									return new Expr_StrEq_c ( pLeft, pRight, m_eCollation );
+									return new Expr_StrEq_c ( pLeft.Leak (), pRight.Leak (), m_eCollation );
 								LOC_SPAWN_POLY ( Expr_Eq ); break;
 		case TOK_NE:			LOC_SPAWN_POLY ( Expr_Ne ); break;
 		case TOK_AND:			LOC_SPAWN_POLY ( Expr_And ); break;
 		case TOK_OR:			LOC_SPAWN_POLY ( Expr_Or ); break;
 		case TOK_NOT:
-			SafeDelete ( pRight );
 			return ( tNode.m_eArgType==SPH_ATTR_BIGINT )
-				? (ISphExpr * ) new Expr_NotInt64_c ( pLeft )
-				: (ISphExpr * ) new Expr_NotInt_c ( pLeft );
+				? (ISphExpr * ) new Expr_NotInt64_c ( pLeft.Leak () )
+				: (ISphExpr * ) new Expr_NotInt_c ( pLeft.Leak () );
 
 		case ',':
 			if ( pLeft && pRight )
-				return new Expr_Arglist_c ( pLeft, pRight );
+				return new Expr_Arglist_c ( pLeft.Leak (), pRight.Leak () );
 			break;
 
-		case TOK_NEG:			assert ( pRight==nullptr ); return new Expr_Neg_c ( pLeft ); break;
+		case TOK_NEG:			assert ( !pRight ); return new Expr_Neg_c ( pLeft.Leak () ); break;
 		case TOK_FUNC:
 			{
 				// fold arglist to array
@@ -4744,7 +4739,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 
 				CSphVector<ISphExpr *> dArgs;
 				if ( !bSkipLeft )
-					FoldArglist ( pLeft, dArgs );
+					FoldArglist ( pLeft.Leak (), dArgs );
 
 				// spawn proper function
 				assert ( tNode.m_iFunc>=0 && tNode.m_iFunc<int(sizeof(g_dFuncs)/sizeof(g_dFuncs[0])) );
@@ -4883,9 +4878,9 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 				break;
 			}
 
-		case TOK_UDF:			return CreateUdfNode ( tNode.m_iFunc, pLeft ); break;
+		case TOK_UDF:			return CreateUdfNode ( tNode.m_iFunc, pLeft.Leak () ); break;
 		case TOK_HOOK_IDENT:	return m_pHook->CreateNode ( tNode.m_iFunc, NULL, NULL, m_sCreateError ); break;
-		case TOK_HOOK_FUNC:		return m_pHook->CreateNode ( tNode.m_iFunc, pLeft, &m_eEvalStage, m_sCreateError ); break;
+		case TOK_HOOK_FUNC:		return m_pHook->CreateNode ( tNode.m_iFunc, pLeft.Leak (), &m_eEvalStage, m_sCreateError ); break;
 		case TOK_MAP_ARG:
 			// tricky bit
 			// data gets moved (!) from node to ISphExpr at this point
@@ -4895,7 +4890,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 			if ( pLeft && m_dNodes[tNode.m_iLeft].m_iToken==TOK_SUBKEY && !tNode.m_tLocator.m_bDynamic )
 			{
 				// json key is a single static subkey, switch to fastpath
-				return new Expr_JsonFastKey_c ( tNode.m_tLocator, tNode.m_iLocator, pLeft );
+				return new Expr_JsonFastKey_c ( tNode.m_tLocator, tNode.m_iLocator, pLeft.Leak () );
 			} else
 			{
 				// json key is a generic expression, use generic catch-all JsonField
@@ -4903,7 +4898,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 				CSphVector<ESphAttr> dTypes;
 				if ( pLeft ) // may be NULL (top level array)
 				{
-					FoldArglist ( pLeft, dArgs );
+					FoldArglist ( pLeft.Leak (), dArgs );
 					GatherArgRetTypes ( tNode.m_iLeft, dTypes );
 				}
 				return new Expr_JsonField_c ( tNode.m_tLocator, tNode.m_iLocator, dArgs, dTypes );
@@ -4916,7 +4911,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 				CSphVector<ESphAttr> dTypes;
 				if ( pLeft )
 				{
-					FoldArglist ( pLeft, dArgs );
+					FoldArglist ( pLeft.Leak (), dArgs );
 					GatherArgRetTypes ( tNode.m_iLeft, dTypes );
 				}
 				return new Expr_JsonFieldConv_c ( new Expr_Iterator_c ( tNode.m_tLocator, tNode.m_iLocator, dArgs, dTypes, tNode.m_pAttr ) );
@@ -4926,7 +4921,7 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 		case TOK_IS_NULL:
 		case TOK_IS_NOT_NULL:
 			if ( m_dNodes[tNode.m_iLeft].m_eRetType==SPH_ATTR_JSON_FIELD )
-				return new Expr_JsonFieldIsNull_c ( pLeft, tNode.m_iToken==TOK_IS_NULL );
+				return new Expr_JsonFieldIsNull_c ( pLeft.Leak (), tNode.m_iToken==TOK_IS_NULL );
 			else
 				return new Expr_GetIntConst_c ( tNode.m_iToken!=TOK_IS_NULL );
 
@@ -4936,8 +4931,6 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 #undef LOC_SPAWN_POLY
 
 	// fire exit
-	SafeRelease ( pLeft );
-	SafeRelease ( pRight );
 	return nullptr;
 }
 

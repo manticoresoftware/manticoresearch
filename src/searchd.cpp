@@ -6275,6 +6275,8 @@ struct Expr_Snippet_c : public ISphStringExpr
 			return PackSnippets ( m_tHighlight.m_dRes, m_tHighlight.m_dSeparators, m_tHighlight.m_sChunkSeparator.Length(), ppStr );
 	}
 
+	bool IsDataPtrAttr () const final { return true; }
+
 	void FixupLocator ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema ) override
 	{
 		if ( m_pText )

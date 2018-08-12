@@ -101,7 +101,9 @@ const BYTE * ISphExpr::StringEvalPacked ( const CSphMatch & tMatch ) const
 {
 	const BYTE * pStr = nullptr;
 	int iStrLen = StringEval ( tMatch, &pStr );
-	return sphPackPtrAttr ( pStr, iStrLen );
+	auto pRes = sphPackPtrAttr ( pStr, iStrLen );
+	if ( IsDataPtrAttr () ) SafeDeleteArray ( pStr );
+	return pRes;
 }
 
 

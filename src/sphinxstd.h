@@ -2363,6 +2363,7 @@ public:
 					~CSphScopedPtr ()			{ SafeDelete ( m_pPtr ); }
 	T *				operator -> () const		{ return m_pPtr; }
 	T *				Ptr () const				{ return m_pPtr; }
+	explicit operator bool () const				{ return m_pPtr!=nullptr; }
 	CSphScopedPtr &	operator = ( T * pPtr )		{ SafeDelete ( m_pPtr ); m_pPtr = pPtr; return *this; }
 	T *				LeakPtr ()					{ T * pPtr = m_pPtr; m_pPtr = NULL; return pPtr; }
 	void			ReplacePtr ( T * pPtr )		{ m_pPtr = pPtr; }
@@ -2416,7 +2417,7 @@ public:
 	~CSphRefcountedPtr ()				{ SafeRelease ( m_pPtr ); }
 
 	T *	operator -> () const			{ return m_pPtr; }
-		explicit operator bool() const			{ return m_pPtr!=nullptr; }
+		explicit operator bool() const	{ return m_pPtr!=nullptr; }
 		operator T * () const			{ return m_pPtr; }
 
 	// drop the ownership and reset pointer

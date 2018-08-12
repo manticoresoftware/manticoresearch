@@ -3025,6 +3025,11 @@ struct CSphMatchComparatorState
 		}
 	}
 
+	~CSphMatchComparatorState ()
+	{
+		for ( ISphExpr *&pExpr :  m_tSubExpr ) SafeRelease( pExpr );
+	}
+
 	/// check if any of my attrs are bitfields
 	bool UsesBitfields ()
 	{

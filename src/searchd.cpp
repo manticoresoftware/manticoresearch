@@ -5399,8 +5399,6 @@ static int KillAllDupes ( ISphMatchSorter * pSorter, AggrResult_t & tRes )
 
 	tRes.m_dMatches.Reset ();
 	sphFlattenQueue ( pSorter, &tRes, -1 );
-	SafeDelete ( pSorter );
-
 	return iDupes;
 }
 
@@ -5848,7 +5846,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 		SphQueueSettings_t tQueueSettings ( tQuery, tRes.m_tSchema, tRes.m_sError );
 		tQueueSettings.m_bComputeItems = false;
 		tQueueSettings.m_pAggrFilter = pAggrFilter;
-		ISphMatchSorter * pSorter = sphCreateQueue ( tQueueSettings );
+		CSphScopedPtr<ISphMatchSorter> pSorter  ( sphCreateQueue ( tQueueSettings ) );
 
 		// restore outer order related patches, or it screws up the query log
 		if ( tQuery.m_bHasOuter )
@@ -5897,7 +5895,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 		}
 
 		// do the sort work!
-		tRes.m_iTotalMatches -= KillAllDupes ( pSorter, tRes );
+		tRes.m_iTotalMatches -= KillAllDupes ( pSorter.Ptr(), tRes );
 	}
 
 	// apply outer order clause to single result set

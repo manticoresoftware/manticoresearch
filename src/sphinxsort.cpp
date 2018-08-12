@@ -70,6 +70,7 @@ void ISphMatchSorter::SetSchema ( ISphSchema * pSchema )
 void ISphMatchSorter::SetState ( const CSphMatchComparatorState & tState )
 {
 	m_tState = tState;
+	for ( ISphExpr *&pExpr :  m_tState.m_tSubExpr ) SafeAddRef ( pExpr );
 	m_tState.m_iNow = (DWORD) time ( nullptr );
 }
 
@@ -4475,7 +4476,10 @@ struct ExprSortJson2StringPtr_c : public ISphExpr
 		: m_pStrings ( nullptr )
 		, m_tJsonCol ( tLocator )
 		, m_pExpr ( pExpr )
-	{}
+	{
+		if ( pExpr ) // adopt the expression
+			pExpr->AddRef();
+	}
 
 	bool IsDataPtrAttr () const final { return true; }
 
@@ -4621,7 +4625,12 @@ static void SetupSortRemap ( CSphRsetSchema & tSorterSchema, CSphMatchComparator
 			CSphColumnInfo tRemapCol ( sRemapCol.cstr(), bIsJson ? SPH_ATTR_STRINGPTR : SPH_ATTR_BIGINT );
 			tRemapCol.m_eStage = SPH_EVAL_PRESORT;
 			if ( bIsJson )
-				tRemapCol.m_pExpr = bIsFunc ? tState.m_tSubExpr[i] : new ExprSortJson2StringPtr_c ( tState.m_tLocator[i], tState.m_tSubExpr[i] );
+				if ( bIsFunc )
+				{
+					tRemapCol.m_pExpr = tState.m_tSubExpr[i];
+					tRemapCol.m_pExpr->AddRef();
+				} else
+					tRemapCol.m_pExpr = new ExprSortJson2StringPtr_c ( tState.m_tLocator[i], tState.m_tSubExpr[i] );
 			else
 				tRemapCol.m_pExpr = new ExprSortStringAttrFixup_c ( tState.m_tLocator[i] );
 

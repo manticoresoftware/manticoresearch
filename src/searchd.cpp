@@ -6237,7 +6237,7 @@ struct Expr_Snippet_c : public ISphStringExpr
 		SafeRelease ( m_pArgs );
 	}
 
-	int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const override
+	int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const final
 	{
 		CSphScopedProfile ( m_pProfiler, SPH_QSTATE_SNIPPET );
 
@@ -15718,19 +15718,11 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const QueryParserFactory
 
 struct SessionVars_t
 {
-	bool			m_bAutoCommit;
-	bool			m_bInTransaction;
-	ESphCollation	m_eCollation;
-	bool			m_bProfile;
-	bool			m_bVIP;
-
-	SessionVars_t ()
-		: m_bAutoCommit ( true )
-		, m_bInTransaction ( false )
-		, m_eCollation ( g_eCollation )
-		, m_bProfile ( false )
-		, m_bVIP ( false )
-	{}
+	bool			m_bAutoCommit = true;
+	bool			m_bInTransaction = false;
+	ESphCollation	m_eCollation { g_eCollation };
+	bool			m_bProfile = false;
+	bool			m_bVIP = false;
 };
 
 // fwd
@@ -20825,15 +20817,15 @@ struct ISphNetAction : ISphNoncopyable
 
 struct NetStateCommon_t
 {
-	int					m_iClientSock;
-	int					m_iConnID;
+	int					m_iClientSock = -1;
+	int					m_iConnID = 0;
 	char				m_sClientName[SPH_ADDRPORT_SIZE];
-	bool				m_bKeepSocket;
-	bool				m_bVIP;
+	bool				m_bKeepSocket = false;
+	bool				m_bVIP = false;
 
 	CSphVector<BYTE>	m_dBuf;
-	int					m_iLeft;
-	int					m_iPos;
+	int					m_iLeft = 0;
+	int					m_iPos = 0;
 
 	NetStateCommon_t ();
 	virtual ~NetStateCommon_t ();
@@ -22407,12 +22399,6 @@ void NetSendData_t::CloseSocket()
 
 
 NetStateCommon_t::NetStateCommon_t ()
-	: m_iClientSock ( -1 )
-	, m_iConnID ( 0 )
-	, m_bKeepSocket ( false )
-	, m_bVIP ( false )
-	, m_iLeft ( 0 )
-	, m_iPos ( 0 )
 {
 	m_sClientName[0] = '\0';
 }

@@ -3007,18 +3007,15 @@ struct CSphMatchComparatorState
 	ESphAttr			m_tSubType[MAX_ATTRS];		///< sort-by expression type
 	int					m_dAttrs[MAX_ATTRS];		///< sort-by attr index
 
-	DWORD				m_uAttrDesc;				///< sort order mask (if i-th bit is set, i-th attr order is DESC)
-	DWORD				m_iNow;						///< timestamp (for timesegments sorting mode)
-	SphStringCmp_fn		m_fnStrCmp;					///< string comparator
+	DWORD				m_uAttrDesc = 0;			///< sort order mask (if i-th bit is set, i-th attr order is DESC)
+	DWORD				m_iNow = 0;					///< timestamp (for timesegments sorting mode)
+	SphStringCmp_fn		m_fnStrCmp = nullptr;		///< string comparator
 
 
 	/// create default empty state
 	CSphMatchComparatorState ()
-		: m_uAttrDesc ( 0 )
-		, m_iNow ( 0 )
-		, m_fnStrCmp ( nullptr )
 	{
-		for ( int i=0; i<MAX_ATTRS; i++ )
+		for ( int i=0; i<MAX_ATTRS; ++i )
 		{
 			m_eKeypart[i] = SPH_KEYPART_ID;
 			m_tSubExpr[i] = nullptr;

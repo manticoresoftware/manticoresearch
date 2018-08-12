@@ -2327,9 +2327,9 @@ class MatchesToNewSchema_c : public ISphMatchProcessor
 {
 public:
 							MatchesToNewSchema_c ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema );
-	virtual void			Process ( CSphMatch * pMatch ) override;
+	void					Process ( CSphMatch * pMatch ) final;
 
-protected:
+private:
 	const ISphSchema *		m_pOldSchema;
 	const ISphSchema *		m_pNewSchema;
 	CSphVector<CSphAttrLocator>	m_dNewAttrs;

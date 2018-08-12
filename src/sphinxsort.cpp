@@ -4477,7 +4477,7 @@ struct ExprSortJson2StringPtr_c : public ISphExpr
 		, m_pExpr ( pExpr )
 	{}
 
-	bool IsDataPtrAttr () const override { return true; }
+	bool IsDataPtrAttr () const final { return true; }
 
 	float Eval ( const CSphMatch & ) const override { assert ( 0 ); return 0.0f; }
 

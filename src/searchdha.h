@@ -234,7 +234,7 @@ using HostStatSnapshot_t = uint64_t[eMaxAgentStat + ehMaxStat];
 /// per-host dashboard
 struct HostDashboard_t : public ISphRefcountedMT
 {
-	HostDesc_t m_tHost;                // only host info, no indices. Used for ping.
+	HostDesc_t m_tHost;          // only host info, no indices. Used for ping.
 	bool m_bNeedPing = false;    // we'll ping only HA agents, not everyone
 	PersistentConnectionsPool_c * m_pPersPool = nullptr;    // persistence pool also lives here, one per dashboard
 

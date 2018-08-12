@@ -8751,17 +8751,17 @@ private:
 	const DWORD *	m_pMVAPool;
 	bool			m_bArenaProhibit;
 
-	virtual const DWORD * GetMVAPool ( const CSphMatch * /*pMatch*/ ) override
+	const DWORD * GetMVAPool ( const CSphMatch * /*pMatch*/ ) final
 	{
 		return m_pMVAPool;
 	}
 
-	virtual const BYTE * GetStringPool ( const CSphMatch * /*pMatch*/ ) override
+	const BYTE * GetStringPool ( const CSphMatch * /*pMatch*/ ) final
 	{
 		return m_pStringPool;
 	}
 
-	virtual bool GetArenaProhibitFlag ( const CSphMatch * /*pMatch*/ ) override
+	bool GetArenaProhibitFlag ( const CSphMatch * /*pMatch*/ ) final
 	{
 		return m_bArenaProhibit;
 	}
@@ -14889,6 +14889,12 @@ struct SphFinalMatchCalc_t : ISphMatchProcessor, ISphNoncopyable
 
 	void Process ( CSphMatch * pMatch ) final
 	{
+		// fixme! tag is signed int,
+		// for distr. tags from remotes set with | 0x80000000,
+		// i e in terms of signed int they're <0!
+		// Is it intention, or bug?
+		// If intention, lt us use uniformely either <0, either &0x80000000
+		// conditions to avoid messing. If bug, shit already happened!
 		if ( pMatch->m_iTag>=0 )
 			return;
 
@@ -15062,6 +15068,10 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	CSphMatch tMatch;
 	tMatch.Reset ( tMaxSorterSchema.GetDynamicSize() );
 	tMatch.m_iWeight = tArgs.m_iIndexWeight;
+	// fixme! tag also used over bitmask | 0x80000000,
+	// which marks that match comes from remote.
+	// using -1 might be also interpreted as 0xFFFFFFFF in such context!
+	// Does it intended?
 	tMatch.m_iTag = tCtx.m_dCalcFinal.GetLength() ? -1 : tArgs.m_iTag;
 
 	if ( pResult->m_pProfile )
@@ -15071,7 +15081,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	// run full scan with block and row filtering for everything else
 	if ( pQuery->m_dFilters.GetLength()==1
 		&& pQuery->m_dFilters[0].m_eType==SPH_FILTER_VALUES
-		&& pQuery->m_dFilters[0].m_bExclude==false
+		&& !pQuery->m_dFilters[0].m_bExclude
 		&& pQuery->m_dFilters[0].m_sAttrName=="@id"
 		&& tArgs.m_dKillList.GetLength()==0
 		&& pQuery->m_dFilterTree.GetLength()==0 )

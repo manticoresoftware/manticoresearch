@@ -2137,7 +2137,7 @@ void AgentConn_t::SoftTimeoutCallback ()
 {
 	if ( !DoQuery () )
 		StartRemoteLoopTry ();
-	FirePoller ();
+	FirePoller (); // fixme? M.b. no more necessary, since processing queue will restart on fired timeout.
 	sphLogDebugA ( "%d finished retry timeout ref=%d", m_iStoreTag, ( int ) GetRefcount () );
 }
 

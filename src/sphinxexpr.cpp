@@ -1525,7 +1525,7 @@ public:
 		return JsonAggr<int64_t> ( eJson, pVal, m_eFunc, nullptr );
 	}
 
-	bool IsDataPtrAttr() const override { return true; }
+	bool IsDataPtrAttr() const final { return true; }
 
 	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
 	{

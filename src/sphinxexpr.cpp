@@ -1828,8 +1828,8 @@ struct Expr_StrEq_c : public Expr_Binary_c
 
 	int IntEval ( const CSphMatch & tMatch ) const final
 	{
-		const BYTE * pLeft;
-		const BYTE * pRight;
+		const BYTE * pLeft = nullptr;
+		const BYTE * pRight = nullptr;
 		int iLeft = m_pFirst->StringEval ( tMatch, &pLeft );
 		int iRight = m_pSecond->StringEval ( tMatch, &pRight );
 

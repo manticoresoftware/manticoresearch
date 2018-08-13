@@ -1762,6 +1762,11 @@ void AgentConn_t::HardTimeoutCallback ()
 	sphLogDebugA ( "%d <- hard timeout (ref=%d)", m_iStoreTag, ( int ) GetRefcount () );
 }
 
+void AgentConn_t::AbortCallback()
+{
+	ReportFinish (false);
+}
+
 void AgentConn_t::ErrorCallback ( int64_t iWaited )
 {
 	if ( !m_pPollerTask )
@@ -3540,6 +3545,19 @@ private:
 		return bHasTimeout; /// means 'infinite'
 	}
 
+	/// abandon and release all events (on shutdown)
+	void AbortScheduled ()
+	{
+		while ( !m_dTimeouts.IsEmpty () )
+		{
+			auto pTask = m_dTimeouts.Root ();
+			m_dTimeouts.Pop ();
+			CSphRefcountedPtr<AgentConn_t> pKeepConn ( DeleteTask ( pTask, false ) );
+			if ( pKeepConn )
+				pKeepConn->AbortCallback ();
+		}
+	}
+
 	/// one event cycle.
 	/// \return false to stop event loop and exit.
 	bool EventTick () REQUIRES ( LazyThread )
@@ -3558,6 +3576,7 @@ private:
 
 		if ( g_bShutdown )
 		{
+			AbortScheduled();
 			sphInfo ( "EventTick() exit because of shutdown=%d", g_bShutdown );
 			return false;
 		}

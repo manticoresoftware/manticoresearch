@@ -495,6 +495,7 @@ public:
 	void RecvCallback ( int64_t iWaited, DWORD uReceived );
 	void SoftTimeoutCallback();
 	void HardTimeoutCallback();
+	void AbortCallback();
 
 #if USE_WINDOWS
 	// move recv buffer to dOut, reinit mine.

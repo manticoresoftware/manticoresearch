@@ -480,6 +480,7 @@ void MultiAgentDesc_c::CleanupOrphaned()
 {
 	// cleanup global
 	auto &gAgents = g_MultiAgents ();
+	bool bNeedGC = false;
 	for ( WLockedHashIt_c it ( &gAgents ); it.Next (); )
 	{
 		auto pAgent = it.Get ();
@@ -490,9 +491,12 @@ void MultiAgentDesc_c::CleanupOrphaned()
 			{
 				it.Delete ();
 				SafeRelease ( pAgent );
+				bNeedGC = true;
 			}
 		}
 	}
+	if ( bNeedGC )
+		g_tDashes.CleanupOrphaned ();
 }
 
 // calculate uniq key for holding MultiAgent instance in global hash
@@ -1248,32 +1252,34 @@ AgentDesc_t &AgentDesc_t::CloneFrom ( const AgentDesc_t &rhs )
 	return *this;
 }
 
-void cDashStorage::LinkHost ( HostDesc_t &dHost )
+void cDashStorage::CleanupOrphaned ()
 {
-	assert ( !dHost.m_pDash );
 	CSphScopedWLock tWguard ( m_tDashLock );
-
-	// a little trick: simultaneously add new and free deleted entries
-	// (with refcount==1, i.e. owned only here)
-	// this is why we don't return immediately as found value for addref
 	ARRAY_FOREACH ( i, m_dDashes )
 	{
 		auto pDash = m_dDashes[i];
-		if ( dHost.GetMyUrl ()==pDash->m_tHost.GetMyUrl () )
-			dHost.m_pDash = pDash;
-		else if ( pDash->IsLast () )
+		if ( pDash->IsLast () )
 		{
 			m_dDashes.RemoveFast ( i-- ); // remove, and then step back
 			SafeRelease ( pDash );
 		}
 	}
+}
 
-	if ( !dHost.m_pDash )
+void cDashStorage::LinkHost ( HostDesc_t &dHost )
+{
+	assert ( !dHost.m_pDash );
+	auto pDash = FindAgent ( dHost.GetMyUrl() );
+	if ( pDash )
 	{
-		dHost.m_pDash = new HostDashboard_t ( dHost );
-		m_dDashes.Add ( dHost.m_pDash );
+		dHost.m_pDash = pDash.Leak ();
+		return;
 	}
 
+	// nothing found existing; so create the new.
+	dHost.m_pDash = new HostDashboard_t ( dHost );
+	CSphScopedWLock tWguard ( m_tDashLock );
+	m_dDashes.Add ( dHost.m_pDash );
 	dHost.m_pDash->AddRef(); // one link here in vec, other returned with the host
 }
 

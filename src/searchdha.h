@@ -706,6 +706,7 @@ public:
 	void				LinkHost ( HostDesc_t &dHost ); ///< put host into dashboard and init link to it
 	HostDashboardPtr_t	FindAgent ( const CSphString& sAgent ) const;
 	void				GetActiveDashes ( VecRefPtrs_t<HostDashboard_t *> & dAgents ) const;
+	void				CleanupOrphaned();
 };
 
 extern SearchdStats_t			g_tStats;

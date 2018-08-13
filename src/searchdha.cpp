@@ -558,12 +558,20 @@ bool MultiAgentDesc_c::Init ( const CSphVector<AgentDesc_t *> &dHosts,
 		m_dWeights[i] = fFrac;
 	}
 
-	// require pings for HA agent
-	if ( IsHA () )
+	// agents with neeping!=0 will be pinged
+	m_bNeedPing = IsHA () && !tOpt.m_bBlackhole;
+	if ( m_bNeedPing )
 		for ( int i = 0; i<GetLength (); ++i )
-			m_pData[i].m_pDash->m_bNeedPing = true;
+			++m_pData[i].m_pDash->m_iNeedPing;
 
 	return true;
+}
+
+MultiAgentDesc_c::~MultiAgentDesc_c()
+{
+	if ( m_bNeedPing )
+		for ( int i = 0; i<GetLength (); ++i )
+			--m_pData[i].m_pDash->m_iNeedPing;
 }
 
 const AgentDesc_t &MultiAgentDesc_c::RRAgent ()

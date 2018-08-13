@@ -235,7 +235,7 @@ using HostStatSnapshot_t = uint64_t[eMaxAgentStat + ehMaxStat];
 struct HostDashboard_t : public ISphRefcountedMT
 {
 	HostDesc_t m_tHost;          // only host info, no indices. Used for ping.
-	bool m_bNeedPing = false;    // we'll ping only HA agents, not everyone
+	volatile int m_iNeedPing = 0;    // we'll ping only HA agents, not everyone
 	PersistentConnectionsPool_c * m_pPersPool = nullptr;    // persistence pool also lives here, one per dashboard
 
 	mutable RwLock_t m_dDataLock;        // guards everything essential (see thread annotations)
@@ -314,8 +314,9 @@ class MultiAgentDesc_c : public ISphRefcountedMT, public CSphFixedVector<AgentDe
 	DWORD				m_uTimestamp { HostDashboard_t::GetCurSeconds () };    /// timestamp of last weight's actualization
 	HAStrategies_e		m_eStrategy { HA_DEFAULT };
 	int					m_iMultiRetryCount = 0;
+	bool 				m_bNeedPing = false;	/// ping need to hosts if we're HA and NOT bl.
 
-	~MultiAgentDesc_c () final = default;
+	~MultiAgentDesc_c () final;
 
 public:
 	MultiAgentDesc_c ()

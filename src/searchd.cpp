@@ -11206,7 +11206,7 @@ void BuildOneAgentStatus ( VectorLike & dStatus, HostDashboard_t* pDash, const c
 		if ( dStatus.MatchAddVa ( "%s_references", sPrefix ) )
 			dStatus.Add().SetSprintf ( "%d", (int) pDash->GetRefcount()-1 ); // -1 since we currently also 'use' the agent, reading it's stats
 		if ( dStatus.MatchAddVa ( "%s_ping", sPrefix ) )
-			dStatus.Add ().SetSprintf ( "%s", pDash->m_bNeedPing ? "yes" : "no" );
+			dStatus.Add ().SetSprintf ( "%s", pDash->m_iNeedPing ? "yes" : "no" );
 		if ( dStatus.MatchAddVa ( "%s_has_perspool", sPrefix ) )
 			dStatus.Add ().SetSprintf ( "%s", pDash->m_pPersPool ? "yes" : "no" );
 		if ( dStatus.MatchAddVa ( "%s_need_resolve", sPrefix ) )
@@ -14521,7 +14521,8 @@ static void CheckPing ( int64_t iNow )
 	g_tDashes.GetActiveDashes ( dDashes );
 	for ( auto& pDash : dDashes )
 	{
-		if ( pDash->m_bNeedPing )
+		assert ( pDash->m_iNeedPing>=0 );
+		if ( pDash->m_iNeedPing )
 		{
 			CSphScopedRLock tRguard ( pDash->m_dDataLock );
 			if ( pDash->IsOlder ( iNow ) )

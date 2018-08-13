@@ -6350,7 +6350,7 @@ bool CSphSchema::IsReserved ( const char * szToken )
 {
 	static const char * dReserved[] =
 	{
-		"AND", "AS", "BY", "DIV", "FACET", "FALSE", "FROM", "ID", "IN", "INDEXES", "IS", "LIMIT", "LOGS",
+		"AND", "AS", "BY", "DIV", "DEBUG", "FACET", "FALSE", "FROM", "ID", "IN", "INDEXES", "IS", "LIMIT", "LOGS",
 		"MOD", "NOT", "NULL", "OR", "ORDER", "RELOAD", "SELECT", "SYSFILTERS", "TRUE", "WAIT_TIMEOUT", nullptr
 	};
 
@@ -18613,6 +18613,39 @@ public:
 			digest[i] = ( BYTE ) ( ( state[i >> 2] >> ( ( 3 - ( i & 3 ) ) * 8 ) ) & 255 );
 	}
 };
+
+
+CSphString BinToHex ( const CSphVector<BYTE>& dHash )
+{
+	const char * sDigits = "0123456789abcdef";
+	if ( dHash.IsEmpty() )
+		return "";
+
+	CSphString sRes;
+	auto iLen = 2*dHash.GetLength()*2;
+	sRes.Reserve ( iLen );
+	auto sHash = const_cast<char *> (sRes.cstr ());
+
+	ARRAY_FOREACH ( i, dHash )
+	{
+		sHash[i << 1] = sDigits[dHash[i] >> 4];
+		sHash[1 + ( i << 1 )] = sDigits[dHash[i] & 0x0f];
+	}
+	sHash[iLen] = '\0';
+	return sRes;
+}
+
+CSphString CalcSHA1 ( const void * pData, int iLen )
+{
+	CSphVector<BYTE> dHashValue (HASH20_SIZE);
+	SHA1_c dHasher;
+	dHasher.Init();
+	dHasher.Update ( (const BYTE*) pData, iLen );
+	dHasher.Final ( dHashValue.begin() );
+	return BinToHex ( dHashValue );
+}
+
+
 
 //////////////////////////////////////////////////////////////////////////
 // WriterWithHash_c - CSphWriter which also calc SHA1 on-the-fly

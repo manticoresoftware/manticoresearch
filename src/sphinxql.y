@@ -49,6 +49,7 @@
 %token	TOK_COUNT
 %token	TOK_CREATE
 %token	TOK_DATABASES
+%token	TOK_DEBUG
 %token	TOK_DELETE
 %token	TOK_DESC
 %token	TOK_DESCRIBE
@@ -229,6 +230,7 @@ statement:
 	| flush_hostnames
 	| flush_logs
 	| sysfilters
+	| debug_clause
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -1802,8 +1804,25 @@ sysfilters:
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_SYSFILTERS;
 		}
-	;		
+	;
 
+debug_clause:
+	TOK_DEBUG opt_par
+		{
+            pParser->m_pStmt->m_eStmt = STMT_DEBUG;
+        }
+
+opt_par:
+	// empty
+	| ident
+		{
+			pParser->ToString ( pParser->m_pStmt->m_sIndex, $1 );
+		}
+	| ident set_string_value
+		{
+			pParser->ToString ( pParser->m_pStmt->m_sIndex, $1 );
+			pParser->ToString ( pParser->m_pStmt->m_sStringParam, $2 );
+		}
 %%
 
 #if USE_WINDOWS

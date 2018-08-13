@@ -177,6 +177,7 @@ static int				g_iThdQueueMax		= 0;
 static int				g_tmWait = 1;
 bool					g_bGroupingInUtc	= false;
 static bool				g_bTcpFastOpen		= false; ///< whether to use TFO on listeners
+static CSphString		g_sShutdownToken;
 
 struct Listener_t
 {
@@ -266,6 +267,7 @@ struct ThdDesc_t : public ListNode_t
 	ProtocolType_e	m_eProto { PROTO_MYSQL41 };
 	int				m_iClientSock = 0;
 	CSphString		m_sClientName;
+	bool			m_bVip = false;
 
 	ThdState_e		m_eThdState { THD_HANDSHAKE };
 	const char *	m_sCommand = nullptr;
@@ -8521,7 +8523,7 @@ static const char * g_dSqlStmts[] =
 	"show_index_status", "show_profile", "alter_add", "alter_drop", "show_plan",
 	"select_dual", "show_databases", "create_plugin", "drop_plugin", "show_plugins", "show_threads",
 	"facet", "alter_reconfigure", "show_index_settings", "flush_index", "reload_plugins", "reload_index",
-	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters"
+	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug"
 };
 
 
@@ -16200,6 +16202,60 @@ void HandleMysqlFlush ( SqlRowBuffer_c & tOut, const SqlStmt_t & )
 	tOut.Eof();
 }
 
+inline static CSphString strSHA1 ( const CSphString& sLine )
+{
+	return CalcSHA1 ( sLine.cstr(), sLine.Length() );
+}
+
+void HandleMysqlDebug ( SqlRowBuffer_c &tOut, const SqlStmt_t &tStmt, bool bVipConn )
+{
+	CSphString sCommand = tStmt.m_sIndex;
+	CSphString sParam = tStmt.m_sStringParam;
+	sCommand.ToLower ();
+	sCommand.Trim ();
+	sParam.Trim ();
+
+	if ( bVipConn && sCommand=="shutdown" )
+	{
+		if ( g_sShutdownToken.IsEmpty () )
+		{
+			tOut.HeadTuplet ("command","error");
+			tOut.DataTuplet ("debug shutdown", "shutdown_token is empty. Provide it in searchd config section.");
+		}
+		else {
+			if ( strSHA1(sParam) == g_sShutdownToken )
+			{
+				tOut.HeadTuplet ( "command", "result" );
+				tOut.DataTuplet ( "debug shutdown <password>", "SUCCESS" );
+				sigterm(1);
+			} else
+				{
+					tOut.HeadTuplet ( "command", "result" );
+					tOut.DataTuplet ( "debug shutdown <password>", "FAIL" );
+			}
+			// perform challenge here...
+		}
+	} else if ( bVipConn && sCommand=="token" )
+	{
+		auto sSha = strSHA1(sParam);
+		tOut.HeadTuplet ( "command", "result" );
+		tOut.DataTuplet ( "debug token", sSha.cstr() );
+	} else
+	{
+		// no known command; provide short help.
+		tOut.HeadTuplet ( "command", "meaning" );
+		if ( bVipConn )
+		{
+			tOut.DataTuplet ( "debug shutdown <password>", "emulate TERM signal");
+			tOut.DataTuplet ( "debug token <password>", "calculate token for password" );
+		}
+		tOut.DataTuplet ( "flush logs", "emulate USR1 signal" );
+		tOut.DataTuplet ( "reload indexes", "emulate HUP signal" );
+	}
+	// done
+	tOut.Eof ();
+}
+
 // fwd
 static bool PrepareReconfigure ( const CSphString & sIndex, CSphReconfigureSettings & tSettings, CSphString & sError );
 
@@ -17561,6 +17617,10 @@ public:
 		case STMT_RELOAD_INDEXES: HandleMysqlReloadIndexes ( tOut );
 			return true;
 
+		case STMT_DEBUG:
+			HandleMysqlDebug ( tOut, *pStmt, m_tVars.m_bVIP );
+			return true;
+
 		default:
 			m_sError.SetSprintf ( "internal error: unhandled statement type (value=%d)", eStmt );
 			tOut.Error ( sQuery.cstr(), m_sError.cstr() );
@@ -17762,6 +17822,7 @@ static void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * p
 
 	CSphString sQuery; // to keep data alive for SphCrashQuery_c
 	CSphinxqlSession tSession ( false ); // session variables and state
+	tSession.m_tVars.m_bVIP = pThd->m_bVip;
 	bool bAuthed = false;
 	BYTE uPacketID = 1;
 
@@ -20730,6 +20791,7 @@ void TickHead () REQUIRES ( MainThread )
 	pThd->m_sClientName = sClientName;
 	pThd->m_iConnID = g_iConnectionID;
 	pThd->m_tmConnect = sphMicroTimer();
+	pThd->m_bVip = pListener->m_bVIP;
 
 	ThreadAdd ( pThd );
 
@@ -22906,6 +22968,9 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 		g_bGroupingInUtc = (hSearchd["grouping_in_utc"].intval ()!=0);
 		setGroupingInUtc ( g_bGroupingInUtc );
 	}
+
+	// sha1 password hash for shutdown action
+	g_sShutdownToken = hSearchd.GetStr ("shutdown_token");
 
 	if ( !g_bSeamlessRotate && g_bPreopenIndexes )
 		sphWarning ( "preopen_indexes=1 has no effect with seamless_rotate=0" );

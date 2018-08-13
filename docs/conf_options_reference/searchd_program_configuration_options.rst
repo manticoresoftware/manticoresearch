@@ -1269,7 +1269,17 @@ Example:
 
     shutdown_timeout = 5 # wait for up to 5 seconds
 
+.. _shutdown_token:
+
+shutdown_token
+~~~~~~~~~~~~~~
+
+SHA1 hash of the password which is necessary to invoke 'shutdown' command
+from VIP sphinxql connection. Without it :ref:`debug` shutdown' subcommand
+will never cause daemon's stop.
+
 .. _snippets_file_prefix:
+
 
 snippets_file_prefix
 ~~~~~~~~~~~~~~~~~~~~

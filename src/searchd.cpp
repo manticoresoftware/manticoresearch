@@ -23237,6 +23237,12 @@ void OpenDaemonLog ( const CSphConfigSection & hSearchd, bool bCloseIfOpened=fal
 		g_bLogTty = isatty ( g_iLogFile )!=0;
 }
 
+SphThread_t g_thPreread;
+void JoinPrereadThread ()
+{
+	sphThreadJoin ( &g_thPreread );
+}
+
 int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 {
 	ScopedRole_c thMain (MainThread);
@@ -24018,9 +24024,10 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		PrereadFunc ( NULL );
 	} else
 	{
-		SphThread_t tTmpPreread;
-		if ( !sphThreadCreate ( &tTmpPreread, PrereadFunc, 0, true ) )
+		if ( !sphThreadCreate ( &g_thPreread, PrereadFunc, 0, true ) )
 			sphWarning ( "failed to create preread thread" );
+		else
+			atexit( &JoinPrereadThread );
 	}
 
 	// almost ready, time to start listening

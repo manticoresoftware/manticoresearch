@@ -11676,6 +11676,10 @@ static void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_
 	const bool bCollectDocs = tMatchCtx.m_bGetDocs;
 	int iDocsOff = tMatchCtx.m_dDocsMatched.GetLength();
 	int iMatchCount = 0;
+	// reserve space for matched docs counter
+	if ( bCollectDocs )
+		tMatchCtx.m_dDocsMatched.Add ( 0 );
+
 
 	if ( !pStored->IsFullscan() ) // matching path
 	{
@@ -11697,8 +11701,6 @@ static void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_
 			if ( bCollectDocs )
 			{
 				// docs encoding: docs-count; docs matched
-				if ( !iMatchCount )
-					tMatchCtx.m_dDocsMatched.Add ( 0 );									
 				tMatchCtx.m_dDocsMatched.Reserve ( tMatchCtx.m_dDocsMatched.GetLength() + iMatches );
 				for ( int iMatch=0; iMatch<iMatches; iMatch++ )
 					tMatchCtx.m_dDocsMatched.Add ( pMatch[iMatch].m_uDocID );
@@ -11708,10 +11710,6 @@ static void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_
 		}
 	} else // full-scan path
 	{
-		// reserve space for matched docs counter
-		if ( bCollectDocs )
-			tMatchCtx.m_dDocsMatched.Add ( 0 );
-
 		CSphMatch tDoc;
 		int iStride = DOCINFO_IDSIZE + tMatchCtx.m_tSchema.GetRowSize();
 		const CSphIndex * pIndex = tMatchCtx.m_pTermSetup->m_pIndex;
@@ -11751,6 +11749,9 @@ static void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_
 				tDesc.m_sFilters = tMatchCtx.m_tFilterBuf.cstr();
 			}
 		}
+	} else if ( bCollectDocs ) // pop's up reserved but not used matched counter
+	{
+		tMatchCtx.m_dDocsMatched.Resize ( iDocsOff );
 	}
 
 	if ( tMatchCtx.m_bVerbose )

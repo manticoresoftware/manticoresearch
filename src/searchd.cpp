@@ -11203,6 +11203,12 @@ void BuildOneAgentStatus ( VectorLike & dStatus, HostDashboard_t* pDash, const c
 
 		if ( dStatus.MatchAddVa ( "%s_references", sPrefix ) )
 			dStatus.Add().SetSprintf ( "%d", (int) pDash->GetRefcount()-1 ); // -1 since we currently also 'use' the agent, reading it's stats
+		if ( dStatus.MatchAddVa ( "%s_ping", sPrefix ) )
+			dStatus.Add ().SetSprintf ( "%s", pDash->m_bNeedPing ? "yes" : "no" );
+		if ( dStatus.MatchAddVa ( "%s_has_perspool", sPrefix ) )
+			dStatus.Add ().SetSprintf ( "%s", pDash->m_pPersPool ? "yes" : "no" );
+		if ( dStatus.MatchAddVa ( "%s_need_resolve", sPrefix ) )
+			dStatus.Add ().SetSprintf ( "%s", pDash->m_tHost.m_bNeedResolve ? "yes" : "no" );
 		uint64_t iCur = sphMicroTimer();
 		uint64_t iLastAccess = iCur - pDash->m_iLastQueryTime;
 		float fPeriod = (float)iLastAccess/1000000.0f;

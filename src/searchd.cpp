@@ -7845,7 +7845,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 	// connect to remote agents and query them, if required
 	CSphScopedPtr<SearchRequestBuilder_t> tReqBuilder { nullptr };
-	CSphScopedPtr<IRemoteAgentsObserver> tReporter { nullptr };
+	CSphRefcountedPtr<IRemoteAgentsObserver> tReporter { nullptr };
 	CSphScopedPtr<IReplyParser_t> tParser { nullptr };
 	if ( !dRemotes.IsEmpty() )
 	{
@@ -7860,7 +7860,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		// also blackholes will be removed from this flow of remotes.
 		ScheduleDistrJobs ( dRemotes, tReqBuilder.Ptr (),
 			tParser.Ptr (),
-			tReporter.Ptr(), tFirst.m_iRetryCount, tFirst.m_iRetryDelay );
+			tReporter, tFirst.m_iRetryCount, tFirst.m_iRetryDelay );
 	}
 
 	/////////////////////
@@ -10314,8 +10314,8 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 	// connect to remote agents and query them
 	SnippetRequestBuilder_t tReqBuilder ( &dRemoteSnippets );
 	SnippetReplyParser_t  tParser ( &dRemoteSnippets );
-	CSphScopedPtr<IRemoteAgentsObserver> tReporter ( GetObserver() );
-	ScheduleDistrJobs ( dRemoteSnippets.m_dAgents, &tReqBuilder, &tParser, tReporter.Ptr() );
+	CSphRefcountedPtr<IRemoteAgentsObserver> tReporter ( GetObserver() );
+	ScheduleDistrJobs ( dRemoteSnippets.m_dAgents, &tReqBuilder, &tParser, tReporter );
 
 	// run local worker in current thread also
 	SnippetThreadFunc ( &dThreads[0] );

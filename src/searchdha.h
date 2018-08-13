@@ -368,11 +368,12 @@ using MultiAgentDescRefPtr_c = CSphRefcountedPtr<MultiAgentDesc_c>;
 extern int g_iAgentRetryCount;
 extern int g_iAgentRetryDelay;
 
-struct IReporter_t : ISphNoncopyable
+struct IReporter_t : ISphRefcountedMT
 {
-	virtual ~IReporter_t () {};
 	virtual void SetTotal ( int iTasks ) = 0;
 	virtual void Report ( bool bSuccess ) = 0;
+protected:
+	virtual ~IReporter_t () {};
 };
 
 #if USE_WINDOWS
@@ -475,7 +476,7 @@ struct AgentConn_t : public ISphRefcountedMT
 	mutable int		m_iStoreTag = -1;	///< cookie, m.b. used to 'glue' to concrete connection
 	int				m_iWeight = -1;		///< weight of the index, will be send with query to remote host
 
-	IReporter_t *	m_pReporter = nullptr;	///< used to report back when we're finished
+	CSphRefcountedPtr<IReporter_t>	m_pReporter { nullptr };	///< used to report back when we're finished
 	LPKEY			m_pPollerTask = nullptr; ///< internal for poller. fixme! privatize?
 	bool			m_bSuccess = false;		///< agent got processed, no need to retry
 
@@ -602,6 +603,9 @@ public:
 
 	// block execution while some works finished
 	virtual void WaitChanges () = 0;
+
+protected:
+	~IRemoteAgentsObserver() override {}
 };
 
 IRemoteAgentsObserver * GetObserver ();
@@ -705,7 +709,7 @@ class cDashStorage : public ISphNoncopyable
 public:
 	void				LinkHost ( HostDesc_t &dHost ); ///< put host into dashboard and init link to it
 	HostDashboardPtr_t	FindAgent ( const CSphString& sAgent ) const;
-	void				GetActiveDashes ( VecRefPtrs_t<HostDashboard_t *> & dAgents ) const;
+	void				GetActiveDashes ( CSphVector<HostDashboard_t *> & dAgents ) const;
 	void				CleanupOrphaned();
 };
 

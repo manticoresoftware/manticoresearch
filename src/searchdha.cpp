@@ -1301,7 +1301,7 @@ HostDashboardPtr_t cDashStorage::FindAgent ( const CSphString & sAgent ) const
 	return HostDashboardPtr_t(); // not found
 }
 
-void cDashStorage::GetActiveDashes ( VecRefPtrs_t<HostDashboard_t *> & dAgents ) const
+void cDashStorage::GetActiveDashes ( CSphVector<HostDashboard_t *> & dAgents ) const
 {
 	assert ( dAgents.IsEmpty ());
 	CSphScopedRLock tRguard ( m_tDashLock );
@@ -2038,8 +2038,8 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 //! Simplified wrapper for ScheduleDistrJobs, wait for finish and return succeeded
 int PerformRemoteTasks ( VectorAgentConn_t &dRemotes, IRequestBuilder_t * pQuery, IReplyParser_t * pParser )
 {
-	CSphScopedPtr<IRemoteAgentsObserver> tReporter { GetObserver () };
-	ScheduleDistrJobs ( dRemotes, pQuery, pParser, tReporter.Ptr () );
+	CSphRefcountedPtr<IRemoteAgentsObserver> tReporter { GetObserver () };
+	ScheduleDistrJobs ( dRemotes, pQuery, pParser, tReporter );
 	tReporter->Finish ();
 	return (int)tReporter->GetSucceeded ();
 }
@@ -2105,6 +2105,8 @@ void AgentConn_t::GenericInit ( IRequestBuilder_t * pQuery, IReplyParser_t * pPa
 	m_bNeedKick = false;
 	m_pPollerTask = nullptr;
 	m_pReporter = pReporter;
+	if ( pReporter )
+		pReporter->AddRef();
 	m_pParser = pParser;
 	m_iRetries = iQueryRetry>=0 ? iQueryRetry * m_iMirrorsCount :
 		( m_pMultiAgent ? m_pMultiAgent->GetRetryLimit () : 0 );
@@ -3888,12 +3890,13 @@ public:
 	{
 		return m_iFinished;
 	}
-
+protected:
+	~CRemoteAgentsObserver() final {}
 private:
 	CSphAutoEvent	m_tChanged;			///< the signaller
 	CSphAtomic		m_iSucceeded { 0 };	//< num of tasks finished successfully
 	CSphAtomic		m_iFinished { 0 };	//< num of tasks finished.
-	int				m_iTasks = 0;		//< total num of tasks
+	volatile int	m_iTasks = 0;		//< total num of tasks
 
 };
 

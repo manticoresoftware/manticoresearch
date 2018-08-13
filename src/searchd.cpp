@@ -2217,6 +2217,10 @@ void ProtoByName ( const CSphString & sProto, ListenerDesc_t & tDesc )
 	{
 		tDesc.m_eProto = PROTO_MYSQL41;
 		tDesc.m_bVIP = true;
+	} else if ( sProto=="http_vip" )
+	{
+		tDesc.m_eProto = PROTO_HTTP;
+		tDesc.m_bVIP = true;
 	} else
 	{
 		sphFatal ( "unknown listen protocol type '%s'", sProto.cstr() ? sProto.cstr() : "(NULL)" );

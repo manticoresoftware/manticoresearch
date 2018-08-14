@@ -1205,6 +1205,8 @@ static bool ConfigureMirrorSet ( CSphVector<AgentDesc_t*> &tMirrors, AgentOption
 MultiAgentDesc_c * ConfigureMultiAgent ( const char * szAgent, const char * szIndexName, AgentOptions_t tOptions )
 {
 	CSphVector<AgentDesc_t *> tMirrors;
+	auto dFree = AtScopeExit ( [&tMirrors] { tMirrors.Apply( [] ( AgentDesc_t * pMirror ) { SafeDelete ( pMirror ); } ); } );
+
 	WarnInfo_t dWI { szIndexName, szAgent };
 
 	if ( !ConfigureMirrorSet ( tMirrors, &tOptions, dWI ) )

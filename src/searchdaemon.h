@@ -924,7 +924,8 @@ public:
 
 	ServedIndexRefPtr_c Get () REQUIRES_SHARED ( m_pHash->IndexesRWLock() )
 	{
-		return ServedIndexRefPtr_c ( ( ServedIndex_c * ) RLockedHashIt_c::Get () );
+		auto pServed = ( ServedIndex_c * ) RLockedHashIt_c::Get ().Leak ();
+		return ServedIndexRefPtr_c ( pServed );
 	}
 };
 

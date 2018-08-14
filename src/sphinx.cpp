@@ -3337,7 +3337,7 @@ void SaveTokenizerSettings ( CSphWriter & tWriter, const ISphTokenizer * pTokeni
 	tWriter.PutString ( tSettings.m_sCaseFolding.cstr () );
 	tWriter.PutDword ( tSettings.m_iMinWordLen );
 
-	bool bEmbedSynonyms = pTokenizer->GetSynFileInfo ().m_uSize<=(SphOffset_t)iEmbeddedLimit;
+	bool bEmbedSynonyms = ( iEmbeddedLimit>0 && pTokenizer->GetSynFileInfo ().m_uSize<=(SphOffset_t)iEmbeddedLimit );
 	tWriter.PutByte ( bEmbedSynonyms ? 1 : 0 );
 	if ( bEmbedSynonyms )
 		pTokenizer->WriteSynonyms ( tWriter );
@@ -3447,7 +3447,8 @@ void SaveDictionarySettings ( CSphWriter & tWriter, const CSphDict * pDict, bool
 	ARRAY_FOREACH ( i, dSWFileInfos )
 		uTotalSize += dSWFileInfos[i].m_uSize;
 
-	bool bEmbedStopwords = uTotalSize<=(SphOffset_t)iEmbeddedLimit;
+	// embed only in case it allowed
+	bool bEmbedStopwords = ( iEmbeddedLimit>0 && uTotalSize<=(SphOffset_t)iEmbeddedLimit );
 	tWriter.PutByte ( bEmbedStopwords ? 1 : 0 );
 	if ( bEmbedStopwords )
 		pDict->WriteStopwords ( tWriter );
@@ -3465,7 +3466,7 @@ void SaveDictionarySettings ( CSphWriter & tWriter, const CSphDict * pDict, bool
 	ARRAY_FOREACH ( i, dWFFileInfos )
 		uTotalSize += dWFFileInfos[i].m_uSize;
 
-	bool bEmbedWordforms = uTotalSize<=(SphOffset_t)iEmbeddedLimit;
+	bool bEmbedWordforms = ( iEmbeddedLimit>0 && uTotalSize<=(SphOffset_t)iEmbeddedLimit );
 	tWriter.PutByte ( bEmbedWordforms ? 1 : 0 );
 	if ( bEmbedWordforms )
 		pDict->WriteWordforms ( tWriter );

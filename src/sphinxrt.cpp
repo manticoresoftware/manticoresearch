@@ -3922,6 +3922,7 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, SphDocID_t iMinDocID, i
 	SaveTokenizerSettings ( tWriter, m_pTokenizer, m_tSettings.m_iEmbeddedLimit );
 
 	// dictionary
+	// can not use embedding as stopwords id differs between RT and plain dictionaries
 	SaveDictionarySettings ( tWriter, m_pDict, m_bKeywordDict, 0 );
 
 	// kill-list size

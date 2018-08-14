@@ -1249,7 +1249,7 @@ void cDashStorage::LinkHost ( HostDesc_t &dHost )
 	ARRAY_FOREACH ( i, m_dDashes )
 	{
 		auto pDash = m_dDashes[i];
-		if ( dHost.m_pDash && dHost.GetMyUrl ()==pDash->m_tHost.GetMyUrl () )
+		if ( dHost.GetMyUrl ()==pDash->m_tHost.GetMyUrl () )
 			dHost.m_pDash = pDash;
 		else if ( pDash->IsLast () )
 		{

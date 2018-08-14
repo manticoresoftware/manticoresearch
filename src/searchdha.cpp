@@ -551,8 +551,8 @@ bool MultiAgentDesc_c::Init ( const CSphVector<AgentDesc_t *> &dHosts,
 	auto fFrac = 100.0f / iLen;
 	ARRAY_FOREACH ( i, dHosts )
 	{
-		assert ( !dHosts[i]->m_pDash
-					 && !dHosts[i]->m_pStats ); // we have templates parsed from config, NOT real working hosts!
+		// we have templates parsed from config, NOT real working hosts!
+		assert ( !dHosts[i]->m_pDash && !dHosts[i]->m_pStats );
 		if ( !ValidateAndAddDashboard ( ( m_pData + i )->CloneFrom ( *dHosts[i] ), tWarn ) )
 			return false;
 		m_dWeights[i] = fFrac;
@@ -1361,6 +1361,18 @@ void SmartOutputBuffer_t::Reset ()
 	m_dBuf.Reserve ( NETOUTBUF );
 };
 
+#if USE_WINDOWS
+void SmartOutputBuffer_t::LeakTo ( CSphVector<ISphOutputBuffer *> dOut )
+{
+	for ( auto & pChunk : m_dChunks )
+		dOut.Add ( pChunk );
+	m_dChunks.Reset ();
+	dOut.Add ( new ISphOutputBuffer ( m_dBuf ) );
+	m_dBuf.Reserve ( NETOUTBUF );
+}
+#endif
+
+
 #ifndef UIO_MAXIOV
 #define UIO_MAXIOV (1024)
 #endif
@@ -1527,83 +1539,7 @@ static bool CreateSocketPair ( int &iSock1, int &iSock2, CSphString &sError )
 	return true;
 }
 #endif
-PollableEvent_t::PollableEvent_t ()
-{
-	int iRead = -1;
-	int iWrite = -1;
-#if HAVE_EVENTFD
-	int iFD = eventfd ( 0, EFD_NONBLOCK );
-	if ( iFD==-1 )
-		m_sError.SetSprintf ( "failed to create eventfd: %s", strerrorm ( errno ) );
-	iRead = iWrite = iFD;
-#else
-	CreateSocketPair ( iRead, iWrite, m_sError );
-#endif
 
-	if (iRead==-1 || iWrite==-1)
-		sphWarning ( "PollableEvent_t create error:%s", m_sError.cstr () );
-	m_iPollablefd = iRead;
-	m_iSignalEvent = iWrite;
-}
-
-PollableEvent_t::~PollableEvent_t ()
-{
-	Close();
-}
-
-void PollableEvent_t::Close ()
-{
-	SafeCloseSocket ( m_iPollablefd );
-#if !HAVE_EVENTFD
-	SafeCloseSocket ( m_iSignalEvent );
-#endif
-}
-
-int PollableEvent_t::PollableErrno()
-{
-	return sphSockGetErrno();
-}
-
-bool PollableEvent_t::FireEvent () const
-{
-	if ( m_iSignalEvent==-1 )
-		return true;
-
-	int iErrno = EAGAIN;
-	while ( iErrno==EAGAIN || iErrno==EWOULDBLOCK )
-	{
-		uint64_t uVal = 1;
-#if HAVE_EVENTFD
-		int iPut = ::write ( m_iSignalEvent, &uVal, 8 );
-#else
-		int iPut = sphSockSend ( m_iSignalEvent, (const char * )&uVal, 8 );
-#endif
-		if ( iPut==8 )
-			return true;
-		iErrno = PollableErrno ();
-	};
-	return false;
-}
-
-// just wipe-out a fired event to free queue, we don't need the value itself
-void PollableEvent_t::DisposeEvent () const
-{
-	assert ( m_iPollablefd!=-1 );
-	uint64_t uVal = 0;
-	while ( true )
-	{
-#if HAVE_EVENTFD
-		auto iRead = ::read ( m_iPollablefd, &uVal, 8 );
-		if ( iRead==8 )
-			break;
-#else
-	// socket-pair case might stack up some values and these should be read
-		int iRead = sphSockRecv ( m_iPollablefd, (char *)&uVal, 8 );
-		if ( iRead<=0 )
-			break;
-#endif
-	}
-}
 
 inline static bool IS_PENDING ( int iErr )
 {
@@ -1666,23 +1602,20 @@ void AgentConn_t::State ( Agent_e eState )
 	m_eConnState = eState;
 }
 
+
 // initialize socket from persistent pool (it m.b. disconnected or not initialized, however).
-bool AgentConn_t::GetPersist ()
+bool AgentConn_t::IsPersistent ()
 {
-
-	if ( !m_tDesc.m_bPersistent || !m_tDesc.m_pDash->m_pPersPool )
-		return false;
-
-	assert ( m_iSock==-1 );
-	m_iSock = m_tDesc.m_pDash->m_pPersPool->RentConnection ();
-	m_tDesc.m_bPersistent = m_iSock!=-2;
-	return true;
+	return m_tDesc.m_bPersistent && m_tDesc.m_pDash && m_tDesc.m_pDash->m_pPersPool;
 }
+
+
 
 // return socket to the pool (it m.b. connected!)
 void AgentConn_t::ReturnPersist ()
 {
-	if ( m_tDesc.m_bPersistent && m_tDesc.m_pDash->m_pPersPool )
+	assert ( ( m_iSock==-1 ) || IsPersistent () ); // otherwize it will leak...
+	if ( IsPersistent() )
 		m_tDesc.m_pDash->m_pPersPool->ReturnConnection ( m_iSock );
 	m_iSock = -1;
 }
@@ -1716,19 +1649,16 @@ bool AgentConn_t::Fatal ( AgentStats_e eStat, const char * sMessage, ... )
 /// correct way to close connection:
 void AgentConn_t::Finish ( bool bFail )
 {
-	if ( m_iSock>=0 && ( bFail || !m_tDesc.m_bPersistent ) )
+	if ( m_iSock>=0 && ( bFail || !IsPersistent() ) )
 	{
 		sphLogDebugA ( "%d Socket %d closed and turned to -1", m_iStoreTag, m_iSock );
 		sphSockClose ( m_iSock );
 		m_iSock = -1;
 	}
 
-	if ( m_pPollerTask )
-	{
-		sphLogDebugA ( "%d Abort all callbacks ref=%d", m_iStoreTag, ( int ) GetRefcount () );
-		TimeoutTask (); // remove timer and all callbacks, if any
-		m_pPollerTask = nullptr;
-	}
+	sphLogDebugA ( "%d Abort all callbacks ref=%d", m_iStoreTag, ( int ) GetRefcount () );
+	LazyDeleteOrChange (); // remove timer and all callbacks, if any
+	m_pPollerTask = nullptr;
 
 	ReturnPersist ();
 	if ( m_iStartQuery )
@@ -1766,23 +1696,8 @@ void AgentConn_t::SendingState ()
 		track_processing_time ( *this );
 		State ( Agent_e::HEALTHY );
 		m_iPoolerTimeout = sphMicroTimer () + 1000 * m_iMyQueryTimeout;
-		TimeoutTask ( m_iPoolerTimeout ); // assign new time value, don't touch the handler
+		LazyDeleteOrChange ( m_iPoolerTimeout ); // assign new time value, don't touch the handler
 	}
-}
-
-/// for persistent conn take socket from the pool.
-/// Set need-to-initiate flag if it is failed/not-connected.
-void AgentConn_t::SetupPersist()
-{
-	if ( !GetPersist() )
-		return;
-
-	if ( m_iSock>=0 && sphNBSockEof ( m_iSock ) )
-	{
-		sphSockClose ( m_iSock );
-		m_iSock = -1;
-	}
-	m_bNeedInitiatePersist = m_iSock==-1;
 }
 
 /// prepare all necessary things to connect
@@ -1791,60 +1706,64 @@ bool AgentConn_t::StartNextRetry ()
 {
 	sphLogDebugA ( "%d StartNextRetry() retries=%d, ref=%d", m_iStoreTag, m_iRetries, ( int ) GetRefcount () );
 	m_iSock = -1;
+
 	if ( m_iRetries--<0 )
 		return m_bManyTries ? Fail ( "retries limit exceeded" ) : false;
 
-	m_bNeedInitiatePersist = false;
 	if ( m_pMultiAgent )
-	{
 		m_tDesc.CloneFrom ( m_pMultiAgent->ChooseAgent () );
-		SetupPersist ();
+
+	sphLogDebugA ( "%d Connection %p, host %s, pers=%d", m_iStoreTag, this, m_tDesc.GetMyUrl().cstr(), m_tDesc.m_bPersistent );
+
+	if ( IsPersistent() )
+	{
+		assert ( m_iSock==-1 );
+		m_iSock = m_tDesc.m_pDash->m_pPersPool->RentConnection ();
+		m_tDesc.m_bPersistent = m_iSock!=-2;
+		if ( m_iSock>=0 && sphNBSockEof ( m_iSock ) )
+		{
+			sphSockClose ( m_iSock );
+			m_iSock = -1;
+		}
 	}
+
+	if ( IsBlackhole() )
+	{
+		sphLogDebugA ( "%d Connection %p is blackhole (no retries, no parser, no reporter)", m_iStoreTag, this );
+		m_bManyTries = false;
+		m_iRetries = -1;
+		m_pParser = nullptr;
+		m_pReporter = nullptr;
+	}
+
 	return true;
 }
 
-//! Check connection and prepare pre-query messages to be send
-//! \return false, if handshake injected and we have to parse answer on it later.
-bool AgentConn_t::ConnectionAlive ()
-{
-	if ( m_iSock>=0 )
-		return true;
-
-	m_tOutput.SendDword ( SPHINX_CLIENT_VERSION );
-	m_tOutput.StartNewChunk ();
-
-	if ( m_bNeedInitiatePersist )
-	{
-		m_tOutput.SendWord ( SEARCHD_COMMAND_PERSIST );
-		m_tOutput.SendWord ( 0 ); // dummy version
-		m_tOutput.SendInt ( 4 ); // request body length
-		m_tOutput.SendInt ( 1 ); // set persistent to 1.
-		m_tOutput.StartNewChunk ();
-		m_bNeedInitiatePersist = false;
-	}
-	return false;
-}
-
+// set up ll the stuff about async query. Namely - add timeout callback,
+// initialize read/write task
 void AgentConn_t::ScheduleCallbacks ()
 {
 	// that is 'hard' timeout. If it happened, we have to cancel all current IO.
 	// Then we need to reschedule (if appliable) the whole work
-	TimeoutTask ( m_iPoolerTimeout, [this]
-	{
-		m_bInNetLoop = true;
-		if ( StateIs ( Agent_e::CONNECTING ) )
-			Fatal ( eTimeoutsConnect, "connect timed out" );
-		else
-			Fatal ( eTimeoutsQuery, "query timed out" );
-		StartRemoteLoopTry ();
-		sphLogDebugA ( "%d <- finished lambda timeout (ref=%d)", m_iStoreTag, ( int ) GetRefcount () );
-	}, m_dIOVec.HasUnsent () ? 1 : 2 );
+	LazyTask ( m_iPoolerTimeout, true, BYTE ( m_dIOVec.HasUnsent () ? 1 : 2 ) );
+}
+
+void AgentConn_t::HardTimeoutCallback ()
+{
+	if ( StateIs ( Agent_e::CONNECTING ) )
+		Fatal ( eTimeoutsConnect, "connect timed out" );
+	else
+		Fatal ( eTimeoutsQuery, "query timed out" );
+	StartRemoteLoopTry ();
+	sphLogDebugA ( "%d <- hard timeout (ref=%d)", m_iStoreTag, ( int ) GetRefcount () );
 }
 
 void AgentConn_t::ErrorCallback ( int64_t iWaited )
 {
-	m_bInNetLoop = true;
+	if ( !m_pPollerTask )
+		return;
 	m_iWaited += iWaited;
+
 	int iErr = sphSockGetErrno ();
 	Fatal ( eNetworkErrors, "detected the error (errno=%d, msg=%s)", iErr, sphSockError ( iErr ) );
 	StartRemoteLoopTry ();
@@ -1854,7 +1773,7 @@ void AgentConn_t::SendCallback ( int64_t iWaited, DWORD uSent )
 {
 	if ( !m_pPollerTask )
 		return;
-	m_bInNetLoop = true;
+
 	if ( m_dIOVec.HasUnsent () )
 	{
 		m_iWaited += iWaited;
@@ -1868,8 +1787,9 @@ void AgentConn_t::RecvCallback ( int64_t iWaited, DWORD uReceived )
 {
 	if ( !m_pPollerTask )
 		return;
-	m_bInNetLoop = true;
+
 	m_iWaited += iWaited;
+
 	if ( !ReceiveAnswer ( uReceived ) )
 		StartRemoteLoopTry ();
 	sphLogDebugA ( "%d <- finished RecvCallback", m_iStoreTag );
@@ -1895,7 +1815,7 @@ size_t AgentConn_t::ReplyBufPlace () const
 	if ( !m_pReplyCur )
 		return 0;
 	if ( m_dReplyBuf.IsEmpty () )
-		return REPLY_HEADER_SIZE - ( m_pReplyCur - m_dReplyHeader );
+		return m_dReplyHeader.begin () + REPLY_HEADER_SIZE - m_pReplyCur;
 	return m_dReplyBuf.begin () + m_dReplyBuf.GetLength () - m_pReplyCur;
 }
 
@@ -1906,52 +1826,84 @@ void AgentConn_t::InitReplyBuf ( int iSize )
 	if ( m_dReplyBuf.IsEmpty () )
 	{
 		m_iReplySize = -1;
-		m_pReplyCur = m_dReplyHeader;
+		m_pReplyCur = m_dReplyHeader.begin ();
 	} else {
 		m_pReplyCur = m_dReplyBuf.begin ();
 		m_iReplySize = iSize;
 	}
 }
 
-/// raw (platform specific) send (scattered - from several buffers)
-inline SSIZE_T AgentConn_t::SendChunk ()
+#if USE_WINDOWS
+void AgentConn_t::LeakRecvTo ( CSphFixedVector<BYTE>& dOut )
 {
-#if !USE_WINDOWS
-	struct msghdr dHdr = { 0 };
-	dHdr.msg_iov = m_dIOVec.IOPtr ();
-	dHdr.msg_iovlen = m_dIOVec.IOSize ();
-	return ::sendmsg ( m_iSock, &dHdr, MSG_NOSIGNAL );
-#else
-	SendingState ();
-	if (!m_pPollerTask)
-		ScheduleCallbacks ();
-	m_pPollerTask->m_dWrite.Zero();
-	sphLogDebugA ( "%d overlaped WSASend called for %d chunks", m_iStoreTag, m_dIOVec.IOSize () );
-	WSASend ( m_iSock, m_dIOVec.IOPtr (), m_dIOVec.IOSize (), nullptr, 0, &m_pPollerTask->m_dWrite, nullptr );
-	++m_pPollerTask->m_iRefs;
-	return -1;
-#endif
+	assert ( dOut.IsEmpty () );
+	if ( m_iReplySize<0 )
+	{
+		dOut.SwapData ( m_dReplyHeader );
+		m_dReplyHeader.Reset ( REPLY_HEADER_SIZE );
+	} else
+		dOut.SwapData ( m_dReplyBuf );
+	InitReplyBuf ();
 }
 
+void AgentConn_t::LeakSendTo ( CSphVector <ISphOutputBuffer* >& dOut, CSphVector<sphIovec>& dOutIO )
+{
+	assert ( dOut.IsEmpty () );
+	assert ( dOutIO.IsEmpty () );
+	m_tOutput.LeakTo ( dOut );
+	m_dIOVec.LeakTo ( dOutIO );
+}
+
+#endif
+
+
+/// raw (platform specific) send (scattered - from several buffers)
 /// raw (platform specific) receive
+	
+#if USE_WINDOWS
 inline SSIZE_T AgentConn_t::RecvChunk ()
 {
-#if !USE_WINDOWS
-	return sphSockRecv ( m_iSock, ( char * ) m_pReplyCur, ReplyBufPlace () );
-#else
+	assert ( !m_pPollerTask->m_dRead.m_bInUse );
 	if ( !m_pPollerTask )
 		ScheduleCallbacks ();
 	WSABUF dBuf;
 	dBuf.buf = (CHAR*) m_pReplyCur;
 	dBuf.len = ReplyBufPlace ();
 	DWORD uFlags = 0;
-	m_pPollerTask->m_dRead.Zero();
+	m_pPollerTask->m_dRead.Zero ();
 	sphLogDebugA ( "%d Scheduling overlapped WSARecv for %d bytes", m_iStoreTag, ReplyBufPlace () );
 	WSARecv ( m_iSock, &dBuf, 1, nullptr, &uFlags, &m_pPollerTask->m_dRead, nullptr );
-	++m_pPollerTask->m_iRefs;
+	m_pPollerTask->m_dRead.m_bInUse = true;
 	return -1;
-#endif
 }
+
+inline SSIZE_T AgentConn_t::SendChunk ()
+{
+	assert ( !m_pPollerTask->m_dWrite.m_bInUse );
+	SendingState ();
+	if ( !m_pPollerTask )
+		ScheduleCallbacks ();
+	m_pPollerTask->m_dWrite.Zero ();
+	sphLogDebugA ( "%d overlaped WSASend called for %d chunks", m_iStoreTag, m_dIOVec.IOSize () );
+	WSASend ( m_iSock, m_dIOVec.IOPtr (), m_dIOVec.IOSize (), nullptr, 0, &m_pPollerTask->m_dWrite, nullptr );
+	m_pPollerTask->m_dWrite.m_bInUse = true;
+	return -1;
+}
+
+#else
+inline SSIZE_T AgentConn_t::RecvChunk ()
+{
+	return sphSockRecv ( m_iSock, (char *) m_pReplyCur, ReplyBufPlace () );
+}
+
+inline SSIZE_T AgentConn_t::SendChunk ()
+{
+	struct msghdr dHdr = { 0 };
+	dHdr.msg_iov = m_dIOVec.IOPtr ();
+	dHdr.msg_iovlen = m_dIOVec.IOSize ();
+	return ::sendmsg ( m_iSock, &dHdr, MSG_NOSIGNAL );
+}
+#endif
 
 /// try to establish connection in the modern fast way, and also perform some data sending, if possible.
 /// @return 1 on success, 0 if need fallback into usual (::connect), -1 on failure.
@@ -1994,8 +1946,11 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 	// let us also send first chunk of the buff
 	sphIovec * pChunk = m_dIOVec.IOPtr ();
 	assert ( pChunk );
+	assert ( !m_pPollerTask->m_dWrite.m_bInUse );
 	iRes = ConnectEx ( m_iSock, pSs, iLen, pChunk->buf, pChunk->len, NULL, &m_pPollerTask->m_dWrite );
-	++m_pPollerTask->m_iRefs;
+	m_pPollerTask->m_dWrite.m_bInUse = true;
+
+
 	if ( iRes )
 	{
 		State ( Agent_e::CONNECTING );
@@ -2057,7 +2012,7 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 #endif
 }
 
-/// add works to the queue; return int cookie for future references to this jobs group.
+/// Add set of works (dRemotes) to the queue.
 /// jobs themselves are ref-counted and owned by nobody (they're just released on finish, so
 /// if nobody waits them (say, blackhole), they just dissapeared).
 /// on return blackholes removed from dRemotes
@@ -2070,26 +2025,28 @@ void ScheduleDistrJobs ( VectorAgentConn_t &dRemotes, IRequestBuilder_t * pQuery
 	sphLogDebugv ( "S ==========> ScheduleDistrJobs() for %d remotes", dRemotes.GetLength () );
 
 	bool bNeedKick = false; // if some of connections falled to waiting and need to kick the poller.
-	int iManaged = 0;
-	for ( AgentConn_t *&pConnection : dRemotes )
-	{
-		pConnection->InitRemoteTask ( pQuery, pParser, ( IReporter_t * ) pReporter, iQueryRetry, iQueryDelay );
-		if ( pConnection->m_pReporter )
-			++iManaged;
-		pConnection->StartRemoteLoopTry (true);
-		bNeedKick |= pConnection->NeedKick ();
-	}
-	if ( pReporter )
-		pReporter->SetTotal ( iManaged );
-
-	// now wipe out blackholes - they're live own life.
 	ARRAY_FOREACH ( i, dRemotes )
-		if ( dRemotes[i]->IsBl () )
+	{
+		auto & pConnection = dRemotes[i];
+		pConnection->GenericInit ( pQuery, pParser, pReporter, iQueryRetry, iQueryDelay );
+
+		// start the actual job.
+		// It might lucky be completed immediately. Or, it will be acquired by async network
+		// (and addreffed there in the loop)
+		pConnection->StartRemoteLoopTry ();
+		bNeedKick |= pConnection->FireKick ();
+
+		// remove and release blackholes from the queue.
+		if ( pConnection->IsBlackhole () )
 		{
-			sphLogDebugv ( "S Removed blackhole()" );
-			SafeRelease ( dRemotes[i] );
+			sphLogDebugv ( "S Remove blackhole()" );
+			SafeRelease ( pConnection );
 			dRemotes.RemoveFast ( i-- );
 		}
+	}
+
+	if ( pReporter )
+		pReporter->SetTotal ( dRemotes.GetLength () );
 
 	if ( bNeedKick )
 	{
@@ -2097,53 +2054,39 @@ void ScheduleDistrJobs ( VectorAgentConn_t &dRemotes, IRequestBuilder_t * pQuery
 		FirePoller ();
 	}
 
-	sphLogDebugv ( "S ScheduleDistrJobs() done. Total %d, remotes rest %d", iManaged, dRemotes.GetLength () );
+	sphLogDebugv ( "S ScheduleDistrJobs() done. Total %d", dRemotes.GetLength () );
 
 }
 
 // this is run once entering query loop for all retries (and all mirrors).
-void AgentConn_t::InitRemoteTask ( IRequestBuilder_t * pQuery, IReplyParser_t * pParser,
-	IReporter_t * pReporter, int iQueryRetry, int iQueryDelay )
+void AgentConn_t::GenericInit ( IRequestBuilder_t * pQuery, IReplyParser_t * pParser, IReporter_t * pReporter
+								, int iQueryRetry, int iQueryDelay )
 {
-	sphLogDebugA ( "%d InitRemoteTask() pBuilder %p, pParser %p, retry %d, delay %d ref=%d", m_iStoreTag, pQuery
-				   , pParser, iQueryRetry, iQueryDelay, ( int ) GetRefcount ());
-	if ( iQueryRetry>=0 )
-		SetRetryLimit ( iQueryRetry );
+	sphLogDebugA ( "%d GenericInit() pBuilder %p, parser %p, retries %d, delay %d, ref=%d", m_iStoreTag, pQuery, pParser, m_iRetries, iQueryDelay, ( int ) GetRefcount ());
 	if ( iQueryDelay>=0 )
 		m_iDelay = iQueryDelay;
 
 	m_pBuilder = pQuery;
-	State ( Agent_e::HEALTHY );
 	m_iWall = 0;
 	m_iWaited = 0;
-	m_bInNetLoop = false;
 	m_bNeedKick = false;
 	m_pPollerTask = nullptr;
-	StartNextRetry ();
-
-	if ( IsBl () ) // for blackholes we have only 1 try, and don't need to parse the answer.
-	{
-		sphLogDebugA ( "%d conn %p is blackhole (host %s)", m_iStoreTag, this, m_tDesc.m_sAddr.cstr () );
-		m_pReporter = nullptr;
-		m_pParser = nullptr;
-		m_iRetries = -1;
-	} else
-	{
-		sphLogDebugA ( "%d conn %p is normal (host %s)", m_iStoreTag, this, m_tDesc.m_sAddr.cstr () );
-		m_pParser = pParser;
-		m_pReporter = pReporter;
-	}
+	m_pReporter = pReporter;
+	m_pParser = pParser;
+	m_iRetries = iQueryRetry>=0 ? iQueryRetry * m_iMirrorsCount :
+		( m_pMultiAgent ? m_pMultiAgent->GetRetryLimit () : 0 );
+	m_bManyTries = m_iRetries>0;;
+	SetNetLoop ( false );
+	State ( Agent_e::HEALTHY );
 }
 
-
 /// an entry point to the whole remote agent's work
-void AgentConn_t::StartRemoteLoopTry ( bool bSkipFirstRetry )
+void AgentConn_t::StartRemoteLoopTry ()
 {
 	sphLogDebugA ( "%d StartRemoteLoopTry() ref=%d", m_iStoreTag, ( int ) GetRefcount () );
-	while ( bSkipFirstRetry || StartNextRetry () )
+	while ( StartNextRetry () )
 	{
 		/// reset state before every retry
-		bSkipFirstRetry = false;
 		m_dIOVec.Reset ();
 		m_tOutput.Reset ();
 		InitReplyBuf ();
@@ -2152,20 +2095,23 @@ void AgentConn_t::StartRemoteLoopTry ( bool bSkipFirstRetry )
 		m_iStartQuery = 0;
 		m_pPollerTask = nullptr;
 
-		if ( StateIs ( Agent_e::RETRY ) && m_iDelay>0 )
+		if ( StateIs ( Agent_e::RETRY ) )
 		{
-			// can't start right now; need to postpone until timeout
-			sphLogDebugA ( "%d postpone DoQuery() for %d msecs", m_iStoreTag, m_iDelay );
-			TimeoutTask ( sphMicroTimer () + 1000 * m_iDelay, [this] {
-				m_bInNetLoop = true;
-				State ( Agent_e::HEALTHY );
-				if ( !DoQuery () )
-					StartRemoteLoopTry ();
-				FirePoller ();
-				sphLogDebugA ( "%d finished lambda timeout from postponer ref=%d", m_iStoreTag, ( int ) GetRefcount () );
-			} );
-			return;
+			assert ( !IsBlackhole () ); // blackholes never uses retry!
+			assert ( !m_pPollerTask ); // must be cleaned out before try!
+
+			// here we can came not only after delay, but also immediately (if iDelay==0)
+			State ( Agent_e::HEALTHY );
+
+			if ( m_iDelay>0 )
+			{
+				// can't start right now; need to postpone until timeout
+				sphLogDebugA ( "%d postpone DoQuery() for %d msecs", m_iStoreTag, m_iDelay );
+				LazyTask ( sphMicroTimer () + 1000 * m_iDelay, false );
+				return;
+			}
 		}
+
 		if ( DoQuery () )
 			return;
 	};
@@ -2173,11 +2119,20 @@ void AgentConn_t::StartRemoteLoopTry ( bool bSkipFirstRetry )
 	sphLogDebugA ( "%d StartRemoteLoopTry() finished ref=%d", m_iStoreTag, ( int ) GetRefcount () );
 }
 
+void AgentConn_t::SoftTimeoutCallback ()
+{
+	if ( !DoQuery () )
+		StartRemoteLoopTry ();
+	FirePoller ();
+	sphLogDebugA ( "%d finished retry timeout ref=%d", m_iStoreTag, ( int ) GetRefcount () );
+}
+
+// do oneshot query. Return true on any success
 bool AgentConn_t::DoQuery()
 {
 	sphLogDebugA ( "%d DoQuery() ref=%d", m_iStoreTag, ( int ) GetRefcount () );
 	auto iNow = sphMicroTimer ();
-	if ( ConnectionAlive () )
+	if ( m_iSock>=0 )
 	{
 		sphLogDebugA ( "%d branch for established(%d). Timeout %d", m_iStoreTag, m_iSock, m_iMyQueryTimeout );
 		m_bConnectHandshake = false;
@@ -2185,6 +2140,18 @@ bool AgentConn_t::DoQuery()
 		m_iStartQuery = iNow; /// copied from old behaviour
 		m_iPoolerTimeout = iNow + 1000 * m_iMyQueryTimeout;
 		return SendQuery ();
+	}
+
+	// fill initial chunks
+	m_tOutput.SendDword ( SPHINX_CLIENT_VERSION );
+	m_tOutput.StartNewChunk ();
+	if ( IsPersistent() && m_iSock==-1 )
+	{
+		m_tOutput.SendWord ( SEARCHD_COMMAND_PERSIST );
+		m_tOutput.SendWord ( 0 ); // dummy version
+		m_tOutput.SendInt ( 4 ); // request body length
+		m_tOutput.SendInt ( 1 ); // set persistent to 1.
+		m_tOutput.StartNewChunk ();
 	}
 
 	sphLogDebugA ( "%d branch for not established. Timeout %d", m_iStoreTag, m_iMyConnectTimeout );
@@ -2203,14 +2170,14 @@ bool AgentConn_t::DoQuery()
 		if ( !EstablishConnection () )
 			StartRemoteLoopTry ();
 		sphLogDebugA ( "%d <- async GetAddress_a returned() ref=%d", m_iStoreTag, ( int ) GetRefcount () );
-		if ( NeedKick () )
+		if ( FireKick () )
 			FirePoller ();
 		Release ();
 	} );
 
 	// for blackholes we parse query immediately, since builder will be disposed
 	// outside once we returned from the function
-	if ( IsBl () )
+	if ( IsBlackhole () )
 		BuildData ();
 	return true;
 }
@@ -2359,7 +2326,7 @@ bool AgentConn_t::ReceiveAnswer ( DWORD uRecv )
 		// We're in state of receiving the header (m_iReplySize==-1 is the indicator)
 		if ( IsReplyHeader () && iRest<=( REPLY_HEADER_SIZE - 4 ))
 		{
-			MemInputBuffer_c dBuf ( m_dReplyHeader, REPLY_HEADER_SIZE );
+			MemInputBuffer_c dBuf ( m_dReplyHeader.begin(), REPLY_HEADER_SIZE );
 			auto iVer = dBuf.GetInt ();
 			sphLogDebugA ( "%d Handshake is %d (this message may appear >1 times)", m_iStoreTag, iVer );
 
@@ -2462,17 +2429,10 @@ void AgentConn_t::SetMultiAgent ( const CSphString &sIndex, MultiAgentDesc_c * p
 	pAgent->AddRef ();
 	m_pMultiAgent = pAgent;
 	m_iMirrorsCount = pAgent->GetLength ();
-	SetRetryLimit ( pAgent->GetRetryLimit (), false );
-}
-
-//! Initializes num of tries during networking
-void AgentConn_t::SetRetryLimit ( int iValue, bool bTryPerMirror )
-{
-	m_iRetries = iValue;
-	if ( bTryPerMirror )
-		m_iRetries *= m_iMirrorsCount;
+	m_iRetries = pAgent->GetRetryLimit ();
 	m_bManyTries = m_iRetries>0;
 }
+
 #if 0
 
 // here is async dns resolution made on mac os
@@ -2521,29 +2481,99 @@ void macresolver()
 
 #endif
 
-/// wrap raw void* into ListNode_t to store it in List_t
-struct ListedData_t : public ListNode_t
+
+PollableEvent_t::PollableEvent_t ()
 {
-	const void * m_pData = nullptr;
+	int iRead = -1;
+	int iWrite = -1;
+#if HAVE_EVENTFD
+	int iFD = eventfd ( 0, EFD_NONBLOCK );
+	if ( iFD==-1 )
+		m_sError.SetSprintf ( "failed to create eventfd: %s", strerrorm ( errno ) );
+	iRead = iWrite = iFD;
+#else
+	CreateSocketPair ( iRead, iWrite, m_sError );
+#endif
 
-	explicit ListedData_t ( const void * pData )
-		: m_pData ( pData )
-	{}
-};
+	if ( iRead==-1 || iWrite==-1 )
+		sphWarning ( "PollableEvent_t create error:%s", m_sError.cstr () );
+	m_iPollablefd = iRead;
+	m_iSignalEvent = iWrite;
+}
 
+PollableEvent_t::~PollableEvent_t ()
+{
+	Close ();
+}
+
+void PollableEvent_t::Close ()
+{
+	SafeCloseSocket ( m_iPollablefd );
+#if !HAVE_EVENTFD
+	SafeCloseSocket ( m_iSignalEvent );
+#endif
+}
+
+int PollableEvent_t::PollableErrno ()
+{
+	return sphSockGetErrno ();
+}
+
+bool PollableEvent_t::FireEvent () const
+{
+	if ( m_iSignalEvent==-1 )
+		return true;
+
+	int iErrno = EAGAIN;
+	while ( iErrno==EAGAIN || iErrno==EWOULDBLOCK )
+	{
+		uint64_t uVal = 1;
+#if HAVE_EVENTFD
+		int iPut = ::write ( m_iSignalEvent, &uVal, 8 );
+#else
+		int iPut = sphSockSend ( m_iSignalEvent, ( const char * ) &uVal, 8 );
+#endif
+		if ( iPut==8 )
+			return true;
+		iErrno = PollableErrno ();
+	};
+	return false;
+}
+
+// just wipe-out a fired event to free queue, we don't need the value itself
+void PollableEvent_t::DisposeEvent () const
+{
+	assert ( m_iPollablefd!=-1 );
+	uint64_t uVal = 0;
+	while ( true )
+	{
+#if HAVE_EVENTFD
+		auto iRead = ::read ( m_iPollablefd, &uVal, 8 );
+		if ( iRead==8 )
+			break;
+#else
+		// socket-pair case might stack up some values and these should be read
+		int iRead = sphSockRecv ( m_iPollablefd, ( char * ) &uVal, 8 );
+		if ( iRead<=0 )
+			break;
+#endif
+	}
+}
 
 struct Task_t
 #if USE_WINDOWS
 	: DoubleOverlapped_t
 #endif
 {
+	enum IO : BYTE { NO = 0, RW = 1, RO = 2 };
+
+	AgentConn_t *		m_pPayload	= nullptr;    // ext conn we hold
+	int64_t				m_iTimeoutTime = -1;    // timeout (used for bin heap morph)
+	int					m_iTimeoutIdx = -1;    // idx inside timeouts bin heap (or -1 if not there)
 	int					m_ifd = -1;
-	int					m_iTimeoutIdx = -1;	// idx inside timeouts bin heap (or -1 if not there)
-	int64_t				m_iTimeoutTime = 0;	// timeout (used for bin heap morph)
-	Clbck_f				m_fTimeoutAction = nullptr;
-	AgentConn_t *		m_pPayload = nullptr;	// ext conn we hold
-	BYTE				m_uIOActive = 0;		// active IO callbacks: 0-none, 1-r+w, 2-r
-	BYTE				m_uIOChanged = 0;		// need IO changes: dequeue (if !m_uIOActive), 1-set to rw, 2-set to ro
+	bool				m_bHardTimeout = false;
+	BYTE				m_uIOActive = NO;		// active IO callbacks: 0-none, 1-r+w, 2-r
+	BYTE				m_uIOChanged = NO;		// need IO changes: dequeue (if !m_uIOActive), 1-set to rw, 2-set to ro
 };
 
 inline static bool operator< (const Task_t& dLeft, const Task_t& dRight )
@@ -2687,22 +2717,281 @@ public:
 ThreadRole LazyThread;
 
 // low-level ops depends from epoll/kqueue/iocp availability
+/*
+ * void events_change_io ( Task_t * pTask ) // apply changes of task (if any)
+ * void events_create ( int iSizeHint )
+ * void events_destroy ()
+ * void fire_event () // kick the event loop (fire internal event which unfreeze waiting)
+ *
+ *
+ */
+
+// that is static iface, no virtuals
+/* iterator iface
+struct NetEvent_c
+{
+	Task_t * GetTask();
+	bool IsSignaler();
+	int GetEvents ();
+	DWORD BytesTransferred();
+	bool IsError();
+	bool IsEof();
+	bool IsRead();
+	bool IsWrite();
+};*/
+
+#if USE_WINDOWS
+class NetEvent_c
+{
+	Task_t *			m_pTask = nullptr;
+	bool				m_bWrite = false;
+	DWORD				m_uNumberOfBytesTransferred = 0;
+	bool				m_bSignaler = true;
+
+public:
+	NetEvent_c ( LPOVERLAPPED_ENTRY pEntry )
+	{
+		if ( !pEntry )
+			return;
+		
+		m_bSignaler = !pEntry->lpOverlapped;
+		if ( m_bSignaler )
+			return;
+
+		auto pOvl = (SingleOverlapped_t *) pEntry->lpOverlapped;
+		auto uOffset = pOvl->m_uParentOffset;
+		m_pTask = (Task_t *) ( (BYTE*) pOvl - uOffset );
+		m_bWrite = uOffset<sizeof ( OVERLAPPED );
+		m_uNumberOfBytesTransferred = pEntry->dwNumberOfBytesTransferred;
+
+		if ( m_pTask )
+		{
+			assert ( pOvl->m_bInUse );
+			pOvl->m_bInUse = false;
+			if ( m_pTask->m_ifd==-1 && m_pTask->m_pPayload==nullptr && !m_pTask->IsInUse() )
+			{
+				sphLogDebugL ( "L Removing deffered %p", m_pTask );
+				SafeDelete ( m_pTask );
+			}
+		}
+	}
+
+	inline Task_t * GetTask () const
+	{
+		return m_pTask;
+	}
+
+	inline bool IsSignaler () const
+	{
+		return m_bSignaler;
+	}
+
+	inline int GetEvents() const
+	{
+		// return 0 for internal signal, or 1 for write, 1+sizeof(OVERLAPPED) for read.
+		return (!!m_pTask) + 2 * (!!m_bWrite);
+	}
+
+	inline bool IsError() const
+	{
+		return false;
+//		assert ( m_pEntry );
+	//	return ( m_pEntry->dwNumberOfBytesTransferred==0 );
+		//auto & dEvent = m_dReady[iReady];
+		//bool bRes = ( dEvent.flags & EV_ERROR )!=0;
+		//if ( bRes )
+		//			sphLogDebugL ( "L error for %d, errno=%d, %s", dEvent.ident, dEvent.data, sphSockError ( dEvent.data ) );
+		//	return bRes;
+	}
+
+	inline bool IsEof() const
+	{
+		return !m_bWrite && !m_uNumberOfBytesTransferred;
+	}
+
+	inline bool IsRead() const
+	{
+		return !m_bWrite;
+	}
+
+	inline bool IsWrite() const
+	{
+		return m_bWrite;
+	}
+
+	inline DWORD BytesTransferred () const
+	{
+		return m_uNumberOfBytesTransferred;
+	}
+};
+
+#elif POLLING_EPOLL
+
+class NetEvent_c
+{
+	struct epoll_event * m_pEntry = nullptr;
+	const Task_t * m_pSignalerTask = nullptr;
+
+public:
+	NetEvent_c ( struct epoll_event * pEntry, const Task_t * pSignaler )
+		: m_pEntry ( pEntry )
+		, m_pSignalerTask ( pSignaler )
+	{}
+
+	inline Task_t * GetTask ()
+	{
+		assert ( m_pEntry );
+		return ( Task_t * ) m_pEntry->data.ptr;
+	}
+
+	inline bool IsSignaler ()
+	{
+		assert ( m_pEntry );
+		auto pTask = GetTask ();
+		if ( pTask==m_pSignalerTask )
+		{
+			auto pSignaler = ( PollableEvent_t * ) m_pSignalerTask->m_pPayload;
+			pSignaler->DisposeEvent ();
+		}
+		return pTask==m_pSignalerTask;
+	}
+
+	inline int GetEvents ()
+	{
+		assert ( m_pEntry );
+		return m_pEntry->events;
+	}
+
+	inline bool IsError ()
+	{
+		assert ( m_pEntry );
+		return ( m_pEntry->events & EPOLLERR )!=0;
+	}
+
+	inline bool IsEof ()
+	{
+		assert ( m_pEntry );
+		return ( m_pEntry->events & EPOLLHUP )!=0;
+	}
+
+	inline bool IsRead ()
+	{
+		assert ( m_pEntry );
+		return ( m_pEntry->events & EPOLLIN )!=0;
+	}
+
+	inline bool IsWrite ()
+	{
+		assert ( m_pEntry );
+		return ( m_pEntry->events & EPOLLOUT )!=0;
+	}
+
+	inline DWORD BytesTransferred ()
+	{
+		assert ( m_pEntry );
+		return 0;
+	}
+};
+
+#elif POLLING_KQUEUE
+
+class NetEvent_c
+{
+	struct kevent * m_pEntry = nullptr;
+	const Task_t * m_pSignalerTask = nullptr;
+
+public:
+	NetEvent_c ( struct kevent * pEntry, const Task_t * pSignaler )
+		: m_pEntry ( pEntry )
+		, m_pSignalerTask ( pSignaler )
+	{}
+
+	inline Task_t * GetTask ()
+	{
+		assert ( m_pEntry );
+		return ( Task_t * ) m_pEntry->udata;
+	}
+
+	inline bool IsSignaler ()
+	{
+		assert ( m_pEntry );
+		auto pTask = GetTask();
+		if ( pTask==m_pSignalerTask )
+		{
+			auto pSignaler = ( PollableEvent_t* )m_pSignalerTask->m_pPayload;
+			pSignaler->DisposeEvent ();
+		}
+		return pTask==m_pSignalerTask;
+	}
+
+	inline int GetEvents ()
+	{
+		assert ( m_pEntry );
+		return m_pEntry->filter;
+	}
+
+	inline bool IsError ()
+	{
+		assert ( m_pEntry );
+		if ( ( m_pEntry->flags & EV_ERROR )==0 )
+			return false;
+
+		sphLogDebugL ( "L error for %lu, errno=%lu, %s", m_pEntry->ident, m_pEntry->data, sphSockError (
+			m_pEntry->data ) );
+		return true;
+	}
+
+	inline bool IsEof ()
+	{
+		assert ( m_pEntry );
+		return ( m_pEntry->flags | EV_EOF )!=0;
+	}
+
+	inline bool IsRead ()
+	{
+		assert ( m_pEntry );
+		return ( m_pEntry->filter==EVFILT_READ )!=0;
+	}
+
+	inline bool IsWrite ()
+	{
+		assert ( m_pEntry );
+		return ( m_pEntry->filter==EVFILT_WRITE )!=0;
+	}
+
+	inline DWORD BytesTransferred ()
+	{
+		assert ( m_pEntry );
+		return 0;
+	}
+};
+#endif
+
 class NetEventsFlavour_c
 {
 protected:
 	int m_iEvents = 0;    ///< how many events are in queue.
 
-	// schedule all actions a time...
-	// on kqueue we don't need to add them one-by-one
-	void poll_batch_action ( Task_t * pTask )
+	// perform actual changing of pTask subscription state.
+	// NOTE! m_uIOChanged==0 field here means active 'unsubscribe' (in use for deletion)
+void events_change_io ( Task_t * pTask )
 	{
-		auto iEvents = add_change_task ( pTask );
+		assert ( pTask );
+
+		// check if 'pure timer' deletion asked (i.e. task which didn't have io at all)
+		if ( !pTask->m_uIOActive && !pTask->m_uIOChanged )
+		{
+			sphLogDebugL ( "L events_change_io invoked for pure timer (%p); nothing to do (m_ifd, btw, is %d)", pTask, pTask->m_ifd );
+			return;
+		}
+
+		auto iEvents = events_apply_task_changes ( pTask );
 		m_iEvents += iEvents;
 		pTask->m_uIOActive = pTask->m_uIOChanged;
-		pTask->m_uIOChanged = 0;
-		sphLogDebugL ( "L poll_one_action returned %d, now %d events counted", iEvents, m_iEvents );
+		pTask->m_uIOChanged = Task_t::NO;
+		sphLogDebugL ( "L events_apply_task_changes returned %d, now %d events counted", iEvents, m_iEvents );
 	}
-
+protected:
 #if USE_WINDOWS
 						  // for windows it is one more level of indirection:
 						  // we set and wait for the tasks in one thread,
@@ -2710,9 +2999,8 @@ protected:
 	HANDLE				m_IOCP = INVALID_HANDLE_VALUE;
 	CSphVector<DWORD>	m_dIOThreads;
 	CSphVector<OVERLAPPED_ENTRY>	m_dReady;
-	LPOVERLAPPED_ENTRY	m_pEntry = nullptr;
 
-	inline void poll_create ( int iSizeHint )
+	inline void events_create ( int iSizeHint )
 	{
 		// fixme! m.b. more workers, or just one enough?
 		m_IOCP = CreateIoCompletionPort ( INVALID_HANDLE_VALUE, NULL, 0, 1 );
@@ -2720,7 +3008,7 @@ protected:
 
 	}
 
-	inline void poll_destroy ()
+	inline void events_destroy ()
 	{
 		sphLogDebugv ( "iocp poller %d closed", m_IOCP );
 		// that is have to be done only when ALL reference sockets are closed.
@@ -2735,19 +3023,38 @@ protected:
 			sphLogDebugv ( "L PostQueuedCompletionStatus failed with error %d", GetLastError () );
 	}
 
+private:
 	// each action added one-by-one...
-	int add_change_task ( Task_t * pTask )
+	int events_apply_task_changes ( Task_t * pTask )
 	{
+		// if socket already closed (say, FATAL in action),
+		// we don't need to unsubscribe events, but still need to return num of deleted events
+		// to keep in health poller's input buffer
+		
 		bool bApply = pTask->m_ifd!=-1;
-		bool bWrite = pTask->m_uIOChanged==1;
-		bool bRead = ( pTask->m_uIOChanged!=0 );
-		bool bWasWrite = pTask->m_uIOActive==1;
-		bool bWasRead = ( pTask->m_uIOActive!=0 );
-
-		if ( !bRead && !bWrite ) // requested delete
+		
+		if ( !pTask->m_uIOChanged ) // requested delete
 		{
 			sphLogDebugL ( "L request to remove event (%d), %d events rest", pTask->m_ifd, m_iEvents );
-			return pTask->m_ifd==-1 ? -1 : 0;
+			if ( pTask->IsInUse () && pTask->m_pPayload && bApply )
+			{
+				if ( pTask->m_dRead.m_bInUse && pTask->m_dReadBuf.IsEmpty () )
+				{
+					sphLogDebugL ( "L canceling read" );
+					pTask->m_pPayload->LeakRecvTo ( pTask->m_dReadBuf );
+					CancelIoEx ( (HANDLE) pTask->m_ifd, &pTask->m_dRead );
+				}
+
+				if ( pTask->m_dWrite.m_bInUse && pTask->m_dWriteBuf.IsEmpty () && pTask->m_dOutIO.IsEmpty () )
+				{
+					sphLogDebugL ( "L canceling write" );
+					pTask->m_pPayload->LeakSendTo ( pTask->m_dWriteBuf, pTask->m_dOutIO );
+					CancelIoEx ( (HANDLE) pTask->m_ifd, &pTask->m_dWrite );
+				}
+			}
+
+			return pTask->m_ifd==-1 ? -2 : 0;
+
 			/*
 			Hackers way to unbind from IOCP:
 
@@ -2761,23 +3068,18 @@ protected:
 			*/
 		}
 
-		if ( !bWasWrite && !bWasRead )
+		if ( !pTask->m_uIOActive )
 		{
 			sphLogDebugL ( "L Associate %d with iocp %d, %d events before", pTask->m_ifd, m_IOCP, m_iEvents );
 			if ( !CreateIoCompletionPort ( (HANDLE) pTask->m_ifd, m_IOCP, (ULONG_PTR) pTask->m_ifd, 0 ) )
 				sphLogDebugv ( "L Associate %d with port %d failed with error %d", pTask->m_ifd, m_IOCP, GetLastError () );
-			return 1;
+			return 2;
 		}
 		sphLogDebugL ( "L According to state, %d already associated with iocp %d, no action", pTask->m_ifd, m_IOCP );
 		return 0;
 	}
 
-	inline void poll_correct_events ( BYTE uIOmode )
-	{
-		sphLogDebugL ( "L poll_correct_events(%d) invoked", uIOmode );
-		if ( uIOmode )
-			--m_iEvents;
-	}
+protected:
 
 // 	void unsubscribecpio ( Task_t * pTask )
 // 	{
@@ -2789,7 +3091,7 @@ protected:
 // 	}
 
 	// always return 0 (timeout) or 1 (since iocp returns per event, not the bigger group).
-	inline int poller_wait ( int64_t iTimeoutUS )
+	inline int events_wait ( int64_t iTimeoutUS )
 	{
 		ULONG uReady = 0;
 		DWORD uTimeout = ( iTimeoutUS>=0 ) ? ( iTimeoutUS/1000 ) : INFINITE;
@@ -2807,83 +3109,12 @@ protected:
 	}
 
 	// returns task and also selects current event for all the functions below
-	inline Task_t * ready_iterate ( int iReady )
+	NetEvent_c GetEvent ( int iReady )
 	{
 		if ( iReady>=0 )
-			m_pEntry = &m_dReady[iReady];
-		assert ( m_pEntry );
-		if ( !m_pEntry->lpCompletionKey )
-			return nullptr;
-
-		auto pOvl = (SingleOverlapped_t *) m_pEntry->lpOverlapped;
-		auto pTask = (Task_t *) ( (BYTE*) pOvl - pOvl->m_uParentOffset );
-		--pTask->m_iRefs;
-		return pTask;
-	}
-
-	inline bool ready_signaler ( Task_t * pTask )
-	{
-		assert ( m_pEntry );
-		if ( !pTask )
-			return true;
-
-		if ( pTask->m_ifd==-1 && pTask->m_pPayload==nullptr )
-		{
-			sphLogDebugL ( "L ready_signaler for deffered %p, refs=%d", pTask, (int)pTask->m_iRefs );
-			if ( pTask->m_iRefs<=0 )
-				delete pTask;
-			return true;
-		}
-		return false;
-	}
-
-	inline int ready_events()
-	{
-		assert ( m_pEntry );
-		// return 0 for internal signal, or 1 for write, 1+sizeof(OVERLAPPED) for read.
-		return ( m_pEntry->lpCompletionKey ? 1 : 0 ) + ( (SingleOverlapped_t*) m_pEntry->lpOverlapped )->m_uParentOffset;
-	}
-
-	inline bool ready_error()
-	{
-		return false;
-//		assert ( m_pEntry );
-	//	return ( m_pEntry->dwNumberOfBytesTransferred==0 );
-		//auto & dEvent = m_dReady[iReady];
-		//bool bRes = ( dEvent.flags & EV_ERROR )!=0;
-		//if ( bRes )
-		//			sphLogDebugL ( "L error for %d, errno=%d, %s", dEvent.ident, dEvent.data, sphSockError ( dEvent.data ) );
-		//	return bRes;
-	}
-
-	inline bool ready_eof()
-	{
-		assert ( m_pEntry );
-		return ready_read() && !ready_transferred();
-	}
-
-	inline int delta_ovl()
-	{
-		// return 0 for internal signal, or 1 for write, 1+sizeof(OVERLAPPED) for read.
-		return ( (SingleOverlapped_t*) m_pEntry->lpOverlapped )->m_uParentOffset;
-	}
-
-	inline bool ready_read()
-	{
-		assert ( m_pEntry );
-		return !ready_write();
-	}
-
-	inline bool ready_write()
-	{
-		assert ( m_pEntry );
-		return delta_ovl ()<sizeof ( OVERLAPPED );
-	}
-
-	inline DWORD ready_transferred ()
-	{
-		assert ( m_pEntry );
-		return m_pEntry->dwNumberOfBytesTransferred;
+			return NetEvent_c ( &m_dReady[iReady] );
+		assert (false);
+		return NetEvent_c ( nullptr );
 	}
 
 #else
@@ -2891,23 +3122,18 @@ protected:
 	PollableEvent_t m_dSignaler;
 	Task_t			m_dSignalerTask;
 
-	inline void poll_create ( int iSizeHint )
+	inline void events_create ( int iSizeHint )
 	{
-		poll_create_impl ( iSizeHint );
+		epoll_or_kqueue_create_impl ( iSizeHint );
+		m_dReady.Reserve ( iSizeHint );
 		m_dSignalerTask.m_ifd = m_dSignaler.m_iPollablefd;
+		m_dSignalerTask.m_pPayload = ( AgentConn_t * ) &m_dSignaler; // hack! Will compare with &m_dSignaler before use
+		m_dSignalerTask.m_uIOChanged = Task_t::RO;
 		sphLogDebugv( "Add internal signaller");
-		poll_batch_action ( &m_dSignalerTask );
+		events_change_io ( &m_dSignalerTask );
 		sphLogDebugv ( "Internal signal action (for epoll/kqueue) added (%d), %p",
 			m_dSignaler.m_iPollablefd, &m_dSignalerTask );
 
-	}
-
-	inline bool ready_signaler ( Task_t * pTask )
-	{
-		if ( pTask==&m_dSignalerTask )
-			m_dSignaler.DisposeEvent ();
-
-		return pTask==&m_dSignalerTask;
 	}
 
 	inline void fire_event ()
@@ -2915,48 +3141,39 @@ protected:
 		m_dSignaler.FireEvent ();
 	}
 
-	// epoll/kqueue doesn't perform read/write itself, so transferred size is always 0.
-	inline DWORD ready_transferred ()
-	{
-		return 0;
-	}
 
 #if POLLING_EPOLL
 	CSphVector<epoll_event> m_dReady;
-	epoll_event	* m_pEntry = nullptr;
 
-	inline void poll_create_impl ( int iSizeHint )
+private:
+	inline void epoll_or_kqueue_create_impl ( int iSizeHint )
 	{
 		m_iEFD = epoll_create ( iSizeHint ); // 1000 is dummy, see man
 		if ( m_iEFD==-1 )
 			sphDie ( "failed to create epoll main FD, errno=%d, %s", errno, strerrorm ( errno ) );
 
 		sphLogDebugv ( "epoll %d created", m_iEFD );
-		m_dReady.Reserve ( iSizeHint );
 	}
 
-	inline void poll_destroy ()
+	// apply changes in case of epoll
+	int events_apply_task_changes ( Task_t * pTask )
 	{
-		sphLogDebugv ( "epoll %d closed", m_iEFD );
-		SafeClose ( m_iEFD );
-	}
+		auto iEvents = 0; // how many events we add/delete
 
-	// each action added one-by-one...
-	int add_change_task ( Task_t * pTask )
-	{
-		auto iEvents = 0;
+		// if socket already closed (say, FATAL in action),
+		// we don't need to unsubscribe events, but still need to return num of deleted events
+		// to keep in health poller's input buffer
 		bool bApply = pTask->m_ifd!=-1;
-		bool bWrite = pTask->m_uIOChanged==1;
-		bool bRead = ( pTask->m_uIOChanged!=0 ) || ( pTask==&m_dSignalerTask );
-		bool bWasWrite = pTask->m_uIOActive==1;
-		bool bWasRead = ( pTask->m_uIOActive!=0 );
 
+		bool bWrite = pTask->m_uIOChanged==Task_t::RW;
+		bool bRead = pTask->m_uIOChanged!=Task_t::NO;
 
 		int iOp = 0;
 		epoll_event tEv = { 0 };
 		tEv.data.ptr = pTask;
 
-		if ( !bRead && !bWrite )
+		// boring matrix of conditions...
+		if ( !pTask->m_uIOChanged )
 		{
 			iOp = EPOLL_CTL_DEL;
 			--iEvents;
@@ -2964,7 +3181,7 @@ protected:
 		} else
 		{
 			tEv.events = ( bRead ? EPOLLIN : 0 ) | ( bWrite ? EPOLLOUT : 0 );
-			if ( !bWasWrite && !bWasRead )
+			if ( !pTask->m_uIOActive )
 			{
 				iOp = EPOLL_CTL_ADD;
 				++iEvents;
@@ -2987,55 +3204,28 @@ protected:
 		return iEvents;
 	}
 
-	inline void poll_correct_events ( BYTE uIOmode )
+
+protected:
+	inline void events_destroy ()
 	{
-		if ( uIOmode )
-			--m_iEvents;
+		sphLogDebugv ( "epoll %d closed", m_iEFD );
+		SafeClose ( m_iEFD );
 	}
 
-	inline int poller_wait ( int64_t iTimeoutUS )
+	inline int events_wait ( int64_t iTimeoutUS )
 	{
 		m_dReady.Resize ( m_iEvents );
 		int iTimeoutMS = iTimeoutUS<0 ? -1 : ( ( iTimeoutUS + 500 ) / 1000 );
 		return epoll_wait ( m_iEFD, m_dReady.Begin (), m_dReady.GetLength (), iTimeoutMS );
 	};
 
-	inline Task_t * ready_iterate ( int iReady )
+	// returns task and also selects current event for all the functions below
+	NetEvent_c GetEvent ( int iReady )
 	{
 		if ( iReady>=0 )
-			m_pEntry = &m_dReady[iReady];
-		assert ( m_pEntry );
-		return ( Task_t *) m_pEntry->data.ptr;
-	}
-
-	inline int ready_events ()
-	{
-		assert ( m_pEntry );
-		return m_pEntry->events;
-	}
-
-	inline bool ready_error ()
-	{
-		assert ( m_pEntry );
-		return ( m_pEntry->events & EPOLLERR )!=0;
-	}
-
-	inline bool ready_eof ()
-	{
-		assert ( m_pEntry );
-		return ( m_pEntry->events & EPOLLHUP )!=0;
-	}
-
-	inline bool ready_read ()
-	{
-		assert ( m_pEntry );
-		return ( m_pEntry->events & EPOLLIN )!=0;
-	}
-
-	inline bool ready_write ()
-	{
-		assert ( m_pEntry );
-		return ( m_pEntry->events & EPOLLOUT )!=0;
+			return NetEvent_c ( &m_dReady[iReady], &m_dSignalerTask );
+		assert ( false );
+		return NetEvent_c ( nullptr, &m_dSignalerTask );
 	}
 
 #elif POLLING_KQUEUE
@@ -3043,27 +3233,19 @@ protected:
 	CSphVector<struct kevent> m_dScheduled; // prepared group of events
 	struct kevent * m_pEntry = nullptr;
 
-	inline void poll_create_impl ( int iSizeHint )
+private:
+	inline void epoll_or_kqueue_create_impl ( int iSizeHint )
 	{
 		m_iEFD = kqueue ();
 		if ( m_iEFD==-1 )
 			sphDie ( "failed to create kqueue main FD, errno=%d, %s", errno, strerrorm ( errno ) );
 
 		sphLogDebugv ( "kqueue %d created", m_iEFD );
-		m_dReady.Reserve ( iSizeHint );
 		m_dScheduled.Reserve ( iSizeHint * 2 );
 	}
 
-	inline void poll_destroy ()
+	int events_apply_task_changes ( Task_t * pTask )
 	{
-		sphLogDebugv ( "kqueue %d closed", m_iEFD );
-		SafeClose ( m_iEFD );
-	}
-
-
-	inline int poll_one_action ( CSphVector<struct kevent> &dSchedule, Task_t * pTask  )
-	{
-
 		int iEvents = 0;
 		bool bWrite = pTask->m_uIOChanged==1;
 		bool bRead = ( pTask->m_uIOChanged!=0 ) || ( pTask==&m_dSignalerTask );
@@ -3075,55 +3257,51 @@ protected:
 		if ( bRead && !bWasRead )
 		{
 			if ( bApply )
-				EV_SET ( &dSchedule.Add (), pTask->m_ifd, EVFILT_READ, EV_ADD, 0, 0, pTask );
+				EV_SET ( &m_dScheduled.Add (), pTask->m_ifd, EVFILT_READ, EV_ADD, 0, 0, pTask );
 			++iEvents;
-			sphLogDebugL ( "L EVFILT_READ, EV_ADD, %d (%d enqueued), %d in call", pTask->m_ifd, dSchedule.GetLength ()
+			sphLogDebugL ( "L EVFILT_READ, EV_ADD, %d (%d enqueued), %d in call", pTask->m_ifd, m_dScheduled.GetLength ()
 						   , iEvents );
 		}
 
 		if ( bWrite && !bWasWrite )
 		{
 			if ( bApply )
-				EV_SET ( &dSchedule.Add (), pTask->m_ifd, EVFILT_WRITE, EV_ADD, 0, 0, pTask );
+				EV_SET ( &m_dScheduled.Add (), pTask->m_ifd, EVFILT_WRITE, EV_ADD, 0, 0, pTask );
 			++iEvents;
-			sphLogDebugL ( "L EVFILT_WRITE, EV_ADD, %d (%d enqueued), %d in call", pTask->m_ifd, dSchedule.GetLength ()
+			sphLogDebugL ( "L EVFILT_WRITE, EV_ADD, %d (%d enqueued), %d in call", pTask->m_ifd, m_dScheduled.GetLength ()
 						   , iEvents );
 		}
 
 		if ( !bRead && bWasRead )
 		{
 			if ( bApply )
-				EV_SET ( &dSchedule.Add (), pTask->m_ifd, EVFILT_READ, EV_DELETE, 0, 0, pTask );
+				EV_SET ( &m_dScheduled.Add (), pTask->m_ifd, EVFILT_READ, EV_DELETE, 0, 0, pTask );
 			--iEvents;
-			sphLogDebugL ( "L EVFILT_READ, EV_DELETE, %d (%d enqueued), %d in call", pTask->m_ifd, dSchedule.GetLength ()
+			sphLogDebugL ( "L EVFILT_READ, EV_DELETE, %d (%d enqueued), %d in call", pTask->m_ifd
+						   , m_dScheduled.GetLength ()
 						   , iEvents );
 		}
 
 		if ( !bWrite && bWasWrite )
 		{
 			if ( bApply )
-				EV_SET ( &dSchedule.Add (), pTask->m_ifd, EVFILT_WRITE, EV_DELETE, 0, 0, pTask );
+				EV_SET ( &m_dScheduled.Add (), pTask->m_ifd, EVFILT_WRITE, EV_DELETE, 0, 0, pTask );
 			--iEvents;
-			sphLogDebugL ( "L EVFILT_WRITE, EV_DELETE, %d (%d enqueued), %d in call", pTask->m_ifd, dSchedule.GetLength ()
+			sphLogDebugL ( "L EVFILT_WRITE, EV_DELETE, %d (%d enqueued), %d in call", pTask->m_ifd
+						   , m_dScheduled.GetLength ()
 						   , iEvents );
 		}
 		return iEvents;
 	}
 
-	inline void poll_correct_events ( BYTE uIOmode )
+protected:
+	inline void events_destroy ()
 	{
-		if ( uIOmode )
-			--m_iEvents;
-		if ( uIOmode==1 )
-			--m_iEvents;
+		sphLogDebugv ( "kqueue %d closed", m_iEFD );
+		SafeClose ( m_iEFD );
 	}
 
-	int add_change_task ( Task_t * pTask )
-	{
-		return poll_one_action ( m_dScheduled, pTask );
-	}
-
-	inline int poller_wait ( int64_t iTimeoutUS )
+	inline int events_wait ( int64_t iTimeoutUS )
 	{
 		m_dReady.Resize ( m_iEvents + m_dScheduled.GetLength () );
 		timespec ts;
@@ -3142,47 +3320,15 @@ protected:
 
 	};
 
-	inline Task_t * ready_iterate ( int iReady )
+	// returns task and also selects current event for all the functions below
+	NetEvent_c GetEvent ( int iReady )
 	{
 		if ( iReady>=0 )
-			m_pEntry = &m_dReady[iReady];
-		assert ( m_pEntry );
-		return ( Task_t * ) m_pEntry->udata;
+			return NetEvent_c ( &m_dReady[iReady], &m_dSignalerTask );
+		assert ( false );
+		return NetEvent_c ( nullptr, &m_dSignalerTask );
 	}
 
-	inline int ready_events ()
-	{
-		assert ( m_pEntry );
-		return m_pEntry->filter;
-	}
-
-	inline bool ready_error ()
-	{
-		assert ( m_pEntry );
-		if ( ( m_pEntry->flags & EV_ERROR ) == 0 )
-			return false;
-		
-		sphLogDebugL ( "L error for %lu, errno=%lu, %s", m_pEntry->ident, m_pEntry->data, sphSockError ( m_pEntry->data ) );
-		return true;
-	}
-
-	inline bool ready_eof ()
-	{
-		assert ( m_pEntry );
-		return ( m_pEntry->flags | EV_EOF )!=0;
-	}
-
-	inline bool ready_read ()
-	{
-		assert ( m_pEntry );
-		return ( m_pEntry->filter == EVFILT_READ )!=0;
-	}
-
-	inline bool ready_write ()
-	{
-		assert ( m_pEntry );
-		return ( m_pEntry->filter == EVFILT_WRITE )!=0;
-	}
 #endif
 #endif
 };
@@ -3199,22 +3345,18 @@ class LazyNetEvents_c : ISphNoncopyable, protected NetEventsFlavour_c
 	TimeoutQueue_c m_dTimeouts;
 	SphThread_t m_dWorkingThread;
 	int			m_iLastReportedErrno = -1;
+	int64_t		m_iNextTimeoutUS = 0;
 
 private:
 	/// maps AgentConn_t -> Task_c for new/existing task
-	inline Task_t * TaskFor ( AgentConn_t * pConnection )
+	inline Task_t * CreateNewTask ( AgentConn_t * pConnection )
 	{
-		auto pTask = ( Task_t * ) pConnection->m_pPollerTask;
-		if ( !pTask )
-		{
-			pTask = new Task_t;
-			pTask->m_ifd = pConnection->m_iSock;
-			pTask->m_pPayload = pConnection;
-			pConnection->m_pPollerTask = pTask;
-			pConnection->AddRef ();
-			sphLogDebugv ( "- TaskFor(%p)->%p, new, ref=%d", pConnection, pTask, (int) pConnection->GetRefcount () );
-		} else
-			sphLogDebugv ( "- TaskFor(%p)->%p, exst, ref=%d", pConnection, pTask, ( int ) pConnection->GetRefcount () );
+		auto pTask = new Task_t;
+		pTask->m_ifd = pConnection->m_iSock;
+		pTask->m_pPayload = pConnection;
+		pConnection->m_pPollerTask = pTask;
+		pConnection->AddRef ();
+		sphLogDebugv ( "- CreateNewTask for (%p)->%p, ref=%d", pConnection, pTask, (int) pConnection->GetRefcount () );
 		return pTask;
 	}
 
@@ -3224,32 +3366,30 @@ private:
 	// 2. (win specific): On windows, however, another trick is in game: timeout condition we get from
 	// internal GetQueuedCompletionStatusEx function. At the same time overlapped ops (WSAsend or recv, 
 	// or even both) are still in work, and so we need to keep the 'overlapped' structs alive for them.
-	// So, we can't just delete the task in the case. Instead we invalidate it (all, excluding overlapped),
-	// so that the next return from poller_wait will recognize it and finally totally destroy the task for us.
+	// So, we can't just delete the task in the case. Instead we invalidate it (set m_ifd=-1, nullify payload),
+	// so that the next return from events_wait will recognize it and finally totally destroy the task for us.
 	AgentConn_t * DeleteTask ( Task_t * pTask, bool bReleasePayload=true )
 	{
 		assert ( pTask );
-		auto pConnection = pTask->m_pPayload;
-
 		sphLogDebugL ( "L DeleteTask for %p, (conn %p), release=%d", pTask, pTask->m_pPayload, bReleasePayload );
+		assert (pTask->m_uIOChanged == 0);
+		events_change_io ( pTask );
+		auto pConnection = pTask->m_pPayload;
+		pTask->m_pPayload = nullptr;
+
 		// if payload already invoked in another task (remember, we process deffered action!)
 		// we won't nullify it.
 		if ( pConnection && pConnection->m_pPollerTask==pTask )
 			pConnection->m_pPollerTask = nullptr;
 
-		if ( bReleasePayload )
-		{
-			SafeRelease ( pConnection );
 #if USE_WINDOWS
-			delete pTask;
-		} else
-		{
-			pTask->m_ifd = -1;
-			pTask->m_pPayload = nullptr;
-			if (pTask->m_iRefs<=0)
+		pTask->m_ifd = -1;
+		pTask = nullptr; // save from delete below
 #endif
-				delete pTask;
-		}
+		SafeDelete ( pTask );
+
+		if ( bReleasePayload )
+			SafeRelease ( pConnection );
 		return pConnection;
 	}
 
@@ -3269,73 +3409,64 @@ private:
 
 	void ProcessChanges ( Task_t * pTask )
 	{
-		sphLogDebugL ( "L PerformTask for %p, (conn %p)", pTask, pTask->m_pPayload );
+		sphLogDebugL ( "L ProcessChanges for %p, (conn %p) (%d->%d), tm(%d)=" INT64_FMT, pTask, pTask->m_pPayload,
+			pTask->m_uIOActive, pTask->m_uIOChanged, pTask->m_bHardTimeout, pTask->m_iTimeoutTime);
 
-		if ( pTask->m_uIOChanged )
-			poll_batch_action ( pTask );
+		assert ( pTask->m_iTimeoutTime!=0);
 
-		// positive timeout - task is about add/change timeout
-		if ( pTask->m_iTimeoutTime>0 )
+		if ( pTask->m_iTimeoutTime<0 ) // process 'finish' socket.
 		{
-			sphLogDebugL ( "L change/add timeout for %p, " INT64_FMT " (%d) is changed one", pTask
-						   , pTask->m_iTimeoutTime, ( int ) ( pTask->m_iTimeoutTime - sphMicroTimer () ) );
-			m_dTimeouts.Change ( pTask );
-			sphLogDebugL ( "%s", m_dTimeouts.DebugDump ( "L " ).cstr () );
-		}
-		// -1 timeout - task is about delete everything
-		else if ( pTask->m_iTimeoutTime==-1 ) // process 'finish' socket
-		{
-			sphLogDebugL ( "L remove timeout for %p", pTask );
+			sphLogDebugL ( "L finally remove task %p", pTask );
 			m_dTimeouts.Remove ( pTask );
-			// real unclosed socket provided, need to unsubscribe it
-			pTask->m_uIOChanged = 0;
-			poll_batch_action ( pTask );
 			DeleteTask ( pTask );
 			sphLogDebugL ( "%s", m_dTimeouts.DebugDump ( "L " ).cstr () );
+			return;
 		}
+
+		// on enqueued tasks m_uIOChanged == 0 doesn't request unsubscribe, but means 'nope'.
+		// (unsubscription, in turn, means 'delete' and planned by setting timeout=-1)
+		if ( pTask->m_uIOChanged )
+			events_change_io ( pTask );
+
+		m_dTimeouts.Change ( pTask );
+
+		sphLogDebugL ( "L change/add timeout for %p, " INT64_FMT " (%d) is changed one", pTask,
+			pTask->m_iTimeoutTime, ( int ) ( pTask->m_iTimeoutTime - sphMicroTimer () ) );
+		sphLogDebugL ( "%s", m_dTimeouts.DebugDump ( "L " ).cstr () );
+
 	}
 
 	/// take current internal and external queues, parse it and enqueue changes.
+	/// actualy 1 task can have only 1 action (another change will change very same task).
 	void ProcessEnqueuedTasks () REQUIRES ( LazyThread )
 	{
 		sphLogDebugL ( "L ProcessEnqueuedTasks" );
 
-		if ( !m_dInternalTasks.IsEmpty () )
-		{
-			sphLogDebugL ( "L starting processing %d internal events", m_dInternalTasks.GetLength () );
-			Task_t * pLastTask = nullptr;
-			for ( auto * pTask : m_dInternalTasks )
-			{
-				if ( pTask==pLastTask )
-					continue;
-				sphLogDebugL ( "L Internal event" );
-				ProcessChanges ( pTask );
-				pLastTask = pTask;
-			}
-			sphLogDebugL ( "L Internal events processed" );
-			m_dInternalTasks.Reset();
-		}
+		auto uStartLen = m_dInternalTasks.GetLength ();
 
 		auto pExternalQueue = PopQueue ();
-		if ( !pExternalQueue )
-			return;
+		if ( pExternalQueue )
+			m_dInternalTasks.Append ( *pExternalQueue );
+		SafeDelete ( pExternalQueue );
 
-		if ( !pExternalQueue->IsEmpty () )
+		auto uLastLen = m_dInternalTasks.GetLength ();
+		m_dInternalTasks.Uniq ();
+
+		if ( m_dInternalTasks.IsEmpty () )
 		{
-			sphLogDebugL ( "L starting adding %d events", pExternalQueue->GetLength () );
-			Task_t * pLastTask = nullptr;
-			for ( auto * pTask : *pExternalQueue )
-			{
-				if ( pTask==pLastTask )
-					continue;
-				sphLogDebugL ( "L Event" );
-				ProcessChanges ( pTask );
-				pLastTask = pTask;
-			}
-			sphLogDebugL ( "L Events processed" );
+			sphLogDebugL ( "L No tasks in queue" );
+			return;
 		}
+		sphLogDebugL ( "L starting processing %d internal events (originally %d, sparsed %d)", m_dInternalTasks.GetLength (), uStartLen, uLastLen );
 
-		delete pExternalQueue;
+		for ( auto * pTask : m_dInternalTasks )
+		{
+			sphLogDebugL ( "L Start processing task %p", pTask );
+			ProcessChanges ( pTask );
+			sphLogDebugL ( "L Finish processing task %p", pTask );
+		}
+		sphLogDebugL ( "L All events processed" );
+		m_dInternalTasks.Reset ();
 	}
 
 	/// main event loop run in separate thread.
@@ -3348,50 +3479,63 @@ private:
 
 	/// abandon and release all tiemouted events.
 	/// \return next active timeout (in uS), or -1 for infinite.
-	int64_t GetNextTimeout()
+	bool HasTimeoutActions()
 	{
+		bool bHasTimeout = false;
 		while ( !m_dTimeouts.IsEmpty () )
 		{
 			auto pTask = m_dTimeouts.Root ();
 			assert ( pTask->m_iTimeoutTime>0 );
 
-			int64_t iNextTimeout = pTask->m_iTimeoutTime - sphMicroTimer ();
-			if ( iNextTimeout>0 )
-				return iNextTimeout;
+			m_iNextTimeoutUS = pTask->m_iTimeoutTime - sphMicroTimer ();
+			if ( m_iNextTimeoutUS>0 )
+				return bHasTimeout;
+
+			bHasTimeout = true;
 
 			sphLogDebugL ( "L timeout happens for %p task", pTask );
 			m_dTimeouts.Pop ();
 
 			// adopt timeout action, keep connection
-			Clbck_f m_fTimeoutAction = std::move ( pTask->m_fTimeoutAction );
-			BYTE uSubscribes = pTask->m_uIOActive;
-
+			bool bHardTimeout = pTask->m_bHardTimeout;
 			CSphRefcountedPtr<AgentConn_t> pKeepConn ( DeleteTask ( pTask, false ) );
 
 			sphLogDebugL ( "%s", m_dTimeouts.DebugDump ( "L heap:" ).cstr () );
-			if ( m_fTimeoutAction )
+			if ( pKeepConn )
 			{
-				sphLogDebugL ( "L timeout action started" );
-				m_fTimeoutAction ();
+				/*
+				 * Timeout means that r/w actions for task might be still active.
+				 * Suppose that timeout functor will unsibscribe socket from polling.
+				 * However if right now something came to the socket, next call to poller might
+				 * signal it, and we catch the events on the next round.
+				 */
+				sphLogDebugL ( "L timeout action started %d", bHardTimeout );
+				pKeepConn->SetNetLoop ();
+				if ( bHardTimeout )
+					pKeepConn->HardTimeoutCallback ();
+				else
+					pKeepConn->SoftTimeoutCallback ();
 				sphLogDebugL ( "L timeout action finished" );
 			}
-			poll_correct_events ( uSubscribes );
 		}
-		return -1; /// means 'infinite'
+		m_iNextTimeoutUS = -1;
+		return bHasTimeout; /// means 'infinite'
 	}
 
 	/// one event cycle.
 	/// \return false to stop event loop and exit.
 	bool EventTick () REQUIRES ( LazyThread )
 	{
-		sphLogDebugL ( "L EventTick()" );
-		ProcessEnqueuedTasks ();
+		sphLogDebugL ( "L ---------------------------- EventTick()" );
+		do
+			ProcessEnqueuedTasks ();
+		while ( HasTimeoutActions () );
 
-		auto iTimeToWailtUS = GetNextTimeout ();
-		sphLogDebugL ( "L calculated timeout is " INT64_FMT " useconds", iTimeToWailtUS );
+
+		sphLogDebugL ( "L calculated timeout is " INT64_FMT " useconds", m_iNextTimeoutUS );
 
 		auto iStarted = sphMicroTimer ();
-		auto iEvents = poller_wait ( iTimeToWailtUS );
+		auto iEvents = events_wait ( m_iNextTimeoutUS );
 		auto iWaited = sphMicroTimer() - iStarted;
 
 		if ( g_bShutdown )
@@ -3416,20 +3560,27 @@ private:
 		/// we have some events to speak about...
 		for ( int i = 0; i<iEvents; ++i )
 		{
-			Task_t * pTask = ready_iterate ( i );
-			if ( ready_signaler ( pTask ) )
+			auto tEvent = GetEvent (i);
+			if ( tEvent.IsSignaler () )
 			{
 				sphLogDebugL ( "L internal event. Disposed" );
 				continue;
 			}
 
-			if ( !pTask )
-				continue;
-			else
-				sphLogDebugL ( "L event action for %p(%d), %d", pTask, pTask->m_ifd, ready_events () );
+			Task_t * pTask = tEvent.GetTask ();
 
-			bool bError = ready_error ();
-			bool bEof = ready_eof ();
+			if ( !pTask )
+			{
+#if USE_WINDOWS
+				m_iEvents -= 2;
+#endif
+				continue;
+			}
+			else
+				sphLogDebugL ( "L event action for task %p(%d), %d", pTask, pTask->m_ifd, tEvent.GetEvents () );
+
+			bool bError = tEvent.IsError ();
+			bool bEof = tEvent.IsEof ();
 			if ( bError )
 			{
 				sphLogDebugL ( "L error happened" );
@@ -3440,30 +3591,34 @@ private:
 				}
 			}
 
-			if ( pTask->m_uIOActive )
+			auto pConn = pTask->m_pPayload;
+			if ( pConn && pTask->m_uIOActive )
 			{
 				if ( bError )
 				{
 					sphLogDebugL ( "L error action %p, waited " INT64_FMT, pTask, iWaited );
-					pTask->m_pPayload->ErrorCallback ( iWaited );
+					pConn->SetNetLoop ();
+					pConn->ErrorCallback ( iWaited );
 					sphLogDebugL ( "L error action %p completed", pTask );
 				} else
 				{
-					if ( ready_write () )
+					if ( tEvent.IsWrite () )
 					{
 						if ( !bEof )
 						{
-							sphLogDebugL ( "L write action %p, waited " INT64_FMT ", transferred %d", pTask, iWaited, ready_transferred() );
-							pTask->m_pPayload->SendCallback ( iWaited, ready_transferred () );
+							sphLogDebugL ( "L write action %p, waited " INT64_FMT ", transferred %d", pTask, iWaited, tEvent.BytesTransferred () );
+							pConn->SetNetLoop ();
+							pConn->SendCallback ( iWaited, tEvent.BytesTransferred () );
 							sphLogDebugL ( "L write action %p completed", pTask );
 						} else
 							sphLogDebugL ( "L write action avoid because of eof", pTask );
 					}
 
-					if ( ready_read() )
+					if ( tEvent.IsRead () )
 					{
-						sphLogDebugL ( "L read action %p, waited " INT64_FMT ", transferred %d", pTask, iWaited, ready_transferred () );
-						pTask->m_pPayload->RecvCallback ( iWaited, ready_transferred () );
+						sphLogDebugL ( "L read action %p, waited " INT64_FMT ", transferred %d", pTask, iWaited, tEvent.BytesTransferred () );
+						pConn->SetNetLoop ();
+						pConn->RecvCallback ( iWaited, tEvent.BytesTransferred () );
 						sphLogDebugL ( "L read action %p completed", pTask );
 					}
 				}
@@ -3472,11 +3627,26 @@ private:
 		return true;
 	}
 
+	void AddToQueue ( Task_t * pTask, bool bInternal )
+	{
+		if ( bInternal )
+		{
+			sphLogDebugL ( "L AddToQueue, int=%d", m_dInternalTasks.GetLength () + 1 );
+			m_dInternalTasks.Add ( pTask );
+		} else
+		{
+			sphLogDebugL ( "- AddToQueue, ext=%d", m_pEnqueuedTasks ? m_pEnqueuedTasks->GetLength () + 1 : 1 );
+			ScopedMutex_t tLock ( m_dActiveLock );
+			if ( !m_pEnqueuedTasks )
+				m_pEnqueuedTasks = new VectorTask_c;
+			m_pEnqueuedTasks->Add ( pTask );
+		}
+	}
 
 public:
 	explicit LazyNetEvents_c ( int iSizeHint )
 	{
-		poll_create ( iSizeHint );
+		events_create ( iSizeHint );
 		SphCrashLogger_c::ThreadCreate ( &m_dWorkingThread, WorkerFunc, this );
 	}
 
@@ -3486,70 +3656,80 @@ public:
 		sphLogDebug ( "~LazyNetEvents_c. Shutdown=%d", g_bShutdown );
 		Fire();
 		sphThreadJoin ( &m_dWorkingThread );
-		poll_destroy();
-	}
-
-	void AddToQueue ( Task_t * pTask, bool bInternal )
-	{
-		if ( bInternal )
-		{
-			sphLogDebugL ( "L AddToQueue, int=%d", m_dInternalTasks.GetLength () );
-			m_dInternalTasks.Add ( pTask );
-		} else
-		{
-			sphLogDebugL ( "- AddToQueue, ext=%d", m_pEnqueuedTasks ? m_pEnqueuedTasks->GetLength () : 0 );
-			ScopedMutex_t tLock ( m_dActiveLock );
-			if ( !m_pEnqueuedTasks )
-				m_pEnqueuedTasks = new VectorTask_c;
-			m_pEnqueuedTasks->Add ( pTask );
-		}
+		events_destroy();
 	}
 
 	/// Enqueue or perform a timer functor
 	/// caller guarantee that interhal task exists
-	void EnqueueTask ( AgentConn_t * pConnection, int64_t iTimeoutMS, Clbck_f &&fTimeout, BYTE uActivateIO )
+	bool EnqueueNewTask ( AgentConn_t * pConnection, int64_t iTimeoutMS, bool bTimeoutKind, BYTE uActivateIO )
 	{
-		Task_t * pTask = TaskFor ( pConnection );
+		if ( pConnection->m_pPollerTask )
+		{
+			sphLogDebugv ( "- %d EnqueueNewTask invoked with pconn=%p aborted, poller not null(%p)"
+						   , pConnection->m_iStoreTag, pConnection, pConnection->m_pPollerTask );
+			return false;
+		}
+
+		Task_t * pTask = CreateNewTask ( pConnection );
+		assert ( pTask );
+		assert ( iTimeoutMS!=-1 );
+
+		// check for same timeout as we have. Avoid dupes, if so.
+		sphLogDebugv ( "- %d EnqueueNewTask invoked with pconn=%p, ts=" INT64_FMT ", ActivateIO=%d"
+					   , pConnection->m_iStoreTag, pConnection, iTimeoutMS, uActivateIO );
+
+		pTask->m_iTimeoutTime = iTimeoutMS;
+		pTask->m_bHardTimeout = bTimeoutKind;
+
+		if ( uActivateIO )
+			pTask->m_uIOChanged = uActivateIO;
+
+		sphLogDebugv ( "- %d EnqueueNewTask enqueueing (task %p) " INT64_FMT " Us, IO(%d->%d)", pConnection->m_iStoreTag, pTask, pTask->m_iTimeoutTime, pTask->m_uIOActive, pTask->m_uIOChanged );
+		AddToQueue ( pTask, pConnection->InNetLoop () );
+
+		// for win it is vitable important to apply changes immediately,
+		// since iocp has to be enqueued before read/write op, not after!
+#if USE_WINDOWS
+		if ( uActivateIO )
+			events_change_io ( pTask );
+#endif
+		return true;
+	}
+
+	void ChangeDeleteTask ( AgentConn_t * pConnection, int64_t iTimeoutMS )
+	{
+		auto pTask = ( Task_t * ) pConnection->m_pPollerTask;
 		assert ( pTask );
 
 		// check for same timeout as we have. Avoid dupes, if so.
 		if ( pTask->m_iTimeoutTime==iTimeoutMS )
 			return;
 
-		sphLogDebugv ( "- %d EnqueueTask invoked with pconn=%p, ts=" INT64_FMT ", ActivateIO=%d"
-					   , pConnection->m_iStoreTag, pConnection, iTimeoutMS, uActivateIO );
-
 		pTask->m_iTimeoutTime = iTimeoutMS;
-		if ( fTimeout )
-			pTask->m_fTimeoutAction = std::move ( fTimeout );
 
-		// case of finish: we need to unsubscribe IO, and so need actual socket for it.
-		if ( iTimeoutMS==-1 )
-			pTask->m_ifd = pConnection->m_iSock;
-
-		if ( uActivateIO != pTask->m_uIOActive )
+		// case of delete: pConn socket m.b. already closed and ==-1. Actualize it right now.
+		if ( iTimeoutMS<0 )
 		{
-			pTask->m_uIOChanged = uActivateIO;
-#if USE_WINDOWS
-			// for win it is vitable important to apply changes immediately,
-			// since iocp has to be enqueued before read/write op, not after!
-			if ( pTask->m_uIOChanged )
-				poll_batch_action ( pTask );
-#endif
+			pTask->m_ifd = pConnection->m_iSock;
+			pConnection->m_pPollerTask = nullptr; // this will allow to create another task.
 		}
 
-		sphLogDebugv ( "- %d EnqueueTask enqueueing (task %p) " INT64_FMT "Us, ChangeIO=%d", pConnection->m_iStoreTag, pTask, pTask->m_iTimeoutTime, pTask->m_uIOChanged );
+		sphLogDebugv ( "- %d ChangeDeleteTask enqueueing (task %p), fd=%d " INT64_FMT " Us", pConnection->m_iStoreTag
+					   , pTask, pTask->m_ifd, pTask->m_iTimeoutTime );
 		AddToQueue ( pTask, pConnection->InNetLoop () );
 	}
 
 	void DisableWrite ( AgentConn_t * pConnection )
 	{
-		Task_t * pTask = TaskFor ( pConnection );
+		auto pTask = ( Task_t * ) pConnection->m_pPollerTask;
 		assert ( pTask );
 
-		if ( 2!=pTask->m_uIOActive )
+		if ( Task_t::RO!=pTask->m_uIOActive )
 		{
-			pTask->m_uIOChanged = 2;
+			pTask->m_uIOChanged = Task_t::RO;
+			sphLogDebugv ( "- %d DisableWrite enqueueing (task %p) (%d->%d), innet=%d", pConnection->m_iStoreTag, pTask,
+						   pTask->m_uIOActive, pTask->m_uIOChanged, pConnection->InNetLoop());
+
 			AddToQueue ( pTask, pConnection->InNetLoop () );
 		}
 	}
@@ -3579,17 +3759,24 @@ LazyNetEvents_c & LazyPoller ()
 	return dEvents;
 }
 
-//! Add or change timeout task
-void AgentConn_t::TimeoutTask ( int64_t iTimeoutMS, Clbck_f &&fTimeout, BYTE uActivateIO )
+//! Add or change task for poller.
+void AgentConn_t::LazyTask ( int64_t iTimeoutMS, bool bHardTimeout, BYTE uActivateIO )
+{
+	assert ( iTimeoutMS>0 );
+
+	m_bNeedKick = !InNetLoop();
+	LazyPoller ().EnqueueNewTask ( this, iTimeoutMS, bHardTimeout, uActivateIO );
+}
+
+void AgentConn_t::LazyDeleteOrChange ( int64_t iTimeoutMS )
 {
 	// skip del/change for not scheduled conns
-	if ( !m_pPollerTask && !fTimeout )
+	if ( !m_pPollerTask )
 		return;
 
-	if ( fTimeout )
-		m_bNeedKick = !m_bInNetLoop;
-	LazyPoller ().EnqueueTask ( this, iTimeoutMS, std::forward<Clbck_f> ( fTimeout ), uActivateIO );
+	LazyPoller ().ChangeDeleteTask ( this, iTimeoutMS );
 }
+
 
 void AgentConn_t::DisableWrite ()
 {
@@ -3684,6 +3871,15 @@ bool sphNBSockEof ( int iSock )
 // in a cache inside kernel, so once added, we can't iterate over all of the items.
 // So, we store them in linked list for that purpose.
 
+/// wrap raw void* into ListNode_t to store it in List_t
+struct ListedData_t : public ListNode_t
+{
+	const void * m_pData = nullptr;
+
+	explicit ListedData_t ( const void * pData )
+		: m_pData ( pData )
+	{}
+};
 
 // store and iterate over the list of items
 class IterableEvents_c : public ISphNetEvents

@@ -7844,6 +7844,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		tReporter = GetObserver();
 
 		// run remote queries. tReporter will tell us when they're finished.
+		// also blackholes will be removed from this flow of remotes.
+
 		ScheduleDistrJobs ( dRemotes, tReqBuilder.Ptr (),
 			new SearchReplyParser_c( iStart, iEnd ),
 			tReporter.Ptr(), tFirst.m_iRetryCount, tFirst.m_iRetryDelay );
@@ -7886,6 +7888,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 			ARRAY_FOREACH ( iAgent, dRemotes )
 			{
 				AgentConn_t * pAgent = dRemotes[iAgent];
+				assert ( !pAgent->IsBlackhole () ); // must not be any blacknole here.
+
 				if ( !pAgent->m_bSuccess )
 					continue;
 
@@ -7975,9 +7979,9 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	// copy timings from all agents
 	if ( !dRemotes.IsEmpty() )
 	{
-		ARRAY_FOREACH ( i, dRemotes )
+		for ( const AgentConn_t * pAgent : dRemotes )
 		{
-			const AgentConn_t * pAgent = dRemotes[i];
+			assert ( !pAgent->IsBlackhole () ); // must not be any blacknole here.
 
 			for ( int j=iStart; j<=iEnd; ++j )
 			{
@@ -7987,7 +7991,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 			if ( !pAgent->m_bSuccess && !pAgent->m_sFailure.IsEmpty() )
 				for ( int j=iStart; j<=iEnd; j++ )
-					m_dFailuresSet[j].SubmitEx ( tFirst.m_sIndexes.cstr(), nullptr, pAgent->m_tDesc.m_bBlackhole ? "blackhole %s: %s" : "agent %s: %s",
+					m_dFailuresSet[j].SubmitEx ( tFirst.m_sIndexes.cstr(), nullptr, "agent %s: %s",
 						pAgent->m_tDesc.GetMyUrl().cstr(), pAgent->m_sFailure.cstr() );
 		}
 	}
@@ -18441,8 +18445,8 @@ void RotationThreadFunc ( void * )
 					if ( PreallocNewIndex ( *wLocked, sIndex.cstr() ))
 					{
 						wLocked->m_bOnlyNew = false;
-						pIndex->AddRef();
 						g_pLocalIndexes->AddOrReplace ( pIndex, sIndex );
+						pIndex->AddRef ();
 					} else
 						g_pLocalIndexes->DeleteIfNull ( sIndex );
 				}
@@ -19664,8 +19668,8 @@ void CheckRotate () REQUIRES ( MainThread )
 				pWlockedServedPtr->m_bOnlyNew = false;
 				if ( PreallocNewIndex ( *pWlockedServedPtr, &g_pCfg.m_tConf["index"][sIndex], sIndex ) )
 				{
-					pIndex->AddRef ();
 					g_pLocalIndexes->AddOrReplace ( pIndex, sIndex );
+					pIndex->AddRef ();
 				} else
 					g_pLocalIndexes->DeleteIfNull ( sIndex );
 				g_pDistIndexes->Delete ( sIndex ); // postponed delete of same-named distributed (if any)
@@ -19688,8 +19692,8 @@ void CheckRotate () REQUIRES ( MainThread )
 			if ( bOk )
 			{
 				pWlockedServedPtr->m_pIndex->Preread();
-				pIndex->AddRef ();
 				g_pLocalIndexes->AddOrReplace ( pIndex, sIndex );
+				pIndex->AddRef ();
 			} else
 				g_pLocalIndexes->DeleteIfNull ( sIndex );
 			g_pDistIndexes->Delete ( sIndex ); // postponed delete of same-named distributed (if any)

@@ -1587,13 +1587,13 @@ static size_t sphReadThrottled ( int iFD, void * pBuf, size_t iCount )
 	if ( iCount<=0 )
 		return iCount;
 
-	auto iStep = g_iMaxIOSize ? Min ( iCount, g_iMaxIOSize ) : iCount;
+	auto iStep = g_iMaxIOSize ? Min ( iCount, (size_t)g_iMaxIOSize ) : iCount;
 	auto * p = ( BYTE * ) pBuf;
 	size_t nBytesToRead = iCount;
 	while ( iCount )
 	{
 		ThrottleSleep();
-		auto iChunk = Min ( iCount, iStep );
+		auto iChunk = (long) Min ( iCount, iStep );
 		auto iRead = sphRead ( iFD, p, iChunk );
 		p += iRead;
 		iCount -= iRead;

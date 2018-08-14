@@ -334,6 +334,9 @@ public:
 //	void PrependBuf ( SmartOutputBuffer_t &dBuf );
 	size_t GetIOVec ( CSphVector<sphIovec> &dOut );
 	void Reset();
+#if USE_WINDOWS
+	void LeakTo ( CSphVector<ISphOutputBuffer *> dOut );
+#endif
 };
 
 class NetOutputBuffer_c : public CachedOutputBuffer_c
@@ -822,6 +825,7 @@ private:
 class SCOPED_CAPABILITY RLockedHashIt_c : public ISphNoncopyable
 {
 public:
+	using RefPtr_c = CSphRefcountedPtr<ISphRefcountedMT>;
 	explicit RLockedHashIt_c ( const GuardedHash_c * pHash ) ACQUIRE_SHARED ( pHash->m_tIndexesRWLock
 																		  , m_pHash->m_tIndexesRWLock )
 		: m_pHash ( pHash )
@@ -835,13 +839,13 @@ public:
 	bool Next () REQUIRES_SHARED ( m_pHash->m_tIndexesRWLock )
 	{ return m_pHash->m_hIndexes.IterateNext ( &m_pIterator ); }
 
-	ISphRefcountedMT * Get () REQUIRES_SHARED ( m_pHash->m_tIndexesRWLock )
+	RefPtr_c Get () REQUIRES_SHARED ( m_pHash->m_tIndexesRWLock )
 	{
 		assert ( m_pIterator );
 		auto pRes = GuardedHash_c::RefCntHash_t::IterateGet ( &m_pIterator );
 		if ( pRes )
 			pRes->AddRef ();
-		return pRes;
+		return RefPtr_c ( pRes );
 	}
 
 	const CSphString &GetName () REQUIRES_SHARED ( m_pHash->m_tIndexesRWLock )

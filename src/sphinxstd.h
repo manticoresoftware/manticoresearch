@@ -1164,9 +1164,9 @@ public:
 	/// reset
 	void Reset ()
 	{
+		SafeDeleteArray ( m_pData );
 		m_iCount = 0;
 		m_iLimit = 0;
-		SafeDeleteArray ( m_pData );
 	}
 
 	/// memset whole reserved vec

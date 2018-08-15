@@ -1119,6 +1119,17 @@ public:
 		return false;
 	}
 
+	/// remove element by value, asuming vec is sorted/uniq
+	bool RemoveValueFromSorted ( T tValue )
+	{
+		T* pValue = BinarySearch (tValue);
+		if ( !pValue )
+			return false;
+
+		RemoveFast ( pValue - Begin() );
+		return true;
+	}
+
 	/// pop last value
 	const T & Pop ()
 	{

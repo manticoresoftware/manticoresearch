@@ -1016,12 +1016,13 @@ template < typename T, typename POLICY=CSphVectorPolicy<T> > class CSphVector
 	: public VecTraits_T<T>
 {
 protected:
-	using VecTraits_T<T>::m_pData;
-	using VecTraits_T<T>::m_iCount;
+	using BASE = VecTraits_T<T>;
+	using BASE::m_pData;
+	using BASE::m_iCount;
 
 public:
-	using VecTraits_T<T>::Begin;
-	using VecTraits_T<T>::Sort;
+	using BASE::Begin;
+	using BASE::Sort;
 
 	/// ctor
 	CSphVector () = default;
@@ -1122,11 +1123,11 @@ public:
 	/// remove element by value, asuming vec is sorted/uniq
 	bool RemoveValueFromSorted ( T tValue )
 	{
-		T* pValue = BinarySearch (tValue);
+		T* pValue = VecTraits_T<T>::BinarySearch (tValue);
 		if ( !pValue )
 			return false;
 
-		RemoveFast ( pValue - Begin() );
+		Remove ( pValue - Begin() );
 		return true;
 	}
 

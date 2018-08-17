@@ -1703,6 +1703,7 @@ void AgentConn_t::ReportFinish ( bool bSuccess )
 {
 	if ( m_pReporter )
 		m_pReporter->Report ( bSuccess );
+	m_iRetries = -1; // avoid any accidental retry in future
 }
 
 /// switch from 'connecting' to 'healthy' state.
@@ -1784,17 +1785,8 @@ void AgentConn_t::TimeoutCallback ()
 	m_eTimeoutKind = TIMEOUT_UNKNOWN;
 
 	// check if we accidentally orphaned (that is bug!)
-	if ( IsLast () && !IsBlackhole () )
-	{
-		sphWarning ( "Orphaned (last) connection detected!" );
+	if ( CheckOrphaned() )
 		return;
-	}
-
-	if ( m_pReporter && m_pReporter->IsDone () )
-	{
-		sphWarning ( "Orphaned (kind of done) connection detected!" );
-		return;
-	}
 
 	switch ( ePrevKind )
 	{
@@ -1816,6 +1808,23 @@ void AgentConn_t::TimeoutCallback ()
 		default:
 			sphLogDebugA ("%d Unknown kind of timeout invoked. No action", m_iStoreTag );
 	}
+}
+
+bool AgentConn_t::CheckOrphaned()
+{
+	// check if we accidentally orphaned (that is bug!)
+	if ( IsLast () && !IsBlackhole () )
+	{
+		sphWarning ( "Orphaned (last) connection detected!" );
+		return true;
+	}
+
+	if ( m_pReporter && m_pReporter->IsDone () )
+	{
+		sphWarning ( "Orphaned (kind of done) connection detected!" );
+		return true;
+	}
+	return false;
 }
 
 void AgentConn_t::AbortCallback()
@@ -2456,6 +2465,12 @@ bool AgentConn_t::CommitResult ()
 {
 	sphLogDebugA ( "%d CommitResult() ref=%d, parser %p", m_iStoreTag, ( int ) GetRefcount (), m_pParser );
 	if ( !m_pParser )
+	{
+		Finish();
+		return true;
+	}
+
+	if  ( CheckOrphaned() )
 	{
 		Finish();
 		return true;

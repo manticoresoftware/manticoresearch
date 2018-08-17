@@ -500,6 +500,7 @@ public:
 	void RecvCallback ( int64_t iWaited, DWORD uReceived );
 	void TimeoutCallback ();
 	void AbortCallback();
+	bool CheckOrphaned();
 
 #if USE_WINDOWS
 	// move recv buffer to dOut, reinit mine.

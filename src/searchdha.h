@@ -372,6 +372,7 @@ struct IReporter_t : ISphRefcountedMT
 {
 	virtual void SetTotal ( int iTasks ) = 0;
 	virtual void Report ( bool bSuccess ) = 0;
+	virtual bool IsDone () const = 0;
 protected:
 	virtual ~IReporter_t () {};
 };
@@ -459,6 +460,8 @@ public:
 /// remote agent connection (local per-query state)
 struct AgentConn_t : public ISphRefcountedMT
 {
+	enum ETimeoutKind { TIMEOUT_UNKNOWN, TIMEOUT_RETRY, TIMEOUT_HARD, };
+public:
 	AgentDesc_t		m_tDesc;			///< desc of my host // fixme! turn to ref to MultiAgent mirror?
 	int				m_iSock = -1;
 
@@ -495,8 +498,7 @@ public:
 	void ErrorCallback ( int64_t iWaited );
 	void SendCallback ( int64_t iWaited, DWORD uSent );
 	void RecvCallback ( int64_t iWaited, DWORD uReceived );
-	void SoftTimeoutCallback();
-	void HardTimeoutCallback();
+	void TimeoutCallback ();
 	void AbortCallback();
 
 #if USE_WINDOWS
@@ -521,7 +523,8 @@ private:
 	int			m_iDelay { g_iAgentRetryDelay };	///< delay between retries
 
 	// active timeout (directly used by poller)
-	int64_t			m_iPoolerTimeout = -1;    ///< m.b. query, or connect+query when TCP_FASTOPEN
+	int64_t		m_iPoolerTimeout = -1;	///< m.b. query, or connect+query when TCP_FASTOPEN
+	ETimeoutKind 	m_eTimeoutKind { TIMEOUT_UNKNOWN };
 
 	// receiving buffer stuff
 	CSphFixedVector<BYTE>	m_dReplyBuf { 0 };
@@ -582,6 +585,7 @@ private:
 	bool SendQuery (DWORD uSent = 0);
 	bool ReceiveAnswer (DWORD uReceived = 0);
 	bool CommitResult ();
+	bool SwitchBlackhole ();
 };
 
 using VectorAgentConn_t = CSphVector<AgentConn_t *>;
@@ -589,8 +593,7 @@ using VecRefPtrsAgentConn_t = VecRefPtrs_t<AgentConn_t *>;
 class IRemoteAgentsObserver : public IReporter_t
 {
 public:
-	// check that there are no works to do
-	virtual bool IsDone () const = 0;
+
 
 	// get num of succeeded agents
 	virtual long GetSucceeded () const = 0;

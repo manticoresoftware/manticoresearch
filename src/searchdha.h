@@ -595,7 +595,6 @@ class IRemoteAgentsObserver : public IReporter_t
 {
 public:
 
-
 	// get num of succeeded agents
 	virtual long GetSucceeded () const = 0;
 
@@ -607,9 +606,6 @@ public:
 
 	// block execution while some works finished
 	virtual void WaitChanges () = 0;
-
-protected:
-	~IRemoteAgentsObserver() override {}
 };
 
 IRemoteAgentsObserver * GetObserver ();

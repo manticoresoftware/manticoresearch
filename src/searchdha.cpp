@@ -3664,6 +3664,9 @@ private:
 		auto iEvents = events_wait ( m_iNextTimeoutUS );
 		auto iWaited = sphMicroTimer() - iStarted;
 
+#if USE_WINDOWS
+		ProcessEnqueuedTasks (); // we have 'pushed' our iocp inside, if it is fired, the fire event is last
+#endif
 
 		// tick # allows to trace different events over one and same task.
 		// Say, write action processing may initiate reading, or even

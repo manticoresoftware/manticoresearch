@@ -153,8 +153,8 @@ maparg:
 map_key:
 	ident							{ $$ = $1; }
 	| TOK_ATTR_STRING				{ $$ = pParser->Attr2Ident($1); }
-	| TOK_FUNC_IN					{ $$ = strdup("in"); }
-	| TOK_FUNC_RAND					{ $$ = strdup("rand"); }
+	| TOK_FUNC_IN					{ $$ = "in"; }
+	| TOK_FUNC_RAND					{ $$ = "rand"; }
 	;
 
 arg:

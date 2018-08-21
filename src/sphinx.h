@@ -1479,7 +1479,7 @@ struct CSphColumnInfo
 	CSphString		m_sQuery;		///< query to retrieve values (for multi-valued attrs only)
 	CSphString		m_sQueryRange;	///< query to retrieve range (for multi-valued attrs only)
 
-	CSphRefcountedPtr<ISphExpr>		m_pExpr { nullptr };///< evaluator for expression items
+	CSphRefcountedPtr<ISphExpr>		m_pExpr;///< evaluator for expression items
 	ESphAggrFunc	m_eAggrFunc { SPH_AGGR_NONE };	///< aggregate function on top of expression (for GROUP BY)
 	ESphEvalStage	m_eStage { SPH_EVAL_STATIC };///< column evaluation stage (who and how computes this column)
 	bool			m_bPayload = false;
@@ -1565,9 +1565,9 @@ public:
 class CSphSchemaHelper : public ISphSchema
 {
 public:
-	virtual void	FreeDataPtrs ( CSphMatch * pMatch ) const;
-	virtual void	CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const;
-	void 			DiscardPtr ( int iAttr );
+	void	FreeDataPtrs ( CSphMatch * pMatch ) const final;
+	void	CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const final;
+	void 	DiscardPtr ( int iAttr );
 
 protected:
 	CSphVector<int>	m_dDataPtrAttrs;				// rowitems of pointers to data that are stored inside matches
@@ -1594,11 +1594,10 @@ public:
 	/// ctor
 	explicit				CSphSchema ( const char * sName="(nameless)" );
 							CSphSchema ( const CSphSchema & rhs );
-							~CSphSchema(){}
 
 	CSphSchema &			operator = ( const ISphSchema & rhs );
 	CSphSchema &			operator = ( const CSphSchema & rhs );
-	CSphSchema &			operator = ( CSphSchema && rhs );
+	CSphSchema &			operator = ( CSphSchema && rhs ) noexcept;
 
 	/// visitor-style uber-virtual assignment implementation
 	virtual void			AssignTo ( CSphRsetSchema & lhs ) const;
@@ -1719,6 +1718,10 @@ private:
 
 public:
 								CSphRsetSchema();
+								~CSphRsetSchema() override
+	{
+		assert (true);
+	};
 	CSphRsetSchema &			operator = ( const ISphSchema & rhs );
 	CSphRsetSchema &			operator = ( const CSphSchema & rhs );
 

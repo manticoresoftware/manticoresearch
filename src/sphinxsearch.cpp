@@ -7301,7 +7301,7 @@ public:
 	int					m_iMinGaps[SPH_MAX_FIELDS];		///< number of gaps in the minimum matching window
 
 	const char *		m_sExpr = nullptr;
-	ISphExpr *			m_pExpr = nullptr;
+	CSphRefcountedPtr<ISphExpr>	m_pExpr { nullptr };
 	ESphAttr			m_eExprType { SPH_ATTR_NONE };
 	const CSphSchema *	m_pSchema = nullptr;
 	CSphAttrLocator		m_tFieldLensLoc;
@@ -7374,7 +7374,6 @@ public:
 	float				TermTC ( int iTerm, bool bLeft );
 
 public:
-						~RankerState_Expr_fn () override;
 
 	bool				Init ( int iFields, const int * pWeights, ExtRanker_c * pRanker, CSphString & sError, DWORD uFactorFlags );
 	void				Update ( const ExtHit_t * pHlist );
@@ -7832,7 +7831,7 @@ struct Expr_BM25F_T : public Expr_NoLocator_c
 		m_dWeights.Fill ( 1 );
 		if ( pFieldWeights )
 		{
-			Expr_MapArg_c * pMapArg = (Expr_MapArg_c*)pFieldWeights;
+			auto pMapArg = ( Expr_MapArg_c * ) pFieldWeights;
 
 			CSphVector<CSphNamedVariant> & dOpts = pMapArg->m_dValues;
 			ARRAY_FOREACH ( i, dOpts )
@@ -7901,16 +7900,13 @@ template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >
 struct Expr_Sum_T : public ISphExpr
 {
 	RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES> * m_pState;
-	ISphExpr *				m_pArg;
+	CSphRefcountedPtr<ISphExpr>				m_pArg;
 
 	Expr_Sum_T ( RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES> * pState, ISphExpr * pArg )
 		: m_pState ( pState )
 		, m_pArg ( pArg )
-	{}
-
-	virtual ~Expr_Sum_T() override
 	{
-		SafeRelease ( m_pArg );
+		SafeAddRef ( pArg );
 	}
 
 	float Eval ( const CSphMatch & tMatch ) const override
@@ -7973,16 +7969,13 @@ template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >
 struct Expr_Top_T : public ISphExpr
 {
 	RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES> * m_pState;
-	ISphExpr *				m_pArg;
+	CSphRefcountedPtr<ISphExpr>		m_pArg;
 
 	Expr_Top_T ( RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES> * pState, ISphExpr * pArg )
 		: m_pState ( pState )
 		, m_pArg ( pArg )
-	{}
-
-	~Expr_Top_T() override
 	{
-		SafeRelease ( m_pArg );
+		SafeAddRef ( pArg );
 	}
 
 	float Eval ( const CSphMatch & tMatch ) const override
@@ -8138,9 +8131,11 @@ public:
 		return -1;
 	}
 
-	ISphExpr * CreateNode ( int iID, ISphExpr * pLeft, ESphEvalStage *, CSphString & ) final
+	ISphExpr * CreateNode ( int iID, ISphExpr * _pLeft, ESphEvalStage *, CSphString & ) final
 	{
 		int * pCF = &m_pState->m_iCurrentField; // just a shortcut
+		CSphRefcountedPtr<ISphExpr> pLeft ( _pLeft );
+		SafeAddRef ( _pLeft );
 		switch ( iID )
 		{
 			case XRANK_LCS:					return new Expr_FieldFactor_c<BYTE> ( pCF, m_pState->m_uLCS );
@@ -8159,7 +8154,6 @@ public:
 				{
 					CSphMatch tDummy;
 					m_pState->m_iWindowSize = pLeft->IntEval ( tDummy ); // must be constant; checked in GetReturnType()
-					SafeRelease ( pLeft );
 					return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMaxWindowHits );
 				}
 			case XRANK_MIN_GAPS:			return new Expr_FieldFactor_c<int> ( pCF, m_pState->m_iMinGaps );
@@ -8184,7 +8178,6 @@ public:
 					m_pState->m_fParamB = pLeft->GetArg(1)->Eval ( tDummy );
 					m_pState->m_fParamK1 = Max ( m_pState->m_fParamK1, 0.001f );
 					m_pState->m_fParamB = Min ( Max ( m_pState->m_fParamB, 0.0f ), 1.0f );
-					SafeDelete ( pLeft );
 					return new Expr_FloatPtr_c ( &m_pState->m_fDocBM25A );
 				}
 			case XRANK_BM25F:
@@ -8195,14 +8188,12 @@ public:
 					float fB = pLeft->GetArg(1)->Eval ( tDummy );
 					fK1 = Max ( fK1, 0.001f );
 					fB = Min ( Max ( fB, 0.0f ), 1.0f );
-					ISphExpr * pRes = new Expr_BM25F_T<NEED_PACKEDFACTORS, HANDLE_DUPES> ( m_pState, fK1, fB, pLeft->GetArg(2) );
-					SafeDelete ( pLeft );
-					return pRes;
+					return new Expr_BM25F_T<NEED_PACKEDFACTORS, HANDLE_DUPES> ( m_pState, fK1, fB, pLeft->GetArg(2) );
 				}
 
 			case XRANK_SUM:					return new Expr_Sum_T<NEED_PACKEDFACTORS, HANDLE_DUPES> ( m_pState, pLeft );
 			case XRANK_TOP:					return new Expr_Top_T<NEED_PACKEDFACTORS, HANDLE_DUPES> ( m_pState, pLeft );
-			default:						return NULL;
+			default:						return nullptr;
 		}
 	}
 
@@ -8390,14 +8381,6 @@ public:
 		}
 	}
 };
-
-/// dtor
-template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >
-RankerState_Expr_fn <NEED_PACKEDFACTORS, HANDLE_DUPES>::~RankerState_Expr_fn ()
-{
-	SafeRelease ( m_pExpr );
-}
-
 
 /// initialize ranker state
 template < bool NEED_PACKEDFACTORS, bool HANDLE_DUPES >

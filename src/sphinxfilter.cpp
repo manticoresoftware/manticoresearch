@@ -1228,14 +1228,15 @@ template<typename BASE>
 class ExprFilter_c : public BASE
 {
 protected:
-	const BYTE *				m_pStrings;
+	const BYTE *				m_pStrings = nullptr;
 	CSphRefcountedPtr<ISphExpr>	m_pExpr;
 
 public:
 	explicit ExprFilter_c ( ISphExpr * pExpr )
-		: m_pStrings ( NULL )
-		, m_pExpr ( pExpr )
-	{}
+		: m_pExpr ( pExpr )
+	{
+		SafeAddRef ( pExpr );
+	}
 
 	virtual void SetStringStorage ( const BYTE * pStrings )
 	{
@@ -1425,11 +1426,13 @@ public:
 
 
 
-static ISphFilter * CreateFilterExpr ( ISphExpr * pExpr, const CSphFilterSettings & tSettings, CSphString & sError, ESphCollation eCollation, ESphAttr eAttrType )
+static ISphFilter * CreateFilterExpr ( ISphExpr * _pExpr, const CSphFilterSettings & tSettings, CSphString & sError, ESphCollation eCollation, ESphAttr eAttrType )
 {
 	// autoconvert all json types except SPH_FILTER_NULL, it needs more info
 	bool bAutoConvert = ( eAttrType==SPH_ATTR_JSON || eAttrType==SPH_ATTR_JSON_FIELD )
 		&& tSettings.m_eType!=SPH_FILTER_NULL;
+	CSphRefcountedPtr<ISphExpr> pExpr { _pExpr };
+	SafeAddRef ( _pExpr );
 	if ( bAutoConvert )
 		pExpr = sphJsonFieldConv ( pExpr );
 
@@ -1446,7 +1449,6 @@ static ISphFilter * CreateFilterExpr ( ISphExpr * pExpr, const CSphFilterSetting
 				&& eAttrType!=SPH_ATTR_INT64SET && eAttrType!=SPH_ATTR_UINT32SET )
 			{
 				sError = "filter expression must evaluate to integer or float";
-				SafeDelete ( pExpr );
 				return nullptr;
 			} else
 			{
@@ -1455,8 +1457,6 @@ static ISphFilter * CreateFilterExpr ( ISphExpr * pExpr, const CSphFilterSetting
 		}
 		default:
 			sError = "this filter type on expressions is not implemented yet";
-			if ( bAutoConvert )
-				SafeDelete ( pExpr );
 			return nullptr;
 	}
 }
@@ -1527,21 +1527,21 @@ struct Filter_KillList : public ISphFilter
 static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const CSphString & sAttrName, const ISphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings,
 	CSphString & sError, CSphString & sWarning, bool bHaving, ESphCollation eCollation, bool bArenaProhibit )
 {
-	ISphFilter * pFilter = NULL;
-	const CSphColumnInfo * pAttr = NULL;
+	ISphFilter * pFilter = nullptr;
+	const CSphColumnInfo * pAttr = nullptr;
 
 	// try to create a filter on a special attribute
 	if ( sAttrName.Begins("@") && !bHaving && ( sAttrName=="@groupby" || sAttrName=="@count" || sAttrName=="@distinct" ) )
 	{
 		sError.SetSprintf ( "unsupported filter column '%s'", sAttrName.cstr() );
-		return NULL;
+		return nullptr;
 	}
 
 	if ( sAttrName.Begins("@") )
 	{
 		pFilter = CreateSpecialFilter ( sAttrName, tSettings, sError );
 		if ( !pFilter && !sError.IsEmpty() )
-			return NULL;
+			return nullptr;
 	}
 
 	// try to lookup a regular attribute
@@ -1550,7 +1550,7 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 	float fMax = tSettings.m_fMaxValue;
 
 	ESphAttr eAttrType = SPH_ATTR_NONE;
-	ISphExpr * pExpr = NULL;
+	CSphRefcountedPtr<ISphExpr> pExpr;
 
 	if ( !pFilter )
 	{
@@ -1558,7 +1558,7 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 		if ( iAttr<0 || tSettings.m_eType==SPH_FILTER_EXPRESSION )
 		{
 			// try expression
-			pExpr = sphExprParse ( sAttrName.cstr(), tSchema, &eAttrType, NULL, sError, NULL, eCollation );
+			pExpr = sphExprParse ( sAttrName.cstr(), tSchema, &eAttrType, nullptr, sError, nullptr, eCollation );
 			if ( pExpr )
 			{
 				pFilter = CreateFilterExpr ( pExpr, tSettings, sError, eCollation, eAttrType );
@@ -1566,7 +1566,7 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 			} else
 			{
 				sError.SetSprintf ( "no such filter attribute '%s'", sAttrName.cstr() );
-				return NULL;
+				return nullptr;
 			}
 
 		} else
@@ -1575,14 +1575,11 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 			if ( !bHaving && pAttr->m_eAggrFunc!=SPH_AGGR_NONE )
 			{
 				sError.SetSprintf ( "unsupported filter '%s' on aggregate column", sAttrName.cstr() );
-				return NULL;
+				return nullptr;
 			}
 
 			if ( pAttr->m_eAttrType==SPH_ATTR_JSON || pAttr->m_eAttrType==SPH_ATTR_JSON_FIELD )
 			{
-				if ( pAttr->m_pExpr )
-					pAttr->m_pExpr->AddRef(); // CreateFilterExpr() uses a refcounted pointer, but does not AddRef() itself, so help it
-
 				pExpr = pAttr->m_pExpr;
 				eAttrType = pAttr->m_eAttrType;
 				pFilter = CreateFilterExpr ( pExpr, tSettings, sError, eCollation, pAttr->m_eAttrType );
@@ -1636,10 +1633,8 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 		// filter for json || json.field needs to check that key exists
 		if ( ( eAttrType==SPH_ATTR_JSON || eAttrType==SPH_ATTR_JSON_FIELD ) && tSettings.m_eType!=SPH_FILTER_NULL && pFilter && pExpr )
 		{
-			pExpr->AddRef();
 			ISphFilter * pNotNull = new ExprFilterNull_c ( pExpr, false, true );
 			pNotNull->SetStringStorage ( pStrings );
-
 			pFilter = new Filter_And2 ( pFilter, pNotNull, true );
 		}
 	}

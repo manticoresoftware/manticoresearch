@@ -459,7 +459,7 @@ public:
 	{
 		CSphAttrLocator			m_tLoc;					///< result locator
 		ESphAttr				m_eType { SPH_ATTR_NONE};	///< result type
-		ISphExpr *				m_pExpr = nullptr;		///< evaluator (non-owned)
+		CSphRefcountedPtr<ISphExpr>	m_pExpr;		///< evaluator (non-owned)
 	};
 	CSphVector<CalcItem_t>		m_dCalcFilter;			///< items to compute for filtering
 	CSphVector<CalcItem_t>		m_dCalcSort;			///< items to compute for sorting/grouping

@@ -6136,8 +6136,8 @@ ESphSpz GetPassageBoundary ( const CSphString & );
 /// suddenly, searchd-level expression function!
 struct Expr_Snippet_c : public ISphStringExpr
 {
-	ISphExpr *					m_pArgs;
-	ISphExpr *					m_pText = nullptr;
+	CSphRefcountedPtr<ISphExpr>					m_pArgs;
+	CSphRefcountedPtr<ISphExpr>					m_pText;
 	CSphIndex *					m_pIndex;
 	SnippetContext_t			m_tCtx;
 	mutable ExcerptQuery_t		m_tHighlight;
@@ -6148,8 +6148,10 @@ struct Expr_Snippet_c : public ISphStringExpr
 		, m_pIndex ( pIndex )
 		, m_pProfiler ( pProfiler )
 	{
+		SafeAddRef ( pArglist );
 		assert ( pArglist->IsArglist() );
 		m_pText = pArglist->GetArg(0);
+		SafeAddRef ( m_pText );
 
 		CSphMatch tDummy;
 		char * pWords;
@@ -6236,11 +6238,6 @@ struct Expr_Snippet_c : public ISphStringExpr
 		m_tHighlight.m_bHasAfterPassageMacro = SnippetTransformPassageMacros ( m_tHighlight.m_sAfterMatch, m_tHighlight.m_sAfterMatchPassage );
 
 		m_tCtx.Setup ( m_pIndex, m_tHighlight, sError );
-	}
-
-	~Expr_Snippet_c() final
-	{
-		SafeRelease ( m_pArgs );
 	}
 
 	int StringEval ( const CSphMatch & tMatch, const BYTE ** ppStr ) const final
@@ -6336,11 +6333,11 @@ struct ExprHook_t : public ISphExprHook
 		if ( pEvalStage )
 			*pEvalStage = SPH_EVAL_POSTLIMIT;
 
-		ISphExpr * pRes = new Expr_Snippet_c ( pLeft, m_pIndex, m_pProfiler, sError );
-		if ( sError.Length() )
-			SafeDelete ( pRes );
+		CSphRefcountedPtr<ISphExpr> pRes { new Expr_Snippet_c ( pLeft, m_pIndex, m_pProfiler, sError ) };
+		if ( !sError.IsEmpty () )
+			pRes = nullptr;
 
-		return pRes;
+		return pRes.Leak();
 	}
 
 	ESphAttr GetIdentType ( int ) final
@@ -12325,8 +12322,8 @@ bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, co
 	if ( iRes!=0 && !dFilters.GetLength() && sError.Begins ( "percolate filters: syntax error" ) )
 	{
 		ESphAttr eAttrType = SPH_ATTR_NONE;
-		CSphScopedPtr<ISphExpr> pExpr ( sphExprParse ( sFilters, tSchema, &eAttrType, NULL, sError, NULL, eCollation ) );
-		if ( pExpr.Ptr() )
+		CSphScopedPtr<ISphExpr> pExpr { sphExprParse ( sFilters, tSchema, &eAttrType, NULL, sError, NULL, eCollation ) };
+		if ( pExpr )
 		{
 			sError = "";
 			iRes = 0;
@@ -16344,7 +16341,7 @@ void HandleMysqlSelectDual ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	ESphAttr eAttrType;
 	CSphString sError;
 
-	ISphExpr * pExpr = sphExprParse ( sVar.cstr(), tSchema, &eAttrType, NULL, sError, NULL );
+	CSphRefcountedPtr<ISphExpr> pExpr { sphExprParse ( sVar.cstr(), tSchema, &eAttrType, NULL, sError, NULL ) };
 
 	if ( !pExpr )
 	{
@@ -16357,7 +16354,7 @@ void HandleMysqlSelectDual ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	tOut.HeadEnd();
 
 	CSphMatch tMatch;
-	const BYTE * pStr = NULL;
+	const BYTE * pStr = nullptr;
 
 	switch ( eAttrType )
 	{
@@ -16373,8 +16370,6 @@ void HandleMysqlSelectDual ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 			tOut.PutNULL();
 			break;
 	}
-
-	SafeDelete ( pExpr );
 
 	// done
 	tOut.Commit();

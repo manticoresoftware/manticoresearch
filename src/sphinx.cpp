@@ -6104,7 +6104,7 @@ CSphSchema & CSphSchema::operator = ( const ISphSchema & rhs )
 }
 
 
-CSphSchema & CSphSchema::operator = ( CSphSchema && rhs )
+CSphSchema & CSphSchema::operator = ( CSphSchema && rhs ) noexcept
 {
 	if ( this!=&rhs )
 	{
@@ -16597,7 +16597,8 @@ bool CSphQueryContext::SetupCalc ( CSphQueryResult * pResult, const ISphSchema &
 				CalcItem_t tCalc;
 				tCalc.m_eType = tIn.m_eAttrType;
 				tCalc.m_tLoc = tIn.m_tLocator;
-				tCalc.m_pExpr = pExpr;
+				tCalc.m_pExpr = pExpr; // is not owned, so stink but seems to be ok for now
+				SafeAddRef ( pExpr );
 				PoolPtrs_t tMva;
 				tMva.m_pMva = pMvaPool;
 				tMva.m_bArenaProhibit = bArenaProhibit;

@@ -477,7 +477,7 @@ enum Uservar_e
 struct Uservar_t
 {
 	Uservar_e			m_eType { USERVAR_INT_SET };
-	UservarIntSet_c *	m_pVal = nullptr;
+	CSphRefcountedPtr<UservarIntSet_c>	m_pVal;
 };
 
 static CSphMutex					g_tUservarsMutex;
@@ -15899,8 +15899,6 @@ static void UservarAdd ( const CSphString & sName, CSphVector<SphAttr_t> & dVal 
 		// from here, the old value becomes nameless, though
 		assert ( pVar->m_eType==USERVAR_INT_SET );
 		assert ( pVar->m_pVal );
-		pVar->m_pVal->Release();
-		pVar->m_pVal = nullptr;
 	} else
 	{
 		// create a shiny new variable
@@ -15911,9 +15909,8 @@ static void UservarAdd ( const CSphString & sName, CSphVector<SphAttr_t> & dVal 
 
 	// swap in the new value
 	assert ( pVar );
-	assert ( !pVar->m_pVal );
 	pVar->m_eType = USERVAR_INT_SET;
-	pVar->m_pVal = new UservarIntSet_c();
+	pVar->m_pVal = new UservarIntSet_c(); // previous will be auto-released here
 	pVar->m_pVal->SwapData ( dVal );
 }
 
@@ -18574,7 +18571,7 @@ static void PrereadFunc ( void * )
 struct NamedRefVectorPair_t
 {
 	CSphString			m_sName;
-	UservarIntSet_c *	m_pVal;
+	CSphRefcountedPtr<UservarIntSet_c>	m_pVal;
 };
 
 
@@ -18638,7 +18635,6 @@ static void SphinxqlStateThreadFunc ( void * )
 				NamedRefVectorPair_t &tPair = dUservars.Add ();
 				tPair.m_sName = g_hUservars.IterateGetKey ();
 				tPair.m_pVal = g_hUservars.IterateGet ().m_pVal;
-				tPair.m_pVal->AddRef ();
 			}
 		}
 		dUservars.Sort ( bind ( &NamedRefVectorPair_t::m_sName ) );
@@ -18666,10 +18662,6 @@ static void SphinxqlStateThreadFunc ( void * )
 			char sTail[] = " );\n";
 			tWriter.PutBytes ( sTail, sizeof ( sTail )-1 );
 		}
-
-		// release all locked uservars
-		ARRAY_FOREACH ( i, dUservars )
-			dUservars[i].m_pVal->Release();
 
 		/////////////////////////////////
 		// writing done, flip the burger

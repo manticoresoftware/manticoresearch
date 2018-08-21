@@ -371,11 +371,25 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 	$abs_error_file = testdir($error_file);
 	$abs_pidfile = testdir($pidfile);
 
-	$path = $g_locals['searchd'];
-	if ( !is_executable($path) )
+	if ( isset ( $g_locals['valgrindsearchd'] ) )
+		$use_valgrind = $g_locals['valgrindsearchd'];
+	else
+		$use_valgrind = false;
+
+	if ( $use_valgrind ) {
+		$path = "valgrind --leak-check=full ";
+		if ( file_exists("valgrind.supp" ) )
+			$path .= "--suppressions=" . getcwd() . "/valgrind.supp ";
+		$path .= $g_locals['searchd'];
+	}
+	else
 	{
-		$error = "$path: searchd not found";
-		return 1;
+		$path = $g_locals['searchd'];
+		if ( !is_executable($path) )
+		{
+			$error = "$path: searchd not found";
+			return 1;
+		}
 	}
 
 	if ( !@touch($abs_error_file) )
@@ -416,6 +430,9 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 
 	if ($cd)
 		chdir($backdir);
+
+	if ( $use_valgrind )
+		usleep ( 2000000 );
 
 	// wait until pid appears
 	for ( $i=0; $i<$action_retries && !file_exists($abs_pidfile); $i++ )

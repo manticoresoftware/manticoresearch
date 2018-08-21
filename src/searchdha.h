@@ -381,7 +381,7 @@ protected:
 	struct SingleOverlapped_t : public OVERLAPPED
 	{
 		ULONG_PTR	m_uParentOffset; // how many bytes add to this to take pointer to parent
-		bool		m_bInUse = false;
+		volatile bool		m_bInUse = false;
 		inline void Zero ()
 		{
 			ZeroMemory ( this, sizeof ( OVERLAPPED ) );

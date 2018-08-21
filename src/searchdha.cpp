@@ -1608,7 +1608,7 @@ bool LoadExFunctions ()
 /////////////////////////////////////////////////////////////////////////////
 AgentConn_t::~AgentConn_t ()
 {
-	sphLogDebugA ( "A AgentConn %p destroyed", this );
+	sphLogDebugv ( "AgentConn %p destroyed", this );
 	if ( m_iSock>=0 )
 		Finish ();
 }
@@ -1704,6 +1704,7 @@ void AgentConn_t::ReportFinish ( bool bSuccess )
 	if ( m_pReporter )
 		m_pReporter->Report ( bSuccess );
 	m_iRetries = -1; // avoid any accidental retry in future. fixme! better investigate why such accident may happen
+	m_bManyTries = false; // avoid report message because of it.
 }
 
 /// switch from 'connecting' to 'healthy' state.
@@ -1952,8 +1953,8 @@ inline SSIZE_T AgentConn_t::RecvChunk ()
 	DWORD uFlags = 0;
 	m_pPollerTask->m_dRead.Zero ();
 	sphLogDebugA ( "%d Scheduling overlapped WSARecv for %d bytes", m_iStoreTag, ReplyBufPlace () );
-	WSARecv ( m_iSock, &dBuf, 1, nullptr, &uFlags, &m_pPollerTask->m_dRead, nullptr );
 	m_pPollerTask->m_dRead.m_bInUse = true;
+	WSARecv ( m_iSock, &dBuf, 1, nullptr, &uFlags, &m_pPollerTask->m_dRead, nullptr );
 	return -1;
 }
 
@@ -1965,8 +1966,8 @@ inline SSIZE_T AgentConn_t::SendChunk ()
 		ScheduleCallbacks ();
 	m_pPollerTask->m_dWrite.Zero ();
 	sphLogDebugA ( "%d overlaped WSASend called for %d chunks", m_iStoreTag, m_dIOVec.IOSize () );
-	WSASend ( m_iSock, m_dIOVec.IOPtr (), m_dIOVec.IOSize (), nullptr, 0, &m_pPollerTask->m_dWrite, nullptr );
 	m_pPollerTask->m_dWrite.m_bInUse = true;
+	WSASend ( m_iSock, m_dIOVec.IOPtr (), m_dIOVec.IOSize (), nullptr, 0, &m_pPollerTask->m_dWrite, nullptr );
 	return -1;
 }
 
@@ -2027,9 +2028,8 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 	sphIovec * pChunk = m_dIOVec.IOPtr ();
 	assert ( pChunk );
 	assert ( !m_pPollerTask->m_dWrite.m_bInUse );
-	iRes = ConnectEx ( m_iSock, pSs, iLen, pChunk->buf, pChunk->len, NULL, &m_pPollerTask->m_dWrite );
 	m_pPollerTask->m_dWrite.m_bInUse = true;
-
+	iRes = ConnectEx ( m_iSock, pSs, iLen, pChunk->buf, pChunk->len, NULL, &m_pPollerTask->m_dWrite );
 
 	if ( iRes )
 	{
@@ -3818,8 +3818,6 @@ public:
 	{
 		if ( pConnection->m_pPollerTask )
 		{
-			sphLogDebugv ( "- %d EnqueueNewTask invoked with pconn=%p aborted, poller not null(%p)"
-						   , pConnection->m_iStoreTag, pConnection, pConnection->m_pPollerTask );
 			return false;
 		}
 
@@ -3828,14 +3826,12 @@ public:
 		assert ( iTimeoutMS>0 );
 
 		// check for same timeout as we have. Avoid dupes, if so.
-		sphLogDebugv ( "- %d EnqueueNewTask invoked with pconn=%p, ts=" INT64_FMT ", ActivateIO=%d"
-					   , pConnection->m_iStoreTag, pConnection, iTimeoutMS, uActivateIO );
 
 		pTask->m_iPlannedTimeout = iTimeoutMS;
 		if ( uActivateIO )
 			pTask->m_uIOChanged = uActivateIO;
 
-		sphLogDebugv ( "- %d EnqueueNewTask enqueueing (task %p) " INT64_FMT " Us, IO(%d->%d)", pConnection->m_iStoreTag, pTask, iTimeoutMS, pTask->m_uIOActive, pTask->m_uIOChanged );
+		sphLogDebugv ( "- %d EnqueueNewTask %p (%p) " INT64_FMT " Us, IO(%d->%d)", pConnection->m_iStoreTag, pTask, pConnection, iTimeoutMS, pTask->m_uIOActive, pTask->m_uIOChanged );
 		AddToQueue ( pTask, pConnection->InNetLoop () );
 
 		// for win it is vitable important to apply changes immediately,
@@ -3863,10 +3859,13 @@ public:
 		{
 			pTask->m_ifd = pConnection->m_iSock;
 			pConnection->m_pPollerTask = nullptr; // this will allow to create another task.
-		}
+			sphLogDebugv ( "- %d Delete task (task %p), fd=%d (%d) " INT64_FMT "Us",
+				pConnection->m_iStoreTag, pTask, pTask->m_ifd, pTask->m_iStoredfd, pTask->m_iTimeoutTime );
+		} else
+			sphLogDebugv ( "- %d Change task (task %p), fd=%d (%d) " INT64_FMT "Us -> " INT64_FMT "Us",
+				pConnection->m_iStoreTag, pTask, pTask->m_ifd, pTask->m_iStoredfd, pTask->m_iTimeoutTime, iTimeoutMS );
 
-		sphLogDebugv ( "- %d ChangeDeleteTask enqueueing (task %p), fd=%d " INT64_FMT " Us -> " INT64_FMT " Us", pConnection->m_iStoreTag
-					   , pTask, pTask->m_ifd, pTask->m_iTimeoutTime, iTimeoutMS );
+		
 		AddToQueue ( pTask, pConnection->InNetLoop () );
 	}
 

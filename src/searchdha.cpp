@@ -1568,6 +1568,11 @@ inline static bool IS_PENDING ( int iErr )
 #endif
 }
 
+inline static bool IS_PENDING_PROGRESS ( int iErr )
+{
+	return IS_PENDING ( iErr ) || iErr==EINPROGRESS;
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // some extended win-specific stuff
 #if USE_WINDOWS
@@ -2327,7 +2332,7 @@ bool AgentConn_t::EstablishConnection ()
 	if ( iRes<0 )
 	{
 		int iErr = sphSockGetErrno ();
-		if ( !( IS_PENDING(iErr) || iErr==EINTR ) ) // check for EWOULDBLOCK is for winsock only
+		if ( iErr==EINTR || !IS_PENDING_PROGRESS ( iErr ) ) // check for EWOULDBLOCK is for winsock only
 			return Fatal ( eConnectFailures, "connect() failed: errno=%d, %s", iErr, sphSockError ( iErr ) );
 	}
 
@@ -2375,7 +2380,7 @@ bool AgentConn_t::SendQuery ( DWORD uSent )
 	assert ( iRes==-1 );
 
 	int iErr = sphSockGetErrno ();
-	if ( !IS_PENDING(iErr) && iErr!=EINPROGRESS )
+	if ( !IS_PENDING_PROGRESS(iErr) )
 	{
 		if ( !( iErr==ENOTCONN && StateIs ( Agent_e::CONNECTING ) ) )
 			return Fatal ( eNetworkErrors, "error when sending data: %s", sphSockError ( iErr ) );

@@ -3733,7 +3733,7 @@ private:
 			// (stuff supporting IsNotHere is not necessary also in case).
 			if ( m_dTimeouts.IsNotHere ( pTask ) )
 			{
-				sphWarning ( "phantom event detected! %p(%d), %d", pTask, pTask->m_ifd, tEvent.GetEvents () );
+				// sphWarning ( "phantom event detected! %p(%d, original %d), %d, closing", pTask, pTask->m_ifd, pTask->m_iStoredfd, tEvent.GetEvents () );
 				continue;
 			}
 

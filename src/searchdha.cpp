@@ -2319,6 +2319,9 @@ bool AgentConn_t::EstablishConnection ()
 	if ( sphSetSockNB ( m_iSock )<0 )
 		return Fatal ( eConnectFailures, "sphSetSockNB() failed: %s", sphSockError () );
 
+	// connection in progress
+	State ( Agent_e::CONNECTING );
+
 	// prepare our data to send.
 	auto iTfoRes = DoTFO ( ( struct sockaddr * ) &ss, len );
 	if ( iTfoRes==1 )
@@ -2335,9 +2338,6 @@ bool AgentConn_t::EstablishConnection ()
 		if ( iErr==EINTR || !IS_PENDING_PROGRESS ( iErr ) ) // check for EWOULDBLOCK is for winsock only
 			return Fatal ( eConnectFailures, "connect() failed: errno=%d, %s", iErr, sphSockError ( iErr ) );
 	}
-
-	// connection in progress
-	State ( Agent_e::CONNECTING );
 	return SendQuery ();
 }
 

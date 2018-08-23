@@ -429,7 +429,7 @@ public:
 	//! If there is no need to go background (i.e. we have plain ip address which not need to be
 	//! resolved any complex way), will call the callback immediately.
 	//! \param sHost - host address, as 'www.google.com', or '127.0.0.1'
-	//! \param pFunc - callback func. May be simple functor, or even lambda with acquired resources.
+	//! \param pFunc - callback func/functor or lambda
 	static void GetAddress_a ( const char * sHost, CallBack_f && pFunc )
 	{
 		if ( IsIpAddress ( sHost ) )
@@ -1315,7 +1315,7 @@ void cDashStorage::GetActiveDashes ( CSphVector<HostDashboard_t *> & dAgents ) c
 	}
 }
 
-/// SmartOutputBuffer_t : an event which could be watched by poll/epoll/kqueue
+/// SmartOutputBuffer_t : chain of blobs could be used in scattered sending
 /////////////////////////////////////////////////////////////////////////////
 SmartOutputBuffer_t::~SmartOutputBuffer_t ()
 {
@@ -1545,7 +1545,6 @@ static bool CreateSocketPair ( int &iSock1, int &iSock2, CSphString &sError )
 		sError.SetSprintf ( "failed to set socket non-block: %s", sphSockError () );
 		SafeCloseSocket ( iSock1 );
 		SafeCloseSocket ( iSock2 );
-		iSock1 = iSock2 = -1;
 		return false;
 	}
 
@@ -1675,8 +1674,7 @@ void AgentConn_t::Finish ( bool bFail )
 	if ( m_iSock>=0 && ( bFail || !IsPersistent() ) )
 	{
 		sphLogDebugA ( "%d Socket %d closed and turned to -1", m_iStoreTag, m_iSock );
-		sphSockClose ( m_iSock );
-		m_iSock = -1;
+		SafeCloseSocket ( m_iSock );
 	}
 
 	sphLogDebugA ( "%d Abort all callbacks ref=%d", m_iStoreTag, ( int ) GetRefcount () );
@@ -1691,7 +1689,7 @@ void AgentConn_t::Finish ( bool bFail )
 //! Failure from successfully ended session
 //! (i.e. no network issues, but error in packet itself - like bad syntax, or simple 'try again').
 //! so, we don't have to corrupt agent's stat in the case.
-void AgentConn_t::BadResult ( int iError )
+bool AgentConn_t::BadResult ( int iError )
 {
 	sphLogDebugA ( "%d BadResult() ref=%d", m_iStoreTag, ( int ) GetRefcount () );
 	if ( iError==-1 )
@@ -1702,6 +1700,7 @@ void AgentConn_t::BadResult ( int iError )
 	State ( Agent_e::RETRY );
 	Finish ();
 	m_dResults.Reset ();
+	return false;
 }
 
 void AgentConn_t::ReportFinish ( bool bSuccess )
@@ -1749,17 +1748,13 @@ bool AgentConn_t::StartNextRetry ()
 		m_iSock = m_tDesc.m_pDash->m_pPersPool->RentConnection ();
 		m_tDesc.m_bPersistent = m_iSock!=-2;
 		if ( m_iSock>=0 && sphNBSockEof ( m_iSock ) )
-		{
-			sphSockClose ( m_iSock );
-			m_iSock = -1;
-		}
+			SafeCloseSocket ( m_iSock );
 	}
 
 	return true;
 }
 
 // if we're blackhole, drop retries, parser, reporter and return true
-// 'onetry' must be set when initialization of non-multiagent to allow only one retry
 bool AgentConn_t::SwitchBlackhole ()
 {
 	if ( IsBlackhole () )
@@ -1779,11 +1774,11 @@ bool AgentConn_t::SwitchBlackhole ()
 // initialize read/write task
 void AgentConn_t::ScheduleCallbacks ()
 {
-	// that is 'hard' timeout. If it happened, we have to cancel all current IO.
-	// Then we need to reschedule (if appliable) the whole work
 	LazyTask ( m_iPoolerTimeout, true, BYTE ( m_dIOVec.HasUnsent () ? 1 : 2 ) );
 }
 
+// retry timeout used when we need to pause before next retry, so just start connection when it fired
+// hard timeout used when connection/query timed out. Drop existing connection and try again.
 void AgentConn_t::TimeoutCallback ()
 {
 	SetNetLoop ();
@@ -1894,8 +1889,7 @@ void AgentConn_t::BuildData ()
 		sphLogDebugA ( "%d BuildData, already done", m_iStoreTag );
 }
 
-//! How many bytes we can read to m_pReplyCur
-//! \return available space in bytes
+//! How many bytes we can read to m_pReplyCur (in bytes)
 size_t AgentConn_t::ReplyBufPlace () const
 {
 	if ( !m_pReplyCur )
@@ -1993,7 +1987,6 @@ inline SSIZE_T AgentConn_t::SendChunk ()
 
 /// try to establish connection in the modern fast way, and also perform some data sending, if possible.
 /// @return 1 on success, 0 if need fallback into usual (::connect), -1 on failure.
-//!
 int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 {
 	if ( pSs->sa_family==AF_UNIX )
@@ -2489,15 +2482,13 @@ bool AgentConn_t::CommitResult ()
 	if ( m_eReplyStatus == SEARCHD_RETRY )
 	{
 		m_sFailure.SetSprintf ( "remote warning: %s", tReq.GetString ().cstr () );
-		BadResult ( -1 );
-		return false;
+		return BadResult ( -1 );
 	}
 
 	if ( m_eReplyStatus == SEARCHD_ERROR )
 	{
 		m_sFailure.SetSprintf ( "remote error: %s", tReq.GetString ().cstr () );
-		BadResult ( -1 );
-		return false;
+		return BadResult ( -1 );
 	}
 
 	bool bWarnings = ( m_eReplyStatus == SEARCHD_WARNING );
@@ -2505,10 +2496,7 @@ bool AgentConn_t::CommitResult ()
 		m_sFailure.SetSprintf ( "remote warning: %s", tReq.GetString ().cstr () );
 
 	if ( !m_pParser->ParseReply ( tReq, *this ) )
-	{
-		BadResult ();
-		return false;
-	}
+		return BadResult ();
 
 	Finish();
 	m_bSuccess = true;
@@ -2827,28 +2815,6 @@ public:
 ThreadRole LazyThread;
 
 // low-level ops depends from epoll/kqueue/iocp availability
-/*
- * void events_change_io ( Task_t * pTask ) // apply changes of task (if any)
- * void events_create ( int iSizeHint )
- * void events_destroy ()
- * void fire_event () // kick the event loop (fire internal event which unfreeze waiting)
- *
- *
- */
-
-// that is static iface, no virtuals
-/* iterator iface
-struct NetEvent_c
-{
-	Task_t * GetTask();
-	bool IsSignaler();
-	int GetEvents ();
-	DWORD BytesTransferred();
-	bool IsError();
-	bool IsEof();
-	bool IsRead();
-	bool IsWrite();
-};*/
 
 #if USE_WINDOWS
 class NetEvent_c
@@ -2905,13 +2871,6 @@ public:
 	inline bool IsError() const
 	{
 		return false;
-//		assert ( m_pEntry );
-	//	return ( m_pEntry->dwNumberOfBytesTransferred==0 );
-		//auto & dEvent = m_dReady[iReady];
-		//bool bRes = ( dEvent.flags & EV_ERROR )!=0;
-		//if ( bRes )
-		//			sphLogDebugL ( "L error for %d, errno=%d, %s", dEvent.ident, dEvent.data, sphSockError ( dEvent.data ) );
-		//	return bRes;
 	}
 
 	inline bool IsEof() const
@@ -3083,7 +3042,7 @@ protected:
 	int m_iEvents = 0;    ///< how many events are in queue.
 	static const int m_iCReserve = 256; 	/// will always provide extra that space of events to poller
 
-	// perform actual changing of pTask subscription state.
+	// perform actual changing OR scheduling of pTask subscription state (on BSD we collect changes and will populate later)
 	// NOTE! m_uIOChanged==0 field here means active 'unsubscribe' (in use for deletion)
 void events_change_io ( Task_t * pTask )
 	{
@@ -3192,15 +3151,6 @@ private:
 
 protected:
 
-// 	void unsubscribecpio ( Task_t * pTask )
-// 	{
-// 		auto tmpIOCP = CreateIoCompletionPort ( INVALID_HANDLE_VALUE, NULL, 0, 1 );
-// 		sphLogDebugL ( "L temporary IOCP %d created", tmpIOCP );
-// 		if ( !CreateIoCompletionPort ( (HANDLE) pTask->m_ifd, tmpIOCP, (ULONG_PTR) pTask, 0 ) )
-// 			sphLogDebugv ( "L Associate %d with port %d failed with error %d", pTask->m_ifd, tmpIOCP, GetLastError () );
-// 		CloseHandle ( tmpIOCP );
-// 	}
-
 	// always return 0 (timeout) or 1 (since iocp returns per event, not the bigger group).
 	inline int events_wait ( int64_t iTimeoutUS )
 	{
@@ -3237,9 +3187,14 @@ protected:
 	{
 		epoll_or_kqueue_create_impl ( iSizeHint );
 		m_dReady.Reserve ( iSizeHint );
+
+		// special event to wake up
 		m_dSignalerTask.m_ifd = m_dSignaler.m_iPollablefd;
-		m_dSignalerTask.m_pPayload = ( AgentConn_t * ) &m_dSignaler; // hack! Will compare with &m_dSignaler before use
+		// m_pPayload here used ONLY as store for pointer for comparing with &m_dSignaller,
+		// NEVER called this way (since it NOT points to AgentConn_t instance)
+		m_dSignalerTask.m_pPayload = ( AgentConn_t * ) &m_dSignaler;
 		m_dSignalerTask.m_uIOChanged = Task_t::RO;
+
 		sphLogDebugv( "Add internal signaller");
 		events_change_io ( &m_dSignalerTask );
 		sphLogDebugv ( "Internal signal action (for epoll/kqueue) added (%d), %p",
@@ -3359,10 +3314,10 @@ private:
 	int events_apply_task_changes ( Task_t * pTask )
 	{
 		int iEvents = 0;
-		bool bWrite = pTask->m_uIOChanged==1;
-		bool bRead = ( pTask->m_uIOChanged!=0 ) || ( pTask==&m_dSignalerTask );
-		bool bWasWrite = pTask->m_uIOActive==1;
-		bool bWasRead = ( pTask->m_uIOActive!=0 );
+		bool bWrite = pTask->m_uIOChanged==Task_t::RW;
+		bool bRead = pTask->m_uIOChanged!=Task_t::NO;
+		bool bWasWrite = pTask->m_uIOActive==Task_t::RW;;
+		bool bWasRead = ( pTask->m_uIOActive!=Task_t::NO);
 		bool bApply = pTask->m_ifd!=-1;
 
 		// boring combination matrix below
@@ -3817,14 +3772,11 @@ public:
 		events_destroy();
 	}
 
-	/// Enqueue or perform a timer functor
-	/// caller guarantee that interhal task exists
+	/// New task (only applied to fresh connections; skip already enqueued)
 	bool EnqueueNewTask ( AgentConn_t * pConnection, int64_t iTimeoutMS, BYTE uActivateIO )
 	{
 		if ( pConnection->m_pPollerTask )
-		{
 			return false;
-		}
 
 		Task_t * pTask = CreateNewTask ( pConnection );
 		assert ( pTask );

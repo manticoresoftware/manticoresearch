@@ -560,7 +560,7 @@ private:
 	bool Fail ( const char * sFmt, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
 	bool Fatal ( AgentStats_e eStat, const char * sMessage, ... ) __attribute__ ( ( format ( printf, 3, 4 ) ) );
 	void Finish ( bool bFailed = false ); /// finish the task, stat time.
-	void BadResult ( int iError = 0 );	/// always return false
+	bool BadResult ( int iError = 0 );	/// always return false
 	void ReportFinish ( bool bSuccess = true );
 	void SendingState (); ///< from CONNECTING state go to HEALTHY and switch timer to QUERY timeout.
 

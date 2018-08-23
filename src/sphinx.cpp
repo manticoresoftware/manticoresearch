@@ -14436,9 +14436,18 @@ bool CSphIndex_VLN::EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) 
 		}
 		CopyDocinfo ( pCtx, tMatch, pRow );
 	}
-	pCtx->CalcFilter ( tMatch ); // FIXME!!! leak of filtered STRING_PTR
 
-	return pCtx->m_pFilter ? !pCtx->m_pFilter->Eval ( tMatch ) : false;
+	pCtx->CalcFilter ( tMatch );
+	if ( !pCtx->m_pFilter )
+		return false;
+
+	if ( !pCtx->m_pFilter->Eval ( tMatch ) )
+	{
+		pCtx->FreeDataFilter ( tMatch );
+		return true;
+	}
+
+	return false;
 }
 
 SphDocID_t * CSphIndex_VLN::GetKillList () const
@@ -14632,7 +14641,7 @@ static inline void CalcContextItems ( CSphMatch & tMatch, const CSphVector<CSphQ
 				break;
 
 			case SPH_ATTR_STRINGPTR:
-				tMatch.SetAttr ( tCalc.m_tLoc, (SphAttr_t)tCalc.m_pExpr->StringEvalPacked ( tMatch ) ); // FIXME! a potential leak of *previous* value?
+				tMatch.SetAttr ( tCalc.m_tLoc, (SphAttr_t)tCalc.m_pExpr->StringEvalPacked ( tMatch ) );
 				break;
 
 			case SPH_ATTR_FACTORS:

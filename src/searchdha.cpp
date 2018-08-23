@@ -3254,7 +3254,8 @@ private:
 			sphLogDebugL ( "L EPOLL_CTL_DEL(%d), %d+%d events", pTask->m_ifd, m_iEvents, iEvents );
 		} else
 		{
-			tEv.events = ( bRead ? EPOLLIN : 0 ) | ( bWrite ? EPOLLOUT : 0 );
+			tEv.events = ( bRead ? EPOLLIN : 0 ) | ( bWrite ? EPOLLOUT : 0 ) | ( ( pTask==&m_dSignalerTask ) ? 0 : EPOLLET );
+
 			if ( !pTask->m_uIOActive )
 			{
 				iOp = EPOLL_CTL_ADD;

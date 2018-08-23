@@ -852,8 +852,10 @@ public:
 
 	int IntEval ( const CSphMatch & tMatch ) const final
 	{
-		const BYTE * pStr;		
-		return m_pFirst->StringEval ( tMatch, &pStr );
+		const BYTE * pStr = nullptr;
+		int iLen = m_pFirst->StringEval ( tMatch, &pStr );
+		if ( m_pFirst->IsDataPtrAttr () ) SafeDeleteArray ( pStr );
+		return iLen;
 	}
 
 	float Eval ( const CSphMatch & tMatch ) const final { return (float)IntEval ( tMatch ); }

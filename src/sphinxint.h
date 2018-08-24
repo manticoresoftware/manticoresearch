@@ -1968,9 +1968,7 @@ struct SphExpanded_t
 
 struct ISphSubstringPayload
 {
-	// neither of derivatives uses dynamic data and d-trs.
-//	virtual ~ISphSubstringPayload() {}
-
+	virtual ~ISphSubstringPayload() {}
 	int m_iTotalDocs = 0;
 	int m_iTotalHits = 0;
 };
@@ -2112,8 +2110,8 @@ public:
 	CSphScopedPayload () {}
 	~CSphScopedPayload ()
 	{
-		ARRAY_FOREACH ( i, m_dPayloads )
-			SafeDelete ( m_dPayloads[i] );
+		for ( auto & dPayload : m_dPayloads )
+			SafeDelete ( dPayload );
 	}
 	void Add ( ISphSubstringPayload * pPayload ) { m_dPayloads.Add ( pPayload ); }
 

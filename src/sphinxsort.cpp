@@ -80,10 +80,11 @@ typedef int64_t				SphGroupKey_t;
 
 
 /// base grouper (class that computes groupby key)
-class CSphGrouper
+class CSphGrouper : public ISphRefcounted
 {
-public:
+protected:
 	virtual					~CSphGrouper () {}; // =default causes bunch of errors building on wheezy
+public:
 	virtual SphGroupKey_t	KeyFromValue ( SphAttr_t uValue ) const = 0;
 	virtual SphGroupKey_t	KeyFromMatch ( const CSphMatch & tMatch ) const = 0;
 	virtual void			GetLocator ( CSphAttrLocator & tOut ) const = 0;
@@ -914,18 +915,15 @@ protected:
 	CSphAttrLocator m_tLocator;
 
 public:
-	ISphExpr * m_pExpr;
+	CSphRefcountedPtr<ISphExpr> m_pExpr;
 	const BYTE * m_pStrings;
 
 	explicit CSphGrouperJsonField ( const CSphAttrLocator & tLoc, ISphExpr * pExpr )
 		: m_tLocator ( tLoc )
 		, m_pExpr ( pExpr )
 		, m_pStrings ( nullptr )
-	{}
-
-	~CSphGrouperJsonField () override
 	{
-		SafeRelease ( m_pExpr );
+		SafeAddRef ( pExpr );
 	}
 
 	void SetStringPool ( const BYTE * pStrings ) override
@@ -1357,7 +1355,7 @@ struct CSphGroupSorterSettings
 	bool				m_bDistinct = false;///< whether we need distinct
 	bool				m_bMVA = false;		///< whether we're grouping by MVA attribute
 	bool				m_bMva64 = false;
-	CSphGrouper *		m_pGrouper = nullptr;///< group key calculator
+	CSphRefcountedPtr<CSphGrouper>		m_pGrouper;///< group key calculator
 	bool				m_bImplicit = false;///< for queries with aggregate functions but without group by clause
 	const ISphFilter *	m_pAggrFilterTrait = nullptr; ///< aggregate filter that got owned by grouper
 	bool				m_bJson = false;	///< whether we're grouping by Json attribute
@@ -1768,7 +1766,7 @@ class CSphKBufferGroupSorter : public CSphMatchQueueTraits, protected CSphGroupS
 {
 protected:
 	ESphGroupBy		m_eGroupBy;			///< group-by function
-	CSphGrouper *	m_pGrouper;
+	CSphRefcountedPtr<CSphGrouper>	m_pGrouper;
 
 	CSphFixedHash < CSphMatch *, SphGroupKey_t, IdentityHash_fn >	m_hGroup2Match;
 
@@ -1831,7 +1829,6 @@ public:
 	~CSphKBufferGroupSorter () override
 	{
 		SafeDelete ( m_pComp );
-		SafeDelete ( m_pGrouper );
 		SafeDelete ( m_pAggrFilter );
 		ARRAY_FOREACH ( i, m_dAggregates )
 			SafeDelete ( m_dAggregates[i] );
@@ -2170,7 +2167,7 @@ class CSphKBufferNGroupSorter : public CSphMatchQueueTraits, protected CSphGroup
 {
 protected:
 	ESphGroupBy		m_eGroupBy;			///< group-by function
-	CSphGrouper *	m_pGrouper;
+	CSphRefcountedPtr<CSphGrouper>	m_pGrouper;
 
 	CSphFixedHash < CSphMatch *, SphGroupKey_t, IdentityHash_fn >	m_hGroup2Match;
 
@@ -2299,7 +2296,6 @@ public:
 	~CSphKBufferNGroupSorter () override
 	{
 		SafeDelete ( m_pComp );
-		SafeDelete ( m_pGrouper );
 		SafeDelete ( m_pAggrFilter );
 		ARRAY_FOREACH ( i, m_dAggregates )
 			SafeDelete ( m_dAggregates[i] );
@@ -3080,7 +3076,8 @@ public:
 		SphGroupKey_t uGroupkey = this->m_pGrouper->KeyFromMatch ( tMatch );
 
 		auto iValue = (int64_t)uGroupkey;
-		const BYTE * pStrings = ((CSphGrouperJsonField*)this->m_pGrouper)->m_pStrings;
+		CSphGrouper* pGrouper = this->m_pGrouper;
+		const BYTE * pStrings = ((CSphGrouperJsonField*) pGrouper)->m_pStrings;
 		const BYTE * pValue = pStrings + ( iValue & 0xffffffff );
 		auto eRes = (ESphJsonType)( iValue >> 32 );
 
@@ -4301,7 +4298,7 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const ISphSchema & 
 
 		dGroupColumns.Add ( iAttr );
 
-		ISphExpr * pExpr = sphExprParse ( pQuery->m_sGroupBy.cstr(), tSchema, nullptr, nullptr, sError, nullptr, pQuery->m_eCollation );
+		CSphRefcountedPtr<ISphExpr> pExpr { sphExprParse ( pQuery->m_sGroupBy.cstr(), tSchema, nullptr, nullptr, sError, nullptr, pQuery->m_eCollation ) };
 		tSettings.m_pGrouper = new CSphGrouperJsonField ( tSchema.GetAttr(iAttr).m_tLocator, pExpr );
 		tSettings.m_bJson = true;
 
@@ -4347,7 +4344,7 @@ static bool SetupGroupbySettings ( const CSphQuery * pQuery, const ISphSchema & 
 			case SPH_GROUPBY_ATTR:
 				if ( eType==SPH_ATTR_JSON || eType==SPH_ATTR_JSON_FIELD )
 				{
-					ISphExpr * pExpr = sphExprParse ( pQuery->m_sGroupBy.cstr(), tSchema, nullptr, nullptr, sError, nullptr, pQuery->m_eCollation );
+					CSphRefcountedPtr<ISphExpr> pExpr { sphExprParse ( pQuery->m_sGroupBy.cstr(), tSchema, nullptr, nullptr, sError, nullptr, pQuery->m_eCollation ) };
 					tSettings.m_pGrouper = new CSphGrouperJsonField ( tLoc, pExpr );
 					tSettings.m_bJson = true;
 

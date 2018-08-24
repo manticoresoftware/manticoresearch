@@ -175,7 +175,7 @@ static int				g_iThdPoolCount		= 2;
 static int				g_iThdQueueMax		= 0;
 static int				g_tmWait = 1;
 bool					g_bGroupingInUtc	= false;
-static bool				g_bTcpFastOpen		= false; ///< whether to use TFO on listeners
+static auto&			g_iTFO = sphGetTFO ();
 static CSphString		g_sShutdownToken;
 
 struct Listener_t
@@ -2159,16 +2159,13 @@ int sphCreateInetSocket ( DWORD uAddr, int iPort )
 		sphWarning ( "setsockopt(TCP_NODELAY) failed: %s", sphSockError() );
 #endif
 
-	// TFO
-	if ( g_bTcpFastOpen )
-	{
 #ifdef TCP_FASTOPEN
+	if ( ( g_iTFO!=TFO_ABSENT ) && ( g_iTFO & TFO_LISTEN ) )
+	{
 		if ( setsockopt ( iSock, IPPROTO_TCP, TCP_FASTOPEN, ( char * ) &iOn, sizeof ( iOn ) ) )
-			sphWarning ( "can't set TCP_FASTOPEN option for listener: %s", sphSockError () );
-#else
-		sphWarning ( "daemon wasn't build with TCP Fast Open support, option 'listen_tfo' ignored");
-#endif
+			sphWarning ( "setsockopt(TCP_FASTOPEN) failed: %s", sphSockError () );
 	}
+#endif
 
 	int iTries = 12;
 	int iRes;
@@ -22880,6 +22877,45 @@ static void ParsePredictedTimeCosts ( const char * p )
 	}
 }
 
+// read system TFO settings and init g_ITFO according to it.
+/* From https://www.kernel.org/doc/Documentation/networking/ip-sysctl.txt
+ * possible bitmask values are:
+
+	  0x1: (client) enables sending data in the opening SYN on the client.
+	  0x2: (server) enables the server support, i.e., allowing data in
+			a SYN packet to be accepted and passed to the
+			application before 3-way handshake finishes.
+	  0x4: (client) send data in the opening SYN regardless of cookie
+			availability and without a cookie option.
+	0x200: (server) accept data-in-SYN w/o any cookie option present.
+	0x400: (server) enable all listeners to support Fast Open by
+			default without explicit TCP_FASTOPEN socket option.
+
+ Actually we interested only in first 2 bits.
+ */
+static void CheckSystemTFO ()
+{
+#if defined (MSG_FASTOPEN)
+	char sBuf[20] = { 0 };
+	g_iTFO = TFO_ABSENT;
+
+	FILE * fp = fopen ( "/proc/sys/net/ipv4/tcp_fastopen", "rb" );
+	if ( !fp )
+	{
+		sphWarning ( "TCP fast open unavailable (can't read /proc/sys/net/ipv4/tcp_fastopen, unsupported kernel?)" );
+		return;
+	}
+
+	auto szResult = fgets ( sBuf, 20, fp );
+	fclose ( fp );
+	if ( !szResult )
+		return;
+
+	g_iTFO = atoi ( szResult );
+#else
+	g_iTFO = 3; // suggest it is available.
+#endif
+}
 
 void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 {
@@ -22964,8 +23000,11 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 	g_iThrottleAccept = hSearchd.GetInt ( "net_throttle_accept", g_iThrottleAccept );
 	g_iNetWorkers = hSearchd.GetInt ( "net_workers", g_iNetWorkers );
 	g_iNetWorkers = Max ( g_iNetWorkers, 1 );
-	g_bTcpFastOpen = ( hSearchd.GetInt ( "listen_tfo", 0 )==1 );
-
+	CheckSystemTFO();
+	if ( g_iTFO!=TFO_ABSENT && hSearchd.GetInt ( "listen_tfo" )==0 )
+	{
+		g_iTFO &= ~TFO_LISTEN;
+	}
 	if ( hSearchd ( "collation_libc_locale" ) )
 	{
 		const char * sLocale = hSearchd.GetStr ( "collation_libc_locale" );

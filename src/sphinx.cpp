@@ -33100,3 +33100,9 @@ volatile bool& sphGetShutdown ()
 	static bool bShutdown = false;
 	return bShutdown;
 }
+
+volatile int &sphGetTFO ()
+{
+	static int iTFO = 0;
+	return iTFO;
+}

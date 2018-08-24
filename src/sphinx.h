@@ -3561,6 +3561,11 @@ extern CSphString g_sLemmatizerBase;
 // Get global shutdown flag
 volatile bool& sphGetShutdown();
 
+// Access to global TFO settings
+volatile int& sphGetTFO();
+#define TFO_CONNECT 1
+#define TFO_LISTEN 2
+#define TFO_ABSENT (-1)
 /////////////////////////////////////////////////////////////////////////////
 
 // workaround to suppress C4511/C4512 warnings (copy ctor and assignment operator) in VS 2003

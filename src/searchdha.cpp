@@ -45,6 +45,7 @@ DWORD			g_uHAPeriodKarma	= 60;		// by default use the last 1 minute statistic to
 int				g_iPersistentPoolSize	= 0;
 
 static auto& g_bShutdown = sphGetShutdown();
+static auto& g_iTFO = sphGetTFO ();
 
 CSphString HostDesc_t::GetMyUrl() const
 {
@@ -1996,7 +1997,7 @@ inline SSIZE_T AgentConn_t::SendChunk ()
 //!
 int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 {
-	if ( pSs->sa_family==AF_UNIX )
+	if ( pSs->sa_family==AF_UNIX || g_iTFO==TFO_ABSENT || !(g_iTFO & TFO_CONNECT) )
 		return 0;
 	m_iStartQuery = sphMicroTimer (); // copied old behaviour
 #if USE_WINDOWS
@@ -2088,6 +2089,13 @@ int AgentConn_t::DoTFO ( struct sockaddr * pSs, int iLen )
 	auto iErr = sphSockGetErrno ();
 	if ( iErr!=EINPROGRESS )
 	{
+		if ( iErr==EOPNOTSUPP )
+		{
+			assert ( g_iTFO!=TFO_ABSENT );
+			sphWarning("TFO client supoport unavailable, switch to usual connect()");
+			g_iTFO &= ~TFO_CONNECT;
+			return 0;
+		}
 		Fatal ( eConnectFailures, "sendmsg/connectx() failed: errno=%d, %s", iErr, sphSockError ( iErr ) );
 		return -1;
 	}

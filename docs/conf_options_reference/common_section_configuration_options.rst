@@ -16,7 +16,7 @@ discussion of what lemmatizers are) is dictionary driven.
 lemmatizer_base directive configures the base dictionary path. File
 names are hardcoded and specific to a given lemmatizer; the Russian
 lemmatizer uses ru.pak dictionary file. The dictionaries can be obtained
-from the Manticore website.
+from the Manticore website (https://manticoresearch.com/downloads/).
 
 Example:
 

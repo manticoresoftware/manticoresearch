@@ -180,10 +180,12 @@ In most cases, upgrading is just a matter of replacing the binaries.
 
 In case of Linux distributions, Manticore Search continues to use the usual ``/etc/sphinxsearch/sphinx.conf``, but it runs under a different user and use different folders.
 
-Service name has changed from ``sphinx``/``sphinxsearch`` to ``manticore`` and will run under ``manticore`` user ( Spinx was using ``sphinx`` or ``sphinxsearch``).
+Service name has changed from ``sphinx``/``sphinxsearch`` to ``manticore`` and will run under ``manticore`` user ( Spinx was using ``sphinx`` or ``sphinxsearch``). It also uses a different folder for the PID file.
 
 Default used folders are ``/var/lib/manticore``, ``/var/log/manticore``, ``/var/run/manticore``.
-You can still use existing ``sphinx.conf``, but you need to manually change the permissions on ``/var/lib/sphinxsearch``, ``/var/log/sphinxsearch``, ``/var/run/sphinxsearch`` folders.
+You can still use existing ``sphinx.conf``, but you need to manually change the permissions on ``/var/lib/sphinxsearch`` and ``/var/log/sphinxsearch`` folders. 
+If you  use other folders (for data, wordforms files etc.) the ownership must be also switched to ``manticore`` user.
+The ``pid_file`` location should be changed to match the manticore.service  to ``/var/run/manticore/searchd.pid``. 
 
 If you want to use the Manticore folder instead, the index files needs to be moved to the new data folder (``/var/lib/manticore``) and permissions to be changed to ``manticore`` user.
 

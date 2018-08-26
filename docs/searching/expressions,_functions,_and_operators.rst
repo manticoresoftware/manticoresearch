@@ -475,8 +475,9 @@ Comparison functions
 
        IF ( sqrt(3)*sqrt(3)-3<>0, a, b )
        IF ( sqrt(3)*sqrt(3)-3, a, b )
-   
+  
 
+  
    In the first case, the comparison operator <> will return 0.0 (false)
    because of a threshold, and ``IF()`` will always return ‘**’ as a
    result. In the second one, the same ``sqrt(3)*sqrt(3)-3`` expression

@@ -76,9 +76,9 @@ In addition to those, you can use counters on hits or words, boolean factors lik
 
 Several pre-built ranker expressions are available: proximity_bm25, bm25, none, wordcount, proximity, matchany, sph04, expr (custom rankers) and export (same as expr, but stores for output the factor values). They can be changed using the OPTION statement, for example OPTION ranker=bm25.
 
-The default proximity_bm25 can be written as custom ranker as OPTION ranker=expr('sum(lcs*user_weight)+bm25').
+The default proximity_bm25 can be written as custom ranker as ``OPTION ranker=expr('sum(lcs*user_weight)+bm25')``.
 
-The user_weight relates to the boost per field, by default all fields are treated equal. For example if you have fields ‘title’ and ‘content’ you might want to give a boost to ‘title’ matching so you would set OPTION field_weights=(title=10, content=1).
+The user_weight relates to the boost per field, by default all fields are treated equal. For example if you have fields ‘title’ and ‘content’ you might want to give a boost to ‘title’ matching so you would set ``OPTION field_weights=(title=10, content=1)``.
 
 The ranking score is relative to the query itself as long as it includes metrics that calculate distances between keywords or keywords/document frequencies. In these cases, the values of the score can differ a lot from query to query, so doing any kind of comparison between scores of different queries does not make sense. 
 

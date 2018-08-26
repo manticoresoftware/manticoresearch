@@ -1210,6 +1210,8 @@ int main ( int argc, char ** argv )
 		if ( argv[i][0]!='-' ) break;
 		OPT ( "-q", "--quiet" )		{ bQuiet = true; continue; }
 		OPT1 ( "--strip-path" )		{ bStripPath = true; continue; }
+		OPT1 ( "--checkconfig" )	{ eCommand = CMD_CHECKCONFIG; continue; }
+		OPT1 ( "--rotate" )			{ bRotate = true; continue; }
 		OPT1 ( "-v" )				{ ShowVersion(); exit(0); }
 		OPT ( "-h", "--help" )		{ ShowVersion(); ShowHelp(); exit(0); }
 
@@ -1220,12 +1222,10 @@ int main ( int argc, char ** argv )
 		OPT1 ( "--dumpconfig" )		{ eCommand = CMD_DUMPCONFIG; sDumpHeader = argv[++i]; }
 		OPT1 ( "--dumpdocids" )		{ eCommand = CMD_DUMPDOCIDS; sIndex = argv[++i]; }
 		OPT1 ( "--check" )			{ eCommand = CMD_CHECK; sIndex = argv[++i]; }
-		OPT1 ( "--rotate" )			{ bRotate = true; }
 		OPT1 ( "--htmlstrip" )		{ eCommand = CMD_STRIP; sIndex = argv[++i]; }
 		OPT1 ( "--build-infixes" )	{ eCommand = CMD_BUILDINFIXES; sIndex = argv[++i]; }
 		OPT1 ( "--build-skips" )	{ eCommand = CMD_BUILDSKIPS; sIndex = argv[++i]; }
 		OPT1 ( "--morph" )			{ eCommand = CMD_MORPH; sIndex = argv[++i]; }
-		OPT1 ( "--checkconfig" )	{ eCommand = CMD_CHECKCONFIG; }
 		OPT1 ( "--optimize-rt-klists" )
 		{
 			eCommand = CMD_OPTIMIZEKLISTS;
@@ -1257,7 +1257,8 @@ int main ( int argc, char ** argv )
 			// not enough args
 			break;
 
-		} else if ( !strcmp ( argv[i], "--dumphitlist" ) )
+		}
+		OPT1 ("--dumphitlist" )
 		{
 			eCommand = CMD_DUMPHITLIST;
 			sIndex = argv[++i];

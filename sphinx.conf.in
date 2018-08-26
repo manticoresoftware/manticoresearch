@@ -701,7 +701,7 @@ index dist1
 #
 # you can run INSERT, REPLACE, and DELETE on this index on the fly
 # using MySQL protocol (see 'listen' directive below)
-index rt
+index testrt
 {
 	# 'rt' index type must be specified to use RT index
 	type			= rt

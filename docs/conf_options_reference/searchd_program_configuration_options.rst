@@ -1408,9 +1408,10 @@ directly or through term expansion) can eventually run out of stack.
 potentially dangerous queries. To process such queries, you can either
 set the thread stack size by using the ``thread_stack`` directive (or
 switch to a different ``workers`` setting if that is possible).
+The setting can take values from 64K to 8M. In case a wrong value is provided, the minimum 64K will be used instead.
 
 A query with N levels of nesting is estimated to require approximately
-30+0.16\*N KB of stack, meaning that the default 64K is enough for
+30+0.16\*N KB of stack, meaning that the minimum 64K is enough for
 queries with upto 250 levels, 150K for upto 700 levels, etc. If the
 stack size limit is not met, ``searchd`` fails the query and reports the
 required stack size in the error message.

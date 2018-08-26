@@ -36,8 +36,8 @@ Grouping function value and per-group match count are returned along as
 “virtual” attributes named **@group** and **@count** respectively.
 
 The result set is sorted by group-by sorting clause, with the syntax
-similar to ```SPH_SORT_EXTENDED`` sorting
-clause <SPH_SORT_EXTENDED_mode>` syntax. In addition
+similar to ``SPH_SORT_EXTENDED`` sorting
+clause syntax. In addition
 to ``@id`` and ``@weight``, group-by sorting clause may also include:
 
 -  @group (groupby function value),

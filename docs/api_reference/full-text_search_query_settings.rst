@@ -106,8 +106,8 @@ accomplished by setting the appropriate ranking mode. The list of the
 modes is available in :ref:`search_results_ranking`.
 
 ``$rankexpr`` argument lets you specify a ranking formula to use with
-the `expression based
-ranker <expression_based_ranker_sphrank_expr>`,
+the expression based
+ranker,
 that is, when ``$ranker`` is set to SPH_RANK_EXPR. In all other cases,
 ``$rankexpr`` is ignored.
 

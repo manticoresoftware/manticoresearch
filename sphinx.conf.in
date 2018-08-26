@@ -960,7 +960,7 @@ searchd
 
 
 	# per-thread stack size, only affects workers=threads mode
-	# optional, default is 64K
+	# optional, default is 1M
 	#
 	# thread_stack			= 128K
 

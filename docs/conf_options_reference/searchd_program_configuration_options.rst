@@ -1275,7 +1275,7 @@ shutdown_token
 ~~~~~~~~~~~~~~
 
 SHA1 hash of the password which is necessary to invoke 'shutdown' command
-from VIP sphinxql connection. Without it :ref:`debug` shutdown' subcommand
+from VIP sphinxql connection. Without it :ref:`debug <debug_syntax>` shutdown' subcommand
 will never cause daemon's stop.
 
 .. _snippets_file_prefix:

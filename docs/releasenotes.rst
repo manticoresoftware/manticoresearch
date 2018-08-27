@@ -1,6 +1,54 @@
 Release notes
 =============
 
+Version 2.7.2 GA, 27 August 2018
+--------------------------------
+
+Improvements
+~~~~~~~~~~~~
+* compatibility with MySQL 8 clients
+* :ref:`TRUNCATE <truncate_rtindex_syntax>` WITH RECONFIGURE
+* retired memory counter on SHOW STATUS for RT indexes
+* global cache of multi agents
+* improved IOCP on Windows
+* VIP connections for HTTP protocol
+* SphinxQL  :ref:`DEBUG <debug_syntax>` command which can run various subcommands
+* :ref:`shutdown_token` - SHA1 hash of password needed to invoke `shutdown` using DEBUG command
+* new stats to SHOW AGENT STATUS (_ping, _has_perspool, _need_resolve)
+* --verbose option of indexer now accept [debug|debugv|debugvv] for printing debug messages
+
+Bugfixes
+~~~~~~~~
+* `390082 <https://github.com/manticoresoftware/manticoresearch/commit/390082a7be0a1f9539b30361d11d54de35c62a44>`__ removed wlock at optimize
+* `4c3376 <https://github.com/manticoresoftware/manticoresearch/commit/4c337648329be22373be33333cbc9c5664d18b80>`__ fixed wlock at reload index settings
+* `b5ea8d <https://github.com/manticoresoftware/manticoresearch/commit/b5ea8dc0b18a23dbd739e92c66dd93b0094df14b>`__ fixed memory leak on query with JSON filter
+* `930e83 <https://github.com/manticoresoftware/manticoresearch/commit/930e831a43fd3d1ce996185be968d1df49a088d0>`__ fixed empty documents at PQ result set
+* `53deec <https://github.com/manticoresoftware/manticoresearch/commit/53deecfecb374431f84f8592a1095a77407b8aea>`__ fixed confusion of tasks due to removed one
+* `cad9b9 <https://github.com/manticoresoftware/manticoresearch/commit/cad9b9c617719aad97e9f5a2ae93491153d8e504>`__ fixed wrong remote host counting
+* `90008c <https://github.com/manticoresoftware/manticoresearch/commit/90008cc15c4684d445d37a391bb4a667bbc2e365>`__ fixed memory leak of parsed agent descriptors
+* `978d83 <https://github.com/manticoresoftware/manticoresearch/commit/978d839641ad6040c22c9fc3b703b1a02685f266>`__ fixed leak in search
+* `019394 <https://github.com/manticoresoftware/manticoresearch/commit/0193946105ac08913362b7d7acf0c90f9b38dc85>`__ cosmetic changes on explicit/inline c-trs, override/final usage
+* `943e29 <https://github.com/manticoresoftware/manticoresearch/commit/943e2997b33f9b2eda23d94a66068910f9476ebd>`__ fixed leak of json in local/remote schema 
+* `02dbdd <https://github.com/manticoresoftware/manticoresearch/commit/02dbdd6f1d0b72e7e458ebebdd2c67f989577e6b>`__ fixed leak of json sorting col expr in local/remote schema
+* `c74d0b <https://github.com/manticoresoftware/manticoresearch/commit/c74d0b4035e4214510376845b22cb676a8da24a3>`__ fixed leak of const alias 
+* `6e5b57 <https://github.com/manticoresoftware/manticoresearch/commit/6e5b57e1d3952c9695376728a143bf5434208f53>`__ fixed leak of preread thread
+* `39c740 <https://github.com/manticoresoftware/manticoresearch/commit/39c740fef5bf71da0bee60a35f5dd9f471af850f>`__ fixed stuck on exit because of stucked wait in netloop
+* `adaf97 <https://github.com/manticoresoftware/manticoresearch/commit/adaf9772f95772ad6d5297acace6c5cb92b56ad5>`__ fixed stuck of 'ping' behaviour on change HA agent to usual host
+* `32c40e <https://github.com/manticoresoftware/manticoresearch/commit/32c40eac9cdd40b15d79e58b2f15416f164f9701>`__ separate gc for dashboard storage
+* `511a3c <https://github.com/manticoresoftware/manticoresearch/commit/511a3cf2c1f1858f6e94fe9f8175b7216db3cbd6>`__ fixed ref-counted ptr fix
+* `32c40e <https://github.com/manticoresoftware/manticoresearch/commit/af2326cd2927effbad7bec88e8dc238a566cf27e>`__ fixed indextool crash on unexistent index
+* `156edc <https://github.com/manticoresoftware/manticoresearch/commit/156edc717dc63d3ea120f42466eba6e022da88be>`__ fixed output name of exceeding attr/field in xmlpipe indexing
+* `cdac6d <https://github.com/manticoresoftware/manticoresearch/commit/cdac6d1f17d384bfc8bae49e91241b2f346c3830>`__ fixed default indexer's value if no indexer section in config
+* `e61ec0 <https://github.com/manticoresoftware/manticoresearch/commit/e61ec00b6b27d1d5878247e2ee817f3b1e7fde16>`__ fixed wrong embedded stopwords in disk chunk by RT index after daemon restart
+* `5fba49 <https://github.com/manticoresoftware/manticoresearch/commit/5fba49d5e28c17de4c0acbd984466127f42de6e8>`__ fixed skip phantom (already closed, but not finally deleted from the poller) connections
+* `f22ae3 <https://github.com/manticoresoftware/manticoresearch/commit/f22ae34b623906b3c5a05a06198dad2e548dc541>`__ fixed blended (orphaned) network tasks
+* `46890e <https://github.com/manticoresoftware/manticoresearch/commit/46890e70eb8dcd00c1bf1b030538b8f131c601c2>`__ fixed crash on read action after write
+* `03f9df <https://github.com/manticoresoftware/manticoresearch/commit/03f9df904f611c438d5ebcaaeef911b0dc8d6c39>`__ fixed searchd crashes when running tests on windows
+* `e9255e <https://github.com/manticoresoftware/manticoresearch/commit/e9255ed2704790a3d7f5273d38b85433463cb3ff>`__ fixed handle EINPROGRESS code on usual connect() 
+* `248b72 <https://github.com/manticoresoftware/manticoresearch/commit/248b72f1544b27e9e82773284050d44eeb1714e1>`__ fixed connection timeouts when working with TFO
+
+
+
 Version 2.7.1 GA, 4 July 2018
 -----------------------------
 
@@ -35,7 +83,7 @@ Improvements
 * added `docs_id` option for documents called in CALL PQ. 
 * percolate queries filter can now contain expressions
 * distributed indexes can work with FEDERATED
-* dummy SHOW NAMES COLLATE and :ref:`SET <set>` wait_timeout (for better ProxySQL compatibility)
+* dummy SHOW NAMES COLLATE and :ref:`SET <set_syntax>` wait_timeout (for better ProxySQL compatibility)
 
 Bugfixes
 ~~~~~~~~

@@ -1112,6 +1112,7 @@ struct AggrResult_t : CSphQueryResult
 	StrVec_t						m_dZeroCount;
 
 	void ClampMatches ( int iLimit, bool bCommonSchema );
+	void FreeMatchesPtrs ( int iLimit, bool bCommonSchema );
 };
 
 

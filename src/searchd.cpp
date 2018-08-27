@@ -3613,11 +3613,11 @@ bool MinimizeSchema ( CSphSchema & tDst, const ISphSchema & tSrc )
 
 		tDst.Reset();
 
-		ARRAY_FOREACH ( i, dDst )
-			tDst.AddAttr ( dDst[i], true );
+		for ( auto& dAttr : dDst )
+			tDst.AddAttr ( dAttr, true );
 
-		ARRAY_FOREACH ( i, dFields )
-			tDst.AddField( dFields[i] );
+		for ( auto& dField: dFields )
+			tDst.AddField ( dField );
 
 	} else
 		tDst.SwapAttrs ( dDst );
@@ -5167,14 +5167,14 @@ void SendResult ( int iVer, ISphOutputBuffer & tOut, const CSphQueryResult * pRe
 
 /////////////////////////////////////////////////////////////////////////////
 
-void AggrResult_t::ClampMatches ( int iLimit, bool bCommonSchema )
+void AggrResult_t::FreeMatchesPtrs ( int iLimit, bool bCommonSchema )
 {
-	if ( m_dMatches.GetLength()<=iLimit )
+	if ( m_dMatches.GetLength ()<=iLimit )
 		return;
 
 	if ( bCommonSchema )
 	{
-		for ( int i = iLimit; i < m_dMatches.GetLength(); ++i )
+		for ( int i = iLimit; i<m_dMatches.GetLength (); ++i )
 			m_tSchema.FreeDataPtrs ( &m_dMatches[i] );
 	} else
 	{
@@ -5183,15 +5183,21 @@ void AggrResult_t::ClampMatches ( int iLimit, bool bCommonSchema )
 		{
 			nMatches += m_dMatchCounts[i];
 
-			if ( iLimit < nMatches )
+			if ( iLimit<nMatches )
 			{
-				int iFrom = Max ( iLimit, nMatches-m_dMatchCounts[i] );
-				for ( int j=iFrom; j<nMatches; ++j )
+				int iFrom = Max ( iLimit, nMatches - m_dMatchCounts[i] );
+				for ( int j = iFrom; j<nMatches; ++j )
 					m_dSchemas[i].FreeDataPtrs ( &m_dMatches[j] );
 			}
 		}
 	}
+}
 
+void AggrResult_t::ClampMatches ( int iLimit, bool bCommonSchema )
+{
+	FreeMatchesPtrs ( iLimit, bCommonSchema );
+	if ( m_dMatches.GetLength()<=iLimit )
+		return;
 	m_dMatches.Resize ( iLimit );
 }
 
@@ -5640,7 +5646,10 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 	// api + index without attributes + select * case
 	// can not skip aggregate filtering
 	if ( bQueryFromAPI && !tItems.GetLength() && !pAggrFilter && !bHaveExprs )
+	{
+		tRes.FreeMatchesPtrs ( 0, bAllEqual );
 		return true;
+	}
 
 	// build the final schemas!
 	// ???

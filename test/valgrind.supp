@@ -12,3 +12,11 @@
    fun:has_index
    fun:_ZN3re23NFA12AddToThreadqEPNS_11SparseArrayIPNS0_6ThreadEEEiiPKcPS7_
 }
+
+{
+   ExtRanker_c::IsInZone(int, ExtHit_t const*, int*)
+   Memcheck:Cond
+   fun:_ZN11ExtRanker_c8IsInZoneEiPK8ExtHit_tPi
+   fun:_ZNK14TermAcceptor_cIL15TermPosFilter_e5EE15IsAcceptableHitEPK8ExtHit_t
+   fun:_ZN14ExtConditionalIL15TermPosFilter_e5E9ExtTerm_cE12GetDocsChunkEv
+}

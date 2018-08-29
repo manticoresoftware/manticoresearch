@@ -582,8 +582,12 @@ struct MemTracker_c : ISphNoncopyable
 
 inline int64_t MVA_UPSIZE ( const DWORD * pMva )
 {
+#if USE_LITTLE_ENDIAN
+	return *(int64_t*)pMva;
+#else
 	int64_t iMva = (int64_t)( (uint64_t)pMva[0] | ( ( (uint64_t)pMva[1] )<<32 ) );
 	return iMva;
+#endif
 }
 
 

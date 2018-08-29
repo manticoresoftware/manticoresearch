@@ -1211,3 +1211,17 @@ TEST ( functions, valgrind_use )
 	ASSERT_TRUE (true) << "intended leak";
 }
 
+TEST ( functions, int64_le )
+{
+	DWORD pMva[2] = {0x01020304, 0x05060708};
+
+	// expression from MVA_UPSIZE
+	auto iTest = ( int64_t ) ( ( uint64_t ) pMva[0] | ( ( ( uint64_t ) pMva[1] ) << 32 ) );
+	auto iTest2 = MVA_UPSIZE ( pMva );
+	ASSERT_EQ ( iTest, iTest2 );
+
+#if USE_LITTLE_ENDIAN
+	auto iTestLE = *( int64_t * ) pMva;
+	ASSERT_EQ ( iTest, iTestLE ) << "little endian allows simplify";
+#endif
+}

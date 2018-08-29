@@ -121,7 +121,7 @@ template<> inline DWORD DOCINFO2ID_T ( const DWORD * pDocinfo )
 template<> inline uint64_t DOCINFO2ID_T ( const DWORD * pDocinfo )
 {
 #if USE_LITTLE_ENDIAN
-	return uint64_t(pDocinfo[0]) + (uint64_t(pDocinfo[1])<<32);
+	return *(uint64_t *) pDocinfo;
 #else
 	return uint64_t(pDocinfo[1]) + (uint64_t(pDocinfo[0])<<32);
 #endif
@@ -135,8 +135,7 @@ inline void DOCINFOSETID ( DWORD * pDocinfo, DWORD uValue )
 inline void DOCINFOSETID ( DWORD * pDocinfo, uint64_t uValue )
 {
 #if USE_LITTLE_ENDIAN
-	pDocinfo[0] = (DWORD)uValue;
-	pDocinfo[1] = (DWORD)(uValue>>32);
+	*( uint64_t * ) pDocinfo = uValue;
 #else
 	pDocinfo[0] = (DWORD)(uValue>>32);
 	pDocinfo[1] = (DWORD)uValue;

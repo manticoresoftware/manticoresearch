@@ -1335,10 +1335,11 @@ enum
 
 
 /// match comparator interface from group-by sorter point of view
-struct ISphMatchComparator
+struct ISphMatchComparator : public ISphRefcounted // non-mt refcounted is enough right now
 {
-	virtual ~ISphMatchComparator () = default;
 	virtual bool VirtualIsLess ( const CSphMatch & a, const CSphMatch & b, const CSphMatchComparatorState & tState ) const = 0;
+protected:
+	virtual            ~ISphMatchComparator () = default;
 };
 
 
@@ -1812,6 +1813,7 @@ public:
 	{
 		assert ( GROUPBY_FACTOR>1 );
 		assert ( DISTINCT==false || tSettings.m_tDistinctLoc.m_iBitOffset>=0 );
+		SafeAddRef ( pComp );
 
 		if_const ( NOTIFICATIONS )
 			m_dJustPopped.Reserve ( m_iSize );
@@ -1836,7 +1838,7 @@ public:
 	/// dtor
 	~CSphKBufferGroupSorter () override
 	{
-		SafeDelete ( m_pComp );
+		SafeRelease ( m_pComp );
 		SafeDelete ( m_pAggrFilter );
 		ARRAY_FOREACH ( i, m_dAggregates )
 			SafeDelete ( m_dAggregates[i] );
@@ -2255,6 +2257,7 @@ public:
 		assert ( GROUPBY_FACTOR>1 );
 		assert ( DISTINCT==false || tSettings.m_tDistinctLoc.m_iBitOffset>=0 );
 		assert ( m_iGLimit > 1 );
+		SafeAddRef ( pComp );
 
 		if_const ( NOTIFICATIONS )
 			m_dJustPopped.Reserve ( m_iSize );
@@ -2303,7 +2306,7 @@ public:
 	/// dtor
 	~CSphKBufferNGroupSorter () override
 	{
-		SafeDelete ( m_pComp );
+		SafeRelease ( m_pComp );
 		SafeDelete ( m_pAggrFilter );
 		ARRAY_FOREACH ( i, m_dAggregates )
 			SafeDelete ( m_dAggregates[i] );
@@ -4067,7 +4070,7 @@ static ISphMatchSorter * sphCreateSorter2nd ( ESphSortFunc eGroupFunc, const ISp
 		case FUNC_GENERIC4:		return sphCreateSorter3rd<MatchGeneric4_fn>	( pComp, pQuery, tSettings, bHasPackedFactors ); break;
 		case FUNC_GENERIC5:		return sphCreateSorter3rd<MatchGeneric5_fn>	( pComp, pQuery, tSettings, bHasPackedFactors ); break;
 		case FUNC_EXPR:			return sphCreateSorter3rd<MatchExpr_fn>		( pComp, pQuery, tSettings, bHasPackedFactors ); break;
-		default:				SafeDelete ( pComp ); return nullptr;
+		default:				return nullptr;
 	}
 }
 
@@ -4075,24 +4078,21 @@ static ISphMatchSorter * sphCreateSorter2nd ( ESphSortFunc eGroupFunc, const ISp
 static ISphMatchSorter * sphCreateSorter1st ( ESphSortFunc eMatchFunc, ESphSortFunc eGroupFunc,
 	const CSphQuery * pQuery, const CSphGroupSorterSettings & tSettings, bool bHasPackedFactors )
 {
-	if ( tSettings.m_bImplicit )
-		return sphCreateSorter2nd ( eGroupFunc, nullptr, pQuery, tSettings, bHasPackedFactors );
+	CSphRefcountedPtr<ISphMatchComparator> pComp;
+	if ( !tSettings.m_bImplicit )
+		switch ( eMatchFunc )
+		{
+			case FUNC_REL_DESC:		pComp = new MatchRelevanceLt_fn(); break;
+			case FUNC_ATTR_DESC:	pComp = new MatchAttrLt_fn(); break;
+			case FUNC_ATTR_ASC:		pComp = new MatchAttrGt_fn(); break;
+			case FUNC_TIMESEGS:		pComp = new MatchTimeSegments_fn(); break;
+			case FUNC_GENERIC2:		pComp = new MatchGeneric2_fn(); break;
+			case FUNC_GENERIC3:		pComp = new MatchGeneric3_fn(); break;
+			case FUNC_GENERIC4:		pComp = new MatchGeneric4_fn(); break;
+			case FUNC_GENERIC5:		pComp = new MatchGeneric5_fn(); break;
+			case FUNC_EXPR:			pComp = new MatchExpr_fn(); break; // only for non-bitfields, obviously
+		}
 
-	ISphMatchComparator * pComp = nullptr;
-	switch ( eMatchFunc )
-	{
-		case FUNC_REL_DESC:		pComp = new MatchRelevanceLt_fn(); break;
-		case FUNC_ATTR_DESC:	pComp = new MatchAttrLt_fn(); break;
-		case FUNC_ATTR_ASC:		pComp = new MatchAttrGt_fn(); break;
-		case FUNC_TIMESEGS:		pComp = new MatchTimeSegments_fn(); break;
-		case FUNC_GENERIC2:		pComp = new MatchGeneric2_fn(); break;
-		case FUNC_GENERIC3:		pComp = new MatchGeneric3_fn(); break;
-		case FUNC_GENERIC4:		pComp = new MatchGeneric4_fn(); break;
-		case FUNC_GENERIC5:		pComp = new MatchGeneric5_fn(); break;
-		case FUNC_EXPR:			pComp = new MatchExpr_fn(); break; // only for non-bitfields, obviously
-	}
-
-	assert ( pComp );
 	return sphCreateSorter2nd ( eGroupFunc, pComp, pQuery, tSettings, bHasPackedFactors );
 }
 

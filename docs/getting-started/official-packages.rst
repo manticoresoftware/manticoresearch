@@ -15,7 +15,7 @@ Start the service:
 
 .. code-block:: bash
 
-    $ systemctl manticore start
+    $ systemctl start manticore
 	
 or
 

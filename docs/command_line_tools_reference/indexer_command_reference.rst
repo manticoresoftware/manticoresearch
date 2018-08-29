@@ -35,6 +35,17 @@ them, ad-hoc, or you can tell it to process all indexes - you are not
 limited to calling just one, or all at once, you can always pick some
 combination of the available indexes.
 
+Wildcarding on index names is also supported. The following wildcard tokens can be used:
+
+* ``?`` matches any single character
+* ``*`` matches any count of any characters
+* ``*`` matches none or any single character
+
+.. code-block:: bash
+
+    $ indexer indexpart*main --rotate
+
+
 The exit codes are as follows:
 
 -  0, everything went ok

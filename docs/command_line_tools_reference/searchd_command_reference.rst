@@ -165,7 +165,9 @@ The options available to ``searchd`` on all builds are:
    for connections on this socket. Supported protocol values are
    ‘sphinx’ and ‘mysql41’ (MySQL protocol used since 4.1 upto at least
    5.1).
-
+   
+-  ``--force-preread`` forbids the daemon to serve any incoming connection until prereading of index files completes. By default, at startup the daemon accepts connections while index files are lazy loaded into memory. 
+   
 -  ``--index <index>`` (or ``-i <index>`` for short) forces
    this instance of ``searchd`` only to serve the specified index. Like
    ``--port``, above, this is usually for debugging purposes; more

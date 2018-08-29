@@ -113,7 +113,7 @@ repalces already stored query with 2nd ``ID``:
 		"tags": ["zip", "location", "city"]
 	}
 	
-The responce:
+The response:
 
 .. code-block:: rest
 

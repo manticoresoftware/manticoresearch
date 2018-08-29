@@ -222,7 +222,6 @@ public:
 class CSphWriter : ISphNoncopyable
 {
 public:
-					CSphWriter ();
 	virtual			~CSphWriter ();
 
 	void			SetBufferSize ( int iBufferSize );	///< tune write cache size; must be called before OpenFile() or SetFile()
@@ -251,19 +250,19 @@ public:
 
 protected:
 	CSphString		m_sName;
-	SphOffset_t		m_iPos;
-	SphOffset_t		m_iWritten;
+	SphOffset_t		m_iPos = -1;
+	SphOffset_t		m_iWritten = 0;
 
-	int				m_iFD;
-	int				m_iPoolUsed;
-	BYTE *			m_pBuffer;
-	BYTE *			m_pPool;
-	bool			m_bOwnFile;
-	SphOffset_t	*	m_pSharedOffset;
-	int				m_iBufferSize;
+	int				m_iFD = -1;
+	int				m_iPoolUsed = 0;
+	BYTE *			m_pBuffer = nullptr;
+	BYTE *			m_pPool = nullptr;
+	bool			m_bOwnFile = false;
+	SphOffset_t	*	m_pSharedOffset = nullptr;
+	int				m_iBufferSize = 262144;
 
-	bool			m_bError;
-	CSphString *	m_pError;
+	bool			m_bError = false;
+	CSphString *	m_pError = nullptr;
 
 	virtual void	Flush ();
 };

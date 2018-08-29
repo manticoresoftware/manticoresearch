@@ -3524,7 +3524,7 @@ public:
 typedef CSphAtomic_T<long> CSphAtomic;
 typedef CSphAtomic_T<int64_t> CSphAtomicL;
 
-/// MT-aware refcounted base (might be a mutex protected and slow)
+/// MT-aware refcounted base (uses atomics that sometimes m.b. slow because of inter-cpu sync)
 struct ISphRefcountedMT : public ISphNoncopyable
 {
 protected:

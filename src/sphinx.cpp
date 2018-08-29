@@ -3246,24 +3246,6 @@ bool sphParseCharset ( const char * sCharset, CSphVector<CSphRemapRange> & dRema
 }
 
 /////////////////////////////////////////////////////////////////////////////
-
-CSphSavedFile::CSphSavedFile ()
-	: m_uSize	( 0 )
-	, m_uCTime	( 0 )
-	, m_uMTime	( 0 )
-	, m_uCRC32	( 0 )
-{
-}
-
-
-CSphEmbeddedFiles::CSphEmbeddedFiles ()
-	: m_bEmbeddedSynonyms	( false )
-	, m_bEmbeddedStopwords	( false )
-	, m_bEmbeddedWordforms	( false )
-{
-}
-
-
 void CSphEmbeddedFiles::Reset()
 {
 	m_dSynonyms.Reset();
@@ -3271,14 +3253,6 @@ void CSphEmbeddedFiles::Reset()
 	m_dStopwords.Reset();
 	m_dWordforms.Reset();
 	m_dWordformFiles.Reset();
-}
-
-
-CSphTokenizerSettings::CSphTokenizerSettings ()
-	: m_iType				( TOKENIZER_UTF8 )
-	, m_iMinWordLen			( 1 )
-	, m_iNgramLen			( 0 )
-{
 }
 
 
@@ -6655,26 +6629,6 @@ void CSphRsetSchema::SwapAttrs ( CSphVector<CSphColumnInfo> & dAttrs )
 ///////////////////////////////////////////////////////////////////////////////
 // BIT-ENCODED FILE OUTPUT
 ///////////////////////////////////////////////////////////////////////////////
-
-CSphWriter::CSphWriter ()
-	: m_sName ( "" )
-	, m_iPos ( -1 )
-	, m_iWritten ( 0 )
-
-	, m_iFD ( -1 )
-	, m_iPoolUsed ( 0 )
-	, m_pBuffer ( NULL )
-	, m_pPool ( NULL )
-	, m_bOwnFile ( false )
-	, m_pSharedOffset ( NULL )
-	, m_iBufferSize	( 262144 )
-
-	, m_bError ( false )
-	, m_pError ( NULL )
-{
-}
-
-
 void CSphWriter::SetBufferSize ( int iBufferSize )
 {
 	if ( iBufferSize!=m_iBufferSize )

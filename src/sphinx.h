@@ -433,52 +433,50 @@ protected:
 };
 
 /////////////////////////////////////////////////////////////////////////////
+enum
+{
+	// where was TOKENIZER_SBCS=1 once
+	TOKENIZER_UTF8 = 2,
+	TOKENIZER_NGRAM = 3
+};
 
 struct CSphSavedFile
 {
 	CSphString			m_sFilename;
-	SphOffset_t			m_uSize;
-	SphOffset_t			m_uCTime;
-	SphOffset_t			m_uMTime;
-	DWORD				m_uCRC32;
-
-						CSphSavedFile ();
+	SphOffset_t			m_uSize = 0;
+	SphOffset_t			m_uCTime = 0;
+	SphOffset_t			m_uMTime = 0;
+	DWORD				m_uCRC32 = 0;
 };
 
 
 struct CSphEmbeddedFiles
 {
-	bool						m_bEmbeddedSynonyms;
-	bool						m_bEmbeddedStopwords;
-	bool						m_bEmbeddedWordforms;
+	bool						m_bEmbeddedSynonyms = false;
+	bool						m_bEmbeddedStopwords = false;
+	bool						m_bEmbeddedWordforms = false;
 	CSphSavedFile				m_tSynonymFile;
 	StrVec_t					m_dSynonyms;
 	CSphVector<CSphSavedFile>	m_dStopwordFiles;
 	CSphVector<SphWordID_t>		m_dStopwords;
 	StrVec_t					m_dWordforms;
 	CSphVector<CSphSavedFile>	m_dWordformFiles;
-
-								CSphEmbeddedFiles ();
-
 	void						Reset();
 };
 
 
 struct CSphTokenizerSettings
 {
-	int					m_iType;
+	int					m_iType { TOKENIZER_UTF8 };
 	CSphString			m_sCaseFolding;
-	int					m_iMinWordLen;
+	int					m_iMinWordLen = 1;
 	CSphString			m_sSynonymsFile;
 	CSphString			m_sBoundary;
 	CSphString			m_sIgnoreChars;
-	int					m_iNgramLen;
+	int					m_iNgramLen = 0;
 	CSphString			m_sNgramChars;
 	CSphString			m_sBlendChars;
 	CSphString			m_sBlendMode;
-	CSphString			m_sIndexingPlugin;	///< this tokenizer wants an external plugin to process its raw output
-
-						CSphTokenizerSettings ();
 };
 
 
@@ -1264,8 +1262,6 @@ public:
 private:
 	/// copy ctor. just in case
 	CSphMatch ( const CSphMatch & rhs )
-		: m_pStatic ( nullptr )
-		, m_pDynamic ( nullptr )
 	{
 		*this = rhs;
 	}

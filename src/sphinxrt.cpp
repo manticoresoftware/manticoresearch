@@ -4365,12 +4365,13 @@ static void SaveVector ( CSphWriter & tWriter, const CSphVector < T, P > & tVect
 	STATIC_ASSERT ( std::is_pod<T>::value, NON_POD_VECTORS_ARE_UNSERIALIZABLE );
 	tWriter.PutDword ( tVector.GetLength() );
 	if ( tVector.GetLength() )
-		tWriter.PutBytes ( tVector.Begin(), tVector.GetLength()*sizeof(T) );
+		tWriter.PutBytes ( tVector.Begin(), tVector.GetLengthBytes() );
 }
 
 
 template < typename T, typename P >
-static bool LoadVector ( CSphReader & tReader, CSphVector < T, P > & tVector, int64_t iSaneLen, const char * sAt, CSphString & sError )
+static bool LoadVector ( CSphReader & tReader, CSphVector < T, P > & tVector,
+	int64_t iSaneLen, const char * sAt, CSphString & sError )
 {
 	STATIC_ASSERT ( std::is_pod<T>::value, NON_POD_VECTORS_ARE_UNSERIALIZABLE );
 	int iSize = tReader.GetDword();
@@ -4379,7 +4380,7 @@ static bool LoadVector ( CSphReader & tReader, CSphVector < T, P > & tVector, in
 
 	tVector.Resize ( iSize );
 	if ( tVector.GetLength() )
-		tReader.GetBytes ( tVector.Begin(), tVector.GetLength()*sizeof(T) );
+		tReader.GetBytes ( tVector.Begin(), tVector.GetLengthBytes() );
 
 	return true;
 }
@@ -4391,7 +4392,7 @@ static void SaveVector ( BinlogWriter_c & tWriter, const CSphVector < T, P > & t
 	STATIC_ASSERT ( std::is_pod<T>::value, NON_POD_VECTORS_ARE_UNSERIALIZABLE );
 	tWriter.ZipOffset ( tVector.GetLength() );
 	if ( tVector.GetLength() )
-		tWriter.PutBytes ( tVector.Begin(), tVector.GetLength()*sizeof(T) );
+		tWriter.PutBytes ( tVector.Begin(), tVector.GetLengthBytes() );
 }
 
 
@@ -4401,7 +4402,7 @@ static bool LoadVector ( BinlogReader_c & tReader, CSphVector < T, P > & tVector
 	STATIC_ASSERT ( std::is_pod<T>::value, NON_POD_VECTORS_ARE_UNSERIALIZABLE );
 	tVector.Resize ( (int) tReader.UnzipOffset() ); // FIXME? sanitize?
 	if ( tVector.GetLength() )
-		tReader.GetBytes ( tVector.Begin(), tVector.GetLength()*sizeof(T) );
+		tReader.GetBytes ( tVector.Begin(), tVector.GetLengthBytes() );
 	return !tReader.GetErrorFlag();
 }
 

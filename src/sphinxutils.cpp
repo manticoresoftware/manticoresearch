@@ -1299,7 +1299,6 @@ void sphConfTokenizer ( const CSphConfigSection & hIndex, CSphTokenizerSettings 
 	tSettings.m_sIgnoreChars = hIndex.GetStr ( "ignore_chars" );
 	tSettings.m_sBlendChars = hIndex.GetStr ( "blend_chars" );
 	tSettings.m_sBlendMode = hIndex.GetStr ( "blend_mode" );
-	tSettings.m_sIndexingPlugin = hIndex.GetStr ( "index_token_filter" );
 
 	// phrase boundaries
 	int iBoundaryStep = Max ( hIndex.GetInt ( "phrase_boundary_step" ), -1 );

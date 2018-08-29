@@ -1360,8 +1360,6 @@ struct CSphGroupSorterSettings
 	const ISphFilter *	m_pAggrFilterTrait = nullptr; ///< aggregate filter that got owned by grouper
 	bool				m_bJson = false;	///< whether we're grouping by Json attribute
 
-	CSphGroupSorterSettings () = default;
-
 	void FixupLocators ( const ISphSchema * pOldSchema, const ISphSchema * pNewSchema )
 	{
 		sphFixupLocator ( m_tLocGroupby, pOldSchema, pNewSchema );
@@ -1579,67 +1577,77 @@ struct GroupSorter_fn : public CSphMatchComparatorState, public MatchSortAccesso
 
 struct MatchCloner_t
 {
-	CSphFixedVector<CSphRowitem>	m_dRowBuf;
+private:
+	CSphFixedVector<CSphRowitem>	m_dRowBuf { 0 };
 	CSphVector<CSphAttrLocator>		m_dAttrsRaw;
 	CSphVector<CSphAttrLocator>		m_dAttrsPtr;
-	const ISphSchema *				m_pSchema;
+	const ISphSchema *				m_pSchema = nullptr;
 
-	MatchCloner_t ()
-		: m_dRowBuf ( 0 )
-		, m_pSchema ( nullptr )
-	{ }
-
+public:
 	void SetSchema ( const ISphSchema * pSchema )
 	{
 		m_pSchema = pSchema;
 		m_dRowBuf.Reset ( m_pSchema->GetDynamicSize() );
 	}
 
+	// clone src to dst, then apply attrs from pGroup according stored locators.
 	void Combine ( CSphMatch * pDst, const CSphMatch * pSrc, const CSphMatch * pGroup )
 	{
 		assert ( m_pSchema && pDst && pSrc && pGroup );
 		assert ( pDst!=pGroup );
 		m_pSchema->CloneMatch ( pDst, *pSrc );
 
-		ARRAY_FOREACH ( i, m_dAttrsRaw )
-		{
-			pDst->SetAttr ( m_dAttrsRaw[i], pGroup->GetAttr ( m_dAttrsRaw[i] ) );
-		}
+		for ( auto &AttrsRaw : m_dAttrsRaw )
+			pDst->SetAttr ( AttrsRaw, pGroup->GetAttr ( AttrsRaw ) );
 
-		ARRAY_FOREACH ( i, m_dAttrsPtr )
+		for ( auto &AttrsPtr : m_dAttrsPtr )
 		{
-			assert ( !pDst->GetAttr ( m_dAttrsPtr[i] ) );
-			auto sSrc = ( const char * ) pGroup->GetAttr ( m_dAttrsPtr[i] );
+			assert ( !pDst->GetAttr ( AttrsPtr ) );
+			auto sSrc = ( const char * ) pGroup->GetAttr ( AttrsPtr );
 			const char * sDst = nullptr;
 			if ( sSrc && *sSrc )
-				sDst = strdup(sSrc);
+				sDst = strdup(sSrc); // wtf?
 
-			pDst->SetAttr ( m_dAttrsPtr[i], (SphAttr_t)sDst );
+			pDst->SetAttr ( AttrsPtr, (SphAttr_t)sDst );
 		}
 	}
 
-	void Clone ( CSphMatch * pOld, const CSphMatch * pNew )
+	void Clone ( CSphMatch * pDst, const CSphMatch * pSrc )
 	{
-		assert ( m_pSchema && pOld && pNew );
-		if ( pOld->m_pDynamic==nullptr ) // no old match has no data to copy, just a fresh but old match
+		assert ( m_pSchema && pDst && pSrc );
+		if ( !pDst->m_pDynamic ) // no old match has no data to copy, just a fresh but old match
 		{
-			m_pSchema->CloneMatch ( pOld, *pNew );
+			m_pSchema->CloneMatch ( pDst, *pSrc );
 			return;
 		}
 
-		memcpy ( m_dRowBuf.Begin(), pOld->m_pDynamic, m_dRowBuf.GetLengthBytes() );
+		memcpy ( m_dRowBuf.Begin(), pDst->m_pDynamic, m_dRowBuf.GetLengthBytes() );
 
 		// don't let cloning operation to free old string data
 		// as it will be copied back
 		for ( auto &AttrsPtr : m_dAttrsPtr )
-			pOld->SetAttr ( AttrsPtr, 0 );
+			pDst->SetAttr ( AttrsPtr, 0 );
 
-		m_pSchema->CloneMatch ( pOld, *pNew );
+		m_pSchema->CloneMatch ( pDst, *pSrc );
 
 		for ( auto &AttrsRaw : m_dAttrsRaw )
-			pOld->SetAttr ( AttrsRaw, sphGetRowAttr ( m_dRowBuf.Begin(), AttrsRaw ) );
+			pDst->SetAttr ( AttrsRaw, sphGetRowAttr ( m_dRowBuf.Begin(), AttrsRaw ) );
 		for ( auto &AttrsPtr : m_dAttrsPtr )
-			pOld->SetAttr ( AttrsPtr, sphGetRowAttr ( m_dRowBuf.Begin(), AttrsPtr) );
+			pDst->SetAttr ( AttrsPtr, sphGetRowAttr ( m_dRowBuf.Begin(), AttrsPtr) );
+	}
+
+	inline void AddRaw ( const CSphAttrLocator& tLoc )
+	{
+		m_dAttrsRaw.Add ( tLoc );
+	}
+
+	inline void AddPtr ( const CSphAttrLocator &tLoc )
+	{
+		m_dAttrsPtr.Add ( tLoc );
+	}
+	inline void ResetRaw()
+	{
+		m_dAttrsRaw.Resize(0);
 	}
 };
 
@@ -1720,9 +1728,9 @@ static void ExtractAggregates ( const ISphSchema & tSchema, const CSphAttrLocato
 		}
 
 		if ( tAttr.m_eAggrFunc==SPH_AGGR_CAT )
-			tCloner.m_dAttrsPtr.Add ( tAttr.m_tLocator );
+			tCloner.AddPtr ( tAttr.m_tLocator );
 		else
-			tCloner.m_dAttrsRaw.Add ( tAttr.m_tLocator );
+			tCloner.AddRaw ( tAttr.m_tLocator );
 	}
 }
 
@@ -1756,7 +1764,7 @@ static void FixupSorterLocators ( CSphGroupSorterSettings & tSettings, ISphSchem
 		SafeDelete(i);
 
 	dAggregates.Resize(0);
-	tPregroup.m_dAttrsRaw.Resize(0);
+	tPregroup.ResetRaw ();
 }
 
 
@@ -1816,10 +1824,10 @@ public:
 		ISphMatchSorter::SetSchema ( pSchema );
 
 		m_tPregroup.SetSchema ( m_pSchema );
-		m_tPregroup.m_dAttrsRaw.Add ( m_tLocGroupby );
-		m_tPregroup.m_dAttrsRaw.Add ( m_tLocCount );
+		m_tPregroup.AddRaw ( m_tLocGroupby );
+		m_tPregroup.AddRaw ( m_tLocCount );
 		if_const ( DISTINCT )
-			m_tPregroup.m_dAttrsRaw.Add ( m_tLocDistinct );
+			m_tPregroup.AddRaw ( m_tLocDistinct );
 
 		m_dAvgs.Resize(0);
 		ExtractAggregates ( *m_pSchema, m_tLocCount, m_tGroupSorter.m_eKeypart, m_tGroupSorter.m_tLocator, m_dAggregates, m_dAvgs, m_tPregroup );
@@ -2283,10 +2291,10 @@ public:
 		ISphMatchSorter::SetSchema ( pSchema );
 
 		m_tPregroup.SetSchema ( m_pSchema );
-		m_tPregroup.m_dAttrsRaw.Add ( m_tLocGroupby );
-		m_tPregroup.m_dAttrsRaw.Add ( m_tLocCount );
+		m_tPregroup.AddRaw ( m_tLocGroupby );
+		m_tPregroup.AddRaw ( m_tLocCount );
 		if_const ( DISTINCT )
-			m_tPregroup.m_dAttrsRaw.Add ( m_tLocDistinct );
+			m_tPregroup.AddRaw ( m_tLocDistinct );
 
 		m_dAvgs.Resize(0);
 		ExtractAggregates ( *m_pSchema, m_tLocCount, m_tGroupSorter.m_eKeypart, m_tGroupSorter.m_tLocator, m_dAggregates, m_dAvgs, m_tPregroup );
@@ -3220,10 +3228,10 @@ public:
 		ISphMatchSorter::SetSchema ( pSchema );
 
 		m_tPregroup.SetSchema ( m_pSchema );
-		m_tPregroup.m_dAttrsRaw.Add ( m_tLocGroupby );
-		m_tPregroup.m_dAttrsRaw.Add ( m_tLocCount );
+		m_tPregroup.AddRaw ( m_tLocGroupby );
+		m_tPregroup.AddRaw ( m_tLocCount );
 		if_const ( DISTINCT )
-			m_tPregroup.m_dAttrsRaw.Add ( m_tLocDistinct );
+			m_tPregroup.AddRaw ( m_tLocDistinct );
 
 		CSphVector<IAggrFunc *> dTmp;
 		ESphSortKeyPart dTmpKeypart[CSphMatchComparatorState::MAX_ATTRS] = { SPH_KEYPART_ID };

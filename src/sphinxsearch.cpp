@@ -7301,7 +7301,7 @@ public:
 	int					m_iMinGaps[SPH_MAX_FIELDS];		///< number of gaps in the minimum matching window
 
 	const char *		m_sExpr = nullptr;
-	CSphRefcountedPtr<ISphExpr>	m_pExpr { nullptr };
+	CSphRefcountedPtr<ISphExpr>	m_pExpr;
 	ESphAttr			m_eExprType { SPH_ATTR_NONE };
 	const CSphSchema *	m_pSchema = nullptr;
 	CSphAttrLocator		m_tFieldLensLoc;

@@ -5989,57 +5989,75 @@ void CSphSchemaHelper::InsertAttr ( CSphVector<CSphColumnInfo> & dAttrs, CSphVec
 void CSphSchemaHelper::Reset()
 {
 	m_dDataPtrAttrs.Reset();
+	m_dDynamicUsed.Reset ();
 }
 
+void CSphSchemaHelper::CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const
+{
+	CloneMatchSpecial ( pDst, rhs, m_dDataPtrAttrs );
+}
 
 void CSphSchemaHelper::FreeDataPtrs ( CSphMatch * pMatch ) const
+{
+	FreeDataSpecial ( pMatch, m_dDataPtrAttrs );
+}
+
+void CSphSchemaHelper::CopyPtrs ( CSphMatch * pDst, const CSphMatch &rhs ) const
+{
+	CopyDataSpecial ( pDst, rhs, m_dDataPtrAttrs );
+}
+
+void CSphSchemaHelper::SubsetPtrs ( CSphVector<int> &dDiscarded )
+{
+	CSphVector<int> dFiltered;
+	dDiscarded.Uniq ();
+	for ( int iPtr : m_dDataPtrAttrs )
+		if ( !dDiscarded.BinarySearch ( iPtr ) )
+			dFiltered.Add ( iPtr );
+	dFiltered.Uniq ();
+	dDiscarded.SwapData ( dFiltered );
+}
+
+void CSphSchemaHelper::CloneMatchSpecial ( CSphMatch * pDst, const CSphMatch &rhs, const CSphVector<int> &dSpecials ) const
+{
+	assert ( pDst );
+	FreeDataSpecial ( pDst, dSpecials );
+	pDst->Combine ( rhs, GetDynamicSize () );
+	CopyDataSpecial ( pDst, rhs, dSpecials );
+}
+
+void CSphSchemaHelper::FreeDataSpecial ( CSphMatch * pMatch, const CSphVector<int> &dSpecials )
 {
 	assert ( pMatch );
 	if ( !pMatch->m_pDynamic )
 		return;
 
-	for ( auto iOffset : m_dDataPtrAttrs )
+	for ( auto iOffset : dSpecials )
 	{
-		BYTE * pData = *(BYTE**)(pMatch->m_pDynamic+iOffset);
+		BYTE * pData = *( BYTE ** ) ( pMatch->m_pDynamic + iOffset );
 		if ( pData )
 		{
-			delete [] pData;
-			*(BYTE**)(pMatch->m_pDynamic+iOffset) = NULL;
+			delete[] pData;
+			*( BYTE ** ) ( pMatch->m_pDynamic + iOffset ) = NULL;
 		}
 	}
 }
 
-void CSphSchemaHelper::DiscardPtr ( int iAttr )
-{
-	m_dDataPtrAttrs.RemoveValue ( iAttr );
-}
-
-
-void CSphSchemaHelper::CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const
-{
-	assert ( pDst );
-	FreeDataPtrs ( pDst );
-	pDst->Combine ( rhs, GetDynamicSize() );
-	CopyPtrs ( pDst, rhs );
-}
-
-
-void CSphSchemaHelper::CopyPtrs ( CSphMatch * pDst, const CSphMatch & rhs ) const
+void CSphSchemaHelper::CopyDataSpecial ( CSphMatch * pDst, const CSphMatch &rhs, const CSphVector<int> &dSpecials )
 {
 	// notes on PACKEDFACTORS
 	// not immediately obvious: this is not needed while pushing matches to sorters; factors are held in an outer hash table
 	// but it is necessary to copy factors when combining results from several indexes via a sorter because at this moment matches are the owners of factor data
-	for ( auto i : m_dDataPtrAttrs )
+	for ( auto i : dSpecials )
 	{
-		const BYTE * pData = *(BYTE**)(rhs.m_pDynamic+i);
+		const BYTE * pData = *( BYTE ** ) ( rhs.m_pDynamic + i );
 		if ( pData )
 		{
 			int nBytes = sphUnpackPtrAttr ( pData, &pData );
-			*(BYTE**)(pDst->m_pDynamic+i) = sphPackPtrAttr ( pData, nBytes );
+			*( BYTE ** ) ( pDst->m_pDynamic + i ) = sphPackPtrAttr ( pData, nBytes );
 		}
 	}
 }
-
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -6048,8 +6066,8 @@ CSphSchema::CSphSchema ( const char * sName )
 	, m_iFirstFieldLenAttr ( -1 )
 	, m_iLastFieldLenAttr ( -1 )
 {
-	for ( int i=0; i<BUCKET_COUNT; i++ )
-		m_dBuckets[i] = 0xffff;
+	for ( auto & dBucket : m_dBuckets )
+		dBucket = 0xffff;
 }
 
 
@@ -6237,10 +6255,9 @@ void CSphSchema::Reset ()
 
 	m_dFields.Reset();
 	m_dAttrs.Reset();
-	for ( int i=0; i<BUCKET_COUNT; i++ )
-		m_dBuckets[i] = 0xffff;
+	for ( auto & dBucket : m_dBuckets )
+		dBucket = 0xffff;
 	m_dStaticUsed.Reset();
-	m_dDynamicUsed.Reset();
 }
 
 
@@ -6412,18 +6429,12 @@ void CSphSchema::SwapAttrs ( CSphVector<CSphColumnInfo> & dAttrs )
 
 //////////////////////////////////////////////////////////////////////////
 
-CSphRsetSchema::CSphRsetSchema()
-	: m_pIndexSchema ( NULL )
-{}
-
-
 void CSphRsetSchema::Reset ()
 {
 	CSphSchemaHelper::Reset();
 
-	m_pIndexSchema = NULL;
+	m_pIndexSchema = nullptr;
 	m_dExtraAttrs.Reset();
-	m_dDynamicUsed.Reset();
 }
 
 
@@ -6445,9 +6456,7 @@ int CSphRsetSchema::GetRowSize() const
 	// we copy over dynamic map in case index schema has dynamic attributes
 	// (that happens in case of inline attributes, or RAM segments in RT indexes)
 	// so there is no need to add GetDynamicSize() here
-	return m_pIndexSchema
-		? m_dDynamicUsed.GetLength() + m_pIndexSchema->GetStaticSize()
-		: m_dDynamicUsed.GetLength();
+	return GetDynamicSize () + m_pIndexSchema ? m_pIndexSchema->GetStaticSize() : 0;
 }
 
 
@@ -6455,13 +6464,6 @@ int CSphRsetSchema::GetStaticSize() const
 {
 	// result set schemas additions are always dynamic
 	return m_pIndexSchema ? m_pIndexSchema->GetStaticSize() : 0;
-}
-
-
-int CSphRsetSchema::GetDynamicSize() const
-{
-	// we copy over dynamic map in case index schema has dynamic attributes
-	return m_dDynamicUsed.GetLength();
 }
 
 
@@ -14580,9 +14582,8 @@ void CSphIndex_VLN::CopyDocinfo ( const CSphQueryContext * pCtx, CSphMatch & tMa
 
 static inline void CalcContextItems ( CSphMatch & tMatch, const CSphVector<CSphQueryContext::CalcItem_t> & dItems )
 {
-	ARRAY_FOREACH ( i, dItems )
+	for ( const CSphQueryContext::CalcItem_t & tCalc : dItems )
 	{
-		const CSphQueryContext::CalcItem_t & tCalc = dItems[i];
 		switch ( tCalc.m_eType )
 		{
 			case SPH_ATTR_INTEGER:

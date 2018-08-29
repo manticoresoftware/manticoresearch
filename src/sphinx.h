@@ -1552,6 +1552,10 @@ public:
 	/// simple copy; clones either the entire dynamic part, or a part thereof
 	virtual void					CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const = 0;
 
+	// clone all raw attrs and only specified dynamics
+	virtual void					CloneMatchSpecial ( CSphMatch * pDst, const CSphMatch &rhs,
+														const CSphVector<int> &dSpecials ) const = 0;
+
 	virtual void					SwapAttrs ( CSphVector<CSphColumnInfo> & dAttrs ) = 0;
 };
 
@@ -1562,16 +1566,28 @@ class CSphSchemaHelper : public ISphSchema
 public:
 	void	FreeDataPtrs ( CSphMatch * pMatch ) const final;
 	void	CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const final;
-	void 	DiscardPtr ( int iAttr );
+	void	CloneMatchSpecial ( CSphMatch * pDst, const CSphMatch &rhs, const CSphVector<int> &dSpecials ) const final;
+
+	// exclude vec of rowitems from dataPtrAttrs and return diff back
+	void SubsetPtrs ( CSphVector<int> &dSpecials );
+
+	/// get dynamic row part size
+	int GetDynamicSize () const final { return m_dDynamicUsed.GetLength (); }
 
 protected:
-	CSphVector<int>	m_dDataPtrAttrs;				// rowitems of pointers to data that are stored inside matches
+	CSphVector<int>	m_dDataPtrAttrs;		///< rowitems of pointers to data that are stored inside matches
+	CSphVector<int> m_dDynamicUsed;			///< dynamic row part map
 
 	/// generic InsertAttr() implementation that tracks data ptr attributes
 	void			InsertAttr ( CSphVector<CSphColumnInfo> & dAttrs, CSphVector<int> & dUsed, int iPos, const CSphColumnInfo & tCol, bool bDynamic );
 	void			Reset();
 
 	void			CopyPtrs ( CSphMatch * pDst, const CSphMatch & rhs ) const;
+
+public:
+	// free/copy by specified vec of rowitems, assumed to be from SubsetPtrs() call.
+	static void	FreeDataSpecial ( CSphMatch * pMatch, const CSphVector<int> &dSpecials );
+	static void	CopyDataSpecial ( CSphMatch * pDst, const CSphMatch &rhs, const CSphVector<int> &dSpecials );
 };
 
 
@@ -1620,13 +1636,10 @@ public:
 	void					Reset ();
 
 	/// get row size (static+dynamic combined)
-	virtual int				GetRowSize () const				{ return m_dStaticUsed.GetLength() + m_dDynamicUsed.GetLength(); }
+	virtual int				GetRowSize () const				{ return GetStaticSize () + GetDynamicSize(); }
 
 	/// get static row part size
 	virtual int				GetStaticSize () const			{ return m_dStaticUsed.GetLength(); }
-
-	/// get dynamic row part size
-	virtual int				GetDynamicSize () const			{ return m_dDynamicUsed.GetLength(); }
 
 	virtual int				GetAttrsCount () const			{ return m_dAttrs.GetLength(); }
 	virtual int				GetFieldsCount() const			{ return m_dFields.GetLength(); }
@@ -1680,7 +1693,6 @@ protected:
 	CSphVector<CSphColumnInfo>	m_dFields;		///< my fulltext-searchable fields
 	CSphVector<CSphColumnInfo>	m_dAttrs;		///< all my attributes
 	CSphVector<int>				m_dStaticUsed;	///< static row part map (amount of used bits in each rowitem)
-	CSphVector<int>				m_dDynamicUsed;	///< dynamic row part map
 
 
 	/// returns 0xffff if bucket list is empty and position otherwise
@@ -1703,20 +1715,16 @@ protected:
 class CSphRsetSchema : public CSphSchemaHelper
 {
 protected:
-	const CSphSchema *			m_pIndexSchema;		///< original index schema, for the static part
+	const CSphSchema *			m_pIndexSchema = nullptr;		///< original index schema, for the static part
 	CSphVector<CSphColumnInfo>	m_dExtraAttrs;		///< additional dynamic attributes, for the dynamic one
-	CSphVector<int>				m_dDynamicUsed;		///< dynamic row part map
 	CSphVector<int>				m_dRemoved;			///< original indexes that are suppressed from the index schema by RemoveStaticAttr()
 
 private:
 	int							ActualLen() const;	///< len of m_pIndexSchema accounting removed stuff
 
 public:
-								CSphRsetSchema();
-								~CSphRsetSchema() override
-	{
-		assert (true);
-	};
+								~CSphRsetSchema() override {}
+
 	CSphRsetSchema &			operator = ( const ISphSchema & rhs );
 	CSphRsetSchema &			operator = ( const CSphSchema & rhs );
 
@@ -1727,7 +1735,6 @@ public:
 public:
 	virtual int					GetRowSize() const;
 	virtual int					GetStaticSize() const;
-	virtual int					GetDynamicSize() const;
 	virtual int					GetAttrsCount() const;
 	virtual int					GetFieldsCount() const;
 	virtual int					GetAttrIndex ( const char * sName ) const;

@@ -1642,11 +1642,11 @@ public:
 class CSphTokenFilter : public ISphTokenizer
 {
 protected:
-	ISphTokenizer *		m_pTokenizer;
+	ISphTokenizerRefPtr_c		m_pTokenizer;
 
 public:
-	explicit						CSphTokenFilter ( ISphTokenizer * pTokenizer )					: m_pTokenizer ( pTokenizer ) {}
-									~CSphTokenFilter()												{ SafeDelete ( m_pTokenizer ); }
+	explicit						CSphTokenFilter ( ISphTokenizer * pTokenizer )					: m_pTokenizer ( pTokenizer ) {	SafeAddRef ( pTokenizer ); }
+
 
 	virtual bool					SetCaseFolding ( const char * sConfig, CSphString & sError )	{ return m_pTokenizer->SetCaseFolding ( sConfig, sError ); }
 	virtual void					AddPlainChar ( char c )											{ m_pTokenizer->AddPlainChar ( c ); }
@@ -1693,13 +1693,12 @@ struct CSphReconfigureSettings
 
 struct CSphReconfigureSetup
 {
-	ISphTokenizer *		m_pTokenizer;
-	CSphDict *			m_pDict;
+	ISphTokenizerRefPtr_c	m_pTokenizer;
+	CSphDict *			m_pDict = nullptr;
 	CSphIndexSettings	m_tIndex;
-	ISphFieldFilter *	m_pFieldFilter;
+	ISphFieldFilter *	m_pFieldFilter = nullptr;
 	CSphSchema			m_tSchema;
 
-	CSphReconfigureSetup ();
 	~CSphReconfigureSetup ();
 };
 
@@ -2151,13 +2150,12 @@ struct GetKeywordsSettings_t
 
 struct ISphQueryFilter
 {
-	ISphTokenizer *				m_pTokenizer;
-	CSphDict *					m_pDict;
-	const CSphIndexSettings *	m_pSettings;
+	ISphTokenizerRefPtr_c		m_pTokenizer;
+	CSphDict *					m_pDict = nullptr;
+	const CSphIndexSettings *	m_pSettings = nullptr;
 	GetKeywordsSettings_t		m_tFoldSettings;
 
-	ISphQueryFilter ();
-	virtual ~ISphQueryFilter ();
+	virtual ~ISphQueryFilter () {}
 
 	void GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const ExpansionContext_t & tCtx );
 	virtual void AddKeywordStats ( BYTE * sWord, const BYTE * sTokenized, int iQpos, CSphVector <CSphKeywordInfo> & dKeywords ) = 0;

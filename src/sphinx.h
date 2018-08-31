@@ -509,12 +509,11 @@ struct CSphMultiformContainer;
 class CSphWriter;
 
 /// generic tokenizer
-class ISphTokenizer
+class ISphTokenizer : public ISphRefcountedMT
 {
-public:
-	/// trivial dtor
-	virtual							~ISphTokenizer () {}
-
+	/// trivial dtor - inherited from Refcounted
+protected:
+	~ISphTokenizer() override {};
 public:
 	/// set new translation table
 	/// returns true on success, false on failure
@@ -701,6 +700,8 @@ protected:
 public:
 	bool							m_bPhrase = false;
 };
+
+using ISphTokenizerRefPtr_c = CSphRefcountedPtr<ISphTokenizer>;
 
 /// parse charset table
 bool					sphParseCharset ( const char * sCharset, CSphVector<CSphRemapRange> & dRemaps );
@@ -3446,9 +3447,9 @@ protected:
 	CSphIndexSettings			m_tSettings;
 
 	ISphFieldFilter *			m_pFieldFilter;
-	ISphTokenizer *				m_pTokenizer;
-	ISphTokenizer *				m_pQueryTokenizer;
-	ISphTokenizer *				m_pQueryTokenizerJson {nullptr};
+	ISphTokenizerRefPtr_c		m_pTokenizer;
+	ISphTokenizerRefPtr_c		m_pQueryTokenizer;
+	ISphTokenizerRefPtr_c		m_pQueryTokenizerJson;
 	CSphDict *					m_pDict;
 
 	int							m_iMaxCachedDocs;

@@ -191,7 +191,6 @@ protected:
 
 	virtual void TearDown ()
 	{
-		SafeDelete ( pTok );
 		sphRTDone ();
 		DeleteIndexFiles ( RT_INDEX_FILE_NAME );
 	}
@@ -200,7 +199,7 @@ protected:
 	CSphSchema tSrcSchema;
 	CSphString sError, sWarning;
 
-	ISphTokenizer * pTok = nullptr;
+	ISphTokenizerRefPtr_c pTok;
 
 	CSphDictSettings tDictSettings;
 };

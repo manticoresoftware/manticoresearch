@@ -30,7 +30,7 @@ protected:
 		if ( !( uMode & TOK_NO_SHORT ) )
 			tSettings.m_iMinWordLen = 2;
 
-		ISphTokenizer * pTokenizer = ISphTokenizer::Create ( tSettings, NULL, sError );
+		ISphTokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tSettings, NULL, sError ) };
 		if ( !( uMode & TOK_NO_DASH ) )
 		{
 			Verify ( pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z, U+80..U+FF", sError ) );
@@ -51,20 +51,11 @@ protected:
 		// however, Clone() adds backslash as a special
 		// and that must be done *after* SetCaseFolding, otherwise it's not special any more
 		ISphTokenizer * pTokenizer1 = pTokenizer->Clone ( SPH_CLONE_QUERY );
-		SafeDelete ( pTokenizer );
-
 		return pTokenizer1;
 	}
 
-
-	void TearDown () override
-	{
-		SafeDelete ( m_pTokenizer );
-	}
-
-
-	ISphTokenizer * m_pTokenizer = nullptr;
-	ISphTokenizer *& pTokenizer = m_pTokenizer;
+	ISphTokenizerRefPtr_c m_pTokenizer;
+	ISphTokenizerRefPtr_c& pTokenizer = m_pTokenizer;
 	CSphString sError;
 };
 
@@ -541,7 +532,7 @@ TEST_P ( TokenizerP, short_token_handling )
 		NULL
 	};
 
-	ISphTokenizer * pShortTokenizer = m_pTokenizer->Clone ( SPH_CLONE_QUERY );
+	ISphTokenizerRefPtr_c pShortTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
 	pShortTokenizer->AddPlainChar ( '*' );
 
 	CSphTokenizerSettings tSettings = pShortTokenizer->GetSettings ();
@@ -563,8 +554,6 @@ TEST_P ( TokenizerP, short_token_handling )
 		ASSERT_FALSE ( dTestsShort[iCur] );
 		iCur++;
 	}
-
-	SafeDelete ( pShortTokenizer );
 }
 
 TEST_P( TokenizerP, boundaries )
@@ -676,7 +665,7 @@ protected:
 		tSchema.AddField ( "title" );
 		tSchema.AddField ( "body" );
 
-		CSphScopedPtr<ISphTokenizer> pBase ( sphCreateUTF8Tokenizer () );
+		ISphTokenizerRefPtr_c pBase ( sphCreateUTF8Tokenizer () );
 		CSphTokenizerSettings tTokenizerSetup;
 		tTokenizerSetup.m_iMinWordLen = 2;
 		tTokenizerSetup.m_sSynonymsFile = g_sTmpfile;

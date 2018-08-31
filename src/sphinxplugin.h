@@ -13,7 +13,7 @@
 #ifndef _sphinxplugin_
 #define _sphinxplugin_
 
-#include "sphinxstd.h"
+#include "sphinxexpr.h"
 extern "C"
 {
 #include "sphinxudf.h"

@@ -592,7 +592,7 @@ bool sphPluginReload ( const char * sName, CSphString & sError )
 
 PluginDesc_c * sphPluginAcquire ( const char * szLib, PluginType_e eType, const char * szName, CSphString & sError )
 {
-	PluginDesc_c * pDesc = sphPluginGet ( eType, szName );
+	CSphRefcountedPtr<PluginDesc_c> pDesc { sphPluginGet ( eType, szName ) };
 	if ( !pDesc )
 	{
 		if ( !sphPluginCreate ( szLib, eType, szName, SPH_ATTR_NONE, sError ) )
@@ -603,11 +603,10 @@ PluginDesc_c * sphPluginAcquire ( const char * szLib, PluginType_e eType, const 
 	CSphString sLib ( szLib );
 	sLib.ToLower();
 	if ( pDesc->GetLibName()==sLib )
-		return pDesc;
+		return pDesc.Leak();
 
 	sError.SetSprintf ( "unable to load plugin '%s' from '%s': it has already been loaded from library '%s'",
 		szName, sLib.cstr(), pDesc->GetLibName().cstr() );
-	pDesc->Release();
 	return nullptr;
 }
 

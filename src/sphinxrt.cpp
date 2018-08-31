@@ -1155,7 +1155,7 @@ private:
 	bool						m_bKeywordDict;
 	int							m_iWordsCheckpoint;
 	int							m_iMaxCodepointLength;
-	ISphTokenizer *				m_pTokenizerIndexing;
+	ISphTokenizerRefPtr_c		m_pTokenizerIndexing;
 	bool						m_bLoadRamPassedOk;
 
 	bool						m_bMlock;
@@ -1307,7 +1307,6 @@ RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int6
 	, m_bKeywordDict ( bKeywordDict )
 	, m_iWordsCheckpoint ( RTDICT_CHECKPOINT_V5 )
 	, m_iMaxCodepointLength ( 0 )
-	, m_pTokenizerIndexing ( nullptr )
 	, m_dFieldLens ( SPH_MAX_FIELDS )
 	, m_dFieldLensRam ( SPH_MAX_FIELDS )
 	, m_dFieldLensDisk ( SPH_MAX_FIELDS )
@@ -1357,17 +1356,15 @@ RtIndex_t::~RtIndex_t ()
 	Verify ( m_tReading.Done() );
 	Verify ( m_tChunkLock.Done() );
 
-	ARRAY_FOREACH ( i, m_dRamChunks )
-		SafeDelete ( m_dRamChunks[i] );
+	for ( auto & dRamChunk : m_dRamChunks )
+		SafeDelete ( dRamChunk );
 
 	m_dRetired.Uniq();
-	ARRAY_FOREACH ( i, m_dRetired )
-		SafeDelete ( m_dRetired[i] );
+	for ( auto & dRetired : m_dRetired )
+		SafeDelete ( dRetired );
 
-	ARRAY_FOREACH ( i, m_dDiskChunks )
-		SafeDelete ( m_dDiskChunks[i] );
-
-	SafeDelete ( m_pTokenizerIndexing );
+	for ( auto & dDiskChunk : m_dDiskChunks )
+		SafeDelete ( dDiskChunk );
 
 	if ( m_iLockFD>=0 )
 		::close ( m_iLockFD );
@@ -1528,7 +1525,7 @@ bool RtIndex_t::AddDocument ( ISphTokenizer * pTokenizer, int iFields, const cha
 {
 	assert ( g_bRTChangesAllowed );
 
-	CSphScopedPtr<ISphTokenizer> tTokenizer ( pTokenizer );
+	ISphTokenizerRefPtr_c tTokenizer { pTokenizer };
 
 	if ( !tDoc.m_uDocID )
 		return true;
@@ -1553,8 +1550,8 @@ bool RtIndex_t::AddDocument ( ISphTokenizer * pTokenizer, int iFields, const cha
 	// OPTIMIZE? do not create filter on each(!) INSERT
 	if ( !m_tSettings.m_sIndexTokenFilter.IsEmpty() )
 	{
-		tTokenizer.ReplacePtr ( ISphTokenizer::CreatePluginFilter ( tTokenizer.Ptr(), m_tSettings.m_sIndexTokenFilter, sError ) );
-		if ( !tTokenizer.Ptr() )
+		tTokenizer = ISphTokenizer::CreatePluginFilter ( tTokenizer, m_tSettings.m_sIndexTokenFilter, sError );
+		if ( !tTokenizer )
 			return false;
 		if ( !tTokenizer->SetFilterSchema ( m_tSchema, sError ) )
 			return false;
@@ -1565,7 +1562,7 @@ bool RtIndex_t::AddDocument ( ISphTokenizer * pTokenizer, int iFields, const cha
 
 	// OPTIMIZE? do not create filter on each(!) INSERT
 	if ( m_tSettings.m_uAotFilterMask )
-		tTokenizer.ReplacePtr ( sphAotCreateFilter ( tTokenizer.Ptr(), m_pDict, m_tSettings.m_bIndexExactWords, m_tSettings.m_uAotFilterMask ) );
+		tTokenizer = sphAotCreateFilter ( tTokenizer, m_pDict, m_tSettings.m_bIndexExactWords, m_tSettings.m_uAotFilterMask );
 
 	CSphSource_StringVector tSrc ( iFields, ppFields, m_tSchema );
 
@@ -1586,7 +1583,7 @@ bool RtIndex_t::AddDocument ( ISphTokenizer * pTokenizer, int iFields, const cha
 		pFieldFilter = m_pFieldFilter->Clone();
 
 	tSrc.Setup ( m_tSettings );
-	tSrc.SetTokenizer ( tTokenizer.Ptr() );
+	tSrc.SetTokenizer ( tTokenizer );
 	tSrc.SetDict ( pAcc->m_pDict );
 	tSrc.SetFieldFilter ( pFieldFilter.Ptr() );
 	tSrc.SetMorphFields ( m_tMorphFields );
@@ -4214,7 +4211,6 @@ bool RtIndex_t::Prealloc ( bool bStripPath )
 		}
 
 		// recreate tokenizer
-		SafeDelete ( m_pTokenizer );
 		m_pTokenizer = ISphTokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, m_sLastError );
 		if ( !m_pTokenizer )
 			return false;
@@ -4654,7 +4650,7 @@ void RtIndex_t::PostSetup()
 
 	// FIXME!!! handle error
 	m_pTokenizerIndexing = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
-	ISphTokenizer * pIndexing = ISphTokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError );
+	ISphTokenizerRefPtr_c pIndexing { ISphTokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError ) };
 	if ( pIndexing )
 		m_pTokenizerIndexing = pIndexing;
 
@@ -6474,7 +6470,7 @@ void RtIndex_t::GetSuggest ( const SuggestArgs_t & tArgs, SuggestResult_t & tRes
 		// FIXME!!! cache InfixCodepointBytes as it is slow - GetMaxCodepointLength is charset_table traverse
 		sphGetSuggest ( this, m_pTokenizer->GetMaxCodepointLength(), tArgs, tRes );
 
-		RtWordReader_t * pReader = (RtWordReader_t *)tRes.m_pWordReader;
+		auto pReader = ( RtWordReader_t * ) tRes.m_pWordReader;
 		SafeDelete ( pReader );
 		tRes.m_pWordReader = NULL;
 		tRes.m_pSegments = NULL;
@@ -6614,7 +6610,8 @@ static CSphDict * SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDic
 }
 
 
-static CSphDict * SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict, ISphTokenizer * pTokenizer, bool bKeywordDict, bool bStarDict )
+static CSphDict * SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict,
+	ISphTokenizer * pTokenizer,	bool bKeywordDict, bool bStarDict )
 {
 	assert ( pTokenizer );
 	if ( !bKeywordDict )
@@ -6842,11 +6839,11 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	// wrappers
 	// OPTIMIZE! make a lightweight clone here? and/or remove double clone?
-	CSphScopedPtr<ISphTokenizer> pQueryTokenizerJson ( m_pTokenizer->Clone ( SPH_CLONE_QUERY ) );
-	sphSetupQueryTokenizer ( pQueryTokenizerJson.Ptr(), IsStarDict(), m_tSettings.m_bIndexExactWords, true );
+	ISphTokenizerRefPtr_c pQueryTokenizerJson { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
+	sphSetupQueryTokenizer ( pQueryTokenizerJson, IsStarDict(), m_tSettings.m_bIndexExactWords, true );
 
-	CSphScopedPtr<ISphTokenizer> pQueryTokenizer ( m_pTokenizer->Clone ( SPH_CLONE_QUERY ) );
-	sphSetupQueryTokenizer ( pQueryTokenizer.Ptr(), IsStarDict(), m_tSettings.m_bIndexExactWords, false );
+	ISphTokenizerRefPtr_c pQueryTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
+	sphSetupQueryTokenizer ( pQueryTokenizer, IsStarDict(), m_tSettings.m_bIndexExactWords, false );
 
 	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
 	CSphDict * pDict = m_pDict;
@@ -6856,10 +6853,10 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	}
 
 	CSphScopedPtr<CSphDict> tDictStar ( NULL );
-	pDict = SetupStarDict ( tDictStar, pDict, pQueryTokenizer.Ptr(), m_bKeywordDict, IsStarDict() );
+	pDict = SetupStarDict ( tDictStar, pDict, pQueryTokenizer, m_bKeywordDict, IsStarDict() );
 
 	CSphScopedPtr<CSphDict> tDictExact ( NULL );
-	pDict = SetupExactDict ( tDictExact, pDict, pQueryTokenizer.Ptr(), true, m_tSettings.m_bIndexExactWords );
+	pDict = SetupExactDict ( tDictExact, pDict, pQueryTokenizer, true, m_tSettings.m_bIndexExactWords );
 
 	// calculate local idf for RT with disk chunks
 	// in case of local_idf set but no external hash no full-scan query and RT has disk chunks
@@ -7120,7 +7117,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	// no need to create ranker, etc if there's no query
 	if ( !pQueryParser->IsFullscan(*pQuery) )
 	{
-		if ( !pQueryParser->ParseQuery ( tParsed, (const char *)sModifiedQuery, pQuery, pQueryTokenizer.Ptr(), pQueryTokenizerJson.Ptr(), &m_tSchema, pDict, m_tSettings ) )
+		if ( !pQueryParser->ParseQuery ( tParsed, (const char *)sModifiedQuery, pQuery, pQueryTokenizer, pQueryTokenizerJson, &m_tSchema, pDict, m_tSettings ) )
 		{
 			pResult->m_sError = tParsed.m_sParseError;
 			return false;
@@ -7547,7 +7544,7 @@ bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 
 	RtQword_t tQword;
 
-	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( SPH_CLONE_INDEX ) ); // avoid race
+	ISphTokenizerRefPtr_c pTokenizer { m_pTokenizer->Clone ( SPH_CLONE_INDEX ) };
 	pTokenizer->EnableTokenizedMultiformTracking ();
 
 	// need to support '*' and '=' but not the other specials
@@ -7563,10 +7560,10 @@ bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 	}
 
 	CSphScopedPtr<CSphDict> tDict ( NULL );
-	CSphDict * pDict = SetupStarDict ( tDict, pDictBase, pTokenizer.Ptr(), m_bKeywordDict, IsStarDict() );
+	CSphDict * pDict = SetupStarDict ( tDict, pDictBase, pTokenizer, m_bKeywordDict, IsStarDict() );
 
 	CSphScopedPtr<CSphDict> tDict2 ( NULL );
-	pDict = SetupExactDict ( tDict2, pDict, pTokenizer.Ptr(), false, m_tSettings.m_bIndexExactWords );
+	pDict = SetupExactDict ( tDict2, pDict, pTokenizer, false, m_tSettings.m_bIndexExactWords );
 
 	// FIXME!!! missed bigram, FieldFilter
 
@@ -7579,7 +7576,7 @@ bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 		bool bExpandWildcards = ( m_bKeywordDict && IsStarDict() && !tSettings.m_bFoldWildcards );
 
 		CSphRtQueryFilter tAotFilter ( this, &tQword, tGuard );
-		tAotFilter.m_pTokenizer = pTokenizer.Ptr();
+		tAotFilter.m_pTokenizer = pTokenizer;
 		tAotFilter.m_pDict = pDict;
 		tAotFilter.m_pSettings = &m_tSettings;
 		tAotFilter.m_tFoldSettings = tSettings;
@@ -8319,7 +8316,6 @@ bool RtIndex_t::AttachDiskIndex ( CSphIndex * pIndex, CSphString & sError )
 	m_tStats.m_iTotalDocuments += pIndex->GetStats().m_iTotalDocuments;
 
 	// copy tokenizer, dict etc settings from new index
-	SafeDelete ( m_pTokenizer );
 	SafeDelete ( m_pDict );
 
 	m_tSettings = pIndex->GetSettings();
@@ -8876,15 +8872,15 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError )
 {
 	// FIXME!!! check missed embedded files
-	CSphScopedPtr<ISphTokenizer> tTokenizer ( ISphTokenizer::Create ( tSettings.m_tTokenizer, NULL, sError ) );
-	if ( !tTokenizer.Ptr() )
+	ISphTokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tSettings.m_tTokenizer, NULL, sError ) };
+	if ( !pTokenizer )
 	{
 		sError.SetSprintf ( "'%s' failed to create tokenizer, error '%s'", sIndexName.cstr(), sError.cstr() );
 		return true;
 	}
 
 	// dict setup second
-	CSphScopedPtr<CSphDict> tDict ( sphCreateDictionaryCRC ( tSettings.m_tDict, NULL, tTokenizer.Ptr(), sIndexName.cstr(), sError ) );
+	CSphScopedPtr<CSphDict> tDict ( sphCreateDictionaryCRC ( tSettings.m_tDict, NULL, pTokenizer, sIndexName.cstr(), sError ) );
 	if ( !tDict.Ptr() )
 	{
 		sError.SetSprintf ( "'%s' failed to create dictionary, error '%s'", sIndexName.cstr(), sError.cstr() );
@@ -8892,15 +8888,15 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	}
 
 	// multiforms right after dict
-	tTokenizer = ISphTokenizer::CreateMultiformFilter ( tTokenizer.LeakPtr(), tDict->GetMultiWordforms() );
+	pTokenizer = ISphTokenizer::CreateMultiformFilter ( pTokenizer, tDict->GetMultiWordforms() );
 
 	// bigram filter
 	if ( tSettings.m_tIndex.m_eBigramIndex!=SPH_BIGRAM_NONE && tSettings.m_tIndex.m_eBigramIndex!=SPH_BIGRAM_ALL )
 	{
-		tTokenizer->SetBuffer ( (BYTE*)tSettings.m_tIndex.m_sBigramWords.cstr(), tSettings.m_tIndex.m_sBigramWords.Length() );
+		pTokenizer->SetBuffer ( (BYTE*)tSettings.m_tIndex.m_sBigramWords.cstr(), tSettings.m_tIndex.m_sBigramWords.Length() );
 
 		BYTE * pTok = NULL;
-		while ( ( pTok = tTokenizer->GetToken() )!=NULL )
+		while ( ( pTok = pTokenizer->GetToken() )!=NULL )
 			tSettings.m_tIndex.m_dBigramWords.Add() = (const char*)pTok;
 
 		tSettings.m_tIndex.m_dBigramWords.Sort();
@@ -8967,11 +8963,11 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	}
 
 	// compare options
-	if ( !bSame || uTokHash!=tTokenizer->GetSettingsFNV() || uDictHash!=tDict->GetSettingsFNV() ||
-		iMaxCodepointLength!=tTokenizer->GetMaxCodepointLength() || sphGetSettingsFNV ( tIndexSettings )!=sphGetSettingsFNV ( tSettings.m_tIndex ) ||
+	if ( !bSame || uTokHash!=pTokenizer->GetSettingsFNV() || uDictHash!=tDict->GetSettingsFNV() ||
+		iMaxCodepointLength!=pTokenizer->GetMaxCodepointLength() || sphGetSettingsFNV ( tIndexSettings )!=sphGetSettingsFNV ( tSettings.m_tIndex ) ||
 		!bReFilterSame || !bRlpSame )
 	{
-		tSetup.m_pTokenizer = tTokenizer.LeakPtr();
+		tSetup.m_pTokenizer = pTokenizer.Leak();
 		tSetup.m_pDict = tDict.LeakPtr();
 		tSetup.m_tIndex = tSettings.m_tIndex;
 		tSetup.m_pFieldFilter = tFieldFilter.LeakPtr();
@@ -9001,14 +8997,12 @@ void RtIndex_t::Reconfigure ( CSphReconfigureSetup & tSetup )
 	SetupQueryTokenizer();
 
 	// FIXME!!! handle error
-	SafeDelete ( m_pTokenizerIndexing );
 	m_pTokenizerIndexing = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
-	ISphTokenizer * pIndexing = ISphTokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError );
+	ISphTokenizerRefPtr_c pIndexing { ISphTokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError ) };
 	if ( pIndexing )
 		m_pTokenizerIndexing = pIndexing;
 
 	// clean-up
-	tSetup.m_pTokenizer = NULL;
 	tSetup.m_pDict = NULL;
 	tSetup.m_pFieldFilter = NULL;
 }
@@ -9050,16 +9044,8 @@ uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings )
 	return uHash;
 }
 
-CSphReconfigureSetup::CSphReconfigureSetup ()
-	: m_pTokenizer ( NULL )
-	, m_pDict ( NULL )
-	, m_pFieldFilter ( NULL )
-{}
-
-
 CSphReconfigureSetup::~CSphReconfigureSetup()
 {
-	SafeDelete ( m_pTokenizer );
 	SafeDelete ( m_pDict );
 	SafeDelete ( m_pFieldFilter );
 }
@@ -10624,7 +10610,7 @@ public:
 	int					UpdateAttributes ( const CSphAttrUpdate & , int , CSphString & sError, CSphString & ) override { NotImplementedError ( &sError ); return -1; }
 	bool				SaveAttributes ( CSphString & ) const override { return true; }
 	DWORD				GetAttributeStatus () const override { return 0; }
-	virtual bool				CreateModifiedFiles ( bool , const CSphString & , ESphAttr , int , CSphString & ) { return true; }
+	virtual bool		CreateModifiedFiles ( bool , const CSphString & , ESphAttr , int , CSphString & ) { return true; }
 	bool				AddRemoveAttribute ( bool , const CSphString & , ESphAttr , CSphString & sError ) override { return NotImplementedError ( &sError ); }
 	void				DebugDumpHeader ( FILE *, const char *, bool ) override {}
 	void				DebugDumpDocids ( FILE * ) override {}
@@ -10640,7 +10626,7 @@ private:
 
 	int								m_iLockFD = -1;
 	CSphSourceStats					m_tStat;
-	ISphTokenizer *					m_pTokenizerIndexing = nullptr;
+	ISphTokenizerRefPtr_c			m_pTokenizerIndexing;
 	int								m_iMaxCodepointLength = 0;
 	int64_t							m_iSavedTID = 1;
 	int64_t							m_tmSaved = 0;
@@ -11205,8 +11191,6 @@ PercolateIndex_c::~PercolateIndex_c ()
 	if ( bValid )
 		SaveMeta();
 
-	SafeDelete ( m_pTokenizerIndexing );
-
 	{ // coverity complains about accessing m_dStored without locking tLock
 		CSphScopedWLock tLock { m_tLock };
 		for ( auto& dStored : m_dStored )
@@ -11232,7 +11216,7 @@ bool PercolateIndex_c::AddDocument ( ISphTokenizer * pTokenizer, int iFields, co
 	if ( m_tSettings.m_uAotFilterMask )
 		pTokenizer = sphAotCreateFilter ( pTokenizer, m_pDict, m_tSettings.m_bIndexExactWords, m_tSettings.m_uAotFilterMask );
 
-	CSphScopedPtr<ISphTokenizer> tTokenizer { pTokenizer };
+	ISphTokenizerRefPtr_c tTokenizer { pTokenizer };
 
 	// SPZ setup
 	if ( m_tSettings.m_bIndexSP && !pTokenizer->EnableSentenceIndexing ( sError ) )
@@ -12038,32 +12022,33 @@ bool PercolateIndex_c::EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch
 }
 
 
-bool PercolateIndex_c::Query ( const char * sQuery, const char * sTags, const CSphVector<CSphFilterSettings> * pFilters, const CSphVector<FilterTreeItem_t> * pFilterTree, bool bReplace, bool bQL, uint64_t & uId, CSphString & sError )
+bool PercolateIndex_c::Query ( const char * sQuery, const char * sTags, const CSphVector<CSphFilterSettings> * pFilters,
+	const CSphVector<FilterTreeItem_t> * pFilterTree, bool bReplace, bool bQL, uint64_t & uId, CSphString & sError )
 {
-	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( SPH_CLONE_QUERY ) );
-	sphSetupQueryTokenizer ( pTokenizer.Ptr(), IsStarDict(), m_tSettings.m_bIndexExactWords, false );
+	ISphTokenizerRefPtr_c pTokenizer ( m_pTokenizer->Clone ( SPH_CLONE_QUERY ) );
+	sphSetupQueryTokenizer ( pTokenizer, IsStarDict(), m_tSettings.m_bIndexExactWords, false );
 
-	CSphScopedPtr<ISphTokenizer> pTokenizerJson ( nullptr );
+	ISphTokenizerRefPtr_c pTokenizerJson;
 	if ( !bQL )
 	{
 		pTokenizerJson = m_pTokenizer->Clone ( SPH_CLONE_QUERY );
-		sphSetupQueryTokenizer ( pTokenizerJson.Ptr(), IsStarDict(), m_tSettings.m_bIndexExactWords, true );
+		sphSetupQueryTokenizer ( pTokenizerJson, IsStarDict(), m_tSettings.m_bIndexExactWords, true );
 	}
 
-	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
+	CSphScopedPtr<CSphDict> tDictCloned ( nullptr );
 	CSphDict * pDict = m_pDict;
 	if ( pDict->HasState() )
 	{
 		tDictCloned = pDict = pDict->Clone();
 	}
 
-	CSphScopedPtr<CSphDict> tDictStar ( NULL );
-	pDict = SetupStarDict ( tDictStar, pDict, pTokenizer.Ptr(), true, IsStarDict() );
+	CSphScopedPtr<CSphDict> tDictStar ( nullptr );
+	pDict = SetupStarDict ( tDictStar, pDict, pTokenizer, true, IsStarDict() );
 
-	CSphScopedPtr<CSphDict> tDictExact ( NULL );
-	pDict = SetupExactDict ( tDictExact, pDict, pTokenizer.Ptr(), true, m_tSettings.m_bIndexExactWords );
+	CSphScopedPtr<CSphDict> tDictExact ( nullptr );
+	pDict = SetupExactDict ( tDictExact, pDict, pTokenizer, true, m_tSettings.m_bIndexExactWords );
 
-	const ISphTokenizer * pTok = ( bQL ? pTokenizer.Ptr() : pTokenizerJson.Ptr() );
+	const ISphTokenizer * pTok = bQL ? pTokenizer : pTokenizerJson;
 	return AddQuery ( sQuery, sTags, pFilters, pFilterTree, bReplace, bQL, uId, pTok, pDict, sError );
 }
 
@@ -12099,7 +12084,9 @@ static void FixExpanded ( XQNode_t * pNode )
 		FixExpanded ( pNode->m_dChildren[i] );
 }
 
-bool PercolateIndex_c::AddQuery ( const char * sQuery, const char * sTags, const CSphVector<CSphFilterSettings> * pFilters, const CSphVector<FilterTreeItem_t> * pFilterTree, bool bReplace, bool bQL, uint64_t & uId, const ISphTokenizer * pTokenizer, CSphDict * pDict, CSphString & sError )
+bool PercolateIndex_c::AddQuery ( const char * sQuery, const char * sTags, const CSphVector<CSphFilterSettings> * pFilters,
+	const CSphVector<FilterTreeItem_t> * pFilterTree, bool bReplace, bool bQL, uint64_t & uId,
+	const ISphTokenizer * pTokenizer, CSphDict * pDict, CSphString & sError )
 {
 	CSphVector<BYTE> dFiltered;
 	if ( m_pFieldFilter )
@@ -12284,16 +12271,16 @@ void PercolateIndex_c::PostSetup()
 
 	// FIXME!!! handle error
 	m_pTokenizerIndexing = m_pTokenizer->Clone ( SPH_CLONE_INDEX );
-	ISphTokenizer * pIndexing = ISphTokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError );
+	ISphTokenizerRefPtr_c pIndexing { ISphTokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError ) };
 	if ( pIndexing )
 		m_pTokenizerIndexing = pIndexing;
 
 	// create queries
-	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( SPH_CLONE_QUERY ) );
-	sphSetupQueryTokenizer ( pTokenizer.Ptr(), IsStarDict(), m_tSettings.m_bIndexExactWords, false );
+	ISphTokenizerRefPtr_c pTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
+	sphSetupQueryTokenizer ( pTokenizer, IsStarDict(), m_tSettings.m_bIndexExactWords, false );
 
-	CSphScopedPtr<ISphTokenizer> pTokenizerJson ( m_pTokenizer->Clone ( SPH_CLONE_QUERY ) );
-	sphSetupQueryTokenizer ( pTokenizerJson.Ptr(), IsStarDict(), m_tSettings.m_bIndexExactWords, true );
+	ISphTokenizerRefPtr_c pTokenizerJson { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };
+	sphSetupQueryTokenizer ( pTokenizerJson, IsStarDict(), m_tSettings.m_bIndexExactWords, true );
 
 	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
 	CSphDict * pDict = m_pDict;
@@ -12301,16 +12288,16 @@ void PercolateIndex_c::PostSetup()
 		tDictCloned = pDict = pDict->Clone();
 
 	CSphScopedPtr<CSphDict> tDictStar ( NULL );
-	pDict = SetupStarDict ( tDictStar, pDict, pTokenizer.Ptr(), true, IsStarDict() );
+	pDict = SetupStarDict ( tDictStar, pDict, pTokenizer, true, IsStarDict() );
 
 	CSphScopedPtr<CSphDict> tDictExact ( NULL );
-	pDict = SetupExactDict ( tDictExact, pDict, pTokenizer.Ptr(), true, m_tSettings.m_bIndexExactWords );
+	pDict = SetupExactDict ( tDictExact, pDict, pTokenizer, true, m_tSettings.m_bIndexExactWords );
 
 	CSphString sError;
 	ARRAY_FOREACH ( i, m_dLoadedQueries )
 	{
 		const StoredQuery_t & tQuery = m_dLoadedQueries[i];
-		const ISphTokenizer * pTok = tQuery.m_bQL ? pTokenizer.Ptr() : pTokenizerJson.Ptr();
+		const ISphTokenizer * pTok = tQuery.m_bQL ? pTokenizer : pTokenizerJson;
 		uint64_t uUID = tQuery.m_uUID;
 		bool bLoaded = AddQuery ( tQuery.m_sQuery.cstr(), tQuery.m_sTags.cstr(), &tQuery.m_dFilters, &tQuery.m_dFilterTree, false, tQuery.m_bQL, uUID, pTok, pDict, sError );
 		if ( !bLoaded )
@@ -12395,7 +12382,6 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath )
 	}
 
 	// recreate tokenizer
-	SafeDelete ( m_pTokenizer );
 	m_pTokenizer = ISphTokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, m_sLastError );
 	if ( !m_pTokenizer )
 		return false;
@@ -12726,7 +12712,6 @@ void PercolateIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 	PostSetup();
 
 	// clean-up
-	tSetup.m_pTokenizer = NULL;
 	tSetup.m_pDict = NULL;
 	tSetup.m_pFieldFilter = NULL;
 

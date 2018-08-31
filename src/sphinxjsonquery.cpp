@@ -272,7 +272,9 @@ class QueryParserJson_c : public QueryParser_i
 public:
 	virtual bool	IsFullscan ( const CSphQuery & tQuery ) const;
 	virtual bool	IsFullscan ( const XQQuery_t & tQuery ) const;
-	virtual bool	ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const ISphTokenizer * pQueryTokenizer, const ISphTokenizer * pQueryTokenizerJson, const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings ) const;
+	virtual bool	ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery,
+		const ISphTokenizer * pQueryTokenizer, const ISphTokenizer * pQueryTokenizerJson,
+		const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings ) const;
 
 private:
 	XQNode_t *		ConstructMatchNode ( XQNode_t * pParent, const cJSON * pJson, bool bPhrase, QueryTreeBuilder_c & tBuilder ) const;
@@ -299,7 +301,9 @@ bool QueryParserJson_c::IsFullscan ( const XQQuery_t & tQuery ) const
 }
 
 
-bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, const CSphQuery * /*pQuery*/, const ISphTokenizer *, const ISphTokenizer * pQueryTokenizerJson, const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings ) const
+bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, const CSphQuery * /*pQuery*/,
+	const ISphTokenizer *, const ISphTokenizer * pQueryTokenizerJson, const CSphSchema * pSchema, CSphDict * pDict,
+	const CSphIndexSettings & tSettings ) const
 {
 	CJsonScopedPtr_c pJsonRoot ( cJSON_Parse ( szQuery ) );
 	assert ( pJsonRoot.Ptr() );
@@ -312,7 +316,7 @@ bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, 
 		return false;
 	}
 
-	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pQueryTokenizerJson->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT ) );
+	ISphTokenizerRefPtr_c pMyTokenizer { pQueryTokenizerJson->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT ) };
 
 	CSphDict * pMyDict = pDict;
 	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
@@ -320,7 +324,7 @@ bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, 
 		tDictCloned = pMyDict = pDict->Clone();
 
 	QueryTreeBuilder_c tBuilder;
-	tBuilder.Setup ( pSchema, pMyTokenizer.Ptr(), pMyDict, &tParsed, tSettings );
+	tBuilder.Setup ( pSchema, pMyTokenizer, pMyDict, &tParsed, tSettings );
 
 	tParsed.m_pRoot = ConstructNode ( NULL, cJSON_GetArrayItem ( pJsonRoot.Ptr(), 0 ), tBuilder );
 	if ( tBuilder.IsError() )

@@ -144,7 +144,7 @@ void BenchTokenizer ()
 	{
 		char * sData = LoadFile ( "./configure", &iBytes, true );
 
-		ISphTokenizer * pTokenizer = sphCreateUTF8Tokenizer ();
+		ISphTokenizerRefPtr_c pTokenizer { sphCreateUTF8Tokenizer () };
 		// pTokenizer->SetCaseFolding ( "-, 0..9, A..Z->a..z, _, a..z", sError );
 		if ( iRun==2 )
 			pTokenizer->LoadSynonyms ( g_sTmpfile, NULL, sError );
@@ -153,7 +153,6 @@ void BenchTokenizer ()
 		printf ( "run %d: ", iRun );
 		BenchTokenizer ( pTokenizer, (BYTE*)sData, iBytes );
 		SafeDeleteArray ( sData );
-		SafeDelete ( pTokenizer );
 	}
 
 	char * sData = LoadFile ( "./utf8.txt", &iBytes, false );
@@ -162,7 +161,6 @@ void BenchTokenizer ()
 		ISphTokenizer * pTokenizer = sphCreateUTF8Tokenizer ();
 		printf ( "run 3: " );
 		BenchTokenizer ( pTokenizer, (BYTE*)sData, iBytes );
-		SafeDelete ( pTokenizer );
 	}
 	SafeDeleteArray ( sData );
 }
@@ -737,7 +735,7 @@ void BenchStemmer ()
 	printf ( "read %d bytes\n", iLen );
 	fclose ( fp );
 
-	ISphTokenizer * pTok = sphCreateUTF8Tokenizer();
+	ISphTokenizerRefPtr_c pTok { sphCreateUTF8Tokenizer() };
 	if ( !pTok->SetCaseFolding ( "A..Z->a..z, a..z", sError ) )
 		sphDie ( "oops: %s", sError.cstr() );
 
@@ -838,7 +836,6 @@ void BenchStemmer ()
 	if ( uHash!=U64C ( 0x54ef4f21994b67db ) )
 		printf ( "ERROR, HASH MISMATCH\n" );
 
-	SafeDelete ( pTok );
 	SafeDeleteArray ( pRaw );
 }
 

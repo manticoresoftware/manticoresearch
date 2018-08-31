@@ -18088,7 +18088,7 @@ bool RotateIndexGreedy ( const ServedIndex_c * pIndex, ServedDesc_t &tWlockedInd
 	}
 
 	// try to use new index
-	CSphScopedPtr<ISphTokenizer> pTokenizer ( tWlockedIndex.m_pIndex->LeakTokenizer () ); // FIXME! disable support of that old indexes and remove this bullshit
+	ISphTokenizerRefPtr_c pTokenizer { tWlockedIndex.m_pIndex->LeakTokenizer () }; // FIXME! disable support of that old indexes and remove this bullshit
 	CSphScopedPtr<CSphDict> pDictionary ( tWlockedIndex.m_pIndex->LeakDictionary () );
 
 //	bool bRolledBack = false;
@@ -18118,7 +18118,7 @@ bool RotateIndexGreedy ( const ServedIndex_c * pIndex, ServedDesc_t &tWlockedInd
 		sphWarning ( "rotating index '%s': %s", sIndex, tWlockedIndex.m_pIndex->GetLastWarning().cstr() );
 
 	if ( !tWlockedIndex.m_pIndex->GetTokenizer () )
-		tWlockedIndex.m_pIndex->SetTokenizer ( pTokenizer.LeakPtr () );
+		tWlockedIndex.m_pIndex->SetTokenizer ( pTokenizer );
 
 	if ( !tWlockedIndex.m_pIndex->GetDictionary () )
 		tWlockedIndex.m_pIndex->SetDictionary ( pDictionary.LeakPtr () );

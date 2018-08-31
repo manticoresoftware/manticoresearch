@@ -1647,7 +1647,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		CSphTokenizerSettings tSettings;
 		sphConfTokenizer ( hIndex, tSettings );
 
-		ISphTokenizer * pTokenizer = ISphTokenizer::Create ( tSettings, nullptr, sError );
+		ISphTokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tSettings, nullptr, sError ) };
 		if ( !pTokenizer )
 			return false;
 
@@ -1682,8 +1682,10 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 
 	if ( bTokenizerSpawned )
 	{
-		pIndex->SetTokenizer ( ISphTokenizer::CreateMultiformFilter ( pIndex->LeakTokenizer(),
-			pIndex->GetDictionary()->GetMultiWordforms () ) );
+		ISphTokenizerRefPtr_c pOldTokenizer { pIndex->LeakTokenizer () };
+		ISphTokenizerRefPtr_c pMultiTokenizer
+			{ ISphTokenizer::CreateMultiformFilter ( pOldTokenizer, pIndex->GetDictionary ()->GetMultiWordforms () ) };
+		pIndex->SetTokenizer ( pMultiTokenizer );
 	}
 
 	pIndex->SetupQueryTokenizer();

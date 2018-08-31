@@ -301,7 +301,9 @@ public:
 	virtual ~QueryParser_i () {}
 	virtual bool IsFullscan ( const CSphQuery & tQuery ) const = 0;
 	virtual bool IsFullscan ( const XQQuery_t & tQuery ) const = 0;
-	virtual bool ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery, const ISphTokenizer * pQueryTokenizer, const ISphTokenizer * pQueryTokenizerJson, const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings ) const = 0;
+	virtual bool ParseQuery ( XQQuery_t & tParsed, const char * sQuery, const CSphQuery * pQuery,
+		const ISphTokenizer * pQueryTokenizer, const ISphTokenizer * pQueryTokenizerJson,
+		const CSphSchema * pSchema, CSphDict * pDict, const CSphIndexSettings & tSettings ) const = 0;
 };
 
 class PluginQueryTokenFilter_c;

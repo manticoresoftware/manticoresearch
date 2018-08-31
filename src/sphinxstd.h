@@ -2444,8 +2444,7 @@ public:
 	/// assignment of a raw pointer, takes over ownership!
 	CSphRefcountedPtr<T> & operator = ( T * pPtr )
 	{
-		if ( m_pPtr!=pPtr )
-			SafeRelease ( m_pPtr );
+		SafeRelease ( m_pPtr );
 		m_pPtr = pPtr;
 		return *this;
 	}

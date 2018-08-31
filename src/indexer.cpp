@@ -932,7 +932,7 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 	CSphDictSettings tDictSettings;
 	sphConfDictionary ( hIndex, tDictSettings );
 
-	ISphTokenizer * pTokenizer = ISphTokenizer::Create ( tTokSettings, NULL, sError );
+	ISphTokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tTokSettings, NULL, sError ) };
 	if ( !pTokenizer )
 		sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
@@ -1101,7 +1101,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 	{
 		fprintf ( stdout, "ERROR: index '%s': failed to configure some of the sources, will not index.\n", sIndexName );
 		SafeDelete ( pDict );
-		SafeDelete ( pTokenizer );
 		return false;
 	}
 
@@ -1157,7 +1156,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 		tDict.Save ( g_sBuildStops, g_iTopStops, g_bBuildFreqs );
 
 		SafeDelete ( pFieldFilter );
-		SafeDelete ( pTokenizer );
 
 		bOK = true;
 

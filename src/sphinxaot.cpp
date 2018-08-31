@@ -1477,7 +1477,7 @@ public:
 		// this token filter must NOT be created as escaped
 		// it must only be used during indexing time, NEVER in searching time
 		assert ( eMode==SPH_CLONE_INDEX );
-		auto * pClone = new CSphAotTokenizerRu ( m_pTokenizer->Clone ( eMode ), NULL, m_bIndexExact );
+		auto * pClone = new CSphAotTokenizerRu ( ISphTokenizerRefPtr_c ( m_pTokenizer->Clone ( eMode ) ), NULL, m_bIndexExact );
 		if ( m_pWordforms )
 			pClone->m_pWordforms = m_pWordforms;
 		return pClone;
@@ -1594,6 +1594,7 @@ public:
 class CSphAotTokenizer : public CSphAotTokenizerTmpl
 {
 	AOT_LANGS		m_iLang;
+
 public:
 	CSphAotTokenizer ( ISphTokenizer * pTok, CSphDict * pDict, bool bIndexExact, int iLang )
 		: CSphAotTokenizerTmpl ( pTok, pDict, bIndexExact, iLang )
@@ -1605,7 +1606,7 @@ public:
 		// this token filter must NOT be created as escaped
 		// it must only be used during indexing time, NEVER in searching time
 		assert ( eMode==SPH_CLONE_INDEX );
-		auto * pClone = new CSphAotTokenizer ( m_pTokenizer->Clone ( eMode ), nullptr, m_bIndexExact, m_iLang );
+		auto * pClone = new CSphAotTokenizer ( ISphTokenizerRefPtr_c ( m_pTokenizer->Clone ( eMode ) ), nullptr, m_bIndexExact, m_iLang );
 		if ( m_pWordforms )
 			pClone->m_pWordforms = m_pWordforms;
 		return pClone;
@@ -1742,7 +1743,7 @@ public:
 CSphTokenFilter * sphAotCreateFilter ( ISphTokenizer * pTokenizer, CSphDict * pDict, bool bIndexExact, DWORD uLangMask )
 {
 	assert ( uLangMask!=0 );
-	CSphTokenFilter * pDerivedTokenizer = nullptr;
+	CSphRefcountedPtr<CSphTokenFilter> pDerivedTokenizer;
 	for ( int i=AOT_BEGIN; i<AOT_LENGTH; ++i )
 	{
 		if ( uLangMask & (1UL<<i) )
@@ -1754,7 +1755,7 @@ CSphTokenFilter * sphAotCreateFilter ( ISphTokenizer * pTokenizer, CSphDict * pD
 			pTokenizer = pDerivedTokenizer;
 		}
 	}
-	return pDerivedTokenizer;
+	return pDerivedTokenizer.Leak();
 }
 
 

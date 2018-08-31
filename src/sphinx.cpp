@@ -1093,7 +1093,7 @@ struct WriteHeader_t
 {
 	const CSphIndexSettings * m_pSettings;
 	const CSphSchema * m_pSchema;
-	const ISphTokenizer * m_pTokenizer;
+	ISphTokenizerRefPtr_c m_pTokenizer;
 	const CSphDict * m_pDict;
 	const ISphFieldFilter * m_pFieldFilter;
 	const int64_t * m_pFieldLens;
@@ -1268,7 +1268,7 @@ bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	if ( !szQuery || !szQuery[0] )
 		return true;
 
-	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( SPH_CLONE_INDEX ) ); // avoid race
+	ISphTokenizerRefPtr_c pTokenizer { m_pTokenizer->Clone ( SPH_CLONE_INDEX ) };
 	pTokenizer->EnableTokenizedMultiformTracking ();
 
 	// need to support '*' and '=' but not the other specials
@@ -1305,7 +1305,7 @@ bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	pTokenizer->SetBuffer ( sModifiedQuery, strlen ( (const char*)sModifiedQuery) );
 
 	CSphTemplateQueryFilter tAotFilter;
-	tAotFilter.m_pTokenizer = pTokenizer.Ptr();
+	tAotFilter.m_pTokenizer = pTokenizer;
 	tAotFilter.m_pDict = pDict;
 	tAotFilter.m_pSettings = &m_tSettings;
 	tAotFilter.m_tFoldSettings = tSettings;
@@ -2231,9 +2231,11 @@ inline int sphUTF8Encode ( BYTE * pBuf, int iCode ); // forward ref for GCC
 
 class CSphTokenizerBase : public ISphTokenizer
 {
+protected:
+	~CSphTokenizerBase ();
+
 public:
 	CSphTokenizerBase();
-	~CSphTokenizerBase();
 
 	bool			SetCaseFolding ( const char * sConfig, CSphString & sError ) override;
 	bool			LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, CSphString & sError ) override;
@@ -2426,7 +2428,6 @@ class CSphMultiformTokenizer : public CSphTokenFilter
 {
 public:
 	CSphMultiformTokenizer ( ISphTokenizer * pTokenizer, const CSphMultiformContainer * pContainer );
-	~CSphMultiformTokenizer ();
 
 	virtual bool					SetCaseFolding ( const char * sConfig, CSphString & sError )	{ return m_pTokenizer->SetCaseFolding ( sConfig, sError ); }
 	virtual void					AddPlainChar ( char c )											{ m_pTokenizer->AddPlainChar ( c ); }
@@ -2556,18 +2557,17 @@ public:
 		m_dWords = pBase->m_dWords;
 	}
 
-	ISphTokenizer * Clone ( ESphTokenizerClone eMode ) const
+	ISphTokenizer * Clone ( ESphTokenizerClone eMode ) const final
 	{
-		ISphTokenizer * pTok = m_pTokenizer->Clone ( eMode );
-		return new CSphBigramTokenizer ( pTok, this );
+		return new CSphBigramTokenizer ( ISphTokenizerRefPtr_c ( m_pTokenizer->Clone ( eMode ) ), this );
 	}
 
-	void SetBuffer ( const BYTE * sBuffer, int iLength )
+	void SetBuffer ( const BYTE * sBuffer, int iLength ) final
 	{
 		m_pTokenizer->SetBuffer ( sBuffer, iLength );
 	}
 
-	bool TokenIsBlended() const
+	bool TokenIsBlended() const final
 	{
 		if ( m_eState==BIGRAM_PAIR )
 			return true;
@@ -2595,7 +2595,7 @@ public:
 		return m_dWords[iPos]!=0;
 	}
 
-	BYTE * GetToken()
+	BYTE * GetToken() final
 	{
 		if ( m_eState==BIGRAM_FIRST || m_eState==BIGRAM_CLEAN )
 		{
@@ -2684,7 +2684,7 @@ public:
 		return NULL;
 	}
 
-	uint64_t GetSettingsFNV () const
+	uint64_t GetSettingsFNV () const final
 	{
 		uint64_t uHash = CSphTokenFilter::GetSettingsFNV();
 		uHash = sphFNV64 ( m_dWords.Begin(), m_dWords.GetLength(), uHash );
@@ -3574,7 +3574,7 @@ void ISphTokenizer::Setup ( const CSphTokenizerSettings & tSettings )
 
 ISphTokenizer * ISphTokenizer::Create ( const CSphTokenizerSettings & tSettings, const CSphEmbeddedFiles * pFiles, CSphString & sError )
 {
-	CSphScopedPtr<ISphTokenizer> pTokenizer ( NULL );
+	ISphTokenizerRefPtr_c pTokenizer;
 
 	switch ( tSettings.m_iType )
 	{
@@ -3582,7 +3582,7 @@ ISphTokenizer * ISphTokenizer::Create ( const CSphTokenizerSettings & tSettings,
 		case TOKENIZER_NGRAM:	pTokenizer = sphCreateUTF8NgramTokenizer (); break;
 		default:
 			sError.SetSprintf ( "failed to create tokenizer (unknown charset type '%d')", tSettings.m_iType );
-			return NULL;
+			return nullptr;
 	}
 
 	pTokenizer->Setup ( tSettings );
@@ -3590,38 +3590,38 @@ ISphTokenizer * ISphTokenizer::Create ( const CSphTokenizerSettings & tSettings,
 	if ( !tSettings.m_sCaseFolding.IsEmpty () && !pTokenizer->SetCaseFolding ( tSettings.m_sCaseFolding.cstr (), sError ) )
 	{
 		sError.SetSprintf ( "'charset_table': %s", sError.cstr() );
-		return NULL;
+		return nullptr;
 	}
 
 	if ( !tSettings.m_sSynonymsFile.IsEmpty () && !pTokenizer->LoadSynonyms ( tSettings.m_sSynonymsFile.cstr (),
-		pFiles && pFiles->m_bEmbeddedSynonyms ? pFiles : NULL, sError ) )
+		pFiles && pFiles->m_bEmbeddedSynonyms ? pFiles : nullptr, sError ) )
 	{
 		sError.SetSprintf ( "'synonyms': %s", sError.cstr() );
-		return NULL;
+		return nullptr;
 	}
 
 	if ( !tSettings.m_sBoundary.IsEmpty () && !pTokenizer->SetBoundary ( tSettings.m_sBoundary.cstr (), sError ) )
 	{
 		sError.SetSprintf ( "'phrase_boundary': %s", sError.cstr() );
-		return NULL;
+		return nullptr;
 	}
 
 	if ( !tSettings.m_sIgnoreChars.IsEmpty () && !pTokenizer->SetIgnoreChars ( tSettings.m_sIgnoreChars.cstr (), sError ) )
 	{
 		sError.SetSprintf ( "'ignore_chars': %s", sError.cstr() );
-		return NULL;
+		return nullptr;
 	}
 
 	if ( !tSettings.m_sBlendChars.IsEmpty () && !pTokenizer->SetBlendChars ( tSettings.m_sBlendChars.cstr (), sError ) )
 	{
 		sError.SetSprintf ( "'blend_chars': %s", sError.cstr() );
-		return NULL;
+		return nullptr;
 	}
 
 	if ( !pTokenizer->SetBlendMode ( tSettings.m_sBlendMode.cstr (), sError ) )
 	{
 		sError.SetSprintf ( "'blend_mode': %s", sError.cstr() );
-		return NULL;
+		return nullptr;
 	}
 
 	pTokenizer->SetNgramLen ( tSettings.m_iNgramLen );
@@ -3629,17 +3629,20 @@ ISphTokenizer * ISphTokenizer::Create ( const CSphTokenizerSettings & tSettings,
 	if ( !tSettings.m_sNgramChars.IsEmpty () && !pTokenizer->SetNgramChars ( tSettings.m_sNgramChars.cstr (), sError ) )
 	{
 		sError.SetSprintf ( "'ngram_chars': %s", sError.cstr() );
-		return NULL;
+		return nullptr;
 	}
 
-	return pTokenizer.LeakPtr ();
+	return pTokenizer.Leak ();
 }
 
 
 ISphTokenizer * ISphTokenizer::CreateMultiformFilter ( ISphTokenizer * pTokenizer, const CSphMultiformContainer * pContainer )
 {
 	if ( !pContainer )
+	{
+		SafeAddRef ( pTokenizer );
 		return pTokenizer;
+	}
 	return new CSphMultiformTokenizer ( pTokenizer, pContainer );
 }
 
@@ -3649,7 +3652,10 @@ ISphTokenizer * ISphTokenizer::CreateBigramFilter ( ISphTokenizer * pTokenizer, 
 	assert ( pTokenizer );
 
 	if ( eBigramIndex==SPH_BIGRAM_NONE )
+	{
+		SafeAddRef ( pTokenizer );
 		return pTokenizer;
+	}
 
 	StrVec_t dFreq;
 	if ( eBigramIndex!=SPH_BIGRAM_ALL )
@@ -3676,20 +3682,23 @@ class PluginFilterTokenizer_c : public CSphTokenFilter
 protected:
 	const PluginTokenFilter_c *	m_pFilter;		///< plugin descriptor
 	CSphString					m_sOptions;		///< options string for the plugin init()
-	void *						m_pUserdata;	///< userdata returned from by the plugin init()
-	bool						m_bGotExtra;	///< are we looping through extra tokens?
-	int							m_iPosDelta;	///< position delta for the current token, see comments in GetToken()
-	bool						m_bWasBlended;	///< whether the last raw token was blended
+	void *						m_pUserdata = nullptr;	///< userdata returned from by the plugin init()
+	bool						m_bGotExtra = false;	///< are we looping through extra tokens?
+	int							m_iPosDelta = 0;		///< position delta for the current token, see comments in GetToken()
+	bool						m_bWasBlended = false;	///< whether the last raw token was blended
+
+	~PluginFilterTokenizer_c () final
+	{
+		if ( m_pFilter->m_fnDeinit )
+			m_pFilter->m_fnDeinit ( m_pUserdata );
+		m_pFilter->Release ();
+	}
 
 public:
 	PluginFilterTokenizer_c ( ISphTokenizer * pTok, const PluginTokenFilter_c * pFilter, const char * sOptions )
 		: CSphTokenFilter ( pTok )
 		, m_pFilter ( pFilter )
 		, m_sOptions ( sOptions )
-		, m_pUserdata ( NULL )
-		, m_bGotExtra ( false )
-		, m_iPosDelta ( 0 )
-		, m_bWasBlended ( false )
 	{
 		assert ( m_pTokenizer );
 		assert ( m_pFilter );
@@ -3699,20 +3708,13 @@ public:
 		SetFilterSchema ( CSphSchema(), sError );
 	}
 
-	~PluginFilterTokenizer_c()
+	ISphTokenizer * Clone ( ESphTokenizerClone eMode ) const final
 	{
-		if ( m_pFilter->m_fnDeinit )
-			m_pFilter->m_fnDeinit ( m_pUserdata );
-		m_pFilter->Release();
-	}
-
-	ISphTokenizer * Clone ( ESphTokenizerClone eMode ) const
-	{
-		ISphTokenizer * pTok = m_pTokenizer->Clone ( eMode );
+		ISphTokenizerRefPtr_c pTok { m_pTokenizer->Clone ( eMode ) };
 		return new PluginFilterTokenizer_c ( pTok, m_pFilter, m_sOptions.cstr() );
 	}
 
-	virtual bool SetFilterSchema ( const CSphSchema & s, CSphString & sError )
+	bool SetFilterSchema ( const CSphSchema & s, CSphString & sError ) final
 	{
 		if ( m_pUserdata && m_pFilter->m_fnDeinit )
 			m_pFilter->m_fnDeinit ( m_pUserdata );
@@ -3728,7 +3730,7 @@ public:
 		return false;
 	}
 
-	virtual bool SetFilterOptions ( const char * sOptions, CSphString & sError )
+	bool SetFilterOptions ( const char * sOptions, CSphString & sError ) final
 	{
 		char sErrBuf[SPH_UDF_ERROR_LEN+1];
 		if ( m_pFilter->m_fnBeginDocument ( m_pUserdata, sOptions, sErrBuf )==0 )
@@ -3737,13 +3739,13 @@ public:
 		return false;
 	}
 
-	virtual void BeginField ( int iField )
+	void BeginField ( int iField ) final
 	{
 		if ( m_pFilter->m_fnBeginField )
 			m_pFilter->m_fnBeginField ( m_pUserdata, iField );
 	}
 
-	virtual BYTE * GetToken ()
+	BYTE * GetToken () final
 	{
 		// we have two principal states here
 		// a) have pending extra tokens, keep looping and returning those
@@ -3803,12 +3805,12 @@ public:
 		}
 	}
 
-	virtual int GetOvershortCount()
+	int GetOvershortCount() final
 	{
 		return m_iPosDelta-1;
 	}
 
-	virtual bool TokenIsBlended() const
+	bool TokenIsBlended() const final
 	{
 		return false;
 	}
@@ -3819,20 +3821,21 @@ ISphTokenizer * ISphTokenizer::CreatePluginFilter ( ISphTokenizer * pTokenizer, 
 {
 	StrVec_t dPlugin; // dll, filtername, options
 	if ( !sphPluginParseSpec ( sSpec, dPlugin, sError ) )
-		return NULL;
+		return nullptr;
 
 	if ( !dPlugin.GetLength() )
+	{
+		SafeAddRef ( pTokenizer );
 		return pTokenizer;
+	}
 
-	const PluginDesc_c * p = sphPluginAcquire ( dPlugin[0].cstr(), PLUGIN_INDEX_TOKEN_FILTER, dPlugin[1].cstr(), sError );
+	CSphRefcountedPtr<PluginTokenFilter_c> p { ( PluginTokenFilter_c *) sphPluginAcquire ( dPlugin[0].cstr(), PLUGIN_INDEX_TOKEN_FILTER, dPlugin[1].cstr(), sError ) };
 	if ( !p )
 	{
 		sError.SetSprintf ( "INTERNAL ERROR: plugin %s:%s loaded ok but lookup fails, error: %s", dPlugin[0].cstr(), dPlugin[1].cstr(), sError.cstr() );
-		return NULL;
+		return nullptr;
 	}
-	ISphTokenizer * pPluginTokenizer = new PluginFilterTokenizer_c ( pTokenizer, (const PluginTokenFilter_c *)p, dPlugin[2].cstr() );
-	p->Release(); // plugin got owned by filter no need to leak counter
-	return pPluginTokenizer;
+	return new PluginFilterTokenizer_c ( pTokenizer, p, dPlugin[2].cstr () );
 }
 
 
@@ -5106,13 +5109,6 @@ CSphMultiformTokenizer::CSphMultiformTokenizer ( ISphTokenizer * pTokenizer, con
 	m_sTokenizedMultiform[0] = '\0';
 }
 
-
-CSphMultiformTokenizer::~CSphMultiformTokenizer ()
-{
-	SafeDelete ( m_pTokenizer );
-}
-
-
 BYTE * CSphMultiformTokenizer::GetToken ()
 {
 	if ( m_iOutputPending > -1 && m_pCurrentForm )
@@ -5301,7 +5297,7 @@ BYTE * CSphMultiformTokenizer::GetToken ()
 
 ISphTokenizer * CSphMultiformTokenizer::Clone ( ESphTokenizerClone eMode ) const
 {
-	ISphTokenizer * pClone = m_pTokenizer->Clone ( eMode );
+	ISphTokenizerRefPtr_c pClone { m_pTokenizer->Clone ( eMode ) };
 	return CreateMultiformFilter ( pClone, m_pMultiWordforms );
 }
 
@@ -8457,8 +8453,6 @@ CSphIndex::CSphIndex ( const char * sIndexName, const char * sFilename )
 	, m_bBinlog ( true )
 	, m_bStripperInited ( true )
 	, m_pFieldFilter ( NULL )
-	, m_pTokenizer ( NULL )
-	, m_pQueryTokenizer ( NULL )
 	, m_pDict ( NULL )
 	, m_iMaxCachedDocs ( 0 )
 	, m_iMaxCachedHits ( 0 )
@@ -8473,9 +8467,6 @@ CSphIndex::~CSphIndex ()
 {
 	QcacheDeleteIndex ( m_iIndexId );
 	SafeDelete ( m_pFieldFilter );
-	SafeDelete ( m_pQueryTokenizer );
-	SafeDelete ( m_pQueryTokenizerJson );
-	SafeDelete ( m_pTokenizer );
 	SafeDelete ( m_pDict );
 }
 
@@ -8500,8 +8491,7 @@ void CSphIndex::SetFieldFilter ( ISphFieldFilter * pFieldFilter )
 
 void CSphIndex::SetTokenizer ( ISphTokenizer * pTokenizer )
 {
-	if ( m_pTokenizer!=pTokenizer )
-		SafeDelete ( m_pTokenizer );
+	SafeAddRef ( pTokenizer );
 	m_pTokenizer = pTokenizer;
 }
 
@@ -8510,11 +8500,9 @@ void CSphIndex::SetupQueryTokenizer()
 {
 	// create and setup a master copy of query time tokenizer
 	// that we can then use to create lightweight clones
-	SafeDelete ( m_pQueryTokenizer );
 	m_pQueryTokenizer = m_pTokenizer->Clone ( SPH_CLONE_QUERY );
 	sphSetupQueryTokenizer ( m_pQueryTokenizer, IsStarDict(), m_tSettings.m_bIndexExactWords, false );
 
-	SafeDelete ( m_pQueryTokenizerJson );
 	m_pQueryTokenizerJson = m_pTokenizer->Clone ( SPH_CLONE_QUERY );
 	sphSetupQueryTokenizer ( m_pQueryTokenizerJson, IsStarDict(), m_tSettings.m_bIndexExactWords, true );
 }
@@ -8522,9 +8510,7 @@ void CSphIndex::SetupQueryTokenizer()
 
 ISphTokenizer *	CSphIndex::LeakTokenizer ()
 {
-	ISphTokenizer * pTokenizer = m_pTokenizer;
-	m_pTokenizer = NULL;
-	return pTokenizer;
+	return m_pTokenizer.Leak();
 }
 
 
@@ -15456,9 +15442,6 @@ void CSphIndex_VLN::Dealloc ()
 	m_tSettings.m_eDocinfo = SPH_DOCINFO_NONE;
 
 	SafeDelete ( m_pFieldFilter );
-	SafeDelete ( m_pQueryTokenizer );
-	SafeDelete ( m_pQueryTokenizerJson );
-	SafeDelete ( m_pTokenizer );
 	SafeDelete ( m_pDict );
 
 	if ( m_iIndexTag>=0 && g_pMvaArena )
@@ -15646,7 +15629,7 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 		if ( bStripPath )
 			StripPath ( tTokSettings.m_sSynonymsFile );
 
-		ISphTokenizer * pTokenizer = ISphTokenizer::Create ( tTokSettings, &tEmbeddedFiles, m_sLastError );
+		ISphTokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tTokSettings, &tEmbeddedFiles, m_sLastError ) };
 		if ( !pTokenizer )
 			return false;
 
@@ -16686,20 +16669,6 @@ GetKeywordsSettings_t::GetKeywordsSettings_t ()
 	m_iExpansionLimit = 0;
 }
 
-
-ISphQueryFilter::ISphQueryFilter ()
-{
-	m_pTokenizer = NULL;
-	m_pDict = NULL;
-	m_pSettings = NULL;
-}
-
-
-ISphQueryFilter::~ISphQueryFilter ()
-{
-}
-
-
 void ISphQueryFilter::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const ExpansionContext_t & tCtx )
 {
 	assert ( m_pTokenizer && m_pDict && m_pSettings );
@@ -16926,17 +16895,6 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	if ( ( bFillOnly && !dKeywords.GetLength() ) || ( !bFillOnly && ( !szQuery || !szQuery[0] ) ) )
 		return true;
 
-	// TODO: in case of bFillOnly skip tokenizer cloning and setup
-	CSphScopedPtr<ISphTokenizer> pTokenizer ( m_pTokenizer->Clone ( SPH_CLONE_INDEX ) ); // avoid race
-	pTokenizer->EnableTokenizedMultiformTracking ();
-
-	// need to support '*' and '=' but not the other specials
-	// so m_pQueryTokenizer does not work for us, gotta clone and setup one manually
-	if ( IsStarDict() )
-		pTokenizer->AddPlainChar ( '*' );
-	if ( m_tSettings.m_bIndexExactWords )
-		pTokenizer->AddPlainChar ( '=' );
-
 	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
 	CSphDict * pDictBase = m_pDict;
 	if ( pDictBase->HasState() )
@@ -16970,41 +16928,15 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 
 	Qword tQueryWord ( false, false );
 
-	if ( !bFillOnly )
-	{
-		ExpansionContext_t tExpCtx;
-		// query defined options
-		tExpCtx.m_iExpansionLimit = ( tSettings.m_iExpansionLimit ? tSettings.m_iExpansionLimit : m_iExpansionLimit );
-		bool bExpandWildcards = ( pDict->GetSettings ().m_bWordDict && IsStarDict() && !tSettings.m_bFoldWildcards );
-
-		CSphPlainQueryFilter tAotFilter;
-		tAotFilter.m_pTokenizer = pTokenizer.Ptr();
-		tAotFilter.m_pDict = pDict;
-		tAotFilter.m_pSettings = &m_tSettings;
-		tAotFilter.m_pTermSetup = &tTermSetup;
-		tAotFilter.m_pQueryWord = &tQueryWord;
-		tAotFilter.m_tFoldSettings = tSettings;
-		tAotFilter.m_tFoldSettings.m_bFoldWildcards = !bExpandWildcards;
-
-		tExpCtx.m_pWordlist = &m_tWordlist;
-		tExpCtx.m_iMinPrefixLen = m_tSettings.m_iMinPrefixLen;
-		tExpCtx.m_iMinInfixLen = m_tSettings.m_iMinInfixLen;
-		tExpCtx.m_bHasMorphology = m_pDict->HasMorphology();
-		tExpCtx.m_bMergeSingles = false;
-		tExpCtx.m_eHitless = m_tSettings.m_eHitless;
-
-		pTokenizer->SetBuffer ( sModifiedQuery, strlen ( (const char *)sModifiedQuery) );
-
-		tAotFilter.GetKeywords ( dKeywords, tExpCtx );
-	} else
+	if ( bFillOnly )
 	{
 		BYTE sWord[MAX_KEYWORD_BYTES];
 
 		ARRAY_FOREACH ( i, dKeywords )
 		{
-			CSphKeywordInfo & tInfo = dKeywords[i];
-			int iLen = tInfo.m_sTokenized.Length();
-			memcpy ( sWord, tInfo.m_sTokenized.cstr(), iLen );
+			CSphKeywordInfo &tInfo = dKeywords[i];
+			int iLen = tInfo.m_sTokenized.Length ();
+			memcpy ( sWord, tInfo.m_sTokenized.cstr (), iLen );
 			sWord[iLen] = '\0';
 
 			SphWordID_t iWord = pDict->GetWordID ( sWord );
@@ -17012,7 +16944,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 			{
 				tQueryWord.Reset ();
 				tQueryWord.m_sWord = tInfo.m_sTokenized;
-				tQueryWord.m_sDictWord = (const char*)sWord;
+				tQueryWord.m_sDictWord = ( const char * ) sWord;
 				tQueryWord.m_uWordID = iWord;
 				tTermSetup.QwordSetup ( &tQueryWord );
 
@@ -17020,8 +16952,43 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 				tInfo.m_iHits += tQueryWord.m_iHits;
 			}
 		}
+		return true;
 	}
 
+	ISphTokenizerRefPtr_c pTokenizer { m_pTokenizer->Clone ( SPH_CLONE_INDEX ) };
+	pTokenizer->EnableTokenizedMultiformTracking ();
+
+	// need to support '*' and '=' but not the other specials
+	// so m_pQueryTokenizer does not work for us, gotta clone and setup one manually
+	if ( IsStarDict () )
+		pTokenizer->AddPlainChar ( '*' );
+	if ( m_tSettings.m_bIndexExactWords )
+		pTokenizer->AddPlainChar ( '=' );
+
+	ExpansionContext_t tExpCtx;
+	// query defined options
+	tExpCtx.m_iExpansionLimit = ( tSettings.m_iExpansionLimit ? tSettings.m_iExpansionLimit : m_iExpansionLimit );
+	bool bExpandWildcards = ( pDict->GetSettings ().m_bWordDict && IsStarDict() && !tSettings.m_bFoldWildcards );
+
+	CSphPlainQueryFilter tAotFilter;
+	tAotFilter.m_pTokenizer = pTokenizer;
+	tAotFilter.m_pDict = pDict;
+	tAotFilter.m_pSettings = &m_tSettings;
+	tAotFilter.m_pTermSetup = &tTermSetup;
+	tAotFilter.m_pQueryWord = &tQueryWord;
+	tAotFilter.m_tFoldSettings = tSettings;
+	tAotFilter.m_tFoldSettings.m_bFoldWildcards = !bExpandWildcards;
+
+	tExpCtx.m_pWordlist = &m_tWordlist;
+	tExpCtx.m_iMinPrefixLen = m_tSettings.m_iMinPrefixLen;
+	tExpCtx.m_iMinInfixLen = m_tSettings.m_iMinInfixLen;
+	tExpCtx.m_bHasMorphology = m_pDict->HasMorphology();
+	tExpCtx.m_bMergeSingles = false;
+	tExpCtx.m_eHitless = m_tSettings.m_eHitless;
+
+	pTokenizer->SetBuffer ( sModifiedQuery, strlen ( (const char *)sModifiedQuery) );
+
+	tAotFilter.GetKeywords ( dKeywords, tExpCtx );
 	return true;
 }
 
@@ -21012,7 +20979,7 @@ void CSphTemplateDictTraits::LoadStopwords ( const char * sFiles, const ISphToke
 
 	m_dSWFileInfos.Resize ( 0 );
 
-	CSphScopedPtr<ISphTokenizer> tTokenizer ( pTokenizer->Clone ( SPH_CLONE_INDEX ) );
+	ISphTokenizerRefPtr_c tTokenizer ( pTokenizer->Clone ( SPH_CLONE_INDEX ) );
 	CSphFixedVector<char> dList ( 1+strlen(sFiles) );
 	strcpy ( dList.Begin(), sFiles ); // NOLINT
 
@@ -21478,7 +21445,7 @@ CSphWordforms * CSphTemplateDictTraits::LoadWordformContainer ( const CSphVector
 	pContainer->m_uTokenizerFNV = pTokenizer->GetSettingsFNV();
 	pContainer->m_sIndexName = sIndex;
 
-	CSphScopedPtr<ISphTokenizer> pMyTokenizer ( pTokenizer->Clone ( SPH_CLONE_INDEX ) );
+	ISphTokenizerRefPtr_c pMyTokenizer ( pTokenizer->Clone ( SPH_CLONE_INDEX ) );
 	const CSphTokenizerSettings & tSettings = pMyTokenizer->GetSettings();
 	CSphVector<int> dBlended;
 
@@ -21525,9 +21492,9 @@ CSphWordforms * CSphTemplateDictTraits::LoadWordformContainer ( const CSphVector
 		CSphString sAllFiles;
 		ConcatReportStrings ( dFilenames, sAllFiles );
 
-		ARRAY_FOREACH ( i, (*pEmbeddedWordforms) )
-			AddWordform ( pContainer, (char*)(*pEmbeddedWordforms)[i].cstr(),
-				(*pEmbeddedWordforms)[i].Length(), pMyTokenizer.Ptr(), sAllFiles.cstr(), dBlended, -1 );
+		for ( auto & sWordForm : (*pEmbeddedWordforms) )
+			AddWordform ( pContainer, (char*)sWordForm.cstr(),
+				sWordForm.Length(), pMyTokenizer, sAllFiles.cstr(), dBlended, -1 );
 	} else
 	{
 		char sBuffer [ 6*SPH_MAX_WORD_LEN + 512 ]; // enough to hold 2 UTF-8 words, plus some whitespace overhead
@@ -21546,7 +21513,7 @@ CSphWordforms * CSphTemplateDictTraits::LoadWordformContainer ( const CSphVector
 
 			int iLen;
 			while ( ( iLen = rdWordforms.GetLine ( sBuffer, sizeof(sBuffer) ) )>=0 )
-				AddWordform ( pContainer, sBuffer, iLen, pMyTokenizer.Ptr(), szFile, dBlended, i );
+				AddWordform ( pContainer, sBuffer, iLen, pMyTokenizer, szFile, dBlended, i );
 		}
 	}
 
@@ -31278,7 +31245,7 @@ int DecodeUtf8 ( const BYTE * sWord, int * pBuf )
 
 bool SuggestResult_t::SetWord ( const char * sWord, const ISphTokenizer * pTok, bool bUseLastWord )
 {
-	CSphScopedPtr<ISphTokenizer> pTokenizer ( pTok->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT ) );
+	ISphTokenizerRefPtr_c pTokenizer ( pTok->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT ) );
 	pTokenizer->SetBuffer ( (BYTE *)sWord, strlen ( sWord ) );
 
 	const BYTE * pToken = pTokenizer->GetToken();
@@ -31847,7 +31814,7 @@ void sphDictBuildInfixes ( const char * sPath )
 	tIndexSettings.m_iMinPrefixLen = 0;
 	tIndexSettings.m_iMinInfixLen = 2;
 
-	ISphTokenizer * pTokenizer = ISphTokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, sError );
+	ISphTokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, sError ) };
 	if ( !pTokenizer )
 		sphDie ( "infix upgrade: %s", sError.cstr() );
 
@@ -32502,7 +32469,7 @@ void sphDictBuildSkiplists ( const char * sPath )
 	// write new header
 	////////////////////
 
-	ISphTokenizer * pTokenizer = ISphTokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, sError );
+	ISphTokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tTokenizerSettings, &tEmbeddedFiles, sError ) };
 	if ( !pTokenizer )
 		sphDie ( "skiplists upgrade: %s", sError.cstr() );
 

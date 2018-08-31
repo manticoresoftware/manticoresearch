@@ -85,8 +85,7 @@ const CSphNamedInt &	sphAotDictinfo ( int iLang );
 
 /// create token filter that returns all morphological hypotheses
 /// NOTE, takes over wordforms from pDict, in AOT case they must be handled by the fitler
-class CSphTokenFilter;
-CSphTokenFilter *		sphAotCreateFilter ( ISphTokenizer * pTokenizer, CSphDict * pDict, bool bIndexExact, DWORD uLangMask );
+ISphTokenizer *		sphAotCreateFilter ( ISphTokenizer * pTokenizer, CSphDict * pDict, bool bIndexExact, DWORD uLangMask );
 
 /// free lemmatizers on shutdown
 void	sphAotShutdown ();

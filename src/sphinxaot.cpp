@@ -1740,10 +1740,10 @@ public:
 };
 
 
-CSphTokenFilter * sphAotCreateFilter ( ISphTokenizer * pTokenizer, CSphDict * pDict, bool bIndexExact, DWORD uLangMask )
+ISphTokenizer * sphAotCreateFilter ( ISphTokenizer * pTokenizer, CSphDict * pDict, bool bIndexExact, DWORD uLangMask )
 {
 	assert ( uLangMask!=0 );
-	CSphRefcountedPtr<CSphTokenFilter> pDerivedTokenizer;
+	CSphRefcountedPtr<ISphTokenizer> pDerivedTokenizer;
 	for ( int i=AOT_BEGIN; i<AOT_LENGTH; ++i )
 	{
 		if ( uLangMask & (1UL<<i) )

@@ -1552,10 +1552,6 @@ public:
 	/// simple copy; clones either the entire dynamic part, or a part thereof
 	virtual void					CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const = 0;
 
-	// clone all raw attrs and only specified dynamics
-	virtual void					CloneMatchSpecial ( CSphMatch * pDst, const CSphMatch &rhs,
-														const CSphVector<int> &dSpecials ) const = 0;
-
 	virtual void					SwapAttrs ( CSphVector<CSphColumnInfo> & dAttrs ) = 0;
 };
 
@@ -1566,10 +1562,12 @@ class CSphSchemaHelper : public ISphSchema
 public:
 	void	FreeDataPtrs ( CSphMatch * pMatch ) const final;
 	void	CloneMatch ( CSphMatch * pDst, const CSphMatch & rhs ) const final;
-	void	CloneMatchSpecial ( CSphMatch * pDst, const CSphMatch &rhs, const CSphVector<int> &dSpecials ) const final;
 
-	// exclude vec of rowitems from dataPtrAttrs and return diff back
-	void SubsetPtrs ( CSphVector<int> &dSpecials );
+	/// clone all raw attrs and only specified ptrs
+	void	CloneMatchSpecial ( CSphMatch * pDst, const CSphMatch &rhs, const CSphVector<int> &dSpecials ) const;
+
+	/// exclude vec of rowitems from dataPtrAttrs and return diff back
+	CSphVector<int> SubsetPtrs ( CSphVector<int> &dSpecials ) const ;
 
 	/// get dynamic row part size
 	int GetDynamicSize () const final { return m_dDynamicUsed.GetLength (); }
@@ -1586,8 +1584,8 @@ protected:
 
 public:
 	// free/copy by specified vec of rowitems, assumed to be from SubsetPtrs() call.
-	static void	FreeDataSpecial ( CSphMatch * pMatch, const CSphVector<int> &dSpecials );
-	static void	CopyDataSpecial ( CSphMatch * pDst, const CSphMatch &rhs, const CSphVector<int> &dSpecials );
+	static void FreeDataSpecial ( CSphMatch * pMatch, const CSphVector<int> &dSpecials );
+	static void	CopyPtrsSpecial ( CSphMatch * pDst, const void* pSrc, const CSphVector<int> &dSpecials );
 };
 
 

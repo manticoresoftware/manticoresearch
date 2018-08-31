@@ -6004,10 +6004,13 @@ void CSphSchemaHelper::FreeDataPtrs ( CSphMatch * pMatch ) const
 
 void CSphSchemaHelper::CopyPtrs ( CSphMatch * pDst, const CSphMatch &rhs ) const
 {
-	CopyDataSpecial ( pDst, rhs, m_dDataPtrAttrs );
+	// notes on PACKEDFACTORS
+	// not immediately obvious: this is not needed while pushing matches to sorters; factors are held in an outer hash table
+	// but it is necessary to copy factors when combining results from several indexes via a sorter because at this moment matches are the owners of factor data
+	CopyPtrsSpecial ( pDst, rhs.m_pDynamic, m_dDataPtrAttrs );
 }
 
-void CSphSchemaHelper::SubsetPtrs ( CSphVector<int> &dDiscarded )
+CSphVector<int> CSphSchemaHelper::SubsetPtrs ( CSphVector<int> &dDiscarded ) const
 {
 	CSphVector<int> dFiltered;
 	dDiscarded.Uniq ();
@@ -6015,7 +6018,7 @@ void CSphSchemaHelper::SubsetPtrs ( CSphVector<int> &dDiscarded )
 		if ( !dDiscarded.BinarySearch ( iPtr ) )
 			dFiltered.Add ( iPtr );
 	dFiltered.Uniq ();
-	dDiscarded.SwapData ( dFiltered );
+	return dFiltered;
 }
 
 void CSphSchemaHelper::CloneMatchSpecial ( CSphMatch * pDst, const CSphMatch &rhs, const CSphVector<int> &dSpecials ) const
@@ -6023,7 +6026,7 @@ void CSphSchemaHelper::CloneMatchSpecial ( CSphMatch * pDst, const CSphMatch &rh
 	assert ( pDst );
 	FreeDataSpecial ( pDst, dSpecials );
 	pDst->Combine ( rhs, GetDynamicSize () );
-	CopyDataSpecial ( pDst, rhs, dSpecials );
+	CopyPtrsSpecial ( pDst, rhs.m_pDynamic, dSpecials );
 }
 
 void CSphSchemaHelper::FreeDataSpecial ( CSphMatch * pMatch, const CSphVector<int> &dSpecials )
@@ -6034,23 +6037,17 @@ void CSphSchemaHelper::FreeDataSpecial ( CSphMatch * pMatch, const CSphVector<in
 
 	for ( auto iOffset : dSpecials )
 	{
-		BYTE * pData = *( BYTE ** ) ( pMatch->m_pDynamic + iOffset );
-		if ( pData )
-		{
-			delete[] pData;
-			*( BYTE ** ) ( pMatch->m_pDynamic + iOffset ) = NULL;
-		}
+		BYTE * &pData = *( BYTE ** ) ( pMatch->m_pDynamic + iOffset );
+		SafeDeleteArray ( pData );
 	}
 }
 
-void CSphSchemaHelper::CopyDataSpecial ( CSphMatch * pDst, const CSphMatch &rhs, const CSphVector<int> &dSpecials )
+void CSphSchemaHelper::CopyPtrsSpecial ( CSphMatch * pDst, const void* _pSrc, const CSphVector<int> &dSpecials )
 {
-	// notes on PACKEDFACTORS
-	// not immediately obvious: this is not needed while pushing matches to sorters; factors are held in an outer hash table
-	// but it is necessary to copy factors when combining results from several indexes via a sorter because at this moment matches are the owners of factor data
+	auto pSrc = (const CSphRowitem *) _pSrc;
 	for ( auto i : dSpecials )
 	{
-		const BYTE * pData = *( BYTE ** ) ( rhs.m_pDynamic + i );
+		const BYTE * pData = *( BYTE ** ) ( pSrc + i );
 		if ( pData )
 		{
 			int nBytes = sphUnpackPtrAttr ( pData, &pData );

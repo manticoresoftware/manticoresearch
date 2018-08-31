@@ -1582,12 +1582,15 @@ private:
 	CSphFixedVector<CSphRowitem>	m_dRowBuf { 0 };
 	CSphVector<CSphAttrLocator>		m_dAttrsRaw;
 	CSphVector<CSphAttrLocator>		m_dAttrsPtr;
-	const ISphSchema *				m_pSchema = nullptr;
+	CSphVector<int>					m_dMyPtrRows; // rowids matching m_dAttrsPtr
+	CSphVector<int>					m_dOtherPtrRows; // rest rowids NOT matching m_dAttrsPtr
+	const CSphSchemaHelper *		m_pSchema = nullptr;
+	bool							m_bPtrRowsCommited = false;
 
 public:
 	void SetSchema ( const ISphSchema * pSchema )
 	{
-		m_pSchema = pSchema;
+		m_pSchema = ( CSphSchemaHelper * ) pSchema; /// lazy hack
 		m_dRowBuf.Reset ( m_pSchema->GetDynamicSize() );
 	}
 
@@ -1596,26 +1599,22 @@ public:
 	{
 		assert ( m_pSchema && pDst && pSrc && pGroup );
 		assert ( pDst!=pGroup );
-		m_pSchema->CloneMatch ( pDst, *pSrc );
+		assert ( m_bPtrRowsCommited );
+
+		// clone
+		m_pSchema->CloneMatchSpecial ( pDst, *pSrc, m_dOtherPtrRows );
 
 		for ( auto &AttrsRaw : m_dAttrsRaw )
 			pDst->SetAttr ( AttrsRaw, pGroup->GetAttr ( AttrsRaw ) );
 
-		for ( auto &AttrsPtr : m_dAttrsPtr )
-		{
-			assert ( !pDst->GetAttr ( AttrsPtr ) );
-			auto sSrc = ( const char * ) pGroup->GetAttr ( AttrsPtr );
-			const char * sDst = nullptr;
-			if ( sSrc && *sSrc )
-				sDst = strdup(sSrc); // wtf?
-
-			pDst->SetAttr ( AttrsPtr, (SphAttr_t)sDst );
-		}
+		m_pSchema->FreeDataSpecial ( pDst, m_dMyPtrRows );
+		m_pSchema->CopyPtrsSpecial ( pDst, pGroup->m_pDynamic, m_dMyPtrRows );
 	}
 
 	void Clone ( CSphMatch * pDst, const CSphMatch * pSrc )
 	{
 		assert ( m_pSchema && pDst && pSrc );
+		assert ( m_bPtrRowsCommited );
 		if ( !pDst->m_pDynamic ) // no old match has no data to copy, just a fresh but old match
 		{
 			m_pSchema->CloneMatch ( pDst, *pSrc );
@@ -1623,18 +1622,13 @@ public:
 		}
 
 		memcpy ( m_dRowBuf.Begin(), pDst->m_pDynamic, m_dRowBuf.GetLengthBytes() );
-
-		// don't let cloning operation to free old string data
-		// as it will be copied back
-		for ( auto &AttrsPtr : m_dAttrsPtr )
-			pDst->SetAttr ( AttrsPtr, 0 );
-
-		m_pSchema->CloneMatch ( pDst, *pSrc );
+		m_pSchema->CloneMatchSpecial ( pDst, *pSrc, m_dOtherPtrRows );
 
 		for ( auto &AttrsRaw : m_dAttrsRaw )
 			pDst->SetAttr ( AttrsRaw, sphGetRowAttr ( m_dRowBuf.Begin(), AttrsRaw ) );
-		for ( auto &AttrsPtr : m_dAttrsPtr )
-			pDst->SetAttr ( AttrsPtr, sphGetRowAttr ( m_dRowBuf.Begin(), AttrsPtr) );
+
+		for ( auto &AttrsRaw : m_dAttrsPtr )
+			pDst->SetAttr ( AttrsRaw, sphGetRowAttr ( m_dRowBuf.Begin (), AttrsRaw ) );
 	}
 
 	inline void AddRaw ( const CSphAttrLocator& tLoc )
@@ -1646,9 +1640,31 @@ public:
 	{
 		m_dAttrsPtr.Add ( tLoc );
 	}
-	inline void ResetRaw()
+	inline void ResetAttrs()
 	{
 		m_dAttrsRaw.Resize(0);
+		m_dAttrsPtr.Resize ( 0 );
+	}
+
+	inline void CommitPtrs ()
+	{
+		assert ( m_pSchema );
+		static const int SIZE_OF_ROW = 8 * sizeof ( CSphRowitem );
+
+		if ( m_bPtrRowsCommited )
+			m_dMyPtrRows.Resize(0);
+
+		for ( const CSphAttrLocator &tLoc : m_dAttrsPtr )
+			m_dMyPtrRows.Add ( tLoc.m_iBitOffset / SIZE_OF_ROW );
+
+		m_dOtherPtrRows = m_pSchema->SubsetPtrs ( m_dMyPtrRows );
+
+#ifndef NDEBUG
+		// sanitize check
+		m_dMyPtrRows = m_pSchema->SubsetPtrs ( m_dOtherPtrRows );
+		assert ( m_dMyPtrRows.GetLength ()==m_dAttrsPtr.GetLength () );
+#endif
+		m_bPtrRowsCommited = true;
 	}
 };
 
@@ -1688,7 +1704,7 @@ static void FixupSorterLocators ( CSphGroupSorterSettings & tSettings, ISphSchem
 		SafeDelete(i);
 
 	dAggregates.Resize(0);
-	tPregroup.ResetRaw ();
+	tPregroup.ResetAttrs ();
 }
 
 class BaseGroupSorter_c : protected CSphGroupSorterSettings
@@ -1805,6 +1821,7 @@ public:
 			if ( tAttr.m_eAggrFunc!=SPH_AGGR_CAT )
 				m_tPregroup.AddRaw ( tAttr.m_tLocator );
 		}
+		m_tPregroup.CommitPtrs();
 	}
 };
 

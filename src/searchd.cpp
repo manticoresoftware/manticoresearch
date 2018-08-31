@@ -5252,7 +5252,9 @@ void RemapResult ( const ISphSchema * pTarget, AggrResult_t * pRes )
 				);
 		}
 		int iLimit = Min ( iCur + pRes->m_dMatchCounts[iSchema], pRes->m_dMatches.GetLength() );
-		dSchema.SubsetPtrs ( dRowItems );
+
+		// inverse dRowItems - we'll free only those NOT enumerated yet
+		dRowItems = dSchema.SubsetPtrs ( dRowItems );
 		for ( int i=iCur; i<iLimit; i++ )
 		{
 			CSphMatch & tMatch = pRes->m_dMatches[i];

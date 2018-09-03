@@ -8025,6 +8025,7 @@ bool RtIndex_t::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ES
 	SphOptimizeGuard_t tStopOptimize ( m_tOptimizingLock, m_bOptimizeStop ); // got write-locked at daemon
 
 	int iOldStride = m_iStride;
+	int iOldRowSize = m_tSchema.GetRowSize();
 	const CSphColumnInfo * pNewAttr = NULL;
 	CSphSchema tOldSchema = m_tSchema;
 
@@ -8063,7 +8064,7 @@ bool RtIndex_t::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ES
 			{
 				SphDocID_t uDocId = DOCINFO2ID ( pOldDocinfo );
 				DWORD * pAttrs = DOCINFO2ATTRS ( pOldDocinfo );
-				memcpy ( DOCINFO2ATTRS ( pNewDocinfo ), pAttrs, m_tSchema.GetRowSize()*sizeof(CSphRowitem) );
+				memcpy ( DOCINFO2ATTRS ( pNewDocinfo ), pAttrs, iOldRowSize*sizeof(CSphRowitem) );
 				sphSetRowAttr ( DOCINFO2ATTRS ( pNewDocinfo ), pNewAttr->m_tLocator, 0 );
 				DOCINFOSETID ( pNewDocinfo, uDocId );
 				pOldDocinfo += iOldStride;

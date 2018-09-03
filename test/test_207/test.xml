@@ -172,7 +172,6 @@ index test_lemmas
 {
 	source			= test_lemmas
 	path			= <data_path/>/test_lemmas
-	charset_type	= utf-8
 	morphology		= lemmatize_ru_all
 	dict            = keywords
 }
@@ -190,7 +189,6 @@ index test_lemmas1
 {
 	source			= test_lemmas1
 	path			= <data_path/>/test_lemmas1
-	charset_type	= utf-8
 	morphology		= lemmatize_ru_all
 	dict            = keywords
 	blend_chars		= .
@@ -209,7 +207,6 @@ index test_lemmas2
 {
 	source			= test_lemmas2
 	path			= <data_path/>/test_lemmas2
-	charset_type	= utf-8
 	morphology		= lemmatize_ru_all
 	dict            = keywords
 	blend_chars		= .
@@ -229,8 +226,7 @@ index test_stop10
 	source			= src_stop10
 	path			= <data_path/>/test_stop10
 	dict			= keywords
-	charset_type 	= utf-8
-	charset_table 	= 0..9, A..Z->a..z, _, ., -, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+0401->U+0435, U+0451->U+0435 
+	charset_table 	= 0..9, A..Z->a..z, _, ., -, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+0401->U+0435, U+0451->U+0435
 	morphology 		= lemmatize_ru_all, stem_enru
 	index_exact_words = 1
 }
@@ -249,8 +245,7 @@ index test_all11
 	source			= src_all11
 	path			= <data_path/>/test_all11
 	dict			= keywords
-	charset_type 	= utf-8
-	charset_table 	= 0..9, A..Z->a..z, _, ., -, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+0401->U+0435, U+0451->U+0435 
+	charset_table 	= 0..9, A..Z->a..z, _, ., -, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+0401->U+0435, U+0451->U+0435
 	morphology 		= lemmatize_ru_all, stem_enru
 	min_prefix_len	= 2
 	enable_star		= 1
@@ -297,8 +292,7 @@ index test_over
 	source			= src_over
 	path			= <data_path/>/test_over
 	dict			= keywords
-	charset_type 	= utf-8
-	charset_table 	= 0..9, A..Z->a..z, _, ., -, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+0401->U+0435, U+0451->U+0435 
+	charset_table 	= 0..9, A..Z->a..z, _, ., -, a..z, U+410..U+42F->U+430..U+44F, U+430..U+44F, U+0401->U+0435, U+0451->U+0435
 	morphology 		= lemmatize_ru_all, stem_enru
     index_exact_words = 1
 	min_word_len    = 1

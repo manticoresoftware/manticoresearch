@@ -12,10 +12,6 @@
 searchd
 {
 	<searchd_settings/>
-	<dynamic>
-		<variant>workers = fork</variant>
-		<variant>workers = prefork</variant>
-	</dynamic>
 }
 
 source sql

@@ -23,8 +23,6 @@ searchd
 		workers = threads
 		binlog_path =
 	</variant>
-	<variant>workers = fork</variant>
-	<variant>workers = prefork</variant>
 	</dynamic>
 }
 

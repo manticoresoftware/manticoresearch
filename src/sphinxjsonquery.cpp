@@ -1938,14 +1938,12 @@ CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQ
 
 	if ( pProfile )
 	{
-		cJSON * pProfileMeta = cJSON_CreateObject();
-		assert ( pProfileMeta );
-
 		cJSON * pProfileResult = pProfile->LeakResultAsJson();
-
 		// FIXME: result can be empty if we run a fullscan
 		if ( pProfileResult )
 		{
+			cJSON * pProfileMeta = cJSON_CreateObject ();
+			assert ( pProfileMeta );
 			assert ( cJSON_IsObject ( pProfileResult ) );
 			cJSON_AddItemToObject ( pProfileMeta, "query", pProfileResult );
 			cJSON_AddItemToObject ( pRoot, "profile", pProfileMeta );

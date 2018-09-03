@@ -1891,11 +1891,12 @@ struct CSphFieldFilterSettings
 };
 
 /// field filter
-class ISphFieldFilter // fixme! Made refcounted
+class ISphFieldFilter : public ISphRefcountedMT
 {
+protected:
+	virtual                     ~ISphFieldFilter ();
 public:
 								ISphFieldFilter();
-	virtual						~ISphFieldFilter();
 
 	virtual	int					Apply ( const BYTE * sField, int iLength, CSphVector<BYTE> & dStorage, bool bQuery ) = 0;
 	virtual	void				GetSettings ( CSphFieldFilterSettings & tSettings ) const = 0;
@@ -1906,6 +1907,9 @@ public:
 protected:
 	ISphFieldFilter *		m_pParent;
 };
+
+using ISphFieldFilterRefPtr_c = CSphRefcountedPtr<ISphFieldFilter>;
+
 
 /// create a regexp field filter
 ISphFieldFilter * sphCreateRegexpFilter ( const CSphFieldFilterSettings & tFilterSettings, CSphString & sError );
@@ -2030,7 +2034,7 @@ public:
 protected:
 	ISphTokenizerRefPtr_c				m_pTokenizer;	///< my tokenizer
 	CSphDictRefPtr_c					m_pDict;		///< my dict
-	ISphFieldFilter	*					m_pFieldFilter = nullptr;	///< my field filter
+	ISphFieldFilterRefPtr_c				m_pFieldFilter;	///< my field filter
 
 	CSphSourceStats						m_tStats;		///< my stats
 	CSphSchema 							m_tSchema;		///< my schema
@@ -3451,7 +3455,7 @@ protected:
 protected:
 	CSphIndexSettings			m_tSettings;
 
-	ISphFieldFilter *			m_pFieldFilter = nullptr;
+	ISphFieldFilterRefPtr_c		m_pFieldFilter;
 	ISphTokenizerRefPtr_c		m_pTokenizer;
 	ISphTokenizerRefPtr_c		m_pQueryTokenizer;
 	ISphTokenizerRefPtr_c		m_pQueryTokenizerJson;

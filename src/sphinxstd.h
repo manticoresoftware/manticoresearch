@@ -2452,8 +2452,7 @@ public:
 	/// wrapper assignment, does automated reference tracking
 	CSphRefcountedPtr & operator = ( const CSphRefcountedPtr & rhs )
 	{
-		if ( rhs.m_pPtr )
-			rhs.m_pPtr->AddRef();
+		SafeAddRef ( rhs.m_pPtr );
 		SafeRelease ( m_pPtr );
 		m_pPtr = rhs.m_pPtr;
 		return *this;

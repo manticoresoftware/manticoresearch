@@ -1693,11 +1693,9 @@ struct CSphReconfigureSetup
 {
 	ISphTokenizerRefPtr_c	m_pTokenizer;
 	CSphDictRefPtr_c		m_pDict;
-	CSphIndexSettings	m_tIndex;
-	ISphFieldFilter *	m_pFieldFilter = nullptr;
+	CSphIndexSettings		m_tIndex;
+	ISphFieldFilterRefPtr_c	m_pFieldFilter;
 	CSphSchema			m_tSchema;
-
-	~CSphReconfigureSetup ();
 };
 
 uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings );

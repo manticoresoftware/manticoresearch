@@ -1575,14 +1575,14 @@ bool RtIndex_t::AddDocument ( ISphTokenizer * pTokenizer, int iFields, const cha
 		return false;
 
 	// OPTIMIZE? do not clone filters on each INSERT
-	CSphScopedPtr<ISphFieldFilter> pFieldFilter ( NULL );
+	ISphFieldFilterRefPtr_c pFieldFilter;
 	if ( m_pFieldFilter )
 		pFieldFilter = m_pFieldFilter->Clone();
 
 	tSrc.Setup ( m_tSettings );
 	tSrc.SetTokenizer ( tTokenizer );
 	tSrc.SetDict ( pAcc->m_pDict );
-	tSrc.SetFieldFilter ( pFieldFilter.Ptr() );
+	tSrc.SetFieldFilter ( pFieldFilter );
 	tSrc.SetMorphFields ( m_tMorphFields );
 	if ( !tSrc.Connect ( m_sLastError ) )
 		return false;
@@ -4224,17 +4224,14 @@ bool RtIndex_t::Prealloc ( bool bStripPath )
 
 	if ( uVersion>=11 )
 	{
-		ISphFieldFilter * pFieldFilter = NULL;
+		ISphFieldFilterRefPtr_c pFieldFilter;
 		CSphFieldFilterSettings tFieldFilterSettings;
 		LoadFieldFilterSettings ( rdMeta, tFieldFilterSettings );
 		if ( tFieldFilterSettings.m_dRegexps.GetLength() )
 			pFieldFilter = sphCreateRegexpFilter ( tFieldFilterSettings, m_sLastError );
 
 		if ( !sphSpawnRLPFilter ( pFieldFilter, m_tSettings, tTokenizerSettings, sMeta.cstr(), m_sLastError ) )
-		{
-			SafeDelete ( pFieldFilter );
 			return false;
-		}
 
 		SetFieldFilter ( pFieldFilter );
 	}
@@ -7031,11 +7028,11 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	CSphVector<BYTE> dFiltered;
 	const BYTE * sModifiedQuery = (BYTE *)pQuery->m_sQuery.cstr();
 
-	CSphScopedPtr<ISphFieldFilter> pFieldFilter ( NULL );
+	ISphFieldFilterRefPtr_c pFieldFilter;
 	if ( m_pFieldFilter )
 	{
 		pFieldFilter = m_pFieldFilter->Clone();
-		if ( pFieldFilter.Ptr() && pFieldFilter->Apply ( sModifiedQuery, strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
+		if ( pFieldFilter && pFieldFilter->Apply ( sModifiedQuery, strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
 			sModifiedQuery = dFiltered.Begin();
 	}
 
@@ -8810,9 +8807,9 @@ void RtIndex_t::GetStatus ( CSphIndexStatus * pRes ) const
 // RECONFIGURE
 //////////////////////////////////////////////////////////////////////////
 
-bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const ISphFieldFilter * pFieldFilter, const CSphIndexSettings & tIndexSettings,
-	uint64_t uTokHash, uint64_t uDictHash, int iMaxCodepointLength, bool bSame,
-	CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError )
+bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const ISphFieldFilter * pFieldFilter,
+	const CSphIndexSettings & tIndexSettings, uint64_t uTokHash, uint64_t uDictHash, int iMaxCodepointLength,
+	bool bSame, CSphReconfigureSettings & tSettings, CSphReconfigureSetup & tSetup, CSphString & sError )
 {
 	// FIXME!!! check missed embedded files
 	ISphTokenizerRefPtr_c pTokenizer { ISphTokenizer::Create ( tSettings.m_tTokenizer, NULL, sError ) };
@@ -8853,7 +8850,7 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 		tSettings.m_tIndex.m_bIndexExactWords = true;
 
 	// field filter
-	CSphScopedPtr<ISphFieldFilter> tFieldFilter ( NULL );
+	ISphFieldFilterRefPtr_c tFieldFilter;
 
 	// re filter
 	bool bReFilterSame = true;
@@ -8883,7 +8880,7 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	if ( !bReFilterSame && tSettings.m_tFieldFilter.m_dRegexps.GetLength () )
 	{
 		tFieldFilter = sphCreateRegexpFilter ( tSettings.m_tFieldFilter, sError );
-		if ( !tFieldFilter.Ptr() )
+		if ( !tFieldFilter )
 		{
 			sError.SetSprintf ( "'%s' failed to create field filter, error '%s'", sIndexName.cstr (), sError.cstr () );
 			return true;
@@ -8894,15 +8891,11 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	bool bRlpSame = ( tIndexSettings.m_eChineseRLP==tSettings.m_tIndex.m_eChineseRLP );
 	if ( !bRlpSame )
 	{
-		ISphFieldFilter * pRlpFilter = tFieldFilter.Ptr();
-		bool bOk = sphSpawnRLPFilter ( pRlpFilter, tSettings.m_tIndex, tSettings.m_tTokenizer, sIndexName.cstr(), sError );
-		if ( !bOk )
+		if ( !sphSpawnRLPFilter ( tFieldFilter, tSettings.m_tIndex, tSettings.m_tTokenizer, sIndexName.cstr (), sError ) )
 		{
 			sError.SetSprintf ( "'%s' failed to create field filter, error '%s'", sIndexName.cstr (), sError.cstr () );
 			return true;
 		}
-
-		tFieldFilter = pRlpFilter;
 	}
 
 	// compare options
@@ -8913,7 +8906,7 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 		tSetup.m_pTokenizer = pTokenizer.Leak();
 		tSetup.m_pDict = tDict.Leak();
 		tSetup.m_tIndex = tSettings.m_tIndex;
-		tSetup.m_pFieldFilter = tFieldFilter.LeakPtr();
+		tSetup.m_pFieldFilter = tFieldFilter.Leak();
 		return false;
 	} else
 	{
@@ -8944,9 +8937,6 @@ void RtIndex_t::Reconfigure ( CSphReconfigureSetup & tSetup )
 	ISphTokenizerRefPtr_c pIndexing { ISphTokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError ) };
 	if ( pIndexing )
 		m_pTokenizerIndexing = pIndexing;
-
-	// clean-up
-	tSetup.m_pFieldFilter = NULL;
 }
 
 uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings )
@@ -8985,12 +8975,6 @@ uint64_t sphGetSettingsFNV ( const CSphIndexSettings & tSettings )
 
 	return uHash;
 }
-
-CSphReconfigureSetup::~CSphReconfigureSetup()
-{
-	SafeDelete ( m_pFieldFilter );
-}
-
 
 //////////////////////////////////////////////////////////////////////////
 // BINLOG
@@ -11171,7 +11155,7 @@ bool PercolateIndex_c::AddDocument ( ISphTokenizer * pTokenizer, int iFields, co
 		!tSrc.SetStripHTML ( m_tSettings.m_sHtmlIndexAttrs.cstr(), m_tSettings.m_sHtmlRemoveElements.cstr(), m_tSettings.m_bIndexSP, m_tSettings.m_sZones.cstr(), sError ) )
 		return false;
 
-	CSphScopedPtr<ISphFieldFilter> pFieldFilter { nullptr };
+	ISphFieldFilterRefPtr_c pFieldFilter;
 	if ( m_pFieldFilter )
 		pFieldFilter = m_pFieldFilter->Clone();
 
@@ -11179,7 +11163,7 @@ bool PercolateIndex_c::AddDocument ( ISphTokenizer * pTokenizer, int iFields, co
 	tSrc.Setup ( m_tSettings );
 	tSrc.SetTokenizer ( pTokenizer );
 	tSrc.SetDict ( pAcc->m_pDict );
-	tSrc.SetFieldFilter ( pFieldFilter.Ptr() );
+	tSrc.SetFieldFilter ( pFieldFilter );
 	if ( !tSrc.Connect ( m_sLastError ) )
 		return false;
 
@@ -12027,8 +12011,8 @@ bool PercolateIndex_c::AddQuery ( const char * sQuery, const char * sTags, const
 	CSphVector<BYTE> dFiltered;
 	if ( m_pFieldFilter )
 	{
-		CSphScopedPtr<ISphFieldFilter> pFieldFilter ( m_pFieldFilter->Clone() );
-		if ( pFieldFilter.Ptr() && pFieldFilter->Apply ( (const BYTE *)sQuery, strlen ( sQuery ), dFiltered, true ) )
+		ISphFieldFilterRefPtr_c pFieldFilter { m_pFieldFilter->Clone() };
+		if ( pFieldFilter && pFieldFilter->Apply ( (const BYTE *)sQuery, strlen ( sQuery ), dFiltered, true ) )
 			sQuery = (const char *)dFiltered.Begin();
 	}
 
@@ -12332,17 +12316,14 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath )
 	// regexp and RLP
 	if ( uVersion>=6 )
 	{
-		ISphFieldFilter * pFieldFilter = NULL;
+		ISphFieldFilterRefPtr_c pFieldFilter;
 		CSphFieldFilterSettings tFieldFilterSettings;
 		LoadFieldFilterSettings ( rdMeta, tFieldFilterSettings );
 		if ( tFieldFilterSettings.m_dRegexps.GetLength() )
 			pFieldFilter = sphCreateRegexpFilter ( tFieldFilterSettings, m_sLastError );
 
 		if ( !sphSpawnRLPFilter ( pFieldFilter, m_tSettings, tTokenizerSettings, sMeta.cstr(), m_sLastError ) )
-		{
-			SafeDelete ( pFieldFilter );
 			return false;
-		}
 
 		SetFieldFilter ( pFieldFilter );
 	}
@@ -12642,10 +12623,6 @@ void PercolateIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 	m_iTID++;
 
 	PostSetup();
-
-	// clean-up
-	tSetup.m_pFieldFilter = NULL;
-
 }
 
 void SetPercolateThreads ( int iThreads )

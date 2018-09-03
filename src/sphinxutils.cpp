@@ -1707,7 +1707,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 
 	if ( !pIndex->GetFieldFilter() )
 	{
-		ISphFieldFilter * pFieldFilter = nullptr;
+		ISphFieldFilterRefPtr_c pFieldFilter;
 		CSphFieldFilterSettings tFilterSettings;
 		if ( sphConfFieldFilter ( hIndex, tFilterSettings, sError ) )
 			pFieldFilter = sphCreateRegexpFilter ( tFilterSettings, sError );

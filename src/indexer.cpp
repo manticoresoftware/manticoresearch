@@ -995,16 +995,13 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 			pTokenizer = sphAotCreateFilter ( pTokenizer, pDict, tSettings.m_bIndexExactWords, tSettings.m_uAotFilterMask );
 	}
 
-	ISphFieldFilter * pFieldFilter = NULL;
+	ISphFieldFilterRefPtr_c pFieldFilter;
 	CSphFieldFilterSettings tFilterSettings;
 	if ( sphConfFieldFilter ( hIndex, tFilterSettings, sError ) )
 		pFieldFilter = sphCreateRegexpFilter ( tFilterSettings, sError );
 
 	if ( !sphSpawnRLPFilter ( pFieldFilter, tSettings, tTokSettings, sIndexName, sError ) )
-	{
-		SafeDelete ( pFieldFilter );
 		sphDie ( "%s", sError.cstr() );
-	}
 
 	if ( !sError.IsEmpty () )
 		fprintf ( stdout, "WARNING: index '%s': %s\n", sIndexName, sError.cstr() );
@@ -1155,9 +1152,6 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 				fprintf ( stdout, "ERROR: index '%s': %s\n", sIndexName, sError.cstr() );
 		}
 		tDict->Save ( g_sBuildStops, g_iTopStops, g_bBuildFreqs );
-
-		SafeDelete ( pFieldFilter );
-
 		bOK = true;
 
 	} else

@@ -455,6 +455,8 @@ private:
 
 class CSphFieldFilterRLP : public ISphFieldFilter, public CSphRLPPreprocessor
 {
+protected:
+	~CSphFieldFilterRLP() {}
 public:
 	CSphFieldFilterRLP ( const char * szRLPRoot, const char * szRLPEnv, const char * szRLPCtx );
 
@@ -514,12 +516,11 @@ void CSphFieldFilterRLP::GetSettings ( CSphFieldFilterSettings & tSettings ) con
 
 ISphFieldFilter * CSphFieldFilterRLP::Clone()
 {
-	ISphFieldFilter * pClonedParent = nullptr;
-	if ( m_pParent )
-		pClonedParent = m_pParent->Clone();
+	ISphFieldFilterRefPtr_c pClonedParent { m_pParent ? m_pParent->Clone () : nullptr };
 
 	CSphString sError;
-	ISphFieldFilter * pFilter = sphCreateRLPFilter ( pClonedParent, m_sRootPath.cstr(), m_sEnvPath.cstr(), m_sCtxPath.cstr(), m_sBlendChars.cstr(), sError );
+	ISphFieldFilter * pFilter = sphCreateRLPFilter ( pClonedParent, m_sRootPath.cstr(), m_sEnvPath.cstr(),
+		m_sCtxPath.cstr(), m_sBlendChars.cstr(), sError );
 	if ( !pFilter )
 		sphWarning ( "RLP filter clone error '%s'", sError.cstr() );
 
@@ -528,16 +529,21 @@ ISphFieldFilter * CSphFieldFilterRLP::Clone()
 
 ISphFieldFilter * sphCreateRLPFilter ( ISphFieldFilter * pParent, const char * szRLPRoot, const char * szRLPEnv, const char * szRLPCtx, const char * szBlendChars, CSphString & sError )
 {
-	CSphScopedPtr<CSphFieldFilterRLP> pFilter { new CSphFieldFilterRLP ( szRLPRoot, szRLPEnv, szRLPCtx ) };
+	CSphRefcountedPtr<CSphFieldFilterRLP> pFilter { new CSphFieldFilterRLP ( szRLPRoot, szRLPEnv, szRLPCtx ) };
 	if ( !pFilter->Init ( sError ) )
+	{
+		SafeAddRef ( pParent )
 		return pParent;
+	}
 
 	if ( szBlendChars && *szBlendChars && !pFilter->SetBlendChars ( szBlendChars, sError ) )
+	{
+		SafeAddRef ( pParent );
 		return pParent;
+	}
 
 	pFilter->SetParent ( pParent );
-
-	return pFilter.LeakPtr ();
+	return pFilter.Leak ();
 }
 
 
@@ -546,12 +552,14 @@ bool sphRLPCheckConfig ( CSphIndexSettings &, CSphString & )
 	return true;
 }
 
-bool sphSpawnRLPFilter ( ISphFieldFilter * & pFieldFilter, const CSphIndexSettings & m_tSettings, const CSphTokenizerSettings & tTokSettings, const char * szIndex, CSphString & sError )
+bool sphSpawnRLPFilter ( ISphFieldFilterRefPtr_c & pFieldFilter, const CSphIndexSettings & m_tSettings,
+	const CSphTokenizerSettings & tTokSettings, const char * szIndex, CSphString & sError )
 {
 	if ( m_tSettings.m_eChineseRLP==SPH_RLP_NONE )
 		return true;
 
-	ISphFieldFilter * pRLPFilter = sphCreateRLPFilter ( pFieldFilter, g_sRLPRoot.cstr(), g_sRLPEnv.cstr(), m_tSettings.m_sRLPContext.cstr(), tTokSettings.m_sBlendChars.cstr(), sError );
+	ISphFieldFilterRefPtr_c pRLPFilter { sphCreateRLPFilter ( pFieldFilter, g_sRLPRoot.cstr(), g_sRLPEnv.cstr(),
+		m_tSettings.m_sRLPContext.cstr(), tTokSettings.m_sBlendChars.cstr(), sError ) };
 	if ( pRLPFilter==pFieldFilter && m_tSettings.m_eChineseRLP==SPH_RLP_BATCHED )
 	{
 		sError.SetSprintf ( "index '%s': Error initializing RLP: %s", szIndex, sError.cstr() );
@@ -575,6 +583,7 @@ void sphConfigureRLP ( CSphConfigSection & hCommon )
 
 ISphFieldFilter * sphCreateRLPFilter ( ISphFieldFilter * pParent, CSphString & )
 {
+	SafeAddRef ( pParent );
 	return pParent;
 }
 
@@ -592,7 +601,7 @@ bool sphRLPCheckConfig ( CSphIndexSettings & tSettings, CSphString & sError )
 }
 
 
-bool sphSpawnRLPFilter ( ISphFieldFilter * &, const CSphIndexSettings &, const CSphTokenizerSettings &, const char *, CSphString & )
+bool sphSpawnRLPFilter ( ISphFieldFilterRefPtr_c &, const CSphIndexSettings &, const CSphTokenizerSettings &, const char *, CSphString & )
 {
 	return true;
 }

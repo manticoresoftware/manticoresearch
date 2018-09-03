@@ -1093,7 +1093,7 @@ struct WriteHeader_t
 	const CSphSchema * m_pSchema;
 	ISphTokenizerRefPtr_c m_pTokenizer;
 	CSphDictRefPtr_c m_pDict;
-	const ISphFieldFilter * m_pFieldFilter;
+	ISphFieldFilterRefPtr_c m_pFieldFilter;
 	const int64_t * m_pFieldLens;
 };
 
@@ -1289,12 +1289,12 @@ bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	dKeywords.Resize ( 0 );
 
 	CSphVector<BYTE> dFiltered;
-	CSphScopedPtr<ISphFieldFilter> pFieldFilter ( NULL );
+	ISphFieldFilterRefPtr_c pFieldFilter;
 	const BYTE * sModifiedQuery = (const BYTE *)szQuery;
 	if ( m_pFieldFilter && szQuery )
 	{
 		pFieldFilter = m_pFieldFilter->Clone();
-		if ( pFieldFilter.Ptr() && pFieldFilter->Apply ( sModifiedQuery, strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
+		if ( pFieldFilter && pFieldFilter->Apply ( sModifiedQuery, strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
 			sModifiedQuery = dFiltered.Begin();
 	}
 
@@ -8447,7 +8447,6 @@ CSphIndex::CSphIndex ( const char * sIndexName, const char * sFilename )
 CSphIndex::~CSphIndex ()
 {
 	QcacheDeleteIndex ( m_iIndexId );
-	SafeDelete ( m_pFieldFilter );
 }
 
 
@@ -8463,8 +8462,7 @@ void CSphIndex::SetInplaceSettings ( int iHitGap, int iDocinfoGap, float fRelocF
 
 void CSphIndex::SetFieldFilter ( ISphFieldFilter * pFieldFilter )
 {
-	if ( m_pFieldFilter!=pFieldFilter )
-		SafeDelete ( m_pFieldFilter );
+	SafeAddRef ( pFieldFilter );
 	m_pFieldFilter = pFieldFilter;
 }
 
@@ -15412,8 +15410,6 @@ void CSphIndex_VLN::Dealloc ()
 	m_iMinMaxIndex = 0;
 	m_tSettings.m_eDocinfo = SPH_DOCINFO_NONE;
 
-	SafeDelete ( m_pFieldFilter );
-
 	if ( m_iIndexTag>=0 && g_pMvaArena )
 		g_tMvaArena.TaggedFreeTag ( m_iIndexTag );
 	m_iIndexTag = -1;
@@ -15647,17 +15643,14 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 
 	if ( m_uVersion>=28 )
 	{
-		ISphFieldFilter * pFieldFilter = NULL;
+		ISphFieldFilterRefPtr_c pFieldFilter;
 		CSphFieldFilterSettings tFieldFilterSettings;
 		LoadFieldFilterSettings ( rdInfo, tFieldFilterSettings );
 		if ( tFieldFilterSettings.m_dRegexps.GetLength() )
 			pFieldFilter = sphCreateRegexpFilter ( tFieldFilterSettings, m_sLastError );
 
 		if ( !sphSpawnRLPFilter ( pFieldFilter, m_tSettings, tTokSettings, sHeaderName, m_sLastError ) )
-		{
-			SafeDelete ( pFieldFilter );
 			return false;
-		}
 
 		SetFieldFilter ( pFieldFilter );
 	}
@@ -16864,12 +16857,12 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	SetupExactDict ( pDict );
 
 	CSphVector<BYTE> dFiltered;
-	CSphScopedPtr<ISphFieldFilter> pFieldFilter ( NULL );
+	ISphFieldFilterRefPtr_c pFieldFilter;
 	const BYTE * sModifiedQuery = (const BYTE *)szQuery;
 	if ( m_pFieldFilter && szQuery )
 	{
 		pFieldFilter = m_pFieldFilter->Clone();
-		if ( pFieldFilter.Ptr() && pFieldFilter->Apply ( sModifiedQuery, strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
+		if ( pFieldFilter && pFieldFilter->Apply ( sModifiedQuery, strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
 			sModifiedQuery = dFiltered.Begin();
 	}
 
@@ -17899,11 +17892,11 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	CSphVector<BYTE> dFiltered;
 	const BYTE * sModifiedQuery = (BYTE *)pQuery->m_sQuery.cstr();
 
-	CSphScopedPtr<ISphFieldFilter> pFieldFilter ( NULL );
+	ISphFieldFilterRefPtr_c pFieldFilter;
 	if ( m_pFieldFilter )
 	{
 		pFieldFilter = m_pFieldFilter->Clone();
-		if ( pFieldFilter.Ptr() && pFieldFilter->Apply ( sModifiedQuery, strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
+		if ( pFieldFilter && pFieldFilter->Apply ( sModifiedQuery, strlen ( (char*)sModifiedQuery ), dFiltered, true ) )
 			sModifiedQuery = dFiltered.Begin();
 	}
 
@@ -24797,13 +24790,14 @@ ISphFieldFilter::ISphFieldFilter()
 
 ISphFieldFilter::~ISphFieldFilter()
 {
-	SafeDelete ( m_pParent );
+	SafeRelease ( m_pParent );
 }
 
 
 void ISphFieldFilter::SetParent ( ISphFieldFilter * pParent )
 {
-	SafeDelete ( m_pParent );
+	SafeAddRef ( pParent );
+	SafeRelease ( m_pParent );
 	m_pParent = pParent;
 }
 
@@ -24811,9 +24805,11 @@ void ISphFieldFilter::SetParent ( ISphFieldFilter * pParent )
 #if USE_RE2
 class CSphFieldRegExps : public ISphFieldFilter
 {
+protected:
+	~CSphFieldRegExps() override;
 public:
-							CSphFieldRegExps ( bool bCloned );
-	virtual					~CSphFieldRegExps();
+							CSphFieldRegExps () = default;
+							CSphFieldRegExps ( const StrVec_t& m_dRegexps, CSphString &	sError );
 
 	virtual	int				Apply ( const BYTE * sField, int iLength, CSphVector<BYTE> & dStorage, bool );
 	virtual	void			GetSettings ( CSphFieldFilterSettings & tSettings ) const;
@@ -24831,13 +24827,14 @@ private:
 	};
 
 	CSphVector<RegExp_t>	m_dRegexps;
-	bool					m_bCloned;
+	bool					m_bCloned = true;
 };
 
-
-CSphFieldRegExps::CSphFieldRegExps ( bool bCloned )
-	: m_bCloned ( bCloned )
+CSphFieldRegExps::CSphFieldRegExps ( const StrVec_t &dRegexps, CSphString &sError )
+	: m_bCloned ( false )
 {
+	for ( const auto &sRegexp : dRegexps )
+		AddRegExp ( sRegexp.cstr (), sError );
 }
 
 
@@ -24845,8 +24842,8 @@ CSphFieldRegExps::~CSphFieldRegExps ()
 {
 	if ( !m_bCloned )
 	{
-		ARRAY_FOREACH ( i, m_dRegexps )
-			SafeDelete ( m_dRegexps[i].m_pRE2 );
+		for ( auto & dRegexp : m_dRegexps )
+			SafeDelete ( dRegexp.m_pRE2 );
 	}
 }
 
@@ -24926,7 +24923,7 @@ bool CSphFieldRegExps::AddRegExp ( const char * sRegExp, CSphString & sError )
 
 ISphFieldFilter * CSphFieldRegExps::Clone()
 {
-	CSphFieldRegExps * pCloned = new CSphFieldRegExps ( true );
+	CSphFieldRegExps * pCloned = new CSphFieldRegExps;
 	pCloned->m_dRegexps = m_dRegexps;
 
 	return pCloned;
@@ -24937,16 +24934,12 @@ ISphFieldFilter * CSphFieldRegExps::Clone()
 #if USE_RE2
 ISphFieldFilter * sphCreateRegexpFilter ( const CSphFieldFilterSettings & tFilterSettings, CSphString & sError )
 {
-	CSphFieldRegExps * pFilter = new CSphFieldRegExps ( false );
-	ARRAY_FOREACH ( i, tFilterSettings.m_dRegexps )
-		pFilter->AddRegExp ( tFilterSettings.m_dRegexps[i].cstr(), sError );
-
-	return pFilter;
+	return new CSphFieldRegExps ( tFilterSettings.m_dRegexps, sError );
 }
 #else
 ISphFieldFilter * sphCreateRegexpFilter ( const CSphFieldFilterSettings &, CSphString & )
 {
-	return NULL;
+	return nullptr;
 }
 #endif
 
@@ -25079,14 +25072,15 @@ bool CSphSource::SetStripHTML ( const char * sExtractAttrs, const char * sRemove
 
 void CSphSource::SetFieldFilter ( ISphFieldFilter * pFilter )
 {
+	SafeAddRef ( pFilter );
 	m_pFieldFilter = pFilter;
 }
 
 void CSphSource::SetTokenizer ( ISphTokenizer * pTokenizer )
 {
 	assert ( pTokenizer );
-	m_pTokenizer = pTokenizer;
 	SafeAddRef ( pTokenizer );
+	m_pTokenizer = pTokenizer;
 }
 
 
@@ -31967,7 +31961,7 @@ void sphDictBuildSkiplists ( const char * sPath )
 	else if ( uVersion>=20 )
 		uMinMaxIndex = rdHeader.GetDword ();
 
-	ISphFieldFilter* pFieldFilter = NULL;
+	ISphFieldFilterRefPtr_c pFieldFilter;
 	if ( uVersion>=28 )
 	{
 		CSphFieldFilterSettings tFieldFilterSettings;
@@ -31976,10 +31970,7 @@ void sphDictBuildSkiplists ( const char * sPath )
 			pFieldFilter = sphCreateRegexpFilter ( tFieldFilterSettings, sError );
 
 		if ( !sphSpawnRLPFilter ( pFieldFilter, tIndexSettings, tTokenizerSettings, sPath, sError ) )
-		{
-			SafeDelete ( pFieldFilter );
 			sphDie ( "%s", sError.cstr() );
-		}
 	}
 
 	CSphFixedVector<uint64_t> dFieldLens ( tSchema.GetFieldsCount() );
@@ -32452,8 +32443,6 @@ void sphDictBuildSkiplists ( const char * sPath )
 	wrHeader.PutDword ( iKillListSize );
 	wrHeader.PutOffset ( uMinMaxIndex );
 	SaveFieldFilterSettings ( wrHeader, pFieldFilter );
-
-	SafeDelete ( pFieldFilter );
 
 	// average field lengths
 	if ( tIndexSettings.m_bIndexFieldLens )

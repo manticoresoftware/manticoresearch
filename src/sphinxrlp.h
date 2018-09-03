@@ -87,6 +87,7 @@ public:
 	// CSphSource_Document to run them again in IterateDocument 
 	void SetFieldFilter ( ISphFieldFilter * pFilter ) final
 	{
+		SafeAddRef ( pFilter );
 		m_pBatchFieldFilter = pFilter;
 	}
 
@@ -268,7 +269,7 @@ private:
 	CSphVector<bool>		m_dFieldHasChinese;
 	int						m_iDocStart = 0;
 	int						m_iDocCount = 0;
-	ISphFieldFilter *		m_pBatchFieldFilter = nullptr;
+	ISphFieldFilterRefPtr_c	m_pBatchFieldFilter;
 
 	BYTE					m_pMarkerDocStart[PROXY_MARKER_LEN];
 	BYTE					m_pMarkerFieldStart[PROXY_MARKER_LEN];
@@ -372,7 +373,7 @@ T * CreateSourceWithProxy ( const char * sSourceName, bool )
 
 
 bool sphRLPCheckConfig ( CSphIndexSettings & tSettings, CSphString & sError );
-bool sphSpawnRLPFilter ( ISphFieldFilter * & pFieldFilter, const CSphIndexSettings & m_tSettings, const CSphTokenizerSettings & tTokSettings, const char * szIndex, CSphString & sError );
+bool sphSpawnRLPFilter ( ISphFieldFilterRefPtr_c & pFieldFilter, const CSphIndexSettings & m_tSettings, const CSphTokenizerSettings & tTokSettings, const char * szIndex, CSphString & sError );
 void sphConfigureRLP ( CSphConfigSection & hCommon );
 void sphRLPDone();
 

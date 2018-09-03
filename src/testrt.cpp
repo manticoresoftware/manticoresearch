@@ -184,13 +184,13 @@ int main ( int argc, char ** argv )
 	CSphDictSettings tDictSettings;
 	tDictSettings.m_bWordDict = false;
 
-	ISphTokenizer * pTok = sphCreateUTF8Tokenizer();
-	CSphDict * pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt1", sError );
+	ISphTokenizerRefPtr_c pTok {sphCreateUTF8Tokenizer()};
+	CSphDictRefPtr_c pDict {sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt1", sError )};
 	CSphSource_MySQL * pSrc = SpawnSource ( "SELECT id, channel_id, UNIX_TIMESTAMP(published) published, "
 		"title, UNCOMPRESS(content) content FROM posting WHERE id<=10000 AND id%2=0", pTok, pDict );
 
-	ISphTokenizer * pTok2 = sphCreateUTF8Tokenizer();
-	CSphDict * pDict2 = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt2", sError );
+	ISphTokenizerRefPtr_c pTok2 {sphCreateUTF8Tokenizer()};
+	CSphDictRefPtr_c pDict2 {sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt2", sError )};
 	CSphSource_MySQL * pSrc2 = SpawnSource ( "SELECT id, channel_id, UNIX_TIMESTAMP(published) published, "
 		"title, UNCOMPRESS(content) content FROM posting WHERE id<=10000 AND id%2=1", pTok2, pDict2 );
 

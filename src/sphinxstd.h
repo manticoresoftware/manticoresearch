@@ -2361,8 +2361,8 @@ struct CSphStrHashFunc
 };
 
 /// small hash with string keys
-template < typename T >
-using SmallStringHash_T = CSphOrderedHash < T, CSphString, CSphStrHashFunc, 256 >;
+template < typename T, int LENGTH = 256 >
+using SmallStringHash_T = CSphOrderedHash < T, CSphString, CSphStrHashFunc, LENGTH >;
 
 //////////////////////////////////////////////////////////////////////////
 

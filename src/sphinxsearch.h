@@ -100,41 +100,32 @@ struct CSphQueryStats;
 class ISphQwordSetup : ISphNoncopyable
 {
 public:
-	CSphDict *				m_pDict;
-	const CSphIndex *		m_pIndex;
-	ESphDocinfo				m_eDocinfo;
-	const CSphRowitem *		m_pMinRow;
-	SphDocID_t				m_uMinDocid;
-	int						m_iInlineRowitems;		///< inline rowitems count
-	int						m_iDynamicRowitems;		///< dynamic rowitems counts (including (!) inline)
-	int64_t					m_iMaxTimer;
-	CSphString *			m_pWarning;
-	CSphQueryContext *		m_pCtx;
-	CSphQueryNodeCache *	m_pNodeCache;
-	mutable ISphZoneCheck *	m_pZoneChecker;
-	CSphQueryStats *		m_pStats;
-	mutable bool			m_bSetQposMask;
+	CSphDictRefPtr_c		m_pDict;
+public:
+	const CSphIndex *		m_pIndex = nullptr;
+	ESphDocinfo				m_eDocinfo { SPH_DOCINFO_NONE };
+	const CSphRowitem *		m_pMinRow = nullptr;
+	SphDocID_t				m_uMinDocid = 0;
+	int						m_iInlineRowitems = 0;		///< inline rowitems count
+	int						m_iDynamicRowitems = 0;		///< dynamic rowitems counts (including (!) inline)
+	int64_t					m_iMaxTimer = 0;
+	CSphString *			m_pWarning = nullptr;
+	CSphQueryContext *		m_pCtx = nullptr;
+	CSphQueryNodeCache *	m_pNodeCache = nullptr;
+	mutable ISphZoneCheck *	m_pZoneChecker = nullptr;
+	CSphQueryStats *		m_pStats = nullptr;
+	mutable bool			m_bSetQposMask = false;
 
-	ISphQwordSetup ()
-		: m_pDict ( NULL )
-		, m_pIndex ( NULL )
-		, m_eDocinfo ( SPH_DOCINFO_NONE )
-		, m_pMinRow ( NULL )
-		, m_uMinDocid ( 0 )
-		, m_iInlineRowitems ( 0 )
-		, m_iDynamicRowitems ( 0 )
-		, m_iMaxTimer ( 0 )
-		, m_pWarning ( NULL )
-		, m_pCtx ( NULL )
-		, m_pNodeCache ( NULL )
-		, m_pZoneChecker ( NULL )
-		, m_pStats ( NULL )
-		, m_bSetQposMask ( false )
-	{}
 	virtual ~ISphQwordSetup () {}
 
 	virtual ISphQword *					QwordSpawn ( const XQKeyword_t & tWord ) const = 0;
 	virtual bool						QwordSetup ( ISphQword * pQword ) const = 0;
+	inline void SetDict ( CSphDict * pDict )
+	{
+		SafeAddRef ( pDict );
+		m_pDict = pDict;
+	}
+	inline CSphDict * Dict() const { return m_pDict; };
 };
 
 /// generic ranker interface

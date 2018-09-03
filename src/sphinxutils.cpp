@@ -1657,7 +1657,7 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 
 	if ( !pIndex->GetDictionary () )
 	{
-		CSphDict * pDict = nullptr;
+		CSphDictRefPtr_c pDict;
 		CSphDictSettings tSettings;
 		if ( bTemplateDict )
 		{
@@ -1720,7 +1720,8 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 
 	// exact words fixup, needed for RT indexes
 	// cloned from indexer, remove somehow?
-	CSphDict * pDict = pIndex->GetDictionary();
+	CSphDictRefPtr_c pDict { pIndex->GetDictionary() };
+	SafeAddRef ( pDict );
 	assert ( pDict );
 
 	CSphIndexSettings tSettings = pIndex->GetSettings ();

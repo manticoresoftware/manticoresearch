@@ -782,17 +782,18 @@ struct CSphWordforms
 struct CSphWordHit;
 class CSphAutofile;
 struct DictHeader_t;
-class CSphDict
+class CSphDict : public ISphRefcountedMT
 {
+protected:
+	/// virtualizing dtor. Protected to follow refcounted rules.
+	virtual                ~CSphDict () {}
+
 public:
 	static const int	ST_OK = 0;
 	static const int	ST_ERROR = 1;
 	static const int	ST_WARNING = 2;
 
 public:
-	/// virtualizing dtor
-	virtual				~CSphDict () {}
-
 	/// Get word ID by word, "text" version
 	/// may apply stemming and modify word inplace
 	/// modified word may become bigger than the original one, so make sure you have enough space in buffer which is pointer by pWord
@@ -908,7 +909,7 @@ public:
 	virtual bool			HasState () const { return false; }
 
 	/// make a clone
-	virtual CSphDict *		Clone () const { return NULL; }
+	virtual CSphDict *		Clone () const { return nullptr; }
 
 	/// get settings hash
 	virtual uint64_t		GetSettingsFNV () const = 0;
@@ -917,6 +918,10 @@ protected:
 	CSphString				m_sMorphFingerprint;
 };
 
+using CSphDictRefPtr_c = CSphRefcountedPtr<CSphDict>;
+
+/// returns pDict, if stateless. Or it's clone, if not
+CSphDict * GetStatelessDict ( CSphDict * pDict );
 
 /// traits dictionary factory (no storage, only tokenizing, lemmatizing, etc.)
 CSphDict * sphCreateDictionaryTemplate ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, CSphString & sError );
@@ -1886,7 +1891,7 @@ struct CSphFieldFilterSettings
 };
 
 /// field filter
-class ISphFieldFilter
+class ISphFieldFilter // fixme! Made refcounted
 {
 public:
 								ISphFieldFilter();
@@ -2023,8 +2028,8 @@ public:
 	virtual void						PostIndex () {}
 
 protected:
-	ISphTokenizer *						m_pTokenizer = nullptr;	///< my tokenizer
-	CSphDict *							m_pDict = nullptr;		///< my dict
+	ISphTokenizerRefPtr_c				m_pTokenizer;	///< my tokenizer
+	CSphDictRefPtr_c					m_pDict;		///< my dict
 	ISphFieldFilter	*					m_pFieldFilter = nullptr;	///< my field filter
 
 	CSphSourceStats						m_tStats;		///< my stats
@@ -3418,10 +3423,10 @@ public:
 	virtual void				GetFieldFilterSettings ( CSphFieldFilterSettings & tSettings );
 
 public:
-	int64_t						m_iTID;					///< last committed transaction id
+	int64_t						m_iTID = 0;				///< last committed transaction id
 
-	int							m_iExpandKeywords;		///< enable automatic query-time keyword expansion (to "( word | =word | *word* )")
-	int							m_iExpansionLimit;
+	int							m_iExpandKeywords = KWE_DISABLED;	///< enable automatic query-time keyword expansion (to "( word | =word | *word* )")
+	int							m_iExpansionLimit = 0;
 
 protected:
 	static CSphAtomic			m_tIdGenerator;
@@ -3432,28 +3437,28 @@ protected:
 	CSphString					m_sLastError;
 	CSphString					m_sLastWarning;
 
-	bool						m_bInplaceSettings;
-	int							m_iHitGap;
-	int							m_iDocinfoGap;
-	float						m_fRelocFactor;
-	float						m_fWriteFactor;
+	bool						m_bInplaceSettings = false;
+	int							m_iHitGap = 0;
+	int							m_iDocinfoGap = 0;
+	float						m_fRelocFactor { 0.0f };
+	float						m_fWriteFactor { 0.0f };
 
-	bool						m_bKeepFilesOpen;		///< keep files open to avoid race on seamless rotation
-	bool						m_bBinlog;
+	bool						m_bKeepFilesOpen = false;	///< keep files open to avoid race on seamless rotation
+	bool						m_bBinlog = true;
 
-	bool						m_bStripperInited;		///< was stripper initialized (old index version (<9) handling)
+	bool						m_bStripperInited = true;	///< was stripper initialized (old index version (<9) handling)
 
 protected:
 	CSphIndexSettings			m_tSettings;
 
-	ISphFieldFilter *			m_pFieldFilter;
+	ISphFieldFilter *			m_pFieldFilter = nullptr;
 	ISphTokenizerRefPtr_c		m_pTokenizer;
 	ISphTokenizerRefPtr_c		m_pQueryTokenizer;
 	ISphTokenizerRefPtr_c		m_pQueryTokenizerJson;
-	CSphDict *					m_pDict;
+	CSphDictRefPtr_c			m_pDict;
 
-	int							m_iMaxCachedDocs;
-	int							m_iMaxCachedHits;
+	int							m_iMaxCachedDocs = 0;
+	int							m_iMaxCachedHits = 0;
 	CSphString					m_sIndexName;			///< index ID in binlogging; otherwise used only in messages.
 	CSphString					m_sFilename;
 

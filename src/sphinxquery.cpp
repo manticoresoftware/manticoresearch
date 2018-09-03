@@ -218,7 +218,9 @@ void XQParseHelper_c::Setup ( const CSphSchema * pSchema, ISphTokenizer * pToken
 {
 	m_pSchema = pSchema;
 	m_pTokenizer = pTokenizer;
+	SafeAddRef ( pTokenizer );
 	m_pDict = pDict;
+	SafeAddRef ( pDict );
 	m_pParsed = pXQQuery;
 	m_iAtomPos = 0;
 	m_bEmptyStopword = ( tSettings.m_iStopwordStep==0 );
@@ -1776,10 +1778,7 @@ bool XQParser_t::Parse ( XQQuery_t & tParsed, const char * sQuery, const CSphQue
 	}
 
 	// setup parser
-	CSphDict * pMyDict = pDict;
-	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
-	if ( pDict->HasState() )
-		tDictCloned = pMyDict = pDict->Clone();
+	CSphDictRefPtr_c pMyDict { GetStatelessDict ( pDict ) };
 
 	Setup ( pSchema, pMyTokenizer, pMyDict, &tParsed, tSettings );
 	m_sQuery = (BYTE*) sQuery;

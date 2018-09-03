@@ -317,11 +317,7 @@ bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, 
 	}
 
 	ISphTokenizerRefPtr_c pMyTokenizer { pQueryTokenizerJson->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT ) };
-
-	CSphDict * pMyDict = pDict;
-	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
-	if ( pDict->HasState() )
-		tDictCloned = pMyDict = pDict->Clone();
+	CSphDictRefPtr_c pMyDict { GetStatelessDict ( pDict ) };
 
 	QueryTreeBuilder_c tBuilder;
 	tBuilder.Setup ( pSchema, pMyTokenizer, pMyDict, &tParsed, tSettings );

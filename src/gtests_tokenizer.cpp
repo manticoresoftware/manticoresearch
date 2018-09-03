@@ -111,7 +111,7 @@ TEST_F( Tokenizer, exceptions_more )
 		++iCur;
 	}
 
-	ISphTokenizer * pQtok = m_pTokenizer->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT );
+	ISphTokenizerRefPtr_c pQtok { m_pTokenizer->Clone ( SPH_CLONE_QUERY_LIGHTWEIGHT ) };
 
 	pQtok->SetBuffer ( ( BYTE * ) "life:)", 7 );
 	ASSERT_STREQ ( ( char * ) pQtok->GetToken (), "life:)" );
@@ -656,7 +656,6 @@ class QueryParser : public Tokenizer
 protected:
 	void TearDown () override
 	{
-		SafeDelete (pDict);
 		Tokenizer::TearDown ();
 	}
 
@@ -685,7 +684,7 @@ protected:
 		ASSERT_TRUE ( pDict );
 	}
 
-	CSphDict* pDict;
+	CSphDictRefPtr_c pDict;
 	CSphSchema tSchema;
 	CSphIndexSettings tTmpSettings;
 };

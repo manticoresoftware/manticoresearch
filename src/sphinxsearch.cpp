@@ -1252,10 +1252,11 @@ static ISphQword * CreateQueryWord ( const XQKeyword_t & tWord, const ISphQwordS
 
 	ISphQword * pWord = tSetup.QwordSpawn ( tWord );
 	pWord->m_sWord = tWord.m_sWord;
-	CSphDict * pDict = pZonesDict ? pZonesDict : tSetup.m_pDict;
+	if (!pZonesDict)
+		pZonesDict = tSetup.Dict();
 	pWord->m_uWordID = tWord.m_bMorphed
-		? pDict->GetWordIDNonStemmed ( sTmp )
-		: pDict->GetWordID ( sTmp );
+		? pZonesDict->GetWordIDNonStemmed ( sTmp )
+		: pZonesDict->GetWordID ( sTmp );
 	pWord->m_sDictWord = (char*)sTmp;
 	pWord->m_bExpanded = tWord.m_bExpanded;
 	tSetup.QwordSetup ( pWord );
@@ -5858,7 +5859,7 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup,
 	m_bZSlist = tXQ.m_bNeedSZlist;
 	m_dZoneInfo.Reset ( m_dZones.GetLength() );
 
-	CSphDict * pZonesDict = nullptr;
+	CSphDictRefPtr_c pZonesDict;
 	// workaround for a particular case with following conditions
 	if ( !m_pIndex->GetDictionary()->GetSettings().m_bWordDict && m_dZones.GetLength() )
 		pZonesDict = m_pIndex->GetDictionary()->Clone();
@@ -5875,8 +5876,6 @@ ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup,
 		m_dZoneEndTerm.Add ( new ExtTerm_c ( CreateQueryWord ( tDot, tSetup, pZonesDict ), tSetup ) );
 		m_dZoneEnd[i] = nullptr;
 	}
-
-	SafeDelete ( pZonesDict );
 
 	if ( QcacheGetStatus().m_iMaxBytes>0 && !bSkipQCache )
 	{

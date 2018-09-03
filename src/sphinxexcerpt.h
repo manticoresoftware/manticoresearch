@@ -70,12 +70,10 @@ public:
 class SnippetContext_t : ISphNoncopyable
 {
 private:
-	CSphScopedPtr<CSphDict> m_tDictKeeper { nullptr };
-	CSphScopedPtr<CSphDict> m_tExactDictKeeper { nullptr };
 	CSphScopedPtr<CSphHTMLStripper> m_tStripper { nullptr };
 	ISphTokenizerRefPtr_c m_pTokenizer;
 	ISphTokenizerRefPtr_c m_pQueryTokenizer;
-	CSphDict * m_pDict = nullptr;
+	CSphDictRefPtr_c m_pDict;
 	XQQuery_t m_tExtQuery;
 	DWORD m_eExtQuerySPZ { SPH_SPZ_NONE };
 

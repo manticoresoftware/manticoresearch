@@ -654,7 +654,7 @@ public:
 
 	SnippetsDocIndex_c &	m_tContainer;
 	ISphTokenizerRefPtr_c	m_pTokenizer;
-	CSphDict *				m_pDict;
+	CSphDictRefPtr_c		m_pDict;
 	const char *			m_szDocBuffer;
 	const char *			m_pDoc = nullptr;
 	const char *			m_pDocMax = nullptr;
@@ -680,6 +680,7 @@ public:
 		, m_iDocLen ( iDocLen )
 	{
 		SafeAddRef ( pTokenizer );
+		SafeAddRef ( pDict );
 		assert ( m_pTokenizer && m_pDict );
 		ExcerptQuery_t::operator = ( tQuery );
 		m_pTokenizer->SetBuffer ( (BYTE*)sDoc, m_iDocLen );
@@ -2986,7 +2987,7 @@ template < typename T >
 static void TokenizeDocument ( T & tFunctor, const CSphHTMLStripper * pStripper, DWORD iSPZ )
 {
 	ISphTokenizerRefPtr_c pTokenizer { tFunctor.m_pTokenizer };
-	CSphDict * pDict = tFunctor.m_pDict;
+	CSphDictRefPtr_c& pDict = tFunctor.m_pDict;
 
 	const char * pStartPtr = pTokenizer->GetBufferPtr ();
 	const char * pLastTokenEnd = pStartPtr;
@@ -3363,14 +3364,12 @@ public:
 		m_pHiglighter = pHiglighter;
 	}
 
-	virtual ~SnippetsFastQwordSetup_c () {}
-
-	virtual ISphQword * QwordSpawn ( const XQKeyword_t & tWord ) const
+	ISphQword * QwordSpawn ( const XQKeyword_t & tWord ) const final
 	{
 		return new SnippetsFastQword_c ( m_pHiglighter->GetHitlist ( tWord ) );
 	}
 
-	virtual bool QwordSetup ( ISphQword * pQword ) const
+	bool QwordSetup ( ISphQword * pQword ) const final
 	{
 		SnippetsFastQword_c * pWord = (SnippetsFastQword_c *)pQword;
 		pWord->Setup ( m_pHiglighter->m_tContainer.m_uLastPos );
@@ -3626,7 +3625,7 @@ static void DoHighlighting ( ExcerptQuery_t & tQuerySettings,
 		SnippetZoneChecker_c tZoneChecker ( tHitCollector.m_dZones, tHitCollector.m_tZoneInfo.m_hZones, tContainer.m_tQuery.m_dZones );
 
 		SnippetsFastQwordSetup_c tQwordSetup ( &tHitCollector );
-		tQwordSetup.m_pDict = pDict;
+		tQwordSetup.SetDict ( pDict );
 		tQwordSetup.m_eDocinfo = SPH_DOCINFO_EXTERN;
 		tQwordSetup.m_pWarning = &sError;
 		tQwordSetup.m_pZoneChecker = &tZoneChecker;
@@ -3892,10 +3891,7 @@ static bool SetupStripperSPZ ( const CSphIndexSettings &tSettings, const Excerpt
 bool SnippetContext_t::Setup ( const CSphIndex * pIndex, const ExcerptQuery_t &tSettings, CSphString &sError )
 {
 	assert ( pIndex );
-	CSphScopedPtr<CSphDict> tDictCloned ( nullptr );
-	m_pDict = pIndex->GetDictionary ();
-	if ( m_pDict->HasState () )
-		m_tDictKeeper = m_pDict = m_pDict->Clone ();
+	m_pDict = GetStatelessDict ( pIndex->GetDictionary () );
 
 	// AOT tokenizer works only with query mode
 	if ( pIndex->GetSettings ().m_uAotFilterMask &&
@@ -3936,10 +3932,7 @@ bool SnippetContext_t::Setup ( const CSphIndex * pIndex, const ExcerptQuery_t &t
 
 	// setup exact dictionary if needed
 	if ( pIndex->GetSettings ().m_bIndexExactWords )
-	{
-		m_tExactDictKeeper = new CSphDictExact ( m_pDict );
-		m_pDict = m_tExactDictKeeper.Ptr();
-	}
+		m_pDict = new CSphDictExact ( m_pDict );
 
 	if ( tSettings.m_bHighlightQuery )
 	{

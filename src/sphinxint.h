@@ -1573,7 +1573,7 @@ struct LocatorPair_t
 class CSphDictTraits : public CSphDict
 {
 public:
-	explicit			CSphDictTraits ( CSphDict * pDict ) : m_pDict ( pDict ) { assert ( m_pDict ); }
+	explicit			CSphDictTraits ( CSphDict * pDict ) : m_pDict { pDict } { SafeAddRef ( pDict ); }
 
 	virtual void		LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer ) { m_pDict->LoadStopwords ( sFiles, pTokenizer ); }
 	virtual void		LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) { m_pDict->LoadStopwords ( dStopwords ); }
@@ -1597,7 +1597,7 @@ public:
 	virtual uint64_t	GetSettingsFNV () const { return m_pDict->GetSettingsFNV(); }
 
 protected:
-	CSphDict *			m_pDict;
+	CSphDictRefPtr_c	m_pDict;
 };
 
 
@@ -1605,23 +1605,21 @@ protected:
 class CSphDictStar : public CSphDictTraits
 {
 public:
-	explicit			CSphDictStar ( CSphDict * pDict ) : CSphDictTraits ( pDict ) {}
+	explicit	CSphDictStar ( CSphDict * pDict ) : CSphDictTraits ( pDict ) {}
 
-	virtual SphWordID_t	GetWordID ( BYTE * pWord );
-	virtual SphWordID_t	GetWordIDNonStemmed ( BYTE * pWord );
+	SphWordID_t	GetWordID ( BYTE * pWord ) override;
+	SphWordID_t	GetWordIDNonStemmed ( BYTE * pWord ) override;
 };
 
 
 /// star dict for index v.8+
 class CSphDictStarV8 : public CSphDictStar
 {
+	bool m_bInfixes;
 public:
-	CSphDictStarV8 ( CSphDict * pDict, bool bPrefixes, bool bInfixes );
-
-	virtual SphWordID_t	GetWordID ( BYTE * pWord );
-
-private:
-	bool				m_bInfixes;
+	CSphDictStarV8 ( CSphDict * pDict, bool bInfixes ) : CSphDictStar ( pDict ), m_bInfixes ( bInfixes )
+	{}
+	SphWordID_t	GetWordID ( BYTE * pWord ) final;
 };
 
 
@@ -1630,8 +1628,8 @@ class CSphDictExact : public CSphDictTraits
 {
 public:
 	explicit CSphDictExact ( CSphDict * pDict ) : CSphDictTraits ( pDict ) {}
-	virtual SphWordID_t	GetWordID ( BYTE * pWord );
-	virtual SphWordID_t GetWordIDNonStemmed ( BYTE * pWord ) { return m_pDict->GetWordIDNonStemmed ( pWord ); }
+	SphWordID_t	GetWordID ( BYTE * pWord ) final;
+	SphWordID_t GetWordIDNonStemmed ( BYTE * pWord ) final { return m_pDict->GetWordIDNonStemmed ( pWord ); }
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1694,7 +1692,7 @@ struct CSphReconfigureSettings
 struct CSphReconfigureSetup
 {
 	ISphTokenizerRefPtr_c	m_pTokenizer;
-	CSphDict *			m_pDict = nullptr;
+	CSphDictRefPtr_c		m_pDict;
 	CSphIndexSettings	m_tIndex;
 	ISphFieldFilter *	m_pFieldFilter = nullptr;
 	CSphSchema			m_tSchema;
@@ -1949,6 +1947,8 @@ int sphCollateBinary ( const BYTE * pStr1, const BYTE * pStr2, StringSource_e eS
 
 class ISphRtDictWraper : public CSphDict
 {
+protected:
+	~ISphRtDictWraper() override {}
 public:
 	virtual const BYTE *	GetPackedKeywords () = 0;
 	virtual int				GetPackedLen () = 0;
@@ -1958,6 +1958,8 @@ public:
 	virtual const char *	GetLastWarning() const = 0;
 	virtual void			ResetWarning() = 0;
 };
+
+using ISphRtDictWraperRefPtr_c = CSphRefcountedPtr<ISphRtDictWraper>;
 
 ISphRtDictWraper * sphCreateRtKeywordsDictionaryWrapper ( CSphDict * pBase );
 

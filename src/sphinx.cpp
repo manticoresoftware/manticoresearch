@@ -606,7 +606,7 @@ class DiskIndexQwordSetup_c : public ISphQwordSetup
 public:
 	const CSphAutofile &	m_tDoclist;
 	const CSphAutofile &	m_tHitlist;
-	bool					m_bSetupReaders;
+	bool					m_bSetupReaders = false;
 	const BYTE *			m_pSkips;
 	CSphQueryProfile *		m_pProfile;
 
@@ -614,16 +614,14 @@ public:
 	DiskIndexQwordSetup_c ( const CSphAutofile & tDoclist, const CSphAutofile & tHitlist, const BYTE * pSkips, CSphQueryProfile * pProfile )
 		: m_tDoclist ( tDoclist )
 		, m_tHitlist ( tHitlist )
-		, m_bSetupReaders ( false )
 		, m_pSkips ( pSkips )
 		, m_pProfile ( pProfile )
-	{
-	}
+	{}
 
-	virtual ISphQword *					QwordSpawn ( const XQKeyword_t & tWord ) const;
-	virtual bool						QwordSetup ( ISphQword * ) const;
+	ISphQword *					QwordSpawn ( const XQKeyword_t & tWord ) const final;
+	bool						QwordSetup ( ISphQword * ) const final;
 
-	bool								Setup ( ISphQword * ) const;
+	bool						Setup ( ISphQword * ) const;
 };
 
 
@@ -1094,7 +1092,7 @@ struct WriteHeader_t
 	const CSphIndexSettings * m_pSettings;
 	const CSphSchema * m_pSchema;
 	ISphTokenizerRefPtr_c m_pTokenizer;
-	const CSphDict * m_pDict;
+	CSphDictRefPtr_c m_pDict;
 	const ISphFieldFilter * m_pFieldFilter;
 	const int64_t * m_pFieldLens;
 };
@@ -1273,22 +1271,20 @@ bool CSphTokenizerIndex::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 
 	// need to support '*' and '=' but not the other specials
 	// so m_pQueryTokenizer does not work for us, gotta clone and setup one manually
+
+	CSphDictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
+
 	if ( IsStarDict() )
+	{
 		pTokenizer->AddPlainChar ( '*' );
+		pDict = new CSphDictStar ( pDict );
+	}
+
 	if ( m_tSettings.m_bIndexExactWords )
+	{
 		pTokenizer->AddPlainChar ( '=' );
-
-	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
-	CSphDict * pDictBase = m_pDict;
-	if ( pDictBase->HasState() )
-		tDictCloned = pDictBase = pDictBase->Clone();
-
-	CSphDict * pDict = pDictBase;
-	if ( IsStarDict() )
-		pDict = new CSphDictStar ( pDictBase );
-
-	if ( m_tSettings.m_bIndexExactWords )
 		pDict = new CSphDictExact ( pDict );
+	}
 
 	dKeywords.Resize ( 0 );
 
@@ -1468,9 +1464,9 @@ private:
 
 	bool						BuildMVA ( const CSphVector<CSphSource*> & dSources, CSphFixedVector<CSphWordHit> & dHits, int iArenaSize, int iFieldFD, int nFieldMVAs, int iFieldMVAInPool, CSphIndex_VLN * pPrevIndex, const CSphBitvec * pPrevMva );
 
-	bool						IsStarDict() const;
-	CSphDict *					SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict ) const;
-	CSphDict *					SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict ) const;
+	bool						IsStarDict() const override ;
+	void						SetupStarDict ( CSphDictRefPtr_c &pDict ) const;
+	void						SetupExactDict ( CSphDictRefPtr_c &pDict ) const;
 
 	bool						RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSize, SphOffset_t * pFileSize, CSphBin * pMinBin, SphOffset_t * pSharedOffset );
 	bool						PrecomputeMinMax();
@@ -8440,22 +8436,7 @@ CSphMultiQueryArgs::CSphMultiQueryArgs ( const KillListVector & dKillList, int i
 CSphAtomic CSphIndex::m_tIdGenerator;
 
 CSphIndex::CSphIndex ( const char * sIndexName, const char * sFilename )
-	: m_iTID ( 0 )
-	, m_iExpandKeywords ( KWE_DISABLED )
-	, m_iExpansionLimit ( 0 )
-	, m_tSchema ( sFilename )
-	, m_bInplaceSettings ( false )
-	, m_iHitGap ( 0 )
-	, m_iDocinfoGap ( 0 )
-	, m_fRelocFactor ( 0.0f )
-	, m_fWriteFactor ( 0.0f )
-	, m_bKeepFilesOpen ( false )
-	, m_bBinlog ( true )
-	, m_bStripperInited ( true )
-	, m_pFieldFilter ( NULL )
-	, m_pDict ( NULL )
-	, m_iMaxCachedDocs ( 0 )
-	, m_iMaxCachedHits ( 0 )
+	: m_tSchema ( sFilename )
 	, m_sIndexName ( sIndexName )
 	, m_sFilename ( sFilename )
 {
@@ -8467,7 +8448,6 @@ CSphIndex::~CSphIndex ()
 {
 	QcacheDeleteIndex ( m_iIndexId );
 	SafeDelete ( m_pFieldFilter );
-	SafeDelete ( m_pDict );
 }
 
 
@@ -8516,18 +8496,14 @@ ISphTokenizer *	CSphIndex::LeakTokenizer ()
 
 void CSphIndex::SetDictionary ( CSphDict * pDict )
 {
-	if ( m_pDict!=pDict )
-		SafeDelete ( m_pDict );
-
+	SafeAddRef ( pDict );
 	m_pDict = pDict;
 }
 
 
 CSphDict * CSphIndex::LeakDictionary ()
 {
-	CSphDict * pDict = m_pDict;
-	m_pDict = NULL;
-	return pDict;
+	return m_pDict.Leak();
 }
 
 
@@ -8540,7 +8516,8 @@ void CSphIndex::Setup ( const CSphIndexSettings & tSettings )
 void CSphIndex::PostSetup ()
 {
 	// in case infixes got enabled and no prefix set let's enable prefix of any length 
-	if ( m_pDict && m_pDict->GetSettings().m_bWordDict && m_tSettings.m_iMinPrefixLen==0 && m_tSettings.m_iMinInfixLen>0 )
+	if ( m_pDict && m_pDict->GetSettings().m_bWordDict
+		&& m_tSettings.m_iMinPrefixLen==0 && m_tSettings.m_iMinInfixLen>0 )
 		m_tSettings.m_iMinPrefixLen = 1;
 }
 
@@ -9901,7 +9878,7 @@ private:
 	BYTE						m_sLastKeyword [ MAX_KEYWORD_BYTES ];
 
 	const CSphVector<SphWordID_t> &	m_dHitlessWords;
-	CSphDict *					m_pDict;
+	CSphDictRefPtr_c			m_pDict;
 	CSphString *				m_pLastError;
 
 	SphOffset_t					m_iLastHitlistPos = 0;		///< doclist entry
@@ -9937,6 +9914,7 @@ CSphHitBuilder::CSphHitBuilder ( const CSphIndexSettings & tSettings,
 	m_sLastKeyword[0] = '\0';
 	HitReset();
 	m_dLastDocFields.UnsetAll();
+	SafeAddRef ( pDict );
 	assert ( m_pDict );
 	assert ( m_pLastError );
 }
@@ -14031,11 +14009,11 @@ bool CSphIndex_VLN::DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_V
 	if ( !sError.IsEmpty() || tTmpDict.GetFD()<0 || tDict.GetFD()<0 || g_bShutdown || *pLocalStop )
 		return false;
 
-	CSphScopedPtr<CSphDict> pDict ( pSettings->m_pDict->Clone() );
+	CSphDictRefPtr_c pDict { pSettings->m_pDict->Clone() };
 
 	int iHitBufferSize = 8 * 1024 * 1024;
 	CSphVector<SphWordID_t> dDummy;
-	CSphHitBuilder tHitBuilder ( pSettings->m_tSettings, dDummy, true, iHitBufferSize, pDict.Ptr(), &sError );
+	CSphHitBuilder tHitBuilder ( pSettings->m_tSettings, dDummy, true, iHitBufferSize, pDict, &sError );
 
 	CSphFixedVector<CSphRowitem> dMinRow (0);
 	dMinRow.CopyFrom ( pDstIndex->m_dMinRow );
@@ -14200,13 +14178,6 @@ SphWordID_t	CSphDictStar::GetWordIDNonStemmed ( BYTE * pWord )
 
 
 //////////////////////////////////////////////////////////////////////////
-
-CSphDictStarV8::CSphDictStarV8 ( CSphDict * pDict, bool bPrefixes, bool bInfixes )
-	: CSphDictStar	( pDict )
-	, m_bInfixes	( bInfixes )
-{
-}
-
 
 SphWordID_t	CSphDictStarV8::GetWordID ( BYTE * pWord )
 {
@@ -15442,7 +15413,6 @@ void CSphIndex_VLN::Dealloc ()
 	m_tSettings.m_eDocinfo = SPH_DOCINFO_NONE;
 
 	SafeDelete ( m_pFieldFilter );
-	SafeDelete ( m_pDict );
 
 	if ( m_iIndexTag>=0 && g_pMvaArena )
 		g_tMvaArena.TaggedFreeTag ( m_iIndexTag );
@@ -15644,9 +15614,10 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 				StripPath ( tDictSettings.m_dWordforms[i] );
 		}
 
-		CSphDict * pDict = tDictSettings.m_bWordDict
+		CSphDictRefPtr_c pDict { tDictSettings.m_bWordDict
 			? sphCreateDictionaryKeywords ( tDictSettings, &tEmbeddedFiles, pTokenizer, m_sIndexName.cstr(), m_sLastError )
-			: sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, pTokenizer, m_sIndexName.cstr(), m_sLastError );
+			: sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, pTokenizer, m_sIndexName.cstr(), m_sLastError )
+		};
 
 		if ( !pDict )
 			return false;
@@ -16051,7 +16022,7 @@ void CSphIndex_VLN::DumpHitlist ( FILE * fp, const char * sKeyword, bool bID )
 
 	// aim
 	DiskIndexQwordSetup_c tTermSetup ( tDoclist, tHitlist, m_tSkiplists.GetWritePtr(), NULL );
-	tTermSetup.m_pDict = m_pDict;
+	tTermSetup.SetDict ( m_pDict );
 	tTermSetup.m_pIndex = this;
 	tTermSetup.m_eDocinfo = m_tSettings.m_eDocinfo;
 	tTermSetup.m_uMinDocid = m_uMinDocid;
@@ -16583,29 +16554,22 @@ bool CSphIndex_VLN::IsStarDict () const
 }
 
 
-CSphDict * CSphIndex_VLN::SetupStarDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict ) const
+void CSphIndex_VLN::SetupStarDict ( CSphDictRefPtr_c &pDict ) const
 {
 	// spawn wrapper, and put it in the box
 	// wrapper type depends on version; v.8 introduced new mangling rules
-	if ( !IsStarDict() )
-		return pPrevDict;
-	if ( m_uVersion>=8 )
-		tContainer = new CSphDictStarV8 ( pPrevDict, m_tSettings.m_iMinPrefixLen>0, m_tSettings.m_iMinInfixLen>0 );
-	else
-		tContainer = new CSphDictStar ( pPrevDict );
+	if ( IsStarDict() )
+		pDict = ( m_uVersion>=8 )
+			? new CSphDictStarV8 ( pDict, m_tSettings.m_iMinInfixLen>0 )
+			: new CSphDictStar ( pDict );
 
 	// FIXME? might wanna verify somehow that the tokenizer has '*' as a character
-	return tContainer.Ptr();
 }
 
-
-CSphDict * CSphIndex_VLN::SetupExactDict ( CSphScopedPtr<CSphDict> & tContainer, CSphDict * pPrevDict ) const
+void CSphIndex_VLN::SetupExactDict ( CSphDictRefPtr_c &pDict ) const
 {
-	if ( m_uVersion<12 || !m_tSettings.m_bIndexExactWords )
-		return pPrevDict;
-
-	tContainer = new CSphDictExact ( pPrevDict );
-	return tContainer.Ptr();
+	if ( m_uVersion>=12 && m_tSettings.m_bIndexExactWords )
+		pDict = new CSphDictExact ( pDict );
 }
 
 
@@ -16895,16 +16859,9 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	if ( ( bFillOnly && !dKeywords.GetLength() ) || ( !bFillOnly && ( !szQuery || !szQuery[0] ) ) )
 		return true;
 
-	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
-	CSphDict * pDictBase = m_pDict;
-	if ( pDictBase->HasState() )
-		tDictCloned = pDictBase = pDictBase->Clone();
-
-	CSphScopedPtr<CSphDict> tDict ( NULL );
-	CSphDict * pDict = SetupStarDict ( tDict, pDictBase );
-
-	CSphScopedPtr<CSphDict> tDict2 ( NULL );
-	pDict = SetupExactDict ( tDict2, pDict );
+	CSphDictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
+	SetupStarDict ( pDict );
+	SetupExactDict ( pDict );
 
 	CSphVector<BYTE> dFiltered;
 	CSphScopedPtr<ISphFieldFilter> pFieldFilter ( NULL );
@@ -16922,7 +16879,7 @@ bool CSphIndex_VLN::DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords,
 	CSphAutofile tDummy1, tDummy2;
 
 	DiskIndexQwordSetup_c tTermSetup ( tDummy1, tDummy2, m_tSkiplists.GetWritePtr(), NULL );
-	tTermSetup.m_pDict = pDict;
+	tTermSetup.SetDict ( pDict );
 	tTermSetup.m_pIndex = this;
 	tTermSetup.m_eDocinfo = m_tSettings.m_eDocinfo;
 
@@ -17561,7 +17518,8 @@ bool sphExpandGetWords ( const char * sWord, const ExpansionContext_t & tCtx, IS
 
 XQNode_t * CSphIndex_VLN::ExpandPrefix ( XQNode_t * pNode, CSphQueryResultMeta * pResult, CSphScopedPayload * pPayloads, DWORD uQueryDebugFlags ) const
 {
-	if ( !pNode || !m_pDict->GetSettings().m_bWordDict || ( m_tSettings.m_iMinPrefixLen<=0 && m_tSettings.m_iMinInfixLen<=0 ) )
+	if ( !pNode || !m_pDict->GetSettings().m_bWordDict
+			|| ( m_tSettings.m_iMinPrefixLen<=0 && m_tSettings.m_iMinInfixLen<=0 ) )
 		return pNode;
 
 	assert ( m_bPassedAlloc );
@@ -17934,16 +17892,9 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	if ( pProfile )
 		pProfile->Switch ( SPH_QSTATE_DICT_SETUP );
 
-	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
-	CSphDict * pDictBase = m_pDict;
-	if ( pDictBase->HasState() )
-		tDictCloned = pDictBase = pDictBase->Clone();
-
-	CSphScopedPtr<CSphDict> tDict ( NULL );
-	CSphDict * pDict = SetupStarDict ( tDict, pDictBase );
-
-	CSphScopedPtr<CSphDict> tDict2 ( NULL );
-	pDict = SetupExactDict ( tDict2, pDict );
+	CSphDictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
+	SetupStarDict ( pDict );
+	SetupExactDict ( pDict );
 
 	CSphVector<BYTE> dFiltered;
 	const BYTE * sModifiedQuery = (BYTE *)pQuery->m_sQuery.cstr();
@@ -18036,16 +17987,9 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 	assert ( pQueries );
 	assert ( ppSorters );
 
-	CSphScopedPtr<CSphDict> tDictCloned ( NULL );
-	CSphDict * pDictBase = m_pDict;
-	if ( pDictBase->HasState() )
-		tDictCloned = pDictBase = pDictBase->Clone();
-
-	CSphScopedPtr<CSphDict> tDict ( NULL );
-	CSphDict * pDict = SetupStarDict ( tDict, pDictBase );
-
-	CSphScopedPtr<CSphDict> tDict2 ( NULL );
-	pDict = SetupExactDict ( tDict2, pDict );
+	CSphDictRefPtr_c pDict { GetStatelessDict ( m_pDict ) };
+	SetupStarDict ( pDict );
+	SetupExactDict ( pDict );
 
 	CSphFixedVector<XQQuery_t> dXQ ( iQueries );
 	CSphFixedVector<SphWordStatChecker_t> dStatChecker ( iQueries );
@@ -18242,7 +18186,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 		m_bKeepFilesOpen ? m_tHitlistFile : tHitlist,
 		m_tSkiplists.GetWritePtr(), pProfile );
 
-	tTermSetup.m_pDict = pDict;
+	tTermSetup.SetDict ( pDict );
 	tTermSetup.m_pIndex = this;
 	tTermSetup.m_eDocinfo = m_tSettings.m_eDocinfo;
 	tTermSetup.m_uMinDocid = m_uMinDocid;
@@ -20155,8 +20099,10 @@ bool CSphDict::DictIsError () const														{ return true; }
 struct CSphTemplateDictTraits : CSphDict
 {
 	CSphTemplateDictTraits ();
+protected:
 	virtual				~CSphTemplateDictTraits ();
 
+public:
 	virtual void		LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer );
 	virtual void		LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords );
 	virtual void		WriteStopwords ( CSphWriter & tWriter ) const;
@@ -20218,27 +20164,22 @@ CSphVector<CSphWordforms*> CSphTemplateDictTraits::m_dWordformContainers;
 /// common CRC32/64 dictionary stuff
 struct CSphDiskDictTraits : CSphTemplateDictTraits
 {
-						CSphDiskDictTraits ()
-							: m_iEntries ( 0 )
-							, m_iLastDoclistPos ( 0 )
-							, m_iLastWordID ( 0 )
-						{}
-						virtual				~CSphDiskDictTraits () {}
-
-	virtual void DictBegin ( CSphAutofile & tTempDict, CSphAutofile & tDict, int iDictLimit );
-	virtual void DictEntry ( const CSphDictEntry & tEntry );
-	virtual void DictEndEntries ( SphOffset_t iDoclistOffset );
-	virtual bool DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphString & sError );
-	virtual bool DictIsError () const { return m_wrDict.IsError(); }
+	void DictBegin ( CSphAutofile & tTempDict, CSphAutofile & tDict, int iDictLimit ) override;
+	void DictEntry ( const CSphDictEntry & tEntry ) override;
+	void DictEndEntries ( SphOffset_t iDoclistOffset ) override;
+	bool DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphString & sError ) override;
+	bool DictIsError () const final { return m_wrDict.IsError(); }
 
 protected:
+	~CSphDiskDictTraits () override {} // fixme! remove
 
+protected:
 	CSphTightVector<CSphWordlistCheckpoint>	m_dCheckpoints;		///< checkpoint offsets
 	CSphWriter			m_wrDict;			///< final dict file writer
 	CSphString			m_sWriterError;		///< writer error message storage
-	int					m_iEntries;			///< dictionary entries stored
-	SphOffset_t			m_iLastDoclistPos;
-	SphWordID_t			m_iLastWordID;
+	int					m_iEntries = 0;			///< dictionary entries stored
+	SphOffset_t			m_iLastDoclistPos = 0;
+	SphWordID_t			m_iLastWordID = 0;
 };
 
 
@@ -20254,24 +20195,29 @@ template < bool CRC32DICT >
 struct CSphDictCRC : public CSphDiskDictTraits, CCRCEngine<CRC32DICT>
 {
 	typedef CCRCEngine<CRC32DICT> tHASH;
-	virtual SphWordID_t		GetWordID ( BYTE * pWord );
-	virtual SphWordID_t		GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops );
-	virtual SphWordID_t		GetWordIDWithMarkers ( BYTE * pWord );
-	virtual SphWordID_t		GetWordIDNonStemmed ( BYTE * pWord );
-	virtual bool			IsStopWord ( const BYTE * pWord ) const;
+	SphWordID_t		GetWordID ( BYTE * pWord ) override;
+	SphWordID_t		GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops ) override;
+	SphWordID_t		GetWordIDWithMarkers ( BYTE * pWord ) override;
+	SphWordID_t		GetWordIDNonStemmed ( BYTE * pWord ) override;
+	bool			IsStopWord ( const BYTE * pWord ) const final;
 
-	virtual CSphDict *		Clone () const { return CloneBase ( new CSphDictCRC<CRC32DICT>() ); }
+	CSphDict *		Clone () const override { return CloneBase ( new CSphDictCRC<CRC32DICT>() ); }
+protected:
+	~CSphDictCRC() override {} // fixme! remove
 };
 
 struct CSphDictTemplate : public CSphTemplateDictTraits, CCRCEngine<false> // based on flv64
 {
-	virtual SphWordID_t		GetWordID ( BYTE * pWord );
-	virtual SphWordID_t		GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops );
-	virtual SphWordID_t		GetWordIDWithMarkers ( BYTE * pWord );
-	virtual SphWordID_t		GetWordIDNonStemmed ( BYTE * pWord );
-	virtual bool			IsStopWord ( const BYTE * pWord ) const;
+	SphWordID_t		GetWordID ( BYTE * pWord ) final;
+	SphWordID_t		GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops ) final;
+	SphWordID_t		GetWordIDWithMarkers ( BYTE * pWord ) final;
+	SphWordID_t		GetWordIDNonStemmed ( BYTE * pWord ) final;
+	bool			IsStopWord ( const BYTE * pWord ) const final;
 
-	virtual CSphDict *		Clone () const { return CloneBase ( new CSphDictTemplate() ); }
+	CSphDict *		Clone () const final { return CloneBase ( new CSphDictTemplate() ); }
+
+protected:
+	~CSphDictTemplate () final 	{} // fixme! remove
 };
 
 
@@ -22504,27 +22450,29 @@ private:
 
 public:
 	explicit				CSphDictKeywords ();
-	virtual					~CSphDictKeywords ();
 
-	virtual void			HitblockBegin () { m_bHitblock = true; }
-	virtual void			HitblockPatch ( CSphWordHit * pHits, int iHits ) const;
-	virtual const char *	HitblockGetKeyword ( SphWordID_t uWordID );
-	virtual int				HitblockGetMemUse () { return m_iMemUse; }
-	virtual void			HitblockReset ();
+	void			HitblockBegin () final { m_bHitblock = true; }
+	void			HitblockPatch ( CSphWordHit * pHits, int iHits ) const final;
+	const char *	HitblockGetKeyword ( SphWordID_t uWordID ) final;
+	int				HitblockGetMemUse () final { return m_iMemUse; }
+	void			HitblockReset () final;
 
-	virtual void			DictBegin ( CSphAutofile & tTempDict, CSphAutofile & tDict, int iDictLimit );
-	virtual void			DictEntry ( const CSphDictEntry & tEntry );
-	virtual void			DictEndEntries ( SphOffset_t ) {}
-	virtual bool			DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphString & sError );
+	void			DictBegin ( CSphAutofile & tTempDict, CSphAutofile & tDict, int iDictLimit ) final;
+	void			DictEntry ( const CSphDictEntry & tEntry ) final;
+	void			DictEndEntries ( SphOffset_t ) final {}
+	bool			DictEnd ( DictHeader_t * pHeader, int iMemLimit, CSphString & sError ) final;
 
-	virtual SphWordID_t		GetWordID ( BYTE * pWord );
-	virtual SphWordID_t		GetWordIDWithMarkers ( BYTE * pWord );
-	virtual SphWordID_t		GetWordIDNonStemmed ( BYTE * pWord );
-	virtual SphWordID_t		GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops );
-	virtual CSphDict *		Clone () const { return CloneBase ( new CSphDictKeywords() ); }
+	SphWordID_t		GetWordID ( BYTE * pWord ) final;
+	SphWordID_t		GetWordIDWithMarkers ( BYTE * pWord ) final;
+	SphWordID_t		GetWordIDNonStemmed ( BYTE * pWord ) final;
+	SphWordID_t		GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops ) final;
+	CSphDict *		Clone () const final { return CloneBase ( new CSphDictKeywords() ); }
 
 private:
 	void					DictFlush ();
+
+protected:
+	~CSphDictKeywords () final;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -23384,92 +23332,98 @@ const char * CSphDictKeywords::HitblockGetKeyword ( SphWordID_t uWordID )
 class CRtDictKeywords : public ISphRtDictWraper
 {
 private:
-	CSphDict *				m_pBase;
-	CSphOrderedHash<int, CSphString, CSphStrHashFunc, 8192>	m_hKeywords;
-	CSphVector<BYTE>		m_dPackedKeywords;
+	CSphDictRefPtr_c		m_pBase;
+	SmallStringHash_T<int, 8192>	m_hKeywords;
+
+	CSphVector<BYTE>		m_dPackedKeywords {0};
 
 	CSphString				m_sWarning;
-	int						m_iKeywordsOverrun;
+	int						m_iKeywordsOverrun = 0;
 	CSphString				m_sWord; // For allocation reuse.
+
+protected:
+	virtual ~CRtDictKeywords () final {} // fixme! remove
 
 public:
 	explicit CRtDictKeywords ( CSphDict * pBase )
 		: m_pBase ( pBase )
-		, m_iKeywordsOverrun ( 0 )
 	{
+		SafeAddRef ( pBase );
 		m_dPackedKeywords.Add ( 0 ); // avoid zero offset at all costs
 	}
-	virtual ~CRtDictKeywords() {}
 
-	virtual SphWordID_t GetWordID ( BYTE * pWord )
+	SphWordID_t GetWordID ( BYTE * pWord ) final
 	{
-		SphWordID_t uCRC = m_pBase->GetWordID ( pWord );
-		if ( uCRC )
-			return AddKeyword ( pWord );
-		else
-			return 0;
+		return m_pBase->GetWordID ( pWord ) ? AddKeyword ( pWord ) : 0;
 	}
 
-	virtual SphWordID_t GetWordIDWithMarkers ( BYTE * pWord )
+	SphWordID_t GetWordIDWithMarkers ( BYTE * pWord ) final
 	{
-		SphWordID_t uCRC = m_pBase->GetWordIDWithMarkers ( pWord );
-		if ( uCRC )
-			return AddKeyword ( pWord );
-		else
-			return 0;
+		return m_pBase->GetWordIDWithMarkers ( pWord ) ? AddKeyword ( pWord ) : 0;
 	}
 
-	virtual SphWordID_t GetWordIDNonStemmed ( BYTE * pWord )
+	SphWordID_t GetWordIDNonStemmed ( BYTE * pWord ) final
 	{
-		SphWordID_t uCRC = m_pBase->GetWordIDNonStemmed ( pWord );
-		if ( uCRC )
-			return AddKeyword ( pWord );
-		else
-			return 0;
+		return m_pBase->GetWordIDNonStemmed ( pWord ) ? AddKeyword ( pWord ) : 0;
 	}
 
-	virtual SphWordID_t GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops )
+	SphWordID_t GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops ) final
 	{
-		SphWordID_t uCRC = m_pBase->GetWordID ( pWord, iLen, bFilterStops );
-		if ( uCRC )
-			return AddKeyword ( pWord );
-		else
-			return 0;
+		return m_pBase->GetWordID ( pWord, iLen, bFilterStops ) ? AddKeyword ( pWord ) : 0;
 	}
 
-	virtual const BYTE * GetPackedKeywords () { return m_dPackedKeywords.Begin(); }
-	virtual int GetPackedLen () { return m_dPackedKeywords.GetLength(); }
-	virtual void ResetKeywords()
+	const BYTE * GetPackedKeywords () final { return m_dPackedKeywords.Begin(); }
+	int GetPackedLen () final { return m_dPackedKeywords.GetLength(); }
+	void ResetKeywords() final
 	{
 		m_dPackedKeywords.Resize ( 0 );
 		m_dPackedKeywords.Add ( 0 ); // avoid zero offset at all costs
 		m_hKeywords.Reset();
 	}
 
+	void LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer ) final { m_pBase->LoadStopwords ( sFiles, pTokenizer ); }
+	void LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) final { m_pBase->LoadStopwords ( dStopwords ); }
+	void WriteStopwords ( CSphWriter & tWriter ) const final { m_pBase->WriteStopwords ( tWriter ); }
+	bool LoadWordforms ( const StrVec_t & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) final
+		{ return m_pBase->LoadWordforms ( dFiles, pEmbedded, pTokenizer, sIndex ); }
+	void WriteWordforms ( CSphWriter & tWriter ) const final { m_pBase->WriteWordforms ( tWriter ); }
+	int SetMorphology ( const char * szMorph, CSphString & sMessage ) final { return m_pBase->SetMorphology ( szMorph, sMessage ); }
+	void Setup ( const CSphDictSettings & tSettings ) final { m_pBase->Setup ( tSettings ); }
+	const CSphDictSettings & GetSettings () const final { return m_pBase->GetSettings(); }
+	const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () const final { return m_pBase->GetStopwordsFileInfos(); }
+	const CSphVector <CSphSavedFile> & GetWordformsFileInfos () const final { return m_pBase->GetWordformsFileInfos(); }
+	const CSphMultiformContainer * GetMultiWordforms () const final { return m_pBase->GetMultiWordforms(); }
+	bool IsStopWord ( const BYTE * pWord ) const final { return m_pBase->IsStopWord ( pWord ); }
+	const char * GetLastWarning() const final { return m_iKeywordsOverrun ? m_sWarning.cstr() : NULL; }
+	void ResetWarning () final { m_iKeywordsOverrun = 0; }
+	uint64_t GetSettingsFNV () const final { return m_pBase->GetSettingsFNV(); }
+
+private:
 	SphWordID_t AddKeyword ( const BYTE * pWord )
 	{
-		int iLen = strlen ( (const char *)pWord );
+		int iLen = strlen ( ( const char * ) pWord );
 		// stemmer might squeeze out the word
 		if ( !iLen )
 			return 0;
 
 		// fix of very long word (zones)
-		if ( iLen>( SPH_MAX_WORD_LEN*3 ) )
+		if ( iLen>( SPH_MAX_WORD_LEN * 3 ) )
 		{
-			int iClippedLen = SPH_MAX_WORD_LEN*3;
-			m_sWord.SetBinary ( (const char *)pWord, iClippedLen );
+			int iClippedLen = SPH_MAX_WORD_LEN * 3;
+			m_sWord.SetBinary ( ( const char * ) pWord, iClippedLen );
 			if ( m_iKeywordsOverrun )
 			{
-				m_sWarning.SetSprintf ( "word overrun buffer, clipped!!! clipped='%s', length=%d(%d)", m_sWord.cstr(), iClippedLen, iLen );
+				m_sWarning.SetSprintf ( "word overrun buffer, clipped!!! clipped='%s', length=%d(%d)", m_sWord.cstr ()
+										, iClippedLen, iLen );
 			} else
 			{
-				m_sWarning.SetSprintf ( ", clipped='%s', length=%d(%d)", m_sWord.cstr(), iClippedLen, iLen );
+				m_sWarning.SetSprintf ( ", clipped='%s', length=%d(%d)", m_sWord.cstr (), iClippedLen, iLen );
 			}
 			iLen = iClippedLen;
 			m_iKeywordsOverrun++;
 		} else
 		{
-			m_sWord.SetBinary ( (const char *)pWord, iLen );
+			m_sWord.SetBinary ( ( const char * ) pWord, iLen );
 		}
 
 		int * pOff = m_hKeywords ( m_sWord );
@@ -23478,31 +23432,15 @@ public:
 			return *pOff;
 		}
 
-		int iOff = m_dPackedKeywords.GetLength();
-		m_dPackedKeywords.Resize ( iOff+iLen+1 );
-		m_dPackedKeywords[iOff] = (BYTE)( iLen & 0xFF );
-		memcpy ( m_dPackedKeywords.Begin()+iOff+1, pWord, iLen );
+		int iOff = m_dPackedKeywords.GetLength ();
+		m_dPackedKeywords.Resize ( iOff + iLen + 1 );
+		m_dPackedKeywords[iOff] = ( BYTE ) ( iLen & 0xFF );
+		memcpy ( m_dPackedKeywords.Begin () + iOff + 1, pWord, iLen );
 
 		m_hKeywords.Add ( iOff, m_sWord );
 
 		return iOff;
 	}
-
-	virtual void LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer ) { m_pBase->LoadStopwords ( sFiles, pTokenizer ); }
-	virtual void LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) { m_pBase->LoadStopwords ( dStopwords ); }
-	virtual void WriteStopwords ( CSphWriter & tWriter ) const { m_pBase->WriteStopwords ( tWriter ); }
-	virtual bool LoadWordforms ( const StrVec_t & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) { return m_pBase->LoadWordforms ( dFiles, pEmbedded, pTokenizer, sIndex ); }
-	virtual void WriteWordforms ( CSphWriter & tWriter ) const { m_pBase->WriteWordforms ( tWriter ); }
-	virtual int SetMorphology ( const char * szMorph, CSphString & sMessage ) { return m_pBase->SetMorphology ( szMorph, sMessage ); }
-	virtual void Setup ( const CSphDictSettings & tSettings ) { m_pBase->Setup ( tSettings ); }
-	virtual const CSphDictSettings & GetSettings () const { return m_pBase->GetSettings(); }
-	virtual const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () const { return m_pBase->GetStopwordsFileInfos(); }
-	virtual const CSphVector <CSphSavedFile> & GetWordformsFileInfos () const { return m_pBase->GetWordformsFileInfos(); }
-	virtual const CSphMultiformContainer * GetMultiWordforms () const { return m_pBase->GetMultiWordforms(); }
-	virtual bool IsStopWord ( const BYTE * pWord ) const { return m_pBase->IsStopWord ( pWord ); }
-	virtual const char * GetLastWarning() const { return m_iKeywordsOverrun ? m_sWarning.cstr() : NULL; }
-	virtual void ResetWarning () { m_iKeywordsOverrun = 0; }
-	virtual uint64_t GetSettingsFNV () const { return m_pBase->GetSettingsFNV(); }
 };
 
 ISphRtDictWraper * sphCreateRtKeywordsDictionaryWrapper ( CSphDict * pBase )
@@ -23515,19 +23453,17 @@ ISphRtDictWraper * sphCreateRtKeywordsDictionaryWrapper ( CSphDict * pBase )
 // DICTIONARY FACTORIES
 //////////////////////////////////////////////////////////////////////////
 
-static CSphDict * SetupDictionary ( CSphDict * pDict, const CSphDictSettings & tSettings,
+static void SetupDictionary ( CSphDictRefPtr_c& pDict, const CSphDictSettings & tSettings,
 	const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex,
 	CSphString & sError )
 {
 	assert ( pTokenizer );
-	assert ( pDict );
 
 	pDict->Setup ( tSettings );
-	int iRet = pDict->SetMorphology ( tSettings.m_sMorphology.cstr (), sError );
-	if ( iRet==CSphDict::ST_ERROR )
+	if ( CSphDict::ST_ERROR == pDict->SetMorphology ( tSettings.m_sMorphology.cstr (), sError ) )
 	{
-		SafeDelete ( pDict );
-		return NULL;
+		SafeRelease ( pDict );
+		return;
 	}
 
 	if ( pFiles && pFiles->m_bEmbeddedStopwords )
@@ -23536,25 +23472,23 @@ static CSphDict * SetupDictionary ( CSphDict * pDict, const CSphDictSettings & t
 		pDict->LoadStopwords ( tSettings.m_sStopwords.cstr (), pTokenizer );
 
 	pDict->LoadWordforms ( tSettings.m_dWordforms, pFiles && pFiles->m_bEmbeddedWordforms ? pFiles : NULL, pTokenizer, sIndex );
-
-	return pDict;
 }
 
 CSphDict * sphCreateDictionaryTemplate ( const CSphDictSettings & tSettings,
 									const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex,
 									CSphString & sError )
 {
-	CSphDict * pDict = new CSphDictTemplate();
-	if ( !pDict )
-		return NULL;
-	return SetupDictionary ( pDict, tSettings, pFiles, pTokenizer, sIndex, sError );
+	CSphDictRefPtr_c pDict { new CSphDictTemplate() };
+	SetupDictionary ( pDict, tSettings, pFiles, pTokenizer, sIndex, sError );
+	return pDict.Leak();
 }
 
 
 CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, CSphString & sError )
 {
-	CSphDict * pDict = new CSphDictCRC<false>;
-	return SetupDictionary ( pDict, tSettings, pFiles, pTokenizer, sIndex, sError );
+	CSphDictRefPtr_c pDict { new CSphDictCRC<false> };
+	SetupDictionary ( pDict, tSettings, pFiles, pTokenizer, sIndex, sError );
+	return pDict.Leak ();
 }
 
 
@@ -23562,8 +23496,9 @@ CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings,
 	const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex,
 	CSphString & sError )
 {
-	CSphDict * pDict = new CSphDictKeywords();
-	return SetupDictionary ( pDict, tSettings, pFiles, pTokenizer, sIndex, sError );
+	CSphDictRefPtr_c pDict { new CSphDictKeywords() };
+	SetupDictionary ( pDict, tSettings, pFiles, pTokenizer, sIndex, sError );
+	return pDict.Leak ();
 }
 
 
@@ -23571,6 +23506,18 @@ void sphShutdownWordforms ()
 {
 	CSphVector<CSphSavedFile> dEmptyFiles;
 	CSphDiskDictTraits::SweepWordformContainers ( dEmptyFiles );
+}
+
+CSphDict * GetStatelessDict ( CSphDict * pDict )
+{
+	if ( !pDict )
+		return nullptr;
+
+	if ( pDict->HasState () )
+		return pDict->Clone();
+
+	SafeAddRef ( pDict );
+	return pDict;
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -25097,6 +25044,7 @@ CSphSource::~CSphSource()
 void CSphSource::SetDict ( CSphDict * pDict )
 {
 	assert ( pDict );
+	SafeAddRef ( pDict );
 	m_pDict = pDict;
 }
 
@@ -25138,6 +25086,7 @@ void CSphSource::SetTokenizer ( ISphTokenizer * pTokenizer )
 {
 	assert ( pTokenizer );
 	m_pTokenizer = pTokenizer;
+	SafeAddRef ( pTokenizer );
 }
 
 
@@ -31897,7 +31846,7 @@ void sphDictBuildInfixes ( const char * sPath )
 	////////////////////
 
 	assert ( tDictSettings.m_bWordDict );
-	CSphDict * pDict = sphCreateDictionaryKeywords ( tDictSettings, &tEmbeddedFiles, pTokenizer, "$indexname", sError );
+	CSphDictRefPtr_c pDict { sphCreateDictionaryKeywords ( tDictSettings, &tEmbeddedFiles, pTokenizer, "$indexname", sError )};
 	if ( !pDict )
 		sphDie ( "infix upgrade: %s", sError.cstr() );
 
@@ -32473,9 +32422,9 @@ void sphDictBuildSkiplists ( const char * sPath )
 	if ( !pTokenizer )
 		sphDie ( "skiplists upgrade: %s", sError.cstr() );
 
-	CSphDict * pDict = bWordDict
+	CSphDictRefPtr_c pDict { bWordDict
 		? sphCreateDictionaryKeywords ( tDictSettings, &tEmbeddedFiles, pTokenizer, "$indexname", sError )
-		: sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, pTokenizer, "$indexname", sError );
+		: sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, pTokenizer, "$indexname", sError ) };
 	if ( !pDict )
 		sphDie ( "skiplists upgrade: %s", sError.cstr() );
 

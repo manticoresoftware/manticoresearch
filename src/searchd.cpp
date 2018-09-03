@@ -18088,8 +18088,8 @@ bool RotateIndexGreedy ( const ServedIndex_c * pIndex, ServedDesc_t &tWlockedInd
 	}
 
 	// try to use new index
-	ISphTokenizerRefPtr_c pTokenizer { tWlockedIndex.m_pIndex->LeakTokenizer () }; // FIXME! disable support of that old indexes and remove this bullshit
-	CSphScopedPtr<CSphDict> pDictionary ( tWlockedIndex.m_pIndex->LeakDictionary () );
+	ISphTokenizerRefPtr_c	pTokenizer { tWlockedIndex.m_pIndex->LeakTokenizer () }; // FIXME! disable support of that old indexes and remove this bullshit
+	CSphDictRefPtr_c		pDictionary { tWlockedIndex.m_pIndex->LeakDictionary () };
 
 //	bool bRolledBack = false;
 	bool bPreallocSuccess = tWlockedIndex.m_pIndex->Prealloc ( g_bStripPath );
@@ -18121,7 +18121,7 @@ bool RotateIndexGreedy ( const ServedIndex_c * pIndex, ServedDesc_t &tWlockedInd
 		tWlockedIndex.m_pIndex->SetTokenizer ( pTokenizer );
 
 	if ( !tWlockedIndex.m_pIndex->GetDictionary () )
-		tWlockedIndex.m_pIndex->SetDictionary ( pDictionary.LeakPtr () );
+		tWlockedIndex.m_pIndex->SetDictionary ( pDictionary );
 
 //	if ( bRolledBack )
 //		return bPreallocSuccess;

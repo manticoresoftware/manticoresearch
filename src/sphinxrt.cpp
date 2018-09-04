@@ -6006,8 +6006,16 @@ bool RtIndex_t::EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) cons
 		CopyDocinfo ( tMatch, pRow );
 	}
 
-	pCtx->CalcFilter ( tMatch ); // FIXME!!! leak of filtered STRING_PTR
-	return pCtx->m_pFilter ? !pCtx->m_pFilter->Eval ( tMatch ) : false;
+	pCtx->CalcFilter ( tMatch );
+	if ( !pCtx->m_pFilter )
+		return false;
+
+	if ( !pCtx->m_pFilter->Eval ( tMatch ) )
+	{
+		pCtx->FreeDataFilter ( tMatch );
+		return true;
+	}
+	return false;
 }
 
 

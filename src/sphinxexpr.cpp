@@ -2657,10 +2657,12 @@ static inline ESphAttr GetIntType ( int64_t iValue )
 /// get the widest numeric type of the two
 static inline ESphAttr WidestType ( ESphAttr a, ESphAttr b )
 {
-	assert ( IsNumeric(a) && IsNumeric(b) );
+	assert ( ( IsNumeric(a) && IsNumeric(b) ) || ( IsNumeric(a) && b==SPH_ATTR_JSON_FIELD ) || ( a==SPH_ATTR_JSON_FIELD && IsNumeric(b) ) );
 	if ( a==SPH_ATTR_FLOAT || b==SPH_ATTR_FLOAT )
 		return SPH_ATTR_FLOAT;
 	if ( a==SPH_ATTR_BIGINT || b==SPH_ATTR_BIGINT )
+		return SPH_ATTR_BIGINT;
+	if ( a==SPH_ATTR_JSON_FIELD || b==SPH_ATTR_JSON_FIELD )
 		return SPH_ATTR_BIGINT;
 	return SPH_ATTR_INTEGER;
 }

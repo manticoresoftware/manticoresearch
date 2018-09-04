@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>IN filter vs expression</name>
+
+<config>
+indexer
+{
+	mem_limit				= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source test
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+	sql_attr_uint	= gid
+	sql_attr_json	= j
+}
+
+index test
+{
+	source			= test
+	path			= <data_path/>/test
+}
+
+index pq
+{
+	type = percolate
+	path			= <data_path/>/pq_re
+	rt_field 		= title
+	rt_attr_json	= j
+}
+
+index dist
+{
+	type			= distributed
+	agent			= <my_address/>:test
+}
+</config>
+
+<db_create>
+CREATE TABLE `test_table` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `gid` int(11) NOT NULL,
+  `title` varchar(255) NOT NULL,
+  `j` varchar(8192) NOT NULL,
+  PRIMARY KEY (`id`)
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS `test_table`;</db_drop>
+<db_insert>
+INSERT INTO `test_table` VALUES
+(1,1,'test one','{"a":5,"b":123}'),
+(2,1,'test two','{"a":101,"b":134}')
+</db_insert>
+
+<sphqueries>
+<!-- IN for plain indexes -->
+<sphinxql>select * from test</sphinxql>
+<sphinxql>select * from test where j.a IN (5,100)</sphinxql>
+<sphinxql>select *, IN(j.b, 100, 134) as cnd from test where cnd&lt;&gt;0</sphinxql>
+<sphinxql>select *, j.b IN(100, 134) as cnd from test where cnd&lt;&gt;0</sphinxql>
+
+<!-- IN for distributed indexes -->
+<sphinxql>select * from dist where j.a IN (5,100)</sphinxql>
+<sphinxql>select *, IN(j.b, 100, 134) as cnd from dist where cnd&lt;&gt;0</sphinxql>
+<sphinxql>select *, j.b IN(100, 134) as cnd from dist where cnd&lt;&gt;0</sphinxql>
+
+<!-- IN for PQ indexes -->
+<sphinxql>INSERT INTO pq (query, filters) VALUES ('', 'j.a IN (5, 100)')</sphinxql>
+<sphinxql>INSERT INTO pq (query, filters) VALUES ('', 'IN (j.a, 5, 100)')</sphinxql>
+<sphinxql>INSERT INTO pq (query, filters) VALUES ('', 'j.a IN (5, 100) and CRC32(\'test\')')</sphinxql>
+<sphinxql>INSERT INTO pq (query, filters) VALUES ('', 'IN (j.a, 5, 100) and CRC32(\'test\')')</sphinxql>
+<sphinxql>INSERT INTO pq (query, filters) VALUES ('', 'j.a IN (5, 100) or IN (j.b, 134, 200)')</sphinxql>
+<sphinxql>INSERT INTO pq (query, filters) VALUES ('', 'IN (j.a, 5, 100) or j.b IN (134, 200)')</sphinxql>
+
+<sphinxql>CALL PQ ('pq', ('{"j":{"a":5, "b":123}}', '{"j":{"a":101, "b":134}}'), 1 as docs, 1 as query)</sphinxql>
+
+<!-- crash on IN for plain indexes -->
+<sphinxql>select *, IN (missed.a,5,100) from test</sphinxql>
+</sphqueries>
+</test>

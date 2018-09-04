@@ -1225,3 +1225,15 @@ TEST ( functions, int64_le )
 	ASSERT_EQ ( iTest, iTestLE ) << "little endian allows simplify";
 #endif
 }
+
+TEST ( functions, FindLastNumeric )
+{
+	static const char * sNum1 = "12345";
+	ASSERT_EQ ( sNum1, sphFindLastNumeric (sNum1,5 ));
+
+	static const char * sNum2 = "1234 ";
+	ASSERT_EQ ( sNum2+5, sphFindLastNumeric ( sNum2, 5 ) );
+
+	static const char * sNum3 = "12 34";
+	ASSERT_EQ ( sNum3 + 3, sphFindLastNumeric ( sNum3, 5 ) );
+}

@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>asciiz edge effect on string attributes</name>
+
+<requires>
+<force-rt/>
+</requires>
+
+<config>
+indexer
+{
+	mem_limit = 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type = mysql
+	<sql_settings/>
+	sql_query = SELECT * FROM test_table
+	sql_attr_string = kk
+	sql_attr_string = poly2d_attr
+}
+
+index test
+{
+	source	= test
+	path	= <data_path/>/test
+}
+
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INT NOT NULL,
+	title VARCHAR(255) NOT NULL,
+	kk VARCHAR(255) NOT NULL,
+	poly2d_attr VARCHAR(255) NOT NULL
+);
+</db_create>
+
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+
+<!-- Key point of the test:
+   Since string attrs in blob are packed and NOT z-terminated,
+   right after last byte of poly2d_attr of doc 1 will follow
+   packed attr kk of doc2. Packing first write len of attr (50) and then
+   the blob of string itself.
+   Finally it lead to the fact that in the saved blob (at least of RAM-chunk in rt)
+   will be raw byte sequence '1,2,3,4,4,6210 tenten ...'.
+   Original version of POLY2D will catch it, and so, reveal that point (2,40) are
+   in polygon (triangle) (1,2) (3,4) (4,6), because last point is parsed
+   was (4,6210).
+   -->
+
+<db_insert>
+INSERT INTO test_table ( id, title, kk, poly2d_attr ) VALUES
+( 1, 'ohai', 'eleventy', '1,2,3,4,4,6' ),
+( 2, 'ohai2', '10 tenten tententen tententen tententen tententen ', '1,2,3,4,4,6' )
+</db_insert>
+
+<sphqueries>
+<sphinxql>SELECT id, CONTAINS(POLY2D(poly2d_attr),2,40) FROM test</sphinxql>
+</sphqueries>
+
+</test>

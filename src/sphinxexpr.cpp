@@ -4387,6 +4387,8 @@ public:
 };
 
 
+
+
 class Expr_ContainsStrattr_c : public Expr_Contains_c
 {
 protected:
@@ -4404,7 +4406,8 @@ public:
 
 	static void ParsePoly ( const char * p, int iLen, CSphVector<float> & dPoly )
 	{
-		const char * pMax = p+iLen;
+		const char * pBegin = p;
+		const char * pMax = sphFindLastNumeric ( p, iLen );
 		while ( p<pMax )
 		{
 			if ( isdigit(p[0]) || ( p+1<pMax && p[0]=='-' && isdigit(p[1]) ) )
@@ -4412,6 +4415,11 @@ public:
 			else
 				p++;
 		}
+
+		// edge case - last numeric touches the end
+		iLen -= pMax - pBegin;
+		if ( iLen )
+			dPoly.Add ( (float)strtod ( CSphString(pMax, iLen).cstr (), nullptr ) );
 	}
 
 	int IntEval ( const CSphMatch & tMatch ) const final

@@ -1527,9 +1527,9 @@ public:
 
 	void Update ( CSphMatch * pDst, const CSphMatch * pSrc, bool ) override
 	{
-		const BYTE * sSrc = (const BYTE*)pSrc->GetAttr(m_tLoc);
-		const BYTE * sDst = (const BYTE*)pDst->GetAttr(m_tLoc);
-		const BYTE * pOldDst = sDst;
+		auto sSrc = (const BYTE*)pSrc->GetAttr(m_tLoc);
+		auto sDst = (const BYTE*)pDst->GetAttr(m_tLoc);
+		auto pOldDst = const_cast<BYTE*> ( sDst );
 
 		int iSrc = sphUnpackPtrAttr ( sSrc, &sSrc );
 		int iDst = sphUnpackPtrAttr ( sDst, &sDst );
@@ -1558,8 +1558,8 @@ public:
 		memcpy ( dNew.Begin()+iDst+1, sSrc, iSrc );
 
 		// clear dst to avoid leaks
-		SafeDeleteArray ( pOldDst );
-
+		// SafeDeleteArray ( pOldDst );
+		sphDeallocatePacked ( pOldDst );
 		pDst->SetAttr ( m_tLoc, (SphAttr_t)sphPackPtrAttr ( dNew.Begin(), iSrc+iDst+1 ) );
 	}
 };

@@ -5851,7 +5851,8 @@ BYTE * sphPackPtrAttr ( const BYTE * pData, int iLengthBytes )
 
 	assert ( pData );
 
-	BYTE * pPacked = new BYTE [sphCalcPackedLength(iLengthBytes)];
+	//BYTE * pPacked = new BYTE [sphCalcPackedLength(iLengthBytes)];
+	BYTE * pPacked = sphAllocateSmall ( sphCalcPackedLength ( iLengthBytes ) );
 	sphPackPtrAttr ( pPacked, pData, iLengthBytes );
 	return pPacked;
 }
@@ -5867,7 +5868,8 @@ void sphPackPtrAttr ( BYTE * pPrealloc, const BYTE * pData, int iLengthBytes )
 
 BYTE * sphPackPtrAttr ( int iLengthBytes, BYTE * & pData )
 {
-	BYTE * pPacked = new BYTE [sphCalcPackedLength(iLengthBytes)];
+	// BYTE * pPacked = new BYTE [sphCalcPackedLength(iLengthBytes)];
+	BYTE * pPacked = sphAllocateSmall ( sphCalcPackedLength ( iLengthBytes ) );
 	pData = pPacked;
 	pData += sphZipToPtr ( iLengthBytes, pPacked );
 	return pPacked;
@@ -6021,6 +6023,15 @@ void CSphSchemaHelper::CloneMatchSpecial ( CSphMatch * pDst, const CSphMatch &rh
 	CopyPtrsSpecial ( pDst, rhs.m_pDynamic, dSpecials );
 }
 
+// declared in sphinxstd.h
+void sphDeallocatePacked ( BYTE * pBlob )
+{
+	if ( !pBlob )
+		return;
+	const BYTE * pFoo = pBlob;
+	sphDeallocateSmall ( pBlob, sphCalcPackedLength ( sphUnzipInt ( pFoo ) ) );
+}
+
 void CSphSchemaHelper::FreeDataSpecial ( CSphMatch * pMatch, const CSphVector<int> &dSpecials )
 {
 	assert ( pMatch );
@@ -6030,7 +6041,9 @@ void CSphSchemaHelper::FreeDataSpecial ( CSphMatch * pMatch, const CSphVector<in
 	for ( auto iOffset : dSpecials )
 	{
 		BYTE * &pData = *( BYTE ** ) ( pMatch->m_pDynamic + iOffset );
-		SafeDeleteArray ( pData );
+		// SafeDeleteArray ( pData );
+		sphDeallocatePacked ( pData );
+		pData = nullptr;
 	}
 }
 
@@ -14594,8 +14607,12 @@ static inline void FreeDataPtrAttrs ( CSphMatch & tMatch, const CSphVector<CSphQ
 		if ( sphIsDataPtrAttr ( i.m_eType ) )
 		{
 			BYTE * pData = (BYTE *)tMatch.GetAttr ( i.m_tLoc );
-			delete [] pData;
-			tMatch.SetAttr ( i.m_tLoc, 0 );
+			// delete[] pData;
+			if ( pData )
+			{
+				sphDeallocatePacked ( pData );
+				tMatch.SetAttr ( i.m_tLoc, 0 );
+			}
 		}
 }
 

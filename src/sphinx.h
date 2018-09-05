@@ -3580,7 +3580,6 @@ volatile int& sphGetTFO();
 #define TFO_LISTEN 2
 #define TFO_ABSENT (-1)
 /////////////////////////////////////////////////////////////////////////////
-
 // workaround to suppress C4511/C4512 warnings (copy ctor and assignment operator) in VS 2003
 #if _MSC_VER>=1300 && _MSC_VER<1400
 #pragma warning(disable:4511)

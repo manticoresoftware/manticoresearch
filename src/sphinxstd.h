@@ -4164,5 +4164,11 @@ inline int sphZipToPtr ( T tValue, BYTE * pData )
 	return nBytes;
 }
 
+/// Allocate blobs upto 64 bytes using internal cache, bigger came to standard new/delete
+/// internals based on Alexandresku's 'loki' implementation - 'Allocator for small objects'
+BYTE * sphAllocateSmall ( int iBytes );
+void sphDeallocateSmall ( BYTE * pBlob, int iBytes );
+void sphDeallocatePacked ( BYTE * pBlob );
+
 
 #endif // _sphinxstd_

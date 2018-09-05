@@ -2278,3 +2278,459 @@ void StringBuilder_c::Clear ()
 	m_sBuffer[0] = '\0';
 	m_iUsed = 0;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+/// FixedAllocator_c, PtrAttrAllocator_c
+/// Provides fast alloc/dealloc for small objects
+/// (large objects will be redirected to standard new/delete)
+////////////////////////////////////////////////////////////////////////////////
+static const int MAX_SMALL_OBJECT_SIZE = 64;
+static const size_t DEFAULT_CHUNK_SIZE = 4096;
+
+#if !USE_WINDOWS
+
+// proxy accessor to raw allocate
+inline static BYTE * AllocRaw ( size_t iBytes )
+{
+	auto pBlob = mmap ( nullptr, iBytes, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0 );
+	if ( pBlob==MAP_FAILED )
+		return new BYTE[iBytes];
+	return ( BYTE * ) pBlob;
+}
+
+// proxy accessor to raw deallocate
+inline static void DeallocRaw ( BYTE * pBlock, size_t iBytes )
+{
+	int iRes = ::munmap ( pBlock, iBytes );
+	if ( iRes )
+		delete[] pBlock;
+}
+
+#else
+// proxy accessor to raw allocate
+inline static BYTE * AllocRaw ( int iBytes )
+{
+	return new BYTE[iBytes];
+}
+
+// proxy accessor to raw deallocate
+inline static void DeallocRaw ( const BYTE * pBlock, int iBytes )
+{
+	delete[] pBlock;
+}
+#endif
+
+////////////////////////////////////////////////////////////////////////////////
+/// FixedAllocator_c
+/// Represents storage for any num of objects of fixed size
+////////////////////////////////////////////////////////////////////////////////
+class FixedAllocator_c
+{
+	struct Chunk_t
+	{
+		void Init ( int iBlockSize, BYTE uBlocks );
+		void Release ( int iBytes );
+
+		BYTE * Allocate ( int iBlockSize );
+		void Deallocate ( BYTE * pBlob, int iBlockSize );
+
+		BYTE * m_pData;
+		BYTE m_uFirstAvailable;
+		BYTE m_uAvailable;
+	};
+
+	int m_iBlockSize;        // size of blobs I can serve
+	Chunk_t * m_pAllocChunk = nullptr;      // shortcut to last alloc
+	Chunk_t * m_pDeallocChunk = nullptr;    // shortcut to last dealloc
+
+	// For ensuring proper copy semantics
+	// (copies share same blobs in their chunks; removing last releases everything)
+	mutable const FixedAllocator_c * m_pPrev;
+	mutable const FixedAllocator_c * m_pNext;
+
+	CSphVector<Chunk_t> m_dChunks;    // my chunks
+	BYTE m_uNumBlocks;        // # of blocks per chunk
+
+private:
+	void Swap ( FixedAllocator_c &rhs );
+	void DoDeallocate ( BYTE * pBlob );
+	Chunk_t * VicinityFind ( BYTE * pBlob );
+
+public:
+	explicit FixedAllocator_c ( int iBlockSize = 0 );
+	FixedAllocator_c ( const FixedAllocator_c & );
+	FixedAllocator_c &operator= ( const FixedAllocator_c & );
+	~FixedAllocator_c ();
+
+	// allocate block of my m_iBlockSize
+	BYTE * Allocate ();
+
+	// Deallocate a memory block previously allocated with Allocate()
+	// (if that's not the case, the behavior is undefined)
+	void Deallocate ( BYTE * pBlob );
+
+	inline int BlockSize () const
+	{ return m_iBlockSize; }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+/// FixedAllocator_c::Chunk_t
+/// Represents a blob of memory for few objects of fixed size
+////////////////////////////////////////////////////////////////////////////////
+void FixedAllocator_c::Chunk_t::Init ( int iBlockSize, BYTE uBlocks )
+{
+	assert( iBlockSize>0 );
+	assert( uBlocks>0 );
+
+	// Overflow check
+	assert( ( iBlockSize * uBlocks ) / iBlockSize==uBlocks );
+
+	m_pData = AllocRaw ( iBlockSize * uBlocks );
+	m_uAvailable = uBlocks;
+	m_uFirstAvailable = 0;
+
+	auto p = m_pData;
+	for ( BYTE i=0; i<uBlocks; p += iBlockSize )
+		*p = ++i;
+}
+
+void FixedAllocator_c::Chunk_t::Release ( int iBytes )
+{
+	DeallocRaw ( m_pData, iBytes );
+}
+
+BYTE * FixedAllocator_c::Chunk_t::Allocate ( int iBlockSize )
+{
+	if ( !m_uAvailable )
+		return nullptr;
+
+	assert( ( m_uFirstAvailable * iBlockSize ) / iBlockSize==m_uFirstAvailable );
+
+	auto * pResult = m_pData + ( m_uFirstAvailable * iBlockSize );
+	m_uFirstAvailable = *pResult;
+	--m_uAvailable;
+
+	return pResult;
+}
+
+void FixedAllocator_c::Chunk_t::Deallocate ( BYTE * pBlob, int iBlockSize )
+{
+	assert( pBlob>=m_pData );
+
+	// Alignment check
+	assert( ( pBlob - m_pData ) % iBlockSize==0 );
+
+	*pBlob = m_uFirstAvailable;
+	m_uFirstAvailable = ( BYTE ) ( ( pBlob - m_pData ) / iBlockSize );
+
+	// Truncation check
+	assert( m_uFirstAvailable==( pBlob - m_pData ) / iBlockSize );
+	++m_uAvailable;
+}
+
+
+FixedAllocator_c::FixedAllocator_c ( int iBlockSize )
+	: m_iBlockSize ( iBlockSize )
+{
+	m_pPrev = m_pNext = this;
+	if ( !iBlockSize )
+		return;
+
+	assert( m_iBlockSize>0 );
+	m_uNumBlocks = (BYTE) Min ( DEFAULT_CHUNK_SIZE / iBlockSize, BYTE ( 0xFF ) );
+	assert ( m_uNumBlocks && "Too large iBlocksize passed" );
+}
+
+FixedAllocator_c::FixedAllocator_c ( const FixedAllocator_c &rhs )
+	: m_iBlockSize ( rhs.m_iBlockSize )
+	, m_dChunks ( rhs.m_dChunks )
+	, m_uNumBlocks ( rhs.m_uNumBlocks )
+{
+	m_pPrev = &rhs;
+	m_pNext = rhs.m_pNext;
+	rhs.m_pNext->m_pPrev = this;
+	rhs.m_pNext = this;
+
+	if ( rhs.m_pAllocChunk )
+		m_pAllocChunk =  m_dChunks.begin () + ( rhs.m_pAllocChunk - rhs.m_dChunks.begin () );
+
+	if ( rhs.m_pDeallocChunk )
+		m_pDeallocChunk = m_dChunks.begin () + ( rhs.m_pDeallocChunk - rhs.m_dChunks.begin () );
+}
+
+FixedAllocator_c &FixedAllocator_c::operator= ( const FixedAllocator_c &rhs )
+{
+	FixedAllocator_c dCopy ( rhs );
+	dCopy.Swap ( *this );
+	return *this;
+}
+
+FixedAllocator_c::~FixedAllocator_c ()
+{
+	if ( m_pPrev!=this )
+	{
+		m_pPrev->m_pNext = m_pNext;
+		m_pNext->m_pPrev = m_pPrev;
+		return;
+	}
+
+	assert( m_pPrev==m_pNext );
+	for ( auto & dChunk : m_dChunks )
+	{
+		assert (dChunk.m_uAvailable==m_uNumBlocks);
+		dChunk.Release( m_iBlockSize * m_uNumBlocks );
+	}
+}
+
+void FixedAllocator_c::Swap ( FixedAllocator_c &rhs )
+{
+	::Swap ( m_iBlockSize, rhs.m_iBlockSize );
+	::Swap ( m_uNumBlocks, rhs.m_uNumBlocks );
+	m_dChunks.SwapData ( rhs.m_dChunks );
+	::Swap ( m_pAllocChunk, rhs.m_pAllocChunk );
+	::Swap ( m_pDeallocChunk, rhs.m_pDeallocChunk );
+}
+
+BYTE * FixedAllocator_c::Allocate ()
+{
+	if ( !m_pAllocChunk || !m_pAllocChunk->m_uAvailable )
+	{
+		for ( auto & dChunk : m_dChunks)
+		{
+			if ( dChunk.m_uAvailable )
+			{
+				m_pAllocChunk = &dChunk;
+				return m_pAllocChunk->Allocate ( m_iBlockSize );
+			}
+		}
+
+		// loop finished, we're still here. Create new chunk then
+		Chunk_t &dNewChunk = m_dChunks.Add ();
+		dNewChunk.Init ( m_iBlockSize, m_uNumBlocks );
+		m_pDeallocChunk = m_dChunks.begin ();
+		m_pAllocChunk = &m_dChunks.Last();
+	}
+
+	assert( m_pAllocChunk );
+	assert( m_pAllocChunk->m_uAvailable );
+
+	return m_pAllocChunk->Allocate ( m_iBlockSize );
+}
+
+void FixedAllocator_c::Deallocate ( BYTE * pBlob )
+{
+	assert( !m_dChunks.IsEmpty () );
+	assert( m_dChunks.begin ()<=m_pDeallocChunk );
+	assert( m_dChunks.end ()>m_pDeallocChunk );
+
+	m_pDeallocChunk = VicinityFind ( pBlob );
+	assert( m_pDeallocChunk );
+
+	DoDeallocate ( pBlob );
+}
+
+// Finds the chunk corresponding to a pointer, using an efficient search
+FixedAllocator_c::Chunk_t * FixedAllocator_c::VicinityFind ( BYTE * pBlob )
+{
+	assert( !m_dChunks.IsEmpty () );
+	assert( m_pDeallocChunk );
+
+	const int iChunkLength = m_uNumBlocks * m_iBlockSize;
+
+	Chunk_t * pLo = m_pDeallocChunk;
+	Chunk_t * pHi = m_pDeallocChunk + 1;
+	Chunk_t * pLoBound = m_dChunks.begin();
+	Chunk_t * pHiBound = m_dChunks.end();
+
+	// Special case: deallocChunk_ is the last in the array
+	if ( pHi==pHiBound )
+		pHi = nullptr;
+
+	while (true)
+	{
+		if ( pLo )
+		{
+			if ( pBlob>=pLo->m_pData && pBlob<pLo->m_pData + iChunkLength )
+				return pLo;
+
+			if ( pLo==pLoBound )
+				pLo = nullptr;
+			else
+				--pLo;
+		}
+
+		if ( pHi )
+		{
+			if ( pBlob>=pHi->m_pData && pBlob<pHi->m_pData + iChunkLength )
+				return pHi;
+
+			if ( ++pHi==pHiBound )
+				pHi = nullptr;
+		}
+	}
+}
+
+// Performs deallocation. Assumes m_pDeallocChunk points to the correct chunk
+void FixedAllocator_c::DoDeallocate ( BYTE * pBlob )
+{
+	assert( m_pDeallocChunk->m_pData<=pBlob );
+	assert( m_pDeallocChunk->m_pData + m_uNumBlocks * m_iBlockSize>pBlob );
+
+	// call into the chunk, will adjust the inner list but won't release memory
+	m_pDeallocChunk->Deallocate ( pBlob, m_iBlockSize );
+
+	if ( m_pDeallocChunk->m_uAvailable==m_uNumBlocks )
+	{
+		// deallocChunk_ is completely free, should we release it?
+		auto & dLast = m_dChunks.Last();
+		if ( &dLast==m_pDeallocChunk )
+		{
+			// check if we have two last chunks empty
+			if ( m_dChunks.GetLength ()>1 && m_pDeallocChunk[-1].m_uAvailable==m_uNumBlocks )
+			{
+				// Two free chunks, discard the last one
+				dLast.Release ( m_iBlockSize * m_uNumBlocks );
+				m_dChunks.Pop ();
+				m_pAllocChunk = m_pDeallocChunk = m_dChunks.begin();
+			}
+			return;
+		}
+
+		if ( dLast.m_uAvailable==m_uNumBlocks )
+		{
+			// Two free blocks, discard one
+			dLast.Release ( m_iBlockSize * m_uNumBlocks );
+			m_dChunks.Pop ();
+			m_pAllocChunk = m_pDeallocChunk;
+		} else
+		{
+			// move the empty chunk to the end
+			std::swap ( *m_pDeallocChunk, dLast );
+			m_pAllocChunk = &m_dChunks.Last();
+		}
+	}
+}
+
+////////////////////////////////////////////////////////////////////////////////
+/// class PtrAttrAllocator_c
+/// Offers fast allocations/deallocations
+////////////////////////////////////////////////////////////////////////////////
+class PtrAttrAllocator_c : public ISphNoncopyable
+{
+	CSphSwapVector<FixedAllocator_c> m_dPool;
+	FixedAllocator_c * m_pLastAlloc = nullptr;
+	FixedAllocator_c * m_pLastDealloc = nullptr;
+	CSphMutex m_dAllocMutex;
+
+private:
+	int LowerBound ( int iBytes ) REQUIRES (m_dAllocMutex);
+
+public:
+
+	BYTE * Allocate ( int iBytes );
+	void Deallocate ( BYTE * pBlob, int iBytes );
+};
+
+// returns lower bound for fixed allocators sized 'iBytes'.
+// i.e. idx of pool (asc sorted) where you can insert new not breaking the sequence.
+int PtrAttrAllocator_c::LowerBound ( int iBytes )
+{
+	if ( m_dPool.IsEmpty () )
+		return -1;
+
+	auto pStart = m_dPool.begin();
+	auto pLast = &m_dPool.Last();
+
+	if ( pStart->BlockSize ()>=iBytes )
+		return 0;
+
+	if ( pLast->BlockSize ()<iBytes )
+		return -1;
+
+	while ( pLast - pStart>1 )
+	{
+		auto pMid = pStart + ( pLast - pStart ) / 2;
+		if ( pMid->BlockSize()<iBytes )
+			pStart = pMid;
+		else
+			pLast = pMid;
+	}
+	return int ( pLast - m_dPool.begin () );
+}
+
+// Allocates 'iBytes' memory
+// Uses an internal pool of FixedAllocator_c objects for small objects
+BYTE * PtrAttrAllocator_c::Allocate ( int iBytes )
+{
+	if ( iBytes>MAX_SMALL_OBJECT_SIZE )
+		return new BYTE[iBytes];
+
+	CSphScopedLock<CSphMutex> tScopedLock ( m_dAllocMutex );
+	if ( m_pLastAlloc && m_pLastAlloc->BlockSize ()==iBytes )
+		return m_pLastAlloc->Allocate ();
+
+	auto i = LowerBound ( iBytes );
+	if ( i<0 ) // required size > any other in the pool
+	{
+		i = m_dPool.GetLength ();
+		m_dPool.Add ( FixedAllocator_c ( iBytes ) );
+		m_pLastDealloc = m_dPool.begin();
+	}
+	else if ( m_dPool[i].BlockSize ()!=iBytes )
+	{
+		FixedAllocator_c dAlloc ( iBytes );
+		m_dPool.Insert ( i, dAlloc );
+		m_pLastDealloc = m_dPool.begin ();
+	}
+	m_pLastAlloc = m_dPool.begin() + i;
+	return m_pLastAlloc->Allocate ();
+}
+
+// Deallocates memory previously allocated with Allocate
+// (undefined behavior if you pass any other pointer)
+void PtrAttrAllocator_c::Deallocate ( BYTE * pBlob, int iBytes )
+{
+	if ( iBytes>MAX_SMALL_OBJECT_SIZE )
+	{
+		SafeDeleteArray ( pBlob );
+		return;
+	}
+
+	CSphScopedLock<CSphMutex> tScopedLock ( m_dAllocMutex );
+	if ( m_pLastDealloc && m_pLastDealloc->BlockSize ()==iBytes )
+	{
+		m_pLastDealloc->Deallocate ( pBlob );
+		return;
+	}
+
+	auto i = LowerBound ( iBytes );
+	assert( i>=0 );
+	assert( m_dPool[i].BlockSize ()==iBytes );
+	m_pLastDealloc = m_dPool.begin () + i;
+	m_pLastDealloc->Deallocate ( pBlob );
+}
+
+PtrAttrAllocator_c &SmallAllocator ()
+{
+	static PtrAttrAllocator_c dAllocator;
+	return dAllocator;
+}
+
+BYTE * sphAllocateSmall ( int iBytes )
+{
+	assert ( iBytes>0 );
+	if ( iBytes>MAX_SMALL_OBJECT_SIZE )
+		return new BYTE[iBytes];
+
+	return SmallAllocator().Allocate (iBytes);
+}
+
+void sphDeallocateSmall ( BYTE * pBlob, int iBytes )
+{
+	if ( iBytes>MAX_SMALL_OBJECT_SIZE )
+	{
+		SafeDeleteArray ( pBlob );
+		return;
+	}
+	SmallAllocator ().Deallocate (pBlob, iBytes);
+}

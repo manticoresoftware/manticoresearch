@@ -20,3 +20,9 @@
    fun:_ZNK14TermAcceptor_cIL15TermPosFilter_e5EE15IsAcceptableHitEPK8ExtHit_t
    fun:_ZN14ExtConditionalIL15TermPosFilter_e5E9ExtTerm_cE12GetDocsChunkEv
 }
+
+{
+   IsRuFreq3(unsigned char*)
+   Memcheck:Cond
+   fun:_ZL9IsRuFreq3Ph
+}

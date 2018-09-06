@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>KEYWORDS with limit</name>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	expansion_limit = 4
+}
+
+source dummy
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+	sql_attr_uint	= gid
+}
+
+index dummy
+{
+	source			= dummy
+	path			= <data_path/>/dummy
+}
+
+index rt
+{
+	type = rt
+	path			= <data_path/>/rt
+	docinfo = extern
+	rt_mem_limit = 128k
+	
+	rt_field		= title
+	rt_attr_uint	= gid
+	
+	dict = keywords
+	min_prefix_len = 2
+}
+</config>
+<db_create>
+CREATE TABLE `test_table` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `gid` int(11) NOT NULL,
+  `title` varchar(255) NOT NULL,
+  PRIMARY KEY (`id`)
+)
+</db_create>
+<db_drop>DROP TABLE IF EXISTS `test_table`;</db_drop>
+<db_insert>INSERT INTO `test_table` VALUES ( 1, 1, 'test 1' )</db_insert>
+
+<sphqueries>
+<sphinxql>INSERT INTO rt (id, gid, title) VALUES ( 1, 1, 'testend for' ), ( 2, 2, 'testat from' )</sphinxql>
+<sphinxql>INSERT INTO rt (id, gid, title) VALUES ( 3, 3, 'testend far' ), ( 4, 4, 'testem from' )</sphinxql>
+<sphinxql>INSERT INTO rt (id, gid, title) VALUES ( 5, 5, 'testend far' ), ( 6, 6, 'testat from' )</sphinxql>
+<sphinxql>INSERT INTO rt (id, gid, title) VALUES ( 7, 7, 'testik me' ), ( 7, 7, 'testup from' )</sphinxql>
+
+<sphinxql>CALL KEYWORDS ( 'test*', 'rt', 1 AS stats, 0 AS fold_wildcards )</sphinxql>
+</sphqueries>
+
+</test>

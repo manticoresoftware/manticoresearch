@@ -6121,6 +6121,7 @@ struct DictEntryRtPayload_t
 	DictEntryRtPayload_t ( bool bPayload, int iSegments )
 	{
 		m_bPayload = bPayload;
+		m_iSegExpansionLimit = iSegments;
 		if ( bPayload )
 		{
 			m_dWordPayload.Reserve ( 1000 );
@@ -6170,7 +6171,7 @@ struct DictEntryRtPayload_t
 		int iTotalHits = 0;
 		if ( m_dWordExpand.GetLength() )
 		{
-			int iRtExpansionLimit = tArgs.m_iExpansionLimit * m_dSeg.GetLength();
+			int iRtExpansionLimit = tArgs.m_iExpansionLimit * m_iSegExpansionLimit;
 			if ( tArgs.m_iExpansionLimit && m_dWordExpand.GetLength()>iRtExpansionLimit )
 			{
 				// sort expansions by frequency desc
@@ -6264,6 +6265,7 @@ struct DictEntryRtPayload_t
 	CSphVector<RtExpandedPayload_t>	m_dWordPayload;
 	CSphVector<BYTE>				m_dWordBuf;
 	CSphVector<Slice_t>				m_dSeg;
+	int								m_iSegExpansionLimit = 0;
 };
 
 

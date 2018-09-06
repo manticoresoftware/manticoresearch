@@ -128,6 +128,7 @@ struct PercolateMatchResult_t
 	CSphFixedVector<PercolateQueryDesc> m_dQueryDesc;
 	CSphFixedVector<int> m_dDocs;
 	int m_iQueriesMatched;
+	int m_iQueriesFailed = 0;
 	int m_iDocsMatched;
 	int64_t m_tmTotal;
 

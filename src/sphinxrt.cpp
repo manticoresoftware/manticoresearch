@@ -11500,9 +11500,9 @@ struct PercolateMatchContext_t
 	bool m_bGetQuery = false;
 	bool m_bGetFilters = false;
 	bool m_bVerbose = false;
+	int m_iQueriesFailed = 0;
 
 	StringBuilder_c m_tFilterBuf;
-	CSphString m_sWarning;
 	KillListVector m_dKillist;
 
 	PercolateDictProxy_c m_tDictMap;
@@ -11557,7 +11557,15 @@ static void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_
 
 	tMatchCtx.m_iEarlyPassed++;
 	tMatchCtx.m_pCtx->ResetFilters();
-	tMatchCtx.m_pCtx->CreateFilters ( false, &pStored->m_dFilters, tMatchCtx.m_tSchema, pMva, pStrings, tMatchCtx.m_sWarning, tMatchCtx.m_sWarning, SPH_COLLATION_DEFAULT, true, tMatchCtx.m_dKillist, &pStored->m_dFilterTree );
+
+	// FIXME!!! collect and show all errors and warnings somehow
+	CSphString sError;
+	CSphString sWarning;
+	if ( !tMatchCtx.m_pCtx->CreateFilters ( false, &pStored->m_dFilters, tMatchCtx.m_tSchema, pMva, pStrings, sError, sWarning, SPH_COLLATION_DEFAULT, true, tMatchCtx.m_dKillist, &pStored->m_dFilterTree ) )
+	{
+		tMatchCtx.m_iQueriesFailed++;
+		return;
+	}
 
 
 	const bool bCollectDocs = tMatchCtx.m_bGetDocs;
@@ -11636,13 +11644,14 @@ static void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_
 				tDesc.m_sFilters = tMatchCtx.m_tFilterBuf.cstr();
 			}
 		}
+
+	if ( tMatchCtx.m_bVerbose )
+		tMatchCtx.m_dDt.Add ( (int)( sphMicroTimer() - tmQueryStart ) );
+
 	} else if ( bCollectDocs ) // pop's up reserved but not used matched counter
 	{
 		tMatchCtx.m_dDocsMatched.Resize ( iDocsOff );
 	}
-
-	if ( tMatchCtx.m_bVerbose )
-		tMatchCtx.m_dDt.Add ( (int)( sphMicroTimer() - tmQueryStart ) );
 }
 
 
@@ -11717,6 +11726,7 @@ static void PercolateGetResult ( int iTotalQueries, CSphFixedVector<PercolateMat
 		tRes.m_iTotalQueries = iTotalQueries;
 		tRes.m_iEarlyOutQueries = ( iTotalQueries - pMatch->m_iEarlyPassed );
 		tRes.m_iOnlyTerms = pMatch->m_iOnlyTerms;
+		tRes.m_iQueriesFailed = pMatch->m_iQueriesFailed;
 		if ( tRes.m_bVerbose )
 			tRes.m_dQueryDT.CopyFrom ( pMatch->m_dDt );
 
@@ -11753,6 +11763,7 @@ static void PercolateGetResult ( int iTotalQueries, CSphFixedVector<PercolateMat
 		tRes.m_iDocsMatched += pMatch->m_iDocsMatched;
 		tRes.m_iEarlyOutQueries += pMatch->m_iEarlyPassed;
 		tRes.m_iOnlyTerms += pMatch->m_iOnlyTerms;
+		tRes.m_iQueriesFailed += pMatch->m_iQueriesFailed;
 	}
 	tRes.m_iTotalQueries = iTotalQueries;
 	tRes.m_iEarlyOutQueries = ( iTotalQueries - tRes.m_iEarlyOutQueries );
@@ -11866,6 +11877,7 @@ bool PercolateIndex_c::MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchRes
 	MEMORY ( MEM_INDEX_RT );
 
 	int64_t tmStart = sphMicroTimer();
+	tRes.m_tmSetup = tmStart;
 	m_sLastWarning = "";
 
 	RtAccum_t * pAcc = AcquireAccum ( NULL, pAccExt, true, this, m_pDict, true );
@@ -12559,6 +12571,7 @@ void PercolateMatchResult_t::Swap ( PercolateMatchResult_t & tOther )
 	m_iQueriesMatched = tOther.m_iQueriesMatched;
 	m_iDocsMatched = tOther.m_iDocsMatched;
 	m_tmTotal = tOther.m_tmTotal;
+	m_iQueriesFailed = tOther.m_iQueriesFailed;
 
 	m_bVerbose = tOther.m_bVerbose;
 	m_dQueryDT.SwapData ( tOther.m_dQueryDT );

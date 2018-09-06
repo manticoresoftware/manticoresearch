@@ -12328,6 +12328,45 @@ bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, co
 		dFilterTree.SwapData ( tQuery.m_dFilterTree );
 	}
 
+	// maybe its better to create real filter instead of just checking column name
+	if ( iRes==0 && dFilters.GetLength() )
+	{
+		ARRAY_FOREACH ( i, dFilters )
+		{
+			const CSphFilterSettings & tFilter = dFilters[i];
+			if ( tFilter.m_sAttrName.IsEmpty() )
+			{
+				sError.SetSprintf ( "bad filter %d name", i );
+				return false;
+			}
+
+			if ( tFilter.m_sAttrName.Begins ( "@" ) )
+			{
+				sError.SetSprintf ( "unsupported filter column '%s'", tFilter.m_sAttrName.cstr() );
+				return false;
+			}
+	
+			const char * sAttrName = tFilter.m_sAttrName.cstr();
+			
+			// might be a JSON.field
+			CSphString sJsonField;
+			const char * sJsonDot = strchr ( sAttrName, '.' );
+			if ( sJsonDot )
+			{
+				assert ( sJsonDot>sAttrName );
+				sJsonField.SetBinary ( sAttrName, sJsonDot - sAttrName );
+				sAttrName = sJsonField.cstr();
+			}
+
+			int iCol = tSchema.GetAttrIndex ( sAttrName );
+			if ( iCol==-1 )
+			{
+				sError.SetSprintf ( "no such filter attribute '%s'", sAttrName );
+				return false;
+			}
+		}
+	}
+
 	// TODO: change way of filter -> expression create: produce single error, share parser code
 	// try expression
 	if ( iRes!=0 && !dFilters.GetLength() && sError.Begins ( "percolate filters: syntax error" ) )
@@ -12343,7 +12382,7 @@ bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, co
 			tExpr.m_sAttrName = sFilters;
 		} else
 		{
-			iRes = 1;
+			return false;
 		}
 	}
 
@@ -13074,6 +13113,8 @@ static void PercolateMatchDocuments ( const StrVec_t & dDocs, const PercolateOpt
 
 	if ( iDocsNoIdCount )
 		sWarning.SetSprintf ( "skipped %d documents without id field '%s'", iDocsNoIdCount, sIdAlias.cstr() );
+	if ( tRes.m_iQueriesFailed )
+		sWarning.SetSprintf ( "%d queries failed", tRes.m_iQueriesFailed );
 
 	SendPercolateReply ( tRes, sWarning, sError, dDocids, tOut );
 	tMeta.Swap ( tRes );
@@ -13186,6 +13227,7 @@ void HandleMysqlPercolateMeta ( const PercolateMatchResult_t & tMeta, const CSph
 		tOut.DataTuplet ( "Setup", sTmp.cstr() );
 	}
 	tOut.DataTuplet ( "Queries matched", tMeta.m_iQueriesMatched );
+	tOut.DataTuplet ( "Queries failed", tMeta.m_iQueriesFailed );
 	tOut.DataTuplet ( "Document matches", tMeta.m_iDocsMatched );
 	tOut.DataTuplet ( "Total queries stored", tMeta.m_iTotalQueries );
 	tOut.DataTuplet ( "Term only queries", tMeta.m_iOnlyTerms );
@@ -13196,7 +13238,7 @@ void HandleMysqlPercolateMeta ( const PercolateMatchResult_t & tMeta, const CSph
 		uint64_t tmMatched = 0;
 		const char * sDelimiter = "";
 		sTmp.Clear();
-		assert ( tMeta.m_dQueryDesc.GetLength()==tMeta.m_dQueryDT.GetLength() );
+		assert ( tMeta.m_iQueriesMatched==tMeta.m_dQueryDT.GetLength() );
 		ARRAY_FOREACH ( i, tMeta.m_dQueryDT )
 		{
 			int tmQuery = tMeta.m_dQueryDT[i];

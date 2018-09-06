@@ -26,3 +26,15 @@
    Memcheck:Cond
    fun:_ZL9IsRuFreq3Ph
 }
+
+{
+   operator new(unsigned long)
+   Memcheck:Leak
+   match-leak-kinds: possible
+   fun:malloc
+   fun:_Znwm
+   fun:_ZN10btstlp_std12__node_allocILb1ELi0EE14_S_chunk_allocEmRi
+   fun:_ZN10btstlp_std12__node_allocILb1ELi0EE9_S_refillEm
+   fun:_ZN10btstlp_std12__node_allocILb1ELi0EE11_M_allocateEm
+   fun:_ZN10btstlp_std12basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE7reserveEm
+}

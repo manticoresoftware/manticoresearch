@@ -481,7 +481,7 @@ public:
 
 	CSphRefcountedPtr<IReporter_t>	m_pReporter { nullptr };	///< used to report back when we're finished
 	LPKEY			m_pPollerTask = nullptr; ///< internal for poller. fixme! privatize?
-	bool			m_bSuccess = false;		///< agent got processed, no need to retry
+	CSphAtomic		m_bSuccess;		///< agent got processed, no need to retry
 
 public:
 	AgentConn_t () = default;

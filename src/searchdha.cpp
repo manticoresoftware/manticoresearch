@@ -2192,7 +2192,7 @@ void AgentConn_t::StartRemoteLoopTry ()
 		m_tOutput.Reset ();
 		InitReplyBuf ();
 		m_bConnectHandshake = true;
-		m_bSuccess = false;
+		m_bSuccess = 0;
 		m_iStartQuery = 0;
 		m_pPollerTask = nullptr;
 
@@ -2507,12 +2507,12 @@ bool AgentConn_t::CommitResult ()
 		return BadResult ();
 
 	Finish();
-	m_bSuccess = true;
 
 	if ( !bWarnings )
 		bWarnings = m_dResults.FindFirst ( [] ( const CSphQueryResult &dRes ) { return !dRes.m_sWarning.IsEmpty(); } );
 
 	agent_stats_inc ( *this, bWarnings ? eNetworkCritical : eNetworkNonCritical );
+	m_bSuccess = 1;
 	return true;
 }
 

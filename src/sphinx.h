@@ -1262,17 +1262,8 @@ public:
 	int						m_iTag = 0;			///< my index tag
 
 public:
-	/// ctor. clears everything
 	CSphMatch () = default;
 
-private:
-	/// copy ctor. just in case
-	CSphMatch ( const CSphMatch & rhs )
-	{
-		*this = rhs;
-	}
-
-public:
 	/// dtor. frees everything
 	~CSphMatch ()
 	{
@@ -1388,13 +1379,9 @@ public:
 	/// MVA getter
 	const DWORD * GetAttrMVA ( const CSphAttrLocator & tLoc, const DWORD * pPool, bool bArenaProhibit ) const;
 
-private:
 	/// "manually" prevent copying
-	const CSphMatch & operator = ( const CSphMatch & )
-	{
-		assert ( 0 && "internal error (CSphMatch::operator= called)" );
-		return *this;
-	}
+	CSphMatch & operator = ( const CSphMatch & ) = delete;
+	CSphMatch ( const CSphMatch &) = delete;
 };
 
 /// specialized swapper

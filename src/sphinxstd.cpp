@@ -2279,57 +2279,26 @@ void StringBuilder_c::Clear ()
 	m_iUsed = 0;
 }
 
+#ifdef USE_SMALLALLOC
+
 ////////////////////////////////////////////////////////////////////////////////
 /// FixedAllocator_c, PtrAttrAllocator_c
 /// Provides fast alloc/dealloc for small objects
 /// (large objects will be redirected to standard new/delete)
 ////////////////////////////////////////////////////////////////////////////////
-static const int MAX_SMALL_OBJECT_SIZE = 64;
 static const size_t DEFAULT_CHUNK_SIZE = 4096;
 
-#if !USE_WINDOWS
-
-// proxy accessor to raw allocate
-inline static BYTE * AllocRaw ( size_t iBytes )
-{
-	auto pBlob = mmap ( nullptr, iBytes, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0 );
-	if ( pBlob==MAP_FAILED )
-		return new BYTE[iBytes];
-	return ( BYTE * ) pBlob;
-}
-
-// proxy accessor to raw deallocate
-inline static void DeallocRaw ( BYTE * pBlock, size_t iBytes )
-{
-	int iRes = ::munmap ( pBlock, iBytes );
-	if ( iRes )
-		delete[] pBlock;
-}
-
-#else
-// proxy accessor to raw allocate
-inline static BYTE * AllocRaw ( int iBytes )
-{
-	return new BYTE[iBytes];
-}
-
-// proxy accessor to raw deallocate
-inline static void DeallocRaw ( const BYTE * pBlock, int iBytes )
-{
-	delete[] pBlock;
-}
-#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 /// FixedAllocator_c
 /// Represents storage for any num of objects of fixed size
 ////////////////////////////////////////////////////////////////////////////////
-class FixedAllocator_c
+class FixedAllocator_c : ISphNoncopyable
 {
 	struct Chunk_t
 	{
 		void Init ( int iBlockSize, BYTE uBlocks );
-		void Release ( int iBytes );
+		void Release ();
 
 		BYTE * Allocate ( int iBlockSize );
 		void Deallocate ( BYTE * pBlob, int iBlockSize );
@@ -2342,12 +2311,7 @@ class FixedAllocator_c
 	int m_iBlockSize;        // size of blobs I can serve
 	Chunk_t * m_pAllocChunk = nullptr;      // shortcut to last alloc
 	Chunk_t * m_pDeallocChunk = nullptr;    // shortcut to last dealloc
-
-	// For ensuring proper copy semantics
-	// (copies share same blobs in their chunks; removing last releases everything)
-	mutable const FixedAllocator_c * m_pPrev;
-	mutable const FixedAllocator_c * m_pNext;
-
+	Chunk_t * m_pLastFree = nullptr;		//
 	CSphVector<Chunk_t> m_dChunks;    // my chunks
 	BYTE m_uNumBlocks;        // # of blocks per chunk
 
@@ -2358,8 +2322,8 @@ private:
 
 public:
 	explicit FixedAllocator_c ( int iBlockSize = 0 );
-	FixedAllocator_c ( const FixedAllocator_c & );
-	FixedAllocator_c &operator= ( const FixedAllocator_c & );
+	FixedAllocator_c ( FixedAllocator_c && ) noexcept;
+	FixedAllocator_c &operator= ( FixedAllocator_c && ) noexcept;
 	~FixedAllocator_c ();
 
 	// allocate block of my m_iBlockSize
@@ -2371,6 +2335,10 @@ public:
 
 	inline int BlockSize () const
 	{ return m_iBlockSize; }
+
+	// debug/diagnostic
+	size_t GetAllocatedSize () const;	// how many allocated right now
+	size_t GetReservedSize () const;	// how many pooled from the sys right now
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2385,7 +2353,7 @@ void FixedAllocator_c::Chunk_t::Init ( int iBlockSize, BYTE uBlocks )
 	// Overflow check
 	assert( ( iBlockSize * uBlocks ) / iBlockSize==uBlocks );
 
-	m_pData = AllocRaw ( iBlockSize * uBlocks );
+	m_pData = new BYTE[iBlockSize * uBlocks];
 	m_uAvailable = uBlocks;
 	m_uFirstAvailable = 0;
 
@@ -2394,9 +2362,9 @@ void FixedAllocator_c::Chunk_t::Init ( int iBlockSize, BYTE uBlocks )
 		*p = ++i;
 }
 
-void FixedAllocator_c::Chunk_t::Release ( int iBytes )
+void FixedAllocator_c::Chunk_t::Release ()
 {
-	DeallocRaw ( m_pData, iBytes );
+	delete[] m_pData;
 }
 
 BYTE * FixedAllocator_c::Chunk_t::Allocate ( int iBlockSize )
@@ -2432,7 +2400,6 @@ void FixedAllocator_c::Chunk_t::Deallocate ( BYTE * pBlob, int iBlockSize )
 FixedAllocator_c::FixedAllocator_c ( int iBlockSize )
 	: m_iBlockSize ( iBlockSize )
 {
-	m_pPrev = m_pNext = this;
 	if ( !iBlockSize )
 		return;
 
@@ -2441,44 +2408,23 @@ FixedAllocator_c::FixedAllocator_c ( int iBlockSize )
 	assert ( m_uNumBlocks && "Too large iBlocksize passed" );
 }
 
-FixedAllocator_c::FixedAllocator_c ( const FixedAllocator_c &rhs )
-	: m_iBlockSize ( rhs.m_iBlockSize )
-	, m_dChunks ( rhs.m_dChunks )
-	, m_uNumBlocks ( rhs.m_uNumBlocks )
+FixedAllocator_c::FixedAllocator_c ( FixedAllocator_c &&rhs ) noexcept
 {
-	m_pPrev = &rhs;
-	m_pNext = rhs.m_pNext;
-	rhs.m_pNext->m_pPrev = this;
-	rhs.m_pNext = this;
-
-	if ( rhs.m_pAllocChunk )
-		m_pAllocChunk =  m_dChunks.begin () + ( rhs.m_pAllocChunk - rhs.m_dChunks.begin () );
-
-	if ( rhs.m_pDeallocChunk )
-		m_pDeallocChunk = m_dChunks.begin () + ( rhs.m_pDeallocChunk - rhs.m_dChunks.begin () );
+	Swap (rhs);
 }
 
-FixedAllocator_c &FixedAllocator_c::operator= ( const FixedAllocator_c &rhs )
+FixedAllocator_c &FixedAllocator_c::operator= ( FixedAllocator_c &&rhs ) noexcept
 {
-	FixedAllocator_c dCopy ( rhs );
-	dCopy.Swap ( *this );
+	Swap (rhs);
 	return *this;
 }
 
 FixedAllocator_c::~FixedAllocator_c ()
 {
-	if ( m_pPrev!=this )
-	{
-		m_pPrev->m_pNext = m_pNext;
-		m_pNext->m_pPrev = m_pPrev;
-		return;
-	}
-
-	assert( m_pPrev==m_pNext );
 	for ( auto & dChunk : m_dChunks )
 	{
 		assert (dChunk.m_uAvailable==m_uNumBlocks);
-		dChunk.Release( m_iBlockSize * m_uNumBlocks );
+		dChunk.Release();
 	}
 }
 
@@ -2582,33 +2528,36 @@ void FixedAllocator_c::DoDeallocate ( BYTE * pBlob )
 	if ( m_pDeallocChunk->m_uAvailable==m_uNumBlocks )
 	{
 		// deallocChunk_ is completely free, should we release it?
-		auto & dLast = m_dChunks.Last();
-		if ( &dLast==m_pDeallocChunk )
+		if ( m_pLastFree!=m_pDeallocChunk )
 		{
-			// check if we have two last chunks empty
-			if ( m_dChunks.GetLength ()>1 && m_pDeallocChunk[-1].m_uAvailable==m_uNumBlocks )
+			if ( m_pLastFree && m_pLastFree->m_uAvailable==m_uNumBlocks )
 			{
-				// Two free chunks, discard the last one
-				dLast.Release ( m_iBlockSize * m_uNumBlocks );
-				m_dChunks.Pop ();
-				m_pAllocChunk = m_pDeallocChunk = m_dChunks.begin();
+				// Two free blocks, discard one
+				m_pLastFree->Release();
+				auto iIdx = m_pLastFree - m_dChunks.begin ();
+				m_dChunks.RemoveFast ( iIdx );
+				if ( m_pDeallocChunk == m_dChunks.end() )
+					m_pDeallocChunk = m_pLastFree;
 			}
-			return;
-		}
-
-		if ( dLast.m_uAvailable==m_uNumBlocks )
-		{
-			// Two free blocks, discard one
-			dLast.Release ( m_iBlockSize * m_uNumBlocks );
-			m_dChunks.Pop ();
-			m_pAllocChunk = m_pDeallocChunk;
-		} else
-		{
 			// move the empty chunk to the end
-			std::swap ( *m_pDeallocChunk, dLast );
-			m_pAllocChunk = &m_dChunks.Last();
+			m_pAllocChunk = m_pLastFree = m_pDeallocChunk;
+			m_pDeallocChunk = &m_dChunks.Last();
 		}
 	}
+}
+
+size_t FixedAllocator_c::GetAllocatedSize () const
+{
+	size_t uAccum = 0;
+	for ( const auto &dChunk : m_dChunks )
+		uAccum += m_uNumBlocks-dChunk.m_uAvailable;
+	return uAccum * m_iBlockSize;
+}
+
+size_t FixedAllocator_c::GetReservedSize () const
+{
+	auto uSize = Max ( m_iBlockSize * m_uNumBlocks, 4096 );
+	return ( size_t ) m_dChunks.GetLength () * uSize;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2618,8 +2567,8 @@ void FixedAllocator_c::DoDeallocate ( BYTE * pBlob )
 class PtrAttrAllocator_c : public ISphNoncopyable
 {
 	CSphSwapVector<FixedAllocator_c> m_dPool;
-	FixedAllocator_c * m_pLastAlloc = nullptr;
-	FixedAllocator_c * m_pLastDealloc = nullptr;
+	FixedAllocator_c * m_pLastAlloc;
+	FixedAllocator_c * m_pLastDealloc;
 	CSphMutex m_dAllocMutex;
 
 private:
@@ -2627,8 +2576,19 @@ private:
 
 public:
 
+	PtrAttrAllocator_c()
+		: m_pLastAlloc (nullptr)
+		, m_pLastDealloc (nullptr)
+	{
+		m_dPool.Reserve ( MAX_SMALL_OBJECT_SIZE );
+	}
+
 	BYTE * Allocate ( int iBytes );
 	void Deallocate ( BYTE * pBlob, int iBytes );
+
+	// debug/diagnostic
+	size_t GetAllocatedSize();	// how many allocated right now
+	size_t GetReservedSize();	// how many pooled from the sys right now
 };
 
 // returns lower bound for fixed allocators sized 'iBytes'.
@@ -2710,11 +2670,31 @@ void PtrAttrAllocator_c::Deallocate ( BYTE * pBlob, int iBytes )
 	m_pLastDealloc->Deallocate ( pBlob );
 }
 
+size_t PtrAttrAllocator_c::GetAllocatedSize ()
+{
+	CSphScopedLock<CSphMutex> tScopedLock ( m_dAllocMutex );
+	size_t uAccum = 0;
+	for ( const auto &dAlloc : m_dPool )
+		uAccum += dAlloc.GetAllocatedSize ();
+	return uAccum;
+}
+
+size_t PtrAttrAllocator_c::GetReservedSize ()
+{
+	CSphScopedLock<CSphMutex> tScopedLock ( m_dAllocMutex );
+	size_t uAccum = 0;
+	for ( const auto &dAlloc : m_dPool )
+		uAccum += dAlloc.GetReservedSize ();
+	return uAccum;
+}
+
 PtrAttrAllocator_c &SmallAllocator ()
 {
 	static PtrAttrAllocator_c dAllocator;
 	return dAllocator;
 }
+
+
 
 BYTE * sphAllocateSmall ( int iBytes )
 {
@@ -2734,3 +2714,13 @@ void sphDeallocateSmall ( BYTE * pBlob, int iBytes )
 	}
 	SmallAllocator ().Deallocate (pBlob, iBytes);
 }
+
+size_t sphGetSmallAllocatedSize ()
+{
+	return SmallAllocator ().GetAllocatedSize ();
+}
+size_t sphGetSmallReservedSize ()
+{
+	return SmallAllocator ().GetReservedSize ();
+}
+#endif

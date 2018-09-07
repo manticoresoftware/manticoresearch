@@ -438,9 +438,9 @@ template <typename T, typename U> T Max ( T a, U b )
 /// swap
 template < typename T > inline void Swap ( T & v1, T & v2 )
 {
-	T temp = v1;
-	v1 = v2;
-	v2 = temp;
+	T temp = std::move ( v1 );
+	v1 = std::move ( v2 );
+	v2 = std::move ( temp );
 }
 
 /// prevent copy
@@ -1378,6 +1378,7 @@ public:
 /// swap-vector
 template < typename T >
 using CSphSwapVector = CSphVector < T, CSphSwapVectorPolicy<T> >;
+
 
 /// tight-vector
 template < typename T >
@@ -4164,11 +4165,22 @@ inline int sphZipToPtr ( T tValue, BYTE * pData )
 	return nBytes;
 }
 
-/// Allocate blobs upto 64 bytes using internal cache, bigger came to standard new/delete
+/// Allocation for small objects (namely - for movable dynamic attributes).
 /// internals based on Alexandresku's 'loki' implementation - 'Allocator for small objects'
+static const int MAX_SMALL_OBJECT_SIZE = 64;
+
+#ifdef USE_SMALLALLOC
 BYTE * sphAllocateSmall ( int iBytes );
 void sphDeallocateSmall ( BYTE * pBlob, int iBytes );
-void sphDeallocatePacked ( BYTE * pBlob );
+size_t sphGetSmallAllocatedSize ();	// how many allocated right now
+size_t sphGetSmallReservedSize ();	// how many pooled from the sys right now
+#else
+inline BYTE * sphAllocateSmall(int iBytes) {return new BYTE[iBytes];};
+inline void sphDeallocateSmall(BYTE * pBlob, int) {delete[]pBlob;};
+inline size_t sphGetSmallAllocatedSize() {return 0;};    // how many allocated right now
+inline size_t sphGetSmallReservedSize() {return 0;};    // how many pooled from the sys right now
+#endif // USE_SMALLALLOC
 
+void sphDeallocatePacked ( BYTE * pBlob );
 
 #endif // _sphinxstd_

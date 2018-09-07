@@ -1237,3 +1237,92 @@ TEST ( functions, FindLastNumeric )
 	static const char * sNum3 = "12 34";
 	ASSERT_EQ ( sNum3 + 3, sphFindLastNumeric ( sNum3, 5 ) );
 }
+const char* sPattern="DeadBeefDeadBeefDeadBeefDeadBeefDeadBeefDeadBeefDeadBeefDeadBeef";
+
+TEST ( functions, bench_allocator_linear )
+{
+	static const DWORD uTries = 10000000;
+
+	struct chunk_t {
+		BYTE * pChunk;
+		BYTE uSize;
+	};
+
+	CSphVector<chunk_t> dChunks;
+	dChunks.Resize (uTries);
+	auto iTimeSpan = -sphMicroTimer ();
+	BYTE iAllocate = 1;
+	for ( auto & chunk : dChunks)
+	{
+		chunk.uSize = iAllocate;
+		chunk.pChunk = sphAllocateSmall ( iAllocate );
+		memcpy ( chunk.pChunk, sPattern, iAllocate );
+		++iAllocate;
+		if ( iAllocate > MAX_SMALL_OBJECT_SIZE )
+			iAllocate = 1;
+	}
+	for ( auto &chunk : dChunks )
+		sphDeallocateSmall (chunk.pChunk, chunk.uSize);
+	iTimeSpan += sphMicroTimer();
+	auto uReserved = sphGetSmallReservedSize ();
+	std::cout << "Took " << iTimeSpan << " uSec, reserved " << uReserved << " bytes.\n";
+	ASSERT_EQ ( sphGetSmallAllocatedSize (), 0 );
+}
+
+TEST ( functions, bench_allocator_linear64 )
+{
+	static const DWORD uTries = 1000;
+
+	struct chunk_t
+	{
+		BYTE * pChunk;
+		BYTE uSize;
+	};
+
+	CSphVector<chunk_t> dChunks;
+	dChunks.Resize ( uTries );
+	auto iTimeSpan = -sphMicroTimer ();
+	BYTE iAllocate = 64;
+	for ( auto &chunk : dChunks )
+	{
+		chunk.uSize = iAllocate;
+		chunk.pChunk = sphAllocateSmall ( iAllocate );
+		memcpy ( chunk.pChunk, sPattern, iAllocate );
+//		iAllocate++;
+		if ( iAllocate>MAX_SMALL_OBJECT_SIZE )
+			iAllocate = 1;
+	}
+	for ( auto &chunk : dChunks )
+		sphDeallocateSmall ( chunk.pChunk, chunk.uSize );
+	iTimeSpan += sphMicroTimer ();
+	auto uReserved = sphGetSmallReservedSize ();
+	std::cout << "Took " << iTimeSpan << " uSec, reserved " << uReserved << " bytes.\n";
+	ASSERT_EQ ( sphGetSmallAllocatedSize (), 0 );
+}
+
+TEST ( functions, bench_allocator_small )
+{
+	static const DWORD uTries = 10000000;
+	static const DWORD uLoops = uTries/MAX_SMALL_OBJECT_SIZE;
+
+	CSphVector<BYTE*> dChunks;
+	dChunks.Resize ( MAX_SMALL_OBJECT_SIZE );
+	auto iTimeSpan = -sphMicroTimer ();
+
+	for ( DWORD j=0; j<uLoops; ++j)
+	{
+		ARRAY_FOREACH ( i, dChunks )
+		{
+			dChunks[i] = sphAllocateSmall ( MAX_SMALL_OBJECT_SIZE - i );
+			memcpy ( dChunks[i], sPattern, MAX_SMALL_OBJECT_SIZE - i );
+		}
+
+		ARRAY_FOREACH ( i, dChunks )
+			sphDeallocateSmall ( dChunks[i], MAX_SMALL_OBJECT_SIZE - i );
+	}
+
+	iTimeSpan += sphMicroTimer ();
+	auto uReserved = sphGetSmallReservedSize ();
+	std::cout << uLoops << " loops took " << iTimeSpan << " uSec, reserved " << uReserved << " bytes.\n";
+	ASSERT_EQ ( sphGetSmallAllocatedSize (), 0 );
+}

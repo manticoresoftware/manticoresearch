@@ -434,6 +434,14 @@ else ( WIN32 )
 
 endif ( WIN32 )
 
+
+option ( USE_SMALLALLOC "Use 'small allocator' derived from loki lib. Bench! Glibc allocator now is fast enough!" )
+if ( USE_SMALLALLOC )
+	SET ( USE_SMALLALLOC 1 )
+	cfginfo ( "USE_SMALLALLOC=ON" )
+endif ( USE_SMALLALLOC )
+mark_as_advanced ( USE_SMALLALLOC )
+
 INCLUDE ( GNUInstallDirs )
 
 if ( ${CMAKE_INSTALL_FULL_LOCALSTATEDIR} STREQUAL "/usr/var" )

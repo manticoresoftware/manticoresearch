@@ -3912,18 +3912,20 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, SphDocID_t iMinDocID, i
 	tWriter.CloseFile ();
 }
 
-
-#if USE_WINDOWS
-#undef rename
-int rename ( const char * sOld, const char * sNew )
+namespace sph
 {
-	if ( MoveFileEx ( sOld, sNew, MOVEFILE_REPLACE_EXISTING ) )
-		return 0;
-	errno = GetLastError();
-	return -1;
-}
+	inline int rename ( const char * sOld, const char * sNew )
+	{
+#if USE_WINDOWS
+		if ( MoveFileEx ( sOld, sNew, MOVEFILE_REPLACE_EXISTING ) )
+			return 0;
+		errno = GetLastError();
+		return -1;
+#else
+		return ::rename ( sOld, sNew );
 #endif
-
+	}
+}
 
 void RtIndex_t::SaveMeta ( int64_t iTID, const CSphFixedVector<int> & dChunkNames )
 {
@@ -3973,7 +3975,7 @@ void RtIndex_t::SaveMeta ( int64_t iTID, const CSphFixedVector<int> & dChunkName
 	wrMeta.CloseFile(); // FIXME? handle errors?
 
 	// rename
-	if ( ::rename ( sMetaNew.cstr(), sMeta.cstr() ) )
+	if ( sph::rename ( sMetaNew.cstr(), sMeta.cstr() ) )
 		sphDie ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)",
 			sMetaNew.cstr(), sMeta.cstr(), errno, strerrorm(errno) ); // !COMMIT handle this gracefully
 }
@@ -4439,7 +4441,7 @@ bool RtIndex_t::SaveRamChunk ()
 		return false;
 
 	// rename
-	if ( ::rename ( sNewChunk.cstr(), sChunk.cstr() ) )
+	if ( sph::rename ( sNewChunk.cstr(), sChunk.cstr() ) )
 		sphDie ( "failed to rename ram chunk (src=%s, dst=%s, errno=%d, error=%s)",
 			sNewChunk.cstr(), sChunk.cstr(), errno, strerrorm(errno) ); // !COMMIT handle this gracefully
 
@@ -9618,7 +9620,7 @@ void RtBinlog_c::SaveMeta ()
 
 	wrMeta.CloseFile();
 
-	if ( ::rename ( sMeta.cstr(), sMetaOld.cstr() ) )
+	if ( sph::rename ( sMeta.cstr(), sMetaOld.cstr() ) )
 		sphDie ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)",
 			sMeta.cstr(), sMetaOld.cstr(), errno, strerrorm(errno) ); // !COMMIT handle this gracefully
 	sphLogDebug ( "SaveMeta: Done." );
@@ -12474,7 +12476,7 @@ void PercolateIndex_c::SaveMeta()
 	wrMeta.CloseFile();
 
 	// rename
-	if ( ::rename ( sMetaNew.cstr(), sMeta.cstr() ) )
+	if ( sph::rename ( sMetaNew.cstr(), sMeta.cstr() ) )
 		sphWarning ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)", sMetaNew.cstr(), sMeta.cstr(), errno, strerrorm( errno ) );
 }
 

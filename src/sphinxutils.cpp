@@ -2316,6 +2316,19 @@ static bool DumpGdb ( int iFD )
 	pid_t iRes = waitpid ( iPidIntermediate, &iStatus, 0 );
 	if ( iRes==-1 || iRes==0 )
 		return false;
+
+	// master branch is mirrored on githup, so could generate more info here.
+	if ( strncmp ( GIT_BRANCH_ID, "git branch master", 17 ) == 0 )
+		sphSafeInfo ( iFD,
+			"You can obtain the sources of this version from https://github.com/manticoresoftware/manticoresearch/archive/" SPH_GIT_COMMIT_ID ".zip\n"
+			"and set up debug env with this shippet (select wget or curl version below):\n\n"
+   "  wget https://codeload.github.com/manticoresoftware/manticoresearch/zip/" SPH_GIT_COMMIT_ID " -O manticore.zip\n"
+   "  curl https://codeload.github.com/manticoresoftware/manticoresearch/zip/" SPH_GIT_COMMIT_ID " -o manticore.zip");
+	sphSafeInfo ( iFD,
+	  "\nUnpack the sources by command:\n"
+	  "  mkdir -p /tmp/manticore && unzip manticore.zip -d /tmp/manticore\n\n"
+	  "Also suggest to append a substitution def to your ~/.gdbinit file:\n"
+	  "  set substitute-path \"" SOURCE_DIR "\" /tmp/manticore/manticoresearch-" SPH_GIT_COMMIT_ID );
 	return true;
 #else
 	return false;
@@ -2468,7 +2481,8 @@ void sphBacktrace ( int iFD, bool bSafe )
 			"Look into the chapter 'Reporting bugs' in the documentation\n"
 			"(http://docs.manticoresearch.com/latest/html/reporting_bugs.html)" );
 
-	DumpGdb ( iFD );
+	if ( DumpGdb ( iFD ) )
+		return;
 	// convert all BT addresses to source code lines
 	int iCount = Min ( iDepth, (int)( sizeof(g_pArgv)/sizeof(g_pArgv[0]) - SPH_BT_ADDRS - 1 ) );
 	sphSafeInfo ( iFD, "--- BT to source lines (depth %d): ---", iCount );

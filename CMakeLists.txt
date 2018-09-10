@@ -263,6 +263,7 @@ else ( WIN32 )
 
 	message ( STATUS "Checking for specific headers" )
 	ac_check_headers ( "execinfo.h;syslog.h;sys/eventfd.h" )
+	ac_check_headers ( "sys/prctl.h" )
 
 	# mb use something better. The code below is copy-pasted from automake script
 	message ( STATUS "Checking for library functions" )

@@ -106,6 +106,9 @@
 /* Define to 1 if you have the <sys/types.h> header file. */
 #cmakedefine HAVE_SYS_TYPES_H ${HAVE_SYS_TYPES_H}
 
+/* Define to 1 if you have the <sys/prctl.h> header file. */
+#cmakedefine HAVE_SYS_PRCTL_H ${HAVE_SYS_PRCTL_H}
+
 /* whether 2nd arg to iconv() is const ptr */
 #cmakedefine ICONV_INBUF_CONST ${ICONV_INBUF_CONST}
 

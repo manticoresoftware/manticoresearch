@@ -48,6 +48,10 @@
 
 #include <sys/stat.h>
 
+#if HAVE_SYS_PRCTL_H
+#include <sys/prctl.h>
+#endif
+
 //////////////////////////////////////////////////////////////////////////
 // STRING FUNCTIONS
 //////////////////////////////////////////////////////////////////////////
@@ -2159,7 +2163,164 @@ static void * g_pBacktraceAddresses [SPH_BACKTRACE_ADDR_COUNT];
 static char g_pBacktrace[4096];
 static const char g_sSourceTail[] = "> source.txt\n";
 static const char * g_pArgv[128] = { "addr2line", "-e", "./searchd", "0x0", NULL };
+static char g_sNameBuf[512] = {0};
 static CSphString g_sBinaryName;
+
+bool IsDebuggerPresent()
+{
+	const int status_fd = ::open ( "/proc/self/status", O_RDONLY );
+	if ( status_fd==-1 )
+		return false;
+
+	const ssize_t num_read = ::read ( status_fd, g_pBacktrace, sizeof ( g_pBacktrace ) - 1 );
+	if ( num_read<=0 )
+		return false;
+
+	g_pBacktrace[num_read] = '\0';
+	constexpr char tracerPidString[] = "TracerPid:";
+	const auto tracer_pid_ptr = ::strstr ( g_pBacktrace, tracerPidString );
+	if ( !tracer_pid_ptr )
+		return false;
+
+
+	for ( const char * characterPtr = tracer_pid_ptr + sizeof ( tracerPidString ) - 1;
+		  characterPtr<=g_pBacktrace + num_read; ++characterPtr )
+	{
+		if ( ::isspace ( *characterPtr ) )
+			continue;
+		else
+			return ::isdigit ( *characterPtr )!=0 && *characterPtr!='0';
+	}
+
+	return false;
+}
+
+static bool DumpGdb ( int iFD )
+{
+#if HAVE_SYS_PRCTL_H
+	char sPid[30] = {0};
+	sprintf ( sPid, "%d", getpid () );
+	g_sNameBuf [ ::readlink ( "/proc/self/exe", g_sNameBuf, 511 ) ] = 0;
+
+	if ( IsDebuggerPresent ())
+		return false;
+
+	// allow to trace us
+	prctl ( PR_SET_PTRACER, PR_SET_PTRACER_ANY, 0, 0, 0 );
+
+	sigset_t signal_set;
+	sigemptyset ( &signal_set );
+
+	sigaddset ( &signal_set, SIGTERM );
+	sigaddset ( &signal_set, SIGINT );
+	sigaddset ( &signal_set, SIGSEGV );
+	sigaddset ( &signal_set, SIGABRT );
+	sigaddset ( &signal_set, SIGILL );
+	sigaddset ( &signal_set, SIGUSR1 );
+	sigaddset ( &signal_set, SIGHUP );
+
+	// Block signals to child processes
+	sigprocmask ( SIG_BLOCK, &signal_set, NULL );
+
+	// Spawn helper process which will keep running when gdb is attached to us
+	pid_t iPidIntermediate = fork ();
+	if ( iPidIntermediate==-1 )
+		return false;
+
+	if ( !iPidIntermediate ) // the helper, run gdb
+	{
+
+		// Wathchdog 1: Used to kill sub processes to gdb which may hang
+		pid_t iWait30 = fork ();
+		if ( iWait30==-1 )
+			_Exit ( 1 );
+		if ( !iWait30 )
+		{
+			sphSleepMsec ( 30000 );
+			_Exit ( 1 );
+		}
+
+		// Wathchdog 2: Give up on gdb, if it still does not finish even after killing its sub processes
+		pid_t iWait60 = fork ();
+		if ( iWait60==-1 )
+		{
+			kill ( iWait30, SIGKILL );
+			_Exit ( 1 );
+		}
+		if ( !iWait60 )
+		{
+			sphSleepMsec ( 60000 );
+			_Exit ( 1 );
+		}
+
+		// Worker: Spawns gdb
+		pid_t iWorker = fork ();
+
+		if ( !iWorker )
+		{
+			sphSafeInfo ( iFD, "Will run gdb on %s, pid %s", g_sNameBuf, sPid );
+			if ( dup2 ( iFD, STDOUT_FILENO )==-1 )
+				_Exit ( 1 );
+			if ( dup2 ( iFD, STDERR_FILENO )==-1 )
+				_Exit ( 1 );
+			execlp ( "gdb", "gdb", "--batch", "-n", "-ex", "info threads", "-ex", "thread apply all bt", "-ex"
+					 , "echo \nMain thread:\n", "-ex", "bt", "-ex", "detach", g_sNameBuf, sPid, nullptr );
+
+			// If gdb failed to start, signal back
+			_Exit ( 1 );
+		}
+
+		int iResult = 1;
+
+		while ( iWorker || iWait30 || iWait60 )
+		{
+			int iStatus;
+			pid_t iExited = wait ( &iStatus );
+			if ( iExited == iWorker )
+			{
+				if ( WIFEXITED( iStatus ) && WEXITSTATUS( iStatus )==0 )
+					iResult = 0; // Success
+				else
+					iResult = 2; // Failed to start gdb
+				iWorker = 0;
+				if ( iWait60 )
+					kill ( iWait60, SIGKILL );
+				if ( iWait30 )
+					kill ( iWait30, SIGKILL );
+			} else if ( iExited == iWait30 )
+			{
+				iWait30 = 0;
+				char tmp[128];
+				if ( iWorker )
+				{
+					sphSafeInfo ( tmp, "pkill -KILL -P %d", iWorker );
+					::system ( tmp );
+				}
+			} else if ( iExited == iWait60 )
+			{
+				iWait60 = 0;
+				if ( iWorker )
+					kill ( iWorker, SIGKILL );
+				if ( iWait30 )
+					kill ( iWait30, SIGKILL );
+			}
+		}
+		_Exit ( iResult );
+	}
+
+	// main process
+	assert ( iPidIntermediate>0 );
+
+	int iStatus;
+	sigprocmask ( SIG_UNBLOCK, &signal_set, nullptr );
+	pid_t iRes = waitpid ( iPidIntermediate, &iStatus, 0 );
+	if ( iRes==-1 || iRes==0 )
+		return false;
+	return true;
+#else
+	return false;
+#endif
+}
 
 #if HAVE_BACKTRACE & HAVE_BACKTRACE_SYMBOLS
 const char * DoBacktrace ( int iDepth, int iSkip )
@@ -2307,6 +2468,7 @@ void sphBacktrace ( int iFD, bool bSafe )
 			"Look into the chapter 'Reporting bugs' in the documentation\n"
 			"(http://docs.manticoresearch.com/latest/html/reporting_bugs.html)" );
 
+	DumpGdb ( iFD );
 	// convert all BT addresses to source code lines
 	int iCount = Min ( iDepth, (int)( sizeof(g_pArgv)/sizeof(g_pArgv[0]) - SPH_BT_ADDRS - 1 ) );
 	sphSafeInfo ( iFD, "--- BT to source lines (depth %d): ---", iCount );

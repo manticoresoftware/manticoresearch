@@ -2139,13 +2139,13 @@ struct ExpansionContext_t
 
 struct GetKeywordsSettings_t
 {
-	bool	m_bStats;
-	bool	m_bFoldLemmas;
-	bool	m_bFoldBlended;
-	bool	m_bFoldWildcards;
-	int		m_iExpansionLimit;
-
-	GetKeywordsSettings_t ();
+	bool	m_bStats = true;
+	bool	m_bFoldLemmas = false;
+	bool	m_bFoldBlended = false;
+	bool	m_bFoldWildcards = false;
+	int		m_iExpansionLimit = 0;
+	bool	m_bSortByDocs = false;
+	bool	m_bSortByHits = false;
 };
 
 struct ISphQueryFilter

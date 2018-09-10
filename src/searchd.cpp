@@ -13830,6 +13830,7 @@ struct KeywordsReplyParser_t : public IReplyParser_t
 };
 
 static void MergeKeywords ( CSphVector<CSphKeywordInfo> & dKeywords );
+static void SortKeywords ( const GetKeywordsSettings_t & tSettings, CSphVector<CSphKeywordInfo> & dKeywords );
 
 void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphString & sWarning )
 {
@@ -13854,6 +13855,7 @@ void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphStr
 		CSphString & sOpt = tStmt.m_dCallOptNames[i];
 		sOpt.ToLower ();
 		bool bEnabled = ( tStmt.m_dCallOptValues[i].m_iVal!=0 );
+		bool bOptInt = true;
 
 		if ( sOpt=="stats" )
 			tSettings.m_bStats = bEnabled;
@@ -13865,7 +13867,20 @@ void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphStr
 			tSettings.m_bFoldWildcards = bEnabled;
 		else if ( sOpt=="expansion_limit" )
 			tSettings.m_iExpansionLimit = int ( tStmt.m_dCallOptValues[i].m_iVal );
-		else
+		else if ( sOpt=="sort_mode" )
+		{
+			// FIXME!!! add more sorting modes
+			if ( tStmt.m_dCallOptValues[i].m_sVal!="docs" && tStmt.m_dCallOptValues[i].m_sVal!="hits" )
+			{
+				sError.SetSprintf ( "unknown option %s mode '%s'", sOpt.cstr(), tStmt.m_dCallOptValues[i].m_sVal.cstr() );
+				tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+				return;
+			}
+			tSettings.m_bSortByDocs = ( tStmt.m_dCallOptValues[i].m_sVal=="docs" );
+			tSettings.m_bSortByHits = ( tStmt.m_dCallOptValues[i].m_sVal=="hits" );
+			bOptInt = false;
+						
+		} else
 		{
 			sError.SetSprintf ( "unknown option %s", sOpt.cstr () );
 			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
@@ -13873,7 +13888,7 @@ void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphStr
 		}
 
 		// post-conf type check
-		if ( tStmt.m_dCallOptValues[i].m_iType!=TOK_CONST_INT )
+		if ( bOptInt && tStmt.m_dCallOptValues[i].m_iType!=TOK_CONST_INT )
 		{
 			sError.SetSprintf ( "unexpected option %s type", sOpt.cstr () );
 			tOut.Error ( tStmt.m_sStmt, sError.cstr () );
@@ -13955,6 +13970,8 @@ void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphStr
 		if ( dLocals.GetLength() + iAgentsReply>1 )
 			MergeKeywords ( dKeywords );
 	}
+
+	SortKeywords ( tSettings, dKeywords );
 
 	// result set header packet
 	tOut.HeadBegin ( tSettings.m_bStats ? 5 : 3 );
@@ -14089,6 +14106,28 @@ void MergeKeywords ( CSphVector<CSphKeywordInfo> & dSrc )
 	}
 
 	sphSort ( dSrc.Begin(), dSrc.GetLength(), KeywordSorter_fn() );
+}
+
+struct KeywordSorterDocs_fn
+{
+	bool IsLess ( const CSphKeywordInfo & a, const CSphKeywordInfo & b ) const
+	{
+		return ( ( a.m_iQpos<b.m_iQpos )
+			|| ( a.m_iQpos==b.m_iQpos && a.m_iDocs>b.m_iDocs )
+			|| ( a.m_iQpos==b.m_iQpos && a.m_iDocs==b.m_iDocs && a.m_sNormalized<b.m_sNormalized ) );
+	}
+};
+
+
+void SortKeywords ( const GetKeywordsSettings_t & tSettings, CSphVector<CSphKeywordInfo> & dKeywords )
+{
+	if ( !tSettings.m_bSortByDocs && !tSettings.m_bSortByHits )
+		return;
+
+	if ( tSettings.m_bSortByHits )
+		dKeywords.Sort ( KeywordSorter_fn() );
+	else
+		dKeywords.Sort ( KeywordSorterDocs_fn() );
 }
 
 // sort by distance asc, document count desc, ABC asc

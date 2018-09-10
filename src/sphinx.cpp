@@ -16634,15 +16634,6 @@ DWORD sphParseMorphAot ( const char * sMorphology )
 }
 
 
-GetKeywordsSettings_t::GetKeywordsSettings_t ()
-{
-	m_bStats = true;
-	m_bFoldLemmas = false;
-	m_bFoldBlended = false;
-	m_bFoldWildcards = false;
-	m_iExpansionLimit = 0;
-}
-
 void ISphQueryFilter::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const ExpansionContext_t & tCtx )
 {
 	assert ( m_pTokenizer && m_pDict && m_pSettings );

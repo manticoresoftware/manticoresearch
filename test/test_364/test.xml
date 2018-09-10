@@ -58,9 +58,14 @@ CREATE TABLE `test_table` (
 <sphinxql>INSERT INTO rt (id, gid, title) VALUES ( 1, 1, 'testend for' ), ( 2, 2, 'testat from' )</sphinxql>
 <sphinxql>INSERT INTO rt (id, gid, title) VALUES ( 3, 3, 'testend far' ), ( 4, 4, 'testem from' )</sphinxql>
 <sphinxql>INSERT INTO rt (id, gid, title) VALUES ( 5, 5, 'testend far' ), ( 6, 6, 'testat from' )</sphinxql>
-<sphinxql>INSERT INTO rt (id, gid, title) VALUES ( 7, 7, 'testik me' ), ( 7, 7, 'testup from' )</sphinxql>
+<sphinxql>INSERT INTO rt (id, gid, title) VALUES ( 7, 7, 'testik me' ), ( 8, 8, 'tested from me but not tested properly' )</sphinxql>
+<sphinxql>INSERT INTO rt (id, gid, title) VALUES ( 10, 10, 'testzek me but not testzek' ), ( 11, 11, 'testzek from me testzek' )</sphinxql>
 
 <sphinxql>CALL KEYWORDS ( 'test*', 'rt', 1 AS stats, 0 AS fold_wildcards )</sphinxql>
+
+<!-- sort_mode option -->
+<sphinxql>CALL KEYWORDS ( 'test*', 'rt', 1 AS stats, 0 AS fold_wildcards, 100 as expansion_limit, 'docs' as sort_mode )</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'test*', 'rt', 1 AS stats, 0 AS fold_wildcards, 100 as expansion_limit, 'hits' as sort_mode )</sphinxql>
 </sphqueries>
 
 </test>

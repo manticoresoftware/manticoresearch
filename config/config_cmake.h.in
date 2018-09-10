@@ -82,6 +82,9 @@
 /* Define to 1 if you have the 'mremap' function */
 #cmakedefine HAVE_MREMAP ${HAVE_MREMAP}
 
+/* Define to 1 if you have the 'malloc.h' header */
+#cmakedefine HAVE_MALLOC_H ${HAVE_MALLOC_H}
+
 /* Define to 1 if you have the 'nanosleep' function */
 #cmakedefine HAVE_NANOSLEEP ${HAVE_NANOSLEEP}
 

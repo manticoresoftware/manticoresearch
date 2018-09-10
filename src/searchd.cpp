@@ -44,6 +44,10 @@ extern "C"
 #include "searchdaemon.h"
 #include "searchdha.h"
 
+#if HAVE_MALLOC_H
+#include <malloc.h>
+#endif
+
 #define SEARCHD_BACKLOG			5
 #define SPHINXAPI_PORT			9312
 #define SPHINXQL_PORT			9306
@@ -1053,7 +1057,6 @@ void sphLogEntry ( ESphLogLevel , char * sBuf, char * sTtyBuf )
 			sphWrite ( STDOUT_FILENO, sTtyBuf, strlen(sTtyBuf) );
 	}
 }
-
 
 /// log entry (with log levels, dupe catching, etc)
 /// call with NULL format for dupe flushing
@@ -16278,6 +16281,14 @@ inline static CSphString strSHA1 ( const CSphString& sLine )
 	return CalcSHA1 ( sLine.cstr(), sLine.Length() );
 }
 
+int GetLogFD ()
+{
+	if ( g_bLogStdout && g_iLogFile!=STDOUT_FILENO )
+		return STDOUT_FILENO;
+	return g_iLogFile;
+}
+
+
 void HandleMysqlDebug ( SqlRowBuffer_c &tOut, const SqlStmt_t &tStmt, bool bVipConn )
 {
 	CSphString sCommand = tStmt.m_sIndex;
@@ -16286,10 +16297,11 @@ void HandleMysqlDebug ( SqlRowBuffer_c &tOut, const SqlStmt_t &tStmt, bool bVipC
 	sCommand.Trim ();
 	sParam.Trim ();
 
-	if ( bVipConn && sCommand=="shutdown" )
+	if ( bVipConn && ( sCommand=="shutdown" || sCommand=="crash" ) )
 	{
 		if ( g_sShutdownToken.IsEmpty () )
 		{
+
 			tOut.HeadTuplet ("command","error");
 			tOut.DataTuplet ("debug shutdown", "shutdown_token is empty. Provide it in searchd config section.");
 		}
@@ -16297,8 +16309,16 @@ void HandleMysqlDebug ( SqlRowBuffer_c &tOut, const SqlStmt_t &tStmt, bool bVipC
 			if ( strSHA1(sParam) == g_sShutdownToken )
 			{
 				tOut.HeadTuplet ( "command", "result" );
-				tOut.DataTuplet ( "debug shutdown <password>", "SUCCESS" );
-				sigterm(1);
+				if ( sCommand=="shutdown" )
+				{
+					tOut.DataTuplet ( "debug shutdown <password>", "SUCCESS" );
+					sigterm(1);
+				} else if ( sCommand=="crash")
+				{
+					tOut.DataTuplet ( "debug crash <password>", "SUCCESS" );
+					BYTE * pSegv = ( BYTE * ) ( 0 );
+					*pSegv = 'a';
+				}
 			} else
 				{
 					tOut.HeadTuplet ( "command", "result" );
@@ -16311,17 +16331,42 @@ void HandleMysqlDebug ( SqlRowBuffer_c &tOut, const SqlStmt_t &tStmt, bool bVipC
 		auto sSha = strSHA1(sParam);
 		tOut.HeadTuplet ( "command", "result" );
 		tOut.DataTuplet ( "debug token", sSha.cstr() );
-	} else
+	}
+#if HAVE_MALLOC_H
+	else if ( sCommand=="malloc_stats" )
+	{
+		tOut.HeadTuplet ( "command", "result" );
+		// check where is stderr...
+		int iOldErr = ::dup ( STDERR_FILENO );
+		::dup2 ( GetLogFD (), STDERR_FILENO );
+		malloc_stats();
+		::dup2 ( iOldErr, STDERR_FILENO );
+		::close ( iOldErr );
+		tOut.DataTuplet ( "malloc_stats", g_sLogFile.cstr());
+	} else if ( sCommand=="malloc_trim" )
+	{
+		tOut.HeadTuplet ( "command", "result" );
+		CSphString sResult;
+		sResult.SetSprintf ( "%d", malloc_trim (0));
+		tOut.DataTuplet ( "malloc_trim", sResult.cstr () );
+	}
+#endif
+	else
 	{
 		// no known command; provide short help.
 		tOut.HeadTuplet ( "command", "meaning" );
 		if ( bVipConn )
 		{
 			tOut.DataTuplet ( "debug shutdown <password>", "emulate TERM signal");
+			tOut.DataTuplet ( "debug crash <password>", "crash daemon (make SIGSEGV action)" );
 			tOut.DataTuplet ( "debug token <password>", "calculate token for password" );
 		}
 		tOut.DataTuplet ( "flush logs", "emulate USR1 signal" );
 		tOut.DataTuplet ( "reload indexes", "emulate HUP signal" );
+#if HAVE_MALLOC_H
+		tOut.DataTuplet ( "malloc_stats", "perform 'malloc_stats', result in searchd.log" );
+		tOut.DataTuplet ( "malloc_trim", "pefrorm 'malloc_trim' call" );
+#endif
 	}
 	// done
 	tOut.Eof ();

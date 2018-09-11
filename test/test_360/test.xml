@@ -60,7 +60,7 @@ CREATE TABLE `test_table` (
 <sphinxql>select * from testrt where match ( 'test me ') order by id desc</sphinxql>
 
 <!-- next disk chunks from RT index is with embeded stopwords from RT index that is wrong -->
-<sphinxql system="restart-daemon"></sphinxql>
+<sphinxql system="restart-daemon"/>
 
 <sphinxql>select * from testrt where match ( 'test me ') order by id desc</sphinxql>
 <sphinxql>insert into testrt (id, gid, title) values (2, 22, 'test me up')</sphinxql>

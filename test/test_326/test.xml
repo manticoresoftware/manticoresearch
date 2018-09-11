@@ -85,45 +85,19 @@ INSERT INTO test_table VALUES
 <!-- for plain index this is field_lengths -->
 <!-- for RT index this is dick chunk list after RT got saved, need daemon restart -->
 
-<custom_test><![CDATA[
+<sphqueries>
+<!-- populate commit -->
+<sphinxql>insert into rt (id, content, text, gid) values ( 1, 'test mixed', 'test more', 1)</sphinxql>
 
-$RestartDaemon = create_function('','
+<!-- query test -->
+<sphinxql>select * from test where match('mixed')</sphinxql>
+<sphinxql>select * from rt where match('mixed')</sphinxql>
 
-	$error = "";
-	$r = array();
-	$stop = StopWaitSearchd ( "config.conf", "searchd.pid" );
-	$r[] = "stoped=" . ( $stop==0 ? "ok" : "err" ) . "(code=" . $stop . ")";
-	usleep ( 150000 );
-	$started = StartSearchd ( "config.conf", "error.txt", "searchd.pid", $error );
-	if ( $started == 0 || $started == 2 )
-	{
-		$r[] = "started=ok";
-	} else {
-		$r[] = sprintf("start.err=%d local=%s", $started, $error);
-	}
-	
-	return $r;
-');
+<sphinxql system="restart-daemon"/>
 
-$results = array();
-$ql->Reconnect();
-
-$results[] = 'populate commit';
-$sql = sprintf ( "insert into rt (id, content, text, gid) values ( 1, 'test mixed', 'test more' )");
-
-$results[] = 'query test';
-$results[] = "\n" . $ql->Query ( "select * from test where match('mixed')" );
-$results[] = "\n" . $ql->Query ( "select * from rt where match('mixed')"  );
-
-$res = $RestartDaemon();
-$results = array_merge ( $results, $res );
-$ql->Reconnect();
-
-$results[] = 'query test';
-$results[] = "\n" . $ql->Query ( "select * from test where match('mixed')" );
-$results[] = "\n" . $ql->Query ( "select * from rt where match('mixed')"  );
-
-]]></custom_test>
-
+<!-- query test -->
+<sphinxql>select * from test where match('mixed')</sphinxql>
+<sphinxql>select * from rt where match('mixed')</sphinxql>
+</sphqueries>
 
 </test>

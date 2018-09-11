@@ -12059,7 +12059,7 @@ bool PercolateIndex_c::AddQuery ( const char * sQuery, const char * sTags, const
 	if ( m_tSettings.m_iMinPrefixLen>0 || m_tSettings.m_iMinInfixLen>0 )
 		FixExpanded ( tParsed->m_pRoot );
 
-	StoredQuery_t * pStored = new StoredQuery_t();
+	auto pStored = new StoredQuery_t();
 	pStored->m_pXQ = tParsed.LeakPtr();
 	pStored->m_bOnlyTerms = true;
 	pStored->m_sQuery = sQuery;
@@ -12100,7 +12100,7 @@ bool PercolateIndex_c::AddQuery ( const char * sQuery, const char * sTags, const
 		{
 			bAdded = false;
 			sError.SetSprintf ( "duplicate id '" UINT64_FMT "'", tItem.m_uUID );
-
+			SafeDelete ( pStored );
 		} else if ( m_dStored[iPos].m_uUID==tItem.m_uUID && bReplace )
 		{
 			SafeDelete ( m_dStored[iPos].m_pQuery );

@@ -849,12 +849,14 @@ public:
 private:
 	ISphRtDictWraperRefPtr_c	m_pDictRt;
 	bool						m_bReplace = false;	///< insert or replace mode (affects CleanupDuplicates() behavior)
-
+	void				ResetDict ();
 public:
 					explicit RtAccum_t ( bool bKeywordDict );
 	void			SetupDict ( const ISphRtIndex * pIndex, CSphDict * pDict, bool bKeywordDict );
-	void			ResetDict ();
 	void			Sort ();
+
+	enum EWhatClear { EPartial=1, EAccum=2, ERest=4, EAll=7};
+	void Cleanup ( BYTE eWhat=EAll );
 
 	void			AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bReplace, int iRowSize, const char ** ppStr, const CSphVector<DWORD> & dMvas );
 	RtSegment_t *	CreateSegment ( int iRowSize, int iWordsCheckpoint );
@@ -1688,6 +1690,26 @@ void RtAccum_t::Sort ()
 		assert ( m_pDictRt );
 		const BYTE * pPackedKeywords = m_pDictRt->GetPackedKeywords();
 		m_dAccum.Sort ( CmpHitKeywords_fn ( pPackedKeywords ) );
+	}
+}
+
+void RtAccum_t::Cleanup ( BYTE eWhat )
+{
+	if ( eWhat & EPartial )
+	{
+		m_dAccumRows.Resize ( 0 );
+		m_dStrings.Resize ( 1 ); // handle dummy zero offset
+		m_dMvas.Resize ( 1 );
+		m_dPerDocHitsCount.Resize ( 0 );
+		ResetDict ();
+	}
+	if ( eWhat & EAccum )
+		m_dAccum.Resize ( 0 );
+	if ( eWhat & ERest )
+	{
+		SetIndex ( nullptr );
+		m_iAccumDocs = 0;
+		m_dAccumKlist.Reset ();
 	}
 }
 
@@ -2804,12 +2826,8 @@ void RtIndex_t::Commit ( int * pDeleted, ISphRtAccum * pAccExt )
 	// empty txn, just ignore
 	if ( !pAcc->m_iAccumDocs && !pAcc->m_dAccumKlist.GetLength() )
 	{
-		pAcc->SetIndex ( NULL );
-		pAcc->m_dAccumRows.Resize ( 0 );
-		pAcc->m_dStrings.Resize ( 1 );
-		pAcc->m_dMvas.Resize ( 1 );
-		pAcc->m_dPerDocHitsCount.Resize ( 0 );
-		pAcc->ResetDict();
+		pAcc->SetIndex ( nullptr );
+		pAcc->Cleanup ( RtAccum_t::EPartial );
 		return;
 	}
 
@@ -2832,12 +2850,7 @@ void RtIndex_t::Commit ( int * pDeleted, ISphRtAccum * pAccExt )
 #endif
 
 	// clean up parts we no longer need
-	pAcc->m_dAccum.Resize ( 0 );
-	pAcc->m_dAccumRows.Resize ( 0 );
-	pAcc->m_dStrings.Resize ( 1 ); // handle dummy zero offset
-	pAcc->m_dMvas.Resize ( 1 );
-	pAcc->m_dPerDocHitsCount.Resize ( 0 );
-	pAcc->ResetDict();
+	pAcc->Cleanup ( RtAccum_t::EPartial | RtAccum_t::EAccum );
 
 	// sort accum klist, too
 	pAcc->m_dAccumKlist.Uniq ();
@@ -2846,9 +2859,7 @@ void RtIndex_t::Commit ( int * pDeleted, ISphRtAccum * pAccExt )
 	CommitReplayable ( pNewSeg, pAcc->m_dAccumKlist, pDeleted );
 
 	// done; cleanup accum
-	pAcc->SetIndex ( NULL );
-	pAcc->m_iAccumDocs = 0;
-	pAcc->m_dAccumKlist.Reset();
+	pAcc->Cleanup ( RtAccum_t::ERest );
 	// reset accumulated warnings
 	CSphString sWarning;
 	pAcc->GrabLastWarning ( sWarning );
@@ -3225,18 +3236,7 @@ void RtIndex_t::RollBack ( ISphRtAccum * pAccExt )
 	if ( !pAcc )
 		return;
 
-	// clean up parts we no longer need
-	pAcc->m_dAccum.Resize ( 0 );
-	pAcc->m_dAccumRows.Resize ( 0 );
-	pAcc->m_dStrings.Resize ( 1 ); // handle dummy zero offset
-	pAcc->m_dMvas.Resize ( 1 );
-	pAcc->m_dPerDocHitsCount.Resize ( 0 );
-	pAcc->ResetDict();
-
-	// finish cleaning up and release accumulator
-	pAcc->SetIndex ( NULL );
-	pAcc->m_iAccumDocs = 0;
-	pAcc->m_dAccumKlist.Reset();
+	pAcc->Cleanup ();
 }
 
 bool RtIndex_t::DeleteDocument ( const SphDocID_t * pDocs, int iDocs, CSphString & sError, ISphRtAccum * pAccExt )
@@ -11851,12 +11851,7 @@ bool PercolateIndex_c::MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchRes
 	// empty txn or no queries just ignore
 	if ( !pAcc->m_iAccumDocs || !m_dStored.GetLength() )
 	{
-		pAcc->SetIndex ( NULL );
-		pAcc->m_dAccumRows.Resize ( 0 );
-		pAcc->m_dStrings.Resize ( 1 );
-		pAcc->m_dMvas.Resize ( 1 );
-		pAcc->m_dPerDocHitsCount.Resize ( 0 );
-		pAcc->ResetDict();
+		pAcc->Cleanup ();
 		return true;
 	}
 
@@ -11872,16 +11867,7 @@ bool PercolateIndex_c::MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchRes
 	SafeDelete ( pSeg );
 
 	// done; cleanup accum
-	pAcc->m_dAccum.Resize ( 0 );
-	pAcc->m_dAccumRows.Resize ( 0 );
-	pAcc->m_dStrings.Resize ( 1 ); // handle dummy zero offset
-	pAcc->m_dMvas.Resize ( 1 );
-	pAcc->m_dPerDocHitsCount.Resize ( 0 );
-	pAcc->ResetDict();
-
-	pAcc->SetIndex ( NULL );
-	pAcc->m_iAccumDocs = 0;
-	pAcc->m_dAccumKlist.Reset();
+	pAcc->Cleanup ();
 
 	int64_t tmEnd = sphMicroTimer();
 	tRes.m_tmTotal = tmEnd - tmStart;
@@ -11896,17 +11882,7 @@ void PercolateIndex_c::RollBack ( ISphRtAccum * pAccExt )
 	if ( !pAcc )
 		return;
 
-	// clean up parts we no longer need
-	pAcc->m_dAccum.Resize ( 0 );
-	pAcc->m_dAccumRows.Resize ( 0 );
-	pAcc->m_dStrings.Resize ( 1 ); // handle dummy zero offset
-	pAcc->m_dMvas.Resize ( 1 );
-	pAcc->m_dPerDocHitsCount.Resize ( 0 );
-	pAcc->ResetDict();
-
-	pAcc->SetIndex ( NULL );
-	pAcc->m_iAccumDocs = 0;
-	pAcc->m_dAccumKlist.Reset();
+	pAcc->Cleanup ();
 }
 
 bool PercolateIndex_c::EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const

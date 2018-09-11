@@ -602,6 +602,14 @@ function IsModelGenMode ()
 	return $g_model;
 }
 
+function RandomWords ( $n, $seed )
+{
+	srand ( $seed );
+	$words = [];
+	for ( $k=0; $k<$n; $k++ )
+		$words[] = substr ( str_shuffle ( 'abcdefghijklmnopqrstuvwxyz' ), 0, 5 );
+	return join ( $words, " " );
+}
 
 function RoundFloatValues ( &$values, $roundoff )
 {
@@ -819,12 +827,22 @@ class QLClient
 {
 	private $_conn = false;
 
-	function Reconnect()
+	function Disconnect()
 	{
 		if ($this->_conn!==false)
 			@mysqli_close($this->_conn);
+	}
+
+	function Connect()
+	{
 		$this->_conn = ConnectQL();
 		return $this->_conn!==false;
+	}
+
+	function Reconnect()
+	{
+		$this->Disconnect();
+		return $this->Connect();
 	}
 
 	function Query($q)

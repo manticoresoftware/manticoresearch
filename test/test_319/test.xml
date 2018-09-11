@@ -59,33 +59,6 @@ insert into test_table values ( 1, 'first',  1 )
 
 <custom_test><![CDATA[
 
-function RandomWords ( $n, $seed )
-{
-	srand ( $seed );
-	$words = [];
-	for ( $k=0; $k<$n; $k++ )
-		$words[] = substr ( str_shuffle ( 'abcdefghijklmnopqrstuvwxyz' ), 0, 5 );
-	return join ( $words, " " );
-}
-
-function RestartDaemon()
-{
-	$error = "";
-	$r = array();
-	$stop = StopWaitSearchd ( "config.conf", "searchd.pid" );
-	$r[] = 'stoped='.($stop==0 ? 'ok' : 'err' ) . '(code=' . $stop . ')';
-	usleep ( 150000 );
-	$started = StartSearchd ( "config.conf", "error.txt", "searchd.pid", $error );
-	if ( $started == 0 || $started == 2 )
-	{
-		$r[] = "started=ok";
-	} else {
-		$r[] = sprintf("start.err=%d local=%s", $started, $error);
-	}
-	
-	return $r;
-}
-
 $results = array();
 $ql->Reconnect();
 
@@ -113,14 +86,14 @@ $results[] = "\n" . $ql->Query ( "SELECT id FROM rt WHERE id > 10 and id < 60 or
 $results[] = "\n" . $ql->Query ( "SELECT id FROM rt WHERE id > 100 and id < 500 order by id asc limit 3"  );
 $results[] = "\n" . $ql->Query ( "SELECT id FROM rt WHERE id > 700 and id < 800 order by id asc limit 3"  );
 
-$res = RestartDaemon();
-$results = array_merge ( $results, $res );
-$ql->Reconnect();
+$ql->Disconnect();
+$results[] = RestartDaemon();
+$ql->Connect();
 $results[] = "\n" . $ql->Query ( "OPTIMIZE INDEX rt option sync=1" );
 
-$res = RestartDaemon();
-$results = array_merge ( $results, $res );
-$ql->Reconnect();
+$ql->Disconnect();
+$results[] = RestartDaemon();
+$ql->Connect();
 
 $seg = $ql->Query ( "show index rt status" );
 $seg = explode ( "\n", $seg );

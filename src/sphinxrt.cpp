@@ -1097,10 +1097,6 @@ CSphFixedVector<int> GetIndexNames ( const VEC & dIndexes, bool bAddNext )
 	return dNames;
 }
 
-/// acquire thread-local indexing accumulator
-/// returns NULL if another index already uses it in an open txn
-static RtAccum_t * AcquireAccum ( CSphString * sError, ISphRtAccum * pAccExt, bool bSetTLS, ISphRtIndex * pIndex, CSphDict * pDict,  bool bWordDict );
-
 /// RAM based index
 struct RtQword_t;
 struct RtIndex_t : public ISphRtIndex, public ISphNoncopyable, public ISphWordlist, public ISphWordlistSuggest
@@ -1533,7 +1529,7 @@ bool RtIndex_t::AddDocument ( ISphTokenizer * pTokenizer, int iFields, const cha
 			}
 	}
 
-	RtAccum_t * pAcc = AcquireAccum ( &sError, pAccExt, true, this, m_pDict, m_bKeywordDict );
+	auto pAcc = ( RtAccum_t * ) AcquireAccum ( m_pDict, pAccExt, m_bKeywordDict, true, &sError );
 	if ( !pAcc )
 		return false;
 
@@ -1604,18 +1600,12 @@ static void AccumCleanup ( void * pArg )
 }
 
 
-RtAccum_t * AcquireAccum ( CSphString * sError, ISphRtAccum * pAccExt, bool bSetTLS, ISphRtIndex * pIndex, CSphDict * pDict,  bool bWordDict )
+ISphRtAccum * ISphRtIndex::AcquireAccum ( CSphDict * pDict, ISphRtAccum * pAccExt,
+	bool bWordDict, bool bSetTLS, CSphString* sError )
 {
-	RtAccum_t * pAcc = NULL;
-	//assert ( pAccExt && !bSetTLS );
+	auto pAcc = ( RtAccum_t * ) ( pAccExt ? pAccExt : sphThreadGet ( g_tTlsAccumKey ) );
 
-	// check that no other index is holding the acc
-	if ( !pAccExt )
-		pAcc = (RtAccum_t*) sphThreadGet ( g_tTlsAccumKey );
-	else
-		pAcc = (RtAccum_t *)pAccExt;
-
-	if ( pAcc && pAcc->GetIndex()!=NULL && pAcc->GetIndex()!=pIndex )
+	if ( pAcc && pAcc->GetIndex() && pAcc->GetIndex()!=this )
 	{
 		if ( sError )
 			sError->SetSprintf ( "current txn is working with another index ('%s')", pAcc->GetIndex()->GetName() );
@@ -1632,15 +1622,15 @@ RtAccum_t * AcquireAccum ( CSphString * sError, ISphRtAccum * pAccExt, bool bSet
 		}
 	}
 
-	assert ( pAcc->GetIndex()==NULL || pAcc->GetIndex()==pIndex );
-	pAcc->SetIndex ( pIndex );
-	pAcc->SetupDict ( pIndex, pDict, bWordDict );
+	assert ( pAcc->GetIndex()==nullptr || pAcc->GetIndex()==this );
+	pAcc->SetIndex ( this );
+	pAcc->SetupDict ( this, pDict, bWordDict );
 	return pAcc;
 }
 
 ISphRtAccum * RtIndex_t::CreateAccum ( CSphString & sError )
 {
-	return AcquireAccum ( &sError, NULL, false, this, m_pDict, m_bKeywordDict );
+	return AcquireAccum ( m_pDict, nullptr, m_bKeywordDict, false, &sError);
 }
 
 
@@ -2807,7 +2797,7 @@ void RtIndex_t::Commit ( int * pDeleted, ISphRtAccum * pAccExt )
 	assert ( g_bRTChangesAllowed );
 	MEMORY ( MEM_INDEX_RT );
 
-	RtAccum_t * pAcc = AcquireAccum ( NULL, pAccExt, true, this, m_pDict, m_bKeywordDict );
+	auto pAcc = ( RtAccum_t * ) AcquireAccum ( m_pDict, pAccExt, m_bKeywordDict );
 	if ( !pAcc )
 		return;
 
@@ -3231,7 +3221,7 @@ void RtIndex_t::RollBack ( ISphRtAccum * pAccExt )
 {
 	assert ( g_bRTChangesAllowed );
 
-	RtAccum_t * pAcc = AcquireAccum ( NULL, pAccExt, true, this, m_pDict, m_bKeywordDict );
+	auto pAcc = ( RtAccum_t * ) AcquireAccum ( m_pDict, pAccExt, m_bKeywordDict );
 	if ( !pAcc )
 		return;
 
@@ -3254,7 +3244,7 @@ bool RtIndex_t::DeleteDocument ( const SphDocID_t * pDocs, int iDocs, CSphString
 	assert ( g_bRTChangesAllowed );
 	MEMORY ( MEM_RT_ACCUM );
 
-	RtAccum_t * pAcc = AcquireAccum ( &sError, pAccExt, true, this, m_pDict, m_bKeywordDict );
+	auto pAcc = ( RtAccum_t * ) AcquireAccum ( m_pDict, pAccExt, m_bKeywordDict, true, &sError );
 	if ( !pAcc )
 		return false;
 
@@ -11100,13 +11090,13 @@ PercolateIndex_c::~PercolateIndex_c ()
 
 ISphRtAccum * PercolateIndex_c::CreateAccum ( CSphString & sError )
 {
-	return AcquireAccum ( &sError, NULL, false, this, m_pDict, true );
+	return AcquireAccum ( m_pDict, nullptr, true, false, &sError );
 }
 
 
 bool PercolateIndex_c::AddDocument ( ISphTokenizer * pTokenizer, int iFields, const char ** ppFields, const CSphMatch & tDoc, bool , const CSphString & , const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt )
 {
-	RtAccum_t * pAcc = AcquireAccum ( &sError, pAccExt, true, this, m_pDict, true );
+	auto pAcc = ( RtAccum_t * ) AcquireAccum ( m_pDict, pAccExt, true, true, &sError );
 	if ( !pAcc )
 		return false;
 
@@ -11854,7 +11844,7 @@ bool PercolateIndex_c::MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchRes
 	tRes.m_tmSetup = tmStart;
 	m_sLastWarning = "";
 
-	RtAccum_t * pAcc = AcquireAccum ( NULL, pAccExt, true, this, m_pDict, true );
+	auto pAcc = ( RtAccum_t * ) AcquireAccum ( m_pDict, pAccExt );
 	if ( !pAcc )
 		return false;
 
@@ -11902,7 +11892,7 @@ void PercolateIndex_c::RollBack ( ISphRtAccum * pAccExt )
 {
 	assert ( g_bRTChangesAllowed );
 
-	RtAccum_t * pAcc = AcquireAccum ( NULL, pAccExt, true, this, m_pDict, true );
+	auto pAcc = ( RtAccum_t * ) AcquireAccum ( m_pDict, pAccExt );
 	if ( !pAcc )
 		return;
 

@@ -81,6 +81,11 @@ public:
 
 	// instead of cloning for each AddDocument() call we could just call this method and improve batch inserts speed
 	virtual ISphTokenizer * CloneIndexingTokenizer() const = 0;
+
+	/// acquire thread-local indexing accumulator
+	/// returns NULL if another index already uses it in an open txn
+	ISphRtAccum * AcquireAccum ( CSphDict * pDict, ISphRtAccum * pAccExt=nullptr,
+		bool bWordDict=true, bool bSetTLS = true, CSphString * sError=nullptr );
 };
 
 /// initialize subsystem

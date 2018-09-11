@@ -11879,6 +11879,7 @@ bool PercolateIndex_c::MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchRes
 	BuildSegmentInfixes ( pSeg, m_pDict->HasMorphology(), true, m_tSettings.m_iMinInfixLen, PERCOLATE_WORDS_PER_CP, ( m_iMaxCodepointLength>1 ) );
 
 	DoMatchDocuments ( pSeg, tRes );
+	SafeDelete ( pSeg );
 
 	// done; cleanup accum
 	pAcc->m_dAccum.Resize ( 0 );

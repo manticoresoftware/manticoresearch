@@ -1139,7 +1139,7 @@ public:
 	ISphRtIndex * GetIndex ();
 
 private:
-	ISphRtAccum *		m_pAcc;
+	ISphRtAccum *		m_pAcc = nullptr;
 	bool				m_bManage;
 };
 

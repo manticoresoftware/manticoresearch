@@ -1017,7 +1017,7 @@ bool sphThreadJoin ( SphThread_t * pThread )
 // to free local resources allocated by its main thread.
 void sphThreadOnExit ( void (*fnCleanup)(void*), void * pArg )
 {
-	ThreadCall_t * pCleanup = new ThreadCall_t;
+	auto pCleanup = new ThreadCall_t;
 	pCleanup->m_pCall = fnCleanup;
 	pCleanup->m_pArg = pArg;
 	pCleanup->m_pNext = (ThreadCall_t*) sphThreadGet ( g_tThreadCleanupKey );

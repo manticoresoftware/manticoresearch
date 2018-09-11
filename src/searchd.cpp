@@ -17268,8 +17268,7 @@ static void HandleMysqlReloadIndex ( SqlRowBuffer_c & tOut, const SqlStmt_t & tS
 //////////////////////////////////////////////////////////////////////////
 
 CSphSessionAccum::CSphSessionAccum ( bool bManage )
-	: m_pAcc ( NULL )
-	, m_bManage ( bManage )
+	: m_bManage ( bManage )
 { }
 
 CSphSessionAccum::~CSphSessionAccum()
@@ -17280,7 +17279,7 @@ CSphSessionAccum::~CSphSessionAccum()
 ISphRtAccum * CSphSessionAccum::GetAcc ( ISphRtIndex * pIndex, CSphString & sError )
 {
 	if ( !m_bManage )
-		return NULL;
+		return nullptr;
 
 	assert ( pIndex );
 	if ( m_pAcc )
@@ -17307,8 +17306,8 @@ private:
 	CSphQueryResultMeta m_tLastMeta;
 	CSphSessionAccum	m_tAcc;
 	PercolateMatchResult_t m_tPercolateMeta;
-	SqlStmt_e			m_eLastStmt;
-	bool				m_bFederatedUser;
+	SqlStmt_e			m_eLastStmt { STMT_DUMMY };
+	bool				m_bFederatedUser = false;
 	CSphString			m_sFederatedQuery;
 
 public:
@@ -17319,8 +17318,6 @@ public:
 public:
 	explicit CSphinxqlSession ( bool bManage )
 		: m_tAcc ( bManage )
-		, m_eLastStmt ( STMT_DUMMY )
-		, m_bFederatedUser ( false )
 	{}
 
 	// just execute one sphinxql statement

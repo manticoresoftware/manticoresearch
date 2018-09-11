@@ -82,6 +82,7 @@ typedef uint64_t		SphWordID_t;
 typedef uint64_t		SphDocID_t;
 
 #define DOCID_MAX		U64C(0xffffffffffffffff)
+#define WORDID_MAX		U64C(0xffffffffffffffff)
 #define DOCID_FMT		UINT64_FMT
 #define DOCINFO_IDSIZE	2
 
@@ -1106,9 +1107,9 @@ struct FieldMask_t
 /// hit info
 struct CSphWordHit
 {
-	SphDocID_t		m_uDocID;		///< document ID
-	SphWordID_t		m_uWordID;		///< word ID in current dictionary
-	Hitpos_t		m_uWordPos;		///< word position in current document
+	SphDocID_t		m_uDocID = DOCID_MAX;		///< document ID
+	SphWordID_t		m_uWordID = WORDID_MAX;		///< word ID in current dictionary
+	Hitpos_t		m_uWordPos = EMPTY_HIT;		///< word position in current document
 };
 
 

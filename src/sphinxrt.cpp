@@ -382,11 +382,11 @@ public:
 	CSphTightVector<BYTE>		m_dDocs;
 	CSphTightVector<BYTE>		m_dHits;
 
-	int							m_iRows;		///< number of actually allocated rows
-	int							m_iAliveRows;	///< number of alive (non-killed) rows
+	int							m_iRows = 0;		///< number of actually allocated rows
+	int							m_iAliveRows = 0;	///< number of alive (non-killed) rows
 	CSphTightVector<CSphRowitem>		m_dRows;		///< row data storage
 	KlistRefcounted_t *			m_pKlist;
-	bool						m_bTlsKlist;	///< whether to apply TLS K-list during merge (must only be used by writer during Commit())
+	bool						m_bTlsKlist = false;	///< whether to apply TLS K-list during merge (must only be used by writer during Commit())
 	CSphTightVector<BYTE>		m_dStrings;		///< strings storage
 	CSphTightVector<DWORD>		m_dMvas;		///< MVAs storage
 	CSphVector<BYTE>			m_dKeywordCheckpoints;
@@ -395,9 +395,6 @@ public:
 	RtSegment_t ()
 	{
 		m_iTag = m_iSegments.Inc();
-		m_iRows = 0;
-		m_iAliveRows = 0;
-		m_bTlsKlist = false;
 		m_dStrings.Add ( 0 ); // dummy zero offset
 		m_dMvas.Add ( 0 ); // dummy zero offset
 		m_pKlist = new KlistRefcounted_t();
@@ -486,11 +483,10 @@ const CSphRowitem * RtSegment_t::FindAliveRow ( SphDocID_t uDocid ) const
 struct RtDocWriter_t
 {
 	CSphTightVector<BYTE> *		m_pDocs;
-	SphDocID_t					m_uLastDocID;
+	SphDocID_t					m_uLastDocID = 0;
 
 	explicit RtDocWriter_t ( RtSegment_t * pSeg )
 		: m_pDocs ( &pSeg->m_dDocs )
-		, m_uLastDocID ( 0 )
 	{}
 
 	void ZipDoc ( const RtDoc_t & tDoc )
@@ -672,22 +668,20 @@ struct RtWordWriter_t
 template < typename WORDID = SphWordID_t >
 struct RtWordReader_T
 {
-	typedef RtWord_T<WORDID> RTWORD;
+	using RTWORD = RtWord_T<WORDID>;
 	BYTE			m_tPackedWord[SPH_MAX_KEYWORD_LEN+1];
-	const BYTE *	m_pCur;
-	const BYTE *	m_pMax;
+	const BYTE *	m_pCur = nullptr;
+	const BYTE *	m_pMax = nullptr;
 	RTWORD			m_tWord;
-	int				m_iWords;
+	int				m_iWords = 0;
 
 	bool			m_bWordDict;
 	int				m_iWordsCheckpoint;
-	int				m_iCheckpoint;
+	int				m_iCheckpoint = 0;
 
 	RtWordReader_T ( const RtSegment_t * pSeg, bool bWordDict, int iWordsCheckpoint )
-		: m_iWords ( 0 )
-		, m_bWordDict ( bWordDict )
+		: m_bWordDict ( bWordDict )
 		, m_iWordsCheckpoint ( iWordsCheckpoint )
-		, m_iCheckpoint ( 0 )
 	{
 		m_tWord.m_uWordID = 0;
 		Reset ( pSeg );
@@ -710,12 +704,12 @@ struct RtWordReader_T
 		{
 			m_tWord.m_uDoc = 0;
 			m_iWords = 1;
-			m_iCheckpoint++;
+			++m_iCheckpoint;
 			if ( !m_bWordDict )
 				m_tWord.m_uWordID = 0;
 		}
 		if ( m_pCur>=m_pMax )
-			return NULL;
+			return nullptr;
 
 		const BYTE * pIn = m_pCur;
 		DWORD uDeltaDoc;
@@ -757,11 +751,10 @@ typedef RtWordReader_T<SphWordID_t> RtWordReader_t;
 struct RtHitWriter_t
 {
 	CSphTightVector<BYTE> *		m_pHits;
-	DWORD						m_uLastHit;
+	DWORD						m_uLastHit = 0;
 
 	explicit RtHitWriter_t ( RtSegment_t * pSeg )
 		: m_pHits ( &pSeg->m_dHits )
-		, m_uLastHit ( 0 )
 	{}
 
 	void ZipHit ( DWORD uValue )
@@ -1606,7 +1599,7 @@ bool RtIndex_t::AddDocument ( ISphTokenizer * pTokenizer, int iFields, const cha
 
 static void AccumCleanup ( void * pArg )
 {
-	RtAccum_t * pAcc = (RtAccum_t *) pArg;
+	auto pAcc = (RtAccum_t *) pArg;
 	SafeDelete ( pAcc );
 }
 
@@ -1626,7 +1619,7 @@ RtAccum_t * AcquireAccum ( CSphString * sError, ISphRtAccum * pAccExt, bool bSet
 	{
 		if ( sError )
 			sError->SetSprintf ( "current txn is working with another index ('%s')", pAcc->GetIndex()->GetName() );
-		return NULL;
+		return nullptr;
 	}
 
 	if ( !pAcc )
@@ -1846,61 +1839,41 @@ static void FixupSegmentCheckpoints ( RtSegment_t * pSeg )
 
 	const char * pBase = (const char *)pSeg->m_dKeywordCheckpoints.Begin();
 	assert ( pBase );
-	ARRAY_FOREACH ( i, pSeg->m_dWordCheckpoints )
-	{
-		const char * sWord = pBase + pSeg->m_dWordCheckpoints[i].m_uWordID;
-		pSeg->m_dWordCheckpoints[i].m_sWord = sWord;
-	}
+	for ( auto & dCheckpoint : pSeg->m_dWordCheckpoints )
+		dCheckpoint.m_sWord = pBase + dCheckpoint.m_uWordID;
 }
 
 
 RtSegment_t * RtAccum_t::CreateSegment ( int iRowSize, int iWordsCheckpoint )
 {
 	if ( !m_iAccumDocs )
-		return NULL;
+		return nullptr;
 
 	MEMORY ( MEM_RT_ACCUM );
 
-	RtSegment_t * pSeg = new RtSegment_t ();
+	auto * pSeg = new RtSegment_t ();
 
-	CSphWordHit tClosingHit;
-	tClosingHit.m_uWordID = WORDID_MAX;
-	tClosingHit.m_uDocID = DOCID_MAX;
-	tClosingHit.m_uWordPos = EMPTY_HIT;
-	m_dAccum.Add ( tClosingHit );
+	m_dAccum.Add ( CSphWordHit() );
 
 	RtDoc_t tDoc;
-	tDoc.m_uDocID = 0;
-	tDoc.m_uDocFields = 0;
-	tDoc.m_uHits = 0;
-	tDoc.m_uHit = 0;
-
 	RtWord_t tWord;
-	tWord.m_uWordID = 0;
-	tWord.m_uDocs = 0;
-	tWord.m_uHits = 0;
-	tWord.m_uDoc = 0;
-
 	RtDocWriter_t tOutDoc ( pSeg );
 	RtWordWriter_t tOutWord ( pSeg, m_bKeywordDict, iWordsCheckpoint );
 	RtHitWriter_t tOutHit ( pSeg );
 
-	const BYTE * pPacketBase = NULL;
-	if ( m_bKeywordDict )
-		pPacketBase = m_pDictRt->GetPackedKeywords();
+	const BYTE * pPacketBase = m_bKeywordDict ? m_pDictRt->GetPackedKeywords() : nullptr;
 
 	Hitpos_t uEmbeddedHit = EMPTY_HIT;
 	Hitpos_t uPrevHit = EMPTY_HIT;
-	ARRAY_FOREACH ( i, m_dAccum )
-	{
-		const CSphWordHit & tHit = m_dAccum[i];
 
+	for ( const CSphWordHit &tHit : m_dAccum )
+	{
 		// new keyword or doc; flush current doc
 		if ( tHit.m_uWordID!=tWord.m_uWordID || tHit.m_uDocID!=tDoc.m_uDocID )
 		{
 			if ( tDoc.m_uDocID )
 			{
-				tWord.m_uDocs++;
+				++tWord.m_uDocs;
 				tWord.m_uHits += tDoc.m_uHits;
 
 				if ( uEmbeddedHit )
@@ -1966,7 +1939,7 @@ RtSegment_t * RtAccum_t::CreateSegment ( int iRowSize, int iWordsCheckpoint )
 		const int iField = HITMAN::GetField ( tHit.m_uWordPos );
 		if ( iField<32 )
 			tDoc.m_uDocFields |= ( 1UL<<iField );
-		tDoc.m_uHits++;
+		++tDoc.m_uHits;
 	}
 
 	if ( m_bKeywordDict )
@@ -2680,7 +2653,7 @@ RtSegment_t * RtIndex_t::MergeSegments ( const RtSegment_t * pSeg1, const RtSegm
 	if ( pSeg1->m_iTag > pSeg2->m_iTag )
 		Swap ( pSeg1, pSeg2 );
 
-	RtSegment_t * pSeg = new RtSegment_t ();
+	auto * pSeg = new RtSegment_t ();
 
 	////////////////////
 	// merge attributes
@@ -2720,7 +2693,7 @@ RtSegment_t * RtIndex_t::MergeSegments ( const RtSegment_t * pSeg1, const RtSegm
 		if ( !pRow2 || ( pRow1 && pRow2 && DOCINFO2ID(pRow1)<DOCINFO2ID(pRow2) ) )
 		{
 			assert ( pRow1 );
-			for ( int i=0; i<m_iStride; i++ )
+			for ( int i=0; i<m_iStride; ++i )
 				dRows.Add ( *pRow1++ );
 			CSphRowitem * pDstRow = dRows.Begin() + dRows.GetLength() - m_iStride;
 			CopyFixupStorageAttrs ( pSeg1->m_dStrings, tStorageString, pDstRow );
@@ -2730,15 +2703,15 @@ RtSegment_t * RtIndex_t::MergeSegments ( const RtSegment_t * pSeg1, const RtSegm
 		{
 			assert ( pRow2 );
 			assert ( !pRow1 || ( DOCINFO2ID(pRow1)!=DOCINFO2ID(pRow2) ) ); // all dupes must be killed and skipped by the iterator
-			for ( int i=0; i<m_iStride; i++ )
+			for ( int i=0; i<m_iStride; ++i )
 				dRows.Add ( *pRow2++ );
 			CSphRowitem * pDstRow = dRows.Begin() + dRows.GetLength() - m_iStride;
 			CopyFixupStorageAttrs ( pSeg2->m_dStrings, tStorageString, pDstRow );
 			CopyFixupStorageAttrs ( pSeg2->m_dMvas, tStorageMva, pDstRow );
 			pRow2 = tIt2.GetNextAliveRow();
 		}
-		pSeg->m_iRows++;
-		pSeg->m_iAliveRows++;
+		++pSeg->m_iRows;
+		++pSeg->m_iAliveRows;
 	}
 
 	assert ( pSeg->m_iRows*m_iStride==pSeg->m_dRows.GetLength() );
@@ -2784,7 +2757,7 @@ RtSegment_t * RtIndex_t::MergeSegments ( const RtSegment_t * pSeg1, const RtSegm
 					iCmp = 1;
 			}
 
-			if ( iCmp==0 )
+			if ( !iCmp )
 				break;
 
 			if ( iCmp<0 )
@@ -2904,8 +2877,8 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 		int iFields = m_tSchema.GetFieldsCount(); // shortcut
 		dLens.Resize ( iFields );
 		dLens.Fill ( 0 );
-		for ( int i=0; i<pNewSeg->m_iRows; i++ )
-			for ( int j=0; j<iFields; j++ )
+		for ( int i=0; i<pNewSeg->m_iRows; ++i )
+			for ( int j=0; j<iFields; ++j )
 				dLens[j] += sphGetRowAttr ( &pNewSeg->m_dRows [ i*m_iStride+DOCINFO_IDSIZE ], m_tSchema.GetAttr ( j+iFirstFieldLenAttr ).m_tLocator );
 	}
 
@@ -2921,7 +2894,7 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 	// let merger know that existing segments are subject to additional, TLS K-list filter
 	// safe despite the readers, flag must only be used by writer
 	if ( dAccKlist.GetLength() )
-		for ( int i=m_iDoubleBuffer; i<m_dRamChunks.GetLength(); i++ )
+		for ( int i=m_iDoubleBuffer; i<m_dRamChunks.GetLength(); ++i )
 		{
 			// OPTIMIZE? only need to set the flag if TLS K-list *actually* affects segment
 			assert ( m_dRamChunks[i]->m_bTlsKlist==false );
@@ -2934,10 +2907,8 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 	CSphVector<RtSegment_t*> dSegments;
 
 	dSegments.Reserve ( m_dRamChunks.GetLength() - m_iDoubleBuffer + 1 );
-	for ( int i=m_iDoubleBuffer; i<m_dRamChunks.GetLength(); i++ )
-	{
+	for ( int i=m_iDoubleBuffer; i<m_dRamChunks.GetLength(); ++i )
 		dSegments.Add ( m_dRamChunks[i] );
-	}
 	if ( pNewSeg )
 		dSegments.Add ( pNewSeg );
 
@@ -2947,10 +2918,10 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 
 	// enforce RAM usage limit
 	int64_t iRamLeft = m_iDoubleBuffer ? m_iDoubleBufferLimit : m_iSoftRamLimit;
-	ARRAY_FOREACH ( i, dSegments )
-		iRamLeft = Max ( iRamLeft - dSegments[i]->GetUsedRam(), 0 );
-	ARRAY_FOREACH ( i, m_dRetired )
-		iRamLeft = Max ( iRamLeft - m_dRetired[i]->GetUsedRam(), 0 );
+	for ( const auto& dSegment : dSegments )
+		iRamLeft = Max ( iRamLeft - dSegment->GetUsedRam(), 0 );
+	for ( const auto& dRetired : m_dRetired )
+		iRamLeft = Max ( iRamLeft - dRetired->GetUsedRam(), 0 );
 
 	// skip merging if no rows were added or no memory left
 	bool bDump = ( iRamLeft==0 );
@@ -3074,7 +3045,7 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 					break;
 
 				// killed in one of disk chunks?
-				if ( m_dDiskChunkKlist.BinarySearch ( uDocid )!=NULL )
+				if ( m_dDiskChunkKlist.BinarySearch ( uDocid ) )
 					break;
 
 				for ( int j=m_dDiskChunks.GetLength()-1; j>=0; --j )
@@ -3091,15 +3062,15 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 			}
 
 			if ( bRamAlive || bSavedOrDiskAlive )
-				iTotalKilled++;
+				++iTotalKilled;
 
 			if ( bAlreadyKilled || !bSavedOrDiskAlive )
 			{
 				// we can't just RemoveFast() elements from vector
 				// because we'll use its values with indexes >=iDiskLiveKLen in segments kill lists just below
 				Swap ( dAccKlist[i], dAccKlist[iDiskLiveKLen-1] );
-				iDiskLiveKLen--;
-				i--;
+				--iDiskLiveKLen;
+				--i;
 			}
 		}
 
@@ -3124,7 +3095,7 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 				dSegmentKlist.Append ( pSeg->GetKlist ().begin(), pSeg->GetKlist ().GetLength () );
 				dSegmentKlist.Uniq();
 
-				KlistRefcounted_t * pKlist = new KlistRefcounted_t();
+				auto * pKlist = new KlistRefcounted_t();
 				pKlist->m_dKilled.CopyFrom ( dSegmentKlist );
 
 				// swap data, update counters
@@ -3163,7 +3134,7 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 		{
 			m_dRetired.Add ( pSeg );
 			dSegments.RemoveFast ( i );
-			i--;
+			--i;
 		}
 	}
 
@@ -10618,11 +10589,11 @@ static void SegmentGetRejects ( const RtSegment_t * pSeg, bool bBuildInfix, bool
 	}
 
 	RtWordReader_t tDict ( pSeg, true, PERCOLATE_WORDS_PER_CP );
-	const RtWord_t * pWord = NULL;
+	const RtWord_t * pWord = nullptr;
 	BloomGenTraits_t tBloom0 ( tReject.m_dWilds.Begin() );
 	BloomGenTraits_t tBloom1 ( tReject.m_dWilds.Begin() + PERCOLATE_BLOOM_WILD_COUNT );
 
-	while ( ( pWord = tDict.UnzipWord() )!=NULL )
+	while ( ( pWord = tDict.UnzipWord() )!=nullptr )
 	{
 		const BYTE * pDictWord = pWord->m_sWord + 1;
 		int iLen = pWord->m_sWord[0];
@@ -10665,10 +10636,8 @@ static void SegmentGetRejects ( const RtSegment_t * pSeg, bool bBuildInfix, bool
 	tReject.m_dTerms.Uniq();
 	if ( bMultiDocs )
 	{
-		ARRAY_FOREACH ( i, tReject.m_dPerDocTerms )
-		{
-			tReject.m_dPerDocTerms[i].Uniq();
-		}
+		for ( auto & dTerms : tReject.m_dPerDocTerms )
+			dTerms.Uniq();
 	}
 }
 
@@ -11813,7 +11782,8 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 {
 	SegmentReject_t tReject;
 	// reject need bloom filter for either infix or prefix
-	SegmentGetRejects ( pSeg, ( m_tSettings.m_iMinInfixLen>0 || m_tSettings.m_iMinPrefixLen>0 ), ( m_iMaxCodepointLength>1 ), tReject );
+	SegmentGetRejects ( pSeg, ( m_tSettings.m_iMinInfixLen>0 || m_tSettings.m_iMinPrefixLen>0 ),
+		( m_iMaxCodepointLength>1 ), tReject );
 
 	CSphAtomic tQueryCounter ( 0 );
 	CSphFixedVector<PercolateMatchContext_t *> dMatches ( 1 );
@@ -11871,8 +11841,8 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 	// merge result set
 	PercolateGetResult ( iTotalQueries, dMatches, tRes );
 
-	ARRAY_FOREACH ( i, dMatches )
-		SafeDelete ( dMatches[i] );
+	for ( auto & dMatch: dMatches )
+		SafeDelete ( dMatch );
 }
 
 

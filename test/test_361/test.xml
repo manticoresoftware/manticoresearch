@@ -43,6 +43,28 @@ index dist
 	type			= distributed
 	agent			= <my_address/>:test
 }
+
+index pq_in
+{
+	type = percolate
+	path			= <data_path/>/pq_in
+	rt_field 		= title
+	rt_attr_json	= j
+}
+
+source j_arrays
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * from j_arrays
+	sql_attr_json	= j
+}
+
+index arrays
+{
+	source = j_arrays
+	path = <data_path/>/j_arrays
+}
 </config>
 
 <db_create>
@@ -59,6 +81,16 @@ CREATE TABLE `test_table` (
 INSERT INTO `test_table` VALUES
 (1,1,'test one','{"a":5,"b":123}'),
 (2,1,'test two','{"a":101,"b":134}')
+</db_insert>
+
+<db_create>CREATE TABLE j_arrays ( id INTEGER NOT NULL, gid INTEGER NOT NULL, j VARCHAR(255) NOT NULL )</db_create>
+<db_drop>DROP TABLE IF EXISTS `j_arrays`;</db_drop>
+<db_insert>
+INSERT INTO j_arrays ( id, gid, j ) VALUES
+	( 123, 1, '{"a":[1,2,3,4], "t":["t1", "t2", "t3"]}' ),
+	( 234, 1, '{"a":[2,3,4,5], "t":["t2", "t3", "t4"]}' ),
+	( 345, 2, '{"a":[3,4,5,1], "t":["t3", "t4", "t5"]}' ),
+	( 456, 2, '{"a":["4","5","6","2"], "t":["t4", "t5", "t6"]}' )
 </db_insert>
 
 <sphqueries>
@@ -85,5 +117,11 @@ INSERT INTO `test_table` VALUES
 
 <!-- crash on IN for plain indexes -->
 <sphinxql>select *, IN (missed.a,5,100) from test</sphinxql>
+
+<!-- crash on IN with large values -->
+<sphinxql>INSERT INTO pq_in (query, filters) VALUES ('', '(j.a=5 OR (j.a=6 AND NOT IN(j.b, 1220431865,6663093570)))')</sphinxql>
+<sphinxql>CALL PQ ('pq_in', ('{"j":{"a":5, "b":123}}', '{"j":{"a":6, "b":134}}'), 1 as docs, 1 as query)</sphinxql>
+<sphinxql>select *, in(j.a,1220431865,6663093570) as p from arrays</sphinxql>
+
 </sphqueries>
 </test>

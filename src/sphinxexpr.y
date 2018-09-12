@@ -171,8 +171,8 @@ arglist:
 	;
 
 constlist:
-	TOK_CONST_INT						{ $$ = pParser->AddNodeConstlist ( $1 ); }
-	| '-' TOK_CONST_INT					{ $$ = pParser->AddNodeConstlist ( -$2 );}
+	TOK_CONST_INT						{ $$ = pParser->AddNodeConstlist ( $1, false ); }
+	| '-' TOK_CONST_INT					{ $$ = pParser->AddNodeConstlist ( -$2, false );}
 	| TOK_CONST_FLOAT					{ $$ = pParser->AddNodeConstlist ( $1 ); }
 	| '-' TOK_CONST_FLOAT				{ $$ = pParser->AddNodeConstlist ( -$2 );}
 	| constlist ',' TOK_CONST_INT		{ pParser->AppendToConstlist ( $$, $3 ); }
@@ -182,7 +182,7 @@ constlist:
 	;
 
 stringlist:
-	TOK_CONST_STRING					{ $$ = pParser->AddNodeConstlist ( $1 ); }
+	TOK_CONST_STRING					{ $$ = pParser->AddNodeConstlist ( $1, true ); }
 	| stringlist ',' TOK_CONST_STRING	{ pParser->AppendToConstlist ( $$, $3 ); }
 	;
 

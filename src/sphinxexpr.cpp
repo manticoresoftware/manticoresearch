@@ -2675,6 +2675,7 @@ public:
 	CSphVector<float>		m_dFloats;		///< float storage
 	ESphAttr				m_eRetType { SPH_ATTR_INTEGER };		///< SPH_ATTR_INTEGER, SPH_ATTR_BIGINT, SPH_ATTR_STRING, or SPH_ATTR_FLOAT
 	CSphString				m_sExpr;		///< m_sExpr copy for TOK_CONST_STRING evaluation
+	bool					m_bPackedStrings = false;
 
 public:
 
@@ -2803,7 +2804,7 @@ protected:
 	int						AddNodeRand ( int iArg );
 	int						AddNodeUdf ( int iCall, int iArg );
 	int						AddNodePF ( int iFunc, int iArg );
-	int						AddNodeConstlist ( int64_t iValue );
+	int						AddNodeConstlist ( int64_t iValue, bool bPackedString );
 	int						AddNodeConstlist ( float iValue );
 	void					AppendToConstlist ( int iNode, int64_t iValue );
 	void					AppendToConstlist ( int iNode, float iValue );
@@ -5496,19 +5497,21 @@ public:
 		const char * sExpr = pConsts->m_sExpr.cstr();
 		int iExprLen = pConsts->m_sExpr.Length();
 
-		for ( int64_t iVal : m_dValues )
+		if ( pConsts->m_bPackedStrings )
 		{
-			auto iOfs = (int)( iVal>>32 );
-			auto iLen = (int)( iVal & 0xffffffffUL );
-			if ( iOfs>0 && iOfs+iLen<=iExprLen )
+			for ( int64_t iVal : m_dValues )
 			{
-				CSphString sRes;
-				SqlUnescape ( sRes, sExpr + iOfs, iLen );
-				m_dHashes.Add ( sphFNV64 ( sRes.cstr(), sRes.Length() ) );
+				auto iOfs = (int)( iVal>>32 );
+				auto iLen = (int)( iVal & 0xffffffffUL );
+				if ( iOfs>0 && iLen>0 && iOfs+iLen<=iExprLen )
+				{
+					CSphString sRes;
+					SqlUnescape ( sRes, sExpr + iOfs, iLen );
+					m_dHashes.Add ( sphFNV64 ( sRes.cstr(), sRes.Length() ) );
+				}
 			}
+			m_dHashes.Sort();
 		}
-
-		m_dHashes.Sort();
 	}
 
 	Expr_JsonFieldIn_c ( UservarIntSet_c * pUserVar, ISphExpr * pArg )
@@ -5706,7 +5709,7 @@ public:
 		, m_pUservar ( pUservar )
 	{
 		assert ( tLoc.m_iBitOffset>=0 && tLoc.m_iBitCount>0 );
-		assert ( !pConsts || !pUservar );
+		assert ( !pConsts || !pUservar || !pConsts->m_bPackedStrings );
 
 		m_fnStrCmp = GetCollationFn ( eCollation );
 
@@ -7335,13 +7338,14 @@ int	ExprParser_t::AddNodePF ( int iFunc, int iArg )
 	return m_dNodes.GetLength()-1;
 }
 
-int ExprParser_t::AddNodeConstlist ( int64_t iValue )
+int ExprParser_t::AddNodeConstlist ( int64_t iValue, bool bPackedString )
 {
 	ExprNode_t & tNode = m_dNodes.Add();
 	tNode.m_iToken = TOK_CONST_LIST;
 	tNode.m_pConsts = new ConstList_c();
 	tNode.m_pConsts->Add ( iValue );
 	tNode.m_pConsts->m_sExpr = m_sExpr;
+	tNode.m_pConsts->m_bPackedStrings = bPackedString;
 	return m_dNodes.GetLength()-1;
 }
 

@@ -1326,3 +1326,192 @@ TEST ( functions, bench_allocator_small )
 	std::cout << uLoops << " loops took " << iTimeSpan << " uSec, reserved " << uReserved << " bytes.\n";
 	ASSERT_EQ ( sphGetSmallAllocatedSize (), 0 );
 }
+
+TEST ( functions, UItoA_ItoA )
+{
+	using namespace sph;
+
+	char sBuf[50];
+	memset (sBuf, 255, 50);
+
+	int iLen = UItoA (sBuf, (DWORD)50);
+	sBuf[iLen]='\0';
+	ASSERT_STREQ ( "50", sBuf);
+
+	iLen = ItoA ( sBuf, 50, 10, 0, 4);
+	sBuf[iLen] = '\0';
+	ASSERT_STREQ ( "0050", sBuf );
+
+	iLen = ItoA ( sBuf, 50, 10, 4 );
+	sBuf[iLen] = '\0';
+	ASSERT_STREQ ( "  50", sBuf );
+
+	iLen = ItoA ( sBuf, 50, 10, 6, 3 );
+	sBuf[iLen] = '\0';
+	ASSERT_STREQ ( "   050", sBuf );
+
+	iLen = ItoA ( sBuf, 50, 10, 6, 3, '_' );
+	sBuf[iLen] = '\0';
+	ASSERT_STREQ ( "___050", sBuf );
+
+	iLen = ItoA<int64_t> ( sBuf, 0xFFFFFFFFFFFFFFFFll );
+	sBuf[iLen] = '\0';
+	ASSERT_STREQ ( "-1", sBuf );
+
+	iLen = ItoA<int64_t> ( sBuf, 0x8000000000000000ll );
+	sBuf[iLen] = '\0';
+	ASSERT_STREQ ( "-9223372036854775808", sBuf );
+
+	iLen = ItoA ( sBuf, 0x7FFFFFFFFFFFFFFFll );
+	sBuf[iLen] = '\0';
+	ASSERT_STREQ ( "9223372036854775807", sBuf );
+
+	iLen = ItoA ( sBuf, -9223372036854775807 );
+	sBuf[iLen] = '\0';
+	ASSERT_STREQ ( "-9223372036854775807", sBuf );
+
+	sBuf[ItoA ( sBuf, -9223372036854775807 )] = '\0';
+	ASSERT_STREQ ( "-9223372036854775807", sBuf );
+
+	iLen = ItoA ( sBuf, 9223372036854775807 );
+	sBuf[iLen] = '\0';
+	ASSERT_STREQ ( "9223372036854775807", sBuf );
+
+	iLen = ItoA<int64_t> ( sBuf, 0xFFFFFFFFFFFFFFFFll, 16 );
+	sBuf[iLen] = '\0';
+	ASSERT_STREQ ( "-1", sBuf );
+
+	iLen = ItoA<int64_t> ( sBuf, 0x8000000000000000ll, 16 );
+	sBuf[iLen] = '\0';
+	ASSERT_STREQ ( "-8000000000000000", sBuf );
+}
+
+TEST ( functions, IFtoA )
+{
+	using namespace sph;
+
+	char sBuf[50];
+	memset ( sBuf, 255, 50 );
+
+	int iLen = IFtoA ( sBuf, 50000, 3 );
+	sBuf[iLen] = '\0';
+	ASSERT_STREQ ( "50.000", sBuf );
+
+	iLen = IFtoA ( sBuf, -50000, 3 );
+	sBuf[iLen] = '\0';
+	ASSERT_STREQ ( "-50.000", sBuf );
+
+	iLen = IFtoA ( sBuf, -1, 3 );
+	sBuf[iLen] = '\0';
+	ASSERT_STREQ ( "-0.001", sBuf );
+
+	iLen = IFtoA ( sBuf, 1, 3 );
+	sBuf[iLen] = '\0';
+	ASSERT_STREQ ( "0.001", sBuf );
+}
+
+
+void test_mysprintf ( const char* sFmt, int64_t iNum, const char* sResult)
+{
+	using namespace sph;
+	char sBuf[50];
+	memset ( sBuf, 255, 50 );
+	sph::Sprintf ( sBuf, sFmt, iNum );
+	ASSERT_STREQ ( sBuf, sResult ) << " (on fmt " << sFmt << ")";
+}
+
+void test_sprintf ( const char * sFmt, int64_t iNum )
+{
+	char sBuf[50];
+	sprintf ( sBuf, sFmt, iNum );
+	test_mysprintf ( sFmt, iNum, sBuf );
+}
+
+void test_sphintf_for ( int64_t iNum )
+{
+	test_sprintf ( "%d", iNum );
+	test_sprintf ( "%0d", iNum );
+	test_sprintf ( "%4d", iNum );
+	test_sprintf ( "%04d", iNum );
+	test_sprintf ( "%.4d", iNum );
+	test_sprintf ( "%0.4d", iNum );
+	test_sprintf ( "%9.3d", iNum );
+	test_sprintf ( "%09.3d", iNum );
+}
+
+TEST ( functions, sph_Sprintf )
+{
+	test_sphintf_for ( 0 );
+	test_sphintf_for ( 50 );
+	test_sphintf_for ( -50 );
+	test_sphintf_for ( 10000 );
+	test_sphintf_for ( -10000 );
+
+	int iNum = -10000;
+	test_mysprintf ( "%l", iNum, "-10000" ); // %l is our specific for 64-bit signed
+	test_mysprintf ( "%0l", iNum, "-10000" );
+	test_mysprintf ( "%4l", iNum, "-10000" );
+	test_mysprintf ( "%04l", iNum, "-10000" );
+	test_mysprintf ( "%.4l", iNum, "-10000" );
+	test_mysprintf ( "%0.4l", iNum, "-10000" );
+	test_mysprintf ( "%9.3l", iNum, "   -10000" );
+	test_mysprintf ( "%09.3l", iNum, "   -10000" );
+
+	// my own fixed-point nums
+	test_mysprintf ( "%.3D", iNum, "-10.000");
+	test_mysprintf ( "%.9D", iNum, "-0.000010000" );
+
+	test_mysprintf ( "%.3F", iNum, "-10.000" );
+	test_mysprintf ( "%.5F", iNum, "-0.10000" );
+
+	iNum = 10000;
+	test_mysprintf ( "%U", iNum, "10000" ); // %U is our specific for 64-bit signed
+	test_mysprintf ( "%0U", iNum, "10000" );
+	test_mysprintf ( "%4U", iNum, "10000" );
+	test_mysprintf ( "%04U", iNum, "10000" );
+	test_mysprintf ( "%.4U", iNum, "10000" );
+	test_mysprintf ( "%0.4U", iNum, "10000" );
+	test_mysprintf ( "%9.3U", iNum, "    10000" );
+	test_mysprintf ( "%09.3U", iNum, "    10000" );
+
+	// fallback to stardard %f
+	using namespace sph;
+	char sBuf[50];
+	memset ( sBuf, 255, 50 );
+	sph::Sprintf ( sBuf, "%03.2f", 99.9911 );
+	ASSERT_STREQ ( sBuf, "99.99" );
+
+	// strings output
+	sph::Sprintf ( sBuf, "%s", "hello");
+	ASSERT_STREQ ( sBuf, "hello" );
+	sph::Sprintf ( sBuf, "%-s", "hello" );
+	ASSERT_STREQ ( sBuf, "hello" );
+	sph::Sprintf ( sBuf, "%10s", "hello" );
+	ASSERT_STREQ ( sBuf, "     hello" );
+	sph::Sprintf ( sBuf, "%-10s", "hello" );
+	ASSERT_STREQ ( sBuf, "hello     " );
+	sph::Sprintf ( sBuf, "%-10.3s", "hello" );
+	ASSERT_STREQ ( sBuf, "hel       " );
+	sph::Sprintf ( sBuf, "%10.3s", "hello" );
+	ASSERT_STREQ ( sBuf, "       hel" );
+}
+
+TEST ( functions, bench_Sprintf )
+{
+	char sBuf[40];
+	auto uLoops = 10000000;
+
+	auto iTimeSpan = -sphMicroTimer ();
+	for ( auto i=0; i<uLoops; ++i )
+		sph::Sprintf ( sBuf, "%d", 1000000 );
+	iTimeSpan += sphMicroTimer ();
+	std::cout << "\n" << uLoops << " of sph::sprintf took " << iTimeSpan << " uSec";
+
+	iTimeSpan = -sphMicroTimer ();
+	for ( auto i = 0; i<uLoops; ++i )
+		sprintf ( sBuf, "%d", 1000000 );
+	iTimeSpan += sphMicroTimer ();
+	std::cout << "\n" << uLoops << " of sprintf took " << iTimeSpan << " uSec\n";
+
+	ASSERT_EQ ( sphGetSmallAllocatedSize (), 0 );
+}

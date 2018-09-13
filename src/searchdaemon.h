@@ -251,9 +251,21 @@ public:
 	}
 
 	void		SendDocid ( SphDocID_t iValue )	{ SendUint64 ( iValue ); }
-	void		SendString ( const char * sStr );
+
+	// send raw byte blob
 	void		SendBytes ( const void * pBuf, int iLen );	///< (was) protected to avoid network-vs-host order bugs
-	void		SendOutput ( const ISphOutputBuffer & tOut );
+	void		SendBytes ( const char * pBuf );    // used strlen() to get length
+	void		SendBytes ( const CSphString& sStr );    // used strlen() to get length
+	void		SendBytes ( const VecTraits_T<BYTE>& dBuf );
+	void		SendBytes ( const StringBuilder_c& dBuf );
+
+	// send array: first length(int), then byte blob
+	void		SendString ( const char * sStr );
+	void		SendArray ( const ISphOutputBuffer &tOut );
+	void		SendArray ( const VecTraits_T<BYTE> &dBuf, int iElems=-1 );
+	void		SendArray ( const void * pBuf, int iLen );
+	void		SendArray ( const StringBuilder_c &dBuf );
+
 	void		SwapData ( CSphVector<BYTE> & rhs ) { m_dBuf.SwapData ( rhs ); }
 
 	virtual void	Flush () {}
@@ -268,7 +280,7 @@ protected:
 
 	CSphVector<BYTE>	m_dBuf;
 
-	template < typename T > void WriteT ( intptr_t iOff, const T& tValue )
+	template < typename T > void WriteT ( intptr_t iOff, T tValue )
 	{
 		sphUnalignedWrite ( m_dBuf.Begin () + iOff, tValue );
 	}
@@ -277,7 +289,7 @@ private:
 	template < typename T > void	SendT ( T tValue )							///< (was) protected to avoid network-vs-host order bugs
 	{
 		intptr_t iOff = m_dBuf.GetLength();
-		m_dBuf.Resize ( iOff + sizeof(T) );
+		m_dBuf.AddN ( sizeof(T) );
 		WriteT ( iOff, tValue );
 	}
 };

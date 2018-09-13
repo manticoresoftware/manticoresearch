@@ -2659,21 +2659,66 @@ int MysqlUnpack ( InputBuffer_c & tReq, DWORD * pSize )
 /////////////////////////////////////////////////////////////////////////////
 void ISphOutputBuffer::SendBytes ( const void * pBuf, int iLen )
 {
-	if ( !iLen )
-		return;
-	int iOff = m_dBuf.GetLength();
-	m_dBuf.Resize ( iOff + iLen );
-	memcpy ( m_dBuf.Begin() + iOff, pBuf, iLen );
+	m_dBuf.Append ( pBuf, iLen );
 }
 
+void ISphOutputBuffer::SendBytes ( const char * pBuf )
+{
+	if ( !pBuf )
+		return;
+	SendBytes ( pBuf, strlen ( pBuf ) );
+}
 
-void ISphOutputBuffer::SendOutput ( const ISphOutputBuffer & tOut )
+void ISphOutputBuffer::SendBytes ( const CSphString& sStr )
+{
+	SendBytes ( sStr.cstr(), sStr.Length() );
+}
+
+void ISphOutputBuffer::SendBytes ( const VecTraits_T<BYTE> & dBuf )
+{
+	m_dBuf.Append ( dBuf );
+}
+
+void ISphOutputBuffer::SendBytes ( const StringBuilder_c &dBuf )
+{
+	SendBytes ( dBuf.begin(), dBuf.GetLength () );
+}
+
+void ISphOutputBuffer::SendArray ( const ISphOutputBuffer &tOut )
 {
 	int iLen = tOut.m_dBuf.GetLength();
 	SendInt ( iLen );
-	if ( iLen )
-		SendBytes ( tOut.m_dBuf.Begin(), iLen );
+	SendBytes ( tOut.m_dBuf.Begin(), iLen );
 }
+
+void ISphOutputBuffer::SendArray ( const VecTraits_T<BYTE> &dBuf, int iElems )
+{
+	if ( iElems==-1 )
+	{
+		SendInt ( dBuf.GetLength () );
+		SendBytes ( dBuf );
+		return;
+	}
+	assert ( dBuf.GetLength() == (int) dBuf.GetLengthBytes() );
+	assert ( iElems<=dBuf.GetLength ());
+	SendInt ( iElems );
+	SendBytes ( dBuf.begin(), iElems );
+}
+
+void ISphOutputBuffer::SendArray ( const void * pBuf, int iLen )
+{
+	if ( !pBuf )
+		iLen=0;
+	assert ( iLen>=0 );
+	SendInt ( iLen );
+	SendBytes ( pBuf, iLen );
+}
+
+void ISphOutputBuffer::SendArray ( const StringBuilder_c &dBuf )
+{
+	SendArray ( dBuf.begin(), dBuf.GetLength () );
+}
+
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -4609,28 +4654,13 @@ int sphSendGetAttrCount ( const ISphSchema & tSchema, bool bAgentMode )
 	return iCount;
 }
 
-
 static int SendDataPtrAttr ( ISphOutputBuffer * pOut, const BYTE * pData )
 {
-	if ( pData ) // magic zero
-	{
-		int iLen = sphUnpackPtrAttr ( pData, &pData );
-		if ( pOut )
-		{
-			pOut->SendDword ( iLen );
-			pOut->SendBytes ( pData, iLen );
-		}
-
-		return iLen;
-	} else
-	{
-		if ( pOut )
-			pOut->SendDword ( 0 ); // null string
-	}
-
-	return 0;
+	int iLen = pData ? sphUnpackPtrAttr ( pData, &pData ) : 0;
+	if ( pOut )
+		pOut->SendArray ( pData, iLen );
+	return iLen;
 }
-
 
 static char g_sJsonNull[] = "{}";
 
@@ -4644,11 +4674,8 @@ static int SendJsonAsString ( ISphOutputBuffer * pOut, const BYTE * pJSON )
 		sphJsonFormat ( dJson, pJSON );
 
 		if ( pOut )
-		{
-			pOut->SendDword ( dJson.GetLength() );
-			pOut->SendBytes ( dJson.begin(), dJson.GetLength() );
-		}
-		
+			pOut->SendArray ( dJson );
+
 		return dJson.GetLength();
 	} else
 	{
@@ -4686,10 +4713,8 @@ static int SendJsonFieldAsString ( ISphOutputBuffer * pOut, const BYTE * pJSON )
 		sphJsonFieldFormat ( dJson, pJSON, eJson, false );
 
 		if ( pOut )
-		{
-			pOut->SendDword ( dJson.GetLength () );
-			pOut->SendBytes ( dJson.begin(), dJson.GetLength() );
-		} else
+			pOut->SendArray ( dJson );
+		else
 			return dJson.GetLength();
 	} else
 	{
@@ -4714,8 +4739,7 @@ static int SendJsonField ( ISphOutputBuffer * pOut, const BYTE * pJSON, bool bSe
 			if ( pOut )
 			{
 				pOut->SendByte ( (BYTE)eJson );
-				pOut->SendDword ( iLen );
-				pOut->SendBytes ( pJSON, iLen );
+				pOut->SendArray ( pJSON, iLen );
 			}
 
 			return iLen+1;
@@ -10446,11 +10470,7 @@ void HandleCommandExcerpt ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & t
 	tOut.SendWord ( VER_COMMAND_EXCERPT );
 	tOut.SendInt ( iRespLen );
 	for ( const auto& dQuery : dQueries )
-	{
-		tOut.SendInt ( dQuery.m_dRes.GetLength () );
-		tOut.SendBytes ( dQuery.m_dRes.Begin (), dQuery.m_dRes.GetLength () );
-	}
-
+		tOut.SendArray ( dQuery.m_dRes );
 	tOut.Flush ();
 	assert ( tOut.GetError()==true || tOut.GetSentCount()==iRespLen+8 );
 }
@@ -11995,14 +12015,14 @@ public:
 	}
 
 private:
-	void SendInt ( int iVal )
+	void SqlInt ( int iVal )
 	{
 		BYTE dBuf[12];
 		auto * pBuf = MysqlPackInt ( dBuf, iVal );
 		m_tOut.SendBytes ( dBuf, ( int ) ( pBuf - dBuf ) );
 	}
 
-	void SendString ( const char * sStr )
+	void SqlString ( const char * sStr )
 	{
 		int iLen = strlen ( sStr );
 
@@ -12012,7 +12032,7 @@ private:
 		m_tOut.SendBytes ( sStr, iLen );
 	}
 
-	void SendFieldPacket ( const char * sCol, MysqlColumnType_e eType, WORD uFlags )
+	void SqlFieldPacket ( const char * sCol, MysqlColumnType_e eType, WORD uFlags )
 	{
 		const char * sDB = "";
 		const char * sTable = "";
@@ -12035,12 +12055,12 @@ private:
 		}
 
 		m_tOut.SendLSBDword ( ( ( m_uPacketID++ ) << 24 ) + iLen );
-		SendString ( "def" ); // catalog
-		SendString ( sDB ); // db
-		SendString ( sTable ); // table
-		SendString ( sTable ); // org_table
-		SendString ( sCol ); // name
-		SendString ( sCol ); // org_name
+		SqlString ( "def" ); // catalog
+		SqlString ( sDB ); // db
+		SqlString ( sTable ); // table
+		SqlString ( sTable ); // org_table
+		SqlString ( sCol ); // name
+		SqlString ( sCol ); // org_name
 
 		m_tOut.SendByte ( 12 ); // filler, must be 12 (following pseudo-string length)
 		m_tOut.SendByte ( 0x21 ); // charset_nr, 0x21 is utf8
@@ -12059,7 +12079,7 @@ public:
 	void Commit()
 	{
 		m_tOut.SendLSBDword ( ((m_uPacketID++)<<24) + ( Length() ) );
-		m_tOut.SendBytes ( m_pData, Length() );
+		m_tOut.SendBytes ( *this );
 		ResetBuf();
 	}
 
@@ -12097,7 +12117,7 @@ public:
 	inline void HeadBegin ( int iColumns )
 	{
 		m_tOut.SendLSBDword ( ((m_uPacketID++)<<24) + SizeOf ( iColumns ) );
-		SendInt ( iColumns );
+		SqlInt ( iColumns );
 #ifndef NDEBUG
 		m_iColumns = iColumns;
 #endif
@@ -12113,7 +12133,7 @@ public:
 	inline void HeadColumn ( const char * sName, MysqlColumnType_e uType=MYSQL_COL_STRING, WORD uFlags=0 )
 	{
 		assert ( m_iColumns-->0 && "you try to send more mysql columns than declared in InitHead" );
-		SendFieldPacket ( sName, uType, uFlags );
+		SqlFieldPacket ( sName, uType, uFlags );
 	}
 
 	// Fire he header for table with iSize string columns
@@ -14703,8 +14723,7 @@ struct UVarRequestBuilder_t : public IRequestBuilder_t
 
 		tOut.SendString ( m_sName.cstr() );
 		tOut.SendInt ( m_iUserVars );
-		tOut.SendInt ( m_iLength );
-		tOut.SendBytes ( m_dBuf.Begin(), m_iLength );
+		tOut.SendArray ( m_dBuf, m_iLength );
 	}
 
 	CSphString m_sName;
@@ -14870,9 +14889,9 @@ void SphinxqlRequestBuilder_c::BuildRequest ( const AgentConn_t & tAgent, Cached
 	tOut.SendWord ( VER_COMMAND_SPHINXQL );
 	WriteLenHere_c tWrLayer1 { tOut };
 	WriteLenHere_c tWrLayer2 { tOut }; // sphinxql wrapped twice, so one more length need to be written.
-	tOut.SendBytes ( m_sBegin.cstr(), m_sBegin.Length() );
-	tOut.SendBytes ( sIndexes, strlen(sIndexes) );
-	tOut.SendBytes ( m_sEnd.cstr(), m_sEnd.Length() );
+	tOut.SendBytes ( m_sBegin );
+	tOut.SendBytes ( sIndexes );
+	tOut.SendBytes ( m_sEnd );
 }
 
 
@@ -17662,7 +17681,7 @@ void HandleCommandSphinxql ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c &
 	ISphOutputBuffer tMemOut;
 	tSession.Execute ( sCommand, tMemOut, uDummy, tThd );
 
-	tOut.SendOutput ( tMemOut );
+	tOut.SendArray ( tMemOut );
 	tOut.Flush();
 }
 
@@ -17689,9 +17708,7 @@ void HandleCommandJson ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tRe
 	tOut.SendDword( dResult.GetLength()+sEndpoint.Length()+8 );
 
 	tOut.SendString ( sEndpoint.cstr() );
-	tOut.SendDword( dResult.GetLength() );
-	tOut.SendBytes ( dResult.Begin(), dResult.GetLength() );
-
+	tOut.SendArray ( dResult );
 	tOut.Flush();
 }
 

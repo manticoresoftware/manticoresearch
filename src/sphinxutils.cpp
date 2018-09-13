@@ -2205,8 +2205,10 @@ static bool DumpGdb ( int iFD )
 	if ( IsDebuggerPresent ())
 		return false;
 
+#ifdef PR_SET_PTRACER
 	// allow to trace us
 	prctl ( PR_SET_PTRACER, PR_SET_PTRACER_ANY, 0, 0, 0 );
+#endif
 
 	sigset_t signal_set;
 	sigemptyset ( &signal_set );

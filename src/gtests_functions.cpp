@@ -1207,7 +1207,7 @@ TEST ( functions, curledref )
 
 TEST ( functions, valgrind_use )
 {
-	BYTE* pLeak = new BYTE[100];
+	BYTE* VARIABLE_IS_NOT_USED pLeak = new BYTE[100];
 	ASSERT_TRUE (true) << "intended leak";
 }
 
@@ -1514,4 +1514,40 @@ TEST ( functions, bench_Sprintf )
 	std::cout << "\n" << uLoops << " of sprintf took " << iTimeSpan << " uSec\n";
 
 	ASSERT_EQ ( sphGetSmallAllocatedSize (), 0 );
+}
+
+TEST ( functions, VectorEx )
+{
+	using namespace sph;
+	CSphTightVector<int> dTVec;
+	CSphVector<int> dVec;
+	dVec.Add ( 1 );
+	dVec.Add ( 2 );
+	auto &dv = dVec.Add ();
+	dv = 3;
+	dVec.Add ( 4 );
+	dVec.Add ( 5 );
+	dVec.Add ( 6 );
+	dVec.Add ( 7 );
+	dVec.RemoveValue ( 2 );
+	dVec.Add ( 8 );
+	dVec.Add ( 9 );
+	dVec.RemoveValue ( 9 );
+	dVec.Add ( 9 );
+	dVec.Add ( 10 );
+	dVec.RemoveValue ( 10 );
+	ASSERT_EQ ( dVec.GetLength (), 8 );
+	dTVec.Add(30);
+	dTVec.Add(20);
+	dVec.Append ( dTVec );
+	ASSERT_EQ ( dVec.GetLength (), 10 );
+//	dVec.SwapData (dTVec);
+	LazyVector<int> dLVec;
+	dLVec.Add(4);
+	dLVec.Add(5);
+	ASSERT_EQ ( dLVec.GetLength (), 2 );
+	dTVec.Append (dLVec);
+	ASSERT_EQ ( dTVec.GetLength (), 4 );
+	int* VARIABLE_IS_NOT_USED pData = dTVec.LeakData();
+
 }

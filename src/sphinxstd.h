@@ -780,71 +780,6 @@ T_COUNTER sphUniq ( T * pData, T_COUNTER iCount )
 	return iDst;
 }
 
-
-//////////////////////////////////////////////////////////////////////////
-/// Copy/move vec of a data item-by-item
-template < typename T, bool = std::is_pod<T>::value >
-class DataMover_T
-{
-public:
-	static inline void Copy ( T * pNew, T * pData, int iLength )
-	{
-		for ( int i = 0; i<iLength; ++i )
-			pNew[i] = pData[i];
-	}
-
-	static inline void Move ( T * pNew, T * pData, int iLength )
-	{
-		for ( int i = 0; i<iLength; ++i )
-			pNew[i] = std::move ( pData[i] );
-	}
-};
-
-template < typename T> /// Copy/move vec of POD data using memmove
-class DataMover_T<T, true>
-{
-public:
-	static inline void Copy ( T * pNew, const T * pData, int iLength )
-	{
-		if ( iLength ) // m.b. work without this check, but sanitize for paranoids.
-			memmove ( ( void * ) pNew, ( const void * ) pData, iLength * sizeof ( T ) );
-	}
-
-	static inline void Move ( T * pNew, const T * pData, int iLength )
-	{ Copy ( pNew, pData, iLength); }
-
-	// append raw blob: defined ONLY in POD specialization.
-	static inline void CopyVoid ( T * pNew, const void * pData, int iLength )
-	{ Copy ( pNew, (T*)pData, iLength ); }
-};
-
-/// default vector policy
-/// grow 2x and copy using assignment operator on resize
-template < typename T >
-class CSphVectorPolicy : public DataMover_T<T>
-{
-protected:
-	static const int MAGIC_INITIAL_LIMIT = 8;
-
-public:
-	static inline void CopyOrSwap ( T & pLeft, const T & pRight )
-	{
-		pLeft = pRight;
-	}
-
-	static inline int Relimit ( int iLimit, int iNewLimit )
-	{
-		if ( !iLimit )
-			iLimit = MAGIC_INITIAL_LIMIT;
-		while ( iLimit<iNewLimit )
-		{
-			iLimit *= 2;
-			assert ( iLimit>0 );
-		}
-		return iLimit;
-	}
-};
-
 /// buffer traits - provides generic ops over a typed blob (vector).
 /// just provide common operators; doesn't manage buffer anyway
 template < typename T > class VecTraits_T
@@ -873,6 +808,12 @@ public:
 	T * Begin () const
 	{
 		return m_iCount ? m_pData : nullptr;
+	}
+
+	/// pointer to the item after the last
+	T * End () const
+	{
+		return  m_pData + m_iCount;
 	}
 
 	/// make happy C++11 ranged for loops
@@ -1009,38 +950,237 @@ protected:
 	int64_t m_iCount = 0;
 };
 
+namespace sph {
+
+//////////////////////////////////////////////////////////////////////////
+/// Storage backends for vector
+/// Each backend provides Allocate and Deallocate
+
+/// Default backend - uses plain old new/delete
+template < typename T >
+class DefaultStorage_T
+{
+protected:
+	/// grow enough to hold that much entries.
+	inline static T * Allocate ( int iLimit )
+	{
+		return new T[iLimit];
+	}
+
+	inline static void Deallocate ( T * pData )
+	{
+		delete[] pData;
+	}
+	static inline void DataIsNotOwned() {}
+};
+
+/// Static backend: small blobs stored localy,
+/// bigger came to plain old new/delete
+template < typename T, int STATICSIZE = 4096 >
+class LazyStorage_T
+{
+public:
+	// don't allow moving (it has no sence with embedded buffer)
+	inline LazyStorage_T ( LazyStorage_T &&rhs ) noexcept = delete;
+	inline LazyStorage_T &operator= ( LazyStorage_T &&rhs ) noexcept = delete;
+
+	LazyStorage_T() = default;
+
+protected:
+	inline T * Allocate ( int iLimit )
+	{
+		if ( iLimit<=STATICSIZE )
+			return m_dData;
+		return new T[iLimit];
+	}
+
+	inline void Deallocate ( T * pData ) const
+	{
+		if ( pData!=m_dData )
+			delete[] pData;
+	}
+
+	// DataIsNotOwned is not defined here, so swap/leakdata will not compile.
+	//static inline void DataIsNotOwned () {}
+
+private:
+	T m_dData[STATICSIZE];
+};
+
+//////////////////////////////////////////////////////////////////////////
+/// Copy backends for vector
+/// Each backend provides Copy, Move and CopyOrSwap
+
+/// Copy/move vec of a data item-by-item
+template < typename T, bool = std::is_pod<T>::value >
+class DataMover_T
+{
+public:
+	static inline void Copy ( T * pNew, T * pData, int iLength )
+	{
+		for ( int i = 0; i<iLength; ++i )
+			pNew[i] = pData[i];
+	}
+
+	static inline void Move ( T * pNew, T * pData, int iLength )
+	{
+		for ( int i = 0; i<iLength; ++i )
+			pNew[i] = std::move ( pData[i] );
+	}
+};
+
+template < typename T > /// Copy/move blob of POD data using memmove
+class DataMover_T<T, true>
+{
+public:
+	static inline void Copy ( T * pNew, const T * pData, int iLength )
+	{
+		if ( iLength ) // m.b. work without this check, but sanitize for paranoids.
+			memmove ( ( void * ) pNew, ( const void * ) pData, iLength * sizeof ( T ) );
+	}
+
+	static inline void Move ( T * pNew, const T * pData, int iLength )
+	{ Copy ( pNew, pData, iLength ); }
+
+	// append raw blob: defined ONLY in POD specialization.
+	static inline void CopyVoid ( T * pNew, const void * pData, int iLength )
+	{ Copy ( pNew, ( T * ) pData, iLength ); }
+};
+
+/// default vector mover
+template < typename T >
+class DefaultCopy_T : public DataMover_T<T>
+{
+public:
+	static inline void CopyOrSwap ( T &pLeft, const T &pRight )
+	{
+		pLeft = pRight;
+	}
+};
+
+
+/// swap-vector policy (for non-copyable classes)
+/// use Swap() instead of assignment on resize
+template < typename T >
+class SwapCopy_T
+{
+public:
+	static inline void Copy ( T * pNew, T * pData, int iLength )
+	{
+		for ( int i = 0; i<iLength; ++i )
+			Swap ( pNew[i], pData[i] );
+	}
+
+	static inline void Move ( T * pNew, T * pData, int iLength )
+	{
+		for ( int i = 0; i<iLength; ++i )
+			Swap ( pNew[i], pData[i] );
+	}
+
+	static inline void CopyOrSwap ( T &dLeft, T &dRight )
+	{
+		Swap ( dLeft, dRight );
+	}
+};
+
+//////////////////////////////////////////////////////////////////////////
+/// Resize backends for vector
+/// Each backend provides Relimit
+
+/// Default relimit: grow 2x
+class DefaultRelimit
+{
+public:
+	static const int MAGIC_INITIAL_LIMIT = 8;
+	static inline int Relimit ( int iLimit, int iNewLimit )
+	{
+		if ( !iLimit )
+			iLimit = MAGIC_INITIAL_LIMIT;
+		while ( iLimit<iNewLimit )
+		{
+			iLimit *= 2;
+			assert ( iLimit>0 );
+		}
+		return iLimit;
+	}
+};
+
+/// tight-vector policy
+/// grow only 1.2x on resize (not 2x) starting from a certain threshold
+class TightRelimit : public DefaultRelimit
+{
+public:
+	static const int SLOW_GROW_TRESHOLD = 1024;
+	static inline int Relimit ( int iLimit, int iNewLimit )
+	{
+		if ( !iLimit )
+			iLimit = MAGIC_INITIAL_LIMIT;
+		while ( iLimit<iNewLimit && iLimit<SLOW_GROW_TRESHOLD )
+		{
+			iLimit *= 2;
+			assert ( iLimit>0 );
+		}
+		while ( iLimit<iNewLimit )
+		{
+			iLimit = ( int ) ( iLimit * 1.2f );
+			assert ( iLimit>0 );
+		}
+		return iLimit;
+	}
+};
+
 
 /// generic vector
+/// uses storage, mover and relimit backends
 /// (don't even ask why it's not std::vector)
-template < typename T, typename POLICY=CSphVectorPolicy<T> > class CSphVector
-	: public VecTraits_T<T>
+template < typename T, class POLICY=DefaultCopy_T<T>, class LIMIT=DefaultRelimit, class STORE=DefaultStorage_T<T> >
+class Vector_T : public VecTraits_T<T>, protected STORE
 {
 protected:
 	using BASE = VecTraits_T<T>;
 	using BASE::m_pData;
 	using BASE::m_iCount;
+	using STORE::Allocate;
+	using STORE::Deallocate;
 
 public:
 	using BASE::Begin;
 	using BASE::Sort;
+	using BASE::GetLength; // these are for IDE helpers to work
+	using BASE::GetLength64;
+	using BASE::GetLengthBytes;
+
 
 	/// ctor
-	CSphVector () = default;
+	Vector_T () = default;
 
 	/// ctor with initial size
-	explicit CSphVector ( int iCount )
+	explicit Vector_T ( int iCount )
 	{
 		Resize ( iCount );
 	}
 
 	/// copy ctor
-	CSphVector ( const CSphVector<T> & rhs )
+	Vector_T ( const Vector_T<T> & rhs )
 	{
 		*this = rhs;
 	}
 
+	/// move ctr
+	Vector_T ( Vector_T<T> &&rhs ) noexcept
+		: STORE (std::move(rhs))
+	{
+		m_iCount = rhs.m_iCount;
+		m_iLimit = rhs.m_iLimit;
+		m_pData = rhs.m_pData;
+
+		rhs.m_pData = nullptr;
+		rhs.m_iCount = 0;
+		rhs.m_iLimit = 0;
+	}
+
 	/// dtor
-	~CSphVector ()
+	~Vector_T ()
 	{
 		Reset ();
 	}
@@ -1148,19 +1288,21 @@ public:
 			return;
 
 		// calc new limit
-		m_iLimit = POLICY::Relimit ( m_iLimit, iNewLimit );
+		m_iLimit = LIMIT::Relimit ( m_iLimit, iNewLimit );
 
 		// realloc
 		T * pNew = nullptr;
 		if ( m_iLimit )
 		{
-			pNew = new T[m_iLimit];
-			__analysis_assume ( m_iCount<=m_iLimit );
+			pNew = STORE::Allocate ( m_iLimit );
 
+			if ( pNew==m_pData )
+				return;
+
+			__analysis_assume ( m_iCount<=m_iLimit );
 			POLICY::Move ( pNew, m_pData, m_iCount );
 		}
-		SafeDeleteArray( m_pData );
-
+		STORE::Deallocate ( m_pData );
 		m_pData = pNew;
 	}
 
@@ -1176,7 +1318,8 @@ public:
 	/// reset
 	void Reset ()
 	{
-		SafeDeleteArray ( m_pData );
+		STORE::Deallocate ( m_pData );
+		m_pData = nullptr;
 		m_iCount = 0;
 		m_iLimit = 0;
 	}
@@ -1213,7 +1356,7 @@ public:
 	}
 
 	/// copy
-	CSphVector &operator= ( const CSphVector<T> &rhs )
+	Vector_T &operator= ( const Vector_T<T> &rhs )
 	{
 		Reset ();
 
@@ -1228,7 +1371,7 @@ public:
 	}
 
 	/// move
-	CSphVector &operator= ( CSphVector<T> &&rhs )
+	Vector_T &operator= ( Vector_T<T> &&rhs ) noexcept
 	{
 		Reset ();
 
@@ -1240,7 +1383,8 @@ public:
 		rhs.m_iCount = 0;
 		rhs.m_iLimit = 0;
 
-		return *this;
+		return static_cast<Vector_T &>(STORE::operator= ( std::move ( rhs ) ));
+//		return *this;
 	}
 
 	/// memmove N elements from raw pointer to the end
@@ -1267,8 +1411,10 @@ public:
 	}
 
 	/// swap
-	void SwapData ( CSphVector<T, POLICY> & rhs )
+	template < typename L=LIMIT >
+	void SwapData ( Vector_T<T, POLICY, L, STORE> &rhs )
 	{
+		STORE::DataIsNotOwned ();
 		Swap ( m_iCount, rhs.m_iCount );
 		Swap ( m_iLimit, rhs.m_iLimit );
 		Swap ( m_pData, rhs.m_pData );
@@ -1277,6 +1423,7 @@ public:
 	/// leak
 	T * LeakData ()
 	{
+		STORE::DataIsNotOwned ();
 		T * pData = m_pData;
 		m_pData = NULL;
 		Reset();
@@ -1315,6 +1462,7 @@ protected:
 	int64_t		m_iLimit = 0;		///< entries allocated
 };
 
+} // namespace sph
 
 #define ARRAY_FOREACH(_index,_array) \
 	for ( int _index=0; _index<_array.GetLength(); ++_index )
@@ -1324,65 +1472,20 @@ protected:
 
 //////////////////////////////////////////////////////////////////////////
 
-/// swap-vector policy (for non-copyable classes)
-/// use Swap() instead of assignment on resize
-template < typename T >
-class CSphSwapVectorPolicy : public CSphVectorPolicy<T>
-{
-public:
-	static inline void Copy ( T * pNew, T * pData, int iLength )
-	{
-		for ( int i=0; i<iLength; ++i )
-			Swap ( pNew[i], pData[i] );
-	}
+/// old well-known vector
+template < typename T, typename R=sph::DefaultRelimit >
+using CSphVector = sph::Vector_T < T, sph::DefaultCopy_T<T>, R >;
 
-	static inline void Move ( T * pNew, T * pData, int iLength )
-	{
-		for ( int i = 0; i<iLength; ++i )
-			Swap ( pNew[i], pData[i] );
-	}
-
-	static inline void CopyOrSwap ( T& dLeft, T& dRight )
-	{
-		Swap ( dLeft, dRight );
-	}
-};
-
-/// tight-vector policy
-/// grow only 1.2x on resize (not 2x) starting from a certain threshold
-template < typename T >
-class CSphTightVectorPolicy : public CSphVectorPolicy<T>
-{
-protected:
-	static const int SLOW_GROW_TRESHOLD = 1024;
-
-public:
-	static inline int Relimit ( int iLimit, int iNewLimit )
-	{
-		if ( !iLimit )
-			iLimit = CSphVectorPolicy<T>::MAGIC_INITIAL_LIMIT;
-		while ( iLimit<iNewLimit && iLimit<SLOW_GROW_TRESHOLD )
-		{
-			iLimit *= 2;
-			assert ( iLimit>0 );
-		}
-		while ( iLimit<iNewLimit )
-		{
-			iLimit = (int)( iLimit*1.2f );
-			assert ( iLimit>0 );
-		}
-		return iLimit;
-	}
-};
+template < typename T, typename R=sph::DefaultRelimit, int STATICSIZE=4096/sizeof(T) >
+using LazyVector = sph::Vector_T<T, sph::DefaultCopy_T<T>, R, sph::LazyStorage_T<T, STATICSIZE> >;
 
 /// swap-vector
 template < typename T >
-using CSphSwapVector = CSphVector < T, CSphSwapVectorPolicy<T> >;
-
+using CSphSwapVector = sph::Vector_T < T, sph::SwapCopy_T<T> >;
 
 /// tight-vector
 template < typename T >
-using CSphTightVector =  CSphVector < T, CSphTightVectorPolicy<T> >;
+using CSphTightVector =  CSphVector < T, sph::TightRelimit >;
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -2379,7 +2482,6 @@ public:
 	explicit operator bool () const				{ return m_pPtr!=nullptr; }
 	CSphScopedPtr &	operator = ( T * pPtr )		{ SafeDelete ( m_pPtr ); m_pPtr = pPtr; return *this; }
 	T *				LeakPtr ()					{ T * pPtr = m_pPtr; m_pPtr = NULL; return pPtr; }
-	void			ReplacePtr ( T * pPtr )		{ m_pPtr = pPtr; }
 	void			Reset ()					{ SafeDelete ( m_pPtr ); }
 
 protected:

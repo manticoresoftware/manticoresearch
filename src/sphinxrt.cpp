@@ -2959,13 +2959,14 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 #define LOC_ESTIMATE(_vec) \
 	( LOC_ESTIMATE1 ( dSegments[iLen-1], _vec ) + LOC_ESTIMATE1 ( dSegments[iLen-2], _vec ) )
 
-		int64_t iWordsRelimit = CSphTightVectorPolicy<BYTE>::Relimit ( 0, LOC_ESTIMATE ( m_dWords ) );
-		int64_t iDocsRelimit = CSphTightVectorPolicy<BYTE>::Relimit ( 0, LOC_ESTIMATE ( m_dDocs ) );
-		int64_t iHitsRelimit = CSphTightVectorPolicy<BYTE>::Relimit ( 0, LOC_ESTIMATE ( m_dHits ) );
-		int64_t iStringsRelimit = CSphTightVectorPolicy<BYTE>::Relimit ( 0, LOC_ESTIMATE ( m_dStrings ) );
-		int64_t iMvasRelimit = CSphTightVectorPolicy<DWORD>::Relimit ( 0, LOC_ESTIMATE ( m_dMvas ) );
-		int64_t iKeywordsRelimit = CSphTightVectorPolicy<BYTE>::Relimit ( 0, LOC_ESTIMATE ( m_dKeywordCheckpoints ) );
-		int64_t iRowsRelimit = CSphTightVectorPolicy<SphDocID_t>::Relimit ( 0, LOC_ESTIMATE ( m_dRows ) );
+		using namespace sph;
+		int64_t iWordsRelimit = TightRelimit::Relimit ( 0, LOC_ESTIMATE ( m_dWords ) );
+		int64_t iDocsRelimit = TightRelimit::Relimit ( 0, LOC_ESTIMATE ( m_dDocs ) );
+		int64_t iHitsRelimit = TightRelimit::Relimit ( 0, LOC_ESTIMATE ( m_dHits ) );
+		int64_t iStringsRelimit = TightRelimit::Relimit ( 0, LOC_ESTIMATE ( m_dStrings ) );
+		int64_t iMvasRelimit = TightRelimit::Relimit ( 0, LOC_ESTIMATE ( m_dMvas ) );
+		int64_t iKeywordsRelimit = TightRelimit::Relimit ( 0, LOC_ESTIMATE ( m_dKeywordCheckpoints ) );
+		int64_t iRowsRelimit = TightRelimit::Relimit ( 0, LOC_ESTIMATE ( m_dRows ) );
 
 #undef LOC_ESTIMATE
 #undef LOC_ESTIMATE1
@@ -4320,7 +4321,7 @@ static bool LoadVector ( CSphReader & tReader, CSphVector < T, P > & tVector,
 
 
 template < typename T, typename P >
-static void SaveVector ( BinlogWriter_c & tWriter, const CSphVector < T, P > & tVector )
+static void SaveVector ( BinlogWriter_c &tWriter, const CSphVector<T, P> &tVector )
 {
 	STATIC_ASSERT ( std::is_pod<T>::value, NON_POD_VECTORS_ARE_UNSERIALIZABLE );
 	tWriter.ZipOffset ( tVector.GetLength() );

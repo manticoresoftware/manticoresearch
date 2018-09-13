@@ -17792,6 +17792,18 @@ bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dSt
 static bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString & sQuery,
 	int iPacketLen, bool bProfile, ThdDesc_t & tThd, InputBuffer_c & tIn, ISphOutputBuffer & tOut );
 
+static bool ReadMySQLPacketHeader ( int iSock, int& iLen, BYTE& uPacketID )
+{
+	const int MAX_PACKET_LEN = 0xffffffL; // 16777215 bytes, max low level packet size
+	NetInputBuffer_c tIn ( iSock );
+	if ( !tIn.ReadFrom ( 4, g_iClientQlTimeout, true ) )
+		return false;
+	DWORD uAddon = tIn.GetLSBDword ();
+	uPacketID = 1 + ( BYTE ) ( uAddon >> 24 );
+	iLen = ( uAddon & MAX_PACKET_LEN );
+
+}
+
 static void HandleClientMySQL ( int iSock, ThdDesc_t & tThd ) REQUIRES ( HandlerThread )
 {
 	MEMORY ( MEM_SQL_HANDLE );
@@ -17817,7 +17829,9 @@ static void HandleClientMySQL ( int iSock, ThdDesc_t & tThd ) REQUIRES ( Handler
 	tSession.m_tVars.m_bVIP = tThd.m_bVip;
 	bool bAuthed = false;
 	BYTE uPacketID = 1;
+	int iPacketLen = 0;
 
+	const int MAX_PACKET_LEN = 0xffffffL; // 16777215 bytes, max low level packet size
 	while (true)
 	{
 		NetOutputBuffer_c tOut ( iSock ); // OPTIMIZE? looks like buffer size matters a lot..
@@ -17826,7 +17840,7 @@ static void HandleClientMySQL ( int iSock, ThdDesc_t & tThd ) REQUIRES ( Handler
 		// get next packet
 		// we want interruptible calls here, so that shutdowns could be honored
 		ThdState ( THD_NET_IDLE, tThd );
-		if ( !tIn.ReadFrom ( 4, g_iClientQlTimeout, true ) )
+		if ( !ReadMySQLPacketHeader ( iSock, iPacketLen, uPacketID ) )
 		{
 			sphLogDebugv ( "conn %s(%d): bailing on failed MySQL header (sockerr=%s)", sClientIP, iCID, sphSockError() );
 			break;
@@ -17842,9 +17856,6 @@ static void HandleClientMySQL ( int iSock, ThdDesc_t & tThd ) REQUIRES ( Handler
 
 		// keep getting that packet
 		ThdState ( THD_NET_READ, tThd );
-		const int MAX_PACKET_LEN = 0xffffffL; // 16777215 bytes, max low level packet size
-		DWORD uPacketHeader = tIn.GetLSBDword ();
-		int iPacketLen = ( uPacketHeader & MAX_PACKET_LEN );
 		if ( !tIn.ReadFrom ( iPacketLen, g_iClientQlTimeout, true ) )
 		{
 			sphWarning ( "failed to receive MySQL request body (client=%s(%d), exp=%d, error='%s')", sClientIP, iCID, iPacketLen, sphSockError() );
@@ -17854,25 +17865,18 @@ static void HandleClientMySQL ( int iSock, ThdDesc_t & tThd ) REQUIRES ( Handler
 		if ( bProfile )
 			tSession.m_tProfile.Switch ( SPH_QSTATE_UNKNOWN );
 
-		// handle it!
-		uPacketID = 1 + (BYTE)( uPacketHeader>>24 ); // client will expect this id
-
 		// handle big packets
 		if ( iPacketLen==MAX_PACKET_LEN )
 		{
-			NetInputBuffer_c tIn2 ( iSock );
 			int iAddonLen = -1;
 			do
 			{
-				if ( !tIn2.ReadFrom ( 4, g_iClientQlTimeout, true ) )
+				if ( !ReadMySQLPacketHeader ( iSock, iAddonLen, uPacketID ) )
 				{
 					sphLogDebugv ( "conn %s(%d): bailing on failed MySQL header2 (sockerr=%s)", sClientIP, iCID, sphSockError() );
 					break;
 				}
 
-				DWORD uAddon = tIn2.GetLSBDword();
-				uPacketID = 1 + (BYTE)( uAddon>>24 );
-				iAddonLen = ( uAddon & MAX_PACKET_LEN );
 				if ( !tIn.ReadFrom ( iAddonLen, g_iClientQlTimeout, true, true ) )
 				{
 					sphWarning ( "failed to receive MySQL request body2 (client=%s(%d), exp=%d, error='%s')", sClientIP, iCID, iAddonLen, sphSockError() );

@@ -133,7 +133,7 @@ static void PrintDocsChunk ( int QDEBUGARG(iCount), int QDEBUGARG(iAtomPos), con
 	tRes.Appendf ( "node %s 0x%x:%p getdocs (%d) = [", sNode ? sNode : "???", iAtomPos, pNode, iCount );
 	for ( int i=0; i<iCount; i++ )
 		tRes.Appendf ( i ? ", 0x%x" : "0x%x", DWORD ( pDocs[i].m_uDocid ) );
-	tRes.Appendf ( "]" );
+	tRes+="]";
 	printf ( "%s\n", tRes.cstr() );
 #endif
 }
@@ -145,7 +145,7 @@ static void PrintHitsChunk ( int QDEBUGARG(iCount), int QDEBUGARG(iAtomPos), con
 	tRes.Appendf ( "node %s 0x%x:%p gethits (%d) = [", sNode ? sNode : "???", iAtomPos, pNode, iCount );
 	for ( int i=0; i<iCount; i++ )
 		tRes.Appendf ( i ? ", 0x%x:0x%x" : "0x%x:0x%x", DWORD ( pHits[i].m_uDocid ), DWORD ( pHits[i].m_uHitpos ) );
-	tRes.Appendf ( "]" );
+	tRes+= "]";
 	printf ( "%s\n", tRes.cstr() );
 #endif
 }
@@ -5712,7 +5712,7 @@ static void Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const 
 	if ( iIndent )
 		tRes.Appendf ( "%s", szLinebreak );
 
-	for ( int i=0; i<iIndent; i++ )
+	for ( int i=0; i<iIndent; ++i )
 		tRes.Appendf ( "%s", szIndent );
 
 	tRes.Appendf ( "%s(%s", sphXQNodeToStr(pNode).cstr(), sphXQNodeGetExtraStr(pNode).cstr() );

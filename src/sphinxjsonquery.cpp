@@ -2231,14 +2231,9 @@ void sphInitCJson()
 
 struct HttpSnippetField_t
 {
-	int m_iFragmentSize;
-	int m_iFragmentCount;
+	int m_iFragmentSize = -1;
+	int m_iFragmentCount = -1;
 	CSphString m_sName;
-
-	HttpSnippetField_t()
-		: m_iFragmentSize ( -1 )
-		, m_iFragmentCount ( -1 )
-	{}
 };
 
 static bool CheckField ( HttpSnippetField_t & tParsed, CSphString & sError, const cJSON * pField )
@@ -2613,17 +2608,17 @@ bool ParseSort ( cJSON * pSort, CSphQuery & tQuery, bool & bGotWeight, CSphStrin
 		bool bObj = !!cJSON_IsObject ( pItem );
 		if ( !bString && !bObj )
 		{
-			sError.SetSprintf ( "\"sort\" property %d(\"%s\") should be a string or an object", i, ( pItem->string ? pItem->string : "" ) );
+			sError.SetSprintf ( R"("sort" property %d("%s") should be a string or an object)", i, ( pItem->string ? pItem->string : "" ) );
 			return false;
 		}
 		if ( bString && !pItem->valuestring )
 		{
-			sError.SetSprintf ( "\"sort\" property %d should be a string", i );
+			sError.SetSprintf ( R"("sort" property %d should be a string)", i );
 			return false;
 		}
 		if ( bObj && cJSON_GetArraySize ( pItem )!=1 )
 		{
-			sError.SetSprintf ( "\"sort\" property %d(\"%s\") should be object", i, ( pItem->string ? pItem->string : "" ) );
+			sError.SetSprintf ( R"("sort" property %d("%s") should be object)", i, ( pItem->string ? pItem->string : "" ) );
 			return false;
 		}
 
@@ -2650,7 +2645,7 @@ bool ParseSort ( cJSON * pSort, CSphQuery & tQuery, bool & bGotWeight, CSphStrin
 		if ( ( !bSortString && !bSortObj ) || !pSortItem->string
 			|| ( bSortString && !pSortItem->valuestring ) )
 		{
-			sError.SetSprintf ( "\"sort\" property 0(\"%s\") should be %s", ( pItem->string ? pItem->string : "" ), ( bSortObj ? "a string" : "an object" ) );
+			sError.SetSprintf ( R"("sort" property 0("%s") should be %s)", ( pItem->string ? pItem->string : "" ), ( bSortObj ? "a string" : "an object" ) );
 			return false;
 		}
 
@@ -2660,7 +2655,7 @@ bool ParseSort ( cJSON * pSort, CSphQuery & tQuery, bool & bGotWeight, CSphStrin
 			CSphString sOrder = pSortItem->valuestring;
 			if ( sOrder!="asc" && sOrder!="desc" )
 			{
-				sError.SetSprintf ( "\"sort\" property \"%s\" order is invalid %s", pSortItem->string, sOrder.cstr() );
+				sError.SetSprintf ( R"("sort" property "%s" order is invalid %s)", pSortItem->string, sOrder.cstr() );
 				return false;
 			}
 
@@ -2680,7 +2675,7 @@ bool ParseSort ( cJSON * pSort, CSphQuery & tQuery, bool & bGotWeight, CSphStrin
 		{
 			if ( !cJSON_IsString ( pAttrItems ) )
 			{
-				sError.SetSprintf ( "\"sort\" property \"%s\" order is invalid", pAttrItems->string );
+				sError.SetSprintf ( R"("sort" property "%s" order is invalid)", pAttrItems->string );
 				return false;
 			}
 
@@ -2693,14 +2688,14 @@ bool ParseSort ( cJSON * pSort, CSphQuery & tQuery, bool & bGotWeight, CSphStrin
 		{
 			if ( pAttrItems && !cJSON_IsString ( pMode ) )
 			{
-				sError.SetSprintf ( "\"mode\" property \"%s\" order is invalid", pAttrItems->string );
+				sError.SetSprintf ( R"("mode" property "%s" order is invalid)", pAttrItems->string );
 				return false;
 			}
 
 			CSphString sMode = pMode->valuestring;
 			if ( sMode!="min" && sMode!="max" )
 			{
-				sError.SetSprintf ( "\"mode\" supported are \"min\" and \"max\", got \"%s\", not supported", sMode.cstr() );
+				sError.SetSprintf ( R"("mode" supported are "min" and "max", got "%s", not supported)", sMode.cstr() );
 				return false;
 			}
 
@@ -2712,12 +2707,12 @@ bool ParseSort ( cJSON * pSort, CSphQuery & tQuery, bool & bGotWeight, CSphStrin
 		{
 			if ( pMode )
 			{
-				sError = "\"mode\" property not supported with \"_geo_distance\"";
+				sError = R"("mode" property not supported with "_geo_distance")";
 				return false;
 			}
 			if ( cJSON_GetObjectItem ( pSortItem, "unit" ) )
 			{
-				sError = "\"unit\" property not supported with \"_geo_distance\"";
+				sError = R"("unit" property not supported with "_geo_distance")";
 				return false;
 			}
 
@@ -2729,25 +2724,25 @@ bool ParseSort ( cJSON * pSort, CSphQuery & tQuery, bool & bGotWeight, CSphStrin
 		cJSON * pUnmapped = cJSON_GetObjectItem ( pSortItem, "unmapped_type" );
 		if ( pUnmapped )
 		{
-			sError = "\"unmapped_type\" property not supported";
+			sError = R"("unmapped_type" property not supported)";
 			return false;
 		}
 		cJSON * pMissing = cJSON_GetObjectItem ( pSortItem, "missing" );
 		if ( pMissing )
 		{
-			sError = "\"missing\" property not supported";
+			sError = R"("missing" property not supported)";
 			return false;
 		}
 		cJSON * pNestedPath = cJSON_GetObjectItem ( pSortItem, "nested_path" );
 		if ( pNestedPath )
 		{
-			sError = "\"nested_path\" property not supported";
+			sError = R"("nested_path" property not supported)";
 			return false;
 		}
 		cJSON * pNestedFilter = cJSON_GetObjectItem ( pSortItem, "nested_filter" );
 		if ( pNestedFilter )
 		{
-			sError = "\"nested_filter\" property not supported";
+			sError = R"("nested_filter" property not supported)";
 			return false;
 		}
 	}
@@ -2836,7 +2831,7 @@ bool ParseLocation ( const char * sName, cJSON * pLoc, LocationField_t * pField,
 		if ( !pLat || !pLon )
 		{
 			if ( !pLat && !pLon )
-				sError = "\"lat\" and \"lon\" properties missed";
+				sError = R"("lat" and "lon" properties missed)";
 			else
 				sError.SetSprintf ( "\"%s\" property missed", ( !pLat ? "lat" : "lon" ) );
 			return false;
@@ -2847,7 +2842,7 @@ bool ParseLocation ( const char * sName, cJSON * pLoc, LocationField_t * pField,
 		if ( !bLatChecked || !bLonChecked )
 		{
 			if ( !bLatChecked && !bLonChecked )
-				sError.SetSprintf ( "\"lat\" and \"lon\" property values should be %s", ( bParseField ? "numeric" : "string" ) );
+				sError.SetSprintf ( R"("lat" and "lon" property values should be %s)", ( bParseField ? "numeric" : "string" ) );
 			else
 				sError.SetSprintf ( "\"%s\" property value should be %s", ( !bLatChecked ? "lat" : "lon" ), ( bParseField ? "numeric" : "string" ) );
 			return false;
@@ -2884,7 +2879,7 @@ bool ParseLocation ( const char * sName, cJSON * pLoc, LocationField_t * pField,
 		if ( !iLatLen || !iLonLen )
 		{
 			if ( !iLatLen && !iLonLen )
-				sError.SetSprintf ( "\"lat\" and \"lon\" values should be %s", ( bParseField ? "numeric" : "string" ) );
+				sError.SetSprintf ( R"("lat" and "lon" values should be %s)", ( bParseField ? "numeric" : "string" ) );
 			else
 				sError.SetSprintf ( "\"%s\" value should be %s", ( !iLatLen ? "lat" : "lon" ), ( bParseField ? "numeric" : "string" ) );
 			return false;
@@ -2918,7 +2913,7 @@ bool ParseLocation ( const char * sName, cJSON * pLoc, LocationField_t * pField,
 	if ( !pLat || !pLon )
 	{
 		if ( !pLat && !pLon )
-			sError = "\"lat\" and \"lon\" properties missed";
+			sError = R"("lat" and "lon" properties missed)";
 		else
 			sError.SetSprintf ( "\"%s\" property missed", !pLat ? "lat" : "lon" );
 		return false;
@@ -2929,9 +2924,9 @@ bool ParseLocation ( const char * sName, cJSON * pLoc, LocationField_t * pField,
 	if ( !bLatChecked || !bLonChecked )
 	{
 		if ( !bLatChecked && !bLonChecked )
-			sError.SetSprintf ( "\"lat\" and \"lon\" property values should be %s", ( bParseField ? "numeric" : "string" ) );
+			sError.SetSprintf ( R"("lat" and "lon" property values should be %s)", ( bParseField ? "numeric" : "string" ) );
 		else
-			sError.SetSprintf ( "\"%s\" property value should be %s", ( !bLatChecked ? "lat" : "lon" ), ( bParseField ? "numeric" : "string" ) );
+			sError.SetSprintf ( R"("%s" property value should be %s)", ( !bLatChecked ? "lat" : "lon" ), ( bParseField ? "numeric" : "string" ) );
 		return false;
 	}
 
@@ -2981,7 +2976,7 @@ bool ParseSelect ( cJSON * pSelect, CSphQuery & tQuery, CSphString & sError )
 
 	if ( !bString && !bArray && !bObj )
 	{
-		sError = "\"_source\" property should be a string or an array or an object";
+		sError = R"("_source" property should be a string or an array or an object)";
 		return false;
 	}
 
@@ -2995,7 +2990,7 @@ bool ParseSelect ( cJSON * pSelect, CSphQuery & tQuery, CSphString & sError )
 	}
 
 	if ( bArray )
-		return ParseStringArray ( pSelect, "\"_source\"", tQuery.m_dIncludeItems, sError );
+		return ParseStringArray ( pSelect, R"("_source")", tQuery.m_dIncludeItems, sError );
 
 	assert ( bObj );
 
@@ -3003,12 +2998,12 @@ bool ParseSelect ( cJSON * pSelect, CSphQuery & tQuery, CSphString & sError )
 	cJSON * pInclude = cJSON_GetObjectItem ( pSelect, "includes" );
 	if ( pInclude && !cJSON_IsArray ( pInclude ) )
 	{
-		sError = "\"_source\" \"includes\" property should be an array";
+		sError = R"("_source" "includes" property should be an array)";
 		return false;
 	}
 	if ( pInclude )
 	{
-		if ( !ParseStringArray ( pInclude, "\"_source\" \"includes\"", tQuery.m_dIncludeItems, sError ) )
+		if ( !ParseStringArray ( pInclude, R"("_source" "includes")", tQuery.m_dIncludeItems, sError ) )
 			return false;
 
 		if ( tQuery.m_dIncludeItems.GetLength()==1 && tQuery.m_dIncludeItems[0]=="*" )
@@ -3019,12 +3014,12 @@ bool ParseSelect ( cJSON * pSelect, CSphQuery & tQuery, CSphString & sError )
 	cJSON * pExclude = cJSON_GetObjectItem ( pSelect, "excludes" );
 	if ( pExclude && !cJSON_IsArray ( pExclude ) )
 	{
-		sError = "\"_source\" \"excludes\" property should be an array";
+		sError = R"("_source" "excludes" property should be an array)";
 		return false;
 	}
 	if ( pExclude )
 	{
-		if ( !ParseStringArray ( pExclude, "\"_source\" \"excludes\"", tQuery.m_dExcludeItems, sError ) )
+		if ( !ParseStringArray ( pExclude, R"("_source" "excludes")", tQuery.m_dExcludeItems, sError ) )
 			return false;
 
 		if ( !tQuery.m_dExcludeItems.GetLength() )
@@ -3043,14 +3038,14 @@ static bool GetString ( const cJSON * pObj, const char * sProp, CSphString & sVa
 	cJSON * pProp = cJSON_GetObjectItem ( pObj, sProp );
 	if ( !pProp )
 	{
-		sError.SetSprintf ( "\"%s\" property should have \"%s\" string", pObj->string, sProp );
+		sError.SetSprintf ( R"("%s" property should have "%s" string)", pObj->string, sProp );
 		return false;
 
 	}
 
 	if ( !cJSON_IsString ( pProp ) )
 	{
-		sError.SetSprintf ( "\"%s\" property should be a string", sProp );
+		sError.SetSprintf ( R"("%s" property should be a string)", sProp );
 		return false;
 	}
 
@@ -3065,7 +3060,7 @@ bool ParseExpr ( cJSON * pExpr, CSphQuery & tQuery, CSphString & sError )
 
 	if ( !cJSON_IsObject ( pExpr ) )
 	{
-		sError = "\"script_fields\" property should be an object";
+		sError = R"("script_fields" property should be an object)";
 		return false;
 	}
 
@@ -3078,24 +3073,24 @@ bool ParseExpr ( cJSON * pExpr, CSphQuery & tQuery, CSphString & sError )
 		cJSON * pAlias = cJSON_GetArrayItem ( pExpr, iExpr );
 		if ( !pAlias )
 		{
-			sError.SetSprintf ( "missed %d \"script_fields\" property item", iExpr );
+			sError.SetSprintf ( R"(missed %d "script_fields" property item)", iExpr );
 			return false;
 		}
 		if ( !cJSON_IsObject ( pAlias ) )
 		{
-			sError.SetSprintf ( "\"script_fields\" property %d should be an object", iExpr );
+			sError.SetSprintf ( R"("script_fields" property %d should be an object)", iExpr );
 			return false;
 		}
 		if ( !pAlias->string || !*pAlias->string )
 		{
-			sError.SetSprintf ( "\"script_fields\" property %d invalid name", iExpr );
+			sError.SetSprintf ( R"("script_fields" property %d invalid name)", iExpr );
 			return false;
 		}
 
 		cJSON * pAliasScript = cJSON_GetObjectItem ( pAlias, "script" );
 		if ( !pAliasScript )
 		{
-			sError.SetSprintf ( "\"script_fields\" property should have \"script\" object" );
+			sError = R"("script_fields" property should have "script" object)";
 			return false;
 		}
 
@@ -3106,22 +3101,22 @@ bool ParseExpr ( cJSON * pExpr, CSphQuery & tQuery, CSphString & sError )
 		// unsupported options
 		if ( cJSON_GetObjectItem ( pAliasScript, "lang" ) )
 		{
-			sError.SetSprintf ( "\"script_fields\" \"lang\" property unsupported, use manticore inline expression" );
+			sError = R"("script_fields" "lang" property unsupported, use manticore inline expression)";
 			return false;
 		}
 		if ( cJSON_GetObjectItem ( pAliasScript, "params" ) )
 		{
-			sError.SetSprintf ( "\"script_fields\" \"params\" property unsupported" );
+			sError = R"("script_fields" "params" property unsupported)";
 			return false;
 		}
 		if ( cJSON_GetObjectItem ( pAliasScript, "stored" ) )
 		{
-			sError.SetSprintf ( "\"script_fields\" \"stored\" property unsupported" );
+			sError = R"("script_fields" "stored" property unsupported)";
 			return false;
 		}
 		if ( cJSON_GetObjectItem ( pAliasScript, "file" ) )
 		{
-			sError.SetSprintf ( "\"script_fields\" \"file\" property unsupported" );
+			sError = R"("script_fields" "file" property unsupported)";
 			return false;
 		}
 

@@ -4601,7 +4601,7 @@ static void SetupSortRemap ( CSphRsetSchema & tSorterSchema, CSphMatchComparator
 #ifndef NDEBUG
 	int iColWasCount = tSorterSchema.GetAttrsCount();
 #endif
-	for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
+	for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; ++i )
 	{
 		if ( !( tState.m_eKeypart[i]==SPH_KEYPART_STRING || tState.m_tSubKeys[i].m_sKey.cstr() ) )
 			continue;

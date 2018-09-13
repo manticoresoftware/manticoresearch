@@ -1994,14 +1994,12 @@ static CSphString LogFilterTreeItem ( int iItem, const CSphVector<FilterTreeItem
 void FormatFiltersQL ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree, int iCompactIN, bool bDeflowered, StringBuilder_c & tBuf )
 {
 	if ( !dFilterTree.GetLength() )
-	{
-		ARRAY_FOREACH ( i, dFilters )
+		for ( const auto& dFilter : dFilters )
 		{
 			if ( bDeflowered )
 				tBuf += " AND";
 			bDeflowered = true;
-
-			FormatFilterQL ( dFilters[i], iCompactIN, tBuf );
+			FormatFilterQL ( dFilter, iCompactIN, tBuf );
 		}
 	} else
 	{

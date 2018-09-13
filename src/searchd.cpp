@@ -2448,14 +2448,14 @@ int sphPoll ( int iSock, int64_t tmTimeout, bool bWrite=false )
 int RecvNBChunk ( int iSock, char * &pBuf, int& iLeftBytes)
 {
 	// try to receive next chunk
-	int iRes = sphSockRecv ( iSock, pBuf, iLeftBytes );
+	auto iRes = sphSockRecv ( iSock, pBuf, iLeftBytes );
 
 	if ( iRes>0 )
 	{
 		pBuf += iRes;
 		iLeftBytes -= iRes;
 	}
-	return iRes;
+	return (int)iRes;
 }
 
 
@@ -2469,16 +2469,6 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr 
 	auto pBuf = (char*) buf;
 	int iErr = 0;
 	int iRes = -1;
-
-	// try to recv very virst chunk. On lucky case we don't need to wait.
-
-//	if ( !iReadTimeout) {
-//		sphSockSetErrno ( ETIMEDOUT );
-//		return -1;
-//	}
-//	iRes = RecvNBChunk ( iSock, pBuf, iLeftBytes );
-//	if ( iRes<0 && sphSockGetErrno ()!=EAGAIN )
-//		return -1;
 
 	while ( iLeftBytes>0 )
 	{
@@ -2961,9 +2951,6 @@ template < typename T > bool InputBuffer_c::GetQwords ( CSphVector<T> & dBuffer,
 NetInputBuffer_c::NetInputBuffer_c ( int iSock )
 	: InputBuffer_c ( m_dMinibufer, sizeof(m_dMinibufer) )
 	, m_iSock ( iSock )
-	, m_bIntr ( false )
-	, m_iMaxibuffer ( 0 )
-	, m_pMaxibuffer ( nullptr )
 {}
 
 
@@ -3908,19 +3895,8 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	tQuery.m_sIndexes = tReq.GetString ();
 	bool bIdrange64 = tReq.GetInt()!=0;
 
-	SphDocID_t uMinID = 0;
-	SphDocID_t uMaxID = DOCID_MAX;
-	if ( bIdrange64 )
-	{
-		uMinID = (SphDocID_t)tReq.GetUint64 ();
-		uMaxID = (SphDocID_t)tReq.GetUint64 ();
-		// FIXME? could report clamp here if I'm id32 and client passed id64 range,
-		// but frequently this won't affect anything at all
-	} else
-	{
-		uMinID = tReq.GetDword ();
-		uMaxID = tReq.GetDword ();
-	}
+	SphDocID_t uMinID = bIdrange64 ? (SphDocID_t)tReq.GetUint64 () : tReq.GetDword ();
+	SphDocID_t uMaxID = bIdrange64 ? (SphDocID_t)tReq.GetUint64 () : tReq.GetDword ();
 
 	if ( uVer<0x108 && uMaxID==0xffffffffUL )
 		uMaxID = 0; // fixup older clients which send 32-bit UINT_MAX by default
@@ -3972,34 +3948,32 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	}
 
 	tQuery.m_dIndexWeights.Resize ( tReq.GetInt() ); // FIXME! add sanity check
-	ARRAY_FOREACH ( i, tQuery.m_dIndexWeights )
+	for ( auto& dIndexWeight : tQuery.m_dIndexWeights )
 	{
-		tQuery.m_dIndexWeights[i].m_sName = tReq.GetString ();
-		tQuery.m_dIndexWeights[i].m_iValue = tReq.GetInt ();
+		dIndexWeight.m_sName = tReq.GetString ();
+		dIndexWeight.m_iValue = tReq.GetInt ();
 	}
 
 	tQuery.m_uMaxQueryMsec = tReq.GetDword ();
 
 	tQuery.m_dFieldWeights.Resize ( tReq.GetInt() ); // FIXME! add sanity check
-	ARRAY_FOREACH ( i, tQuery.m_dFieldWeights )
+	for ( auto & dFieldWeight : tQuery.m_dFieldWeights )
 	{
-		tQuery.m_dFieldWeights[i].m_sName = tReq.GetString ();
-		tQuery.m_dFieldWeights[i].m_iValue = tReq.GetInt ();
+		dFieldWeight.m_sName = tReq.GetString ();
+		dFieldWeight.m_iValue = tReq.GetInt ();
 	}
 
 	tQuery.m_sComment = tReq.GetString ();
 
 	tQuery.m_dOverrides.Resize ( tReq.GetInt() ); // FIXME! add sanity check
-	ARRAY_FOREACH ( i, tQuery.m_dOverrides )
+	for ( CSphAttrOverride &tOverride : tQuery.m_dOverrides )
 	{
-		CSphAttrOverride & tOverride = tQuery.m_dOverrides[i];
 		tOverride.m_sAttr = tReq.GetString ();
 		tOverride.m_eAttrType = (ESphAttr) tReq.GetDword ();
 
 		tOverride.m_dValues.Resize ( tReq.GetInt() ); // FIXME! add sanity check
-		ARRAY_FOREACH ( iVal, tOverride.m_dValues )
+		for ( auto& tEntry : tOverride.m_dValues )
 		{
-			CSphAttrOverride::IdValuePair_t & tEntry = tOverride.m_dValues[iVal];
 			tEntry.m_uDocID = (SphDocID_t) tReq.GetUint64 ();
 
 			if ( tOverride.m_eAttrType==SPH_ATTR_FLOAT )		tEntry.m_fValue = tReq.GetFloat ();
@@ -4108,9 +4082,8 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	if ( uVer>=0x121 )
 	{
 		tQuery.m_dFilterTree.Resize ( tReq.GetInt() );
-		ARRAY_FOREACH ( i, tQuery.m_dFilterTree )
+		for ( FilterTreeItem_t &tItem : tQuery.m_dFilterTree )
 		{
-			FilterTreeItem_t & tItem = tQuery.m_dFilterTree[i];
 			tItem.m_iLeft = tReq.GetInt();
 			tItem.m_iRight = tReq.GetInt();
 			tItem.m_iFilterItem = tReq.GetInt();
@@ -4121,17 +4094,15 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 	if ( uMasterVer>=15 )
 	{
 		tQuery.m_dItems.Resize ( tReq.GetInt() );
-		ARRAY_FOREACH ( i, tQuery.m_dItems )
+		for ( CSphQueryItem &tItem : tQuery.m_dItems )
 		{
-			CSphQueryItem & tItem = tQuery.m_dItems[i];
 			tItem.m_sAlias = tReq.GetString();
 			tItem.m_sExpr = tReq.GetString();
 			tItem.m_eAggrFunc = (ESphAggrFunc)tReq.GetDword();
 		}
 		tQuery.m_dRefItems.Resize ( tReq.GetInt() );
-		ARRAY_FOREACH ( i, tQuery.m_dRefItems )
+		for ( CSphQueryItem &tItem : tQuery.m_dRefItems )
 		{
-			CSphQueryItem & tItem = tQuery.m_dRefItems[i];
 			tItem.m_sAlias = tReq.GetString();
 			tItem.m_sExpr = tReq.GetString();
 			tItem.m_eAggrFunc = (ESphAggrFunc)tReq.GetDword();
@@ -4516,7 +4487,7 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes
 	char sTimeBuf[SPH_TIME_PID_MAX_SIZE];
 	sphFormatCurrentTime ( sTimeBuf, sizeof(sTimeBuf) );
 
-	tBuf += "/""* ";
+	tBuf += R"(/* )";
 	tBuf += sTimeBuf;
 
 	if ( tRes.m_iMultiplier>1 )
@@ -7129,7 +7100,7 @@ bool SearchHandler_c::RunLocalSearchMT ( int iLocal, ISphMatchSorter ** ppSorter
 	// create sorters
 	int iValidSorters = 0;
 	DWORD uFactorFlags = SPH_FACTOR_DISABLE;
-	for ( int i=0; i<iQueries; i++ )
+	for ( int i=0; i<iQueries; ++i )
 	{
 		CSphString & sError = ppResults[i]->m_sError;
 		const CSphQuery & tQuery = m_dQueries[i+m_iStart];
@@ -7286,14 +7257,14 @@ void SearchHandler_c::RunLocalSearches()
 				m_dFailuresSet[iQuery].Submit ( sLocal, sParentIndex, sError.cstr() );
 
 			dSorters[iQuery-m_iStart] = pSorter;
-			iValidSorters++;
+			++iValidSorters;
 		}
 		if ( !iValidSorters )
 			continue;
 
 		// if sorter schemes have dynamic part, its lengths should be the same for queries to be optimized
 		const ISphMatchSorter * pLastMulti = dSorters[0];
-		for ( int i=1; i<dSorters.GetLength() && m_bMultiQueue; i++ )
+		for ( int i=1; i<dSorters.GetLength() && m_bMultiQueue; ++i )
 		{
 			if ( !dSorters[i] )
 				continue;
@@ -7309,7 +7280,7 @@ void SearchHandler_c::RunLocalSearches()
 		}
 
 		// facets, sanity check for json fields (can't be multi-queried yet)
-		for ( int i=1; i<dSorters.GetLength() && m_bFacetQueue; i++ )
+		for ( int i=1; i<dSorters.GetLength() && m_bFacetQueue; ++i )
 		{
 			if ( !dSorters[i] )
 				continue;
@@ -10422,8 +10393,8 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 	SnippetThreadFunc ( &dThreads[0] );
 
 	// wait local jobs to finish
-	for ( int i=1; i<dThreads.GetLength(); ++i )
-		sphThreadJoin ( &dThreads[i].m_tThd );
+	for ( auto & dThread : dThreads )
+		sphThreadJoin ( &dThread.m_tThd );
 
 	// wait remotes to finish also
 	tReporter->Finish ();
@@ -12184,7 +12155,7 @@ public:
 		vsnprintf ( sBuf, sizeof(sBuf), sTemplate, ap );
 		va_end ( ap );
 
-		Error ( NULL, sBuf, iErr );
+		Error ( nullptr, sBuf, iErr );
 	}
 
 	inline void Ok ( int iAffectedRows=0, int iWarns=0, const char * sMessage=NULL, bool bMoreResults=false )
@@ -12364,7 +12335,7 @@ bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, co
 	CSphVector<SqlStmt_t> dStmt;
 	SqlParser_c tParser ( dStmt, eCollation );
 	tParser.m_pBuf = sBuf.cstr();
-	tParser.m_pLastTokenStart = NULL;
+	tParser.m_pLastTokenStart = nullptr;
 	tParser.m_pParseError = &sError;
 	tParser.m_eCollation = eCollation;
 	tParser.m_sErrorHeader = "percolate filters:";
@@ -12492,9 +12463,9 @@ static void PercolateQuery ( const SqlStmt_t & tStmt, bool bReplace, ESphCollati
 	}
 
 	bool bNoSchema = true;
-	const char * sQuery = NULL;
-	const char * sTags = NULL;
-	const char * sFilters = NULL;
+	const char * sQuery = nullptr;
+	const char * sTags = nullptr;
+	const char * sFilters = nullptr;
 	uint64_t uID = 0;
 	StringBuilder_c sSkipColumns;
 
@@ -12715,9 +12686,8 @@ static bool PercolateShowStatus ( const SqlStmt_t & tStmt, SqlRowBuffer_c & tOut
 	const char * sFilterTags = nullptr;
 	const CSphFilterSettings * pUID = nullptr;
 	bool bTagsEq = true;
-	ARRAY_FOREACH ( i, dFilters )
+	for ( const CSphFilterSettings &tFilter : dFilters )
 	{
-		const CSphFilterSettings & tFilter = dFilters[i];
 		if ( tFilter.m_sAttrName=="tags" && tFilter.m_eType==SPH_FILTER_STRING && tFilter.m_dStrings.GetLength() )
 		{
 			sFilterTags = tFilter.m_dStrings[0].cstr();
@@ -12732,11 +12702,11 @@ static bool PercolateShowStatus ( const SqlStmt_t & tStmt, SqlRowBuffer_c & tOut
 	}
 
 	const char * sCountAlias = nullptr;
-	ARRAY_FOREACH ( i, dSelect )
+	for ( const auto & dElem : dSelect )
 	{
-		if ( dSelect[i].m_sExpr.Begins ( "count" ) )
+		if ( dElem.m_sExpr.Begins ( "count" ) )
 		{
-			sCountAlias = dSelect[i].m_sAlias.cstr();
+			sCountAlias = dElem.m_sAlias.cstr();
 			break;
 		}
 	}
@@ -12774,9 +12744,8 @@ static bool PercolateShowStatus ( const SqlStmt_t & tStmt, SqlRowBuffer_c & tOut
 		tOut.HeadColumn ( "Filters" );
 		tOut.HeadEnd();
 
-		ARRAY_FOREACH ( i, dQueries )
+		for ( const PercolateQueryDesc &tItem : dQueries )
 		{
-			const PercolateQueryDesc & tItem = dQueries[i];
 			tOut.PutNumeric<uint64_t> ( UINT64_FMT, tItem.m_uID );
 			tOut.PutString ( tItem.m_sQuery.cstr() );
 			tOut.PutString ( tItem.m_sTags.cstr() );
@@ -12807,17 +12776,10 @@ static bool PercolateShowStatus ( const SqlStmt_t & tStmt, SqlRowBuffer_c & tOut
 
 struct PercolateOptions_t
 {
-	bool m_bGetDocs;
-	bool m_bVerbose;
-	bool m_bJsonDocs;
-	bool m_bGetQuery;
-
-	PercolateOptions_t()
-		: m_bGetDocs ( false )
-		, m_bVerbose ( false )
-		, m_bJsonDocs ( true )
-		, m_bGetQuery ( false )
-	{}
+	bool m_bGetDocs = false;
+	bool m_bVerbose = false;
+	bool m_bJsonDocs = true;
+	bool m_bGetQuery = false;
 };
 
 
@@ -15369,7 +15331,7 @@ static void MVA2Str ( const T * pMVA, int iLengthBytes, const char * szFmt, CSph
 	dStr.Reserve ( (SPH_MAX_NUMERIC_STR+1)*iLengthBytes/sizeof(DWORD) );
 
 	int nValues = iLengthBytes / sizeof(T);
-	for ( int i = 0; i < nValues; i++ )
+	for ( int i = 0; i < nValues; ++i )
 	{
 		int iOldLength = dStr.GetLength();
 		dStr.Resize ( iOldLength+SPH_MAX_NUMERIC_STR+1 );
@@ -15403,7 +15365,7 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 	if ( !tRes.m_iSuccesses )
 	{
 		// at this point, SELECT error logging should have been handled, so pass a NULL stmt to logger
-		dRows.Error ( NULL, tRes.m_sError.cstr() );
+		dRows.Error ( nullptr, tRes.m_sError.cstr() );
 		return;
 	}
 
@@ -16792,11 +16754,11 @@ static void AddQueryStats ( IDataTupleter & tOut, const char * szPrefix, const Q
 
 	StringBuilder_c sBuf;
 	StringBuilder_c sName;
-	for ( int i = 0; i < QUERY_STATS_INTERVAL_TOTAL; i++ )
+	for ( int i = 0; i < QUERY_STATS_INTERVAL_TOTAL; ++i )
 	{
 		sBuf.Clear();
 		sBuf.Appendf ( "{\"queries\":" UINT64_FMT, tStats.m_dStats[i].m_uTotalQueries );
-		for ( int j = 0; j < QUERY_STATS_TYPE_TOTAL; j++ )
+		for ( int j = 0; j < QUERY_STATS_TYPE_TOTAL; ++j )
 		{
 			sBuf += ", ";
 			FormatFn ( sBuf, tStats.m_dStats[i].m_uTotalQueries, tStats.m_dStats[i].m_dData[j], dStatTypeNames[j] );

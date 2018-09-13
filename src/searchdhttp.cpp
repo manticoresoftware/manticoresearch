@@ -865,9 +865,7 @@ protected:
 	{
 		JsonEscapedBuilder tResBuilder;
 		EncodeResultJson ( tRes, tResBuilder );
-		CSphString sResult;
-		sResult.Adopt ( tResBuilder.Leak() );
-		return sResult;
+		return tResBuilder.cstr();
 	}
 };
 
@@ -1699,7 +1697,7 @@ bool HttpHandlerPQ_c::GotDocuments ( PercolateIndex_i * pIndex, const CSphString
 }
 
 
-static void EncodePercolateQueryResult ( bool bReplace, const CSphString & sIndex, uint64_t uID, JsonEscapedBuilder & tOut )
+static void EncodePercolateQueryResult ( bool bReplace, const CSphString & sIndex, uint64_t uID, StringBuilder_c & tOut )
 {
 	tOut += "{";
 
@@ -1754,7 +1752,7 @@ bool HttpHandlerPQ_c::GotQuery ( PercolateIndex_i * pIndex, const CSphString & s
 
 	uint64_t uID = 0;
 	if ( pUID && !pUID->IsEmpty() )
-		uID = strtoull ( pUID->cstr(), NULL, 10 );
+		uID = strtoull ( pUID->cstr(), nullptr, 10 );
 
 	StringBuilder_c sTags;
 	const cJSON * pTagsArray = cJSON_GetObjectItem ( pRoot, "tags" );
@@ -1807,7 +1805,7 @@ bool HttpHandlerPQ_c::GotQuery ( PercolateIndex_i * pIndex, const CSphString & s
 		ReportError ( sError.scstr(), SPH_HTTP_STATUS_500 );
 	} else
 	{
-		JsonEscapedBuilder sRes;
+		StringBuilder_c sRes;
 		EncodePercolateQueryResult ( bReplace, sIndex, uID, sRes );
 		BuildReply ( sRes, SPH_HTTP_STATUS_200 );
 	}

@@ -2288,7 +2288,7 @@ protected:
 	const BYTE *		m_pTokenEnd = nullptr;				///< last token end point
 
 	BYTE				m_sAccum [ 3*SPH_MAX_WORD_LEN+3 ];	///< folded token accumulator
-	BYTE *				m_pAccum;							///< current accumulator position
+	BYTE *				m_pAccum = nullptr;					///< current accumulator position
 	int					m_iAccum = 0;						///< boundary token size
 
 	BYTE				m_sAccumBlend [ 3*SPH_MAX_WORD_LEN+3 ];	///< blend-acc, an accumulator copy for additional blended variants
@@ -8732,7 +8732,7 @@ static void PooledAttrsToPtrAttrs ( ISphMatchSorter ** ppSorters, int nSorters, 
 {
 	assert ( ppSorters );
 
-	for ( int i=0; i<nSorters; i++ )
+	for ( int i=0; i<nSorters; ++i )
 	{
 		ISphMatchSorter * pSorter = ppSorters[i];
 		if ( !pSorter )
@@ -15061,6 +15061,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 		int64_t iStart = bReverse ? m_iDocinfoIndex-1 : 0;
 		int64_t iEnd = bReverse ? -1 : m_iDocinfoIndex;
 		int64_t iStep = bReverse ? -1 : 1;
+		int iDocinfoStep = bReverse ? -( int ) uStride : ( int ) uStride;
 		for ( int64_t iIndexEntry=iStart; iIndexEntry!=iEnd; iIndexEntry+=iStep )
 		{
 			// block-level filtering
@@ -15070,15 +15071,10 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 				continue;
 
 			// row-level filtering
-			const DWORD * pBlockStart = m_tAttr.GetWritePtr() + ( iIndexEntry*uStride*DOCINFO_INDEX_FREQ );
-			const DWORD * pBlockEnd = m_tAttr.GetWritePtr() + ( Min ( ( iIndexEntry+1 )*DOCINFO_INDEX_FREQ, m_iDocinfo )*uStride );
-			if ( bReverse )
-			{
-				pBlockStart = m_tAttr.GetWritePtr() + ( ( Min ( ( iIndexEntry+1 )*DOCINFO_INDEX_FREQ, m_iDocinfo ) - 1 ) * uStride );
-				pBlockEnd = m_tAttr.GetWritePtr() + uStride*( iIndexEntry*DOCINFO_INDEX_FREQ-1 );
-			}
-			int iDocinfoStep = bReverse ? -(int)uStride : (int)uStride;
-
+			auto iA = iIndexEntry * DOCINFO_INDEX_FREQ;
+			auto iB = Min ( ( iIndexEntry + 1 ) * DOCINFO_INDEX_FREQ, m_iDocinfo );
+			const DWORD * pBlockStart = m_tAttr.GetWritePtr() + uStride * ( bReverse ? iB-1 : iA );
+			const DWORD * pBlockEnd = m_tAttr.GetWritePtr() + uStride * ( bReverse ? iA-1 : iB );
 			if ( !tCtx.m_pOverrides && tCtx.m_pFilter && !pQuery->m_iCutoff && !tCtx.m_dCalcFilter.GetLength() && !tCtx.m_dCalcSort.GetLength() && !tmMaxTimer )
 			{
 				// kinda fastpath
@@ -15103,7 +15099,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 				// generic path
 				for ( const DWORD * pDocinfo=pBlockStart; pDocinfo!=pBlockEnd; pDocinfo+=iDocinfoStep )
 				{
-					pResult->m_tStats.m_iFetchedDocs++;
+					++pResult->m_tStats.m_iFetchedDocs;
 					tMatch.m_uDocID = DOCINFO2ID ( pDocinfo );
 					CopyDocinfo ( &tCtx, tMatch, pDocinfo );
 
@@ -15122,7 +15118,7 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 					tCtx.CalcSort ( tMatch );
 
 					bool bNewMatch = false;
-					for ( int iSorter=0; iSorter<iSorters; iSorter++ )
+					for ( int iSorter=0; iSorter<iSorters; ++iSorter )
 						bNewMatch |= ppSorters[iSorter]->Push ( tMatch );
 
 					// stringptr expressions should be duplicated (or taken over) at this point
@@ -17853,18 +17849,6 @@ void sphTransformExtendedQuery ( XQNode_t ** ppNode, const CSphIndexSettings & t
 	if ( bHasBooleanOptimization )
 		sphOptimizeBoolean ( ppNode, pKeywords );
 }
-
-
-struct CmpPSortersByRandom_fn
-{
-	inline bool IsLess ( const ISphMatchSorter * a, const ISphMatchSorter * b ) const
-	{
-		assert ( a );
-		assert ( b );
-		return a->m_bRandomize < b->m_bRandomize;
-	}
-};
-
 
 /// one regular query vs many sorters
 bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult,
@@ -25044,7 +25028,7 @@ bool ParseMorphFields ( const CSphString & sMorphology, const CSphString & sMorp
 	if ( sMissed.Length() )
 		sError.SetSprintf ( "morphology_skip_fields contains out of schema fields: %s", sMissed.cstr() );
 
-	return ( sMissed.Length()==0 );
+	return ( !sMissed.Length() );
 }
 
 CSphSource::CSphSource ( const char * sName )

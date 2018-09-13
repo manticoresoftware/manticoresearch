@@ -2639,9 +2639,7 @@ struct CSphQueryItem
 {
 	CSphString		m_sExpr;		///< expression to compute
 	CSphString		m_sAlias;		///< alias to return
-	ESphAggrFunc	m_eAggrFunc;
-
-	CSphQueryItem() : m_eAggrFunc ( SPH_AGGR_NONE ) {}
+	ESphAggrFunc	m_eAggrFunc { SPH_AGGR_NONE };
 };
 
 /// search query complex filter tree
@@ -3152,6 +3150,16 @@ public:
 
 	/// get a pointer to the worst element, NULL if there is no fixed location
 	virtual const CSphMatch *	GetWorst() const { return NULL; }
+};
+
+struct CmpPSortersByRandom_fn
+{
+	inline static bool IsLess ( const ISphMatchSorter * a, const ISphMatchSorter * b )
+	{
+		assert ( a );
+		assert ( b );
+		return a->m_bRandomize<b->m_bRandomize;
+	}
 };
 
 

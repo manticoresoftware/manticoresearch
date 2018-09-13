@@ -398,7 +398,7 @@ protected:
 	int				m_iLen;
 
 protected:
-	void						SetError ( bool bError ) { m_bError = bError; }
+	void			SetError ( bool bError ) { m_bError = bError; }
 	template < typename T > T	GetT ();
 };
 
@@ -435,11 +435,11 @@ protected:
 	static const int	NET_MINIBUFFER_SIZE = 4096;
 
 	int					m_iSock;
-	bool				m_bIntr;
+	bool				m_bIntr = false;
 
 	BYTE				m_dMinibufer[NET_MINIBUFFER_SIZE];
-	int					m_iMaxibuffer;
-	BYTE *				m_pMaxibuffer;
+	int					m_iMaxibuffer = 0;
+	BYTE *				m_pMaxibuffer = nullptr;
 };
 
 bool IsPortInRange ( int iPort );

@@ -6729,7 +6729,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	// to avoid the checking of a ppSorters's element for NULL on every next step, just filter out all nulls right here
 	CSphVector<ISphMatchSorter*> dSorters;
 	dSorters.Reserve ( iSorters );
-	for ( int i=0; i<iSorters; i++ )
+	for ( int i=0; i<iSorters; ++i )
 		if ( ppSorters[i] )
 			dSorters.Add ( ppSorters[i] );
 
@@ -7392,7 +7392,7 @@ bool RtIndex_t::MultiQueryEx ( int iQueries, const CSphQuery * ppQueries, CSphQu
 {
 	// FIXME! OPTIMIZE! implement common subtree cache here
 	bool bResult = false;
-	for ( int i=0; i<iQueries; i++ )
+	for ( int i=0; i<iQueries; ++i )
 		if ( MultiQuery ( &ppQueries[i], ppResults[i], 1, &ppSorters[i], tArgs ) )
 			bResult = true;
 		else
@@ -12174,12 +12174,12 @@ int PercolateIndex_c::DeleteQueries ( const char * sTags )
 
 bool PercolateIndex_c::MultiQuery ( const CSphQuery *, CSphQueryResult *, int, ISphMatchSorter **, const CSphMultiQueryArgs & ) const
 {
-	return true;
+	return true; // fixme!
 }
 
 bool PercolateIndex_c::MultiQueryEx ( int , const CSphQuery * , CSphQueryResult ** , ISphMatchSorter ** , const CSphMultiQueryArgs & ) const
 {
-	return true;
+	return true; // fixme!
 }
 
 void PercolateIndex_c::PostSetup()

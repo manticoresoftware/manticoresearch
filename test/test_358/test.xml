@@ -41,6 +41,16 @@ index pq_re
 	regexp_filter = (blue|red) => color	
 }
 
+index pq_re_1
+{
+	type = percolate
+	path			= <data_path/>/pq_re_1
+	rt_field = title
+	rt_attr_json	= j
+	
+	regexp_filter = (blue|red) => color	
+}
+
 </config>
 
 <db_create>
@@ -59,6 +69,13 @@ CREATE TABLE `test_table` (
 <sphinxql>CALL PQ ('pq_re', ('test of red', 'color test'), 1 as docs, 0 as docs_json )</sphinxql>
 <sphinxql system="restart-daemon"/>
 <sphinxql>CALL PQ ('pq_re', ('test of red', 'color test'), 1 as docs, 0 as docs_json )</sphinxql>
+
+
+<!--crash on adding full-scan query to index with field filter -->
+<sphinxql>INSERT INTO pq_re_1 (query, filters) VALUES ('', 'j.a=10')</sphinxql>
+<sphinxql>SELECT * FROM pq_re_1</sphinxql>
+<sphinxql system="restart-daemon"/>
+<sphinxql>SELECT * FROM pq_re_1</sphinxql>
 </sphqueries>
 
 </test>

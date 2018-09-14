@@ -11962,7 +11962,7 @@ bool PercolateIndex_c::AddQuery ( const char * sQuery, const char * sTags, const
 	const ISphTokenizer * pTokenizer, CSphDict * pDict, CSphString & sError )
 {
 	CSphVector<BYTE> dFiltered;
-	if ( m_pFieldFilter )
+	if ( m_pFieldFilter && sQuery )
 	{
 		ISphFieldFilterRefPtr_c pFieldFilter { m_pFieldFilter->Clone() };
 		if ( pFieldFilter && pFieldFilter->Apply ( (const BYTE *)sQuery, strlen ( sQuery ), dFiltered, true ) )

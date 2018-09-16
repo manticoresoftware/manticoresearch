@@ -1440,14 +1440,9 @@ int main ( int argc, char ** argv )
 				pIndex = sphCreateIndexRT ( tSchema, sIndex.cstr(), 32*1024*1024, hConf["index"][sIndex]["path"].cstr(), bDictKeywords );
 		} else
 		{
-			const char * sPath = hConf["index"][sIndex]["path"].cstr();
 			StringBuilder_c tPath;
-			if ( bRotate )
-			{
-				tPath.Appendf ( "%s.tmp", sPath );
-				sPath = tPath.cstr();
-			}
-			pIndex = sphCreateIndexPhrase ( sIndex.cstr(), sPath );
+			tPath << hConf["index"][sIndex]["path"] << ( bRotate ? ".tmp" : nullptr );
+			pIndex = sphCreateIndexPhrase ( sIndex.cstr(), tPath.cstr() );
 		}
 
 		if ( !pIndex )

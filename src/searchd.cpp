@@ -1329,7 +1329,7 @@ public:
 		SearchFailure_t &tEntry = m_dLog.Add ();
 		tEntry.m_sParentIndex = sParentIndex;
 		tEntry.m_sIndex = sIndex;
-		tEntry.m_sError.Adopt ( tError.Leak () );
+		tError.MoveTo ( tEntry.m_sError );
 	}
 
 	inline void Submit ( const CSphString & sIndex, const char * sParentIndex, const char * sError )
@@ -1371,20 +1371,19 @@ public:
 		// collapse same messages
 		m_dLog.Uniq ();
 		int iSpanStart = 0;
+		Comma_c sDelimiter (";\n");
 
-		for ( int i=1; i<=m_dLog.GetLength(); i++ )
+		for ( int i=1; i<=m_dLog.GetLength(); ++i )
 		{
 			// keep scanning while error text is the same
 			if ( i!=m_dLog.GetLength() )
 				if ( m_dLog[i].m_sError==m_dLog[i-1].m_sError )
 					continue;
 
-			if ( iSpanStart )
-				sReport += ";\n";
-			sReport += "index ";
+			sReport << sDelimiter << "index ";
 
 			ReportIndexesName ( iSpanStart, i, m_dLog, sReport );
-			sReport += m_dLog[iSpanStart].m_sError.cstr();
+			sReport << m_dLog[iSpanStart].m_sError;
 
 			// done
 			iSpanStart = i;
@@ -2117,23 +2116,20 @@ DWORD sphGetAddress ( const char * sHost, bool bFatal, bool bIP )
 
 	if ( pResult->ai_next )
 	{
-		const char * sSep = "";
-		StringBuilder_c sBuf;
+		StringBuilder_c sBuf ( "; ip=", "ip=" );
 		for ( ; pResult->ai_next; pResult = pResult->ai_next )
 		{
 			char sAddrBuf [ SPH_ADDRESS_SIZE ];
 			auto * pAddr = (struct sockaddr_in *)pResult->ai_addr;
 			DWORD uNextAddr = pAddr->sin_addr.s_addr;
 			sphFormatIP ( sAddrBuf, sizeof(sAddrBuf), uNextAddr );
-			sBuf.Appendf ( "ip=%s%s", sBuf.cstr(), sSep );
-			sSep = "; ";
+			sBuf << sAddrBuf;
 		}
 
 		sphWarning ( "multiple addresses found for '%s', using the first one (%s)", sHost, sBuf.cstr() );
 	}
 
 	freeaddrinfo ( pOrigResult );
-
 	return uAddr;
 }
 
@@ -4006,11 +4002,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 			StringBuilder_c tBuf;
 			char sTimeBuf [ SPH_TIME_PID_MAX_SIZE ];
 			sphFormatCurrentTime ( sTimeBuf, sizeof(sTimeBuf) );
-
-			tBuf += "/""* ";
-			tBuf += sTimeBuf;
-			tBuf.Appendf ( "*""/ %s # error=%s\n", tQuery.m_sSelect.cstr(), sError.cstr() );
-
+			tBuf << "/""* " << sTimeBuf << "*""/ " << tQuery.m_sSelect << " # error=" << sError << "\n";
 			sphSeek ( g_iQueryLogFile, 0, SEEK_END );
 			sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.Length() );
 		}
@@ -4309,15 +4301,16 @@ static void FormatOrderBy ( StringBuilder_c * pBuf, const char * sPrefix, ESphSo
 	UnBackquote_fn tUnquoted ( sSubst );
 	sSubst = tUnquoted.cstr();
 
+	*pBuf << " " << sPrefix << " ";
 	switch ( eSort )
 	{
-	case SPH_SORT_ATTR_DESC:		pBuf->Appendf ( " %s %s DESC", sPrefix, sSubst ); break;
-	case SPH_SORT_ATTR_ASC:			pBuf->Appendf ( " %s %s ASC", sPrefix, sSubst ); break;
-	case SPH_SORT_TIME_SEGMENTS:	pBuf->Appendf ( " %s TIME_SEGMENT(%s)", sPrefix, sSubst ); break;
-	case SPH_SORT_EXTENDED:			pBuf->Appendf ( " %s %s", sPrefix, sSubst ); break;
-	case SPH_SORT_EXPR:				pBuf->Appendf ( " %s BUILTIN_EXPR()", sPrefix ); break;
-	case SPH_SORT_RELEVANCE:		pBuf->Appendf ( " %s weight() desc%s%s", sPrefix, ( sSubst && *sSubst ? ", " : "" ), ( sSubst && *sSubst ? sSubst : "" ) ); break;
-	default:						pBuf->Appendf ( " %s mode-%d", sPrefix, (int)eSort ); break;
+	case SPH_SORT_ATTR_DESC:		*pBuf << sSubst << " DESC"; break;
+	case SPH_SORT_ATTR_ASC:			*pBuf << sSubst << " ASC"; break;
+	case SPH_SORT_TIME_SEGMENTS:	*pBuf << "TIME_SEGMENT(" << sSubst << ")"; break;
+	case SPH_SORT_EXTENDED:			*pBuf << sSubst; break;
+	case SPH_SORT_EXPR:				*pBuf << "BUILTIN_EXPR()"; break;
+	case SPH_SORT_RELEVANCE:		*pBuf << "weight() desc" << ( sSubst && *sSubst ? ", " : nullptr ) << ( sSubst && *sSubst ? sSubst : nullptr ); break;
+	default:						pBuf->Appendf ( "mode-%d", (int)eSort ); break;
 	}
 }
 
@@ -4326,25 +4319,20 @@ static const CSphQuery g_tDefaultQuery;
 static void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuilder & tBuf );
 static void FormatList ( const CSphVector<CSphNamedInt> & dValues, StringBuilder_c & tBuf )
 {
-	ARRAY_FOREACH ( i, dValues )
-		tBuf.Appendf ( "%s%s=%d", i==0 ? "" : ", ", dValues[i].m_sName.cstr(), dValues[i].m_iValue );
+	ScopedComma_c tComma ( tBuf );
+	for ( const auto& dValue : dValues )
+		tBuf.Appendf ( "%s=%d", dValue.m_sName.cstr(), dValue.m_iValue );
 }
 
 static void FormatOption ( const CSphQuery & tQuery, StringBuilder_c & tBuf )
 {
-	int iOpts = 0;
+	ScopedComma_c tOptionComma ( tBuf, ", ", " OPTION ");
 
 	if ( tQuery.m_iMaxMatches!=DEFAULT_MAX_MATCHES )
-	{
-		tBuf.Appendf ( " OPTION max_matches=%d", tQuery.m_iMaxMatches );
-		++iOpts;
-	}
+		tBuf.Appendf ( "max_matches=%d", tQuery.m_iMaxMatches );
 
 	if ( !tQuery.m_sComment.IsEmpty() )
-	{
-		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
 		tBuf.Appendf ( "comment='%s'", tQuery.m_sComment.cstr() ); // FIXME! escape, replace newlines..
-	}
 
 	if ( tQuery.m_eRanker!=SPH_RANK_DEFAULT )
 	{
@@ -4352,94 +4340,65 @@ static void FormatOption ( const CSphQuery & tQuery, StringBuilder_c & tBuf )
 		if ( !sRanker )
 			sRanker = sphGetRankerName ( SPH_RANK_DEFAULT );
 
-		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
 		tBuf.Appendf ( "ranker=%s", sRanker );
 
-		if ( !tQuery.m_sRankerExpr.IsEmpty() )
-			tBuf.Appendf ( "(\'%s\')", tQuery.m_sRankerExpr.scstr() );
+		if ( tQuery.m_sRankerExpr.IsEmpty() )
+			tBuf.Appendf ( "ranker=%s", sRanker );
+		else
+			tBuf.Appendf ( "ranker=%s(\'%s\')", sRanker, tQuery.m_sRankerExpr.scstr() );
 	}
 
 	if ( tQuery.m_iAgentQueryTimeout!=g_iAgentQueryTimeout )
-	{
-		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
 		tBuf.Appendf ( "agent_query_timeout=%d", tQuery.m_iAgentQueryTimeout );
-	}
 
 	if ( tQuery.m_iCutoff!=g_tDefaultQuery.m_iCutoff )
-	{
-		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
 		tBuf.Appendf ( "cutoff=%d", tQuery.m_iCutoff );
-	}
 
 	if ( tQuery.m_dFieldWeights.GetLength() )
 	{
-		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
-		tBuf.Appendf ( "field_weights=(" );
+		tBuf.StartBlock (nullptr,"field_weights=(",")");
 		FormatList ( tQuery.m_dFieldWeights, tBuf );
-		tBuf.Appendf ( ")" );
+		tBuf.FinishBlock ();
 	}
 
 	if ( tQuery.m_bGlobalIDF!=g_tDefaultQuery.m_bGlobalIDF )
-	{
-		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
-		tBuf.Appendf ( "global_idf=1" );
-	}
+		tBuf << "global_idf=1";
 
 	if ( tQuery.m_bPlainIDF || !tQuery.m_bNormalizedTFIDF )
 	{
-		const char * sIDF1 = ( tQuery.m_bPlainIDF ? "plain" : "normalized" );
-		const char * sIDF2 = ( tQuery.m_bNormalizedTFIDF ? "tfidf_normalized" : "tfidf_unnormalized" );
-		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
-		tBuf.Appendf ( "idf='%s,%s'", sIDF1, sIDF2 );
+		tBuf.StartBlock(",","idf='","'");
+		tBuf << ( tQuery.m_bPlainIDF ? "plain" : "normalized" )
+		<< ( tQuery.m_bNormalizedTFIDF ? "tfidf_normalized" : "tfidf_unnormalized" );
+		tBuf.FinishBlock ();
 	}
 
 	if ( tQuery.m_bLocalDF!=g_tDefaultQuery.m_bLocalDF )
-	{
-		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
-		tBuf.Appendf ( "local_df=1" );
-	}
+		tBuf << "local_df=1";
 
 	if ( tQuery.m_dIndexWeights.GetLength() )
 	{
-		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
-		tBuf.Appendf ( "index_weights=(" );
+		tBuf.StartBlock ( nullptr, "index_weights=(", ")" );
 		FormatList ( tQuery.m_dIndexWeights, tBuf );
-		tBuf.Appendf ( ")" );
+		tBuf.FinishBlock ();
 	}
 
 	if ( tQuery.m_uMaxQueryMsec!=g_tDefaultQuery.m_uMaxQueryMsec )
-	{
-		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
 		tBuf.Appendf ( "max_query_time=%u", tQuery.m_uMaxQueryMsec );
-	}
 
 	if ( tQuery.m_iMaxPredictedMsec!=g_tDefaultQuery.m_iMaxPredictedMsec )
-	{
-		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
 		tBuf.Appendf ( "max_predicted_time=%d", tQuery.m_iMaxPredictedMsec );
-	}
 
 	if ( tQuery.m_iRetryCount!=-1 )
-	{
-		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
 		tBuf.Appendf ( "retry_count=%d", tQuery.m_iRetryCount );
-	}
 
 	if ( tQuery.m_iRetryDelay!=-1 )
-	{
-		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
 		tBuf.Appendf ( "retry_delay=%d", tQuery.m_iRetryDelay );
-	}
 
 	if ( tQuery.m_iRandSeed!=g_tDefaultQuery.m_iRandSeed )
-	{
-		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
 		tBuf.Appendf ( "rand_seed=" INT64_FMT, tQuery.m_iRandSeed );
-	}
 
 	if ( !tQuery.m_sQueryTokenFilterLib.IsEmpty() )
 	{
-		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
 		if ( tQuery.m_sQueryTokenFilterOpts.IsEmpty() )
 			tBuf.Appendf ( "token_filter = '%s:%s'", tQuery.m_sQueryTokenFilterLib.cstr(), tQuery.m_sQueryTokenFilterName.cstr() );
 		else
@@ -4447,28 +4406,16 @@ static void FormatOption ( const CSphQuery & tQuery, StringBuilder_c & tBuf )
 	}
 
 	if ( tQuery.m_bIgnoreNonexistent )
-	{
-		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
-		tBuf.Appendf ( "ignore_nonexistent_columns=1" );
-	}
+		tBuf << "ignore_nonexistent_columns=1";
 
 	if ( tQuery.m_bIgnoreNonexistentIndexes )
-	{
-		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
-		tBuf.Appendf ( "ignore_nonexistent_indexes=1" );
-	}
+		tBuf << "ignore_nonexistent_indexes=1";
 
 	if ( tQuery.m_bStrict )
-	{
-		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
-		tBuf.Appendf ( "strict=1" );
-	}
+		tBuf << "strict=1";
 
 	if ( tQuery.m_eExpandKeywords!=QUERY_OPT_DEFAULT )
-	{
-		tBuf.Appendf ( iOpts++ ? ", " : " OPTION " );
 		tBuf.Appendf ( "expand_keywords=%d", ( tQuery.m_eExpandKeywords==QUERY_OPT_ENABLED ? 1 : 0 ) );
-	}
 }
 
 static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes, const CSphVector<int64_t> & dAgentTimes, int iCid )
@@ -4507,55 +4454,50 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes
 	// query stats
 	///////////////
 
+	// next block ecnlosed in /* .. */, space-separated
+	tBuf.StartBlock ( " ", R"( /*)", " */" );
 	if ( !tRes.m_sError.IsEmpty() )
 	{
 		// all we have is an error
-		tBuf.Appendf ( " /""* error=%s */", tRes.m_sError.cstr() );
+		tBuf.Appendf ( "error=%s", tRes.m_sError.cstr() );
 
 	} else if ( g_bIOStats || g_bCpuStats || dAgentTimes.GetLength() || !tRes.m_sWarning.IsEmpty() )
 	{
-		// got some extra data, add a comment
-		tBuf += " /""*";
-
 		// performance counters
 		if ( g_bIOStats || g_bCpuStats )
 		{
 			const CSphIOStats & IOStats = tRes.m_tIOStats;
 
 			if ( g_bIOStats )
-				tBuf.Appendf ( " ios=%d kb=%d.%d ioms=%d.%d",
+				tBuf.Appendf ( "ios=%d kb=%d.%d ioms=%d.%d",
 				IOStats.m_iReadOps, (int)( IOStats.m_iReadBytes/1024 ), (int)( IOStats.m_iReadBytes%1024 )*10/1024,
 				(int)( IOStats.m_iReadTime/1000 ), (int)( IOStats.m_iReadTime%1000 )/100 );
 
 			if ( g_bCpuStats )
-				tBuf.Appendf ( " cpums=%d.%d", (int)( tRes.m_iCpuTime/1000 ), (int)( tRes.m_iCpuTime%1000 )/100 );
+				tBuf.Appendf ( "cpums=%d.%d", (int)( tRes.m_iCpuTime/1000 ), (int)( tRes.m_iCpuTime%1000 )/100 );
 		}
 
 		// per-agent times
 		if ( dAgentTimes.GetLength() )
 		{
-			tBuf += " agents=(";
-			ARRAY_FOREACH ( i, dAgentTimes )
-				tBuf.Appendf ( i ? ", %d.%03d" : "%d.%03d",
-					(int)(dAgentTimes[i]/1000),
-					(int)(dAgentTimes[i]%1000) );
-
-			tBuf += ")";
+			ScopedComma_c dAgents ( tBuf, ", ", " agents=(",")");
+			for ( auto iTime : dAgentTimes )
+				tBuf.Appendf ( "%d.%03d",
+					(int)( iTime/1000),
+					(int)( iTime%1000) );
 		}
 
 		// warning
 		if ( !tRes.m_sWarning.IsEmpty() )
-			tBuf.Appendf ( " warning=%s", tRes.m_sWarning.cstr() );
-
-		// close the comment
-		tBuf += " */";
+			tBuf.Appendf ( "warning=%s", tRes.m_sWarning.cstr() );
 	}
+	tBuf.FinishBlock (); // close the comment
 
 	// line feed
 	tBuf += "\n";
 
 	sphSeek ( g_iQueryLogFile, 0, SEEK_END );
-	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.Length() );
+	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.GetLength() );
 }
 
 
@@ -4645,15 +4587,11 @@ static void LogSphinxqlError ( const char * sStmt, const char * sError, int iCid
 	if ( g_eLogFormat!=LOG_FORMAT_SPHINXQL || g_iQueryLogFile<0 || !sStmt || !sError )
 		return;
 
-	// time, conn id, query, error
-	StringBuilder_c tBuf;
-
 	char sTimeBuf[SPH_TIME_PID_MAX_SIZE];
 	sphFormatCurrentTime ( sTimeBuf, sizeof(sTimeBuf) );
 
-	tBuf += "/""* ";
-	tBuf += sTimeBuf;
-	tBuf.Appendf ( " conn %d *""/ %s # error=%s\n", iCid, sStmt, sError );
+	StringBuilder_c tBuf;
+	tBuf.Appendf ( "/""* %s conn %d *""/ %s # error=%s\n", sTimeBuf, iCid, sStmt, sError );
 
 	sphSeek ( g_iQueryLogFile, 0, SEEK_END );
 	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.Length() );
@@ -4665,24 +4603,23 @@ void ReportIndexesName ( int iSpanStart, int iSpandEnd, const CSphVector<SearchF
 	int iSpanLen = iSpandEnd - iSpanStart;
 
 	// report distributed index in case all failures are from their locals
-	if ( iSpanLen>1 && !dLog[iSpanStart].m_sParentIndex.IsEmpty () && dLog[iSpanStart].m_sParentIndex==dLog[iSpandEnd-1].m_sParentIndex )
+	if ( iSpanLen>1 && !dLog[iSpanStart].m_sParentIndex.IsEmpty ()
+		&& dLog[iSpanStart].m_sParentIndex==dLog[iSpandEnd-1].m_sParentIndex )
 	{
 		auto pDist = GetDistr ( dLog[iSpanStart].m_sParentIndex );
 		if ( pDist && pDist->m_dLocal.GetLength ()==iSpanLen )
 		{
-			sOut.Appendf ( "%s: ", dLog[iSpanStart].m_sParentIndex.cstr () );
+			sOut << dLog[iSpanStart].m_sParentIndex << ": ";
 			return;
 		}
 	}
 
 	// report only first indexes up to 4
 	int iEndReport = ( iSpanLen>4 ) ? iSpanStart+3 : iSpandEnd;
-	for ( int j=iSpanStart; j<iEndReport; j++ )
-	{
-		if ( j!=iSpanStart )
-			sOut += ",";
-		sOut += dLog[j].m_sIndex.cstr ();
-	}
+	sOut.StartBlock (",");
+	for ( int j=iSpanStart; j<iEndReport; ++j )
+		sOut << dLog[j].m_sIndex;
+	sOut.FinishBlock ();
 
 	// add total index count
 	if ( iEndReport!=iSpandEnd )
@@ -6668,13 +6605,13 @@ void SearchHandler_c::RunActionQuery ( const CSphQuery & tQuery, const CSphStrin
 	{
 		StringBuilder_c sFailures;
 		m_dFailuresSet[0].BuildReport ( sFailures );
-		*pErrors = sFailures.cstr();
+		sFailures.MoveTo ( *pErrors );
 
 	} else if ( !tRes.m_sError.IsEmpty() )
 	{
 		StringBuilder_c sFailures;
 		m_dFailuresSet[0].BuildReport ( sFailures );
-		tRes.m_sWarning = sFailures.cstr(); // FIXME!!! commit warnings too
+		sFailures.MoveTo ( tRes.m_sWarning ); // FIXME!!! commit warnings too
 	}
 
 	const CSphIOStats & tIO = tRes.m_tIOStats;
@@ -7697,14 +7634,10 @@ bool SearchHandler_c::RLockInvokedIndexes()
 	}
 
 	// _build the list of non-existent
-	StringBuilder_c sFailed;
+	StringBuilder_c sFailed (", ");
 	for ( const auto & dLocal : m_dLocal )
 		if ( !m_dLocked.AddRLocked ( dLocal.m_sName ) )
-		{
-			if ( !sFailed.IsEmpty () )
-				sFailed += ", ";
-			sFailed += dLocal.m_sName.cstr();
-		}
+			sFailed << dLocal.m_sName;
 
 	// no absent indexes, viola!
 	if ( sFailed.IsEmpty ())
@@ -8092,8 +8025,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		{
 			StringBuilder_c sFailures;
 			m_dFailuresSet[iRes].BuildReport ( sFailures );
-
-			tRes.m_sError = sFailures.cstr();
+			sFailures.MoveTo (tRes.m_sError);
 			continue;
 		}
 
@@ -8133,7 +8065,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		{
 			StringBuilder_c sFailures;
 			m_dFailuresSet[iRes].BuildReport ( sFailures );
-			tRes.m_sWarning = sFailures.cstr();
+			sFailures.MoveTo ( tRes.m_sWarning );
 		}
 
 		////////////
@@ -10175,17 +10107,6 @@ void SnippetThreadFunc ( void * pArg )
 	( ( SnippetThread_t * ) pArg )->BuildSnippets ();
 }
 
-void AppendErrorMessage ( StringBuilder_c & sError, const CSphString &sQueryError )
-{
-	if ( sQueryError.IsEmpty() )
-		return;
-
-	if ( sError.IsEmpty () )
-		sError += sQueryError.cstr ();
-	else
-		sError.Appendf ( "; %s", sQueryError.cstr() );
-}
-
 bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQueries, CSphString & sError, ThdDesc_t & tThd )
 {
 	SnippetsRemote_t dRemoteSnippets ( dQueries );
@@ -10244,21 +10165,20 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 	if ( !tCtx.Setup ( pIndex, q, sError ) ) // same path for single - threaded snippets, bail out here on error
 		return false;
 
-	StringBuilder_c sErrors;
-
 	///////////////////
 	// do highlighting
 	///////////////////
 
 	// boring single threaded loop
+	StringBuilder_c sErrors ( "; " );
 	if ( g_iDistThreads<=1 || dQueries.GetLength()<2 )
 	{
 		for ( auto & dQuery: dQueries )
 		{
 			tCtx.BuildExcerpt ( dQuery, pIndex );
-			AppendErrorMessage ( sErrors, dQuery.m_sError );
+			sErrors << dQuery.m_sError;
 		}
-		sError.Adopt ( sErrors.Leak () );
+		sErrors.MoveTo (sError);
 		return sError.IsEmpty ();
 	}
 
@@ -10337,8 +10257,8 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 		// back in query order
 		if ( !bScattered )
 			dQueries.Sort ( bind ( &ExcerptQueryChained_t::m_iSeq ) );
-		dQueries.Apply ( [&] ( const ExcerptQuery_t &dQuery ) { AppendErrorMessage ( sErrors, dQuery.m_sError ); } );
-		sError.Adopt ( sErrors.Leak () );
+		dQueries.Apply ( [&] ( const ExcerptQuery_t &dQuery ) { sErrors << dQuery.m_sError; } );
+		sErrors.MoveTo ( sError );
 		return sError.IsEmpty ();
 	}
 
@@ -10436,8 +10356,8 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 	if ( !bScattered )
 		dQueries.Sort ( bind ( &ExcerptQueryChained_t::m_iSeq ) );
 
-	dQueries.Apply ( [&] ( const ExcerptQuery_t &dQuery ) { AppendErrorMessage ( sErrors, dQuery.m_sError );});
-	sError.Adopt ( sErrors.Leak () );
+	dQueries.Apply ( [&] ( const ExcerptQuery_t &dQuery ) { sErrors << dQuery.m_sError;});
+	sErrors.MoveTo ( sError );
 	return sError.IsEmpty ();
 }
 
@@ -12328,8 +12248,7 @@ bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, co
 		return true;
 
 	StringBuilder_c sBuf;
-	sBuf += "sysfilters ";
-	sBuf += sFilters;
+	sBuf << "sysfilters " << sFilters;
 	int iLen = sBuf.Length();
 
 	CSphVector<SqlStmt_t> dStmt;
@@ -12467,7 +12386,7 @@ static void PercolateQuery ( const SqlStmt_t & tStmt, bool bReplace, ESphCollati
 	const char * sTags = nullptr;
 	const char * sFilters = nullptr;
 	uint64_t uID = 0;
-	StringBuilder_c sSkipColumns;
+	StringBuilder_c sSkipColumns (", ");
 
 	// got schema, get values
 	ARRAY_FOREACH ( i, tStmt.m_dInsertSchema )
@@ -12495,9 +12414,7 @@ static void PercolateQuery ( const SqlStmt_t & tStmt, bool bReplace, ESphCollati
 			bNoSchema = false;
 			iExpected = TOK_CONST_INT;
 		} else
-		{
-			sSkipColumns.Appendf ( "%s%s", sSkipColumns.Length() ? ", "  : "", sCol.cstr() );
-		}
+			sSkipColumns << sCol;
 
 		if ( iExpected>=0 && iExpected!=tStmt.m_dInsertValues[i].m_iType )
 		{
@@ -12607,15 +12524,14 @@ static void SendPercolateReply ( const PercolateMatchResult_t & tRes, const CSph
 	CSphVector<int64_t> dTmpDocs;
 	int iDocOff = 0;
 	StringBuilder_c sDocs;
-	ARRAY_FOREACH ( i, tRes.m_dQueryDesc )
+	for ( const auto& tDesc : tRes.m_dQueryDesc )
 	{
-		tOut.PutNumeric<uint64_t> ( UINT64_FMT, tRes.m_dQueryDesc[i].m_uID );
+		tOut.PutNumeric<uint64_t> ( UINT64_FMT, tDesc.m_uID );
 		if ( bDumpDocs )
 		{
-			sDocs.Clear();
+			sDocs.StartBlock(",");
 			// document count + document id(s)
 			int iCount = (int)( tRes.m_dDocs[iDocOff] );
-			const char * sSep = "";
 			if ( dDocids.GetLength() ) // need de-duplicate docs
 			{
 				dTmpDocs.Resize ( iCount );
@@ -12625,18 +12541,14 @@ static void SendPercolateReply ( const PercolateMatchResult_t & tRes, const CSph
 					dTmpDocs[iDoc] = dDocids[iRow];
 				}
 				dTmpDocs.Uniq();
-				ARRAY_FOREACH ( i, dTmpDocs )
-				{
-					sDocs.Appendf ( "%s" INT64_FMT, sSep, dTmpDocs[i] );
-					sSep = ",";
-				}
+				for ( auto dTmpDoc : dTmpDocs )
+					sDocs.Appendf ( INT64_FMT, dTmpDoc );
 			} else
 			{
-				for ( int iDoc = 0; iDoc<iCount; iDoc++ )
+				for ( int iDoc = 0; iDoc<iCount; ++iDoc )
 				{
 					int iRow = tRes.m_dDocs[iDocOff + 1 + iDoc];
-					sDocs.Appendf ( "%s%d", sSep, iRow );
-					sSep = ",";
+					sDocs.Appendf ( "%d", iRow );
 				}
 			}
 			iDocOff += iCount + 1;
@@ -12648,12 +12560,12 @@ static void SendPercolateReply ( const PercolateMatchResult_t & tRes, const CSph
 			// send string data
 			if ( iLen )
 				memcpy ( pOutStr, sDocs.cstr(), iLen );
+			sDocs.Clear();
 
 			tOut.IncPtr ( pOutStr - tOut.Get() + iLen );
 		}
 		if ( bQuery )
 		{
-			const PercolateQueryDesc & tDesc = tRes.m_dQueryDesc[i];
 			tOut.PutString ( tDesc.m_sQuery.cstr() );
 			tOut.PutString ( tDesc.m_sTags.cstr() );
 			tOut.PutString ( tDesc.m_sFilters.cstr() );
@@ -12682,7 +12594,7 @@ static bool PercolateShowStatus ( const SqlStmt_t & tStmt, SqlRowBuffer_c & tOut
 	
 	tMeta = CSphQueryResultMeta();
 
-	StringBuilder_c tMissedFilter;
+	StringBuilder_c tMissedFilter (", ");
 	const char * sFilterTags = nullptr;
 	const CSphFilterSettings * pUID = nullptr;
 	bool bTagsEq = true;
@@ -12693,12 +12605,9 @@ static bool PercolateShowStatus ( const SqlStmt_t & tStmt, SqlRowBuffer_c & tOut
 			sFilterTags = tFilter.m_dStrings[0].cstr();
 			bTagsEq = !tFilter.m_bExclude;
 		} else if ( tFilter.m_sAttrName=="uid" && ( tFilter.m_eType==SPH_FILTER_VALUES || tFilter.m_eType==SPH_FILTER_RANGE ) )
-		{
 			pUID = &tFilter;
-		} else
-		{
-			tMissedFilter.Appendf ( "%s%s", tMissedFilter.Length() ? ", " : "", tFilter.m_sAttrName.cstr() );
-		}
+		else
+			tMissedFilter << tFilter.m_sAttrName;
 	}
 
 	const char * sCountAlias = nullptr;
@@ -14065,8 +13974,8 @@ void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphStr
 
 		StringBuilder_c sErrorBuf;
 		tFailureLog.BuildReport ( sErrorBuf );
-		sphWarning ( "%s", sErrorBuf.cstr() );
-		sWarning = sErrorBuf.cstr();
+		sErrorBuf.MoveTo ( sWarning );
+		sphWarning ( "%s", sWarning.cstr() );
 	}
 
 	tOut.Eof ( false, iWarnings );
@@ -14294,8 +14203,6 @@ void HandleMysqlCallSuggest ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, bool bQu
 	}
 
 	// data
-	StringBuilder_c sBuf;
-
 	if ( tArgs.m_bResultOneline )
 	{
 		// let's resort by alphabet to better compare result sets
@@ -14308,9 +14215,9 @@ void HandleMysqlCallSuggest ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, bool bQu
 		tOut.HeadColumn ( "value" );
 		tOut.HeadEnd ();
 
-		sBuf.Clear();
-		ARRAY_FOREACH ( i, tRes.m_dMatched )
-			sBuf.Appendf ( "%s%s", ( i==0 ? "" : "," ), tRes.m_dBuf.Begin() + tRes.m_dMatched[i].m_iNameOff );
+		StringBuilder_c sBuf ( "," );
+		for ( auto& dMatched : tRes.m_dMatched )
+			sBuf << (const char*) tRes.m_dBuf.Begin() + dMatched.m_iNameOff;
 		tOut.PutString ( "suggests" );
 		tOut.PutString ( sBuf.cstr() );
 		tOut.Commit();
@@ -14318,15 +14225,17 @@ void HandleMysqlCallSuggest ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, bool bQu
 		if ( tArgs.m_bResultStats )
 		{
 			sBuf.Clear ();
-			ARRAY_FOREACH ( i, tRes.m_dMatched )
-				sBuf.Appendf ( "%s%d", ( i==0 ? "" : "," ), tRes.m_dMatched[i].m_iDistance );
+			sBuf.StartBlock ( "," );
+			for ( auto &dMatched : tRes.m_dMatched )
+				sBuf.Appendf ( "%d", dMatched.m_iDistance );
 			tOut.PutString ( "distance" );
 			tOut.PutString ( sBuf.cstr () );
 			tOut.Commit ();
 
 			sBuf.Clear ();
-			ARRAY_FOREACH ( i, tRes.m_dMatched )
-				sBuf.Appendf ( "%s%d", ( i==0 ? "" : "," ), tRes.m_dMatched[i].m_iDocs );
+			sBuf.StartBlock ( "," );
+			for ( auto &dMatched : tRes.m_dMatched )
+				sBuf.Appendf ( "%d", dMatched.m_iDocs );
 			tOut.PutString ( "docs" );
 			tOut.PutString ( sBuf.cstr () );
 			tOut.Commit ();
@@ -14343,7 +14252,6 @@ void HandleMysqlCallSuggest ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, bool bQu
 		}
 		tOut.HeadEnd ();
 
-		sBuf.Clear();
 		auto * szResult = (const char *)( tRes.m_dBuf.Begin() );
 		ARRAY_FOREACH ( i, tRes.m_dMatched )
 		{
@@ -16766,7 +16674,7 @@ static void AddQueryStats ( IDataTupleter & tOut, const char * szPrefix, const Q
 		sBuf += "}";
 
 		sName.Clear();
-		sName.Appendf ( "%s_%s", szPrefix, dStatIntervalNames[i] );
+		sName << szPrefix << "_" << dStatIntervalNames[i];
 
 		tOut.DataTuplet ( sName.cstr(), sBuf.cstr() );
 	}
@@ -16781,7 +16689,7 @@ static void AddQueryTimeStatsToOutput ( SqlRowBuffer_c & tOut, const char * szPr
 			if ( uQueries )
 				sBuf.Appendf ( "\"%s_sec\":%d.%03d", sType, DWORD ( uStat/1000 ), DWORD ( uStat%1000 ) );
 			else
-				sBuf.Appendf ( "\"%s\":\"-\"", sType );
+				sBuf << "\"" << sType << R"(":"-")";
 		} );
 }
 
@@ -16791,7 +16699,7 @@ static void AddFoundRowsStatsToOutput ( SqlRowBuffer_c & tOut, const char * szPr
 	AddQueryStats ( tOut, szPrefix, tRowsFoundStats,
 		[]( StringBuilder_c & sBuf, uint64_t uQueries, uint64_t uStat, const char * sType )
 		{
-			sBuf.Appendf ( "\"%s\":", sType );
+			sBuf << "\"" << sType << "\":";
 			if ( uQueries )
 				sBuf.Appendf ( UINT64_FMT, uStat );
 			else
@@ -16955,7 +16863,7 @@ void HandleMysqlShowIndexStatus ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt
 void DumpKey ( StringBuilder_c & tBuf, const char * sKey, const char * sVal, bool bCond )
 {
 	if ( bCond )
-		tBuf.Appendf ( "%s = %s\n", sKey, sVal );
+		tBuf << sKey << " = " << sVal << "\n";
 }
 
 
@@ -17014,8 +16922,8 @@ void DumpIndexSettings ( StringBuilder_c & tBuf, CSphIndex * pIndex )
 	{
 		const CSphDictSettings & tDictSettings = pIndex->GetDictionary()->GetSettings();
 		StringBuilder_c tWordforms;
-		ARRAY_FOREACH ( i, tDictSettings.m_dWordforms )
-			tWordforms.Appendf ( " %s", tDictSettings.m_dWordforms[i].cstr () );
+		for ( const auto& dWordform : tDictSettings.m_dWordforms )
+			tWordforms << " " << dWordform;
 		DumpKey ( tBuf, "dict",				"keywords",								tDictSettings.m_bWordDict );
 		DumpKey ( tBuf, "morphology",		tDictSettings.m_sMorphology.cstr(),		!tDictSettings.m_sMorphology.IsEmpty() );
 		DumpKey ( tBuf, "stopwords",		tDictSettings.m_sStopwords.cstr (),		!tDictSettings.m_sStopwords.IsEmpty() );

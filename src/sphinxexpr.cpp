@@ -411,8 +411,9 @@ struct Expr_GetZonespanlist_c : public Expr_StrNoLocator_c
 		int iEnd = iStart + dSpans [ tMatch.m_iTag ]; // [start,end) now covers all data indexes
 		for ( int i=iStart; i<iEnd; i+=2 )
 			m_sBuilder.Appendf ( " %d:%d", 1+dSpans[i], 1+dSpans[i+1] ); // convert our 0-based span numbers to human 1-based ones
-		*ppStr = (const BYTE *) CSphString ( m_sBuilder.cstr() ).Leak();
-		return m_sBuilder.Length();
+		auto iRes = m_sBuilder.Length ();
+		*ppStr = m_sBuilder.Leak();
+		return iRes;
 	}
 
 	void Command ( ESphExprCommand eCmd, void * pArg ) final
@@ -1002,8 +1003,9 @@ public:
 			return 0;
 		}
 
-		*ppStr = (const BYTE *) CSphString ( m_sBuilder.cstr() ).Leak();
-		return m_sBuilder.Length();
+		auto iRes = m_sBuilder.Length ();
+		*ppStr = m_sBuilder.Leak();
+		return iRes;
 	}
 
 	bool IsDataPtrAttr() const final

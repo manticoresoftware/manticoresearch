@@ -505,12 +505,7 @@ CSphString MultiAgentDesc_c::GetKey ( const CSphVector<AgentDesc_t *> &dTemplate
 {
 	StringBuilder_c sKey;
 	for ( const auto* dHost : dTemplateHosts )
-	{
-		sKey+=dHost->GetMyUrl ().cstr();
-		sKey+=":";
-		sKey+=dHost->m_sIndexes.cstr();
-		sKey+="|";
-	}
+		sKey << dHost->GetMyUrl () << ":" << dHost->m_sIndexes << "|";
 	sKey.Appendf ("[%d,%d,%d,%d,%d]",
 		tOpt.m_bBlackhole?1:0,
 		tOpt.m_bPersistent?1:0,

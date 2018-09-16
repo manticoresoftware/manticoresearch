@@ -1915,12 +1915,17 @@ void sphSetLogger ( SphLogger_fn fnLog )
 //////////////////////////////////////////////////////////////////////////
 // CRASH REPORTING
 //////////////////////////////////////////////////////////////////////////
+inline static void Grow (char*, int) {};
+inline static void Grow ( StringBuilder_c &tBuilder, int iInc ) { tBuilder.GrowEnough ( iInc ); }
 
-template <typename Num>
-static void NtoA ( char** ppOutput, Num uVal, int iBase=10, int iWidth=0, int iPrec=0, char cFill=' ' )
+inline static char* tail (char* p) { return p; }
+inline static char* tail ( StringBuilder_c &tBuilder ) { return tBuilder.end(); }
+
+template <typename Num, typename PCHAR>
+static void NtoA_T ( PCHAR* ppOutput, Num uVal, int iBase=10, int iWidth=0, int iPrec=0, char cFill=' ' )
 {
 	assert ( ppOutput );
-	assert ( *ppOutput );
+	assert ( tail ( *ppOutput ) );
 	assert ( iWidth>=0 );
 	assert ( iPrec>=0 );
 	assert ( iBase>0 && iBase<=16);
@@ -1930,13 +1935,15 @@ static void NtoA ( char** ppOutput, Num uVal, int iBase=10, int iWidth=0, int iP
 	// since digit[x%10] for both x==2 and x==-2 is '2'.
 	const char * cDigits = cAllDigits+sizeof(cAllDigits)/2-1;
 	const char cZero = '0';
-	char *&pOutput = *ppOutput;
+	auto &pOutput = *ppOutput;
 
 	if ( !uVal )
 	{
 		if ( !iPrec && !iWidth )
-			*pOutput++ = cZero;
-		else
+		{
+			*tail ( pOutput ) = cZero;
+			++pOutput;
+		} else
 		{
 			if ( !iPrec )
 				++iPrec;
@@ -1950,10 +1957,19 @@ static void NtoA ( char** ppOutput, Num uVal, int iBase=10, int iWidth=0, int iP
 				iWidth -= iPrec;
 			}
 
-			while ( iWidth-->0 )
-				*pOutput++ = cFill;
-			while ( iPrec-->0 )
-				*pOutput++ = cZero;
+			if ( iWidth>=0 )
+			{
+				Grow ( pOutput, iWidth );
+				memset ( tail ( pOutput ), cFill, iWidth );
+				pOutput += iWidth;
+			}
+
+			if ( iPrec>=0 )
+			{
+				Grow ( pOutput, iPrec );
+				memset ( tail ( pOutput ), cZero, iPrec );
+				pOutput += iPrec;
+			}
 		}
 		return;
 	}
@@ -1985,24 +2001,65 @@ static void NtoA ( char** ppOutput, Num uVal, int iBase=10, int iWidth=0, int iP
 
 	if ( uNegative && cFill==cZero )
 	{
-		*pOutput++ = '-';
+		*tail ( pOutput ) = '-';
+		++pOutput;
 		uNegative=0;
 	}
 
-	while ( iWidth-->0 )
-		*pOutput++ = cFill;
+	if ( iWidth>=0 )
+	{
+		Grow ( pOutput, iWidth );
+		memset ( tail ( pOutput ), cFill, iWidth );
+		pOutput += iWidth;
+	}
 
 	if ( uNegative )
-		*pOutput++ = '-';
+	{
+		*tail ( pOutput ) = '-';
+		++pOutput;
+	}
 
 	if ( iPrec )
 		iPrec -= uLen;
 
-	while ( iPrec-->0 )
-		*pOutput++ = cZero;
+	if ( iPrec>=0 )
+	{
+		Grow ( pOutput, iPrec );
+		memset ( tail ( pOutput ), cZero, iPrec );
+		pOutput += iPrec;
+	}
 
-	memcpy ( pOutput, pRes+1, uLen );
+	Grow ( pOutput, uLen );
+	memcpy ( tail ( pOutput ), pRes+1, uLen );
 	pOutput+= uLen;
+}
+
+static const int nDividers = 10;
+static const int Dividers[nDividers] = { 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000 };
+
+template < typename Num, typename PCHAR >
+void IFtoA_T ( PCHAR * pOutput, Num nVal, int iPrec )
+{
+	assert ( iPrec<nDividers );
+	auto &pBegin = *pOutput;
+	if ( nVal<0 )
+	{
+		*tail ( pBegin ) = '-';
+		++pBegin;
+		nVal = -nVal;
+	}
+	auto iInt = nVal / Dividers[iPrec];
+	auto iFrac = nVal % Dividers[iPrec];
+	::NtoA_T ( &pBegin, iInt );
+	*tail ( pBegin ) = '.';
+	++pBegin;
+	::NtoA_T ( &pBegin, iFrac, 10, 0, iPrec, '0' );
+}
+
+template <typename Num>
+inline static void NtoA ( char** ppOutput, Num uVal, int iBase = 10, int iWidth = 0, int iPrec = 0, char cFill = ' ' )
+{
+	NtoA_T ( ppOutput, uVal, iBase, iWidth, iPrec, cFill);
 }
 
 namespace sph {
@@ -2036,77 +2093,71 @@ namespace sph {
 
 #undef DECLARE_NUMTOA
 
-	static const int nDividers = 10;
-	static const int Dividers[nDividers] = {1,10,100,1000,10000,100000,1000000,10000000,100000000,1000000000};
-
 	int IFtoA ( char * pOutput, int nVal, int iPrec )
 	{
-		assert ( iPrec<nDividers );
 		auto pBegin = pOutput;
-		if ( nVal<0 )
-		{
-			*pBegin++ = '-';
-			nVal = -nVal;
-		}
-		auto iInt = nVal / Dividers[iPrec];
-		auto iFrac = nVal % Dividers[iPrec];
-		::NtoA ( &pBegin, iInt );
-		*pBegin++ = '.';
-		::NtoA ( &pBegin, iFrac, 10, 0, iPrec, '0' );
+		IFtoA_T ( &pBegin, nVal, iPrec );
 		return int ( pBegin - pOutput );
 	}
 
 	int IFtoA ( char * pOutput, int64_t nVal, int iPrec )
 	{
-		assert ( iPrec<nDividers );
 		auto pBegin = pOutput;
-		if ( nVal<0 )
-		{
-			*pBegin++ = '-';
-			nVal = -nVal;
-		}
-		auto iInt = nVal / Dividers[iPrec];
-		auto iFrac = nVal % Dividers[iPrec];
-		::NtoA ( &pBegin, iInt );
-		*pBegin++ = '.';
-		::NtoA ( &pBegin, iFrac, 10, 0, iPrec, '0' );
+		IFtoA_T ( &pBegin, nVal, iPrec );
 		return int ( pBegin - pOutput );
 	}
 
-int vSprintf ( char * pOutput, const char * sFmt, va_list ap )
+template <typename PCHAR>
+void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 {
 	enum eStates { SNORMAL, SPERCENT, SHAVEFILL, SINWIDTH, SINPREC };
 	eStates state = SNORMAL;
 	size_t iPrec = 0;
 	size_t iWidth = 0;
 	char cFill = ' ';
-	const char * pBegin = pOutput;
 	bool bHeadingSpace = true;
+	auto &pOutput = *_pOutput;
 
 	char c;
 	while ( ( c = *sFmt++ )!=0 )
 	{
-		// handle percent
-		if ( c=='%' )
-		{
-			if ( state==SNORMAL )
-			{
-				state = SPERCENT;
-				iPrec = 0;
-				iWidth = 0;
-				cFill = ' ';
-			} else
-			{
-				state = SNORMAL;
-				*pOutput++ = c;
-			}
-			continue;
-		}
-
 		// handle regular chars
 		if ( state==SNORMAL )
 		{
-			*pOutput++ = c;
+			auto sPercent = strchr (sFmt-1, '%');
+			if ( !sPercent ) // no formatters, only plain chars
+			{
+				auto uLen = strlen (sFmt-1);
+				Grow ( pOutput, uLen );
+				memcpy ( tail ( pOutput ), sFmt-1, uLen );
+				pOutput += uLen;
+				sFmt+=uLen-1;
+				continue;
+			}
+
+			auto uLen = sPercent - sFmt + 1;
+			if ( uLen )
+			{
+				Grow ( pOutput, uLen );
+				memcpy ( tail ( pOutput ), sFmt - 1, uLen );
+				pOutput += uLen;
+				sFmt+=uLen;
+			}
+
+			// handle percent
+			state = SPERCENT;
+			iPrec = 0;
+			iWidth = 0;
+			cFill = ' ';
+			continue;
+		}
+
+		// handle percent
+		if ( c=='%' && state!=SNORMAL )
+		{
+			state = SNORMAL;
+			*tail ( pOutput ) = c;
+			++pOutput;
 			continue;
 		}
 
@@ -2161,18 +2212,20 @@ int vSprintf ( char * pOutput, const char * sFmt, va_list ap )
 				if ( iWidth )
 					iWidth-=iValue;
 
+				Grow ( pOutput, iWidth );
 				if ( iWidth && bHeadingSpace )
 				{
-					memset ( pOutput, ' ', iWidth );
+					memset ( tail ( pOutput ), ' ', iWidth );
 					pOutput += iWidth;
 				}
 
-				memmove ( pOutput, pValue, iValue );
+				Grow ( pOutput, iValue );
+				memcpy ( tail ( pOutput ), pValue, iValue );
 				pOutput += iValue;
 
 				if ( iWidth && !bHeadingSpace )
 				{
-					memset ( pOutput, ' ', iWidth );
+					memset ( tail ( pOutput ), ' ', iWidth );
 					pOutput += iWidth;
 				}
 
@@ -2184,7 +2237,7 @@ int vSprintf ( char * pOutput, const char * sFmt, va_list ap )
 			{
 				void * pValue = va_arg ( ap, void * );
 				auto uValue = uint64_t ( pValue );
-				::NtoA ( &pOutput, uValue, 16, iWidth, iPrec, cFill );
+				::NtoA_T ( &pOutput, uValue, 16, iWidth, iPrec, cFill );
 				state = SNORMAL;
 				break;
 			}
@@ -2193,14 +2246,14 @@ int vSprintf ( char * pOutput, const char * sFmt, va_list ap )
 		case 'u': // decimal unsigned
 			{
 				DWORD uValue = va_arg ( ap, DWORD );
-				::NtoA ( &pOutput, uValue, ( c=='x' ) ? 16 : 10, iWidth, iPrec, cFill );
+				::NtoA_T ( &pOutput, uValue, ( c=='x' ) ? 16 : 10, iWidth, iPrec, cFill );
 				state = SNORMAL;
 				break;
 			}
 		case 'd': // decimal integer
 			{
 				int iValue = va_arg ( ap, int );
-				::NtoA ( &pOutput, iValue, 10, iWidth, iPrec, cFill );
+				::NtoA_T ( &pOutput, iValue, 10, iWidth, iPrec, cFill );
 				state = SNORMAL;
 				break;
 			}
@@ -2215,7 +2268,7 @@ int vSprintf ( char * pOutput, const char * sFmt, va_list ap )
 		case 'l': // decimal int64
 			{
 				int64_t iValue = va_arg ( ap, int64_t );
-				::NtoA ( &pOutput, iValue, 10, iWidth, iPrec, cFill );
+				::NtoA_T ( &pOutput, iValue, 10, iWidth, iPrec, cFill );
 				state = SNORMAL;
 				break;
 			}
@@ -2223,7 +2276,7 @@ int vSprintf ( char * pOutput, const char * sFmt, va_list ap )
 		case 'U': // decimal uint64
 			{
 				uint64_t iValue = va_arg ( ap, uint64_t );
-				::NtoA ( &pOutput, iValue, 10, iWidth, iPrec, cFill );
+				::NtoA_T ( &pOutput, iValue, 10, iWidth, iPrec, cFill );
 				state = SNORMAL;
 				break;
 			}
@@ -2231,7 +2284,7 @@ int vSprintf ( char * pOutput, const char * sFmt, va_list ap )
 		case 'D': // fixed-point signed 64-bit
 			{
 				int64_t iValue = va_arg ( ap, int64_t );
-				pOutput += IFtoA ( pOutput, iValue, iPrec );
+				::IFtoA_T ( &pOutput, iValue, iPrec );
 				state = SNORMAL;
 				break;
 			}
@@ -2239,7 +2292,7 @@ int vSprintf ( char * pOutput, const char * sFmt, va_list ap )
 		case 'F': // fixed-point signed 32-bit
 			{
 				int iValue = va_arg ( ap, int );
-				pOutput += IFtoA ( pOutput, iValue, iPrec );
+				::IFtoA_T ( &pOutput, iValue, iPrec );
 				state = SNORMAL;
 				break;
 			}
@@ -2255,37 +2308,59 @@ int vSprintf ( char * pOutput, const char * sFmt, va_list ap )
 				memcpy ( sFormat, pF, sFmt-pF );
 
 				// invoke standard sprintf
-				pOutput += sprintf ( pOutput, sFormat, fValue );
+				Grow ( pOutput, Max ( sFmt - pF, 32 ) ); // ensure 32 is enough to take any flow value.
+				pOutput += sprintf ( tail ( pOutput ), sFormat, fValue );
 				state = SNORMAL;
 				break;
 			}
 
 		default:
 			state = SNORMAL;
-			*pOutput++ = c;
+			*tail ( pOutput ) = c;
+			++pOutput;
 		}
 	}
 
 	// final zero
-	*pOutput++ = c;
-	return int ( pOutput - pBegin );
+	*tail ( pOutput ) = c;
 }
 
-int Sprintf ( char * pOutput, const char * sFmt, ... )
-{
-	va_list ap;
-	va_start ( ap, sFmt );
-	int iLen = sph::vSprintf ( pOutput, sFmt, ap );
-	va_end ( ap );
-	return iLen;
-}
+	int vSprintf ( char * pOutput, const char * sFmt, va_list ap )
+	{
+		auto pBegin = pOutput;
+		sph::vSprintf_T ( &pOutput, sFmt, ap );
+		return int ( pOutput - pBegin );
+	}
+
+	int Sprintf ( char * pOutput, const char * sFmt, ... )
+	{
+		auto pBegin = pOutput;
+		va_list ap;
+		va_start ( ap, sFmt );
+		sph::vSprintf_T ( &pOutput, sFmt, ap );
+		va_end ( ap );
+		return int ( pOutput - pBegin );
+	}
+
+	void vSprintf ( StringBuilder_c &dOutput, const char * sFmt, va_list ap )
+	{
+		sph::vSprintf_T ( &dOutput, sFmt, ap );
+	}
+
+	void Sprintf ( StringBuilder_c& dOutput, const char * sFmt, ... )
+	{
+		va_list ap;
+		va_start ( ap, sFmt );
+		vSprintf ( dOutput, sFmt, ap );
+		va_end ( ap );
+	}
 
 } // namespace sph
 
 static int sphVSprintf ( char * pOutput, const char * sFmt, va_list ap )
 {
 	auto iRes = sph::vSprintf (pOutput,sFmt,ap);
-	pOutput[iRes-1]='\n'; // final zero to EOL
+	pOutput[iRes++]='\n'; // final zero to EOL
 	return iRes;
 }
 

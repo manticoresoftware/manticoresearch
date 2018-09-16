@@ -90,16 +90,199 @@ TEST ( Misc, SpanSearch )
 
 //////////////////////////////////////////////////////////////////////////
 
-TEST ( functions, stringbuilder )
+// test on usual +=, <<.
+TEST ( functions, stringbuilder_hello )
 {
 	StringBuilder_c builder;
 
 	builder += "Hello";
+	builder << " " << "world!";
 
-	ASSERT_STREQ ( builder.cstr (), "Hello" );
+	ASSERT_STREQ ( builder.cstr (), "Hello world!" );
+}
+
+// test for scoped-comma modifier.
+// comma will automatically append '; ' between ops.
+TEST ( functions, stringbuilder_simplescoped )
+{
+	StringBuilder_c builder;
+	auto tComma = ScopedComma_c (builder,"; ");
+
+	builder += "one";
+	builder << "two" << "three";
+	builder.Appendf ("four: %d", 4);
+	builder << "five";
+	ASSERT_STREQ ( builder.cstr (), "one; two; three; four: 4; five" );
+}
+
+// scoped comma with prefix (will prepend prefix before first op)
+// nested comma (will use other behaviour in isolated scope)
+TEST ( functions, stringbuilder_scopedprefixed )
+{
+	StringBuilder_c builder;
+	auto tC = ScopedComma_c ( builder, "; ", "List: " );
+
+	builder += "one";
+	builder << "two" << "three";
+	ASSERT_STREQ ( builder.cstr (), "List: one; two; three" ) << "plain insert into managed";
+	{
+		auto tI = ScopedComma_c ( builder, ": ", "{", "}" );
+		builder << "first" << "second";
+		ASSERT_STREQ ( builder.cstr (), "List: one; two; three; {first: second" ) << "nested managed insert";
+	}
+	ASSERT_STREQ ( builder.cstr (), "List: one; two; three; {first: second}" ) << "nested managed insert terminated";
+	builder.Appendf ( "four: %d", 4 );
+	builder << "five";
+	ASSERT_STREQ ( builder.cstr (), "List: one; two; three; {first: second}; four: 4; five" );
+}
+
+// standalone comma. Not necesssary related to stringbuilder, but live alone.
+TEST ( functions, stringbuilder_standalone )
+{
+	StringBuilder_c builder;
+	Comma_c tComma; // default is ', '
+	builder << tComma << "one";
+	builder << tComma << "two";
+	builder << tComma << "three";
+	ASSERT_STREQ ( builder.cstr (), "one, two, three" );
+}
+
+// many nested scoped commas and 'StartBlock' modifier
+// (scoped comma is the same as pair 'StartBlock...FinishBlock')
+TEST ( functions, stringbuilder_nested )
+{
+	StringBuilder_c builder;
+	builder << "one, two, three";
+	ScopedComma_c lev0 ( builder );
+	{
+		ScopedComma_c lev1 ( builder, ", ", "[", "]" );
+		builder.StartBlock ( ": ", "(", ")" );
+		builder.StartBlock ( ";", "{", "}" );
+		ASSERT_STREQ ( builder.cstr (), "one, two, three" ) << "simple blocks do nothing";
+		builder << "first" << "second" << "third";
+		ASSERT_STREQ ( builder.cstr (), "one, two, three[({first;second;third" ) << "unclosed block";
+	}
+	// note that only 'lev1' is destroyed, we didn't explicitly finished two nested blocks.
+	// but they're finished implicitly
+	ASSERT_STREQ ( builder.cstr (), "one, two, three[({first;second;third})]" ) << "closed block";
+	builder << "four";
+
+	// note, we doesn't destroy outer comma lev0, but this is not necessary since it doesn't have a suffix.
+	ASSERT_STREQ ( builder.cstr (), "one, two, three[({first;second;third})], four" ) << "finished block with tail";
+}
+
+// pure StartBlock..FinishBlock test
+TEST ( functions, stringbuilder_autoclose )
+{
+	StringBuilder_c builder ( ": ", "[", "]" );
+	// note that there is no ': ' suffixed at the end (since comma only between blocks)
+	builder << "one" << "two";
+	ASSERT_STREQ ( builder.cstr (), "[one: two" ) << "simple pushed block";
+
+	// starting block doesn't mean any output yet, so content is the same
+	builder.StartBlock(",","(",")");
+	ASSERT_STREQ ( builder.cstr (), "[one: two" ) << "simple pushed block";
+
+	// note that now ': ' of outer block prepended to the suffix '(' of the current block.
+	builder << "abc" << "def";
+	ASSERT_STREQ ( builder.cstr (), "[one: two: (abc,def" ) << "simple pushed block 2";
+
+	// finishing block mean that suffix appended, if the state is different from initial
+	builder.FinishBlock ();
+	ASSERT_STREQ ( builder.cstr (), "[one: two: (abc,def)" ) << "simple pushed block 2";
+	builder.FinishBlock();
+	ASSERT_STREQ ( builder.cstr (), "[one: two: (abc,def)]" ) << "simple pushed block 3";
+}
+
+// pure StartBlock..FinishBlock test with one empty block (it outputs nothing)
+TEST ( functions, stringbuilder_close_of_empty )
+{
+	StringBuilder_c builder ( ": ", "[", "]" );
+
+	// note that there is no ': ' suffixed at the end (since comma only between blocks)
+	builder << "one" << "two";
+	ASSERT_STREQ ( builder.cstr (), "[one: two" ) << "simple pushed block";
+
+	// starting block doesn't output anything by itself, but modify future output
+	builder.StartBlock ( ",", "(", ")" );
+	ASSERT_STREQ ( builder.cstr (), "[one: two" ) << "started new block";
+
+	// finishing of empty block outputs also nothing
+	builder.FinishBlock ();
+	ASSERT_STREQ ( builder.cstr (), "[one: two" ) << "finished empty block";
+
+	// finishing non-empty block outputs suffix (and so, doesn't strictly necessary if no suffixes).
+	builder.FinishBlock ();
+	ASSERT_STREQ ( builder.cstr (), "[one: two]" ) << "final result";
+}
+
+// operation 'clear'. Not only wipe content, but also undo any comma state
+TEST ( functions, stringbuilder_clear )
+{
+	StringBuilder_c builder ( ": ", "[", "]" );
+	builder << "one" << "two";
+	builder.StartBlock ( ",", "(", ")" );
+	builder << "abc" << "def";
+	builder.Clear();
+	ASSERT_STREQ ( builder.cstr (), "" ) << "emtpy";
+	builder << "one" << "two";
+	ASSERT_STREQ ( builder.cstr (), "onetwo" ) << "nocommas";
+	builder.FinishBlocks();
+	ASSERT_STREQ ( builder.cstr (), "onetwo" ) << "nocommas";
+}
+
+// 'FinishBlocks()' - by default closes ALL opened blocks
+TEST ( functions, stringbuilder_twoopenoneclose )
+{
+	StringBuilder_c builder ( ": ", "[", "]" );
+	builder << "one" << "two";
+	builder.StartBlock ( ",", "(", ")" );
+	builder << "abc" << "def";
+	builder.FinishBlocks ();
+	ASSERT_STREQ ( builder.cstr (), "[one: two: (abc,def)]" ) << "simple pushed block 3";
 
 }
 
+// simple start/finish blocks manipulation - outputs nothing by alone
+TEST ( functions, stringbuilder_finishnoopen )
+{
+	StringBuilder_c builder ( ":", "[", "]" );
+	auto pLev = builder.StartBlock ( ";", "(", ")" );
+	builder.StartBlock ( ",", "{", "}" );
+	builder.FinishBlocks ( pLev );
+	ASSERT_STREQ ( builder.cstr (), "" ) << "nothing outputed";
+}
+
+// FinishBlocks() to stored state
+TEST ( functions, stringbuilder_ret_to_level )
+{
+	// outer block
+	StringBuilder_c builder ( ":", "[", "]" );
+	builder << "exone" << "extwo";
+
+	// middle block - we memorize this state
+	auto pLev = builder.StartBlock ( ";", "(", ")" );
+	builder << "one" << "two";
+
+	// internal block
+	builder.StartBlock ( ",", "{", "}" );
+	builder << "three" << "four";
+	ASSERT_STREQ ( builder.cstr (), "[exone:extwo:(one;two;{three,four" );
+
+	// finish memorized block and all blocks created after it
+	builder.FinishBlocks ( pLev );
+	ASSERT_STREQ ( builder.cstr (), "[exone:extwo:(one;two;{three,four})" );
+
+	// it will output into most outer block, since others finished
+	builder << "ex3";
+	ASSERT_STREQ ( builder.cstr (), "[exone:extwo:(one;two;{three,four}):ex3" );
+
+	// it will finish outer block (and close the bracket).
+	builder.FinishBlocks();
+	ASSERT_STREQ ( builder.cstr (), "[exone:extwo:(one;two;{three,four}):ex3]" ) << "test complete";
+}
+
+// simple test on Appendf
 TEST ( functions, strinbguilder_appendf )
 {
 	StringBuilder_c sRes;
@@ -1457,6 +1640,9 @@ TEST ( functions, sph_Sprintf )
 	test_mysprintf ( "%9.3l", iNum, "   -10000" );
 	test_mysprintf ( "%09.3l", iNum, "   -10000" );
 
+
+	test_mysprintf ( "%l", -100000000000000, "-100000000000000" ); // %l is our specific for 64-bit signed
+
 	// my own fixed-point nums
 	test_mysprintf ( "%.3D", iNum, "-10.000");
 	test_mysprintf ( "%.9D", iNum, "-0.000010000" );
@@ -1494,6 +1680,51 @@ TEST ( functions, sph_Sprintf )
 	ASSERT_STREQ ( sBuf, "hel       " );
 	sph::Sprintf ( sBuf, "%10.3s", "hello" );
 	ASSERT_STREQ ( sBuf, "       hel" );
+
+	sph::Sprintf ( sBuf, "Hello %l, %d world!", -100000000000000, -2000000000 );
+	ASSERT_STREQ ( sBuf, "Hello -100000000000000, -2000000000 world!" );
+}
+
+// sph::Sprintf into StringBuilder_c
+TEST ( functions, sph_Sprintf_to_builder )
+{
+	using namespace sph;
+	StringBuilder_c sBuf;
+	Sprintf ( sBuf, "%-10s", "hello" );
+	EXPECT_STREQ ( sBuf.cstr(), "hello     " );
+	sBuf.Clear();
+
+	Sprintf ( sBuf, "%03.2f", 99.9911 );
+	EXPECT_STREQ ( sBuf.cstr(), "99.99" );
+	sBuf.Clear ();
+
+	sph::Sprintf ( sBuf, "Hello %d, %l world!", -2000000000, -100000000000000 );
+	ASSERT_STREQ ( sBuf.cstr(), "Hello -2000000000, -100000000000000 world!" );
+
+	sph::Sprintf ( sBuf, "Hi!" );
+	ASSERT_STREQ ( sBuf.cstr (), "Hello -2000000000, -100000000000000 world!Hi!" );
+	sBuf.Clear();
+
+	Sprintf ( sBuf, "%09.3d", -10000 );
+	EXPECT_STREQ ( sBuf.cstr(), "   -10000" );
+	sBuf.Clear ();
+
+	Sprintf ( sBuf, "%.3D", (int64_t) -10000 );
+	EXPECT_STREQ ( sBuf.cstr (), "-10.000" );
+	sBuf.Clear ();
+
+	Sprintf ( sBuf, "%.9D", -10000ll );
+	ASSERT_STREQ ( sBuf.cstr (), "-0.000010000" );
+	sBuf.Clear ();
+
+	sBuf.StartBlock ( ",", "{", "}" );
+	sBuf.Sprintf ( "%d %d %d", 1, -1, 100);
+	sBuf.Sprintf ( "%d %d %d", 2, -2, 200 );
+	sBuf.FinishBlock ();
+	ASSERT_STREQ ( sBuf.cstr (), "{1 -1 100,2 -2 200}" );
+
+	sBuf.Sprintf ( " %.3F, %.6F", 999500, -1400932 );
+	ASSERT_STREQ ( sBuf.cstr (), "{1 -1 100,2 -2 200} 999.500, -1.400932" );
 }
 
 TEST ( functions, bench_Sprintf )
@@ -1512,6 +1743,34 @@ TEST ( functions, bench_Sprintf )
 		sprintf ( sBuf, "%d", 1000000 );
 	iTimeSpan += sphMicroTimer ();
 	std::cout << "\n" << uLoops << " of sprintf took " << iTimeSpan << " uSec\n";
+
+	ASSERT_EQ ( sphGetSmallAllocatedSize (), 0 );
+}
+
+TEST ( functions, bench_builder_Sprintf )
+{
+
+	auto uLoops = 10000000;
+
+	StringBuilder_c sBuf;
+
+	auto iTimeSpan = -sphMicroTimer ();
+	for ( auto i = 0; i<uLoops; ++i )
+	{
+		sBuf.Appendf ( "Hello my little %d! Nice to meet you...", 1000000 );
+		sBuf.Clear();
+	}
+	iTimeSpan += sphMicroTimer ();
+	std::cout << "\n" << uLoops << " of Appendf took " << iTimeSpan << " uSec";
+
+	iTimeSpan = -sphMicroTimer ();
+	for ( auto i = 0; i<uLoops; ++i )
+	{
+		sBuf.Sprintf ( "Hello my little %d! Nice to meet you...", 1000000 );
+		sBuf.Clear();
+	}
+	iTimeSpan += sphMicroTimer ();
+	std::cout << "\n" << uLoops << " of Sprintf took " << iTimeSpan << " uSec\n";
 
 	ASSERT_EQ ( sphGetSmallAllocatedSize (), 0 );
 }

@@ -2441,41 +2441,32 @@ bool ParseSnippet ( cJSON * pSnip, CSphQuery & tQuery, CSphString & sError )
 			tField.m_iFragmentCount = tGlobalOptions.m_iFragmentCount;
 	}
 
-	// FIXME!!! get rid of print -> parse
-	StringBuilder_c sSelect;
-	sSelect += tQuery.m_sSelect.cstr();
-
-	StringBuilder_c sItem;
-	ARRAY_FOREACH ( iSnip, dFields )
+	for ( const HttpSnippetField_t &tSnip : dFields )
 	{
-		const HttpSnippetField_t & tSnip = dFields[iSnip];
-		sItem.Clear();
-		const char * sHiQuery = ( sQuery.IsEmpty() ? tQuery.m_sQuery.cstr() : sQuery.cstr() );
-		sItem.Appendf ( "SNIPPET(%s, '%s'", tSnip.m_sName.cstr(), sHiQuery );
+		StringBuilder_c sItem;
+		const char * sHiQuery = ( sQuery.IsEmpty () ? tQuery.m_sQuery.cstr () : sQuery.cstr () );
+		sItem << "SNIPPET(" << tSnip.m_sName << ", '" << sHiQuery << "'";
 
-		if ( !sPreTag.IsEmpty() )
-			sItem.Appendf ( ", 'before_match=%s'", sPreTag.cstr() );
-		if ( !sPostTag.IsEmpty() )
-			sItem.Appendf ( ", 'after_match=%s'", sPostTag.cstr() );
+		if ( !sPreTag.IsEmpty () )
+			sItem << ", 'before_match=" << sPreTag << "'";
+		if ( !sPostTag.IsEmpty () )
+			sItem << ", 'after_match=" << sPostTag << "'";
 		if ( tSnip.m_iFragmentSize!=-1 && !bKeepHtml )
 			sItem.Appendf ( ", 'limit=%d'", tSnip.m_iFragmentSize );
 		if ( tSnip.m_iFragmentCount!=-1 && !bKeepHtml )
 			sItem.Appendf ( ", 'limit_passages=%d'", tSnip.m_iFragmentCount );
 		if ( iNoMatch<1 )
-			sItem.Appendf ( ", 'allow_empty=1'" );
+			sItem << ", 'allow_empty=1'";
 		if ( bWeightOrder )
-			sItem.Appendf ( ", 'weight_order=1'" );
+			sItem << ", 'weight_order=1'";
 		if ( bKeepHtml )
-			sItem.Appendf ( ", 'html_strip_mode=retain', 'limit=0'" );
+			sItem << ", 'html_strip_mode=retain', 'limit=0'";
 
-		sItem += ",'json_query=1')";
+		sItem += ", 'json_query=1')";
 
-		sSelect += ", ";
-		sSelect += sItem.cstr();
-
-		CSphQueryItem & tItem = tQuery.m_dItems.Add();
-		tItem.m_sExpr = sItem.cstr();
-		tItem.m_sAlias.SetSprintf ( "%s%s", g_sHighlight, tSnip.m_sName.cstr() );
+		CSphQueryItem &tItem = tQuery.m_dItems.Add ();
+		tItem.m_sExpr = sItem.cstr ();
+		tItem.m_sAlias.SetSprintf ( "%s%s", g_sHighlight, tSnip.m_sName.cstr () );
 	}
 
 	return true;
@@ -2747,18 +2738,18 @@ bool ParseSort ( cJSON * pSort, CSphQuery & tQuery, bool & bGotWeight, CSphStrin
 		}
 	}
 
-	const char * sSep = "";
 	StringBuilder_c sSortBuf;
-	StringBuilder_c sTmp;
+	Comma_c sComma;
+
 	bGotWeight = false;
 
-	ARRAY_FOREACH ( i, dSort )
+	for ( const SortField_t &tItem : dSort )
 	{
-		const SortField_t & tItem = dSort[i];
+		const char * sSort = ( tItem.m_bAsc ? " asc" : " desc" );
 		if ( tItem.IsGeoDist() )
 		{
 			// ORDER BY statement
-			sSortBuf.Appendf ( "%s%s%s %s", sSep, g_sOrder, tItem.m_sName.cstr(), ( tItem.m_bAsc ? "asc" : "desc" ) );
+			sSortBuf << sComma << g_sOrder << tItem.m_sName << sSort;
 
 			// query item
 			CSphQueryItem & tQueryItem = tQuery.m_dItems.Add();
@@ -2766,34 +2757,31 @@ bool ParseSort ( cJSON * pSort, CSphQuery & tQuery, bool & bGotWeight, CSphStrin
 			tQueryItem.m_sAlias.SetSprintf ( "%s%s", g_sOrder, tItem.m_sName.cstr() );
 
 			// select list
-			sTmp.Clear();
-			sTmp.Appendf ( "%s, %s as %s", tQuery.m_sSelect.cstr(), tQueryItem.m_sExpr.cstr(), tQueryItem.m_sAlias.cstr() );
-			tQuery.m_sSelect = sTmp.cstr();
+			StringBuilder_c sTmp;
+			sTmp << tQuery.m_sSelect << ", " << tQueryItem.m_sExpr << " as " << tQueryItem.m_sAlias;
+			sTmp.MoveTo ( tQuery.m_sSelect );
 		} else if ( tItem.m_sMode.IsEmpty() )
 		{
 			// sort by attribute or weight
-			sSortBuf.Appendf ( "%s%s %s", sSep, ( tItem.m_sName=="_score" ? "@weight" : tItem.m_sName.cstr() ), ( tItem.m_bAsc ? "asc" : "desc" ) );
+			sSortBuf << sComma << ( tItem.m_sName=="_score" ? "@weight" : tItem.m_sName ) << sSort;
 			bGotWeight |= ( tItem.m_sName=="_score" );
 		} else
 		{
 			// sort by MVA
-
 			// ORDER BY statement
-			sSortBuf.Appendf ( "%s%s%s %s", sSep, g_sOrder, tItem.m_sName.cstr(), ( tItem.m_bAsc ? "asc" : "desc" ) );
+			sSortBuf << sComma << g_sOrder << tItem.m_sName << sSort;
 
 			// query item
-			sTmp.Clear();
-			sTmp.Appendf ( "%s(%s)", tItem.m_sMode=="min" ? "least" : "greatest", tItem.m_sName.cstr() );
+			StringBuilder_c sTmp;
+			sTmp << ( tItem.m_sMode=="min" ? "least" : "greatest" ) << "(" << tItem.m_sName << ")";
 			CSphQueryItem & tQueryItem = tQuery.m_dItems.Add();
-			tQueryItem.m_sExpr = sTmp.cstr();
+			sTmp.MoveTo (tQueryItem.m_sExpr);
 			tQueryItem.m_sAlias.SetSprintf ( "%s%s", g_sOrder, tItem.m_sName.cstr() );
 
 			// select list
-			sTmp.Clear();
-			sTmp.Appendf ( "%s, %s as %s", tQuery.m_sSelect.cstr(), tQueryItem.m_sExpr.cstr(), tQueryItem.m_sAlias.cstr() );
-			tQuery.m_sSelect = sTmp.cstr();
+			sTmp << tQuery.m_sSelect << ", " << tQueryItem.m_sExpr << " as " << tQueryItem.m_sAlias;
+			sTmp.MoveTo ( tQuery.m_sSelect );
 		}
-		sSep = ", ";
 	}
 	if ( !dSort.GetLength() )
 	{
@@ -2802,8 +2790,7 @@ bool ParseSort ( cJSON * pSort, CSphQuery & tQuery, bool & bGotWeight, CSphStrin
 	}
 
 	tQuery.m_eSort = SPH_SORT_EXTENDED;
-	tQuery.m_sSortBy = sSortBuf.cstr();
-
+	sSortBuf.MoveTo ( tQuery.m_sSortBy );
 	return true;
 }
 
@@ -3065,7 +3052,7 @@ bool ParseExpr ( cJSON * pExpr, CSphQuery & tQuery, CSphString & sError )
 	}
 
 	StringBuilder_c sSelect;
-	sSelect += tQuery.m_sSelect.cstr();
+	sSelect << tQuery.m_sSelect;
 
 	int iCount = cJSON_GetArraySize ( pExpr );
 	for ( int iExpr=0; iExpr<iCount; iExpr++ )
@@ -3129,6 +3116,6 @@ bool ParseExpr ( cJSON * pExpr, CSphQuery & tQuery, CSphString & sError )
 		sSelect.Appendf ( ", %s as %s", tQueryItem.m_sExpr.cstr(), tQueryItem.m_sAlias.cstr() );
 	}
 
-	tQuery.m_sSelect = sSelect.cstr();
+	sSelect.MoveTo ( tQuery.m_sSelect );
 	return true;
 }

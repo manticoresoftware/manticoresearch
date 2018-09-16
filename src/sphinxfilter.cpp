@@ -1845,49 +1845,25 @@ void FormatFilterQL ( const CSphFilterSettings & f, int iCompactIN, StringBuilde
 		case SPH_FILTER_VALUES:
 			if ( f.m_dValues.GetLength()==1 )
 			{
-				if ( f.m_bExclude )
-					tBuf.Appendf ( " %s!=" INT64_FMT, f.m_sAttrName.cstr(), (int64_t)f.m_dValues[0] );
-				else
-					tBuf.Appendf ( " %s=" INT64_FMT, f.m_sAttrName.cstr(), (int64_t)f.m_dValues[0] );
+				tBuf << " " << f.m_sAttrName << ( f.m_bExclude ? "!" : nullptr ) << "=";
+				tBuf.Appendf (  INT64_FMT, (int64_t)f.m_dValues[0] );
 			} else
 			{
-				if ( f.m_bExclude )
-					tBuf.Appendf ( " %s NOT IN (", f.m_sAttrName.cstr() );
-				else
-					tBuf.Appendf ( " %s IN (", f.m_sAttrName.cstr() );
-
+				tBuf << " " << f.m_sAttrName << ( f.m_bExclude ? " NOT IN (" : " IN (" );
+				ScopedComma_c tInComma ( tBuf, ",", nullptr,")");
 				if ( iCompactIN>0 && ( iCompactIN+1<f.m_dValues.GetLength() ) )
 				{
 					// for really long IN-lists optionally format them as N,N,N,N,...N,N,N, with ellipsis inside.
 					int iLimit = Max ( iCompactIN-3, 3 );
 					for ( int j=0; j<iLimit; ++j )
-					{
-						if ( j )
-							tBuf.Appendf ( "," INT64_FMT, (int64_t)f.m_dValues[j] );
-						else
-							tBuf.Appendf ( INT64_FMT, (int64_t)f.m_dValues[j] );
-					}
+						tBuf.Appendf ( INT64_FMT, (int64_t)f.m_dValues[j] );
 					iLimit = f.m_dValues.GetLength();
-					tBuf.Appendf ( "%s", ",..." );
+					ScopedComma_c tElipsis ( tBuf, ",","...");
 					for ( int j=iLimit-3; j<iLimit; ++j )
-					{
-						if ( j )
-							tBuf.Appendf ( "," INT64_FMT, (int64_t)f.m_dValues[j] );
-						else
-							tBuf.Appendf ( INT64_FMT, (int64_t)f.m_dValues[j] );
-					}
+						tBuf.Appendf ( INT64_FMT, (int64_t)f.m_dValues[j] );
 				} else
-				{
-					ARRAY_FOREACH ( j, f.m_dValues )
-					{
-						if ( j )
-							tBuf.Appendf ( "," INT64_FMT, (int64_t)f.m_dValues[j] );
-						else
-							tBuf.Appendf ( INT64_FMT, (int64_t)f.m_dValues[j] );
-					}
-				}
-
-				tBuf += ")";
+					for ( int64_t iValue : f.m_dValues )
+						tBuf.Appendf ( INT64_FMT, (int64_t) iValue );
 			}
 			break;
 
@@ -1945,19 +1921,21 @@ void FormatFilterQL ( const CSphFilterSettings & f, int iCompactIN, StringBuilde
 			break;
 
 		case SPH_FILTER_NULL:
-			tBuf.Appendf ( " %s %s", f.m_sAttrName.cstr(), ( f.m_bIsNull ? "IS NULL" : "IS NOT NULL" ) );
+			tBuf << " " << f.m_sAttrName << ( f.m_bIsNull ? " IS NULL" : " IS NOT NULL" );
 			break;
 
 		case SPH_FILTER_STRING_LIST:
-			tBuf.Appendf ( " %s IN (", f.m_sAttrName.cstr () );
-			ARRAY_FOREACH ( iString, f.m_dStrings )
-				tBuf.Appendf ( "%s'%s'", ( iString>0 ? "," : "" ), f.m_dStrings[iString].cstr() );
-			tBuf.Appendf ( ")" );
+			tBuf << " " << f.m_sAttrName << " IN (";
+			{
+				Comma_c sComma;
+				for ( const auto& sString : f.m_dStrings )
+					tBuf << sComma << "'" << sString << "'";
+			}
+			tBuf << ")";
 			break;
 
 		case SPH_FILTER_EXPRESSION:
-			tBuf += " ";
-			tBuf += f.m_sAttrName.cstr();
+			tBuf << " " << f.m_sAttrName;
 			break;
 
 		default:
@@ -1986,12 +1964,15 @@ static CSphString LogFilterTreeItem ( int iItem, const CSphVector<FilterTreeItem
 	bool bRightPts = ( dTree[tItem.m_iRight].m_iFilterItem==-1 && dTree[tItem.m_iRight].m_bOr!=tItem.m_bOr );
 
 	StringBuilder_c tBuf;
-	tBuf.Appendf ( "%s%s%s %s %s%s%s", ( bLeftPts ? "(" : "" ), sLeft.cstr(), ( bLeftPts ? ")" : "" ), sOp, ( bRightPts ? "(" : "" ), sRight.cstr(), ( bRightPts ? ")" : "" ) );
+	if ( bLeftPts ) tBuf << "(" << sLeft << ")"; else tBuf << sLeft;
+	tBuf << " " << sOp << " ";
+	if ( bRightPts ) tBuf << "(" << sRight << ")"; else tBuf << sRight;
 
 	return tBuf.cstr();
 }
 
-void FormatFiltersQL ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree, int iCompactIN, bool bDeflowered, StringBuilder_c & tBuf )
+void FormatFiltersQL ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree,
+	int iCompactIN, bool bDeflowered, StringBuilder_c & tBuf )
 {
 	if ( !dFilterTree.GetLength() )
 		for ( const auto& dFilter : dFilters )
@@ -2001,14 +1982,10 @@ void FormatFiltersQL ( const CSphVector<CSphFilterSettings> & dFilters, const CS
 			bDeflowered = true;
 			FormatFilterQL ( dFilter, iCompactIN, tBuf );
 		}
-	} else
+	else
 	{
-		if ( bDeflowered )
-			tBuf += " AND ";
-		else
-			tBuf += " ";
-
-		tBuf += LogFilterTreeItem ( dFilterTree.GetLength() - 1, dFilterTree, dFilters, iCompactIN ).cstr();
+		tBuf += (bDeflowered?" AND ":" ");
+		tBuf << LogFilterTreeItem ( dFilterTree.GetLength() - 1, dFilterTree, dFilters, iCompactIN );
 	}
 }
 

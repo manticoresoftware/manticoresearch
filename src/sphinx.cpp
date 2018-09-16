@@ -31585,7 +31585,8 @@ void SphWordStatChecker_t::Set ( const SmallStringHash_T<CSphQueryResultMeta::Wo
 }
 
 
-void SphWordStatChecker_t::DumpDiffer ( const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hStat, const char * sIndex, CSphString & sWarning ) const
+void SphWordStatChecker_t::DumpDiffer ( const SmallStringHash_T<CSphQueryResultMeta::WordStat_t> & hStat,
+	const char * sIndex, CSphString & sWarning ) const
 {
 	if ( !m_dSrcWords.GetLength() )
 		return;
@@ -31597,21 +31598,19 @@ void SphWordStatChecker_t::DumpDiffer ( const SmallStringHash_T<CSphQueryResultM
 		uint64_t uHash = sphFNV64 ( hStat.IterateGetKey().cstr() );
 		if ( !m_dSrcWords.BinarySearch ( uHash ) )
 		{
-			if ( !tWarningBuilder.Length() )
+			if ( tWarningBuilder.IsEmpty () )
 			{
 				if ( sIndex )
 					tWarningBuilder.Appendf ( "index '%s': ", sIndex );
 
 				tWarningBuilder.Appendf ( "query word(s) mismatch: %s", hStat.IterateGetKey().cstr() );
 			} else
-			{
-				tWarningBuilder.Appendf ( ", %s", hStat.IterateGetKey().cstr() );
-			}
+				tWarningBuilder << ", " << hStat.IterateGetKey();
 		}
 	}
 
 	if ( tWarningBuilder.Length() )
-		sWarning = tWarningBuilder.cstr();
+		tWarningBuilder.MoveTo ( sWarning );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -32874,7 +32873,6 @@ bool IndexFiles_c::RenameLock ( const char * sToSz, int &iLockFD )
 	m_bFatal = false;
 	auto sFrom = FullPath ( ".spl" );
 	auto sTo = FullPath ( ".spl", "", sToSz );
-	StringBuilder_c sError;
 
 #if !USE_WINDOWS
 	if ( !sph::rename ( sFrom.cstr (), sTo.cstr () ) )

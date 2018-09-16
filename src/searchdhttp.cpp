@@ -43,11 +43,9 @@ struct EscapeJsonString_t
 
 using JsonEscapedBuilder = EscapedStringBuilder_T <EscapeJsonString_t>;
 
-static void AppendJsonKey ( const char * sName, JsonEscapedBuilder & tOut )
+inline static void AppendJsonKey ( const char * sName, StringBuilder_c & tOut )
 {
-	tOut += "\"";
-	tOut += sName;
-	tOut += "\":";
+	tOut << "\"" << sName << "\":";
 }
 
 
@@ -94,12 +92,9 @@ static void EncodeResultJson ( const AggrResult_t & tRes, JsonEscapedBuilder & t
 			case SPH_ATTR_UINT32SET_PTR:
 			case SPH_ATTR_INT64SET_PTR:
 				{
-					tOut += "[";
 					CSphVector<char> dStr;
 					sphPackedMVA2Str ( (const BYTE *)tMatch.GetAttr ( tLoc ), eAttrType==SPH_ATTR_INT64SET_PTR, dStr );
-					dStr.Add('\0');
-					tOut += dStr.Begin();
-					tOut += "]";
+					tOut << "[" << dStr << "]";
 				}
 				break;
 
@@ -1435,7 +1430,8 @@ struct SourceMatch_c : public CSphMatch
 	}
 };
 
-static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, const CSphFixedVector<SphDocID_t> & dDocids, const CSphString & sIndex, JsonEscapedBuilder & tOut )
+static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, const CSphFixedVector<SphDocID_t> & dDocids,
+	const CSphString & sIndex, JsonEscapedBuilder & tOut )
 {
 	tOut += "{";
 
@@ -1754,18 +1750,18 @@ bool HttpHandlerPQ_c::GotQuery ( PercolateIndex_i * pIndex, const CSphString & s
 	if ( pUID && !pUID->IsEmpty() )
 		uID = strtoull ( pUID->cstr(), nullptr, 10 );
 
-	StringBuilder_c sTags;
+
 	const cJSON * pTagsArray = cJSON_GetObjectItem ( pRoot, "tags" );
 	if ( pTagsArray && !cJSON_IsArray ( pTagsArray ) )
 	{
 		ReportError ( "invalid tags array", SPH_HTTP_STATUS_400 );
 		return false;
 	}
+
+	StringBuilder_c sTags (", ");
 	const cJSON * pTag = nullptr;
 	cJSON_ArrayForEach ( pTag, pTagsArray )
-	{
-		sTags.Appendf ( "%s%s", sTags.Length() ? ", " : "", pTag->valuestring );
-	}
+		sTags << pTag->valuestring;
 
 	const cJSON * pFilters = cJSON_GetObjectItem ( pRoot, "filters" );
 	if ( pFilters && !cJSON_IsString ( pFilters ) )
@@ -1845,18 +1841,18 @@ bool HttpHandlerPQ_c::Delete ( PercolateIndex_i * pIndex, const CSphString & sIn
 {
 	CSphString sTmp;
 
-	StringBuilder_c sTags;
+
 	const cJSON * pTagsArray = cJSON_GetObjectItem ( pRoot, "tags" );
 	if ( pTagsArray && !cJSON_IsArray ( pTagsArray ) )
 	{
 		ReportError ( "invalid tags array", SPH_HTTP_STATUS_400 );
 		return false;
 	}
+
+	StringBuilder_c sTags ( ", " );
 	const cJSON * pTag = nullptr;
 	cJSON_ArrayForEach ( pTag, pTagsArray )
-	{
-		sTags.Appendf ( "%s%s", sTags.Length() ? ", " : "", pTag->valuestring );
-	}
+		sTags << pTag->valuestring;
 
 	CSphVector<uint64_t> dUID;
 	const cJSON * pUidsArray = cJSON_GetObjectItem ( pRoot, "id" );
@@ -1888,7 +1884,7 @@ bool HttpHandlerPQ_c::Delete ( PercolateIndex_i * pIndex, const CSphString & sIn
 
 	uint64_t tmTotal = sphMicroTimer() - tmStart;
 
-	JsonEscapedBuilder tOut;
+	StringBuilder_c tOut;
 	tOut += "{";
 
 	AppendJsonKey ( "took", tOut );
@@ -1900,9 +1896,7 @@ bool HttpHandlerPQ_c::Delete ( PercolateIndex_i * pIndex, const CSphString & sIn
 	AppendJsonKey ( "total", tOut );
 	tOut.Appendf ( "%d,", iDeleted );
 	AppendJsonKey ( "failures", tOut );
-	tOut += "[]";
-
-	tOut += "}";
+	tOut += "[]}";
 
 	BuildReply ( tOut, SPH_HTTP_STATUS_200 );
 

@@ -81,6 +81,8 @@ namespace sph {
 	int IFtoA ( char * pOutput, int64_t nVal, int iPrec = 6 );
 	int vSprintf ( char * pOutput, const char * sFmt, va_list ap );
 	int Sprintf ( char * pOutput, const char * sFmt, ... );
+	void vSprintf ( StringBuilder_c &pOutput, const char * sFmt, va_list ap );
+	void Sprintf ( StringBuilder_c& pOutput, const char * sFmt, ...);
 }
 
 /// string splitter, extracts sequences of alphas (as in sphIsAlpha)

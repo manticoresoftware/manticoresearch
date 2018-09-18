@@ -1824,6 +1824,11 @@ opt_par:
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $1 );
 			pParser->ToString ( pParser->m_pStmt->m_sStringParam, $2 );
 		}
+	| ident TOK_CONST_INT
+		{
+			pParser->ToString ( pParser->m_pStmt->m_sIndex, $1 );
+			pParser->m_pStmt->m_iIntParam = $2.m_iValue;
+		}
 %%
 
 #if USE_WINDOWS

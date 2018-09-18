@@ -16351,7 +16351,17 @@ void HandleMysqlDebug ( SqlRowBuffer_c &tOut, const SqlStmt_t &tStmt, bool bVipC
 		tOut.DataTuplet ( "malloc_trim", sResult.cstr () );
 	}
 #endif
-	else
+	else if ( sCommand=="sleep" )
+	{
+		int64_t tmStart = sphMicroTimer();
+		sphSleepMsec ( Max ( tStmt.m_iIntParam, 1 )*1000 );
+		int64_t tmDelta = sphMicroTimer() - tmStart;
+
+		tOut.HeadTuplet ( "command", "result" );
+		CSphString sResult;
+		sResult.SetSprintf ( "%.3f", (float)tmDelta/1000000.0f );
+		tOut.DataTuplet ( "sleep", sResult.cstr () );
+	} else
 	{
 		// no known command; provide short help.
 		tOut.HeadTuplet ( "command", "meaning" );
@@ -16367,6 +16377,7 @@ void HandleMysqlDebug ( SqlRowBuffer_c &tOut, const SqlStmt_t &tStmt, bool bVipC
 		tOut.DataTuplet ( "malloc_stats", "perform 'malloc_stats', result in searchd.log" );
 		tOut.DataTuplet ( "malloc_trim", "pefrorm 'malloc_trim' call" );
 #endif
+		tOut.DataTuplet ( "sleep Nsec", "sleep for N seconds" );
 	}
 	// done
 	tOut.Eof ();
@@ -22046,8 +22057,7 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 			m_tState->m_iLeft = NetBufGetInt ( m_tState->m_dBuf.Begin() + 4 );
 			bool bBadCommand = ( m_eCommand>=SEARCHD_COMMAND_WRONG );
 			bool bBadLength = ( m_tState->m_iLeft<0 || m_tState->m_iLeft>g_iMaxPacketSize );
-			bool bMaxedOut = ( g_iThdQueueMax && !m_tState->m_bVIP && g_pThdPool->GetQueueLength()>=g_iThdQueueMax );
-			if ( bBadCommand || bBadLength || bMaxedOut )
+			if ( bBadCommand || bBadLength )
 			{
 				m_tState->m_bKeepSocket = false;
 
@@ -22057,26 +22067,11 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 				// if command is insane, low level comm is broken, so we bail out
 				if ( bBadCommand )
 					sphWarning ( "ill-formed client request (command=%d, SEARCHD_COMMAND_TOTAL=%d)", m_eCommand, SEARCHD_COMMAND_TOTAL );
-				// warning on thread pool work maxed out
-				if ( bMaxedOut )
-					sphWarning ( "%s", g_sMaxedOutMessage );
 
 				m_tState->m_dBuf.Resize ( 0 );
 				ISphOutputBuffer tOut;
 				tOut.SwapData ( m_tState->m_dBuf );
-				if ( !bMaxedOut )
-				{
-					SendErrorReply ( tOut, "invalid command (code=%d, len=%d)", m_eCommand, m_tState->m_iLeft );
-				} else
-				{
-					int iRespLen = 4 + strlen(g_sMaxedOutMessage);
-
-					tOut.SendInt ( SPHINX_CLIENT_VERSION );
-					tOut.SendWord ( (WORD)SEARCHD_RETRY );
-					tOut.SendWord ( 0 ); // version doesn't matter
-					tOut.SendInt ( iRespLen );
-					tOut.SendString ( g_sMaxedOutMessage );
-				}
+				SendErrorReply ( tOut, "invalid command (code=%d, len=%d)", m_eCommand, m_tState->m_iLeft );
 
 				tOut.SwapData ( m_tState->m_dBuf );
 				NetSendData_t * pSend = new NetSendData_t ( m_tState.LeakPtr(), PROTO_SPHINX );
@@ -22095,6 +22090,8 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 
 		case AAPI_BODY:
 		{
+			const bool bMaxedOut = ( g_iThdQueueMax && !m_tState->m_bVIP && g_pThdPool->GetQueueLength()>=g_iThdQueueMax );
+
 			if ( m_eCommand==SEARCHD_COMMAND_PING )
 			{
 				bool bGotError = false;
@@ -22128,6 +22125,27 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 				tOut.SwapData ( m_tState->m_dBuf );
 				NetSendData_t * pSend = new NetSendData_t ( m_tState.LeakPtr (), PROTO_SPHINX );
 				dNextTick.Add ( pSend );
+
+			} else if ( bMaxedOut )
+			{
+				m_tState->m_bKeepSocket = false;
+				sphWarning ( "%s", g_sMaxedOutMessage );
+
+				m_tState->m_dBuf.Resize ( 0 );
+				ISphOutputBuffer tOut;
+				tOut.SwapData ( m_tState->m_dBuf );
+
+				int iRespLen = 4 + strlen(g_sMaxedOutMessage);
+
+				tOut.SendWord ( (WORD)SEARCHD_RETRY );
+				tOut.SendWord ( 0 ); // version doesn't matter
+				tOut.SendInt ( iRespLen );
+				tOut.SendString ( g_sMaxedOutMessage );
+
+				tOut.SwapData ( m_tState->m_dBuf );
+				NetSendData_t * pSend = new NetSendData_t ( m_tState.LeakPtr(), PROTO_SPHINX );
+				dNextTick.Add ( pSend );
+
 			} else
 			{
 				AddJobAPI ( pLoop );
@@ -22332,8 +22350,7 @@ NetEvent_e NetReceiveDataQL_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction
 						SendMysqlErrorPacket ( tOut, m_tState->m_uPacketID, "", "unknown command with size 0", m_tState->m_iConnID, MYSQL_ERR_UNKNOWN_COM_ERROR );
 					} else
 					{
-						LogSphinxqlError ( "", g_sMaxedOutMessage, m_tState->m_iConnID );
-						tOut.SendBytes ( g_dSphinxQLMaxedOutPacket, g_iSphinxQLMaxedOutLen );
+						SendMysqlErrorPacket ( tOut, m_tState->m_uPacketID, "", "Too many connections", m_tState->m_iConnID, MYSQL_ERR_TOO_MANY_USER_CONNECTIONS );
 					}
 
 					tOut.SwapData ( dBuf );

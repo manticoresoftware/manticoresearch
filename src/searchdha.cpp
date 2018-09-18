@@ -4137,8 +4137,6 @@ public:
 		// need positive timeout for communicate threads back and shutdown
 		m_iReady = epoll_wait ( m_iEFD, m_dReady.Begin (), m_dReady.GetLength (), timeoutMs );
 
-		sphLogDebugv ( "%d epoll wait returned %d events (timeout %d)", m_iEFD, m_iReady, timeoutMs );
-
 		if ( m_iReady<0 )
 		{
 			int iErrno = sphSockGetErrno ();

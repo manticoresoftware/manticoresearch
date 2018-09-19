@@ -2308,7 +2308,7 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 				memcpy ( sFormat, pF, sFmt-pF );
 
 				// invoke standard sprintf
-				Grow ( pOutput, Max ( sFmt - pF, 32 ) ); // ensure 32 is enough to take any flow value.
+				Grow ( pOutput, Max ( iWidth, (size_t)32 ) ); // ensure 32 is enough to take any flow value.
 				pOutput += sprintf ( tail ( pOutput ), sFormat, fValue );
 				state = SNORMAL;
 				break;

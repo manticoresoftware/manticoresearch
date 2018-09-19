@@ -20,63 +20,30 @@
 #include "searchdaemon.h"
 #include "searchdha.h"
 
-struct EscapeJsonString_t
-{
-	static bool IsEscapeChar ( char c )
-	{
-		return ( c=='"' || c=='\\' || c=='/' || c=='\b' || c=='\n' || c=='\r' || c=='\t'|| c=='\f' );
-	}
-
-	static char GetEscapedChar ( char c )
-	{
-		switch ( c )
-		{
-		case '\b': return 'b';
-		case '\n': return 'n';
-		case '\r': return 'r';
-		case '\t': return 't';
-		case '\f': return 'f';
-		default: return c;
-		}
-	}
-};
-
-using JsonEscapedBuilder = EscapedStringBuilder_T <EscapeJsonString_t>;
-
-inline static void AppendJsonKey ( const char * sName, StringBuilder_c & tOut )
-{
-	tOut << "\"" << sName << "\":";
-}
-
-
 static void EncodeResultJson ( const AggrResult_t & tRes, JsonEscapedBuilder & tOut )
 {
 	const ISphSchema & tSchema = tRes.m_tSchema;
-	CSphVector<BYTE> dTmp;
+	StringBuilder_c sTmp;
 
 	int iAttrsCount = sphSendGetAttrCount(tSchema);
 
-	tOut += "{";
+	tOut.StartBlock ( ",", "{", "}");
 
 	// column names
-	AppendJsonKey ( "attrs", tOut );
-	tOut += "[";
-	for ( int i=0; i<iAttrsCount; i++ )
-		tOut.Appendf ( "%s\"%s\"", ( i==0 ? "" : "," ), tSchema.GetAttr ( i ).m_sName.cstr() );
-	tOut += "],";
+	tOut.StartBlock (",", R"("attrs":[)","]");
+	for ( int i=0; i<iAttrsCount; ++i )
+		tOut.AppendString ( tSchema.GetAttr(i).m_sName, '"');
+	tOut.FinishBlock(false); // attrs
 
 	// attribute values
-	AppendJsonKey ( "matches", tOut );
-	tOut += "[";
-	for ( int iMatch=tRes.m_iOffset; iMatch<tRes.m_iOffset+tRes.m_iCount; iMatch++ )
+	tOut.StartBlock ( "," , R"("matches":[)", "]" );
+	for ( int iMatch=tRes.m_iOffset; iMatch<tRes.m_iOffset+tRes.m_iCount; ++iMatch )
 	{
-		tOut += ( iMatch==tRes.m_iOffset ? "[" : ",[" );
+		tOut.StartBlock ( ",", "[", "]");
 
 		const CSphMatch & tMatch = tRes.m_dMatches [ iMatch ];
-		const char * sSep = "";
-		for ( int iAttr=0; iAttr<iAttrsCount; iAttr++ )
+		for ( int iAttr=0; iAttr<iAttrsCount; ++iAttr )
 		{
-			tOut += sSep;
 
 			CSphAttrLocator tLoc = tSchema.GetAttr(iAttr).m_tLocator;
 			ESphAttr eAttrType = tSchema.GetAttr(iAttr).m_eAttrType;
@@ -92,22 +59,18 @@ static void EncodeResultJson ( const AggrResult_t & tRes, JsonEscapedBuilder & t
 			case SPH_ATTR_UINT32SET_PTR:
 			case SPH_ATTR_INT64SET_PTR:
 				{
-					CSphVector<char> dStr;
-					sphPackedMVA2Str ( (const BYTE *)tMatch.GetAttr ( tLoc ), eAttrType==SPH_ATTR_INT64SET_PTR, dStr );
-					tOut << "[" << dStr << "]";
+					ScopedComma_c sNoComma ( tOut, nullptr );
+					tOut << "[";
+					sphPackedMVA2Str ( (const BYTE *)tMatch.GetAttr ( tLoc ), eAttrType==SPH_ATTR_INT64SET_PTR, tOut );
+					tOut << "]";
 				}
 				break;
 
 			case SPH_ATTR_STRINGPTR:
 				{
-					const BYTE * pString = (const BYTE *)tMatch.GetAttr ( tLoc );
+					auto * pString = ( const BYTE * ) tMatch.GetAttr ( tLoc );
 					int iLen = sphUnpackPtrAttr ( pString, &pString );
-					dTmp.Resize ( iLen+1 );
-					memcpy ( dTmp.Begin(), pString, iLen );
-					dTmp[iLen] = '\0';
-					tOut += "\"";
-					tOut.AppendEscaped ( ( const char *)dTmp.Begin(), true, false );
-					tOut += "\"";
+					tOut.AppendEscaped ( (const char*) pString, EscBld::eEscape, iLen );
 				}
 				break;
 
@@ -115,26 +78,13 @@ static void EncodeResultJson ( const AggrResult_t & tRes, JsonEscapedBuilder & t
 				{
 					const BYTE * pJSON = (const BYTE *)tMatch.GetAttr ( tLoc );
 					sphUnpackPtrAttr ( pJSON, &pJSON );
+					auto pTest = tOut.end();
+					sphJsonFormat ( tOut, pJSON );
+					// empty string (no objects) - return NULL
+					// (canonical "{}" and "[]" are handled by sphJsonFormat)
 
-					// no object at all? return NULL
-					if ( !pJSON )
-					{
+					if ( pTest == tOut.end() )
 						tOut += "null";
-						break;
-					}
-
-					dTmp.Resize ( 0 );
-					sphJsonFormat ( dTmp, pJSON );
-					if ( !dTmp.GetLength() )
-					{
-						// empty string (no objects) - return NULL
-						// (canonical "{}" and "[]" are handled by sphJsonFormat)
-						tOut += "null";
-						break;
-					}
-
-					dTmp.Add(0);
-					tOut += (const char *)dTmp.Begin();
 				}
 				break;
 
@@ -145,17 +95,13 @@ static void EncodeResultJson ( const AggrResult_t & tRes, JsonEscapedBuilder & t
 					sphUnpackPtrAttr ( pFactors, &pFactors );
 					if ( pFactors )
 					{
-						bool bStr = ( eAttrType==SPH_ATTR_FACTORS );
-						dTmp.Resize ( 0 );
-						sphFormatFactors ( dTmp, (unsigned int *)pFactors, !bStr );
-						dTmp.Add ( '\0' );
-						if ( bStr )
-						{
-							tOut += "\"";
-							tOut.AppendEscaped ( (const char *)dTmp.Begin(), true, false );
-							tOut += "\"";
-						} else
-							tOut += (const char *)dTmp.Begin();
+						if ( eAttrType==SPH_ATTR_FACTORS_JSON ) // fixme! need test for it!
+							sphFormatFactors ( tOut, ( unsigned int * ) pFactors, true );
+						else {
+							sTmp.Clear ();
+							sphFormatFactors ( sTmp, ( unsigned int * ) pFactors, false );
+							tOut.AppendEscaped ( sTmp.cstr(), EscBld::eEscape );
+						}
 					} else
 						tOut += "null";
 				}
@@ -171,7 +117,7 @@ static void EncodeResultJson ( const AggrResult_t & tRes, JsonEscapedBuilder & t
 						break;
 					}
 
-					ESphJsonType eJson = ESphJsonType ( *pField++ );
+					auto eJson = ESphJsonType ( *pField++ );
 					if ( eJson==JSON_NULL )
 					{
 						// no key found - NULL value
@@ -179,10 +125,7 @@ static void EncodeResultJson ( const AggrResult_t & tRes, JsonEscapedBuilder & t
 					} else
 					{
 						// send string to client
-						dTmp.Resize ( 0 );
-						sphJsonFieldFormat ( dTmp, pField, eJson, true );
-						dTmp.Add ( '\0' );
-						tOut += (const char *)dTmp.Begin();
+						sphJsonFieldFormat ( tOut, pField, eJson, true );
 					}
 				}
 				break;
@@ -195,45 +138,39 @@ static void EncodeResultJson ( const AggrResult_t & tRes, JsonEscapedBuilder & t
 			default:
 				tOut.Appendf ( INT64_FMT, tMatch.GetAttr(tLoc) );
 			}
-
-			sSep = ",";
 		}
-
-		tOut += "]";
+		tOut.FinishBlock (); // one match
 	}
-	tOut += "],";
+	tOut.FinishBlock ( false ); // matches
 
 	// meta information
-	AppendJsonKey ( "meta", tOut );
-	tOut += "{";
-
-	tOut.Appendf ( "\"total\":%d, \"total_found\":" INT64_FMT ", \"time\":%d.%03d,", tRes.m_iMatches, tRes.m_iTotalMatches, tRes.m_iQueryTime/1000, tRes.m_iQueryTime%1000 );
+	tOut.StartBlock ( ",", R"("meta":{)", "}" );
+	tOut.Sprintf ( R"("total":%d, "total_found":%l, "time":%.3F)",
+		tRes.m_iMatches, tRes.m_iTotalMatches, tRes.m_iQueryTime );
 
 	// word statistics
-	AppendJsonKey ( "words", tOut );
-	tOut += "[";
-	tRes.m_hWordStats.IterateStart();
-	const char * sSep = "";
-	while ( tRes.m_hWordStats.IterateNext() )
+	tOut.StartBlock ( ",", R"("words":[)", "]" );
+	auto &hWS = tRes.m_hWordStats;//.IterateStart();
+	for ( hWS.IterateStart (); hWS.IterateNext (); )
 	{
-		const CSphQueryResultMeta::WordStat_t & tStat = tRes.m_hWordStats.IterateGet();
-		tOut.Appendf ( "%s{\"word\":\"%s\", \"docs\":" INT64_FMT ", \"hits\":" INT64_FMT "}", sSep, tRes.m_hWordStats.IterateGetKey().cstr(), tStat.m_iDocs, tStat.m_iHits );
-		sSep = ",";
+		const auto &tS = tRes.m_hWordStats.IterateGet ();
+		tOut.Sprintf ( R"({"word":"%s", "docs":%l, "hits":%l})", hWS.IterateGetKey().cstr(), tS.m_iDocs, tS.m_iHits );
 	}
-	tOut += "]}";
+	tOut.FinishBlock ( false ); // words
+	tOut.FinishBlock ( false ); // meta
 
 	if ( !tRes.m_sWarning.IsEmpty() )
 	{
-		tOut.Appendf ( ",\"warning\":\"" );
-		tOut.AppendEscaped ( tRes.m_sWarning.cstr() );
-		tOut.Appendf ( "\"" );
-	}	
-
-	tOut += "}";
+		tOut.StartBlock ( nullptr, R"("warning":)" );
+		tOut.AppendEscaped ( tRes.m_sWarning.cstr () );
+		tOut.FinishBlock ();
+	}
+	tOut.FinishBlock (false);
 }
 
 
-const char * g_dHttpStatus[] = { "200 OK", "206 Partial Content", "400 Bad Request", "500 Internal Server Error", "501 Not Implemented", "503 Service Unavailable" };
+const char * g_dHttpStatus[] = { "200 OK", "206 Partial Content", "400 Bad Request", "500 Internal Server Error",
+								 "501 Not Implemented", "503 Service Unavailable" };
 STATIC_ASSERT ( sizeof(g_dHttpStatus)/sizeof(g_dHttpStatus[0])==SPH_HTTP_STATUS_TOTAL, SPH_HTTP_STATUS_SHOULD_BE_SAME_AS_SPH_HTTP_STATUS_TOTAL );
 
 
@@ -512,7 +449,7 @@ static void HttpHandlerIndexPage ( CSphVector<BYTE> & dData )
 {
 	StringBuilder_c sIndexPage;
 	sIndexPage.Appendf ( g_sIndexPage, SPHINX_VERSION );
-	HttpBuildReply ( dData, SPH_HTTP_STATUS_200, sIndexPage.cstr(), sIndexPage.Length(), true );
+	HttpBuildReply ( dData, SPH_HTTP_STATUS_200, sIndexPage.cstr(), sIndexPage.GetLength(), true );
 }
 
 
@@ -743,7 +680,7 @@ protected:
 
 	void BuildReply ( const StringBuilder_c & sResult, ESphHttpStatus eStatus )
 	{
-		BuildReply ( sResult.cstr(), sResult.Length(), eStatus );
+		BuildReply ( sResult.cstr(), sResult.GetLength(), eStatus );
 	}
 
 	void BuildReply ( const char * sResult, int iLen, ESphHttpStatus eStatus )
@@ -1436,34 +1373,34 @@ static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, co
 	tOut += "{";
 
 	// column names
-	AppendJsonKey ( "took", tOut );
+	tOut << R"("took":)";
 	tOut.Appendf ( "%d,", (int)( tRes.m_tmTotal/1000 ) );
-	AppendJsonKey ( "timed_out", tOut );
+	tOut << R"("timed_out":)";
 	tOut += "false,";
 
-	AppendJsonKey ( "hits", tOut );
+	tOut << R"("hits":)";
 	tOut += "{";
-	AppendJsonKey ( "total", tOut );
+	tOut << R"("total":)";
 	tOut.Appendf ( "%d,", tRes.m_dQueryDesc.GetLength() );
-	AppendJsonKey ( "max_score", tOut );
+	tOut << R"("max_score":)";
 	tOut += "1,"; // FIXME!!! track and provide weight
 
 	if ( tRes.m_bVerbose )
 	{
-		AppendJsonKey ( "early_out_queries", tOut );
+		tOut << R"("early_out_queries":)";
 		tOut.Appendf ( "%d,", tRes.m_iEarlyOutQueries );
-		AppendJsonKey ( "matched_queries", tOut );
+		tOut << R"("matched_queries":)";
 		tOut.Appendf ( "%d,", tRes.m_iQueriesMatched );
-		AppendJsonKey ( "matched_docs", tOut );
+		tOut << R"("matched_docs":)";
 		tOut.Appendf ( "%d,", tRes.m_iDocsMatched );
-		AppendJsonKey ( "only_terms_queries", tOut );
+		tOut << R"("only_terms_queries":)";
 		tOut.Appendf ( "%d,", tRes.m_iOnlyTerms );
-		AppendJsonKey ( "total_queries", tOut );
+		tOut << R"("total_queries":)";
 		tOut.Appendf ( "%d,", tRes.m_iTotalQueries );
 	}
 
 	// documents
-	AppendJsonKey ( "hits", tOut );
+	tOut << R"("hits":)";
 	tOut += "[";
 
 	int iDocOff = 0;
@@ -1473,25 +1410,25 @@ static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, co
 		if ( i )
 			tOut += ",";
 		tOut += "{";
-		AppendJsonKey ( "_index", tOut );
+		tOut << R"("_index":)";
 		tOut.Appendf ( "\"%s\",", sIndex.cstr() );
-		AppendJsonKey ( "_type", tOut );
+		tOut << R"("_type":)";
 		tOut += "\"doc\",";
-		AppendJsonKey ( "_id", tOut );
+		tOut << R"("_id":)";
 		tOut.Appendf ( "\"" UINT64_FMT "\",", tDesc.m_uID );
-		AppendJsonKey ( "_score", tOut );
+		tOut << R"("_score":)";
 		tOut += "\"1\","; // FIXME!!! track and provide weight
 
-		AppendJsonKey ( "_source", tOut );
+		tOut << R"("_source":)";
 		if ( tDesc.m_bQL )
 		{
-			tOut += "{ \"query\": { \"ql\":\"";
-			tOut.AppendEscaped ( tDesc.m_sQuery.cstr(), true, false );
-			tOut += "\" } }";
+			tOut += "{ \"query\": { \"ql\":";
+			tOut.AppendEscaped ( tDesc.m_sQuery.cstr(), EscBld::eEscape );
+			tOut += " } }";
 		} else
 		{
 			tOut += "{";
-			AppendJsonKey ( "query", tOut );
+			tOut << R"("query":)";
 			tOut += tDesc.m_sQuery.cstr();
 			tOut += "}";
 		}
@@ -1504,7 +1441,7 @@ static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, co
 		if ( iCount )
 		{
 			tOut += ",";
-			AppendJsonKey ( "fields", tOut );
+			tOut << R"("fields":)";
 			tOut += "{\"_percolator_document_slot\": [";
 
 			const char * sSep = "";
@@ -1697,18 +1634,18 @@ static void EncodePercolateQueryResult ( bool bReplace, const CSphString & sInde
 {
 	tOut += "{";
 
-	AppendJsonKey ( "index", tOut );
+	tOut << R"("index":)";
 	tOut.Appendf ( "\"%s\",", sIndex.cstr() );
-	AppendJsonKey ( "type", tOut );
+	tOut << R"("type":)";
 	tOut += "\"doc\",";
-	AppendJsonKey ( "_id", tOut );
+	tOut << R"("_id":)";
 	tOut.Appendf ( "\"" UINT64_FMT "\",", uID );
-	AppendJsonKey ( "result", tOut );
+	tOut << R"("result":)";
 	tOut += bReplace ? "\"updated\"" : "\"created\"";
 	if ( bReplace )
 	{
 		tOut += ",";
-		AppendJsonKey ( "forced_refresh", tOut );
+		tOut << R"("forced_refresh":)";
 		tOut += "true";
 	}
 
@@ -1867,12 +1804,11 @@ bool HttpHandlerPQ_c::Delete ( PercolateIndex_i * pIndex, const CSphString & sIn
 		dUID.Add ( pUID->valueint );
 	}
 
-	if ( !sTags.Length() && !dUID.GetLength() )
+	if ( !sTags.GetLength() && !dUID.GetLength() )
 	{
 		ReportError ( "no tags or id field arrays found", SPH_HTTP_STATUS_400 );
 		return false;
 	}
-
 
 	uint64_t tmStart = sphMicroTimer();
 
@@ -1885,19 +1821,8 @@ bool HttpHandlerPQ_c::Delete ( PercolateIndex_i * pIndex, const CSphString & sIn
 	uint64_t tmTotal = sphMicroTimer() - tmStart;
 
 	StringBuilder_c tOut;
-	tOut += "{";
-
-	AppendJsonKey ( "took", tOut );
-	tOut.Appendf ( "%d,", (int)( tmTotal/1000 ) );
-	AppendJsonKey ( "timed_out", tOut );
-	tOut += "false,";
-	AppendJsonKey ( "deleted", tOut );
-	tOut.Appendf ( "%d,", iDeleted );
-	AppendJsonKey ( "total", tOut );
-	tOut.Appendf ( "%d,", iDeleted );
-	AppendJsonKey ( "failures", tOut );
-	tOut += "[]}";
-
+	tOut.Sprintf (R"({"took":%d,"timed_out":false,"deleted":%d,"total":%d,"failures":[]})",
+		( int ) ( tmTotal / 1000 ), iDeleted, iDeleted );
 	BuildReply ( tOut, SPH_HTTP_STATUS_200 );
 
 	return true;

@@ -3962,7 +3962,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 			sphFormatCurrentTime ( sTimeBuf, sizeof(sTimeBuf) );
 			tBuf << "/""* " << sTimeBuf << "*""/ " << tQuery.m_sSelect << " # error=" << sError << "\n";
 			sphSeek ( g_iQueryLogFile, 0, SEEK_END );
-			sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.Length() );
+			sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.GetLength() );
 		}
 
 		return false;
@@ -4095,12 +4095,14 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery
 
 struct EscapeQuotation_t
 {
-	static bool IsEscapeChar ( char c )
+	static const char cQuote = '\'';
+
+	inline static bool IsEscapeChar ( char c )
 	{
 		return ( c=='\\' || c=='\'' );
 	}
 
-	static char GetEscapedChar ( char c )
+	inline static char GetEscapedChar ( char c )
 	{
 		return c;
 	}
@@ -4191,7 +4193,7 @@ void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 	if ( !sQuery.IsEmpty() )
 	{
 		tBuf += " ";
-		tBuf.AppendEscaped ( sQuery.cstr(), false, true );
+		tBuf.AppendEscaped ( sQuery.cstr(), EscBld::eFixupSpace );
 	}
 
 #if USE_SYSLOG
@@ -4203,7 +4205,7 @@ void LogQueryPlain ( const CSphQuery & tQuery, const CSphQueryResult & tRes )
 	tBuf += "\n";
 
 	sphSeek ( g_iQueryLogFile, 0, SEEK_END );
-	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.Length() );
+	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.GetLength() );
 
 #if USE_SYSLOG
 	} else
@@ -4477,9 +4479,9 @@ void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuild
 		tBuf += " WHERE";
 		if ( !sQuery.IsEmpty() )
 		{
-			tBuf += " MATCH('";
+			tBuf += " MATCH(";
 			tBuf.AppendEscaped ( sQuery.cstr() );
-			tBuf += "')";
+			tBuf += ")";
 			bDeflowered = true;
 		}
 
@@ -4552,7 +4554,7 @@ static void LogSphinxqlError ( const char * sStmt, const char * sError, int iCid
 	tBuf.Appendf ( "/""* %s conn %d *""/ %s # error=%s\n", sTimeBuf, iCid, sStmt, sError );
 
 	sphSeek ( g_iQueryLogFile, 0, SEEK_END );
-	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.Length() );
+	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.GetLength() );
 }
 
 
@@ -4637,20 +4639,20 @@ static int SendJsonAsString ( ISphOutputBuffer * pOut, const BYTE * pJSON )
 	if ( pJSON )
 	{
 		int iLengthBytes = sphUnpackPtrAttr ( pJSON, &pJSON );
-		CSphVector<BYTE> dJson;
-		dJson.Reserve ( iLengthBytes*2 );
+		JsonEscapedBuilder dJson;
+		dJson.GrowEnough ( iLengthBytes*2 );
 		sphJsonFormat ( dJson, pJSON );
 
 		if ( pOut )
 		{
 			pOut->SendDword ( dJson.GetLength() );
-			pOut->SendBytes ( dJson.Begin(), dJson.GetLength() );
+			pOut->SendBytes ( dJson.begin(), dJson.GetLength() );
 		}
 		
 		return dJson.GetLength();
 	} else
 	{
-		// magic zero
+		// magic zero - "{}"
 		int iLengthBytes = sizeof(g_sJsonNull)-1;
 		if ( pOut )
 		{
@@ -4677,16 +4679,16 @@ static int SendJsonFieldAsString ( ISphOutputBuffer * pOut, const BYTE * pJSON )
 	if ( pJSON )
 	{
 		int iLengthBytes = sphUnpackPtrAttr ( pJSON, &pJSON );
-		CSphVector<BYTE> dJson;
-		dJson.Reserve ( iLengthBytes*2 );
+		JsonEscapedBuilder dJson;
+		dJson.GrowEnough ( iLengthBytes * 2 );
 
-		ESphJsonType eJson = (ESphJsonType)*pJSON++;
+		auto eJson = (ESphJsonType)*pJSON++;
 		sphJsonFieldFormat ( dJson, pJSON, eJson, false );
 
 		if ( pOut )
 		{
-			pOut->SendDword ( dJson.GetLength() );
-			pOut->SendBytes ( dJson.Begin(), dJson.GetLength() );
+			pOut->SendDword ( dJson.GetLength () );
+			pOut->SendBytes ( dJson.begin(), dJson.GetLength() );
 		} else
 			return dJson.GetLength();
 	} else
@@ -12252,7 +12254,7 @@ bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, co
 
 	StringBuilder_c sBuf;
 	sBuf << "sysfilters " << sFilters;
-	int iLen = sBuf.Length();
+	int iLen = sBuf.GetLength();
 
 	CSphVector<SqlStmt_t> dStmt;
 	SqlParser_c tParser ( dStmt, eCollation );
@@ -12481,7 +12483,7 @@ static void PercolateQuery ( const SqlStmt_t & tStmt, bool bReplace, ESphCollati
 	bool bOk = pIndex->Query ( sQuery, sTags, &dFilters, &dFilterTree, bReplace, true, uID, sError );
 
 	int iWarnings = 0;
-	if ( sSkipColumns.Length () )
+	if ( sSkipColumns.GetLength () )
 	{
 		iWarnings = 1;
 		sWarning.SetSprintf ( "out of schema column(s): %s", sSkipColumns.cstr () );
@@ -12666,7 +12668,7 @@ static bool PercolateShowStatus ( const SqlStmt_t & tStmt, SqlRowBuffer_c & tOut
 		tOut.Commit();
 	}
 
-	if ( tMissedFilter.Length() )
+	if ( tMissedFilter.GetLength() )
 	{
 		tOut.Eof ( false, 1 );
 		tMeta.m_sWarning.SetSprintf ( "unsupported filters '%s'", tMissedFilter.cstr() );
@@ -15059,122 +15061,79 @@ bool HandleMysqlSelect ( SqlRowBuffer_c & dRows, SearchHandler_c & tHandler )
 	return true;
 }
 
-
-void sphFormatFactors ( CSphVector<BYTE> & dOut, const unsigned int * pFactors, bool bJson )
+inline static int Bit ( int iBit, const unsigned int * pData )
 {
-	const int MAX_STR_LEN = 512;
-	int iOff = dOut.GetLength();
-	auto pTail = ( char * ) dOut.AddN ( MAX_STR_LEN );
+	return ( ( pData[iBit / 32] & ( 1 << ( iBit % 32 ) ) ) ? 1 : 0 );
+}
+
+void sphFormatFactors ( StringBuilder_c & sOut, const unsigned int * pFactors, bool bJson )
+{
+	sOut.GrowEnough ( 512 );
+
+	// format lines for header, fields, words
+	const char * sBmFmt = nullptr;
+	const char * sFieldFmt = nullptr;
+	const char * sWordFmt = nullptr;
+	ScopedComma_c sDelim;
 	if ( bJson )
 	{
-		iOff += snprintf ( pTail, MAX_STR_LEN, "{\"bm25\":%d, \"bm25a\":%f, \"field_mask\":%u, \"doc_word_count\":%d",
-			sphinx_get_doc_factor_int ( pFactors, SPH_DOCF_BM25 ), sphinx_get_doc_factor_float ( pFactors, SPH_DOCF_BM25A ),
-			sphinx_get_doc_factor_int ( pFactors, SPH_DOCF_MATCHED_FIELDS ), sphinx_get_doc_factor_int ( pFactors, SPH_DOCF_DOC_WORD_COUNT ) );
+		sBmFmt = R"("bm25":%d, "bm25a":%f, "field_mask":%u, "doc_word_count":%d)";
+		sFieldFmt = R"({"field":%d, "lcs":%u, "hit_count":%u, "word_count":%u, "tf_idf":%f, "min_idf":%f, )"
+			R"("max_idf":%f, "sum_idf":%f, "min_hit_pos":%d, "min_best_span_pos":%d, "exact_hit":%u, )"
+	 		R"("max_window_hits":%d, "min_gaps":%d, "exact_order":%u, "lccs":%d, "wlccs":%f, "atc":%f})";
+		sWordFmt = R"(%i{"tf":%d, "idf":%f})";
+		sDelim.Init ( sOut, ", ", "{", "}" );
+
 	} else
 	{
-		iOff += snprintf ( pTail, MAX_STR_LEN, "bm25=%d, bm25a=%f, field_mask=%u, doc_word_count=%d",
-			sphinx_get_doc_factor_int ( pFactors, SPH_DOCF_BM25 ), sphinx_get_doc_factor_float ( pFactors, SPH_DOCF_BM25A ),
-			sphinx_get_doc_factor_int ( pFactors, SPH_DOCF_MATCHED_FIELDS ), sphinx_get_doc_factor_int ( pFactors, SPH_DOCF_DOC_WORD_COUNT ) );
+		sBmFmt = "bm25=%d, bm25a=%f, field_mask=%u, doc_word_count=%d";
+		sFieldFmt = "field%d=(lcs=%u, hit_count=%u, word_count=%u, tf_idf=%f, min_idf=%f, max_idf=%f, sum_idf=%f, "
+					"min_hit_pos=%d, min_best_span_pos=%d, exact_hit=%u, max_window_hits=%d, "
+					"min_gaps=%d, exact_order=%u, lccs=%d, wlccs=%f, atc=%f)";
+		sWordFmt = "word%d=(tf=%d, idf=%f)";
+		sDelim.Init ( sOut );
 	}
+#define DI( _factor ) sphinx_get_doc_factor_int ( pFactors, SPH_DOCF_##_factor )
+#define DF( _factor ) sphinx_get_doc_factor_float ( pFactors, SPH_DOCF_##_factor )
+	sOut.Sprintf ( sBmFmt, DI( BM25 ), DF( BM25A ), DI( MATCHED_FIELDS ), DI( DOC_WORD_COUNT ) );
+	{ ScopedComma_c sFields;
+		if ( bJson )
+			sFields.Init ( sOut, ", ", R"("fields":[)", "]");
 
-	dOut.Resize ( iOff );
-
-	if ( bJson )
-	{
-		pTail = ( char * ) dOut.AddN ( MAX_STR_LEN );
-		iOff += snprintf ( pTail, MAX_STR_LEN, ", \"fields\":[" );
-		dOut.Resize ( iOff );
-	}
-
-	const unsigned int * pExactHit = sphinx_get_doc_factor_ptr ( pFactors, SPH_DOCF_EXACT_HIT_MASK );
-	const unsigned int * pExactOrder = sphinx_get_doc_factor_ptr ( pFactors, SPH_DOCF_EXACT_ORDER_MASK );
-
-	int iFields = sphinx_get_doc_factor_int ( pFactors, SPH_DOCF_NUM_FIELDS );
-	bool bFields = false;
-	for ( int i = 0; i<iFields; ++i )
-	{
-		const unsigned int * pField = sphinx_get_field_factors ( pFactors, i );
-		int iHits = sphinx_get_field_factor_int ( pField, SPH_FIELDF_HIT_COUNT );
-		if ( !iHits )
-			continue;
-
-		pTail = ( char * ) dOut.AddN ( MAX_STR_LEN );
-
-		int iFieldPos = i/32;
-		int iFieldBit = 1<<( i % 32 );
-		int iGotExactHit = ( ( pExactHit [ iFieldPos ] & iFieldBit )==0 ? 0 : 1 );
-		int iGotExactOrder = ( ( pExactOrder [ iFieldPos ] & iFieldBit )==0 ? 0 : 1 );
-
-		if ( !bJson )
+		auto pExactHit		= sphinx_get_doc_factor_ptr ( pFactors, SPH_DOCF_EXACT_HIT_MASK );
+		auto pExactOrder	= sphinx_get_doc_factor_ptr ( pFactors, SPH_DOCF_EXACT_ORDER_MASK );
+		int iFields = DI ( NUM_FIELDS );
+		for ( int i = 0; i<iFields; ++i )
 		{
-			iOff += snprintf ( pTail, MAX_STR_LEN, ", field%d="
-				"(lcs=%u, hit_count=%u, word_count=%u, "
-				"tf_idf=%f, min_idf=%f, max_idf=%f, sum_idf=%f, "
-				"min_hit_pos=%d, min_best_span_pos=%d, exact_hit=%u, max_window_hits=%d, "
-				"min_gaps=%d, exact_order=%d, lccs=%d, wlccs=%f, atc=%f)",
-				i,
-				sphinx_get_field_factor_int ( pField, SPH_FIELDF_LCS ), sphinx_get_field_factor_int ( pField, SPH_FIELDF_HIT_COUNT ), sphinx_get_field_factor_int ( pField, SPH_FIELDF_WORD_COUNT ),
-				sphinx_get_field_factor_float ( pField, SPH_FIELDF_TF_IDF ), sphinx_get_field_factor_float ( pField, SPH_FIELDF_MIN_IDF ),
-				sphinx_get_field_factor_float ( pField, SPH_FIELDF_MAX_IDF ), sphinx_get_field_factor_float ( pField, SPH_FIELDF_SUM_IDF ),
-				sphinx_get_field_factor_int ( pField, SPH_FIELDF_MIN_HIT_POS ), sphinx_get_field_factor_int ( pField, SPH_FIELDF_MIN_BEST_SPAN_POS ),
-				iGotExactHit, sphinx_get_field_factor_int ( pField, SPH_FIELDF_MAX_WINDOW_HITS ),
-				sphinx_get_field_factor_int ( pField, SPH_FIELDF_MIN_GAPS ), iGotExactOrder,
-				sphinx_get_field_factor_int ( pField, SPH_FIELDF_LCCS ), sphinx_get_field_factor_float ( pField, SPH_FIELDF_WLCCS ), sphinx_get_field_factor_float ( pField, SPH_FIELDF_ATC ) );
-		} else
-		{
-			iOff += snprintf ( pTail, MAX_STR_LEN,
-				"%s{\"field\":%d, \"lcs\":%u, \"hit_count\":%u, \"word_count\":%u, "
-				"\"tf_idf\":%f, \"min_idf\":%f, \"max_idf\":%f, \"sum_idf\":%f, "
-				"\"min_hit_pos\":%d, \"min_best_span_pos\":%d, \"exact_hit\":%u, \"max_window_hits\":%d, "
-				"\"min_gaps\":%d, \"exact_order\":%d, \"lccs\":%d, \"wlccs\":%f, \"atc\":%f}",
-				bFields ? ", " : "", i, sphinx_get_field_factor_int ( pField, SPH_FIELDF_LCS ), sphinx_get_field_factor_int ( pField, SPH_FIELDF_HIT_COUNT ), sphinx_get_field_factor_int ( pField, SPH_FIELDF_WORD_COUNT ),
-				sphinx_get_field_factor_float ( pField, SPH_FIELDF_TF_IDF ), sphinx_get_field_factor_float ( pField, SPH_FIELDF_MIN_IDF ),
-				sphinx_get_field_factor_float ( pField, SPH_FIELDF_MAX_IDF ), sphinx_get_field_factor_float ( pField, SPH_FIELDF_SUM_IDF ),
-				sphinx_get_field_factor_int ( pField, SPH_FIELDF_MIN_HIT_POS ), sphinx_get_field_factor_int ( pField, SPH_FIELDF_MIN_BEST_SPAN_POS ),
-				iGotExactHit, sphinx_get_field_factor_int ( pField, SPH_FIELDF_MAX_WINDOW_HITS ),
-				sphinx_get_field_factor_int ( pField, SPH_FIELDF_MIN_GAPS ), iGotExactOrder,
-				sphinx_get_field_factor_int ( pField, SPH_FIELDF_LCCS ), sphinx_get_field_factor_float ( pField, SPH_FIELDF_WLCCS ), sphinx_get_field_factor_float ( pField, SPH_FIELDF_ATC ) );
-			bFields = true;
+#define FI( _factor ) sphinx_get_field_factor_int ( pField, SPH_FIELDF_##_factor )
+#define FF( _factor ) sphinx_get_field_factor_float ( pField, SPH_FIELDF_##_factor )
+			auto pField = sphinx_get_field_factors ( pFactors, i );
+			if ( !FI (HIT_COUNT) )
+				continue;
+			sOut.Sprintf ( sFieldFmt, i, FI (LCS), FI (HIT_COUNT), FI (WORD_COUNT), FF (TF_IDF), FF (MIN_IDF),
+				FF (MAX_IDF), FF (SUM_IDF), FI (MIN_HIT_POS), FI (MIN_BEST_SPAN_POS), Bit (i, pExactHit),
+				FI (MAX_WINDOW_HITS), FI (MIN_GAPS), Bit (i, pExactOrder), FI (LCCS), FF (WLCCS), FF (ATC) );
+#undef FF
+#undef FI
 		}
+	} // fields block
 
-		dOut.Resize ( iOff );
-	}
+	{ ScopedComma_c sWords;
+		if ( bJson )
+			sWords.Init ( sOut, ", ", R"("words":[)", "]" );
 
-	int iUniqQpos = sphinx_get_doc_factor_int ( pFactors, SPH_DOCF_MAX_UNIQ_QPOS );
-	if ( bJson )
-	{
-		pTail = ( char * ) dOut.AddN ( MAX_STR_LEN );
-		iOff += snprintf ( pTail, MAX_STR_LEN, "], \"words\":[" );
-		dOut.Resize ( iOff );
-	}
-	bool bWord = false;
-	for ( int i = 0; i<iUniqQpos; ++i )
-	{
-		const unsigned int * pTerm = sphinx_get_term_factors ( pFactors, i+1 );
-		int iKeywordMask = sphinx_get_term_factor_int ( pTerm, SPH_TERMF_KEYWORD_MASK );
-		if ( !iKeywordMask )
-			continue;
-
-		pTail = ( char * ) dOut.AddN ( MAX_STR_LEN );
-		if ( !bJson )
+		auto iUniqQpos = DI ( MAX_UNIQ_QPOS );
+		for ( int i = 0; i<iUniqQpos; ++i )
 		{
-			iOff += snprintf ( pTail, MAX_STR_LEN, ", word%d=(tf=%d, idf=%f)", i,
-				sphinx_get_term_factor_int ( pTerm, SPH_TERMF_TF ), sphinx_get_term_factor_float ( pTerm, SPH_TERMF_IDF ) );
-		} else
-		{
-			iOff += snprintf ( pTail, MAX_STR_LEN, "%s{\"tf\":%d, \"idf\":%f}", ( bWord ? ", " : "" ),
-				sphinx_get_term_factor_int ( pTerm, SPH_TERMF_TF ), sphinx_get_term_factor_float ( pTerm, SPH_TERMF_IDF ) );
-			bWord = true;
+			auto pTerm = sphinx_get_term_factors ( pFactors, i + 1 );
+			if ( !sphinx_get_term_factor_int ( pTerm, SPH_TERMF_KEYWORD_MASK ) )
+				continue;
+			sOut.Sprintf ( sWordFmt, i, sphinx_get_term_factor_int ( pTerm, SPH_TERMF_TF ),
+				sphinx_get_term_factor_float ( pTerm, SPH_TERMF_IDF ) );
 		}
-		dOut.Resize ( iOff );
-	}
-
-	if ( bJson )
-	{
-		pTail = ( char * ) dOut.AddN ( MAX_STR_LEN );
-		iOff += snprintf ( pTail, MAX_STR_LEN, "]}" );
-		dOut.Resize ( iOff );
-	}
+	} // words block
+#undef DF
+#undef DI
 }
 
 
@@ -15223,24 +15182,22 @@ static void ReturnZeroCount ( const CSphSchema & tSchema, int iAttrsCount, const
 }
 
 template <typename T>
-static void MVA2Str ( const T * pMVA, int iLengthBytes, CSphVector<char> & dStr )
+static void MVA2Str ( const T * pMVA, int iLengthBytes, StringBuilder_c & dStr)
 {
-	dStr.Reserve ( (SPH_MAX_NUMERIC_STR+1)*iLengthBytes/sizeof(DWORD) );
+	dStr.GrowEnough ( (SPH_MAX_NUMERIC_STR+1)*iLengthBytes/sizeof(DWORD) );
 	int nValues = iLengthBytes / sizeof(T);
+	Comma_c sComma ( "," );
 	for ( int i = 0; i < nValues; ++i )
 	{
-		if ( i )
-			dStr.Add ( ',' );
-		auto pTail = dStr.AddN ( SPH_MAX_NUMERIC_STR );
-		pTail += sph::NtoA ( pTail, pMVA[i] );
-		dStr.Resize ( dStr.Idx ( pTail ) );
+		dStr << sComma;
+		dStr.GrowEnough ( SPH_MAX_NUMERIC_STR );
+		dStr += sph::NtoA ( dStr.end (), pMVA[i] );
 	}
 }
 
-void sphPackedMVA2Str ( const BYTE * pMVA, bool b64bit, CSphVector<char> & dStr )
+void sphPackedMVA2Str ( const BYTE * pMVA, bool b64bit, StringBuilder_c & dStr )
 {
 	int iLengthBytes = sphUnpackPtrAttr ( pMVA, &pMVA );
-
 	if ( b64bit )
 		MVA2Str ( (const int64_t *)pMVA, iLengthBytes, dStr );
 	else
@@ -15305,7 +15262,6 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 	dRows.HeadEnd ( bMoreResultsFollow, iWarns );
 
 	// FIXME!!! replace that vector relocations by SqlRowBuffer
-	CSphVector<BYTE> dTmp;
 
 	// rows
 	for ( int iMatch = tRes.m_iOffset; iMatch < tRes.m_iOffset + tRes.m_iCount; iMatch++ )
@@ -15347,9 +15303,9 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 			case SPH_ATTR_INT64SET_PTR:
 			case SPH_ATTR_UINT32SET_PTR:
 				{
-					CSphVector<char> dStr;
+					StringBuilder_c dStr;
 					sphPackedMVA2Str ( (const BYTE *)tMatch.GetAttr(tLoc), eAttrType==SPH_ATTR_INT64SET_PTR, dStr );
-					dRows.PutBlob ( dStr );
+					dRows.PutBlob ( dStr.begin(), dStr.GetLength() );
 					break;
 				}
 
@@ -15371,12 +15327,12 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 					int iLen = sphUnpackPtrAttr ( pString, &pString );
 					if ( eAttrType==SPH_ATTR_JSON_PTR )
 					{
-						dTmp.Resize ( 0 );
-						sphJsonFormat ( dTmp, pString );
-						if ( dTmp.IsEmpty() )
+						JsonEscapedBuilder sTmp;
+						sphJsonFormat ( sTmp, pString );
+						if ( sTmp.IsEmpty() )
 							dRows.PutNULL();
 						else
-							dRows.PutBlob ( dTmp );
+							dRows.PutBlob ( sTmp.begin(), sTmp.GetLength() );
 						break;
 					}
 					dRows.PutBlob ( pString, iLen );
@@ -15388,10 +15344,10 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 				{
 					const BYTE * pFactors = nullptr;
 					sphUnpackPtrAttr ( (const BYTE*)tMatch.GetAttr ( tLoc ), &pFactors );
-					dTmp.Resize ( 0 );
+					StringBuilder_c sTmp;
 					if ( pFactors )
-						sphFormatFactors ( dTmp, (const unsigned int *)pFactors, eAttrType==SPH_ATTR_FACTORS_JSON );
-					dRows.PutBlob ( dTmp );
+						sphFormatFactors ( sTmp, (const unsigned int *)pFactors, eAttrType==SPH_ATTR_FACTORS_JSON );
+					dRows.PutBlob ( sTmp.begin (), sTmp.GetLength () );
 					break;
 				}
 
@@ -15414,10 +15370,10 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 					}
 			
 					// send string to client
-					dTmp.Resize ( 0 );
-					sphJsonFieldFormat ( dTmp, pField, eJson, false );
+					JsonEscapedBuilder sTmp;
+					sphJsonFieldFormat ( sTmp, pField, eJson, false );
 
-					dRows.PutBlob ( dTmp );
+					dRows.PutBlob ( sTmp.begin(), sTmp.GetLength () );
 					break;
 				}
 

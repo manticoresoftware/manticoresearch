@@ -2377,7 +2377,7 @@ uint64_t sphCalcExprDepHash ( ISphExpr * pExpr, const ISphSchema & tSorterSchema
 void sphFixupLocator ( CSphAttrLocator & tLocator, const ISphSchema * pOldSchema, const ISphSchema * pNewSchema );
 ISphSchema * sphCreateStandaloneSchema ( const ISphSchema * pSchema );
 
-void sphPackedMVA2Str ( const BYTE * pMVA, bool b64bit, CSphVector<char> & dStr );
+void sphPackedMVA2Str ( const BYTE * pMVA, bool b64bit, StringBuilder_c & dStr );
 
 // internals attributes are last no need to send them
 int sphSendGetAttrCount ( const ISphSchema & tSchema, bool bAgentMode=false );

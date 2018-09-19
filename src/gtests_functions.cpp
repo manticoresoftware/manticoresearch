@@ -95,10 +95,40 @@ TEST ( functions, stringbuilder_hello )
 {
 	StringBuilder_c builder;
 
+	// += of const char string
 	builder += "Hello";
-	builder << " " << "world!";
 
+	// << for const char*
+	builder << " " << "world!";
 	ASSERT_STREQ ( builder.cstr (), "Hello world!" );
+
+	// << for CSphString
+	CSphString s ("I am");
+	builder << s;
+	ASSERT_STREQ ( builder.cstr (), "Hello world!I am" );
+
+	// << for vec of chars
+	CSphVector<char> dText;
+	dText.Add('a'); dText.Add('b'); dText.Add('c');
+	builder << dText;
+	ASSERT_STREQ ( builder.cstr (), "Hello world!I amabc" );
+
+	// AppendChars of blob
+	const char* sText = "text";
+	builder.AppendChars ( sText, (int) strlen (sText) );
+	ASSERT_STREQ ( builder.cstr (), "Hello world!I amabctext" );
+
+	// AppendChars with quotation
+	builder.AppendChars ( sText, ( int ) strlen ( sText ), '`' );
+	ASSERT_STREQ ( builder.cstr (), "Hello world!I amabctext`text`" );
+
+	// AppendString
+	builder.AppendString (s);
+	ASSERT_STREQ ( builder.cstr (), "Hello world!I amabctext`text`I am" );
+
+	// AppendString quoted
+	builder.AppendString ( s, '_' );
+	ASSERT_STREQ ( builder.cstr (), "Hello world!I amabctext`text`I am_I am_" );
 }
 
 // test for scoped-comma modifier.
@@ -297,12 +327,14 @@ TEST ( functions, strinbguilder_appendf )
 
 struct EscapeQuotation_t
 {
-	static bool IsEscapeChar ( char c )
+	static const char cQuote = '\'';
+
+	inline static bool IsEscapeChar ( char c )
 	{
 		return ( c=='\\' || c=='\'' );
 	}
 
-	static char GetEscapedChar ( char c )
+	inline static char GetEscapedChar ( char c )
 	{
 		return c;
 	}
@@ -314,22 +346,177 @@ TEST( functions, EscapedStringBuilder )
 {
 	QuotationEscapedBuilder tBuilder;
 	tBuilder.AppendEscaped ( "Hello" );
-	ASSERT_STREQ ( tBuilder.cstr (), "Hello" );
+	ASSERT_STREQ ( tBuilder.cstr (), "'Hello'" );
 
 	tBuilder.AppendEscaped ( " wo\\rl\'d" );
-	ASSERT_STREQ ( tBuilder.cstr (), "Hello wo\\\\rl\\'d" );
+	ASSERT_STREQ ( tBuilder.cstr (), "'Hello'' wo\\\\rl\\'d'" );
 
 	tBuilder.Clear ();
-	tBuilder.AppendEscaped ( "wo\\rl\'d", false );
+	tBuilder.AppendEscaped ( "wo\\rl\'d", EscBld::eFixupSpace );
 	ASSERT_STREQ ( tBuilder.cstr (), "wo\\rl\'d" );
 
+	// generic const char* with different escapes
 	tBuilder.Clear ();
-	tBuilder.AppendEscaped ( "space\t and\r tab\n here", false, false );
-	ASSERT_STREQ ( tBuilder.cstr (), "space\t and\r tab\n here" );
+	tBuilder.AppendEscaped ( "space\t and\r 'tab'\n here", EscBld::eNone);
+	ASSERT_STREQ ( tBuilder.cstr (), "space\t and\r 'tab'\n here" );
 
 	tBuilder.Clear ();
-	tBuilder.AppendEscaped ( "space\t and\r tab\n here" );
-	ASSERT_STREQ ( tBuilder.cstr (), "space  and  tab  here" );
+	tBuilder.AppendEscaped ( "space\t and\r 'tab'\n here", EscBld::eFixupSpace );
+	ASSERT_STREQ ( tBuilder.cstr (), "space  and  'tab'  here" );
+
+	tBuilder.Clear ();
+	tBuilder.AppendEscaped ( "space\t and\r 'tab'\n here", EscBld::eEscape );
+	ASSERT_STREQ ( tBuilder.cstr (), "'space\t and\r \\'tab\\'\n here'" );
+
+	tBuilder.Clear ();
+	tBuilder.AppendEscaped ( "space\t and\r 'tab'\n here" );
+	ASSERT_STREQ ( tBuilder.cstr (), "'space  and  \\'tab\\'  here'" );
+
+	// nullptr with different escapes
+	tBuilder.Clear ();
+	tBuilder.AppendEscaped ( nullptr, EscBld::eNone );
+	ASSERT_STREQ ( tBuilder.cstr (), "" );
+
+	tBuilder.Clear ();
+	tBuilder.AppendEscaped ( nullptr, EscBld::eFixupSpace );
+	ASSERT_STREQ ( tBuilder.cstr (), "" );
+
+	tBuilder.Clear ();
+	tBuilder.AppendEscaped ( nullptr, EscBld::eEscape );
+	ASSERT_STREQ ( tBuilder.cstr (), "''" );
+
+	tBuilder.Clear ();
+	tBuilder.AppendEscaped ( nullptr, EscBld::eAll );
+	ASSERT_STREQ ( tBuilder.cstr (), "''" );
+
+	// empty with different escapes
+	tBuilder.Clear ();
+	tBuilder.AppendEscaped ( "", EscBld::eNone );
+	ASSERT_STREQ ( tBuilder.cstr (), "" );
+
+	tBuilder.Clear ();
+	tBuilder.AppendEscaped ( "", EscBld::eFixupSpace );
+	ASSERT_STREQ ( tBuilder.cstr (), "" );
+
+	tBuilder.Clear ();
+	tBuilder.AppendEscaped ( "", EscBld::eEscape );
+	ASSERT_STREQ ( tBuilder.cstr (), "''" );
+
+	tBuilder.Clear ();
+	tBuilder.AppendEscaped ( "", EscBld::eAll );
+	ASSERT_STREQ ( tBuilder.cstr (), "''" );
+
+	// len-defined blob
+	tBuilder.Clear ();
+	tBuilder.AppendEscaped ( "space\t and\r 'tab'\n here", EscBld::eNone, 10 );
+	ASSERT_STREQ ( tBuilder.cstr (), "space\t and" );
+
+	tBuilder.Clear ();
+	tBuilder.AppendEscaped ( "space\t and\r 'tab'\n here", EscBld::eFixupSpace, 10 );
+	ASSERT_STREQ ( tBuilder.cstr (), "space  and" );
+
+	tBuilder.Clear ();
+	tBuilder.AppendEscaped ( "space\t and\r 'tab'\n here", EscBld::eEscape, 10 );
+	ASSERT_STREQ ( tBuilder.cstr (), "'space\t and'" );
+
+	tBuilder.Clear ();
+	tBuilder.AppendEscaped ( "space\t and\r 'tab'\n here", EscBld::eAll, 10 );
+	ASSERT_STREQ ( tBuilder.cstr (), "'space  and'" );
+
+	// zero-len blob
+	tBuilder.Clear ();
+	tBuilder.AppendEscaped ( "space\t and\r 'tab'\n here", EscBld::eNone, 0 );
+	ASSERT_STREQ ( tBuilder.cstr (), "" );
+
+	tBuilder.Clear ();
+	tBuilder.AppendEscaped ( "space\t and\r 'tab'\n here", EscBld::eFixupSpace, 0 );
+	ASSERT_STREQ ( tBuilder.cstr (), "" );
+
+	tBuilder.Clear ();
+	tBuilder.AppendEscaped ( "space\t and\r 'tab'\n here", EscBld::eEscape, 0 );
+	ASSERT_STREQ ( tBuilder.cstr (), "''" );
+
+	tBuilder.Clear ();
+	tBuilder.AppendEscaped ( "space\t and\r 'tab'\n here", EscBld::eAll, 0 );
+	ASSERT_STREQ ( tBuilder.cstr (), "''" );
+
+	// len-defined blob exactly of given len, non z-terminated.
+	// (valgrind would check nicely if it even try to touch a byte over allocated buf)
+	char * buf = new char[5];
+	memcpy (buf, "space", 5);
+
+	tBuilder.Clear ();
+	tBuilder.AppendEscaped ( buf, EscBld::eNone, 5 );
+	ASSERT_STREQ ( tBuilder.cstr (), "space" );
+
+	tBuilder.Clear ();
+	tBuilder.AppendEscaped ( buf, EscBld::eFixupSpace, 5 );
+	ASSERT_STREQ ( tBuilder.cstr (), "space" );
+
+	tBuilder.Clear ();
+	tBuilder.AppendEscaped ( buf, EscBld::eEscape, 5 );
+	ASSERT_STREQ ( tBuilder.cstr (), "'space'" );
+
+	tBuilder.Clear ();
+	tBuilder.AppendEscaped ( buf, EscBld::eAll, 5 );
+	ASSERT_STREQ ( tBuilder.cstr (), "'space'" );
+
+	delete[] buf;
+}
+
+TEST( functions, EscapedStringBuilderAndCommas )
+{
+	QuotationEscapedBuilder tBuilder;
+
+	// generic const char* with different escapes
+	tBuilder.StartBlock();
+	tBuilder << "first";
+	tBuilder.AppendEscaped ( "space\t and\r 'tab'\n here", EscBld::eNone );
+	ASSERT_STREQ ( tBuilder.cstr (), "first, space\t and\r 'tab'\n here" );
+
+	tBuilder.Clear ();
+	tBuilder.StartBlock ();
+	tBuilder << "first";
+	tBuilder.AppendEscaped ( "space\t and\r 'tab'\n here", EscBld::eFixupSpace );
+	ASSERT_STREQ ( tBuilder.cstr (), "first, space  and  'tab'  here" );
+
+	tBuilder.Clear ();
+	tBuilder.StartBlock ();
+	tBuilder << "first";
+	tBuilder.AppendEscaped ( "space\t and\r 'tab'\n here", EscBld::eEscape );
+	ASSERT_STREQ ( tBuilder.cstr (), "first, 'space\t and\r \\'tab\\'\n here'" );
+
+	tBuilder.Clear ();
+	tBuilder.StartBlock ();
+	tBuilder << "first";
+	tBuilder.AppendEscaped ( "space\t and\r 'tab'\n here" );
+	ASSERT_STREQ ( tBuilder.cstr (), "first, 'space  and  \\'tab\\'  here'" );
+
+	// null with different escapes
+	tBuilder.Clear ();
+	tBuilder.StartBlock ();
+	tBuilder << "first";
+	tBuilder.AppendEscaped ( nullptr, EscBld::eNone );
+	ASSERT_STREQ ( tBuilder.cstr (), "first" );
+
+	tBuilder.Clear ();
+	tBuilder.StartBlock ();
+	tBuilder << "first";
+	tBuilder.AppendEscaped ( nullptr, EscBld::eFixupSpace );
+	ASSERT_STREQ ( tBuilder.cstr (), "first" );
+
+	tBuilder.Clear ();
+	tBuilder.StartBlock ();
+	tBuilder << "first";
+	tBuilder.AppendEscaped ( nullptr, EscBld::eEscape );
+	ASSERT_STREQ ( tBuilder.cstr (), "first, ''" );
+
+	tBuilder.Clear ();
+	tBuilder.StartBlock ();
+	tBuilder << "first";
+	tBuilder.AppendEscaped ( nullptr );
+	ASSERT_STREQ ( tBuilder.cstr (), "first, ''" );
+
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1747,17 +1934,22 @@ TEST ( functions, bench_Sprintf )
 	ASSERT_EQ ( sphGetSmallAllocatedSize (), 0 );
 }
 
-TEST ( functions, bench_builder_Sprintf )
+TEST ( functions, bench_builder_Appendf_vs_Sprintf )
 {
+	auto uLoops = 1000000;
 
-	auto uLoops = 10000000;
+	const char * sFieldFmt = R"({"field":%d, "lcs":%u, "hit_count":%u, "word_count":%u, "tf_idf":%d, "min_idf":%d, )"
+				R"("max_idf":%d, "sum_idf":%d, "min_hit_pos":%d, "min_best_span_pos":%d, "exact_hit":%u, )"
+				R"("max_window_hits":%d, "min_gaps":%d, "exact_order":%u, "lccs":%d, "wlccs":%f, "atc":%f})";
 
 	StringBuilder_c sBuf;
 
 	auto iTimeSpan = -sphMicroTimer ();
 	for ( auto i = 0; i<uLoops; ++i )
 	{
-		sBuf.Appendf ( "Hello my little %d! Nice to meet you...", 1000000 );
+		sBuf.Appendf ( sFieldFmt, 3, 23, 23465, 234, 234, 4346,
+			345345, 3434535, 345, 54, 1,
+			23, 5, 0, 34, .345f, .234f );
 		sBuf.Clear();
 	}
 	iTimeSpan += sphMicroTimer ();
@@ -1766,8 +1958,43 @@ TEST ( functions, bench_builder_Sprintf )
 	iTimeSpan = -sphMicroTimer ();
 	for ( auto i = 0; i<uLoops; ++i )
 	{
-		sBuf.Sprintf ( "Hello my little %d! Nice to meet you...", 1000000 );
+		sBuf.Sprintf ( sFieldFmt, 3, 23, 23465, 234, 234, 4346,
+			345345, 3434535, 345, 54, 1,
+			23, 5, 0, 34, .345f, .234f );
 		sBuf.Clear();
+	}
+	iTimeSpan += sphMicroTimer ();
+	std::cout << "\n" << uLoops << " of Sprintf took " << iTimeSpan << " uSec\n";
+
+	ASSERT_EQ ( sphGetSmallAllocatedSize (), 0 );
+}
+
+TEST ( functions, bench_builder_Appendf_vs_Sprintf_ints )
+{
+	auto uLoops = 1000000;
+
+	const char * sFieldFmt = R"({"field":%d, "lcs":%u, "hit_count":%u, "word_count":%u, "tf_idf":%d, "min_idf":%d, )"
+			 R"("max_idf":%d, "sum_idf":%d, "min_hit_pos":%d, "min_best_span_pos":%d, "exact_hit":%u, )"
+			 R"("max_window_hits":%d, "min_gaps":%d, "exact_order":%u, "lccs":%d, "wlccs":%d, "atc":%d})";
+
+	StringBuilder_c sBuf;
+
+	auto iTimeSpan = -sphMicroTimer ();
+	for ( auto i = 0; i<uLoops; ++i )
+	{
+		sBuf.Appendf ( sFieldFmt, 3, 23, 23465, 234, 234, 4346, 345345, 3434535, 345, 54, 1, 23, 5, 0, 34, 45
+					   , 234 );
+		sBuf.Clear ();
+	}
+	iTimeSpan += sphMicroTimer ();
+	std::cout << "\n" << uLoops << " of Appendf took " << iTimeSpan << " uSec";
+
+	iTimeSpan = -sphMicroTimer ();
+	for ( auto i = 0; i<uLoops; ++i )
+	{
+		sBuf.Sprintf ( sFieldFmt, 3, 23, 23465, 234, 234, 4346, 345345, 3434535, 345, 54, 1, 23, 5, 0, 34, 45
+					   , 234 );
+		sBuf.Clear ();
 	}
 	iTimeSpan += sphMicroTimer ();
 	std::cout << "\n" << uLoops << " of Sprintf took " << iTimeSpan << " uSec\n";

@@ -1712,7 +1712,7 @@ static void PackedMVA2Json ( const BYTE * pMVA, cJSON * pArray )
 
 
 static void JsonObjAddAttr ( const AggrResult_t & tRes, ESphAttr eAttrType, const char * szCol,
-	const CSphMatch & tMatch, const CSphAttrLocator & tLoc, cJSON * pSource, CSphVector<BYTE> & dTmp )
+	const CSphMatch & tMatch, const CSphAttrLocator & tLoc, cJSON * pSource )
 {
 	assert ( sphPlainAttrToPtrAttr(eAttrType)==eAttrType );
 
@@ -1751,10 +1751,10 @@ static void JsonObjAddAttr ( const AggrResult_t & tRes, ESphAttr eAttrType, cons
 		{
 			const auto * pString = (const BYTE *)tMatch.GetAttr(tLoc);
 			int iLen = sphUnpackPtrAttr ( pString, &pString );
-			dTmp.Resize ( iLen+1 );
-			memcpy ( dTmp.Begin(), pString, iLen );
-			dTmp[iLen] = '\0';
-			cJSON_AddStringToObject ( pSource, szCol, (const char *)dTmp.Begin() );
+			StringBuilder_c sTmp;
+			sTmp.GrowEnough (iLen+1);
+			sTmp.AppendChars ((const char*)pString, iLen);
+			cJSON_AddStringToObject ( pSource, szCol, sTmp.cstr() );
 		}
 		break;
 
@@ -1770,16 +1770,14 @@ static void JsonObjAddAttr ( const AggrResult_t & tRes, ESphAttr eAttrType, cons
 				break;
 			}
 
-			dTmp.Resize ( 0 );
-			sphJsonFormat ( dTmp, pJSON );
-			if ( !dTmp.GetLength() )
+			JsonEscapedBuilder sTmp;
+			sphJsonFormat ( sTmp, pJSON );
+			if ( sTmp.IsEmpty () )
 			{
 				cJSON_AddNullToObject ( pSource, szCol );
 				break;
 			}
-
-			dTmp.Add ( '\0' );
-			cJSON_AddStringToObject ( pSource, szCol, (const char *)dTmp.Begin() );
+			cJSON_AddStringToObject ( pSource, szCol, sTmp.cstr () );
 		}
 		break;
 
@@ -1791,10 +1789,9 @@ static void JsonObjAddAttr ( const AggrResult_t & tRes, ESphAttr eAttrType, cons
 			if ( pFactors )
 			{
 				bool bStr = ( eAttrType==SPH_ATTR_FACTORS );
-				dTmp.Resize ( 0 );
-				sphFormatFactors ( dTmp, (const unsigned int *)pFactors, !bStr );
-				dTmp.Add ( '\0' );
-				cJSON_AddStringToObject ( pSource, szCol, (const char *)dTmp.Begin() );
+				StringBuilder_c sTmp;
+				sphFormatFactors ( sTmp, (const unsigned int *)pFactors, !bStr );
+				cJSON_AddStringToObject ( pSource, szCol, sTmp.cstr () );
 			} else
 				cJSON_AddNullToObject ( pSource, szCol );
 		}
@@ -1815,10 +1812,9 @@ static void JsonObjAddAttr ( const AggrResult_t & tRes, ESphAttr eAttrType, cons
 				cJSON_AddNullToObject ( pSource, szCol );
 			else
 			{
-				dTmp.Resize ( 0 );
-				sphJsonFieldFormat ( dTmp, pField, eJson, true );
-				dTmp.Add ( '\0' );
-				cJSON_AddStringToObject ( pSource, szCol, (const char *)dTmp.Begin() );
+				JsonEscapedBuilder sTmp;
+				sphJsonFieldFormat ( sTmp, pField, eJson, true );
+				cJSON_AddStringToObject ( pSource, szCol, sTmp.cstr () );
 			}
 		}
 		break;
@@ -1958,7 +1954,7 @@ CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQ
 			const CSphColumnInfo & tCol = tSchema.GetAttr(iAttr);
 			const char * sName = tCol.m_sName.cstr();
 
-			JsonObjAddAttr ( tRes, tCol.m_eAttrType, sName, tMatch, tCol.m_tLocator, pSource, dTmp );
+			JsonObjAddAttr ( tRes, tCol.m_eAttrType, sName, tMatch, tCol.m_tLocator, pSource );
 		}
 
 		if ( bAttrsHighlight )

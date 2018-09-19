@@ -2390,9 +2390,7 @@ public:
 			m_iLength = strlen ( sDelim );
 	}
 
-	// 'rewind' to initial state
-	inline void Restart ()
-	{ m_bStarted = false; }
+	inline bool Started() const { return m_bStarted; };
 
 	// returns "" first time, m_sDelimiter after
 	operator const char * ()
@@ -2407,7 +2405,7 @@ public:
 /// string builder
 /// somewhat quicker than a series of SetSprintf()s
 /// lets you build strings bigger than 1024 bytes, too
-class StringBuilder_c
+class StringBuilder_c : public ISphNoncopyable
 {
 	// RAII comma for frequently used pattern of pushing into StringBuilder many values separated by ',', ';', etc.
 	// When in scope, inject prefix before very first item, or delimiter before each next.
@@ -2417,7 +2415,6 @@ class StringBuilder_c
 
 		const char * m_sPrefix = nullptr;
 		const char * m_sSuffix = nullptr;
-
 		LazyComma_c * m_pPrevious = nullptr;
 
 		// c-tr for managed - linked StringBuilder will inject RawComma() on each call, terminator at end
@@ -2428,9 +2425,15 @@ class StringBuilder_c
 			, m_pPrevious ( pPrevious )
 		{}
 
-		const char * RawComma ( int &iLen, StringBuilder_c& dBuilder )
+		~LazyComma_c ()
 		{
-			if ( m_bStarted )
+			SafeDelete ( m_pPrevious );
+		}
+
+	public:
+		const char * RawComma ( int &iLen, StringBuilder_c &dBuilder )
+		{
+			if ( Started() )
 			{
 				iLen = m_iLength;;
 				return m_sDelimiter;
@@ -2441,43 +2444,21 @@ class StringBuilder_c
 			{
 				int iPrevLen = 0;
 				const char * sPrevDelim = m_pPrevious->RawComma ( iPrevLen, dBuilder );
-				dBuilder.AppendRawChars (sPrevDelim);
+				dBuilder.AppendRawChars ( sPrevDelim );
 			}
 
 			iLen = m_sPrefix ? strlen ( m_sPrefix ) : 0;
 			return m_sPrefix;
 		}
-
-		~LazyComma_c ()
-		{
-			SafeDelete ( m_pPrevious );
-		}
-
-		inline void Restart ()
-		{
-			Comma_c::Restart();
-			if ( m_pPrevious )
-				m_pPrevious->Restart();
-		}
-
-		// returns m_sPrefix first time, m_sDelimiter after, or "" if res is empty (nullptr)
-		const char * operator() ()
-		{
-			auto * sComma = m_bStarted ? m_sDelimiter : m_sPrefix;
-			m_bStarted = true;
-			return sComma ? sComma : "";
-		}
 	};
 
 private:
 	void NewBuffer ();
-	StringBuilder_c &AppendChars ( const char * sText, int iLen );
-	void AppendRawChars ( const char * sText ); // append without any commas
 	friend class ScopedComma_c;
 
 protected:
 	char * m_sBuffer = nullptr;
-	int m_iSize = 256;
+	int m_iSize = 0;
 	int m_iUsed = 0;
 	static const BYTE uSTEP = 64; // how much to grow if no space left
 	LazyComma_c * m_pDelimiter = nullptr;
@@ -2488,7 +2469,8 @@ public:
 	StringBuilder_c ( const char * sDel = nullptr, const char * sPref = nullptr, const char * sTerm = nullptr );
 	~StringBuilder_c ();
 
-	StringBuilder_c &operator= ( const StringBuilder_c &rhs );
+	StringBuilder_c ( StringBuilder_c&& rhs ) noexcept;
+	StringBuilder_c& operator= ( StringBuilder_c&& rhs ) noexcept;
 
 	// reset to initial state
 	void Clear ();
@@ -2497,19 +2479,25 @@ public:
 	const char * cstr () const { return m_sBuffer; }
 
 	// move out (de-own) value
-	const BYTE * Leak ();
+	BYTE * Leak ();
 	void MoveTo ( CSphString &sTarget ); // leak to string
 
 	// get state
 	bool IsEmpty () const { return !m_sBuffer || m_sBuffer[0]=='\0'; }
-	inline int Length () const { return m_iUsed; }
+	inline int GetLength () const { return m_iUsed; }
 
 	// different kind of fullfillments
+	StringBuilder_c &AppendChars ( const char * sText, int iLen, char cQuote = '\0' );
+	StringBuilder_c &AppendString ( const CSphString &sText, char cQuote = '\0' );
 	StringBuilder_c &operator+= ( const char * sText );
 	StringBuilder_c &operator<< ( const VecTraits_T<char> &sText );
 	inline StringBuilder_c &operator<< ( const char * sText ) { return *this += sText; }
 	inline StringBuilder_c &operator<< ( const CSphString &sText ) { return *this += sText.cstr (); }
 	inline StringBuilder_c &operator<< ( const CSphVariant &sText )	{ return *this += sText.cstr (); }
+
+	// append 1 char despite any blocks.
+	inline void RawC ( char cChar ) { GrowEnough ( 1 ); *end () = cChar; ++m_iUsed; }
+	void AppendRawChars ( const char * sText ); // append without any commas
 
 	// these use standard sprintf() inside
 	StringBuilder_c &vAppendf ( const char * sTemplate, va_list ap );
@@ -2523,11 +2511,12 @@ public:
 	// start new comma block; return pointer to it (for future possible reference in FinishBlocks())
 	LazyComma_c * StartBlock ( const char * sDel = ", ", const char * sPref = nullptr, const char * sTerm = nullptr );
 
-	// finish and close last opened comma block
-	void FinishBlock();
+	// finish and close last opened comma block.
+	// bAllowEmpty - close empty block output nothing(default), or prefix/suffix pair (if any).
+	void FinishBlock ( bool bAllowEmpty = true );
 
 	// finish and close all blocks including pLevels (by default - all blocks)
-	void FinishBlocks ( LazyComma_c* pLevels = nullptr );
+	void FinishBlocks ( LazyComma_c * pLevels = nullptr, bool bAllowEmpty = true );
 
 	inline char * begin() const { return m_sBuffer; }
 	inline char * end () const { return m_sBuffer + m_iUsed; }
@@ -2545,42 +2534,107 @@ public:
 	inline void operator+= (int i) { GrowEnough ( i ); m_iUsed += i; }
 };
 
+namespace EscBld {
+	enum eAct : BYTE
+	{
+		eNone = 0, eFixupSpace = 1, eEscape = 2, eAll = 3
+	};
+}
+
 template < typename T >
 class EscapedStringBuilder_T : public StringBuilder_c
 {
 public:
-
-	void AppendEscaped ( const char * sText, bool bEscape = true, bool bFixupSpace = true )
+	void AppendEscaped ( const char * sText, BYTE eWhat=EscBld::eAll, int iLen=-1 )
 	{
-		if ( !sText || !*sText )
-			return;
-
-		const char * pBuf = sText;
-		int iEsc = 0;
-		for ( ; *pBuf; ++pBuf )
-			iEsc += bEscape && T::IsEscapeChar ( *pBuf );
-
-		int iLen = pBuf - sText + iEsc;
-		if ( iLen>=( m_iSize - m_iUsed ) )
-			Grow ( iLen );
-
-		char * pCur = m_sBuffer + m_iUsed;
-		for ( char s = *pBuf; s; s = *++pBuf, ++pCur )
+		if ( ( !sText || !*sText ) )
 		{
-			if ( bEscape && T::IsEscapeChar ( s ) )
+			if ( eWhat & EscBld::eEscape )
+				iLen=0;
+			else
+				return;
+		}
+
+		// process comma
+		int iComma = 0;
+		const char * sPrefix = m_pDelimiter ? m_pDelimiter->RawComma ( iComma, *this ) : nullptr;
+		GrowEnough ( iComma );
+		if ( iComma )
+		{
+			assert ( sPrefix );
+			memcpy ( end (), sPrefix, iComma );
+			m_iUsed+=iComma;
+		}
+
+		const char * pSrc = sText;
+		int iFinalLen = 0;
+		if ( eWhat & EscBld::eEscape )
+		{
+			if ( iLen<0 )
 			{
-				*pCur++ = '\\';
-				*pCur = T::GetEscapedChar ( s );
-			} else if ( bFixupSpace && ( s=='\t' || s=='\n' || s=='\r' ) )
-			{
-				*pCur = ' ';
+				for ( ; *pSrc; ++pSrc )
+					if ( T::IsEscapeChar (*pSrc) )
+						++iFinalLen;
 			} else
 			{
-				*pCur = s;
+				for ( ; iLen; ++pSrc, --iLen )
+					if ( T::IsEscapeChar ( *pSrc ) )
+						++iFinalLen;
 			}
+			iLen = (int) (pSrc - sText);
+			iFinalLen += iLen+2; // 2 quotes: 1 prefix, 2 postfix.
+		} else if ( iLen<0 )
+			iFinalLen = iLen = (int) strlen (sText);
+		else
+			iFinalLen = iLen;
+
+		GrowEnough ( iFinalLen+1 ); // + zero terminator
+
+		auto * pCur = end();
+		switch (eWhat)
+		{
+		case EscBld::eNone:
+			memcpy ( pCur, sText, iFinalLen );
+			pCur += iFinalLen;
+			break;
+		case EscBld::eFixupSpace:
+			for ( ; iLen; --iLen )
+			{
+				char s = *sText++;
+				*pCur++ = strchr ( "\t\n\r", s ) ? ' ' : s ;
+			}
+			break;
+		case EscBld::eEscape:
+			*pCur++ = T::cQuote;
+			for ( ; iLen; --iLen )
+			{
+				char s = *sText++;
+				if ( T::IsEscapeChar ( s ) )
+				{
+					*pCur++ = '\\';
+					*pCur++ = T::GetEscapedChar ( s );
+				} else
+					*pCur++ = s;
+			}
+			*pCur++ = T::cQuote;
+			break;
+		case EscBld::eAll:
+		default:
+			*pCur++ = T::cQuote;
+			for ( ; iLen; --iLen )
+			{
+				char s = *sText++;
+				if ( T::IsEscapeChar ( s ) )
+				{
+					*pCur++ = '\\';
+					*pCur++ = T::GetEscapedChar ( s );
+				} else
+					*pCur++ = strchr ( "\t\n\r", s ) ? ' ' : s;
+			}
+			*pCur++ = T::cQuote;
 		}
 		*pCur = '\0';
-		m_iUsed = pCur - m_sBuffer;
+		m_iUsed += iFinalLen;
 	}
 };
 

@@ -1951,7 +1951,7 @@ static CSphString LogFilterTreeItem ( int iItem, const CSphVector<FilterTreeItem
 	{
 		StringBuilder_c tBuf;
 		FormatFilterQL ( dFilters[tItem.m_iFilterItem], iCompactIN, tBuf );
-		int iOff = ( tBuf.Length() && *tBuf.cstr()== ' ' ? 1 : 0 );
+		int iOff = ( tBuf.GetLength() && *tBuf.cstr()== ' ' ? 1 : 0 );
 		return tBuf.cstr() + iOff;
 	}
 

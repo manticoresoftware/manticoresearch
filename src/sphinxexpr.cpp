@@ -411,7 +411,7 @@ struct Expr_GetZonespanlist_c : public Expr_StrNoLocator_c
 		int iEnd = iStart + dSpans [ tMatch.m_iTag ]; // [start,end) now covers all data indexes
 		for ( int i=iStart; i<iEnd; i+=2 )
 			m_sBuilder.Appendf ( " %d:%d", 1+dSpans[i], 1+dSpans[i+1] ); // convert our 0-based span numbers to human 1-based ones
-		auto iRes = m_sBuilder.Length ();
+		auto iRes = m_sBuilder.GetLength ();
 		*ppStr = m_sBuilder.Leak();
 		return iRes;
 	}
@@ -957,7 +957,7 @@ public:
 					{
 						while ( nValues-- )
 						{
-							if ( m_sBuilder.Length() )
+							if ( m_sBuilder.GetLength() )
 								m_sBuilder += ",";
 							m_sBuilder.Appendf ( "%u", *pValues++ );
 						}
@@ -965,7 +965,7 @@ public:
 					{
 						for ( ; nValues; nValues-=2, pValues+=2 )
 						{
-							if ( m_sBuilder.Length() )
+							if ( m_sBuilder.GetLength() )
 								m_sBuilder += ",";
 							m_sBuilder.Appendf ( INT64_FMT, MVA_UPSIZE ( pValues ) );
 						}
@@ -985,10 +985,10 @@ public:
 					iLen = 0;
 				} else
 				{
-					CSphVector<BYTE> dTmp;
+					JsonEscapedBuilder dTmp;
 					sphJsonFieldFormat ( dTmp, m_pStrings+uOff, eJson, false );
 					iLen = dTmp.GetLength();
-					*ppStr = dTmp.LeakData();
+					*ppStr = dTmp.Leak();
 				}
 				return iLen;
 
@@ -997,13 +997,13 @@ public:
 				break;
 		}
 
-		if ( !m_sBuilder.Length() )
+		if ( !m_sBuilder.GetLength() )
 		{
 			*ppStr = nullptr;
 			return 0;
 		}
 
-		auto iRes = m_sBuilder.Length ();
+		auto iRes = m_sBuilder.GetLength ();
 		*ppStr = m_sBuilder.Leak();
 		return iRes;
 	}
@@ -3719,9 +3719,10 @@ public:
 					tArgs.str_lengths[i] = 0;
 				} else
 				{
-					sphJsonFieldFormat ( dTmp, m_pStrings+uOff, eJson, false );
-					tArgs.str_lengths[i] = dTmp.GetLength();
-					tArgs.arg_values[i] = (char *)dTmp.LeakData();
+					JsonEscapedBuilder sTmp;
+					sphJsonFieldFormat ( sTmp, m_pStrings+uOff, eJson, false );
+					tArgs.str_lengths[i] = sTmp.GetLength();
+					tArgs.arg_values[i] = (char*) sTmp.Leak();
 				}
 			break;
 

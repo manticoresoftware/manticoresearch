@@ -25012,7 +25012,7 @@ bool ParseMorphFields ( const CSphString & sMorphology, const CSphString & sMorp
 		int * pField = hFields.Find ( sphFNV64 ( sStart, sCur - sStart ) );
 		if ( !pField )
 		{
-			const char * sSep = sMissed.Length() ? ", " : "";
+			const char * sSep = sMissed.GetLength() ? ", " : "";
 			sMissed.Appendf ( "%s%.*s", sSep, (int)(sCur - sStart), sStart );
 			break;
 		}
@@ -25025,10 +25025,10 @@ bool ParseMorphFields ( const CSphString & sMorphology, const CSphString & sMorp
 	if ( !iFieldsGot )
 		tMorphFields.Init ( 0 );
 
-	if ( sMissed.Length() )
+	if ( sMissed.GetLength() )
 		sError.SetSprintf ( "morphology_skip_fields contains out of schema fields: %s", sMissed.cstr() );
 
-	return ( !sMissed.Length() );
+	return ( !sMissed.GetLength() );
 }
 
 CSphSource::CSphSource ( const char * sName )
@@ -31609,7 +31609,7 @@ void SphWordStatChecker_t::DumpDiffer ( const SmallStringHash_T<CSphQueryResultM
 		}
 	}
 
-	if ( tWarningBuilder.Length() )
+	if ( tWarningBuilder.GetLength() )
 		tWarningBuilder.MoveTo ( sWarning );
 }
 

@@ -234,7 +234,7 @@ else ( WIN32 )
 		if ( JEMALLOC_FOUND )
 			list ( APPEND EXTRA_LIBRARIES ${JEMALLOC_LIBRARIES} )
 		else()
-			message (STATUS "USE_JEMALLOC requested, but no jemalloc found -- Ignore")
+			message (FATAL_ERROR "USE_JEMALLOC requested, but no jemalloc found -- Ignore")
 		endif()
 	endif ()
 

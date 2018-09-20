@@ -29,7 +29,7 @@ Response is a JSON document containing an array of attrs,matches and meta simila
 
 .. code-block:: bash
 
-       curl -X POST 'http://manticoresearch:9308/search/' 
+       curl -X POST 'http://manticoresearch:9308/search'
        -d 'index=forum&match=@subject php manticore&select=id,subject,author_id&limit=5'
 
 .. code-block:: json
@@ -74,7 +74,7 @@ Response is a JSON document containing an array of attrs,matches and meta simila
 .. code-block:: bash
 
 
-        curl -X POST 'http://manticoresearch:9308/sql/' 
+        curl -X POST 'http://manticoresearch:9308/sql'
        -d "query=select id,subject,author_id  from forum where match('@subject php manticore') group by
         author_id order by id desc limit 0,5"
 

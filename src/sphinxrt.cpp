@@ -8343,12 +8343,14 @@ void RtIndex_t::Optimize ( )
 			pOldest = m_dDiskChunks[0];
 			pOlder = m_dDiskChunks[1];
 
-			// add disk chunks kill-lists
-			for ( const CSphIndex * pIndex : m_dDiskChunks )
+			// add disk chunks kill-lists from next to oldest up to the newest, but not the oldest one
+			for ( int iChunk=1; iChunk<m_dDiskChunks.GetLength(); iChunk++ )
 			{
 				if ( g_bShutdown || m_bOptimizeStop )
 					break;
-				dKlist.Append ( pIndex->GetKillList (), pIndex->GetKillListSize ());
+
+				const CSphIndex * pIndex = m_dDiskChunks[iChunk];
+				dKlist.Append ( pIndex->GetKillList(), pIndex->GetKillListSize() );
 			}
 		} // m_tChunkLock scoped Readlock
 
@@ -8563,8 +8565,8 @@ void RtIndex_t::ProgressiveMerge ()
 			// so we're merging chunk A (older) with the (younger) B, so A < B
 			// we have to merge chunk's A kill-list to chunk A+1 to maintain the integrity
 
-			// collect all kill-lists from A to B (inclusive)
-			for ( int iChunk=iA+1; iChunk<=iB; iChunk++ )
+			// collect all kill-lists from A to newest (inclusive), but not A itself
+			for ( int iChunk=iA+1; iChunk<=m_dDiskChunks.GetLength()-1; iChunk++ )
 			{
 				if ( g_bShutdown || m_bOptimizeStop )
 					break;
@@ -8578,9 +8580,13 @@ void RtIndex_t::ProgressiveMerge ()
 
 			// merge klist from oldest disk chunk to next disk chunk
 			// that might be either A and A+1 or A and B
-			CSphIndex * pNextChunk = m_dDiskChunks[iA + 1];
-			dMergedKlist.Append ( pOldest->GetKillList (), pOldest->GetKillListSize () );
-			dMergedKlist.Append ( pNextChunk->GetKillList (), pNextChunk->GetKillListSize () );
+			// but not set kill-list for oldest disk chunk as it useless and only consumes memory
+			if ( iA!=0 )
+			{
+				CSphIndex * pNextChunk = m_dDiskChunks[iA + 1];
+				dMergedKlist.Append ( pOldest->GetKillList (), pOldest->GetKillListSize () );
+				dMergedKlist.Append ( pNextChunk->GetKillList (), pNextChunk->GetKillListSize () );
+			}
 		} // m_tChunkLock scope
 
 		// for filtering have to set bounds

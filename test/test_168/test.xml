@@ -69,6 +69,40 @@ index idx_blend2
 	morphology = stem_ru
 }
 
+source src31
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * FROM table_t1
+	sql_attr_uint	= idd
+	sql_attr_string	= f1
+}
+
+index idx31
+{
+	source			= src31
+	docinfo			= extern
+	path			= <data_path/>/idx31
+	dict			= keywords
+}
+
+source src32
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= SELECT * FROM table_t2
+	sql_attr_uint	= idd
+	sql_attr_string	= f1
+}
+
+index idx32
+{
+	source			= src32
+	docinfo			= extern
+	path			= <data_path/>/idx32
+	dict			= keywords
+}
+
 </config>
 
 
@@ -108,6 +142,12 @@ index idx_blend2
 <sphinxql>CALL SNIPPETS ('+hashtag for me is not so long but who knows', 'idx2', '+hashtag', 1 as query_mode, 40 as limit)</sphinxql>
 <sphinxql>CALL SNIPPETS (('text1.txt'),'idx_blend1','mysql query',1 AS load_files)</sphinxql>
 <sphinxql>CALL SNIPPETS (('text2.txt'),'idx_blend2','*алгоритм*',1 AS load_files)</sphinxql>
+
+<!-- crash or hung on empty snippet -->
+<sphinxql>SELECT *, SNIPPET(f1,'J07A | query', 'load_files=1, html_strip_mode=index, around=10') FROM idx31 WHERE MATCH ('J07A | query')</sphinxql>
+<sphinxql>SELECT *, SNIPPET(f1,'J07A | *алгоритм*', 'load_files=1, html_strip_mode=index, around=10') FROM idx31 WHERE MATCH ('J07A | *алгоритм*')</sphinxql>
+<sphinxql>SELECT *, SNIPPET(f1,'J07A | query', 'load_files=1, html_strip_mode=index, around=10') FROM idx32 WHERE MATCH ('J07A | query')</sphinxql>
+<sphinxql>SELECT *, SNIPPET(f1,'J07A | *алгоритм*', 'load_files=1, html_strip_mode=index, around=10') FROM idx32 WHERE MATCH ('J07A | *алгоритм*')</sphinxql>
 </sphqueries>
 
 <db_create>
@@ -122,5 +162,37 @@ INSERT INTO `test_table` VALUES
 ( 1, 'dummy' )
 </db_insert>
 <db_drop>DROP TABLE IF EXISTS test_table</db_drop>
+
+<db_create>
+CREATE TABLE table_t1
+(
+	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
+	title VARCHAR(255) NOT NULL,
+	f1 VARCHAR(255) NOT NULL,
+	idd INTEGER
+);
+</db_create>
+<db_insert>
+INSERT INTO `table_t1` VALUES
+( 1, 'J07A best', 'text1', 1 ),
+( 2, 'J07A test', 'text2', 1 )
+</db_insert>
+<db_drop>DROP TABLE IF EXISTS table_t1</db_drop>
+
+<db_create>
+CREATE TABLE table_t2
+(
+	id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
+	title VARCHAR(255) NOT NULL,
+	f1 VARCHAR(255) NOT NULL,
+	idd INTEGER
+);
+</db_create>
+<db_insert>
+INSERT INTO `table_t2` VALUES
+( 1, 'J07A best', 'text1.txt', 1 ),
+( 2, 'J07A test', 'text2.txt', 1 )
+</db_insert>
+<db_drop>DROP TABLE IF EXISTS table_t2</db_drop>
 
 </test>

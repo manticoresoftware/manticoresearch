@@ -6287,7 +6287,7 @@ struct Expr_Snippet_c : public ISphStringExpr
 			int iResultLength = m_tHighlight.m_dRes.GetLength();
 			*ppStr = m_tHighlight.m_dRes.LeakData();
 			// skip trailing zero
-			return iResultLength-1;
+			return ( iResultLength ? iResultLength-1 : 0 );
 		} else
 			return PackSnippets ( m_tHighlight.m_dRes, m_tHighlight.m_dSeparators, m_tHighlight.m_sChunkSeparator.Length(), ppStr );
 	}

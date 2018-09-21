@@ -1473,13 +1473,11 @@ and threads. Default is thread_pool.
 Lets you choose how ``searchd`` processes multiple concurrent requests.
 The possible values are:
 
--  threads
--  A new dedicated thread is created on every incoming network
+-  threads - A new dedicated thread is created on every incoming network
    connection. Subsequent queries on that connection are handled by that
    thread. When a client disconnected, the thread gets killed.
 
--  thread_pool
--  A worker threads pool is created on daemon startup. An internal
+-  thread_pool - A worker threads pool is created on daemon startup. An internal
    network thread handles all the incoming network connections.
    Subsequent queries on any connection are then put into a queue, and
    processed in order by the first avaialble worker thread from the

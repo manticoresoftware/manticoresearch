@@ -96,6 +96,8 @@ for quick access.
 
 -  :ref:`NOW() <expr-func-now>`
 
+-  :ref:`PACKEDFACTORS() <expr-func-packedfactors>`
+
 -  :ref:`POLY2D() <expr-func-poly2d>`
 
 -  :ref:`POW() <expr-func-pow>`
@@ -661,12 +663,6 @@ Miscellaneous functions
    matches.
    
 
-.. _expr-func-weight:
-
--  WEIGHT()
-   Returns fulltext match score.
-   
-
 .. _expr-func-packedfactors:
 
 -  PACKEDFACTORS()
@@ -852,7 +848,14 @@ Miscellaneous functions
 
 .. _expr-func-rand:
 
--  rand()
+-  RAND()
 
    RAND(seed) function returns a random float between 0..1. Optional, an
    integer seed value can be specified.
+
+   
+.. _expr-func-weight:
+
+-  WEIGHT()
+   Returns fulltext match score.
+   

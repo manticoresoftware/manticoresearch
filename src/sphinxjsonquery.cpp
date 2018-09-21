@@ -1772,12 +1772,10 @@ static void JsonObjAddAttr ( const AggrResult_t & tRes, ESphAttr eAttrType, cons
 
 			JsonEscapedBuilder sTmp;
 			sphJsonFormat ( sTmp, pJSON );
-			if ( sTmp.IsEmpty () )
-			{
+			if ( !sTmp.IsEmpty () )
+				cJSON_AddStringToObject ( pSource, szCol, sTmp.cstr () );
+			else
 				cJSON_AddNullToObject ( pSource, szCol );
-				break;
-			}
-			cJSON_AddStringToObject ( pSource, szCol, sTmp.cstr () );
 		}
 		break;
 

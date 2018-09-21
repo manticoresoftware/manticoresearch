@@ -1370,102 +1370,48 @@ struct SourceMatch_c : public CSphMatch
 static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, const CSphFixedVector<SphDocID_t> & dDocids,
 	const CSphString & sIndex, JsonEscapedBuilder & tOut )
 {
-	tOut += "{";
+	ScopedComma_c sRootBlock ( tOut, ",", "{", "}" );
 
 	// column names
-	tOut << R"("took":)";
-	tOut.Appendf ( "%d,", (int)( tRes.m_tmTotal/1000 ) );
-	tOut << R"("timed_out":)";
-	tOut += "false,";
+	tOut.Sprintf ( R"("took":%d,"timed_out":false)", ( int ) ( tRes.m_tmTotal / 1000 ));
 
-	tOut << R"("hits":)";
-	tOut += "{";
-	tOut << R"("total":)";
-	tOut.Appendf ( "%d,", tRes.m_dQueryDesc.GetLength() );
-	tOut << R"("max_score":)";
-	tOut += "1,"; // FIXME!!! track and provide weight
-
+	// hits {
+	ScopedComma_c sHitsBlock ( tOut, ",", R"("hits":{)", "}");
+	tOut.Sprintf ( R"("total":%d,"max_score":1)", tRes.m_dQueryDesc.GetLength()); // FIXME!!! track and provide weight
 	if ( tRes.m_bVerbose )
-	{
-		tOut << R"("early_out_queries":)";
-		tOut.Appendf ( "%d,", tRes.m_iEarlyOutQueries );
-		tOut << R"("matched_queries":)";
-		tOut.Appendf ( "%d,", tRes.m_iQueriesMatched );
-		tOut << R"("matched_docs":)";
-		tOut.Appendf ( "%d,", tRes.m_iDocsMatched );
-		tOut << R"("only_terms_queries":)";
-		tOut.Appendf ( "%d,", tRes.m_iOnlyTerms );
-		tOut << R"("total_queries":)";
-		tOut.Appendf ( "%d,", tRes.m_iTotalQueries );
-	}
+		tOut.Sprintf ( R"("early_out_queries":%d,"matched_queries":%d,"matched_docs":%d,"only_terms_queries":%d,"total_queries":%d)",
+			tRes.m_iEarlyOutQueries, tRes.m_iQueriesMatched, tRes.m_iDocsMatched, tRes.m_iOnlyTerms, tRes.m_iTotalQueries );
 
 	// documents
-	tOut << R"("hits":)";
-	tOut += "[";
+	tOut.StartBlock ( ",", R"("hits":[)", "]");
 
 	int iDocOff = 0;
-	ARRAY_FOREACH ( i, tRes.m_dQueryDesc )
+	for ( const auto& tDesc : tRes.m_dQueryDesc )
 	{
-		const PercolateQueryDesc & tDesc = tRes.m_dQueryDesc[i];
-		if ( i )
-			tOut += ",";
-		tOut += "{";
-		tOut << R"("_index":)";
-		tOut.Appendf ( "\"%s\",", sIndex.cstr() );
-		tOut << R"("_type":)";
-		tOut += "\"doc\",";
-		tOut << R"("_id":)";
-		tOut.Appendf ( "\"" UINT64_FMT "\",", tDesc.m_uID );
-		tOut << R"("_score":)";
-		tOut += "\"1\","; // FIXME!!! track and provide weight
-
-		tOut << R"("_source":)";
-		if ( tDesc.m_bQL )
-		{
-			tOut += "{ \"query\": { \"ql\":";
+		ScopedComma_c sQueryComma ( tOut, ",","{"," }");
+		tOut.Sprintf ( R"("_index":"%s","_type":"doc","_id":"%u","_score":"1")", sIndex.cstr(), tDesc.m_uID );
+		if ( !tDesc.m_bQL )
+			tOut.Sprintf ( R"("_source":{"query":%s})", tDesc.m_sQuery.cstr () );
+		else {
+			ScopedComma_c sBrackets ( tOut, nullptr, R"("_source":{ "query": {"ql":)", " } }");
 			tOut.AppendEscaped ( tDesc.m_sQuery.cstr(), EscBld::eEscape );
-			tOut += " } }";
-		} else
-		{
-			tOut += "{";
-			tOut << R"("query":)";
-			tOut += tDesc.m_sQuery.cstr();
-			tOut += "}";
 		}
 
 		// document count + document id(s)
-		int iCount = 0;
 		if ( tRes.m_bGetDocs )
-			iCount = (int)( tRes.m_dDocs[iDocOff] );
-
-		if ( iCount )
 		{
-			tOut += ",";
-			tOut << R"("fields":)";
-			tOut += "{\"_percolator_document_slot\": [";
-
-			const char * sSep = "";
-			for ( int iDoc = 0; iDoc<iCount; iDoc++ )
+			ScopedComma_c sFields ( tOut, ",",R"("fields":{"_percolator_document_slot": [)", "] }");
+			for ( int iDoc = 1; iDoc<=tRes.m_dDocs[iDocOff]; ++iDoc )
 			{
-				int iRow = tRes.m_dDocs[iDocOff + 1 + iDoc];
-				SphDocID_t uDocid = ( dDocids.GetLength() ? dDocids[iRow] : iRow );
-				tOut.Appendf ( "%s" DOCID_FMT, sSep, uDocid );
-				sSep = ",";
+				int iRow = tRes.m_dDocs[iDocOff + iDoc];
+				tOut.Sprintf ("%U", ( dDocids.GetLength () ? dDocids[iRow] : iRow ) ); // docid
 			}
-			tOut += "] }";
+			iDocOff += tRes.m_dDocs[iDocOff] + 1;
 		}
-		if ( tRes.m_bGetDocs )
-			iDocOff += iCount + 1;
-
-		tOut += " }";
 	}
 
-
-	tOut += "]";
-
-	tOut += "}";
-
-	tOut += "}";
+	tOut.FinishBlock ( false ); // hits[]
+	// all the rest blocks (root, hits) will be auto-closed here.
 }
 
 

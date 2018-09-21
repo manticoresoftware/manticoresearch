@@ -2534,10 +2534,14 @@ public:
 	inline void operator+= (int i) { GrowEnough ( i ); m_iUsed += i; }
 };
 
-namespace EscBld {
+namespace EscBld {	// what kind of changes will do AppendEscaped of escaped string builder:
 	enum eAct : BYTE
 	{
-		eNone = 0, eFixupSpace = 1, eEscape = 2, eAll = 3
+		eNone		= 0, // [comma,] append raw text without changes
+		eFixupSpace	= 1, // [comma,] change \t, \n, \r into spaces
+		eEscape		= 2, // [comma,] all escaping according to provided interface
+		eAll		= 3, // [comma,] escape and change spaces
+//		eSkipComma	= 4, // force to NOT prefix comma (if any active)
 	};
 }
 
@@ -2557,13 +2561,18 @@ public:
 
 		// process comma
 		int iComma = 0;
-		const char * sPrefix = m_pDelimiter ? m_pDelimiter->RawComma ( iComma, *this ) : nullptr;
-		GrowEnough ( iComma );
-		if ( iComma )
+//		if ( eWhat & EscBld::eSkipComma )
+//			eWhat -= EscBld::eSkipComma;
+//		else
 		{
-			assert ( sPrefix );
-			memcpy ( end (), sPrefix, iComma );
-			m_iUsed+=iComma;
+			const char * sPrefix = m_pDelimiter ? m_pDelimiter->RawComma ( iComma, *this ) : nullptr;
+			GrowEnough ( iComma );
+			if ( iComma )
+			{
+				assert ( sPrefix );
+				memcpy ( end (), sPrefix, iComma );
+				m_iUsed+=iComma;
+			}
 		}
 
 		const char * pSrc = sText;

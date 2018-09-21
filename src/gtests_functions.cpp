@@ -464,60 +464,51 @@ TEST( functions, EscapedStringBuilder )
 	delete[] buf;
 }
 
-TEST( functions, EscapedStringBuilderAndCommas )
+void esc_first_comma ( const char* sText, BYTE eKind, const char* sProof )
 {
 	QuotationEscapedBuilder tBuilder;
+	tBuilder.StartBlock ();
+	tBuilder << "first";
+	tBuilder.AppendEscaped ( sText, eKind );
+	ASSERT_STREQ ( tBuilder.cstr (), sProof );
+}
 
+TEST( functions, EscapedStringBuilderAndCommas )
+{
 	// generic const char* with different escapes
-	tBuilder.StartBlock();
-	tBuilder << "first";
-	tBuilder.AppendEscaped ( "space\t and\r 'tab'\n here", EscBld::eNone );
-	ASSERT_STREQ ( tBuilder.cstr (), "first, space\t and\r 'tab'\n here" );
-
-	tBuilder.Clear ();
-	tBuilder.StartBlock ();
-	tBuilder << "first";
-	tBuilder.AppendEscaped ( "space\t and\r 'tab'\n here", EscBld::eFixupSpace );
-	ASSERT_STREQ ( tBuilder.cstr (), "first, space  and  'tab'  here" );
-
-	tBuilder.Clear ();
-	tBuilder.StartBlock ();
-	tBuilder << "first";
-	tBuilder.AppendEscaped ( "space\t and\r 'tab'\n here", EscBld::eEscape );
-	ASSERT_STREQ ( tBuilder.cstr (), "first, 'space\t and\r \\'tab\\'\n here'" );
-
-	tBuilder.Clear ();
-	tBuilder.StartBlock ();
-	tBuilder << "first";
-	tBuilder.AppendEscaped ( "space\t and\r 'tab'\n here" );
-	ASSERT_STREQ ( tBuilder.cstr (), "first, 'space  and  \\'tab\\'  here'" );
+	esc_first_comma ( "space\t and\r 'tab'\n here", EscBld::eNone, "first, space\t and\r 'tab'\n here" );
+	esc_first_comma ( "space\t and\r 'tab'\n here", EscBld::eFixupSpace, "first, space  and  'tab'  here" );
+	esc_first_comma ( "space\t and\r 'tab'\n here", EscBld::eEscape , "first, 'space\t and\r \\'tab\\'\n here'" );
+	esc_first_comma ( "space\t and\r 'tab'\n here", EscBld::eAll, "first, 'space  and  \\'tab\\'  here'" );
 
 	// null with different escapes
-	tBuilder.Clear ();
-	tBuilder.StartBlock ();
-	tBuilder << "first";
-	tBuilder.AppendEscaped ( nullptr, EscBld::eNone );
-	ASSERT_STREQ ( tBuilder.cstr (), "first" );
+	esc_first_comma ( nullptr, EscBld::eNone, "first" );
+	esc_first_comma ( nullptr, EscBld::eFixupSpace, "first" );
+	esc_first_comma ( nullptr, EscBld::eEscape, "first, ''" );
+	esc_first_comma ( nullptr, EscBld::eAll, "first, ''" );
+}
 
-	tBuilder.Clear ();
-	tBuilder.StartBlock ();
-	tBuilder << "first";
-	tBuilder.AppendEscaped ( nullptr, EscBld::eFixupSpace );
-	ASSERT_STREQ ( tBuilder.cstr (), "first" );
+/*
+TEST( functions, EscapedStringBuilderAndSkipCommas )
+{
+	// generic const char* with different escapes, exclude comma
+	esc_first_comma ( "space\t and\r 'tab'\n here", EscBld::eNone | EscBld::eSkipComma
+					  , "firstspace\t and\r 'tab'\n here" );
+	esc_first_comma ( "space\t and\r 'tab'\n here", EscBld::eFixupSpace | EscBld::eSkipComma
+					  , "firstspace  and  'tab'  here" );
+	esc_first_comma ( "space\t and\r 'tab'\n here", EscBld::eEscape | EscBld::eSkipComma
+					  , "first'space\t and\r \\'tab\\'\n here'" );
+	esc_first_comma ( "space\t and\r 'tab'\n here", EscBld::eAll | EscBld::eSkipComma
+					  , "first'space  and  \\'tab\\'  here'" );
 
-	tBuilder.Clear ();
-	tBuilder.StartBlock ();
-	tBuilder << "first";
-	tBuilder.AppendEscaped ( nullptr, EscBld::eEscape );
-	ASSERT_STREQ ( tBuilder.cstr (), "first, ''" );
-
-	tBuilder.Clear ();
-	tBuilder.StartBlock ();
-	tBuilder << "first";
-	tBuilder.AppendEscaped ( nullptr );
-	ASSERT_STREQ ( tBuilder.cstr (), "first, ''" );
+	// null with different escapes, exclude comma
+	esc_first_comma ( nullptr, EscBld::eNone | EscBld::eSkipComma, "first" );
+	esc_first_comma ( nullptr, EscBld::eFixupSpace | EscBld::eSkipComma, "first" );
+	esc_first_comma ( nullptr, EscBld::eEscape | EscBld::eSkipComma, "first''" );
+	esc_first_comma ( nullptr, EscBld::eAll | EscBld::eSkipComma, "first''" );
 
 }
+*/
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -1914,7 +1905,7 @@ TEST ( functions, sph_Sprintf_to_builder )
 	ASSERT_STREQ ( sBuf.cstr (), "{1 -1 100,2 -2 200} 999.500, -1.400932" );
 }
 
-TEST ( functions, bench_Sprintf )
+TEST ( functions, DISABLED_bench_Sprintf )
 {
 	char sBuf[40];
 	auto uLoops = 10000000;
@@ -1934,7 +1925,7 @@ TEST ( functions, bench_Sprintf )
 	ASSERT_EQ ( sphGetSmallAllocatedSize (), 0 );
 }
 
-TEST ( functions, bench_builder_Appendf_vs_Sprintf )
+TEST ( functions, DISABLED_bench_builder_Appendf_vs_Sprintf )
 {
 	auto uLoops = 1000000;
 
@@ -1969,7 +1960,7 @@ TEST ( functions, bench_builder_Appendf_vs_Sprintf )
 	ASSERT_EQ ( sphGetSmallAllocatedSize (), 0 );
 }
 
-TEST ( functions, bench_builder_Appendf_vs_Sprintf_ints )
+TEST ( functions, DISABLED_bench_builder_Appendf_vs_Sprintf_ints )
 {
 	auto uLoops = 1000000;
 

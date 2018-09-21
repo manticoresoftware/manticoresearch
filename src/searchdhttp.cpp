@@ -1632,24 +1632,10 @@ bool HttpHandlerPQ_c::GotDocuments ( PercolateIndex_i * pIndex, const CSphString
 
 static void EncodePercolateQueryResult ( bool bReplace, const CSphString & sIndex, uint64_t uID, StringBuilder_c & tOut )
 {
-	tOut += "{";
-
-	tOut << R"("index":)";
-	tOut.Appendf ( "\"%s\",", sIndex.cstr() );
-	tOut << R"("type":)";
-	tOut += "\"doc\",";
-	tOut << R"("_id":)";
-	tOut.Appendf ( "\"" UINT64_FMT "\",", uID );
-	tOut << R"("result":)";
-	tOut += bReplace ? "\"updated\"" : "\"created\"";
 	if ( bReplace )
-	{
-		tOut += ",";
-		tOut << R"("forced_refresh":)";
-		tOut += "true";
-	}
-
-	tOut += "}";
+		tOut.Sprintf (R"({"index":"%s","type":"doc","_id":"%U","result":"updated","forced_refresh":true})", sIndex.cstr(), uID);
+	else
+		tOut.Sprintf ( R"({"index":"%s","type":"doc","_id":"%U","result":"created"})", sIndex.cstr (), uID );
 }
 
 

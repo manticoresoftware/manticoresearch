@@ -395,7 +395,7 @@ Example:
 .. code-block:: ini
 
 
-    bigram_freq_words = both_freq
+    bigram_index = both_freq
 
 .. _blend_chars:
 

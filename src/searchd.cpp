@@ -2719,7 +2719,6 @@ void ISphOutputBuffer::SendArray ( const StringBuilder_c &dBuf )
 	SendArray ( dBuf.begin(), dBuf.GetLength () );
 }
 
-
 /////////////////////////////////////////////////////////////////////////////
 
 void CachedOutputBuffer_c::Flush()
@@ -10346,7 +10345,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 }
 
 // throw out tailing \0 if any
-void FixupResultTail (CSphVector<BYTE> & dData)
+inline static void FixupResultTail (CSphVector<BYTE> & dData)
 {
 	if ( !dData.IsEmpty() && !dData.Last () )
 		dData.Pop ();
@@ -10884,7 +10883,7 @@ private:
 	CSphString m_sPattern;
 
 public:
-	explicit CheckLike ( const char * sPattern )
+	explicit CheckLike ( const char * sPattern = nullptr )
 	{
 		if ( !sPattern )
 			return;
@@ -10924,9 +10923,7 @@ public:
 
 public:
 
-	VectorLike ()
-		: CheckLike ( NULL )
-	{}
+	VectorLike () = default;
 
 	explicit VectorLike ( const CSphString& sPattern )
 		: CheckLike ( sPattern.cstr() )
@@ -10957,10 +10954,10 @@ public:
 	bool MatchAddVa ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) )
 	{
 		va_list ap;
-		CSphString sValue;
+		StringBuilder_c sValue;
 
 		va_start ( ap, sTemplate );
-		sValue.SetSprintfVa ( sTemplate, ap );
+		sValue.vSprintf ( sTemplate, ap );
 		va_end ( ap );
 
 		return MatchAdd ( sValue.cstr() );
@@ -11281,7 +11278,7 @@ static bool BuildDistIndexStatus ( VectorLike & dStatus, const CSphString& sInde
 	return true;
 }
 
-void BuildAgentStatus ( VectorLike & dStatus, const CSphString& sIndexOrAgent )
+void BuildAgentStatus ( VectorLike &dStatus, const CSphString& sIndexOrAgent )
 {
 	if ( !sIndexOrAgent.IsEmpty() )
 	{
@@ -11316,8 +11313,6 @@ void BuildAgentStatus ( VectorLike & dStatus, const CSphString& sIndexOrAgent )
 		BuildOneAgentStatus ( dStatus, dDashes[i], sPrefix.cstr() );
 	}
 }
-
-
 
 static void AddIOStatsToMeta ( VectorLike & dStatus, const CSphIOStats & tStats, const char * sPrefix )
 {
@@ -11667,7 +11662,8 @@ static void HandleClientSphinx ( int iSock, ThdDesc_t & tThd ) REQUIRES ( Handle
 }
 
 
-bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength, ThdDesc_t & tThd, InputBuffer_c & tBuf, ISphOutputBuffer & tOut, bool bManagePersist )
+bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength,
+	ThdDesc_t & tThd, InputBuffer_c & tBuf, ISphOutputBuffer & tOut, bool bManagePersist )
 {
 	// set on query guard
 	CrashQuery_t tCrashQuery;
@@ -11886,57 +11882,16 @@ IDataTupleter::~IDataTupleter() = default;
 class SqlRowBuffer_c : public ISphNoncopyable, public IDataTupleter, private LazyVector<BYTE>
 {
 	using BaseVec = LazyVector<BYTE>;
-public:
+	BYTE &m_uPacketID;
+	ISphOutputBuffer &m_tOut;
+	int m_iCID; // connection ID for error report
+	bool m_bAutoCommit = false;
+#ifndef NDEBUG
+	size_t m_iColumns = 0; // used for head/data columns num sanitize check
+#endif
 
-	SqlRowBuffer_c ( BYTE * pPacketID, ISphOutputBuffer * pOut, int iCID, bool bAutoCommit )
-		: m_uPacketID ( *pPacketID )
-		, m_tOut ( *pOut )
-		, m_iCID ( iCID )
-		, m_bAutoCommit ( bAutoCommit )
-	{}
-
-private:
-
-	inline BYTE* Tail() const
-	{
-		return m_pData + m_iCount;
-	}
-
-	int Length () const
-	{
-		return GetLength ();
-	}
-
-	void ResetBuf ()
-	{
-		Resize ( 0 );
-	}
-
-public:
-	using BaseVec::Add;
-
-	void PutFloatAsString ( float fVal, const char * sFormat = "%f" )
-	{
-		ReserveGap ( SPH_MAX_NUMERIC_STR );
-		auto pSize = Tail();
-		int iLen = snprintf ( ( char * )pSize+1, SPH_MAX_NUMERIC_STR-1, sFormat, fVal );
-		*pSize = BYTE ( iLen );
-		AddN ( iLen + 1 );
-	}
-
-	template < typename NUM >
-	void PutIntAsString ( NUM tVal )
-	{
-		ReserveGap ( SPH_MAX_NUMERIC_STR );
-		auto pSize = Tail();
-		int iLen = sph::NtoA ( ( char * ) pSize + 1, tVal );
-		*pSize = BYTE ( iLen );
-		AddN ( iLen + 1 );
-	}
-
-private:
 	// how many bytes this int will occupy in proto mysql
-	static int SizeOf ( int iLen )
+	static inline int SqlSizeOf ( int iLen )
 	{
 		if ( iLen<251 )
 			return 1;
@@ -11948,96 +11903,32 @@ private:
 	}
 
 	// how many bytes this string will occupy in proto mysql
-	int Strlen ( const char * sStr )
+	int SqlStrlen ( const char * sStr )
 	{
-		auto iLen = (int)strlen ( sStr );
-		return SizeOf ( iLen ) + iLen;
+		auto iLen = ( int ) strlen ( sStr );
+		return SqlSizeOf ( iLen ) + iLen;
 	}
 
-public:
-	// pack raw blob into proto mysql
-	void PutBlob ( const void * pBlob, int iLen )
-	{
-		if ( iLen<0 )
-			return;
-
-		ReserveGap ( iLen + 9 ); // 9 is taken from MysqlPack() implementation (max possible offset)
-		auto * pStr = MysqlPackInt ( Tail(), iLen );
-		if ( iLen )
-			memcpy ( pStr, pBlob, iLen );
-		Resize ( Idx ( pStr ) + iLen );
-	}
-
-	// pack vec of chars
-	void PutBlob ( const VecTraits_T<char> &dData )
-	{
-		PutBlob ( dData.begin (), dData.GetLength () );
-	}
-
-	// pack vec of bytes
-	void PutBlob ( const VecTraits_T<BYTE> &dData )
-	{
-		PutBlob ( ( const char * ) dData.begin (), dData.GetLength () );
-	}
-
-	// pack zero-terminated string (or "" if it is zero itself)
-	// const void * used to avoid explicit const char* <> const BYTE* casts
-	void PutString ( const void * _sMsg )
-	{
-		auto sMsg = (const char*)_sMsg;
-		int iLen = ( sMsg && *sMsg ) ? ( int ) strlen ( sMsg ) : 0;
-
-		if (!sMsg)
-			sMsg = "";
-
-		PutBlob ( sMsg, iLen );
-	}
-
-	inline void PutString ( const CSphString& sMsg )
-	{
-		PutString ( sMsg.cstr() );
-	}
-
-	void PutMicrosec ( int64_t iUsec )
-	{
-		iUsec = Max ( iUsec, 0 );
-
-		ReserveGap ( SPH_MAX_NUMERIC_STR+1 );
-		auto pSize = (char*) Tail();
-		int iLen = sph::IFtoA ( pSize + 1, iUsec, 6 );
-		*pSize = BYTE ( iLen );
-		AddN ( iLen + 1 );
-	}
-
-	void PutNULL ()
-	{
-		Add ( 0xfb ); // MySQL NULL is 0xfb at VLB length
-	}
-
-private:
-	void SqlInt ( int iVal )
+	void SendSqlInt ( int iVal )
 	{
 		BYTE dBuf[12];
 		auto * pBuf = MysqlPackInt ( dBuf, iVal );
 		m_tOut.SendBytes ( dBuf, ( int ) ( pBuf - dBuf ) );
 	}
 
-	void SqlString ( const char * sStr )
+	void SendSqlString ( const char * sStr )
 	{
 		int iLen = strlen ( sStr );
-
-		BYTE dBuf[12];
-		auto * pBuf = MysqlPackInt ( dBuf, iLen );
-		m_tOut.SendBytes ( dBuf, ( int ) ( pBuf - dBuf ) );
+		SendSqlInt ( iLen );
 		m_tOut.SendBytes ( sStr, iLen );
 	}
 
-	void SqlFieldPacket ( const char * sCol, MysqlColumnType_e eType, WORD uFlags )
+	void SendSqlFieldPacket ( const char * sCol, MysqlColumnType_e eType, WORD uFlags )
 	{
 		const char * sDB = "";
 		const char * sTable = "";
 
-		int iLen = 17 + Strlen ( sDB ) + 2 * ( Strlen ( sTable ) + Strlen ( sCol ) );
+		int iLen = 17 + SqlStrlen ( sDB ) + 2 * ( SqlStrlen ( sTable ) + SqlStrlen ( sCol ) );
 
 		int iColLen = 0;
 		switch ( eType )
@@ -12055,12 +11946,12 @@ private:
 		}
 
 		m_tOut.SendLSBDword ( ( ( m_uPacketID++ ) << 24 ) + iLen );
-		SqlString ( "def" ); // catalog
-		SqlString ( sDB ); // db
-		SqlString ( sTable ); // table
-		SqlString ( sTable ); // org_table
-		SqlString ( sCol ); // name
-		SqlString ( sCol ); // org_name
+		SendSqlString ( "def" ); // catalog
+		SendSqlString ( sDB ); // db
+		SendSqlString ( sTable ); // table
+		SendSqlString ( sTable ); // org_table
+		SendSqlString ( sCol ); // name
+		SendSqlString ( sCol ); // org_name
 
 		m_tOut.SendByte ( 12 ); // filler, must be 12 (following pseudo-string length)
 		m_tOut.SendByte ( 0x21 ); // charset_nr, 0x21 is utf8
@@ -12074,13 +11965,142 @@ private:
 	}
 
 public:
+
+	SqlRowBuffer_c ( BYTE * pPacketID, ISphOutputBuffer * pOut, int iCID, bool bAutoCommit )
+		: m_uPacketID ( *pPacketID )
+		, m_tOut ( *pOut )
+		, m_iCID ( iCID )
+		, m_bAutoCommit ( bAutoCommit )
+	{}
+
+	using BaseVec::Add;
+
+	void PutFloatAsString ( float fVal, const char * sFormat = "%f" )
+	{
+		ReserveGap ( SPH_MAX_NUMERIC_STR );
+		auto pSize = End();
+		int iLen = snprintf ( ( char * )pSize+1, SPH_MAX_NUMERIC_STR-1, sFormat, fVal );
+		*pSize = BYTE ( iLen );
+		AddN ( iLen + 1 );
+	}
+
+	template < typename NUM >
+	void PutNumAsString ( NUM tVal )
+	{
+		ReserveGap ( SPH_MAX_NUMERIC_STR );
+		auto pSize = End();
+		int iLen = sph::NtoA ( ( char * ) pSize + 1, tVal );
+		*pSize = BYTE ( iLen );
+		AddN ( iLen + 1 );
+	}
+
+
+	// pack raw array (i.e. packed length, then blob) into proto mysql
+	void PutArray ( const void * pBlob, int iLen, bool bSendEmpty = false )
+	{
+		if ( iLen<0 )
+			return;
+
+		if ( !iLen && bSendEmpty )
+		{
+			PutNULL();
+			return;
+		}
+
+		ReserveGap ( iLen + 9 ); // 9 is taken from MysqlPack() implementation (max possible offset)
+		auto * pStr = MysqlPackInt ( End(), iLen );
+		if ( iLen )
+			memcpy ( pStr, pBlob, iLen );
+		Resize ( Idx ( pStr ) + iLen );
+	}
+
+	void PutArray ( const VecTraits_T<BYTE> &dData )
+	{
+		PutArray ( ( const char * ) dData.begin (), dData.GetLength () );
+	}
+
+	void PutArray ( const StringBuilder_c& dData, bool bSendEmpty = true )
+	{
+		PutArray ( ( const char * ) dData.begin (), dData.GetLength (), bSendEmpty );
+	}
+
+	// pack zero-terminated string (or "" if it is zero itself)
+	// const void * used to avoid explicit const char* <> const BYTE* casts
+	void PutString ( const void * _sMsg )
+	{
+		auto sMsg = (const char*)_sMsg;
+		int iLen = ( sMsg && *sMsg ) ? ( int ) strlen ( sMsg ) : 0;
+
+		if (!sMsg)
+			sMsg = "";
+
+		PutArray ( sMsg, iLen );
+	}
+
+	inline void PutString ( const CSphString& sMsg )
+	{
+		PutString ( sMsg.cstr() );
+	}
+
+	void PutMicrosec ( int64_t iUsec )
+	{
+		iUsec = Max ( iUsec, 0 );
+
+		ReserveGap ( SPH_MAX_NUMERIC_STR+1 );
+		auto pSize = (char*) End();
+		int iLen = sph::IFtoA ( pSize + 1, iUsec, 6 );
+		*pSize = BYTE ( iLen );
+		AddN ( iLen + 1 );
+	}
+
+	void PutNULL ()
+	{
+		Add ( 0xfb ); // MySQL NULL is 0xfb at VLB length
+	}
+
+	// popular pattern of 2 columns of data
+	void DataTuplet ( const char * pLeft, const char * pRight ) override
+	{
+		PutString ( pLeft );
+		PutString ( pRight );
+		Commit ();
+	}
+
+	void DataTuplet ( const char * pLeft, int64_t iRight ) override
+	{
+		PutString ( pLeft );
+		PutNumAsString (iRight);
+		Commit();
+	}
+
+	template <typename NUM>
+	void DataTuplet ( const char * pLeft, NUM iRight )
+	{
+		PutString ( pLeft );
+		PutNumAsString ( iRight );
+		Commit ();
+	}
+
+	void DataTupletf ( const char * pLeft, const char * sFmt, ... )
+	{
+		StringBuilder_c sRight;
+		PutString ( pLeft );
+		va_list ap;
+		va_start ( ap, sFmt );
+		sRight.vSprintf ( sFmt, ap );
+		va_end ( ap );
+		PutString ( sRight.cstr() );
+		Commit();
+	}
+
+public:
 	/// more high level. Processing the whole tables.
 	// sends collected data, then reset
 	void Commit()
 	{
-		m_tOut.SendLSBDword ( ((m_uPacketID++)<<24) + ( Length() ) );
+		m_tOut.SendLSBDword ( ((m_uPacketID++)<<24) + ( GetLength() ) );
 		m_tOut.SendBytes ( *this );
-		ResetBuf();
+		Resize(0);
 	}
 
 	// wrappers for popular packets
@@ -12116,8 +12136,8 @@ public:
 	// Header of the table with defined num of columns
 	inline void HeadBegin ( int iColumns )
 	{
-		m_tOut.SendLSBDword ( ((m_uPacketID++)<<24) + SizeOf ( iColumns ) );
-		SqlInt ( iColumns );
+		m_tOut.SendLSBDword ( ((m_uPacketID++)<<24) + SqlSizeOf ( iColumns ) );
+		SendSqlInt ( iColumns );
 #ifndef NDEBUG
 		m_iColumns = iColumns;
 #endif
@@ -12126,14 +12146,14 @@ public:
 	inline void HeadEnd ( bool bMoreResults=false, int iWarns=0 )
 	{
 		Eof ( bMoreResults, iWarns );
-		ResetBuf();
+		Resize(0);
 	}
 
 	// add the next column. The EOF after the tull set will be fired automatically
 	inline void HeadColumn ( const char * sName, MysqlColumnType_e uType=MYSQL_COL_STRING, WORD uFlags=0 )
 	{
 		assert ( m_iColumns-->0 && "you try to send more mysql columns than declared in InitHead" );
-		SqlFieldPacket ( sName, uType, uFlags );
+		SendSqlFieldPacket ( sName, uType, uFlags );
 	}
 
 	// Fire he header for table with iSize string columns
@@ -12153,30 +12173,6 @@ public:
 		HeadColumn(pRight);
 		HeadEnd();
 	}
-
-	// popular pattern of 2 columns of data
-	void DataTuplet ( const char * pLeft, const char * pRight ) override
-	{
-		PutString ( pLeft );
-		PutString ( pRight );
-		Commit();
-	}
-
-	void DataTuplet ( const char * pLeft, int64_t iRight ) override
-	{
-		char sTmp[SPH_MAX_NUMERIC_STR];
-		snprintf ( sTmp, sizeof(sTmp), INT64_FMT, iRight );
-		DataTuplet ( pLeft, sTmp );
-	}
-
-private:
-	BYTE &	m_uPacketID;
-	ISphOutputBuffer & m_tOut;
-	int		m_iCID; // connection ID for error report
-	bool	m_bAutoCommit = false;
-#ifndef NDEBUG
-	size_t	m_iColumns = 0; // used for head/data columns num sanitize check
-#endif
 };
 
 class TableLike : public CheckLike
@@ -12551,7 +12547,7 @@ static void SendPercolateReply ( const PercolateMatchResult_t & tRes, const CSph
 	StringBuilder_c sDocs;
 	for ( const auto& tDesc : tRes.m_dQueryDesc )
 	{
-		tOut.PutIntAsString ( tDesc.m_uID );
+		tOut.PutNumAsString ( tDesc.m_uID );
 		if ( bDumpDocs )
 		{
 			sDocs.StartBlock(",");
@@ -12672,7 +12668,7 @@ static bool PercolateShowStatus ( const SqlStmt_t & tStmt, SqlRowBuffer_c & tOut
 
 		for ( const PercolateQueryDesc &tItem : dQueries )
 		{
-			tOut.PutIntAsString ( tItem.m_uID );
+			tOut.PutNumAsString ( tItem.m_uID );
 			tOut.PutString ( tItem.m_sQuery );
 			tOut.PutString ( tItem.m_sTags );
 			tOut.PutString ( tItem.m_sFilters );
@@ -12684,7 +12680,7 @@ static bool PercolateShowStatus ( const SqlStmt_t & tStmt, SqlRowBuffer_c & tOut
 		tOut.HeadColumn ( sCountAlias, MYSQL_COL_LONG );
 		tOut.HeadEnd();
 
-		tOut.PutIntAsString ( dQueries.GetLength() );
+		tOut.PutNumAsString ( dQueries.GetLength () );
 		tOut.Commit();
 	}
 
@@ -13773,7 +13769,7 @@ void HandleMysqlCallSnippets ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, ThdDesc
 	{
 		auto &dData = dQuery.m_dRes;
 		FixupResultTail ( dData );
-		tOut.PutBlob ( dData );
+		tOut.PutArray ( dData );
 		tOut.Commit();
 	}
 	tOut.Eof();
@@ -14276,8 +14272,8 @@ void HandleMysqlCallSuggest ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, bool bQu
 			tOut.PutString ( szResult + tWord.m_iNameOff );
 			if ( tArgs.m_bResultStats )
 			{
-				tOut.PutIntAsString ( tWord.m_iDistance );
-				tOut.PutIntAsString ( tWord.m_iDocs );
+				tOut.PutNumAsString ( tWord.m_iDistance );
+				tOut.PutNumAsString ( tWord.m_iDocs );
 			}
 			tOut.Commit();
 		}
@@ -14449,7 +14445,7 @@ void HandleMysqlShowPlugins ( SqlRowBuffer_c & tOut, SqlStmt_t & )
 		tOut.PutString ( g_dPluginTypes[p.m_eType] );
 		tOut.PutString ( p.m_sName );
 		tOut.PutString ( p.m_sLib );
-		tOut.PutIntAsString ( p.m_iUsers );
+		tOut.PutNumAsString ( p.m_iUsers );
 		tOut.PutString ( p.m_sExtra );
 		tOut.Commit();
 	}
@@ -14515,7 +14511,7 @@ void HandleMysqlShowThreads ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 		if ( tStmt.m_iThreadsCols>0 && iLen>tStmt.m_iThreadsCols )
 			pThd->m_dBuf[tStmt.m_iThreadsCols] = '\0';
 
-		tOut.PutIntAsString ( pThd->m_iTid );
+		tOut.PutNumAsString ( pThd->m_iTid );
 		tOut.PutString ( pThd->m_bSystem ? "-" : g_dProtoNames [ pThd->m_eProto ] );
 		tOut.PutString ( pThd->m_bSystem ? "-" : g_dThdStates [ pThd->m_eThdState ] );
 		tOut.PutString ( pThd->m_sClientName );
@@ -15156,28 +15152,29 @@ void sphFormatFactors ( StringBuilder_c & sOut, const unsigned int * pFactors, b
 }
 
 
-static void ReturnZeroCount ( const CSphSchema & tSchema, int iAttrsCount, const StrVec_t & dCounts, SqlRowBuffer_c & dRows )
+static void ReturnZeroCount ( const CSphSchema & tSchema, int iAttrsCount, const StrVec_t & dCounts,
+	SqlRowBuffer_c & dRows )
 {
-	for ( int i=0; i<iAttrsCount; i++ )
+	for ( int i=0; i<iAttrsCount; ++i )
 	{
 		const CSphColumnInfo & tCol = tSchema.GetAttr ( i );
 
 		// @count or its alias or count(distinct attr_name)
 		if ( dCounts.Contains ( tCol.m_sName ) )
 		{
-			dRows.PutIntAsString ( 0 );
+			dRows.PutNumAsString ( 0 );
 		} else
 		{
 			// essentially the same as SELECT_DUAL, parse and print constant expressions
 			ESphAttr eAttrType;
 			CSphString sError;
-			ISphExpr * pExpr = sphExprParse ( tCol.m_sName.cstr(), tSchema, &eAttrType, NULL, sError, NULL );
+			ISphExprRefPtr_c pExpr { sphExprParse ( tCol.m_sName.cstr(), tSchema, &eAttrType, NULL, sError, NULL )};
 
 			if ( !pExpr || !pExpr->IsConst() )
 				eAttrType = SPH_ATTR_NONE;
 
 			CSphMatch tMatch;
-			const BYTE * pStr = NULL;
+			const BYTE * pStr = nullptr;
 
 			switch ( eAttrType )
 			{
@@ -15186,15 +15183,13 @@ static void ReturnZeroCount ( const CSphSchema & tSchema, int iAttrsCount, const
 					dRows.PutString ( pStr );
 					SafeDelete ( pStr );
 					break;
-				case SPH_ATTR_INTEGER:	dRows.PutIntAsString ( pExpr->IntEval ( tMatch ) ); break;
-				case SPH_ATTR_BIGINT:	dRows.PutIntAsString ( pExpr->Int64Eval ( tMatch ) ); break;
+				case SPH_ATTR_INTEGER: dRows.PutNumAsString ( pExpr->IntEval ( tMatch ) ); break;
+				case SPH_ATTR_BIGINT: dRows.PutNumAsString ( pExpr->Int64Eval ( tMatch ) ); break;
 				case SPH_ATTR_FLOAT:	dRows.PutFloatAsString ( pExpr->Eval ( tMatch ) ); break;
 				default:
 					dRows.PutNULL();
 					break;
 			}
-
-			SafeDelete ( pExpr );
 		}
 	}
 	dRows.Commit();
@@ -15251,24 +15246,29 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 	dRows.HeadBegin ( iAttrsCount );
 
 	// field packets
-	if ( !tRes.m_dMatches.GetLength() && !bReturnZeroCount )
+	if ( tRes.m_dMatches.IsEmpty() && !bReturnZeroCount )
 	{
 		// in case there are no matches, send a dummy schema
 		dRows.HeadColumn ( "id", MYSQL_COL_LONGLONG, MYSQL_COL_UNSIGNED_FLAG );
 	} else
 	{
-		for ( int i=0; i<iSchemaAttrsCount; i++ )
+		for ( int i=0; i<iSchemaAttrsCount; ++i )
 		{
 			const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
 			MysqlColumnType_e eType = MYSQL_COL_STRING;
-			if ( tCol.m_eAttrType==SPH_ATTR_INTEGER || tCol.m_eAttrType==SPH_ATTR_TIMESTAMP || tCol.m_eAttrType==SPH_ATTR_BOOL )
-				eType = MYSQL_COL_LONG;
-			if ( tCol.m_eAttrType==SPH_ATTR_FLOAT )
-				eType = MYSQL_COL_FLOAT;
-			if ( tCol.m_eAttrType==SPH_ATTR_BIGINT )
-				eType = MYSQL_COL_LONGLONG;
-			if ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_STRINGPTR || tCol.m_eAttrType==SPH_ATTR_FACTORS || tCol.m_eAttrType==SPH_ATTR_FACTORS_JSON )
-				eType = MYSQL_COL_STRING;
+			switch ( tCol.m_eAttrType )
+			{
+			case SPH_ATTR_INTEGER:
+			case SPH_ATTR_TIMESTAMP:
+			case SPH_ATTR_BOOL:
+				eType = MYSQL_COL_LONG; break;
+			case SPH_ATTR_FLOAT:
+				eType = MYSQL_COL_FLOAT; break;
+			case SPH_ATTR_BIGINT:
+				eType = MYSQL_COL_LONGLONG; break;
+			default:
+				break;
+			}
 			dRows.HeadColumn ( tCol.m_sName.cstr(), eType, tCol.m_sName=="id" ? MYSQL_COL_UNSIGNED_FLAG : 0 );
 		}
 	}
@@ -15277,17 +15277,16 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 		dRows.HeadColumn ( "query", MYSQL_COL_STRING );
 
 	// EOF packet is sent explicitly due to non-default params.
-	BYTE iWarns = ( !tRes.m_sWarning.IsEmpty() ) ? 1 : 0;
+	auto iWarns = tRes.m_sWarning.IsEmpty() ? 0 : 1;
 	dRows.HeadEnd ( bMoreResultsFollow, iWarns );
 
 	// FIXME!!! replace that vector relocations by SqlRowBuffer
 
 	// rows
-	for ( int iMatch = tRes.m_iOffset; iMatch < tRes.m_iOffset + tRes.m_iCount; iMatch++ )
+	const CSphSchema &tSchema = tRes.m_tSchema;
+	for ( int iMatch = tRes.m_iOffset; iMatch < tRes.m_iOffset + tRes.m_iCount; ++iMatch )
 	{
 		const CSphMatch & tMatch = tRes.m_dMatches [ iMatch ];
-
-		const CSphSchema & tSchema = tRes.m_tSchema;
 		for ( int i=0; i<iSchemaAttrsCount; ++i )
 		{
 			const CSphColumnInfo & dAttr = tSchema.GetAttr(i);
@@ -15302,16 +15301,16 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 			case SPH_ATTR_TIMESTAMP:
 			case SPH_ATTR_BOOL:
 			case SPH_ATTR_TOKENCOUNT:
-				dRows.PutIntAsString ( (DWORD)tMatch.GetAttr(tLoc) );
+				dRows.PutNumAsString ( ( DWORD ) tMatch.GetAttr ( tLoc ) );
 				break;
 
 			case SPH_ATTR_BIGINT:
 				{
 					// how to get rid of this if?
 					if ( dAttr.m_sName == "id" )
-						dRows.PutIntAsString ( tMatch.m_uDocID );
+						dRows.PutNumAsString ( tMatch.m_uDocID ); // uint64_t
 					else
-						dRows.PutIntAsString ( tMatch.GetAttr(tLoc) );
+						dRows.PutNumAsString ( tMatch.GetAttr ( tLoc ) ); // int64_t
 					break;
 				}
 
@@ -15324,37 +15323,32 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 				{
 					StringBuilder_c dStr;
 					sphPackedMVA2Str ( (const BYTE *)tMatch.GetAttr(tLoc), eAttrType==SPH_ATTR_INT64SET_PTR, dStr );
-					dRows.PutBlob ( dStr.begin(), dStr.GetLength() );
+					dRows.PutArray ( dStr );
 					break;
 				}
 
 			case SPH_ATTR_STRINGPTR:
+				{
+					auto * pString = ( const BYTE * ) tMatch.GetAttr ( tLoc );
+					if ( pString )
+					{
+						int iLen = sphUnpackPtrAttr ( pString, &pString );
+						dRows.PutArray ( pString, iLen );
+					} else
+						dRows.PutString ( "" );
+				}
+				break;
 			case SPH_ATTR_JSON_PTR:
 				{
 					auto * pString = (const BYTE*) tMatch.GetAttr ( tLoc );
-					if ( !pString )
+					if ( pString )
 					{
-						// JSON is NULL - send NULL value
-						// string - empty string have no support for NULL of value types
-						if ( eAttrType==SPH_ATTR_JSON_PTR )
-							dRows.PutNULL();
-						else
-							dRows.PutString ( "" );
-						break;
-					}
-
-					int iLen = sphUnpackPtrAttr ( pString, &pString );
-					if ( eAttrType==SPH_ATTR_JSON_PTR )
-					{
+						sphUnpackPtrAttr ( pString, &pString );
 						JsonEscapedBuilder sTmp;
 						sphJsonFormat ( sTmp, pString );
-						if ( sTmp.IsEmpty() )
-							dRows.PutNULL();
-						else
-							dRows.PutBlob ( sTmp.begin(), sTmp.GetLength() );
-						break;
-					}
-					dRows.PutBlob ( pString, iLen );
+						dRows.PutArray ( sTmp );
+					} else
+						dRows.PutNULL();
 				}
 				break;
 
@@ -15366,7 +15360,7 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 					StringBuilder_c sTmp;
 					if ( pFactors )
 						sphFormatFactors ( sTmp, (const unsigned int *)pFactors, eAttrType==SPH_ATTR_FACTORS_JSON );
-					dRows.PutBlob ( sTmp.begin (), sTmp.GetLength () );
+					dRows.PutArray ( sTmp, false );
 					break;
 				}
 
@@ -15380,7 +15374,7 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 					}
 
 					sphUnpackPtrAttr ( pField, &pField );
-					ESphJsonType eJson = ESphJsonType ( *pField++ );
+					auto eJson = ESphJsonType ( *pField++ );
 
 					if ( eJson==JSON_NULL )
 					{
@@ -15391,8 +15385,7 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 					// send string to client
 					JsonEscapedBuilder sTmp;
 					sphJsonFieldFormat ( sTmp, pField, eJson, false );
-
-					dRows.PutBlob ( sTmp.begin(), sTmp.GetLength () );
+					dRows.PutArray ( sTmp, false );
 					break;
 				}
 
@@ -16163,7 +16156,7 @@ void HandleMysqlFlush ( SqlRowBuffer_c & tOut, const SqlStmt_t & )
 	tOut.HeadEnd();
 
 	// data packet, var value
-	tOut.PutIntAsString ( iTag );
+	tOut.PutNumAsString ( iTag );
 	tOut.Commit();
 
 	// done
@@ -16368,7 +16361,7 @@ void HandleMysqlSelectSysvar ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 
 		// MySQL Go connector, really expects an answer here
 		else if ( sVar=="@@max_allowed_packet" )
-			tOut.PutIntAsString ( g_iMaxPacketSize );
+			tOut.PutNumAsString ( g_iMaxPacketSize );
 		else
 			tOut.PutString("");
 	}
@@ -16407,8 +16400,8 @@ void HandleMysqlSelectDual ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 			tOut.PutString ( pStr );
 			SafeDelete ( pStr );
 			break;
-		case SPH_ATTR_INTEGER:	tOut.PutIntAsString ( pExpr->IntEval ( tMatch ) ); break;
-		case SPH_ATTR_BIGINT:	tOut.PutIntAsString ( pExpr->Int64Eval ( tMatch ) ); break;
+		case SPH_ATTR_INTEGER: tOut.PutNumAsString ( pExpr->IntEval ( tMatch ) ); break;
+		case SPH_ATTR_BIGINT: tOut.PutNumAsString ( pExpr->Int64Eval ( tMatch ) ); break;
 		case SPH_ATTR_FLOAT:	tOut.PutFloatAsString ( pExpr->Eval ( tMatch ) ); break;
 		default:
 			tOut.PutNULL();
@@ -16500,41 +16493,19 @@ static const char * LogLevelName ( ESphLogLevel eLevel )
 
 void HandleMysqlShowVariables ( SqlRowBuffer_c & dRows, const SqlStmt_t & tStmt, SessionVars_t & tVars )
 {
-	VectorLike dStatus ( tStmt.m_sStringParam );
-
-	if ( dStatus.MatchAdd ( "autocommit" ) )
-		dStatus.Add ( tVars.m_bAutoCommit ? "1" : "0" );
-
-	if ( dStatus.MatchAdd ( "collation_connection" ) )
-		dStatus.Add ( sphCollationToName ( tVars.m_eCollation ) );
-
-	if ( dStatus.MatchAdd ( "query_log_format" ) )
-		dStatus.Add ( g_eLogFormat==LOG_FORMAT_PLAIN ? "plain" : "sphinxql" );
-
-	if ( dStatus.MatchAdd ( "log_level" ) )
-		dStatus.Add ( LogLevelName ( g_eLogLevel ) );
-
-	if ( dStatus.MatchAdd ( "max_allowed_packet" ) )
-		dStatus.Add().SetSprintf ( "%d", g_iMaxPacketSize );
-
-	// .NET connector requires character_set_* vars
-	if ( dStatus.MatchAdd ( "character_set_client" ) )
-		dStatus.Add ( "utf8" );
-
-	if ( dStatus.MatchAdd ( "character_set_connection" ) )
-		dStatus.Add ( "utf8" );
-
-	if ( dStatus.MatchAdd ( "grouping_in_utc" ) )
-		dStatus.Add ( g_bGroupingInUtc ? "1" : "0" );
-
-	// result set header packet
 	dRows.HeadTuplet ( "Variable_name", "Value" );
 
-	// send rows
-	for ( int iRow=0; iRow<dStatus.GetLength(); iRow+=2 )
-		dRows.DataTuplet ( dStatus[iRow+0].cstr(), dStatus[iRow+1].cstr() );
+	TableLike dMatchRows ( dRows, tStmt.m_sStringParam.cstr () );
+	dMatchRows.DataTuplet ("autocommit", tVars.m_bAutoCommit ? "1" : "0" );
+	dMatchRows.DataTuplet ( "collation_connection", sphCollationToName ( tVars.m_eCollation ) );
+	dMatchRows.DataTuplet ( "query_log_format", g_eLogFormat==LOG_FORMAT_PLAIN ? "plain" : "sphinxql" );
+	dMatchRows.DataTuplet ( "log_level", LogLevelName ( g_eLogLevel ) );
+	dMatchRows.DataTuplet ( "max_allowed_packet", g_iMaxPacketSize );
+	dMatchRows.DataTuplet ( "character_set_client", "utf8" );
+	dMatchRows.DataTuplet ( "character_set_connection", "utf8" );
+	dMatchRows.DataTuplet ( "grouping_in_utc", g_bGroupingInUtc ? "1" : "0" );
 
-	// cleanup
+	// fine
 	dRows.Eof();
 }
 
@@ -16634,7 +16605,7 @@ static void AddFederatedIndexStatus ( const CSphSourceStats & tStats, const CSph
 	tOut.PutString ( "InnoDB" );		// Engine
 	tOut.PutString ( "10" );			// Version
 	tOut.PutString ( "Dynamic" );		// Row_format
-	tOut.PutIntAsString ( tStats.m_iTotalDocuments );	// Rows
+	tOut.PutNumAsString ( tStats.m_iTotalDocuments );	// Rows
 	tOut.PutString ( "4096" );			// Avg_row_length
 	tOut.PutString ( "0" );				// Data_length
 	tOut.PutString ( "0" );				// Max_data_length
@@ -16891,7 +16862,7 @@ void HandleMysqlShowProfile ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p,
 		snprintf ( sTime, sizeof(sTime), "%d.%06d", int(p.m_tmTotal[i]/1000000), int(p.m_tmTotal[i]%1000000) );
 		tOut.PutString ( dStates[i] );
 		tOut.PutString ( sTime );
-		tOut.PutIntAsString ( p.m_dSwitches[i] );
+		tOut.PutNumAsString ( p.m_dSwitches[i] );
 		if ( tmTotal )
 			tOut.PutFloatAsString ( 100.0f * p.m_tmTotal[i]/tmTotal, "%.2f" );
 		else
@@ -16901,7 +16872,7 @@ void HandleMysqlShowProfile ( SqlRowBuffer_c & tOut, const CSphQueryProfile & p,
 	snprintf ( sTime, sizeof(sTime), "%d.%06d", int(tmTotal/1000000), int(tmTotal%1000000) );
 	tOut.PutString ( "total" );
 	tOut.PutString ( sTime );
-	tOut.PutIntAsString ( iCount );
+	tOut.PutNumAsString ( iCount );
 	tOut.PutString ( "0" );
 	tOut.Commit();
 	tOut.Eof ( bMoreResultsFollow );

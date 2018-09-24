@@ -2561,6 +2561,23 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr 
 	return iLen;
 }
 
+int SockReadFast ( int iSock, void * buf, int iLen, int iReadTimeout )
+{
+	auto pBuf = ( char * ) buf;
+	int iFullLen = iLen;
+	// try to receive available chunk
+	int iChunk = RecvNBChunk ( iSock, pBuf, iLen );
+	if ( !iLen ) // all read in one-shot
+	{
+		assert (iChunk==iFullLen);
+		return iFullLen;
+	}
+
+	auto iRes = sphSockRead ( iSock, pBuf, iLen, iReadTimeout, false );
+	if ( iRes>=0 )
+		iRes += iChunk;
+	return iRes;
+}
 /////////////////////////////////////////////////////////////////////////////
 
 ISphOutputBuffer::ISphOutputBuffer ()
@@ -2955,50 +2972,27 @@ template < typename T > bool InputBuffer_c::GetQwords ( CSphVector<T> & dBuffer,
 /////////////////////////////////////////////////////////////////////////////
 
 NetInputBuffer_c::NetInputBuffer_c ( int iSock )
-	: InputBuffer_c ( m_dMinibufer, sizeof(m_dMinibufer) )
+	: STORE (NET_MINIBUFFER_SIZE)
+	, InputBuffer_c ( m_pData, NET_MINIBUFFER_SIZE )
 	, m_iSock ( iSock )
-{}
-
-
-NetInputBuffer_c::~NetInputBuffer_c ()
 {
-	SafeDeleteArray ( m_pMaxibuffer );
+	Resize (0);
 }
 
 
 bool NetInputBuffer_c::ReadFrom ( int iLen, int iTimeout, bool bIntr, bool bAppend )
 {
-	assert (!( bAppend && m_pCur!=m_pBuf && m_pBuf!=m_pMaxibuffer )); // only allow appends to untouched maxi-buffers
-	int iCur = bAppend ? m_iLen : 0;
+	int iTail = bAppend ? m_iLen : 0;
 
 	m_bIntr = false;
 	if ( iLen<=0 || iLen>g_iMaxPacketSize || m_iSock<0 )
 		return false;
 
-	BYTE * pBuf = m_dMinibufer + iCur;
-	if ( ( iCur+iLen )>NET_MINIBUFFER_SIZE )
-	{
-		if ( ( iCur+iLen )>m_iMaxibuffer )
-		{
-			if ( iCur )
-			{
-				auto * pNew = new BYTE [ iCur+iLen ];
-				memcpy ( pNew, m_pCur, iCur ); // fixme! wrong count; data is over-copied
-				SafeDeleteArray ( m_pMaxibuffer );
-				m_pMaxibuffer = pNew;
-				m_iMaxibuffer = iCur+iLen;
-			} else
-			{
-				SafeDeleteArray ( m_pMaxibuffer );
-				m_pMaxibuffer = new BYTE [ iLen ];
-				m_iMaxibuffer = iLen;
-			}
-		}
-		pBuf = m_pMaxibuffer;
-	}
-
+	Resize ( m_iLen );
+	Reserve ( iTail + iLen );
+	BYTE * pBuf = m_pData + iTail;
 	m_pCur = m_pBuf = pBuf;
-	int iGot = sphSockRead ( m_iSock, pBuf + iCur, iLen, iTimeout, bIntr );
+	int iGot = sphSockRead ( m_iSock, pBuf , iLen, iTimeout, bIntr );
 	if ( g_bGotSigterm )
 	{
 		sphLogDebug ( "NetInputBuffer_c::ReadFrom: got SIGTERM, return false" );
@@ -3009,7 +3003,7 @@ bool NetInputBuffer_c::ReadFrom ( int iLen, int iTimeout, bool bIntr, bool bAppe
 
 	m_bError = ( iGot!=iLen );
 	m_bIntr = m_bError && ( sphSockPeekErrno()==EINTR );
-	m_iLen = m_bError ? 0 : iCur+iLen;
+	m_iLen = m_bError ? 0 : iTail+iLen;
 	return !m_bError;
 }
 
@@ -11424,7 +11418,7 @@ static void HandleClientSphinx ( int iSock, ThdDesc_t & tThd ) REQUIRES ( Handle
 
 	// get client version and request
 	int iMagic = 0;
-	int iGot = sphSockRead ( iSock, &iMagic, sizeof(iMagic), g_iReadTimeout, false );
+	int iGot = SockReadFast ( iSock, &iMagic, sizeof(iMagic), g_iReadTimeout );
 
 	bool bReadErr = ( iGot!=sizeof(iMagic) );
 	sphLogDebugv ( "conn %s(" INT64_FMT "): got handshake, major v.%d, err %d", sClientIP, iCID, iMagic, (int)bReadErr );

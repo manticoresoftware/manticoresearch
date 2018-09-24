@@ -426,30 +426,30 @@ template < typename T > T InputBuffer_c::GetT ()
 using MemInputBuffer_c = InputBuffer_c;
 
 /// simple network request buffer
-class NetInputBuffer_c : public InputBuffer_c
+class NetInputBuffer_c : private LazyVector<BYTE>, public InputBuffer_c
 {
+	using STORE = LazyVector<BYTE>;
 public:
 	explicit		NetInputBuffer_c ( int iSock );
-	virtual			~NetInputBuffer_c ();
 
 	bool			ReadFrom ( int iLen, int iTimeout, bool bIntr=false, bool bAppend=false );
 	bool			ReadFrom ( int iLen ) { return ReadFrom ( iLen, g_iReadTimeout ); }
 
 	bool			IsIntr () const { return m_bIntr; }
 
-protected:
-	static const int	NET_MINIBUFFER_SIZE = 4096;
+	using InputBuffer_c::GetLength;
+private:
+	static const int	NET_MINIBUFFER_SIZE = STORE::iSTATICSIZE;
 
 	int					m_iSock;
 	bool				m_bIntr = false;
-
-	BYTE				m_dMinibufer[NET_MINIBUFFER_SIZE];
-	int					m_iMaxibuffer = 0;
-	BYTE *				m_pMaxibuffer = nullptr;
 };
 
 bool IsPortInRange ( int iPort );
 int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr );
+
+// first try to get data, and only then fall into sphSockRead (which poll socket first)
+int SockReadFast ( int iSock, void * buf, int iLen, int iReadTimeout );
 
 
 extern ThreadRole MainThread;

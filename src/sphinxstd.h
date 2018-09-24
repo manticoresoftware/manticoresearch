@@ -985,7 +985,7 @@ public:
 	inline LazyStorage_T &operator= ( LazyStorage_T &&rhs ) noexcept = delete;
 
 	LazyStorage_T() = default;
-
+	static const int iSTATICSIZE = STATICSIZE;
 protected:
 	inline T * Allocate ( int iLimit )
 	{
@@ -1004,7 +1004,7 @@ protected:
 	//static inline void DataIsNotOwned () {}
 
 private:
-	T m_dData[STATICSIZE];
+	T m_dData[iSTATICSIZE];
 };
 
 //////////////////////////////////////////////////////////////////////////

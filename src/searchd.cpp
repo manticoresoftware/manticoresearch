@@ -2723,22 +2723,32 @@ void ISphOutputBuffer::SendArray ( const StringBuilder_c &dBuf )
 
 void CachedOutputBuffer_c::Flush()
 {
-	assert ( !m_dBlobs.GetLength () && "Try to flush with non-commited blobs" );
+	CommitAllMeasuredLengths();
 	ISphOutputBuffer::Flush();
 }
 
-void CachedOutputBuffer_c::StartChunk ()
+void CachedOutputBuffer_c::StartMeasureLength ()
 {
 	m_dBlobs.Add ( ( intptr_t ) m_dBuf.GetLength () );
 	SendInt(0);
 }
 
-void CachedOutputBuffer_c::CommitChunk ()
+void CachedOutputBuffer_c::CommitMeasuredLength ()
 {
 	assert ( m_dBlobs.GetLength () && "Can't commit with empty blob stack" );
 	auto uPos = m_dBlobs.Pop();
 	int iBlobLen = m_dBuf.GetLength () - uPos - sizeof ( int );
 	WriteInt ( uPos, iBlobLen );
+}
+
+void CachedOutputBuffer_c::CommitAllMeasuredLengths()
+{
+	while ( !m_dBlobs.IsEmpty() )
+	{
+		auto uPos = m_dBlobs.Pop ();
+		int iBlobLen = m_dBuf.GetLength () - uPos - sizeof ( int );
+		WriteInt ( uPos, iBlobLen );
+	}
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -2749,13 +2759,10 @@ NetOutputBuffer_c::NetOutputBuffer_c ( int iSock )
 	assert ( m_iSock>0 );
 }
 
-const char * NetOutputBuffer_c::GetErrorMsg () const
-{
-	return m_sError.cstr ();
-}
-
 void NetOutputBuffer_c::Flush ()
 {
+	CommitAllMeasuredLengths ();
+
 	if ( m_bError )
 		return;
 
@@ -2766,6 +2773,7 @@ void NetOutputBuffer_c::Flush ()
 	if ( g_bGotSigterm )
 		sphLogDebug ( "SIGTERM in NetOutputBuffer::Flush" );
 
+	StringBuilder_c sError;
 	auto * pBuffer = (const char *)m_dBuf.Begin();
 
 	CSphScopedProfile tProf ( m_pProfile, SPH_QSTATE_NET_WRITE );
@@ -2781,8 +2789,8 @@ void NetOutputBuffer_c::Flush ()
 				continue;
 			if ( iErrno!=EAGAIN && iErrno!=EWOULDBLOCK )
 			{
-				m_sError.SetSprintf ( "send() failed: %d: %s", iErrno, sphSockError ( iErrno ) );
-				sphWarning ( "%s", m_sError.cstr () );
+				sError.Sprintf ( "send() failed: %d: %s", iErrno, sphSockError ( iErrno ) );
+				sphWarning ( "%s", sError.cstr () );
 				m_bError = true;
 				break;
 			}
@@ -2803,8 +2811,8 @@ void NetOutputBuffer_c::Flush ()
 
 		if ( !iRes ) // timeout
 		{
-			m_sError.SetSprintf ( "timed out while trying to flush network buffers" );
-			sphWarning ( "%s", m_sError.cstr () );
+			sError << "timed out while trying to flush network buffers";
+			sphWarning ( "%s", sError.cstr () );
 			m_bError = true;
 			break;
 		}
@@ -2814,8 +2822,8 @@ void NetOutputBuffer_c::Flush ()
 			int iErrno = sphSockGetErrno ();
 			if ( iErrno==EINTR )
 				break;
-			m_sError.SetSprintf ( "select() failed: %d: %s", iErrno, sphSockError ( iErrno ) );
-			sphWarning ( "%s", m_sError.cstr () );
+			sError.Sprintf ( "sphPoll() failed: %d: %s", iErrno, sphSockError ( iErrno ) );
+			sphWarning ( "%s", sError.cstr () );
 			m_bError = true;
 			break;
 		}
@@ -3006,7 +3014,7 @@ bool NetInputBuffer_c::ReadFrom ( int iLen, int iTimeout, bool bIntr, bool bAppe
 }
 
 
-void SendErrorReply ( ISphOutputBuffer & tOut, const char * sTemplate, ... )
+void SendErrorReply ( CachedOutputBuffer_c & tOut, const char * sTemplate, ... )
 {
 	CSphString sError;
 	va_list ap;
@@ -3016,7 +3024,7 @@ void SendErrorReply ( ISphOutputBuffer & tOut, const char * sTemplate, ... )
 
 	tOut.SendWord ( SEARCHD_ERROR );
 	tOut.SendWord ( 0 );
-	tOut.SendInt ( sError.Length() + 4 );
+	tOut.StartMeasureLength ();
 	tOut.SendString ( sError.cstr() );
 	// send!
 	tOut.Flush();
@@ -3771,7 +3779,7 @@ static void FixupQuerySettings ( CSphQuery & tQuery )
 }
 
 
-static bool ParseSearchFilter ( CSphFilterSettings & tFilter, InputBuffer_c & tReq, ISphOutputBuffer & tOut, int iMasterVer )
+static bool ParseSearchFilter ( CSphFilterSettings & tFilter, InputBuffer_c & tReq, CachedOutputBuffer_c & tOut, int iMasterVer )
 {
 	tFilter.m_sAttrName = tReq.GetString ();
 	sphColumnToLowercase ( const_cast<char *>( tFilter.m_sAttrName.cstr() ) );
@@ -3857,7 +3865,7 @@ static bool ParseSearchFilter ( CSphFilterSettings & tFilter, InputBuffer_c & tR
 }
 
 
-bool ParseSearchQuery ( InputBuffer_c & tReq, ISphOutputBuffer & tOut, CSphQuery & tQuery, WORD uVer, WORD uMasterVer )
+bool ParseSearchQuery ( InputBuffer_c & tReq, CachedOutputBuffer_c & tOut, CSphQuery & tQuery, WORD uVer, WORD uMasterVer )
 {
 	// daemon-level defaults
 	tQuery.m_iRetryCount = -1;
@@ -4797,113 +4805,6 @@ static int SendMVA ( ISphOutputBuffer * pOut, const BYTE * pMVA, bool b64bit )
 }
 
 
-int CalcResultLength ( WORD uVer, const CSphQueryResult * pRes, bool bAgentMode, const CSphQuery & tQuery, WORD uMasterVer )
-{
-	int iRespLen = 0;
-
-	// multi-query status
-	iRespLen += 4; // status code
-
-	if ( !pRes->m_sError.IsEmpty() )
-		return int ( iRespLen + 4 + strlen ( pRes->m_sError.cstr () ) );
-
-	if ( !pRes->m_sWarning.IsEmpty() )
-		iRespLen += 4+strlen ( pRes->m_sWarning.cstr() );
-
-	// query stats
-	iRespLen += 20;
-
-	int iAttrsCount = sphSendGetAttrCount ( pRes->m_tSchema, bAgentMode );
-
-	// schema
-	iRespLen += 8; // 4 for field count, 4 for attr count
-	for ( int i=0; i<pRes->m_tSchema.GetFieldsCount(); ++i )
-		iRespLen += 4 + strlen ( pRes->m_tSchema.GetFieldName(i) ); // namelen, name
-	for ( int i=0; i<iAttrsCount; ++i )
-		iRespLen += 8 + strlen ( pRes->m_tSchema.GetAttr(i).m_sName.cstr() ); // namelen, name, type
-
-	iRespLen += 4 + ( 12+4*iAttrsCount )*pRes->m_iCount; // id64 tag and matches
-
-	// 64bit matches
-	int iWideAttrs = 0;
-	for ( int i=0; i<iAttrsCount; ++i )
-		if ( pRes->m_tSchema.GetAttr(i).m_eAttrType==SPH_ATTR_BIGINT )
-			++iWideAttrs;
-	iRespLen += 4*pRes->m_iCount*iWideAttrs; // extra 4 bytes per attr per match
-
-	// agents send additional flag from words statistics
-	if ( bAgentMode )
-		iRespLen += pRes->m_hWordStats.GetLength();
-
-	pRes->m_hWordStats.IterateStart();
-	while ( pRes->m_hWordStats.IterateNext() ) // per-word stats
-		iRespLen += 12 + strlen ( pRes->m_hWordStats.IterateGetKey().cstr() ); // wordlen, word, docs, hits
-
-	bool bSendJson = bAgentMode && uMasterVer>=3;
-	bool bSendJsonField = bAgentMode && uMasterVer>=4;
-
-	for ( int iAttr=0; iAttr<iAttrsCount; ++iAttr )
-	{
-		const CSphColumnInfo & tCol = pRes->m_tSchema.GetAttr(iAttr);
-		assert ( sphPlainAttrToPtrAttr(tCol.m_eAttrType)==tCol.m_eAttrType );
-
-		for ( int i=0; i<pRes->m_iCount; ++i )
-		{
-			const CSphMatch & tMatch = pRes->m_dMatches[pRes->m_iOffset+i];
-			auto * pData = (const BYTE*) tMatch.GetAttr ( tCol.m_tLocator );
-
-			switch ( tCol.m_eAttrType )
-			{
-			case SPH_ATTR_UINT32SET_PTR:
-			case SPH_ATTR_INT64SET_PTR:
-				iRespLen += SendMVA ( nullptr, pData, tCol.m_eAttrType==SPH_ATTR_INT64SET_PTR );
-				break;
-
-			case SPH_ATTR_STRINGPTR:
-				iRespLen += SendDataPtrAttr ( nullptr, pData );
-				break;
-
-			case SPH_ATTR_FACTORS:
-			case SPH_ATTR_FACTORS_JSON:
-				if ( uVer>=0x11C )
-					iRespLen += SendDataPtrAttr ( nullptr, pData );
-				break;
-
-			case SPH_ATTR_JSON_PTR:
-				iRespLen += SendJson ( nullptr, pData, bSendJson );
-				break;
-
-			case SPH_ATTR_JSON_FIELD_PTR:
-				iRespLen += SendJsonField ( nullptr, pData, bSendJsonField );
-				break;
-
-			default:
-				break;
-			}
-		}
-	}
-
-	if ( uVer>=0x11A && bAgentMode )
-	{
-		iRespLen += 1;			// stats mask
-		if ( g_bIOStats )
-			iRespLen += 40;		// IO Stats
-
-		if ( g_bCpuStats )
-			iRespLen += 8;		// CPU Stats
-
-		if ( tQuery.m_iMaxPredictedMsec > 0 )
-			iRespLen += 8;		// predicted time
-	}
-
-	// fetched_docs and fetched_hits from agent to master
-	if ( bAgentMode && uMasterVer>=7 )
-		iRespLen += 12;
-
-	return iRespLen;
-}
-
-
 static ESphAttr FixupAttrForNetwork ( ESphAttr eAttr, WORD uMasterVer, bool bAgentMode )
 {
 	bool bSendJson = ( bAgentMode && uMasterVer>=3 );
@@ -4936,11 +4837,11 @@ static ESphAttr FixupAttrForNetwork ( ESphAttr eAttr, WORD uMasterVer, bool bAge
 static void SendSchema ( ISphOutputBuffer & tOut, const CSphQueryResult & tRes, int iAttrsCount, WORD uMasterVer, bool bAgentMode )
 {
 	tOut.SendInt ( tRes.m_tSchema.GetFieldsCount() );
-	for ( int i=0; i < tRes.m_tSchema.GetFieldsCount(); i++ )
+	for ( int i=0; i < tRes.m_tSchema.GetFieldsCount(); ++i )
 		tOut.SendString ( tRes.m_tSchema.GetFieldName(i) );
 
 	tOut.SendInt ( iAttrsCount );
-	for ( int i=0; i<iAttrsCount; i++ )
+	for ( int i=0; i<iAttrsCount; ++i )
 	{
 		const CSphColumnInfo & tCol = tRes.m_tSchema.GetAttr(i);
 		tOut.SendString ( tCol.m_sName.cstr() );
@@ -8234,7 +8135,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 }
 
 
-bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, ISphOutputBuffer & tOut )
+bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, CachedOutputBuffer_c & tOut )
 {
 	if ( ( uVer>>8)!=( uDaemonVersion>>8) )
 	{
@@ -8252,29 +8153,24 @@ bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, ISphOutputBuffer & tO
 }
 
 
-void SendSearchResponse ( SearchHandler_c & tHandler, ISphOutputBuffer & tOut, WORD uVer, WORD uMasterVer )
+void SendSearchResponse ( SearchHandler_c & tHandler, CachedOutputBuffer_c & tOut, WORD uVer, WORD uMasterVer )
 {
 	// serve the response
-	int iReplyLen = 0;
 	bool bAgentMode = ( uMasterVer>0 );
-
-	ARRAY_FOREACH ( i, tHandler.m_dQueries )
-		iReplyLen += CalcResultLength ( uVer, &tHandler.m_dResults[i], bAgentMode, tHandler.m_dQueries[i], uMasterVer );
 
 	// send it
 	tOut.SendWord ( SEARCHD_OK );
 	tOut.SendWord ( VER_COMMAND_SEARCH );
-	tOut.SendInt ( iReplyLen );
+	tOut.StartMeasureLength(); // here will be ReplyLen
 
 	ARRAY_FOREACH ( i, tHandler.m_dQueries )
 		SendResult ( uVer, tOut, &tHandler.m_dResults[i], bAgentMode, tHandler.m_dQueries[i], uMasterVer );
 
 	tOut.Flush ();
-	assert ( tOut.GetError() || tOut.GetSentCount()==iReplyLen+8 );
 }
 
 
-void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq, ThdDesc_t & tThd )
+void HandleCommandSearch ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq, ThdDesc_t & tThd )
 {
 	MEMORY ( MEM_API_SEARCH );
 
@@ -10351,7 +10247,7 @@ inline static void FixupResultTail (CSphVector<BYTE> & dData)
 		dData.Pop ();
 }
 
-void HandleCommandExcerpt ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tReq, ThdDesc_t & tThd )
+void HandleCommandExcerpt ( CachedOutputBuffer_c & tOut, int iVer, InputBuffer_c & tReq, ThdDesc_t & tThd )
 {
 	if ( !CheckCommandVersion ( iVer, VER_COMMAND_EXCERPT, tOut ) )
 		return;
@@ -10450,14 +10346,11 @@ void HandleCommandExcerpt ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & t
 	// serve result
 	////////////////
 
-	int iRespLen = 0;
 	for ( auto & dQuery : dQueries )
 	{
-		iRespLen+=4;
 		auto &dData = dQuery.m_dRes;
 		FixupResultTail ( dData );
 		// handle errors
-		iRespLen += dData.GetLength ();
 		if ( !bScattered && dData.IsEmpty() && !dQuery.m_sError.IsEmpty () )
 		{
 			SendErrorReply ( tOut, "highlighting failed: %s", dQuery.m_sError.cstr() );
@@ -10467,11 +10360,10 @@ void HandleCommandExcerpt ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & t
 
 	tOut.SendWord ( SEARCHD_OK );
 	tOut.SendWord ( VER_COMMAND_EXCERPT );
-	tOut.SendInt ( iRespLen );
+	tOut.StartMeasureLength ();
 	for ( const auto& dQuery : dQueries )
 		tOut.SendArray ( dQuery.m_dRes );
 	tOut.Flush ();
-	assert ( tOut.GetError()==true || tOut.GetSentCount()==iRespLen+8 );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -10480,7 +10372,7 @@ void HandleCommandExcerpt ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & t
 
 static bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const GetKeywordsSettings_t & tSettings, CSphVector <CSphKeywordInfo> & dKeywords, CSphString & sError, SearchFailuresLog_c & tFailureLog );
 
-void HandleCommandKeywords ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq )
+void HandleCommandKeywords ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq )
 {
 	if ( !CheckCommandVersion ( uVer, VER_COMMAND_KEYWORDS, tOut ) )
 		return;
@@ -10514,36 +10406,24 @@ void HandleCommandKeywords ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c &
 		sphWarning ( "%s", sErrorBuf.cstr() );
 	}
 
-	int iRespLen = 4;
-	ARRAY_FOREACH ( i, dKeywords )
-	{
-		iRespLen += 4 + strlen ( dKeywords[i].m_sTokenized.cstr () );
-		iRespLen += 4 + strlen ( dKeywords[i].m_sNormalized.cstr () );
-		if ( uVer>=0x101 )
-			iRespLen += 4;
-		if ( tSettings.m_bStats )
-			iRespLen += 8;
-	}
-
 	tOut.SendWord ( SEARCHD_OK );
 	tOut.SendWord ( VER_COMMAND_KEYWORDS );
-	tOut.SendInt ( iRespLen );
+	tOut.StartMeasureLength ();
 	tOut.SendInt ( dKeywords.GetLength () );
-	ARRAY_FOREACH ( i, dKeywords )
+	for ( auto & dKeyword : dKeywords )
 	{
-		tOut.SendString ( dKeywords[i].m_sTokenized.cstr () );
-		tOut.SendString ( dKeywords[i].m_sNormalized.cstr () );
+		tOut.SendString ( dKeyword.m_sTokenized.cstr () );
+		tOut.SendString ( dKeyword.m_sNormalized.cstr () );
 		if ( uVer>=0x101 )
-			tOut.SendInt ( dKeywords[i].m_iQpos );
+			tOut.SendInt ( dKeyword.m_iQpos );
 		if ( tSettings.m_bStats )
 		{
-			tOut.SendInt ( dKeywords[i].m_iDocs );
-			tOut.SendInt ( dKeywords[i].m_iHits );
+			tOut.SendInt ( dKeyword.m_iDocs );
+			tOut.SendInt ( dKeyword.m_iHits );
 		}
 	}
 
 	tOut.Flush ();
-	assert ( tOut.GetError ()==true || tOut.GetSentCount ()==iRespLen + 8 );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -10698,7 +10578,7 @@ static bool ExtractDistributedIndexes ( const StrVec_t &dNames, DistrPtrs_t &dDi
 	return true;
 }
 
-void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tReq )
+void HandleCommandUpdate ( CachedOutputBuffer_c & tOut, int iVer, InputBuffer_c & tReq )
 {
 	if ( !CheckCommandVersion ( iVer, VER_COMMAND_UPDATE, tOut ) )
 		return;
@@ -10864,12 +10744,12 @@ void HandleCommandUpdate ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tR
 	{
 		tOut.SendWord ( SEARCHD_OK );
 		tOut.SendWord ( VER_COMMAND_UPDATE );
-		tOut.SendInt ( 4 );
+		tOut.StartMeasureLength ();
 	} else
 	{
 		tOut.SendWord ( SEARCHD_WARNING );
 		tOut.SendWord ( VER_COMMAND_UPDATE );
-		tOut.SendInt ( 8 + strlen ( sReport.cstr() ) );
+		tOut.StartMeasureLength ();
 		tOut.SendString ( sReport.cstr() );
 	}
 	tOut.SendInt ( iUpdated );
@@ -11415,7 +11295,7 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 }
 
 
-void HandleCommandStatus ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq )
+void HandleCommandStatus ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq )
 {
 	if ( !CheckCommandVersion ( uVer, VER_COMMAND_STATUS, tOut ) )
 		return;
@@ -11440,21 +11320,16 @@ void HandleCommandStatus ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 		g_tLastMetaMutex.Unlock();
 	}
 
-	int iRespLen = 8; // int rows, int cols
-	ARRAY_FOREACH ( i, dStatus )
-		iRespLen += 4 + strlen ( dStatus[i].cstr() );
-
 	tOut.SendWord ( SEARCHD_OK );
 	tOut.SendWord ( VER_COMMAND_STATUS );
-	tOut.SendInt ( iRespLen );
+	tOut.StartMeasureLength ();
 
 	tOut.SendInt ( dStatus.GetLength()/2 ); // rows
 	tOut.SendInt ( 2 ); // cols
-	ARRAY_FOREACH ( i, dStatus )
-		tOut.SendString ( dStatus[i].cstr() );
+	for ( const auto & dLines : dStatus )
+		tOut.SendString ( dLines.cstr() );
 
 	tOut.Flush ();
-	assert ( tOut.GetError()==true || tOut.GetSentCount()==8+iRespLen );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -11478,7 +11353,7 @@ static int CommandFlush ()
 	return g_tFlush.m_iFlushTag;
 }
 
-void HandleCommandFlush ( ISphOutputBuffer & tOut, WORD uVer )
+void HandleCommandFlush ( CachedOutputBuffer_c & tOut, WORD uVer )
 {
 	if ( !CheckCommandVersion ( uVer, VER_COMMAND_FLUSHATTRS, tOut ) )
 		return;
@@ -11487,7 +11362,7 @@ void HandleCommandFlush ( ISphOutputBuffer & tOut, WORD uVer )
 	// return last flush tag, just for the fun of it
 	tOut.SendWord ( SEARCHD_OK );
 	tOut.SendWord ( VER_COMMAND_FLUSHATTRS );
-	tOut.SendInt ( 4 ); // resplen, 1 dword
+	tOut.StartMeasureLength ();
 	tOut.SendInt ( iTag );
 	tOut.Flush ();
 	assert ( tOut.GetError()==true || tOut.GetSentCount()==12 ); // 8+resplen
@@ -11498,13 +11373,13 @@ void HandleCommandFlush ( ISphOutputBuffer & tOut, WORD uVer )
 // GENERAL HANDLER
 /////////////////////////////////////////////////////////////////////////////
 
-void HandleCommandSphinxql ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq, ThdDesc_t & tThd ); // definition is below
-void HandleCommandJson ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq, ThdDesc_t & tThd );
+void HandleCommandSphinxql ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq, ThdDesc_t & tThd ); // definition is below
+void HandleCommandJson ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq, ThdDesc_t & tThd );
 void StatCountCommand ( SearchdCommand_e eCmd );
-void HandleCommandUserVar ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
+void HandleCommandUserVar ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq );
 
 /// ping/pong exchange over API
-void HandleCommandPing ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq )
+void HandleCommandPing ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq )
 {
 	if ( !CheckCommandVersion ( uVer, VER_COMMAND_PING, tOut ) )
 		return;
@@ -11523,7 +11398,7 @@ void HandleCommandPing ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tRe
 
 static bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer,
 	int iLength, ThdDesc_t & tThd,
-	InputBuffer_c & tBuf, ISphOutputBuffer & tOut, bool bManagePersist );
+	InputBuffer_c & tBuf, CachedOutputBuffer_c & tOut, bool bManagePersist );
 
 static void HandleClientSphinx ( int iSock, ThdDesc_t & tThd ) REQUIRES ( HandlerThread )
 {
@@ -11663,7 +11538,7 @@ static void HandleClientSphinx ( int iSock, ThdDesc_t & tThd ) REQUIRES ( Handle
 
 
 bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength,
-	ThdDesc_t & tThd, InputBuffer_c & tBuf, ISphOutputBuffer & tOut, bool bManagePersist )
+	ThdDesc_t & tThd, InputBuffer_c & tBuf, CachedOutputBuffer_c & tOut, bool bManagePersist )
 {
 	// set on query guard
 	CrashQuery_t tCrashQuery;
@@ -14784,7 +14659,7 @@ static bool SendUserVar ( const char * sIndex, const char * sUserVarName, CSphVe
 }
 
 
-void HandleCommandUserVar ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq )
+void HandleCommandUserVar ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq )
 {
 	if ( !CheckCommandVersion ( uVer, VER_COMMAND_UVAR, tOut ) )
 		return;
@@ -14817,7 +14692,7 @@ void HandleCommandUserVar ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & 
 
 	tOut.SendWord ( SEARCHD_OK );
 	tOut.SendWord ( VER_COMMAND_UVAR );
-	tOut.SendInt ( 4 ); // resplen, 1 dword
+	tOut.StartMeasureLength ();
 	tOut.SendInt ( 1 );
 	tOut.Flush ();
 	assert ( tOut.GetError() || tOut.GetSentCount()==12 );
@@ -17630,7 +17505,7 @@ public:
 
 
 /// sphinxql command over API
-void HandleCommandSphinxql ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq, ThdDesc_t & tThd ) REQUIRES (HandlerThread)
+void HandleCommandSphinxql ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq, ThdDesc_t & tThd ) REQUIRES (HandlerThread)
 {
 	if ( !CheckCommandVersion ( uVer, VER_COMMAND_SPHINXQL, tOut ) )
 		return;
@@ -17643,13 +17518,14 @@ void HandleCommandSphinxql ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c &
 	// todo: move upper, if the session variables are also necessary in API access mode.
 	CSphinxqlSession tSession ( true ); // FIXME!!! check that no accum related command used via API
 
-	tOut.Flush();
+//	tOut.Flush();
 	tOut.SendWord ( SEARCHD_OK );
 	tOut.SendWord ( VER_COMMAND_SPHINXQL );
 
 	// fixme! why do we need these stranges (separate output buffer, etc) if we just unconditionally send it's content?
 	// m.b. reduce it to tSessionExecute (.. tOut..)?
 	ISphOutputBuffer tMemOut;
+//	tOut.StartMeasureLength ();
 	tSession.Execute ( sCommand, tMemOut, uDummy, tThd );
 
 	tOut.SendArray ( tMemOut );
@@ -17657,7 +17533,7 @@ void HandleCommandSphinxql ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c &
 }
 
 /// json command over API
-void HandleCommandJson ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq, ThdDesc_t & tThd )
+void HandleCommandJson ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq, ThdDesc_t & tThd )
 {
 	if ( !CheckCommandVersion ( uVer, VER_COMMAND_JSON, tOut ) )
 		return;
@@ -17673,11 +17549,10 @@ void HandleCommandJson ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tRe
 	SmallStringHash_T<CSphString> tOptions;
 	sphProcessHttpQueryNoResponce ( eEndpoint, sCommand, tOptions, tThd, dResult );
 
-	tOut.Flush();
+//	tOut.Flush();
 	tOut.SendWord ( SEARCHD_OK );
 	tOut.SendWord ( VER_COMMAND_JSON );
-	tOut.SendDword( dResult.GetLength()+sEndpoint.Length()+8 );
-
+	tOut.StartMeasureLength ();
 	tOut.SendString ( sEndpoint.cstr() );
 	tOut.SendArray ( dResult );
 	tOut.Flush();
@@ -17801,7 +17676,7 @@ static bool ReadMySQLPacketHeader ( int iSock, int& iLen, BYTE& uPacketID )
 	DWORD uAddon = tIn.GetLSBDword ();
 	uPacketID = 1 + ( BYTE ) ( uAddon >> 24 );
 	iLen = ( uAddon & MAX_PACKET_LEN );
-
+	return true;
 }
 
 static void HandleClientMySQL ( int iSock, ThdDesc_t & tThd ) REQUIRES ( HandlerThread )
@@ -20502,7 +20377,7 @@ void QueryStatus ( CSphVariant * v )
 		tOut.SendDword ( SPHINX_CLIENT_VERSION );
 		tOut.SendWord ( SEARCHD_COMMAND_STATUS );
 		tOut.SendWord ( VER_COMMAND_STATUS );
-		tOut.SendInt ( 4 ); // request body length
+		tOut.StartMeasureLength (); // request body length
 		tOut.SendInt ( 1 ); // dummy body
 		tOut.Flush ();
 
@@ -20564,13 +20439,11 @@ void FailClient ( int iSock, SearchdStatus_e eStatus, const char * sMessage )
 {
 	assert ( eStatus==SEARCHD_RETRY || eStatus==SEARCHD_ERROR );
 
-	int iRespLen = 4 + strlen(sMessage);
-
 	NetOutputBuffer_c tOut ( iSock );
 	tOut.SendInt ( SPHINX_CLIENT_VERSION );
 	tOut.SendWord ( (WORD)eStatus );
 	tOut.SendWord ( 0 ); // version doesn't matter
-	tOut.SendInt ( iRespLen );
+	tOut.StartMeasureLength ();
 	tOut.SendString ( sMessage );
 	tOut.Flush ();
 
@@ -21947,7 +21820,7 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 					sphWarning ( "ill-formed client request (command=%d, SEARCHD_COMMAND_TOTAL=%d)", m_eCommand, SEARCHD_COMMAND_TOTAL );
 
 				m_tState->m_dBuf.Resize ( 0 );
-				ISphOutputBuffer tOut;
+				CachedOutputBuffer_c tOut;
 				tOut.SwapData ( m_tState->m_dBuf );
 				SendErrorReply ( tOut, "invalid command (code=%d, len=%d)", m_eCommand, m_tState->m_iLeft );
 
@@ -21980,7 +21853,7 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 					bGotError = true;
 
 				m_tState->m_dBuf.Resize ( 0 );
-				ISphOutputBuffer tOut;
+				CachedOutputBuffer_c tOut;
 				tOut.SwapData ( m_tState->m_dBuf );
 
 				// dump invalid command here after out-buffer set
@@ -22625,7 +22498,7 @@ void ThdJobAPI_t::Call ()
 
 	// handle that client
 	MemInputBuffer_c tBuf ( m_tState->m_dBuf.Begin(), m_tState->m_dBuf.GetLength() );
-	ISphOutputBuffer tOut;
+	CachedOutputBuffer_c tOut;
 
 	if ( g_bMaintenance && !m_tState->m_bVIP )
 	{
@@ -22633,7 +22506,8 @@ void ThdJobAPI_t::Call ()
 		m_tState->m_bKeepSocket = false;
 	} else
 	{
-		bool bProceed = LoopClientSphinx ( m_eCommand, m_uCommandVer, m_tState->m_dBuf.GetLength(), tThdDesc, tBuf, tOut, false );
+		bool bProceed = LoopClientSphinx ( m_eCommand, m_uCommandVer,
+			m_tState->m_dBuf.GetLength(), tThdDesc, tBuf, tOut, false );
 		m_tState->m_bKeepSocket |= bProceed;
 	}
 

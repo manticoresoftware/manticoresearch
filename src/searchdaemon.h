@@ -310,22 +310,22 @@ public:
 		explicit ReqLenCalc ( CachedOutputBuffer_c &dBuff )
 			: m_dBuff ( dBuff )
 		{
-			dBuff.StartChunk ();
+			dBuff.StartMeasureLength ();
 		}
 
 		~ReqLenCalc ()
 		{
-			m_dBuff.CommitChunk ();
+			m_dBuff.CommitMeasuredLength ();
 		}
 	};
 
 public:
 	void Flush() override; // just check integrity before flush
-	bool BlobsEmpty() const { return m_dBlobs.IsEmpty (); }
-
-protected:
-	void StartChunk(); // reserve int in the buf, push it's position
-	void CommitChunk(); // get last pushed int, write delta count there.
+	inline bool BlobsEmpty () const { return m_dBlobs.IsEmpty (); }
+public:
+	void StartMeasureLength (); // reserve int in the buf, push it's position
+	void CommitMeasuredLength (); // get last pushed int, write delta count there.
+	void CommitAllMeasuredLengths (); // finalize all nums starting from the last one.
 };
 
 using WriteLenHere_c = CachedOutputBuffer_c::ReqLenCalc;
@@ -358,15 +358,12 @@ public:
 	bool	GetError () const override { return m_bError; }
 	int		GetSentCount () const override { return m_iSent; }
 	void	SetProfiler ( CSphQueryProfile * pProfiler ) override { m_pProfile = pProfiler; }
-	const char * GetErrorMsg () const;
 
 private:
 	CSphQueryProfile *	m_pProfile = nullptr;
 	int			m_iSock;			///< my socket
 	int			m_iSent = 0;
 	bool		m_bError = false;
-	CSphString	m_sError;
-
 };
 
 

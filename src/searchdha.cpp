@@ -1332,7 +1332,7 @@ int SmartOutputBuffer_t::GetSentCount () const
 
 void SmartOutputBuffer_t::StartNewChunk ()
 {
-	assert ( BlobsEmpty() );
+	assert ( BlobsEmpty () );
 	m_dChunks.Add ( new ISphOutputBuffer ( m_dBuf ) );
 	m_dBuf.Reserve ( NETOUTBUF );
 }

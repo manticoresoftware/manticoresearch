@@ -252,9 +252,6 @@ public:
 
 	void		SendDocid ( SphDocID_t iValue )	{ SendUint64 ( iValue ); }
 	void		SendString ( const char * sStr );
-
-	void		SendMysqlInt ( int iVal );
-	void		SendMysqlString ( const char * sStr );
 	void		SendBytes ( const void * pBuf, int iLen );	///< (was) protected to avoid network-vs-host order bugs
 	void		SendOutput ( const ISphOutputBuffer & tOut );
 	void		SwapData ( CSphVector<BYTE> & rhs ) { m_dBuf.SwapData ( rhs ); }

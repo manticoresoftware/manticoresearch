@@ -1219,6 +1219,18 @@ public:
 		return m_pData + m_iCount - iCount;
 	}
 
+	/// return idx of the item pointed by pBuf, or -1
+	inline int Idx ( const T* pBuf )
+	{
+		if ( !pBuf )
+			return -1;
+
+		if ( pBuf < m_pData || pBuf >= m_pData + m_iLimit )
+			return -1;
+
+		return pBuf - m_pData;
+	}
+
 
 	/// add unique entry (ie. do not add if equal to last one)
 	void AddUnique ( const T & tValue )
@@ -1304,6 +1316,12 @@ public:
 		}
 		STORE::Deallocate ( m_pData );
 		m_pData = pNew;
+	}
+
+	/// ensure we have space for iGap more items (reserve more if necessary)
+	inline void ReserveGap ( int iGap )
+	{
+		Reserve ( m_iCount + iGap );
 	}
 
 	/// resize

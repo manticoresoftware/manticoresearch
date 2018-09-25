@@ -1711,7 +1711,8 @@ static void PackedMVA2Json ( const BYTE * pMVA, cJSON * pArray )
 }
 
 
-static void JsonObjAddAttr ( const AggrResult_t & tRes, ESphAttr eAttrType, const char * szCol, const CSphMatch & tMatch, const CSphAttrLocator & tLoc, cJSON * pSource, CSphVector<BYTE> & dTmp )
+static void JsonObjAddAttr ( const AggrResult_t & tRes, ESphAttr eAttrType, const char * szCol,
+	const CSphMatch & tMatch, const CSphAttrLocator & tLoc, cJSON * pSource, CSphVector<BYTE> & dTmp )
 {
 	assert ( sphPlainAttrToPtrAttr(eAttrType)==eAttrType );
 

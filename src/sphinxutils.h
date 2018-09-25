@@ -75,7 +75,7 @@ namespace sph {
 	int UItoA ( char * pOutput, UInt nVal, int iBase = 10, int iWidth = 0, int iPrec = 0, char cFill = ' ' );
 	template < typename Num > // let compiler deduce whether signed or unsigned...
 	int NtoA ( char * pOutput, Num nVal, int iBase = 10, int iWidth = 0, int iPrec = 0, char cFill = ' ' );
-	
+
 	/// my own fixed-point floats. iPrec - num of digits after point. i.e. 100000, 3 -> 100.000
 	int IFtoA ( char * pOutput, int nVal, int iPrec = 3 );
 	int IFtoA ( char * pOutput, int64_t nVal, int iPrec = 6 );

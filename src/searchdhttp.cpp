@@ -264,33 +264,40 @@ bool HttpRequestParser_c::Parse ( const BYTE * pData, int iDataLen )
 	return true;
 }
 
-static BYTE Char2Hex ( BYTE uChar )
+static int Char2Hex ( BYTE uChar )
 {
 	if ( uChar>=0x41 && uChar<=0x46 )
 		return ( uChar - 'A' ) + 10;
 	else if ( uChar>=0x61 && uChar<=0x66 )
 		return ( uChar - 'a' ) + 10;
-	else
+	else if ( uChar>='0' && uChar<='9' )
 		return uChar - '0';
+	return -1;
 }
 
-static void UriPercentReplace ( CSphString & sEntity )
+static void UriPercentReplace ( CSphString & sEntity, bool bAlsoPlus=true )
 {
 	if ( sEntity.IsEmpty() )
 		return;
 
 	char * pDst = (char *)sEntity.cstr();
 	const char * pSrc = pDst;
+	char cPlus = bAlsoPlus ? ' ' : '+';
 	while ( *pSrc )
 	{
 		if ( *pSrc=='%' && *(pSrc+1) && *(pSrc+2) )
 		{
-			BYTE uCode = Char2Hex ( *(pSrc+1) ) * 16 + Char2Hex ( *(pSrc+2) );
+			auto iCode = Char2Hex ( *(pSrc+1) ) * 16 + Char2Hex ( *(pSrc+2) );
+			if ( iCode<0 )
+			{
+				*pDst++ = *pSrc++;
+				continue;
+			}
 			pSrc += 3;
-			*pDst++ = uCode;
+			*pDst++ = (BYTE) iCode;
 		} else
 		{
-			*pDst++ = ( *pSrc=='+' ? ' ' : *pSrc );
+			*pDst++ = ( *pSrc=='+' ? cPlus : *pSrc );
 			pSrc++;
 		}
 	}
@@ -305,6 +312,8 @@ bool HttpRequestParser_c::ParseList ( const char * sAt, int iLen )
 	const char * sLast = sCur;
 	CSphString sName;
 	CSphString sVal;
+	const char * sRawData = nullptr;
+	CSphString sRawName;
 	for ( ; sCur<sEnd; sCur++ )
 	{
 		if ( *sCur!='&' && *sCur!='=' )
@@ -322,6 +331,11 @@ bool HttpRequestParser_c::ParseList ( const char * sAt, int iLen )
 		} else
 		{
 			sName.SetBinary ( sLast, iValueLen );
+			if ( !sRawData )
+			{
+				sRawData = sCur + 1;
+				sRawName = sName;
+			}
 		}
 		sLast = sCur+1;
 	}
@@ -331,6 +345,14 @@ bool HttpRequestParser_c::ParseList ( const char * sAt, int iLen )
 		sVal.SetBinary ( sLast, sCur - sLast );
 		UriPercentReplace ( sName );
 		UriPercentReplace ( sVal );
+		m_hOptions.Add ( sVal, sName );
+	}
+
+	if ( sRawData ) {
+		sVal.SetBinary ( sRawData, sCur - sRawData );
+		sName.SetSprintf ( "decoded_%s", sRawName.cstr() );
+		UriPercentReplace ( sName );
+		UriPercentReplace ( sVal, false ); // avoid +-decoding
 		m_hOptions.Add ( sVal, sName );
 	}
 
@@ -398,6 +420,8 @@ int HttpRequestParser_c::ParserBody ( http_parser * pParser, const char * sAt, s
 	pHttpParser->m_sRawBody.SetBinary ( sAt, iLen );
 	return 0;
 }
+
+
 
 static const CSphString * GetAnyValue ( const SmallStringHash_T<CSphString> & hOptions, const char * sKey1, const char * sKey2 )
 {
@@ -812,11 +836,25 @@ public:
 protected:
 	QueryParser_i * PreParseQuery() override
 	{
-		const CSphString * pRawQl = m_tOptions ( "query" );
+		const CSphString * pRawQl = nullptr;
+		CSphString sQuery;
+		auto pBaypass = m_tOptions ( "decoded_mode" );
+		if ( pBaypass && !pBaypass->IsEmpty () ) // test for 'mode=raw&query=...'
+		{
+			CSphString &a = *pBaypass;
+			if ( a.SubString (0,10) == "raw&query=" )
+			{
+				sQuery = a.cstr()+10;
+				pRawQl = &sQuery;
+			}
+		}
+
+		if (!pRawQl)
+			pRawQl = m_tOptions ( "query" );
 		if ( !pRawQl || pRawQl->IsEmpty() )
 		{
 			ReportError ( "query missing", SPH_HTTP_STATUS_400 );
-			return NULL;
+			return nullptr;
 		}
 
 		CSphString sError;
@@ -824,18 +862,18 @@ protected:
 		if ( !sphParseSqlQuery ( pRawQl->cstr(), pRawQl->Length(), dStmt, sError, SPH_COLLATION_DEFAULT ) )
 		{
 			ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
-			return NULL;
+			return nullptr;
 		}
 
 		m_tQuery = dStmt[0].m_tQuery;
 		if ( dStmt.GetLength()>1 )
 		{
 			ReportError ( "multiple queries not supported", SPH_HTTP_STATUS_501 );
-			return NULL;
+			return nullptr;
 		} else if ( dStmt[0].m_eStmt!=STMT_SELECT )
 		{
 			ReportError ( "only SELECT queries are supported", SPH_HTTP_STATUS_501 );
-			return NULL;
+			return nullptr;
 		}
 
 		m_eQueryType = QUERY_SQL;

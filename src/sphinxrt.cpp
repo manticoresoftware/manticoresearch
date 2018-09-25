@@ -184,8 +184,8 @@ struct RtWord_T
 {
 	union
 	{
-		WORDID					m_uWordID;	///< my keyword id
-		const BYTE *			m_sWord = nullptr;
+		WORDID					m_uWordID = 0;	///< my keyword id
+		const BYTE *			m_sWord;
 	};
 	DWORD						m_uDocs = 0;	///< document count (for stats and/or BM25)
 	DWORD						m_uHits = 0;	///< hit count (for stats and/or BM25)

@@ -3875,7 +3875,7 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, SphDocID_t iMinDocID, i
 
 namespace sph
 {
-	inline int rename ( const char * sOld, const char * sNew )
+	int rename ( const char * sOld, const char * sNew )
 	{
 #if USE_WINDOWS
 		if ( MoveFileEx ( sOld, sNew, MOVEFILE_REPLACE_EXISTING ) )

@@ -18813,7 +18813,7 @@ static void SphinxqlStateThreadFunc ( void * )
 		/////////////////////////////////
 
 		tWriter.CloseFile();
-		if ( ::rename ( sNewState.cstr(), g_sSphinxqlState.cstr() )==0 )
+		if ( sph::rename ( sNewState.cstr(), g_sSphinxqlState.cstr() )==0 )
 		{
 			::unlink ( sNewState.cstr() );
 		} else

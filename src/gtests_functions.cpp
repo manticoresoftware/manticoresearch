@@ -2028,3 +2028,18 @@ TEST ( functions, VectorEx )
 	int* VARIABLE_IS_NOT_USED pData = dTVec.LeakData();
 
 }
+
+TEST ( functions, wider_and_widest )
+{
+	WIDER<BYTE,DWORD>::T VARIABLE_IS_NOT_USED dw;
+	ASSERT_EQ ( sizeof ( dw ), sizeof ( DWORD ) );
+	
+	WIDER<double,char>::T VARIABLE_IS_NOT_USED dbl;
+	ASSERT_EQ ( sizeof ( dbl ), sizeof ( double ) );
+	
+	WIDEST<char,BYTE,WORD,double>::T VARIABLE_IS_NOT_USED dbl2;
+	ASSERT_EQ ( sizeof ( dbl ), sizeof ( double ) );
+
+	WIDEST<char *, BYTE, WORD, float>::T VARIABLE_IS_NOT_USED pchar;
+	ASSERT_EQ ( sizeof ( pchar ), sizeof ( char* ) );
+}

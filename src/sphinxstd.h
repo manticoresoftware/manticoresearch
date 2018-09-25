@@ -310,6 +310,45 @@ extern const char * strerrorm ( int errnum ); // defined in sphinxint.h
 // HELPERS
 /////////////////////////////////////////////////////////////////////////////
 
+// magick to determine widest from provided types and initialize a whole unions
+// for example,
+/*
+ *	union foo {
+ *		BYTE	a;
+ *		char	b;
+ *		DWORD	c;
+ *		WORDID	w;
+ *		sphDocid_t d;
+ *		void*	p;
+ *		WIDEST<BYTE,char,DWORD,WORDID,sphDocid_t,void*>::T _init = 0;
+ *	};
+ */
+template < typename T1, typename T2, bool= (sizeof ( T1 )<sizeof ( T2 )) >
+struct WIDER
+{
+	using T=T2;
+};
+
+template < typename T1, typename T2 >
+struct WIDER < T1, T2, false >
+{
+	using T=T1;
+};
+
+template < typename T1, typename... TYPES >
+struct WIDEST
+{
+	using T=typename WIDER < T1, typename WIDEST< TYPES... >::T >::T;
+};
+
+template < typename T1, typename T2 >
+struct WIDEST<T1, T2>
+{
+	using T=typename WIDER < T1, T2 >::T;
+};
+
+
+
 inline int sphBitCount ( DWORD n )
 {
 	// MIT HACKMEM count
@@ -419,15 +458,13 @@ void sphAssert ( const char * sExpr, const char * sFile, int iLine );
 /////////////////////////////////////////////////////////////////////////////
 
 template <typename T> T Min ( T a, T b ) { return a<b ? a : b; }
-template <typename T, typename U> T Min ( T a, U b )
+template <typename T, typename U> typename WIDER<T,U>::T Min ( T a, U b )
 {
-	STATIC_ASSERT ( sizeof(U)<=sizeof(T), WIDEST_ARG_FIRST );
 	return a<b ? a : b;
 }
 template <typename T> T Max ( T a, T b ) { return a<b ? b : a; }
-template <typename T, typename U> T Max ( T a, U b )
+template <typename T, typename U> typename WIDER<T,U>::T Max ( T a, U b )
 {
-	STATIC_ASSERT ( sizeof(U)<=sizeof(T), WIDEST_ARG_FIRST );
 	return a<b ? b : a;
 }
 #define SafeDelete(_x)		{ if (_x) { delete (_x); (_x) = nullptr; } }

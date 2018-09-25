@@ -2752,7 +2752,7 @@ struct ExprNode_t
 
 	union
 	{
-		int64_t			m_iConst = 0;	///< constant value, for TOK_CONST_INT type
+		int64_t			m_iConst;		///< constant value, for TOK_CONST_INT type
 		float			m_fConst;		///< constant value, for TOK_CONST_FLOAT type
 		int				m_iFunc;		///< built-in function id, for TOK_FUNC type
 		int				m_iArgs;		///< args count, for arglist (token==',') type
@@ -2760,6 +2760,7 @@ struct ExprNode_t
 		MapArg_c	*	m_pMapArg;		///< map argument (maps name to const or name to expr), for TOK_MAP_ARG type
 		const char	*	m_sIdent;		///< pointer to const char, for TOK_IDENT type
 		SphAttr_t	*	m_pAttr;		///< pointer to 64-bit value, for TOK_ITERATOR type
+		WIDEST<int64_t,float,int, ConstList_c *, MapArg_c *,const char*, SphAttr_t*>::T m_null = 0;
 	};
 	int				m_iLeft = -1;
 	int				m_iRight = -1;

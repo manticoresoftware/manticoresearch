@@ -9446,7 +9446,7 @@ bool CSphIndex_VLN::JuggleFile ( const char* szExt, CSphString & sError, bool bN
 	sExtNew.SetSprintf ( "%s.tmpnew", sExt.cstr() );
 	sExtOld.SetSprintf ( "%s.tmpold", sExt.cstr() );
 
-	if ( ::rename ( sExt.cstr(), sExtOld.cstr() ) )
+	if ( sph::rename ( sExt.cstr(), sExtOld.cstr() ) )
 	{
 		if ( bNeedOrigin )
 		{
@@ -9455,9 +9455,9 @@ bool CSphIndex_VLN::JuggleFile ( const char* szExt, CSphString & sError, bool bN
 		}
 	}
 
-	if ( ::rename ( sExtNew.cstr(), sExt.cstr() ) )
+	if ( sph::rename ( sExtNew.cstr(), sExt.cstr() ) )
 	{
-		if ( bNeedOrigin && !::rename ( sExtOld.cstr(), sExt.cstr() ) )
+		if ( bNeedOrigin && !sph::rename ( sExtOld.cstr(), sExt.cstr() ) )
 		{
 			// rollback failed too!
 			sError.SetSprintf ( "rollback rename to '%s' failed: %s; INDEX UNUSABLE; FIX FILE NAMES MANUALLY", sExt.cstr(), strerrorm(errno) );
@@ -31681,7 +31681,7 @@ static void FinalizeUpgrade ( const char ** sRenames, const char * sBanner, cons
 		sTo.SetSprintf ( "%s%s", sPath, sRenames[1] );
 		sRenames += 2;
 
-		if ( ::rename ( sFrom.cstr(), sTo.cstr() ) )
+		if ( sph::rename ( sFrom.cstr(), sTo.cstr() ) )
 			sphDie ( "%s: rename %s to %s failed: %s\n", sBanner,
 			sFrom.cstr(), sTo.cstr(), strerrorm(errno) );
 	}
@@ -32809,7 +32809,7 @@ bool IndexFiles_c::Rename ( const char * sFromSz, const char * sToSz )  // move 
 		sphLogDebug ( "%s unlinked", sTo.cstr() );
 #endif
 
-		if ( ::rename ( sFrom.cstr (), sTo.cstr () ) )
+		if ( sph::rename ( sFrom.cstr (), sTo.cstr () ) )
 		{
 			// this is no reason to fail if not necessary files missed.
 			if ( !dExt.m_bNeed )
@@ -32832,7 +32832,7 @@ bool IndexFiles_c::Rename ( const char * sFromSz, const char * sToSz )  // move 
 		const auto &dExt = g_dIndexFilesExts[i];
 		auto sFrom = FullPath ( dExt.m_sExt, "", sToSz );
 		auto sTo = FullPath ( dExt.m_sExt, "", sFromSz );
-		if ( ::rename ( sFrom.cstr (), sTo.cstr () ) )
+		if ( sph::rename ( sFrom.cstr (), sTo.cstr () ) )
 		{
 			sphLogDebug ( "rollback failure when renaming %s to %s", sFrom.cstr (), sTo.cstr () );
 			m_bFatal = true;
@@ -32852,7 +32852,7 @@ bool IndexFiles_c::RenameLock ( const char * sToSz, int &iLockFD )
 	StringBuilder_c sError;
 
 #if !USE_WINDOWS
-	if ( !::rename ( sFrom.cstr (), sTo.cstr () ) )
+	if ( !sph::rename ( sFrom.cstr (), sTo.cstr () ) )
 		return true;
 
 	m_sLastError.SetSprintf ("failed to rename lock %s to %s, fd=%d, error %s (%d); ", sFrom.cstr(),
@@ -32892,7 +32892,7 @@ bool IndexFiles_c::Rollback ( const char * sBackup, const char * sPath )
 		::unlink ( sTo.cstr() );
 		sphLogDebug ( "%s unlinked", sTo.cstr() );
 #endif
-		if ( ::rename ( sFrom.cstr (), sTo.cstr () ) )
+		if ( sph::rename ( sFrom.cstr (), sTo.cstr () ) )
 		{
 			sphLogDebug ( "rollback rename %s to %s failed: %s", sFrom.cstr (), sTo.cstr (), strerrorm (	errno ) );
 			m_bFatal = true;

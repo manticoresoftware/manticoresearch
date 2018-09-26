@@ -1,6 +1,64 @@
 Release notes
 =============
 
+Version 2.7.3 GA, 26 September 2018
+-----------------------------------
+
+Improvements
+~~~~~~~~~~~~
+* sort_mode option for CALL KEYWORDS
+* DEBUG on VIP connection can perform 'crash <password>' for intentional SIGEGV action on daemon
+* DEBUG can perform 'malloc_stats' for dumping malloc stats in searchd.log 'malloc_trim' to perform a malloc_trim()
+* improved backtrace is gdb is present on the system
+
+
+Bugfixes
+~~~~~~~~
+* `0f3cc33 <https://github.com/manticoresoftware/manticoresearch/commit/0f3cc333f6129451ad1ae2c97905b6c04ba5d454>`__ fixed crash or hfailure of rename on Windows
+* `1455ba2 <https://github.com/manticoresoftware/manticoresearch/commit/1455ba2bf8079f03ce7f861a8d9662a360d705de>`__ fixed crashes of daemon on 32-bit systems
+* `ad3710d <https://github.com/manticoresoftware/manticoresearch/commit/ad3710d53b5cd6a28b8c60352d0f9e285b03d9fa>`__ fixed crash or hung of daemon on empty SNIPPET expression
+* `b36d792 <https://github.com/manticoresoftware/manticoresearch/commit/b36d79214364500252665860f000ae85343528b6>`__ fixed broken non progressive optimize and fixed progressive optimize to not create kill-list for oldest disk chunk
+* `34b0324 <https://github.com/manticoresoftware/manticoresearch/commit/34b032499afd42ce47a4c7247814b4031094388a>`__ fixed queue_max_length bad reply for SphinxQL and API at thread pool worker mode
+* `ae4b320 <https://github.com/manticoresoftware/manticoresearch/commit/ae4b3202cbdb8014cabe2b90e269d5cf74f49871>`__ fixed crash on adding full-scan query to PQ index with regexp or rlp options set
+* `f80f8d5 <https://github.com/manticoresoftware/manticoresearch/commit/f80f8d5d7560187078868aed9a9575f4549e98aa>`__ fixed crash when call one PQ after another
+* `9742f5f <https://github.com/manticoresoftware/manticoresearch/commit/9742f5f0866af73f8cd8483ecd18a507ea80dd65>`__ refactor AquireAccum 
+* `39e5bc3 <https://github.com/manticoresoftware/manticoresearch/commit/39e5bc3751b7295222eb76407c5d72ce1dad545b>`__ fixed leak of memory after call pq 
+* `21bcc6d <https://github.com/manticoresoftware/manticoresearch/commit/21bcc6d17395f0f57dde79f6716ef303b7ea527d>`__ cosmetic refactor (c++11 style c-trs, defaults, nullptrs)
+* `2d69039 <https://github.com/manticoresoftware/manticoresearch/commit/2d690398f14c736956cfdd66feb4d3091d6b3a4d>`__ fixed memory leak on trying to insert duplicate into PQ index
+* `5ed92c4 <https://github.com/manticoresoftware/manticoresearch/commit/5ed92c4b66da6423fa28f11b1fd59103ed1e1fb9>`__ fixed crash on JSON field IN with large values
+* `4a5262e <https://github.com/manticoresoftware/manticoresearch/commit/4a5262e2776aa261e34ba5c914ea60804f59de3f>`__ fixed crash of daemon on CALL KEYWORDS statement to RT index with expansion limit set
+* `552646b <https://github.com/manticoresoftware/manticoresearch/commit/552646bb6fefde4e2525298e43e628839b421d3d>`__ fixed invalid filter at PQ matches query;
+* `204f521 <https://github.com/manticoresoftware/manticoresearch/commit/204f521408b730198a5bab2c20407a3d7df94873>`__ introduce small obj allocator for ptr attrs
+* `25453e5 <https://github.com/manticoresoftware/manticoresearch/commit/25453e5387152c0575d1eda1b2beb89a49c7493a>`__ refactor ISphFieldFilter to refcounted flavour
+* `1366ee0 <https://github.com/manticoresoftware/manticoresearch/commit/1366ee06e828397074b69bec9265d7147170c60e>`__ fixed ub/sigsegv when using strtod on non-terminated strings
+* `94bc6fc <https://github.com/manticoresoftware/manticoresearch/commit/94bc6fcbdae4d08bcf6da2966e3ec2966091289f>`__ fixed memory leak in json resultset processing
+* `e78e9c9 <https://github.com/manticoresoftware/manticoresearch/commit/e78e9c948963416caff9e4e46296a58080107835>`__ fixed read over the end of mem block applying attribute add
+* `fad572f <https://github.com/manticoresoftware/manticoresearch/commit/fad572fb543606b33e688eb82a485b86011545fd>`__ fixed refactor CSphDict for refcount flavour
+* `fd841a4 <https://github.com/manticoresoftware/manticoresearch/commit/fd841a472b472280c93f4af3506851d19f6adc45>`__ fixed leak of AOT internal type outside
+* `5ee7f20 <https://github.com/manticoresoftware/manticoresearch/commit/5ee7f208c7685f2ebb9e5623a8802b721e2a7f0a>`__ fixed memory leak tokenizer management 
+* `116c5f1 <https://github.com/manticoresoftware/manticoresearch/commit/116c5f1abebee9a0d99afe93546a1d8e4c6c6958>`__ fixed memory leak in grouper
+* `56fdbc9 <https://github.com/manticoresoftware/manticoresearch/commit/56fdbc9ab38973a9a0ba8ccee45f71cf33c16423>`__ special free/copy for dynamic ptrs in matches (memory leak grouper)
+* `b1fc161 <https://github.com/manticoresoftware/manticoresearch/commit/31db660f378541aa0d1e7cf2e7209bb0a1f47fd8>`__ fixed memory leak of dynamic strings for RT
+* `517b9e8 <https://github.com/manticoresoftware/manticoresearch/commit/517b9e8749f092e923cd2884b674b5bb84e20755>`__ refactor grouper
+* `b1fc161 <https://github.com/manticoresoftware/manticoresearch/commit/b1fc16140e5dc44290686330b476a254e0092107>`__ minor refactor (c++11 c-trs, some reformats)
+* `7034e07 <https://github.com/manticoresoftware/manticoresearch/commit/7034e073f4cf2844762e0a464b7c3de05d3d122b>`__ refactor ISphMatchComparator to refcounted flavour
+* `b1fc161 <https://github.com/manticoresoftware/manticoresearch/commit/b1fc16140e5dc44290686330b476a254e0092107>`__ privatize cloner
+* `efbc051 <https://github.com/manticoresoftware/manticoresearch/commit/efbc0511d6809c4a57453c7283f9bf53f3fb8d97>`__ simplify native little-endian for MVA_UPSIZE, DOCINFO2ID_T, DOCINFOSETID
+* `6da0df4 <https://github.com/manticoresoftware/manticoresearch/commit/6da0df4ac9946fc59f98d229b90e12c9221dd4c0>`__ add valgrind support to to ubertests
+* `1d17669 <https://github.com/manticoresoftware/manticoresearch/commit/1d17669cb7ec54ac80b392e101f37a688eb98080>`__ fixed crash because race of 'success' flag on connection
+* `5a09c32 <https://github.com/manticoresoftware/manticoresearch/commit/5a09c32d7ded56b2c0bd3e2ad7968cb8d6362919>`__ switch epoll to edge-triggered flavour
+* `5d52868 <https://github.com/manticoresoftware/manticoresearch/commit/5d528682737fca03a4352a3093b1319ec27d598c>`__ fixed IN statement in expression with formatting like at filter
+* `bd8b3c9 <https://github.com/manticoresoftware/manticoresearch/commit/bd8b3c976ff8b4667f55dfdd101b20a920137ac5>`__ fixed crash at RT index on commit of document with large docid
+* `ce656b8 <https://github.com/manticoresoftware/manticoresearch/commit/ce656b83b747ce7c55795b53915770c13fb99cfe>`__ fixed argless options in indextool
+* `08c9507 <https://github.com/manticoresoftware/manticoresearch/commit/08c9507177820f441f534bf06a11dac5e54bebb4>`__ fixed memory leak of expanded keyword
+* `30c75a2 <https://github.com/manticoresoftware/manticoresearch/commit/30c75a2f525ec9bda625d903acdc9d4d2e2413dc>`__ fixed memory leak of json grouper
+* `6023f26 <https://github.com/manticoresoftware/manticoresearch/commit/6023f269b6f2080e4d380b0957605ef8107c8c9f>`__ fixed leak of global user vars 
+* `7c138f1 <https://github.com/manticoresoftware/manticoresearch/commit/7c138f15ca23c0c8717fa12041e3db7f988fcf15>`__ fixed leakage of dynamic strings on early rejected matches
+* `9154b18 <https://github.com/manticoresoftware/manticoresearch/commit/9154b18eaed5302e8330cb3a95bd968959ccb312>`__ fixed leakage on length(<expression>) 
+* `43fca3a <https://github.com/manticoresoftware/manticoresearch/commit/43fca3a4e26139765d0fac8de054200dc4875fc6>`__ fixed memory leak because strdup() in parser 
+* `71ff777 <https://github.com/manticoresoftware/manticoresearch/commit/71ff77737e63d1019b7c9804dca7fa2351025dba>`__ fixed refactor expression parser to accurate follow refcounts
+
+
 Version 2.7.2 GA, 27 August 2018
 --------------------------------
 

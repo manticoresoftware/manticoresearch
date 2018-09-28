@@ -16332,7 +16332,7 @@ void HandleMysqlDebug ( SqlRowBuffer_c &tOut, const SqlStmt_t &tStmt, bool bVipC
 		tOut.HeadTuplet ( "command", "result" );
 		tOut.DataTuplet ( "debug token", sSha.cstr() );
 	}
-#if HAVE_MALLOC_H
+#if HAVE_MALLOC_STATS
 	else if ( sCommand=="malloc_stats" )
 	{
 		tOut.HeadTuplet ( "command", "result" );
@@ -16343,7 +16343,10 @@ void HandleMysqlDebug ( SqlRowBuffer_c &tOut, const SqlStmt_t &tStmt, bool bVipC
 		::dup2 ( iOldErr, STDERR_FILENO );
 		::close ( iOldErr );
 		tOut.DataTuplet ( "malloc_stats", g_sLogFile.cstr());
-	} else if ( sCommand=="malloc_trim" )
+	}
+#endif
+#if HAVE_MALLOC_TRIM
+	else if ( sCommand=="malloc_trim" )
 	{
 		tOut.HeadTuplet ( "command", "result" );
 		CSphString sResult;
@@ -16373,8 +16376,10 @@ void HandleMysqlDebug ( SqlRowBuffer_c &tOut, const SqlStmt_t &tStmt, bool bVipC
 		}
 		tOut.DataTuplet ( "flush logs", "emulate USR1 signal" );
 		tOut.DataTuplet ( "reload indexes", "emulate HUP signal" );
-#if HAVE_MALLOC_H
+#if HAVE_MALLOC_STATS
 		tOut.DataTuplet ( "malloc_stats", "perform 'malloc_stats', result in searchd.log" );
+#endif
+#if HAVE_MALLOC_TRIM
 		tOut.DataTuplet ( "malloc_trim", "pefrorm 'malloc_trim' call" );
 #endif
 		tOut.DataTuplet ( "sleep Nsec", "sleep for N seconds" );

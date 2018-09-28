@@ -64,6 +64,12 @@
 /* Define if your system supports flag SO_REUSEPORT */
 #cmakedefine01 HAVE_SO_REUSEPORT
 
+/* Define if your system libc has malloc_trim() */
+#cmakedefine01 HAVE_MALLOC_TRIM
+
+/* Define if your system libc has malloc_stats() */
+#cmakedefine01 HAVE_MALLOC_STATS
+
 /* Define if your system supports flag PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP */
 #cmakedefine01 HAVE_RWLOCK_PREFER_WRITER
 

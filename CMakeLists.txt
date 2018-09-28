@@ -297,6 +297,12 @@ else ( WIN32 )
 	message ( STATUS "Checking for SO_REUSEPORT flag" )
 	include ( check_so_reuseport_availability )
 
+	message ( STATUS "Checking for malloc_trim availability" )
+	include ( check_malloc_trim_availability )
+
+	message ( STATUS "Checking for malloc_stats availability" )
+	include ( check_malloc_stats_availability )
+
 	message ( STATUS "Checking for PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP flag" )
 	include ( check_rwlock_prefer_writer )
 

@@ -1600,7 +1600,7 @@ TEST ( functions, FindLastNumeric )
 }
 const char* sPattern="DeadBeefDeadBeefDeadBeefDeadBeefDeadBeefDeadBeefDeadBeefDeadBeef";
 
-TEST ( functions, bench_allocator_linear )
+TEST ( functions, DISABLED_bench_allocator_linear )
 {
 	static const DWORD uTries = 10000000;
 
@@ -1630,7 +1630,7 @@ TEST ( functions, bench_allocator_linear )
 	ASSERT_EQ ( sphGetSmallAllocatedSize (), 0 );
 }
 
-TEST ( functions, bench_allocator_linear64 )
+TEST ( functions, DISABLED_bench_allocator_linear64 )
 {
 	static const DWORD uTries = 1000;
 
@@ -1661,7 +1661,7 @@ TEST ( functions, bench_allocator_linear64 )
 	ASSERT_EQ ( sphGetSmallAllocatedSize (), 0 );
 }
 
-TEST ( functions, bench_allocator_small )
+TEST ( functions, DISABLED_bench_allocator_small )
 {
 	static const DWORD uTries = 10000000;
 	static const DWORD uLoops = uTries/MAX_SMALL_OBJECT_SIZE;

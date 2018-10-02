@@ -2747,6 +2747,33 @@ struct CSphStrHashFunc
 template < typename T, int LENGTH = 256 >
 using SmallStringHash_T = CSphOrderedHash < T, CSphString, CSphStrHashFunc, LENGTH >;
 
+
+namespace sph {
+
+// used to simple add/delete strings and check if a string was added by [] op
+class StringSet : private SmallStringHash_T<bool>
+{
+	using BASE = SmallStringHash_T<bool>;
+public:
+	inline void Add ( const CSphString& sKey )
+	{
+		BASE::Add ( true, sKey );
+	}
+
+	inline void Delete ( const CSphString& sKey )
+	{
+		BASE::Delete ( sKey );
+	}
+
+	inline bool operator[] ( const CSphString& sKey ) const
+	{
+		if ( BASE::Exists ( sKey ) )
+			return BASE::operator[] ( sKey );
+		return false;
+	}
+};
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 /// pointer with automatic safe deletion when going out of scope

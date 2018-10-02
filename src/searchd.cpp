@@ -4629,7 +4629,7 @@ void ReportIndexesName ( int iSpanStart, int iSpandEnd, const CSphVector<SearchF
 
 	// add total index count
 	if ( iEndReport!=iSpandEnd )
-		sOut.Appendf ( " and %d more: ", iSpandEnd-iEndReport );
+		sOut.Sprintf ( " and %d more: ", iSpandEnd-iEndReport );
 	else
 		sOut += ": ";
 }
@@ -4646,7 +4646,7 @@ int sphSendGetAttrCount ( const ISphSchema & tSchema, bool bAgentMode )
 
 	if ( iCount && sphIsSortStringInternal ( tSchema.GetAttr ( iCount-1 ).m_sName.cstr() ) )
 	{
-		for ( int i=iCount-1; i>=0 && sphIsSortStringInternal ( tSchema.GetAttr(i).m_sName.cstr() ); i-- )
+		for ( int i=iCount-1; i>=0 && sphIsSortStringInternal ( tSchema.GetAttr(i).m_sName.cstr() ); --i )
 		{
 			iCount = i;
 		}
@@ -5444,7 +5444,9 @@ static void ProcessLocalPostlimit ( const CSphQuery & tQuery, AggrResult_t & tRe
 
 /// merges multiple result sets, remaps columns, does reorder for outer selects
 /// query is only (!) non-const to tweak order vs reorder clauses
-bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, int iLocals, CSphSchema * pExtraSchema, CSphQueryProfile * pProfiler, const CSphFilterSettings * pAggrFilter, bool bForceRefItems )
+bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bHaveLocals,
+	const sph::StringSet& hExtraColumns, CSphQueryProfile * pProfiler,
+	const CSphFilterSettings * pAggrFilter, bool bForceRefItems )
 {
 	// sanity check
 	// verify that the match counts are consistent
@@ -5458,16 +5460,18 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, int iLo
 		return false;
 	}
 
-	bool bReturnZeroCount = ( tRes.m_dZeroCount.GetLength()!=0 );
+	bool bReturnZeroCount = !tRes.m_dZeroCount.IsEmpty();
 	bool bQueryFromAPI = tQuery.m_eQueryType==QUERY_API;
+	bool bAgent = tQuery.m_bAgent;
+	bool bUsualApi = !bAgent && bQueryFromAPI;
 
 	// 0 matches via SphinxAPI? no fiddling with schemes is necessary
 	// (and via SphinxQL, we still need to return the right schema)
-	if ( bQueryFromAPI && !tRes.m_dMatches.GetLength() )
+	if ( bQueryFromAPI && tRes.m_dMatches.IsEmpty() )
 		return true;
 
 	// 0 result set schemes via SphinxQL? just bail
-	if ( !bQueryFromAPI && !tRes.m_dSchemas.GetLength() && !bReturnZeroCount )
+	if ( !bQueryFromAPI && tRes.m_dSchemas.IsEmpty() && !bReturnZeroCount )
 		return true;
 
 	// build a minimal schema over all the (potentially different) schemes
@@ -5475,8 +5479,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, int iLo
 	assert ( tRes.m_dSchemas.GetLength() || bReturnZeroCount );
 	if ( tRes.m_dSchemas.GetLength() )
 		tRes.m_tSchema = tRes.m_dSchemas[0];
-	bool bAgent = tQuery.m_bAgent;
-	bool bUsualApi = !bAgent && bQueryFromAPI;
+
 	bool bAllEqual = true;
 
 	// FIXME? add assert ( tRes.m_tSchema==tRes.m_dSchemas[0] );
@@ -5605,7 +5608,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, int iLo
 			// however we might need it anyway because of a non-NULL extra-schema
 			// ??? explain extra-schemas here
 			// bMagic condition added for @groupbystr in the agent mode
-			if ( !bAdded && pExtraSchema && ( pExtraSchema->GetAttrIndex ( tCol.m_sName.cstr() )>=0 || iLocals==0 || bMagic ) )
+			if ( !bAdded && bAgent && ( hExtraColumns[tCol.m_sName] || !bHaveLocals || bMagic ) )
 			{
 				CSphColumnInfo & t = dFrontend.Add();
 				t.m_iIndex = iCol;
@@ -5616,7 +5619,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, int iLo
 
 	// sanity check
 	// verify that we actually have all the queried select items
-	assert ( !dUnmappedItems.GetLength() || ( dUnmappedItems.GetLength()==1 && tItems [ dUnmappedItems[0] ].m_sExpr=="id" ) );
+	assert ( dUnmappedItems.IsEmpty() || ( dUnmappedItems.GetLength()==1 && tItems [ dUnmappedItems[0] ].m_sExpr=="id" ) );
 	dKnownItems.Sort();
 	ARRAY_FOREACH ( i, tItems )
 		if ( !dKnownItems.BinarySearch(i) && tItems[i].m_sExpr!="id" )
@@ -5661,7 +5664,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, int iLo
 	// tricky bit
 	// in purely distributed case, all schemas are received from the wire, and miss aggregate functions info
 	// thus, we need to re-assign that info
-	if ( !iLocals )
+	if ( !bHaveLocals )
 		RecoverAggregateFunctions ( tQuery, tRes );
 
 	// if there's more than one result set,
@@ -5743,7 +5746,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, int iLo
 		if ( !bAllEqual )
 		{
 			// post-limit stuff first
-			if ( iLocals )
+			if ( bHaveLocals )
 			{
 				CSphScopedProfile tProf ( pProfiler, SPH_QSTATE_EVAL_POST );
 				ProcessLocalPostlimit ( tQueryCopy, tRes );
@@ -5780,7 +5783,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, int iLo
 	}
 
 	// compute post-limit stuff
-	if ( bAllEqual && iLocals )
+	if ( bAllEqual && bHaveLocals )
 	{
 		CSphScopedProfile ( pProfiler, SPH_QSTATE_EVAL_POST );
 
@@ -5877,76 +5880,6 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, int iLo
 }
 
 /////////////////////////////////////////////////////////////////////////////
-
-// TODO: DELETE!!!
-class CSphSchemaMT : public CSphSchema
-{
-public:
-	explicit				CSphSchemaMT ( const char * sName="(nameless)" ) : CSphSchema ( sName ), m_pLock ( NULL )
-	{
-	}
-
-	void AwareMT()
-	{
-		if ( m_pLock )
-			return;
-		m_pLock = new CSphRwlock();
-		m_pLock->Init();
-	}
-
-	~CSphSchemaMT()
-	{
-		if ( m_pLock )
-			Verify ( m_pLock->Done() );
-		SafeDelete ( m_pLock )
-	}
-
-	// get wlocked entry, only if it is not yet touched
-	inline CSphSchemaMT * GetVirgin () ACQUIRE ( )
-	{
-		if ( !m_pLock )
-			return this;
-
-		if ( m_pLock->WriteLock() )
-		{
-			if ( m_dAttrs.GetLength()!=0 ) // not already a virgin
-			{
-				m_pLock->Unlock();
-				return nullptr;
-			}
-			return this;
-		} else
-		{
-			sphLogDebug ( "WriteLock %p failed", this );
-			assert ( false );
-		}
-
-		return nullptr;
-	}
-
-	inline CSphSchemaMT * RLock() ACQUIRE_SHARED ( )
-	{
-		if ( !m_pLock )
-			return this;
-
-		if ( !m_pLock->ReadLock() )
-		{
-			sphLogDebug ( "ReadLock %p failed", this );
-			assert ( false );
-		}
-		return this;
-	}
-
-	inline void Release() const UNLOCK_FUNCTION ( )
-	{
-		if ( m_pLock )
-			m_pLock->Unlock();
-	}
-
-private:
-	mutable CSphRwlock * m_pLock;
-};
-
 static int StringBinary2Number ( const char * sStr, int iLen )
 {
 	if ( !sStr || !iLen )
@@ -6322,7 +6255,7 @@ protected:
 	bool							m_bMultiQueue = false;	///< whether current subset is subject to multi-queue optimization
 	bool							m_bFacetQueue = false;	///< whether current subset is subject to facet-queue optimization
 	CSphVector<LocalIndex_t>		m_dLocal;				///< local indexes for the current subset
-	mutable CSphVector<CSphSchemaMT> m_dExtraSchemas; 		///< the extra fields for agents
+	mutable CSphVector<sph::StringSet> m_dExtraSchemas; 	///< the extra attrs for agents
 	CSphAttrUpdateEx *				m_pUpdates = nullptr;	///< holder for updates
 	CSphVector<SphDocID_t> *		m_pDelDocs = nullptr;	///< this query is for deleting
 
@@ -6753,10 +6686,6 @@ void SearchHandler_c::RunLocalSearchesParallel()
 	// setup threads
 	CSphVector<LocalSearchThreadContext_t> dThreads ( Min ( g_iDistThreads, dWorks.GetLength() ) );
 
-	// prepare for multithread extra schema processing
-	for ( int iQuery=m_iStart; iQuery<=m_iEnd; iQuery++ )
-		m_dExtraSchemas[iQuery].AwareMT();
-
 	CrashQuery_t tCrashQuery = SphCrashLogger_c::GetQuery(); // transfer query info for crash logger to new thread
 	// fire searcher threads
 
@@ -6919,7 +6848,7 @@ bool SearchHandler_c::RunLocalSearchMT ( int iLocal, ISphMatchSorter ** ppSorter
 	{
 		CSphString & sError = ppResults[i]->m_sError;
 		const CSphQuery & tQuery = m_dQueries[i+m_iStart];
-		CSphSchemaMT * pExtraSchemaMT = tQuery.m_bAgent ? m_dExtraSchemas[i+m_iStart].GetVirgin() : nullptr;
+		auto * pExtraSchemaMT = tQuery.m_bAgent ? &m_dExtraSchemas[i+m_iStart] : nullptr;
 
 		m_tHook.m_pIndex = pServed->m_pIndex;
 		SphQueueSettings_t tQueueSettings ( tQuery, pServed->m_pIndex->GetMatchSchema(), sError, m_pProfile );
@@ -6939,9 +6868,6 @@ bool SearchHandler_c::RunLocalSearchMT ( int iLocal, ISphMatchSorter ** ppSorter
 		// can't use multi-query for sorter with string attribute at group by or sort
 		if ( ppSorters[i] && *pMulti )
 			*pMulti = ppSorters[i]->CanMulti();
-
-		if ( pExtraSchemaMT )
-			pExtraSchemaMT->Release();
 	}
 	if ( !iValidSorters )
 		return false;
@@ -7038,8 +6964,8 @@ void SearchHandler_c::RunLocalSearches()
 		{
 			CSphString sError;
 			CSphQuery & tQuery = m_dQueries[iQuery];
-			auto tExtraSchema = tQuery.m_bAgent?m_dExtraSchemas[iQuery].GetVirgin():nullptr;
-			
+			auto tExtraSchema = tQuery.m_bAgent ? &m_dExtraSchemas[iQuery] : nullptr;
+
 			// create queue
 			m_tHook.m_pIndex = pServed->m_pIndex;
 			SphQueueSettings_t tQueueSettings ( tQuery, pServed->m_pIndex->GetMatchSchema(), sError, m_pProfile );
@@ -7893,7 +7819,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 		AggrResult_t & tRes = m_dResults[iRes];
 		const CSphQuery & tQuery = m_dQueries[iRes];
 		// fixme! wonder why Begin(), not [iRes]-ed schema here?
-		CSphSchemaMT * pExtraSchema = tQuery.m_bAgent ? m_dExtraSchemas.Begin() : nullptr;
+		auto & hExtra = *m_dExtraSchemas.begin();
 
 		// minimize sorters needs these pointers
 		tIO.Add ( tRes.m_tIOStats );
@@ -7917,21 +7843,18 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 		if ( tRes.m_iSuccesses>1 || dItems.GetLength() || pAggrFilter )
 		{
-			if ( pExtraSchema )
-				pExtraSchema->RLock();
+
 			if ( m_bMaster && tRes.m_iSuccesses && dItems.GetLength() && tQuery.m_sGroupBy.IsEmpty() && tRes.m_dMatches.GetLength()==0 )
 			{
-				ARRAY_FOREACH ( i, dItems )
+				for ( auto& dItem : dItems )
 				{
-					if ( dItems[i].m_sExpr=="count(*)" || ( dItems[i].m_sExpr=="@distinct" ) )
-						tRes.m_dZeroCount.Add ( dItems[i].m_sAlias );
+					if ( dItem.m_sExpr=="count(*)" || ( dItem.m_sExpr=="@distinct" ) )
+						tRes.m_dZeroCount.Add ( dItem.m_sAlias );
 				}
 			}
 
-			bool bOk = MinimizeAggrResult ( tRes, tQuery, m_dLocal.GetLength(), pExtraSchema, m_pProfile, pAggrFilter, m_bFederatedUser );
+			bool bOk = MinimizeAggrResult ( tRes, tQuery, !m_dLocal.IsEmpty(), hExtra, m_pProfile, pAggrFilter, m_bFederatedUser );
 
-			if ( pExtraSchema )
-				pExtraSchema->Release();
 			if ( !bOk )
 			{
 				tRes.m_iSuccesses = 0;
@@ -15102,7 +15025,7 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 	// bummer! lets protect ourselves against that
 	int iSchemaAttrsCount = 0;
 	int iAttrsCount = 1;
-	bool bReturnZeroCount = ( tRes.m_dZeroCount.GetLength()!=0 );
+	bool bReturnZeroCount = !tRes.m_dZeroCount.IsEmpty();
 	if ( tRes.m_dMatches.GetLength() || bReturnZeroCount )
 	{
 		iSchemaAttrsCount = sphSendGetAttrCount ( tRes.m_tSchema );

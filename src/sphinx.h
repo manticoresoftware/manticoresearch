@@ -1468,7 +1468,7 @@ struct CSphColumnInfo
 	CSphString		m_sQuery;		///< query to retrieve values (for multi-valued attrs only)
 	CSphString		m_sQueryRange;	///< query to retrieve range (for multi-valued attrs only)
 
-	CSphRefcountedPtr<ISphExpr>		m_pExpr;///< evaluator for expression items
+	ISphExprRefPtr_c m_pExpr;///< evaluator for expression items
 	ESphAggrFunc	m_eAggrFunc { SPH_AGGR_NONE };	///< aggregate function on top of expression (for GROUP BY)
 	ESphEvalStage	m_eStage { SPH_EVAL_STATIC };///< column evaluation stage (who and how computes this column)
 	bool			m_bPayload = false;
@@ -3486,7 +3486,7 @@ struct SphQueueSettings_t : public ISphNoncopyable
 	CSphString &				m_sError;
 	CSphQueryProfile *			m_pProfiler;
 	bool						m_bComputeItems = true;
-	CSphSchema *				m_pExtra = nullptr;
+	sph::StringSet *			m_pExtra = nullptr;
 	CSphAttrUpdateEx *			m_pUpdate = nullptr;
 	CSphVector<SphDocID_t> *	m_pCollection = nullptr;
 	bool						m_bZonespanlist = false;

@@ -2534,11 +2534,10 @@ static bool DumpGdb ( int iFD )
 			} else if ( iExited == iWait30 )
 			{
 				iWait30 = 0;
-				char tmp[128];
 				if ( iWorker )
 				{
-					sphSafeInfo ( tmp, "pkill -KILL -P %d", iWorker );
-					::system ( tmp );
+					sphSafeInfo ( g_sNameBuf, "pkill -KILL -P %d", iWorker );
+					::system ( g_sNameBuf );
 				}
 			} else if ( iExited == iWait60 )
 			{
@@ -2561,7 +2560,7 @@ static bool DumpGdb ( int iFD )
 	if ( iRes==-1 || iRes==0 )
 		return false;
 
-	// master branch is mirrored on githup, so could generate more info here.
+	// master branch is mirrored on github, so could generate more info here.
 	if ( strncmp ( GIT_BRANCH_ID, "git branch master", 17 ) == 0 )
 		sphSafeInfo ( iFD,
 			"You can obtain the sources of this version from https://github.com/manticoresoftware/manticoresearch/archive/" SPH_GIT_COMMIT_ID ".zip\n"
@@ -2571,7 +2570,7 @@ static bool DumpGdb ( int iFD )
 	sphSafeInfo ( iFD,
 	  "\nUnpack the sources by command:\n"
 	  "  mkdir -p /tmp/manticore && unzip manticore.zip -d /tmp/manticore\n\n"
-	  "Also suggest to append a substitution def to your ~/.gdbinit file:\n"
+	  "For comfortable debug also suggest to append a substitution def to your ~/.gdbinit file:\n"
 	  "  set substitute-path \"" GDB_SOURCE_DIR "\" /tmp/manticore/manticoresearch-" SPH_GIT_COMMIT_ID );
 	return true;
 #else
@@ -2734,7 +2733,7 @@ void sphBacktrace ( int iFD, bool bSafe )
 	char * pCur = g_pBacktrace;
 	for ( int i=0; i<iCount; i++ )
 	{
-		// early our on strings buffer overrun
+		// early out on strings buffer overrun
 		if ( pCur>=g_pBacktrace+sizeof(g_pBacktrace)-48 )
 		{
 			iCount = i;

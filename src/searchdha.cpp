@@ -1807,21 +1807,19 @@ void AgentConn_t::TimeoutCallback ()
 	}
 }
 
-// fixme! Actually this must never happens.
-// So, explicit sphWarning used to detect if it actually called
 // the reason for orphanes is suggested to be combined write, then read in netloop with epoll
 bool AgentConn_t::CheckOrphaned()
 {
 	// check if we accidentally orphaned (that is bug!)
 	if ( IsLast () && !IsBlackhole () )
 	{
-		sphWarning ( "Orphaned (last) connection detected!" );
+		sphLogDebug ( "Orphaned (last) connection detected!" );
 		return true;
 	}
 
 	if ( m_pReporter && m_pReporter->IsDone () )
 	{
-		sphWarning ( "Orphaned (kind of done) connection detected!" );
+		sphLogDebug ( "Orphaned (kind of done) connection detected!" );
 		return true;
 	}
 	return false;

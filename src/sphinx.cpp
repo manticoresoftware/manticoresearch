@@ -13350,9 +13350,15 @@ static ISphFilter * CreateMergeFilters ( const CSphVector<CSphFilterSettings> & 
 {
 	CSphString sError, sWarning;
 	ISphFilter * pResult = nullptr;
+	CreateFilterContext_t tCtx;
+	tCtx.m_pSchema = &tSchema;
+	tCtx.m_pMvaPool = pMvaPool;
+	tCtx.m_pStrings = pStrings;
+	tCtx.m_bArenaProhibit = bArenaProhibit;
+
 	ARRAY_FOREACH ( i, dSettings )
 	{
-		ISphFilter * pFilter = sphCreateFilter ( dSettings[i], tSchema, pMvaPool, pStrings, sError, sWarning, SPH_COLLATION_DEFAULT, bArenaProhibit );
+		ISphFilter * pFilter = sphCreateFilter ( dSettings[i], tCtx, sError, sWarning );
 		if ( pFilter )
 			pResult = sphJoinFilters ( pResult, pFilter );
 	}
@@ -14857,7 +14863,7 @@ struct SphFinalMatchCalc_t : ISphMatchProcessor, ISphNoncopyable
 
 
 /// scoped thread scheduling helper
-/// either makes the current thread low priority while the helper lives, or does noething
+/// either makes the current thread low priority while the helper lives, or does nothing
 class ScopedThreadPriority_c
 {
 private:
@@ -14969,8 +14975,18 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	tCtx.SetStringPool ( m_tString.GetWritePtr() );
 
 	// setup filters
-	if ( !tCtx.CreateFilters ( true, &pQuery->m_dFilters, tMaxSorterSchema,
-		m_tMva.GetWritePtr(), m_tString.GetWritePtr(), pResult->m_sError, pResult->m_sWarning, pQuery->m_eCollation, m_bArenaProhibit, tArgs.m_dKillList, &pQuery->m_dFilterTree ) )
+	CreateFilterContext_t tFlx;
+	tFlx.m_pFilters = &pQuery->m_dFilters;
+	tFlx.m_pFilterTree = &pQuery->m_dFilterTree;
+	tFlx.m_pKillList = &tArgs.m_dKillList;
+	tFlx.m_pSchema = &tMaxSorterSchema;
+	tFlx.m_pMvaPool = m_tMva.GetWritePtr ();
+	tFlx.m_pStrings = m_tString.GetWritePtr ();
+	tFlx.m_eCollation = pQuery->m_eCollation;
+	tFlx.m_bScan = true;
+	tFlx.m_bArenaProhibit = m_bArenaProhibit;
+
+	if ( !tCtx.CreateFilters ( tFlx, pResult->m_sError, pResult->m_sWarning ) )
 			return false;
 
 	// check if we can early reject the whole index
@@ -16971,33 +16987,18 @@ bool CSphIndex_VLN::FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) co
 #endif
 
 
-bool CSphQueryContext::CreateFilters ( bool bFullscan,
-	const CSphVector<CSphFilterSettings> * pdFilters, const ISphSchema & tSchema,
-	const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError, CSphString & sWarning, ESphCollation eCollation, bool bArenaProhibit,
-	const KillListVector & dKillList, const CSphVector<FilterTreeItem_t> * pFilterTree )
+bool CSphQueryContext::CreateFilters ( CreateFilterContext_t &tCtx, CSphString &sError, CSphString &sWarning )
 {
-	if ( ( !pdFilters || !pdFilters->GetLength() ) && !dKillList.GetLength() )
+	if ( ( !tCtx.m_pFilters || tCtx.m_pFilters->IsEmpty () ) && tCtx.m_pKillList->IsEmpty() )
 		return true;
-
-	CreateFilterContext_t tCtx;
-	tCtx.m_pFilters = pdFilters;
-	tCtx.m_pFilterTree = pFilterTree;
-	tCtx.m_pKillList = &dKillList;
-	tCtx.m_pSchema = &tSchema;
-	tCtx.m_pMvaPool = pMvaPool;
-	tCtx.m_pStrings = pStrings;
-	tCtx.m_eCollation = eCollation;
-	tCtx.m_bScan = bFullscan;
-	tCtx.m_bArenaProhibit = bArenaProhibit;
-
 	if ( !sphCreateFilters ( tCtx, sError, sWarning ) )
 		return false;
 
 	m_pFilter = tCtx.m_pFilter;
 	m_pWeightFilter = tCtx.m_pWeightFilter;
 	m_dUserVals.SwapData ( tCtx.m_dUserVals );
-	tCtx.m_pFilter = NULL;
-	tCtx.m_pWeightFilter = NULL;
+	tCtx.m_pFilter = nullptr;
+	tCtx.m_pWeightFilter = nullptr;
 
 	return true;
 }
@@ -18256,9 +18257,19 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	assert ( m_tSettings.m_eDocinfo!=SPH_DOCINFO_EXTERN || !m_tAttr.IsEmpty() ); // check that docinfo is preloaded
 
 	// setup filters
-	if ( !tCtx.CreateFilters ( pQuery->m_sQuery.IsEmpty(), &pQuery->m_dFilters, tMaxSorterSchema,
-		m_tMva.GetWritePtr(), m_tString.GetWritePtr(), pResult->m_sError, pResult->m_sWarning, pQuery->m_eCollation, m_bArenaProhibit, tArgs.m_dKillList, &pQuery->m_dFilterTree ) )
-			return false;
+	CreateFilterContext_t tFlx;
+	tFlx.m_pFilters = &pQuery->m_dFilters;
+	tFlx.m_pFilterTree = &pQuery->m_dFilterTree;
+	tFlx.m_pKillList = &tArgs.m_dKillList;
+	tFlx.m_pSchema = &tMaxSorterSchema;
+	tFlx.m_pMvaPool = m_tMva.GetWritePtr ();
+	tFlx.m_pStrings = m_tString.GetWritePtr ();
+	tFlx.m_eCollation = pQuery->m_eCollation;
+	tFlx.m_bScan = pQuery->m_sQuery.IsEmpty ();
+	tFlx.m_bArenaProhibit = m_bArenaProhibit;
+
+	if ( !tCtx.CreateFilters ( tFlx, pResult->m_sError, pResult->m_sWarning ) )
+		return false;
 
 	// check if we can early reject the whole index
 	if ( tCtx.m_pFilter && m_iDocinfoIndex )

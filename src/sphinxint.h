@@ -486,24 +486,24 @@ public:
 	explicit CSphQueryContext ( const CSphQuery & q );
 	~CSphQueryContext ();
 
-	void						BindWeights ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sWarning );
-	bool						SetupCalc ( CSphQueryResult * pResult, const ISphSchema & tInSchema, const CSphSchema & tSchema, const DWORD * pMvaPool, bool bArenaProhibit, const CSphVector<const ISphSchema *> & dInSchemas );
-	bool						CreateFilters ( bool bFullscan, const CSphVector<CSphFilterSettings> * pdFilters, const ISphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError, CSphString & sWarning, ESphCollation eCollation, bool bArenaProhibit, const KillListVector & dKillList, const CSphVector<FilterTreeItem_t> * pFilterTree );
-	bool						SetupOverrides ( const CSphQuery * pQuery, CSphQueryResult * pResult, const CSphSchema & tIndexSchema, const ISphSchema & tOutgoingSchema );
+	void	BindWeights ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sWarning );
+	bool	SetupCalc ( CSphQueryResult * pResult, const ISphSchema & tInSchema, const CSphSchema & tSchema, const DWORD * pMvaPool, bool bArenaProhibit, const CSphVector<const ISphSchema *> & dInSchemas );
+	bool	CreateFilters ( CreateFilterContext_t &tCtx, CSphString &sError, CSphString &sWarning );
+	bool	SetupOverrides ( const CSphQuery * pQuery, CSphQueryResult * pResult, const CSphSchema & tIndexSchema, const ISphSchema & tOutgoingSchema );
 
-	void						CalcFilter ( CSphMatch & tMatch ) const;
-	void						CalcSort ( CSphMatch & tMatch ) const;
-	void						CalcFinal ( CSphMatch & tMatch ) const;
+	void	CalcFilter ( CSphMatch & tMatch ) const;
+	void	CalcSort ( CSphMatch & tMatch ) const;
+	void	CalcFinal ( CSphMatch & tMatch ) const;
 
-	void						FreeDataFilter ( CSphMatch & tMatch ) const;
-	void						FreeDataSort ( CSphMatch & tMatch ) const;
+	void	FreeDataFilter ( CSphMatch & tMatch ) const;
+	void	FreeDataSort ( CSphMatch & tMatch ) const;
 
 	// note that RT index bind pools at segment searching, not at time it setups context
-	void						ExprCommand ( ESphExprCommand eCmd, void * pArg );
-	void						SetStringPool ( const BYTE * pStrings );
-	void						SetMVAPool ( const DWORD * pMva, bool bArenaProhibit );
-	void						SetupExtraData ( ISphRanker * pRanker, ISphMatchSorter * pSorter );
-	void						ResetFilters();
+	void	ExprCommand ( ESphExprCommand eCmd, void * pArg );
+	void	SetStringPool ( const BYTE * pStrings );
+	void	SetMVAPool ( const DWORD * pMva, bool bArenaProhibit );
+	void	SetupExtraData ( ISphRanker * pRanker, ISphMatchSorter * pSorter );
+	void	ResetFilters();
 
 private:
 	CSphVector<const UservarIntSet_c*>		m_dUserVals;

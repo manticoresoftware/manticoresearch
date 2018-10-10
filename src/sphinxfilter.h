@@ -52,11 +52,6 @@ protected:
 	bool m_bUsesAttrs;
 };
 
-ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const ISphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError, CSphString & sWarning, ESphCollation eCollation, bool bArenaProhibit );
-ISphFilter * sphCreateAggrFilter ( const CSphFilterSettings * pSettings, const CSphString & sAttrName, const ISphSchema & tSchema, CSphString & sError );
-ISphFilter * sphCreateFilter ( const KillListVector & dKillList );
-ISphFilter * sphJoinFilters ( ISphFilter *, ISphFilter * );
-
 // fwd
 class UservarIntSet_c;
 
@@ -69,7 +64,7 @@ struct CreateFilterContext_t
 	const ISphSchema * m_pSchema = nullptr;
 	const DWORD * m_pMvaPool = nullptr;
 	const BYTE * m_pStrings = nullptr;
-	
+
 	ESphCollation m_eCollation { SPH_COLLATION_DEFAULT };
 	bool m_bScan = false;
 	bool m_bArenaProhibit = false;
@@ -78,8 +73,17 @@ struct CreateFilterContext_t
 	ISphFilter * m_pWeightFilter = nullptr;
 	CSphVector<const UservarIntSet_c *> m_dUserVals;
 
-	~CreateFilterContext_t();
+	CreateFilterContext_t ( const ISphSchema * pSchema=nullptr )
+		: m_pSchema ( pSchema ) {};
+	~CreateFilterContext_t ();
 };
+
+
+ISphFilter * sphCreateFilter ( const CSphFilterSettings &tSettings, const CreateFilterContext_t &tCtx, CSphString &sError, CSphString &sWarning);
+ISphFilter * sphCreateAggrFilter ( const CSphFilterSettings * pSettings, const CSphString & sAttrName, const ISphSchema & tSchema, CSphString & sError );
+ISphFilter * sphCreateFilter ( const KillListVector & dKillList );
+ISphFilter * sphJoinFilters ( ISphFilter *, ISphFilter * );
+
 
 bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphString & sWarning );
 

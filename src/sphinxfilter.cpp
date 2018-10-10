@@ -1153,7 +1153,9 @@ static ISphFilter * CreateSpecialFilter ( const CSphString & sName, const CSphFi
 }
 
 
-static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, ESphFilter eFilterType, ESphAttr eAttrType, const CSphAttrLocator & tLoc, ESphCollation eCollation, CSphString & sError, CSphString & sWarning )
+static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, ESphFilter eFilterType,
+	ESphAttr eAttrType, const CSphAttrLocator & tLoc, ESphCollation eCollation,
+	CSphString & sError, CSphString & sWarning )
 {
 	// MVA
 	if ( eAttrType==SPH_ATTR_UINT32SET || eAttrType==SPH_ATTR_INT64SET )
@@ -1643,11 +1645,12 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 }
 
 
-ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const ISphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError, CSphString & sWarning, ESphCollation eCollation, bool bArenaProhibit )
+ISphFilter * sphCreateFilter ( const CSphFilterSettings &tSettings, const CreateFilterContext_t &tCtx, CSphString &sError, CSphString &sWarning )
 {
-	return CreateFilter ( tSettings, tSettings.m_sAttrName, tSchema, pMvaPool, pStrings, sError, sWarning, false, eCollation, bArenaProhibit );
+	return CreateFilter ( tSettings, tSettings.m_sAttrName, *tCtx.m_pSchema,
+		tCtx.m_pMvaPool, tCtx.m_pStrings, sError, sWarning, false,
+		tCtx.m_eCollation, tCtx.m_bArenaProhibit );
 }
-
 
 ISphFilter * sphCreateAggrFilter ( const CSphFilterSettings * pSettings, const CSphString & sAttrName, const ISphSchema & tSchema, CSphString & sError )
 {
@@ -1728,7 +1731,7 @@ static ISphFilter * CreateFilterNode ( CreateFilterContext_t & tCtx, int iNode, 
 			pFilterSettings = &tUservar;
 		}
 
-		ISphFilter * pFilter = sphCreateFilter ( *pFilterSettings, *tCtx.m_pSchema, tCtx.m_pMvaPool, tCtx.m_pStrings, sError, sWarning, tCtx.m_eCollation, tCtx.m_bArenaProhibit );
+		ISphFilter * pFilter = sphCreateFilter ( *pFilterSettings, tCtx, sError, sWarning );
 		if ( !pFilter )
 			return NULL;
 
@@ -1804,7 +1807,7 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 					pFilterSettings = &tUservar;
 				}
 
-				ISphFilter * pFilter = sphCreateFilter ( *pFilterSettings, *tCtx.m_pSchema, tCtx.m_pMvaPool, tCtx.m_pStrings, sError, sWarning, tCtx.m_eCollation, tCtx.m_bArenaProhibit );
+				ISphFilter * pFilter = sphCreateFilter ( *pFilterSettings, tCtx, sError, sWarning );
 				if ( !pFilter )
 					return false;
 

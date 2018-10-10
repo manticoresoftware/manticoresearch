@@ -7130,7 +7130,16 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 		// setup filters
 		// FIXME! setup filters MVA pool
 		bool bFullscan = pQuery->m_pQueryParser->IsFullscan ( *pQuery ) || pQuery->m_pQueryParser->IsFullscan ( tParsed );
-		if ( !tCtx.CreateFilters ( bFullscan, &pQuery->m_dFilters, tMaxSorterSchema, NULL, NULL, pResult->m_sError, pResult->m_sWarning, pQuery->m_eCollation, false, KillListVector(), &pQuery->m_dFilterTree ) )
+		auto dKillList = KillListVector ();
+		CreateFilterContext_t tFlx;
+		tFlx.m_pFilters = &pQuery->m_dFilters;
+		tFlx.m_pFilterTree = &pQuery->m_dFilterTree;
+		tFlx.m_pKillList = &dKillList;
+		tFlx.m_pSchema = &tMaxSorterSchema;
+		tFlx.m_eCollation = pQuery->m_eCollation;
+		tFlx.m_bScan = bFullscan;
+
+		if ( !tCtx.CreateFilters ( tFlx, pResult->m_sError, pResult->m_sWarning ) )
 			return false;
 
 		// FIXME! OPTIMIZE! check if we can early reject the whole index
@@ -11583,9 +11592,21 @@ static void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_
 	// FIXME!!! collect and show all errors and warnings somehow
 	CSphString sError;
 	CSphString sWarning;
-	if ( !tMatchCtx.m_pCtx->CreateFilters ( false, &pStored->m_dFilters, tMatchCtx.m_tSchema, pMva, pStrings, sError, sWarning, SPH_COLLATION_DEFAULT, true, tMatchCtx.m_dKillist, &pStored->m_dFilterTree ) )
+
+	// setup filters
+	CreateFilterContext_t tFlx;
+	tFlx.m_pFilters = &pStored->m_dFilters;
+	tFlx.m_pFilterTree = &pStored->m_dFilterTree;
+	tFlx.m_pKillList = &tMatchCtx.m_dKillist;
+	tFlx.m_pSchema = &tMatchCtx.m_tSchema;
+	tFlx.m_pMvaPool = pMva;
+	tFlx.m_pStrings = pStrings;
+	tFlx.m_eCollation = SPH_COLLATION_DEFAULT;
+	tFlx.m_bArenaProhibit = true;
+
+	if ( !tMatchCtx.m_pCtx->CreateFilters ( tFlx, sError, sWarning ) )
 	{
-		tMatchCtx.m_iQueriesFailed++;
+		++tMatchCtx.m_iQueriesFailed;
 		return;
 	}
 

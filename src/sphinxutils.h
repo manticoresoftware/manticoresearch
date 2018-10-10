@@ -302,4 +302,42 @@ public:
 	bool		LoadSymbols ( const char** sNames, void*** pppFuncs, int iNum );
 };
 
+/// collect warnings/errors from any suitable context.
+/// on multiple calls appends new message, separating it with '; ' from previous.
+class Warner_c : public ISphNoncopyable
+{
+	StringBuilder_c m_sWarnings;
+	StringBuilder_c m_sErrors;
+
+	const char * m_sDel = nullptr;
+	const char * m_sPref = nullptr;
+	const char * m_sTerm = nullptr;
+
+public:
+	Warner_c ( const char * sDel = ", ", const char * sPref = nullptr, const char * sTerm = nullptr );
+	Warner_c ( Warner_c&& rhs ) noexcept;
+	Warner_c& operator= ( Warner_c &&rhs ) noexcept;
+
+	// append message as error.
+	// always return false (in order to simplify pattern {error='foo'; return false;})
+	bool Err ( const char * sFmt, ... );
+	bool Err ( const CSphString &sMsg );
+	void Warn ( const char * sFmt, ... );
+	void Warn ( const CSphString &sMsg );
+
+	void Clear ();
+
+	const char * sError () const;
+	const char * sWarning () const;
+
+	bool ErrEmpty () const { return m_sErrors.IsEmpty (); }
+	bool WarnEmpty () const { return m_sWarnings.IsEmpty (); };
+
+	void AddStringsFrom ( const Warner_c &sSrc );
+	void MoveErrorsTo ( CSphString &sTarget );
+	void MoveWarningsTo ( CSphString &sTarget );
+	void MoveAllTo ( CSphString &sTarget );
+};
+
+
 #endif // _sphinxutils_

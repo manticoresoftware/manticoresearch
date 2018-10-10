@@ -3145,3 +3145,125 @@ void CrashQuerySetupHandlers ( CrashQuerySetTop_fn * pSetTop, CrashQueryGet_fn *
 	g_pCrashQueryGet = pGet;
 	g_pCrashQuerySet = pSet;
 }
+
+
+/// collect warnings/errors from any suitable context.
+Warner_c::Warner_c ( const char * sDel, const char * sPref, const char * sTerm )
+	: m_sWarnings ( sDel, sPref, sTerm )
+	, m_sErrors ( sDel, sPref, sTerm )
+	, m_sDel ( sDel )
+	, m_sPref ( sPref )
+	, m_sTerm ( sTerm )
+{}
+
+Warner_c::Warner_c ( Warner_c &&rhs ) noexcept
+{
+	m_sWarnings = std::move (rhs.m_sWarnings);
+	m_sErrors = std::move (rhs.m_sErrors);
+	m_sDel = rhs.m_sDel;
+	m_sPref = rhs.m_sPref;
+	m_sTerm = rhs.m_sTerm;
+}
+
+Warner_c& Warner_c::operator= ( Warner_c && rhs ) noexcept
+{
+	if ( &rhs!=this )
+	{
+		m_sWarnings = std::move ( rhs.m_sWarnings );
+		m_sErrors = std::move ( rhs.m_sErrors );
+		m_sDel = rhs.m_sDel;
+		m_sPref = rhs.m_sPref;
+		m_sTerm = rhs.m_sTerm;
+	}
+	return *this;
+}
+
+
+bool Warner_c::Err ( const char * sFmt, ... )
+{
+	va_list ap;
+	va_start ( ap, sFmt );
+	m_sErrors.vSprintf ( sFmt, ap );
+	va_end ( ap );
+	return false;
+}
+
+bool Warner_c::Err ( const CSphString &sMsg )
+{
+	m_sErrors << sMsg;
+	return false;
+}
+
+void Warner_c::Warn ( const char * sFmt, ... )
+{
+	va_list ap;
+	va_start ( ap, sFmt );
+	m_sWarnings.vSprintf ( sFmt, ap );
+	va_end ( ap );
+}
+
+void Warner_c::Warn ( const CSphString &sMsg )
+{
+	m_sWarnings << sMsg;
+}
+
+void Warner_c::Clear ()
+{
+	m_sErrors.Clear ();
+	m_sWarnings.Clear();
+	if ( m_sDel || m_sPref || m_sTerm )
+	{
+		m_sErrors.StartBlock ( m_sDel, m_sPref, m_sTerm );
+		m_sWarnings.StartBlock ( m_sDel, m_sPref, m_sTerm );
+	}
+}
+
+const char * Warner_c::sError () const
+{
+	return m_sErrors.cstr();
+}
+
+const char * Warner_c::sWarning () const
+{
+	return m_sWarnings.cstr();
+}
+
+void Warner_c::AddStringsFrom ( const Warner_c &sSrc )
+{
+	if ( !sSrc.WarnEmpty () )
+		m_sWarnings << sSrc.sWarning ();
+
+	if ( !sSrc.ErrEmpty () )
+		m_sWarnings << sSrc.sError ();
+}
+
+void Warner_c::MoveErrorsTo ( CSphString &sTarget )
+{
+	m_sErrors.FinishBlocks();
+	m_sErrors.MoveTo ( sTarget );
+}
+
+void Warner_c::MoveWarningsTo ( CSphString &sTarget )
+{
+	m_sWarnings.FinishBlocks();
+	m_sWarnings.MoveTo ( sTarget );
+}
+
+void Warner_c::MoveAllTo ( CSphString &sTarget )
+{
+	m_sErrors.FinishBlocks();
+	m_sWarnings.FinishBlocks();
+	StringBuilder_c sCollection ( "; ", m_sPref, m_sTerm );
+
+	sCollection.StartBlock ( nullptr, "ERRORS: ");
+	sCollection << m_sErrors.cstr();
+	sCollection.FinishBlock();
+
+	sCollection.StartBlock ( nullptr, "WARNINGS: " );
+	sCollection << m_sWarnings.cstr();
+
+	sCollection.FinishBlocks();
+	sCollection.MoveTo ( sTarget );
+	Clear();
+}
+

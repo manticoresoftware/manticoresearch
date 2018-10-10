@@ -2043,3 +2043,39 @@ TEST ( functions, wider_and_widest )
 	WIDEST<char *, BYTE, WORD, float>::T VARIABLE_IS_NOT_USED pchar;
 	ASSERT_EQ ( sizeof ( pchar ), sizeof ( char* ) );
 }
+
+TEST ( functions, warner_c )
+{
+	Warner_c sMsg;
+
+	// output two errors - expect ,-separated
+	sMsg.Err("Error 1");
+	sMsg.Err("Error 2");
+	ASSERT_STREQ ( sMsg.sError(), "Error 1, Error 2");
+
+	// formatted output
+	sMsg.Clear();
+	sMsg.Err("Error %d", 10);
+	ASSERT_STREQ ( sMsg.sError (), "Error 10" );
+
+	// finalized combo output for errors only
+	CSphString sFinal;
+	sMsg.MoveAllTo (sFinal);
+	ASSERT_STREQ ( sFinal.cstr (), "ERRORS: Error 10" );
+
+	// finalized combo output for warnings only
+	sMsg.Warn ( "msg 1" );
+	sMsg.Warn ( "msg %d", 2 );
+	sMsg.MoveAllTo ( sFinal );
+	ASSERT_STREQ ( sFinal.cstr (), "WARNINGS: msg 1, msg 2" );
+
+	// output two warnings (same as with error - expected ,-separated)
+	sMsg.Warn ( "msg 1" );
+	sMsg.Warn ( "msg %d", 2 );
+	ASSERT_STREQ ( sMsg.sWarning (), "msg 1, msg 2" );
+
+	// finalized combo output of both errors and warnings
+	sMsg.Err ( "Error %d", 10 );
+	sMsg.MoveAllTo ( sFinal );
+	ASSERT_STREQ ( sFinal.cstr (), "ERRORS: Error 10; WARNINGS: msg 1, msg 2" );
+}

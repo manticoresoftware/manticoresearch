@@ -158,7 +158,7 @@ protected:
 	char *			GetBufferString ( char * szDest, int iMax, const char * & szSource );
 };
 
-bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dResult, char * sError, int iErrorLen );
+bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dResult, char * sError, int iErrorLen, const char * sArgs=nullptr );
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -190,8 +190,9 @@ enum ESphLogLevel
 	SPH_LOG_WARNING	= 1,
 	SPH_LOG_INFO	= 2,
 	SPH_LOG_DEBUG	= 3,
-	SPH_LOG_VERBOSE_DEBUG = 4,
-	SPH_LOG_VERY_VERBOSE_DEBUG = 5,
+	SPH_LOG_RPL_DEBUG	= 4,
+	SPH_LOG_VERBOSE_DEBUG = 5,
+	SPH_LOG_VERY_VERBOSE_DEBUG = 6,
 	SPH_LOG_MAX = SPH_LOG_VERY_VERBOSE_DEBUG
 };
 
@@ -207,7 +208,7 @@ void sphLogFatal ( const char * sFmt, ... ) __attribute__((format(printf,1,2)));
 void sphLogDebug ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
 void sphLogDebugv ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
 void sphLogDebugvv ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
-
+void sphLogDebugRpl ( const char * sFmt, ... ) __attribute__((format(printf,1,2))); //NOLINT
 
 // set the prefix to supress the log
 void sphLogSupress ( const char * sPrefix, ESphLogLevel eLevel = SPH_LOG_WARNING );

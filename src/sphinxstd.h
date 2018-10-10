@@ -967,6 +967,14 @@ public:
 		return false;
 	}
 
+	inline int GetFirst ( fFilter COND ) const
+	{
+		for ( int i = 0; i<m_iCount; ++i )
+			if ( COND ( m_pData[i] ) )
+				return i;
+		return -1;
+	}
+
 	/// generic 'ARRAY_ALL'
 	inline bool TestAll ( fFilter COND ) const
 	{

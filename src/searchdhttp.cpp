@@ -761,6 +761,23 @@ protected:
 			memcpy ( m_dData.Begin(), sResult, m_dData.GetLength() );
 		}
 	}
+
+	ServedDescPtr_c GetIndex ( const CSphString & sIndex, eITYPE eType )
+	{
+		ServedDescPtr_c pServed ( GetServed ( sIndex ), false );
+		if ( !pServed )
+		{
+			FormatError ( SPH_HTTP_STATUS_500, "no such index '%s'", sIndex.cstr () );
+			return ServedDescPtr_c();
+		}
+		if ( pServed->m_eType!=eType || !pServed->m_pIndex )
+		{
+			FormatError ( SPH_HTTP_STATUS_500, "index '%s' is not %s (enabled=%d)", sIndex.cstr(), GetTypeName ( eType ).cstr(), (int)(!!pServed->m_pIndex) );
+			return ServedDescPtr_c();
+		}
+
+		return pServed;
+	}
 };
 
 
@@ -1229,10 +1246,11 @@ public:
 private:
 	const OptionsHash_t & m_tOptions;
 
-	bool GotDocuments ( PercolateIndex_i * pIndex, const CSphString & sIndex, const cJSON * pPercolate, bool bVerbose );
-	bool GotQuery ( PercolateIndex_i * pIndex, const CSphString & sIndex, const cJSON * pQuery, const cJSON * pRoot, CSphString * pUID, bool bReplace );
-	bool ListQueries ( PercolateIndex_i * pIndex, const CSphString & sIndex );
-	bool Delete ( PercolateIndex_i * pIndex, const CSphString & sIndex, const cJSON * pRoot );
+	// FIXME!!! handle replication for GotQuery and Delete
+	bool GotDocuments ( const CSphString & sIndex, const cJSON * pPercolate, bool bVerbose );
+	bool GotQuery ( const CSphString & sIndex, const cJSON * pQuery, const cJSON * pRoot, CSphString * pUID, bool bReplace );
+	bool ListQueries ( const CSphString & sIndex );
+	bool Delete ( const CSphString & sIndex, const cJSON * pRoot );
 };
 
 
@@ -1538,10 +1556,16 @@ static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, co
 }
 
 
-bool HttpHandlerPQ_c::GotDocuments ( PercolateIndex_i * pIndex, const CSphString & sIndex, const cJSON * pPercolate, bool bVerbose )
+bool HttpHandlerPQ_c::GotDocuments ( const CSphString & sIndex, const cJSON * pPercolate, bool bVerbose )
 {
 	CSphString sWarning, sError, sTmp;
 	CSphVector<const cJSON *> dDocs;
+
+	ServedDescPtr_c pServed ( GetIndex ( sIndex, eITYPE::PERCOLATE ) );
+	if ( !pServed )
+		return false;
+
+	auto pIndex = (PercolateIndex_i *)pServed->m_pIndex;
 
 	// single document
 	const cJSON * pDoc = GetJSONPropertyObject ( pPercolate, "document", sTmp );
@@ -1722,7 +1746,7 @@ static void EncodePercolateQueryResult ( bool bReplace, const CSphString & sInde
 }
 
 
-bool HttpHandlerPQ_c::GotQuery ( PercolateIndex_i * pIndex, const CSphString & sIndex, const cJSON * pQuery, const cJSON * pRoot, CSphString * pUID, bool bReplace )
+bool HttpHandlerPQ_c::GotQuery ( const CSphString & sIndex, const cJSON * pQuery, const cJSON * pRoot, CSphString * pUID, bool bReplace )
 {
 	CSphString sTmp, sError, sWarning;
 
@@ -1786,6 +1810,12 @@ bool HttpHandlerPQ_c::GotQuery ( PercolateIndex_i * pIndex, const CSphString & s
 	CSphVector<FilterTreeItem_t> dFilterTree;
 	if ( pFilters )
 	{
+		ServedDescPtr_c pServed ( GetIndex ( sIndex, eITYPE::PERCOLATE ) );
+		if ( !pServed )
+			return false;
+
+		auto pIndex = (PercolateIndex_i *)pServed->m_pIndex;
+
 		if ( !PercolateParseFilters ( pFilters->valuestring, SPH_COLLATION_UTF8_GENERAL_CI, pIndex->GetMatchSchema(), dFilters, dFilterTree, sError ) )
 		{
 			ReportError ( sError.scstr(), SPH_HTTP_STATUS_400 );
@@ -1797,10 +1827,37 @@ bool HttpHandlerPQ_c::GotQuery ( PercolateIndex_i * pIndex, const CSphString & s
 		dFilterTree.SwapData ( tQuery.m_dFilterTree );
 	}
 
-	assert ( pIndex );
+	StoredQuery_i * pStored = nullptr;
+	// scope for index lock
+	{
+		ServedDescPtr_c pServed ( GetIndex ( sIndex, eITYPE::PERCOLATE ) );
+		if ( !pServed )
+			return false;
 
-	// add query
-	bool bOk = pIndex->Query ( sQuery, sTags.cstr(), &dFilters, &dFilterTree, bReplace, bQueryQL, uID, sError );
+		auto pIndex = (PercolateIndex_i *)pServed->m_pIndex;
+
+		PercolateQueryArgs_t tArgs ( dFilters, dFilterTree );
+		tArgs.m_sQuery = sQuery;
+		tArgs.m_sTags = sTags.cstr();
+		tArgs.m_uUID = uID;
+		tArgs.m_bReplace = bReplace;
+		tArgs.m_bQL = bQueryQL;
+
+		// add query
+		pStored = pIndex->Query ( tArgs, sError );
+	}
+	bool bOk = ( pStored!=nullptr );
+	if ( pStored )
+	{
+		ReplicationCommand_t tCmd;
+		tCmd.m_eCommand = RCOMMAND_PQUERY_ADD;
+		tCmd.m_sIndex = sIndex;
+		tCmd.m_pStored = pStored;
+		// refresh query's UID for reply as it might be auto-generated
+		uID = pStored->m_uUID;
+
+		bOk = HandleCmdReplicate ( tCmd, sError, nullptr );
+	}
 
 	if ( !bOk )
 	{
@@ -1815,11 +1872,17 @@ bool HttpHandlerPQ_c::GotQuery ( PercolateIndex_i * pIndex, const CSphString & s
 	return bOk;
 }
 
-bool HttpHandlerPQ_c::ListQueries ( PercolateIndex_i * pIndex, const CSphString & sIndex )
+bool HttpHandlerPQ_c::ListQueries ( const CSphString & sIndex )
 {
 	// FIXME!!! provide filters
 	const char * sFilterTags = nullptr;
 	const CSphFilterSettings * pUID = nullptr;
+
+	ServedDescPtr_c pServed ( GetIndex ( sIndex, eITYPE::PERCOLATE ) );
+	if ( !pServed )
+		return false;
+
+	auto pIndex = (PercolateIndex_i *)pServed->m_pIndex;
 
 	uint64_t tmStart = sphMicroTimer();
 
@@ -1843,9 +1906,11 @@ bool HttpHandlerPQ_c::ListQueries ( PercolateIndex_i * pIndex, const CSphString 
 	return true;
 }
 
-bool HttpHandlerPQ_c::Delete ( PercolateIndex_i * pIndex, const CSphString & sIndex, const cJSON * pRoot )
+bool HttpHandlerPQ_c::Delete ( const CSphString & sIndex, const cJSON * pRoot )
 {
-	CSphString sTmp;
+	ReplicationCommand_t tCmd;
+	tCmd.m_eCommand = RCOMMAND_DELETE;
+	tCmd.m_sIndex = sIndex;
 
 	StringBuilder_c sTags;
 	const cJSON * pTagsArray = cJSON_GetObjectItem ( pRoot, "tags" );
@@ -1860,7 +1925,6 @@ bool HttpHandlerPQ_c::Delete ( PercolateIndex_i * pIndex, const CSphString & sIn
 		sTags.Appendf ( "%s%s", sTags.Length() ? ", " : "", pTag->valuestring );
 	}
 
-	CSphVector<uint64_t> dUID;
 	const cJSON * pUidsArray = cJSON_GetObjectItem ( pRoot, "id" );
 	if ( pUidsArray && !cJSON_IsArray ( pUidsArray ) )
 	{
@@ -1870,25 +1934,31 @@ bool HttpHandlerPQ_c::Delete ( PercolateIndex_i * pIndex, const CSphString & sIn
 	const cJSON * pUID = nullptr;
 	cJSON_ArrayForEach ( pUID, pUidsArray )
 	{
-		dUID.Add ( pUID->valueint );
+		tCmd.m_dDeleteQueries.Add ( pUID->valueint );
 	}
 
-	if ( !sTags.Length() && !dUID.GetLength() )
+	if ( !sTags.Length() && !tCmd.m_dDeleteQueries.GetLength() )
 	{
 		ReportError ( "no tags or id field arrays found", SPH_HTTP_STATUS_400 );
 		return false;
 	}
 
+	tCmd.m_sDeleteTags = sTags.cstr();
+	CSphString sError;
+
 
 	uint64_t tmStart = sphMicroTimer();
 
 	int iDeleted = 0;
-	if ( dUID.GetLength() )
-		iDeleted = pIndex->DeleteQueries ( dUID.Begin(), dUID.GetLength() );
-	else
-		iDeleted = pIndex->DeleteQueries ( sTags.cstr() );
+	bool bOk = HandleCmdReplicate ( tCmd, sError, &iDeleted );
 
 	uint64_t tmTotal = sphMicroTimer() - tmStart;
+
+	if ( !bOk )
+	{
+		FormatError ( SPH_HTTP_STATUS_400, "%s", sError.cstr() );
+		return false;
+	}
 
 	JsonEscapedBuilder tOut;
 	tOut += "{";
@@ -1942,23 +2012,8 @@ bool HttpHandlerPQ_c::Process()
 	else if ( sOp!="doc" )
 		bMatch = true;
 
-	// get index
-	ServedDescRPtr_c pServed ( GetServed ( sIndex ) );
-	if ( !pServed )
-	{
-		FormatError ( SPH_HTTP_STATUS_500, "no such index '%s'", sIndex.cstr () );
-		return false;
-	}
-	if ( pServed->m_eType!=eITYPE::PERCOLATE || !pServed->m_pIndex )
-	{
-		FormatError ( SPH_HTTP_STATUS_500, "index '%s' is not percolate (enabled=%d)", sIndex.cstr() );
-		return false;
-	}
-
-	auto * pIndex = (PercolateIndex_i *) pServed->m_pIndex;
-
 	if ( m_sQuery.IsEmpty() )
-		return ListQueries ( pIndex, sIndex );
+		return ListQueries ( sIndex );
 
 	const ScopedJson_c tRoot ( cJSON_Parse ( m_sQuery.cstr() ) );
 	if ( !tRoot.Ptr() )
@@ -1968,7 +2023,7 @@ bool HttpHandlerPQ_c::Process()
 	}
 
 	if ( cJSON_GetArraySize ( tRoot.Ptr() )==0 )
-		return ListQueries ( pIndex, sIndex );
+		return ListQueries ( sIndex );
 
 	CSphString sError;
 	const cJSON * pQuery = GetJSONPropertyObject ( tRoot.Ptr(), "query", sError );
@@ -1999,10 +2054,10 @@ bool HttpHandlerPQ_c::Process()
 
 	if ( bMatch )
 	{
-		return GotDocuments ( pIndex, sIndex, pPerc, bVerbose );
+		return GotDocuments ( sIndex, pPerc, bVerbose );
 	} else if ( bDelete )
 	{
-		return Delete ( pIndex, sIndex, tRoot.Ptr() );
+		return Delete ( sIndex, tRoot.Ptr() );
 	} else
 	{
 		bool bRefresh = false;
@@ -2015,7 +2070,7 @@ bool HttpHandlerPQ_c::Process()
 				bRefresh = true;
 		}
 
-		return GotQuery ( pIndex, sIndex, pQuery, tRoot.Ptr(), pUID, bRefresh );
+		return GotQuery ( sIndex, pQuery, tRoot.Ptr(), pUID, bRefresh );
 	}
 }
 

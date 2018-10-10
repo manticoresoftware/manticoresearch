@@ -24,21 +24,6 @@ static const char g_sHighlight[] = "_@highlight_";
 static const char g_sOrder[] = "_@order_";
 
 
-class CJsonScopedPtr_c : public CSphScopedPtr<cJSON>
-{
-public:
-	CJsonScopedPtr_c ( cJSON * pPtr  )
-		: CSphScopedPtr<cJSON> ( pPtr )
-	{}
-
-	~CJsonScopedPtr_c()
-	{
-		cJSON_Delete(m_pPtr);
-		m_pPtr = NULL;
-	}
-};
-
-
 static bool	IsFilter ( const cJSON * pJson )
 {
 	if ( !pJson || !pJson->string )

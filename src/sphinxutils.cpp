@@ -708,6 +708,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "query_log_mode",			0, NULL },
 	{ "prefer_rotate",			KEY_DEPRECATED, "seamless_rotate" },
 	{ "shutdown_token",			0, NULL },
+	{ "repli_provider_path",	0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -867,7 +868,7 @@ bool CSphConfigParser::ValidateKey ( const char * sKey )
 
 #if !USE_WINDOWS
 
-bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dResult, char * sError, int iErrorLen )
+bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dResult, char * sError, int iErrorLen, const char * sArgs )
 {
 	int dPipe[2] = { -1, -1 };
 
@@ -877,7 +878,10 @@ bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dRe
 		return false;
 	}
 
-	pBuffer = trim ( pBuffer );
+	if ( !sArgs )
+		pBuffer = trim ( pBuffer );
+	else
+		pBuffer = const_cast<char *>( sArgs );
 
 	int iRead = dPipe[0];
 	int iWrite = dPipe[1];
@@ -890,21 +894,36 @@ bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dRe
 		close ( STDOUT_FILENO );
 		dup2 ( iWrite, STDOUT_FILENO );
 
-		char * pPtr = pBuffer;
+		CSphVector<CSphString> dTmpArgs;
+		CSphVector<char *> dArgs;
 		char * pArgs = NULL;
-		while ( *pPtr )
+		if ( !sArgs )
 		{
-			if ( sphIsSpace ( *pPtr ) )
+			char * pPtr = pBuffer;
+			while ( *pPtr )
 			{
-				*pPtr = '\0';
-				pArgs = trim ( pPtr+1 );
-				break;
-			}
+				if ( sphIsSpace ( *pPtr ) )
+				{
+					*pPtr = '\0';
+					pArgs = trim ( pPtr+1 );
+					break;
+				}
 
-			pPtr++;
+				pPtr++;
+			}
+		} else
+		{
+			sphSplit ( dTmpArgs, sArgs, " " );
+			dArgs.Resize ( dTmpArgs.GetLength() + 1 );
+			ARRAY_FOREACH ( i, dTmpArgs )
+				dArgs[i] = const_cast<char *>( dTmpArgs[i].cstr() );
+			dArgs.Last() = nullptr;
 		}
 
-		if ( pArgs )
+		if ( sArgs )
+		{
+			execvp ( dArgs[0], dArgs.Begin() );
+		} else if ( pArgs )
 			execl ( pBuffer, pBuffer, pArgs, szFilename, (char*)NULL );
 		else
 			execl ( pBuffer, pBuffer, szFilename, (char*)NULL );
@@ -985,7 +1004,11 @@ bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dRe
 
 	return true;
 }
-
+#else
+bool TryToExec ( char * pBuffer, const char * szFilename, CSphVector<char> & dResult, char * sError, int iErrorLen, const char * sArgs )
+{
+	return true;
+}
 #endif
 
 
@@ -1806,6 +1829,7 @@ static void StdoutLogger ( ESphLogLevel eLevel, const char * sFmt, va_list ap )
 	case SPH_LOG_DEBUG:
 	case SPH_LOG_VERBOSE_DEBUG:
 	case SPH_LOG_VERY_VERBOSE_DEBUG: fprintf ( stdout, "DEBUG: " ); break;
+	case SPH_LOG_RPL_DEBUG: fprintf ( stdout, "RPL: " ); break;
 	}
 
 	vfprintf ( stdout, sFmt, ap );
@@ -1904,6 +1928,14 @@ void sphLogDebugvv ( const char * sFmt, ... )
 	va_list ap;
 	va_start ( ap, sFmt );
 	sphLogVa ( sFmt, ap, SPH_LOG_VERY_VERBOSE_DEBUG );
+	va_end ( ap );
+}
+
+void sphLogDebugRpl ( const char * sFmt, ... )
+{
+	va_list ap;
+	va_start ( ap, sFmt );
+	sphLogVa ( sFmt, ap, SPH_LOG_RPL_DEBUG );
 	va_end ( ap );
 }
 
@@ -2638,6 +2670,9 @@ void sphUnlinkIndex ( const char * sName, bool bForce )
 
 void sphCheckDuplicatePaths ( const CSphConfig & hConf )
 {
+	if ( !hConf.Exists ( "index" ) )
+		return;
+
 	CSphOrderedHash < CSphString, CSphString, CSphStrHashFunc, 256 > hPaths;
 	hConf["index"].IterateStart ();
 	while ( hConf["index"].IterateNext() )

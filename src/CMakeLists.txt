@@ -18,7 +18,7 @@ set ( LIBSPHINX_SRCS sphinx.cpp sphinxexcerpt.cpp
 		json/cJSON.c )
 set ( INDEXER_SRCS indexer.cpp )
 set ( INDEXTOOL_SRCS indextool.cpp )
-set ( SEARCHD_SRCS_TESTABLE searchdha.cpp http/http_parser.c searchdhttp.cpp )
+set ( SEARCHD_SRCS_TESTABLE searchdha.cpp http/http_parser.c searchdhttp.cpp searchdreplication.cpp replication/wsrep_loader.cpp replication/wsrep_dummy.cpp replication/wsrep_uuid.cpp replication/wsrep_gtid.cpp )
 set ( SEARCHD_SRCS searchd.cpp ${SEARCHD_SRCS_TESTABLE} )
 set ( SPELLDUMP_SRCS spelldump.cpp )
 set ( TESTS_SRCS tests.cpp )
@@ -31,7 +31,7 @@ set ( SEARCHD_FLEX sphinxql.l )
 # The headers is not neccessary for executable build, but nesessary for MSVC and other projects
 # all the (non-generated) headers
 file ( GLOB HEADERS "sphinx*.h" lz4.h lz4hc.h http/http_parser.h )
-file ( GLOB SEARCHD_H "searchd*.h" )
+file ( GLOB SEARCHD_H "searchd*.h" replication/wsrep_api.h )
 
 file ( GLOB GHEADERS "yysphinx*.h" )
 source_group ( "Generated Header Files" FILES ${GHEADERS} )

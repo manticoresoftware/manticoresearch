@@ -3312,6 +3312,7 @@ public:
 	virtual int					GetKillListSize () const = 0;
 	virtual bool				HasDocid ( SphDocID_t uDocid ) const = 0;
 	virtual bool				IsRT() const { return false; }
+	virtual bool				IsPQ() const { return false; }
 	void						SetBinlog ( bool bBinlog ) { m_bBinlog = bBinlog; }
 	virtual int64_t *			GetFieldLens() const { return NULL; }
 	virtual bool				IsStarDict() const { return true; }

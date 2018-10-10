@@ -107,6 +107,7 @@
 // declarations for correct work of code analysis
 #include "sphinxutils.h"
 #include "sphinxint.h"
+#include "json/cJSON.h"
 
 const char * sphSockError ( int =0 );
 int sphSockGetErrno ();
@@ -124,6 +125,8 @@ Invokes getaddrinfo for given host which perform name resolving (dns).
  so no potentially lengthy network host address lockup necessary
  \return ipv4 address as DWORD, to be directly used as s_addr in connect(). */
 DWORD sphGetAddress ( const char * sHost, bool bFatal=false, bool bIP=false );
+char * sphFormatIP ( char * sBuffer, int iBufferSize, DWORD uAddress );
+bool GetMyIP ( CSphString & sIP );
 
 /////////////////////////////////////////////////////////////////////////////
 // MISC GLOBALS
@@ -183,13 +186,15 @@ enum ESphAddIndex
 
 enum class eITYPE
 {
-	PLAIN,
+	PLAIN = 0,
 	TEMPLATE,
 	RT,
 	PERCOLATE,
 	DISTR,
 	ERROR_, // simple "ERROR" doesn't work on win due to '#define ERROR 0' somewhere.
 };
+
+CSphString GetTypeName ( eITYPE eType );
 
 /////////////////////////////////////////////////////////////////////////////
 // SOME SHARED GLOBAL VARIABLES
@@ -444,7 +449,7 @@ protected:
 
 bool IsPortInRange ( int iPort );
 int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr );
-
+int GetOsThreadId();
 
 extern ThreadRole MainThread;
 /// This class is basically a pointer to query string and some more additional info.
@@ -646,6 +651,8 @@ struct ServedDesc_t
 	int64_t		m_iMass			= 0; // relative weight (by access speed) of the index
 	mutable CSphString	m_sUnlink;
 	eITYPE		m_eType			= eITYPE::PLAIN;
+	bool		m_bJson			= false;
+
 	inline bool IsMutable () const { return m_eType==eITYPE::RT || m_eType==eITYPE::PERCOLATE; }
 	virtual                ~ServedDesc_t ();
 };
@@ -659,6 +666,7 @@ class ServedIndex_c : public ISphRefcountedMT, private ServedDesc_t, public Serv
 private:
 	friend class ServedDescRPtr_c;
 	friend class ServedDescWPtr_c;
+	friend class ServedDescPtr_c;
 
 	ServedDesc_t * ReadLock () const ACQUIRE_SHARED( m_tLock );
 	ServedDesc_t * WriteLock () const ACQUIRE( m_tLock );
@@ -745,6 +753,67 @@ public:
 
 	operator ServedDesc_t * () const
 	{ return m_pCore; }
+
+private:
+	ServedDesc_t * m_pCore = nullptr;
+	const ServedIndex_c * m_pLock = nullptr;
+};
+
+
+/// RAII exclusive writer for ServedDesc_t hidden in ServedIndex_c
+class SCOPED_CAPABILITY ServedDescPtr_c : ISphNoncopyable
+{
+public:
+	ServedDescPtr_c () = default;
+
+	// acquire write (exclusive) lock
+	ServedDescPtr_c ( const ServedIndex_c * pLock, bool bWrite ) ACQUIRE ( pLock->m_tLock )
+		: m_pLock { pLock }
+	{
+		if ( m_pLock )
+		{
+			if ( bWrite )
+				m_pCore = m_pLock->WriteLock();
+			else
+				m_pCore = m_pLock->ReadLock();
+		}
+	}
+
+	ServedDescPtr_c ( ServedDescPtr_c && tOther )
+		: m_pCore ( std::move ( tOther.m_pCore ) )
+		, m_pLock ( std::move ( tOther.m_pLock ) )
+	{
+		tOther.m_pCore = nullptr;
+		tOther.m_pLock = nullptr;
+	}
+
+	ServedDescPtr_c & operator= ( ServedDescPtr_c && tOther )
+	{
+		m_pCore = std::move ( tOther.m_pCore );
+		m_pLock = std::move ( tOther.m_pLock );
+		tOther.m_pCore = nullptr;
+		tOther.m_pLock = nullptr;
+
+		return *this;
+	}
+
+	/// unlock on going out of scope
+	~ServedDescPtr_c () RELEASE ()
+	{
+		if ( m_pLock )
+			m_pLock->Unlock ();
+	}
+
+public:
+	ServedDesc_t * operator-> () const
+	{
+		return m_pCore;
+	}
+
+	explicit operator bool () const
+	{
+		return m_pCore!=nullptr;
+	}
 
 private:
 	ServedDesc_t * m_pCore = nullptr;
@@ -1232,5 +1301,147 @@ int sphGetTokTypeConstMVA();
 
 bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, const CSphSchema & tSchema, CSphVector<CSphFilterSettings> & dFilters, CSphVector<FilterTreeItem_t> & dFilterTree, CSphString & sError );
 
+
+void JsonConfigSetIndex ( const CSphString & sIndexName, const CSphString & sPath, eITYPE eIndexType, cJSON * pIndexes );
+bool JsonGetError ( const char * sBuf, int iBufLen, CSphString & sError );
+bool JsonConfigCheckProperty ( const cJSON * pNode, const char * sPropertyName, CSphString & sError );
+bool JsonCheckIndex ( const cJSON * pIndex, CSphString & sError );
+
+class CJsonScopedPtr_c : public CSphScopedPtr<cJSON>
+{
+public:
+	CJsonScopedPtr_c ( cJSON * pPtr  )
+		: CSphScopedPtr<cJSON> ( pPtr )
+	{}
+
+	~CJsonScopedPtr_c()
+	{
+		cJSON_Delete(m_pPtr);
+		m_pPtr = NULL;
+	}
+};
+
+// fwd
+typedef struct wsrep wsrep_t;
+
+struct ReplicationCluster_t
+{
+	CSphString	m_sName;
+	CSphString	m_sURI;
+	CSphString	m_sListen;
+	// +1 after listen is IST port
+	// +1 after listen IST is SST port
+	CSphString	m_sListenSST; 
+	CSphString	m_sPath;
+	CSphString	m_sOptions;
+	bool		m_bSkipSST = false;
+	CSphVector<CSphString> m_dIndexes;
+
+	// replicator
+	wsrep_t *	m_pProvider = nullptr;
+
+	// state
+	CSphFixedVector<BYTE>	m_dUUID { 0 };
+	int						m_iConfID = 0;
+	int						m_iStatus = 0;
+	int						m_iSize = 0;
+	int						m_iIdx = 0;
+};
+
+typedef void (*Abort_fn) (void);
+struct ReplicationArgs_t
+{
+	ReplicationCluster_t *	m_pCluster = nullptr;
+	int						m_iCluster = 0;
+	bool					m_bNewCluster = false;
+	const char *			m_sProvider = nullptr;
+};
+
+void ReplicationInit ( int iClusterCount, Abort_fn fnAbort, CSphAutoEvent * pSync );
+bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError );
+void ReplicateClusterDone ( ReplicationCluster_t * pCluster, int iCluster );
+bool ReplicatedIndexes ( const cJSON * pIndexes, bool bBypass, ReplicationCluster_t * pCluster );
+
+enum ReplicationCommand_e
+{
+	RCOMMAND_PQUERY_ADD = 0,
+	RCOMMAND_ROLLBACK,
+	RCOMMAND_DELETE,
+	RCOMMAND_TRUNCATE,
+
+	RCOMMAND_TOTAL
+};
+
+struct ReplicationCommand_t
+{
+	// common
+	ReplicationCommand_e	m_eCommand { RCOMMAND_TOTAL };
+	CSphString				m_sIndex;
+
+	// add
+	StoredQueryDesc_t		m_tPQ;
+	StoredQuery_i *			m_pStored = nullptr;
+
+	// delete
+	CSphVector<uint64_t>	m_dDeleteQueries;
+	CSphString				m_sDeleteTags;
+
+	// truncate
+	bool					m_bReconfigure = false;
+	CSphReconfigureSettings m_tReconfigureSettings;
+};
+
+class CommitMonitor_c
+{
+public:
+	CommitMonitor_c ( ReplicationCommand_t & tCmd, int * pDeletedCount )
+		: m_tCmd ( tCmd )
+		, m_pDeletedCount ( pDeletedCount )
+	{}
+	~CommitMonitor_c() = default;
+
+	bool Commit ( CSphString & sError );
+
+private:
+	ReplicationCommand_t & m_tCmd;
+	int * m_pDeletedCount = nullptr;
+};
+
+bool HandleCmdReplicate ( ReplicationCommand_t & tCmd, CSphString & sError, int * pDeletedCount );
+bool Replicate ( uint64_t uQueryHash, const CSphVector<BYTE> & dBuf, wsrep_t * pProvider, CommitMonitor_c & tMonitor, CSphString & sError );
+bool ParseCmdReplicated ( const BYTE * pData, int iLen, CSphVector<ReplicationCommand_t> & dCommands );
+bool HandleCmdReplicated ( ReplicationCommand_t & tCmd );
+WORD GetReplicateCommandVer ( ReplicationCommand_e eCommand );
+
+// 'like' matcher
+class CheckLike
+{
+private:
+	CSphString m_sPattern;
+
+public:
+	explicit CheckLike ( const char * sPattern );
+	bool Match ( const char * sValue );
+};
+
+// string vector with 'like' matcher
+class VectorLike : public StrVec_t, public CheckLike
+{
+public:
+	CSphString m_sColKey;
+	CSphString m_sColValue;
+
+public:
+
+	VectorLike ();
+	explicit VectorLike ( const CSphString& sPattern );
+
+	const char * szColKey() const;
+	const char * szColValue() const;
+	bool MatchAdd ( const char* sValue );
+	bool MatchAddVa ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
+};
+
+void ReplicateClusterStats ( ReplicationCluster_t * pCluster, VectorLike & dOut );
 
 #endif // _searchdaemon_

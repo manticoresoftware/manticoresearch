@@ -4723,3 +4723,22 @@ ISphNetEvents * sphCreatePoll (int iSizeHint, bool bFallbackSelect)
 }
 
 #endif
+
+bool GetMyIP ( CSphString & sIP )
+{
+	char sHostName[255];
+	if ( gethostname ( sHostName, sizeof(sHostName) )!=0 )
+		return false;
+
+	hostent * pHost = gethostbyname ( sHostName );
+	if ( !pHost )
+		return false;
+
+	in_addr ** ppAddr = (in_addr **)(pHost->h_addr_list);
+	DWORD uAddr = (*ppAddr)->s_addr;
+	const int iMaxLenIP = 32;
+	sIP.Reserve ( iMaxLenIP );
+	sphFormatIP ( const_cast<char *>( sIP.cstr() ), iMaxLenIP, uAddr );
+
+	return true;
+}

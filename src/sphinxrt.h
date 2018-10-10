@@ -21,7 +21,6 @@ struct CSphReconfigureSettings;
 struct CSphReconfigureSetup;
 class ISphRtAccum;
 
-
 /// RAM based updateable backend interface
 class ISphRtIndex : public CSphIndex
 {
@@ -82,6 +81,8 @@ public:
 	// instead of cloning for each AddDocument() call we could just call this method and improve batch inserts speed
 	virtual ISphTokenizer * CloneIndexingTokenizer() const = 0;
 
+	virtual void ProhibitSave() = 0;
+	
 	/// acquire thread-local indexing accumulator
 	/// returns NULL if another index already uses it in an open txn
 	ISphRtAccum * AcquireAccum ( CSphDict * pDict, ISphRtAccum * pAccExt=nullptr,
@@ -149,6 +150,38 @@ struct PercolateMatchResult_t
 	void Swap ( PercolateMatchResult_t & tOther );
 };
 
+struct StoredQueryDesc_t
+{
+	CSphVector<CSphFilterSettings>	m_dFilters;
+	CSphVector<FilterTreeItem_t>	m_dFilterTree;
+
+	CSphString						m_sQuery;
+	CSphString						m_sTags;
+	uint64_t						m_uUID = 0;
+	bool							m_bQL = true;
+};
+
+class StoredQuery_i : public ISphNoncopyable, public StoredQueryDesc_t
+{
+public:
+	virtual ~StoredQuery_i() {}
+};
+
+struct PercolateQueryArgs_t
+{
+	const char * m_sQuery = nullptr;
+	const char * m_sTags = nullptr;
+	const CSphVector<CSphFilterSettings> & m_dFilters;
+	const CSphVector<FilterTreeItem_t> & m_dFilterTree;
+	uint64_t m_uUID = 0;
+	bool m_bQL = true;
+
+	bool m_bReplace = false;
+
+	PercolateQueryArgs_t ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree );
+	PercolateQueryArgs_t ( const StoredQueryDesc_t & tDesc );
+};
+
 class PercolateIndex_i : public ISphRtIndex
 {
 public:
@@ -156,9 +189,12 @@ public:
 	virtual bool	MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchResult_t & tResult ) = 0;
 	virtual int		DeleteQueries ( const uint64_t * pQueries, int iCount ) = 0;
 	virtual int		DeleteQueries ( const char * sTags ) = 0;
-	virtual bool	Query ( const char * sQuery, const char * sTags, const CSphVector<CSphFilterSettings> * pFilters, const CSphVector<FilterTreeItem_t> * pFilterTree, bool bReplace, bool bQL, uint64_t & uId, CSphString & sError ) = 0;
+
+	virtual StoredQuery_i * Query ( const PercolateQueryArgs_t & tArgs, CSphString & sError ) = 0;
+	virtual bool	Commit ( StoredQuery_i * pQuery, CSphString & sError ) = 0;
 
 	virtual void	GetQueries ( const char * sFilterTags, bool bTagsEq, const CSphFilterSettings * pUID, int iOffset, int iLimit, CSphVector<PercolateQueryDesc> & dQueries ) = 0;
+	virtual bool	IsPQ() const override { return true; }
 };
 
 /// percolate query index factory
@@ -168,6 +204,11 @@ void FixPercolateSchema ( CSphSchema & tSchema );
 typedef const QueryParser_i * CreateQueryParser ( bool bJson );
 void SetPercolateQueryParserFactory ( CreateQueryParser * pCall );
 void SetPercolateThreads ( int iThreads );
+
+void LoadStoredQuery ( const BYTE * pData, int iLen, StoredQueryDesc_t & tQuery );
+void SaveStoredQuery ( const StoredQueryDesc_t & tQuery, CSphVector<BYTE> & dOut );
+void LoadDeleteQuery ( const BYTE * pData, int iLen, CSphVector<uint64_t> & dQueries, CSphString & sTags );
+void SaveDeleteQuery ( const uint64_t * pQueries, int iCount, const char * sTags, CSphVector<BYTE> & dOut );
 
 //////////////////////////////////////////////////////////////////////////
 

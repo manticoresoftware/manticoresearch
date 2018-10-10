@@ -43,6 +43,7 @@
 #define MVA_ARENA_FLAG		0x80000000UL	// MVA global-arena flag
 
 #define DEFAULT_MAX_MATCHES 1000
+#define SPH_MAX_NUMERIC_STR 64
 
 #ifdef __GNUC__
 #define VARIABLE_IS_NOT_USED __attribute__ ((unused))
@@ -377,6 +378,122 @@ public:
 public:
 	// added for DebugCheck()
 	int			GetFD () { return m_iFD; }
+};
+
+class MemoryReader_c
+{
+private:
+	const BYTE * m_pData = nullptr;
+	const int m_iLen = 0;
+
+	const BYTE * m_pCur = nullptr;
+
+public:
+	MemoryReader_c ( const BYTE * pData, int iLen )
+		: m_pData ( pData )
+		, m_iLen ( iLen )
+		, m_pCur ( pData )
+	{}
+
+	int GetPos()
+	{
+		return ( m_pCur - m_pData );
+	}
+	uint64_t UnzipOffset();
+	DWORD UnzipInt();
+
+	CSphString GetString()
+	{
+		CSphString sRes;
+		DWORD iLen = GetDword();
+		if ( iLen )
+		{
+			sRes.Reserve ( iLen );
+			GetBytes ( (BYTE *)sRes.cstr(), iLen );
+		}
+
+		return sRes;
+	}
+
+	DWORD GetDword()
+	{
+		assert ( m_pCur );
+		assert ( m_pCur<m_pData+m_iLen );
+		DWORD uRes = 0;
+		GetBytes ( (BYTE *)&uRes, sizeof(uRes) );
+		return uRes;
+	}
+
+	WORD GetWord()
+	{
+		assert ( m_pCur );
+		assert ( m_pCur<m_pData+m_iLen );
+		WORD uRes = 0;
+		GetBytes ( (BYTE *)&uRes, sizeof(uRes) );
+		return uRes;
+	}
+
+	void GetBytes ( BYTE * pData, int iLen )
+	{
+		assert ( m_pCur );
+		assert ( m_pCur<m_pData+m_iLen );
+		assert ( m_pCur+iLen<=m_pData+m_iLen );
+		memcpy ( pData, m_pCur, iLen );
+		m_pCur += iLen;
+	}
+};
+
+class MemoryWriter_c
+{
+private:
+	CSphVector<BYTE> & m_dBuf;
+
+public:
+	MemoryWriter_c ( CSphVector<BYTE> & dBuf )
+		: m_dBuf ( dBuf )
+	{}
+
+	int GetPos()
+	{
+		return m_dBuf.GetLength();
+	}
+
+	void ZipOffset ( uint64_t uVal );
+	void ZipInt ( DWORD uVal );
+
+	void PutString ( const CSphString & sVal )
+	{
+		int iLen = sVal.Length();
+		PutDword ( iLen );
+		if ( iLen )
+			PutBytes ( (const BYTE *)sVal.cstr(), iLen );
+	}
+
+	void PutString ( const char * sVal )
+	{
+		int iLen = 0;
+		if ( sVal )
+			iLen = strlen ( sVal );
+		PutDword ( iLen );
+		if ( iLen )
+			PutBytes ( (const BYTE *)sVal, iLen );
+	}
+
+	void PutDword ( DWORD uVal )
+	{
+		PutBytes ( (BYTE *)&uVal, sizeof(uVal) );
+	}
+
+	void PutWord ( WORD uVal )
+	{
+		PutBytes ( (BYTE *)&uVal, sizeof(uVal) );
+	}
+
+	void PutBytes ( const BYTE * pData, int iLen )
+	{
+		BYTE * pCur = m_dBuf.AddN ( iLen );
+		memcpy ( pCur, pData, iLen );
+	}
 };
 
 

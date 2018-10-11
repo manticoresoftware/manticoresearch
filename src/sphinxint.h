@@ -121,6 +121,7 @@ extern bool g_bJsonKeynamesToLowercase;
 	SPH_QUERY_STATE ( RANK,			"rank" ) \
 	SPH_QUERY_STATE ( SORT,			"sort" ) \
 	SPH_QUERY_STATE ( FINALIZE,		"finalize" ) \
+	SPH_QUERY_STATE ( DYNAMIC,		"clone_attrs" ) \
 	SPH_QUERY_STATE ( DIST_WAIT,	"dist_wait" ) \
 	SPH_QUERY_STATE ( AGGREGATE,	"aggregate" ) \
 	SPH_QUERY_STATE ( NET_WRITE,	"net_write" ) \

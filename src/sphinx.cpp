@@ -14732,6 +14732,9 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 									ISphRanker * pRanker, int iTag, int iIndexWeight ) const
 {
 	CSphQueryProfile * pProfile = pCtx->m_pProfile;
+	ESphQueryState eOldState = SPH_QSTATE_UNKNOWN;
+	if ( pProfile )
+		eOldState = pProfile->m_eState;
 
 	int iCutoff = pQuery->m_iCutoff;
 	if ( iCutoff<=0 )
@@ -14806,7 +14809,7 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 	}
 
 	if ( pProfile )
-		pProfile->Switch ( SPH_QSTATE_UNKNOWN );
+		pProfile->Switch ( eOldState );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -15163,7 +15166,11 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	}
 
 	if ( tArgs.m_bModifySorterSchemas )
+	{
+		if ( pResult->m_pProfile )
+			pResult->m_pProfile->Switch ( SPH_QSTATE_DYNAMIC );
 		PooledAttrsToPtrAttrs ( ppSorters, iSorters, m_tMva.GetWritePtr(), m_tString.GetWritePtr(), m_bArenaProhibit );
+	}
 
 	// done
 	pResult->m_pMva = m_tMva.GetWritePtr();
@@ -17967,7 +17974,11 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	bool bResult = ParsedMultiQuery ( pQuery, pResult, iSorters, &dSorters[0], tParsed, pDict, tArgs, &tNodeCache, tStatDiff );
 
 	if ( tArgs.m_bModifySorterSchemas )
+	{
+		if ( pProfile )
+			pProfile->Switch ( SPH_QSTATE_DYNAMIC );
 		PooledAttrsToPtrAttrs ( &dSorters[0], iSorters, m_tMva.GetWritePtr(), m_tString.GetWritePtr(), m_bArenaProhibit );
+	}
 
 	return bResult;
 }
@@ -18102,7 +18113,11 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 	}
 
 	if ( tArgs.m_bModifySorterSchemas )
+	{
+		if ( ppResults[0] && ppResults[0]->m_pProfile )
+			ppResults[0]->m_pProfile->Switch ( SPH_QSTATE_DYNAMIC );
 		PooledAttrsToPtrAttrs ( ppSorters, iQueries, m_tMva.GetWritePtr(), m_tString.GetWritePtr(), m_bArenaProhibit );
+	}
 
 	return bResult | bResultScan;
 }
@@ -18121,8 +18136,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	int64_t tmQueryStart = sphMicroTimer();
 
 	CSphQueryProfile * pProfile = pResult->m_pProfile;
+	ESphQueryState eOldState = SPH_QSTATE_UNKNOWN;
 	if ( pProfile )
-		pProfile->Switch ( SPH_QSTATE_INIT );
+		eOldState = pProfile->Switch ( SPH_QSTATE_INIT );
 
 	ScopedThreadPriority_c tPrio ( pQuery->m_bLowPriority );
 
@@ -18361,7 +18377,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 #endif
 
 	if ( pProfile )
-		pProfile->Switch ( SPH_QSTATE_UNKNOWN );
+		pProfile->Switch ( eOldState );
 
 	if ( bCollectPredictionCounters )
 	{

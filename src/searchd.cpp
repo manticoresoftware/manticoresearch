@@ -7702,6 +7702,11 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	int64_t tmLocal = 0;
 	int64_t tmCpu = sphCpuTimer ();
 
+	ESphQueryState eOldState = SPH_QSTATE_UNKNOWN;
+	if ( m_pProfile )
+		eOldState = m_pProfile->m_eState;
+
+
 	// prepare for descent
 	CSphQuery & tFirst = m_dQueries[iStart];
 
@@ -8271,7 +8276,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	g_tStats.m_iDiskReadBytes += tIO.m_iReadBytes;
 
 	if ( m_pProfile )
-		m_pProfile->Switch ( SPH_QSTATE_UNKNOWN );
+		m_pProfile->Switch ( eOldState );
 }
 
 
@@ -15277,8 +15282,10 @@ void sphPackedMVA2Str ( const BYTE * pMVA, bool b64bit, CSphVector<char> & dStr 
 }
 
 
-void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, bool bMoreResultsFollow, bool bAddQueryColumn, const CSphString * pQueryColumn )
+void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, bool bMoreResultsFollow, bool bAddQueryColumn, const CSphString * pQueryColumn, CSphQueryProfile * pProfile )
 {
+	CSphScopedProfile tProf ( pProfile, SPH_QSTATE_NET_WRITE );
+
 	if ( !tRes.m_iSuccesses )
 	{
 		// at this point, SELECT error logging should have been handled, so pass a NULL stmt to logger
@@ -15939,7 +15946,7 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 			AggrResult_t & tRes = tHandler.m_dResults[iSelect++];
 			if ( !sWarning.IsEmpty() )
 				tRes.m_sWarning = sWarning;
-			SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr );
+			SendMysqlSelectResult ( dRows, tRes, bMoreResultsFollow, false, nullptr, ( tVars.m_bProfile ? &tProfile : nullptr ) );
 			// mysql server breaks send on error
 			if ( !tRes.m_iSuccesses )
 				break;
@@ -17440,7 +17447,7 @@ public:
 					// query just completed ok; reset out error message
 					m_sError = "";
 					AggrResult_t & tLast = tHandler.m_dResults.Last();
-					SendMysqlSelectResult ( tOut, tLast, false, m_bFederatedUser, &m_sFederatedQuery );
+					SendMysqlSelectResult ( tOut, tLast, false, m_bFederatedUser, &m_sFederatedQuery, ( m_tVars.m_bProfile ? &m_tProfile : nullptr ) );
 				}
 
 				// save meta for SHOW META (profile is saved elsewhere)

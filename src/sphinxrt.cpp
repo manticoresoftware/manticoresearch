@@ -6743,9 +6743,10 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	pResult->m_iQueryTime = 0;
 	int64_t tmQueryStart = sphMicroTimer();
 	CSphQueryProfile * pProfiler = pResult->m_pProfile;
+	ESphQueryState eOldState = SPH_QSTATE_UNKNOWN;
 
 	if ( pProfiler )
-		pProfiler->Switch ( SPH_QSTATE_DICT_SETUP );
+		eOldState = pProfiler->Switch ( SPH_QSTATE_DICT_SETUP );
 
 	// force ext2 mode for them
 	// FIXME! eliminate this const breakage
@@ -7361,13 +7362,16 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	MEMORY ( MEM_RT_RES_STRINGS );
 
+	if ( pProfiler )
+		pProfiler->Switch ( SPH_QSTATE_DYNAMIC );
+
 	// create new standalone schema for sorters (independent of any external indexes/pools/storages)
 	// modify matches inside the sorters to work with the new schema
 	for ( auto i : dSorters )
 		TransformSorterSchema ( i, tGuard, dDiskMva, dDiskStrings, tMvaArenaFlag );
 
 	if ( pProfiler )
-		pProfiler->Switch ( SPH_QSTATE_UNKNOWN );
+		pProfiler->Switch ( eOldState );
 
 	if ( pResult->m_bHasPrediction )
 		pResult->m_tStats.Add ( tQueryStats );

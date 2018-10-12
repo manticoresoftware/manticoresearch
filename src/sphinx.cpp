@@ -1254,8 +1254,7 @@ struct CSphTemplateQueryFilter : public ISphQueryFilter
 		tInfo.m_iHits = 0;
 		tInfo.m_iQpos = iQpos;
 
-		if ( tInfo.m_sNormalized.cstr()[0]==MAGIC_WORD_HEAD_NONSTEMMED )
-			*(char *)tInfo.m_sNormalized.cstr() = '=';
+		RemoveDictSpecials ( tInfo.m_sNormalized );
 	}
 };
 
@@ -16685,6 +16684,8 @@ void ISphQueryFilter::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 					tInfo.m_iDocs = tWordlist.m_dExpanded[i].m_iDocs;
 					tInfo.m_iHits = tWordlist.m_dExpanded[i].m_iHits;
 					tInfo.m_iQpos = iQpos;
+
+					RemoveDictSpecials ( tInfo.m_sNormalized );
 				}
 			}
 
@@ -16804,6 +16805,8 @@ void ISphQueryFilter::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 				dKeywords[iTokenized].m_iDocs = iDocs;
 				dKeywords[iTokenized].m_iHits = iHits;
 				dKeywords[iTokenized].m_sNormalized = sNormalizedWithMaxHits;
+
+				RemoveDictSpecials ( dKeywords[iTokenized].m_sNormalized );
 			}
 		}
 	}
@@ -16843,8 +16846,7 @@ struct CSphPlainQueryFilter : public ISphQueryFilter
 		tInfo.m_iHits = m_tFoldSettings.m_bStats ? m_pQueryWord->m_iHits : 0;
 		tInfo.m_iQpos = iQpos;
 
-		if ( tInfo.m_sNormalized.cstr()[0]==MAGIC_WORD_HEAD_NONSTEMMED )
-			*(char *)tInfo.m_sNormalized.cstr() = '=';
+		RemoveDictSpecials ( tInfo.m_sNormalized );
 	}
 };
 
@@ -31633,9 +31635,26 @@ void SphWordStatChecker_t::DumpDiffer ( const SmallStringHash_T<CSphQueryResultM
 // CSphQueryResultMeta
 //////////////////////////////////////////////////////////////////////////
 
-void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int64_t iDocs, int64_t iHits )
+void RemoveDictSpecials ( CSphString & sWord )
 {
-	CSphString sFixed;
+	if ( sWord.cstr()[0]==MAGIC_WORD_HEAD )
+	{
+		*(char *)( sWord.cstr() ) = '*';
+	} else if ( sWord.cstr()[0]==MAGIC_WORD_HEAD_NONSTEMMED )
+	{
+		*(char *)( sWord.cstr() ) = '=';
+	} else
+	{
+		const char * p = strchr ( sWord.cstr(), MAGIC_WORD_BIGRAM );
+		if ( p )
+		{
+			*(char *)p = ' ';
+		}
+	}
+}
+
+const CSphString & RemoveDictSpecials ( const CSphString & sWord, CSphString & sFixed )
+{
 	const CSphString * pFixed = &sWord;
 	if ( sWord.cstr()[0]==MAGIC_WORD_HEAD )
 	{
@@ -31658,7 +31677,14 @@ void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int64_t iDocs, int
 		}
 	}
 
-	WordStat_t & tStats = m_hWordStats.AddUnique ( *pFixed );
+	return *pFixed;
+}
+
+void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int64_t iDocs, int64_t iHits )
+{
+	CSphString sBuf;
+	const CSphString & tFixed = RemoveDictSpecials ( sWord, sBuf );
+	WordStat_t & tStats = m_hWordStats.AddUnique ( tFixed );
 	tStats.m_iDocs += iDocs;
 	tStats.m_iHits += iHits;
 }

@@ -7421,8 +7421,7 @@ void RtIndex_t::AddKeywordStats ( BYTE * sWord, const BYTE * sTokenized, CSphDic
 	tInfo.m_iHits = bGetStats ? pQueryWord->m_iHits : 0;
 	tInfo.m_iQpos = iQpos;
 
-	if ( tInfo.m_sNormalized.cstr()[0]==MAGIC_WORD_HEAD_NONSTEMMED )
-		*(char *)tInfo.m_sNormalized.cstr() = '=';
+	RemoveDictSpecials ( tInfo.m_sNormalized );
 }
 
 
@@ -7446,8 +7445,20 @@ struct CSphRtQueryFilter : public ISphQueryFilter, public ISphNoncopyable
 	}
 };
 
+static void HashKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, SmallStringHash_T<CSphKeywordInfo> & hKeywords )
+{
+	for ( CSphKeywordInfo & tSrc : dKeywords )
+	{
+		CSphKeywordInfo & tDst = hKeywords.AddUnique ( tSrc.m_sNormalized );
+		tDst.m_sTokenized = std::move ( tSrc.m_sTokenized );
+		tDst.m_sNormalized = std::move ( tSrc.m_sNormalized );
+		tDst.m_iQpos = tSrc.m_iQpos;
+		tDst.m_iDocs += tSrc.m_iDocs;
+		tDst.m_iHits += tSrc.m_iHits;
+	}
+}
 
-bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const char * sQuery, const GetKeywordsSettings_t & tSettings, bool bFillOnly, CSphString * , const SphChunkGuard_t & tGuard ) const
+bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const char * sQuery, const GetKeywordsSettings_t & tSettings, bool bFillOnly, CSphString * pError, const SphChunkGuard_t & tGuard ) const
 {
 	if ( !bFillOnly )
 		dKeywords.Resize ( 0 );
@@ -7532,8 +7543,38 @@ bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 	if ( !tSettings.m_bStats )
 		return true;
 
-	ARRAY_FOREACH ( iChunk, tGuard.m_dDiskChunks )
-		tGuard.m_dDiskChunks[iChunk]->FillKeywords ( dKeywords );
+	if ( bFillOnly )
+	{
+		ARRAY_FOREACH ( iChunk, tGuard.m_dDiskChunks )
+			tGuard.m_dDiskChunks[iChunk]->FillKeywords ( dKeywords );
+	} else
+	{
+		// bigram and expanded might differs need to merge infos
+		CSphVector<CSphKeywordInfo> dChunkKeywords;
+		SmallStringHash_T<CSphKeywordInfo> hKeywords;
+		ARRAY_FOREACH ( iChunk, tGuard.m_dDiskChunks )
+		{
+			tGuard.m_dDiskChunks[iChunk]->GetKeywords ( dChunkKeywords, sQuery, tSettings, pError );
+			HashKeywords ( dChunkKeywords, hKeywords );
+			dChunkKeywords.Resize ( 0 );
+		}
+
+		if ( hKeywords.GetLength() )
+		{
+			// merge keywords from RAM parts with disk keywords into hash
+			HashKeywords ( dKeywords, hKeywords );
+			dKeywords.Resize ( 0 );
+			dKeywords.Reserve ( hKeywords.GetLength() );
+
+			hKeywords.IterateStart();
+			while ( hKeywords.IterateNext() )
+			{
+				const CSphKeywordInfo & tSrc = hKeywords.IterateGet();
+				dKeywords.Add ( tSrc );
+			}
+			sphSort ( dKeywords.Begin(), dKeywords.GetLength(), bind ( &CSphKeywordInfo::m_iQpos ) );
+		}
+	}
 
 	return true;
 }

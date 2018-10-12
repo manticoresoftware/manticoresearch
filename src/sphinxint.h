@@ -1638,6 +1638,9 @@ public:
 	SphWordID_t GetWordIDNonStemmed ( BYTE * pWord ) final { return m_pDict->GetWordIDNonStemmed ( pWord ); }
 };
 
+void RemoveDictSpecials ( CSphString & sWord );
+const CSphString & RemoveDictSpecials ( const CSphString & sWord, CSphString & sBuf );
+
 //////////////////////////////////////////////////////////////////////////
 // TOKEN FILTER
 //////////////////////////////////////////////////////////////////////////

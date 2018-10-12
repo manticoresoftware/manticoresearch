@@ -46,6 +46,22 @@ index rt_bi
 	dict = keywords
 	min_prefix_len = 2
 }
+
+index dist_local
+{
+	type = distributed
+	local = idx_bi
+	local = rt_bi
+}
+
+index dist_remote
+{
+	type = distributed
+	agent = <my_address/>:dist_local
+	agent_connect_timeout	= 1000
+	agent_query_timeout		= 3000	
+}
+
 </config>
 <db_create>
 CREATE TABLE `test_table` (
@@ -61,12 +77,16 @@ CREATE TABLE `test_table` (
 <sphqueries>
 <sphinxql>INSERT INTO rt_bi (id, gid, title) VALUES ( 1, 1, 'manticore search is the best'), (2, 2, 'manticore is more better' )</sphinxql>
 
-<sphinxql>CALL KEYWORDS ( 'manti*', 'idx_bi', 1 AS stats, 0 AS fold_wildcards )</sphinxql>
-<sphinxql>CALL KEYWORDS ( 'manti*', 'rt_bi', 1 AS stats, 0 AS fold_wildcards )</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'manti*', 'idx_bi', 1 AS stats, 0 AS fold_wildcards, 'hits' as sort_mode )</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'manti*', 'rt_bi', 1 AS stats, 0 AS fold_wildcards, 'hits' as sort_mode )</sphinxql>
 
 <sphinxql>FLUSH RAMCHUNK rt_bi</sphinxql>
 <sphinxql>INSERT INTO rt_bi (id, gid, title) VALUES (3, 3, 'search with manticore like many' )</sphinxql>
-<sphinxql>CALL KEYWORDS ( 'manti*', 'rt_bi', 1 AS stats, 0 AS fold_wildcards )</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'manti*', 'rt_bi', 1 AS stats, 0 AS fold_wildcards, 'hits' as sort_mode )</sphinxql>
+
+<!-- regression keywords to distributed index via API -->
+<sphinxql>CALL KEYWORDS ( 'manti*', 'dist_local', 1 AS stats, 0 AS fold_wildcards, 'hits' as sort_mode )</sphinxql>
+<sphinxql>CALL KEYWORDS ( 'manti*', 'dist_remote', 1 AS stats, 0 AS fold_wildcards, 'hits' as sort_mode )</sphinxql>
 </sphqueries>
 
 </test>

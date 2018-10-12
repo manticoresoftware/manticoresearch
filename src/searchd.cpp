@@ -10525,6 +10525,8 @@ void HandleCommandExcerpt ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & t
 // KEYWORDS HANDLER
 /////////////////////////////////////////////////////////////////////////////
 
+static bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const GetKeywordsSettings_t & tSettings, CSphVector <CSphKeywordInfo> & dKeywords, CSphString & sError, SearchFailuresLog_c & tFailureLog );
+
 void HandleCommandKeywords ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq )
 {
 	if ( !CheckCommandVersion ( uVer, VER_COMMAND_KEYWORDS, tOut ) )
@@ -10541,22 +10543,22 @@ void HandleCommandKeywords ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c &
 		tSettings.m_bFoldWildcards = !!tReq.GetInt ();
 		tSettings.m_iExpansionLimit = tReq.GetInt ();
 	}
-	auto pServed = GetServed ( sIndex );
-	if ( !pServed )
-	{
-		SendErrorReply ( tOut, "unknown local index '%s' in search request", sIndex.cstr() );
-		return;
-	}
 
 	CSphString sError;
+	SearchFailuresLog_c tFailureLog;
 	CSphVector < CSphKeywordInfo > dKeywords;
+	bool bOk = DoGetKeywords ( sIndex, sQuery, tSettings, dKeywords, sError, tFailureLog );
+	if ( !bOk )
 	{
-		ServedDescRPtr_c  pIndex ( pServed );
-		if ( !pIndex->m_pIndex->GetKeywords ( dKeywords, sQuery.cstr (), tSettings, &sError ) )
-		{
-			SendErrorReply ( tOut, "error generating keywords: %s", sError.cstr () );
-			return;
-		}
+		SendErrorReply ( tOut, "%s", sError.cstr() );
+		return;
+	}
+	// just log distribute index error as command has no warning filed to pass such error into
+	if ( !tFailureLog.IsEmpty() )
+	{
+		StringBuilder_c sErrorBuf;
+		tFailureLog.BuildReport ( sErrorBuf );
+		sphWarning ( "%s", sErrorBuf.cstr() );
 	}
 
 	int iRespLen = 4;
@@ -13839,6 +13841,81 @@ struct KeywordsReplyParser_t : public IReplyParser_t
 
 static void MergeKeywords ( CSphVector<CSphKeywordInfo> & dKeywords );
 static void SortKeywords ( const GetKeywordsSettings_t & tSettings, CSphVector<CSphKeywordInfo> & dKeywords );
+bool DoGetKeywords ( const CSphString & sIndex, const CSphString & sQuery, const GetKeywordsSettings_t & tSettings, CSphVector <CSphKeywordInfo> & dKeywords, CSphString & sError, SearchFailuresLog_c & tFailureLog )
+{
+	auto pLocal = GetServed ( sIndex );
+	auto pDistributed = GetDistr ( sIndex );
+
+	if ( !pLocal && !pDistributed )
+	{
+		sError.SetSprintf ( "no such index %s", sIndex.cstr() );
+		return false;
+	}
+
+	bool bOk = false;
+	// just local plain or template index
+	if ( pLocal )
+	{
+		ServedDescRPtr_c pIndex ( pLocal );
+		if ( !pIndex->m_pIndex )
+		{
+			sError.SetSprintf ( "missed index '%s'", sIndex.cstr() );
+		} else
+		{
+			bOk = pIndex->m_pIndex->GetKeywords ( dKeywords, sQuery.cstr(), tSettings, &sError );
+		}
+	} else
+	{
+		// FIXME!!! g_iDistThreads thread pool for locals.
+		// locals
+		const StrVec_t & dLocals = pDistributed->m_dLocal;
+		CSphVector<CSphKeywordInfo> dKeywordsLocal;
+		for ( const CSphString &sLocal : dLocals )
+		{
+			ServedDescRPtr_c pServed ( GetServed ( sLocal ) );
+			if ( !pServed || !pServed->m_pIndex )
+			{
+				tFailureLog.Submit ( sLocal.cstr(), sIndex.cstr(), "missed index" );
+				continue;
+			}
+
+			dKeywordsLocal.Resize(0);
+			if ( pServed->m_pIndex->GetKeywords ( dKeywordsLocal, sQuery.cstr(), tSettings, &sError ) )
+				dKeywords.Append ( dKeywordsLocal );
+			else
+				tFailureLog.SubmitEx ( sLocal.cstr (), sIndex.cstr (), "keyword extraction failed: %s", sError.cstr () );
+		}
+
+		// remote agents requests send off thread
+		VecRefPtrsAgentConn_t dAgents;
+		// fixme! We don't need all hosts here, only usual selected mirrors
+		pDistributed->GetAllHosts ( dAgents );
+
+		int iAgentsReply = 0;
+		if ( !dAgents.IsEmpty() )
+		{
+			// connect to remote agents and query them
+			KeywordsRequestBuilder_t tReqBuilder ( tSettings, sQuery );
+			KeywordsReplyParser_t tParser ( tSettings.m_bStats, dKeywords );
+			iAgentsReply = PerformRemoteTasks ( dAgents, &tReqBuilder, &tParser );
+
+			for ( const AgentConn_t * pAgent : dAgents )
+				if ( !pAgent->m_bSuccess && !pAgent->m_sFailure.IsEmpty() )
+					tFailureLog.SubmitEx ( pAgent->m_tDesc.m_sIndexes.cstr(), sIndex.cstr(),
+						"agent %s: %s", pAgent->m_tDesc.GetMyUrl().cstr(), pAgent->m_sFailure.cstr() );
+		}
+
+		// process result sets
+		if ( dLocals.GetLength() + iAgentsReply>1 )
+			MergeKeywords ( dKeywords );
+
+		bOk = true;
+	}
+
+	SortKeywords ( tSettings, dKeywords );
+
+	return bOk;
+}
 
 void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphString & sWarning )
 {
@@ -13905,81 +13982,15 @@ void HandleMysqlCallKeywords ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphStr
 	}
 	const CSphString & sTerm = tStmt.m_dInsertValues[0].m_sVal;
 	const CSphString & sIndex = tStmt.m_dInsertValues[1].m_sVal;
+	CSphVector<CSphKeywordInfo> dKeywords;
+	SearchFailuresLog_c tFailureLog;
 
-	auto pLocal = GetServed ( sIndex );
-	auto pDistributed = GetDistr ( sIndex );
-
-	if ( !pLocal && !pDistributed )
+	if ( !DoGetKeywords ( sIndex, sTerm, tSettings, dKeywords, sError, tFailureLog ) )
 	{
-		sError.SetSprintf ( "no such index %s", sIndex.cstr() );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
 
-	SearchFailuresLog_c tFailureLog;
-	CSphVector<CSphKeywordInfo> dKeywords;
-
-	// just local plain or template index
-	if ( pLocal )
-	{
-		ServedDescRPtr_c pIndex ( pLocal );
-		if ( !pIndex->m_pIndex )
-		{
-			tFailureLog.Submit ( sIndex.cstr(), NULL, "missed index" );
-		} else
-		{
-			bool bRes = pIndex->m_pIndex->GetKeywords ( dKeywords, sTerm.cstr(), tSettings, &sError );
-
-			if ( !bRes )
-				tFailureLog.SubmitEx ( sIndex.cstr(), NULL, "keyword extraction failed: %s", sError.cstr() );
-		}
-	} else
-	{
-		// FIXME!!! g_iDistThreads thread pool for locals.
-		// locals
-		const StrVec_t & dLocals = pDistributed->m_dLocal;
-		CSphVector<CSphKeywordInfo> dKeywordsLocal;
-		for ( const CSphString &sLocal : dLocals )
-		{
-			ServedDescRPtr_c pServed ( GetServed ( sLocal ) );
-			if ( !pServed || !pServed->m_pIndex )
-			{
-				tFailureLog.Submit ( sLocal.cstr(), sIndex.cstr(), "missed index" );
-				continue;
-			}
-
-			dKeywordsLocal.Resize(0);
-			if ( pServed->m_pIndex->GetKeywords ( dKeywordsLocal, sTerm.cstr(), tSettings, &sError ) )
-				dKeywords.Append ( dKeywordsLocal );
-			else
-				tFailureLog.SubmitEx ( sLocal.cstr (), sIndex.cstr (), "keyword extraction failed: %s", sError.cstr () );
-		}
-
-		// remote agents requests send off thread
-		VecRefPtrsAgentConn_t dAgents;
-		// fixme! We don't need all hosts here, only usual selected mirrors
-		pDistributed->GetAllHosts ( dAgents );
-
-		int iAgentsReply = 0;
-		if ( !dAgents.IsEmpty() )
-		{
-			// connect to remote agents and query them
-			KeywordsRequestBuilder_t tReqBuilder ( tSettings, sTerm );
-			KeywordsReplyParser_t tParser ( tSettings.m_bStats, dKeywords );
-			iAgentsReply = PerformRemoteTasks ( dAgents, &tReqBuilder, &tParser );
-
-			for ( const AgentConn_t * pAgent : dAgents )
-				if ( !pAgent->m_bSuccess && !pAgent->m_sFailure.IsEmpty() )
-					tFailureLog.SubmitEx ( pAgent->m_tDesc.m_sIndexes.cstr(), sIndex.cstr(),
-						"agent %s: %s", pAgent->m_tDesc.GetMyUrl().cstr(), pAgent->m_sFailure.cstr() );
-		}
-
-		// process result sets
-		if ( dLocals.GetLength() + iAgentsReply>1 )
-			MergeKeywords ( dKeywords );
-	}
-
-	SortKeywords ( tSettings, dKeywords );
 
 	// result set header packet
 	tOut.HeadBegin ( tSettings.m_bStats ? 5 : 3 );

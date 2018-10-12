@@ -5151,7 +5151,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 
 	tSorterSchema = tSchema;
 
-	CSphVector<uint64_t> dQueryAttrs;
+	sph::StringSet hQueryAttrs;
 
 	// we need this to perform a sanity check
 	bool bHasGroupByExpr = false;
@@ -5176,7 +5176,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 			pExtra->Add ( tCol.m_sName );
 		tSorterSchema.RemoveStaticAttr ( iIndex );
 
-		dQueryAttrs.Add ( sphFNV64 ( tCol.m_sName.cstr() ) );
+		hQueryAttrs.Add ( tCol.m_sName );
 	}
 
 	// setup @geodist
@@ -5195,7 +5195,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		if ( pExtra )
 			pExtra->Add ( tCol.m_sName );
 
-		dQueryAttrs.Add ( sphFNV64 ( tCol.m_sName.cstr() ) );
+		hQueryAttrs.Add ( tCol.m_sName );
 	}
 
 	// setup @expr
@@ -5209,7 +5209,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		tCol.m_eStage = SPH_EVAL_PRESORT;
 		tSorterSchema.AddAttr ( tCol, true );
 
-		dQueryAttrs.Add ( sphFNV64 ( tCol.m_sName.cstr() ) );
+		hQueryAttrs.Add ( tCol.m_sName );
 	}
 
 	// expressions from select items
@@ -5225,8 +5225,8 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 
 		if ( sExpr=="*" )
 		{
-			for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
-				dQueryAttrs.Add ( sphFNV64 ( tSchema.GetAttr(i).m_sName.cstr() ) );
+			for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
+				hQueryAttrs.Add ( tSchema.GetAttr(i).m_sName );
 		}
 
 		// for now, just always pass "plain" attrs from index to sorter; they will be filtered on searchd level
@@ -5257,7 +5257,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		if ( bPlainAttr || IsGroupby ( sExpr ) || bIsCount )
 		{
 			if ( sExpr!="*" && !tItem.m_sAlias.IsEmpty() )
-				dQueryAttrs.Add ( sphFNV64 ( tItem.m_sAlias.cstr() ) );
+				hQueryAttrs.Add ( tItem.m_sAlias );
 			bHasGroupByExpr = IsGroupby ( sExpr );
 			continue;
 		}
@@ -5271,7 +5271,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		int iSorterAttr = tSorterSchema.GetAttrIndex ( tItem.m_sAlias.cstr() );
 		if ( iSorterAttr>=0 )
 		{
-			if ( dQueryAttrs.Contains ( sphFNV64 ( tItem.m_sAlias.cstr() ) ) )
+			if ( hQueryAttrs[tItem.m_sAlias] )
 			{
 				sError.SetSprintf ( "alias '%s' must be unique (conflicts with another alias)", tItem.m_sAlias.cstr() );
 				return nullptr;
@@ -5415,7 +5415,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 					tDep.m_eStage = tExprCol.m_eStage;
 			}
 		}
-		dQueryAttrs.Add ( sphFNV64 ( (const BYTE *)tExprCol.m_sName.cstr() ) );
+		hQueryAttrs.Add ( tExprCol.m_sName );
 	}
 
 	////////////////////////////////////////////

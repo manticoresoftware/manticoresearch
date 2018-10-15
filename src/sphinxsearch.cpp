@@ -5959,7 +5959,6 @@ const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 	printf ( "ranker getfiltereddocs\n" );
 	#endif
 
-	CSphScopedProfile ( m_pCtx->m_pProfile, SPH_QSTATE_GET_DOCS );
 	while (true)
 	{
 		// get another chunk
@@ -5967,7 +5966,11 @@ const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 			m_pCtx->m_pProfile->Switch ( SPH_QSTATE_GET_DOCS );
 		const ExtDoc_t * pCand = m_pRoot->GetDocsChunk();
 		if ( !pCand )
+		{
+			if ( m_pCtx->m_pProfile )
+				m_pCtx->m_pProfile->Switch ( SPH_QSTATE_RANK );
 			return NULL;
+		}
 
 		// create matches, and filter them
 		if ( m_pCtx->m_pProfile )
@@ -5994,6 +5997,9 @@ const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 			iDocs++;
 			pCand++;
 		}
+
+		if ( m_pCtx->m_pProfile )
+			m_pCtx->m_pProfile->Switch ( SPH_QSTATE_RANK );
 
 		// clean up zone hash
 		if ( !m_bZSlist )

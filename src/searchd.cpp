@@ -306,6 +306,13 @@ struct ThdDesc_t : public ListNode_t
 	}
 };
 
+static void ThdState ( ThdState_e eState, ThdDesc_t & tThd )
+{
+	tThd.m_eThdState = eState;
+	tThd.m_tmStart = sphMicroTimer();
+	if ( eState==THD_NET_IDLE )
+		tThd.m_dBuf[0] = '\0';
+}
 
 static CSphMutex				g_tThdMutex;
 static List_t					g_dThd;				///< existing threads table
@@ -362,6 +369,31 @@ struct ThreadSystem_t
 	}
 };
 
+struct ThreadLocal_t
+{
+	ThdDesc_t m_tDesc;
+
+	explicit ThreadLocal_t ( const ThdDesc_t & tDesc )
+	{
+		m_tDesc.m_iTid = GetOsThreadId();
+		m_tDesc.m_eProto = tDesc.m_eProto;
+		m_tDesc.m_iClientSock = tDesc.m_iClientSock;
+		m_tDesc.m_sClientName = tDesc.m_sClientName;
+		m_tDesc.m_eThdState = tDesc.m_eThdState;
+		m_tDesc.m_sCommand = tDesc.m_sCommand;
+		m_tDesc.m_iConnID = tDesc.m_iConnID;
+
+		m_tDesc.m_tmConnect = tDesc.m_tmConnect;
+		m_tDesc.m_tmStart = tDesc.m_tmStart;
+
+		ThreadAdd ( &m_tDesc );
+	}
+
+	~ThreadLocal_t()
+	{
+		ThreadRemove ( &m_tDesc );
+	}
+};
 
 static int						g_iConnectionID = 0;		///< global conn-id
 
@@ -6443,7 +6475,7 @@ class SearchHandler_c : public ISphSearchHandler
 	friend void LocalSearchThreadFunc ( void * pArg );
 
 public:
-									SearchHandler_c ( int iQueries, const QueryParser_i * pParser, QueryType_e eQueryType, bool bMaster, int iCID );
+									SearchHandler_c ( int iQueries, const QueryParser_i * pParser, QueryType_e eQueryType, bool bMaster, const ThdDesc_t & tThd );
 									~SearchHandler_c() final;
 
 	void							RunQueries () final;					///< run all queries, get all results
@@ -6462,8 +6494,8 @@ public:
 	CSphVector<StatsPerQuery_t>		m_dQueryIndexStats;				///< statistics for current query
 	CSphVector<SearchFailuresLog_c>	m_dFailuresSet;					///< failure logs for each query
 	CSphVector < CSphVector<int64_t> >	m_dAgentTimes;				///< per-agent time stats
-	int								m_iCid;
 	LockedCollection_c				m_dLocked;						/// locked indexes
+	const ThdDesc_t &				m_tThd;
 
 protected:
 	void							RunSubset ( int iStart, int iEnd );	///< run queries against index(es) from first query in the subset
@@ -6508,13 +6540,14 @@ private:
 };
 
 
-ISphSearchHandler * sphCreateSearchHandler ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster, int iCID )
+ISphSearchHandler * sphCreateSearchHandler ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster, const ThdDesc_t & tThd )
 {
-	return new SearchHandler_c ( iQueries, pQueryParser, eQueryType, bMaster, iCID );
+	return new SearchHandler_c ( iQueries, pQueryParser, eQueryType, bMaster, tThd );
 }
 
 
-SearchHandler_c::SearchHandler_c ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster, int iCid )
+SearchHandler_c::SearchHandler_c ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster, const ThdDesc_t & tThd )
+	: m_tThd ( tThd )
 {
 	m_dQueries.Resize ( iQueries );
 	m_dResults.Resize ( iQueries );
@@ -6522,7 +6555,6 @@ SearchHandler_c::SearchHandler_c ( int iQueries, const QueryParser_i * pQueryPar
 	m_dExtraSchemas.Resize ( iQueries );
 	m_dAgentTimes.Resize ( iQueries );
 	m_bMaster = bMaster;
-	m_iCid = iCid;
 	m_bFederatedUser = false;
 
 	SetQueryParser ( pQueryParser );
@@ -6653,7 +6685,7 @@ void SearchHandler_c::RunActionQuery ( const CSphQuery & tQuery, const CSphStrin
 	g_tStats.m_iDiskReadTime += tIO.m_iReadTime;
 	g_tStats.m_iDiskReadBytes += tIO.m_iReadBytes;
 
-	LogQuery ( m_dQueries[0], m_dResults[0], m_dAgentTimes[0], m_iCid );
+	LogQuery ( m_dQueries[0], m_dResults[0], m_dAgentTimes[0], m_tThd.m_iConnID );
 }
 
 void SearchHandler_c::SetQuery ( int iQuery, const CSphQuery & tQuery )
@@ -6688,7 +6720,7 @@ void SearchHandler_c::RunQueries()
 	}
 	RunSubset ( iStart, iEnd );
 	ARRAY_FOREACH ( i, m_dQueries )
-		LogQuery ( m_dQueries[i], m_dResults[i], m_dAgentTimes[i], m_iCid );
+		LogQuery ( m_dQueries[i], m_dResults[i], m_dAgentTimes[i], m_tThd.m_iConnID );
 	OnRunFinished();
 }
 
@@ -6759,6 +6791,7 @@ void LocalSearchThreadFunc ( void * pArg )
 	auto * pContext = (LocalSearchThreadContext_t*) pArg;
 
 	SphCrashLogger_c::SetLastQuery ( pContext->m_tCrashQuery );
+	ThreadLocal_t tThd ( pContext->m_pHandler->m_tThd );
 
 	while (true)
 	{
@@ -6769,6 +6802,12 @@ void LocalSearchThreadFunc ( void * pArg )
 		if ( iCurSearch>=pContext->m_iSearches )
 			return;
 		LocalSearch_t * pCall = pContext->m_pSearches + iCurSearch;
+
+		const SearchHandler_c * pHnd = pContext->m_pHandler;
+		// FIXME!!! handle different proto
+		tThd.m_tDesc.SetThreadInfo ( "api-search query=\"%s\" comment=\"%s\" index=\"%s\"", pHnd->m_dQueries[pHnd->m_iStart].m_sQuery.scstr(), pHnd->m_dQueries[pHnd->m_iStart].m_sComment.scstr(), pHnd->m_dLocal[pCall->m_iLocal].m_sName.scstr() );
+		tThd.m_tDesc.m_tmStart = sphMicroTimer();
+
 		pCall->m_bResult = pContext->m_pHandler->RunLocalSearchMT ( pCall->m_iLocal, pCall->m_ppSorters
 																	, pCall->m_ppResults
 																	, &pContext->m_pHandler->m_bMultiQueue );
@@ -8320,7 +8359,7 @@ void SendSearchResponse ( SearchHandler_c & tHandler, ISphOutputBuffer & tOut, W
 }
 
 
-void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq, ThdDesc_t * pThd )
+void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq, ThdDesc_t & tThd )
 {
 	MEMORY ( MEM_API_SEARCH );
 
@@ -8351,8 +8390,7 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 		return;
 	}
 
-	assert ( pThd );
-	SearchHandler_c tHandler ( iQueries, nullptr, QUERY_API, ( iMasterVer==0 ), pThd->m_iConnID );
+	SearchHandler_c tHandler ( iQueries, nullptr, QUERY_API, ( iMasterVer==0 ), tThd );
 	for ( auto &dQuery : tHandler.m_dQueries )
 		if ( !ParseSearchQuery ( tReq, tOut, dQuery, uVer, uMasterVer ) )
 			return;
@@ -8378,7 +8416,7 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 		tHandler.SetQueryType ( eQueryType );
 
 		const CSphQuery & q = tHandler.m_dQueries[0];
-		pThd->SetThreadInfo ( "api-search query=\"%s\" comment=\"%s\"", q.m_sQuery.scstr(), q.m_sComment.scstr() );
+		tThd.SetThreadInfo ( "api-search query=\"%s\" comment=\"%s\" index=\"%s\"", q.m_sQuery.scstr(), q.m_sComment.scstr(), q.m_sIndexes.scstr() );
 	}
 
 	// run queries, send response
@@ -10133,7 +10171,7 @@ void AppendErrorMessage ( StringBuilder_c & sError, const CSphString &sQueryErro
 		sError.Appendf ( "; %s", sQueryError.cstr() );
 }
 
-bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQueries, CSphString & sError, ThdDesc_t * pThd )
+bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQueries, CSphString & sError, ThdDesc_t & tThd )
 {
 	SnippetsRemote_t dRemoteSnippets ( dQueries );
 	ExcerptQuery_t &q = *dQueries.begin ();
@@ -10237,7 +10275,7 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 	}
 
 	// set correct data size for snippets
-	ThreadSetSnippetInfo ( dQueries[0].m_sWords.scstr (), GetSnippetDataSize (dQueries), *pThd );
+	ThreadSetSnippetInfo ( dQueries[0].m_sWords.scstr (), GetSnippetDataSize (dQueries), tThd );
 
 	// tough jobs first
 	if ( !bScattered )
@@ -10395,7 +10433,7 @@ void FixupResultTail (CSphVector<BYTE> & dData)
 		dData.Pop ();
 }
 
-void HandleCommandExcerpt ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tReq, ThdDesc_t * pThd )
+void HandleCommandExcerpt ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & tReq, ThdDesc_t & tThd )
 {
 	if ( !CheckCommandVersion ( iVer, VER_COMMAND_EXCERPT, tOut ) )
 		return;
@@ -10481,9 +10519,9 @@ void HandleCommandExcerpt ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & t
 			return;
 		}
 	}
-	ThreadSetSnippetInfo ( dQueries[0].m_sWords.scstr (), GetSnippetDataSize ( dQueries ), false, *pThd );
+	ThreadSetSnippetInfo ( dQueries[0].m_sWords.scstr (), GetSnippetDataSize ( dQueries ), false, tThd );
 
-	if ( !MakeSnippets ( sIndex, dQueries, sError, pThd ) )
+	if ( !MakeSnippets ( sIndex, dQueries, sError, tThd ) )
 	{
 		SendErrorReply ( tOut, "%s", sError.cstr() );
 		return;
@@ -11549,20 +11587,8 @@ void HandleCommandFlush ( ISphOutputBuffer & tOut, WORD uVer )
 // GENERAL HANDLER
 /////////////////////////////////////////////////////////////////////////////
 
-#define THD_STATE(_state) \
-{ \
-	DISABLE_CONST_COND_CHECK \
-	{ \
-		pThd->m_eThdState = _state; \
-		pThd->m_tmStart = sphMicroTimer(); \
-		if_const ( _state==THD_NET_IDLE ) \
-			pThd->m_dBuf[0] = '\0'; \
-	} \
-	ENABLE_CONST_COND_CHECK \
-}
-
-void HandleCommandSphinxql ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq, ThdDesc_t * pThd ); // definition is below
-void HandleCommandJson ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq, ThdDesc_t * pThd );
+void HandleCommandSphinxql ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq, ThdDesc_t & tThd ); // definition is below
+void HandleCommandJson ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq, ThdDesc_t & tThd );
 void StatCountCommand ( SearchdCommand_e eCmd );
 void HandleCommandUserVar ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq );
 
@@ -11585,10 +11611,10 @@ void HandleCommandPing ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tRe
 }
 
 static bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer,
-	int iLength, const char * sClientIP, int64_t iCID, ThdDesc_t * pThd,
+	int iLength, ThdDesc_t & tThd,
 	InputBuffer_c & tBuf, ISphOutputBuffer & tOut, bool bManagePersist );
 
-static void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * pThd ) REQUIRES ( HandlerThread )
+static void HandleClientSphinx ( int iSock, ThdDesc_t & tThd ) REQUIRES ( HandlerThread )
 {
 	if ( iSock<0 )
 	{
@@ -11597,9 +11623,10 @@ static void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * 
 	}
 
 	MEMORY ( MEM_API_HANDLE );
-	THD_STATE ( THD_HANDSHAKE );
+	ThdState ( THD_HANDSHAKE, tThd );
 
-	int64_t iCID = pThd->m_iConnID;
+	int64_t iCID = tThd.m_iConnID;
+	const char * sClientIP = tThd.m_sClientName.cstr();
 
 	// send my version
 	DWORD uServer = htonl ( SPHINX_SEARCHD_PROTO );
@@ -11636,7 +11663,7 @@ static void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * 
 		// currently, the only signal allowed to interrupt this read is SIGTERM
 		// letting SIGHUP interrupt causes trouble under query/rotation pressure
 		// see sphSockRead() and ReadFrom() for details
-		THD_STATE ( THD_NET_IDLE );
+		ThdState ( THD_NET_IDLE, tThd );
 		bool bCommand = tBuf.ReadFrom ( 8, iTimeout, bPersist );
 
 		// on SIGTERM, bail unconditionally and immediately, at all times
@@ -11675,7 +11702,7 @@ static void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * 
 
 		// okay, signal related mess should be over, try to parse the command
 		// (but some other socket error still might had happened, so beware)
-		THD_STATE ( THD_NET_READ );
+		ThdState ( THD_NET_READ, tThd );
 		auto eCommand = ( SearchdCommand_e ) tBuf.GetWord ();
 		WORD uCommandVer = tBuf.GetWord ();
 		int iLength = tBuf.GetInt ();
@@ -11714,7 +11741,7 @@ static void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * 
 			break;
 		}
 
-		bPersist |= LoopClientSphinx ( eCommand, uCommandVer, iLength, sClientIP, iCID, pThd, tBuf, tOut, true );
+		bPersist |= LoopClientSphinx ( eCommand, uCommandVer, iLength, tThd, tBuf, tOut, true );
 	} while ( bPersist );
 
 	if ( bPersist )
@@ -11724,7 +11751,7 @@ static void HandleClientSphinx ( int iSock, const char * sClientIP, ThdDesc_t * 
 }
 
 
-bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength, const char * sClientIP, int64_t iCID, ThdDesc_t * pThd, InputBuffer_c & tBuf, ISphOutputBuffer & tOut, bool bManagePersist )
+bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength, ThdDesc_t & tThd, InputBuffer_c & tBuf, ISphOutputBuffer & tOut, bool bManagePersist )
 {
 	// set on query guard
 	CrashQuery_t tCrashQuery;
@@ -11741,21 +11768,21 @@ bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength
 	// count commands
 	StatCountCommand ( eCommand );
 
-	pThd->m_sCommand = g_dApiCommands[eCommand];
-	THD_STATE ( THD_QUERY );
+	tThd.m_sCommand = g_dApiCommands[eCommand];
+	ThdState ( THD_QUERY, tThd );
 
 	bool bPersist = false;
-	sphLogDebugv ( "conn %s(" INT64_FMT "): got command %d, handling", sClientIP, iCID, eCommand );
+	sphLogDebugv ( "conn %s(%d): got command %d, handling", tThd.m_sClientName.cstr(), tThd.m_iConnID, eCommand );
 	switch ( eCommand )
 	{
-		case SEARCHD_COMMAND_SEARCH:	HandleCommandSearch ( tOut, uCommandVer, tBuf, pThd ); break;
-		case SEARCHD_COMMAND_EXCERPT:	HandleCommandExcerpt ( tOut, uCommandVer, tBuf, pThd ); break;
+		case SEARCHD_COMMAND_SEARCH:	HandleCommandSearch ( tOut, uCommandVer, tBuf, tThd ); break;
+		case SEARCHD_COMMAND_EXCERPT:	HandleCommandExcerpt ( tOut, uCommandVer, tBuf, tThd ); break;
 		case SEARCHD_COMMAND_KEYWORDS:	HandleCommandKeywords ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_UPDATE:	HandleCommandUpdate ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_PERSIST:
 			{
 				bPersist = ( tBuf.GetInt()!=0 );
-				sphLogDebugv ( "conn %s(" INT64_FMT "): pconn is now %s", sClientIP, iCID, bPersist ? "on" : "off" );
+				sphLogDebugv ( "conn %s(%d): pconn is now %s", tThd.m_sClientName.cstr(), tThd.m_iConnID, bPersist ? "on" : "off" );
 				if ( !bManagePersist ) // thread pool handles all persist connections
 					break;
 
@@ -11774,8 +11801,8 @@ bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength
 			break;
 		case SEARCHD_COMMAND_STATUS:	HandleCommandStatus ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_FLUSHATTRS:HandleCommandFlush ( tOut, uCommandVer ); break;
-		case SEARCHD_COMMAND_SPHINXQL:	HandleCommandSphinxql ( tOut, uCommandVer, tBuf, pThd ); break;
-		case SEARCHD_COMMAND_JSON:		HandleCommandJson ( tOut, uCommandVer, tBuf, pThd ); break;
+		case SEARCHD_COMMAND_SPHINXQL:	HandleCommandSphinxql ( tOut, uCommandVer, tBuf, tThd ); break;
+		case SEARCHD_COMMAND_JSON:		HandleCommandJson ( tOut, uCommandVer, tBuf, tThd ); break;
 		case SEARCHD_COMMAND_PING:		HandleCommandPing ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_UVAR:		HandleCommandUserVar ( tOut, uCommandVer, tBuf ); break;
 		default:						assert ( 0 && "INTERNAL ERROR: unhandled command" ); break;
@@ -13680,7 +13707,7 @@ enum
 };
 
 
-void HandleMysqlCallSnippets ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, ThdDesc_t * pThd )
+void HandleMysqlCallSnippets ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, ThdDesc_t & tThd )
 {
 	CSphString sError;
 
@@ -13786,9 +13813,9 @@ void HandleMysqlCallSnippets ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, ThdDesc
 		}
 	}
 
-	ThreadSetSnippetInfo ( dQueries[0].m_sWords.scstr (), GetSnippetDataSize ( dQueries ), true, *pThd );
+	ThreadSetSnippetInfo ( dQueries[0].m_sWords.scstr (), GetSnippetDataSize ( dQueries ), true, tThd );
 
-	if ( !MakeSnippets ( sIndex, dQueries, sError, pThd ) )
+	if ( !MakeSnippets ( sIndex, dQueries, sError, tThd ) )
 	{
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
@@ -14928,7 +14955,7 @@ public:
 //////////////////////////////////////////////////////////////////////////
 
 static void DoExtendedUpdate ( const char * sIndex, const QueryParserFactory_i & tQueryParserFactory, const char * sDistributed, const SqlStmt_t & tStmt, int & iSuccesses, int & iUpdated,
-	SearchFailuresLog_c & dFails, const ServedDesc_t * pServed, CSphString & sWarning, int iCID )
+	SearchFailuresLog_c & dFails, const ServedDesc_t * pServed, CSphString & sWarning, const ThdDesc_t & tThd )
 {
 	if ( !pServed || !pServed->m_pIndex )
 	{
@@ -14936,7 +14963,7 @@ static void DoExtendedUpdate ( const char * sIndex, const QueryParserFactory_i &
 		return;
 	}
 
-	SearchHandler_c tHandler ( 1, tQueryParserFactory.CreateQueryParser(), tStmt.m_tQuery.m_eQueryType, false, iCID );
+	SearchHandler_c tHandler ( 1, tQueryParserFactory.CreateQueryParser(), tStmt.m_tQuery.m_eQueryType, false, tThd );
 	CSphAttrUpdateEx tUpdate;
 	CSphString sError;
 
@@ -14959,7 +14986,7 @@ static void DoExtendedUpdate ( const char * sIndex, const QueryParserFactory_i &
 }
 
 
-void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const QueryParserFactory_i & tQueryParserFactory, const SqlStmt_t & tStmt, const CSphString & sQuery, CSphString & sWarning, int iCID )
+void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const QueryParserFactory_i & tQueryParserFactory, const SqlStmt_t & tStmt, const CSphString & sQuery, CSphString & sWarning, const ThdDesc_t & tThd )
 {
 	CSphString sError;
 
@@ -15000,10 +15027,10 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const QueryParserFactory
 		{
 			if ( bMvaUpdate )
 				DoExtendedUpdate ( sReqIndex, tQueryParserFactory, nullptr, tStmt, iSuccesses,
-					iUpdated, dFails, ServedDescWPtr_c ( pLocked ), sWarning, iCID );
+					iUpdated, dFails, ServedDescWPtr_c ( pLocked ), sWarning, tThd );
 			else
 				DoExtendedUpdate ( sReqIndex, tQueryParserFactory, nullptr, tStmt, iSuccesses,
-					iUpdated, dFails, ServedDescRPtr_c ( pLocked ), sWarning, iCID );
+					iUpdated, dFails, ServedDescRPtr_c ( pLocked ), sWarning, tThd );
 		} else if ( dDistributed[iIdx] )
 		{
 			assert ( !dDistributed[iIdx]->IsEmpty() );
@@ -15015,10 +15042,10 @@ void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const QueryParserFactory
 				auto pServed = GetServed ( sLocal );
 				if ( bMvaUpdate )
 					DoExtendedUpdate ( sLocal, tQueryParserFactory, sReqIndex, tStmt, iSuccesses,
-						iUpdated, dFails, ServedDescWPtr_c ( pServed ), sWarning, iCID );
+						iUpdated, dFails, ServedDescWPtr_c ( pServed ), sWarning, tThd );
 				else
 					DoExtendedUpdate ( sLocal, tQueryParserFactory, sReqIndex, tStmt, iSuccesses,
-						iUpdated, dFails, ServedDescRPtr_c ( pServed ), sWarning, iCID );
+						iUpdated, dFails, ServedDescRPtr_c ( pServed ), sWarning, tThd );
 			}
 		}
 
@@ -15059,7 +15086,7 @@ bool HandleMysqlSelect ( SqlRowBuffer_c & dRows, SearchHandler_c & tHandler )
 		CheckQuery ( tHandler.m_dQueries[i], tHandler.m_dResults[i].m_sError );
 		if ( !tHandler.m_dResults[i].m_sError.IsEmpty() )
 		{
-			LogQuery ( tHandler.m_dQueries[i], tHandler.m_dResults[i], dAgentTimes, tHandler.m_iCid );
+			LogQuery ( tHandler.m_dQueries[i], tHandler.m_dResults[i], dAgentTimes, tHandler.m_tThd.m_iConnID );
 			if ( sError.IsEmpty() )
 			{
 				if ( tHandler.m_dQueries.GetLength()==1 )
@@ -15650,7 +15677,7 @@ static int PercolateDeleteDocuments ( PercolateIndex_i * pIndex, const SqlStmt_t
 }
 
 static int LocalIndexDoDeleteDocuments ( const char * sName, const QueryParserFactory_i & tQueryParserFactory, const char * sDistributed, const SqlStmt_t & tStmt,
-	const SphDocID_t * pDocs, int iCount, const ServedDesc_t * pLocked, SearchFailuresLog_c & dErrors, bool bCommit, CSphSessionAccum & tAcc, int iCID )
+	const SphDocID_t * pDocs, int iCount, const ServedDesc_t * pLocked, SearchFailuresLog_c & dErrors, bool bCommit, CSphSessionAccum & tAcc, const ThdDesc_t & tThd )
 {
 	if ( !pLocked || !pLocked->m_pIndex )
 	{
@@ -15687,7 +15714,7 @@ static int LocalIndexDoDeleteDocuments ( const char * sName, const QueryParserFa
 	CSphVector<SphDocID_t> dValues;
 	if ( !pDocs ) // needs to be deleted via query
 	{
-		pHandler = new SearchHandler_c ( 1, tQueryParserFactory.CreateQueryParser(), tStmt.m_tQuery.m_eQueryType, false, iCID );
+		pHandler = new SearchHandler_c ( 1, tQueryParserFactory.CreateQueryParser(), tStmt.m_tQuery.m_eQueryType, false, tThd );
 		pHandler->m_dLocked.AddUnmanaged ( sName, pLocked );
 		pHandler->RunDeletes ( tStmt.m_tQuery, sName, &sError, &dValues );
 		pDocs = dValues.Begin();
@@ -15708,7 +15735,7 @@ static int LocalIndexDoDeleteDocuments ( const char * sName, const QueryParserFa
 }
 
 
-void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const QueryParserFactory_i & tQueryParserFactory, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit, CSphSessionAccum & tAcc, int iCID )
+void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const QueryParserFactory_i & tQueryParserFactory, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit, CSphSessionAccum & tAcc, const ThdDesc_t & tThd )
 {
 	MEMORY ( MEM_SQL_DELETE );
 
@@ -15787,7 +15814,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const QueryParserFactory
 		auto pLocal = GetServed ( sName );
 		if ( pLocal )
 			iAffected += LocalIndexDoDeleteDocuments ( sName, tQueryParserFactory, nullptr,
-				tStmt, pDocs, iDocsCount, ServedDescRPtr_c ( pLocal ), dErrors, bCommit, tAcc, iCID );
+				tStmt, pDocs, iDocsCount, ServedDescRPtr_c ( pLocal ), dErrors, bCommit, tAcc, tThd );
 		else if ( dDistributed[iIdx] )
 		{
 			assert ( !dDistributed[iIdx]->IsEmpty() );
@@ -15796,7 +15823,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const QueryParserFactory
 				auto pDistLocal = GetServed ( sLocal );
 				if ( pDistLocal )
 					iAffected += LocalIndexDoDeleteDocuments ( sLocal.cstr(), tQueryParserFactory, sName,
-						tStmt, pDocs, iDocsCount, ServedDescRPtr_c ( pDistLocal ), dErrors, bCommit, tAcc, iCID );
+						tStmt, pDocs, iDocsCount, ServedDescRPtr_c ( pDistLocal ), dErrors, bCommit, tAcc, tThd );
 			}
 		}
 
@@ -15881,7 +15908,7 @@ const char * CSphQueryProfileMysql::GetResultAsStr() const
 
 
 void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResultMeta & tLastMeta,
-	SqlRowBuffer_c & dRows, ThdDesc_t * pThd, const CSphString& sWarning )
+	SqlRowBuffer_c & dRows, ThdDesc_t & tThd, const CSphString& sWarning )
 {
 	// select count
 	int iSelect = 0;
@@ -15891,12 +15918,12 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 
 	CSphQueryResultMeta tPrevMeta = tLastMeta;
 
-	pThd->m_sCommand = g_dSqlStmts[STMT_SELECT];
+	tThd.m_sCommand = g_dSqlStmts[STMT_SELECT];
 	for ( int i=0; i<iSelect; i++ )
 		StatCountCommand ( SEARCHD_COMMAND_SEARCH );
 
 	// setup query for searching
-	SearchHandler_c tHandler ( iSelect, sphCreatePlainQueryParser(), QUERY_SQL, true, pThd->m_iConnID );
+	SearchHandler_c tHandler ( iSelect, sphCreatePlainQueryParser(), QUERY_SQL, true, tThd );
 	SessionVars_t tVars;
 	CSphQueryProfileMysql tProfile;
 
@@ -15946,8 +15973,8 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	{
 		SqlStmt_e eStmt = dStmt[i].m_eStmt;
 
-		THD_STATE ( THD_QUERY );
-		pThd->m_sCommand = g_dSqlStmts[eStmt];
+		ThdState ( THD_QUERY, tThd );
+		tThd.m_sCommand = g_dSqlStmts[eStmt];
 
 		const CSphQueryResultMeta & tMeta = bUseFirstMeta ? tHandler.m_dResults[0] : ( iSelect-1>=0 ? tHandler.m_dResults[iSelect-1] : tPrevMeta );
 		bool bMoreResultsFollow = (i+1)<dStmt.GetLength();
@@ -17361,7 +17388,7 @@ public:
 	//
 	// returns true if the current profile should be kept (default)
 	// returns false if profile should be discarded (eg. SHOW PROFILE case)
-	bool Execute ( const CSphString & sQuery, ISphOutputBuffer & tOutput, BYTE & uPacketID, ThdDesc_t * pThd )
+	bool Execute ( const CSphString & sQuery, ISphOutputBuffer & tOutput, BYTE & uPacketID, ThdDesc_t & tThd )
 	{
 		// set on query guard
 		CrashQuery_t tCrashQuery;
@@ -17393,10 +17420,10 @@ public:
 		SqlStmt_t * pStmt = dStmt.Begin();
 		assert ( !bParsedOK || pStmt );
 
-		pThd->m_sCommand = g_dSqlStmts[eStmt];
-		THD_STATE ( THD_QUERY );
+		tThd.m_sCommand = g_dSqlStmts[eStmt];
+		ThdState ( THD_QUERY, tThd );
 
-		SqlRowBuffer_c tOut ( &uPacketID, &tOutput, pThd->m_iConnID, m_tVars.m_bAutoCommit );
+		SqlRowBuffer_c tOut ( &uPacketID, &tOutput, tThd.m_iConnID, m_tVars.m_bAutoCommit );
 
 		if ( bParsedOK && m_bFederatedUser )
 		{
@@ -17414,7 +17441,7 @@ public:
 		if ( bParsedOK && dStmt.GetLength()>1 )
 		{
 			m_sError = "";
-			HandleMysqlMultiStmt ( dStmt, m_tLastMeta, tOut, pThd, m_sError );
+			HandleMysqlMultiStmt ( dStmt, m_tLastMeta, tOut, tThd, m_sError );
 			return true; // FIXME? how does this work with profiling?
 		}
 
@@ -17445,7 +17472,7 @@ public:
 				}
 
 				StatCountCommand ( SEARCHD_COMMAND_SEARCH );
-				SearchHandler_c tHandler ( 1, sphCreatePlainQueryParser(), QUERY_SQL, true, pThd->m_iConnID );
+				SearchHandler_c tHandler ( 1, sphCreatePlainQueryParser(), QUERY_SQL, true, tThd );
 				tHandler.SetQuery ( 0, dStmt.Begin()->m_tQuery );
 
 				if ( m_tVars.m_bProfile )
@@ -17503,7 +17530,7 @@ public:
 				StatCountCommand ( SEARCHD_COMMAND_DELETE );
 				StmtErrorReporter_c tErrorReporter ( tOut );
 				PlainParserFactory_c tParserFactory;
-				sphHandleMysqlDelete ( tErrorReporter, tParserFactory, *pStmt, sQuery, m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction, m_tAcc, pThd->m_iConnID );
+				sphHandleMysqlDelete ( tErrorReporter, tParserFactory, *pStmt, sQuery, m_tVars.m_bAutoCommit && !m_tVars.m_bInTransaction, m_tAcc, tThd );
 				return true;
 			}
 
@@ -17566,7 +17593,7 @@ public:
 			if ( pStmt->m_sCallProc=="SNIPPETS" )
 			{
 				StatCountCommand ( SEARCHD_COMMAND_EXCERPT );
-				HandleMysqlCallSnippets ( tOut, *pStmt, pThd );
+				HandleMysqlCallSnippets ( tOut, *pStmt, tThd );
 			} else if ( pStmt->m_sCallProc=="KEYWORDS" )
 			{
 				StatCountCommand ( SEARCHD_COMMAND_KEYWORDS );
@@ -17606,7 +17633,7 @@ public:
 				StatCountCommand ( SEARCHD_COMMAND_UPDATE );
 				StmtErrorReporter_c tErrorReporter ( tOut );
 				PlainParserFactory_c tParserFactory;
-				sphHandleMysqlUpdate ( tErrorReporter, tParserFactory, *pStmt, sQuery, m_tLastMeta.m_sWarning, pThd->m_iConnID );
+				sphHandleMysqlUpdate ( tErrorReporter, tParserFactory, *pStmt, sQuery, m_tLastMeta.m_sWarning, tThd );
 				return true;
 			}
 
@@ -17782,7 +17809,7 @@ public:
 
 
 /// sphinxql command over API
-void HandleCommandSphinxql ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq, ThdDesc_t * pThd ) REQUIRES (HandlerThread)
+void HandleCommandSphinxql ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq, ThdDesc_t & tThd ) REQUIRES (HandlerThread)
 {
 	if ( !CheckCommandVersion ( uVer, VER_COMMAND_SPHINXQL, tOut ) )
 		return;
@@ -17802,14 +17829,14 @@ void HandleCommandSphinxql ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c &
 	// fixme! why do we need these stranges (separate output buffer, etc) if we just unconditionally send it's content?
 	// m.b. reduce it to tSessionExecute (.. tOut..)?
 	ISphOutputBuffer tMemOut;
-	tSession.Execute ( sCommand, tMemOut, uDummy, pThd );
+	tSession.Execute ( sCommand, tMemOut, uDummy, tThd );
 
 	tOut.SendOutput ( tMemOut );
 	tOut.Flush();
 }
 
 /// json command over API
-void HandleCommandJson ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq, ThdDesc_t * pThd )
+void HandleCommandJson ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tReq, ThdDesc_t & tThd )
 {
 	if ( !CheckCommandVersion ( uVer, VER_COMMAND_JSON, tOut ) )
 		return;
@@ -17823,7 +17850,7 @@ void HandleCommandJson ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & tRe
 
 	CSphVector<BYTE> dResult;
 	SmallStringHash_T<CSphString> tOptions;
-	sphProcessHttpQueryNoResponce ( eEndpoint, sCommand, tOptions, pThd->m_iConnID, dResult );
+	sphProcessHttpQueryNoResponce ( eEndpoint, sCommand, tOptions, tThd, dResult );
 
 	tOut.Flush();
 	tOut.SendWord ( SEARCHD_OK );
@@ -17944,19 +17971,20 @@ bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dSt
 }
 
 static bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString & sQuery,
-	int iPacketLen, bool bProfile, ThdDesc_t * pThd, InputBuffer_c & tIn, ISphOutputBuffer & tOut );
+	int iPacketLen, bool bProfile, ThdDesc_t & tThd, InputBuffer_c & tIn, ISphOutputBuffer & tOut );
 
-static void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * pThd ) REQUIRES ( HandlerThread )
+static void HandleClientMySQL ( int iSock, ThdDesc_t & tThd ) REQUIRES ( HandlerThread )
 {
 	MEMORY ( MEM_SQL_HANDLE );
-	THD_STATE ( THD_HANDSHAKE );
+	ThdState ( THD_HANDSHAKE, tThd );
 
 	// set off query guard
 	CrashQuery_t tCrashQuery;
 	tCrashQuery.m_bMySQL = true;
 	SphCrashLogger_c::SetLastQuery ( tCrashQuery );
 
-	int iCID = pThd->m_iConnID;
+	int iCID = tThd.m_iConnID;
+	const char * sClientIP = tThd.m_sClientName.cstr();
 
 	if ( sphSockSend ( iSock, g_sMysqlHandshake, g_iMysqlHandshake )!=g_iMysqlHandshake )
 	{
@@ -17967,7 +17995,7 @@ static void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * p
 
 	CSphString sQuery; // to keep data alive for SphCrashQuery_c
 	CSphinxqlSession tSession ( false ); // session variables and state
-	tSession.m_tVars.m_bVIP = pThd->m_bVip;
+	tSession.m_tVars.m_bVIP = tThd.m_bVip;
 	bool bAuthed = false;
 	BYTE uPacketID = 1;
 
@@ -17978,7 +18006,7 @@ static void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * p
 
 		// get next packet
 		// we want interruptible calls here, so that shutdowns could be honored
-		THD_STATE ( THD_NET_IDLE );
+		ThdState ( THD_NET_IDLE, tThd );
 		if ( !tIn.ReadFrom ( 4, g_iClientQlTimeout, true ) )
 		{
 			sphLogDebugv ( "conn %s(%d): bailing on failed MySQL header (sockerr=%s)", sClientIP, iCID, sphSockError() );
@@ -17994,7 +18022,7 @@ static void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * p
 		}
 
 		// keep getting that packet
-		THD_STATE ( THD_NET_READ );
+		ThdState ( THD_NET_READ, tThd );
 		const int MAX_PACKET_LEN = 0xffffffL; // 16777215 bytes, max low level packet size
 		DWORD uPacketHeader = tIn.GetLSBDword ();
 		int iPacketLen = ( uPacketHeader & MAX_PACKET_LEN );
@@ -18046,7 +18074,7 @@ static void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * p
 		// handle auth packet
 		if ( !bAuthed )
 		{
-			THD_STATE ( THD_NET_WRITE );
+			ThdState ( THD_NET_WRITE, tThd );
 			bAuthed = true;
 			if ( IsFederatedUser ( tIn.GetBufferPtr(), tIn.GetLength() ) )
 				tSession.SetFederatedUser();
@@ -18058,7 +18086,7 @@ static void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * p
 				continue;
 		}
 
-		bool bRun = LoopClientMySQL ( uPacketID, tSession, sQuery, iPacketLen, bProfile, pThd, tIn, tOut );
+		bool bRun = LoopClientMySQL ( uPacketID, tSession, sQuery, iPacketLen, bProfile, tThd, tIn, tOut );
 
 		if ( !bRun )
 			break;
@@ -18069,7 +18097,7 @@ static void HandleClientMySQL ( int iSock, const char * sClientIP, ThdDesc_t * p
 }
 
 bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString & sQuery, int iPacketLen,
-	bool bProfile, ThdDesc_t * pThd, InputBuffer_c & tIn, ISphOutputBuffer & tOut )
+	bool bProfile, ThdDesc_t & tThd, InputBuffer_c & tIn, ISphOutputBuffer & tOut )
 {
 	// get command, handle special packets
 	const BYTE uMysqlCmd = tIn.GetByte ();
@@ -18097,20 +18125,20 @@ bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString
 			assert ( uMysqlCmd==MYSQL_COM_QUERY );
 			sQuery = tIn.GetRawString ( iPacketLen-1 ); // OPTIMIZE? could be huge; avoid copying?
 			assert ( !tIn.GetError() );
-			THD_STATE ( THD_QUERY );
-			pThd->SetThreadInfo ( "%s", sQuery.cstr() ); // OPTIMIZE? could be huge; avoid copying?
-			bKeepProfile = tSession.Execute ( sQuery, tOut, uPacketID, pThd );
+			ThdState ( THD_QUERY, tThd );
+			tThd.SetThreadInfo ( "%s", sQuery.cstr() ); // OPTIMIZE? could be huge; avoid copying?
+			bKeepProfile = tSession.Execute ( sQuery, tOut, uPacketID, tThd );
 			break;
 
 		default:
 			// default case, unknown command
 			sError.SetSprintf ( "unknown command (code=%d)", uMysqlCmd );
-				SendMysqlErrorPacket ( tOut, uPacketID, NULL, sError.cstr(), pThd->m_iConnID, MYSQL_ERR_UNKNOWN_COM_ERROR );
+				SendMysqlErrorPacket ( tOut, uPacketID, NULL, sError.cstr(), tThd.m_iConnID, MYSQL_ERR_UNKNOWN_COM_ERROR );
 			break;
 	}
 
 	// send the response packet
-	THD_STATE ( THD_NET_WRITE );
+	ThdState ( THD_NET_WRITE, tThd );
 	tOut.Flush();
 	if ( tOut.GetError() )
 		return false;
@@ -18128,12 +18156,12 @@ bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString
 // HANDLE-BY-LISTENER
 //////////////////////////////////////////////////////////////////////////
 
-void HandleClient ( ProtocolType_e eProto, int iSock, const char * sClientIP, ThdDesc_t * pThd ) REQUIRES (HandlerThread)
+void HandleClient ( ProtocolType_e eProto, int iSock, ThdDesc_t & tThd ) REQUIRES (HandlerThread)
 {
 	switch ( eProto )
 	{
-		case PROTO_SPHINX:		HandleClientSphinx ( iSock, sClientIP, pThd ); break;
-		case PROTO_MYSQL41:		HandleClientMySQL ( iSock, sClientIP, pThd ); break;
+		case PROTO_SPHINX:		HandleClientSphinx ( iSock, tThd ); break;
+		case PROTO_MYSQL41:		HandleClientMySQL ( iSock, tThd ); break;
 		default:				assert ( 0 && "unhandled protocol type" ); break;
 	}
 }
@@ -20871,7 +20899,7 @@ void HandlerThreadFunc ( void * pArg ) REQUIRES ( !HandlerThread )
 	// handle that client
 	ThdDesc_t * pThd = (ThdDesc_t*) pArg;
 	pThd->m_iTid = GetOsThreadId();
-	HandleClient ( pThd->m_eProto, pThd->m_iClientSock, pThd->m_sClientName.cstr(), pThd );
+	HandleClient ( pThd->m_eProto, pThd->m_iClientSock, *pThd );
 	sphSockClose ( pThd->m_iClientSock );
 
 	// done; remove myself from the table
@@ -22778,7 +22806,7 @@ void ThdJobAPI_t::Call ()
 		m_tState->m_bKeepSocket = false;
 	} else
 	{
-		bool bProceed = LoopClientSphinx ( m_eCommand, m_uCommandVer, m_tState->m_dBuf.GetLength(), m_tState->m_sClientName, m_tState->m_iConnID, &tThdDesc, tBuf, tOut, false );
+		bool bProceed = LoopClientSphinx ( m_eCommand, m_uCommandVer, m_tState->m_dBuf.GetLength(), tThdDesc, tBuf, tOut, false );
 		m_tState->m_bKeepSocket |= bProceed;
 	}
 
@@ -22847,7 +22875,7 @@ void ThdJobQL_t::Call ()
 		SendMysqlErrorPacket ( tOut, m_tState->m_uPacketID, NULL, "server is in maintenance mode", tThdDesc.m_iConnID, MYSQL_ERR_UNKNOWN_COM_ERROR );
 	else
 	{
-		bSendResponse = LoopClientMySQL ( m_tState->m_uPacketID, m_tState->m_tSession, sQuery, m_tState->m_dBuf.GetLength(), bProfile, &tThdDesc, tIn, tOut );
+		bSendResponse = LoopClientMySQL ( m_tState->m_uPacketID, m_tState->m_tSession, sQuery, m_tState->m_dBuf.GetLength(), bProfile, tThdDesc, tIn, tOut );
 		m_tState->m_bKeepSocket = bSendResponse;
 	}
 
@@ -22942,7 +22970,7 @@ void ThdJobHttp_t::Call ()
 	} else
 	{
 		CSphVector<BYTE> dResult;
-		m_tState->m_bKeepSocket = sphLoopClientHttp ( m_tState->m_dBuf.Begin(), m_tState->m_dBuf.GetLength(), dResult, m_tState->m_iConnID );
+		m_tState->m_bKeepSocket = sphLoopClientHttp ( m_tState->m_dBuf.Begin(), m_tState->m_dBuf.GetLength(), dResult, tThdDesc );
 		m_tState->m_dBuf = std::move(dResult);
 	}
 

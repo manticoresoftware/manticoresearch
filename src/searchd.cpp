@@ -283,6 +283,9 @@ struct ThdDesc_t : public ListNode_t
 	bool			m_bSystem = false;
 	CSphFixedVector<char> m_dBuf {512};	///< current request description
 
+	const CSphQuery *	m_pQuery = nullptr;
+	CSphMutex			m_tQueryLock;
+
 	ThdDesc_t ()
 	{
 		m_dBuf[0] = '\0';
@@ -304,15 +307,14 @@ struct ThdDesc_t : public ListNode_t
 		if ( iPrinted>0 )
 			m_dBuf[Min ( iPrinted, m_dBuf.GetLength()-1 )] = '\0';
 	}
-};
 
-static void ThdState ( ThdState_e eState, ThdDesc_t & tThd )
-{
-	tThd.m_eThdState = eState;
-	tThd.m_tmStart = sphMicroTimer();
-	if ( eState==THD_NET_IDLE )
-		tThd.m_dBuf[0] = '\0';
-}
+	void SetSearchQuery ( const CSphQuery * pQuery )
+	{
+		m_tQueryLock.Lock();
+		m_pQuery = pQuery;
+		m_tQueryLock.Unlock();
+	}
+};
 
 static CSphMutex				g_tThdMutex;
 static List_t					g_dThd;				///< existing threads table
@@ -342,6 +344,14 @@ static void ThreadRemove ( ThdDesc_t * pThd )
 	g_tThdMutex.Lock();
 	g_dThd.Remove ( pThd );
 	g_tThdMutex.Unlock();
+}
+
+static void ThdState ( ThdState_e eState, ThdDesc_t & tThd )
+{
+	tThd.m_eThdState = eState;
+	tThd.m_tmStart = sphMicroTimer();
+	if ( eState==THD_NET_IDLE )
+		tThd.m_dBuf[0] = '\0';
 }
 
 // forward
@@ -4336,6 +4346,7 @@ static void FormatOrderBy ( StringBuilder_c * pBuf, const char * sPrefix, ESphSo
 
 static const CSphQuery g_tDefaultQuery;
 
+static void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuilder & tBuf );
 static void FormatList ( const CSphVector<CSphNamedInt> & dValues, StringBuilder_c & tBuf )
 {
 	ARRAY_FOREACH ( i, dValues )
@@ -4513,6 +4524,66 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes
 	// format request as SELECT query
 	///////////////////////////////////
 
+	FormatSphinxql ( q, iCompactIN, tBuf );
+
+	///////////////
+	// query stats
+	///////////////
+
+	if ( !tRes.m_sError.IsEmpty() )
+	{
+		// all we have is an error
+		tBuf.Appendf ( " /""* error=%s */", tRes.m_sError.cstr() );
+
+	} else if ( g_bIOStats || g_bCpuStats || dAgentTimes.GetLength() || !tRes.m_sWarning.IsEmpty() )
+	{
+		// got some extra data, add a comment
+		tBuf += " /""*";
+
+		// performance counters
+		if ( g_bIOStats || g_bCpuStats )
+		{
+			const CSphIOStats & IOStats = tRes.m_tIOStats;
+
+			if ( g_bIOStats )
+				tBuf.Appendf ( " ios=%d kb=%d.%d ioms=%d.%d",
+				IOStats.m_iReadOps, (int)( IOStats.m_iReadBytes/1024 ), (int)( IOStats.m_iReadBytes%1024 )*10/1024,
+				(int)( IOStats.m_iReadTime/1000 ), (int)( IOStats.m_iReadTime%1000 )/100 );
+
+			if ( g_bCpuStats )
+				tBuf.Appendf ( " cpums=%d.%d", (int)( tRes.m_iCpuTime/1000 ), (int)( tRes.m_iCpuTime%1000 )/100 );
+		}
+
+		// per-agent times
+		if ( dAgentTimes.GetLength() )
+		{
+			tBuf += " agents=(";
+			ARRAY_FOREACH ( i, dAgentTimes )
+				tBuf.Appendf ( i ? ", %d.%03d" : "%d.%03d",
+					(int)(dAgentTimes[i]/1000),
+					(int)(dAgentTimes[i]%1000) );
+
+			tBuf += ")";
+		}
+
+		// warning
+		if ( !tRes.m_sWarning.IsEmpty() )
+			tBuf.Appendf ( " warning=%s", tRes.m_sWarning.cstr() );
+
+		// close the comment
+		tBuf += " */";
+	}
+
+	// line feed
+	tBuf += "\n";
+
+	sphSeek ( g_iQueryLogFile, 0, SEEK_END );
+	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.Length() );
+}
+
+
+void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuilder & tBuf )
+{
 	if ( q.m_bHasOuter )
 		tBuf += "SELECT * FROM (";
 
@@ -4577,62 +4648,7 @@ static void LogQuerySphinxql ( const CSphQuery & q, const CSphQueryResult & tRes
 
 	// finish SQL statement
 	tBuf += ";";
-
-	///////////////
-	// query stats
-	///////////////
-
-	if ( !tRes.m_sError.IsEmpty() )
-	{
-		// all we have is an error
-		tBuf.Appendf ( " /""* error=%s */", tRes.m_sError.cstr() );
-
-	} else if ( g_bIOStats || g_bCpuStats || dAgentTimes.GetLength() || !tRes.m_sWarning.IsEmpty() )
-	{
-		// got some extra data, add a comment
-		tBuf += " /""*";
-
-		// performance counters
-		if ( g_bIOStats || g_bCpuStats )
-		{
-			const CSphIOStats & IOStats = tRes.m_tIOStats;
-
-			if ( g_bIOStats )
-				tBuf.Appendf ( " ios=%d kb=%d.%d ioms=%d.%d",
-				IOStats.m_iReadOps, (int)( IOStats.m_iReadBytes/1024 ), (int)( IOStats.m_iReadBytes%1024 )*10/1024,
-				(int)( IOStats.m_iReadTime/1000 ), (int)( IOStats.m_iReadTime%1000 )/100 );
-
-			if ( g_bCpuStats )
-				tBuf.Appendf ( " cpums=%d.%d", (int)( tRes.m_iCpuTime/1000 ), (int)( tRes.m_iCpuTime%1000 )/100 );
-		}
-
-		// per-agent times
-		if ( dAgentTimes.GetLength() )
-		{
-			tBuf += " agents=(";
-			ARRAY_FOREACH ( i, dAgentTimes )
-				tBuf.Appendf ( i ? ", %d.%03d" : "%d.%03d",
-					(int)(dAgentTimes[i]/1000),
-					(int)(dAgentTimes[i]%1000) );
-
-			tBuf += ")";
-		}
-
-		// warning
-		if ( !tRes.m_sWarning.IsEmpty() )
-			tBuf.Appendf ( " warning=%s", tRes.m_sWarning.cstr() );
-
-		// close the comment
-		tBuf += " */";
-	}
-
-	// line feed
-	tBuf += "\n";
-
-	sphSeek ( g_iQueryLogFile, 0, SEEK_END );
-	sphWrite ( g_iQueryLogFile, tBuf.cstr(), tBuf.Length() );
 }
-
 
 static void LogQuery ( const CSphQuery & q, const CSphQueryResult & tRes, const CSphVector<int64_t> & dAgentTimes, int iCid )
 {
@@ -5636,7 +5652,7 @@ static void ProcessLocalPostlimit ( const CSphQuery & tQuery, AggrResult_t & tRe
 
 /// merges multiple result sets, remaps columns, does reorder for outer selects
 /// query is only (!) non-const to tweak order vs reorder clauses
-bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, CSphSchema * pExtraSchema, CSphQueryProfile * pProfiler, const CSphFilterSettings * pAggrFilter, bool bForceRefItems )
+bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, int iLocals, CSphSchema * pExtraSchema, CSphQueryProfile * pProfiler, const CSphFilterSettings * pAggrFilter, bool bForceRefItems )
 {
 	// sanity check
 	// verify that the match counts are consistent
@@ -5862,13 +5878,14 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 	if ( tRes.m_iSuccesses>1 || pAggrFilter )
 	{
 		ESphSortOrder eQuerySort = ( tQuery.m_sOuterOrderBy.IsEmpty() ? SPH_SORT_RELEVANCE : SPH_SORT_EXTENDED );
+		CSphQuery tQueryCopy = tQuery;
 		// got outer order? gotta do a couple things
-		if ( tQuery.m_bHasOuter )
+		if ( tQueryCopy.m_bHasOuter )
 		{
 			// first, temporarily patch up sorting clause and max_matches (we will restore them later)
-			Swap ( tQuery.m_sOuterOrderBy, tQuery.m_sGroupBy.IsEmpty() ? tQuery.m_sSortBy : tQuery.m_sGroupSortBy );
-			Swap ( eQuerySort, tQuery.m_eSort );
-			tQuery.m_iMaxMatches *= tRes.m_dMatchCounts.GetLength();
+			Swap ( tQueryCopy.m_sOuterOrderBy, tQueryCopy.m_sGroupBy.IsEmpty() ? tQueryCopy.m_sSortBy : tQueryCopy.m_sGroupSortBy );
+			Swap ( eQuerySort, tQueryCopy.m_eSort );
+			tQueryCopy.m_iMaxMatches *= tRes.m_dMatchCounts.GetLength();
 			// FIXME? probably not right; 20 shards with by 300 matches might be too much
 			// but propagating too small inner max_matches to the outer is not right either
 
@@ -5877,8 +5894,8 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 			int iSetStart = 0;
 			for ( int & iCurMatches : tRes.m_dMatchCounts )
 			{
-				assert ( tQuery.m_iLimit>=0 );
-				int iLimitedMatches = Min ( tQuery.m_iLimit, iCurMatches );
+				assert ( tQueryCopy.m_iLimit>=0 );
+				int iLimitedMatches = Min ( tQueryCopy.m_iLimit, iCurMatches );
 				for ( int i=0; i<iLimitedMatches; ++i )
 					Swap ( tRes.m_dMatches[iOut++], tRes.m_dMatches[iSetStart+i] );
 				iSetStart += iCurMatches;
@@ -5892,17 +5909,17 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 		//
 		// create queue
 		// at this point, we do not need to compute anything; it all must be here
-		SphQueueSettings_t tQueueSettings ( tQuery, tRes.m_tSchema, tRes.m_sError );
+		SphQueueSettings_t tQueueSettings ( tQueryCopy, tRes.m_tSchema, tRes.m_sError );
 		tQueueSettings.m_bComputeItems = false;
 		tQueueSettings.m_pAggrFilter = pAggrFilter;
 		CSphScopedPtr<ISphMatchSorter> pSorter  ( sphCreateQueue ( tQueueSettings ) );
 
 		// restore outer order related patches, or it screws up the query log
-		if ( tQuery.m_bHasOuter )
+		if ( tQueryCopy.m_bHasOuter )
 		{
-			Swap ( tQuery.m_sOuterOrderBy, tQuery.m_sGroupBy.IsEmpty() ? tQuery.m_sSortBy : tQuery.m_sGroupSortBy );
-			Swap ( eQuerySort, tQuery.m_eSort );
-			tQuery.m_iMaxMatches /= tRes.m_dMatchCounts.GetLength();
+			Swap ( tQueryCopy.m_sOuterOrderBy, tQueryCopy.m_sGroupBy.IsEmpty() ? tQueryCopy.m_sSortBy : tQueryCopy.m_sGroupSortBy );
+			Swap ( eQuerySort, tQueryCopy.m_eSort );
+			tQueryCopy.m_iMaxMatches /= tRes.m_dMatchCounts.GetLength();
 		}
 
 		if ( !pSorter )
@@ -5937,7 +5954,7 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, CSphQuery & tQuery, int iLocals, 
 			if ( iLocals )
 			{
 				CSphScopedProfile tProf ( pProfiler, SPH_QSTATE_EVAL_POST );
-				ProcessLocalPostlimit ( tQuery, tRes );
+				ProcessLocalPostlimit ( tQueryCopy, tRes );
 			}
 
 			RemapResult ( &tRes.m_tSchema, &tRes );
@@ -6481,7 +6498,7 @@ public:
 	void							RunQueries () final;					///< run all queries, get all results
 	void							RunUpdates ( const CSphQuery & tQuery, const CSphString & sIndex, CSphAttrUpdateEx * pUpdates ); ///< run Update command instead of Search
 	void							RunDeletes ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors, CSphVector<SphDocID_t> * pDelDocs );
-	void							SetQuery ( int iQuery, const CSphQuery & tQuery ) final;
+	void							SetQuery ( int iQuery, const CSphQuery & tQuery, ISphTableFunc * pTableFunc ) final;
 	void							SetQueryParser ( const QueryParser_i * pParser );
 	void							SetQueryType ( QueryType_e eQueryType );
 	void							SetProfile ( CSphQueryProfile * pProfile ) final;
@@ -6495,6 +6512,7 @@ public:
 	CSphVector<SearchFailuresLog_c>	m_dFailuresSet;					///< failure logs for each query
 	CSphVector < CSphVector<int64_t> >	m_dAgentTimes;				///< per-agent time stats
 	LockedCollection_c				m_dLocked;						/// locked indexes
+	CSphFixedVector<ISphTableFunc *>	m_dTables;
 	const ThdDesc_t &				m_tThd;
 
 protected:
@@ -6547,7 +6565,8 @@ ISphSearchHandler * sphCreateSearchHandler ( int iQueries, const QueryParser_i *
 
 
 SearchHandler_c::SearchHandler_c ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster, const ThdDesc_t & tThd )
-	: m_tThd ( tThd )
+	: m_dTables ( iQueries )
+	, m_tThd ( tThd )
 {
 	m_dQueries.Resize ( iQueries );
 	m_dResults.Resize ( iQueries );
@@ -6556,6 +6575,8 @@ SearchHandler_c::SearchHandler_c ( int iQueries, const QueryParser_i * pQueryPar
 	m_dAgentTimes.Resize ( iQueries );
 	m_bMaster = bMaster;
 	m_bFederatedUser = false;
+	ARRAY_FOREACH ( i, m_dTables )
+		m_dTables[i] = nullptr;
 
 	SetQueryParser ( pQueryParser );
 	SetQueryType ( eQueryType );
@@ -6565,6 +6586,8 @@ SearchHandler_c::SearchHandler_c ( int iQueries, const QueryParser_i * pQueryPar
 SearchHandler_c::~SearchHandler_c ()
 {
 	SafeDelete ( m_pQueryParser );
+	ARRAY_FOREACH ( i, m_dTables )
+		SafeDelete ( m_dTables[i] );
 }
 
 
@@ -6639,7 +6662,7 @@ void SearchHandler_c::RunDeletes ( const CSphQuery &tQuery, const CSphString &sI
 
 void SearchHandler_c::RunActionQuery ( const CSphQuery & tQuery, const CSphString & sIndex, CSphString * pErrors )
 {
-	SetQuery ( 0, tQuery );
+	SetQuery ( 0, tQuery, nullptr );
 	m_dQueries[0].m_sIndexes = sIndex;
 	m_dResults[0].m_dTag2Pools.Resize ( 1 );
 	m_dLocal.Add ().m_sName = sIndex;
@@ -6688,11 +6711,12 @@ void SearchHandler_c::RunActionQuery ( const CSphQuery & tQuery, const CSphStrin
 	LogQuery ( m_dQueries[0], m_dResults[0], m_dAgentTimes[0], m_tThd.m_iConnID );
 }
 
-void SearchHandler_c::SetQuery ( int iQuery, const CSphQuery & tQuery )
+void SearchHandler_c::SetQuery ( int iQuery, const CSphQuery & tQuery, ISphTableFunc * pTableFunc )
 {
 	m_dQueries[iQuery] = tQuery;
 	m_dQueries[iQuery].m_pQueryParser = m_pQueryParser;
 	m_dQueries[iQuery].m_eQueryType = m_eQueryType;
+	m_dTables[iQuery] = pTableFunc;
 }
 
 
@@ -7747,7 +7771,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 
 
 	// prepare for descent
-	CSphQuery & tFirst = m_dQueries[iStart];
+	const CSphQuery & tFirst = m_dQueries[iStart];
 
 	for ( int iRes=iStart; iRes<=iEnd; ++iRes )
 		m_dResults[iRes].m_iSuccesses = 0;
@@ -8078,7 +8102,7 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	for ( int iRes=iStart; iRes<=iEnd; ++iRes )
 	{
 		AggrResult_t & tRes = m_dResults[iRes];
-		CSphQuery & tQuery = m_dQueries[iRes];
+		const CSphQuery & tQuery = m_dQueries[iRes];
 		// fixme! wonder why Begin(), not [iRes]-ed schema here?
 		CSphSchemaMT * pExtraSchema = tQuery.m_bAgent ? m_dExtraSchemas.Begin() : nullptr;
 
@@ -8150,17 +8174,15 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	for ( int iRes=iStart; iRes<=iEnd; ++iRes )
 	{
 		AggrResult_t & tRes = m_dResults[iRes];
-		CSphQuery & tQuery = m_dQueries[iRes];
+		ISphTableFunc * pTableFunc = m_dTables[iRes];
 
 		// FIXME! log such queries properly?
-		if ( tQuery.m_pTableFunc )
+		if ( pTableFunc )
 		{
 			if ( m_pProfile )
 				m_pProfile->Switch ( SPH_QSTATE_TABLE_FUNC );
-			if ( !tQuery.m_pTableFunc->Process ( &tRes, tRes.m_sError ) )
+			if ( !pTableFunc->Process ( &tRes, tRes.m_sError ) )
 				tRes.m_iSuccesses = 0;
-			// we don't need it anymore
-			SafeDelete ( tQuery.m_pTableFunc ); // FIXME? find more obvious place to delete
 		}
 	}
 
@@ -8417,6 +8439,7 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 
 		const CSphQuery & q = tHandler.m_dQueries[0];
 		tThd.SetThreadInfo ( "api-search query=\"%s\" comment=\"%s\" index=\"%s\"", q.m_sQuery.scstr(), q.m_sComment.scstr(), q.m_sIndexes.scstr() );
+		tThd.SetSearchQuery ( &q );
 	}
 
 	// run queries, send response
@@ -8437,6 +8460,9 @@ void HandleCommandSearch ( ISphOutputBuffer & tOut, WORD uVer, InputBuffer_c & t
 
 	g_tStats.m_iPredictedTime += iTotalPredictedTime;
 	g_tStats.m_iAgentPredictedTime += iTotalAgentPredictedTime;
+
+	// clean up query at thread descriptor
+	tThd.SetSearchQuery ( nullptr );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -8619,6 +8645,11 @@ SqlStmt_t::SqlStmt_t ()
 	m_tQuery.m_iAgentQueryTimeout = g_iAgentQueryTimeout;
 	m_tQuery.m_iRetryCount = -1;
 	m_tQuery.m_iRetryDelay = -1;
+}
+
+SqlStmt_t::~SqlStmt_t()
+{
+	SafeDelete ( m_pTableFunc );
 }
 
 bool SqlStmt_t::AddSchemaItem ( const char * psName )
@@ -9177,6 +9208,10 @@ bool SqlParser_c::AddOption ( const SqlNode_t & tIdent, const SqlNode_t & tValue
 	} else if ( sOpt=="expand_keywords" )
 	{
 		m_pQuery->m_eExpandKeywords = ( tValue.m_iValue!=0 ? QUERY_OPT_ENABLED : QUERY_OPT_DISABLED );
+
+	} else if ( sOpt=="format" ) // for SHOW THREADS
+	{
+		m_pStmt->m_sThreadFormat = sVal;
 
 	} else
 	{
@@ -9766,7 +9801,7 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 				SafeDelete ( pFunc );
 				return false;
 			}
-			tQuery.m_pTableFunc = pFunc;
+			dStmt[iStmt].m_pTableFunc = pFunc;
 		}
 
 		// validate filters
@@ -14523,6 +14558,36 @@ void HandleMysqlShowPlugins ( SqlRowBuffer_c & tOut, SqlStmt_t & )
 	tOut.Eof();
 }
 
+enum ThreadInfoFormat_e
+{
+	THD_FORMAT_NATIVE,
+	THD_FORMAT_SPHINXQL
+};
+
+static const char * FormatInfo ( ThdDesc_t & tThd, ThreadInfoFormat_e eFmt, QuotationEscapedBuilder & tBuf )
+{
+	if ( tThd.m_pQuery && eFmt==THD_FORMAT_SPHINXQL && tThd.m_eProto!=PROTO_MYSQL41 )
+	{
+		bool bGotQuery = false;
+		tThd.m_tQueryLock.Lock();
+		if ( tThd.m_pQuery )
+		{
+			tBuf.Clear();
+			FormatSphinxql ( *tThd.m_pQuery, 0, tBuf );
+			bGotQuery = true;
+		}
+		tThd.m_tQueryLock.Unlock();
+
+		// query might be removed prior to lock then go to common path
+		if ( bGotQuery )
+			return tBuf.cstr();
+	}
+
+	if ( tThd.m_dBuf[0]=='\0' && tThd.m_sCommand )
+		return tThd.m_sCommand;
+	else
+		return tThd.m_dBuf.Begin();
+}
 
 void HandleMysqlShowThreads ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 {
@@ -14538,26 +14603,26 @@ void HandleMysqlShowThreads ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	tOut.HeadColumn ( "Info" );
 	tOut.HeadEnd();
 
+	QuotationEscapedBuilder tBuf;
+	ThreadInfoFormat_e eFmt = THD_FORMAT_NATIVE;
+	if ( tStmt.m_sThreadFormat=="sphinxql" )
+		eFmt = THD_FORMAT_SPHINXQL;
+
 	const ListNode_t * pIt = g_dThd.Begin();
 	while ( pIt!=g_dThd.End() )
 	{
-		const ThdDesc_t * pThd = (const ThdDesc_t *)pIt;
+		ThdDesc_t * pThd = (ThdDesc_t *)pIt;
 
 		int iLen = strnlen ( pThd->m_dBuf.Begin(), pThd->m_dBuf.GetLength() );
 		if ( tStmt.m_iThreadsCols>0 && iLen>tStmt.m_iThreadsCols )
-		{
-			const_cast<ThdDesc_t *>(pThd)->m_dBuf[tStmt.m_iThreadsCols] = '\0';
-		}
+			pThd->m_dBuf[tStmt.m_iThreadsCols] = '\0';
 
 		tOut.PutNumeric ( "%d", pThd->m_iTid );
 		tOut.PutString ( pThd->m_bSystem ? "-" : g_dProtoNames [ pThd->m_eProto ] );
 		tOut.PutString ( pThd->m_bSystem ? "-" : g_dThdStates [ pThd->m_eThdState ] );
 		tOut.PutString ( pThd->m_sClientName.cstr() );
 		tOut.PutMicrosec ( tmNow - pThd->m_tmStart );
-		if ( pThd->m_dBuf[0]=='\0' && pThd->m_sCommand )
-			tOut.PutString ( pThd->m_sCommand );
-		else
-			tOut.PutString ( pThd->m_dBuf.Begin() );
+		tOut.PutString ( FormatInfo ( *pThd, eFmt, tBuf ) );
 
 		tOut.Commit();
 		pIt = pIt->m_pNext;
@@ -15931,7 +15996,11 @@ void HandleMysqlMultiStmt ( const CSphVector<SqlStmt_t> & dStmt, CSphQueryResult
 	ARRAY_FOREACH ( i, dStmt )
 	{
 		if ( dStmt[i].m_eStmt==STMT_SELECT )
-			tHandler.SetQuery ( iSelect++, dStmt[i].m_tQuery );
+		{
+			tHandler.SetQuery ( iSelect, dStmt[i].m_tQuery, dStmt[i].m_pTableFunc );
+			dStmt[i].m_pTableFunc = nullptr;
+			iSelect++;
+		}
 		else if ( dStmt[i].m_eStmt==STMT_SET && dStmt[i].m_eSet==SET_LOCAL )
 		{
 			CSphString sSetName ( dStmt[i].m_sSetName );
@@ -17473,7 +17542,8 @@ public:
 
 				StatCountCommand ( SEARCHD_COMMAND_SEARCH );
 				SearchHandler_c tHandler ( 1, sphCreatePlainQueryParser(), QUERY_SQL, true, tThd );
-				tHandler.SetQuery ( 0, dStmt.Begin()->m_tQuery );
+				tHandler.SetQuery ( 0, dStmt.Begin()->m_tQuery, dStmt.Begin()->m_pTableFunc );
+				dStmt.Begin()->m_pTableFunc = nullptr;
 
 				if ( m_tVars.m_bProfile )
 					tHandler.SetProfile ( &m_tProfile );

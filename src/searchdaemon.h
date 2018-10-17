@@ -1040,6 +1040,7 @@ struct SqlStmt_t
 
 	// SELECT specific
 	CSphQuery				m_tQuery;
+	ISphTableFunc *			m_pTableFunc = nullptr;
 
 	CSphString				m_sTableFunc;
 	StrVec_t				m_dTableFuncArgs;
@@ -1082,6 +1083,7 @@ struct SqlStmt_t
 
 	// SHOW THREADS specific
 	int						m_iThreadsCols = 0;
+	CSphString				m_sThreadFormat;
 
 	// generic parameter, different meanings in different statements
 	// filter pattern in DESCRIBE, SHOW TABLES / META / VARIABLES
@@ -1097,6 +1099,8 @@ struct SqlStmt_t
 	bool					m_bLimitSet = false; // true for query with not default values
 
 	SqlStmt_t ();
+	~SqlStmt_t();
+
 	bool AddSchemaItem ( const char * psName );
 	// check if the number of fields which would be inserted is in accordance to the given schema
 	bool CheckInsertIntegrity();
@@ -1123,7 +1127,7 @@ public:
 	virtual							~ISphSearchHandler() {}
 	virtual void					RunQueries () = 0;					///< run all queries, get all results
 
-	virtual void					SetQuery ( int iQuery, const CSphQuery & tQuery ) = 0;
+	virtual void					SetQuery ( int iQuery, const CSphQuery & tQuery, ISphTableFunc * pTableFunc ) = 0;
 	virtual void					SetProfile ( CSphQueryProfile * pProfile ) = 0;
 	virtual AggrResult_t *			GetResult ( int iResult ) = 0;
 };

@@ -5490,7 +5490,6 @@ CSphQuery::CSphQuery ()
 	, m_bIgnoreNonexistentIndexes ( false )
 	, m_bStrict			( false )
 	, m_bSync			( false )
-	, m_pTableFunc		( NULL )
 
 	, m_iSQLSelectStart	( -1 )
 	, m_iSQLSelectEnd	( -1 )

@@ -798,7 +798,7 @@ public:
 		if ( m_bProfile )
 			tHandler->SetProfile ( &tProfile );
 
-		tHandler->SetQuery ( 0, m_tQuery );
+		tHandler->SetQuery ( 0, m_tQuery, nullptr );
 
 		// search
 		tHandler->RunQueries();

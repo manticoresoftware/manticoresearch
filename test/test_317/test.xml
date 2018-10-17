@@ -61,7 +61,7 @@ $results[] = 'initial commit';
 $results[] = "\n" . $ql->Query ( "REPLACE INTO rt (id, name, idd) VALUES (1, 'test', 1)" );
 $results[] = "\n" . $ql->Query ( "REPLACE INTO rt (id, name, idd) VALUES (2, 'test', 2)" );
 $results[] = 'query test';
-$results[] = "\n" . $ql->Query ( "SELECT * FROM rt WHERE MATCH ( 'test' )" );
+$results[] = "\n" . $ql->Query ( "SELECT * FROM rt WHERE MATCH ( 'test' ) ORDER BY id ASC" );
 $results[] = 'query tes*';
 $results[] = "\n" . $ql->Query ( "SELECT * FROM rt WHERE MATCH ( 'tes*' )" );
 
@@ -83,7 +83,7 @@ $results[] = "\n" . $ql->Query ( "ALTER RTINDEX rt RECONFIGURE" );
 $results[] = "\n" . $ql->Query ( "REPLACE INTO rt (id, name, idd) VALUES (11, 'test', 11)" );
 $results[] = "\n" . $ql->Query ( "REPLACE INTO rt (id, name, idd) VALUES (12, 'test', 12)" );
 $results[] = 'query test';
-$results[] = "\n" . $ql->Query ( "SELECT * FROM rt WHERE MATCH ( 'test' )" );
+$results[] = "\n" . $ql->Query ( "SELECT * FROM rt WHERE MATCH ( 'test' ) ORDER BY id ASC" );
 $results[] = 'query tes*';
 $results[] = "\n" . $ql->Query ( "SELECT * FROM rt WHERE MATCH ( 'tes*' )" );
 
@@ -91,7 +91,7 @@ $results[] = "\n" . $ql->Query ( "FLUSH RAMCHUNK rt" );
 $results[] = "\n" . $ql->Query ( "OPTIMIZE INDEX rt option sync=1" );
 
 $results[] = 'query test';
-$results[] = "\n" . $ql->Query ( "SELECT * FROM rt WHERE MATCH ( 'test' )" );
+$results[] = "\n" . $ql->Query ( "SELECT * FROM rt WHERE MATCH ( 'test' ) ORDER BY id ASC" );
 $results[] = 'query tes*';
 $results[] = "\n" . $ql->Query ( "SELECT * FROM rt WHERE MATCH ( 'tes*' )" );
 

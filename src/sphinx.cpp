@@ -18173,7 +18173,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	CSphQueryContext tCtx ( *pQuery );
 	tCtx.m_pProfile = pProfile;
 	tCtx.m_pLocalDocs = tArgs.m_pLocalDocs;
-	tCtx.m_iTotalDocs = tArgs.m_iTotalDocs;
+	tCtx.m_iTotalDocs = ( tArgs.m_iTotalDocs ? tArgs.m_iTotalDocs : m_tStats.m_iTotalDocuments );
 	if ( !tCtx.SetupCalc ( pResult, tMaxSorterSchema, m_tSchema, m_tMva.GetWritePtr(), m_bArenaProhibit, dSorterSchemas ) )
 		return false;
 

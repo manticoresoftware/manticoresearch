@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>RT index total documents</name>
+<skip_indexer/>
+
+<config>
+indexer
+{
+	mem_limit		= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+index rt
+{
+	type			= rt
+	path			= <data_path/>/rt
+	rt_attr_uint	= idd
+	rt_field		= text
+}
+</config>
+
+<sphqueries>
+
+<sphinxql>REPLACE INTO rt ( id, text ) VALUES ( 1, 'test me' ),( 2, 'test framework' ),( 3, 'our test framework' ),( 4, 'best test solution' )</sphinxql>
+<sphinxql>select id, weight() as w from rt where match ('test')</sphinxql>
+<sphinxql>select id, weight() as w from rt where match ('best')</sphinxql>
+
+<!-- 1st disk chunk -->
+<sphinxql>flush ramchunk rt</sphinxql>
+<sphinxql>select id, weight() as w from rt where match ('test')</sphinxql>
+<sphinxql>select id, weight() as w from rt where match ('best')</sphinxql>
+
+<!-- 2nd disk chunk -->
+<sphinxql>REPLACE INTO rt ( id, text ) VALUES ( 11, 'test me' ),( 12, 'test framework' ),( 13, 'our test framework' ),( 14, 'best test solution' )</sphinxql>
+<sphinxql>flush ramchunk rt</sphinxql>
+<sphinxql>select id, weight() as w from rt where match ('test')</sphinxql>
+<sphinxql>select id, weight() as w from rt where match ('best')</sphinxql>
+
+<!-- only disk chunk -->
+<sphinxql>optimize index rt option sync=1</sphinxql>
+<sphinxql>select id, weight() as w from rt where match ('test')</sphinxql>
+<sphinxql>select id, weight() as w from rt where match ('best')</sphinxql>
+
+</sphqueries>
+
+</test>

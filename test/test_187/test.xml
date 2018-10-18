@@ -169,7 +169,7 @@ INSERT INTO test_table VALUES
 <sphinxql>SELECT * FROM rt</sphinxql>
 <sphinxql>SELECT * FROM disk</sphinxql>
 <sphinxql>SELECT * FROM disk WHERE MATCH('thee')</sphinxql>
-<sphinxql>SELECT * FROM disk WHERE MATCH('under')</sphinxql>
+<sphinxql>SELECT * FROM disk WHERE MATCH('under') order by id desc</sphinxql>
 <sphinxql>ATTACH INDEX disk TO RTINDEX rt</sphinxql>
 <sphinxql>SELECT * FROM rt</sphinxql>
 <sphinxql>SELECT * FROM disk</sphinxql>
@@ -178,7 +178,7 @@ INSERT INTO test_table VALUES
 <sphinxql>INSERT INTO rt ( id, gid, title ) VALUES ( 10, 22, 'I dub thee unforgiven' )</sphinxql>
 <sphinxql>SELECT * FROM rt WHERE MATCH('thee')</sphinxql>
 <sphinxql><![CDATA[INSERT INTO rt ( id, gid, title ) VALUES ( 11, 22, 'under_score_again <stuff>but got here</stuff>' )]]></sphinxql>
-<sphinxql>SELECT * FROM rt WHERE MATCH('under')</sphinxql>
+<sphinxql>SELECT * FROM rt WHERE MATCH('under') order by id desc</sphinxql>
 <sphinxql>SELECT * FROM rt_arena</sphinxql>
 <sphinxql>ATTACH INDEX plain TO RTINDEX rt_arena</sphinxql>
 <sphinxql>SELECT * FROM rt_arena where mva1=15 order by id asc</sphinxql>

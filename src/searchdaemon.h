@@ -1109,6 +1109,7 @@ struct SqlStmt_t
 
 	// SELECT specific
 	CSphQuery				m_tQuery;
+	ISphTableFunc *			m_pTableFunc = nullptr;
 
 	CSphString				m_sTableFunc;
 	StrVec_t				m_dTableFuncArgs;
@@ -1151,6 +1152,7 @@ struct SqlStmt_t
 
 	// SHOW THREADS specific
 	int						m_iThreadsCols = 0;
+	CSphString				m_sThreadFormat;
 
 	// generic parameter, different meanings in different statements
 	// filter pattern in DESCRIBE, SHOW TABLES / META / VARIABLES
@@ -1166,6 +1168,8 @@ struct SqlStmt_t
 	bool					m_bLimitSet = false; // true for query with not default values
 
 	SqlStmt_t ();
+	~SqlStmt_t();
+
 	bool AddSchemaItem ( const char * psName );
 	// check if the number of fields which would be inserted is in accordance to the given schema
 	bool CheckInsertIntegrity();
@@ -1192,7 +1196,7 @@ public:
 	virtual							~ISphSearchHandler() {}
 	virtual void					RunQueries () = 0;					///< run all queries, get all results
 
-	virtual void					SetQuery ( int iQuery, const CSphQuery & tQuery ) = 0;
+	virtual void					SetQuery ( int iQuery, const CSphQuery & tQuery, ISphTableFunc * pTableFunc ) = 0;
 	virtual void					SetProfile ( CSphQueryProfile * pProfile ) = 0;
 	virtual AggrResult_t *			GetResult ( int iResult ) = 0;
 };
@@ -1279,16 +1283,19 @@ enum ESphHttpEndpoint
 	SPH_HTTP_ENDPOINT_TOTAL
 };
 
+// fwd
+struct ThdDesc_t;
+
 bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, ISphOutputBuffer & tOut );
-ISphSearchHandler * sphCreateSearchHandler ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster, int iCID );
+ISphSearchHandler * sphCreateSearchHandler ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster, const ThdDesc_t & tThd );
 void sphFormatFactors ( CSphVector<BYTE> & dOut, const unsigned int * pFactors, bool bJson );
 bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation );
 void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, bool bReplace, bool bCommit, CSphString & sWarning, CSphSessionAccum & tAcc, ESphCollation	eCollation );
-void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const QueryParserFactory_i & tQueryParserFactory, const SqlStmt_t & tStmt, const CSphString & sQuery, CSphString & sWarning, int iCID );
-void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const QueryParserFactory_i & tQueryParserFactory, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit, CSphSessionAccum & tAcc, int iCID );
+void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const QueryParserFactory_i & tQueryParserFactory, const SqlStmt_t & tStmt, const CSphString & sQuery, CSphString & sWarning, const ThdDesc_t & tThd );
+void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const QueryParserFactory_i & tQueryParserFactory, const SqlStmt_t & tStmt, const CSphString & sQuery, bool bCommit, CSphSessionAccum & tAcc, const ThdDesc_t & tThd );
 
-bool				sphLoopClientHttp ( const BYTE * pRequest, int iRequestLen, CSphVector<BYTE> & dResult, int iCID );
-bool				sphProcessHttpQueryNoResponce ( ESphHttpEndpoint eEndpoint, const CSphString & sQuery, const SmallStringHash_T<CSphString> & tOptions, int iCID, CSphVector<BYTE> & dResult );
+bool				sphLoopClientHttp ( const BYTE * pRequest, int iRequestLen, CSphVector<BYTE> & dResult, const ThdDesc_t & tThd );
+bool				sphProcessHttpQueryNoResponce ( ESphHttpEndpoint eEndpoint, const CSphString & sQuery, const SmallStringHash_T<CSphString> & tOptions, const ThdDesc_t & tThd, CSphVector<BYTE> & dResult );
 void				sphHttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError );
 ESphHttpEndpoint	sphStrToHttpEndpoint ( const CSphString & sEndpoint );
 CSphString			sphHttpEndpointToStr ( ESphHttpEndpoint eEndpoint );

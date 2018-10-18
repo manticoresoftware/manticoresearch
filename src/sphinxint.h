@@ -122,6 +122,7 @@ extern bool g_bJsonKeynamesToLowercase;
 	SPH_QUERY_STATE ( RANK,			"rank" ) \
 	SPH_QUERY_STATE ( SORT,			"sort" ) \
 	SPH_QUERY_STATE ( FINALIZE,		"finalize" ) \
+	SPH_QUERY_STATE ( DYNAMIC,		"clone_attrs" ) \
 	SPH_QUERY_STATE ( DIST_WAIT,	"dist_wait" ) \
 	SPH_QUERY_STATE ( AGGREGATE,	"aggregate" ) \
 	SPH_QUERY_STATE ( NET_WRITE,	"net_write" ) \
@@ -496,6 +497,11 @@ public:
 	}
 };
 
+
+namespace sph
+{
+	int rename ( const char * sOld, const char * sNew );
+}
 
 namespace sph
 {
@@ -1753,6 +1759,9 @@ public:
 	SphWordID_t	GetWordID ( BYTE * pWord ) final;
 	SphWordID_t GetWordIDNonStemmed ( BYTE * pWord ) final { return m_pDict->GetWordIDNonStemmed ( pWord ); }
 };
+
+void RemoveDictSpecials ( CSphString & sWord );
+const CSphString & RemoveDictSpecials ( const CSphString & sWord, CSphString & sBuf );
 
 //////////////////////////////////////////////////////////////////////////
 // TOKEN FILTER

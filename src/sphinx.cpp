@@ -1254,8 +1254,7 @@ struct CSphTemplateQueryFilter : public ISphQueryFilter
 		tInfo.m_iHits = 0;
 		tInfo.m_iQpos = iQpos;
 
-		if ( tInfo.m_sNormalized.cstr()[0]==MAGIC_WORD_HEAD_NONSTEMMED )
-			*(char *)tInfo.m_sNormalized.cstr() = '=';
+		RemoveDictSpecials ( tInfo.m_sNormalized );
 	}
 };
 
@@ -5491,7 +5490,6 @@ CSphQuery::CSphQuery ()
 	, m_bIgnoreNonexistentIndexes ( false )
 	, m_bStrict			( false )
 	, m_bSync			( false )
-	, m_pTableFunc		( NULL )
 
 	, m_iSQLSelectStart	( -1 )
 	, m_iSQLSelectEnd	( -1 )
@@ -14732,6 +14730,9 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 									ISphRanker * pRanker, int iTag, int iIndexWeight ) const
 {
 	CSphQueryProfile * pProfile = pCtx->m_pProfile;
+	ESphQueryState eOldState = SPH_QSTATE_UNKNOWN;
+	if ( pProfile )
+		eOldState = pProfile->m_eState;
 
 	int iCutoff = pQuery->m_iCutoff;
 	if ( iCutoff<=0 )
@@ -14806,7 +14807,7 @@ void CSphIndex_VLN::MatchExtended ( CSphQueryContext * pCtx, const CSphQuery * p
 	}
 
 	if ( pProfile )
-		pProfile->Switch ( SPH_QSTATE_UNKNOWN );
+		pProfile->Switch ( eOldState );
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -15163,7 +15164,11 @@ bool CSphIndex_VLN::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pRes
 	}
 
 	if ( tArgs.m_bModifySorterSchemas )
+	{
+		if ( pResult->m_pProfile )
+			pResult->m_pProfile->Switch ( SPH_QSTATE_DYNAMIC );
 		PooledAttrsToPtrAttrs ( ppSorters, iSorters, m_tMva.GetWritePtr(), m_tString.GetWritePtr(), m_bArenaProhibit );
+	}
 
 	// done
 	pResult->m_pMva = m_tMva.GetWritePtr();
@@ -16678,6 +16683,8 @@ void ISphQueryFilter::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 					tInfo.m_iDocs = tWordlist.m_dExpanded[i].m_iDocs;
 					tInfo.m_iHits = tWordlist.m_dExpanded[i].m_iHits;
 					tInfo.m_iQpos = iQpos;
+
+					RemoveDictSpecials ( tInfo.m_sNormalized );
 				}
 			}
 
@@ -16797,6 +16804,8 @@ void ISphQueryFilter::GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, co
 				dKeywords[iTokenized].m_iDocs = iDocs;
 				dKeywords[iTokenized].m_iHits = iHits;
 				dKeywords[iTokenized].m_sNormalized = sNormalizedWithMaxHits;
+
+				RemoveDictSpecials ( dKeywords[iTokenized].m_sNormalized );
 			}
 		}
 	}
@@ -16836,8 +16845,7 @@ struct CSphPlainQueryFilter : public ISphQueryFilter
 		tInfo.m_iHits = m_tFoldSettings.m_bStats ? m_pQueryWord->m_iHits : 0;
 		tInfo.m_iQpos = iQpos;
 
-		if ( tInfo.m_sNormalized.cstr()[0]==MAGIC_WORD_HEAD_NONSTEMMED )
-			*(char *)tInfo.m_sNormalized.cstr() = '=';
+		RemoveDictSpecials ( tInfo.m_sNormalized );
 	}
 };
 
@@ -17967,7 +17975,11 @@ bool CSphIndex_VLN::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pRe
 	bool bResult = ParsedMultiQuery ( pQuery, pResult, iSorters, &dSorters[0], tParsed, pDict, tArgs, &tNodeCache, tStatDiff );
 
 	if ( tArgs.m_bModifySorterSchemas )
+	{
+		if ( pProfile )
+			pProfile->Switch ( SPH_QSTATE_DYNAMIC );
 		PooledAttrsToPtrAttrs ( &dSorters[0], iSorters, m_tMva.GetWritePtr(), m_tString.GetWritePtr(), m_bArenaProhibit );
+	}
 
 	return bResult;
 }
@@ -18102,7 +18114,11 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 	}
 
 	if ( tArgs.m_bModifySorterSchemas )
+	{
+		if ( ppResults[0] && ppResults[0]->m_pProfile )
+			ppResults[0]->m_pProfile->Switch ( SPH_QSTATE_DYNAMIC );
 		PooledAttrsToPtrAttrs ( ppSorters, iQueries, m_tMva.GetWritePtr(), m_tString.GetWritePtr(), m_bArenaProhibit );
+	}
 
 	return bResult | bResultScan;
 }
@@ -18121,8 +18137,9 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	int64_t tmQueryStart = sphMicroTimer();
 
 	CSphQueryProfile * pProfile = pResult->m_pProfile;
+	ESphQueryState eOldState = SPH_QSTATE_UNKNOWN;
 	if ( pProfile )
-		pProfile->Switch ( SPH_QSTATE_INIT );
+		eOldState = pProfile->Switch ( SPH_QSTATE_INIT );
 
 	ScopedThreadPriority_c tPrio ( pQuery->m_bLowPriority );
 
@@ -18156,7 +18173,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 	CSphQueryContext tCtx ( *pQuery );
 	tCtx.m_pProfile = pProfile;
 	tCtx.m_pLocalDocs = tArgs.m_pLocalDocs;
-	tCtx.m_iTotalDocs = tArgs.m_iTotalDocs;
+	tCtx.m_iTotalDocs = ( tArgs.m_iTotalDocs ? tArgs.m_iTotalDocs : m_tStats.m_iTotalDocuments );
 	if ( !tCtx.SetupCalc ( pResult, tMaxSorterSchema, m_tSchema, m_tMva.GetWritePtr(), m_bArenaProhibit, dSorterSchemas ) )
 		return false;
 
@@ -18361,7 +18378,7 @@ bool CSphIndex_VLN::ParsedMultiQuery ( const CSphQuery * pQuery, CSphQueryResult
 #endif
 
 	if ( pProfile )
-		pProfile->Switch ( SPH_QSTATE_UNKNOWN );
+		pProfile->Switch ( eOldState );
 
 	if ( bCollectPredictionCounters )
 	{
@@ -31617,9 +31634,26 @@ void SphWordStatChecker_t::DumpDiffer ( const SmallStringHash_T<CSphQueryResultM
 // CSphQueryResultMeta
 //////////////////////////////////////////////////////////////////////////
 
-void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int64_t iDocs, int64_t iHits )
+void RemoveDictSpecials ( CSphString & sWord )
 {
-	CSphString sFixed;
+	if ( sWord.cstr()[0]==MAGIC_WORD_HEAD )
+	{
+		*(char *)( sWord.cstr() ) = '*';
+	} else if ( sWord.cstr()[0]==MAGIC_WORD_HEAD_NONSTEMMED )
+	{
+		*(char *)( sWord.cstr() ) = '=';
+	} else
+	{
+		const char * p = strchr ( sWord.cstr(), MAGIC_WORD_BIGRAM );
+		if ( p )
+		{
+			*(char *)p = ' ';
+		}
+	}
+}
+
+const CSphString & RemoveDictSpecials ( const CSphString & sWord, CSphString & sFixed )
+{
 	const CSphString * pFixed = &sWord;
 	if ( sWord.cstr()[0]==MAGIC_WORD_HEAD )
 	{
@@ -31642,7 +31676,14 @@ void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int64_t iDocs, int
 		}
 	}
 
-	WordStat_t & tStats = m_hWordStats.AddUnique ( *pFixed );
+	return *pFixed;
+}
+
+void CSphQueryResultMeta::AddStat ( const CSphString & sWord, int64_t iDocs, int64_t iHits )
+{
+	CSphString sBuf;
+	const CSphString & tFixed = RemoveDictSpecials ( sWord, sBuf );
+	WordStat_t & tStats = m_hWordStats.AddUnique ( tFixed );
 	tStats.m_iDocs += iDocs;
 	tStats.m_iHits += iHits;
 }

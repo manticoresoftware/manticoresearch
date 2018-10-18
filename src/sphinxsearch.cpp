@@ -1113,7 +1113,8 @@ public:
 public:
 	// FIXME? hide and friend?
 	virtual SphZoneHit_e		IsInZone ( int iZone, const ExtHit_t * pHit, int * pLastSpan );
-	virtual const CSphIndex *	GetIndex() { return m_pIndex; }
+	const CSphIndex *	GetIndex() { return m_pIndex; }
+	const CSphQueryContext * GetCtx() const { return m_pCtx; }
 
 public:
 	CSphMatch					m_dMatches[ExtNode_i::MAX_DOCS];	///< exposed for caller
@@ -5959,7 +5960,6 @@ const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 	printf ( "ranker getfiltereddocs\n" );
 	#endif
 
-	CSphScopedProfile ( m_pCtx->m_pProfile, SPH_QSTATE_GET_DOCS );
 	while (true)
 	{
 		// get another chunk
@@ -5967,7 +5967,11 @@ const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 			m_pCtx->m_pProfile->Switch ( SPH_QSTATE_GET_DOCS );
 		const ExtDoc_t * pCand = m_pRoot->GetDocsChunk();
 		if ( !pCand )
+		{
+			if ( m_pCtx->m_pProfile )
+				m_pCtx->m_pProfile->Switch ( SPH_QSTATE_RANK );
 			return NULL;
+		}
 
 		// create matches, and filter them
 		if ( m_pCtx->m_pProfile )
@@ -5994,6 +5998,9 @@ const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 			iDocs++;
 			pCand++;
 		}
+
+		if ( m_pCtx->m_pProfile )
+			m_pCtx->m_pProfile->Switch ( SPH_QSTATE_RANK );
 
 		// clean up zone hash
 		if ( !m_bZSlist )
@@ -8430,7 +8437,7 @@ bool RankerState_Expr_fn<NEED_PACKEDFACTORS, HANDLE_DUPES>::Init ( int iFields, 
 			m_fAvgDocLen += m_pFieldLens[i];
 	else
 		m_fAvgDocLen = 1.0f;
-	m_iTotalDocuments = pRanker->GetIndex()->GetStats().m_iTotalDocuments;
+	m_iTotalDocuments = pRanker->GetCtx()->m_iTotalDocs;
 	m_fAvgDocLen /= m_iTotalDocuments;
 
 	m_fParamK1 = 1.2f;
@@ -9487,9 +9494,7 @@ ISphRanker * sphCreateRanker ( const XQQuery_t & tXQ, const CSphQuery * pQuery, 
 	int iMaxQpos = pRanker->GetQwords ( hQwords );
 
 	const int iQwords = hQwords.GetLength ();
-	int64_t iTotalDocuments = pIndex->GetStats().m_iTotalDocuments;
-	if ( tCtx.m_pLocalDocs )
-		iTotalDocuments = tCtx.m_iTotalDocs;
+	int64_t iTotalDocuments = tCtx.m_iTotalDocs;
 
 	CSphVector<const ExtQword_t *> dWords;
 	dWords.Reserve ( hQwords.GetLength() );

@@ -65,7 +65,7 @@ $results[] = "\n" . $ql->Query ( "REPLACE INTO rt1 (id, name, idd) VALUES (1, 'T
 $results[] = 'query SOY';
 $results[] = "\n" . $ql->Query ( "SELECT * FROM rt1 WHERE MATCH ( 'SOY' )" );
 $results[] = 'query TOFU';
-$results[] = "\n" . $ql->Query ( "SELECT * FROM rt1 WHERE MATCH ( 'TOFU' )" );
+$results[] = "\n" . $ql->Query ( "SELECT * FROM rt1 WHERE MATCH ( 'TOFU' ) ORDER BY id ASC" );
 
 $orig_conf = file(testdir('config.conf'));
 
@@ -87,14 +87,14 @@ $results[] = "\n" . $ql->Query ( "REPLACE INTO rt1 (id, name, idd) VALUES (2, 'T
 $results[] = 'query SOY';
 $results[] = "\n" . $ql->Query ( "SELECT * FROM rt1 WHERE MATCH ( 'SOY' )" );
 $results[] = 'query TOFU';
-$results[] = "\n" . $ql->Query ( "SELECT * FROM rt1 WHERE MATCH ( 'TOFU' )" );
+$results[] = "\n" . $ql->Query ( "SELECT * FROM rt1 WHERE MATCH ( 'TOFU' ) ORDER BY id DESC" );
 
 $results[] = 'replace 1st doc';
 $results[] = "\n" . $ql->Query ( "REPLACE INTO rt1 (id, name, idd) VALUES (1, 'TOFU', 1)" );
 $results[] = 'query SOY';
 $results[] = "\n" . $ql->Query ( "SELECT * FROM rt1 WHERE MATCH ( 'SOY' )" );
 $results[] = 'query TOFU';
-$results[] = "\n" . $ql->Query ( "SELECT * FROM rt1 WHERE MATCH ( 'TOFU' )" );
+$results[] = "\n" . $ql->Query ( "SELECT * FROM rt1 WHERE MATCH ( 'TOFU' ) ORDER BY id ASC" );
 
 
 ]]></custom_test>

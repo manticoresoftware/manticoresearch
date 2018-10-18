@@ -1402,7 +1402,7 @@ private:
 	void						CopyDoc ( RtSegment_t * pSeg, RtDocWriter_t & tOutDoc, RtWord_t * pWord, const RtSegment_t * pSrc, const RtDoc_t * pDoc );
 
 	void						SaveMeta ( int64_t iTID, const CSphFixedVector<int> & dChunkNames );
-	void						SaveDiskHeader ( const char * sFilename, SphDocID_t iMinDocID, int iCheckpoints, SphOffset_t iCheckpointsPosition, DWORD iInfixBlocksOffset, int iInfixCheckpointWordsSize, DWORD uKillListSize, uint64_t uMinMaxSize, const ChunkStats_t & tStats ) const;
+	void						SaveDiskHeader ( const char * sFilename, SphDocID_t iMinDocID, int iCheckpoints, SphOffset_t iCheckpointsPosition, DWORD iInfixBlocksOffset, int iInfixCheckpointWordsSize, DWORD uKillListSize, uint64_t uMinMaxSize, const ChunkStats_t & tStats, int64_t iTotalDocuments ) const;
 	void						SaveDiskDataImpl ( const char * sFilename, const SphChunkGuard_t & tGuard, const ChunkStats_t & tStats ) const;
 	void						SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, const ChunkStats_t & tStats, bool bMoveRetired );
 	CSphIndex *					LoadDiskChunk ( const char * sChunk, CSphString & sError ) const;
@@ -3986,7 +3986,7 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const SphChunkGuard_t
 
 	// header
 	SaveDiskHeader ( sFilename, iMinDocID, dCheckpoints.GetLength(), iCheckpointsPosition, (DWORD)iInfixBlockOffset, iInfixCheckpointWordsSize,
-		m_dDiskChunkKlist.GetLength(), uMinMaxOff, tStats );
+		m_dDiskChunkKlist.GetLength(), uMinMaxOff, tStats, iTotalDocs );
 
 	// cleanup
 	ARRAY_FOREACH ( i, pWordReaders )
@@ -4007,7 +4007,7 @@ void RtIndex_t::SaveDiskDataImpl ( const char * sFilename, const SphChunkGuard_t
 
 void RtIndex_t::SaveDiskHeader ( const char * sFilename, SphDocID_t iMinDocID, int iCheckpoints,
 	SphOffset_t iCheckpointsPosition, DWORD iInfixBlocksOffset, int iInfixCheckpointWordsSize, DWORD uKillListSize, uint64_t uMinMaxSize,
-	const ChunkStats_t & tStats ) const
+	const ChunkStats_t & tStats, int64_t iTotalDocuments ) const
 {
 	static const DWORD RT_INDEX_FORMAT_VERSION	= 43;			///< my format version
 
@@ -4039,7 +4039,7 @@ void RtIndex_t::SaveDiskHeader ( const char * sFilename, SphDocID_t iMinDocID, i
 	tWriter.PutDword ( iInfixCheckpointWordsSize ); // m_iInfixCheckpointWordsSize, v.34+
 
 	// stats
-	tWriter.PutDword ( (DWORD)tStats.m_Stats.m_iTotalDocuments ); // FIXME? we don't expect over 4G docs per just 1 local index
+	tWriter.PutDword ( (DWORD)iTotalDocuments ); // FIXME? we don't expect over 4G docs per just 1 local index
 	tWriter.PutOffset ( tStats.m_Stats.m_iTotalBytes );
 	// FIXME!!! calc duplicates here to
 	tWriter.PutDword ( 0 ); // v.40+
@@ -6962,9 +6962,10 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	pResult->m_iQueryTime = 0;
 	int64_t tmQueryStart = sphMicroTimer();
 	CSphQueryProfile * pProfiler = pResult->m_pProfile;
+	ESphQueryState eOldState = SPH_QSTATE_UNKNOWN;
 
 	if ( pProfiler )
-		pProfiler->Switch ( SPH_QSTATE_DICT_SETUP );
+		eOldState = pProfiler->Switch ( SPH_QSTATE_DICT_SETUP );
 
 	// force ext2 mode for them
 	// FIXME! eliminate this const breakage
@@ -6989,7 +6990,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	// in case of local_idf set but no external hash no full-scan query and RT has disk chunks
 	const SmallStringHash_T<int64_t> * pLocalDocs = tArgs.m_pLocalDocs;
 	SmallStringHash_T<int64_t> hLocalDocs;
-	int64_t iTotalDocs = tArgs.m_iTotalDocs;
+	int64_t iTotalDocs = ( tArgs.m_iTotalDocs ? tArgs.m_iTotalDocs : m_tStats.m_iTotalDocuments );
 	bool bGotLocalDF = tArgs.m_bLocalDF;
 	if ( tArgs.m_bLocalDF && !tArgs.m_pLocalDocs && !pQuery->m_sQuery.IsEmpty() && tGuard.m_dDiskChunks.GetLength() )
 	{
@@ -7580,13 +7581,16 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 
 	MEMORY ( MEM_RT_RES_STRINGS );
 
+	if ( pProfiler )
+		pProfiler->Switch ( SPH_QSTATE_DYNAMIC );
+
 	// create new standalone schema for sorters (independent of any external indexes/pools/storages)
 	// modify matches inside the sorters to work with the new schema
 	for ( auto i : dSorters )
 		TransformSorterSchema ( i, tGuard, dDiskMva, dDiskStrings, tMvaArenaFlag );
 
 	if ( pProfiler )
-		pProfiler->Switch ( SPH_QSTATE_UNKNOWN );
+		pProfiler->Switch ( eOldState );
 
 	if ( pResult->m_bHasPrediction )
 		pResult->m_tStats.Add ( tQueryStats );
@@ -7636,8 +7640,7 @@ void RtIndex_t::AddKeywordStats ( BYTE * sWord, const BYTE * sTokenized, CSphDic
 	tInfo.m_iHits = bGetStats ? pQueryWord->m_iHits : 0;
 	tInfo.m_iQpos = iQpos;
 
-	if ( tInfo.m_sNormalized.cstr()[0]==MAGIC_WORD_HEAD_NONSTEMMED )
-		*(char *)tInfo.m_sNormalized.cstr() = '=';
+	RemoveDictSpecials ( tInfo.m_sNormalized );
 }
 
 
@@ -7661,8 +7664,20 @@ struct CSphRtQueryFilter : public ISphQueryFilter, public ISphNoncopyable
 	}
 };
 
+static void HashKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, SmallStringHash_T<CSphKeywordInfo> & hKeywords )
+{
+	for ( CSphKeywordInfo & tSrc : dKeywords )
+	{
+		CSphKeywordInfo & tDst = hKeywords.AddUnique ( tSrc.m_sNormalized );
+		tDst.m_sTokenized = std::move ( tSrc.m_sTokenized );
+		tDst.m_sNormalized = std::move ( tSrc.m_sNormalized );
+		tDst.m_iQpos = tSrc.m_iQpos;
+		tDst.m_iDocs += tSrc.m_iDocs;
+		tDst.m_iHits += tSrc.m_iHits;
+	}
+}
 
-bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const char * sQuery, const GetKeywordsSettings_t & tSettings, bool bFillOnly, CSphString * , const SphChunkGuard_t & tGuard ) const
+bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const char * sQuery, const GetKeywordsSettings_t & tSettings, bool bFillOnly, CSphString * pError, const SphChunkGuard_t & tGuard ) const
 {
 	if ( !bFillOnly )
 		dKeywords.Resize ( 0 );
@@ -7747,8 +7762,38 @@ bool RtIndex_t::DoGetKeywords ( CSphVector<CSphKeywordInfo> & dKeywords, const c
 	if ( !tSettings.m_bStats )
 		return true;
 
-	ARRAY_FOREACH ( iChunk, tGuard.m_dDiskChunks )
-		tGuard.m_dDiskChunks[iChunk]->FillKeywords ( dKeywords );
+	if ( bFillOnly )
+	{
+		ARRAY_FOREACH ( iChunk, tGuard.m_dDiskChunks )
+			tGuard.m_dDiskChunks[iChunk]->FillKeywords ( dKeywords );
+	} else
+	{
+		// bigram and expanded might differs need to merge infos
+		CSphVector<CSphKeywordInfo> dChunkKeywords;
+		SmallStringHash_T<CSphKeywordInfo> hKeywords;
+		ARRAY_FOREACH ( iChunk, tGuard.m_dDiskChunks )
+		{
+			tGuard.m_dDiskChunks[iChunk]->GetKeywords ( dChunkKeywords, sQuery, tSettings, pError );
+			HashKeywords ( dChunkKeywords, hKeywords );
+			dChunkKeywords.Resize ( 0 );
+		}
+
+		if ( hKeywords.GetLength() )
+		{
+			// merge keywords from RAM parts with disk keywords into hash
+			HashKeywords ( dKeywords, hKeywords );
+			dKeywords.Resize ( 0 );
+			dKeywords.Reserve ( hKeywords.GetLength() );
+
+			hKeywords.IterateStart();
+			while ( hKeywords.IterateNext() )
+			{
+				const CSphKeywordInfo & tSrc = hKeywords.IterateGet();
+				dKeywords.Add ( tSrc );
+			}
+			sphSort ( dKeywords.Begin(), dKeywords.GetLength(), bind ( &CSphKeywordInfo::m_iQpos ) );
+		}
+	}
 
 	return true;
 }

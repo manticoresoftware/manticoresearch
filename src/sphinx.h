@@ -2761,7 +2761,6 @@ public:
 	bool			m_bStrict;			///< whether to warning or not about incompatible types
 	bool			m_bSync;			///< whether or not use synchronous operations (optimize, etc.)
 
-	ISphTableFunc *	m_pTableFunc;		///< post-query NOT OWNED, WILL NOT BE FREED in dtor.
 	CSphFilterSettings	m_tHaving;		///< post aggregate filtering (got applied only on master)
 
 public:

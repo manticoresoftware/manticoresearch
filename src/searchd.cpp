@@ -18949,12 +18949,16 @@ void RotationThreadFunc ( void * )
 		CSphString sIndex;
 		bool bMutable = false;
 		{
-			RLockedServedIt_c it ( g_pDisabledIndexes );
-			it.Next();
-			sIndex = it.GetName ();
-			assert ( g_pLocalIndexes->Contains ( sIndex ));
+			ServedIndexRefPtr_c pIndex ( nullptr );
+			// scope for g_pDisabledIndexes
+			{
+				RLockedServedIt_c it ( g_pDisabledIndexes );
+				it.Next();
+				sIndex = it.GetName ();
+				pIndex = it.Get();
+			}
+			assert ( g_pLocalIndexes->Contains ( sIndex ) );
 
-			auto pIndex = it.Get();
 			if ( pIndex ) // that is rt/percolate. Plain locals has just name and nullptr index
 			{
 				ServedDescWPtr_c wLocked ( pIndex );

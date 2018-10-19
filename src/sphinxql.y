@@ -41,6 +41,7 @@
 %token	TOK_CALL
 %token	TOK_CHARACTER
 %token	TOK_CHUNK
+%token	TOK_CLUSTER
 %token  TOK_COLLATE
 %token	TOK_COLLATION
 %token	TOK_COLUMN
@@ -248,7 +249,7 @@ ident_set:
 	TOK_IDENT
 	| TOK_ADD | TOK_AGENT | TOK_ALL | TOK_ALTER | TOK_ANY | TOK_ASC | TOK_ATTACH | TOK_ATTRIBUTES
 	| TOK_AVG | TOK_BEGIN | TOK_BETWEEN | TOK_BIGINT | TOK_BOOL| TOK_CALL
-	| TOK_CHARACTER | TOK_CHUNK | TOK_COLLATION | TOK_COLUMN | TOK_COMMIT
+	| TOK_CHARACTER | TOK_CHUNK | TOK_CLUSTER | TOK_COLLATION | TOK_COLUMN | TOK_COMMIT
 	| TOK_COMMITTED | TOK_COUNT | TOK_CREATE | TOK_DATABASES | TOK_DELETE
 	| TOK_DESC | TOK_DESCRIBE  | TOK_DISTINCT  | TOK_DOUBLE | TOK_DROP
 	| TOK_FLOAT | TOK_FLUSH | TOK_FOR| TOK_FUNCTION | TOK_GLOBAL | TOK_GROUP
@@ -1115,6 +1116,12 @@ set_global_stmt:
 			pParser->SetStatement ( $5, SET_INDEX_UVAR );
 			pParser->m_pStmt->m_dSetValues = *$8.m_pValues;
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $3 );
+		}
+	| TOK_SET TOK_CLUSTER ident TOK_GLOBAL set_string_value
+		{
+			pParser->SetStatement ( $5, SET_CLUSTER_UVAR );
+			pParser->ToString ( pParser->m_pStmt->m_sIndex, $3 );
+			pParser->ToString ( pParser->m_pStmt->m_sSetValue, $5 ).Unquote();
 		}
 	;
 

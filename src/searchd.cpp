@@ -16614,6 +16614,23 @@ void HandleMysqlSet ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, SessionVars_t & 
 		}
 		break;
 
+	case SET_CLUSTER_UVAR:
+	{
+		int iCluster = g_dClusters.GetFirst ( [&] ( const ReplicationCluster_t * tVal ) { return tStmt.m_sIndex==tVal->m_sName; } );
+		if ( iCluster==-1 )
+		{
+			sError.SetSprintf ( "unknown cluster '%s' in SET statement", tStmt.m_sIndex.cstr() );
+			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+			return;
+		}
+		if ( !ReplicateSetOption ( g_dClusters[iCluster], tStmt.m_sSetValue ) )
+		{
+			tOut.Error ( tStmt.m_sStmt, "cluster SET error" );
+			return;
+		}
+	}
+	break;
+
 	default:
 		sError.SetSprintf ( "INTERNAL ERROR: unhandle SET mode %d", (int)tStmt.m_eSet );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
@@ -19064,7 +19081,6 @@ void RotationThreadFunc ( void * )
 		ThreadSystem_t tThdSystemDesc ( "ROTATION" );
 
 		CSphString sIndex;
-		bool bMutable = false;
 		{
 			ServedIndexRefPtr_c pIndex ( nullptr );
 			// scope for g_pDisabledIndexes
@@ -19078,28 +19094,16 @@ void RotationThreadFunc ( void * )
 
 			if ( pIndex ) // that is rt/percolate. Plain locals has just name and nullptr index
 			{
-				ServedDescWPtr_c wLocked ( pIndex );
-				// prealloc RT and percolate here
-				bMutable = wLocked->IsMutable ();
-				if ( bMutable )
-				{
-					if ( PreallocNewIndex ( *wLocked, sIndex.cstr() ))
-					{
-						wLocked->m_bOnlyNew = false;
-						g_pLocalIndexes->AddOrReplace ( pIndex, sIndex );
-						pIndex->AddRef ();
-					} else
-						g_pLocalIndexes->DeleteIfNull ( sIndex );
-				}
+				ServedDescRPtr_c tLocked ( pIndex );
+				// FIXME!!! RT and percolate can not rotate along with replicator adding indexes
+				if ( tLocked->IsMutable () )
+					continue;
 			}
 		}
 
-		if ( !bMutable )
-		{
-			CSphString sError;
-			if ( !RotateIndexMT ( sIndex, sError ) )
-				sphWarning ( "%s", sError.cstr () );
-		}
+		CSphString sError;
+		if ( !RotateIndexMT ( sIndex, sError ) )
+			sphWarning ( "%s", sError.cstr () );
 
 		g_pDistIndexes->Delete ( sIndex ); // postponed delete of same-named distributed (if any)
 		g_pDisabledIndexes->Delete ( sIndex );
@@ -24293,6 +24297,7 @@ bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIndexName
 	// finally add the index to the hash of enabled.
 	g_pLocalIndexes->AddOrReplace ( pServed, sIndexName );
 	pServed->AddRef ();
+	g_pDisabledIndexes->Delete ( sIndexName );
 
 	return true;
 }
@@ -24452,7 +24457,7 @@ bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bo
 		pElem->m_sName = pCluster->string;
 		pElem->m_sListen = cJSON_GetObjectItem ( pCluster, "listen" )->valuestring;
 		pElem->m_sPath = cJSON_GetObjectItem ( pCluster, "path" )->valuestring;
-		pElem->m_sOptions = cJSON_GetObjectItem ( pCluster, "options" )->valuestring;
+		pElem->m_sOptions = ReplicateClusterOptions ( cJSON_GetObjectItem ( pCluster, "options" )->valuestring, g_eLogLevel>=SPH_LOG_RPL_DEBUG );
 		pElem->m_bSkipSST = ( !!cJSON_IsTrue ( cJSON_GetObjectItem ( pCluster, "skipSst" ) ) );
 
 		// check cluster path is unique

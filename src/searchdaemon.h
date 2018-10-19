@@ -1074,7 +1074,8 @@ enum SqlSet_e
 	SET_LOCAL,
 	SET_GLOBAL_UVAR,
 	SET_GLOBAL_SVAR,
-	SET_INDEX_UVAR
+	SET_INDEX_UVAR,
+	SET_CLUSTER_UVAR
 };
 
 /// refcounted vector
@@ -1368,6 +1369,8 @@ void ReplicationInit ( int iClusterCount, Abort_fn fnAbort, CSphAutoEvent * pSyn
 bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError );
 void ReplicateClusterDone ( ReplicationCluster_t * pCluster, int iCluster );
 bool ReplicatedIndexes ( const cJSON * pIndexes, bool bBypass, ReplicationCluster_t * pCluster );
+CSphString ReplicateClusterOptions ( const char * sOptionsRaw, bool bLogReplication );
+bool ReplicateSetOption ( ReplicationCluster_t * pCluster, const CSphString & sOpt );
 
 enum ReplicationCommand_e
 {

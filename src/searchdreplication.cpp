@@ -769,7 +769,7 @@ bool Replicate ( uint64_t uQueryHash, const CSphVector<BYTE> & dBuf, wsrep_t * p
 	tQuery.len = dBuf.GetLength();
 
 	wsrep_ws_handle_t tHnd;
-	tHnd.trx_id = WSREP_SEQNO_UNDEFINED;
+	tHnd.trx_id = UINT64_MAX;
 	tHnd.opaque = nullptr;
 
 	wsrep_status_t tRes = pProvider->append_key ( pProvider, &tHnd, &tKey, 1, WSREP_KEY_EXCLUSIVE, false );
@@ -889,4 +889,26 @@ void ReplicateClusterStats ( ReplicationCluster_t * pCluster, VectorLike & dOut 
 	}
 
 	pCluster->m_pProvider->stats_free ( pCluster->m_pProvider, pVarsStart );
+}
+
+CSphString ReplicateClusterOptions ( const char * sOptionsRaw, bool bLogReplication )
+{
+	CSphString sOptions ( sOptionsRaw );
+	if ( bLogReplication )
+	{
+		if ( sOptions.IsEmpty() )
+			sOptions = "debug=on;cert.log_conflicts=yes";
+		else
+			sOptions.SetSprintf ( "%s;debug=on;cert.log_conflicts=yes", sOptions.cstr() );
+	}
+	return sOptions;
+}
+
+bool ReplicateSetOption ( ReplicationCluster_t * pCluster, const CSphString & sOpt )
+{
+	if ( !pCluster || !pCluster->m_pProvider || sOpt.IsEmpty() )
+		return false;
+
+	wsrep_status_t tOk = pCluster->m_pProvider->options_set ( pCluster->m_pProvider, sOpt.cstr() );
+	return ( tOk==WSREP_OK );
 }

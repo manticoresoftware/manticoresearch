@@ -24443,6 +24443,21 @@ bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bo
 	const char * sProviderPath = hSearchd["repli_provider_path"].cstr();
 	ReplicationInit ( cJSON_GetArraySize ( pClusters ), ReplicationAbort, &tReplicationSync );
 
+	// node with empty incoming addresses works as GARB - does not affect FC
+	// might hung on pushing 1500 transactions
+	StringBuilder_c sIncomingAddrs;
+	for ( const CSphVariant * pOpt = hSearchd("listen"); pOpt; pOpt = pOpt->m_pNext )
+	{
+		if ( sIncomingAddrs.Length() )
+			sIncomingAddrs += ", ";
+		sIncomingAddrs += pOpt->strval().cstr();
+	}
+	if ( sIncomingAddrs.IsEmpty() )
+	{
+		sphWarning ( "no listen found, can not set incoming addresses, replication disabled" );
+		return false;
+	}
+
 	cJSON * pCluster = pClusters->child;
 	while ( pCluster )
 	{
@@ -24451,6 +24466,7 @@ bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bo
 		tArgs.m_sProvider = sProviderPath;
 		tArgs.m_bNewCluster = ( bNewCluster || bForce );
 		tArgs.m_iCluster = g_dClusters.GetLength();
+		tArgs.m_sIncomingAdresses = sIncomingAddrs.cstr();
 
 		CSphScopedPtr<ReplicationCluster_t> pElem ( new ReplicationCluster_t );
 		pElem->m_sURI = cJSON_GetObjectItem ( pCluster, "uri" )->valuestring;

@@ -1363,6 +1363,7 @@ struct ReplicationArgs_t
 	int						m_iCluster = 0;
 	bool					m_bNewCluster = false;
 	const char *			m_sProvider = nullptr;
+	const char *			m_sIncomingAdresses = nullptr;
 };
 
 void ReplicationInit ( int iClusterCount, Abort_fn fnAbort, CSphAutoEvent * pSync );

@@ -672,7 +672,7 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 
 	wsrep_args.node_name     = sMyName.cstr();
 	wsrep_args.node_address  = tArgs.m_pCluster->m_sListen.cstr();
-	wsrep_args.node_incoming = "";
+	wsrep_args.node_incoming = tArgs.m_sIncomingAdresses; // must to be set otherwise node works as GARB - does not affect FC and might hung 
 	wsrep_args.data_dir      = tArgs.m_pCluster->m_sPath.cstr(); // working directory
 	wsrep_args.options       = tArgs.m_pCluster->m_sOptions.cstr();
 	wsrep_args.proto_ver     = 127; // maximum supported application event protocol

@@ -1816,7 +1816,7 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bRe
 		iHits = pHits->Length();
 		m_dAccum.Reserve ( m_dAccum.GetLength()+iHits );
 		iHits = 0;
-		for ( const CSphWordHit * pHit = pHits->First(); pHit<=pHits->Last(); pHit++ )
+		for ( CSphWordHit * pHit = pHits->m_dData.Begin(); pHit<=pHits->Last(); pHit++ )
 		{
 			// ignore duplicate hits
 			if ( pHit->m_uDocID==tLastHit.m_uDocID && pHit->m_uWordID==tLastHit.m_uWordID && pHit->m_uWordPos==tLastHit.m_uWordPos )
@@ -1826,9 +1826,15 @@ void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bRe
 			if ( pFieldLens && HITMAN::GetField ( pHit->m_uWordPos )!=HITMAN::GetField ( tLastHit.m_uWordPos ) )
 				pFieldLens [ HITMAN::GetField ( tLastHit.m_uWordPos ) ] = HITMAN::GetPos ( tLastHit.m_uWordPos );
 
+			// need original hit for duplicate removal
+			tLastHit = *pHit;
+			// reset field end for not very last position
+			if ( HITMAN::IsEnd ( pHit->m_uWordPos ) && pHit!=pHits->Last() &&
+				pHit->m_uDocID==pHit[1].m_uDocID && pHit->m_uWordID==pHit[1].m_uWordID && HITMAN::IsEnd ( pHit[1].m_uWordPos ) )
+				pHit->m_uWordPos = HITMAN::GetPosWithField ( pHit->m_uWordPos );
+
 			// accumulate
 			m_dAccum.Add ( *pHit );
-			tLastHit = *pHit;
 			iHits++;
 		}
 		if ( pFieldLens )
@@ -4902,8 +4908,8 @@ int RtIndex_t::DebugCheck ( FILE * fp )
 				}
 
 				tDoc.m_uDocID += uDeltaID;
-				DWORD uField;
-				pIn = UnzipDword ( &uField, pIn );
+				DWORD uDocField;
+				pIn = UnzipDword ( &uDocField, pIn );
 				if ( pIn>=pMaxDoc )
 				{
 					LOC_FAIL(( fp, "reading past doclist end (segment=%d, word=%d, "
@@ -4913,7 +4919,7 @@ int RtIndex_t::DebugCheck ( FILE * fp )
 					break;
 				}
 
-				tDoc.m_uDocFields = uField;
+				tDoc.m_uDocFields = uDocField;
 				pIn = UnzipDword ( &tDoc.m_uHits, pIn );
 				if ( pIn>=pMaxDoc )
 				{
@@ -5083,7 +5089,7 @@ int RtIndex_t::DebugCheck ( FILE * fp )
 						}
 
 						uLastPosInField = uPosInField;
-						uLastFieldId = uField;
+						uLastFieldId = uFieldId;
 						bLastInFieldFound |= bLastInField;
 					}
 

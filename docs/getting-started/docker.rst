@@ -44,7 +44,6 @@ First, let's connect to Manticore Search and take a look at the available indexe
    +-------+-------------+
    | Index | Type        |
    +-------+-------------+
-   | dist1 | distributed |
    | testrt| rt          |
    +-------+-------------+
    2 rows in set (0.00 sec)

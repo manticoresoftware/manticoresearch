@@ -5,4 +5,4 @@
 #define GIT_TIMESTAMP_ID "@GIT_TIMESTAMP_ID@"
 #cmakedefine SPHINX_TAG "@SPHINX_TAG@"
 #cmakedefine GIT_BRANCH_ID "@GIT_BRANCH_ID@"
-#cmakedefine SOURCE_DIR "@SOURCE_DIR@"
+#cmakedefine GDB_SOURCE_DIR "@GDB_SOURCE_DIR@"

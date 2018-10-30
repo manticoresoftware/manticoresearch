@@ -6278,6 +6278,7 @@ struct Expr_Snippet_c : public ISphStringExpr
 			else if ( !strcasecmp ( szOption, "html_strip_mode" ) )			{ m_tHighlight.m_sStripMode.SetBinary ( sValue, iStrValLen ); }
 			else if ( !strcasecmp ( szOption, "allow_empty" ) )				{ m_tHighlight.m_bAllowEmpty= ( StringBinary2Number ( sValue, iStrValLen )!=0 ); }
 			else if ( !strcasecmp ( szOption, "emit_zones" ) )				{ m_tHighlight.m_bEmitZones = ( StringBinary2Number ( sValue, iStrValLen )!=0 ); }
+			else if ( !strcasecmp ( szOption, "force_passages" ) )			{ m_tHighlight.m_bForcePassages = ( StringBinary2Number ( sValue, iStrValLen )!=0 ); }
 			else if ( !strcasecmp ( szOption, "passage_boundary" ) )
 			{
 				CSphString sBuf;
@@ -10000,7 +10001,8 @@ enum eExcerpt_Flags
 	EXCERPT_FLAG_LOAD_FILES			= 128,
 	EXCERPT_FLAG_ALLOW_EMPTY		= 256,
 	EXCERPT_FLAG_EMIT_ZONES			= 512,
-	EXCERPT_FLAG_FILES_SCATTERED	= 1024
+	EXCERPT_FLAG_FILES_SCATTERED	= 1024,
+	EXCERPT_FLAG_FORCEPASSAGES		= 2048
 };
 
 enum
@@ -10023,6 +10025,7 @@ int PackAPISnippetFlags ( const ExcerptQuery_t &q, bool bOnlyScattered = false )
 	iRawFlags |= q.m_bAllowEmpty ? EXCERPT_FLAG_ALLOW_EMPTY : 0;
 	iRawFlags |= q.m_bEmitZones ? EXCERPT_FLAG_EMIT_ZONES : 0;
 	iRawFlags |= ( q.m_uFilesMode & 2 ) ? EXCERPT_FLAG_FILES_SCATTERED : 0;
+	iRawFlags |= q.m_bForcePassages ? EXCERPT_FLAG_FORCEPASSAGES : 0;
 	return iRawFlags;
 }
 
@@ -10527,6 +10530,7 @@ void HandleCommandExcerpt ( ISphOutputBuffer & tOut, int iVer, InputBuffer_c & t
 	q.m_uFilesMode |= bScattered?2:0;
 	q.m_bAllowEmpty = ( iFlags & EXCERPT_FLAG_ALLOW_EMPTY )!=0;
 	q.m_bEmitZones = ( iFlags & EXCERPT_FLAG_EMIT_ZONES )!=0;
+	q.m_bForcePassages = ( iFlags & EXCERPT_FLAG_FORCEPASSAGES )!=0;
 
 	int iCount = tReq.GetInt ();
 	if ( iCount<=0 || iCount>EXCERPT_MAX_ENTRIES )
@@ -13805,6 +13809,7 @@ void HandleMysqlCallSnippets ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, ThdDesc
 		else if ( sOpt=="load_files_scattered" ) { q.m_uFilesMode |= ( v.m_iVal!=0 )?2:0; iExpType = TOK_CONST_INT; }
 		else if ( sOpt=="allow_empty" )			{ q.m_bAllowEmpty = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
 		else if ( sOpt=="emit_zones" )			{ q.m_bEmitZones = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
+		else if ( sOpt=="force_passages" )		{ q.m_bForcePassages = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
 
 		else
 		{

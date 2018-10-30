@@ -631,11 +631,11 @@ static void CheckQuerySoftSpace ( const XQNode_t * pNode, const int * pQPos, int
 	ARRAY_FOREACH ( i, dChildren )
 	{
 		const XQNode_t * pChild = dChildren[i];
-		ARRAY_FOREACH ( j, pChild->m_dChildren )
-			dChildren.Add ( pChild->m_dChildren[j] );
+		for ( auto * pChildren : pChild->m_dChildren )
+			dChildren.Add ( pChildren );
 
-		ARRAY_FOREACH ( j, pChild->m_dWords )
-			dTerms.Add ( pChild->m_dWords.Begin () + j );
+		for ( auto & dWord : pChild->m_dWords )
+			dTerms.Add ( &dWord );
 	}
 
 	dTerms.Sort ( CmpAtomPos_fn () );

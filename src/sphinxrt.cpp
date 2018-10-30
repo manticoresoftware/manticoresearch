@@ -10522,8 +10522,8 @@ public:
 	bool MultiQuery ( const CSphQuery *, CSphQueryResult *, int, ISphMatchSorter **, const CSphMultiQueryArgs & ) const override;
 	bool MultiQueryEx ( int, const CSphQuery *, CSphQueryResult **, ISphMatchSorter **, const CSphMultiQueryArgs & ) const override;
 	virtual bool AddDocument ( ISphHits * , const CSphMatch & , const char ** , const CSphVector<DWORD> & , CSphString & , CSphString & ) { return true; }
-	void Commit ( int * , ISphRtAccum * pAccExt ) override { RollBack ( pAccExt ); }
-	bool DeleteDocument ( const SphDocID_t * , int , CSphString & , ISphRtAccum * pAccExt ) override { RollBack ( pAccExt ); return true; }
+	void Commit ( int * , ISphRtAccum * pAccExt ) override;
+	bool DeleteDocument ( const SphDocID_t * , int , CSphString & , ISphRtAccum * pAccExt ) final;
 	void CheckRamFlush () override {}
 	void ForceRamFlush ( bool bPeriodic ) override;
 	void ForceDiskChunk () override;
@@ -10570,6 +10570,7 @@ private:
 	static const DWORD				META_VERSION = 6;				///< current version, added expression filter
 
 	int								m_iLockFD = -1;
+	int								m_iDeleted = 0; // set in DeleteDocument, reset and return in Commit
 	CSphSourceStats					m_tStat;
 	ISphTokenizerRefPtr_c			m_pTokenizerIndexing;
 	int								m_iMaxCodepointLength = 0;
@@ -12169,6 +12170,44 @@ int PercolateIndex_c::DeleteQueries ( const char * sTags )
 		++m_iTID;
 
 	return iDeleted;
+}
+
+void PercolateIndex_c::Commit ( int * pDeleted, ISphRtAccum * pAccExt )
+{
+	if ( pDeleted )
+		*pDeleted = m_iDeleted;
+	m_iDeleted = 0;
+	RollBack ( pAccExt );
+}
+
+bool PercolateIndex_c::DeleteDocument ( const SphDocID_t * pUIDS, int iCount, CSphString &, ISphRtAccum * pAccExt )
+{
+	assert ( !iCount || pUIDS!=NULL );
+
+	int iDeleted = 0;
+	ScWL_t wLock ( m_tLock );
+
+	for ( int i = 0; i<iCount; ++i )
+	{
+		const StoredQueryKey_t * ppElem = m_dStored.BinarySearch ( bind ( &StoredQueryKey_t::m_uUID ), pUIDS[i] );
+		if ( ppElem )
+		{
+			int iElem = ppElem - m_dStored.Begin ();
+			SafeDelete ( m_dStored[iElem].m_pQuery );
+			m_dStored.Remove ( iElem );
+			++iDeleted;
+		}
+	}
+	if ( iDeleted )
+	{
+		++m_iTID;
+		m_iDeleted = iDeleted;
+	}
+
+
+//	return iDeleted;
+//	RollBack ( pAccExt );
+	return true;
 }
 
 bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters,

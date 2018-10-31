@@ -126,26 +126,25 @@ struct PercolateQueryDesc
 
 struct PercolateMatchResult_t
 {
-	bool m_bGetDocs;
-	bool m_bGetQuery;
-	bool m_bGetFilters;
+	bool m_bGetDocs = false;
+	bool m_bGetQuery = false;
+	bool m_bGetFilters = true;
 
-	CSphFixedVector<PercolateQueryDesc> m_dQueryDesc;
-	CSphFixedVector<int> m_dDocs;
-	int m_iQueriesMatched;
+	CSphFixedVector<PercolateQueryDesc> m_dQueryDesc {0};
+	CSphFixedVector<int> m_dDocs {0};
+	int m_iQueriesMatched = 0;
 	int m_iQueriesFailed = 0;
-	int m_iDocsMatched;
-	int64_t m_tmTotal;
+	int m_iDocsMatched = 0;
+	int64_t m_tmTotal = 0;
 
 	// verbose data
-	bool m_bVerbose;
-	CSphFixedVector<int> m_dQueryDT; // microsecond time per query
-	int	m_iEarlyOutQueries;
-	int	m_iTotalQueries;
-	int m_iOnlyTerms;
-	int64_t m_tmSetup;
+	bool m_bVerbose = false;
+	CSphFixedVector<int> m_dQueryDT {0}; // microsecond time per query
+	int	m_iEarlyOutQueries = 0;
+	int	m_iTotalQueries = 0;
+	int m_iOnlyTerms = 0;
+	int64_t m_tmSetup = 0;
 
-	PercolateMatchResult_t ();
 	void Swap ( PercolateMatchResult_t & tOther );
 };
 

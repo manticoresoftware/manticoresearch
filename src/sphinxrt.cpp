@@ -10607,11 +10607,6 @@ struct SegmentReject_t
 	CSphFixedVector<uint64_t> m_dPerDocWilds { 0 };
 	int m_iRows = 0;
 
-	SegmentReject_t ()
-	{
-		m_dWilds.Fill ( 0 );
-	}
-
 	bool Filter ( const StoredQuery_t * pStored, bool bUtf8 ) const;
 };
 
@@ -11316,11 +11311,11 @@ private:
 };
 
 
-enum PercolateTermMatched_e
+enum class PERCOLATE
 {
-	PERCOLATE_EXACT,
-	PERCOLATE_PREFIX,
-	PERCOLATE_INFIX
+	EXACT,
+	PREFIX,
+	INFIX
 };
 
 class PercolateQwordSetup_c : public ISphQwordSetup
@@ -11354,7 +11349,7 @@ bool PercolateQwordSetup_c::QwordSetup ( ISphQword * pQword ) const
 
 	SubstringInfo_t tSubInfo;
 	CSphVector<Slice_t> dDictLoc;
-	PercolateTermMatched_e eCmp = PERCOLATE_EXACT;
+	PERCOLATE eCmp = PERCOLATE::EXACT;
 	if ( !sphHasExpandableWildcards ( sWord ) )
 	{
 		// no wild-cards, or just wild-cards? do not expand
@@ -11362,18 +11357,18 @@ bool PercolateQwordSetup_c::QwordSetup ( ISphQword * pQword ) const
 		dDictLoc.Add ( tChPoint );
 	} else if ( !sphIsWild ( *sWord ) )
 	{
-		eCmp = PERCOLATE_PREFIX;
+		eCmp = PERCOLATE::PREFIX;
 		Slice_t tChPoint = GetPrefixLocator ( sWord, m_pDict->HasMorphology(), m_pSeg, tSubInfo );
 		dDictLoc.Add ( tChPoint );
 	} else
 	{
-		eCmp = PERCOLATE_INFIX;
+		eCmp = PERCOLATE::INFIX;
 		GetSuffixLocators ( sWord, m_iMaxCodepointLength, m_pSeg, tSubInfo, dDictLoc );
 	}
 
 	// to skip heading magic chars ( NONSTEMMED ) in the prefix
 	int iSkipMagic = 0;
-	if ( eCmp==PERCOLATE_PREFIX || eCmp==PERCOLATE_INFIX )
+	if ( eCmp==PERCOLATE::PREFIX || eCmp==PERCOLATE::INFIX )
 		iSkipMagic = ( BYTE ( *tSubInfo.m_sSubstring )<0x20 );
 
 	// cases:
@@ -11395,17 +11390,17 @@ bool PercolateQwordSetup_c::QwordSetup ( ISphQword * pQword ) const
 		while ( ( pWord = tReader.UnzipWord() )!=NULL )
 		{
 			// stemmed terms do not match any kind of wild-cards
-			if ( ( eCmp==PERCOLATE_PREFIX || eCmp==PERCOLATE_INFIX ) && m_pDict->HasMorphology() && pWord->m_sWord[1]!=MAGIC_WORD_HEAD_NONSTEMMED )
+			if ( ( eCmp==PERCOLATE::PREFIX || eCmp==PERCOLATE::INFIX ) && m_pDict->HasMorphology() && pWord->m_sWord[1]!=MAGIC_WORD_HEAD_NONSTEMMED )
 				continue;
 
 			int iCmp = -1;
 			switch ( eCmp )
 			{
-			case PERCOLATE_EXACT:
+			case PERCOLATE::EXACT:
 				iCmp = sphDictCmpStrictly ( (const char *)pWord->m_sWord + 1, pWord->m_sWord[0], sWord, iWordLen );
 				break;
 
-			case PERCOLATE_PREFIX:
+			case PERCOLATE::PREFIX:
 				iCmp = sphDictCmp ( (const char *)pWord->m_sWord + 1, pWord->m_sWord[0], tSubInfo.m_sSubstring, tSubInfo.m_iSubLen );
 				if ( iCmp==0 )
 				{
@@ -11414,7 +11409,7 @@ bool PercolateQwordSetup_c::QwordSetup ( ISphQword * pQword ) const
 				}
 				break;
 
-			case PERCOLATE_INFIX:
+			case PERCOLATE::INFIX:
 				if ( sphWildcardMatch ( (const char *)pWord->m_sWord + 1 + iSkipMagic, tSubInfo.m_sWildcard ) )
 					iCmp = 0;
 				break;
@@ -11432,7 +11427,7 @@ bool PercolateQwordSetup_c::QwordSetup ( ISphQword * pQword ) const
 				tDictPoint.m_uLen = pWord->m_uDocs;
 			}
 
-			if ( iCmp>0 || ( iCmp==0 && eCmp==PERCOLATE_EXACT ) )
+			if ( iCmp>0 || ( iCmp==0 && eCmp==PERCOLATE::EXACT ) )
 				break;
 		}
 	}
@@ -12082,15 +12077,13 @@ bool PercolateIndex_c::AddQuery ( const char * sQuery, const char * sTags, const
 		pStored->m_dFilterTree = *pFilterTree;
 	pStored->m_bQL = bQL;
 
-	m_tLock.WriteLock();
+	ScWL_t wLock (m_tLock);
 
 	bool bAutoID = ( uId==0 );
 	if ( bAutoID )
 		uId = ( m_dStored.GetLength() ? m_dStored.Last().m_uUID + 1 : 1 );
 
-	StoredQueryKey_t tItem;
-	tItem.m_pQuery = pStored;
-	tItem.m_uUID = uId;
+	StoredQueryKey_t tItem { uId, pStored };
 	pStored->m_uUID = uId;
 
 	bool bAdded = true;
@@ -12121,8 +12114,6 @@ bool PercolateIndex_c::AddQuery ( const char * sQuery, const char * sTags, const
 	}
 	if ( bAdded )
 		m_iTID++;
-
-	m_tLock.Unlock();
 
 	return bAdded;
 }
@@ -12549,26 +12540,6 @@ bool PercolateIndex_c::Truncate ( CSphString & )
 
 	SaveMeta();
 	return true;
-}
-
-PercolateMatchResult_t::PercolateMatchResult_t()
-	: m_dQueryDesc ( 0 )
-	, m_dDocs ( 0 )
-	, m_dQueryDT ( 0 )
-{
-	m_bGetDocs = false;
-	m_bGetQuery = false;
-	m_bGetFilters = true;
-	m_iQueriesMatched = 0;
-	m_iDocsMatched = 0;
-	m_tmTotal = 0;
-
-	m_bVerbose = false;
-
-	m_iEarlyOutQueries = 0;
-	m_iTotalQueries = 0;
-	m_iOnlyTerms = 0;
-	m_tmSetup = 0;
 }
 
 void PercolateMatchResult_t::Swap ( PercolateMatchResult_t & tOther )

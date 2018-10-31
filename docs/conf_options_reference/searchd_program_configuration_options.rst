@@ -591,6 +591,12 @@ raise max_children much higher than the amount of CPU cores. Usually
 that will only hurt CPU contention and *decrease* the general
 throughput.
 
+For workers **thread_pool** searchd daemon *always creates* N threads for the thread pool:
+| max_children is defined | max_children is undefined |
+| ------ | ------ |
+| value of max_children  | max ( 3 * sphCpuThreadsCount() / 2, 2 ) |
+High value for max_children and *thread_pool* may lead to N=max_children amount of threads created immediattely on daemon startup.
+
 Example:
 
 

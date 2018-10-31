@@ -12,7 +12,6 @@ struct AppCtx_t
 {
 	CSphAutoEvent * m_pSync = nullptr;
 	Abort_fn m_fnAbort = nullptr;
-	CSphFixedVector<SphThread_t> m_dRecv { 0 };
 };
 static AppCtx_t g_tCtx;
 
@@ -674,7 +673,7 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 	wsrep_args.node_address  = tArgs.m_pCluster->m_sListen.cstr();
 	wsrep_args.node_incoming = tArgs.m_sIncomingAdresses; // must to be set otherwise node works as GARB - does not affect FC and might hung 
 	wsrep_args.data_dir      = tArgs.m_pCluster->m_sPath.cstr(); // working directory
-	wsrep_args.options       = tArgs.m_pCluster->m_sOptions.cstr();
+	wsrep_args.options       = tArgs.m_pCluster->m_sOptions.scstr();
 	wsrep_args.proto_ver     = 127; // maximum supported application event protocol
 
 	wsrep_args.state_id      = &tStateID;
@@ -707,18 +706,18 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 	}
 
 	// let's start listening thread with proper provider set
-	if ( !sphThreadCreate ( g_tCtx.m_dRecv.Begin() + tArgs.m_iCluster, ReplicationRecv_fn, tArgs.m_pCluster, false ) )
+	if ( !sphThreadCreate ( &tArgs.m_pCluster->m_tRecvThd, ReplicationRecv_fn, tArgs.m_pCluster, false ) )
 	{
 		sError.SetSprintf ( "failed to start thread %d (%s)", errno, strerror(errno) );
 		return false;
 	}
 
-	sphLogDebugRpl ( "replicator %d created", tArgs.m_iCluster );
+	sphLogDebugRpl ( "replicator created for cluster '%s'", tArgs.m_pCluster->m_sName.cstr() );
 
 	return true;
 }
 
-void ReplicateClusterDone ( ReplicationCluster_t * pCluster, int iCluster )
+void ReplicateClusterDone ( ReplicationCluster_t * pCluster )
 {
 	if ( !pCluster )
 		return;
@@ -729,7 +728,7 @@ void ReplicateClusterDone ( ReplicationCluster_t * pCluster, int iCluster )
 
 	// Listening thread are now running and receiving writesets. Wait for them
 	// to join. Thread will join after signal handler closes wsrep connection
-	sphThreadJoin ( g_tCtx.m_dRecv.Begin() + iCluster );
+	sphThreadJoin ( &pCluster->m_tRecvThd );
 
 	// FIXME!!! unload provider ONLY after nobody uses it any more
 	wsrep_unload ( pCluster->m_pProvider );
@@ -824,9 +823,8 @@ bool Replicate ( uint64_t uQueryHash, const CSphVector<BYTE> & dBuf, wsrep_t * p
 	return bOk;
 }
 
-void ReplicationInit ( int iClusterCount, Abort_fn fnAbort, CSphAutoEvent * pSync )
+void ReplicationInit ( Abort_fn fnAbort, CSphAutoEvent * pSync )
 {
-	g_tCtx.m_dRecv.Reset ( iClusterCount );
 	g_tCtx.m_fnAbort = fnAbort;
 	g_tCtx.m_pSync = pSync;
 }

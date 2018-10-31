@@ -82,6 +82,7 @@
 %token	TOK_INTO
 %token	TOK_IS
 %token	TOK_ISOLATION
+%token	TOK_JOIN
 %token	TOK_JSON
 %token	TOK_LEVEL
 %token	TOK_LIKE
@@ -232,6 +233,7 @@ statement:
 	| flush_logs
 	| sysfilters
 	| debug_clause
+	| join_cluster
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -1836,6 +1838,21 @@ opt_par:
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $1 );
 			pParser->m_pStmt->m_iIntParam = $2.m_iValue;
 		}
+
+join_cluster:
+	TOK_JOIN TOK_CLUSTER ident cluster_opts_list
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_JOIN_CLUSTER;
+			pParser->ToString ( tStmt.m_sIndex, $3 );
+		}
+	;
+
+cluster_opts_list:
+	// empty
+	| call_opts_list
+	;
+
 %%
 
 #if USE_WINDOWS

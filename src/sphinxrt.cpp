@@ -9665,7 +9665,7 @@ void RtBinlog_c::Configure ( const CSphConfigSection & hSearchd, bool bTestMode 
 void RtBinlog_c::Replay ( const SmallStringHash_T<CSphIndex*> & hIndexes, DWORD uReplayFlags,
 	ProgressCallbackSimple_t * pfnProgressCallback )
 {
-	if ( m_bDisabled || !hIndexes.GetLength() )
+	if ( m_bDisabled )
 		return;
 
 	// on replay started

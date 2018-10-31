@@ -1064,6 +1064,7 @@ enum SqlStmt_e
 	STMT_RELOAD_INDEXES,
 	STMT_SYSFILTERS,
 	STMT_DEBUG,
+	STMT_JOIN_CLUSTER,
 
 	STMT_TOTAL
 };
@@ -1347,6 +1348,7 @@ struct ReplicationCluster_t
 
 	// replicator
 	wsrep_t *	m_pProvider = nullptr;
+	SphThread_t	m_tRecvThd;
 
 	// state
 	CSphFixedVector<BYTE>	m_dUUID { 0 };
@@ -1360,15 +1362,14 @@ typedef void (*Abort_fn) (void);
 struct ReplicationArgs_t
 {
 	ReplicationCluster_t *	m_pCluster = nullptr;
-	int						m_iCluster = 0;
 	bool					m_bNewCluster = false;
 	const char *			m_sProvider = nullptr;
 	const char *			m_sIncomingAdresses = nullptr;
 };
 
-void ReplicationInit ( int iClusterCount, Abort_fn fnAbort, CSphAutoEvent * pSync );
+void ReplicationInit ( Abort_fn fnAbort, CSphAutoEvent * pSync );
 bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError );
-void ReplicateClusterDone ( ReplicationCluster_t * pCluster, int iCluster );
+void ReplicateClusterDone ( ReplicationCluster_t * pCluster );
 bool ReplicatedIndexes ( const cJSON * pIndexes, bool bBypass, ReplicationCluster_t * pCluster );
 CSphString ReplicateClusterOptions ( const char * sOptionsRaw, bool bLogReplication );
 bool ReplicateSetOption ( ReplicationCluster_t * pCluster, const CSphString & sOpt );

@@ -479,8 +479,12 @@ static CSphAutoEvent						g_tReplicationSync;
 static bool JsonConfigWrite ( const cJSON * pConf, CSphString & sError );
 static void JsonConfigSetLocal ( cJSON * pConf );
 
-CSphVector<ReplicationCluster_t *> g_dClusters;
-SmallStringHash_T<ReplicationCluster_t *> g_hIndex2Cluster;
+static CSphVector<ReplicationCluster_t *> g_dClusters;
+static SmallStringHash_T<ReplicationCluster_t *> g_hIndex2Cluster;
+static CSphString g_sProviderPath;
+static CSphString g_sIncomingAddr;
+static RwLock_t g_tClustersLock;
+static CSphMutex g_tClusterJoin;
 
 /// master-agent API protocol extensions version
 enum
@@ -1528,7 +1532,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 		// unfreeze main thread that might wait of replication started
 		g_tReplicationSync.SetEvent();
 
-		ReplicateClusterDone ( g_dClusters[iCluster], iCluster );
+		ReplicateClusterDone ( g_dClusters[iCluster] );
 		SafeDelete ( g_dClusters[iCluster] );
 	}
 
@@ -8652,7 +8656,7 @@ static const char * g_dSqlStmts[] =
 	"show_index_status", "show_profile", "alter_add", "alter_drop", "show_plan",
 	"select_dual", "show_databases", "create_plugin", "drop_plugin", "show_plugins", "show_threads",
 	"facet", "alter_reconfigure", "show_index_settings", "flush_index", "reload_plugins", "reload_index",
-	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug"
+	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "join_cluster"
 };
 
 
@@ -11309,11 +11313,13 @@ void BuildStatus ( VectorLike & dStatus )
 		dStatus.Add().SetSprintf ( INT64_FMT, s.m_iHits );
 
 	// clusters
+	g_tClustersLock.ReadLock();
 	ARRAY_FOREACH ( i, g_dClusters )
 	{
 		ReplicationCluster_t * pCluster = g_dClusters[i];
 		ReplicateClusterStats ( pCluster, dStatus );
 	}
+	g_tClustersLock.Unlock();
 }
 
 void BuildOneAgentStatus ( VectorLike & dStatus, HostDashboard_t* pDash, const char * sPrefix="agent" )
@@ -13530,7 +13536,9 @@ bool HandleCmdReplicate ( ReplicationCommand_t & tCmd, CSphString & sError, int 
 	assert ( tCmd.m_eCommand>=0 && tCmd.m_eCommand<RCOMMAND_TOTAL );
 	CommitMonitor_c tMonitor ( tCmd, pDeletedCount );
 
+	g_tClustersLock.ReadLock();
 	ReplicationCluster_t ** ppCluster = g_hIndex2Cluster ( tCmd.m_sIndex );
+	g_tClustersLock.Unlock();
 	if ( !ppCluster )
 		return tMonitor.Commit ( sError );
 
@@ -16616,6 +16624,7 @@ void HandleMysqlSet ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, SessionVars_t & 
 
 	case SET_CLUSTER_UVAR:
 	{
+		CSphScopedRLock tClusterGuard ( g_tClustersLock );		
 		int iCluster = g_dClusters.GetFirst ( [&] ( const ReplicationCluster_t * tVal ) { return tStmt.m_sIndex==tVal->m_sName; } );
 		if ( iCluster==-1 )
 		{
@@ -17773,7 +17782,8 @@ ISphRtIndex * CSphSessionAccum::GetIndex ()
 	return ( m_pAcc ? m_pAcc->GetIndex() : NULL );
 }
 
-bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, CSphString & sFederatedQuery );
+static bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, CSphString & sFederatedQuery );
+static bool ReplicationJoin ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, CSphAutoEvent & tReplicationSync, CSphString & sError );
 
 class CSphinxqlSession : public ISphNoncopyable
 {
@@ -18207,6 +18217,13 @@ public:
 
 		case STMT_DEBUG:
 			HandleMysqlDebug ( tOut, *pStmt, m_tVars.m_bVIP );
+			return true;
+
+		case STMT_JOIN_CLUSTER:
+			if ( ReplicationJoin ( pStmt->m_sIndex, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues, g_tReplicationSync, m_sError ) )
+				tOut.Ok();
+			else
+				tOut.Error ( sQuery.cstr(), m_sError.cstr() );
 			return true;
 
 		default:
@@ -24262,7 +24279,7 @@ void JsonConfigSetLocal ( cJSON * pConf )
 	}
 }
 
-bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIndexName, ReplicationCluster_t * pCluster )
+bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIndexName )
 {
 	// delete existed index first, does not allow to save it's data that breaks sync'ed index files
 	// need a scope for RefRtr's to work
@@ -24308,12 +24325,47 @@ bool ReplicatedIndexes ( const cJSON * pIndexes, bool bBypass, ReplicationCluste
 	assert ( pCluster );
 	assert ( bBypass || ( pIndexes && cJSON_GetArraySize ( pIndexes ) ) );
 
+	// reset indexes list at cluster and JSON representation
+	cJSON * pClusters = cJSON_GetObjectItem ( g_pCfgJson, "clusters" );
+	if ( !pClusters )
+	{
+		sphWarning ( "no clusters found" );
+		return false;
+	}
+	cJSON * pClusterJSON = cJSON_GetObjectItem ( pClusters, pCluster->m_sName.cstr() );
+	if ( !pClusterJSON )
+	{
+		sphWarning ( "no cluster '%s' found", pCluster->m_sName.cstr() );
+		return false;
+	}
+
+	// for bypass mode only seqno got replicated but not indexes
+	if ( bBypass )
+		return true;
+
+	cJSON_DeleteItemFromObject ( pClusterJSON, "indexes" );
+	cJSON * pClusterIndexes = cJSON_CreateArray();
+	cJSON_AddItemToObject ( pClusterJSON, "indexes", pClusterIndexes );
+	pCluster->m_dIndexes.Resize ( 0 );
+
 	const cJSON * pIndex = ( pIndexes ? pIndexes->child : nullptr );
 	int iIndexCount = ( pIndexes ? cJSON_GetArraySize ( pIndexes ) : 0 );
 	int iLoaded = 0;
 	while ( pIndex!=nullptr )
 	{
-		const char * sIndexName = pIndex->string;
+		CSphString sIndexName = pIndex->string;
+
+		g_tClustersLock.ReadLock();
+		ReplicationCluster_t ** ppOrigCluster = g_hIndex2Cluster ( sIndexName );
+		g_tClustersLock.Unlock();
+
+		if ( ppOrigCluster && (*ppOrigCluster)!=pCluster )
+		{
+			sphWarning ( "index '%s' is already in another cluster '%s', replicated cluster '%s'", sIndexName.cstr(), (*ppOrigCluster)->m_sName.cstr(), pCluster->m_sName.cstr() );
+			pIndex = pIndex->next;
+			continue;
+		}
+
 		CSphVariant tPath ( cJSON_GetObjectItem( pIndex, "path" )->valuestring, 0 );
 		CSphVariant tType ( cJSON_GetObjectItem( pIndex, "type" )->valuestring, 0 );
 
@@ -24321,12 +24373,26 @@ bool ReplicatedIndexes ( const cJSON * pIndexes, bool bBypass, ReplicationCluste
 		hIndex.Add ( tPath, "path" );
 		hIndex.Add ( tType, "type" );
 
-		bool bLoaded = LoadIndex ( hIndex, sIndexName, pCluster );
-		if ( !bLoaded )
-			sphWarning ( "index '%s': removed from JSON config", sIndexName );
-
+		bool bLoaded = LoadIndex ( hIndex, sIndexName );
 		iLoaded += ( bLoaded ? 1 : 0 );
 		pIndex = pIndex->next;
+
+		if ( !bLoaded )
+		{
+			sphWarning ( "index '%s': removed from JSON config", sIndexName.cstr() );
+			continue;
+		} 
+
+		// add index into hash, cluster indexes list, JSON representation
+		if ( !ppOrigCluster )
+		{
+			g_tClustersLock.WriteLock();
+			g_hIndex2Cluster.Add ( pCluster, sIndexName );
+			g_tClustersLock.Unlock();
+		}
+
+		pCluster->m_dIndexes.Add ( sIndexName );
+		cJSON_AddItemToArray ( pClusterIndexes, cJSON_CreateString ( sIndexName.cstr() ) );
 	}
 
 	CSphString sError;
@@ -24430,8 +24496,7 @@ bool NewClusterForce ( const CSphString & sPath, const CSphString & sName )
 
 bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bool bForce, CSphAutoEvent & tReplicationSync )
 {
-	cJSON * pClusters = cJSON_GetObjectItem ( g_pCfgJson, "clusters" );
-	if ( g_bSkipCfgJson || !pClusters || !pClusters->child )
+	if ( g_bSkipCfgJson )
 		return false;
 
 	if ( !hSearchd.Exists ( "repli_provider_path" ) )
@@ -24441,7 +24506,7 @@ bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bo
 	}
 
 	const char * sProviderPath = hSearchd["repli_provider_path"].cstr();
-	ReplicationInit ( cJSON_GetArraySize ( pClusters ), ReplicationAbort, &tReplicationSync );
+	ReplicationInit ( ReplicationAbort, &tReplicationSync );
 
 	// node with empty incoming addresses works as GARB - does not affect FC
 	// might hung on pushing 1500 transactions
@@ -24458,14 +24523,17 @@ bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bo
 		return false;
 	}
 
-	cJSON * pCluster = pClusters->child;
+	g_sProviderPath = sProviderPath;
+	g_sIncomingAddr = sIncomingAddrs.cstr();
+
+	cJSON * pClusters = cJSON_GetObjectItem ( g_pCfgJson, "clusters" );
+	cJSON * pCluster = pClusters ? pClusters->child : nullptr;
 	while ( pCluster )
 	{
 		ReplicationArgs_t tArgs;
 		// global options
 		tArgs.m_sProvider = sProviderPath;
 		tArgs.m_bNewCluster = ( bNewCluster || bForce );
-		tArgs.m_iCluster = g_dClusters.GetLength();
 		tArgs.m_sIncomingAdresses = sIncomingAddrs.cstr();
 
 		CSphScopedPtr<ReplicationCluster_t> pElem ( new ReplicationCluster_t );
@@ -24563,6 +24631,125 @@ void ReplicationWait ( CSphAutoEvent & tReplicationSync )
 			continue;
 		}
 	}
+}
+
+static bool CheckJoinClusterValue ( const SmallStringHash_T<SqlInsert_t *> & hValues, const char * sName, CSphString & sError )
+{
+	if ( !hValues.Exists ( sName ) )
+	{
+		sError.SetSprintf ( "'%s' not set", sName );
+		return false;
+	}
+	if ( hValues[sName]->m_sVal.IsEmpty() )
+	{
+		sError.SetSprintf ( "'%s' should have string value", sName );
+		return false;
+	}
+
+	return true;
+}
+
+bool ReplicationJoin ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, CSphAutoEvent & tReplicationSync, CSphString & sError )
+{
+	// only one join at a time as sync callback know nothing what cluster got synced
+	CSphScopedLock<CSphMutex> tJoinGuard ( g_tClusterJoin );
+
+	if ( g_sProviderPath.IsEmpty() )
+	{
+		sError.SetSprintf ( "provider not set" );
+		return false;
+	}
+	if ( g_sIncomingAddr.IsEmpty() )
+	{
+		sError.SetSprintf ( "incoming addresses not set" );
+		return false;
+	}
+
+	assert ( dNames.GetLength()==dValues.GetLength() );
+	SmallStringHash_T<SqlInsert_t *> hValues;
+	ARRAY_FOREACH ( i, dNames )
+		hValues.Add ( dValues.Begin() + i, dNames[i] );
+
+	g_tClustersLock.ReadLock();
+	bool bClusterExists = g_dClusters.FindFirst ( [&] ( const ReplicationCluster_t * pCluster ) { return pCluster->m_sName==sCluster; } );
+	g_tClustersLock.Unlock();
+	if ( bClusterExists )
+	{
+		sError.SetSprintf ( "cluster '%s' already exists", sCluster.cstr() );
+		return false;
+	}
+	if ( !CheckJoinClusterValue ( hValues, "uri", sError ) )
+		return false;
+	if ( !CheckJoinClusterValue ( hValues, "listen", sError ) )
+		return false;
+	if ( !CheckJoinClusterValue ( hValues, "path", sError ) )
+		return false;
+
+	ReplicationArgs_t tArgs;
+	// global options
+	tArgs.m_sProvider = g_sProviderPath.cstr();
+	tArgs.m_bNewCluster = false;
+	tArgs.m_sIncomingAdresses = g_sIncomingAddr.cstr();
+
+	CSphScopedPtr<ReplicationCluster_t> pElem ( new ReplicationCluster_t );
+	pElem->m_sURI = hValues["uri"]->m_sVal;
+	pElem->m_sName = sCluster;
+	pElem->m_sListen = hValues["listen"]->m_sVal;
+	pElem->m_sPath = hValues["path"]->m_sVal;
+	CSphString sOpts;
+	if ( hValues.Exists ( "options" ) )
+		sOpts = hValues["options"]->m_sVal;
+	pElem->m_sOptions = ReplicateClusterOptions ( sOpts.cstr(), g_eLogLevel>=SPH_LOG_RPL_DEBUG );
+	// uri should start with gcomm://
+	if ( !pElem->m_sURI.Begins ( "gcomm://" ) )
+		pElem->m_sURI.SetSprintf ( "gcomm://%s", pElem->m_sURI.cstr() );
+
+	// check cluster path is unique
+	g_tClustersLock.ReadLock();
+	bool bValidPath = ClusterCheckPath ( pElem->m_sPath, pElem->m_sName, g_dClusters );
+	g_tClustersLock.Unlock();
+	if ( !bValidPath )
+		return false;
+
+	ListenerDesc_t tListen = ParseListener ( pElem->m_sListen.cstr() );
+	char sListenBuf [ SPH_ADDRESS_SIZE ];
+	sphFormatIP ( sListenBuf, sizeof(sListenBuf), tListen.m_uIP );
+	pElem->m_sListenSST.SetSprintf ( "%s:%d", sListenBuf, tListen.m_iPort+2 );
+
+	tArgs.m_pCluster = pElem.Ptr();
+
+	// need valid cluster description at config
+	cJSON * pClusters = cJSON_GetObjectItem ( g_pCfgJson, "clusters" );
+	if ( !pClusters )
+	{
+		sphWarning ( "no clusters found" );
+		return false;
+	}
+	cJSON * pCluster = cJSON_CreateObject();
+	cJSON_AddItemToObject ( pCluster, "uri", cJSON_CreateString ( pElem->m_sURI.cstr() ) );
+	cJSON_AddItemToObject ( pCluster, "listen", cJSON_CreateString ( pElem->m_sListen.cstr() ) );
+	cJSON_AddItemToObject ( pCluster, "path", cJSON_CreateString ( pElem->m_sPath.cstr() ) );
+	cJSON_AddItemToObject ( pCluster, "options", cJSON_CreateString ( pElem->m_sOptions.cstr() ) );
+	cJSON_AddItemToObject ( pCluster, "indexes", cJSON_CreateArray() );
+	cJSON_AddItemToObject ( pClusters, pElem->m_sName.cstr(), pCluster );
+
+	if ( !ReplicateClusterInit ( tArgs, sError ) )
+	{
+		// need to remove cluster description from config
+		cJSON_DeleteItemFromObject ( pClusters, pElem->m_sName.cstr() );
+		tReplicationSync.SetEvent();
+		return false;
+	}
+
+	assert ( pElem->m_pProvider );
+	g_tClustersLock.WriteLock();
+	g_dClusters.Add ( pElem.LeakPtr() );
+	g_tClustersLock.Unlock();
+
+	// wait sync to finish
+	tReplicationSync.WaitEvent();
+
+	return true;
 }
 
 int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)

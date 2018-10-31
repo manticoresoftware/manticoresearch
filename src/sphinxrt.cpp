@@ -11903,7 +11903,8 @@ bool PercolateIndex_c::MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchRes
 	MEMORY ( MEM_INDEX_RT );
 
 	int64_t tmStart = sphMicroTimer();
-	tRes.m_tmSetup = tmStart;
+	if ( tRes.m_bVerbose )
+		tRes.m_tmSetup = tmStart;
 	m_sLastWarning = "";
 
 	auto pAcc = ( RtAccum_t * ) AcquireAccum ( m_pDict, pAccExt );

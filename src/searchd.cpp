@@ -12384,6 +12384,7 @@ struct PercolateOptions_t
 	bool m_bVerbose = false;
 	bool m_bJsonDocs = true;
 	bool m_bGetQuery = false;
+	CSphString m_sIdAlias;
 };
 
 
@@ -12681,7 +12682,7 @@ static void PercolateMatchDocuments ( const StrVec_t & dDocs, const PercolateOpt
 	}
 
 	int iDocsNoIdCount = 0;
-	bool bAutoId = ( sIdAlias.IsEmpty() );
+	bool bAutoId = tOpts.m_sIdAlias.IsEmpty();
 	CSphFixedVector<int64_t> dDocids ( bAutoId ? 0 : dDocs.GetLength()+1 );
 	int64_t uSeqDocid = 1;
 
@@ -12714,7 +12715,7 @@ static void PercolateMatchDocuments ( const StrVec_t & dDocs, const PercolateOpt
 			}
 			tStrings.Reset();
 
-			if ( !ParseJsonDocument ( dDocs[iDoc].cstr(), hSchemaLocators, sIdAlias, iDoc, dFields, tDoc, tStrings,
+			if ( !ParseJsonDocument ( dDocs[iDoc].cstr(), hSchemaLocators, tOpts.m_sIdAlias, iDoc, dFields, tDoc, tStrings,
 				dMvaParsed, sError, sWarning ) )
 				break;
 

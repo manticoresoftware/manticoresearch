@@ -19,6 +19,8 @@
 
 Manticore Search is an open source search server designed to be fast, scalable and with powerful and accurate full-text search capabilities. It is a fork of popular search engine Sphinx.
 
+[![IMAGE ALT TEXT](http://img.youtube.com/vi/-5lB6_L28gw/0.jpg)](http://www.youtube.com/watch?v=-5lB6_L28gw "Introduction to Manticore Search")
+
 ## Features
 * Over 20 full-text operators and over 20 ranking factors, custom rankers
 * Advanced tokenization at character and word level

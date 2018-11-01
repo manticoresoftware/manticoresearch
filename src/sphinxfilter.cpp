@@ -1531,29 +1531,28 @@ struct Filter_KillList : public ISphFilter
 	explicit Filter_KillList ( const KillListVector & dKillList )
 	{
 		m_bUsesAttrs = false;
-		m_dExt = dKillList;
-
 		int iMerged = 0;
-		if ( m_dExt.GetLength()>1 )
+		if ( dKillList.GetLength()>1 )
 		{
-			for ( const auto & dExt: m_dExt )
-				iMerged += ( dExt.m_iLen<=g_iKillMerge ? dExt.m_iLen : 0 );
+			for ( const auto & dExt: dKillList )
+				if ( dExt.m_iLen<=g_iKillMerge )
+					iMerged += dExt.m_iLen;
 
 			if ( iMerged>0 )
 			{
 				m_dMerged.Reserve ( iMerged );
-				ARRAY_FOREACH ( i, m_dExt )
+				for ( const auto &dExt: dKillList )
 				{
-					if ( m_dExt[i].m_iLen>g_iKillMerge )
-						continue;
-
-					m_dMerged.Append(m_dExt[i].m_pBegin,m_dExt[i].m_iLen);
-					m_dExt.RemoveFast ( i );
-					i--;
+					if ( dExt.m_iLen>g_iKillMerge )
+						m_dExt.Add ( dExt );
+					else
+						m_dMerged.Append ( dExt.m_pBegin, dExt.m_iLen );
 				}
+				m_dMerged.Uniq ();
 			}
-			m_dMerged.Uniq();
-		}
+		};
+		if ( m_dMerged.IsEmpty() )
+			m_dExt = dKillList;
 	}
 
 	bool Eval ( const CSphMatch & tMatch ) const final

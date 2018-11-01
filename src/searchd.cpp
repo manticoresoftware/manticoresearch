@@ -12736,7 +12736,7 @@ static void PercolateMatchDocuments ( const StrVec_t & dDocs, const PercolateOpt
 	CSphHash<SchemaItemVariant_t> hSchemaLocators;
 	if ( tOpts.m_bJsonDocs )
 	{
-		for ( int i=0; i<iAttrsCount; i++ )
+		for ( int i=0; i<iAttrsCount; ++i )
 		{
 			const CSphColumnInfo & tCol = tSchema.GetAttr(i);
 			SchemaItemVariant_t tAttr;
@@ -12813,9 +12813,9 @@ static void PercolateMatchDocuments ( const StrVec_t & dDocs, const PercolateOpt
 			break;
 
 		// in user-provides-id mode let's skip all docs without id
-		if ( !bAutoId && tDoc.m_uDocID==0 )
+		if ( !bAutoId && !tDoc.m_uDocID )
 		{
-			iDocsNoIdCount++;
+			++iDocsNoIdCount;
 			continue;
 		}
 

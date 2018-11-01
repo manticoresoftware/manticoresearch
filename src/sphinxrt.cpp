@@ -10577,12 +10577,12 @@ private:
 	int64_t							m_tmSaved = 0;
 
 	CSphVector<StoredQueryKey_t>	m_dStored GUARDED_BY ( m_tLock );
-	CSphRwlock						m_tLock;
+	RwLock_t						m_tLock;
 
 	CSphFixedVector<StoredQuery_t>	m_dLoadedQueries { 0 };
 	CSphSchema						m_tMatchSchema;
 
-	void DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMatchResult_t & tRes );
+	void DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMatchResult_t & tRes ) REQUIRES ( !m_tLock );
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -11116,7 +11116,6 @@ static bool TagsMatched ( const uint64_t * pFilter, int iCount, const uint64_t *
 PercolateIndex_c::PercolateIndex_c ( const CSphSchema & tSchema, const char * sIndexName, const char * sPath )
 	: PercolateIndex_i ( sIndexName, sPath )
 {
-	Verify ( m_tLock.Init () );
 	m_tSchema = tSchema;
 
 	// fill match schema
@@ -11133,12 +11132,11 @@ PercolateIndex_c::~PercolateIndex_c ()
 		SaveMeta();
 
 	{ // coverity complains about accessing m_dStored without locking tLock
-		CSphScopedWLock tLock { m_tLock };
+		ScWL_t wLock { m_tLock };
 		for ( auto& dStored : m_dStored )
 			SafeDelete ( dStored.m_pQuery );
 	}
 	SafeClose ( m_iLockFD );
-	Verify ( m_tLock.Done () );
 }
 
 ISphRtAccum * PercolateIndex_c::CreateAccum ( CSphString & sError )
@@ -11203,21 +11201,12 @@ bool PercolateIndex_c::AddDocument ( ISphTokenizer * pTokenizer, int iFields, co
 struct PercolateQword_t : public ISphQword
 {
 public:
-	PercolateQword_t ()
-		: m_dDoclist ( 0 )
-		, m_uNextHit ( 0 )
-	{
-		m_tMatch.Reset ( 0 );
-
-		m_iDoc = 0;
-		m_pSeg = NULL;
-	}
-
+	PercolateQword_t () = default;
 	virtual ~PercolateQword_t ()
 	{
 	}
 
-	virtual const CSphMatch & GetNextDoc ( DWORD * )
+	const CSphMatch & GetNextDoc ( DWORD * ) final
 	{
 		m_iHits = 0;
 		while (true)
@@ -11246,7 +11235,7 @@ public:
 		}
 	}
 
-	virtual void SeekHitlist ( SphOffset_t uOff )
+	void SeekHitlist ( SphOffset_t uOff ) final
 	{
 		int iHits = (int)(uOff>>32);
 		if ( iHits==1 )
@@ -11259,7 +11248,7 @@ public:
 		}
 	}
 
-	virtual Hitpos_t GetNextHit ()
+	Hitpos_t GetNextHit () final
 	{
 		if ( m_uNextHit==0 )
 			return Hitpos_t ( m_tHitReader.UnzipHit() );
@@ -11300,14 +11289,14 @@ private:
 		m_iDoc++;
 	}
 
-	const RtSegment_t *			m_pSeg;
-	CSphFixedVector<Slice_t>	m_dDoclist;
+	const RtSegment_t *			m_pSeg = nullptr;
+	CSphFixedVector<Slice_t>	m_dDoclist { 0 };
 	CSphMatch					m_tMatch;
 	RtDocReader_t				m_tDocReader;
 	RtHitReader2_t				m_tHitReader;
 
-	int							m_iDoc;
-	DWORD						m_uNextHit;
+	int							m_iDoc = 0;
+	DWORD						m_uNextHit = 0;
 };
 
 
@@ -11341,7 +11330,7 @@ ISphQword *	PercolateQwordSetup_c::QwordSpawn ( const XQKeyword_t & ) const
 
 bool PercolateQwordSetup_c::QwordSetup ( ISphQword * pQword ) const
 {
-	PercolateQword_t * pMyQword = (PercolateQword_t *)pQword;
+	auto * pMyQword = (PercolateQword_t *)pQword;
 	const char * sWord = pMyQword->m_sDictWord.cstr();
 	int iWordLen = pMyQword->m_sDictWord.Length();
 	if ( !iWordLen )
@@ -11872,27 +11861,29 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 		tRes.m_tmSetup = sphMicroTimer() - tRes.m_tmSetup;
 
 	// queries should be locked for reading now
-	m_tLock.ReadLock();
-
-	int iTotalQueries = m_dStored.GetLength();
-	PercolateMatchJob_t tJobMain ( m_dStored, tQueryCounter, *dMatches[0], nullptr ); // still got crash info no need to set it again
-
-	// work loop
-	if ( pPool )
+	int iTotalQueries = 0;
 	{
-		tCrashQuery = CrashQueryGet();
-		for ( int i=1; i<dMatches.GetLength(); i++ )
-		{
-			PercolateMatchJob_t * pJob = new PercolateMatchJob_t ( m_dStored, tQueryCounter, *dMatches[i], &tCrashQuery );
-			pPool->AddJob ( pJob );
-		}
-	}
-	tJobMain.Call();
-	if ( pPool )
-		pPool->Shutdown();
-	SafeDelete ( pPool );
+		ScRL_t rLock ( m_tLock );
 
-	m_tLock.Unlock();
+		iTotalQueries = m_dStored.GetLength();
+		PercolateMatchJob_t tJobMain ( m_dStored, tQueryCounter, *dMatches[0], nullptr ); // still got crash info no need to set it again
+
+		// work loop
+		if ( pPool )
+		{
+			tCrashQuery = CrashQueryGet();
+			for ( int i=1; i<dMatches.GetLength(); i++ )
+			{
+				PercolateMatchJob_t * pJob = new PercolateMatchJob_t ( m_dStored, tQueryCounter, *dMatches[i], &tCrashQuery );
+				pPool->AddJob ( pJob );
+			}
+		}
+		tJobMain.Call();
+		if ( pPool )
+			pPool->Shutdown();
+		SafeDelete ( pPool );
+
+	}
 
 	// merge result set
 	PercolateGetResult ( iTotalQueries, dMatches, tRes );
@@ -11915,10 +11906,13 @@ bool PercolateIndex_c::MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchRes
 		return false;
 
 	// empty txn or no queries just ignore
-	if ( !pAcc->m_iAccumDocs || !m_dStored.GetLength() )
 	{
-		pAcc->Cleanup ();
-		return true;
+		ScRL_t rLock ( m_tLock );
+		if ( !pAcc->m_iAccumDocs || m_dStored.IsEmpty() )
+		{
+			pAcc->Cleanup ();
+			return true;
+		}
 	}
 
 	pAcc->Sort();
@@ -11926,7 +11920,7 @@ bool PercolateIndex_c::MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchRes
 	RtSegment_t * pSeg = pAcc->CreateSegment ( m_tSchema.GetRowSize(), PERCOLATE_WORDS_PER_CP );
 	assert ( !pSeg || pSeg->m_iRows>0 );
 	assert ( !pSeg || pSeg->m_iAliveRows>0 );
-	assert ( !pSeg || pSeg->m_bTlsKlist==false );
+	assert ( !pSeg || !pSeg->m_bTlsKlist );
 	BuildSegmentInfixes ( pSeg, m_pDict->HasMorphology(), true, m_tSettings.m_iMinInfixLen, PERCOLATE_WORDS_PER_CP, ( m_iMaxCodepointLength>1 ) );
 
 	DoMatchDocuments ( pSeg, tRes );
@@ -12123,7 +12117,7 @@ int PercolateIndex_c::DeleteQueries ( const uint64_t * pQueries, int iCount )
 	assert ( !iCount || pQueries!=NULL );
 
 	int iDeleted = 0;
-	m_tLock.WriteLock();
+	ScWL_t wLock (m_tLock);
 
 	for ( int i=0; i<iCount; i++ )
 	{
@@ -12139,8 +12133,6 @@ int PercolateIndex_c::DeleteQueries ( const uint64_t * pQueries, int iCount )
 	if ( iDeleted )
 		m_iTID++;
 
-	m_tLock.Unlock();
-
 	return iDeleted;
 }
 
@@ -12153,7 +12145,7 @@ int PercolateIndex_c::DeleteQueries ( const char * sTags )
 		return 0;
 
 	int iDeleted = 0;
-	m_tLock.WriteLock();
+	ScWL_t wLock ( m_tLock );
 
 	ARRAY_FOREACH ( i, m_dStored )
 	{
@@ -12170,9 +12162,7 @@ int PercolateIndex_c::DeleteQueries ( const char * sTags )
 		}
 	}
 	if ( iDeleted )
-		m_iTID++;
-
-	m_tLock.Unlock();
+		++m_iTID;
 
 	return iDeleted;
 }
@@ -12531,12 +12521,13 @@ void PercolateIndex_c::GetQueries ( const char * sFilterTags, bool bTagsEq, cons
 
 bool PercolateIndex_c::Truncate ( CSphString & )
 {
-	m_tLock.WriteLock();
-	for ( auto& dStored : m_dStored )
-		SafeDelete ( dStored.m_pQuery );
-	m_dStored.Reset();
+	{
+		ScWL_t wLock ( m_tLock );
+		for ( auto& dStored : m_dStored )
+			SafeDelete ( dStored.m_pQuery );
+		m_dStored.Reset();
+	}
 	++m_iTID;
-	m_tLock.Unlock();
 
 	SaveMeta();
 	return true;

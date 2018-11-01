@@ -589,7 +589,8 @@ until there are free worker threads. The queries will only start failing
 with a temporary. Thus, in thread_pool mode it makes little sense to
 raise max_children much higher than the amount of CPU cores. Usually
 that will only hurt CPU contention and *decrease* the general
-throughput.
+throughput. The threads are created at startup to initialized the thread pool, 
+using extreme high values can lead to a slow daemon startup.
 
 Example:
 

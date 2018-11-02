@@ -9753,18 +9753,17 @@ struct SnippetsRemote_t : ISphNoncopyable
 	{}
 };
 
-struct SnippetThread_t
+struct SnippetJob_t : public ISphJob
 {
-	SphThread_t					m_tThd {0};
 	long						m_iQueries = 0;
 	ExcerptQueryChained_t *		m_pQueries = nullptr;
 	CSphAtomic *				m_pCurQuery = nullptr;
 	CSphIndex *					m_pIndex = nullptr;
 	CrashQuery_t				m_tCrashQuery;
 
-	void BuildSnippets ()
+	void Call () final
 	{
-		SphCrashLogger_c::SetLastQuery ( m_tCrashQuery );
+		CrashQuerySet ( m_tCrashQuery ); // transfer crash info into container
 
 		SnippetContext_t tCtx;
 		tCtx.Setup ( m_pIndex, *m_pQueries, m_pQueries->m_sError );
@@ -9894,11 +9893,6 @@ static int64_t GetSnippetDataSize ( const CSphVector<ExcerptQueryChained_t> &dSn
 	return iSize;
 }
 
-void SnippetThreadFunc ( void * pArg )
-{
-	( ( SnippetThread_t * ) pArg )->BuildSnippets ();
-}
-
 bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQueries, CSphString & sError, ThdDesc_t & tThd )
 {
 	SnippetsRemote_t dRemoteSnippets ( dQueries );
@@ -10024,27 +10018,34 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 	if ( bScattered && iAbsentHead==EOF_ITEM )
 		bRemote = false;
 
+	// stuff for thread-pooling
+	auto * pPool = sphThreadPoolCreate ( g_iDistThreads - 1, "snippets", sError );
+	if ( !pPool )
+		sphWarning ( "failed to create thread_pool, single thread snippets used: %s", sError.cstr () );
+	CrashQuery_t tCrashQuery = SphCrashLogger_c::GetQuery (); // transfer query info for crash logger to new thread
+	CSphAtomic iCurQuery;
+	CSphVector<SnippetJob_t> dThreads ( Min ( 1, g_iDistThreads ) );
+	SnippetJob_t * pJobLocal = nullptr;
+
 	// one more boring case: multithreaded, but no remote agents.
 	if ( !bRemote )
 	{
 		// do MT searching
-		CrashQuery_t tCrashQuery = SphCrashLogger_c::GetQuery (); // transfer query info for crash logger to new thread
-		CSphAtomic iCurQuery;
-		CSphVector<SnippetThread_t> dThreads ( g_iDistThreads );
-		for ( int i = 0; i<g_iDistThreads; ++i )
+		for ( auto & t : dThreads )
 		{
-			SnippetThread_t &t = dThreads[i];
 			t.m_iQueries = dQueries.GetLength ();
 			t.m_pQueries = dQueries.Begin ();
 			t.m_pCurQuery = &iCurQuery;
 			t.m_pIndex = pIndex;
 			t.m_tCrashQuery = tCrashQuery;
-			if ( i )
-				SphCrashLogger_c::ThreadCreate ( &t.m_tThd, SnippetThreadFunc, &t );
+			if ( !pJobLocal )
+				pJobLocal = &t;
+			else if ( pPool )
+				pPool->AddJob ( &t );
 		}
-		SnippetThreadFunc ( &dThreads[0] );
-		for ( int i = 1; i<dThreads.GetLength (); ++i )
-			sphThreadJoin ( &dThreads[i].m_tThd );
+		if ( pJobLocal )
+			pJobLocal->Call();
+		SafeDelete ( pPool );
 
 		// back in query order
 		if ( !bScattered )
@@ -10080,19 +10081,17 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 	}
 
 	// do MT searching
-	CrashQuery_t tCrashQuery = SphCrashLogger_c::GetQuery(); // transfer query info for crash logger to new thread
-	CSphAtomic iCurQuery;
-	CSphVector<SnippetThread_t> dThreads ( g_iDistThreads );
-	for ( int i=0; i<g_iDistThreads; ++i )
+	for ( auto &t : dThreads )
 	{
-		SnippetThread_t & t = dThreads[i];
 		t.m_iQueries = dQueries.GetLength();
 		t.m_pQueries = dQueries.Begin();
 		t.m_pCurQuery = &iCurQuery;
 		t.m_pIndex = pIndex;
 		t.m_tCrashQuery = tCrashQuery;
-		if ( i )
-			SphCrashLogger_c::ThreadCreate ( &t.m_tThd, SnippetThreadFunc, &t );
+		if ( !pJobLocal )
+			pJobLocal = &t;
+		else if ( pPool )
+			pPool->AddJob ( &t );
 	}
 
 	// connect to remote agents and query them
@@ -10102,11 +10101,11 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 	ScheduleDistrJobs ( dRemoteSnippets.m_dAgents, &tReqBuilder, &tParser, tReporter );
 
 	// run local worker in current thread also
-	SnippetThreadFunc ( &dThreads[0] );
+	if ( pJobLocal )
+		pJobLocal->Call ();
 
 	// wait local jobs to finish
-	for ( auto & dThread : dThreads )
-		sphThreadJoin ( &dThread.m_tThd );
+	SafeDelete ( pPool );
 
 	// wait remotes to finish also
 	tReporter->Finish ();
@@ -10136,10 +10135,10 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 			if ( iFailed )
 			{
 				sphWarning ( "Snippets: failsafe for %d failed items", iFailed );
-				SnippetThread_t & t = dThreads[0];
+				auto & t = dThreads[0];
 				t.m_pQueries = dQueries.Begin();
 				iCurQuery = 0;
-				SnippetThreadFunc ( &t );
+				t.Call();
 			}
 		}
 	}

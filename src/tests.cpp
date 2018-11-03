@@ -163,6 +163,7 @@ void BenchTokenizer ()
 	{
 		ISphTokenizer * pTokenizer = sphCreateUTF8NgramTokenizer ();
 		bool g = pTokenizer->SetNgramChars("U+3000..U+2FA1F", sError);
+		pTokenizer->SetBuffer ( (const BYTE*)sData, iBytes );
 		printf("SetNgramChars: %d, %s\n", g, sError.cstr());
 		printf ( "run 3: \n" );
 		while (1) {
@@ -179,6 +180,7 @@ void BenchTokenizer ()
 		ISphTokenizer * pTokenizer = sphCreateUTF8SegTokenizer ();
 		CSphString sError;
 		pTokenizer->SetSegDictionary("/opt/veeseek/etc/chinese-words.dict", sError);
+		pTokenizer->SetBuffer ( (const BYTE*)sData, iBytes );
 		printf ( "run 4: \n" );
 		while (1) {
 			BYTE * token = pTokenizer->GetToken ();

@@ -1,13 +1,15 @@
 # Manticoresearch with CJK Word Segmentation
 ## Why Word Segmentation for CJK
 Manticore (Sphinx) is a great full-text search engine. It supports almost all languages, including CJK (Chinese, Japanese, Korean) supported by its ngram tokenizer.
-**Ngram = 1** will splits all CJK to single character, which likes split all English to alphabet. This will makes searching with much lower efficiency.
+**Ngram = 1** will splits all CJK to single character, which likes split all English to alphabet. This will makes searching with much lower efficiency and lower relevance.
 **Ngram = 2 or greater** will creates much more meaningless “word”, and make the index file much larger, and also makes the speed of indexing, searching lower.
 so, a Word Segmentation is necessary for CJK.
 
-Manticore is a folk of Sphinx search and makes some [optimization with performance](https://manticoresearch.com/2018/03/18/sphinx-3-vs-manticore-performance-benchmark/). And Sphinxsearch 3.x is no longer open-sourced at present. So, Manticoresearch is the best to add CJK Word Segmentation.
+Manticore is a folk of Sphinx search and makes some [optimization with performance](https://manticoresearch.com/2018/03/18/sphinx-3-vs-manticore-performance-benchmark/). And Sphinxsearch 3.x is [no longer open-sourced at present](http://sphinxsearch.com/downloads/). So, Manticoresearch is the best to add CJK Word Segmentation.
 
-## Implementation
+I will keep updating with Manticoresearch main branch as possible as I can.
+
+## Algorithm Implementation
 The algorithm is based on a word dictionary, which implemented with [cedar](http://www.tkl.iis.u-tokyo.ac.jp/~ynaga/cedar/). <code>cedar</code> is C++ implementation of efficiently-updatable double-array trie, which is best for the dictionary. Its License: GNU GPLv2, LGPLv2.1, and BSD;  or e-mail author for other licenses you want.
 
 It use Minium Matching (but not single character) to match the dictionary with string to get words. If it can’t resolve some ambiguity, just make the single character as on word, this mechanism can guarantee search engine find out content without missing.

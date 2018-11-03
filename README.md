@@ -1,3 +1,50 @@
+# Manticoresearch with CJK Word Segmentation
+## Why Word Segmentation for CJK
+Manticore (Sphinx) is a great full-text search engine. It supports almost all languages, including CJK (Chinese, Japanese, Korean) supported by its ngram tokenizer.
+**Ngram = 1** will splits all CJK to single character, which likes split all English to alphabet. This will makes searching with much lower efficiency.
+**Ngram = 2 or greater** will creates much more meaningless “word”, and make the index file much larger, and also makes the speed of indexing, searching lower.
+so, a Word Segmentation is necessary for CJK.
+
+Manticore is a folk of Sphinx search and makes some [optimization with performance](https://manticoresearch.com/2018/03/18/sphinx-3-vs-manticore-performance-benchmark/). And Sphinxsearch 3.x is no longer open-sourced at present. So, Manticoresearch is the best to add CJK Word Segmentation.
+
+## Implementation
+The algorithm is based on a word dictionary, which implemented with [cedar](http://www.tkl.iis.u-tokyo.ac.jp/~ynaga/cedar/). <code>cedar</code> is C++ implementation of efficiently-updatable double-array trie, which is best for the dictionary. Its License: GNU GPLv2, LGPLv2.1, and BSD;  or e-mail author for other licenses you want.
+
+It use Minium Matching (but not single character) to match the dictionary with string to get words. If it can’t resolve some ambiguity, just make the single character as on word, this mechanism can guarantee search engine find out content without missing.
+
+## Installation
+Same as the original Manticore, see the [Docs](https://docs.manticoresearch.com/latest/html/)
+
+## Usage
+**1. prepare your words**
+Put all your words into an .txt file, one word per line, which likes:
+
+>\# words.txt
+>中文
+>中国語
+>중국어
+
+**2. create your dictionary**
+You will get <code>make_segdictionary</code> after building secceed. run the command:
+```shell
+./make_segdictionary words.txt words.dict
+```
+Now, you get the dictionary: words.dict
+
+**3. configure**
+Just add one line to the <code>index {...} block</code> in your config file:
+```config
+index {
+    ...
+    seg_dictionary = path-to-your-segmentation-words-dictionary
+    ...
+}
+```
+**remind:** It works for both of plain index and real-time index.
+
+------------------------------------------------------------------------------------------------------------------------------
+---
+
 [![manticoresearch](https://manticoresearch.com/wp-content/uploads/2018/03/manticoresearch.png)](https://manticoresearch.com)
 
 -----------------

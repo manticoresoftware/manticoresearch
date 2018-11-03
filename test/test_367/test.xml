@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<test>
+<name>snippets passage generation</name>
+
+<config>
+searchd
+{
+	<searchd_settings/>
+}
+
+source test
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query			= select * from test_table
+	sql_attr_uint		= gid
+	sql_field_string	= title
+}
+
+index test
+{
+	source				= test
+	path				= <data_path/>/test
+}
+
+</config>
+
+<db_create>
+CREATE TABLE test_table
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	gid INTEGER NOT NULL,
+	title VARCHAR(255) NOT NULL
+);
+</db_create>
+<db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_insert>INSERT INTO test_table VALUES ( 1, 123, 'hello world' )</db_insert>
+<db_insert>INSERT INTO test_table VALUES ( 2, 123, 'aaa' )</db_insert>
+<db_insert>INSERT INTO test_table VALUES ( 3, 123, 'In 1853, pro-Southern Copperheads (politics) proposed dividing the state of California to create a new Territory of Colorado (California) (at this time the territory that would become the state of Colorado was named Jefferson Territory' )</db_insert>
+
+<sphqueries>
+<sphinxql>CALL SNIPPETS('In 1853, pro-Southern Copperheads (politics) proposed dividing the state of California to create a new Territory of Colorado (California) (at this time the territory that would become the state of Colorado was named Jefferson Territory', 'test', 'state of',  1 AS around, 300 AS limit, 1 as limit_passages)</sphinxql>
+<sphinxql>CALL SNIPPETS('In 1853, pro-Southern Copperheads (politics) proposed dividing the state of California to create a new Territory of Colorado (California) (at this time the territory that would become the state of Colorado was named Jefferson Territory', 'test', 'state of',  1 AS around, 200 AS limit, 1 as limit_passages)</sphinxql>
+<sphinxql>CALL SNIPPETS('In 1853, pro-Southern Copperheads (politics) proposed dividing the state of California to create a new Territory of Colorado (California) (at this time the territory that would become the state of Colorado was named Jefferson Territory', 'test', 'state of',  1 AS around, 300 AS limit, 1 as limit_passages, 1 as force_passages)</sphinxql>
+<sphinxql>SELECT id, SNIPPET(title, 'state of', 'around=1', 'limit=300', 'limit_passages=1', 'force_passages=1') as s FROM test WHERE MATCH('state of')</sphinxql>
+</sphqueries>
+
+</test>

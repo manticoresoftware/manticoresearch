@@ -49,6 +49,7 @@ public:
 	BYTE			m_uFilesMode = 0;		///< sources are text(0), files(1), scattered files(2), only scattered files (3).
 	bool			m_bAllowEmpty = false;	///< whether to allow empty snippets (by default, return something from the start)
 	bool			m_bEmitZones = false;	///< whether to emit zone for passage
+	bool			m_bForcePassages = false; ///< whether to force passages generation
 
 	CSphVector<BYTE>	m_dRes;			///< snippet result holder
 	CSphString		m_sError;			///< snippet error message

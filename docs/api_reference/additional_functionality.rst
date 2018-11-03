@@ -157,6 +157,10 @@ contains additional optional highlighting parameters:
    Emits an HTML tag with an enclosing zone name before each passage.
    Boolean, default is false.
 
+-  ``force_passages``:
+   Whether to generate passages for snippet even if limits allow to highlight
+   whole text. Boolean, default is false.
+
 Snippets extraction algorithm currently favors better passages (with
 closer phrase matches), and then passages with keywords not yet in
 snippet. Generally, it will try to highlight the best match with the

@@ -6,7 +6,7 @@ SHOW THREADS syntax
 .. code-block:: none
 
 
-    SHOW THREADS [ OPTION columns=width ]
+    SHOW THREADS [ OPTION columns=width[,format=sphinxql] ]
 
 SHOW THREADS lists all currently active client threads, not counting
 system threads. It returns a table with columns that describe:
@@ -42,3 +42,5 @@ and time since current iteration started in system endless loop.
     +------+----------+-------+----------+----------------------------------------------------+
     3 row in set (0.00 sec)
 
+By default, the query is shown in format that was executed - SphinxQL or API. 
+With `format` option the queries will be shown in SphinxQL format regardless of protocol from which they were executed.

@@ -2335,7 +2335,7 @@ static bool DumpGdb ( int iFD )
 	  "\nUnpack the sources by command:\n"
 	  "  mkdir -p /tmp/manticore && unzip manticore.zip -d /tmp/manticore\n\n"
 	  "Also suggest to append a substitution def to your ~/.gdbinit file:\n"
-	  "  set substitute-path \"" SOURCE_DIR "\" /tmp/manticore/manticoresearch-" SPH_GIT_COMMIT_ID );
+	  "  set substitute-path \"" GDB_SOURCE_DIR "\" /tmp/manticore/manticoresearch-" SPH_GIT_COMMIT_ID );
 	return true;
 #else
 	return false;

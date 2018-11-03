@@ -66,6 +66,10 @@ if ( NOT VERNUMBERS )
 	STRING ( REGEX REPLACE ".*\"(.*)\"(.*)$" "\\1" VERNUMBERS "${_STRINGS}" )
 endif()
 
+if ( NOT GDB_SOURCE_DIR )
+	set ( GDB_SOURCE_DIR "${SOURCE_DIR}" )
+endif()
+
 # All info collected (we need SPH_GIT_COMMIT_ID, GIT_TIMESTAMP_ID, GIT_BRANCH_ID and SPHINX_TAG, if any)
 message ( STATUS "Version ${VERNUMBERS} ${SPH_GIT_COMMIT_ID}@${GIT_TIMESTAMP_ID}, ${GIT_BRANCH_ID}" )
 

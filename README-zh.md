@@ -19,11 +19,12 @@ Manticoresearch 从Sphinx search 2.x 继承而来，并做了[性能优化](http
 ## 使用方法
 **1. 准备词表**
 把所有词写到一个txt文件，一行一个词，如下所示：
-
->\# words.txt
->中文
->中国語
->중국어
+```text
+# words.txt
+中文
+中国語
+중국어
+```
 
 **2. 创建字典**
 成功编译代码后，就会得到创建字典的可执行程序<code>make_segdictionary</code>. 然后执行命令:

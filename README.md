@@ -20,11 +20,12 @@ Same as the original Manticore, see the [Docs](https://docs.manticoresearch.com/
 ## Usage
 **1. prepare your words**
 Put all your words into an .txt file, one word per line, which likes:
-
->\# words.txt
->中文
->中国語
->중국어
+```text
+# words.txt
+中文
+中国語
+중국어
+```
 
 **2. create your dictionary**
 You will get <code>make_segdictionary</code> after building secceed. run the command:

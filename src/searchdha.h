@@ -457,6 +457,13 @@ public:
 #endif
 };
 
+struct iQueryResult
+{
+	virtual ~iQueryResult() {}
+	virtual void Reset() = 0;
+	virtual bool HasWarnings() const = 0;
+};
+
 /// remote agent connection (local per-query state)
 struct AgentConn_t : public ISphRefcountedMT
 {
@@ -474,7 +481,7 @@ public:
 	int64_t			m_iWaited = 0;		///< statistics of waited
 
 	// some external stuff
-	CSphVector<CSphQueryResult> m_dResults;	///< multi-query results
+	CSphScopedPtr<iQueryResult> m_pResult { nullptr };	///< multi-query results
 	CSphString		m_sFailure;				///< failure message (both network and logical)
 	mutable int		m_iStoreTag = -1;	///< cookie, m.b. used to 'glue' to concrete connection
 	int				m_iWeight = -1;		///< weight of the index, will be send with query to remote host

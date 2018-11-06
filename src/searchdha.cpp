@@ -1695,7 +1695,8 @@ bool AgentConn_t::BadResult ( int iError )
 
 	State ( Agent_e::RETRY );
 	Finish ();
-	m_dResults.Reset ();
+	if ( m_pResult )
+		m_pResult->Reset ();
 	return false;
 }
 
@@ -2501,8 +2502,8 @@ bool AgentConn_t::CommitResult ()
 
 	Finish();
 
-	if ( !bWarnings )
-		bWarnings = m_dResults.FindFirst ( [] ( const CSphQueryResult &dRes ) { return !dRes.m_sWarning.IsEmpty(); } );
+	if ( !bWarnings && m_pResult )
+		bWarnings = m_pResult->HasWarnings ();
 
 	agent_stats_inc ( *this, bWarnings ? eNetworkCritical : eNetworkNonCritical );
 	m_bSuccess = 1;

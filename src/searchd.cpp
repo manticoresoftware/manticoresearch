@@ -3354,6 +3354,23 @@ void SearchRequestBuilder_t::BuildRequest ( const AgentConn_t & tAgent, CachedOu
 		SendQuery ( tAgent.m_tDesc.m_sIndexes.cstr (), tOut, m_dQueries[i], tAgent.m_iWeight, tAgent.m_iMyQueryTimeout );
 }
 
+
+struct cSearchResult : public iQueryResult
+{
+	CSphVector<CSphQueryResult>	m_dResults;
+
+	void Reset () final
+	{
+		m_dResults.Reset();
+	}
+
+	bool HasWarnings () const final
+	{
+		return m_dResults.FindFirst ( [] ( const CSphQueryResult &dRes ) { return !dRes.m_sWarning.IsEmpty (); } );
+	}
+};
+
+
 /////////////////////////////////////////////////////////////////////////////
 
 void SearchReplyParser_c::ParseMatch ( CSphMatch & tMatch, MemInputBuffer_c & tReq, const CSphSchema & tSchema, bool bAgent64 ) const
@@ -3468,11 +3485,20 @@ bool SearchReplyParser_c::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tA
 	int iResults = m_iEnd-m_iStart+1;
 	assert ( iResults>0 );
 
-	tAgent.m_dResults.Resize ( iResults );
-	for ( auto & tRes : tAgent.m_dResults )
+	auto pResult = ( cSearchResult * ) tAgent.m_pResult.Ptr ();
+	if ( !pResult )
+	{
+		pResult = new cSearchResult;
+		tAgent.m_pResult = pResult;
+	}
+
+	auto &dResults = pResult->m_dResults;
+
+	dResults.Resize ( iResults );
+	for ( auto & tRes : dResults )
 		tRes.m_iSuccesses = 0;
 
-	for ( auto & tRes : tAgent.m_dResults )
+	for ( auto & tRes : dResults )
 	{
 		tRes.m_sError = "";
 		tRes.m_sWarning = "";
@@ -7695,7 +7721,11 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				// merge this agent's results
 				for ( int iRes=iStart; iRes<=iEnd; ++iRes )
 				{
-					const CSphQueryResult & tRemoteResult = pAgent->m_dResults[iRes-iStart];
+					auto pResult = ( cSearchResult * ) pAgent->m_pResult.Ptr ();
+					if ( !pResult )
+						continue;
+
+					const CSphQueryResult &tRemoteResult = pResult->m_dResults[iRes - iStart];
 
 					// copy errors or warnings
 					if ( !tRemoteResult.m_sError.IsEmpty() )
@@ -7755,7 +7785,8 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 				}
 
 				// dismissed
-				pAgent->m_dResults.Reset ();
+				if ( pAgent->m_pResult )
+					pAgent->m_pResult->Reset ();
 				pAgent->m_bSuccess = false;
 				pAgent->m_sFailure = "";
 			}

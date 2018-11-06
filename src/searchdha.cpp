@@ -1332,6 +1332,7 @@ int SmartOutputBuffer_t::GetSentCount () const
 
 void SmartOutputBuffer_t::StartNewChunk ()
 {
+	CommitAllMeasuredLengths ();
 	assert ( BlobsEmpty () );
 	m_dChunks.Add ( new ISphOutputBuffer ( m_dBuf ) );
 	m_dBuf.Reserve ( NETOUTBUF );
@@ -2234,10 +2235,10 @@ bool AgentConn_t::DoQuery()
 	m_tOutput.StartNewChunk ();
 	if ( IsPersistent() && m_iSock==-1 )
 	{
-		m_tOutput.SendWord ( SEARCHD_COMMAND_PERSIST );
-		m_tOutput.SendWord ( 0 ); // dummy version
-		m_tOutput.SendInt ( 4 ); // request body length
-		m_tOutput.SendInt ( 1 ); // set persistent to 1.
+		{
+			APICommand_t dPersist ( m_tOutput, SEARCHD_COMMAND_PERSIST );
+			m_tOutput.SendInt ( 1 ); // set persistent to 1.
+		}
 		m_tOutput.StartNewChunk ();
 	}
 

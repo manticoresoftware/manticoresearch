@@ -543,9 +543,7 @@ public:
 		CSphString sRequest = sphJsonToString ( m_pQuery );
 		CSphString sEndpoint = sphHttpEndpointToStr ( m_eEndpoint );
 
-		tOut.SendWord ( SEARCHD_COMMAND_JSON );
-		tOut.SendWord ( VER_COMMAND_JSON );
-		WriteLenHere_c tWr { tOut };
+		APICommand_t tWr { tOut, SEARCHD_COMMAND_JSON, VER_COMMAND_JSON }; // API header
 		tOut.SendString ( sEndpoint.cstr() );
 		tOut.SendString ( sRequest.cstr() );
 	}

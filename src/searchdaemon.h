@@ -266,7 +266,7 @@ public:
 	void		SendArray ( const void * pBuf, int iLen );
 	void		SendArray ( const StringBuilder_c &dBuf );
 
-	void		SwapData ( CSphVector<BYTE> & rhs ) { m_dBuf.SwapData ( rhs ); }
+	virtual void	SwapData ( CSphVector<BYTE> & rhs ) { m_dBuf.SwapData ( rhs ); }
 
 	virtual void	Flush () {}
 	virtual bool	GetError () const { return false; }
@@ -300,35 +300,42 @@ private:
 class CachedOutputBuffer_c : public ISphOutputBuffer
 {
 	CSphVector<intptr_t> m_dBlobs;
+	using BASE = ISphOutputBuffer;
 
 public:
 	// start blob on create, commit on dtr.
 	class ReqLenCalc : public ISphNoncopyable
 	{
 		CachedOutputBuffer_c &m_dBuff;
+		intptr_t m_iPos;
 	public:
-		explicit ReqLenCalc ( CachedOutputBuffer_c &dBuff )
+		ReqLenCalc ( CachedOutputBuffer_c &dBuff, WORD uCommand, WORD uVer = 0 /* SEARCHD_OK */ )
 			: m_dBuff ( dBuff )
 		{
-			dBuff.StartMeasureLength ();
+			m_dBuff.AddRef();
+			m_dBuff.SendWord ( uCommand );
+			m_dBuff.SendWord ( uVer );
+			m_iPos = m_dBuff.StartMeasureLength();
 		}
 
 		~ReqLenCalc ()
 		{
-			m_dBuff.CommitMeasuredLength ();
+			m_dBuff.CommitMeasuredLength ( m_iPos );
+			m_dBuff.Release();
 		}
 	};
 
 public:
 	void Flush() override; // just check integrity before flush
+	void SwapData ( CSphVector<BYTE> &rhs ) override { CommitAllMeasuredLengths (); BASE::SwapData (rhs); }
 	inline bool BlobsEmpty () const { return m_dBlobs.IsEmpty (); }
 public:
-	void StartMeasureLength (); // reserve int in the buf, push it's position
-	void CommitMeasuredLength (); // get last pushed int, write delta count there.
+	intptr_t StartMeasureLength (); // reserve int in the buf, push it's position, return cur pos.
+	void CommitMeasuredLength ( intptr_t uStoredPos=-1 ); // get last pushed int, write delta count there.
 	void CommitAllMeasuredLengths (); // finalize all nums starting from the last one.
 };
 
-using WriteLenHere_c = CachedOutputBuffer_c::ReqLenCalc;
+using APICommand_t = CachedOutputBuffer_c::ReqLenCalc;
 
 // buffer that knows if it has requested data or not
 class SmartOutputBuffer_t : public CachedOutputBuffer_c

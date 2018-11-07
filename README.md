@@ -45,6 +45,7 @@ index {
 ```
 **remind:** It works for both of plain index and real-time index.
 
+[中文说明](https://github.com/veelion/manticoresearch-seg/blob/master/README-zh.md)
 ------------------------------------------------------------------------------------------------------------------------------
 ---
 

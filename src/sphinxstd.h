@@ -3549,7 +3549,7 @@ class SCOPED_CAPABILITY CSphScopedWLock : ISphNoncopyable
 {
 public:
 	/// lock on creation
-	CSphScopedWLock ( CSphRwlock & tLock ) ACQUIRE ( tLock )
+	CSphScopedWLock ( CSphRwlock & tLock ) ACQUIRE ( tLock ) EXCLUDES ( tLock )
 		: m_tLock ( tLock )
 	{
 		m_tLock.WriteLock();

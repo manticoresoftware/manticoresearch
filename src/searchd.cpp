@@ -501,8 +501,8 @@ const char * sAgentStatsNames[eMaxAgentStat+ehMaxStat]=
 		"warnings", "succeeded_queries", "total_query_time",
 		"connect_count", "connect_avg", "connect_max" };
 
-static CSphQueryResultMeta		g_tLastMeta;
-static CSphMutex				g_tLastMetaMutex;
+static RwLock_t					g_tLastMetaLock;
+static CSphQueryResultMeta		g_tLastMeta GUARDED_BY ( g_tLastMetaLock );
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -8156,12 +8156,11 @@ void HandleCommandSearch ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c
 		iTotalAgentPredictedTime += dResult.m_iAgentPredictedTime;
 	}
 
-	g_tLastMetaMutex.Lock();
-	g_tLastMeta = tHandler.m_dResults[tHandler.m_dResults.GetLength()-1];
-	g_tLastMetaMutex.Unlock();
-
 	g_tStats.m_iPredictedTime += iTotalPredictedTime;
 	g_tStats.m_iAgentPredictedTime += iTotalAgentPredictedTime;
+
+	ScWL_t dLastMetaLock ( g_tLastMetaLock );
+	g_tLastMeta = tHandler.m_dResults[tHandler.m_dResults.GetLength () - 1];
 
 	// clean up query at thread descriptor
 	tThd.SetSearchQuery ( nullptr );
@@ -11215,7 +11214,7 @@ void HandleCommandStatus ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c
 		BuildStatus ( dStatus );
 	else
 	{
-		g_tLastMetaMutex.Lock();
+		ScRL_t dMetaRlock ( g_tLastMetaLock );
 		BuildMeta ( dStatus, g_tLastMeta );
 		if ( g_tStats.m_iPredictedTime || g_tStats.m_iAgentPredictedTime )
 		{
@@ -11224,7 +11223,6 @@ void HandleCommandStatus ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c
 			if ( dStatus.MatchAdd ( "dist_predicted_time" ) )
 				dStatus.Add().SetSprintf ( INT64_FMT, (int64_t) g_tStats.m_iAgentPredictedTime );
 		}
-		g_tLastMetaMutex.Unlock();
 	}
 
 	APICommand_t dOk ( tOut, SEARCHD_OK, VER_COMMAND_STATUS );

@@ -20407,6 +20407,7 @@ struct NetStateCommon_t
 	NetStateCommon_t ();
 	virtual ~NetStateCommon_t ();
 
+	int NetManageSocket ( bool bWrite, bool bAfterWrite = false );
 	void CloseSocket ();
 };
 
@@ -21179,37 +21180,6 @@ static bool CheckSocketError ( DWORD uGotEvents, const char * sMsg, const NetSta
 	return false;
 }
 
-static int NetManageSocket ( int iSock, char * pBuf, int iSize, bool bWrite, bool bAfterWrite )
-{
-	// try next chunk
-	int iRes = 0;
-	if ( bWrite )
-		iRes = sphSockSend ( iSock, pBuf, iSize );
-	else
-		iRes = sphSockRecv ( iSock, pBuf, iSize );
-
-	// if there was EINTR, retry
-	// if any other error, bail
-	if ( iRes==-1 )
-	{
-		// only let SIGTERM (of all them) to interrupt
-		int iErr = sphSockPeekErrno();
-		return ( ( iErr==EINTR || iErr==EAGAIN || iErr==EWOULDBLOCK ) ? 0 : -1 );
-	}
-
-	// if there was eof, we're done
-	// but need to make sure that poll loop passed at least once,
-	// ie write-read pattern should failed only this way write-poll-read
-	if ( !bWrite && iRes==0 && !bAfterWrite )
-	{
-		sphLogDebugv ( "read zero bytes, shutting down socket, sock=%d", iSock );
-		sphSockSetErrno ( ESHUTDOWN );
-		return -1;
-	}
-
-	return iRes;
-}
-
 static WORD NetBufGetWord ( const BYTE * pBuf )
 {
 	WORD uVal = sphUnalignedRead ( (WORD &)*pBuf );
@@ -21447,7 +21417,7 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 	while (true)
 	{
 		bool bWrite = ( m_ePhase==AAPI_HANDSHAKE_OUT );
-		int iRes = NetManageSocket ( m_tState->m_iClientSock, (char *)( m_tState->m_dBuf.Begin() + m_tState->m_iPos ), m_tState->m_iLeft, bWrite, bWasWrite );
+		int iRes = m_tState->NetManageSocket ( bWrite, bWasWrite );
 		if ( iRes==-1 )
 		{
 			LogSocketError ( g_sErrorNetAPI[m_ePhase], m_tState.Ptr(), false );
@@ -21654,7 +21624,7 @@ NetEvent_e NetReceiveDataQL_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction
 	// loop to handle similar operations at once
 	while (true)
 	{
-		int iRes = NetManageSocket ( m_tState->m_iClientSock, (char *)( m_tState->m_dBuf.Begin() + m_tState->m_iPos ), m_tState->m_iLeft, m_bWrite, bWrite );
+		int iRes = m_tState->NetManageSocket ( m_bWrite, bWrite );
 		if ( iRes==-1 )
 		{
 			LogSocketError ( g_sErrorNetQL[m_ePhase], m_tState.Ptr(), false );
@@ -21875,7 +21845,7 @@ NetEvent_e NetSendData_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> &
 
 	for ( ; m_tState->m_iLeft>0; )
 	{
-		int iRes = NetManageSocket ( m_tState->m_iClientSock, (char *)m_tState->m_dBuf.Begin() + m_tState->m_iPos, m_tState->m_iLeft, true, false );
+		int iRes = m_tState->NetManageSocket ( true );
 		if ( iRes==-1 )
 		{
 			LogSocketError ( "failed to send data", m_tState.Ptr(), false );
@@ -21982,9 +21952,9 @@ int NetStateCommon_t::NetManageSocket ( bool bWrite, bool bAfterWrite )
 	// try next chunk
 	int iRes = 0;
 	if ( bWrite )
-		iRes = (int)sphSockSend ( m_iClientSock, m_dBuf.begin() + m_iPos, m_iLeft );
+		iRes = (int)sphSockSend ( m_iClientSock, (const char*) m_dBuf.begin() + m_iPos, m_iLeft );
 	else
-		iRes = (int)sphSockRecv ( m_iClientSock, m_dBuf.begin () + m_iPos, m_iLeft );
+		iRes = (int)sphSockRecv ( m_iClientSock, (char*) m_dBuf.begin () + m_iPos, m_iLeft );
 
 	// if there was EINTR, retry
 	// if any other error, bail
@@ -21995,6 +21965,18 @@ int NetStateCommon_t::NetManageSocket ( bool bWrite, bool bAfterWrite )
 		return ( ( iErr==EINTR || iErr==EAGAIN || iErr==EWOULDBLOCK ) ? 0 : -1 );
 	}
 
+	// if there was eof, we're done
+	// but need to make sure that poll loop passed at least once,
+	// ie write-read pattern should failed only this way write-poll-read
+	if ( !bWrite && iRes==0 && !bAfterWrite )
+	{
+		sphLogDebugv ( "read zero bytes, shutting down socket, sock=%d", m_iClientSock );
+		sphSockSetErrno ( ESHUTDOWN );
+		return -1;
+	}
+
+	return iRes;
+}
 
 NetReceiveDataHttp_t::NetReceiveDataHttp_t ( NetStateQL_t *	pState )
 	: ISphNetAction ( pState->m_iClientSock )
@@ -22086,7 +22068,7 @@ NetEvent_e NetReceiveDataHttp_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActi
 	// loop to handle similar operations at once
 	while (true)
 	{
-		int iRes = NetManageSocket ( m_tState->m_iClientSock, (char *)( m_tState->m_dBuf.Begin() + m_tState->m_iPos ), m_tState->m_iLeft, false, false );
+		int iRes = m_tState->NetManageSocket ( false );
 		if ( iRes==-1 )
 		{
 			// FIXME!!! report back to client buffer overflow with 413 error

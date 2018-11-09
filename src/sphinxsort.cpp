@@ -5421,6 +5421,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 	bool bImplicit = false;
 	// need schema with group related columns however not need grouper
 	bool bHeadWOGroup = ( pQuery->m_sGroupBy.IsEmpty() && pQuery->m_bFacetHead );
+	bool bFacet = ( pQuery->m_bFacetHead || pQuery->m_bFacet );
 
 	if ( pQuery->m_sGroupBy.IsEmpty() )
 		ARRAY_FOREACH_COND ( i, pQuery->m_dItems, !bImplicit )
@@ -5477,7 +5478,8 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 	if ( bGotGroupby && tSorterSchema.GetAttrIndex ( "@groupby" )<0 )
 	{
 		ESphAttr eGroupByResult = ( !tSettings.m_bImplicit ) ? tSettings.m_pGrouper->GetResultType() : SPH_ATTR_INTEGER; // implicit do not have grouper
-		if ( tSettings.m_bMva64 )
+		// all FACET group by should be widest possible type
+		if ( tSettings.m_bMva64 || bFacet )
 			eGroupByResult = SPH_ATTR_BIGINT;
 
 		CSphColumnInfo tGroupby ( "@groupby", eGroupByResult );

@@ -5430,6 +5430,18 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 			bImplicit = ( t.m_eAggrFunc!=SPH_AGGR_NONE ) || t.m_sExpr=="count(*)" || t.m_sExpr=="@distinct";
 		}
 
+	// count(*) and distinct wo group by at main query should keep implicit flag
+	if ( bImplicit && bHeadWOGroup )
+	{
+		bool bRefImplicit= false;
+		ARRAY_FOREACH_COND ( i, pQuery->m_dRefItems, !bRefImplicit )
+		{
+			const CSphQueryItem & t = pQuery->m_dItems[i];
+			bRefImplicit = ( t.m_eAggrFunc!=SPH_AGGR_NONE ) || t.m_sExpr=="count(*)" || t.m_sExpr=="@distinct";
+		}
+		bHeadWOGroup = !bRefImplicit;
+	}
+
 	if ( !SetupGroupbySettings ( pQuery, tSorterSchema, tSettings, dGroupColumns, sError, bImplicit ) )
 		return nullptr;
 

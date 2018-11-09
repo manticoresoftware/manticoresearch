@@ -217,6 +217,9 @@ insert into facetdemo (id,price,brand_id,title,brand_name,property,categories,j)
 <!-- regression crash on FACET\group by with different attribute sizes -->
 <sphinxql>select * from facet_gr1 order by id asc facet price_i order by id asc facet price_b order by id asc; show meta</sphinxql>
 
+<!-- regression need to keeo implicit group by for main query -->
+<sphinxql>select id, price_b, count(*) from facet_gr1 order by id asc facet price_b order by id asc; show meta</sphinxql>
+
 </sphqueries>
 
 </test>

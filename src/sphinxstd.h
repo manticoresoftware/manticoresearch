@@ -2571,6 +2571,8 @@ public:
 	inline void operator+= (int i) { GrowEnough ( i ); m_iUsed += i; }
 };
 
+using Str_b = StringBuilder_c;
+
 namespace EscBld {	// what kind of changes will do AppendEscaped of escaped string builder:
 	enum eAct : BYTE
 	{
@@ -3249,6 +3251,12 @@ void sphThreadDone ( int iFD );
 
 /// my create thread wrapper
 bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pArg, bool bDetached=false );
+
+/// assign a name to thread
+void sphThreadName ( SphThread_t * pThread, const char * sName );
+
+/// get name of a thread
+CSphString GetThreadName ( SphThread_t * pThread );
 
 /// my join thread wrapper
 bool sphThreadJoin ( SphThread_t * pThread );

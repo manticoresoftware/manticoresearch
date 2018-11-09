@@ -998,6 +998,27 @@ bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pA
 	return false;
 }
 
+void sphThreadName ( SphThread_t * pThread, const char * sName )
+{
+#if HAVE_PTHREAD_SETNAME_NP
+	char sClippedName[16];
+	strncpy (sClippedName, sName, 15);
+	sClippedName[15] = '\0';
+	pthread_setname_np ( *pThread, sClippedName );
+#endif
+}
+
+CSphString GetThreadName ( SphThread_t * pThread )
+{
+#if HAVE_PTHREAD_SETNAME_NP
+	char sClippedName[16];
+	pthread_getname_np ( *pThread, sClippedName, 16 );
+	return sClippedName;
+#else
+	return "";
+#endif
+}
+
 
 bool sphThreadJoin ( SphThread_t * pThread )
 {
@@ -1801,6 +1822,7 @@ class CSphThdPool : public ISphThdPool
 
 public:
 	CSphThdPool ( int iThreads, const char * sName, CSphString & sError )
+		: m_sName ( sName )
 	{
 		if ( !m_tWakeup.Initialized () )
 		{
@@ -1815,7 +1837,12 @@ public:
 		for ( auto& dWorker : m_dWorkers )
 		{
 			if ( sphThreadCreate ( &dWorker, Tick, this ) )
+			{
+				StringBuilder_c sthdName;
+				sthdName.Sprintf ("%s_%d",m_sName.cstr(),iStarted);
+				sphThreadName ( &dWorker, sthdName.cstr());
 				++iStarted;
+			}
 		}
 		assert ( iStarted == iThreads );
 	}
@@ -1877,7 +1904,9 @@ public:
 	{
 		// FIXME!!! start thread only in case of no workers available to offload call site
 		SphThread_t tThd;
-		return sphThreadCreate ( &tThd, Start, pItem, true );
+		bool bRes = sphThreadCreate ( &tThd, Start, pItem, true );
+		sphThreadName ( &tThd, ( Str_b () << m_sName << "_Job" ).cstr () );
+		return bRes;
 	}
 
 private:

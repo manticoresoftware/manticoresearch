@@ -235,9 +235,11 @@ struct ServiceThread_t
 		Join();
 	}
 
-	bool Create ( void (*fnThread)(void*), void * pArg )
+	bool Create ( void (*fnThread)(void*), void * pArg, const char * sName = nullptr )
 	{
 		m_bCreated = sphThreadCreate ( &m_tThread, fnThread, pArg, false );
+		if ( m_bCreated && sName )
+			sphThreadName ( &m_tThread, sName );
 		return m_bCreated;
 	}
 
@@ -6702,6 +6704,7 @@ void SearchHandler_c::RunLocalSearchesParallel()
 		t.m_iSearches = dWorks.GetLength();
 		t.m_pSearches = dWorks.Begin();
 		SphCrashLogger_c::ThreadCreate ( &t.m_tThd, LocalSearchThreadFunc, (void*)&t ); // FIXME! check result
+		sphThreadName ( &t.m_tThd, "LocalSearch");
 	}
 
 	// wait for them to complete
@@ -14144,8 +14147,9 @@ void HandleMysqlShowThreads ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	int64_t tmNow = sphMicroTimer();
 
 
-	tOut.HeadBegin ( 6 );
+	tOut.HeadBegin ( 7 );
 	tOut.HeadColumn ( "Tid" );
+	tOut.HeadColumn ( "Name" );
 	tOut.HeadColumn ( "Proto" );
 	tOut.HeadColumn ( "State" );
 	tOut.HeadColumn ( "Host" );
@@ -14168,6 +14172,7 @@ void HandleMysqlShowThreads ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 			pThd->m_dBuf[tStmt.m_iThreadsCols] = '\0';
 
 		tOut.PutNumAsString ( pThd->m_iTid );
+		tOut.PutString ( GetThreadName ( const_cast <SphThread_t *>(&pThd->m_tThd) ) );
 		tOut.PutString ( pThd->m_bSystem ? "-" : g_dProtoNames [ pThd->m_eProto ] );
 		tOut.PutString ( pThd->m_bSystem ? "-" : g_dThdStates [ pThd->m_eThdState ] );
 		tOut.PutString ( pThd->m_sClientName );
@@ -19485,6 +19490,8 @@ void CheckFlush () REQUIRES ( MainThread )
 	ThdDesc_t tThd;
 	if ( !sphThreadCreate ( &tThd.m_tThd, ThdSaveIndexes, NULL, true ) )
 		sphWarning ( "failed to create attribute save thread, error[%d] %s", errno, strerrorm(errno) );
+	else
+		sphThreadName ( &tThd.m_tThd, "SaveIndexes");
 }
 
 
@@ -20359,6 +20366,7 @@ void TickHead () REQUIRES ( MainThread )
 		FailClient ( iClientSock, "failed to create worker thread" );
 		sphWarning ( "failed to create worker thread, threads(%d), error[%d] %s", ThreadsNum(), iErr, strerrorm(iErr) );
 	}
+	sphThreadName ( &pThd->m_tThd, "handler");
 }
 
 
@@ -23548,7 +23556,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	sphSetReadBuffers ( hSearchd.GetSize ( "read_buffer", 0 ), hSearchd.GetSize ( "read_unhinted", 0 ) );
 
 	// in threaded mode, create a dedicated rotation thread
-	if ( g_bSeamlessRotate && !g_tRotateThread.Create ( RotationThreadFunc, 0 ) )
+	if ( g_bSeamlessRotate && !g_tRotateThread.Create ( RotationThreadFunc, 0, "rotation" ) )
 		sphDie ( "failed to create rotation thread" );
 
 	// replay last binlog
@@ -23562,7 +23570,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 	sphReplayBinlog ( hIndexes, uReplayFlags, DumpMemStat, g_tBinlogAutoflush );
 	hIndexes.Reset();
-	if ( g_tBinlogAutoflush.m_fnWork && !g_tBinlogFlushThread.Create ( RtBinlogAutoflushThreadFunc, 0 ) )
+	if ( g_tBinlogAutoflush.m_fnWork && !g_tBinlogFlushThread.Create ( RtBinlogAutoflushThreadFunc, 0, "binlog_flush" ) )
 		sphDie ( "failed to create binlog flush thread" );
 
 	if ( g_bIOStats && !sphInitIOStats () )
@@ -23572,10 +23580,10 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 	// threads mode
 	// create optimize and flush threads, and load saved sphinxql state
-	if ( !g_tRtFlushThread.Create ( RtFlushThreadFunc, 0 ) )
+	if ( !g_tRtFlushThread.Create ( RtFlushThreadFunc, 0, "rt_flush" ) )
 		sphDie ( "failed to create rt-flush thread" );
 
-	if ( !g_tOptimizeThread.Create ( OptimizeThreadFunc, 0 ) )
+	if ( !g_tOptimizeThread.Create ( OptimizeThreadFunc, 0, "optimize" ) )
 		sphDie ( "failed to create optimize thread" );
 
 	g_sSphinxqlState = hSearchd.GetStr ( "sphinxql_state" );
@@ -23597,14 +23605,14 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 			sphWarning ( "sphinxql_state flush disabled: %s", sError.cstr() );
 			g_sSphinxqlState = ""; // need to disable thread join on shutdown 
 		}
-		else if ( !g_tSphinxqlStateFlushThread.Create ( SphinxqlStateThreadFunc, NULL ) )
+		else if ( !g_tSphinxqlStateFlushThread.Create ( SphinxqlStateThreadFunc, NULL, "sphinxql_state" ) )
 			sphDie ( "failed to create sphinxql_state writer thread" );
 	}
 
-	if ( !g_tRotationServiceThread.Create ( RotationServiceThreadFunc, 0 ) )
+	if ( !g_tRotationServiceThread.Create ( RotationServiceThreadFunc, 0, "rotationservice" ) )
 		sphDie ( "failed to create rotation service thread" );
 
-	if ( !g_tPingThread.Create ( PingThreadFunc, 0 ) )
+	if ( !g_tPingThread.Create ( PingThreadFunc, 0, "ping_service" ) )
 		sphDie ( "failed to create ping service thread" );
 
 	if ( bForcedPreread )
@@ -23612,7 +23620,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		PrereadFunc ( NULL );
 	} else
 	{
-		if ( !g_tPrereadThread.Create ( PrereadFunc, 0 ) )
+		if ( !g_tPrereadThread.Create ( PrereadFunc, 0, "preread" ) )
 			sphWarning ( "failed to create preread thread" );
 	}
 
@@ -23644,6 +23652,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		{
 			if ( !sphThreadCreate ( g_dTickPoolThread.Begin()+iTick, CSphNetLoop::ThdTick, 0 ) )
 				sphDie ( "failed to create tick pool thread" );
+
+			sphThreadName ( g_dTickPoolThread.Begin () + iTick, Str_b ().Sprintf ( "TickPool_%d", iTick ).cstr () );
 		}
 	}
 

@@ -1690,6 +1690,7 @@ SphCrashLogger_c::~SphCrashLogger_c () { sphThreadSet ( m_tTLS, NULL ); }
 
 void SphCrashLogger_c::Init ()
 {
+	sphBacktraceInit();
 	Verify ( sphThreadKeyCreate ( &m_tTLS ) );
 }
 

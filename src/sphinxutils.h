@@ -251,6 +251,9 @@ void sphBacktrace ( int iFD, bool bSafe=false );
 void sphBacktrace ( EXCEPTION_POINTERS * pExc, const char * sFile );
 #endif
 
+/// dummy call of backtrace to alloc internal structures and prevent deadlock at malloc on crash
+void sphBacktraceInit();
+
 void sphBacktraceSetBinaryName ( const char * sName );
 
 /// plain backtrace - returns static buffer with the text of the call stack

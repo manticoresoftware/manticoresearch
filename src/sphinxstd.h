@@ -834,6 +834,18 @@ public:
 
 	VecTraits_T() = default;
 
+	// this ctr allows to regard any typed blob as VecTraits, and use it's benefits.
+	VecTraits_T( T* pData, int64_t iCount )
+		: m_pData ( pData )
+		, m_iCount ( iCount )
+	{}
+
+	template <typename TT>
+	VecTraits_T ( TT * pData, int64_t iCount )
+		: m_pData ( pData )
+		, m_iCount ( iCount )
+	{}
+
 	/// accessor by forward index
 	T &operator[] ( int64_t iIndex ) const
 	{

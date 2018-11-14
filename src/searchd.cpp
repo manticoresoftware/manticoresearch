@@ -12728,7 +12728,7 @@ static void PercolateMatchDocuments ( const StrVec_t & dDocs, const PercolateOpt
 		tDoc.m_uDocID = uSeqDocid++;
 
 		// add document
-		pIndex->AddDocument ( pIndex->CloneIndexingTokenizer (), iFieldsCount, dFields.Begin(), tDoc, true,
+		pIndex->AddDocument ( dFields, tDoc, true,
 			sTokenFilterOpts, dStrings.Begin(), dMva, sError, sWarning, pAccum );
 
 		if ( !sError.IsEmpty() )
@@ -13229,7 +13229,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 			break;
 
 		// do add
-		pIndex->AddDocument ( pIndex->CloneIndexingTokenizer(), dFields.GetLength(), dFields.Begin(), tDoc,
+		pIndex->AddDocument ( dFields, tDoc,
 			bReplace, tStmt.m_sStringParam,
 			dStrings.Begin(), dMvas, sError, sWarning, pAccum );
 

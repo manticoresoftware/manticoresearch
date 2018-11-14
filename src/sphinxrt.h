@@ -33,8 +33,8 @@ public:
 
 	/// insert/update document in current txn
 	/// fails in case of two open txns to different indexes
-	virtual bool AddDocument ( ISphTokenizer * pTokenizer, int iFields, const char ** ppFields, const CSphMatch & tDoc,
-		bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const CSphVector<DWORD> & dMvas,
+	virtual bool AddDocument ( const VecTraits_T<const char *> &dFields, const CSphMatch & tDoc,
+		bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const VecTraits_T<DWORD> & dMvas,
 		CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt ) = 0;
 
 	/// delete document in current txn

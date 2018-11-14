@@ -859,7 +859,8 @@ public:
 	enum EWhatClear { EPartial=1, EAccum=2, ERest=4, EAll=7};
 	void Cleanup ( BYTE eWhat=EAll );
 
-	void			AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bReplace, int iRowSize, const char ** ppStr, const CSphVector<DWORD> & dMvas );
+	void			AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bReplace, int iRowSize,
+		const char ** ppStr, const VecTraits_T<DWORD> & dMvas );
 	RtSegment_t *	CreateSegment ( int iRowSize, int iWordsCheckpoint );
 	void			CleanupDuplicates ( int iRowSize );
 	void			GrabLastWarning ( CSphString & sWarning );
@@ -1145,8 +1146,12 @@ public:
 	explicit					RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict );
 	virtual						~RtIndex_t ();
 
-	virtual bool				AddDocument ( ISphTokenizer * pTokenizer, int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt );
-	virtual bool				AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bReplace, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt );
+	bool				AddDocument ( const VecTraits_T<const char *> &dFields,
+		const CSphMatch & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr,
+		const VecTraits_T<DWORD> & dMvas, CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt ) override;
+	virtual bool				AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bReplace,
+		const char ** ppStr, const VecTraits_T<DWORD> & dMvas, CSphString & sError, CSphString & sWarning,
+		ISphRtAccum * pAccExt );
 	virtual bool				DeleteDocument ( const SphDocID_t * pDocs, int iDocs, CSphString & sError, ISphRtAccum * pAccExt );
 	virtual void				Commit ( int * pDeleted, ISphRtAccum * pAccExt );
 	virtual void				RollBack ( ISphRtAccum * pAccExt );
@@ -1435,7 +1440,7 @@ int64_t RtIndex_t::GetUsedRam () const
 class CSphSource_StringVector : public CSphSource_Document
 {
 public:
-	explicit			CSphSource_StringVector ( int iFields, const char ** ppFields, const CSphSchema & tSchema );
+	explicit			CSphSource_StringVector ( const VecTraits_T<const char *> &dFields, const CSphSchema & tSchema );
 						~CSphSource_StringVector () override = default;
 
 	bool		Connect ( CSphString & ) override;
@@ -1462,20 +1467,19 @@ protected:
 };
 
 
-CSphSource_StringVector::CSphSource_StringVector ( int iFields, const char ** ppFields, const CSphSchema & tSchema )
+CSphSource_StringVector::CSphSource_StringVector ( const VecTraits_T<const char *> &dFields, const CSphSchema & tSchema )
 	: CSphSource_Document ( "$stringvector" )
 {
 	m_tSchema = tSchema;
-
-	m_dFields.Resize ( 1+iFields );
-	m_dFieldLengths.Resize ( iFields );
-	for ( int i=0; i<iFields; i++ )
+	m_dFieldLengths.Reserve ( dFields.GetLength () );
+	m_dFields.Reserve ( dFields.GetLength() + 1 );
+	for ( const char* sField : dFields )
 	{
-		m_dFields[i] = (BYTE*) ppFields[i];
-		m_dFieldLengths[i] = strlen ( ppFields[i] );
-		assert ( m_dFields[i] );
+		m_dFields.Add ( (BYTE*) sField );
+		m_dFieldLengths.Add ( strlen ( sField ) );
+		assert ( sField );
 	}
-	m_dFields [ iFields ] = NULL;
+	m_dFields.Add (nullptr);
 
 	m_iMaxHits = 0; // force all hits build
 }
@@ -1492,14 +1496,19 @@ void CSphSource_StringVector::Disconnect ()
 	m_tHits.m_dData.Reset();
 }
 
-bool RtIndex_t::AddDocument ( ISphTokenizer * pTokenizer, int iFields, const char ** ppFields, const CSphMatch & tDoc,
-	bool bReplace, const CSphString & sTokenFilterOptions,
-	const char ** ppStr, const CSphVector<DWORD> & dMvas,
-	CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt )
+bool RtIndex_t::AddDocument ( const VecTraits_T<const char *> &dFields,
+	const CSphMatch & tDoc,	bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr,
+	const VecTraits_T<DWORD> & dMvas, CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt )
 {
 	assert ( g_bRTChangesAllowed );
 
-	ISphTokenizerRefPtr_c tTokenizer { pTokenizer };
+	ISphTokenizerRefPtr_c tTokenizer { CloneIndexingTokenizer() };
+
+	if (!tTokenizer)
+	{
+		sError.SetSprintf ( "internal error: no indexing tokenizer available" );
+		return false;
+	}
 
 	if ( !tDoc.m_uDocID )
 		return true;
@@ -1538,7 +1547,7 @@ bool RtIndex_t::AddDocument ( ISphTokenizer * pTokenizer, int iFields, const cha
 	if ( m_tSettings.m_uAotFilterMask )
 		tTokenizer = sphAotCreateFilter ( tTokenizer, m_pDict, m_tSettings.m_bIndexExactWords, m_tSettings.m_uAotFilterMask );
 
-	CSphSource_StringVector tSrc ( iFields, ppFields, m_tSchema );
+	CSphSource_StringVector tSrc ( dFields, m_tSchema );
 
 	// SPZ setup
 	if ( m_tSettings.m_bIndexSP && !tTokenizer->EnableSentenceIndexing ( sError ) )
@@ -1622,8 +1631,8 @@ ISphRtAccum * RtIndex_t::CreateAccum ( CSphString & sError )
 }
 
 
-bool RtIndex_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bReplace, const char ** ppStr, const CSphVector<DWORD> & dMvas,
-	CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt )
+bool RtIndex_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bReplace, const char ** ppStr,
+	const VecTraits_T<DWORD> & dMvas, CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt )
 {
 	assert ( g_bRTChangesAllowed );
 
@@ -1699,7 +1708,8 @@ void RtAccum_t::Cleanup ( BYTE eWhat )
 	}
 }
 
-void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bReplace, int iRowSize, const char ** ppStr, const CSphVector<DWORD> & dMvas )
+void RtAccum_t::AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bReplace, int iRowSize,
+	const char ** ppStr, const VecTraits_T<DWORD> & dMvas )
 {
 	MEMORY ( MEM_RT_ACCUM );
 
@@ -10499,7 +10509,9 @@ public:
 	explicit PercolateIndex_c ( const CSphSchema & tSchema, const char * sIndexName, const char * sPath );
 	~PercolateIndex_c () override;
 
-	bool AddDocument ( ISphTokenizer * pTokenizer, int iFields, const char ** ppFields, const CSphMatch & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt ) override;
+	bool AddDocument ( const VecTraits_T<const char *> &dFields, const CSphMatch & tDoc,
+		bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const VecTraits_T<DWORD> & dMvas,
+		CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt ) override;
 	bool MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchResult_t &tRes ) override;
 	void RollBack ( ISphRtAccum * pAccExt ) override;
 	bool AddQuery ( const char * sQuery, const char * sTags, const CSphVector<CSphFilterSettings> * pFilters, const CSphVector<FilterTreeItem_t> * pFilterTree, bool bReplace, bool bQL, uint64_t & uId, const ISphTokenizer * pTokenizer, CSphDict * pDict, CSphString & sError )
@@ -11150,26 +11162,22 @@ ISphRtAccum * PercolateIndex_c::CreateAccum ( CSphString & sError )
 }
 
 
-bool PercolateIndex_c::AddDocument ( ISphTokenizer * pTokenizer, int iFields, const char ** ppFields, const CSphMatch & tDoc, bool , const CSphString & , const char ** ppStr, const CSphVector<DWORD> & dMvas, CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt )
+bool PercolateIndex_c::AddDocument ( const VecTraits_T<const char *> &dFields,
+	const CSphMatch & tDoc, bool , const CSphString & , const char ** ppStr, const VecTraits_T<DWORD> & dMvas,
+	CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt )
 {
 	auto pAcc = ( RtAccum_t * ) AcquireAccum ( m_pDict, pAccExt, true, true, &sError );
 	if ( !pAcc )
 		return false;
 
-	// FIXME!!! move setup to preparation or CloneIndexingTokenizer
-	if ( m_tSettings.m_uAotFilterMask )
-		pTokenizer = sphAotCreateFilter ( pTokenizer, m_pDict, m_tSettings.m_bIndexExactWords, m_tSettings.m_uAotFilterMask );
-
-	ISphTokenizerRefPtr_c tTokenizer { pTokenizer };
-
-	// SPZ setup
-	if ( m_tSettings.m_bIndexSP && !pTokenizer->EnableSentenceIndexing ( sError ) )
+	ISphTokenizerRefPtr_c tTokenizer { CloneIndexingTokenizer () };
+	if ( !tTokenizer )
+	{
+		sError = GetLastError ();
 		return false;
+	}
 
-	if ( !m_tSettings.m_sZones.IsEmpty() && !pTokenizer->EnableZoneIndexing ( sError ) )
-		return false;
-
-	CSphSource_StringVector tSrc ( iFields, ppFields, m_tSchema );
+	CSphSource_StringVector tSrc ( dFields, m_tSchema );
 	if ( m_tSettings.m_bHtmlStrip &&
 		!tSrc.SetStripHTML ( m_tSettings.m_sHtmlIndexAttrs.cstr(), m_tSettings.m_sHtmlRemoveElements.cstr(),
 			m_tSettings.m_bIndexSP, m_tSettings.m_sZones.cstr(), sError ) )
@@ -11181,7 +11189,7 @@ bool PercolateIndex_c::AddDocument ( ISphTokenizer * pTokenizer, int iFields, co
 
 	// TODO: field filter \ token filter?
 	tSrc.Setup ( m_tSettings );
-	tSrc.SetTokenizer ( pTokenizer );
+	tSrc.SetTokenizer ( tTokenizer );
 	tSrc.SetDict ( pAcc->m_pDict );
 	tSrc.SetFieldFilter ( pFieldFilter );
 	if ( !tSrc.Connect ( m_sLastError ) )
@@ -12439,6 +12447,16 @@ void PercolateIndex_c::PostSetup()
 	ISphTokenizerRefPtr_c pIndexing { ISphTokenizer::CreateBigramFilter ( m_pTokenizerIndexing, m_tSettings.m_eBigramIndex, m_tSettings.m_sBigramWords, m_sLastError ) };
 	if ( pIndexing )
 		m_pTokenizerIndexing = pIndexing;
+
+	if ( m_tSettings.m_uAotFilterMask )
+		m_pTokenizerIndexing = sphAotCreateFilter ( m_pTokenizerIndexing, m_pDict, m_tSettings.m_bIndexExactWords
+										  , m_tSettings.m_uAotFilterMask );
+
+	// SPZ and zones setup
+	if ( m_tSettings.m_bIndexSP && !m_pTokenizerIndexing->EnableSentenceIndexing ( m_sLastError ) )
+		m_pTokenizerIndexing = nullptr;
+	else if ( !m_tSettings.m_sZones.IsEmpty () && !m_pTokenizerIndexing->EnableZoneIndexing ( m_sLastError ) )
+		m_pTokenizerIndexing = nullptr;
 
 	// create queries
 	ISphTokenizerRefPtr_c pTokenizer { m_pTokenizer->Clone ( SPH_CLONE_QUERY ) };

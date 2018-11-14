@@ -93,8 +93,8 @@ public:
 	MOCK_METHOD1 ( IterateKillListNext, bool (SphDocID_t & ) ) ; // return false
 	int GetFieldCount () const { return m_iFields; }
 
-	const char ** GetFields ()
-	{ return ( const char ** ) ( m_ppDocs + ( m_tDocInfo.m_uDocID - 1 ) * m_iFields ); }
+	VecTraits_T<const char *> GetFields ()
+	{ return VecTraits_T< const char *> ( (const char**) ( m_ppDocs + ( m_tDocInfo.m_uDocID - 1 ) * m_iFields ), m_iFields ); }
 
 	int m_iDocCount;
 	int m_iFields;
@@ -164,7 +164,8 @@ public:
 	MOCK_METHOD1 ( IterateKillListStart, bool (CSphString & ) ); // return false;
 	MOCK_METHOD1 ( IterateKillListNext, bool (SphDocID_t & ) ); // return false
 	int  GetFieldCount () const { return m_iMaxFields; }
-	const char ** GetFields () { return (const char **)( m_ppFields ); }
+
+	VecTraits_T<const char *>  GetFields () { return VecTraits_T<const char *> ((const char **)( m_ppFields ), m_iMaxFields); }
 };
 
 
@@ -260,7 +261,7 @@ TEST_P ( RTN, WeightBoundary )
 		if ( !pSrc->m_tDocInfo.m_uDocID )
 			break;
 
-		pIndex->AddDocument ( pIndex->CloneIndexingTokenizer (), pSrc->GetFieldCount (), pSrc->GetFields ()
+		pIndex->AddDocument ( pSrc->GetFields ()
 							  , pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
 		pIndex->Commit ( NULL, NULL );
 	}
@@ -355,7 +356,7 @@ TEST_F ( RT, RankerFactors )
 		if ( !pSrc->m_tDocInfo.m_uDocID )
 			break;
 
-		pIndex->AddDocument ( pIndex->CloneIndexingTokenizer (), pSrc->GetFieldCount (), pSrc->GetFields ()
+		pIndex->AddDocument ( pSrc->GetFields ()
 							  , pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
 	}
 	pIndex->Commit ( NULL, NULL );
@@ -540,7 +541,7 @@ TEST_F ( RT, SendVsMerge )
 		if ( !pSrc->m_tDocInfo.m_uDocID )
 			break;
 
-		pIndex->AddDocument ( pIndex->CloneIndexingTokenizer (), pSrc->GetFieldCount (), pSrc->GetFields ()
+		pIndex->AddDocument ( pSrc->GetFields ()
 							  , pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
 		if ( pSrc->m_tDocInfo.m_uDocID==350 )
 		{

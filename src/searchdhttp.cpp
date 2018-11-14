@@ -1583,7 +1583,8 @@ bool HttpHandlerPQ_c::GotDocuments ( PercolateIndex_i * pIndex, const CSphString
 		iDoc++;
 
 		// add document
-		pIndex->AddDocument ( pIndex->CloneIndexingTokenizer (), iFieldsCount, dFields.Begin(), tDoc, true, sTokenFilterOpts, NULL, CSphVector<DWORD>(), sError, sWarning, pAccum );
+		pIndex->AddDocument ( dFields, tDoc,
+			true, sTokenFilterOpts, NULL, CSphVector<DWORD>(), sError, sWarning, pAccum );
 
 		if ( !sError.IsEmpty() )
 			break;

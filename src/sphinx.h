@@ -392,7 +392,6 @@ class CSphLowercaser
 {
 	friend class ISphTokenizer;
 	friend class CSphTokenizerBase;
-	friend class CSphTokenizer_UTF8_Base;
 	friend class CSphTokenizerBase2;
 
 public:
@@ -405,7 +404,7 @@ public:
 	uint64_t	GetFNV () const;
 
 public:
-	const CSphLowercaser &		operator = ( const CSphLowercaser & rhs );
+	CSphLowercaser &		operator = ( const CSphLowercaser & rhs );
 
 public:
 	inline int	ToLower ( int iCode ) const
@@ -665,7 +664,6 @@ protected:
 	virtual bool					AddSpecialsSPZ ( const char * sSpecials, const char * sDirective, CSphString & sError );
 
 protected:
-	static const int				MAX_SYNONYM_LEN		= 1024;	///< max synonyms map-from length, bytes
 
 	static const BYTE				BLEND_TRIM_NONE		= 1;
 	static const BYTE				BLEND_TRIM_HEAD		= 2;
@@ -680,7 +678,6 @@ protected:
 	int								m_iBoundaryOffset = 0;		///< boundary character offset (in bytes)
 	bool							m_bWasSpecial = false;		///< special token flag
 	bool							m_bWasSynonym = false;		///< last token is a synonym token
-	bool							m_bEscaped = false;			///< backslash handling flag
 	int								m_iOvershortCount = 0;		///< skipped overshort tokens count
 	ESphTokenMorph					m_eTokenMorph {SPH_TOKEN_MORPH_RAW}; ///< whether last token was a generated morphological guess
 

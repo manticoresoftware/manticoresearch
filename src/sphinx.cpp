@@ -2232,44 +2232,44 @@ protected:
 public:
 	CSphTokenizerBase();
 
-	bool			SetCaseFolding ( const char * sConfig, CSphString & sError ) override;
-	bool			LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, CSphString & sError ) override;
-	void			WriteSynonyms ( CSphWriter & tWriter ) const override;
+	bool			SetCaseFolding ( const char * sConfig, CSphString & sError ) final;
+	bool			LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, CSphString & sError ) final;
+	void			WriteSynonyms ( CSphWriter & tWriter ) const final;
 	void			CloneBase ( const CSphTokenizerBase * pFrom, ESphTokenizerClone eMode );
 
-	const char *	GetTokenStart () const override		{ return (const char *) m_pTokenStart; }
-	const char *	GetTokenEnd () const override		{ return (const char *) m_pTokenEnd; }
-	const char *	GetBufferPtr () const override		{ return (const char *) m_pCur; }
-	const char *	GetBufferEnd () const override		{ return (const char *) m_pBufferMax; }
-	void			SetBufferPtr ( const char * sNewPtr ) override;
-	uint64_t		GetSettingsFNV () const override;
+	const char *	GetTokenStart () const final	{ return (const char *) m_pTokenStart; }
+	const char *	GetTokenEnd () const final		{ return (const char *) m_pTokenEnd; }
+	const char *	GetBufferPtr () const final		{ return (const char *) m_pCur; }
+	const char *	GetBufferEnd () const final		{ return (const char *) m_pBufferMax; }
+	void			SetBufferPtr ( const char * sNewPtr ) final;
+	uint64_t		GetSettingsFNV () const final;
 
-	bool			SetBlendChars ( const char * sConfig, CSphString & sError ) override;
-	bool			WasTokenMultiformDestination ( bool &, int & ) const override { return false; }
+	bool			SetBlendChars ( const char * sConfig, CSphString & sError ) final;
+	bool			WasTokenMultiformDestination ( bool &, int & ) const final { return false; }
 
 public:
 	// lightweight clones must impose a lockdown on some methods
 	// (specifically those that change the lowercaser data table)
 
-	void AddPlainChar ( char c ) override
+	void AddPlainChar ( char c ) final
 	{
 		assert ( m_eMode!=SPH_CLONE_QUERY_LIGHTWEIGHT );
 		ISphTokenizer::AddPlainChar ( c );
 	}
 
-	void AddSpecials ( const char * sSpecials ) override
+	void AddSpecials ( const char * sSpecials ) final
 	{
 		assert ( m_eMode!=SPH_CLONE_QUERY_LIGHTWEIGHT );
 		ISphTokenizer::AddSpecials ( sSpecials );
 	}
 
-	void Setup ( const CSphTokenizerSettings & tSettings ) override
+	void Setup ( const CSphTokenizerSettings & tSettings ) final
 	{
 		assert ( m_eMode!=SPH_CLONE_QUERY_LIGHTWEIGHT );
 		ISphTokenizer::Setup ( tSettings );
 	}
 
-	bool RemapCharacters ( const char * sConfig, DWORD uFlags, const char * sSource, bool bCanRemap, CSphString & sError ) override
+	bool RemapCharacters ( const char * sConfig, DWORD uFlags, const char * sSource, bool bCanRemap, CSphString & sError ) final
 	{
 		assert ( m_eMode!=SPH_CLONE_QUERY_LIGHTWEIGHT );
 		return ISphTokenizer::RemapCharacters ( sConfig, uFlags, sSource, bCanRemap, sError );
@@ -2341,16 +2341,16 @@ protected:
 	}
 
 protected:
-	BYTE *			GetBlendedVariant ();
-	bool			CheckException ( const BYTE * pStart, const BYTE * pCur, bool bQueryMode );
+	BYTE *	GetBlendedVariant ();
+	bool	CheckException ( const BYTE * pStart, const BYTE * pCur, bool bQueryMode );
 
 	template < bool IS_QUERY, bool IS_BLEND >
-	BYTE *						DoGetToken();
+	BYTE *	DoGetToken();
 
-	void						FlushAccum ();
+	void	FlushAccum ();
 
 public:
-	virtual int		SkipBlended ();
+	int		SkipBlended () final;
 };
 
 
@@ -2359,12 +2359,12 @@ template < bool IS_QUERY >
 class CSphTokenizer_UTF8 : public CSphTokenizerBase2
 {
 public:
-								CSphTokenizer_UTF8 ();
-	virtual void				SetBuffer ( const BYTE * sBuffer, int iLength );
-	virtual BYTE *				GetToken ();
-	virtual ISphTokenizer *		Clone ( ESphTokenizerClone eMode ) const;
-	virtual int					GetCodepointLength ( int iCode ) const;
-	virtual int					GetMaxCodepointLength () const { return m_tLC.GetMaxCodepointLength(); }
+						CSphTokenizer_UTF8 ();
+	void				SetBuffer ( const BYTE * sBuffer, int iLength ) final;
+	BYTE *				GetToken () override;
+	ISphTokenizer *		Clone ( ESphTokenizerClone eMode ) const final;
+	int					GetCodepointLength ( int iCode ) const final;
+	int					GetMaxCodepointLength () const final { return m_tLC.GetMaxCodepointLength(); }
 };
 
 
@@ -2373,16 +2373,12 @@ template < bool IS_QUERY >
 class CSphTokenizer_UTF8Ngram : public CSphTokenizer_UTF8<IS_QUERY>
 {
 public:
-						CSphTokenizer_UTF8Ngram () : m_iNgramLen ( 1 ) {}
-
-public:
-	virtual bool		SetNgramChars ( const char * sConfig, CSphString & sError );
-	virtual void		SetNgramLen ( int iLen );
-	virtual BYTE *		GetToken ();
+	bool		SetNgramChars ( const char * sConfig, CSphString & sError ) final;
+	void		SetNgramLen ( int iLen ) final;
+	BYTE *		GetToken () final;
 
 protected:
-	int					m_iNgramLen;
-	CSphString			m_sNgramCharsStr;
+	int			m_iNgramLen = 1;
 };
 
 
@@ -2421,52 +2417,40 @@ struct CSphMultiformContainer
 /// token filter for multiforms support
 class CSphMultiformTokenizer : public CSphTokenFilter
 {
+	using Base = CSphTokenFilter;
 public:
 	CSphMultiformTokenizer ( ISphTokenizer * pTokenizer, const CSphMultiformContainer * pContainer );
 
-	virtual bool					SetCaseFolding ( const char * sConfig, CSphString & sError )	{ return m_pTokenizer->SetCaseFolding ( sConfig, sError ); }
-	virtual void					AddPlainChar ( char c )											{ m_pTokenizer->AddPlainChar ( c ); }
-	virtual void					AddSpecials ( const char * sSpecials )							{ m_pTokenizer->AddSpecials ( sSpecials ); }
-	virtual bool					SetIgnoreChars ( const char * sIgnored, CSphString & sError )	{ return m_pTokenizer->SetIgnoreChars ( sIgnored, sError ); }
-	virtual bool					SetNgramChars ( const char * sConfig, CSphString & sError )		{ return m_pTokenizer->SetNgramChars ( sConfig, sError ); }
-	virtual void					SetNgramLen ( int iLen )										{ m_pTokenizer->SetNgramLen ( iLen ); }
-	virtual bool					LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, CSphString & sError ) { return m_pTokenizer->LoadSynonyms ( sFilename, pFiles, sError ); }
-	virtual bool					SetBoundary ( const char * sConfig, CSphString & sError )		{ return m_pTokenizer->SetBoundary ( sConfig, sError ); }
-	virtual void					Setup ( const CSphTokenizerSettings & tSettings )				{ m_pTokenizer->Setup ( tSettings ); }
-	virtual const CSphTokenizerSettings &	GetSettings () const									{ return m_pTokenizer->GetSettings (); }
-	virtual const CSphSavedFile &	GetSynFileInfo () const											{ return m_pTokenizer->GetSynFileInfo (); }
-	virtual bool					EnableSentenceIndexing ( CSphString & sError )					{ return m_pTokenizer->EnableSentenceIndexing ( sError ); }
-	virtual bool					EnableZoneIndexing ( CSphString & sError )						{ return m_pTokenizer->EnableZoneIndexing ( sError ); }
 
 public:
-	virtual void					SetBuffer ( const BYTE * sBuffer, int iLength );
-	virtual BYTE *					GetToken ();
-	virtual void					EnableTokenizedMultiformTracking ()			{ m_bBuildMultiform = true; }
-	virtual int						GetLastTokenLen () const					{ return m_iStart<m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_iTokenLen : m_pTokenizer->GetLastTokenLen(); }
-	virtual bool					GetBoundary ()								{ return m_iStart<m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_bBoundary : m_pTokenizer->GetBoundary(); }
-	virtual bool					WasTokenSpecial ()							{ return m_iStart<m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_bSpecial : m_pTokenizer->WasTokenSpecial(); }
-	virtual int						GetOvershortCount ()						{ return m_iStart<m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_iOvershortCount : m_pTokenizer->GetOvershortCount(); }
-	virtual BYTE *					GetTokenizedMultiform ()					{ return m_sTokenizedMultiform[0] ? m_sTokenizedMultiform : NULL; }
-	virtual bool					TokenIsBlended () const						{ return m_iStart<m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_bBlended : m_pTokenizer->TokenIsBlended(); }
-	virtual bool					TokenIsBlendedPart () const					{ return m_iStart<m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_bBlendedPart : m_pTokenizer->TokenIsBlendedPart(); }
-	virtual int						SkipBlended ();
+	void	SetBuffer ( const BYTE * sBuffer, int iLength ) final;
+	BYTE *	GetToken () final;
+	void	EnableTokenizedMultiformTracking () final	{ m_bBuildMultiform = true; }
+	int		GetLastTokenLen () const final				{ return m_iStart<m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_iTokenLen : Base::GetLastTokenLen(); }
+	bool	GetBoundary () final						{ return m_iStart<m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_bBoundary : Base::GetBoundary(); }
+	bool	WasTokenSpecial () final					{ return m_iStart<m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_bSpecial : Base::WasTokenSpecial(); }
+	int		GetOvershortCount () final					{ return m_iStart<m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_iOvershortCount : Base::GetOvershortCount(); }
+	BYTE *	GetTokenizedMultiform () final				{ return m_sTokenizedMultiform[0] ? m_sTokenizedMultiform : nullptr; }
+	bool	TokenIsBlended () const final				{ return m_iStart<m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_bBlended : Base::TokenIsBlended(); }
+	bool	TokenIsBlendedPart () const final			{ return m_iStart<m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_bBlendedPart : Base::TokenIsBlendedPart(); }
+	int		SkipBlended () final;
 
 public:
-	virtual ISphTokenizer *			Clone ( ESphTokenizerClone eMode ) const;
-	virtual const char *			GetTokenStart () const		{ return m_iStart<m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_szTokenStart : m_pTokenizer->GetTokenStart(); }
-	virtual const char *			GetTokenEnd () const		{ return m_iStart<m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_szTokenEnd : m_pTokenizer->GetTokenEnd(); }
-	virtual const char *			GetBufferPtr () const		{ return m_iStart<m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_pBufferPtr : m_pTokenizer->GetBufferPtr(); }
-	virtual void					SetBufferPtr ( const char * sNewPtr );
-	virtual uint64_t				GetSettingsFNV () const;
-	virtual bool					WasTokenMultiformDestination ( bool & bHead, int & iDestCount ) const;
+	ISphTokenizer *			Clone ( ESphTokenizerClone eMode ) const final;
+	const char *			GetTokenStart () const final	{ return m_iStart<m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_szTokenStart : Base::GetTokenStart(); }
+	const char *			GetTokenEnd () const final		{ return m_iStart<m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_szTokenEnd : Base::GetTokenEnd(); }
+	const char *			GetBufferPtr () const final		{ return m_iStart<m_dStoredTokens.GetLength() ? m_dStoredTokens[m_iStart].m_pBufferPtr : Base::GetBufferPtr(); }
+	void					SetBufferPtr ( const char * sNewPtr ) final;
+	uint64_t				GetSettingsFNV () const final;
+	bool					WasTokenMultiformDestination ( bool & bHead, int & iDestCount ) const final;
 
 private:
 	const CSphMultiformContainer *	m_pMultiWordforms;
-	int								m_iStart;
-	int								m_iOutputPending;
-	const CSphMultiform *			m_pCurrentForm;
+	int								m_iStart = 0;
+	int								m_iOutputPending = -1;
+	const CSphMultiform *			m_pCurrentForm = nullptr;
 
-	bool				m_bBuildMultiform;
+	bool				m_bBuildMultiform = false;
 	BYTE				m_sTokenizedMultiform [ 3*SPH_MAX_WORD_LEN+4 ];
 
 	CSphVector<StoredToken_t>		m_dStoredTokens;
@@ -2557,10 +2541,6 @@ public:
 		return new CSphBigramTokenizer ( ISphTokenizerRefPtr_c ( m_pTokenizer->Clone ( eMode ) ), this );
 	}
 
-	void SetBuffer ( const BYTE * sBuffer, int iLength ) final
-	{
-		m_pTokenizer->SetBuffer ( sBuffer, iLength );
-	}
 
 	bool TokenIsBlended() const final
 	{
@@ -2608,7 +2588,7 @@ public:
 				// just clean slate
 				// assure we're, well, clean
 				assert ( !m_pSecond );
-				pFirst = m_pTokenizer->GetToken();
+				pFirst = CSphTokenFilter::GetToken();
 			}
 
 			// clean slate
@@ -2618,7 +2598,7 @@ public:
 
 			// pass through blended
 			// could handle them as first too, but.. cumbersome
-			if ( m_pTokenizer->TokenIsBlended() )
+			if ( CSphTokenFilter::TokenIsBlended() )
 				return pFirst;
 
 			// check pair
@@ -2633,7 +2613,7 @@ public:
 
 			// grow a pair!
 			// get a second one (lookahead, in a sense)
-			BYTE * pSecond = m_pTokenizer->GetToken();
+			BYTE * pSecond = CSphTokenFilter::GetToken();
 
 			// eof? oi
 			if ( !pSecond )
@@ -2864,7 +2844,7 @@ void CSphLowercaser::AddSpecials ( const char * sSpecials )
 	AddRemaps ( dRemaps, FLAG_CODEPOINT_SPECIAL );
 }
 
-const CSphLowercaser & CSphLowercaser::operator = ( const CSphLowercaser & rhs )
+CSphLowercaser & CSphLowercaser::operator = ( const CSphLowercaser & rhs )
 {
 	SetRemap ( &rhs );
 	return * this;
@@ -3695,7 +3675,7 @@ public:
 		, m_pFilter ( pFilter )
 		, m_sOptions ( sOptions )
 	{
-		assert ( m_pTokenizer );
+		assert ( pTok );
 		assert ( m_pFilter );
 		m_pFilter->AddRef();
 		// FIXME!!! handle error in constructor \ move to setup?
@@ -3772,7 +3752,7 @@ public:
 		while (true)
 		{
 			// get next raw token, handle field end
-			BYTE * pRaw = m_pTokenizer->GetToken();
+			BYTE * pRaw = CSphTokenFilter::GetToken();
 			if ( !pRaw )
 			{
 				// no more hits? notify plugin of a field end,
@@ -3788,8 +3768,8 @@ public:
 			}
 
 			// compute proper position delta
-			m_iPosDelta = ( m_bWasBlended ? 0 : 1 ) + m_pTokenizer->GetOvershortCount();
-			m_bWasBlended = m_pTokenizer->TokenIsBlended();
+			m_iPosDelta = ( m_bWasBlended ? 0 : 1 ) + CSphTokenFilter::GetOvershortCount();
+			m_bWasBlended = CSphTokenFilter::TokenIsBlended();
 
 			// push raw token to plugin, return a processed one, if any
 			int iExtra = 0;
@@ -5067,7 +5047,6 @@ bool CSphTokenizer_UTF8Ngram<IS_QUERY>::SetNgramChars ( const char * sConfig, CS
 
 	// gcc braindamage requires this
 	this->m_tLC.AddRemaps ( dRemaps, FLAG_CODEPOINT_NGRAM | FLAG_CODEPOINT_SPECIAL ); // !COMMIT support other n-gram lengths than 1
-	m_sNgramCharsStr = sConfig;
 	return true;
 }
 
@@ -5094,10 +5073,6 @@ BYTE * CSphTokenizer_UTF8Ngram<IS_QUERY>::GetToken ()
 CSphMultiformTokenizer::CSphMultiformTokenizer ( ISphTokenizer * pTokenizer, const CSphMultiformContainer * pContainer )
 	: CSphTokenFilter ( pTokenizer )
 	, m_pMultiWordforms ( pContainer )
-	, m_iStart	( 0 )
-	, m_iOutputPending ( -1 )
-	, m_pCurrentForm ( NULL )
-	, m_bBuildMultiform	( false )
 {
 	assert ( pTokenizer && pContainer );
 	m_dStoredTokens.Reserve ( pContainer->m_iMaxTokens + 6 ); // max form tokens + some blended tokens
@@ -5133,14 +5108,14 @@ BYTE * CSphMultiformTokenizer::GetToken ()
 	{
 		m_iStart = 0;
 		m_dStoredTokens.Resize ( 0 );
-		const BYTE * pToken = m_pTokenizer->GetToken();
+		const BYTE * pToken = CSphTokenFilter::GetToken();
 		if ( !pToken )
 			return NULL;
 
 		FillStoredTokenInfo ( m_dStoredTokens.Add(), pToken, m_pTokenizer );
 		while ( m_dStoredTokens.Last().m_bBlended || m_dStoredTokens.Last().m_bBlendedPart )
 		{
-			pToken = m_pTokenizer->GetToken ();
+			pToken = CSphTokenFilter::GetToken ();
 			if ( !pToken )
 				break;
 
@@ -5190,7 +5165,7 @@ BYTE * CSphMultiformTokenizer::GetToken ()
 				if ( iCur>=m_dStoredTokens.GetLength() )
 				{
 					// fetch next token
-					const BYTE* pToken = m_pTokenizer->GetToken ();
+					const BYTE* pToken = CSphTokenFilter::GetToken ();
 					if ( !pToken )
 						break;
 
@@ -5301,14 +5276,14 @@ void CSphMultiformTokenizer::SetBufferPtr ( const char * sNewPtr )
 {
 	m_iStart = 0;
 	m_iOutputPending = -1;
-	m_pCurrentForm = NULL;
+	m_pCurrentForm = nullptr;
 	m_dStoredTokens.Resize ( 0 );
-	m_pTokenizer->SetBufferPtr ( sNewPtr );
+	CSphTokenFilter::SetBufferPtr ( sNewPtr );
 }
 
 void CSphMultiformTokenizer::SetBuffer ( const BYTE * sBuffer, int iLength )
 {
-	m_pTokenizer->SetBuffer ( sBuffer, iLength );
+	CSphTokenFilter::SetBuffer ( sBuffer, iLength );
 	SetBufferPtr ( (const char *)sBuffer );
 }
 

@@ -2079,3 +2079,35 @@ TEST ( functions, warner_c )
 	sMsg.MoveAllTo ( sFinal );
 	ASSERT_STREQ ( sFinal.cstr (), "ERRORS: Error 10; WARNINGS: msg 1, msg 2" );
 }
+
+// testing our priority queue
+TEST ( functions, CSphQueue )
+{
+	int iMin = 1000;
+	CSphQueue<int, SphLess_T<int> > qQ ( 10 );
+	for ( auto iVal : { 89, 5, 4, 8, 4, 3, 1, 5, 4, 2 } )
+	{
+		qQ.Push ( iVal );
+		iMin = Min ( iMin, iVal );
+		ASSERT_EQ ( qQ.Root (), iMin ) << "min elem always on root";
+	}
+
+	ASSERT_EQ ( qQ.GetLength (), 10 ); ASSERT_EQ ( qQ.Root(), 1); qQ.Pop();
+	ASSERT_EQ ( qQ.GetLength (), 9 ); ASSERT_EQ ( qQ.Root (), 2 ); qQ.Pop();
+	ASSERT_EQ ( qQ.GetLength (), 8 ); ASSERT_EQ ( qQ.Root (), 3 ); qQ.Pop();
+	ASSERT_EQ ( qQ.GetLength (), 7 ); ASSERT_EQ ( qQ.Root (), 4 ); qQ.Pop();
+	ASSERT_EQ ( qQ.GetLength (), 6 ); ASSERT_EQ ( qQ.Root (), 4 ); qQ.Pop();
+	ASSERT_EQ ( qQ.GetLength (), 5 ); ASSERT_EQ ( qQ.Root (), 4 ); qQ.Pop();
+	ASSERT_EQ ( qQ.GetLength (), 4 ); ASSERT_EQ ( qQ.Root (), 5 ); qQ.Pop();
+	ASSERT_EQ ( qQ.GetLength (), 3 ); ASSERT_EQ ( qQ.Root (), 5 ); qQ.Pop();
+	ASSERT_EQ ( qQ.GetLength (), 2 ); ASSERT_EQ ( qQ.Root (), 8 ); qQ.Pop();
+	ASSERT_EQ ( qQ.GetLength (), 1 ); ASSERT_EQ ( qQ.Root (), 89 ); qQ.Pop();
+	ASSERT_EQ ( qQ.GetLength (), 0 );
+
+	qQ.Push(1000);
+	ASSERT_EQ ( qQ.Root (), 1000 ) << "pushed 1000 to empty, it is root now";
+
+	qQ.Push ( 100 );
+	ASSERT_EQ ( qQ.Root (), 100 ) << "pushed 100 over 1000, it became root now";
+
+}

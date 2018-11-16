@@ -183,7 +183,8 @@ int wsrep_load(const char *spec, wsrep_t **hptr, wsrep_log_cb_t log_cb)
     void *dlh = NULL;
     wsrep_loader_fun dlfun;
     char msg[1024];
-    const size_t msg_len = sizeof(msg);
+    const size_t msg_len = sizeof(msg) - 1;
+	msg[msg_len] = 0;
 
     if (NULL != log_cb)
         logger = log_cb;

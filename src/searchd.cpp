@@ -6213,6 +6213,16 @@ public:
 	const ServedDesc_t * Get ( const CSphString &sName ) const;
 };
 
+
+struct LocalSearch_t
+{
+	int					m_iLocal;
+	ISphMatchSorter **	m_ppSorters;
+	CSphQueryResult **	m_ppResults;
+	bool				m_bResult;
+	int64_t				m_iMass;
+};
+
 class SearchHandler_c : public ISphSearchHandler
 {
 	friend void LocalSearchThreadFunc ( void * pArg );
@@ -6230,6 +6240,7 @@ public:
 	void							SetProfile ( CSphQueryProfile * pProfile ) final;
 	AggrResult_t *					GetResult ( int iResult ) final { return m_dResults.Begin() + iResult; }
 	void							SetFederatedUser () { m_bFederatedUser = true; }
+	void 							RunLocalSearchMT ( LocalSearch_t &dWork, ThreadLocal_t &tThd );
 
 public:
 	CSphVector<CSphQuery>			m_dQueries;						///< queries which i need to search
@@ -6245,8 +6256,6 @@ protected:
 	void							RunSubset ( int iStart, int iEnd );	///< run queries against index(es) from first query in the subset
 	void							RunLocalSearches();
 	void							RunLocalSearchesParallel ();
-	bool							RunLocalSearchMT ( int iLocal, ISphMatchSorter ** ppSorters
-													   , CSphQueryResult ** pResults, bool * pMulti ) const;
 	bool							AllowsMulti ( int iStart, int iEnd ) const;
 	void							SetupLocalDF ( int iStart, int iEnd );
 
@@ -6515,53 +6524,27 @@ int64_t sphCpuTimer ()
 }
 
 
-struct LocalSearch_t
-{
-	int					m_iLocal;
-	ISphMatchSorter **	m_ppSorters;
-	CSphQueryResult **	m_ppResults;
-	bool				m_bResult;
-	int64_t				m_iMass;
-};
-
-
 struct LocalSearchThreadContext_t
 {
 	SphThread_t					m_tThd {0};
 	SearchHandler_c *			m_pHandler = nullptr;
 	CrashQuery_t				m_tCrashQuery;
-	int							m_iSearches = 0;
+	long						m_iSearches = 0;
 	LocalSearch_t *				m_pSearches = nullptr;
 	CSphAtomic *				m_pCurSearch = nullptr;
-};
 
+	void LocalSearch ()
+	{
+		SphCrashLogger_c::SetLastQuery ( m_tCrashQuery );
+		ThreadLocal_t tThd ( m_pHandler->m_tThd );
+		for ( long iCurSearch = ( *m_pCurSearch )++; iCurSearch<m_iSearches; iCurSearch = ( *m_pCurSearch )++ )
+			m_pHandler->RunLocalSearchMT ( m_pSearches[iCurSearch], tThd );
+	}
+};
 
 void LocalSearchThreadFunc ( void * pArg )
 {
-	auto * pContext = (LocalSearchThreadContext_t*) pArg;
-
-	SphCrashLogger_c::SetLastQuery ( pContext->m_tCrashQuery );
-	ThreadLocal_t tThd ( pContext->m_pHandler->m_tThd );
-
-	while (true)
-	{
-		if ( pContext->m_pCurSearch->GetValue()>=pContext->m_iSearches )
-			return;
-
-		long iCurSearch = pContext->m_pCurSearch->Inc();
-		if ( iCurSearch>=pContext->m_iSearches )
-			return;
-		LocalSearch_t * pCall = pContext->m_pSearches + iCurSearch;
-
-		const SearchHandler_c * pHnd = pContext->m_pHandler;
-		// FIXME!!! handle different proto
-		tThd.m_tDesc.SetThreadInfo ( "api-search query=\"%s\" comment=\"%s\" index=\"%s\"", pHnd->m_dQueries[pHnd->m_iStart].m_sQuery.scstr(), pHnd->m_dQueries[pHnd->m_iStart].m_sComment.scstr(), pHnd->m_dLocal[pCall->m_iLocal].m_sName.scstr() );
-		tThd.m_tDesc.m_tmStart = sphMicroTimer();
-
-		pCall->m_bResult = pContext->m_pHandler->RunLocalSearchMT ( pCall->m_iLocal, pCall->m_ppSorters
-																	, pCall->m_ppResults
-																	, &pContext->m_pHandler->m_bMultiQueue );
-	}
+	( ( LocalSearchThreadContext_t * ) pArg )->LocalSearch ();
 }
 
 
@@ -6737,7 +6720,7 @@ void SearchHandler_c::RunLocalSearchesParallel()
 
 			// current sorter ALWAYS resides at this index, in all cases
 			// (current as in sorter for iQuery-th query against iLocal-th index)
-			int iSorterIndex = iLocal*iQueries + iQuery - m_iStart;
+			int iSorterIndex = iResultIndex + iQuery - m_iStart;
 
 			if ( !m_bMultiQueue )
 			{
@@ -6767,9 +6750,9 @@ void SearchHandler_c::RunLocalSearchesParallel()
 			AggrResult_t & tRes = m_dResults[iQuery];
 			CSphQueryResult & tRaw = dResults[iResultIndex];
 
-			iTotalSuccesses++;
+			++iTotalSuccesses;
 
-			tRes.m_iSuccesses++;
+			++tRes.m_iSuccesses;
 			tRes.m_iTotalMatches += pSorter->GetTotalCount();
 
 			tRes.m_pMva = tRaw.m_pMva;
@@ -6826,20 +6809,28 @@ void SearchHandler_c::RunLocalSearchesParallel()
 int64_t sphCpuTimer();
 
 // invoked from MT searches. So, must be MT-aware!
-bool SearchHandler_c::RunLocalSearchMT ( int iLocal, ISphMatchSorter ** ppSorters, CSphQueryResult ** ppResults
-										 , bool * pMulti ) const
+void SearchHandler_c::RunLocalSearchMT ( LocalSearch_t &dWork, ThreadLocal_t &tThd )
 {
-	int64_t iCpuTime = -sphCpuTimer();
 
+	// FIXME!!! handle different proto
+	tThd.m_tDesc.SetThreadInfo ( R"(api-search query="%s" comment="%s" index="%s")"
+								 , m_dQueries[m_iStart].m_sQuery.scstr (), m_dQueries[m_iStart].m_sComment.scstr ()
+								 , m_dLocal[dWork.m_iLocal].m_sName.scstr () );
+	tThd.m_tDesc.m_tmStart = sphMicroTimer ();
+
+	int64_t iCpuTime = -sphCpuTimer ();;
 	const int iQueries = m_iEnd-m_iStart+1;
-	auto * pServed = m_dLocked.Get ( m_dLocal[iLocal].m_sName );
+	dWork.m_bResult = false;
+	auto ppResults = dWork.m_ppResults;
+	auto ppSorters = dWork.m_ppSorters;
+	auto iLocal = dWork.m_iLocal;
+	auto * pServed = m_dLocked.Get ( m_dLocal[dWork.m_iLocal].m_sName );
 	if ( !pServed )
 	{
 		// FIXME! submit a failure?
-		return false;
+		return;
 	}
 	assert ( pServed->m_pIndex );
-	assert ( pMulti );
 
 	// create sorters
 	int iValidSorters = 0;
@@ -6848,12 +6839,11 @@ bool SearchHandler_c::RunLocalSearchMT ( int iLocal, ISphMatchSorter ** ppSorter
 	{
 		CSphString & sError = ppResults[i]->m_sError;
 		const CSphQuery & tQuery = m_dQueries[i+m_iStart];
-		auto * pExtraSchemaMT = tQuery.m_bAgent ? &m_dExtraSchemas[i+m_iStart] : nullptr;
 
 		m_tHook.m_pIndex = pServed->m_pIndex;
 		SphQueueSettings_t tQueueSettings ( tQuery, pServed->m_pIndex->GetMatchSchema(), sError, m_pProfile );
 		tQueueSettings.m_bComputeItems = true;
-		tQueueSettings.m_pExtra = pExtraSchemaMT;
+		tQueueSettings.m_pExtra = tQuery.m_bAgent ? &m_dExtraSchemas[i + m_iStart] : nullptr;
 		tQueueSettings.m_pUpdate = m_pUpdates;
 		tQueueSettings.m_pCollection = m_pDelDocs;
 		tQueueSettings.m_pHook = &m_tHook;
@@ -6866,11 +6856,11 @@ bool SearchHandler_c::RunLocalSearchMT ( int iLocal, ISphMatchSorter ** ppSorter
 			iValidSorters++;
 
 		// can't use multi-query for sorter with string attribute at group by or sort
-		if ( ppSorters[i] && *pMulti )
-			*pMulti = ppSorters[i]->CanMulti();
+		if ( ppSorters[i] && m_bMultiQueue )
+			m_bMultiQueue = ppSorters[i]->CanMulti();
 	}
 	if ( !iValidSorters )
-		return false;
+		return;
 
 	// setup kill-lists
 	KillListVector dKillist;
@@ -6903,22 +6893,16 @@ bool SearchHandler_c::RunLocalSearchMT ( int iLocal, ISphMatchSorter ** ppSorter
 		tMultiArgs.m_iTotalDocs = m_iTotalDocs;
 	}
 
-	bool bResult;
 	ppResults[0]->m_tIOStats.Start();
-	if ( *pMulti )
-	{
-		bResult = pServed->m_pIndex->MultiQuery ( &m_dQueries[m_iStart], ppResults[0], iQueries, ppSorters, tMultiArgs );
-	} else
-	{
-		bResult = pServed->m_pIndex->MultiQueryEx ( iQueries, &m_dQueries[m_iStart], ppResults, ppSorters, tMultiArgs );
-	}
+	if ( m_bMultiQueue )
+		dWork.m_bResult = pServed->m_pIndex->MultiQuery ( &m_dQueries[m_iStart], ppResults[0], iQueries, ppSorters, tMultiArgs );
+	else
+		dWork.m_bResult = pServed->m_pIndex->MultiQueryEx ( iQueries, &m_dQueries[m_iStart], ppResults, ppSorters, tMultiArgs );
 	ppResults[0]->m_tIOStats.Stop();
 
 	iCpuTime += sphCpuTimer();
 	for ( int i=0; i<iQueries; ++i )
 		ppResults[i]->m_iCpuTime = iCpuTime;
-
-	return bResult;
 }
 
 
@@ -6964,13 +6948,12 @@ void SearchHandler_c::RunLocalSearches()
 		{
 			CSphString sError;
 			CSphQuery & tQuery = m_dQueries[iQuery];
-			auto tExtraSchema = tQuery.m_bAgent ? &m_dExtraSchemas[iQuery] : nullptr;
 
 			// create queue
 			m_tHook.m_pIndex = pServed->m_pIndex;
 			SphQueueSettings_t tQueueSettings ( tQuery, pServed->m_pIndex->GetMatchSchema(), sError, m_pProfile );
 			tQueueSettings.m_bComputeItems = true;
-			tQueueSettings.m_pExtra = tExtraSchema;
+			tQueueSettings.m_pExtra = tQuery.m_bAgent ? &m_dExtraSchemas[iQuery] : nullptr;;
 			tQueueSettings.m_pUpdate = m_pUpdates;
 			tQueueSettings.m_pCollection = m_pDelDocs;
 			tQueueSettings.m_pHook = &m_tHook;

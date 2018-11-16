@@ -17993,7 +17993,7 @@ bool CSphIndex_VLN::MultiQueryEx ( int iQueries, const CSphQuery * pQueries,
 	CSphScopedPayload tPayloads;
 	bool bResult = false;
 	bool bResultScan = false;
-	for ( int i=0; i<iQueries; i++ )
+	for ( int i=0; i<iQueries; ++i )
 	{
 		// nothing to do without a sorter
 		if ( !ppSorters[i] )

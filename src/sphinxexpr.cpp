@@ -20,6 +20,10 @@
 #include <time.h>
 #include <math.h>
 
+#if USE_RE2
+#include <re2/re2.h>
+#endif
+
 #ifndef M_LOG2E
 #define M_LOG2E		1.44269504088896340736
 #endif
@@ -2419,7 +2423,9 @@ enum Func_e
 	FUNC_MIN_TOP_SORTVAL,
 
 	FUNC_ATAN2,
-	FUNC_RAND
+	FUNC_RAND,
+
+	FUNC_REGEX
 };
 
 
@@ -2506,7 +2512,9 @@ static FuncDesc_t g_dFuncs[] =
 	{ "min_top_sortval",	0,	FUNC_MIN_TOP_SORTVAL,	SPH_ATTR_FLOAT },
 
 	{ "atan2",			2,	FUNC_ATAN2,			SPH_ATTR_FLOAT },
-	{ "rand",			-1,	FUNC_RAND,			SPH_ATTR_FLOAT }
+	{ "rand",			-1,	FUNC_RAND,			SPH_ATTR_FLOAT },
+
+	{ "regex",			2,	FUNC_REGEX,			SPH_ATTR_INTEGER }
 };
 
 
@@ -2549,34 +2557,34 @@ static int FuncHashLookup ( const char * sKey )
 	assert ( sKey && sKey[0] );
 
 	static BYTE dAsso[] =
-	{
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		0, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 60, 109, 25, 25, 0,
-		25, 15, 30, 10, 60, 10, 109, 109, 5, 0,
-		10, 25, 25, 25, 0, 55, 0, 0, 109, 15,
-		60, 20, 0, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109, 109, 109, 109, 109,
-		109, 109, 109, 109, 109, 109
-	};
+    {
+      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
+      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
+      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
+      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
+      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
+        0, 134, 134, 134, 134, 134, 134, 134, 134, 134,
+      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
+      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
+      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
+      134, 134, 134, 134, 134,  50, 134,  15,  50,   0,
+       75,  10,   0,  10,  15,   0, 134, 134,   5,   0,
+       10,   0,  45,   0,  25,  35,  25,  25, 134,  75,
+       60,  40,  10, 134, 134, 134, 134, 134, 134, 134,
+      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
+      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
+      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
+      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
+      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
+      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
+      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
+      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
+      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
+      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
+      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
+      134, 134, 134, 134, 134, 134, 134, 134, 134, 134,
+      134, 134, 134, 134, 134, 134
+    };
 
 	auto * s = (const BYTE*) sKey;
 	auto iHash = strlen ( sKey );
@@ -2589,17 +2597,20 @@ static int FuncHashLookup ( const char * sKey )
 
 	static int dIndexes[] =
 	{
-		-1, -1, -1, -1, -1, 13, -1, 51, 52, 29,
-		-1, -1, 55, 53, -1, -1, -1, 6, 54, -1,
-		33, -1, 31, 23, 50, -1, 21, 45, 30, 2,
-		44, -1, -1, 49, 60, 61, 47, -1, 57, 63,
-		16, 32, 27, 38, 7, 8, 41, 39, 56, 26,
-		48, 11, 59, 0, 28, 62, 46, 34, 58, 37,
-		-1, 36, 43, 42, 17, 3, -1, -1, 25, 18,
-		-1, -1, 19, 15, 14, -1, 22, -1, 4, 12,
-		-1, -1, -1, 5, 10, -1, -1, -1, 24, 20,
-		35, -1, -1, -1, 40, -1, -1, -1, -1, -1,
-		-1, -1, -1, 9, -1, -1, -1, -1, 1
+		-1, -1, 27, -1, -1, -1, -1, -1, -1, -1,
+		3, -1, 31, 23, 2, 16, 21, 6, 38, 7,
+		8, -1, 43, 56, 60, 61, -1, 34, 57, 37,
+		13, 47, 39, 54, 29, 48, -1, -1, 5, 50,
+		33, -1, 45, 30, 20, -1, -1, -1, 4, 12,
+		64, 22, -1, 49, 63, 44, 36, 51, 52, 14,
+		62, 41, 55, 53, 10, -1, 11, -1, 58, 17,
+		-1, -1, -1, 42, 18, 35, -1, 19, 24, 26,
+		-1, 32, -1, -1, 40, -1, -1, -1, 0, -1,
+		-1, -1, 59, -1, 28, -1, -1, -1, -1, -1,
+		-1, -1, -1, 1, -1, -1, 46, -1, -1, -1,
+		-1, -1, -1, -1, -1, -1, -1, -1, 9, -1,
+		-1, -1, -1, 25, -1, -1, -1, -1, -1, -1,
+		-1, -1, -1, 15
 	};
 
 	if ( iHash>=(int)(sizeof(dIndexes)/sizeof(dIndexes[0])) )
@@ -2870,6 +2881,7 @@ private:
 	ISphExpr *				CreateContainsNode ( const ExprNode_t & tNode );
 	ISphExpr *				CreateAggregateNode ( const ExprNode_t & tNode, ESphAggrFunc eFunc, ISphExpr * pLeft );
 	ISphExpr *				CreateForInNode ( int iNode );
+	ISphExpr *				CreateRegexNode ( ISphExpr * pAttr, bool bJsonAttr, ISphExpr * pString );
 	void					FixupIterators ( int iNode, const char * sKey, SphAttr_t * pAttr );
 
 	bool					GetError () const { return !( m_sLexerError.IsEmpty() && m_sParserError.IsEmpty() && m_sCreateError.IsEmpty() ); }
@@ -4871,6 +4883,11 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 						m_eEvalStage = SPH_EVAL_PRESORT;
 						return new Expr_MinTopSortval();
 						break;
+					case FUNC_REGEX:
+					{
+						bool bLeftJson = ( m_dNodes[m_dNodes[tNode.m_iLeft].m_iLeft].m_iToken==TOK_ATTR_JSON );
+						return CreateRegexNode ( dArgs[0], bLeftJson, dArgs[1] );
+					}
 					default: // just make gcc happy
 						break;
 				}
@@ -6062,6 +6079,65 @@ private:
 	ISphExpr *	m_pAnchorLon;
 };
 
+class Expr_Regex_c : public Expr_ArgVsSet_c<int>
+{
+protected:
+	uint64_t m_uFilterHash = SPH_FNV64_SEED;
+#if USE_RE2
+	RE2 *	m_pRE2 = nullptr;
+#endif
+
+public:
+	Expr_Regex_c ( ISphExpr * pAttr, ISphExpr * pString )
+		: Expr_ArgVsSet_c ( pAttr )
+	{
+		CSphMatch tTmp;
+		const BYTE * sVal = nullptr;
+		int iLen = pString->StringEval ( tTmp, &sVal );
+		if ( iLen )
+			m_uFilterHash = sphFNV64 ( sVal, iLen );
+
+#if USE_RE2
+		re2::StringPiece tBuf ( (const char *)sVal, iLen );
+		RE2::Options tOpts;
+		tOpts.set_utf8 ( true );
+		m_pRE2 = new RE2 ( tBuf, tOpts );
+#endif
+	}
+
+	~Expr_Regex_c() final
+	{
+#if USE_RE2
+		SafeDelete ( m_pRE2 );
+#endif
+	}
+
+	int IntEval ( const CSphMatch & tMatch ) const final
+	{
+#if USE_RE2
+		if ( !m_pRE2 )
+			return 0;
+
+		const BYTE * sVal = nullptr;
+		int iLen = m_pArg->StringEval ( tMatch, &sVal );
+
+		re2::StringPiece tBuf ( (const char *)sVal, iLen );
+		if ( RE2::PartialMatchN ( tBuf, *m_pRE2, nullptr, 0 ) )
+			return 1;
+#endif
+
+		return 0;
+	}
+
+	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final
+	{
+		EXPR_CLASS_NAME("Expr_Regex_c");
+		uHash ^= m_uFilterHash;
+		return CALC_DEP_HASHES();
+	}
+};
+
+
 //////////////////////////////////////////////////////////////////////////
 
 struct DistanceUnit_t
@@ -6553,6 +6629,15 @@ ISphExpr * ExprParser_t::CreateForInNode ( int iNode )
 	return pFunc;
 }
 
+ISphExpr * ExprParser_t::CreateRegexNode ( ISphExpr * pAttr, bool bJsonAttr, ISphExpr * pString )
+{
+	// force type conversion, where possible
+	if ( bJsonAttr )
+		pAttr = new Expr_JsonFieldConv_c ( pAttr );
+
+	return new Expr_Regex_c ( pAttr, pString );
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 int yylex ( YYSTYPE * lvalp, ExprParser_t * pParser )
@@ -6843,7 +6928,7 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 		bGotString |= ( dRetTypes[i]==SPH_ATTR_STRING );
 		bGotMva |= ( dRetTypes[i]==SPH_ATTR_UINT32SET || dRetTypes[i]==SPH_ATTR_INT64SET );
 	}
-	if ( bGotString && !( eFunc==FUNC_CRC32 || eFunc==FUNC_EXIST || eFunc==FUNC_POLY2D || eFunc==FUNC_GEOPOLY2D ) )
+	if ( bGotString && !( eFunc==FUNC_CRC32 || eFunc==FUNC_EXIST || eFunc==FUNC_POLY2D || eFunc==FUNC_GEOPOLY2D || eFunc==FUNC_REGEX ) )
 	{
 		m_sParserError.SetSprintf ( "%s() arguments can not be string", sFuncName );
 		return -1;
@@ -6986,6 +7071,33 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 			m_sParserError.SetSprintf ( "%s() argument 5 must be map", sFuncName );
 			return -1;
 		}
+		break;
+	case FUNC_REGEX:
+		{
+#if USE_RE2
+			int iLeft = m_dNodes[iArg].m_iLeft;
+			ESphAttr eLeft = m_dNodes[iLeft].m_eRetType;
+			bool bIsLeftGood = ( eLeft==SPH_ATTR_STRING || eLeft==SPH_ATTR_STRINGPTR || eLeft==SPH_ATTR_JSON_FIELD );
+			if ( !bIsLeftGood )
+			{
+				m_sParserError.SetSprintf ( "first %s() argument must be string or JSON.field", sFuncName );
+				return -1;
+			}
+
+			int iRight = m_dNodes[iArg].m_iRight;
+			ESphAttr eRight = m_dNodes[iRight].m_eRetType;
+			bool bIsRightGood = ( eRight==SPH_ATTR_STRING );
+			if ( !bIsRightGood )
+			{
+				m_sParserError.SetSprintf ( "second %s() argument must be string", sFuncName );
+				return -1;
+			}
+#else
+			m_sParserError.SetSprintf ( "%s() used but no regexp support compiled", sFuncName );
+			return -1;
+#endif
+		}
+		break;
 	default:;
 	}
 

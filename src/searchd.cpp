@@ -3235,6 +3235,8 @@ void SearchRequestBuilder_t::SendQuery ( const char * sIndexes, ISphOutputBuffer
 				ARRAY_FOREACH ( iString, tFilter.m_dStrings )
 					tOut.SendString ( tFilter.m_dStrings[iString].cstr() );
 				break;
+			case SPH_FILTER_EXPRESSION: // need only name and type
+				break;
 		}
 		tOut.SendInt ( tFilter.m_bExclude );
 		tOut.SendInt ( tFilter.m_bHasEqualMin );
@@ -3837,6 +3839,8 @@ static bool ParseSearchFilter ( CSphFilterSettings & tFilter, InputBuffer_c & tR
 			ARRAY_FOREACH ( iString, tFilter.m_dStrings )
 				tFilter.m_dStrings[iString] = tReq.GetString();
 		}
+		break;
+	case SPH_FILTER_EXPRESSION: // need only name and type
 		break;
 
 	default:

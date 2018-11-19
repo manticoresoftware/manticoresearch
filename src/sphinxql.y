@@ -105,6 +105,7 @@
 %token	TOK_RAND
 %token	TOK_RAMCHUNK
 %token	TOK_READ
+%token	TOK_REGEX
 %token	TOK_RECONFIGURE
 %token	TOK_RELOAD
 %token	TOK_REPEATABLE
@@ -668,6 +669,13 @@ filter_item:
 		{
 			AddMvaRange ( pParser, $1, $3.m_iValue, INT64_MAX );
 		}
+	| TOK_REGEX '(' json_field ',' TOK_QUOTED_STRING ')'
+		{
+			TRACK_BOUNDS ( $$, $1, $6 );
+			CSphFilterSettings * pFilter = pParser->AddFilter ( $$, SPH_FILTER_EXPRESSION );
+			if ( !pFilter )
+				YYERROR;
+		}
 	;
 
 expr_ident:
@@ -972,6 +980,7 @@ function:
 	| TOK_REMAP '(' expr ',' expr ',' '(' arglist ')' ',' '(' arglist ')' ')' { TRACK_BOUNDS ( $$, $1, $14 ); }
 	| TOK_RAND '(' ')'				{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| TOK_RAND '(' arglist ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); }
+	| TOK_REGEX '(' arglist ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	;
 	
 arglist:

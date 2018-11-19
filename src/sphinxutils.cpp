@@ -18,6 +18,7 @@
 #include "sphinxint.h"
 #include "sphinxplugin.h"
 #include "sphinxrlp.h"
+#include "sphinxstem.h"
 
 #include <ctype.h>
 #include <fcntl.h>

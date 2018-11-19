@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "sphinxint.h"
+#include "sphinxrt.h"
 
 #include <gmock/gmock.h>
 

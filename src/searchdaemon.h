@@ -107,6 +107,7 @@
 // declarations for correct work of code analysis
 #include "sphinxutils.h"
 #include "sphinxint.h"
+#include "sphinxrt.h"
 
 const char * sphSockError ( int =0 );
 int sphSockGetErrno ();

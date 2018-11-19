@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "sphinxint.h"
+#include "sphinxutils.h"
 #include "json/cJSON.h"
 #include <math.h>
 

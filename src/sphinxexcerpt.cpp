@@ -19,6 +19,7 @@
 #include "sphinxsearch.h"
 #include "sphinxquery.h"
 #include "sphinxint.h"
+#include "sphinxstem.h"
 
 #include <math.h>
 

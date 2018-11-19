@@ -13,6 +13,7 @@
 #include "sphinxfilter.h"
 #include "sphinxint.h"
 #include "sphinxjson.h"
+#include "sphinxutils.h"
 
 #if USE_WINDOWS
 #pragma warning(disable:4250) // inheritance via dominance is our intent

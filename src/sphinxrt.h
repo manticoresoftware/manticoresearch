@@ -16,6 +16,7 @@
 #include "sphinx.h"
 #include "sphinxutils.h"
 #include "sphinxstem.h"
+#include "sphinxint.h"
 
 struct CSphReconfigureSettings;
 struct CSphReconfigureSetup;

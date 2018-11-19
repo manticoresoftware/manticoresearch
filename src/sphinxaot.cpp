@@ -16,6 +16,7 @@
 #include "sphinx.h"
 #include "sphinxint.h"
 #include "sphinxutils.h"
+#include "sphinxstem.h"
 
 //////////////////////////////////////////////////////////////////////////
 // LEMMATIZER

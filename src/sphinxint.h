@@ -15,7 +15,6 @@
 
 #include "sphinx.h"
 #include "sphinxfilter.h"
-#include "sphinxrt.h"
 #include "sphinxquery.h"
 #include "sphinxexcerpt.h"
 #include "sphinxudf.h"
@@ -1779,6 +1778,7 @@ void			SaveFieldFilterSettings ( CSphWriter & tWriter, const ISphFieldFilter * p
 bool			AddFieldLens ( CSphSchema & tSchema, bool bDynamic, CSphString & sError );
 
 /// Get current thread local index - internal do not use
+class ISphRtIndex;
 ISphRtIndex * sphGetCurrentIndexRT();
 
 void			RebalanceWeights ( const CSphFixedVector<int64_t> & dTimers, CSphFixedVector<float>& pWeights );

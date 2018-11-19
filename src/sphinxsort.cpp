@@ -13,6 +13,7 @@
 #include "sphinx.h"
 #include "sphinxint.h"
 #include "sphinxjson.h"
+#include "sphinxutils.h"
 
 #include <time.h>
 #include <math.h>

@@ -14,6 +14,7 @@
 #include "sphinxint.h"
 #include "sphinxjson.h"
 #include "sphinxjsonquery.h"
+#include "sphinxpq.h"
 
 #include "http/http_parser.h"
 #include "json/cJSON.h"

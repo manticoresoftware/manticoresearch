@@ -114,67 +114,8 @@ public:
 	ISphRtIndex * GetIndex() const { return m_pIndex; }
 };
 
-struct PercolateQueryDesc
-{
-	uint64_t m_uQID;
-	CSphString m_sQuery;
-	CSphString m_sTags;
-	CSphString m_sFilters;
-	bool m_bQL;
-
-	void Swap ( PercolateQueryDesc & tOther );
-};
-
-struct PercolateMatchResult_t : ISphNoncopyable
-{
-	bool m_bGetDocs = false;
-	bool m_bGetQuery = false;
-	bool m_bGetFilters = true;
-
-	int m_iQueriesMatched = 0;
-	int m_iQueriesFailed = 0;
-	int m_iDocsMatched = 0;
-	int64_t m_tmTotal = 0;
-
-	// verbose data
-	bool m_bVerbose = false;
-
-	int	m_iEarlyOutQueries = 0;
-	int	m_iTotalQueries = 0;
-	int m_iOnlyTerms = 0;
-	int64_t m_tmSetup = 0;
-
-	Warner_c m_sMessages;
-	CSphFixedVector<PercolateQueryDesc> m_dQueryDesc { 0 };
-	CSphFixedVector<int> m_dDocs { 0 };
-	CSphFixedVector<int> m_dQueryDT { 0 }; // microsecond time per query
-
-	PercolateMatchResult_t() = default;
-	PercolateMatchResult_t ( PercolateMatchResult_t&& rhs ) noexcept;
-	PercolateMatchResult_t& operator = ( PercolateMatchResult_t&& rhs ) noexcept;
-
-	void Reset ();
-};
-
-class PercolateIndex_i : public ISphRtIndex
-{
-public:
-	PercolateIndex_i ( const char * sIndexName, const char * sFileName ) : ISphRtIndex ( sIndexName, sFileName ) {}
-	virtual bool	MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchResult_t & tResult ) = 0;
-	virtual int		DeleteQueries ( const uint64_t * pQueries, int iCount ) = 0;
-	virtual int		DeleteQueries ( const char * sTags ) = 0;
-	virtual bool	Query ( const char * sQuery, const char * sTags, const CSphVector<CSphFilterSettings> * pFilters, const CSphVector<FilterTreeItem_t> * pFilterTree, bool bReplace, bool bQL, uint64_t & uId, CSphString & sError ) = 0;
-
-	virtual void	GetQueries ( const char * sFilterTags, bool bTagsEq, const CSphFilterSettings * pUID, int iOffset, int iLimit, CSphVector<PercolateQueryDesc> & dQueries ) = 0;
-};
-
-/// percolate query index factory
-PercolateIndex_i * CreateIndexPercolate ( const CSphSchema & tSchema, const char * sIndexName, const char * sPath );
-void FixPercolateSchema ( CSphSchema & tSchema );
-
 typedef const QueryParser_i * CreateQueryParser ( bool bJson );
-void SetPercolateQueryParserFactory ( CreateQueryParser * pCall );
-void SetPercolateThreads ( int iThreads );
+
 
 //////////////////////////////////////////////////////////////////////////
 

@@ -14,6 +14,7 @@
 #include "sphinxutils.h"
 #include "sphinxexcerpt.h"
 #include "sphinxrt.h"
+#include "sphinxpq.h"
 #include "sphinxint.h"
 #include "sphinxquery.h"
 #include "sphinxjson.h"

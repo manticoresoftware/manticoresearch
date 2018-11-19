@@ -2218,7 +2218,9 @@ protected:
 	ESphGroupBy		m_eGroupBy;			///< group-by function
 	CSphRefcountedPtr<CSphGrouper>	m_pGrouper;
 
-	CSphFixedHash < CSphMatch *, SphGroupKey_t, IdentityHash_fn >	m_hGroup2Match;
+	// can not use CSphFixedHash as it replaces stored value on add
+	// that breaks group by list on Hash collisions
+	CSphHash < CSphMatch * >	m_hGroup2Match;
 
 protected:
 	int				m_iLimit;		///< max matches to be retrieved
@@ -2395,7 +2397,7 @@ public:
 		INSERT_ADDED
 	};
 
-	InsertRes_e InsertMatch ( int iPos, const CSphMatch & tEntry )
+	InsertRes_e InsertMatch ( int iPos, const CSphMatch & tEntry, const SphGroupKey_t uGroupKey)
 	{
 		const int iHead = iPos;
 		int iPrev = 0;
@@ -2454,6 +2456,8 @@ public:
 					m_dGroupByList[iPrev] = iNew;
 					m_dGroupByList[iNew] = iPos;
 				}
+				// need to keep group by for whole chain
+				tNew.SetAttr ( m_tLocGroupby, uGroupKey );
 				break;
 			}
 			iPrev = iPos;
@@ -2470,6 +2474,8 @@ public:
 			m_tPregroup.Clone ( &tNew, &tEntry );
 			m_dGroupByList[iPrev] = iNew;
 			m_dGroupByList[iNew] = iPos;
+			// need to keep group key for whole chain
+			tNew.SetAttr ( m_tLocGroupby, uGroupKey );
 
 			if_const ( NOTIFICATIONS )
 				m_iJustPushed = tEntry.m_uDocID;
@@ -2520,7 +2526,7 @@ public:
 		}
 
 		// if this group is already hashed, we only need to update the corresponding match
-		CSphMatch ** ppMatch = m_hGroup2Match ( uGroupKey );
+		CSphMatch ** ppMatch = m_hGroup2Match.Find ( uGroupKey );
 		if ( ppMatch )
 		{
 			CSphMatch * pMatch = (*ppMatch);
@@ -2553,7 +2559,7 @@ public:
 					pAggregate->Update ( pMatch, &tEntry, bGrouped );
 
 			// if new entry is more relevant, update from it
-			InsertRes_e eRes = InsertMatch ( pMatch-m_pData, tEntry );
+			InsertRes_e eRes = InsertMatch ( pMatch-m_pData, tEntry, uGroupKey );
 			if ( eRes==INSERT_NONE )
 			{
 				// need to keep all poped values
@@ -2566,7 +2572,7 @@ public:
 				// post Push work
 				ARRAY_FOREACH ( i, dJustPopped )
 					m_dJustPopped.Add ( dJustPopped[i] );
-				CSphMatch ** ppDec = m_hGroup2Match ( uGroupKey );
+				CSphMatch ** ppDec = m_hGroup2Match.Find ( uGroupKey );
 				assert ( ppDec );
 				(*ppDec)->SetAttr ( m_tLocCount, (*ppDec)->GetAttr ( m_tLocCount )-1 );
 
@@ -2619,7 +2625,7 @@ public:
 				pAggregate->Ungroup ( &tNew );
 		}
 
-		m_hGroup2Match.Add ( &tNew, uGroupKey );
+		Verify ( m_hGroup2Match.Add ( uGroupKey, &tNew ) );
 		m_iTotal++;
 		CHECKINTEGRITY();
 		return true;
@@ -2653,7 +2659,7 @@ public:
 	void Hash2nd()
 	{
 		// let the hash points to the chains from 2-nd elem
-		m_hGroup2Match.Reset();
+		m_hGroup2Match.Clear();
 		int iHeads = m_iUsed;
 		for ( int i=0; i<iHeads; i++ )
 		{
@@ -2666,7 +2672,7 @@ public:
 				assert ( m_pData[iTail].GetAttr ( m_tLocGroupby )==0 ||
 						m_pData[i].GetAttr ( m_tLocGroupby )==m_pData[iTail].GetAttr ( m_tLocGroupby ) );
 
-				m_hGroup2Match.Add ( m_pData + iTail, m_pData[i].GetAttr ( m_tLocGroupby ) );
+				Verify ( m_hGroup2Match.Add ( m_pData[i].GetAttr ( m_tLocGroupby ), m_pData + iTail ) );
 				iHeads -= iCount - 1;
 				m_dGroupsLen[iTail] = iCount;
 			}
@@ -2718,7 +2724,7 @@ public:
 			// now look for the next match.
 			// In this specific case (2-nd, just after the head)
 			// we have to look it in the hash, not in the linked list!
-			CSphMatch ** ppMatch = m_hGroup2Match ( pMatch->GetAttr ( m_tLocGroupby ) );
+			CSphMatch ** ppMatch = m_hGroup2Match.Find ( pMatch->GetAttr ( m_tLocGroupby ) );
 			int iNext = ( ppMatch ? *ppMatch-m_pData : -1 );
 			while ( iNext>=0 )
 			{
@@ -2743,7 +2749,7 @@ public:
 			m_dGroupsLen[i] = 0;
 		}
 
-		m_hGroup2Match.Reset ();
+		m_hGroup2Match.Clear();
 		if_const ( DISTINCT )
 			m_tUniq.Resize ( 0 );
 
@@ -2790,7 +2796,7 @@ protected:
 			SphGroupKey_t uGroup;
 			for ( int iCount = m_tUniq.CountStart ( &uGroup ); iCount; iCount = m_tUniq.CountNext ( &uGroup ) )
 			{
-				CSphMatch ** ppMatch = m_hGroup2Match(uGroup);
+				CSphMatch ** ppMatch = m_hGroup2Match.Find ( uGroup );
 				if ( ppMatch )
 					(*ppMatch)->SetAttr ( m_tLocDistinct, iCount );
 			}
@@ -2819,7 +2825,7 @@ protected:
 		for ( int iLimit=0; iLimit<iBound; iHead++ )
 		{
 			const CSphMatch * pMatch = m_pData + iHead;
-			CSphMatch ** ppTailMatch = m_hGroup2Match ( pMatch->GetAttr ( m_tLocGroupby ) );
+			CSphMatch ** ppTailMatch = m_hGroup2Match.Find ( pMatch->GetAttr ( m_tLocGroupby ) );
 			int iCount = 1;
 			int iTail = -1;
 			if ( ppTailMatch )
@@ -2891,7 +2897,7 @@ protected:
 		for ( int i=iHead; i<m_iFreeHeads; ++i )
 		{
 			CSphMatch * pMatch = m_pData + i;
-			CSphMatch ** ppTailMatch = m_hGroup2Match ( pMatch->GetAttr ( m_tLocGroupby ) );
+			CSphMatch ** ppTailMatch = m_hGroup2Match.Find ( pMatch->GetAttr ( m_tLocGroupby ) );
 			if ( ppTailMatch )
 			{
 				assert ( ( *ppTailMatch )->GetAttr ( m_tLocGroupby )==0 || pMatch->GetAttr ( m_tLocGroupby )==( *ppTailMatch )->GetAttr ( m_tLocGroupby ) );
@@ -2912,9 +2918,9 @@ protected:
 			m_dGroupsLen[i] = 0;
 
 		// rehash
-		m_hGroup2Match.Reset ();
+		m_hGroup2Match.Clear();
 		for ( int i=0; i<iHead; i++ )
-			m_hGroup2Match.Add ( m_pData + i, m_pData[i].GetAttr ( m_tLocGroupby ) );
+			Verify ( m_hGroup2Match.Add ( m_pData[i].GetAttr ( m_tLocGroupby ), m_pData + i ) );
 
 		// cut groups
 		m_iUsed = iBound;

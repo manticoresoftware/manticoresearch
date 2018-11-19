@@ -3638,6 +3638,14 @@ public:
 		m_iMaxUsed = GetMaxLoad ( iSize );
 	}
 
+	void Clear()
+	{
+		for ( int i=0; i<m_iSize; i++ )
+			m_pHash[i] = Entry();
+
+		m_iUsed = 0;
+	}
+
 	~CSphHash()
 	{
 		SafeDeleteArray ( m_pHash );

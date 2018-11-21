@@ -16171,7 +16171,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath )
 	// prealloc docinfos
 	/////////////////////
 
-	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && !m_bIsEmpty )
+	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && !m_bIsEmpty && !m_bDebugCheck )
 	{
 		/////////////
 		// attr data
@@ -16204,7 +16204,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath )
 		m_pDocinfoIndex = m_tAttr.GetWritePtr() + m_iMinMaxIndex;
 
 		// prealloc docinfo hash but only if docinfo is big enough (in other words if hash is 8x+ less in size)
-		if ( m_tAttr.GetLengthBytes() > ( 32 << DOCINFO_HASH_BITS ) && !m_bDebugCheck )
+		if ( m_tAttr.GetLengthBytes() > ( 32 << DOCINFO_HASH_BITS ) )
 		{
 			if ( !m_tDocinfoHash.Alloc ( ( 1 << DOCINFO_HASH_BITS )+4, m_sLastError ) )
 				return false;
@@ -16234,6 +16234,31 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath )
 				return false;
 	}
 
+	if ( m_bDebugCheck )
+	{
+		if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && !m_bIsEmpty )
+		{
+			int iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
+
+			CSphAutoreader tAttr;
+			if ( !tAttr.Open ( GetIndexFileName("spa").cstr(), m_sLastError ) )
+				return false;
+
+			int64_t iDocinfoSize = tAttr.GetFilesize();
+			iDocinfoSize = iDocinfoSize / sizeof(DWORD);
+			int64_t iRealDocinfoSize = m_iMinMaxIndex ? m_iMinMaxIndex : iDocinfoSize;
+			m_iDocinfo = iRealDocinfoSize / iStride;
+
+			m_iDocinfoIndex = ( ( iDocinfoSize - iRealDocinfoSize ) / iStride / 2 ) - 1;
+			m_pDocinfoIndex = nullptr;
+		}
+
+		m_bPassedAlloc = true;
+		m_iIndexTag = ++m_iIndexTagSeq;
+
+		return true;
+	}
+
 
 	// prealloc killlist
 	if ( m_uVersion>=10 )
@@ -16244,7 +16269,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath )
 	}
 
 	// prealloc skiplist
-	if ( !m_bDebugCheck && m_bHaveSkips && !m_tSkiplists.Setup ( GetIndexFileName("spe").cstr(), m_sLastError, false ) )
+	if ( m_bHaveSkips && !m_tSkiplists.Setup ( GetIndexFileName("spe").cstr(), m_sLastError, false ) )
 			return false;
 
 	// almost done
@@ -16253,7 +16278,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath )
 
 	bool bPersistMVA = sphIsReadable ( GetIndexFileName("mvp").cstr() );
 	bool bNoMinMax = ( m_uVersion<20 );
-	if ( ( bPersistMVA || bNoMinMax ) && !m_bDebugCheck )
+	if ( bPersistMVA || bNoMinMax )
 	{
 		sphLogDebug ( "'%s' forced to read data at prealloc (persist MVA = %d, no min-max = %d)", m_sIndexName.cstr(), (int)bPersistMVA, (int)bNoMinMax );
 		Preread();
@@ -18890,7 +18915,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 	int64_t iStrEnd = 0;
 	int64_t iMvaEnd = 0;
 
-	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && !m_tAttr.IsEmpty() )
+	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && m_iDocinfo )
 	{
 		fprintf ( fp, "checking rows...\n" );
 
@@ -19539,7 +19564,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 	// check rows (attributes)
 	///////////////////////////
 
-	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && !m_tAttr.IsEmpty() )
+	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN && m_iDocinfo )
 	{
 		fprintf ( fp, "checking rows...\n" );
 
@@ -19550,9 +19575,10 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		int64_t iAllRowsTotal = iRowsTotal;
 		iAllRowsTotal += (m_iDocinfoIndex+1)*2; // should had been fixed up to v.20 by the loader
 
-		if ( iAllRowsTotal*uStride!=m_tAttr.GetLength64() )
+		int64_t iLoadedRows = rdAttr.GetFilesize()/sizeof(DWORD);
+		if ( iAllRowsTotal*uStride!=iLoadedRows )
 			LOC_FAIL(( fp, "rowitems count mismatch (expected=" INT64_FMT ", loaded=" INT64_FMT ")",
-				iAllRowsTotal*uStride, m_tAttr.GetLength64() ));
+				iAllRowsTotal*uStride, iLoadedRows ));
 
 		iStrEnd = rdString.GetFilesize();
 		iMvaEnd = rdMva.GetFilesize();
@@ -19600,7 +19626,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		// walk string data, build a list of acceptable start offsets
 		// must be sorted by construction
 		CSphVector<DWORD> dStringOffsets;
-		if ( m_tString.GetLength64()>1 )
+		if ( rdString.GetFilesize()>1 )
 		{
 			rdString.SeekTo ( 1, READ_NO_SIZE_HINT );
 			while ( rdString.GetPos()<iStrEnd )
@@ -19623,6 +19649,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 		// loop the rows
 		int iOrphan = 0;
 		SphDocID_t uLastID = 0;
+		const bool bArenaProhibit = ( iMvaEnd>INT_MAX );
 
 		for ( int64_t iRow=0; iRow<iRowsTotal; iRow++ )
 		{
@@ -19653,7 +19680,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				{
 					const DWORD uOffset = pAttrs[dMvaItems[iItem]];
 					bHasValues |= ( uOffset!=0 );
-					bool bArena = ( ( uOffset & MVA_ARENA_FLAG )!=0 ) && !m_bArenaProhibit;
+					bool bArena = ( ( uOffset & MVA_ARENA_FLAG )!=0 ) && !bArenaProhibit;
 					bHasArena |= bArena;
 
 					if ( uOffset && !bArena && uOffset>=iMvaEnd )
@@ -19708,7 +19735,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 					ARRAY_FOREACH_COND ( iItem, dMvaItems, bIsMvaCorrect )
 					{
 						const DWORD uSpaOffset = pAttrs[dMvaItems[iItem]];
-						bool bArena = ( ( uSpaOffset & MVA_ARENA_FLAG )!=0 ) && !m_bArenaProhibit;
+						bool bArena = ( ( uSpaOffset & MVA_ARENA_FLAG )!=0 ) && !bArenaProhibit;
 						bWasArena |= bArena;
 
 						// zero offset means empty MVA in rt index, however plain index stores offset to zero length
@@ -19885,35 +19912,43 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 				iTempDocinfoIndex, m_iDocinfoIndex ));
 
 		const DWORD uMinMaxStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
-		const DWORD * pDocinfoIndexMax = m_pDocinfoIndex + ( m_iDocinfoIndex+1 )*uMinMaxStride*2;
+		const int64_t iMinMaxEnd = sizeof(DWORD) * m_iMinMaxIndex + sizeof(DWORD) * ( m_iDocinfoIndex+1 ) * uMinMaxStride * 2;
+
+		CSphFixedVector<DWORD> dMinMax ( uMinMaxStride*2 );
+		const DWORD * pMinEntry = dMinMax.Begin();
+		const DWORD * pMaxEntry = pMinEntry + uMinMaxStride;
+		const DWORD * pMinAttrs = DOCINFO2ATTRS ( pMinEntry );
+		const DWORD * pMaxAttrs = pMinAttrs + uMinMaxStride;
 
 		rdAttr.SeekTo ( 0, sizeof ( dRow[0] ) * dRow.GetLength() );
 
 		for ( int64_t iIndexEntry=0; iIndexEntry<m_iDocinfo; iIndexEntry++ )
 		{
 			const int64_t iBlock = iIndexEntry / DOCINFO_INDEX_FREQ;
-
 			// we have to do some checks in border cases, for example: when move from 1st to 2nd block
 			const int64_t iPrevEntryBlock = ( iIndexEntry-1 )/DOCINFO_INDEX_FREQ;
 			const bool bIsBordersCheckTime = ( iPrevEntryBlock!=iBlock );
+			if ( bIsBordersCheckTime || iIndexEntry==0 )
+			{
+				int64_t iPos = rdAttr.GetPos();
+
+				int64_t iBlockPos = sizeof(DWORD) * m_iMinMaxIndex + sizeof(DWORD) * iBlock * uMinMaxStride * 2;
+				// check docid vs global range
+				if ( iBlockPos + sizeof(DWORD) * uMinMaxStride > iMinMaxEnd )
+					LOC_FAIL(( fp, "unexpected block index end (row=" INT64_FMT ", block=" INT64_FMT ")",
+						iIndexEntry, iBlock ));
+
+				rdAttr.SeekTo ( iBlockPos, dMinMax.GetLengthBytes() );
+				rdAttr.GetBytes ( dMinMax.Begin(), dMinMax.GetLengthBytes() );
+				if ( rdAttr.GetErrorFlag() )
+					LOC_FAIL(( fp, "unexpected block index (row=" INT64_FMT ", block=" INT64_FMT ")",
+						iIndexEntry, iBlock ));
+
+				rdAttr.SeekTo ( iPos, sizeof ( dRow[0] ) * dRow.GetLength() );
+			}
 
 			rdAttr.GetBytes ( dRow.Begin(), sizeof(dRow[0]) * dRow.GetLength() );
 			const SphDocID_t uDocID = DOCINFO2ID ( dRow.Begin() );
-
-			const DWORD * pMinEntry = m_pDocinfoIndex + iBlock * uMinMaxStride * 2;
-			const DWORD * pMaxEntry = pMinEntry + uMinMaxStride;
-			const DWORD * pMinAttrs = DOCINFO2ATTRS ( pMinEntry );
-			const DWORD * pMaxAttrs = pMinAttrs + uMinMaxStride;
-
-			// check docid vs global range
-			if ( pMaxEntry+uMinMaxStride > pDocinfoIndexMax )
-				LOC_FAIL(( fp, "unexpected block index end (row=" INT64_FMT ", docid=" DOCID_FMT ", block=" INT64_FMT ", max=" INT64_FMT ", cur=" INT64_FMT ")",
-					iIndexEntry, uDocID, iBlock, int64_t ( pDocinfoIndexMax-m_pDocinfoIndex ), int64_t ( pMaxEntry+uMinMaxStride-m_pDocinfoIndex ) ));
-
-			// check attribute location vs global range
-			if ( pMaxAttrs+uMinMaxStride > pDocinfoIndexMax )
-				LOC_FAIL(( fp, "attribute position out of blocks index (row=" INT64_FMT ", docid=" DOCID_FMT ", block=" INT64_FMT ", expected<" INT64_FMT ", got=" INT64_FMT ")",
-					iIndexEntry, uDocID, iBlock, int64_t ( pDocinfoIndexMax-m_pDocinfoIndex ), int64_t ( pMaxAttrs+uMinMaxStride-m_pDocinfoIndex ) ));
 
 			const SphDocID_t uMinDocID = DOCINFO2ID ( pMinEntry );
 			const SphDocID_t uMaxDocID = DOCINFO2ID ( pMaxEntry );
@@ -20052,11 +20087,21 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 	fprintf ( fp, "checking kill-list...\n" );
 
+	CSphAutoreader rdKill;
+	if ( !rdKill.Open ( GetIndexFileName("spk").cstr(), sError ) )
+		LOC_FAIL(( fp, "unable to open kill-list: %s", sError.cstr() ));
+
+	SphDocID_t uPrevID = 0;
+	int iKillLen = (int)( rdKill.GetFilesize() / sizeof (uPrevID) );
 	// check that ids are ascending
-	for ( auto uID=1; uID<m_tKillList.GetLength(); ++uID )
-		if ( m_tKillList[uID]<=m_tKillList[uID-1] )
+	for ( int i=0; i<iKillLen; ++i )
+	{
+		SphDocID_t uID = rdKill.GetDocid();
+		if ( uID<=uPrevID )
 			LOC_FAIL(( fp, "unsorted kill-list values (val[%d]=%d, val[%d]=%d)",
-				uID-1, (DWORD)m_tKillList[uID-1], uID, (DWORD)m_tKillList[uID] ));
+				i-1, (DWORD)uPrevID, i, (DWORD)uID ));
+		uPrevID = uID;
+	}
 
 	///////////////////////////
 	// all finished

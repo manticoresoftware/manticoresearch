@@ -159,7 +159,7 @@ if ( SPLIT_SYMBOLS )
 	install_dbg ( spelldump )
 	install_dbg ( wordbreaker )
 else()
-	INSTALL ( TARGETS indexer indextool searchd spelldump wordbreaker RUNTIME DESTINATION bin COMPONENT APPLICATIONS )
+	INSTALL ( TARGETS indexer indextool searchd spelldump wordbreaker make_segdictionary RUNTIME DESTINATION bin COMPONENT APPLICATIONS )
 endif ( SPLIT_SYMBOLS )
 
 if ( NOT DISABLE_TESTING )

@@ -182,19 +182,23 @@ public:
 	uint64_t GetSettingsFNV () const final { return 0; }
 };
 
-struct PercolateMatchContext_t
+struct PQMatchContextResult_t
 {
-	CSphVector <PercolateQueryDesc> m_dQueryMatched;
+	CSphVector<PercolateQueryDesc> m_dQueryMatched;
 	CSphVector<int> m_dDocsMatched;
 	CSphVector<int> m_dDt;
 	int m_iDocsMatched = 0;
 	int m_iEarlyPassed = 0;
 	int m_iOnlyTerms = 0;
+	int m_iQueriesFailed = 0;
+};
+
+struct PercolateMatchContext_t : public PQMatchContextResult_t
+{
 	bool m_bGetDocs = false;
 	bool m_bGetQuery = false;
 	bool m_bGetFilters = false;
 	bool m_bVerbose = false;
-	int m_iQueriesFailed = 0;
 
 	PercolateDictProxy_c m_tDictMap;
 	CSphQuery m_tDummyQuery;
@@ -229,6 +233,6 @@ struct PercolateMatchContext_t
 	};
 };
 
-void PercolateMergeResults ( VecTraits_T<PercolateMatchContext_t *> &dMatches, PercolateMatchResult_t &tRes );
+void PercolateMergeResults ( const VecTraits_T<PQMatchContextResult_t *> &dMatches, PercolateMatchResult_t &tRes );
 
 #endif //MANTICORE_SPHINXPQ_H

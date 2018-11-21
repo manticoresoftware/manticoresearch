@@ -1172,12 +1172,12 @@ void PercolateQueryDesc::Swap ( PercolateQueryDesc & tOther )
 
 struct PQMergeIterator_t
 {
-	PercolateMatchContext_t * m_pMatch = nullptr;
+	PQMatchContextResult_t * m_pMatch = nullptr;
 	int m_iIdx = 0;
 	int m_iElems = 0;
 	int m_iDocOff = 0;
 
-	PQMergeIterator_t ( PercolateMatchContext_t * pMatch = nullptr )
+	PQMergeIterator_t ( PQMatchContextResult_t * pMatch = nullptr )
 		: m_pMatch ( pMatch )
 	{
 		if ( pMatch )
@@ -1194,7 +1194,7 @@ struct PQMergeIterator_t
 };
 
 // merge matches from one or many contexts into one result
-void PercolateMergeResults ( VecTraits_T<PercolateMatchContext_t *> & dMatches, PercolateMatchResult_t & tRes )
+void PercolateMergeResults ( const VecTraits_T<PQMatchContextResult_t *> & dMatches, PercolateMatchResult_t & tRes )
 {
 	if ( dMatches.IsEmpty() )
 		return;
@@ -1203,7 +1203,7 @@ void PercolateMergeResults ( VecTraits_T<PercolateMatchContext_t *> & dMatches, 
 	int iGotDocs = 0;
 	tRes.m_iEarlyOutQueries = tRes.m_iTotalQueries;
 	CSphQueue<PQMergeIterator_t, PQMergeIterator_t> qMatches ( dMatches.GetLength ());
-	for ( PercolateMatchContext_t * pMatch : dMatches )
+	for ( PQMatchContextResult_t * pMatch : dMatches )
 	{
 		if ( pMatch->m_dQueryMatched.IsEmpty() )
 			continue;
@@ -1233,7 +1233,10 @@ void PercolateMergeResults ( VecTraits_T<PercolateMatchContext_t *> & dMatches, 
 			tRes.m_dQueryDT.Set ( tIt.m_pMatch->m_dDt.LeakData (), iGotQueries );
 		}
 		if ( tRes.m_bGetDocs )
+		{
+			assert ( tIt.m_pMatch->m_dDocsMatched.GetLength()==iGotDocs );
 			tRes.m_dDocs.Set ( tIt.m_pMatch->m_dDocsMatched.LeakData (), iGotDocs );
+		}
 		return;
 	}
 
@@ -1283,6 +1286,14 @@ void PercolateMergeResults ( VecTraits_T<PercolateMatchContext_t *> & dMatches, 
 		if ( tMin.m_iIdx<tMin.m_iElems )
 			qMatches.Push ( tMin );
 	}
+}
+
+// adaptor from vec of PercolateMatchContext_t* to PQMatchContextResult_t*
+inline void PercolateMergeResults ( const VecTraits_T<PercolateMatchContext_t *> &dMatches, PercolateMatchResult_t &tRes )
+{
+	auto pMatches = ( PQMatchContextResult_t ** ) dMatches.begin ();
+	auto iMatches = dMatches.GetLength ();
+	PercolateMergeResults ( VecTraits_T<PQMatchContextResult_t *> ( pMatches, iMatches ), tRes );
 }
 
 void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMatchResult_t & tRes )

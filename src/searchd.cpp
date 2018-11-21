@@ -12375,6 +12375,7 @@ static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVari
 	SqlInsert_t tAttr;
 	CSphString sTmp;
 
+	const SchemaItemVariant_t * pId = sIdAlias.IsEmpty () ? nullptr : tLoc.Find ( sphFNV64 ( sIdAlias.cstr() ) );
 	int iChildrenCount = cJSON_GetArraySize ( pRoot );
 	const cJSON * pChild = pRoot->child;
 	while ( pChild && iChildrenCount )
@@ -12388,12 +12389,16 @@ static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVari
 			if ( pItem->m_iField!=-1 && pChild->valuestring )
 			{
 				dFields[pItem->m_iField] = pChild->valuestring;
+				if ( pItem==pId )
+					sMsg.Warn ( "field '%s' requested as docs_id identifier, but it is field!", sName );
 			} else
 			{
 				tAttr.m_iType = TOK_CONST_FLOAT;
 				tAttr.m_iVal = pChild->valueint;
 				tAttr.m_fVal = (float)pChild->valuedouble;
 				tDoc.SetAttr ( pItem->m_tLoc, tAttr, pItem->m_eType );
+				if ( pId==pItem )
+					tDoc.m_uDocID = pChild->valueint;
 
 				if ( pItem->m_eType==SPH_ATTR_JSON || pItem->m_eType==SPH_ATTR_STRING )
 				{

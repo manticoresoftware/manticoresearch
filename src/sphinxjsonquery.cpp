@@ -59,7 +59,7 @@ static bool	IsFilter ( const cJSON * pJson )
 
 //////////////////////////////////////////////////////////////////////////
 // Misc cJSON helpers
-cJSON * GetJSONPropertyString ( const cJSON * pNode, const char * szName, CSphString & sError )
+cJSON * GetJSONPropertyString ( const cJSON * pNode, const char * szName, CSphString & sError, bool bIgnoreMissing )
 {
 	if ( !pNode )
 		return nullptr;
@@ -67,7 +67,9 @@ cJSON * GetJSONPropertyString ( const cJSON * pNode, const char * szName, CSphSt
 	cJSON * pChild = cJSON_GetObjectItem ( pNode, szName );
 	if ( !pChild )
 	{
-		sError.SetSprintf ( "\"%s\" property missing", szName );
+		if ( !bIgnoreMissing )
+			sError.SetSprintf ( "\"%s\" property missing", szName );
+
 		return nullptr;
 	}
 
@@ -81,7 +83,7 @@ cJSON * GetJSONPropertyString ( const cJSON * pNode, const char * szName, CSphSt
 }
 
 
-cJSON * GetJSONPropertyInt ( const cJSON * pNode, const char * szName, CSphString & sError )
+cJSON * GetJSONPropertyInt ( const cJSON * pNode, const char * szName, CSphString & sError, bool bIgnoreMissing )
 {
 	if ( !pNode )
 		return nullptr;
@@ -89,7 +91,9 @@ cJSON * GetJSONPropertyInt ( const cJSON * pNode, const char * szName, CSphStrin
 	cJSON * pChild = cJSON_GetObjectItem ( pNode, szName );
 	if ( !pChild )
 	{
-		sError.SetSprintf ( "\"%s\" property missing", szName );
+		if ( !bIgnoreMissing )
+			sError.SetSprintf ( "\"%s\" property missing", szName );
+
 		return nullptr;
 	}
 
@@ -103,7 +107,23 @@ cJSON * GetJSONPropertyInt ( const cJSON * pNode, const char * szName, CSphStrin
 }
 
 
-cJSON * GetJSONPropertyObject ( const cJSON * pNode, const char * szName, CSphString & sError )
+// get int property with a synonym
+cJSON * GetJSONPropertyInt ( const cJSON * pNode, const char * szName1, const char * szName2, CSphString & sError )
+{
+	cJSON * pResult = GetJSONPropertyInt ( pNode, szName1, sError, true );
+	if ( !pResult )
+	{
+		if ( !sError.IsEmpty() )
+			return nullptr;
+
+		pResult = GetJSONPropertyInt ( pNode, szName2, sError, true );
+	}
+
+	return pResult;
+}
+
+
+cJSON * GetJSONPropertyObject ( const cJSON * pNode, const char * szName, CSphString & sError, bool bIgnoreMissing )
 {
 	if ( !pNode )
 		return nullptr;
@@ -111,7 +131,8 @@ cJSON * GetJSONPropertyObject ( const cJSON * pNode, const char * szName, CSphSt
 	cJSON * pChild = cJSON_GetObjectItem ( pNode, szName );
 	if ( !pChild )
 	{
-		sError.SetSprintf ( "\"%s\" property missing", szName );
+		if ( !bIgnoreMissing )
+			sError.SetSprintf ( "\"%s\" property missing", szName );
 		return nullptr;
 	}
 
@@ -1308,6 +1329,28 @@ bool ParseJsonQueryFilters ( const cJSON * pQuery, CSphQuery & tQuery, CSphStrin
 }
 
 
+static bool ParseLimits ( cJSON * pRoot, CSphQuery & tQuery, CSphString & sError )
+{
+	assert ( pRoot );
+
+	cJSON * pLimit = GetJSONPropertyInt ( pRoot, "limit", "size", sError );
+	if ( !sError.IsEmpty() )
+		return false;
+
+	if ( pLimit )
+		tQuery.m_iLimit = pLimit->valueint;
+
+	cJSON * pOffset = GetJSONPropertyInt ( pRoot, "offset", "from", sError );
+	if ( !sError.IsEmpty() )
+		return false;
+
+	if ( pOffset )
+		tQuery.m_iOffset = pLimit->valueint;
+
+	return true;
+}
+
+
 bool sphParseJsonQuery ( const char * szQuery, CSphQuery & tQuery, bool & bProfile, bool & bAttrsHighlight, CSphString & sError, CSphString & sWarning )
 {
 	CJsonScopedPtr_c pRoot ( cJSON_Parse ( szQuery ) );
@@ -1328,6 +1371,9 @@ bool sphParseJsonQuery ( const char * szQuery, CSphQuery & tQuery, bool & bProfi
 
 	if ( tQuery.m_sIndexes==g_szAll )
 		tQuery.m_sIndexes = "*";
+
+	if ( !ParseLimits ( pRoot.Ptr(), tQuery, sError ) )
+		return false;
 
 	cJSON * pQuery = cJSON_GetObjectItem ( pRoot.Ptr(), "query" );
 

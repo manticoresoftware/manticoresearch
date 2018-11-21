@@ -2170,6 +2170,7 @@ static const char g_sSourceTail[] = "> source.txt\n";
 static const char * g_pArgv[128] = { "addr2line", "-e", "./searchd", "0x0", NULL };
 static char g_sNameBuf[512] = {0};
 static CSphString g_sBinaryName;
+static bool g_bDumpGDB = true;
 
 bool IsDebuggerPresent()
 {
@@ -2488,7 +2489,8 @@ void sphBacktrace ( int iFD, bool bSafe )
 			"Look into the chapter 'Reporting bugs' in the documentation\n"
 			"(http://docs.manticoresearch.com/latest/html/reporting_bugs.html)" );
 
-	if ( DumpGdb ( iFD ) )
+	// wo jemalloc allocator might deadlock in case of crash at free function
+	if ( g_bDumpGDB && DumpGdb ( iFD ) )
 		return;
 	// convert all BT addresses to source code lines
 	int iCount = Min ( iDepth, (int)( sizeof(g_pArgv)/sizeof(g_pArgv[0]) - SPH_BT_ADDRS - 1 ) );
@@ -2581,6 +2583,19 @@ void sphBacktraceSetBinaryName ( const char * sName )
 	g_pArgv[SPH_BT_BINARY_NAME] = g_sBinaryName.cstr();
 }
 
+void sphBacktraceInit()
+{
+#if HAVE_BACKTRACE
+	backtrace ( g_pBacktraceAddresses, SPH_BACKTRACE_ADDR_COUNT );
+#endif // !HAVE_BACKTRACE
+
+	// check that jemalloc is present
+#if HAVE_DLOPEN
+	void * fnJMalloc = dlsym ( RTLD_DEFAULT, "mallctl" );
+	g_bDumpGDB = ( fnJMalloc!=nullptr );
+#endif
+}
+
 #else // USE_WINDOWS
 
 const char * DoBacktrace ( int, int )
@@ -2616,6 +2631,10 @@ void sphBacktrace ( EXCEPTION_POINTERS * pExc, const char * sFile )
 }
 
 void sphBacktraceSetBinaryName ( const char * )
+{
+}
+
+void sphBacktraceInit()
 {
 }
 

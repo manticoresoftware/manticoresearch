@@ -5940,15 +5940,21 @@ void ExtRanker_c::Reset ( const ISphQwordSetup & tSetup )
 void ExtRanker_c::UpdateQcache ( int iMatches )
 {
 	if ( m_pQcacheEntry )
+	{
+		CSphScopedProfile tProfile ( m_pCtx->m_pProfile, SPH_QSTATE_QCACHE_UP );
 		for ( int i=0; i<iMatches; i++ )
 			m_pQcacheEntry->Append ( m_dMatches[i].m_uDocID, m_dMatches[i].m_iWeight );
+	}
 }
 
 
 void ExtRanker_c::FinalizeCache ( const ISphSchema & tSorterSchema )
 {
 	if ( m_pQcacheEntry )
+	{
+		CSphScopedProfile tProfile ( m_pCtx->m_pProfile, SPH_QSTATE_QCACHE_FINAL );
 		QcacheAdd ( m_pCtx->m_tQuery, m_pQcacheEntry, tSorterSchema );
+	}
 
 	SafeRelease ( m_pQcacheEntry );
 }

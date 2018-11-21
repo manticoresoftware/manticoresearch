@@ -119,6 +119,8 @@ extern bool g_bJsonKeynamesToLowercase;
 	SPH_QUERY_STATE ( GET_HITS,		"get_hits" ) \
 	SPH_QUERY_STATE ( FILTER,		"filter" ) \
 	SPH_QUERY_STATE ( RANK,			"rank" ) \
+	SPH_QUERY_STATE ( QCACHE_UP,	"qcache_update" ) \
+	SPH_QUERY_STATE ( QCACHE_FINAL,	"qcache_final" ) \
 	SPH_QUERY_STATE ( SORT,			"sort" ) \
 	SPH_QUERY_STATE ( FINALIZE,		"finalize" ) \
 	SPH_QUERY_STATE ( DYNAMIC,		"clone_attrs" ) \

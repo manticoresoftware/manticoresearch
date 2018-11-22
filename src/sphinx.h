@@ -2553,7 +2553,7 @@ public:
 	bool				m_bIsNull = false;		///< for NULL or NOT NULL
 
 	ESphFilter			m_eType = SPH_FILTER_VALUES;		///< filter type
-	ESphMvaFunc			m_eMvaFunc = SPH_MVAFUNC_NONE;		///< MVA folding function
+	ESphMvaFunc			m_eMvaFunc = SPH_MVAFUNC_NONE;		///< MVA and stringlist folding function
 	union
 	{
 		SphAttr_t		m_iMinValue = LLONG_MIN;	///< range min

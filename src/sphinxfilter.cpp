@@ -547,23 +547,53 @@ SphStringCmp_fn CmpFn ( ESphCollation eCollation )
 	}
 }
 
+class IFilter_Str : public IFilter_Attr
+{
 
-class FilterString_c : public IFilter_Attr
+protected:
+	const BYTE * m_pStringBase = nullptr;
+	StringSource_e m_eStrSource;
+
+public:
+	explicit IFilter_Str ( ESphAttr eType )
+		: m_eStrSource ( eType==SPH_ATTR_STRING ? STRING_STATIC : STRING_DATAPTR )
+	{}
+
+	void SetStringStorage ( const BYTE * pStrings ) final
+	{
+		m_pStringBase = pStrings;
+	}
+
+protected:
+	inline const BYTE * GetStr ( const CSphMatch& tMatch ) const
+	{
+		SphAttr_t uVal = tMatch.GetAttr ( m_tLocator );
+
+		if ( !uVal )
+			return ( const BYTE * ) "\0"; // 2 bytes, for packed strings
+
+		if ( m_eStrSource==STRING_STATIC )
+			return m_pStringBase + uVal;
+
+		return ( const BYTE * ) uVal;
+	}
+};
+
+
+class FilterString_c : public IFilter_Str
 {
 private:
-	CSphFixedVector<BYTE>	m_dVal {0};
 	bool					m_bEq;
 
 protected:
+	CSphVector<BYTE>		m_dVal;
 	SphStringCmp_fn			m_fnStrCmp;
-	const BYTE *			m_pStringBase = nullptr;
-	StringSource_e			m_eStrSource;
 
 public:
 	FilterString_c ( ESphCollation eCollation, ESphAttr eType, bool bEq )
-		: m_bEq ( bEq )
+		: IFilter_Str ( eType )
+		, m_bEq ( bEq )
 		, m_fnStrCmp ( CmpFn ( eCollation ) )
-		, m_eStrSource ( eType==SPH_ATTR_STRING ? STRING_STATIC : STRING_DATAPTR )
 	{}
 
 	void SetRefString ( const CSphString * pRef, int iCount ) override
@@ -574,20 +604,15 @@ public:
 		if ( m_eStrSource==STRING_STATIC )
 		{
 			// pack string as it is stored in index (.sps file)
-			m_dVal.Reset ( iLen+4 );
+			m_dVal.Resize ( iLen+4 );
 			int iPacked = sphPackStrlen ( m_dVal.Begin(), iLen );
 			memcpy ( m_dVal.Begin()+iPacked, sVal, iLen );
 		} else
 		{
 			// pack string as it is stored in memory
-			m_dVal.Reset ( sphCalcPackedLength ( iLen ) );
+			m_dVal.Resize ( sphCalcPackedLength ( iLen ) );
 			sphPackPtrAttr ( m_dVal.Begin(), (const BYTE*)sVal, iLen );
 		}
-	}
-
-	void SetStringStorage ( const BYTE * pStrings ) final
-	{
-		m_pStringBase = pStrings;
 	}
 
 	bool Eval ( const CSphMatch & tMatch ) const override
@@ -595,20 +620,7 @@ public:
 		if ( m_eStrSource==STRING_STATIC && !m_pStringBase )
 			return !m_bEq;
 
-		SphAttr_t uVal = tMatch.GetAttr ( m_tLocator );
-
-		const BYTE * pStr;
-		if ( !uVal )
-			pStr = (const BYTE*)"\0"; // 2 bytes, for packed strings
-		else
-		{
-			if ( m_eStrSource==STRING_STATIC )
-				pStr = m_pStringBase + uVal;
-			else
-				pStr = (const BYTE *)uVal;
-		}
-
-		bool bEq = m_fnStrCmp ( pStr, m_dVal.Begin(), m_eStrSource, 0, 0 )==0;
+		bool bEq = m_fnStrCmp ( GetStr ( tMatch ), m_dVal.Begin (), m_eStrSource, 0, 0 )==0;
 		return ( m_bEq==bEq );
 	}
 };
@@ -616,7 +628,6 @@ public:
 
 struct Filter_StringValues_c: FilterString_c
 {
-	CSphVector<BYTE>		m_dVal;
 	CSphVector<int>			m_dOfs;
 
 	Filter_StringValues_c ( ESphCollation eCollation, ESphAttr eType )
@@ -653,24 +664,123 @@ struct Filter_StringValues_c: FilterString_c
 
 	bool Eval ( const CSphMatch & tMatch ) const final
 	{
-		SphAttr_t uVal = tMatch.GetAttr ( m_tLocator );
-
-		const BYTE * pStr;
-		if ( !uVal )
-			pStr = (const BYTE*)"\0";
-		else
-		{
-			if ( m_eStrSource==STRING_STATIC )
-				pStr = m_pStringBase + uVal;
-			else
-				pStr = (const BYTE *)uVal;
-		}
-
 		for ( int iOffs: m_dOfs )
-			if ( m_fnStrCmp ( pStr, m_dVal.Begin() + iOffs, m_eStrSource, 0, 0 )==0 )
+			if ( m_fnStrCmp ( GetStr ( tMatch ), m_dVal.Begin() + iOffs, m_eStrSource, 0, 0 )==0 )
 				return true;
 
 		return false;
+	}
+};
+
+
+struct Filter_StringTags_c : IFilter_Str
+{
+protected:
+	CSphVector<uint64_t> m_dTags;
+	mutable CSphVector<uint64_t> m_dMatchTags;
+
+public:
+	explicit Filter_StringTags_c ( ESphAttr eType )
+		: IFilter_Str ( eType )
+	{}
+
+	void SetRefString ( const CSphString * pRef, int iCount ) final
+	{
+		assert ( pRef );
+		assert ( iCount>0 );
+
+		m_dTags.Resize ( iCount );
+
+		for ( int i = 0; i<iCount; ++i )
+			m_dTags[i] = sphFNV64 ( pRef[i].cstr ());
+
+		m_dTags.Uniq();
+	}
+
+protected:
+	inline void GetMatchTags ( const CSphMatch &tMatch ) const
+	{
+		SphAttr_t uVal = tMatch.GetAttr ( m_tLocator );
+
+		const BYTE * pStr = nullptr;
+		int iStrLen = -1;
+
+		if ( m_eStrSource==STRING_STATIC )
+			pStr = m_pStringBase + uVal;
+		else
+			pStr = ( const BYTE * ) uVal;
+
+		UnpackString ( pStr, iStrLen, m_eStrSource );
+
+		m_dMatchTags.Resize(0);
+		sphSplitApply ( ( const char * ) pStr, iStrLen, [this] (const char* pTag, int iLen)
+		{
+			m_dMatchTags.Add ( sphFNV64 ( pTag, iLen, SPH_FNV64_SEED));
+		} );
+		m_dMatchTags.Uniq();
+	}
+};
+
+struct Filter_StringTagsAny_c : Filter_StringTags_c
+{
+public:
+	explicit Filter_StringTagsAny_c ( ESphAttr eType )
+		: Filter_StringTags_c ( eType )
+	{}
+
+	bool Eval ( const CSphMatch &tMatch ) const final
+	{
+		GetMatchTags ( tMatch );
+
+		auto pFilter = m_dMatchTags.begin ();
+		auto pQueryTags = m_dTags.begin ();
+		auto pFilterEnd = m_dMatchTags.end ();
+		auto pTagsEnd = m_dTags.end ();
+
+		while ( pFilter<pFilterEnd && pQueryTags<pTagsEnd )
+		{
+			if ( *pQueryTags<*pFilter )
+				++pQueryTags;
+			else if ( *pFilter<*pQueryTags )
+				++pFilter;
+			else if ( *pQueryTags==*pFilter )
+				return true;
+		}
+		return false;
+	}
+};
+
+struct Filter_StringTagsAll_c : Filter_StringTags_c
+{
+public:
+	explicit Filter_StringTagsAll_c ( ESphAttr eType )
+		: Filter_StringTags_c ( eType )
+	{}
+
+	bool Eval ( const CSphMatch &tMatch ) const final
+	{
+		GetMatchTags ( tMatch );
+
+		auto pFilter = m_dMatchTags.begin ();
+		auto pQueryTags = m_dTags.begin ();
+		auto pFilterEnd = m_dMatchTags.end ();
+		auto pTagsEnd = m_dTags.end ();
+		int iExpectedTags = m_dTags.GetLength();
+
+		while ( pFilter<pFilterEnd && pQueryTags<pTagsEnd && iExpectedTags>0 )
+		{
+			if ( *pQueryTags<*pFilter )
+				++pQueryTags;
+			else if ( *pFilter<*pQueryTags )
+				++pFilter;
+			else if ( *pQueryTags==*pFilter )
+			{
+				--iExpectedTags;
+				++pQueryTags;
+				++pFilter;
+			}
+		}
+		return !iExpectedTags;
 	}
 };
 
@@ -1136,7 +1246,15 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, ESphFil
 	if ( eAttrType==SPH_ATTR_STRING || eAttrType==SPH_ATTR_STRINGPTR )
 	{
 		if ( eFilterType==SPH_FILTER_STRING_LIST )
-			return new Filter_StringValues_c ( eCollation, eAttrType );
+		{
+			if ( tSettings.m_eMvaFunc==SPH_MVAFUNC_NONE )
+				return new Filter_StringValues_c ( eCollation, eAttrType );
+			else if ( tSettings.m_eMvaFunc==SPH_MVAFUNC_ANY )
+				return new Filter_StringTagsAny_c ( eAttrType );
+			else if ( tSettings.m_eMvaFunc==SPH_MVAFUNC_ALL )
+				return new Filter_StringTagsAll_c ( eAttrType );
+		}
+
 		else
 			return new FilterString_c ( eCollation, eAttrType, tSettings.m_bHasEqualMin || tSettings.m_bHasEqualMax );
 	}
@@ -1863,12 +1981,20 @@ void FormatFilterQL ( const CSphFilterSettings & f, StringBuilder_c & tBuf, int 
 			break;
 
 		case SPH_FILTER_STRING_LIST:
+
 			tBuf << f.m_sAttrName;// << " IN (";
-			{
-				ScopedComma_c sIN ( tBuf, ", '", " IN ('", "')");
-				for ( const auto& sString : f.m_dStrings )
-					tBuf << sString;
-			}
+			if ( f.m_bExclude )
+				tBuf << " NOT";
+			if ( f.m_eMvaFunc==SPH_MVAFUNC_ANY )
+				tBuf.StartBlock ( ", '", " ANY ('", "')" );
+			else if ( f.m_eMvaFunc==SPH_MVAFUNC_ALL )
+				tBuf.StartBlock ( ", '", " ALL ('", "')" );
+			else
+				tBuf.StartBlock ( ", '", " IN ('", "')" );
+			for ( const auto &sString : f.m_dStrings )
+				tBuf << sString;
+
+			tBuf.FinishBlock ();
 			break;
 
 		case SPH_FILTER_EXPRESSION:

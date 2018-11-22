@@ -8369,6 +8369,19 @@ enum
 	SPHINXQL_TOK_ID			= -4
 };
 
+/// types of string-list filters.
+enum class STRLIST {
+	// string matching: assume attr is a whole solid string
+	// attr MUST match any of variants provided, assuming collation applied
+	IN_, 	/// 'hello' OP ( 'hello', 'foo') true, OP ( 'foo', 'fee' ) false
+
+	// tags matching: assume attr is string of space-separated tags, no collation
+	// any separate tag of attr MUST match any of variants provided
+	ANY,	/// 'hello world' OP ('hello', 'foo') true, OP ('foo', 'fee' ) false
+
+	// every separate tag of attr MUST match any of variants provided
+	ALL,    /// 'hello world' OP ('world', 'hello') true, OP ('a','world','hello') false
+};
 
 struct SqlParser_c : ISphNoncopyable
 {
@@ -8461,7 +8474,7 @@ public:
 	CSphFilterSettings *	AddFilter ( const SqlNode_t & tCol, ESphFilter eType );
 	bool					AddStringFilter ( const SqlNode_t & tCol, const SqlNode_t & tVal, bool bExclude );
 	CSphFilterSettings *	AddValuesFilter ( const SqlNode_t & tCol ) { return AddFilter ( tCol, SPH_FILTER_VALUES ); }
-	bool					AddStringListFilter ( const SqlNode_t & tCol, SqlNode_t & tVal, bool bExclude );
+	bool			AddStringListFilter ( const SqlNode_t & tCol, SqlNode_t & tVal, STRLIST eType, bool bInverse=false );
 	bool					AddNullFilter ( const SqlNode_t & tCol, bool bEqualsNull );
 	void			AddHaving ();
 
@@ -9253,7 +9266,7 @@ bool SqlParser_c::AddStringFilter ( const SqlNode_t & tCol, const SqlNode_t & tV
 }
 
 
-bool SqlParser_c::AddStringListFilter ( const SqlNode_t & tCol, SqlNode_t & tVal, bool bExclude )
+bool SqlParser_c::AddStringListFilter ( const SqlNode_t & tCol, SqlNode_t & tVal, STRLIST eType, bool bInverse )
 {
 	CSphFilterSettings * pFilter = AddFilter ( tCol, SPH_FILTER_STRING_LIST );
 	if ( !pFilter || !tVal.m_pValues )
@@ -9268,7 +9281,12 @@ bool SqlParser_c::AddStringListFilter ( const SqlNode_t & tCol, SqlNode_t & tVal
 		SqlUnescape ( pFilter->m_dStrings[i], m_pBuf + iOff, iLen );
 	}
 	tVal.m_pValues = nullptr;
-	pFilter->m_bExclude = bExclude;
+	pFilter->m_bExclude = bInverse;
+	assert ( pFilter->m_eMvaFunc == SPH_MVAFUNC_NONE ); // that is default for IN filter
+	if ( eType==STRLIST::ANY )
+		pFilter->m_eMvaFunc = SPH_MVAFUNC_ANY;
+	else if ( eType==STRLIST::ALL )
+		pFilter->m_eMvaFunc = SPH_MVAFUNC_ALL;
 	return true;
 }
 
@@ -17049,18 +17067,6 @@ public:
 		case STMT_SELECT:
 			{
 				MEMORY ( MEM_SQL_SELECT );
-				
-				// select query to percolate shows stored queries and status
-				auto pIndex = GetServed ( dStmt[0].m_tQuery.m_sIndexes );
-				if ( pIndex )
-				{
-					ServedDescRPtr_c pServed ( pIndex );
-					if ( pServed->m_eType==eITYPE::PERCOLATE )
-					{
-						const SqlStmt_t & tStmt = dStmt[0];
-						return PercolateShowStatus ( tStmt, tOut, m_tLastMeta );
-					}
-				}
 
 				StatCountCommand ( SEARCHD_COMMAND_SEARCH );
 				SearchHandler_c tHandler ( 1, sphCreatePlainQueryParser(), QUERY_SQL, true, tThd );

@@ -5389,7 +5389,7 @@ bool CSphFilterSettings::operator == ( const CSphFilterSettings & rhs ) const
 			ARRAY_FOREACH ( i, m_dStrings )
 				if ( m_dStrings[i]!=rhs.m_dStrings[i] )
 					return false;
-			return true;
+			return ( m_eMvaFunc==rhs.m_eMvaFunc );
 
 		default:
 			assert ( 0 && "internal error: unhandled filter type in comparison" );
@@ -5422,7 +5422,9 @@ uint64_t CSphFilterSettings::GetHash() const
 		case SPH_FILTER_STRING_LIST:
 			ARRAY_FOREACH ( iString, m_dStrings )
 				h = sphFNV64cont ( m_dStrings[iString].cstr(), h );
-			break;
+			if ( m_eMvaFunc!=SPH_MVAFUNC_NONE )
+				h = sphFNV64 ( &m_eMvaFunc, sizeof ( m_eMvaFunc ), h );
+		break;
 		case SPH_FILTER_NULL:
 			break;
 		default:
@@ -16924,7 +16926,7 @@ bool CSphIndex_VLN::FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) co
 
 bool CSphQueryContext::CreateFilters ( CreateFilterContext_t &tCtx, CSphString &sError, CSphString &sWarning )
 {
-	if ( ( !tCtx.m_pFilters || tCtx.m_pFilters->IsEmpty () ) && tCtx.m_pKillList->IsEmpty() )
+	if ( ( !tCtx.m_pFilters || tCtx.m_pFilters->IsEmpty () ) && ( !tCtx.m_pKillList || tCtx.m_pKillList->IsEmpty () ) )
 		return true;
 	if ( !sphCreateFilters ( tCtx, sError, sWarning ) )
 		return false;

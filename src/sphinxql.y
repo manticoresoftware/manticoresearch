@@ -477,12 +477,32 @@ filter_item:
 		}
 	| expr_ident TOK_IN '(' string_list ')'
 		{
-			if ( !pParser->AddStringListFilter ( $1, $4, false ) )
+			if ( !pParser->AddStringListFilter ( $1, $4, STRLIST::IN_ ) )
 				YYERROR;
 		}
 	| expr_ident TOK_NOT TOK_IN '(' string_list ')'
 		{
-			if ( !pParser->AddStringListFilter ( $1, $5, true ) )
+			if ( !pParser->AddStringListFilter ( $1, $5, STRLIST::IN_, true ) )
+				YYERROR;
+		}
+	| expr_ident TOK_ANY '(' string_list ')'
+		{
+			if ( !pParser->AddStringListFilter ( $1, $4, STRLIST::ANY ) )
+				YYERROR;
+		}
+	| expr_ident TOK_NOT TOK_ANY '(' string_list ')'
+    	{
+    		if ( !pParser->AddStringListFilter ( $1, $5, STRLIST::ANY, true ) )
+    			YYERROR;
+    	}
+	| expr_ident TOK_ALL '(' string_list ')'
+		{
+			if ( !pParser->AddStringListFilter ( $1, $4, STRLIST::ALL ) )
+				YYERROR;
+		}
+	| expr_ident TOK_NOT TOK_ALL '(' string_list ')'
+		{
+			if ( !pParser->AddStringListFilter ( $1, $5, STRLIST::ALL, true ) )
 				YYERROR;
 		}
 	| expr_ident TOK_IN TOK_USERVAR

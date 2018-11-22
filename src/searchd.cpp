@@ -12255,7 +12255,7 @@ static void PercolateQuery ( const SqlStmt_t & tStmt, bool bReplace, ESphCollati
 
 	auto * pIndex = ( PercolateIndex_i * ) pServed->m_pIndex;
 	assert ( pIndex );
-	const CSphSchema &tSchema = pIndex->GetMatchSchema ();
+	const CSphSchema &tSchema = pIndex->GetInternalSchema ();
 
 	CSphVector<CSphFilterSettings> dFilters;
 	CSphVector<FilterTreeItem_t> dFilterTree;

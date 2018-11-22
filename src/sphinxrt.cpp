@@ -10563,6 +10563,8 @@ public:
 	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn ) override {}
 	void				SetMemorySettings ( bool , bool , bool ) override {}
 
+	const CSphSchema &GetMatchSchema () const override { return m_tMatchSchema; }
+
 private:
 	static const DWORD				META_HEADER_MAGIC = 0x50535451;	///< magic 'PSTQ' header
 	static const DWORD				META_VERSION = 6;				///< current version, added expression filter
@@ -10578,6 +10580,7 @@ private:
 	CSphRwlock						m_tLock;
 
 	CSphFixedVector<StoredQuery_t>	m_dLoadedQueries { 0 };
+	CSphSchema						m_tMatchSchema;
 
 	void DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMatchResult_t & tRes );
 };
@@ -11117,10 +11120,15 @@ static bool TagsMatched ( const uint64_t * pFilter, int iCount, const uint64_t *
 
 PercolateIndex_c::PercolateIndex_c ( const CSphSchema & tSchema, const char * sIndexName, const char * sPath )
 	: PercolateIndex_i ( sIndexName, sPath )
-	, m_dLoadedQueries ( 0 )
 {
 	Verify ( m_tLock.Init () );
 	m_tSchema = tSchema;
+
+	// fill match schema
+	m_tMatchSchema.AddAttr ( CSphColumnInfo ( "uid", SPH_ATTR_BIGINT ), true );
+	m_tMatchSchema.AddAttr ( CSphColumnInfo ( "query", SPH_ATTR_STRINGPTR ), true );
+	m_tMatchSchema.AddAttr ( CSphColumnInfo ( "tags", SPH_ATTR_STRINGPTR ), true );
+	m_tMatchSchema.AddAttr ( CSphColumnInfo ( "filters", SPH_ATTR_STRINGPTR ), true );
 }
 
 PercolateIndex_c::~PercolateIndex_c ()

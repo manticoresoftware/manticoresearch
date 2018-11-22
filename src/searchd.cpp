@@ -12867,16 +12867,9 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 void HandleMysqlPercolateMeta ( const PercolateMatchResult_t & tMeta, const CSphString & sWarning, SqlRowBuffer_c & tOut )
 {
 	tOut.HeadTuplet ( "Name", "Value" );
-
-	StringBuilder_c sTmp;
-	sTmp.Appendf ( "%d.%03d sec", (int)(tMeta.m_tmTotal / 1000000), (int)(tMeta.m_tmTotal%1000000)/1000 );
-	tOut.DataTuplet ( "Total", sTmp.cstr() );
+	tOut.DataTupletf ( "Total", "%.3D sec", tMeta.m_tmTotal / 1000 );
 	if ( tMeta.m_tmSetup )
-	{
-		sTmp.Clear();
-		sTmp.Appendf ( "%d.%03d sec", (int)(tMeta.m_tmSetup / 1000000), (int)(tMeta.m_tmSetup%1000000)/1000 );
-		tOut.DataTuplet ( "Setup", sTmp.cstr() );
-	}
+		tOut.DataTupletf ( "Setup", "%.3D sec", tMeta.m_tmSetup / 1000 );
 	tOut.DataTuplet ( "Queries matched", tMeta.m_iQueriesMatched );
 	tOut.DataTuplet ( "Queries failed", tMeta.m_iQueriesFailed );
 	tOut.DataTuplet ( "Document matches", tMeta.m_iDocsMatched );
@@ -12884,23 +12877,18 @@ void HandleMysqlPercolateMeta ( const PercolateMatchResult_t & tMeta, const CSph
 	tOut.DataTuplet ( "Term only queries", tMeta.m_iOnlyTerms );
 	tOut.DataTuplet ( "Fast rejected queries", tMeta.m_iEarlyOutQueries );
 
-	if ( tMeta.m_dQueryDT.GetLength() )
+	if ( !tMeta.m_dQueryDT.IsEmpty() )
 	{
 		uint64_t tmMatched = 0;
-		const char * sDelimiter = "";
-		sTmp.Clear();
+		StringBuilder_c sList (", ");
 		assert ( tMeta.m_iQueriesMatched==tMeta.m_dQueryDT.GetLength() );
-		ARRAY_FOREACH ( i, tMeta.m_dQueryDT )
+		for ( int tmQuery : tMeta.m_dQueryDT )
 		{
-			int tmQuery = tMeta.m_dQueryDT[i];
-			sTmp.Appendf ( "%s%d", sDelimiter, tmQuery );
-			sDelimiter = ", ";
+			sList.Sprintf ( "%d", tmQuery );
 			tmMatched += tmQuery;
 		}
-		tOut.DataTuplet ( "Time per query", sTmp.cstr() );
-		sTmp.Clear();
-		sTmp.Appendf ( UINT64_FMT, tmMatched );
-		tOut.DataTuplet ( "Time of matched queries", sTmp.cstr() );
+		tOut.DataTuplet ( "Time per query", sList.cstr() );
+		tOut.DataTuplet ( "Time of matched queries", tmMatched );
 	}
 	if ( !sWarning.IsEmpty() )
 		tOut.DataTuplet ( "Warning", sWarning.cstr() );

@@ -115,7 +115,7 @@ public:
 
 struct PercolateQueryDesc
 {
-	uint64_t m_uID;
+	uint64_t m_uQID;
 	CSphString m_sQuery;
 	CSphString m_sTags;
 	CSphString m_sFilters;

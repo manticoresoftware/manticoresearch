@@ -12321,7 +12321,7 @@ static void SendPercolateReply ( const PercolateMatchResult_t & tRes, const CSph
 	StringBuilder_c sDocs;
 	for ( const auto& tDesc : tRes.m_dQueryDesc )
 	{
-		tOut.PutNumAsString ( tDesc.m_uID );
+		tOut.PutNumAsString ( tDesc.m_uQID );
 		if ( bDumpDocs )
 		{
 			sDocs.StartBlock(",");

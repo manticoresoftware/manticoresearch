@@ -10461,7 +10461,7 @@ struct StoredQuery_t : ISphNoncopyable
 	DictMap_t						m_hDict;
 	CSphVector<CSphString>			m_dSuffixes;
 
-	uint64_t						m_uUID = 0;
+	uint64_t						m_uQUID = 0;
 	// show status info
 	CSphString						m_sQuery;
 	CSphString						m_sTags;
@@ -11659,7 +11659,7 @@ static void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_
 		tMatchCtx.m_iDocsMatched += iMatchCount;
 
 		PercolateQueryDesc & tDesc = tMatchCtx.m_dQueryMatched.Add();
-		tDesc.m_uID = pStored->m_uUID;
+		tDesc.m_uQID = pStored->m_uQUID;
 		if ( bCollectDocs )
 			tMatchCtx.m_dDocsMatched[iDocsOff] = iMatchCount;
 		if ( tMatchCtx.m_bGetQuery )
@@ -11726,7 +11726,7 @@ struct PercolateMatchJob_t : public ISphJob
 
 void PercolateQueryDesc::Swap ( PercolateQueryDesc & tOther )
 {
-	::Swap ( m_uID, tOther.m_uID );
+	::Swap ( m_uQID, tOther.m_uQID );
 	::Swap ( m_bQL, tOther.m_bQL );
 
 	m_sQuery.Swap ( tOther.m_sQuery );
@@ -11809,7 +11809,7 @@ static void PercolateGetResult ( int iTotalQueries, CSphFixedVector<PercolateMat
 		int iMinIt = 0;
 		for ( int i=1; i<dIters.GetLength(); i++ )
 		{
-			if ( dIters[i].m_pCur->m_uID<dIters[iMinIt].m_pCur->m_uID )
+			if ( dIters[i].m_pCur->m_uQID<dIters[iMinIt].m_pCur->m_uQID )
 				iMinIt = i;
 		}
 
@@ -12078,7 +12078,7 @@ bool PercolateIndex_c::AddQuery ( const char * sQuery, const char * sTags, const
 	QueryGetTerms ( pStored->m_pXQ->m_pRoot, pDict, pStored->m_hDict );
 	pStored->m_sTags = sTags;
 	PercolateTags ( sTags, pStored->m_dTags );
-	pStored->m_uUID = uId;
+	pStored->m_uQUID = uId;
 	if ( pFilters && pFilters->GetLength() )
 		pStored->m_dFilters = *pFilters;
 	if ( pFilterTree && pFilterTree->GetLength() )
@@ -12092,7 +12092,7 @@ bool PercolateIndex_c::AddQuery ( const char * sQuery, const char * sTags, const
 		uId = ( m_dStored.GetLength() ? m_dStored.Last().m_uUID + 1 : 1 );
 
 	StoredQueryKey_t tItem { uId, pStored };
-	pStored->m_uUID = uId;
+	pStored->m_uQUID = uId;
 
 	bool bAdded = true;
 	if ( bAutoID )
@@ -12478,10 +12478,10 @@ void PercolateIndex_c::PostSetup()
 	{
 		const StoredQuery_t & tQuery = m_dLoadedQueries[i];
 		const ISphTokenizer * pTok = tQuery.m_bQL ? pTokenizer : pTokenizerJson;
-		uint64_t uUID = tQuery.m_uUID;
+		uint64_t uUID = tQuery.m_uQUID;
 		bool bLoaded = AddQuery ( tQuery.m_sQuery.cstr(), tQuery.m_sTags.cstr(), &tQuery.m_dFilters, &tQuery.m_dFilterTree, false, tQuery.m_bQL, uUID, pTok, pDict, sError );
 		if ( !bLoaded )
-			sphWarning ( "index '%s': %d (id=" UINT64_FMT ") query failed to load, ignoring", m_sIndexName.cstr(), i, tQuery.m_uUID );
+			sphWarning ( "index '%s': %d (id=" UINT64_FMT ") query failed to load, ignoring", m_sIndexName.cstr(), i, tQuery.m_uQUID );
 	}
 
 	m_dLoadedQueries.Reset ( 0 );
@@ -12599,7 +12599,7 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath )
 		StoredQuery_t & tQuery = m_dLoadedQueries[i];
 
 		if ( uVersion>=3 )
-			tQuery.m_uUID = rdMeta.GetOffset();
+			tQuery.m_uQUID = rdMeta.GetOffset();
 		if ( uVersion>=4 )
 			tQuery.m_bQL = ( rdMeta.GetDword()!=0 );
 
@@ -12681,7 +12681,7 @@ void PercolateIndex_c::SaveMeta()
 	for ( const auto & dStored : m_dStored )
 	{
 		const StoredQuery_t * pQuery = dStored.m_pQuery;
-		wrMeta.PutOffset ( pQuery->m_uUID );
+		wrMeta.PutOffset ( pQuery->m_uQUID );
 		wrMeta.PutDword ( !!pQuery->m_bQL );
 		wrMeta.PutString ( pQuery->m_sQuery );
 		wrMeta.PutString ( pQuery->m_sTags );
@@ -12756,11 +12756,11 @@ void PercolateIndex_c::GetQueries ( const char * sFilterTags, bool bTagsEq, cons
 				continue;
 		}
 
-		if ( tFilter.Ptr() && !tFilter->Eval ( pQuery->m_uUID ) )
+		if ( tFilter.Ptr() && !tFilter->Eval ( pQuery->m_uQUID ) )
 			continue;
 
 		PercolateQueryDesc & tItem = dQueries.Add();
-		tItem.m_uID = pQuery->m_uUID;
+		tItem.m_uQID = pQuery->m_uQUID;
 		tItem.m_sQuery = pQuery->m_sQuery;
 		tItem.m_sTags = pQuery->m_sTags;
 		tItem.m_bQL = pQuery->m_bQL;
@@ -12851,7 +12851,7 @@ void PercolateIndex_c::Reconfigure ( CSphReconfigureSetup & tSetup )
 		StoredQuery_t & tQuery = m_dLoadedQueries[i];
 		const StoredQuery_t * pStored = m_dStored[i].m_pQuery;
 
-		tQuery.m_uUID = pStored->m_uUID;
+		tQuery.m_uQUID = pStored->m_uQUID;
 		tQuery.m_sQuery = pStored->m_sQuery;
 		tQuery.m_sTags = pStored->m_sTags;
 		tQuery.m_dFilters = pStored->m_dFilters;

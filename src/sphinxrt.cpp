@@ -11666,7 +11666,7 @@ static void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_
 			if ( tMatchCtx.m_bGetFilters && pStored->m_dFilters.GetLength() )
 			{
 				tMatchCtx.m_tFilterBuf.Clear();
-				FormatFiltersQL ( pStored->m_dFilters, pStored->m_dFilterTree, 5, false, tMatchCtx.m_tFilterBuf );
+				FormatFiltersQL ( pStored->m_dFilters, pStored->m_dFilterTree, tMatchCtx.m_tFilterBuf );
 				tDesc.m_sFilters = tMatchCtx.m_tFilterBuf.cstr();
 			}
 		}
@@ -12521,7 +12521,7 @@ void PercolateIndex_c::GetQueries ( const char * sFilterTags, bool bTagsEq, cons
 		if ( pQuery->m_dFilters.GetLength() )
 		{
 			tBuf.Clear();
-			FormatFiltersQL ( pQuery->m_dFilters, pQuery->m_dFilterTree, 5, false, tBuf );
+			FormatFiltersQL ( pQuery->m_dFilters, pQuery->m_dFilterTree, tBuf );
 			tItem.m_sFilters = tBuf.cstr();
 		}
 

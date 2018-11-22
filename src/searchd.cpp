@@ -4520,18 +4520,15 @@ void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuild
 	const CSphString & sQuery = q.m_sQuery;
 	if ( !sQuery.IsEmpty() || q.m_dFilters.GetLength() )
 	{
-		bool bDeflowered = false;
+		ScopedComma_c sWHERE ( tBuf, " AND ", " WHERE ");
 
-		tBuf += " WHERE";
 		if ( !sQuery.IsEmpty() )
 		{
-			tBuf += " MATCH(";
+			ScopedComma_c sMatch (tBuf, nullptr, "MATCH(", ")");
 			tBuf.AppendEscaped ( sQuery.cstr() );
-			tBuf += ")";
-			bDeflowered = true;
 		}
 
-		FormatFiltersQL ( q.m_dFilters, q.m_dFilterTree, iCompactIN, bDeflowered, tBuf ); 
+		FormatFiltersQL ( q.m_dFilters, q.m_dFilterTree, tBuf, iCompactIN );
 	}
 
 	// ORDER BY and/or GROUP BY clause
@@ -4545,8 +4542,8 @@ void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuild
 		FormatOrderBy ( &tBuf, "WITHIN GROUP ORDER BY", q.m_eSort, q.m_sSortBy );
 		if ( !q.m_tHaving.m_sAttrName.IsEmpty() )
 		{
-			tBuf += " HAVING";
-			FormatFilterQL ( q.m_tHaving, iCompactIN, tBuf );
+			ScopedComma_c sHawing ( tBuf, nullptr," HAVING ");
+			FormatFilterQL ( q.m_tHaving, tBuf, iCompactIN );
 		}
 		if ( q.m_sGroupSortBy!="@group desc" )
 			FormatOrderBy ( &tBuf, "ORDER BY", SPH_SORT_EXTENDED, q.m_sGroupSortBy );

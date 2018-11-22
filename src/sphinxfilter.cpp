@@ -1774,32 +1774,32 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 	return true;
 }
 
-void FormatFilterQL ( const CSphFilterSettings & f, int iCompactIN, StringBuilder_c & tBuf )
+void FormatFilterQL ( const CSphFilterSettings & f, StringBuilder_c & tBuf, int iCompactIN )
 {
+	ScopedComma_c sEmpty (tBuf,nullptr); // disable outer scope separator
 	switch ( f.m_eType )
 	{
 		case SPH_FILTER_VALUES:
+			//tBuf << " " << f.m_sAttrName;
+			tBuf << f.m_sAttrName;
 			if ( f.m_dValues.GetLength()==1 )
+				tBuf.Sprintf ( ( f.m_bExclude ? "!=%l" : "=%l" ), (int64_t)f.m_dValues[0] );
+			else
 			{
-				tBuf << " " << f.m_sAttrName << ( f.m_bExclude ? "!" : nullptr ) << "=";
-				tBuf.Appendf (  INT64_FMT, (int64_t)f.m_dValues[0] );
-			} else
-			{
-				tBuf << " " << f.m_sAttrName << ( f.m_bExclude ? " NOT IN (" : " IN (" );
-				ScopedComma_c tInComma ( tBuf, ",", nullptr,")");
+				ScopedComma_c tInComma ( tBuf, ",", ( f.m_bExclude ? " NOT IN (" : " IN (" ),")");
 				if ( iCompactIN>0 && ( iCompactIN+1<f.m_dValues.GetLength() ) )
 				{
 					// for really long IN-lists optionally format them as N,N,N,N,...N,N,N, with ellipsis inside.
 					int iLimit = Max ( iCompactIN-3, 3 );
 					for ( int j=0; j<iLimit; ++j )
-						tBuf.Appendf ( INT64_FMT, (int64_t)f.m_dValues[j] );
+						tBuf.Sprintf ( "%l", (int64_t)f.m_dValues[j] );
 					iLimit = f.m_dValues.GetLength();
 					ScopedComma_c tElipsis ( tBuf, ",","...");
 					for ( int j=iLimit-3; j<iLimit; ++j )
-						tBuf.Appendf ( INT64_FMT, (int64_t)f.m_dValues[j] );
+						tBuf.Sprintf ( "%l", (int64_t)f.m_dValues[j] );
 				} else
 					for ( int64_t iValue : f.m_dValues )
-						tBuf.Appendf ( INT64_FMT, (int64_t) iValue );
+						tBuf.Sprintf ( "%l", iValue );
 			}
 			break;
 
@@ -1808,22 +1808,24 @@ void FormatFilterQL ( const CSphFilterSettings & f, int iCompactIN, StringBuilde
 			{
 				// no min, thus (attr<maxval)
 				const char * sOps[2][2] = { { "<", "<=" }, { ">=", ">" } };
-				tBuf.Appendf ( " %s%s" INT64_FMT, f.m_sAttrName.cstr(),
-					sOps [ f.m_bExclude ][ f.m_bHasEqualMax ], f.m_iMaxValue );
+				tBuf.Sprintf ( "%s%s%l", f.m_sAttrName.cstr(), sOps [ f.m_bExclude ][ f.m_bHasEqualMax ], f.m_iMaxValue );
 			} else if ( f.m_iMaxValue==INT64_MAX || ( f.m_iMaxValue==-1 && f.m_sAttrName=="@id" ) )
 			{
 				// mo max, thus (attr>minval)
 				const char * sOps[2][2] = { { ">", ">=" }, { "<", "<=" } };
-				tBuf.Appendf ( " %s%s" INT64_FMT, f.m_sAttrName.cstr(),
-					sOps [ f.m_bExclude ][ f.m_bHasEqualMin ], f.m_iMinValue );
+				tBuf.Sprintf ( "%s%s%l", f.m_sAttrName.cstr(), sOps [ f.m_bExclude ][ f.m_bHasEqualMin ], f.m_iMinValue );
 			} else
 			{
 				if ( f.m_bHasEqualMin!=f.m_bHasEqualMax)
 				{
 					const char * sOps[2]= { "<", "<=" };
-					tBuf.Appendf ( " %s " INT64_FMT "%s%s%s" INT64_FMT, f.m_bExclude ? "NOT ": "", f.m_iMinValue, sOps[f.m_bHasEqualMin], f.m_sAttrName.cstr(), sOps[f.m_bHasEqualMax], f.m_iMaxValue );
+					const char * sFmt = f.m_bExclude ? "NOT %l%s%s%s%l" : "%l%s%s%s%l";
+					tBuf.Sprintf ( sFmt, f.m_iMinValue, sOps[f.m_bHasEqualMin], f.m_sAttrName.cstr(), sOps[f.m_bHasEqualMax], f.m_iMaxValue );
 				} else
-					tBuf.Appendf ( " %s%s BETWEEN " INT64_FMT " AND " INT64_FMT, f.m_sAttrName.cstr(), f.m_bExclude ? " NOT" : "", f.m_iMinValue + !f.m_bHasEqualMin, f.m_iMaxValue - !f.m_bHasEqualMax );
+				{
+					const char * sFmt = f.m_bExclude ? "%s NOT BETWEEN %l AND %l" : "%s BETWEEN %l AND %l";
+					tBuf.Sprintf ( sFmt, f.m_sAttrName.cstr(), f.m_iMinValue + !f.m_bHasEqualMin, f.m_iMaxValue - !f.m_bHasEqualMax );
+				}
 			}
 			break;
 
@@ -1832,50 +1834,49 @@ void FormatFilterQL ( const CSphFilterSettings & f, int iCompactIN, StringBuilde
 			{
 				// no min, thus (attr<maxval)
 				const char * sOps[2][2] = { { "<", "<=" }, { ">=", ">" } };
-				tBuf.Appendf ( " %s%s%f", f.m_sAttrName.cstr(),
+				tBuf.Sprintf ( "%s%s%f", f.m_sAttrName.cstr(),
 					sOps [ f.m_bExclude ][ f.m_bHasEqualMax ], f.m_fMaxValue );
 			} else if ( f.m_fMaxValue==FLT_MAX )
 			{
 				// mo max, thus (attr>minval)
 				const char * sOps[2][2] = { { ">", ">=" }, { "<", "<=" } };
-				tBuf.Appendf ( " %s%s%f", f.m_sAttrName.cstr(),
+				tBuf.Sprintf ( "%s%s%f", f.m_sAttrName.cstr(),
 					sOps [ f.m_bExclude ][ f.m_bHasEqualMin ], f.m_fMinValue );
 			} else
 			{
 				if ( f.m_bHasEqualMin!=f.m_bHasEqualMax)
 				{
 					const char * sOps[2]= { "<", "<=" };
-					tBuf.Appendf ( " %s%f%s%s%s%f", f.m_bExclude ? "NOT ": "", f.m_fMinValue, sOps[f.m_bHasEqualMin], f.m_sAttrName.cstr(), sOps[f.m_bHasEqualMax], f.m_fMaxValue );
+					tBuf.Sprintf ( "%s%f%s%s%s%f", f.m_bExclude ? "NOT ": "", f.m_fMinValue, sOps[f.m_bHasEqualMin], f.m_sAttrName.cstr(), sOps[f.m_bHasEqualMax], f.m_fMaxValue );
 				} else // FIXME? need we handle m_bHasEqual here?					
-					tBuf.Appendf ( " %s%s BETWEEN %f AND %f", f.m_sAttrName.cstr(), f.m_bExclude ? " NOT" : "",	f.m_fMinValue, f.m_fMaxValue );
+					tBuf.Sprintf ( "%s%s BETWEEN %f AND %f", f.m_sAttrName.cstr(), f.m_bExclude ? " NOT" : "",	f.m_fMinValue, f.m_fMaxValue );
 			}
 			break;
 
 		case SPH_FILTER_USERVAR:
 		case SPH_FILTER_STRING:
-			tBuf.Appendf ( " %s%s'%s'", f.m_sAttrName.cstr(), ( f.m_bExclude ? "!=" : "=" ), ( f.m_dStrings.GetLength()==1 ? f.m_dStrings[0].cstr() : "" ) );
+			tBuf.Sprintf ( "%s%s'%s'", f.m_sAttrName.cstr(), ( f.m_bExclude ? "!=" : "=" ), ( f.m_dStrings.GetLength()==1 ? f.m_dStrings[0].cstr() : "" ) );
 			break;
 
 		case SPH_FILTER_NULL:
-			tBuf << " " << f.m_sAttrName << ( f.m_bIsNull ? " IS NULL" : " IS NOT NULL" );
+			tBuf << f.m_sAttrName << ( f.m_bIsNull ? " IS NULL" : " IS NOT NULL" );
 			break;
 
 		case SPH_FILTER_STRING_LIST:
-			tBuf << " " << f.m_sAttrName << " IN (";
+			tBuf << f.m_sAttrName;// << " IN (";
 			{
-				Comma_c sComma;
+				ScopedComma_c sIN ( tBuf, ", '", " IN ('", "')");
 				for ( const auto& sString : f.m_dStrings )
-					tBuf << sComma << "'" << sString << "'";
+					tBuf << sString;
 			}
-			tBuf << ")";
 			break;
 
 		case SPH_FILTER_EXPRESSION:
-			tBuf << " " << f.m_sAttrName;
+			tBuf << f.m_sAttrName;
 			break;
 
 		default:
-			tBuf += " 1 /""* oops, unknown filter type *""/";
+			tBuf += "1 /""* oops, unknown filter type *""/";
 			break;
 	}
 }
@@ -1886,43 +1887,36 @@ static CSphString LogFilterTreeItem ( int iItem, const CSphVector<FilterTreeItem
 	if ( tItem.m_iFilterItem!=-1 )
 	{
 		StringBuilder_c tBuf;
-		FormatFilterQL ( dFilters[tItem.m_iFilterItem], iCompactIN, tBuf );
-		int iOff = ( tBuf.GetLength() && *tBuf.cstr()== ' ' ? 1 : 0 );
-		return tBuf.cstr() + iOff;
+		FormatFilterQL ( dFilters[tItem.m_iFilterItem], tBuf, iCompactIN );
+		return tBuf.cstr();// + iOff;
 	}
 
 	assert ( tItem.m_iLeft!=-1 && tItem.m_iRight!=-1 );
 	CSphString sLeft = LogFilterTreeItem ( tItem.m_iLeft, dTree, dFilters, iCompactIN );
 	CSphString sRight = LogFilterTreeItem ( tItem.m_iRight, dTree, dFilters, iCompactIN );
 
-	const char * sOp = tItem.m_bOr ? "OR" : "AND";
 	bool bLeftPts = ( dTree[tItem.m_iLeft].m_iFilterItem==-1 && dTree[tItem.m_iLeft].m_bOr!=tItem.m_bOr );
 	bool bRightPts = ( dTree[tItem.m_iRight].m_iFilterItem==-1 && dTree[tItem.m_iRight].m_bOr!=tItem.m_bOr );
 
 	StringBuilder_c tBuf;
 	if ( bLeftPts ) tBuf << "(" << sLeft << ")"; else tBuf << sLeft;
-	tBuf << " " << sOp << " ";
+	tBuf << ( tItem.m_bOr ? " OR " : " AND " );
 	if ( bRightPts ) tBuf << "(" << sRight << ")"; else tBuf << sRight;
 
 	return tBuf.cstr();
 }
 
 void FormatFiltersQL ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree,
-	int iCompactIN, bool bDeflowered, StringBuilder_c & tBuf )
+	StringBuilder_c & tBuf, int iCompactIN )
 {
-	if ( !dFilterTree.GetLength() )
-		for ( const auto& dFilter : dFilters )
-		{
-			if ( bDeflowered )
-				tBuf += " AND";
-			bDeflowered = true;
-			FormatFilterQL ( dFilter, iCompactIN, tBuf );
-		}
-	else
+	if ( dFilterTree.IsEmpty() )
 	{
-		tBuf += (bDeflowered?" AND ":" ");
-		tBuf << LogFilterTreeItem ( dFilterTree.GetLength() - 1, dFilterTree, dFilters, iCompactIN );
+		ScopedComma_c sAND ( tBuf, " AND " );
+		for ( const auto& dFilter : dFilters )
+			FormatFilterQL ( dFilter, tBuf, iCompactIN );
 	}
+	else
+		tBuf << LogFilterTreeItem ( dFilterTree.GetLength() - 1, dFilterTree, dFilters, iCompactIN );
 }
 
 

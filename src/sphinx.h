@@ -2988,6 +2988,8 @@ enum StringSource_e
 // iLen1 and iLen2 should be specified only in case of STRING_PLAIN
 using SphStringCmp_fn =  int ( * )( const BYTE * pStr1, const BYTE * pStr2, StringSource_e eStrSource, int iLen1, int iLen2 );
 
+void UnpackString ( const BYTE *&pStr, int &iLen, StringSource_e eStrSource );
+
 /// match comparator state
 struct CSphMatchComparatorState
 {

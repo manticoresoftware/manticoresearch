@@ -4679,19 +4679,30 @@ bool sphSortGetStringRemap ( const ISphSchema & tSorterSchema, const ISphSchema 
 
 static const char * EMPTY_STR = "";
 
+void UnpackString ( const BYTE *&pStr, int &iLen, StringSource_e eStrSource )
+{
+	if ( !pStr )
+	{
+		pStr = ( const BYTE * ) EMPTY_STR;
+		return;
+	}
+
+	if ( eStrSource==STRING_STATIC )
+		iLen = sphUnpackStr ( pStr, &pStr );
+	else if ( eStrSource==STRING_DATAPTR )
+		iLen = sphUnpackPtrAttr ( pStr, &pStr );
+}
+
 inline static void UnpackStrings ( const BYTE * & pStr1, const BYTE * & pStr2, StringSource_e eStrSource, int & iLen1, int & iLen2 )
 {
-	if ( eStrSource==STRING_STATIC || eStrSource==STRING_DATAPTR )
+	if ( eStrSource==STRING_STATIC )
 	{
-		if ( eStrSource==STRING_STATIC )
-		{
-			iLen1 = sphUnpackStr ( pStr1, &pStr1 );
-			iLen2 = sphUnpackStr ( pStr2, &pStr2 );
-		} else
-		{
-			iLen1 = sphUnpackPtrAttr ( pStr1, &pStr1 );
-			iLen2 = sphUnpackPtrAttr ( pStr2, &pStr2 );
-		}
+		iLen1 = sphUnpackStr ( pStr1, &pStr1 );
+		iLen2 = sphUnpackStr ( pStr2, &pStr2 );
+	} else if ( eStrSource==STRING_DATAPTR )
+	{
+		iLen1 = sphUnpackPtrAttr ( pStr1, &pStr1 );
+		iLen2 = sphUnpackPtrAttr ( pStr2, &pStr2 );
 	}
 
 	if ( !pStr1 ) pStr1 = (const BYTE*)EMPTY_STR;

@@ -14469,17 +14469,18 @@ void CSphIndex_VLN::CopyDocinfo ( const CSphQueryContext * pCtx, CSphMatch & tMa
 	assert ( DOCINFO2ID(pFound)==tMatch.m_uDocID );
 	tMatch.m_pStatic = DOCINFO2ATTRS(pFound);
 
-	// patch if necessary
-	if ( pCtx->m_pOverrides )
-		ARRAY_FOREACH ( i, (*pCtx->m_pOverrides) )
-		{
-			const CSphAttrOverride & tOverride = (*pCtx->m_pOverrides)[i]; // shortcut
-			const CSphAttrOverride::IdValuePair_t * pEntry = tOverride.m_dValues.BinarySearch (
-				bind ( &CSphAttrOverride::IdValuePair_t::m_uDocID ), tMatch.m_uDocID );
-			tMatch.SetAttr ( pCtx->m_dOverrideOut[i], pEntry
-							? pEntry->m_uValue
-							: sphGetRowAttr ( tMatch.m_pStatic, pCtx->m_dOverrideIn[i] ) );
-		}
+	if ( !pCtx->m_pOverrides ) // if no overrides, nothing else to do
+		return;
+
+	ARRAY_FOREACH ( i, (*pCtx->m_pOverrides) )
+	{
+		const CSphAttrOverride & tOverride = (*pCtx->m_pOverrides)[i]; // shortcut
+		const CSphAttrOverride::IdValuePair_t * pEntry = tOverride.m_dValues.BinarySearch (
+			bind ( &CSphAttrOverride::IdValuePair_t::m_uDocID ), tMatch.m_uDocID );
+		tMatch.SetAttr ( pCtx->m_dOverrideOut[i], pEntry
+						? pEntry->m_uValue
+						: sphGetRowAttr ( tMatch.m_pStatic, pCtx->m_dOverrideIn[i] ) );
+	}
 }
 
 

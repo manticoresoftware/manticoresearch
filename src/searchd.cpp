@@ -316,8 +316,8 @@ struct ThdDesc_t : public ListNode_t
 	}
 };
 
-static CSphMutex				g_tThdMutex;
-static List_t					g_dThd;				///< existing threads table
+static RwLock_t				g_tThdLock;
+static List_t				g_dThd GUARDED_BY ( g_tThdLock );				///< existing threads table
 
 static void ThreadSetSnippetInfo ( const char * sQuery, int64_t iSizeKB, bool bApi, ThdDesc_t &tThd )
 {
@@ -332,18 +332,22 @@ static void ThreadSetSnippetInfo ( const char * sQuery, int64_t iSizeKB, ThdDesc
 	tThd.SetThreadInfo ( "snippet datasize=%d.%d""k query=\"%s\"", int ( iSizeKB / 10 ), int ( iSizeKB % 10 ), sQuery );
 }
 
-static void ThreadAdd ( ThdDesc_t * pThd )
+static void ThreadAdd ( ThdDesc_t * pThd ) EXCLUDES ( g_tThdLock )
 {
-	g_tThdMutex.Lock();
+	ScWL_t dThdLock ( g_tThdLock );
 	g_dThd.Add ( pThd );
-	g_tThdMutex.Unlock();
 }
 
-static void ThreadRemove ( ThdDesc_t * pThd )
+static void ThreadRemove ( ThdDesc_t * pThd ) EXCLUDES ( g_tThdLock )
 {
-	g_tThdMutex.Lock();
+	ScWL_t dThdLock ( g_tThdLock );
 	g_dThd.Remove ( pThd );
-	g_tThdMutex.Unlock();
+}
+
+static int ThreadsNum () EXCLUDES ( g_tThdLock )
+{
+	ScRL_t dThdLock ( g_tThdLock );
+	return g_dThd.GetLength ();
 }
 
 static void ThdState ( ThdState_e eState, ThdDesc_t & tThd )
@@ -1461,7 +1465,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	int64_t tmShutStarted = sphMicroTimer();
 	// stop search threads; up to shutdown_timeout seconds
-	while ( ( g_dThd.GetLength() > 0 || g_bPrereading ) && ( sphMicroTimer()-tmShutStarted )<g_iShutdownTimeout )
+	while ( ( ThreadsNum() > 0 || g_bPrereading ) && ( sphMicroTimer()-tmShutStarted )<g_iShutdownTimeout )
 		sphSleepMsec ( 50 );
 
 	if ( g_pThdPool )
@@ -1700,7 +1704,7 @@ void SphCrashLogger_c::Done ()
 
 
 #if !USE_WINDOWS
-void SphCrashLogger_c::HandleCrash ( int sig )
+void SphCrashLogger_c::HandleCrash ( int sig ) NO_THREAD_SAFETY_ANALYSIS
 #else
 LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 #endif // !USE_WINDOWS
@@ -1854,18 +1858,17 @@ LONG WINAPI SphCrashLogger_c::HandleCrash ( EXCEPTION_POINTERS * pExc )
 	// threads table
 	// FIXME? should we try to lock threads table somehow?
 	sphSafeInfo ( g_iLogFile, "--- %d active threads ---", g_dThd.GetLength() );
-	const ListNode_t * pIt = g_dThd.Begin();
+
 	int iThd = 0;
-	while ( pIt!=g_dThd.End() )
+	for ( const ListNode_t * pIt = g_dThd.Begin (); pIt!=g_dThd.End(); pIt = pIt->m_pNext )
 	{
-		ThdDesc_t * pThd = (ThdDesc_t *)pIt;
+		auto * pThd = (ThdDesc_t *)pIt;
 		sphSafeInfo ( g_iLogFile, "thd %d, proto %s, state %s, command %s",
 			iThd,
 			g_dProtoNames[pThd->m_eProto],
 			g_dThdStates[pThd->m_eThdState],
 			pThd->m_sCommand ? pThd->m_sCommand : "-" );
-		pIt = pIt->m_pNext;
-		iThd++;
+		++iThd;
 	}
 
 	// memory info
@@ -14142,7 +14145,7 @@ void HandleMysqlShowThreads ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 {
 	int64_t tmNow = sphMicroTimer();
 
-	g_tThdMutex.Lock();
+
 	tOut.HeadBegin ( 6 );
 	tOut.HeadColumn ( "Tid" );
 	tOut.HeadColumn ( "Proto" );
@@ -14157,12 +14160,12 @@ void HandleMysqlShowThreads ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	if ( tStmt.m_sThreadFormat=="sphinxql" )
 		eFmt = THD_FORMAT_SPHINXQL;
 
-	const ListNode_t * pIt = g_dThd.Begin();
-	while ( pIt!=g_dThd.End() )
+	ScRL_t dThdLock ( g_tThdLock );
+	for ( const ListNode_t * pIt = g_dThd.Begin (); pIt!=g_dThd.End(); pIt = pIt->m_pNext )
 	{
-		ThdDesc_t * pThd = (ThdDesc_t *)pIt;
+		auto * pThd = (ThdDesc_t *)pIt;
 
-		int iLen = strnlen ( pThd->m_dBuf.Begin(), pThd->m_dBuf.GetLength() );
+		auto iLen = strnlen ( pThd->m_dBuf.Begin(), pThd->m_dBuf.GetLength() );
 		if ( tStmt.m_iThreadsCols>0 && iLen>tStmt.m_iThreadsCols )
 			pThd->m_dBuf[tStmt.m_iThreadsCols] = '\0';
 
@@ -14174,11 +14177,10 @@ void HandleMysqlShowThreads ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 		tOut.PutString ( FormatInfo ( *pThd, eFmt, tBuf ) );
 
 		tOut.Commit();
-		pIt = pIt->m_pNext;
 	}
 
 	tOut.Eof();
-	g_tThdMutex.Unlock();
+
 }
 
 void HandleMysqlFlushHostnames ( SqlRowBuffer_c & tOut )
@@ -20327,7 +20329,7 @@ void TickHead () REQUIRES ( MainThread )
 	if ( !pListener )
 		return;
 
-	if ( ( g_iMaxChildren && !g_pThdPool && g_dThd.GetLength()>=g_iMaxChildren )
+	if ( ( g_iMaxChildren && !g_pThdPool && ThreadsNum()>=g_iMaxChildren )
 		|| ( g_bInRotate && !g_bSeamlessRotate ) )
 	{
 		if ( pListener->m_eProto==PROTO_SPHINX )
@@ -20357,7 +20359,7 @@ void TickHead () REQUIRES ( MainThread )
 		SafeDelete ( pThd );
 
 		FailClient ( iClientSock, "failed to create worker thread" );
-		sphWarning ( "failed to create worker thread, threads(%d), error[%d] %s", g_dThd.GetLength(), iErr, strerrorm(iErr) );
+		sphWarning ( "failed to create worker thread, threads(%d), error[%d] %s", ThreadsNum(), iErr, strerrorm(iErr) );
 	}
 }
 

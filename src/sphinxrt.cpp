@@ -1164,7 +1164,7 @@ public:
 	virtual void				Optimize ();
 	virtual void				ProgressiveMerge ();
 	CSphIndex *					GetDiskChunk ( int iChunk ) { return m_dDiskChunks.GetLength()>iChunk ? m_dDiskChunks[iChunk] : NULL; }
-	virtual ISphTokenizer *		CloneIndexingTokenizer() const { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
+	virtual ISphTokenizer *		CloneIndexingTokenizer() const { SafeAddRef(m_pTokenizerIndexing); return m_pTokenizerIndexing; }
 
 private:
 	virtual ISphRtAccum *		CreateAccum ( CSphString & sError );
@@ -10524,7 +10524,7 @@ public:
 	void Preread () override {}
 	void PostSetup() override;
 	ISphRtAccum * CreateAccum ( CSphString & sError ) override;
-	ISphTokenizer * CloneIndexingTokenizer() const override { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
+	ISphTokenizer * CloneIndexingTokenizer() const override { SafeAddRef ( m_pTokenizerIndexing ); return m_pTokenizerIndexing; }
 	void SaveMeta ();
 	void GetQueries ( const char * sFilterTags, bool bTagsEq, const CSphFilterSettings * pUID, int iOffset, int iLimit, CSphVector<PercolateQueryDesc> & dQueries ) override
 		REQUIRES (!m_tLock);

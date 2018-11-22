@@ -1463,8 +1463,7 @@ int main ( int argc, char ** argv )
 		if ( eCommand==CMD_MORPH )
 			break;
 
-		if ( eCommand!=CMD_CHECK )
-			pIndex->Preread();
+		pIndex->Preread();
 
 		if ( hConf["index"][sIndex]("hitless_words") )
 		{

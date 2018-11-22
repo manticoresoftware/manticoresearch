@@ -1269,11 +1269,8 @@ public:
 	virtual void				Reconfigure ( CSphReconfigureSetup & tSetup );
 	virtual int64_t				GetFlushAge() const override;
 
-	virtual void				SetDebugCheck () override { m_bDebugCheck = true; }
-
 protected:
 	CSphSourceStats				m_tStats;
-	bool						m_bDebugCheck = false;
 
 private:
 
@@ -4042,8 +4039,6 @@ CSphIndex * RtIndex_t::LoadDiskChunk ( const char * sChunk, CSphString & sError 
 	pDiskChunk->m_iExpandKeywords = m_iExpandKeywords;
 	pDiskChunk->SetBinlog ( false );
 	pDiskChunk->SetMemorySettings ( m_bMlock, m_bOndiskAllAttr, m_bOndiskPoolAttr );
-	if ( m_bDebugCheck )
-		pDiskChunk->SetDebugCheck();
 
 	if ( !pDiskChunk->Prealloc ( m_bPathStripped ) )
 	{
@@ -4051,8 +4046,7 @@ CSphIndex * RtIndex_t::LoadDiskChunk ( const char * sChunk, CSphString & sError 
 		SafeDelete ( pDiskChunk );
 		return NULL;
 	}
-	if ( !m_bDebugCheck )
-		pDiskChunk->Preread();
+	pDiskChunk->Preread();
 
 	return pDiskChunk;
 }

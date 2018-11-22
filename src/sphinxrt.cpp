@@ -11093,17 +11093,19 @@ static void PercolateTags ( const char * sTags, CSphVector<uint64_t> & dTags )
 	dTags.Uniq();
 }
 
-static bool TagsMatched ( const uint64_t * pFilter, int iCount, const uint64_t * pQueryTags, int iQueryTagsCount, bool bTagsEq )
+static bool TagsMatched ( const VecTraits_T<uint64_t>& dFilter, const VecTraits_T<uint64_t>& dQueryTags, bool bTagsEq=true )
 {
-	const uint64_t * pFilterEnd = pFilter + iCount;
-	const uint64_t * pTagsEnd = pQueryTags + iQueryTagsCount;
+	auto pFilter = dFilter.begin();
+	auto pQueryTags = dQueryTags.begin();
+	auto pFilterEnd = dFilter.end();
+	auto pTagsEnd = dQueryTags.end();
 
 	while ( pFilter<pFilterEnd && pQueryTags<pTagsEnd )
 	{
 		if ( *pQueryTags<*pFilter )
-			pQueryTags++;
+			++pQueryTags;
 		else if ( *pFilter<*pQueryTags )
-			pFilter++;
+			++pFilter;
 		else if ( *pQueryTags==*pFilter )
 			return bTagsEq;
 	}
@@ -12153,7 +12155,7 @@ int PercolateIndex_c::DeleteQueries ( const char * sTags )
 		if ( !pQuery->m_dTags.GetLength() )
 			continue;
 
-		if ( TagsMatched ( dTags.Begin(), dTags.GetLength(), pQuery->m_dTags.Begin(), pQuery->m_dTags.GetLength(), true ) )
+		if ( TagsMatched ( dTags, pQuery->m_dTags ) )
 		{
 			SafeDelete ( m_dStored[i].m_pQuery );
 			m_dStored.Remove ( i );
@@ -12494,7 +12496,7 @@ void PercolateIndex_c::GetQueries ( const char * sFilterTags, bool bTagsEq, cons
 			if ( !pQuery->m_dTags.GetLength() )
 				continue;
 
-			if ( !TagsMatched ( dTags.Begin(), dTags.GetLength(), pQuery->m_dTags.Begin(), pQuery->m_dTags.GetLength(), bTagsEq ) )
+			if ( !TagsMatched ( dTags, pQuery->m_dTags, bTagsEq ) )
 				continue;
 		}
 

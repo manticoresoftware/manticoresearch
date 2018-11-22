@@ -105,6 +105,36 @@ void sphSplit ( StrVec_t & dOut, const char * sIn )
 	}
 }
 
+void sphSplitApply ( const char * sIn, int iSize, StrFunctor &&dFunc )
+{
+	if ( !sIn )
+		return;
+
+	if (!dFunc)
+		return;
+
+	const char * p = ( char * ) sIn;
+	if ( iSize<0 ) iSize = strlen (p);
+	const char * pEnd = p + iSize;
+	while ( p < pEnd )
+	{
+		// skip non-alphas
+		while ( ( p<pEnd ) && !sphIsAlpha ( *p ) )
+			p++;
+		if ( p>=pEnd )
+			break;
+
+		// this is my next token
+		assert ( sphIsAlpha ( *p ) );
+		const char * sNext = p;
+		while ( ( p<pEnd ) && sphIsAlpha ( *p ) )
+			++p;
+		if ( sNext!=p )
+			dFunc ( sNext, int ( p - sNext ) );
+	}
+}
+
+
 // split by any char from sBounds.
 // if line starts from a bound char, first splitted str will be an empty string
 void sphSplit ( StrVec_t & dOut, const char * sIn, const char * sBounds )

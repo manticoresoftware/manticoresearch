@@ -91,6 +91,10 @@ void sphSplit ( StrVec_t & dOut, const char * sIn );
 /// string splitter, splits by the given boundaries
 void sphSplit ( StrVec_t & dOut, const char * sIn, const char * sBounds );
 
+/// perform sphSplit, but applies a functor instead of add a chunk to the vector
+using StrFunctor = std::function<void ( const char*, int )>;
+void sphSplitApply ( const char * sIn, int iSize, StrFunctor &&dFunc );
+
 /// string wildcard matching (case-sensitive, supports * and ? patterns)
 bool sphWildcardMatch ( const char * sSstring, const char * sPattern, const int * pPattern = NULL );
 

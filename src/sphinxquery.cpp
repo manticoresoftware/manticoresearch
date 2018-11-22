@@ -766,19 +766,7 @@ void XQLimitSpec_t::SetFieldSpec ( const FieldMask_t& uMask, int iMaxPos )
 
 /// ctor
 XQNode_t::XQNode_t ( const XQLimitSpec_t & dSpec )
-: m_pParent ( NULL )
-, m_eOp ( SPH_QUERY_AND )
-, m_iOrder ( 0 )
-, m_iCounter ( 0 )
-, m_iMagicHash ( 0 )
-, m_iFuzzyHash ( 0 )
-, m_dSpec ( dSpec )
-, m_iOpArg ( 0 )
-, m_iAtomPos ( -1 )
-, m_iUser ( 0 )
-, m_bVirtuallyPlain ( false )
-, m_bNotWeighted ( false )
-, m_bPercentOp ( false )
+: m_dSpec ( dSpec )
 {
 #ifdef XQ_DUMP_NODE_ADDR
 	printf ( "node new 0x%08x\n", this );

@@ -3996,7 +3996,7 @@ bool ParseSearchQuery ( InputBuffer_c & tReq, CachedOutputBuffer_c & tOut, CSphQ
 
 	// master sends items to agents since master.version=15 
 	CSphString sError;
-	if ( uMasterVer<15 && !tQuery.ParseSelectList ( sError ) )
+	if ( uMasterVer<15 && !ParseSelectList ( sError, tQuery ) )
 	{
 		SendErrorReply ( tOut, "select: %s", sError.cstr() );
 
@@ -4320,7 +4320,7 @@ static void FormatOrderBy ( StringBuilder_c * pBuf, const char * sPrefix, ESphSo
 	}
 }
 
-static const CSphQuery g_tDefaultQuery;
+static const CSphQuery g_tDefaultQuery {};
 
 static void FormatSphinxql ( const CSphQuery & q, int iCompactIN, QuotationEscapedBuilder & tBuf );
 static void FormatList ( const CSphVector<CSphNamedInt> & dValues, StringBuilder_c & tBuf )
@@ -11176,8 +11176,7 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 
 
 	int iWord = 0;
-	tMeta.m_hWordStats.IterateStart();
-	while ( tMeta.m_hWordStats.IterateNext() )
+	for ( tMeta.m_hWordStats.IterateStart (); tMeta.m_hWordStats.IterateNext(); )
 	{
 		const CSphQueryResultMeta::WordStat_t & tStat = tMeta.m_hWordStats.IterateGet();
 
@@ -11190,7 +11189,7 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 		if ( dStatus.MatchAddVa ( "hits[%d]", iWord ) )
 			dStatus.Add().SetSprintf ( INT64_FMT, tStat.m_iHits );
 
-		iWord++;
+		++iWord;
 	}
 }
 
@@ -12013,26 +12012,26 @@ public:
 class StmtErrorReporter_c : public StmtErrorReporter_i
 {
 public:
-	StmtErrorReporter_c ( SqlRowBuffer_c & tBuffer )
+	explicit StmtErrorReporter_c ( SqlRowBuffer_c & tBuffer )
 		: m_tRowBuffer ( tBuffer )
 	{}
 
-	virtual void Ok ( int iAffectedRows, const CSphString & sWarning )
+	void Ok ( int iAffectedRows, const CSphString & sWarning ) final
 	{
 		m_tRowBuffer.Ok ( iAffectedRows, sWarning.IsEmpty() ? 0 : 1 );
 	}
 
-	virtual void Ok ( int iAffectedRows, int nWarnings )
+	void Ok ( int iAffectedRows, int nWarnings ) final
 	{
 		m_tRowBuffer.Ok ( iAffectedRows, nWarnings );
 	}
 
-	virtual void Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr )
+	void Error ( const char * sStmt, const char * sError, MysqlErrors_e iErr ) final
 	{
 		m_tRowBuffer.Error ( sStmt, sError, iErr );
 	}
 
-	virtual SqlRowBuffer_c * GetBuffer() { return &m_tRowBuffer; }
+	SqlRowBuffer_c * GetBuffer() final { return &m_tRowBuffer; }
 
 private:
 	SqlRowBuffer_c & m_tRowBuffer;
@@ -12314,7 +12313,7 @@ static void SendPercolateReply ( const PercolateMatchResult_t & tRes, const CSph
 	}
 
 	// EOF packet is sent explicitly due to non-default params.
-	BYTE iWarns = ( !sWarning.IsEmpty() ? 1 : 0 );
+	auto iWarns = sWarning.IsEmpty() ? 0 : 1;
 	tOut.HeadEnd ( false, iWarns );
 
 	CSphVector<int64_t> dTmpDocs;
@@ -20640,14 +20639,13 @@ struct NetActionAccept_t : public ISphNetAction
 };
 
 // just new typedef for API state
-typedef NetStateCommon_t NetStateAPI_t;
+using NetStateAPI_t = NetStateCommon_t;
 
 struct NetStateQL_t : public NetStateCommon_t
 {
-	CSphinxqlSession	m_tSession;
-	bool				m_bAuthed;
-	BYTE				m_uPacketID;
-	NetStateQL_t ();
+	CSphinxqlSession	m_tSession { true };
+	bool				m_bAuthed = false;
+	BYTE				m_uPacketID = 1;
 };
 
 enum ActionAPI_e
@@ -21725,7 +21723,7 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 				SendErrorReply ( tOut, "invalid command (code=%d, len=%d)", m_eCommand, m_tState->m_iLeft );
 
 				tOut.SwapData ( m_tState->m_dBuf );
-				NetSendData_t * pSend = new NetSendData_t ( m_tState.LeakPtr(), PROTO_SPHINX );
+				auto * pSend = new NetSendData_t ( m_tState.LeakPtr(), PROTO_SPHINX );
 				dNextTick.Add ( pSend );
 				return NE_REMOVE;
 			}
@@ -22139,7 +22137,7 @@ NetEvent_e NetSendData_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> &
 		{
 			case PROTO_SPHINX:
 			{
-				NetReceiveDataAPI_t * pAction = new NetReceiveDataAPI_t ( (NetStateAPI_t *)m_tState.LeakPtr() );
+				auto * pAction = new NetReceiveDataAPI_t ( m_tState.LeakPtr() );
 				pAction->SetupBodyPhase();
 				dNextTick.Add ( pAction );
 			}
@@ -22147,7 +22145,7 @@ NetEvent_e NetSendData_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> &
 
 			case PROTO_MYSQL41:
 			{
-				NetReceiveDataQL_t * pAction = new NetReceiveDataQL_t ( (NetStateQL_t *)m_tState.LeakPtr() );
+				auto * pAction = new NetReceiveDataQL_t ( (NetStateQL_t *)m_tState.LeakPtr() );
 				pAction->SetupBodyPhase();
 				dNextTick.Add ( pAction );
 			}
@@ -22155,7 +22153,7 @@ NetEvent_e NetSendData_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetAction *> &
 
 			case PROTO_HTTP:
 			{
-				NetReceiveDataHttp_t * pAction = new NetReceiveDataHttp_t ( (NetStateQL_t *)m_tState.LeakPtr() );
+				auto * pAction = new NetReceiveDataHttp_t ( (NetStateQL_t *)m_tState.LeakPtr() );
 				dNextTick.Add ( pAction );
 			}
 			break;
@@ -22214,11 +22212,23 @@ void NetStateCommon_t::CloseSocket ()
 	}
 }
 
-NetStateQL_t::NetStateQL_t ()
-	: m_tSession ( true )
-	, m_bAuthed ( false )
-	, m_uPacketID ( 1 )
-{}
+int NetStateCommon_t::NetManageSocket ( bool bWrite, bool bAfterWrite )
+{
+	// try next chunk
+	int iRes = 0;
+	if ( bWrite )
+		iRes = (int)sphSockSend ( m_iClientSock, m_dBuf.begin() + m_iPos, m_iLeft );
+	else
+		iRes = (int)sphSockRecv ( m_iClientSock, m_dBuf.begin () + m_iPos, m_iLeft );
+
+	// if there was EINTR, retry
+	// if any other error, bail
+	if ( iRes==-1 )
+	{
+		// only let SIGTERM (of all them) to interrupt
+		int iErr = sphSockPeekErrno ();
+		return ( ( iErr==EINTR || iErr==EAGAIN || iErr==EWOULDBLOCK ) ? 0 : -1 );
+	}
 
 
 NetReceiveDataHttp_t::NetReceiveDataHttp_t ( NetStateQL_t *	pState )
@@ -22422,11 +22432,11 @@ void ThdJobAPI_t::Call ()
 	if ( tOut.GetSentCount() )
 	{
 		tOut.SwapData ( m_tState->m_dBuf );
-		NetSendData_t * pSend = new NetSendData_t ( m_tState.LeakPtr(), PROTO_SPHINX );
+		auto * pSend = new NetSendData_t ( m_tState.LeakPtr(), PROTO_SPHINX );
 		JobDoSendNB ( pSend, m_pLoop );
 	} else if ( m_tState->m_bKeepSocket ) // no response - switching to receive
 	{
-		NetReceiveDataAPI_t * pReceive = new NetReceiveDataAPI_t ( m_tState.LeakPtr() );
+		auto * pReceive = new NetReceiveDataAPI_t ( m_tState.LeakPtr() );
 		pReceive->SetupBodyPhase();
 		m_pLoop->AddAction ( pReceive );
 	}

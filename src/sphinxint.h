@@ -42,7 +42,7 @@
 #define MVA_OFFSET_MASK		0x7fffffffUL	// MVA offset mask
 #define MVA_ARENA_FLAG		0x80000000UL	// MVA global-arena flag
 
-#define DEFAULT_MAX_MATCHES 1000
+//#define DEFAULT_MAX_MATCHES 1000
 
 #ifdef __GNUC__
 #define VARIABLE_IS_NOT_USED __attribute__ ((unused))
@@ -1997,7 +1997,7 @@ int sphLevenshtein ( const int * sWord1, int iLen1, const int * sWord2, int iLen
 
 struct Slice_t
 {
-	DWORD				m_uOff;
+	DWORD				m_uOff = 0;
 	DWORD				m_uLen;
 };
 

@@ -21,39 +21,20 @@
 struct XQKeyword_t
 {
 	CSphString			m_sWord;
-	int					m_iAtomPos;
-	int					m_iSkippedBefore; ///< positions skipped before this token (because of blended chars)
-	bool				m_bFieldStart;	///< must occur at very start
-	bool				m_bFieldEnd;	///< must occur at very end
-	float				m_fBoost;		///< keyword IDF will be multiplied by this
-	bool				m_bExpanded;	///< added by prefix expansion
-	bool				m_bExcluded;	///< excluded by query (rval to operator NOT)
-	bool				m_bMorphed;		///< morphology processing (wordforms, stemming etc) already done
-	void *				m_pPayload;
+	int					m_iAtomPos = -1;
+	int					m_iSkippedBefore = 0;	///< positions skipped before this token (because of blended chars)
+	bool				m_bFieldStart = false;	///< must occur at very start
+	bool				m_bFieldEnd = false;	///< must occur at very end
+	float				m_fBoost = 1.0f;		///< keyword IDF will be multiplied by this
+	bool				m_bExpanded = false;	///< added by prefix expansion
+	bool				m_bExcluded = false;	///< excluded by query (rval to operator NOT)
+	bool				m_bMorphed = false;		///< morphology processing (wordforms, stemming etc) already done
+	void *				m_pPayload = nullptr;
 
-	XQKeyword_t ()
-		: m_iAtomPos ( -1 )
-		, m_iSkippedBefore ( 0 )
-		, m_bFieldStart ( false )
-		, m_bFieldEnd ( false )
-		, m_fBoost ( 1.0f )
-		, m_bExpanded ( false )
-		, m_bExcluded ( false )
-		, m_bMorphed ( false )
-		, m_pPayload ( NULL )
-	{}
-
+	XQKeyword_t() = default;
 	XQKeyword_t ( const char * sWord, int iPos )
 		: m_sWord ( sWord )
 		, m_iAtomPos ( iPos )
-		, m_iSkippedBefore ( 0 )
-		, m_bFieldStart ( false )
-		, m_bFieldEnd ( false )
-		, m_fBoost ( 1.0f )
-		, m_bExpanded ( false )
-		, m_bExcluded ( false )
-		, m_bMorphed ( false )
-		, m_pPayload ( NULL )
 	{}
 };
 
@@ -139,28 +120,28 @@ public:
 /// non-plain nodes are a logical function over children nodes
 struct XQNode_t : public ISphNoncopyable
 {
-	XQNode_t *				m_pParent;		///< my parent node (NULL for root ones)
+	XQNode_t *				m_pParent = nullptr;		///< my parent node (NULL for root ones)
 
 private:
-	XQOperator_e			m_eOp;			///< operation over childen
-	int						m_iOrder;
-	int						m_iCounter;
+	XQOperator_e			m_eOp { SPH_QUERY_AND };	///< operation over childen
+	int						m_iOrder = 0;
+	int						m_iCounter = 0;
 
 private:
-	mutable uint64_t		m_iMagicHash;
-	mutable uint64_t		m_iFuzzyHash;
+	mutable uint64_t		m_iMagicHash = 0;
+	mutable uint64_t		m_iFuzzyHash = 0;
 
 public:
-	CSphVector<XQNode_t*>	m_dChildren;	///< non-plain node children
-	XQLimitSpec_t			m_dSpec;		///< specification by field, zone(s), etc.
+	CSphVector<XQNode_t*>	m_dChildren;		///< non-plain node children
+	XQLimitSpec_t			m_dSpec;			///< specification by field, zone(s), etc.
 
-	CSphVector<XQKeyword_t>	m_dWords;		///< query words (plain node)
-	int						m_iOpArg;		///< operator argument (proximity distance, quorum count)
-	int						m_iAtomPos;		///< atom position override (currently only used within expanded nodes)
-	int						m_iUser;
-	bool					m_bVirtuallyPlain;	///< "virtually plain" flag (currently only used by expanded nodes)
-	bool					m_bNotWeighted;	///< this our expanded but empty word's node
-	bool					m_bPercentOp;
+	CSphVector<XQKeyword_t>	m_dWords;			///< query words (plain node)
+	int						m_iOpArg = 0;		///< operator argument (proximity distance, quorum count)
+	int						m_iAtomPos = -1;	///< atom position override (currently only used within expanded nodes)
+	int						m_iUser = 0;
+	bool					m_bVirtuallyPlain = false;	///< "virtually plain" flag (currently only used by expanded nodes)
+	bool					m_bNotWeighted = false;	///< this our expanded but empty word's node
+	bool					m_bPercentOp = false;
 
 public:
 	/// ctor

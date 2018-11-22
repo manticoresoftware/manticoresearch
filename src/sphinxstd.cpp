@@ -1886,40 +1886,44 @@ private:
 		SetThdName ( "job" );
 
 		auto * pPool = (CSphThdPool *)pArg;
+		pPool->TickImpl();
+	}
 
-		while ( !pPool->m_bShutdown )
+	void TickImpl()
+	{
+		while ( !m_bShutdown )
 		{
-			pPool->m_tWakeup.WaitEvent();
+			m_tWakeup.WaitEvent ();
 
-			if ( pPool->m_bShutdown )
+			if ( m_bShutdown )
 				break;
 
-			pPool->m_tJobLock.Lock();
+			m_tJobLock.Lock ();
 
-			ThdJob_t * pJob = pPool->m_pTail;
-			if ( pPool->m_pHead==pPool->m_pTail ) // either 0 or 1 job case
+			ThdJob_t * pJob = m_pTail;
+			if ( m_pHead==m_pTail ) // either 0 or 1 job case
 			{
-				pPool->m_pHead = pPool->m_pTail = nullptr;
+				m_pHead = m_pTail = nullptr;
 			} else
 			{
 				pJob->m_pPrev->m_pNext = nullptr;
-				pPool->m_pTail = pJob->m_pPrev;
+				m_pTail = pJob->m_pPrev;
 			}
 
 			if ( pJob )
-				--pPool->m_iStatQueuedJobs;
+				--m_iStatQueuedJobs;
 
-			pPool->m_tJobLock.Unlock();
+			m_tJobLock.Unlock ();
 
 			if ( !pJob )
 				continue;
 
-			pPool->m_tStatActiveWorkers.Inc();
+			++m_tStatActiveWorkers;
 
-			pJob->m_pItem->Call();
+			pJob->m_pItem->Call ();
 			SafeDelete ( pJob );
 
-			pPool->m_tStatActiveWorkers.Dec();
+			--m_tStatActiveWorkers;
 
 			// FIXME!!! work stealing case (check another job prior going to sem)
 		}
@@ -1935,7 +1939,7 @@ private:
 
 	int GetActiveWorkerCount () const final
 	{
-		return m_tStatActiveWorkers.GetValue();
+		return m_tStatActiveWorkers;
 	}
 
 	int GetTotalWorkerCount () const final

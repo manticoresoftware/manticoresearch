@@ -803,7 +803,7 @@ protected:
 	{
 		CSphString sError;
 		ParseSearchOptions ( m_tOptions, m_tQuery );
-		if ( !m_tQuery.ParseSelectList ( sError ) )
+		if ( !ParseSelectList ( sError, m_tQuery ) )
 		{
 			ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
 			return NULL;

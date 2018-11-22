@@ -2656,7 +2656,7 @@ struct FilterTreeItem_t
 };
 
 /// table function interface
-class CSphQuery;
+struct CSphQuery;
 struct AggrResult_t;
 class ISphTableFunc
 {
@@ -2683,126 +2683,120 @@ enum QueryOption_e
 	QUERY_OPT_ENABLED
 };
 
-/// search query
-class CSphQuery
+const int DEFAULT_MAX_MATCHES = 1000;
+
+/// search query. Pure struct, no member functions
+struct CSphQuery
 {
-public:
-	CSphString		m_sIndexes;		///< indexes to search
-	CSphString		m_sQuery;		///< cooked query string for the engine (possibly transformed during legacy matching modes fixup)
-	CSphString		m_sRawQuery;	///< raw query string from the client for searchd log, agents, etc
+	CSphString		m_sIndexes {"*"};	///< indexes to search
+	CSphString		m_sQuery;			///< cooked query string for the engine (possibly transformed during legacy matching modes fixup)
+	CSphString		m_sRawQuery;		///< raw query string from the client for searchd log, agents, etc
 
-	int				m_iOffset;		///< offset into result set (as X in MySQL LIMIT X,Y clause)
-	int				m_iLimit;		///< limit into result set (as Y in MySQL LIMIT X,Y clause)
+	int				m_iOffset=0;		///< offset into result set (as X in MySQL LIMIT X,Y clause)
+	int				m_iLimit=20;		///< limit into result set (as Y in MySQL LIMIT X,Y clause)
 	CSphVector<DWORD>	m_dWeights;		///< user-supplied per-field weights. may be NULL. default is NULL
-	ESphMatchMode	m_eMode;		///< match mode. default is "match all"
-	ESphRankMode	m_eRanker;		///< ranking mode, default is proximity+BM25
-	CSphString		m_sRankerExpr;	///< ranking expression for SPH_RANK_EXPR
-	CSphString		m_sUDRanker;	///< user-defined ranker name
+	ESphMatchMode	m_eMode = SPH_MATCH_EXTENDED;		///< match mode. default is "match all"
+	ESphRankMode	m_eRanker = SPH_RANK_DEFAULT;		///< ranking mode, default is proximity+BM25
+	CSphString		m_sRankerExpr;		///< ranking expression for SPH_RANK_EXPR
+	CSphString		m_sUDRanker;		///< user-defined ranker name
 	CSphString		m_sUDRankerOpts;	///< user-defined ranker options
-	ESphSortOrder	m_eSort;		///< sort mode
-	CSphString		m_sSortBy;		///< attribute to sort by
-	int64_t			m_iRandSeed;	///< random seed for ORDER BY RAND(), -1 means do not set
-	int				m_iMaxMatches;	///< max matches to retrieve, default is 1000. more matches use more memory and CPU time to hold and sort them
+	ESphSortOrder	m_eSort = SPH_SORT_RELEVANCE;		///< sort mode
+	CSphString		m_sSortBy;			///< attribute to sort by
+	int64_t			m_iRandSeed = -1;	///< random seed for ORDER BY RAND(), -1 means do not set
+	int				m_iMaxMatches = DEFAULT_MAX_MATCHES;	///< max matches to retrieve, default is 1000. more matches use more memory and CPU time to hold and sort them
 
-	bool			m_bSortKbuffer;	///< whether to use PQ or K-buffer sorting algorithm
-	bool			m_bZSlist;		///< whether the ranker has to fetch the zonespanlist with this query
-	bool			m_bSimplify;	///< whether to apply boolean simplification
-	bool			m_bPlainIDF;		///< whether to use PlainIDF=log(N/n) or NormalizedIDF=log((N-n+1)/n)
-	bool			m_bGlobalIDF;		///< whether to use local indexes or a global idf file
-	bool			m_bNormalizedTFIDF;	///< whether to scale IDFs by query word count, so that TF*IDF is normalized
-	bool			m_bLocalDF;			///< whether to use calculate DF among local indexes
-	bool			m_bLowPriority;		///< set low thread priority for this query
-	DWORD			m_uDebugFlags;
-	QueryOption_e	m_eExpandKeywords;	///< control automatic query-time keyword expansion
+	bool			m_bSortKbuffer = false;		///< whether to use PQ or K-buffer sorting algorithm
+	bool			m_bZSlist = false;			///< whether the ranker has to fetch the zonespanlist with this query
+	bool			m_bSimplify = false;		///< whether to apply boolean simplification
+	bool			m_bPlainIDF = false;		///< whether to use PlainIDF=log(N/n) or NormalizedIDF=log((N-n+1)/n)
+	bool			m_bGlobalIDF = false;		///< whether to use local indexes or a global idf file
+	bool			m_bNormalizedTFIDF = true;	///< whether to scale IDFs by query word count, so that TF*IDF is normalized
+	bool			m_bLocalDF = false;			///< whether to use calculate DF among local indexes
+	bool			m_bLowPriority = false;		///< set low thread priority for this query
+	DWORD			m_uDebugFlags = 0;
+	QueryOption_e	m_eExpandKeywords = QUERY_OPT_DEFAULT;	///< control automatic query-time keyword expansion
 
 	CSphVector<CSphFilterSettings>	m_dFilters;	///< filters
 	CSphVector<FilterTreeItem_t>	m_dFilterTree;
 
 	CSphString		m_sGroupBy;			///< group-by attribute name(s)
 	CSphString		m_sFacetBy;			///< facet-by attribute name(s)
-	ESphGroupBy		m_eGroupFunc;		///< function to pre-process group-by attribute value with
-	CSphString		m_sGroupSortBy;		///< sorting clause for groups in group-by mode
-	CSphString		m_sGroupDistinct;	///< count distinct values for this attribute
+	ESphGroupBy		m_eGroupFunc = SPH_GROUPBY_ATTR;	///< function to pre-process group-by attribute value with
+	CSphString		m_sGroupSortBy { "@groupby desc" };	///< sorting clause for groups in group-by mode
+	CSphString		m_sGroupDistinct;		///< count distinct values for this attribute
 
-	int				m_iCutoff;			///< matches count threshold to stop searching at (default is 0; means to search until all matches are found)
+	int				m_iCutoff = 0;			///< matches count threshold to stop searching at (default is 0; means to search until all matches are found)
 
 	int				m_iRetryCount = -1;		///< retry count, for distributed queries. (-1 means 'use default')
 	int				m_iRetryDelay = -1;		///< retry delay, for distributed queries. (-1 means 'use default')
-	int				m_iAgentQueryTimeout;	///< agent query timeout override, for distributed queries
+	int				m_iAgentQueryTimeout = 0;	///< agent query timeout override, for distributed queries
 
-	bool			m_bGeoAnchor;		///< do we have an anchor
-	CSphString		m_sGeoLatAttr;		///< latitude attr name
-	CSphString		m_sGeoLongAttr;		///< longitude attr name
-	float			m_fGeoLatitude;		///< anchor latitude
-	float			m_fGeoLongitude;	///< anchor longitude
+	bool			m_bGeoAnchor = false;	///< do we have an anchor
+	CSphString		m_sGeoLatAttr;			///< latitude attr name
+	CSphString		m_sGeoLongAttr;			///< longitude attr name
+	float			m_fGeoLatitude = 0.0f;	///< anchor latitude
+	float			m_fGeoLongitude = 0.0f;	///< anchor longitude
 
 	CSphVector<CSphNamedInt>	m_dIndexWeights;	///< per-index weights
 	CSphVector<CSphNamedInt>	m_dFieldWeights;	///< per-field weights
 
-	DWORD			m_uMaxQueryMsec;	///< max local index search time, in milliseconds (default is 0; means no limit)
-	int				m_iMaxPredictedMsec; ///< max predicted (!) search time limit, in milliseconds (0 means no limit)
-	CSphString		m_sComment;			///< comment to pass verbatim in the log file
+	DWORD			m_uMaxQueryMsec = 0;	///< max local index search time, in milliseconds (default is 0; means no limit)
+	int				m_iMaxPredictedMsec = 0; ///< max predicted (!) search time limit, in milliseconds (0 means no limit)
+	CSphString		m_sComment;				///< comment to pass verbatim in the log file
 
 	CSphVector<CSphAttrOverride>	m_dOverrides;	///< per-query attribute value overrides
 
-	CSphString		m_sSelect;			///< select-list (attributes and/or expressions)
-	CSphString		m_sOrderBy;			///< order-by clause
+	CSphString		m_sSelect;				///< select-list (attributes and/or expressions)
+	CSphString		m_sOrderBy;				///< order-by clause
 
-	CSphString		m_sOuterOrderBy;	///< temporary (?) subselect hack
-	int				m_iOuterOffset;		///< keep and apply outer offset at master
-	int				m_iOuterLimit;
-	bool			m_bHasOuter;
+	CSphString		m_sOuterOrderBy;		///< temporary (?) subselect hack
+	int				m_iOuterOffset = 0;		///< keep and apply outer offset at master
+	int				m_iOuterLimit = 0;
+	bool			m_bHasOuter = false;
 
-	bool			m_bReverseScan;		///< perform scan in reverse order
-	bool			m_bIgnoreNonexistent; ///< whether to warning or not about non-existent columns in select list
-	bool			m_bIgnoreNonexistentIndexes; ///< whether to error or not about non-existent indexes in index list
-	bool			m_bStrict;			///< whether to warning or not about incompatible types
-	bool			m_bSync;			///< whether or not use synchronous operations (optimize, etc.)
+	bool			m_bReverseScan = false;		///< perform scan in reverse order
+	bool			m_bIgnoreNonexistent = false; ///< whether to warning or not about non-existent columns in select list
+	bool			m_bIgnoreNonexistentIndexes = false; ///< whether to error or not about non-existent indexes in index list
+	bool			m_bStrict = false;			///< whether to warning or not about incompatible types
+	bool			m_bSync = false;			///< whether or not use synchronous operations (optimize, etc.)
 
-	CSphFilterSettings	m_tHaving;		///< post aggregate filtering (got applied only on master)
+	ISphTableFunc *	m_pTableFunc = nullptr;		///< post-query NOT OWNED, WILL NOT BE FREED in dtor.
+	CSphFilterSettings	m_tHaving;				///< post aggregate filtering (got applied only on master)
 
-public:
-	int				m_iSQLSelectStart;	///< SQL parser helper
-	int				m_iSQLSelectEnd;	///< SQL parser helper
+	int				m_iSQLSelectStart = -1;	///< SQL parser helper
+	int				m_iSQLSelectEnd = -1;	///< SQL parser helper
 
-	int				m_iGroupbyLimit;	///< number of elems within group
+	int				m_iGroupbyLimit = 1;	///< number of elems within group
 
-public:
 	CSphVector<CSphQueryItem>	m_dItems;		///< parsed select-list
 	CSphVector<CSphQueryItem>	m_dRefItems;	///< select-list prior replacing by facet
-	ESphCollation				m_eCollation;	///< ORDER BY collation
-	bool						m_bAgent;		///< agent mode (may need extra cols on output)
+	ESphCollation				m_eCollation = SPH_COLLATION_DEFAULT;	///< ORDER BY collation
+	bool						m_bAgent = false;	///< agent mode (may need extra cols on output)
 
 	CSphString		m_sQueryTokenFilterLib;		///< token filter library name
 	CSphString		m_sQueryTokenFilterName;	///< token filter name
 	CSphString		m_sQueryTokenFilterOpts;	///< token filter options
 
-public:
-					CSphQuery ();		///< ctor, fills defaults
-					~CSphQuery ();		///< dtor, frees owned stuff
-
-	/// parse select list string into items
-	bool			ParseSelectList ( CSphString & sError );
-	bool			m_bFacet;			///< whether this a facet query
-	bool			m_bFacetHead;
+	bool			m_bFacet = false;			///< whether this a facet query
+	bool			m_bFacetHead = false;
 
 	QueryType_e		m_eQueryType {QUERY_API};		///< queries from sphinxql require special handling
-	const QueryParser_i * m_pQueryParser {nullptr};	///< queries do not own this parser
+	const QueryParser_i * m_pQueryParser = nullptr;	///< queries do not own this parser
 
 	StrVec_t m_dIncludeItems;
 	StrVec_t m_dExcludeItems;
 };
 
+/// parse select list string into items
+bool ParseSelectList ( CSphString &sError, CSphQuery &pResult );
 
 /// some low-level query stats
 struct CSphQueryStats
 {
-	int64_t *	m_pNanoBudget;		///< pointer to max_predicted_time budget (counted in nanosec)
-	DWORD		m_iFetchedDocs;		///< processed documents
-	DWORD		m_iFetchedHits;		///< processed hits (aka positions)
-	DWORD		m_iSkips;			///< number of Skip() calls
-
-				CSphQueryStats();
+	int64_t *	m_pNanoBudget = nullptr;///< pointer to max_predicted_time budget (counted in nanosec)
+	DWORD		m_iFetchedDocs = 0;		///< processed documents
+	DWORD		m_iFetchedHits = 0;		///< processed hits (aka positions)
+	DWORD		m_iSkips = 0;			///< number of Skip() calls
 
 	void		Add ( const CSphQueryStats & tStats );
 };

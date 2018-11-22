@@ -411,14 +411,14 @@ public:
 	{
 		// FIXME! gonna break on vectors over 2GB
 		return
-			( (int64_t)m_dWords.GetLimit() )*sizeof(m_dWords[0]) +
-			( (int64_t)m_dDocs.GetLimit() )*sizeof(m_dDocs[0]) +
-			( (int64_t)m_dHits.GetLimit() )*sizeof(m_dHits[0]) +
-			( (int64_t)m_dStrings.GetLimit() )*sizeof(m_dStrings[0]) +
-			( (int64_t)m_dMvas.GetLimit() )*sizeof(m_dMvas[0]) +
-			( (int64_t)m_dKeywordCheckpoints.GetLimit() )*sizeof(m_dKeywordCheckpoints[0])+
-			( (int64_t)m_dRows.GetLimit() )*sizeof(m_dRows[0]) +
-			( (int64_t)m_dInfixFilterCP.GetLength()*sizeof(m_dInfixFilterCP[0]) );
+			(int64_t)m_dWords.AllocatedBytes() +
+			(int64_t)m_dDocs.AllocatedBytes() +
+			(int64_t)m_dHits.AllocatedBytes() +
+			(int64_t)m_dStrings.AllocatedBytes() +
+			(int64_t)m_dMvas.AllocatedBytes() +
+			(int64_t)m_dKeywordCheckpoints.AllocatedBytes() +
+			(int64_t)m_dRows.AllocatedBytes() +
+			(int64_t)m_dInfixFilterCP.AllocatedBytes();
 	}
 
 	int GetMergeFactor () const
@@ -873,39 +873,24 @@ static SphThreadKey_t g_tTlsAccumKey;
 /// everything that a given log file needs to know about an index
 struct BinlogIndexInfo_t
 {
-	CSphString	m_sName;			///< index name
-	int64_t		m_iMinTID;			///< min TID logged by this file
-	int64_t		m_iMaxTID;			///< max TID logged by this file
-	int64_t		m_iFlushedTID;		///< last flushed TID
-	int64_t		m_tmMin;			///< min TID timestamp
-	int64_t		m_tmMax;			///< max TID timestamp
+	CSphString	m_sName;				///< index name
+	int64_t		m_iMinTID = INT64_MAX;	///< min TID logged by this file
+	int64_t		m_iMaxTID = 0;			///< max TID logged by this file
+	int64_t		m_iFlushedTID = 0;		///< last flushed TID
+	int64_t		m_tmMin = INT64_MAX;	///< min TID timestamp
+	int64_t		m_tmMax = 0;			///< max TID timestamp
 
-	CSphIndex *	m_pIndex;			///< replay only; associated index (might be NULL if we don't serve it anymore!)
-	RtIndex_t *	m_pRT;				///< replay only; RT index handle (might be NULL if N/A or non-RT)
-	int64_t		m_iPreReplayTID;	///< replay only; index TID at the beginning of this file replay
-
-	BinlogIndexInfo_t ()
-		: m_iMinTID ( INT64_MAX )
-		, m_iMaxTID ( 0 )
-		, m_iFlushedTID ( 0 )
-		, m_tmMin ( INT64_MAX )
-		, m_tmMax ( 0 )
-		, m_pIndex ( NULL )
-		, m_pRT ( NULL )
-		, m_iPreReplayTID ( 0 )
-	{}
+	CSphIndex *	m_pIndex = nullptr;		///< replay only; associated index (might be NULL if we don't serve it anymore!)
+	RtIndex_t *	m_pRT = nullptr;		///< replay only; RT index handle (might be NULL if N/A or non-RT)
+	int64_t		m_iPreReplayTID = 0;	///< replay only; index TID at the beginning of this file replay
 };
 
 /// binlog file descriptor
 /// file id (aka extension), plus a list of associated index infos
 struct BinlogFileDesc_t
 {
-	int								m_iExt;
+	int								m_iExt = 0;
 	CSphVector<BinlogIndexInfo_t>	m_dIndexInfos;
-
-	BinlogFileDesc_t ()
-		: m_iExt ( 0 )
-	{}
 };
 
 /// Bin Log Operation
@@ -2643,9 +2628,9 @@ static void BuildSegmentInfixes ( RtSegment_t * pSeg, bool bHasMorphology, bool 
 	pSeg->m_dInfixFilterCP.Fill ( 0 );
 
 	uint64_t * pRough = pSeg->m_dInfixFilterCP.Begin();
-	const RtWord_t * pWord = NULL;
+	const RtWord_t * pWord = nullptr;
 	RtWordReader_t rdDictRough ( pSeg, true, iWordsCheckpoint );
-	while ( ( pWord = rdDictRough.UnzipWord () )!=NULL )
+	while ( ( pWord = rdDictRough.UnzipWord () )!=nullptr )
 	{
 		const BYTE * pDictWord = pWord->m_sWord+1;
 		if ( bHasMorphology && *pDictWord!=MAGIC_WORD_HEAD_NONSTEMMED )
@@ -10592,7 +10577,7 @@ private:
 	CSphVector<StoredQueryKey_t>	m_dStored GUARDED_BY ( m_tLock );
 	CSphRwlock						m_tLock;
 
-	CSphFixedVector<StoredQuery_t>	m_dLoadedQueries;
+	CSphFixedVector<StoredQuery_t>	m_dLoadedQueries { 0 };
 
 	void DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMatchResult_t & tRes );
 };
@@ -10961,7 +10946,6 @@ struct SubstringInfo_t
 static Slice_t GetTermLocator ( const char * sWord, int iLen, const RtSegment_t * pSeg )
 {
 	Slice_t tChPoint;
-	tChPoint.m_uOff = 0;
 	tChPoint.m_uLen = pSeg->m_dWords.GetLength();
 
 	// tighten dictionary location
@@ -11018,7 +11002,6 @@ static Slice_t GetPrefixLocator ( const char * sWord, bool bHasMorphology, const
 	tSubInfo.m_iSubLen = iPrefix;
 
 	Slice_t tChPoint;
-	tChPoint.m_uOff = 0;
 	tChPoint.m_uLen = pSeg->m_dWords.GetLength();
 
 	// find initial checkpoint or check words prior to 1st checkpoint
@@ -11126,7 +11109,6 @@ static bool TagsMatched ( const uint64_t * pFilter, int iCount, const uint64_t *
 		else if ( *pQueryTags==*pFilter )
 			return bTagsEq;
 	}
-
 	return !bTagsEq;
 }
 
@@ -11183,7 +11165,8 @@ bool PercolateIndex_c::AddDocument ( ISphTokenizer * pTokenizer, int iFields, co
 
 	CSphSource_StringVector tSrc ( iFields, ppFields, m_tSchema );
 	if ( m_tSettings.m_bHtmlStrip &&
-		!tSrc.SetStripHTML ( m_tSettings.m_sHtmlIndexAttrs.cstr(), m_tSettings.m_sHtmlRemoveElements.cstr(), m_tSettings.m_bIndexSP, m_tSettings.m_sZones.cstr(), sError ) )
+		!tSrc.SetStripHTML ( m_tSettings.m_sHtmlIndexAttrs.cstr(), m_tSettings.m_sHtmlRemoveElements.cstr(),
+			m_tSettings.m_bIndexSP, m_tSettings.m_sZones.cstr(), sError ) )
 		return false;
 
 	ISphFieldFilterRefPtr_c pFieldFilter;
@@ -11520,7 +11503,7 @@ public:
 
 struct PercolateMatchContext_t
 {
-	CSphVector<PercolateQueryDesc> m_dQueryMatched;	
+	CSphVector<PercolateQueryDesc> m_dQueryMatched;
 	CSphVector<int> m_dDocsMatched;
 	CSphVector<int> m_dDt;
 	int m_iQueriesMatched = 0;
@@ -12448,36 +12431,33 @@ void PercolateIndex_c::SaveMeta()
 	Verify ( m_tLock.ReadLock() );
 	wrMeta.PutDword ( m_dStored.GetLength() );
 
-	ARRAY_FOREACH ( i, m_dStored )
+	for ( const auto & dStored : m_dStored )
 	{
-		const StoredQuery_t * pQuery = m_dStored[i].m_pQuery;
+		const StoredQuery_t * pQuery = dStored.m_pQuery;
 		wrMeta.PutOffset ( pQuery->m_uUID );
-		wrMeta.PutDword ( pQuery->m_bQL );
+		wrMeta.PutDword ( !!pQuery->m_bQL );
 		wrMeta.PutString ( pQuery->m_sQuery );
 		wrMeta.PutString ( pQuery->m_sTags );
 		wrMeta.PutDword ( pQuery->m_dFilters.GetLength() );
 		wrMeta.PutDword ( pQuery->m_dFilterTree.GetLength() );
-		ARRAY_FOREACH ( iFilter, pQuery->m_dFilters )
+		for ( const CSphFilterSettings &tFilter : pQuery->m_dFilters )
 		{
-			const CSphFilterSettings & tFilter = pQuery->m_dFilters[iFilter];
 			wrMeta.PutString ( tFilter.m_sAttrName );
-			wrMeta.PutDword ( tFilter.m_bExclude );
-			wrMeta.PutDword ( tFilter.m_bHasEqualMin );
-			wrMeta.PutDword ( tFilter.m_bHasEqualMax );
+			wrMeta.PutDword ( !!tFilter.m_bExclude );
+			wrMeta.PutDword ( !!tFilter.m_bHasEqualMin );
+			wrMeta.PutDword ( !!tFilter.m_bHasEqualMax );
 			wrMeta.PutDword ( tFilter.m_eType );
 			wrMeta.PutDword ( tFilter.m_eMvaFunc );
 			wrMeta.PutBytes ( &tFilter.m_iMinValue, sizeof(tFilter.m_iMinValue) );
 			wrMeta.PutBytes ( &tFilter.m_iMaxValue, sizeof(tFilter.m_iMaxValue) );
 			wrMeta.PutDword ( tFilter.m_dValues.GetLength() );
 			wrMeta.PutDword ( tFilter.m_dStrings.GetLength() );
-			ARRAY_FOREACH ( j, tFilter.m_dValues )
-				wrMeta.PutBytes ( tFilter.m_dValues.Begin() + j, sizeof ( tFilter.m_dValues[j] ) );
-			ARRAY_FOREACH ( j, tFilter.m_dStrings )
-				wrMeta.PutString ( tFilter.m_dStrings[j] );
+			wrMeta.PutBytes ( tFilter.m_dValues.begin(), tFilter.m_dValues.GetLengthBytes());
+			for ( const CSphString& sString : tFilter.m_dStrings )
+				wrMeta.PutString ( sString );
 		}
-		ARRAY_FOREACH ( iTree, pQuery->m_dFilterTree )
+		for ( const FilterTreeItem_t &tItem : pQuery->m_dFilterTree )
 		{
-			const FilterTreeItem_t & tItem = pQuery->m_dFilterTree[iTree];
 			wrMeta.PutDword ( tItem.m_iLeft );
 			wrMeta.PutDword ( tItem.m_iRight );
 			wrMeta.PutDword ( tItem.m_iFilterItem );
@@ -12511,13 +12491,13 @@ void PercolateIndex_c::GetQueries ( const char * sFilterTags, bool bTagsEq, cons
 		dQueries.Reserve ( m_dStored.GetLength() );
 
 	StringBuilder_c tBuf;
-	m_tLock.ReadLock();
+	ScRL_t rLock ( m_tLock );
 
 	int iFrom = 0;
 	if ( iLimit>0 && iOffset>0 )
 		iFrom = Min ( iOffset, m_dStored.GetLength() );
 
-	for ( int i=iFrom; i<m_dStored.GetLength(); i++ )
+	for ( int i=iFrom; i<m_dStored.GetLength(); ++i )
 	{
 		const StoredQuery_t * pQuery = m_dStored[i].m_pQuery;
 		if ( dTags.GetLength() )
@@ -12548,17 +12528,15 @@ void PercolateIndex_c::GetQueries ( const char * sFilterTags, bool bTagsEq, cons
 		if ( iLimit>0 && dQueries.GetLength()==iLimit )
 			break;
 	}
-
-	m_tLock.Unlock();
 }
 
 bool PercolateIndex_c::Truncate ( CSphString & )
 {
 	m_tLock.WriteLock();
-	ARRAY_FOREACH ( i, m_dStored )
-		SafeDelete ( m_dStored[i].m_pQuery );
+	for ( auto& dStored : m_dStored )
+		SafeDelete ( dStored.m_pQuery );
 	m_dStored.Reset();
-	m_iTID++;
+	++m_iTID;
 	m_tLock.Unlock();
 
 	SaveMeta();

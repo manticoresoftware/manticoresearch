@@ -10813,6 +10813,8 @@ void BuildStatus ( VectorLike & dStatus )
 		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_SUGGEST] );
 	if ( dStatus.MatchAdd ( "command_json" ) )
 		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_JSON] );
+	if ( dStatus.MatchAdd ( "command_callpq" ) )
+		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iCommandCount[SEARCHD_COMMAND_CALLPQ] );
 	if ( dStatus.MatchAdd ( "agent_connect" ) )
 		dStatus.Add().SetSprintf ( FMT64, (int64_t) g_tStats.m_iAgentConnect );
 	if ( dStatus.MatchAdd ( "agent_retry" ) )
@@ -11276,6 +11278,7 @@ void HandleCommandSphinxql ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer
 void HandleCommandJson ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq, ThdDesc_t & tThd );
 void StatCountCommand ( SearchdCommand_e eCmd );
 void HandleCommandUserVar ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq );
+void HandleCommandCallPq ( CachedOutputBuffer_c &tOut, WORD uVer, InputBuffer_c &tReq );
 
 /// ping/pong exchange over API
 void HandleCommandPing ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c & tReq )
@@ -11491,6 +11494,7 @@ bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength
 		case SEARCHD_COMMAND_JSON:		HandleCommandJson ( tOut, uCommandVer, tBuf, tThd ); break;
 		case SEARCHD_COMMAND_PING:		HandleCommandPing ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_UVAR:		HandleCommandUserVar ( tOut, uCommandVer, tBuf ); break;
+		case SEARCHD_COMMAND_CALLPQ:	HandleCommandCallPq ( tOut, uCommandVer, tBuf ); break;
 		default:						assert ( 0 && "INTERNAL ERROR: unhandled command" ); break;
 	}
 
@@ -12285,86 +12289,6 @@ static void PercolateQuery ( const SqlStmt_t & tStmt, bool bReplace, ESphCollati
 		tOut.Ok ( 1, iWarnings );
 }
 
-static void SendPercolateReply ( const PercolateMatchResult_t & tRes, const CSphString & sWarning, const CSphString & sError, const CSphFixedVector<int64_t> & dDocids, SqlRowBuffer_c & tOut )
-{
-	if ( !sError.IsEmpty() )
-	{
-		tOut.Error ( NULL, sError.cstr() );
-		return;
-	}
-
-	bool bDumpDocs = tRes.m_bGetDocs;
-	bool bQuery = tRes.m_bGetQuery;
-
-	// result set header packet. We will attach EOF manually at the end.
-	int iColumns = bDumpDocs ? 2 : 1;
-	if ( bQuery )
-		iColumns += 3;
-	tOut.HeadBegin ( iColumns );
-
-	tOut.HeadColumn ( "UID", MYSQL_COL_LONGLONG, MYSQL_COL_UNSIGNED_FLAG );
-	if ( bDumpDocs )
-		tOut.HeadColumn ( "Documents", MYSQL_COL_STRING );
-	if ( bQuery )
-	{
-		tOut.HeadColumn ( "Query" );
-		tOut.HeadColumn ( "Tags" );
-		tOut.HeadColumn ( "Filters" );
-	}
-
-	// EOF packet is sent explicitly due to non-default params.
-	auto iWarns = sWarning.IsEmpty() ? 0 : 1;
-	tOut.HeadEnd ( false, iWarns );
-
-	CSphVector<int64_t> dTmpDocs;
-	int iDocOff = 0;
-	StringBuilder_c sDocs;
-	for ( const auto& tDesc : tRes.m_dQueryDesc )
-	{
-		tOut.PutNumAsString ( tDesc.m_uQID );
-		if ( bDumpDocs )
-		{
-			sDocs.StartBlock(",");
-			// document count + document id(s)
-			int iCount = (int)( tRes.m_dDocs[iDocOff] );
-			if ( dDocids.GetLength() ) // need de-duplicate docs
-			{
-				dTmpDocs.Resize ( iCount );
-				for ( int iDoc = 0; iDoc<iCount; iDoc++ )
-				{
-					int iRow = tRes.m_dDocs[iDocOff + 1 + iDoc];
-					dTmpDocs[iDoc] = dDocids[iRow];
-				}
-				dTmpDocs.Uniq();
-				for ( auto dTmpDoc : dTmpDocs )
-					sDocs.Appendf ( INT64_FMT, dTmpDoc );
-			} else
-			{
-				for ( int iDoc = 0; iDoc<iCount; ++iDoc )
-				{
-					int iRow = tRes.m_dDocs[iDocOff + 1 + iDoc];
-					sDocs.Appendf ( "%d", iRow );
-				}
-			}
-			iDocOff += iCount + 1;
-
-			tOut.PutString ( sDocs.cstr () );
-			sDocs.Clear();
-		}
-		if ( bQuery )
-		{
-			tOut.PutString ( tDesc.m_sQuery );
-			tOut.PutString ( tDesc.m_sTags );
-			tOut.PutString ( tDesc.m_sFilters );
-		}
-
-		tOut.Commit();
-	}
-
-
-	tOut.Eof ( false, iWarns );
-}
-
 struct PercolateOptions_t
 {
 	bool m_bGetDocs = false;
@@ -12372,6 +12296,7 @@ struct PercolateOptions_t
 	bool m_bJsonDocs = true;
 	bool m_bGetQuery = false;
 	CSphString m_sIdAlias;
+	CSphString m_sIndex;
 };
 
 
@@ -12435,16 +12360,13 @@ struct StringPtrTraits_t
 };
 
 
-static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVariant_t> & tLoc, const CSphString & sIdAlias,
-	int iRow, CSphFixedVector<const char*> & dFields, CSphMatchVariant & tDoc,
-	StringPtrTraits_t & tStrings, CSphVector<DWORD> & dMva, CSphString & sError, CSphString & sWarning )
+static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVariant_t> & tLoc,
+	const CSphString & sIdAlias, int iRow, CSphFixedVector<const char*> & dFields, CSphMatchVariant & tDoc,
+	StringPtrTraits_t & tStrings, CSphVector<DWORD> & dMva, Warner_c & sMsg )
 {
 	const cJSON * pRoot = cJSON_Parse ( sDoc );
 	if ( !pRoot )
-	{
-		sError.SetSprintf ( "bad JSON object at %d document", iRow+1 );
-		return false;
-	}
+		return sMsg.Err ( "bad JSON object at %d document", iRow+1 );
 
 	assert ( !tStrings.m_pJsonStorage );
 	tStrings.m_pJsonStorage = const_cast<cJSON *>( pRoot );
@@ -12485,8 +12407,12 @@ static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVari
 						if ( pChild->child && !sTmp.IsEmpty() )
 						{
 							// sphJsonParse must be terminated with a double zero however usual CSphString have SAFETY_GAP of 4 zeros
+							CSphString sWarning, sError;
 							if ( !String2JsonPack ( (char *)sTmp.cstr(), tStrings.m_dParserBuf, sError, sWarning ) )
-								return false;
+							{
+								sMsg.Warn ( sWarning );
+								return sMsg.Err ( sError );
+							}
 
 							if ( tStrings.m_dParserBuf.GetLength() )
 							{
@@ -12526,7 +12452,7 @@ static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVari
 							assert ( pElem );
 							if ( !cJSON_IsInteger ( pElem ) )
 							{
-								sWarning = "MVA elements should be integers";
+								sMsg.Warn ( "MVA elements should be integers" );
 								continue;
 							}
 
@@ -12547,7 +12473,7 @@ static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVari
 
 					} else
 					{
-						sWarning = "MVA item should be array";
+						sMsg.Warn ( "MVA item should be array" );
 					}
 
 					if ( !iStored )
@@ -12569,7 +12495,7 @@ static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVari
 		}
 
 		pChild = pChild->next;
-		iChildrenCount--;
+		--iChildrenCount;
 	}
 
 	return true;
@@ -12601,31 +12527,372 @@ static void FixParsedMva ( const CSphVector<DWORD> & dParsed, CSphVector<DWORD> 
 	}
 }
 
-static void PercolateMatchDocuments ( const StrVec_t & dDocs, const PercolateOptions_t & tOpts,
-	const CSphString & sIdAlias, const char * sStmt, SqlRowBuffer_c & tOut, CSphSessionAccum & tAcc,
-	PercolateIndex_i * pIndex, PercolateMatchResult_t & tMeta, CSphString & sWarning )
+class PqRequestBuilder_c : public IRequestBuilder_t
 {
-	CSphString sError;
+	const StrVec_t &m_dDocs;
+	const PercolateOptions_t &m_tOpts;
+	//	mutable CSphAtomic m_iWorker;
 
-	ISphRtAccum * pAccum = tAcc.GetAcc ( pIndex, sError );
-	if ( !sError.IsEmpty() )
+public:
+	explicit PqRequestBuilder_c ( const StrVec_t &dDocs, const PercolateOptions_t &tOpts )
+		: m_dDocs ( dDocs )
+		, m_tOpts ( tOpts )
+	{}
+
+	void BuildRequest ( const AgentConn_t &tAgent, CachedOutputBuffer_c &tOut ) const final
 	{
-		tOut.Error ( sStmt, sError.cstr() );
+		// it sends either all queries to each agent or sequence of queries to current agent
+
+//	auto iWorker = tAgent.m_iStoreTag;
+//	if ( iWorker<0 )
+//	{
+//		iWorker = ( int ) m_iWorker++;
+//		tAgent.m_iStoreTag = iWorker;
+//	}
+
+		const char * sIndex = tAgent.m_tDesc.m_sIndexes.cstr ();
+		APICommand_t tWr { tOut, SEARCHD_COMMAND_CALLPQ, VER_COMMAND_CALLPQ };
+
+		DWORD uFlags = 0;
+		if ( m_tOpts.m_bGetDocs )
+			uFlags = 1;
+		if ( m_tOpts.m_bGetQuery )
+			uFlags |= 2;
+		if ( m_tOpts.m_bJsonDocs )
+			uFlags |= 4;
+		if ( m_tOpts.m_bVerbose )
+			uFlags |= 8;
+
+		tOut.SendDword ( uFlags );
+		tOut.SendString ( m_tOpts.m_sIdAlias.cstr () );
+		tOut.SendString ( sIndex );
+		tOut.SendInt ( m_dDocs.GetLength () ); // fixme! sparsed send m.b.?
+		for ( const auto &dDoc : m_dDocs )
+			tOut.SendString ( dDoc.cstr () );
+	}
+};
+
+
+struct CPqResult : public iQueryResult
+{
+	PercolateMatchResult_t m_dResult;
+	CSphFixedVector<int64_t> m_dDocids { 0 }; // check whether it necessary at all or not
+
+	CPqResult() = default;
+	CPqResult ( CPqResult&& rhs ) noexcept
+		: m_dResult { std::move ( rhs.m_dResult )}
+		, m_dDocids { std::move ( rhs.m_dDocids )}
+	{}
+	CPqResult& operator= (CPqResult&& rhs) noexcept
+	{
+		m_dResult = std::move ( rhs.m_dResult );
+		m_dDocids = std::move ( rhs.m_dDocids );
+		return *this;
+	}
+
+	void Reset () final
+	{
+		m_dResult.Reset ();
+		m_dDocids.Reset (0);
+	}
+
+	bool HasWarnings () const final
+	{
+		return false; // Stub. fixme!
+	}
+};
+
+void MergePqResults ( const VecTraits_T<CPqResult*>& dChunks, CPqResult& dRes )
+{
+	if ( dChunks.GetLength ()==1 ) // short path
+	{
+		dRes = std::move ( *dChunks[0] );
 		return;
 	}
-	const CSphSchema & tSchema = pIndex->GetInternalSchema();
-	int iFieldsCount = tSchema.GetFieldsCount();
-	CSphFixedVector<const char*> dFields ( iFieldsCount );
+}
+
+struct PqReplyParser_t : public IReplyParser_t
+{
+	bool ParseReply ( MemInputBuffer_c &tReq, AgentConn_t &tAgent ) const final
+	{
+		//	auto &dQueries = m_pWorker->m_dQueries;
+		//	int iDoc = m_pWorker->m_dTasks[tAgent.m_iStoreTag].m_iHead;
+
+		auto pResult = ( CPqResult * ) tAgent.m_pResult.Ptr ();
+		if ( !pResult )
+		{
+			pResult = new CPqResult;
+			tAgent.m_pResult = pResult;
+		}
+
+		auto &dResult = pResult->m_dResult;
+		auto uFlags = tReq.GetDword ();
+		bool bDumpDocs = uFlags & 1;
+		bool bQuery = uFlags & 2;
+		bool bDeduplicatedDocs = uFlags & 4;
+
+		dResult.m_bGetDocs = bDumpDocs;
+		dResult.m_bGetQuery = bQuery;
+		CSphVector<int> dDocs;
+		CSphVector<int64_t> dDocids;
+
+		int iRows = tReq.GetInt ();
+		dResult.m_dQueryDesc.Reset ( iRows );
+		for ( auto &tDesc : dResult.m_dQueryDesc )
+		{
+			tDesc.m_uQID = tReq.GetUint64 ();
+			if ( bDumpDocs )
+			{
+				int iCount = tReq.GetInt ();
+				dDocs.Add ( iCount );
+				dDocs.Add ( 0 );
+				if ( bDeduplicatedDocs )
+				{
+					for ( int iDoc = 0; iDoc<iCount; ++iDoc )
+					{
+						dDocs.Add ( dDocids.GetLength () );
+						dDocids.Add ( ( int64_t ) tReq.GetUint64 () );
+					}
+				} else
+				{
+					for ( int iDoc = 0; iDoc<iCount; ++iDoc )
+						dDocs.Add ( tReq.GetInt () );
+				}
+			}
+
+			if ( bQuery )
+			{
+				tDesc.m_sQuery = tReq.GetString ();
+				tDesc.m_sTags = tReq.GetString ();
+				tDesc.m_sFilters = tReq.GetString ();
+			}
+		}
+
+		// meta
+		dResult.m_tmTotal = tReq.GetUint64 ();
+		dResult.m_tmSetup = tReq.GetUint64 ();
+		dResult.m_iQueriesMatched = tReq.GetInt();
+		dResult.m_iQueriesFailed = tReq.GetInt ();
+		dResult.m_iDocsMatched = tReq.GetInt ();
+		dResult.m_iTotalQueries = tReq.GetInt ();
+		dResult.m_iOnlyTerms = tReq.GetInt ();
+		dResult.m_iEarlyOutQueries = tReq.GetInt ();
+		auto iDts = tReq.GetInt();
+		dResult.m_dQueryDT.Reset ( iDts );
+		for ( int& iDt : dResult.m_dQueryDT )
+			iDt = tReq.GetInt();
+
+		dResult.m_sMessages.Warn ( tReq.GetString () );
+
+		auto iDocs = dDocs.GetLength ();
+		dResult.m_dDocs.Set ( dDocs.LeakData (), iDocs );
+
+		if ( !dDocids.IsEmpty () )
+		{
+			iDocs = dDocids.GetLength ();
+			pResult->m_dDocids.Set ( dDocids.LeakData (), iDocs );
+		}
+
+		return true;
+	}
+};
+
+static void SendAPIPercolateReply ( CachedOutputBuffer_c &tOut, const CPqResult &tResult )
+{
+	APICommand_t dCallPq ( tOut, SEARCHD_OK, VER_COMMAND_CALLPQ );
+
+	CSphVector<int64_t> dTmpDocs;
+	int iDocOff = -1;
+
+	const PercolateMatchResult_t &tRes = tResult.m_dResult;
+	const CSphFixedVector<int64_t> &dDocids = tResult.m_dDocids;
+	bool bHasDocids = !dDocids.IsEmpty ();
+	bool bDumpDocs = tRes.m_bGetDocs;
+	bool bQuery = tRes.m_bGetQuery;
+
+	DWORD uFlags = 0;
+
+	if ( bDumpDocs )
+		uFlags = 1;
+	if ( bQuery )
+		uFlags |=2;
+	if ( bHasDocids )
+		uFlags |=4;
+
+	tOut.SendDword ( uFlags );
+
+	tOut.SendInt ( tRes.m_dQueryDesc.GetLength () );
+	for ( const auto &tDesc : tRes.m_dQueryDesc )
+	{
+		tOut.SendUint64 ( tDesc.m_uQID );
+		if ( bDumpDocs )
+		{
+			// document count + document id(s)
+			auto iCount = ( int ) ( tRes.m_dDocs[++iDocOff] );
+			if ( bHasDocids ) // need de-duplicate docs
+			{
+				dTmpDocs.Resize ( iCount );
+				for ( int iDoc = 0; iDoc<iCount; ++iDoc )
+				{
+					int iRow = tRes.m_dDocs[++iDocOff];
+					dTmpDocs[iDoc] = dDocids[iRow];
+				}
+				dTmpDocs.Uniq ();
+				tOut.SendInt ( dTmpDocs.GetLength());
+				for ( auto dTmpDoc : dTmpDocs )
+					tOut.SendUint64 ( dTmpDoc );
+			} else
+			{
+				tOut.SendInt ( iCount );
+				for ( int iDoc = 0; iDoc<iCount; ++iDoc )
+					tOut.SendInt ( tRes.m_dDocs[++iDocOff] );
+			}
+		}
+		if ( bQuery )
+		{
+			tOut.SendString ( tDesc.m_sQuery.cstr() );
+			tOut.SendString ( tDesc.m_sTags.cstr () );
+			tOut.SendString ( tDesc.m_sFilters.cstr () );
+		}
+	}
+
+	// send meta
+	tOut.SendUint64 ( tRes.m_tmTotal );
+	tOut.SendUint64 ( tRes.m_tmSetup );
+	tOut.SendInt ( tRes.m_iQueriesMatched );
+	tOut.SendInt ( tRes.m_iQueriesFailed );
+	tOut.SendInt ( tRes.m_iDocsMatched );
+	tOut.SendInt ( tRes.m_iTotalQueries );
+	tOut.SendInt ( tRes.m_iOnlyTerms );
+	tOut.SendInt ( tRes.m_iEarlyOutQueries );
+	tOut.SendInt ( tRes.m_dQueryDT.GetLength () );
+	for ( int iDT : tRes.m_dQueryDT )
+		tOut.SendInt ( iDT );
+
+	tOut.SendString ( tRes.m_sMessages.sWarning () );
+}
+
+static void SendMysqlPercolateReply ( SqlRowBuffer_c &tOut, const CPqResult &tResult )
+{
+	// shortcuts
+	const PercolateMatchResult_t &tRes = tResult.m_dResult;
+	const CSphFixedVector<int64_t> &dDocids = tResult.m_dDocids;
+
+	bool bDumpDocs = tRes.m_bGetDocs;
+	bool bQuery = tRes.m_bGetQuery;
+
+	// result set header packet. We will attach EOF manually at the end.
+	int iColumns = bDumpDocs ? 2 : 1;
+	if ( bQuery )
+		iColumns += 3;
+	tOut.HeadBegin ( iColumns );
+
+	tOut.HeadColumn ( "UID", MYSQL_COL_LONGLONG, MYSQL_COL_UNSIGNED_FLAG );
+	if ( bDumpDocs )
+		tOut.HeadColumn ( "Documents", MYSQL_COL_STRING );
+	if ( bQuery )
+	{
+		tOut.HeadColumn ( "Query" );
+		tOut.HeadColumn ( "Tags" );
+		tOut.HeadColumn ( "Filters" );
+	}
+
+	// EOF packet is sent explicitly due to non-default params.
+	auto iWarns = tRes.m_sMessages.WarnEmpty () ? 0 : 1;
+	tOut.HeadEnd ( false, iWarns );
+
+	CSphVector<int64_t> dTmpDocs;
+	int iDocOff = -1;
+	StringBuilder_c sDocs;
+	for ( const auto &tDesc : tRes.m_dQueryDesc )
+	{
+		tOut.PutNumAsString ( tDesc.m_uQID );
+		if ( bDumpDocs )
+		{
+			sDocs.StartBlock ( "," );
+			// document count + document id(s)
+			auto iCount = ( int ) ( tRes.m_dDocs[++iDocOff] );
+			if ( dDocids.GetLength () ) // need de-duplicate docs
+			{
+				dTmpDocs.Resize ( iCount );
+				for ( int iDoc = 0; iDoc<iCount; ++iDoc )
+				{
+					int iRow = tRes.m_dDocs[++iDocOff];
+					dTmpDocs[iDoc] = dDocids[iRow];
+				}
+				dTmpDocs.Uniq ();
+				for ( auto dTmpDoc : dTmpDocs )
+					sDocs.Sprintf ( "%l", dTmpDoc );
+			} else
+			{
+				for ( int iDoc = 0; iDoc<iCount; ++iDoc )
+				{
+					int iRow = tRes.m_dDocs[++iDocOff];
+					sDocs.Sprintf ( "%d", iRow );
+				}
+			}
+
+			tOut.PutString ( sDocs.cstr () );
+			sDocs.Clear ();
+		}
+		if ( bQuery )
+		{
+			tOut.PutString ( tDesc.m_sQuery );
+			tOut.PutString ( tDesc.m_sTags );
+			tOut.PutString ( tDesc.m_sFilters );
+		}
+
+		tOut.Commit ();
+	}
+
+	tOut.Eof ( false, iWarns );
+}
+
+// process one(!) local(!) pq index
+static void PQLocalMatch ( const StrVec_t &dDocs, const CSphString& sIndex, const PercolateOptions_t & tOpt,
+	CSphSessionAccum &tAcc, CPqResult &tResult )
+{
+	CSphString sWarning, sError;
+	auto &sMsg = tResult.m_dResult.m_sMessages;
+	tResult.m_dResult.m_bGetDocs = tOpt.m_bGetDocs;
+	tResult.m_dResult.m_bVerbose = tOpt.m_bVerbose;
+	tResult.m_dResult.m_bGetQuery = tOpt.m_bGetQuery;
+	sMsg.Clear ();
+
+	ServedDescRPtr_c pServed ( GetServed ( sIndex ) );
+	if ( !pServed || !pServed->m_pIndex )
+	{
+		sMsg.Err ( "unknown local index '%s' in search request", sIndex.cstr () );
+		return;
+	}
+
+	if ( pServed->m_eType!=eITYPE::PERCOLATE )
+	{
+		sMsg.Err ( "index '%s' is not percolate", sIndex.cstr () );
+		return;
+	}
+
+	auto pIndex = ( PercolateIndex_i * ) pServed->m_pIndex;
+	ISphRtAccum * pAccum = tAcc.GetAcc ( pIndex, sError );
+	sMsg.Err ( sError );
+
+	if ( !sMsg.ErrEmpty () )
+		return;
+
+
+	const CSphSchema &tSchema = pIndex->GetInternalSchema ();
+	int iFieldsCount = tSchema.GetFieldsCount ();
+	CSphFixedVector<const char *> dFields ( iFieldsCount );
 	CSphString sTmp;
-	dFields.Fill ( sTmp.scstr() );
+	dFields.Fill ( sTmp.scstr () );
 
 	// set defaults
 	CSphMatchVariant tDoc;
-	tDoc.Reset ( tSchema.GetRowSize() );
-	int iAttrsCount = tSchema.GetAttrsCount();
-	for ( int i=0; i<iAttrsCount; i++ )
+	tDoc.Reset ( tSchema.GetRowSize () );
+	int iAttrsCount = tSchema.GetAttrsCount ();
+	for ( int i = 0; i<iAttrsCount; i++ )
 	{
-		const CSphColumnInfo & tCol = tSchema.GetAttr ( i );
+		const CSphColumnInfo &tCol = tSchema.GetAttr ( i );
 		CSphAttrLocator tLoc = tCol.m_tLocator;
 		tLoc.m_bDynamic = true;
 		tDoc.SetDefaultAttr ( tLoc, tCol.m_eAttrType );
@@ -12634,11 +12901,11 @@ static void PercolateMatchDocuments ( const StrVec_t & dDocs, const PercolateOpt
 	int iStrCounter = 0;
 	int iMvaCounter = 0;
 	CSphHash<SchemaItemVariant_t> hSchemaLocators;
-	if ( tOpts.m_bJsonDocs )
+	if ( tOpt.m_bJsonDocs )
 	{
-		for ( int i=0; i<iAttrsCount; ++i )
+		for ( int i = 0; i<iAttrsCount; ++i )
 		{
-			const CSphColumnInfo & tCol = tSchema.GetAttr(i);
+			const CSphColumnInfo &tCol = tSchema.GetAttr ( i );
 			SchemaItemVariant_t tAttr;
 			tAttr.m_tLoc = tCol.m_tLocator;
 			tAttr.m_tLoc.m_bDynamic = true;
@@ -12648,30 +12915,31 @@ static void PercolateMatchDocuments ( const StrVec_t & dDocs, const PercolateOpt
 			if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET )
 				tAttr.m_iMva = iMvaCounter++;
 
-			hSchemaLocators.Add ( sphFNV64 ( tCol.m_sName.cstr() ), tAttr );
+			hSchemaLocators.Add ( sphFNV64 ( tCol.m_sName.cstr () ), tAttr );
 		}
-		for ( int i=0; i<iFieldsCount; i++ )
+		for ( int i = 0; i<iFieldsCount; ++i )
 		{
-			const CSphColumnInfo & tField = tSchema.GetField ( i );
+			const CSphColumnInfo &tField = tSchema.GetField ( i );
 			SchemaItemVariant_t tAttr;
 			tAttr.m_iField = i;
-			hSchemaLocators.Add ( sphFNV64 ( tField.m_sName.cstr() ), tAttr );
+			hSchemaLocators.Add ( sphFNV64 ( tField.m_sName.cstr () ), tAttr );
 		}
 	} else
 	{
 		// even withoout JSON docs MVA should match to schema definition on inserting data into accumulator
-		for ( int i=0; i<iAttrsCount; i++ )
+		for ( int i = 0; i<iAttrsCount; ++i )
 		{
-			const CSphColumnInfo & tCol = tSchema.GetAttr(i);
+			const CSphColumnInfo &tCol = tSchema.GetAttr ( i );
 			if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET )
-				iMvaCounter++;
+				++iMvaCounter;
 		}
 	}
 
+
 	int iDocsNoIdCount = 0;
-	bool bAutoId = tOpts.m_sIdAlias.IsEmpty();
-	CSphFixedVector<int64_t> dDocids ( bAutoId ? 0 : dDocs.GetLength()+1 );
-	int64_t uSeqDocid = 1;
+	bool bAutoId = tOpt.m_sIdAlias.IsEmpty ();
+	tResult.m_dDocids.Reset ( bAutoId ? 0 : dDocs.GetLength () + 1 );
+	SphDocID_t uSeqDocid = 1;
 
 	CSphFixedVector<const char *> dStrings ( iStrCounter );
 	StringPtrTraits_t tStrings;
@@ -12684,85 +12952,203 @@ static void PercolateMatchDocuments ( const StrVec_t & dDocs, const PercolateOpt
 	{
 		// doc-id
 		tDoc.m_uDocID = 0;
-		dFields[0] = dDocs[iDoc].cstr();
+		dFields[0] = dDocs[iDoc].cstr ();
 
 		dMvaParsed.Resize ( iMvaCounter );
 		dMvaParsed.Fill ( 0 );
 
-		if ( tOpts.m_bJsonDocs )
+		if ( tOpt.m_bJsonDocs )
 		{
 			// reset all back to defaults
-			dFields.Fill ( sTmp.scstr() );
-			for ( int i=0; i<iAttrsCount; i++ )
+			dFields.Fill ( sTmp.scstr () );
+			for ( int i = 0; i<iAttrsCount; ++i )
 			{
-				const CSphColumnInfo & tCol = tSchema.GetAttr ( i );
+				const CSphColumnInfo &tCol = tSchema.GetAttr ( i );
 				CSphAttrLocator tLoc = tCol.m_tLocator;
 				tLoc.m_bDynamic = true;
 				tDoc.SetDefaultAttr ( tLoc, tCol.m_eAttrType );
 			}
-			tStrings.Reset();
+			tStrings.Reset ();
 
-			if ( !ParseJsonDocument ( dDocs[iDoc].cstr(), hSchemaLocators, tOpts.m_sIdAlias, iDoc, dFields, tDoc, tStrings,
-				dMvaParsed, sError, sWarning ) )
+			if ( !ParseJsonDocument ( dDocs[iDoc].cstr (), hSchemaLocators, tOpt.m_sIdAlias, iDoc,
+						dFields, tDoc, tStrings, dMvaParsed, sMsg ) )
 				break;
 
 			tStrings.GetPointers ( dStrings );
 		}
 		FixParsedMva ( dMvaParsed, dMva, iMvaCounter );
 
-		if ( !sError.IsEmpty() )
+		if ( !sMsg.ErrEmpty () )
 			break;
 
-		// in user-provides-id mode let's skip all docs without id
-		if ( !bAutoId && !tDoc.m_uDocID )
-		{
-			++iDocsNoIdCount;
-			continue;
-		}
 
-		// store provided doc-id for result set sending
 		if ( !bAutoId )
-			dDocids[uSeqDocid] = (int64_t)tDoc.m_uDocID;
+		{
+			// in user-provides-id mode let's skip all docs without id
+			if ( !tDoc.m_uDocID )
+			{
+				++iDocsNoIdCount;
+				continue;
+			}
+
+			// store provided doc-id for result set sending
+			tResult.m_dDocids[uSeqDocid] = ( int64_t ) tDoc.m_uDocID;
+		}
 
 		// PQ work with sequential document numbers, 0 element unused
 		tDoc.m_uDocID = uSeqDocid++;
 
 		// add document
-		pIndex->AddDocument ( dFields, tDoc, true,
-			sTokenFilterOpts, dStrings.Begin(), dMva, sError, sWarning, pAccum );
+		pIndex->AddDocument ( dFields, tDoc, true, sTokenFilterOpts, dStrings.Begin(), dMva, sError, sWarning, pAccum );
+		sMsg.Err ( sError );
+		sMsg.Warn ( sWarning );
 
-		if ( !sError.IsEmpty() )
+		if ( !sMsg.ErrEmpty () )
 			break;
 	}
 
 	// fire exit
-	if ( !sError.IsEmpty() )
+	if ( !sMsg.ErrEmpty () )
 	{
 		pIndex->RollBack ( pAccum ); // clean up collected data
-		tOut.Error ( sStmt, sError.cstr() );
 		return;
 	}
 
-	PercolateMatchResult_t tRes;
-	tRes.m_bGetDocs = tOpts.m_bGetDocs;
-	tRes.m_bVerbose = tOpts.m_bVerbose;
-	tRes.m_bGetQuery = tOpts.m_bGetQuery;
-
-	pIndex->MatchDocuments ( pAccum, tRes );
+	pIndex->MatchDocuments ( pAccum, tResult.m_dResult );
 
 	if ( iDocsNoIdCount )
-		sWarning.SetSprintf ( "skipped %d documents without id field '%s'", iDocsNoIdCount, sIdAlias.cstr() );
-	if ( tRes.m_iQueriesFailed )
-		sWarning.SetSprintf ( "%d queries failed", tRes.m_iQueriesFailed );
+		sMsg.Warn ( "skipped %d documents without id field '%s'", iDocsNoIdCount, tOpt.m_sIdAlias.cstr () );
 
-	SendPercolateReply ( tRes, sWarning, sError, dDocids, tOut );
-	tMeta.Swap ( tRes );
 }
 
-
-static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSessionAccum & tAcc, PercolateMatchResult_t & tMeta, CSphString & sWarning )
+static void PercolateMatchDocuments ( const StrVec_t & dDocs, const PercolateOptions_t & tOpts,
+	CSphSessionAccum & tAcc, CPqResult &tResult )
 {
-	CSphString sError;
+	CSphString sIndex = tOpts.m_sIndex;
+	CSphString sWarning, sError;
+
+	StrVec_t dLocalIndexes;
+	auto * pLocalIndexes = &dLocalIndexes;
+
+	VecRefPtrsAgentConn_t dAgents;
+	auto pDist = GetDistr ( sIndex );
+	if ( pDist )
+	{
+		for ( auto * pAgent : pDist->m_dAgents )
+		{
+			auto * pConn = new AgentConn_t;
+			pConn->SetMultiAgent ( sIndex, pAgent );
+			pConn->m_iMyConnectTimeout = pDist->m_iAgentConnectTimeout;
+			pConn->m_iMyQueryTimeout = pDist->m_iAgentQueryTimeout;
+			dAgents.Add ( pConn );
+		}
+
+		pLocalIndexes = &pDist->m_dLocal;
+	} else
+		dLocalIndexes.Add ( sIndex );
+
+	PqRequestBuilder_c tReqBuilder ( dDocs, tOpts );
+	PqReplyParser_t tParser;
+	CSphRefcountedPtr<IRemoteAgentsObserver> tReporter ( GetObserver () );
+	ScheduleDistrJobs ( dAgents, &tReqBuilder, &tParser, tReporter );
+
+	LazyVector <CPqResult> dLocalResults;
+	for ( const auto & sPqIndex : *pLocalIndexes )
+	{
+		auto & dResult = dLocalResults.Add();
+		PQLocalMatch ( dDocs, sPqIndex, tOpts, tAcc, dResult );
+	}
+
+	tReporter->Finish ();
+
+	auto iSuccesses = ( int ) tReporter->GetSucceeded ();
+	auto iAgentsDone = ( int ) tReporter->GetFinished ();
+
+	LazyVector<CPqResult*> dAllResults;
+	for ( auto & dLocalRes : dLocalResults )
+		dAllResults.Add ( &dLocalRes );
+
+	CPqResult dMsgs; // fake resultset just to grab errors from remotes
+	if ( iAgentsDone>iSuccesses )
+		dAllResults.Add ( &dMsgs );
+
+	if ( iAgentsDone )
+	{
+		for ( auto * pAgent : dAgents )
+		{
+			if ( !pAgent->m_bSuccess )
+			{
+				dMsgs.m_dResult.m_sMessages.Err ( pAgent->m_sFailure );
+				continue;
+			}
+
+			auto pResult = ( CPqResult * ) pAgent->m_pResult.Ptr ();
+			if ( !pResult )
+				continue;
+
+			dAllResults.Add ( pResult );
+		}
+	}
+
+	MergePqResults ( dAllResults, tResult );
+
+	if ( iSuccesses!=iAgentsDone )
+	{
+		sphWarning ( "Remote PQ: some of the agents didn't answered: %d queried, %d finished, %d succeeded"
+					 , dAgents.GetLength (), iAgentsDone, iSuccesses );
+
+	}
+}
+
+/// call PQ command over API
+void HandleCommandCallPq ( CachedOutputBuffer_c &tOut, WORD uVer, InputBuffer_c &tReq ) REQUIRES ( HandlerThread )
+{
+	if ( !CheckCommandVersion ( uVer, VER_COMMAND_CALLPQ, tOut ) )
+		return;
+
+	// options
+	PercolateOptions_t tOpts;
+
+	DWORD uFlags = tReq.GetDword ();
+	tOpts.m_bGetDocs	= bool (uFlags & 1);
+	tOpts.m_bGetQuery	= bool (uFlags & 2);
+	tOpts.m_bJsonDocs	= bool (uFlags & 4);
+	tOpts.m_bVerbose	= bool (uFlags & 8);
+
+	tOpts.m_sIdAlias = tReq.GetString();
+
+	// index name
+	tOpts.m_sIndex = tReq.GetString();
+
+	// document(s)
+	StrVec_t dDocs ( tReq.GetInt() );
+	for ( auto & sDoc : dDocs )
+		sDoc = tReq.GetString();
+
+	// working
+	CSphSessionAccum tAcc ( true );
+	CPqResult tResult;
+
+	PercolateMatchDocuments ( dDocs, tOpts, tAcc, tResult );
+
+	if ( tResult.m_dResult.m_iQueriesFailed )
+		tResult.m_dResult.m_sMessages.Err ( "%d queries failed", tResult.m_dResult.m_iQueriesFailed );
+
+	if ( !tResult.m_dResult.m_sMessages.ErrEmpty () )
+	{
+		SendErrorReply ( tOut, "%s", tResult.m_dResult.m_sMessages.sError() );
+		return;
+	}
+
+	SendAPIPercolateReply ( tOut, tResult );
+}
+
+static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSessionAccum & tAcc,
+	CPqResult & tResult )
+{
+
+	PercolateMatchResult_t &tRes = tResult.m_dResult;
+	CSphFixedVector<int64_t> &dDocids = tResult.m_dDocids;
 
 	// check arguments
 	// index name, document | documents list, [named opts]
@@ -12771,46 +13157,44 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 		tOut.Error ( tStmt.m_sStmt, "PQ() expectes exactly 2 arguments (index, document(s))" );
 		return;
 	}
-	if ( tStmt.m_dInsertValues[0].m_iType!=TOK_QUOTED_STRING )
+	auto &dStmtIndex = tStmt.m_dInsertValues[0];
+	auto &dStmtDocs = tStmt.m_dInsertValues[1];
+
+	if ( dStmtIndex.m_iType!=TOK_QUOTED_STRING )
 	{
 		tOut.Error ( tStmt.m_sStmt, "PQ() argument 1 must be a string" );
 		return;
 	}
-	if ( tStmt.m_dInsertValues[1].m_iType!=TOK_QUOTED_STRING && tStmt.m_dInsertValues[1].m_iType!=TOK_CONST_STRINGS )
+	if ( dStmtDocs.m_iType!=TOK_QUOTED_STRING && dStmtDocs.m_iType!=TOK_CONST_STRINGS )
 	{
 		tOut.Error ( tStmt.m_sStmt, "PQ() argument 2 must be a string or a string list" );
 		return;
 	}
 
-	// index name 1st
-	CSphString sIndex = tStmt.m_dInsertValues[0].m_sVal;
-
-	// document(s) 2nd
+	// document(s)
 	StrVec_t dDocs;
-	if ( tStmt.m_dInsertValues[1].m_iType==TOK_QUOTED_STRING )
-	{
-		dDocs.Add ( tStmt.m_dInsertValues[1].m_sVal );
-	} else
-	{
+	if ( dStmtDocs.m_iType==TOK_QUOTED_STRING )
+		dDocs.Add ( dStmtDocs.m_sVal );
+	else
 		dDocs.SwapData ( tStmt.m_dCallStrings );
-	}
 
 	// options last
-	CSphString sIdAlias;
+	CSphString sError;
 	PercolateOptions_t tOpts;
+	tOpts.m_sIndex = dStmtIndex.m_sVal;
 	ARRAY_FOREACH ( i, tStmt.m_dCallOptNames )
 	{
 		CSphString & sOpt = tStmt.m_dCallOptNames[i];
 		const SqlInsert_t & v = tStmt.m_dCallOptValues[i];
 
 		sOpt.ToLower();
-		int iExpType = -1;
+		int iExpType = TOK_CONST_INT;
 
-		if ( sOpt=="docs" )				{ tOpts.m_bGetDocs = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
-		else if ( sOpt=="verbose" )		{ tOpts.m_bVerbose = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
-		else if ( sOpt=="docs_json" )	{ tOpts.m_bJsonDocs = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
-		else if ( sOpt=="query" )		{ tOpts.m_bGetQuery = ( v.m_iVal!=0 ); iExpType = TOK_CONST_INT; }
-		else if ( sOpt=="docs_id" )		{ sIdAlias = v.m_sVal; ; iExpType = TOK_QUOTED_STRING; }
+		if ( sOpt=="docs_id" ) 			{ tOpts.m_sIdAlias = v.m_sVal; iExpType = TOK_QUOTED_STRING; }
+		else if ( sOpt=="docs" )		tOpts.m_bGetDocs = ( v.m_iVal!=0 );
+		else if ( sOpt=="verbose" )		tOpts.m_bVerbose = ( v.m_iVal!=0 );
+		else if ( sOpt=="docs_json" )	tOpts.m_bJsonDocs = ( v.m_iVal!=0 );
+		else if ( sOpt=="query" )		tOpts.m_bGetQuery = ( v.m_iVal!=0 );
 		else
 		{
 			sError.SetSprintf ( "unknown option %s", sOpt.cstr() );
@@ -12831,29 +13215,26 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 		return;
 	}
 
-	// get index
-	auto pIndex = GetServed ( sIndex );
-	if ( !pIndex )
+	dDocids.Reset ( tOpts.m_sIdAlias.IsEmpty () ? 0 : dDocs.GetLength () + 1 );
+	tRes.Reset();
+
+	PercolateMatchDocuments ( dDocs, tOpts, tAcc, tResult );
+
+	if ( !tRes.m_sMessages.ErrEmpty () )
 	{
-		sError.SetSprintf ( "no such index '%s'", sIndex.cstr() );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
+		tRes.m_sMessages.MoveAllTo ( sError );
+		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
 		return;
 	}
 
-	ServedDescRPtr_c pServed ( pIndex );
-
-	if ( pServed->m_eType!=eITYPE::PERCOLATE )
-	{
-		sError.SetSprintf ( "index '%s' is not percolate", sIndex.cstr());
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
-		return;
-	}
-
-	PercolateMatchDocuments ( dDocs, tOpts, sIdAlias, tStmt.m_sStmt, tOut, tAcc, (PercolateIndex_i *)pServed->m_pIndex, tMeta, sWarning );
+	SendMysqlPercolateReply ( tOut, tResult );
 }
 
-void HandleMysqlPercolateMeta ( const PercolateMatchResult_t & tMeta, const CSphString & sWarning, SqlRowBuffer_c & tOut )
+void HandleMysqlPercolateMeta ( const CPqResult &tResult, const CSphString & sWarning, SqlRowBuffer_c & tOut )
 {
+	// shortcuts
+	const PercolateMatchResult_t &tMeta = tResult.m_dResult;
+
 	tOut.HeadTuplet ( "Name", "Value" );
 	tOut.DataTupletf ( "Total", "%.3D sec", tMeta.m_tmTotal / 1000 );
 	if ( tMeta.m_tmSetup )
@@ -16785,7 +17166,7 @@ private:
 	CSphString			m_sError;
 	CSphQueryResultMeta m_tLastMeta;
 	CSphSessionAccum	m_tAcc;
-	PercolateMatchResult_t m_tPercolateMeta;
+	CPqResult			m_tPercolateMeta;
 	SqlStmt_e			m_eLastStmt { STMT_DUMMY };
 	bool				m_bFederatedUser = false;
 	CSphString			m_sFederatedQuery;
@@ -17016,8 +17397,10 @@ public:
 				HandleMysqlCallSuggest ( tOut, *pStmt, true );
 			} else if ( pStmt->m_sCallProc=="PQ" )
 			{
-				m_tLastMeta.m_sWarning = "";
-				HandleMysqlCallPQ ( tOut, *pStmt, m_tAcc, m_tPercolateMeta, m_tLastMeta.m_sWarning );
+				StatCountCommand ( SEARCHD_COMMAND_CALLPQ );
+				HandleMysqlCallPQ ( tOut, *pStmt, m_tAcc, m_tPercolateMeta );
+				m_tPercolateMeta.m_dResult.m_sMessages.MoveWarningsTo ( m_tLastMeta.m_sWarning );
+				m_tPercolateMeta.m_dDocids.Reset ( 0 ); // free occupied mem
 			} else
 			{
 				m_sError.SetSprintf ( "no such builtin procedure %s", pStmt->m_sCallProc.cstr() );
@@ -21535,7 +21918,7 @@ NetEvent_e NetReceiveDataAPI_t::Tick ( DWORD uGotEvents, CSphVector<ISphNetActio
 				tOut.SendString ( g_sMaxedOutMessage );
 
 				tOut.SwapData ( m_tState->m_dBuf );
-				NetSendData_t * pSend = new NetSendData_t ( m_tState.LeakPtr(), PROTO_SPHINX );
+				auto * pSend = new NetSendData_t ( m_tState.LeakPtr(), PROTO_SPHINX );
 				dNextTick.Add ( pSend );
 
 			} else

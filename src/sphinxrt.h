@@ -124,14 +124,12 @@ struct PercolateQueryDesc
 	void Swap ( PercolateQueryDesc & tOther );
 };
 
-struct PercolateMatchResult_t
+struct PercolateMatchResult_t : ISphNoncopyable
 {
 	bool m_bGetDocs = false;
 	bool m_bGetQuery = false;
 	bool m_bGetFilters = true;
 
-	CSphFixedVector<PercolateQueryDesc> m_dQueryDesc {0};
-	CSphFixedVector<int> m_dDocs {0};
 	int m_iQueriesMatched = 0;
 	int m_iQueriesFailed = 0;
 	int m_iDocsMatched = 0;
@@ -139,13 +137,22 @@ struct PercolateMatchResult_t
 
 	// verbose data
 	bool m_bVerbose = false;
-	CSphFixedVector<int> m_dQueryDT {0}; // microsecond time per query
+
 	int	m_iEarlyOutQueries = 0;
 	int	m_iTotalQueries = 0;
 	int m_iOnlyTerms = 0;
 	int64_t m_tmSetup = 0;
 
-	void Swap ( PercolateMatchResult_t & tOther );
+	Warner_c m_sMessages;
+	CSphFixedVector<PercolateQueryDesc> m_dQueryDesc { 0 };
+	CSphFixedVector<int> m_dDocs { 0 };
+	CSphFixedVector<int> m_dQueryDT { 0 }; // microsecond time per query
+
+	PercolateMatchResult_t() = default;
+	PercolateMatchResult_t ( PercolateMatchResult_t&& rhs ) noexcept;
+	PercolateMatchResult_t& operator = ( PercolateMatchResult_t&& rhs ) noexcept;
+
+	void Reset ();
 };
 
 class PercolateIndex_i : public ISphRtIndex
@@ -180,13 +187,8 @@ typedef void BinlogFlushWork_t ( void * pLog );
 
 struct BinlogFlushInfo_t
 {
-	void * m_pLog;
-	BinlogFlushWork_t * m_fnWork;
-
-	BinlogFlushInfo_t ()
-		: m_pLog ( NULL )
-		, m_fnWork ( NULL )
-	{}
+	void * m_pLog = nullptr;
+	BinlogFlushWork_t * m_fnWork = nullptr;
 };
 
 /// replay stored binlog

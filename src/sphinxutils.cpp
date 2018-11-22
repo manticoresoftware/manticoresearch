@@ -2165,7 +2165,7 @@ static const char g_sSourceTail[] = "> source.txt\n";
 static const char * g_pArgv[128] = { "addr2line", "-e", "./searchd", "0x0", NULL };
 static char g_sNameBuf[512] = {0};
 static CSphString g_sBinaryName;
-static bool g_bDumpGDB = true;
+static bool g_bHaveJemalloc = true;
 
 bool IsDebuggerPresent()
 {
@@ -2485,7 +2485,7 @@ void sphBacktrace ( int iFD, bool bSafe )
 			"(http://docs.manticoresearch.com/latest/html/reporting_bugs.html)" );
 
 	// wo jemalloc allocator might deadlock in case of crash at free function
-	if ( g_bDumpGDB && DumpGdb ( iFD ) )
+	if ( g_bHaveJemalloc && DumpGdb ( iFD ) )
 		return;
 	// convert all BT addresses to source code lines
 	int iCount = Min ( iDepth, (int)( sizeof(g_pArgv)/sizeof(g_pArgv[0]) - SPH_BT_ADDRS - 1 ) );
@@ -2587,7 +2587,7 @@ void sphBacktraceInit()
 	// check that jemalloc is present
 #if HAVE_DLOPEN
 	void * fnJMalloc = dlsym ( RTLD_DEFAULT, "mallctl" );
-	g_bDumpGDB = ( fnJMalloc!=nullptr );
+	g_bHaveJemalloc = ( fnJMalloc!=nullptr );
 #endif
 }
 

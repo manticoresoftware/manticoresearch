@@ -19,6 +19,7 @@
 
 #include "sphinxsearch.h"
 #include "sphinxrt.h"
+#include "searchdha.h"
 
 // stuff moved here from sphinxrt.h
 struct PercolateQueryDesc
@@ -234,5 +235,38 @@ struct PercolateMatchContext_t : public PQMatchContextResult_t
 };
 
 void PercolateMergeResults ( const VecTraits_T<PQMatchContextResult_t *> &dMatches, PercolateMatchResult_t &tRes );
+
+struct CPqResult : public iQueryResult
+{
+	PercolateMatchResult_t m_dResult;
+	CSphFixedVector<int64_t> m_dDocids { 0 }; // check whether it necessary at all or not
+
+	CPqResult () = default;
+
+	CPqResult ( CPqResult &&rhs ) noexcept
+		: m_dResult { std::move ( rhs.m_dResult ) }
+		, m_dDocids { std::move ( rhs.m_dDocids ) }
+	{}
+
+	CPqResult &operator= ( CPqResult &&rhs ) noexcept
+	{
+		m_dResult = std::move ( rhs.m_dResult );
+		m_dDocids = std::move ( rhs.m_dDocids );
+		return *this;
+	}
+
+	void Reset () final
+	{
+		m_dResult.Reset ();
+		m_dDocids.Reset ( 0 );
+	}
+
+	bool HasWarnings () const final
+	{
+		return false; // Stub. fixme!
+	}
+};
+
+void MergePqResults ( const VecTraits_T<CPqResult *> &dChunks, CPqResult &dRes, bool bSparsed );
 
 #endif //MANTICORE_SPHINXPQ_H

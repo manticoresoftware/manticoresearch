@@ -1043,7 +1043,6 @@ static void MatchingWork ( const StoredQuery_t * pStored, PercolateMatchContext_
 		return;
 	}
 
-
 	const bool bCollectDocs = tMatchCtx.m_bGetDocs;
 	int iDocsOff = tMatchCtx.m_dDocsMatched.GetLength();
 	int iMatchCount = 0;
@@ -1222,6 +1221,9 @@ void PercolateMergeResults ( const VecTraits_T<PQMatchContextResult_t *> & dMatc
 	tRes.m_iDocsMatched = iGotDocs;
 	iGotDocs += iGotQueries; // in addition to docs, the num of them is written per every query
 
+	if ( !iGotQueries )
+		return;
+
 	if ( qMatches.GetLength ()==1 ) // fastpath, only 1 essential result set
 	{
 		auto & tIt = qMatches.Root();
@@ -1259,10 +1261,12 @@ void PercolateMergeResults ( const VecTraits_T<PQMatchContextResult_t *> & dMatc
 		assert ( pDocs );
 	}
 
-	while ( qMatches.GetLength() )
-	{
-		PQMergeIterator_t tMin = qMatches.Root();
-		qMatches.Pop();
+	PQMergeIterator_t tMin = qMatches.Root ();
+	qMatches.Pop ();
+
+	assert ( qMatches.GetLength()>=0 ); // since case of only 1 resultset we already processed.
+
+	while (true) {
 		pDst->Swap ( tMin.CurDesc () );
 		++pDst;
 
@@ -1284,7 +1288,19 @@ void PercolateMergeResults ( const VecTraits_T<PQMatchContextResult_t *> & dMatc
 
 		++tMin.m_iIdx;
 		if ( tMin.m_iIdx<tMin.m_iElems )
-			qMatches.Push ( tMin );
+		{
+			// if current root is better - change the head.
+			if ( qMatches.GetLength () && !PQMergeIterator_t::IsLess ( tMin, qMatches.Root() ) )
+				qMatches.Push ( tMin );
+			else
+				continue;
+		}
+
+		if ( !qMatches.GetLength () )
+			break;
+
+		tMin = qMatches.Root();
+		qMatches.Pop();
 	}
 }
 
@@ -1335,7 +1351,7 @@ void PercolateIndex_c::DoMatchDocuments ( const RtSegment_t * pSeg, PercolateMat
 	}
 
 	if ( tRes.m_bVerbose )
-		tRes.m_tmSetup = sphMicroTimer() - tRes.m_tmSetup;
+		tRes.m_tmSetup = sphMicroTimer() + tRes.m_tmSetup;
 
 	// queries should be locked for reading now
 	{
@@ -1370,7 +1386,7 @@ bool PercolateIndex_c::MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchRes
 
 	int64_t tmStart = sphMicroTimer();
 	if ( tRes.m_bVerbose )
-		tRes.m_tmSetup = tmStart;
+		tRes.m_tmSetup = -tmStart;
 	m_sLastWarning = "";
 
 	auto pAcc = ( RtAccum_t * ) AcquireAccum ( m_pDict, pAccExt );
@@ -2413,4 +2429,171 @@ void PercolateIndex_c::ForceRamFlush ( bool bPeriodic )
 void PercolateIndex_c::ForceDiskChunk ()
 {
 	ForceRamFlush ( false );
+}
+
+// stuff for merging several results into one
+struct PQMergeResultsIterator_t
+{
+	CPqResult * m_pResult = nullptr;
+	int m_iIdx = 0;
+	int m_iElems = 0;
+	int* m_pDocs = nullptr;
+
+	PQMergeResultsIterator_t ( CPqResult * pMatch = nullptr )
+		: m_pResult ( pMatch )
+	{
+		if ( !pMatch )
+			return;
+		m_iElems = pMatch->m_dResult.m_dQueryDesc.GetLength ();
+		m_pDocs = pMatch->m_dResult.m_dDocs.begin();
+	}
+
+	inline PercolateQueryDesc &CurDesc () const
+	{ return m_pResult->m_dResult.m_dQueryDesc[m_iIdx]; }
+
+	inline int CurDt () const
+	{ return m_pResult->m_dResult.m_dQueryDT[m_iIdx]; }
+
+	static inline bool IsLess ( const PQMergeResultsIterator_t &a, const PQMergeResultsIterator_t &b )
+	{
+		return a.CurDesc ().m_uQID<b.CurDesc ().m_uQID;
+	}
+};
+
+void MergePqResults ( const VecTraits_T<CPqResult *> &dChunks, CPqResult &dRes, bool bSharded )
+{
+	if ( dChunks.IsEmpty () )
+		return;
+
+	// check if we have exactly one non-null and non-empty result
+	if ( dChunks.GetLength ()==1 ) // short path for only 1 result.
+	{
+		dRes = std::move ( *dChunks[0] );
+		return;
+	}
+
+	assert ( dChunks.GetLength ()>1 ); // simplest cases must be already processed;
+
+	int iGotQueries = 0;
+	int iGotDocids = 0;
+	auto & dFinal = dRes.m_dResult; // shortcut
+
+	CSphQueue<PQMergeResultsIterator_t, PQMergeResultsIterator_t> qMatches ( dChunks.GetLength () );
+	for ( CPqResult * pChunk : dChunks )
+	{
+		assert ( pChunk ); // no nulls allowed
+
+		auto &dResult = pChunk->m_dResult; /// shortcut
+
+		// collect all warnings/errors/other things despite the num of collected results
+		dFinal.m_sMessages.AddStringsFrom ( dResult.m_sMessages );
+		dFinal.m_iTotalQueries = dResult.m_iTotalQueries + ( bSharded ? 0 : dFinal.m_iTotalQueries );
+		dFinal.m_iEarlyOutQueries += dResult.m_iEarlyOutQueries;
+		dFinal.m_iQueriesFailed += dResult.m_iQueriesFailed;
+		dFinal.m_iDocsMatched += dResult.m_iDocsMatched;
+		dFinal.m_tmTotal += dResult.m_tmTotal;
+		dFinal.m_tmSetup += dResult.m_tmSetup;
+
+		dFinal.m_bVerbose |= !dResult.m_dQueryDT.IsEmpty();
+		dFinal.m_bGetDocs |= !dResult.m_dDocs.IsEmpty();
+		dFinal.m_bGetQuery = dResult.m_bGetQuery;
+
+		// we interest only in filled results
+		if ( dResult.m_dQueryDesc.IsEmpty () )
+			continue;
+
+		qMatches.Push ( pChunk );
+		iGotQueries += dResult.m_dQueryDesc.GetLength ();
+		iGotDocids += pChunk->m_dDocids.GetLength();
+	}
+
+	if ( !iGotQueries )
+		return;
+
+	dFinal.m_iQueriesMatched = iGotQueries;
+	int iDocSpace = iGotQueries + dFinal.m_iDocsMatched;
+
+	dFinal.m_dQueryDesc.Reset ( iGotQueries );
+	PercolateQueryDesc * pDst = dFinal.m_dQueryDesc.Begin ();
+
+	int * pDt = nullptr;
+	if ( dFinal.m_bVerbose )
+	{
+		dFinal.m_dQueryDT.Reset ( iGotQueries );
+		pDt = dFinal.m_dQueryDT.begin ();
+		assert ( pDt );
+	}
+
+	int * pDocs = nullptr;
+	if ( dFinal.m_bGetDocs )
+	{
+		dFinal.m_dDocs.Reset ( iDocSpace );
+		pDocs = dFinal.m_dDocs.begin ();
+		assert ( pDocs );
+	}
+
+	CSphHash<int> hDocids ( iGotDocids+1 );
+	bool bHasDocids = iGotDocids!=0;
+	if ( bHasDocids )
+		hDocids.Add ( iGotDocids, 0 );
+
+	PQMergeResultsIterator_t tMin = qMatches.Root ();
+	qMatches.Pop ();
+
+	assert ( qMatches.GetLength ()>=0 ); // since case of only 1 resultset we already processed.
+
+	while ( true )
+	{
+		pDst->Swap ( tMin.CurDesc () );
+		++pDst;
+
+		if ( dFinal.m_bVerbose )
+			*pDt++ = tMin.CurDt ();
+
+		// docs copy
+		if ( dFinal.m_bGetDocs )
+		{
+			int iDocCount = *tMin.m_pDocs;
+
+			// in case of docids we collect them into common hash and rewrite results with hashed values
+			if ( bHasDocids )
+			{
+				*pDocs = iDocCount;
+				for ( int i=1; i<iDocCount+1; ++i )
+					pDocs[i] = hDocids.FindOrAdd ( tMin.m_pResult->m_dDocids[tMin.m_pDocs[i]], hDocids.GetLength () );
+			} else
+				memcpy ( pDocs, tMin.m_pDocs, sizeof(int) * (iDocCount + 1) );
+
+			tMin.m_pDocs += iDocCount + 1;
+			pDocs += iDocCount + 1;
+		}
+
+		++tMin.m_iIdx;
+		if ( tMin.m_iIdx<tMin.m_iElems )
+		{
+			// if current root is better - change the head.
+			if ( qMatches.GetLength () && !PQMergeResultsIterator_t::IsLess ( tMin, qMatches.Root () ) )
+				qMatches.Push ( tMin );
+			else
+				continue;
+		}
+
+		if ( !qMatches.GetLength () )
+			break;
+
+		tMin = qMatches.Root ();
+		qMatches.Pop ();
+	}
+
+	// repack hash into vec (if necessary)
+	if ( bHasDocids )
+	{
+		dRes.m_dDocids.Reset ( hDocids.GetLength() );
+		int i = 0;
+		int64_t iDocid;
+		int * pIndex;
+		while ( nullptr != ( pIndex = hDocids.Iterate ( &i, &iDocid ) ) )
+			dRes.m_dDocids[*pIndex] = iDocid;
+
+	}
 }

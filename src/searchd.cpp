@@ -12292,10 +12292,13 @@ static void PercolateQuery ( const SqlStmt_t & tStmt, bool bReplace, ESphCollati
 
 struct PercolateOptions_t
 {
+	enum MODE { unknown=0, sparsed=1, sharded=2 };
 	bool m_bGetDocs = false;
 	bool m_bVerbose = false;
 	bool m_bJsonDocs = true;
 	bool m_bGetQuery = false;
+	int m_iShift = 0;
+	MODE m_eMode = unknown;
 	CSphString m_sIdAlias;
 	CSphString m_sIndex;
 };
@@ -12537,24 +12540,28 @@ class PqRequestBuilder_c : public IRequestBuilder_t
 {
 	const StrVec_t &m_dDocs;
 	const PercolateOptions_t &m_tOpts;
-	//	mutable CSphAtomic m_iWorker;
+	mutable CSphAtomic m_iWorker;
+	int m_iStart;
+	int m_iStep;
 
 public:
-	explicit PqRequestBuilder_c ( const StrVec_t &dDocs, const PercolateOptions_t &tOpts )
+	explicit PqRequestBuilder_c ( const StrVec_t &dDocs, const PercolateOptions_t &tOpts, int iStart=0, int iStep=0 )
 		: m_dDocs ( dDocs )
 		, m_tOpts ( tOpts )
+		, m_iStart ( iStart )
+		, m_iStep ( iStep)
 	{}
 
 	void BuildRequest ( const AgentConn_t &tAgent, CachedOutputBuffer_c &tOut ) const final
 	{
 		// it sends either all queries to each agent or sequence of queries to current agent
 
-//	auto iWorker = tAgent.m_iStoreTag;
-//	if ( iWorker<0 )
-//	{
-//		iWorker = ( int ) m_iWorker++;
-//		tAgent.m_iStoreTag = iWorker;
-//	}
+		auto iWorker = tAgent.m_iStoreTag;
+		if ( iWorker<0 )
+		{
+			iWorker = ( int ) m_iWorker++;
+			tAgent.m_iStoreTag = iWorker;
+		}
 
 		const char * sIndex = tAgent.m_tDesc.m_sIndexes.cstr ();
 		APICommand_t tWr { tOut, SEARCHD_COMMAND_CALLPQ, VER_COMMAND_CALLPQ };
@@ -12572,50 +12579,23 @@ public:
 		tOut.SendDword ( uFlags );
 		tOut.SendString ( m_tOpts.m_sIdAlias.cstr () );
 		tOut.SendString ( sIndex );
-		tOut.SendInt ( m_dDocs.GetLength () ); // fixme! sparsed send m.b.?
-		for ( const auto &dDoc : m_dDocs )
-			tOut.SendString ( dDoc.cstr () );
+
+		// send docs (all or chunk)
+		int iStart = 0;
+		int iStep = m_dDocs.GetLength();
+		if ( m_iStep ) // sparsed case, calculate the interval.
+		{
+			iStart = m_iStart + m_iStep * iWorker;
+			iStep = Min ( iStep - iStart, m_iStep );
+		}
+		tOut.SendInt ( iStart );
+		tOut.SendInt ( iStep );
+		for ( int i=iStart; i<iStart+iStep; ++i)
+			tOut.SendString ( m_dDocs[i].cstr () );
 	}
 };
 
 
-struct CPqResult : public iQueryResult
-{
-	PercolateMatchResult_t m_dResult;
-	CSphFixedVector<int64_t> m_dDocids { 0 }; // check whether it necessary at all or not
-
-	CPqResult() = default;
-	CPqResult ( CPqResult&& rhs ) noexcept
-		: m_dResult { std::move ( rhs.m_dResult )}
-		, m_dDocids { std::move ( rhs.m_dDocids )}
-	{}
-	CPqResult& operator= (CPqResult&& rhs) noexcept
-	{
-		m_dResult = std::move ( rhs.m_dResult );
-		m_dDocids = std::move ( rhs.m_dDocids );
-		return *this;
-	}
-
-	void Reset () final
-	{
-		m_dResult.Reset ();
-		m_dDocids.Reset (0);
-	}
-
-	bool HasWarnings () const final
-	{
-		return false; // Stub. fixme!
-	}
-};
-
-void MergePqResults ( const VecTraits_T<CPqResult*>& dChunks, CPqResult& dRes )
-{
-	if ( dChunks.GetLength ()==1 ) // short path
-	{
-		dRes = std::move ( *dChunks[0] );
-		return;
-	}
-}
 
 struct PqReplyParser_t : public IReplyParser_t
 {
@@ -12641,6 +12621,7 @@ struct PqReplyParser_t : public IReplyParser_t
 		dResult.m_bGetQuery = bQuery;
 		CSphVector<int> dDocs;
 		CSphVector<int64_t> dDocids;
+		dDocids.Add(0); // just to keep docids 1-based and so, simplify processing by avoid checks.
 
 		int iRows = tReq.GetInt ();
 		dResult.m_dQueryDesc.Reset ( iRows );
@@ -12651,7 +12632,6 @@ struct PqReplyParser_t : public IReplyParser_t
 			{
 				int iCount = tReq.GetInt ();
 				dDocs.Add ( iCount );
-				dDocs.Add ( 0 );
 				if ( bDeduplicatedDocs )
 				{
 					for ( int iDoc = 0; iDoc<iCount; ++iDoc )
@@ -12693,7 +12673,7 @@ struct PqReplyParser_t : public IReplyParser_t
 		auto iDocs = dDocs.GetLength ();
 		dResult.m_dDocs.Set ( dDocs.LeakData (), iDocs );
 
-		if ( !dDocids.IsEmpty () )
+		if ( dDocids.GetLength()>1 )
 		{
 			iDocs = dDocids.GetLength ();
 			pResult->m_dDocids.Set ( dDocids.LeakData (), iDocs );
@@ -12703,7 +12683,7 @@ struct PqReplyParser_t : public IReplyParser_t
 	}
 };
 
-static void SendAPIPercolateReply ( CachedOutputBuffer_c &tOut, const CPqResult &tResult )
+static void SendAPIPercolateReply ( CachedOutputBuffer_c &tOut, const CPqResult &tResult, int iShift=0 )
 {
 	APICommand_t dCallPq ( tOut, SEARCHD_OK, VER_COMMAND_CALLPQ );
 
@@ -12751,7 +12731,7 @@ static void SendAPIPercolateReply ( CachedOutputBuffer_c &tOut, const CPqResult 
 			{
 				tOut.SendInt ( iCount );
 				for ( int iDoc = 0; iDoc<iCount; ++iDoc )
-					tOut.SendInt ( tRes.m_dDocs[++iDocOff] );
+					tOut.SendInt ( iShift+tRes.m_dDocs[++iDocOff] );
 			}
 		}
 		if ( bQuery )
@@ -12778,7 +12758,7 @@ static void SendAPIPercolateReply ( CachedOutputBuffer_c &tOut, const CPqResult 
 	tOut.SendString ( tRes.m_sMessages.sWarning () );
 }
 
-static void SendMysqlPercolateReply ( SqlRowBuffer_c &tOut, const CPqResult &tResult )
+static void SendMysqlPercolateReply ( SqlRowBuffer_c &tOut, const CPqResult &tResult, int iShift=0 )
 {
 	// shortcuts
 	const PercolateMatchResult_t &tRes = tResult.m_dResult;
@@ -12834,7 +12814,7 @@ static void SendMysqlPercolateReply ( SqlRowBuffer_c &tOut, const CPqResult &tRe
 				for ( int iDoc = 0; iDoc<iCount; ++iDoc )
 				{
 					int iRow = tRes.m_dDocs[++iDocOff];
-					sDocs.Sprintf ( "%d", iRow );
+					sDocs.Sprintf ( "%d", iRow + iShift );
 				}
 			}
 
@@ -12856,7 +12836,7 @@ static void SendMysqlPercolateReply ( SqlRowBuffer_c &tOut, const CPqResult &tRe
 
 // process one(!) local(!) pq index
 static void PQLocalMatch ( const StrVec_t &dDocs, const CSphString& sIndex, const PercolateOptions_t & tOpt,
-	CSphSessionAccum &tAcc, CPqResult &tResult )
+	CSphSessionAccum &tAcc, CPqResult &tResult, int iStart, int iDocs )
 {
 	CSphString sWarning, sError;
 	auto &sMsg = tResult.m_dResult.m_sMessages;
@@ -12864,6 +12844,15 @@ static void PQLocalMatch ( const StrVec_t &dDocs, const CSphString& sIndex, cons
 	tResult.m_dResult.m_bVerbose = tOpt.m_bVerbose;
 	tResult.m_dResult.m_bGetQuery = tOpt.m_bGetQuery;
 	sMsg.Clear ();
+
+	if ( !iDocs || ( iStart + iDocs )>dDocs.GetLength () )
+		iDocs = dDocs.GetLength () - iStart;
+
+	if ( !iDocs )
+	{
+		sMsg.Warn ( "No more docs for sparse matching" );
+		return;
+	}
 
 	ServedDescRPtr_c pServed ( GetServed ( sIndex ) );
 	if ( !pServed || !pServed->m_pIndex )
@@ -12941,10 +12930,9 @@ static void PQLocalMatch ( const StrVec_t &dDocs, const CSphString& sIndex, cons
 		}
 	}
 
-
 	int iDocsNoIdCount = 0;
 	bool bAutoId = tOpt.m_sIdAlias.IsEmpty ();
-	tResult.m_dDocids.Reset ( bAutoId ? 0 : dDocs.GetLength () + 1 );
+	tResult.m_dDocids.Reset ( bAutoId ? 0 : iDocs + 1 );
 	SphDocID_t uSeqDocid = 1;
 
 	CSphFixedVector<const char *> dStrings ( iStrCounter );
@@ -12954,7 +12942,7 @@ static void PQLocalMatch ( const StrVec_t &dDocs, const CSphString& sIndex, cons
 	CSphVector<DWORD> dMva;
 
 	CSphString sTokenFilterOpts;
-	ARRAY_FOREACH ( iDoc, dDocs )
+	for ( auto iDoc = iStart; iDoc<iStart+iDocs; ++iDoc )
 	{
 		// doc-id
 		tDoc.m_uDocID = 0;
@@ -12999,10 +12987,10 @@ static void PQLocalMatch ( const StrVec_t &dDocs, const CSphString& sIndex, cons
 
 			// store provided doc-id for result set sending
 			tResult.m_dDocids[uSeqDocid] = ( int64_t ) tDoc.m_uDocID;
-		}
-
-		// PQ work with sequential document numbers, 0 element unused
-		tDoc.m_uDocID = uSeqDocid++;
+			tDoc.m_uDocID = uSeqDocid++;
+		} else
+			// PQ work with sequential document numbers, 0 element unused
+			tDoc.m_uDocID = iDoc+1; // +1 since docid is 1-based
 
 		// add document
 		pIndex->AddDocument ( dFields, tDoc, true, sTokenFilterOpts, dStrings.Begin(), dMva, sError, sWarning, pAccum );
@@ -13053,7 +13041,16 @@ static void PercolateMatchDocuments ( const StrVec_t & dDocs, const PercolateOpt
 	} else
 		dLocalIndexes.Add ( sIndex );
 
-	PqRequestBuilder_c tReqBuilder ( dDocs, tOpts );
+	// at this point we know total num of involved indexes,
+	// and can eventually split (sparse) docs among them.
+	int iChunks = 0;
+	if ( tOpts.m_eMode==PercolateOptions_t::unknown || tOpts.m_eMode==PercolateOptions_t::sparsed)
+		iChunks = dAgents.GetLength () + pLocalIndexes->GetLength ();
+	int iStart = 0;
+	int iStep = iChunks>1 ? ( ( dDocs.GetLength () - 1 ) / iChunks + 1 ) : 0;
+
+	PqRequestBuilder_c tReqBuilder ( dDocs, tOpts, iStart, iStep );
+	iStart += iStep * dAgents.GetLength();
 	PqReplyParser_t tParser;
 	CSphRefcountedPtr<IRemoteAgentsObserver> tReporter ( GetObserver () );
 	ScheduleDistrJobs ( dAgents, &tReqBuilder, &tParser, tReporter );
@@ -13062,7 +13059,8 @@ static void PercolateMatchDocuments ( const StrVec_t & dDocs, const PercolateOpt
 	for ( const auto & sPqIndex : *pLocalIndexes )
 	{
 		auto & dResult = dLocalResults.Add();
-		PQLocalMatch ( dDocs, sPqIndex, tOpts, tAcc, dResult );
+		PQLocalMatch ( dDocs, sPqIndex, tOpts, tAcc, dResult, iStart, iStep );
+		iStart += iStep;
 	}
 
 	tReporter->Finish ();
@@ -13096,7 +13094,7 @@ static void PercolateMatchDocuments ( const StrVec_t & dDocs, const PercolateOpt
 		}
 	}
 
-	MergePqResults ( dAllResults, tResult );
+	MergePqResults ( dAllResults, tResult, iChunks<2 );
 
 	if ( iSuccesses!=iAgentsDone )
 	{
@@ -13127,6 +13125,7 @@ void HandleCommandCallPq ( CachedOutputBuffer_c &tOut, WORD uVer, InputBuffer_c 
 	tOpts.m_sIndex = tReq.GetString();
 
 	// document(s)
+	tOpts.m_iShift = tReq.GetInt();
 	StrVec_t dDocs ( tReq.GetInt() );
 	for ( auto & sDoc : dDocs )
 		sDoc = tReq.GetString();
@@ -13146,7 +13145,7 @@ void HandleCommandCallPq ( CachedOutputBuffer_c &tOut, WORD uVer, InputBuffer_c 
 		return;
 	}
 
-	SendAPIPercolateReply ( tOut, tResult );
+	SendAPIPercolateReply ( tOut, tResult, tOpts.m_iShift );
 }
 
 static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSessionAccum & tAcc,
@@ -13154,7 +13153,6 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 {
 
 	PercolateMatchResult_t &tRes = tResult.m_dResult;
-	CSphFixedVector<int64_t> &dDocids = tResult.m_dDocids;
 
 	// check arguments
 	// index name, document | documents list, [named opts]
@@ -13201,7 +13199,22 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 		else if ( sOpt=="verbose" )		tOpts.m_bVerbose = ( v.m_iVal!=0 );
 		else if ( sOpt=="docs_json" )	tOpts.m_bJsonDocs = ( v.m_iVal!=0 );
 		else if ( sOpt=="query" )		tOpts.m_bGetQuery = ( v.m_iVal!=0 );
-		else
+		else if ( sOpt=="shift" ) 		tOpts.m_iShift = v.m_iVal;
+		else if ( sOpt=="mode" )
+		{
+			auto sMode = v.m_sVal;
+			iExpType = TOK_QUOTED_STRING;
+			sMode.ToLower();
+			if ( sMode=="sparsed" )
+				tOpts.m_eMode = PercolateOptions_t::sparsed;
+			else if ( sMode=="sharded" )
+				tOpts.m_eMode = PercolateOptions_t::sharded;
+			else
+			{
+				sError.SetSprintf ( "unknown mode %s. (Expected 'sparsed' or 'sharded')", v.m_sVal.cstr () );
+				break;
+			}
+		} else
 		{
 			sError.SetSprintf ( "unknown option %s", sOpt.cstr() );
 			break;
@@ -13221,8 +13234,11 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 		return;
 	}
 
-	dDocids.Reset ( tOpts.m_sIdAlias.IsEmpty () ? 0 : dDocs.GetLength () + 1 );
+	tResult.m_dDocids.Reset ( tOpts.m_sIdAlias.IsEmpty () ? 0 : dDocs.GetLength () + 1 );
 	tRes.Reset();
+
+	if ( tOpts.m_iShift && !tOpts.m_sIdAlias.IsEmpty() )
+		tRes.m_sMessages.Warn ( "'shift' option works only for automatic ids, when 'docs_id' is not defined");
 
 	PercolateMatchDocuments ( dDocs, tOpts, tAcc, tResult );
 
@@ -13233,7 +13249,7 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 		return;
 	}
 
-	SendMysqlPercolateReply ( tOut, tResult );
+	SendMysqlPercolateReply ( tOut, tResult, tOpts.m_iShift );
 }
 
 void HandleMysqlPercolateMeta ( const CPqResult &tResult, const CSphString & sWarning, SqlRowBuffer_c & tOut )
@@ -13243,7 +13259,7 @@ void HandleMysqlPercolateMeta ( const CPqResult &tResult, const CSphString & sWa
 
 	tOut.HeadTuplet ( "Name", "Value" );
 	tOut.DataTupletf ( "Total", "%.3D sec", tMeta.m_tmTotal / 1000 );
-	if ( tMeta.m_tmSetup )
+	if ( tMeta.m_tmSetup && tMeta.m_tmSetup>0 )
 		tOut.DataTupletf ( "Setup", "%.3D sec", tMeta.m_tmSetup / 1000 );
 	tOut.DataTuplet ( "Queries matched", tMeta.m_iQueriesMatched );
 	tOut.DataTuplet ( "Queries failed", tMeta.m_iQueriesFailed );

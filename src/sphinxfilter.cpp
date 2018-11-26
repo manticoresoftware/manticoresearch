@@ -13,6 +13,7 @@
 #include "sphinxfilter.h"
 #include "sphinxint.h"
 #include "sphinxjson.h"
+#include "sphinxutils.h"
 
 #if USE_WINDOWS
 #pragma warning(disable:4250) // inheritance via dominance is our intent
@@ -23,7 +24,7 @@ struct IFilter_Attr: virtual ISphFilter
 {
 	CSphAttrLocator m_tLocator;
 
-	virtual void SetLocator ( const CSphAttrLocator & tLocator )
+	void SetLocator ( const CSphAttrLocator & tLocator ) override
 	{
 		m_tLocator = tLocator;
 	}
@@ -32,15 +33,10 @@ struct IFilter_Attr: virtual ISphFilter
 /// values
 struct IFilter_Values : virtual ISphFilter
 {
-	const SphAttr_t *	m_pValues;
-	int					m_iValueCount;
+	const SphAttr_t *	m_pValues = nullptr;
+	int					m_iValueCount = 0;
 
-	IFilter_Values ()
-		: m_pValues		( NULL )
-		, m_iValueCount	( 0 )
-	{}
-
-	virtual void SetValues ( const SphAttr_t * pStorage, int iCount )
+	void SetValues ( const SphAttr_t * pStorage, int iCount ) final
 	{
 		assert ( pStorage );
 		assert ( iCount > 0 );
@@ -93,7 +89,7 @@ bool IFilter_Values::EvalValues ( SphAttr_t uValue ) const
 bool IFilter_Values::EvalBlockValues ( SphAttr_t uBlockMin, SphAttr_t uBlockMax ) const
 {
 	// is any of our values inside the block?
-	for ( int i = 0; i < m_iValueCount; i++ )
+	for ( int i = 0; i < m_iValueCount; ++i )
 		if ( GetValue(i)>=uBlockMin && GetValue(i)<=uBlockMax )
 			return true;
 	return false;
@@ -104,32 +100,13 @@ template<bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT = false, bool OP
 bool EvalRange ( T tValue, T tMin, T tMax )
 {
 	if_const ( OPEN_LEFT )
-	{
-		if_const ( HAS_EQUAL_MAX )
-			return tValue<=tMax;
-		else
-			return tValue<tMax;
-	}
-	
+		return HAS_EQUAL_MAX ? ( tValue<=tMax ) : ( tValue<tMax );
+
 	if_const ( OPEN_RIGHT )
-	{
-		if_const ( HAS_EQUAL_MIN )
-			return tValue>=tMin;
-		else
-			return tValue>tMin;
-	}
+		return  HAS_EQUAL_MIN ? ( tValue>=tMin ) : ( tValue>tMin );
 
-	bool bMinOk;
-	if_const ( HAS_EQUAL_MIN )
-		bMinOk = tValue>=tMin;
-	else
-		bMinOk = tValue>tMin;
-
-	bool bMaxOk;
-	if_const ( HAS_EQUAL_MAX )
-		bMaxOk = tValue<=tMax;
-	else
-		bMaxOk = tValue<tMax;
+	auto bMinOk = HAS_EQUAL_MIN ? ( tValue>=tMin ) : ( tValue>tMin );
+	auto bMaxOk = HAS_EQUAL_MAX ? ( tValue<=tMax ) : ( tValue<tMax );
 
 	return bMinOk && bMaxOk;
 }
@@ -139,32 +116,13 @@ template<bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT = false, bool OP
 bool EvalBlockRangeAny ( T tMin1, T tMax1, T tMin2, T tMax2 )
 {
 	if_const ( OPEN_LEFT )
-	{
-		if_const ( HAS_EQUAL_MAX )
-			return tMin1<=tMax2;
-		else
-			return tMin1<tMax2;
-	}
+		return HAS_EQUAL_MAX ? ( tMin1<=tMax2 ) : ( tMin1<tMax2 );
 
 	if_const ( OPEN_RIGHT )
-	{
-		if_const ( HAS_EQUAL_MIN )
-			return tMax1>=tMin2;
-		else
-			return tMax1>tMin2;
-	}
+		return HAS_EQUAL_MIN ? ( tMax1>=tMin2 ) : ( tMax1>tMin2 );
 
-	bool bMinOk;
-	if_const ( HAS_EQUAL_MIN )
-		bMinOk = tMin1<=tMax2;
-	else
-		bMinOk = tMin1<tMax2;
-
-	bool bMaxOk;
-	if_const ( HAS_EQUAL_MAX )
-		bMaxOk = tMax1>=tMin2;
-	else
-		bMaxOk = tMax1>tMin2;
+	auto bMinOk = HAS_EQUAL_MIN ? ( tMin1<=tMax2 ) : ( tMin1<tMax2 );
+	auto bMaxOk = HAS_EQUAL_MAX ? ( tMax1>=tMin2 ) : ( tMax1>tMin2 );
 
 	return bMinOk && bMaxOk;
 }
@@ -173,17 +131,8 @@ bool EvalBlockRangeAny ( T tMin1, T tMax1, T tMin2, T tMax2 )
 template<bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, typename T = SphAttr_t>
 bool EvalBlockRangeAll ( T tMin1, T tMax1, T tMin2, T tMax2 )
 {
-	bool bMinOk;
-	if_const ( HAS_EQUAL_MIN )
-		bMinOk = tMin1>=tMin2;
-	else
-		bMinOk = tMin1>tMin2;
-
-	bool bMaxOk;
-	if_const ( HAS_EQUAL_MAX )
-		bMaxOk = tMax1<=tMax2;
-	else
-		bMaxOk = tMax1<tMax2;
+	auto bMinOk = HAS_EQUAL_MIN ? ( tMin1>=tMin2 ) : ( tMin1>tMin2 );
+	auto bMaxOk = HAS_EQUAL_MAX ? ( tMax1<=tMax2 ) : ( tMax1<tMax2 );
 
 	return bMinOk && bMaxOk;
 }
@@ -195,7 +144,7 @@ struct IFilter_Range: virtual ISphFilter
 	SphAttr_t m_iMinValue;
 	SphAttr_t m_iMaxValue;
 
-	virtual void SetRange ( SphAttr_t tMin, SphAttr_t tMax )
+	void SetRange ( SphAttr_t tMin, SphAttr_t tMax ) override
 	{
 		m_iMinValue = tMin;
 		m_iMaxValue = tMax;
@@ -209,12 +158,12 @@ struct IFilter_Range: virtual ISphFilter
 
 struct Filter_Values: public IFilter_Attr, IFilter_Values
 {
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		return EvalValues ( tMatch.GetAttr ( m_tLocator ) );
 	}
 
-	virtual bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const
+	bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const final
 	{
 		if ( m_tLocator.m_bDynamic )
 			return true; // ignore computed attributes
@@ -232,7 +181,7 @@ struct Filter_SingleValue : public IFilter_Attr
 	SphAttr_t m_RefValue;
 
 #ifndef NDEBUG
-	virtual void SetValues ( const SphAttr_t * pStorage, int iCount )
+	void SetValues ( const SphAttr_t * pStorage, int iCount ) final
 #else
 	virtual void SetValues ( const SphAttr_t * pStorage, int )
 #endif
@@ -242,12 +191,12 @@ struct Filter_SingleValue : public IFilter_Attr
 		m_RefValue = (*pStorage);
 	}
 
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const override
 	{
 		return tMatch.GetAttr ( m_tLocator )==m_RefValue;
 	}
 
-	virtual bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const
+	bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const final
 	{
 		if ( m_tLocator.m_bDynamic )
 			return true; // ignore computed attributes
@@ -263,7 +212,7 @@ struct Filter_SingleValueStatic32 : public Filter_SingleValue
 {
 	int m_iIndex;
 
-	virtual void SetLocator ( const CSphAttrLocator & tLoc )
+	void SetLocator ( const CSphAttrLocator & tLoc ) final
 	{
 		assert ( tLoc.m_iBitCount==32 );
 		assert ( ( tLoc.m_iBitOffset % 32 )==0 );
@@ -272,7 +221,7 @@ struct Filter_SingleValueStatic32 : public Filter_SingleValue
 		m_iIndex = tLoc.m_iBitOffset / 32;
 	}
 
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		return tMatch.m_pStatic [ m_iIndex ]==m_RefValue;
 	}
@@ -282,18 +231,18 @@ struct Filter_SingleValueStatic32 : public Filter_SingleValue
 template < bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX, bool OPEN_LEFT, bool OPEN_RIGHT >
 struct Filter_Range: public IFilter_Attr, IFilter_Range
 {
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		return EvalRange<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT> ( tMatch.GetAttr ( m_tLocator ), m_iMinValue, m_iMaxValue );
 	}
 
-	virtual bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const
+	bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const final
 	{
 		if ( m_tLocator.m_bDynamic )
 			return true; // ignore computed attributes
 
-		SphAttr_t uBlockMin = sphGetRowAttr ( DOCINFO2ATTRS ( pMinDocinfo ), m_tLocator );
-		SphAttr_t uBlockMax = sphGetRowAttr ( DOCINFO2ATTRS ( pMaxDocinfo ), m_tLocator );
+		auto uBlockMin = sphGetRowAttr ( DOCINFO2ATTRS ( pMinDocinfo ), m_tLocator );
+		auto uBlockMax = sphGetRowAttr ( DOCINFO2ATTRS ( pMaxDocinfo ), m_tLocator );
 
 		// not-reject
 		return EvalBlockRangeAny<HAS_EQUAL_MIN,HAS_EQUAL_MAX,OPEN_LEFT,OPEN_RIGHT> ( uBlockMin, uBlockMax, m_iMinValue, m_iMaxValue );
@@ -308,18 +257,18 @@ struct Filter_FloatRange : public IFilter_Attr
 	float m_fMinValue;
 	float m_fMaxValue;
 
-	virtual void SetRangeFloat ( float fMin, float fMax )
+	void SetRangeFloat ( float fMin, float fMax ) final
 	{
 		m_fMinValue = fMin;
 		m_fMaxValue = fMax;
 	}
 
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		return EvalRange<HAS_EQUAL_MIN,HAS_EQUAL_MAX> ( tMatch.GetAttrFloat ( m_tLocator ), m_fMinValue, m_fMaxValue );
 	}
 
-	virtual bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const
+	bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const final
 	{
 		if ( m_tLocator.m_bDynamic )
 			return true; // ignore computed attributes
@@ -336,26 +285,21 @@ struct Filter_FloatRange : public IFilter_Attr
 
 struct Filter_IdValues: public IFilter_Values
 {
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		return EvalValues ( tMatch.m_uDocID );
 	}
 
-	bool EvalBlockValues ( SphAttr_t uBlockMin, SphAttr_t uBlockMax ) const
-	{
-		// is any of our values inside the block?
-		for ( int i = 0; i < m_iValueCount; i++ )
-			if ( (SphDocID_t)GetValue(i)>=(SphDocID_t)uBlockMin && (SphDocID_t)GetValue(i)<=(SphDocID_t)uBlockMax )
-				return true;
-		return false;
-	}
-
-	virtual bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const
+	bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const final
 	{
 		const SphAttr_t uBlockMin = DOCINFO2ID ( pMinDocinfo );
 		const SphAttr_t uBlockMax = DOCINFO2ID ( pMaxDocinfo );
 
-		return EvalBlockValues ( uBlockMin, uBlockMax );
+		for ( int i = 0; i<m_iValueCount; ++i )
+			if ( ( SphDocID_t ) GetValue ( i )>=( SphDocID_t ) uBlockMin
+				&& ( SphDocID_t ) GetValue ( i )<=( SphDocID_t ) uBlockMax )
+				return true;
+		return false;
 	}
 
 	Filter_IdValues ()
@@ -367,18 +311,18 @@ struct Filter_IdValues: public IFilter_Values
 template < bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX >
 struct Filter_IdRange: public IFilter_Range
 {
-	virtual void SetRange ( SphAttr_t tMin, SphAttr_t tMax )
+	void SetRange ( SphAttr_t tMin, SphAttr_t tMax ) final
 	{
 		m_iMinValue = (SphDocID_t)Max ( (SphDocID_t)tMin, 0u );
 		m_iMaxValue = tMax;
 	}
 
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		return EvalRange<HAS_EQUAL_MIN, HAS_EQUAL_MAX>( tMatch.m_uDocID, (SphDocID_t)m_iMinValue, (SphDocID_t)m_iMaxValue );
 	}
 
-	virtual bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const
+	bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const final
 	{
 		const SphDocID_t uBlockMin = DOCINFO2ID ( pMinDocinfo );
 		const SphDocID_t uBlockMax = DOCINFO2ID ( pMaxDocinfo );
@@ -395,7 +339,7 @@ struct Filter_IdRange: public IFilter_Range
 
 struct Filter_WeightValues: public IFilter_Values
 {
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		return EvalValues ( tMatch.m_iWeight );
 	}
@@ -410,7 +354,7 @@ template < bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX >
 struct Filter_WeightRange: public IFilter_Range
 {
 	virtual bool IsEarly () { return false; }
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		return EvalRange<HAS_EQUAL_MIN, HAS_EQUAL_MAX> ( (SphAttr_t)tMatch.m_iWeight, m_iMinValue, m_iMaxValue );
 	}
@@ -427,15 +371,10 @@ struct Filter_WeightRange: public IFilter_Range
 
 struct IFilter_MVA: virtual IFilter_Attr
 {
-	const DWORD *	m_pMvaStorage;
-	bool			m_bArenaProhibit;
+	const DWORD *	m_pMvaStorage = nullptr;
+	bool			m_bArenaProhibit = false;
 
-	IFilter_MVA ()
-		: m_pMvaStorage ( NULL )
-		, m_bArenaProhibit ( false )
-	{}
-
-	virtual void SetMVAStorage ( const DWORD * pMva, bool bArenaProhibit )
+	void SetMVAStorage ( const DWORD * pMva, bool bArenaProhibit ) final
 	{
 		m_pMvaStorage = pMva;
 		m_bArenaProhibit = bArenaProhibit;
@@ -459,7 +398,7 @@ struct IFilter_MVA: virtual IFilter_Attr
 template < typename T >
 struct Filter_MVAValues_Any : public IFilter_MVA, IFilter_Values
 {
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		const DWORD * pMva, * pMvaMax;
 		if ( !LoadMVA ( tMatch, &pMva, &pMvaMax ) )
@@ -473,10 +412,9 @@ struct Filter_MVAValues_Any : public IFilter_MVA, IFilter_Values
 		const SphAttr_t * pFilter = m_pValues;
 		const SphAttr_t * pFilterMax = pFilter + m_iValueCount;
 
-		const T * L = (const T *)pMva;
-		const T * R = (const T *)pMvaMax;
-		R--;
-		for ( ; pFilter < pFilterMax; pFilter++ )
+		auto L = (const T *)pMva;
+		auto R = ((const T *)pMvaMax)-1;
+		for ( ; pFilter < pFilterMax; ++pFilter )
 		{
 			while ( L<=R )
 			{
@@ -489,7 +427,7 @@ struct Filter_MVAValues_Any : public IFilter_MVA, IFilter_Values
 					return true;
 			}
 			R = (const T *)pMvaMax;
-			R--;
+			--R;
 		}
 		return false;
 	}
@@ -499,7 +437,7 @@ struct Filter_MVAValues_Any : public IFilter_MVA, IFilter_Values
 template < typename T >
 struct Filter_MVAValues_All : public IFilter_MVA, IFilter_Values
 {
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		const DWORD * pMva, * pMvaMax;
 		if ( !LoadMVA ( tMatch, &pMva, &pMvaMax ) )
@@ -510,10 +448,10 @@ struct Filter_MVAValues_All : public IFilter_MVA, IFilter_Values
 
 	bool MvaEval ( const DWORD * pMva, const DWORD * pMvaMax ) const
 	{
-		const T * L = (const T *)pMva;
-		const T * R = (const T *)pMvaMax;
+		auto L = (const T *)pMva;
+		auto R = (const T *)pMvaMax;
 
-		for ( const T * pVal=L; pVal<R; pVal++ )
+		for ( const T * pVal=L; pVal<R; ++pVal )
 		{
 			const SphAttr_t iCheck = *pVal;
 			if ( !sphBinarySearch ( m_pValues, m_pValues + m_iValueCount - 1, iCheck ) )
@@ -537,7 +475,7 @@ static int64_t GetMvaValue ( const int64_t * pVal )
 template < typename T, bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX >
 struct Filter_MVARange_Any : public IFilter_MVA, IFilter_Range
 {
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		const DWORD * pMva, * pMvaMax;
 		if ( !LoadMVA ( tMatch, &pMva, &pMvaMax ) )
@@ -579,7 +517,7 @@ struct Filter_MVARange_Any : public IFilter_MVA, IFilter_Range
 template < typename T, bool HAS_EQUAL_MIN, bool HAS_EQUAL_MAX >
 struct Filter_MVARange_All : public IFilter_MVA, IFilter_Range
 {
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		const DWORD * pMva, * pMvaMax;
 		if ( !LoadMVA ( tMatch, &pMva, &pMvaMax ) )
@@ -610,68 +548,80 @@ SphStringCmp_fn CmpFn ( ESphCollation eCollation )
 	}
 }
 
+class IFilter_Str : public IFilter_Attr
+{
 
-class FilterString_c : public IFilter_Attr
+protected:
+	const BYTE * m_pStringBase = nullptr;
+	StringSource_e m_eStrSource;
+
+public:
+	explicit IFilter_Str ( ESphAttr eType )
+		: m_eStrSource ( eType==SPH_ATTR_STRING ? STRING_STATIC : STRING_DATAPTR )
+	{}
+
+	void SetStringStorage ( const BYTE * pStrings ) final
+	{
+		m_pStringBase = pStrings;
+	}
+
+protected:
+	inline const BYTE * GetStr ( const CSphMatch& tMatch ) const
+	{
+		SphAttr_t uVal = tMatch.GetAttr ( m_tLocator );
+
+		if ( !uVal )
+			return ( const BYTE * ) "\0"; // 2 bytes, for packed strings
+
+		if ( m_eStrSource==STRING_STATIC )
+			return m_pStringBase + uVal;
+
+		return ( const BYTE * ) uVal;
+	}
+};
+
+
+class FilterString_c : public IFilter_Str
 {
 private:
-	CSphFixedVector<BYTE>	m_dVal {0};
 	bool					m_bEq;
 
 protected:
+	CSphVector<BYTE>		m_dVal;
 	SphStringCmp_fn			m_fnStrCmp;
-	const BYTE *			m_pStringBase = nullptr;
-	StringSource_e			m_eStrSource;
 
 public:
 	FilterString_c ( ESphCollation eCollation, ESphAttr eType, bool bEq )
-		: m_bEq ( bEq )
+		: IFilter_Str ( eType )
+		, m_bEq ( bEq )
 		, m_fnStrCmp ( CmpFn ( eCollation ) )
-		, m_eStrSource ( eType==SPH_ATTR_STRING ? STRING_STATIC : STRING_DATAPTR )
 	{}
 
-	virtual void SetRefString ( const CSphString * pRef, int iCount )
+	void SetRefString ( const CSphString * pRef, int iCount ) override
 	{
 		assert ( iCount<2 );
-		const char * sVal = pRef ? pRef->cstr() : NULL;
+		const char * sVal = pRef ? pRef->cstr() : nullptr;
 		int iLen = pRef ? pRef->Length() : 0;
 		if ( m_eStrSource==STRING_STATIC )
 		{
 			// pack string as it is stored in index (.sps file)
-			m_dVal.Reset ( iLen+4 );
+			m_dVal.Resize ( iLen+4 );
 			int iPacked = sphPackStrlen ( m_dVal.Begin(), iLen );
 			memcpy ( m_dVal.Begin()+iPacked, sVal, iLen );
 		} else
 		{
 			// pack string as it is stored in memory
-			m_dVal.Reset ( sphCalcPackedLength ( iLen ) );
+			m_dVal.Resize ( sphCalcPackedLength ( iLen ) );
 			sphPackPtrAttr ( m_dVal.Begin(), (const BYTE*)sVal, iLen );
 		}
 	}
 
-	virtual void SetStringStorage ( const BYTE * pStrings )
-	{
-		m_pStringBase = pStrings;
-	}
-
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const override
 	{
 		if ( m_eStrSource==STRING_STATIC && !m_pStringBase )
 			return !m_bEq;
 
-		SphAttr_t uVal = tMatch.GetAttr ( m_tLocator );
-
-		const BYTE * pStr;
-		if ( !uVal )
-			pStr = (const BYTE*)"\0"; // 2 bytes, for packed strings
-		else
-		{
-			if ( m_eStrSource==STRING_STATIC )
-				pStr = m_pStringBase + uVal;
-			else
-				pStr = (const BYTE *)uVal;
-		}
-
-		bool bEq = m_fnStrCmp ( pStr, m_dVal.Begin(), m_eStrSource, 0, 0 )==0;
+		bool bEq = m_fnStrCmp ( GetStr ( tMatch ), m_dVal.Begin (), m_eStrSource, 0, 0 )==0;
 		return ( m_bEq==bEq );
 	}
 };
@@ -679,20 +629,19 @@ public:
 
 struct Filter_StringValues_c: FilterString_c
 {
-	CSphVector<BYTE>		m_dVal;
 	CSphVector<int>			m_dOfs;
 
 	Filter_StringValues_c ( ESphCollation eCollation, ESphAttr eType )
 		: FilterString_c ( eCollation, eType, false )
 	{}
 
-	virtual void SetRefString ( const CSphString * pRef, int iCount )
+	void SetRefString ( const CSphString * pRef, int iCount ) final
 	{
 		assert ( pRef );
 		assert ( iCount>0 );
 
 		int iOfs = 0;
-		for ( int i=0; i<iCount; i++ )
+		for ( int i=0; i<iCount; ++i )
 		{
 			const char * sRef = ( pRef + i )->cstr();
 			int iLen = ( pRef + i )->Length();
@@ -714,26 +663,125 @@ struct Filter_StringValues_c: FilterString_c
 		}
 	}
 
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
-		SphAttr_t uVal = tMatch.GetAttr ( m_tLocator );
-
-		const BYTE * pStr;
-		if ( !uVal )
-			pStr = (const BYTE*)"\0";
-		else
-		{
-			if ( m_eStrSource==STRING_STATIC )
-				pStr = m_pStringBase + uVal;
-			else
-				pStr = (const BYTE *)uVal;
-		}
-
-		ARRAY_FOREACH ( i, m_dOfs )
-			if ( m_fnStrCmp ( pStr, m_dVal.Begin() + m_dOfs[i], m_eStrSource, 0, 0 )==0 )
+		for ( int iOffs: m_dOfs )
+			if ( m_fnStrCmp ( GetStr ( tMatch ), m_dVal.Begin() + iOffs, m_eStrSource, 0, 0 )==0 )
 				return true;
 
 		return false;
+	}
+};
+
+
+struct Filter_StringTags_c : IFilter_Str
+{
+protected:
+	CSphVector<uint64_t> m_dTags;
+	mutable CSphVector<uint64_t> m_dMatchTags;
+
+public:
+	explicit Filter_StringTags_c ( ESphAttr eType )
+		: IFilter_Str ( eType )
+	{}
+
+	void SetRefString ( const CSphString * pRef, int iCount ) final
+	{
+		assert ( pRef );
+		assert ( iCount>0 );
+
+		m_dTags.Resize ( iCount );
+
+		for ( int i = 0; i<iCount; ++i )
+			m_dTags[i] = sphFNV64 ( pRef[i].cstr ());
+
+		m_dTags.Uniq();
+	}
+
+protected:
+	inline void GetMatchTags ( const CSphMatch &tMatch ) const
+	{
+		SphAttr_t uVal = tMatch.GetAttr ( m_tLocator );
+
+		const BYTE * pStr = nullptr;
+		int iStrLen = -1;
+
+		if ( m_eStrSource==STRING_STATIC )
+			pStr = m_pStringBase + uVal;
+		else
+			pStr = ( const BYTE * ) uVal;
+
+		UnpackString ( pStr, iStrLen, m_eStrSource );
+
+		m_dMatchTags.Resize(0);
+		sphSplitApply ( ( const char * ) pStr, iStrLen, [this] (const char* pTag, int iLen)
+		{
+			m_dMatchTags.Add ( sphFNV64 ( pTag, iLen, SPH_FNV64_SEED));
+		} );
+		m_dMatchTags.Uniq();
+	}
+};
+
+struct Filter_StringTagsAny_c : Filter_StringTags_c
+{
+public:
+	explicit Filter_StringTagsAny_c ( ESphAttr eType )
+		: Filter_StringTags_c ( eType )
+	{}
+
+	bool Eval ( const CSphMatch &tMatch ) const final
+	{
+		GetMatchTags ( tMatch );
+
+		auto pFilter = m_dMatchTags.begin ();
+		auto pQueryTags = m_dTags.begin ();
+		auto pFilterEnd = m_dMatchTags.end ();
+		auto pTagsEnd = m_dTags.end ();
+
+		while ( pFilter<pFilterEnd && pQueryTags<pTagsEnd )
+		{
+			if ( *pQueryTags<*pFilter )
+				++pQueryTags;
+			else if ( *pFilter<*pQueryTags )
+				++pFilter;
+			else if ( *pQueryTags==*pFilter )
+				return true;
+		}
+		return false;
+	}
+};
+
+struct Filter_StringTagsAll_c : Filter_StringTags_c
+{
+public:
+	explicit Filter_StringTagsAll_c ( ESphAttr eType )
+		: Filter_StringTags_c ( eType )
+	{}
+
+	bool Eval ( const CSphMatch &tMatch ) const final
+	{
+		GetMatchTags ( tMatch );
+
+		auto pFilter = m_dMatchTags.begin ();
+		auto pQueryTags = m_dTags.begin ();
+		auto pFilterEnd = m_dMatchTags.end ();
+		auto pTagsEnd = m_dTags.end ();
+		int iExpectedTags = m_dTags.GetLength();
+
+		while ( pFilter<pFilterEnd && pQueryTags<pTagsEnd && iExpectedTags>0 )
+		{
+			if ( *pQueryTags<*pFilter )
+				++pQueryTags;
+			else if ( *pFilter<*pQueryTags )
+				++pFilter;
+			else if ( *pQueryTags==*pFilter )
+			{
+				--iExpectedTags;
+				++pQueryTags;
+				++pFilter;
+			}
+		}
+		return !iExpectedTags;
 	}
 };
 
@@ -750,36 +798,35 @@ struct Filter_And2 : public ISphFilter
 		m_bUsesAttrs = bUsesAttrs;
 	}
 
-	~Filter_And2 ()
+	~Filter_And2 () final
 	{
 		SafeDelete ( m_pArg1 );
 		SafeDelete ( m_pArg2 );
 	}
 
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		return m_pArg1->Eval ( tMatch ) && m_pArg2->Eval ( tMatch );
 	}
 
-	virtual bool EvalBlock ( const DWORD * pMin, const DWORD * pMax ) const
+	bool EvalBlock ( const DWORD * pMin, const DWORD * pMax ) const final
 	{
 		return m_pArg1->EvalBlock ( pMin, pMax ) && m_pArg2->EvalBlock ( pMin, pMax );
 	}
 
-	virtual ISphFilter * Join ( ISphFilter * pFilter )
+	ISphFilter * Join ( ISphFilter * pFilter ) final
 	{
-		ISphFilter * pJoined = new Filter_And2 ( m_pArg2, pFilter, m_bUsesAttrs );
-		m_pArg2 = pJoined;
+		m_pArg2 = new Filter_And2 ( m_pArg2, pFilter, m_bUsesAttrs );
 		return this;
 	}
 
-	virtual void SetMVAStorage ( const DWORD * pMva, bool bArenaProhibit )
+	void SetMVAStorage ( const DWORD * pMva, bool bArenaProhibit ) final
 	{
 		m_pArg1->SetMVAStorage ( pMva, bArenaProhibit );
 		m_pArg2->SetMVAStorage ( pMva, bArenaProhibit );
 	}
 
-	virtual void SetStringStorage ( const BYTE * pStrings )
+	void SetStringStorage ( const BYTE * pStrings ) final
 	{
 		m_pArg1->SetStringStorage ( pStrings );
 		m_pArg2->SetStringStorage ( pStrings );
@@ -801,38 +848,37 @@ struct Filter_And3 : public ISphFilter
 		m_bUsesAttrs = bUsesAttrs;
 	}
 
-	~Filter_And3 ()
+	~Filter_And3 () final
 	{
 		SafeDelete ( m_pArg1 );
 		SafeDelete ( m_pArg2 );
 		SafeDelete ( m_pArg3 );
 	}
 
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		return m_pArg1->Eval ( tMatch ) && m_pArg2->Eval ( tMatch ) && m_pArg3->Eval ( tMatch );
 	}
 
-	virtual bool EvalBlock ( const DWORD * pMin, const DWORD * pMax ) const
+	bool EvalBlock ( const DWORD * pMin, const DWORD * pMax ) const final
 	{
 		return m_pArg1->EvalBlock ( pMin, pMax ) && m_pArg2->EvalBlock ( pMin, pMax ) && m_pArg3->EvalBlock ( pMin, pMax );
 	}
 
-	virtual ISphFilter * Join ( ISphFilter * pFilter )
+	ISphFilter * Join ( ISphFilter * pFilter ) final
 	{
-		ISphFilter * pJoined = new Filter_And2 ( m_pArg3, pFilter, m_bUsesAttrs );
-		m_pArg3 = pJoined;
+		m_pArg3 = new Filter_And2 ( m_pArg3, pFilter, m_bUsesAttrs );
 		return this;
 	}
 
-	virtual void SetMVAStorage ( const DWORD * pMva, bool bArenaProhibit )
+	void SetMVAStorage ( const DWORD * pMva, bool bArenaProhibit ) final
 	{
 		m_pArg1->SetMVAStorage ( pMva, bArenaProhibit );
 		m_pArg2->SetMVAStorage ( pMva, bArenaProhibit );
 		m_pArg3->SetMVAStorage ( pMva, bArenaProhibit );
 	}
 
-	virtual void SetStringStorage ( const BYTE * pStrings )
+	void SetStringStorage ( const BYTE * pStrings ) final
 	{
 		m_pArg1->SetStringStorage ( pStrings );
 		m_pArg2->SetStringStorage ( pStrings );
@@ -845,10 +891,10 @@ struct Filter_And: public ISphFilter
 {
 	CSphVector<ISphFilter *> m_dFilters;
 
-	~Filter_And ()
+	~Filter_And () final
 	{
-		ARRAY_FOREACH ( i, m_dFilters )
-			SafeDelete ( m_dFilters[i] );
+		for ( auto &pFilter : m_dFilters )
+			SafeDelete ( pFilter );
 	}
 
 	void Add ( ISphFilter * pFilter )
@@ -857,23 +903,23 @@ struct Filter_And: public ISphFilter
 		m_bUsesAttrs |= pFilter->UsesAttrs();
 	}
 
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
-		ARRAY_FOREACH ( i, m_dFilters )
-			if ( !m_dFilters[i]->Eval ( tMatch ) )
+		for ( auto pFilter: m_dFilters )
+			if ( !pFilter->Eval ( tMatch ) )
 				return false;
 		return true;
 	}
 
-	virtual bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const
+	bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const final
 	{
-		ARRAY_FOREACH ( i, m_dFilters )
-			if ( !m_dFilters[i]->EvalBlock ( pMinDocinfo, pMaxDocinfo ) )
+		for ( auto pFilter : m_dFilters )
+			if ( !pFilter->EvalBlock ( pMinDocinfo, pMaxDocinfo ) )
 				return false;
 		return true;
 	}
 
-	virtual ISphFilter * Join ( ISphFilter * pFilter )
+	ISphFilter * Join ( ISphFilter * pFilter ) final
 	{
 		Add ( pFilter );
 		return this;
@@ -885,19 +931,19 @@ struct Filter_And: public ISphFilter
 	}
 
 
-	virtual void SetMVAStorage ( const DWORD * pMva, bool bArenaProhibit )
+	void SetMVAStorage ( const DWORD * pMva, bool bArenaProhibit ) final
 	{
-		ARRAY_FOREACH ( i, m_dFilters )
-			m_dFilters[i]->SetMVAStorage ( pMva, bArenaProhibit );
+		for ( auto &pFilter: m_dFilters )
+			pFilter->SetMVAStorage ( pMva, bArenaProhibit );
 	}
 
-	virtual void SetStringStorage ( const BYTE * pStrings )
+	void SetStringStorage ( const BYTE * pStrings ) final
 	{
-		ARRAY_FOREACH ( i, m_dFilters )
-			m_dFilters[i]->SetStringStorage ( pStrings );
+		for ( auto &pFilter : m_dFilters )
+			pFilter->SetStringStorage ( pStrings );
 	}
 
-	virtual ISphFilter * Optimize()
+	ISphFilter * Optimize() final
 	{
 		if ( m_dFilters.GetLength()==2 )
 		{
@@ -931,35 +977,35 @@ struct Filter_Or: public ISphFilter
 		m_bUsesAttrs |= pRight->UsesAttrs();
 	}
 
-	~Filter_Or ()
+	~Filter_Or () final
 	{
 		SafeDelete ( m_pLeft );
 		SafeDelete ( m_pRight );
 	}
 
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		return ( m_pLeft->Eval ( tMatch ) || m_pRight->Eval ( tMatch ) );
 	}
 
-	virtual bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const
+	bool EvalBlock ( const DWORD * pMinDocinfo, const DWORD * pMaxDocinfo ) const final
 	{
 		return ( m_pLeft->EvalBlock ( pMinDocinfo, pMaxDocinfo ) || m_pRight->EvalBlock ( pMinDocinfo, pMaxDocinfo ) );
 	}
 
-	virtual void SetMVAStorage ( const DWORD * pMva, bool bArenaProhibit )
+	void SetMVAStorage ( const DWORD * pMva, bool bArenaProhibit ) final
 	{
 		m_pLeft->SetMVAStorage ( pMva, bArenaProhibit );
 		m_pRight->SetMVAStorage ( pMva, bArenaProhibit );
 	}
 
-	virtual void SetStringStorage ( const BYTE * pStrings )
+	void SetStringStorage ( const BYTE * pStrings ) final
 	{
 		m_pLeft->SetStringStorage ( pStrings );
 		m_pRight->SetStringStorage ( pStrings );
 	}
 
-	virtual ISphFilter * Optimize()
+	ISphFilter * Optimize() final
 	{
 		m_pLeft->Optimize();
 		m_pRight->Optimize();
@@ -981,29 +1027,29 @@ struct Filter_Not: public ISphFilter
 		m_bUsesAttrs = pFilter->UsesAttrs();
 	}
 
-	~Filter_Not ()
+	~Filter_Not () final
 	{
 		SafeDelete ( m_pFilter );
 	}
 
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		return !m_pFilter->Eval ( tMatch );
 	}
 
-	virtual bool EvalBlock ( const DWORD *, const DWORD * ) const
+	bool EvalBlock ( const DWORD *, const DWORD * ) const final
 	{
 		// if block passes through the filter we can't just negate the
 		// result since it's imprecise at this point
 		return true;
 	}
 
-	virtual void SetMVAStorage ( const DWORD * pMva, bool bArenaProhibit )
+	void SetMVAStorage ( const DWORD * pMva, bool bArenaProhibit ) final
 	{
 		m_pFilter->SetMVAStorage ( pMva, bArenaProhibit );
 	}
 
-	virtual void SetStringStorage ( const BYTE * pStrings )
+	void SetStringStorage ( const BYTE * pStrings ) final
 	{
 		m_pFilter->SetStringStorage ( pStrings );
 	}
@@ -1013,7 +1059,7 @@ struct Filter_Not: public ISphFilter
 
 ISphFilter * ISphFilter::Join ( ISphFilter * pFilter )
 {
-	Filter_And * pAnd = new Filter_And();
+	auto pAnd = new Filter_And();
 
 	pAnd->Add ( this );
 	pAnd->Add ( pFilter );
@@ -1037,7 +1083,7 @@ static inline ISphFilter * ReportError ( CSphString & sError, const char * sMess
 	}
 
 	sError.SetSprintf ( sMessage, sFilterName.cstr() );
-	return NULL;
+	return nullptr;
 }
 
 
@@ -1149,11 +1195,13 @@ static ISphFilter * CreateSpecialFilter ( const CSphString & sName, const CSphFi
 		}
 	}
 
-	return NULL;
+	return nullptr;
 }
 
 
-static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, ESphFilter eFilterType, ESphAttr eAttrType, const CSphAttrLocator & tLoc, ESphCollation eCollation, CSphString & sError, CSphString & sWarning )
+static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, ESphFilter eFilterType,
+	ESphAttr eAttrType, const CSphAttrLocator & tLoc, ESphCollation eCollation,
+	CSphString & sError, CSphString & sWarning )
 {
 	// MVA
 	if ( eAttrType==SPH_ATTR_UINT32SET || eAttrType==SPH_ATTR_INT64SET )
@@ -1182,6 +1230,8 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, ESphFil
 
 			case 6:	CREATE_MVA_RANGE_FILTER ( Filter_MVARange_Any, int64_t, tSettings );
 			case 7:	CREATE_MVA_RANGE_FILTER ( Filter_MVARange_All, int64_t, tSettings );
+			default:
+				assert (false && "UB in CreateFilter");
 		}
 	}
 
@@ -1197,7 +1247,15 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, ESphFil
 	if ( eAttrType==SPH_ATTR_STRING || eAttrType==SPH_ATTR_STRINGPTR )
 	{
 		if ( eFilterType==SPH_FILTER_STRING_LIST )
-			return new Filter_StringValues_c ( eCollation, eAttrType );
+		{
+			if ( tSettings.m_eMvaFunc==SPH_MVAFUNC_NONE )
+				return new Filter_StringValues_c ( eCollation, eAttrType );
+			else if ( tSettings.m_eMvaFunc==SPH_MVAFUNC_ANY )
+				return new Filter_StringTagsAny_c ( eAttrType );
+			else if ( tSettings.m_eMvaFunc==SPH_MVAFUNC_ALL )
+				return new Filter_StringTagsAll_c ( eAttrType );
+		}
+
 		else
 			return new FilterString_c ( eCollation, eAttrType, tSettings.m_bHasEqualMin || tSettings.m_bHasEqualMax );
 	}
@@ -1238,7 +1296,7 @@ public:
 		SafeAddRef ( pExpr );
 	}
 
-	virtual void SetStringStorage ( const BYTE * pStrings )
+	void SetStringStorage ( const BYTE * pStrings ) final
 	{
 		m_pStrings = pStrings;
 		if ( m_pExpr )
@@ -1264,9 +1322,9 @@ public:
 		m_fMaxValue = fMax;
 	}
 
-	bool Eval ( const CSphMatch & tMatch ) const override
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
-		return EvalRange<HAS_EQUAL_MIN, HAS_EQUAL_MAX> ( m_pExpr->Eval ( tMatch ), m_fMinValue, m_fMaxValue );
+		return EvalRange<HAS_EQUAL_MIN, HAS_EQUAL_MAX,false,false,float> ( m_pExpr->Eval ( tMatch ), m_fMinValue, m_fMaxValue );
 	}
 };
 
@@ -1279,7 +1337,7 @@ public:
 		: ExprFilter_c<IFilter_Range> ( pExpr )
 	{}
 
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		return EvalRange<HAS_EQUAL_MIN, HAS_EQUAL_MAX> ( m_pExpr->Int64Eval(tMatch), m_iMinValue, m_iMaxValue );
 	}
@@ -1293,7 +1351,7 @@ public:
 		: ExprFilter_c<IFilter_Values> ( pExpr )
 	{}
 
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		assert ( this->m_pExpr );
 		return EvalValues ( m_pExpr->Int64Eval ( tMatch ) );
@@ -1305,19 +1363,18 @@ class ExprFilterString_c : public ExprFilter_c<ISphFilter>
 {
 protected:
 	CSphString				m_sVal;
-	int						m_iValLength;
+	int						m_iValLength = 0;
 	SphStringCmp_fn			m_fnStrCmp;
 	bool					m_bEq;
 
 public:
 	explicit ExprFilterString_c ( ISphExpr * pExpr, ESphCollation eCollation, bool bEq )
 		: ExprFilter_c<ISphFilter> ( pExpr )
-		, m_iValLength ( 0 )
 		, m_fnStrCmp ( CmpFn ( eCollation ) )
 		, m_bEq ( bEq )
 	{}
 
-	virtual void SetRefString ( const CSphString * pRef, int iCount )
+	void SetRefString ( const CSphString * pRef, int iCount ) final
 	{
 		assert ( iCount<2 );
 		if ( pRef )
@@ -1327,7 +1384,7 @@ public:
 		}
 	}
 
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		const BYTE * pVal = nullptr;
 		int iLen = m_pExpr->StringEval ( tMatch, &pVal );
@@ -1351,7 +1408,7 @@ public:
 		, m_bCheckOnlyKey ( bCheckOnlyKey )
 	{}
 
-	virtual void SetLocator ( const CSphAttrLocator & tLocator )
+	void SetLocator ( const CSphAttrLocator & tLocator ) final
 	{
 		m_tLoc = tLocator;
 	}
@@ -1368,17 +1425,17 @@ public:
 		return eRes;
 	}
 
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		assert ( m_pStrings );
 
 		if ( !m_pExpr ) // regular attribute? return true if blob size is null
 		{
-			const BYTE * pStr = NULL;
-			DWORD uOffset = (DWORD) tMatch.GetAttr ( m_tLoc );
+			const BYTE * pStr = nullptr;
+			auto uOffset = (DWORD) tMatch.GetAttr ( m_tLoc );
 			if ( uOffset )
 				sphUnpackStr ( m_pStrings+uOffset, &pStr );
-			return m_bEquals ^ ( pStr!=NULL );
+			return m_bEquals ^ ( pStr!=nullptr );
 		}
 
 		// possibly json
@@ -1403,7 +1460,7 @@ public:
 		, m_eAttrType ( eAttrType )
 	{}
 
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		switch ( m_eAttrType )
 		{
@@ -1475,45 +1532,41 @@ struct Filter_KillList : public ISphFilter
 	explicit Filter_KillList ( const KillListVector & dKillList )
 	{
 		m_bUsesAttrs = false;
-		m_dExt = dKillList;
-
 		int iMerged = 0;
-		if ( m_dExt.GetLength()>1 )
+		if ( dKillList.GetLength()>1 )
 		{
-			ARRAY_FOREACH ( i, m_dExt )
-			{
-				iMerged += ( m_dExt[i].m_iLen<=g_iKillMerge ? m_dExt[i].m_iLen : 0 );
-			}
+			for ( const auto & dExt: dKillList )
+				if ( dExt.m_iLen<=g_iKillMerge )
+					iMerged += dExt.m_iLen;
+
 			if ( iMerged>0 )
 			{
 				m_dMerged.Reserve ( iMerged );
-				ARRAY_FOREACH ( i, m_dExt )
+				for ( const auto &dExt: dKillList )
 				{
-					if ( m_dExt[i].m_iLen>g_iKillMerge )
-						continue;
-
-					m_dMerged.Append(m_dExt[i].m_pBegin,m_dExt[i].m_iLen);
-					m_dExt.RemoveFast ( i );
-					i--;
+					if ( dExt.m_iLen>g_iKillMerge )
+						m_dExt.Add ( dExt );
+					else
+						m_dMerged.Append ( dExt.m_pBegin, dExt.m_iLen );
 				}
+				m_dMerged.Uniq ();
 			}
-			m_dMerged.Uniq();
-		}
+		};
+		if ( m_dMerged.IsEmpty() )
+			m_dExt = dKillList;
 	}
 
-	virtual bool Eval ( const CSphMatch & tMatch ) const
+	bool Eval ( const CSphMatch & tMatch ) const final
 	{
 		if ( !m_dMerged.GetLength() && !m_dExt.GetLength() )
 			return true;
 
-		if ( m_dMerged.BinarySearch ( tMatch.m_uDocID )!=NULL )
+		if ( m_dMerged.BinarySearch ( tMatch.m_uDocID )!=nullptr )
 			return false;
 
-		ARRAY_FOREACH ( i, m_dExt )
-		{
-			if ( sphBinarySearch ( m_dExt[i].m_pBegin, m_dExt[i].m_pBegin + m_dExt[i].m_iLen - 1, tMatch.m_uDocID )!=NULL )
+		for ( const auto &dExt: m_dExt )
+			if ( sphBinarySearch ( dExt.m_pBegin, dExt.m_pBegin + dExt.m_iLen - 1, tMatch.m_uDocID )!=nullptr )
 				return false;
-		}
 
 		return true;
 	}
@@ -1621,7 +1674,7 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 			// check that the values are actually sorted
 			const SphAttr_t * pValues = tSettings.GetValueArray();
 			int iValues = tSettings.GetNumValues ();
-			for ( int i=1; i<iValues; i++ )
+			for ( int i=1; i<iValues; ++i )
 				assert ( pValues[i]>=pValues[i-1] );
 #endif
 		}
@@ -1643,17 +1696,18 @@ static ISphFilter * CreateFilter ( const CSphFilterSettings & tSettings, const C
 }
 
 
-ISphFilter * sphCreateFilter ( const CSphFilterSettings & tSettings, const ISphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError, CSphString & sWarning, ESphCollation eCollation, bool bArenaProhibit )
+ISphFilter * sphCreateFilter ( const CSphFilterSettings &tSettings, const CreateFilterContext_t &tCtx, CSphString &sError, CSphString &sWarning )
 {
-	return CreateFilter ( tSettings, tSettings.m_sAttrName, tSchema, pMvaPool, pStrings, sError, sWarning, false, eCollation, bArenaProhibit );
+	return CreateFilter ( tSettings, tSettings.m_sAttrName, *tCtx.m_pSchema,
+		tCtx.m_pMvaPool, tCtx.m_pStrings, sError, sWarning, false,
+		tCtx.m_eCollation, tCtx.m_bArenaProhibit );
 }
-
 
 ISphFilter * sphCreateAggrFilter ( const CSphFilterSettings * pSettings, const CSphString & sAttrName, const ISphSchema & tSchema, CSphString & sError )
 {
 	assert ( pSettings );
 	CSphString sWarning;
-	ISphFilter * pRes = CreateFilter ( *pSettings, sAttrName, tSchema, NULL, NULL, sError, sWarning, true, SPH_COLLATION_DEFAULT, false );
+	ISphFilter * pRes = CreateFilter ( *pSettings, sAttrName, tSchema, nullptr, nullptr, sError, sWarning, true, SPH_COLLATION_DEFAULT, false );
 	assert ( sWarning.IsEmpty() );
 	return pRes;
 }
@@ -1684,8 +1738,8 @@ CreateFilterContext_t::~CreateFilterContext_t()
 	SafeDelete ( m_pFilter );
 	SafeDelete ( m_pWeightFilter );
 
-	ARRAY_FOREACH ( i, m_dUserVals )
-		m_dUserVals[i]->Release();
+	for ( auto &pUserVal: m_dUserVals )
+		pUserVal->Release();
 }
 
 
@@ -1698,7 +1752,7 @@ static ISphFilter * CreateFilterNode ( CreateFilterContext_t & tCtx, int iNode, 
 		if ( pFilterSettings->m_sAttrName.IsEmpty() )
 		{
 			sError = "filter with empty name";
-			return NULL;
+			return nullptr;
 		}
 
 		bHasWeight |= IsWeightColumn ( pFilterSettings->m_sAttrName, *tCtx.m_pSchema );
@@ -1711,14 +1765,14 @@ static ISphFilter * CreateFilterNode ( CreateFilterContext_t & tCtx, int iNode, 
 			if ( !g_pUservarsHook || !sVar )
 			{
 				sError = "no global variables found";
-				return NULL;
+				return nullptr;
 			}
 
 			const UservarIntSet_c * pUservar = g_pUservarsHook ( *sVar );
 			if ( !pUservar )
 			{
 				sError.SetSprintf ( "undefined global variable '%s'", sVar->cstr() );
-				return NULL;
+				return nullptr;
 			}
 
 			tCtx.m_dUserVals.Add ( pUservar );
@@ -1728,9 +1782,9 @@ static ISphFilter * CreateFilterNode ( CreateFilterContext_t & tCtx, int iNode, 
 			pFilterSettings = &tUservar;
 		}
 
-		ISphFilter * pFilter = sphCreateFilter ( *pFilterSettings, *tCtx.m_pSchema, tCtx.m_pMvaPool, tCtx.m_pStrings, sError, sWarning, tCtx.m_eCollation, tCtx.m_bArenaProhibit );
+		ISphFilter * pFilter = sphCreateFilter ( *pFilterSettings, tCtx, sError, sWarning );
 		if ( !pFilter )
-			return NULL;
+			return nullptr;
 
 		return pFilter;
 	}
@@ -1743,13 +1797,13 @@ static ISphFilter * CreateFilterNode ( CreateFilterContext_t & tCtx, int iNode, 
 	{
 		SafeDelete ( pLeft );
 		SafeDelete ( pRight );
-		return NULL;
+		return nullptr;
 	}
 
 	if ( pCur->m_bOr )
 		return new Filter_Or ( pLeft, pRight );
-	else
-		return new Filter_And2 ( pLeft, pRight, pLeft->UsesAttrs() || pRight->UsesAttrs() );
+
+	return new Filter_And2 ( pLeft, pRight, pLeft->UsesAttrs() || pRight->UsesAttrs() );
 }
 
 
@@ -1769,21 +1823,21 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 		if ( !bGotTree )
 		{
 			bool bScan = tCtx.m_bScan;
-			ARRAY_FOREACH ( i, (*tCtx.m_pFilters) )
+			for ( const CSphFilterSettings& dSettings  : (*tCtx.m_pFilters) )
 			{
-				const CSphFilterSettings * pFilterSettings = tCtx.m_pFilters->Begin() + i;
-				if ( pFilterSettings->m_sAttrName.IsEmpty() )
+				if ( dSettings.m_sAttrName.IsEmpty() )
 					continue;
 
-				bool bWeight = IsWeightColumn ( pFilterSettings->m_sAttrName, *tCtx.m_pSchema );
+				bool bWeight = IsWeightColumn ( dSettings.m_sAttrName, *tCtx.m_pSchema );
 				if ( bScan && bWeight )
 					continue; // @weight is not available in fullscan mode
 
 				// bind user variable local to that daemon
 				CSphFilterSettings tUservar;
-				if ( pFilterSettings->m_eType==SPH_FILTER_USERVAR )
+				auto pFilterSettings = &dSettings;
+				if ( dSettings.m_eType==SPH_FILTER_USERVAR )
 				{
-					const CSphString * sVar = pFilterSettings->m_dStrings.GetLength()==1 ? pFilterSettings->m_dStrings.Begin() : NULL;
+					const CSphString * sVar = dSettings.m_dStrings.GetLength()==1 ? dSettings.m_dStrings.Begin() : nullptr;
 					if ( !g_pUservarsHook || !sVar )
 					{
 						sError = "no global variables found";
@@ -1798,13 +1852,13 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 					}
 
 					tCtx.m_dUserVals.Add ( pUservar );
-					tUservar = *pFilterSettings;
+					tUservar = dSettings;
 					tUservar.m_eType = SPH_FILTER_VALUES;
 					tUservar.SetExternalValues ( pUservar->Begin(), pUservar->GetLength() );
 					pFilterSettings = &tUservar;
 				}
 
-				ISphFilter * pFilter = sphCreateFilter ( *pFilterSettings, *tCtx.m_pSchema, tCtx.m_pMvaPool, tCtx.m_pStrings, sError, sWarning, tCtx.m_eCollation, tCtx.m_bArenaProhibit );
+				ISphFilter * pFilter = sphCreateFilter ( *pFilterSettings, tCtx, sError, sWarning );
 				if ( !pFilter )
 					return false;
 
@@ -1838,56 +1892,32 @@ bool sphCreateFilters ( CreateFilterContext_t & tCtx, CSphString & sError, CSphS
 	return true;
 }
 
-void FormatFilterQL ( const CSphFilterSettings & f, int iCompactIN, StringBuilder_c & tBuf )
+void FormatFilterQL ( const CSphFilterSettings & f, StringBuilder_c & tBuf, int iCompactIN )
 {
+	ScopedComma_c sEmpty (tBuf,nullptr); // disable outer scope separator
 	switch ( f.m_eType )
 	{
 		case SPH_FILTER_VALUES:
+			//tBuf << " " << f.m_sAttrName;
+			tBuf << f.m_sAttrName;
 			if ( f.m_dValues.GetLength()==1 )
+				tBuf.Sprintf ( ( f.m_bExclude ? "!=%l" : "=%l" ), (int64_t)f.m_dValues[0] );
+			else
 			{
-				if ( f.m_bExclude )
-					tBuf.Appendf ( " %s!=" INT64_FMT, f.m_sAttrName.cstr(), (int64_t)f.m_dValues[0] );
-				else
-					tBuf.Appendf ( " %s=" INT64_FMT, f.m_sAttrName.cstr(), (int64_t)f.m_dValues[0] );
-			} else
-			{
-				if ( f.m_bExclude )
-					tBuf.Appendf ( " %s NOT IN (", f.m_sAttrName.cstr() );
-				else
-					tBuf.Appendf ( " %s IN (", f.m_sAttrName.cstr() );
-
+				ScopedComma_c tInComma ( tBuf, ",", ( f.m_bExclude ? " NOT IN (" : " IN (" ),")");
 				if ( iCompactIN>0 && ( iCompactIN+1<f.m_dValues.GetLength() ) )
 				{
 					// for really long IN-lists optionally format them as N,N,N,N,...N,N,N, with ellipsis inside.
 					int iLimit = Max ( iCompactIN-3, 3 );
 					for ( int j=0; j<iLimit; ++j )
-					{
-						if ( j )
-							tBuf.Appendf ( "," INT64_FMT, (int64_t)f.m_dValues[j] );
-						else
-							tBuf.Appendf ( INT64_FMT, (int64_t)f.m_dValues[j] );
-					}
+						tBuf.Sprintf ( "%l", (int64_t)f.m_dValues[j] );
 					iLimit = f.m_dValues.GetLength();
-					tBuf.Appendf ( "%s", ",..." );
+					ScopedComma_c tElipsis ( tBuf, ",","...");
 					for ( int j=iLimit-3; j<iLimit; ++j )
-					{
-						if ( j )
-							tBuf.Appendf ( "," INT64_FMT, (int64_t)f.m_dValues[j] );
-						else
-							tBuf.Appendf ( INT64_FMT, (int64_t)f.m_dValues[j] );
-					}
+						tBuf.Sprintf ( "%l", (int64_t)f.m_dValues[j] );
 				} else
-				{
-					ARRAY_FOREACH ( j, f.m_dValues )
-					{
-						if ( j )
-							tBuf.Appendf ( "," INT64_FMT, (int64_t)f.m_dValues[j] );
-						else
-							tBuf.Appendf ( INT64_FMT, (int64_t)f.m_dValues[j] );
-					}
-				}
-
-				tBuf += ")";
+					for ( int64_t iValue : f.m_dValues )
+						tBuf.Sprintf ( "%l", iValue );
 			}
 			break;
 
@@ -1896,22 +1926,24 @@ void FormatFilterQL ( const CSphFilterSettings & f, int iCompactIN, StringBuilde
 			{
 				// no min, thus (attr<maxval)
 				const char * sOps[2][2] = { { "<", "<=" }, { ">=", ">" } };
-				tBuf.Appendf ( " %s%s" INT64_FMT, f.m_sAttrName.cstr(),
-					sOps [ f.m_bExclude ][ f.m_bHasEqualMax ], f.m_iMaxValue );
+				tBuf.Sprintf ( "%s%s%l", f.m_sAttrName.cstr(), sOps [ f.m_bExclude ][ f.m_bHasEqualMax ], f.m_iMaxValue );
 			} else if ( f.m_iMaxValue==INT64_MAX || ( f.m_iMaxValue==-1 && f.m_sAttrName=="@id" ) )
 			{
 				// mo max, thus (attr>minval)
 				const char * sOps[2][2] = { { ">", ">=" }, { "<", "<=" } };
-				tBuf.Appendf ( " %s%s" INT64_FMT, f.m_sAttrName.cstr(),
-					sOps [ f.m_bExclude ][ f.m_bHasEqualMin ], f.m_iMinValue );
+				tBuf.Sprintf ( "%s%s%l", f.m_sAttrName.cstr(), sOps [ f.m_bExclude ][ f.m_bHasEqualMin ], f.m_iMinValue );
 			} else
 			{
 				if ( f.m_bHasEqualMin!=f.m_bHasEqualMax)
 				{
 					const char * sOps[2]= { "<", "<=" };
-					tBuf.Appendf ( " %s " INT64_FMT "%s%s%s" INT64_FMT, f.m_bExclude ? "NOT ": "", f.m_iMinValue, sOps[f.m_bHasEqualMin], f.m_sAttrName.cstr(), sOps[f.m_bHasEqualMax], f.m_iMaxValue );
+					const char * sFmt = f.m_bExclude ? "NOT %l%s%s%s%l" : "%l%s%s%s%l";
+					tBuf.Sprintf ( sFmt, f.m_iMinValue, sOps[f.m_bHasEqualMin], f.m_sAttrName.cstr(), sOps[f.m_bHasEqualMax], f.m_iMaxValue );
 				} else
-					tBuf.Appendf ( " %s%s BETWEEN " INT64_FMT " AND " INT64_FMT, f.m_sAttrName.cstr(), f.m_bExclude ? " NOT" : "", f.m_iMinValue + !f.m_bHasEqualMin, f.m_iMaxValue - !f.m_bHasEqualMax );
+				{
+					const char * sFmt = f.m_bExclude ? "%s NOT BETWEEN %l AND %l" : "%s BETWEEN %l AND %l";
+					tBuf.Sprintf ( sFmt, f.m_sAttrName.cstr(), f.m_iMinValue + !f.m_bHasEqualMin, f.m_iMaxValue - !f.m_bHasEqualMax );
+				}
 			}
 			break;
 
@@ -1920,48 +1952,57 @@ void FormatFilterQL ( const CSphFilterSettings & f, int iCompactIN, StringBuilde
 			{
 				// no min, thus (attr<maxval)
 				const char * sOps[2][2] = { { "<", "<=" }, { ">=", ">" } };
-				tBuf.Appendf ( " %s%s%f", f.m_sAttrName.cstr(),
+				tBuf.Sprintf ( "%s%s%f", f.m_sAttrName.cstr(),
 					sOps [ f.m_bExclude ][ f.m_bHasEqualMax ], f.m_fMaxValue );
 			} else if ( f.m_fMaxValue==FLT_MAX )
 			{
 				// mo max, thus (attr>minval)
 				const char * sOps[2][2] = { { ">", ">=" }, { "<", "<=" } };
-				tBuf.Appendf ( " %s%s%f", f.m_sAttrName.cstr(),
+				tBuf.Sprintf ( "%s%s%f", f.m_sAttrName.cstr(),
 					sOps [ f.m_bExclude ][ f.m_bHasEqualMin ], f.m_fMinValue );
 			} else
 			{
 				if ( f.m_bHasEqualMin!=f.m_bHasEqualMax)
 				{
 					const char * sOps[2]= { "<", "<=" };
-					tBuf.Appendf ( " %s%f%s%s%s%f", f.m_bExclude ? "NOT ": "", f.m_fMinValue, sOps[f.m_bHasEqualMin], f.m_sAttrName.cstr(), sOps[f.m_bHasEqualMax], f.m_fMaxValue );
+					tBuf.Sprintf ( "%s%f%s%s%s%f", f.m_bExclude ? "NOT ": "", f.m_fMinValue, sOps[f.m_bHasEqualMin], f.m_sAttrName.cstr(), sOps[f.m_bHasEqualMax], f.m_fMaxValue );
 				} else // FIXME? need we handle m_bHasEqual here?					
-					tBuf.Appendf ( " %s%s BETWEEN %f AND %f", f.m_sAttrName.cstr(), f.m_bExclude ? " NOT" : "",	f.m_fMinValue, f.m_fMaxValue );
+					tBuf.Sprintf ( "%s%s BETWEEN %f AND %f", f.m_sAttrName.cstr(), f.m_bExclude ? " NOT" : "",	f.m_fMinValue, f.m_fMaxValue );
 			}
 			break;
 
 		case SPH_FILTER_USERVAR:
 		case SPH_FILTER_STRING:
-			tBuf.Appendf ( " %s%s'%s'", f.m_sAttrName.cstr(), ( f.m_bExclude ? "!=" : "=" ), ( f.m_dStrings.GetLength()==1 ? f.m_dStrings[0].cstr() : "" ) );
+			tBuf.Sprintf ( "%s%s'%s'", f.m_sAttrName.cstr(), ( f.m_bExclude ? "!=" : "=" ), ( f.m_dStrings.GetLength()==1 ? f.m_dStrings[0].cstr() : "" ) );
 			break;
 
 		case SPH_FILTER_NULL:
-			tBuf.Appendf ( " %s %s", f.m_sAttrName.cstr(), ( f.m_bIsNull ? "IS NULL" : "IS NOT NULL" ) );
+			tBuf << f.m_sAttrName << ( f.m_bIsNull ? " IS NULL" : " IS NOT NULL" );
 			break;
 
 		case SPH_FILTER_STRING_LIST:
-			tBuf.Appendf ( " %s IN (", f.m_sAttrName.cstr () );
-			ARRAY_FOREACH ( iString, f.m_dStrings )
-				tBuf.Appendf ( "%s'%s'", ( iString>0 ? "," : "" ), f.m_dStrings[iString].cstr() );
-			tBuf.Appendf ( ")" );
+
+			tBuf << f.m_sAttrName;// << " IN (";
+			if ( f.m_bExclude )
+				tBuf << " NOT";
+			if ( f.m_eMvaFunc==SPH_MVAFUNC_ANY )
+				tBuf.StartBlock ( ", '", " ANY ('", "')" );
+			else if ( f.m_eMvaFunc==SPH_MVAFUNC_ALL )
+				tBuf.StartBlock ( ", '", " ALL ('", "')" );
+			else
+				tBuf.StartBlock ( ", '", " IN ('", "')" );
+			for ( const auto &sString : f.m_dStrings )
+				tBuf << sString;
+
+			tBuf.FinishBlock ();
 			break;
 
 		case SPH_FILTER_EXPRESSION:
-			tBuf += " ";
-			tBuf += f.m_sAttrName.cstr();
+			tBuf << f.m_sAttrName;
 			break;
 
 		default:
-			tBuf += " 1 /""* oops, unknown filter type *""/";
+			tBuf += "1 /""* oops, unknown filter type *""/";
 			break;
 	}
 }
@@ -1972,46 +2013,36 @@ static CSphString LogFilterTreeItem ( int iItem, const CSphVector<FilterTreeItem
 	if ( tItem.m_iFilterItem!=-1 )
 	{
 		StringBuilder_c tBuf;
-		FormatFilterQL ( dFilters[tItem.m_iFilterItem], iCompactIN, tBuf );
-		int iOff = ( tBuf.Length() && *tBuf.cstr()== ' ' ? 1 : 0 );
-		return tBuf.cstr() + iOff;
+		FormatFilterQL ( dFilters[tItem.m_iFilterItem], tBuf, iCompactIN );
+		return tBuf.cstr();// + iOff;
 	}
 
 	assert ( tItem.m_iLeft!=-1 && tItem.m_iRight!=-1 );
 	CSphString sLeft = LogFilterTreeItem ( tItem.m_iLeft, dTree, dFilters, iCompactIN );
 	CSphString sRight = LogFilterTreeItem ( tItem.m_iRight, dTree, dFilters, iCompactIN );
 
-	const char * sOp = tItem.m_bOr ? "OR" : "AND";
 	bool bLeftPts = ( dTree[tItem.m_iLeft].m_iFilterItem==-1 && dTree[tItem.m_iLeft].m_bOr!=tItem.m_bOr );
 	bool bRightPts = ( dTree[tItem.m_iRight].m_iFilterItem==-1 && dTree[tItem.m_iRight].m_bOr!=tItem.m_bOr );
 
 	StringBuilder_c tBuf;
-	tBuf.Appendf ( "%s%s%s %s %s%s%s", ( bLeftPts ? "(" : "" ), sLeft.cstr(), ( bLeftPts ? ")" : "" ), sOp, ( bRightPts ? "(" : "" ), sRight.cstr(), ( bRightPts ? ")" : "" ) );
+	if ( bLeftPts ) tBuf << "(" << sLeft << ")"; else tBuf << sLeft;
+	tBuf << ( tItem.m_bOr ? " OR " : " AND " );
+	if ( bRightPts ) tBuf << "(" << sRight << ")"; else tBuf << sRight;
 
 	return tBuf.cstr();
 }
 
-void FormatFiltersQL ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree, int iCompactIN, bool bDeflowered, StringBuilder_c & tBuf )
+void FormatFiltersQL ( const CSphVector<CSphFilterSettings> & dFilters, const CSphVector<FilterTreeItem_t> & dFilterTree,
+	StringBuilder_c & tBuf, int iCompactIN )
 {
-	if ( !dFilterTree.GetLength() )
+	if ( dFilterTree.IsEmpty() )
 	{
-		ARRAY_FOREACH ( i, dFilters )
-		{
-			if ( bDeflowered )
-				tBuf += " AND";
-			bDeflowered = true;
-
-			FormatFilterQL ( dFilters[i], iCompactIN, tBuf );
-		}
-	} else
-	{
-		if ( bDeflowered )
-			tBuf += " AND ";
-		else
-			tBuf += " ";
-
-		tBuf += LogFilterTreeItem ( dFilterTree.GetLength() - 1, dFilterTree, dFilters, iCompactIN ).cstr();
+		ScopedComma_c sAND ( tBuf, " AND " );
+		for ( const auto& dFilter : dFilters )
+			FormatFilterQL ( dFilter, tBuf, iCompactIN );
 	}
+	else
+		tBuf << LogFilterTreeItem ( dFilterTree.GetLength() - 1, dFilterTree, dFilters, iCompactIN );
 }
 
 

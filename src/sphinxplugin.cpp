@@ -12,6 +12,7 @@
 
 #include "sphinx.h"
 #include "sphinxint.h"
+#include "sphinxutils.h"
 #include "sphinxplugin.h"
 
 #if !USE_WINDOWS

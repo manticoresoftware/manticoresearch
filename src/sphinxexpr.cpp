@@ -411,8 +411,9 @@ struct Expr_GetZonespanlist_c : public Expr_StrNoLocator_c
 		int iEnd = iStart + dSpans [ tMatch.m_iTag ]; // [start,end) now covers all data indexes
 		for ( int i=iStart; i<iEnd; i+=2 )
 			m_sBuilder.Appendf ( " %d:%d", 1+dSpans[i], 1+dSpans[i+1] ); // convert our 0-based span numbers to human 1-based ones
-		*ppStr = (const BYTE *) CSphString ( m_sBuilder.cstr() ).Leak();
-		return m_sBuilder.Length();
+		auto iRes = m_sBuilder.GetLength ();
+		*ppStr = m_sBuilder.Leak();
+		return iRes;
 	}
 
 	void Command ( ESphExprCommand eCmd, void * pArg ) final
@@ -956,7 +957,7 @@ public:
 					{
 						while ( nValues-- )
 						{
-							if ( m_sBuilder.Length() )
+							if ( m_sBuilder.GetLength() )
 								m_sBuilder += ",";
 							m_sBuilder.Appendf ( "%u", *pValues++ );
 						}
@@ -964,7 +965,7 @@ public:
 					{
 						for ( ; nValues; nValues-=2, pValues+=2 )
 						{
-							if ( m_sBuilder.Length() )
+							if ( m_sBuilder.GetLength() )
 								m_sBuilder += ",";
 							m_sBuilder.Appendf ( INT64_FMT, MVA_UPSIZE ( pValues ) );
 						}
@@ -984,10 +985,10 @@ public:
 					iLen = 0;
 				} else
 				{
-					CSphVector<BYTE> dTmp;
+					JsonEscapedBuilder dTmp;
 					sphJsonFieldFormat ( dTmp, m_pStrings+uOff, eJson, false );
 					iLen = dTmp.GetLength();
-					*ppStr = dTmp.LeakData();
+					*ppStr = dTmp.Leak();
 				}
 				return iLen;
 
@@ -996,14 +997,15 @@ public:
 				break;
 		}
 
-		if ( !m_sBuilder.Length() )
+		if ( !m_sBuilder.GetLength() )
 		{
 			*ppStr = nullptr;
 			return 0;
 		}
 
-		*ppStr = (const BYTE *) CSphString ( m_sBuilder.cstr() ).Leak();
-		return m_sBuilder.Length();
+		auto iRes = m_sBuilder.GetLength ();
+		*ppStr = m_sBuilder.Leak();
+		return iRes;
 	}
 
 	bool IsDataPtrAttr() const final
@@ -2750,7 +2752,7 @@ struct ExprNode_t
 
 	union
 	{
-		int64_t			m_iConst = 0;	///< constant value, for TOK_CONST_INT type
+		int64_t			m_iConst;		///< constant value, for TOK_CONST_INT type
 		float			m_fConst;		///< constant value, for TOK_CONST_FLOAT type
 		int				m_iFunc;		///< built-in function id, for TOK_FUNC type
 		int				m_iArgs;		///< args count, for arglist (token==',') type
@@ -2758,6 +2760,7 @@ struct ExprNode_t
 		MapArg_c	*	m_pMapArg;		///< map argument (maps name to const or name to expr), for TOK_MAP_ARG type
 		const char	*	m_sIdent;		///< pointer to const char, for TOK_IDENT type
 		SphAttr_t	*	m_pAttr;		///< pointer to 64-bit value, for TOK_ITERATOR type
+		WIDEST<int64_t,float,int, ConstList_c *, MapArg_c *,const char*, SphAttr_t*>::T m_null = 0;
 	};
 	int				m_iLeft = -1;
 	int				m_iRight = -1;
@@ -3717,9 +3720,10 @@ public:
 					tArgs.str_lengths[i] = 0;
 				} else
 				{
-					sphJsonFieldFormat ( dTmp, m_pStrings+uOff, eJson, false );
-					tArgs.str_lengths[i] = dTmp.GetLength();
-					tArgs.arg_values[i] = (char *)dTmp.LeakData();
+					JsonEscapedBuilder sTmp;
+					sphJsonFieldFormat ( sTmp, m_pStrings+uOff, eJson, false );
+					tArgs.str_lengths[i] = sTmp.GetLength();
+					tArgs.arg_values[i] = (char*) sTmp.Leak();
 				}
 			break;
 

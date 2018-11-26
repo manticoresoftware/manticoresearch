@@ -130,11 +130,12 @@ static void PrintDocsChunk ( int QDEBUGARG(iCount), int QDEBUGARG(iAtomPos), con
 {
 #if QDEBUG
 	StringBuilder_c tRes;
-	tRes.Appendf ( "node %s 0x%x:%p getdocs (%d) = [", sNode ? sNode : "???", iAtomPos, pNode, iCount );
-	for ( int i=0; i<iCount; i++ )
-		tRes.Appendf ( i ? ", 0x%x" : "0x%x", DWORD ( pDocs[i].m_uDocid ) );
-	tRes.Appendf ( "]" );
-	printf ( "%s\n", tRes.cstr() );
+	tRes.Appendf ( "node %s 0x%x:%p getdocs (%d) = ", sNode ? sNode : "???", iAtomPos, pNode, iCount );
+	tRes.StartBlock (", ","[","]\n");
+	for ( int i=0; i<iCount; ++i )
+		tRes.Appendf ( "0x%x", DWORD ( pDocs[i].m_uDocid ) );
+	tRes.FinishBlock ();
+	printf ( "%s", tRes.cstr() );
 #endif
 }
 
@@ -142,10 +143,11 @@ static void PrintHitsChunk ( int QDEBUGARG(iCount), int QDEBUGARG(iAtomPos), con
 {
 #if QDEBUG
 	StringBuilder_c tRes;
-	tRes.Appendf ( "node %s 0x%x:%p gethits (%d) = [", sNode ? sNode : "???", iAtomPos, pNode, iCount );
-	for ( int i=0; i<iCount; i++ )
-		tRes.Appendf ( i ? ", 0x%x:0x%x" : "0x%x:0x%x", DWORD ( pHits[i].m_uDocid ), DWORD ( pHits[i].m_uHitpos ) );
-	tRes.Appendf ( "]" );
+	tRes.Appendf ( "node %s 0x%x:%p gethits (%d) = ", sNode ? sNode : "???", iAtomPos, pNode, iCount );
+	tRes.StartBlock ( ", ", "[", "]\n" );
+	for ( int i=0; i<iCount; ++i )
+		tRes.Appendf ( "0x%x:0x%x", DWORD ( pHits[i].m_uDocid ), DWORD ( pHits[i].m_uHitpos ) );
+	tRes.FinishBlock ();
 	printf ( "%s\n", tRes.cstr() );
 #endif
 }
@@ -5709,18 +5711,20 @@ const ExtHit_t * ExtNotNear_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 
 static void Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t * pZones, StringBuilder_c & tRes, int iIndent, const char * szIndent, const char * szLinebreak )
 {
+	ScopedComma_c sEmpty ( tRes, nullptr );
 	if ( iIndent )
-		tRes.Appendf ( "%s", szLinebreak );
+		tRes += szLinebreak;
 
-	for ( int i=0; i<iIndent; i++ )
-		tRes.Appendf ( "%s", szIndent );
+	for ( int i=0; i<iIndent; ++i )
+		tRes += szIndent;
 
-	tRes.Appendf ( "%s(%s", sphXQNodeToStr(pNode).cstr(), sphXQNodeGetExtraStr(pNode).cstr() );
-	if ( pNode->GetOp()==SPH_QUERY_PROXIMITY || pNode->GetOp()==SPH_QUERY_QUORUM )
-		tRes.Appendf ( ", " );
+	tRes << sphXQNodeToStr(pNode);
 
+	// enclose the rest in brackets, comma-separated
+	ScopedComma_c ExplainComma ( tRes, ", ", "(", ")" );
+	tRes << sphXQNodeGetExtraStr ( pNode );
 	if ( pNode->m_dChildren.GetLength() && pNode->m_dWords.GetLength() )
-		tRes.Appendf("virtually-plain, ");
+		tRes += "virtually-plain";
 
 	// dump spec for keyword nodes
 	// FIXME? double check that spec does *not* affect non keyword nodes
@@ -5729,70 +5733,45 @@ static void Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const 
 		const XQLimitSpec_t & s = pNode->m_dSpec;
 		if ( s.m_bFieldSpec && !s.m_dFieldMask.TestAll ( true ) )
 		{
-			tRes.Appendf ( "fields=(" );
-			bool bNeedComma = false;
-			for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
+			ScopedComma_c dFieldsComma (tRes, ", ", "fields=(", ")" );
+			for ( int i = 0; i < tSchema.GetFieldsCount(); ++i )
 				if ( s.m_dFieldMask.Test(i) )
-				{
-					if ( bNeedComma )
-						tRes.Appendf ( ", " );
-					bNeedComma = true;
-					tRes.Appendf ( "%s", tSchema.GetFieldName(i) );
-				}
-			tRes.Appendf ( "), " );
+					tRes << tSchema.GetFieldName ( i );
 		}
 
 		if ( s.m_iFieldMaxPos )
-			tRes.Appendf ( "max_field_pos=%d, ", s.m_iFieldMaxPos );
+			tRes.Appendf ( "max_field_pos=%d", s.m_iFieldMaxPos );
 
 		if ( pZones && s.m_dZones.GetLength() )
 		{
-			tRes.Appendf ( s.m_bZoneSpan ? "zonespans=(" : "zones=(" );
-			bool bNeedComma = false;
-			ARRAY_FOREACH ( i, s.m_dZones )
-			{
-				if ( bNeedComma )
-					tRes.Appendf ( ", " );
-				bNeedComma = true;
-				tRes.Appendf ( "%s", (*pZones) [ s.m_dZones[i] ].cstr() );
-			}
-			tRes.Appendf ( "), " );
+			ScopedComma_c dZoneDelim ( tRes, ", ", s.m_bZoneSpan ? "zonespans=(" : "zones=(", ")" );
+			for ( int iZone : s.m_dZones )
+				tRes << (*pZones) [iZone ];
 		}
 	}
 
-	if ( pNode->m_dChildren.GetLength() )
-	{
-		ARRAY_FOREACH ( i, pNode->m_dChildren )
+	if ( !pNode->m_dChildren.IsEmpty() )
+		for ( const auto& dChild : pNode->m_dChildren )
+			Explain ( dChild, tSchema, pZones, tRes, iIndent+1, szIndent, szLinebreak );
+	else
+		for ( const XQKeyword_t &w : pNode->m_dWords )
 		{
-			if ( i>0 )
-				tRes.Appendf ( ", " );
-			Explain ( pNode->m_dChildren[i], tSchema, pZones, tRes, iIndent+1, szIndent, szLinebreak );
-		}
-	} else
-	{
-		ARRAY_FOREACH ( i, pNode->m_dWords )
-		{
-			const XQKeyword_t & w = pNode->m_dWords[i];
-			if ( i>0 )
-				tRes.Appendf(", ");
-			tRes.Appendf ( "KEYWORD(%s, querypos=%d", w.m_sWord.cstr(), w.m_iAtomPos );
+			ScopedComma_c dKeyword ( tRes, ", ", "KEYWORD(", ")");
+			tRes << w.m_sWord;
+			tRes.Appendf ( "querypos=%d", w.m_iAtomPos );
 			if ( w.m_bExcluded )
-				tRes.Appendf ( ", excluded" );
+				tRes += "excluded";
 			if ( w.m_bExpanded )
-				tRes.Appendf ( ", expanded" );
+				tRes += "expanded";
 			if ( w.m_bFieldStart )
-				tRes.Appendf ( ", field_start" );
+				tRes += "field_start";
 			if ( w.m_bFieldEnd )
-				tRes.Appendf ( ", field_end" );
+				tRes += "field_end";
 			if ( w.m_bMorphed )
-				tRes.Appendf ( ", morphed" );
+				tRes += "morphed";
 			if ( w.m_fBoost!=1.0f ) // really comparing floats?
-				tRes.Appendf ( ", boost=%f", w.m_fBoost );
-			tRes.Appendf ( ")" );
+				tRes.Appendf ( "boost=%f", w.m_fBoost );
 		}
-	}
-
-	tRes.Appendf(")");
 }
 
 
@@ -5800,19 +5779,14 @@ CSphString sphExplainQuery ( const XQNode_t * pNode, const CSphSchema & tSchema,
 {
 	StringBuilder_c tRes;
 	Explain ( pNode, tSchema, &dZones, tRes, 0, "  ", "\n" );
-	CSphString sRes;
-	sRes.Adopt ( tRes.Leak() );
-	return sRes;
+	return tRes.cstr ();
 }
-
 
 CSphString sphExplainQueryBrief ( const XQNode_t * pNode, const CSphSchema & tSchema )
 {
 	StringBuilder_c tRes;
-	Explain ( pNode, tSchema, NULL, tRes, 0, "", " " );
-	CSphString sRes;
-	sRes.Adopt ( tRes.Leak() );
-	return sRes;
+	Explain ( pNode, tSchema, nullptr, tRes, 0, "", " " );
+	return tRes.cstr();
 }
 
 
@@ -5940,15 +5914,21 @@ void ExtRanker_c::Reset ( const ISphQwordSetup & tSetup )
 void ExtRanker_c::UpdateQcache ( int iMatches )
 {
 	if ( m_pQcacheEntry )
+	{
+		CSphScopedProfile tProfile ( m_pCtx->m_pProfile, SPH_QSTATE_QCACHE_UP );
 		for ( int i=0; i<iMatches; i++ )
 			m_pQcacheEntry->Append ( m_dMatches[i].m_uDocID, m_dMatches[i].m_iWeight );
+	}
 }
 
 
 void ExtRanker_c::FinalizeCache ( const ISphSchema & tSorterSchema )
 {
 	if ( m_pQcacheEntry )
+	{
+		CSphScopedProfile tProfile ( m_pCtx->m_pProfile, SPH_QSTATE_QCACHE_FINAL );
 		QcacheAdd ( m_pCtx->m_tQuery, m_pQcacheEntry, tSorterSchema );
+	}
 
 	SafeRelease ( m_pQcacheEntry );
 }
@@ -6014,11 +5994,12 @@ const ExtDoc_t * ExtRanker_c::GetFilteredDocs ()
 
 			#if QDEBUG
 			StringBuilder_c tRes;
-			tRes.Appendf ( "matched %p docs (%d) = [", this, iDocs );
-			for ( int i=0; i<iDocs; i++ )
-				tRes.Appendf ( i ? ", 0x%x" : "0x%x", DWORD ( m_dMyDocs[i].m_uDocid ) );
-			tRes.Appendf ( "]" );
-			printf ( "%s\n", tRes.cstr() );
+			tRes.Appendf ( "matched %p docs (%d) = ", this, iDocs );
+			tRes.StartBlock (", ","[","]\n");
+			for ( int i=0; i<iDocs; ++i )
+				tRes.Appendf ( "0x%x", DWORD ( m_dMyDocs[i].m_uDocid ) );
+			tRes.FinishBlock ();
+			printf ( "%s", tRes.cstr() );
 			#endif
 
 			return m_dMyDocs;

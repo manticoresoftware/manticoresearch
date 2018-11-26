@@ -5,6 +5,8 @@
 #include <gtest/gtest.h>
 
 #include "sphinxint.h"
+#include "sphinxutils.h"
+#include "sphinxstem.h"
 
 
 // Miscelaneous tests mostly processing texts with many test cases: HTML Stripper, levenstein,

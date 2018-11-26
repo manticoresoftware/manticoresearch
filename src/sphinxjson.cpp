@@ -509,11 +509,9 @@ public:
 
 	void DebugDump ( const BYTE * p )
 	{
-		CSphVector<BYTE> dOut;
+		JsonEscapedBuilder dOut;
 		sphJsonFormat ( dOut, m_dBuffer.Begin() );
-		dOut.Add ( '\0' );
-		printf ( "sphJsonFormat: %s\n", (char*)dOut.Begin() );
-
+		printf ( "sphJsonFormat: %s\n", dOut.cstr() );
 		printf ( "Blob size: %d bytes\n", m_dBuffer.GetLength() );
 		ESphJsonType eType = sphJsonFindFirst ( &p );
 		DebugDump ( eType, &p, 0 );
@@ -813,46 +811,18 @@ ESphJsonType sphJsonFindByIndex ( ESphJsonType eType, const BYTE ** ppValue, int
 
 //////////////////////////////////////////////////////////////////////////
 
-static const BYTE * JsonFormatStr ( CSphVector<BYTE> & dOut, const BYTE * p, bool bQuote=true )
+static const BYTE * JsonFormatStr ( JsonEscapedBuilder &sOut, const BYTE * p, bool bQuote=true )
 {
 	int iLen = sphJsonUnpackInt ( &p );
-	dOut.Reserve ( dOut.GetLength()+iLen );
+	sOut.GrowEnough ( iLen );
 	if ( bQuote )
-		dOut.Add ( '"' );
-	while ( iLen-- )
-	{
-		if ( bQuote )
-		{
-			switch ( *p )
-			{
-				case '\b': dOut.Add('\\'); dOut.Add('b'); break;
-				case '\n': dOut.Add('\\'); dOut.Add('n'); break;
-				case '\r': dOut.Add('\\'); dOut.Add('r'); break;
-				case '\t': dOut.Add('\\'); dOut.Add('t'); break;
-				case '\f': dOut.Add('\\'); dOut.Add('f'); break; // formfeed (rfc 4627)
-				default:
-					if ( *p == '"' || *p=='\\' || *p=='/' )
-						dOut.Add ( '\\' );
-					dOut.Add ( *p );
-			}
-		} else
-			dOut.Add ( *p );
-		p++;
-	}
-	if ( bQuote )
-		dOut.Add ( '"' );
-	return p;
+		sOut.AppendEscaped ( ( const char * ) p, EscBld::eEscape, iLen );
+	else
+		sOut.AppendChars ( ( const char * ) p, iLen );
+	return p+iLen;
 }
 
-
-void JsonAddStr ( CSphVector<BYTE> & dOut, const char * pStr )
-{
-	while ( *pStr )
-		dOut.Add ( *pStr++ );
-}
-
-
-void sphJsonFormat ( CSphVector<BYTE> & dOut, const BYTE * pData )
+void sphJsonFormat ( JsonEscapedBuilder & sOut, const BYTE * pData )
 {
 	if ( !pData )
 		return;
@@ -860,104 +830,79 @@ void sphJsonFormat ( CSphVector<BYTE> & dOut, const BYTE * pData )
 
 	// check for the empty root
 	if ( eType==JSON_EOF )
-	{
-		JsonAddStr ( dOut, "{}" );
-		return;
-	}
-
-	sphJsonFieldFormat ( dOut, pData, eType );
+		sOut << "{}";
+	else
+		sphJsonFieldFormat ( sOut, pData, eType );
 }
 
 
-const BYTE * sphJsonFieldFormat ( CSphVector<BYTE> & dOut, const BYTE * pData, ESphJsonType eType, bool bQuoteString )
+const BYTE * sphJsonFieldFormat ( JsonEscapedBuilder & sOut, const BYTE * pData, ESphJsonType eType, bool bQuoteString )
 {
-	const BYTE * p = pData;
+	const BYTE szDouble = 32;
+	char sDouble[szDouble];
 
 	// format value
+	const BYTE * p = pData;
 	switch ( eType )
 	{
 		case JSON_INT32:
-		{
-			int iOff = dOut.GetLength();
-			dOut.Resize ( iOff+32 );
-			int iLen = snprintf ( (char *)dOut.Begin()+iOff, 32, "%d", sphJsonLoadInt ( &p ) ); // NOLINT
-			dOut.Resize ( iOff+iLen );
+			sOut.Sprintf ("%d", sphJsonLoadInt ( &p )); // NOLINT
 			break;
-		}
+
 		case JSON_INT64:
-		{
-			int iOff = dOut.GetLength();
-			dOut.Resize ( iOff+32 );
-			int iLen = snprintf ( (char *)dOut.Begin()+iOff, 32, INT64_FMT, sphJsonLoadBigint ( &p ) ); // NOLINT
-			dOut.Resize ( iOff+iLen );
+			sOut.Sprintf ( "%l", sphJsonLoadBigint ( &p ) ); // NOLINT
 			break;
-		}
+
 		case JSON_DOUBLE:
 		{
-			int iOff = dOut.GetLength();
-			dOut.Resize ( iOff+32 );
-			int iLen = snprintf ( (char *)dOut.Begin()+iOff, 32, "%lf", sphQW2D ( sphJsonLoadBigint ( &p ) ) ); // NOLINT
-			dOut.Resize ( iOff+iLen );
+			auto iLen = snprintf ( sDouble, szDouble, "%lf", sphQW2D ( sphJsonLoadBigint ( &p ) ) ); // NOLINT
+			sOut.AppendChars ( sDouble, iLen );
 			break;
 		}
 		case JSON_STRING:
-			p = JsonFormatStr ( dOut, p, bQuoteString );
+			p = JsonFormatStr ( sOut, p, bQuoteString );
 			break;
+
 		case JSON_STRING_VECTOR:
-		{
-			int iLen = sphJsonUnpackInt ( &p );
-			dOut.Reserve ( dOut.GetLength()+iLen );
-			int iVals = sphJsonUnpackInt ( &p );
-			dOut.Add ( '[' );
-			for ( int i=0; i<iVals; i++ )
-			{
-				if ( i>0 )
-					dOut.Add ( ',' );
-				p = JsonFormatStr ( dOut, p );
-			}
-			dOut.Add ( ']' );
+			sOut.GrowEnough ( sphJsonUnpackInt ( &p ) );
+			sOut.StartBlock ( ",", "[", "]");
+			for ( int i= sphJsonUnpackInt ( &p ); i>0; --i )
+				p = JsonFormatStr ( sOut, p );
+			sOut.FinishBlock ( false );
 			break;
-		}
+
 		case JSON_INT32_VECTOR:
+			sOut.StartBlock ( ",", "[", "]" );
+			for ( int i = sphJsonUnpackInt ( &p ); i>0; --i )
+				sOut.Sprintf ( "%d", sphJsonLoadInt ( &p ) );
+			sOut.FinishBlock ( false );
+		break;
 		case JSON_INT64_VECTOR:
-		case JSON_DOUBLE_VECTOR:
-		{
-			int iVals = sphJsonUnpackInt ( &p );
-			dOut.Add ( '[' );
-			for ( int i=0; i<iVals; i++ )
-			{
-				if ( i>0 )
-					dOut.Add ( ',' );
-				int iOff = dOut.GetLength();
-				dOut.Resize ( iOff+32 );
-				int iLen = 0;
-				char * b = (char *)dOut.Begin()+iOff;
-				switch ( eType )
-				{
-				case JSON_INT32_VECTOR: iLen = snprintf ( b, 32, "%d", sphJsonLoadInt ( &p ) ); break; // NOLINT
-				case JSON_INT64_VECTOR: iLen = snprintf ( b, 32, INT64_FMT, sphJsonLoadBigint ( &p ) ); break; // NOLINT
-				case JSON_DOUBLE_VECTOR: iLen = snprintf ( b, 32, "%lf", sphQW2D ( sphJsonLoadBigint ( &p ) ) ); break; // NOLINT
-				default:
-					break;
-				}
-				dOut.Resize ( iOff+iLen );
-			}
-			dOut.Add ( ']' );
+			sOut.StartBlock ( ",", "[", "]" );
+			for ( int i = sphJsonUnpackInt ( &p ); i>0; --i )
+				sOut.Sprintf ( "%l", sphJsonLoadBigint ( &p ) );
+			sOut.FinishBlock ( false );
 			break;
-		}
+		case JSON_DOUBLE_VECTOR:
+			sOut.StartBlock ( ",", "[", "]" );
+			for ( int i = sphJsonUnpackInt ( &p ); i>0; --i )
+			{
+				auto iLen = snprintf ( sDouble, szDouble, "%lf", sphQW2D ( sphJsonLoadBigint ( &p ) ) ); // NOLINT
+				sOut.AppendChars ( sDouble, iLen );
+			}
+			sOut.FinishBlock ( false );
+			break;
+
 		case JSON_MIXED_VECTOR:
 			{
+				sOut.StartBlock ( ",", "[", "]" );
 				sphJsonUnpackInt ( &p );
-				int iVals = sphJsonUnpackInt ( &p );
-				dOut.Add ( '[' );
-				for ( int i=0; i<iVals; i++ )
+				for ( int i = sphJsonUnpackInt ( &p ); i>0; --i )
 				{
-					if ( i>0 )
-						dOut.Add ( ',' );
-					ESphJsonType eNode = (ESphJsonType) *p++;
-					p = sphJsonFieldFormat ( dOut, p, eNode, true );
+					auto eNode = ( ESphJsonType ) *p++;
+					p = sphJsonFieldFormat ( sOut, p, eNode, true );
 				}
-				dOut.Add ( ']' );
+				sOut.FinishBlock ( false );
 				break;
 			}
 		case JSON_ROOT:
@@ -966,28 +911,26 @@ const BYTE * sphJsonFieldFormat ( CSphVector<BYTE> & dOut, const BYTE * pData, E
 				if ( eType==JSON_OBJECT )
 					sphJsonUnpackInt ( &p );
 				p += 4; // skip bloom table
-				dOut.Add ( '{' );
-				for ( int i=0;;i++ )
+				sOut.StartBlock ( ",", "{", "}" );
+				while (true)
 				{
-					ESphJsonType eNode = (ESphJsonType) *p++;
+					ScopedComma_c sMuteCommas ( sOut, nullptr );
+					auto eNode = (ESphJsonType) *p++;
 					if ( eNode==JSON_EOF )
 						break;
-					if ( i>0 )
-						dOut.Add ( ',' );
-					p = JsonFormatStr ( dOut, p );
-					dOut.Add ( ':' );
-					p = sphJsonFieldFormat ( dOut, p, eNode, true );
+					p = JsonFormatStr ( sOut, p );
+					sOut.RawC (':');
+					p = sphJsonFieldFormat ( sOut, p, eNode, true );
 				}
-				dOut.Add ( '}' );
+				sOut.FinishBlock (false);
 				break;
 			}
-		case JSON_TRUE:		JsonAddStr ( dOut, bQuoteString ? "true" : "1" ); break;
-		case JSON_FALSE:	JsonAddStr ( dOut, bQuoteString ? "false" : "0" ); break;
-		case JSON_NULL:		JsonAddStr ( dOut, bQuoteString ? "null" : "" ); break;
+		case JSON_TRUE:		sOut << ( bQuoteString ? "true" : "1" ); break;
+		case JSON_FALSE:	sOut << ( bQuoteString ? "false" : "0"); break;
+		case JSON_NULL:		sOut << ( bQuoteString ? "null" : nullptr); break;
 		case JSON_EOF:		break;
 		case JSON_TOTAL:	break;
 	}
-
 	return p;
 }
 
@@ -1036,7 +979,7 @@ void JsonStoreInt ( BYTE * p, int v )
 	*p++ = BYTE(DWORD(v));
 	*p++ = BYTE(DWORD(v) >> 8);
 	*p++ = BYTE(DWORD(v) >> 16);
-	*p++ = BYTE(DWORD(v) >> 24);
+	*p   = BYTE(DWORD(v) >> 24);
 }
 
 

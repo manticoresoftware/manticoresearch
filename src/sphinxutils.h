@@ -67,15 +67,33 @@ inline bool sphIsWild ( T c )
 	return c=='*' || c=='?' || c=='%';
 }
 
-/// my own converter unsigned to string. Instanciated for DWORD and uint64_t
-void sphUItoA ( char ** ppOutput, DWORD uVal, int iBase = 10, int iWidth = 0, int iPrec = 0, char cFill = ' ' );
+namespace sph {
+	/// my own converter unsigned to string. Instanciated for DWORD and uint64_t
+	template <typename Int> // signed
+	int ItoA ( char * pOutput, Int nVal, int iBase = 10, int iWidth = 0, int iPrec = 0, char cFill = ' ' );
+	template < typename UInt > // unsigned
+	int UItoA ( char * pOutput, UInt nVal, int iBase = 10, int iWidth = 0, int iPrec = 0, char cFill = ' ' );
+	template < typename Num > // let compiler deduce whether signed or unsigned...
+	int NtoA ( char * pOutput, Num nVal, int iBase = 10, int iWidth = 0, int iPrec = 0, char cFill = ' ' );
 
+	/// my own fixed-point floats. iPrec - num of digits after point. i.e. 100000, 3 -> 100.000
+	int IFtoA ( char * pOutput, int nVal, int iPrec = 3 );
+	int IFtoA ( char * pOutput, int64_t nVal, int iPrec = 6 );
+	int vSprintf ( char * pOutput, const char * sFmt, va_list ap );
+	int Sprintf ( char * pOutput, const char * sFmt, ... );
+	void vSprintf ( StringBuilder_c &pOutput, const char * sFmt, va_list ap );
+	void Sprintf ( StringBuilder_c& pOutput, const char * sFmt, ...);
+}
 
 /// string splitter, extracts sequences of alphas (as in sphIsAlpha)
 void sphSplit ( StrVec_t & dOut, const char * sIn );
 
 /// string splitter, splits by the given boundaries
 void sphSplit ( StrVec_t & dOut, const char * sIn, const char * sBounds );
+
+/// perform sphSplit, but applies a functor instead of add a chunk to the vector
+using StrFunctor = std::function<void ( const char*, int )>;
+void sphSplitApply ( const char * sIn, int iSize, StrFunctor &&dFunc );
 
 /// string wildcard matching (case-sensitive, supports * and ? patterns)
 bool sphWildcardMatch ( const char * sSstring, const char * sPattern, const int * pPattern = NULL );
@@ -287,5 +305,43 @@ public:
 
 	bool		LoadSymbols ( const char** sNames, void*** pppFuncs, int iNum );
 };
+
+/// collect warnings/errors from any suitable context.
+/// on multiple calls appends new message, separating it with '; ' from previous.
+class Warner_c : public ISphNoncopyable
+{
+	StringBuilder_c m_sWarnings;
+	StringBuilder_c m_sErrors;
+
+	const char * m_sDel = nullptr;
+	const char * m_sPref = nullptr;
+	const char * m_sTerm = nullptr;
+
+public:
+	Warner_c ( const char * sDel = ", ", const char * sPref = nullptr, const char * sTerm = nullptr );
+	Warner_c ( Warner_c&& rhs ) noexcept;
+	Warner_c& operator= ( Warner_c &&rhs ) noexcept;
+
+	// append message as error.
+	// always return false (in order to simplify pattern {error='foo'; return false;})
+	bool Err ( const char * sFmt, ... );
+	bool Err ( const CSphString &sMsg );
+	void Warn ( const char * sFmt, ... );
+	void Warn ( const CSphString &sMsg );
+
+	void Clear ();
+
+	const char * sError () const;
+	const char * sWarning () const;
+
+	bool ErrEmpty () const { return m_sErrors.IsEmpty (); }
+	bool WarnEmpty () const { return m_sWarnings.IsEmpty (); };
+
+	void AddStringsFrom ( const Warner_c &sSrc );
+	void MoveErrorsTo ( CSphString &sTarget );
+	void MoveWarningsTo ( CSphString &sTarget );
+	void MoveAllTo ( CSphString &sTarget );
+};
+
 
 #endif // _sphinxutils_

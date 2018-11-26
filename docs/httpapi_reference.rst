@@ -110,7 +110,28 @@ Response is a JSON document containing an array of attrs,matches and meta simila
 		  ]
 	   }
 	}
- 
+
+For comfortable debugging in browser you can set param 'mode' to 'raw', and then the rest of the query after 'query='
+will be passed inside without any substitutions/url decoding.
+
+.. code-block:: bash
+
+        curl -X POST http://manticoresearch:9308/sql -d "query=select id,packedfactors() from test where match('tes*') option ranker=expr('1')"
+
+
+.. code-block:: json
+
+	{"error":"query missing"}
+
+.. code-block:: bash
+
+		curl -X POST http://localhost:6780/sql -d "mode=raw&query=select id,packedfactors() from test where match('tes*') option ranker=expr('1')"
+
+.. code-block:: json
+
+{"attrs":["id","packedfactors()"],"matches":[[1,"bm25=616, bm25a=0.696891, field_mask=1, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=0.255958, min_idf=0.255958, max_idf=0.255958, sum_idf=0.255958, min_hit_pos=1, min_best_span_pos=1, exact_hit=0, max_window_hits=1, min_gaps=0, exact_order=1, lccs=1, wlccs=0.255958, atc=0.000000), word0=(tf=1, idf=0.255958)"],[2,"bm25=616, bm25a=0.696891, field_mask=1, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=0.255958, min_idf=0.255958, max_idf=0.255958, sum_idf=0.255958, min_hit_pos=1, min_best_span_pos=1, exact_hit=0, max_window_hits=1, min_gaps=0, exact_order=1, lccs=1, wlccs=0.255958, atc=0.000000), word0=(tf=1, idf=0.255958)"],[8,"bm25=616, bm25a=0.696891, field_mask=1, doc_word_count=1, field0=(lcs=1, hit_count=1, word_count=1, tf_idf=0.255958, min_idf=0.255958, max_idf=0.255958, sum_idf=0.255958, min_hit_pos=2, min_best_span_pos=2, exact_hit=0, max_window_hits=1, min_gaps=0, exact_order=1, lccs=1, wlccs=0.255958, atc=0.000000), word0=(tf=1, idf=0.255958)"]],"meta":{"total":3, "total_found":3, "time":0.001,"words":[{"word":"tes*", "docs":3, "hits":3}]}}
+
+
  
 /json API
 ---------

@@ -13,6 +13,7 @@
 #include "sphinx.h"
 #include "sphinxint.h"
 #include "sphinxjson.h"
+#include "sphinxutils.h"
 
 #include <time.h>
 #include <math.h>
@@ -4601,7 +4602,7 @@ static void SetupSortRemap ( CSphRsetSchema & tSorterSchema, CSphMatchComparator
 #ifndef NDEBUG
 	int iColWasCount = tSorterSchema.GetAttrsCount();
 #endif
-	for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; i++ )
+	for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; ++i )
 	{
 		if ( !( tState.m_eKeypart[i]==SPH_KEYPART_STRING || tState.m_tSubKeys[i].m_sKey.cstr() ) )
 			continue;
@@ -4679,19 +4680,30 @@ bool sphSortGetStringRemap ( const ISphSchema & tSorterSchema, const ISphSchema 
 
 static const char * EMPTY_STR = "";
 
+void UnpackString ( const BYTE *&pStr, int &iLen, StringSource_e eStrSource )
+{
+	if ( !pStr )
+	{
+		pStr = ( const BYTE * ) EMPTY_STR;
+		return;
+	}
+
+	if ( eStrSource==STRING_STATIC )
+		iLen = sphUnpackStr ( pStr, &pStr );
+	else if ( eStrSource==STRING_DATAPTR )
+		iLen = sphUnpackPtrAttr ( pStr, &pStr );
+}
+
 inline static void UnpackStrings ( const BYTE * & pStr1, const BYTE * & pStr2, StringSource_e eStrSource, int & iLen1, int & iLen2 )
 {
-	if ( eStrSource==STRING_STATIC || eStrSource==STRING_DATAPTR )
+	if ( eStrSource==STRING_STATIC )
 	{
-		if ( eStrSource==STRING_STATIC )
-		{
-			iLen1 = sphUnpackStr ( pStr1, &pStr1 );
-			iLen2 = sphUnpackStr ( pStr2, &pStr2 );
-		} else
-		{
-			iLen1 = sphUnpackPtrAttr ( pStr1, &pStr1 );
-			iLen2 = sphUnpackPtrAttr ( pStr2, &pStr2 );
-		}
+		iLen1 = sphUnpackStr ( pStr1, &pStr1 );
+		iLen2 = sphUnpackStr ( pStr2, &pStr2 );
+	} else if ( eStrSource==STRING_DATAPTR )
+	{
+		iLen1 = sphUnpackPtrAttr ( pStr1, &pStr1 );
+		iLen2 = sphUnpackPtrAttr ( pStr2, &pStr2 );
 	}
 
 	if ( !pStr1 ) pStr1 = (const BYTE*)EMPTY_STR;
@@ -5113,12 +5125,12 @@ static ISphMatchSorter * CreatePlainSorter ( ESphSortFunc eMatchFunc, bool bKbuf
 }
 
 
-static void ExtraAddSortkeys ( CSphSchema * pExtra, const ISphSchema & tSorterSchema, const int * dAttrs )
+static void ExtraAddSortkeys ( sph::StringSet * pExtra, const ISphSchema & tSorterSchema, const int * dAttrs )
 {
 	if ( pExtra )
 		for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; ++i )
 			if ( dAttrs[i]>=0 )
-				pExtra->AddAttr ( tSorterSchema.GetAttr ( dAttrs[i] ), true );
+				pExtra->Add ( tSorterSchema.GetAttr ( dAttrs[i] ).m_sName );
 }
 
 
@@ -5133,7 +5145,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 	const ISphSchema & tSchema = tQueue.m_tSchema;
 	CSphString & sError = tQueue.m_sError;
 	CSphQueryProfile * pProfiler = tQueue.m_pProfiler;
-	CSphSchema * pExtra = tQueue.m_pExtra;
+	auto * pExtra = tQueue.m_pExtra;
 
 	sError = "";
 	bool bHasZonespanlist = false;
@@ -5151,7 +5163,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 
 	tSorterSchema = tSchema;
 
-	CSphVector<uint64_t> dQueryAttrs;
+	sph::StringSet hQueryAttrs;
 
 	// we need this to perform a sanity check
 	bool bHasGroupByExpr = false;
@@ -5173,10 +5185,10 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		tCol.m_eStage = SPH_EVAL_OVERRIDE;
 		tSorterSchema.AddAttr ( tCol, true );
 		if ( pExtra )
-			pExtra->AddAttr ( tCol, true );
+			pExtra->Add ( tCol.m_sName );
 		tSorterSchema.RemoveStaticAttr ( iIndex );
 
-		dQueryAttrs.Add ( sphFNV64 ( tCol.m_sName.cstr() ) );
+		hQueryAttrs.Add ( tCol.m_sName );
 	}
 
 	// setup @geodist
@@ -5193,9 +5205,9 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		tCol.m_eStage = SPH_EVAL_PREFILTER; // OPTIMIZE? actual stage depends on usage
 		tSorterSchema.AddAttr ( tCol, true );
 		if ( pExtra )
-			pExtra->AddAttr ( tCol, true );
+			pExtra->Add ( tCol.m_sName );
 
-		dQueryAttrs.Add ( sphFNV64 ( tCol.m_sName.cstr() ) );
+		hQueryAttrs.Add ( tCol.m_sName );
 	}
 
 	// setup @expr
@@ -5209,7 +5221,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		tCol.m_eStage = SPH_EVAL_PRESORT;
 		tSorterSchema.AddAttr ( tCol, true );
 
-		dQueryAttrs.Add ( sphFNV64 ( tCol.m_sName.cstr() ) );
+		hQueryAttrs.Add ( tCol.m_sName );
 	}
 
 	// expressions from select items
@@ -5225,8 +5237,8 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 
 		if ( sExpr=="*" )
 		{
-			for ( int i=0; i<tSchema.GetAttrsCount(); i++ )
-				dQueryAttrs.Add ( sphFNV64 ( tSchema.GetAttr(i).m_sName.cstr() ) );
+			for ( int i=0; i<tSchema.GetAttrsCount(); ++i )
+				hQueryAttrs.Add ( tSchema.GetAttr(i).m_sName );
 		}
 
 		// for now, just always pass "plain" attrs from index to sorter; they will be filtered on searchd level
@@ -5257,7 +5269,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		if ( bPlainAttr || IsGroupby ( sExpr ) || bIsCount )
 		{
 			if ( sExpr!="*" && !tItem.m_sAlias.IsEmpty() )
-				dQueryAttrs.Add ( sphFNV64 ( tItem.m_sAlias.cstr() ) );
+				hQueryAttrs.Add ( tItem.m_sAlias );
 			bHasGroupByExpr = IsGroupby ( sExpr );
 			continue;
 		}
@@ -5271,7 +5283,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		int iSorterAttr = tSorterSchema.GetAttrIndex ( tItem.m_sAlias.cstr() );
 		if ( iSorterAttr>=0 )
 		{
-			if ( dQueryAttrs.Contains ( sphFNV64 ( tItem.m_sAlias.cstr() ) ) )
+			if ( hQueryAttrs[tItem.m_sAlias] )
 			{
 				sError.SetSprintf ( "alias '%s' must be unique (conflicts with another alias)", tItem.m_sAlias.cstr() );
 				return nullptr;
@@ -5394,7 +5406,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 			tExprCol.m_eStage = SPH_EVAL_PRESORT; // sorter expects computed expression
 			tSorterSchema.AddAttr ( tExprCol, true );
 			if ( pExtra )
-				pExtra->AddAttr ( tExprCol, true );
+				pExtra->Add ( tExprCol.m_sName );
 
 			/// update aggregate dependencies (e.g. SELECT 1+attr f1, min(f1), ...)
 			CSphVector<int> dCur;
@@ -5415,7 +5427,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 					tDep.m_eStage = tExprCol.m_eStage;
 			}
 		}
-		dQueryAttrs.Add ( sphFNV64 ( (const BYTE *)tExprCol.m_sName.cstr() ) );
+		hQueryAttrs.Add ( tExprCol.m_sName );
 	}
 
 	////////////////////////////////////////////
@@ -5510,16 +5522,17 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 
 		tSorterSchema.AddAttr ( tGroupby, true );
 		tSorterSchema.AddAttr ( tCount, true );
-		if ( pExtra )
-		{
-			pExtra->AddAttr ( tGroupby, true );
-			pExtra->AddAttr ( tCount, true );
-		}
+		// commented out since @-attrs ('magics') are always added in minimizeaggrresult
+//		if ( pExtra )
+//		{
+//			pExtra->AddAttr ( tGroupby, true );
+//			pExtra->AddAttr ( tCount, true );
+//		}
 		if ( bGotDistinct )
 		{
 			tSorterSchema.AddAttr ( tDistinct, true );
-			if ( pExtra )
-				pExtra->AddAttr ( tDistinct, true );
+//			if ( pExtra )
+//				pExtra->AddAttr ( tDistinct, true );
 		}
 
 		// add @groupbystr last in case we need to skip it on sending (like @int_str2ptr_*)
@@ -5661,7 +5674,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		if ( pExtra && !tSettings.m_bImplicit )
 		{
 			for ( const auto& dGroupColumn : dGroupColumns )
-				pExtra->AddAttr ( tSorterSchema.GetAttr ( dGroupColumn ), true );
+				pExtra->Add ( tSorterSchema.GetAttr ( dGroupColumn ).m_sName );
 		}
 
 		if ( bGotDistinct )
@@ -5669,7 +5682,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 			dGroupColumns.Add ( tSorterSchema.GetAttrIndex ( pQuery->m_sGroupDistinct.cstr() ) );
 			assert ( dGroupColumns.Last()>=0 );
 			if ( pExtra )
-				pExtra->AddAttr ( tSorterSchema.GetAttr ( dGroupColumns.Last() ), true );
+				pExtra->Add ( tSorterSchema.GetAttr ( dGroupColumns.Last() ).m_sName );
 		}
 
 		if ( dGroupColumns.GetLength() ) // implicit case

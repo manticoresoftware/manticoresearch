@@ -505,12 +505,7 @@ CSphString MultiAgentDesc_c::GetKey ( const CSphVector<AgentDesc_t *> &dTemplate
 {
 	StringBuilder_c sKey;
 	for ( const auto* dHost : dTemplateHosts )
-	{
-		sKey+=dHost->GetMyUrl ().cstr();
-		sKey+=":";
-		sKey+=dHost->m_sIndexes.cstr();
-		sKey+="|";
-	}
+		sKey << dHost->GetMyUrl () << ":" << dHost->m_sIndexes << "|";
 	sKey.Appendf ("[%d,%d,%d,%d,%d]",
 		tOpt.m_bBlackhole?1:0,
 		tOpt.m_bPersistent?1:0,
@@ -1337,7 +1332,8 @@ int SmartOutputBuffer_t::GetSentCount () const
 
 void SmartOutputBuffer_t::StartNewChunk ()
 {
-	assert ( BlobsEmpty() );
+	CommitAllMeasuredLengths ();
+	assert ( BlobsEmpty () );
 	m_dChunks.Add ( new ISphOutputBuffer ( m_dBuf ) );
 	m_dBuf.Reserve ( NETOUTBUF );
 }
@@ -1700,7 +1696,8 @@ bool AgentConn_t::BadResult ( int iError )
 
 	State ( Agent_e::RETRY );
 	Finish ();
-	m_dResults.Reset ();
+	if ( m_pResult )
+		m_pResult->Reset ();
 	return false;
 }
 
@@ -1812,21 +1809,19 @@ void AgentConn_t::TimeoutCallback ()
 	}
 }
 
-// fixme! Actually this must never happens.
-// So, explicit sphWarning used to detect if it actually called
 // the reason for orphanes is suggested to be combined write, then read in netloop with epoll
 bool AgentConn_t::CheckOrphaned()
 {
 	// check if we accidentally orphaned (that is bug!)
 	if ( IsLast () && !IsBlackhole () )
 	{
-		sphWarning ( "Orphaned (last) connection detected!" );
+		sphLogDebug ( "Orphaned (last) connection detected!" );
 		return true;
 	}
 
 	if ( m_pReporter && m_pReporter->IsDone () )
 	{
-		sphWarning ( "Orphaned (kind of done) connection detected!" );
+		sphLogDebug ( "Orphaned (kind of done) connection detected!" );
 		return true;
 	}
 	return false;
@@ -2240,10 +2235,10 @@ bool AgentConn_t::DoQuery()
 	m_tOutput.StartNewChunk ();
 	if ( IsPersistent() && m_iSock==-1 )
 	{
-		m_tOutput.SendWord ( SEARCHD_COMMAND_PERSIST );
-		m_tOutput.SendWord ( 0 ); // dummy version
-		m_tOutput.SendInt ( 4 ); // request body length
-		m_tOutput.SendInt ( 1 ); // set persistent to 1.
+		{
+			APICommand_t dPersist ( m_tOutput, SEARCHD_COMMAND_PERSIST );
+			m_tOutput.SendInt ( 1 ); // set persistent to 1.
+		}
 		m_tOutput.StartNewChunk ();
 	}
 
@@ -2508,8 +2503,8 @@ bool AgentConn_t::CommitResult ()
 
 	Finish();
 
-	if ( !bWarnings )
-		bWarnings = m_dResults.FindFirst ( [] ( const CSphQueryResult &dRes ) { return !dRes.m_sWarning.IsEmpty(); } );
+	if ( !bWarnings && m_pResult )
+		bWarnings = m_pResult->HasWarnings ();
 
 	agent_stats_inc ( *this, bWarnings ? eNetworkCritical : eNetworkNonCritical );
 	m_bSuccess = 1;
@@ -3770,6 +3765,7 @@ public:
 	{
 		events_create ( iSizeHint );
 		SphCrashLogger_c::ThreadCreate ( &m_dWorkingThread, WorkerFunc, this );
+		sphThreadName ( &m_dWorkingThread, "AgentsPoller");
 	}
 
 	~LazyNetEvents_c ()

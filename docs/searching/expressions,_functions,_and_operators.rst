@@ -547,7 +547,26 @@ Miscellaneous functions
 
 
        SELECT * FROM test WHERE ALL(mymva)>10;
-  
+
+    ALL(string list) is a special operation for filtering string tags.
+
+   .. code-block:: mysql
+
+
+       SELECT * FROM test WHERE tags ALL('foo', 'bar', 'fake');
+       SELECT * FROM test WHERE tags NOT ALL('true', 'text', 'tag');
+
+   Here assumed that index 'test' has string attribute 'tags' with set of words (tags), separated by whitespace.
+   If all of the words enumerated as arguments of `ALL()`' present in the attribute, filter matches. Optional 'NOT'
+   inverses the logic.
+   For example, attr containing 'buy iphone cheap' will be matched by `ALL('cheap', 'iphone')``, but will not match `ALL('iphone', '5s')``.
+
+   This filter internally uses doc-by-doc matching, so in case of full scan query it might be very slow. It is intended
+   originally for attributes which are not indexed, like calculated expressions or tags in pq indexes.
+
+   if you like such filtering and want to use it in production, consider the solution to put the 'tags' attribute as full-text
+   field, and then use FT operator 'match()' which will invoke full-text indexed search.
+
 
 .. _expr-func-any:
 
@@ -560,6 +579,16 @@ Miscellaneous functions
    ANY(mva) is a special constructor for multi value attributes. 
    When used in conjunction with comparison operators it returns 1 if any of the  values compared are found among the MVA values.
    ANY is used by default if no constructor is used, however a warning will be raised about missing constructor.
+
+   ANY(string list) is a special operation for filtering string tags. Works similar to :ref:`ALL() <expr-func-all>`, except
+   if condition is true for the case when any tag of tested expression match.
+
+   .. code-block:: mysql
+
+
+       SELECT * FROM test WHERE tags NOT ANY('true', 'text', 'tag');
+       SELECT TO_STRING(id*321) secret FROM test WHERE secret ANY('1000','3210');
+
    
 .. _expr-func-atan2:
 

@@ -103,6 +103,9 @@
 /* Define to 1 if you have the `pthread_mutex_timedlock' function. */
 #cmakedefine HAVE_PTHREAD_MUTEX_TIMEDLOCK ${HAVE_PTHREAD_MUTEX_TIMEDLOCK}
 
+/* Define to 1 if you have the `pthread_setname_np' function. */
+#cmakedefine HAVE_PTHREAD_SETNAME_NP ${HAVE_PTHREAD_SETNAME_NP}
+
 /* Define to 1 if you have the <stdint.h> header file. */
 #cmakedefine HAVE_STDINT_H ${HAVE_STDINT_H}
 

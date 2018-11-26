@@ -15,7 +15,7 @@ set ( LIBSPHINX_SRCS sphinx.cpp sphinxexcerpt.cpp
 		sphinxsearch.cpp sphinxrt.cpp sphinxjson.cpp
 		sphinxaot.cpp sphinxplugin.cpp sphinxudf.c
 		sphinxqcache.cpp sphinxrlp.cpp sphinxjsonquery.cpp
-		json/cJSON.c )
+		json/cJSON.c sphinxpq.cpp )
 set ( INDEXER_SRCS indexer.cpp )
 set ( INDEXTOOL_SRCS indextool.cpp )
 set ( SEARCHD_SRCS_TESTABLE searchdha.cpp http/http_parser.c searchdhttp.cpp )
@@ -149,7 +149,7 @@ target_link_libraries ( indexer libsphinx ${EXTRA_LIBRARIES} )
 target_link_libraries ( indextool libsphinx ${EXTRA_LIBRARIES} )
 target_link_libraries ( searchd libsphinx ${EXTRA_LIBRARIES} )
 target_link_libraries ( spelldump libsphinx ${EXTRA_LIBRARIES} )
-target_link_libraries ( wordbreaker ${EXTRA_LIBRARIES} )
+target_link_libraries ( wordbreaker libsphinx ${EXTRA_LIBRARIES} )
 
 if ( SPLIT_SYMBOLS )
 	include ( helpers )
@@ -170,7 +170,8 @@ if ( NOT DISABLE_TESTING )
 		include ( GetGoogletest )
 		if ( HAVE_GOOGLETEST )
 			set ( GTESTS_SRC ${SEARCHD_SRCS_TESTABLE} gtests_rtstuff.cpp gtests_tokenizer.cpp gtests_text.cpp
-					gtests_functions.cpp gtests_globalstate.cpp gtests_searchd.cpp gtests_filter.cpp gtests_searchdaemon.cpp )
+					gtests_functions.cpp gtests_globalstate.cpp gtests_searchd.cpp gtests_filter.cpp gtests_searchdaemon.cpp
+					gtests_pqstuff.cpp )
 			add_executable ( gmanticoretest ${GTESTS_SRC} )
 			target_link_libraries ( gmanticoretest gmock_main libsphinx ${EXTRA_LIBRARIES} )
 			if ( CMAKE_VERSION VERSION_LESS 3.9.0 )# freshest cmake able to discover google-tests

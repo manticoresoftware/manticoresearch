@@ -83,6 +83,15 @@ Two"}')
 <query endpoint="search" method="get">index=test&amp;limit=10&amp;select=*&amp;group=gid</query>
 <query endpoint="search" method="post">index=test&amp;limit=5&amp;select=*&amp;order_by=j.uid+asc</query>
 <query endpoint="sql" method="post">query=select%20%2A+from+test%20order+by+j.uid+asc+limit+5</query>
+
+<!-- expected to fail since non-url encoded -->
+<query endpoint="sql" method="post">query=select id,1+2 as a, packedfactors() from test where match('tes*') option ranker=expr('1')</query>
+<query endpoint="sql" method="get">query=select id,1+2 as a, packedfactors() from test where match('tes*') option ranker=expr('1')</query>
+
+<!-- expected to success since mode=raw -->
+<query endpoint="sql" method="post">mode=raw&amp;query=select id,1+2 as a, packedfactors() from test where match('tes*') option ranker=expr('1')</query>
+<query endpoint="sql" method="post">mode=raw&amp;query=select id,1+2 as a, packedfactors({json=1}) from test where match('tes*') option ranker=expr('1')</query>
+
 </httpqueries>
 
 </test>

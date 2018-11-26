@@ -59,7 +59,7 @@ static bool	IsFilter ( const cJSON * pJson )
 
 //////////////////////////////////////////////////////////////////////////
 // Misc cJSON helpers
-cJSON * GetJSONPropertyString ( const cJSON * pNode, const char * szName, CSphString & sError )
+cJSON * GetJSONPropertyString ( const cJSON * pNode, const char * szName, CSphString & sError, bool bIgnoreMissing )
 {
 	if ( !pNode )
 		return nullptr;
@@ -67,7 +67,9 @@ cJSON * GetJSONPropertyString ( const cJSON * pNode, const char * szName, CSphSt
 	cJSON * pChild = cJSON_GetObjectItem ( pNode, szName );
 	if ( !pChild )
 	{
-		sError.SetSprintf ( "\"%s\" property missing", szName );
+		if ( !bIgnoreMissing )
+			sError.SetSprintf ( "\"%s\" property missing", szName );
+
 		return nullptr;
 	}
 
@@ -81,7 +83,7 @@ cJSON * GetJSONPropertyString ( const cJSON * pNode, const char * szName, CSphSt
 }
 
 
-cJSON * GetJSONPropertyInt ( const cJSON * pNode, const char * szName, CSphString & sError )
+cJSON * GetJSONPropertyInt ( const cJSON * pNode, const char * szName, CSphString & sError, bool bIgnoreMissing )
 {
 	if ( !pNode )
 		return nullptr;
@@ -89,7 +91,9 @@ cJSON * GetJSONPropertyInt ( const cJSON * pNode, const char * szName, CSphStrin
 	cJSON * pChild = cJSON_GetObjectItem ( pNode, szName );
 	if ( !pChild )
 	{
-		sError.SetSprintf ( "\"%s\" property missing", szName );
+		if ( !bIgnoreMissing )
+			sError.SetSprintf ( "\"%s\" property missing", szName );
+
 		return nullptr;
 	}
 
@@ -103,7 +107,23 @@ cJSON * GetJSONPropertyInt ( const cJSON * pNode, const char * szName, CSphStrin
 }
 
 
-cJSON * GetJSONPropertyObject ( const cJSON * pNode, const char * szName, CSphString & sError )
+// get int property with a synonym
+cJSON * GetJSONPropertyInt ( const cJSON * pNode, const char * szName1, const char * szName2, CSphString & sError )
+{
+	cJSON * pResult = GetJSONPropertyInt ( pNode, szName1, sError, true );
+	if ( !pResult )
+	{
+		if ( !sError.IsEmpty() )
+			return nullptr;
+
+		pResult = GetJSONPropertyInt ( pNode, szName2, sError, true );
+	}
+
+	return pResult;
+}
+
+
+cJSON * GetJSONPropertyObject ( const cJSON * pNode, const char * szName, CSphString & sError, bool bIgnoreMissing )
 {
 	if ( !pNode )
 		return nullptr;
@@ -111,7 +131,8 @@ cJSON * GetJSONPropertyObject ( const cJSON * pNode, const char * szName, CSphSt
 	cJSON * pChild = cJSON_GetObjectItem ( pNode, szName );
 	if ( !pChild )
 	{
-		sError.SetSprintf ( "\"%s\" property missing", szName );
+		if ( !bIgnoreMissing )
+			sError.SetSprintf ( "\"%s\" property missing", szName );
 		return nullptr;
 	}
 
@@ -1308,6 +1329,28 @@ bool ParseJsonQueryFilters ( const cJSON * pQuery, CSphQuery & tQuery, CSphStrin
 }
 
 
+static bool ParseLimits ( cJSON * pRoot, CSphQuery & tQuery, CSphString & sError )
+{
+	assert ( pRoot );
+
+	cJSON * pLimit = GetJSONPropertyInt ( pRoot, "limit", "size", sError );
+	if ( !sError.IsEmpty() )
+		return false;
+
+	if ( pLimit )
+		tQuery.m_iLimit = pLimit->valueint;
+
+	cJSON * pOffset = GetJSONPropertyInt ( pRoot, "offset", "from", sError );
+	if ( !sError.IsEmpty() )
+		return false;
+
+	if ( pOffset )
+		tQuery.m_iOffset = pLimit->valueint;
+
+	return true;
+}
+
+
 bool sphParseJsonQuery ( const char * szQuery, CSphQuery & tQuery, bool & bProfile, bool & bAttrsHighlight, CSphString & sError, CSphString & sWarning )
 {
 	CJsonScopedPtr_c pRoot ( cJSON_Parse ( szQuery ) );
@@ -1328,6 +1371,9 @@ bool sphParseJsonQuery ( const char * szQuery, CSphQuery & tQuery, bool & bProfi
 
 	if ( tQuery.m_sIndexes==g_szAll )
 		tQuery.m_sIndexes = "*";
+
+	if ( !ParseLimits ( pRoot.Ptr(), tQuery, sError ) )
+		return false;
 
 	cJSON * pQuery = cJSON_GetObjectItem ( pRoot.Ptr(), "query" );
 
@@ -1665,7 +1711,8 @@ static void PackedMVA2Json ( const BYTE * pMVA, cJSON * pArray )
 }
 
 
-static void JsonObjAddAttr ( const AggrResult_t & tRes, ESphAttr eAttrType, const char * szCol, const CSphMatch & tMatch, const CSphAttrLocator & tLoc, cJSON * pSource, CSphVector<BYTE> & dTmp )
+static void JsonObjAddAttr ( const AggrResult_t & tRes, ESphAttr eAttrType, const char * szCol,
+	const CSphMatch & tMatch, const CSphAttrLocator & tLoc, cJSON * pSource )
 {
 	assert ( sphPlainAttrToPtrAttr(eAttrType)==eAttrType );
 
@@ -1704,10 +1751,10 @@ static void JsonObjAddAttr ( const AggrResult_t & tRes, ESphAttr eAttrType, cons
 		{
 			const auto * pString = (const BYTE *)tMatch.GetAttr(tLoc);
 			int iLen = sphUnpackPtrAttr ( pString, &pString );
-			dTmp.Resize ( iLen+1 );
-			memcpy ( dTmp.Begin(), pString, iLen );
-			dTmp[iLen] = '\0';
-			cJSON_AddStringToObject ( pSource, szCol, (const char *)dTmp.Begin() );
+			StringBuilder_c sTmp;
+			sTmp.GrowEnough (iLen+1);
+			sTmp.AppendChars ((const char*)pString, iLen);
+			cJSON_AddStringToObject ( pSource, szCol, sTmp.cstr() );
 		}
 		break;
 
@@ -1723,16 +1770,12 @@ static void JsonObjAddAttr ( const AggrResult_t & tRes, ESphAttr eAttrType, cons
 				break;
 			}
 
-			dTmp.Resize ( 0 );
-			sphJsonFormat ( dTmp, pJSON );
-			if ( !dTmp.GetLength() )
-			{
+			JsonEscapedBuilder sTmp;
+			sphJsonFormat ( sTmp, pJSON );
+			if ( !sTmp.IsEmpty () )
+				cJSON_AddStringToObject ( pSource, szCol, sTmp.cstr () );
+			else
 				cJSON_AddNullToObject ( pSource, szCol );
-				break;
-			}
-
-			dTmp.Add ( '\0' );
-			cJSON_AddStringToObject ( pSource, szCol, (const char *)dTmp.Begin() );
 		}
 		break;
 
@@ -1744,10 +1787,9 @@ static void JsonObjAddAttr ( const AggrResult_t & tRes, ESphAttr eAttrType, cons
 			if ( pFactors )
 			{
 				bool bStr = ( eAttrType==SPH_ATTR_FACTORS );
-				dTmp.Resize ( 0 );
-				sphFormatFactors ( dTmp, (const unsigned int *)pFactors, !bStr );
-				dTmp.Add ( '\0' );
-				cJSON_AddStringToObject ( pSource, szCol, (const char *)dTmp.Begin() );
+				StringBuilder_c sTmp;
+				sphFormatFactors ( sTmp, (const unsigned int *)pFactors, !bStr );
+				cJSON_AddStringToObject ( pSource, szCol, sTmp.cstr () );
 			} else
 				cJSON_AddNullToObject ( pSource, szCol );
 		}
@@ -1768,10 +1810,9 @@ static void JsonObjAddAttr ( const AggrResult_t & tRes, ESphAttr eAttrType, cons
 				cJSON_AddNullToObject ( pSource, szCol );
 			else
 			{
-				dTmp.Resize ( 0 );
-				sphJsonFieldFormat ( dTmp, pField, eJson, true );
-				dTmp.Add ( '\0' );
-				cJSON_AddStringToObject ( pSource, szCol, (const char *)dTmp.Begin() );
+				JsonEscapedBuilder sTmp;
+				sphJsonFieldFormat ( sTmp, pField, eJson, true );
+				cJSON_AddStringToObject ( pSource, szCol, sTmp.cstr () );
 			}
 		}
 		break;
@@ -1911,7 +1952,7 @@ CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQ
 			const CSphColumnInfo & tCol = tSchema.GetAttr(iAttr);
 			const char * sName = tCol.m_sName.cstr();
 
-			JsonObjAddAttr ( tRes, tCol.m_eAttrType, sName, tMatch, tCol.m_tLocator, pSource, dTmp );
+			JsonObjAddAttr ( tRes, tCol.m_eAttrType, sName, tMatch, tCol.m_tLocator, pSource );
 		}
 
 		if ( bAttrsHighlight )
@@ -2185,14 +2226,9 @@ void sphInitCJson()
 
 struct HttpSnippetField_t
 {
-	int m_iFragmentSize;
-	int m_iFragmentCount;
+	int m_iFragmentSize = -1;
+	int m_iFragmentCount = -1;
 	CSphString m_sName;
-
-	HttpSnippetField_t()
-		: m_iFragmentSize ( -1 )
-		, m_iFragmentCount ( -1 )
-	{}
 };
 
 static bool CheckField ( HttpSnippetField_t & tParsed, CSphString & sError, const cJSON * pField )
@@ -2400,41 +2436,32 @@ bool ParseSnippet ( cJSON * pSnip, CSphQuery & tQuery, CSphString & sError )
 			tField.m_iFragmentCount = tGlobalOptions.m_iFragmentCount;
 	}
 
-	// FIXME!!! get rid of print -> parse
-	StringBuilder_c sSelect;
-	sSelect += tQuery.m_sSelect.cstr();
-
-	StringBuilder_c sItem;
-	ARRAY_FOREACH ( iSnip, dFields )
+	for ( const HttpSnippetField_t &tSnip : dFields )
 	{
-		const HttpSnippetField_t & tSnip = dFields[iSnip];
-		sItem.Clear();
-		const char * sHiQuery = ( sQuery.IsEmpty() ? tQuery.m_sQuery.cstr() : sQuery.cstr() );
-		sItem.Appendf ( "SNIPPET(%s, '%s'", tSnip.m_sName.cstr(), sHiQuery );
+		StringBuilder_c sItem;
+		const char * sHiQuery = ( sQuery.IsEmpty () ? tQuery.m_sQuery.cstr () : sQuery.cstr () );
+		sItem << "SNIPPET(" << tSnip.m_sName << ", '" << sHiQuery << "'";
 
-		if ( !sPreTag.IsEmpty() )
-			sItem.Appendf ( ", 'before_match=%s'", sPreTag.cstr() );
-		if ( !sPostTag.IsEmpty() )
-			sItem.Appendf ( ", 'after_match=%s'", sPostTag.cstr() );
+		if ( !sPreTag.IsEmpty () )
+			sItem << ", 'before_match=" << sPreTag << "'";
+		if ( !sPostTag.IsEmpty () )
+			sItem << ", 'after_match=" << sPostTag << "'";
 		if ( tSnip.m_iFragmentSize!=-1 && !bKeepHtml )
 			sItem.Appendf ( ", 'limit=%d'", tSnip.m_iFragmentSize );
 		if ( tSnip.m_iFragmentCount!=-1 && !bKeepHtml )
 			sItem.Appendf ( ", 'limit_passages=%d'", tSnip.m_iFragmentCount );
 		if ( iNoMatch<1 )
-			sItem.Appendf ( ", 'allow_empty=1'" );
+			sItem << ", 'allow_empty=1'";
 		if ( bWeightOrder )
-			sItem.Appendf ( ", 'weight_order=1'" );
+			sItem << ", 'weight_order=1'";
 		if ( bKeepHtml )
-			sItem.Appendf ( ", 'html_strip_mode=retain', 'limit=0'" );
+			sItem << ", 'html_strip_mode=retain', 'limit=0'";
 
-		sItem += ",'json_query=1')";
+		sItem += ", 'json_query=1')";
 
-		sSelect += ", ";
-		sSelect += sItem.cstr();
-
-		CSphQueryItem & tItem = tQuery.m_dItems.Add();
-		tItem.m_sExpr = sItem.cstr();
-		tItem.m_sAlias.SetSprintf ( "%s%s", g_sHighlight, tSnip.m_sName.cstr() );
+		CSphQueryItem &tItem = tQuery.m_dItems.Add ();
+		tItem.m_sExpr = sItem.cstr ();
+		tItem.m_sAlias.SetSprintf ( "%s%s", g_sHighlight, tSnip.m_sName.cstr () );
 	}
 
 	return true;
@@ -2567,17 +2594,17 @@ bool ParseSort ( cJSON * pSort, CSphQuery & tQuery, bool & bGotWeight, CSphStrin
 		bool bObj = !!cJSON_IsObject ( pItem );
 		if ( !bString && !bObj )
 		{
-			sError.SetSprintf ( "\"sort\" property %d(\"%s\") should be a string or an object", i, ( pItem->string ? pItem->string : "" ) );
+			sError.SetSprintf ( R"("sort" property %d("%s") should be a string or an object)", i, ( pItem->string ? pItem->string : "" ) );
 			return false;
 		}
 		if ( bString && !pItem->valuestring )
 		{
-			sError.SetSprintf ( "\"sort\" property %d should be a string", i );
+			sError.SetSprintf ( R"("sort" property %d should be a string)", i );
 			return false;
 		}
 		if ( bObj && cJSON_GetArraySize ( pItem )!=1 )
 		{
-			sError.SetSprintf ( "\"sort\" property %d(\"%s\") should be object", i, ( pItem->string ? pItem->string : "" ) );
+			sError.SetSprintf ( R"("sort" property %d("%s") should be object)", i, ( pItem->string ? pItem->string : "" ) );
 			return false;
 		}
 
@@ -2604,7 +2631,7 @@ bool ParseSort ( cJSON * pSort, CSphQuery & tQuery, bool & bGotWeight, CSphStrin
 		if ( ( !bSortString && !bSortObj ) || !pSortItem->string
 			|| ( bSortString && !pSortItem->valuestring ) )
 		{
-			sError.SetSprintf ( "\"sort\" property 0(\"%s\") should be %s", ( pItem->string ? pItem->string : "" ), ( bSortObj ? "a string" : "an object" ) );
+			sError.SetSprintf ( R"("sort" property 0("%s") should be %s)", ( pItem->string ? pItem->string : "" ), ( bSortObj ? "a string" : "an object" ) );
 			return false;
 		}
 
@@ -2614,7 +2641,7 @@ bool ParseSort ( cJSON * pSort, CSphQuery & tQuery, bool & bGotWeight, CSphStrin
 			CSphString sOrder = pSortItem->valuestring;
 			if ( sOrder!="asc" && sOrder!="desc" )
 			{
-				sError.SetSprintf ( "\"sort\" property \"%s\" order is invalid %s", pSortItem->string, sOrder.cstr() );
+				sError.SetSprintf ( R"("sort" property "%s" order is invalid %s)", pSortItem->string, sOrder.cstr() );
 				return false;
 			}
 
@@ -2634,7 +2661,7 @@ bool ParseSort ( cJSON * pSort, CSphQuery & tQuery, bool & bGotWeight, CSphStrin
 		{
 			if ( !cJSON_IsString ( pAttrItems ) )
 			{
-				sError.SetSprintf ( "\"sort\" property \"%s\" order is invalid", pAttrItems->string );
+				sError.SetSprintf ( R"("sort" property "%s" order is invalid)", pAttrItems->string );
 				return false;
 			}
 
@@ -2647,14 +2674,14 @@ bool ParseSort ( cJSON * pSort, CSphQuery & tQuery, bool & bGotWeight, CSphStrin
 		{
 			if ( pAttrItems && !cJSON_IsString ( pMode ) )
 			{
-				sError.SetSprintf ( "\"mode\" property \"%s\" order is invalid", pAttrItems->string );
+				sError.SetSprintf ( R"("mode" property "%s" order is invalid)", pAttrItems->string );
 				return false;
 			}
 
 			CSphString sMode = pMode->valuestring;
 			if ( sMode!="min" && sMode!="max" )
 			{
-				sError.SetSprintf ( "\"mode\" supported are \"min\" and \"max\", got \"%s\", not supported", sMode.cstr() );
+				sError.SetSprintf ( R"("mode" supported are "min" and "max", got "%s", not supported)", sMode.cstr() );
 				return false;
 			}
 
@@ -2666,12 +2693,12 @@ bool ParseSort ( cJSON * pSort, CSphQuery & tQuery, bool & bGotWeight, CSphStrin
 		{
 			if ( pMode )
 			{
-				sError = "\"mode\" property not supported with \"_geo_distance\"";
+				sError = R"("mode" property not supported with "_geo_distance")";
 				return false;
 			}
 			if ( cJSON_GetObjectItem ( pSortItem, "unit" ) )
 			{
-				sError = "\"unit\" property not supported with \"_geo_distance\"";
+				sError = R"("unit" property not supported with "_geo_distance")";
 				return false;
 			}
 
@@ -2683,41 +2710,41 @@ bool ParseSort ( cJSON * pSort, CSphQuery & tQuery, bool & bGotWeight, CSphStrin
 		cJSON * pUnmapped = cJSON_GetObjectItem ( pSortItem, "unmapped_type" );
 		if ( pUnmapped )
 		{
-			sError = "\"unmapped_type\" property not supported";
+			sError = R"("unmapped_type" property not supported)";
 			return false;
 		}
 		cJSON * pMissing = cJSON_GetObjectItem ( pSortItem, "missing" );
 		if ( pMissing )
 		{
-			sError = "\"missing\" property not supported";
+			sError = R"("missing" property not supported)";
 			return false;
 		}
 		cJSON * pNestedPath = cJSON_GetObjectItem ( pSortItem, "nested_path" );
 		if ( pNestedPath )
 		{
-			sError = "\"nested_path\" property not supported";
+			sError = R"("nested_path" property not supported)";
 			return false;
 		}
 		cJSON * pNestedFilter = cJSON_GetObjectItem ( pSortItem, "nested_filter" );
 		if ( pNestedFilter )
 		{
-			sError = "\"nested_filter\" property not supported";
+			sError = R"("nested_filter" property not supported)";
 			return false;
 		}
 	}
 
-	const char * sSep = "";
 	StringBuilder_c sSortBuf;
-	StringBuilder_c sTmp;
+	Comma_c sComma;
+
 	bGotWeight = false;
 
-	ARRAY_FOREACH ( i, dSort )
+	for ( const SortField_t &tItem : dSort )
 	{
-		const SortField_t & tItem = dSort[i];
+		const char * sSort = ( tItem.m_bAsc ? " asc" : " desc" );
 		if ( tItem.IsGeoDist() )
 		{
 			// ORDER BY statement
-			sSortBuf.Appendf ( "%s%s%s %s", sSep, g_sOrder, tItem.m_sName.cstr(), ( tItem.m_bAsc ? "asc" : "desc" ) );
+			sSortBuf << sComma << g_sOrder << tItem.m_sName << sSort;
 
 			// query item
 			CSphQueryItem & tQueryItem = tQuery.m_dItems.Add();
@@ -2725,34 +2752,31 @@ bool ParseSort ( cJSON * pSort, CSphQuery & tQuery, bool & bGotWeight, CSphStrin
 			tQueryItem.m_sAlias.SetSprintf ( "%s%s", g_sOrder, tItem.m_sName.cstr() );
 
 			// select list
-			sTmp.Clear();
-			sTmp.Appendf ( "%s, %s as %s", tQuery.m_sSelect.cstr(), tQueryItem.m_sExpr.cstr(), tQueryItem.m_sAlias.cstr() );
-			tQuery.m_sSelect = sTmp.cstr();
+			StringBuilder_c sTmp;
+			sTmp << tQuery.m_sSelect << ", " << tQueryItem.m_sExpr << " as " << tQueryItem.m_sAlias;
+			sTmp.MoveTo ( tQuery.m_sSelect );
 		} else if ( tItem.m_sMode.IsEmpty() )
 		{
 			// sort by attribute or weight
-			sSortBuf.Appendf ( "%s%s %s", sSep, ( tItem.m_sName=="_score" ? "@weight" : tItem.m_sName.cstr() ), ( tItem.m_bAsc ? "asc" : "desc" ) );
+			sSortBuf << sComma << ( tItem.m_sName=="_score" ? "@weight" : tItem.m_sName ) << sSort;
 			bGotWeight |= ( tItem.m_sName=="_score" );
 		} else
 		{
 			// sort by MVA
-
 			// ORDER BY statement
-			sSortBuf.Appendf ( "%s%s%s %s", sSep, g_sOrder, tItem.m_sName.cstr(), ( tItem.m_bAsc ? "asc" : "desc" ) );
+			sSortBuf << sComma << g_sOrder << tItem.m_sName << sSort;
 
 			// query item
-			sTmp.Clear();
-			sTmp.Appendf ( "%s(%s)", tItem.m_sMode=="min" ? "least" : "greatest", tItem.m_sName.cstr() );
+			StringBuilder_c sTmp;
+			sTmp << ( tItem.m_sMode=="min" ? "least" : "greatest" ) << "(" << tItem.m_sName << ")";
 			CSphQueryItem & tQueryItem = tQuery.m_dItems.Add();
-			tQueryItem.m_sExpr = sTmp.cstr();
+			sTmp.MoveTo (tQueryItem.m_sExpr);
 			tQueryItem.m_sAlias.SetSprintf ( "%s%s", g_sOrder, tItem.m_sName.cstr() );
 
 			// select list
-			sTmp.Clear();
-			sTmp.Appendf ( "%s, %s as %s", tQuery.m_sSelect.cstr(), tQueryItem.m_sExpr.cstr(), tQueryItem.m_sAlias.cstr() );
-			tQuery.m_sSelect = sTmp.cstr();
+			sTmp << tQuery.m_sSelect << ", " << tQueryItem.m_sExpr << " as " << tQueryItem.m_sAlias;
+			sTmp.MoveTo ( tQuery.m_sSelect );
 		}
-		sSep = ", ";
 	}
 	if ( !dSort.GetLength() )
 	{
@@ -2761,8 +2785,7 @@ bool ParseSort ( cJSON * pSort, CSphQuery & tQuery, bool & bGotWeight, CSphStrin
 	}
 
 	tQuery.m_eSort = SPH_SORT_EXTENDED;
-	tQuery.m_sSortBy = sSortBuf.cstr();
-
+	sSortBuf.MoveTo ( tQuery.m_sSortBy );
 	return true;
 }
 
@@ -2790,7 +2813,7 @@ bool ParseLocation ( const char * sName, cJSON * pLoc, LocationField_t * pField,
 		if ( !pLat || !pLon )
 		{
 			if ( !pLat && !pLon )
-				sError = "\"lat\" and \"lon\" properties missed";
+				sError = R"("lat" and "lon" properties missed)";
 			else
 				sError.SetSprintf ( "\"%s\" property missed", ( !pLat ? "lat" : "lon" ) );
 			return false;
@@ -2801,7 +2824,7 @@ bool ParseLocation ( const char * sName, cJSON * pLoc, LocationField_t * pField,
 		if ( !bLatChecked || !bLonChecked )
 		{
 			if ( !bLatChecked && !bLonChecked )
-				sError.SetSprintf ( "\"lat\" and \"lon\" property values should be %s", ( bParseField ? "numeric" : "string" ) );
+				sError.SetSprintf ( R"("lat" and "lon" property values should be %s)", ( bParseField ? "numeric" : "string" ) );
 			else
 				sError.SetSprintf ( "\"%s\" property value should be %s", ( !bLatChecked ? "lat" : "lon" ), ( bParseField ? "numeric" : "string" ) );
 			return false;
@@ -2838,7 +2861,7 @@ bool ParseLocation ( const char * sName, cJSON * pLoc, LocationField_t * pField,
 		if ( !iLatLen || !iLonLen )
 		{
 			if ( !iLatLen && !iLonLen )
-				sError.SetSprintf ( "\"lat\" and \"lon\" values should be %s", ( bParseField ? "numeric" : "string" ) );
+				sError.SetSprintf ( R"("lat" and "lon" values should be %s)", ( bParseField ? "numeric" : "string" ) );
 			else
 				sError.SetSprintf ( "\"%s\" value should be %s", ( !iLatLen ? "lat" : "lon" ), ( bParseField ? "numeric" : "string" ) );
 			return false;
@@ -2872,7 +2895,7 @@ bool ParseLocation ( const char * sName, cJSON * pLoc, LocationField_t * pField,
 	if ( !pLat || !pLon )
 	{
 		if ( !pLat && !pLon )
-			sError = "\"lat\" and \"lon\" properties missed";
+			sError = R"("lat" and "lon" properties missed)";
 		else
 			sError.SetSprintf ( "\"%s\" property missed", !pLat ? "lat" : "lon" );
 		return false;
@@ -2883,9 +2906,9 @@ bool ParseLocation ( const char * sName, cJSON * pLoc, LocationField_t * pField,
 	if ( !bLatChecked || !bLonChecked )
 	{
 		if ( !bLatChecked && !bLonChecked )
-			sError.SetSprintf ( "\"lat\" and \"lon\" property values should be %s", ( bParseField ? "numeric" : "string" ) );
+			sError.SetSprintf ( R"("lat" and "lon" property values should be %s)", ( bParseField ? "numeric" : "string" ) );
 		else
-			sError.SetSprintf ( "\"%s\" property value should be %s", ( !bLatChecked ? "lat" : "lon" ), ( bParseField ? "numeric" : "string" ) );
+			sError.SetSprintf ( R"("%s" property value should be %s)", ( !bLatChecked ? "lat" : "lon" ), ( bParseField ? "numeric" : "string" ) );
 		return false;
 	}
 
@@ -2935,7 +2958,7 @@ bool ParseSelect ( cJSON * pSelect, CSphQuery & tQuery, CSphString & sError )
 
 	if ( !bString && !bArray && !bObj )
 	{
-		sError = "\"_source\" property should be a string or an array or an object";
+		sError = R"("_source" property should be a string or an array or an object)";
 		return false;
 	}
 
@@ -2949,7 +2972,7 @@ bool ParseSelect ( cJSON * pSelect, CSphQuery & tQuery, CSphString & sError )
 	}
 
 	if ( bArray )
-		return ParseStringArray ( pSelect, "\"_source\"", tQuery.m_dIncludeItems, sError );
+		return ParseStringArray ( pSelect, R"("_source")", tQuery.m_dIncludeItems, sError );
 
 	assert ( bObj );
 
@@ -2957,12 +2980,12 @@ bool ParseSelect ( cJSON * pSelect, CSphQuery & tQuery, CSphString & sError )
 	cJSON * pInclude = cJSON_GetObjectItem ( pSelect, "includes" );
 	if ( pInclude && !cJSON_IsArray ( pInclude ) )
 	{
-		sError = "\"_source\" \"includes\" property should be an array";
+		sError = R"("_source" "includes" property should be an array)";
 		return false;
 	}
 	if ( pInclude )
 	{
-		if ( !ParseStringArray ( pInclude, "\"_source\" \"includes\"", tQuery.m_dIncludeItems, sError ) )
+		if ( !ParseStringArray ( pInclude, R"("_source" "includes")", tQuery.m_dIncludeItems, sError ) )
 			return false;
 
 		if ( tQuery.m_dIncludeItems.GetLength()==1 && tQuery.m_dIncludeItems[0]=="*" )
@@ -2973,12 +2996,12 @@ bool ParseSelect ( cJSON * pSelect, CSphQuery & tQuery, CSphString & sError )
 	cJSON * pExclude = cJSON_GetObjectItem ( pSelect, "excludes" );
 	if ( pExclude && !cJSON_IsArray ( pExclude ) )
 	{
-		sError = "\"_source\" \"excludes\" property should be an array";
+		sError = R"("_source" "excludes" property should be an array)";
 		return false;
 	}
 	if ( pExclude )
 	{
-		if ( !ParseStringArray ( pExclude, "\"_source\" \"excludes\"", tQuery.m_dExcludeItems, sError ) )
+		if ( !ParseStringArray ( pExclude, R"("_source" "excludes")", tQuery.m_dExcludeItems, sError ) )
 			return false;
 
 		if ( !tQuery.m_dExcludeItems.GetLength() )
@@ -2997,14 +3020,14 @@ static bool GetString ( const cJSON * pObj, const char * sProp, CSphString & sVa
 	cJSON * pProp = cJSON_GetObjectItem ( pObj, sProp );
 	if ( !pProp )
 	{
-		sError.SetSprintf ( "\"%s\" property should have \"%s\" string", pObj->string, sProp );
+		sError.SetSprintf ( R"("%s" property should have "%s" string)", pObj->string, sProp );
 		return false;
 
 	}
 
 	if ( !cJSON_IsString ( pProp ) )
 	{
-		sError.SetSprintf ( "\"%s\" property should be a string", sProp );
+		sError.SetSprintf ( R"("%s" property should be a string)", sProp );
 		return false;
 	}
 
@@ -3019,12 +3042,12 @@ bool ParseExpr ( cJSON * pExpr, CSphQuery & tQuery, CSphString & sError )
 
 	if ( !cJSON_IsObject ( pExpr ) )
 	{
-		sError = "\"script_fields\" property should be an object";
+		sError = R"("script_fields" property should be an object)";
 		return false;
 	}
 
 	StringBuilder_c sSelect;
-	sSelect += tQuery.m_sSelect.cstr();
+	sSelect << tQuery.m_sSelect;
 
 	int iCount = cJSON_GetArraySize ( pExpr );
 	for ( int iExpr=0; iExpr<iCount; iExpr++ )
@@ -3032,24 +3055,24 @@ bool ParseExpr ( cJSON * pExpr, CSphQuery & tQuery, CSphString & sError )
 		cJSON * pAlias = cJSON_GetArrayItem ( pExpr, iExpr );
 		if ( !pAlias )
 		{
-			sError.SetSprintf ( "missed %d \"script_fields\" property item", iExpr );
+			sError.SetSprintf ( R"(missed %d "script_fields" property item)", iExpr );
 			return false;
 		}
 		if ( !cJSON_IsObject ( pAlias ) )
 		{
-			sError.SetSprintf ( "\"script_fields\" property %d should be an object", iExpr );
+			sError.SetSprintf ( R"("script_fields" property %d should be an object)", iExpr );
 			return false;
 		}
 		if ( !pAlias->string || !*pAlias->string )
 		{
-			sError.SetSprintf ( "\"script_fields\" property %d invalid name", iExpr );
+			sError.SetSprintf ( R"("script_fields" property %d invalid name)", iExpr );
 			return false;
 		}
 
 		cJSON * pAliasScript = cJSON_GetObjectItem ( pAlias, "script" );
 		if ( !pAliasScript )
 		{
-			sError.SetSprintf ( "\"script_fields\" property should have \"script\" object" );
+			sError = R"("script_fields" property should have "script" object)";
 			return false;
 		}
 
@@ -3060,22 +3083,22 @@ bool ParseExpr ( cJSON * pExpr, CSphQuery & tQuery, CSphString & sError )
 		// unsupported options
 		if ( cJSON_GetObjectItem ( pAliasScript, "lang" ) )
 		{
-			sError.SetSprintf ( "\"script_fields\" \"lang\" property unsupported, use manticore inline expression" );
+			sError = R"("script_fields" "lang" property unsupported, use manticore inline expression)";
 			return false;
 		}
 		if ( cJSON_GetObjectItem ( pAliasScript, "params" ) )
 		{
-			sError.SetSprintf ( "\"script_fields\" \"params\" property unsupported" );
+			sError = R"("script_fields" "params" property unsupported)";
 			return false;
 		}
 		if ( cJSON_GetObjectItem ( pAliasScript, "stored" ) )
 		{
-			sError.SetSprintf ( "\"script_fields\" \"stored\" property unsupported" );
+			sError = R"("script_fields" "stored" property unsupported)";
 			return false;
 		}
 		if ( cJSON_GetObjectItem ( pAliasScript, "file" ) )
 		{
-			sError.SetSprintf ( "\"script_fields\" \"file\" property unsupported" );
+			sError = R"("script_fields" "file" property unsupported)";
 			return false;
 		}
 
@@ -3088,6 +3111,6 @@ bool ParseExpr ( cJSON * pExpr, CSphQuery & tQuery, CSphString & sError )
 		sSelect.Appendf ( ", %s as %s", tQueryItem.m_sExpr.cstr(), tQueryItem.m_sAlias.cstr() );
 	}
 
-	tQuery.m_sSelect = sSelect.cstr();
+	sSelect.MoveTo ( tQuery.m_sSelect );
 	return true;
 }

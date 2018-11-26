@@ -830,12 +830,12 @@ public:
 
 inline bool NetEventsIterator_t::IsReadable () const
 {
-	return bool ( m_uEvents & ISphNetEvents::SPH_POLL_RD );
+	return !! ( m_uEvents & ISphNetEvents::SPH_POLL_RD );
 }
 
 inline bool NetEventsIterator_t::IsWritable () const
 {
-	return bool ( m_uEvents & ISphNetEvents::SPH_POLL_WR );
+	return !! ( m_uEvents & ISphNetEvents::SPH_POLL_WR );
 }
 
 // all fresh codeflows use version with poll/epoll/kqueue.

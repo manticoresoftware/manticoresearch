@@ -246,7 +246,7 @@ struct ServiceThread_t
 
 	void Join ()
 	{
-		if ( m_bCreated )
+		if ( m_bCreated && sphGetShutdown() )
 			sphThreadJoin ( &m_tThread );
 		m_bCreated = false;
 	}
@@ -9918,8 +9918,8 @@ bool MakeSnippets ( CSphString sIndex, CSphVector<ExcerptQueryChained_t> & dQuer
 
 	// Both load_files && load_files_scattered report the absent files as errors.
 	// load_files_scattered without load_files just omits the absent files (returns empty strings).
-	auto bScattered = bool ( q.m_uFilesMode & 2 );
-	auto bNeedAllFiles = bool ( q.m_uFilesMode & 1 );
+	auto bScattered = !!( q.m_uFilesMode & 2 );
+	auto bNeedAllFiles = !!( q.m_uFilesMode & 1 );
 
 	auto pDist = GetDistr ( sIndex );
 	if ( pDist )
@@ -12616,9 +12616,9 @@ struct PqReplyParser_t : public IReplyParser_t
 
 		auto &dResult = pResult->m_dResult;
 		auto uFlags = tReq.GetDword ();
-		bool bDumpDocs = uFlags & 1;
-		bool bQuery = uFlags & 2;
-		bool bDeduplicatedDocs = uFlags & 4;
+		bool bDumpDocs = !!(uFlags & 1);
+		bool bQuery = !!(uFlags & 2);
+		bool bDeduplicatedDocs = !!(uFlags & 4);
 
 		dResult.m_bGetDocs = bDumpDocs;
 		dResult.m_bGetQuery = bQuery;
@@ -13127,11 +13127,11 @@ void HandleCommandCallPq ( CachedOutputBuffer_c &tOut, WORD uVer, InputBuffer_c 
 	PercolateOptions_t tOpts;
 
 	DWORD uFlags = tReq.GetDword ();
-	tOpts.m_bGetDocs	= bool (uFlags & 1);
-	tOpts.m_bGetQuery	= bool (uFlags & 2);
-	tOpts.m_bJsonDocs	= bool (uFlags & 4);
-	tOpts.m_bVerbose	= bool (uFlags & 8);
-	tOpts.m_bSkipBadJson = bool ( uFlags & 16 );
+	tOpts.m_bGetDocs	= !!(uFlags & 1);
+	tOpts.m_bGetQuery	= !!(uFlags & 2);
+	tOpts.m_bJsonDocs	= !!(uFlags & 4);
+	tOpts.m_bVerbose	= !!(uFlags & 8);
+	tOpts.m_bSkipBadJson = !! ( uFlags & 16 );
 
 	tOpts.m_sIdAlias = tReq.GetString();
 
@@ -14589,7 +14589,7 @@ void HandleMysqlShowThreads ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 	{
 		auto * pThd = (ThdDesc_t *)pIt;
 
-		auto iLen = strnlen ( pThd->m_dBuf.Begin(), pThd->m_dBuf.GetLength() );
+		int iLen = strnlen ( pThd->m_dBuf.Begin(), pThd->m_dBuf.GetLength() );
 		if ( tStmt.m_iThreadsCols>0 && iLen>tStmt.m_iThreadsCols )
 			pThd->m_dBuf[tStmt.m_iThreadsCols] = '\0';
 

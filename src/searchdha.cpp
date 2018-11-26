@@ -3648,7 +3648,7 @@ private:
 		if ( g_bShutdown )
 		{
 			AbortScheduled();
-			sphInfo ( "EventTick() exit because of shutdown=%d", g_bShutdown );
+			sphLogDebugL ( "EventTick() exit because of shutdown=%d", g_bShutdown );
 			return false;
 		}
 
@@ -3770,10 +3770,11 @@ public:
 
 	~LazyNetEvents_c ()
 	{
-		assert ( g_bShutdown );
 		sphLogDebug ( "~LazyNetEvents_c. Shutdown=%d", g_bShutdown );
 		Fire();
-		sphThreadJoin ( &m_dWorkingThread );
+		// might be crash - no need to hung waiting thread
+		if ( g_bShutdown )
+			sphThreadJoin ( &m_dWorkingThread );
 		events_destroy();
 	}
 

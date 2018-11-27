@@ -99,7 +99,7 @@ public:
 	void Preread () override {}
 	void PostSetup() override;
 	ISphRtAccum * CreateAccum ( CSphString & sError ) override;
-	ISphTokenizer * CloneIndexingTokenizer() const override { SafeAddRef ( m_pTokenizerIndexing ); return m_pTokenizerIndexing; }
+	ISphTokenizer * CloneIndexingTokenizer() const override { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
 	void SaveMeta ();
 	void GetQueries ( const char * sFilterTags, bool bTagsEq, const CSphFilterSettings * pUID, int iOffset, int iLimit, CSphVector<PercolateQueryDesc> & dQueries ) override
 		REQUIRES (!m_tLock);

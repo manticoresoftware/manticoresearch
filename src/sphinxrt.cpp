@@ -1005,7 +1005,7 @@ public:
 	virtual void				Optimize ();
 	virtual void				ProgressiveMerge ();
 	CSphIndex *					GetDiskChunk ( int iChunk ) { return m_dDiskChunks.GetLength()>iChunk ? m_dDiskChunks[iChunk] : NULL; }
-	virtual ISphTokenizer *		CloneIndexingTokenizer() const { SafeAddRef(m_pTokenizerIndexing); return m_pTokenizerIndexing; }
+	virtual ISphTokenizer *		CloneIndexingTokenizer() const { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
 
 private:
 	virtual ISphRtAccum *		CreateAccum ( CSphString & sError );

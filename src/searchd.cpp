@@ -12297,6 +12297,7 @@ struct PercolateOptions_t
 	bool m_bVerbose = false;
 	bool m_bJsonDocs = true;
 	bool m_bGetQuery = false;
+	bool m_bSkipBadJson = false; // don't fail whole call if one doc is bad; warn instead.
 	int m_iShift = 0;
 	MODE m_eMode = unknown;
 	CSphString m_sIdAlias;
@@ -12575,6 +12576,8 @@ public:
 			uFlags |= 4;
 		if ( m_tOpts.m_bVerbose )
 			uFlags |= 8;
+		if ( m_tOpts.m_bSkipBadJson )
+			uFlags |= 16;
 
 		tOut.SendDword ( uFlags );
 		tOut.SendString ( m_tOpts.m_sIdAlias.cstr () );
@@ -12966,7 +12969,17 @@ static void PQLocalMatch ( const StrVec_t &dDocs, const CSphString& sIndex, cons
 
 			if ( !ParseJsonDocument ( dDocs[iDoc].cstr (), hSchemaLocators, tOpt.m_sIdAlias, iDoc,
 						dFields, tDoc, tStrings, dMvaParsed, sMsg ) )
-				break;
+			{
+				if ( !tOpt.m_bSkipBadJson )
+					break;
+
+				// regard errors as warnings
+				StringBuilder_c sWarnings;
+				sWarnings << sMsg.sWarning () << sMsg.sError ();
+				sMsg.Clear();
+				sMsg.Warn ( "%s", sWarnings.cstr() );
+				continue;
+			}
 
 			tStrings.GetPointers ( dStrings );
 		}
@@ -13118,6 +13131,7 @@ void HandleCommandCallPq ( CachedOutputBuffer_c &tOut, WORD uVer, InputBuffer_c 
 	tOpts.m_bGetQuery	= bool (uFlags & 2);
 	tOpts.m_bJsonDocs	= bool (uFlags & 4);
 	tOpts.m_bVerbose	= bool (uFlags & 8);
+	tOpts.m_bSkipBadJson = bool ( uFlags & 16 );
 
 	tOpts.m_sIdAlias = tReq.GetString();
 
@@ -13199,6 +13213,8 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 		else if ( sOpt=="verbose" )		tOpts.m_bVerbose = ( v.m_iVal!=0 );
 		else if ( sOpt=="docs_json" )	tOpts.m_bJsonDocs = ( v.m_iVal!=0 );
 		else if ( sOpt=="query" )		tOpts.m_bGetQuery = ( v.m_iVal!=0 );
+// uncomment the opt after dicsussion(?) on call, may be name has to be changed.
+//		else if ( sOpt=="skip_bad" )	tOpts.m_bSkipBadJson = ( v.m_iVal!=0 );
 		else if ( sOpt=="shift" ) 		tOpts.m_iShift = v.m_iVal;
 		else if ( sOpt=="mode" )
 		{
@@ -13219,6 +13235,9 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 			sError.SetSprintf ( "unknown option %s", sOpt.cstr() );
 			break;
 		}
+
+//		if ( tOpts.m_bSkipBadJson && !tOpts.m_bJsonDocs ) // fixme! do we need such warn? Uncomment, if so.
+//			tRes.m_sMessages.Warn ("option to skip bad json has no sense since docs are not in json form");
 
 		// post-conf type check
 		if ( iExpType!=v.m_iType )

@@ -882,6 +882,13 @@ public:
 		return ( *this )[m_iCount - 1];
 	}
 
+	/// make possible to pass VecTraits_T<T*> into funcs which need VecTraits_T<const T*>
+	/// fixme! M.b. add check and fire error if T is not a pointer?
+	operator VecTraits_T<const typename std::remove_pointer<T>::type *> & () const
+	{
+		return *( VecTraits_T<const typename std::remove_pointer<T>::type *>* ) ( this );
+	}
+
 	/// check if i'm empty
 	bool IsEmpty () const
 	{

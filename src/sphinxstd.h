@@ -1198,7 +1198,7 @@ public:
 /// uses storage, mover and relimit backends
 /// (don't even ask why it's not std::vector)
 template < typename T, class POLICY=DefaultCopy_T<T>, class LIMIT=DefaultRelimit, class STORE=DefaultStorage_T<T> >
-class Vector_T : public VecTraits_T<T>, protected STORE
+class Vector_T : public VecTraits_T<T>, protected STORE, protected LIMIT
 {
 protected:
 	using BASE = VecTraits_T<T>;
@@ -1213,6 +1213,7 @@ public:
 	using BASE::GetLength; // these are for IDE helpers to work
 	using BASE::GetLength64;
 	using BASE::GetLengthBytes;
+	using LIMIT::Relimit;
 
 
 	/// ctor

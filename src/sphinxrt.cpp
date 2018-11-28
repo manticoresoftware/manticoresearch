@@ -2984,19 +2984,23 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 #define LOC_ESTIMATE1(_seg,_vec) \
 	(int)( ( (int64_t)_seg->_vec.GetLength() ) * _seg->m_iAliveRows / _seg->m_iRows )
 
-#define LOC_ESTIMATE(_vec) \
+#define LOC_ESTIMATE0(_vec) \
 	( LOC_ESTIMATE1 ( dSegments[iLen-1], _vec ) + LOC_ESTIMATE1 ( dSegments[iLen-2], _vec ) )
 
+#define LOC_ESTIMATE( _vec ) \
+    ( dSegments[iLen-1]->_vec.Relimit( 0, LOC_ESTIMATE0 ( _vec ) ) )
+
 		using namespace sph;
-		int64_t iWordsRelimit = TightRelimit::Relimit ( 0, LOC_ESTIMATE ( m_dWords ) );
-		int64_t iDocsRelimit = TightRelimit::Relimit ( 0, LOC_ESTIMATE ( m_dDocs ) );
-		int64_t iHitsRelimit = TightRelimit::Relimit ( 0, LOC_ESTIMATE ( m_dHits ) );
-		int64_t iStringsRelimit = TightRelimit::Relimit ( 0, LOC_ESTIMATE ( m_dStrings ) );
-		int64_t iMvasRelimit = TightRelimit::Relimit ( 0, LOC_ESTIMATE ( m_dMvas ) );
-		int64_t iKeywordsRelimit = TightRelimit::Relimit ( 0, LOC_ESTIMATE ( m_dKeywordCheckpoints ) );
-		int64_t iRowsRelimit = TightRelimit::Relimit ( 0, LOC_ESTIMATE ( m_dRows ) );
+		int64_t iWordsRelimit =	LOC_ESTIMATE ( m_dWords );
+		int64_t iDocsRelimit =	LOC_ESTIMATE ( m_dDocs );
+		int64_t iHitsRelimit =	LOC_ESTIMATE ( m_dHits );
+		int64_t iStringsRelimit = LOC_ESTIMATE ( m_dStrings );
+		int64_t iMvasRelimit =	LOC_ESTIMATE ( m_dMvas );
+		int64_t iKeywordsRelimit = LOC_ESTIMATE ( m_dKeywordCheckpoints );
+		int64_t iRowsRelimit =	LOC_ESTIMATE ( m_dRows );
 
 #undef LOC_ESTIMATE
+#undef LOC_ESTIMATE0
 #undef LOC_ESTIMATE1
 
 		int64_t iEstimate = iWordsRelimit + iDocsRelimit + iHitsRelimit + iStringsRelimit + iMvasRelimit + iKeywordsRelimit + iRowsRelimit;

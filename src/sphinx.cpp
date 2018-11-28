@@ -3782,7 +3782,7 @@ public:
 
 	int GetOvershortCount() final
 	{
-		return m_iPosDelta-1;
+		return Max ( 0, m_iPosDelta-1 );
 	}
 
 	bool TokenIsBlended() const final

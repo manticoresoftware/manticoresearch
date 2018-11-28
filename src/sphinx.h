@@ -1856,6 +1856,7 @@ public:
 			tHit.m_uDocID = uDocid;
 			tHit.m_uWordID = uWordid;
 			tHit.m_uWordPos = uPos;
+			assert ( uPos>0 );
 		}
 	}
 

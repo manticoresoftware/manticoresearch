@@ -6689,32 +6689,28 @@ static void TransformSorterSchema ( ISphMatchSorter * pSorter, const SphChunkGua
 
 void RtIndex_t::GetReaderChunks ( SphChunkGuard_t & tGuard ) const NO_THREAD_SAFETY_ANALYSIS
 {
-	if ( !m_dRamChunks.GetLength() && !m_dDiskChunks.GetLength() )
+	if ( m_dRamChunks.IsEmpty() && m_dDiskChunks.IsEmpty() )
 		return;
 
 	m_tReading.ReadLock();
 	tGuard.m_pReading = &m_tReading;
 
-	m_tChunkLock.ReadLock ();
+	ScRL_t tChunkRLock ( m_tChunkLock );
 
-	tGuard.m_dRamChunks.Reset ( m_dRamChunks.GetLength () );
+	tGuard.m_dRamChunks.CopyFrom ( m_dRamChunks );
+	tGuard.m_dDiskChunks.CopyFrom ( m_dDiskChunks );
+
 	tGuard.m_dKill.Reset ( m_dRamChunks.GetLength () );
-	tGuard.m_dDiskChunks.Reset ( m_dDiskChunks.GetLength () );
-
-	memcpy ( tGuard.m_dRamChunks.Begin (), m_dRamChunks.Begin (), m_dRamChunks.GetLengthBytes () );
-	memcpy ( tGuard.m_dDiskChunks.Begin (), m_dDiskChunks.Begin (),	m_dDiskChunks.GetLengthBytes () );
-
 	ARRAY_FOREACH ( i, tGuard.m_dRamChunks )
 	{
 		KlistRefcounted_t * pKlist = tGuard.m_dRamChunks[i]->m_pKlist;
-		pKlist->AddRef();
+		SafeAddRef ( pKlist );
 		tGuard.m_dKill[i] = pKlist;
 
 		assert ( tGuard.m_dRamChunks[i]->m_tRefCount.GetValue()>=0 );
 		tGuard.m_dRamChunks[i]->m_tRefCount.Inc();
 	}
 
-	m_tChunkLock.Unlock ();
 }
 
 

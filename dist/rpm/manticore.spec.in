@@ -90,7 +90,7 @@ fi
 mv "@CPACK_TOPLEVEL_DIRECTORY@/tmpBBroot" $RPM_BUILD_ROOT
 
 %if %{with_systemd}
-install -p -D -m 0644 %{_scripts}/searchd.service $RPM_BUILD_ROOT%{_unitdir}/searchd.service
+install -p -D -m 0755 %{_scripts}/searchd.generator $RPM_BUILD_ROOT%{_unitdir}/../system-generators/manticore-search-generator
 install -d -m 0755 %{buildroot}/usr/lib/tmpfiles.d/
 install -m 0644 %{_scripts}/searchd.conf %{buildroot}/usr/lib/tmpfiles.d/searchd.conf
 %else
@@ -109,6 +109,7 @@ groupadd -r %{manticore_group} 2>/dev/null || true
 useradd -M -r -d /var/lib/sphinx -s /bin/bash -c "Manticore server" -g %{manticore_group} %{manticore_user} 2>/dev/null || true
 usermod -g %{manticore_group} %{manticore_user} 2>/dev/null || true
 chown -R %{manticore_user}:%{manticore_group} /var/lib/manticore /var/log/manticore /var/run/manticore
+/bin/systemctl daemon-reload >/dev/null 2>&1 || :
 %systemd_post searchd.service
 systemd-tmpfiles --create /usr/lib/tmpfiles.d/searchd.conf
 
@@ -173,7 +174,7 @@ fi
 %config(noreplace) %{_sysconfdir}/sphinx/sphinx.conf
 
 %if %{with_systemd}
-%{_unitdir}/searchd.service
+%{_unitdir}/../system-generators/manticore-search-generator
 %else
 %{_initrddir}/searchd
 %endif

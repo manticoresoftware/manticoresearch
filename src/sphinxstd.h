@@ -3547,6 +3547,11 @@ public:
 	{
 		Verify ( Done());
 	}
+
+	explicit RwLock_t ( bool bPreferWriter )
+	{
+		Verify ( Init ( bPreferWriter ) );
+	}
 };
 
 

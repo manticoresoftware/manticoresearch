@@ -838,7 +838,11 @@ void ServedStats_c::CalcStatsForInterval ( const QueryStatContainer_i * pContain
 }
 
 //////////////////////////////////////////////////////////////////////////
-ServedIndex_c::ServedIndex_c ( const ServedDesc_t& tDesc )
+
+// want write lock to wipe out reader and not wait readers
+// but only for RT and PQ indexes as these operations are rare there
+ServedIndex_c::ServedIndex_c ( const ServedDesc_t & tDesc )
+	: m_tLock ( tDesc.m_eType==eITYPE::RT || tDesc.m_eType==eITYPE::PERCOLATE )
 {
 	*(ServedDesc_t*)(this) = tDesc;
 }

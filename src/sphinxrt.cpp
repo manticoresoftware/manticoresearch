@@ -3117,13 +3117,11 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 		CSphVector<SphDocID_t> dSegmentKlist;
 
 		// update K-lists on survivors
-		ARRAY_FOREACH ( iSeg, dSegments )
+		for ( RtSegment_t * pSeg : dSegments )
 		{
-			RtSegment_t * pSeg = dSegments[iSeg];
 			if ( !pSeg->m_bTlsKlist )
 				continue; // should be fresh enough
 
-			dSegmentKlist.Resize ( 0 );
 			for ( SphDocID_t uDocid : dAccKlist )
 				if ( pSeg->FindAliveRow ( uDocid ) )
 					dSegmentKlist.Add ( uDocid );
@@ -3132,20 +3130,20 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 			if ( dSegmentKlist.GetLength() )
 			{
 				int iAdded = dSegmentKlist.GetLength ();
-				dSegmentKlist.Append ( pSeg->GetKlist ().begin(), pSeg->GetKlist ().GetLength () );
+				dSegmentKlist.Append ( pSeg->GetKlist () );
 				dSegmentKlist.Uniq();
 
 				auto * pKlist = new KlistRefcounted_t();
-				pKlist->m_dKilled.CopyFrom ( dSegmentKlist );
+				int iUniqAdded = dSegmentKlist.GetLength();
+				pKlist->m_dKilled.Set ( dSegmentKlist.LeakData(), iUniqAdded );
 
-				// swap data, update counters
-				m_tChunkLock.WriteLock();
+				// w-lock, then swap data, update counters
+				ScWL_t tChunkWLock { m_tChunkLock };
 
 				Swap ( pSeg->m_pKlist, pKlist ); // hold swapped kill-list for postponed delete
 				pSeg->m_iAliveRows -= iAdded;
 				assert ( pSeg->m_iAliveRows>=0 );
 
-				m_tChunkLock.Unlock();
 				SafeRelease ( pKlist );
 			}
 
@@ -3156,9 +3154,8 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 		// collect kill-list for new segments
 		if ( m_iDoubleBuffer )
 		{
-			int iOff = m_dNewSegmentKlist.GetLength();
-			m_dNewSegmentKlist.Resize ( iOff + iDiskLiveKLen );
-			memcpy ( m_dNewSegmentKlist.Begin()+iOff, dAccKlist.Begin(), sizeof(SphDocID_t)*iDiskLiveKLen );
+			dAccKlist.Resize ( iDiskLiveKLen );
+			m_dNewSegmentKlist.Append ( dAccKlist );
 		}
 	}
 
@@ -3195,7 +3192,7 @@ void RtIndex_t::CommitReplayable ( RtSegment_t * pNewSeg, CSphVector<SphDocID_t>
 	m_tStats.m_iTotalDocuments += iNewDocs - iTotalKilled;
 
 	if ( dLens.GetLength() )
-		for ( int i = 0; i < m_tSchema.GetFieldsCount(); i++ )
+		for ( int i = 0; i < m_tSchema.GetFieldsCount(); ++i )
 		{
 			m_dFieldLensRam[i] += dLens[i];
 			m_dFieldLens[i] = m_dFieldLensRam[i] + m_dFieldLensDisk[i];

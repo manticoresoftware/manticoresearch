@@ -12975,7 +12975,8 @@ static void PQLocalMatch ( const StrVec_t &dDocs, const CSphString& sIndex, cons
 
 				// regard errors as warnings
 				StringBuilder_c sWarnings;
-				sWarnings << sMsg.sWarning () << sMsg.sError ();
+				sWarnings << sMsg.sWarning ();
+				sWarnings.Sprintf ( "ERROR: %s in doc #%d", sMsg.sError (), iDoc+tOpt.m_iShift+1 );
 				sMsg.Clear();
 				sMsg.Warn ( "%s", sWarnings.cstr() );
 				continue;
@@ -13213,8 +13214,7 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 		else if ( sOpt=="verbose" )		tOpts.m_bVerbose = ( v.m_iVal!=0 );
 		else if ( sOpt=="docs_json" )	tOpts.m_bJsonDocs = ( v.m_iVal!=0 );
 		else if ( sOpt=="query" )		tOpts.m_bGetQuery = ( v.m_iVal!=0 );
-// uncomment the opt after dicsussion(?) on call, may be name has to be changed.
-//		else if ( sOpt=="skip_bad" )	tOpts.m_bSkipBadJson = ( v.m_iVal!=0 );
+		else if ( sOpt=="skip_bad_json" )	tOpts.m_bSkipBadJson = ( v.m_iVal!=0 );
 		else if ( sOpt=="shift" ) 		tOpts.m_iShift = v.m_iVal;
 		else if ( sOpt=="mode" )
 		{

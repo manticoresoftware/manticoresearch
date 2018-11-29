@@ -1544,7 +1544,7 @@ template < typename T, typename R=sph::DefaultRelimit >
 using CSphVector = sph::Vector_T < T, sph::DefaultCopy_T<T>, R >;
 
 template < typename T, typename R=sph::DefaultRelimit, int STATICSIZE=4096/sizeof(T) >
-using LazyVector = sph::Vector_T<T, sph::DefaultCopy_T<T>, R, sph::LazyStorage_T<T, STATICSIZE> >;
+using LazyVector_T = sph::Vector_T<T, sph::DefaultCopy_T<T>, R, sph::LazyStorage_T<T, STATICSIZE> >;
 
 /// swap-vector
 template < typename T >

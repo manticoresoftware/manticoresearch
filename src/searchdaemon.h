@@ -436,9 +436,9 @@ template < typename T > T InputBuffer_c::GetT ()
 using MemInputBuffer_c = InputBuffer_c;
 
 /// simple network request buffer
-class NetInputBuffer_c : private LazyVector<BYTE>, public InputBuffer_c
+class NetInputBuffer_c : private LazyVector_T<BYTE>, public InputBuffer_c
 {
-	using STORE = LazyVector<BYTE>;
+	using STORE = LazyVector_T<BYTE>;
 public:
 	explicit		NetInputBuffer_c ( int iSock );
 

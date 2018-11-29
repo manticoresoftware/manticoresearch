@@ -11658,9 +11658,9 @@ public:
 IDataTupleter::~IDataTupleter() = default;
 
 #define SPH_MAX_NUMERIC_STR 64
-class SqlRowBuffer_c : public ISphNoncopyable, public IDataTupleter, private LazyVector<BYTE>
+class SqlRowBuffer_c : public ISphNoncopyable, public IDataTupleter, private LazyVector_T<BYTE>
 {
-	using BaseVec = LazyVector<BYTE>;
+	using BaseVec = LazyVector_T<BYTE>;
 	BYTE &m_uPacketID;
 	ISphOutputBuffer &m_tOut;
 	int m_iCID; // connection ID for error report
@@ -13068,7 +13068,7 @@ static void PercolateMatchDocuments ( const StrVec_t & dDocs, const PercolateOpt
 	CSphRefcountedPtr<IRemoteAgentsObserver> tReporter ( GetObserver () );
 	ScheduleDistrJobs ( dAgents, &tReqBuilder, &tParser, tReporter );
 
-	LazyVector <CPqResult> dLocalResults;
+	LazyVector_T <CPqResult> dLocalResults;
 	for ( const auto & sPqIndex : *pLocalIndexes )
 	{
 		auto & dResult = dLocalResults.Add();
@@ -13081,7 +13081,7 @@ static void PercolateMatchDocuments ( const StrVec_t & dDocs, const PercolateOpt
 	auto iSuccesses = ( int ) tReporter->GetSucceeded ();
 	auto iAgentsDone = ( int ) tReporter->GetFinished ();
 
-	LazyVector<CPqResult*> dAllResults;
+	LazyVector_T<CPqResult*> dAllResults;
 	for ( auto & dLocalRes : dLocalResults )
 		dAllResults.Add ( &dLocalRes );
 

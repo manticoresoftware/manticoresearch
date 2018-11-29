@@ -2020,7 +2020,7 @@ TEST ( functions, VectorEx )
 	dVec.Append ( dTVec );
 	ASSERT_EQ ( dVec.GetLength (), 10 );
 //	dVec.SwapData (dTVec);
-	LazyVector<int> dLVec;
+	LazyVector_T<int> dLVec;
 	dLVec.Add(4);
 	dLVec.Add(5);
 	ASSERT_EQ ( dLVec.GetLength (), 2 );

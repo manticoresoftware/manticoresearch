@@ -10357,16 +10357,10 @@ bool IndexWriteHeader ( const BuildHeader_t & tBuildHeader, const WriteHeader_t 
 bool IndexBuildDone ( const BuildHeader_t & tBuildHeader, const WriteHeader_t & tWriteHeader, const CSphString & sFileName, CSphString & sError )
 {
 	CSphWriter fdInfo;
-	fdInfo.OpenFile ( sFileName, sError );
-	if ( fdInfo.IsError() )
+	if ( !fdInfo.OpenFile ( sFileName, sError ) )
 		return false;
 
-	if ( !IndexWriteHeader ( tBuildHeader, tWriteHeader, fdInfo ) )
-		return false;
-
-	// close header
-	fdInfo.CloseFile ();
-	return !fdInfo.IsError();
+	return IndexWriteHeader ( tBuildHeader, tWriteHeader, fdInfo );
 }
 
 

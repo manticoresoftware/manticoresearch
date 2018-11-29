@@ -1010,6 +1010,9 @@ void sphThreadName ( SphThread_t * pThread, const char * sName )
 
 CSphString GetThreadName ( SphThread_t * pThread )
 {
+	if ( !pThread || !*pThread )
+		return "";
+
 #if HAVE_PTHREAD_SETNAME_NP
 	char sClippedName[16];
 	pthread_getname_np ( *pThread, sClippedName, 16 );

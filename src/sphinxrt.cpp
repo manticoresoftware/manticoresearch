@@ -1165,7 +1165,7 @@ private:
 
 private:
 	int							m_iStride;
-	CSphVector<RtSegment_t*>	m_dRamChunks;
+	CSphVector<RtSegment_t*>	m_dRamChunks GUARDED_BY ( m_tChunkLock );
 	CSphVector<const RtSegment_t*>	m_dRetired;
 
 	CSphMutex					m_tWriting;
@@ -1504,8 +1504,8 @@ int64_t RtIndex_t::GetFlushAge() const
 int64_t RtIndex_t::GetUsedRam () const
 {
 	int64_t iTotal = 0;
-	ARRAY_FOREACH ( i, m_dRamChunks )
-		iTotal += m_dRamChunks[i]->GetUsedRam();
+	for ( const auto &pSeg : m_dRamChunks )
+		iTotal += pSeg->GetUsedRam();
 
 	return iTotal;
 }
@@ -1514,8 +1514,8 @@ int64_t RtIndex_t::GetUsedRam () const
 int64_t RtIndex_t::GetUsedRam ( const SphChunkGuard_t & tGuard  )
 {
 	int64_t iTotal = 0;
-	ARRAY_FOREACH ( i, tGuard.m_dRamChunks )
-		iTotal += tGuard.m_dRamChunks[i]->GetUsedRam();
+	for ( const auto & pSeg : tGuard.m_dRamChunks )
+		iTotal += pSeg->GetUsedRam();
 
 	return iTotal;
 }
@@ -4474,7 +4474,7 @@ bool RtIndex_t::LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes )
 
 	ARRAY_FOREACH ( iSeg, m_dRamChunks )
 	{
-		RtSegment_t * pSeg = new RtSegment_t ();
+		auto * pSeg = new RtSegment_t ();
 		m_dRamChunks[iSeg] = pSeg;
 
 		pSeg->m_iTag = rdChunk.GetDword ();
@@ -8086,9 +8086,8 @@ bool RtIndex_t::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ES
 			sphWarning ( "%s attribute to %s.%d: %s", bAdd ? "adding" : "removing", m_sPath.cstr(), dChunkNames[iDiskChunk], sError.cstr() );
 
 	// now modify the ramchunk
-	ARRAY_FOREACH ( iSegment, m_dRamChunks )
+	for ( RtSegment_t * pSeg : m_dRamChunks )
 	{
-		RtSegment_t * pSeg = m_dRamChunks[iSegment];
 		assert ( pSeg );
 		CSphTightVector<CSphRowitem> dNewRows;
 		dNewRows.Resize ( pSeg->m_dRows.GetLength() / iOldStride * m_iStride );

@@ -1249,7 +1249,7 @@ private:
 	void						SaveDiskChunk ( int64_t iTID, const SphChunkGuard_t & tGuard, const ChunkStats_t & tStats, bool bMoveRetired );
 	CSphIndex *					LoadDiskChunk ( const char * sChunk, CSphString & sError ) const;
 	bool						LoadRamChunk ( DWORD uVersion, bool bRebuildInfixes );
-	bool						SaveRamChunk ( const RtSegment_t ** ppSegments, int iSegCount );
+	bool						SaveRamChunk ( const VecTraits_T<const RtSegment_t *>& dSegments );
 
 	virtual void				GetPrefixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const;
 	virtual void				GetInfixedWords ( const char * sSubstring, int iSubLen, const char * sWildcard, Args_t & tArgs ) const;
@@ -1401,7 +1401,7 @@ RtIndex_t::~RtIndex_t ()
 
 	if ( bValid )
 	{
-		SaveRamChunk ( (const RtSegment_t **)m_dRamChunks.Begin(), m_dRamChunks.GetLength() );
+		SaveRamChunk ( m_dRamChunks );
 		CSphFixedVector<int> dNames = GetIndexNames ( m_dDiskChunks, false );
 		SaveMeta ( m_iTID, dNames );
 	}
@@ -1468,7 +1468,7 @@ void RtIndex_t::ForceRamFlush ( bool bPeriodic )
 		GetReaderChunks ( tGuard );
 		iUsedRam = GetUsedRam ( tGuard );
 
-		if ( !SaveRamChunk ( tGuard.m_dRamChunks.Begin(), tGuard.m_dRamChunks.GetLength() ) )
+		if ( !SaveRamChunk ( tGuard.m_dRamChunks ) )
 		{
 			sphWarning ( "rt: index %s: ramchunk save FAILED! (error=%s)", m_sIndexName.cstr(), m_sLastError.cstr() );
 			return;
@@ -4316,8 +4316,8 @@ static bool CheckVectorLength ( int iLen, int64_t iSaneLen, const char * sAt, CS
 	return false;
 }
 
-template < typename T, typename P >
-static void SaveVector ( CSphWriter & tWriter, const CSphVector < T, P > & tVector )
+template < typename T >
+static void SaveVector ( CSphWriter & tWriter, const VecTraits_T < T > & tVector )
 {
 	STATIC_ASSERT ( std::is_pod<T>::value, NON_POD_VECTORS_ARE_UNSERIALIZABLE );
 	tWriter.PutDword ( tVector.GetLength() );
@@ -4364,7 +4364,7 @@ static bool LoadVector ( BinlogReader_c & tReader, CSphVector < T, P > & tVector
 }
 
 
-bool RtIndex_t::SaveRamChunk ( const RtSegment_t ** ppSegments, int iSegCount )
+bool RtIndex_t::SaveRamChunk ( const VecTraits_T<const RtSegment_t *> &dSegments )
 {
 	MEMORY ( MEM_INDEX_RT );
 
@@ -4380,12 +4380,11 @@ bool RtIndex_t::SaveRamChunk ( const RtSegment_t ** ppSegments, int iSegCount )
 
 	wrChunk.PutDword ( 1 ); // was USE_64BIT
 	wrChunk.PutDword ( RtSegment_t::m_iSegments );
-	wrChunk.PutDword ( iSegCount );
+	wrChunk.PutDword ( dSegments.GetLength() );
 
 	// no locks here, because it's only intended to be called from dtor
-	for ( int iSeg=0; iSeg<iSegCount; iSeg++ )
+	for ( const RtSegment_t * pSeg : dSegments )
 	{
-		const RtSegment_t * pSeg = ppSegments[iSeg];
 		wrChunk.PutDword ( pSeg->m_iTag );
 		SaveVector ( wrChunk, pSeg->m_dWords );
 		if ( m_bKeywordDict )
@@ -4393,17 +4392,17 @@ bool RtIndex_t::SaveRamChunk ( const RtSegment_t ** ppSegments, int iSegCount )
 			SaveVector ( wrChunk, pSeg->m_dKeywordCheckpoints );
 		}
 
-		const char * pCheckpoints = (const char *)pSeg->m_dKeywordCheckpoints.Begin();
+		auto pCheckpoints = (const char *)pSeg->m_dKeywordCheckpoints.Begin();
 		wrChunk.PutDword ( pSeg->m_dWordCheckpoints.GetLength() );
-		ARRAY_FOREACH ( i, pSeg->m_dWordCheckpoints )
+		for ( const auto& dWordCheckpoint : pSeg->m_dWordCheckpoints )
 		{
-			wrChunk.PutOffset ( pSeg->m_dWordCheckpoints[i].m_iOffset );
+			wrChunk.PutOffset ( dWordCheckpoint.m_iOffset );
 			if ( m_bKeywordDict )
 			{
-				wrChunk.PutOffset ( pSeg->m_dWordCheckpoints[i].m_sWord-pCheckpoints );
+				wrChunk.PutOffset ( dWordCheckpoint.m_sWord-pCheckpoints );
 			} else
 			{
-				wrChunk.PutOffset ( pSeg->m_dWordCheckpoints[i].m_uWordID );
+				wrChunk.PutOffset ( dWordCheckpoint.m_uWordID );
 			}
 		}
 		SaveVector ( wrChunk, pSeg->m_dDocs );
@@ -4411,11 +4410,7 @@ bool RtIndex_t::SaveRamChunk ( const RtSegment_t ** ppSegments, int iSegCount )
 		wrChunk.PutDword ( pSeg->m_iRows );
 		wrChunk.PutDword ( pSeg->m_iAliveRows );
 		SaveVector ( wrChunk, pSeg->m_dRows );
-
-		wrChunk.PutDword ( pSeg->GetKlist().GetLength() );
-		if ( pSeg->GetKlist().GetLength() )
-			wrChunk.PutBytes ( pSeg->GetKlist().Begin(), sizeof(pSeg->GetKlist()[0]) * pSeg->GetKlist().GetLength() );
-
+		SaveVector ( wrChunk, pSeg->GetKlist () );
 		SaveVector ( wrChunk, pSeg->m_dStrings );
 		SaveVector ( wrChunk, pSeg->m_dMvas );
 
@@ -4425,7 +4420,7 @@ bool RtIndex_t::SaveRamChunk ( const RtSegment_t ** ppSegments, int iSegCount )
 
 	// field lengths
 	wrChunk.PutDword ( m_tSchema.GetFieldsCount() );
-	for ( int i=0; i < m_tSchema.GetFieldsCount(); i++ )
+	for ( int i=0; i < m_tSchema.GetFieldsCount(); ++i )
 		wrChunk.PutOffset ( m_dFieldLensRam[i] );
 
 	wrChunk.CloseFile();
@@ -8150,7 +8145,7 @@ bool RtIndex_t::AddRemoveAttribute ( bool bAdd, const CSphString & sAttrName, ES
 	}
 
 	// fixme: we can't rollback at this point
-	Verify ( SaveRamChunk ( (const RtSegment_t **)m_dRamChunks.Begin(), m_dRamChunks.GetLength() ) );
+	Verify ( SaveRamChunk ( m_dRamChunks ) );
 
 	SaveMeta ( m_iTID, dChunkNames );
 

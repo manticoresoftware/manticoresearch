@@ -102,6 +102,9 @@ index pq_d2
 <sphinxql>CALL PQ ('META:multi', ('{"title":"angry test", "gid":3 }', '{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query, 'gid' as docs_id, 10 as shift)</sphinxql>
 <sphinxql>SHOW WARNINGS</sphinxql>
 
+<!-- test that final stage filters work -->
+<sphinxql>select id, id as quid, id*2 as quid2 from META:multi</sphinxql>
+
 </sphqueries>
 
 </test>

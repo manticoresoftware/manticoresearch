@@ -99,7 +99,7 @@ public:
 	void SaveMeta ( bool bShutdown );
 	void GetQueries ( const char * sFilterTags, bool bTagsEq, const CSphFilterSettings * pUID, int iOffset, int iLimit, CSphVector<PercolateQueryDesc> & dQueries ) override
 		REQUIRES (!m_tLock);
-	bool Truncate ( CSphString & ) override;
+	bool Truncate ( CSphString & ) override EXCLUDES (m_tLock);
 
 	// RT index stub
 	bool MultiQuery ( const CSphQuery *, CSphQueryResult *, int, ISphMatchSorter **, const CSphMultiQueryArgs & ) const override;
@@ -173,7 +173,7 @@ private:
 		ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs &tArgs ) const;
 
 	PercolateMatchContext_t * CreateMatchContext ( const RtSegment_t * pSeg, const SegmentReject_t &tReject );
-		
+
 	void RamFlush ( bool bPeriodic );
 };
 
@@ -465,7 +465,7 @@ bool SegmentReject_t::Filter ( const StoredQuery_t * pStored, bool bUtf8 ) const
 		{
 			if ( TermsReject ( m_dPerDocTerms[i], pStored->m_dRejectTerms ) )
 				break;
-			
+
 			iRejects++;
 		}
 
@@ -1134,7 +1134,7 @@ struct PercolateMatchJob_t : public ISphJob
 	const CSphVector<StoredQueryKey_t> & m_dStored;
 	CSphAtomic & m_tQueryCounter;
 	PercolateMatchContext_t & m_tMatchCtx;
-	
+
 	const CrashQuery_t * m_pCrashQuery = nullptr;
 
 	PercolateMatchJob_t ( const CSphVector<StoredQueryKey_t> & dStored, CSphAtomic & tQueryCounter,
@@ -1668,10 +1668,39 @@ int PercolateIndex_c::DeleteQueries ( const char * sTags )
 	return iDeleted;
 }
 
+struct PqMatchProcessor_t : ISphMatchProcessor, ISphNoncopyable
+{
+	const CSphQueryContext &m_tCtx;
+	int m_iTag;
+
+	PqMatchProcessor_t ( int iTag, const CSphQueryContext &tCtx )
+		: m_tCtx ( tCtx )
+		, m_iTag ( iTag )
+	{}
+
+	void Process ( CSphMatch * pMatch ) final
+	{
+		// fixme! tag is signed int,
+		// for distr. tags from remotes set with | 0x80000000,
+		// i e in terms of signed int they're <0!
+		// Is it intention, or bug?
+		// If intention, lt us use uniformely either <0, either &0x80000000
+		// conditions to avoid messing. If bug, shit already happened!
+		if ( pMatch->m_iTag>=0 )
+			return;
+
+		m_tCtx.CalcFinal ( *pMatch );
+		pMatch->m_iTag = m_iTag;
+	}
+};
+
 bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters,
 	ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs &tArgs ) const
 {
 	assert ( tArgs.m_iTag>=0 );
+
+	CSphQueryProfile * pProfiler = pResult->m_pProfile;
+	ESphQueryState eOldState = SPH_QSTATE_UNKNOWN;
 
 	// we count documents only (before filters)
 	if ( pQuery->m_iMaxPredictedMsec )
@@ -1746,9 +1775,8 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 	// Does it intended?
 	tMatch.m_iTag = tCtx.m_dCalcFinal.GetLength () ? -1 : tArgs.m_iTag;
 
-
-	if ( pResult->m_pProfile )
-		pResult->m_pProfile->Switch ( SPH_QSTATE_FULLSCAN );
+	if ( pProfiler )
+		eOldState = pProfiler->Switch ( SPH_QSTATE_FULLSCAN );
 
 	int iCutoff = ( pQuery->m_iCutoff<=0 ) ? -1 : pQuery->m_iCutoff;
 	BYTE * pData = nullptr;
@@ -1817,9 +1845,23 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 		}
 	}
 
+	if ( pProfiler )
+		pProfiler->Switch ( SPH_QSTATE_FINALIZE );
 
-	if ( pResult->m_pProfile )
-		pResult->m_pProfile->Switch ( SPH_QSTATE_FINALIZE );
+	// do final expression calculations
+	if ( tCtx.m_dCalcFinal.GetLength () )
+	{
+		PqMatchProcessor_t tFinal ( tArgs.m_iTag, tCtx );
+		for ( int iSorter = 0; iSorter<iSorters; iSorter++ )
+		{
+			ISphMatchSorter * pTop = ppSorters[iSorter];
+			if ( pTop )
+				pTop->Finalize ( tFinal, false );
+		}
+	}
+
+	if ( pProfiler )
+		pProfiler->Switch ( eOldState );
 
 	pResult->m_iQueryTime += ( int ) ( ( sphMicroTimer () - tmQueryStart ) / 1000 );
 	pResult->m_iBadRows += tCtx.m_iBadRows;

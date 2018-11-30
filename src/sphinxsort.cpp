@@ -5248,7 +5248,8 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 		if ( iAttrIdx>=0 )
 		{
 			ESphAttr eAttr = tSchema.GetAttr ( iAttrIdx ).m_eAttrType;
-			if ( eAttr==SPH_ATTR_STRING || eAttr==SPH_ATTR_UINT32SET || eAttr==SPH_ATTR_INT64SET )
+			if ( eAttr==SPH_ATTR_STRING || eAttr==SPH_ATTR_STRINGPTR
+				|| eAttr==SPH_ATTR_UINT32SET || eAttr==SPH_ATTR_INT64SET )
 			{
 				if ( tItem.m_eAggrFunc!=SPH_AGGR_NONE )
 				{
@@ -5256,7 +5257,7 @@ ISphMatchSorter * sphCreateQueue ( SphQueueSettings_t & tQueue )
 					return nullptr;
 				}
 
-				if ( !bPlainAttr && eAttr==SPH_ATTR_STRING )
+				if ( !bPlainAttr && ( eAttr==SPH_ATTR_STRING || eAttr==SPH_ATTR_STRINGPTR ) )
 				{
 					bPlainAttr = true;
 					for ( int i=0; i<iItem && bPlainAttr; i++ )

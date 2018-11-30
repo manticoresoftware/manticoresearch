@@ -1118,7 +1118,7 @@ set_stmt:
 	| TOK_SET ident_set '=' TOK_NULL
 		{
 			pParser->SetStatement ( $2, SET_LOCAL );
-			pParser->m_pStmt->m_bSetNull = true;
+//			pParser->m_pStmt->m_bSetNull = true;
 		}
 	| TOK_SET TOK_NAMES set_value		{ pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
 	| TOK_SET TOK_NAMES set_value TOK_COLLATE set_value { pParser->m_pStmt->m_eStmt = STMT_DUMMY; }
@@ -1358,12 +1358,19 @@ call_opt_name:
 //////////////////////////////////////////////////////////////////////////
 
 describe:
-	describe_tok ident like_filter
+	describe_tok ident describe_opt like_filter
 		{
 			pParser->m_pStmt->m_eStmt = STMT_DESCRIBE;
 			pParser->ToString ( pParser->m_pStmt->m_sIndex, $2 );
 		}
 	;
+
+describe_opt:
+	// empty
+	| TOK_TABLE
+		{
+			pParser->m_pStmt->m_iIntParam = 42; // just a flag that 'TOK_TABLE' is in use
+		}
 
 describe_tok:
 	TOK_DESCRIBE

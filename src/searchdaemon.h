@@ -1146,7 +1146,7 @@ struct SqlStmt_t
 	int64_t					m_iSetValue = 0;
 	CSphString				m_sSetValue;
 	CSphVector<SphAttr_t>	m_dSetValues;
-	bool					m_bSetNull = false;
+//	bool					m_bSetNull = false; // not(yet) used
 
 	// CALL specific
 	CSphString				m_sCallProc;

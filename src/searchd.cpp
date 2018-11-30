@@ -14388,7 +14388,17 @@ void HandleMysqlDescribe ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt )
 		// data
 		dCondOut.MatchDataTuplet ( "id", "bigint" );
 
-		const CSphSchema &tSchema = pServed->m_pIndex->GetMatchSchema ();
+		const CSphSchema *pSchema = &pServed->m_pIndex->GetMatchSchema ();
+		if ( tStmt.m_iIntParam==42 ) // user wants internal schema instead
+		{
+			if ( pServed->IsMutable () )
+			{
+				auto pRtIndex = (ISphRtIndex*)pServed->m_pIndex;
+				pSchema = &pRtIndex->GetInternalSchema ();
+			}
+		}
+
+		const CSphSchema &tSchema = *pSchema;
 		for ( int i = 0; i<tSchema.GetFieldsCount (); i++ )
 			dCondOut.MatchDataTuplet ( tSchema.GetFieldName ( i ), "field" );
 

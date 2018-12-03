@@ -880,7 +880,7 @@ void CISpellAffix::LoadLocale ()
 			FILE * pFile = fopen ( m_sCharsetFile.cstr (), "rt" );
 			if ( pFile )
 			{
-				printf ( "Using charater set from '%s'\n", m_sCharsetFile.cstr () );
+				printf ( "Using character set from '%s'\n", m_sCharsetFile.cstr () );
 
 				const int MAX_CHARSET_LENGTH = 4096;
 				char szBuffer [MAX_CHARSET_LENGTH];
@@ -1030,7 +1030,7 @@ int main ( int iArgs, char ** dArgs )
 		default:
 			printf ( "Usage: spelldump [options] <dictionary> <affix> [result] [locale-name]\n\n"
 				"Options:\n"
-				"-c <file>\tuse case convertion defined in <file>\n"
+				"-c <file>\tuse case conversion defined in <file>\n"
 				"-m <mode>\toutput (conflict resolution) mode:\n"
 				"\t\tdefault - try to guess the best way to resolve a conflict\n"
 				"\t\tlast - choose last entry\n"

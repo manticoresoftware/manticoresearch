@@ -4657,7 +4657,7 @@ int RtIndex_t::DebugCheck ( FILE * fp )
 
 		RtSegment_t & tSegment = *m_dRamChunks[iSegment];
 		if ( tSegment.m_bTlsKlist )
-			LOC_FAIL(( fp, "TLS k-list flag on: index is being commited (segment=%d)", iSegment ));
+			LOC_FAIL(( fp, "TLS k-list flag on: index is being committed (segment=%d)", iSegment ));
 
 		if ( !tSegment.m_iRows )
 		{
@@ -5000,7 +5000,7 @@ int RtIndex_t::DebugCheck ( FILE * fp )
 
 					if ( iCounter!=1 || tDoc.m_uHits!=1 )
 					{
-						LOC_FAIL(( fp, "embedded hit with multiple occurences in a document found "
+						LOC_FAIL(( fp, "embedded hit with multiple occurrences in a document found "
 							"(segment=%d, word=%d, wordid=" UINT64_FMT ", docid=" UINT64_FMT ")",
 							iSegment, nWordsRead, (uint64_t)tWord.m_uWordID, (uint64_t)tDoc.m_uDocID ));
 					}

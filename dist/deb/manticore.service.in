@@ -1,6 +1,7 @@
 [Unit]
 Description=Manticore Search Engine
 After=network.target remote-fs.target nss-lookup.target
+Documentation=https://docs.manticoresearch.com/, man:searchd(1)
 
 [Service]
 Type=forking

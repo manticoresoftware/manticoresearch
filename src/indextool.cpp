@@ -670,7 +670,7 @@ void OptimizeRtKlists ( const CSphString & sIndex, const CSphConfig & hConf )
 
 		if ( !hIndex.Exists ( "path" ) )
 		{
-			fprintf ( stdout, "key 'path' not found in index '%s' - skiped\n", sIndexName );
+			fprintf ( stdout, "key 'path' not found in index '%s' - skipped\n", sIndexName );
 			continue;
 		}
 
@@ -685,7 +685,7 @@ void OptimizeRtKlists ( const CSphString & sIndex, const CSphConfig & hConf )
 
 		if ( !tSchema.GetFieldsCount() )
 		{
-			fprintf ( stdout, "index '%s': no fields configured (use rt_field directive) - skiped\n", sIndexName );
+			fprintf ( stdout, "index '%s': no fields configured (use rt_field directive) - skipped\n", sIndexName );
 			continue;
 		}
 

@@ -335,7 +335,7 @@ protected:
 	ISphQword *					m_pQword = nullptr;
 	FieldMask_t					m_dQueriedFields;	///< accepted fields mask
 	bool						m_bHasWideFields = false;	///< whether fields mask for this term refer to fields 32+
-	float						m_fIDF = 0.0f;		///< IDF for this term (might be 0.0f for non-1st occurences in query)
+	float						m_fIDF = 0.0f;		///< IDF for this term (might be 0.0f for non-1st occurrences in query)
 	int64_t						m_iMaxTimer = 0;	///< work until this timestamp
 	CSphString *				m_pWarning = nullptr;
 	bool						m_bNotWeighted = true;

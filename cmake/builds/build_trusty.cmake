@@ -23,6 +23,9 @@ include ( builds/CommonDeb )
 configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/manticore.service.in"
 		"${MANTICORE_BINARY_DIR}/manticore.service" @ONLY )
 
+install ( FILES "${MANTICORE_BINARY_DIR}/manticore.upstart"
+                DESTINATION ${SYSCONFDIR}/init COMPONENT adm RENAME manticore.conf )
+
 # everywhere, but not on wheezy
 install ( FILES "${MANTICORE_BINARY_DIR}/manticore.service"
 		DESTINATION lib/systemd/system COMPONENT adm )

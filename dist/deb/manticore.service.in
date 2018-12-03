@@ -1,7 +1,6 @@
 [Unit]
 Description=Manticore Search Engine
 After=network.target remote-fs.target nss-lookup.target
-After=syslog.target
 
 [Service]
 Type=forking

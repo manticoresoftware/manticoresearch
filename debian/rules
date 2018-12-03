@@ -1,0 +1,20 @@
+#!/usr/bin/make -f
+
+include /usr/share/dpkg/default.mk
+
+
+RELEASE := $(shell lsb_release -i -s |   sed -e 's/\(.*\)/\L\1/')
+%:
+	dh $@ --buildsystem=cmake
+
+override_dh_auto_clean:
+	dh_auto_clean
+
+override_dh_auto_build:
+	dh_auto_build
+
+override_dh_auto_configure:
+	dh_auto_configure -- -DDISTR_BUILD=$(RELEASE)
+
+override_dh_auto_install:
+	dh_auto_install

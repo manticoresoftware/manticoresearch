@@ -1,8 +1,10 @@
-# ---------- jessie ----------
+# ---------- debian ----------
 # Above line is mandatory!
-# rules to build deb package for Debian jessie
+# rules to build general deb package for Debian
 
-message ( STATUS "Will create DEB for Debian (jessie)" )
+SET ( SPLIT_SYMBOLS OFF )
+SET ( NOAPI ON )
+message ( STATUS "Will create DEB for Debian (sid)" )
 
 # m.b. postinst.xenial, postinst.debian and postinst.trusty
 FILE ( READ dist/deb/postinst.debian.in POSTINST_SPECIFIC )
@@ -14,7 +16,6 @@ configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/prerm.debian.in"
 # m.b. posrtrm.systemd, posrtm.wheezy targeted to posrtm, and also preinst.trusty targeted to preinst
 configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/postrm.systemd"
 		"${MANTICORE_BINARY_DIR}/postrm" COPYONLY )
-
 
 # m.b. posrtrm, preinst - see also above
 set ( EXTRA_SCRIPTS "${MANTICORE_BINARY_DIR}/postrm;" )
@@ -28,5 +29,5 @@ configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/manticore.service.in"
 install ( FILES "${MANTICORE_BINARY_DIR}/manticore.service"
 		DESTINATION /lib/systemd/system COMPONENT adm )
 
-# some jessie-specific variables and files
-set ( DISTR_SUFFIX "~jessie_${CPACK_DEBIAN_PACKAGE_ARCHITECTURE}" )
+# some sid-specific variables and files
+set ( DISTR_SUFFIX "~debian_${CPACK_DEBIAN_PACKAGE_ARCHITECTURE}" )

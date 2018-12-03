@@ -54,9 +54,6 @@ configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/manticore.default.in"
 configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/manticore.init.in"
 		"${MANTICORE_BINARY_DIR}/manticore.init" @ONLY )
 
-configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/manticore.upstart.in"
-		"${MANTICORE_BINARY_DIR}/manticore.upstart" @ONLY )
-
 configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/README.Debian.in"
 		"${MANTICORE_BINARY_DIR}/README.Debian" @ONLY )
 
@@ -71,7 +68,10 @@ INSTALL ( FILES ${MANTICORE_BINARY_DIR}/sphinx.conf.dist
 install ( FILES doc/indexer.1 doc/indextool.1 doc/searchd.1 doc/spelldump.1
 		DESTINATION ${MANDIR}/man1 COMPONENT doc )
 
-install ( DIRECTORY api DESTINATION ${SHAREDIR}/${PACKAGE_NAME} COMPONENT doc )
+if (NOT NOAPI)
+               install ( DIRECTORY api DESTINATION ${SHAREDIR}/${PACKAGE_NAME} COMPONENT doc )
+endif ()
+
 
 install ( FILES
 		doc/internals-index-format.txt doc/internals-format-versions.txt
@@ -87,15 +87,11 @@ install ( FILES example.sql ${MANTICORE_BINARY_DIR}/sphinx.conf.dist
 install ( FILES "${MANTICORE_BINARY_DIR}/manticore"
 		DESTINATION ${SYSCONFDIR}/default COMPONENT adm)
 
-install ( FILES "${MANTICORE_BINARY_DIR}/manticore.upstart"
-		DESTINATION ${SYSCONFDIR}/init COMPONENT adm RENAME manticore.conf )
-
 install ( FILES "${MANTICORE_BINARY_DIR}/manticore.init"
 		DESTINATION ${SYSCONFDIR}/init.d PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
                       GROUP_EXECUTE GROUP_READ COMPONENT adm RENAME manticore )
 
 install ( DIRECTORY DESTINATION ${LOCALSTATEDIR}/lib/manticore/data COMPONENT adm)
-install ( DIRECTORY DESTINATION ${LOCALSTATEDIR}/run/manticore COMPONENT adm )
 install ( DIRECTORY DESTINATION ${LOCALSTATEDIR}/log/manticore COMPONENT adm )
 
 # tickets per components

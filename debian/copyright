@@ -1,0 +1,48 @@
+This work was packaged for Debian by:
+
+   Manticore build team <builds@manticoresearch.com> on Mon, 15 Oct 2018 00:09:31 +0300
+
+It is based on package for previous release, created by Sphinx builds team <builds@sphinxsearch.com>.
+Which, in turn, is based on package for previous release, created by Radu Spineanu <radu@debian.org>.
+Which, in turn, is based on the Ubuntu package by Marco Rodrigues and David Leal from
+launchpad.net.
+
+
+Copyright: 
+
+----- License of manticore
+
+   Copyright (c) 2017-2018, Manticore Software LTD (http://manticoresearch.com)
+   Copyright (C) 2001-2016 by Andrew Aksyonoff <shodan@shodan.ru>
+   Copyright (c) 2008-2016, Sphinx Technologies Inc
+
+   This program is free software; you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation; version 2 dated June, 1991.
+
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with this program; if not, write to the Free Software
+   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston,
+   MA 02110-1301, USA.
+
+On Debian GNU/Linux systems, the complete text of the GNU General
+Public License can be found in `/usr/share/common-licenses/GPL-2'.
+
+----- Other Licenses and Copyright 
+
+Directory: api/libsphinxclient and files
+Copyright (c) Sphinx Technologies Inc
+License: GNU Library General Public License
+
+Directory: api/ruby and files 
+Copyright (c) Dmytro Shteflyuk <kpumuk@kpumuk.info> 
+License: Ruby license 
+
+Directory: contrib/perlapi and files 
+Copyright (c) Len Kranendonk 
+License : GNU General Public License

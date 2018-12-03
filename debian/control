@@ -5,14 +5,14 @@ Maintainer: Manticore Search Maintainers <build@manticoresearch.com>
 Uploaders:
     Adrian Nuta <adrian.nuta@manticoresearch.com>
 Build-Depends:
-   cmake (>= 2.8), debhelper-compat (=11), 
+   cmake (>= 2.8), debhelper (>= 11),
    lsb-release,
    default-libmysqlclient-dev,
-   libexpat-dev,
-   libpq-dev,
-   unixodbc-dev,
-   libstemmer-dev,
-   libre2-dev
+    libexpat-dev ,
+    libpq-dev ,
+    unixodbc-dev ,
+    libstemmer-dev,
+    libre2-dev
 Homepage: https://www.manticoresearch.com
 Standards-Version: 4.2.1
 Vcs-Browser: https://github.com/manticoresoftware/manticoresearch/
@@ -22,9 +22,18 @@ Package: manticore
 Architecture: any
 Pre-Depends: adduser (>= 3.40)
 Depends:
- ${shlibs:Depends}, ${misc:Depends}, lsb-base
+ ${shlibs:Depends}, ${misc:Depends},  lsb-base
 Suggests:
  default-libmysqlclient,libexpat,libpq,unixodbc, libstemmer,libre2
 Description: High performance full-text search engine
- Manticore Search is a high performance full-text search oriented engine 
- with SQL and JSON support.
+ Manticore Search is a high performance full-text search oriented engine
+ with SQL and JSON support. It is a fork of Sphinx Search engine.
+ Main features:
+    * advanced text search
+    * distributed indexes and high availability
+    * Real-Time indexes
+    * Geosearch locating
+    * JSON objects
+    * Percolate Queries
+    * Faceted search
+

@@ -1,6 +1,27 @@
 Release notes
 =============
 
+Version 2.7.5 GA, 4 December 2018
+---------------------------------
+
+Improvements
+~~~~~~~~~~~~
+
+* REGEX function 
+* limit/offset for json API search
+* profiler points for qcache
+
+Bugfixes
+~~~~~~~~
+
+* `eb3c768 <https://github.com/manticoresoftware/manticoresearch/commit/eb3c7683b9740cff4cc4cadd2ab9f990b9f7d173>`__ fixed crash of daemon on FACET with multiple attribute wide types
+* `d915cf6 <https://github.com/manticoresoftware/manticoresearch/commit/d915cf6696514f4be365ffb5981bccaa15983e65>`__ fixed implicit group by at main select list of FACET query
+* `5c25dc2 <https://github.com/manticoresoftware/manticoresearch/commit/5c25dc271a8c11a1c82ca3c88e518acbc6a8c164>`__ fixed crash on query with GROUP N BY
+* `85d30a2 <https://github.com/manticoresoftware/manticoresearch/commit/85d30a232d4ffd89916b673a9b2db946d272a945>`__ fixed deadlock on handling crash at memory operations
+* `85166b5 <https://github.com/manticoresoftware/manticoresearch/commit/85166b5ef2be38061d62f2b20f15acaa0311258a>`__ fixed indextool memory consumption during check
+* `58fb031 <https://github.com/manticoresoftware/manticoresearch/commit/58fb03166830d8b23e7ab9ce56309db7ddac22f4>`__ fixed gmock include not needed anymore as upstream resolve itself
+
+
 Version 2.7.4 GA, 1 November 2018
 ---------------------------------
 

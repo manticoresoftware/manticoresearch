@@ -13,11 +13,9 @@ if ! getent passwd manticore >/dev/null; then
 fi
 DATADIR=@LOCALSTATEDIR@/lib/manticore
 LOGDIR=@LOCALSTATEDIR@/log/manticore
-RUNDIR=@LOCALSTATEDIR@/run/manticore
 SYSCONFDIR=@SYSCONFDIR@/sphinxsearch
 chown manticore:manticore $DATADIR -R
 chown manticore:manticore $LOGDIR -R
-chown manticore:manticore $RUNDIR -R
 chown manticore:manticore $SYSCONFDIR -R
 
 case "$1" in

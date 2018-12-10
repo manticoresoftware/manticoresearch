@@ -708,7 +708,6 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "query_log_mode",			0, NULL },
 	{ "prefer_rotate",			KEY_DEPRECATED, "seamless_rotate" },
 	{ "shutdown_token",			0, NULL },
-	{ "repli_provider_path",	0, NULL },
 	{ NULL,						0, NULL }
 };
 

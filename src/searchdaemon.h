@@ -126,7 +126,6 @@ Invokes getaddrinfo for given host which perform name resolving (dns).
  \return ipv4 address as DWORD, to be directly used as s_addr in connect(). */
 DWORD sphGetAddress ( const char * sHost, bool bFatal=false, bool bIP=false );
 char * sphFormatIP ( char * sBuffer, int iBufferSize, DWORD uAddress );
-bool GetMyIP ( CSphString & sIP );
 
 /////////////////////////////////////////////////////////////////////////////
 // MISC GLOBALS
@@ -195,6 +194,7 @@ enum class eITYPE
 };
 
 CSphString GetTypeName ( eITYPE eType );
+eITYPE TypeOfIndexConfig ( const CSphString & sType );
 
 /////////////////////////////////////////////////////////////////////////////
 // SOME SHARED GLOBAL VARIABLES
@@ -1311,10 +1311,10 @@ int sphGetTokTypeConstMVA();
 bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, const CSphSchema & tSchema, CSphVector<CSphFilterSettings> & dFilters, CSphVector<FilterTreeItem_t> & dFilterTree, CSphString & sError );
 
 
-void JsonConfigSetIndex ( const CSphString & sIndexName, const CSphString & sPath, eITYPE eIndexType, cJSON * pIndexes );
-bool JsonGetError ( const char * sBuf, int iBufLen, CSphString & sError );
-bool JsonConfigCheckProperty ( const cJSON * pNode, const char * sPropertyName, CSphString & sError );
-bool JsonCheckIndex ( const cJSON * pIndex, CSphString & sError );
+void JsonSkipConfig();
+void JsonLoadConfig ( const CSphString & sConfigName );
+void JsonSaveConfig();
+void JsonConfigConfigureAndPreload ( int & iValidIndexes, int & iCounter  );
 
 class CJsonScopedPtr_c : public CSphScopedPtr<cJSON>
 {
@@ -1329,50 +1329,6 @@ public:
 		m_pPtr = NULL;
 	}
 };
-
-// fwd
-typedef struct wsrep wsrep_t;
-
-struct ReplicationCluster_t
-{
-	CSphString	m_sName;
-	CSphString	m_sURI;
-	CSphString	m_sListen;
-	// +1 after listen is IST port
-	// +1 after listen IST is SST port
-	CSphString	m_sListenSST; 
-	CSphString	m_sPath;
-	CSphString	m_sOptions;
-	bool		m_bSkipSST = false;
-	CSphVector<CSphString> m_dIndexes;
-
-	// replicator
-	wsrep_t *	m_pProvider = nullptr;
-	SphThread_t	m_tRecvThd;
-
-	// state
-	CSphFixedVector<BYTE>	m_dUUID { 0 };
-	int						m_iConfID = 0;
-	int						m_iStatus = 0;
-	int						m_iSize = 0;
-	int						m_iIdx = 0;
-};
-
-typedef void (*Abort_fn) (void);
-struct ReplicationArgs_t
-{
-	ReplicationCluster_t *	m_pCluster = nullptr;
-	bool					m_bNewCluster = false;
-	const char *			m_sProvider = nullptr;
-	const char *			m_sIncomingAdresses = nullptr;
-};
-
-void ReplicationInit ( Abort_fn fnAbort, CSphAutoEvent * pSync );
-bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError );
-void ReplicateClusterDone ( ReplicationCluster_t * pCluster );
-bool ReplicatedIndexes ( const cJSON * pIndexes, bool bBypass, ReplicationCluster_t * pCluster );
-CSphString ReplicateClusterOptions ( const char * sOptionsRaw, bool bLogReplication );
-bool ReplicateSetOption ( ReplicationCluster_t * pCluster, const CSphString & sOpt );
 
 enum ReplicationCommand_e
 {
@@ -1403,27 +1359,16 @@ struct ReplicationCommand_t
 	CSphReconfigureSettings m_tReconfigureSettings;
 };
 
-class CommitMonitor_c
-{
-public:
-	CommitMonitor_c ( ReplicationCommand_t & tCmd, int * pDeletedCount )
-		: m_tCmd ( tCmd )
-		, m_pDeletedCount ( pDeletedCount )
-	{}
-	~CommitMonitor_c() = default;
-
-	bool Commit ( CSphString & sError );
-
-private:
-	ReplicationCommand_t & m_tCmd;
-	int * m_pDeletedCount = nullptr;
-};
-
+bool ReplicateSetOption ( const CSphString & sCluster, const CSphString & sOpt, CSphString & sError );
 bool HandleCmdReplicate ( ReplicationCommand_t & tCmd, CSphString & sError, int * pDeletedCount );
-bool Replicate ( uint64_t uQueryHash, const CSphVector<BYTE> & dBuf, wsrep_t * pProvider, CommitMonitor_c & tMonitor, CSphString & sError );
-bool ParseCmdReplicated ( const BYTE * pData, int iLen, CSphVector<ReplicationCommand_t> & dCommands );
-bool HandleCmdReplicated ( ReplicationCommand_t & tCmd );
-WORD GetReplicateCommandVer ( ReplicationCommand_e eCommand );
+
+void Shutdown ();
+// unfreeze threads waiting of replication started
+void ReplicateClustersWake();
+void ReplicateClustersDelete();
+bool ReplicationJoin ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, CSphString & sError );
+bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bool bForce );
+void ReplicationWait();
 
 // 'like' matcher
 class CheckLike
@@ -1454,6 +1399,32 @@ public:
 	bool MatchAddVa ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
 };
 
-void ReplicateClusterStats ( ReplicationCluster_t * pCluster, VectorLike & dOut );
+void ReplicateClustersStatus ( VectorLike & dStatus );
+
+#define SPH_ADDRESS_SIZE		sizeof("000.000.000.000")
+#define SPH_ADDRPORT_SIZE		sizeof("000.000.000.000:00000")
+
+enum ProtocolType_e
+{
+	PROTO_SPHINX = 0,
+	PROTO_MYSQL41,
+	PROTO_HTTP,
+
+	PROTO_TOTAL
+};
+
+struct ListenerDesc_t
+{
+	ProtocolType_e	m_eProto;
+	CSphString		m_sUnix;
+	DWORD			m_uIP;
+	int				m_iPort;
+	bool			m_bVIP;
+};
+
+ListenerDesc_t ParseListener ( const char * sSpec );
+ESphAddIndex ConfigureAndPreload ( const CSphConfigSection & hIndex, const char * sIndexName, bool bJson );
+ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace=false );
+bool PreallocNewIndex ( ServedDesc_t &tIdx, const CSphConfigSection * pConfig, const char * szIndexName );
 
 #endif // _searchdaemon_

@@ -5,7 +5,7 @@ import os, time, sys, argparse, logging, atexit, signal, json, subprocess, selec
 rootLog = logging.getLogger()
 info = rootLog.info
 debug = rootLog.debug
-module = "rsync_sst"
+module = "rsync_sst_"
 
 rsync_pid = None
 rsync_pid_file = None
@@ -138,18 +138,21 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--role", required=True)
 parser.add_argument("--datadir", required=True)
 parser.add_argument("--parent", required=True)
+parser.add_argument("--cluster-name", required=True)
 parser.add_argument("--state-in", required=True)
 parser.add_argument("--state-out")
 parser.add_argument("--address")
 parser.add_argument("--listen")
+parser.add_argument("--log-file")
 args = parser.parse_args()
 	
-logFormatter = logging.Formatter("%(asctime)s [%(thread)d][%(levelname)-5.5s]  %(message)s")
+logFormatter = logging.Formatter(fmt="[%(asctime)s] [%(levelname)-5.5s] RPL-SST: %(message)s", datefmt='%a %b %d %H:%M:%S %Y')
 
-fileHandler = logging.FileHandler("sst.log", mode='w')
-fileHandler.setFormatter(logFormatter)
-fileHandler.setLevel(logging.DEBUG)
-rootLog.addHandler(fileHandler)
+if args.log_file:
+	fileHandler = logging.FileHandler(args.log_file, mode='a')
+	fileHandler.setFormatter(logFormatter)
+	fileHandler.setLevel(logging.DEBUG)
+	rootLog.addHandler(fileHandler)
 
 consoleHandler = logging.StreamHandler()
 consoleHandler.setFormatter(logFormatter)
@@ -159,7 +162,8 @@ rootLog.addHandler(consoleHandler)
 rootLog.setLevel(logging.DEBUG)
 
 # setup
-info("sst starting, role %s" % args.role)
+info("sst starting, role %s, cluster %s" % (args.role, args.cluster_name))
+module = module + args.cluster_name
 
 atexit.register(cleanup)
 signal.signal(signal.SIGTERM, sig_cleanup)
@@ -229,11 +233,11 @@ elif args.role=='joiner':
 		die(1, "no address provided")
 	addr, port = parse_listen(args.listen)	
 	
-	rsync_pid_file = module + '_' + str(args.parent) + '.pid'
+	rsync_pid_file = os.path.join(os.path.normpath(args.datadir), module + '.pid')
 	if os.path.exists(rsync_pid_file):
 		die(114, "rsync daemon already running %s" % rsync_pid_file) # EALREADY
 		
-	rsync_conf = module + '_' + str(args.parent) + '.conf'
+	rsync_conf = os.path.join(os.path.normpath(args.datadir), module + '.conf')
 	with open(rsync_conf, 'w') as rsync_conf_file:
 		rsync_conf_file.write("pid file = %s\n" % rsync_pid_file)
 		rsync_conf_file.write("use chroot = no\n")
@@ -241,6 +245,9 @@ elif args.role=='joiner':
 		rsync_conf_file.write("timeout = 300\n")
 		rsync_conf_file.write("[%s]\n" % module)
 		rsync_conf_file.write("path = %s\n" % args.datadir)
+		# need explisitly set root user
+		if os.geteuid()==0:
+			rsync_conf_file.write("uid = root\n")
 
 	info("joiner waiting for data at '%s' through rsync..." % args.datadir)
 	

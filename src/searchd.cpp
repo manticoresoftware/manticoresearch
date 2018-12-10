@@ -51,8 +51,6 @@ extern "C"
 #define SEARCHD_BACKLOG			5
 #define SPHINXAPI_PORT			9312
 #define SPHINXQL_PORT			9306
-#define SPH_ADDRESS_SIZE		sizeof("000.000.000.000")
-#define SPH_ADDRPORT_SIZE		sizeof("000.000.000.000:00000")
 #define MVA_UPDATES_POOL		1048576
 #define NETOUTBUF				8192
 #define PING_INTERVAL			1000
@@ -110,15 +108,6 @@ extern "C"
 #endif
 
 /////////////////////////////////////////////////////////////////////////////
-
-enum ProtocolType_e
-{
-	PROTO_SPHINX = 0,
-	PROTO_MYSQL41,
-	PROTO_HTTP,
-
-	PROTO_TOTAL
-};
 
 
 static const char * g_dProtoNames[PROTO_TOTAL] =
@@ -470,21 +459,6 @@ static CSphMutex							g_tPersLock;
 static CSphAtomic							g_iPersistentInUse;
 
 static ServiceThread_t						g_tPrereadThread;
-
-
-static cJSON *								g_pCfgJson = nullptr;
-static bool									g_bSkipCfgJson = false;
-static bool									g_bCfgJsonValid = false;
-static CSphAutoEvent						g_tReplicationSync;
-static bool JsonConfigWrite ( const cJSON * pConf, CSphString & sError );
-static void JsonConfigSetLocal ( cJSON * pConf );
-
-static CSphVector<ReplicationCluster_t *> g_dClusters;
-static SmallStringHash_T<ReplicationCluster_t *> g_hIndex2Cluster;
-static CSphString g_sProviderPath;
-static CSphString g_sIncomingAddr;
-static RwLock_t g_tClustersLock;
-static CSphMutex g_tClusterJoin;
 
 /// master-agent API protocol extensions version
 enum
@@ -1426,14 +1400,6 @@ static bool SaveIndexes ()
 	return bAllSaved;
 }
 
-static void ReplicationAbort()
-{
-	sphWarning ( "shutting down due to abort" );
-	// no need to shutdown cluster properly in case of cluster signaled abort
-	g_dClusters.Reset();
-	Shutdown();
-}
-
 void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 {
 #if !USE_WINDOWS
@@ -1481,6 +1447,9 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	g_tPrereadThread.Join();
 
+	// unfreeze threads waiting of replication started
+	ReplicateClustersWake();
+
 	int64_t tmShutStarted = sphMicroTimer();
 	// stop search threads; up to shutdown_timeout seconds
 	while ( ( g_dThd.GetLength() > 0 || g_bPrereading ) && ( sphMicroTimer()-tmShutStarted )<g_iShutdownTimeout )
@@ -1498,18 +1467,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	bAttrsSaveOk = SaveIndexes();
 
 	// right before unlock loop
-	CSphString sError;
-	if ( !g_bSkipCfgJson && g_bCfgJsonValid )
-	{
-		JsonConfigSetLocal ( g_pCfgJson );
-		if ( !JsonConfigWrite ( g_pCfgJson, sError ) )
-			sphLogFatal ( "%s", sError.cstr() );
-	}
-	if ( g_pCfgJson )
-	{
-		cJSON_Delete( g_pCfgJson );
-		g_pCfgJson = nullptr;
-	}
+	JsonSaveConfig();
 
 	// unlock indexes and release locks if needed
 	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next(); )
@@ -1527,14 +1485,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	sphDoneIOStats();
 	sphRTDone();
 
-	ARRAY_FOREACH ( iCluster, g_dClusters )
-	{
-		// unfreeze main thread that might wait of replication started
-		g_tReplicationSync.SetEvent();
-
-		ReplicateClusterDone ( g_dClusters[iCluster] );
-		SafeDelete ( g_dClusters[iCluster] );
-	}
+	ReplicateClustersDelete();
 
 	sphShutdownWordforms ();
 	sphShutdownGlobalIDFs ();
@@ -2284,15 +2235,6 @@ void CheckPort ( int iPort )
 	if ( !IsPortInRange(iPort) )
 		sphFatal ( "port %d is out of range", iPort );
 }
-
-struct ListenerDesc_t
-{
-	ProtocolType_e	m_eProto;
-	CSphString		m_sUnix;
-	DWORD			m_uIP;
-	int				m_iPort;
-	bool			m_bVIP;
-};
 
 void ProtoByName ( const CSphString & sProto, ListenerDesc_t & tDesc )
 {
@@ -11313,13 +11255,7 @@ void BuildStatus ( VectorLike & dStatus )
 		dStatus.Add().SetSprintf ( INT64_FMT, s.m_iHits );
 
 	// clusters
-	g_tClustersLock.ReadLock();
-	ARRAY_FOREACH ( i, g_dClusters )
-	{
-		ReplicationCluster_t * pCluster = g_dClusters[i];
-		ReplicateClusterStats ( pCluster, dStatus );
-	}
-	g_tClustersLock.Unlock();
+	ReplicateClustersStatus ( dStatus );
 }
 
 void BuildOneAgentStatus ( VectorLike & dStatus, HostDashboard_t* pDash, const char * sPrefix="agent" )
@@ -12076,6 +12012,7 @@ public:
 
 IDataTupleter::~IDataTupleter() = default;
 
+#define SPH_MAX_NUMERIC_STR 64
 class SqlRowBuffer_c : public ISphNoncopyable, public IDataTupleter
 {
 public:
@@ -13386,269 +13323,6 @@ void HandleMysqlPercolateMeta ( const PercolateMatchResult_t & tMeta, const CSph
 	tOut.Eof();
 }
 
-
-static WORD g_iReplicateCommandVer[RCOMMAND_TOTAL] = { 0x101, 0x101, 0x101, 0x101 };
-
-WORD GetReplicateCommandVer ( ReplicationCommand_e eCommand )
-{
-	assert ( eCommand>=0 && eCommand<RCOMMAND_TOTAL );
-	return g_iReplicateCommandVer[(int)eCommand];
-}
-
-bool ParseCmdReplicated ( const BYTE * pData, int iLen, CSphVector<ReplicationCommand_t> & dCommands )
-{
-	MemoryReader_c tReader ( pData, iLen );
-
-	ReplicationCommand_e eCommand = (ReplicationCommand_e)tReader.GetWord();
-	if ( eCommand<0 || eCommand>RCOMMAND_TOTAL )
-	{
-		sphWarning ( "replication bad command %d", (int)eCommand );
-		return false;
-	}
-
-	WORD uVer = tReader.GetWord();
-	if ( uVer!=GetReplicateCommandVer ( eCommand ) )
-	{
-		sphWarning ( "replication command %d, version mismatch %d, got %d", (int)eCommand, (int)GetReplicateCommandVer ( eCommand ), (int)uVer );
-		return false;
-	}
-
-	CSphString sIndex = tReader.GetString();
-	ServedIndexRefPtr_c pServed = GetServed ( sIndex );
-	if ( !pServed )
-	{
-		sphWarning ( "replicate unknown index '%s', command %d", sIndex.cstr(), (int)eCommand );
-		return false;
-	}
-
-	ServedDescRPtr_c pDesc ( pServed );
-	if ( pDesc->m_eType!=eITYPE::PERCOLATE )
-	{
-		sphWarning ( "replicate wrong type of index '%s', command %d", sIndex.cstr(), (int)eCommand );
-		return false;
-	}
-
-	PercolateIndex_i * pIndex = (PercolateIndex_i * )pDesc->m_pIndex;
-	const BYTE * pRequest = pData + tReader.GetPos();
-	int iRequestLen = iLen - tReader.GetPos();
-
-	ReplicationCommand_t & tCmd = dCommands.Add();
-	tCmd.m_eCommand = eCommand;
-	tCmd.m_sIndex = sIndex;
-
-	switch ( eCommand )
-	{
-	case RCOMMAND_PQUERY_ADD:
-	{
-		LoadStoredQuery ( pRequest, iRequestLen, tCmd.m_tPQ );
-		sphLogDebugRpl ( "pq-add, index '%s', uid " UINT64_FMT " query %s", tCmd.m_sIndex.cstr(), tCmd.m_tPQ.m_uUID, tCmd.m_tPQ.m_sQuery.cstr() );
-
-		CSphString sError;
-		PercolateQueryArgs_t tArgs ( tCmd.m_tPQ );
-		tArgs.m_bReplace = true;
-		tCmd.m_pStored = pIndex->Query ( tArgs, sError );
-
-		if ( !tCmd.m_pStored )
-		{
-			sphWarning ( "replicate pq-add error '%s', index '%s'", sError.cstr(), tCmd.m_sIndex.cstr() );
-			dCommands.Pop();
-			return false;
-		}
-	}
-	break;
-
-	case RCOMMAND_DELETE:
-		LoadDeleteQuery ( pRequest, iRequestLen, tCmd.m_dDeleteQueries, tCmd.m_sDeleteTags );
-		sphLogDebugRpl ( "pq-delete, index '%s', queries %d, tags %s", tCmd.m_sIndex.cstr(), tCmd.m_dDeleteQueries.GetLength(), tCmd.m_sDeleteTags.cstr() );
-		break;
-
-	case RCOMMAND_TRUNCATE:
-		sphLogDebugRpl ( "pq-truncate, index '%s'", tCmd.m_sIndex.cstr() );
-		break;
-
-	default:
-		sphWarning ( "replicate unsupported command %d", (int)eCommand );
-		return false;
-	}
-
-	return true;
-}
-
-bool HandleCmdReplicated ( ReplicationCommand_t & tCmd )
-{
-	ServedIndexRefPtr_c pServed = GetServed ( tCmd.m_sIndex );
-	if ( !pServed )
-	{
-		sphWarning ( "replicate unknown index '%s', command %d", tCmd.m_sIndex.cstr(), (int)tCmd.m_eCommand );
-		return false;
-	}
-
-	ServedDescPtr_c pDesc ( pServed, ( tCmd.m_eCommand==RCOMMAND_TRUNCATE ) );
-	if ( pDesc->m_eType!=eITYPE::PERCOLATE )
-	{
-		sphWarning ( "replicate wrong type of index '%s', command %d", tCmd.m_sIndex.cstr(), (int)tCmd.m_eCommand );
-		return false;
-	}
-
-	PercolateIndex_i * pIndex = (PercolateIndex_i * )pDesc->m_pIndex;
-	CSphString sError;
-
-	switch ( tCmd.m_eCommand )
-	{
-	case RCOMMAND_PQUERY_ADD:
-	{
-		sphLogDebugRpl ( "pq-add-commit, index '%s', uid " INT64_FMT, tCmd.m_sIndex.cstr(), tCmd.m_tPQ.m_uUID );
-
-		bool bOk = pIndex->Commit ( tCmd.m_pStored, sError );
-		tCmd.m_pStored = nullptr;
-		if ( !bOk )
-		{
-			sphWarning ( "replicate commit error '%s', index '%s'", sError.cstr(), tCmd.m_sIndex.cstr() );
-			return false;
-		}
-	}
-	break;
-
-	case RCOMMAND_DELETE:
-		sphLogDebugRpl ( "pq-delete-commit, index '%s'", tCmd.m_sIndex.cstr() );
-
-		if ( tCmd.m_dDeleteQueries.GetLength() )
-			pIndex->DeleteQueries ( tCmd.m_dDeleteQueries.Begin(), tCmd.m_dDeleteQueries.GetLength() );
-		else
-			pIndex->DeleteQueries ( tCmd.m_sDeleteTags.cstr() );
-		break;
-
-	case RCOMMAND_TRUNCATE:
-		sphLogDebugRpl ( "pq-truncate-commit, index '%s'", tCmd.m_sIndex.cstr() );
-		pIndex->Truncate ( sError );
-		break;
-
-	default:
-		sphWarning ( "replicate unsupported command %d", tCmd.m_eCommand );
-		return false;
-	}
-
-	return true;
-}
-
-bool HandleCmdReplicate ( ReplicationCommand_t & tCmd, CSphString & sError, int * pDeletedCount )
-{
-	assert ( tCmd.m_eCommand>=0 && tCmd.m_eCommand<RCOMMAND_TOTAL );
-	CommitMonitor_c tMonitor ( tCmd, pDeletedCount );
-
-	g_tClustersLock.ReadLock();
-	ReplicationCluster_t ** ppCluster = g_hIndex2Cluster ( tCmd.m_sIndex );
-	g_tClustersLock.Unlock();
-	if ( !ppCluster )
-		return tMonitor.Commit ( sError );
-
-	if ( tCmd.m_eCommand==RCOMMAND_TRUNCATE && tCmd.m_bReconfigure )
-	{
-		sError.SetSprintf ( "RECONFIGURE not supported in cluster index" );
-		return false;
-	}
-
-	assert ( (*ppCluster)->m_pProvider );
-
-	// replicator check CRC of data - no need to check that at our side
-	CSphVector<BYTE> dBuf;
-	uint64_t uQueryHash = sphFNV64 ( tCmd.m_sIndex.cstr() );
-	uQueryHash = sphFNV64 ( &tCmd.m_eCommand, sizeof(tCmd.m_eCommand), uQueryHash );
-
-	// scope for writer
-	{
-		MemoryWriter_c tWriter ( dBuf );
-		tWriter.PutWord ( tCmd.m_eCommand );
-		tWriter.PutWord ( GetReplicateCommandVer ( tCmd.m_eCommand ) );
-		tWriter.PutString ( tCmd.m_sIndex );
-	}
-
-	switch ( tCmd.m_eCommand )
-	{
-	case RCOMMAND_PQUERY_ADD:
-		assert ( tCmd.m_pStored );
-		SaveStoredQuery ( *tCmd.m_pStored, dBuf );
-
-		uQueryHash = sphFNV64 ( &tCmd.m_pStored->m_uUID, sizeof(tCmd.m_pStored->m_uUID), uQueryHash );
-		break;
-
-	case RCOMMAND_DELETE:
-		assert ( tCmd.m_dDeleteQueries.GetLength() || !tCmd.m_sDeleteTags.IsEmpty() );
-		SaveDeleteQuery ( tCmd.m_dDeleteQueries.Begin(), tCmd.m_dDeleteQueries.GetLength(), tCmd.m_sDeleteTags.cstr(), dBuf );
-
-		ARRAY_FOREACH ( i, tCmd.m_dDeleteQueries )
-		{
-			uQueryHash = sphFNV64 ( tCmd.m_dDeleteQueries.Begin()+i, sizeof(tCmd.m_dDeleteQueries[0]), uQueryHash );
-		}
-		uQueryHash = sphFNV64cont ( tCmd.m_sDeleteTags.cstr(), uQueryHash );
-		break;
-
-	case RCOMMAND_TRUNCATE:
-		// FIXME!!! add reconfigure option here
-		break;
-
-	default:
-		sError.SetSprintf ( "unknown command %d", tCmd.m_eCommand );
-		return false;
-	}
-
-	return Replicate ( uQueryHash, dBuf, (*ppCluster)->m_pProvider, tMonitor, sError );
-}
-
-bool CommitMonitor_c::Commit ( CSphString & sError )
-{
-	ServedIndexRefPtr_c pServed = GetServed ( m_tCmd.m_sIndex );
-	if ( !pServed )
-	{
-		sError = "requires an existing RT index";
-		return false;
-	}
-
-	ServedDescPtr_c pDesc ( pServed, ( m_tCmd.m_eCommand==RCOMMAND_TRUNCATE ) );
-	if ( m_tCmd.m_eCommand!=RCOMMAND_TRUNCATE && pDesc->m_eType!=eITYPE::PERCOLATE )
-	{
-		sError = "requires an existing Percolate index";
-		return false;
-	}
-
-	bool bOk = false;
-	PercolateIndex_i * pIndex = (PercolateIndex_i * )pDesc->m_pIndex;
-
-	switch ( m_tCmd.m_eCommand )
-	{
-	case RCOMMAND_PQUERY_ADD:
-		bOk = pIndex->Commit ( m_tCmd.m_pStored, sError );
-		break;
-
-	case RCOMMAND_DELETE:
-		assert ( m_pDeletedCount );
-		if ( !m_tCmd.m_dDeleteQueries.GetLength() )
-			*m_pDeletedCount = pIndex->DeleteQueries ( m_tCmd.m_sDeleteTags.cstr() );
-		else
-			*m_pDeletedCount = pIndex->DeleteQueries ( m_tCmd.m_dDeleteQueries.Begin(), m_tCmd.m_dDeleteQueries.GetLength() );
-
-		bOk = true;
-		break;
-
-	case RCOMMAND_TRUNCATE:
-		bOk = pIndex->Truncate ( sError );
-		if ( bOk && m_tCmd.m_bReconfigure )
-		{
-			CSphReconfigureSetup tSetup;
-			bool bSame = pIndex->IsSameSettings ( m_tCmd.m_tReconfigureSettings, tSetup, sError );
-			if ( !bSame && sError.IsEmpty() )
-				pIndex->Reconfigure ( tSetup );
-			bOk = sError.IsEmpty();
-		}
-		break;
-
-	default:
-		sError.SetSprintf ( "unknown command %d", m_tCmd.m_eCommand );
-		return false;
-	}
-
-	return bOk;
-}
 
 class SphinxqlRequestBuilder_c : public IRequestBuilder_t
 {
@@ -16624,17 +16298,9 @@ void HandleMysqlSet ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, SessionVars_t & 
 
 	case SET_CLUSTER_UVAR:
 	{
-		CSphScopedRLock tClusterGuard ( g_tClustersLock );		
-		int iCluster = g_dClusters.GetFirst ( [&] ( const ReplicationCluster_t * tVal ) { return tStmt.m_sIndex==tVal->m_sName; } );
-		if ( iCluster==-1 )
+		if ( !ReplicateSetOption ( tStmt.m_sIndex, tStmt.m_sSetValue, sError ) )
 		{
-			sError.SetSprintf ( "unknown cluster '%s' in SET statement", tStmt.m_sIndex.cstr() );
 			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
-			return;
-		}
-		if ( !ReplicateSetOption ( g_dClusters[iCluster], tStmt.m_sSetValue ) )
-		{
-			tOut.Error ( tStmt.m_sStmt, "cluster SET error" );
 			return;
 		}
 	}
@@ -17783,7 +17449,6 @@ ISphRtIndex * CSphSessionAccum::GetIndex ()
 }
 
 static bool FixupFederatedQuery ( ESphCollation eCollation, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, CSphString & sFederatedQuery );
-static bool ReplicationJoin ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, CSphAutoEvent & tReplicationSync, CSphString & sError );
 
 class CSphinxqlSession : public ISphNoncopyable
 {
@@ -18220,7 +17885,7 @@ public:
 			return true;
 
 		case STMT_JOIN_CLUSTER:
-			if ( ReplicationJoin ( pStmt->m_sIndex, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues, g_tReplicationSync, m_sError ) )
+			if ( ReplicationJoin ( pStmt->m_sIndex, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues, m_sError ) )
 				tOut.Ok();
 			else
 				tOut.Error ( sQuery.cstr(), m_sError.cstr() );
@@ -20012,7 +19677,7 @@ CSphString GetTypeName ( eITYPE eType )
 
 // ServiceMain() -> ConfigureAndPreload() -> AddIndex()
 // ServiceMain() -> TickHead() -> CheckRotate() -> ReloadIndexSettings() -> AddIndex()
-ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace=false ) REQUIRES ( MainThread )
+ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace ) REQUIRES ( MainThread )
 {
 	switch ( TypeOfIndexConfig ( hIndex.GetStr ( "type", nullptr ) ) )
 	{
@@ -23860,36 +23525,7 @@ void ConfigureAndPreload ( const CSphConfig & hConf, const StrVec_t & dOptIndexe
 		}
 	}
 
-	cJSON * pIndexes = cJSON_GetObjectItem ( g_pCfgJson, "indexes" );
-	cJSON * pIndex = ( pIndexes ? pIndexes->child : nullptr );
-	while ( pIndex!=nullptr )
-	{
-		const char * sIndexName = pIndex->string;
-		CSphVariant tPath ( cJSON_GetObjectItem( pIndex, "path" )->valuestring, 0 );
-		CSphVariant tType ( cJSON_GetObjectItem( pIndex, "type" )->valuestring, 0 );
-
-		CSphConfigSection hIndex;
-		hIndex.Add ( tPath, "path" );
-		hIndex.Add ( tType, "type" );
-
-		ESphAddIndex eAdd = ConfigureAndPreload ( hIndex, sIndexName, true );
-		iValidIndexes += ( eAdd!=ADD_ERROR ? 1 : 0 );
-		iCounter +=  ( eAdd==ADD_DSBLED ? 1 : 0 );
-		if ( eAdd==ADD_ERROR )
-		{
-			// remove bad index from config
-			sphWarning ( "index '%s': removed from JSON config", sIndexName );
-			cJSON * pDelete = pIndex;
-			// advance to next element prior delete
-			pIndex = pIndex->next;
-			cJSON_DetachItemViaPointer ( pIndexes, pDelete );
-			cJSON_Delete ( pDelete );
-		} else
-		{
-			pIndex = pIndex->next;
-		}
-	}
-	g_bCfgJsonValid = !g_bSkipCfgJson;
+	JsonConfigConfigureAndPreload ( iValidIndexes, iCounter );
 
 	// we don't have any more unprocessed disabled indexes during startup
 	g_pDisabledIndexes->ReleaseAndClear ();
@@ -23946,810 +23582,6 @@ void OpenDaemonLog ( const CSphConfigSection & hSearchd, bool bCloseIfOpened=fal
 
 		g_sLogFile = sLog;
 		g_bLogTty = isatty ( g_iLogFile )!=0;
-}
-
-
-static void JsonConfigFileName ( CSphString & sName )
-{
-	sName.SetSprintf ( "%s.json", g_sConfigFile.cstr() );
-}
-
-static bool JsonConfigCheckProperty ( const cJSON * pNode, const char * sPropertyName, bool bOptional, CSphString & sError )
-{
-	const cJSON * pChild = cJSON_GetObjectItem( pNode, sPropertyName );
-	if ( !pChild && bOptional )
-		return true;
-
-	if ( !pChild || !cJSON_IsString ( pChild ) )
-	{
-		sError.SetSprintf ( "property '%s' should be a string", sPropertyName );
-		return false;
-	}
-	if ( strlen ( pChild->valuestring )==0 && !bOptional )
-	{
-		sError.SetSprintf ( "property '%s' empty", sPropertyName );
-		return false;
-	}
-
-	return true;
-}
-
-bool JsonConfigCheckProperty ( const cJSON * pNode, const char * sPropertyName, CSphString & sError )
-{
-	return JsonConfigCheckProperty ( pNode, sPropertyName, false, sError );
-}
-
-bool JsonCheckIndex ( const cJSON * pIndex, CSphString & sError )
-{
-	if ( !pIndex->string || strlen ( pIndex->string )==0 )
-	{
-		sError = "empty index name";
-		return false;
-	}
-
-	if ( !JsonConfigCheckProperty ( pIndex, "path", sError ) )
-		return false;
-
-	cJSON * pType = cJSON_GetObjectItem( pIndex, "type" );
-	if ( !JsonConfigCheckProperty ( pIndex, "type", sError ) )
-		return false;
-
-	if ( TypeOfIndexConfig ( pType->valuestring )==eITYPE::ERROR_ )
-	{
-		sError.SetSprintf ( "index '%s' type '%s' is invalid", pIndex->string, pType->valuestring );
-		return false;
-	}
-
-	return true;
-}
-
-static void JsonConfigDefault ( cJSON ** ppConf )
-{
-	assert ( ppConf );
-	if ( *ppConf )
-	{
-		cJSON_Delete( *ppConf );
-		*ppConf = nullptr;
-	}
-
-	// default
-	*ppConf = cJSON_CreateObject();
-	cJSON * pDefaultIndexes = cJSON_CreateObject();
-	cJSON_AddItemToObject( *ppConf, "indexes", pDefaultIndexes );
-	cJSON * pDefaultSearchd = cJSON_CreateObject();
-	cJSON_AddItemToObject( *ppConf, "searchd", pDefaultSearchd );
-	cJSON * pDefaultClusters = cJSON_CreateObject();
-	cJSON_AddItemToObject( *ppConf, "clusters", pDefaultClusters );
-}
-
-bool JsonGetError ( const char * sBuf, int iBufLen, CSphString & sError )
-{
-	if ( !cJSON_GetErrorPtr() )
-		return false;
-
-	const int iErrorWindowLen = 20;
-
-	const char * sErrorStart = cJSON_GetErrorPtr() - iErrorWindowLen/2;
-	if ( sErrorStart<sBuf )
-		sErrorStart = sBuf;
-
-	int iLen = iErrorWindowLen;
-	if ( sErrorStart-sBuf+iLen>iBufLen )
-		iLen = iBufLen - ( sErrorStart - sBuf );
-
-	sError.SetSprintf ( "JSON parse error at: %.*s", iLen, sErrorStart );
-	return true;
-}
-
-static bool JsonConfigRead ( cJSON ** ppConf, CSphString & sError )
-{
-	assert ( ppConf );
-	assert ( cJSON_GetObjectItem ( *ppConf, "indexes" ) );
-	assert ( cJSON_GetObjectItem ( *ppConf, "searchd" ) );
-	assert ( cJSON_GetObjectItem ( *ppConf, "clusters" ) );
-
-	CSphString sConfigFileName;
-	JsonConfigFileName ( sConfigFileName );
-
-	if ( !sphIsReadable ( sConfigFileName, nullptr ) )
-		return true;
-
-	CSphAutoreader tConfigFile;
-	if ( !tConfigFile.Open ( sConfigFileName, sError ) )
-		return false;
-
-	int iSize = tConfigFile.GetFilesize();
-	if ( !iSize )
-		return true;
-	
-	CSphFixedVector<BYTE> dData ( iSize+1 );
-	tConfigFile.GetBytes ( dData.Begin(), iSize );
-
-	if ( tConfigFile.GetErrorFlag() )
-	{
-		sError = tConfigFile.GetErrorMessage();
-		return false;
-	}
-	
-	dData[iSize] = 0; // safe gap
-	cJSON * pRoot = cJSON_Parse ( (const char*)dData.Begin() );
-	if ( JsonGetError ( (const char *)dData.Begin(), dData.GetLength(), sError ) )
-		return false;
-
-	// FIXME!!! check for path duplicates
-	// check indexes
-	int iElem = 0;
-	cJSON * pIndexes = cJSON_GetObjectItem ( pRoot, "indexes" );
-	cJSON * pIndex = ( pIndexes ? pIndexes->child : nullptr );
-	while ( pIndex!=nullptr )
-	{
-		if ( !JsonCheckIndex ( pIndex, sError ) )
-		{
-			// remove bad index from config
-			sphWarning ( "index '%s'(%d): removed from JSON config, %s", pIndex->string, iElem, sError.cstr() );
-			cJSON * pDelete = pIndex;
-			// advance to next element prior delete
-			pIndex = pIndex->next;
-			cJSON_DetachItemViaPointer ( pIndexes, pDelete );
-			cJSON_Delete ( pDelete );
-			sError = "";
-		} else
-		{
-			pIndex = pIndex->next;
-		}
-		iElem++;
-	}
-
-	// check clusters
-	iElem = 0;
-	cJSON * pClusters = cJSON_GetObjectItem ( pRoot, "clusters" );
-	cJSON * pCluster = ( pClusters ? pClusters->child : nullptr );
-	while ( pCluster!=nullptr )
-	{
-		bool bGood = true;
-		if ( !pCluster->string || strlen ( pCluster->string )==0 )
-		{
-			sError = "empty cluster name";
-			bGood = false;
-		}
-
-		// optional items such as: options and skipSst
-		cJSON * pOpts = cJSON_GetObjectItem( pCluster, "options" );
-		if ( pOpts && !JsonConfigCheckProperty ( pCluster, "options", true, sError ) )
-		{
-			sphWarning ( "cluster '%s'(%d): %s, set default", pCluster->string, iElem, sError.cstr() );
-			cJSON_DetachItemViaPointer ( pCluster, pOpts );
-			cJSON_Delete ( pOpts );
-			pOpts = nullptr;
-			sError = "";
-		}
-		if ( !pOpts )
-		{
-			cJSON_AddStringToObject ( pCluster, "options", "" );
-		}
-
-		cJSON * pSkipSst = cJSON_GetObjectItem( pCluster, "skipSst" );
-		if ( pSkipSst && !cJSON_IsBool ( pSkipSst) )
-		{
-			sphWarning ( "cluster '%s'(%d): invalid skipSst value, should be boolean, set to false", pCluster->string, iElem );
-			cJSON_DetachItemViaPointer ( pCluster, pSkipSst );
-			cJSON_Delete ( pSkipSst );
-			pSkipSst = nullptr;
-		}
-		if ( !pSkipSst )
-		{
-			cJSON_AddFalseToObject ( pCluster, "skipSst" );
-		}
-
-		// cluster desc
-		bGood &= JsonConfigCheckProperty ( pCluster, "uri", sError );
-		bGood &= JsonConfigCheckProperty ( pCluster, "listen", sError );
-		bGood &= JsonConfigCheckProperty ( pCluster, "path", sError );
-
-		if ( !bGood )
-		{
-			// remove bad index from config
-			sphWarning ( "cluster '%s'(%d): removed from JSON config, %s", pCluster->string, iElem, sError.cstr() );
-			cJSON * pDelete = pCluster;
-			// advance to next element prior delete
-			pCluster = pCluster->next;
-			cJSON_DetachItemViaPointer ( pClusters, pDelete );
-			cJSON_Delete ( pDelete );
-			sError = "";
-		} else
-		{
-			pCluster = pCluster->next;
-		}
-		iElem++;
-	}
-
-	// move sections into config
-	if ( *ppConf )
-	{
-		if ( pIndexes )
-		{
-			cJSON_DeleteItemFromObject ( *ppConf, "indexes" );
-			cJSON_DetachItemViaPointer ( pRoot, pIndexes );
-			cJSON_AddItemToObject ( *ppConf, "indexes", pIndexes );
-		}
-
-		if ( pClusters )
-		{
-			cJSON_DeleteItemFromObject ( *ppConf, "clusters" );
-			cJSON_DetachItemViaPointer ( pRoot, pClusters );
-			cJSON_AddItemToObject ( *ppConf, "clusters", pClusters );
-		}
-
-		cJSON * pDaemon = cJSON_GetObjectItem ( pRoot, "searchd" );
-		if ( pDaemon )
-		{
-			cJSON_DeleteItemFromObject ( *ppConf, "searchd" );
-			cJSON_DetachItemViaPointer ( pRoot, pDaemon );
-			cJSON_AddItemToObject ( *ppConf, "searchd", pDaemon );
-		}
-	}
-
-	cJSON_Delete ( pRoot );
-
-	return true;
-}
-
-
-bool JsonConfigWrite ( const cJSON * pConf, CSphString & sError )
-{
-	if ( !pConf )
-		return true;
-
-	cJSON * pIndexes = cJSON_GetObjectItem ( pConf, "indexes" );
-	cJSON * pSearchd = cJSON_GetObjectItem ( pConf, "searchd" );
-	cJSON * pClusters = cJSON_GetObjectItem ( pConf, "clusters" );
-	int iIndexesCount = pIndexes ? cJSON_GetArraySize ( pIndexes ) : 0;
-	int iSearchdOpts = pSearchd ? cJSON_GetArraySize ( pSearchd ) : 0;
-	int iClustersCount = pClusters ? cJSON_GetArraySize ( pClusters ) : 0;
-	// no need to write empty JSON config
-	if ( !iIndexesCount && !iSearchdOpts && !iClustersCount )
-		return true;
-
-	CSphString sConfigData;
-	char * sRawData = cJSON_Print ( pConf );
-	sConfigData.Adopt ( &sRawData );
-
-	CSphString sNew, sOld, sCur;
-	JsonConfigFileName ( sCur );
-	sNew.SetSprintf ( "%s.new", sCur.cstr() );
-	sOld.SetSprintf ( "%s.old", sCur.cstr() );
-
-	CSphWriter tConfigFile;
-	if ( !tConfigFile.OpenFile ( sNew, sError ) )
-		return false;
-
-	tConfigFile.PutBytes ( sConfigData.cstr(), sConfigData.Length() );
-	tConfigFile.CloseFile();
-	if ( tConfigFile.IsError() )
-		return false;
-
-	if ( sphIsReadable ( sCur, nullptr ) && rename ( sCur.cstr(), sOld.cstr() ) )
-	{
-		sError.SetSprintf ( "failed to rename current to old, '%s'->'%s', error '%s'", sCur.cstr(), sOld.cstr(), strerror(errno) );
-		return false;
-	}
-
-	if ( rename ( sNew.cstr(), sCur.cstr() ) )
-	{
-		sError.SetSprintf ( "failed to rename new to current, '%s'->'%s', error '%s'", sNew.cstr(), sCur.cstr(), strerror(errno) );
-		if ( sphIsReadable ( sOld, nullptr ) && rename ( sOld.cstr(), sCur.cstr() ) )
-			sError.SetSprintf ( "%s, rollback failed too", sError.cstr() );
-		return false;
-	}
-
-	unlink ( sOld.cstr() );
-
-	return true;
-}
-
-void JsonConfigSetIndex ( const CSphString & sIndexName, const CSphString & sPath, eITYPE eIndexType, cJSON * pIndexes )
-{
-	const CSphString sType = GetTypeName ( eIndexType );
-
-	cJSON * pIdx = cJSON_CreateObject();
-	cJSON_AddStringToObject ( pIdx, "path", sPath.cstr() );
-	cJSON_AddStringToObject ( pIdx, "type", sType.cstr() );
-	cJSON_AddItemToObject( pIndexes, sIndexName.cstr(), pIdx );
-}
-
-void JsonConfigSetLocal ( cJSON * pConf )
-{
-	assert ( pConf );
-	assert ( cJSON_GetObjectItem ( pConf, "indexes" ) );
-	cJSON_DeleteItemFromObject ( pConf, "indexes" );
-	cJSON * pIndexes = cJSON_CreateObject();
-	cJSON_AddItemToObject( pConf, "indexes", pIndexes );
-
-	for ( RLockedServedIt_c tIt ( g_pLocalIndexes ); tIt.Next (); )
-	{
-		auto pServed = tIt.Get();
-		if ( !pServed )
-			continue;
-
-		ServedDescRPtr_c tDesc ( pServed );
-		if ( !tDesc->m_bJson )
-			continue;
-
-		JsonConfigSetIndex ( tIt.GetName(), tDesc->m_sIndexPath, tDesc->m_eType, pIndexes );
-	}
-}
-
-bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIndexName )
-{
-	// delete existed index first, does not allow to save it's data that breaks sync'ed index files
-	// need a scope for RefRtr's to work
-	{
-		ServedIndexRefPtr_c pServedCur = GetServed ( sIndexName );
-		if ( pServedCur )
-		{
-			// we are only owner of that index and will free it after delete from hash
-			ServedDescWPtr_c pDesc ( pServedCur );
-			if ( pDesc->IsMutable() )
-			{
-				ISphRtIndex * pIndex = (ISphRtIndex *)pDesc->m_pIndex;
-				pIndex->ProhibitSave();
-			}
-
-			g_pLocalIndexes->Delete ( sIndexName );
-		}
-	}
-
-	ESphAddIndex eAdd = AddIndex ( sIndexName.cstr(), hIndex );
-	if ( eAdd!=ADD_DSBLED )
-		return false;
-
-	ServedIndexRefPtr_c pServed = GetDisabled ( sIndexName );
-	ServedDescWPtr_c pDesc ( pServed );
-	pDesc->m_bJson = true;
-
-	bool bPreload = PreallocNewIndex ( *pDesc, &hIndex, sIndexName.cstr() );
-	if ( !bPreload )
-		return false;
-
-	// finally add the index to the hash of enabled.
-	g_pLocalIndexes->AddOrReplace ( pServed, sIndexName );
-	pServed->AddRef ();
-	g_pDisabledIndexes->Delete ( sIndexName );
-
-	return true;
-}
-
-bool ReplicatedIndexes ( const cJSON * pIndexes, bool bBypass, ReplicationCluster_t * pCluster )
-{
-	assert ( !g_bSkipCfgJson && g_bCfgJsonValid );
-	assert ( pCluster );
-	assert ( bBypass || ( pIndexes && cJSON_GetArraySize ( pIndexes ) ) );
-
-	// reset indexes list at cluster and JSON representation
-	cJSON * pClusters = cJSON_GetObjectItem ( g_pCfgJson, "clusters" );
-	if ( !pClusters )
-	{
-		sphWarning ( "no clusters found" );
-		return false;
-	}
-	cJSON * pClusterJSON = cJSON_GetObjectItem ( pClusters, pCluster->m_sName.cstr() );
-	if ( !pClusterJSON )
-	{
-		sphWarning ( "no cluster '%s' found", pCluster->m_sName.cstr() );
-		return false;
-	}
-
-	// for bypass mode only seqno got replicated but not indexes
-	if ( bBypass )
-		return true;
-
-	cJSON_DeleteItemFromObject ( pClusterJSON, "indexes" );
-	cJSON * pClusterIndexes = cJSON_CreateArray();
-	cJSON_AddItemToObject ( pClusterJSON, "indexes", pClusterIndexes );
-	pCluster->m_dIndexes.Resize ( 0 );
-
-	const cJSON * pIndex = ( pIndexes ? pIndexes->child : nullptr );
-	int iIndexCount = ( pIndexes ? cJSON_GetArraySize ( pIndexes ) : 0 );
-	int iLoaded = 0;
-	while ( pIndex!=nullptr )
-	{
-		CSphString sIndexName = pIndex->string;
-
-		g_tClustersLock.ReadLock();
-		ReplicationCluster_t ** ppOrigCluster = g_hIndex2Cluster ( sIndexName );
-		g_tClustersLock.Unlock();
-
-		if ( ppOrigCluster && (*ppOrigCluster)!=pCluster )
-		{
-			sphWarning ( "index '%s' is already in another cluster '%s', replicated cluster '%s'", sIndexName.cstr(), (*ppOrigCluster)->m_sName.cstr(), pCluster->m_sName.cstr() );
-			pIndex = pIndex->next;
-			continue;
-		}
-
-		CSphVariant tPath ( cJSON_GetObjectItem( pIndex, "path" )->valuestring, 0 );
-		CSphVariant tType ( cJSON_GetObjectItem( pIndex, "type" )->valuestring, 0 );
-
-		CSphConfigSection hIndex;
-		hIndex.Add ( tPath, "path" );
-		hIndex.Add ( tType, "type" );
-
-		bool bLoaded = LoadIndex ( hIndex, sIndexName );
-		iLoaded += ( bLoaded ? 1 : 0 );
-		pIndex = pIndex->next;
-
-		if ( !bLoaded )
-		{
-			sphWarning ( "index '%s': removed from JSON config", sIndexName.cstr() );
-			continue;
-		} 
-
-		// add index into hash, cluster indexes list, JSON representation
-		if ( !ppOrigCluster )
-		{
-			g_tClustersLock.WriteLock();
-			g_hIndex2Cluster.Add ( pCluster, sIndexName );
-			g_tClustersLock.Unlock();
-		}
-
-		pCluster->m_dIndexes.Add ( sIndexName );
-		cJSON_AddItemToArray ( pClusterIndexes, cJSON_CreateString ( sIndexName.cstr() ) );
-	}
-
-	CSphString sError;
-	JsonConfigSetLocal ( g_pCfgJson );
-	if ( !JsonConfigWrite ( g_pCfgJson, sError ) )
-	{
-		sphWarning ( "%s", sError.cstr() );
-		return false;
-	}
-
-	return ( iLoaded==iIndexCount );
-}
-
-bool ClusterCheckPath ( const CSphString & sPath, const CSphString & sName, const CSphVector<ReplicationCluster_t *> & dClusters )
-{
-	ARRAY_FOREACH ( i, dClusters )
-	{
-		const ReplicationCluster_t * pCluster = dClusters[i];
-		if ( sPath==pCluster->m_sPath )
-		{
-			sphWarning ( "duplicate paths: cluster '%s' has the same path as '%s', skipped", sName.cstr(), pCluster->m_sName.cstr() );
-			return false;
-		}
-	}
-
-	return true;
-}
-
-bool NewClusterForce ( const CSphString & sPath, const CSphString & sName )
-{
-	CSphString sClusterState;
-	sClusterState.SetSprintf ( "%s/grastate.dat", sPath.cstr() );
-	CSphString sNewState;
-	sNewState.SetSprintf ( "%s/grastate.dat.new", sPath.cstr() );
-	CSphString sOldState;
-	sOldState.SetSprintf ( "%s/grastate.dat.old", sPath.cstr() );
-	const char sPattern[] = "safe_to_bootstrap";
-	const int iPatternLen = sizeof(sPattern)-1;
-	CSphString sError;
-
-	// cluster starts well without grastate.dat file
-	if ( !sphIsReadable ( sClusterState ) )
-		return true;
-
-	CSphAutoreader tReader;
-	if ( !tReader.Open ( sClusterState, sError ) )
-	{
-		sphWarning ( "%s, cluster '%s' skipped", sError.cstr(), sName.cstr() );
-		return false;
-	}
-
-	CSphWriter tWriter;
-	if ( !tWriter.OpenFile ( sNewState, sError ) )
-	{
-		sphWarning ( "%s, cluster '%s' skipped", sError.cstr(), sName.cstr() );
-		return false;
-	}
-
-	CSphFixedVector<char> dBuf { 2048 };
-	SphOffset_t iStateSize = tReader.GetFilesize();
-	while ( tReader.GetPos()<iStateSize )
-	{
-		int iLineLen = tReader.GetLine ( dBuf.Begin(), dBuf.GetLengthBytes() );
-		// replace value of safe_to_bootstrap to 1
-		if ( iLineLen>iPatternLen && strncmp ( sPattern, dBuf.Begin(), iPatternLen )==0 )
-			iLineLen = snprintf ( dBuf.Begin(), dBuf.GetLengthBytes(), "%s: 1", sPattern );
-
-		tWriter.PutBytes ( dBuf.Begin(), iLineLen );
-		tWriter.PutByte ( '\n' );
-	}
-
-	if ( tReader.GetErrorFlag() )
-	{
-		sphWarning ( "%s, cluster '%s' skipped", tReader.GetErrorMessage().cstr(), sName.cstr() );
-		return false;
-	}
-	if ( tWriter.IsError() )
-	{
-		sphWarning ( "%s, cluster '%s' skipped", sError.cstr(), sName.cstr() );
-		return false;
-	}
-
-	tReader.Close();
-	tWriter.CloseFile();
-
-	if ( sph::rename ( sClusterState.cstr (), sOldState.cstr () )!=0 )
-	{
-		sphWarning ( "failed to rename %s to %s, cluster '%s' skipped", sClusterState.cstr(), sOldState.cstr(), sName.cstr() );
-		return false;
-	}
-
-	if ( sph::rename ( sNewState.cstr (), sClusterState.cstr () )!=0 )
-	{
-		sphWarning ( "failed to rename %s to %s, cluster '%s' skipped", sNewState.cstr(), sClusterState.cstr(), sName.cstr() );
-		return false;
-	}
-
-	::unlink ( sOldState.cstr() );
-	return true;
-}
-
-bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bool bForce, CSphAutoEvent & tReplicationSync )
-{
-	if ( g_bSkipCfgJson )
-		return false;
-
-	if ( !hSearchd.Exists ( "repli_provider_path" ) )
-	{
-		sphWarning ( "got cluster but provider not set, replication disabled" );
-		return false;
-	}
-
-	const char * sProviderPath = hSearchd["repli_provider_path"].cstr();
-	ReplicationInit ( ReplicationAbort, &tReplicationSync );
-
-	// node with empty incoming addresses works as GARB - does not affect FC
-	// might hung on pushing 1500 transactions
-	StringBuilder_c sIncomingAddrs;
-	for ( const CSphVariant * pOpt = hSearchd("listen"); pOpt; pOpt = pOpt->m_pNext )
-	{
-		if ( sIncomingAddrs.Length() )
-			sIncomingAddrs += ", ";
-		sIncomingAddrs += pOpt->strval().cstr();
-	}
-	if ( sIncomingAddrs.IsEmpty() )
-	{
-		sphWarning ( "no listen found, can not set incoming addresses, replication disabled" );
-		return false;
-	}
-
-	g_sProviderPath = sProviderPath;
-	g_sIncomingAddr = sIncomingAddrs.cstr();
-
-	cJSON * pClusters = cJSON_GetObjectItem ( g_pCfgJson, "clusters" );
-	cJSON * pCluster = pClusters ? pClusters->child : nullptr;
-	while ( pCluster )
-	{
-		ReplicationArgs_t tArgs;
-		// global options
-		tArgs.m_sProvider = sProviderPath;
-		tArgs.m_bNewCluster = ( bNewCluster || bForce );
-		tArgs.m_sIncomingAdresses = sIncomingAddrs.cstr();
-
-		CSphScopedPtr<ReplicationCluster_t> pElem ( new ReplicationCluster_t );
-		pElem->m_sURI = cJSON_GetObjectItem ( pCluster, "uri" )->valuestring;
-		pElem->m_sName = pCluster->string;
-		pElem->m_sListen = cJSON_GetObjectItem ( pCluster, "listen" )->valuestring;
-		pElem->m_sPath = cJSON_GetObjectItem ( pCluster, "path" )->valuestring;
-		pElem->m_sOptions = ReplicateClusterOptions ( cJSON_GetObjectItem ( pCluster, "options" )->valuestring, g_eLogLevel>=SPH_LOG_RPL_DEBUG );
-		pElem->m_bSkipSST = ( !!cJSON_IsTrue ( cJSON_GetObjectItem ( pCluster, "skipSst" ) ) );
-
-		// check cluster path is unique
-		if ( !ClusterCheckPath ( pElem->m_sPath, pElem->m_sName, g_dClusters ) )
-		{
-			pCluster = pCluster->next;
-			continue;
-		}
-
-		// set safe_to_bootstrap to 1 into grastate.dat file at cluster path
-		if ( bForce && !NewClusterForce ( pElem->m_sPath, pElem->m_sName ) )
-		{
-			pCluster = pCluster->next;
-			continue;
-		}
-
-		ListenerDesc_t tListen = ParseListener ( pElem->m_sListen.cstr() );
-		char sListenBuf [ SPH_ADDRESS_SIZE ];
-		sphFormatIP ( sListenBuf, sizeof(sListenBuf), tListen.m_uIP );
-		pElem->m_sListenSST.SetSprintf ( "%s:%d", sListenBuf, tListen.m_iPort+2 );
-
-		// set indexes prior replication init
-		cJSON * pClusterIndexes = cJSON_GetObjectItem ( pCluster, "indexes" );
-		cJSON * pClusterIndex = pClusterIndexes ? pClusterIndexes->child : nullptr;
-		while ( pClusterIndex )
-		{
-			if ( cJSON_IsString ( pClusterIndex ) )
-			{
-				pElem->m_dIndexes.Add ( pClusterIndex->valuestring );
-				g_hIndex2Cluster.Add ( pElem.Ptr(), pElem->m_dIndexes.Last() );
-			}
-			pClusterIndex = pClusterIndex->next;
-		}
-
-		// save data to disk to sync it
-		// but only for just created indexes
-		ARRAY_FOREACH ( i, pElem->m_dIndexes )
-		{
-			ServedDescRPtr_c pServed ( GetServed ( pElem->m_dIndexes[i] ) );
-			if ( !pServed || !pServed->m_pIndex || !pServed->IsMutable() )
-				continue;
-
-			((ISphRtIndex *)pServed->m_pIndex)->ForceDiskChunk();
-		}
-
-		tArgs.m_pCluster = pElem.Ptr();
-
-		CSphString sError;
-		if ( !ReplicateClusterInit ( tArgs, sError ) )
-		{
-			tReplicationSync.SetEvent();
-			sphFatal ( "%s", sError.cstr() );
-		}
-
-		assert ( pElem->m_pProvider );
-		g_dClusters.Add ( pElem.LeakPtr() );
-
-		pCluster = pCluster->next;
-	}
-	return true;
-}
-
-void ReplicationWait ( CSphAutoEvent & tReplicationSync )
-{
-	int iClusters = g_dClusters.GetLength();
-	sphLogDebugRpl ( "waiting replication of %d cluster(s)", iClusters );
-	for ( int i=0; i<iClusters; i++ )
-		tReplicationSync.WaitEvent();
-	sphLogDebugRpl ( "wait over of replication" );
-
-	// check of cluster indexes after possible sync
-	g_hIndex2Cluster.IterateStart();
-	while ( g_hIndex2Cluster.IterateNext() )
-	{
-		const CSphString & sIndexName = g_hIndex2Cluster.IterateGetKey();
-
-		ServedDescRPtr_c pDesc ( GetServed ( sIndexName ) );
-		if ( !pDesc )
-		{
-			sphWarning ( "missed cluster index %s", sIndexName.cstr() );
-			continue;
-		}
-
-		if ( pDesc->m_eType!=eITYPE::PERCOLATE )
-		{
-			sphWarning ( "index %s is not percolate, no replicator set", sIndexName.cstr() );
-			continue;
-		}
-	}
-}
-
-static bool CheckJoinClusterValue ( const SmallStringHash_T<SqlInsert_t *> & hValues, const char * sName, CSphString & sError )
-{
-	if ( !hValues.Exists ( sName ) )
-	{
-		sError.SetSprintf ( "'%s' not set", sName );
-		return false;
-	}
-	if ( hValues[sName]->m_sVal.IsEmpty() )
-	{
-		sError.SetSprintf ( "'%s' should have string value", sName );
-		return false;
-	}
-
-	return true;
-}
-
-bool ReplicationJoin ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, CSphAutoEvent & tReplicationSync, CSphString & sError )
-{
-	// only one join at a time as sync callback know nothing what cluster got synced
-	CSphScopedLock<CSphMutex> tJoinGuard ( g_tClusterJoin );
-
-	if ( g_sProviderPath.IsEmpty() )
-	{
-		sError.SetSprintf ( "provider not set" );
-		return false;
-	}
-	if ( g_sIncomingAddr.IsEmpty() )
-	{
-		sError.SetSprintf ( "incoming addresses not set" );
-		return false;
-	}
-
-	assert ( dNames.GetLength()==dValues.GetLength() );
-	SmallStringHash_T<SqlInsert_t *> hValues;
-	ARRAY_FOREACH ( i, dNames )
-		hValues.Add ( dValues.Begin() + i, dNames[i] );
-
-	g_tClustersLock.ReadLock();
-	bool bClusterExists = g_dClusters.FindFirst ( [&] ( const ReplicationCluster_t * pCluster ) { return pCluster->m_sName==sCluster; } );
-	g_tClustersLock.Unlock();
-	if ( bClusterExists )
-	{
-		sError.SetSprintf ( "cluster '%s' already exists", sCluster.cstr() );
-		return false;
-	}
-	if ( !CheckJoinClusterValue ( hValues, "uri", sError ) )
-		return false;
-	if ( !CheckJoinClusterValue ( hValues, "listen", sError ) )
-		return false;
-	if ( !CheckJoinClusterValue ( hValues, "path", sError ) )
-		return false;
-
-	ReplicationArgs_t tArgs;
-	// global options
-	tArgs.m_sProvider = g_sProviderPath.cstr();
-	tArgs.m_bNewCluster = false;
-	tArgs.m_sIncomingAdresses = g_sIncomingAddr.cstr();
-
-	CSphScopedPtr<ReplicationCluster_t> pElem ( new ReplicationCluster_t );
-	pElem->m_sURI = hValues["uri"]->m_sVal;
-	pElem->m_sName = sCluster;
-	pElem->m_sListen = hValues["listen"]->m_sVal;
-	pElem->m_sPath = hValues["path"]->m_sVal;
-	CSphString sOpts;
-	if ( hValues.Exists ( "options" ) )
-		sOpts = hValues["options"]->m_sVal;
-	pElem->m_sOptions = ReplicateClusterOptions ( sOpts.cstr(), g_eLogLevel>=SPH_LOG_RPL_DEBUG );
-	// uri should start with gcomm://
-	if ( !pElem->m_sURI.Begins ( "gcomm://" ) )
-		pElem->m_sURI.SetSprintf ( "gcomm://%s", pElem->m_sURI.cstr() );
-
-	// check cluster path is unique
-	g_tClustersLock.ReadLock();
-	bool bValidPath = ClusterCheckPath ( pElem->m_sPath, pElem->m_sName, g_dClusters );
-	g_tClustersLock.Unlock();
-	if ( !bValidPath )
-		return false;
-
-	ListenerDesc_t tListen = ParseListener ( pElem->m_sListen.cstr() );
-	char sListenBuf [ SPH_ADDRESS_SIZE ];
-	sphFormatIP ( sListenBuf, sizeof(sListenBuf), tListen.m_uIP );
-	pElem->m_sListenSST.SetSprintf ( "%s:%d", sListenBuf, tListen.m_iPort+2 );
-
-	tArgs.m_pCluster = pElem.Ptr();
-
-	// need valid cluster description at config
-	cJSON * pClusters = cJSON_GetObjectItem ( g_pCfgJson, "clusters" );
-	if ( !pClusters )
-	{
-		sphWarning ( "no clusters found" );
-		return false;
-	}
-	cJSON * pCluster = cJSON_CreateObject();
-	cJSON_AddItemToObject ( pCluster, "uri", cJSON_CreateString ( pElem->m_sURI.cstr() ) );
-	cJSON_AddItemToObject ( pCluster, "listen", cJSON_CreateString ( pElem->m_sListen.cstr() ) );
-	cJSON_AddItemToObject ( pCluster, "path", cJSON_CreateString ( pElem->m_sPath.cstr() ) );
-	cJSON_AddItemToObject ( pCluster, "options", cJSON_CreateString ( pElem->m_sOptions.cstr() ) );
-	cJSON_AddItemToObject ( pCluster, "indexes", cJSON_CreateArray() );
-	cJSON_AddItemToObject ( pClusters, pElem->m_sName.cstr(), pCluster );
-
-	if ( !ReplicateClusterInit ( tArgs, sError ) )
-	{
-		// need to remove cluster description from config
-		cJSON_DeleteItemFromObject ( pClusters, pElem->m_sName.cstr() );
-		tReplicationSync.SetEvent();
-		return false;
-	}
-
-	assert ( pElem->m_pProvider );
-	g_tClustersLock.WriteLock();
-	g_dClusters.Add ( pElem.LeakPtr() );
-	g_tClustersLock.Unlock();
-
-	// wait sync to finish
-	tReplicationSync.WaitEvent();
-
-	return true;
 }
 
 int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
@@ -24858,8 +23690,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		OPT1 ( "--logdebugvv" )		g_eLogLevel = SPH_LOG_VERY_VERBOSE_DEBUG;
 		OPT1 ( "--logreplication" )	g_eLogLevel = SPH_LOG_RPL_DEBUG;
 		OPT1 ( "--safetrace" )		g_bSafeTrace = true;
-		OPT1 ( "--test" )			{ g_bWatchdog = false; bTestMode = true; g_bSkipCfgJson = true; } // internal option, do NOT document
-		OPT1 ( "--test-thd-pool" )	{ g_bWatchdog = false; bTestMode = true; bTestThdPoolMode = true; g_bSkipCfgJson = true; } // internal option, do NOT document
+		OPT1 ( "--test" )			{ g_bWatchdog = false; bTestMode = true; JsonSkipConfig(); } // internal option, do NOT document
+		OPT1 ( "--test-thd-pool" )	{ g_bWatchdog = false; bTestMode = true; bTestThdPoolMode = true; JsonSkipConfig(); } // internal option, do NOT document
 		OPT1 ( "--strip-path" )		g_bStripPath = true;
 		OPT1 ( "--vtune" )			g_bVtune = true;
 		OPT1 ( "--noqlog" )			bOptDebugQlog = false;
@@ -25144,12 +23976,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	/////////////////////
 
 	sphInitCJson();
-	if ( !g_bSkipCfgJson )
-	{
-		JsonConfigDefault ( &g_pCfgJson );
-		if ( !JsonConfigRead ( &g_pCfgJson, sError ) )
-			sphDie ( "failed to use JSON config, %s", sError.cstr() );
-	}
+	JsonLoadConfig ( g_sConfigFile );
 
 	ConfigureSearchd ( hConf, bOptPIDFile );
 	sphConfigureCommon ( hConf ); // this also inits plugins now
@@ -25502,7 +24329,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		bNewClusterForce = false;
 	}
 	
-	bool bReplicationStarted = ReplicationStart ( hSearchd, bNewCluster, bNewClusterForce, g_tReplicationSync );
+	bool bReplicationStarted = ReplicationStart ( hSearchd, bNewCluster, bNewClusterForce );
 
 	if ( g_tBinlogAutoflush.m_fnWork && !g_tBinlogFlushThread.Create ( RtBinlogAutoflushThreadFunc, 0 ) )
 		sphDie ( "failed to create binlog flush thread" );
@@ -25560,7 +24387,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 
 	// wait here replication to sync with cluster
 	if ( bReplicationStarted )
-		ReplicationWait ( g_tReplicationSync );
+		ReplicationWait();
 
 	// almost ready, time to start listening
 	g_iBacklog = hSearchd.GetInt ( "listen_backlog", g_iBacklog );

@@ -169,3 +169,6 @@
 
 /* define if mincore has unsigned 3-rd param */
 #cmakedefine HAVE_UNSIGNED_MINCORE ${HAVE_UNSIGNED_MINCORE}
+
+/* define if you want runtime load replication library using dlopen */
+#cmakedefine REPLICATION_LIB "${REPLICATION_LIB}"

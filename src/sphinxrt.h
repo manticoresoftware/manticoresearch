@@ -21,6 +21,7 @@ struct CSphReconfigureSettings;
 struct CSphReconfigureSetup;
 class ISphRtAccum;
 
+
 /// RAM based updateable backend interface
 class ISphRtIndex : public CSphIndex
 {

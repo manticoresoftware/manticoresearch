@@ -438,6 +438,15 @@ else ( WIN32 )
 	if ( WITH_PGSQL )
 		include ( GetPGSQL )
 	endif ( WITH_PGSQL )
+	
+	if ( WITH_REPLICATION )
+		find_library ( REPLICATION_LIB NAMES galera_smm HINTS "${REPLICATION_LIB_PATH}" )
+		if ( REPLICATION_LIB )
+			message ( STATUS "Replication library will be loaded dynamically in runtime as (${REPLICATION_LIB})" )
+		else ()
+			message ( FATAL_ERROR "WITH_REPLICATION requested, but no replication library found in folder '${REPLICATION_LIB_PATH}' -- Ignore" )
+		endif ( REPLICATION_LIB )
+	endif ( WITH_REPLICATION )
 
 endif ( WIN32 )
 

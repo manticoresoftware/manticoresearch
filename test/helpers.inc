@@ -3148,6 +3148,8 @@ class SphinxConfig
 		fwrite ( $fp, "\tsql_pass		= " . $g_locals['db-password'] . "\n" );
 		fwrite ( $fp, "\tsql_port		= " . $g_locals['db-port'] . "\n" );
 
+		if (is_null($attributes))
+			return;
 		$node = $attributes->getNamedItem('sql_db');
 		fprintf ( $fp, "\tsql_db		= %s\n", $node ? $node->nodeValue : $g_locals['db-name'] );
 	}
@@ -3167,15 +3169,48 @@ class SphinxConfig
         $dsn[] = "UID=" . $g_locals['db-user'];
         $dsn[] = "PWD=" . $g_locals['db-password'];
 
-        $node = $attributes->getNamedItem('sql_db');
-        if ($node)
-            $dsn[] = "Database=" . $node->nodeValue;
-        else
-            $dsn[] = "Database=" . $g_locals['db-name'];
+        if (!is_null($attributes)) {
+			$node = $attributes->getNamedItem('sql_db');
+			if ($node)
+				$dsn[] = "Database=" . $node->nodeValue;
+			else
+				$dsn[] = "Database=" . $g_locals['db-name'];
+		}
 
         $dsn = join ( ";", $dsn );
         fwrite ( $fp, "odbc_dsn		= $dsn" );
     }
+
+    function show_settings ( $nodename )
+	{
+		global $index_data_path, $agents, $g_locals;
+		switch ($nodename)
+		{
+			case "searchd_settings":	$this->WriteSearchdSettings ( STDOUT ); return;
+			case "sql_settings":		$this->WriteSqlSettings ( STDOUT, null ); return;
+			case "odbc_settings":       $this->WriteOdbcSettings ( STDOUT, null ); return;
+			case "my_address":
+			case "agent0_address":		fwrite ( STDOUT, $agents[0]["address"].":".$agents[0]["port"] ); return;
+			case "my_port":				fwrite ( STDOUT, $agents[0]["port"]); return;
+			case "agent_address":
+			case "agent1_address":		fwrite ( STDOUT, $agents[1]["address"].":".$agents[1]["port"] ); return;
+			case "agent2_address":		fwrite ( STDOUT, $agents[2]["address"].":".$agents[2]["port"] ); return;
+
+			case "test_root":			fwrite ( STDOUT, dirname(__FILE__) ); return;
+			case "rlp_root":			fwrite ( STDOUT, $g_locals['rlproot'] ); return;
+			case "testdir":	{
+				if ( $g_locals['testdir'] == '' ) {
+					fwrite(STDOUT, dirname(__FILE__)."/");
+					return;
+				}
+				fwrite ( STDOUT, $g_locals['testdir'] ); return;
+			}
+			case "data_path": {
+					fwrite(STDOUT, $index_data_path);
+					return;
+				}
+		}
+	}
 
 	function Dump ( $node, $fp, $dynamic_only, $agentid )
 	{

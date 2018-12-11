@@ -15,6 +15,10 @@ configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/prerm.ubuntu.in"
 configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/preinst.trusty.in"
 		"${MANTICORE_BINARY_DIR}/preinst" @ONLY )
 
+# upstart is only for trusty, newer switched to systemd
+configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/manticore.upstart.in"
+		"${MANTICORE_BINARY_DIR}/manticore.upstart" @ONLY )
+
 # m.b. posrtrm, preinst - see also above
 set ( EXTRA_SCRIPTS "${MANTICORE_BINARY_DIR}/preinst;" )
 
@@ -22,6 +26,9 @@ include ( builds/CommonDeb )
 
 configure_file ( "${CMAKE_CURRENT_SOURCE_DIR}/dist/deb/manticore.service.in"
 		"${MANTICORE_BINARY_DIR}/manticore.service" @ONLY )
+
+install ( FILES "${MANTICORE_BINARY_DIR}/manticore.upstart"
+                DESTINATION ${SYSCONFDIR}/init COMPONENT adm RENAME manticore.conf )
 
 # everywhere, but not on wheezy
 install ( FILES "${MANTICORE_BINARY_DIR}/manticore.service"

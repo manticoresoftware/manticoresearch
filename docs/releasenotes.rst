@@ -1,6 +1,49 @@
 Release notes
 =============
 
+Version 2.7.5 GA, 4 December 2018
+---------------------------------
+
+Improvements
+~~~~~~~~~~~~
+
+* REGEX function 
+* limit/offset for json API search
+* profiler points for qcache
+
+Bugfixes
+~~~~~~~~
+
+* `eb3c768 <https://github.com/manticoresoftware/manticoresearch/commit/eb3c7683b9740cff4cc4cadd2ab9f990b9f7d173>`__ fixed crash of daemon on FACET with multiple attribute wide types
+* `d915cf6 <https://github.com/manticoresoftware/manticoresearch/commit/d915cf6696514f4be365ffb5981bccaa15983e65>`__ fixed implicit group by at main select list of FACET query
+* `5c25dc2 <https://github.com/manticoresoftware/manticoresearch/commit/5c25dc271a8c11a1c82ca3c88e518acbc6a8c164>`__ fixed crash on query with GROUP N BY
+* `85d30a2 <https://github.com/manticoresoftware/manticoresearch/commit/85d30a232d4ffd89916b673a9b2db946d272a945>`__ fixed deadlock on handling crash at memory operations
+* `85166b5 <https://github.com/manticoresoftware/manticoresearch/commit/85166b5ef2be38061d62f2b20f15acaa0311258a>`__ fixed indextool memory consumption during check
+* `58fb031 <https://github.com/manticoresoftware/manticoresearch/commit/58fb03166830d8b23e7ab9ce56309db7ddac22f4>`__ fixed gmock include not needed anymore as upstream resolve itself
+
+
+Version 2.7.4 GA, 1 November 2018
+---------------------------------
+
+Improvements
+~~~~~~~~~~~~
+
+* SHOW THREADS in case of remote distributed indexes prints the original query instead of API call
+* SHOW THREADS new option `format=sphinxql` prints all queries in SphinxQL format
+* SHOW PROFILE prints additional `clone_attrs` stage
+
+Bugfixes
+~~~~~~~~
+
+* `4f15571 <https://github.com/manticoresoftware/manticoresearch/commit/4f155712a0bccc1bd01cc191647bc8cff814888e>`__ fixed failed to build with libc without malloc_stats, malloc_trim
+* `f974f20 <https://github.com/manticoresoftware/manticoresearch/commit/f974f20bda3214a56877c393a192be1a77150958>`__ fixed special symbols inside words for CALL KEYWORDS result set
+* `0920832 <https://github.com/manticoresoftware/manticoresearch/commit/092083282ea8ae0b2e72fb6989c57ccec81e74ac>`__ fixed broken CALL KEYWORDS to distributed index via API or to remote agent
+* `fd686bf <https://github.com/manticoresoftware/manticoresearch/commit/fd686bfe88b720ffd7642e36897ba45161cbd7d2>`__ fixed distributed index agent_query_timeout propagate to agents as max_query_time
+* `4ffa623 <https://github.com/manticoresoftware/manticoresearch/commit/4ffa623e9d357a3b0b441615089e211f92f8de32>`__ fixed total documents counter at disk chunk got affected by OPTIMIZE command and breaks weight calculation
+* `dcaf4e0 <https://github.com/manticoresoftware/manticoresearch/commit/dcaf4e0e3c8e9b0fbec47bbf3307feddec0936a6>`__ fixed multiple tail hits at RT index from blended
+* `eee3817 <https://github.com/manticoresoftware/manticoresearch/commit/eee381754e902a43a8f499e1c950198a2a3e6ee0>`__ fixed deadlock at rotation
+
+
 Version 2.7.3 GA, 26 September 2018
 -----------------------------------
 

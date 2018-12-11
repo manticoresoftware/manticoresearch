@@ -15,7 +15,6 @@
 
 #include "sphinx.h"
 #include "sphinxfilter.h"
-#include "sphinxrt.h"
 #include "sphinxquery.h"
 #include "sphinxexcerpt.h"
 #include "sphinxudf.h"
@@ -42,8 +41,7 @@
 #define MVA_OFFSET_MASK		0x7fffffffUL	// MVA offset mask
 #define MVA_ARENA_FLAG		0x80000000UL	// MVA global-arena flag
 
-#define DEFAULT_MAX_MATCHES 1000
-#define SPH_MAX_NUMERIC_STR 64
+//#define DEFAULT_MAX_MATCHES 1000
 
 #ifdef __GNUC__
 #define VARIABLE_IS_NOT_USED __attribute__ ((unused))
@@ -120,6 +118,8 @@ extern bool g_bJsonKeynamesToLowercase;
 	SPH_QUERY_STATE ( GET_HITS,		"get_hits" ) \
 	SPH_QUERY_STATE ( FILTER,		"filter" ) \
 	SPH_QUERY_STATE ( RANK,			"rank" ) \
+	SPH_QUERY_STATE ( QCACHE_UP,	"qcache_update" ) \
+	SPH_QUERY_STATE ( QCACHE_FINAL,	"qcache_final" ) \
 	SPH_QUERY_STATE ( SORT,			"sort" ) \
 	SPH_QUERY_STATE ( FINALIZE,		"finalize" ) \
 	SPH_QUERY_STATE ( DYNAMIC,		"clone_attrs" ) \
@@ -606,24 +606,24 @@ public:
 	explicit CSphQueryContext ( const CSphQuery & q );
 	~CSphQueryContext ();
 
-	void						BindWeights ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sWarning );
-	bool						SetupCalc ( CSphQueryResult * pResult, const ISphSchema & tInSchema, const CSphSchema & tSchema, const DWORD * pMvaPool, bool bArenaProhibit, const CSphVector<const ISphSchema *> & dInSchemas );
-	bool						CreateFilters ( bool bFullscan, const CSphVector<CSphFilterSettings> * pdFilters, const ISphSchema & tSchema, const DWORD * pMvaPool, const BYTE * pStrings, CSphString & sError, CSphString & sWarning, ESphCollation eCollation, bool bArenaProhibit, const KillListVector & dKillList, const CSphVector<FilterTreeItem_t> * pFilterTree );
-	bool						SetupOverrides ( const CSphQuery * pQuery, CSphQueryResult * pResult, const CSphSchema & tIndexSchema, const ISphSchema & tOutgoingSchema );
+	void	BindWeights ( const CSphQuery * pQuery, const CSphSchema & tSchema, CSphString & sWarning );
+	bool	SetupCalc ( CSphQueryResult * pResult, const ISphSchema & tInSchema, const CSphSchema & tSchema, const DWORD * pMvaPool, bool bArenaProhibit, const CSphVector<const ISphSchema *> & dInSchemas );
+	bool	CreateFilters ( CreateFilterContext_t &tCtx, CSphString &sError, CSphString &sWarning );
+	bool	SetupOverrides ( const CSphQuery * pQuery, CSphQueryResult * pResult, const CSphSchema & tIndexSchema, const ISphSchema & tOutgoingSchema );
 
-	void						CalcFilter ( CSphMatch & tMatch ) const;
-	void						CalcSort ( CSphMatch & tMatch ) const;
-	void						CalcFinal ( CSphMatch & tMatch ) const;
+	void	CalcFilter ( CSphMatch & tMatch ) const;
+	void	CalcSort ( CSphMatch & tMatch ) const;
+	void	CalcFinal ( CSphMatch & tMatch ) const;
 
-	void						FreeDataFilter ( CSphMatch & tMatch ) const;
-	void						FreeDataSort ( CSphMatch & tMatch ) const;
+	void	FreeDataFilter ( CSphMatch & tMatch ) const;
+	void	FreeDataSort ( CSphMatch & tMatch ) const;
 
 	// note that RT index bind pools at segment searching, not at time it setups context
-	void						ExprCommand ( ESphExprCommand eCmd, void * pArg );
-	void						SetStringPool ( const BYTE * pStrings );
-	void						SetMVAPool ( const DWORD * pMva, bool bArenaProhibit );
-	void						SetupExtraData ( ISphRanker * pRanker, ISphMatchSorter * pSorter );
-	void						ResetFilters();
+	void	ExprCommand ( ESphExprCommand eCmd, void * pArg );
+	void	SetStringPool ( const BYTE * pStrings );
+	void	SetMVAPool ( const DWORD * pMva, bool bArenaProhibit );
+	void	SetupExtraData ( ISphRanker * pRanker, ISphMatchSorter * pSorter );
+	void	ResetFilters();
 
 private:
 	CSphVector<const UservarIntSet_c*>		m_dUserVals;
@@ -1777,36 +1777,36 @@ public:
 	explicit						CSphTokenFilter ( ISphTokenizer * pTokenizer )					: m_pTokenizer ( pTokenizer ) {	SafeAddRef ( pTokenizer ); }
 
 
-	virtual bool					SetCaseFolding ( const char * sConfig, CSphString & sError )	{ return m_pTokenizer->SetCaseFolding ( sConfig, sError ); }
-	virtual void					AddPlainChar ( char c )											{ m_pTokenizer->AddPlainChar ( c ); }
-	virtual void					AddSpecials ( const char * sSpecials )							{ m_pTokenizer->AddSpecials ( sSpecials ); }
-	virtual bool					SetIgnoreChars ( const char * sIgnored, CSphString & sError )	{ return m_pTokenizer->SetIgnoreChars ( sIgnored, sError ); }
-	virtual bool					SetNgramChars ( const char * sConfig, CSphString & sError )		{ return m_pTokenizer->SetNgramChars ( sConfig, sError ); }
-	virtual void					SetNgramLen ( int iLen )										{ m_pTokenizer->SetNgramLen ( iLen ); }
-	virtual bool					LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, CSphString & sError ) { return m_pTokenizer->LoadSynonyms ( sFilename, pFiles, sError ); }
-	virtual void					WriteSynonyms ( CSphWriter & tWriter ) const					{ return m_pTokenizer->WriteSynonyms ( tWriter ); }
-	virtual bool					SetBoundary ( const char * sConfig, CSphString & sError )		{ return m_pTokenizer->SetBoundary ( sConfig, sError ); }
-	virtual void					Setup ( const CSphTokenizerSettings & tSettings )				{ m_pTokenizer->Setup ( tSettings ); }
-	virtual const CSphTokenizerSettings &	GetSettings () const									{ return m_pTokenizer->GetSettings (); }
-	virtual const CSphSavedFile &	GetSynFileInfo () const											{ return m_pTokenizer->GetSynFileInfo (); }
-	virtual bool					EnableSentenceIndexing ( CSphString & sError )					{ return m_pTokenizer->EnableSentenceIndexing ( sError ); }
-	virtual bool					EnableZoneIndexing ( CSphString & sError )						{ return m_pTokenizer->EnableZoneIndexing ( sError ); }
-	virtual int						SkipBlended ()													{ return m_pTokenizer->SkipBlended(); }
+	bool					SetCaseFolding ( const char * sConfig, CSphString & sError ) override	{ return m_pTokenizer->SetCaseFolding ( sConfig, sError ); }
+	void					AddPlainChar ( char c ) override											{ m_pTokenizer->AddPlainChar ( c ); }
+	void					AddSpecials ( const char * sSpecials ) override							{ m_pTokenizer->AddSpecials ( sSpecials ); }
+	bool					SetIgnoreChars ( const char * sIgnored, CSphString & sError ) override	{ return m_pTokenizer->SetIgnoreChars ( sIgnored, sError ); }
+	bool					SetNgramChars ( const char * sConfig, CSphString & sError ) override		{ return m_pTokenizer->SetNgramChars ( sConfig, sError ); }
+	void					SetNgramLen ( int iLen ) override										{ m_pTokenizer->SetNgramLen ( iLen ); }
+	bool					LoadSynonyms ( const char * sFilename, const CSphEmbeddedFiles * pFiles, CSphString & sError ) override { return m_pTokenizer->LoadSynonyms ( sFilename, pFiles, sError ); }
+	void					WriteSynonyms ( CSphWriter & tWriter ) const final						{ return m_pTokenizer->WriteSynonyms ( tWriter ); }
+	bool					SetBoundary ( const char * sConfig, CSphString & sError ) override		{ return m_pTokenizer->SetBoundary ( sConfig, sError ); }
+	void					Setup ( const CSphTokenizerSettings & tSettings ) override				{ m_pTokenizer->Setup ( tSettings ); }
+	const CSphTokenizerSettings &	GetSettings () const override									{ return m_pTokenizer->GetSettings (); }
+	const CSphSavedFile &	GetSynFileInfo () const override										{ return m_pTokenizer->GetSynFileInfo (); }
+	bool					EnableSentenceIndexing ( CSphString & sError ) override					{ return m_pTokenizer->EnableSentenceIndexing ( sError ); }
+	bool					EnableZoneIndexing ( CSphString & sError ) override						{ return m_pTokenizer->EnableZoneIndexing ( sError ); }
+	int						SkipBlended () override													{ return m_pTokenizer->SkipBlended(); }
 
-	virtual int						GetCodepointLength ( int iCode ) const		{ return m_pTokenizer->GetCodepointLength ( iCode ); }
-	virtual int						GetMaxCodepointLength () const				{ return m_pTokenizer->GetMaxCodepointLength(); }
+	int						GetCodepointLength ( int iCode ) const final		{ return m_pTokenizer->GetCodepointLength ( iCode ); }
+	int						GetMaxCodepointLength () const final				{ return m_pTokenizer->GetMaxCodepointLength(); }
 
-	virtual const char *			GetTokenStart () const						{ return m_pTokenizer->GetTokenStart(); }
-	virtual const char *			GetTokenEnd () const						{ return m_pTokenizer->GetTokenEnd(); }
-	virtual const char *			GetBufferPtr () const						{ return m_pTokenizer->GetBufferPtr(); }
-	virtual const char *			GetBufferEnd () const						{ return m_pTokenizer->GetBufferEnd (); }
-	virtual void					SetBufferPtr ( const char * sNewPtr )		{ m_pTokenizer->SetBufferPtr ( sNewPtr ); }
-	virtual uint64_t				GetSettingsFNV () const						{ return m_pTokenizer->GetSettingsFNV(); }
+	const char *			GetTokenStart () const override						{ return m_pTokenizer->GetTokenStart(); }
+	const char *			GetTokenEnd () const override						{ return m_pTokenizer->GetTokenEnd(); }
+	const char *			GetBufferPtr () const override						{ return m_pTokenizer->GetBufferPtr(); }
+	const char *			GetBufferEnd () const final							{ return m_pTokenizer->GetBufferEnd (); }
+	void					SetBufferPtr ( const char * sNewPtr ) override		{ m_pTokenizer->SetBufferPtr ( sNewPtr ); }
+	uint64_t				GetSettingsFNV () const override						{ return m_pTokenizer->GetSettingsFNV(); }
 
-	virtual void					SetBuffer ( const BYTE * sBuffer, int iLength )	{ m_pTokenizer->SetBuffer ( sBuffer, iLength ); }
-	virtual BYTE *					GetToken ()										{ return m_pTokenizer->GetToken(); }
+	void					SetBuffer ( const BYTE * sBuffer, int iLength ) override	{ m_pTokenizer->SetBuffer ( sBuffer, iLength ); }
+	BYTE *					GetToken () override										{ return m_pTokenizer->GetToken(); }
 
-	virtual bool					WasTokenMultiformDestination ( bool & bHead, int & iDestCount ) const { return m_pTokenizer->WasTokenMultiformDestination ( bHead, iDestCount ); }
+	bool					WasTokenMultiformDestination ( bool & bHead, int & iDestCount ) const override { return m_pTokenizer->WasTokenMultiformDestination ( bHead, iDestCount ); }
 };
 
 DWORD sphParseMorphAot ( const char * );
@@ -1846,6 +1846,8 @@ extern UservarIntSet_c * ( *g_pUservarsHook )( const CSphString & sUservar );
 // BINLOG INTERNALS
 //////////////////////////////////////////////////////////////////////////
 
+struct StoredQueryDesc_t;
+
 /// global binlog interface
 class ISphBinlog : ISphNoncopyable
 {
@@ -1854,6 +1856,12 @@ public:
 
 	virtual void		BinlogUpdateAttributes ( int64_t * pTID, const char * sIndexName, const CSphAttrUpdate & tUpd ) = 0;
 	virtual void		NotifyIndexFlush ( const char * sIndexName, int64_t iTID, bool bShutdown ) = 0;
+
+	virtual void		BinlogReconfigure ( int64_t * pTID, const char * sIndexName, const CSphReconfigureSetup & tSetup ) = 0;
+	virtual bool		IsActive () = 0;
+
+	virtual void		BinlogPqAdd ( int64_t * pTID, const char * sIndexName, const StoredQueryDesc_t & tStored ) = 0;
+	virtual void		BinlogPqDelete ( int64_t * pTID, const char * sIndexName, const uint64_t * pQueries, int iCount, const char * sTags ) = 0;
 };
 
 //////////////////////////////////////////////////////////////////////////
@@ -1899,6 +1907,7 @@ void			SaveFieldFilterSettings ( CSphWriter & tWriter, const ISphFieldFilter * p
 bool			AddFieldLens ( CSphSchema & tSchema, bool bDynamic, CSphString & sError );
 
 /// Get current thread local index - internal do not use
+class ISphRtIndex;
 ISphRtIndex * sphGetCurrentIndexRT();
 
 void			RebalanceWeights ( const CSphFixedVector<int64_t> & dTimers, CSphFixedVector<float>& pWeights );
@@ -2117,7 +2126,7 @@ int sphLevenshtein ( const int * sWord1, int iLen1, const int * sWord2, int iLen
 
 struct Slice_t
 {
-	DWORD				m_uOff;
+	DWORD				m_uOff = 0;
 	DWORD				m_uLen;
 };
 
@@ -2497,7 +2506,7 @@ uint64_t sphCalcExprDepHash ( ISphExpr * pExpr, const ISphSchema & tSorterSchema
 void sphFixupLocator ( CSphAttrLocator & tLocator, const ISphSchema * pOldSchema, const ISphSchema * pNewSchema );
 ISphSchema * sphCreateStandaloneSchema ( const ISphSchema * pSchema );
 
-void sphPackedMVA2Str ( const BYTE * pMVA, bool b64bit, CSphVector<char> & dStr );
+void sphPackedMVA2Str ( const BYTE * pMVA, bool b64bit, StringBuilder_c & dStr );
 
 // internals attributes are last no need to send them
 int sphSendGetAttrCount ( const ISphSchema & tSchema, bool bAgentMode=false );

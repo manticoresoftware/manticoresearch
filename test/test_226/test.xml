@@ -55,6 +55,21 @@ index facetdemo4
 	agent             = <my_address/>:facetdemo
 }
 
+source src10
+{
+	type              = mysql
+	<sql_settings/>
+	sql_query         = SELECT *, price as price_i, price as price_b FROM test_table
+	sql_attr_uint     = price_i
+	sql_attr_bigint   = price_b
+}
+
+index facet_gr1
+{
+	source            = src10
+	path              = <data_path/>/facet_gr1
+}
+
 </config>
 
 <db_create>
@@ -199,6 +214,11 @@ insert into facetdemo (id,price,brand_id,title,brand_name,property,categories,j)
 <sphinxql>select id, price from facetdemo facet brand_id as price order by count(*) asc;</sphinxql>
 <sphinxql>select * from facetdemo facet brand_id as price order by count(*) asc;</sphinxql>
 
+<!-- regression crash on FACET\group by with different attribute sizes -->
+<sphinxql>select * from facet_gr1 order by id asc facet price_i order by id asc facet price_b order by id asc; show meta</sphinxql>
+
+<!-- regression need to keeo implicit group by for main query -->
+<sphinxql>select id, price_b, count(*) from facet_gr1 order by id asc facet price_b order by id asc; show meta</sphinxql>
 
 </sphqueries>
 

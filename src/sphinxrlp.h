@@ -14,6 +14,7 @@
 #define _sphinxrlp_
 
 #include "sphinxstd.h"
+#include "sphinxutils.h"
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -335,7 +336,7 @@ private:
 
 	void AddNumber ( BYTE * & pPtr, int iNumber )
 	{
-		sphUItoA ( ( char ** ) &pPtr, iNumber );
+		pPtr += sph::ItoA ( (char*&) pPtr, iNumber );
 	}
 
 	int ReadNumber ( BYTE * & pPtr, BYTE * const pEndPtr ) // expect to read ' ', uint num, ' ' from utf8 buffer

@@ -94,15 +94,39 @@ inline DWORD sphJsonUnpackInt ( const BYTE ** pp )
 	return uRes;
 }
 
+struct EscapeJsonString_t
+{
+	static const char cQuote = '"';
+	inline static bool IsEscapeChar ( char c )
+	{
+		return strchr ( "\"\\/\b\f\n\r\t", c )!=nullptr;
+	}
+
+	inline static char GetEscapedChar ( char c )
+	{
+		switch ( c )
+		{
+		case '\b': return 'b';
+		case '\f': return 'f';
+		case '\n': return 'n';
+		case '\r': return 'r';
+		case '\t': return 't';
+		default: return c;
+		}
+	}
+};
+
+using JsonEscapedBuilder = EscapedStringBuilder_T<EscapeJsonString_t>;
+
 /// parse JSON, convert it into SphinxBSON blob
 bool sphJsonParse ( CSphVector<BYTE> & dData, char * sData, bool bAutoconv, bool bToLowercase, CSphString & sError );
 
 /// convert SphinxBSON blob back to JSON document
-void sphJsonFormat ( CSphVector<BYTE> & dOut, const BYTE * pData );
+void sphJsonFormat ( JsonEscapedBuilder & dOut, const BYTE * pData );
 
 /// convert SphinxBSON blob back to JSON document
 /// NOTE, bQuoteString==false is intended to format individual values only (and avoid quoting string values in that case)
-const BYTE * sphJsonFieldFormat ( CSphVector<BYTE> & dOut, const BYTE * pData, ESphJsonType eType, bool bQuoteString=true );
+const BYTE * sphJsonFieldFormat ( JsonEscapedBuilder & sOut, const BYTE * pData, ESphJsonType eType, bool bQuoteString=true );
 
 /// compute key mask (for Bloom filtering) from the key name
 DWORD sphJsonKeyMask ( const char * sKey, int iLen );

@@ -998,6 +998,30 @@ bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pA
 	return false;
 }
 
+void sphThreadName ( SphThread_t * pThread, const char * sName )
+{
+#if HAVE_PTHREAD_SETNAME_NP
+	char sClippedName[16];
+	strncpy (sClippedName, sName, 15);
+	sClippedName[15] = '\0';
+	pthread_setname_np ( *pThread, sClippedName );
+#endif
+}
+
+CSphString GetThreadName ( SphThread_t * pThread )
+{
+	if ( !pThread || !*pThread )
+		return "";
+
+#if HAVE_PTHREAD_SETNAME_NP
+	char sClippedName[16];
+	pthread_getname_np ( *pThread, sClippedName, 16 );
+	return sClippedName;
+#else
+	return "";
+#endif
+}
+
 
 bool sphThreadJoin ( SphThread_t * pThread )
 {
@@ -1801,6 +1825,7 @@ class CSphThdPool : public ISphThdPool
 
 public:
 	CSphThdPool ( int iThreads, const char * sName, CSphString & sError )
+		: m_sName ( sName )
 	{
 		if ( !m_tWakeup.Initialized () )
 		{
@@ -1815,7 +1840,12 @@ public:
 		for ( auto& dWorker : m_dWorkers )
 		{
 			if ( sphThreadCreate ( &dWorker, Tick, this ) )
+			{
+				StringBuilder_c sthdName;
+				sthdName.Sprintf ("%s_%d",m_sName.cstr(),iStarted);
+				sphThreadName ( &dWorker, sthdName.cstr());
 				++iStarted;
+			}
 		}
 		assert ( iStarted == iThreads );
 	}
@@ -1877,7 +1907,9 @@ public:
 	{
 		// FIXME!!! start thread only in case of no workers available to offload call site
 		SphThread_t tThd;
-		return sphThreadCreate ( &tThd, Start, pItem, true );
+		bool bRes = sphThreadCreate ( &tThd, Start, pItem, true );
+		sphThreadName ( &tThd, ( Str_b () << m_sName << "_Job" ).cstr () );
+		return bRes;
 	}
 
 private:
@@ -1886,40 +1918,44 @@ private:
 		SetThdName ( "job" );
 
 		auto * pPool = (CSphThdPool *)pArg;
+		pPool->TickImpl();
+	}
 
-		while ( !pPool->m_bShutdown )
+	void TickImpl()
+	{
+		while ( !m_bShutdown )
 		{
-			pPool->m_tWakeup.WaitEvent();
+			m_tWakeup.WaitEvent ();
 
-			if ( pPool->m_bShutdown )
+			if ( m_bShutdown )
 				break;
 
-			pPool->m_tJobLock.Lock();
+			m_tJobLock.Lock ();
 
-			ThdJob_t * pJob = pPool->m_pTail;
-			if ( pPool->m_pHead==pPool->m_pTail ) // either 0 or 1 job case
+			ThdJob_t * pJob = m_pTail;
+			if ( m_pHead==m_pTail ) // either 0 or 1 job case
 			{
-				pPool->m_pHead = pPool->m_pTail = nullptr;
+				m_pHead = m_pTail = nullptr;
 			} else
 			{
 				pJob->m_pPrev->m_pNext = nullptr;
-				pPool->m_pTail = pJob->m_pPrev;
+				m_pTail = pJob->m_pPrev;
 			}
 
 			if ( pJob )
-				--pPool->m_iStatQueuedJobs;
+				--m_iStatQueuedJobs;
 
-			pPool->m_tJobLock.Unlock();
+			m_tJobLock.Unlock ();
 
 			if ( !pJob )
 				continue;
 
-			pPool->m_tStatActiveWorkers.Inc();
+			++m_tStatActiveWorkers;
 
-			pJob->m_pItem->Call();
+			pJob->m_pItem->Call ();
 			SafeDelete ( pJob );
 
-			pPool->m_tStatActiveWorkers.Dec();
+			--m_tStatActiveWorkers;
 
 			// FIXME!!! work stealing case (check another job prior going to sem)
 		}
@@ -1935,7 +1971,7 @@ private:
 
 	int GetActiveWorkerCount () const final
 	{
-		return m_tStatActiveWorkers.GetValue();
+		return m_tStatActiveWorkers;
 	}
 
 	int GetTotalWorkerCount () const final
@@ -2168,15 +2204,79 @@ TDigest_i * sphCreateTDigest()
 //////////////////////////////////////////////////////////////////////////
 /// StringBuilder implementation
 //////////////////////////////////////////////////////////////////////////
-
-StringBuilder_c::StringBuilder_c ()
+StringBuilder_c::StringBuilder_c ( const char * sDel, const char * sPref, const char * sTerm )
 {
-	Reset ();
+	NewBuffer ();
+	if ( sDel || sPref || sTerm )
+		StartBlock ( sDel, sPref, sTerm );
 }
 
 StringBuilder_c::~StringBuilder_c ()
 {
+	SafeDelete ( m_pDelimiter );
 	SafeDeleteArray ( m_sBuffer );
+}
+
+StringBuilder_c::StringBuilder_c ( StringBuilder_c&& rhs ) noexcept
+	: m_sBuffer (rhs.m_sBuffer)
+	, m_iSize (rhs.m_iSize)
+	, m_iUsed (rhs.m_iUsed)
+	, m_pDelimiter (rhs.m_pDelimiter)
+{
+	rhs.m_pDelimiter = nullptr;
+	rhs.m_sBuffer = nullptr;
+}
+
+StringBuilder_c & StringBuilder_c::operator= ( StringBuilder_c && rhs ) noexcept
+{
+	if ( &rhs!=this )
+	{
+		SafeDelete ( m_pDelimiter );
+		SafeDeleteArray ( m_sBuffer );
+
+		m_sBuffer = rhs.m_sBuffer;
+		m_iSize = rhs.m_iSize;
+		m_iUsed = rhs.m_iUsed;
+		m_pDelimiter = rhs.m_pDelimiter;
+
+		rhs.m_pDelimiter = nullptr;
+		rhs.m_sBuffer = nullptr;
+	}
+	return *this;
+}
+
+StringBuilder_c::LazyComma_c * StringBuilder_c::StartBlock ( const char * sDel, const char * sPref, const char * sTerm )
+{
+	m_pDelimiter = new LazyComma_c (m_pDelimiter, sDel, sPref, sTerm );
+	return m_pDelimiter;
+}
+
+void StringBuilder_c::FinishBlock ( bool bAllowEmpty ) // finish last pushed block
+{
+	if ( !m_pDelimiter )
+		return;
+
+	if ( !bAllowEmpty && !m_pDelimiter->Started() )
+	{
+		AppendChars ( "\0", 1 );
+		--m_iUsed;
+	}
+
+	if ( m_pDelimiter->Started () )
+		AppendRawChars ( m_pDelimiter->m_sSuffix );
+
+	auto pDel = m_pDelimiter;
+	m_pDelimiter = pDel->m_pPrevious;
+	pDel->m_pPrevious = nullptr;
+	SafeDelete ( pDel );
+}
+
+void StringBuilder_c::FinishBlocks ( StringBuilder_c::LazyComma_c * pLevel, bool bAllowEmpty )
+{
+	while ( m_pDelimiter && m_pDelimiter!=pLevel )
+		FinishBlock ( bAllowEmpty );
+	if ( m_pDelimiter )
+		FinishBlock ( bAllowEmpty );
 }
 
 StringBuilder_c & StringBuilder_c::vAppendf ( const char * sTemplate, va_list ap )
@@ -2184,9 +2284,20 @@ StringBuilder_c & StringBuilder_c::vAppendf ( const char * sTemplate, va_list ap
 	assert ( m_sBuffer );
 	assert ( m_iUsed<m_iSize );
 
+	int iComma = 0;
+	const char * sPrefix = m_pDelimiter ? m_pDelimiter->RawComma ( iComma, *this ) : nullptr;
+
 	while (true)
 	{
 		int iLeft = m_iSize - m_iUsed;
+		if ( iComma && iComma < iLeft ) // prepend delimiter first...
+		{
+			if ( sPrefix )
+				memcpy ( m_sBuffer + m_iUsed, sPrefix, iComma );
+			iLeft -= iComma;
+			m_iUsed += iComma;
+			iComma = 0;
+		}
 
 		// try to append
 		va_list cp;
@@ -2208,7 +2319,7 @@ StringBuilder_c & StringBuilder_c::vAppendf ( const char * sTemplate, va_list ap
 		// we need more chars!
 		// either 256 (happens on Windows; lets assume we need 256 more chars)
 		// or get all the needed chars and 64 more for future calls
-		Grow ( iPrinted<0 ? 256 : iPrinted - iLeft + 64 );
+		GrowEnough ( iPrinted<0 ? 256 : iPrinted + iComma );
 	}
 	return *this;
 }
@@ -2222,11 +2333,89 @@ StringBuilder_c & StringBuilder_c::Appendf ( const char * sTemplate, ... )
 	return *this;
 }
 
-char * StringBuilder_c::Leak ()
+StringBuilder_c &StringBuilder_c::vSprintf ( const char * sTemplate, va_list ap )
 {
-	char * tRes = m_sBuffer;
-	Reset ();
-	return tRes;
+	assert ( m_sBuffer );
+	assert ( m_iUsed<m_iSize );
+
+	int iComma = 0;
+	const char * sPrefix = m_pDelimiter ? m_pDelimiter->RawComma ( iComma, *this ) : nullptr;
+
+	if ( iComma && sPrefix ) // prepend delimiter first...
+	{
+		GrowEnough ( iComma );
+		memcpy ( m_sBuffer + m_iUsed, sPrefix, iComma );
+		m_iUsed += iComma;
+	}
+	sph::vSprintf ( *this, sTemplate, ap );
+	return *this;
+}
+
+StringBuilder_c &StringBuilder_c::Sprintf ( const char * sTemplate, ... )
+{
+	va_list ap;
+	va_start ( ap, sTemplate );
+	vSprintf ( sTemplate, ap );
+	va_end ( ap );
+	return *this;
+}
+
+BYTE * StringBuilder_c::Leak ()
+{
+	auto pRes = ( BYTE * ) m_sBuffer;
+	NewBuffer ();
+	return pRes;
+}
+
+void StringBuilder_c::MoveTo ( CSphString &sTarget )
+{
+	sTarget.Adopt ( std::move(m_sBuffer) );
+	NewBuffer ();
+}
+
+void StringBuilder_c::AppendRawChars ( const char * sText ) // append without any commas
+{
+	if ( !sText || !*sText )
+		return;
+
+	int iLen = strlen ( sText );
+
+	GrowEnough ( iLen + 1 ); // +1 because we'll put trailing \0 also
+
+	memcpy ( m_sBuffer + m_iUsed, sText, iLen );
+	m_iUsed += iLen;
+	m_sBuffer[m_iUsed] = '\0';
+}
+
+StringBuilder_c & StringBuilder_c::AppendChars ( const char * sText, int iLen, char cQuote )
+{
+	if ( !iLen )
+		return *this;
+
+	int iComma = 0;
+	const char * sPrefix = m_pDelimiter ? m_pDelimiter->RawComma ( iComma, *this ) : nullptr;
+
+	int iQuote = 0;
+	if ( cQuote!='\0' )
+		++iQuote;
+
+	GrowEnough ( iLen + iComma + iQuote + iQuote + 1 ); // +1 because we'll put trailing \0 also
+
+	if ( sPrefix )
+		memcpy ( m_sBuffer + m_iUsed, sPrefix, iComma );
+	if (iQuote)
+		m_sBuffer[m_iUsed + iComma] = cQuote;
+	memcpy ( m_sBuffer + m_iUsed + iComma + iQuote, sText, iLen );
+	m_iUsed += iLen+iComma+iQuote+iQuote;
+	if ( iQuote )
+		m_sBuffer[m_iUsed-1] = cQuote;
+	m_sBuffer[m_iUsed] = '\0';
+	return *this;
+}
+
+StringBuilder_c &StringBuilder_c::AppendString ( const CSphString &sText, char cQuote)
+{
+	return AppendChars ( sText.cstr(), sText.Length (), cQuote );
 }
 
 StringBuilder_c& StringBuilder_c::operator+= ( const char * sText )
@@ -2234,39 +2423,28 @@ StringBuilder_c& StringBuilder_c::operator+= ( const char * sText )
 	if ( !sText || *sText=='\0' )
 		return *this;
 
-	int iLen = strlen ( sText );
-	int iLeft = m_iSize - m_iUsed;
-	if ( iLen>=iLeft )
-		Grow ( iLen - iLeft + 64 );
-
-	memcpy ( m_sBuffer + m_iUsed, sText, iLen + 1 );
-	m_iUsed += iLen;
-	return *this;
+	return AppendChars ( sText, strlen ( sText ) );
 }
 
-StringBuilder_c& StringBuilder_c::operator= ( const StringBuilder_c &rhs )
+StringBuilder_c &StringBuilder_c::operator<< ( const VecTraits_T<char> &sText )
 {
-	if ( this!=&rhs )
-	{
-		m_iUsed = rhs.m_iUsed;
-		m_iSize = rhs.m_iSize;
-		SafeDeleteArray ( m_sBuffer );
-		m_sBuffer = new char[m_iSize];
-		memcpy ( m_sBuffer, rhs.m_sBuffer, m_iUsed + 1 );
-	}
-	return *this;
+	if ( sText.IsEmpty () )
+		return *this;
+
+	return AppendChars ( sText.begin(), sText.GetLength() );
 }
 
 void StringBuilder_c::Grow ( int iLen )
 {
-	m_iSize += iLen;
+	assert ( m_iSize<m_iUsed + iLen + uSTEP );
+	m_iSize = m_iUsed + iLen + uSTEP;
 	auto * pNew = new char[m_iSize];
 	memcpy ( pNew, m_sBuffer, m_iUsed + 1 );
 	Swap ( pNew, m_sBuffer );
 	SafeDeleteArray ( pNew );
 }
 
-void StringBuilder_c::Reset ()
+void StringBuilder_c::NewBuffer ()
 {
 	m_iSize = 256;
 	m_sBuffer = new char[m_iSize];
@@ -2277,6 +2455,7 @@ void StringBuilder_c::Clear ()
 {
 	m_sBuffer[0] = '\0';
 	m_iUsed = 0;
+	SafeDelete ( m_pDelimiter );
 }
 
 #ifdef USE_SMALLALLOC

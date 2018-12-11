@@ -46,9 +46,16 @@ int				PackSnippets ( const CSphVector<BYTE> & dRes, CSphVector<int> & dSeparato
 
 bool ParseJsonQueryFilters ( const cJSON * pQuery, CSphQuery & tQuery, CSphString & sError, CSphString & sWarning );
 bool NonEmptyQuery ( const cJSON * pQuery );
-cJSON * GetJSONPropertyString ( const cJSON * pNode, const char * szName, CSphString & sError );
-cJSON * GetJSONPropertyInt ( const cJSON * pNode, const char * szName, CSphString & sError );
-cJSON * GetJSONPropertyObject ( const cJSON * pNode, const char * szName, CSphString & sError );
+cJSON * GetJSONPropertyString ( const cJSON * pNode, const char * szName, CSphString & sError, bool bIgnoreMissing = false );
+cJSON * GetJSONPropertyInt ( const cJSON * pNode, const char * szName, CSphString & sError, bool bIgnoreMissing = false );
+cJSON * GetJSONPropertyObject ( const cJSON * pNode, const char * szName, CSphString & sError, bool bIgnoreMissing = false );
+
+class CJsonScopedPtr_c : public CSphScopedPtr<cJSON>
+{
+public:
+	CJsonScopedPtr_c ( cJSON * pPtr  );
+	~CJsonScopedPtr_c();
+};
 
 #endif
 

@@ -107,6 +107,7 @@
 // declarations for correct work of code analysis
 #include "sphinxutils.h"
 #include "sphinxint.h"
+#include "sphinxrt.h"
 #include "json/cJSON.h"
 
 const char * sphSockError ( int =0 );
@@ -151,6 +152,7 @@ enum SearchdCommand_e : WORD
 	SEARCHD_COMMAND_COMMIT		= 14,
 	SEARCHD_COMMAND_SUGGEST		= 15,
 	SEARCHD_COMMAND_JSON		= 16,
+	SEARCHD_COMMAND_CALLPQ 		= 17,
 
 	SEARCHD_COMMAND_TOTAL,
 	SEARCHD_COMMAND_WRONG = SEARCHD_COMMAND_TOTAL,
@@ -170,6 +172,7 @@ enum SearchdCommandV_e : WORD
 	VER_COMMAND_JSON		= 0x100,
 	VER_COMMAND_PING		= 0x100,
 	VER_COMMAND_UVAR		= 0x100,
+	VER_COMMAND_CALLPQ		= 0x100,
 
 	VER_COMMAND_WRONG = 0,
 };
@@ -256,13 +259,22 @@ public:
 	}
 
 	void		SendDocid ( SphDocID_t iValue )	{ SendUint64 ( iValue ); }
-	void		SendString ( const char * sStr );
 
-	void		SendMysqlInt ( int iVal );
-	void		SendMysqlString ( const char * sStr );
+	// send raw byte blob
 	void		SendBytes ( const void * pBuf, int iLen );	///< (was) protected to avoid network-vs-host order bugs
-	void		SendOutput ( const ISphOutputBuffer & tOut );
-	void		SwapData ( CSphVector<BYTE> & rhs ) { m_dBuf.SwapData ( rhs ); }
+	void		SendBytes ( const char * pBuf );    // used strlen() to get length
+	void		SendBytes ( const CSphString& sStr );    // used strlen() to get length
+	void		SendBytes ( const VecTraits_T<BYTE>& dBuf );
+	void		SendBytes ( const StringBuilder_c& dBuf );
+
+	// send array: first length(int), then byte blob
+	void		SendString ( const char * sStr );
+	void		SendArray ( const ISphOutputBuffer &tOut );
+	void		SendArray ( const VecTraits_T<BYTE> &dBuf, int iElems=-1 );
+	void		SendArray ( const void * pBuf, int iLen );
+	void		SendArray ( const StringBuilder_c &dBuf );
+
+	virtual void	SwapData ( CSphVector<BYTE> & rhs ) { m_dBuf.SwapData ( rhs ); }
 
 	virtual void	Flush () {}
 	virtual bool	GetError () const { return false; }
@@ -276,7 +288,7 @@ protected:
 
 	CSphVector<BYTE>	m_dBuf;
 
-	template < typename T > void WriteT ( intptr_t iOff, const T& tValue )
+	template < typename T > void WriteT ( intptr_t iOff, T tValue )
 	{
 		sphUnalignedWrite ( m_dBuf.Begin () + iOff, tValue );
 	}
@@ -285,7 +297,7 @@ private:
 	template < typename T > void	SendT ( T tValue )							///< (was) protected to avoid network-vs-host order bugs
 	{
 		intptr_t iOff = m_dBuf.GetLength();
-		m_dBuf.Resize ( iOff + sizeof(T) );
+		m_dBuf.AddN ( sizeof(T) );
 		WriteT ( iOff, tValue );
 	}
 };
@@ -296,35 +308,42 @@ private:
 class CachedOutputBuffer_c : public ISphOutputBuffer
 {
 	CSphVector<intptr_t> m_dBlobs;
+	using BASE = ISphOutputBuffer;
 
 public:
 	// start blob on create, commit on dtr.
 	class ReqLenCalc : public ISphNoncopyable
 	{
 		CachedOutputBuffer_c &m_dBuff;
+		intptr_t m_iPos;
 	public:
-		explicit ReqLenCalc ( CachedOutputBuffer_c &dBuff )
+		ReqLenCalc ( CachedOutputBuffer_c &dBuff, WORD uCommand, WORD uVer = 0 /* SEARCHD_OK */ )
 			: m_dBuff ( dBuff )
 		{
-			dBuff.StartChunk ();
+			m_dBuff.AddRef();
+			m_dBuff.SendWord ( uCommand );
+			m_dBuff.SendWord ( uVer );
+			m_iPos = m_dBuff.StartMeasureLength();
 		}
 
 		~ReqLenCalc ()
 		{
-			m_dBuff.CommitChunk ();
+			m_dBuff.CommitMeasuredLength ( m_iPos );
+			m_dBuff.Release();
 		}
 	};
 
 public:
 	void Flush() override; // just check integrity before flush
-	bool BlobsEmpty() const { return m_dBlobs.IsEmpty (); }
-
-protected:
-	void StartChunk(); // reserve int in the buf, push it's position
-	void CommitChunk(); // get last pushed int, write delta count there.
+	void SwapData ( CSphVector<BYTE> &rhs ) override { CommitAllMeasuredLengths (); BASE::SwapData (rhs); }
+	inline bool BlobsEmpty () const { return m_dBlobs.IsEmpty (); }
+public:
+	intptr_t StartMeasureLength (); // reserve int in the buf, push it's position, return cur pos.
+	void CommitMeasuredLength ( intptr_t uStoredPos=-1 ); // get last pushed int, write delta count there.
+	void CommitAllMeasuredLengths (); // finalize all nums starting from the last one.
 };
 
-using WriteLenHere_c = CachedOutputBuffer_c::ReqLenCalc;
+using APICommand_t = CachedOutputBuffer_c::ReqLenCalc;
 
 // buffer that knows if it has requested data or not
 class SmartOutputBuffer_t : public CachedOutputBuffer_c
@@ -354,15 +373,12 @@ public:
 	bool	GetError () const override { return m_bError; }
 	int		GetSentCount () const override { return m_iSent; }
 	void	SetProfiler ( CSphQueryProfile * pProfiler ) override { m_pProfile = pProfiler; }
-	const char * GetErrorMsg () const;
 
 private:
 	CSphQueryProfile *	m_pProfile = nullptr;
 	int			m_iSock;			///< my socket
 	int			m_iSent = 0;
 	bool		m_bError = false;
-	CSphString	m_sError;
-
 };
 
 
@@ -403,7 +419,7 @@ protected:
 	int				m_iLen;
 
 protected:
-	void						SetError ( bool bError ) { m_bError = bError; }
+	void			SetError ( bool bError ) { m_bError = bError; }
 	template < typename T > T	GetT ();
 };
 
@@ -425,30 +441,30 @@ template < typename T > T InputBuffer_c::GetT ()
 using MemInputBuffer_c = InputBuffer_c;
 
 /// simple network request buffer
-class NetInputBuffer_c : public InputBuffer_c
+class NetInputBuffer_c : private LazyVector_T<BYTE>, public InputBuffer_c
 {
+	using STORE = LazyVector_T<BYTE>;
 public:
 	explicit		NetInputBuffer_c ( int iSock );
-	virtual			~NetInputBuffer_c ();
 
 	bool			ReadFrom ( int iLen, int iTimeout, bool bIntr=false, bool bAppend=false );
 	bool			ReadFrom ( int iLen ) { return ReadFrom ( iLen, g_iReadTimeout ); }
 
 	bool			IsIntr () const { return m_bIntr; }
 
-protected:
-	static const int	NET_MINIBUFFER_SIZE = 4096;
+	using InputBuffer_c::GetLength;
+private:
+	static const int	NET_MINIBUFFER_SIZE = STORE::iSTATICSIZE;
 
 	int					m_iSock;
-	bool				m_bIntr;
-
-	BYTE				m_dMinibufer[NET_MINIBUFFER_SIZE];
-	int					m_iMaxibuffer;
-	BYTE *				m_pMaxibuffer;
+	bool				m_bIntr = false;
 };
 
 bool IsPortInRange ( int iPort );
 int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr );
+
+// first try to get data, and only then fall into sphSockRead (which poll socket first)
+int SockReadFast ( int iSock, void * buf, int iLen, int iReadTimeout );
 int GetOsThreadId();
 
 extern ThreadRole MainThread;
@@ -1290,7 +1306,7 @@ struct ThdDesc_t;
 
 bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, ISphOutputBuffer & tOut );
 ISphSearchHandler * sphCreateSearchHandler ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster, const ThdDesc_t & tThd );
-void sphFormatFactors ( CSphVector<BYTE> & dOut, const unsigned int * pFactors, bool bJson );
+void sphFormatFactors ( StringBuilder_c& dOut, const unsigned int * pFactors, bool bJson );
 bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation );
 void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, bool bReplace, bool bCommit, CSphString & sWarning, CSphSessionAccum & tAcc, ESphCollation	eCollation );
 void sphHandleMysqlUpdate ( StmtErrorReporter_i & tOut, const QueryParserFactory_i & tQueryParserFactory, const SqlStmt_t & tStmt, const CSphString & sQuery, CSphString & sWarning, const ThdDesc_t & tThd );
@@ -1309,122 +1325,5 @@ int sphGetTokTypeStr();
 int sphGetTokTypeConstMVA();
 
 bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, const CSphSchema & tSchema, CSphVector<CSphFilterSettings> & dFilters, CSphVector<FilterTreeItem_t> & dFilterTree, CSphString & sError );
-
-
-void JsonSkipConfig();
-void JsonLoadConfig ( const CSphString & sConfigName );
-void JsonSaveConfig();
-void JsonConfigConfigureAndPreload ( int & iValidIndexes, int & iCounter  );
-
-class CJsonScopedPtr_c : public CSphScopedPtr<cJSON>
-{
-public:
-	CJsonScopedPtr_c ( cJSON * pPtr  )
-		: CSphScopedPtr<cJSON> ( pPtr )
-	{}
-
-	~CJsonScopedPtr_c()
-	{
-		cJSON_Delete(m_pPtr);
-		m_pPtr = NULL;
-	}
-};
-
-enum ReplicationCommand_e
-{
-	RCOMMAND_PQUERY_ADD = 0,
-	RCOMMAND_ROLLBACK,
-	RCOMMAND_DELETE,
-	RCOMMAND_TRUNCATE,
-
-	RCOMMAND_TOTAL
-};
-
-struct ReplicationCommand_t
-{
-	// common
-	ReplicationCommand_e	m_eCommand { RCOMMAND_TOTAL };
-	CSphString				m_sIndex;
-
-	// add
-	StoredQueryDesc_t		m_tPQ;
-	StoredQuery_i *			m_pStored = nullptr;
-
-	// delete
-	CSphVector<uint64_t>	m_dDeleteQueries;
-	CSphString				m_sDeleteTags;
-
-	// truncate
-	bool					m_bReconfigure = false;
-	CSphReconfigureSettings m_tReconfigureSettings;
-};
-
-bool ReplicateSetOption ( const CSphString & sCluster, const CSphString & sOpt, CSphString & sError );
-bool HandleCmdReplicate ( ReplicationCommand_t & tCmd, CSphString & sError, int * pDeletedCount );
-
-void Shutdown ();
-// unfreeze threads waiting of replication started
-void ReplicateClustersWake();
-void ReplicateClustersDelete();
-bool ReplicationJoin ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, CSphString & sError );
-bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bool bForce );
-void ReplicationWait();
-
-// 'like' matcher
-class CheckLike
-{
-private:
-	CSphString m_sPattern;
-
-public:
-	explicit CheckLike ( const char * sPattern );
-	bool Match ( const char * sValue );
-};
-
-// string vector with 'like' matcher
-class VectorLike : public StrVec_t, public CheckLike
-{
-public:
-	CSphString m_sColKey;
-	CSphString m_sColValue;
-
-public:
-
-	VectorLike ();
-	explicit VectorLike ( const CSphString& sPattern );
-
-	const char * szColKey() const;
-	const char * szColValue() const;
-	bool MatchAdd ( const char* sValue );
-	bool MatchAddVa ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
-};
-
-void ReplicateClustersStatus ( VectorLike & dStatus );
-
-#define SPH_ADDRESS_SIZE		sizeof("000.000.000.000")
-#define SPH_ADDRPORT_SIZE		sizeof("000.000.000.000:00000")
-
-enum ProtocolType_e
-{
-	PROTO_SPHINX = 0,
-	PROTO_MYSQL41,
-	PROTO_HTTP,
-
-	PROTO_TOTAL
-};
-
-struct ListenerDesc_t
-{
-	ProtocolType_e	m_eProto;
-	CSphString		m_sUnix;
-	DWORD			m_uIP;
-	int				m_iPort;
-	bool			m_bVIP;
-};
-
-ListenerDesc_t ParseListener ( const char * sSpec );
-ESphAddIndex ConfigureAndPreload ( const CSphConfigSection & hIndex, const char * sIndexName, bool bJson );
-ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace=false );
-bool PreallocNewIndex ( ServedDesc_t &tIdx, const CSphConfigSection * pConfig, const char * szIndexName );
 
 #endif // _searchdaemon_

@@ -670,7 +670,7 @@ void OptimizeRtKlists ( const CSphString & sIndex, const CSphConfig & hConf )
 
 		if ( !hIndex.Exists ( "path" ) )
 		{
-			fprintf ( stdout, "key 'path' not found in index '%s' - skiped\n", sIndexName );
+			fprintf ( stdout, "key 'path' not found in index '%s' - skipped\n", sIndexName );
 			continue;
 		}
 
@@ -685,7 +685,7 @@ void OptimizeRtKlists ( const CSphString & sIndex, const CSphConfig & hConf )
 
 		if ( !tSchema.GetFieldsCount() )
 		{
-			fprintf ( stdout, "index '%s': no fields configured (use rt_field directive) - skiped\n", sIndexName );
+			fprintf ( stdout, "index '%s': no fields configured (use rt_field directive) - skipped\n", sIndexName );
 			continue;
 		}
 
@@ -1440,14 +1440,9 @@ int main ( int argc, char ** argv )
 				pIndex = sphCreateIndexRT ( tSchema, sIndex.cstr(), 32*1024*1024, hConf["index"][sIndex]["path"].cstr(), bDictKeywords );
 		} else
 		{
-			const char * sPath = hConf["index"][sIndex]["path"].cstr();
 			StringBuilder_c tPath;
-			if ( bRotate )
-			{
-				tPath.Appendf ( "%s.tmp", sPath );
-				sPath = tPath.cstr();
-			}
-			pIndex = sphCreateIndexPhrase ( sIndex.cstr(), sPath );
+			tPath << hConf["index"][sIndex]["path"] << ( bRotate ? ".tmp" : nullptr );
+			pIndex = sphCreateIndexPhrase ( sIndex.cstr(), tPath.cstr() );
 		}
 
 		if ( !pIndex )
@@ -1463,7 +1458,8 @@ int main ( int argc, char ** argv )
 		if ( eCommand==CMD_MORPH )
 			break;
 
-		pIndex->Preread();
+		if ( eCommand!=CMD_CHECK )
+			pIndex->Preread();
 
 		if ( hConf["index"][sIndex]("hitless_words") )
 		{

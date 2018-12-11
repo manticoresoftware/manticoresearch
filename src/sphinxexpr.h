@@ -145,6 +145,8 @@ public:
 	virtual uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) = 0;
 };
 
+using ISphExprRefPtr_c = CSphRefcountedPtr<ISphExpr>;
+
 /// set global behavior of grouping by day/week/month/year functions:
 /// if invoked true, params treated as UTC timestamps,
 /// and as local timestamps otherwise (default)

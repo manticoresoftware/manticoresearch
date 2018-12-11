@@ -57,6 +57,28 @@ index test_rt
 { "delete" : { "index" : "test_rt", "id" : 2 } }
 </query>
 
+<query endpoint="json/bulk" content="application/x-ndjson">
+{ "insert" : { "index" : "test_rt", "id" : 1, "doc": { "int_col" : 1, "flt_col" : 1.1, "content" : "bulk doc one" } } }
+{ "insert" : { "index" : "test_rt", "id" : 2, "doc": { "int_col" : 2, "flt_col" : 2.2, "content" : "bulk doc two" } } }
+{ "insert" : { "index" : "test_rt", "id" : 3, "doc": { "int_col" : 3, "flt_col" : 3.3, "content" : "bulk doc three" } } }
+{ "insert" : { "index" : "test_rt", "id" : 4, "doc": { "int_col" : 4, "flt_col" : 4.4, "content" : "bulk doc four" } } }
+{ "insert" : { "index" : "test_rt", "id" : 5, "doc": { "int_col" : 5, "flt_col" : 5.5, "content" : "bulk doc five" } } }
+{ "insert" : { "index" : "test_rt", "id" : 6, "doc": { "int_col" : 6, "flt_col" : 6.6, "content" : "bulk doc six" } } }
+{ "insert" : { "index" : "test_rt", "id" : 7, "doc": { "int_col" : 7, "flt_col" : 7.7, "content" : "bulk doc seven" } } }
+{ "insert" : { "index" : "test_rt", "id" : 8, "doc": { "int_col" : 8, "flt_col" : 8.8, "content" : "bulk doc eight" } } }
+{ "insert" : { "index" : "test_rt", "id" : 9, "doc": { "int_col" : 9, "flt_col" : 9.9, "content" : "bulk doc nine" } } }
+{ "insert" : { "index" : "test_rt", "id" :10, "doc": { "int_col" :10, "flt_col" :10.10,"content" : "bulk doc ten" } } }
+</query>
+
+<query endpoint="json/search">{ "index": "test_rt", "query": { "match_all": {} } } }</query>
+
+<query endpoint="json/search">{ "index": "test_rt", "limit": 5, "query": { "match_all": {} } } }</query>
+<query endpoint="json/search">{ "index": "test_rt", "limit": 5, "offset": 5, "query": { "match_all": {} } } }</query>
+
+<query endpoint="json/search">{ "index": "test_rt", "size": 5, "query": { "match_all": {} } } }</query>
+<query endpoint="json/search">{ "index": "test_rt", "size": 5, "from": 5, "query": { "match_all": {} } } }</query>
+
+
 </httpqueries>
 
 </test>

@@ -281,6 +281,7 @@ static cJSON_bool parse_number(cJSON * const item, parse_buffer * const input_bu
 		    case 'e':
             case 'E':
                 is_float = 1;
+				number_c_string[i] = 'e';
 				break;
             case '0':
             case '1':

@@ -431,7 +431,7 @@ In the text processing pipeline, the token filters will run after the base token
 (which process the text from field or query and create tokens out of them).
 
 
-Index-time tokeniker
+Index-time tokenizer
 ~~~~~~~~~~~~~~~~~~~~
 
 Index-time tokenizer gets created by indexer on indexing source data into index

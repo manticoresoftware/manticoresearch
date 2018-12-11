@@ -127,33 +127,27 @@ additional general per-query statistics. The result set is a hash (PHP
 specific; other languages might utilize other structures instead of
 hash) with the following keys and values:
 
--  “matches”:
--  Hash which maps found document IDs to another small hash containing
+-  "matches": Hash which maps found document IDs to another small hash containing
    document weight and attribute values (or an array of the similar
    small hashes if
    :ref:`SetArrayResult() <set_array_result>`
    was enabled).
 
--  “total”:
--  Total amount of matches retrieved *on server* (ie. to the server side
+-  "total": Total amount of matches retrieved *on server* (ie. to the server side
    result set) by this query. You can retrieve up to this amount of
    matches from server for this query text with current query settings.
 
--  “total_found”:
--  Total amount of matching documents in index (that were found and
+-  "total_found": Total amount of matching documents in index (that were found and
    processed on server).
 
--  “words”:
--  Hash which maps query keywords (case-folded, stemmed, and otherwise
+-  "words": Hash which maps query keywords (case-folded, stemmed, and otherwise
    processed) to a small hash with per-keyword statistics (“docs”,
    “hits”).
 
--  “error”:
--  Query error message reported by ``searchd`` (string, human readable).
+-  "error": Query error message reported by ``searchd`` (string, human readable).
    Empty if there were no errors.
 
--  “warning”:
--  Query warning message reported by ``searchd`` (string, human
+-  "warning": Query warning message reported by ``searchd`` (string, human
    readable). Empty if there were no warnings.
 
 It should be noted that ``Query()`` carries out the same actions as

@@ -3,7 +3,8 @@
 #include "sphinxstd.h"
 #include "sphinxutils.h"
 #include "sphinxint.h"
-#include "searchdaemon.h"
+#include "sphinxpq.h"
+#include "searchdreplication.h"
 #include "json/cJSON.h"
 #include "replication/wsrep_api.h"
 
@@ -521,9 +522,7 @@ static void SstJoinerThread ( void * pArgs )
 
 	wsrep_gtid tGtid = WSREP_GTID_UNDEFINED;
 	bool bBypass = false;
-	CJsonScopedPtr_c pIndexes ( nullptr );
-	if ( bExecPassed )
-		pIndexes.ReplacePtr ( ReadJoinerState ( pCluster, sStateFilename, tGtid, bBypass ) );
+	CJsonScopedPtr_c pIndexes ( bExecPassed ? ReadJoinerState ( pCluster, sStateFilename, tGtid, bBypass ) : nullptr );
 	bool bValidState = ( bBypass || pIndexes.Ptr()!=nullptr );
 
 	char sGtid[WSREP_GTID_STR_LEN];
@@ -1328,7 +1327,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, CSphVector<ReplicationCo
 	case RCOMMAND_PQUERY_ADD:
 	{
 		LoadStoredQuery ( pRequest, iRequestLen, tCmd.m_tPQ );
-		sphLogDebugRpl ( "pq-add, index '%s', uid " UINT64_FMT " query %s", tCmd.m_sIndex.cstr(), tCmd.m_tPQ.m_uUID, tCmd.m_tPQ.m_sQuery.cstr() );
+		sphLogDebugRpl ( "pq-add, index '%s', uid " UINT64_FMT " query %s", tCmd.m_sIndex.cstr(), tCmd.m_tPQ.m_uQUID, tCmd.m_tPQ.m_sQuery.cstr() );
 
 		CSphString sError;
 		PercolateQueryArgs_t tArgs ( tCmd.m_tPQ );
@@ -1384,7 +1383,7 @@ bool HandleCmdReplicated ( ReplicationCommand_t & tCmd )
 	{
 	case RCOMMAND_PQUERY_ADD:
 	{
-		sphLogDebugRpl ( "pq-add-commit, index '%s', uid " INT64_FMT, tCmd.m_sIndex.cstr(), tCmd.m_tPQ.m_uUID );
+		sphLogDebugRpl ( "pq-add-commit, index '%s', uid " INT64_FMT, tCmd.m_sIndex.cstr(), tCmd.m_tPQ.m_uQUID );
 
 		bool bOk = pIndex->Commit ( tCmd.m_pStored, sError );
 		tCmd.m_pStored = nullptr;
@@ -1456,7 +1455,7 @@ bool HandleCmdReplicate ( ReplicationCommand_t & tCmd, CSphString & sError, int 
 		assert ( tCmd.m_pStored );
 		SaveStoredQuery ( *tCmd.m_pStored, dBuf );
 
-		uQueryHash = sphFNV64 ( &tCmd.m_pStored->m_uUID, sizeof(tCmd.m_pStored->m_uUID), uQueryHash );
+		uQueryHash = sphFNV64 ( &tCmd.m_pStored->m_uQUID, sizeof(tCmd.m_pStored->m_uQUID), uQueryHash );
 		break;
 
 	case RCOMMAND_DELETE:
@@ -2113,7 +2112,7 @@ bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bo
 	StringBuilder_c sIncomingAddrs;
 	for ( const CSphVariant * pOpt = hSearchd("listen"); pOpt; pOpt = pOpt->m_pNext )
 	{
-		if ( sIncomingAddrs.Length() )
+		if ( sIncomingAddrs.GetLength() )
 			sIncomingAddrs += ", ";
 		sIncomingAddrs += pOpt->strval().cstr();
 	}

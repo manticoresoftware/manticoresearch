@@ -19,6 +19,7 @@
 #include "sphinxsearch.h"
 #include "sphinxquery.h"
 #include "sphinxint.h"
+#include "sphinxstem.h"
 
 #include <math.h>
 
@@ -3568,6 +3569,10 @@ static void DoHighlighting ( ExcerptQuery_t & tQuerySettings,
 
 	bool bHighlightAll = ( tFixedSettings.m_iLimit==0 || tFixedSettings.m_iLimit>=iDocLen ) && ( tFixedSettings.m_iLimitWords==0 || tFixedSettings.m_iLimitWords>iDocLen/2 )
 		&& tFixedSettings.m_ePassageSPZ==SPH_SPZ_NONE;
+
+	// might need separate passages
+	if ( bHighlightAll && tFixedSettings.m_bForcePassages && ( tFixedSettings.m_iLimit!=0 || tFixedSettings.m_iLimitWords!=0 || tFixedSettings.m_iLimitPassages!=0 ) )
+		bHighlightAll = false;
 
 	int iSPZ = ConvertSPZ ( eExtQuerySPZ | ( bHighlightAll ? 0 : tFixedSettings.m_ePassageSPZ ) );
 

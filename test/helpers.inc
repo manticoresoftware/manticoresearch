@@ -379,6 +379,11 @@ function ActionRetries ()
 	return $action_retries + $valgrind_action_retries;
 }
 
+function WaitRetries ()
+{
+	return ActionRetries()*50;
+}
+
 function GetSearchd ( &$searchd, &$error )
 {
 	global $g_locals;
@@ -470,9 +475,10 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 	// on windows, searchd starts *fully* async
 	// so lets also wait until pidfile gets real data
 	// (meaning that index precaching is actually done)
+
+	$STARTUP_TRIES = WaitRetries();
 	if ( $retval!=1 && $windows )
 	{
-		$STARTUP_TRIES = 1000;
 		$STARTUP_TICK = 50000; // msec
 
 		// FIXME! add a better check that searchd is still alive than just file_exists
@@ -484,10 +490,6 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 			usleep ( $STARTUP_TICK );
 		}
 	}
-
-//	// we've got a pid file; but lets check the log file for startup errors
-//	for ( $i=0; $i<$action_retries && !file_exists($error_file); $i++ )
-//		usleep ( $action_wait_timeout );
 
 	// lets wait when daemon is ready to accept connections
 	if ( $retval==0 )
@@ -503,7 +505,7 @@ function StartSearchd ( $config_file, $error_file, $pidfile, &$error, $use_watch
 		
 		$ok = false;
 		$start = MyMicrotime();		
-		for ( $i=0; $i<1000; $i++ )
+		for ( $i=0; $i<$STARTUP_TRIES; $i++ )
 		{
 			if ( $cl->Open() )
 			{

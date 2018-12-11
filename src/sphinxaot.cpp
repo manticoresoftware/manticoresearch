@@ -16,6 +16,7 @@
 #include "sphinx.h"
 #include "sphinxint.h"
 #include "sphinxutils.h"
+#include "sphinxstem.h"
 
 //////////////////////////////////////////////////////////////////////////
 // LEMMATIZER
@@ -1415,6 +1416,7 @@ const CSphNamedInt & sphAotDictinfo ( int iLang )
 class CSphAotTokenizerTmpl : public CSphTokenFilter
 {
 protected:
+	using Base = CSphTokenFilter;
 	BYTE		m_sForm [ SPH_MAX_WORD_LEN*3+4 ];	///< aka MAX_KEYWORD_BYTES
 	int			m_iFormLen = 0;						///< in bytes, but in windows-1251 that is characters, too
 	bool		m_bFound = false;					///< found or predicted?
@@ -1445,10 +1447,6 @@ public:
 		m_bIndexExact = bIndexExact;
 	}
 
-	void SetBuffer ( const BYTE * sBuffer, int iLength ) final
-	{
-		m_pTokenizer->SetBuffer ( sBuffer, iLength );
-	}
 
 	bool TokenIsBlended() const final
 	{
@@ -1521,7 +1519,7 @@ public:
 
 		// ok, time to work on a next word
 		assert ( m_iCurrent<0 );
-		BYTE * pToken = m_pTokenizer->GetToken();
+		BYTE * pToken = Base::GetToken();
 		if ( !pToken )
 			return nullptr;
 
@@ -1651,7 +1649,7 @@ public:
 
 		// ok, time to work on a next word
 		assert ( m_iCurrent<0 );
-		BYTE * pToken = m_pTokenizer->GetToken();
+		BYTE * pToken = Base::GetToken();
 		if ( !pToken )
 			return nullptr;
 

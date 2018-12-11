@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+
+<name>REGEX filter and expression</name>
+
+<requires><re2/></requires>
+
+<config>
+indexer
+{
+	mem_limit				= 16M
+}
+
+searchd
+{
+	<searchd_settings/>
+	workers = threads
+}
+
+source dummy
+{
+	type			= mysql
+	<sql_settings/>
+	sql_query		= select * from test_table
+	sql_attr_uint	= gid
+}
+
+index dummy
+{
+	source			= dummy
+	path			= <data_path/>/dummy
+}
+
+index rt1
+{
+	type 			= rt
+	path			= <data_path/>/rt1
+	docinfo = extern
+	rt_mem_limit = 8M
+	rt_attr_uint	= idd
+	rt_field		= title
+	rt_attr_string = title
+	rt_attr_json = j
+	dict = keywords
+}
+
+index test_d
+{
+	type = distributed
+	agent = <my_address/>:rt1
+}
+</config>
+
+<db_create>
+CREATE TABLE `test_table` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `gid` int(11) NOT NULL,
+  `title` varchar(255) NOT NULL,
+  PRIMARY KEY (`id`)
+)
+</db_create>
+<db_drop>DROP TABLE IF EXISTS `test_table`;</db_drop>
+<db_insert>INSERT INTO `test_table` VALUES ( 1, 1, 'test 1' )</db_insert>
+
+<sphqueries>
+<sphinxql>INSERT INTO rt1 (id, title, j) VALUES (1, 'do it test blue', '{"price":[11,15], "doc":"manticore is very good"}' ), (2, 'tests of the best', '{"doc":"core of reactor"}' ), (3, 'the wild west', '{"price":11}' )</sphinxql>
+<sphinxql>SELECT * FROM test_d</sphinxql>
+
+<sphinxql>SELECT id, REGEX(title, 'est') as c, title, j FROM rt1 WHERE c>0</sphinxql>
+<sphinxql>SELECT id, title, j FROM rt1 WHERE REGEX(title, '\\bwest')</sphinxql>
+
+<sphinxql>SELECT id, title, j FROM test_d WHERE REGEX(j.doc, '^core')</sphinxql>
+<sphinxql>SELECT id, REGEX(j.doc, 'core') as c, title, j FROM test_d WHERE c>0</sphinxql>
+
+<sphinxql>SELECT id, REGEX(to_string(j.price), '11') as c, title, j FROM test_d WHERE c>0</sphinxql>
+<sphinxql>SELECT id, REGEX(to_string(j.price), '5]') as c, title, j FROM test_d WHERE c>0</sphinxql>
+<sphinxql>SELECT id, title, j FROM rt1 WHERE REGEX(j.doc, 'is | of')</sphinxql>
+<sphinxql>SELECT id, title, j FROM test_d WHERE REGEX(j.doc, 'core of')</sphinxql>
+<sphinxql>SELECT id, title, j FROM test_d WHERE REGEX(title, 'test?')</sphinxql>
+</sphqueries>
+
+</test>

@@ -6,7 +6,7 @@ CALL PQ syntax
 .. code-block:: mysql
 
 
-    CALL PQ(data, index[, opt_value AS opt_name[, ...]])
+    CALL PQ(index, data[, opt_value AS opt_name[, ...]])
 	
 
 CALL PQ statement performs a prospective search. It returns stored queries from a ``percolate``index that match documents from provided``data``. For more information, see :ref:`Percolate Query <percolate_query>` section.

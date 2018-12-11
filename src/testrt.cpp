@@ -85,8 +85,10 @@ void DoIndexing ( CSphSource_MySQL * pSrc, ISphRtIndex * pIndex )
 		if ( !pFields )
 			break;
 
+		auto  dFields = VecTraits_T<const char *> ( (const char **) ( pFields ), g_iFieldsCount );
+
 		if ( pSrc->m_tDocInfo.m_uDocID )
-			pIndex->AddDocument ( pIndex->CloneIndexingTokenizer(), g_iFieldsCount, pFields, pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
+			pIndex->AddDocument ( dFields, pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );
 
 		if ( ( pSrc->GetStats().m_iTotalDocuments % COMMIT_STEP )==0 || !pSrc->m_tDocInfo.m_uDocID )
 		{

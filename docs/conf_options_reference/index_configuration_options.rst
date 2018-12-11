@@ -1614,6 +1614,9 @@ your server.)
 
 When mininum infix length is set to a positive number,
 mininum prefix length is considered 1.
+For dict=keywords word infixing and prefixing cannot be both enabled at the same.
+For dict=crc it is possible to specify only some fields to have infixes  declared with :ref:`infix_fields <infix_fields>`  and
+other fields to have prefixes declared with :ref:`prefix_fields <prefix_fields>`, but it's forbidden to declare same field in both lists.
 
 Example:
 

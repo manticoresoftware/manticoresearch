@@ -18,6 +18,7 @@
 # Short-Description: Fast standalone full-text SQL search engine
 ### END INIT INFO
 
+. /lib/lsb/init-functions
 
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 DAEMON=@BINDIRFULL@/searchd

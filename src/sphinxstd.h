@@ -310,6 +310,45 @@ extern const char * strerrorm ( int errnum ); // defined in sphinxint.h
 // HELPERS
 /////////////////////////////////////////////////////////////////////////////
 
+// magick to determine widest from provided types and initialize a whole unions
+// for example,
+/*
+ *	union foo {
+ *		BYTE	a;
+ *		char	b;
+ *		DWORD	c;
+ *		WORDID	w;
+ *		sphDocid_t d;
+ *		void*	p;
+ *		WIDEST<BYTE,char,DWORD,WORDID,sphDocid_t,void*>::T _init = 0;
+ *	};
+ */
+template < typename T1, typename T2, bool= (sizeof ( T1 )<sizeof ( T2 )) >
+struct WIDER
+{
+	using T=T2;
+};
+
+template < typename T1, typename T2 >
+struct WIDER < T1, T2, false >
+{
+	using T=T1;
+};
+
+template < typename T1, typename... TYPES >
+struct WIDEST
+{
+	using T=typename WIDER < T1, typename WIDEST< TYPES... >::T >::T;
+};
+
+template < typename T1, typename T2 >
+struct WIDEST<T1, T2>
+{
+	using T=typename WIDER < T1, T2 >::T;
+};
+
+
+
 inline int sphBitCount ( DWORD n )
 {
 	// MIT HACKMEM count
@@ -419,15 +458,13 @@ void sphAssert ( const char * sExpr, const char * sFile, int iLine );
 /////////////////////////////////////////////////////////////////////////////
 
 template <typename T> T Min ( T a, T b ) { return a<b ? a : b; }
-template <typename T, typename U> T Min ( T a, U b )
+template <typename T, typename U> typename WIDER<T,U>::T Min ( T a, U b )
 {
-	STATIC_ASSERT ( sizeof(U)<=sizeof(T), WIDEST_ARG_FIRST );
 	return a<b ? a : b;
 }
 template <typename T> T Max ( T a, T b ) { return a<b ? b : a; }
-template <typename T, typename U> T Max ( T a, U b )
+template <typename T, typename U> typename WIDER<T,U>::T Max ( T a, U b )
 {
-	STATIC_ASSERT ( sizeof(U)<=sizeof(T), WIDEST_ARG_FIRST );
 	return a<b ? b : a;
 }
 #define SafeDelete(_x)		{ if (_x) { delete (_x); (_x) = nullptr; } }
@@ -780,71 +817,6 @@ T_COUNTER sphUniq ( T * pData, T_COUNTER iCount )
 	return iDst;
 }
 
-
-//////////////////////////////////////////////////////////////////////////
-/// Copy/move vec of a data item-by-item
-template < typename T, bool = std::is_pod<T>::value >
-class DataMover_T
-{
-public:
-	static inline void Copy ( T * pNew, T * pData, int iLength )
-	{
-		for ( int i = 0; i<iLength; ++i )
-			pNew[i] = pData[i];
-	}
-
-	static inline void Move ( T * pNew, T * pData, int iLength )
-	{
-		for ( int i = 0; i<iLength; ++i )
-			pNew[i] = std::move ( pData[i] );
-	}
-};
-
-template < typename T> /// Copy/move vec of POD data using memmove
-class DataMover_T<T, true>
-{
-public:
-	static inline void Copy ( T * pNew, const T * pData, int iLength )
-	{
-		if ( iLength ) // m.b. work without this check, but sanitize for paranoids.
-			memmove ( ( void * ) pNew, ( const void * ) pData, iLength * sizeof ( T ) );
-	}
-
-	static inline void Move ( T * pNew, const T * pData, int iLength )
-	{ Copy ( pNew, pData, iLength); }
-
-	// append raw blob: defined ONLY in POD specialization.
-	static inline void CopyVoid ( T * pNew, const void * pData, int iLength )
-	{ Copy ( pNew, (T*)pData, iLength ); }
-};
-
-/// default vector policy
-/// grow 2x and copy using assignment operator on resize
-template < typename T >
-class CSphVectorPolicy : public DataMover_T<T>
-{
-protected:
-	static const int MAGIC_INITIAL_LIMIT = 8;
-
-public:
-	static inline void CopyOrSwap ( T & pLeft, const T & pRight )
-	{
-		pLeft = pRight;
-	}
-
-	static inline int Relimit ( int iLimit, int iNewLimit )
-	{
-		if ( !iLimit )
-			iLimit = MAGIC_INITIAL_LIMIT;
-		while ( iLimit<iNewLimit )
-		{
-			iLimit *= 2;
-			assert ( iLimit>0 );
-		}
-		return iLimit;
-	}
-};
-
 /// buffer traits - provides generic ops over a typed blob (vector).
 /// just provide common operators; doesn't manage buffer anyway
 template < typename T > class VecTraits_T
@@ -862,6 +834,18 @@ public:
 
 	VecTraits_T() = default;
 
+	// this ctr allows to regard any typed blob as VecTraits, and use it's benefits.
+	VecTraits_T( T* pData, int64_t iCount )
+		: m_pData ( pData )
+		, m_iCount ( iCount )
+	{}
+
+	template <typename TT>
+	VecTraits_T ( TT * pData, int64_t iCount )
+		: m_pData ( pData )
+		, m_iCount ( iCount )
+	{}
+
 	/// accessor by forward index
 	T &operator[] ( int64_t iIndex ) const
 	{
@@ -873,6 +857,12 @@ public:
 	T * Begin () const
 	{
 		return m_iCount ? m_pData : nullptr;
+	}
+
+	/// pointer to the item after the last
+	T * End () const
+	{
+		return  m_pData + m_iCount;
 	}
 
 	/// make happy C++11 ranged for loops
@@ -890,6 +880,13 @@ public:
 	T &Last () const
 	{
 		return ( *this )[m_iCount - 1];
+	}
+
+	/// make possible to pass VecTraits_T<T*> into funcs which need VecTraits_T<const T*>
+	/// fixme! M.b. add check and fire error if T is not a pointer?
+	operator VecTraits_T<const typename std::remove_pointer<T>::type *> & () const
+	{
+		return *( VecTraits_T<const typename std::remove_pointer<T>::type *>* ) ( this );
 	}
 
 	/// check if i'm empty
@@ -1017,38 +1014,237 @@ protected:
 	int64_t m_iCount = 0;
 };
 
+namespace sph {
+
+//////////////////////////////////////////////////////////////////////////
+/// Storage backends for vector
+/// Each backend provides Allocate and Deallocate
+
+/// Default backend - uses plain old new/delete
+template < typename T >
+class DefaultStorage_T
+{
+protected:
+	/// grow enough to hold that much entries.
+	inline static T * Allocate ( int iLimit )
+	{
+		return new T[iLimit];
+	}
+
+	inline static void Deallocate ( T * pData )
+	{
+		delete[] pData;
+	}
+	static inline void DataIsNotOwned() {}
+};
+
+/// Static backend: small blobs stored localy,
+/// bigger came to plain old new/delete
+template < typename T, int STATICSIZE = 4096 >
+class LazyStorage_T
+{
+public:
+	// don't allow moving (it has no sence with embedded buffer)
+	inline LazyStorage_T ( LazyStorage_T &&rhs ) noexcept = delete;
+	inline LazyStorage_T &operator= ( LazyStorage_T &&rhs ) noexcept = delete;
+
+	LazyStorage_T() = default;
+	static const int iSTATICSIZE = STATICSIZE;
+protected:
+	inline T * Allocate ( int iLimit )
+	{
+		if ( iLimit<=STATICSIZE )
+			return m_dData;
+		return new T[iLimit];
+	}
+
+	inline void Deallocate ( T * pData ) const
+	{
+		if ( pData!=m_dData )
+			delete[] pData;
+	}
+
+	// DataIsNotOwned is not defined here, so swap/leakdata will not compile.
+	//static inline void DataIsNotOwned () {}
+
+private:
+	T m_dData[iSTATICSIZE];
+};
+
+//////////////////////////////////////////////////////////////////////////
+/// Copy backends for vector
+/// Each backend provides Copy, Move and CopyOrSwap
+
+/// Copy/move vec of a data item-by-item
+template < typename T, bool = std::is_pod<T>::value >
+class DataMover_T
+{
+public:
+	static inline void Copy ( T * pNew, T * pData, int iLength )
+	{
+		for ( int i = 0; i<iLength; ++i )
+			pNew[i] = pData[i];
+	}
+
+	static inline void Move ( T * pNew, T * pData, int iLength )
+	{
+		for ( int i = 0; i<iLength; ++i )
+			pNew[i] = std::move ( pData[i] );
+	}
+};
+
+template < typename T > /// Copy/move blob of POD data using memmove
+class DataMover_T<T, true>
+{
+public:
+	static inline void Copy ( T * pNew, const T * pData, int iLength )
+	{
+		if ( iLength ) // m.b. work without this check, but sanitize for paranoids.
+			memmove ( ( void * ) pNew, ( const void * ) pData, iLength * sizeof ( T ) );
+	}
+
+	static inline void Move ( T * pNew, const T * pData, int iLength )
+	{ Copy ( pNew, pData, iLength ); }
+
+	// append raw blob: defined ONLY in POD specialization.
+	static inline void CopyVoid ( T * pNew, const void * pData, int iLength )
+	{ Copy ( pNew, ( T * ) pData, iLength ); }
+};
+
+/// default vector mover
+template < typename T >
+class DefaultCopy_T : public DataMover_T<T>
+{
+public:
+	static inline void CopyOrSwap ( T &pLeft, const T &pRight )
+	{
+		pLeft = pRight;
+	}
+};
+
+
+/// swap-vector policy (for non-copyable classes)
+/// use Swap() instead of assignment on resize
+template < typename T >
+class SwapCopy_T
+{
+public:
+	static inline void Copy ( T * pNew, T * pData, int iLength )
+	{
+		for ( int i = 0; i<iLength; ++i )
+			Swap ( pNew[i], pData[i] );
+	}
+
+	static inline void Move ( T * pNew, T * pData, int iLength )
+	{
+		for ( int i = 0; i<iLength; ++i )
+			Swap ( pNew[i], pData[i] );
+	}
+
+	static inline void CopyOrSwap ( T &dLeft, T &dRight )
+	{
+		Swap ( dLeft, dRight );
+	}
+};
+
+//////////////////////////////////////////////////////////////////////////
+/// Resize backends for vector
+/// Each backend provides Relimit
+
+/// Default relimit: grow 2x
+class DefaultRelimit
+{
+public:
+	static const int MAGIC_INITIAL_LIMIT = 8;
+	static inline int Relimit ( int iLimit, int iNewLimit )
+	{
+		if ( !iLimit )
+			iLimit = MAGIC_INITIAL_LIMIT;
+		while ( iLimit<iNewLimit )
+		{
+			iLimit *= 2;
+			assert ( iLimit>0 );
+		}
+		return iLimit;
+	}
+};
+
+/// tight-vector policy
+/// grow only 1.2x on resize (not 2x) starting from a certain threshold
+class TightRelimit : public DefaultRelimit
+{
+public:
+	static const int SLOW_GROW_TRESHOLD = 1024;
+	static inline int Relimit ( int iLimit, int iNewLimit )
+	{
+		if ( !iLimit )
+			iLimit = MAGIC_INITIAL_LIMIT;
+		while ( iLimit<iNewLimit && iLimit<SLOW_GROW_TRESHOLD )
+		{
+			iLimit *= 2;
+			assert ( iLimit>0 );
+		}
+		while ( iLimit<iNewLimit )
+		{
+			iLimit = ( int ) ( iLimit * 1.2f );
+			assert ( iLimit>0 );
+		}
+		return iLimit;
+	}
+};
+
 
 /// generic vector
+/// uses storage, mover and relimit backends
 /// (don't even ask why it's not std::vector)
-template < typename T, typename POLICY=CSphVectorPolicy<T> > class CSphVector
-	: public VecTraits_T<T>
+template < typename T, class POLICY=DefaultCopy_T<T>, class LIMIT=DefaultRelimit, class STORE=DefaultStorage_T<T> >
+class Vector_T : public VecTraits_T<T>, protected STORE
 {
 protected:
 	using BASE = VecTraits_T<T>;
 	using BASE::m_pData;
 	using BASE::m_iCount;
+	using STORE::Allocate;
+	using STORE::Deallocate;
 
 public:
 	using BASE::Begin;
 	using BASE::Sort;
+	using BASE::GetLength; // these are for IDE helpers to work
+	using BASE::GetLength64;
+	using BASE::GetLengthBytes;
+
 
 	/// ctor
-	CSphVector () = default;
+	Vector_T () = default;
 
 	/// ctor with initial size
-	explicit CSphVector ( int iCount )
+	explicit Vector_T ( int iCount )
 	{
 		Resize ( iCount );
 	}
 
 	/// copy ctor
-	CSphVector ( const CSphVector<T> & rhs )
+	Vector_T ( const Vector_T<T> & rhs )
 	{
 		*this = rhs;
 	}
 
+	/// move ctr
+	Vector_T ( Vector_T<T> &&rhs ) noexcept
+		: STORE (std::move(rhs))
+	{
+		m_iCount = rhs.m_iCount;
+		m_iLimit = rhs.m_iLimit;
+		m_pData = rhs.m_pData;
+
+		rhs.m_pData = nullptr;
+		rhs.m_iCount = 0;
+		rhs.m_iLimit = 0;
+	}
+
 	/// dtor
-	~CSphVector ()
+	~Vector_T ()
 	{
 		Reset ();
 	}
@@ -1087,6 +1283,18 @@ public:
 		return m_pData + m_iCount - iCount;
 	}
 
+	/// return idx of the item pointed by pBuf, or -1
+	inline int Idx ( const T* pBuf )
+	{
+		if ( !pBuf )
+			return -1;
+
+		if ( pBuf < m_pData || pBuf >= m_pData + m_iLimit )
+			return -1;
+
+		return pBuf - m_pData;
+	}
+
 
 	/// add unique entry (ie. do not add if equal to last one)
 	void AddUnique ( const T & tValue )
@@ -1113,7 +1321,7 @@ public:
 	{
 		assert ( iIndex>=0 && iIndex<m_iCount );
 		if ( iIndex!=--m_iCount )
-			Swap ( m_pData[iIndex], m_pData[m_iCount] );
+			Swap ( m_pData[iIndex], m_pData[m_iCount] ); // fixme! What about POLICY::CopyOrSwap here?
 	}
 
 	/// remove element by value (warning, linear O(n) search)
@@ -1156,20 +1364,28 @@ public:
 			return;
 
 		// calc new limit
-		m_iLimit = POLICY::Relimit ( m_iLimit, iNewLimit );
+		m_iLimit = LIMIT::Relimit ( m_iLimit, iNewLimit );
 
 		// realloc
 		T * pNew = nullptr;
 		if ( m_iLimit )
 		{
-			pNew = new T[m_iLimit];
-			__analysis_assume ( m_iCount<=m_iLimit );
+			pNew = STORE::Allocate ( m_iLimit );
 
+			if ( pNew==m_pData )
+				return;
+
+			__analysis_assume ( m_iCount<=m_iLimit );
 			POLICY::Move ( pNew, m_pData, m_iCount );
 		}
-		SafeDeleteArray( m_pData );
-
+		STORE::Deallocate ( m_pData );
 		m_pData = pNew;
+	}
+
+	/// ensure we have space for iGap more items (reserve more if necessary)
+	inline void ReserveGap ( int iGap )
+	{
+		Reserve ( m_iCount + iGap );
 	}
 
 	/// resize
@@ -1184,7 +1400,8 @@ public:
 	/// reset
 	void Reset ()
 	{
-		SafeDeleteArray ( m_pData );
+		STORE::Deallocate ( m_pData );
+		m_pData = nullptr;
 		m_iCount = 0;
 		m_iLimit = 0;
 	}
@@ -1221,7 +1438,7 @@ public:
 	}
 
 	/// copy
-	CSphVector &operator= ( const CSphVector<T> &rhs )
+	Vector_T &operator= ( const Vector_T<T> &rhs )
 	{
 		Reset ();
 
@@ -1236,7 +1453,7 @@ public:
 	}
 
 	/// move
-	CSphVector &operator= ( CSphVector<T> &&rhs )
+	Vector_T &operator= ( Vector_T<T> &&rhs ) noexcept
 	{
 		Reset ();
 
@@ -1248,7 +1465,8 @@ public:
 		rhs.m_iCount = 0;
 		rhs.m_iLimit = 0;
 
-		return *this;
+		return static_cast<Vector_T &>(STORE::operator= ( std::move ( rhs ) ));
+//		return *this;
 	}
 
 	/// memmove N elements from raw pointer to the end
@@ -1275,8 +1493,10 @@ public:
 	}
 
 	/// swap
-	void SwapData ( CSphVector<T, POLICY> & rhs )
+	template < typename L=LIMIT >
+	void SwapData ( Vector_T<T, POLICY, L, STORE> &rhs )
 	{
+		STORE::DataIsNotOwned ();
 		Swap ( m_iCount, rhs.m_iCount );
 		Swap ( m_iLimit, rhs.m_iLimit );
 		Swap ( m_pData, rhs.m_pData );
@@ -1285,6 +1505,7 @@ public:
 	/// leak
 	T * LeakData ()
 	{
+		STORE::DataIsNotOwned ();
 		T * pData = m_pData;
 		m_pData = NULL;
 		Reset();
@@ -1323,6 +1544,7 @@ protected:
 	int64_t		m_iLimit = 0;		///< entries allocated
 };
 
+} // namespace sph
 
 #define ARRAY_FOREACH(_index,_array) \
 	for ( int _index=0; _index<_array.GetLength(); ++_index )
@@ -1332,65 +1554,20 @@ protected:
 
 //////////////////////////////////////////////////////////////////////////
 
-/// swap-vector policy (for non-copyable classes)
-/// use Swap() instead of assignment on resize
-template < typename T >
-class CSphSwapVectorPolicy : public CSphVectorPolicy<T>
-{
-public:
-	static inline void Copy ( T * pNew, T * pData, int iLength )
-	{
-		for ( int i=0; i<iLength; ++i )
-			Swap ( pNew[i], pData[i] );
-	}
+/// old well-known vector
+template < typename T, typename R=sph::DefaultRelimit >
+using CSphVector = sph::Vector_T < T, sph::DefaultCopy_T<T>, R >;
 
-	static inline void Move ( T * pNew, T * pData, int iLength )
-	{
-		for ( int i = 0; i<iLength; ++i )
-			Swap ( pNew[i], pData[i] );
-	}
-
-	static inline void CopyOrSwap ( T& dLeft, T& dRight )
-	{
-		Swap ( dLeft, dRight );
-	}
-};
-
-/// tight-vector policy
-/// grow only 1.2x on resize (not 2x) starting from a certain threshold
-template < typename T >
-class CSphTightVectorPolicy : public CSphVectorPolicy<T>
-{
-protected:
-	static const int SLOW_GROW_TRESHOLD = 1024;
-
-public:
-	static inline int Relimit ( int iLimit, int iNewLimit )
-	{
-		if ( !iLimit )
-			iLimit = CSphVectorPolicy<T>::MAGIC_INITIAL_LIMIT;
-		while ( iLimit<iNewLimit && iLimit<SLOW_GROW_TRESHOLD )
-		{
-			iLimit *= 2;
-			assert ( iLimit>0 );
-		}
-		while ( iLimit<iNewLimit )
-		{
-			iLimit = (int)( iLimit*1.2f );
-			assert ( iLimit>0 );
-		}
-		return iLimit;
-	}
-};
+template < typename T, typename R=sph::DefaultRelimit, int STATICSIZE=4096/sizeof(T) >
+using LazyVector_T = sph::Vector_T<T, sph::DefaultCopy_T<T>, R, sph::LazyStorage_T<T, STATICSIZE> >;
 
 /// swap-vector
 template < typename T >
-using CSphSwapVector = CSphVector < T, CSphSwapVectorPolicy<T> >;
-
+using CSphSwapVector = sph::Vector_T < T, sph::SwapCopy_T<T> >;
 
 /// tight-vector
 template < typename T >
-using CSphTightVector =  CSphVector < T, CSphTightVectorPolicy<T> >;
+using CSphTightVector =  CSphVector < T, sph::TightRelimit >;
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -2181,91 +2358,6 @@ inline void Swap ( CSphString & v1, CSphString & v2 )
 // commonly used vector of strings
 using StrVec_t = CSphVector<CSphString>;
 
-/// string builder
-/// somewhat quicker than a series of SetSprintf()s
-/// lets you build strings bigger than 1024 bytes, too
-class StringBuilder_c
-{
-protected:
-	char *	m_sBuffer = nullptr;
-	int		m_iSize = 256;
-	int		m_iUsed = 0;
-
-public:
-	StringBuilder_c ();
-	~StringBuilder_c ();
-
-	void Clear ();
-	StringBuilder_c& vAppendf ( const char * sTemplate, va_list ap );
-	StringBuilder_c& Appendf ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
-
-	const char * cstr() const
-	{
-		return m_sBuffer;
-	}
-
-	bool IsEmpty() const
-	{
-		return !m_sBuffer || m_sBuffer[0]=='\0';
-	}
-
-	char* Leak();
-
-	int Length () const
-	{
-		return m_iUsed;
-	}
-
-	StringBuilder_c& operator += ( const char * sText );
-	StringBuilder_c& operator = ( const StringBuilder_c& rhs );
-
-protected:
-	void Grow ( int iLen );
-	void Reset ();
-};
-
-template < typename T >
-class EscapedStringBuilder_T : public StringBuilder_c
-{
-public:
-
-	void AppendEscaped ( const char * sText, bool bEscape = true, bool bFixupSpace = true )
-	{
-		if ( !sText || !*sText )
-			return;
-
-		const char * pBuf = sText;
-		int iEsc = 0;
-		for ( ; *pBuf; pBuf++ )
-			iEsc += bEscape && T::IsEscapeChar ( *pBuf );
-
-		int iLen = pBuf - sText + iEsc;
-		int iLeft = m_iSize - m_iUsed;
-		if ( iLen>=iLeft )
-			Grow ( iLen - iLeft + 64 );
-
-		pBuf = sText;
-		char * pCur = m_sBuffer + m_iUsed;
-		for ( char s = *pBuf; s; s=*++pBuf, ++pCur )
-		{
-			if ( bEscape && T::IsEscapeChar ( s ) )
-			{
-				*pCur++ = '\\';
-				*pCur = T::GetEscapedChar ( s );
-			} else if ( bFixupSpace && ( s=='\t' || s=='\n' || s=='\r' ) )
-			{
-				*pCur = ' ';
-			} else
-			{
-				*pCur = s;
-			}
-		}
-		*pCur = '\0';
-		m_iUsed = pCur - m_sBuffer;
-	}
-};
-
-
 /////////////////////////////////////////////////////////////////////////////
 
 /// immutable string/int/float variant list proxy
@@ -2341,6 +2433,317 @@ public:
 	bool operator!= ( const char * s ) const { return m_sValue!=s; }
 };
 
+/// text delimiter
+/// returns "" first time, then defined delimiter starting from 2-nd call
+/// NOTE that using >1 call in one chain like out << comma << "foo" << comma << "bar" is NOT defined,
+/// since order of calling 2 commas here is undefined (so, you may take "foo, bar", but may ", foobar" also).
+/// Use out << comma << "foo"; out << comma << "bar"; in the case
+class Comma_c
+{
+protected:
+	const char * m_sDelimiter = nullptr;
+	int m_iLength = 0;
+	bool m_bStarted = false;
+
+public:
+	// standalone - call () when necessary
+	Comma_c ( const char * sDelim = ", " )
+		: m_sDelimiter ( sDelim )
+	{
+		if ( sDelim )
+			m_iLength = strlen ( sDelim );
+	}
+
+	inline bool Started() const { return m_bStarted; };
+
+	// returns "" first time, m_sDelimiter after
+	operator const char * ()
+	{
+		auto * sComma = m_bStarted ? m_sDelimiter : nullptr;
+		m_bStarted = true;
+		return sComma ? sComma : "";
+	}
+};
+
+
+/// string builder
+/// somewhat quicker than a series of SetSprintf()s
+/// lets you build strings bigger than 1024 bytes, too
+class StringBuilder_c : public ISphNoncopyable
+{
+	// RAII comma for frequently used pattern of pushing into StringBuilder many values separated by ',', ';', etc.
+	// When in scope, inject prefix before very first item, or delimiter before each next.
+	class LazyComma_c : public Comma_c
+	{
+		friend class StringBuilder_c;
+
+		const char * m_sPrefix = nullptr;
+		const char * m_sSuffix = nullptr;
+		LazyComma_c * m_pPrevious = nullptr;
+
+		// c-tr for managed - linked StringBuilder will inject RawComma() on each call, terminator at end
+		LazyComma_c ( LazyComma_c * pPrevious, const char * sDelim, const char * sPrefix, const char * sTerm )
+			: Comma_c ( sDelim )
+			, m_sPrefix ( sPrefix )
+			, m_sSuffix ( sTerm )
+			, m_pPrevious ( pPrevious )
+		{}
+
+		~LazyComma_c ()
+		{
+			SafeDelete ( m_pPrevious );
+		}
+
+	public:
+		const char * RawComma ( int &iLen, StringBuilder_c &dBuilder )
+		{
+			if ( Started() )
+			{
+				iLen = m_iLength;;
+				return m_sDelimiter;
+			}
+
+			m_bStarted = true;
+			if ( m_pPrevious )
+			{
+				int iPrevLen = 0;
+				const char * sPrevDelim = m_pPrevious->RawComma ( iPrevLen, dBuilder );
+				dBuilder.AppendRawChars ( sPrevDelim );
+			}
+
+			iLen = m_sPrefix ? strlen ( m_sPrefix ) : 0;
+			return m_sPrefix;
+		}
+	};
+
+private:
+	void NewBuffer ();
+	friend class ScopedComma_c;
+
+protected:
+	char * m_sBuffer = nullptr;
+	int m_iSize = 0;
+	int m_iUsed = 0;
+	static const BYTE uSTEP = 64; // how much to grow if no space left
+	LazyComma_c * m_pDelimiter = nullptr;
+	void Grow ( int iLen ); // unconditionally shrink enough to place at least iLen more bytes
+
+public:
+	// creates and m.b. start block
+	StringBuilder_c ( const char * sDel = nullptr, const char * sPref = nullptr, const char * sTerm = nullptr );
+	~StringBuilder_c ();
+
+	StringBuilder_c ( StringBuilder_c&& rhs ) noexcept;
+	StringBuilder_c& operator= ( StringBuilder_c&& rhs ) noexcept;
+
+	// reset to initial state
+	void Clear ();
+
+	// get current build value
+	const char * cstr () const { return m_sBuffer; }
+
+	// move out (de-own) value
+	BYTE * Leak ();
+	void MoveTo ( CSphString &sTarget ); // leak to string
+
+	// get state
+	bool IsEmpty () const { return !m_sBuffer || m_sBuffer[0]=='\0'; }
+	inline int GetLength () const { return m_iUsed; }
+
+	// different kind of fullfillments
+	StringBuilder_c &AppendChars ( const char * sText, int iLen, char cQuote = '\0' );
+	StringBuilder_c &AppendString ( const CSphString &sText, char cQuote = '\0' );
+	StringBuilder_c &operator+= ( const char * sText );
+	StringBuilder_c &operator<< ( const VecTraits_T<char> &sText );
+	inline StringBuilder_c &operator<< ( const char * sText ) { return *this += sText; }
+	inline StringBuilder_c &operator<< ( const CSphString &sText ) { return *this += sText.cstr (); }
+	inline StringBuilder_c &operator<< ( const CSphVariant &sText )	{ return *this += sText.cstr (); }
+
+	// append 1 char despite any blocks.
+	inline void RawC ( char cChar ) { GrowEnough ( 1 ); *end () = cChar; ++m_iUsed; }
+	void AppendRawChars ( const char * sText ); // append without any commas
+
+	// these use standard sprintf() inside
+	StringBuilder_c &vAppendf ( const char * sTemplate, va_list ap );
+	StringBuilder_c &Appendf ( const char * sTemplate, ... ) __attribute__ ( ( format ( printf, 2, 3 ) ) );
+
+	// these use or own implementation sph::Sprintf which provides also some sugar
+	StringBuilder_c &vSprintf ( const char * sTemplate, va_list ap );
+	StringBuilder_c &Sprintf ( const char * sTemplate, ... );
+
+	// comma manipulations
+	// start new comma block; return pointer to it (for future possible reference in FinishBlocks())
+	LazyComma_c * StartBlock ( const char * sDel = ", ", const char * sPref = nullptr, const char * sTerm = nullptr );
+
+	// finish and close last opened comma block.
+	// bAllowEmpty - close empty block output nothing(default), or prefix/suffix pair (if any).
+	void FinishBlock ( bool bAllowEmpty = true );
+
+	// finish and close all blocks including pLevels (by default - all blocks)
+	void FinishBlocks ( LazyComma_c * pLevels = nullptr, bool bAllowEmpty = true );
+
+	inline char * begin() const { return m_sBuffer; }
+	inline char * end () const { return m_sBuffer + m_iUsed; }
+
+	// shrink, if necessary, to be able to fit at least iLen more chars
+	inline void GrowEnough ( int iLen )
+	{
+		if ( m_iUsed + iLen<m_iSize )
+			return;
+		Grow ( iLen );
+	}
+
+	// support for sph::Sprintf - emulate POD 'char*'
+	inline StringBuilder_c & operator++() { GrowEnough ( 1 ); ++m_iUsed; return *this; }
+	inline void operator+= (int i) { GrowEnough ( i ); m_iUsed += i; }
+};
+
+using Str_b = StringBuilder_c;
+
+namespace EscBld {	// what kind of changes will do AppendEscaped of escaped string builder:
+	enum eAct : BYTE
+	{
+		eNone		= 0, // [comma,] append raw text without changes
+		eFixupSpace	= 1, // [comma,] change \t, \n, \r into spaces
+		eEscape		= 2, // [comma,] all escaping according to provided interface
+		eAll		= 3, // [comma,] escape and change spaces
+//		eSkipComma	= 4, // force to NOT prefix comma (if any active)
+	};
+}
+
+template < typename T >
+class EscapedStringBuilder_T : public StringBuilder_c
+{
+public:
+	void AppendEscaped ( const char * sText, BYTE eWhat=EscBld::eAll, int iLen=-1 )
+	{
+		if ( ( !sText || !*sText ) )
+		{
+			if ( eWhat & EscBld::eEscape )
+				iLen=0;
+			else
+				return;
+		}
+
+		// process comma
+		int iComma = 0;
+//		if ( eWhat & EscBld::eSkipComma )
+//			eWhat -= EscBld::eSkipComma;
+//		else
+		{
+			const char * sPrefix = m_pDelimiter ? m_pDelimiter->RawComma ( iComma, *this ) : nullptr;
+			GrowEnough ( iComma );
+			if ( iComma )
+			{
+				assert ( sPrefix );
+				memcpy ( end (), sPrefix, iComma );
+				m_iUsed+=iComma;
+			}
+		}
+
+		const char * pSrc = sText;
+		int iFinalLen = 0;
+		if ( eWhat & EscBld::eEscape )
+		{
+			if ( iLen<0 )
+			{
+				for ( ; *pSrc; ++pSrc )
+					if ( T::IsEscapeChar (*pSrc) )
+						++iFinalLen;
+			} else
+			{
+				for ( ; iLen; ++pSrc, --iLen )
+					if ( T::IsEscapeChar ( *pSrc ) )
+						++iFinalLen;
+			}
+			iLen = (int) (pSrc - sText);
+			iFinalLen += iLen+2; // 2 quotes: 1 prefix, 2 postfix.
+		} else if ( iLen<0 )
+			iFinalLen = iLen = (int) strlen (sText);
+		else
+			iFinalLen = iLen;
+
+		GrowEnough ( iFinalLen+1 ); // + zero terminator
+
+		auto * pCur = end();
+		switch (eWhat)
+		{
+		case EscBld::eNone:
+			memcpy ( pCur, sText, iFinalLen );
+			pCur += iFinalLen;
+			break;
+		case EscBld::eFixupSpace:
+			for ( ; iLen; --iLen )
+			{
+				char s = *sText++;
+				*pCur++ = strchr ( "\t\n\r", s ) ? ' ' : s ;
+			}
+			break;
+		case EscBld::eEscape:
+			*pCur++ = T::cQuote;
+			for ( ; iLen; --iLen )
+			{
+				char s = *sText++;
+				if ( T::IsEscapeChar ( s ) )
+				{
+					*pCur++ = '\\';
+					*pCur++ = T::GetEscapedChar ( s );
+				} else
+					*pCur++ = s;
+			}
+			*pCur++ = T::cQuote;
+			break;
+		case EscBld::eAll:
+		default:
+			*pCur++ = T::cQuote;
+			for ( ; iLen; --iLen )
+			{
+				char s = *sText++;
+				if ( T::IsEscapeChar ( s ) )
+				{
+					*pCur++ = '\\';
+					*pCur++ = T::GetEscapedChar ( s );
+				} else
+					*pCur++ = strchr ( "\t\n\r", s ) ? ' ' : s;
+			}
+			*pCur++ = T::cQuote;
+		}
+		*pCur = '\0';
+		m_iUsed += iFinalLen;
+	}
+};
+
+class ScopedComma_c
+{
+	StringBuilder_c * m_pOwner = nullptr;
+	StringBuilder_c::LazyComma_c * m_pLevel = nullptr;
+
+public:
+	ScopedComma_c () = default;
+	explicit ScopedComma_c ( StringBuilder_c & tOwner,
+		const char * sDel = ", ", const char * sPref = nullptr, const char * sTerm = nullptr )
+		: m_pOwner ( &tOwner )
+	{
+		m_pLevel = tOwner.StartBlock (sDel, sPref, sTerm);
+	}
+
+	void Init ( StringBuilder_c &tOwner,
+		const char * sDel = ", ", const char * sPref = nullptr, const char * sTerm = nullptr )
+	{
+		assert ( !m_pOwner );
+		if ( m_pOwner )
+			return;
+		m_pOwner = &tOwner;
+		m_pLevel = tOwner.StartBlock ( sDel, sPref, sTerm );
+	}
+
+	~ScopedComma_c()
+	{
+		if ( m_pOwner )
+			m_pOwner->FinishBlocks ( m_pLevel );
+	}
+};
+
 //////////////////////////////////////////////////////////////////////////
 
 /// name+int pair
@@ -2373,6 +2776,33 @@ struct CSphStrHashFunc
 template < typename T, int LENGTH = 256 >
 using SmallStringHash_T = CSphOrderedHash < T, CSphString, CSphStrHashFunc, LENGTH >;
 
+
+namespace sph {
+
+// used to simple add/delete strings and check if a string was added by [] op
+class StringSet : private SmallStringHash_T<bool>
+{
+	using BASE = SmallStringHash_T<bool>;
+public:
+	inline void Add ( const CSphString& sKey )
+	{
+		BASE::Add ( true, sKey );
+	}
+
+	inline void Delete ( const CSphString& sKey )
+	{
+		BASE::Delete ( sKey );
+	}
+
+	inline bool operator[] ( const CSphString& sKey ) const
+	{
+		if ( BASE::Exists ( sKey ) )
+			return BASE::operator[] ( sKey );
+		return false;
+	}
+};
+}
+
 //////////////////////////////////////////////////////////////////////////
 
 /// pointer with automatic safe deletion when going out of scope
@@ -2387,7 +2817,6 @@ public:
 	explicit operator bool () const				{ return m_pPtr!=nullptr; }
 	CSphScopedPtr &	operator = ( T * pPtr )		{ SafeDelete ( m_pPtr ); m_pPtr = pPtr; return *this; }
 	T *				LeakPtr ()					{ T * pPtr = m_pPtr; m_pPtr = NULL; return pPtr; }
-	void			ReplacePtr ( T * pPtr )		{ m_pPtr = pPtr; }
 	void			Reset ()					{ SafeDelete ( m_pPtr ); }
 
 protected:
@@ -2850,6 +3279,12 @@ void sphThreadDone ( int iFD );
 /// my create thread wrapper
 bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pArg, bool bDetached=false );
 
+/// assign a name to thread
+void sphThreadName ( SphThread_t * pThread, const char * sName );
+
+/// get name of a thread
+CSphString GetThreadName ( SphThread_t * pThread );
+
 /// my join thread wrapper
 bool sphThreadJoin ( SphThread_t * pThread );
 
@@ -3120,6 +3555,11 @@ public:
 	{
 		Verify ( Done());
 	}
+
+	explicit RwLock_t ( bool bPreferWriter )
+	{
+		Verify ( Init ( bPreferWriter ) );
+	}
 };
 
 
@@ -3149,7 +3589,7 @@ class SCOPED_CAPABILITY CSphScopedWLock : ISphNoncopyable
 {
 public:
 	/// lock on creation
-	CSphScopedWLock ( CSphRwlock & tLock ) ACQUIRE ( tLock )
+	CSphScopedWLock ( CSphRwlock & tLock ) ACQUIRE ( tLock ) EXCLUDES ( tLock )
 		: m_tLock ( tLock )
 	{
 		m_tLock.WriteLock();
@@ -3644,6 +4084,14 @@ public:
 		m_iSize = iSize;
 		m_iUsed = 0;
 		m_iMaxUsed = GetMaxLoad ( iSize );
+	}
+
+	void Clear()
+	{
+		for ( int i=0; i<m_iSize; i++ )
+			m_pHash[i] = Entry();
+
+		m_iUsed = 0;
 	}
 
 	~CSphHash()

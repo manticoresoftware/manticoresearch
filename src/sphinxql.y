@@ -107,6 +107,7 @@
 %token	TOK_RAND
 %token	TOK_RAMCHUNK
 %token	TOK_READ
+%token	TOK_REGEX
 %token	TOK_RECONFIGURE
 %token	TOK_RELOAD
 %token	TOK_REPEATABLE
@@ -479,12 +480,32 @@ filter_item:
 		}
 	| expr_ident TOK_IN '(' string_list ')'
 		{
-			if ( !pParser->AddStringListFilter ( $1, $4, false ) )
+			if ( !pParser->AddStringListFilter ( $1, $4, STRLIST::IN_ ) )
 				YYERROR;
 		}
 	| expr_ident TOK_NOT TOK_IN '(' string_list ')'
 		{
-			if ( !pParser->AddStringListFilter ( $1, $5, true ) )
+			if ( !pParser->AddStringListFilter ( $1, $5, STRLIST::IN_, true ) )
+				YYERROR;
+		}
+	| expr_ident TOK_ANY '(' string_list ')'
+		{
+			if ( !pParser->AddStringListFilter ( $1, $4, STRLIST::ANY ) )
+				YYERROR;
+		}
+	| expr_ident TOK_NOT TOK_ANY '(' string_list ')'
+    	{
+    		if ( !pParser->AddStringListFilter ( $1, $5, STRLIST::ANY, true ) )
+    			YYERROR;
+    	}
+	| expr_ident TOK_ALL '(' string_list ')'
+		{
+			if ( !pParser->AddStringListFilter ( $1, $4, STRLIST::ALL ) )
+				YYERROR;
+		}
+	| expr_ident TOK_NOT TOK_ALL '(' string_list ')'
+		{
+			if ( !pParser->AddStringListFilter ( $1, $5, STRLIST::ALL, true ) )
 				YYERROR;
 		}
 	| expr_ident TOK_IN TOK_USERVAR
@@ -670,6 +691,13 @@ filter_item:
 	| mva_aggr TOK_GTE const_int
 		{
 			AddMvaRange ( pParser, $1, $3.m_iValue, INT64_MAX );
+		}
+	| TOK_REGEX '(' json_field ',' TOK_QUOTED_STRING ')'
+		{
+			TRACK_BOUNDS ( $$, $1, $6 );
+			CSphFilterSettings * pFilter = pParser->AddFilter ( $$, SPH_FILTER_EXPRESSION );
+			if ( !pFilter )
+				YYERROR;
 		}
 	;
 
@@ -975,6 +1003,7 @@ function:
 	| TOK_REMAP '(' expr ',' expr ',' '(' arglist ')' ',' '(' arglist ')' ')' { TRACK_BOUNDS ( $$, $1, $14 ); }
 	| TOK_RAND '(' ')'				{ TRACK_BOUNDS ( $$, $1, $3 ); }
 	| TOK_RAND '(' arglist ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); }
+	| TOK_REGEX '(' arglist ')'		{ TRACK_BOUNDS ( $$, $1, $4 ); }
 	;
 	
 arglist:

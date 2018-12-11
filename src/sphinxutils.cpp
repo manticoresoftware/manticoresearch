@@ -18,6 +18,7 @@
 #include "sphinxint.h"
 #include "sphinxplugin.h"
 #include "sphinxrlp.h"
+#include "sphinxstem.h"
 
 #include <ctype.h>
 #include <fcntl.h>
@@ -104,6 +105,36 @@ void sphSplit ( StrVec_t & dOut, const char * sIn )
 			dOut.Add().SetBinary ( sNext, int (p-sNext) );
 	}
 }
+
+void sphSplitApply ( const char * sIn, int iSize, StrFunctor &&dFunc )
+{
+	if ( !sIn )
+		return;
+
+	if (!dFunc)
+		return;
+
+	const char * p = ( char * ) sIn;
+	if ( iSize<0 ) iSize = strlen (p);
+	const char * pEnd = p + iSize;
+	while ( p < pEnd )
+	{
+		// skip non-alphas
+		while ( ( p<pEnd ) && !sphIsAlpha ( *p ) )
+			p++;
+		if ( p>=pEnd )
+			break;
+
+		// this is my next token
+		assert ( sphIsAlpha ( *p ) );
+		const char * sNext = p;
+		while ( ( p<pEnd ) && sphIsAlpha ( *p ) )
+			++p;
+		if ( sNext!=p )
+			dFunc ( sNext, int ( p - sNext ) );
+	}
+}
+
 
 // split by any char from sBounds.
 // if line starts from a bound char, first splitted str will be an empty string
@@ -1946,34 +1977,60 @@ void sphSetLogger ( SphLogger_fn fnLog )
 //////////////////////////////////////////////////////////////////////////
 // CRASH REPORTING
 //////////////////////////////////////////////////////////////////////////
+inline static void Grow (char*, int) {};
+inline static void Grow ( StringBuilder_c &tBuilder, int iInc ) { tBuilder.GrowEnough ( iInc ); }
 
-template <typename Uint>
-static void UItoA ( char** ppOutput, Uint uVal, int iBase=10, int iWidth=0, int iPrec=0, char cFill=' ' )
+inline static char* tail (char* p) { return p; }
+inline static char* tail ( StringBuilder_c &tBuilder ) { return tBuilder.end(); }
+
+template <typename Num, typename PCHAR>
+static void NtoA_T ( PCHAR* ppOutput, Num uVal, int iBase=10, int iWidth=0, int iPrec=0, char cFill=' ' )
 {
 	assert ( ppOutput );
-	assert ( *ppOutput );
+	assert ( tail ( *ppOutput ) );
+	assert ( iWidth>=0 );
+	assert ( iPrec>=0 );
+	assert ( iBase>0 && iBase<=16);
 
-	const char cDigits[] = "0123456789abcdef";
-
-	if ( iWidth && iPrec )
-	{
-		iPrec = iWidth;
-		iWidth = 0;
-	}
+	const char cAllDigits[] = "fedcba9876543210123456789abcdef";
+	// point to the '0'. This hack allows to process negative numbers,
+	// since digit[x%10] for both x==2 and x==-2 is '2'.
+	const char * cDigits = cAllDigits+sizeof(cAllDigits)/2-1;
+	const char cZero = '0';
+	auto &pOutput = *ppOutput;
 
 	if ( !uVal )
 	{
 		if ( !iPrec && !iWidth )
-			*(*ppOutput)++ = cDigits[0];
-		else
 		{
-			while ( iPrec-- )
-				*(*ppOutput)++ = cDigits[0];
+			*tail ( pOutput ) = cZero;
+			++pOutput;
+		} else
+		{
+			if ( !iPrec )
+				++iPrec;
+			else
+				cFill = ' ';
+
 			if ( iWidth )
 			{
-				while ( --iWidth )
-					*(*ppOutput)++ = cFill;
-				*(*ppOutput)++ = cDigits[0];
+				if ( iWidth<iPrec )
+					iWidth = iPrec;
+				iWidth -= iPrec;
+			}
+
+			if ( iWidth>=0 )
+			{
+				Grow ( pOutput, iWidth );
+				memset ( tail ( pOutput ), cFill, iWidth );
+				pOutput += iWidth;
+			}
+
+			if ( iPrec>=0 )
+			{
+				Grow ( pOutput, iPrec );
+				memset ( tail ( pOutput ), cZero, iPrec );
+				pOutput += iPrec;
 			}
 		}
 		return;
@@ -1982,7 +2039,11 @@ static void UItoA ( char** ppOutput, Uint uVal, int iBase=10, int iWidth=0, int 
 	const BYTE uMaxIndex = 31; // 20 digits for MAX_INT64 in decimal; let it be 31 (32 digits max).
 	char CBuf[uMaxIndex+1];
 	char *pRes = &CBuf[uMaxIndex];
-	char *& pOutput = *ppOutput;
+
+
+	BYTE uNegative = 0;
+	if ( uVal<0 )
+		++uNegative;
 
 	while ( uVal )
 	{
@@ -1991,67 +2052,174 @@ static void UItoA ( char** ppOutput, Uint uVal, int iBase=10, int iWidth=0, int 
 	}
 
 	auto uLen = (BYTE)( uMaxIndex - (pRes-CBuf) );
+	if (!uLen)
+		uNegative = 0;
+
+	if ( iPrec && iWidth && cFill==cZero)
+		cFill=' ';
 
 	if ( iWidth )
-		while ( uLen < iWidth )
-		{
-			*pOutput++ = cFill;
-			iWidth--;
-		}
+		iWidth = iWidth - Max ( iPrec, uLen ) - uNegative;
 
-	if ( iPrec )
+	if ( uNegative && cFill==cZero )
 	{
-		while ( uLen < iPrec )
-		{
-			*pOutput++=cDigits[0];
-			iPrec--;
-		}
-		iPrec = uLen-iPrec;
+		*tail ( pOutput ) = '-';
+		++pOutput;
+		uNegative=0;
 	}
 
-	while ( pRes < CBuf+uMaxIndex-iPrec )
-		*pOutput++ = *++pRes;
+	if ( iWidth>=0 )
+	{
+		Grow ( pOutput, iWidth );
+		memset ( tail ( pOutput ), cFill, iWidth );
+		pOutput += iWidth;
+	}
+
+	if ( uNegative )
+	{
+		*tail ( pOutput ) = '-';
+		++pOutput;
+	}
+
+	if ( iPrec )
+		iPrec -= uLen;
+
+	if ( iPrec>=0 )
+	{
+		Grow ( pOutput, iPrec );
+		memset ( tail ( pOutput ), cZero, iPrec );
+		pOutput += iPrec;
+	}
+
+	Grow ( pOutput, uLen );
+	memcpy ( tail ( pOutput ), pRes+1, uLen );
+	pOutput+= uLen;
 }
 
-void sphUItoA ( char ** ppOutput, DWORD uVal, int iBase, int iWidth, int iPrec, char cFill )
+static const int nDividers = 10;
+static const int Dividers[nDividers] = { 1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000 };
+
+template < typename Num, typename PCHAR >
+void IFtoA_T ( PCHAR * pOutput, Num nVal, int iPrec )
 {
-	return UItoA ( ppOutput, uVal, iBase, iWidth, iPrec, cFill );
+	assert ( iPrec<nDividers );
+	auto &pBegin = *pOutput;
+	if ( nVal<0 )
+	{
+		*tail ( pBegin ) = '-';
+		++pBegin;
+		nVal = -nVal;
+	}
+	auto iInt = nVal / Dividers[iPrec];
+	auto iFrac = nVal % Dividers[iPrec];
+	::NtoA_T ( &pBegin, iInt );
+	*tail ( pBegin ) = '.';
+	++pBegin;
+	::NtoA_T ( &pBegin, iFrac, 10, 0, iPrec, '0' );
 }
 
-static int sphVSprintf ( char * pOutput, const char * sFmt, va_list ap )
+template <typename Num>
+inline static void NtoA ( char** ppOutput, Num uVal, int iBase = 10, int iWidth = 0, int iPrec = 0, char cFill = ' ' )
+{
+	NtoA_T ( ppOutput, uVal, iBase, iWidth, iPrec, cFill);
+}
+
+namespace sph {
+
+#define DECLARE_NUMTOA(NTOA,TYPE) \
+    template <> \
+	int NTOA ( char * pOutput, TYPE uVal, int iBase, int iWidth, int iPrec, char cFill ) \
+	{ \
+		auto pBegin = pOutput; \
+		::NtoA ( &pBegin, uVal, iBase, iWidth, iPrec, cFill ); \
+		return int ( pBegin - pOutput ); \
+	}
+
+	// unsigned
+	DECLARE_NUMTOA ( UItoA, unsigned int );
+	DECLARE_NUMTOA ( UItoA, unsigned long );
+	DECLARE_NUMTOA ( UItoA, unsigned long long);
+
+	// signed
+	DECLARE_NUMTOA ( ItoA, int );
+	DECLARE_NUMTOA ( ItoA, long );
+	DECLARE_NUMTOA ( ItoA, long long );
+
+	// universal
+	DECLARE_NUMTOA ( NtoA, unsigned int );
+	DECLARE_NUMTOA ( NtoA, unsigned long );
+	DECLARE_NUMTOA ( NtoA, unsigned long long );
+	DECLARE_NUMTOA ( NtoA, int );
+	DECLARE_NUMTOA ( NtoA, long );
+	DECLARE_NUMTOA ( NtoA, long long );
+
+#undef DECLARE_NUMTOA
+
+	int IFtoA ( char * pOutput, int nVal, int iPrec )
+	{
+		auto pBegin = pOutput;
+		IFtoA_T ( &pBegin, nVal, iPrec );
+		return int ( pBegin - pOutput );
+	}
+
+	int IFtoA ( char * pOutput, int64_t nVal, int iPrec )
+	{
+		auto pBegin = pOutput;
+		IFtoA_T ( &pBegin, nVal, iPrec );
+		return int ( pBegin - pOutput );
+	}
+
+template <typename PCHAR>
+void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 {
 	enum eStates { SNORMAL, SPERCENT, SHAVEFILL, SINWIDTH, SINPREC };
 	eStates state = SNORMAL;
 	size_t iPrec = 0;
 	size_t iWidth = 0;
 	char cFill = ' ';
-	const char * pBegin = pOutput;
 	bool bHeadingSpace = true;
+	auto &pOutput = *_pOutput;
 
 	char c;
 	while ( ( c = *sFmt++ )!=0 )
 	{
-		// handle percent
-		if ( c=='%' )
-		{
-			if ( state==SNORMAL )
-			{
-				state = SPERCENT;
-				iPrec = 0;
-				iWidth = 0;
-				cFill = ' ';
-			} else
-			{
-				state = SNORMAL;
-				*pOutput++ = c;
-			}
-			continue;
-		}
-
 		// handle regular chars
 		if ( state==SNORMAL )
 		{
-			*pOutput++ = c;
+			auto sPercent = strchr (sFmt-1, '%');
+			if ( !sPercent ) // no formatters, only plain chars
+			{
+				auto uLen = strlen (sFmt-1);
+				Grow ( pOutput, uLen );
+				memcpy ( tail ( pOutput ), sFmt-1, uLen );
+				pOutput += uLen;
+				sFmt+=uLen-1;
+				continue;
+			}
+
+			auto uLen = sPercent - sFmt + 1;
+			if ( uLen )
+			{
+				Grow ( pOutput, uLen );
+				memcpy ( tail ( pOutput ), sFmt - 1, uLen );
+				pOutput += uLen;
+				sFmt+=uLen;
+			}
+
+			// handle percent
+			state = SPERCENT;
+			iPrec = 0;
+			iWidth = 0;
+			cFill = ' ';
+			continue;
+		}
+
+		// handle percent
+		if ( c=='%' && state!=SNORMAL )
+		{
+			state = SNORMAL;
+			*tail ( pOutput ) = c;
+			++pOutput;
 			continue;
 		}
 
@@ -2097,20 +2265,31 @@ static int sphVSprintf ( char * pOutput, const char * sFmt, va_list ap )
 					pValue = "(null)";
 				size_t iValue = strlen ( pValue );
 
-				if ( iWidth && bHeadingSpace )
-					while ( iValue < iWidth-- )
-						*pOutput++ = ' ';
+				if ( iPrec && iPrec<iValue )
+					iValue = iPrec;
 
-				if ( iPrec && iPrec < iValue )
-					while ( iPrec-- )
-						*pOutput++ = *pValue++;
-				else
-					while ( *pValue )
-						*pOutput++ = *pValue++;
+				if ( iWidth && iValue>iWidth )
+					iWidth = 0;
+
+				if ( iWidth )
+					iWidth-=iValue;
+
+				Grow ( pOutput, iWidth );
+				if ( iWidth && bHeadingSpace )
+				{
+					memset ( tail ( pOutput ), ' ', iWidth );
+					pOutput += iWidth;
+				}
+
+				Grow ( pOutput, iValue );
+				memcpy ( tail ( pOutput ), pValue, iValue );
+				pOutput += iValue;
 
 				if ( iWidth && !bHeadingSpace )
-					while ( iValue < iWidth-- )
-						*pOutput++ = ' ';
+				{
+					memset ( tail ( pOutput ), ' ', iWidth );
+					pOutput += iWidth;
+				}
 
 				state = SNORMAL;
 				break;
@@ -2119,17 +2298,31 @@ static int sphVSprintf ( char * pOutput, const char * sFmt, va_list ap )
 		case 'p': // pointer
 			{
 				void * pValue = va_arg ( ap, void * );
-				uint64_t uValue = uint64_t ( pValue );
-				UItoA ( &pOutput, uValue, 16, iWidth, iPrec, cFill );
+				auto uValue = uint64_t ( pValue );
+				::NtoA_T ( &pOutput, uValue, 16, iWidth, iPrec, cFill );
 				state = SNORMAL;
 				break;
 			}
 
-		case 'x': // hex integer
-		case 'd': // decimal integer
+		case 'x': // hex unsigned integer
+		case 'u': // decimal unsigned
 			{
 				DWORD uValue = va_arg ( ap, DWORD );
-				UItoA ( &pOutput, uValue, ( c=='x' ) ? 16 : 10, iWidth, iPrec, cFill );
+				::NtoA_T ( &pOutput, uValue, ( c=='x' ) ? 16 : 10, iWidth, iPrec, cFill );
+				state = SNORMAL;
+				break;
+			}
+		case 'd': // decimal integer
+			{
+				int iValue = va_arg ( ap, int );
+				::NtoA_T ( &pOutput, iValue, 10, iWidth, iPrec, cFill );
+				state = SNORMAL;
+				break;
+			}
+
+		case 'i': // ignore (skip) current integer. Output nothing.
+			{
+				int VARIABLE_IS_NOT_USED iValue = va_arg ( ap, int );
 				state = SNORMAL;
 				break;
 			}
@@ -2137,22 +2330,101 @@ static int sphVSprintf ( char * pOutput, const char * sFmt, va_list ap )
 		case 'l': // decimal int64
 			{
 				int64_t iValue = va_arg ( ap, int64_t );
-				UItoA ( &pOutput, iValue, 10, iWidth, iPrec, cFill );
+				::NtoA_T ( &pOutput, iValue, 10, iWidth, iPrec, cFill );
+				state = SNORMAL;
+				break;
+			}
+
+		case 'U': // decimal uint64
+			{
+				uint64_t iValue = va_arg ( ap, uint64_t );
+				::NtoA_T ( &pOutput, iValue, 10, iWidth, iPrec, cFill );
+				state = SNORMAL;
+				break;
+			}
+
+		case 'D': // fixed-point signed 64-bit
+			{
+				int64_t iValue = va_arg ( ap, int64_t );
+				::IFtoA_T ( &pOutput, iValue, iPrec );
+				state = SNORMAL;
+				break;
+			}
+
+		case 'F': // fixed-point signed 32-bit
+			{
+				int iValue = va_arg ( ap, int );
+				::IFtoA_T ( &pOutput, iValue, iPrec );
+				state = SNORMAL;
+				break;
+			}
+
+		case 'f': // float (fall-back to standard)
+			{
+				double fValue = va_arg ( ap, double );
+
+				// extract current format from source format line
+				char sFormat[32] = {0};
+				auto *pF = sFmt;
+				while ( *--pF!='%' );
+				memcpy ( sFormat, pF, sFmt-pF );
+
+				// invoke standard sprintf
+				Grow ( pOutput, Max ( iWidth, (size_t)32 ) ); // ensure 32 is enough to take any flow value.
+				pOutput += sprintf ( tail ( pOutput ), sFormat, fValue );
 				state = SNORMAL;
 				break;
 			}
 
 		default:
 			state = SNORMAL;
-			*pOutput++ = c;
+			*tail ( pOutput ) = c;
+			++pOutput;
 		}
 	}
 
-	// final zero to EOL
-	*pOutput++ = '\n';
-	return int ( pOutput - pBegin );
+	// final zero
+	*tail ( pOutput ) = c;
 }
 
+	int vSprintf ( char * pOutput, const char * sFmt, va_list ap )
+	{
+		auto pBegin = pOutput;
+		sph::vSprintf_T ( &pOutput, sFmt, ap );
+		return int ( pOutput - pBegin );
+	}
+
+	int Sprintf ( char * pOutput, const char * sFmt, ... )
+	{
+		auto pBegin = pOutput;
+		va_list ap;
+		va_start ( ap, sFmt );
+		sph::vSprintf_T ( &pOutput, sFmt, ap );
+		va_end ( ap );
+		return int ( pOutput - pBegin );
+	}
+
+	void vSprintf ( StringBuilder_c &dOutput, const char * sFmt, va_list ap )
+	{
+		sph::vSprintf_T ( &dOutput, sFmt, ap );
+	}
+
+	void Sprintf ( StringBuilder_c& dOutput, const char * sFmt, ... )
+	{
+		va_list ap;
+		va_start ( ap, sFmt );
+		vSprintf ( dOutput, sFmt, ap );
+		va_end ( ap );
+	}
+
+} // namespace sph
+
+static int sphVSprintf ( char * pOutput, const char * sFmt, va_list ap )
+{
+	auto iRes = sph::vSprintf (pOutput,sFmt,ap);
+	pOutput[iRes++]='\n'; // final zero to EOL
+	return iRes;
+}
 
 bool sphWrite ( int iFD, const void * pBuf, size_t iSize )
 {
@@ -2196,6 +2468,7 @@ static const char g_sSourceTail[] = "> source.txt\n";
 static const char * g_pArgv[128] = { "addr2line", "-e", "./searchd", "0x0", NULL };
 static char g_sNameBuf[512] = {0};
 static CSphString g_sBinaryName;
+static bool g_bHaveJemalloc = true;
 
 bool IsDebuggerPresent()
 {
@@ -2323,11 +2596,10 @@ static bool DumpGdb ( int iFD )
 			} else if ( iExited == iWait30 )
 			{
 				iWait30 = 0;
-				char tmp[128];
 				if ( iWorker )
 				{
-					sphSafeInfo ( tmp, "pkill -KILL -P %d", iWorker );
-					::system ( tmp );
+					sphSafeInfo ( g_sNameBuf, "pkill -KILL -P %d", iWorker );
+					::system ( g_sNameBuf );
 				}
 			} else if ( iExited == iWait60 )
 			{
@@ -2350,7 +2622,7 @@ static bool DumpGdb ( int iFD )
 	if ( iRes==-1 || iRes==0 )
 		return false;
 
-	// master branch is mirrored on githup, so could generate more info here.
+	// master branch is mirrored on github, so could generate more info here.
 	if ( strncmp ( GIT_BRANCH_ID, "git branch master", 17 ) == 0 )
 		sphSafeInfo ( iFD,
 			"You can obtain the sources of this version from https://github.com/manticoresoftware/manticoresearch/archive/" SPH_GIT_COMMIT_ID ".zip\n"
@@ -2360,8 +2632,8 @@ static bool DumpGdb ( int iFD )
 	sphSafeInfo ( iFD,
 	  "\nUnpack the sources by command:\n"
 	  "  mkdir -p /tmp/manticore && unzip manticore.zip -d /tmp/manticore\n\n"
-	  "Also suggest to append a substitution def to your ~/.gdbinit file:\n"
-	  "  set substitute-path \"" SOURCE_DIR "\" /tmp/manticore/manticoresearch-" SPH_GIT_COMMIT_ID );
+	  "For comfortable debug also suggest to append a substitution def to your ~/.gdbinit file:\n"
+	  "  set substitute-path \"" GDB_SOURCE_DIR "\" /tmp/manticore/manticoresearch-" SPH_GIT_COMMIT_ID );
 	return true;
 #else
 	return false;
@@ -2514,7 +2786,8 @@ void sphBacktrace ( int iFD, bool bSafe )
 			"Look into the chapter 'Reporting bugs' in the documentation\n"
 			"(http://docs.manticoresearch.com/latest/html/reporting_bugs.html)" );
 
-	if ( DumpGdb ( iFD ) )
+	// wo jemalloc allocator might deadlock in case of crash at free function
+	if ( g_bHaveJemalloc && DumpGdb ( iFD ) )
 		return;
 	// convert all BT addresses to source code lines
 	int iCount = Min ( iDepth, (int)( sizeof(g_pArgv)/sizeof(g_pArgv[0]) - SPH_BT_ADDRS - 1 ) );
@@ -2522,7 +2795,7 @@ void sphBacktrace ( int iFD, bool bSafe )
 	char * pCur = g_pBacktrace;
 	for ( int i=0; i<iCount; i++ )
 	{
-		// early our on strings buffer overrun
+		// early out on strings buffer overrun
 		if ( pCur>=g_pBacktrace+sizeof(g_pBacktrace)-48 )
 		{
 			iCount = i;
@@ -2607,6 +2880,19 @@ void sphBacktraceSetBinaryName ( const char * sName )
 	g_pArgv[SPH_BT_BINARY_NAME] = g_sBinaryName.cstr();
 }
 
+void sphBacktraceInit()
+{
+#if HAVE_BACKTRACE
+	backtrace ( g_pBacktraceAddresses, SPH_BACKTRACE_ADDR_COUNT );
+#endif // !HAVE_BACKTRACE
+
+	// check that jemalloc is present
+#if HAVE_DLOPEN
+	void * fnJMalloc = dlsym ( RTLD_DEFAULT, "mallctl" );
+	g_bHaveJemalloc = ( fnJMalloc!=nullptr );
+#endif
+}
+
 #else // USE_WINDOWS
 
 const char * DoBacktrace ( int, int )
@@ -2642,6 +2928,10 @@ void sphBacktrace ( EXCEPTION_POINTERS * pExc, const char * sFile )
 }
 
 void sphBacktraceSetBinaryName ( const char * )
+{
+}
+
+void sphBacktraceInit()
 {
 }
 
@@ -2920,3 +3210,125 @@ void CrashQuerySetupHandlers ( CrashQuerySetTop_fn * pSetTop, CrashQueryGet_fn *
 	g_pCrashQueryGet = pGet;
 	g_pCrashQuerySet = pSet;
 }
+
+
+/// collect warnings/errors from any suitable context.
+Warner_c::Warner_c ( const char * sDel, const char * sPref, const char * sTerm )
+	: m_sWarnings ( sDel, sPref, sTerm )
+	, m_sErrors ( sDel, sPref, sTerm )
+	, m_sDel ( sDel )
+	, m_sPref ( sPref )
+	, m_sTerm ( sTerm )
+{}
+
+Warner_c::Warner_c ( Warner_c &&rhs ) noexcept
+{
+	m_sWarnings = std::move (rhs.m_sWarnings);
+	m_sErrors = std::move (rhs.m_sErrors);
+	m_sDel = rhs.m_sDel;
+	m_sPref = rhs.m_sPref;
+	m_sTerm = rhs.m_sTerm;
+}
+
+Warner_c& Warner_c::operator= ( Warner_c && rhs ) noexcept
+{
+	if ( &rhs!=this )
+	{
+		m_sWarnings = std::move ( rhs.m_sWarnings );
+		m_sErrors = std::move ( rhs.m_sErrors );
+		m_sDel = rhs.m_sDel;
+		m_sPref = rhs.m_sPref;
+		m_sTerm = rhs.m_sTerm;
+	}
+	return *this;
+}
+
+
+bool Warner_c::Err ( const char * sFmt, ... )
+{
+	va_list ap;
+	va_start ( ap, sFmt );
+	m_sErrors.vSprintf ( sFmt, ap );
+	va_end ( ap );
+	return false;
+}
+
+bool Warner_c::Err ( const CSphString &sMsg )
+{
+	m_sErrors << sMsg;
+	return false;
+}
+
+void Warner_c::Warn ( const char * sFmt, ... )
+{
+	va_list ap;
+	va_start ( ap, sFmt );
+	m_sWarnings.vSprintf ( sFmt, ap );
+	va_end ( ap );
+}
+
+void Warner_c::Warn ( const CSphString &sMsg )
+{
+	m_sWarnings << sMsg;
+}
+
+void Warner_c::Clear ()
+{
+	m_sErrors.Clear ();
+	m_sWarnings.Clear();
+	if ( m_sDel || m_sPref || m_sTerm )
+	{
+		m_sErrors.StartBlock ( m_sDel, m_sPref, m_sTerm );
+		m_sWarnings.StartBlock ( m_sDel, m_sPref, m_sTerm );
+	}
+}
+
+const char * Warner_c::sError () const
+{
+	return m_sErrors.cstr();
+}
+
+const char * Warner_c::sWarning () const
+{
+	return m_sWarnings.cstr();
+}
+
+void Warner_c::AddStringsFrom ( const Warner_c &sSrc )
+{
+	if ( !sSrc.WarnEmpty () )
+		m_sWarnings << sSrc.sWarning ();
+
+	if ( !sSrc.ErrEmpty () )
+		m_sWarnings << sSrc.sError ();
+}
+
+void Warner_c::MoveErrorsTo ( CSphString &sTarget )
+{
+	m_sErrors.FinishBlocks();
+	m_sErrors.MoveTo ( sTarget );
+}
+
+void Warner_c::MoveWarningsTo ( CSphString &sTarget )
+{
+	m_sWarnings.FinishBlocks();
+	m_sWarnings.MoveTo ( sTarget );
+}
+
+void Warner_c::MoveAllTo ( CSphString &sTarget )
+{
+	m_sErrors.FinishBlocks();
+	m_sWarnings.FinishBlocks();
+	StringBuilder_c sCollection ( "; ", m_sPref, m_sTerm );
+
+	sCollection.StartBlock ( nullptr, "ERRORS: ");
+	sCollection << m_sErrors.cstr();
+	sCollection.FinishBlock();
+
+	sCollection.StartBlock ( nullptr, "WARNINGS: " );
+	sCollection << m_sWarnings.cstr();
+
+	sCollection.FinishBlocks();
+	sCollection.MoveTo ( sTarget );
+	Clear();
+}
+

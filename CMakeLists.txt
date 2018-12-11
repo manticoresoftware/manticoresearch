@@ -305,6 +305,7 @@ else ( WIN32 )
 
 	message ( STATUS "Checking for PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP flag" )
 	include ( check_rwlock_prefer_writer )
+	include ( check_vitable_pthread_setname_np )
 
 	message ( STATUS "Configuring the options..." )
 	message ( STATUS "Option DISABLE_MEMROUTINES ${DISABLE_MEMROUTINES}" )

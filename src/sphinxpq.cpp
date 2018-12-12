@@ -1831,7 +1831,6 @@ bool PercolateIndex_c::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * 
 									ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs &tArgs ) const
 {
 	assert ( pQuery );
-	CSphQueryProfile * pProfile = pResult->m_pProfile;
 
 	MEMORY ( MEM_DISK_QUERY );
 

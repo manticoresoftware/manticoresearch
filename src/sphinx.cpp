@@ -19659,7 +19659,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 						iLastEmpty = INT_MAX;
 
 						// check offset (index)
-						if ( uMvaID==uLastID && bIsSpaValid && rdMva.GetPos()!=int(sizeof(DWORD))*uSpaOffset )
+						if ( uMvaID==uLastID && bIsSpaValid && rdMva.GetPos()/sizeof(DWORD)!=uSpaOffset )
 						{
 							LOC_FAIL(( fp, "unexpected MVA docid (row=" INT64_FMT ", mvaattr=%d, docid expected=" DOCID_FMT ", got=" DOCID_FMT ", expected=" INT64_FMT ", got=%u)",
 								iRow, iItem, uLastID, uMvaID, rdMva.GetPos()/sizeof(DWORD), uSpaOffset ));
@@ -19841,7 +19841,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 
 				int64_t iBlockPos = sizeof(DWORD) * m_iMinMaxIndex + sizeof(DWORD) * iBlock * uMinMaxStride * 2;
 				// check docid vs global range
-				if ( iBlockPos + sizeof(DWORD) * uMinMaxStride > iMinMaxEnd )
+				if ( iBlockPos + int(sizeof(DWORD)) * uMinMaxStride > iMinMaxEnd )
 					LOC_FAIL(( fp, "unexpected block index end (row=" INT64_FMT ", block=" INT64_FMT ")",
 						iIndexEntry, iBlock ));
 

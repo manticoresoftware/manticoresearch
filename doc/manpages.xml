@@ -394,7 +394,7 @@ $ indexer mysmallindex mybigindex</programlisting>
             each one rotated into <command>searchd</command> as soon as
             possible. With <option>--sighup-each</option>,
             <command>indexer</command> will send a <emphasis>SIGHUP</emphasis>
-            signal to <command>searchd</command> after succesfully completing
+            signal to <command>searchd</command> after successfully completing
             the work on each index. (The default behavior is to send a single
             <emphasis>SIGHUP</emphasis> after all the indexes were
             built.)</para>
@@ -442,7 +442,7 @@ $ indexer mysmallindex mybigindex</programlisting>
 
     <refsect1>
 		<title>Copyright</title>
-		<para>Copyright  2017 Manticore Software LTD (http://manticoresearch.com),  
+		<para>Copyright  2017-2018 Manticore Software LTD (http://manticoresearch.com),  
 		2008-2016 Sphinx Technologies Inc (http://sphinxsearch.com),
 		2001-2016 Andrew Aksyonoff</para>
 		<para>Permission is granted to copy, distribute and/or modify this document
@@ -645,7 +645,7 @@ $ indexer mysmallindex mybigindex</programlisting>
           <term><option>--iostats</option></term>
 
           <listitem>
-            <para>Used in conjuction with the logging options (the
+            <para>Used in conjunction with the logging options (the
             <option>query_log</option> will need to have been activated in
             <filename>sphinx.conf</filename>) to provide more detailed
             information on a per-query basis as to the input/output operations
@@ -675,7 +675,7 @@ $ indexer mysmallindex mybigindex</programlisting>
             leading slash. As the last param you can also specify a protocol
             handler (listener) to be used for connections on this socket.
             Supported protocol values are 'sphinx' (Sphinx 0.9.x API protocol)
-            and 'mysql41' (MySQL protocol used since 4.1 upto at least
+            and 'mysql41' (MySQL protocol used since 4.1 up to at least
             5.1).</para>
           </listitem>
         </varlistentry>
@@ -916,7 +916,7 @@ $ searchd --config /home/myuser/sphinx.conf --status</programlisting>
 
     <refsect1>
 		<title>Copyright</title>
-		<para>Copyright  2017 Manticore Software LTD (http://manticoresearch.com),  
+		<para>Copyright  2017-2018 Manticore Software LTD (http://manticoresearch.com),  
 		2008-2016 Sphinx Technologies Inc (http://sphinxsearch.com),
 		2001-2016 Andrew Aksyonoff</para>
 		<para>Permission is granted to copy, distribute and/or modify this document
@@ -1040,7 +1040,7 @@ zoning &gt; zoning </programlisting></para>
 
     <refsect1>
 		<title>Copyright</title>
-		<para>Copyright  2017 Manticore Software LTD (http://manticoresearch.com),  
+		<para>Copyright  2017-2018 Manticore Software LTD (http://manticoresearch.com),  
 		2008-2016 Sphinx Technologies Inc (http://sphinxsearch.com),
 		2001-2016 Andrew Aksyonoff</para>
 		<para>Permission is granted to copy, distribute and/or modify this document
@@ -1166,7 +1166,7 @@ zoning &gt; zoning </programlisting></para>
           <replaceable>KEYWORD</replaceable></term>
 
           <listitem>
-            <para>dumps all the hits (occurences) of a given keyword in a
+            <para>dumps all the hits (occurrences) of a given keyword in a
             given index, with keyword specified as text.</para>
           </listitem>
         </varlistentry>
@@ -1177,7 +1177,7 @@ zoning &gt; zoning </programlisting></para>
           <replaceable>ID</replaceable></term>
 
           <listitem>
-            <para>dumps all the hits (occurences) of a given keyword in a
+            <para>dumps all the hits (occurrences) of a given keyword in a
             given index, with keyword specified as internal numeric ID.</para>
           </listitem>
         </varlistentry>
@@ -1273,7 +1273,7 @@ zoning &gt; zoning </programlisting></para>
 
     <refsect1>
 		<title>Copyright</title>
-		<para>Copyright  2017 Manticore Software LTD (http://manticoresearch.com),  
+		<para>Copyright  2017-2018 Manticore Software LTD (http://manticoresearch.com),  
 		2008-2016 Sphinx Technologies Inc (http://sphinxsearch.com),
 		2001-2016 Andrew Aksyonoff</para>
 		<para>Permission is granted to copy, distribute and/or modify this document
@@ -1304,4 +1304,133 @@ zoning &gt; zoning </programlisting></para>
       <filename>/usr/share/doc/manticore</filename>.</para>
     </refsect1>
   </refentry>
+
+  <refentry id="wordbreaker">
+    <refmeta>
+      <refentrytitle>wordbreaker</refentrytitle>
+
+      <manvolnum>1</manvolnum>
+
+      <refmiscinfo class="manual">Manticore Search</refmiscinfo>
+
+      <refmiscinfo class="version">2.7.5</refmiscinfo>
+    </refmeta>
+
+    <refnamediv>
+      <refname>wordbreaker</refname>
+
+      <refpurpose>Manticore Search tool to split compounds into individual words</refpurpose>
+    </refnamediv>
+
+    <refsynopsisdiv>
+      <cmdsynopsis>
+        <command>wordbreaker</command>
+
+        <arg choice="req">command</arg>
+
+        <arg>options</arg>
+      </cmdsynopsis>
+    </refsynopsisdiv>
+
+    <refsect1>
+      <title>Description</title>
+
+      <para>Manticore Search is a collection of programs that aim to provide high
+      quality fulltext search.</para>
+
+      <para><command>wordbreaker</command> is a tool to split compounds (eg URL parts) into individual words.</para>
+    </refsect1>
+
+    <refsect1>
+      <title>Commands</title>
+
+      <para>The commands are as follows:</para>
+
+      <variablelist>
+        <varlistentry>
+          <term><option>test</option>
+          <replaceable>TESTFILE</replaceable></term>
+
+          <listitem>
+            <para>do a splitting precision test on TESTFILE</para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><option>bench</option>
+          <replaceable>TESTFILE</replaceable></term>
+
+          <listitem>
+            <para>do a splitting performance benchmark on TESTFILE</para>
+          </listitem>
+        </varlistentry>
+
+        <varlistentry>
+          <term><option>split</option></term>
+           <listitem>
+            <para>do splitting (read from stdin, split, print to stdout)</para>
+          </listitem>
+        </varlistentry>
+		
+      </variablelist>
+    </refsect1>
+
+    <refsect1>
+      <title>Options</title>
+
+      <para>The only currently available option applies to all commands and
+      lets you specify the configuration file:</para>
+
+      <variablelist remap="IP">
+        <varlistentry>
+          <term><option>--dict</option> <replaceable>FILENAME</replaceable></term>
+
+
+          <listitem>
+            <para> use FILENAME as a frequency dictionary
+			 (default is wordbreaker-dict.txt)
+			</para>
+          </listitem>
+        </varlistentry>
+      </variablelist>
+    </refsect1>
+
+    <refsect1>
+      <title>Author</title>
+      <para>  Manticore Software LTD (http://manticoresearch.com)</para>
+    </refsect1>
+
+    <refsect1>
+		<title>Copyright</title>
+		<para>Copyright  2017-2018 Manticore Software LTD (http://manticoresearch.com),  
+		2008-2016 Sphinx Technologies Inc (http://sphinxsearch.com),
+		2001-2016 Andrew Aksyonoff</para>
+		<para>Permission is granted to copy, distribute and/or modify this document
+      under the terms of the GNU General Public License, Version 2 any later
+      version published by the Free Software Foundation.</para>
+	</refsect1>
+
+
+    <refsect1>
+      <title>See also</title>
+
+      <para><citerefentry>
+          <refentrytitle>indexer</refentrytitle>
+
+          <manvolnum>1</manvolnum>
+        </citerefentry>, <citerefentry>
+          <refentrytitle>searchd</refentrytitle>
+
+          <manvolnum>1</manvolnum>
+        </citerefentry>, <citerefentry>
+          <refentrytitle>search</refentrytitle>
+
+          <manvolnum>1</manvolnum>
+        </citerefentry></para>
+
+      <para>Manticore Search and it's programs are documented fully by the <emphasis
+      remap="I">Manticore Search reference manual</emphasis> available in
+      <filename>/usr/share/doc/manticore</filename>.</para>
+    </refsect1>
+  </refentry>  
 </appendix>

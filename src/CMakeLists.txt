@@ -145,7 +145,11 @@ add_custom_target (
 add_dependencies ( tarball vergen )
 
 # our mega-lib
-add_library ( libsphinx STATIC ${LIBSPHINX_SRCS} ${HEADERS} ${GHEADERS} ${LIBSPHINX_BISON} ${LIBSPHINX_FLEX} ${CHARSET_FILES} ${CHARSET_TEMPLATE} )
+if ( WIN32 )
+	add_library ( libsphinx STATIC ${LIBSPHINX_SRCS} ${HEADERS} ${GHEADERS} ${LIBSPHINX_BISON} ${LIBSPHINX_FLEX} ${CHARSET_FILES} ${CHARSET_TEMPLATE} "../misc/manticore.natvis" )
+else ()
+	add_library ( libsphinx STATIC ${LIBSPHINX_SRCS} ${HEADERS} ${GHEADERS} ${LIBSPHINX_BISON} ${LIBSPHINX_FLEX} ${CHARSET_FILES} ${CHARSET_TEMPLATE} )
+endif()
 add_dependencies ( libsphinx vergen )
 
 # our executables

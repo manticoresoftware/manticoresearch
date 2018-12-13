@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+
+<Type Name="VecTraits_T&lt;*&gt;">
+    <DisplayString>{{ size={m_iCount} }}</DisplayString>
+    <Expand>
+        <Item Name="[size]">m_iCount</Item>
+        <ArrayItems>
+            <Size>m_iCount</Size>
+            <ValuePointer>m_pData</ValuePointer>
+        </ArrayItems>
+    </Expand>
+</Type>
+
+<Type Name="CSphString">
+    <DisplayString>{m_sValue,s}</DisplayString>
+    <StringView>m_sValue,sb</StringView>
+</Type>
+
+<Type Name="ExtHit_t">
+    <DisplayString>(docid={m_uDocid}, field={m_uHitpos>>24}, pos={m_uHitpos&lt;0x7fffff}, qpos={m_uQuerypos}, hit_raw={m_uHitpos})</DisplayString>
+</Type>    
+
+</AutoVisualizer>

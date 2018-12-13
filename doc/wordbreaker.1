@@ -1,13 +1,13 @@
 '\" t
-.\"     Title: spelldump
+.\"     Title: wordbreaker
 .\"    Author: [see the "Author" section]
 .\" Generator: DocBook XSL Stylesheets v1.79.1 <http://docbook.sf.net/>
 .\"      Date: 12/13/2018
 .\"    Manual: Manticore Search
-.\"    Source: 2.7.0
+.\"    Source: 2.7.5
 .\"  Language: English
 .\"
-.TH "SPELLDUMP" "1" "12/13/2018" "2\&.7\&.0" "Manticore Search"
+.TH "WORDBREAKER" "1" "12/13/2018" "2\&.7\&.5" "Manticore Search"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -28,60 +28,41 @@
 .\" * MAIN CONTENT STARTS HERE *
 .\" -----------------------------------------------------------------
 .SH "NAME"
-spelldump \- Manticore Search tool for extract the contents of a dictionary file\&.
+wordbreaker \- Manticore Search tool to split compounds into individual words
 .SH "SYNOPSIS"
-.HP \w'\fBspelldump\fR\ 'u
-\fBspelldump\fR [OPTIONS] dictionary affix [result] [locale\-name]
+.HP \w'\fBwordbreaker\fR\ 'u
+\fBwordbreaker\fR {command} [options]
 .SH "DESCRIPTION"
 .PP
 Manticore Search is a collection of programs that aim to provide high quality fulltext search\&.
 .PP
-spelldump is used to extract the contents of a dictionary file that uses ispell or MySpell format, which can help build word lists for wordforms \- all of the possible forms are pre\-built for you\&.
+\fBwordbreaker\fR
+is a tool to split compounds (eg URL parts) into individual words\&.
+.SH "COMMANDS"
 .PP
-The two main parameters are the dictionary\*(Aqs main file and its affix file; usually these are named as
-[language\-prefix]\&.dict
-and
-[language\-prefix]\&.aff
-and will be available with most common Linux distributions, as well as various places online\&.
-\fB[result]\fR
-specifies where the dictionary data should be output to, and
-\fB[locale\-name]\fR
-additionally specifies the locale details you wish to use\&.
+The commands are as follows:
 .PP
-Examples of its usage are:
-.PP
-.if n \{\
+\fBtest\fR \fITESTFILE\fR
 .RS 4
-.\}
-.nf
-spelldump en\&.dict en\&.aff
-spelldump ru\&.dict ru\&.aff ru\&.txt ru_RU\&.CP1251
-spelldump ru\&.dict ru\&.aff ru\&.txt \&.1251
-.fi
-.if n \{\
+do a splitting precision test on TESTFILE
 .RE
-.\}
 .PP
-The results file will contain a list of all the words in the dictionary in alphabetical order, output in the format of a wordforms file, which you can use to customise for your specific circumstances\&.
-.PP
-An example of the result file:
-.PP
-.if n \{\
+\fBbench\fR \fITESTFILE\fR
 .RS 4
-.\}
-.nf
-zone > zone
-zoned > zoned
-zoning > zoning 
-.fi
-.if n \{\
+do a splitting performance benchmark on TESTFILE
 .RE
-.\}
+.PP
+\fBsplit\fR
+.RS 4
+do splitting (read from stdin, split, print to stdout)
+.RE
 .SH "OPTIONS"
 .PP
-\fB\-c\fR\ \&\fI[FILE]\fR
+The only currently available option applies to all commands and lets you specify the configuration file:
+.PP
+\fB\-\-dict\fR\ \&\fIFILENAME\fR
 .RS 4
-specifies a file for case conversion details\&.
+use FILENAME as a frequency dictionary (default is wordbreaker\-dict\&.txt)
 .RE
 .SH "AUTHOR"
 .PP
@@ -94,7 +75,8 @@ Permission is granted to copy, distribute and/or modify this document under the 
 .SH "SEE ALSO"
 .PP
 \fBindexer\fR(1),
-\fBindextool\fR(1)\&.
+\fBsearchd\fR(1),
+\fBsearch\fR(1)
 .PP
 Manticore Search and it\*(Aqs programs are documented fully by the
 \fIManticore Search reference manual\fR

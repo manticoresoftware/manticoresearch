@@ -150,8 +150,9 @@ target_link_libraries ( searchd libsphinx ${EXTRA_LIBRARIES} )
 target_link_libraries ( spelldump libsphinx ${EXTRA_LIBRARIES} )
 target_link_libraries ( wordbreaker libsphinx ${EXTRA_LIBRARIES} )
 
+include ( helpers )
+include ( genheader )
 if ( SPLIT_SYMBOLS )
-	include ( helpers )
 	install_dbg ( indexer )
 	install_dbg ( indextool )
 	install_dbg ( searchd )
@@ -195,15 +196,58 @@ if ( NOT DISABLE_TESTING )
 	if ( SPLIT_SYMBOLS )
 		install_dbg ( tests )
 	endif()
-    # testrt is win-only project
-	if ( WIN32 )
-		add_executable ( testrt testrt.cpp )
-		target_link_libraries ( testrt libsphinx ${EXTRA_LIBRARIES} )
-		add_test ( NAME "\"Internal rt src/tests\""
-			#	    	CONFIGURATIONS Debug
-				WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-				COMMAND "testrt" )
-	endif ( WIN32 )
+
+	# compile rtestconfig.h
+	hsnippet ( rtestconfig testrt.conf "static" )
+
+	set (DATAFLD "${MANTICORE_BINARY_DIR}/test/data")
+	file ( MAKE_DIRECTORY ${DATAFLD} )
+	add_definitions ( -DDATAFLD="${DATAFLD}/" )
+	source_group ( "Testing config" FILES testrt.conf.in )
+	add_executable ( testrt testrt.cpp testrt.conf )
+	target_link_libraries ( testrt libsphinx ${EXTRA_LIBRARIES} )
+
+	# testrt is alive, however it needs database 'lj' accessible
+	# in order to work. So, avoid it's calling till the base is persist
+	# in out CI env
+	if (0)
+
+	add_test ( NAME "\"Remove dump index\""
+			COMMAND ${CMAKE_COMMAND} -E remove "${DATAFLD}/dump.*" )
+	SET_TESTS_PROPERTIES ( "\"Remove dump index\"" PROPERTIES FIXTURES_SETUP TESTRT )
+
+	add_test ( NAME "\"Internal rt src/testrt\""
+			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+			COMMAND testrt )
+	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt\"" PROPERTIES FIXTURES_REQUIRED TESTRT )
+	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt\"" PROPERTIES RESOURCE_LOCK DbAccess )
+
+	add_test ( NAME "\"Internal rt src/testrt step 1000\""
+			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+			COMMAND testrt 1000 )
+	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1000\"" PROPERTIES FIXTURES_REQUIRED TESTRT )
+	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1000\"" PROPERTIES RESOURCE_LOCK DbAccess )
+
+	add_test ( NAME "\"Internal rt src/testrt step 100\""
+			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+			COMMAND testrt 100 )
+	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 100\"" PROPERTIES FIXTURES_REQUIRED TESTRT )
+	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1000\"" PROPERTIES RESOURCE_LOCK DbAccess )
+
+	add_test ( NAME "\"Internal rt src/testrt step 10\""
+			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+			COMMAND testrt 10 )
+	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 10\"" PROPERTIES FIXTURES_REQUIRED TESTRT )
+	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1000\"" PROPERTIES RESOURCE_LOCK DbAccess )
+
+	add_test ( NAME "\"Internal rt src/testrt step 1\""
+			WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+			COMMAND testrt 1 )
+	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1\"" PROPERTIES FIXTURES_REQUIRED TESTRT )
+	SET_TESTS_PROPERTIES ( "\"Internal rt src/testrt step 1000\"" PROPERTIES RESOURCE_LOCK DbAccess )
+
+	endif(0)
+
 	# first check syntax
 	find_package ( PythonInterp QUIET )
 	if ( PYTHONINTERP_FOUND )

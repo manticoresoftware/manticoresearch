@@ -1,0 +1,26 @@
+#
+# Snippet of source config for testrt
+#
+
+source test1
+{
+	type			= mysql
+@SQL_SETTINGS@
+	sql_db			= lj
+	sql_query_pre	= SET NAMES utf8
+
+	sql_query		= \
+		SELECT id, channel_id, UNIX_TIMESTAMP(published) published, \
+		title, UNCOMPRESS(content) content FROM posting WHERE id<=10000 AND id%2=0
+
+	sql_attr_uint		= channel_id
+	sql_attr_timestamp	= published
+
+}
+
+source test2 : test1
+{
+	sql_query		= \
+		SELECT id, channel_id, UNIX_TIMESTAMP(published) published, \
+		title, UNCOMPRESS(content) content FROM posting WHERE id<=10000 AND id%2=1
+}

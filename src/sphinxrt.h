@@ -393,7 +393,4 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 // Get global flag of w-available RT
 volatile bool &RTChangesAllowed ();
 
-ISphBinlog * GetBinlog();
-int64_t GetRtFlushPeriod();
-
 #endif // _sphinxrt_

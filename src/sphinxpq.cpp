@@ -2141,7 +2141,9 @@ void PercolateIndex_c::SaveMeta ( bool bShutdown )
 
 	wrMeta.PutOffset ( m_iTID );
 
-	g_pBinlog->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, bShutdown );
+	if ( GetBinlog() )
+		GetBinlog()->NotifyIndexFlush ( m_sIndexName.cstr(), m_iTID, bShutdown );
+
 	m_iSavedTID = m_iTID;
 	m_tmSaved = sphMicroTimer();
 

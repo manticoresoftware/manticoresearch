@@ -38,6 +38,17 @@ source_group ( "Generated Header Files" FILES ${GHEADERS} )
 source_group ( "Grammar sources" FILES ${LIBSPHINX_BISON} ${SEARCHD_BISON} )
 source_group ( "Lexer sources" FILES ${LIBSPHINX_FLEX} ${SEARCHD_FLEX} )
 
+include ( genheader )
+
+# compile globalaliases.h
+set ( CHARSET_FILTER "charsets/*.txt" )
+set ( CHARSET_TEMPLATE "charsets/globalaliases.h.in" )
+hsnippetfolder ( "${CHARSET_FILTER}" "${CHARSET_TEMPLATE}" )
+
+# populate charset files for IDE
+file ( GLOB CHARSET_FILES "${CHARSET_FILTER}" )
+source_group ( "Charset sources" FILES ${CHARSET_FILES} ${CHARSET_TEMPLATE} )
+
 add_custom_target (
 		vergen
 		COMMAND
@@ -134,7 +145,7 @@ add_custom_target (
 add_dependencies ( tarball vergen )
 
 # our mega-lib
-add_library ( libsphinx STATIC ${LIBSPHINX_SRCS} ${HEADERS} ${GHEADERS} ${LIBSPHINX_BISON} ${LIBSPHINX_FLEX} )
+add_library ( libsphinx STATIC ${LIBSPHINX_SRCS} ${HEADERS} ${GHEADERS} ${LIBSPHINX_BISON} ${LIBSPHINX_FLEX} ${CHARSET_FILES} ${CHARSET_TEMPLATE} )
 add_dependencies ( libsphinx vergen )
 
 # our executables
@@ -151,7 +162,8 @@ target_link_libraries ( spelldump libsphinx ${EXTRA_LIBRARIES} )
 target_link_libraries ( wordbreaker libsphinx ${EXTRA_LIBRARIES} )
 
 include ( helpers )
-include ( genheader )
+
+
 if ( SPLIT_SYMBOLS )
 	install_dbg ( indexer )
 	install_dbg ( indextool )

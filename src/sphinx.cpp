@@ -2991,8 +2991,20 @@ struct CharsetAlias_t
 	CSphVector<CSphRemapRange>	m_dRemaps;
 };
 
+// Charsets relocated to folder 'charsets', each one in separate .txt file.
+// When you change the content of the folder,
+// reconfigure the project with cmake in order to pick the changes.
+
+#if defined(HAVE_GLOBALALIASES_H)
+#include "globalaliases.h"
+#else
+static const char * globalaliases[] = { "A..Z->a..z, a..z", "U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451" };
+static const char * globalaliases_names[] = { "english", "russian" };
+enum E_GLOBALALIASES { CHARSET_ENGLISH, CHARSET_RUSSIAN, CHARSET_TOTAL };
+#endif
+
 static CSphVector<CharsetAlias_t> g_dCharsetAliases;
-static const char * g_sDefaultCharsetAliases[] = { "english", "A..Z->a..z, a..z", "russian", "U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451", NULL };
+
 
 bool sphInitCharsetAliasTable ( CSphString & sError ) // FIXME!!! move alias generation to config common section
 {
@@ -3000,13 +3012,13 @@ bool sphInitCharsetAliasTable ( CSphString & sError ) // FIXME!!! move alias gen
 	CSphCharsetDefinitionParser tParser;
 	CSphVector<CharsetAlias_t> dAliases;
 
-	for ( int i=0; g_sDefaultCharsetAliases[i]; i+=2 )
+	for ( int i=0; i<CHARSET_TOTAL; ++i )
 	{
 		CharsetAlias_t & tCur = dAliases.Add();
-		tCur.m_sName = g_sDefaultCharsetAliases[i];
+		tCur.m_sName = globalaliases_names[i];
 		tCur.m_iNameLen = tCur.m_sName.Length();
 
-		if ( !tParser.Parse ( g_sDefaultCharsetAliases[i+1], tCur.m_dRemaps ) )
+		if ( !tParser.Parse ( globalaliases[i], tCur.m_dRemaps ) )
 		{
 			sError = tParser.GetLastError();
 			return false;

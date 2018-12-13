@@ -4,7 +4,7 @@ Upstream-Contact: Adrian Nuta <adrian.nuta@manticoresearch.com>
 Source:https://manticoresearch.com/
 
 Files: *
-Copyright: 
+Copyright:
    Copyright (c) 2017-2018, Manticore Software LTD (http://manticoresearch.com)
    Copyright (C) 2001-2016 by Andrew Aksyonoff <shodan@shodan.ru>
    Copyright (c) 2008-2016, Sphinx Technologies Inc
@@ -15,13 +15,13 @@ Copyright: Copyright (c) Sphinx Technologies Inc
 License: GPL-2
 
 Files: api/ruby/*
-Copyright: Copyright (c) Dmytro Shteflyuk <kpumuk@kpumuk.info> 
+Copyright: Copyright (c) Dmytro Shteflyuk <kpumuk@kpumuk.info>
 License: Ruby
 
 License: GPL-2
- This program is licensed under the GPL (General Public License: 
+ This program is licensed under the GPL (General Public License:
  http://www.gnu.org/licenses/gpl-2.0.txt).
- A copy of the GPL 2.0 can be found at /usr/share/common-licenses/GPL-2 
+ A copy of the GPL 2.0 can be found at /usr/share/common-licenses/GPL-2
  on any Debian system.
 
 License: Ruby
@@ -71,9 +71,9 @@ License: Ruby
      For the list of those files and their copying conditions, see the
      file LEGAL.
  .
-  5. The scripts and library files supplied as input to or produced as 
+  5. The scripts and library files supplied as input to or produced as
      output from the software do not automatically fall under the
-     copyright of the software, but belong to whomever generated them, 
+     copyright of the software, but belong to whomever generated them,
      and may be sold commercially, and may be aggregated with this
      software.
  .

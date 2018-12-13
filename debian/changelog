@@ -1,3 +1,9 @@
+manticore (2.7.5-3) unstable; urgency=low
+
+  * Added debian/watch.
+
+ -- Adrian Nuta <adrian.nuta@manticoresearch.com>  Thu, 13 Dec 2018 12:00:00 +0300
+
 manticore (2.7.5-2) unstable; urgency=low
 
   * Fix debinization issues.

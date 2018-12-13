@@ -1,0 +1,7 @@
+version=4
+opts="filenamemangle=s%(?:.*?/)?(\d[\d.]*)\/(?:.*)release\.tar\.gz%manticore-$1.tar.gz%" \
+https://github.com/manticoresoftware/manticoresearch/releases \
+ (?:.*?/)?(\d[\d.]*)\/(?:.*)release\.tar\.gz
+
+
+

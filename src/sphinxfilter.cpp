@@ -1485,12 +1485,15 @@ public:
 
 static ISphFilter * CreateFilterExpr ( ISphExpr * _pExpr, const CSphFilterSettings & tSettings, CSphString & sError, ESphCollation eCollation, ESphAttr eAttrType )
 {
-	// autoconvert all json types except SPH_FILTER_NULL, it needs more info
-	bool bAutoConvert = ( eAttrType==SPH_ATTR_JSON || eAttrType==SPH_ATTR_JSON_FIELD )
-		&& tSettings.m_eType!=SPH_FILTER_NULL;
 	CSphRefcountedPtr<ISphExpr> pExpr { _pExpr };
 	SafeAddRef ( _pExpr );
-	if ( bAutoConvert )
+
+	// auto-convert all JSON types except SPH_FILTER_NULL, it needs more info
+	bool bAutoConvert = false;
+	bool bJsonExpr = false;
+	if ( pExpr && tSettings.m_eType!=SPH_FILTER_NULL )
+	 bJsonExpr = pExpr->IsJson ( bAutoConvert );
+	if ( bJsonExpr && !bAutoConvert )
 		pExpr = sphJsonFieldConv ( pExpr );
 
 	switch ( tSettings.m_eType )

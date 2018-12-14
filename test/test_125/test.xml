@@ -226,9 +226,9 @@ INSERT INTO string_table1 VALUES
 
 <db_insert>
 INSERT INTO json_table VALUES
-(1,1,'test one','{"name":"Alice","uid":123}'),
-(2,1,'test two','{"name":"Bob","uid":234,"gid":12}'),
-(3,2,'another doc','{"name":"Charlie","uid":345}')
+(1,1,'test one','{"name":"Alice","uid":123, "lon":-0.0798578, "lat":0.937717, "pct":12.4, "sq":9, "poly":"1,2,3,4,5,6.0", "points":[1,2,3,4,5,6.0]}'),
+(2,1,'test two','{"name":"Bob","uid":234,"gid":12, "lon":-0.0799989, "lat":0.891975, "pct":-103.7, "sq":16, "poly":"1,-2,1,2,-5,6", "points":[1,-2,1,2,-5,6]}'),
+(3,2,'another doc','{"name":"Charlie","uid":345, "lon":-0.0721455, "lat":0.926761, "pct":4.1, "sq":225, "poly":"-1,2,12,4,5,6", "points":[-1,2,12,4,5,6]}')
 </db_insert>
 
 <query_attributes>
@@ -439,6 +439,21 @@ INSERT INTO json_table VALUES
 <sphinxql>SELECT id, j.uid j1, to_string ( j.uid ) FROM test_json order by id asc</sphinxql>
 <sphinxql>SELECT id, j.uid j1, to_string ( j1 ) FROM test_json order by id asc</sphinxql>
 
+<!-- regression json field at expressions -->
+<sphinxql>SELECT j.uid, bigint ( j.uid ) FROM test_json order by id asc</sphinxql>
+<sphinxql>SELECT j.uid, bigint ( j.uid )+1 FROM test_json order by id asc</sphinxql>
+<sphinxql>SELECT j.uid, abs ( j.uid ) FROM test_json order by id asc</sphinxql>
+<sphinxql>SELECT j.uid, abs ( j.uid ) + 1 FROM test_json order by id asc</sphinxql>
+<sphinxql>SELECT j.pct, abs ( j.pct ) FROM test_json order by id asc</sphinxql>
+<sphinxql>SELECT j.pct, abs ( j.pct ) + 1 FROM test_json order by id asc</sphinxql>
+<sphinxql>SELECT j.pct, abs ( j.pct ) + 1.1 FROM test_json order by id asc</sphinxql>
+<sphinxql>SELECT j.pct, abs ( double(j.pct) ) FROM test_json order by id asc</sphinxql>
+<sphinxql>SELECT j.uid, sqrt ( j.sq ) FROM test_json order by id asc</sphinxql>
+<sphinxql>select GEODIST(j.lat, j.lon,0.937717,-0.0798578, {in=radians, out=m} ) FROM test_json</sphinxql>
+<sphinxql>SELECT CONTAINS(POLY2D(j.poly), 2, 3) FROM test_json</sphinxql>
+<sphinxql>SELECT CONTAINS(POLY2D(j.points[0], j.points[1], j.points[2], j.points[3], j.points[4], j.points[5]), 2, 3) FROM test_json</sphinxql>
+<sphinxql>SELECT CONTAINS(POLY2D(j.poly), j.pct, 3 ) FROM test_json</sphinxql>
+<sphinxql>SELECT CONTAINS(POLY2D(j.poly), 3, j.pct ) FROM test_json</sphinxql>
 </sphqueries>
 
 </test>

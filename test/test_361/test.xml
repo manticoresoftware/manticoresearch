@@ -65,6 +65,14 @@ index arrays
 	source = j_arrays
 	path = <data_path/>/j_arrays
 }
+
+index pq_expr
+{
+	type = percolate
+	path			= <data_path/>/pq_expr
+	rt_field 		= title
+	rt_attr_json	= j
+}
 </config>
 
 <db_create>
@@ -122,6 +130,17 @@ INSERT INTO j_arrays ( id, gid, j ) VALUES
 <sphinxql>INSERT INTO pq_in (query, filters) VALUES ('', '(j.a=5 OR (j.a=6 AND NOT IN(j.b, 1220431865,6663093570)))')</sphinxql>
 <sphinxql>CALL PQ ('pq_in', ('{"j":{"a":5, "b":123}}', '{"j":{"a":6, "b":134}}'), 1 as docs, 1 as query)</sphinxql>
 <sphinxql>select *, in(j.a,1220431865,6663093570) as p from arrays</sphinxql>
+
+<!-- JSON expression -->
+<sphinxql>INSERT INTO pq_expr (query, filters) VALUES ('', 'abs(j.a)=22')</sphinxql>
+<sphinxql>INSERT INTO pq_expr (query, filters) VALUES ('', 'abs(j.a)=12')</sphinxql>
+<sphinxql>CALL PQ ('pq_expr', ('{"j":{"a":-12, "b":123}}', '{"j":{"a":22, "b":134}}'), 1 as docs, 1 as query)</sphinxql>
+
+<sphinxql>INSERT INTO pq_expr (query, filters) VALUES ('', 'GEODIST(j.lat, j.lon,0.937717,-0.0798578, {in=radians, out=m} )&lt;100000')</sphinxql>
+<sphinxql>CALL PQ ('pq_expr', ('{"j":{"lon":-0.0798578, "lat":0.937717}}', '{"j":{"lon":-0.0799989, "lat":0.891975}}', '{"j":{"some":"thing"}}', '{"j":{"lon":-0.0721455, "lat":0.926761}}'), 1 as docs, 1 as query)</sphinxql>
+
+<sphinxql>INSERT INTO pq_expr (query, filters) VALUES ('', 'CONTAINS(POLY2D(j.poly), 2, 3)')</sphinxql>
+<sphinxql>CALL PQ ('pq_expr', ('{"j":{"poly":"1,2,3,4,5,6.0"}}', '{"j":{"poly":"1,-2,1,2,-5,6"}}', '{"j":{"poly":"-1,2,12,4,5,6"}}'), 1 as docs, 1 as query)</sphinxql>
 
 </sphqueries>
 </test>

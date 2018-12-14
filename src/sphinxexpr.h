@@ -141,6 +141,8 @@ public:
 	/// check for const type
 	virtual bool IsConst () const { return false; }
 
+	virtual bool IsJson ( bool & bConverted ) const { return false; }
+
 	/// get expression hash (for query cache)
 	virtual uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) = 0;
 };

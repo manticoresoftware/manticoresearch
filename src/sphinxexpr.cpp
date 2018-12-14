@@ -1150,6 +1150,12 @@ public:
 		CALC_CHILD_HASHES(m_dArgs);
 		return CALC_DEP_HASHES();
 	}
+
+	virtual bool IsJson ( bool & bConverted ) const override
+	{
+		bConverted = false;
+		return true;
+	}
 };
 
 
@@ -1221,6 +1227,13 @@ public:
 		EXPR_CLASS_NAME("Expr_JsonFastKey_c");
 		CALC_STR_HASH(m_sKey,m_iKeyLen);
 		return CALC_DEP_HASHES();
+	}
+
+
+	virtual bool IsJson ( bool & bConverted ) const override
+	{
+		bConverted = false;
+		return true;
 	}
 };
 
@@ -1311,6 +1324,13 @@ protected:
 		EXPR_CLASS_NAME_NOCHECK(szTag);
 		CALC_CHILD_HASH(m_pArg);
 		return CALC_DEP_HASHES();
+	}
+
+	
+	virtual bool IsJson ( bool & bConverted ) const override
+	{
+		bConverted = true;
+		return true;
 	}
 };
 
@@ -2649,6 +2669,9 @@ static int VARIABLE_IS_NOT_USED G_FUNC_HASH_CHECK = FuncHashCheck();
 
 //////////////////////////////////////////////////////////////////////////
 
+static ISphExpr * ConvertExprJson ( ISphExpr * pExpr );
+static void ConvertArgsJson ( VecRefPtrs_t<ISphExpr *> & dArgs );
+
 /// check whether the type is numeric
 static inline bool IsNumeric ( ESphAttr eType )
 {
@@ -2659,6 +2682,11 @@ static inline bool IsNumeric ( ESphAttr eType )
 static inline bool IsInt ( ESphAttr eType )
 {
 	return eType==SPH_ATTR_INTEGER || eType==SPH_ATTR_BIGINT;
+}
+
+static inline bool IsJson ( ESphAttr eAttr )
+{
+	return ( eAttr==SPH_ATTR_JSON_FIELD );
 }
 
 /// check for type based on int value
@@ -2884,7 +2912,7 @@ private:
 	ISphExpr *				CreateContainsNode ( const ExprNode_t & tNode );
 	ISphExpr *				CreateAggregateNode ( const ExprNode_t & tNode, ESphAggrFunc eFunc, ISphExpr * pLeft );
 	ISphExpr *				CreateForInNode ( int iNode );
-	ISphExpr *				CreateRegexNode ( ISphExpr * pAttr, bool bJsonAttr, ISphExpr * pString );
+	ISphExpr *				CreateRegexNode ( ISphExpr * pAttr, ISphExpr * pString );
 	void					FixupIterators ( int iNode, const char * sKey, SphAttr_t * pAttr );
 
 	bool					GetError () const { return !( m_sLexerError.IsEmpty() && m_sParserError.IsEmpty() && m_sCreateError.IsEmpty() ); }
@@ -4484,8 +4512,8 @@ ISphExpr * ExprParser_t::CreateContainsNode ( const ExprNode_t & tNode )
 	const int iPoly = m_dNodes [ tArglist.m_iLeft ].m_iLeft;
 	const int iLat = m_dNodes [ tArglist.m_iLeft ].m_iRight;
 	const int iLon = tArglist.m_iRight;
-	assert ( IsNumeric ( m_dNodes[iLat].m_eRetType ) );
-	assert ( IsNumeric ( m_dNodes[iLat].m_eRetType ) );
+	assert ( IsNumeric ( m_dNodes[iLat].m_eRetType ) || IsJson ( m_dNodes[iLat].m_eRetType )  );
+	assert ( IsNumeric ( m_dNodes[iLon].m_eRetType ) || IsJson ( m_dNodes[iLon].m_eRetType ) );
 	assert ( m_dNodes[iPoly].m_eRetType==SPH_ATTR_POLY2D );
 
 	// create evaluator
@@ -4493,14 +4521,14 @@ ISphExpr * ExprParser_t::CreateContainsNode ( const ExprNode_t & tNode )
 	CSphVector<int> dPolyArgs;
 	GatherArgNodes ( m_dNodes[iPoly].m_iLeft, dPolyArgs );
 
-	CSphRefcountedPtr<ISphExpr> pLat { CreateTree ( iLat ) };
-	CSphRefcountedPtr<ISphExpr> pLon { CreateTree ( iLon ) };
+	CSphRefcountedPtr<ISphExpr> pLat { ConvertExprJson ( CreateTree ( iLat ) ) };
+	CSphRefcountedPtr<ISphExpr> pLon { ConvertExprJson ( CreateTree ( iLon ) ) };
 
 	bool bGeoTesselate = ( m_dNodes[iPoly].m_iToken==TOK_FUNC && m_dNodes[iPoly].m_iFunc==FUNC_GEOPOLY2D );
 
-	if ( dPolyArgs.GetLength()==1 && m_dNodes[dPolyArgs[0]].m_iToken==TOK_ATTR_STRING )
+	if ( dPolyArgs.GetLength()==1 && ( m_dNodes[dPolyArgs[0]].m_iToken==TOK_ATTR_STRING || m_dNodes[dPolyArgs[0]].m_iToken==TOK_ATTR_JSON ) )
 	{
-		CSphRefcountedPtr<ISphExpr> dPolyArgs0 { CreateTree ( dPolyArgs[0] ) };
+		CSphRefcountedPtr<ISphExpr> dPolyArgs0 { ConvertExprJson ( CreateTree ( dPolyArgs[0] ) ) };
 		return new Expr_ContainsStrattr_c ( pLat, pLon, dPolyArgs0, bGeoTesselate );
 	}
 
@@ -4515,6 +4543,8 @@ ISphExpr * ExprParser_t::CreateContainsNode ( const ExprNode_t & tNode )
 		dExprs.Resize ( dPolyArgs.GetLength() );
 		ARRAY_FOREACH ( i, dExprs )
 			dExprs[i] = CreateTree ( dPolyArgs[i] );
+
+		ConvertArgsJson ( dExprs );
 
 		// will adopt dExprs and utilize them on d-tr
 		return new Expr_ContainsExprvec_c ( pLat, pLon, dExprs );
@@ -4615,6 +4645,32 @@ public:
 };
 
 //////////////////////////////////////////////////////////////////////////
+
+ISphExpr * ConvertExprJson ( ISphExpr * pExpr )
+{
+	if ( !pExpr )
+		return nullptr;
+
+	bool bConverted = false;
+	bool bJson = pExpr->IsJson ( bConverted );
+	if ( bJson && !bConverted )
+	{
+		ISphExpr * pConv = new Expr_JsonFieldConv_c ( pExpr );
+		pExpr->Release();
+		return pConv;
+	} else
+	{
+		return pExpr;
+	}
+}
+
+void ConvertArgsJson ( VecRefPtrs_t<ISphExpr *> & dArgs )
+{
+	ARRAY_FOREACH ( i, dArgs )
+	{
+		dArgs[i] = ConvertExprJson ( dArgs[i] );
+	}
+}
 
 /// fold nodes subtree into opcodes
 ISphExpr * ExprParser_t::CreateTree ( int iNode )
@@ -4765,6 +4821,24 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 
 				switch ( eFunc )
 				{
+				case FUNC_TO_STRING:
+				case FUNC_INTERVAL:
+				case FUNC_IN:
+				case FUNC_LENGTH:
+				case FUNC_LEAST:
+				case FUNC_GREATEST:
+				case FUNC_ALL:
+				case FUNC_ANY:
+				case FUNC_INDEXOF:
+					break; // these have its own JSON converters
+
+				// all others will get JSON auto-converter
+				default:
+					ConvertArgsJson ( dArgs );
+				}
+
+				switch ( eFunc )
+				{
 					case FUNC_NOW:		return new Expr_Now_c(m_iConstNow); break;
 
 					case FUNC_ABS:		return new Expr_Abs_c ( dArgs[0] );
@@ -4861,8 +4935,6 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 					case FUNC_INTEGER:
 					case FUNC_DOUBLE:
 					case FUNC_UINT:
-						if ( m_dNodes[tNode.m_iLeft].m_iToken==TOK_ATTR_JSON )
-							return new Expr_JsonFieldConv_c ( dArgs[0] );
 						SafeAddRef ( dArgs[0] );
 						return dArgs[0];
 
@@ -4888,10 +4960,9 @@ ISphExpr * ExprParser_t::CreateTree ( int iNode )
 						return new Expr_MinTopSortval();
 						break;
 					case FUNC_REGEX:
-					{
-						bool bLeftJson = ( m_dNodes[m_dNodes[tNode.m_iLeft].m_iLeft].m_iToken==TOK_ATTR_JSON );
-						return CreateRegexNode ( dArgs[0], bLeftJson, dArgs[1] );
-					}
+						return CreateRegexNode ( dArgs[0], dArgs[1] );
+						break;
+
 					default: // just make gcc happy
 						break;
 				}
@@ -5712,6 +5783,12 @@ protected:
 		}
 		return 0;
 	}
+
+	virtual bool IsJson ( bool & bConverted ) const override
+	{
+		bConverted = true;
+		return true;
+	}
 };
 
 
@@ -6516,10 +6593,12 @@ ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 				m_dNodes[dArgs[0]].m_iLocator, m_dNodes[dArgs[1]].m_iLocator );
 		} else
 		{
+			CSphRefcountedPtr<ISphExpr> pAttr0 { ConvertExprJson ( CreateTree ( dArgs[0] ) ) };
+			CSphRefcountedPtr<ISphExpr> pAttr1 { ConvertExprJson ( CreateTree ( dArgs[1] ) ) };
+
 			// expr point
 			return new Expr_GeodistConst_c ( GeodistFn ( eMethod, bDeg ), fOut,
-				CSphRefcountedPtr<ISphExpr> { CreateTree ( dArgs[0] )},
-				CSphRefcountedPtr<ISphExpr> { CreateTree ( dArgs[1] )},
+				pAttr0, pAttr1,
 				FloatVal ( &m_dNodes[dArgs[2]] ), FloatVal ( &m_dNodes[dArgs[3]] ) );
 		}
 	}
@@ -6528,6 +6607,7 @@ ISphExpr * ExprParser_t::CreateGeodistNode ( int iArgs )
 	VecRefPtrs_t<ISphExpr *> dExpr;
 	MoveToArgList ( CreateTree ( iArgs ), dExpr );
 	assert ( dExpr.GetLength()==4 );
+	ConvertArgsJson ( dExpr );
 	return new Expr_Geodist_c ( GeodistFn ( eMethod, bDeg ), fOut, dExpr[0], dExpr[1], dExpr[2], dExpr[3] );
 }
 
@@ -6633,12 +6713,8 @@ ISphExpr * ExprParser_t::CreateForInNode ( int iNode )
 	return pFunc;
 }
 
-ISphExpr * ExprParser_t::CreateRegexNode ( ISphExpr * pAttr, bool bJsonAttr, ISphExpr * pString )
+ISphExpr * ExprParser_t::CreateRegexNode ( ISphExpr * pAttr, ISphExpr * pString )
 {
-	// force type conversion, where possible
-	if ( bJsonAttr )
-		pAttr = new Expr_JsonFieldConv_c ( pAttr );
-
 	return new Expr_Regex_c ( pAttr, pString );
 }
 
@@ -7004,9 +7080,9 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 			m_sParserError.SetSprintf ( "1st CONTAINS() argument must be a 2D polygon (see POLY2D)" );
 			return -1;
 		}
-		if ( !IsNumeric ( dRetTypes[1] ) || !IsNumeric ( dRetTypes[2] ) )
+		if ( !( IsNumeric ( dRetTypes[1] ) || IsJson ( dRetTypes[1] ) ) || ! ( IsNumeric ( dRetTypes[2] ) || IsJson ( dRetTypes[2] ) ) )
 		{
-			m_sParserError.SetSprintf ( "2nd and 3rd CONTAINS() arguments must be numeric" );
+			m_sParserError.SetSprintf ( "2nd and 3rd CONTAINS() arguments must be numeric or JSON" );
 			return -1;
 		}
 		break;
@@ -7015,9 +7091,9 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 		if ( dRetTypes.GetLength ()==1 )
 		{
 			// handle 1 arg version, POLY2D(string-attr)
-			if ( dRetTypes[0]!=SPH_ATTR_STRING )
+			if ( dRetTypes[0]!=SPH_ATTR_STRING && dRetTypes[0]!=SPH_ATTR_JSON_FIELD )
 			{
-				m_sParserError.SetSprintf ( "%s() argument must be a string attribute", sFuncName );
+				m_sParserError.SetSprintf ( "%s() argument must be a string or JSON field attribute", sFuncName );
 				return -1;
 			}
 		} else if ( dRetTypes.GetLength ()<6 )
@@ -7035,9 +7111,9 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 				return -1;
 			}
 			ARRAY_FOREACH ( i, dRetTypes )
-				if ( !IsNumeric ( dRetTypes[i] ) )
+				if ( !( IsNumeric ( dRetTypes[i] ) || IsJson ( dRetTypes[i] ) ) )
 				{
-					m_sParserError.SetSprintf ( "%s() argument %d must be numeric", sFuncName, 1 + i );
+					m_sParserError.SetSprintf ( "%s() argument %d must be numeric or JSON field", sFuncName, 1 + i );
 					return -1;
 				}
 		}
@@ -7122,7 +7198,13 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 	case FUNC_MADD:
 	case FUNC_MUL3:
 	case FUNC_ABS:
-	case FUNC_IDIV: tNode.m_eRetType = tNode.m_eArgType; break;
+	case FUNC_IDIV:
+		if ( IsJson ( tNode.m_eArgType ) ) // auto-converter from JSON field for universal (SPH_ATTR_NONE return type) nodes
+			tNode.m_eRetType = SPH_ATTR_BIGINT;
+		else
+			tNode.m_eRetType = tNode.m_eArgType;
+		break;
+
 	case FUNC_EXIST:
 		{
 			ESphAttr eType = m_dNodes[m_dNodes[iArg].m_iRight].m_eRetType;
@@ -7135,7 +7217,10 @@ int ExprParser_t::AddNodeFunc ( int iFunc, int iArg )
 			tNode.m_eRetType = SPH_ATTR_FLOAT; // enforce if we can; FIXME! silently ignores BIGINT() on floats; should warn or raise an error
 		break;
 	case FUNC_IF:
-	case FUNC_BITDOT: tNode.m_eRetType = tNode.m_eArgType ; break;
+	case FUNC_BITDOT:
+		tNode.m_eRetType = tNode.m_eArgType;
+		break;
+
 	case FUNC_GREATEST:
 	case FUNC_LEAST: // fixup MVA return type according to the leftmost argument
 		{

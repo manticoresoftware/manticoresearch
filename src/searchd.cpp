@@ -22507,7 +22507,7 @@ int NetStateCommon_t::NetManageSocket ( bool bWrite, bool bAfterWrite )
 	// if there was eof, we're done
 	// but need to make sure that poll loop passed at least once,
 	// ie write-read pattern should failed only this way write-poll-read
-	if ( !bWrite && iRes==0 && !bAfterWrite )
+	if ( !bWrite && iRes==0 && m_iLeft!=0 && !bAfterWrite ) // request to read 0 raise error on Linux, but not on Mac
 	{
 		sphLogDebugv ( "read zero bytes, shutting down socket, sock=%d", m_iClientSock );
 		sphSockSetErrno ( ESHUTDOWN );

@@ -12387,7 +12387,7 @@ static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVari
 {
 	const cJSON * pRoot = cJSON_Parse ( sDoc );
 	if ( !pRoot )
-		return sMsg.Err ( "bad JSON object at %d document", iRow+1 );
+		return sMsg.Err ( "bad JSON at document %d", iRow+1 );
 
 	assert ( !tStrings.m_pJsonStorage );
 	tStrings.m_pJsonStorage = const_cast<cJSON *>( pRoot );
@@ -12992,7 +12992,7 @@ static void PQLocalMatch ( const StrVec_t &dDocs, const CSphString& sIndex, cons
 				// regard errors as warnings
 				StringBuilder_c sWarnings;
 				sWarnings << sMsg.sWarning ();
-				sWarnings.Sprintf ( "ERROR: %s in doc #%d", sMsg.sError (), iDoc+tOpt.m_iShift+1 );
+				sWarnings.Sprintf ( "ERROR: %s", sMsg.sError (), iDoc+tOpt.m_iShift+1 );
 				sMsg.Clear();
 				sMsg.Warn ( "%s", sWarnings.cstr() );
 				continue;
@@ -13041,7 +13041,7 @@ static void PQLocalMatch ( const StrVec_t &dDocs, const CSphString& sIndex, cons
 	pIndex->MatchDocuments ( pAccum, tResult.m_dResult );
 
 	if ( iDocsNoIdCount )
-		sMsg.Warn ( "skipped %d documents without id field '%s'", iDocsNoIdCount, tOpt.m_sIdAlias.cstr () );
+		sMsg.Warn ( "skipped %d document(s) without id field '%s'", iDocsNoIdCount, tOpt.m_sIdAlias.cstr () );
 
 }
 
@@ -13298,7 +13298,7 @@ void HandleMysqlPercolateMeta ( const CPqResult &tResult, const CSphString & sWa
 		tOut.DataTupletf ( "Setup", "%.3D sec", tMeta.m_tmSetup / 1000 );
 	tOut.DataTuplet ( "Queries matched", tMeta.m_iQueriesMatched );
 	tOut.DataTuplet ( "Queries failed", tMeta.m_iQueriesFailed );
-	tOut.DataTuplet ( "Document matches", tMeta.m_iDocsMatched );
+	tOut.DataTuplet ( "Document matched", tMeta.m_iDocsMatched );
 	tOut.DataTuplet ( "Total queries stored", tMeta.m_iTotalQueries );
 	tOut.DataTuplet ( "Term only queries", tMeta.m_iOnlyTerms );
 	tOut.DataTuplet ( "Fast rejected queries", tMeta.m_iEarlyOutQueries );

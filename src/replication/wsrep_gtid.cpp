@@ -19,7 +19,8 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <inttypes.h>
+
+#include "../sphinxstd.h"
 
 #include "wsrep_api.h"
 
@@ -53,7 +54,7 @@ wsrep_gtid_scan(const char* str, size_t str_len, wsrep_gtid_t* gtid)
 
 /*!
  * Write GTID to string
- * @return length of GTID stirng representation of -EMSGSIZE if string is too
+ * @return length of GTID string representation of -EMSGSIZE if string is too
  *         short
  */
 int
@@ -63,7 +64,7 @@ wsrep_gtid_print(const wsrep_gtid_t* gtid, char* str, size_t str_len)
     if ((offset = wsrep_uuid_print(&gtid->uuid, str, str_len)) > 0)
     {
         ret = snprintf(str + offset, str_len - offset,
-                       ":%" PRId64, gtid->seqno);
+                       ":" INT64_FMT, gtid->seqno);
         if (ret <= str_len - offset) {
             return (offset + ret);
         }

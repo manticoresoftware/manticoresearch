@@ -11532,6 +11532,8 @@ enum MysqlColumnFlag_e
 	MYSQL_COL_UNSIGNED_FLAG = 32
 };
 
+#define SPH_MYSQL_ERROR_MAX_LENGTH 512
+
 void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, const char * sStmt,
 	const char * sError, int iCID, MysqlErrors_e iErr )
 {
@@ -11541,6 +11543,17 @@ void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, const char 
 	LogSphinxqlError ( sStmt, sError, iCID );
 
 	int iErrorLen = strlen(sError)+1; // including the trailing zero
+	
+	// cut the error message to fix isseue with long message for popular clients
+	if ( iErrorLen>SPH_MYSQL_ERROR_MAX_LENGTH )
+	{
+		iErrorLen = SPH_MYSQL_ERROR_MAX_LENGTH;
+		char * sErr = const_cast<char *>( sError );
+		sErr[iErrorLen-3] = '.';
+		sErr[iErrorLen-2] = '.';
+		sErr[iErrorLen-1] = '.';
+		sErr[iErrorLen] = '\0';
+	}
 	int iLen = 9 + iErrorLen;
 	int iError = iErr; // pretend to be mysql syntax error for now
 
@@ -18060,7 +18073,7 @@ bool LoopClientMySQL ( BYTE & uPacketID, CSphinxqlSession & tSession, CSphString
 		default:
 			// default case, unknown command
 			sError.SetSprintf ( "unknown command (code=%d)", uMysqlCmd );
-				SendMysqlErrorPacket ( tOut, uPacketID, NULL, sError.cstr(), tThd.m_iConnID, MYSQL_ERR_UNKNOWN_COM_ERROR );
+			SendMysqlErrorPacket ( tOut, uPacketID, NULL, sError.cstr(), tThd.m_iConnID, MYSQL_ERR_UNKNOWN_COM_ERROR );
 			break;
 	}
 

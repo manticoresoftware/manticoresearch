@@ -111,6 +111,9 @@ INSERT INTO test_table VALUES
 <sphinxql>INSERT INTO rt1 ( id, idd, title ) VALUES ( 2, 22, 'test')</sphinxql>
 <sphinxql>CALL KEYWORDS ( 'test', 'rt1', 1 )</sphinxql>
 
+<!-- regression crash of daemon at delete query to RT index with field filter -->
+<sphinxql>DELETE FROM rt1 WHERE idd>1000</sphinxql>
+
 </sphqueries>
 
 </test>

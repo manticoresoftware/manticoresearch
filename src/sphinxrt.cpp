@@ -7014,7 +7014,7 @@ bool RtIndex_t::MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult
 	const BYTE * sModifiedQuery = (BYTE *)pQuery->m_sQuery.cstr();
 
 	ISphFieldFilterRefPtr_c pFieldFilter;
-	if ( m_pFieldFilter )
+	if ( m_pFieldFilter && sModifiedQuery )
 	{
 		pFieldFilter = m_pFieldFilter->Clone();
 		if ( pFieldFilter && pFieldFilter->Apply ( sModifiedQuery, strlen ( (char*)sModifiedQuery ), dFiltered, true ) )

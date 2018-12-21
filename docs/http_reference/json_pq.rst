@@ -149,7 +149,7 @@ Example of single document matching:
 		}
 	}
 
-The responce:
+The response:
 
 .. code-block:: rest
 
@@ -211,7 +211,7 @@ Example of multiple documents matching:
 		}
 	}
 
-The responce:
+The response:
 
 .. code-block:: rest
 
@@ -262,7 +262,7 @@ Example:
 	}
 
 	
-The responce:
+The response:
 
 .. code-block:: rest
    

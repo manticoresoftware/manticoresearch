@@ -12962,7 +12962,7 @@ static void PQLocalMatch ( const StrVec_t &dDocs, const CSphString& sIndex, cons
 	{
 		// doc-id
 		tDoc.m_uDocID = 0;
-		dFields[0] = dDocs[iDoc].cstr ();
+		dFields[0] = dDocs[iDoc].scstr ();
 
 		dMvaParsed.Resize ( iMvaCounter );
 		dMvaParsed.Fill ( 0 );

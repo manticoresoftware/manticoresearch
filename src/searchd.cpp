@@ -476,9 +476,9 @@ enum
 
 
 /// command names
-static const char * g_dApiCommands[SEARCHD_COMMAND_TOTAL] =
+static const char * g_dApiCommands[] =
 {
-	"search", "excerpt", "update", "keywords", "persist", "status", "query", "flushattrs", "query", "ping", "delete", "set",  "insert", "replace", "commit", "suggest", "json"
+	"search", "excerpt", "update", "keywords", "persist", "status", "query", "flushattrs", "query", "ping", "delete", "set",  "insert", "replace", "commit", "suggest", "json", "callpq"
 };
 
 STATIC_ASSERT ( sizeof(g_dApiCommands)/sizeof(g_dApiCommands[0])==SEARCHD_COMMAND_TOTAL, SEARCHD_COMMAND_SHOULD_BE_SAME_AS_SEARCHD_COMMAND_TOTAL );
@@ -11168,12 +11168,15 @@ void BuildMeta ( VectorLike & dStatus, const CSphQueryResultMeta & tMeta )
 
 
 	int iWord = 0;
-	for ( tMeta.m_hWordStats.IterateStart (); tMeta.m_hWordStats.IterateNext(); )
+	// multiple readers might iterate word hash here from multiple client queries
+	// that invalidates internal hash iterator - need external iterator
+	void * pWordIt =  nullptr;
+	while ( tMeta.m_hWordStats.IterateNext( &pWordIt ) )
 	{
-		const CSphQueryResultMeta::WordStat_t & tStat = tMeta.m_hWordStats.IterateGet();
+		const CSphQueryResultMeta::WordStat_t & tStat = tMeta.m_hWordStats.IterateGet ( &pWordIt );
 
 		if ( dStatus.MatchAddVa ( "keyword[%d]", iWord ) )
-			dStatus.Add ( tMeta.m_hWordStats.IterateGetKey() );
+			dStatus.Add ( tMeta.m_hWordStats.IterateGetKey ( &pWordIt ) );
 
 		if ( dStatus.MatchAddVa ( "docs[%d]", iWord ) )
 			dStatus.Add().SetSprintf ( INT64_FMT, tStat.m_iDocs );

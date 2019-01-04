@@ -12037,7 +12037,8 @@ private:
 	SqlRowBuffer_c & m_tRowBuffer;
 };
 
-bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, const CSphSchema & tSchema, CSphVector<CSphFilterSettings> & dFilters, CSphVector<FilterTreeItem_t> & dFilterTree, CSphString & sError )
+bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, const CSphSchema & tSchema,
+	CSphVector<CSphFilterSettings> & dFilters, CSphVector<FilterTreeItem_t> & dFilterTree, CSphString & sError )
 {
 	if ( !sFilters || !*sFilters )
 		return true;
@@ -12905,7 +12906,7 @@ static void PQLocalMatch ( const StrVec_t &dDocs, const CSphString& sIndex, cons
 	CSphMatchVariant tDoc;
 	tDoc.Reset ( tSchema.GetRowSize () );
 	int iAttrsCount = tSchema.GetAttrsCount ();
-	for ( int i = 0; i<iAttrsCount; i++ )
+	for ( int i = 0; i<iAttrsCount; ++i )
 	{
 		const CSphColumnInfo &tCol = tSchema.GetAttr ( i );
 		CSphAttrLocator tLoc = tCol.m_tLocator;

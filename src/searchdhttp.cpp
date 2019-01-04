@@ -1535,9 +1535,10 @@ bool HttpHandlerPQ_c::DoCallPQ ( const CSphString &sIndex, const cJSON * pPercol
 		tAttr.m_tLoc = tCol.m_tLocator;
 		tAttr.m_tLoc.m_bDynamic = true;
 		tAttr.m_eType = tCol.m_eAttrType;
-		hSchemaLocators.Add ( sphFNV64 ( tCol.m_sName.cstr() ), tAttr );
+		hSchemaLocators.Add ( sphFNV64 ( tCol.m_sName.cstr () ), tAttr );
 	}
-	for ( int i=0; i<iFieldsCount; i++ )
+
+	for ( int i=0; i<iFieldsCount; ++i )
 	{
 		const CSphColumnInfo & tField = tSchema.GetField ( i );
 		SchemaItemVariant_t tAttr;
@@ -1557,7 +1558,7 @@ bool HttpHandlerPQ_c::DoCallPQ ( const CSphString &sIndex, const cJSON * pPercol
 		// reset all back to defaults
 		tDoc.m_uDocID = 0;
 		dFields.Fill ( sTmp.scstr() );
-		for ( int i=0; i<iAttrsCount; i++ )
+		for ( int i=0; i<iAttrsCount; ++i )
 		{
 			const CSphColumnInfo & tCol = tSchema.GetAttr ( i );
 			CSphAttrLocator tLoc = tCol.m_tLocator;
@@ -1589,11 +1590,11 @@ bool HttpHandlerPQ_c::DoCallPQ ( const CSphString &sIndex, const cJSON * pPercol
 
 		// assign proper docids
 		bool bGotDocid = ( tDoc.m_uDocID!=0 );
-		if ( bGotDocid && !dDocids.GetLength() )
+		if ( bGotDocid && dDocids.IsEmpty() )
 		{
 			dDocids.Reset ( dDocs.GetLength()+1 );
 			dDocids[0] = 0; // 0 element unused
-			for ( int iInit=0; iInit<=iDoc; iInit++ )
+			for ( int iInit=0; iInit<=iDoc; ++iInit )
 				dDocids[iInit] = iInit;
 		}
 		if ( bGotDocid )

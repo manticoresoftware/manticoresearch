@@ -327,8 +327,10 @@ public:
 	// always return false (in order to simplify pattern {error='foo'; return false;})
 	bool Err ( const char * sFmt, ... );
 	bool Err ( const CSphString &sMsg );
+	StringBuilder_c& Err() { return m_sErrors; }
 	void Warn ( const char * sFmt, ... );
 	void Warn ( const CSphString &sMsg );
+	StringBuilder_c& Warn() { return m_sWarnings; }
 
 	void Clear ();
 

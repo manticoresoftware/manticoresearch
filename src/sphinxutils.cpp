@@ -1987,7 +1987,7 @@ template <typename Num, typename PCHAR>
 static void NtoA_T ( PCHAR* ppOutput, Num uVal, int iBase=10, int iWidth=0, int iPrec=0, char cFill=' ' )
 {
 	assert ( ppOutput );
-	assert ( tail ( *ppOutput ) );
+//	assert ( tail ( *ppOutput ) );
 	assert ( iWidth>=0 );
 	assert ( iPrec>=0 );
 	assert ( iBase>0 && iBase<=16);

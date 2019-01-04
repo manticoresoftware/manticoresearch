@@ -2528,6 +2528,7 @@ class StringBuilder_c : public ISphNoncopyable
 	{
 		friend class StringBuilder_c;
 
+		bool m_bSkipNext = false;
 		const char * m_sPrefix = nullptr;
 		const char * m_sSuffix = nullptr;
 		LazyComma_c * m_pPrevious = nullptr;
@@ -2548,6 +2549,13 @@ class StringBuilder_c : public ISphNoncopyable
 	public:
 		const char * RawComma ( int &iLen, StringBuilder_c &dBuilder )
 		{
+			if ( m_bSkipNext )
+			{
+				m_bSkipNext = false;
+				iLen = 0;
+				return nullptr;
+			}
+
 			if ( Started() )
 			{
 				iLen = m_iLength;;
@@ -2565,6 +2573,9 @@ class StringBuilder_c : public ISphNoncopyable
 			iLen = m_sPrefix ? strlen ( m_sPrefix ) : 0;
 			return m_sPrefix;
 		}
+
+		inline void SkipNext () { m_bSkipNext = true; }
+
 	};
 
 private:
@@ -2591,7 +2602,8 @@ public:
 	void Clear ();
 
 	// get current build value
-	const char * cstr () const { return m_sBuffer; }
+	const char * cstr () const { return m_sBuffer ? m_sBuffer : ""; }
+	const char * rawstr () const { return m_sBuffer; }
 
 	// move out (de-own) value
 	BYTE * Leak ();
@@ -2613,6 +2625,8 @@ public:
 	// append 1 char despite any blocks.
 	inline void RawC ( char cChar ) { GrowEnough ( 1 ); *end () = cChar; ++m_iUsed; }
 	void AppendRawChars ( const char * sText ); // append without any commas
+	StringBuilder_c &SkipNextComma ();
+	StringBuilder_c &AppendName ( const char * sName); // append
 
 	// these use standard sprintf() inside
 	StringBuilder_c &vAppendf ( const char * sTemplate, va_list ap );
@@ -2658,7 +2672,7 @@ namespace EscBld {	// what kind of changes will do AppendEscaped of escaped stri
 		eFixupSpace	= 1, // [comma,] change \t, \n, \r into spaces
 		eEscape		= 2, // [comma,] all escaping according to provided interface
 		eAll		= 3, // [comma,] escape and change spaces
-//		eSkipComma	= 4, // force to NOT prefix comma (if any active)
+		eSkipComma	= 4, // force to NOT prefix comma (if any active)
 	};
 }
 
@@ -2678,9 +2692,9 @@ public:
 
 		// process comma
 		int iComma = 0;
-//		if ( eWhat & EscBld::eSkipComma )
-//			eWhat -= EscBld::eSkipComma;
-//		else
+		if ( eWhat & EscBld::eSkipComma )
+			eWhat -= EscBld::eSkipComma;
+		else
 		{
 			const char * sPrefix = m_pDelimiter ? m_pDelimiter->RawComma ( iComma, *this ) : nullptr;
 			GrowEnough ( iComma );
@@ -2761,6 +2775,18 @@ public:
 		}
 		*pCur = '\0';
 		m_iUsed += iFinalLen;
+	}
+
+	EscapedStringBuilder_T &SkipNextComma ()
+	{
+		StringBuilder_c::SkipNextComma ();
+		return *this;
+	}
+
+	EscapedStringBuilder_T &AppendName ( const char * sName )
+	{
+		StringBuilder_c::AppendName(sName);
+		return *this;
 	}
 };
 

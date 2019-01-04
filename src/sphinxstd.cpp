@@ -2206,7 +2206,6 @@ TDigest_i * sphCreateTDigest()
 //////////////////////////////////////////////////////////////////////////
 StringBuilder_c::StringBuilder_c ( const char * sDel, const char * sPref, const char * sTerm )
 {
-	NewBuffer ();
 	if ( sDel || sPref || sTerm )
 		StartBlock ( sDel, sPref, sTerm );
 }
@@ -2281,6 +2280,9 @@ void StringBuilder_c::FinishBlocks ( StringBuilder_c::LazyComma_c * pLevel, bool
 
 StringBuilder_c & StringBuilder_c::vAppendf ( const char * sTemplate, va_list ap )
 {
+	if ( !m_iSize )
+		NewBuffer ();
+
 	assert ( m_sBuffer );
 	assert ( m_iUsed<m_iSize );
 
@@ -2335,8 +2337,7 @@ StringBuilder_c & StringBuilder_c::Appendf ( const char * sTemplate, ... )
 
 StringBuilder_c &StringBuilder_c::vSprintf ( const char * sTemplate, va_list ap )
 {
-	assert ( m_sBuffer );
-	assert ( m_iUsed<m_iSize );
+	assert ( m_iUsed==0 || m_iUsed<m_iSize );
 
 	int iComma = 0;
 	const char * sPrefix = m_pDelimiter ? m_pDelimiter->RawComma ( iComma, *this ) : nullptr;
@@ -2385,6 +2386,26 @@ void StringBuilder_c::AppendRawChars ( const char * sText ) // append without an
 	memcpy ( m_sBuffer + m_iUsed, sText, iLen );
 	m_iUsed += iLen;
 	m_sBuffer[m_iUsed] = '\0';
+}
+
+StringBuilder_c &StringBuilder_c::SkipNextComma()
+{
+	if ( m_pDelimiter )
+		m_pDelimiter->SkipNext ();
+	return *this;
+}
+
+StringBuilder_c &StringBuilder_c::AppendName ( const char * sName )
+{
+	if ( !sName || !strlen ( sName ) )
+		return *this;
+
+	AppendChars ( sName, strlen ( sName ), '"' );
+	GrowEnough(2);
+	m_sBuffer[m_iUsed] = ':';
+	m_sBuffer[m_iUsed+1] = '\0';
+	m_iUsed+=1;
+	return SkipNextComma ();
 }
 
 StringBuilder_c & StringBuilder_c::AppendChars ( const char * sText, int iLen, char cQuote )
@@ -2439,7 +2460,8 @@ void StringBuilder_c::Grow ( int iLen )
 	assert ( m_iSize<m_iUsed + iLen + uSTEP );
 	m_iSize = m_iUsed + iLen + uSTEP;
 	auto * pNew = new char[m_iSize];
-	memcpy ( pNew, m_sBuffer, m_iUsed + 1 );
+	if ( m_sBuffer )
+		memcpy ( pNew, m_sBuffer, m_iUsed + 1 );
 	Swap ( pNew, m_sBuffer );
 	SafeDeleteArray ( pNew );
 }
@@ -2453,7 +2475,8 @@ void StringBuilder_c::NewBuffer ()
 
 void StringBuilder_c::Clear ()
 {
-	m_sBuffer[0] = '\0';
+	if ( m_sBuffer )
+		m_sBuffer[0] = '\0';
 	m_iUsed = 0;
 	SafeDelete ( m_pDelimiter );
 }

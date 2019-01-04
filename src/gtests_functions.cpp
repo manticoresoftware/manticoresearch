@@ -489,7 +489,47 @@ TEST( functions, EscapedStringBuilderAndCommas )
 	esc_first_comma ( nullptr, EscBld::eAll, "first, ''" );
 }
 
-/*
+TEST( functions, JsonNamedEssence )
+{
+	StringBuilder_c sRes (",","{","}");
+	sRes << "hello";
+	ASSERT_STREQ ( sRes.cstr (), "{hello" );
+	sRes << "world";
+	ASSERT_STREQ ( sRes.cstr (), "{hello,world" );
+	sRes.AppendName ("bla");
+	ASSERT_STREQ ( sRes.cstr (), "{hello,world,\"bla\":" );
+	sRes << "foo";
+	ASSERT_STREQ ( sRes.cstr (), "{hello,world,\"bla\":foo" );
+	sRes << "bar";
+	ASSERT_STREQ ( sRes.cstr (), "{hello,world,\"bla\":foo,bar" );
+	sRes.AppendName("bar").Sprintf("%d",1000);
+	ASSERT_STREQ ( sRes.cstr (), "{hello,world,\"bla\":foo,bar,\"bar\":1000" );
+	ScopedComma_c sOne (sRes, ";", "[", "]");
+	sRes.AppendName("foo") << "bar";
+	ASSERT_STREQ ( sRes.cstr (), "{hello,world,\"bla\":foo,bar,\"bar\":1000,[\"foo\":bar" );
+	sRes.SkipNextComma ();
+	sRes << "baz";
+	ASSERT_STREQ ( sRes.cstr (), "{hello,world,\"bla\":foo,bar,\"bar\":1000,[\"foo\":barbaz" );
+	sRes << "end";
+	ASSERT_STREQ ( sRes.cstr (), "{hello,world,\"bla\":foo,bar,\"bar\":1000,[\"foo\":barbaz;end" );
+	sRes.FinishBlock ();
+	ASSERT_STREQ ( sRes.cstr (), "{hello,world,\"bla\":foo,bar,\"bar\":1000,[\"foo\":barbaz;end]" );
+	sRes << "End";
+	ASSERT_STREQ ( sRes.cstr (), "{hello,world,\"bla\":foo,bar,\"bar\":1000,[\"foo\":barbaz;end],End" );
+	sRes.AppendName("arr");
+	ASSERT_STREQ ( sRes.cstr (), "{hello,world,\"bla\":foo,bar,\"bar\":1000,[\"foo\":barbaz;end],End,\"arr\":" );
+	sRes.StartBlock("|","[","]");
+	ASSERT_STREQ ( sRes.cstr (), "{hello,world,\"bla\":foo,bar,\"bar\":1000,[\"foo\":barbaz;end],End,\"arr\":" );
+	sRes.FinishBlock(false);
+	ASSERT_STREQ ( sRes.cstr (), "{hello,world,\"bla\":foo,bar,\"bar\":1000,[\"foo\":barbaz;end],End,\"arr\":[]" );
+	sRes.AppendName ( "a" ).StartBlock ( "|", "[", "]" );
+	sRes << "b";
+	sRes.FinishBlock();
+	ASSERT_STREQ ( sRes.cstr (), "{hello,world,\"bla\":foo,bar,\"bar\":1000,[\"foo\":barbaz;end],End,\"arr\":[],\"a\":[b]" );
+	sRes.FinishBlock();
+	ASSERT_STREQ ( sRes.cstr (), "{hello,world,\"bla\":foo,bar,\"bar\":1000,[\"foo\":barbaz;end],End,\"arr\":[],\"a\":[b]}" );
+}
+
 TEST( functions, EscapedStringBuilderAndSkipCommas )
 {
 	// generic const char* with different escapes, exclude comma
@@ -509,7 +549,7 @@ TEST( functions, EscapedStringBuilderAndSkipCommas )
 	esc_first_comma ( nullptr, EscBld::eAll | EscBld::eSkipComma, "first''" );
 
 }
-*/
+
 
 //////////////////////////////////////////////////////////////////////////
 

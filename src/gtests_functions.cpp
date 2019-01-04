@@ -578,75 +578,7 @@ TEST( functions, TaggedHash20_t )
 
 }
 
-//////////////////////////////////////////////////////////////////////////
 
-TEST ( functions, CJson )
-{
-	struct MyIndex_t
-	{
-		CSphString m_sName;
-		CSphString m_sPath;
-	};
-
-	CSphString sResult;
-
-	CSphVector<MyIndex_t> dIndexes;
-	dIndexes.Add ( { "test1", "test1_path" } );
-	dIndexes.Add ( { "test2", "test2_path" } );
-	dIndexes.Add ( { "test3", "test3_path" } );
-
-	{
-		cJSON * pRoot = cJSON_CreateObject ();
-		ASSERT_TRUE ( pRoot );
-
-		cJSON * pIndexes = cJSON_CreateArray ();
-		ASSERT_TRUE ( pIndexes );
-		cJSON_AddItemToObject ( pRoot, "indexes", pIndexes );
-
-		for ( auto i : dIndexes )
-		{
-			cJSON * pIndex = cJSON_CreateObject ();
-			ASSERT_TRUE ( pIndex );
-			cJSON_AddItemToArray ( pIndexes, pIndex );
-			cJSON_AddStringToObject ( pIndex, "name", i.m_sName.cstr () );
-			cJSON_AddStringToObject ( pIndex, "path", i.m_sPath.cstr () );
-		}
-
-		char * szResult = cJSON_Print ( pRoot );
-		sResult.Adopt ( &szResult );
-		cJSON_Delete ( pRoot );
-	}
-
-	{
-		const char * dContents = sResult.cstr ();
-
-		cJSON * pRoot = cJSON_Parse ( dContents );
-		EXPECT_TRUE ( pRoot );
-
-		cJSON * pIndexes = cJSON_GetObjectItem ( pRoot, "indexes" );
-		EXPECT_TRUE ( pIndexes );
-
-		int iNumIndexes = cJSON_GetArraySize ( pIndexes );
-		ASSERT_EQ ( iNumIndexes, dIndexes.GetLength () );
-
-		int iItem = 0;
-		for ( auto i : dIndexes )
-		{
-			cJSON * pIndex = cJSON_GetArrayItem ( pIndexes, iItem++ );
-			EXPECT_TRUE ( pIndex );
-
-			cJSON * pJ;
-			pJ = cJSON_GetObjectItem ( pIndex, "name" );
-			EXPECT_TRUE ( pJ );
-			ASSERT_EQ ( i.m_sName, pJ->valuestring );
-
-			pJ = cJSON_GetObjectItem ( pIndex, "path" );
-			EXPECT_TRUE ( pJ );
-			ASSERT_EQ ( i.m_sPath, pJ->valuestring );
-		}
-		cJSON_Delete ( pRoot );
-	}
-}
 
 //////////////////////////////////////////////////////////////////////////
 unsigned int nlog2 ( uint64_t x )

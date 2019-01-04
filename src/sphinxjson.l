@@ -11,8 +11,8 @@
 
 #define STORE_BOUNDS \
 	{ \
-		lvalp->m_iStart = yytext - pParser->m_pBuf; \
-		lvalp->m_iEnd = lvalp->m_iStart + yyleng; \
+		lvalp->m_sValue.m_iStart = yytext - pParser->m_pSource; \
+		lvalp->m_sValue.m_iLen = yyleng; \
 		pParser->m_pLastToken = yytext; \
 	}
 

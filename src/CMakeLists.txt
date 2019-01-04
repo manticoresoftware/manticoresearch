@@ -187,7 +187,7 @@ if ( NOT DISABLE_TESTING )
 		if ( HAVE_GOOGLETEST )
 			set ( GTESTS_SRC ${SEARCHD_SRCS_TESTABLE} gtests_rtstuff.cpp gtests_tokenizer.cpp gtests_text.cpp
 					gtests_functions.cpp gtests_globalstate.cpp gtests_searchd.cpp gtests_filter.cpp gtests_searchdaemon.cpp
-					gtests_pqstuff.cpp )
+					gtests_pqstuff.cpp gtests_json.cpp json/cJSON_test.c )
 			add_executable ( gmanticoretest ${GTESTS_SRC} )
 			target_link_libraries ( gmanticoretest gmock_main libsphinx ${EXTRA_LIBRARIES} )
 			if ( CMAKE_VERSION VERSION_LESS 3.9.0 )# freshest cmake able to discover google-tests

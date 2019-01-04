@@ -1215,7 +1215,7 @@ private:
 	const OptionsHash_t & m_tOptions;
 
 	// FIXME!!! handle replication for GotQuery and Delete
-	bool GotDocuments ( const CSphString & sIndex, const cJSON * pPercolate, bool bVerbose );
+	bool DoCallPQ ( const CSphString &sIndex, const cJSON * pPercolate, bool bVerbose );
 	bool GotQuery ( const CSphString & sIndex, const cJSON * pQuery, const cJSON * pRoot, CSphString * pUID, bool bReplace );
 	bool ListQueries ( const CSphString & sIndex );
 	bool Delete ( const CSphString & sIndex, const cJSON * pRoot );
@@ -1471,7 +1471,7 @@ static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, co
 }
 
 
-bool HttpHandlerPQ_c::GotDocuments ( const CSphString & sIndex, const cJSON * pPercolate, bool bVerbose )
+bool HttpHandlerPQ_c::DoCallPQ ( const CSphString &sIndex, const cJSON * pPercolate, bool bVerbose )
 {
 	CSphString sWarning, sError, sTmp;
 	CSphVector<const cJSON *> dDocs;
@@ -1944,7 +1944,7 @@ bool HttpHandlerPQ_c::Process()
 
 	if ( bMatch )
 	{
-		return GotDocuments ( sIndex, pPerc, bVerbose );
+		return DoCallPQ ( sIndex, pPerc, bVerbose );
 	} else if ( bDelete )
 	{
 		return Delete ( sIndex, tRoot.Ptr() );

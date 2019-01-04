@@ -12156,7 +12156,8 @@ bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, co
 	return ( iRes==0 );
 }
 
-static void PercolateQuery ( const SqlStmt_t & tStmt, bool bReplace, ESphCollation eCollation, SqlRowBuffer_c & tOut, CSphString & sWarning )
+static void PercolateAddQuery ( const SqlStmt_t &tStmt, bool bReplace, ESphCollation eCollation,
+	SqlRowBuffer_c &tOut, CSphString &sWarning )
 {
 	CSphString sError;
 	int iExp = tStmt.m_iSchemaSz;
@@ -13358,7 +13359,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 	// percolate need unlocked index
 	if ( eType==eITYPE::PERCOLATE && tOut.GetBuffer () )
 	{
-		PercolateQuery ( tStmt, bReplace, eCollation, *tOut.GetBuffer(), sWarning );
+		PercolateAddQuery ( tStmt, bReplace, eCollation, *tOut.GetBuffer (), sWarning );
 		return;
 	}
 

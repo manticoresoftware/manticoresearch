@@ -21,6 +21,20 @@
 //////////////////////////////////////////////////////////////////////////
 // helpers
 
+// cache result of system ::tolower into table for fast access
+struct LowerTable
+{
+	char m_cLowerTable[256];
+	LowerTable() { for ( int i = 0; i<256; ++i ) m_cLowerTable[i] = ( char ) tolower (i); }
+};
+
+inline char Mytolower ( char c )
+{
+	static LowerTable tbl;
+//	return (char) tolower (c);
+	return tbl.m_cLowerTable [ (int) c ];
+}
+
 // how match bytes need to store packed v
 inline int PackedLen ( DWORD v )
 {
@@ -470,7 +484,7 @@ private:
 		sKey.m_iLen = m_dBsonBuffer.GetLength () - sKey.m_iStart;
 		if ( m_bToLowercase )
 			for ( auto &c : VecTraits_T<char> ( ( char * ) sPacked, sKey.m_iLen ) )
-				c = ( char ) tolower ( c ); // OPTIMIZE! not sure if significant, but known to be hell slow
+				c = ( char ) Mytolower ( c ); // OPTIMIZE! not sure if significant, but known to be hell slow
 	}
 
 public:
@@ -1972,7 +1986,7 @@ inline static int MeasureAndOptimizeVector ( const cJSON * pCJSON, ESphJsonType 
 }
 
 // save cjson as bson
-bool cJsonToBsonNode ( const cJSON * pCJSON, CJsonHelper &dOut, const char * sName, bool bToLowercase, StringBuilder_c &sMsg )
+bool cJsonToBsonNode ( cJSON * pCJSON, CJsonHelper &dOut, const char * sName, bool bToLowercase, StringBuilder_c &sMsg )
 {
 	auto eType = NumericFixup ( pCJSON );
 
@@ -1985,7 +1999,7 @@ bool cJsonToBsonNode ( const cJSON * pCJSON, CJsonHelper &dOut, const char * sNa
 	if ( sName )
 		dOut.PackStr ( sName );
 
-	const cJSON * pNode; // used in cJSON_ArrayForEach iterations
+	cJSON * pNode; // used in cJSON_ArrayForEach iterations
 
 	switch ( eType )
 	{
@@ -2014,13 +2028,13 @@ bool cJsonToBsonNode ( const cJSON * pCJSON, CJsonHelper &dOut, const char * sNa
 		dOut.StoreInt ( 0 ); // place for mask
 		if ( bToLowercase )
 		{
-			CSphString sLower;
 			cJSON_ArrayForEach( pNode, pCJSON )
 			{
-				sLower.SetBinary ( pNode->string, strlen ( pNode->string ) );
-				sLower.ToLower ();
-				uMask |= KeyMask ( sLower.cstr () );
-				cJsonToBsonNode ( pNode, dOut, sLower.cstr (), bToLowercase, sMsg );
+				int iLen = strlen ( pNode->string );
+				for ( auto i = 0; i<iLen; ++i )
+					pNode->string[i] = Mytolower ( pNode->string[i] );
+				uMask |= KeyMask ( pNode->string );
+				cJsonToBsonNode ( pNode, dOut, pNode->string, bToLowercase, sMsg );
 			}
 		} else
 		{
@@ -2075,7 +2089,7 @@ bool cJsonToBsonNode ( const cJSON * pCJSON, CJsonHelper &dOut, const char * sNa
 }
 
 // save cjson as bson
-bool bson::cJsonToBson ( const cJSON * pCJSON, CSphVector<BYTE> &dData, bool bToLowercase, StringBuilder_c &sMsg )
+bool bson::cJsonToBson ( cJSON * pCJSON, CSphVector<BYTE> &dData, bool bToLowercase, StringBuilder_c &sMsg )
 {
 	dData.Resize (0);
 	CJsonHelper dOut ( dData ); // that will write bloom at the beginning
@@ -2083,16 +2097,16 @@ bool bson::cJsonToBson ( const cJSON * pCJSON, CSphVector<BYTE> &dData, bool bTo
 		return cJsonToBsonNode ( pCJSON, dOut, nullptr, bToLowercase, sMsg );
 
 	DWORD uMask = 0;
-	const cJSON * pNode;
+	cJSON * pNode;
 	if ( bToLowercase )
 	{
-		CSphString sLower;
 		cJSON_ArrayForEach( pNode, pCJSON )
 		{
-			sLower.SetBinary ( pNode->string, strlen (pNode->string) );
-			sLower.ToLower ();
-			uMask |= KeyMask ( sLower.cstr() );
-			cJsonToBsonNode ( pNode, dOut, sLower.cstr (), bToLowercase, sMsg );
+			int iLen = strlen ( pNode->string );
+			for ( auto i = 0; i<iLen; ++i )
+				pNode->string[i] = Mytolower ( pNode->string[i] );
+			uMask |= KeyMask ( pNode->string);
+			cJsonToBsonNode ( pNode, dOut, pNode->string, bToLowercase, sMsg );
 		}
 	} else
 	{

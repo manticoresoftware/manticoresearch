@@ -828,3 +828,39 @@ TEST ( bench, DISABLED_bson_vs_cjson )
 	iTimeSpan += sphMicroTimer ();
 	std::cout << "\n" << uLoops << " of payload memcpy took " << iTimeSpan << " uSec";
 }
+
+TEST ( bench, DISABLED_custom_tolower )
+{
+	auto uLoops = 1000000;
+
+	char x[193];
+	char l[193];
+	for (int i=0; i<192; ++i)
+	{
+		x[i] = char ( i + 64 );
+		l[i] = ( char ) tolower ( i + 64 );
+	}
+	x[192] = '\0';
+	l[192] = '\0';
+
+	char result[193];
+
+	auto iTimeSpan = -sphMicroTimer ();
+	for ( auto i = 0; i<uLoops; ++i )
+	{
+		for (int j=0; j<193; ++j)
+			result[j] = (char) tolower (x[j]);
+	}
+	iTimeSpan += sphMicroTimer ();
+	std::cout << uLoops << " of system   tolower took " << iTimeSpan << " uSec\n";
+
+	iTimeSpan = -sphMicroTimer ();
+	for ( auto i = 0; i<uLoops; ++i )
+	{
+		for ( int j = 0; j<193; ++j )
+			result[j] = l[(int)x[j]];
+	}
+	iTimeSpan += sphMicroTimer ();
+	std::cout << uLoops << " of prepared tolower took " << iTimeSpan << " uSec\n";
+
+}

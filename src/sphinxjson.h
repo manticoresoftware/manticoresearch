@@ -339,7 +339,7 @@ public:
 };
 
 // for benching
-bool       cJsonToBson ( const cJSON * pCJSON, CSphVector<BYTE> &dData, bool bToLowercase, StringBuilder_c &sMsg );
+bool       cJsonToBson ( cJSON * pCJSON, CSphVector<BYTE> &dData, bool bToLowercase, StringBuilder_c &sMsg );
 
 }; // namespace sph
 

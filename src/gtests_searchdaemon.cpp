@@ -173,7 +173,7 @@ protected:
 		g_bHostnameLookup = true;
 		const char * pTest = sInExpr;
 		auto pResult = ConfigureMultiAgent ( pTest, "tstidx", tAgentOptions );
-		EXPECT_EQ ( (bool)pResult, bExpectedResult ) << sInExpr;
+		EXPECT_EQ ( pResult!=nullptr, bExpectedResult ) << sInExpr;
 		return pResult;
 	}
 

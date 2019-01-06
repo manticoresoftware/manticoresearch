@@ -34,7 +34,7 @@ void ThdSearch ( void * )
 		ARRAY_FOREACH ( i, g_dLocals )
 		{
 			auto pDesc = GetTestLocal ( g_dLocals[i] );
-			bool bGot = pDesc;
+			bool bGot = pDesc!=nullptr;
 
 			// check that it exists
 			if ( !bGot )

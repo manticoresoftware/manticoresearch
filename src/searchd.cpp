@@ -19634,7 +19634,7 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread
 	{
 		// skip JSON indexes - no need to delete them
 		ServedDescRPtr_c pServed ( it.Get() );
-		if ( pServed->m_bJson )
+		if ( pServed && pServed->m_bJson )
 			continue;
 
 		dLocalToDelete.Add ( true, it.GetName() );

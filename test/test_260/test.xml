@@ -45,6 +45,15 @@ index tmp1
 	dict			= keywords
 	charset_table	= 0..9, A..Z->a..z, _, a..z
 }
+
+index missed_idx
+{
+	source = sql1
+	charset_table	= 0..9, A..Z->a..z, _, a..z
+	docinfo = extern
+	path = <data_path/>/missed_idx
+}
+
 </config>
 
 <db_drop>drop table if exists test_table</db_drop>

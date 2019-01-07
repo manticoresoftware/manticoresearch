@@ -218,6 +218,26 @@ public:
 		StoreBigintLE ( m_dBsonBuffer.AddN ( sizeof ( int64_t ) ), v );
 	}
 
+	inline void Add ( BYTE b )
+	{
+		m_dBsonBuffer.Add ( b );
+	}
+
+	inline void PackStr ( const char * s, int iLen )
+	{
+		assert ( iLen<=0x00FFFFFFFF );
+		iLen = Min ( iLen, 0x00ffffff );
+		PackInt ( iLen );
+		auto * pOut = m_dBsonBuffer.AddN ( iLen );
+		if ( iLen )
+			memmove ( pOut, s, iLen );
+	}
+
+	inline void PackStr ( const char * s )
+	{
+		PackStr ( s, strlen(s));
+	}
+
 	void PackInt ( DWORD v )
 	{
 //		assert ( v<16777216 ); // strings over 16M bytes and arrays over 16M entries are not supported
@@ -1898,40 +1918,127 @@ const char * Bson_c::sError () const
 	return m_sError.cstr();
 }
 
-
-class CJsonHelper : public BsonHelper
+BsonIterator_c::BsonIterator_c ( const NodeHandle_t &dParent )
 {
-public:
-	CJsonHelper ( CSphVector<BYTE> &dBuffer )
-		: BsonHelper ( dBuffer )
-	{}
+	if ( bson::IsNullNode ( dParent ) )
+		return;
 
-	inline void Add ( BYTE b )
+	m_pData = dParent.first;
+	m_eType = dParent.second;
+	switch ( m_eType )
 	{
-		m_dBsonBuffer.Add ( b );
-	}
+		case JSON_STRING_VECTOR:
+			sphJsonUnpackInt ( &m_pData );
+			m_iSize = sphJsonUnpackInt ( &m_pData );
+			m_dData = { m_pData, JSON_STRING };
+			break;
 
-	void PackStr ( const char * s )
-	{
-		int iLen = strlen ( s );
-		assert ( iLen<=0x00FFFFFFFF );
-		iLen = Min ( iLen, 0x00ffffff );
-		PackInt ( iLen );
-		auto * pOut = m_dBsonBuffer.AddN ( iLen );
-		if ( iLen )
-			memmove ( pOut, s, iLen );
-	}
+		case JSON_MIXED_VECTOR:
+			sphJsonUnpackInt ( &m_pData );
+			m_iSize = sphJsonUnpackInt ( &m_pData );
+			m_dData.second = ESphJsonType ( *m_pData++ );
+			m_dData.first = m_pData;
+		break;
 
-	void PackStr ( const char * s, int iLen )
-	{
-		assert ( iLen<=0x00FFFFFFFF );
-		iLen = Min ( iLen, 0x00ffffff );
-		PackInt ( iLen );
-		auto * pOut = m_dBsonBuffer.AddN ( iLen );
-		if ( iLen )
-			memmove ( pOut, s, iLen );
+		case JSON_OBJECT: sphJsonUnpackInt ( &m_pData );
+		case JSON_ROOT:
+			{
+				m_pData += 4; // skip bloom
+				m_dData.second = ESphJsonType ( *m_pData++ );
+				if ( m_dData.second == JSON_EOF )
+					Finish();
+				else
+				{
+					int iStrLen = sphJsonUnpackInt ( &m_pData );
+					m_sName.SetBinary ( ( const char * ) m_pData, iStrLen );
+					m_pData += iStrLen;
+					m_dData.first = m_pData;
+				}
+				break;
+			}
+
+		case JSON_INT32_VECTOR:
+			m_iSize = sphJsonUnpackInt ( &m_pData );
+			m_dData = { m_pData, JSON_INT32 };
+			break;
+
+		case JSON_INT64_VECTOR:
+			m_iSize = sphJsonUnpackInt ( &m_pData );
+			m_dData = { m_pData, JSON_INT64 };
+			break;
+
+		case JSON_DOUBLE_VECTOR:
+			m_iSize = sphJsonUnpackInt ( &m_pData );
+			m_dData = { m_pData, JSON_DOUBLE };
+			break;
+
+		case JSON_INT32:
+		case JSON_INT64:
+		case JSON_DOUBLE:
+		case JSON_STRING:
+		case JSON_TRUE:
+		case JSON_FALSE:
+		case JSON_NULL:
+			m_iSize = 1;
+			m_dData = dParent;
+			break;
+		case JSON_EOF:
+			Finish();
+		default: break;
 	}
-};
+	if ( !m_iSize )
+		Finish();
+}
+
+bool BsonIterator_c::Next()
+{
+	switch ( m_eType )
+	{
+		case JSON_INT32:
+		case JSON_INT64:
+		case JSON_DOUBLE:
+		case JSON_STRING:
+		case JSON_TRUE:
+		case JSON_FALSE:
+		case JSON_NULL:
+		case JSON_EOF:
+			// nowhere to step next
+			return Finish();
+
+		case JSON_OBJECT: // these two have EOF as marker; no size.
+		case JSON_ROOT:
+		{
+			sphJsonSkipNode ( m_dData.second, &m_pData );
+			m_dData.second = ESphJsonType ( *m_pData );
+			if ( m_dData.second==JSON_EOF ) // in case of empty root/obj EOF is already here
+				return Finish ();
+
+			++m_pData;
+			int iStrLen = sphJsonUnpackInt ( &m_pData );
+			m_sName.SetBinary ( ( const char * ) m_pData, iStrLen );
+			m_pData += iStrLen;
+			m_dData.first = m_pData;
+			break;
+		}
+
+		case JSON_STRING_VECTOR: // these have size
+		case JSON_INT32_VECTOR:
+		case JSON_INT64_VECTOR:
+		case JSON_DOUBLE_VECTOR:
+		case JSON_MIXED_VECTOR:
+			--m_iSize;
+			if (m_iSize<=0)
+				return Finish ();
+
+			sphJsonSkipNode ( m_dData.second, &m_pData );
+			if ( m_eType==JSON_MIXED_VECTOR )
+				m_dData.second = ESphJsonType ( *m_pData++ );
+			m_dData.first = m_pData;
+		default:
+			break;
+	}
+	return true;
+}
 
 inline ESphJsonType cJson2BsonType ( int iCjsonType )
 {
@@ -1942,91 +2049,178 @@ inline ESphJsonType cJson2BsonType ( int iCjsonType )
 	return BsonTypes[iCjsonType & 0xFF];
 }
 
-inline ESphJsonType NumericFixup ( const cJSON * pNode )
+class CJsonHelper
 {
-	auto eOrigType = cJson2BsonType ( pNode->type );
-	if ( eOrigType==JSON_INT64 && pNode->valueint==int64_t ( int ( pNode->valueint ) ) )
-		return JSON_INT32;
-	return eOrigType;
-}
+	BsonHelper m_dStorage;
+	bool m_bAutoconv;
+	bool m_bToLowercase;
+//	StringBuilder_c m_sError;
 
-inline static int MeasureAndOptimizeVector ( const cJSON * pCJSON, ESphJsonType &eType )
-{
-	int iSize = 0;
-	ESphJsonType eOutType;
-	const cJSON * pNode;
-	bool bAllSame = true;
-	cJSON_ArrayForEach( pNode, pCJSON )
+public:
+	CJsonHelper ( CSphVector<BYTE> &dBuffer, bool bAutoconv, bool bToLowercase )
+		: m_dStorage ( dBuffer )
+		, m_bAutoconv ( bAutoconv )
+		, m_bToLowercase ( bToLowercase )
+	{}
+
+	inline ESphJsonType NumericFixup ( cJSON * pNode )
 	{
-		if ( !iSize )
-			eOutType = NumericFixup ( pNode );
-		else if ( bAllSame && ( eOutType!=NumericFixup ( pNode ) ) )
-			bAllSame = false;
-		++iSize;
-	}
+		auto eOrigType = cJson2BsonType ( pNode->type );
 
-	if ( !iSize )
-		return 0;
-
-	if ( bAllSame )
-		switch ( eOutType )
+		// auto-convert string values, if necessary
+		if ( m_bAutoconv && eOrigType==JSON_STRING )
 		{
-		case JSON_INT32: eType = JSON_INT32_VECTOR;
-			break;
-		case JSON_INT64: eType = JSON_INT64_VECTOR;
-			break;
-		case JSON_DOUBLE: eType = JSON_DOUBLE_VECTOR;
-			break;
-		case JSON_STRING: eType = JSON_STRING_VECTOR;
-			break;
-		default: break;
+			int64_t iFoo;
+			if ( !sphJsonStringToNumber ( pNode->valuestring, strlen ( pNode->valuestring ), eOrigType, iFoo, pNode->valuedouble ) )
+				return eOrigType;
+			pNode->valueint = iFoo;
 		}
 
-	return iSize;
-}
+		if ( eOrigType==JSON_INT64 && pNode->valueint==int64_t ( int ( pNode->valueint ) ) )
+			return JSON_INT32;
+		return eOrigType;
+	}
 
-// save cjson as bson
-bool cJsonToBsonNode ( cJSON * pCJSON, CJsonHelper &dOut, const char * sName, bool bToLowercase, StringBuilder_c &sMsg )
-{
-	auto eType = NumericFixup ( pCJSON );
-
-	int iSize = 0; // have sense only for vectors
-	if ( eType==JSON_MIXED_VECTOR )
-		iSize = MeasureAndOptimizeVector ( pCJSON, eType );
-
-	dOut.Add ( eType );
-
-	if ( sName )
-		dOut.PackStr ( sName );
-
-	cJSON * pNode; // used in cJSON_ArrayForEach iterations
-
-	switch ( eType )
+	inline int MeasureAndOptimizeVector ( cJSON * pCJSON, ESphJsonType &eType )
 	{
-		// basic types
-	case JSON_INT32: dOut.StoreInt ( ( int ) pCJSON->valueint );
-		break;
-	case JSON_INT64: dOut.StoreBigint ( pCJSON->valueint );
-		break;
-	case JSON_DOUBLE: dOut.StoreBigint ( sphD2QW ( pCJSON->valuedouble ) );
-		break;
-	case JSON_STRING: dOut.PackStr ( pCJSON->valuestring );
-		break;
+		int iSize = 0;
+		ESphJsonType eOutType;
+		cJSON * pNode;
+		bool bAllSame = true;
+		cJSON_ArrayForEach( pNode, pCJSON )
+		{
+			if ( !iSize )
+				eOutType = NumericFixup ( pNode );
+			else if ( bAllSame && ( eOutType!=NumericFixup ( pNode ) ) )
+				bAllSame = false;
+			++iSize;
+		}
 
-		// literals
-	case JSON_TRUE:
-	case JSON_FALSE:
-	case JSON_NULL:
-		// no content
-		break;
+		if ( !iSize )
+			return 0;
 
-		// associative arrays
-	case JSON_OBJECT:
+		if ( bAllSame )
+			switch ( eOutType )
+			{
+			case JSON_INT32: eType = JSON_INT32_VECTOR; break;
+			case JSON_INT64: eType = JSON_INT64_VECTOR; break;
+			case JSON_DOUBLE: eType = JSON_DOUBLE_VECTOR; break;
+			case JSON_STRING: eType = JSON_STRING_VECTOR; break;
+			default: break;
+			}
+
+		return iSize;
+	}
+
+	// save cjson as bson
+	bool cJsonToBsonNode ( cJSON * pCJSON, const char * sName = nullptr )
 	{
+		auto eType = NumericFixup ( pCJSON );
+
+		int iSize = 0; // have sense only for vectors
+		if ( eType==JSON_MIXED_VECTOR )
+			iSize = MeasureAndOptimizeVector ( pCJSON, eType );
+
+		m_dStorage.Add ( eType );
+
+		if ( sName )
+			m_dStorage.PackStr ( sName );
+
+		cJSON * pNode; // used in cJSON_ArrayForEach iterations
+		switch ( eType )
+		{
+			// basic types
+		case JSON_INT32: m_dStorage.StoreInt ( ( int ) pCJSON->valueint );	break;
+		case JSON_INT64: m_dStorage.StoreBigint ( pCJSON->valueint ); break;
+		case JSON_DOUBLE: m_dStorage.StoreBigint ( sphD2QW ( pCJSON->valuedouble ) ); break;
+		case JSON_STRING: m_dStorage.PackStr ( pCJSON->valuestring ); break;
+
+			// literals
+		case JSON_TRUE:
+		case JSON_FALSE:
+		case JSON_NULL:
+			// no content
+			break;
+
+			// associative arrays
+		case JSON_OBJECT:
+		{
+			DWORD uMask = 0;
+			int iOfs = m_dStorage.ReserveSize ();
+			m_dStorage.StoreInt ( 0 ); // place for mask
+			if ( m_bToLowercase )
+			{
+				cJSON_ArrayForEach( pNode, pCJSON )
+				{
+					int iLen = strlen ( pNode->string );
+					for ( auto i = 0; i<iLen; ++i )
+						pNode->string[i] = Mytolower ( pNode->string[i] );
+					uMask |= KeyMask ( pNode->string );
+					cJsonToBsonNode ( pNode, pNode->string );
+				}
+			} else
+			{
+				cJSON_ArrayForEach( pNode, pCJSON )
+				{
+					uMask |= KeyMask ( pNode->string );
+					cJsonToBsonNode ( pNode, pNode->string );
+				}
+			}
+			m_dStorage.Add ( JSON_EOF );
+			m_dStorage.StoreMask ( iOfs + 1, uMask );
+			m_dStorage.PackSize ( iOfs ); // MUST be in this order, because PackSize() might move the data!
+			break;
+		}
+
+			// mixed array
+		case JSON_MIXED_VECTOR:
+		{
+			int iOfs = m_dStorage.ReserveSize ();
+			m_dStorage.PackInt ( iSize );
+			cJSON_ArrayForEach( pNode, pCJSON )
+				cJsonToBsonNode ( pNode );
+			m_dStorage.PackSize ( iOfs );
+			break;
+		}
+
+			// optimized (generic) arrays
+		case JSON_INT32_VECTOR: m_dStorage.PackInt ( iSize );
+			cJSON_ArrayForEach( pNode, pCJSON )
+				m_dStorage.StoreInt ( ( int ) pNode->valueint );
+			break;
+		case JSON_INT64_VECTOR: m_dStorage.PackInt ( iSize );
+			cJSON_ArrayForEach( pNode, pCJSON )
+				m_dStorage.StoreBigint ( pNode->valueint );
+			break;
+		case JSON_DOUBLE_VECTOR: m_dStorage.PackInt ( iSize );
+			cJSON_ArrayForEach( pNode, pCJSON )
+				m_dStorage.StoreBigint ( sphD2QW ( pNode->valuedouble ) );
+			break;
+		case JSON_STRING_VECTOR:
+		{
+			int iOfs = m_dStorage.ReserveSize ();
+			m_dStorage.PackInt ( iSize );
+			cJSON_ArrayForEach( pNode, pCJSON )
+				m_dStorage.PackStr ( pNode->valuestring );
+			m_dStorage.PackSize ( iOfs );
+			break;
+		}
+		default: assert ( 0 && "internal error: unhandled type" );
+			return false;
+		}
+		return true;
+	}
+
+	// save cjson as bson
+	bool cJsonToBson ( cJSON * pCJSON )
+	{
+		assert ( pCJSON );
+		if ( ( pCJSON->type & 0xFF )!=cJSON_Object ) // topmost obj write as 'root'
+			return cJsonToBsonNode ( pCJSON );
+
 		DWORD uMask = 0;
-		int iOfs = dOut.ReserveSize ();
-		dOut.StoreInt ( 0 ); // place for mask
-		if ( bToLowercase )
+		cJSON * pNode;
+		if ( m_bToLowercase )
 		{
 			cJSON_ArrayForEach( pNode, pCJSON )
 			{
@@ -2034,97 +2228,34 @@ bool cJsonToBsonNode ( cJSON * pCJSON, CJsonHelper &dOut, const char * sName, bo
 				for ( auto i = 0; i<iLen; ++i )
 					pNode->string[i] = Mytolower ( pNode->string[i] );
 				uMask |= KeyMask ( pNode->string );
-				cJsonToBsonNode ( pNode, dOut, pNode->string, bToLowercase, sMsg );
+				cJsonToBsonNode ( pNode, pNode->string );
 			}
 		} else
 		{
 			cJSON_ArrayForEach( pNode, pCJSON )
 			{
 				uMask |= KeyMask ( pNode->string );
-				cJsonToBsonNode ( pNode, dOut, pNode->string, bToLowercase, sMsg );
+				cJsonToBsonNode ( pNode, pNode->string );
 			}
 		}
-		dOut.Add ( JSON_EOF );
-		dOut.StoreMask ( iOfs + 1, uMask );
-		dOut.PackSize ( iOfs ); // MUST be in this order, because PackSize() might move the data!
-		break;
+		m_dStorage.Add ( JSON_EOF );
+		m_dStorage.StoreMask ( 0, uMask );
+		return true;
 	}
-
-		// mixed array
-	case JSON_MIXED_VECTOR:
-	{
-		int iOfs = dOut.ReserveSize ();
-		dOut.PackInt ( iSize );
-		cJSON_ArrayForEach( pNode, pCJSON )
-			cJsonToBsonNode ( pNode, dOut, nullptr, bToLowercase, sMsg );
-		dOut.PackSize ( iOfs );
-		break;
-	}
-
-		// optimized (generic) arrays
-	case JSON_INT32_VECTOR: dOut.PackInt ( iSize );
-		cJSON_ArrayForEach( pNode, pCJSON )
-			dOut.StoreInt ( ( int ) pNode->valueint );
-		break;
-	case JSON_INT64_VECTOR: dOut.PackInt ( iSize );
-		cJSON_ArrayForEach( pNode, pCJSON )
-			dOut.StoreBigint ( pNode->valueint );
-		break;
-	case JSON_DOUBLE_VECTOR: dOut.PackInt ( iSize );
-		cJSON_ArrayForEach( pNode, pCJSON )
-			dOut.StoreBigint ( sphD2QW ( pNode->valuedouble ) );
-		break;
-	case JSON_STRING_VECTOR:
-	{
-		int iOfs = dOut.ReserveSize ();
-		dOut.PackInt ( iSize );
-		cJSON_ArrayForEach( pNode, pCJSON )
-			dOut.PackStr ( pNode->valuestring );
-		dOut.PackSize ( iOfs );
-		break;
-	}
-	default: assert ( 0 && "internal error: unhandled type" );
-		return false;
-	}
-}
+};
 
 // save cjson as bson
-bool bson::cJsonToBson ( cJSON * pCJSON, CSphVector<BYTE> &dData, bool bToLowercase, StringBuilder_c &sMsg )
+bool bson::cJsonToBson ( cJSON * pCJSON, CSphVector<BYTE> &dData, bool bAutoconv, bool bToLowercase/*, StringBuilder_c &sMsg*/ )
 {
 	dData.Resize (0);
-	CJsonHelper dOut ( dData ); // that will write bloom at the beginning
-	if ( ( pCJSON->type & 0xFF )!=cJSON_Object ) // topmost obj write as 'root'
-		return cJsonToBsonNode ( pCJSON, dOut, nullptr, bToLowercase, sMsg );
-
-	DWORD uMask = 0;
-	cJSON * pNode;
-	if ( bToLowercase )
-	{
-		cJSON_ArrayForEach( pNode, pCJSON )
-		{
-			int iLen = strlen ( pNode->string );
-			for ( auto i = 0; i<iLen; ++i )
-				pNode->string[i] = Mytolower ( pNode->string[i] );
-			uMask |= KeyMask ( pNode->string);
-			cJsonToBsonNode ( pNode, dOut, pNode->string, bToLowercase, sMsg );
-		}
-	} else
-	{
-		cJSON_ArrayForEach( pNode, pCJSON )
-		{
-			uMask |= KeyMask ( pNode->string );
-			cJsonToBsonNode ( pNode, dOut, pNode->string, bToLowercase, sMsg );
-		}
-	}
-	dOut.Add ( JSON_EOF );
-	dOut.StoreMask ( 0, uMask );
-	return true;
+	CJsonHelper dOut ( dData, bAutoconv, bToLowercase ); // that will write bloom at the beginning
+	return dOut.cJsonToBson ( pCJSON );
 }
 
 
-BsonContainer_c::BsonContainer_c ( char * sJson, bool bToLowercase )
+BsonContainer_c::BsonContainer_c ( char * sJson, bool bAutoconv, bool bToLowercase )
 {
-	sphJsonParse ( m_Bson, sJson, false, bToLowercase, m_sError );
+	sphJsonParse ( m_Bson, sJson, bAutoconv, bToLowercase, m_sError );
 	if ( m_Bson.IsEmpty () )
 		return;
 	const BYTE * pData = m_Bson.begin ();
@@ -2132,11 +2263,11 @@ BsonContainer_c::BsonContainer_c ( char * sJson, bool bToLowercase )
 	m_dData.first = pData;
 }
 
-BsonContainer2_c::BsonContainer2_c ( const char * sJson )
+BsonContainer2_c::BsonContainer2_c ( const char * sJson, bool bAutoconv, bool bToLowercase )
 {
 	auto pCjson = cJSON_Parse ( sJson );
 	m_Bson.Reserve ( strlen ( sJson ) );
-	bson::cJsonToBson ( pCjson, m_Bson, true, m_sError );
+	bson::cJsonToBson ( pCjson, m_Bson, bAutoconv, bToLowercase/*, m_sError*/ );
 	if ( pCjson )
 		cJSON_Delete ( pCjson );
 	if ( m_Bson.IsEmpty () )

@@ -679,7 +679,7 @@ TEST_F ( TJson, bson_via_cjson )
 
 	StringBuilder_c sError;
 	CSphVector<BYTE> dBson;
-	bson::cJsonToBson (pCjson, dBson, false, sError);
+	bson::cJsonToBson (pCjson, dBson, false, false );
 
 	if ( pCjson )
 		cJSON_Delete ( pCjson );
@@ -706,13 +706,13 @@ TEST_F ( TJson, bson_via_cjson )
 
 TEST_F ( TJson, bson_via_cjson_test_consistency )
 {
-	const char * sJson = R"({ "aR32": [1,2,3,4,20], "ar64": [100000000000,100000000001,100000000002,100000000003,100000000004], "ardbl": [1.1,1.2,1.3], "arrstr":["foo","bar"], "arrmixed":[1,1.0] })";
+	const char * sJson = R"({ "aR32": [1,2,3,4,20], "ar64": [100000000000,100000000001,100000000002,100000000003,100000000004], "ardbl": [1.1,1.2,1.3], "arrstr":["foo","bar"], "arrmixed":[1,1.0], "arstr":["1","2","3"] })";
 
 	auto pCjson = cJSON_Parse ( sJson );
 
 	StringBuilder_c sError;
 	CSphVector<BYTE> dBson;
-	bson::cJsonToBson ( pCjson, dBson, true, sError );
+	bson::cJsonToBson ( pCjson, dBson, true );
 
 	if ( pCjson )
 		cJSON_Delete ( pCjson );
@@ -727,17 +727,281 @@ TEST_F ( TJson, bson_via_cjson_test_consistency )
 
 	Bson_c dBSON ( dNode );
 
-	auto d32 = Bson_c ( dBSON.ChildByPath ( "ar32" ));
-	auto d64 = Bson_c ( dBSON.ChildByPath ( "ar64" ));
-	auto ddbl = Bson_c ( dBSON.ChildByPath ( "ardbl" ));
-	auto dmixed = Bson_c ( dBSON.ChildByPath ( "arrmixed" ));
+	auto d32 = Bson_c ( dBSON.ChildByName ( "ar32" ));
+	auto d64 = Bson_c ( dBSON.ChildByName ( "ar64" ));
+	auto ddbl = Bson_c ( dBSON.ChildByName ( "ardbl" ));
+	auto dmixed = Bson_c ( dBSON.ChildByName ( "arrmixed" ));
+	auto dstr = Bson_c ( dBSON.ChildByName ( "arstr" ) );
 
 	ASSERT_TRUE ( d32.IsArray () );
 	ASSERT_TRUE ( d64.IsArray () );
 	ASSERT_TRUE ( ddbl.IsArray () );
 	ASSERT_TRUE ( dmixed.IsArray () );
+	ASSERT_TRUE ( dstr.GetType ()==JSON_INT32_VECTOR );
 }
 
+TEST ( Bson_iterate, root )
+{
+	BsonContainer_c dBson ( R"({ "one":"hello", "two":"world"})" );
+	BsonIterator_c dIter (dBson);
+	ASSERT_TRUE ( dIter );
+	ASSERT_EQ ( dIter.NumElems (), -1 ); // since root is not array
+	ASSERT_STREQ (dIter.GetName().cstr(), "one");
+	ASSERT_TRUE ( dIter.IsString() );
+	ASSERT_TRUE ( dIter.StrEq ("hello"));
+	ASSERT_TRUE ( dIter.Next() );
+	ASSERT_STREQ ( dIter.GetName ().cstr (), "two" );
+	ASSERT_TRUE ( dIter.IsString () );
+	ASSERT_TRUE ( dIter.StrEq ( "world" ) );
+	ASSERT_FALSE ( dIter.Next() );
+}
+
+TEST ( Bson_iterate, empty_root )
+{
+	BsonContainer_c dBson ( R"({})" );
+	BsonIterator_c dIter ( dBson );
+	ASSERT_FALSE ( dIter );
+	ASSERT_EQ ( dIter.NumElems (), -1 ); // since root is not array
+	ASSERT_EQ ( dIter.GetName ().cstr (), nullptr );
+	ASSERT_TRUE ( dIter.IsNull ());
+	ASSERT_FALSE ( dIter.Next() );
+}
+
+TEST ( Bson_iterate, object )
+{
+	BsonContainer_c dRoot ( R"({"x":{"one":"hello", "two":"world"}})" );
+	Bson_c dBson = dRoot.ChildByName ("x");
+	BsonIterator_c dIter ( dBson );
+	ASSERT_TRUE ( dIter );
+	ASSERT_EQ ( dIter.NumElems (), -1 ); // since obj is not array
+	ASSERT_STREQ ( dIter.GetName ().cstr (), "one" );
+	ASSERT_TRUE ( dIter.IsString () );
+	ASSERT_TRUE ( dIter.StrEq ( "hello" ) );
+	ASSERT_TRUE ( dIter.Next () );
+	ASSERT_STREQ ( dIter.GetName ().cstr (), "two" );
+	ASSERT_TRUE ( dIter.IsString () );
+	ASSERT_TRUE ( dIter.StrEq ( "world" ) );
+	ASSERT_FALSE ( dIter.Next () );
+}
+
+TEST ( Bson_iterate, empty_object )
+{
+	BsonContainer_c dRoot ( R"({"x":{}})" );
+	Bson_c dBson = dRoot.ChildByName ( "x" );
+	BsonIterator_c dIter ( dBson );
+	ASSERT_FALSE ( dIter );
+	ASSERT_EQ ( dIter.NumElems (), -1 ); // since obj is not array
+	ASSERT_TRUE ( dIter.GetName ().IsEmpty () );
+	ASSERT_TRUE ( dIter.IsNull () );
+	ASSERT_FALSE ( dIter.Next () );
+}
+
+TEST ( Bson_iterate, array_int )
+{
+	BsonContainer_c dBson ( R"([1,2])" );
+	BsonIterator_c dIter ( dBson );
+	ASSERT_TRUE ( dIter );
+	ASSERT_EQ ( dIter.NumElems (), 2 );
+	ASSERT_TRUE ( dIter.GetName ().IsEmpty () );
+	ASSERT_TRUE ( dIter.IsInt () );
+	ASSERT_EQ ( dIter.Int(), 1 );
+	ASSERT_TRUE ( dIter.Next () );
+	ASSERT_TRUE ( dIter.GetName ().IsEmpty () );
+	ASSERT_TRUE ( dIter.IsInt () );
+	ASSERT_EQ ( dIter.Int (), 2 );
+	ASSERT_FALSE ( dIter.Next () );
+	ASSERT_EQ ( dIter.NumElems (), 0 );
+}
+
+TEST ( Bson_iterate, array_int64 )
+{
+	BsonContainer_c dBson ( R"([100000000001,100000000002])" );
+	BsonIterator_c dIter ( dBson );
+	ASSERT_TRUE ( dIter );
+	ASSERT_EQ ( dIter.NumElems (), 2 );
+	ASSERT_TRUE ( dIter.GetName ().IsEmpty () );
+	ASSERT_TRUE ( dIter.IsInt () );
+	ASSERT_EQ ( dIter.Int (), 100000000001 );
+	ASSERT_TRUE ( dIter.Next () );
+	ASSERT_TRUE ( dIter.GetName ().IsEmpty () );
+	ASSERT_TRUE ( dIter.IsInt () );
+	ASSERT_EQ ( dIter.Int (), 100000000002 );
+	ASSERT_FALSE ( dIter.Next () );
+	ASSERT_EQ ( dIter.NumElems (), 0 );
+}
+
+TEST ( Bson_iterate, array_double )
+{
+	BsonContainer_c dBson ( R"([1.1,1.2])" );
+	BsonIterator_c dIter ( dBson );
+	ASSERT_TRUE ( dIter );
+	ASSERT_EQ ( dIter.NumElems (), 2 );
+	ASSERT_TRUE ( dIter.GetName ().IsEmpty () );
+	ASSERT_TRUE ( dIter.IsDouble () );
+	ASSERT_EQ ( dIter.Double (), 1.1 );
+	ASSERT_TRUE ( dIter.Next () );
+	ASSERT_TRUE ( dIter.GetName ().IsEmpty () );
+	ASSERT_TRUE ( dIter.IsDouble () );
+	ASSERT_EQ ( dIter.Double (), 1.2 );
+	ASSERT_FALSE ( dIter.Next () );
+	ASSERT_EQ ( dIter.NumElems (), 0 );
+}
+
+TEST ( Bson_iterate, array_string )
+{
+	BsonContainer_c dBson ( R"(["foo","bar"])" );
+	BsonIterator_c dIter ( dBson );
+	ASSERT_TRUE ( dIter );
+	ASSERT_EQ ( dIter.NumElems (), 2 );
+	ASSERT_TRUE ( dIter.GetName ().IsEmpty () );
+	ASSERT_TRUE ( dIter.IsString () );
+	ASSERT_TRUE ( dIter.StrEq ( "foo" ) );
+	ASSERT_TRUE ( dIter.Next () );
+	ASSERT_TRUE ( dIter.GetName ().IsEmpty () );
+	ASSERT_TRUE ( dIter.IsString () );
+	ASSERT_TRUE ( dIter.StrEq ( "bar" ) );
+	ASSERT_FALSE ( dIter.Next () );
+	ASSERT_EQ ( dIter.NumElems (), 0 );
+}
+
+TEST ( Bson_iterate, array_mixed )
+{
+	BsonContainer_c dBson ( R"([1,1.1,"bar"])" );
+	BsonIterator_c dIter ( dBson );
+	ASSERT_TRUE ( dIter );
+	ASSERT_EQ ( dIter.NumElems (), 3 );
+	ASSERT_TRUE ( dIter.GetName ().IsEmpty () );
+	ASSERT_TRUE ( dIter.IsInt () );
+	ASSERT_EQ ( dIter.Int (), 1 );
+
+	ASSERT_TRUE ( dIter.Next () );
+	ASSERT_TRUE ( dIter.GetName ().IsEmpty () );
+	ASSERT_TRUE ( dIter.Double () );
+	ASSERT_EQ ( dIter.Double (), 1.1 );
+
+	ASSERT_TRUE ( dIter.Next () );
+	ASSERT_TRUE ( dIter.GetName ().IsEmpty () );
+	ASSERT_TRUE ( dIter.IsString () );
+	ASSERT_TRUE ( dIter.StrEq ( "bar" ) );
+
+	ASSERT_FALSE ( dIter.Next () );
+	ASSERT_EQ ( dIter.NumElems (), 0 );
+}
+
+TEST ( Bson_iterate, empty_array )
+{
+	BsonContainer_c dRoot ( R"({"x":[]})" );
+	Bson_c dBson = dRoot.ChildByName ( "x" );
+	BsonIterator_c dIter ( dBson );
+	ASSERT_FALSE ( dIter );
+	ASSERT_EQ ( dIter.NumElems (), 0 ); // since obj is not array
+	ASSERT_TRUE ( dIter.GetName ().IsEmpty () );
+	ASSERT_TRUE ( dIter.IsNull () );
+	ASSERT_FALSE ( dIter.Next () );
+}
+
+TEST ( Bson_iterate, _null )
+{
+	BsonContainer_c dRoot ( R"({"x":null})" );
+	Bson_c dBson = dRoot.ChildByName ( "x" );
+	BsonIterator_c dIter ( dBson );
+	ASSERT_TRUE ( dIter );
+	ASSERT_EQ ( dIter.NumElems (), 1 );
+	ASSERT_TRUE ( dIter.GetName ().IsEmpty () );
+	ASSERT_EQ ( dIter.GetType (), JSON_NULL );
+
+	ASSERT_FALSE ( dIter.Next () );
+	ASSERT_EQ ( dIter.NumElems (), 0 );
+}
+
+TEST ( Bson_iterate, _true )
+{
+	BsonContainer_c dRoot ( R"({"x":true})" );
+	Bson_c dBson = dRoot.ChildByName ( "x" );
+	BsonIterator_c dIter ( dBson );
+	ASSERT_TRUE ( dIter );
+	ASSERT_EQ ( dIter.NumElems (), 1 );
+	ASSERT_TRUE ( dIter.GetName ().IsEmpty () );
+	ASSERT_EQ ( dIter.GetType (), JSON_TRUE );
+
+	ASSERT_FALSE ( dIter.Next () );
+	ASSERT_EQ ( dIter.NumElems (), 0 );
+}
+
+TEST ( Bson_iterate, _false )
+{
+	BsonContainer_c dRoot ( R"({"x":false})" );
+	Bson_c dBson = dRoot.ChildByName ( "x" );
+	BsonIterator_c dIter ( dBson );
+	ASSERT_TRUE ( dIter );
+	ASSERT_EQ ( dIter.NumElems (), 1 );
+	ASSERT_TRUE ( dIter.GetName ().IsEmpty () );
+	ASSERT_EQ ( dIter.GetType (), JSON_FALSE );
+
+	ASSERT_FALSE ( dIter.Next () );
+	ASSERT_EQ ( dIter.NumElems (), 0 );
+}
+
+
+TEST ( Bson_iterate, int32 )
+{
+	BsonContainer_c dRoot ( R"({"x":1})" );
+	Bson_c dBson = dRoot.ChildByName ( "x" );
+	BsonIterator_c dIter ( dBson );
+	ASSERT_TRUE ( dIter );
+	ASSERT_EQ ( dIter.NumElems (), 1 );
+	ASSERT_TRUE ( dIter.GetName ().IsEmpty () );
+	ASSERT_TRUE ( dIter.IsInt () );
+	ASSERT_EQ ( dIter.Int (), 1 );
+
+	ASSERT_FALSE ( dIter.Next () );
+	ASSERT_EQ ( dIter.NumElems (), 0 );
+}
+
+TEST ( Bson_iterate, int64 )
+{
+	BsonContainer_c dRoot ( R"({"x":100000000001})" );
+	Bson_c dBson = dRoot.ChildByName ( "x" );
+	BsonIterator_c dIter ( dBson );
+	ASSERT_TRUE ( dIter );
+	ASSERT_EQ ( dIter.NumElems (), 1 );
+	ASSERT_TRUE ( dIter.GetName ().IsEmpty () );
+	ASSERT_TRUE ( dIter.IsInt () );
+	ASSERT_EQ ( dIter.Int (), 100000000001 );
+
+	ASSERT_FALSE ( dIter.Next () );
+	ASSERT_EQ ( dIter.NumElems (), 0 );
+}
+
+TEST ( Bson_iterate, _double )
+{
+	BsonContainer_c dRoot ( R"({"x":1.1})" );
+	Bson_c dBson = dRoot.ChildByName ( "x" );
+	BsonIterator_c dIter ( dBson );
+	ASSERT_TRUE ( dIter );
+	ASSERT_EQ ( dIter.NumElems (), 1 );
+	ASSERT_TRUE ( dIter.GetName ().IsEmpty () );
+	ASSERT_TRUE ( dIter.IsDouble () );
+	ASSERT_EQ ( dIter.Double (), 1.1 );
+
+	ASSERT_FALSE ( dIter.Next () );
+	ASSERT_EQ ( dIter.NumElems (), 0 );
+}
+
+TEST ( Bson_iterate, _string )
+{
+	BsonContainer_c dRoot ( R"({"x":"hello"})" );
+	Bson_c dBson = dRoot.ChildByName ( "x" );
+	BsonIterator_c dIter ( dBson );
+	ASSERT_TRUE ( dIter );
+	ASSERT_EQ ( dIter.NumElems (), 1 );
+	ASSERT_TRUE ( dIter.GetName ().IsEmpty () );
+	ASSERT_TRUE ( dIter.IsString () );
+	ASSERT_TRUE ( dIter.StrEq ( "hello" ) );
+
+	ASSERT_FALSE ( dIter.Next () );
+	ASSERT_EQ ( dIter.NumElems (), 0 );
+}
 
 TEST ( bench, DISABLED_bson_vs_cjson )
 {
@@ -794,14 +1058,14 @@ TEST ( bench, DISABLED_bson_vs_cjson )
 	for ( auto i = 0; i<uLoops; ++i ) // warmup pass
 	{
 		CSphVector<BYTE> m_Bson ( iLen );
-		bson::cJsonToBson ( pCjson, m_Bson, false, sError );
+		bson::cJsonToBson ( pCjson, m_Bson, false, false);
 	}
 
 	iTimeSpan = -sphMicroTimer ();
 	for ( auto i = 0; i<uLoops; ++i )
 	{
 		CSphVector<BYTE> m_Bson ( iLen );
-		bson::cJsonToBson ( pCjson, m_Bson, false, sError );
+		bson::cJsonToBson ( pCjson, m_Bson, false, false );
 //		pRes = dBson.ChildByName ( "query" ).first;
 	}
 	iTimeSpan += sphMicroTimer ();
@@ -811,7 +1075,7 @@ TEST ( bench, DISABLED_bson_vs_cjson )
 	for ( auto i = 0; i<uLoops; ++i )
 	{
 		CSphVector<BYTE> m_Bson ( iLen );
-		bson::cJsonToBson ( pCjson, m_Bson, true, sError );
+		bson::cJsonToBson ( pCjson, m_Bson );
 //		pRes = dBson.ChildByName ( "query" ).first;
 	}
 	iTimeSpan += sphMicroTimer ();

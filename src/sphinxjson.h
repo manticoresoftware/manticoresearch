@@ -320,26 +320,48 @@ public:
 	const char * sError () const;
 };
 
+// iterate over Bson_c
+class BsonIterator_c : public Bson_c
+{
+	const BYTE * m_pData = nullptr;
+	ESphJsonType m_eType = JSON_EOF; // parent's type
+	int m_iSize = -1; // for nodes with known size
+	CSphString m_sName;
+
+	inline bool Finish () // used as shortcut return
+	{
+		if ( m_iSize>0 )
+			m_iSize = 0;
+		m_dData = bson::nullnode;
+		return false;
+	}
+
+public:
+	explicit BsonIterator_c ( const NodeHandle_t &dParent );
+	bool Next();
+	int NumElems() const { return m_iSize; } // how many items we still not iterated ( actual only for arrays; otherwise it is -1 )
+	CSphString GetName() const { return m_sName; }
+};
+
 // parse and access to encoded bson
 class BsonContainer_c : public Bson_c
 {
 	CSphVector<BYTE> m_Bson;
 public:
-	explicit BsonContainer_c ( char* sJson, bool bToLowercase=true );
-	explicit BsonContainer_c ( const char * sJsonc, bool bToLowercase = true )
+	explicit BsonContainer_c ( char* sJson, bool bAutoconv=false, bool bToLowercase=true );
+	explicit BsonContainer_c ( const char * sJsonc, bool bAutoconv=false, bool bToLowercase = true )
 	: BsonContainer_c ( ( char * ) CSphString ( sJsonc ).cstr (), bToLowercase ) {}
 };
 
-// parse via intermediate cJSON, and access to encoded bson
 class BsonContainer2_c : public Bson_c
 {
 	CSphVector<BYTE> m_Bson;
 public:
-	explicit BsonContainer2_c ( const char * sJsonc );
+	explicit BsonContainer2_c ( const char * sJsonc, bool bAutoconv = false, bool bToLowercase = true );
 };
 
 // for benching
-bool       cJsonToBson ( cJSON * pCJSON, CSphVector<BYTE> &dData, bool bToLowercase, StringBuilder_c &sMsg );
+bool       cJsonToBson ( cJSON * pCJSON, CSphVector<BYTE> &dData, bool bAutoconv=false, bool bToLowercase = true /*, StringBuilder_c &sMsg */);
 
 }; // namespace sph
 

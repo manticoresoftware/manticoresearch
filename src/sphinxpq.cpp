@@ -77,7 +77,7 @@ public:
 	explicit PercolateIndex_c ( const CSphSchema & tSchema, const char * sIndexName, const char * sPath );
 	~PercolateIndex_c () override;
 
-	bool AddDocument ( const VecTraits_T<const char *> &dFields, const CSphMatch & tDoc,
+	bool AddDocument ( const VecTraits_T<VecTraits_T<const char >> &dFields, const CSphMatch & tDoc,
 		bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const VecTraits_T<DWORD> & dMvas,
 		CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt ) override;
 	bool MatchDocuments ( ISphRtAccum * pAccExt, PercolateMatchResult_t &tRes ) override;
@@ -721,8 +721,7 @@ ISphRtAccum * PercolateIndex_c::CreateAccum ( CSphString & sError )
 	return AcquireAccum ( m_pDict, nullptr, true, false, &sError );
 }
 
-
-bool PercolateIndex_c::AddDocument ( const VecTraits_T<const char *> &dFields,
+bool PercolateIndex_c::AddDocument ( const VecTraits_T<VecTraits_T<const char >> &dFields,
 	const CSphMatch & tDoc, bool , const CSphString & , const char ** ppStr, const VecTraits_T<DWORD> & dMvas,
 	CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt )
 {

@@ -1511,9 +1511,7 @@ bool HttpHandlerPQ_c::DoCallPQ ( const CSphString &sIndex, const cJSON * pPercol
 
 	const CSphSchema & tSchema = pIndex->GetInternalSchema();
 	int iFieldsCount = tSchema.GetFieldsCount();
-	CSphFixedVector<const char*> dFields ( iFieldsCount );
-	sTmp = "";
-	dFields.Fill ( sTmp.scstr() );
+	CSphFixedVector<VecTraits_T<const char>> dFields ( iFieldsCount );
 
 	// set defaults
 	SourceMatch_c tDoc;
@@ -1557,7 +1555,7 @@ bool HttpHandlerPQ_c::DoCallPQ ( const CSphString &sIndex, const cJSON * pPercol
 	{
 		// reset all back to defaults
 		tDoc.m_uDocID = 0;
-		dFields.Fill ( sTmp.scstr() );
+		dFields.Fill ( {nullptr,0} );
 		for ( int i=0; i<iAttrsCount; ++i )
 		{
 			const CSphColumnInfo & tCol = tSchema.GetAttr ( i );
@@ -1581,7 +1579,7 @@ bool HttpHandlerPQ_c::DoCallPQ ( const CSphString &sIndex, const cJSON * pPercol
 			}
 			if ( pItem->m_iField!=-1 && pChild->valuestring )
 			{
-				dFields[pItem->m_iField] = pChild->valuestring;
+				dFields[pItem->m_iField] = { pChild->valuestring, ( int64_t ) strlen ( pChild->valuestring ) };
 			} else
 			{
 				tDoc.SetAttr ( pItem->m_tLoc, pChild, pItem->m_eType );

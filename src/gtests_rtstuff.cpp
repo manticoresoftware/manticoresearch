@@ -53,6 +53,7 @@ public:
 		m_iDocCount = iDocs;
 		m_iFields = iFields;
 		m_dFieldLengths.Resize ( m_iFields );
+		m_dFields.Reserve ( iFields );
 	}
 
 	virtual BYTE ** NextDocument ( CSphString & )
@@ -60,11 +61,11 @@ public:
 		if ( m_tDocInfo.m_uDocID>=( SphDocID_t ) m_iDocCount )
 		{
 			m_tDocInfo.m_uDocID = 0;
-			return NULL;
+			return nullptr;
 		}
 
 		int iDoc = ( int ) m_tDocInfo.m_uDocID;
-		m_tDocInfo.m_uDocID++;
+		++m_tDocInfo.m_uDocID;
 		for ( int i = 0; i<m_iFields; i++ )
 		{
 			char * szField = ( char * ) ( m_ppDocs + iDoc * m_iFields )[i];
@@ -94,12 +95,21 @@ public:
 	MOCK_METHOD1 ( IterateKillListNext, bool (SphDocID_t & ) ) ; // return false
 	int GetFieldCount () const { return m_iFields; }
 
-	VecTraits_T<const char *> GetFields ()
-	{ return VecTraits_T< const char *> ( (const char**) ( m_ppDocs + ( m_tDocInfo.m_uDocID - 1 ) * m_iFields ), m_iFields ); }
+	VecTraits_T<VecTraits_T<const char>> GetFields ()
+	{
+		m_dFields.Resize(0);
+		for ( int i=0; i<m_iFields; ++i)
+		{
+			auto pStr = (const char*) m_ppDocs[ (m_tDocInfo.m_uDocID - 1 ) * m_iFields + i];
+			m_dFields.Add ( VecTraits_T<const char> (pStr,strlen(pStr)));
+		}
+		return m_dFields;
+	}
 
 	int m_iDocCount;
 	int m_iFields;
 	BYTE ** m_ppDocs;
+	CSphVector<VecTraits_T<const char> > m_dFields;
 	CSphVector<int> m_dFieldLengths;
 };
 
@@ -110,14 +120,16 @@ public:
 	static const int m_iMaxFields = 2;
 	static const int m_iMaxFieldLen = 512;
 	char m_dFields[m_iMaxFields][m_iMaxFieldLen];
-	BYTE * m_ppFields[m_iMaxFields];
+	char * m_ppFields[m_iMaxFields];
+	CSphVector<VecTraits_T<const char> > m_dMeasuredFields;
 	int m_dFieldLengths[m_iMaxFields];
 
 	explicit MockDocRandomizer_c ( const CSphSchema & tSchema ) : CSphSource_Document ( "test_doc" )
 	{
 		m_tSchema = tSchema;
-		for ( int i=0; i<m_iMaxFields; i++ )
-			m_ppFields[i] = (BYTE *)&m_dFields[i];
+		m_dMeasuredFields.Reserve(m_iMaxFields);
+		for ( int i=0; i<m_iMaxFields; ++i )
+			m_ppFields[i] = (char *)&m_dFields[i];
 	}
 
 	virtual BYTE ** NextDocument ( CSphString & )
@@ -139,10 +151,10 @@ public:
 		snprintf ( m_dFields[1], m_iMaxFieldLen, "dog contentwashere%d contentwashere%d contentwashere%d contentwashere%d contentwashere%d"
 			, sphRand(), sphRand(), sphRand(), sphRand(), sphRand() );
 
-		for ( int i=0; i < m_iMaxFields; i++ )
-			m_dFieldLengths[i] = strlen ( (char*)m_ppFields[i] );
+		for ( int i=0; i < m_iMaxFields; ++i )
+			m_dFieldLengths[i] = strlen ( m_ppFields[i] );
 
-		return &m_ppFields[0];
+		return (BYTE**) &m_ppFields[0];
 	}
 
 
@@ -166,7 +178,13 @@ public:
 	MOCK_METHOD1 ( IterateKillListNext, bool (SphDocID_t & ) ); // return false
 	int  GetFieldCount () const { return m_iMaxFields; }
 
-	VecTraits_T<const char *>  GetFields () { return VecTraits_T<const char *> ((const char **)( m_ppFields ), m_iMaxFields); }
+	VecTraits_T<VecTraits_T<const char>> GetFields ()
+	{
+		m_dMeasuredFields.Resize ( 0 );
+		for ( const char * pStr : m_ppFields )
+			m_dMeasuredFields.Add ( VecTraits_T<const char> ( pStr, strlen ( pStr ) ) );
+		return m_dMeasuredFields;
+	}
 };
 
 

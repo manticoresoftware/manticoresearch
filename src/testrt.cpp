@@ -96,7 +96,9 @@ void DoIndexing ( CSphSource_MySQL * pSrc, ISphRtIndex * pIndex )
 		if ( !pFields )
 			break;
 
-		auto  dFields = VecTraits_T<const char *> ( (const char **) ( pFields ), g_iFieldsCount );
+		CSphVector<VecTraits_T<const char>> dFields ( g_iFieldsCount );
+		ARRAY_FOREACH (i, dFields)
+			dFields[i] = VecTraits_T<const char> ( pFields[i], strlen ( pFields[i] ) );
 
 		if ( pSrc->m_tDocInfo.m_uDocID )
 			pIndex->AddDocument ( dFields, pSrc->m_tDocInfo, false, sFilter, NULL, dMvas, sError, sWarning, NULL );

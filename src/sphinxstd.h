@@ -2409,6 +2409,9 @@ inline void Swap ( CSphString & v1, CSphString & v2 )
 // commonly used vector of strings
 using StrVec_t = CSphVector<CSphString>;
 
+// vector of byte vectors
+using BlobVec_t = CSphVector<CSphVector<BYTE> >;
+
 /////////////////////////////////////////////////////////////////////////////
 
 /// immutable string/int/float variant list proxy

@@ -11546,7 +11546,7 @@ void SendMysqlErrorPacket ( ISphOutputBuffer & tOut, BYTE uPacketID, const char 
 	LogSphinxqlError ( sStmt, sError, iCID );
 
 	int iErrorLen = strlen(sError)+1; // including the trailing zero
-	
+
 	// cut the error message to fix isseue with long message for popular clients
 	if ( iErrorLen>SPH_MYSQL_ERROR_MAX_LENGTH )
 	{
@@ -12353,13 +12353,22 @@ struct StringPtrTraits_t
 	cJSON * m_pJsonStorage = nullptr;
 
 	// remap offsets to string pointers
-	void GetPointers ( CSphFixedVector<const char *> & dStrings ) const
+	void SavePointersTo ( VecTraits_T<const char *> &dStrings, bool bSkipInvalid=true ) const
 	{
-		ARRAY_FOREACH ( i, m_dOff )
-		{
-			int iOff = m_dOff[i];
-			dStrings[i] = ( iOff>=0 ? (const char *)m_dPackedData.Begin() + iOff : nullptr );
-		}
+		if ( bSkipInvalid )
+			ARRAY_FOREACH ( i, m_dOff )
+			{
+				int iOff = m_dOff[i];
+				if ( iOff<0 )
+					continue;
+				dStrings[i] = ( const char * ) m_dPackedData.Begin () + iOff;
+			}
+		else
+			ARRAY_FOREACH ( i, m_dOff )
+			{
+				int iOff = m_dOff[i];
+				dStrings[i] = ( iOff>=0 ? ( const char * ) m_dPackedData.Begin () + iOff : nullptr );
+			}
 	}
 
 	void Reset ()
@@ -12375,6 +12384,23 @@ struct StringPtrTraits_t
 		}
 	}
 
+	BYTE* ReserveBlob ( int iBlobSize, int iOffset )
+	{
+		if ( !iBlobSize )
+			return nullptr;
+
+		m_dOff[iOffset] = m_dPackedData.GetLength ();
+
+		m_dPackedData.ReserveGap ( iBlobSize + 4 );
+		sphPackStrlen ( m_dPackedData.AddN ( 4 ), iBlobSize );
+		return m_dPackedData.AddN ( iBlobSize );
+	}
+
+	void AddBlob ( const VecTraits_T<BYTE>& dBlob, int iOffset )
+	{
+		memcpy ( ReserveBlob ( dBlob.GetLength (), iOffset ), dBlob.begin (), dBlob.GetLength () );
+	}
+
 	~StringPtrTraits_t()
 	{
 		if ( m_pJsonStorage )
@@ -12382,150 +12408,187 @@ struct StringPtrTraits_t
 	}
 };
 
+static void BsonToSqlInsert ( const bson::Bson_c& dBson, SqlInsert_t& tAttr )
+{
+	switch ( dBson.GetType () )
+	{
+	case JSON_INT32:
+	case JSON_INT64: tAttr.m_iType = TOK_CONST_INT;
+		tAttr.m_iVal = dBson.Int ();
+		break;
+	case JSON_DOUBLE: tAttr.m_iType = TOK_CONST_FLOAT;
+		tAttr.m_fVal = float ( dBson.Double () );
+		break;
+	case JSON_STRING: tAttr.m_iType = TOK_QUOTED_STRING;
+		tAttr.m_sVal = dBson.String ();
+	default: break;
+	}
+}
 
-static bool ParseJsonDocument ( const char * sDoc, const CSphHash<SchemaItemVariant_t> & tLoc,
-	const CSphString & sIdAlias, int iRow, CSphFixedVector<const char*> & dFields, CSphMatchVariant & tDoc,
+// save bson array to 64 bit mvaint64 mva
+static int BsonArrayToMvaWide ( CSphVector<DWORD> &dMva, const bson::Bson_c &dBson )
+{
+	using namespace bson;
+	int iOff = dMva.GetLength ();
+	dMva.Add ();
+	int iStored = 0;
+
+	// int64 may be processed natively; that is the fastest way!
+	if ( dBson.GetType ()==JSON_INT64_VECTOR )
+	{
+		auto dValues = Vector<int64_t> ( dBson );
+		iStored = 2 * dValues.GetLength ();
+		dMva.Append ( dValues.begin(), iStored );
+	} else if ( dBson.GetType ()==JSON_INT32_VECTOR )
+	{ // int32 may be easy shrinked
+		auto dValues = Vector<DWORD> ( dBson );
+		iStored = 2 * dValues.GetLength ();
+		auto pDst = ( int64_t * ) dMva.AddN ( iStored );
+		ARRAY_FOREACH ( i, dValues )
+			pDst[i] = dValues[i];
+	} else
+	{ // slowest path - m.b. need conversion of every value
+		BsonIterator_c dIter ( dBson );
+		iStored = 2 * dIter.NumElems ();
+		auto pDst = ( int64_t * ) dMva.AddN ( iStored );
+		for ( ; dIter; dIter.Next () )
+			*pDst++ = dIter.Int ();
+	}
+
+	if ( !iStored ) // empty mva; discard resize
+	{
+		dMva.Resize ( iOff );
+		return -1;
+	}
+
+	auto pDst = ( int64_t * ) &dMva[iOff + 1];
+
+	sphSort ( pDst, iStored / 2 );
+	iStored = 2 * sphUniq ( pDst, iStored / 2 );
+	dMva[iOff] = iStored;
+	dMva.Resize ( iOff + iStored + 1 );
+	return iOff;
+}
+
+// save bson array to mva (32- or 64-bit wide)
+static int BsonArrayToMva( CSphVector<DWORD> &dMva, const bson::Bson_c& dBson, bool bTargetWide )
+{
+	assert ( dBson.IsArray () );
+	if ( bTargetWide )
+		return BsonArrayToMvaWide ( dMva, dBson );
+
+	using namespace bson;
+	int iOff = dMva.GetLength();
+	dMva.Add();
+	int iStored = 0;
+
+	// int32 may be processed natively; that is the fastest way!
+	if ( dBson.GetType ()==JSON_INT32_VECTOR )
+	{
+		auto dValues = Vector<DWORD> (dBson);
+		iStored = dValues.GetLength ();
+		dMva.Append ( dValues );
+	} else if ( dBson.GetType()==JSON_INT64_VECTOR )
+	{ // int64 may be easy truncated
+		auto dValues = Vector<int64_t> ( dBson );
+		iStored = dValues.GetLength ();
+		dMva.ReserveGap ( iStored );
+		for ( auto& iValue : dValues )
+			dMva.Add ( ( DWORD ) iValue );
+	} else
+	{ // slowest path - m.b. need conversion of every value
+		BsonIterator_c dIter ( dBson );
+		iStored = dIter.NumElems ();
+		dMva.ReserveGap ( iStored );
+		for ( ; dIter; dIter.Next () )
+			dMva.Add ( dIter.Int() );
+	}
+
+	if ( !iStored ) // empty mva; discard resize
+	{
+		dMva.Resize ( iOff );
+		return -1;
+	}
+
+	auto dSlice = dMva.Slice ( iOff + 1 );
+	dSlice.Sort ();
+	iStored = sphUniq ( dSlice.begin (), dSlice.GetLength() );
+	dMva[iOff] = iStored;
+	dMva.Resize ( iOff + iStored + 1 );
+	return iOff;
+}
+
+static bool ParseBsonDocument ( const VecTraits_T<BYTE>& dDoc, const CSphHash<SchemaItemVariant_t> & tLoc,
+	const CSphString & sIdAlias, int iRow, VecTraits_T<VecTraits_T<const char>>& dFields, CSphMatchVariant & tDoc,
 	StringPtrTraits_t & tStrings, CSphVector<DWORD> & dMva, Warner_c & sMsg )
 {
-	const cJSON * pRoot = cJSON_Parse ( sDoc );
-	if ( !pRoot )
+	using namespace bson;
+	Bson_c dBson ( dDoc );
+	if ( dDoc.IsEmpty () )
 		return sMsg.Err ( "bad JSON at document %d", iRow+1 );
 
-	assert ( !tStrings.m_pJsonStorage );
-	tStrings.m_pJsonStorage = const_cast<cJSON *>( pRoot );
-
 	SqlInsert_t tAttr;
-	CSphString sTmp;
 
 	const SchemaItemVariant_t * pId = sIdAlias.IsEmpty () ? nullptr : tLoc.Find ( sphFNV64 ( sIdAlias.cstr() ) );
-	int iChildrenCount = cJSON_GetArraySize ( pRoot );
-	const cJSON * pChild = pRoot->child;
-	while ( pChild && iChildrenCount )
+	BsonIterator_c dChild ( dBson );
+	for ( ; dChild; dChild.Next () )
 	{
-		const char * sName = pChild->string;
-		const SchemaItemVariant_t * pItem = tLoc.Find ( sphFNV64 ( sName ) );
+		CSphString sName = dChild.GetName ();
+		const SchemaItemVariant_t * pItem = tLoc.Find ( sphFNV64 ( sName.cstr() ) );
 
 		// FIXME!!! warn on unknown JSON fields
 		if ( pItem )
 		{
-			if ( pItem->m_iField!=-1 && pChild->valuestring )
+			if ( pItem->m_iField!=-1 && dChild.IsString () )
 			{
-				dFields[pItem->m_iField] = pChild->valuestring;
+				dFields[pItem->m_iField] = Vector<const char> ( dChild );
 				if ( pItem==pId )
-					sMsg.Warn ( "field '%s' requested as docs_id identifier, but it is field!", sName );
+					sMsg.Warn ( "field '%s' requested as docs_id identifier, but it is field!", sName.cstr() );
 			} else
 			{
-				tAttr.m_iType = TOK_CONST_FLOAT;
-				tAttr.m_iVal = pChild->valueint;
-				tAttr.m_fVal = (float)pChild->valuedouble;
+				BsonToSqlInsert ( dChild, tAttr );
 				tDoc.SetAttr ( pItem->m_tLoc, tAttr, pItem->m_eType );
 				if ( pId==pItem )
-					tDoc.m_uDocID = pChild->valueint;
+					tDoc.m_uDocID = ( SphDocID_t ) dChild.Int ();
 
 				if ( pItem->m_eType==SPH_ATTR_JSON || pItem->m_eType==SPH_ATTR_STRING )
 				{
 					assert ( pItem->m_iStr!=-1 );
 					if ( pItem->m_eType==SPH_ATTR_JSON )
 					{
-						// cJSON -> string
-						if ( pChild->child )
-							sTmp = sphJsonToString ( pChild );
-
-						// string -> binary packed JSON
-						if ( pChild->child && !sTmp.IsEmpty() )
-						{
-							// sphJsonParse must be terminated with a double zero however usual CSphString have SAFETY_GAP of 4 zeros
-							CSphString sWarning, sError;
-							if ( !String2JsonPack ( (char *)sTmp.cstr(), tStrings.m_dParserBuf, sError, sWarning ) )
-							{
-								sMsg.Warn ( sWarning );
-								return sMsg.Err ( sError );
-							}
-
-							if ( tStrings.m_dParserBuf.GetLength() )
-							{
-								tStrings.m_dOff[pItem->m_iStr] = tStrings.m_dPackedData.GetLength();
-
-								const int iLenBytes = 4;
-								BYTE * pPacked = tStrings.m_dPackedData.AddN ( iLenBytes + tStrings.m_dParserBuf.GetLength() );
-								sphPackStrlen ( pPacked, tStrings.m_dParserBuf.GetLength() );
-								memcpy ( pPacked + iLenBytes, tStrings.m_dParserBuf.Begin(), tStrings.m_dParserBuf.GetLength() );
-							}
-						}
+						// just save bson blob
+						BYTE * pDst = tStrings.ReserveBlob ( dChild.StandaloneSize (), pItem->m_iStr );
+						dChild.BsonToBson ( pDst );
 					} else // SPH_ATTR_STRING
 					{
-						int iLen = ( pChild->valuestring ? strlen ( pChild->valuestring ) : 0 );
-						if ( iLen )
+						auto dStrBlob = RawBlob ( dChild );
+						if ( dStrBlob.second )
 						{
 							tStrings.m_dOff[pItem->m_iStr] = tStrings.m_dPackedData.GetLength();
-							BYTE * sDst = tStrings.m_dPackedData.AddN ( 1 + iLen + CSphString::GetGap() );
-							memcpy ( sDst, pChild->valuestring, iLen );
-							memset ( sDst+iLen, 0, 1 + CSphString::GetGap() );
+							BYTE * sDst = tStrings.m_dPackedData.AddN ( 1 + dStrBlob.second + CSphString::GetGap() );
+							memcpy ( sDst, dStrBlob.first, dStrBlob.second );
+							memset ( sDst+dStrBlob.second, 0, 1 + CSphString::GetGap() );
 						}
 					}
 				} else if ( pItem->m_eType==SPH_ATTR_UINT32SET || pItem->m_eType==SPH_ATTR_INT64SET )
 				{
-					bool bWide = ( pItem->m_eType==SPH_ATTR_INT64SET );
 					assert ( pItem->m_iMva!=-1 );
-					int iStored = 0;
-					int iOff = dMva.GetLength();
-
-					if ( cJSON_IsArray ( pChild ) )
+					if ( dChild.IsArray() )
 					{
-						int iCount = cJSON_GetArraySize ( pChild );
-						DWORD * pMva = dMva.AddN ( iCount + 1 ) + 1;
-						for ( int i=0; i<iCount; i++ )
-						{
-							cJSON * pElem = cJSON_GetArrayItem ( pChild, i );
-							assert ( pElem );
-							if ( !cJSON_IsInteger ( pElem ) )
-							{
-								sMsg.Warn ( "MVA elements should be integers" );
-								continue;
-							}
-
-							if ( bWide )
-							{
-								int64_t iVal = pElem->valueint;
-								DWORD uLow = (DWORD)iVal;
-								DWORD uHi = (DWORD)(iVal>>32);
-								*pMva++ = uLow;
-								*pMva++ = uHi;
-								iStored +=2;
-							} else
-							{
-								*pMva++ = (DWORD)pElem->valueint;
-								iStored++;
-							}
-						}
-
+						int iOff = BsonArrayToMva ( dMva, dChild, pItem->m_eType==SPH_ATTR_INT64SET );
+						if ( iOff>=0 )
+							dMva[pItem->m_iMva] = iOff;
 					} else
 					{
 						sMsg.Warn ( "MVA item should be array" );
-					}
-
-					if ( !iStored )
-					{
-						dMva.Resize ( iOff );
-					} else
-					{
-						sphSort ( dMva.Begin() + iOff + 1, iStored );
-						iStored = sphUniq ( dMva.Begin() + iOff + 1, iStored );
-						dMva[iOff] = iStored;
-						dMva[pItem->m_iMva] = iOff;
-						dMva.Resize ( iOff+iStored+1 );
 					}
 				}
 			}
 		} else if ( !sIdAlias.IsEmpty() && sIdAlias==sName )
 		{
-			tDoc.m_uDocID = pChild->valueint;
+			tDoc.m_uDocID = ( SphDocID_t ) dChild.Int ();
 		}
-
-		pChild = pChild->next;
-		--iChildrenCount;
 	}
-
 	return true;
 }
 
@@ -12539,7 +12602,7 @@ static void FixParsedMva ( const CSphVector<DWORD> & dParsed, CSphVector<DWORD> 
 	// Could be not in right order
 
 	dMva.Resize ( 0 );
-	for ( int i=0; i<iCount; i++ )
+	for ( int i=0; i<iCount; ++i )
 	{
 		int iOff = dParsed[i];
 		if ( !iOff )
@@ -12548,23 +12611,23 @@ static void FixParsedMva ( const CSphVector<DWORD> & dParsed, CSphVector<DWORD> 
 			continue;
 		}
 
-		int iMvaCount = dParsed[iOff];
-		DWORD * pMva = dMva.AddN ( iMvaCount + 1 );
-		*pMva++ = iMvaCount;
-		memcpy ( pMva, dParsed.Begin() + iOff + 1, sizeof(dMva[0]) * iMvaCount );
+		DWORD uMvaCount = dParsed[iOff];
+		DWORD * pMva = dMva.AddN ( uMvaCount + 1 );
+		*pMva++ = uMvaCount;
+		memcpy ( pMva, dParsed.Begin() + iOff + 1, sizeof(dMva[0]) * uMvaCount );
 	}
 }
 
 class PqRequestBuilder_c : public IRequestBuilder_t
 {
-	const StrVec_t &m_dDocs;
+	const BlobVec_t &m_dDocs;
 	const PercolateOptions_t &m_tOpts;
 	mutable CSphAtomic m_iWorker;
 	int m_iStart;
 	int m_iStep;
 
 public:
-	explicit PqRequestBuilder_c ( const StrVec_t &dDocs, const PercolateOptions_t &tOpts, int iStart=0, int iStep=0 )
+	explicit PqRequestBuilder_c ( const BlobVec_t &dDocs, const PercolateOptions_t &tOpts, int iStart=0, int iStep=0 )
 		: m_dDocs ( dDocs )
 		, m_tOpts ( tOpts )
 		, m_iStart ( iStart )
@@ -12612,7 +12675,7 @@ public:
 		tOut.SendInt ( iStart );
 		tOut.SendInt ( iStep );
 		for ( int i=iStart; i<iStart+iStep; ++i)
-			tOut.SendString ( m_dDocs[i].cstr () );
+			tOut.SendArray ( m_dDocs[i] );
 	}
 };
 
@@ -12669,9 +12732,14 @@ struct PqReplyParser_t : public IReplyParser_t
 
 			if ( bQuery )
 			{
-				tDesc.m_sQuery = tReq.GetString ();
-				tDesc.m_sTags = tReq.GetString ();
-				tDesc.m_sFilters = tReq.GetString ();
+				auto uDescFlags = tReq.GetDword ();
+				if ( uDescFlags & 1 )
+					tDesc.m_sQuery = tReq.GetString ();
+				if ( uDescFlags & 2 )
+					tDesc.m_sTags = tReq.GetString ();
+				if ( uDescFlags & 4 )
+					tDesc.m_sFilters = tReq.GetString ();
+				tDesc.m_bQL = !!(uDescFlags & 8);
 			}
 		}
 
@@ -12757,9 +12825,23 @@ static void SendAPIPercolateReply ( CachedOutputBuffer_c &tOut, const CPqResult 
 		}
 		if ( bQuery )
 		{
-			tOut.SendString ( tDesc.m_sQuery.cstr() );
-			tOut.SendString ( tDesc.m_sTags.cstr () );
-			tOut.SendString ( tDesc.m_sFilters.cstr () );
+			DWORD uDescFlags = 0;
+			if ( !tDesc.m_sQuery.IsEmpty ())
+				uDescFlags |=1;
+			if ( !tDesc.m_sQuery.IsEmpty () )
+				uDescFlags |= 2;
+			if ( !tDesc.m_sQuery.IsEmpty () )
+				uDescFlags |= 4;
+			if ( tDesc.m_bQL )
+				uDescFlags |= 8;
+
+			tOut.SendDword ( uDescFlags );
+			if ( uDescFlags & 1 )
+				tOut.SendString ( tDesc.m_sQuery.cstr () );
+			if ( uDescFlags & 2 )
+				tOut.SendString ( tDesc.m_sTags.cstr () );
+			if ( uDescFlags & 4 )
+				tOut.SendString ( tDesc.m_sFilters.cstr () );
 		}
 	}
 
@@ -12856,7 +12938,7 @@ static void SendMysqlPercolateReply ( SqlRowBuffer_c &tOut, const CPqResult &tRe
 }
 
 // process one(!) local(!) pq index
-static void PQLocalMatch ( const StrVec_t &dDocs, const CSphString& sIndex, const PercolateOptions_t & tOpt,
+static void PQLocalMatch ( const BlobVec_t &dDocs, const CSphString& sIndex, const PercolateOptions_t & tOpt,
 	CSphSessionAccum &tAcc, CPqResult &tResult, int iStart, int iDocs )
 {
 	CSphString sWarning, sError;
@@ -12898,9 +12980,7 @@ static void PQLocalMatch ( const StrVec_t &dDocs, const CSphString& sIndex, cons
 
 	const CSphSchema &tSchema = pIndex->GetInternalSchema ();
 	int iFieldsCount = tSchema.GetFieldsCount ();
-	CSphFixedVector<const char *> dFields ( iFieldsCount );
-	CSphString sTmp;
-	dFields.Fill ( sTmp.scstr () );
+	CSphFixedVector<VecTraits_T<const char>> dFields ( iFieldsCount );
 
 	// set defaults
 	CSphMatchVariant tDoc;
@@ -12919,12 +12999,14 @@ static void PQLocalMatch ( const StrVec_t &dDocs, const CSphString& sIndex, cons
 	CSphHash<SchemaItemVariant_t> hSchemaLocators;
 	if ( tOpt.m_bJsonDocs )
 	{
+
+		// hash attrs
 		for ( int i = 0; i<iAttrsCount; ++i )
 		{
 			const CSphColumnInfo &tCol = tSchema.GetAttr ( i );
 			SchemaItemVariant_t tAttr;
 			tAttr.m_tLoc = tCol.m_tLocator;
-			tAttr.m_tLoc.m_bDynamic = true;
+			tAttr.m_tLoc.m_bDynamic = true; /// was just set above
 			tAttr.m_eType = tCol.m_eAttrType;
 			if ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_JSON )
 				tAttr.m_iStr = iStrCounter++;
@@ -12967,7 +13049,7 @@ static void PQLocalMatch ( const StrVec_t &dDocs, const CSphString& sIndex, cons
 	{
 		// doc-id
 		tDoc.m_uDocID = 0;
-		dFields[0] = dDocs[iDoc].scstr ();
+		dFields[0] = dDocs[iDoc];
 
 		dMvaParsed.Resize ( iMvaCounter );
 		dMvaParsed.Fill ( 0 );
@@ -12975,7 +13057,7 @@ static void PQLocalMatch ( const StrVec_t &dDocs, const CSphString& sIndex, cons
 		if ( tOpt.m_bJsonDocs )
 		{
 			// reset all back to defaults
-			dFields.Fill ( sTmp.scstr () );
+			dFields.Fill ( { nullptr, 0 } );
 			for ( int i = 0; i<iAttrsCount; ++i )
 			{
 				const CSphColumnInfo &tCol = tSchema.GetAttr ( i );
@@ -12985,7 +13067,7 @@ static void PQLocalMatch ( const StrVec_t &dDocs, const CSphString& sIndex, cons
 			}
 			tStrings.Reset ();
 
-			if ( !ParseJsonDocument ( dDocs[iDoc].cstr (), hSchemaLocators, tOpt.m_sIdAlias, iDoc,
+			if ( !ParseBsonDocument ( dDocs[iDoc], hSchemaLocators, tOpt.m_sIdAlias, iDoc,
 						dFields, tDoc, tStrings, dMvaParsed, sMsg ) )
 			{
 				if ( !tOpt.m_bSkipBadJson )
@@ -13000,7 +13082,7 @@ static void PQLocalMatch ( const StrVec_t &dDocs, const CSphString& sIndex, cons
 				continue;
 			}
 
-			tStrings.GetPointers ( dStrings );
+			tStrings.SavePointersTo ( dStrings, false );
 		}
 		FixParsedMva ( dMvaParsed, dMva, iMvaCounter );
 
@@ -13047,7 +13129,7 @@ static void PQLocalMatch ( const StrVec_t &dDocs, const CSphString& sIndex, cons
 
 }
 
-static void PercolateMatchDocuments ( const StrVec_t & dDocs, const PercolateOptions_t & tOpts,
+static void PercolateMatchDocuments ( const BlobVec_t & dDocs, const PercolateOptions_t & tOpts,
 	CSphSessionAccum & tAcc, CPqResult &tResult )
 {
 	CSphString sIndex = tOpts.m_sIndex;
@@ -13159,9 +13241,13 @@ void HandleCommandCallPq ( CachedOutputBuffer_c &tOut, WORD uVer, InputBuffer_c 
 
 	// document(s)
 	tOpts.m_iShift = tReq.GetInt();
-	StrVec_t dDocs ( tReq.GetInt() );
+	BlobVec_t dDocs ( tReq.GetInt() );
 	for ( auto & sDoc : dDocs )
-		sDoc = tReq.GetString();
+		if ( !tReq.GetString ( sDoc ) )
+		{
+			SendErrorReply ( tOut, "Can't retrieve doc from input buffer" );
+			return;
+		}
 
 	// working
 	CSphSessionAccum tAcc ( true );
@@ -13277,7 +13363,24 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 	if ( tOpts.m_iShift && !tOpts.m_sIdAlias.IsEmpty() )
 		tRes.m_sMessages.Warn ( "'shift' option works only for automatic ids, when 'docs_id' is not defined");
 
-	PercolateMatchDocuments ( dDocs, tOpts, tAcc, tResult );
+	BlobVec_t dBlobDocs ( dDocs.GetLength() );
+	if ( tOpts.m_bJsonDocs )
+		ARRAY_FOREACH ( i, dDocs )
+		{
+			auto& dData = dBlobDocs[i];
+			if ( !sphJsonParse ( dData, ( char * ) dDocs[i].cstr (), g_bJsonAutoconvNumbers, g_bJsonKeynamesToLowercase, sError ) )
+			{
+				tOut.Error ( tStmt.m_sStmt, "Bad json!" );
+				return;
+			}
+		}
+	else
+		ARRAY_FOREACH ( i, dDocs )
+		{
+			auto &dData = dBlobDocs[i];
+			dDocs[i].LeakToVec(dData);
+		}
+	PercolateMatchDocuments ( dBlobDocs, tOpts, tAcc, tResult );
 
 	if ( !tRes.m_sMessages.ErrEmpty () )
 	{
@@ -13618,15 +13721,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 						if ( !String2JsonPack ( (char *)tVal.m_sVal.cstr(), tStrings.m_dParserBuf, sError, sWarning ) )
 							break;
 
-						if ( tStrings.m_dParserBuf.GetLength() )
-						{
-							tStrings.m_dOff[iStrCount] = tStrings.m_dPackedData.GetLength();
-
-							const int iLenBytes = 4;
-							BYTE * pPacked = tStrings.m_dPackedData.AddN ( iLenBytes + tStrings.m_dParserBuf.GetLength() );
-							sphPackStrlen ( pPacked, tStrings.m_dParserBuf.GetLength() );
-							memcpy ( pPacked + iLenBytes, tStrings.m_dParserBuf.Begin(), tStrings.m_dParserBuf.GetLength() );
-						}
+						tStrings.AddBlob ( tStrings.m_dParserBuf, iStrCount );
 					}
 				}
 			}
@@ -13641,18 +13736,10 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 			break;
 
 		// remap JSON to string pointers
-		ARRAY_FOREACH ( i, dStrings )
-		{
-			int iOff = tStrings.m_dOff[i];
-			if ( iOff==-1 )
-				continue;
-
-			assert ( !dStrings[i] );
-			dStrings[i] = (const char *)tStrings.m_dPackedData.Begin() + iOff;
-		}
+		tStrings.SavePointersTo ( dStrings );
 
 		// convert fields
-		CSphVector<const char*> dFields;
+		CSphVector<VecTraits_T<const char>> dFields;
 
 		// if strings and fields share one value, it might be modified by html stripper etc
 		// we need to use separate storage for such string attributes and fields
@@ -13663,7 +13750,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 		{
 			int iQuerySchemaIdx = dFieldSchema[i];
 			if ( iQuerySchemaIdx < 0 )
-				dFields.Add ( "" ); // default value
+				dFields.Add (); // default value
 			else
 			{
 				if ( tStmt.m_dInsertValues [ iQuerySchemaIdx + c * iExp ].m_iType!=TOK_QUOTED_STRING )
@@ -13676,9 +13763,9 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 				if ( dFieldAttrs[i] )
 				{
 					dTmpFieldStorage[i] = szFieldValue;
-					dFields.Add ( dTmpFieldStorage[i].cstr() );
+					dFields.Add ( { dTmpFieldStorage[i].cstr(), dTmpFieldStorage[i].Length() } );
 				} else
-					dFields.Add ( szFieldValue );
+					dFields.Add ( { szFieldValue, ( int64_t) strlen(szFieldValue) } );
 			}
 		}
 		if ( !sError.IsEmpty() )

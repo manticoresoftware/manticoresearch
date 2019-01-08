@@ -1215,7 +1215,7 @@ public:
 	explicit					RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict );
 	virtual						~RtIndex_t ();
 
-	bool				AddDocument ( const VecTraits_T<const char *> &dFields,
+	bool				AddDocument ( const VecTraits_T<VecTraits_T<const char >> &dFields,
 		const CSphMatch & tDoc, bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr,
 		const VecTraits_T<DWORD> & dMvas, CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt ) override;
 	virtual bool				AddDocument ( ISphHits * pHits, const CSphMatch & tDoc, bool bReplace,
@@ -1540,6 +1540,23 @@ CSphSource_StringVector::CSphSource_StringVector ( const VecTraits_T<const char 
 	m_iMaxHits = 0; // force all hits build
 }
 
+CSphSource_StringVector::CSphSource_StringVector ( const VecTraits_T<VecTraits_T<const char >> &dFields, const CSphSchema & tSchema )
+	: CSphSource_Document ( "$blobvector" )
+{
+	m_tSchema = tSchema;
+	m_dFieldLengths.Reserve ( dFields.GetLength () );
+	m_dFields.Reserve ( dFields.GetLength() + 1 );
+	for ( const auto& dField : dFields )
+	{
+		m_dFields.Add ( (BYTE*) dField.begin() );
+		m_dFieldLengths.Add ( dField.GetLength () );
+		assert ( dField.begin() || dField.IsEmpty () );
+	}
+	m_dFields.Add (nullptr);
+
+	m_iMaxHits = 0; // force all hits build
+}
+
 bool CSphSource_StringVector::Connect ( CSphString & )
 {
 	// no AddAutoAttrs() here; they should already be in the schema
@@ -1552,7 +1569,7 @@ void CSphSource_StringVector::Disconnect ()
 	m_tHits.m_dData.Reset();
 }
 
-bool RtIndex_t::AddDocument ( const VecTraits_T<const char *> &dFields,
+bool RtIndex_t::AddDocument ( const VecTraits_T<VecTraits_T<const char >> &dFields,
 	const CSphMatch & tDoc,	bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr,
 	const VecTraits_T<DWORD> & dMvas, CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt )
 {
@@ -1644,7 +1661,6 @@ bool RtIndex_t::AddDocument ( const VecTraits_T<const char *> &dFields,
 
 	return true;
 }
-
 
 static void AccumCleanup ( void * pArg )
 {

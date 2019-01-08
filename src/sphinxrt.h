@@ -34,9 +34,10 @@ public:
 
 	/// insert/update document in current txn
 	/// fails in case of two open txns to different indexes
-	virtual bool AddDocument ( const VecTraits_T<const char *> &dFields, const CSphMatch & tDoc,
-		bool bReplace, const CSphString & sTokenFilterOptions, const char ** ppStr, const VecTraits_T<DWORD> & dMvas,
-		CSphString & sError, CSphString & sWarning, ISphRtAccum * pAccExt ) = 0;
+	/// fields are already measured; i.e. not necessary to be asciiz and apply strlen to them
+	virtual bool AddDocument ( const VecTraits_T<VecTraits_T<const char >> &dFields, const CSphMatch &tDoc,
+		bool bReplace, const CSphString &sTokenFilterOptions, const char ** ppStr, const VecTraits_T<DWORD> &dMvas,
+		CSphString &sError, CSphString &sWarning, ISphRtAccum * pAccExt ) = 0;
 
 	/// delete document in current txn
 	/// fails in case of two open txns to different indexes
@@ -301,6 +302,7 @@ class CSphSource_StringVector : public CSphSource_Document
 {
 public:
 	explicit			CSphSource_StringVector ( const VecTraits_T<const char *> &dFields, const CSphSchema & tSchema );
+	explicit			CSphSource_StringVector ( const VecTraits_T<VecTraits_T<const char >> &dFields, const CSphSchema &tSchema );
 						~CSphSource_StringVector () override = default;
 
 	bool		Connect ( CSphString & ) override;

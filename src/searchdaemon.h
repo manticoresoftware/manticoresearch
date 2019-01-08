@@ -1111,10 +1111,6 @@ struct SqlInsert_t
 	int64_t					m_iVal = 0;
 	float					m_fVal = 0.0;
 	AttrValues_p			m_pVals;
-
-	SqlInsert_t ()
-		: m_pVals ( nullptr )
-	{}
 };
 
 /// parsing result

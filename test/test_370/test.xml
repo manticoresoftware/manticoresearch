@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test>
+<name>Charset_table and ngram_chars aliases</name>
+
+<config>
+indexer
+{
+	mem_limit			= 32M
+}
+
+searchd
+{
+	<searchd_settings/>
+}
+
+source src1
+{
+	type = mysql
+	<sql_settings/>
+	sql_query_pre	= SET NAMES utf8
+	sql_query = SELECT id, 11 idd, text from test_table
+	sql_attr_uint = idd
+}
+
+index idx1
+{
+	source				= src1
+	path				= <data_path/>/idx1
+	docinfo				= extern
+	dict 				= keywords
+	
+	charset_table 		= noncjk
+	ngram_len		= 1
+	ngram_chars		= cjk 	
+	min_word_len   		= 1
+}
+</config>
+
+<db_create>CREATE TABLE `test_table` ( `id` int(11) NOT NULL, `text` varchar(16384) CHARACTER SET utf8 NOT NULL )</db_create>
+<db_drop>DROP TABLE IF EXISTS `test_table`</db_drop>
+<db_insert>SET NAMES utf8</db_insert>
+<db_insert>
+INSERT INTO `test_table` ( `id`, `text` ) VALUES 
+( 1, 'The first number is 123.'),
+( 2, 'Basic text example' ),
+( 3, 'Тест 370 очень сложен.' ),
+( 4, 'A primit, în sfărșit, o actualizare a interfeței' ),
+( 5, 'Transformă automat în text cu diacritice!' ),
+( 6, '廬豈 廬豈' ),
+( 7, '豈祉' )
+</db_insert>
+
+<sphqueries>
+<sphinxql>select id from idx1 where match ('123') order by id asc</sphinxql>
+<sphinxql>select id from idx1 where match ('Basic') order by id asc</sphinxql>
+<sphinxql>select id from idx1 where match ('тест') order by id asc</sphinxql>
+<sphinxql>select id from idx1 where match ('interfeței') order by id asc</sphinxql>
+<sphinxql>select id from idx1 where match ('transforma') order by id asc</sphinxql>
+<sphinxql>select id from idx1 where match ('廬') order by id asc</sphinxql>
+<sphinxql>select id from idx1 where match ('祉') order by id asc</sphinxql>
+</sphqueries>
+
+</test>

@@ -846,6 +846,18 @@ public:
 		, m_iCount ( iCount )
 	{}
 
+	VecTraits_T Slice ( int64_t iBegin=0, int64_t iCount=-1 )
+	{
+		// calculate starting bound
+		if ( iBegin<0 )
+			iBegin = 0;
+		else if ( iBegin>m_iCount )
+			iBegin = m_iCount;
+
+		iCount = ( iCount<0 ) ? ( m_iCount - iBegin ) : Min ( iCount, m_iCount - iBegin );
+		return VecTraits_T ( m_pData + iBegin, iCount );
+	}
+
 	/// accessor by forward index
 	T &operator[] ( int64_t iIndex ) const
 	{
@@ -1213,6 +1225,7 @@ public:
 	using BASE::GetLength; // these are for IDE helpers to work
 	using BASE::GetLength64;
 	using BASE::GetLengthBytes;
+	using BASE::Slice;
 	using LIMIT::Relimit;
 
 

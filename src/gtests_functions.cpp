@@ -1534,6 +1534,33 @@ TEST ( functions, vector )
 	ASSERT_EQ (dVec.GetLength (),8);
 }
 
+TEST ( functions, vector_slice )
+{
+	CSphVector<int> dVec;
+	auto dSlice0 = dVec.Slice();
+	ASSERT_TRUE ( dSlice0.IsEmpty() );
+	dVec.Add ( 1 );
+	dVec.Add ( 2 );
+	dVec.Add ( 3 );
+	
+	auto dSlice1 = dVec.Slice(-1,20);
+	ASSERT_EQ ( dSlice1.begin(), dVec.begin());
+	ASSERT_EQ ( dSlice1.GetLength (), 3 );
+	
+	auto dSlice2 = dVec.Slice (10,10);
+	ASSERT_TRUE ( dSlice2.IsEmpty() );
+	
+	auto dSlice3 = dVec.Slice(1);
+	ASSERT_EQ ( dSlice3.GetLength(),2);
+	ASSERT_EQ ( dSlice3[0], 2);
+	ASSERT_EQ ( dSlice3[1], 3 );
+	ASSERT_EQ ( dSlice3.begin(), &dVec[1]);
+	
+	auto dSlice4 = dVec.Slice(1,1);
+	ASSERT_EQ ( dSlice4.GetLength(), 1);
+	ASSERT_EQ ( dSlice4.begin (), &dVec[1] );
+}
+
 TEST ( functions, sphSplit )
 {
 	StrVec_t dParts;

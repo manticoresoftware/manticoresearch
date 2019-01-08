@@ -2998,7 +2998,7 @@ struct CharsetAlias_t
 #if defined(HAVE_GLOBALALIASES_H)
 #include "globalaliases.h"
 #else
-static const char * globalaliases[] = { "A..Z->a..z, a..z", "U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451" };
+static const char * globalaliases[] = { "A..Z->a..z, a..z", nullptr, "U+410..U+42F->U+430..U+44F, U+430..U+44F, U+401->U+451, U+451", nullptr };
 static const char * globalaliases_names[] = { "english", "russian" };
 enum E_GLOBALALIASES { CHARSET_ENGLISH, CHARSET_RUSSIAN, CHARSET_TOTAL };
 #endif
@@ -3011,14 +3011,29 @@ bool sphInitCharsetAliasTable ( CSphString & sError ) // FIXME!!! move alias gen
 	g_dCharsetAliases.Reset();
 	CSphCharsetDefinitionParser tParser;
 	CSphVector<CharsetAlias_t> dAliases;
+	CSphVector<char> dConcat;
 
+	const int iTotalChunks = sizeof(globalaliases)/sizeof(globalaliases[0]);
+	int iCurAliasChunk = 0;
 	for ( int i=0; i<CHARSET_TOTAL; ++i )
 	{
 		CharsetAlias_t & tCur = dAliases.Add();
 		tCur.m_sName = globalaliases_names[i];
 		tCur.m_iNameLen = tCur.m_sName.Length();
 
-		if ( !tParser.Parse ( globalaliases[i], tCur.m_dRemaps ) )
+		dConcat.Resize(0);
+		while ( iCurAliasChunk<iTotalChunks && globalaliases[iCurAliasChunk] )
+		{
+			int iChunkLen = strlen(globalaliases[iCurAliasChunk]);
+			char * szChunk = dConcat.AddN(iChunkLen);
+			memcpy ( szChunk, globalaliases[iCurAliasChunk], iChunkLen );
+			iCurAliasChunk++;
+		}
+
+		dConcat.Add(0);
+		iCurAliasChunk++;
+
+		if ( !tParser.Parse ( dConcat.Begin(), tCur.m_dRemaps ) )
 		{
 			sError = tParser.GetLastError();
 			return false;

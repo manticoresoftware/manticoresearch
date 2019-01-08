@@ -19,7 +19,7 @@
 // from @_SRCFILE@
 
 static const char* @SNIPPETNAME@[] = {
-R"@SNIPPETNAME@(@_SNIPPET@)@SNIPPETNAME@"@DELIMITER@
+@_SNIPPET@@DELIMITER@
 };
 
 static const char* @SNIPPETNAME@_names[] = {

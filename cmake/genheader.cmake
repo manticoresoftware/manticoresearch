@@ -161,6 +161,33 @@ function( HSNIPPETFOLDER FOLDERGLOB TEMPLATE )
 #		diag ( _SNIPPETNAME )
 #		diag ( _SNIPPETNAMEUPPER )
 
+		# split _SNIPPET into a list of 1k chunks
+		string ( LENGTH "${_SNIPPET}" _SNIPPETLEN )
+
+		set ( _SNIPPET2 "" )
+
+		if ( NOT _SNIPPETLEN EQUAL 0 )
+			set ( _CHUNKSIZE 1024 )
+			math ( EXPR _NUMCHUNKS "${_SNIPPETLEN}/${_CHUNKSIZE}" )
+			math ( EXPR _LEFTOVER "${_SNIPPETLEN}%${_CHUNKSIZE}" )
+			if ( _LEFTOVER GREATER 0 )
+				math ( EXPR _NUMCHUNKS "${_NUMCHUNKS}+1" )
+			endif ()
+#			diag ( _SNIPPETLEN )
+#			diag ( _NUMCHUNKS )
+
+			math ( EXPR _NUMCHUNKS "${_NUMCHUNKS}-1" )			
+
+			FOREACH ( _CHUNK RANGE "${_NUMCHUNKS}" )
+				math ( EXPR _CHUNK_START "${_CHUNK}*${_CHUNKSIZE}" )
+				STRING ( SUBSTRING "${_SNIPPET}" "${_CHUNK_START}" ${_CHUNKSIZE} _SUBSTR )
+				STRING ( APPEND _SNIPPET2 "R\"${SNIPPETNAME}(${_SUBSTR})${SNIPPETNAME}\", " )
+	        ENDFOREACH()
+		endif()
+
+		STRING ( APPEND _SNIPPET2 "nullptr" )
+		SET ( _SNIPPET "${_SNIPPET2}" )
+
 		set ( NUMCLAUSE 0 )
 		FOREACH ( EXPRESSION ${CLAUSES} )
 			set ( CLAUSE "CLAUSE${NUMCLAUSE}" )

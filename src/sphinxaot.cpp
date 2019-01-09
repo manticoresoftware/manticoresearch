@@ -1520,6 +1520,7 @@ public:
 		// ok, time to work on a next word
 		assert ( m_iCurrent<0 );
 		BYTE * pToken = Base::GetToken();
+		m_eTokenMorph = m_pTokenizer->GetTokenMorph();
 		if ( !pToken )
 			return nullptr;
 
@@ -1650,6 +1651,7 @@ public:
 		// ok, time to work on a next word
 		assert ( m_iCurrent<0 );
 		BYTE * pToken = Base::GetToken();
+		m_eTokenMorph = m_pTokenizer->GetTokenMorph();
 		if ( !pToken )
 			return nullptr;
 

@@ -11971,6 +11971,12 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 						sData = (const char*)dBson.Begin();
 						iLen = dBson.GetLength();
 					}
+					// truncate string on 4M bound
+					else if ( strlen ( sData )>0x3FFFFF )
+					{
+						*( char * ) ( sData + 0x3FFFFF ) = '\0';
+						m_sLastWarning.SetSprintf ( "too long string attribute was truncated to 4M-1 chars" );
+					}
 
 					// calc offset, do sanity checks
 					SphOffset_t uOff = tStrWriter.GetPos();

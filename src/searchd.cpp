@@ -13335,7 +13335,7 @@ protected:
 };
 
 
-void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt, bool bReplace, bool bCommit, CSphString & sWarning, CSphSessionAccum & tAcc, ESphCollation	eCollation )
+void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool bReplace, bool bCommit, CSphString & sWarning, CSphSessionAccum & tAcc, ESphCollation	eCollation )
 {
 	MEMORY ( MEM_SQL_INSERT );
 
@@ -13598,6 +13598,11 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, const SqlStmt_t & tStmt,
 				bResult = tDoc.SetAttr ( tLoc, tVal, tCol.m_eAttrType );
 				if ( tCol.m_eAttrType==SPH_ATTR_STRING )
 				{
+					if ( tVal.m_sVal.Length() > 0x3FFFFF )
+					{
+						*( char * ) ( tVal.m_sVal.cstr () + 0x3FFFFF ) = '\0';
+						sWarning.SetSprintf ( "String column %d at row %d truncated to 0x3FFFFF chars", i, c );
+					}
 					dStrings.Add ( tVal.m_sVal.cstr() );
 				} else if ( tCol.m_eAttrType==SPH_ATTR_JSON )
 				{

@@ -901,6 +901,13 @@ public:
 		return *( VecTraits_T<const typename std::remove_pointer<T>::type *>* ) ( this );
 	}
 
+	template<typename TT>
+	operator VecTraits_T<TT> & () const
+	{
+		STATIC_ASSERT ( sizeof ( T )==sizeof ( TT ), SIZE_OF_DERIVED_NOT_SAME_AS_ORIGIN );
+		return *( VecTraits_T<TT> * ) ( this );
+	}
+
 	/// check if i'm empty
 	bool IsEmpty () const
 	{
@@ -1524,6 +1531,20 @@ public:
 		m_pData = NULL;
 		Reset();
 		return pData;
+	}
+
+	/// adopt external buffer
+	/// note that caller must himself then nullify origin pData to avoid double-deletion
+	void AdoptData ( T * pData, int64_t iLen, int64_t iLimit )
+	{
+		assert ( iLen>=0 );
+		assert ( iLimit>=0 );
+		assert ( pData || iLimit==0 );
+		assert ( iLen<=iLimit );
+		Reset();
+		m_pData = pData;
+		m_iLimit = iLimit;
+		m_iCount = iLen;
 	}
 
 	/// insert into a middle (will fail to compile for swap vector)
@@ -2187,7 +2208,7 @@ public:
 	// hope this won't kill performance on a huge strings
 	void SetBinary ( const char * sValue, int iLen )
 	{
-		if ( Length ()<iLen )
+		if ( Length ()<( iLen + SAFETY_GAP + 1 ) )
 		{
 			SafeFree ();
 			if ( !sValue )
@@ -2310,7 +2331,7 @@ public:
 		return m_sValue ? (int)strlen(m_sValue) : 0;
 	}
 
-	/// \return internal string and releases it from bein destroyed in d-tr
+	/// \return internal string and releases it from being destroyed in d-tr
 	char * Leak ()
 	{
 		if ( m_sValue==EMPTY )
@@ -2323,6 +2344,22 @@ public:
 		char * pBuf = m_sValue;
 		m_sValue = nullptr;
 		return pBuf;
+	}
+
+	/// \return internal string and releases it from being destroyed in d-tr
+	void LeakToVec ( CSphVector<BYTE> &dVec )
+	{
+		if ( m_sValue==EMPTY )
+		{
+			m_sValue = nullptr;
+			auto * pBuf = new char[1];
+			pBuf[0] = '\0';
+			dVec.AdoptData ((BYTE*)pBuf,0,1);
+			return;
+		}
+		int iLen = Length();
+		dVec.AdoptData ( ( BYTE * ) m_sValue, iLen, iLen + 1 + SAFETY_GAP );
+		m_sValue = nullptr;
 	}
 
 	/// take string from outside and 'adopt' it as own child.

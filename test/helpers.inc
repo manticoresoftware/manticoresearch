@@ -1674,7 +1674,7 @@ class SphinxConfig
 				$decoded_rows = json_decode ( $query_result['rows'] );
 				if ( !$decoded_rows )
 				{
-					$error = "Unable to decode repsonse json";
+					$error = "Unable to decode repsonse json'" . $query_result['rows'] . "'";
 					return false;
 				}
 

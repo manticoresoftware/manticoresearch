@@ -11975,7 +11975,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					else if ( strlen ( sData )>0x3FFFFF )
 					{
 						*( char * ) ( sData + 0x3FFFFF ) = '\0';
-						m_sLastWarning.SetSprintf ( "too long string attribute was truncated to 4M-1 chars" );
+						m_sLastWarning.SetSprintf ( "too long string attribute was truncated to 4MB" );
 					}
 
 					// calc offset, do sanity checks

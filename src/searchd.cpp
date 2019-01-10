@@ -13601,7 +13601,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 					if ( tVal.m_sVal.Length() > 0x3FFFFF )
 					{
 						*( char * ) ( tVal.m_sVal.cstr () + 0x3FFFFF ) = '\0';
-						sWarning.SetSprintf ( "String column %d at row %d truncated to 0x3FFFFF chars", i, c );
+						sWarning.SetSprintf ( "String column %d at row %d too long, truncated to 4MB", i, c );
 					}
 					dStrings.Add ( tVal.m_sVal.cstr() );
 				} else if ( tCol.m_eAttrType==SPH_ATTR_JSON )

@@ -3957,7 +3957,14 @@ void RtIndex_t::SaveMeta ( int64_t iTID, const CSphFixedVector<int> & dChunkName
 	wrMeta.PutDword ( dChunkNames.GetLength () );
 	wrMeta.PutBytes ( dChunkNames.Begin(), dChunkNames.GetLengthBytes() );
 
-	wrMeta.CloseFile(); // FIXME? handle errors?
+	wrMeta.CloseFile();
+
+	// no need to remove old but good meta in case new meta failed to save
+	if ( wrMeta.IsError() )
+	{
+		sphWarning ( "%s", sError.cstr() );
+		return;
+	}
 
 	// rename
 	if ( sph::rename ( sMetaNew.cstr(), sMeta.cstr() ) )

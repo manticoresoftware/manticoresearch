@@ -1,4 +1,3 @@
-
 ant
 apie
 ar

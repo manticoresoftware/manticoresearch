@@ -174,7 +174,7 @@ if ( WIN32 )
 	endif ()
 	mark_as_advanced ( CMAKE_CONFIGURATION_TYPES )
 	add_definitions ("-D_CRT_SECURE_NO_WARNINGS")
-    add_definitions ( "-wd4996" "-wd4706" "-wd4244" "-wd4702" )
+	add_definitions ( "-wd4996" "-wd4706" "-wd4244" "-wd4702" )
 else ( WIN32 )
 
 	include ( helpers )
@@ -198,7 +198,7 @@ else ( WIN32 )
 			set ( SPLIT_SYMBOLS OFF )
 			add_definitions ( "-DNDEBUG" )
 		elseif ( CMAKE_BUILD_TYPE STREQUAL Debug )
-#			set ( CLANGFLAGS "-Wthread-safety" ) # made a different option, off by default
+			#set ( CLANGFLAGS "-Wthread-safety" ) # made a different option, off by default
 			add_definitions ( "-D_DEBUG" )
 			set ( SPLIT_SYMBOLS OFF )
 		else ()
@@ -452,6 +452,8 @@ else ( WIN32 )
 		endif ( REPLICATION_LIB )
 	endif ( WITH_REPLICATION )
 
+	set ( SHARE_DIR "/usr/share/manticore" CACHE PATH "path to shared files" )
+	message ( STATUS "Shared directory: ${SHARE_DIR}" )
 endif ( WIN32 )
 
 

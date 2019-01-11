@@ -212,7 +212,7 @@ class RTN : public RT, public ::testing::WithParamInterface<DWORD>
 TEST_P ( RTN, WeightBoundary )
 {
 	using namespace testing;
-	CSphDictRefPtr_c pDict { sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "weight", sError ) };
+	CSphDictRefPtr_c pDict { sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "weight", false, sError ) };
 
 	tCol.m_sName = "channel_id";
 	tCol.m_eAttrType = SPH_ATTR_INTEGER;
@@ -317,7 +317,7 @@ TEST_F ( RT, RankerFactors )
 	tCol.m_eAttrType = SPH_ATTR_INTEGER;
 	tSrcSchema.AddAttr ( tCol, true );
 
-	auto pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt", sError );
+	auto pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt", false, sError );
 
 	auto pSrc = new MockTestDoc_c ( tSrcSchema, ( BYTE ** ) dFields, sizeof ( dFields ) / sizeof ( dFields[0] ) / 2
 									, 2 );
@@ -345,7 +345,7 @@ TEST_F ( RT, RankerFactors )
 	auto pIndex = sphCreateIndexRT ( tSchema, "testrt", 128 * 1024, RT_INDEX_FILE_NAME, false );
 
 	pIndex->SetTokenizer ( pTok ); // index will own this pair from now on
-	pIndex->SetDictionary ( sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt", sError ) );
+	pIndex->SetDictionary ( sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt", false, sError ) );
 	pIndex->PostSetup ();
 	Verify ( pIndex->Prealloc ( false ) );
 
@@ -483,7 +483,7 @@ TEST_F ( RT, SendVsMerge )
 {
 	using namespace testing;
 
-	auto pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt", sError );
+	auto pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTok, "rt", false, sError );
 
 	tCol.m_sName = "tag1";
 	tCol.m_eAttrType = SPH_ATTR_INTEGER;

@@ -1194,3 +1194,69 @@ TEST ( bench, DISABLED_custom_tolower )
 	std::cout << uLoops << " of prepared tolower took " << iTimeSpan << " uSec\n";
 
 }
+TEST ( bench, DISABLED_format_cjson_vs_stringbuilder )
+{
+	auto uLoops = 100000;
+
+	struct MyIndex_t
+	{
+		CSphString m_sName;
+		CSphString m_sPath;
+	};
+
+	CSphString sResult;
+
+	CSphVector<MyIndex_t> dIndexes;
+	dIndexes.Add ( { "test1", "test1_\tpath" } );
+	dIndexes.Add ( { "test2", "test2_\"path" } );
+	dIndexes.Add ( { "test3", "test3_path" } );
+
+	auto iTimeSpan = -sphMicroTimer ();
+	for ( auto i = 0; i<uLoops; ++i )
+	{
+		{
+			cJSON * pRoot = cJSON_CreateObject ();
+			cJSON * pIndexes = cJSON_CreateArray ();
+			cJSON_AddItemToObject ( pRoot, "indexes", pIndexes );
+
+			for ( auto &dIdx : dIndexes )
+			{
+				cJSON * pIndex = cJSON_CreateObject ();
+				cJSON_AddItemToArray ( pIndexes, pIndex );
+				cJSON_AddStringToObject ( pIndex, "name", dIdx.m_sName.cstr () );
+				cJSON_AddStringToObject ( pIndex, "path", dIdx.m_sPath.cstr () );
+			}
+
+			char * szResult = cJSON_Print ( pRoot );
+			sResult = szResult;
+			cJSON_Delete ( pRoot );
+		}
+	}
+	iTimeSpan += sphMicroTimer ();
+	std::cout << uLoops << " of cjson construct took " << iTimeSpan << " uSec\n"
+	<< "json is " << sResult.cstr();
+
+
+	iTimeSpan = -sphMicroTimer ();
+	for ( auto i = 0; i<uLoops; ++i )
+	{
+		{
+			JsonEscapedBuilder tOut;
+			tOut.StartBlock (",","{","}");
+			{
+				ScopedComma_c sIndexes (tOut, ",", "\"indexes\":[", "]");
+				for ( auto &dIdx : dIndexes )
+				{
+					ScopedComma_c sIndex ( tOut, ",", "{", "}");
+					tOut.AppendName ("name").AppendEscaped ( dIdx.m_sName.cstr(), EscBld::eEscape );
+					tOut.AppendName ("path").AppendEscaped ( dIdx.m_sPath.cstr (), EscBld::eEscape );
+				}
+			}
+			tOut.FinishBlocks();
+			tOut.MoveTo (sResult);
+		}
+	}
+	iTimeSpan += sphMicroTimer ();
+	std::cout << uLoops << " of stringbuilder construct took " << iTimeSpan << " uSec\n"
+			  << "json is " << sResult.cstr ();
+}

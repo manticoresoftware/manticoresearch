@@ -20946,12 +20946,12 @@ void CSphTemplateDictTraits::LoadStopwords ( const char * sFiles, const ISphToke
 	while (true)
 	{
 		// find next name start
-		while ( *pCur && isspace(*pCur) ) pCur++;
+		while ( *pCur && ( isspace(*pCur) || *pCur==',' ) ) pCur++;
 		if ( !*pCur ) break;
 		sName = pCur;
 
 		// find next name end
-		while ( *pCur && !isspace(*pCur) ) pCur++;
+		while ( *pCur && !( isspace(*pCur) || *pCur==',' ) ) pCur++;
 		if ( *pCur ) *pCur++ = '\0';
 
 		CSphString sFileName = sName;

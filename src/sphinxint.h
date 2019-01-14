@@ -1705,8 +1705,8 @@ class CSphDictTraits : public CSphDict
 public:
 	explicit			CSphDictTraits ( CSphDict * pDict ) : m_pDict { pDict } { SafeAddRef ( pDict ); }
 
-	virtual void		LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer ) { m_pDict->LoadStopwords ( sFiles, pTokenizer ); }
-	virtual void		LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) { m_pDict->LoadStopwords ( dStopwords ); }
+	virtual void		LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer, bool bStripFile ) override { m_pDict->LoadStopwords ( sFiles, pTokenizer, bStripFile ); }
+	virtual void		LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) override { m_pDict->LoadStopwords ( dStopwords ); }
 	virtual void		WriteStopwords ( CSphWriter & tWriter ) const { m_pDict->WriteStopwords ( tWriter ); }
 	virtual bool		LoadWordforms ( const StrVec_t & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) { return m_pDict->LoadWordforms ( dFiles, pEmbedded, pTokenizer, sIndex ); }
 	virtual void		WriteWordforms ( CSphWriter & tWriter ) const { m_pDict->WriteWordforms ( tWriter ); }

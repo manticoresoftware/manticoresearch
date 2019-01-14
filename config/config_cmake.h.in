@@ -175,3 +175,6 @@
 
 /* define if you want runtime load replication library using dlopen */
 #cmakedefine REPLICATION_LIB "${REPLICATION_LIB}"
+
+/* define to set custom directory for shared files */
+#cmakedefine SHARE_DIR "${SHARE_DIR}"

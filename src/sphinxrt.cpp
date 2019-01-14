@@ -3957,7 +3957,14 @@ void RtIndex_t::SaveMeta ( int64_t iTID, const CSphFixedVector<int> & dChunkName
 	wrMeta.PutDword ( dChunkNames.GetLength () );
 	wrMeta.PutBytes ( dChunkNames.Begin(), dChunkNames.GetLengthBytes() );
 
-	wrMeta.CloseFile(); // FIXME? handle errors?
+	wrMeta.CloseFile();
+
+	// no need to remove old but good meta in case new meta failed to save
+	if ( wrMeta.IsError() )
+	{
+		sphWarning ( "%s", sError.cstr() );
+		return;
+	}
 
 	// rename
 	if ( sph::rename ( sMetaNew.cstr(), sMeta.cstr() ) )
@@ -4167,7 +4174,6 @@ bool RtIndex_t::Prealloc ( bool bStripPath )
 		if ( bStripPath )
 		{
 			StripPath ( tTokenizerSettings.m_sSynonymsFile );
-			StripPath ( tDictSettings.m_sStopwords );
 			ARRAY_FOREACH ( i, tDictSettings.m_dWordforms )
 				StripPath ( tDictSettings.m_dWordforms[i] );
 		}
@@ -4178,7 +4184,7 @@ bool RtIndex_t::Prealloc ( bool bStripPath )
 			return false;
 
 		// recreate dictionary
-		m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, m_sIndexName.cstr(), m_sLastError );
+		m_pDict = sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, m_pTokenizer, m_sIndexName.cstr(), bStripPath, m_sLastError );
 		if ( !m_pDict )
 		{
 			m_sLastError.SetSprintf ( "index '%s': %s", m_sIndexName.cstr(), m_sLastError.cstr() );
@@ -8863,7 +8869,7 @@ bool CreateReconfigure ( const CSphString & sIndexName, bool bIsStarDict, const 
 	}
 
 	// dict setup second
-	CSphDictRefPtr_c tDict { sphCreateDictionaryCRC ( tSettings.m_tDict, NULL, pTokenizer, sIndexName.cstr(), sError ) };
+	CSphDictRefPtr_c tDict { sphCreateDictionaryCRC ( tSettings.m_tDict, NULL, pTokenizer, sIndexName.cstr(), false, sError ) };
 	if ( !tDict )
 	{
 		sError.SetSprintf ( "'%s' failed to create dictionary, error '%s'", sIndexName.cstr(), sError.cstr() );

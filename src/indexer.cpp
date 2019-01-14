@@ -202,8 +202,8 @@ public:
 	virtual SphWordID_t	GetWordID ( BYTE * pWord );
 	virtual SphWordID_t	GetWordID ( const BYTE * pWord, int iLen, bool );
 
-	virtual void		LoadStopwords ( const char *, const ISphTokenizer * ) {}
-	virtual void		LoadStopwords ( const CSphVector<SphWordID_t> & ) {}
+	virtual void		LoadStopwords ( const char *, const ISphTokenizer *, bool ) override {}
+	virtual void		LoadStopwords ( const CSphVector<SphWordID_t> & ) override {}
 	virtual void		WriteStopwords ( CSphWriter & ) const {}
 	virtual bool		LoadWordforms ( const StrVec_t &, const CSphEmbeddedFiles *, const ISphTokenizer *, const char * ) { return true; }
 	virtual void		WriteWordforms ( CSphWriter & ) const {}
@@ -965,8 +965,8 @@ bool DoIndex ( const CSphConfigSection & hIndex, const char * sIndexName,
 
 		// multiforms filter
 		pDict = tDictSettings.m_bWordDict
-			? sphCreateDictionaryKeywords ( tDictSettings, NULL, pTokenizer, sIndexName, sError )
-			: sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer, sIndexName, sError );
+			? sphCreateDictionaryKeywords ( tDictSettings, NULL, pTokenizer, sIndexName, false, sError )
+			: sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer, sIndexName, false, sError );
 		if ( !pDict )
 			sphDie ( "index '%s': %s", sIndexName, sError.cstr() );
 
@@ -1301,13 +1301,13 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	CSphScopedPtr<CSphIndex> dDstGuard ( pDst );
 
 		CSphString sError;
-	if ( !sphFixupIndexSettings ( pSrc, hSrc, sError ) )
+	if ( !sphFixupIndexSettings ( pSrc, hSrc, sError, false, false ) )
 	{
 		fprintf ( stdout, "ERROR: index '%s': %s\n", sSrc, sError.cstr () );
 		return false;
 	}
 
-	if ( !sphFixupIndexSettings ( pDst, hDst, sError ) )
+	if ( !sphFixupIndexSettings ( pDst, hDst, sError, false, false ) )
 	{
 		fprintf ( stdout, "ERROR: index '%s': %s\n", sDst, sError.cstr () );
 		return false;

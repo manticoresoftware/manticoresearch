@@ -1695,7 +1695,7 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 }
 
 
-bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, CSphString & sError, bool bTemplateDict )
+bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, CSphString & sError, bool bTemplateDict, bool bStripPath )
 {
 	bool bTokenizerSpawned = false;
 
@@ -1719,14 +1719,14 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 		if ( bTemplateDict )
 		{
 			sphConfDictionary ( hIndex, tSettings );
-			pDict = sphCreateDictionaryTemplate ( tSettings, nullptr, pIndex->GetTokenizer (), pIndex->GetName(), sError );
+			pDict = sphCreateDictionaryTemplate ( tSettings, nullptr, pIndex->GetTokenizer (), pIndex->GetName(), bStripPath, sError );
 			CSphIndexSettings tIndexSettings = pIndex->GetSettings();
 			tIndexSettings.m_uAotFilterMask = sphParseMorphAot ( tSettings.m_sMorphology.cstr() );
 			pIndex->Setup ( tIndexSettings );
 		} else
 		{
 			sphConfDictionary ( hIndex, tSettings );
-			pDict = sphCreateDictionaryCRC ( tSettings, nullptr, pIndex->GetTokenizer (), pIndex->GetName(), sError );
+			pDict = sphCreateDictionaryCRC ( tSettings, nullptr, pIndex->GetTokenizer (), pIndex->GetName(), bStripPath, sError );
 		}
 		if ( !pDict )
 		{

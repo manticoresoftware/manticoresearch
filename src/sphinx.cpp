@@ -955,7 +955,7 @@ struct CSphWordlistCheckpoint
 
 /////////////////////////////////////////////////////////////////////////////
 
-static void ReadFileInfo ( CSphReader & tReader, const char * szFilename, CSphSavedFile & tFile, CSphString * sWarning )
+static void ReadFileInfo ( CSphReader & tReader, const char * szFilename, bool bUseShared, CSphSavedFile & tFile, CSphString * sWarning )
 {
 	tFile.m_uSize = tReader.GetOffset ();
 	tFile.m_uCTime = tReader.GetOffset ();
@@ -963,20 +963,33 @@ static void ReadFileInfo ( CSphReader & tReader, const char * szFilename, CSphSa
 	tFile.m_uCRC32 = tReader.GetDword ();
 	tFile.m_sFilename = szFilename;
 
-	if ( szFilename && *szFilename && sWarning )
+	CSphString sName ( szFilename );
+
+	if ( !sName.IsEmpty() && sWarning )
 	{
+		if ( !sphIsReadable ( sName ) && bUseShared )
+		{
+			StripPath ( sName );
+			sName.SetSprintf ( "%s/%s", SHARE_DIR, sName.cstr() );
+		}
+
 		struct_stat tFileInfo;
-		if ( stat ( szFilename, &tFileInfo ) < 0 )
-			sWarning->SetSprintf ( "failed to stat %s: %s", szFilename, strerrorm(errno) );
+		if ( stat ( sName.cstr(), &tFileInfo ) < 0 )
+		{
+			if ( bUseShared )
+				sWarning->SetSprintf ( "failed to stat either %s or %s: %s", szFilename, sName.cstr(), strerrorm(errno) );
+			else
+				sWarning->SetSprintf ( "failed to stat %s: %s", szFilename, strerrorm(errno) );
+		}
 		else
 		{
 			DWORD uMyCRC32 = 0;
-			if ( !sphCalcFileCRC32 ( szFilename, uMyCRC32 ) )
-				sWarning->SetSprintf ( "failed to calculate CRC32 for %s", szFilename );
+			if ( !sphCalcFileCRC32 ( sName.cstr(), uMyCRC32 ) )
+				sWarning->SetSprintf ( "failed to calculate CRC32 for %s", sName.cstr() );
 			else
 				if ( uMyCRC32!=tFile.m_uCRC32 || tFileInfo.st_size!=tFile.m_uSize
 					|| tFileInfo.st_ctime!=tFile.m_uCTime || tFileInfo.st_mtime!=tFile.m_uMTime )
-						sWarning->SetSprintf ( "'%s' differs from the original", szFilename );
+						sWarning->SetSprintf ( "'%s' differs from the original", sName.cstr() );
 		}
 	}
 }
@@ -3287,7 +3300,7 @@ bool LoadTokenizerSettings ( CSphReader & tReader, CSphTokenizerSettings & tSett
 	}
 
 	tSettings.m_sSynonymsFile = tReader.GetString ();
-	ReadFileInfo ( tReader, tSettings.m_sSynonymsFile.cstr (),
+	ReadFileInfo ( tReader, tSettings.m_sSynonymsFile.cstr(), false,
 		tEmbeddedFiles.m_tSynonymFile, tEmbeddedFiles.m_bEmbeddedSynonyms ? NULL : &sWarning );
 	tSettings.m_sBoundary = tReader.GetString ();
 	tSettings.m_sIgnoreChars = tReader.GetString ();
@@ -3360,7 +3373,7 @@ void LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tSettings
 	for ( int i = 0; i < nFiles; i++ )
 	{
 		sFile = tReader.GetString ();
-		ReadFileInfo ( tReader, sFile.cstr (), tEmbeddedFiles.m_dStopwordFiles[i], tEmbeddedFiles.m_bEmbeddedSynonyms ? NULL : &sWarning );
+		ReadFileInfo ( tReader, sFile.cstr(), true, tEmbeddedFiles.m_dStopwordFiles[i], tEmbeddedFiles.m_bEmbeddedSynonyms ? NULL : &sWarning );
 	}
 
 	tEmbeddedFiles.m_bEmbeddedWordforms = false;
@@ -3385,7 +3398,7 @@ void LoadDictionarySettings ( CSphReader & tReader, CSphDictSettings & tSettings
 	ARRAY_FOREACH ( i, tSettings.m_dWordforms )
 	{
 		tSettings.m_dWordforms[i] = tReader.GetString();
-		ReadFileInfo ( tReader, tSettings.m_dWordforms[i].cstr(),
+		ReadFileInfo ( tReader, tSettings.m_dWordforms[i].cstr(), false,
 			tEmbeddedFiles.m_dWordformFiles[i], tEmbeddedFiles.m_bEmbeddedWordforms ? NULL : &sWarning );
 	}
 
@@ -11975,7 +11988,7 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 					else if ( strlen ( sData )>0x3FFFFF )
 					{
 						*( char * ) ( sData + 0x3FFFFF ) = '\0';
-						m_sLastWarning.SetSprintf ( "too long string attribute was truncated to 4M-1 chars" );
+						m_sLastWarning.SetSprintf ( "too long string attribute was truncated to 4MB" );
 					}
 
 					// calc offset, do sanity checks
@@ -15578,14 +15591,13 @@ bool CSphIndex_VLN::LoadHeader ( const char * sHeaderName, bool bStripPath, CSph
 
 		if ( bStripPath )
 		{
-			StripPath ( tDictSettings.m_sStopwords );
 			ARRAY_FOREACH ( i, tDictSettings.m_dWordforms )
 				StripPath ( tDictSettings.m_dWordforms[i] );
 		}
 
 		CSphDictRefPtr_c pDict { tDictSettings.m_bWordDict
-			? sphCreateDictionaryKeywords ( tDictSettings, &tEmbeddedFiles, pTokenizer, m_sIndexName.cstr(), m_sLastError )
-			: sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, pTokenizer, m_sIndexName.cstr(), m_sLastError )
+			? sphCreateDictionaryKeywords ( tDictSettings, &tEmbeddedFiles, pTokenizer, m_sIndexName.cstr(), bStripPath, m_sLastError )
+			: sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, pTokenizer, m_sIndexName.cstr(), bStripPath, m_sLastError )
 		};
 
 		if ( !pDict )
@@ -20100,8 +20112,8 @@ protected:
 	virtual				~CSphTemplateDictTraits ();
 
 public:
-	virtual void		LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer );
-	virtual void		LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords );
+	virtual void		LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer, bool bStripFile ) override;
+	virtual void		LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) override;
 	virtual void		WriteStopwords ( CSphWriter & tWriter ) const;
 	virtual bool		LoadWordforms ( const StrVec_t & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex );
 	virtual void		WriteWordforms ( CSphWriter & tWriter ) const;
@@ -20911,7 +20923,7 @@ bool CSphDictTemplate::IsStopWord ( const BYTE * pWord ) const
 
 //////////////////////////////////////////////////////////////////////////
 
-void CSphTemplateDictTraits::LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer )
+void CSphTemplateDictTraits::LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer, bool bStripFile )
 {
 	assert ( !m_pStopwords );
 	assert ( !m_iStopwords );
@@ -20934,44 +20946,74 @@ void CSphTemplateDictTraits::LoadStopwords ( const char * sFiles, const ISphToke
 	while (true)
 	{
 		// find next name start
-		while ( *pCur && isspace(*pCur) ) pCur++;
+		while ( *pCur && ( isspace(*pCur) || *pCur==',' ) ) pCur++;
 		if ( !*pCur ) break;
 		sName = pCur;
 
 		// find next name end
-		while ( *pCur && !isspace(*pCur) ) pCur++;
+		while ( *pCur && !( isspace(*pCur) || *pCur==',' ) ) pCur++;
 		if ( *pCur ) *pCur++ = '\0';
 
-		BYTE * pBuffer = NULL;
+		CSphString sFileName = sName;
+		bool bGotFile = sphIsReadable ( sFileName );
+		if ( !bGotFile )
+		{
+			if ( bStripFile )
+			{
+				StripPath ( sFileName );
+				bGotFile = sphIsReadable ( sFileName );
+			}
+			if ( !bGotFile )
+			{
+				if ( !bStripFile )
+					StripPath ( sFileName );
+				sFileName.SetSprintf ( "%s/%s", SHARE_DIR, sFileName.cstr() );
+				bGotFile = sphIsReadable ( sFileName );
+			}
+		}
 
+		CSphFixedVector<BYTE> dBuffer ( 0 );
 		CSphSavedFile tInfo;
-		tInfo.m_sFilename = sName;
-		GetFileStats ( sName, tInfo, NULL );
+		GetFileStats ( sFileName.cstr(), tInfo, NULL );
+
+		// need to store original name to compatible with original behavior of load order
+		// from path defined; from tool CWD; from SHARE_DIR
+		tInfo.m_sFilename = sName; 
 		m_dSWFileInfos.Add ( tInfo );
 
+		if ( !bGotFile )
+		{
+			StringBuilder_c sError;
+			sError.Appendf ( "failed to load stopwords from either '%s' or '%s'", sName, sFileName.cstr() );
+			if ( bStripFile )
+				sError += ", current work directory";
+			sphWarn ( "%s", sError.cstr() );
+			continue;
+		}
+
 		// open file
-		FILE * fp = fopen ( sName, "rb" );
+		FILE * fp = fopen ( sFileName.cstr(), "rb" );
 		if ( !fp )
 		{
-			sphWarn ( "failed to load stopwords from '%s'", sName );
+			sphWarn ( "failed to load stopwords from '%s'", sFileName.cstr() );
 			continue;
 		}
 
 		struct_stat st = {0};
 		if ( fstat ( fileno (fp) , &st )==0 )
-			pBuffer = new BYTE[( size_t ) st.st_size];
+			dBuffer.Reset ( st.st_size );
 		else
 		{
 			fclose ( fp );
-			sphWarn ( "stopwords: failed to get file size for '%s'", sName );
+			sphWarn ( "stopwords: failed to get file size for '%s'", sFileName.cstr() );
 			continue;
 		}
 
 		// tokenize file
-		int iLength = (int)fread ( pBuffer, 1, (size_t)st.st_size, fp );
+		int iLength = (int)fread ( dBuffer.Begin(), 1, (size_t)st.st_size, fp );
 
 		BYTE * pToken;
-		tTokenizer->SetBuffer ( pBuffer, iLength );
+		tTokenizer->SetBuffer ( dBuffer.Begin(), iLength );
 		while ( ( pToken = tTokenizer->GetToken() )!=NULL )
 			if ( m_tSettings.m_bStopwordsUnstemmed )
 				dStop.Add ( GetWordIDNonStemmed ( pToken ) );
@@ -20980,8 +21022,6 @@ void CSphTemplateDictTraits::LoadStopwords ( const char * sFiles, const ISphToke
 
 		// close file
 		fclose ( fp );
-
-		SafeDeleteArray ( pBuffer );
 	}
 
 	// sort stopwords
@@ -23378,7 +23418,7 @@ public:
 		m_hKeywords.Reset();
 	}
 
-	void LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer ) final { m_pBase->LoadStopwords ( sFiles, pTokenizer ); }
+	void LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer, bool bStripFile ) final { m_pBase->LoadStopwords ( sFiles, pTokenizer, bStripFile ); }
 	void LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) final { m_pBase->LoadStopwords ( dStopwords ); }
 	void WriteStopwords ( CSphWriter & tWriter ) const final { m_pBase->WriteStopwords ( tWriter ); }
 	bool LoadWordforms ( const StrVec_t & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) final
@@ -23451,7 +23491,7 @@ ISphRtDictWraper * sphCreateRtKeywordsDictionaryWrapper ( CSphDict * pBase )
 //////////////////////////////////////////////////////////////////////////
 
 static void SetupDictionary ( CSphDictRefPtr_c& pDict, const CSphDictSettings & tSettings,
-	const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex,
+	const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, bool bStripFile,
 	CSphString & sError )
 {
 	assert ( pTokenizer );
@@ -23466,35 +23506,35 @@ static void SetupDictionary ( CSphDictRefPtr_c& pDict, const CSphDictSettings & 
 	if ( pFiles && pFiles->m_bEmbeddedStopwords )
 		pDict->LoadStopwords ( pFiles->m_dStopwords );
 	else
-		pDict->LoadStopwords ( tSettings.m_sStopwords.cstr (), pTokenizer );
+		pDict->LoadStopwords ( tSettings.m_sStopwords.cstr(), pTokenizer, bStripFile );
 
 	pDict->LoadWordforms ( tSettings.m_dWordforms, pFiles && pFiles->m_bEmbeddedWordforms ? pFiles : NULL, pTokenizer, sIndex );
 }
 
 CSphDict * sphCreateDictionaryTemplate ( const CSphDictSettings & tSettings,
-									const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex,
+									const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, bool bStripFile,
 									CSphString & sError )
 {
 	CSphDictRefPtr_c pDict { new CSphDictTemplate() };
-	SetupDictionary ( pDict, tSettings, pFiles, pTokenizer, sIndex, sError );
+	SetupDictionary ( pDict, tSettings, pFiles, pTokenizer, sIndex, bStripFile, sError );
 	return pDict.Leak();
 }
 
 
-CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, CSphString & sError )
+CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, bool bStripFile, CSphString & sError )
 {
 	CSphDictRefPtr_c pDict { new CSphDictCRC<false> };
-	SetupDictionary ( pDict, tSettings, pFiles, pTokenizer, sIndex, sError );
+	SetupDictionary ( pDict, tSettings, pFiles, pTokenizer, sIndex, bStripFile, sError );
 	return pDict.Leak ();
 }
 
 
 CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings,
-	const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex,
+	const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, bool bStripFile,
 	CSphString & sError )
 {
 	CSphDictRefPtr_c pDict { new CSphDictKeywords() };
-	SetupDictionary ( pDict, tSettings, pFiles, pTokenizer, sIndex, sError );
+	SetupDictionary ( pDict, tSettings, pFiles, pTokenizer, sIndex, bStripFile, sError );
 	return pDict.Leak ();
 }
 
@@ -31867,7 +31907,7 @@ void sphDictBuildInfixes ( const char * sPath )
 	////////////////////
 
 	assert ( tDictSettings.m_bWordDict );
-	CSphDictRefPtr_c pDict { sphCreateDictionaryKeywords ( tDictSettings, &tEmbeddedFiles, pTokenizer, "$indexname", sError )};
+	CSphDictRefPtr_c pDict { sphCreateDictionaryKeywords ( tDictSettings, &tEmbeddedFiles, pTokenizer, "$indexname", true, sError )};
 	if ( !pDict )
 		sphDie ( "infix upgrade: %s", sError.cstr() );
 
@@ -32441,8 +32481,8 @@ void sphDictBuildSkiplists ( const char * sPath )
 		sphDie ( "skiplists upgrade: %s", sError.cstr() );
 
 	CSphDictRefPtr_c pDict { bWordDict
-		? sphCreateDictionaryKeywords ( tDictSettings, &tEmbeddedFiles, pTokenizer, "$indexname", sError )
-		: sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, pTokenizer, "$indexname", sError ) };
+		? sphCreateDictionaryKeywords ( tDictSettings, &tEmbeddedFiles, pTokenizer, "$indexname", true, sError )
+		: sphCreateDictionaryCRC ( tDictSettings, &tEmbeddedFiles, pTokenizer, "$indexname", true, sError ) };
 	if ( !pDict )
 		sphDie ( "skiplists upgrade: %s", sError.cstr() );
 

@@ -29,16 +29,36 @@ index test
 	stopwords		= <test_root/>/stopwords.txt <test_root/>/stopwords_121.txt
 	stopword_step	= 0
 }
+
+index test10
+{
+	source			= srctest
+	path			= <data_path/>/test10
+	stopwords		= <test_root/>/stopwords.txt, <test_root/>/stopwords_121.txt
+	stopword_step	= 0
+}
+index test11
+{
+	source			= srctest
+	path			= <data_path/>/test11
+	stopwords		= <test_root/>/stopwords.txt,<test_root/>/stopwords_121.txt
+	stopword_step	= 0
+}
+
 </config>
 
 <queries>
-<query>the</query>
-<query>very</query>
-<query>add</query>
-<query>adds</query>
-<query mode="extended2">"look and add books"</query>
-<query mode="extended2">"look add books"</query>
-<query mode="extended2">"look books"</query>
+<query index="test">the</query>
+<query index="test">very</query>
+<query index="test">add</query>
+<query index="test">adds</query>
+<query mode="extended2" index="test">"look and add books"</query>
+<query mode="extended2" index="test">"look add books"</query>
+<query mode="extended2" index="test">"look books"</query>
+
+<!-- stopwords comma delimiter -->
+<query mode="extended2" index="test10">"look add books"</query>
+<query mode="extended2" index="test11">"look add books"</query>
 </queries>
 
 <db_create>

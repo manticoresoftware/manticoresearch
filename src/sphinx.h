@@ -30,6 +30,8 @@
 
 	#define UNALIGNED_RAM_ACCESS	1
 	#define USE_LITTLE_ENDIAN		1
+
+	#define SHARE_DIR "%APPDATA%\\manticore"
 #else
 	#define USE_WINDOWS		0	/// whether to compile for Windows
 #endif
@@ -822,7 +824,7 @@ public:
 	virtual void		ApplyStemmers ( BYTE * ) const {}
 
 	/// load stopwords from given files
-	virtual void		LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer ) = 0;
+	virtual void		LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer, bool bStripFile ) = 0;
 
 	/// load stopwords from an array
 	virtual void		LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) = 0;
@@ -922,13 +924,13 @@ using CSphDictRefPtr_c = CSphRefcountedPtr<CSphDict>;
 CSphDict * GetStatelessDict ( CSphDict * pDict );
 
 /// traits dictionary factory (no storage, only tokenizing, lemmatizing, etc.)
-CSphDict * sphCreateDictionaryTemplate ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, CSphString & sError );
+CSphDict * sphCreateDictionaryTemplate ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, bool bStripFile, CSphString & sError );
 
 /// CRC32/FNV64 dictionary factory
-CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, CSphString & sError );
+CSphDict * sphCreateDictionaryCRC ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, bool bStripFile, CSphString & sError );
 
 /// keyword-storing dictionary factory
-CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, CSphString & sError );
+CSphDict * sphCreateDictionaryKeywords ( const CSphDictSettings & tSettings, const CSphEmbeddedFiles * pFiles, const ISphTokenizer * pTokenizer, const char * sIndex, bool bStripFile, CSphString & sError );
 
 /// clear wordform cache
 void sphShutdownWordforms ();

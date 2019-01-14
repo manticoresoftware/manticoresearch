@@ -678,7 +678,7 @@ protected:
 
 		CSphDictSettings tDictSettings;
 		tDictSettings.m_bWordDict = false;
-		pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer, "query", sError );
+		pDict = sphCreateDictionaryCRC ( tDictSettings, NULL, pTokenizer, "query", false, sError );
 
 		ASSERT_TRUE ( pTokenizer );
 		ASSERT_TRUE ( pDict );

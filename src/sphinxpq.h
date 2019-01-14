@@ -210,8 +210,8 @@ public:
 	CSphVector<CSphSavedFile> m_tDummySF;
 
 	SphWordID_t GetWordID ( const BYTE * pWord, int iLen, bool bFilterStops ) final { return 0; }
-	void LoadStopwords ( const CSphVector<SphWordID_t> &dStopwords ) final {}
-	void LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer ) final {}
+	void LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) final {}
+	void LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer, bool bStripFile ) final {}
 	void WriteStopwords ( CSphWriter &tWriter ) const final {}
 	bool LoadWordforms ( const StrVec_t &, const CSphEmbeddedFiles * pEmbedded,
 		const ISphTokenizer * pTokenizer, const char * sIndex ) final { return false; }

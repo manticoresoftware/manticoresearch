@@ -452,8 +452,6 @@ else ( WIN32 )
 		endif ( REPLICATION_LIB )
 	endif ( WITH_REPLICATION )
 
-	set ( SHARE_DIR "/usr/share/manticore" CACHE PATH "path to shared files" )
-	message ( STATUS "Shared directory: ${SHARE_DIR}" )
 endif ( WIN32 )
 
 
@@ -477,7 +475,13 @@ endif ()
 SET ( LIBDIR ${CMAKE_INSTALL_LIBDIR} )
 SET ( LOCALSTATEDIR ${CMAKE_INSTALL_FULL_LOCALSTATEDIR} )
 SET ( DATADIR "${LOCALSTATEDIR}/data" )
-SET ( SHAREDIR "${CMAKE_INSTALL_DATADIR}" )
+if ( SHARE_DIR )
+       SET ( SHAREDIR "${SHARE_DIR}" )
+else ()
+       SET ( SHAREDIR "${CMAKE_INSTALL_DATADIR}" )
+       SET ( SHARE_DIR "${CMAKE_INSTALL_PREFIX}/${SHAREDIR}/${PACKAGE_NAME}"  CACHE PATH "path to shared files" )
+endif()
+
 SET ( BINDIR ${CMAKE_INSTALL_BINDIR} )
 SET ( BINDIRFULL ${CMAKE_INSTALL_FULL_BINDIR} )
 SET ( MANDIR ${CMAKE_INSTALL_MANDIR} )

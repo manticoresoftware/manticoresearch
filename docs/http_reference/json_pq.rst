@@ -7,7 +7,7 @@ Percolate are accepted at ``/json/pq`` endpoint. Here is an example:
 
 ::
 
-    curl -X POST 'http://manticoresearch:9308//json/pq/index_name/search' 
+    curl -X POST 'http://manticoresearch:9308/json/pq/index_name/search' 
 	-d '{}'
 
 to list of stored queries at ``"index_name"`` percolate index. 

@@ -955,7 +955,7 @@ struct CSphWordlistCheckpoint
 
 /////////////////////////////////////////////////////////////////////////////
 
-static void ReadFileInfo ( CSphReader & tReader, const char * szFilename, bool bUseShared, CSphSavedFile & tFile, CSphString * sWarning )
+static void ReadFileInfo ( CSphReader & tReader, const char * szFilename, bool bSharedStopwords, CSphSavedFile & tFile, CSphString * sWarning )
 {
 	tFile.m_uSize = tReader.GetOffset ();
 	tFile.m_uCTime = tReader.GetOffset ();
@@ -967,16 +967,16 @@ static void ReadFileInfo ( CSphReader & tReader, const char * szFilename, bool b
 
 	if ( !sName.IsEmpty() && sWarning )
 	{
-		if ( !sphIsReadable ( sName ) && bUseShared )
+		if ( !sphIsReadable ( sName ) && bSharedStopwords )
 		{
 			StripPath ( sName );
-			sName.SetSprintf ( "%s/%s", SHARE_DIR, sName.cstr() );
+			sName.SetSprintf ( "%s/stopwords/%s", SHARE_DIR, sName.cstr() );
 		}
 
 		struct_stat tFileInfo;
 		if ( stat ( sName.cstr(), &tFileInfo ) < 0 )
 		{
-			if ( bUseShared )
+			if ( bSharedStopwords )
 				sWarning->SetSprintf ( "failed to stat either %s or %s: %s", szFilename, sName.cstr(), strerrorm(errno) );
 			else
 				sWarning->SetSprintf ( "failed to stat %s: %s", szFilename, strerrorm(errno) );
@@ -20967,7 +20967,7 @@ void CSphTemplateDictTraits::LoadStopwords ( const char * sFiles, const ISphToke
 			{
 				if ( !bStripFile )
 					StripPath ( sFileName );
-				sFileName.SetSprintf ( "%s/%s", SHARE_DIR, sFileName.cstr() );
+				sFileName.SetSprintf ( "%s/stopwords/%s", SHARE_DIR, sFileName.cstr() );
 				bGotFile = sphIsReadable ( sFileName );
 			}
 		}

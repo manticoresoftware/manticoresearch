@@ -576,8 +576,9 @@ endif ()
 
 # a bit of installation stuff
 if ( WIN32 )
-	install ( DIRECTORY api doc contrib DESTINATION ${CMAKE_INSTALL_DATADIR}/doc COMPONENT doc )
-	install ( FILES example.sql DESTINATION ${CMAKE_INSTALL_DATADIR}/doc COMPONENT doc )
+	install ( DIRECTORY api doc contrib DESTINATION ${SHAREDIR}/doc COMPONENT doc )
+	install ( FILES example.sql DESTINATION ${SHAREDIR}/doc COMPONENT doc )
+	install ( DIRECTORY misc/stopwords DESTINATION ${SHAREDIR} COMPONENT doc)
 	install ( FILES COPYING INSTALL sphinx.conf.in sphinx-min.conf.in
 			DESTINATION . COMPONENT config )
 	install ( DIRECTORY DESTINATION log COMPONENT config )

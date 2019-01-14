@@ -46,6 +46,9 @@ install ( FILES ${MANTICORE_BINARY_DIR}/sphinx-min.conf.dist
 
 install ( FILES doc/indexer.1 doc/indextool.1 doc/searchd.1 doc/spelldump.1
 		DESTINATION ${MANDIR}/man1 COMPONENT doc )
+
+install ( DIRECTORY misc/stopwords DESTINATION ${SHAREDIR}/${PACKAGE_NAME} COMPONENT doc)
+
 install ( DIRECTORY api DESTINATION share/${PACKAGE_NAME} COMPONENT doc )
 install ( FILES COPYING example.sql
 		DESTINATION ${DOCDIR} COMPONENT doc )

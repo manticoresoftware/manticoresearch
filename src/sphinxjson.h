@@ -290,6 +290,7 @@ public:
 	bool IsNonEmptyString () const { return bson::IsString ( m_dData ) && !IsEmpty (); }; /// whether we can return non-empty string
 	bool IsEmpty () const; /// whether container bson has child elements, or string is empty.
 	int CountValues() const; /// count of elems. Objs and root will linearly iterate, other returns immediately.
+	int StandaloneSize() const; /// size of blob need to save node as root (standalone) bson
 	bool StrEq ( const char* sValue ) const; // true if value is string and eq to sValue
 
 	// navigate over bson
@@ -313,6 +314,10 @@ public:
 
 	// format back to json
 	bool BsonToJson ( CSphString& ) const;
+
+	// save as standalone (root) bson.
+	bool BsonToBson ( BYTE* ) const;
+	bool BsonToBson ( CSphVector<BYTE>& dOutput ) const;
 
 	// helpers
 	inline ESphJsonType GetType() const { return m_dData.second; }

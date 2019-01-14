@@ -183,6 +183,15 @@ protected:
 		return sphJsonParse ( dData, ( char * ) sText.cstr (), bAutoconv, bToLowercase, sError );
 	}
 
+	void TestConv ( const Bson_c& dNode, const char * sProof )
+	{
+		CSphVector<BYTE> dRoot;
+		CSphString sResult;
+		dNode.BsonToBson ( dRoot );
+		Bson_c ( dRoot ).BsonToJson ( sResult );
+		ASSERT_STREQ ( sResult.cstr (), sProof );
+	}
+
 	// helper: parse given str into internal bson
 	NodeHandle_t Bson ( const char * sJson )
 	{
@@ -576,6 +585,31 @@ TEST_F ( TJson, bson_CountValues )
 
 }
 
+// test standalone size
+TEST_F ( TJson, bson_standalonesize )
+{
+	ASSERT_EQ ( Bson_c ( Bson ( "" ) ).StandaloneSize (), 5 );
+	ASSERT_EQ ( Bson_c ( Bson ( "{}" ) ).StandaloneSize (), 5 );
+
+	const char* sJson = R"([1,1.0,["a","b"],[1,"a"],[1,2],[1.0,2.0],{a:1,b:2,c:3}, {}, [], true, false, null])";
+	auto tst = Bsons ( sJson );
+
+	ASSERT_EQ ( tst[0].StandaloneSize (), -1 );
+	ASSERT_EQ ( tst[1].StandaloneSize (), -1 );
+	ASSERT_EQ ( tst[2].StandaloneSize (), 11 );
+	ASSERT_EQ ( tst[3].StandaloneSize (), 15 );
+	ASSERT_EQ ( tst[4].StandaloneSize (), 14 );
+	ASSERT_EQ ( tst[5].StandaloneSize (), 22 );
+	ASSERT_EQ ( tst[6].StandaloneSize (), 26 );
+	ASSERT_EQ ( tst[7].StandaloneSize (), 5 );
+	ASSERT_EQ ( tst[8].StandaloneSize (), 7 );
+	ASSERT_EQ ( tst[9].StandaloneSize (), -1 );
+	ASSERT_EQ ( tst[10].StandaloneSize (), -1 );
+	ASSERT_EQ ( tst[11].StandaloneSize (), -1 );
+
+	ASSERT_EQ ( Bson_c ( Bson ( sJson ) ).StandaloneSize (), 108 );
+}
+
 // test str comparision
 TEST_F ( TJson, bson_StrEq )
 {
@@ -653,6 +687,38 @@ TEST_F ( TJson, bson_BsonToJson )
 	tst[3].BsonToJson ( sJson );
 	ASSERT_STREQ ( sJson.cstr (), R"({"value4":"foo"})" );
 
+	Bson_c ( Bson ( "" ) ).BsonToJson ( sJson );
+	ASSERT_STREQ ( sJson.cstr (), "{}" );
+
+	Bson_c ( Bson ( "{}" ) ).BsonToJson ( sJson );
+	ASSERT_STREQ ( sJson.cstr (), "{}" );
+}
+
+// test standalone size
+TEST_F ( TJson, bson_BsonToBson )
+{
+	TestConv ( Bson ( "" ), "{}" );
+	TestConv ( Bson ( "{}" ), "{}" );
+	TestConv ( Bson ( "[]" ), "[]" );
+
+	const char * sJson = 	R"([1,1.0,["a","b"],[1,"a"],[1,2],[1.0,2.0],{a:1,b:2,c:3}, {}, [], true, false, null])";
+	auto tst = Bsons ( sJson );
+
+	TestConv ( tst[0], nullptr );
+	TestConv ( tst[1], nullptr );
+	TestConv ( tst[2], R"(["a","b"])" );
+	TestConv ( tst[3], R"([1,"a"])" );
+	TestConv ( tst[4], "[1,2]" );
+	TestConv ( tst[5], "[1.000000,2.000000]" );
+	TestConv ( tst[6], R"({"a":1,"b":2,"c":3})" );
+	TestConv ( tst[7], "{}" );
+	TestConv ( tst[8], "[]" );
+	TestConv ( tst[9], nullptr );
+	TestConv ( tst[10], nullptr );
+	TestConv ( tst[11], nullptr );
+
+	TestConv ( Bson ( sJson ),
+		R"([1,1.000000,["a","b"],[1,"a"],[1,2],[1.000000,2.000000],{"a":1,"b":2,"c":3},{},[],true,false,null])" );
 }
 
 // test contained bson

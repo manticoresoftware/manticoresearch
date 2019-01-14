@@ -1620,6 +1620,36 @@ int Bson_c::CountValues () const
 	return sphJsonFieldLength ( m_dData.second, m_dData.first );
 }
 
+int Bson_c::StandaloneSize() const
+{
+	const BYTE * p = m_dData.first;
+	switch ( m_dData.second )
+	{
+		case JSON_ROOT:
+			return sphJsonNodeSize ( JSON_ROOT, p );
+		case JSON_OBJECT:
+			return sphJsonUnpackInt ( &p );
+		case JSON_INT32_VECTOR:
+		case JSON_INT64_VECTOR:
+		case JSON_DOUBLE_VECTOR:
+		case JSON_STRING_VECTOR:
+		case JSON_MIXED_VECTOR:
+		{
+			int iSize = sphJsonNodeSize ( m_dData.second, p );
+			if ( iSize<0 )
+				break;
+			return 5 + iSize;
+		}
+		case JSON_EOF:
+			return 5; // eof is actually empty root.
+		default:
+			break;
+	}
+	// technically speaking we can easy return here any other type (as INT, TRUE, etc) in root,
+	// but our original parser returns _only_ object or array in the root
+	return -1;
+}
+
 bool Bson_c::StrEq ( const char * sValue ) const
 {
 	if ( !::IsString ( m_dData ) )
@@ -1908,10 +1938,60 @@ void Bson_c::ForSome ( CondNamedAction_f&& fAction ) const
 bool Bson_c::BsonToJson ( CSphString &sResult ) const
 {
 	JsonEscapedBuilder sBuilder;
-	sphJsonFieldFormat ( sBuilder, m_dData.first, m_dData.second );
+	if ( !m_dData.first )
+		return false;
+
+	// check for the empty root
+	if ( m_dData.second==JSON_EOF )
+		sBuilder << "{}";
+	else
+		sphJsonFieldFormat ( sBuilder, m_dData.first, m_dData.second );
+
 	sBuilder.MoveTo ( sResult );
 	return true;
 }
+
+bool Bson_c::BsonToBson ( BYTE* pDst ) const
+{
+	switch ( m_dData.second )
+	{
+		case JSON_ROOT: // root - just dump as is
+			memcpy ( pDst, m_dData.first, sphJsonNodeSize ( JSON_ROOT, m_dData.first ) );
+			break;
+		case JSON_OBJECT: // object - throw out first packed int (len), then save as is (it became root then)
+			{
+				const BYTE * p = m_dData.first;
+				int iLen = sphJsonUnpackInt ( &p );
+				memcpy ( pDst, p, iLen );
+			}
+			break;
+		case JSON_INT32_VECTOR:
+		case JSON_INT64_VECTOR:
+		case JSON_DOUBLE_VECTOR:
+		case JSON_STRING_VECTOR:
+		case JSON_MIXED_VECTOR: // arrays - write zero bloom, then type, then dump the node (artificial root)
+			StoreNUM32LE ( pDst, 0 );
+			pDst[4] = m_dData.second;
+			memcpy ( pDst+5, m_dData.first, sphJsonNodeSize ( m_dData.second, m_dData.first ) );
+			break;
+		case JSON_EOF:
+			StoreNUM32LE ( pDst, 0 );
+			pDst[4] = JSON_EOF;
+			break;
+		default: return false;
+	}
+	return true;
+}
+
+bool Bson_c::BsonToBson ( CSphVector<BYTE> &dOutput ) const
+{
+	int iSize = StandaloneSize ();
+	if ( iSize<0 )
+		return false;
+	dOutput.Resize ( iSize );
+	return BsonToBson ( dOutput.begin() );
+}
+
 
 const char * Bson_c::sError () const
 {

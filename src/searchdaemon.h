@@ -493,7 +493,7 @@ public:
 	static void SetTopQueryTLS ( CrashQuery_t * pQuery );
 
 	// create thread with crash logging
-	static bool ThreadCreate ( SphThread_t * pThread, void ( *pCall )(void*), void * pArg, bool bDetached=false );
+	static bool ThreadCreate ( SphThread_t * pThread, void ( *pCall )(void*), void * pArg, bool bDetached=false, const char* sName=nullptr );
 
 private:
 	struct CallArgPair_t

@@ -3765,8 +3765,7 @@ public:
 	explicit LazyNetEvents_c ( int iSizeHint )
 	{
 		events_create ( iSizeHint );
-		SphCrashLogger_c::ThreadCreate ( &m_dWorkingThread, WorkerFunc, this );
-		sphThreadName ( &m_dWorkingThread, "AgentsPoller");
+		SphCrashLogger_c::ThreadCreate ( &m_dWorkingThread, WorkerFunc, this, false, "AgentsPoller" );
 	}
 
 	~LazyNetEvents_c ()

@@ -829,7 +829,10 @@ struct ThreadCall_t
 	pthread_cond_t	m_dwait;
 	itimerval		m_ditimer;
 #endif
-	ThreadCall_t *	m_pNext;
+	union {
+		ThreadCall_t *	m_pNext; 		// used in exit chain
+		char 			m_sName[16];	// used in main thread
+	};
 };
 static SphThreadKey_t g_tThreadCleanupKey;
 static SphThreadKey_t g_tMyThreadStack;
@@ -869,6 +872,16 @@ SPH_THDFUNC sphThreadProcWrapper ( void * pArg )
 
 	ThreadCall_t * pCall = (ThreadCall_t*) pArg;
 	MemorizeStack ( & cTopOfMyStack );
+
+	// set name of self
+#if HAVE_PTHREAD_SETNAME_NP
+	if ( pCall->m_sName[0]!='\0' )
+	{
+		assert ( strlen ( pCall->m_sName )<16 );
+		pthread_setname_np ( pthread_self(), pCall->m_sName );
+	}
+#endif
+
 	pCall->m_pCall ( pCall->m_pArg );
 	SafeDelete ( pCall );
 
@@ -952,7 +965,7 @@ void sphThreadDone ( int )
 #endif
 
 
-bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pArg, bool bDetached )
+bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pArg, bool bDetached, const char * sName )
 {
 	// we can not put this on current stack because wrapper need to see
 	// it all the time and it will destroy this data from heap by itself
@@ -960,6 +973,12 @@ bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pA
 	pCall->m_pCall = fnThread;
 	pCall->m_pArg = pArg;
 	pCall->m_pNext = nullptr;
+
+#if HAVE_PTHREAD_SETNAME_NP
+	if ( sName )
+		strncpy ( pCall->m_sName, sName, 15 );
+	pCall->m_sName[15] = '\0';
+#endif
 
 	// create thread
 #if USE_WINDOWS
@@ -996,16 +1015,6 @@ bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pA
 	// thread creation failed so we need to cleanup ourselves
 	SafeDelete ( pCall );
 	return false;
-}
-
-void sphThreadName ( SphThread_t * pThread, const char * sName )
-{
-#if HAVE_PTHREAD_SETNAME_NP
-	char sClippedName[16];
-	strncpy (sClippedName, sName, 15);
-	sClippedName[15] = '\0';
-	pthread_setname_np ( *pThread, sClippedName );
-#endif
 }
 
 CSphString GetThreadName ( SphThread_t * pThread )
@@ -1839,13 +1848,9 @@ public:
 		int iStarted = 0;
 		for ( auto& dWorker : m_dWorkers )
 		{
-			if ( sphThreadCreate ( &dWorker, Tick, this ) )
-			{
-				StringBuilder_c sthdName;
-				sthdName.Sprintf ("%s_%d",m_sName.cstr(),iStarted);
-				sphThreadName ( &dWorker, sthdName.cstr());
+			if ( sphThreadCreate ( &dWorker, Tick, this, false,
+				Str_b ().Sprintf ( "%s_%d", m_sName.cstr (), iStarted ).cstr() ) )
 				++iStarted;
-			}
 		}
 		assert ( iStarted == iThreads );
 	}
@@ -1907,9 +1912,7 @@ public:
 	{
 		// FIXME!!! start thread only in case of no workers available to offload call site
 		SphThread_t tThd;
-		bool bRes = sphThreadCreate ( &tThd, Start, pItem, true );
-		sphThreadName ( &tThd, ( Str_b () << m_sName << "_Job" ).cstr () );
-		return bRes;
+		return sphThreadCreate ( &tThd, Start, pItem, true, ( Str_b () << m_sName << "_Job" ).cstr () );
 	}
 
 private:

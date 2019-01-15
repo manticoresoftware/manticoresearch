@@ -3357,10 +3357,7 @@ void * sphThreadInit ( bool bDetached=false );
 void sphThreadDone ( int iFD );
 
 /// my create thread wrapper
-bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pArg, bool bDetached=false );
-
-/// assign a name to thread
-void sphThreadName ( SphThread_t * pThread, const char * sName );
+bool sphThreadCreate ( SphThread_t * pThread, void (*fnThread)(void*), void * pArg, bool bDetached=false, const char * sName=nullptr );
 
 /// get name of a thread
 CSphString GetThreadName ( SphThread_t * pThread );

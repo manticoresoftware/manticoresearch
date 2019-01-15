@@ -228,9 +228,7 @@ struct ServiceThread_t
 
 	bool Create ( void (*fnThread)(void*), void * pArg, const char * sName = nullptr )
 	{
-		m_bCreated = sphThreadCreate ( &m_tThread, fnThread, pArg, false );
-		if ( m_bCreated && sName )
-			sphThreadName ( &m_tThread, sName );
+		m_bCreated = sphThreadCreate ( &m_tThread, fnThread, pArg, false, sName );
 		return m_bCreated;
 	}
 
@@ -1923,10 +1921,10 @@ CrashQuery_t SphCrashLogger_c::GetQuery()
 		return *pQuery;
 }
 
-bool SphCrashLogger_c::ThreadCreate ( SphThread_t * pThread, void (*pCall)(void*), void * pArg, bool bDetached )
+bool SphCrashLogger_c::ThreadCreate ( SphThread_t * pThread, void (*pCall)(void*), void * pArg, bool bDetached, const char* sName )
 {
 	auto * pWrapperArg = new CallArgPair_t ( pCall, pArg );
-	bool bSuccess = sphThreadCreate ( pThread, ThreadWrapper, pWrapperArg, bDetached );
+	bool bSuccess = sphThreadCreate ( pThread, ThreadWrapper, pWrapperArg, bDetached, sName );
 	if ( !bSuccess )
 		SafeDelete ( pWrapperArg );
 	return bSuccess;
@@ -6694,8 +6692,7 @@ void SearchHandler_c::RunLocalSearchesParallel()
 		t.m_pCurSearch = &iaCursor;
 		t.m_iSearches = dWorks.GetLength();
 		t.m_pSearches = dWorks.Begin();
-		SphCrashLogger_c::ThreadCreate ( &t.m_tThd, LocalSearchThreadFunc, (void*)&t ); // FIXME! check result
-		sphThreadName ( &t.m_tThd, "LocalSearch");
+		SphCrashLogger_c::ThreadCreate ( &t.m_tThd, LocalSearchThreadFunc, (void*)&t, false, "LocalSearch" ); // FIXME! check result
 	}
 
 	// wait for them to complete
@@ -20119,10 +20116,8 @@ void CheckFlush () REQUIRES ( MainThread )
 	sphLogDebug ( "attrflush: starting writer, tag ( %d )", g_tFlush.m_iFlushTag );
 
 	ThdDesc_t tThd;
-	if ( !sphThreadCreate ( &tThd.m_tThd, ThdSaveIndexes, NULL, true ) )
+	if ( !sphThreadCreate ( &tThd.m_tThd, ThdSaveIndexes, NULL, true, "SaveIndexes" ) )
 		sphWarning ( "failed to create attribute save thread, error[%d] %s", errno, strerrorm(errno) );
-	else
-		sphThreadName ( &tThd.m_tThd, "SaveIndexes");
 }
 
 
@@ -20988,7 +20983,7 @@ void TickHead () REQUIRES ( MainThread )
 
 	ThreadAdd ( pThd );
 
-	if ( !SphCrashLogger_c::ThreadCreate ( &pThd->m_tThd, HandlerThreadFunc, pThd, true ) )
+	if ( !SphCrashLogger_c::ThreadCreate ( &pThd->m_tThd, HandlerThreadFunc, pThd, true, "handler" ) )
 	{
 		int iErr = errno;
 		ThreadRemove ( pThd );
@@ -20997,7 +20992,6 @@ void TickHead () REQUIRES ( MainThread )
 		FailClient ( iClientSock, "failed to create worker thread" );
 		sphWarning ( "failed to create worker thread, threads(%d), error[%d] %s", ThreadsNum(), iErr, strerrorm(iErr) );
 	}
-	sphThreadName ( &pThd->m_tThd, "handler");
 }
 
 
@@ -24311,10 +24305,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		g_dTickPoolThread.Resize ( g_iNetWorkers );
 		ARRAY_FOREACH ( iTick, g_dTickPoolThread )
 		{
-			if ( !sphThreadCreate ( g_dTickPoolThread.Begin()+iTick, CSphNetLoop::ThdTick, 0 ) )
+			if ( !sphThreadCreate ( g_dTickPoolThread.Begin()+iTick, CSphNetLoop::ThdTick,
+				nullptr, Str_b ().Sprintf ( "TickPool_%d", iTick ).cstr () ) )
 				sphDie ( "failed to create tick pool thread" );
-
-			sphThreadName ( g_dTickPoolThread.Begin () + iTick, Str_b ().Sprintf ( "TickPool_%d", iTick ).cstr () );
 		}
 	}
 

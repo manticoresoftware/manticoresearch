@@ -1815,6 +1815,7 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 		if ( tCtx.m_pFilter && !tCtx.m_pFilter->Eval ( tMatch ) )
 		{
 			tCtx.FreeDataFilter ( tMatch );
+			m_tMatchSchema.FreeDataPtrs ( &tMatch );
 			continue;
 		}
 
@@ -1831,6 +1832,7 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 		// stringptr expressions should be duplicated (or taken over) at this point
 		tCtx.FreeDataFilter ( tMatch );
 		tCtx.FreeDataSort ( tMatch );
+		m_tMatchSchema.FreeDataPtrs ( &tMatch );
 
 		// handle cutoff
 		if ( bNewMatch && --iCutoff==0 )

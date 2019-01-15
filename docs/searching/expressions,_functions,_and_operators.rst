@@ -899,7 +899,7 @@ Miscellaneous functions
 
 
        SELECT REGEX(content, 'box?') FROM test;
-       SELECT REMAP(j.color, 'red | pink') FROM test;
+       SELECT REGEX(j.color, 'red | pink') FROM test;
    
 .. _expr-func-weight:
 

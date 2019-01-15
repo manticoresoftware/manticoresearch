@@ -1399,8 +1399,8 @@ public:
 			__analysis_assume ( m_iCount<=m_iLimit );
 			POLICY::Move ( pNew, m_pData, m_iCount );
 		}
-		STORE::Deallocate ( m_pData );
-		m_pData = pNew;
+		Swap ( pNew, m_pData );
+		STORE::Deallocate ( pNew );
 	}
 
 	/// ensure we have space for iGap more items (reserve more if necessary)

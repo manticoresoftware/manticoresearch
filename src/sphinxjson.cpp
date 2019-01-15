@@ -225,7 +225,7 @@ public:
 
 	inline void PackStr ( const char * s, int iLen )
 	{
-		assert ( iLen<=0x00FFFFFFFF );
+		assert ( iLen<=0x00FFFFFF );
 		iLen = Min ( iLen, 0x00ffffff );
 		PackInt ( iLen );
 		auto * pOut = m_dBsonBuffer.AddN ( iLen );

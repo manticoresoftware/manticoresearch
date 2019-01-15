@@ -276,8 +276,8 @@ struct ThdDesc_t : public ListNode_t
 	bool			m_bSystem = false;
 	CSphFixedVector<char> m_dBuf {512};	///< current request description
 
-	const CSphQuery *	m_pQuery = nullptr;
-	CSphMutex			m_tQueryLock;
+	CSphMutex m_tQueryLock;
+	const CSphQuery *	m_pQuery GUARDED_BY (m_tQueryLock) = nullptr;
 
 	ThdDesc_t ()
 	{

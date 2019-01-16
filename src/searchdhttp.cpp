@@ -1503,7 +1503,7 @@ bool HttpHandlerPQ_c::DoCallPQ ( const CSphString &sIndex, const cJSON * pPercol
 		dDocs.Add ( pElem );
 	}
 
-	if ( !dDocs.GetLength() )
+	if ( dDocs.IsEmpty() )
 	{
 		ReportError ( "no documents found", SPH_HTTP_STATUS_400 );
 		return false;

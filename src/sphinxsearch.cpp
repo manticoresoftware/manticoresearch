@@ -5709,7 +5709,8 @@ const ExtHit_t * ExtNotNear_c::GetHitsChunk ( const ExtDoc_t * pDocs )
 
 //////////////////////////////////////////////////////////////////////////
 
-static void Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t * pZones, StringBuilder_c & tRes, int iIndent, const char * szIndent, const char * szLinebreak )
+static void Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t * pZones, StringBuilder_c & tRes,
+	int iIndent, const char * szIndent, const char * szLinebreak )
 {
 	ScopedComma_c sEmpty ( tRes, nullptr );
 	if ( iIndent )
@@ -5779,16 +5780,19 @@ CSphString sphExplainQuery ( const XQNode_t * pNode, const CSphSchema & tSchema,
 {
 	StringBuilder_c tRes;
 	Explain ( pNode, tSchema, &dZones, tRes, 0, "  ", "\n" );
-	return tRes.cstr ();
+	CSphString sResult;
+	tRes.MoveTo ( sResult );
+	return sResult;
 }
 
 CSphString sphExplainQueryBrief ( const XQNode_t * pNode, const CSphSchema & tSchema )
 {
 	StringBuilder_c tRes;
 	Explain ( pNode, tSchema, nullptr, tRes, 0, "", " " );
-	return tRes.cstr();
+	CSphString sResult;
+	tRes.MoveTo ( sResult );
+	return sResult;
 }
-
 
 ExtRanker_c::ExtRanker_c ( const XQQuery_t & tXQ, const ISphQwordSetup & tSetup, bool bSkipQCache )
 {

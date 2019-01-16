@@ -340,7 +340,7 @@ bool QueryParserJson_c::ParseQuery ( XQQuery_t & tParsed, const char * szQuery, 
 	QueryTreeBuilder_c tBuilder;
 	tBuilder.Setup ( pSchema, pMyTokenizer, pMyDict, &tParsed, tSettings );
 
-	tParsed.m_pRoot = ConstructNode ( NULL, cJSON_GetArrayItem ( pJsonRoot.Ptr(), 0 ), tBuilder );
+	tParsed.m_pRoot = ConstructNode ( nullptr, cJSON_GetArrayItem ( pJsonRoot.Ptr(), 0 ), tBuilder );
 	if ( tBuilder.IsError() )
 	{
 		tBuilder.Cleanup();
@@ -402,7 +402,7 @@ XQNode_t * QueryParserJson_c::ConstructMatchNode ( XQNode_t * pParent, const cJS
 	tBuilder.SetString ( pFields->string );
 
 	XQLimitSpec_t tLimitSpec;
-	const char * szQuery = NULL;
+	const char * szQuery = nullptr;
 	XQOperator_e eNodeOp = bPhrase ? SPH_QUERY_PHRASE : SPH_QUERY_OR;
 	bool bIgnore = false;
 
@@ -411,7 +411,7 @@ XQNode_t * QueryParserJson_c::ConstructMatchNode ( XQNode_t * pParent, const cJS
 
 	if ( bIgnore )
 	{
-		tBuilder.Warning ( "ignoring fields in \"%s\", using \"_all\"", pFields->string );
+		tBuilder.Warning ( R"(ignoring fields in "%s", using "_all")", pFields->string );
 		tLimitSpec.Reset();
 	}
 
@@ -560,9 +560,9 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( XQNode_t * pParent, const cJSO
 		}
 	}
 
-	XQNode_t * pMustNode = NULL;
-	XQNode_t * pShouldNode = NULL;
-	XQNode_t * pMustNotNode = NULL;
+	XQNode_t * pMustNode = nullptr;
+	XQNode_t * pShouldNode = nullptr;
+	XQNode_t * pMustNotNode = nullptr;
 
 	XQLimitSpec_t tLimitSpec;
 
@@ -642,7 +642,7 @@ XQNode_t * QueryParserJson_c::ConstructBoolNode ( XQNode_t * pParent, const cJSO
 		return nullptr;
 	else if ( iTotalNodes==1 )
 	{
-		XQNode_t * pResultNode = NULL;
+		XQNode_t * pResultNode = nullptr;
 		if ( pMustNode )
 			pResultNode = pMustNode;
 		else if ( pShouldNode )
@@ -732,19 +732,17 @@ XQNode_t * QueryParserJson_c::ConstructNode ( XQNode_t * pParent, const cJSON * 
 
 bool NonEmptyQuery ( const cJSON * pQuery )
 {
-	return ( cJSON_HasObjectItem ( pQuery, "match" ) || cJSON_HasObjectItem ( pQuery, "match_phrase" ) || cJSON_HasObjectItem ( pQuery, "bool" ) );
+	return ( cJSON_HasObjectItem ( pQuery, "match" )
+	|| cJSON_HasObjectItem ( pQuery, "match_phrase" )
+	|| cJSON_HasObjectItem ( pQuery, "bool" ) );
 }
 
 
 //////////////////////////////////////////////////////////////////////////
 struct LocationField_t
 {
-	float m_fLat;
-	float m_fLon;
-	LocationField_t ()
-		: m_fLat ( 0.0f )
-		, m_fLon ( 0.0f )
-	{}
+	float m_fLat =0.0f;
+	float m_fLon = 0.0f;
 };
 
 struct LocationSource_t
@@ -785,14 +783,14 @@ bool GeoDistInfo_c::Parse ( const cJSON * pRoot, bool bNeedDistance, CSphString 
 	if ( !pLocSource || !pLocAnchor )
 	{
 		if ( !pLocSource && !pLocAnchor )
-			sError = "\"location_anchor\" and \"location_source\" properties missed";
+			sError = R"("location_anchor" and "location_source" properties missed)";
 		else
 			sError.SetSprintf ( "\"%s\" property missed", ( !pLocAnchor ? "location_anchor" : "location_source" ) );
 		return false;
 	}
 
-	if ( !ParseLocation ( "location_anchor", pLocAnchor, &m_tLocAnchor, NULL, sError )
-		|| !ParseLocation ( "location_source", pLocSource, NULL, &m_tLocSource, sError ) )
+	if ( !ParseLocation ( "location_anchor", pLocAnchor, &m_tLocAnchor, nullptr, sError )
+		|| !ParseLocation ( "location_source", pLocSource, nullptr, &m_tLocSource, sError ) )
 		return false;
 
 	cJSON * pType = cJSON_GetObjectItem ( pRoot, "distance_type" );
@@ -1348,7 +1346,8 @@ static bool ParseLimits ( cJSON * pRoot, CSphQuery & tQuery, CSphString & sError
 }
 
 
-bool sphParseJsonQuery ( const char * szQuery, CSphQuery & tQuery, bool & bProfile, bool & bAttrsHighlight, CSphString & sError, CSphString & sWarning )
+bool sphParseJsonQuery ( const char * szQuery, CSphQuery & tQuery, bool & bProfile, bool & bAttrsHighlight,
+	CSphString & sError, CSphString & sWarning )
 {
 	CJsonScopedPtr_c pRoot ( cJSON_Parse ( szQuery ) );
 	if ( !pRoot.Ptr() )
@@ -1552,7 +1551,7 @@ static bool ParseUpdateDeleteQueries ( cJSON * pRoot, SqlStmt_t & tStmt, SphDocI
 	cJSON * pQuery = cJSON_GetObjectItem ( pRoot, "query" );
 	if ( pQuery && pId )
 	{
-		sError = "both \"id\" and \"query\" specified";
+		sError = R"(both "id" and "query" specified)";
 		return false;
 	}
 
@@ -1596,7 +1595,7 @@ static bool ParseJsonUpdate ( cJSON * pRoot, SqlStmt_t & tStmt, SphDocID_t & tDo
 				int64_t iValue = pItem->valueint;
 
 				tUpd.m_dPool.Add ( (DWORD)iValue );
-				DWORD uHi = (DWORD)( iValue>>32 );
+				auto uHi = (DWORD)( iValue>>32 );
 
 				if ( uHi )
 				{
@@ -1606,7 +1605,7 @@ static bool ParseJsonUpdate ( cJSON * pRoot, SqlStmt_t & tStmt, SphDocID_t & tDo
 					tUpd.m_dTypes.Add ( SPH_ATTR_INTEGER );
 			} else
 			{
-				float fValue = (float) pItem->valuedouble;
+				auto fValue = (float) pItem->valuedouble;
 
 				tUpd.m_dPool.Add ( sphF2DW ( fValue ) );
 				tUpd.m_dTypes.Add ( SPH_ATTR_FLOAT );
@@ -1756,9 +1755,9 @@ static void JsonObjAddAttr ( const AggrResult_t & tRes, ESphAttr eAttrType, cons
 		break;
 
 	case SPH_ATTR_JSON_PTR:
-		{
-			const BYTE * pJSON = (const BYTE *)tMatch.GetAttr(tLoc);
-			sphUnpackPtrAttr ( pJSON, &pJSON );
+	{
+		const BYTE * pJSON = ( const BYTE * ) tMatch.GetAttr ( tLoc );
+		sphUnpackPtrAttr ( pJSON, &pJSON );
 
 			// no object at all? return NULL
 			if ( !pJSON )
@@ -1814,8 +1813,7 @@ static void JsonObjAddAttr ( const AggrResult_t & tRes, ESphAttr eAttrType, cons
 		}
 		break;
 
-	default:
-		assert ( 0 && "Unknown attribute" );
+	default: assert ( 0 && "Unknown attribute" );
 		break;
 	}
 }
@@ -1843,9 +1841,9 @@ static bool NeedToSkipAttr ( const CSphString & sName, const CSphQuery & tQuery 
 	// empty include - shows all select list items
 	// exclude with only "*" - skip all select list items
 	bool bInclude = ( tQuery.m_dIncludeItems.GetLength()==0 );
-	ARRAY_FOREACH ( iItem, tQuery.m_dIncludeItems )
+	for ( const auto &iItem: tQuery.m_dIncludeItems )
 	{
-		if ( sphWildcardMatch ( szName, tQuery.m_dIncludeItems[iItem].cstr() ) )
+		if ( sphWildcardMatch ( szName, iItem.cstr() ) )
 		{
 			bInclude = true;
 			break;
@@ -1853,9 +1851,9 @@ static bool NeedToSkipAttr ( const CSphString & sName, const CSphQuery & tQuery 
 	}
 	if ( bInclude && tQuery.m_dExcludeItems.GetLength() )
 	{
-		ARRAY_FOREACH ( iItem, tQuery.m_dExcludeItems )
+		for ( const auto& iItem: tQuery.m_dExcludeItems )
 		{
-			if ( sphWildcardMatch ( szName, tQuery.m_dExcludeItems[iItem].cstr() ) )
+			if ( sphWildcardMatch ( szName, iItem.cstr() ) )
 			{
 				bInclude = false;
 				break;
@@ -1877,7 +1875,8 @@ CSphString sphJsonToString ( const cJSON * pJson )
 }
 
 
-CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQuery, CSphQueryProfile * pProfile, bool bAttrsHighlight )
+CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQuery,
+	CSphQueryProfile * pProfile, bool bAttrsHighlight )
 {
 	CJsonScopedPtr_c pJsonRoot ( cJSON_CreateObject() );
 	cJSON * pRoot = pJsonRoot.Ptr();
@@ -1915,7 +1914,7 @@ CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQ
 
 	CSphBitvec dHiAttrs ( iAttrsCount );
 	CSphBitvec dSkipAttrs ( iAttrsCount );
-	for ( int iAttr=0; iAttr<iAttrsCount; iAttr++ )
+	for ( int iAttr=0; iAttr<iAttrsCount; ++iAttr )
 	{
 		const CSphColumnInfo & tCol = tSchema.GetAttr(iAttr);
 		const char * sName = tCol.m_sName.cstr();
@@ -1941,7 +1940,7 @@ CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQ
 		cJSON * pSource = cJSON_CreateObject();
 		cJSON_AddItemToObject ( pHit, "_source", pSource );
 
-		for ( int iAttr=0; iAttr<iAttrsCount; iAttr++ )
+		for ( int iAttr=0; iAttr<iAttrsCount; ++iAttr )
 		{
 			if ( dSkipAttrs.BitGet ( iAttr ) )
 				continue;
@@ -2107,10 +2106,10 @@ void AddAccessSpecs ( XQNode_t * pNode, cJSON * pJson, const CSphSchema & tSchem
 
 	// dump spec for keyword nodes
 	// FIXME? double check that spec does *not* affect non keyword nodes
-	if ( pNode->m_dSpec.IsEmpty() || !pNode->m_dWords.GetLength() )
+	if ( pNode->m_dSpec.IsEmpty () || !pNode->m_dWords.GetLength () )
 		return;
 
-	const XQLimitSpec_t & tSpec = pNode->m_dSpec;
+	const XQLimitSpec_t &tSpec = pNode->m_dSpec;
 	if ( tSpec.m_bFieldSpec && !tSpec.m_dFieldMask.TestAll ( true ) )
 	{
 		cJSON * pFields = cJSON_CreateArray();
@@ -2530,24 +2529,24 @@ int PackSnippets ( const CSphVector<BYTE> & dRes, CSphVector<int> & dSeparators,
 
 void UnpackSnippets ( const CSphMatch & tMatch, const CSphAttrLocator & tLoc, cJSON * pSnippets )
 {
-	const BYTE * pData = (const BYTE *)tMatch.GetAttr(tLoc);
+	auto pData = ( const BYTE * ) tMatch.GetAttr ( tLoc );
 	sphUnpackPtrAttr ( pData, &pData );
 	if ( !pData )
 		return;
 
-	int iPassageCount = sphUnalignedRead( *(int *)pData );
-	pData += sizeof(iPassageCount);
+	int iPassageCount = sphUnalignedRead ( *( int * ) pData );
+	pData += sizeof ( iPassageCount );
 
-	const int * pSize = (const int *)pData;
-	const char * pText = (const char *)( pData + sizeof(iPassageCount) * iPassageCount );
+	auto pSize = ( const int * ) pData;
+	auto pText = ( const char * ) ( pData + sizeof ( iPassageCount ) * iPassageCount );
 	int iTextOff = 0;
-	for ( int i=0; i<iPassageCount; i++ )
+	for ( int i = 0; i<iPassageCount; ++i )
 	{
 		const char * pPassage = pText + iTextOff;
 		cJSON_AddItemToArray ( pSnippets, cJSON_CreateString ( pPassage ) );
 
 		iTextOff += sphUnalignedRead ( *pSize );
-		pSize++;
+		++pSize;
 	}
 }
 

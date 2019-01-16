@@ -3483,7 +3483,7 @@ struct SphQueueSettings_t : public ISphNoncopyable
 	CSphString &				m_sError;
 	CSphQueryProfile *			m_pProfiler;
 	bool						m_bComputeItems = true;
-	sph::StringSet *			m_pExtra = nullptr;
+	StrVec_t *					m_pExtra = nullptr;
 	CSphAttrUpdateEx *			m_pUpdate = nullptr;
 	CSphVector<SphDocID_t> *	m_pCollection = nullptr;
 	bool						m_bZonespanlist = false;

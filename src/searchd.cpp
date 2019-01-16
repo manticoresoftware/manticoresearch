@@ -273,6 +273,7 @@ struct ThdDesc_t : public ListNode_t
 	int64_t			m_tmStart = 0;	///< when did the current request start?
 	bool			m_bSystem = false;
 	CSphFixedVector<char> m_dBuf {512};	///< current request description
+	int				m_iCookie = 0;	///< may be used in case of pool to distinguish threads
 
 	CSphMutex m_tQueryLock;
 	const CSphQuery *	m_pQuery GUARDED_BY (m_tQueryLock) = nullptr;
@@ -384,6 +385,7 @@ struct ThreadLocal_t
 		m_tDesc.m_eThdState = tDesc.m_eThdState;
 		m_tDesc.m_sCommand = tDesc.m_sCommand;
 		m_tDesc.m_iConnID = tDesc.m_iConnID;
+		m_tDesc.m_iCookie = tDesc.m_iCookie;
 
 		m_tDesc.m_tmConnect = tDesc.m_tmConnect;
 		m_tDesc.m_tmStart = tDesc.m_tmStart;
@@ -5618,7 +5620,9 @@ bool MinimizeAggrResult ( AggrResult_t & tRes, const CSphQuery & tQuery, bool bH
 
 			// column was not found in the select list directly
 			// however we might need it anyway because of a non-NULL extra-schema
-			// ??? explain extra-schemas here
+			// (extra-schema is additinal set of columns came from right side of query
+			// when you perform 'select a from index order by b', the 'b' is not displayed, but need for sorting,
+			// so extra-schema in the case will contain 'b').
 			// bMagic condition added for @groupbystr in the agent mode
 			if ( !bAdded && bAgent && ( hExtraColumns[tCol.m_sName] || !bHaveLocals || bMagic ) )
 			{
@@ -6276,7 +6280,7 @@ protected:
 	bool							m_bMultiQueue = false;	///< whether current subset is subject to multi-queue optimization
 	bool							m_bFacetQueue = false;	///< whether current subset is subject to facet-queue optimization
 	CSphVector<LocalIndex_t>		m_dLocal;				///< local indexes for the current subset
-	mutable CSphVector<sph::StringSet> m_dExtraSchemas; 	///< the extra attrs for agents
+	mutable CSphVector<CSphVector<StrVec_t> > m_dExtraSchemas; 	///< the extra attrs for agents. One vec per thread
 	CSphAttrUpdateEx *				m_pUpdates = nullptr;	///< holder for updates
 	CSphVector<SphDocID_t> *		m_pDelDocs = nullptr;	///< this query is for deleting
 
@@ -6544,11 +6548,13 @@ struct LocalSearchThreadContext_t
 	long						m_iSearches = 0;
 	LocalSearch_t *				m_pSearches = nullptr;
 	CSphAtomic *				m_pCurSearch = nullptr;
+	int							m_iLocalThreadID = 0;
 
 	void LocalSearch ()
 	{
 		SphCrashLogger_c::SetLastQuery ( m_tCrashQuery );
 		ThreadLocal_t tThd ( m_pHandler->m_tThd );
+		tThd.m_tDesc.m_iCookie = m_iLocalThreadID;
 		for ( long iCurSearch = ( *m_pCurSearch )++; iCurSearch<m_iSearches; iCurSearch = ( *m_pCurSearch )++ )
 			m_pHandler->RunLocalSearchMT ( m_pSearches[iCurSearch], tThd );
 	}
@@ -6679,14 +6685,23 @@ void SearchHandler_c::RunLocalSearchesParallel()
 	dWorks.Sort ( bind ( &LocalSearch_t::m_iMass ) );
 
 	// setup threads
-	CSphVector<LocalSearchThreadContext_t> dThreads ( Min ( g_iDistThreads, dWorks.GetLength() ) );
-
+	int iThreads = Min ( g_iDistThreads, dWorks.GetLength () );
+	CSphVector<LocalSearchThreadContext_t> dThreads ( iThreads );
 	CrashQuery_t tCrashQuery = SphCrashLogger_c::GetQuery(); // transfer query info for crash logger to new thread
-	// fire searcher threads
 
+	// reserve extra schema set for each thread
+	// (that is simpler than ping-pong with mutex on each addition)
+	assert ( m_dQueries.GetLength() == m_dExtraSchemas.GetLength() );
+	ARRAY_FOREACH ( i, m_dQueries )
+		if ( m_dQueries[i].m_bAgent && m_dExtraSchemas[i].IsEmpty() )
+			m_dExtraSchemas[i].Resize ( iThreads );
+
+	// fire searcher threads
 	CSphAtomic iaCursor;
-	for ( auto & t : dThreads )
+	ARRAY_FOREACH ( i, dThreads )
 	{
+		auto& t = dThreads[i];
+		t.m_iLocalThreadID = i;
 		t.m_pHandler = this;
 		t.m_tCrashQuery = tCrashQuery;
 		t.m_pCurSearch = &iaCursor;
@@ -6855,7 +6870,12 @@ void SearchHandler_c::RunLocalSearchMT ( LocalSearch_t &dWork, ThreadLocal_t &tT
 		m_tHook.m_pIndex = pServed->m_pIndex;
 		SphQueueSettings_t tQueueSettings ( tQuery, pServed->m_pIndex->GetMatchSchema(), sError, m_pProfile );
 		tQueueSettings.m_bComputeItems = true;
-		tQueueSettings.m_pExtra = tQuery.m_bAgent ? &m_dExtraSchemas[i + m_iStart] : nullptr;
+		if ( tQuery.m_bAgent )
+		{
+			assert ( m_dExtraSchemas[i + m_iStart].GetLength ()>tThd.m_tDesc.m_iCookie );
+			tQueueSettings.m_pExtra = m_dExtraSchemas[i + m_iStart].begin () + tThd.m_tDesc.m_iCookie;
+		}
+
 		tQueueSettings.m_pUpdate = m_pUpdates;
 		tQueueSettings.m_pCollection = m_pDelDocs;
 		tQueueSettings.m_pHook = &m_tHook;
@@ -6965,7 +6985,12 @@ void SearchHandler_c::RunLocalSearches()
 			m_tHook.m_pIndex = pServed->m_pIndex;
 			SphQueueSettings_t tQueueSettings ( tQuery, pServed->m_pIndex->GetMatchSchema(), sError, m_pProfile );
 			tQueueSettings.m_bComputeItems = true;
-			tQueueSettings.m_pExtra = tQuery.m_bAgent ? &m_dExtraSchemas[iQuery] : nullptr;;
+			if ( tQuery.m_bAgent )
+			{
+				if ( m_dExtraSchemas[iQuery].IsEmpty() )
+					m_dExtraSchemas[iQuery].Add();
+				tQueueSettings.m_pExtra = m_dExtraSchemas[iQuery].begin();
+			}
 			tQueueSettings.m_pUpdate = m_pUpdates;
 			tQueueSettings.m_pCollection = m_pDelDocs;
 			tQueueSettings.m_pHook = &m_tHook;
@@ -7818,8 +7843,12 @@ void SearchHandler_c::RunSubset ( int iStart, int iEnd )
 	{
 		AggrResult_t & tRes = m_dResults[iRes];
 		const CSphQuery & tQuery = m_dQueries[iRes];
-		// fixme! wonder why Begin(), not [iRes]-ed schema here?
-		auto & hExtra = *m_dExtraSchemas.begin();
+		sph::StringSet hExtra;
+		if ( !m_dExtraSchemas.IsEmpty () )
+			for ( const auto &dExtraSet : m_dExtraSchemas[iRes] )
+				for ( const CSphString &sExtra : dExtraSet )
+					hExtra.Add ( sExtra );
+
 
 		// minimize sorters needs these pointers
 		tIO.Add ( tRes.m_tIOStats );

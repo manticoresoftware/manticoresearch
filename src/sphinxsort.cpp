@@ -5125,7 +5125,7 @@ static ISphMatchSorter * CreatePlainSorter ( ESphSortFunc eMatchFunc, bool bKbuf
 }
 
 
-static void ExtraAddSortkeys ( sph::StringSet * pExtra, const ISphSchema & tSorterSchema, const int * dAttrs )
+inline static void ExtraAddSortkeys ( StrVec_t * pExtra, const ISphSchema & tSorterSchema, const int * dAttrs )
 {
 	if ( pExtra )
 		for ( int i=0; i<CSphMatchComparatorState::MAX_ATTRS; ++i )

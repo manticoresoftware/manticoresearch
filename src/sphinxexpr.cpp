@@ -6195,6 +6195,7 @@ public:
 
 	int IntEval ( const CSphMatch & tMatch ) const final
 	{
+		int iRes = 0;
 #if USE_RE2
 		if ( !m_pRE2 )
 			return 0;
@@ -6203,11 +6204,11 @@ public:
 		int iLen = m_pArg->StringEval ( tMatch, &sVal );
 
 		re2::StringPiece tBuf ( (const char *)sVal, iLen );
-		if ( RE2::PartialMatchN ( tBuf, *m_pRE2, nullptr, 0 ) )
-			return 1;
+		iRes = !!( RE2::PartialMatchN ( tBuf, *m_pRE2, nullptr, 0 ) );
+		if ( m_pArg->IsDataPtrAttr () ) SafeDeleteArray ( sVal );
 #endif
 
-		return 0;
+		return iRes;
 	}
 
 	uint64_t GetHash ( const ISphSchema & tSorterSchema, uint64_t uPrevHash, bool & bDisable ) final

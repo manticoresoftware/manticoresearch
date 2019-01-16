@@ -13358,8 +13358,8 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 			break;
 		}
 
-//		if ( tOpts.m_bSkipBadJson && !tOpts.m_bJsonDocs ) // fixme! do we need such warn? Uncomment, if so.
-//			tRes.m_sMessages.Warn ("option to skip bad json has no sense since docs are not in json form");
+		if ( tOpts.m_bSkipBadJson && !tOpts.m_bJsonDocs ) // fixme! do we need such warn? Uncomment, if so.
+			tRes.m_sMessages.Warn ("option to skip bad json has no sense since docs are not in json form");
 
 		// post-conf type check
 		if ( iExpType!=v.m_iType )
@@ -13375,36 +13375,63 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 		return;
 	}
 
-	tResult.m_dDocids.Reset ( tOpts.m_sIdAlias.IsEmpty () ? 0 : dDocs.GetLength () + 1 );
-	tRes.Reset();
-
-	if ( tOpts.m_iShift && !tOpts.m_sIdAlias.IsEmpty() )
-		tRes.m_sMessages.Warn ( "'shift' option works only for automatic ids, when 'docs_id' is not defined");
-
-	BlobVec_t dBlobDocs ( dDocs.GetLength() );
+	BlobVec_t dBlobDocs;
+	dBlobDocs.Reserve ( dDocs.GetLength() ); // actually some docs may be complex
 	CSphVector<int> dBadDocs;
-	if ( tOpts.m_bJsonDocs )
-		ARRAY_FOREACH ( i, dDocs )
-		{
-			auto& dData = dBlobDocs[i];
-			if ( !sphJsonParse ( dData, ( char * ) dDocs[i].cstr (), g_bJsonAutoconvNumbers, g_bJsonKeynamesToLowercase, sError ) )
-				dBadDocs.Add(i+1);
-		}
+
+	if ( !tOpts.m_bJsonDocs )
+		for ( auto &dDoc : dDocs )
+			dDoc.LeakToVec ( dBlobDocs.Add () );
 	else
 		ARRAY_FOREACH ( i, dDocs )
 		{
-			auto &dData = dBlobDocs[i];
-			dDocs[i].LeakToVec(dData);
+			using namespace bson;
+			CSphVector<BYTE> dData;
+			if ( !sphJsonParse ( dData, ( char * ) dDocs[i].cstr (), g_bJsonAutoconvNumbers, g_bJsonKeynamesToLowercase, sError ) )
+			{
+				dBadDocs.Add ( i + 1 );
+				continue;
+			}
+
+			Bson_c dBson ( dData );
+			if ( dBson.IsArray () )
+			{
+				for ( BsonIterator_c dItem ( dBson ); dItem; dItem.Next() )
+				{
+					if ( dItem.IsAssoc () )
+						dItem.BsonToBson ( dBlobDocs.Add () );
+					else
+					{
+						dBadDocs.Add ( i + 1 );	// fixme! m.b. report it as 'wrong doc N in string M'?
+						break;
+					}
+				}
+			}
+			else if ( dBson.IsAssoc() )
+			{
+				dData.SwapData ( dBlobDocs.Add () );
+			}
+			else
+				dBadDocs.Add ( i + 1 ); // let it be just 'an error' for now
+			if ( !dBadDocs.IsEmpty() )
+				break;
 		}
 
 	if ( !dBadDocs.IsEmpty() )
 	{
-		StringBuilder_c sBad (", ","Bad JSON objects at document(s), in order of appear: ");
+		StringBuilder_c sBad (",","Bad JSON objects in strings: ");
 		for ( int iBadDoc:dBadDocs )
 			sBad.Sprintf("%d",iBadDoc);
 		tOut.Error ( tStmt.m_sStmt, sBad.cstr() );
 		return;
 	}
+
+	tResult.m_dDocids.Reset ( tOpts.m_sIdAlias.IsEmpty () ? 0 : dBlobDocs.GetLength () + 1 );
+	tRes.Reset ();
+
+	if ( tOpts.m_iShift && !tOpts.m_sIdAlias.IsEmpty () )
+		tRes.m_sMessages.Warn ( "'shift' option works only for automatic ids, when 'docs_id' is not defined" );
+
 	PercolateMatchDocuments ( dBlobDocs, tOpts, tAcc, tResult );
 
 	if ( !tRes.m_sMessages.ErrEmpty () )

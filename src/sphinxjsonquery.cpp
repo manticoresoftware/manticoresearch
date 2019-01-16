@@ -2095,6 +2095,13 @@ void AddAccessSpecs ( JsonEscapedBuilder &tOut, const XQNode_t * pNode, const CS
 				tOut.AppendEscaped ( tSchema.GetFieldName ( i ), EscBld::eEscape );
 	}
 	tOut.Sprintf ( "\"max_field_pos\":%d", tSpec.m_iFieldMaxPos );
+
+	if ( !tSpec.m_dZones.IsEmpty () )
+	{
+		ScopedComma_c sZoneDelim ( tOut, ",", tSpec.m_bZoneSpan ? "\"zonespans\":[" : "\"zones\":[", "]" );
+		for ( int iZone : tSpec.m_dZones )
+			tOut.AppendEscaped ( dZones[iZone].cstr(), EscBld::eEscape );
+	}
 }
 
 void CreateKeywordNode ( JsonEscapedBuilder & tOut, const XQKeyword_t &tKeyword )

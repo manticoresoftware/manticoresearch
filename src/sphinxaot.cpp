@@ -119,8 +119,8 @@ public:
 
 	~CMorphAutomat ()
 	{
-		SafeDelete ( m_pNodes );
-		SafeDelete ( m_pRelations );
+		SafeDeleteArray ( m_pNodes );
+		SafeDeleteArray ( m_pRelations );
 	}
 
 	int								GetChildrenCount ( int i ) const	{ return m_pNodes[i+1].GetChildrenStart() - m_pNodes[i].GetChildrenStart(); }

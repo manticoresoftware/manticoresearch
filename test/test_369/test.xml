@@ -5,11 +5,15 @@
 
 <skip_indexer/>
 
+<requires>
+<http/>
+</requires>
+
 <config>
 searchd
 {
 	<searchd_settings/>
-	workers = threads
+	binlog_path =
 }
 
 index pq
@@ -105,5 +109,42 @@ index pq_d2
 <sphinxql>CALL PQ ('META:multi', '', 0 as docs, 0 as verbose, 0 as docs_json, 0 as query, 'sharded' as mode)</sphinxql>
 
 </sphqueries>
+
+<httpqueries>
+
+<!-- dpq queries via http -->
+
+<query endpoint="json/pq/pq/search">{ "query": { "percolate": { "document" : {"title":"filter test doc2", "gid":13 } } } }</query>
+<query endpoint="json/pq/pq/search">{ "query": { "percolate": { "documents" : [{"title":"angry test", "gid":3 }, { "title":"filter test doc2", "gid":13 }] } } }</query>
+
+<query endpoint="json/pq/pq1/search">{ "query": { "percolate": { "document" : {"title":"filter test doc2", "gid":13 } } } }</query>
+<query endpoint="json/pq/pq1/search">{ "query": { "percolate": { "documents" : [{"title":"angry test", "gid":3 }, { "title":"filter test doc2", "gid":13 }] } } }</query>
+
+<query endpoint="json/pq/pl_d1/search">{ "query": { "percolate": { "document" : {"title":"filter test doc2", "gid":13 } } } }</query>
+<query endpoint="json/pq/pl_d1/search">{ "query": { "percolate": { "documents" : [{"title":"angry test", "gid":3 }, { "title":"filter test doc2", "gid":13 }] } } }</query>
+
+<query endpoint="json/pq/pq_d1/search">{ "query": { "percolate": { "document" : {"title":"filter test doc2", "gid":13 } } } }</query>
+<query endpoint="json/pq/pq_d1/search">{ "query": { "percolate": { "documents" : [{"title":"angry test", "gid":3 }, { "title":"filter test doc2", "gid":13 }] } } }</query>
+
+<query endpoint="json/pq/pl_d2/search">{ "query": { "percolate": { "document" : {"title":"filter test doc2", "gid":13 } } } }</query>
+<query endpoint="json/pq/pl_d2/search">{ "query": { "percolate": { "documents" : [{"title":"angry test", "gid":3 }, { "title":"filter test doc2", "gid":13 }] } } }</query>
+
+<query endpoint="json/pq/pm_d2/search">{ "query": { "percolate": { "document" : {"title":"filter test doc2", "gid":13 } } } }</query>
+<query endpoint="json/pq/pm_d2/search">{ "query": { "percolate": { "documents" : [{"title":"angry test", "gid":3 }, { "title":"filter test doc2", "gid":13 }] } } }</query>
+
+<query endpoint="json/pq/pq_d2/search">{ "query": { "percolate": { "document" : {"title":"filter test doc2", "gid":13 } } } }</query>
+<query endpoint="json/pq/pq_d2/search">{ "query": { "percolate": { "documents" : [{"title":"angry test", "gid":3 }, { "title":"filter test doc2", "gid":13 }] } } }</query>
+
+
+<!-- list queries. It works via usual json/search, not via json/pq/<idx>/search endpoint! -->
+<query endpoint="json/search">{ "index": "pq"}</query>
+<query endpoint="json/search">{ "index": "pq1"}</query>
+<query endpoint="json/search">{ "index": "pl_d1"}</query>
+<query endpoint="json/search">{ "index": "pq_d1"}</query>
+<query endpoint="json/search">{ "index": "pl_d2"}</query>
+<query endpoint="json/search">{ "index": "pm_d2"}</query>
+<query endpoint="json/search">{ "index": "pq_d2"}</query>
+
+</httpqueries>
 
 </test>

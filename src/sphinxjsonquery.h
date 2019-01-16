@@ -16,6 +16,7 @@
 #define _sphinxjsonquery_
 
 #include "sphinx.h"
+#include "sphinxjson.h"
 
 class QueryParser_i;
 class StmtErrorReporter_i;
@@ -39,7 +40,7 @@ cJSON *			sphEncodeInsertErrorJson ( const char * szIndex, const char * szError 
 
 bool			sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings, bool bUpdate );
 
-cJSON *			sphBuildProfileJson ( XQNode_t * pNode, const CSphSchema & tSchema );
+void			sphBuildProfileJson ( JsonEscapedBuilder &tOut, const XQNode_t * pNode, const CSphSchema &tSchema, const StrVec_t &dZones );
 void			sphInitCJson();
 
 int				PackSnippets ( const CSphVector<BYTE> & dRes, CSphVector<int> & dSeparators, int iSepLen, const BYTE ** ppStr );

@@ -12308,20 +12308,6 @@ static void PercolateAddQuery ( const SqlStmt_t &tStmt, bool bReplace, ESphColla
 		tOut.Ok ( 1, iWarnings );
 }
 
-struct PercolateOptions_t
-{
-	enum MODE { unknown=0, sparsed=1, sharded=2 };
-	bool m_bGetDocs = false;
-	bool m_bVerbose = false;
-	bool m_bJsonDocs = true;
-	bool m_bGetQuery = false;
-	bool m_bSkipBadJson = false; // don't fail whole call if one doc is bad; warn instead.
-	int m_iShift = 0;
-	MODE m_eMode = unknown;
-	CSphString m_sIdAlias;
-	CSphString m_sIndex;
-};
-
 
 static bool String2JsonPack ( char * pStr, CSphVector<BYTE> & dBuf, CSphString & sError, CSphString & sWarning )
 {
@@ -12551,37 +12537,43 @@ static bool ParseBsonDocument ( const VecTraits_T<BYTE>& dDoc, const CSphHash<Sc
 				if ( pId==pItem )
 					tDoc.m_uDocID = ( SphDocID_t ) dChild.Int ();
 
-				if ( pItem->m_eType==SPH_ATTR_JSON || pItem->m_eType==SPH_ATTR_STRING )
+				switch ( pItem->m_eType )
 				{
-					assert ( pItem->m_iStr!=-1 );
-					if ( pItem->m_eType==SPH_ATTR_JSON )
-					{
-						// just save bson blob
-						BYTE * pDst = tStrings.ReserveBlob ( dChild.StandaloneSize (), pItem->m_iStr );
-						dChild.BsonToBson ( pDst );
-					} else // SPH_ATTR_STRING
-					{
-						auto dStrBlob = RawBlob ( dChild );
-						if ( dStrBlob.second )
+					case SPH_ATTR_JSON:
+						assert ( pItem->m_iStr!=-1 );
 						{
-							tStrings.m_dOff[pItem->m_iStr] = tStrings.m_dPackedData.GetLength();
-							BYTE * sDst = tStrings.m_dPackedData.AddN ( 1 + dStrBlob.second + CSphString::GetGap() );
-							memcpy ( sDst, dStrBlob.first, dStrBlob.second );
-							memset ( sDst+dStrBlob.second, 0, 1 + CSphString::GetGap() );
+							// just save bson blob
+							BYTE * pDst = tStrings.ReserveBlob ( dChild.StandaloneSize (), pItem->m_iStr );
+							dChild.BsonToBson ( pDst );
 						}
-					}
-				} else if ( pItem->m_eType==SPH_ATTR_UINT32SET || pItem->m_eType==SPH_ATTR_INT64SET )
-				{
-					assert ( pItem->m_iMva!=-1 );
-					if ( dChild.IsArray() )
-					{
-						int iOff = BsonArrayToMva ( dMva, dChild, pItem->m_eType==SPH_ATTR_INT64SET );
-						if ( iOff>=0 )
-							dMva[pItem->m_iMva] = iOff;
-					} else
-					{
-						sMsg.Warn ( "MVA item should be array" );
-					}
+						break;
+					case SPH_ATTR_STRING:
+						assert ( pItem->m_iStr!=-1 );
+						{
+							auto dStrBlob = RawBlob ( dChild );
+							if ( dStrBlob.second )
+							{
+								tStrings.m_dOff[pItem->m_iStr] = tStrings.m_dPackedData.GetLength ();
+								BYTE * sDst = tStrings.m_dPackedData.AddN ( 1 + dStrBlob.second + CSphString::GetGap () );
+								memcpy ( sDst, dStrBlob.first, dStrBlob.second );
+								memset ( sDst + dStrBlob.second, 0, 1 + CSphString::GetGap () );
+							}
+						}
+						break;
+					case SPH_ATTR_UINT32SET:
+					case SPH_ATTR_INT64SET:
+						assert ( pItem->m_iMva!=-1 );
+						if ( dChild.IsArray() )
+						{
+							int iOff = BsonArrayToMva ( dMva, dChild, pItem->m_eType==SPH_ATTR_INT64SET );
+							if ( iOff>=0 )
+								dMva[pItem->m_iMva] = iOff;
+						} else
+						{
+							sMsg.Warn ( "MVA item should be array" );
+						}
+					default:
+						break;
 				}
 			}
 		} else if ( !sIdAlias.IsEmpty() && sIdAlias==sName )
@@ -13129,7 +13121,7 @@ static void PQLocalMatch ( const BlobVec_t &dDocs, const CSphString& sIndex, con
 
 }
 
-static void PercolateMatchDocuments ( const BlobVec_t & dDocs, const PercolateOptions_t & tOpts,
+void PercolateMatchDocuments ( const BlobVec_t & dDocs, const PercolateOptions_t & tOpts,
 	CSphSessionAccum & tAcc, CPqResult &tResult )
 {
 	CSphString sIndex = tOpts.m_sIndex;
@@ -13364,15 +13356,13 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 		tRes.m_sMessages.Warn ( "'shift' option works only for automatic ids, when 'docs_id' is not defined");
 
 	BlobVec_t dBlobDocs ( dDocs.GetLength() );
+	CSphVector<int> dBadDocs;
 	if ( tOpts.m_bJsonDocs )
 		ARRAY_FOREACH ( i, dDocs )
 		{
 			auto& dData = dBlobDocs[i];
 			if ( !sphJsonParse ( dData, ( char * ) dDocs[i].cstr (), g_bJsonAutoconvNumbers, g_bJsonKeynamesToLowercase, sError ) )
-			{
-				tOut.Error ( tStmt.m_sStmt, "Bad json!" );
-				return;
-			}
+				dBadDocs.Add(i+1);
 		}
 	else
 		ARRAY_FOREACH ( i, dDocs )
@@ -13380,6 +13370,15 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 			auto &dData = dBlobDocs[i];
 			dDocs[i].LeakToVec(dData);
 		}
+
+	if ( !dBadDocs.IsEmpty() )
+	{
+		StringBuilder_c sBad (", ","Bad JSON objects at document(s), in order of appear: ");
+		for ( int iBadDoc:dBadDocs )
+			sBad.Sprintf("%d",iBadDoc);
+		tOut.Error ( tStmt.m_sStmt, sBad.cstr() );
+		return;
+	}
 	PercolateMatchDocuments ( dBlobDocs, tOpts, tAcc, tResult );
 
 	if ( !tRes.m_sMessages.ErrEmpty () )
@@ -15938,13 +15937,11 @@ static void HandleMysqlShowPlan ( SqlRowBuffer_c & tOut, const CSphQueryProfile 
 class CSphQueryProfileMysql : public CSphQueryProfile
 {
 public:
-	virtual void			BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t& dZones );
-	virtual cJSON *			LeakResultAsJson();
-	virtual const char *	GetResultAsStr() const;
+	void			BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t& dZones ) final;
+	const char*	GetResultAsStr() const final;
 
 private:
 	CSphString				m_sResult;
-
 	void					Explain ( const XQNode_t * pNode, const CSphSchema & tSchema, const StrVec_t& dZones, int iIdent );
 };
 
@@ -15955,14 +15952,7 @@ void CSphQueryProfileMysql::BuildResult ( XQNode_t * pRoot, const CSphSchema & t
 }
 
 
-cJSON * CSphQueryProfileMysql::LeakResultAsJson()
-{
-	assert ( 0 && "Not implemented" );
-	return nullptr;
-}
-
-
-const char * CSphQueryProfileMysql::GetResultAsStr() const
+const char* CSphQueryProfileMysql::GetResultAsStr() const
 {
 	return m_sResult.cstr();
 }

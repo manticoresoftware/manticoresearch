@@ -163,9 +163,8 @@ static void EncodeResultJson ( const AggrResult_t & tRes, JsonEscapedBuilder & t
 
 	if ( !tRes.m_sWarning.IsEmpty() )
 	{
-		tOut.StartBlock ( nullptr, R"("warning":)" );
-		tOut.AppendEscaped ( tRes.m_sWarning.cstr () );
-		tOut.FinishBlock ();
+		tOut << R"("warning":)";
+		tOut.AppendEscaped ( tRes.m_sWarning.cstr (), EscBld::eAll | EscBld::eSkipComma );
 	}
 	tOut.FinishBlock (false);
 }
@@ -478,47 +477,23 @@ static void HttpHandlerIndexPage ( CSphVector<BYTE> & dData )
 	HttpBuildReply ( dData, SPH_HTTP_STATUS_200, sIndexPage.cstr(), sIndexPage.GetLength(), true );
 }
 
-
-class CSphQueryProfileJson : public CSphQueryProfile
+class CSphQueryProfileFormatJson : public CSphQueryProfile
 {
 public:
-	virtual					~CSphQueryProfileJson();
 
-	virtual void			BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t & dZones );
-	virtual cJSON *			LeakResultAsJson();
-	virtual const char *	GetResultAsStr() const;
+	void BuildResult ( XQNode_t * pRoot, const CSphSchema &tSchema, const StrVec_t &dZones ) final
+	{
+		sphBuildProfileJson ( m_sResult, pRoot, tSchema, dZones );
+	}
+
+	const char* GetResultAsStr () const final
+	{
+		return m_sResult.cstr();
+	}
 
 private:
-	cJSON *					m_pResult {nullptr};
+	JsonEscapedBuilder m_sResult;
 };
-
-
-CSphQueryProfileJson::~CSphQueryProfileJson()
-{
-	cJSON_Delete(m_pResult);
-}
-
-
-void CSphQueryProfileJson::BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t & /*dZones*/ )
-{
-	assert ( !m_pResult );
-	m_pResult = sphBuildProfileJson ( pRoot, tSchema );
-}
-
-
-cJSON *	CSphQueryProfileJson::LeakResultAsJson()
-{
-	cJSON * pTmp = m_pResult;
-	m_pResult = nullptr;
-	return pTmp;
-}
-
-
-const char * CSphQueryProfileJson::GetResultAsStr() const
-{
-	assert ( 0 && "Not implemented" );
-	return nullptr;
-}
 
 //////////////////////////////////////////////////////////////////////////
 class JsonRequestBuilder_c : public IRequestBuilder_t
@@ -767,7 +742,7 @@ public:
 		m_tQuery.m_pQueryParser = pQueryParser;
 		CSphScopedPtr<ISphSearchHandler> tHandler ( sphCreateSearchHandler ( 1, pQueryParser, m_eQueryType, true, m_tThd ) );
 
-		CSphQueryProfileJson tProfile;
+		CSphQueryProfileFormatJson tProfile;
 		if ( m_bProfile )
 			tHandler->SetProfile ( &tProfile );
 
@@ -1423,7 +1398,7 @@ struct SourceMatch_c : public CSphMatch
 	}
 };
 
-static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, const CSphFixedVector<SphDocID_t> & dDocids,
+static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, const CSphFixedVector<int64_t> & dDocids,
 	const CSphString & sIndex, JsonEscapedBuilder & tOut )
 {
 	ScopedComma_c sRootBlock ( tOut, ",", "{", "}" );
@@ -1474,19 +1449,18 @@ static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, co
 bool HttpHandlerPQ_c::DoCallPQ ( const CSphString &sIndex, const cJSON * pPercolate, bool bVerbose )
 {
 	CSphString sWarning, sError, sTmp;
-	CSphVector<const cJSON *> dDocs;
-
-	ServedDescPtr_c pServed ( GetIndex ( sIndex, eITYPE::PERCOLATE ) );
-	if ( !pServed )
-		return false;
-
-	auto pIndex = (PercolateIndex_i *)pServed->m_pIndex;
+	BlobVec_t dDocs;
 
 	// single document
-	const cJSON * pDoc = GetJSONPropertyObject ( pPercolate, "document", sTmp );
+	cJSON * pDoc = GetJSONPropertyObject ( pPercolate, "document", sTmp );
 	if ( pDoc )
 	{
-		dDocs.Add ( pDoc );
+		auto &dDoc = dDocs.Add();
+		if ( !bson::cJsonToBson ( pDoc, dDoc, g_bJsonAutoconvNumbers, g_bJsonKeynamesToLowercase ) )
+		{
+			ReportError ( "Bad cjson", SPH_HTTP_STATUS_400 );
+			return false;
+		}
 	}
 
 	// multiple documents
@@ -1497,10 +1471,15 @@ bool HttpHandlerPQ_c::DoCallPQ ( const CSphString &sIndex, const cJSON * pPercol
 		return false;
 	}
 
-	const cJSON * pElem = nullptr;
+	cJSON * pElem = nullptr;
 	cJSON_ArrayForEach ( pElem, pDocs )
 	{
-		dDocs.Add ( pElem );
+		auto &dDoc = dDocs.Add ();
+		if ( !bson::cJsonToBson ( pElem, dDoc, g_bJsonAutoconvNumbers, g_bJsonKeynamesToLowercase ) )
+		{
+			ReportError ( "Bad cjson", SPH_HTTP_STATUS_400 );
+			return false;
+		}
 	}
 
 	if ( dDocs.IsEmpty() )
@@ -1509,132 +1488,24 @@ bool HttpHandlerPQ_c::DoCallPQ ( const CSphString &sIndex, const cJSON * pPercol
 		return false;
 	}
 
-	const CSphSchema & tSchema = pIndex->GetInternalSchema();
-	int iFieldsCount = tSchema.GetFieldsCount();
-	CSphFixedVector<VecTraits_T<const char>> dFields ( iFieldsCount );
-
-	// set defaults
-	SourceMatch_c tDoc;
-	tDoc.Reset ( tSchema.GetRowSize() );
-	int iAttrsCount = tSchema.GetAttrsCount();
-	for ( int i=0; i<iAttrsCount; i++ )
-	{
-		const CSphColumnInfo & tCol = tSchema.GetAttr ( i );
-		CSphAttrLocator tLoc = tCol.m_tLocator;
-		tLoc.m_bDynamic = true;
-		tDoc.SetDefaultAttr ( tLoc, tCol.m_eAttrType );
-	}
-
-	CSphHash<SchemaItemVariant_t> hSchemaLocators;
-	for ( int i=0; i<iAttrsCount; i++ )
-	{
-		const CSphColumnInfo & tCol = tSchema.GetAttr(i);
-		SchemaItemVariant_t tAttr;
-		tAttr.m_tLoc = tCol.m_tLocator;
-		tAttr.m_tLoc.m_bDynamic = true;
-		tAttr.m_eType = tCol.m_eAttrType;
-		hSchemaLocators.Add ( sphFNV64 ( tCol.m_sName.cstr () ), tAttr );
-	}
-
-	for ( int i=0; i<iFieldsCount; ++i )
-	{
-		const CSphColumnInfo & tField = tSchema.GetField ( i );
-		SchemaItemVariant_t tAttr;
-		tAttr.m_iField = i;
-		hSchemaLocators.Add ( sphFNV64 ( tField.m_sName.cstr() ), tAttr );
-	}
+	PercolateOptions_t tOpts;
+	tOpts.m_sIndex = sIndex;
+	tOpts.m_bGetDocs = true;
+	tOpts.m_bVerbose = bVerbose;
+	tOpts.m_bGetQuery = true;
+	// fixme! id alias here is 'id' or 'uid'. Process it!
 
 	CSphSessionAccum tAcc ( true );
-	ISphRtAccum * pAccum = tAcc.GetAcc ( pIndex, sError );
+	CPqResult tResult;
+	tResult.m_dResult.m_bGetFilters = false;
 
-	CSphString sTokenFilterOpts;
-	CSphFixedVector<SphDocID_t> dDocids ( 0 );
-	SphDocID_t uSeqDocid = 1;
-	int iDoc = 0;
-	for ( const cJSON * pDoc : dDocs )
-	{
-		// reset all back to defaults
-		tDoc.m_uDocID = 0;
-		dFields.Fill ( {nullptr,0} );
-		for ( int i=0; i<iAttrsCount; ++i )
-		{
-			const CSphColumnInfo & tCol = tSchema.GetAttr ( i );
-			CSphAttrLocator tLoc = tCol.m_tLocator;
-			tLoc.m_bDynamic = true;
-			tDoc.SetDefaultAttr ( tLoc, tCol.m_eAttrType );
-		}
-		const cJSON * pChild = nullptr;
-		cJSON_ArrayForEach ( pChild, pDoc )
-		{
-			const char * sName = pChild->string;
-			const SchemaItemVariant_t * pItem = hSchemaLocators.Find ( sphFNV64 ( sName ) );
+	PercolateMatchDocuments ( dDocs, tOpts, tAcc, tResult );
 
-			// FIXME!!! warn on out of schema JSON fields
-			if ( !pItem )
-			{
-				if ( sName && ( strncmp ( sName, "id", 2 )==0 || strncmp ( sName, "uid", 3 )==0 ) )
-					tDoc.m_uDocID = pChild->valueint;
-
-				continue;
-			}
-			if ( pItem->m_iField!=-1 && pChild->valuestring )
-			{
-				dFields[pItem->m_iField] = { pChild->valuestring, ( int64_t ) strlen ( pChild->valuestring ) };
-			} else
-			{
-				tDoc.SetAttr ( pItem->m_tLoc, pChild, pItem->m_eType );
-			}
-		}
-
-		// assign proper docids
-		bool bGotDocid = ( tDoc.m_uDocID!=0 );
-		if ( bGotDocid && dDocids.IsEmpty() )
-		{
-			dDocids.Reset ( dDocs.GetLength()+1 );
-			dDocids[0] = 0; // 0 element unused
-			for ( int iInit=0; iInit<=iDoc; ++iInit )
-				dDocids[iInit] = iInit;
-		}
-		if ( bGotDocid )
-		{
-			dDocids[iDoc+1] = tDoc.m_uDocID;
-			uSeqDocid = Max ( uSeqDocid, tDoc.m_uDocID );
-		} else if ( dDocids.GetLength() )
-		{
-			dDocids[iDoc+1] = uSeqDocid;
-		}
-		tDoc.m_uDocID = iDoc+1;	// PQ work with sequential document numbers, 0 element unused
-		uSeqDocid++;
-		iDoc++;
-
-		// add document
-		pIndex->AddDocument ( dFields, tDoc,
-			true, sTokenFilterOpts, NULL, CSphVector<DWORD>(), sError, sWarning, pAccum );
-
-		if ( !sError.IsEmpty() )
-			break;
-	}
-
-	// fire exit
-	if ( !sError.IsEmpty() )
-	{
-		pIndex->RollBack ( pAccum ); // clean up collected data
-		ReportError ( sError.cstr(), SPH_HTTP_STATUS_500 );
-		return false;
-	}
-
-	PercolateMatchResult_t tRes;
-	tRes.m_bGetDocs = true;
-	tRes.m_bVerbose = bVerbose;
-	tRes.m_bGetQuery = true;
-	tRes.m_bGetFilters = false;
-
-	bool bRes = pIndex->MatchDocuments ( pAccum, tRes );
 	JsonEscapedBuilder sRes;
-	EncodePercolateMatchResult ( tRes, dDocids, sIndex, sRes );
+	EncodePercolateMatchResult ( tResult.m_dResult, tResult.m_dDocids, sIndex, sRes );
 	BuildReply ( sRes, SPH_HTTP_STATUS_200 );
 
-	return bRes;
+	return true;
 }
 
 
@@ -1799,7 +1670,7 @@ bool HttpHandlerPQ_c::ListQueries ( const CSphString & sIndex )
 
 	tRes.m_tmTotal = sphMicroTimer() - tmStart;
 
-	CSphFixedVector<SphDocID_t> dTmpids ( 0 );
+	CSphFixedVector<int64_t> dTmpids ( 0 );
 	JsonEscapedBuilder sRes;
 	EncodePercolateMatchResult ( tRes, dTmpids, sIndex, sRes );
 	BuildReply ( sRes, SPH_HTTP_STATUS_200 );

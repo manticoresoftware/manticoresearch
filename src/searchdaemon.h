@@ -1320,6 +1320,27 @@ int sphGetTokTypeFloat();
 int sphGetTokTypeStr();
 int sphGetTokTypeConstMVA();
 
-bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, const CSphSchema & tSchema, CSphVector<CSphFilterSettings> & dFilters, CSphVector<FilterTreeItem_t> & dFilterTree, CSphString & sError );
 
+struct PercolateOptions_t
+{
+	enum MODE
+	{
+		unknown = 0, sparsed = 1, sharded = 2
+	};
+	bool m_bGetDocs = false;
+	bool m_bVerbose = false;
+	bool m_bJsonDocs = true;
+	bool m_bGetQuery = false;
+	bool m_bSkipBadJson = false; // don't fail whole call if one doc is bad; warn instead.
+	int m_iShift = 0;
+	MODE m_eMode = unknown;
+	CSphString m_sIdAlias;
+	CSphString m_sIndex;
+};
+
+struct CPqResult; // defined in sphinxpq.h
+
+bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, const CSphSchema & tSchema, CSphVector<CSphFilterSettings> & dFilters, CSphVector<FilterTreeItem_t> & dFilterTree, CSphString & sError );
+void PercolateMatchDocuments ( const BlobVec_t &dDocs, const PercolateOptions_t &tOpts, CSphSessionAccum &tAcc
+							   , CPqResult &tResult );
 #endif // _searchdaemon_

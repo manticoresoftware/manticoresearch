@@ -194,8 +194,19 @@ public:
 	}
 
 	virtual void			BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t & dZones ) = 0;
-	virtual cJSON *			LeakResultAsJson() = 0;
-	virtual const char *	GetResultAsStr() const = 0;
+	virtual cJSON *			LeakResultAsJson()
+	{
+		assert ( 0 && "Not implemented" );
+		return nullptr;
+	}
+
+	virtual const char *	GetResultAsStr() const
+	{
+		assert ( 0 && "Not implemented" );
+		return nullptr;
+	}
+
+	virtual 				~CSphQueryProfile() {};
 };
 
 

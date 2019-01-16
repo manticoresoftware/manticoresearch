@@ -1695,63 +1695,63 @@ bool sphParseJsonStatement ( const char * szStmt, SqlStmt_t & tStmt, CSphString 
 
 
 //////////////////////////////////////////////////////////////////////////
-
-template <typename T>
-static void PackedMVA2Json ( const BYTE * pMVA, cJSON * pArray )
+static void PackedShortMVA2Json ( StringBuilder_c& tOut, const BYTE * pMVA )
 {
 	int iLengthBytes = sphUnpackPtrAttr ( pMVA, &pMVA );
-	int nValues = iLengthBytes / sizeof(T);
-	const T * pValues = (const T *)pMVA;
-	for ( int i = 0; i < nValues; i++ )
-		cJSON_AddItemToArray ( pArray, cJSON_CreateNumber ( pValues[i] ) );
+	int nValues = iLengthBytes / sizeof ( DWORD );
+	auto pValues = ( const DWORD * ) pMVA;
+	for ( int i = 0; i<nValues; ++i )
+		tOut.Sprintf ( "%u", pValues[i] );
 }
 
-
-static void JsonObjAddAttr ( const AggrResult_t & tRes, ESphAttr eAttrType, const char * szCol,
-	const CSphMatch & tMatch, const CSphAttrLocator & tLoc, cJSON * pSource )
+static void PackedWideMVA2Json ( StringBuilder_c &tOut, const BYTE * pMVA )
 {
-	assert ( sphPlainAttrToPtrAttr(eAttrType)==eAttrType );
+	int iLengthBytes = sphUnpackPtrAttr ( pMVA, &pMVA );
+	int nValues = iLengthBytes / sizeof ( int64_t );
+	auto pValues = ( const int64_t * ) pMVA;
+	for ( int i = 0; i<nValues; ++i )
+		tOut.Sprintf ( "%l", pValues[i] );
+}
+
+static void JsonObjAddAttr ( JsonEscapedBuilder & tOut, const AggrResult_t &tRes, ESphAttr eAttrType, const char * szCol,
+	const CSphMatch &tMatch, const CSphAttrLocator &tLoc )
+{
+	assert ( sphPlainAttrToPtrAttr ( eAttrType )==eAttrType );
+	tOut.AppendName(szCol);
 
 	switch ( eAttrType )
 	{
 	case SPH_ATTR_INTEGER:
 	case SPH_ATTR_TIMESTAMP:
 	case SPH_ATTR_TOKENCOUNT:
-	case SPH_ATTR_BIGINT:
-		cJSON_AddNumberToObject ( pSource, szCol, tMatch.GetAttr(tLoc) );
+	case SPH_ATTR_BIGINT: tOut.Sprintf( "%l", tMatch.GetAttr ( tLoc ) );
 		break;
 
-	case SPH_ATTR_FLOAT:
-		cJSON_AddNumberToObject ( pSource, szCol, tMatch.GetAttrFloat(tLoc) );
+	case SPH_ATTR_FLOAT: tOut.Sprintf ( "%f", tMatch.GetAttrFloat ( tLoc ) );
 		break;
 
-	case SPH_ATTR_BOOL:
-		cJSON_AddBoolToObject ( pSource, szCol, tMatch.GetAttr(tLoc) );
+	case SPH_ATTR_BOOL: tOut << ( tMatch.GetAttr ( tLoc ) ? "true" : "false" );
 		break;
 
 	case SPH_ATTR_UINT32SET_PTR:
 	case SPH_ATTR_INT64SET_PTR:
-		{
-			cJSON * pArray = cJSON_CreateArray();
-			cJSON_AddItemToObject ( pSource, szCol, pArray );
-
-			const BYTE * pMVA = (const BYTE*)tMatch.GetAttr(tLoc);
-			if ( eAttrType==SPH_ATTR_UINT32SET_PTR )
-				PackedMVA2Json<DWORD> ( pMVA, pArray );
-			else
-				PackedMVA2Json<int64_t> ( pMVA, pArray );
-		}
+	{
+		tOut.StartBlock( ",", "[", "]" );
+		const BYTE * pMVA = ( const BYTE * ) tMatch.GetAttr ( tLoc );
+		if ( eAttrType==SPH_ATTR_UINT32SET_PTR )
+			PackedShortMVA2Json ( tOut, pMVA );
+		else
+			PackedWideMVA2Json ( tOut, pMVA );
+		tOut.FinishBlock(false);
+	}
 		break;
 
 	case SPH_ATTR_STRINGPTR:
-		{
-			const auto * pString = (const BYTE *)tMatch.GetAttr(tLoc);
-			int iLen = sphUnpackPtrAttr ( pString, &pString );
-			StringBuilder_c sTmp;
-			sTmp.GrowEnough (iLen+1);
-			sTmp.AppendChars ((const char*)pString, iLen);
-			cJSON_AddStringToObject ( pSource, szCol, sTmp.cstr() );
-		}
+	{
+		const auto * pString = ( const BYTE * ) tMatch.GetAttr ( tLoc );
+		int iLen = sphUnpackPtrAttr ( pString, &pString );
+		tOut.AppendEscaped ( ( const char * ) pString, EscBld::eEscape, iLen );
+	}
 		break;
 
 	case SPH_ATTR_JSON_PTR:
@@ -1759,58 +1759,44 @@ static void JsonObjAddAttr ( const AggrResult_t & tRes, ESphAttr eAttrType, cons
 		const BYTE * pJSON = ( const BYTE * ) tMatch.GetAttr ( tLoc );
 		sphUnpackPtrAttr ( pJSON, &pJSON );
 
-			// no object at all? return NULL
-			if ( !pJSON )
-			{
-				cJSON_AddNullToObject ( pSource, szCol );
-				break;
-			}
-
-			JsonEscapedBuilder sTmp;
-			sphJsonFormat ( sTmp, pJSON );
-			if ( !sTmp.IsEmpty () )
-				cJSON_AddStringToObject ( pSource, szCol, sTmp.cstr () );
-			else
-				cJSON_AddNullToObject ( pSource, szCol );
+		// no object at all? return NULL
+		if ( !pJSON )
+		{
+			tOut << "null";
+			break;
 		}
+		sphJsonFormat ( tOut, pJSON );
+	}
 		break;
 
 	case SPH_ATTR_FACTORS:
 	case SPH_ATTR_FACTORS_JSON:
-		{
-			const BYTE * pFactors = (const BYTE *)tMatch.GetAttr(tLoc);
-			sphUnpackPtrAttr ( pFactors, &pFactors );
-			if ( pFactors )
-			{
-				bool bStr = ( eAttrType==SPH_ATTR_FACTORS );
-				StringBuilder_c sTmp;
-				sphFormatFactors ( sTmp, (const unsigned int *)pFactors, !bStr );
-				cJSON_AddStringToObject ( pSource, szCol, sTmp.cstr () );
-			} else
-				cJSON_AddNullToObject ( pSource, szCol );
-		}
+	{
+		const BYTE * pFactors = ( const BYTE * ) tMatch.GetAttr ( tLoc );
+		sphUnpackPtrAttr ( pFactors, &pFactors );
+		if ( pFactors )
+			sphFormatFactors ( tOut, ( const unsigned int * ) pFactors, eAttrType!=SPH_ATTR_FACTORS );
+		else
+			tOut << "null";
+	}
 		break;
 
 	case SPH_ATTR_JSON_FIELD_PTR:
+	{
+		const BYTE * pField = ( const BYTE * ) tMatch.GetAttr ( tLoc );
+		sphUnpackPtrAttr ( pField, &pField );
+		if ( !pField )
 		{
-			const BYTE * pField = (const BYTE *)tMatch.GetAttr(tLoc);
-			sphUnpackPtrAttr ( pField, &pField );
-			if ( !pField )
-			{
-				cJSON_AddNullToObject ( pSource, szCol );
-				break;
-			}
-
-			ESphJsonType eJson = ESphJsonType ( *pField++ );
-			if ( eJson==JSON_NULL )
-				cJSON_AddNullToObject ( pSource, szCol );
-			else
-			{
-				JsonEscapedBuilder sTmp;
-				sphJsonFieldFormat ( sTmp, pField, eJson, true );
-				cJSON_AddStringToObject ( pSource, szCol, sTmp.cstr () );
-			}
+			tOut << "null";
+			break;
 		}
+
+		auto eJson = ESphJsonType ( *pField++ );
+		if ( eJson==JSON_NULL )
+			tOut << "null";
+		else
+			sphJsonFieldFormat ( tOut, pField, eJson, true );
+	}
 		break;
 
 	default: assert ( 0 && "Unknown attribute" );
@@ -1818,7 +1804,7 @@ static void JsonObjAddAttr ( const AggrResult_t & tRes, ESphAttr eAttrType, cons
 	}
 }
 
-static void UnpackSnippets ( const CSphMatch & tMatch, const CSphAttrLocator & tLoc, cJSON * pVec );
+static void UnpackSnippets ( JsonEscapedBuilder &tOut, const CSphMatch &tMatch, const CSphAttrLocator &tLoc );
 
 static bool IsHighlightAttr ( const CSphString & sName )
 {
@@ -1878,35 +1864,31 @@ CSphString sphJsonToString ( const cJSON * pJson )
 CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQuery,
 	CSphQueryProfile * pProfile, bool bAttrsHighlight )
 {
-	CJsonScopedPtr_c pJsonRoot ( cJSON_CreateObject() );
-	cJSON * pRoot = pJsonRoot.Ptr();
-	assert ( pRoot );
+	JsonEscapedBuilder tOut;
+	CSphString sResult;
 
 	if ( !tRes.m_iSuccesses )
 	{
-		cJSON * pError = cJSON_CreateObject();
-		cJSON_AddItemToObject ( pRoot, "error", pError );
-		cJSON_AddStringToObject ( pError, "type", "Error" );
-		cJSON_AddStringToObject ( pError, "reason", tRes.m_sError.cstr() );
-		return sphJsonToString ( pRoot );
+		tOut.StartBlock ( nullptr, R"({"error":{"type":"Error","reason":)", "}}" );
+		tOut.AppendEscaped ( tRes.m_sError.cstr (), EscBld::eEscape );
+		tOut.FinishBlock (false);
+		tOut.MoveTo (sResult); // since simple return tOut.cstr() will cause copy of string, then returning it.
+		return sResult;
 	}
 
-	cJSON_AddNumberToObject ( pRoot, "took", tRes.m_iQueryTime );
-	cJSON_AddFalseToObject ( pRoot, "timed_out" );
+	tOut.StartBlock( ",", "{", "}" );
 
+	tOut.Sprintf (R"("took":%d,"timed_out":false)", tRes.m_iQueryTime);
 	if ( !tRes.m_sWarning.IsEmpty() )
 	{
-		cJSON * pWarning = cJSON_CreateObject();
-		cJSON_AddItemToObject ( pRoot, "warning", pWarning );
-		cJSON_AddStringToObject ( pWarning, "reason", tRes.m_sWarning.cstr() );
+		tOut.StartBlock ( nullptr, R"("warning":{"reason":)", "}" );
+		tOut.AppendEscaped ( tRes.m_sWarning.cstr (), EscBld::eEscape );
+		tOut.FinishBlock ( false );
 	}
 
-	cJSON * pHitMeta = cJSON_CreateObject();
-	cJSON_AddItemToObject ( pRoot, "hits", pHitMeta );
-	cJSON_AddNumberToObject ( pHitMeta, "total", tRes.m_iTotalMatches );
+	auto sHitMeta = tOut.StartBlock ( ",", R"("hits":{)", "}" );
 
-	cJSON * pHits = cJSON_CreateArray();
-	cJSON_AddItemToObject ( pHitMeta, "hits", pHits );
+	tOut.Sprintf ( R"("total":%d)", tRes.m_iTotalMatches );
 
 	const ISphSchema & tSchema = tRes.m_tSchema;
 	CSphVector<BYTE> dTmp;
@@ -1926,19 +1908,17 @@ CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQ
 			dSkipAttrs.BitSet ( iAttr );
 	}
 
-	for ( int iMatch=tRes.m_iOffset; iMatch<tRes.m_iOffset+tRes.m_iCount; iMatch++ )
+	tOut.StartBlock ( ",", R"("hits":[)", "]" );
+
+	for ( int iMatch=tRes.m_iOffset; iMatch<tRes.m_iOffset+tRes.m_iCount; ++iMatch )
 	{
 		const CSphMatch & tMatch = tRes.m_dMatches[iMatch];
 
-		cJSON * pHit = cJSON_CreateObject();
-		cJSON_AddItemToArray ( pHits, pHit );
-		CSphString sTmp;
-		sTmp.SetSprintf ( DOCID_FMT, tMatch.m_uDocID );
-		cJSON_AddStringToObject ( pHit, "_id", sTmp.cstr() );
-		cJSON_AddNumberToObject ( pHit, "_score", tMatch.m_iWeight );
+		ScopedComma_c sQueryComma ( tOut, ",", "{", "}" );
 
-		cJSON * pSource = cJSON_CreateObject();
-		cJSON_AddItemToObject ( pHit, "_source", pSource );
+		// note, that originally there is string UID, so we just output number in quotes for docid here
+		tOut.Sprintf ( R"("_id":"%U","_score":%d)", tMatch.m_uDocID, tMatch.m_iWeight );
+		tOut.StartBlock ( ",", "\"_source\":{", "}");
 
 		for ( int iAttr=0; iAttr<iAttrsCount; ++iAttr )
 		{
@@ -1948,15 +1928,16 @@ CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQ
 			const CSphColumnInfo & tCol = tSchema.GetAttr(iAttr);
 			const char * sName = tCol.m_sName.cstr();
 
-			JsonObjAddAttr ( tRes, tCol.m_eAttrType, sName, tMatch, tCol.m_tLocator, pSource );
+			JsonObjAddAttr ( tOut, tRes, tCol.m_eAttrType, sName, tMatch, tCol.m_tLocator );
 		}
+
+		tOut.FinishBlock ( false ); // _source obj
 
 		if ( bAttrsHighlight )
 		{
-			cJSON * pHighlight = cJSON_CreateObject();
-			cJSON_AddItemToObject ( pHit, "highlight", pHighlight );
+			ScopedComma_c sHighlightComma ( tOut, ",", R"("highlight":{)", "}" );
 
-			for ( int iAttr=0; iAttr<iAttrsCount; iAttr++ )
+			for ( int iAttr=0; iAttr<iAttrsCount; ++iAttr )
 			{
 				if ( !dHiAttrs.BitGet ( iAttr ) )
 					continue;
@@ -1965,30 +1946,26 @@ CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQ
 				const char * sName = tCol.m_sName.cstr() + sizeof(g_sHighlight) - 1;
 				assert ( tCol.m_eAttrType==SPH_ATTR_STRINGPTR );
 
-				cJSON * pSnippets = cJSON_CreateArray();
-				cJSON_AddItemToObject ( pHighlight, sName, pSnippets );
-
-				UnpackSnippets ( tMatch, tCol.m_tLocator, pSnippets );
+				tOut.AppendName (sName);
+				ScopedComma_c sHighlight ( tOut, ",", "[", "]" );
+				UnpackSnippets ( tOut, tMatch, tCol.m_tLocator );
 			}
 		}
 	}
 
+	tOut.FinishBlocks ( sHitMeta, false ); // hits array, hits meta
+
 	if ( pProfile )
 	{
-		cJSON * pProfileResult = pProfile->LeakResultAsJson();
+		const char * sProfileResult = pProfile->GetResultAsStr();
 		// FIXME: result can be empty if we run a fullscan
-		if ( pProfileResult )
-		{
-			cJSON * pProfileMeta = cJSON_CreateObject ();
-			assert ( pProfileMeta );
-			assert ( cJSON_IsObject ( pProfileResult ) );
-			cJSON_AddItemToObject ( pProfileMeta, "query", pProfileResult );
-			cJSON_AddItemToObject ( pRoot, "profile", pProfileMeta );
-		} else
-			cJSON_AddNullToObject ( pRoot, "profile" );
+		if ( sProfileResult && strlen ( sProfileResult ) )
+			tOut.Sprintf ( R"("profile":{"query":%s})", sProfileResult );
+		else
+			tOut << R"("profile":null)";
 	}
 
-	return sphJsonToString ( pRoot );
+	tOut.FinishBlocks (); tOut.MoveTo ( sResult ); return sResult;
 }
 
 
@@ -2100,9 +2077,9 @@ bool sphGetResultStats ( const char * szResult, int & iAffected, int & iWarnings
 }
 
 
-void AddAccessSpecs ( XQNode_t * pNode, cJSON * pJson, const CSphSchema & tSchema  )
+void AddAccessSpecs ( JsonEscapedBuilder &tOut, const XQNode_t * pNode, const CSphSchema &tSchema, const StrVec_t &dZones )
 {
-	assert ( pNode && pJson );
+	assert ( pNode );
 
 	// dump spec for keyword nodes
 	// FIXME? double check that spec does *not* affect non keyword nodes
@@ -2112,90 +2089,67 @@ void AddAccessSpecs ( XQNode_t * pNode, cJSON * pJson, const CSphSchema & tSchem
 	const XQLimitSpec_t &tSpec = pNode->m_dSpec;
 	if ( tSpec.m_bFieldSpec && !tSpec.m_dFieldMask.TestAll ( true ) )
 	{
-		cJSON * pFields = cJSON_CreateArray();
-		cJSON_AddItemToObject ( pJson, "fields", pFields );
-
-		for ( int i = 0; i < tSchema.GetFieldsCount(); i++ )
-			if ( tSpec.m_dFieldMask.Test(i) )
-				cJSON_AddItemToArray ( pFields, cJSON_CreateString ( tSchema.GetFieldName(i) ) );
+		ScopedComma_c sFieldsArray ( tOut, ",", "\"fields\":[", "]" );
+		for ( int i = 0; i<tSchema.GetFieldsCount (); ++i )
+			if ( tSpec.m_dFieldMask.Test ( i ) )
+				tOut.AppendEscaped ( tSchema.GetFieldName ( i ), EscBld::eEscape );
 	}
-
-	cJSON_AddNumberToObject ( pJson, "max_field_pos", tSpec.m_iFieldMaxPos );
+	tOut.Sprintf ( "\"max_field_pos\":%d", tSpec.m_iFieldMaxPos );
 }
 
-
-cJSON * CreateKeywordNode ( const XQKeyword_t & tKeyword )
+void CreateKeywordNode ( JsonEscapedBuilder & tOut, const XQKeyword_t &tKeyword )
 {
-	cJSON * pRoot = cJSON_CreateObject();
-	assert ( pRoot );
-
-	cJSON_AddStringToObject ( pRoot, "type", "KEYWORD" );
-	cJSON_AddStringToObject ( pRoot, "word", tKeyword.m_sWord.cstr() );
-	cJSON_AddNumberToObject ( pRoot, "querypos", tKeyword.m_iAtomPos );
+	ScopedComma_c sRoot ( tOut, ",", "{", "}");
+	tOut << R"("type":"KEYWORD")";
+	tOut << "\"word\":"; tOut.AppendEscaped ( tKeyword.m_sWord.cstr (), EscBld::eEscape | EscBld::eSkipComma );
+	tOut.Sprintf ( R"("querypos":%d)", tKeyword.m_iAtomPos);
 
 	if ( tKeyword.m_bExcluded )
-		cJSON_AddTrueToObject ( pRoot, "excluded" );
+		tOut << R"("excluded":true)";
 
 	if ( tKeyword.m_bExpanded )
-		cJSON_AddTrueToObject ( pRoot, "expanded" );
+		tOut << R"("expanded":true)";
 
 	if ( tKeyword.m_bFieldStart )
-		cJSON_AddTrueToObject ( pRoot, "field_start" );
+		tOut << R"("field_start":true)";
 
 	if ( tKeyword.m_bFieldEnd )
-		cJSON_AddTrueToObject ( pRoot, "field_end" );
+		tOut << R"("field_end":true)";
 
 	if ( tKeyword.m_bMorphed )
-		cJSON_AddTrueToObject ( pRoot, "morphed" );
+		tOut << R"("morphed":true)";
 
 	if ( tKeyword.m_fBoost!=1.0f ) // really comparing floats?
-		cJSON_AddNumberToObject ( pRoot, "boost", tKeyword.m_fBoost );
-
-	return pRoot;
+		tOut.Sprintf ( R"("boost":%f)", tKeyword.m_fBoost) ;
 }
 
-
-cJSON * sphBuildProfileJson ( XQNode_t * pNode, const CSphSchema & tSchema )
+void sphBuildProfileJson ( JsonEscapedBuilder &tOut, const XQNode_t * pNode, const CSphSchema &tSchema, const StrVec_t &dZones )
 {
 	assert ( pNode );
-
-	cJSON * pRoot = cJSON_CreateObject();
-	assert ( pRoot );
+	auto dRootBlock = tOut.StartBlock ( ",", "{", "}" );
 
 	CSphString sNodeName ( sphXQNodeToStr ( pNode ) );
-	cJSON_AddStringToObject ( pRoot, "type", sNodeName.cstr() );
+	tOut << "\"type\":"; tOut.AppendEscaped ( sNodeName.cstr (), EscBld::eEscape | EscBld::eSkipComma );
 
 	CSphString sDescription ( sphExplainQueryBrief ( pNode, tSchema ) );
-	cJSON_AddStringToObject ( pRoot, "description", sDescription.cstr() );
+	tOut << "\"description\":"; tOut.AppendEscaped ( sDescription.cstr (), EscBld::eEscape | EscBld::eSkipComma );
 
 	CSphString sNodeOptions ( sphXQNodeGetExtraStr ( pNode ) );
-	if ( !sNodeOptions.IsEmpty() )
-		cJSON_AddStringToObject ( pRoot, "options", sNodeOptions.cstr() );
-
-	AddAccessSpecs ( pNode, pRoot, tSchema );
-
-	cJSON * pChildren = cJSON_CreateArray();
-	cJSON_AddItemToObject ( pRoot, "children", pChildren );
-
-	if ( pNode->m_dChildren.GetLength() )
+	if ( !sNodeOptions.IsEmpty () )
 	{
-		for ( auto i : pNode->m_dChildren )
-		{
-			cJSON * pChild = sphBuildProfileJson ( i, tSchema );
-			assert ( pChild );
-			cJSON_AddItemToArray ( pChildren, pChild );
-		}
-	} else
-	{
-		for ( auto i : pNode->m_dWords )
-		{
-			cJSON * pKeyword = CreateKeywordNode(i);
-			assert ( pKeyword );
-			cJSON_AddItemToArray ( pChildren, pKeyword );
-		}
+		tOut << "\"options\":"; tOut.AppendEscaped ( sNodeOptions.cstr (), EscBld::eEscape | EscBld::eSkipComma );
 	}
 
-	return pRoot;
+	AddAccessSpecs ( tOut, pNode, tSchema, dZones );
+
+	tOut.StartBlock ( ",", "\"children\":[", "]" );
+	if ( pNode->m_dChildren.GetLength () )
+		for ( const auto& i : pNode->m_dChildren )
+			sphBuildProfileJson ( tOut, i, tSchema, dZones );
+	else
+		for ( const auto& i : pNode->m_dWords )
+			CreateKeywordNode ( tOut, i );
+	tOut.FinishBlocks ( dRootBlock );
 }
 
 
@@ -2526,8 +2480,7 @@ int PackSnippets ( const CSphVector<BYTE> & dRes, CSphVector<int> & dSeparators,
 	return iTotalSize;
 }
 
-
-void UnpackSnippets ( const CSphMatch & tMatch, const CSphAttrLocator & tLoc, cJSON * pSnippets )
+void UnpackSnippets ( JsonEscapedBuilder& tOut, const CSphMatch &tMatch, const CSphAttrLocator &tLoc )
 {
 	auto pData = ( const BYTE * ) tMatch.GetAttr ( tLoc );
 	sphUnpackPtrAttr ( pData, &pData );
@@ -2543,8 +2496,7 @@ void UnpackSnippets ( const CSphMatch & tMatch, const CSphAttrLocator & tLoc, cJ
 	for ( int i = 0; i<iPassageCount; ++i )
 	{
 		const char * pPassage = pText + iTextOff;
-		cJSON_AddItemToArray ( pSnippets, cJSON_CreateString ( pPassage ) );
-
+		tOut.AppendEscaped ( pPassage, EscBld::eEscape );
 		iTextOff += sphUnalignedRead ( *pSize );
 		++pSize;
 	}

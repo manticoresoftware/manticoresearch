@@ -23499,7 +23499,7 @@ static void SetupDictionary ( CSphDictRefPtr_c& pDict, const CSphDictSettings & 
 	pDict->Setup ( tSettings );
 	if ( CSphDict::ST_ERROR == pDict->SetMorphology ( tSettings.m_sMorphology.cstr (), sError ) )
 	{
-		SafeRelease ( pDict );
+		pDict = nullptr;
 		return;
 	}
 

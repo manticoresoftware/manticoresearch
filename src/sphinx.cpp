@@ -180,11 +180,11 @@ static const int	MIN_READ_UNHINTED		= 1024;
 static int			g_iReadBuffer			= DEFAULT_READ_BUFFER;
 static int			g_iReadUnhinted			= DEFAULT_READ_UNHINTED;
 
-#ifndef SHAREDIR
-#define SHAREDIR "."
+#ifndef FULL_SHARE_DIR
+#define FULL_SHARE_DIR "."
 #endif
 
-CSphString			g_sLemmatizerBase		= SHAREDIR;
+CSphString			g_sLemmatizerBase		= FULL_SHARE_DIR;
 
 // quick hack for indexer crash reporting
 // one day, these might turn into a callback or something
@@ -970,7 +970,7 @@ static void ReadFileInfo ( CSphReader & tReader, const char * szFilename, bool b
 		if ( !sphIsReadable ( sName ) && bSharedStopwords )
 		{
 			StripPath ( sName );
-			sName.SetSprintf ( "%s/stopwords/%s", SHARE_DIR, sName.cstr() );
+			sName.SetSprintf ( "%s/stopwords/%s", FULL_SHARE_DIR, sName.cstr() );
 		}
 
 		struct_stat tFileInfo;
@@ -20967,7 +20967,7 @@ void CSphTemplateDictTraits::LoadStopwords ( const char * sFiles, const ISphToke
 			{
 				if ( !bStripFile )
 					StripPath ( sFileName );
-				sFileName.SetSprintf ( "%s/stopwords/%s", SHARE_DIR, sFileName.cstr() );
+				sFileName.SetSprintf ( "%s/stopwords/%s", FULL_SHARE_DIR, sFileName.cstr() );
 				bGotFile = sphIsReadable ( sFileName );
 			}
 		}

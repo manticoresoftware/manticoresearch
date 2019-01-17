@@ -24,6 +24,7 @@ install ( FILES COPYING INSTALL example.sql
 install ( DIRECTORY DESTINATION bin COMPONENT doc )
 install ( DIRECTORY DESTINATION data COMPONENT doc )
 install ( DIRECTORY DESTINATION log COMPONENT doc )
+install ( DIRECTORY misc/stopwords DESTINATION . COMPONENT doc )
 
 # package specific
 

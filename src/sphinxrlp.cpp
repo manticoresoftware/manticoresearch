@@ -28,13 +28,13 @@
 #endif
 
 
-#ifndef SHAREDIR
-#define SHAREDIR "."
+#ifndef FULL_SHARE_DIR
+#define FULL_SHARE_DIR "."
 #endif
 
 #ifndef RLP_ROOT
-#define RLP_ROOT SHAREDIR
-#define RLP_ENV SHAREDIR"/rlp-environment.xml"
+#define RLP_ROOT FULL_SHARE_DIR
+#define RLP_ENV FULL_SHARE_DIR"/rlp-environment.xml"
 #else
 #define RLP_ENV RLP_ROOT"/rlp/etc/rlp-environment.xml"
 #endif

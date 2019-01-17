@@ -49,7 +49,7 @@ install ( FILES doc/indexer.1 doc/indextool.1 doc/searchd.1 doc/spelldump.1
 
 install ( DIRECTORY misc/stopwords DESTINATION ${SHAREDIR}/${PACKAGE_NAME} COMPONENT doc)
 
-install ( DIRECTORY api DESTINATION share/${PACKAGE_NAME} COMPONENT doc )
+install ( DIRECTORY api DESTINATION ${SHAREDIR}/${PACKAGE_NAME} COMPONENT doc )
 install ( FILES COPYING example.sql
 		DESTINATION ${DOCDIR} COMPONENT doc )
 

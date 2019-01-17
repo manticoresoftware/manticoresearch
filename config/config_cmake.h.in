@@ -177,4 +177,4 @@
 #cmakedefine REPLICATION_LIB "${REPLICATION_LIB}"
 
 /* define to set custom directory for shared files */
-#cmakedefine SHARE_DIR "${SHARE_DIR}"
+#define FULL_SHARE_DIR "${FULL_SHARE_DIR}"

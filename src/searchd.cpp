@@ -14724,17 +14724,16 @@ enum ThreadInfoFormat_e
 
 static const char * FormatInfo ( ThdDesc_t & tThd, ThreadInfoFormat_e eFmt, QuotationEscapedBuilder & tBuf )
 {
+	ScopedMutex_t pQueryGuard ( tThd.m_tQueryLock );
 	if ( tThd.m_pQuery && eFmt==THD_FORMAT_SPHINXQL && tThd.m_eProto!=PROTO_MYSQL41 )
 	{
 		bool bGotQuery = false;
-		tThd.m_tQueryLock.Lock();
 		if ( tThd.m_pQuery )
 		{
 			tBuf.Clear();
 			FormatSphinxql ( *tThd.m_pQuery, 0, tBuf );
 			bGotQuery = true;
 		}
-		tThd.m_tQueryLock.Unlock();
 
 		// query might be removed prior to lock then go to common path
 		if ( bGotQuery )
@@ -23388,6 +23387,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 }
 
 ESphAddIndex ConfigureAndPreload ( const CSphConfigSection & hIndex, const char * sIndexName, bool bJson )
+	REQUIRES ( MainThread )
 {
 	ESphAddIndex eAdd = AddIndex ( sIndexName, hIndex );
 

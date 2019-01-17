@@ -1607,8 +1607,8 @@ inline const char * sphTypeName ( ESphAttr eType )
 		case SPH_ATTR_BOOL:			return "bool";
 		case SPH_ATTR_FLOAT:		return "float";
 		case SPH_ATTR_BIGINT:		return "bigint";
-		case SPH_ATTR_STRING:		return "string";
-		case SPH_ATTR_STRINGPTR:	return "stringptr";
+		case SPH_ATTR_STRING:
+		case SPH_ATTR_STRINGPTR:	return "string"; // not 'stringptr' since it used to be human-readable
 		case SPH_ATTR_TOKENCOUNT:	return "tokencount";
 		case SPH_ATTR_JSON:			return "json";
 

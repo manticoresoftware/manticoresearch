@@ -195,6 +195,20 @@ index pq_mva
 <sphinxql>insert into pq_filter1 (query,filters) values('orange', '@weight > 3')</sphinxql>
 <sphinxql>select * from pq_filter1</sphinxql>
 
+<!-- display schema -->
+<sphinxql>describe pq</sphinxql>
+<sphinxql>describe pq_filter</sphinxql>
+<sphinxql>describe pq_filter1</sphinxql>
+<sphinxql>describe pq_wild1</sphinxql>
+<sphinxql>describe pq_mva</sphinxql>
+
+<!-- display internal schema -->
+<sphinxql>describe pq table</sphinxql>
+<sphinxql>describe pq_filter table</sphinxql>
+<sphinxql>describe pq_filter1 table</sphinxql>
+<sphinxql>describe pq_wild1 table</sphinxql>
+<sphinxql>describe pq_mva table</sphinxql>
+
 </sphqueries>
 
 </test>

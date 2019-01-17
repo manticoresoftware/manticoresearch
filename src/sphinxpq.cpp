@@ -696,7 +696,6 @@ PercolateIndex_c::PercolateIndex_c ( const CSphSchema & tSchema, const char * sI
 	m_tSchema = tSchema;
 
 	// fill match schema
-	m_tMatchSchema.AddAttr ( CSphColumnInfo ( "uid", SPH_ATTR_BIGINT ), true );
 	m_tMatchSchema.AddAttr ( CSphColumnInfo ( "query", SPH_ATTR_STRINGPTR ), true );
 	m_tMatchSchema.AddAttr ( CSphColumnInfo ( "tags", SPH_ATTR_STRINGPTR ), true );
 	m_tMatchSchema.AddAttr ( CSphColumnInfo ( "filters", SPH_ATTR_STRINGPTR ), true );
@@ -1756,10 +1755,9 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 		return false;
 
 	// get all locators
-	const CSphColumnInfo & dUID = m_tMatchSchema.GetAttr ( 0 );
-	const CSphColumnInfo & dColQuery = m_tMatchSchema.GetAttr ( 1 );
-	const CSphColumnInfo & dColTags = m_tMatchSchema.GetAttr ( 2 );
-	const CSphColumnInfo & dColFilters = m_tMatchSchema.GetAttr ( 3 );
+	const CSphColumnInfo & dColQuery = m_tMatchSchema.GetAttr ( 0 );
+	const CSphColumnInfo & dColTags = m_tMatchSchema.GetAttr ( 1 );
+	const CSphColumnInfo & dColFilters = m_tMatchSchema.GetAttr ( 2 );
 	StringBuilder_c sFilters;
 
 	// prepare to work them rows
@@ -1787,7 +1785,6 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 		auto * pQuery = dQuery.m_pQuery;
 
 		tMatch.m_uDocID = dQuery.m_uQUID;
-		tMatch.SetAttr ( dUID.m_tLocator, dQuery.m_uQUID );
 
 		int iLen = pQuery->m_sQuery.Length ();
 		tMatch.SetAttr ( dColQuery.m_tLocator, (SphAttr_t) sphPackPtrAttr ( iLen, pData ) );

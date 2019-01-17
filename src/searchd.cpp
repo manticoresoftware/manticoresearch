@@ -18535,7 +18535,7 @@ bool PreallocNewIndex ( ServedDesc_t &tIdx, const CSphConfigSection * pConfig, c
 	// however currently it also ends up configuring dict/tokenizer for fresh RT indexes!
 	// (and for existing RT indexes, settings get loaded during the Prealloc() call)
 	CSphString sError;
-	if ( pConfig && !sphFixupIndexSettings ( tIdx.m_pIndex, *pConfig, sError, false, g_bStripPath ) )
+	if ( pConfig && !sphFixupIndexSettings ( tIdx.m_pIndex, *pConfig, sError, g_bStripPath ) )
 	{
 		sphWarning ( "index '%s': %s - NOT SERVING", szIndexName, sError.cstr () );
 		return false;
@@ -19613,7 +19613,7 @@ ESphAddIndex AddTemplateIndex ( const char * szIndexName, const CSphConfigSectio
 	}
 	tIdx.m_pIndex->Setup ( s );
 
-	if ( !sphFixupIndexSettings ( tIdx.m_pIndex, hIndex, sError, false, g_bStripPath ) )
+	if ( !sphFixupIndexSettings ( tIdx.m_pIndex, hIndex, sError, g_bStripPath ) )
 	{
 		sphWarning ( "index '%s': %s - NOT SERVING", szIndexName, sError.cstr () );
 		return ADD_ERROR;
@@ -20000,7 +20000,7 @@ void CheckRotate () REQUIRES ( MainThread )
 			if ( !bOk )
 				sphWarning ( "%s", sError.cstr() );
 
-			if ( bWasAdded && bOk && !sphFixupIndexSettings ( pWlockedServedPtr->m_pIndex, g_pCfg.m_tConf["index"][sIndex], sError, false, g_bStripPath ) )
+			if ( bWasAdded && bOk && !sphFixupIndexSettings ( pWlockedServedPtr->m_pIndex, g_pCfg.m_tConf["index"][sIndex], sError, g_bStripPath ) )
 			{
 				sphWarning ( "index '%s': %s - NOT SERVING", sIndex, sError.cstr() );
 				bOk = false;
@@ -23409,7 +23409,7 @@ ESphAddIndex ConfigureAndPreload ( const CSphConfigSection & hIndex, const char 
 			CSphString sError;
 			if ( RotateIndexGreedy ( pHandle, *pJustAddedLocalWl, sIndexName, sError ) )
 			{
-				bPreloadOk = sphFixupIndexSettings ( pJustAddedLocalWl->m_pIndex, hIndex, sError, false, g_bStripPath );
+				bPreloadOk = sphFixupIndexSettings ( pJustAddedLocalWl->m_pIndex, hIndex, sError, g_bStripPath );
 				if ( !bPreloadOk )
 				{
 					sphWarning ( "index '%s': %s - NOT SERVING", sIndexName, sError.cstr() );

@@ -1301,13 +1301,13 @@ bool DoMerge ( const CSphConfigSection & hDst, const char * sDst,
 	CSphScopedPtr<CSphIndex> dDstGuard ( pDst );
 
 		CSphString sError;
-	if ( !sphFixupIndexSettings ( pSrc, hSrc, sError, false, false ) )
+	if ( !sphFixupIndexSettings ( pSrc, hSrc, sError ) )
 	{
 		fprintf ( stdout, "ERROR: index '%s': %s\n", sSrc, sError.cstr () );
 		return false;
 	}
 
-	if ( !sphFixupIndexSettings ( pDst, hDst, sError, false, false ) )
+	if ( !sphFixupIndexSettings ( pDst, hDst, sError ) )
 	{
 		fprintf ( stdout, "ERROR: index '%s': %s\n", sDst, sError.cstr () );
 		return false;

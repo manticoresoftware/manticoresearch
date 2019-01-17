@@ -196,7 +196,7 @@ bool			sphConfFieldFilter ( const CSphConfigSection & hIndex, CSphFieldFilterSet
 bool			sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSettings, CSphString & sError );
 
 /// try to set dictionary, tokenizer and misc settings for an index (if not already set)
-bool			sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, CSphString & sError, bool bTemplateDict, bool bStripFile );
+bool			sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, CSphString & sError, bool bStripFile=false );
 
 bool			sphInitCharsetAliasTable ( CSphString & sError );
 

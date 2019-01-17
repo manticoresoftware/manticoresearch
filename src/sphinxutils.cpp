@@ -1695,9 +1695,10 @@ bool sphConfIndex ( const CSphConfigSection & hIndex, CSphIndexSettings & tSetti
 }
 
 
-bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, CSphString & sError, bool bTemplateDict, bool bStripPath )
+bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hIndex, CSphString & sError, /*bool bTemplateDict, */bool bStripPath )
 {
 	bool bTokenizerSpawned = false;
+	//bool bTemplateDict = false; // was param, but was never used
 
 	if ( !pIndex->GetTokenizer () )
 	{
@@ -1716,14 +1717,14 @@ bool sphFixupIndexSettings ( CSphIndex * pIndex, const CSphConfigSection & hInde
 	{
 		CSphDictRefPtr_c pDict;
 		CSphDictSettings tSettings;
-		if ( bTemplateDict )
+		/*if ( bTemplateDict )
 		{
 			sphConfDictionary ( hIndex, tSettings );
 			pDict = sphCreateDictionaryTemplate ( tSettings, nullptr, pIndex->GetTokenizer (), pIndex->GetName(), bStripPath, sError );
 			CSphIndexSettings tIndexSettings = pIndex->GetSettings();
 			tIndexSettings.m_uAotFilterMask = sphParseMorphAot ( tSettings.m_sMorphology.cstr() );
 			pIndex->Setup ( tIndexSettings );
-		} else
+		} else*/
 		{
 			sphConfDictionary ( hIndex, tSettings );
 			pDict = sphCreateDictionaryCRC ( tSettings, nullptr, pIndex->GetTokenizer (), pIndex->GetName(), bStripPath, sError );

@@ -1396,6 +1396,7 @@ void bson::ForEach ( const NodeHandle_t &tLocator, Action_f fAction )
 			int iStrLen = sphJsonUnpackInt ( &p );
 			p += iStrLen;
 		}
+		break;
 	}
 	case JSON_MIXED_VECTOR:
 	{
@@ -1407,6 +1408,7 @@ void bson::ForEach ( const NodeHandle_t &tLocator, Action_f fAction )
 			fAction ( { p, eType } );
 			sphJsonSkipNode ( eType, &p );
 		}
+		break;
 	}
 	case JSON_OBJECT: sphJsonUnpackInt ( &p );
 	case JSON_ROOT:
@@ -1442,6 +1444,7 @@ void bson::ForEach ( const NodeHandle_t &tLocator, NamedAction_f fAction )
 			int iStrLen = sphJsonUnpackInt ( &p );
 			p += iStrLen;
 		}
+		break;
 	}
 	case JSON_MIXED_VECTOR:
 	{
@@ -1453,6 +1456,7 @@ void bson::ForEach ( const NodeHandle_t &tLocator, NamedAction_f fAction )
 			fAction ( "", { p, eType } );
 			sphJsonSkipNode ( eType, &p );
 		}
+		break;
 	}
 
 	case JSON_OBJECT: sphJsonUnpackInt ( &p );
@@ -1491,6 +1495,7 @@ void bson::ForSome ( const NodeHandle_t &tLocator, CondAction_f fAction )
 			int iStrLen = sphJsonUnpackInt ( &p );
 			p += iStrLen;
 		}
+		break;
 	}
 	case JSON_MIXED_VECTOR:
 	{
@@ -1503,6 +1508,7 @@ void bson::ForSome ( const NodeHandle_t &tLocator, CondAction_f fAction )
 				return;
 			sphJsonSkipNode ( eType, &p );
 		}
+		break;
 	}
 	case JSON_OBJECT: sphJsonUnpackInt ( &p );
 	case JSON_ROOT:
@@ -1540,6 +1546,7 @@ void bson::ForSome ( const NodeHandle_t &tLocator, CondNamedAction_f fAction )
 			int iStrLen = sphJsonUnpackInt ( &p );
 			p += iStrLen;
 		}
+		break;
 	}
 	case JSON_MIXED_VECTOR:
 	{
@@ -1552,6 +1559,7 @@ void bson::ForSome ( const NodeHandle_t &tLocator, CondNamedAction_f fAction )
 				return;
 			sphJsonSkipNode ( eType, &p );
 		}
+		break;
 	}
 
 	case JSON_OBJECT: sphJsonUnpackInt ( &p );

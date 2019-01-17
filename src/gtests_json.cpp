@@ -424,7 +424,7 @@ void assert_eq( ESphJsonType a, ESphJsonType b )
 	ASSERT_EQ (a, b);
 }
 
-// "foreach" over the vec
+// "forsome" over the vec
 TEST_F ( TJson, bson_forsome_vec )
 {
 	Bson_c tst = Bson ( R"([12345678, 123456789000000, 1.23, true, false, "123","1.13","123abc", {}, []])" );
@@ -446,64 +446,84 @@ TEST_F ( TJson, bson_forsome_vec )
 	ASSERT_EQ ( iIdx, 4 );
 }
 
-// named "foreach" over the vec
+// named "forsome" over the vec
 TEST_F ( TJson, bson_forsome_namedvec )
 {
 	Bson_c tst = Bson ( R"([12345678, 123456789000000, 1.23, true, false, "123","1.13","123abc", {}, []])" );
 	ESphJsonType dTypes[] = { JSON_INT32, JSON_INT64, JSON_DOUBLE, JSON_TRUE, JSON_FALSE, JSON_STRING, JSON_STRING
 							  , JSON_STRING, JSON_OBJECT, JSON_MIXED_VECTOR };
 	int iIdx = 0;
-	tst.ForEach ( [&] ( CSphString sName, const NodeHandle_t &dNode ) {
-		ASSERT_STREQ ( sName.cstr (), "" );
-		ASSERT_EQ ( dNode.second, dTypes[iIdx++] );
+	tst.ForSome ( [&] ( CSphString sName, const NodeHandle_t &dNode ) {
+		[&] () {
+			ASSERT_STREQ ( sName.cstr (), "" );
+			ASSERT_EQ ( dNode.second, dTypes[iIdx++] );
+		} ();
+		return iIdx<4;
 	} );
+	ASSERT_EQ ( iIdx, 4 );
 
 	iIdx = 0;
-	tst.ForEach ( [&] ( CSphString sName, Bson_c dNode ) {
-		ASSERT_STREQ ( sName.cstr (), "" );
-		ASSERT_EQ ( dNode.GetType (), dTypes[iIdx++] );
+	tst.ForSome ( [&] ( CSphString sName, Bson_c dNode ) {
+		[&] () {
+			ASSERT_STREQ ( sName.cstr (), "" );
+			ASSERT_EQ ( dNode.GetType (), dTypes[iIdx++] );
+		} ();
+		return iIdx<4;
 	} );
+	ASSERT_EQ ( iIdx, 4 );
 }
 
-// "foreach" over obj
+// "forsome" over obj
 TEST_F ( TJson, bson_forsome_obj )
 {
 	Bson_c tst = Bson (
-		R"({a:12345678, b:123456789000000, c:1.23, d:true, e:false, f:"123",g:"1.13",H:"123abc", i:{}, j:[]])" );
+		R"({a:12345678, b:123456789000000, c:1.23, d:true, e:false, f:"123",g:"1.13",H:"123abc", i:{}, j:[]})" );
 	ESphJsonType dTypes[] = { JSON_INT32, JSON_INT64, JSON_DOUBLE, JSON_TRUE, JSON_FALSE, JSON_STRING, JSON_STRING
 							  , JSON_STRING, JSON_OBJECT, JSON_MIXED_VECTOR };
 	int iIdx = 0;
-	tst.ForEach ( [&] ( const NodeHandle_t &dNode ) {
-		ASSERT_EQ ( dNode.second, dTypes[iIdx++] );
+	tst.ForSome ( [&] ( const NodeHandle_t &dNode ) {
+		[&] () { ASSERT_EQ ( dNode.second, dTypes[iIdx++] ); } ();
+		return iIdx<4;
 	} );
+	ASSERT_EQ ( iIdx, 4 );
 
 	iIdx = 0;
-	tst.ForEach ( [&] ( Bson_c dNode ) {
-		ASSERT_EQ ( dNode.GetType (), dTypes[iIdx++] );
+	tst.ForSome ( [&] ( Bson_c dNode ) {
+		[&] () { ASSERT_EQ ( dNode.GetType (), dTypes[iIdx++] ); } ();
+		return iIdx<4;
 	} );
+	ASSERT_EQ ( iIdx, 4 );
 }
 
-// named "foreach" over obj
+// named "forsome" over obj
 TEST_F ( TJson, bson_forsome_namedobj )
 {
 	Bson_c tst = Bson (
-		R"({a:12345678, b:123456789000000, c:1.23, d:true, e:false, f:"123",g:"1.13",H:"123abc", i:{}, j:[]])" );
+		R"({a:12345678, b:123456789000000, c:1.23, d:true, e:false, f:"123",g:"1.13",H:"123abc", i:{}, j:[]})" );
 	ESphJsonType dTypes[] = { JSON_INT32, JSON_INT64, JSON_DOUBLE, JSON_TRUE, JSON_FALSE, JSON_STRING, JSON_STRING
 							  , JSON_STRING, JSON_OBJECT, JSON_MIXED_VECTOR };
 	const char * sNames[] = { "a", "b", "c", "d", "e", "f", "g", "h"
 							  , // note that name is lowercase in opposite 'H' in the object
 		"i", "j" };
 	int iIdx = 0;
-	tst.ForEach ( [&] ( CSphString sName, const NodeHandle_t &dNode ) {
-		ASSERT_STREQ ( sName.cstr (), sNames[iIdx] );
-		ASSERT_EQ ( dNode.second, dTypes[iIdx++] );
+	tst.ForSome ( [&] ( CSphString sName, const NodeHandle_t &dNode ) {
+		[&] () {
+			ASSERT_STREQ ( sName.cstr (), sNames[iIdx] );
+			ASSERT_EQ ( dNode.second, dTypes[iIdx++] );
+		} ();
+		return iIdx<4;
 	} );
+	ASSERT_EQ (iIdx, 4);
 
 	iIdx = 0;
-	tst.ForEach ( [&] ( CSphString sName, Bson_c dNode ) {
-		ASSERT_STREQ ( sName.cstr (), sNames[iIdx] );
-		ASSERT_EQ ( dNode.GetType (), dTypes[iIdx++] );
+	tst.ForSome ( [&] ( CSphString sName, Bson_c dNode ) {
+		[&] () {
+			ASSERT_STREQ ( sName.cstr (), sNames[iIdx] );
+			ASSERT_EQ ( dNode.GetType (), dTypes[iIdx++] );
+		} ();
+		return iIdx<4;
 	} );
+	ASSERT_EQ ( iIdx, 4 );
 }
 
 TEST_F ( TJson, bson_rawblob )

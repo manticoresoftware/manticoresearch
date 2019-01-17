@@ -244,6 +244,12 @@ static bool PluginLoadSymbols ( void * pDesc, const SymbolDesc_t * pSymbol, void
 #endif
 
 #if HAVE_DLOPEN
+
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winvalid-offsetof"
+#endif
+
 static SymbolDesc_t g_dSymbolsUDF[] =
 {
 	{ static_cast<int>( offsetof(PluginUDF_c, m_fnInit)),		"init",		false },

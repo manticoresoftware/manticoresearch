@@ -192,13 +192,9 @@ static void HttpBuildReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, con
 
 static void HttpErrorReply ( CSphVector<BYTE> & dData, ESphHttpStatus eCode, const char * szError )
 {
-	cJSON * pError = cJSON_CreateObject();
-	assert ( pError );
-
-	cJSON_AddStringToObject ( pError, "error", szError );
-	CSphString sJsonError = sphJsonToString ( pError );
-	cJSON_Delete ( pError );
-
+	JsonObj_c tErr;
+	tErr.AddStr ( "error", szError );
+	CSphString sJsonError = tErr.AsString();
 	HttpBuildReply ( dData, eCode, sJsonError.cstr(), sJsonError.Length(), false );
 }
 
@@ -501,23 +497,18 @@ class JsonRequestBuilder_c : public IRequestBuilder_t
 public:
 	JsonRequestBuilder_c ( const CSphString & sQuery, const SqlStmt_t & /*tStmt*/, ESphHttpEndpoint eEndpoint )
 		: m_eEndpoint ( eEndpoint )
+		, m_tQuery ( cJSON_Parse ( sQuery.cstr() ) )
 	{
 		// fixme: we can implement replacing indexes in a string (without parsing) if it becomes a performance issue
-		m_pQuery = cJSON_Parse ( sQuery.cstr() );
-		assert ( m_pQuery );
-	}
-
-	~JsonRequestBuilder_c() override
-	{
-		cJSON_Delete ( m_pQuery );
 	}
 
 	void BuildRequest ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final
 	{
 		// replace "index" value in the json query
-		cJSON_DeleteItemFromObject ( m_pQuery, "index" );
-		cJSON_AddStringToObject ( m_pQuery, "index", tAgent.m_tDesc.m_sIndexes.cstr() );
-		CSphString sRequest = sphJsonToString ( m_pQuery );
+		m_tQuery.DelItem ( "index" );
+		m_tQuery.AddStr ( "index", tAgent.m_tDesc.m_sIndexes.cstr() );
+
+		CSphString sRequest = m_tQuery.AsString();
 		CSphString sEndpoint = sphHttpEndpointToStr ( m_eEndpoint );
 
 		APICommand_t tWr { tOut, SEARCHD_COMMAND_JSON, VER_COMMAND_JSON }; // API header
@@ -526,8 +517,8 @@ public:
 	}
 
 private:
-	cJSON *				m_pQuery {nullptr};
 	ESphHttpEndpoint	m_eEndpoint {SPH_HTTP_ENDPOINT_TOTAL};
+	mutable JsonObj_c	m_tQuery;
 };
 
 
@@ -908,7 +899,7 @@ protected:
 class HttpJsonInsertTraits_c
 {
 protected:
-	bool ProcessInsert ( SqlStmt_t & tStmt, SphDocID_t tDocId, bool bReplace, cJSON * & pResult )
+	bool ProcessInsert ( SqlStmt_t & tStmt, SphDocID_t tDocId, bool bReplace, JsonObj_c & tResult )
 	{
 		CSphSessionAccum tAcc ( false );
 		CSphString sWarning;
@@ -916,9 +907,9 @@ protected:
 		sphHandleMysqlInsert ( tReporter, tStmt, bReplace, true, sWarning, tAcc, SPH_COLLATION_DEFAULT );
 
 		if ( tReporter.IsError() )
-			pResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );
+			tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );
 		else
-			pResult = sphEncodeInsertResultJson ( tStmt.m_sIndex.cstr(), bReplace, tDocId );
+			tResult = sphEncodeInsertResultJson ( tStmt.m_sIndex.cstr(), bReplace, tDocId );
 
 		return !tReporter.IsError();
 	}
@@ -945,13 +936,12 @@ public:
 			return false;
 		}
 
-		cJSON * pResult = NULL;
-		bool bResult = ProcessInsert ( tStmt, tDocId, m_bReplace, pResult );
+		JsonObj_c tResult;
+		bool bResult = ProcessInsert ( tStmt, tDocId, m_bReplace, tResult );
 
-		CSphString sResult = sphJsonToString ( pResult );
-		BuildReply( sResult, bResult ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_500 );
+		CSphString sResult = tResult.AsString();
+		BuildReply ( sResult, bResult ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_500 );
 
-		cJSON_Delete ( pResult );
 		return bResult;
 	}
 
@@ -963,7 +953,7 @@ private:
 class HttpJsonUpdateTraits_c
 {
 protected:
-	bool ProcessUpdate ( const char * szRawRequest, const SqlStmt_t & tStmt, SphDocID_t tDocId, const ThdDesc_t & tThd, cJSON * & pResult )
+	bool ProcessUpdate ( const char * szRawRequest, const SqlStmt_t & tStmt, SphDocID_t tDocId, const ThdDesc_t & tThd, JsonObj_c & tResult )
 	{
 		HttpErrorReporter_c tReporter;
 		CSphString sWarning;
@@ -971,9 +961,9 @@ protected:
 		sphHandleMysqlUpdate ( tReporter, tFactory, tStmt, szRawRequest, sWarning, tThd );
 
 		if ( tReporter.IsError() )
-			pResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );
+			tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );
 		else
-			pResult = sphEncodeUpdateResultJson ( tStmt.m_sIndex.cstr(), tDocId, tReporter.GetAffectedRows() );
+			tResult = sphEncodeUpdateResultJson ( tStmt.m_sIndex.cstr(), tDocId, tReporter.GetAffectedRows() );
 
 		return !tReporter.IsError();
 	}
@@ -999,13 +989,10 @@ public:
 			return false;
 		}
 
-		cJSON * pResult = NULL;
-		bool bResult = ProcessQuery ( tStmt, tDocId, pResult );
+		JsonObj_c tResult;
+		bool bResult = ProcessQuery ( tStmt, tDocId, tResult );
+		BuildReply ( tResult.AsString(), bResult ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_500 );
 
-		CSphString sResult = sphJsonToString ( pResult );
-		BuildReply( sResult, bResult ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_500 );
-
-		cJSON_Delete ( pResult );
 		return bResult;
 	}
 
@@ -1015,9 +1002,9 @@ protected:
 		return sphParseJsonUpdate ( m_sQuery.cstr(), tStmt, tDocId, sError );
 	}
 
-	virtual bool ProcessQuery ( const SqlStmt_t & tStmt, SphDocID_t tDocId, cJSON * & pResult )
+	virtual bool ProcessQuery ( const SqlStmt_t & tStmt, SphDocID_t tDocId, JsonObj_c & tResult )
 	{
-		return ProcessUpdate ( m_sQuery.cstr(), tStmt, tDocId, m_tThd, pResult );
+		return ProcessUpdate ( m_sQuery.cstr(), tStmt, tDocId, m_tThd, tResult );
 	}
 };
 
@@ -1025,7 +1012,7 @@ protected:
 class HttpJsonDeleteTraits_c
 {
 protected:
-	bool ProcessDelete ( const char * szRawRequest, const SqlStmt_t & tStmt, SphDocID_t tDocId, const ThdDesc_t & tThd, cJSON * & pResult )
+	bool ProcessDelete ( const char * szRawRequest, const SqlStmt_t & tStmt, SphDocID_t tDocId, const ThdDesc_t & tThd, JsonObj_c & tResult )
 	{
 		CSphSessionAccum tAcc ( false );
 		HttpErrorReporter_c tReporter;
@@ -1034,9 +1021,9 @@ protected:
 		sphHandleMysqlDelete ( tReporter, tFactory, tStmt, szRawRequest, true, tAcc, tThd );
 
 		if ( tReporter.IsError() )
-			pResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );
+			tResult = sphEncodeInsertErrorJson ( tStmt.m_sIndex.cstr(), tReporter.GetError() );
 		else
-			pResult = sphEncodeDeleteResultJson ( tStmt.m_sIndex.cstr(), tDocId, tReporter.GetAffectedRows() );
+			tResult = sphEncodeDeleteResultJson ( tStmt.m_sIndex.cstr(), tDocId, tReporter.GetAffectedRows() );
 
 		return !tReporter.IsError();
 	}
@@ -1056,9 +1043,9 @@ protected:
 		return sphParseJsonDelete ( m_sQuery.cstr(), tStmt, tDocId, sError );
 	}
 
-	bool ProcessQuery ( const SqlStmt_t & tStmt, SphDocID_t tDocId, cJSON * & pResult ) override
+	bool ProcessQuery ( const SqlStmt_t & tStmt, SphDocID_t tDocId, JsonObj_c & tResult ) override
 	{
-		return ProcessDelete ( m_sQuery.cstr(), tStmt, tDocId, m_tThd, pResult );
+		return ProcessDelete ( m_sQuery.cstr(), tStmt, tDocId, m_tThd, tResult );
 	}
 };
 
@@ -1085,10 +1072,8 @@ public:
 			return false;
 		}
 
-		cJSON * pRoot = cJSON_CreateObject();
-		cJSON * pItems = cJSON_CreateArray();
-		assert ( pRoot && pItems );
-		cJSON_AddItemToObject ( pRoot, "items", pItems );
+		JsonObj_c tRoot;
+		JsonArr_c tItems;
 
 		// fixme: we're modifying the original query at this point
 		char * p = const_cast<char*>(m_sQuery.cstr());
@@ -1116,35 +1101,33 @@ public:
 			{
 				sError.SetSprintf( "Error parsing json query: %s", sError.cstr() );
 				ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
-				cJSON_Delete ( pRoot );
 				return false;
 			}
 
-			cJSON * pResult = NULL;
+			JsonObj_c tResult;
 			bResult = false;
 
 			switch ( tStmt.m_eStmt )
 			{
 			case STMT_INSERT:
 			case STMT_REPLACE:
-				bResult = ProcessInsert ( tStmt, tDocId, tStmt.m_eStmt==STMT_REPLACE, pResult );
+				bResult = ProcessInsert ( tStmt, tDocId, tStmt.m_eStmt==STMT_REPLACE, tResult );
 				break;
 
 			case STMT_UPDATE:
-				bResult = ProcessUpdate ( sQuery.cstr(), tStmt, tDocId, m_tThd, pResult );
+				bResult = ProcessUpdate ( sQuery.cstr(), tStmt, tDocId, m_tThd, tResult );
 				break;
 
 			case STMT_DELETE:
-				bResult = ProcessDelete ( sQuery.cstr(), tStmt, tDocId, m_tThd, pResult );
+				bResult = ProcessDelete ( sQuery.cstr(), tStmt, tDocId, m_tThd, tResult );
 				break;
 
 			default:
 				ReportError ( "Unknown statement", SPH_HTTP_STATUS_400 );
-				cJSON_Delete ( pRoot );
 				return false;
 			}
 
-			AddResult ( pItems, sStmt, pResult );
+			AddResult ( tItems, sStmt, tResult );
 
 			// no further than the first error
 			if ( !bResult )
@@ -1154,25 +1137,19 @@ public:
 				p++;
 		}
 
-		cJSON_AddBoolToObject ( pRoot, "errors", bResult ? 0 : 1 );
-
-		CSphString sResult = sphJsonToString ( pRoot );
-		BuildReply ( sResult, bResult ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_500 );
-		cJSON_Delete ( pRoot );
+		tRoot.AddItem ( "items", tItems );
+		tRoot.AddBool ( "errors", !bResult );
+		BuildReply ( tRoot.AsString(), bResult ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_500 );
 
 		return true;
 	}
 
 private:
-	void AddResult ( cJSON * pRoot, CSphString & sStmt, cJSON * pResult )
+	void AddResult ( JsonArr_c & tRoot, CSphString & sStmt, JsonObj_c & tResult )
 	{
-		assert ( pRoot && pResult );
-
-		cJSON * pItem = cJSON_CreateObject();
-		assert ( pItem );
-		cJSON_AddItemToArray ( pRoot, pItem );
-
-		cJSON_AddItemToObject( pItem, sStmt.cstr(), pResult );
+		JsonObj_c tItem;
+		tItem.AddItem ( sStmt.cstr(), tResult );
+		tRoot.AddItem ( tItem );
 	}
 };
 

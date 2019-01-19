@@ -1851,16 +1851,6 @@ static bool NeedToSkipAttr ( const CSphString & sName, const CSphQuery & tQuery 
 }
 
 
-CSphString sphJsonToString ( const cJSON * pJson )
-{
-	// we can't take this string and just adopt it because we need extra 'gap' bytes at the end
-	char * szResult = cJSON_PrintUnformatted ( pJson );
-	CSphString sResult ( szResult );
-	SafeDeleteArray ( szResult );
-	return sResult;
-}
-
-
 CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQuery,
 	CSphQueryProfile * pProfile, bool bAttrsHighlight )
 {
@@ -1969,75 +1959,68 @@ CSphString sphEncodeResultJson ( const AggrResult_t & tRes, const CSphQuery & tQ
 }
 
 
-cJSON * sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, SphDocID_t tDocId )
+JsonObj_c sphEncodeInsertResultJson ( const char * szIndex, bool bReplace, SphDocID_t tDocId )
 {
-	cJSON * pRoot = cJSON_CreateObject();
-	assert ( pRoot );
+	JsonObj_c tObj;
 
-	cJSON_AddStringToObject ( pRoot, "_index", szIndex );
-	cJSON_AddNumberToObject ( pRoot, "_id", tDocId );
-	cJSON_AddBoolToObject ( pRoot, "created", !bReplace );
-	cJSON_AddStringToObject ( pRoot, "result", bReplace ? "updated" : "created" );
-	cJSON_AddNumberToObject ( pRoot, "status", bReplace ? 200 : 201 );
+	tObj.AddStr ( "_index", szIndex );
+	tObj.AddNum ( "_id", tDocId );
+	tObj.AddBool ( "created", !bReplace );
+	tObj.AddStr ( "result", bReplace ? "updated" : "created" );
+	tObj.AddNum ( "status", bReplace ? 200 : 201 );
 
-	return pRoot;
+	return tObj;
 }
 
 
-cJSON * sphEncodeUpdateResultJson ( const char * szIndex, SphDocID_t tDocId, int iAffected )
+JsonObj_c sphEncodeUpdateResultJson ( const char * szIndex, SphDocID_t tDocId, int iAffected )
 {
-	cJSON * pRoot = cJSON_CreateObject();
-	assert ( pRoot );
+	JsonObj_c tObj;
 
-	cJSON_AddStringToObject ( pRoot, "_index", szIndex );
+	tObj.AddStr ( "_index", szIndex );
 
 	if ( tDocId==DOCID_MAX )
-		cJSON_AddNumberToObject ( pRoot, "updated", iAffected );
+		tObj.AddNum ( "updated", iAffected );
 	else
 	{
-		cJSON_AddNumberToObject ( pRoot, "_id", tDocId );
-		cJSON_AddStringToObject ( pRoot, "result", iAffected ? "updated" : "noop" );
+		tObj.AddNum ( "_id", tDocId );
+		tObj.AddStr ( "result", iAffected ? "updated" : "noop" );
 	}
 
-	return pRoot;
+	return tObj;
 }
 
 
-cJSON * sphEncodeDeleteResultJson ( const char * szIndex, SphDocID_t tDocId, int iAffected )
+JsonObj_c sphEncodeDeleteResultJson ( const char * szIndex, SphDocID_t tDocId, int iAffected )
 {
-	cJSON * pRoot = cJSON_CreateObject();
-	assert ( pRoot );
+	JsonObj_c tObj;
 
-	cJSON_AddStringToObject ( pRoot, "_index", szIndex );
+	tObj.AddStr ( "_index", szIndex );
 
 	if ( tDocId==DOCID_MAX )
-		cJSON_AddNumberToObject ( pRoot, "deleted", iAffected );
+		tObj.AddNum ( "deleted", iAffected );
 	else
 	{
-		cJSON_AddNumberToObject ( pRoot, "_id", tDocId );
-		cJSON_AddBoolToObject ( pRoot, "found", iAffected ? 1 : 0 );
-		cJSON_AddStringToObject ( pRoot, "result", iAffected ? "deleted" : "not found" );
+		tObj.AddNum ( "_id", tDocId );
+		tObj.AddBool ( "found", !!iAffected );
+		tObj.AddStr ( "result", iAffected ? "deleted" : "not found" );
 	}
 
-	return pRoot;
+	return tObj;
 }
 
 
-cJSON * sphEncodeInsertErrorJson ( const char * szIndex, const char * szError )
+JsonObj_c sphEncodeInsertErrorJson ( const char * szIndex, const char * szError )
 {
-	cJSON * pRoot = cJSON_CreateObject();
-	assert ( pRoot );
+	JsonObj_c tObj, tErr;
 
-	cJSON * pError = cJSON_CreateObject();
-	assert ( pError );
+	tErr.AddStr ( "type", szError );
+	tErr.AddStr ( "index", szIndex );
 
-	cJSON_AddStringToObject ( pError, "type", szError );
-	cJSON_AddStringToObject ( pError, "index", szIndex );
+	tObj.AddItem ( "error", tErr );
+	tObj.AddNum ( "status", 500 );
 
-	cJSON_AddItemToObject ( pRoot, "error", pError );
-	cJSON_AddNumberToObject ( pRoot, "status", 500 );
-
-	return pRoot;
+	return tObj;
 }
 
 

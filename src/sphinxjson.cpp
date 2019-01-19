@@ -1253,6 +1253,132 @@ bool sphJsonStringToNumber ( const char * s, int iLen, ESphJsonType &eType, int6
 	return false;
 }
 
+//////////////////////////////////////////////////////////////////////////
+
+CSphString sphJsonToString ( const cJSON * pJson )
+{
+	// we can't take this string and just adopt it because we need extra 'gap' bytes at the end
+	char * szResult = cJSON_PrintUnformatted ( pJson );
+	CSphString sResult ( szResult );
+	SafeDeleteArray ( szResult );
+	return sResult;
+}
+
+//////////////////////////////////////////////////////////////////////////
+
+JsonBase_c::JsonBase_c ( JsonBase_c && rhs )
+{
+	if ( this!=&rhs )
+	{
+		m_pRoot = rhs.m_pRoot;
+		rhs.m_pRoot = nullptr;
+	}
+}
+
+
+JsonBase_c::~JsonBase_c()
+{
+	if ( m_pRoot )
+	{
+		cJSON_Delete(m_pRoot);
+		m_pRoot = nullptr;
+	}
+}
+
+
+JsonBase_c & JsonBase_c::operator = ( JsonBase_c && rhs )
+{
+	if ( this!=&rhs )
+	{
+		m_pRoot = rhs.m_pRoot;
+		rhs.m_pRoot = nullptr;
+	}
+
+	return *this;
+}
+
+
+void JsonBase_c::AddStr ( const char * szName, const char * szValue )
+{
+	assert ( m_pRoot );
+	cJSON_AddStringToObject ( m_pRoot, szName, szValue );
+}
+
+
+void JsonBase_c::AddNum ( const char * szName, int64_t iValue )
+{
+	assert ( m_pRoot );
+	cJSON_AddNumberToObject ( m_pRoot, szName, iValue );
+}
+
+
+void JsonBase_c::AddBool ( const char * szName, bool bValue )
+{
+	assert ( m_pRoot );
+	cJSON_AddBoolToObject ( m_pRoot, szName, bValue ? 1 : 0 );
+}
+
+
+void JsonBase_c::AddItem ( const char * szName, JsonBase_c & tObj )
+{
+	assert ( m_pRoot );
+	cJSON_AddItemToObject ( m_pRoot, szName, tObj.Leak() );
+}
+
+
+void JsonBase_c::AddItem ( JsonBase_c & tObj )
+{
+	assert ( m_pRoot );
+	cJSON_AddItemToArray ( m_pRoot, tObj.Leak() );
+}
+
+
+void JsonBase_c::DelItem ( const char * szName )
+{
+	assert ( m_pRoot );
+	cJSON_DeleteItemFromObject ( m_pRoot, szName );
+}
+
+
+cJSON * JsonBase_c::Leak()
+{
+	cJSON * pRoot = m_pRoot;
+	m_pRoot = nullptr;
+	return pRoot;
+}
+
+
+CSphString JsonBase_c::AsString() const
+{
+	if ( m_pRoot )
+		return sphJsonToString ( m_pRoot );
+
+	return "";
+}
+
+
+JsonObj_c::JsonObj_c()
+{
+	m_pRoot = cJSON_CreateObject();
+	assert ( m_pRoot );
+}
+
+
+JsonObj_c::JsonObj_c ( cJSON * pRoot )
+{
+	assert ( pRoot );
+	m_pRoot = pRoot;
+}
+
+
+JsonArr_c::JsonArr_c()
+{
+	m_pRoot = cJSON_CreateArray();
+	assert ( m_pRoot );
+}
+
+//////////////////////////////////////////////////////////////////////////
+
 using namespace bson;
 
 bool bson::IsAssoc ( const NodeHandle_t & dNode )

@@ -216,6 +216,47 @@ bool sphJsonInplaceUpdate ( ESphJsonType eValueType, int64_t iValue, ISphExpr * 
 /// converts string to number
 bool sphJsonStringToNumber ( const char * s, int iLen, ESphJsonType & eType, int64_t & iVal, double & fVal );
 
+/// formats cJSON object to string
+CSphString sphJsonToString ( const cJSON * pJson );
+
+/// simple cJSON wrappers
+class JsonBase_c
+{
+public:
+					JsonBase_c() {}
+					JsonBase_c ( JsonBase_c && rhs );
+					~JsonBase_c();
+
+	JsonBase_c &	operator = ( JsonBase_c && rhs );
+	void			AddStr ( const char * szName, const char * szValue );
+	void			AddNum ( const char * szName, int64_t iValue );
+	void			AddBool ( const char * szName, bool bValue );
+	void			AddItem ( const char * szName, JsonBase_c & tObj );
+	void			AddItem ( JsonBase_c & tObj );
+	void			DelItem ( const char * szName );
+	cJSON *			Leak();
+	CSphString		AsString() const;
+
+protected:
+	cJSON *			m_pRoot {nullptr};
+};
+
+
+class JsonObj_c : public JsonBase_c
+{
+public:
+					JsonObj_c();
+					JsonObj_c ( cJSON * pRoot );
+};
+
+
+class JsonArr_c : public JsonBase_c
+{
+public:
+					JsonArr_c();
+};
+
+
 namespace bson {
 
 

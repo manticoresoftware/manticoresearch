@@ -12894,14 +12894,14 @@ static void SendMysqlPercolateReply ( SqlRowBuffer_c &tOut, const CPqResult &tRe
 		iColumns += 3;
 	tOut.HeadBegin ( iColumns );
 
-	tOut.HeadColumn ( "UID", MYSQL_COL_LONGLONG, MYSQL_COL_UNSIGNED_FLAG );
+	tOut.HeadColumn ( "id", MYSQL_COL_LONGLONG, MYSQL_COL_UNSIGNED_FLAG );
 	if ( bDumpDocs )
-		tOut.HeadColumn ( "Documents", MYSQL_COL_STRING );
+		tOut.HeadColumn ( "documents", MYSQL_COL_STRING );
 	if ( bQuery )
 	{
-		tOut.HeadColumn ( "Query" );
-		tOut.HeadColumn ( "Tags" );
-		tOut.HeadColumn ( "Filters" );
+		tOut.HeadColumn ( "query" );
+		tOut.HeadColumn ( "tags" );
+		tOut.HeadColumn ( "filters" );
 	}
 
 	// EOF packet is sent explicitly due to non-default params.

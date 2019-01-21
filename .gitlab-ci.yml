@@ -4,9 +4,8 @@ stages:
   - publish
 
 pages:
-  stage: mirroring
+  stage: routines
   tags:
-    - docs
     - docker
   image: registry.gitlab.com/manticoresearch/dev/manticoredocs:latest
   script:
@@ -24,6 +23,8 @@ pages:
 
 job_mirror:
   stage: mirroring
+  tags:
+    - dev-host
   only:
     - master
   script:
@@ -34,7 +35,6 @@ job_mirror:
 simple_tests:
   stage: routines
   tags:
-    - ubuntu
     - specdocker
   dependencies: []
   image: registry.gitlab.com/manticoresearch/dev/ubertests:latest
@@ -54,7 +54,6 @@ simple_tests:
 release_tests:
   stage: routines
   tags:
-    - ubuntu
     - specdocker
   dependencies: []
   image: registry.gitlab.com/manticoresearch/dev/ubertests:latest
@@ -73,7 +72,6 @@ release_tests:
 push_results:
   stage: publish
   tags:
-    - ubuntu
     - specdocker
   image: registry.gitlab.com/manticoresearch/dev/ubertests:latest
   dependencies:

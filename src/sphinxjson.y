@@ -80,6 +80,7 @@ value_list:
 		{
 			$$.m_eType = JSON_MIXED_VECTOR;
 			$$.m_dChildren.m_iStart = -1;
+			$$.m_dChildren.m_iLen = 0;
 		}
 	| value
 		{

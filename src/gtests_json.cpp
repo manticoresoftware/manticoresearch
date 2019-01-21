@@ -255,7 +255,7 @@ TEST_F( TJson, parser )
 	i12:"-123abc",
 	f1:"3.15",
 	f2:"16777217.123"})", true ) );
-
+	ASSERT_TRUE ( testcase ( R"({"a":{"b":0,"c":0},"d":[]})") );
 }
 
 TEST_F ( TJson, accessor )

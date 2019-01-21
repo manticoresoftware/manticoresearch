@@ -69,9 +69,27 @@ endif()
 set ( GDB_SOURCE_DIR "${SOURCE_DIR}" )
 
 # All info collected (we need SPH_GIT_COMMIT_ID, GIT_TIMESTAMP_ID, GIT_BRANCH_ID and SPHINX_TAG, if any)
-message ( STATUS "Version ${VERNUMBERS} ${SPH_GIT_COMMIT_ID}@${GIT_TIMESTAMP_ID}, ${GIT_BRANCH_ID}" )
+set ( VERFILE "${BINARY_DIR}/config/gen_sphinxversion.h" )
 
-configure_file ( "${SOURCE_DIR}/src/sphinxversion.h.in" "${BINARY_DIR}/config/gen_sphinxversion.h" )
+configure_file ( "${SOURCE_DIR}/src/sphinxversion.h.in" "${VERFILE}1" )
+file ( MD5 "${VERFILE}1" VERNEW )
+set ( NEED_NEWFILE TRUE )
+
+if ( EXISTS "${VERFILE}" )
+	file ( MD5 "${VERFILE}" VEROLD )
+	if ( VEROLD STREQUAL VERNEW )
+		set ( NEED_NEWFILE FALSE )
+	endif()
+endif()
+
+if ( NEED_NEWFILE )
+	message ( STATUS "Version ${VERNUMBERS} ${SPH_GIT_COMMIT_ID}@${GIT_TIMESTAMP_ID}, ${GIT_BRANCH_ID}" )
+	configure_file ( "${VERFILE}1" "${VERFILE}" COPYONLY )
+	file ( REMOVE "${VERFILE}1" )
+else()
+	message ( STATUS "Version not changed: ${VERNUMBERS} ${SPH_GIT_COMMIT_ID}@${GIT_TIMESTAMP_ID}, ${GIT_BRANCH_ID}" )
+endif()
+
 configure_file ( "${SOURCE_DIR}/dist/CPackOptions.cmake.in" "${BINARY_DIR}/config/CPackOptions.cmake" @ONLY )
 
 

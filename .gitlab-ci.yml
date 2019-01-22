@@ -1,7 +1,10 @@
 stages:
   - mirroring
   - routines
+  - build
   - publish
+
+include: '/dist/gitlab-release.yml'
 
 pages:
   stage: routines
@@ -43,11 +46,10 @@ simple_tests:
     - build/here
     - build/test/test_*/report.txt
     - build/test/error*.txt
-    - build/test/searchd.log    
+    - build/test/searchd.log
     expire_in: 12 hrs
     when: always
   retry: 1
-
 
 release_tests:
   stage: routines
@@ -62,7 +64,7 @@ release_tests:
     - build/here
     - build/test/test_*/report.txt
     - build/test/error*.txt
-    - build/test/searchd.log    
+    - build/test/searchd.log
     expire_in: 12 hrs
     when: always
   retry: 1
@@ -88,7 +90,3 @@ push_results:
     url: http://$CDASH_URL/CDash/public/index.php?project=Manticoresearch&filtercount=1&field1=revision&compare1=63&value1=$CI_COMMIT_SHA
   retry: 1
   allow_failure: true
-
-
-
-

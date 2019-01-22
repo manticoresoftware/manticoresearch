@@ -1,0 +1,256 @@
+tarball:
+  stage: build
+  only:
+    variables:
+      - $WHAT == "all"
+      - $WHAT =~ /tarball/
+  dependencies: []
+  tags:
+    - dev-host
+  script:
+    - mkdir build && cd build
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISABLE_TESTING=1 ..
+    - make tarball
+    - cp manticore-*.tar.gz ..
+  artifacts:
+    paths:
+      - manticore-*.tar.gz
+    when: on_success
+    expire_in: 12 hrs
+
+
+osx:
+  stage: build
+  only:
+    variables:
+      - $WHAT == "all"
+      - $WHAT =~ /osx/
+  dependencies: []
+  tags:
+    - mac
+    - build
+  script:
+    - mkdir build && cd build
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=macos -DLIBS_BUNDLE=/work ..
+    - make -j2 package
+    - cp manticore-*.tar.gz ..
+  artifacts:
+    paths:
+      - manticore-*.tar.gz
+    when: on_success
+    expire_in: 12 hrs
+
+
+windows:
+  stage: build
+  only:
+    variables:
+      - $WHAT == "all"
+      - $WHAT =~ /windows/
+  dependencies: []
+  tags:
+    - windows
+    - build
+  script:
+    - mkdir sphinxbin-x32
+    - cd sphinxbin-x32
+    - cmake -G "Visual Studio 14" -DSPHINX_TAG=$RELEASE_TAG -DLIBS_BUNDLE="c:/bundle" -DSPLIT_SYMBOLS=1 -DDISABLE_TESTING=1 ..
+    - cmake --build . --target package --config RelWithDebInfo
+    - cmake -DWITH_PGSQL=1 .
+    - cmake --build . --target package --config RelWithDebInfo --clean-first
+    - cmake -DWITH_PGSQL=1 -DWITH_STEMMER=1 .
+    #    - cmake -DWITH_PGSQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 .
+    - cmake --build . --target package --config RelWithDebInfo --clean-first
+    - cp manticore-*.zip ..
+    - cd ..
+    - mkdir sphinxbin-x64
+    - cd sphinxbin-x64
+    - cmake -G "Visual Studio 14 Win64" -DSPHINX_TAG=$RELEASE_TAG -DLIBS_BUNDLE="c:/bundle" -DSPLIT_SYMBOLS=1 -DDISABLE_TESTING=1 ..
+    - cmake --build . --target package --config RelWithDebInfo
+    - cmake -DWITH_PGSQL=1 .
+    - cmake --build . --target package --config RelWithDebInfo --clean-first
+    - cmake -DWITH_PGSQL=1 -DWITH_STEMMER=1 .
+    #    - cmake -DWITH_PGSQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 .
+    - cmake --build . --target package --config RelWithDebInfo --clean-first
+    - cp manticore-*.zip ..
+  artifacts:
+    paths:
+      - manticore-*.zip
+    when: on_success
+    expire_in: 12 hrs
+
+
+rhel6:
+  stage: build
+  only:
+    variables:
+      - $WHAT == "all"
+      - $WHAT =~ /rhel6/
+  dependencies: []
+  tags:
+    - docker
+  image: registry.gitlab.com/manticoresearch/dev/buildcentos6:latest
+  script:
+    - mkdir build && cd build
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=rhel6 ..
+    - make -j4 package
+    - cp manticore*.rpm ..
+  artifacts:
+    paths:
+      - manticore*.rpm
+    when: on_success
+    expire_in: 12 hrs
+
+
+rhel7:
+  stage: build
+  only:
+    variables:
+      - $WHAT == "all"
+      - $WHAT =~ /rhel7/
+  dependencies: []
+  tags:
+    - docker
+  image: registry.gitlab.com/manticoresearch/dev/buildcentos7:latest
+  script:
+    - mkdir build && cd build
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=rhel7 ..
+    - make -j4 package
+    - cp manticore*.rpm ..
+  artifacts:
+    paths:
+      - manticore*.rpm
+    when: on_success
+    expire_in: 12 hrs
+
+
+jessie:
+  stage: build
+  only:
+    variables:
+      - $WHAT == "all"
+      - $WHAT =~ /jessie/
+  dependencies: []
+  tags:
+    - docker
+  image: registry.gitlab.com/manticoresearch/dev/buildjessie:latest
+  script:
+    - mkdir build && cd build
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=jessie ..
+    - make -j4 package
+    - cp manticore*.deb ..
+  artifacts:
+    paths:
+      - manticore*.deb
+    when: on_success
+    expire_in: 12 hrs
+
+
+stretch:
+  stage: build
+  only:
+    variables:
+      - $WHAT == "all"
+      - $WHAT =~ /stretch/
+  dependencies: []
+  tags:
+    - docker
+  image: registry.gitlab.com/manticoresearch/dev/buildstretch:latest
+  script:
+    - mkdir build && cd build
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=stretch ..
+    - make -j4 package
+    - cp manticore*.deb ..
+  artifacts:
+    paths:
+      - manticore*.deb
+    when: on_success
+    expire_in: 12 hrs
+
+
+trusty:
+  stage: build
+  only:
+    variables:
+      - $WHAT == "all"
+      - $WHAT =~ /trusty/
+  dependencies: []
+  tags:
+    - docker
+  image: registry.gitlab.com/manticoresearch/dev/buildtrusty:latest
+  script:
+    - mkdir build && cd build
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=trusty ..
+    - make -j4 package
+    - cp manticore*.deb ..
+  artifacts:
+    paths:
+      - manticore*.deb
+    when: on_success
+    expire_in: 12 hrs
+
+
+xenial:
+  stage: build
+  only:
+    variables:
+      - $WHAT == "all"
+      - $WHAT =~ /xenial/
+  dependencies: []
+  tags:
+    - docker
+  image: registry.gitlab.com/manticoresearch/dev/buildxenial:latest
+  script:
+    - mkdir build && cd build
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=xenial ..
+    - make -j4 package
+    - cp manticore*.deb ..
+  artifacts:
+    paths:
+      - manticore*.deb
+    when: on_success
+    expire_in: 12 hrs
+
+
+bionic:
+  stage: build
+  only:
+    variables:
+      - $WHAT == "all"
+      - $WHAT =~ /bionic/
+  dependencies: []
+  tags:
+    - docker
+  image: registry.gitlab.com/manticoresearch/dev/buildbionic:latest
+  script:
+    - mkdir build && cd build
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=bionic ..
+    - make -j4 package
+    - cp manticore*.deb ..
+  artifacts:
+    paths:
+      - manticore*.deb
+    when: on_success
+    expire_in: 12 hrs
+
+
+# collect artifacts from all previous jobs.
+# m.b. it has sense to also publish them in one click to github release?
+collect:
+  stage: publish
+  only:
+    variables:
+      - $WHAT == "all"
+      - $WHAT =~ /collect/
+  dependencies: [tarball, osx, windows, rhel6, rhel7, jessie, stretch, trusty, xenial, bionic]
+  variables:
+    GIT_STRATEGY: none
+  script:
+    - echo "Collected packages"
+    - ls -1
+  artifacts:
+    paths:
+      - manticore*
+    when: on_success
+    expire_in: 1 week
+  allow_failure: false

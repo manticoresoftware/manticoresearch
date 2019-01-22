@@ -98,7 +98,8 @@ static void EncodeResultJson ( const AggrResult_t & tRes, JsonEscapedBuilder & t
 					{
 						if ( eAttrType==SPH_ATTR_FACTORS_JSON ) // fixme! need test for it!
 							sphFormatFactors ( tOut, ( unsigned int * ) pFactors, true );
-						else {
+						else
+						{
 							sTmp.Clear ();
 							sphFormatFactors ( sTmp, ( unsigned int * ) pFactors, false );
 							tOut.AppendEscaped ( sTmp.cstr(), EscBld::eEscape );
@@ -1310,7 +1311,8 @@ static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, co
 		tOut.Sprintf ( R"("_index":"%s","_type":"doc","_id":"%u","_score":"1")", sIndex.cstr(), tDesc.m_uQID );
 		if ( !tDesc.m_bQL )
 			tOut.Sprintf ( R"("_source":{"query":%s})", tDesc.m_sQuery.cstr () );
-		else {
+		else
+		{
 			ScopedComma_c sBrackets ( tOut, nullptr, R"("_source":{ "query": {"ql":)", " } }");
 			tOut.AppendEscaped ( tDesc.m_sQuery.cstr(), EscBld::eEscape );
 		}
@@ -1476,8 +1478,7 @@ bool HttpHandlerPQ_c::GotQuery ( const CSphString & sIndex, const JsonObj_c & tJ
 			ReportError ( sError.scstr(), SPH_HTTP_STATUS_400 );
 			return false;
 		}
-	}
-	else
+	} else
 	{
 		dFilters.SwapData ( tQuery.m_dFilters );
 		dFilterTree.SwapData ( tQuery.m_dFilterTree );

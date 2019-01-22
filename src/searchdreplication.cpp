@@ -169,6 +169,22 @@ static void Logger_fn ( wsrep_log_level_t eLevel, const char * sMsg )
 	LoggerWrapper ( eLevel, sMsg );
 }
 
+
+class CJsonScopedPtr_c : public CSphScopedPtr<cJSON>
+{
+public:
+	CJsonScopedPtr_c ( cJSON * pPtr  )
+		: CSphScopedPtr<cJSON> ( pPtr )
+	{}
+
+	~CJsonScopedPtr_c()
+	{
+		cJSON_Delete(m_pPtr);
+		m_pPtr = nullptr;
+	}
+};
+
+
 #define SST_OPT_ROLE "--role"
 #define SST_OPT_DATA "--datadir"
 #define SST_OPT_PARENT "--parent"

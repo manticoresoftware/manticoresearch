@@ -18,7 +18,6 @@
 
 #include "sphinx.h"
 #include "sphinxutils.h"
-#include "json/cJSON.h"
 
 /// supported JSON value types
 enum ESphJsonType : BYTE
@@ -216,46 +215,83 @@ bool sphJsonInplaceUpdate ( ESphJsonType eValueType, int64_t iValue, ISphExpr * 
 /// converts string to number
 bool sphJsonStringToNumber ( const char * s, int iLen, ESphJsonType & eType, int64_t & iVal, double & fVal );
 
-/// formats cJSON object to string
-CSphString sphJsonToString ( const cJSON * pJson );
+/// internal cJSON init
+void sphInitCJson();
 
-/// simple cJSON wrappers
-class JsonBase_c
+struct cJSON;
+
+/// simple cJSON wrapper
+class JsonObj_c
 {
 public:
-					JsonBase_c() {}
-					JsonBase_c ( JsonBase_c && rhs );
-					~JsonBase_c();
+	explicit		JsonObj_c ( bool bArray = false );
+	explicit		JsonObj_c ( cJSON * pRoot, bool bOwner = true );
+	explicit		JsonObj_c ( const char * szJson );
+					JsonObj_c ( JsonObj_c && rhs );
+					~JsonObj_c();
 
-	JsonBase_c &	operator = ( JsonBase_c && rhs );
+					// a shortcut for !Empty()
+					operator bool() const;
+	JsonObj_c &		operator = ( JsonObj_c && rhs );
+	JsonObj_c		operator[] ( int iItem ) const;
+	JsonObj_c &		operator++();
+	JsonObj_c 		operator*();
+
 	void			AddStr ( const char * szName, const char * szValue );
 	void			AddNum ( const char * szName, int64_t iValue );
 	void			AddBool ( const char * szName, bool bValue );
-	void			AddItem ( const char * szName, JsonBase_c & tObj );
-	void			AddItem ( JsonBase_c & tObj );
+	void			AddItem ( const char * szName, JsonObj_c & tObj );
+	void			AddItem ( JsonObj_c & tObj );
 	void			DelItem ( const char * szName );
-	cJSON *			Leak();
+
+	int				Size() const;
+	JsonObj_c		GetItem ( const char * szName ) const;
+	JsonObj_c		GetIntItem ( const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
+	JsonObj_c		GetIntItem ( const char * szName1, const char * szName2, CSphString & sError, bool bIgnoreMissing=false ) const;
+	JsonObj_c		GetBoolItem ( const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
+	JsonObj_c		GetStrItem ( const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
+	JsonObj_c		GetObjItem ( const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
+	JsonObj_c		GetArrayItem ( const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
+	bool			FetchIntItem ( int & iValue, const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
+	bool			FetchBoolItem ( bool & bValue, const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
+	bool			FetchStrItem ( CSphString & sValue, const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
+	bool			HasItem ( const char * szName ) const;
+
+	bool			IsInt() const;
+	bool			IsDbl() const;
+	bool			IsNum() const;
+	bool			IsBool() const;
+	bool			IsObj() const;
+	bool			IsStr() const;
+	bool			IsArray() const;
+	bool			Empty() const;
+	const char *	Name() const;
+
+	int64_t			IntVal() const;
+	bool			BoolVal() const;
+	float			FltVal() const;
+	double			DblVal() const;
+	const char *	SzVal() const;
+	CSphString		StrVal() const;
+
+	const char *	GetErrorPtr() const;
+	cJSON *			GetRoot();
 	CSphString		AsString() const;
+
+	JsonObj_c		begin() const;
+	JsonObj_c		end() const;
 
 protected:
 	cJSON *			m_pRoot {nullptr};
+	bool			m_bOwner {true};
+
+	cJSON *			Leak();
+	JsonObj_c		GetChild ( const char * szName, CSphString & sError, bool bIgnoreMissing ) const;
 };
 
-
-class JsonObj_c : public JsonBase_c
-{
-public:
-					JsonObj_c();
-					JsonObj_c ( cJSON * pRoot );
-};
-
-
-class JsonArr_c : public JsonBase_c
-{
-public:
-					JsonArr_c();
-};
-
+#ifndef JsonNull
+#define JsonNull JsonObj_c(nullptr,false)
+#endif
 
 namespace bson {
 
@@ -406,8 +442,8 @@ public:
 	explicit BsonContainer2_c ( const char * sJsonc, bool bAutoconv = false, bool bToLowercase = true );
 };
 
-// for benching
-bool       cJsonToBson ( cJSON * pCJSON, CSphVector<BYTE> &dData, bool bAutoconv=false, bool bToLowercase = true /*, StringBuilder_c &sMsg */);
+bool	JsonObjToBson ( JsonObj_c & tJSON, CSphVector<BYTE> &dData, bool bAutoconv, bool bToLowercase/*, StringBuilder_c &sMsg*/ );
+bool	cJsonToBson ( cJSON * pCJSON, CSphVector<BYTE> &dData, bool bAutoconv=false, bool bToLowercase = true /*, StringBuilder_c &sMsg */);
 
 }; // namespace sph
 

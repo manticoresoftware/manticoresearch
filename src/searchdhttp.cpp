@@ -17,7 +17,6 @@
 #include "sphinxpq.h"
 
 #include "http/http_parser.h"
-#include "json/cJSON.h"
 #include "searchdaemon.h"
 #include "searchdha.h"
 #include "searchdreplication.h"
@@ -497,7 +496,7 @@ class JsonRequestBuilder_c : public IRequestBuilder_t
 public:
 	JsonRequestBuilder_c ( const CSphString & sQuery, const SqlStmt_t & /*tStmt*/, ESphHttpEndpoint eEndpoint )
 		: m_eEndpoint ( eEndpoint )
-		, m_tQuery ( cJSON_Parse ( sQuery.cstr() ) )
+		, m_tQuery ( sQuery.cstr() )
 	{
 		// fixme: we can implement replacing indexes in a string (without parsing) if it becomes a performance issue
 	}
@@ -1073,7 +1072,7 @@ public:
 		}
 
 		JsonObj_c tRoot;
-		JsonArr_c tItems;
+		JsonObj_c tItems(true);
 
 		// fixme: we're modifying the original query at this point
 		char * p = const_cast<char*>(m_sQuery.cstr());
@@ -1145,7 +1144,7 @@ public:
 	}
 
 private:
-	void AddResult ( JsonArr_c & tRoot, CSphString & sStmt, JsonObj_c & tResult )
+	void AddResult ( JsonObj_c & tRoot, CSphString & sStmt, JsonObj_c & tResult )
 	{
 		JsonObj_c tItem;
 		tItem.AddItem ( sStmt.cstr(), tResult );
@@ -1167,10 +1166,10 @@ private:
 	const OptionsHash_t & m_tOptions;
 
 	// FIXME!!! handle replication for GotQuery and Delete
-	bool DoCallPQ ( const CSphString &sIndex, const cJSON * pPercolate, bool bVerbose );
-	bool GotQuery ( const CSphString & sIndex, const cJSON * pQuery, const cJSON * pRoot, CSphString * pUID, bool bReplace );
+	bool DoCallPQ ( const CSphString & sIndex, const JsonObj_c & tPercolate, bool bVerbose );
+	bool GotQuery ( const CSphString & sIndex, const JsonObj_c & tJsonQuery, const JsonObj_c & tRoot, CSphString * pUID, bool bReplace );
 	bool ListQueries ( const CSphString & sIndex );
-	bool Delete ( const CSphString & sIndex, const cJSON * pRoot );
+	bool Delete ( const CSphString & sIndex, const JsonObj_c & tRoot );
 };
 
 
@@ -1285,95 +1284,6 @@ CSphString sphHttpEndpointToStr ( ESphHttpEndpoint eEndpoint )
 	return g_dEndpoints[eEndpoint];
 }
 
-class ScopedJson_c
-{
-	cJSON * m_pPtr = nullptr;
-public:
-	explicit ScopedJson_c ( cJSON * pPtr  )
-		: m_pPtr ( pPtr )
-	{}
-
-	cJSON * Ptr() const { return m_pPtr; }
-	cJSON * operator -> () const { return m_pPtr; }
-
-	~ScopedJson_c()
-	{
-		if ( m_pPtr )
-			cJSON_Delete ( m_pPtr );
-		m_pPtr = nullptr;
-	}
-};
-
-struct SourceMatch_c : public CSphMatch
-{
-	static SphAttr_t ToInt ( const cJSON * pVal )
-	{
-		if ( cJSON_IsNumber ( pVal ) )
-			return int ( pVal->valuedouble );
-		else if ( cJSON_IsInteger ( pVal ) )
-			return int ( pVal->valueint );
-		else if ( pVal->valuestring )
-			return strtoul ( pVal->valuestring, NULL, 10 );
-		else return 0;
-	}
-
-	inline static SphAttr_t ToBigInt ( const cJSON * pVal )
-	{
-		if ( cJSON_IsNumber ( pVal ) )
-			return int ( pVal->valuedouble );
-		else if ( cJSON_IsInteger ( pVal ) )
-			return int ( pVal->valueint );
-		else if ( pVal->valuestring )
-			return strtoll ( pVal->valuestring, NULL, 10 );
-		else return 0;
-	}
-
-	bool SetAttr ( const CSphAttrLocator & tLoc, const cJSON * pVal, ESphAttr eTargetType )
-	{
-		switch ( eTargetType )
-		{
-			case SPH_ATTR_INTEGER:
-			case SPH_ATTR_TIMESTAMP:
-			case SPH_ATTR_BOOL:
-			case SPH_ATTR_TOKENCOUNT:
-				CSphMatch::SetAttr ( tLoc, ToInt ( pVal ) );
-				break;
-			case SPH_ATTR_BIGINT:
-				CSphMatch::SetAttr ( tLoc, ToBigInt ( pVal ) );
-				break;
-			case SPH_ATTR_FLOAT:
-				if ( cJSON_IsNumber ( pVal ) )
-					SetAttrFloat ( tLoc, (float)pVal->valuedouble );
-				else if ( cJSON_IsInteger ( pVal ) )
-					SetAttrFloat ( tLoc, (float)pVal->valueint );
-				else if ( pVal->valuestring )
-					SetAttrFloat ( tLoc, (float)strtod ( pVal->valuestring, NULL ) ); // FIXME? report conversion error?
-				else
-				{
-					SetAttrFloat ( tLoc, 0.0);
-					assert ( false && "empty string passed to float conversion");
-				}
-				break;
-			case SPH_ATTR_STRING:
-			case SPH_ATTR_UINT32SET:
-			case SPH_ATTR_INT64SET:
-			case SPH_ATTR_JSON:
-				CSphMatch::SetAttr ( tLoc, 0 );
-				break;
-			default:
-				return false;
-		};
-		return true;
-	}
-
-	inline bool SetDefaultAttr ( const CSphAttrLocator & tLoc, ESphAttr eTargetType )
-	{
-		cJSON tDefault;
-		tDefault.type = cJSON_Integer;
-		tDefault.valueint = 0;
-		return SetAttr ( tLoc, &tDefault, eTargetType );
-	}
-};
 
 static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, const CSphFixedVector<int64_t> & dDocids,
 	const CSphString & sIndex, JsonEscapedBuilder & tOut )
@@ -1423,17 +1333,17 @@ static void EncodePercolateMatchResult ( const PercolateMatchResult_t & tRes, co
 }
 
 
-bool HttpHandlerPQ_c::DoCallPQ ( const CSphString &sIndex, const cJSON * pPercolate, bool bVerbose )
+bool HttpHandlerPQ_c::DoCallPQ ( const CSphString & sIndex, const JsonObj_c & tPercolate, bool bVerbose )
 {
 	CSphString sWarning, sError, sTmp;
 	BlobVec_t dDocs;
 
 	// single document
-	cJSON * pDoc = GetJSONPropertyObject ( pPercolate, "document", sTmp );
-	if ( pDoc )
+	JsonObj_c tJsonDoc = tPercolate.GetObjItem ( "document", sTmp );
+	if ( tJsonDoc )
 	{
-		auto &dDoc = dDocs.Add();
-		if ( !bson::cJsonToBson ( pDoc, dDoc, g_bJsonAutoconvNumbers, g_bJsonKeynamesToLowercase ) )
+		auto & tDoc = dDocs.Add();
+		if ( !bson::JsonObjToBson ( tJsonDoc, tDoc, g_bJsonAutoconvNumbers, g_bJsonKeynamesToLowercase ) )
 		{
 			ReportError ( "Bad cjson", SPH_HTTP_STATUS_400 );
 			return false;
@@ -1441,18 +1351,17 @@ bool HttpHandlerPQ_c::DoCallPQ ( const CSphString &sIndex, const cJSON * pPercol
 	}
 
 	// multiple documents
-	const cJSON * pDocs = cJSON_GetObjectItem ( pPercolate, "documents" );
-	if ( pDocs && !cJSON_IsArray ( pDocs ) )
+	JsonObj_c tJsonDocs = tPercolate.GetArrayItem ( "documents", sError, true );
+	if ( !sError.IsEmpty() )
 	{
-		ReportError ( "bad documents array", SPH_HTTP_STATUS_400 );
+		ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
 		return false;
 	}
 
-	cJSON * pElem = nullptr;
-	cJSON_ArrayForEach ( pElem, pDocs )
+	for ( auto & i : tJsonDocs )
 	{
-		auto &dDoc = dDocs.Add ();
-		if ( !bson::cJsonToBson ( pElem, dDoc, g_bJsonAutoconvNumbers, g_bJsonKeynamesToLowercase ) )
+		auto & tDoc = dDocs.Add();
+		if ( !bson::JsonObjToBson ( i, tDoc, g_bJsonAutoconvNumbers, g_bJsonKeynamesToLowercase ) )
 		{
 			ReportError ( "Bad cjson", SPH_HTTP_STATUS_400 );
 			return false;
@@ -1495,27 +1404,26 @@ static void EncodePercolateQueryResult ( bool bReplace, const CSphString & sInde
 }
 
 
-bool HttpHandlerPQ_c::GotQuery ( const CSphString & sIndex, const cJSON * pQuery, const cJSON * pRoot, CSphString * pUID, bool bReplace )
+bool HttpHandlerPQ_c::GotQuery ( const CSphString & sIndex, const JsonObj_c & tJsonQuery, const JsonObj_c & tRoot, CSphString * pUID, bool bReplace )
 {
 	CSphString sTmp, sError, sWarning;
 
 	bool bQueryQL = true;
 	CSphQuery tQuery;
 	const char * sQuery = nullptr;
-	const cJSON * pQueryQL = GetJSONPropertyString ( pQuery, "ql", sTmp );
-	if ( pQueryQL )
-	{
-		sQuery = pQueryQL->valuestring;
-	} else
+	JsonObj_c tQueryQL = tJsonQuery.GetStrItem ( "ql", sTmp );
+	if ( tQueryQL )
+		sQuery = tQueryQL.SzVal();
+	else
 	{
 		bQueryQL = false;
-		if ( !ParseJsonQueryFilters ( pQuery, tQuery, sError, sWarning ) )
+		if ( !ParseJsonQueryFilters ( tJsonQuery, tQuery, sError, sWarning ) )
 		{
 			ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
 			return false;
 		}
 
-		if ( NonEmptyQuery ( pQuery ) )
+		if ( NonEmptyQuery ( tJsonQuery ) )
 			sQuery = tQuery.m_sQuery.cstr();
 	}
 
@@ -1529,35 +1437,33 @@ bool HttpHandlerPQ_c::GotQuery ( const CSphString & sIndex, const cJSON * pQuery
 	if ( pUID && !pUID->IsEmpty() )
 		uID = strtoull ( pUID->cstr(), nullptr, 10 );
 
-
-	const cJSON * pTagsArray = cJSON_GetObjectItem ( pRoot, "tags" );
-	if ( pTagsArray && !cJSON_IsArray ( pTagsArray ) )
+	JsonObj_c tTagsArray = tRoot.GetArrayItem ( "tags", sError, true );
+	if ( !sError.IsEmpty() )
 	{
-		ReportError ( "invalid tags array", SPH_HTTP_STATUS_400 );
+		ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
 		return false;
 	}
 
 	StringBuilder_c sTags (", ");
-	const cJSON * pTag = nullptr;
-	cJSON_ArrayForEach ( pTag, pTagsArray )
-		sTags << pTag->valuestring;
+	for ( const auto & i : tTagsArray )
+		sTags << i.SzVal();
 
-	const cJSON * pFilters = cJSON_GetObjectItem ( pRoot, "filters" );
-	if ( pFilters && !cJSON_IsString ( pFilters ) )
+	JsonObj_c tFilters = tRoot.GetStrItem ( "filters", sError, true );
+	if ( !sError.IsEmpty() )
 	{
-		ReportError ( "\"filters\" property value should be a string", SPH_HTTP_STATUS_400 );
+		ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
 		return false;
 	}
 
-	if ( pFilters && !bQueryQL && tQuery.m_dFilters.GetLength() )
+	if ( tFilters && !bQueryQL && tQuery.m_dFilters.GetLength() )
 	{
-		ReportError ( "invalid combination SphinxQL along with query filter provided", SPH_HTTP_STATUS_501 );
+		ReportError ( "invalid combination of SphinxQL and query filter provided", SPH_HTTP_STATUS_501 );
 		return false;
 	}
 
 	CSphVector<CSphFilterSettings> dFilters;
 	CSphVector<FilterTreeItem_t> dFilterTree;
-	if ( pFilters )
+	if ( tFilters )
 	{
 		ServedDescPtr_c pServed ( GetIndex ( sIndex, eITYPE::PERCOLATE ) );
 		if ( !pServed )
@@ -1565,12 +1471,13 @@ bool HttpHandlerPQ_c::GotQuery ( const CSphString & sIndex, const cJSON * pQuery
 
 		auto pIndex = (PercolateIndex_i *)pServed->m_pIndex;
 
-		if ( !PercolateParseFilters ( pFilters->valuestring, SPH_COLLATION_UTF8_GENERAL_CI, pIndex->GetInternalSchema (), dFilters, dFilterTree, sError ) )
+		if ( !PercolateParseFilters ( tFilters.SzVal(), SPH_COLLATION_UTF8_GENERAL_CI, pIndex->GetInternalSchema (), dFilters, dFilterTree, sError ) )
 		{
 			ReportError ( sError.scstr(), SPH_HTTP_STATUS_400 );
 			return false;
 		}
-	} else
+	}
+	else
 	{
 		dFilters.SwapData ( tQuery.m_dFilters );
 		dFilterTree.SwapData ( tQuery.m_dFilterTree );
@@ -1609,9 +1516,8 @@ bool HttpHandlerPQ_c::GotQuery ( const CSphString & sIndex, const cJSON * pQuery
 	}
 
 	if ( !bOk )
-	{
 		ReportError ( sError.scstr(), SPH_HTTP_STATUS_500 );
-	} else
+	else
 	{
 		StringBuilder_c sRes;
 		EncodePercolateQueryResult ( bReplace, sIndex, uID, sRes );
@@ -1655,38 +1561,35 @@ bool HttpHandlerPQ_c::ListQueries ( const CSphString & sIndex )
 	return true;
 }
 
-bool HttpHandlerPQ_c::Delete ( const CSphString & sIndex, const cJSON * pRoot )
+bool HttpHandlerPQ_c::Delete ( const CSphString & sIndex, const JsonObj_c & tRoot )
 {
 	ReplicationCommand_t tCmd;
 	tCmd.m_eCommand = RCOMMAND_DELETE;
 	tCmd.m_sIndex = sIndex;
 
-
-	const cJSON * pTagsArray = cJSON_GetObjectItem ( pRoot, "tags" );
-	if ( pTagsArray && !cJSON_IsArray ( pTagsArray ) )
+	CSphString sError;
+	JsonObj_c tTagsArray = tRoot.GetArrayItem ( "tags", sError, true );
+	if ( !sError.IsEmpty() )
 	{
-		ReportError ( "invalid tags array", SPH_HTTP_STATUS_400 );
+		ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
 		return false;
 	}
 
 	StringBuilder_c sTags ( ", " );
 	const cJSON * pTag = nullptr;
-	cJSON_ArrayForEach ( pTag, pTagsArray )
-	{
-		sTags << pTag->valuestring;
-	}
 
-	const cJSON * pUidsArray = cJSON_GetObjectItem ( pRoot, "id" );
-	if ( pUidsArray && !cJSON_IsArray ( pUidsArray ) )
+	for ( const auto & i : tTagsArray )
+		sTags << i.SzVal();
+
+	JsonObj_c tUidsArray = tRoot.GetArrayItem ( "id", sError, true );
+	if ( !sError.IsEmpty() )
 	{
-		ReportError ( "invalid id array", SPH_HTTP_STATUS_400 );
+		ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
 		return false;
 	}
-	const cJSON * pUID = nullptr;
-	cJSON_ArrayForEach ( pUID, pUidsArray )
-	{
-		tCmd.m_dDeleteQueries.Add ( pUID->valueint );
-	}
+
+	for ( const auto & i : tUidsArray )
+		tCmd.m_dDeleteQueries.Add ( i.IntVal() );
 
 	if ( !sTags.GetLength() && !tCmd.m_dDeleteQueries.GetLength() )
 	{
@@ -1695,8 +1598,6 @@ bool HttpHandlerPQ_c::Delete ( const CSphString & sIndex, const cJSON * pRoot )
 	}
 
 	tCmd.m_sDeleteTags = sTags.cstr();
-	CSphString sError;
-
 	uint64_t tmStart = sphMicroTimer();
 
 	int iDeleted = 0;
@@ -1752,50 +1653,48 @@ bool HttpHandlerPQ_c::Process()
 	if ( m_sQuery.IsEmpty() )
 		return ListQueries ( sIndex );
 
-	const ScopedJson_c tRoot ( cJSON_Parse ( m_sQuery.cstr() ) );
-	if ( !tRoot.Ptr() )
+	const JsonObj_c tRoot ( m_sQuery.cstr() );
+	if ( !tRoot )
 	{
 		ReportError ( "bad JSON object", SPH_HTTP_STATUS_400 );
 		return false;
 	}
 
-	if ( cJSON_GetArraySize ( tRoot.Ptr() )==0 )
+	if ( !tRoot.Size() )
 		return ListQueries ( sIndex );
 
 	CSphString sError;
-	const cJSON * pQuery = GetJSONPropertyObject ( tRoot.Ptr(), "query", sError );
-	if ( !pQuery && !bDelete )
+	JsonObj_c tQuery = tRoot.GetObjItem ( "query", sError );
+	if ( !tQuery && !bDelete )
 	{
 		ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
 		return false;
 	}
 
-	const cJSON * pPerc = bMatch ? GetJSONPropertyObject ( pQuery, "percolate", sError ) : nullptr;
-	if ( bMatch && !pPerc )
+	JsonObj_c tPerc = bMatch ? tQuery.GetObjItem ( "percolate", sError ) : JsonNull;
+	if ( bMatch && !tPerc )
 	{
 		ReportError ( sError.cstr(), SPH_HTTP_STATUS_400 );
 		return false;
 	}
 
 	bool bVerbose = false;
-	const cJSON * pVerbose = cJSON_GetObjectItem ( tRoot.Ptr(), "verbose" );
-	if ( pVerbose )
+	JsonObj_c tVerbose = tRoot.GetItem ( "verbose" );
+	if ( tVerbose )
 	{
-		if ( cJSON_IsNumber ( pVerbose ) )
-			bVerbose = ( pVerbose->valuedouble!=0.0 );
-		else if ( cJSON_IsInteger ( pVerbose ) )
-			bVerbose = ( pVerbose->valueint!=0 );
-		else if ( cJSON_IsBool ( pVerbose ) )
-			bVerbose = ( cJSON_IsTrue ( pVerbose )!=0 );
+		if ( tVerbose.IsDbl() )
+			bVerbose = tVerbose.DblVal()!=0.0;
+		else if ( tVerbose.IsInt() )
+			bVerbose = tVerbose.IntVal()!=0;
+		else if ( tVerbose.IsBool() )
+			bVerbose = tVerbose.BoolVal();
 	}
 
 	if ( bMatch )
-	{
-		return DoCallPQ ( sIndex, pPerc, bVerbose );
-	} else if ( bDelete )
-	{
-		return Delete ( sIndex, tRoot.Ptr() );
-	} else
+		return DoCallPQ ( sIndex, tPerc, bVerbose );
+	else if ( bDelete )
+		return Delete ( sIndex, tRoot );
+	else
 	{
 		bool bRefresh = false;
 		CSphString * pRefresh = m_tOptions ( "refresh" );
@@ -1807,7 +1706,7 @@ bool HttpHandlerPQ_c::Process()
 				bRefresh = true;
 		}
 
-		return GotQuery ( sIndex, pQuery, tRoot.Ptr(), pUID, bRefresh );
+		return GotQuery ( sIndex, tQuery, tRoot, pUID, bRefresh );
 	}
 }
 

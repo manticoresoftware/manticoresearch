@@ -29,8 +29,6 @@ job_mirror:
     - master
   script:
     - ~/gitsync.sh
-  allow_failure: true
-
 
 simple_tests:
   stage: routines

@@ -1358,7 +1358,7 @@ bool HttpHandlerPQ_c::DoCallPQ ( const CSphString & sIndex, const JsonObj_c & tP
 		return false;
 	}
 
-	for ( auto & i : tJsonDocs )
+	for ( auto i : tJsonDocs )
 	{
 		auto & tDoc = dDocs.Add();
 		if ( !bson::JsonObjToBson ( i, tDoc, g_bJsonAutoconvNumbers, g_bJsonKeynamesToLowercase ) )
@@ -1576,8 +1576,6 @@ bool HttpHandlerPQ_c::Delete ( const CSphString & sIndex, const JsonObj_c & tRoo
 	}
 
 	StringBuilder_c sTags ( ", " );
-	const cJSON * pTag = nullptr;
-
 	for ( const auto & i : tTagsArray )
 		sTags << i.SzVal();
 

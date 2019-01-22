@@ -323,7 +323,7 @@ XQNode_t * QueryParserJson_c::ConstructMatchNode ( XQNode_t * pParent, const Jso
 		JsonObj_c tQuery = tFields.GetStrItem ( "query", sError );
 		if ( !tQuery )
 		{
-			tBuilder.Error ( sError.cstr() );
+			tBuilder.Error ( "%s", sError.cstr() );
 			return nullptr;
 		}
 
@@ -2606,7 +2606,7 @@ static bool ParseStringArray ( const JsonObj_c & tArray, const char * szProp, St
 	{
 		if ( !tItem.IsStr() )
 		{
-			sError.SetSprintf ( R"("%s" property %d should be a string)", szProp );
+			sError.SetSprintf ( R"("%s" property should be a string)", szProp );
 			return false;
 		}
 

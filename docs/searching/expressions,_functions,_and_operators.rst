@@ -545,10 +545,10 @@ Miscellaneous functions
 
    .. code-block:: mysql
 
-
        SELECT * FROM test WHERE ALL(mymva)>10;
 
-    ALL(string list) is a special operation for filtering string tags.
+
+   ALL(string list) is a special operation for filtering string tags.
 
    .. code-block:: mysql
 

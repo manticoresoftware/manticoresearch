@@ -2583,6 +2583,7 @@ class StringBuilder_c : public ISphNoncopyable
 
 private:
 	void NewBuffer ();
+	void InitBuffer ();
 	friend class ScopedComma_c;
 
 protected:

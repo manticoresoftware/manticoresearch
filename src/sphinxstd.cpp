@@ -2283,8 +2283,8 @@ void StringBuilder_c::FinishBlocks ( StringBuilder_c::LazyComma_c * pLevel, bool
 
 StringBuilder_c & StringBuilder_c::vAppendf ( const char * sTemplate, va_list ap )
 {
-	if ( !m_iSize )
-		NewBuffer ();
+	if ( !m_sBuffer )
+		InitBuffer ();
 
 	assert ( m_sBuffer );
 	assert ( m_iUsed<m_iSize );
@@ -2340,6 +2340,9 @@ StringBuilder_c & StringBuilder_c::Appendf ( const char * sTemplate, ... )
 
 StringBuilder_c &StringBuilder_c::vSprintf ( const char * sTemplate, va_list ap )
 {
+	if ( !m_sBuffer )
+		InitBuffer ();
+
 	assert ( m_iUsed==0 || m_iUsed<m_iSize );
 
 	int iComma = 0;
@@ -2469,10 +2472,15 @@ void StringBuilder_c::Grow ( int iLen )
 	SafeDeleteArray ( pNew );
 }
 
-void StringBuilder_c::NewBuffer ()
+void StringBuilder_c::InitBuffer ()
 {
 	m_iSize = 256;
 	m_sBuffer = new char[m_iSize];
+}
+
+void StringBuilder_c::NewBuffer ()
+{
+	InitBuffer();
 	Clear ();
 }
 

@@ -1913,6 +1913,13 @@ TEST ( functions, sph_Sprintf_to_builder )
 	ASSERT_STREQ ( sBuf.cstr (), "{1 -1 100,2 -2 200} 999.500, -1.400932" );
 }
 
+TEST ( functions, sph_Sprintf_regression_on_empty_buf )
+{
+	StringBuilder_c sBuf;
+	sBuf.Sprintf ( "%.3D", 10 );
+	ASSERT_STREQ ( sBuf.cstr (), "0.010" );
+}
+
 TEST ( functions, DISABLED_bench_Sprintf )
 {
 	char sBuf[40];

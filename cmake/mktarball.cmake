@@ -22,27 +22,19 @@ endif()
 
 set ( FNAME "${TARBALL_FILE_NAME}${SUFFIX}" )
 set ( PACKDIR "${BINARY_DIR}/sources/${FNAME}" )
-set ( SOURCE_DIR_FILES "${BINARY_DIR}/sources/sources" )
 
-file ( REMOVE_RECURSE "${BINARY_DIR}/sources" )
+# unwind symlinks before file copy
+get_filename_component ( FULL_SOURCE_DIR "${SOURCE_DIR}" REALPATH )
 
-
-# direct copy of source_dir fails if source_dir is symlink (in the case the symlink get copied and then
-# packed). So, let us first copy the directory with external command to ensure all symlinks are
-# resolved.
-
-execute_process ( COMMAND "${CMAKE_COMMAND}" -E copy_directory "${SOURCE_DIR}" "${SOURCE_DIR_FILES}" )
-
-file (COPY ${SOURCE_DIR_FILES}/ DESTINATION ${PACKDIR}
+file ( REMOVE_RECURSE ${PACKDIR} )
+file ( COPY ${FULL_SOURCE_DIR}/ DESTINATION ${PACKDIR}
 		PATTERN "cmake-*" EXCLUDE
 		PATTERN "build-*" EXCLUDE
 		PATTERN "build" EXCLUDE
 		PATTERN ".*" EXCLUDE
 		PATTERN "CMakeCache.txt" EXCLUDE
 		)
-file ( REMOVE_RECURSE ${SOURCE_DIR_FILES} ) # copied dir no more necessary.
-
-configure_file ("${BINARY_DIR}/config/gen_sphinxversion.h"
+configure_file ( "${BINARY_DIR}/config/gen_sphinxversion.h"
 		"${PACKDIR}/src/sphinxversion.h" COPYONLY )
 
 if ( WITH_STEMMER AND STEMMER_BASEDIR )

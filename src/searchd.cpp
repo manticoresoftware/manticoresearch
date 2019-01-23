@@ -12537,7 +12537,7 @@ static bool ParseBsonDocument ( const VecTraits_T<BYTE>& dDoc, const CSphHash<Sc
 	using namespace bson;
 	Bson_c dBson ( dDoc );
 	if ( dDoc.IsEmpty () )
-		return sMsg.Err ( "bad JSON at document %d", iRow+1 );
+		return false;
 
 	SqlInsert_t tAttr;
 
@@ -13088,16 +13088,15 @@ static void PQLocalMatch ( const BlobVec_t &dDocs, const CSphString& sIndex, con
 			if ( !ParseBsonDocument ( dDocs[iDoc], hSchemaLocators, tOpt.m_sIdAlias, iDoc,
 						dFields, tDoc, tStrings, dMvaParsed, sMsg ) )
 			{
-				if ( !tOpt.m_bSkipBadJson )
-					break;
+				// for now the only case of fail - if provided bson is empty (null) document.
+				if ( tOpt.m_bSkipBadJson )
+				{
+					sMsg.Warn ( "ERROR: Document %d is empty", iDoc + tOpt.m_iShift + 1 );
+					continue;
+				}
 
-				// regard errors as warnings
-				StringBuilder_c sWarnings;
-				sWarnings << sMsg.sWarning ();
-				sWarnings.Sprintf ( "ERROR: %s", sMsg.sError (), iDoc+tOpt.m_iShift+1 );
-				sMsg.Clear();
-				sMsg.Warn ( "%s", sWarnings.cstr() );
-				continue;
+				sMsg.Err ( "Document %d is empty", iDoc + tOpt.m_iShift + 1 );
+				break;
 			}
 
 			tStrings.SavePointersTo ( dStrings, false );
@@ -13290,6 +13289,7 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 {
 
 	PercolateMatchResult_t &tRes = tResult.m_dResult;
+	tRes.Reset();
 
 	// check arguments
 	// index name, document | documents list, [named opts]
@@ -13358,9 +13358,6 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 			break;
 		}
 
-		if ( tOpts.m_bSkipBadJson && !tOpts.m_bJsonDocs ) // fixme! do we need such warn? Uncomment, if so.
-			tRes.m_sMessages.Warn ("option to skip bad json has no sense since docs are not in json form");
-
 		// post-conf type check
 		if ( iExpType!=v.m_iType )
 		{
@@ -13368,6 +13365,9 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 			break;
 		}
 	}
+
+	if ( tOpts.m_bSkipBadJson && !tOpts.m_bJsonDocs ) // fixme! do we need such warn? Uncomment, if so.
+		tRes.m_sMessages.Warn ( "option to skip bad json has no sense since docs are not in json form" );
 
 	if ( !sError.IsEmpty() )
 	{
@@ -13413,21 +13413,25 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 			}
 			else
 				dBadDocs.Add ( i + 1 ); // let it be just 'an error' for now
-			if ( !dBadDocs.IsEmpty() )
+			if ( !dBadDocs.IsEmpty() && !tOpts.m_bSkipBadJson )
 				break;
 		}
 
 	if ( !dBadDocs.IsEmpty() )
 	{
-		StringBuilder_c sBad (",","Bad JSON objects in strings: ");
+		StringBuilder_c sBad ( ",", "Bad JSON objects in strings: " );
 		for ( int iBadDoc:dBadDocs )
-			sBad.Sprintf("%d",iBadDoc);
-		tOut.Error ( tStmt.m_sStmt, sBad.cstr() );
-		return;
+			sBad.Sprintf ( "%d", iBadDoc );
+
+		if ( !tOpts.m_bSkipBadJson )
+		{
+			tOut.Error ( tStmt.m_sStmt, sBad.cstr ());
+			return;
+		}
+		tRes.m_sMessages.Warn ( sBad.cstr () );
 	}
 
 	tResult.m_dDocids.Reset ( tOpts.m_sIdAlias.IsEmpty () ? 0 : dBlobDocs.GetLength () + 1 );
-	tRes.Reset ();
 
 	if ( tOpts.m_iShift && !tOpts.m_sIdAlias.IsEmpty () )
 		tRes.m_sMessages.Warn ( "'shift' option works only for automatic ids, when 'docs_id' is not defined" );

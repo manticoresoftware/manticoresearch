@@ -2459,7 +2459,9 @@ void MergePqResults ( const VecTraits_T<CPqResult *> &dChunks, CPqResult &dRes, 
 	// check if we have exactly one non-null and non-empty result
 	if ( dChunks.GetLength ()==1 ) // short path for only 1 result.
 	{
+		auto dOldMsgs = std::move(dRes.m_dResult.m_sMessages);
 		dRes = std::move ( *dChunks[0] );
+		dRes.m_dResult.m_sMessages = std::move(dOldMsgs);
 		return;
 	}
 

@@ -58,8 +58,8 @@ windows:
     - cmake --build . --target package --config RelWithDebInfo
     - cmake -DWITH_PGSQL=1 .
     - cmake --build . --target package --config RelWithDebInfo --clean-first
-    - cmake -DWITH_PGSQL=1 -DWITH_STEMMER=1 .
-    #    - cmake -DWITH_PGSQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 .
+    #- cmake -DWITH_PGSQL=1 -DWITH_STEMMER=1 .
+    - cmake -DWITH_PGSQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 .
     - cmake --build . --target package --config RelWithDebInfo --clean-first
     - cp manticore-*.zip ..
     - cd ..
@@ -69,8 +69,8 @@ windows:
     - cmake --build . --target package --config RelWithDebInfo
     - cmake -DWITH_PGSQL=1 .
     - cmake --build . --target package --config RelWithDebInfo --clean-first
-    - cmake -DWITH_PGSQL=1 -DWITH_STEMMER=1 .
-    #    - cmake -DWITH_PGSQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 .
+    #- cmake -DWITH_PGSQL=1 -DWITH_STEMMER=1 .
+    - cmake -DWITH_PGSQL=1 -DWITH_RE2=1 -DWITH_STEMMER=1 .
     - cmake --build . --target package --config RelWithDebInfo --clean-first
     - cp manticore-*.zip ..
   artifacts:

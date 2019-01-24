@@ -6,6 +6,7 @@ Searching
    
    searching/matching_modes
    searching/boolean_query_syntax
+   searching/escaping_in_queries
    searching/extended_query_syntax
    searching/search_results_ranking
    searching/expressions,_functions,_and_operators

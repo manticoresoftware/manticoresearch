@@ -592,6 +592,28 @@ Example:
 
     # english charset defined with alias
     charset_table = 0..9, english, _
+    
+
+So if you want your search to support different languages 
+you will need to define sets of valid characters and folding rules 
+for all of them what can be quite a laborious task.
+We have performed this task for you by preparing default charset tables,
+non-cjk and cjk, that comprise non-cjk and cjk-languages respectively. 
+These charsets should be sufficient to use in most cases.
+
+To be able to work with both cjk and non-cjk languages you should set the options 
+in your configuration file as shown below:
+
+.. code-block:: none
+
+	charset_table     	= noncjk
+	...
+	ngram_len         	= 1
+	ngram_chars     	= cjk
+
+
+In case you don’t need support for cjk-languages you can just omit `ngram_len` and `ngram_chars` options.
+For more information on those see the appropriate documentation sections.
 
 .. _dict:
 
@@ -1958,6 +1980,20 @@ Example:
 
 
     ngram_chars = U+3000..U+2FA1F
+    
+    
+Also you can use an alias for our default N-gram table as in the example below.
+It should be sufficient in most cases.
+
+Example:
+
+
+.. code-block:: ini
+
+
+    ngram_chars = cjk
+
+
 
 .. _ngram_len:
 
@@ -2603,6 +2639,75 @@ Example:
 
     stopwords = /usr/local/sphinx/data/stopwords.txt
     stopwords = stopwords-ru.txt stopwords-en.txt
+
+Alternatively, just as in the case with ``charset_table`` and ``ngram_chars`` options,  you can use one of our default stopwords files. Currently stopwords for 50 languages are available.  Here is the full list of aliases for them:
+
+
+- af - Africaans
+- ar - Arabic
+- bg - Bulgarian
+- bn - Bengali
+- ca - Catalan
+- ckb- Curdish
+- cz - Czech
+- da - Danish
+- de - German
+- el - Greek
+- en - English
+- eo - Esperanto
+- es - Spain
+- et - Estonian
+- eu - Basque
+- fa - Persian
+- fi - Finnish
+- fr - French
+- ga - Irish
+- gl - Galician
+- hi - Hindi
+- he - Hebrew
+- hr - Croatian
+- hu - Hungarian
+- hy - Armenian
+- id - Indonesian
+- it - Italian
+- ja - Japanese
+- ko - Korean
+- la - Latin
+- lt - Lithuanian
+- lv - Latvian
+- mr - Marathi
+- nl - Dutch
+- no - Norwegian
+- pl - Polish
+- pt - Portuguese
+- ro - Romanian
+- ru - Russian
+- sk - Slovak
+- sl - Slovenian
+- so - Somali
+- st - Sotho
+- sv - Swedish
+- sw - Swahili
+- th - Thai
+- tr - Turkish
+- yo - Yoruba
+- zh - Chinese
+- zu - Zulu
+
+
+
+E.g.,  to use stopwords for Italian language, just put the following line in your config file:
+
+.. code-block:: none
+
+	stopwords         =  it
+
+If you need to use stopwords for multiple languages you should list all their aliases, separated with commas:
+
+.. code-block:: none
+
+	stopwords         =  en, it, ru
+
 
 .. _stopword_step:
 

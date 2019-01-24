@@ -35,6 +35,9 @@ job_mirror:
 
 simple_tests:
   stage: routines
+  except:
+    variables:
+      - $WHAT
   tags:
     - specdocker
   dependencies: []
@@ -53,6 +56,9 @@ simple_tests:
 
 release_tests:
   stage: routines
+  except:
+    variables:
+      - $WHAT
   tags:
     - specdocker
   dependencies: []

@@ -24366,7 +24366,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		ARRAY_FOREACH ( iTick, g_dTickPoolThread )
 		{
 			if ( !sphThreadCreate ( g_dTickPoolThread.Begin()+iTick, CSphNetLoop::ThdTick,
-				nullptr, Str_b ().Sprintf ( "TickPool_%d", iTick ).cstr () ) )
+				nullptr, false, Str_b().Sprintf ( "TickPool_%d", iTick ).cstr () ) )
 				sphDie ( "failed to create tick pool thread" );
 		}
 	}

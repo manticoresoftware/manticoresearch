@@ -75,19 +75,21 @@ if ( NEED_RE2_FROMSOURCES )
 
 	# RE2 sources found. Now patch them, if necessary
 	if ( NOT EXISTS "${RE2_BASEDIR}/is_patched.txt" )
-		set ( PATCH_FILE "${CMAKE_SOURCE_DIR}/libre2/libre2.patch" )
+		file ( COPY "${CMAKE_SOURCE_DIR}/libre2/libre2.patch" DESTINATION "${RE2_BASEDIR}" )
+		set ( PATCH_FILE "libre2.patch" )
 
 		mark_as_advanced ( PATCH_FILE )
-		message ( STATUS "Patching RE2" )
 		find_package ( Git QUIET )
 		if ( GIT_EXECUTABLE )
-			execute_process ( COMMAND "${GIT_EXECUTABLE}" apply ${PATCH_FILE}
+			message ( STATUS "Patching RE2 by git apply" )
+			execute_process ( COMMAND "${GIT_EXECUTABLE}" apply "${PATCH_FILE}"
 					WORKING_DIRECTORY "${RE2_BASEDIR}"
 					)
 			file ( WRITE "${RE2_BASEDIR}/is_patched.txt" "ok" )
 			# no git
 		else ()
 			find_program ( PATCH_PROG patch )
+			message ( STATUS "Patching RE2 by patch -p1" )
 			if ( PATCH_PROG )
 				mark_as_advanced ( PATCH_PROG )
 				execute_process (

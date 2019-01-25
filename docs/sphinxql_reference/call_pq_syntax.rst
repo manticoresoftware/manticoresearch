@@ -19,8 +19,8 @@ Example:
 
 .. code-block:: sql
 
- CALL PQ ('index_name', 'single document', 0 as docs_json);
- CALL PQ ('index_name', ('first document', 'second document'), 0 as docs_json );
+ CALL PQ ('index_name', 'single document', 0 AS docs_json);
+ CALL PQ ('index_name', ('first document', 'second document'), 0 AS docs_json );
  CALL PQ ('index_name', '{"title":"single document","content":"Add your content here","category":10,"timestamp":1513725448}');
  CALL PQ ('index_name', (
 	                          '{"title":"first document","content":"Add your content here","category":10,"timestamp":1513725448}',
@@ -55,7 +55,7 @@ Example:
 
 .. code-block:: sql
 
-    mysql> CALL PQ ('pq', ('{"title":"angry test", "gid":3 }', '{"title":"filter test doc2", "gid":13}'), 1 as docs, 1 as verbose, 1 as query);
+    mysql> CALL PQ ('pq', ('{"title":"angry test", "gid":3 }', '{"title":"filter test doc2", "gid":13}'), 1 AS docs, 1 AS verbose, 1 AS query);
     +------+-----------+-------------+------+-------------------+
     | id   | documents | query       | tags | filters           |
     +------+-----------+-------------+------+-------------------+
@@ -74,8 +74,7 @@ meta-information about the executed prospective search.
 .. _distributed_pq_modes:
 
 Distributed PQ modes
---------------------
-
+~~~~~~~~~~~~~~~~~~~~
 
 CALL PQ transparently works with both local percolate indexes (defined in config under type ``percolate``), and distributed
 indexes consist from local and remote percolate indexes or their combination.
@@ -102,7 +101,7 @@ Each of 'pq' and 'pq1' contains:
 
 .. code-block:: sql
 
-	mysql> select * from pq;
+	mysql> SELECY * FROM pq;
 	+------+-------------+------+-------------------+
 	| id   | query       | tags | filters           |
 	+------+-------------+------+-------------------+
@@ -115,7 +114,7 @@ And you fire ``CALL PQ`` to this index with couple of docs it will return:
 
 .. code-block:: sql
 
-	mysql> CALL PQ ('pq_d2', ('{"title":"angry test", "gid":3 }', '{"title":"filter test doc2", "gid":13}'), 1 as docs);
+	mysql> CALL PQ ('pq_d2', ('{"title":"angry test", "gid":3 }', '{"title":"filter test doc2", "gid":13}'), 1 AS docs);
 	+------+-----------+
 	| id   | documents |
 	+------+-----------+
@@ -131,6 +130,6 @@ On return, head daemon merge results and returns them to you. So, you see same r
 
 ``Sharded`` mode is opposite different. It is suitable when you push relatively small set of documents, but number of stored queries is huge. So, in this case it is more appropriate to store just part of queries on each node, and then unify results returned by applying one and same set of documents. That mode have to be explicitly set, since it implies, first, multiplication of network payload, and also expect different indexes on each of remote agents. Payload multiplication is absolutely useless if your remotes all have one and same index (well, they will answer one and same result, so why send whole set to _each_ of them?).
 
-Note, that query mode (sharded or sparsed) is exclusively logical division, it doesn't reflected anyway in the config. You have to select desirable mode when creating and filling indexes by analysing metrics; may be by initial r&d work.
+Note that query mode (sharded or sparsed) is exclusively logical division, it doesn't reflected anyway in the config. You have to select desirable mode when creating and filling indexes by analysing metrics; may be by initial r&d work.
 
-Note, that syntax of HA mirrors in the config (when several hosts assigned to one ``agent`` line, |-separated) has nothing about this modes. (so, each ``agent`` always represents ONE host node of dpq, despite the number of HA mirrors mentioned for this agent).
+Note that syntax of HA mirrors in the config (when several hosts assigned to one ``agent`` line, | -separated) has nothing about this modes. (so, each ``agent`` always represents ONE host node of dpq, despite the number of HA mirrors mentioned for this agent).

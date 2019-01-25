@@ -41,7 +41,7 @@ If you apply ``DESC`` statement to percolate index it will show the `outer` sche
 
 .. code-block:: mysql
 
- mysql> desc pq;
+ mysql> DESC pq;
  +---------+--------+
  | Field   | Type   |
  +---------+--------+
@@ -56,7 +56,7 @@ Also you can look for a schema for the documents you use to invoke :ref:`CALL PQ
 
 .. code-block:: mysql
 
-  mysql> desc pq table;
+  mysql> DESC pq TABLE;
   +-------+--------+
   | Field | Type   |
   +-------+--------+

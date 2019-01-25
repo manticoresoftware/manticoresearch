@@ -15,7 +15,7 @@ Checking if a document matches any of the predefined criterias (queries) perform
 .. _percolate_query_index:
 
 The percolate index
--------------------
+~~~~~~~~~~~~~~~~~~~
 
 A percolate query works only for ``percolate`` index :ref:`type <type>`.  The percolate index internaly is a modified  Real-Time index
 and shares a similar configuration. The schema provided in config (list of fields and attributes) describes documents which
@@ -71,12 +71,12 @@ The tags  can be returned in the CALL PQ result set.
 
 
 Index schemas
--------------
+~~~~~~~~~~~~~
 
 Usual sphinxql command :ref:`DESCRIBE<describe_syntax>` will reveal you both internal (schema for call pq) and external (schema for select).
 
 Store queries
--------------
+~~~~~~~~~~~~~
 
 Storing queries is done either via usual :ref:`INSERT<insert_and_replace_syntax>` statement, either via http ``json/pq/<idx>/doc`` endpoint.
 Read appropriate sections for syntax details and features.
@@ -85,7 +85,7 @@ Read appropriate sections for syntax details and features.
 .. _percolate_query_list:
 
 List stored queries
--------------------
+~~~~~~~~~~~~~~~~~~~
 
 To list stored queries either use ``SELECT`` statement, or http ``json/search`` endpoint.
 (endpoint ``/json/pq/<index>/search`` is deprecated and will be removed).
@@ -111,10 +111,10 @@ So, you can fire any usual full-scan queries, like
   SELECT * FROM pq;
   SELECT * FROM pq WHERE tags='tags list';
   SELECT * FROM pq WHERE id IN (11,35,101);
-  SELECT * FROM pq WHERE tags any ('foo', 'bar');
-  SELECT * FROM pq WHERE tags not any ('foo', 'bar');
-  SELECT * FROM pq WHERE tags all ('foo', 'bar');
-  SELECT * FROM pq WHERE tags not all ('foo', 'bar');
+  SELECT * FROM pq WHERE tags ANY ('foo', 'bar');
+  SELECT * FROM pq WHERE tags NOT ANY ('foo', 'bar');
+  SELECT * FROM pq WHERE tags ALL ('foo', 'bar');
+  SELECT * FROM pq WHERE tags NOT ALL ('foo', 'bar');
   SELECT * FROM pq LIMIT 1300, 45;
   SELECT * FROM distributed_pq LIMIT 5;
 
@@ -122,7 +122,7 @@ So, you can fire any usual full-scan queries, like
 .. _percolate_query_delete:
 
 Delete queries
---------------
+~~~~~~~~~~~~~~
 
 To delete a stored percolate query(es) in index either use ``DELETE`` statement, http :ref:`json/delete<http_json_delete>` endpoint.
 (also endpoint ``/json/pq/<index>/delete`` works, but avoid to use it)
@@ -131,7 +131,7 @@ To delete a stored percolate query(es) in index either use ``DELETE`` statement,
 
 
     DELETE FROM index_name WHERE id=1;
-    DELETE FROM index_name WHERE tags any ('tags', 'list');
+    DELETE FROM index_name WHERE tags ANY ('tags', 'list');
 
 ``TRUNCATE RTINDEX`` statement can also be used to delete all stored queries:
 
@@ -143,7 +143,7 @@ To delete a stored percolate query(es) in index either use ``DELETE`` statement,
 .. _percolate_query_call:
 
 Search matching queries
------------------------
+~~~~~~~~~~~~~~~~~~~~~~~
 
 That is main purpose of percolate indexes. You provide one or many documents according to internal schema, defined in config, and percolate index gives you matched queries. It may be done either by :ref:`CALL PQ statement <call_pq_syntax>` in sphinxql, or by using http :ref:`json/pq/pq_index/_search<http_percolate_query_search>` endpoint.
 
@@ -153,8 +153,8 @@ To search for queries matching a document(s) the ``CALL PQ`` statement is used w
 .. code-block:: sql
 
 
-    CALL PQ ('index_name', 'single document', 0 as docs, 0 as docs_json, 0 as verbose);
-    CALL PQ ('index_name', ('multiple documents', 'go this way'), 0 as docs_json );
+    CALL PQ ('index_name', 'single document', 0 AS docs, 0 AS docs_json, 0 AS verbose);
+    CALL PQ ('index_name', ('multiple documents', 'go this way'), 0 AS docs_json );
 
 Or via http
 
@@ -178,7 +178,7 @@ It transparently works with :ref:`distributed percolate indexes<distributed_perc
 .. _percolate_query_show_meta:
 
 Meta
-----
+~~~~
 
 Meta information is kept for documents on "CALL PQ" and can be retrieved with ``SHOW META`` call.
 
@@ -236,7 +236,7 @@ Here you see additional entries:
 .. _percolate_query_reconfigure:
 
 Reconfigure
------------
+~~~~~~~~~~~
 
 As well as for RealTime indexes ``ALTER RECONFIGURE`` command is also supported for percolate query index. It allows to reconfigure ``percolate`` index on the fly without deleting
 and repopulating the index with queries back.
@@ -285,7 +285,7 @@ Add `JSON` attribute to the index config ``rt_attr_json = json_data``, then issu
 .. _distributed_percolate_indexes:
 
 Distributed indexes made from percolate locals and/or agents (DPQ indexes)
---------------------------------------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 You can construct a distribute index from several percolate indexes.
 Syntax is absolutely same as for other distributed indexes. It may same way include several :ref:`local<local>` indexes and also several :ref:`agent<agent>`. For ``local`` only noticeable difference is that since percolate indexes doesn't know about kill-lists, this is no difference in which order they're mentioned in distr definition.

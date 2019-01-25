@@ -23,7 +23,7 @@ Expressions are not currently supported in INSERT and values should be
 explicitly specified.
 
 RT index INSERT features
-------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~
 
 ID column is mandatory for RT indexes. Rows with duplicate IDs will
 **not** be overwritten by INSERT; use REPLACE to do that. REPLACE
@@ -36,7 +36,7 @@ values.
 
 
 Percolate index INSERT features
--------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 For percolate indexes INSERT is used to store queries and their meta (id, tags), so the schema is predefined and may include only following
 columns:
@@ -49,6 +49,7 @@ columns:
 All other names for columns are not supported and will fire error.
 
 .. code-block:: sql
+
  INSERT INTO pq (uid, query, filters) VALUES ( 1, 'filter test', 'gid >= 10' )
  INSERT INTO index_name (query) VALUES ( 'full text query terms' );
  INSERT INTO index_name (query, tags, filters) VALUES ( 'full text query terms', 'tags', 'filters' );
@@ -57,6 +58,7 @@ For omited schema ``INSERT`` expects one or two params, first is full-text ``que
 is ``tags``. ``id`` in the case will be auto number, ``filters`` will be empty.
 
 .. code-block:: sql
+
  INSERT INTO index_name VALUES ( 'full text query terms', 'tags');
  INSERT INTO index_name VALUES ( 'full text query terms');
 

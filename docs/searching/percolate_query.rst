@@ -73,7 +73,7 @@ The tags  can be returned in the CALL PQ result set.
 Index schemas
 -------------
 
-Usual sphinxql command ``DESC``
+Usual sphinxql command :ref:`DESCRIBE<describe_syntax>` will reveal you both internal (schema for call pq) and external (schema for select).
 
 Store queries
 -------------

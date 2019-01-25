@@ -29,9 +29,9 @@ index idx1
 	docinfo				= extern
 	dict 				= keywords
 	
-	charset_table 		= noncjk
-	ngram_len		= 1
-	ngram_chars		= cjk 	
+	charset_table 		= non_cjk
+	ngram_len		    = 1
+	ngram_chars		    = cjk 	
 	min_word_len   		= 1
 }
 </config>

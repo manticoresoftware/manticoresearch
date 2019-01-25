@@ -559,7 +559,7 @@ Miscellaneous functions
    Here assumed that index 'test' has string attribute 'tags' with set of words (tags), separated by whitespace.
    If all of the words enumerated as arguments of `ALL()`' present in the attribute, filter matches. Optional 'NOT'
    inverses the logic.
-   For example, attr containing 'buy iphone cheap' will be matched by `ALL('cheap', 'iphone')``, but will not match `ALL('iphone', '5s')``.
+   For example, attr containing 'buy iphone cheap' will be matched by ``ALL('cheap', 'iphone')``, but will not match ``ALL('iphone', '5s')``.
 
    This filter internally uses doc-by-doc matching, so in case of full scan query it might be very slow. It is intended
    originally for attributes which are not indexed, like calculated expressions or tags in pq indexes.

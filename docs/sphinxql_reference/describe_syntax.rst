@@ -30,3 +30,40 @@ and ``mva``. ID column will be typed as ``bigint``. Example:
     4 rows in set (0.00 sec)
 
 An optional LIKE clause is supported. Refer to :ref:`show_meta_syntax` for its syntax details.
+
+
+.. _describe_pq_syntax:
+
+Percolate index schemas
+-----------------------
+
+If you apply ``DESC`` statement to percolate index it will show the `outer` schema which is used to view stored queries. That schema is fixed and same for all local pq indexes:
+
+.. code-block:: mysql
+
+ mysql> desc pq;
+ +---------+--------+
+ | Field   | Type   |
+ +---------+--------+
+ | id      | bigint |
+ | query   | string |
+ | tags    | string |
+ | filters | string |
+ +---------+--------+
+ 4 rows in set (0.00 sec)
+
+Also you can look for a schema for the documents you use to invoke :ref:`CALL PQ<percolate_query_call>`. Add keyword ``table`` to achieve it:
+
+.. code-block:: mysql
+
+  mysql> desc pq table;
+  +-------+--------+
+  | Field | Type   |
+  +-------+--------+
+  | id    | bigint |
+  | title | field  |
+  | gid   | uint   |
+  +-------+--------+
+  3 rows in set (0.00 sec)
+
+Also ``desc pq table like...`` is possible and works as expected.

@@ -2,5 +2,5 @@
 set -e
 # Automatically added by build_xenial, build_trusty
 if [ -x "@SYSCONFDIR@/init.d/manticore" ] || [ -e "@SYSCONFDIR@/init/manticore.conf" ]; then
-	invoke-rc.d manticore stop || exit $?
+	invoke-rc.d manticore stop
 fi

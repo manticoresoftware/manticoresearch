@@ -2,5 +2,5 @@
 set -e
 # Automatically added by build_wheezy, build_jessie
 if [ -x "@SYSCONFDIR@/init.d/manticore" ]; then
-	invoke-rc.d manticore stop || exit $?
+	invoke-rc.d manticore stop
 fi

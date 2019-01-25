@@ -22,6 +22,8 @@ Architecture: any
 Pre-Depends: adduser (>= 3.40)
 Depends: lsb-base, ${misc:Depends}, ${shlibs:Depends}
 Suggests: default-libmysqlclient, libexpat, libpq, libre2, libstemmer, unixodbc
+Replaces: sphinxsearch
+Breaks: sphinxsearch
 Description: High performance full-text search engine
  Manticore Search is a high performance full-text search oriented engine
  with SQL and JSON support. It is a fork of Sphinx Search engine.

@@ -37,6 +37,9 @@ query).
 
 You can also use ``"size"``/``"from"`` synonyms in place of ``"limit"``/``"offset"``.
 
+
+In case the index contains json attributes, they will be injected into output json as inline objects, so you can simple take and work with them (before they were returned as escaped strings, so you had to parse them into json).
+
 Fulltext queries
 """"""""""""""""
 

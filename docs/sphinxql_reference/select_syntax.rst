@@ -597,4 +597,4 @@ Subselects currently have 2 usage cases:
         ORDER by some_attr LIMIT 50000;
 
    In this case, the nodes receive only the inner query and execute. This means the master will receive only *20x10K=200K records*. The master will take all the records received, reorder them by the OUTER clause and return the best 50K records. The  subselect help reducing the traffic between the master and the nodes and also reduce the master's computation time (as it process only 200K instead of 1M).
-   
+

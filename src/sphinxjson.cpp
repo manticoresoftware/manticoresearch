@@ -1290,6 +1290,9 @@ JsonBase_c & JsonBase_c::operator = ( JsonBase_c && rhs )
 {
 	if ( this!=&rhs )
 	{
+		if ( m_pRoot )
+			cJSON_Delete(m_pRoot);
+
 		m_pRoot = rhs.m_pRoot;
 		rhs.m_pRoot = nullptr;
 	}

@@ -287,9 +287,9 @@ Add `JSON` attribute to the index config ``rt_attr_json = json_data``, then issu
 Distributed indexes made from percolate locals and/or agents (DPQ indexes)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-You can construct a distribute index from several percolate indexes.
-Syntax is absolutely same as for other distributed indexes. It may same way include several :ref:`local<local>` indexes and also several :ref:`agent<agent>`. For ``local`` only noticeable difference is that since percolate indexes doesn't know about kill-lists, this is no difference in which order they're mentioned in distr definition.
+You can construct a distributed index from several percolate indexes.
+The syntax is absolutely the same as for other distributed indexes. It can include several :ref:`local<local>` indexes as well as several :ref:`agent<agent>`s. For ``local`` the only noticeable difference is that since percolate indexes don't know about kill-lists there's no difference in which order they're mentioned in a distributed index definition.
 
-For DPQ operations which enumerate stored queries, and also searching (``CALL PQ``) are transparent and works as all indexes are one local index. However, changing statements like ``insert``, ``replace``, ``truncate`` are not working (but this is same for all distributed).
+For DPQ the operations of listing stored queries and searching through them (``CALL PQ``) are transparent and wors as if all the indexes wer one solid local index. However data manipulation statements such as ``insert``, ``replace``, ``truncate`` are not available.
 
-If you mention non-pq index among agents, behaviour will be undefined. (most like, in such case if this erroneous agent has same schema as outer schema of pq (as id, query, tags, filters) - it will not cause query error when enumerating stored data, and so, will polish really stored in pq indexes list by it's own non-pq strings, so be aware the confusion! But 'call pq' to such wrong agent will definitely fire error).
+If you mention a non-pq index among the agents, the behaviour will be undefined. Most likely in case if the erroneous agent has the same schema as the outer schema of the pq index (id, query, tags, filters) - it will not trigger an error when listing stored PQ rules hence may pollute the list of actual PQ rules stored in PQ indexes with it's own non-pq strings, so be aware of the confusion! 'CALL PQ' to such wrong agent will definitely trigger an error.

@@ -88,7 +88,7 @@ public:
 	StoredQuery_i * AddQuery ( const PercolateQueryArgs_t & tArgs, const ISphTokenizer * pTokenizer, CSphDict * pDict, CSphString & sError )
 		REQUIRES (!m_tLock);
 	StoredQuery_i * Query ( const PercolateQueryArgs_t & tArgs, CSphString & sError ) override;
-	bool Commit ( StoredQuery_i * pQuery, CSphString & sError ) override;
+	bool CommitPercolate ( StoredQuery_i * pQuery, CSphString & sError ) final;
 
 	bool Prealloc ( bool bStripPath ) override;
 	void Dealloc () override {}
@@ -1582,7 +1582,7 @@ StoredQuery_i * PercolateIndex_c::AddQuery ( const PercolateQueryArgs_t & tArgs,
 	return pStored;
 }
 
-bool PercolateIndex_c::Commit ( StoredQuery_i * pQuery, CSphString & )
+bool PercolateIndex_c::CommitPercolate ( StoredQuery_i * pQuery, CSphString & )
 {
 	StoredQuery_t * pStored = (StoredQuery_t *)pQuery;
 
@@ -1968,7 +1968,7 @@ void PercolateIndex_c::PostSetup()
 		const ISphTokenizer * pTok = tQuery.m_bQL ? pTokenizer : pTokenizerJson;
 		PercolateQueryArgs_t tArgs ( tQuery );
 		StoredQuery_i * pQuery = AddQuery ( tArgs, pTok, pDict, sError );
-		if ( !pQuery || !Commit ( pQuery, sError ) )
+		if ( !pQuery || !CommitPercolate ( pQuery, sError ) )
 			sphWarning ( "index '%s': %d (id=" UINT64_FMT ") query failed to load, ignoring", m_sIndexName.cstr(), i, tQuery.m_uQUID );
 	}
 

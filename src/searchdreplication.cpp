@@ -1385,7 +1385,7 @@ bool HandleCmdReplicated ( ReplicationCommand_t & tCmd )
 	{
 		sphLogDebugRpl ( "pq-add-commit, index '%s', uid " INT64_FMT, tCmd.m_sIndex.cstr(), tCmd.m_tPQ.m_uQUID );
 
-		bool bOk = pIndex->Commit ( tCmd.m_pStored, sError );
+		bool bOk = pIndex->CommitPercolate ( tCmd.m_pStored, sError );
 		tCmd.m_pStored = nullptr;
 		if ( !bOk )
 		{
@@ -1503,7 +1503,7 @@ bool CommitMonitor_c::Commit ( CSphString & sError )
 	switch ( m_tCmd.m_eCommand )
 	{
 	case RCOMMAND_PQUERY_ADD:
-		bOk = pIndex->Commit ( m_tCmd.m_pStored, sError );
+		bOk = pIndex->CommitPercolate ( m_tCmd.m_pStored, sError );
 		break;
 
 	case RCOMMAND_DELETE:

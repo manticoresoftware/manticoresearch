@@ -1709,41 +1709,41 @@ protected:
 	CSphVector<int>				m_dRemoved;			///< original indexes that are suppressed from the index schema by RemoveStaticAttr()
 
 private:
-	int							ActualLen() const;	///< len of m_pIndexSchema accounting removed stuff
+	int					ActualLen() const;	///< len of m_pIndexSchema accounting removed stuff
 
 public:
-								~CSphRsetSchema() override {}
+						~CSphRsetSchema() override {}
 
-	CSphRsetSchema &			operator = ( const ISphSchema & rhs );
-	CSphRsetSchema &			operator = ( const CSphSchema & rhs );
+	CSphRsetSchema &	operator = ( const ISphSchema & rhs );
+	CSphRsetSchema &	operator = ( const CSphSchema & rhs );
 
-	virtual void				AddAttr ( const CSphColumnInfo & tCol, bool bDynamic );
-	virtual void				AssignTo ( CSphRsetSchema & lhs ) const		{ lhs = *this; }
-	virtual const char *		GetName() const;
-
-public:
-	virtual int					GetRowSize() const;
-	virtual int					GetStaticSize() const;
-	virtual int					GetAttrsCount() const;
-	virtual int					GetFieldsCount() const;
-	virtual int					GetAttrIndex ( const char * sName ) const;
-	virtual const CSphColumnInfo &	GetField ( int iIndex ) const;
-	virtual const CSphVector<CSphColumnInfo> & GetFields () const;
-	virtual const CSphColumnInfo &	GetAttr ( int iIndex ) const;
-	virtual const CSphColumnInfo *	GetAttr ( const char * sName ) const;
-
-	virtual int					GetAttrId_FirstFieldLen() const;
-	virtual int					GetAttrId_LastFieldLen() const;
+	void				AddAttr ( const CSphColumnInfo & tCol, bool bDynamic ) final;
+	void				AssignTo ( CSphRsetSchema & lhs ) const		final { lhs = *this; }
+	const char *		GetName() const final;
 
 public:
-	void						RemoveStaticAttr ( int iAttr );
-	void						Reset();
+	int					GetRowSize() const final;
+	int					GetStaticSize() const final;
+	int					GetAttrsCount() const final;
+	int					GetFieldsCount() const final;
+	int					GetAttrIndex ( const char * sName ) const final;
+	const CSphColumnInfo &	GetField ( int iIndex ) const final;
+	const CSphVector<CSphColumnInfo> & GetFields () const final;
+	const CSphColumnInfo &	GetAttr ( int iIndex ) const final;
+	const CSphColumnInfo *	GetAttr ( const char * sName ) const final;
+
+	int					GetAttrId_FirstFieldLen() const final;
+	int					GetAttrId_LastFieldLen() const final;
+
+public:
+	void				RemoveStaticAttr ( int iAttr );
+	void				Reset();
 
 public:
 	/// swap in a subset of current attributes, with not necessarily (!) unique names
 	/// used to create a network result set (ie. rset to be sent and then discarded)
 	/// WARNING, DO NOT USE THIS UNLESS ABSOLUTELY SURE!
-	virtual void				SwapAttrs ( CSphVector<CSphColumnInfo> & dAttrs );
+	void				SwapAttrs ( CSphVector<CSphColumnInfo> & dAttrs ) final;
 };
 
 //////////////////////////////////////////////////////////////////////////

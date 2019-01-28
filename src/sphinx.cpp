@@ -1346,62 +1346,62 @@ public:
 	explicit					CSphIndex_VLN ( const char* sIndexName, const char * sFilename );
 								~CSphIndex_VLN ();
 
-	virtual int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer );
-	virtual	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn pfnProgress ) { m_tProgress.m_fnProgress = pfnProgress; }
+	int					Build ( const CSphVector<CSphSource*> & dSources, int iMemoryLimit, int iWriteBuffer ) final;
+	void				SetProgressCallback ( CSphIndexProgress::IndexingProgress_fn pfnProgress ) final { m_tProgress.m_fnProgress = pfnProgress; }
 
-	virtual bool				LoadHeader ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, CSphString & sWarning );
+	bool				LoadHeader ( const char * sHeaderName, bool bStripPath, CSphEmbeddedFiles & tEmbeddedFiles, CSphString & sWarning );
 
-	virtual void				DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool bConfig );
-	virtual void				DebugDumpDocids ( FILE * fp );
-	virtual void				DebugDumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
-	virtual void				DebugDumpDict ( FILE * fp );
-	virtual void				SetDebugCheck ();
-	virtual int					DebugCheck ( FILE * fp );
-	template <class Qword> void	DumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
+	void				DebugDumpHeader ( FILE * fp, const char * sHeaderName, bool bConfig ) final;
+	void				DebugDumpDocids ( FILE * fp ) final;
+	void				DebugDumpHitlist ( FILE * fp, const char * sKeyword, bool bID ) final;
+	void				DebugDumpDict ( FILE * fp ) final;
+	void				SetDebugCheck () final;
+	int					DebugCheck ( FILE * fp ) final;
+	template <class Qword> void		DumpHitlist ( FILE * fp, const char * sKeyword, bool bID );
 
-	virtual bool				Prealloc ( bool bStripPath );
-	virtual void				Dealloc ();
-	virtual void				Preread ();
-	virtual void				SetMemorySettings ( bool bMlock, bool bOndiskAttrs, bool bOndiskPool );
+	bool				Prealloc ( bool bStripPath ) final;
+	void				Dealloc () final;
+	void				Preread () final;
+	void				SetMemorySettings ( bool bMlock, bool bOndiskAttrs, bool bOndiskPool ) final;
 
-	virtual void				SetBase ( const char * sNewBase );
-	virtual bool				Rename ( const char * sNewBase );
+	void				SetBase ( const char * sNewBase ) final;
+	bool				Rename ( const char * sNewBase ) final;
 
-	virtual bool				Lock ();
-	virtual void				Unlock ();
+	bool				Lock () final;
+	void				Unlock () final;
 
-	virtual bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const;
-	virtual bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const;
-	virtual bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, CSphString * pError ) const;
-	template <class Qword> bool	DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, bool bFillOnly, CSphString * pError ) const;
-	virtual bool 				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const;
-	virtual void				GetSuggest ( const SuggestArgs_t & tArgs, SuggestResult_t & tRes ) const;
+	bool				MultiQuery ( const CSphQuery * pQuery, CSphQueryResult * pResult, int iSorters, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const final;
+	bool				MultiQueryEx ( int iQueries, const CSphQuery * pQueries, CSphQueryResult ** ppResults, ISphMatchSorter ** ppSorters, const CSphMultiQueryArgs & tArgs ) const final;
+	 bool				GetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, CSphString * pError ) const final;
+	template <class Qword> bool		DoGetKeywords ( CSphVector <CSphKeywordInfo> & dKeywords, const char * szQuery, const GetKeywordsSettings_t & tSettings, bool bFillOnly, CSphString * pError ) const;
+	bool 				FillKeywords ( CSphVector <CSphKeywordInfo> & dKeywords ) const final;
+	void				GetSuggest ( const SuggestArgs_t & tArgs, SuggestResult_t & tRes ) const final;
 
-	virtual bool				Merge ( CSphIndex * pSource, const CSphVector<CSphFilterSettings> & dFilters, bool bMergeKillLists );
+	bool				Merge ( CSphIndex * pSource, const CSphVector<CSphFilterSettings> & dFilters, bool bMergeKillLists ) final;
 
 	template <class QWORDDST, class QWORDSRC>
 	static bool					MergeWords ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, const ISphFilter * pFilter, const CSphVector<SphDocID_t> & dKillList, SphDocID_t uMinID, CSphHitBuilder * pHitBuilder, CSphString & sError, CSphSourceStats & tStat, CSphIndexProgress & tProgress, volatile bool * pLocalStop );
 	static bool					DoMerge ( const CSphIndex_VLN * pDstIndex, const CSphIndex_VLN * pSrcIndex, bool bMergeKillLists, ISphFilter * pFilter, const CSphVector<SphDocID_t> & dKillList, CSphString & sError, CSphIndexProgress & tProgress, volatile bool * pLocalStop, bool bSrcSettings );
 
-	virtual int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError, CSphString & sWarning );
-	virtual bool				SaveAttributes ( CSphString & sError ) const;
-	virtual DWORD				GetAttributeStatus () const;
+	int					UpdateAttributes ( const CSphAttrUpdate & tUpd, int iIndex, CSphString & sError, CSphString & sWarning ) final;
+	bool				SaveAttributes ( CSphString & sError ) const final;
+	DWORD				GetAttributeStatus () const final;
 
-	virtual bool				AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError );
+	bool				AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttrName, ESphAttr eAttrType, CSphString & sError ) final;
 
-	bool						EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const;
+	bool				EarlyReject ( CSphQueryContext * pCtx, CSphMatch & tMatch ) const final;
 
-	virtual void				SetKeepAttrs ( const CSphString & sKeepAttrs, const StrVec_t & dAttrs ) { m_sKeepAttrs = sKeepAttrs; m_dKeepAttrs = dAttrs; }
+	void				SetKeepAttrs ( const CSphString & sKeepAttrs, const StrVec_t & dAttrs ) final { m_sKeepAttrs = sKeepAttrs; m_dKeepAttrs = dAttrs; }
 
-	virtual SphDocID_t *		GetKillList () const;
-	virtual int					GetKillListSize () const;
-	virtual bool				HasDocid ( SphDocID_t uDocid ) const;
+	SphDocID_t *		GetKillList () const final;
+	int					GetKillListSize () const final;
+	bool				HasDocid ( SphDocID_t uDocid ) const final;
 
-	virtual const CSphSourceStats &		GetStats () const { return m_tStats; }
-	virtual int64_t *					GetFieldLens() const { return m_tSettings.m_bIndexFieldLens ? m_dFieldLens.begin() : nullptr; }
-	virtual void				GetStatus ( CSphIndexStatus* ) const;
-	virtual bool 				BuildDocList ( SphAttr_t ** ppDocList, int64_t * pCount, CSphString * pError ) const;
-	virtual bool				ReplaceKillList ( const SphDocID_t * pKillist, int iCount );
+	const CSphSourceStats &		GetStats () const final { return m_tStats; }
+	int64_t *			GetFieldLens() const final { return m_tSettings.m_bIndexFieldLens ? m_dFieldLens.begin() : nullptr; }
+	void				GetStatus ( CSphIndexStatus* ) const final;
+	bool 				BuildDocList ( SphAttr_t ** ppDocList, int64_t * pCount, CSphString * pError ) const final;
+	bool				ReplaceKillList ( const SphDocID_t * pKillist, int iCount ) final;
 
 private:
 
@@ -20109,26 +20109,26 @@ struct CSphTemplateDictTraits : CSphDict
 {
 	CSphTemplateDictTraits ();
 protected:
-	virtual				~CSphTemplateDictTraits ();
+				~CSphTemplateDictTraits () override;
 
 public:
-	virtual void		LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer, bool bStripFile ) override;
-	virtual void		LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) override;
-	virtual void		WriteStopwords ( CSphWriter & tWriter ) const;
-	virtual bool		LoadWordforms ( const StrVec_t & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex );
-	virtual void		WriteWordforms ( CSphWriter & tWriter ) const;
-	virtual const CSphWordforms *	GetWordforms() { return m_pWordforms; }
-	virtual void		DisableWordforms() { m_bDisableWordforms = true; }
-	virtual int			SetMorphology ( const char * szMorph, CSphString & sMessage );
-	virtual bool		HasMorphology() const;
-	virtual void		ApplyStemmers ( BYTE * pWord ) const;
+	void		LoadStopwords ( const char * sFiles, const ISphTokenizer * pTokenizer, bool bStripFile ) final;
+	void		LoadStopwords ( const CSphVector<SphWordID_t> & dStopwords ) final;
+	void		WriteStopwords ( CSphWriter & tWriter ) const final;
+	bool		LoadWordforms ( const StrVec_t & dFiles, const CSphEmbeddedFiles * pEmbedded, const ISphTokenizer * pTokenizer, const char * sIndex ) final;
+	void		WriteWordforms ( CSphWriter & tWriter ) const final;
+	const CSphWordforms *	GetWordforms() final { return m_pWordforms; }
+	void		DisableWordforms() final { m_bDisableWordforms = true; }
+	int			SetMorphology ( const char * szMorph, CSphString & sMessage ) final;
+	bool		HasMorphology() const final;
+	void		ApplyStemmers ( BYTE * pWord ) const final;
 
-	virtual void		Setup ( const CSphDictSettings & tSettings ) { m_tSettings = tSettings; }
-	virtual const CSphDictSettings & GetSettings () const { return m_tSettings; }
-	virtual const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () const { return m_dSWFileInfos; }
-	virtual const CSphVector <CSphSavedFile> & GetWordformsFileInfos () const { return m_dWFFileInfos; }
-	virtual const CSphMultiformContainer * GetMultiWordforms () const;
-	virtual uint64_t	GetSettingsFNV () const;
+	void		Setup ( const CSphDictSettings & tSettings ) final { m_tSettings = tSettings; }
+	const CSphDictSettings & GetSettings () const final { return m_tSettings; }
+	const CSphVector <CSphSavedFile> & GetStopwordsFileInfos () const final { return m_dSWFileInfos; }
+	const CSphVector <CSphSavedFile> & GetWordformsFileInfos () const final { return m_dWFFileInfos; }
+	const CSphMultiformContainer * GetMultiWordforms () const final;
+	uint64_t	GetSettingsFNV () const final;
 	static void			SweepWordformContainers ( const CSphVector<CSphSavedFile> & dFiles );
 
 protected:
@@ -20146,7 +20146,7 @@ protected:
 	int					ParseMorphology ( const char * szMorph, CSphString & sError );
 	SphWordID_t			FilterStopword ( SphWordID_t uID ) const;	///< filter ID against stopwords list
 	CSphDict *			CloneBase ( CSphTemplateDictTraits * pDict ) const;
-	virtual bool		HasState () const;
+	bool				HasState () const final;
 
 	bool				m_bDisableWordforms;
 
@@ -24852,14 +24852,14 @@ class CSphFieldRegExps : public ISphFieldFilter
 protected:
 	~CSphFieldRegExps() override;
 public:
-							CSphFieldRegExps () = default;
-							CSphFieldRegExps ( const StrVec_t& m_dRegexps, CSphString &	sError );
+						CSphFieldRegExps () = default;
+						CSphFieldRegExps ( const StrVec_t& m_dRegexps, CSphString &	sError );
 
-	virtual	int				Apply ( const BYTE * sField, int iLength, CSphVector<BYTE> & dStorage, bool );
-	virtual	void			GetSettings ( CSphFieldFilterSettings & tSettings ) const;
-	ISphFieldFilter *		Clone();
+	int					Apply ( const BYTE * sField, int iLength, CSphVector<BYTE> & dStorage, bool ) final;
+	void				GetSettings ( CSphFieldFilterSettings & tSettings ) const final;
+	ISphFieldFilter *	Clone() final;
 
-	bool					AddRegExp ( const char * sRegExp, CSphString & sError );
+	bool				AddRegExp ( const char * sRegExp, CSphString & sError );
 
 private:
 	struct RegExp_t

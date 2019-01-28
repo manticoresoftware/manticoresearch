@@ -106,10 +106,12 @@ public:
 	virtual int		DeleteQueries ( const char * sTags ) = 0;
 
 	virtual StoredQuery_i * Query ( const PercolateQueryArgs_t & tArgs, CSphString & sError ) = 0;
-	virtual bool	Commit ( StoredQuery_i * pQuery, CSphString & sError ) = 0;
+
+	// ISphRtIndex already has Commit with another signature, so let it be CommitPercolate
+	virtual bool	CommitPercolate ( StoredQuery_i * pQuery, CSphString & sError ) = 0;
 
 	virtual void	GetQueries ( const char * sFilterTags, bool bTagsEq, const CSphFilterSettings * pUID, int iOffset, int iLimit, CSphVector<PercolateQueryDesc> & dQueries ) = 0;
-	virtual bool	IsPQ() const override { return true; }
+	bool	IsPQ() const override { return true; }
 };
 
 /// percolate query index factory

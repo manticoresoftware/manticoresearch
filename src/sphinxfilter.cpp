@@ -183,7 +183,7 @@ struct Filter_SingleValue : public IFilter_Attr
 #ifndef NDEBUG
 	void SetValues ( const SphAttr_t * pStorage, int iCount ) final
 #else
-	virtual void SetValues ( const SphAttr_t * pStorage, int )
+	void SetValues ( const SphAttr_t * pStorage, int ) final
 #endif
 	{
 		assert ( pStorage );

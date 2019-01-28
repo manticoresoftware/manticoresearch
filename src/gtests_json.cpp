@@ -276,8 +276,8 @@ TEST_F ( TJson, accessor )
 //	auto pMembers = dBson->ChildByPath ( "query.percolate.documents" );
 //	auto dQuery = (*dBson)["percolate"];
 //	auto dDoc = (*dQuery)["documeht"];
-	auto dTitle = Bson_c ( dDocs ).ChildByPath ( "title" );
-	auto dTitle1 = Bson_c ( dDocs ).ChildByName ( "title" );
+	auto VARIABLE_IS_NOT_USED dTitle = Bson_c ( dDocs ).ChildByPath ( "title" );
+	auto VARIABLE_IS_NOT_USED dTitle1 = Bson_c ( dDocs ).ChildByName ( "title" );
 
 	ASSERT_TRUE (true);
 }
@@ -1200,7 +1200,7 @@ TEST ( bench, DISABLED_custom_tolower )
 	x[192] = '\0';
 	l[192] = '\0';
 
-	char result[193];
+	char VARIABLE_IS_NOT_USED result[193];
 
 	auto iTimeSpan = -sphMicroTimer ();
 	for ( auto i = 0; i<uLoops; ++i )

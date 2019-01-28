@@ -23303,7 +23303,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 		auto uLimit = ( rlim_t ) hSearchd["max_open_files"].intval ();
 		bool bMax = hSearchd["max_open_files"].strval ()=="max";
 		if ( !uLimit && !bMax )
-			sphWarning ( "max_open_files is %lu, expected positive value; ignored", uLimit );
+			sphWarning ( "max_open_files is %d, expected positive value; ignored", (int) uLimit );
 		else
 		{
 			struct rlimit dRlimit;
@@ -23316,10 +23316,10 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 					uLimit = dRlimit.rlim_max;
 				dRlimit.rlim_cur = Min ( dRlimit.rlim_max, uLimit );
 				if ( 0!=setrlimit ( RLIMIT_NOFILE, &dRlimit ) )
-					sphWarning ( "Failed to setrlimit on %lu, error %d: %s", uLimit, errno, strerrorm ( errno ) );
+					sphWarning ( "Failed to setrlimit on %d, error %d: %s", (int)uLimit, errno, strerrorm ( errno ) );
 				else
-					sphInfo ( "Set max_open_files to %lu (previous was %lu), hardlimit is %lu.",
-						uLimit, uPrevLimit, dRlimit.rlim_max );
+					sphInfo ( "Set max_open_files to %d (previous was %d), hardlimit is %d.",
+						(int)uLimit, (int)uPrevLimit, (int)dRlimit.rlim_max );
 			}
 		}
 #else

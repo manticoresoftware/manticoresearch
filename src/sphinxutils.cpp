@@ -2467,9 +2467,12 @@ static void * g_pBacktraceAddresses [SPH_BACKTRACE_ADDR_COUNT];
 static char g_pBacktrace[4096];
 static const char g_sSourceTail[] = "> source.txt\n";
 static const char * g_pArgv[128] = { "addr2line", "-e", "./searchd", "0x0", NULL };
-static char g_sNameBuf[512] = {0};
 static CSphString g_sBinaryName;
 static bool g_bHaveJemalloc = true;
+
+#if HAVE_SYS_PRCTL_H
+static char g_sNameBuf[512] = {0};
+#endif
 
 bool IsDebuggerPresent()
 {

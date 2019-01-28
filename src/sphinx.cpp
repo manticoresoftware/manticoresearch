@@ -6768,6 +6768,25 @@ void CSphWriter::Tag ( const char * sTag )
 }
 
 
+static bool SeekAndWarn ( int iFD, SphOffset_t iPos, const char* sWarnPrefix )
+{
+	assert ( sWarnPrefix );
+	auto iSeek = sphSeek ( iFD, iPos, SEEK_SET );
+	if ( iSeek!=iPos )
+	{
+		if ( iSeek<0 )
+			sphWarning ( "%s : seek error. Error: %d '%s'", sWarnPrefix, errno, strerrorm (errno));
+		else
+			sphWarning ( "%s : seek error. Expected: " INT64_FMT ", got " INT64_FMT,
+				sWarnPrefix, (int64_t) iPos, (int64_t) iSeek );
+		return false;
+	}
+
+	assert ( iSeek==iPos );
+	return true;
+}
+
+
 void CSphWriter::SeekTo ( SphOffset_t iPos )
 {
 	assert ( iPos>=0 );
@@ -6780,14 +6799,7 @@ void CSphWriter::SeekTo ( SphOffset_t iPos )
 	} else
 	{
 		assert ( iPos<m_iWritten ); // seeking forward in a writer, we don't support it
-		auto uSeek = sphSeek ( m_iFD, iPos, SEEK_SET );
-		if ( uSeek!=iPos )
-		{
-			if ( uSeek<0 )
-				sphWarning ( "CSphWriter::SeekTo seek error. Error: %d '%s'", errno, strerrorm ( errno ) );
-			else
-				sphWarning ( "CSphWriter::SeekTo seek error. Expected: %zd, got %zd", iPos, uSeek );
-		}
+		SeekAndWarn ( m_iFD, iPos, "CSphWriter::SeekTo" );
 
 		// seeking outside the buffer; so the buffer must be discarded
 		// also, current write position must be adjusted
@@ -7395,13 +7407,8 @@ int CSphBin::ReadByte ()
 	{
 		if ( *m_pFilePos!=m_iFilePos )
 		{
-			auto uSeek = sphSeek ( m_iFile, m_iFilePos, SEEK_SET );
-			if ( uSeek!=m_iFilePos )
+			if ( !SeekAndWarn ( m_iFile, m_iFilePos, "CSphBin::ReadBytes" ) )
 			{
-				if ( uSeek<0 )
-					sphWarning ( "CSphBin::ReadBytes : failed seek. Error: %d '%s'", errno, strerrorm ( errno ) );
-				else
-					sphWarning ( "CSphBin::ReadBytes : failed seek. Expected: %zd, got %zd", m_iFilePos, uSeek );
 				m_bError = true;
 				return BIN_READ_ERROR;
 			}
@@ -7457,17 +7464,12 @@ ESphBinRead CSphBin::ReadBytes ( void * pDest, int iBytes )
 	{
 		if ( *m_pFilePos!=m_iFilePos )
 		{
-			auto uSeek = sphSeek ( m_iFile, m_iFilePos, SEEK_SET );
-			if ( uSeek!=m_iFilePos )
+			if ( !SeekAndWarn ( m_iFile, m_iFilePos, "CSphBin::ReadBytes" ))
 			{
-				if ( uSeek<0 )
-					sphWarning ( "CSphBin::ReadBytes : failed seek. Error: %d '%s'", errno, strerrorm ( errno ) );
-				else
-					sphWarning ( "CSphBin::ReadBytes : failed seek. Expected: %zd, got %zd", m_iFilePos, uSeek );
 				m_bError = true;
 				return BIN_READ_ERROR;
 			}
-			*m_pFilePos = uSeek;
+			*m_pFilePos = m_iFilePos;
 		}
 
 		int n = Min ( m_iFileLeft, m_iSize - m_iLeft );
@@ -7671,13 +7673,8 @@ ESphBinRead CSphBin::Precache ()
 
 	if ( *m_pFilePos!=m_iFilePos )
 	{
-		auto uSeek = sphSeek ( m_iFile, m_iFilePos, SEEK_SET );
-		if ( uSeek!=m_iFilePos )
+		if ( !SeekAndWarn ( m_iFile, m_iFilePos, "CSphBin::Precache" ))
 		{
-			if ( uSeek<0 )
-				sphWarning ( "CSphBin::Precache : failed seek. Error: %d '%s'", errno, strerrorm ( errno ) );
-			else
-				sphWarning ( "CSphBin::Precache : failed seek. Expected: %zd, got %zd", m_iFilePos, uSeek );
 			m_bError = true;
 			return BIN_PRECACHE_ERROR;
 		}
@@ -11225,16 +11222,8 @@ bool CSphIndex_VLN::RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSi
 
 	for ( int i = 0; i < nTransfers; i++ )
 	{
-		auto uSeek = sphSeek ( iFile, iBlockStart + uTotalRead, SEEK_SET );
-		if ( uSeek !=iBlockStart + uTotalRead )
-		{
-			if ( uSeek<0 )
-				sphWarning ( "block relocation: failed seek. Error: %d '%s'", errno, strerrorm ( errno ) );
-			else
-				sphWarning ( "block relocation: failed seek. Expected: %zd, got %zd", iBlockStart + uTotalRead, uSeek );
+		if ( !SeekAndWarn ( iFile, iBlockStart + uTotalRead, "block relocation" ))
 			return false;
-		}
-
 
 		int iToRead = i==nTransfers-1 ? (int)( iBlockLeft % iRelocationSize ) : iRelocationSize;
 		size_t iRead = sphReadThrottled ( iFile, pBuffer, iToRead );
@@ -11244,15 +11233,9 @@ bool CSphIndex_VLN::RelocateBlock ( int iFile, BYTE * pBuffer, int iRelocationSi
 			return false;
 		}
 
-		uSeek = sphSeek ( iFile, *pFileSize, SEEK_SET );
-		if ( uSeek!=*pFileSize )
-		{
-			if ( uSeek<0 )
-				sphWarning ( "block relocation: failed seek. Error: %d '%s'", errno, strerrorm ( errno ) );
-			else
-				sphWarning ( "block relocation: failed seek. Expected: %zd, got %zd", *pFileSize, uSeek );
+		if ( !SeekAndWarn ( iFile, *pFileSize, "block relocation" ))
 			return false;
-		}
+
 		uTotalRead += iToRead;
 
 		if ( !sphWriteThrottled ( iFile, pBuffer, iToRead, "block relocation", m_sLastError ) )
@@ -11695,15 +11678,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			iHitsGap = (SphOffset_t)( iHitsMax*HIT_BLOCK_FACTOR*HIT_SIZE_AVG );
 
 		iHitsGap = Max ( iHitsGap, 1 );
-		auto uSeek = sphSeek ( fdHits.GetFD (), iHitsGap, SEEK_SET );
-		if ( uSeek!=iHitsGap )
-		{
-			if ( uSeek<0 )
-				m_sLastError.SetSprintf ( "CSphIndex_VLN::Build: failed seek. Error: %d '%s'", errno, strerrorm ( errno ) );
-			else
-				m_sLastError.SetSprintf ( "CSphIndex_VLN::Build: failed seek. Expected: %zd, got %zd", iHitsGap, uSeek );
+		if ( !SeekAndWarn ( fdHits.GetFD (), iHitsGap, "CSphIndex_VLN::Build" ))
 			return 0;
-		}
 
 		if ( m_iDocinfoGap )
 			iDocinfosGap = (SphOffset_t) m_iDocinfoGap;
@@ -11711,17 +11687,8 @@ int CSphIndex_VLN::Build ( const CSphVector<CSphSource*> & dSources, int iMemory
 			iDocinfosGap = (SphOffset_t)( iDocinfoMax*DOCINFO_BLOCK_FACTOR*iDocinfoStride*sizeof(DWORD) );
 
 		iDocinfosGap = Max ( iDocinfosGap, 1 );
-		uSeek = sphSeek ( fdDocinfos.GetFD (), iDocinfosGap, SEEK_SET );
-		if ( uSeek!=iDocinfosGap )
-		{
-			if ( uSeek<0 )
-				m_sLastError.SetSprintf ( "CSphIndex_VLN::Build: failed seek. Error: %d '%s'",
-					errno, strerrorm ( errno ) );
-			else
-				m_sLastError.SetSprintf ( "CSphIndex_VLN::Build: failed seek. Expected: %zd got %zd",
-					iDocinfosGap, uSeek );
+		if ( !SeekAndWarn ( fdDocinfos.GetFD (), iDocinfosGap, "CSphIndex_VLN::Build" ))
 			return 0;
-		}
 	}
 
 	if ( !sphLockEx ( fdLock.GetFD(), false ) )

@@ -13,6 +13,7 @@ CALL PQ statement performs a prospective search. It returns stored queries from 
 documents from provided``data``. For more information, see :ref:`Percolate Query <percolate_query>` section.
 
 ``data`` can be:
+
 * a document in plain text
 * a JSON object containing a document
 * a JSON array of JSON documents
@@ -141,4 +142,4 @@ On return, the head daemon merges results and returns them to you. So you see th
 
 Note that the query mode (sharded or sparsed) cannot be specified in the config. You have to choose the desired mode when creating and filling PQ indexes by analysing metrics. Some research may be required to make sure you benefit from either of the modes.
 
-Note that the syntax of HA mirrors in the config (when several hosts are assigned to one ``agent`` line, separated with |) has nothing to do with the CALL PQ query mode. (so each ``agent`` always represents ONE host node of dpq despite of the number of HA mirrors specified for this agent).
+Note that the syntax of HA mirrors in the config (when several hosts are assigned to one ``agent`` line, separated with | ) has nothing to do with the CALL PQ query mode. (so each ``agent`` always represents ONE host node of dpq despite of the number of HA mirrors specified for this agent).

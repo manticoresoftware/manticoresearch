@@ -37,7 +37,7 @@ An optional LIKE clause is supported. Refer to :ref:`show_meta_syntax` for its s
 Percolate index schemas
 -----------------------
 
-If you apply ``DESC`` statement to percolate index it will show the `outer` schema which is used to view stored queries. That schema is fixed and same for all local pq indexes:
+If you apply ``DESC`` statement to a percolate index it will show the `outer` schema which is used to view the stored queries. That schema is fixed and the same for all local pq indexes:
 
 .. code-block:: mysql
 
@@ -52,7 +52,7 @@ If you apply ``DESC`` statement to percolate index it will show the `outer` sche
  +---------+--------+
  4 rows in set (0.00 sec)
 
-Also you can look for a schema for the documents you use to invoke :ref:`CALL PQ<percolate_query_call>`. Add keyword ``table`` to achieve it:
+If you're looking for an expected document schema use ``DESC <pq index name> table``:
 
 .. code-block:: mysql
 
@@ -66,4 +66,4 @@ Also you can look for a schema for the documents you use to invoke :ref:`CALL PQ
   +-------+--------+
   3 rows in set (0.00 sec)
 
-Also ``desc pq table like...`` is possible and works as expected.
+Also ``desc pq table like ...`` is possible and works as expected.

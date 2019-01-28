@@ -1556,13 +1556,13 @@ Example:
     local = chunk2
 
 
-The same may be written in one line:
+The same can be written in one line:
 
 .. code-block:: ini
 
     local = chunk1,chunk2
 
-(all 'local' records will be read left-to-right, up-to-down, all mentioned indexes will be merged into one big list, and so, this is no difference whether you enum them in one 'local' line, or distribute to several lines).
+(all 'local' records will be read left-to-right, top-to-bottom and all the indexes will be merged into one big list. So there is is no difference whether you list them in one 'local' line or distribute to several lines).
 
 .. _max_substring_len:
 

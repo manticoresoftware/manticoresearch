@@ -38,31 +38,31 @@ values.
 Percolate index INSERT features
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-For percolate indexes INSERT is used to store queries and their meta (id, tags), so the schema is predefined and may include only following
+For percolate indexes INSERT is used to store queries (aka PQ rules) and their meta (id, tags), so the schema is predefined and may include only the following
 columns:
 
- * ``id`` or ``uid`` - numeric id of stored query (if omited, will be assigned automatically)
+ * ``id`` - numeric id of stored query (if omited, will be assigned automatically)
  * ``query`` - full-text query to store
  * ``filters`` - filters to store (without ``query`` will define the full query as full-scan)
  * ``tags`` - string with one or many comma-separated tags, which may be used to selectively show/delete saved queries.
 
-All other names for columns are not supported and will fire error.
+All other names for columns are not supported and will trigger an error.
 
 .. code-block:: sql
 
- INSERT INTO pq (uid, query, filters) VALUES ( 1, 'filter test', 'gid >= 10' )
+ INSERT INTO pq (id, query, filters) VALUES ( 1, 'filter test', 'gid >= 10' )
  INSERT INTO index_name (query) VALUES ( 'full text query terms' );
  INSERT INTO index_name (query, tags, filters) VALUES ( 'full text query terms', 'tags', 'filters' );
 
-For omited schema ``INSERT`` expects one or two params, first is full-text ``query``, and second (optional)
-is ``tags``. ``id`` in the case will be auto number, ``filters`` will be empty.
+In case of omitted schema ``INSERT`` expects one or two params, first is full-text ``query``, and second (optional)
+is ``tags``. ``id`` in this case will be generated automatically (maximum current id in the index + 1), ``filters`` will be empty.
 
 .. code-block:: sql
 
  INSERT INTO index_name VALUES ( 'full text query terms', 'tags');
  INSERT INTO index_name VALUES ( 'full text query terms');
 
-Into percolate index you can insert only 1 row a time, multiple rows as for RT are not allowed.
+You can insert only 1 row a time into a percolate index, multiple rows as for RT are not allowed yet.
 
 Also, you can insert values only into local percolate index. Distributed percolate (i.e. distributed index built from percolate agents/locals) is not
-supported.
+supported for INSERTs yet.

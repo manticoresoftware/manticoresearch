@@ -12,10 +12,15 @@ CALL PQ syntax
 CALL PQ statement performs a prospective search. It returns stored queries from a ``percolate``index that match
 documents from provided``data``. For more information, see :ref:`Percolate Query <percolate_query>` section.
 
-``data`` can be a document in plain text, a JSON object containing a document or a list of documents in one of the
-two formats. The JSON object can contain pairs of text field names and values as well as attribute names and values.
+``data`` can be:
+* a document in plain text
+* a JSON object containing a document
+* a JSON array of JSON documents
+* a list of any of the above (JSON and plain text documents cannot be mixed)
 
-Example:
+The JSON object can contain pairs of text field names and values as well as attribute names and values.
+
+Examples:
 
 .. code-block:: sql
 
@@ -27,26 +32,30 @@ Example:
 	                          '{"title":"second document","content":"Add more content here","category":20,"timestamp":1513758240}'
 	                        )
 	 );
+ CALL PQ ('pq_sina', '[
+	{"title":"first document","content":"Add your content here","category":10,"timestamp":1513725448}, 
+	{"title":"second document","content":"Add more content here","category":20,"timestamp":1513758240}
+ ]')
 
 
 
 A number of options can be set:
 
--  ``docs`` - 0 (default disabled), provide numbers of matched documents (order or document ids)
--  ``docs_id`` - none (disabled), id alias name, to treat ``JSON`` named field as document id (has sense only with docs=1)
--  ``docs_json`` - 1 ( default enabled), specify if the ``data`` provides document(s) as raw string or encapsulated as JSON object apart alone objects you can also provide array of them, using json array syntax [{...},{...},...].
--  ``mode`` - none (default 'sparsed'), provide a way how to distribute provided docs among members of distributed indexes. Available values are 'sparsed' and 'sharded'. Details described below in :ref:`Distributed PQ modes<distributed_pq_modes>` section.
--  ``query`` - 0 (default disabled), if true returns all information of matched stored query, otherwise it returns just the stored query ID.
--  ``skip_bad_json`` - 0 (default disabled), manages what is to do if json document is broken: either immediately stop
-   with error message, either just skip it and continue to process the rest of documents.
--  ``shift`` - 0, provide number which will be added to document ids if no ``docs_id`` fields provided. Has sense mainly to support :ref:`Distributed PQ modes<distributed_pq_modes>`.
--  ``verbose`` - 0 (default disabled), provide extended info in :ref:`SHOW META <percolate_query_show_meta>`
+-  ``docs`` - 0 (disabled by default), provides numbers of matched documents (in accordance with the order in the CALL PQ or document ids if docs_id is used)
+-  ``docs_id`` - none (disabled by default), defines document id alias name from the JSON object to consider that as a document id (makes sense only with docs=1)
+-  ``docs_json`` - 1 (enabled by default), specifies if the ``data`` provides document(s) as a raw string or as a JSON object. Besides single objects you can also provide array of them, using json array syntax [{...},{...},...].
+-  ``mode`` - none ('sparsed' by default), specifies how to distribute provided docs among members of distributed indexes. Available values are 'sparsed' and 'sharded'. The details are described below in :ref:`Distributed PQ modes<distributed_pq_modes>` section.
+-  ``query`` - 0 (disabled by default), if true returns all information of matched stored queries, otherwise it returns just the stored query IDs.
+-  ``skip_bad_json`` - 0 (disabled by default), specifies what to do if json document is broken: either immediately stop
+   with an error message or just skip it and continue to process the rest of the documents.
+-  ``shift`` - 0 by default, defines the number which will be added to document ids if no ``docs_id`` fields provided. Makes sense mainly to support :ref:`Distributed PQ modes<distributed_pq_modes>`.
+-  ``verbose`` - 0 (disabled by default), provides extended info in :ref:`SHOW META <percolate_query_show_meta>`
 
 
 The output of ``CALL PQ``  return the following columns:
 
 * id  - the id of the stored query
-* documents -  if ``docs_id`` is not set, it will return the index of the documents as defined at input. If ``docs_id`` is set, the document indexes as replaced with the values of the field defined by ``docs_id``
+* documents -  if ``docs_id`` is not set, it will return indexes of the documents as defined at input. If ``docs_id`` is set, the document indexes will be replaced with the values of the field defined by ``docs_id``
 * query -  the stored full text query
 * tags -  the tags attached to the stored query
 * filters -  the filters attached to the stored query
@@ -77,16 +86,16 @@ Distributed PQ modes
 ~~~~~~~~~~~~~~~~~~~~
 
 CALL PQ transparently works with both local percolate indexes (defined in config under type ``percolate``), and distributed
-indexes consist from local and remote percolate indexes or their combination.
+indexes consisting of local and remote percolate indexes or their combination.
 
 However, for more effective work you can organize your distributed indexes using two different approaches:
 
- 1. ``Sparsed``. Bunch of docs you attaches to ``CALL PQ`` will be divided to parts according to number of agents, so each of the hosts will take and process only piece of your request. To distinguish between the pieces each agent will also receive param ``shift``.
- 2. ``Sharded``. Whole ``CALL PQ`` just broadcasted to all agents, without any initial division.
+ 1. ``Sparsed``. Batch of documents you pass in ``CALL PQ`` will be split into parts according to the number of agents, so each of the nodes will receive and process only a part of the documents from your request. To distinguish between the parts each agent will also receive param ``shift``.
+ 2. ``Sharded``. The whole ``CALL PQ`` will be just broadcasted to all agents, without any initial documents split.
 
-``Sparsed`` mode is suitable when your set of documents you send to ``call pq`` is quite big, but set of queries stored in pq index is quite small. Knowing that all hosts are mirrors, manticore will divide your set of documents and distribute chunks among mirrors. On finishing it will collect and unite all results and return final queryset as if it is come from one solid index.
+``Sparsed`` will be beneficial when your set of documents you send to ``call pq`` is quite big, but the set of queries stored in pq index is quite small. Assuming that all the hosts are mirrors  Manticore will split your set of documents and distribute the chunks among the mirrors. Once the agents are done with the queries it will collect and merge all the results and return final query set as if it comes from one solid index.
 
-Say, you have index ``pq_d2`` which defined in config as
+Let's assume you have index ``pq_d2`` which is defined in config as
 
 .. code-block:: ini
 
@@ -110,7 +119,7 @@ Each of 'pq' and 'pq1' contains:
 	+------+-------------+------+-------------------+
 	2 rows in set (0.01 sec)
 
-And you fire ``CALL PQ`` to this index with couple of docs it will return:
+And you fire ``CALL PQ`` to the distributed index with a couple of docs. It will return:
 
 .. code-block:: sql
 
@@ -122,14 +131,14 @@ And you fire ``CALL PQ`` to this index with couple of docs it will return:
 	|    2 | 1         |
 	+------+-----------+
 
-In ``sparsed`` mode head deamon (one to which you connect and invoke ``CALL PQ``) will divide incoming bunch of docs to agents: '{"title":"angry test", "gid":3 }' will come to the first, and '{"title":"filter test doc2", "gid":13}, 1 as shift' to the second. So, each of agents get only half of all parameters.
+In ``sparsed`` mode the head search deamon (the one to which you connect and invoke ``CALL PQ``) will distribute the incoming batch of docs among the agents: '{"title":"angry test", "gid":3 }' will be sent to the first, and '{"title":"filter test doc2", "gid":13}, 1 as shift' to the second. So each of agents gets only half of all the documents.
 
-They process statement and return result back to the head. If documents don't contain explicitly defined ``docs_id`` field, each agent, in advance, will add value of ``shift`` to calculated docid values.
+They then process the statements and return the results back to the head. If the documents don't contain explicitly defined ``docs_id`` field, each agent in advance will add the value of ``shift`` to the calculated docid values.
 
-On return, head daemon merge results and returns them to you. So, you see same result if you invoke ``CALL PQ`` to single local pq index, but actually work was distributed and each node made half of it.
+On return, the head daemon merges results and returns them to you. So you see the same result as if you invoked ``CALL PQ`` to a single local pq index, but actually the work was distributed and each node made half of that.
 
-``Sharded`` mode is opposite different. It is suitable when you push relatively small set of documents, but number of stored queries is huge. So, in this case it is more appropriate to store just part of queries on each node, and then unify results returned by applying one and same set of documents. That mode have to be explicitly set, since it implies, first, multiplication of network payload, and also expect different indexes on each of remote agents. Payload multiplication is absolutely useless if your remotes all have one and same index (well, they will answer one and same result, so why send whole set to _each_ of them?).
+``Sharded`` mode is beneficial when you push relatively small set of documents, but the number of stored queries is huge. So in this case it is more appropriate to store just part of PQ rules on each node and then merge the results returned from the nodes that process one and the same set of documents against different sets of PQ rules. This mode has to be explicitly set since first of all it implies multiplication of network payload and secondly it expects different indexes in terms of PQ rules in each of the remote agents. The payload multiplication is absolutely useless if your remotes all have one and the same index (well, they will answer one and the same result, so why sending the whole set to _each_ of them?).
 
-Note that query mode (sharded or sparsed) is exclusively logical division, it doesn't reflected anyway in the config. You have to select desirable mode when creating and filling indexes by analysing metrics; may be by initial r&d work.
+Note that the query mode (sharded or sparsed) cannot be specified in the config. You have to choose the desired mode when creating and filling PQ indexes by analysing metrics. Some research may be required to make sure you benefit from either of the modes.
 
-Note that syntax of HA mirrors in the config (when several hosts assigned to one ``agent`` line, | -separated) has nothing about this modes. (so, each ``agent`` always represents ONE host node of dpq, despite the number of HA mirrors mentioned for this agent).
+Note that the syntax of HA mirrors in the config (when several hosts are assigned to one ``agent`` line, separated with |) has nothing to do with the CALL PQ query mode. (so each ``agent`` always represents ONE host node of dpq despite of the number of HA mirrors specified for this agent).

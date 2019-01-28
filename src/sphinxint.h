@@ -399,7 +399,6 @@ class MemoryReader_c
 private:
 	const BYTE * m_pData = nullptr;
 	const int m_iLen = 0;
-
 	const BYTE * m_pCur = nullptr;
 
 public:

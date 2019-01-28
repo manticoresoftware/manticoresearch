@@ -6407,7 +6407,7 @@ int CSphRsetSchema::GetRowSize() const
 	// we copy over dynamic map in case index schema has dynamic attributes
 	// (that happens in case of inline attributes, or RAM segments in RT indexes)
 	// so there is no need to add GetDynamicSize() here
-	return GetDynamicSize () + m_pIndexSchema ? m_pIndexSchema->GetStaticSize() : 0;
+	return GetDynamicSize () + ( m_pIndexSchema ? m_pIndexSchema->GetStaticSize() : 0 );
 }
 
 

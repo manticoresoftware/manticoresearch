@@ -154,7 +154,6 @@ private:
 	static const DWORD				META_VERSION = 7;				///< current version, added expression filter
 
 	int								m_iLockFD = -1;
-	int								m_iDeleted = 0; // set in DeleteDocument, reset and return in Commit
 	CSphSourceStats					m_tStat;
 	ISphTokenizerRefPtr_c			m_pTokenizerIndexing;
 	int								m_iMaxCodepointLength = 0;

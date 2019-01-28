@@ -1178,37 +1178,37 @@ private:
 	/// segments with indexes >= m_iDoubleBuffer are RAM chunk
 	CSphMutex					m_tFlushLock;
 	CSphMutex					m_tOptimizingLock;
-	int							m_iDoubleBuffer;
+	int							m_iDoubleBuffer = 0;
 	CSphVector<SphDocID_t>		m_dNewSegmentKlist;					///< raw docid container
-	CSphVector<SphDocID_t>		m_dDiskChunkKlist;					///< ordered SphDocID_t kill list
+	CSphVector<SphDocID_t>		m_dDiskChunkKlist {0};					///< ordered SphDocID_t kill list
 
 	int64_t						m_iSoftRamLimit;
 	int64_t						m_iDoubleBufferLimit;
 	CSphString					m_sPath;
-	bool						m_bPathStripped;
+	bool						m_bPathStripped = false;
 	CSphVector<CSphIndex*>		m_dDiskChunks GUARDED_BY ( m_tChunkLock );
-	int							m_iLockFD;
+	int							m_iLockFD = -1;
 	mutable CSphKilllist		m_tKlist;							///< kill list for disk chunks and saved chunks
-	volatile bool				m_bOptimizing;
-	volatile bool				m_bOptimizeStop;
+	volatile bool				m_bOptimizing = false;
+	volatile bool				m_bOptimizeStop = false;
 
 	int64_t						m_iSavedTID;
 	int64_t						m_tmSaved;
-	mutable DWORD				m_uDiskAttrStatus;
+	mutable DWORD				m_uDiskAttrStatus = 0;
 
 	bool						m_bKeywordDict;
-	int							m_iWordsCheckpoint;
-	int							m_iMaxCodepointLength;
+	int							m_iWordsCheckpoint { RTDICT_CHECKPOINT_V5 };
+	int							m_iMaxCodepointLength = 0;
 	ISphTokenizerRefPtr_c		m_pTokenizerIndexing;
-	bool						m_bLoadRamPassedOk;
+	bool						m_bLoadRamPassedOk = true;
 
-	bool						m_bMlock;
-	bool						m_bOndiskAllAttr;
-	bool						m_bOndiskPoolAttr;
+	bool						m_bMlock = false;
+	bool						m_bOndiskAllAttr = false;
+	bool						m_bOndiskPoolAttr = false;
 
-	CSphFixedVector<int64_t>	m_dFieldLens;						///< total field lengths over entire index
-	CSphFixedVector<int64_t>	m_dFieldLensRam;					///< field lengths summed over current RAM chunk
-	CSphFixedVector<int64_t>	m_dFieldLensDisk;					///< field lengths summed over all disk chunks
+	CSphFixedVector<int64_t>	m_dFieldLens { SPH_MAX_FIELDS };						///< total field lengths over entire index
+	CSphFixedVector<int64_t>	m_dFieldLensRam { SPH_MAX_FIELDS };					///< field lengths summed over current RAM chunk
+	CSphFixedVector<int64_t>	m_dFieldLensDisk { SPH_MAX_FIELDS };					///< field lengths summed over all disk chunks
 	CSphBitvec					m_tMorphFields;
 
 public:
@@ -1347,22 +1347,11 @@ private:
 RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int64_t iRamSize, const char * sPath, bool bKeywordDict )
 
 	: ISphRtIndex ( sIndexName, sPath )
-	, m_dDiskChunkKlist ( 0 )
 	, m_iSoftRamLimit ( iRamSize )
 	, m_sPath ( sPath )
-	, m_bPathStripped ( false )
-	, m_iLockFD ( -1 )
-	, m_bOptimizing ( false )
-	, m_bOptimizeStop ( false )
 	, m_iSavedTID ( m_iTID )
 	, m_tmSaved ( sphMicroTimer() )
-	, m_uDiskAttrStatus ( 0 )
 	, m_bKeywordDict ( bKeywordDict )
-	, m_iWordsCheckpoint ( RTDICT_CHECKPOINT_V5 )
-	, m_iMaxCodepointLength ( 0 )
-	, m_dFieldLens ( SPH_MAX_FIELDS )
-	, m_dFieldLensRam ( SPH_MAX_FIELDS )
-	, m_dFieldLensDisk ( SPH_MAX_FIELDS )
 {
 	MEMORY ( MEM_INDEX_RT );
 
@@ -1370,11 +1359,6 @@ RtIndex_t::RtIndex_t ( const CSphSchema & tSchema, const char * sIndexName, int6
 	m_iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 
 	m_iDoubleBufferLimit = ( m_iSoftRamLimit * SPH_RT_DOUBLE_BUFFER_PERCENT ) / 100;
-	m_iDoubleBuffer = 0;
-	m_bMlock = false;
-	m_bOndiskAllAttr = false;
-	m_bOndiskPoolAttr = false;
-	m_bLoadRamPassedOk = true;
 
 #ifndef NDEBUG
 	// check that index cols are static

@@ -606,7 +606,7 @@ in your configuration file as shown below:
 
 .. code-block:: none
 
-	charset_table     	= noncjk
+	charset_table     	= non_cjk
 	...
 	ngram_len         	= 1
 	ngram_chars     	= cjk

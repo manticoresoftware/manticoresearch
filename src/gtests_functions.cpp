@@ -1916,7 +1916,7 @@ TEST ( functions, sph_Sprintf_to_builder )
 TEST ( functions, sph_Sprintf_regression_on_empty_buf )
 {
 	StringBuilder_c sBuf;
-	sBuf.Sprintf ( "%.3D", 10 );
+	sBuf.Sprintf ( "%.3F", 10 );
 	ASSERT_STREQ ( sBuf.cstr (), "0.010" );
 }
 

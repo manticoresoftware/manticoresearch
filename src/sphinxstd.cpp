@@ -878,7 +878,11 @@ SPH_THDFUNC sphThreadProcWrapper ( void * pArg )
 	if ( pCall->m_sName[0]!='\0' )
 	{
 		assert ( strlen ( pCall->m_sName )<16 );
+#if HAVE_PTHREAD_SETNAME_NP_1ARG
+		pthread_setname_np ( pCall->m_sName );
+#else
 		pthread_setname_np ( pthread_self(), pCall->m_sName );
+#endif
 	}
 #endif
 

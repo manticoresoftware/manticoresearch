@@ -1,0 +1,131 @@
+# Manual on options are here: https://clang.llvm.org/docs/ClangFormatStyleOptions.html
+---
+Language:        Cpp
+Standard:        Cpp11
+Cpp11BracedListStyle: true
+ColumnLimit:     120
+IndentWidth:     4
+ConstructorInitializerIndentWidth: 4
+ContinuationIndentWidth: 6
+AccessModifierOffset: -4
+TabWidth:        4
+UseTab:          Always
+
+AlignAfterOpenBracket: DontAlign
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
+AlignEscapedNewlines: Left
+AlignOperands:   true
+AlignTrailingComments: true
+
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowShortBlocksOnASingleLine: true
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+
+AlwaysBreakAfterReturnType: None
+AlwaysBreakBeforeMultilineStrings: false
+AlwaysBreakTemplateDeclarations: Yes
+
+ExperimentalAutoDetectBinPacking: true
+BinPackArguments: true
+BinPackParameters: true
+
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterClass:      true
+  AfterStruct:     true
+  AfterUnion:      false
+  SplitEmptyRecord: true
+  AfterControlStatement: true
+  AfterEnum:       false
+  AfterFunction:   true
+  SplitEmptyFunction: false
+  AfterNamespace:  true
+  SplitEmptyNamespace: true
+  AfterExternBlock: true
+  BeforeElse:      false
+  IndentBraces:    false
+
+BreakBeforeBinaryOperators: NonAssignment
+BreakBeforeInheritanceComma: true
+BreakInheritanceList: AfterColon
+BreakBeforeTernaryOperators: true
+BreakConstructorInitializersBeforeComma: false
+BreakConstructorInitializers: BeforeColon
+BreakStringLiterals: false
+
+CommentPragmas:  '^ IWYU pragma:'
+CompactNamespaces: false
+ConstructorInitializerAllOnOneLineOrOnePerLine: false
+
+DisableFormat:   false
+FixNamespaceComments: true
+ForEachMacros:
+  - ARRAY_FOREACH
+  - ARRAY_FOREACH_COND
+IncludeBlocks:   Regroup
+IncludeCategories:
+  - Regex:           '^"(json|http)/'
+    Priority:        20
+  - Regex:           '^"sphinx'
+    Priority:        30
+  - Regex:           '^"searchd'
+    Priority:        35
+  - Regex:           '<[[:alnum:].]+>'
+    Priority:        40
+  - Regex:           '.*'
+    Priority:        10
+IncludeIsMainRegex: '^gtests_'
+IndentCaseLabels: false
+IndentPPDirectives: None
+
+IndentWrappedFunctionNames: true
+KeepEmptyLinesAtTheStartOfBlocks: false
+
+MacroBlockBegin: ''
+MacroBlockEnd:   ''
+MaxEmptyLinesToKeep: 2
+NamespaceIndentation: Inner
+
+PenaltyBreakAssignment: 2
+PenaltyBreakBeforeFirstCallParameter: 19
+PenaltyBreakComment: 300
+PenaltyBreakFirstLessLess: 120
+PenaltyBreakString: 1000
+PenaltyBreakTemplateDeclaration: 10
+PenaltyExcessCharacter: 1000000
+PenaltyReturnTypeOnItsOwnLine: 60
+
+DerivePointerAlignment: false
+PointerAlignment: Left
+
+ReflowComments:  true
+
+SortIncludes:    false
+SortUsingDeclarations: false
+
+SpaceAfterCStyleCast: false
+SpaceAfterTemplateKeyword: false
+#SpaceBeforeAssignmentOperators: true
+SpaceBeforeCpp11BracedList: true
+SpaceBeforeCtorInitializerColon: true
+SpaceBeforeInheritanceColon: false
+SpaceBeforeParens: Always
+SpacesInParentheses: true
+SpaceBeforeRangeBasedForLoopColon: true
+SpaceInEmptyParentheses: false
+SpacesBeforeTrailingComments: 1
+SpacesInAngles:  false
+#SpacesInContainerLiterals: false
+SpacesInCStyleCastParentheses: false
+SpacesInSquareBrackets: false
+
+StatementMacros:
+  - SafeDelete
+  - SafeDeleteArray
+  - SafeRelease
+  - SafeAddRef
+

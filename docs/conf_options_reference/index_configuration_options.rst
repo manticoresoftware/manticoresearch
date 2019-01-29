@@ -601,6 +601,32 @@ We have performed this task for you by preparing default charset tables,
 non-cjk and cjk, that comprise non-cjk and cjk-languages respectively. 
 These charsets should be sufficient to use in most cases.
 
+The languages that are currently NOT supported:
+
+-  Assamese
+-  Bishnupriya
+-  Buhid
+-  Garo
+-  Hmong
+-  Ho
+-  Komi
+-  Large Flowery Miao
+-  Maba
+-  Maithili
+-  Marathi
+-  Mende
+-  Mru
+-  Myene
+-  Ngambay
+-  Odia
+-  Santali
+-  Sindhi
+-  Sylheti
+
+
+All other languages listed in the following list are supported by default:
+`Unicode languages list <http://www.unicode.org/cldr/charts/latest/supplemental/languages_and_scripts.html/>`_.
+
 To be able to work with both cjk and non-cjk languages you should set the options 
 in your configuration file as shown below:
 
@@ -614,6 +640,7 @@ in your configuration file as shown below:
 
 In case you don’t need support for cjk-languages you can just omit `ngram_len` and `ngram_chars` options.
 For more information on those see the appropriate documentation sections.
+
 
 .. _dict:
 

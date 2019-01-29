@@ -2536,8 +2536,9 @@ static const int HASH20_SIZE = 20;
 static const int SHA1_SIZE = HASH20_SIZE;
 class SHA1_c;
 
-CSphString BinToHex ( const CSphVector<BYTE> &dHash );
+CSphString BinToHex ( const CSphVector<BYTE> & dHash );
 CSphString CalcSHA1 ( const void * pData, int iLen );
+bool CalcSHA1 ( const CSphString & sFileName, CSphString & sRes, CSphString & sError );
 
 // string and 20-bytes hash
 struct TaggedHash20_t

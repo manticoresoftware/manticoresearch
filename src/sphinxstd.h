@@ -2959,6 +2959,8 @@ public:
 		return pRes;
 	}
 
+	T * Ptr() const { return m_pPtr; }
+
 public:
 	/// assignment of a raw pointer, takes over ownership!
 	CSphRefcountedPtr<T> & operator = ( T * pPtr )

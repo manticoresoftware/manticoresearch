@@ -18415,7 +18415,7 @@ class SHA1_c
 	}
 
 public:
-	SHA1_c &Init ()
+	SHA1_c & Init()
 	{
 		const DWORD dInit[5] = { 0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0 };
 		memcpy ( state, dInit, sizeof ( state ) );
@@ -18423,7 +18423,7 @@ public:
 		return *this;
 	}
 
-	SHA1_c &Update ( const BYTE * data, int len )
+	SHA1_c & Update ( const BYTE * data, int len )
 	{
 		int i, j = ( count[0] >> 3 ) & 63;
 		count[0] += ( len << 3 );
@@ -18460,7 +18460,7 @@ public:
 };
 
 
-CSphString BinToHex ( const CSphVector<BYTE>& dHash )
+CSphString BinToHex ( const CSphFixedVector<BYTE> & dHash )
 {
 	const char * sDigits = "0123456789abcdef";
 	if ( dHash.IsEmpty() )
@@ -18482,14 +18482,42 @@ CSphString BinToHex ( const CSphVector<BYTE>& dHash )
 
 CSphString CalcSHA1 ( const void * pData, int iLen )
 {
-	CSphVector<BYTE> dHashValue (HASH20_SIZE);
+	CSphFixedVector<BYTE> dHashValue ( HASH20_SIZE );
 	SHA1_c dHasher;
 	dHasher.Init();
-	dHasher.Update ( (const BYTE*) pData, iLen );
+	dHasher.Update ( (const BYTE*)pData, iLen );
 	dHasher.Final ( dHashValue.begin() );
 	return BinToHex ( dHashValue );
 }
 
+bool CalcSHA1 ( const CSphString & sFileName, CSphString & sRes, CSphString & sError )
+{
+	CSphAutofile tFile ( sFileName, SPH_O_READ, sError, false );
+	if ( tFile.GetFD()<0 )
+		return false;
+
+	CSphFixedVector<BYTE> dHashValue ( HASH20_SIZE );
+	SHA1_c dHasher;
+	dHasher.Init();
+
+	const int64_t iFileSize = tFile.GetSize();
+	const int iBufSize = Min ( iFileSize, DEFAULT_READ_BUFFER );
+	int64_t iOff = 0;
+	CSphFixedVector<BYTE> dFileData ( iBufSize );
+	while ( iOff<iFileSize )
+	{
+		const int iLen = Min ( iBufSize, iFileSize - iOff );
+		if ( !tFile.Read ( dFileData.Begin(), iLen, sError ) )
+			return false;
+
+		dHasher.Update ( dFileData.Begin(), iLen );
+		iOff += iLen;
+	}
+
+	dHasher.Final ( dHashValue.Begin() );
+	sRes = BinToHex ( dHashValue );
+	return true;
+}
 
 
 //////////////////////////////////////////////////////////////////////////

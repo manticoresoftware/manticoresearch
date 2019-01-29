@@ -346,5 +346,7 @@ public:
 	void MoveAllTo ( CSphString &sTarget );
 };
 
+// extract basename from path
+const char * GetBaseName ( const CSphString & sFullPath );
 
 #endif // _sphinxutils_

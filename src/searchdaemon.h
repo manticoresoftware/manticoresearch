@@ -153,6 +153,7 @@ enum SearchdCommand_e : WORD
 	SEARCHD_COMMAND_SUGGEST		= 15,
 	SEARCHD_COMMAND_JSON		= 16,
 	SEARCHD_COMMAND_CALLPQ 		= 17,
+	SEARCHD_COMMAND_CLUSTERPQ	= 18,
 
 	SEARCHD_COMMAND_TOTAL,
 	SEARCHD_COMMAND_WRONG = SEARCHD_COMMAND_TOTAL,
@@ -173,6 +174,7 @@ enum SearchdCommandV_e : WORD
 	VER_COMMAND_PING		= 0x100,
 	VER_COMMAND_UVAR		= 0x100,
 	VER_COMMAND_CALLPQ		= 0x100,
+	VER_COMMAND_CLUSTERPQ	= 0x100,
 
 	VER_COMMAND_WRONG = 0,
 };
@@ -403,6 +405,7 @@ public:
 	bool			GetBytes ( void * pBuf, int iLen );
 	const BYTE *	GetBufferPtr () const { return m_pBuf; }
 	int				GetLength() const { return m_iLen; }
+	bool			GetBytesZerocopy ( const BYTE ** ppData, int iLen );
 
 	template < typename T > bool	GetDwords ( CSphVector<T> & dBuffer, int & iGot, int iMax );
 	template < typename T > bool	GetQwords ( CSphVector<T> & dBuffer, int & iGot, int iMax );
@@ -1081,6 +1084,10 @@ enum SqlStmt_e
 	STMT_SYSFILTERS,
 	STMT_DEBUG,
 	STMT_JOIN_CLUSTER,
+	STMT_CLUSTER_CREATE,
+	STMT_CLUSTER_DELETE,
+	STMT_CLUSTER_ALTER_ADD,
+	STMT_CLUSTER_ALTER_DROP,
 
 	STMT_TOTAL
 };
@@ -1130,6 +1137,7 @@ struct SqlStmt_t
 
 	// used by INSERT, DELETE, CALL, DESC, ATTACH, ALTER, RELOAD INDEX
 	CSphString				m_sIndex;
+	CSphString				m_sCluster;
 
 	// INSERT (and CALL) specific
 	CSphVector<SqlInsert_t>	m_dInsertValues; // reused by CALL
@@ -1300,7 +1308,7 @@ enum ESphHttpEndpoint
 // fwd
 struct ThdDesc_t;
 
-bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, ISphOutputBuffer & tOut );
+bool CheckCommandVersion ( WORD uVer, WORD uDaemonVersion, CachedOutputBuffer_c & tOut );
 ISphSearchHandler * sphCreateSearchHandler ( int iQueries, const QueryParser_i * pQueryParser, QueryType_e eQueryType, bool bMaster, const ThdDesc_t & tThd );
 void sphFormatFactors ( StringBuilder_c& dOut, const unsigned int * pFactors, bool bJson );
 bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & dStmt, CSphString & sError, ESphCollation eCollation );

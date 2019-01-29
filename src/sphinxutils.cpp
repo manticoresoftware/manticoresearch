@@ -739,6 +739,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "query_log_mode",			0, NULL },
 	{ "prefer_rotate",			KEY_DEPRECATED, "seamless_rotate" },
 	{ "shutdown_token",			0, NULL },
+	{ "data_dir",				0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -3336,3 +3337,15 @@ void Warner_c::MoveAllTo ( CSphString &sTarget )
 	Clear();
 }
 
+const char * GetBaseName ( const CSphString & sFullPath )
+{
+	if ( sFullPath.IsEmpty() )
+		return nullptr;
+
+	const char * pStart = sFullPath.cstr();
+	const char * pCur = pStart + sFullPath.Length() - 1;
+	while ( pCur>pStart && pCur[-1]!='/' && pCur[-1]!='\\' )
+		pCur--;
+
+	return pCur;
+}

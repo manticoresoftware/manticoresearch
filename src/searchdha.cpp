@@ -2138,7 +2138,7 @@ void ScheduleDistrJobs ( VectorAgentConn_t &dRemotes, IRequestBuilder_t * pQuery
 	}
 
 	if ( pReporter )
-		pReporter->SetTotal ( dRemotes.GetLength () );
+		pReporter->Add ( dRemotes.GetLength () );
 
 	if ( bNeedKick )
 	{
@@ -3918,24 +3918,25 @@ public:
 		m_tChanged.SetEvent ();
 	}
 
-	void SetTotal ( int iTasks ) final
+	void Add ( int iTasks ) final
 	{
-		m_iTasks = iTasks;
+		m_iTasks.Add ( iTasks );
+		m_bGotTasks = true;
 	}
 
 	// check that there are no works to do
 	bool IsDone () const final
 	{
-		if ( m_iTasks>=0 )
+		if ( m_bGotTasks )
 		{
 			if ( m_iFinished > m_iTasks )
-				sphWarning ("Orphaned chain detected (expected %d, got %d)", m_iTasks, (int) m_iFinished );
+				sphWarning ( "Orphaned chain detected (expected %d, got %d)", (int)m_iTasks.GetValue(), (int)m_iFinished.GetValue() );
 			return m_iFinished>=m_iTasks;
 		}
 		return false;
 	}
 
-	// block execution untill all tasks are finished
+	// block execution until all tasks are finished
 	void Finish () final
 	{
 		while (!IsDone())
@@ -3962,7 +3963,8 @@ private:
 	CSphAutoEvent	m_tChanged;			///< the signaller
 	CSphAtomic		m_iSucceeded { 0 };	//< num of tasks finished successfully
 	CSphAtomic		m_iFinished { 0 };	//< num of tasks finished.
-	volatile int	m_iTasks = -1;		//< total num of tasks
+	CSphAtomic		m_iTasks { 0 };		//< total num of tasks
+	bool			m_bGotTasks = false;
 
 };
 

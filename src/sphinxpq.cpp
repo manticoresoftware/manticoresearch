@@ -160,6 +160,7 @@ private:
 	int64_t							m_iSavedTID = 0;
 	int64_t							m_tmSaved = 0;
 	bool							m_bSaveDisabled = false;
+	bool							m_bHasFiles = false;
 
 	CSphVector<StoredQueryKey_t>	m_dStored GUARDED_BY ( m_tLock );
 	RwLock_t						m_tLock;
@@ -1972,6 +1973,10 @@ void PercolateIndex_c::PostSetup()
 	}
 
 	m_dLoadedQueries.Reset ( 0 );
+
+	// still need index files for index just created from config
+	if ( !m_bHasFiles )
+		SaveMeta ( false );
 }
 
 bool PercolateIndex_c::Prealloc ( bool bStripPath )
@@ -2001,6 +2006,8 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath )
 	// no readable meta? no disk part yet
 	if ( !sphIsReadable ( sMeta.cstr() ) )
 		return true;
+
+	m_bHasFiles = true;
 
 	// opened and locked, lets read
 	CSphAutoreader rdMeta;
@@ -2389,11 +2396,7 @@ void PercolateIndex_c::RamFlush ( bool bPeriodic )
 
 void PercolateIndex_c::ForceDiskChunk ()
 {
-	// right after cluster started with new indexes we need its files on disk to issue sync command
-	if ( !m_iSavedTID )
-		RamFlush ( false );
-	else
-		ForceRamFlush ( false );
+	ForceRamFlush ( false );
 }
 
 void PercolateIndex_c::CheckRamFlush ()

@@ -190,6 +190,7 @@ ALPHA				[a-zA-Z_]+
 "`ID`"				{ YYSTOREBOUNDS; lvalp->m_iStart++; lvalp->m_iEnd--; return TOK_ID; }
 `{ID}`				{ YYSTOREBOUNDS; lvalp->m_iStart++; lvalp->m_iEnd--; return TOK_IDENT; }
 `{DIGIT}+{ID}`		{ YYSTOREBOUNDS; lvalp->m_iStart++; lvalp->m_iEnd--; return TOK_IDENT; } // allow `123xyz` column names
+{ID}:{ID}			{ YYSTOREBOUNDS; return TOK_IDENT; }
 
 {SPACE}+			{ ; }
 \.{SPACE}*{ID}		{ YYSTOREBOUNDS; return TOK_SUBKEY; }

@@ -235,6 +235,8 @@ statement:
 	| sysfilters
 	| debug_clause
 	| join_cluster
+	| create_cluster
+	| delete_cluster
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -1208,7 +1210,7 @@ insert_into:
 	insert_or_replace TOK_INTO ident opt_column_list TOK_VALUES insert_rows_list opt_insert_options
 		{
 			// everything else is pushed directly into parser within the rules
-			pParser->ToString ( pParser->m_pStmt->m_sIndex, $3 );
+			pParser->SetIndex ( $3 );
 		}
 	;
 
@@ -1490,6 +1492,20 @@ alter:
 			tStmt.m_eStmt = STMT_ALTER_RECONFIGURE;
 			pParser->ToString ( tStmt.m_sIndex, $3 );
 		}
+	| TOK_ALTER TOK_CLUSTER ident TOK_ADD ident
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_CLUSTER_ALTER_ADD;
+			pParser->ToString ( tStmt.m_sCluster, $3 );
+			pParser->ToString ( tStmt.m_sIndex, $5 );
+		}
+	| TOK_ALTER TOK_CLUSTER ident TOK_DROP ident
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_CLUSTER_ALTER_DROP;
+			pParser->ToString ( tStmt.m_sCluster, $3 );
+			pParser->ToString ( tStmt.m_sIndex, $5 );
+		}
 	;
 
 //////////////////////////////////////////////////////////////////////////
@@ -1689,7 +1705,7 @@ truncate:
 		{
 			SqlStmt_t & tStmt = *pParser->m_pStmt;
 			tStmt.m_eStmt = STMT_TRUNCATE_RTINDEX;
-			pParser->ToString ( tStmt.m_sIndex, $3 );
+			pParser->SetIndex ( $3 );
 		}
 	;
 
@@ -1887,6 +1903,24 @@ join_cluster:
 cluster_opts_list:
 	// empty
 	| call_opts_list
+	;
+
+create_cluster:
+	TOK_CREATE TOK_CLUSTER ident cluster_opts_list
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_CLUSTER_CREATE;
+			pParser->ToString ( tStmt.m_sIndex, $3 );
+		}
+	;
+
+delete_cluster:
+	TOK_DELETE TOK_CLUSTER ident
+		{
+			SqlStmt_t & tStmt = *pParser->m_pStmt;
+			tStmt.m_eStmt = STMT_CLUSTER_DELETE;
+			pParser->ToString ( tStmt.m_sIndex, $3 );
+		}
 	;
 
 %%

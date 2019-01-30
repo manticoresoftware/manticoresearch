@@ -17,7 +17,6 @@
 #include "sphinxrt.h"
 #include "sphinxint.h"
 #include "sphinxstem.h"
-#include "json/cJSON.h"
 #include <math.h>
 
 #define SNOWBALL 0

@@ -1352,6 +1352,12 @@ void JsonObj_c::AddStr ( const char * szName, const char * szValue )
 }
 
 
+void JsonObj_c::AddStr ( const char * szName, const CSphString & sValue )
+{
+	AddStr ( szName, sValue.cstr() );
+}
+
+
 void JsonObj_c::AddNum ( const char * szName, int64_t iValue )
 {
 	assert ( m_pRoot );
@@ -1465,7 +1471,7 @@ JsonObj_c JsonObj_c::GetIntItem ( const char * szName, CSphString & sError, bool
 
 	if ( !tChild.IsInt() )
 	{
-		sError.SetSprintf ( "\"%s\" property value should be an integer", szName );
+		sError.SetSprintf ( R"("%s" property value should be an integer)", szName );
 		return JsonNull;
 	}
 
@@ -1496,7 +1502,7 @@ JsonObj_c JsonObj_c::GetBoolItem ( const char * szName, CSphString & sError, boo
 
 	if ( !tChild.IsBool() )
 	{
-		sError.SetSprintf ( "\"%s\" property value should be an integer", szName );
+		sError.SetSprintf ( R"("%s" property value should be an integer)", szName );
 		return JsonNull;
 	}
 
@@ -1512,7 +1518,13 @@ JsonObj_c JsonObj_c::GetStrItem ( const char * szName, CSphString & sError, bool
 
 	if ( !tChild.IsStr() )
 	{
-		sError.SetSprintf ( "\"%s\" property value should be a string", szName );
+		sError.SetSprintf ( R"("%s" property value should be a string)", szName );
+		return JsonNull;
+	}
+
+	if ( tChild.StrVal().IsEmpty() && !bIgnoreMissing )
+	{
+		sError.SetSprintf ( R"("%s"property empty)", szName );
 		return JsonNull;
 	}
 
@@ -1528,7 +1540,7 @@ JsonObj_c JsonObj_c::GetObjItem ( const char * szName, CSphString & sError, bool
 
 	if ( !tChild.IsObj() )
 	{
-		sError.SetSprintf ( "\"%s\" property value should be an object", szName );
+		sError.SetSprintf ( R"("%s" property value should be an object)", szName );
 		return JsonNull;
 	}
 
@@ -1544,7 +1556,7 @@ JsonObj_c JsonObj_c::GetArrayItem ( const char * szName, CSphString & sError, bo
 
 	if ( !tChild.IsArray() )
 	{
-		sError.SetSprintf ( "\"%s\" property value should be an object", szName );
+		sError.SetSprintf ( R"("%s" property value should be an object)", szName );
 		return JsonNull;
 	}
 
@@ -1592,6 +1604,12 @@ bool JsonObj_c::HasItem ( const char * szItem ) const
 {
 	assert ( m_pRoot );
 	return !!cJSON_HasObjectItem ( m_pRoot, szItem );
+}
+
+
+JsonObj_c JsonObj_c::CreateStr ( const CSphString & sStr )
+{
+	return JsonObj_c ( cJSON_CreateString ( sStr.cstr() ) );
 }
 
 
@@ -1655,6 +1673,26 @@ const char * JsonObj_c::GetErrorPtr() const
 }
 
 
+bool JsonObj_c::GetError ( const char * szBuf, int iBufLen, CSphString & sError ) const
+{
+	if ( !GetErrorPtr() )
+		return false;
+
+	const int iErrorWindowLen = 20;
+
+	const char * szErrorStart = GetErrorPtr() - iErrorWindowLen/2;
+	if ( szErrorStart < szBuf )
+		szErrorStart = szBuf;
+
+	int iLen = iErrorWindowLen;
+	if ( szErrorStart-szBuf+iLen>iBufLen )
+		iLen = iBufLen - ( szErrorStart - szBuf );
+
+	sError.SetSprintf ( "JSON parse error at: %.*s", iLen, szErrorStart );
+	return true;
+}
+
+
 cJSON * JsonObj_c::Leak()
 {
 	cJSON * pRoot = m_pRoot;
@@ -1684,12 +1722,18 @@ cJSON * JsonObj_c::GetRoot()
 }
 
 
-CSphString JsonObj_c::AsString() const
+CSphString JsonObj_c::AsString ( bool bFormat ) const
 {
 	if ( m_pRoot )
 	{
 		// we can't take this string and just adopt it because we need extra 'gap' bytes at the end
-		char * szResult = cJSON_PrintUnformatted ( m_pRoot );
+		char * szResult;
+		
+		if ( bFormat )
+			szResult = cJSON_Print ( m_pRoot );
+		else
+			szResult = cJSON_PrintUnformatted ( m_pRoot );
+
 		CSphString sResult ( szResult );
 		SafeDeleteArray ( szResult );
 		return sResult;

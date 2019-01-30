@@ -238,6 +238,7 @@ public:
 	JsonObj_c 		operator*();
 
 	void			AddStr ( const char * szName, const char * szValue );
+	void			AddStr ( const char * szName, const CSphString & sValue );
 	void			AddNum ( const char * szName, int64_t iValue );
 	void			AddBool ( const char * szName, bool bValue );
 	void			AddItem ( const char * szName, JsonObj_c & tObj );
@@ -257,6 +258,8 @@ public:
 	bool			FetchStrItem ( CSphString & sValue, const char * szName, CSphString & sError, bool bIgnoreMissing=false ) const;
 	bool			HasItem ( const char * szName ) const;
 
+	static JsonObj_c CreateStr ( const CSphString & sStr );
+
 	bool			IsInt() const;
 	bool			IsDbl() const;
 	bool			IsNum() const;
@@ -275,8 +278,9 @@ public:
 	CSphString		StrVal() const;
 
 	const char *	GetErrorPtr() const;
+	bool			GetError ( const char * szBuf, int iBufLen, CSphString & sError ) const;
 	cJSON *			GetRoot();
-	CSphString		AsString() const;
+	CSphString		AsString ( bool bFormat=false ) const;
 
 	JsonObj_c		begin() const;
 	JsonObj_c		end() const;

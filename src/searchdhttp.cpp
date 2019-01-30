@@ -684,7 +684,7 @@ protected:
 		}
 	}
 
-	ServedDescPtr_c GetIndex ( const CSphString & sIndex, eITYPE eType )
+	ServedDescPtr_c GetIndex ( const CSphString & sIndex, IndexType_e eType )
 	{
 		ServedDescPtr_c pServed ( GetServed ( sIndex ), false );
 		if ( !pServed )
@@ -1467,7 +1467,7 @@ bool HttpHandlerPQ_c::GotQuery ( const CSphString & sIndex, const JsonObj_c & tJ
 	CSphVector<FilterTreeItem_t> dFilterTree;
 	if ( tFilters )
 	{
-		ServedDescPtr_c pServed ( GetIndex ( sIndex, eITYPE::PERCOLATE ) );
+		ServedDescPtr_c pServed ( GetIndex ( sIndex, IndexType_e::PERCOLATE ) );
 		if ( !pServed )
 			return false;
 
@@ -1487,7 +1487,7 @@ bool HttpHandlerPQ_c::GotQuery ( const CSphString & sIndex, const JsonObj_c & tJ
 	StoredQuery_i * pStored = nullptr;
 	// scope for index lock
 	{
-		ServedDescPtr_c pServed ( GetIndex ( sIndex, eITYPE::PERCOLATE ) );
+		ServedDescPtr_c pServed ( GetIndex ( sIndex, IndexType_e::PERCOLATE ) );
 		if ( !pServed )
 			return false;
 
@@ -1534,7 +1534,7 @@ bool HttpHandlerPQ_c::ListQueries ( const CSphString & sIndex )
 	const char * sFilterTags = nullptr;
 	const CSphFilterSettings * pUID = nullptr;
 
-	ServedDescPtr_c pServed ( GetIndex ( sIndex, eITYPE::PERCOLATE ) );
+	ServedDescPtr_c pServed ( GetIndex ( sIndex, IndexType_e::PERCOLATE ) );
 	if ( !pServed )
 		return false;
 

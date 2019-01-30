@@ -5,7 +5,7 @@
 #include "sphinxint.h"
 #include "sphinxpq.h"
 #include "searchdreplication.h"
-#include "json/cJSON.h"
+#include "sphinxjson.h"
 #include "replication/wsrep_api.h"
 
 #define USE_PSI_INTERFACE 1
@@ -66,7 +66,7 @@ struct IndexDesc_t
 {
 	CSphString	m_sName;
 	CSphString	m_sPath;
-	eITYPE		m_eType = eITYPE::ERROR_;
+	IndexType_e		m_eType = IndexType_e::ERROR_;
 };
 
 struct ReplicationArgs_t
@@ -107,10 +107,8 @@ static void ReplicationAbort();
 static bool JsonConfigWrite ( const CSphString & sConfigPath, const SmallStringHash_T<ReplicationCluster_t *> & hClusters, const CSphVector<IndexDesc_t> & dIndexes, CSphString & sError );
 static bool JsonConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> & hClusters, CSphVector<IndexDesc_t> & dIndexes, CSphString & sError );
 static void GetLocalIndexes ( CSphVector<IndexDesc_t> & dIndexes );
-static void JsonConfigSetIndex ( const IndexDesc_t & tIndex, cJSON * pIndexes );
-static bool JsonGetError ( const char * sBuf, int iBufLen, CSphString & sError );
-static bool JsonConfigCheckProperty ( const cJSON * pNode, const char * sPropertyName, CSphString & sValue, CSphString & sError );
-static bool JsonLoadIndexDesc ( const cJSON * pIndex, CSphString & sError, IndexDesc_t & tIndex );
+static void JsonConfigSetIndex ( const IndexDesc_t & tIndex, JsonObj_c & tIndexes );
+static bool JsonLoadIndexDesc ( const JsonObj_c & tJson, CSphString & sError, IndexDesc_t & tIndex );
 static void JsonConfigDumpClusters ( const SmallStringHash_T<ReplicationCluster_t *> & hClusters, StringBuilder_c & tOut );
 static void JsonConfigDumpIndexes ( const CSphVector<IndexDesc_t> & dIndexes, StringBuilder_c & tOut );
 
@@ -205,27 +203,12 @@ static void Logger_fn ( wsrep_log_level_t eLevel, const char * sMsg )
 }
 
 
-class CJsonScopedPtr_c : public CSphScopedPtr<cJSON>
-{
-public:
-	CJsonScopedPtr_c ( cJSON * pPtr  )
-		: CSphScopedPtr<cJSON> ( pPtr )
-	{}
-
-	~CJsonScopedPtr_c()
-	{
-		cJSON_Delete(m_pPtr);
-		m_pPtr = nullptr;
-	}
-};
-
-
-static const WORD g_iReplicateCommandVer[RCOMMAND_TOTAL] = { 0x101, 0x101, 0x101, 0x101, 0x101, 0x101 };
+static const WORD g_dReplicateCommandVer[RCOMMAND_TOTAL] = { 0x101, 0x101, 0x101, 0x101, 0x101, 0x101 };
 
 WORD GetReplicateCommandVer ( ReplicationCommand_e eCommand )
 {
 	assert ( eCommand>=0 && eCommand<RCOMMAND_TOTAL );
-	return g_iReplicateCommandVer[(int)eCommand];
+	return g_dReplicateCommandVer[(int)eCommand];
 }
 
 
@@ -285,7 +268,7 @@ static bool WriteDonateState ( const ReplicationCluster_t * pCluster, const CSph
 		{
 			IndexDesc_t tIndex;
 			tIndex.m_sName = sName;
-			tIndex.m_eType = eITYPE::PERCOLATE;
+			tIndex.m_eType = IndexType_e::PERCOLATE;
 			// need scope for RLock to free after operations
 			{
 				ServedDescRPtr_c pServed ( GetServed ( sName ) );
@@ -306,14 +289,14 @@ static bool WriteDonateState ( const ReplicationCluster_t * pCluster, const CSph
 	char sGtid[WSREP_GTID_STR_LEN];
 	Verify ( wsrep_gtid_print ( &tGtid, sGtid, sizeof(sGtid) )>0 );
 
-	CJsonScopedPtr_c pSyncSrc ( cJSON_CreateObject() );
-	cJSON * pIndexes = cJSON_CreateObject();
-	ARRAY_FOREACH ( i, dIndexes )
-		JsonConfigSetIndex ( dIndexes[i], pIndexes );
+	JsonObj_c tIndexes;
+	for ( const auto & i : dIndexes )
+		JsonConfigSetIndex ( i, tIndexes );
 
-	cJSON_AddItemToObject ( pSyncSrc.Ptr(), "indexes", pIndexes );
-	cJSON_AddStringToObject ( pSyncSrc.Ptr(), "gtid", sGtid );
-	cJSON_AddBoolToObject ( pSyncSrc.Ptr(), "bypass", bBypass );
+	JsonObj_c tSyncSrc;
+	tSyncSrc.AddItem ( "indexes", tIndexes );
+	tSyncSrc.AddStr( "gtid", sGtid );
+	tSyncSrc.AddBool ( "bypass", bBypass );
 
 	CSphString sError;
 	CSphWriter tFile;
@@ -323,9 +306,7 @@ static bool WriteDonateState ( const ReplicationCluster_t * pCluster, const CSph
 		return false;
 	}
 
-	CSphString sData;
-	char * sRaw = cJSON_Print ( pSyncSrc.Ptr() );
-	sData.Adopt ( &sRaw );
+	CSphString sData = tSyncSrc.AsString();
 
 	tFile.PutBytes ( sData.cstr(), sData.Length() );
 	tFile.CloseFile();
@@ -373,15 +354,15 @@ static bool ReadJoinerState ( const CSphString & sFilename, const CSphString & s
 	}
 	
 	dData[iSize] = 0; // safe gap
-	CJsonScopedPtr_c pRoot ( cJSON_Parse ( (const char*)dData.Begin() ) );
-	if ( JsonGetError ( (const char *)dData.Begin(), dData.GetLength(), sError ) )
+	JsonObj_c tRoot ( (const char*)dData.Begin() );
+	if ( tRoot.GetError ( (const char *)dData.Begin(), dData.GetLength(), sError ) )
 	{
 		sphLogFatal ( "error parsing SST JSON, file %s, %s", sFilename.cstr(), sError.cstr() );
 		return false;
 	}
 
 	CSphString sGTID;
-	if ( !JsonConfigCheckProperty ( pRoot.Ptr(), "gtid", sGTID, sError ) )
+	if ( !tRoot.FetchStrItem ( sGTID, "gtid", sError ) )
 		return false;
 
 	int iGtidLen = wsrep_gtid_scan ( sGTID.cstr(), sGTID.Length(), &tGtid );
@@ -391,23 +372,16 @@ static bool ReadJoinerState ( const CSphString & sFilename, const CSphString & s
 		return false;
 	}
 
-	cJSON * pBypass = cJSON_GetObjectItem ( pRoot.Ptr(), "bypass" );
-	if ( !pBypass || !cJSON_IsBool ( pBypass ) )
-	{
-		sError = "property 'bypass' should be a bool";
+	if ( !tRoot.FetchBoolItem ( bBypass, "bypass", sError ) )
 		return false;
-	}
-	bBypass = ( !!cJSON_IsTrue ( pBypass ) );
 
-	cJSON * pIndexes = cJSON_GetObjectItem ( pRoot.Ptr(), "indexes" );
-	cJSON * pIndex = ( pIndexes && pIndexes->child ? pIndexes->child : nullptr );
-
-	for ( int i=0; pIndex!=nullptr; i++, pIndex=pIndex->next )
+	JsonObj_c tIndexes = tRoot.GetItem("indexes");
+	for ( const auto & i : tIndexes )
 	{
 		IndexDesc_t tIndex;
-		if ( !JsonLoadIndexDesc ( pIndex, sError, tIndex ) )
+		if ( !JsonLoadIndexDesc ( i, sError, tIndex ) )
 		{
-			sError.SetSprintf ( "index '%s'(%d) error: %s", pIndex->string, i, sError.cstr() );
+			sError.SetSprintf ( "index '%s'(%d) error: %s", i.Name(), dIndexes.GetLength(), sError.cstr() );
 			return false;
 		}
 
@@ -1405,7 +1379,7 @@ static bool CheckLocalIndex ( const CSphString & sIndex, CSphString & sError )
 	}
 
 	ServedDescRPtr_c pDesc ( pServed );
-	if ( pDesc->m_eType!=eITYPE::PERCOLATE )
+	if ( pDesc->m_eType!=IndexType_e::PERCOLATE )
 	{
 		sError.SetSprintf ( "wrong type of index '%s'", sIndex.cstr() );
 		return false;
@@ -1454,7 +1428,7 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 		}
 
 		ServedDescRPtr_c pDesc ( pServed );
-		if ( pDesc->m_eType!=eITYPE::PERCOLATE )
+		if ( pDesc->m_eType!=IndexType_e::PERCOLATE )
 		{
 			sphWarning ( "replicate wrong type of index '%s', command %d", sIndex.cstr(), (int)eCommand );
 			return false;
@@ -1533,7 +1507,7 @@ bool HandleCmdReplicated ( ReplicationCommand_t & tCmd )
 	}
 
 	ServedDescPtr_c pDesc ( pServed, ( tCmd.m_eCommand==RCOMMAND_TRUNCATE ) );
-	if ( pDesc->m_eType!=eITYPE::PERCOLATE )
+	if ( pDesc->m_eType!=IndexType_e::PERCOLATE )
 	{
 		sphWarning ( "replicate wrong type of index '%s', command %d", tCmd.m_sIndex.cstr(), (int)tCmd.m_eCommand );
 		return false;
@@ -1680,7 +1654,7 @@ bool CommitMonitor_c::Commit ( CSphString & sError )
 	}
 
 	ServedDescPtr_c pDesc ( pServed, ( m_tCmd.m_eCommand==RCOMMAND_TRUNCATE ) );
-	if ( m_tCmd.m_eCommand!=RCOMMAND_TRUNCATE && pDesc->m_eType!=eITYPE::PERCOLATE )
+	if ( m_tCmd.m_eCommand!=RCOMMAND_TRUNCATE && pDesc->m_eType!=IndexType_e::PERCOLATE )
 	{
 		sError = "requires an existing Percolate index";
 		return false;
@@ -1764,76 +1738,32 @@ bool CommitMonitor_c::CommitTOI ( CSphString & sError )
 	return true;
 }
 
-bool JsonConfigCheckProperty ( const cJSON * pNode, const char * sPropertyName, bool bOptional, CSphString & sValue, CSphString & sError )
+
+static bool JsonLoadIndexDesc ( const JsonObj_c & tJson, CSphString & sError, IndexDesc_t & tIndex )
 {
-	const cJSON * pChild = cJSON_GetObjectItem( pNode, sPropertyName );
-	if ( !pChild && bOptional )
-		return true;
-
-	if ( !pChild || !cJSON_IsString ( pChild ) )
-	{
-		sError.SetSprintf ( "property '%s' should be a string", sPropertyName );
-		return false;
-	}
-	if ( strlen ( pChild->valuestring )==0 && !bOptional )
-	{
-		sError.SetSprintf ( "property '%s' empty", sPropertyName );
-		return false;
-	}
-
-	sValue = pChild->valuestring;
-
-	return true;
-}
-
-bool JsonConfigCheckProperty ( const cJSON * pNode, const char * sPropertyName, CSphString & sValue, CSphString & sError )
-{
-	return JsonConfigCheckProperty ( pNode, sPropertyName, false, sValue, sError );
-}
-
-bool JsonLoadIndexDesc ( const cJSON * pIndex, CSphString & sError, IndexDesc_t & tIndex )
-{
-	if ( !pIndex->string || strlen ( pIndex->string )==0 )
+	CSphString sName = tJson.Name();
+	if ( sName.IsEmpty() )
 	{
 		sError = "empty index name";
 		return false;
 	}
 
-	if ( !JsonConfigCheckProperty ( pIndex, "path", tIndex.m_sPath, sError ) )
+	if ( !tJson.FetchStrItem ( tIndex.m_sPath, "path", sError ) )
 		return false;
 
 	CSphString sType;
-	if ( !JsonConfigCheckProperty ( pIndex, "type", sType, sError ) )
+	if ( !tJson.FetchStrItem ( sType, "type", sError ) )
 		return false;
 
 	tIndex.m_eType = TypeOfIndexConfig ( sType );
-	if ( tIndex.m_eType==eITYPE::ERROR_ )
+	if ( tIndex.m_eType==IndexType_e::ERROR_ )
 	{
 		sError.SetSprintf ( "type '%s' is invalid", sType.cstr() );
 		return false;
 	}
 
-	tIndex.m_sName = pIndex->string;
+	tIndex.m_sName = sName;
 
-	return true;
-}
-
-bool JsonGetError ( const char * sBuf, int iBufLen, CSphString & sError )
-{
-	if ( !cJSON_GetErrorPtr() )
-		return false;
-
-	const int iErrorWindowLen = 20;
-
-	const char * sErrorStart = cJSON_GetErrorPtr() - iErrorWindowLen/2;
-	if ( sErrorStart<sBuf )
-		sErrorStart = sBuf;
-
-	int iLen = iErrorWindowLen;
-	if ( sErrorStart-sBuf+iLen>iBufLen )
-		iLen = iBufLen - ( sErrorStart - sBuf );
-
-	sError.SetSprintf ( "JSON parse error at: %.*s", iLen, sErrorStart );
 	return true;
 }
 
@@ -1862,21 +1792,19 @@ bool JsonConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> 
 	}
 	
 	dData[iSize] = 0; // safe gap
-	CJsonScopedPtr_c pRoot ( cJSON_Parse ( (const char*)dData.Begin() ) );
-	if ( JsonGetError ( (const char *)dData.Begin(), dData.GetLength(), sError ) )
+	JsonObj_c tRoot ( (const char*)dData.Begin() );
+	if ( tRoot.GetError ( (const char *)dData.Begin(), dData.GetLength(), sError ) )
 		return false;
 
 	// FIXME!!! check for path duplicates
 	// check indexes
-	cJSON * pIndexes = cJSON_GetObjectItem ( pRoot.Ptr(), "indexes" );
-	cJSON * pIndex = ( pIndexes ? pIndexes->child : nullptr );
-	
-	for ( int i=0; pIndex!=nullptr; i++, pIndex=pIndex->next )
+	JsonObj_c tIndexes = tRoot.GetItem("indexes");
+	for ( const auto & i : tIndexes )
 	{
 		IndexDesc_t tIndex;
-		if ( !JsonLoadIndexDesc ( pIndex, sError, tIndex ) )
+		if ( !JsonLoadIndexDesc ( i, sError, tIndex ) )
 		{
-			sphWarning ( "index '%s'(%d) error: %s", pIndex->string, i, sError.cstr() );
+			sphWarning ( "index '%s'(%d) error: %s", i.Name(), dIndexes.GetLength(), sError.cstr() );
 			return false;
 		}
 
@@ -1884,14 +1812,14 @@ bool JsonConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> 
 	}
 
 	// check clusters
-	cJSON * pClusters = cJSON_GetObjectItem ( pRoot.Ptr(), "clusters" );
-	cJSON * pCluster = ( pClusters ? pClusters->child : nullptr );
-	for ( int i=0; pCluster!=nullptr; i++, pCluster=pCluster->next )
+	JsonObj_c tClusters = tRoot.GetItem("clusters");
+	int iCluster = 0;
+	for ( const auto & i : tClusters )
 	{
 		ClusterDesc_t tCluster;
 
 		bool bGood = true;
-		tCluster.m_sName = pCluster->string;
+		tCluster.m_sName = i.Name();
 		if ( tCluster.m_sName.IsEmpty() )
 		{
 			sError = "empty cluster name";
@@ -1899,53 +1827,39 @@ bool JsonConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> 
 		}
 
 		// optional items such as: options and skipSst
-		if ( !JsonConfigCheckProperty ( pCluster, "options", true, tCluster.m_sOptions, sError ) )
-			sphWarning ( "cluster '%s'(%d): %s, set default", tCluster.m_sName.cstr(), i, sError.cstr() );
+		bool bFetchOk = true;
+		bFetchOk &= i.FetchStrItem ( tCluster.m_sOptions, "options", sError, true );
+		bFetchOk &= i.FetchBoolItem ( tCluster.m_bSkipSST, "skipSst", sError, true );
+		if ( !bFetchOk )
+			sphWarning ( "cluster '%s'(%d): %s", tCluster.m_sName.cstr(), iCluster, sError.cstr() );
 
-		cJSON * pSkipSst = cJSON_GetObjectItem( pCluster, "skipSst" );
-		if ( pSkipSst )
-		{
-			if ( cJSON_IsBool ( pSkipSst) )
-				tCluster.m_bSkipSST = cJSON_IsTrue ( pSkipSst );
-			else
-				sphWarning ( "cluster '%s'(%d): invalid skipSst value, should be boolean, set to false", tCluster.m_sName.cstr(), i );
-		}
-
-		cJSON * pUri = cJSON_GetObjectItem ( pCluster, "uri" );
-		bGood &= ( !pUri || ( cJSON_IsString ( pUri ) && strlen ( pUri->valuestring )>0 ) );
-		if ( bGood )
-		{
-			// set default uri or use value from config
-			if ( !pUri || strlen ( pUri->valuestring )==0 )
-				tCluster.m_sURI = g_sDefaultReplicationURI.cstr();
-			else
-				tCluster.m_sURI = pUri->valuestring;
-		}
-
-		bGood &= JsonConfigCheckProperty ( pCluster, "path", true, tCluster.m_sPath, sError );
-
+		tCluster.m_sURI = g_sDefaultReplicationURI;
+		bGood &= i.FetchStrItem ( tCluster.m_sURI, "uri", sError, true );
+		bGood &= i.FetchStrItem ( tCluster.m_sPath, "path", sError, true );
 		// must have cluster desc
-		bGood &= JsonConfigCheckProperty ( pCluster, "listen", false, tCluster.m_sListen, sError );
+		bGood &= i.FetchStrItem ( tCluster.m_sListen, "listen", sError, false );
 
 		// set indexes prior replication init
-		cJSON * pIndexes = cJSON_GetObjectItem ( pCluster, "indexes" );
-		cJSON * pIndex = pIndexes ? pIndexes->child : nullptr;
-		for ( int iItem=0; pIndex!=nullptr; iItem++, pIndex=pIndex->next )
+		JsonObj_c tIndexes = i.GetItem("indexes");
+		int iItem = 0;
+		for ( const auto & j : tIndexes )
 		{
-			if ( cJSON_IsString ( pIndex ) )
-				tCluster.m_dIndexes.Add ( pIndex->valuestring );
+			if ( j.IsStr() )
+				tCluster.m_dIndexes.Add ( j.StrVal() );
 			else
 				sphWarning ( "cluster '%s' index %d name should be a string, skipped", tCluster.m_sName.cstr(), iItem );
+
+			iItem++;
 		}
 
 		if ( !bGood )
 		{
-			sphWarning ( "cluster '%s'(%d): removed from JSON config, %s", tCluster.m_sName.cstr(), i, sError.cstr() );
+			sphWarning ( "cluster '%s'(%d): removed from JSON config, %s", tCluster.m_sName.cstr(), iCluster, sError.cstr() );
 			sError = "";
 		} else
-		{
 			dClusters.Add ( tCluster );
-		}
+
+		iCluster++;
 	}
 
 	return true;
@@ -2011,53 +1925,51 @@ static bool SaveConfig()
 	return true;
 }
 
-void JsonConfigSetIndex ( const IndexDesc_t & tIndex, cJSON * pIndexes )
+void JsonConfigSetIndex ( const IndexDesc_t & tIndex, JsonObj_c & tIndexes )
 {
-	const CSphString sType = GetTypeName ( tIndex.m_eType );
+	JsonObj_c tIdx;
+	tIdx.AddStr ( "path", tIndex.m_sPath );
+	tIdx.AddStr ( "type", GetTypeName ( tIndex.m_eType ) );
 
-	cJSON * pIdx = cJSON_CreateObject();
-	cJSON_AddStringToObject ( pIdx, "path", tIndex.m_sPath.cstr() );
-	cJSON_AddStringToObject ( pIdx, "type", sType.cstr() );
-	cJSON_AddItemToObject( pIndexes, tIndex.m_sName.cstr(), pIdx );
+	tIndexes.AddItem ( tIndex.m_sName.cstr(), tIdx );
 }
 
 void JsonConfigDumpClusters ( const SmallStringHash_T<ReplicationCluster_t *> & hClusters, StringBuilder_c & tOut )
 {
-	CJsonScopedPtr_c pClusters ( cJSON_CreateObject() );
+	JsonObj_c tClusters;
 
 	void * pIt = nullptr;
 	while ( hClusters.IterateNext ( &pIt ) )
 	{
 		const ReplicationCluster_t * pCluster = hClusters.IterateGet ( &pIt );
-		cJSON * pItem = cJSON_CreateObject();
-		cJSON_AddItemToObject ( pClusters.Ptr(), pCluster->m_sName.cstr(), pItem );
 
-		cJSON_AddStringToObject ( pItem, "path", pCluster->m_sPath.cstr() );
-		cJSON_AddStringToObject ( pItem, "listen", pCluster->m_sListen.cstr() );
-		cJSON_AddStringToObject ( pItem, "uri", pCluster->m_sURI.cstr() );
-		cJSON_AddStringToObject ( pItem, "options", pCluster->m_sOptions.cstr() );
-		cJSON_AddBoolToObject ( pItem, "skipSst", pCluster->m_bSkipSST );
+		JsonObj_c tItem;
+		tItem.AddStr ( "path", pCluster->m_sPath );
+		tItem.AddStr ( "listen", pCluster->m_sListen );
+		tItem.AddStr ( "uri", pCluster->m_sURI );
+		tItem.AddStr ( "options", pCluster->m_sOptions );
+		tItem.AddBool ( "skipSst", pCluster->m_bSkipSST );
+
+		tClusters.AddItem ( pCluster->m_sName.cstr(), tItem );
 
 		// index array
-		cJSON * pIndexes = cJSON_CreateArray();
-		cJSON_AddItemToObject ( pItem, "indexes", pIndexes );
+		JsonObj_c tIndexes(true);
 		for ( const CSphString & sIndex : pCluster->m_dIndexes )
-			cJSON_AddItemToArray ( pIndexes, cJSON_CreateString ( sIndex.cstr() ) );
+			tIndexes.AddItem ( JsonObj_c::CreateStr(sIndex) );
+
+		tItem.AddItem ( "indexes", tIndexes );
 	}
 
-	CSphScopedPtr<char> dBuf ( cJSON_Print ( pClusters.Ptr() ) );
-	tOut += dBuf.Ptr();
+	tOut += tClusters.AsString(true).cstr();
 }
 
 void JsonConfigDumpIndexes ( const CSphVector<IndexDesc_t> & dIndexes, StringBuilder_c & tOut )
 {
-	CJsonScopedPtr_c pIndexes ( cJSON_CreateObject() );
+	JsonObj_c tIndexes;
+	for ( const auto & i : dIndexes )
+		JsonConfigSetIndex ( i, tIndexes );
 
-	ARRAY_FOREACH ( i, dIndexes )
-		JsonConfigSetIndex ( dIndexes[i], pIndexes.Ptr() );
-
-	CSphScopedPtr<char> dBuf ( cJSON_Print ( pIndexes.Ptr() ) );
-	tOut += dBuf.Ptr();
+	tOut += tIndexes.AsString(true).cstr();
 }
 
 
@@ -2531,7 +2443,7 @@ static bool CheckClusterStatement ( const CSphString & sCluster, bool bCheckClus
 		return true;
 
 	g_tClustersLock.ReadLock();
-	const bool bClusterExists = g_hClusters ( sCluster );
+	const bool bClusterExists = g_hClusters ( sCluster )!=nullptr;
 	g_tClustersLock.Unlock();
 	if ( bClusterExists )
 	{
@@ -2708,7 +2620,7 @@ struct PQRemoteData_t : public PQRemoteReply_t
 
 	CSphString	m_sCluster;			// cluster name of index
 
-	eITYPE		m_eIndex = eITYPE::ERROR_;
+	IndexType_e		m_eIndex = IndexType_e::ERROR_;
 };
 
 struct PQRemoteAgentData_t : public iQueryResult
@@ -2989,7 +2901,7 @@ struct PQRemoteIndexAdd_t : public PQRemoteBase_t
 		tOut.SendString ( tCmd.m_sCluster.cstr() );
 		tOut.SendString ( tCmd.m_sIndex.cstr() );
 		tOut.SendString ( tCmd.m_sIndexBaseName.cstr() );
-		tOut.SendByte ( (BYTE)eITYPE::PERCOLATE );
+		tOut.SendByte ( (BYTE)IndexType_e::PERCOLATE );
 		tOut.SendByte ( tCmd.m_bClusterIndex ? 1 : 0 );
 		tOut.SendUint64 ( tCmd.m_iIndexFileSize );
 		tOut.SendString ( tCmd.m_sFileHash.cstr() );
@@ -3000,7 +2912,7 @@ struct PQRemoteIndexAdd_t : public PQRemoteBase_t
 		tCmd.m_sCluster = tBuf.GetString();
 		tCmd.m_sIndex = tBuf.GetString();
 		tCmd.m_sIndexBaseName = tBuf.GetString();
-		tCmd.m_eIndex = (eITYPE)tBuf.GetByte();
+		tCmd.m_eIndex = (IndexType_e)tBuf.GetByte();
 		tCmd.m_bClusterIndex = ( tBuf.GetByte()!=0 );
 		tCmd.m_iIndexFileSize = tBuf.GetUint64();
 		tCmd.m_sFileHash = tBuf.GetString();
@@ -3292,7 +3204,7 @@ bool RemoteFileSize ( const CSphString & sCluster, const CSphString & sIndexBase
 bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSphString & sError )
 {
 	CSphString sType = GetTypeName ( tCmd.m_eIndex );
-	if ( tCmd.m_eIndex!=eITYPE::PERCOLATE )
+	if ( tCmd.m_eIndex!=IndexType_e::PERCOLATE )
 	{
 		sError.SetSprintf ( "unsupported index '%s' type %s", tCmd.m_sIndex.cstr(), sType.cstr() );
 		return false;
@@ -3528,7 +3440,7 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 		}
 
 		ServedDescRPtr_c pDesc ( pServed );
-		if ( pDesc->m_eType!=eITYPE::PERCOLATE )
+		if ( pDesc->m_eType!=IndexType_e::PERCOLATE )
 		{
 			sError.SetSprintf ( "wrong type of index '%s'", sIndex.cstr() );
 			return false;

@@ -108,7 +108,6 @@
 #include "sphinxutils.h"
 #include "sphinxint.h"
 #include "sphinxrt.h"
-#include "json/cJSON.h"
 
 const char * sphSockError ( int =0 );
 int sphSockGetErrno ();
@@ -188,7 +187,7 @@ enum ESphAddIndex
 //	ADD_CLUSTER	= 4,
 };
 
-enum class eITYPE
+enum class IndexType_e
 {
 	PLAIN = 0,
 	TEMPLATE,
@@ -198,8 +197,8 @@ enum class eITYPE
 	ERROR_, // simple "ERROR" doesn't work on win due to '#define ERROR 0' somewhere.
 };
 
-CSphString GetTypeName ( eITYPE eType );
-eITYPE TypeOfIndexConfig ( const CSphString & sType );
+CSphString GetTypeName ( IndexType_e eType );
+IndexType_e TypeOfIndexConfig ( const CSphString & sType );
 
 /////////////////////////////////////////////////////////////////////////////
 // SOME SHARED GLOBAL VARIABLES
@@ -669,10 +668,10 @@ struct ServedDesc_t
 	bool		m_bOnDiskPools	= false;
 	int64_t		m_iMass			= 0; // relative weight (by access speed) of the index
 	mutable CSphString	m_sUnlink;
-	eITYPE		m_eType			= eITYPE::PLAIN;
+	IndexType_e	m_eType			= IndexType_e::PLAIN;
 	bool		m_bJson			= false;
 
-	inline bool IsMutable () const { return m_eType==eITYPE::RT || m_eType==eITYPE::PERCOLATE; }
+	inline bool IsMutable () const { return m_eType==IndexType_e::RT || m_eType==IndexType_e::PERCOLATE; }
 	virtual                ~ServedDesc_t ();
 };
 

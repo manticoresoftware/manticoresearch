@@ -936,7 +936,7 @@ public:
 			return false;
 		}
 
-		JsonObj_c tResult;
+		JsonObj_c tResult = JsonNull;
 		bool bResult = ProcessInsert ( tStmt, tDocId, m_bReplace, tResult );
 
 		CSphString sResult = tResult.AsString();
@@ -989,7 +989,7 @@ public:
 			return false;
 		}
 
-		JsonObj_c tResult;
+		JsonObj_c tResult = JsonNull;
 		bool bResult = ProcessQuery ( tStmt, tDocId, tResult );
 		BuildReply ( tResult.AsString(), bResult ? SPH_HTTP_STATUS_200 : SPH_HTTP_STATUS_500 );
 
@@ -1104,7 +1104,7 @@ public:
 				return false;
 			}
 
-			JsonObj_c tResult;
+			JsonObj_c tResult = JsonNull;
 			bResult = false;
 
 			switch ( tStmt.m_eStmt )

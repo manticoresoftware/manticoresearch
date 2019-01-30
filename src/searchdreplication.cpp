@@ -1955,7 +1955,10 @@ void JsonConfigDumpClusters ( const SmallStringHash_T<ReplicationCluster_t *> & 
 		// index array
 		JsonObj_c tIndexes(true);
 		for ( const CSphString & sIndex : pCluster->m_dIndexes )
-			tIndexes.AddItem ( JsonObj_c::CreateStr(sIndex) );
+		{
+			JsonObj_c tStrItem = JsonObj_c::CreateStr(sIndex);
+			tIndexes.AddItem(tStrItem);
+		}
 
 		tItem.AddItem ( "indexes", tIndexes );
 	}

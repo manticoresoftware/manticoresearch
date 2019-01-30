@@ -12,6 +12,7 @@
 
 #include "sphinxjson.h"
 #include "sphinxint.h"
+#include "json/cJSON.h"
 
 #if USE_WINDOWS
 #include <io.h> // for isatty() in llsphinxjson.c
@@ -1255,38 +1256,80 @@ bool sphJsonStringToNumber ( const char * s, int iLen, ESphJsonType &eType, int6
 
 //////////////////////////////////////////////////////////////////////////
 
-CSphString sphJsonToString ( const cJSON * pJson )
+static void * cJsonMalloc ( size_t uSize )
 {
-	// we can't take this string and just adopt it because we need extra 'gap' bytes at the end
-	char * szResult = cJSON_PrintUnformatted ( pJson );
-	CSphString sResult ( szResult );
-	SafeDeleteArray ( szResult );
-	return sResult;
+	return new BYTE[uSize];
+}
+
+
+static void cJsonFree ( void * pPtr )
+{
+	delete [] (BYTE *)pPtr;
+}
+
+
+void sphInitCJson()
+{
+	cJSON_Hooks tHooks { cJsonMalloc, cJsonFree };
+	cJSON_InitHooks ( &tHooks );
 }
 
 //////////////////////////////////////////////////////////////////////////
 
-JsonBase_c::JsonBase_c ( JsonBase_c && rhs )
+JsonObj_c::JsonObj_c ( bool bArray )
+{
+	if ( bArray )
+		m_pRoot = cJSON_CreateArray();
+	else
+		m_pRoot = cJSON_CreateObject();
+
+	assert ( m_pRoot );
+}
+
+
+JsonObj_c::JsonObj_c ( cJSON * pRoot, bool bOwner )
+{
+	m_pRoot = pRoot;
+	m_bOwner = bOwner;
+}
+
+
+JsonObj_c::JsonObj_c ( const char * szJson )
+{
+	m_pRoot = cJSON_Parse ( szJson );
+}
+
+
+JsonObj_c::JsonObj_c ( JsonObj_c && rhs )
 {
 	if ( this!=&rhs )
 	{
 		m_pRoot = rhs.m_pRoot;
+		m_bOwner = rhs.m_bOwner;
 		rhs.m_pRoot = nullptr;
 	}
 }
 
 
-JsonBase_c::~JsonBase_c()
+JsonObj_c::~JsonObj_c()
 {
 	if ( m_pRoot )
 	{
-		cJSON_Delete(m_pRoot);
+		if ( m_bOwner )
+			cJSON_Delete(m_pRoot);
+
 		m_pRoot = nullptr;
 	}
 }
 
 
-JsonBase_c & JsonBase_c::operator = ( JsonBase_c && rhs )
+JsonObj_c::operator bool() const
+{
+	return !Empty();
+}
+
+
+JsonObj_c & JsonObj_c::operator = ( JsonObj_c && rhs )
 {
 	if ( this!=&rhs )
 	{
@@ -1294,6 +1337,7 @@ JsonBase_c & JsonBase_c::operator = ( JsonBase_c && rhs )
 			cJSON_Delete(m_pRoot);
 
 		m_pRoot = rhs.m_pRoot;
+		m_bOwner = rhs.m_bOwner;
 		rhs.m_pRoot = nullptr;
 	}
 
@@ -1301,49 +1345,355 @@ JsonBase_c & JsonBase_c::operator = ( JsonBase_c && rhs )
 }
 
 
-void JsonBase_c::AddStr ( const char * szName, const char * szValue )
+void JsonObj_c::AddStr ( const char * szName, const char * szValue )
 {
 	assert ( m_pRoot );
 	cJSON_AddStringToObject ( m_pRoot, szName, szValue );
 }
 
 
-void JsonBase_c::AddNum ( const char * szName, int64_t iValue )
+void JsonObj_c::AddStr ( const char * szName, const CSphString & sValue )
+{
+	AddStr ( szName, sValue.cstr() );
+}
+
+
+void JsonObj_c::AddNum ( const char * szName, int64_t iValue )
 {
 	assert ( m_pRoot );
 	cJSON_AddNumberToObject ( m_pRoot, szName, iValue );
 }
 
 
-void JsonBase_c::AddBool ( const char * szName, bool bValue )
+void JsonObj_c::AddBool ( const char * szName, bool bValue )
 {
 	assert ( m_pRoot );
 	cJSON_AddBoolToObject ( m_pRoot, szName, bValue ? 1 : 0 );
 }
 
 
-void JsonBase_c::AddItem ( const char * szName, JsonBase_c & tObj )
+void JsonObj_c::AddItem ( const char * szName, JsonObj_c & tObj )
 {
 	assert ( m_pRoot );
 	cJSON_AddItemToObject ( m_pRoot, szName, tObj.Leak() );
 }
 
 
-void JsonBase_c::AddItem ( JsonBase_c & tObj )
+void JsonObj_c::AddItem ( JsonObj_c & tObj )
 {
 	assert ( m_pRoot );
 	cJSON_AddItemToArray ( m_pRoot, tObj.Leak() );
 }
 
 
-void JsonBase_c::DelItem ( const char * szName )
+void JsonObj_c::DelItem ( const char * szName )
 {
 	assert ( m_pRoot );
 	cJSON_DeleteItemFromObject ( m_pRoot, szName );
 }
 
 
-cJSON * JsonBase_c::Leak()
+int JsonObj_c::Size() const
+{
+	assert ( m_pRoot );
+	return cJSON_GetArraySize ( m_pRoot );
+}
+
+
+bool JsonObj_c::IsInt() const
+{
+	assert ( m_pRoot );
+	return !!cJSON_IsInteger ( m_pRoot );
+}
+
+
+bool JsonObj_c::IsDbl() const
+{
+	assert ( m_pRoot );
+	return !!cJSON_IsNumber ( m_pRoot );
+}
+
+
+bool JsonObj_c::IsNum() const
+{
+	assert ( m_pRoot );
+	return !!cJSON_IsNumeric ( m_pRoot );
+}
+
+
+bool JsonObj_c::IsBool() const
+{
+	assert ( m_pRoot );
+	return !!cJSON_IsBool ( m_pRoot );
+}
+
+
+bool JsonObj_c::IsObj () const
+{
+	assert ( m_pRoot );
+	return !!cJSON_IsObject ( m_pRoot );
+}
+
+
+bool JsonObj_c::IsStr() const
+{
+	assert ( m_pRoot );
+	return !!cJSON_IsString ( m_pRoot );
+}
+
+
+bool JsonObj_c::IsArray() const
+{
+	assert ( m_pRoot );
+	return !!cJSON_IsArray ( m_pRoot );
+}
+
+
+JsonObj_c JsonObj_c::operator[] ( int iItem ) const
+{
+	assert ( m_pRoot );
+	return JsonObj_c ( cJSON_GetArrayItem ( m_pRoot, iItem ), false );
+}
+
+
+JsonObj_c JsonObj_c::GetItem ( const char * szName ) const
+{
+	assert ( m_pRoot );
+	return JsonObj_c ( cJSON_GetObjectItem ( m_pRoot, szName ), false );
+}
+
+
+JsonObj_c JsonObj_c::GetIntItem ( const char * szName, CSphString & sError, bool bIgnoreMissing ) const
+{
+	JsonObj_c tChild = GetChild ( szName, sError, bIgnoreMissing );
+	if ( !tChild )
+		return JsonNull;
+
+	if ( !tChild.IsInt() )
+	{
+		sError.SetSprintf ( R"("%s" property value should be an integer)", szName );
+		return JsonNull;
+	}
+
+	return tChild;
+}
+
+
+JsonObj_c JsonObj_c::GetIntItem ( const char * szName1, const char * szName2, CSphString & sError, bool bIgnoreMissing ) const
+{
+	JsonObj_c tResult = GetIntItem ( szName1, sError, true );
+	if ( !tResult )
+	{
+		if ( !sError.IsEmpty() )
+			return JsonNull;
+
+		tResult = GetIntItem ( szName2, sError, true );
+	}
+
+	return tResult;
+}
+
+
+JsonObj_c JsonObj_c::GetBoolItem ( const char * szName, CSphString & sError, bool bIgnoreMissing ) const
+{
+	JsonObj_c tChild = GetChild ( szName, sError, bIgnoreMissing );
+	if ( !tChild )
+		return JsonNull;
+
+	if ( !tChild.IsBool() )
+	{
+		sError.SetSprintf ( R"("%s" property value should be an integer)", szName );
+		return JsonNull;
+	}
+
+	return tChild;
+}
+
+
+JsonObj_c JsonObj_c::GetStrItem ( const char * szName, CSphString & sError, bool bIgnoreMissing ) const
+{
+	JsonObj_c tChild = GetChild ( szName, sError, bIgnoreMissing );
+	if ( !tChild )
+		return JsonNull;
+
+	if ( !tChild.IsStr() )
+	{
+		sError.SetSprintf ( R"("%s" property value should be a string)", szName );
+		return JsonNull;
+	}
+
+	if ( tChild.StrVal().IsEmpty() && !bIgnoreMissing )
+	{
+		sError.SetSprintf ( R"("%s"property empty)", szName );
+		return JsonNull;
+	}
+
+	return tChild;
+}
+
+
+JsonObj_c JsonObj_c::GetObjItem ( const char * szName, CSphString & sError, bool bIgnoreMissing ) const
+{
+	JsonObj_c tChild = GetChild ( szName, sError, bIgnoreMissing );
+	if ( !tChild )
+		return JsonNull;
+
+	if ( !tChild.IsObj() )
+	{
+		sError.SetSprintf ( R"("%s" property value should be an object)", szName );
+		return JsonNull;
+	}
+
+	return tChild;
+}
+
+
+JsonObj_c JsonObj_c::GetArrayItem ( const char * szName, CSphString & sError, bool bIgnoreMissing ) const
+{
+	JsonObj_c tChild = GetChild ( szName, sError, bIgnoreMissing );
+	if ( !tChild )
+		return JsonNull;
+
+	if ( !tChild.IsArray() )
+	{
+		sError.SetSprintf ( R"("%s" property value should be an object)", szName );
+		return JsonNull;
+	}
+
+	return tChild;
+}
+
+
+bool JsonObj_c::FetchIntItem ( int & iValue, const char * szName, CSphString & sError, bool bIgnoreMissing ) const
+{
+	JsonObj_c tItem = GetIntItem ( szName, sError, bIgnoreMissing );
+	if ( tItem )
+		iValue = (int)tItem.IntVal();
+	else if ( !sError.IsEmpty() )
+		return false;
+
+	return true;
+}
+
+
+bool JsonObj_c::FetchBoolItem ( bool & bValue, const char * szName, CSphString & sError, bool bIgnoreMissing ) const
+{
+	JsonObj_c tItem = GetBoolItem ( szName, sError, bIgnoreMissing );
+	if ( tItem )
+		bValue = tItem.BoolVal();
+	else if ( !sError.IsEmpty() )
+		return false;
+
+	return true;
+}
+
+
+bool JsonObj_c::FetchStrItem ( CSphString & sValue, const char * szName, CSphString & sError, bool bIgnoreMissing ) const
+{
+	JsonObj_c tItem = GetStrItem ( szName, sError, bIgnoreMissing );
+	if ( tItem )
+		sValue = tItem.StrVal();
+	else if ( !sError.IsEmpty() )
+		return false;
+
+	return true;
+}
+
+
+bool JsonObj_c::HasItem ( const char * szItem ) const
+{
+	assert ( m_pRoot );
+	return !!cJSON_HasObjectItem ( m_pRoot, szItem );
+}
+
+
+JsonObj_c JsonObj_c::CreateStr ( const CSphString & sStr )
+{
+	return JsonObj_c ( cJSON_CreateString ( sStr.cstr() ) );
+}
+
+
+bool JsonObj_c::Empty() const
+{
+	return !m_pRoot;
+}
+
+
+const char * JsonObj_c::Name() const
+{
+	assert ( m_pRoot );
+	return m_pRoot->string;
+}
+
+
+int64_t	JsonObj_c::IntVal() const
+{
+	assert ( m_pRoot );
+	return m_pRoot->valueint;
+}
+
+
+bool JsonObj_c::BoolVal() const
+{
+	assert ( m_pRoot );
+	return !!cJSON_IsTrue(m_pRoot);
+}
+
+
+float JsonObj_c::FltVal() const
+{
+	return (float)DblVal();
+}
+
+
+double JsonObj_c::DblVal() const
+{
+	assert ( m_pRoot );
+	return m_pRoot->valuedouble;
+}
+
+
+const char * JsonObj_c::SzVal() const
+{
+	assert ( m_pRoot );
+	return m_pRoot->valuestring;
+}
+
+
+CSphString JsonObj_c::StrVal() const
+{
+	assert ( m_pRoot );
+	return m_pRoot->valuestring;
+}
+
+
+const char * JsonObj_c::GetErrorPtr() const
+{
+	return cJSON_GetErrorPtr();
+}
+
+
+bool JsonObj_c::GetError ( const char * szBuf, int iBufLen, CSphString & sError ) const
+{
+	if ( !GetErrorPtr() )
+		return false;
+
+	const int iErrorWindowLen = 20;
+
+	const char * szErrorStart = GetErrorPtr() - iErrorWindowLen/2;
+	if ( szErrorStart < szBuf )
+		szErrorStart = szBuf;
+
+	int iLen = iErrorWindowLen;
+	if ( szErrorStart-szBuf+iLen>iBufLen )
+		iLen = iBufLen - ( szErrorStart - szBuf );
+
+	sError.SetSprintf ( "JSON parse error at: %.*s", iLen, szErrorStart );
+	return true;
+}
+
+
+cJSON * JsonObj_c::Leak()
 {
 	cJSON * pRoot = m_pRoot;
 	m_pRoot = nullptr;
@@ -1351,33 +1701,72 @@ cJSON * JsonBase_c::Leak()
 }
 
 
-CSphString JsonBase_c::AsString() const
+JsonObj_c JsonObj_c::GetChild ( const char * szName, CSphString & sError, bool bIgnoreMissing ) const
+{
+	JsonObj_c tChild = GetItem(szName);
+	if ( !tChild )
+	{
+		if ( !bIgnoreMissing )
+			sError.SetSprintf ( "\"%s\" property missing", szName );
+
+		return JsonNull;
+	}
+
+	return tChild;
+}
+
+
+cJSON * JsonObj_c::GetRoot()
+{
+	return m_pRoot;
+}
+
+
+CSphString JsonObj_c::AsString ( bool bFormat ) const
 {
 	if ( m_pRoot )
-		return sphJsonToString ( m_pRoot );
+	{
+		// we can't take this string and just adopt it because we need extra 'gap' bytes at the end
+		char * szResult;
+		
+		if ( bFormat )
+			szResult = cJSON_Print ( m_pRoot );
+		else
+			szResult = cJSON_PrintUnformatted ( m_pRoot );
+
+		CSphString sResult ( szResult );
+		SafeDeleteArray ( szResult );
+		return sResult;
+	}
 
 	return "";
 }
 
 
-JsonObj_c::JsonObj_c()
+JsonObj_c & JsonObj_c::operator++()
 {
-	m_pRoot = cJSON_CreateObject();
-	assert ( m_pRoot );
+	if ( m_pRoot )
+		m_pRoot = m_pRoot->next;
+
+	return *this;
 }
 
 
-JsonObj_c::JsonObj_c ( cJSON * pRoot )
+JsonObj_c JsonObj_c::operator*()
 {
-	assert ( pRoot );
-	m_pRoot = pRoot;
+	return JsonObj_c(m_pRoot,false);
 }
 
 
-JsonArr_c::JsonArr_c()
+JsonObj_c JsonObj_c::begin() const
 {
-	m_pRoot = cJSON_CreateArray();
-	assert ( m_pRoot );
+	return JsonObj_c ( m_pRoot ? m_pRoot->child : nullptr, false );
+}
+
+
+JsonObj_c JsonObj_c::end() const
+{
+	return JsonNull;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -2462,6 +2851,11 @@ public:
 };
 
 // save cjson as bson
+bool bson::JsonObjToBson ( JsonObj_c & tJSON, CSphVector<BYTE> &dData, bool bAutoconv, bool bToLowercase/*, StringBuilder_c &sMsg*/ )
+{
+	return bson::cJsonToBson ( tJSON.GetRoot(), dData, bAutoconv, bToLowercase );
+}
+
 bool bson::cJsonToBson ( cJSON * pCJSON, CSphVector<BYTE> &dData, bool bAutoconv, bool bToLowercase/*, StringBuilder_c &sMsg*/ )
 {
 	dData.Resize (0);

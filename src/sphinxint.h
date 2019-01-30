@@ -141,8 +141,6 @@ enum ESphQueryState
 };
 STATIC_ASSERT ( SPH_QSTATE_UNKNOWN==0, BAD_QUERY_STATE_ENUM_BASE );
 
-struct cJSON;
-
 /// search query profile
 class CSphQueryProfile
 {
@@ -188,11 +186,7 @@ public:
 	}
 
 	virtual void			BuildResult ( XQNode_t * pRoot, const CSphSchema & tSchema, const StrVec_t & dZones ) = 0;
-	virtual cJSON *			LeakResultAsJson()
-	{
-		assert ( 0 && "Not implemented" );
-		return nullptr;
-	}
+
 
 	virtual const char *	GetResultAsStr() const
 	{

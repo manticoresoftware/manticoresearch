@@ -1137,7 +1137,7 @@ TEST ( bench, DISABLED_bson_vs_cjson )
 		auto pBson = cJSON_Parse ( buf );
 		CSphString sError;
 
-		pRes = GetJSONPropertyObject ( pBson, "query", sError );
+		pRes = cJSON_GetObjectItem ( pBson, "query" );
 		if ( pBson )
 			cJSON_Delete ( pBson );
 

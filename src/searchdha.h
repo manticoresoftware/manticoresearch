@@ -370,7 +370,7 @@ extern int g_iAgentRetryDelay;
 
 struct IReporter_t : ISphRefcountedMT
 {
-	virtual void SetTotal ( int iTasks ) = 0;
+	virtual void Add ( int iTasks ) = 0;
 	virtual void Report ( bool bSuccess ) = 0;
 	virtual bool IsDone () const = 0;
 protected:

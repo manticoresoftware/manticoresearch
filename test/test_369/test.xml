@@ -119,6 +119,21 @@ index pq_d2
 <!-- good, but ill-formed json (int instead of 2-nd doc) -->
 <sphinxql>CALL PQ ('META:multi', ('[{"title":"angry test", "gid":3}, 1000]'), 1 as docs, 1 as verbose, 1 as docs_json, 1 as query)</sphinxql>
 
+<!-- bad json holding with no-fail -->
+<sphinxql>CALL PQ ('pq', ('{"title":"filter test doc2", "gid":13}','[{"title":"angry test", "gid":3}, 1000]'), 1 as skip_bad_json )</sphinxql>
+<sphinxql>SHOW WARNINGS</sphinxql>
+<sphinxql>CALL PQ ('pl_d1', ('{"title":"filter test doc2", "gid":13}','[{"title":"angry test", "gid":3}, 1000]'), 1 as skip_bad_json )</sphinxql>
+<sphinxql>SHOW WARNINGS</sphinxql>
+<sphinxql>CALL PQ ('pq_d1', ('{"title":"filter test doc2", "gid":13}','[{"title":"angry test", "gid":3}, 1000]'), 1 as skip_bad_json )</sphinxql>
+<sphinxql>SHOW WARNINGS</sphinxql>
+
+<sphinxql>CALL PQ ('pq', ('{"title":"filter test doc2", "gid":13}','[{"title":"angry test", "gid":3}, 1000]'), 0 as docs_json, 1 as skip_bad_json )</sphinxql>
+<sphinxql>SHOW WARNINGS</sphinxql>
+<sphinxql>CALL PQ ('pl_d1', ('{"title":"filter test doc2", "gid":13}','[{"title":"angry test", "gid":3}, 1000]'), 0 as docs_json, 1 as skip_bad_json )</sphinxql>
+<sphinxql>SHOW WARNINGS</sphinxql>
+<sphinxql>CALL PQ ('pq_d1', ('{"title":"filter test doc2", "gid":13}','[{"title":"angry test", "gid":3}, 1000]'), 0 as docs_json, 1 as skip_bad_json )</sphinxql>
+<sphinxql>SHOW WARNINGS</sphinxql>
+
 <!-- test that final stage filters work -->
 <sphinxql>select id, id as quid, id*2 as quid2 from META:multi</sphinxql>
 

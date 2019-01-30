@@ -878,7 +878,11 @@ SPH_THDFUNC sphThreadProcWrapper ( void * pArg )
 	if ( pCall->m_sName[0]!='\0' )
 	{
 		assert ( strlen ( pCall->m_sName )<16 );
+#if HAVE_PTHREAD_SETNAME_NP_1ARG
+		pthread_setname_np ( pCall->m_sName );
+#else
 		pthread_setname_np ( pthread_self(), pCall->m_sName );
+#endif
 	}
 #endif
 
@@ -1022,7 +1026,7 @@ CSphString GetThreadName ( SphThread_t * pThread )
 	if ( !pThread || !*pThread )
 		return "";
 
-#if HAVE_PTHREAD_SETNAME_NP
+#if HAVE_PTHREAD_GETNAME_NP
 	char sClippedName[16];
 	pthread_getname_np ( *pThread, sClippedName, 16 );
 	return sClippedName;
@@ -2283,8 +2287,8 @@ void StringBuilder_c::FinishBlocks ( StringBuilder_c::LazyComma_c * pLevel, bool
 
 StringBuilder_c & StringBuilder_c::vAppendf ( const char * sTemplate, va_list ap )
 {
-	if ( !m_iSize )
-		NewBuffer ();
+	if ( !m_sBuffer )
+		InitBuffer ();
 
 	assert ( m_sBuffer );
 	assert ( m_iUsed<m_iSize );
@@ -2340,6 +2344,9 @@ StringBuilder_c & StringBuilder_c::Appendf ( const char * sTemplate, ... )
 
 StringBuilder_c &StringBuilder_c::vSprintf ( const char * sTemplate, va_list ap )
 {
+	if ( !m_sBuffer )
+		InitBuffer ();
+
 	assert ( m_iUsed==0 || m_iUsed<m_iSize );
 
 	int iComma = 0;
@@ -2469,10 +2476,15 @@ void StringBuilder_c::Grow ( int iLen )
 	SafeDeleteArray ( pNew );
 }
 
-void StringBuilder_c::NewBuffer ()
+void StringBuilder_c::InitBuffer ()
 {
 	m_iSize = 256;
 	m_sBuffer = new char[m_iSize];
+}
+
+void StringBuilder_c::NewBuffer ()
+{
+	InitBuffer();
 	Clear ();
 }
 

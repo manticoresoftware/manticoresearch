@@ -25,7 +25,7 @@ or
 
 depending on the distribution used.
 
-At this point you can start using Manticore Search. The configuration file is located at ``/etc/sphinx/sphinx.conf`` (RHEL/CentOS) or ``/etc/sphinxsearch/sphinx.conf`` (Debian/Ubuntu).  The default configuration comes with an empty RT index ready to be used and a sample plain index and interfaces SphinxQL on port 9036 and native API on port 9312.
+At this point you can start using Manticore Search. The configuration file is located at ``/etc/sphinx/sphinx.conf`` (RHEL/CentOS) or ``/etc/sphinxsearch/sphinx.conf`` (Debian/Ubuntu).  The default configuration comes with an empty RT index ready to be used and a sample plain index and interfaces SphinxQL on port 9306 and native API on port 9312.
 
 You can also compile Manticore Search from `sources <https://github.com/manticoresoftware/manticore>`__. `Compilation <http://docs.manticoresearch.com/latest/html/installation.html#compiling-manticore-from-source>`__ is easy and uses cmake and you can also create packages for your operating system. 
 

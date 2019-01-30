@@ -103,8 +103,14 @@
 /* Define to 1 if you have the `pthread_mutex_timedlock' function. */
 #cmakedefine HAVE_PTHREAD_MUTEX_TIMEDLOCK ${HAVE_PTHREAD_MUTEX_TIMEDLOCK}
 
+/* Define to 1 if you have the `pthread_getname_np' function. */
+#cmakedefine HAVE_PTHREAD_GETNAME_NP ${HAVE_PTHREAD_GETNAME_NP}
+
 /* Define to 1 if you have the `pthread_setname_np' function. */
 #cmakedefine HAVE_PTHREAD_SETNAME_NP ${HAVE_PTHREAD_SETNAME_NP}
+
+/* Define to 1 if you have the `pthread_setname_np' function. and it receive only 1 arg (name)*/
+#cmakedefine HAVE_PTHREAD_SETNAME_NP_1ARG ${HAVE_PTHREAD_SETNAME_NP_1ARG}
 
 /* Define to 1 if you have the <stdint.h> header file. */
 #cmakedefine HAVE_STDINT_H ${HAVE_STDINT_H}
@@ -178,3 +184,6 @@
 
 /* define to set custom directory for shared files */
 #define FULL_SHARE_DIR "${FULL_SHARE_DIR}"
+
+/* Whether to compile for Windows */
+#cmakedefine01 USE_WINDOWS

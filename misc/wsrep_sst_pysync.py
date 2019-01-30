@@ -62,7 +62,7 @@ def load_sst_state (name):
 	if "bypass" not in sst_state:
 		return None, "no bypass set"
 
-	if "indexes" not in sst_state or (sst_state["bypass"]==False and len(sst_state["indexes"])==0):
+	if "indexes" not in sst_state:
 		return None, "no indexes provided"
 		
 	return sst_state, None
@@ -268,13 +268,6 @@ elif args.role=='joiner':
 	sst_state, msg = load_sst_state(args.state_in)
 	if not sst_state:
 		die(1, msg)
-
-	for idx in sst_state["indexes"].values():
-		name = os.path.basename(idx["path"])
-		idx["path"] = os.path.join(os.path.normpath(args.datadir), name)
-
-	with open(args.state_in, 'w') as sst_state_file:
-		json.dump(sst_state, sst_state_file)
 		
 	info("joiner finished ok, got %d indexes(bypass=%d), gtid '%s'", len(sst_state["indexes"]), int(sst_state["bypass"]), sst_state["gtid"])
 else:

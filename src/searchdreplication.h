@@ -17,9 +17,8 @@
 #ifndef _searchdreplication_
 #define _searchdreplication_
 
-void JsonSkipConfig();
-void JsonLoadConfig ( const CSphString & sConfigName );
-void JsonSaveConfig();
+void JsonLoadConfig ( const CSphConfigSection & hSearchd );
+void JsonDoneConfig();
 void JsonConfigConfigureAndPreload ( int & iValidIndexes, int & iCounter  );
 
 enum ReplicationCommand_e
@@ -28,6 +27,8 @@ enum ReplicationCommand_e
 	RCOMMAND_ROLLBACK,
 	RCOMMAND_DELETE,
 	RCOMMAND_TRUNCATE,
+	RCOMMAND_CLUSTER_ALTER_ADD,
+	RCOMMAND_CLUSTER_ALTER_DROP,
 
 	RCOMMAND_TOTAL
 };
@@ -37,6 +38,7 @@ struct ReplicationCommand_t
 	// common
 	ReplicationCommand_e	m_eCommand { RCOMMAND_TOTAL };
 	CSphString				m_sIndex;
+	CSphString				m_sCluster;
 
 	// add
 	StoredQueryDesc_t		m_tPQ;
@@ -49,6 +51,9 @@ struct ReplicationCommand_t
 	// truncate
 	bool					m_bReconfigure = false;
 	CSphReconfigureSettings m_tReconfigureSettings;
+
+	bool					m_bCheckIndex = true;
+	bool					m_bIsolated = false;
 };
 
 bool ReplicateSetOption ( const CSphString & sCluster, const CSphString & sOpt, CSphString & sError );
@@ -58,9 +63,13 @@ void Shutdown ();
 // unfreeze threads waiting of replication started
 void ReplicateClustersWake();
 void ReplicateClustersDelete();
-bool ReplicationJoin ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, CSphString & sError );
 bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bool bForce );
 void ReplicationWait();
+bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, CSphString & sError );
+bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, CSphString & sError );
+bool ClusterDelete ( const CSphString & sCluster, CSphString & sError, CSphString & sWarning );
+void HandleCommandClusterPq ( CachedOutputBuffer_c & tOut, WORD uCommandVer, InputBuffer_c & tBuf, const char * sClient );
+bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndex, bool bAdd, CSphString & sError, CSphString & sWarning );
 
 // 'like' matcher
 class CheckLike
@@ -101,6 +110,7 @@ enum ProtocolType_e
 	PROTO_SPHINX = 0,
 	PROTO_MYSQL41,
 	PROTO_HTTP,
+	PROTO_REPLICATION,
 
 	PROTO_TOTAL
 };

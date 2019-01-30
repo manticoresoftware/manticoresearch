@@ -65,7 +65,7 @@ set ( CPACK_COMPONENT_ADM_DISPLAY_NAME "Helper scripts" )
 INSTALL ( FILES ${MANTICORE_BINARY_DIR}/sphinx.conf.dist
 		DESTINATION ${SYSCONFDIR}/sphinxsearch COMPONENT doc RENAME sphinx.conf )
 
-install ( FILES doc/indexer.1 doc/indextool.1 doc/searchd.1 doc/spelldump.1
+install ( FILES doc/indexer.1 doc/indextool.1 doc/searchd.1 doc/spelldump.1 doc/wordbreaker.1
 		DESTINATION ${MANDIR}/man1 COMPONENT doc )
 
 if (NOT NOAPI)
@@ -74,15 +74,8 @@ endif ()
 
 
 install ( FILES
-		doc/internals-index-format.txt doc/internals-format-versions.txt
-		doc/internals-coding-standard.txt
 		"${MANTICORE_BINARY_DIR}/README.Debian"
-		dist/deb/copyright
-		DESTINATION ${DOCDIR} COMPONENT doc )
-
-install ( FILES example.sql ${MANTICORE_BINARY_DIR}/sphinx.conf.dist
-		${MANTICORE_BINARY_DIR}/sphinx-min.conf.dist
-		DESTINATION ${DOCDIR}/example-conf COMPONENT doc )
+		DESTINATION ${SHAREDIR}/doc/${PACKAGE_NAME} COMPONENT doc )
 
 install ( FILES "${MANTICORE_BINARY_DIR}/manticore"
 		DESTINATION ${SYSCONFDIR}/default COMPONENT adm)

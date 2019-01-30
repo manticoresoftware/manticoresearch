@@ -471,14 +471,15 @@ static ServiceThread_t						g_tPrereadThread;
 /// master-agent API protocol extensions version
 enum
 {
-	VER_MASTER = 16
+	VER_MASTER = 17
 };
 
 
 /// command names
 static const char * g_dApiCommands[] =
 {
-	"search", "excerpt", "update", "keywords", "persist", "status", "query", "flushattrs", "query", "ping", "delete", "set",  "insert", "replace", "commit", "suggest", "json", "callpq"
+	"search", "excerpt", "update", "keywords", "persist", "status", "query", "flushattrs", "query", "ping", "delete", "set",  "insert", "replace", "commit", "suggest", "json",
+	"callpq", "clusterpq"
 };
 
 STATIC_ASSERT ( sizeof(g_dApiCommands)/sizeof(g_dApiCommands[0])==SEARCHD_COMMAND_TOTAL, SEARCHD_COMMAND_SHOULD_BE_SAME_AS_SEARCHD_COMMAND_TOTAL );
@@ -1478,7 +1479,7 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 	bAttrsSaveOk = SaveIndexes();
 
 	// right before unlock loop
-	JsonSaveConfig();
+	JsonDoneConfig();
 
 	// unlock indexes and release locks if needed
 	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next(); )
@@ -2249,6 +2250,7 @@ void ProtoByName ( const CSphString & sProto, ListenerDesc_t & tDesc )
 	if ( sProto=="sphinx" )			tDesc.m_eProto = PROTO_SPHINX;
 	else if ( sProto=="mysql41" )	tDesc.m_eProto = PROTO_MYSQL41;
 	else if ( sProto=="http" )		tDesc.m_eProto = PROTO_HTTP;
+	else if ( sProto=="replication" )	tDesc.m_eProto = PROTO_REPLICATION;
 	else if ( sProto=="sphinx_vip" )
 	{
 		tDesc.m_eProto = PROTO_SPHINX;
@@ -2926,6 +2928,22 @@ bool InputBuffer_c::GetBytes ( void * pBuf, int iLen )
 	}
 
 	memcpy ( pBuf, m_pCur, iLen );
+	m_pCur += iLen;
+	return true;
+}
+
+bool InputBuffer_c::GetBytesZerocopy ( const BYTE ** ppData, int iLen )
+{
+	assert ( ppData );
+	assert ( iLen>0 && iLen<=g_iMaxPacketSize );
+
+	if ( m_bError || ( m_pCur+iLen > m_pBuf+m_iLen ) )
+	{
+		SetError ( true );
+		return false;
+	}
+
+	*ppData = m_pCur;
 	m_pCur += iLen;
 	return true;
 }
@@ -8333,7 +8351,8 @@ static const char * g_dSqlStmts[] =
 	"show_index_status", "show_profile", "alter_add", "alter_drop", "show_plan",
 	"select_dual", "show_databases", "create_plugin", "drop_plugin", "show_plugins", "show_threads",
 	"facet", "alter_reconfigure", "show_index_settings", "flush_index", "reload_plugins", "reload_index",
-	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug", "join_cluster"
+	"flush_hostnames", "flush_logs", "reload_indexes", "sysfilters", "debug",
+	"join_cluster", "cluster_create", "cluster_delete", "cluster_index_add", "cluster_index_delete"
 };
 
 
@@ -8545,6 +8564,7 @@ public:
 	void						UpdateMVAAttr ( const SqlNode_t & tName, const SqlNode_t& dValues );
 	void						SetGroupbyLimit ( int iLimit );
 	void						SetLimit ( int iOffset, int iLimit );
+	void						SetIndex ( const SqlNode_t & tIndex );
 
 private:
 	void						AutoAlias ( CSphQueryItem & tItem, SqlNode_t * pStart, SqlNode_t * pEnd );
@@ -9165,6 +9185,7 @@ bool SqlParser_c::UpdateStatement ( SqlNode_t * pNode )
 bool SqlParser_c::DeleteStatement ( SqlNode_t * pNode )
 {
 	GenericStatement ( pNode, STMT_DELETE );
+	SetIndex ( *pNode );
 	return true;
 }
 
@@ -9660,6 +9681,26 @@ bool sphParseSqlQuery ( const char * sQuery, int iLen, CSphVector<SqlStmt_t> & d
 	return true;
 }
 
+void SqlParser_c::SetIndex ( const SqlNode_t & tIndex )
+{
+	assert ( m_pStmt );
+	ToString ( m_pStmt->m_sIndex, tIndex );
+
+	// split ident ( cluster:index ) to parts
+	if ( !m_pStmt->m_sIndex.IsEmpty() )
+	{
+		const char * sDelimiter = strchr ( m_pStmt->m_sIndex.cstr(), ':' );
+		if ( sDelimiter )
+		{
+			CSphString sTmp = m_pStmt->m_sIndex; // m_sIndex.SetBinary can not accept this(m_sIndex) pointer
+
+			int iPos = sDelimiter - m_pStmt->m_sIndex.cstr();
+			int iLen = m_pStmt->m_sIndex.Length();
+			m_pStmt->m_sIndex.SetBinary ( sTmp.cstr() + iPos + 1, iLen - iPos - 1 );
+			m_pStmt->m_sCluster.SetBinary ( sTmp.cstr(), iPos );
+		}
+	}
+}
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -11504,6 +11545,7 @@ bool LoopClientSphinx ( SearchdCommand_e eCommand, WORD uCommandVer, int iLength
 		case SEARCHD_COMMAND_PING:		HandleCommandPing ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_UVAR:		HandleCommandUserVar ( tOut, uCommandVer, tBuf ); break;
 		case SEARCHD_COMMAND_CALLPQ:	HandleCommandCallPq ( tOut, uCommandVer, tBuf ); break;
+		case SEARCHD_COMMAND_CLUSTERPQ:	HandleCommandClusterPq ( tOut, uCommandVer, tBuf, tThd.m_sClientName.cstr() ); break;
 		default:						assert ( 0 && "INTERNAL ERROR: unhandled command" ); break;
 	}
 
@@ -12316,6 +12358,7 @@ static void PercolateAddQuery ( const SqlStmt_t &tStmt, bool bReplace, ESphColla
 		ReplicationCommand_t tCmd;
 		tCmd.m_eCommand = RCOMMAND_PQUERY_ADD;
 		tCmd.m_sIndex = sIndex;
+		tCmd.m_sCluster = tStmt.m_sCluster;
 		tCmd.m_pStored = pStored;
 
 		bOk = HandleCmdReplicate ( tCmd, sError, nullptr );
@@ -12537,7 +12580,7 @@ static bool ParseBsonDocument ( const VecTraits_T<BYTE>& dDoc, const CSphHash<Sc
 	using namespace bson;
 	Bson_c dBson ( dDoc );
 	if ( dDoc.IsEmpty () )
-		return sMsg.Err ( "bad JSON at document %d", iRow+1 );
+		return false;
 
 	SqlInsert_t tAttr;
 
@@ -13088,16 +13131,15 @@ static void PQLocalMatch ( const BlobVec_t &dDocs, const CSphString& sIndex, con
 			if ( !ParseBsonDocument ( dDocs[iDoc], hSchemaLocators, tOpt.m_sIdAlias, iDoc,
 						dFields, tDoc, tStrings, dMvaParsed, sMsg ) )
 			{
-				if ( !tOpt.m_bSkipBadJson )
-					break;
+				// for now the only case of fail - if provided bson is empty (null) document.
+				if ( tOpt.m_bSkipBadJson )
+				{
+					sMsg.Warn ( "ERROR: Document %d is empty", iDoc + tOpt.m_iShift + 1 );
+					continue;
+				}
 
-				// regard errors as warnings
-				StringBuilder_c sWarnings;
-				sWarnings << sMsg.sWarning ();
-				sWarnings.Sprintf ( "ERROR: %s", sMsg.sError (), iDoc+tOpt.m_iShift+1 );
-				sMsg.Clear();
-				sMsg.Warn ( "%s", sWarnings.cstr() );
-				continue;
+				sMsg.Err ( "Document %d is empty", iDoc + tOpt.m_iShift + 1 );
+				break;
 			}
 
 			tStrings.SavePointersTo ( dStrings, false );
@@ -13290,6 +13332,7 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 {
 
 	PercolateMatchResult_t &tRes = tResult.m_dResult;
+	tRes.Reset();
 
 	// check arguments
 	// index name, document | documents list, [named opts]
@@ -13358,9 +13401,6 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 			break;
 		}
 
-		if ( tOpts.m_bSkipBadJson && !tOpts.m_bJsonDocs ) // fixme! do we need such warn? Uncomment, if so.
-			tRes.m_sMessages.Warn ("option to skip bad json has no sense since docs are not in json form");
-
 		// post-conf type check
 		if ( iExpType!=v.m_iType )
 		{
@@ -13368,6 +13408,9 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 			break;
 		}
 	}
+
+	if ( tOpts.m_bSkipBadJson && !tOpts.m_bJsonDocs ) // fixme! do we need such warn? Uncomment, if so.
+		tRes.m_sMessages.Warn ( "option to skip bad json has no sense since docs are not in json form" );
 
 	if ( !sError.IsEmpty() )
 	{
@@ -13413,21 +13456,25 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 			}
 			else
 				dBadDocs.Add ( i + 1 ); // let it be just 'an error' for now
-			if ( !dBadDocs.IsEmpty() )
+			if ( !dBadDocs.IsEmpty() && !tOpts.m_bSkipBadJson )
 				break;
 		}
 
 	if ( !dBadDocs.IsEmpty() )
 	{
-		StringBuilder_c sBad (",","Bad JSON objects in strings: ");
+		StringBuilder_c sBad ( ",", "Bad JSON objects in strings: " );
 		for ( int iBadDoc:dBadDocs )
-			sBad.Sprintf("%d",iBadDoc);
-		tOut.Error ( tStmt.m_sStmt, sBad.cstr() );
-		return;
+			sBad.Sprintf ( "%d", iBadDoc );
+
+		if ( !tOpts.m_bSkipBadJson )
+		{
+			tOut.Error ( tStmt.m_sStmt, sBad.cstr ());
+			return;
+		}
+		tRes.m_sMessages.Warn ( sBad.cstr () );
 	}
 
 	tResult.m_dDocids.Reset ( tOpts.m_sIdAlias.IsEmpty () ? 0 : dBlobDocs.GetLength () + 1 );
-	tRes.Reset ();
 
 	if ( tOpts.m_iShift && !tOpts.m_sIdAlias.IsEmpty () )
 		tRes.m_sMessages.Warn ( "'shift' option works only for automatic ids, when 'docs_id' is not defined" );
@@ -15578,32 +15625,29 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 				{
 					StringBuilder_c dStr;
 					sphPackedMVA2Str ( (const BYTE *)tMatch.GetAttr(tLoc), eAttrType==SPH_ATTR_INT64SET_PTR, dStr );
-					dRows.PutArray ( dStr );
+					dRows.PutArray ( dStr, false );
 					break;
 				}
 
 			case SPH_ATTR_STRINGPTR:
 				{
 					auto * pString = ( const BYTE * ) tMatch.GetAttr ( tLoc );
+					int iLen=0;
 					if ( pString )
-					{
-						int iLen = sphUnpackPtrAttr ( pString, &pString );
-						dRows.PutArray ( pString, iLen );
-					} else
-						dRows.PutString ( "" );
+						iLen = sphUnpackPtrAttr ( pString, &pString );
+					dRows.PutArray ( pString, iLen );
 				}
 				break;
 			case SPH_ATTR_JSON_PTR:
 				{
 					auto * pString = (const BYTE*) tMatch.GetAttr ( tLoc );
+					JsonEscapedBuilder sTmp;
 					if ( pString )
 					{
 						sphUnpackPtrAttr ( pString, &pString );
-						JsonEscapedBuilder sTmp;
 						sphJsonFormat ( sTmp, pString );
-						dRows.PutArray ( sTmp );
-					} else
-						dRows.PutNULL();
+					}
+					dRows.PutArray ( sTmp );
 				}
 				break;
 
@@ -15726,13 +15770,14 @@ void HandleMysqlMeta ( SqlRowBuffer_c & dRows, const SqlStmt_t & tStmt, const CS
 	dRows.Eof ( bMoreResultsFollow );
 }
 
-static int PercolateDeleteDocuments ( const CSphString & sIndex, const SqlStmt_t & tStmt, CSphString & sError )
+static int PercolateDeleteDocuments ( const CSphString & sIndex, const CSphString & sCluster, const SqlStmt_t & tStmt, CSphString & sError )
 {
 	// prohibit double copy of filters
 	const CSphQuery & tQuery = tStmt.m_tQuery;
 	ReplicationCommand_t tCmd;
 	tCmd.m_eCommand = RCOMMAND_DELETE;
 	tCmd.m_sIndex = sIndex;
+	tCmd.m_sCluster = sCluster;
 
 	if ( tQuery.m_dFilters.GetLength()>1 )
 	{
@@ -15775,7 +15820,7 @@ static int PercolateDeleteDocuments ( const CSphString & sIndex, const SqlStmt_t
 	return iDeleted;
 }
 
-static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const QueryParserFactory_i & tQueryParserFactory, const char * sDistributed, const SqlStmt_t & tStmt,
+static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const CSphString & sCluster, const QueryParserFactory_i & tQueryParserFactory, const char * sDistributed, const SqlStmt_t & tStmt,
 	const SphDocID_t * pDocs, int iCount, SearchFailuresLog_c & dErrors, bool bCommit, CSphSessionAccum & tAcc, const ThdDesc_t & tThd )
 {
 	CSphString sError;
@@ -15834,7 +15879,7 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const QueryPa
 	}
 
 	// need unlocked index here
-	int iAffected = PercolateDeleteDocuments ( sName, tStmt, sError );
+	int iAffected = PercolateDeleteDocuments ( sName, sCluster, tStmt, sError );
 	if ( !sError.IsEmpty() )
 		dErrors.Submit ( sName, sDistributed, sError.cstr() );
 
@@ -15922,7 +15967,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const QueryParserFactory
 		bool bLocal = g_pLocalIndexes->Contains ( sName );
 		if ( bLocal )
 		{
-			iAffected += LocalIndexDoDeleteDocuments ( sName, tQueryParserFactory, nullptr,
+			iAffected += LocalIndexDoDeleteDocuments ( sName, tStmt.m_sCluster, tQueryParserFactory, nullptr,
 				tStmt, pDocs, iDocsCount, dErrors, bCommit, tAcc, tThd );
 		}
 		else if ( dDistributed[iIdx] )
@@ -15933,7 +15978,7 @@ void sphHandleMysqlDelete ( StmtErrorReporter_i & tOut, const QueryParserFactory
 				bool bDistLocal = g_pLocalIndexes->Contains ( sLocal );
 				if ( bDistLocal )
 				{
-					iAffected += LocalIndexDoDeleteDocuments ( sLocal, tQueryParserFactory, sName.cstr(),
+					iAffected += LocalIndexDoDeleteDocuments ( sLocal, tStmt.m_sCluster, tQueryParserFactory, sName.cstr(),
 						tStmt, pDocs, iDocsCount, dErrors, bCommit, tAcc, tThd );
 				}
 			}
@@ -16582,6 +16627,7 @@ void HandleMysqlTruncate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 
 	tCmd.m_eCommand = RCOMMAND_TRUNCATE;
 	tCmd.m_sIndex = sIndex;
+	tCmd.m_sCluster = tStmt.m_sCluster;
 	tCmd.m_bReconfigure = bReconfigure;
 
 	bool bRes = HandleCmdReplicate ( tCmd, sError, nullptr );
@@ -17878,10 +17924,39 @@ public:
 			return true;
 
 		case STMT_JOIN_CLUSTER:
-			if ( ReplicationJoin ( pStmt->m_sIndex, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues, m_sError ) )
+			if ( ClusterJoin ( pStmt->m_sIndex, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues, m_sError ) )
 				tOut.Ok();
 			else
 				tOut.Error ( sQuery.cstr(), m_sError.cstr() );
+			return true;
+		case STMT_CLUSTER_CREATE:
+			if ( ClusterCreate ( pStmt->m_sIndex, pStmt->m_dCallOptNames, pStmt->m_dCallOptValues, m_sError ) )
+				tOut.Ok();
+			else
+				tOut.Error ( sQuery.cstr(), m_sError.cstr() );
+			return true;
+
+		case STMT_CLUSTER_DELETE:
+			m_tLastMeta = CSphQueryResultMeta();
+			if ( ClusterDelete ( pStmt->m_sIndex, m_tLastMeta.m_sError, m_tLastMeta.m_sWarning ) )
+			{
+				tOut.Ok ( 0, m_tLastMeta.m_sWarning.IsEmpty() ? 0 : 1 );
+			} else
+			{
+				tOut.Error ( sQuery.cstr(), m_tLastMeta.m_sError.cstr() );
+			}
+			return true;
+
+		case STMT_CLUSTER_ALTER_ADD:
+		case STMT_CLUSTER_ALTER_DROP:
+			m_tLastMeta = CSphQueryResultMeta();
+			if ( ClusterAlter ( pStmt->m_sCluster, pStmt->m_sIndex, ( eStmt==STMT_CLUSTER_ALTER_ADD ), m_tLastMeta.m_sError, m_tLastMeta.m_sWarning ) )
+			{
+				tOut.Ok ( 0, m_tLastMeta.m_sWarning.IsEmpty() ? 0 : 1 );
+			} else
+			{
+				tOut.Error ( sQuery.cstr(), m_tLastMeta.m_sError.cstr() );
+			}
 			return true;
 
 		default:
@@ -23299,7 +23374,7 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 		auto uLimit = ( rlim_t ) hSearchd["max_open_files"].intval ();
 		bool bMax = hSearchd["max_open_files"].strval ()=="max";
 		if ( !uLimit && !bMax )
-			sphWarning ( "max_open_files is %lu, expected positive value; ignored", uLimit );
+			sphWarning ( "max_open_files is %d, expected positive value; ignored", (int) uLimit );
 		else
 		{
 			struct rlimit dRlimit;
@@ -23312,10 +23387,10 @@ void ConfigureSearchd ( const CSphConfig & hConf, bool bOptPIDFile )
 					uLimit = dRlimit.rlim_max;
 				dRlimit.rlim_cur = Min ( dRlimit.rlim_max, uLimit );
 				if ( 0!=setrlimit ( RLIMIT_NOFILE, &dRlimit ) )
-					sphWarning ( "Failed to setrlimit on %lu, error %d: %s", uLimit, errno, strerrorm ( errno ) );
+					sphWarning ( "Failed to setrlimit on %d, error %d: %s", (int)uLimit, errno, strerrorm ( errno ) );
 				else
-					sphInfo ( "Set max_open_files to %lu (previous was %lu), hardlimit is %lu.",
-						uLimit, uPrevLimit, dRlimit.rlim_max );
+					sphInfo ( "Set max_open_files to %d (previous was %d), hardlimit is %d.",
+						(int)uLimit, (int)uPrevLimit, (int)dRlimit.rlim_max );
 			}
 		}
 #else
@@ -23636,8 +23711,8 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		OPT1 ( "--logdebugvv" )		g_eLogLevel = SPH_LOG_VERY_VERBOSE_DEBUG;
 		OPT1 ( "--logreplication" )	g_eLogLevel = SPH_LOG_RPL_DEBUG;
 		OPT1 ( "--safetrace" )		g_bSafeTrace = true;
-		OPT1 ( "--test" )			{ g_bWatchdog = false; bTestMode = true; JsonSkipConfig(); } // internal option, do NOT document
-		OPT1 ( "--test-thd-pool" )	{ g_bWatchdog = false; bTestMode = true; bTestThdPoolMode = true; JsonSkipConfig(); } // internal option, do NOT document
+		OPT1 ( "--test" )			{ g_bWatchdog = false; bTestMode = true; } // internal option, do NOT document
+		OPT1 ( "--test-thd-pool" )	{ g_bWatchdog = false; bTestMode = true; bTestThdPoolMode = true; } // internal option, do NOT document
 		OPT1 ( "--strip-path" )		g_bStripPath = true;
 		OPT1 ( "--vtune" )			g_bVtune = true;
 		OPT1 ( "--noqlog" )			bOptDebugQlog = false;
@@ -23922,7 +23997,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	/////////////////////
 
 	sphInitCJson();
-	JsonLoadConfig ( g_sConfigFile );
+	JsonLoadConfig ( hSearchdpre );
 
 	ConfigureSearchd ( hConf, bOptPIDFile );
 	sphConfigureCommon ( hConf ); // this also inits plugins now
@@ -24362,7 +24437,7 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		ARRAY_FOREACH ( iTick, g_dTickPoolThread )
 		{
 			if ( !sphThreadCreate ( g_dTickPoolThread.Begin()+iTick, CSphNetLoop::ThdTick,
-				nullptr, Str_b ().Sprintf ( "TickPool_%d", iTick ).cstr () ) )
+				nullptr, false, Str_b().Sprintf ( "TickPool_%d", iTick ).cstr () ) )
 				sphDie ( "failed to create tick pool thread" );
 		}
 	}

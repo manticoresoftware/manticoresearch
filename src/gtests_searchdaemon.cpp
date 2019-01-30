@@ -49,7 +49,10 @@ class tstlogger
 			break;
 		case SPH_LOG_DEBUG:
 		case SPH_LOG_VERBOSE_DEBUG:
-		case SPH_LOG_VERY_VERBOSE_DEBUG: lvl = "DEBUG: ";
+		case SPH_LOG_RPL_DEBUG:
+		case SPH_LOG_VERY_VERBOSE_DEBUG:
+		default:
+			lvl = "DEBUG: ";
 			break;
 		}
 		char * pOut = sLogBuff;

@@ -88,7 +88,7 @@ public:
 	StoredQuery_i * AddQuery ( const PercolateQueryArgs_t & tArgs, const ISphTokenizer * pTokenizer, CSphDict * pDict, CSphString & sError )
 		REQUIRES (!m_tLock);
 	StoredQuery_i * Query ( const PercolateQueryArgs_t & tArgs, CSphString & sError ) override;
-	bool Commit ( StoredQuery_i * pQuery, CSphString & sError ) override;
+	bool CommitPercolate ( StoredQuery_i * pQuery, CSphString & sError ) final;
 
 	bool Prealloc ( bool bStripPath ) override;
 	void Dealloc () override {}
@@ -154,13 +154,13 @@ private:
 	static const DWORD				META_VERSION = 7;				///< current version, added expression filter
 
 	int								m_iLockFD = -1;
-	int								m_iDeleted = 0; // set in DeleteDocument, reset and return in Commit
 	CSphSourceStats					m_tStat;
 	ISphTokenizerRefPtr_c			m_pTokenizerIndexing;
 	int								m_iMaxCodepointLength = 0;
 	int64_t							m_iSavedTID = 0;
 	int64_t							m_tmSaved = 0;
 	bool							m_bSaveDisabled = false;
+	bool							m_bHasFiles = false;
 
 	CSphVector<StoredQueryKey_t>	m_dStored GUARDED_BY ( m_tLock );
 	RwLock_t						m_tLock;
@@ -1582,7 +1582,7 @@ StoredQuery_i * PercolateIndex_c::AddQuery ( const PercolateQueryArgs_t & tArgs,
 	return pStored;
 }
 
-bool PercolateIndex_c::Commit ( StoredQuery_i * pQuery, CSphString & )
+bool PercolateIndex_c::CommitPercolate ( StoredQuery_i * pQuery, CSphString & )
 {
 	StoredQuery_t * pStored = (StoredQuery_t *)pQuery;
 
@@ -1968,11 +1968,15 @@ void PercolateIndex_c::PostSetup()
 		const ISphTokenizer * pTok = tQuery.m_bQL ? pTokenizer : pTokenizerJson;
 		PercolateQueryArgs_t tArgs ( tQuery );
 		StoredQuery_i * pQuery = AddQuery ( tArgs, pTok, pDict, sError );
-		if ( !pQuery || !Commit ( pQuery, sError ) )
+		if ( !pQuery || !CommitPercolate ( pQuery, sError ) )
 			sphWarning ( "index '%s': %d (id=" UINT64_FMT ") query failed to load, ignoring", m_sIndexName.cstr(), i, tQuery.m_uQUID );
 	}
 
 	m_dLoadedQueries.Reset ( 0 );
+
+	// still need index files for index just created from config
+	if ( !m_bHasFiles )
+		SaveMeta ( false );
 }
 
 bool PercolateIndex_c::Prealloc ( bool bStripPath )
@@ -2002,6 +2006,8 @@ bool PercolateIndex_c::Prealloc ( bool bStripPath )
 	// no readable meta? no disk part yet
 	if ( !sphIsReadable ( sMeta.cstr() ) )
 		return true;
+
+	m_bHasFiles = true;
 
 	// opened and locked, lets read
 	CSphAutoreader rdMeta;
@@ -2390,11 +2396,7 @@ void PercolateIndex_c::RamFlush ( bool bPeriodic )
 
 void PercolateIndex_c::ForceDiskChunk ()
 {
-	// right after cluster started with new indexes we need its files on disk to issue sync command
-	if ( !m_iSavedTID )
-		RamFlush ( false );
-	else
-		ForceRamFlush ( false );
+	ForceRamFlush ( false );
 }
 
 void PercolateIndex_c::CheckRamFlush ()
@@ -2459,7 +2461,9 @@ void MergePqResults ( const VecTraits_T<CPqResult *> &dChunks, CPqResult &dRes, 
 	// check if we have exactly one non-null and non-empty result
 	if ( dChunks.GetLength ()==1 ) // short path for only 1 result.
 	{
+		auto dOldMsgs = std::move(dRes.m_dResult.m_sMessages);
 		dRes = std::move ( *dChunks[0] );
+		dRes.m_dResult.m_sMessages = std::move(dOldMsgs);
 		return;
 	}
 

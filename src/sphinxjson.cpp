@@ -1333,6 +1333,9 @@ JsonObj_c & JsonObj_c::operator = ( JsonObj_c && rhs )
 {
 	if ( this!=&rhs )
 	{
+		if ( m_pRoot )
+			cJSON_Delete(m_pRoot);
+
 		m_pRoot = rhs.m_pRoot;
 		m_bOwner = rhs.m_bOwner;
 		rhs.m_pRoot = nullptr;

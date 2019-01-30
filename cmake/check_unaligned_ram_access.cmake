@@ -1,5 +1,4 @@
 #find if the unaligned RAM access is possible on the build system
-if ( "${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang" )
 	set ( _CHECK_UNALIGNED_PROG "
 #include <stdlib.h>
 #include <string.h>
@@ -28,7 +27,6 @@ return 0;
 
 	include ( CheckCXXSourceRuns )
 	CHECK_CXX_SOURCE_RUNS ( "${_CHECK_UNALIGNED_PROG}" _UNALIGNED_RAM )
-endif ()
 
 if ( _UNALIGNED_RAM )
 	set ( UNALIGNED_RAM_ACCESS 1 )

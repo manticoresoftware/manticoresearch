@@ -739,6 +739,7 @@ static KeyDesc_t g_dKeysSearchd[] =
 	{ "query_log_mode",			0, NULL },
 	{ "prefer_rotate",			KEY_DEPRECATED, "seamless_rotate" },
 	{ "shutdown_token",			0, NULL },
+	{ "data_dir",				0, NULL },
 	{ NULL,						0, NULL }
 };
 
@@ -2467,9 +2468,12 @@ static void * g_pBacktraceAddresses [SPH_BACKTRACE_ADDR_COUNT];
 static char g_pBacktrace[4096];
 static const char g_sSourceTail[] = "> source.txt\n";
 static const char * g_pArgv[128] = { "addr2line", "-e", "./searchd", "0x0", NULL };
-static char g_sNameBuf[512] = {0};
 static CSphString g_sBinaryName;
 static bool g_bHaveJemalloc = true;
+
+#if HAVE_SYS_PRCTL_H
+static char g_sNameBuf[512] = {0};
+#endif
 
 bool IsDebuggerPresent()
 {
@@ -3333,3 +3337,15 @@ void Warner_c::MoveAllTo ( CSphString &sTarget )
 	Clear();
 }
 
+const char * GetBaseName ( const CSphString & sFullPath )
+{
+	if ( sFullPath.IsEmpty() )
+		return nullptr;
+
+	const char * pStart = sFullPath.cstr();
+	const char * pCur = pStart + sFullPath.Length() - 1;
+	while ( pCur>pStart && pCur[-1]!='/' && pCur[-1]!='\\' )
+		pCur--;
+
+	return pCur;
+}

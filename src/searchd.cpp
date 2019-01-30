@@ -15625,7 +15625,7 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 				{
 					StringBuilder_c dStr;
 					sphPackedMVA2Str ( (const BYTE *)tMatch.GetAttr(tLoc), eAttrType==SPH_ATTR_INT64SET_PTR, dStr );
-					dRows.PutArray ( dStr );
+					dRows.PutArray ( dStr, false );
 					break;
 				}
 

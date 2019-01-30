@@ -42,6 +42,8 @@ simple_tests:
     - specdocker
   dependencies: []
   image: registry.gitlab.com/manticoresearch/dev/ubertests:latest
+  variables:
+    CTEST_BUILD_CONFIGURATION: "Debug"
   script:
     - ctest -V -S /work/gltest.cmake
   artifacts:
@@ -50,6 +52,7 @@ simple_tests:
     - build/test/test_*/report.txt
     - build/test/error*.txt
     - build/test/searchd.log
+    - build/junit_*.xml
     expire_in: 12 hrs
     when: always
   retry: 1
@@ -63,14 +66,17 @@ release_tests:
     - specdocker
   dependencies: []
   image: registry.gitlab.com/manticoresearch/dev/ubertests:latest
+  variables:
+    CTEST_BUILD_CONFIGURATION: "RelWithDebInfo"
   script:
-    - ctest -V -DCTEST_BUILD_CONFIGURATION=RelWithDebInfo -S /work/gltest.cmake
+    - ctest -V -S /work/gltest.cmake
   artifacts:
     paths:
     - build/here
     - build/test/test_*/report.txt
     - build/test/error*.txt
     - build/test/searchd.log
+    - build/junit_*.xml
     expire_in: 12 hrs
     when: always
   retry: 1
@@ -94,6 +100,8 @@ push_results:
   artifacts:
     paths:
     - results.html
+    reports:
+      junit: build/junit_*.xml
   environment:
     name: ${CI_COMMIT_REF_NAME}
     url: http://$CDASH_URL/CDash/public/index.php?project=Manticoresearch&filtercount=1&field1=revision&compare1=63&value1=$CI_COMMIT_SHA

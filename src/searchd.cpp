@@ -15632,25 +15632,22 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 			case SPH_ATTR_STRINGPTR:
 				{
 					auto * pString = ( const BYTE * ) tMatch.GetAttr ( tLoc );
+					int iLen=0;
 					if ( pString )
-					{
-						int iLen = sphUnpackPtrAttr ( pString, &pString );
-						dRows.PutArray ( pString, iLen );
-					} else
-						dRows.PutString ( "" );
+						iLen = sphUnpackPtrAttr ( pString, &pString );
+					dRows.PutArray ( pString, iLen );
 				}
 				break;
 			case SPH_ATTR_JSON_PTR:
 				{
 					auto * pString = (const BYTE*) tMatch.GetAttr ( tLoc );
+					JsonEscapedBuilder sTmp;
 					if ( pString )
 					{
 						sphUnpackPtrAttr ( pString, &pString );
-						JsonEscapedBuilder sTmp;
 						sphJsonFormat ( sTmp, pString );
-						dRows.PutArray ( sTmp );
-					} else
-						dRows.PutNULL();
+					}
+					dRows.PutArray ( sTmp );
 				}
 				break;
 

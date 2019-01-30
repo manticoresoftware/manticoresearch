@@ -2,7 +2,10 @@
 <test>
 <name>distibuted index vs MVA</name>
 
-<requires> <variant_match /> </requires>  
+<requires>
+<variant_match/>
+<sphinxql_keep_null/>
+</requires>
 
 <config>
 indexer
@@ -19,15 +22,15 @@ source src
 {
 	type			= mysql
 	<sql_settings/>
-	sql_query = SELECT document_id, text, mva, tag FROM test_table
-<Dynamic>	
+	sql_query = SELECT document_id, text, mva, tag, jsn FROM test_table
+<Dynamic>
 	<Variant>sql_attr_multi = uint mva from field</Variant>
 	<Variant>sql_attr_multi = bigint mva from field</Variant>
-</Dynamic>	
+</Dynamic>
 	sql_attr_uint	= tag
+    sql_attr_json   = jsn
 }
 
-<agent1>
 index idx
 {
 	source			= src
@@ -35,28 +38,45 @@ index idx
 	docinfo			= extern
 	min_word_len	= 1
 }
-</agent1>
 
 index dist
 {
 	type					= distributed
-	agent					= <agent_address/>:idx
+	agent					= <my_address/>:idx
 	agent_connect_timeout	= 1000
 	agent_query_timeout		= 3000
 }
 </config>
 
-<num_agents>2</num_agents>
 <queries>
 <query index="dist"></query>
 </queries>
+
+<sphqueries>
+<!-- regression on empty mva -->
+<sphinxql>select mva from idx where id=5</sphinxql>
+<sphinxql>select mva from dist where id=5</sphinxql>
+
+<!-- also check empty string -->
+<sphinxql>select to_string(mva) a from idx where id=5</sphinxql>
+<sphinxql>select to_string(mva) a from dist where id=5</sphinxql>
+
+<!-- also check empty json -->
+<sphinxql>select jsn from idx where id=3</sphinxql>
+<sphinxql>select jsn from dist where id=3</sphinxql>
+
+<!-- control show everything -->
+<sphinxql>select * from idx</sphinxql>
+<sphinxql>select * from dist</sphinxql>
+</sphqueries>
 
 <db_create>
 CREATE TABLE `test_table` (
   `document_id` int(11),
   `text` varchar(255) NOT NULL,
   `mva` varchar(255) NOT NULL,
-  `tag` int(11)
+  `tag` int(11),
+  `jsn` varchar(100) NOT NULL
 )
 </db_create>
 
@@ -66,11 +86,11 @@ DROP TABLE IF EXISTS `test_table`
 
 <db_insert>
 INSERT INTO `test_table` VALUES
-( 1, 'test1',  '1',			11 ),
-( 2, 'test2',  '2,3',		22 ),
-( 3, 'test3',  '4,5,6',		33 ),
-( 4, 'test4',  '7,8,9,10', 	44 ),
-( 5, 'test5',  '',			55 )
+( 1, 'test1',  '1',			11, '{}' ),
+( 2, 'test2',  '2,3',		22, '[]' ),
+( 3, 'test3',  '4,5,6',		33, '' ),
+( 4, 'test4',  '7,8,9,10', 	44, '{intval: 10}' ),
+( 5, 'test5',  '',			55, '' )
 </db_insert>
 
 </test>

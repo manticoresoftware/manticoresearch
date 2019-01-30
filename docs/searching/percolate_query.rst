@@ -290,6 +290,6 @@ Distributed indexes made from percolate locals and/or agents (DPQ indexes)
 You can construct a distributed index from several percolate indexes.
 The syntax is absolutely the same as for other distributed indexes. It can include several :ref:`local<local>` indexes as well as several :ref:`agents<agent>`. For ``local`` the only noticeable difference is that since percolate indexes don't know about kill-lists there's no difference in which order they're mentioned in a distributed index definition.
 
-For DPQ the operations of listing stored queries and searching through them (``CALL PQ``) are transparent and wors as if all the indexes wer one solid local index. However data manipulation statements such as ``insert``, ``replace``, ``truncate`` are not available.
+For DPQ the operations of listing stored queries and searching through them (``CALL PQ``) are transparent and works as if all the indexes were one solid local index. However data manipulation statements such as ``insert``, ``replace``, ``truncate`` are not available.
 
 If you mention a non-pq index among the agents, the behaviour will be undefined. Most likely in case if the erroneous agent has the same schema as the outer schema of the pq index (id, query, tags, filters) - it will not trigger an error when listing stored PQ rules hence may pollute the list of actual PQ rules stored in PQ indexes with it's own non-pq strings, so be aware of the confusion! 'CALL PQ' to such wrong agent will definitely trigger an error.

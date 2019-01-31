@@ -197,7 +197,8 @@ CREATE TABLE json_table (
 INSERT INTO test_table ( id, aa, title, mm, kk, f1, f2 ) VALUES
 ( 1, 2, 'dummy', '', 'one', 0, 0 ),
 ( 10, 3, 'ohai', '7 40', 'ten', 0, 0 ),
-( 11, 4, 'ohai2', '', 'eleventy', 0.123123, 0.456789 )
+( 11, 4, 'ohai2', '', 'eleventy', 0.123123, 0.456789 ),
+( 21, 5, 'Orchard Terrace', '', 'Omagh', 0.9528931356546767,-0.12749577825941016 )
 </db_insert>
 
 <db_insert>
@@ -254,6 +255,9 @@ INSERT INTO json_table VALUES
 <sphinxql>SELECT id, aa / 2 as sel from test</sphinxql>
 <sphinxql>SELECT id, aa mod 2 as sel from test</sphinxql>
 <sphinxql>SELECT id, aa % 2 as sel from test</sphinxql>
+
+<!-- long floats -->
+<sphinxql>select f1, f2 FROM test where id=21</sphinxql>
 
 <!-- test argument type check -->
 <sphinxql>SELECT id, CRC32('test') FROM test WHERE id=10</sphinxql>

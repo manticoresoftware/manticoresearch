@@ -83,6 +83,10 @@ namespace sph {
 	int Sprintf ( char * pOutput, const char * sFmt, ... );
 	void vSprintf ( StringBuilder_c &pOutput, const char * sFmt, va_list ap );
 	void Sprintf ( StringBuilder_c& pOutput, const char * sFmt, ...);
+
+	/// output fVal with arbitrary 6 or 8 digits
+	/// ensure that sBuffer has enough space to fit fVal!
+	int PrintVarFloat ( char* sBuffer, float fVal );
 }
 
 /// string splitter, extracts sequences of alphas (as in sphIsAlpha)

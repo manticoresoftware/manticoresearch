@@ -2365,15 +2365,27 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 			{
 				double fValue = va_arg ( ap, double );
 
+				// ensure 32 is enough to take any float value.
+				Grow ( pOutput, Max ( iWidth, ( size_t ) 32 ));
+
 				// extract current format from source format line
-				char sFormat[32] = {0};
 				auto *pF = sFmt;
 				while ( *--pF!='%' );
-				memcpy ( sFormat, pF, sFmt-pF );
 
-				// invoke standard sprintf
-				Grow ( pOutput, Max ( iWidth, (size_t)32 ) ); // ensure 32 is enough to take any flow value.
-				pOutput += sprintf ( tail ( pOutput ), sFormat, fValue );
+				if ( memcmp ( pF, "%f", 2 )!=0 )
+				{
+
+					// invoke standard sprintf
+					char sFormat[32] = { 0 };
+					memcpy ( sFormat, pF, sFmt - pF );
+					pOutput += sprintf ( tail ( pOutput ), sFormat, fValue );
+				} else
+				{
+					// plain %f - output arbitrary 6 or 8 digits
+					pOutput += PrintVarFloat ( tail ( pOutput ), fValue );
+					assert (( sFmt - pF )==2 );
+				}
+
 				state = SNORMAL;
 				break;
 			}
@@ -2417,6 +2429,15 @@ void vSprintf_T ( PCHAR * _pOutput, const char * sFmt, va_list ap )
 		va_start ( ap, sFmt );
 		vSprintf ( dOutput, sFmt, ap );
 		va_end ( ap );
+	}
+
+	int PrintVarFloat ( char* sBuffer, float fVal )
+	{
+		int iLen = sprintf ( sBuffer, "%f", fVal );
+		auto fTest = strtof ( sBuffer, nullptr );
+		if ( fTest!=fVal )
+			return sprintf ( sBuffer, "%1.8f", fVal );
+		return iLen;
 	}
 
 } // namespace sph

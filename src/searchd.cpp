@@ -11816,11 +11816,13 @@ public:
 
 	using BaseVec::Add;
 
-	void PutFloatAsString ( float fVal, const char * sFormat = "%f" )
+	void PutFloatAsString ( float fVal, const char * sFormat = nullptr )
 	{
 		ReserveGap ( SPH_MAX_NUMERIC_STR );
 		auto pSize = End();
-		int iLen = snprintf ( ( char * )pSize+1, SPH_MAX_NUMERIC_STR-1, sFormat, fVal );
+		int iLen = sFormat
+			? snprintf (( char* ) pSize + 1, SPH_MAX_NUMERIC_STR - 1, sFormat, fVal )
+			: sph::PrintVarFloat (( char* ) pSize + 1, fVal );
 		*pSize = BYTE ( iLen );
 		AddN ( iLen + 1 );
 	}

@@ -13354,6 +13354,7 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 	CSphString sError;
 	PercolateOptions_t tOpts;
 	tOpts.m_sIndex = dStmtIndex.m_sVal;
+	bool bSkipEmpty = false;
 	ARRAY_FOREACH ( i, tStmt.m_dCallOptNames )
 	{
 		CSphString & sOpt = tStmt.m_dCallOptNames[i];
@@ -13368,6 +13369,7 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 		else if ( sOpt=="docs_json" )	tOpts.m_bJsonDocs = ( v.m_iVal!=0 );
 		else if ( sOpt=="query" )		tOpts.m_bGetQuery = ( v.m_iVal!=0 );
 		else if ( sOpt=="skip_bad_json" )	tOpts.m_bSkipBadJson = ( v.m_iVal!=0 );
+		else if ( sOpt=="skip_empty" ) 	bSkipEmpty = true;
 		else if ( sOpt=="shift" ) 		tOpts.m_iShift = v.m_iVal;
 		else if ( sOpt=="mode" )
 		{
@@ -13442,6 +13444,8 @@ static void HandleMysqlCallPQ ( SqlRowBuffer_c & tOut, SqlStmt_t & tStmt, CSphSe
 			{
 				dData.SwapData ( dBlobDocs.Add () );
 			}
+			else if ( bSkipEmpty && dBson.IsEmpty() )
+				continue;
 			else
 				dBadDocs.Add ( i + 1 ); // let it be just 'an error' for now
 			if ( !dBadDocs.IsEmpty() && !tOpts.m_bSkipBadJson )

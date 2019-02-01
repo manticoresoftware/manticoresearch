@@ -49,6 +49,7 @@ A number of options can be set:
 -  ``query`` - 0 (disabled by default), if true returns all information of matched stored queries, otherwise it returns just the stored query IDs.
 -  ``skip_bad_json`` - 0 (disabled by default), specifies what to do if json document is broken: either immediately stop
    with an error message or just skip it and continue to process the rest of the documents.
+- ``skip_empty`` - 0 (disabled by default), specifies how to behave if we met totally empty json, i.e. just null or empty line. By default it is accounted as 'bad json' and so, may be managed by ``skip_bad_json`` as any other kind of errors. Setting it to 1 will silently ignore such documents without any errors and even warnings.
 -  ``shift`` - 0 by default, defines the number which will be added to document ids if no ``docs_id`` fields provided. Makes sense mainly to support :ref:`Distributed PQ modes<distributed_pq_modes>`.
 -  ``verbose`` - 0 (disabled by default), provides extended info in :ref:`SHOW META <percolate_query_show_meta>`
 

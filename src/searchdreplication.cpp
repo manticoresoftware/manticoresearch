@@ -279,8 +279,9 @@ static wsrep_cb_status_t SstDonate_fn ( void * pAppCtx, void * pRecvCtx, const v
 	CSphString sNode;
 	sNode.SetBinary ( (const char *)sMsg, iMsgLen );
 
+	wsrep_gtid_t tGtid = *pStateID;
 	char sGtid[WSREP_GTID_STR_LEN];
-	Verify ( wsrep_gtid_print ( pStateID, sGtid, sizeof(sGtid) )>0 );
+	Verify ( wsrep_gtid_print ( &tGtid, sGtid, sizeof(sGtid) )>0 );
 
 	ReplicationCluster_t * pCluster = pLocalCtx->m_pCluster;
 	sphLogDebugRpl ( "donate %s to %s, gtid %s, bypass %d", pCluster->m_sName.cstr(), sNode.cstr(), sGtid, (int)bBypass );
@@ -288,13 +289,16 @@ static wsrep_cb_status_t SstDonate_fn ( void * pAppCtx, void * pRecvCtx, const v
 	CSphString sError;
 
 	pCluster->m_eState = WSREP_MEMBER_DONOR;
-	const bool bOk = SendClusterIndexes ( pCluster, sNode, bBypass, *pStateID, sError );
+	const bool bOk = SendClusterIndexes ( pCluster, sNode, bBypass, tGtid, sError );
 	pCluster->m_eState = WSREP_MEMBER_SYNCED;
 
 	if ( !bOk )
+	{
 		sphWarning ( "%s", sError.cstr() );
+		tGtid.seqno = WSREP_SEQNO_UNDEFINED;
+	}
 
-	pCluster->m_pProvider->sst_sent( pCluster->m_pProvider, pStateID, ( bOk ? 0 : -ECANCELED ) );
+	pCluster->m_pProvider->sst_sent( pCluster->m_pProvider, &tGtid, ( bOk ? 0 : -ECANCELED ) );
 
 	sphLogDebugRpl ( "donate cluster %s to %s, gtid %s, bypass %d, done %d", pCluster->m_sName.cstr(), sNode.cstr(), sGtid, (int)bBypass, (int)bOk );
 
@@ -3247,6 +3251,9 @@ bool RemoteClusterSynced ( const PQRemoteData_t & tCmd, CSphString & sError )
 			sError.SetSprintf ( "unknown cluster '%s'", tCmd.m_sCluster.cstr() );
 			return false;
 		}
+
+		if ( !bValid )
+			tGtid.seqno = WSREP_SEQNO_UNDEFINED;
 
 		wsrep_t * pProvider = (*ppCluster)->m_pProvider;
 		pProvider->sst_received ( pProvider, &tGtid, nullptr, 0, bValid ? 0 : -ECANCELED );

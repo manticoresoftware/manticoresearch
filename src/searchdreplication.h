@@ -61,10 +61,8 @@ bool HandleCmdReplicate ( ReplicationCommand_t & tCmd, CSphString & sError, int 
 
 void Shutdown ();
 // unfreeze threads waiting of replication started
-void ReplicateClustersWake();
 void ReplicateClustersDelete();
 bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bool bForce );
-void ReplicationWait();
 bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, CSphString & sError );
 bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const CSphVector<SqlInsert_t> & dValues, CSphString & sError );
 bool ClusterDelete ( const CSphString & sCluster, CSphString & sError, CSphString & sWarning );
@@ -127,6 +125,7 @@ struct ListenerDesc_t
 ListenerDesc_t ParseListener ( const char * sSpec );
 ESphAddIndex ConfigureAndPreload ( const CSphConfigSection & hIndex, const char * sIndexName, bool bJson );
 ESphAddIndex AddIndex ( const char * szIndexName, const CSphConfigSection & hIndex, bool bReplace=false );
-bool PreallocNewIndex ( ServedDesc_t &tIdx, const CSphConfigSection * pConfig, const char * szIndexName );
+bool PreallocNewIndex ( ServedDesc_t & tIdx, const CSphConfigSection * pConfig, const char * szIndexName );
+bool CheckIndexCluster ( const CSphString & sIndexName, const ServedDesc_t & tDesc, const CSphString & sStmtCluster, CSphString & sError );
 
 #endif // _searchdreplication_

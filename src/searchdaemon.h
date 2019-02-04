@@ -670,6 +670,7 @@ struct ServedDesc_t
 	mutable CSphString	m_sUnlink;
 	IndexType_e	m_eType			= IndexType_e::PLAIN;
 	bool		m_bJson			= false;
+	CSphString	m_sCluster;
 
 	inline bool IsMutable () const { return m_eType==IndexType_e::RT || m_eType==IndexType_e::PERCOLATE; }
 	virtual                ~ServedDesc_t ();

@@ -17,6 +17,15 @@
 #define sphSeek		lseek
 #endif
 
+const char * GetReplicationDL()
+{
+#ifndef REPLICATION_LIB
+	return nullptr;
+#else
+	return REPLICATION_LIB;
+#endif
+}
+
 // global application context for wsrep callbacks
 static CSphString	g_sLogFile;
 
@@ -27,30 +36,27 @@ static bool			g_bCfgHasData = false;
 static int			g_iRemoteTimeout = 120 * 1000; // 2 minutes in msec
 static const char * g_sDebugOptions = "debug=on;cert.log_conflicts=yes";
 
+typedef wsrep_member_status_t ClusterState_e;
+
 struct ClusterDesc_t
 {
 	CSphString	m_sName;
 	CSphString	m_sURI;
-	CSphString	m_sListen;
+	CSphString	m_sListen; // +1 after listen is IST port
 	CSphString	m_sPath; // path relative to data_dir
 	CSphString	m_sOptions;
-	bool		m_bSkipSST = false;
 	CSphVector<CSphString> m_dIndexes;
 };
 
 struct ReplicationCluster_t : public ClusterDesc_t
 {
-	// +1 after listen is IST port
-	// +1 after listen IST is SST port
-	CSphString	m_sListenSST; 
-
 	// replicator
 	wsrep_t *	m_pProvider = nullptr;
 	SphThread_t	m_tRecvThd;
-	CSphAutoEvent m_tSync;
 	CSphString	m_sNodes; // raw nodes addresses (API and replication) from whole cluster
 	RwLock_t m_tNodesLock;
 	CSphVector<uint64_t> m_dIndexHashes;
+	CSphAtomicL m_eState { WSREP_MEMBER_UNDEFINED };
 
 	// state
 	CSphFixedVector<BYTE>	m_dUUID { 0 };
@@ -120,21 +126,12 @@ struct PQRemoteReply_t;
 struct PQRemoteData_t;
 
 static bool RemoteClusterDelete ( const CSphString & sCluster, CSphString & sError );
-static bool RemoteFileSize ( const CSphString & sCluster, const CSphString & sIndexBaseName, int64_t & iGot, CSphString & sError );
-static bool RemoteFileReserve ( const CSphString & sCluster, const CSphString & sIndexBaseName, int64_t iSize, PQRemoteReply_t & tRes, CSphString & sError );
-static bool RemoteFileStore ( const CSphString & sCluster, const CSphString & sIndexBaseName, int64_t iFileOff, const BYTE * pData, int iSize, PQRemoteReply_t & tRes, CSphString & sError );
+static bool RemoteFileReserve ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSphString & sError );
+static bool RemoteFileStore ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSphString & sError );
 static bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSphString & sError );
+static bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CSphString & sNode, bool bBypass, const wsrep_gtid_t & tStateID, CSphString & sError );
+static bool RemoteClusterSynced ( const PQRemoteData_t & tCmd, CSphString & sError );
 
-const char * GetReplicationDL()
-{
-#ifndef REPLICATION_LIB
-	return nullptr;
-#else
-	return REPLICATION_LIB;
-#endif
-}
-
-static bool ReplicatedIndexes ( const CSphVector<IndexDesc_t> & dIndexes, bool bBypass, const CSphString & sClusterName );
 static bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CSphString & sCluster, ReplicationCommand_t & tCmd );
 static bool HandleCmdReplicated ( ReplicationCommand_t & tCmd );
 
@@ -203,404 +200,7 @@ static void Logger_fn ( wsrep_log_level_t eLevel, const char * sMsg )
 }
 
 
-static const WORD g_dReplicateCommandVer[RCOMMAND_TOTAL] = { 0x101, 0x101, 0x101, 0x101, 0x101, 0x101 };
-
-WORD GetReplicateCommandVer ( ReplicationCommand_e eCommand )
-{
-	assert ( eCommand>=0 && eCommand<RCOMMAND_TOTAL );
-	return g_dReplicateCommandVer[(int)eCommand];
-}
-
-
-#define SST_OPT_ROLE "--role"
-#define SST_OPT_DATA "--datadir"
-#define SST_OPT_PARENT "--parent"
-#define SST_OPT_NAME "--cluster-name"
-#define SST_OPT_STATE_IN "--state-in"
-#define SST_OPT_STATE_OUT "--state-out"
-#define SST_OPT_ADDR "--address"
-#define SST_OPT_LISTEN "--listen"
-#define SST_OPT_LOG "--log-file"
-
-struct SstArgs_t : public ISphRefcounted
-{
-	CSphString m_sError;
-	CSphAutoEvent m_tEv;
-	SphThread_t m_tThd;
-
-	bool m_bBypass = false;
-	CSphString m_sAddr;
-	wsrep_gtid m_tGtid = WSREP_GTID_UNDEFINED;
-
-	ReplicationCluster_t * m_pCluster = nullptr;
-
-	explicit SstArgs_t ( ReplicationCluster_t * pCluster )
-		: m_pCluster ( pCluster )
-	{
-	}
-};
-
-static CSphString GetSstStateFileName ( const ReplicationCluster_t * pCluster, int iSalt, bool bFileOnly )
-{
-	assert ( pCluster );
-
-	StringBuilder_c sName;
-	if ( bFileOnly )
-	{
-		sName += "sst_state.json";
-	} else
-	{
-		sName += g_sDataDir.cstr();
-		if ( !pCluster->m_sPath.IsEmpty() )
-			sName.Appendf ( "/%s", pCluster->m_sPath.cstr() );
-		sName.Appendf ( "/sst_state_%d.json", iSalt );
-	}
-
-	return sName.cstr();
-}
-
-static bool WriteDonateState ( const ReplicationCluster_t * pCluster, const CSphString & sFilename, const wsrep_gtid & tGtid, bool bBypass )
-{
-	CSphVector<IndexDesc_t> dIndexes;
-	if ( !bBypass ) // in bypass mode informs only joiner by sending gtid
-	{
-		for ( const CSphString & sName : pCluster->m_dIndexes )
-		{
-			IndexDesc_t tIndex;
-			tIndex.m_sName = sName;
-			tIndex.m_eType = IndexType_e::PERCOLATE;
-			// need scope for RLock to free after operations
-			{
-				ServedDescRPtr_c pServed ( GetServed ( sName ) );
-				if ( !pServed || !pServed->m_pIndex || !pServed->IsMutable() )
-					continue;
-
-				tIndex.m_eType = pServed->m_eType;
-				tIndex.m_sPath = pServed->m_sIndexPath;
-
-				// save data to disk to sync it
-				((ISphRtIndex *)pServed->m_pIndex)->ForceRamFlush ( false );
-			}
-
-			dIndexes.Add ( tIndex );
-		}
-	}
-
-	char sGtid[WSREP_GTID_STR_LEN];
-	Verify ( wsrep_gtid_print ( &tGtid, sGtid, sizeof(sGtid) )>0 );
-
-	JsonObj_c tIndexes;
-	for ( const auto & i : dIndexes )
-		JsonConfigSetIndex ( i, tIndexes );
-
-	JsonObj_c tSyncSrc;
-	tSyncSrc.AddItem ( "indexes", tIndexes );
-	tSyncSrc.AddStr( "gtid", sGtid );
-	tSyncSrc.AddBool ( "bypass", bBypass );
-
-	CSphString sError;
-	CSphWriter tFile;
-	if ( !tFile.OpenFile ( sFilename, sError ) )
-	{
-		sphLogFatal ( "%s", sError.cstr() );
-		return false;
-	}
-
-	CSphString sData = tSyncSrc.AsString();
-
-	tFile.PutBytes ( sData.cstr(), sData.Length() );
-	tFile.CloseFile();
-	if ( tFile.IsError() )
-	{
-		sphLogFatal ( "%s", sError.cstr() );
-		return false;
-	}
-
-	return true;
-}
-
-static bool ReadJoinerState ( const CSphString & sFilename, const CSphString & sPath, wsrep_gtid & tGtid, bool & bBypass, CSphVector<IndexDesc_t> & dIndexes )
-{
-	CSphString sError;
-	dIndexes.Resize ( 0 );
-
-	if ( !sphIsReadable ( sFilename, nullptr ) )
-	{
-		sphLogFatal ( "no readable SST file found %s", sFilename.cstr() );
-		return false;
-	}
-
-	CSphAutoreader tReader;
-	if ( !tReader.Open ( sFilename, sError ) )
-	{
-		sphLogFatal ( "%s", sError.cstr() );
-		return false;
-	}
-
-	int iSize = tReader.GetFilesize();
-	if ( !iSize )
-	{
-		sphLogFatal ( "empty SST file %s", sFilename.cstr() );
-		return false;
-	}
-	
-	CSphFixedVector<BYTE> dData ( iSize+1 );
-	tReader.GetBytes ( dData.Begin(), iSize );
-
-	if ( tReader.GetErrorFlag() )
-	{
-		sphLogFatal ( "error reading SST file %s, %s", sFilename.cstr(), tReader.GetErrorMessage().cstr() );
-		return false;
-	}
-	
-	dData[iSize] = 0; // safe gap
-	JsonObj_c tRoot ( (const char*)dData.Begin() );
-	if ( tRoot.GetError ( (const char *)dData.Begin(), dData.GetLength(), sError ) )
-	{
-		sphLogFatal ( "error parsing SST JSON, file %s, %s", sFilename.cstr(), sError.cstr() );
-		return false;
-	}
-
-	CSphString sGTID;
-	if ( !tRoot.FetchStrItem ( sGTID, "gtid", sError ) )
-		return false;
-
-	int iGtidLen = wsrep_gtid_scan ( sGTID.cstr(), sGTID.Length(), &tGtid );
-	if ( iGtidLen<0 )
-	{
-		sError.SetSprintf ( "invalid GTID property value, %s", sGTID.cstr() );
-		return false;
-	}
-
-	if ( !tRoot.FetchBoolItem ( bBypass, "bypass", sError ) )
-		return false;
-
-	JsonObj_c tIndexes = tRoot.GetItem("indexes");
-	for ( const auto & i : tIndexes )
-	{
-		IndexDesc_t tIndex;
-		if ( !JsonLoadIndexDesc ( i, sError, tIndex ) )
-		{
-			sError.SetSprintf ( "index '%s'(%d) error: %s", i.Name(), dIndexes.GetLength(), sError.cstr() );
-			return false;
-		}
-
-		const char * sName = GetBaseName ( tIndex.m_sPath );
-		// index should be at cluster directory
-		tIndex.m_sPath.SetSprintf ( "%s/%s", sPath.cstr(), sName );
-
-		dIndexes.Add ( tIndex );
-	}
-
-	return true;
-}
-
-static void SstDonateThread ( void * pArgs )
-{
-	sphLogDebugRpl ( "SST donate thread started" );
-	CSphRefcountedPtr<SstArgs_t> pDonateArgs ( (SstArgs_t *)pArgs );
-	pDonateArgs->AddRef();
-	assert ( pDonateArgs->m_pCluster && pDonateArgs->m_pCluster->m_pProvider );
-
-	// args copy prior caller detached and vanished
-	const ReplicationCluster_t * pCluster = pDonateArgs->m_pCluster;
-	wsrep_t * pWsrep = pDonateArgs->m_pCluster->m_pProvider;
-	bool bBypass = pDonateArgs->m_bBypass;
-	CSphString sAddr = pDonateArgs->m_sAddr;
-	wsrep_gtid tGtid = pDonateArgs->m_tGtid;
-
-	sphLogDebugRpl ( "SST donate address %s", sAddr.cstr() );
-
-	// free caller thread
-	// FIXME!!! move after exec and also return exec status as 
-	// signal sst_prepare thread with ret code,
-	// it will go on sending SST request
-	pDonateArgs->m_tEv.SetEvent();
-
-	// uniq output name for each invocation
-	CSphString sStateFilename = GetSstStateFileName ( pCluster, GetOsThreadId(), false );
-	if ( !WriteDonateState ( pCluster, sStateFilename, tGtid, bBypass ) )
-	{
-		tGtid = WSREP_GTID_UNDEFINED;
-		pWsrep->sst_sent( pWsrep, &tGtid, -ECANCELED );
-		sphLogFatal ( "SST donate thread exited " );
-		::unlink ( sStateFilename.cstr() );
-		return;
-	}
-	CSphString sStateOut = GetSstStateFileName ( pCluster, 0, true );
-	CSphString sClusterPath = GetClusterPath ( pCluster->m_sPath );
-
-	// setup
-	CSphVector<char> dOut;
-	char sError [ 1024 ];
-	StringBuilder_c sCmd;
-	sCmd.Appendf (
-		"python wsrep_sst_pysync.py "
-		SST_OPT_ROLE" donor "
-		SST_OPT_ADDR" %s "
-		SST_OPT_DATA" %s "
-		SST_OPT_PARENT" %d "
-		SST_OPT_NAME" %s "
-		SST_OPT_STATE_IN" %s "
-		SST_OPT_STATE_OUT" %s",
-		sAddr.cstr(), sClusterPath.cstr(), GetOsThreadId(), pCluster->m_sName.cstr(), sStateFilename.cstr(), sStateOut.cstr() );
-
-	// SST script logs info into daemon log
-	if ( g_eLogLevel>=SPH_LOG_RPL_DEBUG && !g_sLogFile.IsEmpty() )
-		sCmd.Appendf ( " " SST_OPT_LOG" %s", g_sLogFile.cstr() );
-
-	bool bExecPassed = TryToExec ( nullptr, nullptr, dOut, sError, sizeof(sError), sCmd.cstr() );
-	if ( !bExecPassed )
-	{
-		sphLogFatal ( "donate failed to sync\n%s\n%s", sError, ( dOut.GetLength() ? dOut.Begin() : "" ) );
-		tGtid = WSREP_GTID_UNDEFINED;
-	}
-
-	char sGtid[WSREP_GTID_STR_LEN];
-	Verify ( wsrep_gtid_print ( &tGtid, sGtid, sizeof(sGtid) )>0 );
-	sphLogDebugRpl ( "SST donate sent %s UID %s", ( !bExecPassed ? "invalid" : "good" ), sGtid );
-
-	// FIXME!!! replace with proper event
-	sphSleepMsec ( 100 );
-	pWsrep->sst_sent( pWsrep, &tGtid, ( !bExecPassed ? -ECANCELED : 0 ) );
-
-	// SST finished
-	sphLogDebugRpl ( "SST donate thread done" );
-	::unlink ( sStateFilename.cstr() );
-}
-
-bool PrepareDonateSst ( ReplicationCluster_t * pCluster, bool bBypass, const CSphString & sAddr, const wsrep_gtid & tGtid, CSphString & sError )
-{
-	CSphRefcountedPtr<SstArgs_t> tArgs ( new SstArgs_t ( pCluster ) );
-	tArgs->m_bBypass = bBypass;
-	tArgs->m_sAddr = sAddr;
-	tArgs->m_tGtid = tGtid;
-	if ( !sphThreadCreate ( &tArgs->m_tThd, SstDonateThread, tArgs.Ptr(), true ) )
-	{
-		sphLogDebugRpl ( "failed to start SST donate thread %d (%s)", errno, strerror(errno) );
-		return false;
-	}
-
-	// wait SST thread to finish setup
-	tArgs->m_tEv.WaitEvent();
-	if ( !tArgs->m_sError.IsEmpty() )
-	{
-		sphWarning ( "failed to donate SST, '%s'", tArgs->m_sError.cstr() );
-		return false;
-	}
-		
-	// just sleep to donate rsync started
-	// FIXME!!! wait proper process signal
-	sphSleepMsec ( 100 );
-	return true;
-}
-
-static void SstJoinerThread ( void * pArgs )
-{
-	sphLogDebugRpl ( "SST joiner thread started" );
-	CSphRefcountedPtr<SstArgs_t> pJonerArgs ( (SstArgs_t *)pArgs );
-	pJonerArgs->AddRef();
-	assert ( pJonerArgs->m_pCluster && pJonerArgs->m_pCluster->m_pProvider );
-
-	// args copy prior caller detached and vanished
-	const ReplicationCluster_t * pCluster = pJonerArgs->m_pCluster;
-	wsrep_t * pWsrep = pJonerArgs->m_pCluster->m_pProvider;
-	CSphString sName = pCluster->m_sName;
-	CSphString sPath = GetClusterPath ( pCluster->m_sPath );
-	CSphString sListenSST = pCluster->m_sListenSST;
-	CSphString sStateFilename = GetSstStateFileName ( pCluster, 0, true );
-	CSphString sStateFullname;
-	sStateFullname.SetSprintf ( "%s/%s", sPath.cstr(), sStateFilename.cstr() );
-
-	// free caller thread
-	// FIXME!!! move after exec and also return exec status as 
-	// signal sst_prepare thread with ret code,
-	// it will go on sending SST request
-	pJonerArgs->m_tEv.SetEvent();
-
-	// setup
-	CSphVector<char> dOut;
-	char sError [ 1024 ];
-	StringBuilder_c sCmd;
-	sCmd.Appendf (
-		"python wsrep_sst_pysync.py "
-		SST_OPT_ROLE" joiner "
-		SST_OPT_DATA" %s "
-		SST_OPT_PARENT" %d "
-		SST_OPT_NAME" %s "
-		SST_OPT_STATE_IN" %s "
-		SST_OPT_LISTEN" %s",
-		sPath.cstr(), GetOsThreadId(), sName.cstr(), sStateFullname.cstr(), sListenSST.cstr() );
-
-	// SST script logs info into daemon log
-	if ( g_eLogLevel>=SPH_LOG_RPL_DEBUG && !g_sLogFile.IsEmpty() )
-		sCmd.Appendf ( " " SST_OPT_LOG" %s", g_sLogFile.cstr() );
-
-	bool bExecPassed = TryToExec ( nullptr, nullptr, dOut, sError, sizeof(sError), sCmd.cstr() );
-	if ( !bExecPassed )
-		sphLogFatal ( "joiner failed to start sync\n%s\n%s", sError, ( dOut.GetLength() ? dOut.Begin() : "" ) );
-
-	CSphVector<IndexDesc_t> dIndexes;
-	wsrep_gtid tGtid = WSREP_GTID_UNDEFINED;
-	bool bBypass = false;
-	bool bValidState = ( bExecPassed ? ReadJoinerState ( sStateFullname, sPath, tGtid, bBypass, dIndexes ) : false );
-	::unlink ( sStateFullname.cstr() );
-
-	char sGtid[WSREP_GTID_STR_LEN];
-	Verify ( wsrep_gtid_print ( &tGtid, sGtid, sizeof(sGtid) )>0 );
-
-	sphLogDebugRpl ( "SST joiner got %s UID %s, indexes %d", ( !bValidState ? "invalid" : "good" ), sGtid, dIndexes.GetLength() );
-
-	// FIXME!!! remove cluster on failure
-	if ( bValidState )
-		bValidState = ReplicatedIndexes ( dIndexes, bBypass, sName );
-
-	if ( !bValidState )
-		tGtid = WSREP_GTID_UNDEFINED;
-
-	// just sleep to wait of exit sst_prepare_cb
-	// FIXME!!! replace with proper event
-	sphSleepMsec ( 100 );
-	pWsrep->sst_received ( pWsrep, &tGtid, nullptr, 0, !bValidState ? -ECANCELED : 0 );
-
-	// SST finished
-	sphLogDebugRpl ( "SST joiner thread done" );
-}
-
-void PrepareJoinSst ( ReplicationCluster_t * pCluster, void ** ppSstName, size_t * pSstNameLen )
-{
-	*ppSstName = strdup ( pCluster->m_bSkipSST ? WSREP_STATE_TRANSFER_TRIVIAL : pCluster->m_sListenSST.cstr() );
-
-	if ( *ppSstName )
-		*pSstNameLen = strlen ( (const char *)( *ppSstName ) ) + 1;
-	else
-		*pSstNameLen = -ENOMEM;
-
-	sphLogDebugRpl ( "SST join '%s'", (const char *)(*ppSstName) );
-	if ( pCluster->m_bSkipSST )
-		return;
-
-	while ( pSstNameLen )
-	{
-		CSphRefcountedPtr<SstArgs_t> tArgs ( new SstArgs_t ( pCluster ) );
-		if ( !sphThreadCreate ( &tArgs->m_tThd, SstJoinerThread, tArgs.Ptr(), true ) )
-		{
-			sphLogDebugRpl ( "failed to start SST joiner thread %d (%s)", errno, strerror(errno) );
-			break;
-		}
-
-		// wait SST thread to finish setup
-		tArgs->m_tEv.WaitEvent();
-		if ( !tArgs->m_sError.IsEmpty() )
-			sphWarning ( "failed to join SST, '%s'", tArgs->m_sError.cstr() );
-		
-		// just sleep to joiner rsync started
-		// FIXME!!! wait proper process signal
-		sphSleepMsec ( 100 );
-
-		break;
-	}
-}
+static const WORD g_iReplicateCommandVer = 0x101;
 
 static void LogGroupView ( const wsrep_view_info_t * pView )
 {
@@ -659,9 +259,57 @@ static wsrep_cb_status_t ViewChanged_fn ( void * pAppCtx, void * pRecvCtx, const
 	*pSstReqLen = 0;
 
 	if ( pView->state_gap )
-		PrepareJoinSst ( pCluster, ppSstReq, pSstReqLen );
+	{
+		CSphString sAddr;
+		GetNodeAddress ( *pCluster, sAddr );
+		sphLogDebugRpl ( "join %s to %s", sAddr.cstr(), pCluster->m_sName.cstr() );
+
+		*pSstReqLen = sAddr.Length() + 1;
+		*ppSstReq = sAddr.Leak();
+		pCluster->m_eState = WSREP_MEMBER_JOINER;
+	}
 
 	return WSREP_CB_SUCCESS;
+}
+
+static wsrep_cb_status_t SstDonate_fn ( void * pAppCtx, void * pRecvCtx, const void * sMsg, size_t iMsgLen, const wsrep_gtid_t * pStateID, const char * pState, size_t iStateLen, wsrep_bool_t bBypass )
+{
+	ReceiverCtx_t * pLocalCtx = (ReceiverCtx_t *)pRecvCtx;
+	
+	CSphString sNode;
+	sNode.SetBinary ( (const char *)sMsg, iMsgLen );
+
+	char sGtid[WSREP_GTID_STR_LEN];
+	Verify ( wsrep_gtid_print ( pStateID, sGtid, sizeof(sGtid) )>0 );
+
+	ReplicationCluster_t * pCluster = pLocalCtx->m_pCluster;
+	sphLogDebugRpl ( "donate %s to %s, gtid %s, bypass %d", pCluster->m_sName.cstr(), sNode.cstr(), sGtid, (int)bBypass );
+
+	CSphString sError;
+
+	pCluster->m_eState = WSREP_MEMBER_DONOR;
+	const bool bOk = SendClusterIndexes ( pCluster, sNode, bBypass, *pStateID, sError );
+	pCluster->m_eState = WSREP_MEMBER_SYNCED;
+
+	if ( !bOk )
+		sphWarning ( "%s", sError.cstr() );
+
+	pCluster->m_pProvider->sst_sent( pCluster->m_pProvider, pStateID, ( bOk ? 0 : -ECANCELED ) );
+
+	sphLogDebugRpl ( "donate cluster %s to %s, gtid %s, bypass %d, done %d", pCluster->m_sName.cstr(), sNode.cstr(), sGtid, (int)bBypass, (int)bOk );
+
+	return ( bOk ? WSREP_CB_SUCCESS : WSREP_CB_FAILURE );
+}
+
+static void Synced_fn ( void * pAppCtx )
+{
+	ReceiverCtx_t * pLocalCtx = (ReceiverCtx_t *)pAppCtx;
+
+	assert ( pLocalCtx );
+	ReplicationCluster_t * pCluster = pLocalCtx->m_pCluster;
+	pCluster->m_eState = WSREP_MEMBER_SYNCED;
+
+	sphLogDebugRpl ( "synced cluster %s", pCluster->m_sName.cstr() );
 }
 
 // This is called to "apply" writeset.
@@ -719,39 +367,6 @@ static wsrep_cb_status_t Unordered_fn ( void * pCtx, const void * pData, size_t 
 	return WSREP_CB_SUCCESS;
 }
 
-
-static wsrep_cb_status_t SstDonate_fn ( void * pAppCtx, void * pRecvCtx, const void * sMsg, size_t iMsgLen, const wsrep_gtid_t * pStateID, const char * pState, size_t iStateLen, wsrep_bool_t bBypass )
-{
-	//AppCtx_t * pLocalAppCtx = (AppCtx_t *)pAppCtx;
-	ReceiverCtx_t * pLocalCtx = (ReceiverCtx_t *)pRecvCtx;
-	
-	CSphString sAddr;
-	sAddr.SetBinary ( (const char *)sMsg, iMsgLen );
-
-	char sGtid[WSREP_GTID_STR_LEN];
-	Verify ( wsrep_gtid_print ( pStateID, sGtid, sizeof(sGtid) )>0 );
-
-	sphLogDebugRpl ( "donate to %s, gtid %s, bypass %d", sAddr.cstr(), sGtid, (int)bBypass );
-
-	CSphString sError;
-	if ( !PrepareDonateSst ( pLocalCtx->m_pCluster, bBypass, sAddr, *pStateID, sError ) )
-	{
-		sphWarning ( "%s", sError.cstr() );
-		return WSREP_CB_FAILURE;
-	}
-
-	return WSREP_CB_SUCCESS;
-}
-
-static void Synced_fn ( void * pAppCtx )
-{
-	ReceiverCtx_t * pLocalCtx = (ReceiverCtx_t *)pAppCtx;
-	sphLogDebugRpl ( "synced" );
-
-	assert ( pLocalCtx );
-	pLocalCtx->m_pCluster->m_tSync.SetEvent();
-}
-
 // This is the listening thread. It blocks in wsrep::recv() call until
 // disconnect from cluster. It will apply and commit writesets through the
 // callbacks defined above.
@@ -770,9 +385,6 @@ static void ReplicationRecv_fn ( void * pArgs )
 
 	sphLogDebugRpl ( "receiver done, code %d, %s", eState, GetStatus ( eState ) );
 
-	// FIXME!!! release of main thread waiting sync
-	pCtx->m_pCluster->m_tSync.SetEvent();
-
 	// join thread shut with event set but start up sequence should shutdown daemon
 	if ( !pCtx->m_bJoin && ( eState==WSREP_CONN_FAIL || eState==WSREP_NODE_FAIL || eState==WSREP_FATAL ) )
 	{
@@ -784,7 +396,7 @@ static void ReplicationRecv_fn ( void * pArgs )
 	pCtx->Release();
 }
 
-static void Instr_fn ( wsrep_pfs_instr_type_t , wsrep_pfs_instr_ops_t , wsrep_pfs_instr_tag_t , void ** , void ** , const void * );
+void Instr_fn ( wsrep_pfs_instr_type_t , wsrep_pfs_instr_ops_t , wsrep_pfs_instr_tag_t , void ** , void ** , const void * );
 
 bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 {
@@ -806,7 +418,7 @@ bool ReplicateClusterInit ( ReplicationArgs_t & tArgs, CSphString & sError )
 	CSphString sMyName;
 	sMyName.SetSprintf ( "daemon_%d_%s", GetOsThreadId(), tArgs.m_pCluster->m_sName.cstr() );
 
-	sphLogDebugRpl ( "listen IP '%s', SST '%s', '%s'", tArgs.m_pCluster->m_sListen.cstr(), tArgs.m_pCluster->m_sListenSST.cstr(), sMyName.cstr() );
+	sphLogDebugRpl ( "listen IP '%s', '%s'", tArgs.m_pCluster->m_sListen.cstr(), sMyName.cstr() );
 
 	ReceiverCtx_t * pRecvArgs = new ReceiverCtx_t();
 	pRecvArgs->m_pCluster = tArgs.m_pCluster;
@@ -1118,146 +730,12 @@ bool ReplicateSetOption ( const CSphString & sCluster, const CSphString & sOpt, 
 	return ( tOk==WSREP_OK );
 }
 
-// @brief a callback to create PFS instrumented mutex/condition variables
-// 
-// @param type			mutex or condition variable
-// @param ops			add/init or remove/destory mutex/condition variable
-// @param tag			tag/name of instrument to monitor
-// @param value			created mutex or condition variable
-// @param alliedvalue	allied value for supporting operation.
-//						for example: while waiting for cond-var corresponding
-//						mutex is passes through this variable.
-// @param ts			time to wait for condition.
-
-void Instr_fn ( wsrep_pfs_instr_type_t type, wsrep_pfs_instr_ops_t ops, wsrep_pfs_instr_tag_t tag, void ** value, void ** alliedvalue, const void * ts )
-{
-	if ( type==WSREP_PFS_INSTR_TYPE_THREAD || type==WSREP_PFS_INSTR_TYPE_FILE )
-		return;
-
-#if !USE_WINDOWS
-	if (type == WSREP_PFS_INSTR_TYPE_MUTEX)
-	{
-		switch (ops)
-		{
-			case WSREP_PFS_INSTR_OPS_INIT:
-			{
-				pthread_mutex_t * pMutex = new pthread_mutex_t;
-				pthread_mutex_init ( pMutex, nullptr );
-				*value = pMutex;
-			}
-			break;
-
-		case WSREP_PFS_INSTR_OPS_DESTROY:
-		{
-			pthread_mutex_t * pMutex= (pthread_mutex_t *)(*value);
-			assert ( pMutex );
-			pthread_mutex_destroy ( pMutex );
-			delete ( pMutex );
-			*value = nullptr;
-		}
-		break;
-
-		case WSREP_PFS_INSTR_OPS_LOCK:
-		{
-			pthread_mutex_t * pMutex= (pthread_mutex_t *)(*value);
-			assert ( pMutex );
-			pthread_mutex_lock ( pMutex );
-		}
-		break;
-
-		case WSREP_PFS_INSTR_OPS_UNLOCK:
-		{
-			pthread_mutex_t * pMutex= (pthread_mutex_t *)(*value);
-			assert ( pMutex );
-			pthread_mutex_unlock ( pMutex );
-		}
-		break;
-
-		default:
-			assert(0);
-		break;
-		}
-	}
-	else if (type == WSREP_PFS_INSTR_TYPE_CONDVAR)
-	{
-		switch (ops)
-		{
-		case WSREP_PFS_INSTR_OPS_INIT:
-		{
-			pthread_cond_t * pCond = new pthread_cond_t;
-			pthread_cond_init ( pCond, nullptr );
-			*value = pCond;
-		}
-		break;
-
-		case WSREP_PFS_INSTR_OPS_DESTROY:
-		{
-			pthread_cond_t * pCond = (pthread_cond_t *)(*value);
-			assert ( pCond );
-			pthread_cond_destroy ( pCond );
-			delete ( pCond );
-			*value = nullptr;
-		}
-		break;
-
-		case WSREP_PFS_INSTR_OPS_WAIT:
-		{
-			pthread_cond_t * pCond = (pthread_cond_t *)(*value);
-			pthread_mutex_t * pMutex= (pthread_mutex_t *)(*alliedvalue);
-			assert ( pCond && pMutex );
-			pthread_cond_wait ( pCond, pMutex );
-		}
-		break;
-
-		case WSREP_PFS_INSTR_OPS_TIMEDWAIT:
-		{
-			pthread_cond_t * pCond = (pthread_cond_t *)(*value);
-			pthread_mutex_t * pMutex= (pthread_mutex_t *)(*alliedvalue);
-			const timespec * wtime = (const timespec *)ts;
-			assert ( pCond && pMutex );
-			pthread_cond_timedwait( pCond, pMutex, wtime );
-		}
-		break;
-
-		case WSREP_PFS_INSTR_OPS_SIGNAL:
-		{
-			pthread_cond_t * pCond = (pthread_cond_t *)(*value);
-			assert ( pCond );
-			pthread_cond_signal ( pCond );
-		}
-		break;
-
-		case WSREP_PFS_INSTR_OPS_BROADCAST:
-		{
-			pthread_cond_t * pCond = (pthread_cond_t *)(*value);
-			assert ( pCond );
-			pthread_cond_broadcast ( pCond );
-		}
-		break;
-
-		default:
-			assert(0);
-		break;
-		}
-	}
-#endif
-}
-
-
 void ReplicationAbort()
 {
 	sphWarning ( "shutting down due to abort" );
 	// no need to shutdown cluster properly in case of cluster signaled abort
 	g_hClusters.Reset();
 	Shutdown();
-}
-
-// unfreeze threads waiting of replication started
-void ReplicateClustersWake()
-{
-	void * pIt = nullptr;
-	while ( g_hClusters.IterateNext ( &pIt ) )
-		g_hClusters.IterateGet ( &pIt )->m_tSync.SetEvent();
 }
 
 void ReplicateClustersDelete()
@@ -1388,6 +866,34 @@ static bool CheckLocalIndex ( const CSphString & sIndex, CSphString & sError )
 	return true;
 }
 
+static bool SetIndexCluster ( const CSphString & sIndex, const CSphString & sCluster, CSphString & sError )
+{
+	ServedIndexRefPtr_c pServed = GetServed ( sIndex );
+	if ( !pServed )
+	{
+		sError.SetSprintf ( "unknown index '%s'", sIndex.cstr() );
+		return false;
+	}
+
+	bool bSetCluster = false;
+	{
+		ServedDescRPtr_c pDesc ( pServed );
+		if ( pDesc->m_eType!=IndexType_e::PERCOLATE )
+		{
+			sError.SetSprintf ( "wrong type of index '%s'", sIndex.cstr() );
+			return false;
+		}
+		bSetCluster = ( pDesc->m_sCluster!=sCluster );
+	}
+
+	if ( bSetCluster )
+	{
+		ServedDescWPtr_c pDesc ( pServed );
+		pDesc->m_sCluster = sCluster;
+	}
+
+	return true;
+}
 
 bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CSphString & sCluster, ReplicationCommand_t & tCmd )
 {
@@ -1401,9 +907,9 @@ bool ParseCmdReplicated ( const BYTE * pData, int iLen, bool bIsolated, const CS
 	}
 
 	WORD uVer = tReader.GetWord();
-	if ( uVer!=GetReplicateCommandVer ( eCommand ) )
+	if ( uVer!=g_iReplicateCommandVer )
 	{
-		sphWarning ( "replication command %d, version mismatch %d, got %d", (int)eCommand, (int)GetReplicateCommandVer ( eCommand ), (int)uVer );
+		sphWarning ( "replication command %d, version mismatch %d, got %d", (int)eCommand, g_iReplicateCommandVer, (int)uVer );
 		return false;
 	}
 
@@ -1599,7 +1105,7 @@ bool HandleCmdReplicate ( ReplicationCommand_t & tCmd, CSphString & sError, int 
 	{
 		MemoryWriter_c tWriter ( dBuf );
 		tWriter.PutWord ( tCmd.m_eCommand );
-		tWriter.PutWord ( GetReplicateCommandVer ( tCmd.m_eCommand ) );
+		tWriter.PutWord ( g_iReplicateCommandVer );
 		tWriter.PutString ( tCmd.m_sIndex );
 	}
 
@@ -1720,12 +1226,16 @@ bool CommitMonitor_c::CommitTOI ( CSphString & sError )
 	switch ( m_tCmd.m_eCommand )
 	{
 	case RCOMMAND_CLUSTER_ALTER_ADD:
+		if ( !SetIndexCluster ( m_tCmd.m_sIndex, pCluster->m_sName, sError ) )
+			return false;
 		pCluster->m_dIndexes.Add ( m_tCmd.m_sIndex );
 		pCluster->m_dIndexes.Uniq();
 		pCluster->UpdateIndexHashes();
 		break;
 
 	case RCOMMAND_CLUSTER_ALTER_DROP:
+		if ( !SetIndexCluster ( m_tCmd.m_sIndex, CSphString(), sError ) )
+			return false;
 		pCluster->m_dIndexes.RemoveValue ( m_tCmd.m_sIndex );
 		pCluster->UpdateIndexHashes();
 		break;
@@ -1739,7 +1249,7 @@ bool CommitMonitor_c::CommitTOI ( CSphString & sError )
 }
 
 
-static bool JsonLoadIndexDesc ( const JsonObj_c & tJson, CSphString & sError, IndexDesc_t & tIndex )
+bool JsonLoadIndexDesc ( const JsonObj_c & tJson, CSphString & sError, IndexDesc_t & tIndex )
 {
 	CSphString sName = tJson.Name();
 	if ( sName.IsEmpty() )
@@ -1827,10 +1337,7 @@ bool JsonConfigRead ( const CSphString & sConfigPath, CSphVector<ClusterDesc_t> 
 		}
 
 		// optional items such as: options and skipSst
-		bool bFetchOk = true;
-		bFetchOk &= i.FetchStrItem ( tCluster.m_sOptions, "options", sError, true );
-		bFetchOk &= i.FetchBoolItem ( tCluster.m_bSkipSST, "skipSst", sError, true );
-		if ( !bFetchOk )
+		if ( !i.FetchStrItem ( tCluster.m_sOptions, "options", sError, true ) )
 			sphWarning ( "cluster '%s'(%d): %s", tCluster.m_sName.cstr(), iCluster, sError.cstr() );
 
 		tCluster.m_sURI = g_sDefaultReplicationURI;
@@ -1948,19 +1455,16 @@ void JsonConfigDumpClusters ( const SmallStringHash_T<ReplicationCluster_t *> & 
 		tItem.AddStr ( "listen", pCluster->m_sListen );
 		tItem.AddStr ( "uri", pCluster->m_sURI );
 		tItem.AddStr ( "options", pCluster->m_sOptions );
-		tItem.AddBool ( "skipSst", pCluster->m_bSkipSST );
-
-		tClusters.AddItem ( pCluster->m_sName.cstr(), tItem );
 
 		// index array
-		JsonObj_c tIndexes(true);
+		JsonObj_c tIndexes ( true );
 		for ( const CSphString & sIndex : pCluster->m_dIndexes )
 		{
-			JsonObj_c tStrItem = JsonObj_c::CreateStr(sIndex);
-			tIndexes.AddItem(tStrItem);
+			JsonObj_c tStrItem = JsonObj_c::CreateStr ( sIndex );
+			tIndexes.AddItem ( tStrItem );
 		}
-
 		tItem.AddItem ( "indexes", tIndexes );
+		tClusters.AddItem ( pCluster->m_sName.cstr(), tItem );
 	}
 
 	tOut += tClusters.AsString(true).cstr();
@@ -1995,10 +1499,11 @@ void GetLocalIndexes ( CSphVector<IndexDesc_t> & dIndexes )
 	}
 }
 
-bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIndexName )
+bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIndexName, const CSphString & sCluster )
 {
 	// delete existed index first, does not allow to save it's data that breaks sync'ed index files
 	// need a scope for RefRtr's to work
+	bool bJson = false;
 	{
 		ServedIndexRefPtr_c pServedCur = GetServed ( sIndexName );
 		if ( pServedCur )
@@ -2009,6 +1514,7 @@ bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIndexName
 			{
 				ISphRtIndex * pIndex = (ISphRtIndex *)pDesc->m_pIndex;
 				pIndex->ProhibitSave();
+				bJson = pDesc->m_bJson;
 			}
 
 			g_pLocalIndexes->Delete ( sIndexName );
@@ -2021,7 +1527,8 @@ bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIndexName
 
 	ServedIndexRefPtr_c pServed = GetDisabled ( sIndexName );
 	ServedDescWPtr_c pDesc ( pServed );
-	pDesc->m_bJson = true;
+	pDesc->m_bJson = bJson;
+	pDesc->m_sCluster = sCluster;
 
 	bool bPreload = PreallocNewIndex ( *pDesc, &hIndex, sIndexName.cstr() );
 	if ( !bPreload )
@@ -2035,29 +1542,34 @@ bool LoadIndex ( const CSphConfigSection & hIndex, const CSphString & sIndexName
 	return true;
 }
 
-bool ReplicatedIndexes ( const CSphVector<IndexDesc_t> & dIndexes, bool bBypass, const CSphString & sClusterName )
+static bool ReplicatedIndexes ( const CSphFixedVector<CSphString> & dIndexes, const CSphString & sCluster, CSphString & sError )
 {
 	assert ( !g_sDataDir.IsEmpty() );
 
 	if ( !g_hClusters.GetLength() )
 	{
-		sphWarning ( "no clusters found" );
+		sError = "no clusters found";
 		return false;
 	}
 
 	// scope for check of cluster data
 	{
-		ScRL_t tLock ( g_tClustersLock );
-		ReplicationCluster_t ** ppCluster = g_hClusters ( sClusterName );
-		if ( !ppCluster )
+		SmallStringHash_T<int> hIndexes;
+		for ( const CSphString & sIndex : dIndexes )
 		{
-			sphWarning ( "unknown cluster %s", sClusterName.cstr() );
-			return false;
+			if ( !CheckLocalIndex ( sIndex, sError ) )
+				return false;
+
+			hIndexes.Add ( 1, sIndex );
 		}
 
-		SmallStringHash_T<int> hIndexes;
-		for ( const IndexDesc_t & tDesc : dIndexes )
-			hIndexes.Add ( 1, tDesc.m_sName );
+		ScRL_t tLock ( g_tClustersLock );
+		ReplicationCluster_t ** ppCluster = g_hClusters ( sCluster );
+		if ( !ppCluster )
+		{
+			sError.SetSprintf ( "unknown cluster %s", sCluster.cstr() );
+			return false;
+		}
 
 		const ReplicationCluster_t * pCluster = *ppCluster;
 		// indexes should be new or from same cluster
@@ -2072,48 +1584,34 @@ bool ReplicatedIndexes ( const CSphVector<IndexDesc_t> & dIndexes, bool bBypass,
 			{
 				if ( hIndexes.Exists ( sIndex ) )
 				{
-					sphWarning ( "index '%s' is already in another cluster '%s', replicated cluster '%s'", sIndex.cstr(), pOrigCluster->m_sName.cstr(), sClusterName.cstr() );
+					sError.SetSprintf ( "index '%s' is already in another cluster '%s', replicated cluster '%s'", sIndex.cstr(), pOrigCluster->m_sName.cstr(), sCluster.cstr() );
 					return false;
 				}
 			}
 		}
 	}
 
-	// for bypass mode only seqno got replicated but not indexes
-	if ( bBypass )
-		return true;
-
-	for ( const IndexDesc_t & tIndex : dIndexes )
+	for ( const CSphString & sIndex : dIndexes )
 	{
-		CSphConfigSection hIndex;
-		hIndex.Add ( CSphVariant ( tIndex.m_sPath.cstr(), 0 ), "path" );
-		hIndex.Add ( CSphVariant ( GetTypeName ( tIndex.m_eType ).cstr(), 0 ), "type" );
-
-		if ( !LoadIndex ( hIndex, tIndex.m_sName ) )
-		{
-			sphWarning ( "index '%s': removed from JSON config", tIndex.m_sName.cstr() );
+		if ( !SetIndexCluster ( sIndex, sCluster, sError ) )
 			return false;
-		} 
 	}
 
 	// scope for modify cluster data
 	{
 		ScWL_t tLock ( g_tClustersLock );
 		// should be already in cluster list
-		ReplicationCluster_t ** ppCluster = g_hClusters ( sClusterName );
+		ReplicationCluster_t ** ppCluster = g_hClusters ( sCluster );
 		if ( !ppCluster )
 		{
-			sphWarning ( "unknown cluster %s", sClusterName.cstr() );
+			sError.SetSprintf ( "unknown cluster %s", sCluster.cstr() );
 			return false;
 		}
 
 		ReplicationCluster_t * pCluster = *ppCluster;
-		pCluster->m_dIndexes.Resize ( 0 );
-
-		// refresh actual index list
-		for ( const IndexDesc_t & tIndex : dIndexes )
-			pCluster->m_dIndexes.Add ( tIndex.m_sName );
-		
+		pCluster->m_dIndexes.Resize ( dIndexes.GetLength() );
+		ARRAY_FOREACH ( i, dIndexes )
+			pCluster->m_dIndexes[i] = dIndexes[i];
 		pCluster->UpdateIndexHashes();
 	}
 
@@ -2122,7 +1620,7 @@ bool ReplicatedIndexes ( const CSphVector<IndexDesc_t> & dIndexes, bool bBypass,
 	return true;
 }
 
-static CSphString GetClusterPath ( const CSphString & sPath )
+CSphString GetClusterPath ( const CSphString & sPath )
 {
 	if ( sPath.IsEmpty() )
 		return g_sDataDir;
@@ -2133,7 +1631,7 @@ static CSphString GetClusterPath ( const CSphString & sPath )
 	return sFullPath;
 }
 
-static bool GetClusterFileName ( const CSphString & sCluster, const CSphString & sIndexBaseName, CSphString & sClusterPath, CSphString & sError )
+static bool GetClusterPath ( const CSphString & sCluster, CSphString & sClusterPath, CSphString & sError )
 {
 	ScRL_t tLock ( g_tClustersLock );
 	ReplicationCluster_t ** ppCluster = g_hClusters ( sCluster );
@@ -2144,7 +1642,6 @@ static bool GetClusterFileName ( const CSphString & sCluster, const CSphString &
 	}
 
 	sClusterPath = GetClusterPath ( (*ppCluster)->m_sPath );
-	sClusterPath.SetSprintf ( "%s/%s", sClusterPath.cstr(), sIndexBaseName.cstr() );
 	return true;
 }
 
@@ -2277,7 +1774,7 @@ static void NewClusterClean ( const CSphString & sPath )
 	}
 }
 
-static void GetNodeAddress ( const ClusterDesc_t & tCluster, CSphString & sAddr )
+void GetNodeAddress ( const ClusterDesc_t & tCluster, CSphString & sAddr )
 {
 	sAddr.SetSprintf ( "%s,%s:replication", g_sIncomingAddr.cstr(), tCluster.m_sListen.cstr() );
 }
@@ -2319,7 +1816,6 @@ bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bo
 		pElem->m_sListen = tDesc.m_sListen;
 		pElem->m_sPath = tDesc.m_sPath;
 		pElem->m_sOptions = tDesc.m_sOptions;
-		pElem->m_bSkipSST = tDesc.m_bSkipSST;
 
 		// check listen IP address
 		ListenerDesc_t tListen = ParseListener ( pElem->m_sListen.cstr() );
@@ -2330,7 +1826,6 @@ bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bo
 			sphWarning ( "cluster '%s' listen empty address (%s), skipped", pElem->m_sName.cstr(), sListenBuf );
 			continue;
 		}
-		pElem->m_sListenSST.SetSprintf ( "%s:%d", sListenBuf, tListen.m_iPort+2 );
 
 		bool bUriEmpty = ( pElem->m_sURI==g_sDefaultReplicationURI );
 		if ( bUriEmpty )
@@ -2356,31 +1851,14 @@ bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bo
 			continue;
 		}
 
-		// check indexes valid and located into cluster folder
+		// check indexes valid
 		for ( const CSphString & sIndexName : tDesc.m_dIndexes )
 		{
-			ServedDescRPtr_c pServed ( GetServed ( sIndexName ) );
-			if ( !pServed || !pServed->m_pIndex || !pServed->IsMutable() )
+			if ( !SetIndexCluster ( sIndexName, pElem->m_sName, sError ) )
 			{
-				if ( !pServed || !pServed->m_pIndex )
-				{
-					sphWarning ( "cluster '%s' has no index '%s', removed from cluster", pElem->m_sName.cstr(), sIndexName.cstr() );
-				} else
-				{
-					sphWarning ( "cluster '%s' index '%s' should be percolate, got %s, removed from cluster",
-						pElem->m_sName.cstr(), sIndexName.cstr(), GetTypeName ( pServed->m_eType ).cstr() );
-				}
+				sphWarning ( "%s, removed from cluster %s", sError.cstr(), pElem->m_sName.cstr() );
 				continue;
 			}
-
-			// FIXME!!! remove that check after remove of rsync server SST
-			if ( !pServed->m_sIndexPath.Begins ( sClusterPath.cstr() ) )
-			{
-				sphWarning ( "cluster '%s' index '%s' path %s is not inside cluster path %s, removed from cluster",
-					pElem->m_sName.cstr(), sIndexName.cstr(), pServed->m_sIndexPath.cstr(), sClusterPath.cstr() );
-				continue;
-			}
-
 			pElem->m_dIndexes.Add ( sIndexName );
 		}
 		pElem->UpdateIndexHashes();
@@ -2395,16 +1873,6 @@ bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bo
 		g_hClusters.Add ( pElem.LeakPtr(), tDesc.m_sName );
 	}
 	return true;
-}
-
-void ReplicationWait()
-{
-	int iClusters = g_hClusters.GetLength();
-	sphLogDebugRpl ( "waiting replication of %d cluster(s)", iClusters );
-	void * pIt = nullptr;
-	while ( g_hClusters.IterateNext ( &pIt ) )
-		g_hClusters.IterateGet ( &pIt )->m_tSync.WaitEvent();
-	sphLogDebugRpl ( "wait over of replication" );
 }
 
 static bool CheckClusterOption ( const SmallStringHash_T<SqlInsert_t *> & hValues, const char * sName, bool bOptional, CSphString & sVal, CSphString & sError )
@@ -2497,7 +1965,28 @@ static bool CheckClusterStatement ( const CSphString & sCluster, const StrVec_t 
 		sError.SetSprintf ( "cluster '%s' listen empty address (%s)", pElem->m_sName.cstr(), sListenBuf );
 		return false;
 	}
-	pElem->m_sListenSST.SetSprintf ( "%s:%d", sListenBuf, tListen.m_iPort+2 );
+
+	return true;
+}
+
+static bool WaitClusterState ( const CSphString & sCluster, ClusterState_e eState, CSphString & sError )
+{
+	while ( true )
+	{
+		ScRL_t tLock ( g_tClustersLock );
+
+		ReplicationCluster_t ** ppCluster = g_hClusters ( sCluster );
+		if ( !ppCluster )
+		{
+			sError.SetSprintf ( "no cluster '%s' found", sCluster.cstr() );
+			return false;
+		}
+
+		if ( (*ppCluster)->m_eState==WSREP_MEMBER_SYNCED )
+			break;
+
+		sphSleepMsec ( 100 );
+	}
 
 	return true;
 }
@@ -2527,21 +2016,19 @@ bool ClusterJoin ( const CSphString & sCluster, const StrVec_t & dNames, const C
 	CSphString sClusterPath = GetClusterPath ( pElem->m_sPath );
 	NewClusterClean ( sClusterPath );
 
-	if ( !ReplicateClusterInit ( tArgs, sError ) )
-		return false;
-
-	CSphAutoEvent * pSync = &pElem->m_tSync;
-
-	assert ( pElem->m_pProvider );
 	{
 		ScWL_t tLock ( g_tClustersLock );
 		g_hClusters.Add ( pElem.LeakPtr(), sCluster );
 	}
 
-	// wait sync to finish
-	pSync->WaitEvent();
+	if ( !ReplicateClusterInit ( tArgs, sError ) )
+	{
+		ScWL_t tLock ( g_tClustersLock );
+		g_hClusters.Delete ( sCluster );
+		return false;
+	}
 
-	return true;
+	return WaitClusterState ( sCluster, WSREP_MEMBER_SYNCED, sError );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -2568,21 +2055,21 @@ bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const
 	CSphString sClusterPath = GetClusterPath ( pElem->m_sPath );
 	NewClusterClean ( sClusterPath );
 
-	if ( !ReplicateClusterInit ( tArgs, sError ) )
-		return false;
-
-	CSphAutoEvent * pSync = &pElem->m_tSync;
-
 	assert ( pElem->m_pProvider );
 	{
 		ScWL_t tLock ( g_tClustersLock );
 		g_hClusters.Add ( pElem.LeakPtr(), sCluster );
 	}
+	
+	if ( !ReplicateClusterInit ( tArgs, sError ) )
+	{
+		ScWL_t tLock ( g_tClustersLock );
+		g_hClusters.Delete ( sCluster );
+		return false;
+	}
 
-	// wait replicator sync event
-	pSync->WaitEvent();
 
-	return true;
+	return WaitClusterState ( sCluster, WSREP_MEMBER_SYNCED, sError );
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -2597,6 +2084,7 @@ enum PQRemoteCommand_e : WORD
 	CLUSTER_FILE_SIZE			= 2,
 	CLUSTER_FILE_SEND			= 3,
 	CLUSTER_INDEX_ADD_LOCAL		= 4,
+	CLUSTER_SYNCED				= 5,
 
 	PQR_COMMAND_TOTAL,
 	PQR_COMMAND_WRONG = PQR_COMMAND_TOTAL,
@@ -2604,18 +2092,18 @@ enum PQRemoteCommand_e : WORD
 
 struct PQRemoteReply_t
 {
-	CSphString	m_sIndex;			// local name of index
-	CSphString	m_sIndexBaseName;	// index file name without path
+	CSphString	m_sIndexPath;		// index path without extension (with or without path due to bClusterIndex)
 
-	bool		m_bClusterIndex = true;		// index in cluster folder or its own path
-
-	CSphString	m_sFileHash;	// sha1 of index file
-	int64_t		m_iIndexFileSize = 0;
+	CSphString	m_sFileHash;			// sha1 of index file
+	int64_t		m_iIndexFileSize = 0;	// size of index file
 };
 
 
 struct PQRemoteData_t : public PQRemoteReply_t
 {
+	CSphString	m_sIndex;			// local name of index
+	CSphString	m_sFileName;		// index file name with extension (with or without path due to bClusterIndex)
+
 	// file send args
 	const BYTE * m_pSendBuff = nullptr;
 	int			m_iSendSize = 0;
@@ -2623,7 +2111,12 @@ struct PQRemoteData_t : public PQRemoteReply_t
 
 	CSphString	m_sCluster;			// cluster name of index
 
-	IndexType_e		m_eIndex = IndexType_e::ERROR_;
+	IndexType_e	m_eIndex = IndexType_e::ERROR_;
+
+
+	// SST
+	CSphString	m_sGTID;							// GTID received
+	CSphFixedVector<CSphString> m_dIndexes { 0 };	// index list received
 };
 
 struct PQRemoteAgentData_t : public iQueryResult
@@ -2649,12 +2142,13 @@ struct VecAgentDesc_t : public ISphNoncopyable, public CSphVector<AgentDesc_t *>
 	}
 };
 
-static void GetNodes ( CSphString & sNodes, VecAgentDesc_t & dNodes )
+static void GetNodes ( const CSphString & sNodes, VecAgentDesc_t & dNodes )
 {
 	if ( sNodes.IsEmpty () )
 		return;
 
-	const char * sCur = sNodes.cstr();
+	CSphString sTmp = sNodes;
+	const char * sCur = sTmp.cstr();
 	while ( *sCur )
 	{
 		char * sAddrs = (char *)sCur;
@@ -2724,7 +2218,7 @@ static AgentConn_t * CreateAgent ( const AgentDesc_t & tDesc, const PQRemoteData
 	return pAgent;
 }
 
-static void GetNodes ( CSphString & sNodes, VecRefPtrs_t<AgentConn_t *> & dNodes, const PQRemoteData_t & tReq )
+static void GetNodes ( const CSphString & sNodes, VecRefPtrs_t<AgentConn_t *> & dNodes, const PQRemoteData_t & tReq )
 {
 	VecAgentDesc_t dDesc;
 	GetNodes ( sNodes, dDesc );
@@ -2778,7 +2272,7 @@ private:
 
 struct PQRemoteDelete_t : public PQRemoteBase_t
 {
-	explicit PQRemoteDelete_t ()
+	PQRemoteDelete_t()
 		: PQRemoteBase_t ( CLUSTER_DELETE )
 	{
 	}
@@ -2820,16 +2314,18 @@ struct PQRemoteFileReserve_t : public PQRemoteBase_t
 		const PQRemoteData_t & tCmd = GetReq ( tAgent );
 		tOut.SendString ( tCmd.m_sCluster.cstr() );
 		tOut.SendString ( tCmd.m_sIndex.cstr() );
-		tOut.SendString ( tCmd.m_sIndexBaseName.cstr() );
+		tOut.SendString ( tCmd.m_sFileName.cstr() );
 		tOut.SendUint64 ( tCmd.m_iIndexFileSize );
+		tOut.SendString ( tCmd.m_sFileHash.cstr() );
 	}
 
 	static void ParseCommand ( InputBuffer_c & tBuf, PQRemoteData_t & tCmd )
 	{
 		tCmd.m_sCluster = tBuf.GetString();
 		tCmd.m_sIndex = tBuf.GetString();
-		tCmd.m_sIndexBaseName = tBuf.GetString();
+		tCmd.m_sFileName = tBuf.GetString();
 		tCmd.m_iIndexFileSize = tBuf.GetUint64();
+		tCmd.m_sFileHash = tBuf.GetString();
 	}
 
 	static void BuildReply ( const PQRemoteReply_t & tRes, CachedOutputBuffer_c & tOut )
@@ -2837,6 +2333,7 @@ struct PQRemoteFileReserve_t : public PQRemoteBase_t
 		APICommand_t tReply ( tOut, SEARCHD_OK );
 		tOut.SendUint64 ( tRes.m_iIndexFileSize );
 		tOut.SendString ( tRes.m_sFileHash.cstr() );
+		tOut.SendString ( tRes.m_sIndexPath.cstr() );
 	}
 
 	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & tAgent ) const final
@@ -2844,6 +2341,7 @@ struct PQRemoteFileReserve_t : public PQRemoteBase_t
 		PQRemoteReply_t & tRes = GetRes ( tAgent );
 		tRes.m_iIndexFileSize = (int64_t)tReq.GetUint64();
 		tRes.m_sFileHash = tReq.GetString();
+		tRes.m_sIndexPath = tReq.GetString();
 
 		return !tReq.GetError();
 	}
@@ -2861,7 +2359,7 @@ struct PQRemoteFileSend_t : public PQRemoteBase_t
 	{
 		const PQRemoteData_t & tCmd = GetReq ( tAgent );
 		tOut.SendString ( tCmd.m_sCluster.cstr() );
-		tOut.SendString ( tCmd.m_sIndexBaseName.cstr() );
+		tOut.SendString ( tCmd.m_sFileName.cstr() );
 		tOut.SendUint64 ( tCmd.m_iFileOff );
 		tOut.SendInt ( tCmd.m_iSendSize );
 		tOut.SendBytes ( tCmd.m_pSendBuff, tCmd.m_iSendSize );
@@ -2870,7 +2368,7 @@ struct PQRemoteFileSend_t : public PQRemoteBase_t
 	static void ParseCommand ( InputBuffer_c & tBuf, PQRemoteData_t & tCmd )
 	{
 		tCmd.m_sCluster = tBuf.GetString();
-		tCmd.m_sIndexBaseName = tBuf.GetString();
+		tCmd.m_sFileName = tBuf.GetString();
 		tCmd.m_iFileOff = tBuf.GetUint64();
 		tCmd.m_iSendSize = tBuf.GetInt();
 		tBuf.GetBytesZerocopy ( &tCmd.m_pSendBuff, tCmd.m_iSendSize );
@@ -2903,9 +2401,8 @@ struct PQRemoteIndexAdd_t : public PQRemoteBase_t
 		const PQRemoteData_t & tCmd = GetReq ( tAgent );
 		tOut.SendString ( tCmd.m_sCluster.cstr() );
 		tOut.SendString ( tCmd.m_sIndex.cstr() );
-		tOut.SendString ( tCmd.m_sIndexBaseName.cstr() );
+		tOut.SendString ( tCmd.m_sIndexPath.cstr() );
 		tOut.SendByte ( (BYTE)IndexType_e::PERCOLATE );
-		tOut.SendByte ( tCmd.m_bClusterIndex ? 1 : 0 );
 		tOut.SendUint64 ( tCmd.m_iIndexFileSize );
 		tOut.SendString ( tCmd.m_sFileHash.cstr() );
 	}
@@ -2914,9 +2411,8 @@ struct PQRemoteIndexAdd_t : public PQRemoteBase_t
 	{
 		tCmd.m_sCluster = tBuf.GetString();
 		tCmd.m_sIndex = tBuf.GetString();
-		tCmd.m_sIndexBaseName = tBuf.GetString();
+		tCmd.m_sIndexPath = tBuf.GetString();
 		tCmd.m_eIndex = (IndexType_e)tBuf.GetByte();
-		tCmd.m_bClusterIndex = ( tBuf.GetByte()!=0 );
 		tCmd.m_iIndexFileSize = tBuf.GetUint64();
 		tCmd.m_sFileHash = tBuf.GetString();
 	}
@@ -2936,6 +2432,16 @@ struct PQRemoteIndexAdd_t : public PQRemoteBase_t
 
 		return !tReq.GetError();
 	}
+};
+
+
+struct PQRemoteSynced_t : public PQRemoteBase_t
+{
+	PQRemoteSynced_t();
+	void BuildCommand ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const final;
+	static void ParseCommand ( InputBuffer_c & tBuf, PQRemoteData_t & tCmd );
+	static void BuildReply ( const PQRemoteReply_t & tRes, CachedOutputBuffer_c & tOut );
+	bool ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const final;
 };
 
 
@@ -2985,19 +2491,10 @@ void HandleCommandClusterPq ( CachedOutputBuffer_c & tOut, WORD uCommandVer, Inp
 		}
 		break;
 
-		//case CLUSTER_FILE_SIZE:
-		//{
-		//	CSphString sCluster = tBuf.GetString();
-		//	CSphString sIndex = tBuf.GetString();
-		//	CSphString sIndexBaseName = tBuf.GetString();
-		//	bOk = RemoteFileSize ( sCluster, sIndex, sIndexBaseName, tRes );
-		//}
-		//break;
-
 		case CLUSTER_FILE_RESERVE:
 		{
 			PQRemoteFileReserve_t::ParseCommand ( tBuf, tCmd );
-			bOk = RemoteFileReserve ( tCmd.m_sCluster, tCmd.m_sIndexBaseName, tCmd.m_iIndexFileSize, tRes, sError );
+			bOk = RemoteFileReserve ( tCmd, tRes, sError );
 			if ( bOk )
 				PQRemoteFileReserve_t::BuildReply ( tRes, tOut );
 		}
@@ -3006,7 +2503,7 @@ void HandleCommandClusterPq ( CachedOutputBuffer_c & tOut, WORD uCommandVer, Inp
 		case CLUSTER_FILE_SEND:
 		{
 			PQRemoteFileSend_t::ParseCommand ( tBuf, tCmd );
-			bOk = RemoteFileStore ( tCmd.m_sCluster, tCmd.m_sIndexBaseName, tCmd.m_iFileOff, tCmd.m_pSendBuff, tCmd.m_iSendSize, tRes, sError );
+			bOk = RemoteFileStore ( tCmd, tRes, sError );
 			if ( bOk )
 				PQRemoteFileSend_t::BuildReply ( tRes, tOut );
 		}
@@ -3018,6 +2515,15 @@ void HandleCommandClusterPq ( CachedOutputBuffer_c & tOut, WORD uCommandVer, Inp
 			bOk = RemoteLoadIndex ( tCmd, tRes, sError );
 			if ( bOk )
 				PQRemoteIndexAdd_t::BuildReply ( tRes, tOut );
+		}
+		break;
+
+		case CLUSTER_SYNCED:
+		{
+			PQRemoteSynced_t::ParseCommand ( tBuf, tCmd );
+			bOk = RemoteClusterSynced ( tCmd, sError );
+			if ( bOk )
+				PQRemoteSynced_t::BuildReply ( tRes, tOut );
 		}
 		break;
 
@@ -3118,47 +2624,90 @@ static bool ClusterAlterDrop ( const CSphString & sCluster, const CSphString & s
 	return HandleCmdReplicate ( tDropCmd, sError, nullptr );
 }
 
-bool RemoteFileReserve ( const CSphString & sCluster, const CSphString & sIndexBaseName, int64_t iSize, PQRemoteReply_t & tRes, CSphString & sError )
+bool RemoteFileReserve ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSphString & sError )
 {
-	CSphString sPath;
-	if ( !GetClusterFileName ( sCluster, sIndexBaseName, sPath, sError ) )
-		return false;
+	CSphString sFilePath;
+	bool bGotIndex = false;
+
+	// use index path first
+	{
+		ServedIndexRefPtr_c pServed = GetServed ( tCmd.m_sIndex );
+		ServedDescRPtr_c pDesc ( pServed );
+		if ( pDesc && pDesc->IsMutable() )
+		{
+			bGotIndex = true;
+			sFilePath.SetSprintf ( "%s.meta", pDesc->m_sIndexPath.cstr() );
+			tRes.m_sIndexPath = pDesc->m_sIndexPath;
+		}
+	}
+
+	// use cluster path as head of index path
+	if ( !bGotIndex )
+	{
+		CSphString sClusterPath;
+		if ( !GetClusterPath ( tCmd.m_sCluster, sClusterPath, sError ) )
+			return false;
+
+		sFilePath.SetSprintf ( "%s/%s.meta", sClusterPath.cstr(), tCmd.m_sFileName.cstr() );
+		tRes.m_sIndexPath.SetSprintf ( "%s/%s", sClusterPath.cstr(), tCmd.m_sFileName.cstr() );
+	}
+
+	// check that index file matched to reference file
+	// but only in case index loaded into daemon
+	// as there is no path to not sync file but load index afters
+	while ( bGotIndex )
+	{
+		CSphAutofile tFile ( sFilePath, SPH_O_READ, sError, false );
+		if ( tFile.GetFD()<0 )
+			break;
+
+		tRes.m_iIndexFileSize = tFile.GetSize();
+		if ( tRes.m_iIndexFileSize!=tCmd.m_iIndexFileSize )
+			break;
+
+		if ( !CalcSHA1 ( sFilePath, tRes.m_sFileHash, sError ) )
+		{
+			tRes.m_sFileHash = "";
+			sphWarning ( "%s", sError.cstr() );
+			break;
+		}
+
+		// no need to send index file
+		if ( tRes.m_sFileHash==tCmd.m_sFileHash )
+			return true;
+
+		break;
+	}
 
 	// check that could create file with specific size
-	CSphAutofile tOut ( sPath, SPH_O_NEW, sError, false );
+	CSphAutofile tOut ( sFilePath, SPH_O_NEW, sError, false );
 	if ( tOut.GetFD()<0 )
 		return false;
 
-	int64_t iPos = sphSeek ( tOut.GetFD(), iSize, SEEK_SET );
-	if ( iSize!=iPos )
+	tRes.m_iIndexFileSize = sphSeek ( tOut.GetFD(), tCmd.m_iIndexFileSize, SEEK_SET );
+	if ( tCmd.m_iIndexFileSize!=tRes.m_iIndexFileSize )
 	{
-		if ( iPos<0 )
+		if ( tRes.m_iIndexFileSize<0 )
 		{
 			sError.SetSprintf ( "error: %d '%s'", errno, strerrorm ( errno ) );
 		} else
 		{
-			tRes.m_iIndexFileSize = iPos; // reply what disk space available
-			sError.SetSprintf ( "error, expected: " INT64_FMT ", got " INT64_FMT, iSize, iPos );
+			sError.SetSprintf ( "error, expected: " INT64_FMT ", got " INT64_FMT, tCmd.m_iIndexFileSize, tRes.m_iIndexFileSize );
 		}
 
 		return false;
 	}
-	tRes.m_iIndexFileSize = iSize;
 	return true;
 }
 
-static bool RemoteFileStore ( const CSphString & sCluster, const CSphString & sIndexBaseName, int64_t iFileOff, const BYTE * pData, int iSize, PQRemoteReply_t & tRes, CSphString & sError )
+bool RemoteFileStore ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSphString & sError )
 {
-	CSphString sPath;
-	if ( !GetClusterFileName ( sCluster, sIndexBaseName, sPath, sError ) )
-		return false;
-
-	CSphAutofile tOut ( sPath, O_RDWR, sError, false );
+	CSphAutofile tOut ( tCmd.m_sFileName, O_RDWR, sError, false );
 	if ( tOut.GetFD()<0 )
 		return false;
 
-	int64_t iPos = sphSeek ( tOut.GetFD(), iFileOff, SEEK_SET );
-	if ( iFileOff!=iPos )
+	int64_t iPos = sphSeek ( tOut.GetFD(), tCmd.m_iFileOff, SEEK_SET );
+	if ( tCmd.m_iFileOff!=iPos )
 	{
 		if ( iPos<0 )
 		{
@@ -3166,41 +2715,18 @@ static bool RemoteFileStore ( const CSphString & sCluster, const CSphString & sI
 		} else
 		{
 			tRes.m_iIndexFileSize = iPos; // reply what disk space available
-			sError.SetSprintf ( "error, expected: " INT64_FMT ", got " INT64_FMT, iFileOff, iPos );
+			sError.SetSprintf ( "error, expected: " INT64_FMT ", got " INT64_FMT, tCmd.m_iFileOff, iPos );
 		}
 		return false;
 	}
 
-	if ( !sphWrite ( tOut.GetFD(), pData, iSize ) )
+	if ( !sphWrite ( tOut.GetFD(), tCmd.m_pSendBuff, tCmd.m_iSendSize ) )
 	{
 		sError.SetSprintf ( "write error: %s", strerrorm(errno) );
 		return false;
 	}
 
-	tRes.m_iIndexFileSize = iPos + iSize;
-	return true;
-}
-
-bool RemoteFileSize ( const CSphString & sCluster, const CSphString & sIndexBaseName, int64_t & iGot, CSphString & sError )
-{
-	CSphString sPath;
-	if ( !GetClusterFileName ( sCluster, sIndexBaseName, sPath, sError ) )
-		return false;
-
-	CSphAutofile tOut ( sPath, O_RDWR, sError, false );
-	if ( tOut.GetFD()<0 )
-		return false;
-
-	int64_t iPos = sphSeek ( tOut.GetFD(), 0, SEEK_END );
-	if ( iPos<0 )
-	{
-		sError.SetSprintf ( "error: %d '%s'", errno, strerrorm ( errno ) );
-		return false;
-	}
-
-	// FIXME!!! calculate sha1 and provide it back to server
-
-	iGot = iPos;
+	tRes.m_iIndexFileSize = iPos + tCmd.m_iSendSize;
 	return true;
 }
 
@@ -3213,14 +2739,10 @@ bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 		return false;
 	}
 
-	CSphString sIndexPath = tCmd.m_sIndexBaseName;
-	if ( tCmd.m_bClusterIndex && !GetClusterFileName ( tCmd.m_sCluster, tCmd.m_sIndexBaseName, sIndexPath, sError ) )
-		return false;
-
 	// check that size matched and sha1 matched prior to loading index
 	{
 		CSphString sIndexFile;
-		sIndexFile.SetSprintf ( "%s.meta", sIndexPath.cstr() );
+		sIndexFile.SetSprintf ( "%s.meta", tCmd.m_sIndexPath.cstr() );
 		CSphAutofile tFile ( sIndexFile, SPH_O_READ, sError, false );
 		if ( tFile.GetFD()<0 )
 			return false;
@@ -3243,9 +2765,9 @@ bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 	}
 
 	CSphConfigSection hIndex;
-	hIndex.Add ( CSphVariant ( sIndexPath.cstr(), 0 ), "path" );
+	hIndex.Add ( CSphVariant ( tCmd.m_sIndexPath.cstr(), 0 ), "path" );
 	hIndex.Add ( CSphVariant ( sType.cstr(), 0 ), "type" );
-	if ( !LoadIndex ( hIndex, tCmd.m_sIndex ) )
+	if ( !LoadIndex ( hIndex, tCmd.m_sIndex, tCmd.m_sCluster ) )
 	{
 		sError.SetSprintf ( "failed to load index '%s'", tCmd.m_sIndex.cstr() );
 		return false;
@@ -3254,40 +2776,52 @@ bool RemoteLoadIndex ( const PQRemoteData_t & tCmd, PQRemoteReply_t & tRes, CSph
 	return true;
 }
 
-struct IndexReader_t
+struct RemoteFileState_t
+{
+	CSphString m_sRemoteIndexPath;
+	CSphString m_sRemoteFilePath;
+	const AgentDesc_t * m_pAgentDesc = nullptr;
+};
+
+struct FileReader_t
 {
 	CSphAutofile m_tFile;
 	PQRemoteData_t m_tArgs;
+	const AgentDesc_t * m_pAgentDesc = nullptr;
 };
 
-static bool SendFile ( const VecAgentDesc_t & dDesc, const CSphString & sFileIn, int64_t iFileSize, const CSphString & sCluster, const CSphString & sFileOut, CSphString & sError )
+static bool SendFile ( const CSphVector<RemoteFileState_t> & dDesc, const CSphString & sFileIn, int64_t iFileSize, const CSphString & sCluster, CSphString & sError )
 {
-	const int iHeaderSize = 32;
-	const int64_t iReaderBufSize = Min ( iFileSize, g_iMaxPacketSize - iHeaderSize );
+	// setup buffers
+	const int64_t iReaderBufSize = Min ( iFileSize, g_iMaxPacketSize * 3 / 4 );
 	CSphFixedVector<BYTE> dReadBuf ( iReaderBufSize * dDesc.GetLength() );
 
-	CSphFixedVector<IndexReader_t> dReaders ( dDesc.GetLength() );
+	CSphFixedVector<FileReader_t> dReaders  ( dDesc.GetLength() );
 	ARRAY_FOREACH ( i, dReaders )
 	{
-		IndexReader_t & tReader = dReaders[i];
+		// setup file readers
+		FileReader_t & tReader = dReaders[i];
+		tReader.m_tArgs.m_sCluster = sCluster;
+		tReader.m_tArgs.m_sFileName = dDesc[i].m_sRemoteFilePath;
+		tReader.m_pAgentDesc = dDesc[i].m_pAgentDesc;
+
+		BYTE * pBuf = dReadBuf.Begin() + iReaderBufSize * i;
+		tReader.m_tArgs.m_pSendBuff = pBuf;
+		tReader.m_tArgs.m_iSendSize = iReaderBufSize;
+
 		if ( tReader.m_tFile.Open ( sFileIn, SPH_O_READ, sError, false )<0 )
 			return false;
 
 		// initial send is whole buffer or whole file whichever is less
-		BYTE * pBuf = dReadBuf.Begin() + iReaderBufSize * i;
-		tReader.m_tArgs.m_pSendBuff = pBuf;
-		tReader.m_tArgs.m_iSendSize = iReaderBufSize;
-		tReader.m_tArgs.m_sCluster = sCluster;
-		tReader.m_tArgs.m_sIndexBaseName = sFileOut;
-
 		if ( !tReader.m_tFile.Read ( pBuf, iReaderBufSize, sError ) )
 			return false;
 	}
 
+	// create agents
 	VecRefPtrs_t<AgentConn_t *> dNodes;
-	dNodes.Resize ( dDesc.GetLength() );
-	ARRAY_FOREACH ( i, dDesc )
-		dNodes[i] = CreateAgent ( *dDesc[i], dReaders[i].m_tArgs );
+	dNodes.Resize ( dReaders.GetLength() );
+	ARRAY_FOREACH ( i, dReaders )
+		dNodes[i] = CreateAgent ( *dReaders[i].m_pAgentDesc, dReaders[i].m_tArgs );
 
 	// submit initial jobs
 	CSphRefcountedPtr<IRemoteAgentsObserver> tReporter ( GetObserver() );
@@ -3313,7 +2847,7 @@ static bool SendFile ( const VecAgentDesc_t & dDesc, const CSphString & sFileIn,
 			if ( !pAgent->m_bSuccess )
 				continue;
 
-			IndexReader_t & tReader = dReaders[iAgent];
+			FileReader_t & tReader = dReaders[iAgent];
 			const PQRemoteReply_t & tRes = PQRemoteBase_t::GetRes ( *pAgent );
 
 			// report errors first
@@ -3362,7 +2896,7 @@ static bool SendFile ( const VecAgentDesc_t & dDesc, const CSphString & sFileIn,
 			// remove agent from main vector
 			pAgent->Release();
 
-			AgentConn_t * pNextJob = CreateAgent ( *dDesc[iAgent], tReader.m_tArgs );
+			AgentConn_t * pNextJob = CreateAgent ( *tReader.m_pAgentDesc, tReader.m_tArgs );
 			dNodes[iAgent] = pNextJob;
 
 			dNewNode[0] = pNextJob;
@@ -3410,27 +2944,9 @@ static bool CheckReplyIndexState ( const VecRefPtrs_t<AgentConn_t *> & dNodes, i
 	return true;
 }
 
-static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString & sIndex, CSphString & sError )
+static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString & sIndex, const VecAgentDesc_t & dDesc, CSphString & sError )
 {
-	CSphString sNodes;
-	{
-		ScRL_t tLock ( g_tClustersLock );
-		ReplicationCluster_t ** ppCluster = g_hClusters ( sCluster );
-		if ( !ppCluster )
-		{
-			sError.SetSprintf ( "unknown cluster '%s'", sCluster.cstr() );
-			return false;
-		}
-
-		// copy nodes with lock as change of cluster view would change node list string
-		{
-			ScRL_t tNodesLock ( (*ppCluster)->m_tNodesLock );
-			sNodes = (*ppCluster)->m_sNodes;
-		}
-	}
-	// ok for just created cluster (wo nodes) to add existed index
-	if ( sNodes.IsEmpty() )
-		return true;
+	assert ( dDesc.GetLength() );
 
 	CSphString sIndexPath;
 	CSphString sIndexFile;
@@ -3452,34 +2968,31 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 		PercolateIndex_i * pIndex = (PercolateIndex_i *)pDesc->m_pIndex;
 		pIndex->ForceRamFlush ( false );
 		// FIXME!!! handle other index types
-		sIndexPath = pIndex->GetFilename();
+		sIndexPath = pDesc->m_sIndexPath;
 		sIndexFile.SetSprintf ( "%s.meta", sIndexPath.cstr() );
 	}
 	assert ( !sIndexPath.IsEmpty() );
 
-	CSphString sIndexFileBase = GetBaseName ( sIndexFile );
 	int64_t iFileSize = 0;
-	CSphString sIndexHash;
+	CSphString sFileHash;
 	{
 		CSphAutoreader tIndexFile;
 		if ( !tIndexFile.Open ( sIndexFile, sError ) )
 			return false;
 	
 		iFileSize = tIndexFile.GetFilesize();
-		if ( !CalcSHA1 ( sIndexFile, sIndexHash, sError ) )
+		if ( !CalcSHA1 ( sIndexFile, sFileHash, sError ) )
 			return false;
 	}
 
-	VecAgentDesc_t dDesc;
-	GetNodes ( sNodes, dDesc );
-
-	// FIXME!!! calculate sha1 at reserve and at FileSize
-	// in case it same skip file send to that node
+	CSphVector<RemoteFileState_t> dSendStates;
 	{
 		PQRemoteData_t tAgentData;
 		tAgentData.m_sCluster = sCluster;
-		tAgentData.m_sIndexBaseName = sIndexFileBase;
+		tAgentData.m_sIndex = sIndex;
+		tAgentData.m_sFileName = GetBaseName ( sIndexPath );
 		tAgentData.m_iIndexFileSize = iFileSize;
+		tAgentData.m_sFileHash = sFileHash;
 
 		VecRefPtrs_t<AgentConn_t *> dNodes;
 		GetNodes ( dDesc, dNodes, tAgentData );
@@ -3487,24 +3000,48 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 		bool bOk = PerformRemoteTasks ( dNodes, tReq, tReq, sError );
 		if ( !CheckReplyIndexState ( dNodes, iFileSize, nullptr, sError ) || !bOk )
 			return false;
+
+		// collect remote file states and make list nodes and files to send
+		assert ( dDesc.GetLength()==dNodes.GetLength() );
+		ARRAY_FOREACH ( i, dNodes )
+		{
+			 const PQRemoteReply_t & tRes = PQRemoteBase_t::GetRes ( *dNodes[i] );
+
+			 // no need to send index files to nodes there files matches exactly
+			 if ( tRes.m_iIndexFileSize==iFileSize && tRes.m_sFileHash==sFileHash )
+				 continue;
+
+			 RemoteFileState_t & tRemoteState = dSendStates.Add();
+			 tRemoteState.m_sRemoteIndexPath = tRes.m_sIndexPath;
+			 tRemoteState.m_sRemoteFilePath.SetSprintf ( "%s.meta", tRes.m_sIndexPath.cstr() );
+			 tRemoteState.m_pAgentDesc = dDesc[i];
+		}
 	}
 
-	if ( !SendFile ( dDesc, sIndexFile, iFileSize, sCluster, sIndexFileBase, sError ) )
+	if ( !dSendStates.GetLength() )
+		return true;
+
+	if ( !SendFile ( dSendStates, sIndexFile, iFileSize, sCluster, sError ) )
 		return false;
 
 	{
 		PQRemoteData_t tAgentData;
 		tAgentData.m_sCluster = sCluster;
 		tAgentData.m_sIndex = sIndex;
-		tAgentData.m_sIndexBaseName = GetBaseName ( sIndexPath );
-		tAgentData.m_sFileHash = sIndexHash;
+		tAgentData.m_sFileHash = sFileHash;
 		tAgentData.m_iIndexFileSize = iFileSize;
 
 		VecRefPtrs_t<AgentConn_t *> dNodes;
-		GetNodes ( dDesc, dNodes, tAgentData );
+		dNodes.Resize ( dSendStates.GetLength() );
+		ARRAY_FOREACH ( i, dSendStates )
+		{
+			tAgentData.m_sIndexPath = dSendStates[i].m_sRemoteIndexPath;
+			dNodes[i] = CreateAgent ( *dDesc[i], tAgentData );
+		}
+
 		PQRemoteIndexAdd_t tReq;
 		bool bOk = PerformRemoteTasks ( dNodes, tReq, tReq, sError );
-		if ( !CheckReplyIndexState ( dNodes, iFileSize, &sIndexHash, sError ) || !bOk )
+		if ( !CheckReplyIndexState ( dNodes, iFileSize, &sFileHash, sError ) || !bOk )
 			return false;
 	}
 
@@ -3513,8 +3050,32 @@ static bool NodesReplicateIndex ( const CSphString & sCluster, const CSphString 
 
 static bool ClusterAlterAdd ( const CSphString & sCluster, const CSphString & sIndex, CSphString & sError, CSphString & sWarning )
 {
-	if ( !NodesReplicateIndex ( sCluster, sIndex, sError ) )
-		return false;
+	CSphString sNodes;
+	{
+		ScRL_t tLock ( g_tClustersLock );
+		ReplicationCluster_t ** ppCluster = g_hClusters ( sCluster );
+		if ( !ppCluster )
+		{
+			sError.SetSprintf ( "unknown cluster '%s'", sCluster.cstr() );
+			return false;
+		}
+
+		// copy nodes with lock as change of cluster view would change node list string
+		{
+			ScRL_t tNodesLock ( (*ppCluster)->m_tNodesLock );
+			sNodes = (*ppCluster)->m_sNodes;
+		}
+	}
+
+	// ok for just created cluster (wo nodes) to add existed index
+	if ( !sNodes.IsEmpty() )
+	{
+		VecAgentDesc_t dDesc;
+		GetNodes ( sNodes, dDesc );
+
+		if ( !NodesReplicateIndex ( sCluster, sIndex, dDesc, sError ) )
+			return false;
+	}
 
 	ReplicationCommand_t tAddCmd;
 	tAddCmd.m_eCommand = RCOMMAND_CLUSTER_ALTER_ADD;
@@ -3528,8 +3089,181 @@ static bool ClusterAlterAdd ( const CSphString & sCluster, const CSphString & sI
 
 bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndex, bool bAdd, CSphString & sError, CSphString & sWarning )
 {
+	{
+		ServedIndexRefPtr_c pServed = GetServed ( sIndex );
+		if ( !pServed )
+		{
+			sError.SetSprintf ( "unknown index '%s'", sIndex.cstr() );
+			return false;
+		}
+
+		ServedDescRPtr_c pDesc ( pServed );
+		if ( pDesc->m_eType!=IndexType_e::PERCOLATE )
+		{
+			sError.SetSprintf ( "wrong type of index '%s'", sIndex.cstr() );
+			return false;
+		}
+
+		if ( !CheckIndexCluster ( sIndex, *pDesc, sCluster, sError ) )
+			return false;
+	}
+
 	if ( bAdd )
 		return ClusterAlterAdd ( sCluster, sIndex, sError, sWarning );
 	else
 		return ClusterAlterDrop ( sCluster, sIndex, sError );
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// SST
+/////////////////////////////////////////////////////////////////////////////
+
+PQRemoteSynced_t::PQRemoteSynced_t ()
+	: PQRemoteBase_t ( CLUSTER_SYNCED )
+{
+}
+
+void PQRemoteSynced_t::BuildCommand ( const AgentConn_t & tAgent, CachedOutputBuffer_c & tOut ) const
+{
+	const PQRemoteData_t & tCmd = GetReq ( tAgent );
+	tOut.SendString ( tCmd.m_sCluster.cstr() );
+	tOut.SendString ( tCmd.m_sGTID.cstr() );
+	tOut.SendInt( tCmd.m_dIndexes.GetLength() );
+	for ( const CSphString & sIndex : tCmd.m_dIndexes )
+		tOut.SendString ( sIndex.cstr() );
+}
+
+void PQRemoteSynced_t::ParseCommand ( InputBuffer_c & tBuf, PQRemoteData_t & tCmd )
+{
+	tCmd.m_sCluster = tBuf.GetString();
+	tCmd.m_sGTID = tBuf.GetString();
+	tCmd.m_dIndexes.Reset ( tBuf.GetInt() );
+	ARRAY_FOREACH ( i, tCmd.m_dIndexes )
+		tCmd.m_dIndexes[i] = tBuf.GetString();
+}
+
+void PQRemoteSynced_t::BuildReply ( const PQRemoteReply_t & tRes, CachedOutputBuffer_c & tOut )
+{
+	APICommand_t tReply ( tOut, SEARCHD_OK );
+	tOut.SendByte ( 1 );
+}
+
+bool PQRemoteSynced_t::ParseReply ( MemInputBuffer_c & tReq, AgentConn_t & ) const
+{
+	// just payload as can not recv reply with 0 size
+	tReq.GetByte();
+	return !tReq.GetError();
+}
+
+static bool SendClusterSynced ( const CSphString & sCluster, const CSphVector<CSphString> & dIndexes, const VecAgentDesc_t & dDesc, const char * sGTID, CSphString & sError )
+{
+	PQRemoteData_t tAgentData;
+	tAgentData.m_sCluster = sCluster;
+	tAgentData.m_sGTID = sGTID;
+	tAgentData.m_dIndexes.Reset ( dIndexes.GetLength() );
+	ARRAY_FOREACH ( i, dIndexes )
+		tAgentData.m_dIndexes[i] = dIndexes[i];
+
+	VecRefPtrs_t<AgentConn_t *> dNodes;
+	GetNodes ( dDesc, dNodes, tAgentData );
+	PQRemoteSynced_t tReq;
+	bool bOk = PerformRemoteTasks ( dNodes, tReq, tReq, sError );
+	if ( !CheckReplyIndexState ( dNodes, 0, nullptr, sError ) || !bOk )
+		return false;
+
+	return true;
+}
+
+bool SendClusterIndexes ( const ReplicationCluster_t * pCluster, const CSphString & sNode, bool bBypass, const wsrep_gtid_t & tStateID, CSphString & sError )
+{
+	VecAgentDesc_t dDesc;
+	GetNodes ( sNode, dDesc );
+	if ( !dDesc.GetLength() )
+	{
+		sError.SetSprintf ( "%s invalid node", sNode.cstr() );
+		return false;
+	}
+
+	char sGTID[WSREP_GTID_STR_LEN];
+	Verify ( wsrep_gtid_print ( &tStateID, sGTID, sizeof(sGTID) )>0 );
+
+	if ( bBypass )
+		return SendClusterSynced ( pCluster->m_sName, pCluster->m_dIndexes, dDesc, sGTID, sError );
+
+	// keep index list
+	CSphFixedVector<CSphString> dIndexes ( 0 );
+	{
+		ScRL_t tLock ( g_tClustersLock );
+		ReplicationCluster_t ** ppCluster = g_hClusters ( pCluster->m_sName );
+		if ( !ppCluster )
+		{
+			sError.SetSprintf ( "unknown cluster '%s'", pCluster->m_sName.cstr() );
+			return false;
+		}
+
+		dIndexes.Reset ( (*ppCluster)->m_dIndexes.GetLength() );
+		ARRAY_FOREACH ( i, dIndexes )
+			dIndexes[i] = (*ppCluster)->m_dIndexes[i];
+	}
+
+	bool bOk = true;
+	for ( const CSphString & sIndex : dIndexes )
+	{
+		if ( !NodesReplicateIndex ( pCluster->m_sName, sIndex, dDesc, sError ) )
+		{
+			sphWarning ( "%s", sError.cstr() );
+			bOk = false;
+			break;
+		}
+	}
+
+	bOk &= SendClusterSynced ( pCluster->m_sName, pCluster->m_dIndexes, dDesc, bOk ? sGTID : "" , sError );
+	
+	return bOk;
+}
+
+bool RemoteClusterSynced ( const PQRemoteData_t & tCmd, CSphString & sError )
+{
+	sphLogDebugRpl ( "join sync %s, UID %s, indexes %d", tCmd.m_sCluster.cstr(), tCmd.m_sGTID.cstr(), tCmd.m_dIndexes.GetLength() );
+
+	bool bValid = ( !tCmd.m_sGTID.IsEmpty() );
+	wsrep_gtid tGtid = { WSREP_GTID_UNDEFINED };
+	
+	int iLen = wsrep_gtid_scan ( tCmd.m_sGTID.cstr(), tCmd.m_sGTID.Length(), &tGtid );
+	if ( iLen<0 )
+	{
+		sError.SetSprintf ( "invalid GTID, %s", tCmd.m_sGTID.cstr() );
+		bValid	= false;
+	}
+
+	if ( bValid )
+		bValid &= ReplicatedIndexes ( tCmd.m_dIndexes, tCmd.m_sCluster, sError );
+
+	{
+		ScRL_t tLock ( g_tClustersLock );
+		ReplicationCluster_t ** ppCluster = g_hClusters ( tCmd.m_sCluster );
+		if ( !ppCluster )
+		{
+			sError.SetSprintf ( "unknown cluster '%s'", tCmd.m_sCluster.cstr() );
+			return false;
+		}
+
+		wsrep_t * pProvider = (*ppCluster)->m_pProvider;
+		pProvider->sst_received ( pProvider, &tGtid, nullptr, 0, bValid ? 0 : -ECANCELED );
+	}
+
+	return bValid;
+}
+
+bool CheckIndexCluster ( const CSphString & sIndexName, const ServedDesc_t & tDesc, const CSphString & sStmtCluster, CSphString & sError )
+{
+	if ( tDesc.m_sCluster==sStmtCluster )
+		return true;
+
+	if ( tDesc.m_sCluster.IsEmpty() )
+		sError.SetSprintf ( "index '%s' not at any cluster, use %s as ident", sIndexName.cstr(), sIndexName.cstr() );
+	else
+		sError.SetSprintf ( "index '%s' belongs to cluster '%s', use %s:%s as ident", sIndexName.cstr(), tDesc.m_sCluster.cstr(), tDesc.m_sCluster.cstr(), sIndexName.cstr() );
+
+	return false;
 }

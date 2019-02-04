@@ -1458,9 +1458,6 @@ void Shutdown () REQUIRES ( MainThread ) NO_THREAD_SAFETY_ANALYSIS
 
 	g_tPrereadThread.Join();
 
-	// unfreeze threads waiting of replication started
-	ReplicateClustersWake();
-
 	int64_t tmShutStarted = sphMicroTimer();
 	// stop search threads; up to shutdown_timeout seconds
 	while ( ( ThreadsNum() > 0 || g_bPrereading ) && ( sphMicroTimer()-tmShutStarted )<g_iShutdownTimeout )
@@ -12330,6 +12327,12 @@ static void PercolateAddQuery ( const SqlStmt_t &tStmt, bool bReplace, ESphColla
 			return;
 		}
 
+		if ( !CheckIndexCluster ( sIndex, *pServed, tStmt.m_sCluster, sError ) )
+		{
+			tOut.Error ( tStmt.m_sStmt, sError.cstr () );
+			return;
+		}
+
 		auto * pIndex = ( PercolateIndex_i * ) pServed->m_pIndex;
 		assert ( pIndex );
 		const CSphSchema &tSchema = pIndex->GetInternalSchema ();
@@ -15844,7 +15847,15 @@ static int LocalIndexDoDeleteDocuments ( const CSphString & sName, const CSphStr
 
 		// goto to percolate path with unlocked index
 		if ( pLocked->m_eType==IndexType_e::PERCOLATE )
+		{
+			if ( !CheckIndexCluster ( sName, *pLocked, sCluster, sError ) )
+			{
+				dErrors.Submit ( sName, sDistributed, sError.cstr() );
+				return 0;
+			} 
+
 			break;
+		}
 
 		CSphScopedPtr<SearchHandler_c> pHandler ( nullptr );
 		CSphVector<SphDocID_t> dValues;
@@ -16613,6 +16624,12 @@ void HandleMysqlTruncate ( SqlRowBuffer_c & tOut, const SqlStmt_t & tStmt )
 		if ( !pIndex || !pIndex->IsMutable () )
 		{
 			tOut.Error ( tStmt.m_sStmt, "TRUNCATE RTINDEX requires an existing RT index" );
+			return;
+		}
+
+		if ( !CheckIndexCluster ( sIndex, *pIndex, tStmt.m_sCluster, sError ) )
+		{
+			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 			return;
 		}
 	}
@@ -24342,8 +24359,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 		bNewClusterForce = false;
 	}
 	
-	bool bReplicationStarted = ReplicationStart ( hSearchd, bNewCluster, bNewClusterForce );
-
 	if ( g_tBinlogAutoflush.m_fnWork && !g_tBinlogFlushThread.Create ( RtBinlogAutoflushThreadFunc, 0, "binlog_flush" ) )
 		sphDie ( "failed to create binlog flush thread" );
 
@@ -24398,10 +24413,6 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 			sphWarning ( "failed to create preread thread" );
 	}
 
-	// wait here replication to sync with cluster
-	if ( bReplicationStarted )
-		ReplicationWait();
-
 	// almost ready, time to start listening
 	g_iBacklog = hSearchd.GetInt ( "listen_backlog", g_iBacklog );
 	ARRAY_FOREACH ( j, g_dListeners )
@@ -24437,6 +24448,9 @@ int WINAPI ServiceMain ( int argc, char **argv ) REQUIRES (!MainThread)
 	// crash logging for the main thread (for --console case)
 	CrashQuery_t tQueryTLS;
 	SphCrashLogger_c::SetTopQueryTLS ( &tQueryTLS );
+
+	// time for replication to sync with cluster
+	ReplicationStart ( hSearchd, bNewCluster, bNewClusterForce );
 
 	// ready, steady, go
 	sphInfo ( "accepting connections" );

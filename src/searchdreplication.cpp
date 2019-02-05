@@ -1785,6 +1785,14 @@ void GetNodeAddress ( const ClusterDesc_t & tCluster, CSphString & sAddr )
 
 bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bool bForce )
 {
+	if ( !GetReplicationDL() )
+	{
+		// warning only in case clusters declared
+		if ( g_dCfgClusters.GetLength() )
+			sphWarning ( "got cluster but provider not set, replication disabled" );
+		return false;
+	}
+
 	if ( g_sDataDir.IsEmpty() )
 	{
 		sphWarning ( "data_dir option is missed, replication disabled" );
@@ -1794,14 +1802,6 @@ bool ReplicationStart ( const CSphConfigSection & hSearchd, bool bNewCluster, bo
 	if ( g_sIncomingAddr.IsEmpty() )
 	{
 		sphWarning ( "incoming addresses not set, replication disabled" );
-		return false;
-	}
-
-	if ( !GetReplicationDL() )
-	{
-		// warning only in case clusters declared
-		if ( g_dCfgClusters.GetLength() )
-			sphWarning ( "got cluster but provider not set, replication disabled" );
 		return false;
 	}
 

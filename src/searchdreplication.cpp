@@ -3227,7 +3227,7 @@ bool RemoteClusterSynced ( const PQRemoteData_t & tCmd, CSphString & sError )
 	sphLogDebugRpl ( "join sync %s, UID %s, indexes %d", tCmd.m_sCluster.cstr(), tCmd.m_sGTID.cstr(), tCmd.m_dIndexes.GetLength() );
 
 	bool bValid = ( !tCmd.m_sGTID.IsEmpty() );
-	wsrep_gtid tGtid = { WSREP_GTID_UNDEFINED };
+	wsrep_gtid tGtid = WSREP_GTID_UNDEFINED;
 	
 	int iLen = wsrep_gtid_scan ( tCmd.m_sGTID.cstr(), tCmd.m_sGTID.Length(), &tGtid );
 	if ( iLen<0 )

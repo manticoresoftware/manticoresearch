@@ -161,9 +161,11 @@ add_executable ( wordbreaker ${WORDBREAKER_SRCS} )
 add_dependencies ( wordbreaker vergen )
 target_link_libraries ( indexer libsphinx ${EXTRA_LIBRARIES} )
 target_link_libraries ( indextool libsphinx ${EXTRA_LIBRARIES} )
-target_link_libraries ( searchd libsphinx ${EXTRA_LIBRARIES} )
+target_link_libraries ( searchd libsphinx ${EXTRA_LIBRARIES} ${EXTRA_SEARCHD_LIBRARIES} )
 target_link_libraries ( spelldump libsphinx ${EXTRA_LIBRARIES} )
 target_link_libraries ( wordbreaker libsphinx ${EXTRA_LIBRARIES} )
+
+SET_RPATH ( searchd )
 
 include ( helpers )
 

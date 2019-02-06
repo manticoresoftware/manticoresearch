@@ -27,6 +27,7 @@ PROJECT ( MANTICORE )
 SET ( MANTICORE_CMAKE_DIR "${MANTICORE_SOURCE_DIR}/cmake" )
 SET ( CMAKE_MODULE_PATH "${MANTICORE_SOURCE_DIR}/cmake" )
 SET ( EXTRA_LIBRARIES )
+SET ( EXTRA_SEARCHD_LIBRARIES )
 
 option ( DISABLE_TESTING "Disable all testing (if you just build a distr)" OFF )
 
@@ -397,9 +398,7 @@ endif ( WIN32 )
 
 message ( STATUS "Option WITH_REPLICATION ${WITH_REPLICATION}" )
 option ( WITH_REPLICATION "compile with replicaiton support" OFF )
-if ( WITH_REPLICATION )
-	include ( GetREPLICATION )
-endif ( WITH_REPLICATION )
+include ( GetGALERA )
 
 message ( STATUS "Option WITH_RLP ${WITH_RLP}" )
 option ( WITH_RLP "compile with RLP library support" OFF )

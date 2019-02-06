@@ -1918,7 +1918,7 @@ static bool CheckClusterStatement ( const CSphString & sCluster, bool bCheckClus
 		return true;
 
 	g_tClustersLock.ReadLock();
-	const bool bClusterExists = g_hClusters ( sCluster )!=nullptr;
+	const bool bClusterExists = ( g_hClusters ( sCluster )!=nullptr );
 	g_tClustersLock.Unlock();
 	if ( bClusterExists )
 	{
@@ -2059,7 +2059,6 @@ bool ClusterCreate ( const CSphString & sCluster, const StrVec_t & dNames, const
 	CSphString sClusterPath = GetClusterPath ( pElem->m_sPath );
 	NewClusterClean ( sClusterPath );
 
-	assert ( pElem->m_pProvider );
 	{
 		ScWL_t tLock ( g_tClustersLock );
 		g_hClusters.Add ( pElem.LeakPtr(), sCluster );
@@ -2550,7 +2549,7 @@ bool RemoteClusterDelete ( const CSphString & sCluster, CSphString & sError )
 		ScWL_t tLock ( g_tClustersLock );
 
 		ReplicationCluster_t ** ppCluster = g_hClusters ( sCluster );
-		if ( *ppCluster )
+		if ( !ppCluster )
 		{
 			sError.SetSprintf ( "unknown cluster '%s' ", sCluster.cstr() );
 			return false;

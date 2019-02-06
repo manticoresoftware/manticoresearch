@@ -9,7 +9,7 @@ tarball:
     - dev-host
   script:
     - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISABLE_TESTING=1 ..
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISABLE_TESTING=1 $EXTRA_FLAGS ..
     - make tarball
     - cp manticore-*.tar.gz ..
   artifacts:
@@ -31,7 +31,7 @@ osx:
     - build
   script:
     - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=macos -DLIBS_BUNDLE=/work ..
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=macos -DLIBS_BUNDLE=/work $EXTRA_FLAGS ..
     - make -j2 package
     - cp manticore-*.tar.gz ..
   artifacts:
@@ -54,7 +54,7 @@ windows:
   script:
     - mkdir sphinxbin-x32
     - cd sphinxbin-x32
-    - cmake -G "Visual Studio 14" -DSPHINX_TAG=$RELEASE_TAG -DLIBS_BUNDLE="c:/bundle" -DSPLIT_SYMBOLS=1 -DDISABLE_TESTING=1 ..
+    - cmake -G "Visual Studio 14" -DSPHINX_TAG=$RELEASE_TAG -DLIBS_BUNDLE="c:/bundle" -DSPLIT_SYMBOLS=1 -DDISABLE_TESTING=1 $EXTRA_FLAGS ..
     - cmake --build . --target package --config RelWithDebInfo
     - cmake -DWITH_PGSQL=1 .
     - cmake --build . --target package --config RelWithDebInfo --clean-first
@@ -65,7 +65,7 @@ windows:
     - cd ..
     - mkdir sphinxbin-x64
     - cd sphinxbin-x64
-    - cmake -G "Visual Studio 14 Win64" -DSPHINX_TAG=$RELEASE_TAG -DLIBS_BUNDLE="c:/bundle" -DSPLIT_SYMBOLS=1 -DDISABLE_TESTING=1 ..
+    - cmake -G "Visual Studio 14 Win64" -DSPHINX_TAG=$RELEASE_TAG -DLIBS_BUNDLE="c:/bundle" -DSPLIT_SYMBOLS=1 -DDISABLE_TESTING=1 $EXTRA_FLAGS ..
     - cmake --build . --target package --config RelWithDebInfo
     - cmake -DWITH_PGSQL=1 .
     - cmake --build . --target package --config RelWithDebInfo --clean-first
@@ -92,7 +92,7 @@ rhel6:
   image: registry.gitlab.com/manticoresearch/dev/buildcentos6:latest
   script:
     - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=rhel6 ..
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=rhel6 $EXTRA_FLAGS ..
     - make -j4 package
     - cp manticore*.rpm ..
   artifacts:
@@ -114,7 +114,7 @@ rhel7:
   image: registry.gitlab.com/manticoresearch/dev/buildcentos7:latest
   script:
     - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=rhel7 ..
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=rhel7 $EXTRA_FLAGS ..
     - make -j4 package
     - cp manticore*.rpm ..
   artifacts:
@@ -136,7 +136,7 @@ jessie:
   image: registry.gitlab.com/manticoresearch/dev/buildjessie:latest
   script:
     - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=jessie ..
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=jessie $EXTRA_FLAGS ..
     - make -j4 package
     - cp manticore*.deb ..
   artifacts:
@@ -158,7 +158,7 @@ stretch:
   image: registry.gitlab.com/manticoresearch/dev/buildstretch:latest
   script:
     - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=stretch ..
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=stretch $EXTRA_FLAGS ..
     - make -j4 package
     - cp manticore*.deb ..
   artifacts:
@@ -180,7 +180,7 @@ trusty:
   image: registry.gitlab.com/manticoresearch/dev/buildtrusty:latest
   script:
     - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=trusty ..
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=trusty $EXTRA_FLAGS ..
     - make -j4 package
     - cp manticore*.deb ..
   artifacts:
@@ -202,7 +202,7 @@ xenial:
   image: registry.gitlab.com/manticoresearch/dev/buildxenial:latest
   script:
     - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=xenial ..
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=xenial $EXTRA_FLAGS ..
     - make -j4 package
     - cp manticore*.deb ..
   artifacts:
@@ -224,7 +224,7 @@ bionic:
   image: registry.gitlab.com/manticoresearch/dev/buildbionic:latest
   script:
     - mkdir build && cd build
-    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=bionic ..
+    - cmake -DSPHINX_TAG=$RELEASE_TAG -DDISTR_BUILD=bionic $EXTRA_FLAGS ..
     - make -j4 package
     - cp manticore*.deb ..
   artifacts:

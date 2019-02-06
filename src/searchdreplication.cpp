@@ -3107,8 +3107,16 @@ bool ClusterAlter ( const CSphString & sCluster, const CSphString & sIndex, bool
 			return false;
 		}
 
-		if ( !CheckIndexCluster ( sIndex, *pDesc, sCluster, sError ) )
+		if ( bAdd && !pDesc->m_sCluster.IsEmpty() )
+		{
+			sError.SetSprintf ( "index already '%s' is part of cluster '%s'", sIndex.cstr(), pDesc->m_sCluster.cstr() );
 			return false;
+		}
+		if ( !bAdd && pDesc->m_sCluster.IsEmpty() )
+		{
+			sError.SetSprintf ( "index '%s' is not in cluster '%s'", sIndex.cstr(), sCluster.cstr() );
+			return false;
+		}
 	}
 
 	if ( bAdd )
@@ -3267,9 +3275,9 @@ bool CheckIndexCluster ( const CSphString & sIndexName, const ServedDesc_t & tDe
 		return true;
 
 	if ( tDesc.m_sCluster.IsEmpty() )
-		sError.SetSprintf ( "index '%s' not at any cluster, use %s as ident", sIndexName.cstr(), sIndexName.cstr() );
+		sError.SetSprintf ( "index '%s' is not in cluster, use %s as ident", sIndexName.cstr(), sIndexName.cstr() );
 	else
-		sError.SetSprintf ( "index '%s' belongs to cluster '%s', use %s:%s as ident", sIndexName.cstr(), tDesc.m_sCluster.cstr(), tDesc.m_sCluster.cstr(), sIndexName.cstr() );
+		sError.SetSprintf ( "index '%s' already is part of cluster '%s', use %s:%s as ident", sIndexName.cstr(), tDesc.m_sCluster.cstr(), tDesc.m_sCluster.cstr(), sIndexName.cstr() );
 
 	return false;
 }

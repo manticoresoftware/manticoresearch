@@ -1156,12 +1156,13 @@ private:
 class HttpHandlerPQ_c : public HttpHandler_c
 {
 public:	
-	HttpHandlerPQ_c (  const char * sQuery, const ThdDesc_t & tThd, bool bNeedHttpResponse, const OptionsHash_t & tOptions )
+	HttpHandlerPQ_c (  const char * sQuery, const OptionsHash_t& tOptions,
+		const ThdDesc_t& tThd, bool bNeedHttpResponse )
 		: HttpHandler_c ( sQuery, tThd, bNeedHttpResponse )
 		, m_tOptions ( tOptions )
 	{}
 
-	virtual bool Process () override;
+	bool Process () final;
 
 private:
 	const OptionsHash_t & m_tOptions;
@@ -1203,7 +1204,7 @@ static HttpHandler_c * CreateHttpHandler ( ESphHttpEndpoint eEndpoint, const cha
 		return new HttpHandler_JsonBulk_c ( sQuery, tOptions, tThd, bNeedHttpResonse );
 
 	case SPH_HTTP_ENDPOINT_PQ:
-		return new HttpHandlerPQ_c ( sQuery, tThd, bNeedHttpResonse, tOptions );
+		return new HttpHandlerPQ_c ( sQuery, tOptions, tThd, bNeedHttpResonse );
 
 	default:
 		break;
@@ -1216,7 +1217,7 @@ static HttpHandler_c * CreateHttpHandler ( ESphHttpEndpoint eEndpoint, const cha
 static bool sphProcessHttpQuery ( ESphHttpEndpoint eEndpoint, const char * sQuery, const SmallStringHash_T<CSphString> & tOptions, const ThdDesc_t & tThd, CSphVector<BYTE> & dResult, bool bNeedHttpResponse, http_method eRequestType )
 {
 	CSphScopedPtr<HttpHandler_c> pHandler ( CreateHttpHandler ( eEndpoint, sQuery, tOptions, tThd, bNeedHttpResponse, eRequestType ) );
-	if ( !pHandler.Ptr() )
+	if ( !pHandler )
 		return false;
 
 	pHandler->Process();
@@ -1528,37 +1529,18 @@ bool HttpHandlerPQ_c::GotQuery ( const CSphString & sIndex, const JsonObj_c & tJ
 	return bOk;
 }
 
+// for now - forcibly route query as /json/search POST {"index":"<idx>"}. Later matter of deprecate/delete
 bool HttpHandlerPQ_c::ListQueries ( const CSphString & sIndex )
 {
-	// FIXME!!! provide filters
-	const char * sFilterTags = nullptr;
-	const CSphFilterSettings * pUID = nullptr;
-
-	ServedDescPtr_c pServed ( GetIndex ( sIndex, IndexType_e::PERCOLATE ) );
-	if ( !pServed )
+	StringBuilder_c sQuery;
+	sQuery.Sprintf(R"({"index":"%s"})", sIndex.scstr());
+	CSphScopedPtr<HttpHandler_c> pHandler (
+		new HttpHandler_JsonSearch_c ( sQuery.cstr(), m_tOptions, m_tThd, m_bNeedHttpResponse ));
+	if ( !pHandler )
 		return false;
 
-	auto pIndex = (PercolateIndex_i *)pServed->m_pIndex;
-
-	uint64_t tmStart = sphMicroTimer();
-
-	CSphVector<PercolateQueryDesc> dQueries;
-	pIndex->GetQueries ( sFilterTags, true, pUID, 0, 0, dQueries );
-
-	PercolateMatchResult_t tRes;
-	tRes.m_bGetDocs = false;
-	tRes.m_dQueryDesc.Set ( dQueries.Begin(), dQueries.GetLength() );
-	dQueries.LeakData();
-	tRes.m_dDocs.Reset ( tRes.m_dQueryDesc.GetLength() );
-	tRes.m_dDocs.Fill ( 0 );
-
-	tRes.m_tmTotal = sphMicroTimer() - tmStart;
-
-	CSphFixedVector<int64_t> dTmpids ( 0 );
-	JsonEscapedBuilder sRes;
-	EncodePercolateMatchResult ( tRes, dTmpids, sIndex, sRes );
-	BuildReply ( sRes, SPH_HTTP_STATUS_200 );
-
+	pHandler->Process ();
+	m_dData = std::move ( pHandler->GetResult ());
 	return true;
 }
 

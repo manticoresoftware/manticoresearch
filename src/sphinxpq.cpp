@@ -97,8 +97,6 @@ public:
 	ISphRtAccum * CreateAccum ( CSphString & sError ) override;
 	ISphTokenizer * CloneIndexingTokenizer() const override { return m_pTokenizerIndexing->Clone ( SPH_CLONE_INDEX ); }
 	void SaveMeta ( bool bShutdown );
-	void GetQueries ( const char * sFilterTags, bool bTagsEq, const CSphFilterSettings * pUID, int iOffset, int iLimit, CSphVector<PercolateQueryDesc> & dQueries ) override
-		REQUIRES (!m_tLock);
 	bool Truncate ( CSphString & ) override EXCLUDES (m_tLock);
 
 	// RT index stub
@@ -2157,59 +2155,6 @@ void PercolateIndex_c::SaveMeta ( bool bShutdown )
 	// rename
 	if ( sph::rename ( sMetaNew.cstr(), sMeta.cstr() ) )
 		sphWarning ( "failed to rename meta (src=%s, dst=%s, errno=%d, error=%s)", sMetaNew.cstr(), sMeta.cstr(), errno, strerrorm( errno ) );
-}
-
-void PercolateIndex_c::GetQueries ( const char * sFilterTags, bool bTagsEq, const CSphFilterSettings * pUID, int iOffset, int iLimit, CSphVector<PercolateQueryDesc> & dQueries )
-{
-	// FIXME!!! move to filter, add them via join
-	CSphVector<uint64_t> dTags;
-	PercolateTags ( sFilterTags, dTags );
-
-	// FIXME!!! add UID scan for UID IN (value list) queries
-	CSphScopedPtr<PercolateFilter_i> tFilter ( CreatePercolateFilter ( pUID ) );
-
-	// reserve size to store all queries
-	if ( !dTags.GetLength() && !tFilter.Ptr() )
-		dQueries.Reserve ( m_dStored.GetLength() );
-
-	StringBuilder_c tBuf;
-	ScRL_t rLock ( m_tLock );
-
-	int iFrom = 0;
-	if ( iLimit>0 && iOffset>0 )
-		iFrom = Min ( iOffset, m_dStored.GetLength() );
-
-	for ( int i=iFrom; i<m_dStored.GetLength(); ++i )
-	{
-		const StoredQuery_t * pQuery = m_dStored[i].m_pQuery;
-		if ( dTags.GetLength() )
-		{
-			if ( !pQuery->m_dTags.GetLength() )
-				continue;
-
-			if ( !TagsMatched ( dTags, pQuery->m_dTags, bTagsEq ) )
-				continue;
-		}
-
-		if ( tFilter.Ptr() && !tFilter->Eval ( pQuery->m_uQUID ) )
-			continue;
-
-		PercolateQueryDesc & tItem = dQueries.Add();
-		tItem.m_uQID = pQuery->m_uQUID;
-		tItem.m_sQuery = pQuery->m_sQuery;
-		tItem.m_sTags = pQuery->m_sTags;
-		tItem.m_bQL = pQuery->m_bQL;
-
-		if ( pQuery->m_dFilters.GetLength() )
-		{
-			tBuf.Clear();
-			FormatFiltersQL ( pQuery->m_dFilters, pQuery->m_dFilterTree, tBuf );
-			tItem.m_sFilters = tBuf.cstr();
-		}
-
-		if ( iLimit>0 && dQueries.GetLength()==iLimit )
-			break;
-	}
 }
 
 bool PercolateIndex_c::Truncate ( CSphString & sError )

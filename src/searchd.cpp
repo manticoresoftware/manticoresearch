@@ -3404,7 +3404,7 @@ void SearchReplyParser_c::ParseMatch ( CSphMatch & tMatch, MemInputBuffer_c & tR
 			{
 				int iValues = tReq.GetDword ();
 				BYTE * pData = nullptr;
-				BYTE * pPacked = sphPackPtrAttr ( iValues*sizeof(DWORD), pData );
+				BYTE * pPacked = sphPackPtrAttr ( iValues*sizeof(DWORD), &pData );
 				tMatch.SetAttr ( tAttr.m_tLocator, (SphAttr_t)pPacked );
 				DWORD * pMVA = (DWORD *)pData;
 				if ( tAttr.m_eAttrType==SPH_ATTR_UINT32SET_PTR )
@@ -3431,7 +3431,7 @@ void SearchReplyParser_c::ParseMatch ( CSphMatch & tMatch, MemInputBuffer_c & tR
 			{
 				int iLen = tReq.GetDword();
 				BYTE * pData = nullptr;
-				tMatch.SetAttr ( tAttr.m_tLocator, (SphAttr_t)sphPackPtrAttr ( iLen, pData ) );
+				tMatch.SetAttr ( tAttr.m_tLocator, (SphAttr_t)sphPackPtrAttr ( iLen, &pData ) );
 				if ( iLen )
 					tReq.GetBytes ( pData, iLen );
 			}
@@ -3447,7 +3447,7 @@ void SearchReplyParser_c::ParseMatch ( CSphMatch & tMatch, MemInputBuffer_c & tR
 				{
 					int iLen = tReq.GetDword();
 					BYTE * pData = nullptr;
-					tMatch.SetAttr ( tAttr.m_tLocator, (SphAttr_t)sphPackPtrAttr ( iLen+1, pData ) );
+					tMatch.SetAttr ( tAttr.m_tLocator, (SphAttr_t)sphPackPtrAttr ( iLen+1, &pData ) );
 					*pData++ = (BYTE)eJson;
 					tReq.GetBytes ( pData, iLen );
 				}

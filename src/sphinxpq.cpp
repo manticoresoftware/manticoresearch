@@ -1787,14 +1787,14 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 		tMatch.m_uDocID = dQuery.m_uQUID;
 
 		int iLen = pQuery->m_sQuery.Length ();
-		tMatch.SetAttr ( dColQuery.m_tLocator, (SphAttr_t) sphPackPtrAttr ( iLen, pData ) );
+		tMatch.SetAttr ( dColQuery.m_tLocator, (SphAttr_t) sphPackPtrAttr ( iLen+2, &pData ) );
 		memcpy ( pData, pQuery->m_sQuery.cstr (), iLen );
 
 		if ( pQuery->m_sTags.IsEmpty () )
 			tMatch.SetAttr ( dColTags.m_tLocator, ( SphAttr_t ) 0 );
 		else {
 			iLen = pQuery->m_sTags.Length();
-			tMatch.SetAttr ( dColTags.m_tLocator, ( SphAttr_t ) sphPackPtrAttr ( iLen, pData ) );
+			tMatch.SetAttr ( dColTags.m_tLocator, ( SphAttr_t ) sphPackPtrAttr ( iLen, &pData ) );
 			memcpy ( pData, pQuery->m_sTags.cstr (), iLen );
 		}
 
@@ -1802,7 +1802,7 @@ bool PercolateIndex_c::MultiScan ( const CSphQuery * pQuery, CSphQueryResult * p
 		if ( pQuery->m_dFilters.GetLength () )
 			FormatFiltersQL ( pQuery->m_dFilters, pQuery->m_dFilterTree, sFilters );
 		iLen = sFilters.GetLength ();
-		tMatch.SetAttr ( dColFilters.m_tLocator, ( SphAttr_t ) sphPackPtrAttr ( iLen, pData ) );
+		tMatch.SetAttr ( dColFilters.m_tLocator, ( SphAttr_t ) sphPackPtrAttr ( iLen, &pData ) );
 		memcpy ( pData, sFilters.cstr (), iLen );
 
 

@@ -3522,7 +3522,7 @@ BYTE *				sphPackPtrAttr ( const BYTE * pData, int iLengthBytes );
 void				sphPackPtrAttr ( BYTE * pPrealloc, const BYTE * pData, int iLengthBytes );
 
 // allocate buffer, store zipped length, set pointer to free space in buffer
-BYTE *				sphPackPtrAttr ( int iLengthBytes, BYTE * & pData );
+BYTE *				sphPackPtrAttr ( int iLengthBytes, BYTE ** ppData );
 
 // unpack data pointer attr, return length
 int					sphUnpackPtrAttr ( const BYTE * pData, const BYTE ** ppUnpacked=NULL );

@@ -5816,12 +5816,12 @@ void sphPackPtrAttr ( BYTE * pPrealloc, const BYTE * pData, int iLengthBytes )
 }
 
 
-BYTE * sphPackPtrAttr ( int iLengthBytes, BYTE * & pData )
+BYTE * sphPackPtrAttr ( int iLengthBytes, BYTE ** ppData )
 {
 	// BYTE * pPacked = new BYTE [sphCalcPackedLength(iLengthBytes)];
 	BYTE * pPacked = sphAllocateSmall ( sphCalcPackedLength ( iLengthBytes ) );
-	pData = pPacked;
-	pData += sphZipToPtr ( iLengthBytes, pPacked );
+	*ppData = pPacked;
+	*ppData += sphZipToPtr ( iLengthBytes, pPacked );
 	return pPacked;
 }
 
@@ -8590,7 +8590,7 @@ void MatchesToNewSchema_c::Process ( CSphMatch * pMatch )
 					int iLengthBytes = sphJsonNodeSize ( eJson, pStr );
 
 					BYTE * pData = nullptr;
-					BYTE * pPacked = sphPackPtrAttr ( iLengthBytes+1, pData );
+					BYTE * pPacked = sphPackPtrAttr ( iLengthBytes+1, &pData );
 
 					// store field type before the field
 					*pData = (BYTE)eJson;

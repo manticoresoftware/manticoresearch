@@ -15664,6 +15664,8 @@ void SendMysqlSelectResult ( SqlRowBuffer_c & dRows, const AggrResult_t & tRes, 
 					int iLen=0;
 					if ( pString )
 						iLen = sphUnpackPtrAttr ( pString, &pString );
+					if ( pString && iLen>1 && pString[iLen - 2]=='\0' )
+						iLen -= 2;
 					dRows.PutArray ( pString, iLen );
 				}
 				break;

@@ -18098,7 +18098,7 @@ void HandleCommandJson ( CachedOutputBuffer_c & tOut, WORD uVer, InputBuffer_c &
 
 	CSphVector<BYTE> dResult;
 	SmallStringHash_T<CSphString> tOptions;
-	sphProcessHttpQueryNoResponce ( eEndpoint, sCommand, tOptions, tThd, dResult );
+	sphProcessHttpQueryNoResponce ( eEndpoint, sCommand.cstr(), tOptions, tThd, dResult );
 
 	APICommand_t dOk ( tOut, SEARCHD_OK, VER_COMMAND_JSON );
 	tOut.SendString ( sEndpoint.cstr() );

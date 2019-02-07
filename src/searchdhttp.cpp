@@ -1167,9 +1167,10 @@ public:
 private:
 	const OptionsHash_t & m_tOptions;
 
-	// FIXME!!! handle replication for GotQuery and Delete
+	// FIXME!!! handle replication for InsertOrReplaceQuery and Delete
 	bool DoCallPQ ( const CSphString & sIndex, const JsonObj_c & tPercolate, bool bVerbose );
-	bool GotQuery ( const CSphString & sIndex, const JsonObj_c & tJsonQuery, const JsonObj_c & tRoot, CSphString * pUID, bool bReplace );
+	bool InsertOrReplaceQuery ( const CSphString& sIndex, const JsonObj_c& tJsonQuery, const JsonObj_c& tRoot,
+		CSphString* pUID, bool bReplace );
 	bool ListQueries ( const CSphString & sIndex );
 	bool Delete ( const CSphString & sIndex, const JsonObj_c & tRoot );
 };
@@ -1407,7 +1408,8 @@ static void EncodePercolateQueryResult ( bool bReplace, const CSphString & sInde
 }
 
 
-bool HttpHandlerPQ_c::GotQuery ( const CSphString & sIndex, const JsonObj_c & tJsonQuery, const JsonObj_c & tRoot, CSphString * pUID, bool bReplace )
+bool HttpHandlerPQ_c::InsertOrReplaceQuery ( const CSphString& sIndex, const JsonObj_c& tJsonQuery,
+	const JsonObj_c& tRoot, CSphString* pUID, bool bReplace )
 {
 	CSphString sTmp, sError, sWarning;
 
@@ -1687,7 +1689,7 @@ bool HttpHandlerPQ_c::Process()
 				bRefresh = true;
 		}
 
-		return GotQuery ( sIndex, tQuery, tRoot, pUID, bRefresh );
+		return InsertOrReplaceQuery ( sIndex, tQuery, tRoot, pUID, bRefresh );
 	}
 }
 

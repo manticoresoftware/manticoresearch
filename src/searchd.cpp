@@ -8735,6 +8735,7 @@ public:
 					SetAttrFloat ( tLoc, tVal.m_fVal );
 				break;
 			case SPH_ATTR_STRING:
+			case SPH_ATTR_STRINGPTR:
 			case SPH_ATTR_UINT32SET:
 			case SPH_ATTR_INT64SET:
 			case SPH_ATTR_JSON:
@@ -12228,165 +12229,6 @@ bool PercolateParseFilters ( const char * sFilters, ESphCollation eCollation, co
 	return ( iRes==0 );
 }
 
-static void PercolateAddQuery ( const SqlStmt_t &tStmt, bool bReplace, ESphCollation eCollation,
-	SqlRowBuffer_c &tOut, CSphString &sWarning )
-{
-	CSphString sError;
-	int iExp = tStmt.m_iSchemaSz;
-	int iGot = tStmt.m_dInsertValues.GetLength();
-	// with schema provided only one row of values
-	// wo schema - either query or query and tags
-	if ( iExp!=0 && iExp!=iGot )
-	{
-		sError.SetSprintf ( "column count does not match value count (expected %d, got %d)", iExp, iGot );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
-		return;
-	}
-	if ( iExp==0 && iGot>2 )
-	{
-		sError.SetSprintf ( "too many columns, (need (query) or (query, tags) but got %d)", iGot );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
-		return;
-	}
-
-	bool bNoSchema = true;
-	const char * sQuery = nullptr;
-	const char * sTags = nullptr;
-	const char * sFilters = nullptr;
-	uint64_t uID = 0;
-	StringBuilder_c sSkipColumns (", ");
-
-	// got schema, get values
-	ARRAY_FOREACH ( i, tStmt.m_dInsertSchema )
-	{
-		int iExpected = -1;
-		const CSphString & sCol = tStmt.m_dInsertSchema[i];
-		if ( sCol=="query" )
-		{
-			sQuery = tStmt.m_dInsertValues[i].m_sVal.cstr();
-			bNoSchema = false;
-			iExpected = TOK_QUOTED_STRING;
-		} else if ( sCol=="tags" )
-		{
-			sTags = tStmt.m_dInsertValues[i].m_sVal.cstr();
-			bNoSchema = false;
-			iExpected = TOK_QUOTED_STRING;
-		} else if ( sCol=="filters" )
-		{
-			sFilters = tStmt.m_dInsertValues[i].m_sVal.cstr();
-			bNoSchema = false;
-			iExpected = TOK_QUOTED_STRING;
-		} else if ( sCol=="id" || sCol=="uid" )
-		{
-			uID = tStmt.m_dInsertValues[i].m_iVal;
-			bNoSchema = false;
-			iExpected = TOK_CONST_INT;
-		} else
-			sSkipColumns << sCol;
-
-		if ( iExpected>=0 && iExpected!=tStmt.m_dInsertValues[i].m_iType )
-		{
-			sError.SetSprintf ( "column %d: internal error: unknown insval type %d", i+1, tStmt.m_dInsertValues[i].m_iType ); // 1 for human base
-			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
-			return;
-		}
-	}
-	if ( bNoSchema && tStmt.m_dInsertValues.GetLength() )
-	{
-		sQuery = tStmt.m_dInsertValues[0].m_sVal.cstr();
-		if ( tStmt.m_dInsertValues[0].m_iType!=TOK_QUOTED_STRING )
-		{
-			sError.SetSprintf ( "column 1 (query): internal error: unknown insval type %d", tStmt.m_dInsertValues[0].m_iType );
-			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
-			return;
-		}
-
-		if ( tStmt.m_dInsertValues.GetLength()>1 )
-		{
-			sTags = tStmt.m_dInsertValues[1].m_sVal.cstr();
-			if ( tStmt.m_dInsertValues[0].m_iType!=TOK_QUOTED_STRING )
-			{
-				sError.SetSprintf ( "column 2 (tags): internal error: unknown insval type %d", tStmt.m_dInsertValues[1].m_iType );
-				tOut.Error ( tStmt.m_sStmt, sError.cstr() );
-				return;
-			}
-		}
-	}
-
-	const CSphString & sIndex = tStmt.m_sIndex;
-	StoredQuery_i * pStored = nullptr;
-	// scope for index lock
-	{
-		ServedDescRPtr_c pServed ( GetServed ( sIndex ) );
-		if ( !pServed )
-		{
-			sError.SetSprintf ( "no such index '%s'", sIndex.cstr () );
-			tOut.Error ( tStmt.m_sStmt, sError.cstr () );
-			return;
-		}
-
-		if ( pServed->m_eType!=IndexType_e::PERCOLATE )
-		{
-			sError.SetSprintf ( "index '%s' is not percolate", sIndex.cstr () );
-			tOut.Error ( tStmt.m_sStmt, sError.cstr () );
-			return;
-		}
-
-		if ( !CheckIndexCluster ( sIndex, *pServed, tStmt.m_sCluster, sError ) )
-		{
-			tOut.Error ( tStmt.m_sStmt, sError.cstr () );
-			return;
-		}
-
-		auto * pIndex = ( PercolateIndex_i * ) pServed->m_pIndex;
-		assert ( pIndex );
-		const CSphSchema &tSchema = pIndex->GetInternalSchema ();
-
-		CSphVector<CSphFilterSettings> dFilters;
-		CSphVector<FilterTreeItem_t> dFilterTree;
-		if ( !PercolateParseFilters ( sFilters, eCollation, tSchema, dFilters, dFilterTree, sError ) )
-		{
-			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
-			return;
-		}
-
-		PercolateQueryArgs_t tArgs ( dFilters, dFilterTree );
-		tArgs.m_sQuery = sQuery;
-		tArgs.m_sTags = sTags;
-		tArgs.m_uQUID = uID;
-		tArgs.m_bReplace = bReplace;
-		tArgs.m_bQL = true;
-
-		// add query
-		pStored = pIndex->Query ( tArgs, sError );
-	}
-
-	bool bOk = ( pStored!=nullptr );
-	if ( pStored )
-	{
-		ReplicationCommand_t tCmd;
-		tCmd.m_eCommand = RCOMMAND_PQUERY_ADD;
-		tCmd.m_sIndex = sIndex;
-		tCmd.m_sCluster = tStmt.m_sCluster;
-		tCmd.m_pStored = pStored;
-
-		bOk = HandleCmdReplicate ( tCmd, sError, nullptr );
-	}
-
-	int iWarnings = 0;
-	if ( sSkipColumns.GetLength () )
-	{
-		iWarnings = 1;
-		sWarning.SetSprintf ( "out of schema column(s): %s", sSkipColumns.cstr () );
-	}
-
-	if ( !bOk )
-		tOut.Error ( tStmt.m_sStmt, sError.cstr () );
-	else
-		tOut.Ok ( 1, iWarnings );
-}
-
-
 static bool String2JsonPack ( char * pStr, CSphVector<BYTE> & dBuf, CSphString & sError, CSphString & sWarning )
 {
 	dBuf.Resize ( 0 ); // buffer for JSON parser must be empty to properly set JSON_ROOT data
@@ -13568,40 +13410,12 @@ protected:
 };
 
 
-void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool bReplace, bool bCommit, CSphString & sWarning, CSphSessionAccum & tAcc, ESphCollation	eCollation )
+void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool bReplace, bool bCommit,
+	  CSphString & sWarning, CSphSessionAccum & tAcc, ESphCollation	eCollation )
 {
 	MEMORY ( MEM_SQL_INSERT );
 
 	CSphString sError;
-
-	// need desc of that index first
-	IndexType_e eType = IndexType_e::ERROR_;
-	{
-		ServedDescRPtr_c pServed ( GetServed ( tStmt.m_sIndex ) );
-
-		if ( !pServed )
-		{
-			sError.SetSprintf ( "no such index '%s'", tStmt.m_sIndex.cstr() );
-			tOut.Error ( tStmt.m_sStmt, sError.cstr() );
-			return;
-		}
-		eType = pServed->m_eType;
-	}
-
-	// percolate need unlocked index
-	if ( eType==IndexType_e::PERCOLATE && tOut.GetBuffer () )
-	{
-		PercolateAddQuery ( tStmt, bReplace, eCollation, *tOut.GetBuffer (), sWarning );
-		return;
-	}
-
-	if ( eType!=IndexType_e::RT )
-	{
-		sError.SetSprintf ( "index '%s' does not support INSERT", tStmt.m_sIndex.cstr() );
-		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
-		return;
-	}
-
 	ServedDescRPtr_c pServed ( GetServed ( tStmt.m_sIndex ) );
 	if ( !pServed )
 	{
@@ -13609,16 +13423,29 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
 		return;
 	}
+
+	if ( !pServed->IsMutable () )
+	{
+		sError.SetSprintf ( "index '%s' does not support INSERT", tStmt.m_sIndex.cstr ());
+		tOut.Error ( tStmt.m_sStmt, sError.cstr ());
+		return;
+	}
+
+	bool bPq = pServed->m_eType==IndexType_e::PERCOLATE;
+
 	auto * pIndex = (ISphRtIndex *)pServed->m_pIndex;
 
 	// get schema, check values count
-	const CSphSchema & tSchema = pIndex->GetInternalSchema();
+	const CSphSchema & tSchema = pIndex->GetMatchSchema ();
 	int iSchemaSz = tSchema.GetAttrsCount() + tSchema.GetFieldsCount() + 1;
 	if ( pIndex->GetSettings().m_bIndexFieldLens )
 		iSchemaSz -= tSchema.GetFieldsCount();
 	int iExp = tStmt.m_iSchemaSz;
 	int iGot = tStmt.m_dInsertValues.GetLength();
-	if ( !tStmt.m_dInsertSchema.GetLength() && ( iSchemaSz!=tStmt.m_iSchemaSz ) )
+	if ( !tStmt.m_dInsertSchema.GetLength()
+		&& iSchemaSz!=tStmt.m_iSchemaSz
+		&& !( bPq && (2==tStmt.m_iSchemaSz || 1==tStmt.m_iSchemaSz) ) // pq allows 'query' orand 'tags'
+		)
 	{
 		sError.SetSprintf ( "column count does not match schema (expected %d, got %d)", iSchemaSz, iGot );
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
@@ -13632,7 +13459,6 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 		return;
 	}
 
-	ISphRtAccum * pAccum = tAcc.GetAcc ( pIndex, sError );
 	if ( !sError.IsEmpty() )
 	{
 		tOut.Error ( tStmt.m_sStmt, sError.cstr() );
@@ -13650,10 +13476,19 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 	{
 		// no columns list, use index schema
 		ARRAY_FOREACH ( i, dFieldSchema )
-			dFieldSchema[i] = i+1;
-		int iFields = dFieldSchema.GetLength();
+			dFieldSchema[i] = i + 1;
+		int iFields = dFieldSchema.GetLength ();
 		ARRAY_FOREACH ( j, dAttrSchema )
-			dAttrSchema[j] = j+iFields+1;
+			dAttrSchema[j] = j + iFields + 1;
+
+		// schemaless pq - expect either just 'query', or 'query' and 'tags'. And no id.
+		if ( bPq )
+		{
+			iIdIndex	   = -1;
+			dAttrSchema[0] = 0; // query
+			dAttrSchema[1] = ( 1==tStmt.m_iSchemaSz ) ? -1 : 1; // tags
+			dAttrSchema[2] = -1; // filters
+		}
 	} else
 	{
 		// got a list of columns, check for 1) existance, 2) dupes
@@ -13685,10 +13520,14 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 		// get id index
 		if ( !dInsertSchema.Exists("id") )
 		{
-			tOut.Error ( tStmt.m_sStmt, "column list must contain an 'id' column" );
-			return;
-		}
-		iIdIndex = dInsertSchema["id"];
+			if ( !bPq )
+			{
+				tOut.Error ( tStmt.m_sStmt, "column list must contain an 'id' column" );
+				return;
+			}
+			iIdIndex = -1;
+		} else
+			iIdIndex = dInsertSchema["id"];
 
 		// map fields
 		bool bIdDupe = false;
@@ -13743,15 +13582,28 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 	CSphVector<const char *> dStrings;
 	StringPtrTraits_t tStrings;
 	tStrings.m_dOff.Reset ( tSchema.GetAttrsCount() );
+	ISphRtAccum* pAccum = tAcc.GetAcc ( pIndex, sError );
 
 	// convert attrs
-	for ( int c=0; c<tStmt.m_iRowsAffected; c++ )
+	for ( int c=0; c<tStmt.m_iRowsAffected; ++c )
 	{
 		assert ( sError.IsEmpty() );
 
+		// pq specific: only ONE row allowed for now (remove this check on #684 resolving)
+		if ( c && bPq )
+		{
+			sError.SetSprintf ( "PQ for now allows only 1 rows per insert, %d provided", tStmt.m_iRowsAffected );
+			break;
+		}
+
 		CSphMatchVariant tDoc;
 		tDoc.Reset ( tSchema.GetRowSize() );
-		tDoc.m_uDocID = CSphMatchVariant::ToDocid ( tStmt.m_dInsertValues[iIdIndex + c * iExp] );
+		if ( iIdIndex>=0 )
+			tDoc.m_uDocID = CSphMatchVariant::ToDocid ( tStmt.m_dInsertValues[iIdIndex + c * iExp] );
+		else {
+			assert ( bPq );
+			assert ( tDoc.m_uDocID == 0 );
+		}
 		dStrings.Resize ( 0 );
 		tStrings.Reset();
 		dMvas.Resize ( 0 );
@@ -13771,8 +13623,8 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 			if ( iQuerySchemaIdx < 0 )
 			{
 				bResult = tDoc.SetDefaultAttr ( tLoc, tCol.m_eAttrType );
-				if ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_JSON )
-					dStrings.Add ( NULL );
+				if ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_STRINGPTR || tCol.m_eAttrType==SPH_ATTR_JSON )
+					dStrings.Add ( nullptr );
 				if ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET )
 					dMvas.Add ( 0 );
 			} else
@@ -13780,17 +13632,22 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 				const SqlInsert_t & tVal = tStmt.m_dInsertValues[iQuerySchemaIdx + c * iExp];
 
 				// sanity checks
-				if ( tVal.m_iType!=TOK_QUOTED_STRING && tVal.m_iType!=TOK_CONST_INT && tVal.m_iType!=TOK_CONST_FLOAT && tVal.m_iType!=TOK_CONST_MVA )
+				if ( tVal.m_iType!=TOK_QUOTED_STRING
+					&& tVal.m_iType!=TOK_CONST_INT
+					&& tVal.m_iType!=TOK_CONST_FLOAT
+					&& tVal.m_iType!=TOK_CONST_MVA )
 				{
 					sError.SetSprintf ( "row %d, column %d: internal error: unknown insval type %d", 1+c, 1+iQuerySchemaIdx, tVal.m_iType ); // 1 for human base
 					break;
 				}
-				if ( tVal.m_iType==TOK_CONST_MVA && !( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET ) )
+				if ( tVal.m_iType==TOK_CONST_MVA
+					&& !( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET ) )
 				{
 					sError.SetSprintf ( "row %d, column %d: MVA value specified for a non-MVA column", 1+c, 1+iQuerySchemaIdx ); // 1 for human base
 					break;
 				}
-				if ( ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET ) && tVal.m_iType!=TOK_CONST_MVA )
+				if ( ( tCol.m_eAttrType==SPH_ATTR_UINT32SET || tCol.m_eAttrType==SPH_ATTR_INT64SET )
+				&& tVal.m_iType!=TOK_CONST_MVA )
 				{
 					sError.SetSprintf ( "row %d, column %d: non-MVA value specified for a MVA column", 1+c, 1+iQuerySchemaIdx ); // 1 for human base
 					break;
@@ -13829,7 +13686,7 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 
 				// FIXME? index schema is lawfully static, but our temp match obviously needs to be dynamic
 				bResult = tDoc.SetAttr ( tLoc, tVal, tCol.m_eAttrType );
-				if ( tCol.m_eAttrType==SPH_ATTR_STRING )
+				if ( tCol.m_eAttrType==SPH_ATTR_STRING || tCol.m_eAttrType==SPH_ATTR_STRINGPTR)
 				{
 					if ( tVal.m_sVal.Length() > 0x3FFFFF )
 					{
@@ -13900,9 +13757,47 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 			break;
 
 		// do add
-		pIndex->AddDocument ( dFields, tDoc,
-			bReplace, tStmt.m_sStringParam,
-			dStrings.Begin(), dMvas, sError, sWarning, pAccum );
+		if ( bPq )
+		{
+			if ( iIdIndex >= 0 && !tDoc.m_uDocID )
+			{
+				sError.SetSprintf ( "'id' column parsed as 0. Omit the column to enable auto-id" );
+				break;
+			}
+			if ( CheckIndexCluster ( tStmt.m_sIndex, *pServed, tStmt.m_sCluster, sError ) ) {
+				const CSphSchema& tSchema = pIndex->GetInternalSchema ();
+
+				CSphVector<CSphFilterSettings> dFilters;
+				CSphVector<FilterTreeItem_t>   dFilterTree;
+				if ( !PercolateParseFilters ( dStrings[2], eCollation, tSchema, dFilters, dFilterTree, sError ) )
+					break;
+
+				PercolateQueryArgs_t tArgs ( dFilters, dFilterTree );
+				tArgs.m_sQuery   = dStrings[0];
+				tArgs.m_sTags	= dStrings[1];
+				tArgs.m_uQUID	= tDoc.m_uDocID;
+				tArgs.m_bReplace = bReplace;
+				tArgs.m_bQL		 = true;
+
+				// add query
+				auto* pQIndex = (PercolateIndex_i *) pIndex;
+				auto pStored = pQIndex->Query ( tArgs, sError );
+				if ( pStored )
+				{
+					ReplicationCommand_t tCmd;
+					tCmd.m_eCommand = RCOMMAND_PQUERY_ADD;
+					tCmd.m_sIndex   = tStmt.m_sIndex;
+					tCmd.m_sCluster = tStmt.m_sCluster;
+					tCmd.m_pStored  = pStored;
+
+					HandleCmdReplicate ( tCmd, sError, nullptr );
+				}
+			}
+
+		}
+		else
+			pIndex->AddDocument ( dFields, tDoc, bReplace, tStmt.m_sStringParam, dStrings.Begin(),
+				  dMvas, sError, sWarning, pAccum );
 
 		if ( !sError.IsEmpty() )
 			break;
@@ -13917,8 +13812,8 @@ void sphHandleMysqlInsert ( StmtErrorReporter_i & tOut, SqlStmt_t & tStmt, bool 
 	}
 
 	// no errors so far
-	if ( bCommit )
-		pIndex->Commit ( NULL, pAccum );
+	if ( bCommit && !bPq )
+		pIndex->Commit ( nullptr, pAccum );
 
 	// my OK packet
 	tOut.Ok ( tStmt.m_iRowsAffected, sWarning );

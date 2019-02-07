@@ -257,7 +257,7 @@ Example:
 
 .. code-block:: rest
 
-	POST /json/pq/idx_pq_1/search
+	POST /json/pq/idx_pq_1/_search
 	{
 	}
 
@@ -342,8 +342,8 @@ The response:
 
 
 There ``hits`` contains queries stored at percolate index with query ``ID`` at ``_id`` field and ``_source`` field
-is full text query in ``SphinxQL`` compartible format, described at :ref:`extended query syntax <extended_query_syntax>`
-or ``json\search`` compartible format, described at  :ref:`json\search <http_json_search>`
+is full text query in ``SphinxQL`` compatible format, described at :ref:`extended query syntax <extended_query_syntax>`
+or ``json\search`` compatible format, described at  :ref:`json\search <http_json_search>`
 	
 .. _http_percolate_query_delete:
 

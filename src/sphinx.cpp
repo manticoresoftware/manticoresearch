@@ -1062,7 +1062,7 @@ public:
 public:
 										~CWordlist () override;
 	void								Reset();
-	bool								Preread ( const char * sName, DWORD uVersion, bool bWordDict, CSphString & sError );
+	bool								Preread ( const CSphString & sName, DWORD uVersion, bool bWordDict, CSphString & sError );
 
 	const CSphWordlistCheckpoint *		FindCheckpoint ( const char * sWord, int iWordLen, SphWordID_t iWordID, bool bStarMode ) const;
 	bool								GetWord ( const BYTE * pBuf, SphWordID_t iWordID, CSphDictEntry & tWord ) const;
@@ -9705,7 +9705,7 @@ bool CSphIndex_VLN::AddRemoveAttribute ( bool bAddAttr, const CSphString & sAttr
 
 	m_tAttr.Reset();
 
-	if ( !m_tAttr.Setup ( GetIndexFileName("spa").cstr(), sError, true ) )
+	if ( !m_tAttr.Setup ( GetIndexFileName("spa"), sError, true ) )
 		return false;
 
 	m_tSchema = tNewSchema;
@@ -14361,7 +14361,7 @@ bool CSphIndex_VLN::ReplaceKillList ( const SphDocID_t * pKillist, int iCount )
 		return false;
 
 	m_tKillList.Reset();
-	if ( !m_tKillList.Setup ( GetIndexFileName("spk").cstr(), m_sLastError, true ) )
+	if ( !m_tKillList.Setup ( GetIndexFileName("spk"), m_sLastError, true ) )
 		return false;
 
 	PrereadMapping ( m_sIndexName.cstr(), "kill-list", m_bMlock, m_bOndiskAllAttr, m_tKillList );
@@ -16066,7 +16066,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath )
 	bool bWordDict = m_pDict && m_pDict->GetSettings().m_bWordDict;
 
 	// only checkpoint and wordlist infixes are actually read here; dictionary itself is just mapped
-	if ( !m_tWordlist.Preread ( GetIndexFileName("spi").cstr() , m_uVersion, bWordDict, m_sLastError ) )
+	if ( !m_tWordlist.Preread ( GetIndexFileName("spi") , m_uVersion, bWordDict, m_sLastError ) )
 		return false;
 
 	if ( m_tSettings.m_eDocinfo==SPH_DOCINFO_EXTERN )
@@ -16098,7 +16098,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath )
 
 		int iStride = DOCINFO_IDSIZE + m_tSchema.GetRowSize();
 
-		if ( !m_tAttr.Setup ( GetIndexFileName("spa").cstr(), m_sLastError, true ) )
+		if ( !m_tAttr.Setup ( GetIndexFileName("spa"), m_sLastError, true ) )
 			return false;
 
 		int64_t iDocinfoSize = m_tAttr.GetLengthBytes();
@@ -16135,7 +16135,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath )
 
 		if ( m_uVersion>=4 )
 		{
-			if ( !m_tMva.Setup ( GetIndexFileName("spm").cstr(), m_sLastError, false ) )
+			if ( !m_tMva.Setup ( GetIndexFileName("spm"), m_sLastError ) )
 				return false;
 
 			if ( m_tMva.GetLength64()>INT_MAX )
@@ -16149,7 +16149,7 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath )
 		// string data
 		///////////////
 
-		if ( m_uVersion>=17 && !m_tString.Setup ( GetIndexFileName("sps").cstr(), m_sLastError, true ) )
+		if ( m_uVersion>=17 && !m_tString.Setup ( GetIndexFileName("sps"), m_sLastError, true ) )
 				return false;
 	}
 
@@ -16183,12 +16183,12 @@ bool CSphIndex_VLN::Prealloc ( bool bStripPath )
 	if ( m_uVersion>=10 )
 	{
 		// FIXME!!! m_bId32to64
-		if ( !m_tKillList.Setup ( GetIndexFileName("spk").cstr(), m_sLastError, false ) )
+		if ( !m_tKillList.Setup ( GetIndexFileName("spk"), m_sLastError ) )
 			return false;
 	}
 
 	// prealloc skiplist
-	if ( m_bHaveSkips && !m_tSkiplists.Setup ( GetIndexFileName("spe").cstr(), m_sLastError, false ) )
+	if ( m_bHaveSkips && !m_tSkiplists.Setup ( GetIndexFileName("spe"), m_sLastError ) )
 			return false;
 
 	// almost done
@@ -18823,7 +18823,7 @@ int CSphIndex_VLN::DebugCheck ( FILE * fp )
 	CSphAutoreader rdSkips;
 	int64_t iSkiplistLen = 0;
 
-	if ( !rdDict.Open ( GetIndexFileName("spi").cstr(), sError ) )
+	if ( !rdDict.Open ( GetIndexFileName("spi"), sError ) )
 		LOC_FAIL(( fp, "unable to open dictionary: %s", sError.cstr() ));
 
 	if ( !rdDocs.Open ( GetIndexFileName("spd"), sError ) )
@@ -30441,7 +30441,7 @@ struct MappedCheckpoint_fn : public ISphNoncopyable
 };
 
 
-bool CWordlist::Preread ( const char * sName, DWORD uVersion, bool bWordDict, CSphString & sError )
+bool CWordlist::Preread ( const CSphString & sName, DWORD uVersion, bool bWordDict, CSphString & sError )
 {
 	assert ( ( uVersion>=21 && bWordDict ) || !bWordDict );
 	assert ( m_iDictCheckpointsOffset>0 );
@@ -30458,7 +30458,7 @@ bool CWordlist::Preread ( const char * sName, DWORD uVersion, bool bWordDict, CS
 	// fast path for CRC checkpoints - just maps data and use inplace CP reader
 	if ( !bWordDict )
 	{
-		if ( !m_tBuf.Setup ( sName, sError, false ) )
+		if ( !m_tBuf.Setup ( sName, sError ) )
 			return false;
 
 		// read v.14 checkpoints
@@ -30562,7 +30562,7 @@ bool CWordlist::Preread ( const char * sName, DWORD uVersion, bool bWordDict, CS
 	tReader.Close();
 
 	// mapping up only wordlist without meta (checkpoints, infixes, etc)
-	if ( !m_tBuf.Setup ( sName, sError, false ) )
+	if ( !m_tBuf.Setup ( sName, sError ) )
 		return false;
 
 	return true;

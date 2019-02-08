@@ -3205,8 +3205,9 @@ public:
 		this->Reset();
 	}
 
-	bool Setup ( const char * sFile, CSphString & sError, bool bWrite )
+	bool Setup ( const CSphString & sFileStr, CSphString & sError, bool bWrite = false )
 	{
+		const char * sFile = sFileStr.cstr();
 #if USE_WINDOWS
 		assert ( m_iFD==INVALID_HANDLE_VALUE );
 #else

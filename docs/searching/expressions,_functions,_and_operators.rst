@@ -465,9 +465,9 @@ Comparison functions
 
 -  IF()
 
-   ``IF()`` behavior is slightly different that that of its MySQL
-   counterpart. It takes 3 arguments, check whether the 1st argument is
-   equal to 0.0, returns the 2nd argument if it is not zero, or the 3rd
+   ``IF()`` behavior is slightly different than its MySQL
+   counterpart. It takes 3 arguments, checks whether the 1st argument is
+   equal to 0.0, returns the 2nd argument if it is not zero or the 3rd
    one when it is. Note that unlike comparison operators, ``IF()`` does
    **not** use a threshold! Therefore, it's safe to use comparison
    results as its 1st argument, but arithmetic operators might produce
@@ -475,13 +475,13 @@ Comparison functions
    produce *different* results even though they are logically
    equivalent:
 
-.. code-block:: none
+   .. code-block:: none
+
 
        IF ( sqrt(3)*sqrt(3)-3<>0, a, b )
        IF ( sqrt(3)*sqrt(3)-3, a, b )
   
 
-  
    In the first case, the comparison operator <> will return 0.0 (false)
    because of a threshold, and ``IF()`` will always return ‘**’ as a
    result. In the second one, the same ``sqrt(3)*sqrt(3)-3`` expression

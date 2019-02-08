@@ -1,6 +1,7 @@
 stages:
   - mirroring
   - routines
+  - pre_build
   - build
   - publish
 

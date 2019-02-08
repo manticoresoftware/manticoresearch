@@ -6816,18 +6816,9 @@ void CSphWriter::SeekTo ( SphOffset_t iPos )
 ///////////////////////////////////////////////////////////////////////////////
 
 CSphReader::CSphReader ( BYTE * pBuf, int iSize )
-	: m_pProfile ( NULL )
-	, m_eProfileState ( SPH_QSTATE_IO )
-	, m_iFD ( -1 )
-	, m_iPos ( 0 )
-	, m_iBuffPos ( 0 )
-	, m_iBuffUsed ( 0 )
-	, m_pBuff ( pBuf )
-	, m_iSizeHint ( 0 )
+	: m_pBuff ( pBuf )
 	, m_iBufSize ( iSize )
-	, m_bBufOwned ( false )
 	, m_iReadUnhinted ( DEFAULT_READ_UNHINTED )
-	, m_bError ( false )
 {
 	assert ( pBuf==NULL || iSize>0 );
 }
@@ -7220,7 +7211,7 @@ uint64_t CSphReader::UnzipOffset ()	{ SPH_VARINT_DECODE ( uint64_t, GetByte() );
 
 /////////////////////////////////////////////////////////////////////////////
 
-const CSphReader & CSphReader::operator = ( const CSphReader & rhs )
+CSphReader & CSphReader::operator = ( const CSphReader & rhs )
 {
 	SetFile ( rhs.m_iFD, rhs.m_sFilename.cstr() );
 	SeekTo ( rhs.m_iPos + rhs.m_iBuffPos, rhs.m_iSizeHint );

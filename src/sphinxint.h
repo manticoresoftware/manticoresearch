@@ -303,8 +303,8 @@ public:
 class CSphReader
 {
 public:
-	CSphQueryProfile *	m_pProfile;
-	ESphQueryState		m_eProfileState;
+	CSphQueryProfile *	m_pProfile = nullptr;
+	ESphQueryState		m_eProfileState { SPH_QSTATE_IO };
 
 public:
 	CSphReader ( BYTE * pBuf=NULL, int iSize=0 );
@@ -341,23 +341,23 @@ public:
 	SphDocID_t	UnzipDocid ()	{ return UnzipOffset(); }
 	SphWordID_t	UnzipWordid ()	{ return UnzipOffset(); }
 
-	const CSphReader &	operator = ( const CSphReader & rhs );
+	CSphReader &	operator = ( const CSphReader & rhs );
 
 protected:
 
-	int			m_iFD;
-	SphOffset_t	m_iPos;
+	int			m_iFD = -1;
+	SphOffset_t	m_iPos = 0;
 
-	int			m_iBuffPos;
-	int			m_iBuffUsed;
+	int			m_iBuffPos = 0;
+	int			m_iBuffUsed = 0;
 	BYTE *		m_pBuff;
-	int			m_iSizeHint;	///< how much do we expect to read
+	int			m_iSizeHint = 0;	///< how much do we expect to read
 
 	int			m_iBufSize;
-	bool		m_bBufOwned;
+	bool		m_bBufOwned = false;
 	int			m_iReadUnhinted;
 
-	bool		m_bError;
+	bool		m_bError = false;
 	CSphString	m_sError;
 	CSphString	m_sFilename;
 

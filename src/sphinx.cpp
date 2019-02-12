@@ -749,7 +749,7 @@ public:
 	virtual void Reset ()
 	{
 		m_rdDoclist.Reset ();
-		m_rdDoclist.Reset ();
+		m_rdHitlist.Reset ();
 		m_iInlineAttrs = 0;
 		ResetDecoderState();
 	}

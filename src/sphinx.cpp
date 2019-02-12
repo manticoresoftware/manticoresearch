@@ -624,6 +624,60 @@ public:
 	bool						Setup ( ISphQword * ) const;
 };
 
+// imitate CSphReader but fully in memory (intended to use with mmap)
+class ThinMMapReader_c
+{
+	const BYTE *	m_pBase = nullptr;
+	const BYTE *	m_pPointer = nullptr;
+	SphOffset_t		m_iSize = 0;
+public:
+	CSphQueryProfile* m_pProfile;
+	ESphQueryState m_eProfileState;
+
+	void Reset () {};
+
+	SphOffset_t GetPos () const
+	{
+		if ( !m_pPointer )
+			return 0;
+		assert ( m_pBase );
+		return m_pPointer - m_pBase;
+	}
+
+	SphOffset_t GetFilesize () const { return m_iSize; }
+	void SeekTo ( SphOffset_t iPos, int /*iSizeHint*/ =0) { m_pPointer = m_pBase + iPos; }
+
+	void SkipBytes ( int iCount )
+	{
+		assert ( m_pPointer );
+		m_pPointer += iCount;
+	}
+
+	void SetArena ( const BYTE * pArena, SphOffset_t iSize=0 )
+	{
+		m_pPointer = m_pBase = pArena;
+		m_iSize = iSize;
+	}
+
+	DWORD UnzipInt ();
+	uint64_t UnzipOffset ();
+
+	SphDocID_t UnzipDocid () { return UnzipOffset (); }
+	SphWordID_t UnzipWordid () { return UnzipOffset (); }
+
+	BYTE GetByte() {
+		assert ( m_pPointer );
+		return *m_pPointer++;
+	}
+
+	void GetBytes ( void* pData, int iSize )
+	{
+		assert ( m_pPointer );
+		memcpy ( pData, m_pPointer, iSize );
+		SkipBytes ( iSize );
+	}
+
+};
 
 /// query word from the searcher's point of view
 class DiskIndexQwordTraits_c : public ISphQword
@@ -7206,6 +7260,9 @@ SphOffset_t sphUnzipOffset ( const BYTE * & pBuf )	{ SPH_VARINT_DECODE ( SphOffs
 
 DWORD CSphReader::UnzipInt ()			{ SPH_VARINT_DECODE ( DWORD, GetByte() ); }
 uint64_t CSphReader::UnzipOffset ()	{ SPH_VARINT_DECODE ( uint64_t, GetByte() ); }
+
+DWORD ThinMMapReader_c::UnzipInt ()			{ SPH_VARINT_DECODE ( DWORD, *m_pPointer++ ); }
+uint64_t ThinMMapReader_c::UnzipOffset ()		{ SPH_VARINT_DECODE ( uint64_t, *m_pPointer++ ); }
 
 #define sphUnzipWordid sphUnzipOffset
 

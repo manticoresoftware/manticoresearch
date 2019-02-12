@@ -476,14 +476,16 @@ Examples:
     listen = /var/run/sphinx.s
     listen = 9312
     listen = localhost:9306:mysql41
+	listen = 127.0.0.1:9308:http
 
 There can be multiple listen directives, ``searchd`` will listen for
-client connections on all specified ports and sockets. If no ``listen``
-directives are found then the server will listen on all available
-interfaces using the default SphinxAPI port 9312, and also on default
-SphinxQL port 9306. Both port numbers are assigned by IANA (see
+client connections on all specified ports and sockets. 
+If no ``listen`` directives are found then the server will listen on all available
+interfaces using the default SphinxAPI port **9312**, and also on default
+SphinxQL port **9306**. Both port numbers are assigned by IANA (see
 http://www.iana.org/assignments/port-numbers for details) and should
-therefore be available.
+therefore be available. For HTTP port **9308** should be considered, however please note that the port is not assigned by IANA, therefor 
+it should be checked if it's available.
 
 Unix-domain sockets are not supported on Windows.
 

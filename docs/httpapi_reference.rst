@@ -10,7 +10,7 @@ To enabled the HTTP protocol, a :ref:`listen` directive with http specified as a
 .. code-block:: ini
 
 
-    listen = localhost:8080:http
+    listen = localhost:9308:http
 
 Supported endpoints:
 
@@ -125,7 +125,7 @@ will be passed inside without any substitutions/url decoding.
 
 .. code-block:: bash
 
-		curl -X POST http://localhost:6780/sql -d "mode=raw&query=select id,packedfactors() from test where match('tes*') option ranker=expr('1')"
+		curl -X POST http://localhost:9308/sql -d "mode=raw&query=select id,packedfactors() from test where match('tes*') option ranker=expr('1')"
 
 .. code-block:: json
 

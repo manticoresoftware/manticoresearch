@@ -1,4 +1,4 @@
-comp.. _http_json_pq:
+.. _http_json_pq:
 
 json/pq 
 -------

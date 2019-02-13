@@ -102,8 +102,8 @@ index i2
 <custom_test><![CDATA[
 $results = array ();
 
-$query = create_function ( '$q, $sock','
-	
+$query = function ( $q, $sock )
+{
 	$results = array( $q );
 	$res = @mysql_query ( $q, $sock );
 	if ( $res===false )
@@ -135,9 +135,10 @@ $query = create_function ( '$q, $sock','
 	}
 	
 	return $results;
-');
+};
 
-$stop_stem = create_function ( '$q, $sock, $match','
+$stop_stem = function ( $q, $sock, $match )
+{
 	$results = array ();
 	$results = array_merge ( $results, $q ( "SELECT * FROM rt1 WHERE MATCH ( $match );", $sock ) );
 	$results = array_merge ( $results, $q ( "SHOW META", $sock ) );
@@ -148,7 +149,7 @@ $stop_stem = create_function ( '$q, $sock, $match','
 	$results = array_merge ( $results, $q ( "SELECT * FROM i2 WHERE MATCH ( $match );", $sock ) );
 	$results = array_merge ( $results, $q ( "SHOW META", $sock ) );
 	return $results;
-');
+};
 
 global $sd_address, $sd_sphinxql_port;
 $sockStr = "$sd_address:$sd_sphinxql_port";

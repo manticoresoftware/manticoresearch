@@ -72,10 +72,10 @@ foreach ( array(0, 1) as $qmode )
 		$opts['limit_passages'] = 10;
 		$results["[$pass]q"] = $q;
 		$res = $client->BuildExcerpts($docs, 'test', $q, $opts );
-		$results["[$pass]r 0 $qmode"] = ( count($res)>0 ? $res[0] : '');
+		$results["[$pass]r 0 $qmode"] = ( is_array($res) && count($res)>0 ? $res[0] : '');
 		$opts['limit_passages'] = 0;
 		$res = $client->BuildExcerpts($docs, 'test', $q, $opts );
-		$results["[$pass]r 1 $qmode"] = ( count($res)>0 ? $res[0] : '' );
+		$results["[$pass]r 1 $qmode"] = ( is_array($res) && count($res)>0 ? $res[0] : '' );
 		$pass += 1;
 	}
 }

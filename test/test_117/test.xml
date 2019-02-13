@@ -87,7 +87,8 @@ if ( $sock === false )
 	return;
 }
 
-$query = create_function('$q,$sock,$i','
+$query = function($q,$sock,$i)
+{
 	$results = array();
 	$res = @mysql_query ( $q, $sock );
 	if ($res===true)
@@ -111,7 +112,7 @@ $query = create_function('$q,$sock,$i','
 		}	
 	}
 	return $results;
-');
+};
 
 $errors = '';
 

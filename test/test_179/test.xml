@@ -85,7 +85,7 @@ CREATE TABLE test_table2
 <db_insert>INSERT INTO test_table2 VALUES ( 9, 2, 'word | 9' );</db_insert>
 
 <custom_test><![CDATA[
-$run_subtest = create_function ( '&$client, $index1, $index2, &$results, $sd_address, $sd_sphinxql_port', '
+$run_subtest = function ( &$client, $index1, $index2, &$results, $sd_address, $sd_sphinxql_port )
 {
 	global $g_locals;
 
@@ -99,9 +99,9 @@ $run_subtest = create_function ( '&$client, $index1, $index2, &$results, $sd_add
 
 	$sphinxql = @mysql_connect ( sprintf ( "%s:%s", $sd_address, $sd_sphinxql_port ) , $g_locals["db-user"], $g_locals["db-password"] , true );
 	@mysql_query ( "DELETE FROM test_rt" );
-	@mysql_query ( "INSERT INTO test_rt ( id, gid, title ) VALUES ( 4, 1, \'word | 4\' )" );
-	@mysql_query ( "INSERT INTO test_rt ( id, gid, title ) VALUES ( 5, 2, \'word | 5\' )" );
-	@mysql_query ( "INSERT INTO test_rt ( id, gid, title ) VALUES ( 6, 2, \'word | 6\' )" );
+	@mysql_query ( "INSERT INTO test_rt ( id, gid, title ) VALUES ( 4, 1, 'word | 4' )" );
+	@mysql_query ( "INSERT INTO test_rt ( id, gid, title ) VALUES ( 5, 2, 'word | 5' )" );
+	@mysql_query ( "INSERT INTO test_rt ( id, gid, title ) VALUES ( 6, 2, 'word | 6' )" );
 
 	$res = $client->RunQueries();
 
@@ -120,8 +120,7 @@ $run_subtest = create_function ( '&$client, $index1, $index2, &$results, $sd_add
 				$match["id"], $match["weight"], $match["attrs"]["gid"] );
 	}
 	$results[] = "";
-}
-' );
+};
 
 
 $client->SetArrayResult(true);

@@ -236,8 +236,8 @@ function LegacyCreateDB ( $db_drop, $db_create, $db_insert, $custom_insert )
 
 	foreach ( $custom_insert as $code )
 	{
-		$function = create_function( '', $code );
-		$function();
+		$func = function() use ($code) { eval ("$code"); };
+		$func();
 	}
 
 	return $conn;
@@ -2020,7 +2020,8 @@ class SphinxConfig
 					}
 					else
 					{
-						$run_func = create_function( '$client, $query, $index, &$results', $this->_query_settings );
+						//$run_func = create_function( '$client, $query, $index, &$results', $this->_query_settings );
+						$run_func = function( $client, $query, $index, &$results ) { eval( "$this->_query_settings" ); };
 						$run_func ( $cl, $query, $index, $results ); 
 					}
 					
@@ -2109,7 +2110,8 @@ class SphinxConfig
 			$cl->SetServer ( $sd_address, $sd_port );
 
 			$results = false;
-			$run_func = create_function( '$client, $ql, &$results', $this->_custom_test );
+			//$run_func = create_function( '$client, $ql, &$results', $this->_custom_test );
+			$run_func = function( $client, $ql, &$results ) { eval( $this->_custom_test ); };
 
 			if ( !LegacyConnectDB())
 				return FALSE;

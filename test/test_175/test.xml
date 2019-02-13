@@ -388,8 +388,8 @@ foreach ( $res as $r )
 }
 
 // regression RT dictionary lost words on merge with ID64
-$query = create_function ( '$q, $sock','
-	
+$query = function ( $q, $sock )
+{
 	$results = array( $q );
 	$res = @mysql_query ( $q, $sock );
 	if ( $res===false )
@@ -419,7 +419,7 @@ $query = create_function ( '$q, $sock','
 		@mysql_free_result ( $res );
 	}
 	return $results;
-');
+};
 
 global $sd_address, $sd_sphinxql_port;
 $sockStr = "$sd_address:$sd_sphinxql_port";

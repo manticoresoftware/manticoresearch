@@ -101,9 +101,10 @@ insert into test_table values
 $results = array();
 $error = '';
 
-$query = create_function('$client, $index','
-$result = $client->Query ( "first", $index );	if ( $result ) { unset ( $result["time"] ); return $result; } else return $client->GetLastError();
-');
+$query = function ( $client, $index )
+{
+	$result = $client->Query ( "first", $index );	if ( $result ) { unset ( $result["time"] ); return $result; } else return $client->GetLastError();
+};
 
 global $index_data_path;
 

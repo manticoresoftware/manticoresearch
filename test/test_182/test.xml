@@ -45,7 +45,8 @@ index idx
 <custom_test><![CDATA[
 $results = array ();
 
-$restartD = create_function('$client','
+$restartD = function ( $client )
+{
 	$results = array ();
 	$results[] = RestartDaemon();
 		
@@ -70,7 +71,7 @@ $restartD = create_function('$client','
 	@mysql_close($sock);
 	
 	return $results;
-');
+};
 
 
 global $sd_address, $sd_sphinxql_port;

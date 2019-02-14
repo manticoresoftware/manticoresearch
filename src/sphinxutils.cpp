@@ -2479,6 +2479,17 @@ int sphSafeInfo ( char * pBuf, const char * sFmt, ... )
 	return iLen;
 }
 
+volatile int& getParentPID ()
+{
+	static int iParentPID = 0;
+	return iParentPID;
+}
+
+volatile bool& getHaveJemalloc ()
+{
+	static bool bHaveJemalloc = true;
+	return bHaveJemalloc;
+}
 
 #if !USE_WINDOWS
 
@@ -2490,12 +2501,14 @@ static char g_pBacktrace[4096];
 static const char g_sSourceTail[] = "> source.txt\n";
 static const char * g_pArgv[128] = { "addr2line", "-e", "./searchd", "0x0", NULL };
 static CSphString g_sBinaryName;
-static bool g_bHaveJemalloc = true;
+static auto& g_bHaveJemalloc = getHaveJemalloc();
 
 #if HAVE_SYS_PRCTL_H
 static char g_sNameBuf[512] = {0};
+static char g_sPid[30] = { 0 };
 #endif
 
+// if we already run under debugger (i.e. from a kind of IDE) - avoid any scripted crash holding.
 bool IsDebuggerPresent()
 {
 	const int status_fd = ::open ( "/proc/self/status", O_RDONLY );
@@ -2527,11 +2540,27 @@ bool IsDebuggerPresent()
 
 static bool DumpGdb ( int iFD )
 {
+	auto & iParentPID = getParentPID ();
+	if ( iParentPID>0 ) // most safe - ask watchdog to do everything
+	{
+		kill ( iParentPID, SIGUSR1 );
+		sphSleepMsec (3*1000);
+		return true;
+	}
 #if HAVE_SYS_PRCTL_H
-	char sPid[30] = {0};
-	sprintf ( sPid, "%d", getpid () );
+	sphSafeInfo ( g_sPid, "%d", getpid () );
 	g_sNameBuf [ ::readlink ( "/proc/self/exe", g_sNameBuf, 511 ) ] = 0;
 
+	if ( g_bHaveJemalloc || iParentPID==-1 ) // jemalloc looks safe, or user explicitly asked to invoke gdb anyway
+		return sphDumpGdb ( iFD, g_sNameBuf, g_sPid );
+
+#endif
+	return false;
+}
+
+bool sphDumpGdb (int iFD, const char* sName, const char* sPid )
+{
+#if HAVE_SYS_PRCTL_H
 	if ( IsDebuggerPresent ())
 		return false;
 
@@ -2590,13 +2619,19 @@ static bool DumpGdb ( int iFD )
 
 		if ( !iWorker )
 		{
-			sphSafeInfo ( iFD, "Will run gdb on %s, pid %s", g_sNameBuf, sPid );
+			sphSafeInfo ( iFD, "Will run gdb on %s, pid %s", sName, sPid );
 			if ( dup2 ( iFD, STDOUT_FILENO )==-1 )
 				_Exit ( 1 );
 			if ( dup2 ( iFD, STDERR_FILENO )==-1 )
 				_Exit ( 1 );
-			execlp ( "gdb", "gdb", "--batch", "-n", "-ex", "info threads", "-ex", "thread apply all bt", "-ex"
-					 , "echo \nMain thread:\n", "-ex", "bt", "-ex", "detach", g_sNameBuf, sPid, nullptr );
+			execlp ( "gdb", "gdb", "--batch", "-n",
+				"-ex", "info threads",
+				"-ex", "thread apply all bt",
+				"-ex", "echo \nMain thread:\n",
+				"-ex", "bt",
+				"-ex", "echo \nLocal variables:\n",
+				"-ex", "info locals",
+				"-ex", "detach", sName, sPid, nullptr );
 
 			// If gdb failed to start, signal back
 			_Exit ( 1 );
@@ -2649,7 +2684,7 @@ static bool DumpGdb ( int iFD )
 		return false;
 
 	// master branch is mirrored on github, so could generate more info here.
-	if ( strncmp ( GIT_BRANCH_ID, "git branch master", 17 ) == 0 )
+	if ( strncmp ( GIT_BRANCH_ID, "git branch master", 17 ) == 0 ) {
 		sphSafeInfo ( iFD,
 			"You can obtain the sources of this version from https://github.com/manticoresoftware/manticoresearch/archive/" SPH_GIT_COMMIT_ID ".zip\n"
 			"and set up debug env with this shippet (select wget or curl version below):\n\n"
@@ -2660,6 +2695,7 @@ static bool DumpGdb ( int iFD )
 	  "  mkdir -p /tmp/manticore && unzip manticore.zip -d /tmp/manticore\n\n"
 	  "For comfortable debug also suggest to append a substitution def to your ~/.gdbinit file:\n"
 	  "  set substitute-path \"" GDB_SOURCE_DIR "\" /tmp/manticore/manticoresearch-" SPH_GIT_COMMIT_ID );
+	}
 	return true;
 #else
 	return false;
@@ -2812,9 +2848,9 @@ void sphBacktrace ( int iFD, bool bSafe )
 			"Look into the chapter 'Reporting bugs' in the documentation\n"
 			"(http://docs.manticoresearch.com/latest/html/reporting_bugs.html)" );
 
-	// wo jemalloc allocator might deadlock in case of crash at free function
-	if ( g_bHaveJemalloc && DumpGdb ( iFD ) )
+	if ( DumpGdb ( iFD ) )
 		return;
+
 	// convert all BT addresses to source code lines
 	int iCount = Min ( iDepth, (int)( sizeof(g_pArgv)/sizeof(g_pArgv[0]) - SPH_BT_ADDRS - 1 ) );
 	sphSafeInfo ( iFD, "--- BT to source lines (depth %d): ---", iCount );

@@ -469,6 +469,7 @@ int sphSockRead ( int iSock, void * buf, int iLen, int iReadTimeout, bool bIntr 
 int SockReadFast ( int iSock, void * buf, int iLen, int iReadTimeout );
 int GetOsThreadId();
 
+
 extern ThreadRole MainThread;
 /// This class is basically a pointer to query string and some more additional info.
 /// Each thread which executes query must have exactly one instance of this class on

@@ -136,6 +136,7 @@ enum LogFormat_e
 #define					LOG_COMPACT_IN	128						// upto this many IN(..) values allowed in query_log
 
 static int				g_iLogFile			= STDOUT_FILENO;	// log file descriptor
+static auto& 			g_iParentPID		= getParentPID ();  // set by watchdog
 static bool				g_bLogSyslog		= false;
 static bool				g_bQuerySyslog		= false;
 static CSphString		g_sLogFile;								// log file name
@@ -16566,7 +16567,50 @@ void HandleMysqlDebug ( SqlRowBuffer_c &tOut, const SqlStmt_t &tStmt, bool bVipC
 		tOut.DataTuplet ( "malloc_trim", sResult.cstr () );
 	}
 #endif
-	else if ( sCommand=="sleep" )
+#if !USE_WINDOWS
+	else if ( bVipConn && sCommand=="procdump" )
+	{
+		tOut.HeadTuplet ( "command", "result" );
+		if ( g_iParentPID<=0 )
+			tOut.DataTuplet ( "procdump", "Unavailable (no watchdog)" );
+		else
+		{
+			kill ( g_iParentPID, SIGUSR1 );
+			tOut.DataTupletf ( "procdump", "Sent USR1 to wathcdog (%d)", g_iParentPID );
+		}
+	} else if ( bVipConn && sCommand=="setgdb" )
+	{
+		tOut.HeadTuplet ( "command", "result" );
+		const auto& g_bHaveJemalloc = getHaveJemalloc ();
+		if ( sParam=="status" )
+		{
+			if ( g_iParentPID>0 )
+				tOut.DataTupletf ( "setgdb", "Enabled, managed by watchdog (pid=%d)", g_iParentPID );
+			else if ( g_bHaveJemalloc )
+				tOut.DataTupletf ( "setgdb", "Enabled, managed locally because of jemalloc", g_iParentPID );
+			else if ( g_iParentPID==-1 )
+				tOut.DataTuplet ( "setgdb", "Enabled locally, MAY HANG!" );
+			else
+				tOut.DataTuplet ( "setgdb", "Disabled" );
+		} else
+		{
+			if ( g_iParentPID>0 )
+				tOut.DataTupletf ( "setgdb", "Enabled by watchdog (pid=%d)", g_iParentPID );
+			else if ( g_bHaveJemalloc )
+				tOut.DataTuplet ( "setgdb", "Enabled locally because of jemalloc" );
+			else if ( sParam=="on" )
+			{
+				g_iParentPID = -1;
+				tOut.DataTuplet ( "setgdb", "Ok, enabled locally, MAY HANG!" );
+			} else if ( sParam=="off" )
+			{
+				g_iParentPID = 0;
+				tOut.DataTuplet ( "setgdb", "Ok, disabled" );
+			}
+		}
+	}
+#endif
+	else if ( sCommand == "sleep" )
 	{
 		int64_t tmStart = sphMicroTimer();
 		sphSleepMsec ( Max ( tStmt.m_iIntParam, 1 )*1000 );
@@ -16585,6 +16629,10 @@ void HandleMysqlDebug ( SqlRowBuffer_c &tOut, const SqlStmt_t &tStmt, bool bVipC
 			tOut.DataTuplet ( "debug shutdown <password>", "emulate TERM signal");
 			tOut.DataTuplet ( "debug crash <password>", "crash daemon (make SIGSEGV action)" );
 			tOut.DataTuplet ( "debug token <password>", "calculate token for password" );
+#if !USE_WINDOWS
+			tOut.DataTuplet ( "debug procdump", "ask watchdog to dump us" );
+			tOut.DataTuplet ( "debug setgdb on|off|status", "enable or disable potentially dangerous crash dumping with gdb" );
+#endif
 		}
 		tOut.DataTuplet ( "flush logs", "emulate USR1 signal" );
 		tOut.DataTuplet ( "reload indexes", "emulate HUP signal" );
@@ -20555,6 +20603,9 @@ BOOL WINAPI CtrlHandler ( DWORD )
 }
 #endif
 
+static char g_sNameBuf[512] = { 0 };
+static char g_sPid[30] = { 0 };
+
 
 #if !USE_WINDOWS
 // returns 'true' only once - at the very start, to show it beatiful way.
@@ -20605,24 +20656,28 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 			exit ( 0 );
 	}
 
+	// save path to our binary
+	g_sNameBuf[::readlink ( "/proc/self/exe", g_sNameBuf, 511 )] = 0;
+
 	// now we are the watchdog. Let us fork the actual process
-	int iReincarnate = 1;
+	enum class EFork { Startup, Disabled, Restart } eReincarnate = EFork::Startup;
 	bool bShutdown = false;
 	bool bStreamsActive = true;
-	int iRes = 0;
+	int iChild = 0;
+	g_iParentPID = getpid();
 	while (true)
 	{
-		if ( iReincarnate!=0 )
-			iRes = fork();
+		if ( eReincarnate!=EFork::Disabled )
+			iChild = fork();
 
-		if ( iRes==-1 )
+		if ( iChild==-1 )
 		{
 			sphFatalLog ( "fork() failed during watchdog setup (error=%s)", strerrorm(errno) );
 			exit ( 1 );
 		}
 
 		// child process; return true to show that we have to reload everything
-		if ( iRes==0 )
+		if ( iChild==0 )
 		{
 			atexit ( &ReleaseTTYFlag );
 			return bStreamsActive;
@@ -20641,11 +20696,15 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 			bStreamsActive = false;
 		}
 
-		sphInfo ( "watchdog: main process %d forked ok", iRes );
+		if ( eReincarnate!=EFork::Disabled )
+		{
+			sphInfo ( "watchdog: main process %d forked ok", iChild );
+			sprintf ( g_sPid, "%d", iChild);
+		}
 
 		SetSignalHandlers();
 
-		iReincarnate = 0;
+		eReincarnate = EFork::Disabled;
 		int iPid, iStatus;
 		bool bDaemonAtShutdown = 0;
 		while ( ( iPid = wait ( &iStatus ) )>0 )
@@ -20653,14 +20712,14 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 			bDaemonAtShutdown = ( g_bDaemonAtShutdown[0]!=0 );
 			const char * sWillRestart = ( bDaemonAtShutdown ? "will not be restarted (daemon is shutting down)" : "will be restarted" );
 
-			assert ( iPid==iRes );
+			assert ( iPid==iChild );
 			if ( WIFEXITED ( iStatus ) )
 			{
 				int iExit = WEXITSTATUS ( iStatus );
 				if ( iExit==2 || iExit==6 ) // really crash
 				{
 					sphInfo ( "watchdog: main process %d crashed via CRASH_EXIT (exit code %d), %s", iPid, iExit, sWillRestart );
-					iReincarnate = -1;
+					eReincarnate = EFork::Restart;
 				} else
 				{
 					sphInfo ( "watchdog: main process %d exited cleanly (exit code %d), shutting down", iPid, iExit );
@@ -20688,7 +20747,7 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 					else
 						sphInfo ( "watchdog: main process %d killed dirtily with signal %d, %s",
 							iPid, iSig, sWillRestart );
-					iReincarnate = -1;
+					eReincarnate = EFork::Restart;
 				}
 			} else if ( WIFSTOPPED ( iStatus ) )
 				sphInfo ( "watchdog: main process %d stopped with signal %d", iPid, WSTOPSIG ( iStatus ) );
@@ -20696,6 +20755,17 @@ bool SetWatchDog ( int iDevNull ) REQUIRES ( MainThread )
 			else if ( WIFCONTINUED ( iStatus ) )
 				sphInfo ( "watchdog: main process %d resumed", iPid );
 #endif
+		}
+
+		if ( iPid==-1 )
+		{
+			if ( g_bGotSigusr1 )
+			{
+				g_bGotSigusr1 = 0;
+				sphInfo ( "watchdog: got USR1, performing dump of child's stack" );
+				sphDumpGdb ( g_iLogFile, g_sNameBuf, g_sPid );
+			} else
+				sphInfo ( "watchdog: got error %d, %s", errno, strerrorm ( errno ));
 		}
 
 		if ( bShutdown || g_bGotSigterm || bDaemonAtShutdown )

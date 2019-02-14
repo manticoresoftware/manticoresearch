@@ -277,7 +277,14 @@ void sphBacktrace ( EXCEPTION_POINTERS * pExc, const char * sFile );
 /// dummy call of backtrace to alloc internal structures and prevent deadlock at malloc on crash
 void sphBacktraceInit();
 
+/// actualy dump of process sName with pid sPid and sink output to iFD
+/// (warning, that function uses fork!)
+bool sphDumpGdb ( int iFD, const char* sName, const char* sPid );
+
 void sphBacktraceSetBinaryName ( const char * sName );
+
+volatile int& getParentPID ();	/// set by watchdog init and allows children to signal parent
+volatile bool& getHaveJemalloc (); /// if we detected that jemalloc is available
 
 /// plain backtrace - returns static buffer with the text of the call stack
 const char * DoBacktrace ( int iDepth=0, int iSkip=0 );

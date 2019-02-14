@@ -28,10 +28,31 @@ source test
 	sql_attr_json		= json_col
 }
 
+source test2
+{
+	type				= mysql
+	<sql_settings/>
+	sql_query			= select * from test_table2
+	sql_attr_uint		= gid
+	sql_attr_uint 		= bits:5
+	sql_attr_bigint		= bint
+	sql_attr_float		= flt
+	sql_attr_multi		= uint tags from field
+	sql_attr_string		= str
+	sql_attr_json		= bigstr
+	sql_attr_json		= json_col
+}
+
 index test
 {
 	source				= test
 	path				= <data_path/>/test
+}
+
+index test2
+{
+	source				= test2
+	path				= <data_path/>/test2
 }
 </config>
 
@@ -49,13 +70,45 @@ CREATE TABLE test_table
 	title VARCHAR(255) NOT NULL
 );
 </db_create>
+<db_create>
+CREATE TABLE test_table2
+(
+	id INTEGER PRIMARY KEY NOT NULL,
+	gid INTEGER NOT NULL,
+	bits INTEGER NOT NULL,
+	bint INTEGER NOT NULL,
+	flt FLOAT NOT NULL,
+	tags VARCHAR(255) NOT NULL,
+	str VARCHAR(255) NOT NULL,
+	json_col VARCHAR(255) NOT NULL,
+	title VARCHAR(255) NOT NULL,
+	bigstr VARCHAR(1024) NOT NULL
+);
+</db_create>
 <db_drop>DROP TABLE IF EXISTS test_table;</db_drop>
+<db_drop>DROP TABLE IF EXISTS test_table2;</db_drop>
 <db_insert>INSERT INTO test_table VALUES
 ( 1, 123, 123, 123, 1.1, '10,20,30', 'str1', '{"a":[1,2,3,4], "t":["t1", "t2", "t3"]}', 'title' ),
 ( 2, 234, 234, 234, 2.2, '20,30,40', 'str2', '{"a":[2,3,4,5], "t":["t2", "t3", "t4"]}', 'title' ),
 ( 3, 345, 345, 345, 3.3, '30,40,50', 'str3', '{"a":[3,4,5,1], "t":["t3", "t4", "t5"]}',	'title' ),
 ( 4, 456, 456, 456, 4.4, '40,50,60', 'str4', '{"a":["4","5","6","2"], "t":["t4", "t5", "t6"]}','title' ),
 ( 5, 567, 567, 567, 5.5, '50,60,70', 'str5', '["a","b"]', 'title' )
+</db_insert>
+<db_insert>INSERT INTO test_table2 VALUES
+( 6, 678, 678, 678, 6.6, '60,70,80', 'str6', '["a","b"]', 'title', '{"a":"
+You can run on for a long time
+Run on for a long time
+Run on for a long time
+Sooner or later God\'ll cut you down
+Sooner or later God\'ll cut you down
+Go tell that long tongue liar
+Go and tell that midnight rider
+Tell the rambler, the gambler, the back biter
+Tell \'em that God\'s gonna cut \'em down
+Tell \'em that God\'s gonna cut \'em down
+You can run on for a long time
+Run on for a long time
+Run on for a long time"}' )
 </db_insert>
 
 <sphqueries>
@@ -130,6 +183,8 @@ b+c+d e from test where match('title') and e>0</sphinxql> --> <!-- Expr_Hour_c/E
 
 <sphinxql>select json_col j, length(j.a) a, j.a is null b, j.t is not null c, a+b+c d from test where match('title') and d>0</sphinxql> <!-- Expr_JsonFieldLength_c/Expr_JsonFieldIsNull_c -->
 <sphinxql>select now()=0 a from test where match('title') and a=0</sphinxql> <!-- Expr_Now_c -->
+
+<sphinxql>select length(to_string(bigstr.a)), CRC32(bigstr.a) from test2 where id=6</sphinxql> <!-- call Expr_JsonFieldConv_c::StringEval via CRC32() -->
 
 <!-- fixme: NOT TESTED 
 Expr_Udf_c

@@ -108,6 +108,94 @@ TEST ( CJson, format )
 int sphJsonUnescape ( char ** pEscaped, int iLen );
 int sphJsonUnescape1 ( char ** pEscaped, int iLen );
 
+// unescaped pEscaped, modify pEscaped to unescaped chain, return the length of unescaped
+// that is actually used, defined in sphinxjson.cpp
+int JsonUnescape ( char* pTarget, const char* pEscaped, int iLen );
+
+int JsonStrUnescape ( char* pTarget, const CSphString& sSource )
+{
+	if (!sSource.IsEmpty ())
+	{
+		auto iRes = JsonUnescape ( pTarget, sSource.cstr(), sSource.Length ());
+		pTarget[iRes] = '\0';
+		assert ( iRes<=sSource.Length() );
+		return iRes;
+	}
+	return 0;
+}
+
+namespace {
+void te (const char* src, const char* target)
+{
+	char buf[100];
+	auto iRes = JsonUnescape ( buf, src, strlen(src) );
+	buf[iRes]='\0';
+	assert ( iRes<=strlen(src));
+	ASSERT_STREQ (target,buf);
+}
+}
+
+TEST (integrity, JsonUnescape)
+{
+	char buf[100];
+	const char* sbuf = buf;
+
+	// autoremove heading and trailing quotes "
+	JsonStrUnescape(buf,"\"Hello world\"");
+	ASSERT_STREQ (buf,"Hello world");
+
+	// autoremove heading and trailing quotes '
+	JsonStrUnescape ( buf, "'Hello world'" );
+	ASSERT_STREQ ( buf, "Hello world" );
+
+	// cases of escaped syms
+	te ( R"(_\b_)", "_\b_" );
+	te ( R"(_\n_)", "_\n_" );
+	te ( R"(_\r_)", "_\r_" );
+	te ( R"(_\t_)", "_\t_" );
+	te ( R"(_\f_)", "_\f_" );
+
+
+	// assert nothing apart above is unescaped
+	char tst[10]; tst[0]=tst[3]='_'; tst[1]='\\'; tst[4] = '\0';
+	char dst[10]; dst[0]=dst[2]='_'; dst[3] = '\0';
+	for (unsigned char c='a';c<255;++c)
+	{
+		if (c!='b'&&c!='n'&&c!='r'&&c!='t'&&c!='f')
+		{
+			tst[2] = c;
+			dst[1] = c;
+			te ( tst, dst );
+		}
+	}
+
+	JsonStrUnescape(buf,R"(\n\r\b)");
+	ASSERT_STREQ ( buf, "\n\r\b" );
+
+	JsonStrUnescape ( buf, R"(\u000Aabc)" );
+	ASSERT_STREQ ( buf, "\nabc" );
+
+	JsonStrUnescape ( buf, R"(\u001xbc)" );
+	ASSERT_STREQ ( buf, "u001xbc" );
+
+	auto iRes = JsonStrUnescape ( buf, R"(\uD801\uDC01abc)" );
+	ASSERT_EQ ( iRes, 7 );
+
+
+	// regression: check that trailing \\ is not causes reading over the end of the buff
+	// (run under valgrind)
+	char* edge = new char[10];
+	strncpy(edge,R"(\u000Aabc\)",10);
+	iRes = JsonUnescape ( buf, edge, 10);
+	SafeDeleteArray ( edge );
+	buf[iRes] = '\0';
+	ASSERT_STREQ ( buf, "\nabc" );
+
+
+	JsonStrUnescape ( buf, R"(\uD801\uDBFFabc)" );
+	ASSERT_STREQ ( buf, "uD801uDBFFabc" );
+}
+
 // defined in cJSON_test
 extern "C"
 {

@@ -134,22 +134,26 @@ int JsonUnescape ( char* pTarget, const char * pEscaped, int iLen )
 	{
 		if ( s[0]=='\\' )
 		{
-			switch ( s[1] )
+			++s;
+			if ( s<sMax )
 			{
-			case 'b': *d++ = '\b';
-				break;
-			case 'n': *d++ = '\n';
-				break;
-			case 'r': *d++ = '\r';
-				break;
-			case 't': *d++ = '\t';
-				break;
-			case 'f': *d++ = '\f';
-				break; // formfeed (rfc 4627)
-			case 'u': s += parseUTF16 ( d, s, sMax ); break;
-			default: *d++ = s[1];
+				switch ( s[0] )
+				{
+				case 'b': *d++ = '\b';
+					break;
+				case 'n': *d++ = '\n';
+					break;
+				case 'r': *d++ = '\r';
+					break;
+				case 't': *d++ = '\t';
+					break;
+				case 'f': *d++ = '\f';
+					break; // formfeed (rfc 4627)
+				case 'u': s += parseUTF16 ( d, s-1, sMax ); break;
+				default: *d++ = *s;
+				}
+				++s;
 			}
-			s += 2;
 			continue;
 		}
 		assert ( s<sMax );

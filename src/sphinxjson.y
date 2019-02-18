@@ -45,6 +45,7 @@ value:
 key_value_list:
 	// empty
 		{
+			$$ = JsonNode_t();
 			$$.m_eType = JSON_OBJECT;
 			$$.m_dChildren.m_iStart = -1;
 			$$.m_dChildren.m_iLen = 0;
@@ -52,11 +53,12 @@ key_value_list:
 		}
 	| key ':' value
 		{
+			$$ = JsonNode_t();
 			$$.m_eType = JSON_OBJECT;
 			$$.m_dChildren.m_iStart = $$.m_iNext = pParser->m_dNodes.GetLength();
 			$$.m_dChildren.m_iLen = 1;
 			$3.m_sName = $1.m_sValue;
-			pParser->m_dNodes.Add($3);
+			pParser->AddNode($3);
 
 		}
 	| key_value_list ',' key ':' value
@@ -66,28 +68,31 @@ key_value_list:
 				yyerror ( pParser, "unexpected ','" );
 				YYERROR;
 			}
+			$$ = JsonNode_t();
 			$$.m_eType = JSON_OBJECT;
-            $$.m_dChildren.m_iStart = $1.m_dChildren.m_iStart;
-            $$.m_dChildren.m_iLen = $1.m_dChildren.m_iLen+1;
-            $$.m_iNext = pParser->m_dNodes[$1.m_iNext].m_iNext = pParser->m_dNodes.GetLength();
+			$$.m_dChildren.m_iStart = $1.m_dChildren.m_iStart;
+			$$.m_dChildren.m_iLen = $1.m_dChildren.m_iLen+1;
+			$$.m_iNext = pParser->m_dNodes[$1.m_iNext].m_iNext = pParser->m_dNodes.GetLength();
 			$5.m_sName = $3.m_sValue;
-			pParser->m_dNodes.Add($5);
+			pParser->AddNode($5);
 		}
 	;
 
 value_list:
 	// empty
 		{
+			$$ = JsonNode_t();
 			$$.m_eType = JSON_MIXED_VECTOR;
 			$$.m_dChildren.m_iStart = -1;
 			$$.m_dChildren.m_iLen = 0;
 		}
 	| value
 		{
+			$$ = JsonNode_t();
 			$$.m_eType = JSON_MIXED_VECTOR;
 			$$.m_dChildren.m_iStart = $$.m_iNext = pParser->m_dNodes.GetLength();
 			$$.m_dChildren.m_iLen = 1;
-			pParser->m_dNodes.Add($1);
+			pParser->AddNode($1);
 		}
 	| value_list ',' value
 		{
@@ -96,11 +101,12 @@ value_list:
 				yyerror ( pParser, "unexpected ','" );
 				YYERROR;
 			}
+			$$ = JsonNode_t();
 			$$.m_eType = JSON_MIXED_VECTOR;
             $$.m_dChildren.m_iStart = $1.m_dChildren.m_iStart;
             $$.m_dChildren.m_iLen = $1.m_dChildren.m_iLen+1;
 			$$.m_iNext = pParser->m_dNodes[$1.m_iNext].m_iNext = pParser->m_dNodes.GetLength();
-			pParser->m_dNodes.Add($3);
+			pParser->AddNode($3);
 		}
 	;
 

@@ -666,6 +666,11 @@ public:
 		}
 		return true;
 	}
+
+	void AddNode ( const JsonNode_t & tNode )
+	{
+		m_dNodes.Add ( tNode );
+	}
 };
 
 // unused parameter, simply to avoid type clash between all my yylex() functions

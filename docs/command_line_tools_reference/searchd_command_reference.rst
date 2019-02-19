@@ -190,6 +190,9 @@ The options available to ``searchd`` on all builds are:
    -  ``accept-desc-timestamp``, ignore descending transaction
       timestamps and replay such transactions anyway (the default
       behavior is to exit with an error).
+	 
+   -  ``ignore-open-errors``, ignore missing binlog files (the default
+      behavior is to exit with an error).
 
    Example:
 

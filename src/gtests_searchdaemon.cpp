@@ -562,6 +562,25 @@ TEST ( T_IndexHash, served_hash_and_getter )
 	ASSERT_EQ ( pFoo->GetRefcount (), 1 ) << "we're the only owner now";
 }
 
+
+TEST ( T_IndexHash, served_hash_add_or_replace )
+{
+	auto pHash = new GuardedHash_c;
+	ServedDesc_t tDesc;
+
+	// crash of AddOrReplace after Delete
+	ServedIndex_c * pIdx1 = new ServedIndex_c ( tDesc );
+	ServedIndex_c * pIdx2 = new ServedIndex_c ( tDesc );
+	ASSERT_TRUE ( pHash->AddUniq ( pIdx1, "idx1" ) );
+
+	// case itself
+	ASSERT_TRUE ( pHash->Delete ( "idx1" ) );
+	pHash->AddOrReplace ( pIdx2, "idx1" );
+
+	// cleanup
+	ASSERT_TRUE ( pHash->Delete ( "idx1" ) );
+}
+
 TEST ( T_IndexHash, ensure_right_refcounting )
 {
 	auto pHash = new GuardedHash_c;

@@ -962,12 +962,16 @@ bool GuardedHash_c::AddUniq ( ISphRefcountedMT * pValue, const CSphString &tKey 
 void GuardedHash_c::AddOrReplace ( ISphRefcountedMT * pValue, const CSphString &tKey )
 {
 	ScWL_t hHashWLock { m_tIndexesRWLock };
-	// add new unique
-	ISphRefcountedMT * &pVal = m_hIndexes.AddUnique ( tKey );
-	ISphRefcountedMT * pExisted = pVal;
-	pVal = pValue;
-	if ( pExisted!=pValue )
-		SafeRelease ( pExisted );
+	// can not use AddUnique as new inserted item has no values
+	ISphRefcountedMT ** ppEntry = m_hIndexes ( tKey );
+	if ( ppEntry )
+	{
+		SafeRelease ( *ppEntry );
+		(*ppEntry) = pValue;
+	} else
+	{
+		Verify ( m_hIndexes.Add ( pValue, tKey ) );
+	}
 }
 
 // check if hash contains an entry
@@ -18905,6 +18909,7 @@ void RotationThreadFunc ( void * )
 		ThreadSystem_t tThdSystemDesc ( "ROTATION" );
 
 		CSphString sIndex;
+		bool bMutable = false;
 		{
 			ServedIndexRefPtr_c pIndex ( nullptr );
 			// scope for g_pDisabledIndexes
@@ -18914,20 +18919,40 @@ void RotationThreadFunc ( void * )
 				sIndex = it.GetName ();
 				pIndex = it.Get();
 			}
-			assert ( g_pLocalIndexes->Contains ( sIndex ) );
 
 			if ( pIndex ) // that is rt/percolate. Plain locals has just name and nullptr index
 			{
-				ServedDescRPtr_c tLocked ( pIndex );
-				// FIXME!!! RT and percolate can not rotate along with replicator adding indexes
-				if ( tLocked->IsMutable () )
-					continue;
+				{
+					ServedDescRPtr_c tLocked ( pIndex );
+					bMutable = tLocked->IsMutable ();
+					// cluster indexes got managed by different path
+					if ( tLocked->IsCluster() )
+						continue;
+				}
+
+				// prealloc RT and percolate here
+				if ( bMutable )
+				{
+					ServedDescWPtr_c wLocked ( pIndex );
+					if ( PreallocNewIndex ( *wLocked, sIndex.cstr() ) )
+					{
+						wLocked->m_bOnlyNew = false;
+						g_pLocalIndexes->AddOrReplace ( pIndex, sIndex );
+						pIndex->AddRef ();
+					} else
+					{
+						g_pLocalIndexes->DeleteIfNull ( sIndex );
+					}
+				}
 			}
 		}
 
-		CSphString sError;
-		if ( !RotateIndexMT ( sIndex, sError ) )
-			sphWarning ( "%s", sError.cstr () );
+		if ( !bMutable )
+		{
+			CSphString sError;
+			if ( !RotateIndexMT ( sIndex, sError ) )
+				sphWarning ( "%s", sError.cstr () );
+		}
 
 		g_pDistIndexes->Delete ( sIndex ); // postponed delete of same-named distributed (if any)
 		g_pDisabledIndexes->Delete ( sIndex );
@@ -19929,9 +19954,9 @@ static void ReloadIndexSettings ( CSphConfigParser & tCP ) REQUIRES ( MainThread
 	SmallStringHash_T<bool> dLocalToDelete;
 	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next (); )
 	{
-		// skip JSON indexes - no need to delete them
+		// skip JSON indexes or indexes belong to cluster - no need to manage them
 		ServedDescRPtr_c pServed ( it.Get() );
-		if ( pServed && pServed->m_bJson )
+		if ( pServed && pServed->IsCluster() )
 			continue;
 
 		dLocalToDelete.Add ( true, it.GetName() );
@@ -20089,9 +20114,11 @@ void CheckRotate () REQUIRES ( MainThread )
 	// fixme! disabled hash protected by g_bInRotate exclusion,
 	// what about more explicit protection?
 	g_pDisabledIndexes->ReleaseAndClear ();
-	ScWL_t dRotateConfigMutexWlocked { g_tRotateConfigMutex };
-	if ( CheckConfigChanges () )
-		ReloadIndexSettings ( g_pCfg );
+	{
+		ScWL_t dRotateConfigMutexWlocked { g_tRotateConfigMutex };
+		if ( CheckConfigChanges () )
+			ReloadIndexSettings ( g_pCfg );
+	}
 
 	// special pass for 'simple' rotation (i.e. *.new to current)
 	for ( RLockedServedIt_c it ( g_pLocalIndexes ); it.Next (); )
@@ -20112,6 +20139,7 @@ void CheckRotate () REQUIRES ( MainThread )
 
 	if ( !g_bSeamlessRotate )
 	{
+		ScRL_t tRotateConfigMutex { g_tRotateConfigMutex };
 		for ( RLockedServedIt_c it ( g_pDisabledIndexes ); it.Next(); )
 		{
 			auto pIndex = it.Get();

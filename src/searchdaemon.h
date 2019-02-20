@@ -674,6 +674,7 @@ struct ServedDesc_t
 	CSphString	m_sCluster;
 
 	inline bool IsMutable () const { return m_eType==IndexType_e::RT || m_eType==IndexType_e::PERCOLATE; }
+	bool		IsCluster () const { return m_bJson || !m_sCluster.IsEmpty(); }
 	virtual                ~ServedDesc_t ();
 };
 
